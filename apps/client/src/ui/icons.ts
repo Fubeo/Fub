@@ -117,6 +117,9 @@ const SVG: Record<string, string> = {
   sort: '<path d="M4 7h16M7 12h10M10 17h4"/>',
   clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
   "chevron-up": '<path d="M7 14l5-5 5 5"/>',
+  // «…» della testata del foglio: lo disegna la vista del documento, che si
+  // monta prima della cornice; la cornice lo usa uguale.
+  more: '<path d="M6 12h.01M12 12h.01M18 12h.01"/>',
 };
 
 /// L'SVG di un'icona, come stringa HTML pronta per `innerHTML`.

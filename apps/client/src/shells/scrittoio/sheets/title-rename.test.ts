@@ -46,6 +46,41 @@ let driver: ManualDriver;
 let lifetime: Lifetime;
 let panes: HTMLElement;
 
+/// Le briciole come le scrive `drawCrumbs` della vista: il vault, le cartelle
+/// (`data-folder`), i segni fra i pezzi e il nome in `.crumb-name`, col
+/// percorso intero in `data-path`. Una vista resta il suo nome, in testo.
+function crumbs(crumb: HTMLElement, path: string, doc: boolean): void {
+  if (!doc) {
+    delete crumb.dataset.path;
+    crumb.textContent = path;
+    return;
+  }
+  // Come la vista, che a percorso uguale non riscrive niente.
+  if (crumb.dataset.path === path) return;
+  crumb.dataset.path = path;
+  const sep = (): HTMLElement => {
+    const el = document.createElement("span");
+    el.className = "crumb-sep";
+    el.setAttribute("aria-hidden", "true");
+    el.textContent = "/";
+    return el;
+  };
+  const vault = document.createElement("span");
+  vault.dataset.folder = "";
+  vault.textContent = "Vault";
+  const pieces: Node[] = [vault, sep()];
+  const parts = path.split("/");
+  parts.forEach((part, i) => {
+    const el = document.createElement("span");
+    el.textContent = part;
+    if (i === parts.length - 1) el.className = "crumb-name";
+    else el.dataset.folder = parts.slice(0, i + 1).join("/");
+    pieces.push(el);
+    if (i < parts.length - 1) pieces.push(sep());
+  });
+  crumb.replaceChildren(...pieces);
+}
+
 /// Una testata com'è scritta dalla vista: percorso, stato, menu.
 function pane(id: string, doc: string | null, text = doc ?? ""): HTMLElement {
   world.docs[id] = doc;
@@ -57,7 +92,7 @@ function pane(id: string, doc: string | null, text = doc ?? ""): HTMLElement {
   bar.setAttribute("role", "toolbar");
   const crumb = document.createElement("span");
   crumb.className = "muted";
-  crumb.textContent = text;
+  crumbs(crumb, text, doc !== null);
   const menu = document.createElement("button");
   menu.dataset.paneMenu = "";
   bar.append(crumb, menu);
@@ -66,9 +101,9 @@ function pane(id: string, doc: string | null, text = doc ?? ""): HTMLElement {
   return bar;
 }
 
-/// Ciò che fa `drawToolbar` della vista col titolo: riscrive il testo.
-function redraw(bar: HTMLElement, path: string): void {
-  crumbOf(bar).textContent = path;
+/// Ciò che fa `drawToolbar` della vista col titolo: riscrive le briciole.
+function redraw(bar: HTMLElement, path: string, doc = true): void {
+  crumbs(crumbOf(bar), path, doc);
 }
 
 const crumbOf = (bar: HTMLElement): HTMLElement => bar.querySelector<HTMLElement>(":scope > .muted")!;
@@ -181,6 +216,32 @@ describe("il titolo che si può premere", () => {
     await settled();
     watch.disconnect();
     expect(seen).toEqual([]);
+  });
+});
+
+describe("le briciole", () => {
+  it("il doppio clic sul nome rinomina; sul vault, su una cartella o su un segno no", () => {
+    const bar = pane("main", "Guida/Nota.md");
+    mountTitleRename(lifetime);
+    const title = crumbOf(bar);
+    for (const piece of [
+      title.querySelector<HTMLElement>("[data-folder='']")!,
+      title.querySelector<HTMLElement>("[data-folder='Guida']")!,
+      title.querySelector<HTMLElement>(".crumb-sep")!,
+    ]) {
+      dblclick(piece);
+      expect(inputOf(bar)).toBeNull();
+    }
+    dblclick(title.querySelector<HTMLElement>(".crumb-name")!);
+    expect(inputOf(bar)!.value).toBe("Nota");
+  });
+
+  it("il suggerimento del titolo smontato è il percorso, non il testo delle briciole", () => {
+    const bar = pane("main", "Guida/Nota.md");
+    mountTitleRename(lifetime);
+    expect(crumbOf(bar).textContent).toBe("Vault/Guida/Nota.md");
+    lifetime.close();
+    expect(world.tips.get(crumbOf(bar))).toBe("Guida/Nota.md");
   });
 });
 

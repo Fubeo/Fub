@@ -15,7 +15,7 @@ import { openCompare } from "../ui/compare";
 import { pageIcon } from "../state/page-icons";
 import { modeIcon, openModeMenu } from "../state/mode-menu";
 import type { SurfaceMode } from "../editors/core/registry";
-import { FORMAT_ICON, formatKindOf, formatNameOf, formatTagOf } from "../ui/format-kind";
+import { FORMAT_ICON, formatKindOf, formatNameOf } from "../ui/format-kind";
 import { iconEl } from "../ui/icons";
 import { api } from "../host/ipc";
 import { emit, on, state } from "../state/store";
@@ -198,6 +198,14 @@ export function mountDocument(lifetime: Lifetime, d: DocumentDeps): void {
       const frame = frames.get(id);
       const current = paneState(id);
       if (frame && current) drawEmptyPane(frame, current.tabs.length === 0);
+    }
+  }));
+  // Il nome del vault apre il percorso di ogni testata: arriva dopo
+  // l'apertura (il nome scelto dalla persona lo dice il registro dei vault).
+  lifetime.add(on("vault-name", () => {
+    for (const id of frames.keys()) {
+      const pane = paneOf(id);
+      if (pane) drawToolbar(pane);
     }
   }));
   // La domanda sulle anteprime fatte dalle app (T31) segue le risposte dello
@@ -921,15 +929,16 @@ function paintTab(tab: HTMLElement, target: Tab, selected: boolean, tabStop: boo
   const source = tabOverride(target) ? t("document.tab.source_view") : null;
   const name = tab.querySelector<HTMLElement>(".tab-name")!;
   name.textContent = described.label + (target.stack ? ` [${target.stack}]` : "") + (source ? ` · ${source}` : "");
-  // Un documento che non è una nota porta l'icona del suo formato.
+  // Il formato lo dice la linguetta, non la testata: ogni documento porta in
+  // testa la figura del suo formato, anche la nota. Una nota con `icon:` nel
+  // frontmatter porta invece la sua icona (K9), che dice di più.
   const kind = target.k === "doc" ? formatKindOf(target.doc) : null;
-  const format = kind && kind !== "note" ? iconEl(FORMAT_ICON[kind]) : null;
+  const pageMark = target.k === "doc" && (kind === "note" || kind === null) ? pageIcon(target.doc) : null;
+  const format = kind && !pageMark ? iconEl(FORMAT_ICON[kind]) : null;
   if (format) {
     format.classList.add("tab-format");
     name.prepend(format);
   }
-  // Una nota con `icon:` nel frontmatter la porta anche nella scheda (K9).
-  const pageMark = target.k === "doc" && !format ? pageIcon(target.doc) : null;
   if (pageMark) {
     const mark = document.createElement("span");
     mark.className = "tab-page-icon";
@@ -947,7 +956,7 @@ function paintTab(tab: HTMLElement, target: Tab, selected: boolean, tabStop: boo
   tab.setAttribute("aria-keyshortcuts", tabShortcuts());
   tab.setAttribute(
     "aria-label",
-    (target.pinned ? `${t("tabmenu.pinned")} · ` : "") + (described.dirty ? `${described.label} · ${t("save.unsaved")}` : described.label) + (format && kind ? ` · ${formatNameOf(kind)}` : "") + (source ? ` · ${source}` : "") + (target.stack ? ` · ${t("tabmenu.stack", { stack: target.stack })}` : ""),
+    (target.pinned ? `${t("tabmenu.pinned")} · ` : "") + (described.dirty ? `${described.label} · ${t("save.unsaved")}` : described.label) + (kind && kind !== "note" ? ` · ${formatNameOf(kind)}` : "") + (source ? ` · ${source}` : "") + (target.stack ? ` · ${t("tabmenu.stack", { stack: target.stack })}` : ""),
   );
   const close = tab.parentElement!.querySelector<HTMLElement>(".tab-close")!;
   close.tabIndex = tab.tabIndex;
@@ -981,31 +990,70 @@ function drawTabOverflow(r: PaneFrame, tabs: Tab[], active: number): void {
 /// esistente, mai seconda verità; una sola modalità = nessun segmentato (U24);
 /// mai ricreare EditorView (solo chrome, superficie intatta).
 
-/// Il percorso nella testata. Per un documento ogni cartella è un pezzo a sé
-/// (`data-folder` col suo percorso intero), così si può premere; il testo resta
-/// quello di sempre. Si riscrive soltanto quando il percorso cambia.
+/// Il percorso nella testata, a briciole. Per un documento: la figura della
+/// cartella e il nome del vault, poi le cartelle, poi il nome in
+/// `span.crumb-name`. Il vault e ogni cartella sono pezzi a sé (`data-folder`
+/// col percorso intero, `""` per il vault), così si possono premere; fra un
+/// pezzo e l'altro c'è un segno (`span.crumb-sep`, nascosto al lettore di
+/// schermo), non una «/» scritta. Una vista resta il suo nome, in testo.
+///
+/// Si riscrive soltanto quando il percorso o il nome del vault cambiano.
 function drawCrumbs(crumbs: HTMLElement, path: string, doc: boolean): void {
-  const drawn = doc ? path : "";
-  if (crumbs.dataset.path === drawn && crumbs.textContent === path) return;
+  const vault = state.vaultName;
   if (!doc) {
+    if (crumbs.dataset.path === undefined && crumbs.textContent === path) return;
     delete crumbs.dataset.path;
+    delete crumbs.dataset.vault;
     crumbs.textContent = path;
     return;
   }
+  if (crumbs.dataset.path === path && crumbs.dataset.vault === vault && crumbs.querySelector(":scope > .crumb-name")) return;
   crumbs.dataset.path = path;
+  crumbs.dataset.vault = vault;
+  const separator = (): HTMLElement => {
+    const sep = document.createElement("span");
+    sep.className = "crumb-sep";
+    sep.setAttribute("aria-hidden", "true");
+    sep.textContent = "/";
+    return sep;
+  };
+  const pieces: Node[] = [];
+  const figure = iconEl("folder");
+  if (figure) pieces.push(figure);
+  // Un vault senza nome (nessuno aperto, il banco senza radice) non ha la sua
+  // briciola: il percorso parte dalle cartelle.
+  if (vault) {
+    const root = document.createElement("span");
+    root.dataset.folder = "";
+    root.textContent = vault;
+    pieces.push(root, separator());
+  }
   const parts = path.split("/");
-  const pieces: (Node | string)[] = [];
   parts.forEach((part, i) => {
     if (i === parts.length - 1) {
-      pieces.push(part);
+      const name = document.createElement("span");
+      name.className = "crumb-name";
+      // La nota è la casa e si chiama senza «.md», come nella sua linguetta;
+      // ogni altro file tiene l'estensione, che dice il formato.
+      name.textContent = formatKindOf(path) === "note" ? docTitle(part) : part;
+      pieces.push(name);
       return;
     }
     const folder = document.createElement("span");
     folder.dataset.folder = parts.slice(0, i + 1).join("/");
     folder.textContent = part;
-    pieces.push(folder, "/");
+    pieces.push(folder, separator());
   });
   crumbs.replaceChildren(...pieces);
+}
+
+/// «…» è una figura, non tre caratteri: `more` del set di serie. Se un set
+/// ridotto non l'avesse, restano i tre punti scritti.
+function drawPaneMenuGlyph(menu: HTMLElement): void {
+  if (menu.querySelector(":scope > svg")) return;
+  const glyph = iconEl("more");
+  if (glyph) menu.replaceChildren(glyph);
+  else if (menu.textContent !== "…") menu.textContent = "…";
 }
 function drawToolbar(r: Pane): void {
   const bar = frameOf(r).toolbarEl;
@@ -1056,14 +1104,10 @@ function drawToolbar(r: Pane): void {
     const menu = document.createElement("button");
     menu.type = "button";
     menu.dataset.paneMenu = "";
-    menu.textContent = "…";
     menu.setAttribute("aria-haspopup", "menu");
     menu.addEventListener("click", (event) => openPaneMenu(r, event));
-    // «WORD», «ODT»: il formato accanto al percorso.
-    const tag = document.createElement("span");
-    tag.className = "pane-format";
-    tag.hidden = true;
-    bar.append(nav, crumbs, tag, frameOf(r).standing.element, status, group, current, menu);
+    // Il formato non sta qui: lo dice la linguetta, con la sua figura.
+    bar.append(nav, crumbs, frameOf(r).standing.element, status, group, current, menu);
   }
   const nav = bar.querySelector<HTMLElement>(":scope > .pane-nav")!;
   const crumbs = bar.querySelector<HTMLElement>(":scope > .muted")!;
@@ -1088,15 +1132,10 @@ function drawToolbar(r: Pane): void {
   const path = tab?.k === "doc" ? tab.doc : tab?.k === "view" ? nameTab(tab) : "";
   drawCrumbs(crumbs, path, tab?.k === "doc");
   setTooltip(crumbs, path);
-  const tag = bar.querySelector<HTMLElement>(":scope > .pane-format")!;
-  const said = tab?.k === "doc" ? formatTagOf(tab.doc) : null;
-  const kind = tab?.k === "doc" ? formatKindOf(tab.doc) : null;
-  tag.hidden = said === null;
-  tag.textContent = said ?? "";
-  if (said && kind) setTooltip(tag, formatNameOf(kind));
   // Si scrive tutto, in parte o per niente: lo dice il documento.
   frameOf(r).standing.follow(tab?.k === "doc" ? r.surface?.standing ?? null : null);
   group.setAttribute("aria-label", t("document.toolbar.modes"));
+  drawPaneMenuGlyph(menu);
   menu.setAttribute("aria-label", t("document.pane.menu"));
   setTooltip(menu, t("document.pane.menu"));
   const modes = r.surface && r.surface.modes.length > 1 ? r.surface.modes : [];

@@ -30,7 +30,6 @@ const GLYPHS: Readonly<Record<string, readonly string[]>> = {
   cloud: ["M7 18a4 4 0 0 1-.6-7.95A6 6 0 0 1 18 9.5a4.25 4.25 0 0 1-.5 8.5z"],
   split: ["M5 4h14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z", "M12 4v16"],
   ring: ["M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z"],
-  more: ["M6 12h.01M12 12h.01M18 12h.01"],
 };
 
 /** Registra le figure della cornice per la vita che riceve. */

@@ -1,11 +1,13 @@
 // Rinominare dal titolo del foglio.
 //
-// Nella testata la vista scrive il percorso del documento (`.pane-toolbar >
-// .muted`). Qui quel percorso diventa il posto da cui si rinomina: doppio clic,
-// oppure F2 (o Invio, o Spazio) col fuoco sul titolo, e al suo posto compare un
-// campo col nome della pagina. Invio rinomina, Esc e la perdita del fuoco
-// lasciano tutto com'era. Le cartelle del percorso (`[data-folder]`) sono della
-// vista, che le apre nell'esplora: il doppio clic lì non rinomina.
+// Nella testata la vista scrive il percorso del documento a briciole
+// (`.pane-toolbar > .muted`: il vault, le cartelle e il nome in `.crumb-name`,
+// col percorso intero in `data-path`). Qui quel percorso diventa il posto da cui
+// si rinomina: doppio clic sul nome, oppure F2 (o Invio, o Spazio) col fuoco sul
+// titolo, e al suo posto compare un campo col nome della pagina. Invio rinomina,
+// Esc e la perdita del fuoco lasciano tutto com'era. Il vault e le cartelle del
+// percorso (`[data-folder]`) sono della vista, che le apre nell'esplora: il
+// doppio clic lì non rinomina.
 //
 // # La strada
 //
@@ -84,6 +86,11 @@ export function mountTitleRename(lifetime: Lifetime): void {
     return pane === null ? null : activeDoc(pane);
   };
 
+  /// Il percorso che il titolo mostra. Per un documento la vista lo scrive a
+  /// briciole (vault, cartelle, `.crumb-name`) e lo tiene intero in
+  /// `data-path`: il testo delle briciole non è più il percorso.
+  const pathOf = (crumb: HTMLElement): string => crumb.dataset.path ?? crumb.textContent ?? "";
+
   const set = (el: HTMLElement, name: string, value: string | null): void => {
     if (el.getAttribute(name) === value) return;
     if (value === null) el.removeAttribute(name);
@@ -97,7 +104,7 @@ export function mountTitleRename(lifetime: Lifetime): void {
     crumb.removeAttribute("role");
     crumb.removeAttribute("tabindex");
     crumb.removeAttribute("aria-label");
-    setTooltip(crumb, crumb.textContent ?? "");
+    setTooltip(crumb, pathOf(crumb));
   };
 
   const close = (focusTitle: boolean): void => {
@@ -324,8 +331,12 @@ export function mountTitleRename(lifetime: Lifetime): void {
   lifetime.listen(panes, "dblclick", (event) => {
     const title = titleOf(event.target);
     const bar = title ? barOf(title) : null;
-    // Una cartella del percorso si apre nell'esplora: due colpi lì non rinominano.
-    if (!bar || (event.target as Element).closest("[data-folder]")) return;
+    // Una cartella del percorso, o il vault, si apre nell'esplora: due colpi lì
+    // non rinominano. Il nome da rinominare è `.crumb-name`: la figura e i
+    // segni fra le briciole non sono il nome; il titolo attorno ai pezzi sì.
+    // Un titolo senza briciole si rinomina tutto.
+    if (!title || !bar || (event.target as Element).closest("[data-folder]")) return;
+    if (event.target !== title && title.querySelector(".crumb-name") && !(event.target as Element).closest(".crumb-name")) return;
     event.preventDefault();
     open(bar);
   });

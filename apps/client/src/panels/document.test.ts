@@ -861,29 +861,75 @@ describe("la testata del riquadro, prima di Scrittoio 2", () => {
     expect(current.getAttribute("aria-label")).toBe(t("document.toolbar.mode_current", { mode: "Blocchi" }));
   });
 
-  it("le briciole: le cartelle con `data-folder`, poi il nome", async () => {
+  it("le briciole: la cartella disegnata e il vault, le cartelle con `data-folder`, poi il nome", async () => {
     await start("off", null, { [NOTA]: "# Diario\n" });
     await open(NOTA);
+    const { icon } = await import("../ui/icons");
+    const store = await import("../state/store");
+    const drawn = (which: string) => new DOMParser().parseFromString(icon(which), "image/svg+xml").documentElement.innerHTML;
     const crumbs = toolbarOf(panes()[0]!).querySelector<HTMLElement>(":scope > .muted")!;
+    // Il vault del banco finto è `/vault`: il nome è la cartella.
+    expect(store.state.vaultName).toBe("vault");
     expect(crumbs.dataset.path).toBe(NOTA);
+    expect(crumbs.firstElementChild!.tagName.toLowerCase()).toBe("svg");
+    expect(crumbs.firstElementChild!.innerHTML).toBe(drawn("folder"));
     expect([...crumbs.querySelectorAll<HTMLElement>("[data-folder]")].map((f) => [f.dataset.folder, f.textContent])).toEqual([
+      ["", "vault"],
       ["Progetti", "Progetti"],
       ["Progetti/Fub", "Fub"],
     ]);
-    expect(crumbs.lastChild?.textContent).toBe("Diario.md");
-    expect(crumbs.textContent).toBe(NOTA);
-    // Una nota alla radice non ha cartelle.
+    // Fra i pezzi un segno nascosto al lettore di schermo, non una «/» nel testo
+    // del percorso; la nota si chiama senza «.md».
+    const seps = [...crumbs.querySelectorAll<HTMLElement>(":scope > .crumb-sep")];
+    expect(seps).toHaveLength(3);
+    expect(seps.every((sep) => sep.getAttribute("aria-hidden") === "true")).toBe(true);
+    expect(crumbs.lastElementChild!.className).toBe("crumb-name");
+    expect(crumbs.lastElementChild!.textContent).toBe("Diario");
+    // Il formato non sta più nella testata.
+    expect(toolbarOf(panes()[0]!).querySelector(".pane-format")).toBeNull();
+    // Una nota alla radice: il vault e il nome.
     await open("Benvenuto.md");
+    expect([...crumbs.querySelectorAll<HTMLElement>("[data-folder]")].map((f) => f.dataset.folder)).toEqual([""]);
+    expect(crumbs.querySelector(".crumb-name")!.textContent).toBe("Benvenuto");
+    // Un file che non è una nota tiene l'estensione, che dice il formato.
+    await open("Lettera.docx");
+    expect(crumbs.querySelector(".crumb-name")!.textContent).toBe("Lettera.docx");
+    // Il nome scelto dalla persona arriva dopo: la testata si ridisegna.
+    store.setVaultName("Appunti");
+    expect(crumbs.querySelector("[data-folder='']")!.textContent).toBe("Appunti");
+    // Senza nome il percorso parte dal nome.
+    store.setVaultName("");
     expect(crumbs.querySelectorAll("[data-folder]")).toHaveLength(0);
-    expect(crumbs.textContent).toBe("Benvenuto.md");
+    expect(crumbs.querySelector(".crumb-name")!.textContent).toBe("Lettera.docx");
+  });
+
+  it("il formato lo dice la linguetta: la figura per ogni documento, il nome per chi non è una nota", async () => {
+    await start("off", null, { [NOTA]: "# Diario\n" });
+    await open(NOTA);
+    await open("Lettera.docx");
+    const { icon } = await import("../ui/icons");
+    const { t } = await import("../i18n/strings");
+    const drawn = (which: string) => new DOMParser().parseFromString(icon(which), "image/svg+xml").documentElement.innerHTML;
+    const tabOf = (doc: string) => [...document.querySelectorAll<HTMLElement>(".pane .tab")].find((tab) => tab.dataset.key?.includes(doc))!;
+    const note = tabOf(NOTA);
+    const word = tabOf("Lettera.docx");
+    expect(note.querySelector(".tab-name > svg.tab-format")!.innerHTML).toBe(drawn("notes"));
+    expect(note.getAttribute("aria-label")).toBe("Diario");
+    expect(word.querySelector(".tab-name > svg.tab-format")!.innerHTML).toBe(drawn("format-word"));
+    expect(word.getAttribute("aria-label")).toBe(`Lettera · ${t("format.kind.word")}`);
   });
 
   it("il menu «…» di una nota ha le voci di oggi", async () => {
     await start("off", null, { [NOTA]: "# Diario\n" });
     await open(NOTA);
     const { t } = await import("../i18n/strings");
+    const { icon } = await import("../ui/icons");
     const menu = toolbarOf(panes()[0]!).querySelector<HTMLButtonElement>("[data-pane-menu]")!;
-    expect(menu.textContent).toBe("…");
+    // «…» è la figura della cornice, non tre caratteri.
+    expect(menu.textContent).toBe("");
+    expect(menu.querySelector(":scope > svg")!.innerHTML).toBe(
+      new DOMParser().parseFromString(icon("more"), "image/svg+xml").documentElement.innerHTML,
+    );
     expect(menu.getAttribute("aria-label")).toBe(t("document.pane.menu"));
     menu.click();
     await settle();

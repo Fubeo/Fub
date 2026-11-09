@@ -46,8 +46,9 @@ describe("il costrutto delle icone", () => {
     // foto); le forbici e i due fogli sono Taglia e Copia nella riga degli
     // appunti dei menu. Le ultime otto sono di Scrittoio 2: le quattro
     // figure delle modalità (penna, blocchi, codice, occhio) e le quattro del
-    // cassetto (scrivi, ordina, orologio, freccia in su).
-    expect(names).toHaveLength(51);
+    // cassetto (scrivi, ordina, orologio, freccia in su); poi «…» della
+    // testata del foglio.
+    expect(names).toHaveLength(52);
     expect(new Set(names).size).toBe(names.length);
 
     for (const name of names) {

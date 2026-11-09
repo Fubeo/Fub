@@ -587,6 +587,8 @@ describe("navigazione accessibile dell'esploratore", () => {
   });
 
   it("una cartella del percorso nella testata si apre nell'esplora; il nome resta il titolo", async () => {
+    // Il nome scelto dalla persona per il vault apre il percorso.
+    box.known = [{ root: "/vault", name: "Appunti", icon: null, favorite: false, last_opened: 0, keys_seen: {} }];
     await start(VAULT);
     const noteItem = () =>
       document.querySelector<HTMLElement>('#file-list li[data-path="note/Riunione.md"]');
@@ -600,9 +602,14 @@ describe("navigazione accessibile dell'esploratore", () => {
     await waitFor("la cartella si richiude", () => !noteItem());
 
     const crumb = document.querySelector<HTMLElement>(".pane.focus .pane-toolbar > .muted")!;
-    expect(crumb.textContent).toBe("note/Riunione.md");
-    const folder = crumb.querySelector<HTMLElement>("[data-folder]")!;
-    expect(folder.dataset.folder).toBe("note");
+    expect(crumb.dataset.path).toBe("note/Riunione.md");
+    // Le briciole: la cartella disegnata, il vault, la cartella, il nome.
+    expect(crumb.firstElementChild?.tagName.toLowerCase()).toBe("svg");
+    await waitFor("il nome del vault", () => crumb.querySelector("[data-folder='']")?.textContent === "Appunti");
+    expect([...crumb.querySelectorAll<HTMLElement>("[data-folder]")].map((f) => f.textContent)).toEqual(["Appunti", "note"]);
+    expect(crumb.querySelectorAll(".crumb-sep[aria-hidden='true']")).toHaveLength(2);
+    expect(crumb.querySelector(".crumb-name")?.textContent).toBe("Riunione");
+    const folder = crumb.querySelector<HTMLElement>("[data-folder='note']")!;
     expect(folder.textContent).toBe("note");
     // Due colpi sulla cartella non aprono il campo della rinomina.
     folder.dispatchEvent(new MouseEvent("click", { bubbles: true, detail: 1 }));
@@ -616,7 +623,7 @@ describe("navigazione accessibile dell'esploratore", () => {
 });
 
 describe("il formato si vede", () => {
-  it("un Word ha la sua icona nell'albero e nella scheda, e «WORD» accanto al percorso; una nota no", async () => {
+  it("un Word ha la sua icona nell'albero e nella linguetta; la testata ha solo briciole, «Salvato» e «…»", async () => {
     const rich = JSON.stringify({ format: "fub-rich", version: 1, blocks: [{ t: "para", role: { kind: "body" }, c: [{ t: "text", x: "ciao" }] }] });
     await start({ ...VAULT, "Lettera.docx": rich });
     const row = (path: string) => document.querySelector<HTMLElement>(`#file-list li[data-path="${path}"] > .tree-row`);
@@ -624,15 +631,29 @@ describe("il formato si vede", () => {
     expect(row("Lettera.docx")!.querySelector(".row-icon svg")).not.toBeNull();
     expect(row("Benvenuto.md")!.classList.contains("no-icon")).toBe(true);
     row("Lettera.docx")!.click();
-    const tag = () => document.querySelector<HTMLElement>(".pane.focus .pane-toolbar > .pane-format");
-    await waitFor("il Word si apre", () => tag()?.hidden === false);
-    expect(tag()!.textContent).toBe("WORD");
-    const tab = document.querySelector<HTMLElement>('.pane.focus .tab[aria-selected="true"]')!;
-    expect(tab.querySelector(".tab-format")).not.toBeNull();
-    expect(tab.getAttribute("aria-label")).toContain("Documento di Word");
+    const bar = () => document.querySelector<HTMLElement>(".pane.focus .pane-toolbar")!;
+    const name = () => bar().querySelector<HTMLElement>(":scope > .muted .crumb-name")?.textContent;
+    await waitFor("il Word si apre", () => name() === "Lettera.docx");
+    // Il formato non è più un'etichetta della testata: lo dice la linguetta.
+    expect(bar().querySelector(".pane-format")).toBeNull();
+    const tab = () => document.querySelector<HTMLElement>('.pane.focus .tab[aria-selected="true"]')!;
+    expect(tab().querySelector("svg.tab-format")).not.toBeNull();
+    expect(tab().getAttribute("aria-label")).toContain("Documento di Word");
+    // «Salvato» è il bottone dello stato, che ridice la parola nel nome; «…» è
+    // una figura col nome di sempre.
+    const save = bar().querySelector<HTMLButtonElement>(".pane-status-slot button.sheet-save")!;
+    await waitFor("lo stato del Word", () => save.dataset.state === "salvato");
+    expect(save.textContent).toBe("Salvato");
+    expect(save.getAttribute("aria-label")).toContain("Salvato");
+    const menu = bar().querySelector<HTMLButtonElement>(":scope > [data-pane-menu]")!;
+    expect(menu.textContent).toBe("");
+    expect(menu.querySelector(":scope > svg")).not.toBeNull();
+    expect(menu.getAttribute("aria-label")).toBe("Azioni del riquadro");
+    // Una nota ha la figura della nota nella linguetta, e nessun nome di formato.
     row("Benvenuto.md")!.click();
-    await waitFor("la nota si apre", () => tag()?.hidden === true);
-    expect(document.querySelector('.pane.focus .tab[aria-selected="true"] .tab-format')).toBeNull();
+    await waitFor("la nota si apre", () => name() === "Benvenuto");
+    expect(tab().querySelector("svg.tab-format")).not.toBeNull();
+    expect(tab().getAttribute("aria-label")).not.toContain("Documento di Word");
   });
 });
 
