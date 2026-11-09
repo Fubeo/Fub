@@ -379,7 +379,12 @@ schede.
 - **Il tasto D.** D da solo sul viewport, fuori dai campi di testo, fa
   scrivere il mouse (`data-ink="pen"` sul viewport) finché non si alza; lo
   lasciano anche la finestra che perde il fuoco e `visibilitychange`. Un
-  tratto già giù finisce. `setInkMouse(on)` fa lo stesso per l'interruttore.
+  tratto già giù finisce. Il pulsante «Scrivi col mouse» in testa alla barra
+  (`aria-pressed`, disabilitato in sola lettura) chiama `setInkMouse(on)`, che
+  fa lo stesso finché non si spegne; D lasciato non lo spegne. Ogni clic
+  scrive lo stato di vista `canvas.ink_mouse` (`saveInkMouse`); la lavagna
+  che si apre lo riprende una volta sola con `readInkMouse`, cioè solo se
+  «Ricorda se scrivi col mouse» è acceso, e un clic arrivato prima vince.
 - **Il dito.** Un dito sposta la vista, anche sopra le schede; testata,
   maniglie, `[data-connect]` e controlli fanno come col mouse (in sola
   lettura la testata sposta la vista). Due dita pizzicano (`pinchCamera` di

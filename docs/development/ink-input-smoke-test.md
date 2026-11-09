@@ -97,6 +97,22 @@ del tratto) e lo provano i test.
 La riga 6 è la più utile a chi scrive con la mano appoggiata: se il palmo lascia
 un segno prima che la penna tocchi, il ruolo è stato deciso troppo tardi.
 
+## La lavagna
+
+Apri un file `.canvas` con una scheda di testo. Strumenti: la penna, la gomma
+(il retro della penna), il tasto D e il pulsante «Scrivi col mouse», in testa
+alla barra.
+
+| N. | Gesto | Atteso |
+|---|---|---|
+| 1 | Penna sopra una scheda, poi sul vuoto | il tratto resta alla scheda e la segue quando la sposti; sul vuoto è libero |
+| 2 | Gomma sopra un tratto | il tratto sbiadisce mentre passi e sparisce quando alzi |
+| 3 | Mouse, trascina tenendo D; poi senza | con D scrive (cursore a croce), senza seleziona come prima |
+| 4 | «Scrivi col mouse», poi trascina | il pulsante ha il fondo dell'accento e il mouse scrive; D lasciato non lo spegne; di nuovo il pulsante, e torna a selezionare |
+| 5 | Chiudi e riapri la lavagna | l'interruttore è spento; con «Ricorda se scrivi col mouse» acceso in Impostazioni, com'era |
+| 6 | Un dito, poi due | uno sposta la lavagna, due la ingrandiscono; il palmo mentre scrivi non fa niente |
+| 7 | `Ctrl+Z` dopo ciascuno | torna un tratto o una passata di gomma per volta |
+
 ## Tratti molto lunghi e cambi di dispositivo
 
 1. **Tratto lunghissimo.** Con la penna, disegna una spirale continua per circa
