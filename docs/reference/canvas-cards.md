@@ -170,3 +170,54 @@ nessuna scheda cambia modo.
 
 `quiet` è un tipo strutturale di `cards.ts`, `CardQuiet`, con il solo
 `defer(key, work)`: la lavagna non dipende dal modulo della penna.
+
+## Come la tela tiene le schede
+
+La tela (`editors/canvas/engine.ts`) riceve le schede con l'opzione
+`cards?: CanvasCards`, cioè `{ registry: CardRegistry; snapshots:
+CardSnapshots }`. Senza (un'altra finestra, le prove vecchie) ogni scheda ha
+il corpo di sempre: il percorso del file, il segnaposto, l'indirizzo.
+
+La resa è a chiavi: la tela tiene una mappa id → scheda sulla scena, con
+l'elemento `.canvas-node`, il corpo e ciò che lo tiene vivo. A ogni resa:
+
+- chi c'è già si aggiorna sul posto: posizione, misura, colore, titolo,
+  scelta, la maniglia per ridimensionare (non in sola lettura);
+- chi è nuovo nasce, chi non c'è più si distrugge;
+- l'ordine sulla scena segue il file (la prima sotto, l'ultima sopra), e una
+  scheda si sposta nel DOM solo se è fuori posto;
+- il corpo si rifà solo se cambia la sua chiave: `type`, `file`, `subpath`,
+  `url`, `text`, `label` e lo sfondo di un gruppo. I corpi di sempre si
+  rifanno anche quando cambia la lingua, e quelli di testo quando cambiano
+  le sintassi del Markdown o la sola lettura; una vista no.
+
+Spostare, ridimensionare, colorare o scrivere in un'altra scheda non tocca
+le viste; cambiare il file della scheda, toglierla o cambiarle l'id le
+smonta. Una scheda che torna con l'annulla ha una vista nuova. Il campo di
+modifica di una scheda prende il posto del corpo: la vista si smonta quando
+il campo si apre, e il corpo si rifà alla prima resa dopo che si chiude.
+
+Per una scheda con una specie e un renderer la tela chiama
+`mount(node, corpo, "snapshot", context)`: nasce ferma, e quali schede sono
+vive lo decide la tela dopo. Il `context` porta:
+
+- `path`, il file senza `#…`, e `subpath`, da `subpath` o dal `#` nel
+  percorso; una scheda di link ha `path` vuoto e l'indirizzo in `node.url`;
+- `documentId`, la lavagna; `lifetime`, una `Lifetime` per vista;
+- `size()`, la misura di adesso in unità della lavagna, e `zoom()`;
+- `missing()`, che per ora mette il segnaposto di sempre e
+  `data-card-missing="true"` sulla scheda; da una vista già smontata non fa
+  niente.
+
+Sulla scheda montata ci sono `data-card-kind` (la specie) e `data-card-mode`.
+Un renderer che lancia in `mount` lascia il corpo di sempre e un avviso in
+console: la tela va avanti. Una vista si smonta con `destroy()` e poi con la
+chiusura della sua `Lifetime`, una volta sola; se `destroy` lancia, le altre
+si smontano lo stesso. `destroy` della tela smonta tutte le viste, e dopo
+nessuna resa ne monta altre.
+
+Oltre `MAX_INTERACTIVE_NODES` (2000 schede) la scena mostra il messaggio
+della lavagna troppo grande e nessuna vista; tornati sotto, le schede
+rinascono. L'inchiostro sulle schede si ridisegna dopo ogni resa sullo
+stesso elemento, e un tratto scritto aggiorna solo il suo livello, senza
+resa.
