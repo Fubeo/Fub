@@ -106,8 +106,10 @@ const FUOCO = [
   "#panes",
 ];
 
-/// I colori dello strato, con la variabile del tema da cui si leggono.
-const COLORI: readonly (readonly [chiave: string, variabile: string])[] = [
+/// I colori dello strato, con la variabile del tema da cui si leggono e, per
+/// la cartella del logo, quella su cui ripiega la pelle quando il tema non la
+/// dà (`skin/frame.css`): così l'avvio mostra il logo che l'app mostrerà.
+const COLORI: readonly (readonly [chiave: string, variabile: string, ripiego?: string])[] = [
   ["sfondo", "--bg"],
   ["testo", "--text"],
   ["tenue", "--muted"],
@@ -116,6 +118,12 @@ const COLORI: readonly (readonly [chiave: string, variabile: string])[] = [
   ["bordo", "--border"],
   ["guasto", "--danger"],
   ["fuoco", "--focus-ring"],
+  // La cartella di Marcuzzo, nella tinta del tema (D26).
+  ["cartella", "--logo-cartella", "--accent"],
+  ["cartella-retro", "--logo-cartella-retro", "--accent"],
+  ["cartella-ombra", "--logo-cartella-ombra", "--accent"],
+  ["foglio-1", "--logo-foglio-1", "--sheet-2"],
+  ["foglio-2", "--logo-foglio-2", "--sheet-2"],
 ];
 
 /// I testi che lo strato dice: i suoi, «Riprova» e i nomi delle fasi che il
@@ -299,8 +307,9 @@ function coloreBuono(valore: string): boolean {
 function coloriDellApp(): Record<string, string> {
   const stile = getComputedStyle(document.documentElement);
   const colori: Record<string, string> = {};
-  for (const [chiave, variabile] of COLORI) {
-    const valore = stile.getPropertyValue(variabile).trim();
+  for (const [chiave, variabile, ripiego] of COLORI) {
+    const proprio = stile.getPropertyValue(variabile).trim();
+    const valore = proprio === "" && ripiego !== undefined ? stile.getPropertyValue(ripiego).trim() : proprio;
     if (coloreBuono(valore)) colori[chiave] = valore;
   }
   return colori;

@@ -358,6 +358,11 @@ describe("il passaggio", () => {
       bordo: "#232a38",
       guasto: "#e5484d",
       fuoco: "#9d8fff",
+      // Il tema non dà la cartella del logo: si salva il ripiego della pelle,
+      // l'accento; i fogli ripiegano su `--sheet-2`, che qui manca.
+      cartella: "#7c6cf0",
+      "cartella-retro": "#7c6cf0",
+      "cartella-ombra": "#7c6cf0",
     });
     // Il colore cattivo della cache vecchia non sopravvive.
     expect(cache.colori.light).toEqual({ sfondo: "#e8edf5" });
@@ -385,6 +390,35 @@ describe("il passaggio", () => {
     expect(root.getAttribute("data-avvio-moto")).toBe("ridotto");
     expect(root.style.getPropertyValue("--avvio-sfondo")).toBe("#0a0e16");
     expect(root.style.getPropertyValue("--avvio-fuoco")).toBe("#9d8fff");
+  });
+
+  it("la cartella del logo del tema va nella cache e torna al prossimo avvio (D26)", async () => {
+    monta(desktop);
+    const root = document.documentElement;
+    const logo = {
+      "--logo-cartella": "#5787ca",
+      "--logo-cartella-retro": "#3d6aac",
+      "--logo-cartella-ombra": "#4a76b4",
+      "--logo-foglio-1": "#a9c3e8",
+      "--logo-foglio-2": "#b0a6d6",
+    };
+    for (const [nome, valore] of Object.entries(logo)) root.style.setProperty(nome, valore);
+    root.dataset.theme = "light";
+    root.dataset.contrast = "normal";
+    await consegna({ tema: { ...TEMA, scelte: () => ({ light: "light", contrast: "normal" }) } });
+    nienteStrato();
+    expect(JSON.parse(localStorage.getItem(CACHE)!).colori.light).toMatchObject({
+      cartella: "#5787ca",
+      "cartella-retro": "#3d6aac",
+      "cartella-ombra": "#4a76b4",
+      "foglio-1": "#a9c3e8",
+      "foglio-2": "#b0a6d6",
+    });
+    for (const nome of Object.keys(logo)) root.style.removeProperty(nome);
+    // Il prossimo avvio.
+    new Function(luce)();
+    expect(root.style.getPropertyValue("--avvio-cartella")).toBe("#5787ca");
+    expect(root.style.getPropertyValue("--avvio-foglio-2")).toBe("#b0a6d6");
   });
 
   it("le --avvio-* vanno ai colori dell'app prima del passaggio", async () => {
