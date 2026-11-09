@@ -45,7 +45,7 @@
   --drawer-head-h: 36px;
   --sidebar-w: 264px;
   --sidebar-min: 208px;
-  --inspector-w: 300px;
+  --inspector-w: 264px;
   --inspector-min: 248px;
   --status-h: 26px;
 
@@ -190,6 +190,26 @@
 .kit-dialog-actions > :focus {
   outline: var(--focus-ring-width) solid var(--focus-ring);
   outline-offset: var(--focus-ring-offset);
+}
+
+/* Gli stili che `ui/node.ts` scriveva in linea sulle righe di un elenco e di
+   un albero passano qui, uguali: la pelle li può ora cambiare. */
+.ui-list-item {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-height: max(var(--space-9, 32px), 28px);
+}
+.ui-tree-label {
+  display: flex;
+  align-items: center;
+  min-height: max(var(--space-9, 32px), 28px);
+}
+.ui-tree-label > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .ui-webview-frame {
@@ -521,6 +541,12 @@ body {
   display: flex;
   flex-direction: column;
   min-height: 0;
+}
+
+/* Le schede dell'ispettore salgono sulla riga delle linguette: in cima, prima
+   del titolo. */
+.inspector-tabs {
+  order: -1;
 }
 
 #views-right {

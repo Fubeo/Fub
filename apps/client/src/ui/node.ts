@@ -374,18 +374,13 @@ function update(
       if (prev.node !== "tree_item") return false;
       // Lo span interno nasce col disegno (A04: vedi `draw`): un riuso da prima
       // dell'altezza minima non lo ha, e lo crea invece di riscrivere la riga.
+      // Altezza, allineamento ed ellissi li scrive la struttura
+      // (`structure.css`), non lo stile in linea: la pelle li può cambiare.
       const row = el.querySelector<HTMLElement>(":scope > .ui-tree-label");
       if (row) {
-        row.style.minHeight = "max(var(--space-9, 32px), 28px)";
-        row.style.display = "flex";
-        row.style.alignItems = "center";
         let text = row.querySelector<HTMLElement>(":scope > span");
         if (!text) {
           text = document.createElement("span");
-          text.style.minWidth = "0";
-          text.style.overflow = "hidden";
-          text.style.textOverflow = "ellipsis";
-          text.style.whiteSpace = "nowrap";
           row.replaceChildren(text);
         }
         text.textContent = next.label;
@@ -763,11 +758,8 @@ function draw(node: UiNode, onAction: Port): HTMLElement {
       const el = div("ui-list-item");
       // Stessa regola dell'albero (A04): il bersaglio è la voce intera, che può
       // ricevere il fuoco via `activatable`. Multilinea consentita: `min` e non
-      // altezza fissa.
-      el.style.minHeight = "max(var(--space-9, 32px), 28px)";
-      el.style.display = "flex";
-      el.style.flexDirection = "column";
-      el.style.justifyContent = "center";
+      // altezza fissa. La misura sta in `structure.css` (`.ui-list-item`), e
+      // non in linea, perché la pelle la possa cambiare.
       el.setAttribute("role", "listitem");
       // `selected` è uno stato del nodo (§2.1), e va detto anche a chi non
       // vede lo sfondo cambiato. `aria-current` e non `aria-selected`: il
@@ -889,17 +881,12 @@ function draw(node: UiNode, onAction: Port): HTMLElement {
       // (attivabile qui sotto), quindi è la riga a dover valere 32px a densità
       // normale e almeno 24px ovunque. `space-9` è 24/32/36px nelle tre
       // densità: il pavimento a 28px è la V13 per la compatta, e per G04
-      // l'accessibilità prevale sulla scala quando la scala scende sotto.
-      row.style.minHeight = "max(var(--space-9, 32px), 28px)";
-      row.style.display = "flex";
-      row.style.alignItems = "center";
+      // l'accessibilità prevale sulla scala quando la scala scende sotto. La
+      // misura la scrive `structure.css` (`.ui-tree-label`).
       // Il testo in un elemento anonimo non si restringe e l'ellissi della
-      // pelle morirebbe: sta in uno `span` che può farlo, senza classi nuove.
+      // pelle morirebbe: sta in uno `span` che può farlo, senza classi nuove
+      // (`.ui-tree-label > span` nella struttura).
       const text = document.createElement("span");
-      text.style.minWidth = "0";
-      text.style.overflow = "hidden";
-      text.style.textOverflow = "ellipsis";
-      text.style.whiteSpace = "nowrap";
       text.textContent = node.label;
       row.appendChild(text);
       connect(row, node.action, onAction);

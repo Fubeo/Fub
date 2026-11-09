@@ -877,7 +877,10 @@ function buildInspector(): void {
     follows.hidden = !onDocument;
     if (!onDocument) return;
     const doc = activeDoc();
-    follows.textContent = doc ? t("inspector.follows", { doc: pageName(doc) }) : t("inspector.follows_none");
+    // «Segue la nota», a voce bassa: quale nota lo dice il suggerimento, così
+    // un nome lungo non spinge via il titolo della vista.
+    follows.textContent = doc ? t("inspector.follows_doc") : t("inspector.follows_none");
+    setTooltip(follows, doc ? t("inspector.follows", { doc: pageName(doc) }) : "");
     follows.dataset.state = doc ? "doc" : "none";
   }
   const offLayout = on("layout", drawFollows);

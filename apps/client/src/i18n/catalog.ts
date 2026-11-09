@@ -316,6 +316,7 @@ export const IT = { // --- la scocca -------------------------------------------
 "inspector.region": "Ispettore",
 "inspector.empty": "Nessuna vista da mostrare.",
 "inspector.follows": "Segue: {doc}",
+"inspector.follows_doc": "Segue la nota",
 "inspector.follows_none": "Nessuna nota in primo piano",
 
 "command-search.placeholder": "Cerca nel vault…",
@@ -3463,6 +3464,7 @@ export const EN: Record<Key, string> = { "app.skip_to_editor": "Skip to the edit
 "inspector.region": "Inspector",
 "inspector.empty": "No views to show.",
 "inspector.follows": "Following: {doc}",
+"inspector.follows_doc": "Follows the note",
 "inspector.follows_none": "No note in front",
 
 // --- the search trigger in the titlebar -------------------------------

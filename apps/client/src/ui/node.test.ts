@@ -1325,3 +1325,41 @@ describe("un nodo che nomina una nota si trascina (decisione 0157)", () => {
     expect(offers).toBe(1);
   });
 });
+
+describe("le righe di un elenco e di un albero non hanno stile in linea (S2 T9)", () => {
+  // Altezza, allineamento ed ellissi li scrive `structure.css`: uno stile in
+  // linea vincerebbe sulla pelle, che non potrebbe più cambiarli.
+  const tree = (label: string): UiNode =>
+    ({
+      node: "stack",
+      dir: "column",
+      gap: 0,
+      children: [
+        { node: "list", items: [{ node: "list_item", title: "Voce", subtitle: "sotto", action: null, selected: false }] },
+        {
+          node: "tree",
+          roots: [{ node: "tree_item", label, action: null, selected: false, expanded: true, children: [] }],
+        },
+      ],
+    }) as unknown as UiNode;
+
+  const rows = (host: HTMLElement) => [
+    ...host.querySelectorAll<HTMLElement>(".ui-list-item, .ui-tree-label, .ui-tree-label > span"),
+  ];
+
+  it("né quando nascono né quando si riusano", () => {
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    mountTree(host, tree("Titolo"), async () => {});
+    expect(rows(host)).toHaveLength(3);
+    expect(rows(host).filter((el) => el.hasAttribute("style"))).toEqual([]);
+    const label = host.querySelector(".ui-tree-label")!;
+    mountTree(host, tree("Titolo nuovo"), async () => {});
+    // La riga dell'albero è la stessa, con il testo nuovo e ancora senza stile.
+    expect(host.querySelector(".ui-tree-label")).toBe(label);
+    expect(label.textContent).toBe("Titolo nuovo");
+    expect(rows(host).filter((el) => el.hasAttribute("style"))).toEqual([]);
+    unmountTree(host);
+    host.remove();
+  });
+});

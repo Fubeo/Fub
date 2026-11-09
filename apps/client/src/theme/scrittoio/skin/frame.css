@@ -542,7 +542,7 @@
   display: flex;
   align-items: center;
   min-height: var(--drawer-head-h);
-  padding: 0 var(--drawer-pad) 0 calc(var(--drawer-pad) + var(--space-4));
+  padding: 0 var(--drawer-pad);
   overflow: hidden;
   color: var(--text);
   font-family: var(--font-ui);
@@ -558,52 +558,74 @@
   text-overflow: ellipsis;
 }
 
-/* «Segue: nota»: a destra del titolo, in grafite. Cede per prima, perché il
-   titolo dice che vista è e questa riga solo da che cosa dipende. */
+/* «● Segue la nota»: il punto dice che la vista è legata al foglio acceso.
+   Il titolo non cede: è «Segue…» che si accorcia coi puntini. */
+.inspector-title > span:first-child {
+  flex: none;
+}
+
+/* A destra del titolo, in grafite: dice da che cosa dipende la vista, e il
+   nome della nota sta nel suggerimento. */
 .inspector-title > .inspector-follows {
   flex: 0 1 auto;
   margin-left: auto;
   padding-left: var(--space-5);
   color: var(--muted);
-  font-size: var(--text-sm);
+  font-size: var(--text-base);
   font-weight: var(--weight-regular);
+}
+.inspector-title > .inspector-follows::before {
+  content: "";
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-right: var(--space-3);
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+  vertical-align: 0.1em;
 }
 .inspector-title > .inspector-follows[hidden] {
   display: none;
 }
 
+/* Le schede sono un pozzetto, come gli spazi del cassetto: parti uguali,
+   l'accesa è un foglietto. */
 .inspector-tabs {
   display: flex;
   flex-shrink: 0;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: center;
   gap: var(--space-1);
-  padding: 0 var(--drawer-pad) var(--space-3);
+  margin: var(--space-3) var(--drawer-pad) var(--space-3);
+  padding: var(--space-1);
+  border-radius: var(--radius-control);
+  background: var(--bg-hover);
 }
 
 .inspector-tab {
   display: inline-flex;
-  flex-shrink: 0;
+  flex: 1 1 0;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
+  width: auto;
+  height: 26px;
   padding: 0;
   border: none;
-  border-radius: var(--radius-control);
+  border-radius: var(--radius-chip);
   background: transparent;
   color: var(--muted);
   cursor: pointer;
 }
 
 .inspector-tab:hover {
-  background: var(--bg-hover);
+  background: var(--overlay-hover);
   color: var(--text);
 }
 
 .inspector-tab[aria-selected="true"] {
-  background: var(--accent-wash);
-  color: var(--accent);
+  background: var(--bg-elev);
+  box-shadow: var(--shadow-1);
+  color: var(--text);
 }
 
 /* ── La banda di stato ───────────────────────────────────────────────────── */

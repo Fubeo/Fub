@@ -124,10 +124,11 @@ h6.ui-heading {
 
 /* ── Sezioni ─────────────────────────────────────────────────────────────── */
 
-/* L'intestazione di una sezione è un'etichetta di cassetto: maiuscoletto
-   piccolo in grafite, che nomina senza pesare. Il triangolo è disegnato —
-   quello del sistema cambia forma da una macchina all'altra — ed è lo stesso
-   dell'albero dei file. */
+/* L'intestazione di una sezione è in tondo: «In entrata · 2», «In uscita ·
+   2», «Menzioni non collegate · 1». Il nome si scrive come si scrive, in
+   grafite, e il conto lo segue. Il triangolo è disegnato — quello del sistema
+   cambia forma da una macchina all'altra — ed è lo stesso dell'albero dei
+   file. */
 .ui-section {
   margin: 0;
 }
@@ -139,11 +140,11 @@ h6.ui-heading {
   padding: 0 var(--space-4);
   border-radius: var(--radius-control);
   color: var(--muted);
-  font-size: var(--text-xs);
-  font-weight: var(--weight-bold);
-  letter-spacing: var(--tracking-caps);
+  font-size: var(--text-base);
+  font-weight: var(--weight-medium);
+  letter-spacing: 0;
   line-height: var(--leading-tight);
-  text-transform: uppercase;
+  text-transform: none;
   list-style: none;
   cursor: pointer;
 }
@@ -186,8 +187,8 @@ h6.ui-heading {
 
 /* ── Righe: elenchi e alberi ─────────────────────────────────────────────── */
 
-/* Una voce di elenco è una riga di cassetto. L'altezza minima è scritta dal
-   nodo (un bersaglio); qui c'è il resto: rientro, raggio, e due righe di
+/* Una voce di elenco è una riga di cassetto. L'altezza minima è scritta dalla
+   struttura (un bersaglio); qui c'è il resto: rientro, raggio, e due righe di
    testo che non si pestano. */
 .ui-list-item {
   padding: var(--space-2) var(--space-4);
@@ -683,6 +684,50 @@ h6.ui-heading {
 :where(.sidebar, .inspector-pane) .ui-tree-label.clickable:active,
 :where(.sidebar, .inspector-pane) .ui-section > summary:active {
   background: var(--bg-active);
+}
+
+/* ── La struttura: un filo a sinistra, la voce corrente è una tacca blu ───
+   Vale per la vista «Struttura» (`data-view-id="outline"`), non per ogni
+   albero dichiarato: un albero di etichette resta com'è. */
+.declared-view[data-view-id="outline"] .ui-tree {
+  border-left: 1px solid var(--border);
+}
+.declared-view[data-view-id="outline"] .ui-tree-label {
+  min-height: var(--row-h);
+  padding: 0 var(--space-4) 0 var(--space-5);
+  border-radius: 0 var(--radius-chip) var(--radius-chip) 0;
+  color: var(--muted);
+  font-size: var(--text-md);
+}
+.declared-view[data-view-id="outline"] .ui-tree-label::before {
+  content: none;
+}
+.declared-view[data-view-id="outline"] .ui-tree-item > .ui-children {
+  margin-left: var(--space-5);
+}
+.declared-view[data-view-id="outline"] .ui-tree-label.clickable:hover {
+  background: var(--overlay-hover);
+  color: var(--text);
+}
+.declared-view[data-view-id="outline"] .ui-tree-item[aria-selected="true"] > .ui-tree-label,
+.declared-view[data-view-id="outline"] .ui-tree-item[aria-selected="true"] > .ui-tree-label.clickable:hover {
+  background: transparent;
+  color: var(--text);
+  font-weight: var(--weight-bold);
+}
+/* La tacca sta sul filo, a qualunque profondità: 2 px centrati sulla riga di
+   1 px, alti 16. */
+.declared-view[data-view-id="outline"] .ui-tree-item[aria-selected="true"] > .ui-tree-label::after {
+  inset: 6px auto 6px -1.5px;
+  width: 2px;
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+}
+.declared-view[data-view-id="outline"] .ui-children .ui-tree-item[aria-selected="true"] > .ui-tree-label::after {
+  left: calc(-1 * var(--space-5) - 1.5px);
+}
+.declared-view[data-view-id="outline"] .ui-children .ui-children .ui-tree-item[aria-selected="true"] > .ui-tree-label::after {
+  left: calc(-2 * var(--space-5) - 1.5px);
 }
 
 /* In colori forzati i fondi sono del sistema e le ombre non ci sono: ciò che

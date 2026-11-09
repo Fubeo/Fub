@@ -262,6 +262,18 @@ describe("l'inspector a tab", () => {
     expect(follows.hidden).toBe(false);
     expect(follows.dataset.state).toBe("none");
     expect(follows.textContent).toBe("Nessuna nota in primo piano");
+    // Con una nota davanti la riga dice «Segue la nota», a voce bassa: il nome
+    // della nota sta nel suggerimento, così un nome lungo non spinge il titolo.
+    const layout = await import("../state/layout");
+    const store = await import("../state/store");
+    layout.openIn(layout.layout.focus, "Cartella/Una nota dal nome lungo.md");
+    store.emit("active-doc", "Cartella/Una nota dal nome lungo.md");
+    expect(follows.dataset.state).toBe("doc");
+    expect(follows.textContent).toBe("Segue la nota");
+    follows.dispatchEvent(new FocusEvent("focus"));
+    const tip = document.getElementById(follows.getAttribute("aria-describedby") ?? "");
+    expect(tip?.textContent).toBe("Segue: Una nota dal nome lungo");
+    follows.dispatchEvent(new FocusEvent("blur"));
     // Una view che non dipende dal documento non ne parla.
     right.querySelectorAll<HTMLButtonElement>(".inspector-tab")[1]!.click();
     expect(follows.hidden).toBe(true);
