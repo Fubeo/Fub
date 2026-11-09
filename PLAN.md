@@ -182,7 +182,7 @@ codice, nei rami e nelle issue il 2026-11-05.
 | K2 · la pagina «Componenti» | In `main` (#290, cd080044, 2026-11-09); la prova D-2 fatta dall'utente il 2026-11-09 | dentro | I componenti accesi e spenti | `piano/k2-pagina-componenti`, #290; la prova dell'utente prima del merge (D13 A) |
 | K3 · lo strato dei motori | Fatto: in `main` con #295 (fb722164, 2026-11-08, unita dall'utente) | dentro | Word ed Excel | `piano/k3-motori`, #295 |
 | K4, K7–K10 | Senza piano | fuori | Vedi sopra | «Piani di Fub» |
-| K5 · il disegno | Ramo: 12 di 30; T6 fatto, la licenza IJG di `jpeg-encoder` chiede l'utente prima di T9 | dentro | Il disegno SVG | `piano/k5-disegno`, #300 |
+| K5 · il disegno | Ramo: 12 di 30; T6 fatto; la licenza IJG decisa (A, eccezione stretta), T9 sbloccato | dentro | Il disegno SVG | `piano/k5-disegno`, #300 |
 | K6 · il disegno completo | Ramo: 0 di 30 | fuori | Scelta dell'utente (D24 B) | #313 |
 | Griglia · le celle | Ramo: 1 di 9 (T1 il piano a strati); il prototipo approvato dall'utente il 2026-11-07 (D2 A) | dentro | Il foglio che risponde subito | `piano/griglia-celle`, senza PR |
 | Scrittoio 2 | Ramo: 24 di 29 (T1–T9, T11–T23, T27, T28; main unito, 54348679; T29 nuovo) | dentro | La cornice | `piano/scrittoio-2`, #309 |
