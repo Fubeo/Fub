@@ -572,7 +572,7 @@ Fatto quando:
 - quella di `mobile-startup` sta accanto a `?stato=tel-nota` e, col fuoco fuori dal testo, a `?stato=tel-ferma`: il foglio da un bordo all'altro e la spunta;
 - la testata ha solo briciole, «Salvato» e «…»; fino a T3 tiene ancora anche il bottone della modalità.
 Prova: scripts/check.sh --rapido
-Stato: [ ] da fare
+Stato: [x] fatto · 0ed8f8e7..576eb118 · briciole «cartella, vault / cartelle / nome» (il nome del vault nello store, segnale `vault-name`), «✓ Salvato» col suggerimento che segue lo stato, «…» disegnato (`more` passa nelle icone di base), il formato nella figura della linguetta; telefono col foglio largo quanto lo schermo · differenze: a 700 px si stringono le cartelle e il nome resta intero; le note perdono «.md» nella briciola; «Offset e terminatori» passa in `document-model.md` per la soglia · resta: le regole `.pane-format` in `structure.css` non servono più (da togliere con T3 o T20); dopo una rinomina del vault nelle impostazioni la briciola tiene il vecchio nome fino alla riapertura, come prima; le pagine-cartella mostrano «_index»
 
 ## T6 · Le linguette e la scrivania
 
