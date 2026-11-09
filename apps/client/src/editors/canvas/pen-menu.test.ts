@@ -177,7 +177,13 @@ describe("il menu della penna", () => {
     expect(more.getAttribute("aria-haspopup")).toBe("dialog");
     more.click();
     expect(document.querySelector(".kit-color-popover")).not.toBeNull();
-    expect(more.getAttribute("aria-expanded")).toBe("true");
+    // Un radio non porta aria-expanded (axe, aria-allowed-attr): il rialzo lo dice aria-controls.
+    expect(more.hasAttribute("aria-expanded")).toBe(false);
+    expect(more.getAttribute("aria-controls")).toBe(document.querySelector(".kit-color-popover")!.id);
+    key(document.querySelector(".kit-color-popover")!, "Escape");
+    expect(document.querySelector(".kit-color-popover")).toBeNull();
+    expect(more.hasAttribute("aria-expanded")).toBe(false);
+    expect(popover()).not.toBeNull();
   });
 
   it("Esc chiude e rende il fuoco al pulsante; il secondo clic chiude", () => {

@@ -357,7 +357,9 @@ export function createPenMenu(options: PenMenuOptions): PenMenu {
       onChange: (color) => choose("color", color),
       lifetime: own,
     });
-    open.more.setAttribute("aria-expanded", "true");
+    // «Altro colore…» è un radio: `aria-expanded` non gli è permesso, e il
+    // kit lo mette a ogni bottone che apre un rialzo. Si toglie all'apertura
+    // e alla chiusura; `aria-haspopup` e `aria-controls` restano.
     open.picker = openPopover({
       anchor: open.more,
       content: picker.element,
@@ -367,11 +369,12 @@ export function createPenMenu(options: PenMenuOptions): PenMenu {
       lifetime: own,
       autoFocus: false,
       onClose: () => {
-        open.more.setAttribute("aria-expanded", "false");
+        open.more.removeAttribute("aria-expanded");
         open.picker = null;
         own.close();
       },
     });
+    open.more.removeAttribute("aria-expanded");
     picker.focus();
   };
 
@@ -464,7 +467,6 @@ export function createPenMenu(options: PenMenuOptions): PenMenu {
     });
     const more = radio("canvas-pen-more", "color", CUSTOM);
     more.setAttribute("aria-haspopup", "dialog");
-    more.setAttribute("aria-expanded", "false");
     colors.append(more);
 
     // Spessore.
