@@ -5060,6 +5060,28 @@ textarea.draw-properties-input {
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
 }
+/* Le annotazioni nel visore dei PDF: ogni pagina sta nel suo posto, largo
+   quanto il canvas, e lo strato delle annotazioni gli sta sopra, grande
+   quanto lui, in sola lettura: i clic lo attraversano. Una pelle non lo
+   sposta, perché i tratti cadono dove li mette «Annota». */
+.media-pdf-sheet {
+  position: relative;
+  display: block;
+  width: fit-content;
+  margin: 0 auto;
+}
+.media-pdf-spread > .media-pdf-sheet {
+  margin: 0;
+}
+.media-pdf-annotations {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  user-select: none;
+}
 @media (max-width: 40rem) {
   .pdf-body {
     flex-direction: column;

@@ -320,6 +320,19 @@ export function pdfWhereText(where: PdfWhere): string {
     : t("media.pdf.pages", { first: where.first, last: where.last, count: where.count });
 }
 
+/**
+ * Le annotazioni di un PDF, pronte per le pagine del visore: le dà il modulo
+ * delle annotazioni (`pdf-annotations.ts`), caricato solo quando servono.
+ */
+export interface PdfAnnotationLayers {
+  /**
+   * Il documento SVG che disegna sopra la pagina `page` (da 1) le sue
+   * annotazioni, largo e alto `size` punti (la pagina del PDF; `null` se il
+   * PDF non la dice). `null` se la pagina non ne ha.
+   */
+  layer(page: number, size: readonly [number, number] | null): string | null;
+}
+
 export interface PdfView {
   readonly element: HTMLElement;
   /// La pagina che si legge adesso.
@@ -329,6 +342,16 @@ export interface PdfView {
   where(): PdfWhere | null;
   goToPage(page: number): Promise<void>;
   search(needle: string): Promise<PdfSearchHit[]>;
+  /// Quante pagine ha il PDF, appena il motore l'ha aperto; `null` se non si
+  /// apre.
+  pageCount(): Promise<number | null>;
+  /**
+   * Le annotazioni sopra le pagine, in sola lettura, o `null` per non
+   * disegnarne. Con le annotazioni c'è l'interruttore «Mostra le
+   * annotazioni». `note` è la riga che le riguarda (il PDF cambiato, un file
+   * che non si legge), o `null`.
+   */
+  setAnnotations(layers: PdfAnnotationLayers | null, note: string | null): void;
   destroy(): void;
 }
 
@@ -346,6 +369,15 @@ const SPREAD_GAP = 16;
 /// conosce `invert()`. Un'inversione non piena lascia il fondo grigio scuro,
 /// non nero.
 const DARK_FILTER = "invert(0.9) hue-rotate(180deg)";
+/// Il posto di una pagina nel piano: il canvas, lo strato delle annotazioni
+/// sopra e il blob che lo disegna.
+interface PageSheet {
+  readonly box: HTMLSpanElement;
+  mark: HTMLImageElement | null;
+  url: string | null;
+  drawn: string | null;
+  page: number | null;
+}
 /// La larghezza di una miniatura, in pixel CSS.
 const PDF_THUMB_WIDTH = 96;
 /// Oltre, le miniature non si fanno: un PDF di diecimila pagine si percorre
@@ -382,10 +414,20 @@ export function mountPdfView(
   life.add(useMediaIcons());
   const status = document.createElement("p");
   status.setAttribute("role", "status");
+  // La riga delle annotazioni: il PDF cambiato dopo di loro, o un file che
+  // non si legge. Sta sotto quella del visore, che la ricerca e la pagina
+  // riscrivono.
+  const marksNote = document.createElement("p");
+  marksNote.className = "media-pdf-note";
+  marksNote.setAttribute("role", "status");
+  marksNote.hidden = true;
   const canvas = document.createElement("canvas");
   // La seconda pagina, nella vista a due pagine.
   const facing = document.createElement("canvas");
   facing.hidden = true;
+  const front = pageSheet(canvas);
+  const back = pageSheet(facing);
+  back.box.hidden = true;
   const viewer = document.createElement("div");
   viewer.className = "media-pdf-page";
   // Il piano scorre e tiene solo canvas: senza un posto nell'ordine del
@@ -393,7 +435,7 @@ export function mountPdfView(
   // mostra, che `show` aggiorna.
   viewer.tabIndex = 0;
   viewer.setAttribute("role", "region");
-  viewer.append(canvas, facing);
+  viewer.append(front.box, back.box);
   // Le miniature, a lato del piano: si disegnano quando entrano in vista.
   const thumbs = document.createElement("nav");
   thumbs.className = "media-pdf-thumbs";
@@ -402,7 +444,7 @@ export function mountPdfView(
   const body = document.createElement("div");
   body.className = "media-pdf-body";
   body.append(thumbs, viewer);
-  root.append(toolbar, status, body);
+  root.append(toolbar, status, marksNote, body);
 
   let engine: PdfEngine | null = null;
   let page = options.initialPage ?? 1;
@@ -416,6 +458,16 @@ export function mountPdfView(
   let dark = false;
   /// Dove si legge: `null` finché nessuna pagina si mostra.
   let where: PdfWhere | null = null;
+  /// Le annotazioni sopra le pagine, e se si mostrano: accese a ogni
+  /// apertura, come i colori chiari.
+  let layers: PdfAnnotationLayers | null = null;
+  let marksShown = true;
+  /// Il giro dello strato delle annotazioni: uno più nuovo copre i vecchi.
+  let marking = 0;
+  let resolveCount: (count: number | null) => void = () => {};
+  const counted = new Promise<number | null>((resolve) => {
+    resolveCount = resolve;
+  });
 
   /// Una frase nella riga di stato. La pagina la dice la banda della
   /// superficie: nella riga resta per il lettore di schermo (`quiet`). Il
@@ -469,12 +521,40 @@ export function mountPdfView(
     fitWidth = available();
     viewer.classList.toggle("media-pdf-spread", second !== null);
     facing.hidden = second === null;
+    back.box.hidden = second === null;
+    // Lo strato di un'altra pagina non resta sopra quella che si ridisegna.
+    if (front.page !== clamped) drawMark(front, null, clamped);
+    if (back.page !== second) drawMark(back, null, second);
     // Le due pagine si dividono il piano, meno lo spazio fra loro. Si
     // disegnano una dopo l'altra: il motore interrompe una resa quando ne
     // comincia un'altra.
     const room = second ? Math.max(0, (fitWidth - SPREAD_GAP) / 2) : fitWidth;
     await paint(clamped - 1, canvas, room, clamped);
     if (second && !destroyed && page === clamped) await paint(second - 1, facing, room, clamped);
+    if (!destroyed && page === clamped) await drawMarks();
+  }
+
+  /// Lo strato delle annotazioni sopra le pagine che si vedono, alla misura
+  /// della pagina del PDF: spento, o senza annotazioni, le pagine sono il
+  /// PDF e basta.
+  async function drawMarks(): Promise<void> {
+    const token = ++marking;
+    const loaded = engine;
+    const shown = where;
+    for (const [sheet, number] of [[front, shown?.first ?? null], [back, shown?.last ?? null]] as const) {
+      if (!loaded || number === null || !layers || !marksShown) {
+        drawMark(sheet, null, number);
+        continue;
+      }
+      let size: readonly [number, number] | null = null;
+      try {
+        size = await loaded.pageSize(number - 1);
+      } catch {
+        // La misura scritta nelle annotazioni, o A4.
+      }
+      if (destroyed || token !== marking || !layers) return;
+      drawMark(sheet, layers.layer(number, size), number);
+    }
   }
 
   function step(delta: -1 | 1): void {
@@ -608,6 +688,15 @@ export function mountPdfView(
     // Il piano si stringe: la pagina adattata la segue dal `ResizeObserver`.
     if (open && engine) buildThumbs(engine);
   });
+  // «Mostra le annotazioni»: c'è soltanto con delle annotazioni che si
+  // leggono, ed è acceso a ogni apertura.
+  const marksButton = figure("media-show-annotations", "media.pdf.annotations", true);
+  marksButton.hidden = true;
+  life.listen(marksButton, "click", () => {
+    marksShown = !marksShown;
+    marksButton.setAttribute("aria-pressed", String(marksShown));
+    void drawMarks();
+  });
   // Il foglietto delle miniature c'è quando il motore le sa fare.
   const thumbsSheet = sheet(thumbsButton);
   thumbsSheet.hidden = true;
@@ -694,6 +783,9 @@ export function mountPdfView(
   }
   life.add(() => resize?.disconnect());
   toolbar.append(sheet(prev, next), thumbsSheet, contents, searchBox, sheet(fitButton, spreadButton, darkButton));
+  // Il foglietto di «Annota», con prima di lui l'interruttore delle
+  // annotazioni; senza «Annota» l'interruttore sta da solo.
+  const marksSheet = sheet(marksButton);
   if (options.onAnnotate) {
     const annotate = document.createElement("button");
     annotate.type = "button";
@@ -701,8 +793,11 @@ export function mountPdfView(
     annotate.tabIndex = -1;
     annotate.textContent = t("media.pdf.annotate");
     life.listen(annotate, "click", () => invokeAction(() => options.onAnnotate?.()));
-    toolbar.append(sheet(annotate));
+    marksSheet.append(annotate);
+  } else {
+    marksSheet.hidden = true;
   }
+  toolbar.append(marksSheet);
   // «…»: aprire con un'altra app e copiare il link alla pagina, i gesti che
   // non si fanno ogni volta. Senza nessuno dei due, «…» non c'è.
   const extra: { readonly label: Key; readonly run: () => void | Promise<void> }[] = [];
@@ -742,8 +837,10 @@ export function mountPdfView(
   });
 
   if (!options.loader) {
+    resolveCount(null);
     fallback(t("media.pdf.no_engine"));
   } else if (bytes.byteLength === 0) {
+    resolveCount(null);
     fallback(t("media.pdf.empty", { id: descriptor.id }));
   } else {
     say(t("media.loading", { id: descriptor.id }));
@@ -755,6 +852,7 @@ export function mountPdfView(
           return;
         }
         engine = loaded;
+        resolveCount(loaded.pageCount > 0 ? loaded.pageCount : null);
         if (engine.pageCount === 0) {
           fallback(`PDF ${descriptor.id} has no pages.`);
           return;
@@ -764,6 +862,7 @@ export function mountPdfView(
         thumbsSheet.hidden = !loaded.renderThumbnail;
       })
       .catch((error) => {
+        resolveCount(null);
         if (!destroyed) fallback(`PDF ${descriptor.id} could not be opened: ${errorText(error)}`);
       });
   }
@@ -790,8 +889,62 @@ export function mountPdfView(
     keys.refresh();
   }
 
+  /// Il posto di una pagina: il canvas e sopra, quando serve, lo strato
+  /// delle annotazioni, un `<img>` grande quanto il canvas che i clic
+  /// attraversano.
+  function pageSheet(target: HTMLCanvasElement): PageSheet {
+    const box = document.createElement("span");
+    box.className = "media-pdf-sheet";
+    box.append(target);
+    return { box, mark: null, url: null, drawn: null, page: null };
+  }
+
+  /// Mette sul posto `sheet` lo strato `svg` della pagina `number`, o lo
+  /// toglie. Il documento diventa un blob: in un `<img>` script e risorse
+  /// esterne non partono. Il blob di prima si revoca.
+  function drawMark(sheet: PageSheet, svg: string | null, number: number | null): void {
+    sheet.page = number;
+    if (svg === sheet.drawn) return;
+    sheet.drawn = svg;
+    if (sheet.url !== null) URL.revokeObjectURL(sheet.url);
+    sheet.url = null;
+    if (svg === null) {
+      sheet.mark?.remove();
+      sheet.mark = null;
+      return;
+    }
+    if (sheet.mark === null) {
+      const mark = document.createElement("img");
+      mark.className = "media-pdf-annotations";
+      mark.alt = "";
+      mark.setAttribute("aria-hidden", "true");
+      mark.decoding = "async";
+      mark.draggable = false;
+      sheet.mark = mark;
+      sheet.box.append(mark);
+    }
+    sheet.url = URL.createObjectURL(new Blob([svg], { type: "image/svg+xml" }));
+    sheet.mark.src = sheet.url;
+  }
+
+  function setAnnotations(next: PdfAnnotationLayers | null, text: string | null): void {
+    if (destroyed) return;
+    layers = next;
+    marksButton.hidden = next === null;
+    marksSheet.hidden = next === null && !options.onAnnotate;
+    marksNote.textContent = text ?? "";
+    marksNote.hidden = !text;
+    const focused = document.activeElement === marksButton;
+    const current = keys.refresh();
+    if (focused && marksButton.hidden && current) keys.focus(current);
+    void drawMarks();
+  }
+
   life.add(() => {
     destroyed = true;
+    marking++;
+    resolveCount(null);
+    for (const sheet of [front, back]) drawMark(sheet, null, null);
     engine?.destroy();
     engine = null;
     root.remove();
@@ -803,6 +956,8 @@ export function mountPdfView(
     where: () => where,
     goToPage: (n: number) => show(n),
     search: async (needle: string) => (engine && !destroyed ? engine.search(needle, 20) : []),
+    pageCount: () => counted,
+    setAnnotations,
     destroy: () => life.close(),
   };
 }

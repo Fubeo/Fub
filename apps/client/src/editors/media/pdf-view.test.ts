@@ -99,7 +99,7 @@ describe("la barra del PDF", () => {
       if (child.classList.contains("media-pdf-group")) {
         expect(child.classList.contains("kit-bar-group")).toBe(true);
         expect(child.getAttribute("role")).toBe("group");
-        return [...child.querySelectorAll("button")].map((button) => button.getAttribute("aria-label") ?? button.textContent).join(" + ");
+        return [...child.querySelectorAll("button:not([hidden])")].map((button) => button.getAttribute("aria-label") ?? button.textContent).join(" + ");
       }
       if (child.classList.contains("media-pdf-search")) return "search";
       if (child instanceof HTMLSelectElement) return "outline";
@@ -278,5 +278,188 @@ describe("la barra del PDF", () => {
     const toolbar = view.element.querySelector<HTMLElement>(".media-pdf-toolbar")!;
     expect(named(toolbar, t("media.pdf.previous")).disabled).toBe(true);
     expect(named(toolbar, t("media.pdf.next")).disabled).toBe(true);
+  });
+});
+
+describe("le annotazioni sopra le pagine", () => {
+  /// I blob creati, per URL: il visore li disegna in un `<img>`.
+  function blobs() {
+    const made = new Map<string, Blob>();
+    const revoked: string[] = [];
+    let next = 0;
+    vi.spyOn(URL, "createObjectURL").mockImplementation((blob) => {
+      const url = `blob:annotazioni-${++next}`;
+      made.set(url, blob as Blob);
+      return url;
+    });
+    vi.spyOn(URL, "revokeObjectURL").mockImplementation((url) => void revoked.push(url));
+    return { made, revoked };
+  }
+
+  afterEach(() => vi.restoreAllMocks());
+
+  /// Le annotazioni finte: un foglio che dice la sua pagina.
+  function layers(pages: readonly number[]) {
+    const asked: [number, readonly [number, number] | null][] = [];
+    return {
+      asked,
+      layer(page: number, size: readonly [number, number] | null) {
+        asked.push([page, size]);
+        return pages.includes(page) ? `<svg xmlns="http://www.w3.org/2000/svg" data-page="${page}"/>` : null;
+      },
+    };
+  }
+
+  const marks = (root: HTMLElement) => [...root.querySelectorAll<HTMLImageElement>(".media-pdf-sheet > img.media-pdf-annotations")];
+
+  it("ogni pagina che si vede porta il suo strato, sopra il suo canvas e alla misura della sua pagina, anche con due pagine affiancate", async () => {
+    const { made } = blobs();
+    const sizes: Record<number, readonly [number, number]> = { 0: [600, 800], 1: [500, 700], 2: [600, 800] };
+    const { view, toolbar, page } = await mounted(3, {}, { pageSize: async (index: number) => sizes[index]! });
+    const fake = layers([1, 2]);
+    view.setAnnotations(fake, null);
+    await settle();
+    let shown = marks(page);
+    expect(shown).toHaveLength(1);
+    expect(shown[0]!.parentElement!.querySelector("canvas")).not.toBeNull();
+    expect(shown[0]!.getAttribute("src")).toMatch(/^blob:/);
+    expect(shown[0]!.getAttribute("aria-hidden")).toBe("true");
+    const first = made.get(shown[0]!.getAttribute("src")!)!;
+    expect(first.type).toBe("image/svg+xml");
+    expect(await first.text()).toContain(`data-page="1"`);
+    expect(fake.asked[fake.asked.length - 1]).toEqual([1, [600, 800]]);
+    named(toolbar, t("media.pdf.two_pages")).click();
+    await settle();
+    await settle();
+    shown = marks(page);
+    expect(shown).toHaveLength(2);
+    const sheets = [...page.querySelectorAll<HTMLElement>(".media-pdf-sheet")];
+    expect(sheets.map((sheet) => sheet.querySelector("img") !== null)).toEqual([true, true]);
+    expect(await made.get(sheets[1]!.querySelector("img")!.getAttribute("src")!)!.text()).toContain(`data-page="2"`);
+    expect(fake.asked).toContainEqual([2, [500, 700]]);
+    // «Adatta alla larghezza»: lo strato resta, la misura è sempre la pagina.
+    named(toolbar, t("media.pdf.fit_width")).click();
+    await settle();
+    await settle();
+    expect(marks(page)).toHaveLength(2);
+    expect(fake.asked[fake.asked.length - 1]).toEqual([2, [500, 700]]);
+    // La coppia 3–4 di un PDF di 3 pagine: la 3 non è annotata, niente strato.
+    named(toolbar, t("media.pdf.next")).click();
+    await settle();
+    await settle();
+    expect(marks(page)).toHaveLength(0);
+  });
+
+  it("l'interruttore c'è solo con le annotazioni, acceso; le spegne e le riaccende", async () => {
+    blobs();
+    const { view, toolbar, page } = await mounted(2, { onAnnotate: () => {} });
+    const button = named(toolbar, t("media.pdf.annotations"));
+    expect(button.closest("[hidden]")).not.toBeNull();
+    view.setAnnotations(layers([1]), null);
+    await settle();
+    expect(button.closest("[hidden]")).toBeNull();
+    // Nel foglietto di «Annota», prima di lui.
+    expect(button.nextElementSibling?.classList.contains("media-pdf-annotate")).toBe(true);
+    expect(button.classList.contains("kit-bar-button")).toBe(true);
+    expect(button.querySelector('svg[data-icon="media-show-annotations"]')).not.toBeNull();
+    expect(button.getAttribute("aria-pressed")).toBe("true");
+    expect(marks(page)).toHaveLength(1);
+    button.click();
+    await settle();
+    expect(button.getAttribute("aria-pressed")).toBe("false");
+    expect(marks(page)).toHaveLength(0);
+    button.click();
+    await settle();
+    expect(button.getAttribute("aria-pressed")).toBe("true");
+    expect(marks(page)).toHaveLength(1);
+    // Le annotazioni che spariscono tolgono interruttore e strato.
+    view.setAnnotations(null, null);
+    await settle();
+    expect(button.closest("[hidden]")).not.toBeNull();
+    expect(marks(page)).toHaveLength(0);
+  });
+
+  it("l'interruttore entra nelle frecce della barra", async () => {
+    blobs();
+    const { view, toolbar } = await mounted(2, { onAnnotate: () => {} });
+    view.setAnnotations(layers([1]), null);
+    await settle();
+    const dark = named(toolbar, t("media.pdf.dark"));
+    dark.focus();
+    key(dark, "ArrowRight");
+    expect(document.activeElement).toBe(named(toolbar, t("media.pdf.annotations")));
+    key(document.activeElement as HTMLElement, "ArrowRight");
+    expect((document.activeElement as HTMLElement).classList.contains("media-pdf-annotate")).toBe(true);
+  });
+
+  it("senza «Annota» l'interruttore sta da solo; senza annotazioni il foglietto non c'è", async () => {
+    blobs();
+    const { view, toolbar } = await mounted(2);
+    const button = named(toolbar, t("media.pdf.annotations"));
+    expect(button.parentElement!.hidden).toBe(true);
+    view.setAnnotations(layers([1]), null);
+    expect(button.parentElement!.hidden).toBe(false);
+    expect(button.hidden).toBe(false);
+  });
+
+  it("le pagine annotate oltre l'ultima del PDF non si chiedono", async () => {
+    blobs();
+    const { view, toolbar } = await mounted(2);
+    const fake = layers([1, 2, 5]);
+    view.setAnnotations(fake, null);
+    await settle();
+    named(toolbar, t("media.pdf.next")).click();
+    await settle();
+    await settle();
+    expect(fake.asked.length).toBeGreaterThan(0);
+    expect(fake.asked.every(([n]) => n <= 2)).toBe(true);
+  });
+
+  it("la riga delle annotazioni si vede, e la ricerca non la copre", async () => {
+    blobs();
+    const { view } = await mounted(2);
+    const line = view.element.querySelector<HTMLElement>(".media-pdf-note")!;
+    expect(line.hidden).toBe(true);
+    view.setAnnotations(layers([1]), t("pdf.changed"));
+    expect(line.hidden).toBe(false);
+    expect(line.textContent).toBe(t("pdf.changed"));
+    expect(line.getAttribute("role")).toBe("status");
+    const search = view.element.querySelector<HTMLInputElement>('input[type="search"]')!;
+    search.value = "x";
+    search.dispatchEvent(new Event("change"));
+    await settle();
+    expect(line.textContent).toBe(t("pdf.changed"));
+    view.setAnnotations(null, null);
+    expect(line.hidden).toBe(true);
+  });
+
+  it("i colori scuri non toccano le annotazioni", async () => {
+    blobs();
+    const { view, toolbar, page } = await mounted(2);
+    view.setAnnotations(layers([1]), null);
+    await settle();
+    named(toolbar, t("media.pdf.dark")).click();
+    expect(page.querySelector("canvas")!.style.filter).not.toBe("");
+    expect(marks(page)[0]!.style.filter).toBe("");
+  });
+
+  it("smontato, i blob si revocano e una lettura arrivata dopo non disegna", async () => {
+    const { revoked } = blobs();
+    const { view, page, life } = await mounted(2);
+    view.setAnnotations(layers([1]), null);
+    await settle();
+    const url = marks(page)[0]!.getAttribute("src")!;
+    life.close();
+    expect(revoked).toContain(url);
+    view.setAnnotations(layers([1]), null);
+    await settle();
+    expect(marks(page)).toHaveLength(0);
+  });
+
+  it("senza annotazioni il piano tiene solo i canvas", async () => {
+    const created = vi.spyOn(URL, "createObjectURL");
+    const { page } = await mounted(3);
+    expect(page.querySelectorAll("img")).toHaveLength(0);
+    expect(created).not.toHaveBeenCalled();
   });
 });

@@ -15,6 +15,7 @@ export const MEDIA_ICONS: Readonly<Record<string, readonly string[]>> = {
   "media-fit-width": ["M3 12h18", "M7 8l-4 4 4 4", "M17 8l4 4-4 4"],
   "media-two-pages": ["M3 5h8v14H3z", "M13 5h8v14h-8z"],
   "media-dark-pages": ["M12 3a9 9 0 1 0 0 18z", "M12 3a9 9 0 0 1 0 18"],
+  "media-show-annotations": ["M6 3h9l4 4v14H6z", "M14 3v5h5", "M9 16c1.5-2.5 2.5 1 4-1.5s2.5 0 3 0"],
 };
 
 let mounted = 0;

@@ -1176,6 +1176,9 @@
     "media-pdf-spread",
     "media-pdf-body",
     "media-pdf-thumbs",
+    "media-pdf-sheet",
+    "media-pdf-annotations",
+    "media-pdf-note",
     "media-audio",
     "media-video",
     "media-error",
@@ -2761,6 +2764,9 @@
     "media-pdf-spread": "contenuto",
     "media-pdf-body": "contenuto",
     "media-pdf-thumbs": "cornice",
+    "media-pdf-sheet": "contenuto",
+    "media-pdf-annotations": "contenuto",
+    "media-pdf-note": "contenuto",
     "media-audio": "contenuto",
     "media-video": "contenuto",
     "media-error": "cornice",
@@ -5991,7 +5997,10 @@
         "media-pdf-page",
         "media-pdf-spread",
         "media-pdf-body",
-        "media-pdf-thumbs"
+        "media-pdf-thumbs",
+        "media-pdf-sheet",
+        "media-pdf-annotations",
+        "media-pdf-note"
       ],
       "states": [
         "rest",
@@ -8790,7 +8799,7 @@
   "counts": {
     "required_roles": 154,
     "optional_roles": 66,
-    "hooks": 1583,
+    "hooks": 1586,
     "state_names": 7,
     "assigned_states": 759,
     "components": 225,

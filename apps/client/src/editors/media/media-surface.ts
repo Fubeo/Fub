@@ -14,7 +14,7 @@ import type { Lifetime } from "../../ui/lifetime";
 import { openLifetime } from "../../ui/lifetime";
 import { onLanguage, t, type Key } from "../../i18n/strings";
 import { MEDIA_MAX_INLINE_BYTES, mediaKindOfId, type MediaKind, type ResourceDescriptor } from "./media-types";
-import { openResourcePort, type ResourcePort, type ResourceTransport } from "./resource-port";
+import { openResourcePort, readAllResource, type ResourcePort, type ResourceTransport } from "./resource-port";
 import { decodeImage, mountImageView, type ImageView } from "./image-view";
 import { ZOOM_STEP } from "./zoom-view";
 import { mountAudioView, mountVideoView } from "./player-view";
@@ -40,6 +40,45 @@ export interface MediaSurfaceDeps {
   /// riga dell'XMP accanto a `doc`, finché `life` è vivo. Senza, la foto è
   /// sola; con, la riga arriva dopo la foto, che non la aspetta.
   photoData?: { show(root: HTMLElement, doc: string, life: Lifetime): void };
+  /// Le annotazioni del PDF mostrato (`X.pdf.fubann` accanto a `X.pdf`), che
+  /// il visore disegna sopra le pagine in sola lettura. Senza, o con
+  /// `available()` falso (il vault non serve le annotazioni), il visore
+  /// mostra solo il PDF.
+  annotations?: PdfAnnotationsPort;
+}
+
+/// Come il visore legge le annotazioni di un PDF: con le porte di lettura
+/// dell'host e gli eventi dei documenti che la shell ha già.
+export interface PdfAnnotationsPort {
+  /// Vero se il vault serve le annotazioni (la feature `draw`).
+  available(): boolean;
+  /// Il testo intero di `id`, BOM compreso; `null` se il file non c'è.
+  read(id: string): Promise<string | null>;
+  /// `changed` quando `id` si salva, nasce, sparisce o cambia nome; mai per
+  /// tasto. Restituisce lo smontaggio.
+  watch(id: string, changed: () => void): () => void;
+}
+
+type AnnotationsModule = typeof import("./pdf-annotations");
+
+/// Il codice che disegna le annotazioni: si scarica la prima volta che un
+/// PDF ne ha, e una volta.
+let annotationsModule: Promise<AnnotationsModule> | null = null;
+function loadAnnotations(): Promise<AnnotationsModule> {
+  annotationsModule ??= import("./pdf-annotations").catch((error: unknown) => {
+    annotationsModule = null;
+    throw error;
+  });
+  return annotationsModule;
+}
+
+/// L'impronta dei byte del PDF, come la scrive `fub:digest`. `digest` copia
+/// i byte subito: pdf.js se li può tenere dopo.
+async function pdfDigest(bytes: Uint8Array): Promise<string> {
+  const hash = new Uint8Array(await crypto.subtle.digest("SHA-256", bytes as BufferSource));
+  let hex = "";
+  for (const byte of hash) hex += byte.toString(16).padStart(2, "0");
+  return `sha256:${hex}`;
 }
 
 const MEDIA_MODES: SurfaceMode[] = [
@@ -110,6 +149,9 @@ export function mountMediaSurface(
       message("viewer.unavailable");
       return;
     }
+    // Le annotazioni accanto al PDF si cercano subito, insieme ai byte del
+    // PDF: quando il PDF è letto la risposta di solito c'è già.
+    const marks = kind === "pdf" ? watchAnnotations(bareId) : null;
     let port: ResourcePort | null = null;
     try {
       status.textContent = t("viewer.unavailable");
@@ -130,7 +172,18 @@ export function mountMediaSurface(
       } else {
         const bytes = await port.readAll();
         if (!active) return;
+        // Con le annotazioni l'impronta si prende prima che pdf.js abbia i
+        // byte, e il codice del disegno parte insieme al PDF.
+        let digest: Promise<string> | null = null;
+        if (marks !== null && typeof (await marks.text.then((text) => text, () => null)) === "string") {
+          if (!active) return;
+          digest = pdfDigest(bytes);
+          digest.catch(() => {});
+          void loadAnnotations().catch(() => {});
+        }
+        if (!active) return;
         mounted = await mountBytes(descriptor, bytes, life, deps, root, context.documentId, wantedPage, statusChanged);
+        if (marks !== null && mounted?.pdf) followAnnotations(mounted.pdf, marks, digest);
         // La prima pagina può arrivare prima della view: la banda la rilegge.
         statusChanged();
       }
@@ -146,6 +199,124 @@ export function mountMediaSurface(
       if (pendingPort === port) pendingPort = null;
       await port?.close().catch(() => {});
     }
+  }
+
+  /// Le annotazioni di `pdf` mentre il visore è aperto: l'ultima lettura del
+  /// `.fubann` e chi la ridisegna quando il file cambia.
+  interface Marks {
+    readonly port: PdfAnnotationsPort;
+    readonly pdf: string;
+    readonly id: string;
+    /// L'ultima lettura chiesta: un salvataggio ne chiede una nuova.
+    text: Promise<string | null>;
+    /// Chi la porta sulle pagine, quando il visore c'è.
+    redraw: (() => void) | null;
+  }
+
+  /// Comincia a leggere le annotazioni di `pdf` e a seguirne i salvataggi;
+  /// `null` se il vault non le serve.
+  function watchAnnotations(pdf: string): Marks | null {
+    const port = deps.annotations;
+    if (!port?.available()) return null;
+    const id = `${pdf}.fubann`;
+    const read = (): Promise<string | null> => {
+      const text = port.read(id);
+      text.catch(() => {});
+      return text;
+    };
+    const marks: Marks = { port, pdf, id, text: read(), redraw: null };
+    life.add(port.watch(id, () => {
+      if (!active) return;
+      marks.text = read();
+      marks.redraw?.();
+    }));
+    return marks;
+  }
+
+  /// Porta le annotazioni sulle pagine di `view`, e ce le riporta a ogni
+  /// salvataggio: vale l'ultima lettura chiesta, e una più vecchia arrivata
+  /// dopo non la copre.
+  function followAnnotations(view: PdfView, marks: Marks, digest: Promise<string> | null): void {
+    let run = 0;
+    let facts: Promise<{ digest: string; pages: number }> | null = null;
+    // L'impronta e le pagine del PDF mostrato, chieste una volta e solo se le
+    // annotazioni dicono di quale versione sono. Senza l'impronta presa
+    // all'apertura (il `.fubann` è nato dopo) il PDF si rilegge.
+    const pdfFacts = (): Promise<{ digest: string; pages: number }> => {
+      facts ??= (async () => {
+        const hash = await (digest ?? readAllResource(deps.transport, marks.pdf).then((read) => pdfDigest(read.bytes)));
+        const pages = await view.pageCount();
+        if (pages === null) throw new Error("PDF without pages");
+        return { digest: hash, pages };
+      })();
+      facts.catch(() => {
+        facts = null;
+      });
+      return facts;
+    };
+    const refresh = async (): Promise<void> => {
+      const token = ++run;
+      const stale = (): boolean => !active || token !== run;
+      const unreadable = (): void => view.setAnnotations(null, t("media.pdf.annotations_unreadable"));
+      let text: string | null;
+      try {
+        text = await marks.text;
+      } catch {
+        if (!stale()) unreadable();
+        return;
+      }
+      if (stale()) return;
+      if (text === null) {
+        view.setAnnotations(null, null);
+        return;
+      }
+      let module: AnnotationsModule;
+      try {
+        module = await loadAnnotations();
+      } catch {
+        if (!stale()) unreadable();
+        return;
+      }
+      if (stale()) return;
+      const read = module.readPdfAnnotations(text, marks.id, marks.pdf);
+      switch (read.kind) {
+        case "foreign":
+          view.setAnnotations(null, t("media.pdf.annotations_foreign"));
+          return;
+        case "unreadable":
+          unreadable();
+          return;
+        case "elsewhere":
+          view.setAnnotations(null, null);
+          return;
+        case "drawn":
+          break;
+      }
+      let line: string | null = null;
+      if (module.needsPdfFacts(read.root)) {
+        try {
+          const pdf = await pdfFacts();
+          if (stale()) return;
+          if (module.annotationsChanged(read.root, pdf)) {
+            line = t("pdf.changed");
+            if (read.root.pages !== null && read.root.pages !== pdf.pages) {
+              line += ` ${t("pdf.changed.pages", { before: read.root.pages, after: pdf.pages })}`;
+            }
+          }
+        } catch {
+          // Senza l'impronta non si sa se il PDF è cambiato: le annotazioni
+          // si disegnano lo stesso, senza riga.
+          if (stale()) return;
+        }
+      }
+      view.setAnnotations(read.layers, line);
+    };
+    marks.redraw = () => void refresh();
+    life.add(() => {
+      marks.redraw = null;
+      run++;
+    });
+    void refresh();
   }
 
   // La riga dei dati di LightCraft, dopo la foto o dopo la frase che dice

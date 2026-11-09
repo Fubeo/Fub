@@ -17,7 +17,8 @@ finestra stretta scorre di lato. I suoi foglietti, in ordine:
 - la ricerca, il campo con la lente: il numero dei risultati, o «Nessun
   risultato», si legge nella riga sotto la barra;
 - adatta alla larghezza, due pagine affiancate e colori scuri;
-- «Annota», quando c'è (vedi sotto), in un foglietto suo.
+- «Mostra le annotazioni», quando il PDF ne ha (vedi sotto), e «Annota»,
+  quando c'è, nello stesso foglietto.
 
 I pulsanti sono figure; il nome si legge nel suggerimento e lo dice il
 lettore di schermo. Tab entra nella barra e ne esce con un passo solo, le
@@ -31,6 +32,38 @@ La pagina che si legge sta nella banda di stato, «Pagina 3 di 12», o «Pagine
 si apre mostra la sua nota d'errore e nella banda non dice nessuna pagina. La
 riga di stato del visore resta per il caricamento, gli errori e la ricerca, e
 per il lettore di schermo.
+
+### Le annotazioni nel visore
+
+Con la feature `draw`, il visore cerca accanto al PDF le sue annotazioni,
+`X.pdf.fubann`, e le disegna sopra le pagine, in sola lettura: dove le mette
+«Annota», alla misura della pagina, con una pagina sola o due affiancate e
+con «Adatta alla larghezza». Non hanno maniglie né selezione, e i clic vanno
+al visore. Non prendono i «Colori scuri»: restano dei loro colori, come in
+«Annota». Per modificarle si apre «Annota».
+
+L'interruttore «Mostra le annotazioni» sta prima di «Annota», nel suo
+foglietto, e c'è soltanto quando il PDF ha delle annotazioni che si leggono.
+È acceso a ogni apertura e non si ricorda, come i «Colori scuri»; spento, le
+pagine sono il PDF e basta. Il lettore di schermo ne dice il nome e lo stato.
+
+Le annotazioni si rileggono quando il file si salva, da un altro riquadro con
+«Annota» aperto o da fuori, e vale l'ultimo salvataggio. Un file che nasce
+dopo l'apertura, col primo «Annota», fa comparire l'interruttore; uno che
+sparisce lo toglie. Un PDF senza annotazioni non scarica niente di più: il
+codice che le disegna arriva solo quando il file c'è.
+
+Ogni pagina è un'immagine fatta col testo del file: script, collegamenti e
+risorse esterne che il file contenesse non partono. Ciò che sta fuori dalle
+pagine del file, o oltre l'ultima pagina del PDF, non si vede.
+
+La riga sotto la barra dice quando il PDF è cambiato dopo le annotazioni,
+con le parole dell'avviso di «Annota» (vedi
+[Quando il PDF cambia o manca](#quando-il-pdf-cambia-o-manca)): le
+annotazioni si vedono lo stesso. Un file che non si legge, o che non è stato
+fatto con Fub, non si disegna, non ha l'interruttore e la riga lo dice.
+
+La stampa del PDF resta il PDF, senza le annotazioni.
 
 ## Annotare un PDF
 
