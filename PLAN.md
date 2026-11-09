@@ -519,7 +519,7 @@ uniforme ≤ 28 px (oggi fino a 374 px in 16 fotogrammi su 32);
 dentro il margine; d42 resta verde; `npm run bench:grid` verde con G2
 acceso; `engine.test.ts` e `npm run typecheck` verdi.
 Prova: scripts/check.sh --rapido, poi `npm run bench:grid`
-Stato: [ ] da fare
+Stato: [x] fatto (2026-11-09: carta e righe nel gestore; tetti per giro `GRID_FRAME_REFILLS` 48, `GRID_FRAME_NEW_ROWS` 3, fascia 0,1; gestore p90 ≤ 8,5 ms, peggiore ≤ 20 ms, fotogramma ≤ 16,5 ms; a11y scuro col rosso di `live-16-elenco-a-capo`, non della griglia)
 
 ## T3 · I segni che restano e scivolano
 
