@@ -1786,7 +1786,7 @@ byte, che 1000 pezzi sono un commit, che il rifiuto non cambia niente;
 `engine.test.ts` passa invariato.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/canvas src/ink
-Stato: [ ] da fare
+Stato: [x] fatto
 
 ## T23 · La seconda misura sul foglio vero
 
