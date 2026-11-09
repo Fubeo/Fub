@@ -7,8 +7,13 @@
 
 import type { Lifetime } from "../../ui/lifetime";
 import type { ResourceDescriptor } from "./media-types";
-import { t } from "../../i18n/strings";
+import { t, type Key } from "../../i18n/strings";
 import { errorText } from "../../host/errors";
+import { rovingToolbar } from "../../kit/toolbar-keys";
+import { iconEl } from "../../ui/icons";
+import { showContextMenu, type MenuItem } from "../../ui/menu";
+import { attachTooltip } from "../../ui/tooltip";
+import { useMediaIcons } from "./icons";
 
 /// Required local pdf.js version. Composition installs/bundles the dependency
 /// and worker; this module never fetches a CDN or fabricates a loader.
@@ -300,17 +305,37 @@ export function pdfIdWithoutFragment(id: string): string {
   return cut >= 0 ? id.slice(0, cut) : id;
 }
 
+/** Dove si legge: la pagina davanti, la compagna nella vista a due pagine, quante sono. */
+export interface PdfWhere {
+  readonly first: number;
+  /// La seconda pagina affiancata, o `null` con una pagina sola davanti.
+  readonly last: number | null;
+  readonly count: number;
+}
+
+/** «Pagina N di M», o «Pagine N–N+1 di M» con due pagine affiancate. */
+export function pdfWhereText(where: PdfWhere): string {
+  return where.last === null
+    ? t("media.pdf.page", { page: where.first, count: where.count })
+    : t("media.pdf.pages", { first: where.first, last: where.last, count: where.count });
+}
+
 export interface PdfView {
   readonly element: HTMLElement;
   /// La pagina che si legge adesso.
   page(): number;
+  /// Dove si legge, o `null` finché nessuna pagina si mostra (in caricamento,
+  /// o un PDF che non si apre).
+  where(): PdfWhere | null;
   goToPage(page: number): Promise<void>;
   search(needle: string): Promise<PdfSearchHit[]>;
   destroy(): void;
 }
 
 /**
- * Monta il lettore: toolbar (pagina, ricerca, apri-esterno), canvas, stato.
+ * Monta il lettore: la barra (pagine, miniature, sommario, ricerca, vista e
+ * «…»), canvas, stato. La pagina davanti la dice `where()`, e `onPage` avvisa
+ * quando cambia: la superficie la porta nella banda.
  * Il loader e' iniettato (produzione: pdf.js; test: finto): senza loader la
  * view mostra il fallback con le istruzioni di installazione, mai un riquadro
  * vuoto e mai un viewer del browser.
@@ -338,6 +363,8 @@ export function mountPdfView(
     onOpenExternal?: () => void | Promise<void>;
     onCopyLink?: (page: number) => void | Promise<void>;
     onAnnotate?: () => void | Promise<void>;
+    /// La pagina davanti è cambiata, o non c'è più: `where()` dice quale.
+    onPage?: () => void;
   },
   life: Lifetime,
 ): PdfView {
@@ -346,8 +373,13 @@ export function mountPdfView(
   root.tabIndex = 0;
   root.setAttribute("role", "document");
 
+  // La barra è la barra in una fila del kit (`kit-bar`): i foglietti, le
+  // figure, un solo punto di Tab e le frecce (`kit/toolbar-keys.ts`).
   const toolbar = document.createElement("div");
-  toolbar.className = "media-pdf-toolbar";
+  toolbar.className = "media-pdf-toolbar kit-bar";
+  toolbar.setAttribute("role", "toolbar");
+  toolbar.setAttribute("aria-label", t("media.pdf.toolbar"));
+  life.add(useMediaIcons());
   const status = document.createElement("p");
   status.setAttribute("role", "status");
   const canvas = document.createElement("canvas");
@@ -382,6 +414,16 @@ export function mountPdfView(
   /// Due pagine affiancate, come un libro aperto: la dispari a sinistra.
   let spread = false;
   let dark = false;
+  /// Dove si legge: `null` finché nessuna pagina si mostra.
+  let where: PdfWhere | null = null;
+
+  /// Una frase nella riga di stato. La pagina la dice la banda della
+  /// superficie: nella riga resta per il lettore di schermo (`quiet`). Il
+  /// caricamento, gli errori e la ricerca si vedono.
+  function say(text: string, quiet = false): void {
+    status.textContent = text;
+    status.classList.toggle("sr-only", quiet);
+  }
 
   /// La larghezza utile del piano, senza il suo margine interno.
   function available(): number {
@@ -417,12 +459,13 @@ export function mountPdfView(
     if (spread) clamped = spreadStart(clamped);
     page = clamped;
     const second = spread && clamped < count ? clamped + 1 : null;
-    const where = second
-      ? t("media.pdf.pages", { first: clamped, last: second, count: engine.pageCount })
-      : t("media.pdf.page", { page: clamped, count: engine.pageCount });
-    status.textContent = where;
-    viewer.setAttribute("aria-label", where);
+    where = { first: clamped, last: second, count: engine.pageCount };
+    const text = pdfWhereText(where);
+    say(text, true);
+    viewer.setAttribute("aria-label", text);
     markThumbs(clamped, second);
+    markSteps();
+    options.onPage?.();
     fitWidth = available();
     viewer.classList.toggle("media-pdf-spread", second !== null);
     facing.hidden = second === null;
@@ -439,17 +482,23 @@ export function mountPdfView(
   }
 
   function showFailed(error: unknown): void {
-    if (!destroyed) status.textContent = t("media.pdf.page_failed", { reason: errorText(error) });
+    if (!destroyed) say(t("media.pdf.page_failed", { reason: errorText(error) }));
   }
 
   function invokeAction(action: () => void | Promise<void>): void {
     void Promise.resolve().then(action).catch((error) => {
-      if (!destroyed) status.textContent = t("media.pdf.failed", { reason: errorText(error) });
+      if (!destroyed) say(t("media.pdf.failed", { reason: errorText(error) }));
     });
   }
 
   function fallback(reason: string): void {
-    status.textContent = reason;
+    say(reason);
+    // Nessuna pagina si mostra: la banda non ne dice nessuna.
+    if (where !== null) {
+      where = null;
+      markSteps();
+      options.onPage?.();
+    }
     const note = document.createElement("p");
     note.textContent = t("media.pdf.unavailable", { version: PDFJS_VERSION, id: descriptor.id, mime: descriptor.mime });
     viewer.replaceChildren(note);
@@ -462,16 +511,42 @@ export function mountPdfView(
     }
   }
 
-  const prev = document.createElement("button");
-  prev.type = "button";
-  prev.textContent = "‹";
+  /// Un foglietto della barra: un gruppo senza nome, come nella barra di serie.
+  function sheet(...controls: HTMLElement[]): HTMLSpanElement {
+    const group = document.createElement("span");
+    group.className = "media-pdf-group kit-bar-group";
+    group.setAttribute("role", "group");
+    group.append(...controls);
+    return group;
+  }
+
+  /// Un pulsante a figura: il nome accessibile e il suggerimento sono le
+  /// parole di sempre. Senza la figura (un tema che non la disegna) il nome
+  /// resta scritto.
+  function figure(name: string, label: Key, pressed?: boolean): HTMLButtonElement {
+    const control = document.createElement("button");
+    control.type = "button";
+    control.className = "kit-bar-button";
+    control.tabIndex = -1;
+    control.setAttribute("aria-label", t(label));
+    if (pressed !== undefined) control.setAttribute("aria-pressed", String(pressed));
+    const drawn = iconEl(name);
+    if (drawn) control.append(drawn);
+    else control.textContent = t(label);
+    life.add(attachTooltip(control, t(label)));
+    return control;
+  }
+
+  const prev = figure("media-page-previous", "media.pdf.previous");
+  prev.disabled = true;
   life.listen(prev, "click", () => step(-1));
-  const next = document.createElement("button");
-  next.type = "button";
-  next.textContent = "›";
+  const next = figure("media-page-next", "media.pdf.next");
+  next.disabled = true;
   life.listen(next, "click", () => step(1));
   const search = document.createElement("input");
   search.type = "search";
+  search.className = "kit-bar-field";
+  search.tabIndex = -1;
   search.placeholder = t("media.pdf.search");
   search.setAttribute("aria-label", t("media.pdf.search_label"));
   life.listen(search, "change", () => {
@@ -479,17 +554,25 @@ export function mountPdfView(
     const needle = search.value;
     void engine.search(needle, 20).then((hits) => {
       if (destroyed) return;
-      status.textContent =
+      say(
         hits.length === 0
           ? t("media.pdf.no_matches", { needle })
-          : t("media.pdf.matches", { count: hits.length, page: hits[0]!.page });
+          : t("media.pdf.matches", { count: hits.length, page: hits[0]!.page }),
+      );
     }).catch((error) => {
-      if (!destroyed) status.textContent = t("media.pdf.search_failed", { reason: errorText(error) });
+      if (!destroyed) say(t("media.pdf.search_failed", { reason: errorText(error) }));
     });
   });
+  // La ricerca: il campo con la lente dentro.
+  const searchBox = document.createElement("span");
+  searchBox.className = "media-pdf-search";
+  const lens = iconEl("search");
+  if (lens) searchBox.append(lens);
+  searchBox.append(search);
   // Il sommario, se il PDF ne ha uno: un elenco che porta alla pagina.
   const contents = document.createElement("select");
-  contents.className = "media-pdf-outline";
+  contents.className = "media-pdf-outline kit-bar-field";
+  contents.tabIndex = -1;
   contents.setAttribute("aria-label", t("media.pdf.outline"));
   contents.hidden = true;
   life.listen(contents, "change", () => {
@@ -497,19 +580,13 @@ export function mountPdfView(
     contents.selectedIndex = 0;
     if (Number.isInteger(target) && target > 0) void show(target).catch(showFailed);
   });
-  const fitButton = document.createElement("button");
-  fitButton.type = "button";
-  fitButton.textContent = t("media.pdf.fit_width");
-  fitButton.setAttribute("aria-pressed", "false");
+  const fitButton = figure("media-fit-width", "media.pdf.fit_width", false);
   life.listen(fitButton, "click", () => {
     fit = !fit;
     fitButton.setAttribute("aria-pressed", String(fit));
     void show(page).catch(showFailed);
   });
-  const spreadButton = document.createElement("button");
-  spreadButton.type = "button";
-  spreadButton.textContent = t("media.pdf.two_pages");
-  spreadButton.setAttribute("aria-pressed", "false");
+  const spreadButton = figure("media-two-pages", "media.pdf.two_pages", false);
   life.listen(spreadButton, "click", () => {
     spread = !spread;
     spreadButton.setAttribute("aria-pressed", String(spread));
@@ -517,20 +594,13 @@ export function mountPdfView(
   });
   // I colori del tema scuro: la pagina si inverte, e il giro di tinta riporta
   // i colori al loro tono (il rosso resta rosso, su fondo scuro).
-  const darkButton = document.createElement("button");
-  darkButton.type = "button";
-  darkButton.textContent = t("media.pdf.dark");
-  darkButton.setAttribute("aria-pressed", "false");
+  const darkButton = figure("media-dark-pages", "media.pdf.dark", false);
   life.listen(darkButton, "click", () => {
     dark = !dark;
     darkButton.setAttribute("aria-pressed", String(dark));
     for (const target of [canvas, facing, ...thumbs.querySelectorAll("canvas")]) target.style.filter = dark ? DARK_FILTER : "";
   });
-  const thumbsButton = document.createElement("button");
-  thumbsButton.type = "button";
-  thumbsButton.textContent = t("media.pdf.thumbnails");
-  thumbsButton.setAttribute("aria-pressed", "false");
-  thumbsButton.hidden = true;
+  const thumbsButton = figure("media-thumbnails", "media.pdf.thumbnails", false);
   life.listen(thumbsButton, "click", () => {
     const open = thumbs.hidden;
     thumbs.hidden = !open;
@@ -538,6 +608,23 @@ export function mountPdfView(
     // Il piano si stringe: la pagina adattata la segue dal `ResizeObserver`.
     if (open && engine) buildThumbs(engine);
   });
+  // Il foglietto delle miniature c'è quando il motore le sa fare.
+  const thumbsSheet = sheet(thumbsButton);
+  thumbsSheet.hidden = true;
+
+  /// Precedente e successiva si spengono ai capi; senza una pagina davanti
+  /// (in caricamento, un PDF che non si apre) tutte e due. Il fuoco che stava
+  /// su una delle due quando si spegne passa alla barra, non al documento.
+  /// Finché nessuno è entrato nella barra il Tab la apre dalle pagine, non
+  /// dal controllo che era il primo acceso durante il caricamento.
+  function markSteps(): void {
+    const focused = document.activeElement;
+    const last = where ? (where.last ?? where.first) : 0;
+    prev.disabled = !where || where.first <= 1;
+    next.disabled = !where || last >= where.count;
+    const current = keys.refresh(entered ? undefined : [prev, next].find((step) => !step.disabled) ?? null);
+    if ((focused === prev || focused === next) && focused.disabled && current) keys.focus(current);
+  }
 
   let observer: IntersectionObserver | null = null;
   life.add(() => observer?.disconnect());
@@ -605,36 +692,60 @@ export function mountPdfView(
     resize.observe(viewer);
   }
   life.add(() => resize?.disconnect());
-  toolbar.append(prev, next, thumbsButton, contents, search, fitButton, spreadButton, darkButton);
+  toolbar.append(sheet(prev, next), thumbsSheet, contents, searchBox, sheet(fitButton, spreadButton, darkButton));
   if (options.onAnnotate) {
     const annotate = document.createElement("button");
     annotate.type = "button";
-    annotate.className = "media-pdf-annotate";
+    annotate.className = "media-pdf-annotate kit-bar-button";
+    annotate.tabIndex = -1;
     annotate.textContent = t("media.pdf.annotate");
     life.listen(annotate, "click", () => invokeAction(() => options.onAnnotate?.()));
-    toolbar.append(annotate);
+    toolbar.append(sheet(annotate));
   }
-  if (options.onOpenExternal) {
-    const open = document.createElement("button");
-    open.type = "button";
-    open.textContent = t("media.open_external");
-    life.listen(open, "click", () => invokeAction(() => options.onOpenExternal?.()));
-    toolbar.append(open);
+  // «…»: aprire con un'altra app e copiare il link alla pagina, i gesti che
+  // non si fanno ogni volta. Senza nessuno dei due, «…» non c'è.
+  const extra: { readonly label: Key; readonly run: () => void | Promise<void> }[] = [];
+  if (options.onOpenExternal) extra.push({ label: "media.open_external", run: () => options.onOpenExternal?.() });
+  if (options.onCopyLink) extra.push({ label: "media.pdf.copy_link", run: () => options.onCopyLink?.(page) });
+  if (extra.length > 0) {
+    const more = document.createElement("button");
+    more.type = "button";
+    more.className = "kit-options-more";
+    more.tabIndex = -1;
+    more.setAttribute("aria-haspopup", "menu");
+    more.setAttribute("aria-expanded", "false");
+    more.setAttribute("aria-label", t("media.pdf.more"));
+    const dots = iconEl("more");
+    if (dots) more.append(dots);
+    else more.textContent = "…";
+    life.add(attachTooltip(more, t("media.pdf.more")));
+    life.listen(more, "click", () => {
+      const box = more.getBoundingClientRect();
+      const items: MenuItem[] = extra.map((entry) => ({ label: t(entry.label), run: () => invokeAction(entry.run) }));
+      more.setAttribute("aria-expanded", "true");
+      showContextMenu(new MouseEvent("click", { clientX: box.left, clientY: box.bottom }), items, {
+        onClose: () => more.setAttribute("aria-expanded", "false"),
+      });
+    });
+    toolbar.append(more);
   }
-  if (options.onCopyLink) {
-    const copy = document.createElement("button");
-    copy.type = "button";
-    copy.textContent = t("media.pdf.copy_link");
-    life.listen(copy, "click", () => invokeAction(() => options.onCopyLink?.(page)));
-    toolbar.append(copy);
-  }
+  // Le frecce di ogni barra in una fila: un solo punto di Tab, e contano i
+  // controlli visibili e accesi (il sommario c'è solo con un sommario).
+  const keys = rovingToolbar(toolbar, {
+    controls: () => [...toolbar.querySelectorAll<HTMLElement>("button, select, input")],
+  }, life);
+  keys.refresh();
+  let entered = false;
+  life.listen(toolbar, "focusin", () => {
+    entered = true;
+  });
 
   if (!options.loader) {
     fallback(t("media.pdf.no_engine"));
   } else if (bytes.byteLength === 0) {
     fallback(t("media.pdf.empty", { id: descriptor.id }));
   } else {
-    status.textContent = t("media.loading", { id: descriptor.id });
+    say(t("media.loading", { id: descriptor.id }));
     void options
       .loader(bytes)
       .then((loaded) => {
@@ -649,7 +760,7 @@ export function mountPdfView(
         }
         void show(page).catch(() => fallback(`PDF ${descriptor.id} failed to render page ${page}.`));
         void showOutline(loaded);
-        thumbsButton.hidden = !loaded.renderThumbnail;
+        thumbsSheet.hidden = !loaded.renderThumbnail;
       })
       .catch((error) => {
         if (!destroyed) fallback(`PDF ${descriptor.id} could not be opened: ${errorText(error)}`);
@@ -675,6 +786,7 @@ export function mountPdfView(
       return item;
     }));
     contents.hidden = false;
+    keys.refresh();
   }
 
   life.add(() => {
@@ -687,6 +799,7 @@ export function mountPdfView(
   return {
     element: root,
     page: () => page,
+    where: () => where,
     goToPage: (n: number) => show(n),
     search: async (needle: string) => (engine && !destroyed ? engine.search(needle, 20) : []),
     destroy: () => life.close(),

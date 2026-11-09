@@ -5,7 +5,7 @@
 // descrittore e i byte dalla porta, monta la view giusta, rilascia tutto al
 // teardown (handle chiuso, blob revocati, listener staccati). La sorgente
 // binaria non passa dal buffer di testo; la modalita' slide spetta al reso.
-import type { EditorSurface, SurfaceMode, SurfaceMountContext, SurfacePoint } from "../core/registry";
+import type { EditorSurface, SurfaceMode, SurfaceMountContext, SurfacePoint, SurfaceStatusItem } from "../core/registry";
 import type { SurfaceMenu, SurfaceMenuItem } from "../core/editor-menu";
 import { pngOf } from "../core/png";
 import { clipboardSupports, writeClipboardData } from "../../platform/clipboard";
@@ -18,7 +18,7 @@ import { openResourcePort, type ResourcePort, type ResourceTransport } from "./r
 import { decodeImage, mountImageView, type ImageView } from "./image-view";
 import { ZOOM_STEP } from "./zoom-view";
 import { mountAudioView, mountVideoView } from "./player-view";
-import { mountPdfView, pdfIdWithoutFragment, pdfPageFromFragment, type PdfEngineLoader, type PdfView } from "./pdf-view";
+import { mountPdfView, pdfIdWithoutFragment, pdfPageFromFragment, pdfWhereText, type PdfEngineLoader, type PdfView } from "./pdf-view";
 import { openWithChoices, shellOpenWith, type OpenWithHost } from "../../state/external-editors";
 
 export interface MediaSurfaceDeps {
@@ -95,6 +95,12 @@ export function mountMediaSurface(
     status.textContent = t(key);
   }
   life.add(onLanguage(() => message("viewer.unavailable")));
+  // La banda di stato: «Pagina N di M» del PDF, finché una pagina si mostra.
+  const statusListeners = new Set<() => void>();
+  const statusChanged = (): void => {
+    for (const listener of [...statusListeners]) listener();
+  };
+  life.add(onLanguage(statusChanged));
 
   async function load(): Promise<void> {
     const bareId = pdfIdWithoutFragment(context.documentId);
@@ -124,7 +130,9 @@ export function mountMediaSurface(
       } else {
         const bytes = await port.readAll();
         if (!active) return;
-        mounted = await mountBytes(descriptor, bytes, life, deps, root, context.documentId, wantedPage);
+        mounted = await mountBytes(descriptor, bytes, life, deps, root, context.documentId, wantedPage, statusChanged);
+        // La prima pagina può arrivare prima della view: la banda la rilegge.
+        statusChanged();
       }
       status.remove();
       showPhotoData();
@@ -169,6 +177,18 @@ export function mountMediaSurface(
       else if (!mounted) wantedPage = page;
     },
     contextMenu: (at) => mediaMenu(mounted, at, pdfIdWithoutFragment(context.documentId), deps),
+    // Un PDF dice nella banda la pagina che si legge; le altre specie niente.
+    status: {
+      counts: false,
+      items: (): readonly SurfaceStatusItem[] => {
+        const where = active ? mounted?.pdf?.where() : null;
+        return where ? [{ id: "page", text: pdfWhereText(where) }] : [];
+      },
+      subscribe(listener) {
+        statusListeners.add(listener);
+        return () => statusListeners.delete(listener);
+      },
+    },
     setTheme(theme) {
       root.dataset.theme = theme;
     },
@@ -190,6 +210,7 @@ async function mountBytes(
   root: HTMLElement,
   documentId: string,
   wantedPage: number | null = null,
+  onPage?: () => void,
 ): Promise<Mounted> {
   const kind: MediaKind = mediaKindOfId(descriptor.id);
   const openExternal = deps.openExternal ? () => deps.openExternal!(descriptor.id) : undefined;
@@ -224,6 +245,7 @@ async function mountBytes(
               ? undefined
               : (n: number) => deps.copyText!(`${pdfIdWithoutFragment(documentId)}#page=${n}`),
           onAnnotate: deps.annotate?.available() ? () => deps.annotate!.run(pdfIdWithoutFragment(documentId)) : undefined,
+          onPage,
         },
         life,
       );

@@ -2,7 +2,7 @@
 
 Fonte generata: `npm run theme:generate`. Verifica: `npm run theme:verify`.
 
-Il contratto richiede **154 ruoli**, espone **1526 hook**, **7 stati** (742 assegnazioni su 220 componenti) e lascia ridichiarare alla persona **187 token**. Gli elenchi, le coppie di contrasto e il vocabolario CSS in più sono in `contract.json`, generato dalle sorgenti della shell.
+Il contratto richiede **154 ruoli**, espone **1527 hook**, **7 stati** (742 assegnazioni su 220 componenti) e lascia ridichiarare alla persona **187 token**. Gli elenchi, le coppie di contrasto e il vocabolario CSS in più sono in `contract.json`, generato dalle sorgenti della shell.
 
 Dichiara anche **64 ruoli facoltativi** (`optional_roles`): i segni di Fub sulla carta del tema (`--doc-ins`, `--doc-find`, …) e la carta chiara di un file (`--paper-*`). Un tema che non li dichiara ha i ripieghi della struttura; se li dichiara, le loro coppie (`optional_pairs`) si contano come le altre.
 
@@ -10,7 +10,7 @@ Dichiara anche **64 ruoli facoltativi** (`optional_roles`): i segni di Fub sulla
 
 Ogni hook appartiene a uno strato, e `contract.json` lo dice in `layers`:
 
-- **cornice** (1211 hook): barre, pannelli, menu, righelli, scrivania. È del tema, sempre.
+- **cornice** (1212 hook): barre, pannelli, menu, righelli, scrivania. È del tema, sempre.
 - **segno** (97 hook): ciò che Fub disegna sul contenuto, cioè selezione, cursore, fuoco, ricerca, revisioni, correttore, commenti e maniglie. È del tema, con i colori della carta su cui sta (`--doc-*`).
 - **contenuto** (218 hook): ciò che il file dice. Chi ne ha l'autorità lo dichiara la modalità della superficie, con uno di tre aspetti che la shell mette sulla radice del contenuto: `look-tema`, `look-file` o `look-adattato`.
 
@@ -63,7 +63,7 @@ Un tema `theme-2` può ridisegnare per nome le icone della shell. Il manifest no
 
 Il tema non aggiunge icone: ridisegna quelle che ci sono. Un alias ridisegnato vale per il nome a cui punta (`folder` è `vault`). Un nome che oggi nessuno disegna non rifiuta il tema (un modulo può registrarlo più tardi), ma non si vede. Cambiato tema, o annullata l'anteprima, le icone già sullo schermo tornano a quelle del tema scelto.
 
-I 448 nomi che un tema può ridisegnare (`theme/author/icon-names.json`, tenuto uguale a `iconNames()` da `src/ui/icon-names.test.ts`):
+I 454 nomi che un tema può ridisegnare (`theme/author/icon-names.json`, tenuto uguale a `iconNames()` da `src/ui/icon-names.test.ts`):
 
 ```text
 activity arrow-left arrow-right backlinks backup bell blocks caret-down check chevron chevron-up
@@ -110,10 +110,11 @@ gr-shape-rounded gr-shape-triangle gr-shapes gr-sheet gr-show-formulas gr-sort g
 gr-sort-desc gr-sort-filter gr-styles gr-subtotal gr-sum gr-symbol gr-table gr-table-style gr-text
 gr-text-box gr-text-columns gr-theme gr-ungroup gr-unlock gr-unmerge gr-validation gr-view-normal
 gr-what-if gr-wrap gr-zoom gr-zoom-100 gr-zoom-selection graph hash heading help history home info
-keyboard kit-eyedropper line-number minus monitor moon more notes outline palette panel-left
-panel-right pen pin plus properties publish query rc-align-center rc-align-justify rc-align-left
-rc-align-right rc-break-column rc-break-page rc-bullets rc-chevron-down rc-chevron-up rc-clear
-rc-column-after rc-column-before rc-column-delete rc-column-left rc-column-right rc-columns
+keyboard kit-eyedropper line-number media-dark-pages media-fit-width media-page-next
+media-page-previous media-thumbnails media-two-pages minus monitor moon more notes outline palette
+panel-left panel-right pen pin plus properties publish query rc-align-center rc-align-justify
+rc-align-left rc-align-right rc-break-column rc-break-page rc-bullets rc-chevron-down rc-chevron-up
+rc-clear rc-column-after rc-column-before rc-column-delete rc-column-left rc-column-right rc-columns
 rc-comment-new rc-comments rc-count rc-drawing rc-drawing-edit rc-find rc-footer rc-header rc-image
 rc-indent-less rc-indent-more rc-ink-eraser rc-ink-highlighter rc-ink-lasso rc-ink-medium rc-ink-pen
 rc-ink-pen-only rc-ink-select rc-ink-stroke rc-ink-thick rc-ink-thin rc-link rc-look-adapted

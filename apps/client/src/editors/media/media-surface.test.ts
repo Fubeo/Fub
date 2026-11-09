@@ -6,6 +6,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { SurfaceMenuItem } from "../core/editor-menu";
 import type { ResourceDescriptor } from "./media-types";
 import { mountMediaSurface, type MediaSurfaceDeps } from "./media-surface";
+import type { PdfEngine } from "./pdf-view";
+import { t } from "../../i18n/strings";
 
 function png(width: number, height: number): Uint8Array {
   const bytes = new Uint8Array(24);
@@ -113,6 +115,65 @@ describe("il menu del visualizzatore", () => {
     expect(surface.contextMenu!({ x: 1, y: 1 })).toBeNull();
     vi.spyOn(document, "elementFromPoint").mockReturnValue(parent.firstElementChild);
     expect(surface.contextMenu!({ x: 1, y: 1 })!.target.kind).toBe("media");
+    surface.destroy();
+  });
+});
+
+describe("la pagina del PDF nella banda", () => {
+  function pdfEngine(pageCount: number): PdfEngine {
+    return {
+      pageCount,
+      search: async () => [],
+      renderPage: async () => {},
+      pageSize: async () => [600, 800] as const,
+      renderArea: async () => true,
+      destroy: () => {},
+    };
+  }
+
+  it("dice «Pagina N di M» e la cambia quando la pagina cambia", async () => {
+    const parent = document.createElement("div");
+    document.body.append(parent);
+    const deps: MediaSurfaceDeps = { ...depsFor("manuale.pdf", "application/pdf", new Uint8Array([1, 2])), pdfLoader: async () => pdfEngine(12) };
+    const surface = mountMediaSurface("media-pdf", { paneId: "p", documentId: "manuale.pdf#page=3", parent }, deps);
+    const changes = vi.fn();
+    const unsubscribe = surface.status!.subscribe(changes);
+    expect(surface.status!.counts).toBe(false);
+    await vi.waitFor(() => expect(surface.status!.items()).toEqual([{ id: "page", text: t("media.pdf.page", { page: 3, count: 12 }) }]));
+    expect(changes).toHaveBeenCalled();
+    changes.mockClear();
+    surface.showPage!(7);
+    await vi.waitFor(() => expect(surface.status!.items()).toEqual([{ id: "page", text: t("media.pdf.page", { page: 7, count: 12 }) }]));
+    expect(changes).toHaveBeenCalled();
+    // Due pagine affiancate: «Pagine 7–8 di 12».
+    parent.querySelector<HTMLButtonElement>(`button[aria-label="${t("media.pdf.two_pages")}"]`)!.click();
+    await vi.waitFor(() => expect(surface.status!.items()[0]?.text).toBe(t("media.pdf.pages", { first: 7, last: 8, count: 12 })));
+    // La pagina sta nella banda; la riga del visore la tiene per il lettore di schermo.
+    expect(parent.querySelector(".media-pdf > [role=status]")!.classList.contains("sr-only")).toBe(true);
+    unsubscribe();
+    surface.destroy();
+    expect(surface.status!.items()).toEqual([]);
+  });
+
+  it("un PDF che non si apre: la nota d'errore e niente voce nella banda", async () => {
+    const parent = document.createElement("div");
+    document.body.append(parent);
+    const deps: MediaSurfaceDeps = {
+      ...depsFor("rotto.pdf", "application/pdf", new Uint8Array([1])),
+      pdfLoader: async () => Promise.reject(new Error("non è un PDF")),
+    };
+    const surface = mountMediaSurface("media-pdf", { paneId: "p", documentId: "rotto.pdf", parent }, deps);
+    await vi.waitFor(() => expect(parent.textContent).toContain("non è un PDF"));
+    expect(surface.status!.items()).toEqual([]);
+    surface.destroy();
+  });
+
+  it("un'immagine non dice niente nella banda", async () => {
+    const parent = document.createElement("div");
+    document.body.append(parent);
+    const surface = mountMediaSurface("media-image", { paneId: "p", documentId: "foto.png", parent }, depsFor("foto.png", "image/png", png(4, 3)));
+    await vi.waitFor(() => expect(parent.querySelector(".zoom-view")).not.toBeNull());
+    expect(surface.status!.items()).toEqual([]);
     surface.destroy();
   });
 });

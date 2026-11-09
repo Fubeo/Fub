@@ -5067,11 +5067,6 @@ textarea.draw-properties-input {
     flex: 0 1 45%;
   }
 }
-/* «Annota» nel visore del PDF: un bersaglio da 44 px, come quelli del
-   foglio dove porta. */
-.media-pdf-annotate {
-  min-height: 44px;
-}
 @media (forced-colors: active) {
   .draw-width-bar,
   .draw-swatch-frame,
