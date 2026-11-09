@@ -1307,7 +1307,7 @@ mouse e D lasciato no; che D in un campo di testo non cambia niente;
 `engine.test.ts` passa invariato.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/canvas
-Stato: [ ] da fare
+Stato: [x] fatto
 
 ## T14 · Il dito sposta e ingrandisce
 
