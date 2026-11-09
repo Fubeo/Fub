@@ -165,6 +165,22 @@ function shadow(light: Light, near: readonly [number, number, number], far: read
   return `${layer(near)}, ${layer(far)}`;
 }
 
+/// L'ombra del foglio appoggiato sulla scrivania (`--shadow-sheet`, e
+/// `--shadow-sheet-focus` per quello col fuoco, un passo più fondo): un
+/// contatto stretto, una penombra corta e una lunga. I due strati larghi hanno
+/// lo spread negativo, così l'ombra scende sotto il foglio e si vede ai fianchi
+/// senza salire sopra la linguetta. Di giorno l'inchiostro di `shadow()`, di
+/// notte il nero, più fondo perché la scrivania è già quasi nera; col
+/// contrasto alto gli stessi valori. Niente filo di luce: sotto il 10 % non si
+/// vede, sopra è un bordo che si interrompe alla linguetta.
+function sheetShadow(light: Light, focus: boolean): string {
+  const ink = light === "light" ? "24 28 44" : "0 0 0";
+  const [contact, short, long] = focus ? (light === "light" ? [9, 10, 18] : [45, 50, 66]) : light === "light" ? [8, 8, 14] : [40, 45, 60];
+  return focus
+    ? `0 1px 3px rgb(${ink} / ${contact}%), 0 3px 10px -1px rgb(${ink} / ${short}%), 0 10px 20px -6px rgb(${ink} / ${long}%)`
+    : `0 1px 2px rgb(${ink} / ${contact}%), 0 2px 8px -1px rgb(${ink} / ${short}%), 0 8px 16px -6px rgb(${ink} / ${long}%)`;
+}
+
 /// I sette livelli del rilievo: due strati morbidi, vicino e lontano.
 const SHADOWS: Readonly<Record<Light, readonly (readonly [readonly [number, number, number], readonly [number, number, number]])[]>> = {
   light: [
@@ -401,6 +417,10 @@ export function palette(
     "shadow-2": levels[1]!,
     "shadow-3": levels[2]!,
     "shadow-4": levels[3]!,
+    // Il foglio sulla scrivania: ruoli facoltativi (`OPTIONAL_ROLES`), che la
+    // pelle legge col ripiego di `shadow-1` e `shadow-2`.
+    "shadow-sheet": sheetShadow(light, false),
+    "shadow-sheet-focus": sheetShadow(light, true),
     "shadow-5": levels[4]!,
     "shadow-6": levels[5]!,
     "shadow-7": levels[6]!,
@@ -599,14 +619,14 @@ export const COLOR_TOKENS: readonly string[] = Object.keys(palette("light", "nor
 /**
  * I ruoli che la serie dichiara e che un tema può non dichiarare: i segni
  * sulla carta del tema (`--doc-ins`, `--doc-find`, …) e la carta chiara di un
- * file (`--paper-*`), la scrivania del disegno (`--draw-desk`) e il vassoio della barra in una fila (`--bar-tray`). Facoltativi perché un ruolo obbligatorio nuovo farebbe
+ * file (`--paper-*`), la scrivania del disegno (`--draw-desk`), il vassoio della barra in una fila (`--bar-tray`) e l'ombra del foglio (`--shadow-sheet`, `--shadow-sheet-focus`). Facoltativi perché un ruolo obbligatorio nuovo farebbe
  * rifiutare ogni tema `theme-2` di oggi; chi non li dichiara ha il ripiego di
  * `structure.css`, e le loro coppie si contano solo quando ci sono
  * (`THEME_2_OPTIONAL_PAIRS`).
  */
 export const OPTIONAL_ROLES: readonly string[] = COLOR_TOKENS.filter(
   (name) => name.startsWith("paper-") || name.startsWith("doc-author-") || name.startsWith("doc-color-") || name.startsWith("doc-tint-") ||
-    ["doc-ins", "doc-del", "doc-proof-spell", "doc-proof-gram", "doc-find", "doc-find-now", "doc-comment", "draw-desk", "bar-tray",
+    ["doc-ins", "doc-del", "doc-proof-spell", "doc-proof-gram", "doc-find", "doc-find-now", "doc-comment", "draw-desk", "bar-tray", "shadow-sheet", "shadow-sheet-focus",
       "doc-syntax-near", "doc-ghost", "doc-wavy", "doc-block-hover", "doc-block-selected", "doc-drop-line"].includes(name),
 );
 

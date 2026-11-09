@@ -6,14 +6,18 @@
 /* ── La carta ────────────────────────────────────────────────────────────── */
 
 /* Il foglio è l'unico oggetto rialzato della finestra. Quello col fuoco sale
-   di un gradino: con due fogli affiancati è così che si legge dove si scrive. */
+   di un gradino: con due fogli affiancati è così che si legge dove si scrive.
+   L'ombra è di un foglio appoggiato sulla scrivania: un contatto stretto, una
+   penombra corta ai fianchi e una lunga sotto. I due strati larghi hanno lo
+   spread negativo, così l'ombra scende e non sale sopra la carta. I valori
+   sono ruoli della ricetta; un tema che non li ha tiene le ombre di sempre. */
 .pane::before {
   border-radius: var(--radius-sheet);
   background: var(--sheet);
-  box-shadow: var(--shadow-1);
+  box-shadow: var(--shadow-sheet, var(--shadow-1));
 }
 .pane.focus::before {
-  box-shadow: var(--shadow-2);
+  box-shadow: var(--shadow-sheet-focus, var(--shadow-2));
 }
 /* Sotto la prima linguetta, quando è lei l'attiva, l'angolo del foglio è vivo:
    il fianco della linguetta scende dritto in quello del foglio. La toppa che
@@ -89,6 +93,16 @@
    è del foglio. */
 .tab-entry::before {
   background: var(--sheet);
+}
+/* L'attiva e il foglio fanno un'ombra sola: la stessa del foglio, ai fianchi e
+   sopra la linguetta. Dove la linguetta entra nel foglio la struttura la
+   taglia (`clip-path`), e lì non resta nessun segno. */
+.tab-entry:has(> .tab[aria-selected="true"]):not([data-lifted]) {
+  border-radius: var(--tab-radius, 8px) var(--tab-radius, 8px) 0 0;
+  box-shadow: var(--shadow-sheet, none);
+}
+.pane.focus .tab-entry:has(> .tab[aria-selected="true"]):not([data-lifted]) {
+  box-shadow: var(--shadow-sheet-focus, none);
 }
 .tab-entry::after {
   border-radius: var(--radius-chip);

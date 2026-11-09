@@ -152,6 +152,12 @@
     display: none;
   }
 
+  /* Senza la banda, sotto il foglio c'è il bordo dello schermo: la scrivania
+     non si allarga in basso, ai fianchi sì, come sul computer. */
+  :root[data-client-shell="mobile"] #panes {
+    --reach-b: 0px;
+  }
+
   :root[data-client-shell="mobile"] #app:not([data-welcome]) #open-help,
   :root[data-client-shell="mobile"] #app:not([data-welcome]) #toggle-light {
     display: none;
@@ -548,13 +554,21 @@
   /* ── In piedi il foglio è lo schermo ──────────────────────────────────────
      Niente scrivania ai fianchi: la carta va da un bordo all'altro, con gli
      angoli vivi. `--sheet-gap` a zero vince anche la regola della struttura
-     che rimette il margine a sinistra quando il cassetto è chiuso. */
+     che rimette il margine a sinistra quando il cassetto è chiuso. La carta
+     tocca la barra di sotto: non c'è scrivania dove l'ombra possa cadere, e
+     la scrivania non si allarga per lei. */
   :root[data-client-shell="mobile"] #panes {
     --sheet-gap: 0px;
+    --sheet-reach: 0px;
   }
   :root[data-client-shell="mobile"] .pane::before,
   :root[data-client-shell="mobile"] .pane > [role="tabpanel"] {
     border-radius: 0;
+  }
+  :root[data-client-shell="mobile"] .pane::before,
+  :root[data-client-shell="mobile"] .pane.focus::before,
+  :root[data-client-shell="mobile"] .pane .tab-entry:has(> .tab[aria-selected="true"]) {
+    box-shadow: none;
   }
 
   /* ── La barra del titolo senza il marchio ─────────────────────────────────

@@ -28,5 +28,5 @@
 .sheet-ghost::before {
   border-radius: var(--radius-sheet);
   background: var(--sheet);
-  box-shadow: var(--shadow-1);
+  box-shadow: var(--shadow-sheet, var(--shadow-1));
 }

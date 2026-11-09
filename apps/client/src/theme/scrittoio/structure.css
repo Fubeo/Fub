@@ -586,30 +586,59 @@ body {
 
 /* ── La scrivania e i fogli ──────────────────────────────────────────────── */
 
+/* L'ombra del foglio esce dalla scrivania. `#panes` taglia ciò che esce
+   (`overflow: hidden`): l'ombra della carta finiva contro il suo bordo, e
+   restava un rettangolo. La scrivania si allarga di `--sheet-reach` verso i
+   vicini che stanno dentro la finestra (il cassetto o il binario a sinistra,
+   l'ispettore agganciato a destra, la banda sotto) e restituisce la stessa
+   misura in padding: i fogli restano dove sono, la scatola esterna non cambia
+   e l'ombra ha spazio per sfumare. Verso il bordo della finestra non si
+   allarga mai: l'eccedenza renderebbe `#app` scorrevole da programma. La
+   fascia in più non prende i clic: il cassetto, l'ispettore, la banda e i
+   divisori sotto l'ombra restano vivi. */
 #panes {
+  --sheet-reach: 20px;
+  --reach-l: var(--sheet-reach);
+  --reach-r: 0px;
+  --reach-b: var(--sheet-reach);
   flex: 1 1 0;
   min-width: 0;
   min-height: 0;
-  height: 100%;
+  height: calc(100% + var(--reach-b));
   overflow: hidden;
   display: flex;
-  padding: 0 var(--sheet-gap) var(--sheet-gap) 0;
+  margin: 0 calc(-1 * var(--reach-r)) calc(-1 * var(--reach-b)) calc(-1 * var(--reach-l));
+  padding: 0 calc(var(--sheet-gap) + var(--reach-r)) calc(var(--sheet-gap) + var(--reach-b)) var(--reach-l);
+  pointer-events: none;
 }
 
 /* Senza cassetto accanto, il margine torna anche da quel lato. */
 #layout:not(:has(> #sidebar:not([hidden]))) > #panes,
 #layout.layout-compact > #panes {
-  padding-left: var(--sheet-gap);
+  padding-left: calc(var(--sheet-gap) + var(--reach-l));
 }
 
 #layout:has(> #right-pane:not([hidden])):not(.layout-compact):not(.layout-inspector-overlay) > #panes {
-  padding-right: 0;
+  --reach-r: var(--sheet-reach);
+  padding-right: var(--reach-r);
+}
+
+/* Il benvenuto non ha fogli, la modalità concentrata non ha vicini: niente
+   fascia. Senza la banda di stato, sotto c'è il bordo della finestra. */
+#app[data-welcome] #panes,
+#app[data-focus-mode] #panes {
+  --sheet-reach: 0px;
+}
+
+#app[data-status-off] #panes {
+  --reach-b: 0px;
 }
 
 #panes > * {
   flex: 1 1 0;
   min-width: 0;
   min-height: 0;
+  pointer-events: auto;
 }
 
 #panes:has(> .onboarding:not([hidden])) > .pane,
@@ -659,12 +688,16 @@ body {
    uno pseudo-elemento del riquadro e non un contenitore, perché testata, barra
    di formattazione, avvisi e contenuto sono fratelli: così sono una superficie
    sola senza cambiare il DOM che il controllore conosce. */
+/* Il foglio sta sopra i vicini, perché la sua ombra cada su di loro e non
+   sotto: l'ispettore viene dopo nel DOM e la coprirebbe. Divisori, cassetti
+   e menu restano sopra. */
 .pane {
   display: flex;
   flex-direction: column;
   min-width: 0;
   min-height: 0;
   position: relative;
+  z-index: var(--z-sheet);
   isolation: isolate;
 }
 
@@ -815,6 +848,13 @@ body {
 
 .tab-entry:has(> .tab[aria-selected="true"])::before {
   opacity: 1;
+}
+
+/* L'ombra dell'attiva (la pelle) si ferma dove comincia la carta, `--tab-lap`
+   sopra il fondo: sotto c'è il foglio, che ha la sua, e il giunto resta
+   senza segno. Ai fianchi e sopra resta spazio per sfumare. */
+.tab-entry:has(> .tab[aria-selected="true"]):not([data-lifted]) {
+  clip-path: inset(-24px -24px var(--tab-lap) -24px);
 }
 
 /* Il fondo al passaggio: una pastiglia che resta staccata dalla carta. */

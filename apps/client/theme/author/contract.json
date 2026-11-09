@@ -7897,6 +7897,8 @@
     ]
   ],
   "optional_roles": [
+    "shadow-sheet",
+    "shadow-sheet-focus",
     "draw-desk",
     "bar-tray",
     "doc-ins",
@@ -8381,6 +8383,8 @@
     "shadow-2",
     "shadow-3",
     "shadow-4",
+    "shadow-sheet",
+    "shadow-sheet-focus",
     "shadow-5",
     "shadow-6",
     "shadow-7",
@@ -8547,11 +8551,11 @@
   },
   "counts": {
     "required_roles": 154,
-    "optional_roles": 64,
+    "optional_roles": 66,
     "hooks": 1515,
     "state_names": 7,
     "assigned_states": 751,
     "components": 222,
-    "preference_tokens": 187
+    "preference_tokens": 189
   }
 }
