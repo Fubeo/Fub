@@ -567,7 +567,7 @@
   }
   :root[data-client-shell="mobile"] .pane::before,
   :root[data-client-shell="mobile"] .pane.focus::before,
-  :root[data-client-shell="mobile"] .pane .tab-entry:has(> .tab[aria-selected="true"]) {
+  :root[data-client-shell="mobile"] .pane .tab-entry:has(> .tab[aria-selected="true"]):not([data-lifted]) {
     box-shadow: none;
   }
 
