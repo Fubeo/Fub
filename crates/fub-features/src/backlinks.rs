@@ -426,8 +426,8 @@ pub fn catalog() -> Vec<StringCatalog> {
         StringCatalog::new("it")
             .with(VIEW_TITLE, "Collegamenti")
             .with(NO_ACTIVE_DOC, "Nessuna nota aperta.")
-            .with(INCOMING, "Entranti")
-            .with(OUTGOING, "Uscenti")
+            .with(INCOMING, "In entrata")
+            .with(OUTGOING, "In uscita")
             .with(UNLINKED, "Menzioni non collegate")
             .with(OUTBOUND_UNLINKED, "Menzioni uscenti non collegate")
             .with(
@@ -454,8 +454,8 @@ pub fn catalog() -> Vec<StringCatalog> {
                  in questo vault non è attiva.",
             )
             .with(CONVERT_LABEL, "Collega")
-            .with(INCOMING_COUNT, "Entranti · {count}")
-            .with(OUTGOING_COUNT, "Uscenti · {count}")
+            .with(INCOMING_COUNT, "In entrata · {count}")
+            .with(OUTGOING_COUNT, "In uscita · {count}")
             .with(UNLINKED_COUNT, "Menzioni non collegate · {count}")
             .with(
                 OUTBOUND_UNLINKED_COUNT,
@@ -463,7 +463,7 @@ pub fn catalog() -> Vec<StringCatalog> {
             )
             .with(FILTER_SECTION, "Filtro avanzato")
             .with(STATUS_TITLE, "Collegamenti entranti")
-            .with(STATUS_COUNT, "Entranti: {count}"),
+            .with(STATUS_COUNT, "In entrata: {count}"),
         StringCatalog::new("en")
             .with(STATUS_TITLE, "Incoming links")
             .with(STATUS_COUNT, "Incoming: {count}")
@@ -625,7 +625,7 @@ pub fn build_outgoing_view(targets: &[(DocId, Option<String>)]) -> UiNode {
     UiNode::list(items)
 }
 /// Una parte del pannello: una sezione col numero nel titolo, chiusa quando
-/// è vuota — «Uscenti · 0» dice già tutto in una riga, e un segnaposto sotto
+/// è vuota — «In uscita · 0» dice già tutto in una riga, e un segnaposto sotto
 /// ogni titolo riempiva il pannello di niente. Se la parte non si carica il
 /// titolo resta senza numero e la sezione dice il guasto.
 fn part(name: &str, counted: &str, result: Result<(usize, UiNode), PluginError>) -> UiNode {
@@ -1585,7 +1585,7 @@ mod tests {
                 other => panic!("every part is a section: {other:?}"),
             })
             .collect();
-        // Entranti ha una riga ed è aperta; il filtro, senza filtro attivo,
+        // «In entrata» ha una riga ed è aperta; il filtro, senza filtro attivo,
         // sta chiuso in fondo.
         assert_eq!(sections.first(), Some(&(Some(INCOMING), false)));
         assert_eq!(sections.last(), Some(&(Some(FILTER_SECTION), true)));

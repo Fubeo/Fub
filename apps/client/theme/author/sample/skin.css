@@ -12710,6 +12710,86 @@ h6.ui-heading {
   left: calc(-2 * var(--space-5) - 1.5px);
 }
 
+/* ── «In entrata 3»: chi punta qui, il nome a sinistra e la cartella a destra.
+   La sezione la dichiara la vista Struttura con la chiave `outline-incoming`
+   (`incoming` è già dei Collegamenti). */
+.ui-section[data-key="outline-incoming"] {
+  margin-top: var(--space-8);
+}
+.ui-section[data-key="outline-incoming"] > summary {
+  padding: 0;
+  color: var(--muted);
+  font-size: var(--text-base);
+  font-weight: var(--weight-medium);
+  letter-spacing: 0;
+  text-transform: none;
+}
+.ui-section[data-key="outline-incoming"] > summary::before {
+  content: none;
+}
+.ui-section[data-key="outline-incoming"] > summary:hover {
+  background: transparent;
+  color: var(--text);
+}
+.ui-section[data-key="outline-incoming"] > .ui-children {
+  padding: var(--space-2) 0 0;
+}
+/* In riga, e non nella griglia delle voci con l'icona qui sotto: il nome e la
+   cartella stanno sulla stessa linea. */
+.ui-section[data-key="outline-incoming"] .ui-list-item {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: flex-start;
+  gap: var(--space-4);
+  /* 28 più i 2 px fra una voce e l'altra: il passo di 30 del mockup */
+  min-height: var(--row-h);
+  padding: 0 var(--space-3);
+  border-radius: var(--radius-chip);
+  font-size: var(--text-md);
+}
+.ui-section[data-key="outline-incoming"] .ui-list-item-title {
+  flex: 1 1 auto;
+  font-weight: var(--weight-regular);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ui-section[data-key="outline-incoming"] .ui-list-item-subtitle {
+  flex: none;
+  margin: 0;
+  /* grafite e non più chiaro: la cartella è testo, e sotto 4,5:1 non si legge */
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+/* L'icona di una voce che nomina una nota: la sua, come nell'albero. */
+.ui-list-item-icon {
+  display: inline-flex;
+  flex: none;
+  color: var(--muted);
+}
+.ui-list-item-icon > svg {
+  width: 15px;
+  height: 15px;
+}
+/* Altrove (i Collegamenti) la voce è in colonna, col contesto sotto il nome:
+   l'icona sta a sinistra della prima riga, e il testo le si allinea accanto. */
+.ui-list-item:has(> .ui-list-item-icon) {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-content: center;
+  align-items: start;
+  column-gap: var(--space-3);
+}
+.ui-list-item:has(> .ui-list-item-icon) > .ui-list-item-icon {
+  grid-row: span 2;
+}
+.ui-list-item:has(> .ui-list-item-icon) > .ui-list-item-title,
+.ui-list-item:has(> .ui-list-item-icon) > .ui-list-item-subtitle {
+  grid-column: 2;
+}
+
 /* In colori forzati i fondi sono del sistema e le ombre non ci sono: ciò che
    era detto con un fondo — un triangolo, una pastiglia, un guasto, la voce
    scelta — torna a dirsi con un colore del sistema o con un contorno. */

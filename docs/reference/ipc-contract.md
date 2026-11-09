@@ -281,6 +281,12 @@ Il protocollo di view usa:
 La shell non interpreta il payload di un'azione. Lo rimanda al provider
 proprietario.
 
+Una view può rispondere a un'azione con `ViewUpdate::Custom` di `ns`
+`fub.inspector.tab` (`fub_abi::ui::INSPECTOR_TAB_NS`) e payload
+`{ "view": "<id>" }`: la shell apre l'ispettore su quella scheda, o dice che
+non c'è. Non è privilegiato, perché cambia solo quale scheda si guarda; lo usa
+«e altri N» sotto la Struttura per portare ai Collegamenti.
+
 ## Barra di formattazione e azioni dell'editor
 
 Un comando con `CommandSurface::Toolbar` (`"toolbar"` in JSON) si offre come

@@ -11,6 +11,9 @@ vi.mock("./notify", () => ({
     return notify;
   },
 }));
+// Le icone delle pagine si fingono: la cache vera chiede all'indice.
+const pageIcons = vi.hoisted(() => new Map<string, string>());
+vi.mock("../state/page-icons", () => ({ pageIcon: (doc: string) => pageIcons.get(doc) ?? null }));
 import type { ActionRef, FieldValue, UiNode } from "../host/contract";
 import { pair, activeFields, mountTree, patchTree, setNodeMotion, unmountTree, type NodeMotion } from "./node";
 import { registerCustomRenderer, type OnAction } from "./custom";
@@ -1359,6 +1362,53 @@ describe("le righe di un elenco e di un albero non hanno stile in linea (S2 T9)"
     expect(host.querySelector(".ui-tree-label")).toBe(label);
     expect(label.textContent).toBe("Titolo nuovo");
     expect(rows(host).filter((el) => el.hasAttribute("style"))).toEqual([]);
+    unmountTree(host);
+    host.remove();
+  });
+});
+
+describe("una voce che nomina una nota ne porta l'icona (S2 T13)", () => {
+  const item = (title: string, doc?: string): UiNode =>
+    ({
+      node: "list_item",
+      title,
+      subtitle: null,
+      action: null,
+      selected: false,
+      ...(doc ? { drag: { kind: "document", doc } } : {}),
+    }) as unknown as UiNode;
+
+  afterEach(() => pageIcons.clear());
+
+  it("in testa: la sua, la figura del formato, o nessuna senza `drag`", () => {
+    pageIcons.set("Diario/Oggi.md", "🌞");
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    mountTree(
+      host,
+      {
+        node: "list",
+        items: [
+          item("Oggi", "Diario/Oggi.md"),
+          item("Conti", "Dati/Conti.xlsx"),
+          item("Benvenuto", "Benvenuto.md"),
+          item("e altri 2"),
+        ],
+      } as unknown as UiNode,
+      async () => {},
+    );
+    const [own, sheet, note, more] = [...host.querySelectorAll<HTMLElement>(".ui-list-item")];
+    const icon = (el: HTMLElement) => el.querySelector<HTMLElement>(":scope > .ui-list-item-icon");
+    // L'icona è il primo figlio, decorazione: il nome lo dice il titolo.
+    expect(own!.firstElementChild).toBe(icon(own!));
+    expect(icon(own!)!.textContent).toBe("🌞");
+    expect(icon(own!)!.getAttribute("aria-hidden")).toBe("true");
+    expect(icon(sheet!)!.querySelector("svg")).not.toBeNull();
+    expect(icon(note!)!.querySelector("svg")).not.toBeNull();
+    expect(icon(more!)).toBeNull();
+    // Il contratto non cambia: titolo e trascinamento restano quelli di prima.
+    expect(own!.querySelector(".ui-list-item-title")!.textContent).toBe("Oggi");
+    expect(own!.draggable).toBe(true);
     unmountTree(host);
     host.remove();
   });

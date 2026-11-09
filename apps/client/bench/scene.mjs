@@ -391,7 +391,10 @@ export const SCENE = onPage("shell", [
     title: "L'ispettore, sulla seconda scheda",
     prepare: async (page) => {
       await page.click("#right-pane .inspector-tab >> nth=1");
-      await page.waitForSelector("#right-pane .ui-list-item, #right-pane .ui-empty-state");
+      // Nella scheda aperta: anche la Struttura, nascosta, ha le sue voci («In entrata»).
+      await page.waitForSelector(
+        "#right-pane .declared-view-panel:not([hidden]) :is(.ui-list-item, .ui-empty-state)",
+      );
     },
   },
   {

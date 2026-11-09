@@ -1298,30 +1298,50 @@ const RESPONSES: Partial<Record<IndexQuery["kind"], (q: IndexQuery) => IndexResu
 /// fotografare senza inventarsi del markup: **non c'è markup**, c'è un albero
 /// del contratto e il renderer della shell.
 const TREES: Record<string, UiNode> = {
+  // La forma è quella del provider `outline` (fub-features): l'albero dei
+  // titoli e, sotto, «In entrata» con le note che puntano qui (le tre del
+  // prototipo, per la nota Benvenuto che il banco apre per prima).
   outline: {
-    node: "tree",
-    roots: [
+    node: "stack",
+    dir: "column",
+    gap: 2,
+    children: [
       {
-        node: "tree_item",
-        label: "Sintassi di Fub",
-        selected: false,
-        expanded: true,
-        action: { action: "goto", payload: 1 },
-        children: [
-          { node: "tree_item", label: "Titoli", selected: false, expanded: false, action: { action: "goto", payload: 2 }, children: [] },
+        node: "tree",
+        roots: [
           {
             node: "tree_item",
-            label: "Testo",
+            label: "Sintassi di Fub",
             selected: false,
             expanded: true,
-            action: { action: "goto", payload: 3 },
+            action: { action: "goto", payload: 1 },
             children: [
-              { node: "tree_item", label: "Riferimenti", selected: false, expanded: false, action: { action: "goto", payload: 4 }, children: [] },
+              { node: "tree_item", label: "Titoli", selected: false, expanded: false, action: { action: "goto", payload: 2 }, children: [] },
+              {
+                node: "tree_item",
+                label: "Testo",
+                selected: false,
+                expanded: true,
+                action: { action: "goto", payload: 3 },
+                children: [
+                  { node: "tree_item", label: "Riferimenti", selected: false, expanded: false, action: { action: "goto", payload: 4 }, children: [] },
+                ],
+              },
+              { node: "tree_item", label: "Tabella", selected: false, expanded: false, action: { action: "goto", payload: 5 }, children: [] },
+              { node: "tree_item", label: "Codice", selected: false, expanded: false, action: { action: "goto", payload: 6 }, children: [] },
             ],
           },
-          { node: "tree_item", label: "Tabella", selected: false, expanded: false, action: { action: "goto", payload: 5 }, children: [] },
-          { node: "tree_item", label: "Codice", selected: false, expanded: false, action: { action: "goto", payload: 6 }, children: [] },
         ],
+      },
+      {
+        node: "section", title: "In entrata · 3", collapsed: false, key: "outline-incoming", children: [{
+          node: "list",
+          items: [
+            { node: "list_item", title: "Sintassi di Fub", subtitle: "Guida", action: { action: "open", payload: { doc: "Guida/Sintassi di Fub.md" } }, selected: false, key: "Guida/Sintassi di Fub.md#0", drag: { kind: "document", doc: "Guida/Sintassi di Fub.md" } },
+            { node: "list_item", title: "Il banco che vede", subtitle: "Progetti", action: { action: "open", payload: { doc: "Progetti/Il banco che vede.md" } }, selected: false, key: "Progetti/Il banco che vede.md#0", drag: { kind: "document", doc: "Progetti/Il banco che vede.md" } },
+            { node: "list_item", title: "2026-08-19", subtitle: "Diario", action: { action: "open", payload: { doc: "Diario/2026-08-19.md" } }, selected: false, key: "Diario/2026-08-19.md#0", drag: { kind: "document", doc: "Diario/2026-08-19.md" } },
+          ],
+        }],
       },
     ],
   },
@@ -1334,7 +1354,7 @@ const TREES: Record<string, UiNode> = {
     gap: 4,
     children: [
       {
-        node: "section", title: "Entranti · 2", collapsed: false, key: "incoming", children: [{
+        node: "section", title: "In entrata · 2", collapsed: false, key: "incoming", children: [{
           node: "list",
           items: [
             { node: "list_item", title: "Benvenuto", subtitle: "…sta in Sintassi di Fub, i colori della nota e i link…", action: { action: "open", payload: "Benvenuto.md" }, selected: false, drag: { kind: "document", doc: "Benvenuto.md" } },
@@ -1343,7 +1363,7 @@ const TREES: Record<string, UiNode> = {
         }],
       },
       {
-        node: "section", title: "Uscenti · 2", collapsed: false, key: "outgoing", children: [{
+        node: "section", title: "In uscita · 2", collapsed: false, key: "outgoing", children: [{
           node: "list",
           items: [
             { node: "list_item", title: "Benvenuto", subtitle: "Un wikilink risolto: Benvenuto.", action: { action: "open", payload: "Benvenuto.md" }, selected: false, drag: { kind: "document", doc: "Benvenuto.md" } },
@@ -1669,15 +1689,18 @@ const behind = host.module.api;
 /// vault, che non si traduce.
 const HOST_TEXT: ReadonlySet<IndexQuery["kind"]> = new Set(["settings", "jobs"]);
 
-/// L'albero di una view della scenografia, nella lingua della shell. La
-/// struttura no: le sue voci sono i titoli della nota.
+/// L'albero di una view della scenografia, nella lingua della shell. Della
+/// struttura soltanto «In entrata»: le voci dell'albero sono i titoli della nota.
 function treeOf(view: string): UiNode | undefined {
   const tree = TREES[view];
-  return tree && view !== "outline" ? inShellLanguage(tree) : tree;
+  if (!tree || view !== "outline") return tree && inShellLanguage(tree);
+  if (tree.node !== "stack") return tree;
+  return { ...tree, children: tree.children.map((child) => (child.node === "tree" ? child : inShellLanguage(child))) };
 }
 
 /// L'albero con scelta la voce il cui salto porta `payload`, e nessun'altra.
 function choose(node: UiNode, payload: unknown): UiNode {
+  if (node.node === "stack") return { ...node, children: node.children.map((item) => choose(item, payload)) };
   if (node.node === "tree") return { ...node, roots: node.roots.map((item) => choose(item, payload) as typeof item) };
   if (node.node !== "tree_item") return node;
   return {

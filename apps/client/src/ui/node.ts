@@ -65,6 +65,9 @@ import { setTooltip } from "./tooltip";
 import { tabIndexForKey } from "./tab-keys";
 import { iconEl } from "./icons";
 import { offerNote } from "./drag-types";
+import { drawPageMark } from "./page-mark";
+import { FORMAT_ICON, formatKindOf } from "./format-kind";
+import { pageIcon } from "../state/page-icons";
 import type { Lifetime, Teardown } from "./lifetime";
 
 /// Cosa fa la shell quando un'azione scatta: la manda al provider con le due
@@ -693,6 +696,21 @@ function dragSource(el: HTMLElement, node: UiNode): void {
   });
 }
 
+/// L'icona di una voce che nomina un documento: quella che la pagina si è
+/// data (`icon:`, un'emoji o una figura del set), o la figura del suo formato,
+/// e per ciò che non ha una specie quella della nota. È decorazione: il nome
+/// lo dice già il titolo della voce.
+function documentIcon(doc: string): HTMLElement {
+  const span = document.createElement("span");
+  span.className = "ui-list-item-icon";
+  span.setAttribute("aria-hidden", "true");
+  if (!drawPageMark(span, pageIcon(doc))) {
+    const figure = iconEl(FORMAT_ICON[formatKindOf(doc) ?? "note"]);
+    if (figure) span.appendChild(figure);
+  }
+  return span;
+}
+
 function ensureRowCell(row: HTMLTableRowElement): void {
   if (row.cells.length > 0) return;
   const td = document.createElement("td");
@@ -769,6 +787,9 @@ function draw(node: UiNode, onAction: Port): HTMLElement {
       if (node.selected) el.setAttribute("aria-current", "true");
       else el.removeAttribute("aria-current");
       connect(el, node.action, onAction);
+      // Una voce che nomina una nota (`drag`) ne porta l'icona in testa, come
+      // nell'albero: quella della pagina, o la figura del formato.
+      if (node.drag?.kind === "document") el.appendChild(documentIcon(node.drag.doc));
       const title = div("ui-list-item-title");
       title.textContent = node.title;
       el.appendChild(title);

@@ -159,8 +159,9 @@ export const ENGLISH: Readonly<Record<string, string>> = {
   "Snapshot delle versioni": "Version snapshot",
   // Alberi delle view (`fub-features`: backlinks, properties, versioning,
   // stats, tags, trash, graph).
-  "Entranti · 2": "Incoming · 2",
-  "Uscenti · 2": "Outgoing · 2",
+  "In entrata · 2": "Incoming · 2",
+  "In entrata · 3": "Incoming · 3",
+  "In uscita · 2": "Outgoing · 2",
   "Menzioni non collegate · 1": "Unlinked mentions · 1",
   Collega: "Link",
   "Menzioni uscenti non collegate · 0": "Outgoing unlinked mentions · 0",

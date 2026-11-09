@@ -15,7 +15,7 @@
 //! (insieme di selezioni non ancorato) gli offset del modello sono di un altro testo,
 //! e segnare la sezione sbagliata è peggio che non segnarne nessuna.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 mod rename;
 pub use rename::{OutlineCommands, HEADING_RENAME};
@@ -26,12 +26,12 @@ use fub_abi::event::{EventKind, EventMask};
 use fub_abi::model::{custom_kind, Block, DocId, Heading, Inline, ListItem, Span};
 use fub_abi::options::syntax;
 use fub_abi::session::{ContextKind, ContextMask, SelectionSet};
-use fub_abi::text::{StringCatalog, Text};
+use fub_abi::text::{Arg, StringCatalog, Text};
 use fub_abi::traits::{
-    HostApi, IndexQuery, IndexResult, ReadApi, ViewInstance, ViewInterests, ViewProvider, ViewSpec,
-    ViewSurface,
+    BacklinkRef, HostApi, IndexQuery, IndexResult, Page, Paged, ReadApi, ViewInstance,
+    ViewInterests, ViewProvider, ViewSpec, ViewSurface,
 };
-use fub_abi::ui::{ActionRef, Intent, UiAction, UiKind, UiNode, ViewUpdate};
+use fub_abi::ui::{ActionRef, Intent, UiAction, UiKind, UiNode, ViewUpdate, INSPECTOR_TAB_NS};
 
 /// Id del provider (spazio dati/registrazione) e id della view che offre.
 pub const OUTLINE_ID: &str = "fub.outline";
@@ -75,6 +75,24 @@ const FILTER_LABEL: &str = "filter_label";
 const COLLAPSE_ALL: &str = "collapse_all";
 const EXPAND_ALL: &str = "expand_all";
 const NO_MATCH: &str = "no_match";
+/// La sezione «In entrata» sotto l'albero: chi punta alla nota aperta. La
+/// chiave non è `incoming`, che è già della sezione dei Collegamenti.
+pub const INCOMING_SECTION: &str = "outline-incoming";
+/// Quante note in entrata si mostrano al più; le altre le conta «e altri N».
+const INCOMING_SHOWN: u32 = 5;
+const INCOMING_COUNT: &str = "incoming_count";
+const INCOMING_MORE: &str = "incoming_more";
+const A_COUNT: &str = "count";
+/// Apre la nota di una riga «In entrata»: il documento viaggia nel payload
+/// sotto [`DOC`], come nei Collegamenti.
+const OPEN: &str = "open";
+/// «e altri N»: porta alla scheda dei Collegamenti, che le elenca tutte.
+const SHOW_INCOMING: &str = "show_incoming";
+/// La scheda dell'ispettore che elenca tutti i collegamenti in entrata: l'id
+/// della vista dei Collegamenti, scritto qui e non preso dalla feature. La
+/// Struttura legge l'indice del kernel, e con `backlinks` spenta è la shell a
+/// dire che quella scheda non c'è.
+const LINKS_VIEW: &str = "backlinks";
 
 /// Il pannello struttura. Senza stato: heading e documento attivo li chiede
 /// all'host a ogni chiamata.
@@ -152,6 +170,7 @@ impl ViewProvider for OutlineView {
                 ));
             }
         };
+        let incoming = incoming_of(host, &active);
         let tools = Tools {
             filter: host
                 .view_state(FILTER_STATE)?
@@ -168,6 +187,7 @@ impl ViewProvider for OutlineView {
             active.as_str(),
             Some(&host.document_revision(&active)?.0),
             Some(&tools),
+            incoming,
         ))
     }
 
@@ -207,6 +227,20 @@ impl ViewProvider for OutlineView {
             }
             return Ok(ViewUpdate::Replace {
                 root: self.render_view(instance, host)?,
+            });
+        }
+        if instance.view == OUTLINE_VIEW && action.action.0 == OPEN {
+            return Ok(match action.payload.get(DOC).and_then(|v| v.as_str()) {
+                Some(id) => ViewUpdate::Navigate {
+                    doc_id: id.to_string(),
+                },
+                None => ViewUpdate::None,
+            });
+        }
+        if instance.view == OUTLINE_VIEW && action.action.0 == SHOW_INCOMING {
+            return Ok(ViewUpdate::Custom {
+                ns: INSPECTOR_TAB_NS.to_string(),
+                payload: serde_json::json!({ "view": LINKS_VIEW }),
             });
         }
         if action.action.0 != REVEAL {
@@ -574,6 +608,8 @@ pub fn catalog() -> Vec<StringCatalog> {
             .with(COLLAPSE_ALL, "Comprimi tutto")
             .with(EXPAND_ALL, "Espandi tutto")
             .with(NO_MATCH, "Nessun titolo corrisponde.")
+            .with(INCOMING_COUNT, "In entrata · {count}")
+            .with(INCOMING_MORE, "e altri {count}")
             .with(NO_ACTIVE_DOC, "Nessuna nota aperta.")
             .with(EMPTY, "Nessun heading.")
             .with("heading.rename.title", "Rinomina titolo")
@@ -644,6 +680,8 @@ pub fn catalog() -> Vec<StringCatalog> {
             .with(COLLAPSE_ALL, "Collapse all")
             .with(EXPAND_ALL, "Expand all")
             .with(NO_MATCH, "No heading matches.")
+            .with(INCOMING_COUNT, "Incoming · {count}")
+            .with(INCOMING_MORE, "and {count} more")
             .with(NO_ACTIVE_DOC, "No note open.")
             .with(EMPTY, "No headings.")
             .with("heading.rename.title", "Rename heading")
@@ -722,7 +760,93 @@ fn section_of(headings: &[Heading], caret: usize) -> Option<usize> {
 /// e la sezione col cursore è `selected` invece di essere un sottotitolo che
 /// dice «cursore qui».
 pub fn build_outline_view(headings: &[Heading], caret: Option<usize>, doc: &str) -> UiNode {
-    build_outline_view_at(headings, caret, doc, None, None)
+    build_outline_view_at(headings, caret, doc, None, None, None)
+}
+
+/// Le note che puntano a `doc`, lette dall'indice del kernel e non dalla
+/// feature dei Collegamenti: con quella spenta la sezione c'è lo stesso.
+///
+/// Una lettura sola, con la finestra delle righe che si mostrano: la Struttura
+/// segue anche il cursore, e ogni sua pausa la rifà. Una lettura che fallisce
+/// lascia la Struttura com'è, senza sezione: i titoli non dipendono da lei.
+fn incoming_of(host: &dyn ReadApi, doc: &DocId) -> Option<UiNode> {
+    match host.query_index(IndexQuery::Backlinks {
+        target: doc.clone(),
+        page: Some(Page {
+            offset: 0,
+            limit: INCOMING_SHOWN,
+        }),
+    }) {
+        Ok(IndexResult::Backlinks(refs)) => build_incoming_section(&refs),
+        _ => None,
+    }
+}
+
+/// La sezione «In entrata · N»: al più [`INCOMING_SHOWN`] righe, una per
+/// riferimento come nei Collegamenti (il nome della nota, e la sua cartella
+/// come sottotitolo), poi «e altri N» se ce ne sono di più. Senza riferimenti
+/// non c'è. Pura trasformazione dati→UI: si prova senza un host.
+pub fn build_incoming_section(refs: &Paged<BacklinkRef>) -> Option<UiNode> {
+    if refs.total == 0 {
+        return None;
+    }
+    let mut nth: HashMap<&DocId, usize> = HashMap::new();
+    let mut items: Vec<UiNode> = refs
+        .items
+        .iter()
+        .take(INCOMING_SHOWN as usize)
+        .map(|r| {
+            // Una riga per riferimento: due link dalla stessa nota sono due
+            // righe, e la chiave le tiene distinte fra fratelli.
+            let n = nth.entry(&r.source).or_insert(0);
+            let key = format!("{}#{n}", r.source.as_str());
+            *n += 1;
+            UiNode::list_item(
+                r.source.page_name(),
+                folder_of(&r.source).map(Text::from),
+                Some(ActionRef::with(
+                    OPEN,
+                    serde_json::json!({ DOC: r.source.as_str() }),
+                )),
+            )
+            .with_key(key)
+            .dragging_document(r.source.clone())
+        })
+        .collect();
+    let hidden = (refs.total as usize).saturating_sub(items.len());
+    if hidden > 0 {
+        items.push(
+            UiNode::list_item(
+                Text::message(INCOMING_MORE, vec![Arg::int(A_COUNT, hidden as i64)]),
+                None,
+                Some(ActionRef::new(SHOW_INCOMING)),
+            )
+            .with_key(SHOW_INCOMING),
+        );
+    }
+    Some(UiNode::keyed(
+        INCOMING_SECTION,
+        UiKind::Section {
+            title: Text::message(
+                INCOMING_COUNT,
+                vec![Arg::int(A_COUNT, i64::from(refs.total))],
+            ),
+            collapsed: false,
+            children: vec![UiNode::list(items)],
+        },
+    ))
+}
+
+/// La cartella che contiene una nota, col suo nome e basta: è il sottotitolo
+/// di una riga in una colonna stretta. La pagina di una cartella
+/// (`X/_index.md`) si chiama come la cartella, quindi la sua è quella sopra.
+/// Nella radice del vault non c'è una cartella da dire.
+fn folder_of(doc: &DocId) -> Option<String> {
+    let (mut dir, _) = doc.as_str().rsplit_once('/')?;
+    if doc.is_folder_page() {
+        dir = dir.rsplit_once('/')?.0;
+    }
+    Some(dir.rsplit('/').next().unwrap_or(dir).to_string())
 }
 
 /// Il filtro e la compressione del pannello: stato della vista, non della
@@ -761,9 +885,15 @@ fn build_outline_view_at(
     doc: &str,
     base: Option<&str>,
     tools: Option<&Tools>,
+    incoming: Option<UiNode>,
 ) -> UiNode {
     if headings.is_empty() {
-        return placeholder(EMPTY);
+        // Una nota senza titoli può essere citata lo stesso: chi la cita si
+        // vede anche qui.
+        return match incoming {
+            Some(section) => UiNode::column(2, vec![placeholder(EMPTY), section]),
+            None => placeholder(EMPTY),
+        };
     }
     let current = caret.and_then(|c| section_of(headings, c));
     let filter = tools.map_or("", |t| t.filter.as_str());
@@ -807,6 +937,8 @@ fn build_outline_view_at(
     } else {
         children.push(UiNode::new(UiKind::Tree { roots }));
     }
+    // Sotto l'albero, chi punta qui: si vede senza cambiare scheda.
+    children.extend(incoming);
     if let Some(base) = base {
         let mut rows = Vec::new();
         for (index, heading) in headings.iter().enumerate() {
@@ -1517,5 +1649,405 @@ mod tests {
                 span: Span::new(start, start + "^[emoji 🎯]".len()),
             }
         );
+    }
+
+    /// «In entrata» sotto la Struttura (S2 T13): chi punta alla nota aperta,
+    /// letto dall'indice del kernel con una domanda sola.
+    mod incoming {
+        use super::*;
+        use fub_abi::edit::EditRequest;
+        use fub_abi::format::{DocumentFormat, LinkInsert};
+        use fub_abi::locale::Locale;
+        use fub_abi::model::{DocumentModel, TaskMarker};
+        use fub_abi::session::ViewContext;
+        use fub_abi::settings::SettingValue;
+        use fub_abi::text::Strings;
+        use fub_abi::traits::{
+            DataRead, HostEnv, HostQuery, SettingsRead, TransferRead, TrashEntry, VaultRead,
+            ViewStateRead,
+        };
+        use std::sync::Mutex;
+
+        /// Un host che conta le domande all'indice e, a richiesta, fa fallire
+        /// quella dei backlink. Il resto lo fa il `MemoryHost` che avvolge.
+        struct Spy {
+            inner: MemoryHost,
+            asked: Mutex<Vec<IndexQuery>>,
+            backlinks_fail: bool,
+        }
+
+        impl Spy {
+            fn new(inner: MemoryHost) -> Self {
+                Spy {
+                    inner,
+                    asked: Mutex::new(Vec::new()),
+                    backlinks_fail: false,
+                }
+            }
+        }
+
+        impl HostQuery for Spy {
+            fn query_index(&self, query: IndexQuery) -> Result<IndexResult, PluginError> {
+                self.asked.lock().unwrap().push(query.clone());
+                if self.backlinks_fail && matches!(query, IndexQuery::Backlinks { .. }) {
+                    return Err(PluginError::Io("l'indice non risponde".into()));
+                }
+                self.inner.query_index(query)
+            }
+        }
+
+        impl VaultRead for Spy {
+            fn read_document(&self, id: &DocId) -> Result<String, PluginError> {
+                self.inner.read_document(id)
+            }
+            fn read_document_bytes(&self, id: &DocId) -> Result<Vec<u8>, PluginError> {
+                self.inner.read_document_bytes(id)
+            }
+            fn document_revision(&self, id: &DocId) -> Result<Revision, PluginError> {
+                self.inner.document_revision(id)
+            }
+            fn list_documents(&self, page: Option<Page>) -> Result<Paged<DocId>, PluginError> {
+                self.inner.list_documents(page)
+            }
+            fn read_model(&self, id: &DocId) -> Result<DocumentModel, PluginError> {
+                self.inner.read_model(id)
+            }
+            fn format_of(&self, id: &DocId) -> Option<DocumentFormat> {
+                self.inner.format_of(id)
+            }
+            fn free_name(&self, id: &DocId) -> DocId {
+                self.inner.free_name(id)
+            }
+            fn format_link(
+                &self,
+                doc: &DocId,
+                link: &LinkInsert,
+            ) -> Result<Option<String>, PluginError> {
+                self.inner.format_link(doc, link)
+            }
+            fn task_state_edit(
+                &self,
+                doc: &DocId,
+                marker: &TaskMarker,
+                done: bool,
+            ) -> Result<Option<EditRequest>, PluginError> {
+                self.inner.task_state_edit(doc, marker, done)
+            }
+            fn list_trash(&self) -> Result<Vec<TrashEntry>, PluginError> {
+                self.inner.list_trash()
+            }
+        }
+
+        impl DataRead for Spy {
+            fn data_read(&self, path: &str) -> Result<Option<Vec<u8>>, PluginError> {
+                self.inner.data_read(path)
+            }
+            fn data_list(&self, prefix: &str) -> Result<Vec<String>, PluginError> {
+                self.inner.data_list(prefix)
+            }
+            fn cache_read(&self, path: &str) -> Result<Option<Vec<u8>>, PluginError> {
+                self.inner.cache_read(path)
+            }
+        }
+
+        impl SettingsRead for Spy {
+            fn setting(&self, key: &str) -> Result<SettingValue, PluginError> {
+                self.inner.setting(key)
+            }
+        }
+
+        impl ViewStateRead for Spy {
+            fn view_state(&self, key: &str) -> Result<Option<serde_json::Value>, PluginError> {
+                self.inner.view_state(key)
+            }
+        }
+
+        impl HostEnv for Spy {
+            fn now_unix_millis(&self) -> u64 {
+                self.inner.now_unix_millis()
+            }
+            fn user_locale(&self) -> Locale {
+                self.inner.user_locale()
+            }
+            fn random_bytes(&self, n: u32) -> Result<Vec<u8>, PluginError> {
+                self.inner.random_bytes(n)
+            }
+            fn active_context(&self) -> Option<ViewContext> {
+                self.inner.active_context()
+            }
+        }
+
+        impl TransferRead for Spy {
+            fn read_source(
+                &self,
+                handle: fub_abi::transfer::SourceHandle,
+                offset: u64,
+                len: u32,
+            ) -> Result<Vec<u8>, PluginError> {
+                self.inner.read_source(handle, offset, len)
+            }
+        }
+
+        /// La nota aperta, con due titoli, citata da `sources`.
+        fn host(sources: &[&str]) -> MemoryHost {
+            let host = MemoryHost::new()
+                .with_document("nota.md", "# Uno\n\n## Due\n")
+                .with_outline("nota.md", &[h(1, "Uno", 0, 5), h(2, "Due", 7, 13)])
+                .with_backlink("nota.md", sources);
+            host.set_active(Some("nota.md"));
+            host
+        }
+
+        fn render(host: &dyn ReadApi) -> UiNode {
+            OutlineView
+                .render_view(&ViewInstance::only(OUTLINE_VIEW), host)
+                .unwrap()
+        }
+
+        /// La sezione «In entrata», se c'è, fra i figli della radice.
+        fn section(tree: &UiNode) -> Option<&UiNode> {
+            let UiKind::Stack { children, .. } = &tree.kind else {
+                return None;
+            };
+            children
+                .iter()
+                .find(|child| child.key.as_deref() == Some(INCOMING_SECTION))
+        }
+
+        fn rendered(text: &Text, language: &str) -> String {
+            let catalogs = catalog();
+            let locale = Locale {
+                language: language.into(),
+                ..Locale::default()
+            };
+            Strings::new(&catalogs, "en", &locale).render(text)
+        }
+
+        /// Titolo della sezione e righe `(titolo, sottotitolo)`, in italiano.
+        fn read(section: &UiNode) -> (String, Vec<(String, Option<String>)>) {
+            let UiKind::Section {
+                title,
+                collapsed,
+                children,
+            } = &section.kind
+            else {
+                panic!("«In entrata» è una sezione: {section:?}");
+            };
+            assert!(!collapsed, "la sezione nasce aperta");
+            let [list] = children.as_slice() else {
+                panic!("dentro c'è un elenco solo");
+            };
+            let UiKind::List { items } = &list.kind else {
+                panic!("dentro c'è un elenco: {list:?}");
+            };
+            let rows = items
+                .iter()
+                .map(|item| match &item.kind {
+                    UiKind::ListItem {
+                        title, subtitle, ..
+                    } => (
+                        rendered(title, "it"),
+                        subtitle.as_ref().map(|s| rendered(s, "it")),
+                    ),
+                    other => panic!("ogni riga è una voce: {other:?}"),
+                })
+                .collect();
+            (rendered(title, "it"), rows)
+        }
+
+        #[test]
+        fn without_incoming_links_there_is_no_section() {
+            let tree = render(&host(&[]));
+            assert!(section(&tree).is_none());
+            assert_eq!(entries(&tree).len(), 2, "l'albero resta quello di prima");
+        }
+
+        #[test]
+        fn three_incoming_notes_are_three_rows_under_the_tree() {
+            let tree = render(&host(&[
+                "Guida/Sintassi di Fub.md",
+                "Progetti/Il banco che vede.md",
+                "Benvenuto.md",
+            ]));
+            let UiKind::Stack { children, .. } = &tree.kind else {
+                panic!("la Struttura è una colonna");
+            };
+            let tree_at = children
+                .iter()
+                .position(|child| matches!(child.kind, UiKind::Tree { .. }))
+                .unwrap();
+            let section_at = children
+                .iter()
+                .position(|child| child.key.as_deref() == Some(INCOMING_SECTION))
+                .unwrap();
+            assert_eq!(section_at, tree_at + 1, "la sezione sta subito sotto l'albero");
+            let (title, rows) = read(&children[section_at]);
+            assert_eq!(title, "In entrata · 3");
+            assert_eq!(
+                rows,
+                [
+                    ("Sintassi di Fub".to_string(), Some("Guida".to_string())),
+                    ("Il banco che vede".to_string(), Some("Progetti".to_string())),
+                    // Nella radice non c'è una cartella da dire.
+                    ("Benvenuto".to_string(), None),
+                ]
+            );
+            let UiKind::Section { children, .. } = &children[section_at].kind else {
+                unreachable!()
+            };
+            let UiKind::List { items } = &children[0].kind else {
+                unreachable!()
+            };
+            // Ogni riga apre la sua nota e si trascina come la nota che nomina.
+            let first = &items[0];
+            assert_eq!(first.key.as_deref(), Some("Guida/Sintassi di Fub.md#0"));
+            let json = serde_json::to_string(first).unwrap();
+            assert!(
+                json.contains(r#""drag":{"kind":"document","doc":"Guida/Sintassi di Fub.md"}"#),
+                "{json}"
+            );
+            let UiKind::ListItem {
+                action: Some(action),
+                ..
+            } = &first.kind
+            else {
+                panic!("la riga è attivabile");
+            };
+            let mut host = host(&["Guida/Sintassi di Fub.md"]);
+            let update = OutlineView
+                .on_action(
+                    &ViewInstance::only(OUTLINE_VIEW),
+                    UiAction::new(&action.action.0).with_payload(action.payload.clone()),
+                    &mut host,
+                )
+                .unwrap();
+            assert_eq!(
+                update,
+                ViewUpdate::Navigate {
+                    doc_id: "Guida/Sintassi di Fub.md".into()
+                }
+            );
+        }
+
+        #[test]
+        fn past_five_notes_a_row_says_how_many_more_and_leads_to_the_links() {
+            let sources: Vec<String> = (1..=7).map(|n| format!("Diario/Giorno {n}.md")).collect();
+            let sources: Vec<&str> = sources.iter().map(String::as_str).collect();
+            let tree = render(&host(&sources));
+            let (title, rows) = read(section(&tree).unwrap());
+            assert_eq!(title, "In entrata · 7");
+            assert_eq!(rows.len(), 6, "cinque note e «e altri»");
+            assert_eq!(rows[5], ("e altri 2".to_string(), None));
+            let mut host = host(&sources);
+            let update = OutlineView
+                .on_action(
+                    &ViewInstance::only(OUTLINE_VIEW),
+                    UiAction::new(SHOW_INCOMING),
+                    &mut host,
+                )
+                .unwrap();
+            assert_eq!(
+                update,
+                ViewUpdate::Custom {
+                    ns: INSPECTOR_TAB_NS.into(),
+                    payload: serde_json::json!({ "view": "backlinks" }),
+                }
+            );
+        }
+
+        #[test]
+        fn exactly_five_notes_have_no_more_row() {
+            let sources: Vec<String> = (1..=5).map(|n| format!("Giorno {n}.md")).collect();
+            let sources: Vec<&str> = sources.iter().map(String::as_str).collect();
+            let (title, rows) = read(section(&render(&host(&sources))).unwrap());
+            assert_eq!(title, "In entrata · 5");
+            assert_eq!(rows.len(), 5);
+            assert!(rows.iter().all(|(title, _)| !title.starts_with("e altri")));
+        }
+
+        #[test]
+        fn a_failed_read_leaves_the_outline_as_it_was() {
+            let mut spy = Spy::new(host(&["Altra.md"]));
+            spy.backlinks_fail = true;
+            let tree = render(&spy);
+            assert!(section(&tree).is_none());
+            assert_eq!(entries(&tree).len(), 2);
+        }
+
+        /// La Struttura segue il cursore: ogni pausa la ridisegna. «In entrata»
+        /// costa una domanda in più all'indice, una sola, con la finestra delle
+        /// righe che si mostrano.
+        #[test]
+        fn each_render_asks_the_index_once_more_for_at_most_five_rows() {
+            let spy = Spy::new(host(&["Uno.md", "Due.md"]));
+            render(&spy);
+            let asked = spy.asked.lock().unwrap();
+            assert_eq!(asked.len(), 2, "i titoli e chi punta qui: {asked:?}");
+            assert!(matches!(asked[0], IndexQuery::Outline { .. }));
+            assert_eq!(
+                asked[1],
+                IndexQuery::Backlinks {
+                    target: DocId::new("nota.md"),
+                    page: Some(Page {
+                        offset: 0,
+                        limit: 5
+                    }),
+                }
+            );
+        }
+
+        #[test]
+        fn a_note_that_links_to_itself_is_a_row_like_the_others() {
+            let (title, rows) = read(section(&render(&host(&["nota.md"]))).unwrap());
+            assert_eq!(title, "In entrata · 1");
+            assert_eq!(rows, [("nota".to_string(), None)]);
+        }
+
+        #[test]
+        fn a_note_without_headings_still_shows_who_links_to_it() {
+            let host = MemoryHost::new()
+                .with_document("nota.md", "solo testo\n")
+                .with_backlink("nota.md", &["Disegni/Schizzo.svg", "Carte/Atto.pdf"]);
+            host.set_active(Some("nota.md"));
+            let tree = render(&host);
+            let (title, rows) = read(section(&tree).unwrap());
+            assert_eq!(title, "In entrata · 2");
+            // Un link da un disegno o da un PDF è una nota in entrata come le altre.
+            assert_eq!(
+                rows,
+                [
+                    ("Schizzo".to_string(), Some("Disegni".to_string())),
+                    ("Atto".to_string(), Some("Carte".to_string())),
+                ]
+            );
+        }
+
+        #[test]
+        fn the_folder_of_a_folder_page_is_the_one_above() {
+            assert_eq!(folder_of(&DocId::new("Progetti/Fub/_index.md")).as_deref(), Some("Progetti"));
+            assert_eq!(folder_of(&DocId::new("Fub/_index.md")), None);
+            assert_eq!(folder_of(&DocId::new("a/b/c.md")).as_deref(), Some("b"));
+        }
+
+        #[test]
+        fn the_words_exist_in_english_too() {
+            let sources: Vec<String> = (1..=6).map(|n| format!("N{n}.md")).collect();
+            let sources: Vec<&str> = sources.iter().map(String::as_str).collect();
+            let tree = render(&host(&sources));
+            let UiKind::Section {
+                title, children, ..
+            } = &section(&tree).unwrap().kind
+            else {
+                unreachable!()
+            };
+            assert_eq!(rendered(title, "en"), "Incoming · 6");
+            let UiKind::List { items } = &children[0].kind else {
+                unreachable!()
+            };
+            let UiKind::ListItem { title, .. } = &items[5].kind else {
+                unreachable!()
+            };
+            assert_eq!(rendered(title, "en"), "and 1 more");
+        }
     }
 }
