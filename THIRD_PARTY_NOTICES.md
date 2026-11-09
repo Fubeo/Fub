@@ -4,6 +4,8 @@ Questo file raccoglie gli avvisi di copyright e i testi di licenza del codice
 di terzi da cui Fub deriva. Le dipendenze dichiarate nei manifest
 (`Cargo.toml`, `package.json`) non stanno qui: le governano `deny.toml` e lo
 SBOM.
+Il logo in `assets/logo/` non è materiale di terzi né codice: è dell'autore,
+con tutti i diritti riservati ([`assets/logo/LICENZA.md`](assets/logo/LICENZA.md)).
 
 ## Stabilizzatore del tratto
 
