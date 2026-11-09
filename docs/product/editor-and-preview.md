@@ -27,25 +27,24 @@ o sotto) e **Anteprima**, o come [disegno](drawing.md) con la feature `draw`
 dell'host. L'anteprima si ridisegna
 dopo una pausa di scrittura, come immagine inerte; una versione rotta lascia
 l'ultima buona, attenuata, sotto il motivo con riga e colonna. I documenti
-`.xlsx` usano invece la famiglia Grid. Il commutatore è la voce in basso a
-destra della banda di stato; sul telefono un tondo sulla carta
-([dettagli](../architecture/shell-behaviours.md)). Con una sola modalità
-non si vede e non ci sono i comandi di modalità, che trovano la
+`.xlsx` usano invece la famiglia Grid. Il commutatore è la voce in fondo alla
+banda di stato, [sul telefono un tondo](../architecture/shell-behaviours.md);
+con una sola modalità non c'è, né i comandi di modalità, che trovano la
 modalità per ruolo (Live, sulla tela, riporta alle carte). Il riquadro ricorda
 la modalità scelta per ogni famiglia di superfici: una nota in Sorgente non fa
 aprire la tela seguente come JSON, e la tela non cambia la modalità in cui si
 riapre la nota. Le scorciatoie seguono il riquadro attivo. In un campo in cui
 si scrive, un accordo senza Ctrl e senza ⌘ resta del campo: Alt+← muove il
-cursore lì e torna indietro fuori. Una scorciatoia scrive `Mod` per ⌘ sul Mac
-e Ctrl altrove, e `Ctrl` per Control anche sul Mac: il giro delle schede in
-ordine d'uso è `Ctrl-Tab`, perché ⌘-Tab è del sistema. Fuori dal Mac `Ctrl-k`
-e `Mod-k` sono lo stesso tasto, e le impostazioni li segnalano come
-conflitto. Le impostazioni dicono anche quando un accordo lo prende il sistema
-(⌘-Tab sul Mac, Alt-F4 altrove): si salva lo stesso, ma lì non arriva. Sul Mac
-PgDn e PgUp si leggono `Fn↓` e `Fn↑`, come si premono. La modalità delle
-note in una finestra nuova viene da `editor.default-mode`; un riquadro diviso
-eredita quelle del riquadro da cui nasce. I divisori fra riquadri si trascinano,
-si spostano con le frecce e tornano a parti uguali con un doppio clic; le
+cursore lì e torna indietro fuori. Una scorciatoia scrive `Mod` per ⌘ sul Mac e
+Ctrl altrove, e `Ctrl` per Control anche sul Mac: il giro delle schede in
+ordine d'uso è `Ctrl-Tab`, perché ⌘-Tab è del sistema. Fuori dal Mac `Ctrl-k` e
+`Mod-k` sono lo stesso tasto, e le impostazioni li segnalano come conflitto. Le
+impostazioni dicono anche quando un accordo lo prende il sistema (⌘-Tab sul
+Mac, Alt-F4 altrove): si salva lo stesso, ma lì non arriva. Sul Mac PgDn e PgUp
+si leggono `Fn↓` e `Fn↑`, come si premono. La modalità delle note in una
+finestra nuova viene da `editor.default-mode`; un riquadro diviso eredita
+quelle del riquadro da cui nasce. I divisori fra riquadri si trascinano, si
+spostano con le frecce e tornano a parti uguali con un doppio clic; le
 proporzioni restano nel layout finché la fila non cambia. **Affianca la
 Lettura** apre la Lettura in un riquadro collegato che scorre con la sorgente.
 
