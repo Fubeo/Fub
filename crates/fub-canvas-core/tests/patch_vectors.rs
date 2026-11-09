@@ -27,7 +27,10 @@ fn folder() -> PathBuf {
 /// `99-…`.
 fn number(path: &std::path::Path) -> u32 {
     let name = path.file_name().unwrap().to_string_lossy();
-    name.split('-').next().and_then(|n| n.parse().ok()).unwrap_or(u32::MAX)
+    name.split('-')
+        .next()
+        .and_then(|n| n.parse().ok())
+        .unwrap_or(u32::MAX)
 }
 
 /// I vettori, in ordine di numero e poi di nome: `(file, json)`. Un file che

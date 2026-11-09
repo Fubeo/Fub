@@ -848,8 +848,10 @@ const CANVAS_CORE_ALLOWED_DEPENDENTS: &[&str] =
 /// (`wasm-bindgen` e simili) è proprio ciò che la decisione D-1 (a) del piano
 /// N3 ha escluso. Per questo le dirette sono un elenco chiuso (il nucleo,
 /// `serde`, `serde_json`), la chiusura non contiene altri membri del
-/// workspace che il nucleo né una famiglia proibita, e nessun membro dipende
-/// dalla facciata: la caricano la shell e i suoi test, non un crate.
+/// workspace che il nucleo e quelli che il nucleo stesso può vedere
+/// (`CANVAS_CORE_ALLOWED_MEMBERS`, l'inchiostro delle schede) né una famiglia
+/// proibita, e nessun membro dipende dalla facciata: la caricano la shell e i
+/// suoi test, non un crate.
 #[test]
 fn the_canvas_wasm_facade_stays_thin() {
     let metadata = metadata();
@@ -875,15 +877,18 @@ fn the_canvas_wasm_facade_stays_thin() {
         .closure("fub-canvas-wasm")
         .into_iter()
         .filter(|n| {
-            (members.contains(n) && !matches!(*n, "fub-canvas-wasm" | "fub-canvas-core"))
+            (members.contains(n)
+                && !matches!(*n, "fub-canvas-wasm" | "fub-canvas-core")
+                && !CANVAS_CORE_ALLOWED_MEMBERS.contains(n))
                 || forbidden(n)
         })
         .collect();
     assert!(
         trespassers.is_empty(),
         "`fub-canvas-wasm` raggiunge {trespassers:?} fra le dipendenze normali.\n\
-         La facciata vede solo il nucleo della lavagna\n\
-         (docs/reference/canvas-operations.md § «WebAssembly»)."
+         La facciata vede solo il nucleo della lavagna e ciò che il nucleo vede\n\
+         ({CANVAS_CORE_ALLOWED_MEMBERS:?}; docs/reference/canvas-operations.md\n\
+         § «WebAssembly»)."
     );
 
     let dependents: Vec<&str> = members
