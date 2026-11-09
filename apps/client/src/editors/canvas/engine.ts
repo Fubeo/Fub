@@ -17,6 +17,8 @@ import { erasableInk, InkEraseSource, inkKey, type ErasableInk } from "./ink-era
 import { inkFitMode } from "./ink-fit";
 import { mountInkLayer, type InkLayer, type InkLayerStroke } from "./ink-layer";
 import { fadeInkStroke, InkPathCache, paintBoard, paintCard, type DryStroke } from "./ink-paint";
+import { watchPreferences } from "./preferences";
+import { isTap, pinchCamera, type TouchCamera, type TouchPoint, type ZoomLimits } from "./touch";
 import {
   defaultInkLook,
   dryStroke,
@@ -217,6 +219,12 @@ export interface CanvasEngineOptions {
     host: HTMLElement,
     forms: readonly SyntaxForm[] | undefined,
   ) => (() => void) | void;
+  /**
+   * «Il dito sposta le schede», letto quando il primo dito si posa: un cambio
+   * vale dal tocco dopo. I test lo passano; assente, la lavagna segue le
+   * Impostazioni di questo computer (`watchPreferences`).
+   */
+  readonly fingerMovesCard?: () => boolean;
 }
 
 interface Viewport {
@@ -225,8 +233,15 @@ interface Viewport {
   zoom: number;
 }
 
+/** Sotto il dito fanno come col mouse: i controlli sempre, le maniglie se la lavagna si cambia. */
+const FINGER_CONTROLS = "button, a, input, textarea, select, [contenteditable]:not([contenteditable='false'])";
+const FINGER_HANDLES = ".canvas-node-handle, [data-resize], [data-reconnect], [data-connect]";
+
+/** I limiti dello zoom: la rotella, i pulsanti e il pizzico. */
+const ZOOM_LIMITS: ZoomLimits = { min: 0.1, max: 4 };
+
 function clampZoom(zoom: number): number {
-  return Math.min(4, Math.max(0.1, zoom));
+  return Math.min(ZOOM_LIMITS.max, Math.max(ZOOM_LIMITS.min, zoom));
 }
 
 function snap(value: number): number {
@@ -306,6 +321,14 @@ export class CanvasEngine {
   #resize: { pointerId: number; id: string; startX: number; startY: number; width: number; height: number } | null = null;
   #pan: { pointerId: number; startX: number; startY: number; camX: number; camY: number } | null = null;
   #connect: { pointerId: number; from: string; edgeId?: string; endpoint?: "from" | "to" } | null = null;
+  /** Le dita giù che la lavagna segue, in coordinate del client. */
+  readonly #fingers = new Map<number, TouchPoint>();
+  /** Il dito che può ancora essere un tocco breve: dove e quando si è posato, e su che cosa. */
+  #tap: { pointerId: number; startX: number; startY: number; at: number; target: Element | null; shift: boolean } | null = null;
+  /** Il pizzico in corso: le due dita e la camera di quando il secondo si è posato. */
+  #pinch: { a: number; b: number; a0: TouchPoint; b0: TouchPoint; start: TouchCamera } | null = null;
+  /** «Il dito sposta le schede» dalle Impostazioni, quando non lo passano le opzioni. */
+  #fingerMovesCardSetting = false;
   readonly #port: CanvasCorePort;
   /** La lavagna aperta nel nucleo; `null` prima di aprirla o dopo una trappola. */
   #core: CanvasCore | null = null;
@@ -341,6 +364,11 @@ export class CanvasEngine {
     this.#options = options;
     this.#quiet = new PenQuiet(idleSchedule(this.#life));
     this.#life.add(() => this.#quiet.dispose());
+    if (!options.fingerMovesCard) {
+      this.#life.add(watchPreferences((preferences) => {
+        this.#fingerMovesCardSetting = preferences.fingerMovesCard;
+      }));
+    }
     this.#port = options.core ?? SHARED_CORE;
     this.#root = document.createElement("div");
     this.#root.className = "canvas-surface";
@@ -370,7 +398,10 @@ export class CanvasEngine {
     this.#viewport.addEventListener("pointerdown", (event) => this.#pointerDown(event), { signal });
     this.#viewport.addEventListener("pointermove", (event) => this.#pointerMove(event), { signal });
     this.#viewport.addEventListener("pointerup", (event) => this.#pointerUp(event), { signal });
-    this.#viewport.addEventListener("pointercancel", () => this.#cancelGestures(), { signal });
+    this.#viewport.addEventListener("pointercancel", (event) => {
+      if (event.pointerType === "touch") this.#fingers.delete(event.pointerId);
+      this.#cancelGestures();
+    }, { signal });
     this.#viewport.addEventListener("wheel", (event) => this.#wheel(event), { signal, passive: false });
     this.#viewport.addEventListener("keydown", (event) => this.#keydown(event), { signal });
     // D lasciato ovunque, la finestra che perde il fuoco o si nasconde: il
@@ -2037,6 +2068,11 @@ export class CanvasEngine {
   #pointerDown(event: PointerEvent): void {
     // Prima di ogni gesto, il testo in sospeso (non i clic dentro il campo).
     if (!(event.target instanceof Node && this.#editor?.input.contains(event.target))) this.#recordPending();
+    if (event.pointerType === "touch") this.#touchDown(event);
+    else this.#mouseDown(event);
+  }
+
+  #mouseDown(event: PointerEvent): void {
     if (event.button === 1 || event.ctrlKey || event.metaKey || event.altKey) {
       this.#pan = { pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, camX: this.#camera.x, camY: this.#camera.y };
       this.#viewport.setPointerCapture?.(event.pointerId);
@@ -2075,61 +2111,195 @@ export class CanvasEngine {
     }
     const nodeId = this.#nodeAt(target);
     if (nodeId) {
-      const additive = event.shiftKey;
-      if (additive) {
-        this.#selection = this.#selection.includes(nodeId)
-          ? this.#selection.filter((id) => id !== nodeId)
-          : [...this.#selection, nodeId];
-        this.#edgeSelection = [];
-        this.#options.onSelectionChange();
-        this.#displaySelection();
-      } else if (!this.#selection.includes(nodeId)) {
-        this.#selection = [nodeId];
-        this.#edgeSelection = [];
-        this.#options.onSelectionChange();
-        this.#displaySelection();
-      }
+      this.#selectNode(nodeId, event.shiftKey);
       if (this.#readOnly || !this.#doc || !(target instanceof Element && target.closest(".canvas-node-handle"))) return;
-      const origin = new Map<string, { x: number; y: number }>();
-      for (const id of this.#selection) {
-        const node = this.#doc.nodes.find((n) => n.id === id);
-        if (node) origin.set(id, { x: node.x, y: node.y });
-      }
-      // A group carries every card fully inside it. Containment is geometric,
-      // not a second persisted parent relation that would conflict with Canvas.
-      for (const group of this.#doc.nodes.filter((node) => origin.has(node.id) && node.type === "group")) {
-        for (const child of this.#doc.nodes) {
-          if (child.id !== group.id && child.x >= group.x && child.y >= group.y
-            && child.x + child.width <= group.x + group.width
-            && child.y + child.height <= group.y + group.height) {
-            origin.set(child.id, { x: child.x, y: child.y });
-          }
-        }
-      }
-      this.#drag = { pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, origin, moved: false };
-      this.#viewport.setPointerCapture?.(event.pointerId);
-      event.preventDefault();
+      this.#beginDrag(event);
       return;
     }
     const edgeId = this.#edgeAt(target);
     if (edgeId) {
-      this.#edgeSelection = [edgeId];
-      this.#selection = [];
-      this.#options.onSelectionChange();
-      this.#displaySelection();
+      this.#selectEdge(edgeId);
       return;
     }
-    if (!event.shiftKey) {
-      this.#selection = [];
-      this.#edgeSelection = [];
-      this.#options.onSelectionChange();
-      this.#displaySelection();
+    if (!event.shiftKey) this.#clearSelection();
+    this.#beginPan(event.pointerId, event.clientX, event.clientY);
+  }
+
+  /** La scheda `nodeId` presa col clic: `additive` (Maiuscolo) la aggiunge o la toglie. */
+  #selectNode(nodeId: string, additive: boolean): void {
+    if (additive) {
+      this.#selection = this.#selection.includes(nodeId)
+        ? this.#selection.filter((id) => id !== nodeId)
+        : [...this.#selection, nodeId];
+    } else if (!this.#selection.includes(nodeId)) {
+      this.#selection = [nodeId];
+    } else {
+      return;
     }
-    this.#pan = { pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, camX: this.#camera.x, camY: this.#camera.y };
+    this.#edgeSelection = [];
+    this.#options.onSelectionChange();
+    this.#displaySelection();
+  }
+
+  #selectEdge(edgeId: string): void {
+    this.#edgeSelection = [edgeId];
+    this.#selection = [];
+    this.#options.onSelectionChange();
+    this.#displaySelection();
+  }
+
+  #clearSelection(): void {
+    this.#selection = [];
+    this.#edgeSelection = [];
+    this.#options.onSelectionChange();
+    this.#displaySelection();
+  }
+
+  /** Comincia a trascinare le schede scelte, e ciò che i gruppi scelti contengono. */
+  #beginDrag(event: PointerEvent): void {
+    if (!this.#doc) return;
+    const origin = new Map<string, { x: number; y: number }>();
+    for (const id of this.#selection) {
+      const node = this.#doc.nodes.find((n) => n.id === id);
+      if (node) origin.set(id, { x: node.x, y: node.y });
+    }
+    // A group carries every card fully inside it. Containment is geometric,
+    // not a second persisted parent relation that would conflict with Canvas.
+    for (const group of this.#doc.nodes.filter((node) => origin.has(node.id) && node.type === "group")) {
+      for (const child of this.#doc.nodes) {
+        if (child.id !== group.id && child.x >= group.x && child.y >= group.y
+          && child.x + child.width <= group.x + group.width
+          && child.y + child.height <= group.y + group.height) {
+          origin.set(child.id, { x: child.x, y: child.y });
+        }
+      }
+    }
+    this.#drag = { pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, origin, moved: false };
     this.#viewport.setPointerCapture?.(event.pointerId);
+    event.preventDefault();
+  }
+
+  #beginPan(pointerId: number, clientX: number, clientY: number): void {
+    this.#pan = { pointerId, startX: clientX, startY: clientY, camX: this.#camera.x, camY: this.#camera.y };
+    this.#viewport.setPointerCapture?.(pointerId);
+  }
+
+  // --- il dito -----------------------------------------------------------------
+
+  /** «Il dito sposta le schede», adesso. */
+  #fingerMovesCard(): boolean {
+    return this.#options.fingerMovesCard ? this.#options.fingerMovesCard() : this.#fingerMovesCardSetting;
+  }
+
+  /**
+   * Un dito si posa. Il primo sposta la lavagna, anche sopra le schede, e se
+   * si alza presto e vicino fa quello che fa un clic; con «Il dito sposta le
+   * schede» sopra una scheda la sposta. Le maniglie (testata, ridimensiona,
+   * collega) e i controlli (pulsanti, collegamenti, campi) fanno come col
+   * mouse; in sola lettura le maniglie spostano la lavagna. Il secondo dito
+   * comincia il pizzico, salvo durante un gesto su una scheda, che tiene il
+   * dito suo. Con una penna giù il dito non fa niente.
+   */
+  #touchDown(event: PointerEvent): void {
+    if (this.#penDown || this.#drag || this.#resize || this.#connect || this.#pinch) return;
+    this.#fingers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+    if (this.#fingers.size >= 2) {
+      this.#beginPinch();
+      event.preventDefault();
+      return;
+    }
+    const target = event.target instanceof Element ? event.target : null;
+    if (target?.closest(FINGER_CONTROLS) || (!this.#readOnly && target?.closest(FINGER_HANDLES))) {
+      this.#mouseDown(event);
+      return;
+    }
+    const nodeId = this.#nodeAt(target);
+    if (nodeId && !this.#readOnly && this.#doc && this.#fingerMovesCard()) {
+      this.#selectNode(nodeId, event.shiftKey);
+      this.#beginDrag(event);
+      return;
+    }
+    this.#tap = { pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, at: event.timeStamp, target, shift: event.shiftKey };
+    this.#beginPan(event.pointerId, event.clientX, event.clientY);
+  }
+
+  /** Le prime due dita giù diventano un pizzico: il pan e il tocco breve finiscono. */
+  #beginPinch(): void {
+    const [a, b] = [...this.#fingers.keys()];
+    if (a === undefined || b === undefined) return;
+    this.#pan = null;
+    this.#tap = null;
+    this.#pinch = { a, b, a0: this.#local(this.#fingers.get(a)!), b0: this.#local(this.#fingers.get(b)!), start: { ...this.#camera } };
+    this.#viewport.setPointerCapture?.(b);
+  }
+
+  /** Un punto del client in coordinate del viewport. */
+  #local(point: TouchPoint): TouchPoint {
+    const rect = this.#viewport.getBoundingClientRect();
+    return { x: point.x - rect.left, y: point.y - rect.top };
+  }
+
+  /** Un dito si muove: `true` se l'ha preso il dito, `false` se tocca al gesto comune. */
+  #touchMove(event: PointerEvent): boolean {
+    if (!this.#fingers.has(event.pointerId)) return true;
+    this.#fingers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+    // La penna vince: il dito si ferma, e una scheda che spostava torna dov'era.
+    if (this.#penDown) {
+      this.#cancelGestures();
+      return true;
+    }
+    const pinch = this.#pinch;
+    if (pinch) {
+      const a = this.#fingers.get(pinch.a);
+      const b = this.#fingers.get(pinch.b);
+      if (a && b && (event.pointerId === pinch.a || event.pointerId === pinch.b)) {
+        this.#camera = { ...pinchCamera(pinch.start, pinch.a0, pinch.b0, this.#local(a), this.#local(b), ZOOM_LIMITS) };
+        this.#applyCamera();
+      }
+      return true;
+    }
+    const tap = this.#tap;
+    if (tap?.pointerId === event.pointerId && !isTap(tap.startX, tap.startY, event.clientX, event.clientY, 0)) this.#tap = null;
+    return false;
+  }
+
+  /**
+   * Un dito si alza: `true` se l'ha preso il dito. Dal pizzico, il dito che
+   * resta sposta la lavagna; un tocco breve fa quello che fa un clic.
+   */
+  #touchUp(event: PointerEvent): boolean {
+    if (!this.#fingers.delete(event.pointerId)) return true;
+    const pinch = this.#pinch;
+    if (pinch) {
+      if (event.pointerId !== pinch.a && event.pointerId !== pinch.b) return true;
+      this.#pinch = null;
+      const rest = [...this.#fingers][0];
+      if (rest) this.#beginPan(rest[0], rest[1].x, rest[1].y);
+      return true;
+    }
+    const tap = this.#tap;
+    if (tap?.pointerId !== event.pointerId) return false;
+    this.#tap = null;
+    this.#pan = null;
+    if (isTap(tap.startX, tap.startY, event.clientX, event.clientY, event.timeStamp - tap.at)) this.#tapAt(tap.target, tap.shift);
+    return true;
+  }
+
+  /** Il tocco breve su `target`: sceglie come il clic del mouse. */
+  #tapAt(target: Element | null, additive: boolean): void {
+    if (!target?.isConnected) return;
+    const nodeId = this.#nodeAt(target);
+    if (nodeId) {
+      this.#selectNode(nodeId, additive);
+      return;
+    }
+    const edgeId = this.#edgeAt(target);
+    if (edgeId) this.#selectEdge(edgeId);
+    else if (!additive) this.#clearSelection();
   }
 
   #pointerMove(event: PointerEvent): void {
+    if (event.pointerType === "touch" && this.#touchMove(event)) return;
     if (this.#pan && event.pointerId === this.#pan.pointerId) {
       this.#camera.x = this.#pan.camX + (event.clientX - this.#pan.startX);
       this.#camera.y = this.#pan.camY + (event.clientY - this.#pan.startY);
@@ -2164,6 +2334,7 @@ export class CanvasEngine {
   }
 
   #pointerUp(event: PointerEvent): void {
+    if (event.pointerType === "touch" && this.#touchUp(event)) return;
     if (this.#pan && event.pointerId === this.#pan.pointerId) {
       this.#pan = null;
       return;
@@ -2206,6 +2377,9 @@ export class CanvasEngine {
     this.#resize = null;
     this.#pan = null;
     this.#connect = null;
+    this.#fingers.clear();
+    this.#tap = null;
+    this.#pinch = null;
     // Il gesto aveva mosso il modello in mano: torna quello del nucleo.
     const model = active && this.#doc ? this.#coreModel() : null;
     if (model) {

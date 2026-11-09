@@ -374,6 +374,12 @@ schede.
   scrivere il mouse (`data-ink="pen"` sul viewport) finché non si alza; lo
   lasciano anche la finestra che perde il fuoco e `visibilitychange`. Un
   tratto già giù finisce. `setInkMouse(on)` fa lo stesso per l'interruttore.
+- **Il dito.** Un dito sposta la vista, anche sopra le schede; testata,
+  maniglie, `[data-connect]` e controlli fanno come col mouse (in sola
+  lettura la testata sposta la vista). Due dita pizzicano (`pinchCamera` di
+  `touch.ts`); un tocco breve sceglie come un clic. Con «Il dito sposta le
+  schede» il dito su una scheda la sposta, letta al primo dito. Con una
+  penna giù il dito si ferma.
 
 ## Confini e verifica
 
@@ -393,6 +399,7 @@ schede.
 | l'inchiostro di una scheda la segue senza ridisegnare | `editors/canvas/ink-paint.test.ts` |
 | un tratto è una toppa, un commit e un passo; il ridisegno aspetta la penna | `editors/canvas/engine-ink.test.ts` |
 | la gomma prende il tratto dove si vede e cancella in un passo; D fa scrivere il mouse | `editors/canvas/ink-erase.test.ts`, `editors/canvas/engine-ink.test.ts` |
+| il dito sposta e pizzica la lavagna; la penna lo ferma | `editors/canvas/touch.test.ts`, `editors/canvas/engine-touch.test.ts` |
 | Rust e client nominano uguale le impostazioni della lavagna | `editors/canvas/settings-mirror.test.ts`, `fub-host/tests/lavagna_feature.rs` |
 | un puntatore fermo resta fermo nella scena se la vista si muove | `ink/dom/pointer-adapter.test.ts`, `tools/editor.test.ts` |
 
