@@ -361,17 +361,11 @@ grassetto, lo stile dice «Titolo 2» su un titolo di secondo livello, la tabell
 è spenta fuori da una tabella e il formato in riga dentro il codice; in sola
 lettura tutto è spento. Il tasto destro toglie una nota e i suoi richiami.
 
-La barra sta su una riga ed è la barra in una fila di tutti gli editor: un
-vassoio un tono sotto la carta, con i gruppi come foglietti e gli stessi
-pulsanti della barra dei fogli. I gruppi che non entrano scendono nel menu
-«altri strumenti» («…»). Al telefono la barra resta una fila piatta a tutta
-larghezza, sopra la tastiera; la bolla della selezione e la mini-barra hanno
-gli stessi pulsanti, senza vassoio. La tastiera la raggiunge con un solo
-arresto di tabulazione: dall'editor, dove Tab rientra, Escape e poi
-Maiusc+Tab risalgono fino a lei. Le frecce girano ai capi, Home ed End vanno
-al primo e all'ultimo pulsante acceso («…» compreso, quando c'è), Escape
-torna al testo e il menu di un pulsante, chiuso, rende il fuoco al pulsante;
-il suggerimento di ogni pulsante dice la scorciatoia dell'editor quando c'è.
+La barra è la fila di serie, in un vassoio un tono sotto la carta coi gruppi
+come foglietti (al telefono una fila piatta); ciò che non entra va in «…». Un
+solo arresto di tabulazione: dall'editor, dove Tab rientra, Escape e poi
+Maiusc+Tab risalgono. Le frecce girano ai capi, Home ed End vanno al primo e
+all'ultimo pulsante acceso, Escape torna al testo; il suggerimento dice il tasto.
 
 La barra è il plugin ufficiale `fub.formatting` («Formatting bar»): si spegne e
 si riaccende dal pannello dei componenti, e ogni suo pulsante è anche un

@@ -161,11 +161,7 @@ richiederebbe un contratto dichiarativo di superficie che non esiste.
   (`profiles/markdown/actions.ts`), che la sua keymap condivide; esegue come
   una battuta, con `TextEngine.runCommand`, quindi nella cronologia locale e
   nella sessione. In Lettura o in sola lettura ogni azione è spenta. Ne sono
-  clienti la barra di formattazione (`panels/format-bar.ts`) e `fub.editor.action`.
-  La barra decide icone, gruppi e menu; veste la barra in una fila del kit
-  (`kit-bar`, `kit-bar-group`, `kit-bar-button`) e ne prende le frecce
-  (`kit/toolbar-keys.ts`). La bolla della selezione e la mini-barra sono la
-  stessa barra ristretta ad alcuni gruppi, fuori dal vassoio;
+  clienti `fub.editor.action` e la barra di formato (`panels/format-bar.ts`, in `kit-bar`);
 - `setSyntaxForms(forms)` riceve le sintassi effettive del documento, cioè
   quelle del provider più gli innesti delle `SyntaxRule` del vault. La tela le
   usa per le card di testo: il canvas dichiara con `fub:embedded-grammar`
