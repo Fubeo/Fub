@@ -5,13 +5,18 @@ import type { SurfaceMenu, SurfaceMenuEntry, SurfaceMenuItem } from "../core/edi
 import { writeClipboardText } from "../../platform/clipboard";
 import { lineFeeds, operationFromText, type EditorChangeOrigin, type TextOperation } from "../core/text-operation";
 import { idleSchedule } from "../../ink/dom/idle";
+import type { InkPointerType } from "../../ink/input/pointer";
 import { PenQuiet } from "../../ink/quiet";
+import type { InkSample } from "../../ink/sample";
+import { ERASER } from "../../ink/tools/eraser";
+import { EraseSweep } from "../../ink/tools/sweep";
 import { openLifetime, type Lifetime } from "../../ui/lifetime";
 import { mediaKindOfId } from "../media/media-types";
 import { anchorAt, strokeBounds } from "./anchor";
+import { erasableInk, InkEraseSource, inkKey, type ErasableInk } from "./ink-erase";
 import { inkFitMode } from "./ink-fit";
 import { mountInkLayer, type InkLayer, type InkLayerStroke } from "./ink-layer";
-import { InkPathCache, paintBoard, paintCard, type DryStroke } from "./ink-paint";
+import { fadeInkStroke, InkPathCache, paintBoard, paintCard, type DryStroke } from "./ink-paint";
 import {
   defaultInkLook,
   dryStroke,
@@ -24,6 +29,7 @@ import {
 } from "./ink-record";
 import {
   addStrokePatch,
+  eraseStrokePatches,
   newNodeId,
   removeEdgePatch,
   removeNodePatch,
@@ -31,6 +37,7 @@ import {
   upsertNodePatch,
   type CanvasOperation,
   type CanvasPatch,
+  type InkPatch,
 } from "./operation";
 import type { CanvasDocument, CanvasEdge, CanvasNode } from "./model";
 import {
@@ -133,6 +140,28 @@ interface CanvasStep {
 interface InkChain {
   readonly step: CanvasStep;
   readonly before: string;
+}
+
+/**
+ * Una passata della gomma «Il tratto intero» (A20): il tratto dell'adattatore
+ * che la fa, il registro di ciò che ha preso e i tratti disegnati che può
+ * prendere, fissati quando comincia.
+ */
+interface InkErase {
+  readonly id: number;
+  readonly sweep: EraseSweep<ErasableInk>;
+  readonly source: InkEraseSource;
+}
+
+/** Il tasto che fa scrivere il mouse finché è giù (regola 1). */
+function isInkKey(event: KeyboardEvent): boolean {
+  return event.key.toLowerCase() === "d";
+}
+
+/** Un campo dove i tasti scrivono. */
+function isTextTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false;
+  return target.tagName === "TEXTAREA" || target.tagName === "INPUT" || target.isContentEditable;
 }
 
 /** Gli stati dei livelli d'inchiostro, per il modello e i livelli del nucleo da cui vengono. */
@@ -301,6 +330,12 @@ export class CanvasEngine {
   #inkCards = new Map<string, readonly DryStroke[]>();
   #inkBoard: readonly DryStroke[] = [];
   #inkChain: InkChain | null = null;
+  /** La passata di gomma in corso; `null` se nessuna. */
+  #erase: InkErase | null = null;
+  /** D tenuto giù sul viewport: il mouse scrive finché non si alza. */
+  #inkKeyDown = false;
+  /** L'interruttore «Scrivi col mouse» (`setInkMouse`). */
+  #inkMouse = false;
 
   constructor(parent: HTMLElement, options: CanvasEngineOptions) {
     this.#options = options;
@@ -338,6 +373,13 @@ export class CanvasEngine {
     this.#viewport.addEventListener("pointercancel", () => this.#cancelGestures(), { signal });
     this.#viewport.addEventListener("wheel", (event) => this.#wheel(event), { signal, passive: false });
     this.#viewport.addEventListener("keydown", (event) => this.#keydown(event), { signal });
+    // D lasciato ovunque, la finestra che perde il fuoco o si nasconde: il
+    // mouse torna a selezionare.
+    this.#life.listen(window, "keyup", (event) => {
+      if (isInkKey(event)) this.#releaseInkKey();
+    });
+    this.#life.listen(window, "blur", () => this.#releaseInkKey());
+    this.#life.listen(document, "visibilitychange", () => this.#releaseInkKey());
     this.#viewport.addEventListener("dblclick", (event) => this.#dblclick(event), { signal });
     this.#viewport.addEventListener("dragover", (event) => {
       if (!this.#readOnly && !this.#isSceneOversized() && event.dataTransfer
@@ -1015,6 +1057,8 @@ export class CanvasEngine {
       this.#inkLife = null;
       this.#inkChain = null;
       life?.close();
+      this.#eraseDrop();
+      this.#applyInkMouse();
       return;
     }
     const life = openLifetime();
@@ -1025,10 +1069,161 @@ export class CanvasEngine {
       // La penna di serie (A11) allo zoom di quando il tratto comincia.
       look: (input) => defaultInkLook(this.#camera.zoom, input.pressure),
       quiet: this.#quiet,
+      mouse: this.#inkMouseOn ? "ink" : "ignore",
       onStroke: (stroke) => this.#inkStroke(stroke),
-      // Gomma e tasto laterale, fino a T13: niente scia e niente gesto.
+      onCancel: (id) => this.#eraseCancel(id),
+      onEraseStart: (id, pointerType) => this.#eraseStart(id, pointerType),
+      onErase: (id, points) => this.#eraseAlong(id, points),
+      onEraseEnd: (id) => this.#eraseEnd(id),
     }, life);
     this.#inkLayer.setCamera(this.#camera.x, this.#camera.y, this.#camera.zoom);
+    this.#applyInkMouse();
+  }
+
+  /** Il mouse scrive: D tenuto o l'interruttore acceso. */
+  get #inkMouseOn(): boolean {
+    return this.#inkMouse || this.#inkKeyDown;
+  }
+
+  /**
+   * Fa scrivere il mouse (`on`) o lo lascia alla lavagna, dal prossimo
+   * appoggio: l'interruttore «Scrivi col mouse». Un tratto già giù finisce
+   * com'è. D tenuto lo fa scrivere anche da spento.
+   */
+  setInkMouse(on: boolean): void {
+    if (this.#destroyed) return;
+    this.#inkMouse = on;
+    this.#applyInkMouse();
+  }
+
+  /** D lasciato, la finestra senza fuoco o nascosta: il mouse torna com'era. */
+  #releaseInkKey(): void {
+    if (!this.#inkKeyDown) return;
+    this.#inkKeyDown = false;
+    this.#applyInkMouse();
+  }
+
+  /**
+   * Dice allo strato che cosa fa il mouse, e lo mostra sul viewport con
+   * `data-ink="pen"` solo quando scrive davvero (lo strato c'è).
+   */
+  #applyInkMouse(): void {
+    const on = this.#inkMouseOn;
+    const layer = this.#inkLayer;
+    layer?.setMouse(on ? "ink" : "ignore");
+    if (on && layer) this.#viewport.dataset.ink = "pen";
+    else delete this.#viewport.dataset.ink;
+  }
+
+  // --- la gomma «Il tratto intero» (A20) -------------------------------------
+
+  /**
+   * Comincia una passata del retro della penna o del tasto laterale: i tratti
+   * che può prendere sono quelli disegnati adesso, dove si vedono.
+   */
+  #eraseStart(id: number, pointerType: InkPointerType): void {
+    this.#eraseDrop();
+    this.#erase = {
+      id,
+      sweep: new EraseSweep(ERASER, pointerType),
+      source: new InkEraseSource(erasableInk(this.#inkStateList())),
+    };
+  }
+
+  /** Punti nuovi della passata: i tratti presi si attenuano, il resto no. */
+  #eraseAlong(id: number, points: readonly InkSample[]): void {
+    const erase = this.#erase;
+    if (!erase || erase.id !== id) return;
+    const before = erase.sweep.size;
+    for (const point of points) erase.sweep.along(erase.source, [point.x, point.y], this.#camera.zoom);
+    const marked = erase.sweep.marked();
+    for (let i = before; i < marked.length; i++) this.#fadeInk(marked[i]!, true);
+  }
+
+  /**
+   * La passata è finita: i tratti presi si cancellano con un commit solo, un
+   * passo d'annulla, anche se stanno in più livelli. Niente preso, niente
+   * commit; un commit che non riesce rimette i tratti come erano.
+   */
+  #eraseEnd(id: number): void {
+    const erase = this.#erase;
+    if (!erase || erase.id !== id) return;
+    this.#erase = null;
+    const marked = erase.sweep.marked();
+    if (marked.length === 0) return;
+    let done = false;
+    try {
+      done = this.#eraseCommit(marked);
+    } finally {
+      if (!done) for (const unit of marked) this.#fadeInk(unit, false);
+    }
+  }
+
+  /** La passata annullata (palmo, finestra nascosta, sola lettura): i tratti tornano normali. */
+  #eraseCancel(id: number): void {
+    if (this.#erase?.id === id) this.#eraseDrop();
+  }
+
+  #eraseDrop(): void {
+    const erase = this.#erase;
+    this.#erase = null;
+    if (erase) for (const unit of erase.sweep.marked()) this.#fadeInk(unit, false);
+  }
+
+  /** Attenua o rimette il percorso disegnato di un tratto, senza ridisegnare. */
+  #fadeInk(unit: ErasableInk, faded: boolean): void {
+    if (unit.node === null) {
+      fadeInkStroke(this.#stage, "board", unit.id, faded);
+      return;
+    }
+    const element = this.#stage.querySelector<HTMLElement>(`.canvas-node[data-node="${CSS.escape(unit.node)}"]`);
+    if (element) fadeInkStroke(element, "card", unit.id, faded);
+  }
+
+  /**
+   * Cancella i tratti `marked` dal documento di adesso: prima il testo in
+   * sospeso (un passo suo, come prima di ogni gesto), poi una toppa per
+   * tratto, livello per livello nell'ordine in cui la gomma li ha presi. Un
+   * tratto che nel frattempo non c'è più si lascia; un livello diventato
+   * estraneo non si tocca. `true` se il commit è riuscito.
+   */
+  #eraseCommit(marked: readonly ErasableInk[]): boolean {
+    if (this.#destroyed || !this.#doc || this.#readOnly || this.#isSceneOversized()) return false;
+    this.#recordPending();
+    const doc = this.#doc;
+    const layers = this.#inkLayersNow();
+    if (!layers) return false;
+    const present = new Set<string>();
+    for (const state of this.#inkStateList()) {
+      for (const entry of state.strokes) present.add(inkKey(state.layer, entry.id));
+    }
+    const groups = new Map<string, { readonly layer: InkLayerRef; readonly ids: string[] }>();
+    for (const unit of marked) {
+      if (!present.has(unit.key)) continue;
+      const group = unit.node === null ? "board" : `node\u0000${unit.node}`;
+      let entry = groups.get(group);
+      if (!entry) {
+        entry = { layer: unit.layer, ids: [] };
+        groups.set(group, entry);
+      }
+      entry.ids.push(unit.id);
+    }
+    const patches: InkPatch[] = [];
+    for (const { layer, ids } of groups.values()) {
+      const made = eraseStrokePatches(doc, layers, layer, ids);
+      if (made) patches.push(...made);
+    }
+    if (patches.length === 0) return false;
+    const code = this.#commitLocal(patches, "input", (step) => this.#pushUndo(step, true), false);
+    if (code !== true) {
+      // Una trappola la dice il nucleo che si riapre.
+      if (code !== "trap") this.#showNotice(t(code === "limit" ? "canvas.ink.full" : "canvas.ink.refused"));
+      return false;
+    }
+    this.#inkChain = null;
+    this.#paintInk();
+    if (this.#intakeError) this.#showNotice("");
+    return true;
   }
 
   /**
@@ -1071,11 +1266,14 @@ export class CanvasEngine {
     if (!this.#doc || this.#isSceneOversized()) return;
     const cards = new Map<string, readonly DryStroke[]>();
     let board: DryStroke[] = [];
+    // Ciò che la gomma ha preso resta attenuato anche se lo strato si ridisegna.
+    const faded = this.#erase ? new Set(this.#erase.sweep.marked().map((unit) => unit.key)) : null;
     for (const state of this.#inkStateList()) {
       const drys: DryStroke[] = [];
       for (const stroke of state.drawable) {
         const dry = dryStroke(stroke, this.#inkPaths);
-        if (dry) drys.push(dry);
+        if (!dry) continue;
+        drys.push(faded?.has(inkKey(state.layer, stroke.id)) ? { ...dry, faded: true } : dry);
       }
       if (state.node) cards.set(state.node.id, drys);
       else board = drys;
@@ -2077,6 +2275,16 @@ export class CanvasEngine {
 
   #keydown(event: KeyboardEvent): void {
     if (!this.#doc || event.defaultPrevented || this.#isSceneOversized()) return;
+    // D da solo, fuori dai campi: il mouse scrive finché il tasto è giù
+    // (regola 1). La ripetizione del tasto non cambia niente.
+    if (isInkKey(event) && !event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey
+      && !isTextTarget(event.target)) {
+      if (!event.repeat && !this.#inkKeyDown) {
+        this.#inkKeyDown = true;
+        this.#applyInkMouse();
+      }
+      return;
+    }
     this.#recordPending();
     const modifier = event.ctrlKey || event.metaKey;
     if (modifier && event.key.toLowerCase() === "z") {

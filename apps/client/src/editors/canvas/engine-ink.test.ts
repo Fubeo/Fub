@@ -430,3 +430,197 @@ describe("la penna scrive sulla lavagna", () => {
     expect(lastChange(changes).text).toBe(withCopy);
   });
 });
+
+const ERASER_PEN = { pointerId: 9, pointerType: "pen" } as const;
+
+/**
+ * Una passata del retro della penna sui punti `world` della lavagna. Con
+ * `lift: false` resta giù e la funzione dà quella che la alza.
+ */
+function eraser(host: HTMLElement, target: Element, world: readonly (readonly [number, number])[], lift = true): () => void {
+  const cam = camera(host);
+  const at = ([x, y]: readonly [number, number]) => ({ clientX: x * cam.zoom + cam.x, clientY: y * cam.zoom + cam.y });
+  target.dispatchEvent(pointerEvent("pointerdown", { ...ERASER_PEN, ...at(world[0]!), button: 5, buttons: 32, pressure: 0.5, timeStamp: clock }));
+  for (const point of world.slice(1)) {
+    clock += 8;
+    target.dispatchEvent(pointerEvent("pointermove", { ...ERASER_PEN, ...at(point), button: -1, buttons: 32, pressure: 0.5, timeStamp: clock }));
+  }
+  const last = world[world.length - 1]!;
+  const end = clock + 4;
+  clock += 100;
+  const liftEraser = () => {
+    document.dispatchEvent(pointerEvent("pointerup", { ...ERASER_PEN, ...at(last), button: 5, buttons: 0, pressure: 0, timeStamp: end }));
+  };
+  if (lift) liftEraser();
+  return liftEraser;
+}
+
+/** Un tratto del mouse sui punti `world`, col tasto principale; `between` gira dopo il primo movimento. */
+function mouse(host: HTMLElement, target: Element, world: readonly (readonly [number, number])[], between?: () => void): void {
+  const cam = camera(host);
+  const at = ([x, y]: readonly [number, number]) => ({ clientX: x * cam.zoom + cam.x, clientY: y * cam.zoom + cam.y });
+  target.dispatchEvent(pointerEvent("pointerdown", { ...MOUSE, ...at(world[0]!), button: 0, buttons: 1, timeStamp: clock }));
+  world.slice(1).forEach((point, index) => {
+    if (index === 1) between?.();
+    clock += 8;
+    target.dispatchEvent(pointerEvent("pointermove", { ...MOUSE, ...at(point), button: -1, buttons: 1, timeStamp: clock }));
+  });
+  clock += 4;
+  document.dispatchEvent(pointerEvent("pointerup", { ...MOUSE, ...at(world[world.length - 1]!), button: 0, buttons: 0, timeStamp: clock }));
+  clock += 100;
+}
+
+const opacities = (element: Element, selector = ".canvas-ink-card path") =>
+  [...element.querySelectorAll(selector)].map((path) => path.getAttribute("opacity"));
+const inkChanges = (changes: readonly CanvasChange[]) =>
+  changes.filter((change) => change.operation.patches.some((patch) => patch.kind === "ink"));
+const keyD = (target: EventTarget, type: "keydown" | "keyup", init: KeyboardEventInit = {}) =>
+  target.dispatchEvent(new KeyboardEvent(type, { key: "d", bubbles: true, cancelable: true, ...init }));
+
+describe("la gomma «Il tratto intero» e il tasto D", () => {
+  it("la gomma sbiadisce i tratti presi e alla fine li cancella in un passo, anche su due livelli; l'annulla li rimette", () => {
+    const { engine, host, changes } = mounted();
+    pen(host, card(host, "t"), [[20, 20], [60, 25], [100, 30]]);
+    pen(host, card(host, "t"), [[20, 80], [60, 82], [100, 85]]);
+    pen(host, viewportOf(host), [[100, 300], [140, 320], [180, 330]]);
+    expect(changes).toHaveLength(3);
+    const before = lastChange(changes).text;
+
+    // Una passata verticale a x = 60 prende il primo tratto della nota, non il secondo.
+    const lift = eraser(host, viewportOf(host), [[60, 5], [60, 30], [60, 45]], false);
+    expect(opacities(card(host, "t"))).toEqual(["0.25", null]);
+    expect(changes).toHaveLength(3);
+    // E prosegue, girando attorno al secondo tratto, sul tratto libero: un altro livello.
+    const cam = camera(host);
+    for (const [x, y] of [[300, 45], [140, 320]] as const) {
+      clock += 8;
+      viewportOf(host).dispatchEvent(pointerEvent("pointermove", {
+        ...ERASER_PEN, clientX: x * cam.zoom + cam.x, clientY: y * cam.zoom + cam.y, button: -1, buttons: 32, pressure: 0.5, timeStamp: clock,
+      }));
+    }
+    expect(opacities(card(host, "t"))).toEqual(["0.25", null]);
+    expect(opacities(host, ".canvas-ink-board path")).toEqual(["0.25"]);
+    lift();
+
+    expect(changes).toHaveLength(4);
+    const patches = lastChange(changes).operation.patches;
+    expect(patches).toHaveLength(2);
+    for (const patch of patches) expect(patch).toMatchObject({ kind: "ink", after: null });
+    expect(patches.map((patch) => (patch as { layer: unknown }).layer)).toEqual([{ node: "t" }, "board"]);
+    expect(strokesOf(lastChange(changes).text, "t")).toHaveLength(1);
+    expect(strokesOf(lastChange(changes).text, null)).toHaveLength(0);
+    expect(inkPaths(card(host, "t"))).toHaveLength(1);
+    expect(opacities(card(host, "t"))).toEqual([null]);
+
+    expect(engine.undo()).toBe(true);
+    expect(lastChange(changes).text).toBe(before);
+    expect(inkPaths(card(host, "t"))).toHaveLength(2);
+    expect(opacities(card(host, "t"))).toEqual([null, null]);
+    expect(host.querySelectorAll(".canvas-ink-board path")).toHaveLength(1);
+  });
+
+  it("una passata che non prende niente non scrive; una passata annullata rimette i tratti", () => {
+    const { host, changes } = mounted();
+    pen(host, card(host, "t"), across(0, 0));
+    eraser(host, viewportOf(host), [[400, 400], [420, 420]]);
+    expect(changes).toHaveLength(1);
+
+    eraser(host, viewportOf(host), [[60, 30], [60, 60]], false);
+    expect(opacities(card(host, "t"))).toEqual(["0.25"]);
+    document.dispatchEvent(pointerEvent("pointercancel", { ...ERASER_PEN, buttons: 0 }));
+    expect(opacities(card(host, "t"))).toEqual([null]);
+    expect(changes).toHaveLength(1);
+  });
+
+  it("la gomma su un livello estraneo non cancella niente", () => {
+    const foreign = JSON.stringify({
+      nodes: [{ id: "t", type: "text", x: 0, y: 0, width: 200, height: 100, text: "x", "fub:ink": { v: 2, strokes: [] } }],
+      edges: [],
+    });
+    const { host, changes } = mounted(foreign);
+    eraser(host, viewportOf(host), [[0, 0], [200, 100]]);
+    expect(changes).toEqual([]);
+  });
+
+  it("prende il tratto di un'immagine ridimensionata dove si vede, non dove sarebbe stirato", () => {
+    const { host, changes } = mounted();
+    pen(host, card(host, "img"), across(300, 0));
+    host.querySelector('[data-resize="img"]')!.dispatchEvent(pointerEvent("pointerdown", { pointerId: 30, pointerType: "mouse", button: 0, buttons: 1, clientX: 0, clientY: 0 }));
+    viewportOf(host).dispatchEvent(pointerEvent("pointermove", { pointerId: 30, pointerType: "mouse", buttons: 1, clientX: 400, clientY: 300 }));
+    viewportOf(host).dispatchEvent(pointerEvent("pointerup", { pointerId: 30, pointerType: "mouse", clientX: 400, clientY: 300 }));
+    const resized = (JSON.parse(lastChange(changes).text) as { nodes: Json[] }).nodes[1]!;
+    const [x, y, w, h] = ["x", "y", "width", "height"].map((key) => resized[key] as number);
+    // `inkFit` di `scale` sul riferimento 200 × 100.
+    const s = Math.min(w! / 200, h! / 100);
+    const ox = x! + (w! - 200 * s) / 2;
+    const oy = y! + (h! - 100 * s) / 2;
+    expect(s).toBeGreaterThan(1.5);
+    const count = changes.length;
+
+    // Dove il tratto sarebbe senza scala (40…90, 40…55 nella scheda) non c'è niente.
+    eraser(host, viewportOf(host), [[x! + 75, y! + 30], [x! + 75, y! + 60]]);
+    expect(changes).toHaveLength(count);
+    // Dove si vede, scalato e centrato, sì: il secondo punto (60, 50).
+    eraser(host, viewportOf(host), [[ox + 60 * s, oy + 50 * s - 20], [ox + 60 * s, oy + 50 * s + 20]]);
+    expect(changes).toHaveLength(count + 1);
+    expect(strokesOf(lastChange(changes).text, "img")).toEqual([]);
+  });
+
+  it("D tenuto fa scrivere il mouse, D lasciato no; un tratto già giù finisce", () => {
+    const { engine, host, changes } = mounted();
+    const viewport = viewportOf(host);
+    keyD(viewport, "keydown");
+    expect(viewport.dataset.ink).toBe("pen");
+    mouse(host, viewport, [[100, 300], [140, 320], [180, 330]]);
+    expect(inkChanges(changes)).toHaveLength(1);
+    expect(strokesOf(lastChange(changes).text, null)).toHaveLength(1);
+
+    // D lasciato a metà tratto: il tratto finisce e si scrive.
+    mouse(host, viewport, [[100, 400], [140, 420], [180, 430], [200, 440]], () => keyD(window, "keyup"));
+    expect(viewport.dataset.ink).toBeUndefined();
+    expect(inkChanges(changes)).toHaveLength(2);
+
+    mouse(host, viewport, [[100, 500], [140, 520], [180, 530]]);
+    expect(inkChanges(changes)).toHaveLength(2);
+
+    // La ripetizione del tasto non cambia niente; la finestra che perde il fuoco lo lascia.
+    keyD(viewport, "keydown");
+    keyD(viewport, "keydown", { repeat: true });
+    expect(viewport.dataset.ink).toBe("pen");
+    window.dispatchEvent(new Event("blur"));
+    expect(viewport.dataset.ink).toBeUndefined();
+    keyD(viewport, "keydown");
+    document.dispatchEvent(new Event("visibilitychange"));
+    expect(viewport.dataset.ink).toBeUndefined();
+
+    // L'interruttore fa lo stesso, senza D.
+    engine.setInkMouse(true);
+    expect(viewport.dataset.ink).toBe("pen");
+    mouse(host, viewport, [[100, 600], [140, 620], [180, 630]]);
+    expect(inkChanges(changes)).toHaveLength(3);
+    engine.setInkMouse(false);
+    expect(viewport.dataset.ink).toBeUndefined();
+  });
+
+  it("D in un campo di testo scrive la lettera e non cambia niente", () => {
+    const { host, changes } = mounted();
+    card(host, "t").dispatchEvent(new MouseEvent("dblclick", { bubbles: true }));
+    const field = host.querySelector<HTMLTextAreaElement>("textarea")!;
+    const event = new KeyboardEvent("keydown", { key: "d", bubbles: true, cancelable: true });
+    field.dispatchEvent(event);
+    expect(event.defaultPrevented).toBe(false);
+    expect(viewportOf(host).dataset.ink).toBeUndefined();
+    // Un campo fuori dalla scheda, dentro il viewport: neanche.
+    const input = document.createElement("input");
+    viewportOf(host).append(input);
+    keyD(input, "keydown");
+    expect(viewportOf(host).dataset.ink).toBeUndefined();
+    expect(inkChanges(changes)).toEqual([]);
+  });
+
+  it("D con Ctrl duplica come prima e non fa scrivere il mouse", () => {
+    const { host } = mounted();
+    keyD(viewportOf(host), "keydown", { ctrlKey: true });
+    expect(viewportOf(host).dataset.ink).toBeUndefined();
+  });
+});

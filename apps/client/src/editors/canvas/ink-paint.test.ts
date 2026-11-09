@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { describe, expect, it, vi } from "vitest";
 import { FADED_OPACITY } from "../spatial/painter/svg-dom";
-import { INK_FADED_OPACITY, INK_SCALE_ASPECT, InkPathCache, paintBoard, paintCard, type DryStroke } from "./ink-paint";
+import { fadeInkStroke, INK_FADED_OPACITY, INK_SCALE_ASPECT, InkPathCache, paintBoard, paintCard, type DryStroke } from "./ink-paint";
 
 const A: DryStroke = { id: "s1", path: "M0 0L10 0L10 10Z", fill: "#0072b2", ref: { width: 200, height: 100 } };
 const B: DryStroke = { id: "s2", path: "M5 5L20 5L20 20Z", fill: "#d55e00", ref: { width: 200, height: 100 } };
@@ -134,6 +134,26 @@ describe("l'inchiostro asciutto", () => {
 
   it("l'opacità della gomma è quella del disegno", () => {
     expect(INK_FADED_OPACITY).toBe(FADED_OPACITY);
+  });
+
+  it("fadeInkStroke attenua e rimette un percorso solo, senza ridisegnare, nella scheda o sulla radice", () => {
+    const host = cardElement();
+    paintCard(host, [A, B], "fixed");
+    const paths = [...host.querySelectorAll("path")];
+    expect(fadeInkStroke(host, "card", "s2", true)).toBe(true);
+    expect(paths.map((path) => path.getAttribute("opacity"))).toEqual([null, INK_FADED_OPACITY]);
+    expect([...host.querySelectorAll("path")]).toEqual(paths);
+    expect(fadeInkStroke(host, "card", "s2", false)).toBe(true);
+    expect(paths[1]!.hasAttribute("opacity")).toBe(false);
+    expect(fadeInkStroke(host, "card", "nessuno", true)).toBe(false);
+    // Lo stesso id sulla radice non è quello della scheda.
+    const stage = document.createElement("div");
+    stage.append(host);
+    expect(fadeInkStroke(stage, "board", "s1", true)).toBe(false);
+    paintBoard(stage, [{ ...A, ref: null }]);
+    expect(fadeInkStroke(stage, "board", "s1", true)).toBe(true);
+    expect(stage.querySelector(".canvas-ink-board path")!.getAttribute("opacity")).toBe(INK_FADED_OPACITY);
+    expect(paths[0]!.hasAttribute("opacity")).toBe(false);
   });
 
   it("l'ordine dei tratti resta anche fra misure diverse; meno tratti tolgono il resto; nessun tratto toglie lo strato", () => {

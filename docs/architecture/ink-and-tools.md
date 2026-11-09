@@ -279,6 +279,9 @@ Restano del prodotto il livello di destinazione, gli id, gli annunci per lo scre
 `editors/canvas/ink-layer.ts` (`mountInkLayer`) porta la penna sulla lavagna
 (`.canvas`). Attacca `attachInkInput` al viewport con il dito `navigate` e il
 mouse `ignore`: i loro eventi restano alla lavagna, che li usa come prima.
+`setMouse("ink")` fa scrivere il mouse dal prossimo appoggio. La gomma
+non fa scia: `onEraseStart` (col tipo del puntatore), `onErase` coi punti in
+coordinate della lavagna e `onEraseEnd`.
 
 - **Chi ferma l'evento.** Un ascoltatore `pointerdown` in cattura sul
   viewport, registrato dopo l'adattatore, legge il ruolo appena deciso
@@ -359,6 +362,18 @@ schede.
   aspetta che la penna si alzi. Anche il testo in sospeso aspetta, perché
   il suo commit ridisegna le schede. Il tratto in corso non si perde; se la
   sua scheda non c'è più diventa libero.
+- **La gomma.** Il retro della penna e il tasto laterale tolgono il tratto
+  intero (A20). `EraseSweep` cerca nei tratti disegnati portati in
+  coordinate della lavagna da `editors/canvas/ink-erase.ts`, con la
+  trasformazione di `ink-fit.ts`: prende il tratto dove si vede. Un tratto
+  non disegnato o di un livello estraneo non si prende. I tratti presi si
+  attenuano (`fadeInkStroke`, opacità 0,25) senza ridisegnare il resto; alla
+  fine un commit con una `eraseStrokePatches` per livello, un passo solo.
+  Niente preso, niente commit; una passata annullata li rimette.
+- **Il tasto D.** D da solo sul viewport, fuori dai campi di testo, fa
+  scrivere il mouse (`data-ink="pen"` sul viewport) finché non si alza; lo
+  lasciano anche la finestra che perde il fuoco e `visibilitychange`. Un
+  tratto già giù finisce. `setInkMouse(on)` fa lo stesso per l'interruttore.
 
 ## Confini e verifica
 
@@ -377,6 +392,7 @@ schede.
 | la penna della lavagna non arriva alla lavagna; il mouse sì | `editors/canvas/ink-layer.test.ts` |
 | l'inchiostro di una scheda la segue senza ridisegnare | `editors/canvas/ink-paint.test.ts` |
 | un tratto è una toppa, un commit e un passo; il ridisegno aspetta la penna | `editors/canvas/engine-ink.test.ts` |
+| la gomma prende il tratto dove si vede e cancella in un passo; D fa scrivere il mouse | `editors/canvas/ink-erase.test.ts`, `editors/canvas/engine-ink.test.ts` |
 | Rust e client nominano uguale le impostazioni della lavagna | `editors/canvas/settings-mirror.test.ts`, `fub-host/tests/lavagna_feature.rs` |
 | un puntatore fermo resta fermo nella scena se la vista si muove | `ink/dom/pointer-adapter.test.ts`, `tools/editor.test.ts` |
 

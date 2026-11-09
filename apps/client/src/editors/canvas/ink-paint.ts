@@ -97,6 +97,26 @@ export function paintBoard(stage: HTMLElement, strokes: readonly DryStroke[]): v
   paintPaths(svg, strokes);
 }
 
+/// Attenua (`faded`) o rimette il percorso già disegnato del tratto `id`:
+/// dentro la scheda `owner` con `"card"` (`paintCard`), sullo stage `owner`
+/// con `"board"` (`paintBoard`). Tocca un attributo solo, senza ridisegnare
+/// il resto. `false` se il percorso non c'è.
+export function fadeInkStroke(owner: HTMLElement, where: "card" | "board", id: string, faded: boolean): boolean {
+  const layer = where === "card" ? "canvas-ink-card" : "canvas-ink-board";
+  let svg: Element | null = null;
+  for (const child of owner.children) {
+    if (child.localName === "svg" && child.classList.contains(layer)) {
+      svg = child;
+      break;
+    }
+  }
+  if (!svg) return false;
+  const path = svg.querySelector(`path[data-ink-stroke="${CSS.escape(id)}"]`);
+  if (!path) return false;
+  setAttr(path, "opacity", faded ? INK_FADED_OPACITY : null);
+  return true;
+}
+
 /// Il livello d'inchiostro figlio di `parent` con la classe `className`:
 /// creato se serve e `wanted`, tolto se c'è e non serve.
 function ownLayer(parent: HTMLElement, className: string, wanted: boolean): SVGSVGElement | null {

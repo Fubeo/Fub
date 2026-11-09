@@ -274,6 +274,48 @@ describe("lo strato d'inchiostro della lavagna", () => {
     expect(quiet.active).toBe(false);
   });
 
+  it("la gomma dice prima chi la fa: onEraseStart col tipo del puntatore, anche col tasto laterale", () => {
+    const started: Array<[number, string]> = [];
+    const order: string[] = [];
+    mount({
+      onEraseStart: (id, pointerType) => {
+        started.push([id, pointerType]);
+        order.push("start");
+      },
+      onErase: () => order.push("erase"),
+      onEraseEnd: () => order.push("end"),
+    });
+    viewport.dispatchEvent(down({ ...PEN, button: 2, buttons: 2, clientX: 120, clientY: 140, timeStamp: 0 }));
+    viewport.dispatchEvent(move({ ...PEN, buttons: 2, clientX: 130, clientY: 150, timeStamp: 8 }));
+    document.dispatchEvent(up({ ...PEN, button: 2, buttons: 0, clientX: 130, clientY: 150, timeStamp: 12 }));
+    expect(started).toEqual([[1, "pen"]]);
+    expect(order[0]).toBe("start");
+    expect(order[order.length - 1]).toBe("end");
+    expect(strokes).toEqual([]);
+    expect(board).toEqual([]);
+  });
+
+  it("setMouse: il mouse scrive dal prossimo appoggio, e torna alla lavagna; un tratto già giù finisce", () => {
+    const layer = mount();
+    layer.setMouse("ink");
+    const event = down({ ...MOUSE, clientX: 120, clientY: 140, timeStamp: 0 });
+    viewport.dispatchEvent(event);
+    viewport.dispatchEvent(move({ ...MOUSE, clientX: 130, clientY: 150, timeStamp: 8 }));
+    // Il mouse torna alla lavagna a metà tratto: il tratto finisce com'è.
+    layer.setMouse("ignore");
+    viewport.dispatchEvent(move({ ...MOUSE, clientX: 140, clientY: 156, timeStamp: 16 }));
+    document.dispatchEvent(up({ ...MOUSE, clientX: 140, clientY: 156, timeStamp: 20 }));
+    expect(event.defaultPrevented).toBe(true);
+    expect(strokes).toHaveLength(1);
+    expect(strokes[0]!.pointerType).toBe("mouse");
+    expect(board).toEqual([]);
+
+    viewport.dispatchEvent(down({ ...MOUSE, clientX: 120, clientY: 140, timeStamp: 40 }));
+    document.dispatchEvent(up({ ...MOUSE, clientX: 120, clientY: 140, timeStamp: 44 }));
+    expect(strokes).toHaveLength(1);
+    expect(board).toEqual(["pointerdown:mouse"]);
+  });
+
   it("il silenzio rimanda il lavoro finché la penna è giù", () => {
     mount();
     scribble(viewport);
