@@ -179,7 +179,7 @@ codice, nei rami e nelle issue il 2026-11-05.
 | N13 · i Blocchi | In `main`, coreografie comprese (`motion-rules.mjs`, regole `blocchi-*`); #281 aperta | fatto; dentro: la prova con persone, i 33 ms su 2.000 righe, la pagina del PDF nella nota | Fatto quando 6 e 7 | PA T16, T17 (chiude #281), T32 |
 | K0 · misure dei motori | In `main` (`docs/misure/*-k0.md`) | fatto | — | — |
 | K1 · i componenti | In `main` (#285, `crates/fub-componenti`) | fatto | — | — |
-| K2 · la pagina «Componenti» | Ramo: 7 di 7; la prova D-2 fatta dall'utente il 2026-11-09, #290 pronta | dentro | I componenti accesi e spenti | `piano/k2-pagina-componenti`, #290; la prova dell'utente prima del merge (D13 A) |
+| K2 · la pagina «Componenti» | In `main` (#290, cd080044, 2026-11-09); la prova D-2 fatta dall'utente il 2026-11-09 | dentro | I componenti accesi e spenti | `piano/k2-pagina-componenti`, #290; la prova dell'utente prima del merge (D13 A) |
 | K3 · lo strato dei motori | Fatto: in `main` con #295 (fb722164, 2026-11-08, unita dall'utente) | dentro | Word ed Excel | `piano/k3-motori`, #295 |
 | K4, K7–K10 | Senza piano | fuori | Vedi sopra | «Piani di Fub» |
 | K5 · il disegno | Ramo: 12 di 30; T6 fatto, la licenza IJG di `jpeg-encoder` chiede l'utente prima di T9 | dentro | Il disegno SVG | `piano/k5-disegno`, #300 |
@@ -324,7 +324,7 @@ Se una di queste cade, la stima si allunga.
 |---|---|---|---|---|---|---|
 | K3 T17 · il sì dell'utente | K3 | fatto: il sì è arrivato, #295 in `main` (fb722164) | nessuno | medio: un crate nuovo (`fub-motori`), patch nel `vendor/`, tre sistemi | — | il sì dell'utente |
 | Unire #295 (K3, con K3-IPC T8) | K3 | fatto: in `main` (fb722164, 2026-11-08) | il sì dell'utente | medio | S | `main` ha `crates/fub-motori` e i comandi `open_key`, `warm_engine` e `document_closed` |
-| Riallineare #290 a `main` e unirla | K2 | 7 di 7; la prova con una persona non è fatta | la prova dell'utente col protocollo di K2, prima di segnarla pronta (D13 A) | basso | S | CI completa verde, OK dell'utente |
+| Riallineare #290 a `main` e unirla | K2 | fatto: in `main` come cd080044 (2026-11-09), CI completa verde | la prova dell'utente col protocollo di K2, prima di segnarla pronta (D13 A) | basso | S | CI completa verde, OK dell'utente |
 | PA T1 · il finto del banco con le impostazioni dell'host | PA | fatto (baseline delle impostazioni dal runner) | #295 in `main` (d90a09d0 di K3 cambia `bench/fake-ipc.ts`) | basso | S | `bench/fake-ipc.test.ts` |
 | PA T3 · i comandi in sola lettura non tengono il turno | PA | fatto (5432f8b4) | nessuno | medio: tocca il custode | M | test d'integrazione di `fub-host` |
 | PA T4, T5 · #237 R01–R03 | PA | T4 e T5 fatti (baseline di `conflitto-lettura` dal runner) | nessuno | medio: sessioni e conflitto | M + M | test di Vitest sulla sessione; R01 si chiude col test se non si riproduce |
@@ -347,7 +347,7 @@ Se una di queste cade, la stima si allunga.
 | PA T39 · i caratteri del tema | PA | fatto (in main, #319) | T34, T35 | basso | M | test dell'host e del loader |
 | PA T40 · le icone del tema | PA | fatto (D16 A; in main, #320) | T34, T35; mai nella stessa ondata di S2 T14 | basso | M | Vitest di `ui/icons` e di `theme/` |
 | PA T44 · un documento e un foglio vuoti | PA | fatto (in main, #319) | nessuno | basso: due comandi che creano file, dietro le loro feature | M | test d'integrazione di `fub-host`, anche con `--no-default-features` |
-| PA T46 · le parole della scheda di un componente | PA | da fare (D18 A) | K2 in `main` | basso: solo testi del catalogo | S | `i18n/lexicon-settings.test.ts` |
+| PA T46 · le parole della scheda di un componente | PA | da fare (D18 A), sbloccato | K2 in `main` (fatto) | basso: solo testi del catalogo | S | `i18n/lexicon-settings.test.ts` |
 | PA T47 · i 44 px del tocco sul telefono, senza deformare | PA | fatto (in main, #319, con le baseline del runner) | nessuno | basso: solo CSS del telefono | S | la scena `mobile-settings` di `bench/scene.mjs` (`bench:verify`, `bench:a11y`) |
 | PA T48 · il verde di serie | PA | fatto (D25 C; in main, #320, con le baseline dal runner) | niente (il logo definitivo conferma 160); mai con un task che rifà baseline | medio: cambia ogni schermata, le baseline vengono dal runner | M | `recipe.test.ts`, `colori.test.ts`, `theme:verify`, `cargo test -p fub-host` |
 | PA T53 · #237 R05–R08 e A03 | PA | R05–R08 fatte (in main, #320); A03 dopo S2 T10 (D21 A) | S2 T10 per A03 | basso | M | un test per voce nel proprietario |
@@ -357,7 +357,7 @@ Se una di queste cade, la stima si allunga.
 
 | Passo | Fonte | Stato | Dipende da | Rischio | Taglia | Prova di chiusura |
 |---|---|---|---|---|---|---|
-| Scrittoio 2 T3–T28 | S2 | 24 di 28 (T1–T9, T11–T23, T27, T28); T10 aspetta K2 in `main` | K3 in `main` per T20 e T21, che rifanno la barra a schede dalle regole di K3 T18; T22 costruisce la forma A (D5 A); T23 aggiunge solo l'icona (N6 vince sulla lavagna) | medio: tocca quasi ogni pelle; le baseline vengono dal runner (T25) | L | S2 T26 e la CI completa |
+| Scrittoio 2 T3–T28 | S2 | 24 di 28 (T1–T9, T11–T23, T27, T28); T10 sbloccato (K2 in `main`) | K3 in `main` per T20 e T21, che rifanno la barra a schede dalle regole di K3 T18; T22 costruisce la forma A (D5 A); T23 aggiunge solo l'icona (N6 vince sulla lavagna) | medio: tocca quasi ogni pelle; le baseline vengono dal runner (T25) | L | S2 T26 e la CI completa |
 | PA T2 · N4 e K5 allineati a `main` | PA | fatto | #295 in `main` | basso | S | `tsc --noEmit` pulito sui due rami |
 | PA T11 · il vassoio delle barre | PA | da fare (D6 C: chiaro di serie, «marcate» in Aspetto) | S2 T20 | basso | S | Vitest delle preferenze, foto del banco |
 | Il piano del telefono | telefono | da pianificare (D1 B) | S2 in `main`; un pianificatore alla volta | medio: rifà la cornice del telefono prima dell'APK | L | il piano approvato e i suoi task in `main` |
@@ -377,7 +377,7 @@ Se una di queste cade, la stima si allunga.
 | PA T12 · #237 R04 | PA | da fare | griglia T4 | medio | M | test di Vitest sulla griglia |
 | N4 T15, T16, T21–T25 | N4 | 18 di 25 | PA T2; T24 aspetta l'esito della prova con Obsidian, che incolla l'utente | medio: penna e latenza | L | N4 T25 |
 | N6 v1, senza T79–T85 e T88 | N6 | 11 di 90 | N4 in `main` (il ramo nasce da N4, e T90 lo chiede); i task grafici dopo l'approvazione dei prototipi T26–T28 (D3) | alto: 79 task | XL | N6 T90 |
-| K5 T6, T7, T9, T11, T13–T24, T27–T30 | K5 | 12 di 30 | PA T2; T6 copia `Fubeo/vectorcraft` (c'è, pubblico, 2026-11-02); T22 dopo D5; T24 dopo K2 in `main` | alto: motore vettoriale nuovo | XL | K5 T30 |
+| K5 T6, T7, T9, T11, T13–T24, T27–T30 | K5 | 12 di 30 | PA T2; T6 copia `Fubeo/vectorcraft` (c'è, pubblico, 2026-11-02); T22 dopo D5; T24 dopo K2 in `main` (fatto) | alto: motore vettoriale nuovo | XL | K5 T30 |
 | La lavagna in codice T1–T26 | lavagna in codice | 0 di 26 | T15–T18 dopo N4 in `main`; T14, T19, T23 e T24 dopo N6 in `main` (T72, T73, T19, T37, T48) | medio | L | lavagna in codice T26 |
 | A1 T4, T5, T7, T9–T13 | A1 | 5 di 13 | T12 dopo S2 T10 (le impostazioni) | basso | M | A1 T13 |
 
@@ -463,12 +463,12 @@ Verificato su `origin/main` 638358da e sui rami dei piani, il 2026-11-05.
   - `fub-app`: i comandi `components_map`, `components_apply`,
     `components_map_for` e `components_apply_for` (K2 T2);
   - `apps/client/src/panels/components-page.ts` (K2 T3).
-- **Che cosa c'è.** K2 è finito sul ramo (fcd30123, 7 di 7). Gli strumenti
-  MCP `components_*` sono già in `main` con N2.
+- **Che cosa c'è.** K2 è in `main` (#290, cd080044, 2026-11-09). Gli
+  strumenti MCP `components_*` erano già in `main` con N2.
 - **Su disco.** Le chiavi `components.*` nelle impostazioni del vault, e i
   bundle spenti in `plugins.disabled`, la chiave di oggi.
-- **Che cosa manca.** La prova con una persona che K2 D-2 chiede prima di
-  segnare pronta la PR, e il merge di #290, nell'ordine che dice D13.
+- **Che cosa manca.** Niente: la prova D-2 l'ha fatta l'utente il
+  2026-11-09, prima del merge (D13 A).
 
 ### La lavagna in Rust (N3, N6, la lavagna in codice)
 

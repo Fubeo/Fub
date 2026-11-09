@@ -99,6 +99,19 @@ ciò che non dipende dalla risposta.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-09 · K2 · #290 unita in `main` (cd080044) dopo la prova D-2
+  dell'utente e la CI completa verde; le sei baseline nuove
+  (`settings-components-*`, `new-vault-profile-*`, `mobile-settings-*`)
+  vengono dall'artifact del runner; la pagina del contratto dei componenti
+  è separata da `ipc-contract.md` per stare nel tetto delle pagine. Un rosso
+  di `d43-misura-delle-colonne` visto una volta e verde al secondo giro:
+  da aprire come issue se torna. Perché: è la regola D13 A, e la soglia di
+  merge alta (CI completa, diff letto, baseline guardate).
+- 2026-11-09 · PA, S2, K5 · `main` unita nei rami dei piani dopo #290;
+  `check-scope.mjs` tiene la forma di `main` (ogni file fuori dai crate) più
+  il riconoscimento dei percorsi relativi che K5 aveva aggiunto. Perché:
+  la forma di `main` copre anche le doc, quella di K5 i test che leggono
+  `"../../apps/client/src/…"`; insieme non perdono nessun caso.
 - 2026-11-09 · griglia T2 · la soglia del gestore dello scorrimento, che il
   piano lascia all'orchestratore dopo la prima misura: nel banco G2 (14
   rotelle da 900 px), sui quattro giri, gestore p90 ≤ 12 ms e peggiore
