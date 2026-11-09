@@ -425,30 +425,49 @@ function checkManifests(dir) {
   return problems;
 }
 
-/// Le righe che portano la versione dell'upstream: le `<motore>-*` del
-/// `Cargo.toml` di Fub e, in quello di `vendor/<motore>/`, le stesse righe e la
-/// versione di `[workspace.package]`. Una dipendenza a percorso senza versione
-/// è un carattere jolly per `cargo deny`.
-function versionRules() {
+/// Le righe che portano la versione dell'upstream: le dipendenze dal motore
+/// del `Cargo.toml` di Fub e, in quello di `vendor/<motore>/`, le stesse righe e
+/// la versione di `[workspace.package]`. Una dipendenza a percorso senza
+/// versione è un carattere jolly per `cargo deny`.
+///
+/// Il crate si chiama `<motore>-<crate>` (`vectorcraft-three-d`) o come la
+/// voce (`craft-docpath`, una libreria con un crate solo). Soltanto
+/// `[workspace.package]` deve esserci: le righe del `Cargo.toml` di Fub
+/// arrivano quando Fub usa il motore, e fino ad allora sono zero.
+/// `[file, espressione, obbligatoria]`.
+function versionRules(id = ID) {
+  const name = `${id}(?:-[a-z0-9-]+)?`;
   return [
-    ["Cargo.toml", new RegExp(`^(${ID}-[a-z]+ = \\{ path = "vendor\\/${ID}\\/crates\\/[a-z]+", version = ")([^"]+)(" \\})$`, "gm")],
-    [`vendor/${ID}/Cargo.toml`, new RegExp(`^(${ID}-[a-z]+ = \\{ path = "crates\\/[a-z]+", version = ")([^"]+)(" \\})$`, "gm")],
-    [`vendor/${ID}/Cargo.toml`, /^(\[workspace\.package\][^[]*?\nversion = ")([^"]+)(")$/gm],
+    ["Cargo.toml", new RegExp(`^(${name} = \\{ path = "vendor\\/${id}\\/crates\\/[a-z0-9-]+", version = ")([^"]+)(" \\})$`, "gm"), false],
+    [`vendor/${id}/Cargo.toml`, new RegExp(`^(${name} = \\{ path = "crates\\/[a-z0-9-]+", version = ")([^"]+)(" \\})$`, "gm"), false],
+    [`vendor/${id}/Cargo.toml`, /^(\[workspace\.package\][^[]*?\nversion = ")([^"]+)(")$/gm, true],
   ];
 }
 
-/// Per ogni regola, il file e le versioni che vi trova.
-function versionLines() {
-  return versionRules().map(([rel, line]) => {
-    const file = path.join(ROOT, rel);
-    const text = fs.existsSync(file) ? fs.readFileSync(file, "utf8") : "";
-    return { rel, versions: [...text.matchAll(line)].map((m) => m[2]) };
-  });
+/// Le versioni che le regole di `id` trovano nei file, letti da `read`
+/// (percorso relativo alla radice, `""` se il file non c'è), confrontate con
+/// quella del lock.
+function versionProblems(id, read, wanted) {
+  const problems = [];
+  for (const [rel, line, required] of versionRules(id)) {
+    const versions = [...read(rel).matchAll(line)].map((m) => m[2]);
+    for (const version of versions) {
+      if (version !== wanted) problems.push(`${rel}: ${id} a ${version}, il lock dice ${wanted}`);
+    }
+    if (required && versions.length === 0) problems.push(`${rel}: nessuna riga con la versione di ${id} riconosciuta`);
+  }
+  return problems;
+}
+
+function readRoot(rel) {
+  const file = path.join(ROOT, rel);
+  return fs.existsSync(file) ? fs.readFileSync(file, "utf8") : "";
 }
 
 function writeVersions(version) {
   for (const [rel, line] of versionRules()) {
     const file = path.join(ROOT, rel);
+    if (!fs.existsSync(file)) continue;
     fs.writeFileSync(file, fs.readFileSync(file, "utf8").replace(line, `$1${version}$3`));
   }
 }
@@ -502,12 +521,7 @@ function check({ quiet = false } = {}) {
     problems.push(error.message);
   }
 
-  for (const { rel, versions } of versionLines()) {
-    for (const version of versions) {
-      if (version !== lock.version) problems.push(`${rel}: ${ID} a ${version}, il lock dice ${lock.version}`);
-    }
-    if (versions.length === 0) problems.push(`${rel}: nessuna riga con la versione di ${ID} riconosciuta`);
-  }
+  problems.push(...versionProblems(ID, readRoot, lock.version));
   problems.push(...checkManifests(VENDOR));
 
   if (problems.length > 0) {
@@ -817,7 +831,7 @@ function verifyUpstream(source) {
 
 /// Le tre vie su un upstream finto di due revisioni: una patch per stato.
 function selfTest() {
-  const problems = provenance();
+  const problems = [...provenance(), ...versionCases()];
   MANAGED = ["src"];
   const lines = (n, edits = {}) => Array.from({ length: n }, (_, i) => edits[i + 1] ?? `riga ${i + 1}`).join("\n") + "\n";
   const tree = (files) => {
@@ -872,7 +886,32 @@ function selfTest() {
   if (!applies(fresh, path.join(patches, "riscritta")).ok) problems.push("2-tre-vie: la patch riscritta non si applica sui file nuovi");
   for (const d of [v1, v2, patches, dir, fresh]) fs.rmSync(d, { recursive: true, force: true });
   if (problems.length > 0) fail(`autoprova di vendor.mjs fallita:\n- ${problems.join("\n- ")}`);
-  console.log("autoprova di vendor.mjs riuscita: mirror, applica, tre vie, conflitto, assorbita, file tolto.");
+  console.log("autoprova di vendor.mjs riuscita: mirror, versioni, applica, tre vie, conflitto, assorbita, file tolto.");
+}
+
+/// Le regole delle versioni su manifest finti: zero righe nel Cargo.toml di
+/// Fub vanno bene ma senza `[workspace.package]` no; il crate che si chiama
+/// come la voce; il percorso con il trattino. Ogni caso ha il suo rosso.
+function versionCases() {
+  const problems = [];
+  const files = (root, own) => (rel) => (rel === "Cargo.toml" ? root : rel.endsWith("/Cargo.toml") ? own : "");
+  const pkg = (v) => `[workspace]\nresolver = "3"\n\n[workspace.package]\nversion = "${v}"\n`;
+  const expect = (label, got, wanted) => {
+    if (got.length !== wanted) problems.push(`versioni, ${label}: ${wanted} problemi attesi, trovati ${got.length}${got.length ? ` (${got.join("; ")})` : ""}`);
+  };
+  // 1. Fub non nomina ancora il motore: va bene; senza [workspace.package] no.
+  expect("zero righe in Fub", versionProblems("motore", files("[workspace]\n", pkg("1.0.0")), "1.0.0"), 0);
+  expect("senza [workspace.package]", versionProblems("motore", files("[workspace]\n", "[workspace]\n"), "1.0.0"), 1);
+  // 2. Il crate con il nome della voce, nella cartella e in Fub.
+  const lib = (v) => `craft-docpath = { path = "crates/docpath", version = "${v}" }\n`;
+  const libFub = (v) => `craft-docpath = { path = "vendor/craft-docpath/crates/docpath", version = "${v}" }\n`;
+  expect("crate come la voce", versionProblems("craft-docpath", files(libFub("0.1.0"), pkg("0.1.0") + lib("0.1.0")), "0.1.0"), 0);
+  expect("crate come la voce, versione vecchia", versionProblems("craft-docpath", files(libFub("0.0.9"), pkg("0.1.0") + lib("0.0.9")), "0.1.0"), 2);
+  // 3. Il percorso con il trattino (`three-d`).
+  const dash = (v) => `motore-three-d = { path = "crates/three-d", version = "${v}" }\n`;
+  expect("percorso con il trattino", versionProblems("motore", files("", pkg("2.0.0") + dash("2.0.0")), "2.0.0"), 0);
+  expect("percorso con il trattino, versione vecchia", versionProblems("motore", files("", pkg("2.0.0") + dash("1.0.0")), "2.0.0"), 1);
+  return problems;
 }
 
 /// Ogni motore di `motori.mjs` ha un mirror di Fub; il primo `update` lo
