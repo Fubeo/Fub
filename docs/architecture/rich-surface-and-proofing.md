@@ -175,31 +175,24 @@ l'IPC.
   col motore: la barra del kit (`kit/ribbon/ribbon.ts`, la stessa del
   foglio) con le schede Home, Inserisci, Layout, Revisione, Visualizza e la
   contestuale Tabella, Annulla e Ripeti accanto alle schede, le lettere con
-  Alt o F10 e Ctrl+F1 per ritirarla. Come nei fogli, un gruppo raccolto si
-  apre sul posto, nella barra (`openInPlace`), ed Esc lo richiude col fuoco
-  sul suo pulsante. La forma e la pelle sono del kit: ogni pezzo porta
-  `kit-ribbon-<pezzo>` accanto a `rich-ribbon-<pezzo>`, vestito da
-  `structure.css` e da «Barra a schede» in `skin/kit.css`; ai
-  `.rich-ribbon-…` restano l'accesso rapido, i segni del formato, i campi e
-  la galleria degli stili, che sta nelle due file del suo foglietto. Ogni
-  controllo è un'azione del motore
-  (`RICH_ACTION_IDS`, con i suoi accordi), un valore che il motore scrive
-  (tipo, dimensione, stile del paragrafo, con la galleria che scrive ogni
-  nome nel carattere del documento), un riquadro di
-  `editors/rich/panels.ts` o una scheda del pannello di destra
-  (`side.ts`). Layout ha le gallerie veloci della pagina (Margini,
-  Orientamento, Dimensione, Colonne), con ciò che c'è segnato e una voce
-  «Altre opzioni di pagina…» che apre Proprietà; Conteggio apre Proprietà
-  sul conteggio. Il catalogo della barra spegne col perché ciò
-  che non si dà adesso: in sola lettura ciò che scrive (restano Trova,
-  Conteggio, Commenti, scorrere le revisioni e lo zoom), mentre si registra
-  il formato. La superficie dichiara `ownBar`, e la barra di formattazione
-  della shell non si mostra sopra; la mini-barra del menu è quella della
-  barra. Lo zoom è il comando della shell (`runShellCommand`). «Copia formato» lo tiene
-  il motore e lo applica alla prossima selezione finita (puntatore o Maiusc
-  rilasciati). **Immagine** sceglie un'immagine del vault con la porta delle
-  immagini del disegno (`DrawingImagePort`: `pick`, poi `read` dal documento
-  con il tetto di 16 MB), senza IPC propria.
+  Alt o F10 e Ctrl+F1 per ritirarla, i gruppi raccolti aperti nella barra
+  (`openInPlace`), forma e pelle del kit. Ogni controllo è un'azione del
+  motore (`RICH_ACTION_IDS`, con i suoi accordi), un valore che il motore
+  scrive (tipo, dimensione, stile del paragrafo, con la galleria che scrive
+  ogni nome nel carattere del documento), un riquadro di
+  `editors/rich/panels.ts` o una scheda del pannello di destra (`side.ts`).
+  Layout ha le gallerie veloci della pagina (Margini, Orientamento, Dimensione,
+  Colonne), con ciò che c'è segnato e una voce «Altre opzioni di pagina…» che
+  apre Proprietà; Conteggio apre Proprietà sul conteggio. Il catalogo della
+  barra spegne col perché ciò che non si dà adesso: in sola lettura ciò che
+  scrive (restano Trova, Conteggio, Commenti, scorrere le revisioni e lo zoom),
+  mentre si registra il formato. La superficie dichiara `ownBar`, e la barra di
+  formattazione della shell non si mostra sopra; la mini-barra del menu è quella
+  della barra. Lo zoom è il comando della shell (`runShellCommand`). «Copia
+  formato» lo tiene il motore e lo applica alla prossima selezione finita
+  (puntatore o Maiusc rilasciati). **Immagine** sceglie un'immagine del vault
+  con la porta delle immagini del disegno (`DrawingImagePort`: `pick`, poi
+  `read` dal documento con il tetto di 16 MB), senza IPC propria.
 - `editors/rich/review.ts` trova, sostituisce e conta sul testo verbatim di
   un paragrafo alla volta, con una foglia (a-capo, oggetto, segno) per
   posizione: un'occorrenza torna a un intervallo esatto e non porta via un
