@@ -876,7 +876,7 @@ Fatto quando:
 - `page-mark.test.ts`, `page-icons.test.ts` e `menu.test.ts` passano: il valore letto, il nome sconosciuto, il rifiuto degli indirizzi, la scelta di una figura e di un'emoji;
 - la foto di `menu-albero-cartella` col selettore aperto, in giorno e notte, sta accanto a `?stato=icone`.
 Prova: scripts/check.sh --rapido
-Stato: [ ] da fare
+Stato: [x] fatto · ec7330b9..161d293a · le figure monocrome `fub:<nome>` per cartelle e note nel selettore (15 figure, come il DOM del prototipo), nell'albero, nella linguetta, nella testata dei Blocchi e accanto ai wikilink della Live (maschera `data:` in un tema di CodeMirror); gli indirizzi scritti da un'altra app si rifiutano; la figura accanto al wikilink si vede nel banco solo con T15
 
 ## T15 · Il vault del banco con le figure
 
