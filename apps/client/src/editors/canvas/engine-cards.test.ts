@@ -246,7 +246,7 @@ describe("la tela tiene le schede", () => {
     field.value = "img/terza.png";
     field.dispatchEvent(new Event("input", { bubbles: true }));
     field.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
-    expect(mounts.at(-1)!.file).toBe("img/terza.png");
+    expect(mounts[mounts.length - 1]!.file).toBe("img/terza.png");
     expect(alive(mounts)).toEqual(["i", "n", "w"]);
     engine.destroy();
   });
