@@ -36,7 +36,9 @@ Assunzioni:
   Scrittoio 2 è in `main`, e l'APK di PA T22, T23 e T31 lo aspetta.
 - Lavorano due coder alla volta (Opus, ragionamento medio), e nessun altro
   agente: è la regola dell'utente dal 2026-11-07 (prima era un coder solo),
-  e cambia solo se la cambia l'utente. Le «ondate» qui sotto restano
+  e cambia solo se la cambia l'utente. Dal 2026-11-10 i task semplici
+  possono andare a coder Haiku 5.5, quanti ne servono (vedi «Il ramo, le
+  consegne e i due coder»). Le «ondate» qui sotto restano
   l'ordine: due task vanno insieme solo se i loro «Tocca» non si toccano e
   la tabella della fase non li tiene separati («mai con…»). Il pianificatore
   del telefono (D1 B) lo avvia l'utente.
@@ -287,7 +289,8 @@ Quattro fasi. Una fase finisce quando tutti i suoi passi sono chiusi; la
 dopo può cominciare prima solo dove la colonna «Dipende da» lo permette.
 Lavorano due coder alla volta, Opus con ragionamento medio, e nessun altro
 agente (regola dell'utente dal 2026-11-07, prima era un coder solo; cambia
-solo se la cambia l'utente, `DECISIONS.md`). Dove va il codice e come entra
+solo se la cambia l'utente, `DECISIONS.md`); dal 2026-11-10, in più, coder
+Haiku 5.5 per i task semplici. Dove va il codice e come entra
 in `main` lo dice «Come si implementa», «Il ramo, le consegne e i due coder».
 «Taglia» è a occhio, in tempo di un coder con revisione e CI: S un'ora o
 due, M mezza giornata, L due o tre giorni, XL di più.
@@ -2953,6 +2956,18 @@ che serve in più per questo piano.
   non li tiene separati: le note «mai con…» (per esempio T48 con un task
   che rifà le baseline, T54 con S2 T20 o con la griglia T2–T3). Nel
   dubbio, uno alla volta.
+- **I task semplici a Haiku** (regola dell'utente del 2026-11-10): un
+  task semplice può andare a un coder Haiku 5.5 con ragionamento massimo
+  (`model: "haiku"`, `effort: "max"`), in più
+  dei due Opus e senza un numero massimo fissato dall'utente. Semplice vuol
+  dire tutto questo insieme: «Cosa fare» non lascia scelte di disegno; i
+  file sono pochi e in un'area sola; non tocca ABI, WIT, IPC, formati su
+  disco, sicurezza, concorrenza o ciclo di vita; non è un task grafico né
+  un prototipo; la prova è scritta nel task. Nel dubbio va a Opus. Quanti
+  Haiku insieme lo dice il computer (RAM, disco, la porta del banco di
+  ognuno) e le regole sui «Tocca» qui sopra valgono anche per loro. Il
+  brief, la revisione e l'integrazione sono gli stessi; un task che Haiku
+  non chiude bene torna a Opus.
 - **I task PA** si integrano su `piano/fub-pre-alpha` (la riga «Ramo:»):
   il coder parte dalla testa di quel ramo e trova nel suo worktree il
   simulatore, le toppe e i blocchi di `PLAN-ui/`. La PR del ramo del piano

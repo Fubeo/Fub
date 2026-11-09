@@ -18,7 +18,11 @@ dubbio su una scelta tecnica si decide, non si chiede.
 
 - l'ordine dei task pronti. Lavorano due coder alla volta (Opus,
   ragionamento medio) e nessun altro agente: è la regola dell'utente dal
-  2026-11-07 (dal 2026-11-04 era un coder solo), e la cambia solo l'utente;
+  2026-11-07 (dal 2026-11-04 era un coder solo), e la cambia solo l'utente.
+  Dal 2026-11-10 un task semplice può andare a un coder Haiku 5.5, e di
+  coder Haiku ne lavorano quanti ne servono (regola dell'utente): quale
+  task è semplice e quanti Haiku insieme lo decide l'orchestratore (vedi
+  «Il ramo, le consegne e i due coder» in `PLAN.md`);
 - il come che il piano approvato lascia aperto: nomi, tipi, dove sta una
   funzione, la forma di un messaggio d'errore, la forma dei test;
 - un piccolo refactor dentro i file del task;
@@ -99,6 +103,17 @@ ciò che non dipende dalla risposta.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-10 · fub-pre-alpha (utente) · i task semplici li può fare un
+  coder Haiku 5.5, senza un numero massimo; tutti gli altri restano a Opus
+  medio, due alla volta. Sostituisce «mai Sonnet né Haiku» del 2026-11-08.
+  Parole dell'utente: «se c'è un compito particolarmente semplice che può
+  essere fatto da Haiku 5.5, potresti assegnarlo a lui. Per il resto dei
+  task, Opus 5.5 medio. Per quanto riguarda i task semplici, puoi
+  letteralmente avviarne quante ne vuoi di Haiku», e poi «Haiku puoi
+  metterlo anche con effort max» (quindi `effort: "max"`) · i task piccoli e chiusi
+  non devono aspettare uno dei due posti Opus. Il limite vero è il
+  computer (15 GB di RAM, 20–45 GB di `target/` per worktree), e la
+  revisione resta la stessa per tutti.
 - 2026-11-09 · PA (dopo il piano) · le funzioni avanzate non ancora
   provate a fondo si potranno nascondere in una versione ridotta e solida:
   spente e invisibili di serie, con un gruppo «In prova» chiuso in
