@@ -215,20 +215,12 @@ e dal libro della cartella; la scheda della tabella compare con la selezione
 dentro una tabella. La tavolozza disegna i colori del tema con le sfumature
 di ECMA-376 (`palette.ts`), le gallerie gli stili di tabella e di cella.
 
-Nello stile di Fub le sezioni stanno in un pozzetto nella testata, come le
-schede dell'ispettore: la scelta è un foglietto di carta alzata che scorre,
-col nome più marcato. I comandi stanno su un vassoio stondato
-(`--bar-tray`, più vicino alla carta di `--sheet-2`), in foglietti sollevati
-col nome del gruppo in grigio. La forma e la pelle non sono dei fogli: il
-kit mette `kit-ribbon` sulla radice e `kit-ribbon-<pezzo>` accanto a
-`grid-ribbon-<pezzo>` su ogni pezzo, e le regole stanno sulle classi del
-kit (`structure.css` e la sezione «Barra a schede» di `skin/kit.css`),
-comuni a ogni barra a schede. Ai fogli restano, coi loro `.grid-ribbon-…` in
-`structure.css` e `skin/editors.css`, le parti solo loro: la tavolozza, le
-gallerie, i campioni, «Comandi», e la formula e la griglia che coprono il
-vassoio quando si ritira. Le regole del kit vengono prima, così una regola
-dei fogli vince ancora. Sotto i 900 px del foglio (`@container sheet`)
-testata, sezioni e vassoio si stringono di un passo.
+La forma e la pelle della barra sono del kit: ogni pezzo porta
+`kit-ribbon-<pezzo>` accanto a `grid-ribbon-<pezzo>`, vestito da
+`structure.css` e da «Barra a schede» in `skin/kit.css` (sezioni come le
+schede dell'ispettore, vassoio `--bar-tray`), che vengono prima; ai
+`.grid-ribbon-…` restano tavolozza, gallerie, campioni, «Comandi» e i piani
+della formula e della griglia.
 
 La barra si percorre con le frecce (un solo controllo per scheda sta nel
 Tab), Esc torna alla griglia, Alt o F10 mostrano le lettere di Excel. Quando
