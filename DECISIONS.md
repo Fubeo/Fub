@@ -59,6 +59,13 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-10 · N6 · prototipo T26 (`PLAN-ui/lavagna-impianto.html`)
+  approvato con le varianti consigliate: la colonna del disegno con le
+  tendine, il navigatore in basso a destra, l'ispettore chiuso la prima
+  volta e poi come lo si lascia, sei strumenti nello spazio Semplice; il
+  menu delle penne nella riga delle opzioni è solo da guardare · parole
+  dell'utente: «accetto i tuoi consigli per tutte e 5». Perché: A-26, da
+  qui T49–T65 possono partire quando le loro dipendenze ci sono.
 - 2026-11-10 · N6 (A-15) · Riallineato a `piano/n4-inchiostro` @ bd38a567
   (N4 fino a T22 e T15, N3 dentro) prima di T11, con un merge. Conflitti:
   `PLAN.md` e `DECISIONS.md` restano quelli di N6; `i18n/catalog.ts` e
