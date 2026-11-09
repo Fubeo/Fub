@@ -1,11 +1,12 @@
 # Le schede della lavagna
 
 > **Ambito:** il contratto fra la lavagna e chi mostra il contenuto di una
-> scheda di file: le specie, i due modi di una scheda, le regole che scelgono
-> le schede vive e le immagini ferme.
+> scheda di file: le specie, le misure con cui nascono, i due modi di una
+> scheda, le regole che scelgono le schede vive e le immagini ferme.
 > **Fonti autorevoli:** `apps/client/src/editors/canvas/cards.ts` e le prove
-> in `apps/client/src/editors/canvas/cards.test.ts`; per le estensioni,
-> `apps/client/src/ui/format-kind.ts` e
+> in `apps/client/src/editors/canvas/cards.test.ts`; per le misure di nascita,
+> `apps/client/src/editors/canvas/drop-layout.ts` e le sue prove; per le
+> estensioni, `apps/client/src/ui/format-kind.ts` e
 > `apps/client/src/editors/media/media-types.ts`.
 
 Questa pagina serve a chi scrive un renderer di scheda (la parte che mostra
@@ -72,6 +73,34 @@ scheda non diventa mai il disegno vivo.
 
 Una specie senza renderer registrato, per esempio perché il suo componente è
 spento, si mostra come scheda di file con «Apri».
+
+## Le misure di nascita
+
+Una scheda portata sulla lavagna nasce con la misura della sua specie. Le
+misure stanno in `drop-layout.ts`, con `bornSize` e `dropLayout`:
+
+| Specie | Misura di nascita |
+|---|---|
+| `note`, `document` | 320×240 |
+| `sheet` | 480×300 |
+| `pdf` | 360 di larghezza, con le proporzioni della prima pagina; 360×480 finché la prima pagina non si sa |
+| `image` | il lato lungo 480, con le proporzioni dell'immagine; 480×360 finché la misura non si sa |
+| `web` | 320×120 |
+| `file`, `craft` | 320×160 |
+
+Le misure di nascita non si agganciano alla griglia di 8 px: si arrotondano
+all'intero più vicino, e nessun lato scende sotto 40 px, la misura minima
+della tela. Così un'immagine 16:9 nasce 480×270, esatta. Un'immagine molto
+stretta, come 1×4000, ha il lato corto a 40 px: lì la proporzione non si
+tiene. Ridimensionare a mano una scheda, invece, aggancia a 8 px come prima.
+
+Quando si lasciano insieme più schede, si dispongono in griglia: `ceil(sqrt(n))`
+colonne, riempite per righe nell'ordine del nome del file. Le posizioni si
+agganciano a 8 px. La colonna o la riga dopo parte al primo multiplo di 8 che
+lascia almeno 24 px dopo il bordo della precedente, cioè dopo la sua scheda più
+larga o la più alta della riga. Dopo un foglio alto 300 la riga sotto parte
+328 px più in basso, con 28 px di spazio. Oltre 12 schede, un gruppo le
+raccoglie con 24 px di margine per lato.
 
 ## Il contratto
 
