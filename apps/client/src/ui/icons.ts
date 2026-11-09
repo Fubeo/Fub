@@ -330,6 +330,16 @@ function onlyPaths(svg: SVGElement, count: number): boolean {
   return true;
 }
 
+/// Un'icona come immagine `data:` autonoma (con il suo `xmlns`), pronta per un
+/// `url(…)` CSS: per chi non può mettere un nodo nella pagina, come una
+/// maschera dietro un `::before`. Stringa vuota se il nome è sconosciuto.
+export function iconDataUrl(name: string): string {
+  const html = icon(name);
+  if (!html) return "";
+  const svg = html.replace("<svg ", '<svg xmlns="http://www.w3.org/2000/svg" ');
+  return `data:image/svg+xml,${encodeURIComponent(svg)}`;
+}
+
 /// L'elemento SVG di un'icona, per chi vuole attaccarci un ascoltore o
 /// metterlo in un attributo. Restituisce `null` se il nome è sconosciuto.
 export function iconEl(name: string): SVGElement | null {

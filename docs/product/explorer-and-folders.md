@@ -54,7 +54,7 @@ selettore con due gruppi col loro titolo: «Figure», quindici figure monocrome
 (cartella, nota, libro, calendario, casa, stella, bandiera, idea, in arrivo,
 archivio, immagine, cuore, lavoro, persone, musica) che prendono il colore del
 testo come le figure dell'albero, ed «Emoji». Sotto, un campo accetta un'emoji qualsiasi e «Senza
-icona» la toglie; l'icona di oggi ha il velo d'accento, Esc chiude e il fuoco
+icona» la toglie; l'icona scelta ha il velo d'accento, Esc chiude e il fuoco
 torna dov'era. Una figura si salva come `fub:<nome>` nella stessa stringa
 dell'emoji (`.fub/workspace.json`, vedi [Disposizione su
 disco](../reference/on-disk-layout.md)); un `fub:` con un nome che questa

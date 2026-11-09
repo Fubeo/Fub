@@ -47,8 +47,10 @@ describe("il costrutto delle icone", () => {
     // appunti dei menu. Le ultime otto sono di Scrittoio 2: le quattro
     // figure delle modalità (penna, blocchi, codice, occhio) e le quattro del
     // cassetto (scrivi, ordina, orologio, freccia in su); poi «…» della
-    // testata del foglio.
-    expect(names).toHaveLength(52);
+    // testata del foglio, e le undici figure che una cartella o una nota
+    // sceglie (libro, calendario, bandiera, idea, in arrivo, archivio,
+    // immagine, cuore, lavoro, persone, musica).
+    expect(names).toHaveLength(63);
     expect(new Set(names).size).toBe(names.length);
 
     for (const name of names) {

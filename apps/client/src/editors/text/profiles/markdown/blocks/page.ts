@@ -264,17 +264,21 @@ function openIconPicker(view: EditorView, anchor: HTMLElement, data: PageData, l
   figures.className = "cm-fub-page-emoji cm-fub-page-figures";
   figures.setAttribute("role", "group");
   figures.setAttribute("aria-label", t("icons.figures"));
-  const figureButtons = PAGE_FIGURES.map((name) => {
+  // Una figura che nessuno disegna adesso (la stella senza la cornice) non
+  // si offre.
+  const figureButtons = PAGE_FIGURES.flatMap((name) => {
+    const drawn = iconEl(name);
+    if (!drawn) return [];
     const button = document.createElement("button");
     button.type = "button";
     button.className = "cm-fub-page-emoji-choice";
     button.dataset.icon = figureValue(name);
-    button.append(iconEl(name) ?? "");
+    button.append(drawn);
     button.setAttribute("aria-label", figureLabel(name));
     button.title = figureLabel(name);
     own.listen(button, "click", () => choose(figureValue(name)));
     figures.append(button);
-    return { name, button };
+    return [{ name, button }];
   });
   const language = catalogLanguage(resolvedLanguage()) === "it" ? "it" : "en";
   let first: string | null = null;

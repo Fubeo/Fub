@@ -14,7 +14,7 @@
 // il prezzo, accettato, di non cambiare il contratto.
 
 import { t, type Key } from "../i18n/strings";
-import { icon, iconEl } from "./icons";
+import { icon, iconDataUrl, iconEl } from "./icons";
 
 /// Il prefisso di una figura nel valore d'icona.
 export const FIGURE_PREFIX = "fub:";
@@ -134,7 +134,7 @@ export function pageMarkLabel(value: string | null | undefined): string | null {
   return mark.kind === "text" ? mark.text : figureLabel(mark.name);
 }
 
-/// Il contenuto da mettere dentro una riga: un `<svg>` per una figura, un nodo
+/// Il contenuto da mettere dentro una riga: un SVG per una figura, un nodo
 /// di testo per un'emoji, `null` se il valore non si disegna.
 export function pageMarkContent(value: string | null | undefined): Node | null {
   const mark = readPageMark(value);
@@ -160,8 +160,6 @@ export function drawPageMark(host: HTMLElement, value: string | null | undefined
 /// che il cursore non deve vedere). Il colore lo dà chi la usa, col fondo;
 /// della figura conta solo la forma. Stringa vuota se il nome non si disegna.
 export function figureMask(name: PageFigure): string {
-  const drawn = icon(name);
-  if (!drawn) return "";
-  const svg = drawn.replace("<svg ", '<svg xmlns="http://www.w3.org/2000/svg" ');
-  return `url("data:image/svg+xml,${encodeURIComponent(svg)}")`;
+  const url = iconDataUrl(name);
+  return url ? `url("${url}")` : "";
 }
