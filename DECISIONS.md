@@ -99,6 +99,15 @@ ciò che non dipende dalla risposta.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-09 · scrittoio-2 (utente, orchestratore) · nuovo S2 T28: la
+  barra a schede del documento accende il movimento del kit
+  (`motion: true`) come la barra dei fogli, con la tenda sopra il vassoio;
+  dopo T21, che le dà l'apertura sul posto · l'utente vuole le animazioni
+  della barra dei fogli (K3 T18–T19) in tutte le barre a schede; il piano
+  S2 le aveva lasciate fuori, e una sonda ha misurato che nel documento si
+  muove solo il segno della sezione. Il movimento resta scritto una volta,
+  nel kit; le barre in una fila non hanno sezioni né tenda, e restano come
+  sono.
 - 2026-11-09 · fub-pre-alpha · nuovo PA T62: un gancio di fub-app, spento
   di serie e acceso solo dal banco, fa raccogliere la WebView prima di ogni
   lettura di R1 (#284) · T21 ha mostrato che il minimo in 60 s non basta, e
