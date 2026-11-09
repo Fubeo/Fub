@@ -1535,7 +1535,7 @@ Fatto quando: la prova e2e passa; con `canvasCards` assente
 `engine.test.ts` e `shell.e2e.test.ts` passano senza cambiare.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/canvas-cards.e2e.test.ts
-Stato: [ ] da fare
+Stato: [x] fatto (2026-11-10: `CanvasCardPorts` in `bootstrap.ts` = nota, foglio, web, `open`, `watch`; immagini e PDF dalla `transport` di `options.media`; registro per superficie, `CardCache` una per finestra e svuotata al cambio di vault; `watch` ascolta anche `document_*`, perché note e fogli non mandano `entry_*`; l'e2e accende le viste a mano finché T13 non c'è)
 
 ## T13 · Vive solo le schede utili
 

@@ -59,6 +59,13 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-10 · N6 · T12 integrato con due scostamenti accettati: `watch`
+  delle schede ascolta `document_changed/removed/renamed` oltre agli
+  `entry_*` (una nota cambiata manda solo `document_*`: col solo
+  `entry_changed` la scheda non si rifarebbe mai), e `snapshots.forget`
+  lo chiama `bootstrap.ts`, che tiene la cache · Perché: il piano diceva
+  `entry_changed` pensando ai file senza formato; il comportamento chiesto
+  (la scheda segue il file) vuole tutti e due.
 - 2026-11-10 · N6 · prototipo T26 (`PLAN-ui/lavagna-impianto.html`)
   approvato con le varianti consigliate: la colonna del disegno con le
   tendine, il navigatore in basso a destra, l'ispettore chiuso la prima
