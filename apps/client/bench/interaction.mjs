@@ -28,7 +28,7 @@
 // sono quelli di una macchina di chi scrive.
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { SCENE, sceneUrl } from "./scene.mjs";
+import { SCENE, chooseMode, sceneUrl } from "./scene.mjs";
 import { openStage, openPage, prepareScene, OUTPUT } from "./stage.mjs";
 
 const REPORT = join(OUTPUT, "interazione");
@@ -214,7 +214,7 @@ async function measureTyping(stage, sections, mode) {
     await click(page, '#sidebar li[role="treeitem"][data-path="Guida"] .chevron');
     await click(page, '#sidebar .tree-row[data-path="Guida/Live.md"]');
     await page.waitForSelector(tabOf("Guida/Live.md"));
-    await click(page, `.pane.focus .pane-toolbar button[data-mode="${mode}"]`);
+    await chooseMode(page, mode);
     await page.waitForSelector(`.pane.focus[data-mode="${mode}"] .cm-content`);
     // I Blocchi arrivano in un pezzo a parte: si misura quando ci sono.
     if (mode === "blocks") await page.waitForSelector(".pane.focus .cm-fub-block-handles", { state: "attached" });

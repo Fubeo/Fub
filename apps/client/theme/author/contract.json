@@ -315,6 +315,8 @@
     "status-side",
     "status-item",
     "status-item--button",
+    "status-mode",
+    "status-mode-arrow",
     "files-panel",
     "drawer-sidebar-open",
     "drawer-inspector-open",
@@ -1833,6 +1835,8 @@
     "status-side": "cornice",
     "status-item": "cornice",
     "status-item--button": "cornice",
+    "status-mode": "cornice",
+    "status-mode-arrow": "cornice",
     "files-panel": "cornice",
     "drawer-sidebar-open": "cornice",
     "drawer-inspector-open": "cornice",
@@ -3875,7 +3879,9 @@
         "status-band",
         "status-side",
         "status-item",
-        "status-item--button"
+        "status-item--button",
+        "status-mode",
+        "status-mode-arrow"
       ],
       "states": [
         "rest",
@@ -8509,7 +8515,7 @@
   "counts": {
     "required_roles": 154,
     "optional_roles": 64,
-    "hooks": 1516,
+    "hooks": 1518,
     "state_names": 7,
     "assigned_states": 737,
     "components": 219,

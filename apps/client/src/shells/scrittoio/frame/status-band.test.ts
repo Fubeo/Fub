@@ -24,6 +24,15 @@ const world = vi.hoisted(() => ({
   layout: { focus: "p1" },
   zoomed: [] as number[],
   tooltips: new Map<Element, string>(),
+  /// Il menu che la banda ha aperto per ultimo, e le modalità scelte.
+  menu: null as null | {
+    anchor: HTMLElement;
+    items: { label: string; icon?: string; checked?: boolean; run?: () => void }[];
+    onClose?: () => void;
+  },
+  menusClosed: 0,
+  focused: [] as string[],
+  modesSet: [] as string[],
 }));
 
 vi.mock("../../../host/query", () => ({
@@ -47,6 +56,26 @@ vi.mock("../../../i18n/strings", () => ({
 vi.mock("../../../state/document-controller", () => ({
   paneOf: (id: string) => (world.panes ? world.panes.get(id) : world.pane),
   selectedMode: (pane: { mode?: { label(): string } } | undefined) => pane?.mode,
+  setMode: (id: string) => {
+    world.modesSet.push(id);
+    return Promise.resolve();
+  },
+}));
+vi.mock("../../../ui/commands", () => ({
+  allCommands: () => [],
+  displayBinding: () => "",
+}));
+vi.mock("../../../ui/menu", () => ({
+  showContextMenu: (anchor: HTMLElement, items: NonNullable<typeof world.menu>["items"], options: { onClose?: () => void } = {}) => {
+    world.menu = { anchor, items, onClose: options.onClose };
+  },
+  closeContextMenu: () => {
+    const open = world.menu;
+    if (!open) return;
+    world.menu = null;
+    world.menusClosed += 1;
+    open.onClose?.();
+  },
 }));
 vi.mock("../../../state/document-session", () => ({
   documentSessions: {
@@ -66,6 +95,11 @@ vi.mock("../../../state/kernel", () => ({
 vi.mock("../../../state/layout", () => ({
   activeTab: () => world.tab,
   layout: world.layout,
+  pane: (id: string) => (world.panes ? world.panes.get(id) : world.pane) ? { id } : undefined,
+  focusPane: (id: string) => {
+    world.focused.push(id);
+    world.layout.focus = id;
+  },
 }));
 vi.mock("../../../state/zoom", () => ({
   zoomBy: (delta: number) => {
@@ -96,8 +130,18 @@ function deferred<T>(): { promise: Promise<T>; resolve(value: T): void } {
   return { promise, resolve };
 }
 
+/// Il ruolo di una modalità dal suo nome, come lo dichiarano le superfici vere.
+const ROLE: Record<string, string> = { Lettura: "reading", Sorgente: "source" };
+
+/// Un riquadro con `modes` modalità: la prima è quella accesa, col nome dato.
 function surface(modes: number, label = "Live"): unknown {
-  return { surface: { modes: Array.from({ length: modes }, (_, i) => ({ id: `m${i}` })) }, mode: { label: () => label } };
+  const active = { id: "m0", contextMode: ROLE[label] ?? "live_preview", label: () => label };
+  const others = Array.from({ length: Math.max(0, modes - 1) }, (_, i) => ({
+    id: `m${i + 1}`,
+    contextMode: "live_preview",
+    label: () => `Altra ${i + 1}`,
+  }));
+  return { surface: { modes: [active, ...others] }, mode: active };
 }
 
 beforeEach(() => {
@@ -107,7 +151,9 @@ beforeEach(() => {
     <footer id="status-band">
       <span id="status-index" hidden></span>
       <span id="status-saving" hidden></span>
-      <span id="status-mode" hidden></span>
+      <div id="status-end">
+        <button type="button" id="status-mode" class="status-mode" aria-haspopup="menu" aria-expanded="false" hidden></button>
+      </div>
       <button id="status-fit-width" hidden></button>
       <button id="status-fit-page" hidden></button>
       <button id="status-zoom" hidden></button>
@@ -127,6 +173,10 @@ beforeEach(() => {
   world.layout.focus = "p1";
   world.zoomed = [];
   world.tooltips.clear();
+  world.menu = null;
+  world.menusClosed = 0;
+  world.focused = [];
+  world.modesSet = [];
   state.vaultRoot = "/casa/vault";
   life = openLifetime();
 });
@@ -295,6 +345,145 @@ describe("la modalità", () => {
     emit("layout");
     expect(el("status-mode").hidden).toBe(true);
     expect(el("status-mode").textContent).toBe("");
+  });
+
+  it("è un bottone con la figura, il nome e la freccia della modalità del riquadro a fuoco (T3)", () => {
+    world.tab = { k: "doc" };
+    world.panes = new Map([
+      ["p1", surface(4, "Live")],
+      ["p2", surface(3, "Sorgente")],
+    ]);
+    mountStatusBand(life);
+    const button = el("status-mode");
+    const figure = () => button.querySelector(":scope > svg")?.getAttribute("data-icon");
+    const name = () => button.querySelector(":scope > .status-mode-name")?.textContent;
+    expect(button.tagName).toBe("BUTTON");
+    expect(figure()).toBe("pen");
+    expect(name()).toBe("Live");
+    const arrow = button.querySelector<HTMLElement>(":scope > .status-mode-arrow")!;
+    expect(arrow.getAttribute("aria-hidden")).toBe("true");
+    expect(arrow.querySelector("svg")?.getAttribute("data-icon")).toBe("chevron-up");
+    expect(button.lastElementChild).toBe(arrow);
+    expect(button.getAttribute("aria-label")).toBe('document.toolbar.mode_current {"mode":"Live"}');
+    // Lo stesso giro senza cambiare modalità non riscrive la figura.
+    const svg = button.querySelector(":scope > svg");
+    emit("layout");
+    expect(button.querySelector(":scope > svg")).toBe(svg);
+    world.layout.focus = "p2";
+    emit("layout");
+    expect(figure()).toBe("code");
+    expect(name()).toBe("Sorgente");
+    expect(button.getAttribute("aria-label")).toBe('document.toolbar.mode_current {"mode":"Sorgente"}');
+  });
+
+  it("la figura che l'editor registra col motore arriva quando la superficie si fa sentire", async () => {
+    const { registerIcon } = await import("../../../ui/icons");
+    const listeners = new Set<() => void>();
+    const status = {
+      items: () => [],
+      subscribe: (listener: () => void) => {
+        listeners.add(listener);
+        return () => listeners.delete(listener);
+      },
+    };
+    const active = { id: "page", contextMode: "live_preview", icon: "t3-figura-tarda", label: () => "Pagina" };
+    world.tab = { k: "doc" };
+    world.pane = { surface: { modes: [active, { id: "read", contextMode: "reading", label: () => "Lettura" }], status }, mode: active };
+    mountStatusBand(life);
+    const figure = () => el("status-mode").querySelector(":scope > svg")?.getAttribute("data-icon");
+    // Finché nessuno la disegna vale quella del ruolo.
+    expect(figure()).toBe("pen");
+    const release = registerIcon("t3-figura-tarda", ["M4 4h16"]);
+    try {
+      for (const listener of listeners) listener();
+      expect(figure()).toBe("t3-figura-tarda");
+    } finally {
+      release();
+    }
+  });
+
+  it("il clic apre il menu del riquadro a fuoco, e la voce cambia la modalità di quel riquadro", () => {
+    world.tab = { k: "doc" };
+    world.panes = new Map([
+      ["p1", surface(4, "Live")],
+      ["p2", surface(3, "Sorgente")],
+    ]);
+    world.layout.focus = "p2";
+    mountStatusBand(life);
+    const button = el("status-mode");
+    button.click();
+    expect(world.menu?.anchor).toBe(button);
+    expect(button.getAttribute("aria-expanded")).toBe("true");
+    expect(world.menu!.items.map((item) => item.label)).toEqual(["Altra 1", "Altra 2", "Sorgente"]);
+    expect(world.menu!.items.filter((item) => item.checked).map((item) => item.label)).toEqual(["Sorgente"]);
+    // Il menu, chiudendosi, renderebbe il fuoco all'editor dell'altro riquadro:
+    // la voce sceglie lo stesso per il suo.
+    world.layout.focus = "p1";
+    world.menu!.items[0]!.run!();
+    expect(world.focused.at(-1)).toBe("p2");
+    expect(world.layout.focus).toBe("p2");
+    expect(world.modesSet).toEqual(["m1"]);
+  });
+
+  it("↑ apre il menu, e alla chiusura il fuoco torna al bottone", () => {
+    world.tab = { k: "doc" };
+    world.pane = surface(3, "Live");
+    mountStatusBand(life);
+    const button = el("status-mode") as HTMLButtonElement;
+    const other = document.createElement("button");
+    document.body.append(other);
+    other.focus();
+    button.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }));
+    expect(world.menu).toBeNull();
+    button.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowUp", bubbles: true, cancelable: true }));
+    expect(world.menu?.anchor).toBe(button);
+    expect(button.getAttribute("aria-expanded")).toBe("true");
+    // Esc o un clic fuori: il menu si chiude e il fuoco torna qui, anche se il
+    // clic non gliel'aveva dato.
+    world.menu!.onClose!();
+    world.menu = null;
+    expect(button.getAttribute("aria-expanded")).toBe("false");
+    expect(document.activeElement).toBe(button);
+  });
+
+  it("una superficie con una modalità sola non apre niente", () => {
+    world.tab = { k: "doc" };
+    world.pane = surface(1, "Immagine");
+    mountStatusBand(life);
+    el("status-mode").click();
+    expect(world.menu).toBeNull();
+  });
+
+  it("il riquadro si chiude col menu aperto: il menu si chiude", () => {
+    world.tab = { k: "doc" };
+    world.panes = new Map([
+      ["p1", surface(4, "Live")],
+      ["p2", surface(3, "Sorgente")],
+    ]);
+    world.layout.focus = "p2";
+    mountStatusBand(life);
+    el("status-mode").click();
+    expect(world.menu).not.toBeNull();
+    // Il fuoco che passa all'altro riquadro non chiude niente: il menu è del
+    // riquadro per cui si è aperto.
+    world.layout.focus = "p1";
+    emit("layout");
+    expect(world.menusClosed).toBe(0);
+    world.panes.delete("p2");
+    emit("layout");
+    expect(world.menusClosed).toBe(1);
+    expect(el("status-mode").getAttribute("aria-expanded")).toBe("false");
+  });
+
+  it("smontata col menu aperto lo chiude, e il bottone non apre più", () => {
+    world.tab = { k: "doc" };
+    world.pane = surface(3, "Live");
+    mountStatusBand(life);
+    el("status-mode").click();
+    life.close();
+    expect(world.menusClosed).toBe(1);
+    el("status-mode").click();
+    expect(world.menu).toBeNull();
   });
 
   it("il fuoco su un riquadro vuoto non dice niente, e tornato sulla nota la ridice", () => {

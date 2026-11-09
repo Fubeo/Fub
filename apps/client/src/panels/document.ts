@@ -48,7 +48,7 @@ import {
   type Tab,
 } from "../state/layout";
 import { $ } from "../ui/dom";
-import { showContextMenu, type MenuItem } from "../ui/menu";
+import { closeContextMenu, showContextMenu, type MenuItem } from "../ui/menu";
 import { confirm } from "../platform/confirm";
 import { allCommands, ariaBinding, canCreateDrawing, displayBinding, newDrawing, type CommandEntry } from "../ui/commands";
 import { notify } from "../ui/notify";
@@ -153,6 +153,10 @@ interface PaneFrame {
   /// La barra di formattazione, sotto la toolbar: i pulsanti che i plugin
   /// offrono in `CommandSurface::Toolbar`. Vuota e nascosta senza nessuno.
   formatBar: FormatBar;
+  /// Il bottone della modalità accesa, figlio del foglio dopo la barra di
+  /// formato: sul computer la modalità la cambia la banda, e il bottone si
+  /// vede solo sul telefono, nel tondo in basso a destra (`mobile.css`).
+  modeCurrent: HTMLButtonElement;
   /// La bolla di selezione: la barra ristretta, accanto al testo scelto,
   /// quando la barra del foglio è spenta.
   selectionBubble: SelectionBubble;
@@ -227,6 +231,9 @@ const view: PaneView = {
   },
   createPane,
   releaseFrame: (pane) => {
+    // Il riquadro si chiude col menu delle modalità aperto: il menu si chiude
+    // con lui, perché non sceglierebbe più niente.
+    if (frameOf(pane).modeCurrent.getAttribute("aria-expanded") === "true") closeContextMenu();
     frameOf(pane).formatBar.destroy();
     frameOf(pane).selectionBubble.destroy();
     frameOf(pane).standing.destroy();
@@ -448,7 +455,8 @@ function createPane(id: string): PaneElements {
     wanted: () => bubbleWanted(miniBarMode(), document.getElementById("app")?.hasAttribute("data-formatbar-off") === true),
     active: () => root.contains(document.activeElement) || selectionBubble.element.contains(document.activeElement),
   });
-  root.append(tabsShell, toolbarEl, formatBar.element, conflictEl, noticeEl, contentEl);
+  const modeCurrent = createModeCurrent(id);
+  root.append(tabsShell, toolbarEl, formatBar.element, modeCurrent, conflictEl, noticeEl, contentEl);
   // Il tasto destro nell'editor: il menu che la superficie offre, composto
   // nelle sezioni di tutti i menu dell'editor (`editor-menu.ts`). Un menu già
   // aperto da un pezzo dell'editor (la griglia di una tabella, il disegno) ha
@@ -498,6 +506,7 @@ function createPane(id: string): PaneElements {
     tabMenuEl,
     toolbarEl,
     formatBar,
+    modeCurrent,
     selectionBubble,
     conflictEl,
     noticeEl,
@@ -585,7 +594,7 @@ function drawTab(r: PaneFrame, tabs: Tab[], active: number): void {
     const control = onClose
       ? replacement?.parentElement?.querySelector<HTMLElement>(".tab-close")
       : replacement;
-    (control ?? r.toolbarEl.querySelector<HTMLElement>('button[aria-haspopup="menu"]'))
+    (control ?? r.toolbarEl.querySelector<HTMLElement>(":scope > [data-pane-menu]"))
       ?.focus({ preventScroll: true });
   }
   drawTabOverflow(r, tabs, active);
@@ -1087,33 +1096,25 @@ function drawToolbar(r: Pane): void {
     // occupa soltanto il riquadro col fuoco, vedi `hostPaneStatus`.
     const status = document.createElement("span");
     status.className = "pane-status-slot";
+    // I segmenti delle modalità restano nel DOM, ma la cornice non li mostra:
+    // la modalità si sceglie dalla banda, o dal tondo del telefono
+    // (`modeCurrent`, fuori dalla testata).
     const group = document.createElement("span");
     group.className = "segmented";
     group.setAttribute("role", "group");
-    // Le stesse modalità in un bottone solo, che dice quella accesa e apre la
-    // scelta: la cornice decide quale delle due forme mostrare (sul telefono
-    // i segmenti tagliano il nome della nota).
-    const current = document.createElement("button");
-    current.type = "button";
-    current.className = "pane-mode-current";
-    current.setAttribute("aria-haspopup", "menu");
-    current.setAttribute("aria-expanded", "false");
-    // Il menu è quello di tutti (`state/mode-menu.ts`): stesso ordine, stesse
-    // icone, le scorciatoie della persona.
-    current.addEventListener("click", () => openModeMenu(current, r.id));
     const menu = document.createElement("button");
     menu.type = "button";
     menu.dataset.paneMenu = "";
     menu.setAttribute("aria-haspopup", "menu");
     menu.addEventListener("click", (event) => openPaneMenu(r, event));
     // Il formato non sta qui: lo dice la linguetta, con la sua figura.
-    bar.append(nav, crumbs, frameOf(r).standing.element, status, group, current, menu);
+    bar.append(nav, crumbs, frameOf(r).standing.element, status, group, menu);
   }
   const nav = bar.querySelector<HTMLElement>(":scope > .pane-nav")!;
   const crumbs = bar.querySelector<HTMLElement>(":scope > .muted")!;
   const status = bar.querySelector<HTMLElement>(":scope > .pane-status-slot")!;
   const group = bar.querySelector<HTMLElement>(":scope > .segmented")!;
-  const current = bar.querySelector<HTMLButtonElement>(":scope > .pane-mode-current")!;
+  const current = frameOf(r).modeCurrent;
   const menu = bar.querySelector<HTMLElement>(":scope > [data-pane-menu]")!;
   const history = paneState(r.id)?.history;
   for (const button of nav.querySelectorAll<HTMLButtonElement>("button")) {
@@ -1165,6 +1166,22 @@ function drawToolbar(r: Pane): void {
   // entrambe sono appena state decise.
   frameOf(r).formatBar.update(state.commandSpecs);
   frameOf(r).selectionBubble.update(state.commandSpecs);
+}
+
+/// Il bottone della modalità accesa, che apre la scelta. Il menu è quello di
+/// tutti (`state/mode-menu.ts`): stesso ordine, stesse icone, le scorciatoie
+/// della persona. Sta nel foglio, subito dopo la barra di formato, e non nella
+/// testata, che taglia ciò che sporge: sul telefono è il tondo all'angolo
+/// basso della carta.
+function createModeCurrent(id: string): HTMLButtonElement {
+  const current = document.createElement("button");
+  current.type = "button";
+  current.className = "pane-mode-current";
+  current.setAttribute("aria-haspopup", "menu");
+  current.setAttribute("aria-expanded", "false");
+  current.hidden = true;
+  current.addEventListener("click", () => openModeMenu(current, id));
+  return current;
 }
 
 /// Il bottone della modalità accesa: la sua figura e il suo nome. La figura

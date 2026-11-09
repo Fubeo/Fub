@@ -624,3 +624,57 @@ describe("la vista sorgente di una scheda", () => {
     expect(await activeTab()).toEqual({ k: "doc", doc: "schizzo.draw" });
   });
 });
+
+// Sul computer la modalità si sceglie dalla banda (Scrittoio 2, T3): la voce
+// della banda è un bottone che dice la modalità del riquadro a fuoco e apre lo
+// stesso menu del tondo del telefono.
+describe("la modalità si sceglie dalla banda", () => {
+  const button = () => document.getElementById("status-mode") as HTMLButtonElement;
+  const name = () => button().querySelector(".status-mode-name")?.textContent;
+  const radios = () => [...document.querySelectorAll<HTMLElement>("#context-menu [role=menuitemradio]")];
+  const labelOf = (item: Element) => item.querySelector(".menu-label")?.textContent;
+
+  it("dice la modalità a fuoco e la cambia dal menu; la superficie nuova prende il fuoco", async () => {
+    await start();
+    await open("Benvenuto.md");
+    expect(button().hidden).toBe(false);
+    expect(name()).toBe("Live");
+    button().focus();
+    button().click();
+    await settle();
+    expect(button().getAttribute("aria-expanded")).toBe("true");
+    expect(radios().map(labelOf)).toEqual(["Live", "Blocchi", "Sorgente", "Lettura"]);
+    radios().find((item) => labelOf(item) === "Sorgente")!.click();
+    await settle();
+    expect(paneMode()).toBe("source");
+    expect(name()).toBe("Sorgente");
+    expect(button().getAttribute("aria-expanded")).toBe("false");
+    // Il menu rende il fuoco al bottone, poi la modalità scelta si monta e lo
+    // prende, come col comando: si sceglie Sorgente per scriverci.
+    expect(focusedPane().querySelector(".cm-editor")!.contains(document.activeElement)).toBe(true);
+  });
+
+  it("Esc chiude il menu e il fuoco torna al bottone; ↑ lo apre", async () => {
+    await start();
+    await open("schizzo.draw");
+    expect(name()).toBe("Disegno");
+    button().focus();
+    button().dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowUp", bubbles: true, cancelable: true }));
+    await settle();
+    expect(radios().map(labelOf)).toEqual(["Disegno", "Guarda"]);
+    (document.activeElement ?? document.body).dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
+    await settle();
+    expect(document.querySelector("#context-menu [role=menuitemradio]")).toBeNull();
+    expect(button().getAttribute("aria-expanded")).toBe("false");
+    expect(document.activeElement).toBe(button());
+    expect(paneMode()).toBe("draw");
+  });
+
+  it("una superficie con una modalità sola non la dice", async () => {
+    await start();
+    await open("foto.png");
+    expect(button().hidden).toBe(true);
+    await open("Benvenuto.md");
+    expect(button().hidden).toBe(false);
+  });
+});

@@ -353,7 +353,7 @@ export const SCENE = onPage("shell", [
     title: "Modalità Lettura: il documento reso",
     prepare: async (page) => {
       await openNote(page, "Guida/Sintassi di Fub.md");
-      await page.click('.pane.focus .pane-toolbar button[data-mode="reading"]');
+      await chooseMode(page, "reading");
       await page.waitForSelector(".pane-preview h1, .markdown-preview h1");
     },
   },
@@ -372,7 +372,7 @@ export const SCENE = onPage("shell", [
         await api.writeDocument("Benvenuto.md", "# Benvenuto in Fub\n\nCambiata da un'altra app.\n", { kind: "dictated" });
       });
       await page.waitForSelector(".pane.focus [data-banner='document.conflict.body']:not([hidden]) .conflict-actions");
-      await page.click('.pane.focus .pane-toolbar button[data-mode="reading"]');
+      await chooseMode(page, "reading");
       await page.waitForSelector(".pane.focus [data-banner='document.conflict.body'] [data-conflict-reading]");
       await page.focus(".pane.focus .conflict-actions button >> nth=0");
     },
@@ -382,7 +382,7 @@ export const SCENE = onPage("shell", [
     title: "Modalità Sorgente: la tavolozza della sintassi",
     prepare: async (page) => {
       await openNote(page, "Guida/Frammenti di codice.md");
-      await page.click('.pane.focus .pane-toolbar button[data-mode="source"]');
+      await chooseMode(page, "source");
       await page.waitForSelector(".cm-content");
     },
   },
@@ -760,20 +760,13 @@ export const SCENE = onPage("shell", [
     id: "nota-tre-modi",
     title: "La stessa nota in Sorgente, Live e Lettura: tre fogli affiancati",
     prepare: async (page) => {
-      // In un foglio stretto le modalità sono un bottone solo che apre la
-      // scelta; in uno largo, i segmenti.
-      const chooseMode = async (mode, label) => {
-        const segment = page.locator(`.pane.focus .pane-toolbar button[data-mode="${mode}"]`);
-        if (await segment.isVisible()) return segment.click();
-        await page.click(".pane.focus .pane-toolbar .pane-mode-current");
-        await page.click(`#context-menu [role="menuitemradio"]:has-text("${label}")`);
-      };
+      // La modalità del riquadro a fuoco si sceglie dalla banda.
       await openNote(page, "Guida/Sintassi di Fub.md");
-      await chooseMode("source", "Sorgente");
+      await chooseMode(page, "source");
       await runScrittoioCommand(page, "Dividi il riquadro a destra");
-      await chooseMode("live_preview", "Live");
+      await chooseMode(page, "live_preview");
       await runScrittoioCommand(page, "Dividi il riquadro a destra");
-      await chooseMode("reading", "Lettura");
+      await chooseMode(page, "reading");
       await page.waitForSelector('.pane[data-mode="source"] .cm-content');
       await page.waitForSelector('.pane[data-mode="live_preview"] .cm-content');
       await page.waitForSelector('.pane[data-mode="reading"] .pane-preview');
@@ -1292,8 +1285,8 @@ export const SCENE = onPage("shell", [
           if (r.height > 24.5 || r.width >= 44) return false;
           const x = r.left + r.width / 2;
           const y = r.top + r.height / 2;
-          // Il suo tocco non copre il bottone della modalità accanto.
-          const mode = document.querySelector(".pane.focus .pane-toolbar > .pane-mode-current");
+          // Il suo tocco non copre il bottone della modalità.
+          const mode = document.querySelector(".pane.focus > .pane-mode-current");
           const m = mode?.getBoundingClientRect();
           const modeFree = !m || m.width === 0
             || document.elementFromPoint(m.left + 1, m.top + m.height / 2)?.closest(".pane-mode-current") === mode;
@@ -1302,12 +1295,13 @@ export const SCENE = onPage("shell", [
             && document.elementFromPoint(x, y + 10)?.closest(".pane-standing-chip") === chip;
         }, null, { timeout: 5_000 });
         // Il fuoco della tastiera sul bottone della modalità: dal menu «…»
-        // un passo indietro, così l'anello è quello di `:focus-visible`. Il
-        // bottone sta sulla carta o accanto: l'anello sta dentro il suo
-        // rettangolo, cioè lo scarto è negativo e largo almeno quanto la linea
-        // (`shells/mobile/mobile.css`, PA T47).
+        // un passo avanti (il documento non ha la barra di formato), così
+        // l'anello è quello di `:focus-visible`. Il bottone è il tondo sulla
+        // carta: l'anello sta dentro il suo rettangolo, cioè lo scarto è
+        // negativo e largo almeno quanto la linea (`shells/mobile/mobile.css`,
+        // PA T47).
         await page.focus(".pane.focus [data-pane-menu]");
-        await page.keyboard.press("Shift+Tab");
+        await page.keyboard.press("Tab");
         await page.waitForFunction(() => {
           const mode = document.activeElement;
           if (!(mode instanceof HTMLElement) || !mode.matches(".pane.focus .pane-mode-current:focus-visible")) return false;
@@ -1541,6 +1535,21 @@ async function runCommand(page, title) {
   await page.waitForSelector("#command-palette", { state: "detached" });
 }
 
+/// Il nome delle modalità nel menu, in italiano come il banco.
+const MODE_LABELS = { live_preview: "Live", blocks: "Blocchi", source: "Sorgente", reading: "Lettura" };
+
+/// Sceglie la modalità del riquadro a fuoco come la persona (Scrittoio 2, T3):
+/// dalla voce della banda, e dove la banda non c'è (il telefono) dal tondo del
+/// foglio; poi la voce del menu col suo nome. I segmenti della testata restano
+/// nel DOM ma non si vedono, e Playwright non clicca ciò che non si vede.
+export async function chooseMode(page, mode, label = MODE_LABELS[mode]) {
+  if (await page.isVisible(`.pane.focus[data-mode="${mode}"]`)) return;
+  if (await page.isVisible("#status-mode")) await page.click("#status-mode");
+  else await page.click(".pane.focus > .pane-mode-current");
+  await page.click(`#context-menu [role="menuitemradio"]:has-text("${label}")`);
+  await page.waitForSelector(`.pane.focus[data-mode="${mode}"]`);
+}
+
 /// Apre una nota dall'albero. Sta in una funzione perché due scene la fanno, e
 /// perché il modo di aprirla è una cosa che può cambiare: cambierà qui.
 ///
@@ -1569,8 +1578,8 @@ async function openNote(page, path) {
 async function openLive(page, keys, scroll, mode = "live_preview") {
   const doc = await page.evaluate(() => globalThis.__fubLiveBench?.doc ?? null);
   if (doc === null) throw new Error("la pagina non ha la nota della Live");
-  // In una finestra stretta l'albero sta nel cassetto, e le modalità sono un
-  // bottone solo: come in `openRichDocument` e in `nota-tre-modi`.
+  // In una finestra stretta l'albero sta nel cassetto, come in
+  // `openRichDocument`; la modalità la sceglie `chooseMode`.
   const compact = await page.evaluate(() => document.querySelector("#layout")?.classList.contains("layout-compact") ?? false);
   if (compact) {
     await page.click('#views-ribbon .rail-btn[data-panel="files"]');
@@ -1582,12 +1591,7 @@ async function openLive(page, keys, scroll, mode = "live_preview") {
     await page.click("#sidebar-scrim", { position: { x: scrim.width - 8, y: 8 } });
     await page.waitForSelector("#sidebar-scrim", { state: "hidden" });
   }
-  const live = page.locator(`.pane.focus .pane-toolbar button[data-mode="${mode}"]`);
-  if (await live.isVisible()) await live.click();
-  else if (!(await page.isVisible(`.pane.focus[data-mode="${mode}"]`))) {
-    await page.click(".pane.focus .pane-toolbar .pane-mode-current");
-    await page.click(`#context-menu [role="menuitemradio"]:has-text("${mode === "blocks" ? "Blocchi" : "Live"}")`);
-  }
+  await chooseMode(page, mode);
   await page.waitForSelector(`.pane.focus[data-mode="${mode}"] .cm-content`);
   await page.evaluate(async (bottom) => {
     // La vista si prende dal modulo del pacchetto testuale, lo stesso che la

@@ -770,7 +770,8 @@ describe("la testata del riquadro, prima di Scrittoio 2", () => {
   const NOTA = "Progetti/Fub/Diario.md";
   const panes = () => [...document.querySelectorAll<HTMLElement>(".pane")];
   const toolbarOf = (pane: HTMLElement) => pane.querySelector<HTMLElement>(".pane-toolbar")!;
-  const currentOf = (pane: HTMLElement) => toolbarOf(pane).querySelector<HTMLButtonElement>(":scope > .pane-mode-current")!;
+  // Il bottone della modalità è un figlio del foglio, dopo la barra di formato (T3).
+  const currentOf = (pane: HTMLElement) => pane.querySelector<HTMLButtonElement>(":scope > .pane-mode-current")!;
   const radios = () => [...document.querySelectorAll<HTMLElement>("#context-menu [role=menuitemradio]")];
   const labelOf = (item: Element) => item.querySelector(".menu-label")?.textContent ?? "";
 
@@ -859,6 +860,44 @@ describe("la testata del riquadro, prima di Scrittoio 2", () => {
     expect(name()).toBe("Blocchi");
     expect(tooltip()).toBe("Blocchi");
     expect(current.getAttribute("aria-label")).toBe(t("document.toolbar.mode_current", { mode: "Blocchi" }));
+  });
+
+  it("il bottone della modalità sta nel foglio dopo la barra di formato, non nella testata (T3)", async () => {
+    await start("off", null, { [NOTA]: "# Diario\n\nUna riga.\n" });
+    await open(NOTA);
+    const pane = panes()[0]!;
+    const current = currentOf(pane);
+    expect(current.hidden).toBe(false);
+    expect(toolbarOf(pane).querySelector(".pane-mode-current")).toBeNull();
+    expect(current.previousElementSibling?.classList.contains("format-bar")).toBe(true);
+    // Nel giro del Tab, che segue il DOM (nessun `tabindex` positivo), viene
+    // dopo la testata e dopo la barra, e prima del testo.
+    const before = (node: Element) => (node.compareDocumentPosition(current) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0;
+    const focusables = [...pane.querySelectorAll<HTMLElement>("button, [tabindex]")].filter((node) => node.tabIndex >= 0);
+    expect(focusables.filter((node) => node.closest(".pane-toolbar, .format-bar")).every(before)).toBe(true);
+    expect(focusables.some((node) => node.closest(".pane-toolbar"))).toBe(true);
+    expect(before(pane.querySelector(":scope > .format-bar")!)).toBe(true);
+    expect(before(pane.querySelector("[role=tabpanel]")!)).toBe(false);
+    // I segmenti restano nel DOM della testata, nascosti dalla cornice.
+    expect(toolbarOf(pane).querySelector(":scope > .segmented")).not.toBeNull();
+  });
+
+  it("chiusa la linguetta a fuoco, l'ultima, il fuoco va a «…» della testata (T3)", async () => {
+    await start("off", null, { [NOTA]: "# Diario\n\nUna riga.\n" });
+    await open(NOTA);
+    const pane = panes()[0]!;
+    const { closeOtherTabs } = await import("./document");
+    closeOtherTabs();
+    await waitFor("una linguetta sola", () => pane.querySelectorAll(".pane-tabs .tab").length === 1);
+    // La crocetta della linguetta, premuta da tastiera: la linguetta sparisce
+    // col fuoco dentro, e non ce n'è un'altra che lo prenda.
+    const close = pane.querySelector<HTMLButtonElement>(".pane-tabs .tab-close")!;
+    close.focus();
+    expect(document.activeElement).toBe(close);
+    close.click();
+    await waitFor("il riquadro senza linguette", () => pane.querySelectorAll(".pane-tabs .tab").length === 0);
+    await settle();
+    expect(document.activeElement).toBe(toolbarOf(pane).querySelector("[data-pane-menu]"));
   });
 
   it("le briciole: la cartella disegnata e il vault, le cartelle con `data-folder`, poi il nome", async () => {

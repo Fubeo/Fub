@@ -3742,7 +3742,7 @@ describe("la modalità di ogni famiglia di superfici", () => {
 
   it("il bottone solo dice la modalità accesa e la cambia da un menu di scelte", async () => {
     await start(VAULT);
-    const current = document.querySelector<HTMLButtonElement>(".pane.focus .pane-toolbar .pane-mode-current")!;
+    const current = document.querySelector<HTMLButtonElement>(".pane.focus > .pane-mode-current")!;
     const pressed = () =>
       document.querySelector<HTMLElement>('.pane.focus .pane-toolbar button[data-mode][aria-pressed="true"]')?.textContent;
     expect(current.hidden).toBe(false);

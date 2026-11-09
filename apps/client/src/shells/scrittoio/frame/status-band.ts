@@ -1,6 +1,7 @@
-// La banda di stato: a sinistra ciò che sta succedendo al vault, a
-// destra la modalità del foglio a fuoco e lo zoom. Fra le due, le view che dichiarano
-// `ViewSurface::StatusBar` (le monta `ui/views.ts` in `#views-status`).
+// La banda di stato: a sinistra ciò che sta succedendo al vault, a destra la
+// modalità del foglio a fuoco (un bottone che apre la scelta) e lo zoom. Fra
+// le due, le view che dichiarano `ViewSurface::StatusBar` (le monta
+// `ui/views.ts` in `#views-status`).
 //
 // Ogni voce si vede solo quando ha qualcosa da dire: una banda che ripete
 // «tutto bene» in sei modi è rumore.
@@ -8,16 +9,19 @@
 // Il documento a fuoco può portare le sue voci (`EditorSurface.status`: il
 // foglio, le parole, la lingua). Se conta lui le parole, il conteggio della
 // view dichiarata si fa da parte: lo stesso numero da due fonti non si dice.
-import type { SurfacePaperFit, SurfaceStatus } from "../../../editors/core/registry";
+import type { SurfaceMode, SurfacePaperFit, SurfaceStatus } from "../../../editors/core/registry";
 import { settings, vaultStatus } from "../../../host/query";
 import { onLanguage, t } from "../../../i18n/strings";
 import { paneOf, selectedMode } from "../../../state/document-controller";
 import { documentSessions } from "../../../state/document-session";
 import { onEvent } from "../../../state/kernel";
 import { activeTab, layout } from "../../../state/layout";
+import { modeIcon, openModeMenu } from "../../../state/mode-menu";
 import { on, state } from "../../../state/store";
 import { zoomBy } from "../../../state/zoom";
+import { iconEl } from "../../../ui/icons";
 import type { Lifetime } from "../../../ui/lifetime";
+import { closeContextMenu } from "../../../ui/menu";
 import { Race } from "../../../ui/race";
 import { setTooltip } from "../../../ui/tooltip";
 import { animate, DURATION, prepareExit } from "../../../moto";
@@ -33,6 +37,37 @@ function show(el: HTMLElement | null, text: string, tone?: string): void {
   el.textContent = text;
   if (tone) el.dataset.tone = tone;
   else delete el.dataset.tone;
+}
+
+/// Il bottone della modalità: la figura della modalità accesa, il nome e la
+/// freccia che dice che si apre una scelta. La figura si riscrive solo quando
+/// cambia, il nome a ogni giro (la lingua può essere cambiata nel frattempo).
+function drawModeButton(button: HTMLElement, active: SurfaceMode | undefined): void {
+  if (!active) {
+    button.hidden = true;
+    if (button.firstChild) button.replaceChildren();
+    delete button.dataset.icon;
+    button.removeAttribute("aria-label");
+    return;
+  }
+  const figure = modeIcon(active);
+  if (button.dataset.icon !== figure || !button.querySelector(":scope > .status-mode-name")) {
+    const glyph = iconEl(figure);
+    const name = document.createElement("span");
+    name.className = "status-mode-name";
+    const arrow = document.createElement("span");
+    arrow.className = "status-mode-arrow";
+    arrow.setAttribute("aria-hidden", "true");
+    const chevron = iconEl("chevron-up");
+    if (chevron) arrow.append(chevron);
+    button.replaceChildren(...(glyph ? [glyph] : []), name, arrow);
+    button.dataset.icon = figure;
+  }
+  const label = active.label();
+  const name = button.querySelector<HTMLElement>(":scope > .status-mode-name")!;
+  if (name.textContent !== label) name.textContent = label;
+  button.setAttribute("aria-label", t("document.toolbar.mode_current", { mode: label }));
+  button.hidden = false;
 }
 
 export function mountStatusBand(lifetime: Lifetime): void {
@@ -87,14 +122,51 @@ export function mountStatusBand(lifetime: Lifetime): void {
   // la superficie le dà. Una superficie con una modalità sola non ha niente da
   // dire. Parole e tempo di lettura li dichiara una view di stato
   // (`#views-status`): contarle anche qui sarebbe dirle due volte.
-  const drawMode = (): void => {
+  // Il bottone apre il menu delle modalità del riquadro a fuoco, lo stesso
+  // della testata del telefono (`state/mode-menu.ts`); `menuFor` è il riquadro
+  // per cui è aperto, finché è aperto.
+  let menuFor: string | null = null;
+  function drawModeItem(): void {
+    if (!mode) return;
     const tab = state.vaultRoot ? activeTab() : null;
     const pane = tab?.k === "doc" ? paneOf(layout.focus) : undefined;
     const several = (pane?.surface?.modes.length ?? 0) > 1;
-    show(mode, several ? (selectedMode(pane)?.label() ?? "") : "");
+    drawModeButton(mode, several ? selectedMode(pane) : undefined);
+  }
+  const drawMode = (): void => {
+    drawModeItem();
+    // Il riquadro si è chiuso col suo menu aperto: il menu non sceglie più
+    // niente, e si chiude con lui.
+    if (menuFor !== null && !paneOf(menuFor)) closeContextMenu();
     drawFit();
     drawSurface();
   };
+  const openMenu = (): void => {
+    if (!mode || mode.hidden) return;
+    const paneId = layout.focus;
+    menuFor = paneId;
+    openModeMenu(mode, paneId, {
+      onClose: () => {
+        menuFor = null;
+        // Il fuoco torna al bottone anche dove il clic non gliel'aveva dato
+        // (Safari, la WebView di macOS): il menu lo renderebbe all'editor.
+        if (!lifetime.closed && mode.isConnected && !mode.hidden) mode.focus({ preventScroll: true });
+      },
+    });
+  };
+  if (mode) {
+    // Clic, Invio e Spazio arrivano come `click`. Anche ↑ apre: il menu sta
+    // sopra la banda, e la freccia del bottone punta lì.
+    lifetime.listen(mode, "click", openMenu);
+    lifetime.listen(mode, "keydown", (event) => {
+      if (event.key !== "ArrowUp" || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
+      event.preventDefault();
+      openMenu();
+    });
+  }
+  lifetime.add(() => {
+    if (menuFor !== null) closeContextMenu();
+  });
 
   // Le voci della superficie a fuoco, prima della modalità. Un elemento per
   // voce, che resta finché la voce c'è: il fuoco su un pulsante non si perde
@@ -112,6 +184,13 @@ export function mountStatusBand(lifetime: Lifetime): void {
     const tab = state.vaultRoot ? activeTab() : null;
     return tab?.k === "doc" ? paneOf(layout.focus)?.surface?.status ?? null : null;
   };
+  // La superficie dice che le sue voci sono cambiate: il motore è arrivato, e
+  // con lui può essere arrivata la figura della modalità, che un editor
+  // registra quando si monta (il documento, `rc-mode-page`).
+  function onStatus(): void {
+    drawModeItem();
+    drawSurface();
+  }
   function drawSurface(): void {
     const status = statusOf();
     // Un segno che si accende batte solo se il documento è lo stesso di prima:
@@ -120,7 +199,7 @@ export function mountStatusBand(lifetime: Lifetime): void {
     if (status !== told) {
       stopTelling?.();
       told = status;
-      stopTelling = status?.subscribe(drawSurface) ?? null;
+      stopTelling = status?.subscribe(onStatus) ?? null;
     }
     if (status?.counts) band!.dataset.surfaceCounts = "";
     else delete band!.dataset.surfaceCounts;

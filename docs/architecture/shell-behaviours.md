@@ -30,9 +30,12 @@ Ciò che la shell fa sopra le porte generiche, senza contratti propri:
   da ciò che si scrive dopo (`editor.slash` lo spegne); con una selezione il
   menu «/» ha il suo campo. Entrambi passano per l'interfaccia della
   superficie testuale, mai per oggetti CodeMirror.
-- **Menu delle modalità.** Il bottone della testata del riquadro mostra la
-  figura e il nome della modalità accesa e apre il menu delle modalità, uno
-  solo (`state/mode-menu.ts`). L'ordine segue il ruolo: le modalità
+- **Menu delle modalità.** La voce `#status-mode` della banda
+  (`shells/scrittoio/frame/status-band.ts`) mostra la figura e il nome della
+  modalità del riquadro a fuoco e apre il menu delle modalità, uno solo
+  (`state/mode-menu.ts`); sul telefono lo apre il bottone `.pane-mode-current`,
+  figlio del foglio dopo la barra di formato, che la cornice mostra solo dove
+  la banda non c'è. L'ordine segue il ruolo: le modalità
   `live_preview` come la superficie le dichiara, il sorgente, una riga, la
   lettura; una nota dà Live, Blocchi, Sorgente e Lettura. La figura è la
   `icon` della `SurfaceMode` se `ui/icons.ts` la sa disegnare, sennò quella

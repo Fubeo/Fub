@@ -591,7 +591,7 @@
   background: var(--bg);
   color: var(--muted);
   font-family: var(--font-ui);
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
   font-variant-numeric: tabular-nums;
 }
 
@@ -628,13 +628,15 @@
 }
 
 .status-item--button {
+  gap: var(--space-2);
+  min-height: 22px;
   padding: 0 var(--space-3);
   border: none;
   border-radius: var(--radius-chip);
   background: transparent;
   color: var(--muted);
   font-family: var(--font-ui);
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
   cursor: pointer;
 }
 
@@ -647,6 +649,32 @@
 .status-item--button[aria-pressed="true"] {
   background: var(--accent-wash);
   color: var(--text);
+}
+
+/* ── La banda: la modalità è un bottone ──────────────────────────────────── */
+.status-mode > svg {
+  width: 14px;
+  height: 14px;
+}
+/* La freccia è un posto di 12 px, e la sua figura lo riempie. */
+.status-mode > .status-mode-arrow {
+  display: inline-flex;
+  width: 12px;
+  height: 12px;
+  color: var(--muted);
+}
+.status-mode > .status-mode-arrow > svg {
+  width: 100%;
+  height: 100%;
+}
+.status-mode[aria-expanded="true"] {
+  background: var(--bg-elev);
+  box-shadow: var(--shadow-1);
+  color: var(--text);
+}
+.status-item--button:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: -1px;
 }
 
 /* ── La concentrazione ───────────────────────────────────────────────────── */
