@@ -221,3 +221,37 @@ della lavagna troppo grande e nessuna vista; tornati sotto, le schede
 rinascono. L'inchiostro sulle schede si ridisegna dopo ogni resa sullo
 stesso elemento, e un tratto scritto aggiorna solo il suo livello, senza
 resa.
+
+## Le porte della shell
+
+Nella shell le schede arrivano alla tela dalla registrazione della lavagna
+(`editors/core/bootstrap.ts`), dentro il suo montaggio pigro: i renderer si
+caricano col codice della lavagna, non all'avvio di Fub. La scheda di foglio
+arriva con un suo `import()` alla prima scheda di foglio; finché non c'è, la
+vista tiene il modo chiesto dalla tela e lo passa alla scheda vera appena
+montata.
+
+Le porte vengono dall'opzione `canvasCards?: CanvasCardPorts`, che la shell
+costruisce in `state/document-controller.ts`, e da due opzioni che c'erano
+già, `media` e `gridHost`:
+
+| Specie | Da dove legge |
+|---|---|
+| nota, documento | `renderEmbed` e la stessa montatura sicura delle schede di testo (`mountMarkdown`), con i link risolti dalla nota |
+| immagine, PDF | la `transport` di `media`, nel vault di adesso; un file che non c'è (`not_found`) è un file mancante, un'immagine oltre 64 MiB non si legge |
+| foglio | `gridHost`; il giornale e la base della sessione aperta del documento se c'è, sennò il giornale vuoto e la revisione di `readDocument` |
+| web | la cache delle schede di link (`linkCardView`, `requestLinkCard`, l'evento `link-cards`) e il visore della finestra |
+
+Senza `media` le immagini e i PDF, senza `gridHost` i fogli, hanno il corpo
+di sempre; senza `canvasCards` tutte le schede.
+
+`watch(path)` ascolta gli eventi del kernel per quel percorso:
+`document_changed`, `document_removed` e `document_renamed` per i file che un
+formato serve (note, fogli), le loro varianti `entry_*` per gli altri
+(immagini, PDF). Ogni ascolto ha il suo smontaggio. Prima di avvisare la
+scheda, la cache delle immagini ferme dimentica il file (`forget`): nessuna
+scheda, nemmeno su un'altra lavagna, ritrova l'immagine di prima.
+
+La cache delle immagini ferme è una sola per finestra, per tutte le lavagne
+che vi si aprono. Si svuota quando una lavagna si monta in un vault diverso
+da quello in cui la cache si è riempita: lo stesso percorso è un altro file.

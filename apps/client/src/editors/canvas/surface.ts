@@ -61,6 +61,8 @@ export interface CanvasSurfaceCallbacks {
   readonly media?: CanvasEngineOptions["media"];
   readonly attachments?: CanvasEngineOptions["attachments"];
   readonly renderMarkdownForCard?: CanvasEngineOptions["renderMarkdownForCard"];
+  /** Le schede di file e di link (N6): senza, il corpo di sempre. */
+  readonly cards?: CanvasEngineOptions["cards"];
   /** Where annotations read their PDF: without it the pages are blank. */
   readonly pdf?: PdfPorts;
   /** Runs a shell command, like the export window a drawing's «Export» opens. */
@@ -161,6 +163,7 @@ export function mountCanvasSurface(
     media: callbacks.media,
     attachments: callbacks.attachments,
     renderMarkdownForCard: callbacks.renderMarkdownForCard,
+    ...(callbacks.cards ? { cards: callbacks.cards } : {}),
     onPendingChange: (pending) => {
       for (const watcher of [...pendingWatchers]) watcher(pending);
     },

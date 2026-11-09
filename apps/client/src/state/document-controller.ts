@@ -28,7 +28,7 @@
 // nessun selettore. La vista della shell di oggi è `panels/document.ts`.
 import { pickFromList } from "../ui/dialogs";
 import { rebaseStaleChange, type EditorChange } from "../editors/core/text-operation";
-import { createDocumentSurfaceRegistry, setComponentEditors } from "../editors/core/bootstrap";
+import { createDocumentSurfaceRegistry, setComponentEditors, type CanvasCardPorts } from "../editors/core/bootstrap";
 import { VECTOR_PROFILE, uisForFile } from "../editors/core/component-surfaces";
 import { componentsReady, mountComponents, onComponents, refreshComponents, type Components } from "./components";
 import {
@@ -63,7 +63,7 @@ import { createViewStateCrashDeposit } from "../editors/media/recorder-store";
 import { mountRecorderSurface } from "../editors/media/recorder-surface";
 import { printDocument } from "../editors/media/print-view";
 import { mountSlidePresentation } from "../ui/slides";
-import { mountMarkdown, mountRenderedDocument } from "../editors/text/profiles/markdown/mount";
+import { mountMarkdown, mountRenderedDocument, type MarkdownMountOptions } from "../editors/text/profiles/markdown/mount";
 import { applyNoteCssClasses } from "../theme/snippets";
 import { Queue } from "../ui/race";
 import { openWebPage } from "../ui/web-viewer";
@@ -76,8 +76,8 @@ import { linkCardView, requestLinkCard } from "./link-cards";
 import type { Theme } from "../theme/theme";
 import { contentLookPreference, markLook, resolveLook, type Look } from "../theme/content-look";
 import { api } from "../host/ipc";
-import { WITHOUT_PAGE, documentOutline, existingDocuments, matchingDocuments, notesByName, renderPrint, resolvedReference, searchExpression, settings, vaultEntries, vaultTags } from "../host/query";
-import { theseDocuments, type PaneMode, type SyntaxForm, type VaultEntry, type ViewContext } from "../host/contract";
+import { WITHOUT_PAGE, documentOutline, existingDocuments, matchingDocuments, notesByName, renderEmbed, renderPrint, resolvedReference, searchExpression, settings, vaultEntries, vaultTags } from "../host/query";
+import { theseDocuments, type DocumentSource, type PaneMode, type SyntaxForm, type VaultEntry, type ViewContext } from "../host/contract";
 import { existingRecentNotes } from "./recent";
 import { linkPreference, markdownDestination, wikiPathCandidates, type LinkFormat, type LinkPreference } from "./note-links";
 import { onEvent } from "./kernel";
@@ -426,6 +426,96 @@ const mediaTransport: ResourceTransport = {
   open: (id, vault) => api.resourceOpen(id, vault ?? null),
   read_chunk: api.resourceReadChunk,
   close: api.resourceClose,
+};
+
+/// La montatura sicura del Markdown dentro una lavagna, la stessa per le
+/// schede di testo e per le schede di nota: i link si aprono col gesto e si
+/// risolvono da `documentId`.
+function canvasMarkdownMount(documentId: string): MarkdownMountOptions {
+  return {
+    documentId,
+    openWikilink: (page, heading, block) => openWikilink(page, heading, block, undefined, { gesture: true }),
+    openFigure,
+    openPath: async (path, from) => {
+      const target = await resolvedReference({ kind: "path", value: path }, from ?? documentId);
+      if (!target) throw new Error(t("preview.target_missing"));
+      await openDocument(target.doc, { gesture: true });
+      if (target.at) await reveal(target.doc, { span: target.at.span });
+    },
+    searchTag: (tag) => deps.searchTag(tag),
+  };
+}
+
+/// Gli eventi del kernel che cambiano ciò che una scheda mostra del suo file:
+/// i `document_*` per un file che un formato serve (una nota, un foglio), gli
+/// `entry_*` per gli altri (un'immagine, un PDF).
+function watchCardFile(path: string, changed: () => void): () => void {
+  const mine = (id: string): void => {
+    if (id === path) changed();
+  };
+  const moved = (from: string, to: string): void => {
+    if (from === path || to === path) changed();
+  };
+  const stops = [
+    onEvent("document_changed", (e) => mine(e.id)),
+    onEvent("entry_changed", (e) => mine(e.id)),
+    onEvent("document_removed", (e) => mine(e.id)),
+    onEvent("entry_removed", (e) => mine(e.id)),
+    onEvent("document_renamed", (e) => moved(e.from, e.to)),
+    onEvent("entry_renamed", (e) => moved(e.from, e.to)),
+  ];
+  return () => {
+    for (const stop of stops) stop();
+  };
+}
+
+/// Le porte delle schede della lavagna (N6 T12). Le immagini e i PDF si
+/// leggono dalla `transport` dei media (`mediaTransport`), i fogli con le
+/// chiamate di `gridHost`: le passa la registrazione della lavagna.
+const canvasCards: CanvasCardPorts = {
+  note: {
+    show: async (path, heading, host, life) => {
+      const content = await renderEmbed(path, heading, null);
+      if (life.closed) return;
+      life.add(mountMarkdown(host, content.html, canvasMarkdownMount(path)));
+    },
+  },
+  sheet: {
+    // La sessione aperta del documento, se c'è (A-9): la scheda mostra ciò
+    // che il foglio mostra, anche non salvato. Sennò il giornale vuoto sui
+    // byte del disco.
+    source: async (path) => {
+      const vault = openVaultRoot();
+      let read: DocumentSource;
+      try {
+        read = await api.readDocument(path, ...vaultArg(vault));
+      } catch (error) {
+        if (isErrorKind(error, "not_found")) return null;
+        throw error;
+      }
+      const session = openVaultRoot() === vault ? documentSessions.inspect(path) : undefined;
+      if (session?.lifecycle === "open" && session.base.kind === "descends_from") {
+        return { journal: session.text, base: session.base.value, format: read.format_id };
+      }
+      return { journal: "", base: read.revision, format: read.format_id };
+    },
+  },
+  web: {
+    view: linkCardView,
+    request: requestLinkCard,
+    watch: (changed) => on("link-cards", changed),
+    // Il consenso, la barra e gli errori sono del visore della finestra.
+    open: async (url) => {
+      await openWebPage(url);
+    },
+  },
+  open: (path, subpath) => {
+    const page = linkedPdfPage(path, subpath?.replace(/^#/, ""));
+    void openDocument(path, page === null ? { gesture: true } : { gesture: true, page }).catch((error: unknown) => {
+      notify(errorText(error), "guasto");
+    });
+  },
+  watch: watchCardFile,
 };
 
 /// Un'immagine del vault che un disegno mostra per nome. Gli SVG non si
@@ -899,18 +989,9 @@ export function mountDocumentController(lifetime: Lifetime, d: DocumentDeps, pan
     },
     drawingFonts,
     withDrawings: loadLiveCommands,
-    renderCanvasMarkdown: (_nodeId, text, host, documentId, forms) => mountMarkdown(host, renderMarkdown(text, forms).html, {
-      documentId,
-      openWikilink: (page, heading, block) => openWikilink(page, heading, block, undefined, { gesture: true }),
-      openFigure,
-      openPath: async (path, from) => {
-        const target = await resolvedReference({ kind: "path", value: path }, from ?? documentId);
-        if (!target) throw new Error(t("preview.target_missing"));
-        await openDocument(target.doc, { gesture: true });
-        if (target.at) await reveal(target.doc, { span: target.at.span });
-      },
-      searchTag: (tag) => deps.searchTag(tag),
-    }),
+    renderCanvasMarkdown: (_nodeId, text, host, documentId, forms) =>
+      mountMarkdown(host, renderMarkdown(text, forms).html, canvasMarkdownMount(documentId)),
+    canvasCards,
     canvasMedia: {
       openExternal: async () => { throw new Error(t("errors.document.no_external")); },
       // Il consenso, la barra e gli errori sono del visore della finestra.
