@@ -86,6 +86,32 @@ fra −20 e +56 MiB per giro sullo stesso albero
 davvero non scende, e la lettura più bassa lo tiene. Il referto tiene per ogni
 giro anche la lettura a 10 s (`soon`) e quando è arrivata la più bassa
 (`lowestAtMs`).
+
+Prima di ogni lettura a schede chiuse (vuota, chiuse, chiuse.tardi, ogni
+lettura dei giri e tardi) il banco chiede alla WebView una **raccolta
+forzata** e aspetta che finisca: una raccolta piena e sincrona di
+JavaScriptCore, il rilascio che WebKit fa da sé sotto memoria scarsa e
+`malloc_trim`. Senza, la lettura diceva se la WebView aveva già raccolto da
+sé, non quanto restava. Le letture a schede aperte non la chiedono. WebKitGTK
+4.1 non ha un'API del processo dell'app per farlo (la libreria non esporta
+una raccolta a comando né un evento di memoria scarsa): la fa un'estensione
+web, `apps/client/bench/webview/raccolta.rs`, che
+il banco costruisce con `rustc` in una cartella della corsa e che dà alla
+pagina `window.__fubBenchGc`. L'app la carica soltanto se trova nell'ambiente
+all'avvio `FUB_BENCH_GC` con la cartella assoluta dell'estensione
+(`crates/fub-app/src/bench_gc.rs`): allora la finestra principale riparte in
+un processo nuovo, che carica l'estensione. Senza la variabile non succede
+niente, e l'app che si distribuisce non ha l'estensione. Niente comando IPC,
+niente porte, niente file del vault; soltanto Linux. R1 gira su un driver
+suo, con la variabile accesa, e gli altri scenari tornano su un driver
+senza, così l'avvio misurato da S6 non cambia. Con l'app aperta sui sette
+file il banco chiede una raccolta in più e controlla che schede e scheda
+attiva restino quelle. Il referto di R1 dice in `gc` se la raccolta c'era, e
+quante ce ne sono state: chiesta a un'app senza gancio, le letture vanno
+avanti senza e il banco lo scrive. `--gc=no` misura come prima. Ogni lettura
+porta anche la PSS finita nello swap (`swap`): su una macchina sotto carico
+la PSS può scendere perché il sistema ha spostato pagine, non perché la
+memoria è tornata.
 La tolleranza, fissata in K0, sta in `budgets.json`: come obiettivo (il
 cancello di K3) residuo entro 50 MiB e pendenza entro 1 MiB per giro, sul
 runner una volta e mezza il peggiore visto.
