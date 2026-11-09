@@ -23,7 +23,7 @@
 
 import { loadCanvasWasm } from "virtual:fub-canvas-wasm";
 import type { CanvasDocument } from "../model";
-import type { CanvasPatch } from "../operation";
+import type { CanvasPatch, LayerRef } from "../operation";
 
 /** I codici d'errore del modulo, più `trap` (l'istanza è morta) e `load` (il modulo non si carica). */
 export type CanvasCoreErrorCode =
@@ -89,6 +89,29 @@ export interface CanvasCompiled {
   readonly created: string[];
 }
 
+/**
+ * Perché il nucleo non disegna un tratto di un livello valido: la prima
+ * ragione nell'ordine dei vettori (`docs/reference/canvas-ink.md`).
+ */
+export type CanvasInkSkipReason = "tool" | "anchor" | "color" | "brush" | "ink";
+
+/** Un tratto di un livello valido, come lo legge il nucleo. */
+export type CanvasInkStroke =
+  | { readonly id: string; readonly drawn: true }
+  | { readonly id: string; readonly drawn: false; readonly reason: CanvasInkSkipReason };
+
+/**
+ * Un livello d'inchiostro come lo legge il nucleo (`read_layers`), nella
+ * forma dei vettori di `canvas-ink/`: dove sta, se è valido o estraneo e,
+ * se è valido, i suoi tratti nell'ordine del file.
+ */
+export interface CanvasInkLayer {
+  readonly layer: LayerRef;
+  readonly state: "ok" | "foreign";
+  /** Vuoto se il livello è estraneo. */
+  readonly strokes: readonly CanvasInkStroke[];
+}
+
 /** Una lavagna aperta nel nucleo. */
 export interface CanvasCore {
   /** Il modello, con le chiavi nell'ordine in cui si scrivono; un oggetto nuovo a ogni chiamata. */
@@ -103,6 +126,13 @@ export interface CanvasCore {
   compile(ops: readonly CanvasIntentOp[], seed?: number | bigint | string): CanvasCompiled;
   /** L'indice della scheda il cui oggetto contiene il byte `byte` (UTF-8, BOM compreso), o `null`. */
   nodeAt(byte: number): number | null;
+  /**
+   * I livelli d'inchiostro del testo di adesso: quelli delle schede
+   * nell'ordine di `nodes`, poi quello della radice. Il nucleo li legge una
+   * volta per testo (dopo l'apertura, `reset` o `commit`); fino al prossimo
+   * cambio la risposta è lo stesso oggetto, congelato.
+   */
+  inkLayers(): readonly CanvasInkLayer[];
   /** Chiude la lavagna. Si può chiamare più volte; dopo, ogni altra chiamata è un errore `handle`. */
   close(): void;
   readonly closed: boolean;
@@ -120,6 +150,7 @@ interface CoreExports {
   canvas_compile(handle: number, ptr: number, len: number): number;
   canvas_model(handle: number): number;
   canvas_node_at(handle: number, byte: number): number;
+  canvas_ink_layers(handle: number): number;
   canvas_close(handle: number): number;
   result_ptr(): number;
   result_len(): number;
@@ -127,7 +158,8 @@ interface CoreExports {
 
 const FUNCTIONS = [
   "fub_alloc", "fub_free", "canvas_open", "canvas_reset", "canvas_commit", "canvas_preview",
-  "canvas_compile", "canvas_model", "canvas_node_at", "canvas_close", "result_ptr", "result_len",
+  "canvas_compile", "canvas_model", "canvas_node_at", "canvas_ink_layers", "canvas_close", "result_ptr",
+  "result_len",
 ] as const;
 
 export interface CanvasCoreRuntimeOptions {
@@ -354,7 +386,16 @@ function settled(answer: Answer): Uint8Array {
   throw new CanvasCoreError("internal", `the canvas core answered with status ${answer.status}`);
 }
 
-type Invoke = (target: Instance, input: Uint8Array | null, run: (ptr: number, len: number) => number) => Answer;
+/** `value` congelato fino in fondo: una risposta condivisa che nessuno cambia. */
+function deepFreeze<T>(value: T): T {
+  if (typeof value === "object" && value !== null && !Object.isFrozen(value)) {
+    Object.freeze(value);
+    for (const item of Object.values(value)) deepFreeze(item);
+  }
+  return value;
+}
+
+type Invoke =(target: Instance, input: Uint8Array | null, run: (ptr: number, len: number) => number) => Answer;
 
 class Core implements CanvasCore {
   readonly #target: Instance;
@@ -363,6 +404,8 @@ class Core implements CanvasCore {
   #closed = false;
   /** Il modello della risposta di apertura, consegnato al primo `model()` se niente l'ha cambiato. */
   #fresh: CanvasDocument | null;
+  /** I livelli d'inchiostro del testo di adesso; `null` finché nessuno li chiede dopo un cambio. */
+  #ink: readonly CanvasInkLayer[] | null = null;
 
   constructor(target: Instance, handle: number, canvas: CanvasDocument, invoke: Invoke) {
     this.#target = target;
@@ -389,6 +432,7 @@ class Core implements CanvasCore {
     this.#live();
     const source = encodeText(text);
     this.#fresh = null;
+    this.#ink = null;
     return (this.#json(source, (ptr, len) => this.#target.exports.canvas_reset(this.#handle, ptr, len)) as { canvas: CanvasDocument }).canvas;
   }
 
@@ -396,6 +440,7 @@ class Core implements CanvasCore {
     this.#live();
     const request = encodeJson(patches);
     this.#fresh = null;
+    this.#ink = null;
     return this.#json(request, (ptr, len) => this.#target.exports.canvas_commit(this.#handle, ptr, len)) as CanvasCommitted;
   }
 
@@ -431,10 +476,20 @@ class Core implements CanvasCore {
     return answer.status;
   }
 
+  inkLayers(): readonly CanvasInkLayer[] {
+    this.#live();
+    if (this.#ink) return this.#ink;
+    const answer = this.#json(null, () => this.#target.exports.canvas_ink_layers(this.#handle)) as { layers: CanvasInkLayer[] };
+    const layers = deepFreeze(answer.layers);
+    this.#ink = layers;
+    return layers;
+  }
+
   close(): void {
     if (this.#closed) return;
     this.#closed = true;
     this.#fresh = null;
+    this.#ink = null;
     // Un'istanza morta ha già perso le sue lavagne.
     if (this.#target.dead) return;
     settled(this.#invoke(this.#target, null, () => this.#target.exports.canvas_close(this.#handle)));

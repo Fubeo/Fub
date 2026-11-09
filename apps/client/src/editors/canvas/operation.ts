@@ -2,10 +2,13 @@
 // caricato in WebAssembly da `wasm/core.ts`) applica al sorgente, e i
 // costruttori che il motore usa per farle. Il commit, il suo annulla e la
 // lettura del file stanno tutti nel nucleo; qui c'è solo ciò che serve a
-// descrivere un cambiamento.
+// descrivere un cambiamento. Anche le regole dell'inchiostro (quale livello è
+// estraneo) le dice il nucleo: i costruttori dei tratti le prendono da
+// `CanvasCore.inkLayers()`.
 import type { TextOperation } from "../core/text-operation";
-import { INK_KEY, inkLayerWritable, type InkLayerRef } from "./ink-record";
+import { INK_KEY, type InkLayerRef } from "./ink-record";
 import type { CanvasDocument, CanvasEdge, CanvasNode } from "./model";
+import type { CanvasInkLayer } from "./wasm/core";
 
 export type CanvasPatch =
   | { readonly kind: "upsert-node"; readonly before: CanvasNode | null; readonly after: CanvasNode; readonly at?: number }
@@ -160,16 +163,36 @@ function inkHolder(doc: CanvasDocument, layer: LayerRef): Record<string, unknown
   return layer === "board" ? doc : nodeById(doc, layer.node);
 }
 
+function sameLayer(a: LayerRef, b: LayerRef): boolean {
+  return a === "board" || b === "board" ? a === b : a.node === b.node;
+}
+
 /**
- * I tratti del livello `layer` se Fub ci può scrivere: vuoto se il livello
- * non c'è ancora, `null` se la scheda non c'è o il livello è estraneo
- * (`inkLayerWritable`).
+ * I tratti del livello `layer` se Fub ci può scrivere, secondo `layers`
+ * (`CanvasCore.inkLayers()` dello stesso testo di `doc`): vuoto se il livello
+ * non c'è ancora, `null` se chi lo tiene non c'è o il nucleo lo dice
+ * estraneo. Il nucleo decide; qui si guarda solo che `doc` e `layers` vengano
+ * dallo stesso testo (gli stessi id, nello stesso ordine), e se no non si
+ * scrive.
  */
-function writableStrokes(doc: CanvasDocument, layer: LayerRef): readonly StoredInkStroke[] | null {
+function writableStrokes(
+  doc: CanvasDocument,
+  layers: readonly CanvasInkLayer[],
+  layer: LayerRef,
+): readonly StoredInkStroke[] | null {
   const holder = inkHolder(doc, layer);
-  if (!holder || !inkLayerWritable(holder)) return null;
-  if (!has(holder, INK_KEY)) return [];
-  return (holder[INK_KEY] as { strokes: StoredInkStroke[] }).strokes;
+  if (!holder) return null;
+  const read = layers.find((entry) => sameLayer(entry.layer, layer));
+  if (!read) return has(holder, INK_KEY) ? null : [];
+  if (read.state !== "ok") return null;
+  const value = holder[INK_KEY];
+  const strokes = isRecord(value) && Array.isArray(value.strokes) ? (value.strokes as unknown[]) : null;
+  if (!strokes || strokes.length !== read.strokes.length) return null;
+  for (let i = 0; i < strokes.length; i++) {
+    const stroke = strokes[i];
+    if (!isStoredStroke(stroke) || stroke.id !== read.strokes[i]!.id) return null;
+  }
+  return strokes as StoredInkStroke[];
 }
 
 let canvasIds = 0;
@@ -221,21 +244,34 @@ export function removeEdgePatch(doc: CanvasDocument, id: string): Extract<Canvas
 
 /**
  * La toppa che aggiunge `record` in fondo ai tratti del livello `layer` (il
- * livello nasce se non c'è). `null` se il livello non lo accetta: la scheda
- * non c'è, il livello è estraneo o ha già un tratto con quell'id.
+ * livello nasce se non c'è). `layers` sono i livelli che il nucleo legge
+ * nello stesso testo di `doc` (`CanvasCore.inkLayers()`). `null` se il
+ * livello non lo accetta: la scheda non c'è, il nucleo dice il livello
+ * estraneo, o ha già un tratto con quell'id.
  */
-export function addStrokePatch(doc: CanvasDocument, layer: LayerRef, record: StoredInkStroke): InkPatch | null {
-  const strokes = writableStrokes(doc, layer);
+export function addStrokePatch(
+  doc: CanvasDocument,
+  layers: readonly CanvasInkLayer[],
+  layer: LayerRef,
+  record: StoredInkStroke,
+): InkPatch | null {
+  const strokes = writableStrokes(doc, layers, layer);
   if (!strokes || !isStoredStroke(record) || strokes.some((stroke) => stroke.id === record.id)) return null;
   return { kind: "ink", layer: cloneLayerRef(layer), at: strokes.length, before: null, after: cloneStroke(record) };
 }
 
 /**
  * La toppa che toglie il tratto `id` dal livello `layer`, con la sua
- * posizione. `null` se il tratto non c'è o il livello è estraneo.
+ * posizione. `null` se il tratto non c'è o il nucleo dice il livello
+ * estraneo.
  */
-export function eraseStrokePatch(doc: CanvasDocument, layer: LayerRef, id: string): InkPatch | null {
-  return eraseStrokePatches(doc, layer, [id])?.[0] ?? null;
+export function eraseStrokePatch(
+  doc: CanvasDocument,
+  layers: readonly CanvasInkLayer[],
+  layer: LayerRef,
+  id: string,
+): InkPatch | null {
+  return eraseStrokePatches(doc, layers, layer, [id])?.[0] ?? null;
 }
 
 /**
@@ -243,11 +279,16 @@ export function eraseStrokePatch(doc: CanvasDocument, layer: LayerRef, id: strin
  * una passata di gomma, un commit solo. Ogni toppa porta la posizione che il
  * tratto ha dopo le cancellazioni prima di lei (come `erase_strokes` del
  * nucleo), così le toppe si applicano in fila e l'inversa rimette ogni tratto
- * al suo posto. `null` se un id non c'è o è ripetuto, o il livello è
- * estraneo; una lista vuota per `ids` vuoto.
+ * al suo posto. `null` se un id non c'è o è ripetuto, o il nucleo dice il
+ * livello estraneo; una lista vuota per `ids` vuoto.
  */
-export function eraseStrokePatches(doc: CanvasDocument, layer: LayerRef, ids: readonly string[]): InkPatch[] | null {
-  const strokes = writableStrokes(doc, layer);
+export function eraseStrokePatches(
+  doc: CanvasDocument,
+  layers: readonly CanvasInkLayer[],
+  layer: LayerRef,
+  ids: readonly string[],
+): InkPatch[] | null {
+  const strokes = writableStrokes(doc, layers, layer);
   if (!strokes) return null;
   const remaining = [...strokes];
   const patches: InkPatch[] = [];

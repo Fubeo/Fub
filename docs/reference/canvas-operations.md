@@ -425,6 +425,7 @@ sotto. `src/api.rs` è il livello sicuro (una tabella di lavagne per handle),
 | `canvas_compile(h, ptr, len) -> i32` | `{"ops", "seed"}` | 0 o -1 | `{"patches", "created"}` |
 | `canvas_model(h) -> i32` | | 0 o -1 | `{"canvas"}` |
 | `canvas_node_at(h, byte) -> i32` | | l'indice, -1 fuori da ogni scheda, -2 se fallisce | vuoto |
+| `canvas_ink_layers(h) -> i32` | | 0 o -1 | `{"layers"}` |
 | `canvas_close(h) -> i32` | | 0 o -1 | vuoto |
 | `result_ptr() -> ptr`, `result_len() -> len` | | | dove sta il risultato |
 
@@ -450,6 +451,16 @@ sotto. `src/api.rs` è il livello sicuro (una tabella di lavagne per handle),
 - `canvas_node_at` dà l'indice della scheda il cui oggetto nel sorgente
   contiene il byte `byte`, contato in UTF-8 dall'inizio del testo, BOM
   compreso.
+- `canvas_ink_layers` dà i livelli d'inchiostro della lavagna come li legge
+  il nucleo (`read_layers`), nella forma di `expect` dei vettori di
+  `canvas-ink/` ([L'inchiostro della lavagna](canvas-ink.md#i-vettori)):
+  `{"layers": [{"layer", "state", "strokes"}]}`, con `layer` `"board"` o
+  `{"node": id}`, `state` `"ok"` o `"foreign"` (un livello estraneo ha
+  `strokes` vuoto) e ogni tratto di un livello valido come
+  `{"id", "drawn"}`, più `reason` se non si disegna. Non prende un
+  ingresso, quindi non c'è niente da liberare: la risposta sta nel
+  risultato, del modulo, come per `canvas_model`. Le regole
+  dell'inchiostro stanno solo nel nucleo: la shell non ne ha una copia.
 - Gli handle partono da 1, crescono e non si riusano: 0 e `u32::MAX` non sono
   mai handle, e un handle chiuso risponde `handle` per sempre.
 
@@ -496,10 +507,12 @@ per chi indaga e non per l'utente.
 
 I test sono in `crates/fub-canvas-wasm/tests/`: `api.rs` passa dal livello
 sicuro, `abi.rs` dalle funzioni `extern "C"` chiamate in nativo, con gli
-stessi controlli (ogni vettore di `canvas-patches/` e `canvas-ops/`, il
-tratto UTF-16 con caratteri di uno, due, tre e quattro byte, BOM e CRLF, ogni
-ingresso sbagliato, gli handle, 16 MiB e un byte in più, un risultato più
-grande di 64 KiB) e, in `abi.rs`, la memoria viva uguale dopo 10 000 giri.
+stessi controlli (ogni vettore di `canvas-patches/` e `canvas-ops/`, ogni
+vettore di `canvas-ink/` per `canvas_ink_layers`, il tratto UTF-16 con
+caratteri di uno, due, tre e quattro byte, BOM e CRLF, ogni ingresso
+sbagliato, gli handle, 16 MiB e un byte in più, un risultato più grande di
+64 KiB) e, in `abi.rs`, la memoria viva uguale dopo 10 000 giri, anche di
+`canvas_ink_layers` con un commit d'inchiostro.
 
 ### Nella shell
 
@@ -525,7 +538,15 @@ wasm32-unknown-unknown`).
 
 `core.ts` compila il modulo una volta e dà `openCore(testo)`, una
 `CanvasCore` per lavagna con `model`, `reset`, `commit`, `preview`,
-`compile`, `nodeAt` e `close`. Rilegge le viste della memoria dopo ogni
+`compile`, `nodeAt`, `inkLayers` e `close`. `inkLayers` chiede i livelli
+d'inchiostro al nucleo una volta per testo (dopo l'apertura, `reset` o
+`commit`) e fino al cambio dopo ridà lo stesso array, congelato: la tela non
+li chiede a ogni disegno. I costruttori dei tratti (`addStrokePatch`,
+`eraseStrokePatch`, `eraseStrokePatches` in `operation.ts`) li prendono per
+sapere se un livello è estraneo, e `ink-record.ts` li mette accanto ai tratti
+del modello per disegnarli (`inkLayerStates`): il client decodifica la
+stringa `ink` col codec della §5 e fa il contorno, e un tratto che il nucleo
+dice da disegnare e il codec non sa decodificare non si disegna. Rilegge le viste della memoria dopo ogni
 chiamata e libera ogni ingresso con `fub_free`, anche quando la chiamata
 fallisce. Un testo con un surrogato spaiato è un errore `utf8` prima di
 arrivare al modulo, mai un U+FFFD. Gli errori sono `CanvasCoreError` con i
@@ -533,4 +554,5 @@ arrivare al modulo, mai un U+FFFD. Gli errori sono `CanvasCoreError` con i
 di lei risponde `trap`, e il prossimo `openCore` fa un'istanza nuova) e `load`
 (il modulo non si carica; il prossimo `openCore` riprova). `close` si può
 ripetere; dopo `close` ogni altra chiamata risponde `handle`. I test sono
-`wasm/core.test.ts` e `wasm/vectors.test.ts`, sul `.wasm` vero.
+`wasm/core.test.ts`, `wasm/vectors.test.ts` e `wasm/ink-vectors.test.ts`,
+sul `.wasm` vero.

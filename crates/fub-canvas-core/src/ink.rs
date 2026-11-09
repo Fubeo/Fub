@@ -2,10 +2,10 @@
 //! controllati come li legge la shell.
 //!
 //! Le regole sono quelle di `docs/reference/canvas-ink.md` e dei vettori di
-//! `apps/client/src/__fixtures__/canvas-ink/`, che legge anche il lettore
-//! TypeScript (`readInkLayers` in `apps/client/src/editors/canvas/ink-record.ts`):
-//! per ogni vettore i due lati danno lo stesso risultato
-//! (`tests/ink_vectors.rs`).
+//! `apps/client/src/__fixtures__/canvas-ink/` (`tests/ink_vectors.rs`). Sono
+//! le sole regole dell'inchiostro: la shell non ne ha una copia, e chiede i
+//! livelli a questo modulo per `.wasm` (`ink_layers` di `fub-canvas-wasm`,
+//! che fa girare gli stessi vettori).
 //!
 //! - **Il livello** ([`InkLayer`]) è l'oggetto sotto la chiave [`INK_KEY`] di
 //!   una scheda, di qualunque tipo, o della radice. Nel modello sta nei campi

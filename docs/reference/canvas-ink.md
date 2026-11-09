@@ -354,3 +354,16 @@ comune di ogni lettore del formato. Ogni vettore è un oggetto JSON:
 
 I vettori sono scritti a mano. I limiti di dimensione si provano nei test
 d'unità dei lettori, perché un vettore da 512 KiB non sta nel repository.
+
+Il lettore è uno solo, il nucleo Rust (`crates/fub-canvas-core/src/ink.rs`,
+`read_layers`): `crates/fub-canvas-core/tests/ink_vectors.rs` fa girare i
+vettori in nativo. Il client non ha una copia delle regole: legge i livelli
+per `.wasm` (`canvas_ink_layers`, in
+[Operazioni sulla lavagna](canvas-operations.md#webassembly)), e
+`expect` è proprio la forma della risposta. `crates/fub-canvas-wasm/tests/`
+fa girare i vettori attraverso la facciata, nelle sue due vie, e
+`apps/client/src/editors/canvas/wasm/ink-vectors.test.ts` attraverso il
+`.wasm` vero, dove prova anche che ogni tratto che il nucleo dice da
+disegnare il codec TypeScript lo sa decodificare. Lo stesso test conta i
+vettori dell'inchiostro di `canvas-patches/` e `canvas-ops/`, che passano
+da `wasm/vectors.test.ts` con gli altri.

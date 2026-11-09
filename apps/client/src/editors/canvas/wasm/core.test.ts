@@ -29,6 +29,18 @@ function oneCard(text: string, bom = false, crlf = false): string {
   return bom ? `﻿${source}` : source;
 }
 
+/** Un tratto di penna libero e valido (`docs/reference/canvas-ink.md`). */
+function inkStroke(id: string) {
+  return {
+    id,
+    tool: "pen",
+    brush: "pf1 size=3 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=0 pen=ballpoint",
+    color: "#0072b2",
+    anchor: { kind: "free" },
+    ink: "1 s100 cxy 4000,2500 120,40 95,-10",
+  };
+}
+
 /** La toppa che cambia il testo della prima scheda e la sposta. */
 function retext(core: CanvasCore, text: string): CanvasPatch[] {
   const node = core.model().nodes[0]!;
@@ -152,7 +164,76 @@ describe("il nucleo della lavagna in WebAssembly", () => {
     expect(codeOf(() => core.preview(patches))).toBe("handle");
     expect(codeOf(() => core.compile([]))).toBe("handle");
     expect(codeOf(() => core.nodeAt(0))).toBe("handle");
+    expect(codeOf(() => core.inkLayers())).toBe("handle");
     expect(() => core.close()).not.toThrow();
+  });
+
+  it("inkLayers chiede i livelli al nucleo una volta per testo: dopo l'apertura, reset e commit", async () => {
+    let calls = 0;
+    const runtime = runtimeWith((exports) => {
+      const inkLayers = exports.canvas_ink_layers as (handle: number) => number;
+      return {
+        ...exports,
+        canvas_ink_layers: (handle: number) => {
+          calls++;
+          return inkLayers(handle);
+        },
+      };
+    });
+    const core = await runtime.openCore('{"nodes":[],"edges":[]}');
+    const empty = core.inkLayers();
+    expect(empty).toEqual([]);
+    expect(core.inkLayers()).toBe(empty);
+    expect(Object.isFrozen(empty)).toBe(true);
+    // Le letture che non cambiano il testo non rileggono.
+    core.model();
+    core.preview([]);
+    core.nodeAt(0);
+    expect(core.inkLayers()).toBe(empty);
+    expect(calls).toBe(1);
+    // Un commit cambia il testo: i livelli si rileggono alla prossima richiesta.
+    const committed = core.commit([{ kind: "ink", layer: "board", at: 0, before: null, after: inkStroke("s-1") }]);
+    expect(calls).toBe(1);
+    const drawn = core.inkLayers();
+    expect(drawn).toEqual([{ layer: "board", state: "ok", strokes: [{ id: "s-1", drawn: true }] }]);
+    expect(Object.isFrozen(drawn[0]!.strokes[0])).toBe(true);
+    expect(core.inkLayers()).toBe(drawn);
+    expect(calls).toBe(2);
+    core.commit(committed.inverse);
+    expect(core.inkLayers()).toEqual([]);
+    expect(calls).toBe(3);
+    // Un reset anche, e un livello estraneo lo dice il nucleo.
+    core.reset('{"nodes":[],"edges":[],"fub:ink":{"v":2}}');
+    expect(core.inkLayers()).toEqual([{ layer: "board", state: "foreign", strokes: [] }]);
+    expect(calls).toBe(4);
+    core.close();
+  });
+
+  it("una trappola dentro inkLayers uccide l'istanza; la lavagna riaperta rilegge i livelli", async () => {
+    let trapNext = false;
+    const runtime = runtimeWith((exports) => {
+      const inkLayers = exports.canvas_ink_layers as (handle: number) => number;
+      return {
+        ...exports,
+        canvas_ink_layers: (handle: number) => {
+          if (trapNext) {
+            trapNext = false;
+            throw new WebAssembly.RuntimeError("unreachable");
+          }
+          return inkLayers(handle);
+        },
+      };
+    });
+    const source = JSON.stringify({ nodes: [], edges: [], "fub:ink": { v: 1, strokes: [inkStroke("s-1")] } });
+    const core = await runtime.openCore(source);
+    trapNext = true;
+    expect(codeOf(() => core.inkLayers())).toBe("trap");
+    expect(runtime.memoryBytes()).toBeNull();
+    expect(codeOf(() => core.inkLayers())).toBe("trap");
+    core.close();
+    const reopened = await runtime.openCore(source);
+    expect(reopened.inkLayers()).toEqual([{ layer: "board", state: "ok", strokes: [{ id: "s-1", drawn: true }] }]);
+    reopened.close();
   });
 
   it("reset, nodeAt e compile", async () => {

@@ -17,6 +17,7 @@
 use std::collections::BTreeMap;
 
 use fub_canvas_core::commit::{CommitError, Core};
+use fub_canvas_core::ink::{read_layers, LayerRead, LayerState, StrokeState};
 use fub_canvas_core::model::{Canvas, CanvasError, MAX_SOURCE_BYTES};
 use fub_canvas_core::ops::{compile, CanvasOp, OpError};
 use fub_canvas_core::patch::CanvasPatch;
@@ -258,6 +259,21 @@ impl Cores {
         serde_json::to_string(&compiled).map_err(Failure::internal)
     }
 
+    /// I livelli d'inchiostro della lavagna `handle`, come li legge il
+    /// nucleo ([`read_layers`]): `{"layers": [...]}`, nella forma di
+    /// `expect` dei vettori di `canvas-ink/`. Ogni livello è
+    /// `{"layer", "state", "strokes"}`: `layer` è `"board"` o
+    /// `{"node": id}`, `state` è `"ok"` o `"foreign"` (un livello estraneo
+    /// ha `strokes` vuoto), e ogni tratto di un livello valido è
+    /// `{"id", "drawn"}` più `reason` se non si disegna.
+    pub fn ink_layers(&self, handle: Handle) -> Result<String, Failure> {
+        let layers: Vec<Value> = read_layers(self.core(handle)?.canvas())
+            .iter()
+            .map(layer_json)
+            .collect();
+        Ok(json!({ "layers": layers }).to_string())
+    }
+
     /// L'indice della scheda che contiene il byte `byte` del sorgente (BOM
     /// compreso), o `None` fuori da ogni scheda.
     pub fn node_at(&self, handle: Handle, byte: usize) -> Result<Option<usize>, Failure> {
@@ -299,6 +315,28 @@ fn text(bytes: &[u8]) -> Result<&str, Failure> {
 
 fn patches(request: &[u8]) -> Result<Vec<CanvasPatch>, Failure> {
     serde_json::from_str(text(request)?).map_err(|error| Failure::new("request", error.to_string()))
+}
+
+/// Un livello letto nella forma dei vettori di `canvas-ink/`.
+fn layer_json(read: &LayerRead) -> Value {
+    let (state, strokes) = match &read.state {
+        LayerState::Foreign(_) => ("foreign", Vec::new()),
+        LayerState::Ok { layer, strokes } => (
+            "ok",
+            layer
+                .strokes
+                .iter()
+                .zip(strokes)
+                .map(|(stroke, state)| match state {
+                    StrokeState::Drawn(_) => json!({ "id": stroke.id, "drawn": true }),
+                    StrokeState::Kept(reason) => {
+                        json!({ "id": stroke.id, "drawn": false, "reason": reason.as_str() })
+                    }
+                })
+                .collect(),
+        ),
+    };
+    json!({ "layer": read.layer, "state": state, "strokes": strokes })
 }
 
 fn model(canvas: &Canvas) -> Result<Value, Failure> {

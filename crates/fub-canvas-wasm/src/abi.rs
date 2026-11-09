@@ -252,6 +252,19 @@ pub extern "C" fn canvas_model(handle: Handle) -> i32 {
     .unwrap_or(FAILED)
 }
 
+/// I livelli d'inchiostro della lavagna `handle`, letti dal nucleo:
+/// `{"layers"}`, nella forma di `expect` dei vettori di `canvas-ink/`. Come
+/// [`canvas_model`] non prende un ingresso, quindi non ha niente da liberare
+/// né puntatori da leggere: il risultato è del modulo, come sempre.
+#[no_mangle]
+pub extern "C" fn canvas_ink_layers(handle: Handle) -> i32 {
+    with_bridge(|bridge| {
+        let outcome = bridge.cores.ink_layers(handle);
+        bridge.answer(outcome)
+    })
+    .unwrap_or(FAILED)
+}
+
 /// L'indice della scheda che contiene il byte `byte` del sorgente, -1 fuori
 /// da ogni scheda, -2 con un errore (nel risultato). Se riesce, il
 /// risultato è vuoto.

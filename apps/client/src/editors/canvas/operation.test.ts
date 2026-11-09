@@ -136,7 +136,7 @@ describe("canvas ink patches", () => {
   it("addStrokePatch mette il tratto in fondo, coi campi nell'ordine di scrittura", async () => {
     const core = await open(inkSource(["s1", "s2"]));
     const { ink, anchor, id, ...rest } = stroke("s3");
-    const patch = addStrokePatch(core.model(), { node: "n1" }, { ink, anchor, ...rest, id, "fub:x": 1 })!;
+    const patch = addStrokePatch(core.model(), core.inkLayers(), { node: "n1" }, { ink, anchor, ...rest, id, "fub:x": 1 })!;
     expect(patch).toMatchObject({ kind: "ink", layer: { node: "n1" }, at: 2, before: null });
     expect(Object.keys(patch.after!)).toEqual(["id", "tool", "brush", "color", "anchor", "ink", "fub:x"]);
     commit(core, inkSource(["s1", "s2"]), [patch]);
@@ -144,28 +144,44 @@ describe("canvas ink patches", () => {
   });
 
   it("addStrokePatch fa nascere il livello e non scrive dove non può", async () => {
-    const doc = (await open(inkSource([]))).model();
-    expect(addStrokePatch(doc, { node: "n2" }, stroke("s1"))).toMatchObject({ at: 0, before: null });
-    expect(addStrokePatch(doc, "board", stroke("s1", { kind: "free" }))).toMatchObject({ layer: "board", at: 0 });
-    expect(addStrokePatch(doc, { node: "manca" }, stroke("s1"))).toBeNull();
-    const full = (await open(inkSource(["s1"]))).model();
-    expect(addStrokePatch(full, { node: "n1" }, stroke("s1"))).toBeNull();
-    const foreign = (await open(JSON.stringify({
+    const empty = await open(inkSource([]));
+    const doc = empty.model();
+    const layers = empty.inkLayers();
+    expect(addStrokePatch(doc, layers, { node: "n2" }, stroke("s1"))).toMatchObject({ at: 0, before: null });
+    expect(addStrokePatch(doc, layers, "board", stroke("s1", { kind: "free" }))).toMatchObject({ layer: "board", at: 0 });
+    expect(addStrokePatch(doc, layers, { node: "manca" }, stroke("s1"))).toBeNull();
+    const full = await open(inkSource(["s1"]));
+    expect(addStrokePatch(full.model(), full.inkLayers(), { node: "n1" }, stroke("s1"))).toBeNull();
+    // Il livello estraneo lo dice il nucleo.
+    const foreign = await open(JSON.stringify({
       nodes: [{ id: "n1", type: "text", x: 0, y: 0, width: 10, height: 10, text: "a", "fub:ink": { v: 2, strokes: [] } }],
       edges: [],
-    }))).model();
-    expect(addStrokePatch(foreign, { node: "n1" }, stroke("s1"))).toBeNull();
-    expect(eraseStrokePatch(foreign, { node: "n1" }, "s1")).toBeNull();
+    }));
+    expect(foreign.inkLayers()).toEqual([{ layer: { node: "n1" }, state: "foreign", strokes: [] }]);
+    expect(addStrokePatch(foreign.model(), foreign.inkLayers(), { node: "n1" }, stroke("s1"))).toBeNull();
+    expect(eraseStrokePatch(foreign.model(), foreign.inkLayers(), { node: "n1" }, "s1")).toBeNull();
+  });
+
+  it("i costruttori non scrivono con un modello e livelli di due testi diversi", async () => {
+    const two = await open(inkSource(["s1", "s2"]));
+    const one = await open(inkSource(["s1"]));
+    // Il modello ha due tratti, il nucleo ne ha letti uno: niente toppa.
+    expect(addStrokePatch(two.model(), one.inkLayers(), { node: "n1" }, stroke("s3"))).toBeNull();
+    expect(eraseStrokePatch(two.model(), one.inkLayers(), { node: "n1" }, "s1")).toBeNull();
+    // Il nucleo dice che il livello non c'è, ma il modello lo ha.
+    const none = await open(inkSource([]));
+    expect(addStrokePatch(one.model(), none.inkLayers(), { node: "n1" }, stroke("s3"))).toBeNull();
   });
 
   it("eraseStrokePatch toglie il tratto dalla sua posizione e l'annulla lo rimette", async () => {
     const before = inkSource(["s1", "s2", "s3"]);
     const core = await open(before);
     const doc = core.model();
-    const patch = eraseStrokePatch(doc, { node: "n1" }, "s2")!;
+    const layers = core.inkLayers();
+    const patch = eraseStrokePatch(doc, layers, { node: "n1" }, "s2")!;
     expect(patch).toMatchObject({ kind: "ink", layer: { node: "n1" }, at: 1, after: null, before: { id: "s2" } });
-    expect(eraseStrokePatch(doc, { node: "n1" }, "manca")).toBeNull();
-    expect(eraseStrokePatch(doc, { node: "n2" }, "s2")).toBeNull();
+    expect(eraseStrokePatch(doc, layers, { node: "n1" }, "manca")).toBeNull();
+    expect(eraseStrokePatch(doc, layers, { node: "n2" }, "s2")).toBeNull();
     const committed = commit(core, before, [patch]);
     expect(strokeIds(core.model())).toEqual(["s1", "s3"]);
     expect(commit(core, committed.source, committed.inverse).source).toBe(before);
@@ -176,10 +192,11 @@ describe("canvas ink patches", () => {
     const before = inkSource(["s1", "s2", "s3", "s4"]);
     const core = await open(before);
     const doc = core.model();
-    const patches = eraseStrokePatches(doc, { node: "n1" }, ["s4", "s1", "s3"])!;
+    const layers = core.inkLayers();
+    const patches = eraseStrokePatches(doc, layers, { node: "n1" }, ["s4", "s1", "s3"])!;
     expect(patches.map((patch) => patch.at)).toEqual([3, 0, 1]);
-    expect(eraseStrokePatches(doc, { node: "n1" }, ["s1", "s1"])).toBeNull();
-    expect(eraseStrokePatches(doc, { node: "n1" }, [])).toEqual([]);
+    expect(eraseStrokePatches(doc, layers, { node: "n1" }, ["s1", "s1"])).toBeNull();
+    expect(eraseStrokePatches(doc, layers, { node: "n1" }, [])).toEqual([]);
     const committed = commit(core, before, patches);
     expect(strokeIds(core.model())).toEqual(["s2"]);
     expect(commit(core, committed.source, committed.inverse).source).toBe(before);
@@ -189,7 +206,7 @@ describe("canvas ink patches", () => {
   it("togliere tutti i tratti fa sparire la chiave, e l'annulla la rimette", async () => {
     const before = inkSource(["s1", "s2"]);
     const core = await open(before);
-    const committed = commit(core, before, eraseStrokePatches(core.model(), { node: "n1" }, ["s1", "s2"])!);
+    const committed = commit(core, before, eraseStrokePatches(core.model(), core.inkLayers(), { node: "n1" }, ["s1", "s2"])!);
     expect(Object.prototype.hasOwnProperty.call(core.model().nodes[0], "fub:ink")).toBe(false);
     expect(committed.source).not.toContain("fub:ink");
     expect(commit(core, committed.source, committed.inverse).source).toBe(before);
@@ -198,7 +215,7 @@ describe("canvas ink patches", () => {
   it("l'inversa di aggiunte e tolte nello stesso livello le disfa in ordine inverso", async () => {
     const before = inkSource(["s1", "s2", "s3"]);
     const core = await open(before);
-    const erased = eraseStrokePatch(core.model(), { node: "n1" }, "s1")!;
+    const erased = eraseStrokePatch(core.model(), core.inkLayers(), { node: "n1" }, "s1")!;
     const added = { kind: "ink" as const, layer: { node: "n1" }, at: 0, before: null, after: stroke("s4") };
     const second = { kind: "ink" as const, layer: { node: "n1" }, at: 2, before: stroke("s3"), after: null };
     const committed = commit(core, before, [erased, added, second]);
@@ -211,7 +228,7 @@ describe("canvas ink patches", () => {
   it("una toppa su una scheda tolta nel frattempo è stale e non cambia niente", async () => {
     const before = inkSource(["s1"]);
     const core = await open(before);
-    const patch = addStrokePatch(core.model(), { node: "n2" }, stroke("s9"))!;
+    const patch = addStrokePatch(core.model(), core.inkLayers(), { node: "n2" }, stroke("s9"))!;
     commit(core, before, [removeNodePatch(core.model(), "n2")!]);
     const model = JSON.stringify(core.model());
     expect(refusal(core, [patch])).toBe("stale");
@@ -221,7 +238,7 @@ describe("canvas ink patches", () => {
   it("il livello della radice passa nel modello, accanto agli altri campi della radice", async () => {
     const before = '{"nodes":[],"edges":[],"xRoot":{"a":1}}';
     const core = await open(before);
-    const patch = addStrokePatch(core.model(), "board", stroke("s1", { kind: "free" }))!;
+    const patch = addStrokePatch(core.model(), core.inkLayers(), "board", stroke("s1", { kind: "free" }))!;
     const committed = commit(core, before, [patch]);
     const doc = core.model();
     expect(doc.xRoot).toEqual({ a: 1 });
