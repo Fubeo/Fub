@@ -15,26 +15,39 @@ import type {
   SurfaceMountContext,
 } from "../core/registry";
 import { CanvasEngine, type CanvasChange, type CanvasEngineOptions } from "./engine";
+import { canvasCoreLoaded, canvasCoreReady } from "./wasm/core";
 import { t } from "../../i18n/strings";
+import { errorText } from "../../host/errors";
+import { notify } from "../../ui/notify";
+import type { SyntaxForm } from "../../host/contract";
+import type { Theme } from "../../theme/theme";
 import type { EditorChange, TextOperation } from "../core/text-operation";
 import type { VaultFontPort } from "../spatial/fonts/vault";
-import { mountPdfSurfaceLazily, mountVectorSurfaceLazily } from "../spatial/lazy";
-import { PDF_PROFILE, VECTOR_PROFILE } from "../spatial/modes";
+import { mountDrawingSurface } from "../spatial/lazy";
+import {
+  CANVAS_FAMILY,
+  CANVAS_FORMAT,
+  CANVAS_OWNER,
+  CANVAS_PROFILE,
+  CANVAS_SOURCE_PROFILE,
+  FUBANN_FORMAT,
+  PDF_PROFILE,
+  SVG_FORMAT,
+  VECTOR_PROFILE,
+} from "../core/component-surfaces";
 import type { PdfPorts } from "../spatial/pdf/surface";
 import type { Lifetime } from "../../ui/lifetime";
 
-export const CANVAS_OWNER = "fub.shell.canvas";
-export const CANVAS_FAMILY = "canvas" as const;
-export const CANVAS_PROFILE = "canvas";
-export const CANVAS_SOURCE_PROFILE = "source";
-export const CANVAS_FORMAT = "canvas";
-export const SVG_FORMAT = "svg";
-export const FUBANN_FORMAT = "fubann";
+// I descrittori stanno in un modulo leggero, che la shell legge all'avvio
+// senza caricare la lavagna.
+export { CANVAS_FAMILY, CANVAS_FORMAT, CANVAS_OWNER, CANVAS_PROFILE, CANVAS_SOURCE_PROFILE, FUBANN_FORMAT, SVG_FORMAT };
 
 export interface CanvasSurfaceCallbacks {
   /** A drawing's change is a plain text operation; a board's is a `CanvasOperation`. */
   readonly onChange: (paneId: string, change: CanvasChange | EditorChange) => void;
   readonly onSelectionChange: (paneId: string) => void;
+  /** The board's text turned out not to be a board after the core loaded: the shell shows its error surface. */
+  readonly onFail?: (paneId: string, error: unknown) => void;
   readonly onOpenWikilink?: CanvasEngineOptions["onOpenWikilink"];
   readonly onOpenPath?: CanvasEngineOptions["onOpenPath"];
   readonly onCreateNote?: CanvasEngineOptions["onCreateNote"];
@@ -122,38 +135,8 @@ export function mountCanvasSurface(
     throw new Error(`canvas surface profile ${profile} is not registered`);
   }
   context.parent.replaceChildren();
-  if (profile === VECTOR_PROFILE) {
-    // I collegamenti di un disegno sono percorsi relativi al disegno: la shell
-    // li risolve da lì, come quelli di una nota.
-    const openPath = callbacks.onOpenPath;
-    const pickLink = callbacks.onPickDrawingLink;
-    const shellCommand = callbacks.shellCommand;
-    const images = callbacks.drawingImages;
-    const pickImage = images?.pick;
-    return mountVectorSurfaceLazily(context, {
-      onChange: (change) => callbacks.onChange(context.paneId, change),
-      onSelectionChange: () => callbacks.onSelectionChange(context.paneId),
-      onOpenPath: openPath === undefined ? undefined : async (path) => {
-        await openPath(path, context.documentId);
-      },
-      onPickLink: pickLink === undefined ? undefined : (current) => pickLink(context.documentId, current),
-      // Le immagini, come i collegamenti, si risolvono dal disegno.
-      images: images === undefined ? undefined : {
-        url: (path, life) => images.url(path, context.documentId, life),
-        read: (path, limit) => images.read(path, context.documentId, limit),
-        pick: pickImage === undefined ? undefined : () => pickImage(context.documentId),
-      },
-      vaultFonts: callbacks.drawingFonts,
-      // «Esporta» apre la finestra dello Scrittoio.
-      onExport: shellCommand === undefined ? undefined : () => shellCommand("shell.doc.export"),
-    });
-  }
-  if (profile === PDF_PROFILE) {
-    return mountPdfSurfaceLazily(context, {
-      onChange: (change) => callbacks.onChange(context.paneId, change),
-      onSelectionChange: () => callbacks.onSelectionChange(context.paneId),
-      pdf: callbacks.pdf,
-    });
+  if (profile === VECTOR_PROFILE || profile === PDF_PROFILE) {
+    return mountDrawingSurface(profile, context, callbacks);
   }
   const host = document.createElement("div");
   host.className = "canvas-surface-host";
@@ -162,7 +145,9 @@ export function mountCanvasSurface(
   source.tabIndex = 0;
   source.setAttribute("role", "document");
   context.parent.append(host, source);
-  const engine = new CanvasEngine(host, {
+  // Chi ascolta il testo in sospeso delle schede: la sessione, tramite il controller.
+  const pendingWatchers = new Set<(pending: boolean) => void>();
+  const createEngine = (): CanvasEngine => new CanvasEngine(host, {
     surfaceId: context.paneId,
     formatId: context.formatId,
     revision: context.revision,
@@ -176,7 +161,76 @@ export function mountCanvasSurface(
     media: callbacks.media,
     attachments: callbacks.attachments,
     renderMarkdownForCard: callbacks.renderMarkdownForCard,
+    onPendingChange: (pending) => {
+      for (const watcher of [...pendingWatchers]) watcher(pending);
+    },
   });
+  // La tela usa il nucleo, che si carica alla prima lavagna aperta e poi
+  // resta. Finché non c'è la superficie tiene ciò che la shell le dice, e lo
+  // consegna alla tela appena montata, nello stesso ordine.
+  let engine: CanvasEngine | null = canvasCoreLoaded() ? createEngine() : null;
+  let destroyed = false;
+  let failed = false;
+  let held: string | null = null;
+  let heldReadOnly = false;
+  let heldTheme: Theme | null = null;
+  let heldForms: readonly SyntaxForm[] | null = null;
+  let heldReveal: number | null = null;
+  const settle = (): void => {
+    if (destroyed || engine) return;
+    host.removeAttribute("aria-busy");
+    const focused = host === document.activeElement;
+    host.removeAttribute("tabindex");
+    const mounted = createEngine();
+    engine = mounted;
+    try {
+      if (held !== null) mounted.setDoc(held);
+    } catch (error) {
+      broken(error);
+      return;
+    }
+    if (heldReadOnly) mounted.setReadOnly(true);
+    if (heldTheme) mounted.setTheme(heldTheme);
+    if (heldForms) mounted.setSyntaxForms(heldForms);
+    if (focused && mode === "canvas") mounted.focus();
+    if (heldReveal !== null && !mounted.revealSource(heldReveal)) {
+      notify(t("document.reveal_unavailable", { doc: docTitle(context.documentId) }), "info");
+    }
+    heldReveal = null;
+  };
+  // Il testo tenuto durante il caricamento non è una lavagna: lo stesso esito
+  // di un `setDoc` che lancia, la superficie d'errore della shell. Il motore
+  // fatto a metà se ne va prima; senza chi ascolta resta l'avviso.
+  const broken = (error: unknown): void => {
+    if (destroyed) return;
+    engine?.destroy();
+    engine = null;
+    if (callbacks.onFail) callbacks.onFail(context.paneId, error);
+    else fail(error);
+  };
+  const fail = (error: unknown): void => {
+    if (destroyed) return;
+    engine?.destroy();
+    engine = null;
+    // Il testo resta della sessione: la vista Sorgente lo mostra comunque.
+    host.removeAttribute("aria-busy");
+    const notice = document.createElement("div");
+    notice.className = "vector-notice";
+    const text = document.createElement("p");
+    text.className = "vector-notice-text";
+    text.textContent = t("canvas.core_unavailable");
+    notice.append(text);
+    host.replaceChildren(notice);
+    failed = true;
+    source.hidden = false;
+    notify(errorText(error), "guasto");
+  };
+  if (!engine) {
+    host.setAttribute("aria-busy", "true");
+    // Raggiungibile col fuoco come il resto del riquadro, anche prima.
+    host.tabIndex = -1;
+    void canvasCoreReady().then(settle, fail);
+  }
   let mode: "canvas" | "source" = profile === CANVAS_SOURCE_PROFILE ? "source" : "canvas";
   const modes = [
     { id: "canvas", label: () => t("mode.canvas"), presentation: "surface" as const, contextMode: "live_preview" as const, looks: ["tema"] as const },
@@ -194,36 +248,80 @@ export function mountCanvasSurface(
       mode = next;
       context.parent.dataset.surfaceMode = next;
       host.hidden = next === "source";
-      source.hidden = next !== "source";
+      // Senza tela il testo resta in vista.
+      source.hidden = next !== "source" && !failed;
     },
     buffer: {
       setDoc: (text: string): void => {
         source.textContent = canvasSourceFallback(text);
-        engine.setDoc(text);
+        if (engine) return engine.setDoc(text);
+        // Mentre il nucleo si carica il testo si tiene: se non è una lavagna,
+        // `settle` lo dice alla shell (`onFail`), che mostra la superficie
+        // d'errore come per un `setDoc` che lancia.
+        held = text;
       },
       syncDoc: (update: { readonly text: string; readonly operation: TextOperation | null } | string): void => {
-        engine.syncDoc(update);
-        source.textContent = canvasSourceFallback(typeof update === "string" ? update : update.text);
+        const text = typeof update === "string" ? update : update.text;
+        if (engine) engine.syncDoc(update);
+        else held = text;
+        source.textContent = canvasSourceFallback(text);
       },
-      getDoc: (): string => engine.getDoc(),
+      getDoc: (): string => engine?.getDoc() ?? held ?? "",
+      pendingText: (): string | null => engine?.pendingText() ?? null,
+      commitPending: (): void => engine?.commitPending(),
+      watchPending: (listener: (pending: boolean) => void): (() => void) => {
+        pendingWatchers.add(listener);
+        return () => pendingWatchers.delete(listener);
+      },
     },
-    focus: (): void => mode === "source" ? source.focus() : engine.focus(),
+    focus: (): void => {
+      if (mode === "source") source.focus();
+      else if (engine) engine.focus();
+      else host.focus({ preventScroll: true });
+    },
     // Un punto del modello è dentro una carta: la tela la seleziona e la
     // inquadra. Il sorgente grezzo non ha un cursore da portarci.
-    reveal: ({ span }) => mode === "canvas" && engine.revealSource(span.start),
+    reveal: ({ span }) => {
+      if (mode !== "canvas") return false;
+      if (engine) return engine.revealSource(span.start);
+      if (destroyed || host.getAttribute("aria-busy") !== "true") return false;
+      heldReveal = span.start;
+      return true;
+    },
     // Le carte scelte, col loro testo; il sorgente grezzo non seleziona niente.
-    selectedText: () => mode === "canvas" ? engine.selectedText() : null,
-    contextMenu: (at) => mode === "canvas" ? engine.contextMenu(at) : null,
+    selectedText: () => mode === "canvas" ? engine?.selectedText() ?? null : null,
+    contextMenu: (at) => mode === "canvas" ? engine?.contextMenu(at) ?? null : null,
     // La stampa la disegna il provider del canvas (`render_html`).
     printable: true,
-    setReadOnly: (readOnly: boolean): void => engine.setReadOnly(readOnly),
-    setTheme: (theme): void => engine.setTheme(theme),
+    setReadOnly: (readOnly: boolean): void => {
+      heldReadOnly = readOnly;
+      engine?.setReadOnly(readOnly);
+    },
+    setTheme: (theme): void => {
+      heldTheme = theme;
+      engine?.setTheme(theme);
+    },
     // Le card di testo sono Markdown: le sintassi sono quelle del vault.
-    setSyntaxForms: (forms): void => engine.setSyntaxForms(forms),
-    destroy: (): void => engine.destroy(),
+    setSyntaxForms: (forms): void => {
+      heldForms = forms;
+      engine?.setSyntaxForms(forms);
+    },
+    destroy: (): void => {
+      destroyed = true;
+      engine?.destroy();
+      engine = null;
+      pendingWatchers.clear();
+    },
   };
   surface.setMode(mode);
   return surface;
+}
+
+/** Il nome con cui la shell chiama il documento negli avvisi: il file senza estensione. */
+function docTitle(id: string): string {
+  const base = id.split("/").pop() || id;
+  const point = base.lastIndexOf(".");
+  return point > 0 ? base.slice(0, point) : base;
 }
 
 /** Fallback sorgente: testo grezzo quando la vista canvas non è disponibile. */

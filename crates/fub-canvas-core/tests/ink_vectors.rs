@@ -1,11 +1,12 @@
 //! I vettori dell'inchiostro della lavagna, scritti a mano
 //! (`apps/client/src/__fixtures__/canvas-ink/`): la stessa cartella che
-//! `apps/client/src/editors/canvas/ink-vectors.test.ts` fa girare contro
-//! `readInkLayers`. Ogni vettore dà il testo di una `.canvas` e i livelli che
-//! se ne leggono: dove stanno, se sono validi o estranei e, per i validi, quali
-//! tratti si disegnano e la ragione di quelli che no. Così Rust e TypeScript
-//! leggono l'inchiostro allo stesso modo (`docs/reference/canvas-ink.md`). Un
-//! vettore che non passa si corregge nel lettore, non nel vettore.
+//! `crates/fub-canvas-wasm/tests/` e
+//! `apps/client/src/editors/canvas/wasm/ink-vectors.test.ts` fanno girare
+//! attraverso la facciata WebAssembly (`ink_layers`). Ogni vettore dà il testo
+//! di una `.canvas` e i livelli che se ne leggono: dove stanno, se sono validi
+//! o estranei e, per i validi, quali tratti si disegnano e la ragione di
+//! quelli che no (`docs/reference/canvas-ink.md`). Un vettore che non passa si
+//! corregge nel lettore, non nel vettore.
 //!
 //! Su ogni vettore si prova anche il giro: i livelli validi riscritti dal
 //! modello danno lo stesso valore, e lo stesso sorgente byte per byte.

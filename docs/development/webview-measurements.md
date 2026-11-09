@@ -1,7 +1,7 @@
 # Misure nella WebView
 
 Questa guida dice come misurare i tempi di Fub nella WebView vera, con la
-sonda delle prestazioni e i sette scenari del banco WebView.
+sonda delle prestazioni e gli scenari del banco WebView.
 
 > **Per chi:** chi cambia l'editor, il passaggio fra le note, la lavagna, il
 > grafo, l'inchiostro o l'avvio, e chi prepara una versione.
@@ -39,9 +39,12 @@ ascolta niente e non chiede fotogrammi.
 | S5 | tratto di penna di 3 s su un disegno di 2.000 tracciati | massimo fra fotogrammi |
 | S6 | avvio a freddo fino alla prima nota | ms |
 | S7 | Blocchi su una nota di 2.000 righe: un blocco trascinato su e giù per 3 s, poi dieci trasformazioni da paragrafo a titolo e ritorno | p95 e massimo fra fotogrammi |
+| S8 | la penna sulla lavagna: dieci tratti da 300 ms sopra una scheda con una tabella di 100 × 100 celle, su una lavagna con un foglio `.xlsx` di 100 × 100 celle e 2.000 tratti già scritti; poi la scheda della tabella spostata coi suoi tratti per 2 s | massimo fra fotogrammi a penna (obiettivo 33 ms) e allo spostamento; path asciutti; sha256 del `.xlsx` prima e dopo |
 | R1 | la memoria: l'app vuota, aprendo un file per modalità (nota, lavagna, disegno, documento Word, foglio Excel, PDF, immagine), dopo «chiudi tutto» e un minuto dopo | PSS in MiB, in tutto e per processo (app, WebView), soltanto Linux |
 | T1 | le tessere: un fotogramma di 2880 × 1800 RGBA letto a tessere di 256 × 256 dalla IPC (`resource_read_chunk`) e da `fub-asset:` con `Range`, poi disegnato su una tela, una tessera e un fotogramma intero per fotogramma | p95 per tessera, mediana per fotogramma, ms |
 | I1 | il vault durante l'indicizzazione dell'avvio (10.000 note): una nota aperta con `read_document` e una tessera letta dalla IPC, una dopo l'altra, finché `vault_status` non dice che l'indice è pronto | p95 per nota e per tessera, ms |
+| L1 | il nucleo della lavagna in WebAssembly: il modulo degli asset compilato con la CSP dell'app, poi venti aperture e duecento spostamenti di una scheda su una lavagna di 50 e una di 2.000 schede | istanza; prima apertura, primo commit e p95, ms |
+| C1 | i profili dei componenti: «Solo note» e poi «Tutto» applicati con `components_apply`, l'app riavviata sulla nota lunga, poi un'altra nota aperta | avvio a freddo in ms, chunk scaricati all'avvio, chunk dei componenti spegnibili arrivati (zero in tutti e due i profili) |
 
 R1 legge `/proc/<pid>/smaps_rollup` dei processi che discendono dal driver,
 tolti i driver (`memory.mjs`): la PSS divide le pagine condivise fra chi le
@@ -91,6 +94,17 @@ avvio sul vault del banco indicizza le diecimila note, e i comandi che passano
 dal workspace non devono aspettare la fine di una fetta. Lo scenario fallisce
 se l'indice era già pronto all'avvio, perché allora non ha misurato niente.
 
+C1 controlla che il codice dei componenti spegnibili non arrivi nella WebView
+prima che serva. Il build scrive in `dist/switchable-chunks.json` i chunk che
+contengono un pezzo del PDF, della lavagna, dei disegni, dei documenti o dei
+fogli, con i moduli che ce lo portano; con «Solo note» e con «Tutto» nessuno
+di questi deve comparire fra gli script scaricati, all'avvio o aprendo una
+nota (`C1.<profilo>.spegnibili`, soglia 0): arrivano quando si apre un loro
+file, e soltanto se il componente è acceso. Senza quel file, cioè senza
+`npm run build` prima dell'app, lo scenario fallisce. Il referto elenca i
+chunk di ogni profilo e, per uno spegnibile arrivato, i moduli che lo hanno
+portato. C1 gira per ultimo e lascia il vault del banco a «Tutto».
+
 Ogni scenario è un avvio dell'app. L'avvio indicizza il vault da capo, e la
 shell risponde prima che abbia finito: tranne S6, gli scenari partono quando
 `vault_status` non dice più `running`, perché misurano un vault pronto.
@@ -103,6 +117,44 @@ si tocca. Gli obiettivi e le soglie stanno in
 
 S5 chiede la feature `draw` dell'app: senza, un `.svg` si apre come immagine
 e il referto scrive lo scenario come saltato, senza numero.
+
+S8 apre `S8/Lezione.canvas`: la scheda `tabella` (testo con la tabella
+Markdown), la scheda `voti` (il file `S8/voti.xlsx`) e i 2.000 tratti
+`fub:ink`, metà sulla tabella, un quarto sul foglio e un quarto liberi,
+scritti dal codificatore della §5 di [scene-format](../reference/scene-format.md#5-tratti-a-mano-libera)
+dentro `fixtures.mjs`. Aspetta che i tratti asciutti siano disegnati (al più
+30 s), poi manda dieci tratti di penna sopra la tabella. Se la penna non
+scrive (la sonda non vede eventi `pen`, o i path asciutti non crescono),
+rifà i dieci tratti col mouse e D tenuto, e il referto lo dice (`input`).
+WebKitWebDriver sotto Xvfb manda il `pointerdown` della penna e poi niente:
+il tratto rimasto giù terrebbe la lavagna («un tratto alla volta»), quindi
+prima del mouse lo scenario manda alla finestra un `blur`, che lo annulla,
+fuori dalla misura. Per ogni tratto il referto dà i path asciutti
+(`written`) e, per i fotogrammi oltre 33 ms, l'ultimo evento del puntatore
+prima di ognuno (`phases`): il movimento, il rilascio o nessuno. Lo
+spostamento parte dalla testata della scheda, va avanti e indietro e la
+posa 60 px più in basso. Il referto dà `S8.penFrameGap.max` (l'obiettivo
+di N4, 33 ms, solo fra i `targets`), `S8.moveFrameGap.max` senza tetto, i
+path asciutti prima e dopo (`S8.dryPaths.*`) e lo sha256 di `voti.xlsx`
+letto dal disco prima della penna e 3 s dopo lo spostamento: il foglio non
+deve cambiare. Dice anche se la scheda del foglio è viva
+(`[data-card-kind=sheet][data-card-mode=live]`) o un segnaposto: finché è un
+segnaposto la misura è sul caso simile, la tabella di testo (D-7 (c) del
+piano N4); quando la scheda sarà viva, lo stesso scenario sugli stessi dati
+misura il foglio vero.
+
+L1 vive in `canvas.mjs` e segue il patto del
+[modulo](../reference/canvas-operations.md#webassembly) come il caricatore
+della shell: l'**istanza** è compilare e istanziare il modulo dai suoi byte,
+l'**open** va dal testo della lavagna al modello letto, il **commit** dalle
+toppe di uno spostamento al tratto cambiato e alle toppe dell'annulla letti.
+Ogni commit rimette la scheda dov'era con l'annulla del precedente, e alla
+fine il testo deve tornare uguale a quello di partenza. Il nome del modulo,
+con l'hash, viene da `apps/client/dist/assets/`: `dist/` deve essere la build
+che l'app di release ha dentro (`--dist=` ne sceglie un'altra). Una CSP che
+non lascia compilare il modulo fa fallire lo scenario, con l'errore e le
+violazioni che la pagina ha visto. La stessa misura gira in Node, senza app:
+`node bench/webview/canvas.mjs` da `apps/client/`, dopo `npm run build`.
 
 ## Linux, con un comando solo
 
@@ -143,7 +195,7 @@ in più vanno a `run.mjs`, per esempio `--only=R1,T1`.
 Il referto va in `apps/client/bench/.output/webview/referto.json`. Il comando
 esce con 1 se un valore supera la soglia scelta.
 
-Il job `webview` della CI fa lo stesso con S1–S3, S7, R1, T1 e I1, sotto Xvfb e
+Il job `webview` della CI fa lo stesso con S1–S3, S7, R1, T1, I1, L1 e C1, sotto Xvfb e
 senza scheda grafica, e carica il referto come artifact `webview-<sha>`.
 
 ## macOS

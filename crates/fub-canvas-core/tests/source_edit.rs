@@ -1,6 +1,5 @@
-//! Il ritocco del sorgente (`source::patch_source`, `source::node_at`): i casi
-//! di `apps/client/src/editors/canvas/source-edit.test.ts` e
-//! `line-endings.test.ts`, più i casi limite del task T5 del piano N3. I testi
+//! Il ritocco del sorgente (`source::patch_source`, `source::node_at`): lo
+//! scanner, i terminatori di riga e il BOM, più i casi limite. I testi
 //! attesi sono scritti a mano; per ognuno il testo di dopo, riletto con
 //! `parse`, dà il modello di dopo (`patched`).
 
@@ -47,7 +46,7 @@ fn text_node(id: &str, x: i64, y: i64, width: i64, height: i64, text: &str) -> C
     )
 }
 
-// --- source-edit.test.ts ---------------------------------------------------
+// --- Lo scanner e le schede -----------------------------------------------
 
 #[test]
 fn node_at_finds_the_card_whose_source_object_holds_the_offset() {
@@ -185,8 +184,10 @@ fn a_blank_board_with_bom_and_crlf_keeps_them_when_filled() {
     );
 }
 
+/// R7 e R11: il `null` di un campo noto resta dov'è quando la sua scheda
+/// cambia, e anche in quella che non cambia.
 #[test]
-fn the_null_of_a_known_field_goes_when_its_card_is_rewritten_and_stays_elsewhere() {
+fn the_null_of_a_known_field_stays_when_its_card_changes() {
     let a = CARD.replace('}', r#","color":null}"#);
     let b = CARD
         .replace(r#""a""#, r#""b""#)
@@ -194,12 +195,94 @@ fn the_null_of_a_known_field_goes_when_its_card_is_rewritten_and_stays_elsewhere
     let source = format!(r#"{{"nodes":[{a},{b}],"edges":null}}"#);
     let expected = format!(
         r#"{{"nodes":[{},{b}],"edges":null}}"#,
-        CARD.replace(r#""x":0"#, r#""x":5"#)
+        a.replace(r#""x":0"#, r#""x":5"#)
     );
     check(&source, |c| c.nodes[0].x = 5, &expected);
 }
 
-// --- line-endings.test.ts --------------------------------------------------
+/// Una scheda che si ricompone (perde un campo) tiene i suoi `null` al loro
+/// posto, con il separatore che aveva.
+#[test]
+fn the_null_stays_in_a_card_that_is_recomposed() {
+    let source = r#"{"nodes":[{"id":"a", "type":"file", "x":0, "y":0, "width":10, "height":10, "color":null, "file":"a.md", "subpath":null, "label":"via", "background":null}]}"#;
+    check(
+        source,
+        |c| c.nodes[0].label = None,
+        r#"{"nodes":[{"id":"a", "type":"file", "x":0, "y":0, "width":10, "height":10, "color":null, "file":"a.md", "subpath":null, "background":null}]}"#,
+    );
+}
+
+/// Un `null` che prende un valore lo prende al suo posto, non in fondo.
+#[test]
+fn a_null_that_takes_a_value_takes_it_in_place() {
+    let source = CARD.replace(r#""x":0"#, r#""color":null,"x":0"#);
+    let source = format!(r#"{{"nodes":[{source}]}}"#);
+    check(
+        &source,
+        |c| c.nodes[0].color = Some(fub_canvas_core::CanvasColor::Hex("#ff0000".into())),
+        &source.replace(r#""color":null"#, r##""color":"#ff0000""##),
+    );
+}
+
+/// Un `null` di un campo che il tipo della scheda non usa (`url` su una
+/// scheda di testo) resta come gli altri.
+#[test]
+fn the_null_of_a_field_the_type_does_not_use_stays() {
+    let source = format!(
+        r#"{{"nodes":[{}]}}"#,
+        CARD.replace('}', r#","url":null,"xFuture":1}"#)
+    );
+    check(
+        &source,
+        |c| {
+            c.nodes[0].extra.remove("xFuture");
+        },
+        &format!(r#"{{"nodes":[{}]}}"#, CARD.replace('}', r#","url":null}"#)),
+    );
+}
+
+/// Un campo noto che c'era e che Fub toglie va via, anche accanto a un
+/// `null` che resta.
+#[test]
+fn a_removed_field_goes_and_the_null_beside_it_stays() {
+    let source = format!(
+        r#"{{"nodes":[{}]}}"#,
+        CARD.replace('}', r#","color":"2","label":null}"#)
+    );
+    check(
+        &source,
+        |c| c.nodes[0].color = None,
+        &format!(
+            r#"{{"nodes":[{}]}}"#,
+            CARD.replace('}', r#","label":null}"#)
+        ),
+    );
+}
+
+/// Il `null` di un arco resta come quello di una scheda.
+#[test]
+fn the_null_of_an_edge_field_stays() {
+    let source = format!(
+        r#"{{"nodes":[{A},{B}],"edges":[{{"id":"e","fromNode":"a","fromSide":null,"toNode":"b","label":null}}]}}"#
+    );
+    check(
+        &source,
+        |c| c.edges[0].to_node = "a".into(),
+        &source.replace(r#""toNode":"b""#, r#""toNode":"a""#),
+    );
+}
+
+/// Un `null` su un campo obbligatorio resta un errore di lettura (R7).
+#[test]
+fn a_null_on_a_required_field_does_not_read() {
+    assert!(parse(&format!(
+        r#"{{"nodes":[{}]}}"#,
+        CARD.replace(r#""x":0"#, r#""x":null"#)
+    ))
+    .is_err());
+}
+
+// --- Terminatori di riga e BOM --------------------------------------------
 
 const LF: &str = "{\n  \"nodes\": [\n    {\"id\":\"a\",\"type\":\"text\",\"x\":0,\"y\":0,\"width\":200,\"height\":100,\"text\":\"uno\"},\n    {\"id\":\"b\",\"type\":\"text\",\"x\":300,\"y\":0,\"width\":200,\"height\":100,\"text\":\"due\"}\n  ],\n  \"edges\": [\n    {\"id\":\"e\",\"fromNode\":\"a\",\"toNode\":\"b\"}\n  ]\n}\n";
 
@@ -303,7 +386,7 @@ fn crlf_and_bom_boards_keep_endings_and_bom_and_undo_returns_to_the_model_before
     }
 }
 
-// --- I casi limite di T5 ---------------------------------------------------
+// --- I casi limite ---------------------------------------------------------
 
 #[test]
 fn a_one_line_file_keeps_its_comma_separator() {
@@ -362,8 +445,8 @@ fn reordered_cards_keep_their_own_text() {
     check(
         &source,
         |c| c.nodes.swap(0, 1),
-        // La radice riceve `edges`, che il modello ha sempre: va in fondo.
-        &format!("{{\n  \"nodes\": [\n    {B},\n    {A}\n  ],\"edges\":[]}}"),
+        // `edges` resta assente: è vuoto (R11).
+        &format!("{{\n  \"nodes\": [\n    {B},\n    {A}\n  ]}}"),
     );
 }
 
@@ -379,11 +462,54 @@ fn nodes_absent_then_a_new_card() {
         |c| c.nodes.push(text_node("c", 0, 300, 100, 50, "tre")),
         &format!("{{\n  \"edges\": [],\"nodes\":[{C}]\n}}"),
     );
-    // `"nodes": null` vale assente (R7): il valore si scrive per intero.
+    // `"nodes": null` vale assente (R7): il valore va al posto del `null`, e
+    // `edges`, vuoto, non arriva.
     check(
         r#"{"nodes": null}"#,
         |c| c.nodes.push(text_node("c", 0, 300, 100, 50, "tre")),
-        &format!(r#"{{"nodes": [{C}],"edges":[]}}"#),
+        &format!(r#"{{"nodes": [{C}]}}"#),
+    );
+}
+
+/// `edges` assente resta assente quando una scheda arriva e va via; con il
+/// primo arco arriva in fondo alla radice.
+#[test]
+fn edges_absent_stays_absent_until_the_first_edge() {
+    let source = format!("{{\r\n\t\"nodes\": [{A}],\r\n\t\"xFuture\": 1\r\n}}");
+    let (_, with_b) = check(
+        &source,
+        |c| c.nodes.push(text_node("b", 300, 0, 200, 100, "due")),
+        &format!("{{\r\n\t\"nodes\": [{A},{B}],\r\n\t\"xFuture\": 1\r\n}}"),
+    );
+    let written = patched(&source, &parse(&source).unwrap(), &with_b);
+    let mut without_b = with_b.clone();
+    without_b.nodes.pop();
+    assert_eq!(patched(&written, &with_b, &without_b), source);
+    let mut without_a = parse(&source).unwrap();
+    without_a.nodes.clear();
+    assert_eq!(
+        patched(&source, &parse(&source).unwrap(), &without_a),
+        "{\r\n\t\"nodes\": [],\r\n\t\"xFuture\": 1\r\n}"
+    );
+    let mut connected = with_b.clone();
+    connected.edges.push(edge(E));
+    assert_eq!(
+        patched(&written, &with_b, &connected),
+        format!("{{\r\n\t\"nodes\": [{A},{B}],\r\n\t\"xFuture\": 1,\r\n\t\"edges\":[{E}]\r\n}}")
+    );
+}
+
+/// Una radice senza `nodes` né `edges` che cambia solo per un campo
+/// sconosciuto non li riceve.
+#[test]
+fn an_empty_root_does_not_get_nodes_or_edges() {
+    let source = "\u{feff}{\"xFuture\":1}";
+    check(
+        source,
+        |c| {
+            c.extra.insert("xFuture".into(), json!(2));
+        },
+        "\u{feff}{\"xFuture\":2}",
     );
 }
 
@@ -532,7 +658,7 @@ fn a_model_that_does_not_match_the_source_is_still_written_right() {
     assert_eq!(
         written,
         format!(
-            r#"{{"nodes":[{A},{}],"edges":[]}}"#,
+            r#"{{"nodes":[{A},{}]}}"#,
             B.replace(r#""x":300"#, r#""x":1"#)
         )
     );

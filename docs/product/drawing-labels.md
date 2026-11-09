@@ -73,7 +73,7 @@ Un'etichetta scelta da sola si elimina come ogni oggetto, e il gruppo resta.
 - **In Lettura** l'etichetta è un testo, e la forma ha lo stesso nome che
   nell'albero ([Disegni, accessibilità](drawing-accessibility.md)).
 - **Nell'export** un altro programma vede un gruppo con una forma e un testo,
-  dove FubDraw lo mostra. L'SVG pulito toglie gli attributi di FubDraw, e nel
+  dove Fub lo mostra. L'SVG pulito toglie gli attributi di Fub, e nel
   PDF il testo resta testo ([Disegni, esportare](drawing-export.md)).
 
 Il banco di fedeltà (`apps/client/bench/fidelity.mjs`) confronta il foglio,
@@ -95,7 +95,7 @@ stesso gruppo della forma. `fub:wrap` è la larghezza in cui va a capo, e il
 </g>
 ```
 
-Un altro programma vede il testo dove lo mostra FubDraw, e non lo rimette al
+Un altro programma vede il testo dove lo mostra Fub, e non lo rimette al
 centro quando la forma cambia. Chi è l'etichetta di chi, il riquadro del
 testo e il seguire sono in [Formato della scena,
 etichette](../reference/scene-format-labels.md).

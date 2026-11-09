@@ -8,6 +8,7 @@ import { mountMermaidBlocks } from "../../../../ui/mermaid";
 import type { DiagramLight } from "../../../../ui/mermaid-styles";
 import { mountMathBlocks } from "./math";
 import { claimQueryBlocks, fillQueryBlock } from "./query-block";
+import { craftPlaceholder, showEmbeddedCraft } from "../../../craft/figure";
 import { hydrateVaultMedia, scenePlaceholder, showEmbeddedDrawing, showRemoteImages, vaultImageSource } from "./media";
 import { openLightbox } from "../../../../ui/lightbox";
 import { mediaKindOfId, mimeOfId } from "../../../media/media-types";
@@ -30,6 +31,12 @@ export interface MarkdownMountOptions {
   readonly resources?: MarkdownResources;
   readonly openWikilink?: (page: string, heading?: string, block?: string) => void | Promise<void>;
   readonly openPath?: (path: string, from?: string) => void | Promise<void>;
+  /**
+   * Opens the document a figure shows (a Craft file, a PDF) with the gesture.
+   * Unlike `openWikilink` it never creates a note: a file that is gone is a
+   * failure the figure reports. Without it a figure opens nothing (print).
+   */
+  readonly openFigure?: (doc: string) => void | Promise<void>;
   readonly navigateFragment?: (id: string) => boolean;
   readonly searchTag?: (tag: string) => void;
   /** UTF-16 offset of the task symbol in the current, LF-normalized buffer. */
@@ -476,6 +483,15 @@ async function hydrateEmbeds(
       await showEmbeddedDrawing(container, slot, drawing, life);
       return;
     }
+    // Un file Craft (`![[logo.vectorcraft]]`) torna come il segnaposto del
+    // suo formato: diventa la sua anteprima, e un clic lo apre nella sua
+    // scheda. L'app non parte mai da una nota.
+    const craft = craftPlaceholder(content.html);
+    if (craft && craft.doc === content.doc_id) {
+      const open = opener(options, life);
+      await showEmbeddedCraft(container, slot, craft, life, open ? { open } : {});
+      return;
+    }
     // Embedded offsets never mutate the containing note.
     const embeddedOptions: MarkdownMountOptions = {
       ...options,
@@ -493,9 +509,21 @@ async function hydrateEmbeds(
     container.dispatchEvent(new Event("markdown-resize", { bubbles: true }));
     await Promise.all([
       hydrateEmbeds(slot, new Set([...chain, identity]), memo, expected, embeddedOptions, life),
-      hydrateVaultMedia(slot, content.doc_id, expected, life),
+      hydrateVaultMedia(slot, content.doc_id, expected, life, undefined, opener(embeddedOptions, life)),
     ]);
   }));
+}
+
+/// Apre la scheda di un documento dal clic su una figura (un file Craft, un
+/// PDF), e dice da sé se non ci riesce; `undefined` dove la nota non apre
+/// niente (la stampa). Non passa da `openWikilink`: un bersaglio che non
+/// risolve là crea una nota, e un clic su una figura non scrive nel vault.
+function opener(options: MarkdownMountOptions, life: Lifetime): ((doc: string) => Promise<void>) | undefined {
+  const openFigure = options.openFigure;
+  if (!openFigure) return undefined;
+  return (doc) => Promise.resolve().then(() => openFigure(doc)).catch((error: unknown) => {
+    if (!life.closed) notify(t("preview.open_failed", { page: doc, reason: errorText(error) }), "guasto");
+  });
 }
 
 /** Shared Live/Reading mount: sanitization precedes every component and fetch. */
@@ -572,7 +600,7 @@ export function mountMarkdown(
         ...(documentId && (hasEmbeds || hasImages)
           ? [
             hydrateEmbeds(container, new Set([JSON.stringify([documentId, null, null])]), new Map(), expected, options, mountedLife),
-            hydrateVaultMedia(container, documentId, expected, mountedLife),
+            hydrateVaultMedia(container, documentId, expected, mountedLife, undefined, opener(options, mountedLife)),
           ]
           : []),
         ...queries.map(({ block, query }) => fillQueryBlock(block, query, expected, mountedLife)),

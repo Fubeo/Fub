@@ -18,6 +18,7 @@
 | gli eventi e i lotti | `crates/fub-abi/src/event.rs` |
 | la famiglia `grid` a byte e il giornale | `crates/fub-abi/src/grid_bytes.rs` |
 | il confine IPC e i suoi tipi | `docs/reference/ipc-contract.md` e `apps/client/src/host/contract.ts` |
+| le porte della pagina Componenti | `docs/reference/components-contract.md` |
 | il contratto WASM | `crates/fub-abi/wit/fub/abi.wit` (`fub:abi@0.2.0`) |
 | il formato scena dei disegni | `docs/reference/scene-format.md` |
 | le annotazioni PDF (`.fubann`) | `docs/reference/annotation-format.md` |
@@ -42,6 +43,7 @@
 | `SettingSpec` e i livelli delle impostazioni | `crates/fub-abi/src/settings.rs` |
 | `perf.probe` (la sonda N0) | `crates/fub-host/src/settings.rs`, montata da `apps/client/src/perf/` |
 | `draw.workspace` (Semplice o Completo) | le impostazioni della feature `draw`, `crates/fub-features/src/draw.rs` |
+| `canvas.ink_mouse_remember`, `canvas.finger_moves_card` | le impostazioni della feature `lavagna`, `crates/fub-features/src/lavagna.rs`; le legge `apps/client/src/editors/canvas/preferences.ts` |
 | il registro dei comandi del vault | `crates/fub-features/src/commands.rs` (dogfood del `CommandProvider`) |
 | il catalogo dei comandi dei fogli | `crates/fub-abi/src/grid_bytes.rs`, servito in `crates/fub-format-xlsx` |
 | il lessico dei menu | `apps/client/src/i18n/lexicon.ts` |
@@ -55,6 +57,7 @@
 | `MemoryHost` (provare un provider) | `crates/fub-sdk/src/testing/mod.rs` |
 | i template dei disegni | `crates/fub-features/templates/` |
 | le scene del banco visivo | `apps/client/bench/scene.mjs` |
+| la cornice del telefono e la soglia dei 600 px | `apps/client/src/shells/scrittoio/mobile/` e `docs/architecture/phone-frame.md` |
 | i budget della CI della WebView | `apps/client/bench/webview/budgets.json` |
 | le misure prese | `docs/misure/` |
 

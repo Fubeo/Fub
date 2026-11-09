@@ -84,11 +84,10 @@ una decisione: si scrive qui e poi nel test.
 ## Lettura
 
 `parse` rifiuta un sorgente oltre `MAX_SOURCE_BYTES`, salta un BOM iniziale
-senza toglierlo dal file e passa il modello a `Canvas::validate`. Rust e
-TypeScript (`parseCanvas` in `apps/client/src/editors/canvas/model.ts`)
-leggono con le stesse regole, così aprono e rifiutano gli stessi file; ogni
-regola ha i suoi casi in `crates/fub-canvas-core/tests/read_rules.rs`. Nel
-dubbio si apre e si conserva.
+senza toglierlo dal file e passa il modello a `Canvas::validate`. La tela
+legge con lo stesso codice, compilato in WebAssembly (vedi «Parità»); ogni
+regola ha i suoi casi in `crates/fub-canvas-core/tests/read_rules.rs` e nei
+vettori della lettura. Nel dubbio si apre e si conserva.
 
 - **R1 · Vuoto.** Un BOM facoltativo, poi solo spazi JSON (spazio, `\t`,
   `\n`, `\r`): una lavagna vuota (`read::is_blank`). `"\u{feff}"` da solo è
@@ -101,7 +100,20 @@ dubbio si apre e si conserva.
 - **R3 · Chiavi doppie.** Una chiave nota doppia sulla radice, in una scheda o
   in un arco è un errore: `{"nodes":[],"nodes":[]}`. Una chiave sconosciuta
   doppia tiene l'ultimo valore nella posizione della prima, come
-  `JSON.parse`: `"k":1,"z":2,"k":3` dà `k` = 3, poi `z`.
+  `JSON.parse`: `"k":1,"z":2,"k":3` dà `k` = 3, poi `z`. Una lavagna così
+  si apre ma non si riscrive (lo scanner di «Scrittura» la rifiuta, perché
+  riscriverla perderebbe uno dei due valori): a ogni `setDoc` e a ogni
+  `syncDoc` con un testo nuovo la tela chiede al nucleo un'anteprima senza
+  toppe (`Core::preview`), e se risponde `rejected` resta da guardare. I
+  gesti che cambiano sono spenti, un campo aperto si chiude come per la sola
+  lettura del pannello, e l'avviso all'inizio della barra
+  (`canvas-intake-error`, ruolo `alert`, chiave `canvas.unwritable`) dice
+  perché. Questa sola lettura si
+  somma a quella del pannello (`setReadOnly`) e se ne va da sola quando il
+  testo torna riscrivibile, per esempio con la chiave doppia tolta nella
+  vista Sorgente. Una scena oltre il limite interattivo mostra solo il suo
+  avviso. I test sono in `apps/client/src/editors/canvas/engine.test.ts`,
+  coi testi dei vettori 32 e 33 delle toppe.
 - **R4 · Surrogati spaiati.** `"\ud800"`, in una chiave o in un valore, è un
   errore; una coppia intera (`"\ud83d\ude00"`) è un carattere come gli altri.
 - **R5 · Numeri fuori campo.** Un numero che un `f64` non tiene è un errore
@@ -110,8 +122,9 @@ dubbio si apre e si conserva.
 - **R7 · `null` è assente.** `"color": null`, `"label": null` e ogni altro
   campo noto facoltativo `null` valgono come assenti, e non finiscono fra i
   campi sconosciuti; `{"nodes": null}` è una lavagna vuota, anche con `edges`
-  assente. Quando Fub riscrive quella scheda, il `null` sparisce. Un campo
-  obbligatorio `null` (`"x": null`) resta un errore.
+  assente. Il `null` resta nel file finché il campo resta assente (vedi R7
+  in «Scrittura»). Un campo obbligatorio `null` (`"x": null`) resta un
+  errore.
 - **Limiti per tipo.** Ogni campo di testo noto è una stringa; le regole
   valgono solo sulla scheda del suo tipo (`text` fino a 1 MiB su `text`,
   `file` non vuoto fino a 8192 byte e `subpath` con `#` fino a 1024 byte su
@@ -128,9 +141,7 @@ Il sorgente si ritocca, non si riscrive: `source::patch_source(sorgente,
 prima, dopo)` cambia solo i valori e gli oggetti che passano dal modello di
 prima a quello di dopo, e il resto del file resta byte per byte (spazi, a
 capo, ordine delle chiavi, campi sconosciuti, il modo in cui è scritto un
-numero). È il porto di `patchCanvasSource`
-(`apps/client/src/editors/canvas/source-edit.ts`); i casi sono in
-`crates/fub-canvas-core/tests/source_edit.rs`.
+numero). I casi sono in `crates/fub-canvas-core/tests/source_edit.rs`.
 
 - **Lo scanner** legge il sorgente una volta, in byte UTF-8: conta come
   spazio solo lo spazio JSON, lascia un BOM iniziale fuori dalla radice e
@@ -142,11 +153,12 @@ numero). È il porto di `patchCanvasSource`
 - **Un oggetto** che tiene tutti i campi del sorgente e non ne aggiunge
   cambia solo i valori. Altrimenti si ricompone con il prefisso, il
   separatore (`,` se aveva un campo solo) e il suffisso che aveva: i campi
-  tolti cadono, quelli nuovi vanno in fondo come `"chiave":valore` compatti.
+  tolti cadono, quelli nuovi vanno in fondo come `"chiave":valore` compatti,
+  e un campo che resta con lo stesso valore tiene i suoi byte (`1.0`, `1e2`,
+  `"\u00e9"` non si riscrivono).
 - **`nodes` ed `edges`** si accoppiano per id: una voce rimasta tiene il suo
-  testo anche se si sposta, una voce nuova si scrive compatta, un array che
-  si svuota diventa `[]`. Il modello ha sempre `nodes` ed `edges`: una radice
-  che si ricompone e non li aveva li riceve in fondo, come in TypeScript.
+  testo anche se si sposta, una voce nuova si scrive compatta con il
+  separatore che la lista già usa, un array che si svuota diventa `[]`.
 - **Un sorgente vuoto** (R1) diventa la lavagna scritta per intero, rientrata
   di due spazi e chiusa da `"\n"`; tiene il BOM e, se il file ne aveva, i
   terminatori CRLF.
@@ -158,9 +170,18 @@ Le regole dei byte nuovi:
   numeri come `Number.prototype.toString`, anche quelli dei campi
   sconosciuti, che si scrivono come li riscriverebbe JavaScript dopo averli
   letti (`1.50` riscritto è `1.5`). Il codificatore è `js.rs`.
-- **R7 · Il `null` sparisce.** Un `"color": null` vale assente: quando Fub
-  ricompone quella scheda il campo cade; in una scheda che non cambia resta.
+- **R7 · Il `null` resta.** Un `"color": null` vale assente, e finché il
+  campo resta assente il `null` resta dov'è, con i suoi byte: non conta come
+  un campo tolto e la scheda non si ricompone per lui. Vale per ogni campo
+  noto facoltativo, anche per uno che il tipo della scheda non usa (`"url":
+  null` su una scheda di testo). Se il campo prende un valore, il valore va
+  al posto del `null`; se poi l'annulla lo toglie, il campo va via del
+  tutto, perché il modello non distingue un `null` da un campo che non c'è.
   `"edges": null` resta finché gli archi non cambiano.
+- **R11 · `nodes` ed `edges` assenti.** Una radice che non ha `nodes` o
+  `edges` non li riceve finché il modello di dopo li ha vuoti: una scheda
+  aggiunta e poi tolta lascia il file com'era. Con la prima voce l'array
+  arriva in fondo alla radice.
 - **R10 · L'ordine dei campi** di una scheda o di un arco scritti per intero:
   per le schede `id`, `type`, `x`, `y`, `width`, `height`, `color`, `text`,
   `file`, `subpath`, `url`, `label`, `background`, `backgroundStyle`; per gli
@@ -175,15 +196,31 @@ e non diventa un valore JSON.
 
 ## Parità
 
-Il commit di Rust e quello di TypeScript (`commitCanvasPatches` in
-`apps/client/src/editors/canvas/operation.ts`) scrivono gli stessi byte e
-rifiutano con le stesse ragioni. Lo fissano i **vettori delle toppe** in
-`apps/client/src/__fixtures__/canvas-patches/`, che leggono tutti e due:
-`crates/fub-canvas-core/tests/patch_vectors.rs` contro `Core::commit` e
-`apps/client/src/editors/canvas/vectors.test.ts` contro
-`commitCanvasPatches`.
+Le regole di lettura e scrittura sono scritte una volta, in
+`crates/fub-canvas-core`, e girano in due build: quella nativa e quella a 32
+bit in WebAssembly (`crates/fub-canvas-wasm`) che la tela usa. La seconda ha
+un `usize` a 32 bit e un altro allocatore, quindi una divergenza resta
+possibile; la cercano tre prove che leggono le stesse fixture da tutti e due
+i lati:
 
-Un vettore è un file `NN-nome.json`: `name` (il nome del file senza numero),
+- i **vettori della lettura** in `apps/client/src/__fixtures__/canvas-read/`:
+  `crates/fub-canvas-core/tests/read_vectors.rs` contro `Core::open` e
+  `apps/client/src/editors/canvas/wasm/vectors.test.ts` contro `openCore`;
+- i **vettori delle toppe** in `apps/client/src/__fixtures__/canvas-patches/`:
+  `crates/fub-canvas-core/tests/patch_vectors.rs` contro `Core::commit` e lo
+  stesso `wasm/vectors.test.ts` contro `commit` e `preview` del `.wasm`;
+- lo **specchio a caso** `canvas-mirror.json`, che
+  `crates/fub-canvas-core/tests/ts_mirror.rs` genera dal nucleo nativo e
+  `apps/client/src/editors/canvas/wasm/mirror.test.ts` rifà sul `.wasm`.
+
+Un vettore della lettura è un file `NN-nome.json`: `name`, `description`,
+`source` (il testo grezzo) ed `expect`, che è
+`{"outcome": "opened", "nodes": …, "edges": …, "extra": …}` (le schede, gli
+archi e, se ci sono, i campi sconosciuti della radice, confrontati senza
+badare all'ordine delle chiavi) oppure `{"outcome": "rejected", "reason": …}`
+con `limit` per un limite di dimensione e `source` per ogni altro rifiuto.
+
+Un vettore delle toppe è un file `NN-nome.json`: `name` (il nome del file senza numero),
 `description`, `before` (il testo grezzo di prima), `patches` (le toppe come
 le scrive il TypeScript) ed `expect`:
 
@@ -194,12 +231,15 @@ le scrive il TypeScript) ed `expect`:
   toppa non torna con il modello), `invalid` (la lavagna di dopo non è
   valida), `rejected` (il sorgente non si ritocca, per esempio una chiave
   doppia) e `unstable` (il testo scritto non si rilegge come la lavagna di
-  dopo). `CommitError::reason` in Rust e `canvasCommitOutcome` in TypeScript
-  danno la stessa parola.
+  dopo). `CommitError::reason` dà la parola, e il `.wasm` la mette nel
+  `code` dell'errore.
 
 Per aggiungerne uno si prende il numero dopo l'ultimo e si scrive l'atteso a
-mano, byte per byte: non si copia l'uscita di uno dei due lati. I due test
-falliscono con meno di 30 vettori, con un file che non si legge, con un
-numero che salta e con un atteso cambiato di un byte. Una lista vuota di
-toppe resta fuori: Rust la accetta come commit che non cambia nulla,
-`commitCanvasPatches` dà `null`.
+mano, byte per byte: non si copia l'uscita di una delle due build. I test
+falliscono con meno vettori del minimo (60 della lettura, 30 delle toppe),
+con un file che non si legge, con un numero che salta e con un atteso
+cambiato di un byte, in tutte e due le cartelle. Una lista vuota di toppe
+resta fuori dai vettori: `Core::commit` la accetta e non cambia nulla,
+tranne su un sorgente vuoto, dove scrive la lavagna vuota per intero; la tela
+non la manda mai a `commit`, solo a `preview` per sapere se il testo si
+riscrive (R3).

@@ -23,7 +23,7 @@ const THRESHOLDS = {
   "fub-app": 88,
   "fub-features": 80,
   "fub-host": 377,
-  "fub-kernel": 165,
+  "fub-kernel": 164,
   "fub-wasm-host": 39,
 };
 

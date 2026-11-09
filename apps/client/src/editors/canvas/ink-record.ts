@@ -1,15 +1,15 @@
-// L'inchiostro della lavagna nel client: leggere i livelli `fub:ink` di un
-// `.canvas` e fare il record di un tratto appena finito.
+// L'inchiostro della lavagna nel client: disegnare i livelli `fub:ink` che il
+// nucleo ha letto e fare il record di un tratto appena finito.
 //
-// Le regole sono quelle di `docs/reference/canvas-ink.md` e dei vettori di
-// `src/__fixtures__/canvas-ink/`, gli stessi che legge il nucleo Rust:
+// Le regole del formato (quale livello è estraneo, quale tratto si disegna e
+// perché no) stanno solo nel nucleo Rust (`crates/fub-canvas-core/src/ink.rs`),
+// che il client usa per `.wasm` (`CanvasCore.inkLayers()`,
+// `docs/reference/canvas-ink.md`). Qui resta ciò che serve a disegnare:
 //
-// - **I livelli** (`readInkLayers`): uno per scheda con la chiave `fub:ink`,
-//   nell'ordine di `nodes`, poi quello della radice. Un livello è `ok` o
-//   `foreign`; un livello estraneo non elenca tratti. In un livello `ok` ogni
-//   tratto si disegna o no, e se no la ragione è la prima che vale
-//   nell'ordine `tool`, `anchor`, `color`, `brush`, `ink`. I tratti che si
-//   disegnano arrivano già decodificati (`DrawableStroke`).
+// - **I livelli da disegnare** (`inkLayerStates`): i livelli del nucleo
+//   accanto ai tratti del modello, con i tratti che il nucleo dice da
+//   disegnare decodificati col codec della §5 (`DrawableStroke`). Un tratto
+//   che il codec non sa decodificare non si disegna (`decode`).
 // - **Il record** (`strokeRecord`): il tratto della penna, in coordinate della
 //   lavagna, portato nelle unità della scheda che lo tiene (o lasciato in
 //   quelle della lavagna se è libero), quantizzato con `buildStroke` e scritto
@@ -18,27 +18,27 @@
 // - **L'asciutto** (`toDry`, `dryStroke`): il `DryStroke` che disegna
 //   `ink-paint.ts`, col percorso di `inkPath`.
 //
-// Niente DOM qui: solo dati, così le stesse funzioni servono alla lavagna,
-// ai test e a chi legge un file senza aprirlo.
+// Niente DOM qui: solo dati, così le stesse funzioni servono alla lavagna e
+// ai test.
 
 import { brushForInput, checkInkBrush, formatInkBrush, parseInkBrush, type InkBrush } from "../../ink/brush";
 import { toLocal, type Affine } from "../../ink/geometry";
 import { inkPath } from "../../ink/outline";
-import { DEFAULT_PEN, penBrush } from "../../ink/pens";
+import { INK_HIGHLIGHTER_COLOR } from "../../ink/palette";
+import { penBrush, penLook, type PenId } from "../../ink/pens";
 import { INK_MAX_SAMPLES, type InkSample, type QuantizedInk } from "../../ink/sample";
 import { buildStroke } from "../../ink/tools/stroke";
 import { closedAtLimit } from "../../ink/tools/tool";
 import { decodeInk, encodeInk, inkFromQuantized, inkToQuantized, INK_MAX_BYTES, unknownChannels } from "../spatial/ink/codec";
+import type { InkEraserMode } from "./ink-erase";
 import type { InkLook } from "./ink-layer";
 import type { DryStroke, InkPathCache, InkRef } from "./ink-paint";
 import type { CanvasDocument, CanvasNode } from "./model";
 import { newNodeId } from "./operation";
+import type { CanvasInkLayer, CanvasInkSkipReason } from "./wasm/core";
 
 /// La chiave del livello, su una scheda o sulla radice.
 export const INK_KEY = "fub:ink";
-
-/// La versione del livello che Fub legge e scrive.
-export const INK_LAYER_VERSION = 1;
 
 /// Lo spessore della penna di serie in pixel dello schermo (A11, D-5).
 export const INK_PEN_PX = 4;
@@ -52,9 +52,11 @@ export type InkStrokeTool = "pen" | "highlighter";
 /// Dove sta un livello: sulla radice (`"board"`) o su una scheda.
 export type InkLayerRef = "board" | { readonly node: string };
 
-/// Perché un tratto di un livello valido non si disegna. Sono le parole dei
-/// vettori, nell'ordine in cui si guardano.
-export type InkSkipReason = "tool" | "anchor" | "color" | "brush" | "ink";
+/// Perché un tratto non si disegna: le ragioni del nucleo, nell'ordine in cui
+/// le guarda, più `decode` per un tratto che il nucleo dice da disegnare e
+/// che il client non sa decodificare (il codec della §5 lo rifiuta, o il
+/// modello non ha il tratto dove il nucleo l'ha letto).
+export type InkSkipReason = CanvasInkSkipReason | "decode";
 
 /// L'ancora di un tratto come si scrive.
 export type InkAnchorRecord =
@@ -77,7 +79,7 @@ export interface InkStrokeRecord {
 export interface DrawableStroke {
   readonly id: string;
   readonly tool: InkStrokeTool;
-  /// Il colore del file, `#rrggbb` com'è scritto.
+  /// Il colore del file com'è scritto.
   readonly color: string;
   readonly brush: InkBrush;
   /// Il testo di `brush` e di `ink` com'è nel file: la chiave della cache dei
@@ -97,7 +99,8 @@ export type InkStrokeEntry =
   | { readonly id: string; readonly drawn: true; readonly stroke: DrawableStroke }
   | { readonly id: string; readonly drawn: false; readonly reason: InkSkipReason };
 
-/// Un livello letto.
+/// Un livello da disegnare: lo stato che dice il nucleo, con i tratti del
+/// modello.
 export interface InkLayerState {
   readonly layer: InkLayerRef;
   /// La scheda che tiene il livello; `null` per la radice.
@@ -109,60 +112,31 @@ export interface InkLayerState {
   readonly drawable: readonly DrawableStroke[];
 }
 
-/// Dove sta il livello di un tratto: decide quale ancora vale.
-type Place = "card" | "board";
-
 const HEX6 = /^#[0-9a-fA-F]{6}$/;
 
 function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function has(value: object, key: string): boolean {
-  return Object.prototype.hasOwnProperty.call(value, key);
-}
-
-/// Un livello ha la chiave `fub:ink` sulla scheda o sulla radice.
-function layerValue(holder: object): { present: boolean; value: unknown } {
-  if (!has(holder, INK_KEY)) return { present: false, value: undefined };
-  return { present: true, value: (holder as Record<string, unknown>)[INK_KEY] };
-}
-
-/// I tratti di un livello, o `null` se il livello è estraneo: non è un
-/// oggetto, `v` non vale 1, `strokes` non è un array, un tratto non è un
-/// oggetto o non ha un `id` stringa non vuota, due tratti hanno lo stesso id.
-function layerStrokes(value: unknown): readonly Record<string, unknown>[] | null {
-  if (!isObject(value)) return null;
-  if (value.v !== INK_LAYER_VERSION) return null;
-  const strokes = value.strokes;
-  if (!Array.isArray(strokes)) return null;
-  const ids = new Set<string>();
-  for (const stroke of strokes) {
-    if (!isObject(stroke)) return null;
-    const id = stroke.id;
-    if (typeof id !== "string" || id === "" || ids.has(id)) return null;
-    ids.add(id);
-  }
-  return strokes as Record<string, unknown>[];
-}
-
 function positive(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value) && value > 0;
 }
 
-/// L'ancora di un tratto nel livello `place`: la misura di riferimento, `null`
-/// per un'ancora libera, `undefined` se non vale.
-function anchorRef(value: unknown, place: Place): InkRef | null | undefined {
-  if (!isObject(value)) return undefined;
-  if (value.kind === "card") {
-    if (place !== "card" || !positive(value.width) || !positive(value.height)) return undefined;
-    return { width: value.width, height: value.height };
-  }
-  if (value.kind === "free") return place === "board" ? null : undefined;
-  return undefined;
+function sameLayer(a: InkLayerRef, b: InkLayerRef): boolean {
+  return a === "board" || b === "board" ? a === b : a.node === b.node;
 }
 
-function readBrush(value: unknown): InkBrush | null {
+/// La misura di riferimento di un'ancora: `null` per un'ancora libera,
+/// `undefined` se non si decodifica.
+function decodeRef(value: unknown): InkRef | null | undefined {
+  if (!isObject(value)) return undefined;
+  if (value.kind === "card") {
+    return positive(value.width) && positive(value.height) ? { width: value.width, height: value.height } : undefined;
+  }
+  return value.kind === "free" ? null : undefined;
+}
+
+function decodeBrush(value: unknown): InkBrush | null {
   if (typeof value !== "string") return null;
   try {
     const brush = parseInkBrush(value);
@@ -173,7 +147,7 @@ function readBrush(value: unknown): InkBrush | null {
   }
 }
 
-function readInk(value: unknown): QuantizedInk | null {
+function decodeInkText(value: unknown): QuantizedInk | null {
   if (typeof value !== "string") return null;
   try {
     const ink = decodeInk(value);
@@ -186,82 +160,154 @@ function readInk(value: unknown): QuantizedInk | null {
   }
 }
 
-/// Un tratto con un `id` già controllato, nel livello `place`.
-function readStroke(record: Record<string, unknown>, place: Place): InkStrokeEntry {
-  const id = record.id as string;
-  const tool = record.tool;
-  if (tool !== "pen" && tool !== "highlighter") return { id, drawn: false, reason: "tool" };
-  const ref = anchorRef(record.anchor, place);
-  if (ref === undefined) return { id, drawn: false, reason: "anchor" };
-  const color = record.color;
-  if (typeof color !== "string" || !HEX6.test(color)) return { id, drawn: false, reason: "color" };
-  const brush = readBrush(record.brush);
-  if (brush === null) return { id, drawn: false, reason: "brush" };
-  const ink = readInk(record.ink);
-  if (ink === null) return { id, drawn: false, reason: "ink" };
+/// Il tratto `record` decodificato per disegnarlo, `null` se il client non
+/// lo sa decodificare. Non decide se il tratto si disegna, né se la sua
+/// ancora vale dove sta: lo dice il nucleo (`CanvasCore.inkLayers()`). Un
+/// record fatto da `strokeRecord` si decodifica sempre.
+export function decodeStroke(record: Readonly<Record<string, unknown>>): DrawableStroke | null {
+  const { id, tool, color } = record;
+  if (typeof id !== "string" || id === "") return null;
+  if (tool !== "pen" && tool !== "highlighter") return null;
+  if (typeof color !== "string") return null;
+  const ref = decodeRef(record.anchor);
+  if (ref === undefined) return null;
+  const brush = decodeBrush(record.brush);
+  if (brush === null) return null;
+  const ink = decodeInkText(record.ink);
+  if (ink === null) return null;
   return {
     id,
-    drawn: true,
-    stroke: {
-      id,
-      tool,
-      color,
-      brush,
-      brushText: record.brush as string,
-      inkText: record.ink as string,
-      ink,
-      ref,
-      record,
-    },
+    tool,
+    color,
+    brush,
+    brushText: record.brush as string,
+    inkText: record.ink as string,
+    ink,
+    ref,
+    record,
   };
 }
 
-function readLayer(layer: InkLayerRef, node: CanvasNode | null, value: unknown): InkLayerState {
-  const records = layerStrokes(value);
-  if (records === null) return { layer, node, state: "foreign", strokes: [], drawable: [] };
-  const place: Place = node === null ? "board" : "card";
-  const strokes = records.map((record) => readStroke(record, place));
-  const drawable: DrawableStroke[] = [];
-  for (const entry of strokes) if (entry.drawn) drawable.push(entry.stroke);
-  return { layer, node, state: "ok", strokes, drawable };
-}
-
-/// I livelli d'inchiostro di `doc`: quelli delle schede nell'ordine di
-/// `nodes`, poi quello della radice. Una scheda o una radice senza la chiave
-/// non compare.
-export function readInkLayers(doc: CanvasDocument): InkLayerState[] {
-  const layers: InkLayerState[] = [];
-  for (const node of doc.nodes) {
-    const { present, value } = layerValue(node);
-    if (present) layers.push(readLayer({ node: node.id }, node, value));
+/// I livelli da disegnare: quelli che il nucleo ha letto (`layers`, da
+/// `CanvasCore.inkLayers()`), nel suo ordine, accanto ai tratti di `doc`, il
+/// modello dello stesso testo. Un tratto che il nucleo dice da disegnare si
+/// decodifica; se il client non ci riesce, o se in `doc` al suo posto non c'è
+/// lo stesso id, non si disegna (`decode`). Un livello di una scheda che non
+/// è in `doc` non compare: `doc` e `layers` non vengono dallo stesso testo.
+export function inkLayerStates(doc: CanvasDocument, layers: readonly CanvasInkLayer[]): InkLayerState[] {
+  const states: InkLayerState[] = [];
+  for (const read of layers) {
+    const ref = read.layer;
+    const node = ref === "board" ? null : doc.nodes.find((candidate) => candidate.id === ref.node);
+    if (node === undefined) continue;
+    if (read.state !== "ok") {
+      states.push({ layer: ref, node, state: "foreign", strokes: [], drawable: [] });
+      continue;
+    }
+    const value = (node ?? doc)[INK_KEY];
+    const records: readonly unknown[] = isObject(value) && Array.isArray(value.strokes) ? value.strokes : [];
+    const drawable: DrawableStroke[] = [];
+    const strokes = read.strokes.map((entry, index): InkStrokeEntry => {
+      if (!entry.drawn) return { id: entry.id, drawn: false, reason: entry.reason };
+      const record = records[index];
+      const stroke = isObject(record) && record.id === entry.id ? decodeStroke(record) : null;
+      if (!stroke) return { id: entry.id, drawn: false, reason: "decode" };
+      drawable.push(stroke);
+      return { id: entry.id, drawn: true, stroke };
+    });
+    states.push({ layer: ref, node, state: "ok", strokes, drawable });
   }
-  const root = layerValue(doc);
-  if (root.present) layers.push(readLayer("board", null, root.value));
-  return layers;
+  return states;
 }
 
-/// Il livello della scheda `node`, o della radice con `null`; `null` se non
-/// c'è la chiave.
-export function readInkLayer(doc: CanvasDocument, node: CanvasNode | null): InkLayerState | null {
-  const holder: object = node ?? doc;
-  const { present, value } = layerValue(holder);
-  if (!present) return null;
-  return readLayer(node === null ? "board" : { node: node.id }, node, value);
+/// Se il nucleo dice estraneo il livello `layer` (`layers` da
+/// `CanvasCore.inkLayers()`): Fub non ci scrive. Un livello che non c'è
+/// ancora non è estraneo.
+export function foreignInkLayer(layers: readonly CanvasInkLayer[], layer: InkLayerRef): boolean {
+  return layers.some((read) => read.state === "foreign" && sameLayer(read.layer, layer));
 }
 
-/// Il livello della scheda `node` (o della radice) accetta tratti nuovi:
-/// manca, o è valido. Un livello estraneo Fub non lo scrive.
-export function inkLayerWritable(holder: object): boolean {
-  const { present, value } = layerValue(holder);
-  return !present || layerStrokes(value) !== null;
+/// Lo strumento scelto nel menu della penna (T21): con la Gomma la punta e il
+/// mouse che scrive cancellano.
+export type InkMenuTool = InkStrokeTool | "eraser";
+
+/// Le penne della Penna: quelle di sistema tranne l'evidenziatore.
+export type InkPenKind = Exclude<PenId, "highlighter">;
+
+/// Lo spessore dell'evidenziatore di serie, in pixel dello schermo (A19).
+export const INK_HIGHLIGHTER_PX = 16;
+
+/// L'intervallo e il passo del cursore dello spessore, in pixel dello
+/// schermo, per ogni strumento che scrive.
+export const INK_WIDTH_RANGES: Readonly<Record<InkStrokeTool, { readonly min: number; readonly max: number; readonly step: number }>> = {
+  pen: { min: 0.5, max: 20, step: 0.5 },
+  highlighter: { min: 4, max: 48, step: 1 },
+};
+
+/// La scelta del menu della penna (A19): lo strumento, la penna della Penna,
+/// per la Penna e per l'evidenziatore ciascuno il suo colore (`#rrggbb`) e il
+/// suo spessore (pixel dello schermo), e che cosa cancella la gomma.
+export interface InkPenChoice {
+  readonly tool: InkMenuTool;
+  readonly pen: InkPenKind;
+  readonly color: Readonly<Record<InkStrokeTool, string>>;
+  readonly width: Readonly<Record<InkStrokeTool, number>>;
+  readonly eraser: InkEraserMode;
+}
+
+/// La scelta di serie (A11, A19): la Sfera blu da 4 pixel, l'evidenziatore
+/// giallo da 16, la gomma che toglie il tratto intero.
+export const DEFAULT_INK_CHOICE: InkPenChoice = Object.freeze({
+  tool: "pen",
+  pen: "ballpoint",
+  color: Object.freeze({ pen: INK_PEN_COLOR, highlighter: INK_HIGHLIGHTER_COLOR }),
+  width: Object.freeze({ pen: INK_PEN_PX, highlighter: INK_HIGHLIGHTER_PX }),
+  eraser: "stroke",
+});
+
+/// Lo spessore `value` di `tool` come lo dà il cursore: riportato
+/// all'intervallo e al suo passo; `null` se non è un numero.
+export function inkWidthOf(tool: InkStrokeTool, value: unknown): number | null {
+  if (typeof value !== "number" || !Number.isFinite(value)) return null;
+  const { min, max, step } = INK_WIDTH_RANGES[tool];
+  const steps = Math.round((Math.min(max, Math.max(min, value)) - min) / step);
+  // Niente code di virgola mobile: i passi sono mezzi pixel o pixel interi.
+  return Math.round(Math.min(max, min + steps * step) * 1000) / 1000;
+}
+
+/// Lo strumento che scrive con la scelta `choice`: con la Gomma la Penna, che
+/// serve solo se un tratto della punta comincia lo stesso.
+export function inkStrokeTool(choice: InkPenChoice): InkStrokeTool {
+  return choice.tool === "highlighter" ? "highlighter" : "pen";
+}
+
+/// La penna di sistema con cui scrive la scelta `choice`.
+export function inkPenOf(choice: InkPenChoice): PenId {
+  return inkStrokeTool(choice) === "highlighter" ? "highlighter" : choice.pen;
+}
+
+/// L'aspetto del tratto che comincia con la scelta `choice` allo zoom `zoom`:
+/// la penna scelta (l'evidenziatore col suo strumento), il suo colore e il suo
+/// spessore in pixel dello schermo portato in unità della lavagna. Senza la
+/// pressione del dispositivo il pennello la simula, se la penna la segue.
+export function inkLook(choice: InkPenChoice, zoom: number, pressure: boolean): InkLook {
+  if (!(Number.isFinite(zoom) && zoom > 0)) throw new RangeError(`zoom della lavagna non valido: ${zoom}`);
+  const tool = inkStrokeTool(choice);
+  return { brush: penBrush(inkPenOf(choice), choice.width[tool] / zoom, pressure), color: choice.color[tool], tool };
 }
 
 /// L'aspetto della penna di serie allo zoom `zoom` (A11): la biro, blu, 4
 /// pixel dello schermo in unità della lavagna. Senza la pressione del
 /// dispositivo il pennello la simula (`sim=1`).
 export function defaultInkLook(zoom: number, pressure: boolean): InkLook {
-  if (!(Number.isFinite(zoom) && zoom > 0)) throw new RangeError(`zoom della lavagna non valido: ${zoom}`);
-  return { brush: penBrush(DEFAULT_PEN, INK_PEN_PX / zoom, pressure), color: INK_PEN_COLOR, tool: "pen" };
+  return inkLook(DEFAULT_INK_CHOICE, zoom, pressure);
+}
+
+/// Quanto copre un tratto col pennello `brush` di `tool` sulla lavagna:
+/// l'opacità della sua penna (`penLook`; l'evidenziatore 0,5), senza la
+/// fusione `multiply`, che sulle schede scure lo spegnerebbe (A22).
+export function inkOpacity(brush: InkBrush, tool: string): number {
+  return penLook(brush, tool).opacity;
 }
 
 /// Il tratto finito che diventa record: i campioni in coordinate della
@@ -356,16 +402,15 @@ export function dryStroke(stroke: DrawableStroke, cache?: InkPathCache): DryStro
   } catch {
     return null;
   }
-  return { id: stroke.id, path, fill: stroke.color, ref: stroke.ref };
+  const opacity = inkOpacity(stroke.brush, stroke.tool);
+  return { id: stroke.id, path, fill: stroke.color, ref: stroke.ref, ...(opacity < 1 ? { opacity } : {}) };
 }
 
-/// Il `DryStroke` di un record, letto con le regole del file: l'ancora dice
-/// dove sta (`card` su una scheda, `free` sulla radice). `null` se il record
-/// non si disegna.
+/// Il `DryStroke` di un record: un tratto appena fatto da `strokeRecord`, o
+/// uno che il nucleo dice da disegnare. Non giudica il record (lo fa il
+/// nucleo): lo decodifica e ne fa il contorno. `null` se non si decodifica o
+/// il contorno non si calcola.
 export function toDry(record: InkStrokeRecord | Readonly<Record<string, unknown>>, cache?: InkPathCache): DryStroke | null {
-  if (typeof record.id !== "string" || record.id === "") return null;
-  const anchor = record.anchor;
-  const place: Place = isObject(anchor) && anchor.kind === "card" ? "card" : "board";
-  const entry = readStroke(record as Record<string, unknown>, place);
-  return entry.drawn ? dryStroke(entry.stroke, cache) : null;
+  const stroke = decodeStroke(record);
+  return stroke ? dryStroke(stroke, cache) : null;
 }

@@ -83,6 +83,10 @@ function prepareDom(): void {
   // Via gli `<script>`: qui i moduli li carica vitest, e un `type="module"`
   // dentro `innerHTML` non parte comunque.
   document.body.innerHTML = BODY.replace(/<script[\s\S]*?<\/script>/gi, "");
+  // La pagina com'è ad avvio finito: l'app non è più inerte sotto lo strato
+  // d'avvio (lo toglie `avvio/consegna.ts`, che qui non gira).
+  document.querySelector(".avvio")?.remove();
+  for (const el of document.querySelectorAll("[inert]")) el.removeAttribute("inert");
 }
 
 async function loadViews() {

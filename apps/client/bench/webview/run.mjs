@@ -1,9 +1,11 @@
-// Gli scenari di N0, S7 di N13, la memoria (R1), le tessere (T1) e
-// l'indicizzazione (I1) di K0, nella WebView vera, guidati da WebDriver.
+// Gli scenari di N0, S7 di N13, S8 di N4 (la penna sulla lavagna), la
+// memoria (R1), le tessere (T1) e l'indicizzazione (I1) di K0, il nucleo
+// della lavagna (L1) di N3 e i chunk di ciascun profilo dei componenti (C1)
+// di K2, nella WebView vera, guidati da WebDriver.
 //
-//   node bench/webview/run.mjs --app=../../target/release/fub [--only=S1,S2,S3]
+//   node bench/webview/run.mjs --app=../../target/release/fub [--only=S1,S2,S3,C1]
 //        [--driver=tauri-driver] [--native-driver=/usr/bin/WebKitWebDriver]
-//        [--budgets=ci|targets] [--out=bench/.output/webview]
+//        [--budgets=ci|targets] [--out=bench/.output/webview] [--dist=dist]
 //
 // Avvia `tauri-driver` con un vault e una configurazione scritti in una
 // cartella temporanea (`fixtures.mjs`): la sonda è accesa dalle impostazioni
@@ -17,13 +19,15 @@
 // macOS: nessun driver per WKWebView; la procedura a mano è in
 // `docs/development/webview-measurements.md`.
 import { spawn, execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { cpus, hostname, release, tmpdir, totalmem, type as osType } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { openSession, waitForDriver } from "./driver.mjs";
-import { noteName, writeFixtures } from "./fixtures.mjs";
+import { INK_BOARD, INK_STROKES, noteName, writeFixtures } from "./fixtures.mjs";
 import { settled } from "./memory.mjs";
+import { CANVAS_SCRIPT, COMMITS, OPENS, SIZES, builtModule } from "./canvas.mjs";
 import { INDEXING_SCRIPT } from "./indexing.mjs";
 import { TILES_SCRIPT } from "./tiles.mjs";
 
@@ -33,7 +37,7 @@ const args = Object.fromEntries(process.argv.slice(2).map((arg) => {
   return [key, value];
 }));
 const app = resolve(args.app ?? join(here, "../../../../target/release/fub"));
-const only = new Set((args.only ?? "S1,S2,S3,S4,S5,S6,S7,R1,T1,I1").split(","));
+const only = new Set((args.only ?? "S1,S2,S3,S4,S5,S6,S7,S8,R1,T1,I1,L1,C1").split(","));
 const out = resolve(args.out ?? join(here, "../.output/webview"));
 const budgetsKind = args.budgets ?? "ci";
 const port = Number(args.port ?? 4444);
@@ -50,6 +54,9 @@ const pause = (ms) => new Promise((done) => setTimeout(done, ms));
 
 /// Il processo del driver: la memoria di R1 si legge sui suoi discendenti.
 let driverPid = null;
+/// Il vault del banco, nella cartella temporanea: S8 legge dal disco i byte
+/// del foglio prima e dopo la penna.
+let benchVault = null;
 
 /// Quanto si aspetta prima di leggere la memoria: che l'app abbia finito di
 /// disegnare e di indicizzare ciò che ha appena aperto.
@@ -186,6 +193,104 @@ async function closeAll(session) {
   return left;
 }
 
+/// I profili dei componenti che C1 misura, nell'ordine: il vault del banco
+/// resta all'ultimo, «Tutto», come chi non ha scelto niente.
+const C1_PROFILES = [["solo-note", "Solo note"], ["tutto", "Tutto"]];
+
+/// I file JavaScript che la pagina ha scaricato fin qui, con l'impronta
+/// (`editors-canvas-Bx3kQ9aZ.js`), in ordine.
+const CHUNKS_SCRIPT = `
+  // La WebView non mette sempre fra le risorse ciò che arriva dal protocollo
+  // dell'app: contano anche gli script della pagina e i modulepreload, che
+  // Vite scrive per gli import statici e per quelli di ogni import().
+  const urls = [
+    ...performance.getEntriesByType("resource").map((entry) => entry.name),
+    ...[...document.querySelectorAll("script[src]")].map((node) => node.src),
+    ...[...document.querySelectorAll("link[rel=modulepreload][href]")].map((node) => node.href),
+  ];
+  const names = urls
+    .map((url) => url.split("?")[0].split("/").pop() ?? "")
+    .filter((name) => name.endsWith(".js"));
+  return [...new Set(names)].sort();
+`;
+
+/// Il nome di un chunk senza l'impronta, per il referto
+/// (`editors-canvas-Bx3kQ9aZ.js` → `editors-canvas`).
+const chunkName = (file) => file.replace(/\.js$/, "").replace(/-[A-Za-z0-9_-]{8}$/, "");
+
+/// I chunk del build che contengono un pezzo di un componente spegnibile (il
+/// PDF, la lavagna, i disegni, i documenti, i fogli), con i moduli che ce lo
+/// portano: li scrive il plugin di `vite.config.ts` accanto a ciò che
+/// descrive. Nessuno deve arrivare nella WebView all'avvio o aprendo una
+/// nota, in nessun profilo (D-1, A8): arrivano quando si apre un loro file.
+function switchableChunks() {
+  const file = join(here, "../../dist/switchable-chunks.json");
+  let parsed;
+  try {
+    parsed = JSON.parse(readFileSync(file, "utf8"));
+  } catch (error) {
+    throw new Error(`manca l'elenco dei chunk spegnibili del build (${file}): serve \`npm run build\` prima dell'app (${error?.code ?? error})`);
+  }
+  const chunks = new Map();
+  for (const [what, files] of Object.entries(parsed)) {
+    for (const [name, modules] of Object.entries(files)) {
+      const shown = modules.length > 3 ? [...modules.slice(0, 3), `altri ${modules.length - 3}`] : modules;
+      const key = name.split("/").pop();
+      chunks.set(key, [...(chunks.get(key) ?? []), shown.length ? `${what}: ${shown.join(", ")}` : what]);
+    }
+  }
+  if (chunks.size === 0) throw new Error(`${file} non nomina nessun chunk: il build non separa più i componenti spegnibili`);
+  return chunks;
+}
+
+/// Applica un profilo dei componenti col comando vero dell'host, come la
+/// pagina Componenti: le chiavi del vault le scrive l'host, non il banco.
+async function applyProfile(session, nome) {
+  const answer = await session.executeAsync(`
+    const done = arguments[arguments.length - 1];
+    window.__TAURI_INTERNALS__.invoke("components_apply", { vault: null, azione: { azione: "profilo", nome: arguments[0] }, apply: true })
+      .then((result) => done(JSON.stringify(result)), (error) => done(JSON.stringify({ errore: String(error) })));
+  `, [nome]);
+  const parsed = JSON.parse(answer);
+  if (parsed.risposta !== "esito") throw new Error(`il profilo «${nome}» non si applica: ${answer.slice(0, 300)}`);
+}
+
+/// S8: dove va il tempo dei fotogrammi lunghi. Fra due fotogrammi si guarda
+/// quale evento del puntatore è arrivato per ultimo (`pointermove` mentre il
+/// tratto o la scheda si muove, `pointerup` quando il tratto si scrive o la
+/// scheda si posa, niente se il fotogramma è lungo da solo); `phases()` rende
+/// i fotogrammi oltre 33 ms per fase, col più lungo di ognuna, e ferma tutto.
+const PHASES_SCRIPT = `
+  const state = { last: null, gaps: [], frame: 0, stopped: false };
+  const seen = (event) => { state.last = event.type; };
+  const kinds = ["pointerdown", "pointermove", "pointerup"];
+  for (const kind of kinds) document.addEventListener(kind, seen, { capture: true, passive: true });
+  let before = performance.now();
+  const tick = (now) => {
+    if (state.stopped) return;
+    state.gaps.push([now - before, state.last ?? "nessuno"]);
+    state.last = null;
+    before = now;
+    state.frame = requestAnimationFrame(tick);
+  };
+  state.frame = requestAnimationFrame(tick);
+  window.__fubS8Phases = () => {
+    state.stopped = true;
+    cancelAnimationFrame(state.frame);
+    for (const kind of kinds) document.removeEventListener(kind, seen, { capture: true });
+    const out = {};
+    for (const [gap, last] of state.gaps) {
+      if (gap <= 33) continue;
+      const entry = out[last] ?? (out[last] = { over33: 0, max: 0 });
+      entry.over33 += 1;
+      entry.max = Math.max(entry.max, Math.round(gap));
+    }
+    return out;
+  };
+  return true;
+`;
+const PHASES_READ = "return window.__fubS8Phases?.() ?? null;";
+
 const SCENARIOS = {
   /// Scrivere 200 caratteri in una nota di 5.000 righe.
   async S1(session) {
@@ -316,6 +421,142 @@ const SCENARIOS = {
     }
     const report = await stop(session);
     return { report, values: { "S7.frameGap.p95": report.frames.p95, "S7.frameGap.max": report.frames.max }, samples: report.frames.count };
+  },
+  /// La penna sulla lavagna (N4): dieci tratti da 300 ms sopra una tabella di
+  /// 10.000 celle, con 2000 tratti già scritti sulla lavagna, poi la scheda
+  /// della tabella spostata coi suoi tratti. Il foglio `.xlsx` sulla lavagna
+  /// non deve cambiare di un byte. T23 rilancia lo stesso scenario quando la
+  /// scheda del foglio è viva: cambia solo che cosa mostra.
+  async S8(session) {
+    const sheetPath = join(benchVault, INK_BOARD.sheet);
+    const sha = () => createHash("sha256").update(readFileSync(sheetPath)).digest("hex");
+    const before = sha();
+    const notes = [];
+    await openByName(session, "Lezione", "");
+    const table = `.pane.focus .canvas-node[data-node="${INK_BOARD.table.id}"]`;
+    await session.waitFor("return !!document.querySelector(arguments[0])", [table], 60_000);
+    const DRY = ".pane.focus :is(.canvas-ink-card, .canvas-ink-board) path[data-ink-stroke]";
+    const dryPaths = () => session.execute("return document.querySelectorAll(arguments[0]).length;", [DRY]);
+    // L'asciutto arriva dopo le schede: si aspetta che ci siano tutti i
+    // tratti, al più 30 s, e si conta comunque quanti se ne vedono.
+    try {
+      await session.waitFor("return document.querySelectorAll(arguments[0]).length >= arguments[1]", [DRY, INK_STROKES], 30_000);
+    } catch {
+      notes.push(`l'asciutto non arriva a ${INK_STROKES} tratti entro 30 s`);
+    }
+    const dryBefore = await dryPaths();
+    // La scheda del foglio viva (T23) o il segnaposto di adesso: il referto
+    // dice quale.
+    const sheetLive = await session.execute("return !!document.querySelector('.pane.focus [data-card-kind=sheet][data-card-mode=live]');");
+    notes.push(sheetLive ? "la scheda del foglio è viva" : "la scheda del foglio è un segnaposto: sotto la penna c'è la tabella di testo (D-7 (c), il caso simile)");
+    // Dove scrivere: la parte della scheda della tabella che si vede nel
+    // viewport, lontano dai bordi e dalla testata.
+    const area = await session.execute(`
+      const card = document.querySelector(arguments[0] + " .canvas-card-body")?.getBoundingClientRect();
+      const view = document.querySelector(".pane.focus .canvas-viewport")?.getBoundingClientRect();
+      if (!card || !view) return null;
+      const left = Math.max(card.left, view.left) + 40, right = Math.min(card.right, view.right) - 40;
+      const top = Math.max(card.top, view.top) + 40, bottom = Math.min(card.bottom, view.bottom) - 40;
+      return right - left > 80 && bottom - top > 80 ? { left, top, width: right - left, height: bottom - top } : null;
+    `, [table]);
+    if (!area) throw new Error("la scheda della tabella non si vede nel viewport");
+    const strokes = Array.from({ length: 10 }, (_, i) => ({
+      x: Math.round(area.left + area.width * (0.15 + 0.07 * i)),
+      y: Math.round(area.top + area.height * (0.2 + 0.06 * i)),
+      dx: Math.round(Math.min(60, area.width * 0.1)),
+      dy: Math.round(Math.min(40, area.height * 0.1)),
+      ms: 300,
+    }));
+    // La penna, se il driver la manda. Conta che scriva: WebKitWebDriver
+    // sotto Xvfb manda il `pointerdown` della penna e poi niente, né i
+    // movimenti né il rilascio, e il tratto non nasce.
+    let input = "penna";
+    let report = null;
+    /// I path asciutti dopo ogni tratto, e i fotogrammi lunghi per fase.
+    const written = [];
+    let penPhases = null;
+    await start(session);
+    await session.execute(PHASES_SCRIPT);
+    try {
+      for (const stroke of strokes) {
+        await session.actions(drag({ ...stroke, pointerType: "pen" }));
+        await session.releaseActions();
+      }
+      penPhases = await session.execute(PHASES_READ);
+      report = await stop(session);
+    } catch (error) {
+      await session.execute(PHASES_READ);
+      await stop(session);
+      await session.releaseActions();
+      notes.push(`il driver rifiuta la penna (${String(error?.message ?? error).slice(0, 160)})`);
+    }
+    await pause(500);
+    const dryAfterPenTry = await dryPaths();
+    if (!report || report.input.pen.count === 0 || dryAfterPenTry < dryBefore + strokes.length) {
+      // Il driver non manda una penna che scrive: il mouse con D tenuto, il
+      // tasto che fa scrivere il mouse sulla lavagna. Il tasto va al viewport.
+      if (report) notes.push(`la penna del driver non scrive (${report.input.pen.count} campioni \`pen\` visti dalla sonda, path asciutti ${dryBefore} → ${dryAfterPenTry}): i tratti misurati sono del mouse con D tenuto`);
+      input = "mouse con D";
+      const mouseStroke = async (stroke) => {
+        await session.actions([{ type: "key", id: "tastiera", actions: [{ type: "keyDown", value: "d" }] }]);
+        await session.actions(drag(stroke));
+        await session.actions([{ type: "key", id: "tastiera", actions: [{ type: "keyUp", value: "d" }] }]);
+        await session.releaseActions();
+      };
+      // Il tratto della penna che il driver ha lasciato giù tiene la lavagna
+      // («un tratto alla volta»): la finestra che perde il fuoco lo annulla,
+      // come quando chi scrive passa a un'altra finestra. Fuori dalla misura.
+      await session.execute("window.dispatchEvent(new Event('blur')); return true;");
+      await pause(300);
+      await session.execute("document.querySelector('.pane.focus .canvas-viewport')?.focus(); return true;");
+      await start(session);
+      await session.execute(PHASES_SCRIPT);
+      for (const stroke of strokes) {
+        await mouseStroke(stroke);
+        written.push(await dryPaths());
+      }
+      penPhases = await session.execute(PHASES_READ);
+      report = await stop(session);
+    }
+    await pause(500);
+    const dryAfterPen = await dryPaths();
+    // Lo spostamento della scheda coi suoi tratti, dalla testata: avanti e
+    // indietro per due secondi, e posata 60 px più in basso, così è uno
+    // spostamento vero che si salva.
+    const handle = await centerOf(session, `${table} .canvas-node-handle`);
+    if (!handle) throw new Error("la testata della scheda della tabella non c'è");
+    await start(session);
+    await session.execute(PHASES_SCRIPT);
+    await session.actions(drag({ ...handle, dx: 200, dy: 60, ms: 2_000 }));
+    await session.releaseActions();
+    const movePhases = await session.execute(PHASES_READ);
+    const move = await stop(session);
+    // Il salvataggio dopo lo spostamento, poi i byte del foglio dal disco.
+    await pause(3_000);
+    const dryAfterMove = await dryPaths();
+    const after = sha();
+    notes.push(`input: ${input}; path asciutti ${dryBefore} → ${dryAfterPen} dopo la penna → ${dryAfterMove} dopo lo spostamento`);
+    if (written.length > 0) notes.push(`path asciutti dopo ogni tratto: ${written.join(", ")}`);
+    notes.push(`fotogrammi oltre 33 ms per ultimo evento, a penna: ${JSON.stringify(penPhases)}; allo spostamento: ${JSON.stringify(movePhases)}`);
+    notes.push(`sha256 di ${INK_BOARD.sheet}: ${before.slice(0, 12)}… prima, ${after.slice(0, 12)}… dopo, ${before === after ? "uguale" : "DIVERSO"}`);
+    return {
+      report,
+      move,
+      input,
+      sheetLive,
+      sheetSha256: { before, after, same: before === after },
+      written,
+      phases: { pen: penPhases, move: movePhases },
+      notes,
+      values: {
+        "S8.penFrameGap.max": report.frames.max,
+        "S8.penFrameGap.p95": report.frames.p95,
+        "S8.moveFrameGap.max": move.frames.max,
+        "S8.dryPaths.prima": dryBefore,
+        "S8.dryPaths.dopo": dryAfterMove,
+      },
+      samples: input === "penna" ? report.input.pen.count : report.input.pointer.count,
+    };
   },
   /// La memoria (K0), con una procedura fissa:
   ///
@@ -471,6 +712,69 @@ const SCENARIOS = {
       samples: report.open?.count ?? 0,
     };
   },
+  /// I chunk di ciascun profilo dei componenti (K2): per «Solo note» e per
+  /// «Tutto» il profilo si applica, si lascia aperta la nota lunga, e l'app
+  /// riparte da capo. L'avvio a freddo (S6, la nota riaperta), i chunk
+  /// scaricati fin lì, e quelli in più dopo aver aperto un'altra nota. Con
+  /// «Solo note» all'avvio non arriva niente della lavagna, del PDF, dei
+  /// documenti o dei fogli: lo vieta già il build (D-1), qui si vede nella
+  /// WebView vera.
+  async C1(session) {
+    const switchable = switchableChunks();
+    const profiles = {};
+    const values = {};
+    let current = session;
+    try {
+      for (const [nome, label] of C1_PROFILES) {
+        await applyProfile(current, nome);
+        await openByName(current, "Lunga", "Una nota lunga");
+        await current.close();
+        current = null;
+        current = await openSession(base, app);
+        await current.waitFor("return !!window.__fubProbe && window.__fubProbe.stop().coldStart !== null", [], 120_000);
+        const report = await stop(current);
+        const startup = await current.execute(CHUNKS_SCRIPT);
+        await ready(current);
+        await indexed(current);
+        await openByName(current, noteName(1), noteName(1));
+        await pause(MEMORY_QUIET_MS);
+        const after = await current.execute(CHUNKS_SCRIPT);
+        const afterNote = after.filter((name) => !startup.includes(name));
+        const switchableSeen = after.filter((name) => switchable.has(name)).map((name) => `${chunkName(name)} (${switchable.get(name).join("; ")})`);
+        profiles[nome] = { label, coldStart: report.coldStart, startup: startup.map(chunkName), afterNote: afterNote.map(chunkName), switchable: switchableSeen };
+        values[`C1.${nome}.coldStart`] = report.coldStart;
+        values[`C1.${nome}.chunks`] = startup.length;
+        values[`C1.${nome}.spegnibili`] = switchableSeen.length;
+      }
+    } finally {
+      await current?.close();
+    }
+    return { profiles, values, samples: C1_PROFILES.length };
+  },
+  /// Il nucleo della lavagna in WebAssembly (N3): il modulo che la build ha
+  /// messo fra gli asset, compilato con la CSP dell'app, poi istanza, `open`
+  /// e `commit` di uno spostamento su una lavagna di 50 e una di 2000 schede
+  /// (`canvas.mjs`). Una CSP che non lascia compilare WebAssembly fa fallire
+  /// lo scenario, con l'errore e le violazioni che la pagina ha visto.
+  async L1(session) {
+    // Il nome con l'hash viene da `dist/`: deve essere la build che l'app
+    // di release ha dentro.
+    const { url } = builtModule(args.dist ? resolve(args.dist) : undefined);
+    const report = await session.executeAsync(CANVAS_SCRIPT, [url, SIZES, OPENS, COMMITS]);
+    const violations = (report.violations ?? []).map((v) => `${v.directive} ${v.blocked}`.trim());
+    if (report.error) {
+      throw new Error(`il nucleo della lavagna non si carica (${report.error})${violations.length > 0 ? `; violazioni della CSP: ${violations.join(", ")}` : ""}`);
+    }
+    if (violations.length > 0) throw new Error(`violazioni della CSP mentre il nucleo si carica: ${violations.join(", ")}`);
+    const values = { "L1.istanza": report.instanceMs };
+    for (const board of report.boards) {
+      values[`L1.open.${board.size}.prima`] = board.firstOpenMs;
+      values[`L1.open.${board.size}.p95`] = board.open.p95;
+      values[`L1.commit.${board.size}.primo`] = board.firstCommitMs;
+      values[`L1.commit.${board.size}.p95`] = board.commit.p95;
+    }
+    return { report, values, samples: report.boards.reduce((n, b) => n + b.open.count + b.commit.count, 0) };
+  },
   /// Avvio a freddo fino alla prima nota visibile: l'app riapre la nota che
   /// S1 ha lasciato aperta.
   async S6(session) {
@@ -522,6 +826,7 @@ async function main() {
   mkdirSync(out, { recursive: true });
   const root = mkdtempSync(join(tmpdir(), "fub-webview-"));
   const { vault, config } = writeFixtures(root);
+  benchVault = vault;
   const driver = spawn(args.driver ?? "tauri-driver", [
     "--port", String(port),
     ...(args["native-driver"] ? ["--native-driver", args["native-driver"]] : []),
@@ -555,8 +860,9 @@ async function main() {
     // R1 subito dopo il riscaldamento: l'avvio riapre soltanto la nota del
     // riscaldamento, non le schede degli altri scenari. I1 subito dopo, con
     // poche schede da riaprire. S6 dopo S1: l'avvio da misurare riapre la
-    // nota che S1 ha lasciato.
-    const order = ["R1", "I1", "S1", "S6", "S2", "S3", "S4", "S5", "S7", "T1"].filter((id) => only.has(id));
+    // nota che S1 ha lasciato. L1 dopo: non apre niente nel vault. C1 in
+    // fondo: cambia il profilo del vault, e lo lascia a «Tutto».
+    const order = ["R1", "I1", "S1", "S6", "S2", "S3", "S4", "S5", "S7", "S8", "T1", "L1", "C1"].filter((id) => only.has(id));
     for (const id of order) {
       // Un'app che non parte è un risultato dello scenario, non la fine del
       // banco: gli altri scenari e il referto vanno avanti.
@@ -584,7 +890,14 @@ async function main() {
           const limit = limits[key];
           const over = limit !== undefined && (value === null || value > limit);
           if (over) failed++;
-          console.log(`${over ? "✗" : "✓"} ${key} = ${value ?? "—"} ${key.endsWith("MiB") ? "MiB" : "ms"}${limit !== undefined ? ` (soglia ${limit})` : ""} · ${result.samples} campioni`);
+          const unit = key.endsWith("MiB") ? "MiB" : key.endsWith(".chunks") || key.endsWith(".spegnibili") ? "chunk" : key.includes(".dryPaths") ? "path" : "ms";
+          console.log(`${over ? "✗" : "✓"} ${key} = ${value ?? "—"} ${unit}${limit !== undefined ? ` (soglia ${limit})` : ""} · ${result.samples} campioni`);
+        }
+        for (const note of result.notes ?? []) console.log(`· ${id}: ${note}`);
+        for (const [nome, seen] of Object.entries(result.profiles ?? {})) {
+          console.log(`· ${seen.label}: all'avvio ${seen.startup.join(", ")}`);
+          console.log(`· ${seen.label}: dopo una nota ${seen.afterNote.join(", ") || "niente in più"}`);
+          console.log(`· ${seen.label}: dei componenti spegnibili ${seen.switchable.join(", ") || "niente"}`);
         }
       } catch (error) {
         failed++;
@@ -592,7 +905,8 @@ async function main() {
         results[id] = { error: String(error?.message ?? error) };
         console.log(`✗ ${id}: ${results[id].error}`);
       } finally {
-        await session.close();
+        // C1 chiude da sé le sessioni che apre, anche la prima.
+        if (id !== "C1") await session.close();
       }
     }
   } finally {

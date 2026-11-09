@@ -1,21 +1,50 @@
-import { describe, expect, it } from "vitest";
-import { parseInkBrush, type Pf1Brush } from "../../ink/brush";
+import { beforeAll, describe, expect, it } from "vitest";
+import { parseInkBrush, penOf, type Pf1Brush } from "../../ink/brush";
 import type { InkSample } from "../../ink/sample";
 import { decodeInk } from "../spatial/ink/codec";
 import { InkPathCache } from "./ink-paint";
 import {
+  decodeStroke,
+  DEFAULT_INK_CHOICE,
   defaultInkLook,
-  inkLayerWritable,
+  inkLook,
+  inkOpacity,
+  inkWidthOf,
+  type InkPenChoice,
+  foreignInkLayer,
+  inkLayerStates,
   INK_PEN_COLOR,
-  readInkLayer,
-  readInkLayers,
   strokeRecord,
   toDry,
   type DrawableStroke,
+  type InkLayerState,
   type InkStrokeInput,
   type InkStrokeRecord,
 } from "./ink-record";
-import { parseCanvas, serializeCanvas, type CanvasDocument, type CanvasNode } from "./model";
+import type { CanvasDocument, CanvasNode } from "./model";
+import { canvasCoreReady, openCoreNow, type CanvasInkLayer } from "./wasm/core";
+
+beforeAll(async () => {
+  await canvasCoreReady();
+});
+
+/// La lavagna di `doc` scritta nel file e riletta dal nucleo, come la apre la
+/// tela: il modello e i livelli d'inchiostro che il nucleo legge.
+function throughFile(doc: CanvasDocument): { doc: CanvasDocument; layers: readonly CanvasInkLayer[] } {
+  const core = openCoreNow(JSON.stringify(doc, null, "\t"));
+  if (!core) throw new Error("il nucleo non è carico");
+  try {
+    return { doc: core.model(), layers: core.inkLayers() };
+  } finally {
+    core.close();
+  }
+}
+
+/// I livelli da disegnare di `doc`, letti dal nucleo.
+function statesOf(doc: CanvasDocument): InkLayerState[] {
+  const read = throughFile(doc);
+  return inkLayerStates(read.doc, read.layers);
+}
 
 /// L'errore di `s100` (§5): mezzo centesimo di unità.
 const S100_ERROR = 0.005;
@@ -48,7 +77,7 @@ function reread(record: InkStrokeRecord, holder: CanvasNode | null): DrawableStr
   const doc: CanvasDocument = holder === null
     ? { nodes: [], edges: [], "fub:ink": layer }
     : { nodes: [{ ...holder, "fub:ink": layer }], edges: [] };
-  const layers = readInkLayers(parseCanvas(serializeCanvas(doc)));
+  const layers = statesOf(doc);
   expect(layers).toHaveLength(1);
   expect(layers[0]!.state).toBe("ok");
   const entry = layers[0]!.strokes[0]!;
@@ -156,7 +185,7 @@ describe("strokeRecord", () => {
     expect((parseInkBrush(first.brush) as Pf1Brush).taperEnd).toBe(0);
     expect((parseInkBrush(second.brush) as Pf1Brush).taperEnd).toBe((look.brush as Pf1Brush).taperEnd);
     const layer = { v: 1, strokes: [first, second] };
-    const [read] = readInkLayers({ nodes: [{ ...holder, "fub:ink": layer }], edges: [] });
+    const [read] = statesOf({ nodes: [{ ...holder, "fub:ink": layer }], edges: [] });
     expect(read!.drawable.map((s) => s.id)).toEqual([first.id, second.id]);
   });
 
@@ -216,10 +245,21 @@ describe("strokeRecord", () => {
 describe("toDry", () => {
   const record = written(strokeRecord(penStroke(10, 10), card(0, 0), defaultInkLook(1, true), NOW));
 
-  it("non disegna un record che non vale", () => {
-    expect(toDry({ ...record, color: "red" })).toBeNull();
+  it("non disegna un record che non si decodifica", () => {
     expect(toDry({ ...record, ink: "1 s100 cxyq 0,0,1" })).toBeNull();
+    expect(toDry({ ...record, brush: "pf9" })).toBeNull();
+    expect(toDry({ ...record, anchor: { kind: "star" } })).toBeNull();
+    expect(toDry({ ...record, tool: "marker" })).toBeNull();
     expect(toDry({ ...record, id: "" })).toBeNull();
+  });
+
+  it("non giudica il record: quale tratto si disegna lo dice il nucleo", () => {
+    // Un colore che il formato non ammette: il nucleo dice `color`, ma toDry
+    // decodifica soltanto. La tela non lo chiama per un tratto del nucleo
+    // che non si disegna.
+    expect(toDry({ ...record, color: "red" })!.fill).toBe("red");
+    const [state] = statesOf({ nodes: [], edges: [], "fub:ink": { v: 1, strokes: [{ ...record, anchor: { kind: "free" }, color: "red" }] } });
+    expect(state!.strokes[0]).toEqual({ id: record.id, drawn: false, reason: "color" });
   });
 
   it("riusa il percorso della cache", () => {
@@ -232,23 +272,97 @@ describe("toDry", () => {
   });
 });
 
-describe("i livelli", () => {
-  it("un livello estraneo non si scrive, uno che manca o vale sì", () => {
-    expect(inkLayerWritable(card(0, 0))).toBe(true);
-    expect(inkLayerWritable({ ...card(0, 0), "fub:ink": { v: 1, strokes: [] } })).toBe(true);
-    expect(inkLayerWritable({ ...card(0, 0), "fub:ink": { v: 2, strokes: [] } })).toBe(false);
-    expect(inkLayerWritable({ nodes: [], edges: [], "fub:ink": "x" })).toBe(false);
+describe("i livelli da disegnare", () => {
+  it("lo stato viene dal nucleo: un livello estraneo non elenca tratti e non si scrive", () => {
+    const doc: CanvasDocument = {
+      nodes: [
+        { ...card(0, 0), "fub:ink": { v: 2, strokes: [record()] } },
+        { ...card(400, 0, 300, 200, "n2"), "fub:ink": { v: 1, strokes: [record()] } },
+        card(800, 0, 300, 200, "n3"),
+      ],
+      edges: [],
+      "fub:ink": "x",
+    };
+    const { doc: model, layers } = throughFile(doc);
+    const states = inkLayerStates(model, layers);
+    expect(states.map((state) => [state.layer, state.state])).toEqual([
+      [{ node: "n1" }, "foreign"],
+      [{ node: "n2" }, "ok"],
+      ["board", "foreign"],
+    ]);
+    expect(states[0]!.strokes).toEqual([]);
+    expect(states[0]!.node!.id).toBe("n1");
+    expect(states[1]!.drawable).toHaveLength(1);
+    expect(states[2]!.node).toBeNull();
+    expect(foreignInkLayer(layers, { node: "n1" })).toBe(true);
+    expect(foreignInkLayer(layers, "board")).toBe(true);
+    expect(foreignInkLayer(layers, { node: "n2" })).toBe(false);
+    // Un livello che non c'è ancora si può far nascere.
+    expect(foreignInkLayer(layers, { node: "n3" })).toBe(false);
   });
 
-  it("readInkLayer legge il livello di una scheda o della radice", () => {
-    const holder = { ...card(0, 0), "fub:ink": { v: 1, strokes: [record()] } };
-    const doc: CanvasDocument = { nodes: [holder], edges: [] };
-    expect(readInkLayer(doc, holder)!.layer).toEqual({ node: "n1" });
-    expect(readInkLayer(doc, holder)!.drawable).toHaveLength(1);
-    expect(readInkLayer(doc, null)).toBeNull();
+  it("un tratto che il nucleo dice da disegnare e il codec non decodifica non si disegna", () => {
+    const stroke = record();
+    const doc: CanvasDocument = { nodes: [{ ...card(0, 0), "fub:ink": { v: 1, strokes: [{ ...stroke, ink: "1 s100 cxyq 0,0,1" }] } }], edges: [] };
+    // Il nucleo, qui finto, dice «disegnabile».
+    const layers: CanvasInkLayer[] = [{ layer: { node: "n1" }, state: "ok", strokes: [{ id: stroke.id, drawn: true }] }];
+    const [state] = inkLayerStates(doc, layers);
+    expect(state!.strokes).toEqual([{ id: stroke.id, drawn: false, reason: "decode" }]);
+    expect(state!.drawable).toEqual([]);
+  });
+
+  it("un modello che non è quello del nucleo non si disegna", () => {
+    const stroke = record();
+    const doc: CanvasDocument = { nodes: [{ ...card(0, 0), "fub:ink": { v: 1, strokes: [stroke] } }], edges: [] };
+    // Un id diverso al posto del tratto, e una scheda che il modello non ha.
+    const layers: CanvasInkLayer[] = [
+      { layer: { node: "n1" }, state: "ok", strokes: [{ id: "altro", drawn: true }] },
+      { layer: { node: "manca" }, state: "ok", strokes: [] },
+    ];
+    const states = inkLayerStates(doc, layers);
+    expect(states).toHaveLength(1);
+    expect(states[0]!.strokes).toEqual([{ id: "altro", drawn: false, reason: "decode" }]);
+  });
+
+  it("decodeStroke porta la misura della scheda o nessuna per un tratto libero", () => {
+    const stroke = record();
+    expect(decodeStroke(stroke)!.ref).toEqual({ width: 300, height: 200 });
+    expect(decodeStroke({ ...stroke, anchor: { kind: "free" } })!.ref).toBeNull();
+    expect(decodeStroke({ ...stroke, anchor: { kind: "card", width: 0, height: 1 } })).toBeNull();
   });
 
   function record(): InkStrokeRecord {
     return written(strokeRecord(penStroke(10, 10), card(0, 0), defaultInkLook(1, true), NOW));
   }
+});
+
+describe("la penna scelta nel menu", () => {
+  it("inkWidthOf porta lo spessore al bordo e al passo del cursore; un non numero non vale", () => {
+    expect([0, 0.5, 3.3, 3.74, 20, 99].map((px) => inkWidthOf("pen", px))).toEqual([0.5, 0.5, 3.5, 3.5, 20, 20]);
+    expect([1, 4, 9.6, 48, 60].map((px) => inkWidthOf("highlighter", px))).toEqual([4, 4, 10, 48, 48]);
+    for (const bad of [Number.NaN, Infinity, "4", null, undefined]) expect(inkWidthOf("pen", bad)).toBeNull();
+  });
+
+  it("inkLook scrive con la penna, il colore e lo spessore dello strumento scelto, diviso lo zoom", () => {
+    const choice: InkPenChoice = { ...DEFAULT_INK_CHOICE, pen: "fountain", width: { pen: 8, highlighter: 24 } };
+    const pen = inkLook(choice, 2, true);
+    expect([pen.tool, pen.color, penOf(pen.brush), pen.brush.size]).toEqual(["pen", INK_PEN_COLOR, "fountain", 4]);
+    const highlighter = inkLook({ ...choice, tool: "highlighter" }, 0.5, false);
+    expect([highlighter.tool, highlighter.color, penOf(highlighter.brush), highlighter.brush.size]).toEqual(["highlighter", "#f0e442", "highlighter", 48]);
+    expect(inkOpacity(highlighter.brush, highlighter.tool)).toBe(0.5);
+    expect(inkOpacity(pen.brush, pen.tool)).toBe(1);
+    // Con la Gomma scrive la Penna: serve solo se un tratto comincia lo stesso.
+    expect(inkLook({ ...choice, tool: "eraser" }, 1, true).tool).toBe("pen");
+    expect(defaultInkLook(1, true)).toEqual(inkLook(DEFAULT_INK_CHOICE, 1, true));
+    for (const zoom of [0, -1, Number.NaN]) expect(() => inkLook(choice, zoom, true)).toThrow(RangeError);
+  });
+
+  it("un tratto dell'evidenziatore asciuga con la sua opacità, la biro senza", () => {
+    const look = inkLook({ ...DEFAULT_INK_CHOICE, tool: "highlighter" }, 1, true);
+    const highlighted = toDry(written(strokeRecord(penStroke(10, 10), card(0, 0), look, NOW)));
+    expect(highlighted?.opacity).toBe(0.5);
+    expect(highlighted?.fill).toBe("#f0e442");
+    const plain = toDry(written(strokeRecord(penStroke(10, 10), card(0, 0), defaultInkLook(1, true), NOW)));
+    expect(plain && "opacity" in plain).toBe(false);
+  });
 });

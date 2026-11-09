@@ -4,15 +4,61 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Fub</title>
+    <!-- Lo strato d'avvio, prima di ogni altro script: i caratteri del marchio,
+         il suo foglio (luce e colori dal primo disegno, anche senza JS), quello
+         per chi ha il JS spento e i due script classici di public/avvio/. È lo
+         stesso nelle tre pagine. Le pagine non hanno elementi style in linea:
+         public/avvio/avvio.css dice perché. -->
+    <link rel="preload" as="font" type="font/woff2" crossorigin href="/fonts/newsreader-latin-opsz-italic.woff2" />
+    <link rel="preload" as="font" type="font/woff2" crossorigin href="/fonts/hanken-grotesk-latin-wght-normal.woff2" />
+    <link rel="stylesheet" id="avvio-stile" href="/avvio/avvio.css" />
+    <noscript><link rel="stylesheet" href="/avvio/senza-js.css" /></noscript>
+    <script src="/avvio/luce.js"></script>
+    <script defer src="/avvio/stati.js"></script>
   </head>
   <body>
+    <!-- Lo strato d'avvio: copre la pagina dal primo disegno fino alla
+         consegna (src/avvio/consegna.ts), che lo toglie e rende viva l'app.
+         I tempi, i testi salvati e il guasto li tiene /avvio/stati.js; la
+         fase e il nome li scrive l'avvio su data-fase e data-nome. -->
+    <div id="avvio" class="avvio" data-stato="avvio" role="region" aria-labelledby="avvio-regione">
+      <span id="avvio-regione" data-i18n="app.avvio.regione" hidden>Avvio di Fub</span>
+      <div class="avvio-velo"></div>
+      <div class="avvio-colonna">
+        <div class="avvio-posto">
+          <div class="avvio-marchio" aria-hidden="true">
+            <span class="avvio-glifo">f</span>
+            <span class="avvio-segnale"></span>
+          </div>
+        </div>
+        <div class="avvio-info">
+          <div class="avvio-pannello avvio-attesa">
+            <p class="avvio-fase" id="avvio-fase"><span>Carico Fub…</span><span class="avvio-nome" id="avvio-nome"></span><span></span></p>
+            <div class="avvio-traccia" aria-hidden="true"><span class="avvio-scia"></span></div>
+            <div class="avvio-lento">
+              <p class="avvio-lento-testo" data-i18n="app.avvio.lento">Ci vuole più del solito.</p>
+            </div>
+          </div>
+          <div class="avvio-pannello avvio-guasto">
+            <p class="avvio-titolo" id="avvio-titolo" data-i18n="app.avvio.guasto">Fub non è partito</p>
+            <p class="avvio-motivo" id="avvio-motivo"></p>
+            <div class="avvio-azioni">
+              <button type="button" class="avvio-btn" data-kind="primary" id="avvio-riprova" data-i18n="app.retry" aria-describedby="avvio-titolo avvio-motivo">Riprova</button>
+              <button type="button" class="avvio-btn" id="avvio-copia" data-i18n="app.avvio.copia" hidden>Copia i dettagli</button>
+            </div>
+          </div>
+        </div>
+        <p class="avvio-senza-js" data-i18n="app.avvio.senza_js">Fub ha bisogno di JavaScript per partire.</p>
+      </div>
+      <p class="avvio-annuncio" id="avvio-annuncio" role="status"></p>
+    </div>
     <!-- Il salto al contenuto (§12.4). È il primo elemento del documento e si
          vede solo quando prende il fuoco: senza, chi naviga da tastiera deve
          attraversare la topbar, la ricerca e l'intero albero delle note — che
          su un vault vero sono centinaia di fermate — prima di arrivare al
          posto dove si scrive. -->
-    <a href="#panes" class="skip-link" data-i18n="app.skip_to_editor">Vai all'editor</a>
-    <div id="app" class="app">
+    <a href="#panes" class="skip-link" data-i18n="app.skip_to_editor" inert aria-busy="true">Vai all'editor</a>
+    <div id="app" class="app" inert aria-busy="true">
       <header id="topbar" class="titlebar" data-tauri-drag-region="deep">
         <!-- A sinistra: il marchio, che apre il menu dell'applicazione; il
              vault aperto; indietro e avanti del foglio a fuoco. -->

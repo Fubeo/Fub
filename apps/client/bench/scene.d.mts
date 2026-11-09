@@ -30,6 +30,12 @@ export interface Scene {
   page?: string;
   /// La finestra, quando la scena è uno stato che a 1280×800 non esiste.
   viewport?: { width: number; height: number };
+  /// La condizione d'arrivo, al posto di `data-bench="ready"`: la valuta
+  /// `waitForFunction` nella pagina. Serve alle scene dell'avvio, che non
+  /// finisce mai (l'attesa) o finisce nel guasto.
+  ready?: () => boolean;
+  /// Quanto `ready` può farsi aspettare (ms); di serie 30 s.
+  readyTimeout?: number;
   /// I gesti che portano la pagina davanti all'obiettivo. Riceve la pagina di
   /// Playwright, che da questo lato del confine non ha un tipo — i tipi di
   /// Playwright sono di Node, e Node qui non c'è.

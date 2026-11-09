@@ -65,6 +65,44 @@ describe("il menu del visualizzatore", () => {
     surface.destroy();
   });
 
+  it("con un'app Craft installata, «Apri con un'altra app» è il sottomenu con l'app di sistema per prima", async () => {
+    const parent = document.createElement("div");
+    document.body.append(parent);
+    const opened: string[] = [];
+    const deps: MediaSurfaceDeps & { external: string[] } = {
+      ...depsFor("foto.png", "image/png", png(4, 3)),
+      openWith: {
+        installed: () => true,
+        editors: async () => [
+          { id: "photocraft", name: "PhotoCraft", opens: ["png"], installed: true, running: false },
+          { id: "lightcraft", name: "LightCraft", opens: ["png"], installed: false, running: false },
+        ],
+        open: async (doc, editor) => {
+          opened.push(`${editor}:${doc}`);
+          return { editor, how: "new_process" };
+        },
+      },
+    };
+    const surface = mountMediaSurface("media-image", { paneId: "p", documentId: "foto.png", parent }, deps);
+    await vi.waitFor(() => expect(parent.querySelector(".zoom-view")).not.toBeNull());
+    vi.spyOn(document, "elementFromPoint").mockReturnValue(parent.querySelector("img"));
+    const open = surface.contextMenu!({ x: 1, y: 1 })!.tail![0] as SurfaceMenuItem;
+    expect(open.id).toBe("media.open_external");
+    expect(open.label).toBe("Apri con un'altra app");
+    expect(open.run).toBeUndefined();
+    const items = (await open.load!()) as readonly SurfaceMenuItem[];
+    expect(items.map((item) => [item.id, item.label, item.enabled, item.description])).toEqual([
+      ["media.open_with.system", "L'app predefinita del sistema", undefined, undefined],
+      ["media.open_with.photocraft", "PhotoCraft", undefined, undefined],
+      ["media.open_with.lightcraft", "LightCraft", false, "Non installata"],
+    ]);
+    items[0]!.run!();
+    expect(deps.external).toEqual(["foto.png"]);
+    items[1]!.run!();
+    await vi.waitFor(() => expect(opened).toEqual(["photocraft:foto.png"]));
+    surface.destroy();
+  });
+
   it("sul lettore lascia il menu del sistema", async () => {
     vi.spyOn(HTMLMediaElement.prototype, "canPlayType").mockReturnValue("maybe");
     const parent = document.createElement("div");
@@ -75,6 +113,60 @@ describe("il menu del visualizzatore", () => {
     expect(surface.contextMenu!({ x: 1, y: 1 })).toBeNull();
     vi.spyOn(document, "elementFromPoint").mockReturnValue(parent.firstElementChild);
     expect(surface.contextMenu!({ x: 1, y: 1 })!.target.kind).toBe("media");
+    surface.destroy();
+  });
+});
+
+describe("i dati della foto", () => {
+  it("sotto un'immagine, dopo la foto, una volta, con l'id senza frammento", async () => {
+    const parent = document.createElement("div");
+    document.body.append(parent);
+    const shown: string[] = [];
+    const deps: MediaSurfaceDeps = {
+      ...depsFor("foto.jpg", "image/png", png(4, 3)),
+      photoData: {
+        show: (root, doc) => {
+          shown.push(doc);
+          const row = document.createElement("section");
+          row.className = "photo-data";
+          root.append(row);
+        },
+      },
+    };
+    const surface = mountMediaSurface("media-image", { paneId: "p", documentId: "foto.jpg", parent }, deps);
+    await vi.waitFor(() => expect(parent.querySelector(".photo-data")).not.toBeNull());
+    expect(shown).toEqual(["foto.jpg"]);
+    const root = parent.querySelector(".photo-data")!.parentElement!;
+    expect(root.lastElementChild?.className).toBe("photo-data");
+    expect(root.querySelector(".zoom-view")).not.toBeNull();
+    surface.destroy();
+  });
+
+  it("anche sotto la frase di una foto che non si apre", async () => {
+    const parent = document.createElement("div");
+    document.body.append(parent);
+    const shown: string[] = [];
+    const base = depsFor("foto.heic", "image/heic", new Uint8Array(4));
+    const deps: MediaSurfaceDeps = {
+      ...base,
+      transport: { ...base.transport, open: async () => Promise.reject(new Error("non si apre")) },
+      photoData: { show: (_root, doc) => void shown.push(doc) },
+    };
+    const surface = mountMediaSurface("media-image", { paneId: "p", documentId: "foto.heic", parent }, deps);
+    await vi.waitFor(() => expect(shown).toEqual(["foto.heic"]));
+    expect(parent.textContent).toContain("non si apre");
+    surface.destroy();
+  });
+
+  it("non sotto un audio", async () => {
+    vi.spyOn(HTMLMediaElement.prototype, "canPlayType").mockReturnValue("maybe");
+    const parent = document.createElement("div");
+    document.body.append(parent);
+    const shown: string[] = [];
+    const deps: MediaSurfaceDeps = { ...depsFor("voce.mp3", "audio/mpeg", new Uint8Array(8)), photoData: { show: (_r, doc) => void shown.push(doc) } };
+    const surface = mountMediaSurface("media-audio", { paneId: "p", documentId: "voce.mp3", parent }, deps);
+    await vi.waitFor(() => expect(parent.querySelector("audio")).not.toBeNull());
+    expect(shown).toEqual([]);
     surface.destroy();
   });
 });

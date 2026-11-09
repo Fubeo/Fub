@@ -133,12 +133,8 @@ struct RenameIndexProbe {
 
 impl RenameIndexProbe {
     fn observe(&self, callback: RenameCallback) {
-        let read = self.workspace.try_read();
-        let read_free = read.is_some();
-        drop(read);
-        let write = self.workspace.try_write();
-        let write_free = write.is_some();
-        drop(write);
+        let read_free = super::read_comes_free(&self.workspace);
+        let write_free = super::write_comes_free(&self.workspace);
         self.observed
             .send((callback, read_free, write_free))
             .expect("rename observation receiver");
@@ -205,12 +201,8 @@ fn observe_backlink_stage(
         .as_ref()
         .expect("backlink probe workspace installed")
         .clone();
-    let read = workspace.try_read();
-    let read_free = read.is_some();
-    drop(read);
-    let write = workspace.try_write();
-    let write_free = write.is_some();
-    drop(write);
+    let read_free = super::read_comes_free(&workspace);
+    let write_free = super::write_comes_free(&workspace);
     observed
         .send((stage, read_free, write_free))
         .expect("backlink observation receiver");
@@ -361,12 +353,8 @@ impl IndexProvider for RestoreReentryProbe {
         let index = events
             .iter()
             .position(|event| matches!(event, Event::IndexUpdated));
-        let read = self.workspace.try_read();
-        let read_free = read.is_some();
-        drop(read);
-        let write = self.workspace.try_write();
-        let write_free = write.is_some();
-        drop(write);
+        let read_free = super::read_comes_free(&self.workspace);
+        let write_free = super::write_comes_free(&self.workspace);
         let newer_write = std::fs::write(self.root.join("Note 0.md"), "# Newer from re-entry\n")
             .map_err(|error| PluginError::Internal(error.to_string().into()));
         let handler_deferred = !self.handled.load(Ordering::SeqCst);
@@ -471,7 +459,7 @@ fn an_index_feed_runs_without_holding_the_workspace_lock() {
     entered_rx
         .recv_timeout(Duration::from_secs(10))
         .expect("IndexProvider::on_documents_indexed entered");
-    let reader_progressed = ws.try_read().is_some();
+    let reader_progressed = super::read_comes_free(&ws);
     release_tx.send(()).expect("release index feed");
     let outcome = call.join().expect("write thread does not panic");
 
@@ -1098,7 +1086,7 @@ fn an_edit_feed_runs_without_holding_the_workspace_lock() {
     entered_rx
         .recv_timeout(Duration::from_secs(10))
         .expect("IndexProvider::on_documents_indexed entered for edit");
-    let reader_progressed = ws.try_read().is_some();
+    let reader_progressed = super::read_comes_free(&ws);
     release_tx.send(()).expect("release edit index feed");
     let outcome = call.join().expect("edit thread does not panic");
 
@@ -1143,7 +1131,7 @@ fn a_create_feed_runs_without_holding_the_workspace_lock() {
     entered_rx
         .recv_timeout(Duration::from_secs(10))
         .expect("IndexProvider::on_documents_indexed entered for create");
-    let reader_progressed = ws.try_read().is_some();
+    let reader_progressed = super::read_comes_free(&ws);
     release_tx.send(()).expect("release create index feed");
     let outcome = call.join().expect("create thread does not panic");
 

@@ -26,6 +26,9 @@ pub const UPDATES_CHECK_JOB: &str = "updates.check";
 
 const API_HOST: &str = "api.github.com";
 const LATEST_RELEASE: &str = "https://api.github.com/repos/Fubeo/Fub/releases/latest";
+/// Le ultime release, pre-release comprese (le bozze non arrivano senza
+/// autenticazione): la chiede soltanto chi ha una pre-release.
+const RELEASES_LIST: &str = "https://api.github.com/repos/Fubeo/Fub/releases?per_page=30";
 /// La pagina di una release si consegna alla shell soltanto se sta qui: un
 /// link arrivato dalla rete non diventa un link qualunque nella finestra.
 const RELEASES_PAGE: &str = "https://github.com/Fubeo/Fub/releases/";
@@ -141,14 +144,26 @@ impl Plugin for UpdatesPlugin {
 }
 
 /// La domanda e la risposta: `{current, latest, newer, url}`. Nessuna release
-/// pubblicata (404) è un esito, `latest: null`. Una risposta che non si usa —
-/// un altro stato, un corpo che non si capisce, un tag che non è una versione
-/// — è un esito anch'esso, `{current, failed, status}`: chi chiede ha avuto una
-/// risposta, e la shell la dice nella lingua di chi guarda. Errore resta
-/// soltanto la rete che non risponde.
+/// pubblicata (404, o una lista senza release) è un esito, `latest: null`. Una
+/// risposta che non si usa — un altro stato, un corpo che non si capisce, un
+/// tag che non è una versione — è un esito anch'esso, `{current, failed,
+/// status}`: chi chiede ha avuto una risposta, e la shell la dice nella lingua
+/// di chi guarda. Errore resta soltanto la rete che non risponde.
+///
+/// Chi ha una release vera chiede `/releases/latest`, che GitHub dà solo per
+/// le release vere: non vede le pre-release. Chi ha una pre-release chiede la
+/// lista delle ultime release e prende la versione più alta fra quelle che si
+/// leggono, pre-release o no: decide il tag, non il flag `prerelease`.
 fn check(current: &str, host: &mut dyn HostApi) -> Result<serde_json::Value, PluginError> {
+    let running = Version::parse(current);
+    let wants_list = running.as_ref().is_some_and(|version| !version.release);
+    let endpoint = if wants_list {
+        RELEASES_LIST
+    } else {
+        LATEST_RELEASE
+    };
     let response = host.fetch(
-        HttpRequest::get(LATEST_RELEASE)
+        HttpRequest::get(endpoint)
             .with_header("Accept", "application/vnd.github+json")
             .with_header("User-Agent", format!("Fub/{current}")),
     )?;
@@ -159,25 +174,43 @@ fn check(current: &str, host: &mut dyn HostApi) -> Result<serde_json::Value, Plu
             "status": response.status,
         }))
     };
-    if response.status == 404 {
-        return Ok(serde_json::json!({
+    let nothing_published = || -> Result<serde_json::Value, PluginError> {
+        Ok(serde_json::json!({
             "current": current,
             "latest": null,
             "newer": false,
             "url": null,
-        }));
+        }))
+    };
+    if response.status == 404 {
+        return nothing_published();
     }
     if response.status != 200 {
         return failed("status");
     }
-    let Ok(release) = serde_json::from_slice::<serde_json::Value>(&response.body) else {
+    let Ok(body) = serde_json::from_slice::<serde_json::Value>(&response.body) else {
         return failed("unreadable");
     };
-    let Some(tag) = release.get("tag_name").and_then(serde_json::Value::as_str) else {
-        return failed("unreadable");
+    let (latest, newest, release) = if wants_list {
+        let Some(releases) = body.as_array() else {
+            return failed("unreadable");
+        };
+        match highest_release(releases) {
+            Highest::Found(tag, version, release) => (tag, version, release),
+            Highest::NoTags => return nothing_published(),
+            Highest::NoVersions => return failed("version"),
+        }
+    } else {
+        let Some(tag) = body.get("tag_name").and_then(serde_json::Value::as_str) else {
+            return failed("unreadable");
+        };
+        let latest = tag.strip_prefix('v').unwrap_or(tag);
+        let Some(newest) = Version::parse(latest) else {
+            return failed("version");
+        };
+        (latest, newest, &body)
     };
-    let latest = tag.strip_prefix('v').unwrap_or(tag);
-    let (Some(newest), Some(running)) = (Version::parse(latest), Version::parse(current)) else {
+    let Some(running) = running else {
         return failed("version");
     };
     let url = release
@@ -192,15 +225,88 @@ fn check(current: &str, host: &mut dyn HostApi) -> Result<serde_json::Value, Plu
     }))
 }
 
-/// `major.minor.patch` con un eventuale `-pre`: basta a confrontare i tag di
-/// questo repository. Una pre-release viene prima della release che anticipa;
-/// due pre-release si confrontano come testo.
-#[derive(PartialEq, Eq, PartialOrd, Ord)]
+/// Cosa c'è di più alto in una lista di release di GitHub.
+enum Highest<'a> {
+    /// Il tag senza `v`, la sua versione e la release da cui viene.
+    Found(&'a str, Version, &'a serde_json::Value),
+    /// Nessuna release con un tag: per chi chiede, niente di pubblicato.
+    NoTags,
+    /// Release con un tag, ma nessun tag è una versione.
+    NoVersions,
+}
+
+/// La versione più alta della lista. Una bozza (che senza autenticazione non
+/// arriva) o una voce senza `tag_name` non è una release pubblicata e non
+/// conta; un tag che non è una versione si salta. A parità di versione resta
+/// la prima voce, la più recente per GitHub.
+fn highest_release(releases: &[serde_json::Value]) -> Highest<'_> {
+    let mut tagged = false;
+    let mut best: Option<(&str, Version, &serde_json::Value)> = None;
+    for release in releases {
+        if release.get("draft").and_then(serde_json::Value::as_bool) == Some(true) {
+            continue;
+        }
+        let Some(tag) = release.get("tag_name").and_then(serde_json::Value::as_str) else {
+            continue;
+        };
+        tagged = true;
+        let tag = tag.strip_prefix('v').unwrap_or(tag);
+        let Some(version) = Version::parse(tag) else {
+            continue;
+        };
+        if best.as_ref().is_none_or(|(_, top, _)| version > *top) {
+            best = Some((tag, version, release));
+        }
+    }
+    match best {
+        Some((tag, version, release)) => Highest::Found(tag, version, release),
+        None if tagged => Highest::NoVersions,
+        None => Highest::NoTags,
+    }
+}
+
+/// `major.minor.patch` con un eventuale `-pre` e un `+build` che non conta:
+/// basta a confrontare i tag di questo repository. Una pre-release viene prima
+/// della release che anticipa; due pre-release si confrontano come dice
+/// semver, parte per parte.
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
 struct Version {
     core: (u64, u64, u64),
     /// `true` ordina dopo `false`: la release vince sulle sue anteprime.
     release: bool,
-    pre: String,
+    /// Le parti della pre-release, separate dai punti; vuota per una release.
+    /// L'ordine di `Vec` è quello di semver: parte per parte, e a parità la
+    /// lista più corta prima.
+    pre: Vec<PreIdent>,
+}
+
+/// Una parte della pre-release. L'ordine delle varianti è quello di semver:
+/// un numero viene prima di un testo; i numeri si confrontano come numeri, i
+/// testi come testo (ASCII).
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
+enum PreIdent {
+    Number(u64),
+    Text(String),
+}
+
+impl PreIdent {
+    fn parse(part: &str) -> Option<Self> {
+        if part.is_empty()
+            || !part
+                .bytes()
+                .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-')
+        {
+            return None;
+        }
+        if part.bytes().all(|byte| byte.is_ascii_digit()) {
+            // Un numero che non sta in `u64` resta un testo: si ordina dopo i
+            // numeri invece di far cadere tutta la versione.
+            if let Ok(number) = part.parse::<u64>() {
+                return Some(PreIdent::Number(number));
+            }
+        }
+        Some(PreIdent::Text(part.to_string()))
+    }
 }
 
 impl Version {
@@ -215,10 +321,17 @@ impl Version {
         if parts.next().is_some() {
             return None;
         }
+        let pre = match pre {
+            Some(pre) => pre
+                .split('.')
+                .map(PreIdent::parse)
+                .collect::<Option<Vec<_>>>()?,
+            None => Vec::new(),
+        };
         Some(Version {
             core: version,
-            release: pre.is_none(),
-            pre: pre.unwrap_or("").to_string(),
+            release: pre.is_empty(),
+            pre,
         })
     }
 }
@@ -319,6 +432,121 @@ mod tests {
         assert!(v("0.10.0") > v("0.9.0"));
         assert!(Version::parse("1.0").is_none());
         assert!(Version::parse("latest").is_none());
+        // Le parti della pre-release come dice semver.
+        assert!(v("0.2.0-prealpha.10") > v("0.2.0-prealpha.2"));
+        assert!(v("0.2.0") > v("0.2.0-prealpha.9"));
+        assert!(v("0.2.0-rc.1") > v("0.2.0-prealpha.3"));
+        assert!(
+            v("1.0.0-alpha.beta") > v("1.0.0-alpha.1"),
+            "il numero prima del testo"
+        );
+        assert!(
+            v("1.0.0-alpha.1") > v("1.0.0-alpha"),
+            "la lista più corta prima"
+        );
+        assert!(v("1.0.0-beta.11") > v("1.0.0-beta.2"));
+        assert!(v("0.2.0-prealpha.1") > v("0.1.9"));
+        assert_eq!(v("0.2.0-prealpha.2+build.7"), v("0.2.0-prealpha.2"));
+        assert!(Version::parse("1.0.0-").is_none());
+        assert!(Version::parse("1.0.0-rc..1").is_none());
+        assert!(Version::parse("1.0.0-rc_1").is_none());
+    }
+
+    fn list_check(current: &str, body: &str) -> serde_json::Value {
+        let mut host = MemoryHost::new().with_response(answer(200, body));
+        let out = check(current, &mut host).unwrap();
+        let asked = host.network_requests();
+        assert_eq!(asked.len(), 1);
+        assert_eq!(asked[0].url, RELEASES_LIST);
+        out
+    }
+
+    #[test]
+    fn a_prerelease_asks_the_list_and_takes_the_highest_version() {
+        let out = list_check(
+            "0.2.0-prealpha.1",
+            r#"[
+                {"tag_name":"v0.2.0-prealpha.2","prerelease":true,
+                 "html_url":"https://github.com/Fubeo/Fub/releases/tag/v0.2.0-prealpha.2"},
+                {"tag_name":"v0.2.0-prealpha.10","prerelease":true,
+                 "html_url":"https://github.com/Fubeo/Fub/releases/tag/v0.2.0-prealpha.10"},
+                {"tag_name":"v0.1.4","prerelease":false,
+                 "html_url":"https://github.com/Fubeo/Fub/releases/tag/v0.1.4"}
+            ]"#,
+        );
+        assert_eq!(out["latest"], "0.2.0-prealpha.10");
+        assert_eq!(out["newer"], true);
+        assert_eq!(
+            out["url"],
+            "https://github.com/Fubeo/Fub/releases/tag/v0.2.0-prealpha.10"
+        );
+
+        // Una pre-release più vecchia della release vera che c'è: vince la più
+        // alta, e decide il tag, non il flag `prerelease`.
+        let out = list_check(
+            "0.2.0-prealpha.3",
+            r#"[
+                {"tag_name":"v0.2.0-prealpha.4","prerelease":true},
+                {"tag_name":"v0.2.0","prerelease":true,
+                 "html_url":"https://github.com/Fubeo/Fub/releases/tag/v0.2.0"}
+            ]"#,
+        );
+        assert_eq!(out["latest"], "0.2.0");
+        assert_eq!(out["newer"], true);
+
+        // La stessa pre-release che gira non è un aggiornamento.
+        let out = list_check(
+            "0.2.0-prealpha.2",
+            r#"[{"tag_name":"v0.2.0-prealpha.2"},{"tag_name":"v0.1.0"}]"#,
+        );
+        assert_eq!(out["latest"], "0.2.0-prealpha.2");
+        assert_eq!(out["newer"], false);
+        assert!(out["url"].is_null());
+    }
+
+    #[test]
+    fn the_list_skips_drafts_and_tags_that_are_not_versions() {
+        // Una lista vuota: niente di pubblicato.
+        let out = list_check("0.2.0-prealpha.1", "[]");
+        assert!(out["latest"].is_null());
+        assert_eq!(out["newer"], false);
+        assert!(out.get("failed").is_none());
+
+        // Una bozza senza `tag_name` non conta, né da sola né in mezzo.
+        let out = list_check("0.2.0-prealpha.1", r#"[{"draft":true,"name":"bozza"}]"#);
+        assert!(out["latest"].is_null());
+        let out = list_check(
+            "0.2.0-prealpha.1",
+            r#"[{"draft":true},{"draft":true,"tag_name":"v9.0.0"},{"tag_name":"v0.2.0-prealpha.2"}]"#,
+        );
+        assert_eq!(out["latest"], "0.2.0-prealpha.2");
+        assert_eq!(out["newer"], true);
+
+        // Un tag che non è una versione si salta; se non ne resta nessuna è
+        // l'esito `version`.
+        let out = list_check(
+            "0.2.0-prealpha.1",
+            r#"[{"tag_name":"nightly"},{"tag_name":"v0.2.0-prealpha.3"}]"#,
+        );
+        assert_eq!(out["latest"], "0.2.0-prealpha.3");
+        let out = list_check("0.2.0-prealpha.1", r#"[{"tag_name":"nightly"}]"#);
+        assert_eq!(out["failed"], "version");
+        assert_eq!(out["status"], 200);
+
+        // Una lista che non è un array.
+        let out = list_check("0.2.0-prealpha.1", r#"{"tag_name":"v0.2.0-prealpha.2"}"#);
+        assert_eq!(out["failed"], "unreadable");
+    }
+
+    #[test]
+    fn a_real_release_does_not_see_prereleases() {
+        let mut host = MemoryHost::new().with_response(answer(
+            200,
+            r#"{"tag_name":"v0.1.4","html_url":"https://github.com/Fubeo/Fub/releases/tag/v0.1.4"}"#,
+        ));
+        let out = check("0.1.4", &mut host).unwrap();
+        assert_eq!(out["newer"], false);
+        assert_eq!(host.network_requests()[0].url, LATEST_RELEASE);
     }
 
     #[test]

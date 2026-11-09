@@ -5,6 +5,7 @@
 // barra non sa di chi è: le classi portano il prefisso, il testo arriva da
 // fuori, il catalogo decide che cosa si vede, e lo smontaggio non lascia niente.
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { closeContextMenu, showContextMenu } from "../../ui/menu";
 import { mountRibbon, type Ribbon, type RibbonCommandState } from "./ribbon";
 import type { ControlBase, KitControl, RibbonTab } from "./types";
 
@@ -312,5 +313,409 @@ describe("la barra del kit, i gesti di Office", () => {
     off.dispatchEvent(enter);
     expect(enter.defaultPrevented).toBe(true);
     expect(gave).toEqual([]);
+  });
+});
+
+describe("la barra del kit, il gruppo raccolto", () => {
+  type Room = { width: number };
+  const GROUPS = ["uno", "due", "tre", "quattro"] as const;
+  let root: HTMLElement;
+  let place: HTMLElement;
+  let mounted: Ribbon<View, Key>;
+  let focused: number;
+  let room: Room;
+  let scrolled: Element[];
+  const originalScroll = HTMLElement.prototype.scrollIntoView;
+
+  // Ogni foglietto aperto è largo 100 (70 con `data-dense`), uno raccolto 40:
+  // la fila trabocca quando la somma passa la larghezza della barra.
+  function measure(toolbar: HTMLElement): void {
+    Object.defineProperty(toolbar, "clientWidth", { configurable: true, get: () => room.width });
+    Object.defineProperty(toolbar, "scrollWidth", {
+      configurable: true,
+      get: () => {
+        const dense = toolbar.closest<HTMLElement>("[data-dense]")?.dataset.dense === "true";
+        return [...toolbar.children]
+          .filter((group) => !(group as HTMLElement).hidden)
+          .reduce((sum, group) => sum + ((group as HTMLElement).dataset.collapsed === "true" ? 40 : dense ? 70 : 100), 0);
+      },
+    });
+  }
+
+  function mount(openInPlace: boolean): void {
+    const tab = (id: string, keytip: string): RibbonTab<KitControl<View, Key>, Key> => ({
+      id,
+      label: id === "home" ? "home" : "table",
+      keytip,
+      groups: GROUPS.map((name, at) => ({
+        id: `${id}-${name}`,
+        label: "font",
+        icon: "bold",
+        keytip: `Z${at + 1}`,
+        columns: [
+          { kind: "button", id: `${id}.${name}.a`, label: "bold", keytip: `${at + 1}A`, glyph: "A" },
+          { kind: "button", id: `${id}.${name}.b`, label: "italic", keytip: `${at + 1}B`, glyph: "B" },
+        ],
+      })),
+    });
+    const tabs = [tab("home", "H"), tab("view", "W")];
+    states = tabs.flatMap((one) => one.groups.flatMap((group) => group.columns.map((control) => ({ id: (control as { id: string }).id, enabled: true }))));
+    mounted = mountRibbon<View, Key>({
+      host: place,
+      prefix: "doc-ribbon",
+      menuPrefix: "doc.menu.",
+      tabs,
+      mini: [],
+      chevrons: { down: "chevron", up: "chevron" },
+      strings: {
+        label: () => "Barra",
+        collapse: () => "Comprimi",
+        expand: () => "Mostra",
+        unavailable: (label, reason) => `${label}: ${reason}`,
+        empty: () => "Nessuna voce",
+        mini: () => "Mini-barra",
+      },
+      t: (key) => WORDS[key],
+      commands: () => states,
+      commandable: () => true,
+      view: () => view,
+      contextShown: () => false,
+      command: () => {},
+      openDialog: () => {},
+      focus: () => {
+        focused += 1;
+      },
+      languages: () => () => {},
+      openInPlace,
+    });
+    for (const toolbar of place.querySelectorAll<HTMLElement>(".doc-ribbon-toolbar")) measure(toolbar);
+  }
+
+  const frame = () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+  /// Rilegge la barra e aspetta che si raccolga.
+  async function settle(width: number): Promise<void> {
+    room.width = width;
+    mounted.refresh();
+    await frame();
+  }
+  const panel = () => place.querySelector<HTMLElement>('.doc-ribbon-panel[data-tab="home"]')!;
+  const group = (name: string) => panel().querySelector<HTMLElement>(`[data-group="home-${name}"]`)!;
+  const toggleOf = (name: string) => group(name).querySelector<HTMLButtonElement>(".doc-ribbon-group-toggle")!;
+  const collapsedNames = () => GROUPS.filter((name) => group(name).dataset.collapsed === "true");
+  const aloneNames = () => GROUPS.filter((name) => group(name).dataset.alone === "true");
+  const openNames = () => GROUPS.filter((name) => group(name).dataset.open === "true");
+  const key = (target: EventTarget, name: string) =>
+    target.dispatchEvent(new KeyboardEvent("keydown", { key: name, bubbles: true, cancelable: true }));
+  const badges = (container: Element) => [...container.querySelectorAll(".doc-ribbon-keytip")].map((badge) => badge.textContent);
+
+  beforeEach(() => {
+    ribbon.destroy();
+    document.body.replaceChildren();
+    root = document.createElement("div");
+    place = document.createElement("div");
+    root.append(place);
+    document.body.append(root);
+    focused = 0;
+    room = { width: 1000 };
+    scrolled = [];
+    HTMLElement.prototype.scrollIntoView = function (this: HTMLElement, options?: boolean | ScrollIntoViewOptions) {
+      expect(options).toEqual({ block: "nearest", inline: "nearest" });
+      scrolled.push(this);
+    };
+  });
+
+  afterEach(() => {
+    mounted.destroy();
+    HTMLElement.prototype.scrollIntoView = originalScroll;
+  });
+
+  it("senza l'opzione apre il gruppo raccolto nel riquadro di sempre", async () => {
+    mount(false);
+    await settle(300);
+    expect(collapsedNames()).toEqual(["tre", "quattro"]);
+    const toggle = toggleOf("tre");
+    expect(toggle.getAttribute("aria-haspopup")).toBe("dialog");
+    expect(toggle.hasAttribute("aria-controls")).toBe(false);
+    expect(panel().hasAttribute("data-dense")).toBe(false);
+    expect(group("quattro").hasAttribute("data-alone")).toBe(false);
+    toggle.click();
+    const box = document.querySelector<HTMLElement>(".doc-ribbon-popup-group")!;
+    expect(box).not.toBeNull();
+    expect(box.querySelector('[aria-label="Grassetto"]')).not.toBeNull();
+    expect(toggle.getAttribute("aria-expanded")).toBe("true");
+    expect(group("tre").hasAttribute("data-open")).toBe(false);
+  });
+
+  it("nomina il corpo del gruppo e lo apre sul posto, col fuoco sul primo comando", async () => {
+    mount(true);
+    await settle(300);
+    expect(collapsedNames()).toEqual(["tre", "quattro"]);
+    const toggle = toggleOf("tre");
+    expect(toggle.hasAttribute("aria-haspopup")).toBe(false);
+    expect(toggle.getAttribute("aria-expanded")).toBe("false");
+    const body = document.getElementById(toggle.getAttribute("aria-controls")!)!;
+    expect(body.parentElement).toBe(group("tre"));
+    expect(body.id.startsWith("doc-ribbon-body-home-home-tre")).toBe(true);
+    toggle.click();
+    expect(openNames()).toEqual(["tre"]);
+    expect(toggle.getAttribute("aria-expanded")).toBe("true");
+    // Il corpo resta nel gruppo, nessun riquadro.
+    expect(body.parentElement).toBe(group("tre"));
+    expect(document.querySelector(".doc-ribbon-popup-group")).toBeNull();
+    // Gli altri gli fanno posto da destra: 100 + 3 × 40 = 220.
+    expect(collapsedNames()).toEqual(["due", "quattro"]);
+    expect(document.activeElement).toBe(body.querySelector('[aria-label="Grassetto"]'));
+    expect(scrolled).toContain(group("tre"));
+  });
+
+  it("si apre con ↓ e con Invio, uno alla volta", async () => {
+    mount(true);
+    await settle(250);
+    expect(collapsedNames()).toEqual(["due", "tre", "quattro"]);
+    toggleOf("tre").focus();
+    key(toggleOf("tre"), "ArrowDown");
+    expect(openNames()).toEqual(["tre"]);
+    // Un altro richiude il primo.
+    toggleOf("due").click();
+    expect(openNames()).toEqual(["due"]);
+    expect(toggleOf("tre").getAttribute("aria-expanded")).toBe("false");
+    expect(collapsedNames()).toEqual(["uno", "tre", "quattro"]);
+    // Invio e Spazio restano al pulsante vero, che li trasforma in un clic:
+    // la barra non li trattiene.
+    toggleOf("tre").focus();
+    for (const name of ["Enter", " "]) {
+      const press = new KeyboardEvent("keydown", { key: name, bubbles: true, cancelable: true });
+      toggleOf("tre").dispatchEvent(press);
+      expect(press.defaultPrevented).toBe(false);
+    }
+    expect(toggleOf("tre").tagName).toBe("BUTTON");
+    toggleOf("tre").click();
+    expect(openNames()).toEqual(["tre"]);
+  });
+
+  it("Esc richiude il gruppo aperto e torna al suo pulsante; il secondo Esc torna all'editor", async () => {
+    mount(true);
+    await settle(250);
+    toggleOf("tre").click();
+    const first = document.activeElement as HTMLElement;
+    expect(group("tre").contains(first)).toBe(true);
+    key(first, "Escape");
+    expect(openNames()).toEqual([]);
+    expect(toggleOf("tre").getAttribute("aria-expanded")).toBe("false");
+    expect(collapsedNames()).toEqual(["due", "tre", "quattro"]);
+    expect(document.activeElement).toBe(toggleOf("tre"));
+    expect(focused).toBe(0);
+    key(toggleOf("tre"), "Escape");
+    expect(focused).toBe(1);
+  });
+
+  it("segna l'ultimo raccolto di una fila dispari, e nessun altro", async () => {
+    mount(true);
+    await settle(300);
+    // Due raccolti di fila: a pila, nessuno solo.
+    expect(collapsedNames()).toEqual(["tre", "quattro"]);
+    expect(aloneNames()).toEqual([]);
+    await settle(250);
+    // Tre di fila: due a pila, il terzo solo.
+    expect(collapsedNames()).toEqual(["due", "tre", "quattro"]);
+    expect(aloneNames()).toEqual(["quattro"]);
+    // Uno aperto in mezzo spezza la fila: «due» resta solo fra due aperti,
+    // «quattro» solo in fondo.
+    toggleOf("tre").click();
+    expect(collapsedNames()).toEqual(["uno", "due", "quattro"]);
+    expect(aloneNames()).toEqual(["quattro"]);
+    await settle(300);
+    expect(openNames()).toEqual(["tre"]);
+    expect(collapsedNames()).toEqual(["due", "quattro"]);
+    expect(aloneNames()).toEqual(["due", "quattro"]);
+    // Uno solo smette di esserlo quando un altro si raccoglie accanto a lui.
+    await settle(230);
+    expect(collapsedNames()).toEqual(["uno", "due", "quattro"]);
+    expect(aloneNames()).toEqual(["quattro"]);
+  });
+
+  it("quando nemmeno così la fila ci sta, il pannello si fa denso", async () => {
+    mount(true);
+    await settle(300);
+    expect(panel().dataset.dense).toBe("false");
+    toggleOf("tre").click();
+    expect(panel().dataset.dense).toBe("false");
+    await settle(200);
+    // 100 + 3 × 40 = 220 > 200: il gruppo aperto resta aperto, i gettoni
+    // perdono il nome.
+    expect(openNames()).toEqual(["tre"]);
+    expect(collapsedNames()).toEqual(["uno", "due", "quattro"]);
+    expect(panel().dataset.dense).toBe("true");
+  });
+
+  it("una sezione cambiata, la barra ritirata o una larghezza che basta lo richiudono", async () => {
+    mount(true);
+    await settle(250);
+    toggleOf("tre").click();
+    place.querySelector<HTMLElement>('.kit-tab[data-tab="view"], .kit-tab:nth-of-type(2)')!.click();
+    await frame();
+    place.querySelector<HTMLElement>(".kit-tab")!.click();
+    await frame();
+    expect(openNames()).toEqual([]);
+    toggleOf("tre").click();
+    expect(openNames()).toEqual(["tre"]);
+    root.dispatchEvent(new KeyboardEvent("keydown", { key: "F1", ctrlKey: true, bubbles: true }));
+    expect(openNames()).toEqual([]);
+    root.dispatchEvent(new KeyboardEvent("keydown", { key: "F1", ctrlKey: true, bubbles: true }));
+    await frame();
+    toggleOf("tre").click();
+    await settle(1000);
+    expect(collapsedNames()).toEqual([]);
+    expect(openNames()).toEqual([]);
+    expect(toggleOf("tre").getAttribute("aria-expanded")).toBe("false");
+  });
+
+  it("la lettera di Alt di un gruppo raccolto lo apre e mostra le lettere dei suoi comandi", async () => {
+    mount(true);
+    await settle(250);
+    root.dispatchEvent(new KeyboardEvent("keydown", { key: "Alt", bubbles: true }));
+    root.dispatchEvent(new KeyboardEvent("keyup", { key: "Alt", bubbles: true, cancelable: true }));
+    key(document, "H");
+    expect(badges(group("tre"))).toEqual(["Z3"]);
+    key(document, "Z");
+    key(document, "3");
+    expect(openNames()).toEqual(["tre"]);
+    expect(badges(group("tre"))).toEqual(["3A", "3B"]);
+    // Esc lo richiude e torna alle lettere della scheda.
+    key(document, "Escape");
+    expect(openNames()).toEqual([]);
+    expect(badges(group("tre"))).toEqual(["Z3"]);
+  });
+});
+
+describe("la barra del kit, un menu nell'accesso rapido", () => {
+  let root: HTMLElement;
+  let place: HTMLElement;
+  let mounted: Ribbon<View, Key>;
+  let opened: { pointer: boolean; view: View }[];
+  let seen: View[];
+
+  beforeEach(() => {
+    ribbon.destroy();
+    document.body.replaceChildren();
+    root = document.createElement("div");
+    place = document.createElement("div");
+    root.append(place);
+    document.body.append(root);
+    opened = [];
+    seen = [];
+    states = [
+      { id: "doc.bold", enabled: true },
+      { id: "doc.undo", enabled: true },
+    ];
+    view = { bold: false, inTable: false };
+    mounted = mountRibbon<View, Key>({
+      host: place,
+      prefix: "doc-ribbon",
+      menuPrefix: "doc.menu.",
+      tabs: [{ id: "home", label: "home", keytip: "H", groups: [{ id: "font", label: "font", icon: "bold", keytip: "ZF", columns: [{ kind: "button", id: "doc.bold", label: "bold", keytip: "1", glyph: "G" }] }] }],
+      quick: [
+        {
+          kind: "menu",
+          label: "stamp",
+          keytip: "C",
+          icon: "list",
+          labelled: true,
+          requires: [],
+          items: () => [],
+          open: (anchor, now, how) => {
+            opened.push({ pointer: how.pointer, view: now });
+            showContextMenu(anchor, [{ label: "Grassetto", run: () => {} }], { labelledBy: anchor.id, pointer: how.pointer, onClose: how.closed });
+            return { update: (next) => seen.push(next) };
+          },
+        },
+        { kind: "button", id: "doc.undo", label: "rows", keytip: "1", glyph: "↶" },
+      ],
+      mini: [],
+      chevrons: { down: "chevron", up: "chevron" },
+      strings: {
+        label: () => "Barra",
+        collapse: () => "Comprimi",
+        expand: () => "Mostra",
+        unavailable: (label, reason) => `${label}: ${reason}`,
+        empty: () => "Nessuna voce",
+        mini: () => "Mini-barra",
+        quick: () => "Accesso rapido",
+      },
+      t: (key) => WORDS[key],
+      commands: () => states,
+      commandable: () => true,
+      view: () => view,
+      contextShown: () => false,
+      command: () => {},
+      openDialog: () => {},
+      focus: () => {},
+      languages: () => () => {},
+    });
+  });
+
+  afterEach(() => {
+    closeContextMenu();
+    mounted.destroy();
+  });
+
+  const menuButton = () => place.querySelector<HTMLButtonElement>(".doc-ribbon-quick button")!;
+  const key = (target: EventTarget, name: string): KeyboardEvent => {
+    const e = new KeyboardEvent("keydown", { key: name, bubbles: true, cancelable: true });
+    target.dispatchEvent(e);
+    return e;
+  };
+
+  it("sta per primo, col nome scritto, e dice che apre un menu", () => {
+    const button = menuButton();
+    expect(button.getAttribute("aria-label")).toBe("Timbro");
+    expect(button.getAttribute("aria-haspopup")).toBe("menu");
+    expect(button.getAttribute("aria-expanded")).toBe("false");
+    expect(button.querySelector<HTMLElement>(".doc-ribbon-label")!.hidden).toBe(false);
+    expect(button.tabIndex).toBe(0);
+  });
+
+  it("si apre e si chiude da sé, e a menu aperto rilegge la vista", () => {
+    const button = menuButton();
+    button.dispatchEvent(new Event("pointerdown", { bubbles: true }));
+    button.click();
+    expect(opened).toEqual([{ pointer: true, view }]);
+    expect(button.getAttribute("aria-expanded")).toBe("true");
+    view = { bold: true, inTable: false };
+    mounted.refresh();
+    expect(seen).toEqual([view]);
+    // Premuto di nuovo, si chiude.
+    button.click();
+    expect(document.getElementById("context-menu")).toBeNull();
+    expect(button.getAttribute("aria-expanded")).toBe("false");
+    mounted.refresh();
+    expect(seen).toHaveLength(1);
+  });
+
+  it("↓ lo apre dalla tastiera, Esc lo chiude e torna al pulsante", () => {
+    const button = menuButton();
+    button.focus();
+    key(button, "ArrowDown");
+    expect(opened).toEqual([{ pointer: false, view }]);
+    expect(document.activeElement?.closest("#context-menu")).not.toBeNull();
+    key(document.activeElement!, "Escape");
+    expect(document.getElementById("context-menu")).toBeNull();
+    expect(button.getAttribute("aria-expanded")).toBe("false");
+    expect(document.activeElement).toBe(button);
+  });
+
+  it("Alt e la sua lettera lo aprono", () => {
+    root.dispatchEvent(new KeyboardEvent("keydown", { key: "Alt", bubbles: true }));
+    root.dispatchEvent(new KeyboardEvent("keyup", { key: "Alt", bubbles: true, cancelable: true }));
+    key(document, "C");
+    expect(opened).toHaveLength(1);
+    expect(menuButton().getAttribute("aria-expanded")).toBe("true");
+  });
+
+  it("smontata la barra, il menu aperto si chiude", () => {
+    menuButton().click();
+    expect(document.getElementById("context-menu")).not.toBeNull();
+    mounted.destroy();
+    expect(document.getElementById("context-menu")).toBeNull();
   });
 });

@@ -330,7 +330,11 @@ export function markdownProof(options: MarkdownProofOptions): Extension {
       }
 
       update(update: ViewUpdate): void {
-        if (update.docChanged || update.viewportChanged) this.schedule(QUIET_MS);
+        // Anche quando il parser avanza: sotto carico l'albero all'apertura
+        // copre solo l'inizio, e la prosa che arriva dopo va controllata
+        // senza aspettare una battuta.
+        const parsed = syntaxTree(update.state) !== syntaxTree(update.startState);
+        if (update.docChanged || update.viewportChanged || parsed) this.schedule(QUIET_MS);
       }
 
       destroy(): void {

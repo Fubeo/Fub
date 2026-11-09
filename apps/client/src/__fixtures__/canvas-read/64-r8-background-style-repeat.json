@@ -1,0 +1,20 @@
+{
+  "name": "r8-background-style-repeat",
+  "description": "R8: backgroundStyle \"repeat\" si conserva",
+  "source": "{\"nodes\":[{\"id\":\"g\",\"type\":\"group\",\"x\":0,\"y\":0,\"width\":10,\"height\":10,\"backgroundStyle\":\"repeat\"}]}",
+  "expect": {
+    "outcome": "opened",
+    "nodes": [
+      {
+        "id": "g",
+        "type": "group",
+        "x": 0,
+        "y": 0,
+        "width": 10,
+        "height": 10,
+        "backgroundStyle": "repeat"
+      }
+    ],
+    "edges": []
+  }
+}

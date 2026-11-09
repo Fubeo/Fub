@@ -9,8 +9,10 @@
 > `crates/fub-features/tests/lavagna.rs`), i loro test in
 > `crates/fub-canvas-core/tests/patch.rs` e
 > `crates/fub-canvas-core/tests/op_vectors.rs`, i vettori in
-> `apps/client/src/__fixtures__/canvas-ops/` e la tela in
-> `apps/client/src/editors/canvas/operation.ts`.
+> `apps/client/src/__fixtures__/canvas-ops/`, la tela in
+> `apps/client/src/editors/canvas/operation.ts` e, per la WebView, la
+> facciata in `crates/fub-canvas-wasm/src/` (test in
+> `crates/fub-canvas-wasm/tests/`).
 
 Questa pagina dice come si cambia una lavagna. Il modello (schede, archi e
 campi sconosciuti) e le regole di lettura e scrittura del file stanno nel
@@ -31,15 +33,16 @@ chiave e nello stesso ordine.
 |---|---|---|---|
 | `upsert-node` | la scheda com'era, o `null` | la scheda nuova | facoltativo |
 | `remove-node` | la scheda com'era | `null` | facoltativo |
-| `upsert-edge` | l'arco com'era, o `null` | l'arco nuovo | no |
-| `remove-edge` | l'arco com'era | `null` | no |
+| `upsert-edge` | l'arco com'era, o `null` | l'arco nuovo | facoltativo |
+| `remove-edge` | l'arco com'era | `null` | facoltativo |
 | `reorder` | gli id delle schede, in ordine | gli stessi, nel nuovo ordine | no |
 | `ink` | il tratto com'era, o `null` | il tratto nuovo, o `null` | sì, nei tratti |
 
 La toppa `ink` è descritta nella sezione [Inchiostro](#inchiostro).
 
-`at` è una posizione nella lista delle schede, che è anche la profondità: la
-prima scheda sta sotto tutte le altre.
+Nelle toppe delle schede `at` è una posizione nella lista delle schede, che è
+anche la profondità: la prima scheda sta sotto tutte le altre. Nelle toppe
+degli archi è una posizione nella lista degli archi.
 
 ### Mettere una scheda
 
@@ -66,8 +69,11 @@ la posizione che aveva, e serve all'inversa per rimetterla lì.
 
 ### Mettere e togliere un arco
 
-Un arco nuovo va in fondo alla lista degli archi. Le due schede che collega
-devono esserci, anche se sono nuove nella stessa lista di toppe.
+Un arco nuovo va in `at`, o in fondo alla lista degli archi se `at` manca.
+Con `before` l'arco c'è e cambia al suo posto; `at` allora non conta. Le due
+schede che collega devono esserci, anche se sono nuove nella stessa lista di
+toppe. In `remove-edge` `at` è la posizione che l'arco aveva, e serve
+all'inversa per rimetterlo lì.
 
 ```json
 { "kind": "upsert-edge", "before": null,
@@ -77,7 +83,7 @@ devono esserci, anche se sono nuove nella stessa lista di toppe.
 ```json
 { "kind": "remove-edge",
   "before": { "id": "e1", "fromNode": "n1", "toNode": "n2", "toEnd": "arrow" },
-  "after": null }
+  "after": null, "at": 0 }
 ```
 
 ### Riordinare
@@ -123,7 +129,7 @@ Ogni errore (`PatchError`) dice quale toppa della lista non si applica
 | Errore | Quando |
 |---|---|
 | `Stale` | l'immagine di prima non torna: la scheda o l'arco è cambiato, manca, o c'è già quando `before` è `null`; per `reorder`, l'ordine di adesso non è `before` |
-| `AtOutOfRange` | `at` oltre la fine della lista delle schede |
+| `AtOutOfRange` | `at` oltre la fine della lista delle schede, o di quella degli archi per una toppa di un arco (`list` dice quale) |
 | `NodeHasEdges` | si toglie una scheda che ha ancora un arco |
 | `MissingEndpoint` | un arco collega una scheda che non c'è |
 | `NotAPermutation` | in `reorder`, `after` ha un id che non c'è, uno ripetuto o ne manca uno |
@@ -160,15 +166,17 @@ inverso. Applicata dopo la lista, ridà il modello di prima.
 | `upsert-node` con `before` uguale a `null` | `remove-node` senza `at` |
 | `remove-node` | `upsert-node` con `before` uguale a `null` e lo stesso `at` |
 | `upsert-edge` con `before` | `upsert-edge` con `before` e `after` scambiati |
-| `upsert-edge` con `before` uguale a `null` | `remove-edge` |
-| `remove-edge` | `upsert-edge` con `before` uguale a `null` |
+| `upsert-edge` con `before` uguale a `null` | `remove-edge` senza `at` |
+| `remove-edge` | `upsert-edge` con `before` uguale a `null` e lo stesso `at` |
 | `reorder` | `reorder` con `before` e `after` scambiati |
 | `ink` | `ink` con `before` e `after` scambiati e lo stesso `at` |
 
-Gli `at` di una lista di `remove-node` sono le posizioni nel modello di
-partenza. Per questo l'inversa riordina le schede da rimettere che stanno
-vicine nella lista: prima l'`at` più basso, quelle senza `at` per ultime. Così
-ogni scheda torna al suo posto.
+Gli `at` di una lista di `remove-node`, e quelli di una lista di
+`remove-edge`, sono le posizioni nel modello di partenza. Per questo l'inversa
+riordina le voci da rimettere che stanno vicine nella lista e sono della
+stessa lista (schede con schede, archi con archi): prima l'`at` più basso,
+quelle senza `at` per ultime. Così ogni scheda e ogni arco tornano al loro
+posto, e un arco non torna mai prima delle schede che collega.
 
 ```json
 [{ "kind": "remove-node", "before": { "id": "b", "type": "text", "x": 0, "y": 0, "width": 10, "height": 10, "text": "b" }, "after": null, "at": 1 },
@@ -177,9 +185,8 @@ ogni scheda torna al suo posto.
 
 L'inversa rimette prima `a` in 0, poi `b` in 1.
 
-Due cose non tornano al loro posto. Una scheda tolta senza `at` torna in
-cima. Un arco tolto torna in fondo alla lista degli archi: le toppe degli
-archi non hanno `at`, e l'ordine degli archi non si vede sulla tela.
+Una voce tolta senza `at` non torna al suo posto: una scheda torna in cima,
+un arco in fondo alla lista degli archi.
 
 ## Operazioni
 
@@ -244,8 +251,9 @@ scheda a sé stessa va bene.
 Toglie schede e archi. Gli archi che toccano una scheda tolta vanno via
 prima, nella stessa operazione, e un arco nominato e toccato va via una volta
 sola. L'`at` di ogni scheda tolta è la sua posizione all'inizio della serie
-di `remove-node` di cui fa parte, anche se la serie viene da più
-operazioni: così l'inversa rimette ogni scheda al suo posto.
+di `remove-node` di cui fa parte, e quello di ogni arco tolto la sua
+posizione all'inizio della serie di `remove-edge`, anche se la serie viene
+da più operazioni: così l'inversa rimette schede e archi al loro posto.
 
 ```json
 { "op": "remove", "ids": ["b", "e1"] }
@@ -317,74 +325,10 @@ fa girare e controlla anche che l'inversa delle toppe ridia `before`.
 
 ## Inchiostro
 
-L'inchiostro di una lavagna sta nei livelli `fub:ink` delle schede e della
-radice; il formato è nell'[inchiostro della lavagna](canvas-ink.md). Un
-livello si indica con `"board"` (la radice) o `{"node": "<id>"}` (una scheda
-di ogni tipo, gruppi compresi).
-
-### La toppa `ink`
-
-`{"kind": "ink", "layer", "at", "before", "after"}` aggiunge (`before`
-uguale a `null`), toglie (`after` uguale a `null`) o cambia il tratto alla
-posizione `at` dei tratti del livello. Un tratto è scritto come nel file, e
-si confronta per valore come le schede. Un tratto nuovo può andare alla fine
-(`at` uguale al numero dei tratti), non oltre.
-
-```json
-{ "kind": "ink", "layer": { "node": "f1" }, "at": 0, "before": null,
-  "after": { "id": "s1", "tool": "pen", "brush": "pf1 size=3 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=0 pen=ballpoint",
-             "color": "#0072b2", "anchor": { "kind": "card", "width": 640, "height": 420 },
-             "ink": "1 s100 cxy 100,100 10,0" } }
-```
-
-- **Il livello nasce** con la prima toppa: una scheda senza `fub:ink` lo
-  prende in fondo ai suoi campi.
-- **L'ultimo tratto tolto**: se il livello resta esattamente
-  `{"v": 1, "strokes": []}`, la chiave sparisce; l'annulla la rimette in
-  fondo ai campi della scheda. Un livello con altri campi resta, vuoto.
-- **Un livello estraneo** non si tocca (`ForeignLayer`, ragione `invalid`).
-  Una scheda che non c'è o un'immagine di prima che non torna sono `Stale`.
-- Il sorgente si ritocca tratto per tratto: gli array di oggetti con `id` si
-  accoppiano per id a ogni profondità, quindi un tratto nuovo su una scheda
-  con 2000 tratti aggiunge al file solo quel tratto e il separatore
-  (`tests/ink_patch.rs`).
-- Spostare o ridimensionare una scheda resta un `upsert-node`: il file cambia
-  solo in `x`, `y`, `width` o `height`, ma la toppa porta il livello intero,
-  prima e dopo.
-
-### `add_strokes`
-
-Aggiunge i tratti `strokes` in fondo al livello `layer`, nell'ordine dato:
-una toppa `ink` per tratto. Ogni tratto è come nel file, campi sconosciuti
-compresi; `id` è facoltativo (assente o `null`: lo dà il seme, saltando gli
-id del livello). Un tratto che non si disegnerebbe in quel livello (per
-esempio un'ancora `free` su una scheda) è `Invalid`; un id che il livello ha
-già è `DuplicateId`; una scheda che non c'è è `UnknownNode`.
-
-```json
-{ "op": "add_strokes", "layer": "board",
-  "strokes": [{ "tool": "pen", "brush": "pf1 size=3 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=0 pen=ballpoint",
-                "color": "#0072b2", "anchor": { "kind": "free" }, "ink": "1 s100 cxy 4000,2500 120,40 95,-10" }] }
-```
-
-### `erase_strokes`
-
-Cancella dal livello `layer` i tratti `ids`, in un ordine qualunque: una
-toppa `ink` per tratto, con la posizione che il tratto ha dopo le
-cancellazioni prima di lui, così l'inversa li rimette tutti al loro posto.
-Un id che non c'è è `UnknownStroke`, uno ripetuto `DuplicateId`. Un tratto
-che Fub non sa disegnare si conserva e non si cancella: `Invalid`.
-
-```json
-{ "op": "erase_strokes", "layer": { "node": "f1" }, "ids": ["s1", "s3"] }
-```
-
-`move` e `resize` non toccano l'inchiostro: i punti di una scheda sono in
-unità della scheda, e la resa li porta alla misura di adesso come dice
-[«La misura della scheda»](canvas-ink.md#la-misura-della-scheda). `remove` porta
-via l'inchiostro della scheda con lei, e l'annulla lo rimette. I vettori
-sono `apps/client/src/__fixtures__/canvas-patches/*-ink-*.json` e
-`canvas-ops/*strokes*.json`, `canvas-ops/*-card-with-ink.json`.
+La toppa `ink` e le operazioni `add_strokes` ed `erase_strokes`, con i loro
+esempi e i loro errori, stanno nell'[inchiostro della
+lavagna](canvas-ink.md#toppa-e-operazioni). `move` e `resize` non toccano
+l'inchiostro; `remove` lo porta via con la scheda, e l'annulla lo rimette.
 
 ## Comandi
 
@@ -443,3 +387,161 @@ file e non scrive; l'applicazione lo crea con `create_document` (che rifiuta
 un path preso nel frattempo) e risponde con `Navigate`. L'annulla è
 `note.trash` sul file: lo porta nel cestino anche se nel frattempo è cambiato,
 e dal cestino si ripristina com'era quando la creazione è stata annullata.
+
+## WebAssembly
+
+La WebView usa lo stesso nucleo attraverso `fub-canvas-wasm`: un modulo
+`wasm32-unknown-unknown` con un'interfaccia C scritta a mano, senza librerie
+di collegamento, testo e JSON UTF-8 dentro e fuori. **Non è un contratto
+pubblico**: lo usano solo il caricatore della shell,
+`apps/client/src/editors/canvas/wasm/core.ts`, e il `.wasm`
+fatto dagli stessi sorgenti nella stessa build; le due parti cambiano
+insieme.
+
+Il modulo si fa dalla libreria del crate, che nel manifesto resta `rlib`:
+
+```sh
+CARGO_TARGET_DIR=target/canvas-wasm CARGO_PROFILE_RELEASE_OPT_LEVEL=s \
+CARGO_PROFILE_RELEASE_LTO=true CARGO_PROFILE_RELEASE_PANIC=abort \
+CARGO_PROFILE_RELEASE_STRIP=true CARGO_PROFILE_RELEASE_CODEGEN_UNITS=1 \
+cargo rustc -p fub-canvas-wasm --lib --release \
+  --target wasm32-unknown-unknown --crate-type cdylib
+```
+
+Il modulo non importa niente ed esporta la sua `memory` e le funzioni qui
+sotto. `src/api.rs` è il livello sicuro (una tabella di lavagne per handle),
+`src/abi.rs` l'unico `unsafe`.
+
+### Le funzioni
+
+| Funzione | Ingresso | Esito | Risultato se riesce |
+|---|---|---|---|
+| `fub_alloc(len) -> ptr` | | 0 oltre il limite o senza memoria | |
+| `fub_free(ptr, len)` | | | |
+| `canvas_open(ptr, len) -> u32` | i byte del file | l'handle, 0 se fallisce | `{"handle", "canvas"}` |
+| `canvas_reset(h, ptr, len) -> i32` | i byte del file | 0 o -1 | `{"canvas"}` |
+| `canvas_commit(h, ptr, len) -> i32` | un array JSON di toppe | 0 o -1 | `{"edit", "inverse"}` |
+| `canvas_preview(h, ptr, len) -> i32` | un array JSON di toppe | 0 o -1 | il sorgente intero, come testo |
+| `canvas_compile(h, ptr, len) -> i32` | `{"ops", "seed"}` | 0 o -1 | `{"patches", "created"}` |
+| `canvas_model(h) -> i32` | | 0 o -1 | `{"canvas"}` |
+| `canvas_node_at(h, byte) -> i32` | | l'indice, -1 fuori da ogni scheda, -2 se fallisce | vuoto |
+| `canvas_ink_layers(h) -> i32` | | 0 o -1 | `{"layers"}` |
+| `canvas_close(h) -> i32` | | 0 o -1 | vuoto |
+| `result_ptr() -> ptr`, `result_len() -> len` | | | dove sta il risultato |
+
+- `canvas_open` e `canvas_reset` prendono i byte del file così come sono,
+  BOM e terminatori compresi, non una stringa JSON: il sorgente è il file.
+  `canvas` è il modello con le chiavi nell'ordine in cui si scrivono
+  (`nodes` ed `edges` ci sono sempre). Con un errore `canvas_reset` lascia la
+  lavagna com'era.
+- `canvas_commit` fa il commit delle toppe (le stesse di questa pagina, tutte
+  o nessuna). `edit` è il tratto cambiato `{"start", "end", "text"}` in
+  **unità UTF-16 del sorgente di prima**: `prima.slice(0, start) + text +
+  prima.slice(end)` è il sorgente nuovo, e il tratto non taglia mai una
+  coppia di surrogati. Non porta il sorgente intero, che con un file grande
+  costerebbe a ogni gesto. `inverse` sono le toppe dell'annulla, da dare a un
+  altro `canvas_commit`.
+- `canvas_preview` dà il sorgente che darebbe `canvas_commit` con le stesse
+  toppe, o lo stesso errore, e non cambia la lavagna: serve alle bozze, che
+  vogliono il testo intero.
+- `canvas_compile` compila le operazioni d'intento sul modello della lavagna,
+  senza cambiarla. `seed` è facoltativo (0 se manca), un intero da 0 a
+  2⁶⁴ − 1 come numero o come stringa di cifre decimali, perché un numero di
+  JavaScript non è esatto oltre 2⁵³.
+- `canvas_node_at` dà l'indice della scheda il cui oggetto nel sorgente
+  contiene il byte `byte`, contato in UTF-8 dall'inizio del testo, BOM
+  compreso.
+- `canvas_ink_layers` dà i livelli d'inchiostro come li legge il nucleo
+  (`read_layers`), nella forma di `expect` dei
+  [vettori dell'inchiostro](canvas-ink.md#i-vettori). Come `canvas_model`
+  non ha ingresso da liberare; la risposta è nel risultato, del modulo.
+- Gli handle partono da 1, crescono e non si riusano: 0 e `u32::MAX` non sono
+  mai handle, e un handle chiuso risponde `handle` per sempre.
+
+### Gli errori
+
+Una funzione che fallisce mette nel risultato
+`{"error": {"code", "message"}}`; `message` è la frase in inglese del nucleo,
+per chi indaga e non per l'utente.
+
+| `code` | Quando |
+|---|---|
+| `handle` | l'handle non è di una lavagna aperta |
+| `utf8` | l'ingresso non è UTF-8 (anche un surrogato codificato) |
+| `limit` | l'ingresso passa il limite d'ingresso, il sorgente passa `MAX_SOURCE_BYTES`, o gli handle sono finiti |
+| `request` | il JSON non si legge o ha la forma sbagliata; un puntatore nullo con una lunghezza non zero |
+| `source` | i byte non sono una lavagna (le regole del [formato](canvas-format.md)) |
+| `stale`, `invalid`, `rejected`, `unstable` | il commit non si fa: la ragione di [Gli errori](#gli-errori) |
+| `op` | un'operazione non si compila; in più `kind`, `index` e, se c'è, `id`, come nei vettori |
+| `internal` | il modello non si scrive come JSON (non succede con un modello del nucleo) |
+
+### La memoria
+
+- **Chi alloca e chi libera.** Il chiamante chiede `len` byte a `fub_alloc`,
+  ci scrive l'ingresso, chiama la funzione con `(ptr, len)` e poi libera lui
+  con `fub_free(ptr, len)`, anche se la chiamata è fallita: il modulo non
+  tiene mai un ingresso. `len` zero è un ingresso vuoto con qualunque
+  puntatore, anche nullo; `fub_alloc(0)` dà un puntatore non nullo che non si
+  legge, e `fub_free` con `len` zero o un puntatore nullo non fa niente.
+- **Quanto vive il risultato.** Il risultato è del modulo: `result_ptr` e
+  `result_len` lo descrivono fino alla chiamata dopo, che può spostarlo o far
+  crescere la memoria. Il chiamante lo copia subito e rilegge le viste della
+  memoria dopo ogni chiamata.
+- **I limiti.** Il limite d'ingresso è `MAX_INPUT_BYTES` = 32 MiB, il doppio
+  di `MAX_SOURCE_BYTES` (16 MiB): un sorgente di un byte oltre
+  `MAX_SOURCE_BYTES` arriva al nucleo e risponde `limit`, e una lista di
+  toppe ha posto per le immagini di prima e di dopo di una scheda con 1 MiB
+  di testo scritto come stringa JSON. Un `fub_alloc` oltre il limite dà 0,
+  e una chiamata con un `len` oltre il limite risponde `limit` senza leggere.
+- **Una trappola.** Il nucleo non va in panico su un input: ogni errore è un
+  `code`. Un panico che restasse (un difetto) o la memoria che finisce
+  mentre si scrive una risposta sono una trappola WebAssembly (`panic =
+  abort`): l'istanza non si usa più, le lavagne aperte si perdono, e il
+  chiamante rifà l'istanza e riapre le lavagne dai loro testi.
+
+I test sono in `crates/fub-canvas-wasm/tests/`: `api.rs` passa dal livello
+sicuro, `abi.rs` dalle funzioni `extern "C"` chiamate in nativo, con gli
+stessi controlli (ogni vettore di `canvas-patches/` e `canvas-ops/`, ogni
+vettore di `canvas-ink/` per `canvas_ink_layers`, il tratto UTF-16 con
+caratteri di uno, due, tre e quattro byte, BOM e CRLF, ogni ingresso
+sbagliato, gli handle, 16 MiB e un byte in più, un risultato più grande di
+64 KiB) e, in `abi.rs`, la memoria viva uguale dopo 10 000 giri, anche di
+`canvas_ink_layers` con un commit d'inchiostro.
+
+### Nella shell
+
+Il plugin di Vite `apps/client/build/canvas-wasm.mjs`, in `vite.config.ts` e
+in `vite.bench.config.ts`, fa il modulo con il comando qui sopra (più
+`--locked`, con `CARGO_TARGET_DIR=target/canvas-wasm` dalla radice del
+repository) e lo dà come modulo virtuale `virtual:fub-canvas-wasm`
+(`canvasWasmHash`, `loadCanvasWasm()`):
+
+- `npm run build` lo emette fra gli asset (`assets/fub-canvas-<hash>.wasm`) e
+  ne stampa la dimensione; gli stessi sorgenti danno gli stessi byte.
+- `npm run dev` lo serve da `__fub-canvas-wasm/<hash>.wasm`, guarda i
+  sorgenti dei due crate, il loro `Cargo.toml` e `Cargo.lock`, e a ogni
+  cambio rifà il modulo e ricarica la pagina.
+- Sotto Vitest il modulo si compila una volta prima che partano i file di
+  prova (`build/canvas-wasm.global-setup.mjs`), così una build fredda non
+  scade dentro il tempo massimo di una prova; poi i byte si leggono dal file
+  che cargo ha fatto.
+
+Non c'è ripiego su un `.wasm` di prima: senza cargo o senza il target la
+build si ferma, e l'errore dice che cosa installare (`rustup target add
+wasm32-unknown-unknown`).
+
+`core.ts` compila il modulo una volta e dà `openCore(testo)`, una
+`CanvasCore` per lavagna con `model`, `reset`, `commit`, `preview`,
+`compile`, `nodeAt`, `inkLayers` e `close`. `inkLayers` chiede i livelli al
+nucleo una volta per testo (apertura, `reset`, `commit`) e fino al cambio
+ridà lo stesso array congelato; lo usano i costruttori dei tratti di
+`operation.ts` e `inkLayerStates` di `ink-record.ts`. Rilegge le viste della memoria dopo ogni
+chiamata e libera ogni ingresso con `fub_free`, anche quando la chiamata
+fallisce. Un testo con un surrogato spaiato è un errore `utf8` prima di
+arrivare al modulo, mai un U+FFFD. Gli errori sono `CanvasCoreError` con i
+`code` della tabella, più `trap` (l'istanza è morta: ogni lavagna aperta su
+di lei risponde `trap`, e il prossimo `openCore` fa un'istanza nuova) e `load`
+(il modulo non si carica; il prossimo `openCore` riprova). `close` si può
+ripetere; dopo `close` ogni altra chiamata risponde `handle`. I test sono
+`wasm/core.test.ts`, `wasm/vectors.test.ts` e `wasm/ink-vectors.test.ts`,
+sul `.wasm` vero.

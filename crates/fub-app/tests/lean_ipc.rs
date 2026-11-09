@@ -292,6 +292,18 @@ const ALLOWLIST: &[(&str, Why)] = &[
     ("list_themes", Why::AppSurface),
     ("read_theme", Why::AppSurface),
     ("set_plugin_enabled", Why::AppSurface),
+    // Il ciclo di vita dei motori, che sono del processo e non di un vault:
+    // scaldare quello di un'estensione prima della prima apertura, e lasciare
+    // andare le cache dei documenti quando la shell chiude l'ultimo. Nessun
+    // registro di un vault li possiede, come per i job (K3, T8).
+    ("warm_engine", Why::AppSurface),
+    ("document_closed", Why::AppSurface),
+    // La pagina «Componenti» (A7): lo stato dei componenti non è
+    // `program_writable`, come `plugins.disabled` — un componente non deve
+    // poter spegnere gli altri — quindi non passa dalle porte generiche, e la
+    // scelta la applica solo la shell, come `set_plugin_enabled`.
+    ("components_map", Why::AppSurface),
+    ("components_apply", Why::AppSurface),
     // Inventario macchina e decisioni persistenti non appartengono al registro
     // di un vault. Queste porte restano sottili e delegano al manager installato.
     ("list_installed_plugins", Why::AppSurface),
@@ -371,6 +383,15 @@ const ALLOWLIST: &[(&str, Why)] = &[
     ("save_artifact", Why::AppSurface),
     ("print_artifact", Why::AppSurface),
     ("reveal_in_system", Why::AppSurface),
+    // «Apri con» un'app Craft: avviano o interrogano programmi della
+    // macchina, quindi solo la shell principale (`guard_main_shell`).
+    ("external_editors", Why::AppSurface),
+    ("open_with", Why::AppSurface),
+    // Non è un comando del bundle `fub.craft` (A13): `invoke_command` lo
+    // raggiungerebbero anche un plugin e l'MCP, e avviare la CLI di un'app
+    // vuole il gesto di chi guarda la shell. `craft.preview` resta il comando
+    // del bundle, in sola lettura, e non avvia mai niente.
+    ("craft_render", Why::AppSurface),
     // --- macchina e catalogo: sopra ogni vault --------------------------------
     //
     // Profili d'impostazione, capacità del frame, inventario installato e

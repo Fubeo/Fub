@@ -99,6 +99,11 @@ fn the_whole_mounting_table_comes_up_without_a_webview() {
     if cfg!(feature = "xlsx") {
         extensions.extend(["xlsm", "xlsx", "xltm", "xltx"]);
     }
+    // I file delle app Craft e i loro XMP vengono coi formati di `fub.craft`
+    // (feature `craft`), accesi anche col componente spento.
+    if cfg!(feature = "craft") {
+        extensions.extend(["figcraft", "pcraft", "vectorcraft", "xmp"]);
+    }
     extensions.sort_unstable();
     assert_eq!(
         info.extensions, extensions,
@@ -131,6 +136,11 @@ fn the_whole_mounting_table_comes_up_without_a_webview() {
     if cfg!(feature = "xlsx") {
         plugins.retain(|id| *id != "fub.xlsx");
         assert!(info.plugins.iter().any(|p| p.id == "fub.xlsx"));
+    }
+    // L'anteprima dei file Craft viene coi loro formati.
+    if cfg!(feature = "craft") {
+        plugins.retain(|id| *id != "fub.craft");
+        assert!(info.plugins.iter().any(|p| p.id == "fub.craft"));
     }
     #[cfg_attr(not(any(feature = "draw", feature = "lavagna")), allow(unused_mut))]
     let mut expected = vec![

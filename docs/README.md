@@ -45,6 +45,7 @@ flowchart LR
 | [Correttore](product/proofing.md) | l'ortografia mentre si scrive |
 | [Documenti di Word](product/word-documents.md) | la videoscrittura nel vault |
 | [Annotazioni dei PDF](product/pdf-annotations.md) | scrivere accanto ai PDF |
+| [File delle app Craft](product/craft-files.md) | disegni, immagini e foto delle app Craft |
 | [Ricerca, link e grafo](product/search-links-and-graph.md) | trovare e seguire |
 | [Importare ed esportare](product/import-and-export.md) | dentro e fuori dal vault |
 | [Plugin ed estensioni](product/plugins-and-extensions.md) | come Fub cresce |
@@ -62,12 +63,15 @@ all'export, dalla sessione dal tablet ai disegni grandi.
 - [Modello del documento](architecture/document-model.md) e
   [Storage e identità](architecture/storage-and-identity.md)
 - [Runtime, eventi e job](architecture/runtime-events-and-jobs.md)
-- [Frontend e IPC](architecture/frontend-and-ipc.md)
+- [Frontend e IPC](architecture/frontend-and-ipc.md) e
+  [la cornice del telefono](architecture/phone-frame.md)
 - [Superfici dell'editor](architecture/editor-surfaces.md), la
   [superficie ricca e il correttore](architecture/rich-surface-and-proofing.md)
-  e la [superficie dei fogli](architecture/grid-surface.md)
+  e la [superficie dei fogli](architecture/grid-surface.md), con gli
+  [editor dei componenti](architecture/component-editors.md)
 - [Inchiostro e strumenti](architecture/ink-and-tools.md)
 - [Runtime dei plugin](architecture/plugin-runtime.md)
+- [Lo strato dei motori](architecture/motori.md)
 
 ## Sviluppare
 
@@ -79,7 +83,8 @@ all'export, dalla sessione dal tablet ai disegni grandi.
 
 ## Consultare i contratti
 
-- [ABI e WIT](reference/abi-and-wit.md), [contratto IPC](reference/ipc-contract.md),
+- [ABI e WIT](reference/abi-and-wit.md), [contratto IPC](reference/ipc-contract.md)
+  (con il [contratto dei componenti](reference/components-contract.md)),
   [layout su disco](reference/on-disk-layout.md) e
   [permessi e sicurezza](reference/permissions-and-security.md)
 - [Il formato della scena](reference/scene-format.md) con le sue
@@ -97,6 +102,9 @@ all'export, dalla sessione dal tablet ai disegni grandi.
 - [Il server MCP](reference/mcp-server.md)
 - [Le schede della lavagna](reference/canvas-cards.md): specie, schede vive e
   ferme, il contratto dei renderer
+- [I formati dei file Craft](reference/craft-formats.md), gli
+  [XMP accanto alle foto](reference/xmp-sidecars.md) e le
+  [app esterne](reference/external-editors.md)
 
 ## Vedere stato e direzione
 
@@ -117,7 +125,6 @@ fase passa il cancello (l'ordine sta in [Stato](project/status.md)).
 |---|---|
 | `misure/motori-*.md` | K0, le misure dei motori |
 | `architecture/componenti.md` | K1 e K2, il modello a componenti |
-| `reference/fub-motori.md` | K3, lo strato dei motori |
 | `product/lavagna.md` | la lavagna, prima versione |
 | `product/pdf-lettore.md` | P2, il visore PDF |
 | `product/pdf-completo.md` | P5, la modifica completa |

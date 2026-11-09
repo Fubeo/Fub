@@ -14,7 +14,8 @@
 // schede, in coordinate della lavagna, come gli archi.
 //
 // Il colore è un valore del file e va come attributo `fill` (mai una
-// variabile del tema). Ciò che si ridisegna si riconcilia: un tratto uguale
+// variabile del tema); quanto copre la penna (l'evidenziatore) va in
+// `fill-opacity`, così la gomma che attenua (`opacity`) si somma. Ciò che si ridisegna si riconcilia: un tratto uguale
 // tiene il suo `<path>` e non si riscrive.
 //
 // `InkPathCache` tiene i percorsi già calcolati per id, inchiostro e pennello,
@@ -47,11 +48,18 @@ export interface DryStroke {
   readonly path: string;
   /// Il colore del file.
   readonly fill: string;
+  /// Quanto copre la penna, sotto 1 (l'evidenziatore 0,5): va in
+  /// `fill-opacity`, senza `multiply` (A22); manca se copre tutto.
+  readonly opacity?: number;
   /// La misura della scheda quando il tratto è stato scritto; `null` per
   /// l'inchiostro libero.
   readonly ref: InkRef | null;
   /// Preso dalla gomma e non ancora cancellato: si vede attenuato.
   readonly faded?: boolean;
+  /// Tagliato dalla gomma «Solo il pezzo» e non ancora scritto: il contorno
+  /// dei pezzi che restano, pieno sopra il tratto attenuato (vuoto se non ne
+  /// resta nessuno).
+  readonly cut?: string;
 }
 
 /// Disegna i tratti `strokes` dentro l'elemento della scheda `host`, nell'ordine
@@ -97,6 +105,54 @@ export function paintBoard(stage: HTMLElement, strokes: readonly DryStroke[]): v
   paintPaths(svg, strokes);
 }
 
+/// Attenua (`faded`) o rimette il percorso già disegnato del tratto `id`:
+/// dentro la scheda `owner` con `"card"` (`paintCard`), sullo stage `owner`
+/// con `"board"` (`paintBoard`). Tocca un attributo solo, senza ridisegnare
+/// il resto. `false` se il percorso non c'è.
+export function fadeInkStroke(owner: HTMLElement, where: "card" | "board", id: string, faded: boolean): boolean {
+  const path = strokePath(owner, where, id);
+  if (!path) return false;
+  setAttr(path, "opacity", faded ? INK_FADED_OPACITY : null);
+  return true;
+}
+
+/// Mostra il taglio della gomma «Solo il pezzo» sul percorso già disegnato
+/// del tratto `id` (dove `fadeInkStroke`): il tratto attenuato e, subito dopo,
+/// un `<path data-ink-cut>` pieno col contorno `cut` dei pezzi che restano;
+/// `null` toglie il taglio e rimette il tratto. Senza ridisegnare il resto.
+/// `false` se il percorso non c'è.
+export function cutInkStroke(owner: HTMLElement, where: "card" | "board", id: string, cut: string | null): boolean {
+  const path = strokePath(owner, where, id);
+  if (!path) return false;
+  setAttr(path, "opacity", cut === null ? null : INK_FADED_OPACITY);
+  let overlay = path.nextElementSibling;
+  if (overlay && !(overlay.localName === "path" && overlay.hasAttribute("data-ink-cut"))) overlay = null;
+  if (cut === null || cut === "") {
+    overlay?.remove();
+    return true;
+  }
+  if (!overlay) {
+    overlay = document.createElementNS(SVG_NS, "path");
+    path.after(overlay);
+  }
+  setAttr(overlay, "data-ink-cut", id);
+  setAttr(overlay, "d", cut);
+  setAttr(overlay, "fill", path.getAttribute("fill"));
+  setAttr(overlay, "fill-opacity", path.getAttribute("fill-opacity"));
+  return true;
+}
+
+/// Il percorso disegnato del tratto `id` nel livello di `owner`.
+function strokePath(owner: HTMLElement, where: "card" | "board", id: string): Element | null {
+  const layer = where === "card" ? "canvas-ink-card" : "canvas-ink-board";
+  for (const child of owner.children) {
+    if (child.localName === "svg" && child.classList.contains(layer)) {
+      return child.querySelector(`path[data-ink-stroke="${CSS.escape(id)}"]`);
+    }
+  }
+  return null;
+}
+
 /// Il livello d'inchiostro figlio di `parent` con la classe `className`:
 /// creato se serve e `wanted`, tolto se c'è e non serve.
 function ownLayer(parent: HTMLElement, className: string, wanted: boolean): SVGSVGElement | null {
@@ -120,17 +176,35 @@ function ownLayer(parent: HTMLElement, className: string, wanted: boolean): SVGS
   return svg;
 }
 
-/// Un `<path>` per tratto, nell'ordine, riusando quelli che ci sono.
+/// Un `<path>` per tratto, nell'ordine, riusando quelli che ci sono; dopo un
+/// tratto tagliato, il `<path data-ink-cut>` dei suoi pezzi.
 function paintPaths(parent: SVGElement, strokes: readonly DryStroke[]): void {
-  for (let i = 0; i < strokes.length; i++) {
-    const stroke = strokes[i]!;
-    const path = childAt(parent, i, "path");
+  let n = 0;
+  for (const stroke of strokes) {
+    const path = childAt(parent, n++, "path");
+    setAttr(path, "data-ink-cut", null);
     setAttr(path, "data-ink-stroke", stroke.id);
     setAttr(path, "d", stroke.path);
     setAttr(path, "fill", stroke.fill);
-    setAttr(path, "opacity", stroke.faded ? INK_FADED_OPACITY : null);
+    const covers = fillOpacity(stroke);
+    setAttr(path, "fill-opacity", covers);
+    setAttr(path, "opacity", stroke.faded || stroke.cut !== undefined ? INK_FADED_OPACITY : null);
+    if (!stroke.cut) continue;
+    const overlay = childAt(parent, n++, "path");
+    setAttr(overlay, "data-ink-stroke", null);
+    setAttr(overlay, "data-ink-cut", stroke.id);
+    setAttr(overlay, "d", stroke.cut);
+    setAttr(overlay, "fill", stroke.fill);
+    setAttr(overlay, "fill-opacity", covers);
+    setAttr(overlay, "opacity", null);
   }
-  trim(parent, strokes.length);
+  trim(parent, n);
+}
+
+/// Il `fill-opacity` del tratto `stroke`: `null` se copre tutto.
+function fillOpacity(stroke: DryStroke): string | null {
+  const opacity = stroke.opacity;
+  return opacity !== undefined && Number.isFinite(opacity) && opacity >= 0 && opacity < 1 ? String(opacity) : null;
 }
 
 /// Il figlio `index` di `parent` se è un `<name>` SVG, altrimenti uno nuovo al

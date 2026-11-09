@@ -3,9 +3,14 @@
 //
 // Legge i file cambiati (uno per riga, da stdin) e stampa righe `chiave=valore`:
 //   crates=  i crate del workspace toccati più quelli che li usano, anche solo
-//            nei test (un cambio a `fub-abi` riguarda chiunque lo importi);
+//            nei test (un cambio a `fub-abi` riguarda chiunque lo importi), e
+//            quelli il cui codice nomina per percorso un file cambiato fuori
+//            dai crate (le guardie di `fub-abi` che leggono il client);
 //   all=1    quando cambia qualcosa che vale per tutto il workspace;
 //   client=1 / docs=1 / github=1 / vendor=1  le altre aree toccate;
+//   canvaswasm=1  cambia il nucleo della lavagna (`crates/fub-canvas-core/` o
+//            `crates/fub-canvas-wasm/`): il client lo compila in `.wasm`, quindi
+//            vale anche client=1 e si rifanno i test della lavagna;
 //   tauri=   i crate che dipendono da Tauri, per saltarli dove mancano le
 //            librerie di sistema.
 
@@ -45,11 +50,12 @@ function owner(file) {
   return best;
 }
 
-const flags = { all: 0, client: 0, docs: 0, github: 0, vendor: 0 };
+const flags = { all: 0, client: 0, canvaswasm: 0, docs: 0, github: 0, vendor: 0 };
 const touched = new Set();
 for (const f of files) {
   if (f === "Cargo.toml" || f === "Cargo.lock" || f.startsWith(".cargo/") || f === "rust-toolchain.toml" || f === ".config/nextest.toml") flags.all = 1;
   if (f.startsWith("apps/client/")) flags.client = 1;
+  if (/^crates\/fub-canvas-(core|wasm)\//.test(f)) flags.client = flags.canvaswasm = 1;
   if (f.startsWith("docs/") || /^[^/]+\.md$/.test(f)) flags.docs = 1;
   if (f.startsWith(".github/") || f.startsWith("scripts/")) flags.github = 1;
   if (f.startsWith("vendor/") || f.startsWith("tools/vendor-craft/")) flags.vendor = 1;
@@ -66,6 +72,34 @@ while (queue.length) {
       affected.add(u);
       queue.push(u);
     }
+  }
+}
+
+// Un file fuori dai crate (il client, le doc) che il codice Rust di un crate
+// nomina per percorso: quel crate lo legge nei suoi test, che vanno rifatti.
+// Chi lo usa no: il file non cambia la sua API.
+const outside = files.filter((f) => !owner(f));
+if (outside.length) {
+  const rsFiles = (dir) => {
+    const out = [];
+    const walk = (d) => {
+      for (const e of fs.readdirSync(d, { withFileTypes: true })) {
+        if (e.name === "target" || e.name === "node_modules") continue;
+        const full = path.join(d, e.name);
+        if (e.isDirectory()) walk(full);
+        else if (e.name.endsWith(".rs")) out.push(full);
+      }
+    };
+    walk(dir);
+    return out;
+  };
+  for (const p of pkgs) {
+    if (p.dir === "" || affected.has(p.name)) continue;
+    const dir = path.join(root, p.dir);
+    if (rsFiles(dir).some((f) => {
+      const source = fs.readFileSync(f, "utf8");
+      return outside.some((changed) => source.includes(`"${changed}"`));
+    })) affected.add(p.name);
   }
 }
 

@@ -3,12 +3,51 @@ import type { SyntaxForm } from "../../host/contract";
 import { t, onLanguage, type Key } from "../../i18n/strings";
 import type { SurfaceMenu, SurfaceMenuEntry, SurfaceMenuItem } from "../core/editor-menu";
 import { writeClipboardText } from "../../platform/clipboard";
-import { lineFeeds, tryApplyOperation, type EditorChangeOrigin, type TextOperation } from "../core/text-operation";
+import { lineFeeds, operationFromText, type EditorChangeOrigin, type TextOperation } from "../core/text-operation";
+import { idleSchedule } from "../../ink/dom/idle";
+import type { InkPointerType } from "../../ink/input/pointer";
+import { PenQuiet } from "../../ink/quiet";
+import type { InkSample } from "../../ink/sample";
+import { ERASER } from "../../ink/tools/eraser";
+import { EraseSweep, type Spot } from "../../ink/tools/sweep";
+import { openLifetime, type Lifetime } from "../../ui/lifetime";
+import { mediaKindOfId } from "../media/media-types";
+import { anchorAt, strokeBounds } from "./anchor";
 import {
-  applyCanvasPatches,
-  commitCanvasPatches,
-  inverseCanvasPatches,
-  isCanvasOperation,
+  cutInk,
+  cutPath,
+  cutStrokePatches,
+  erasableInk,
+  InkEraseSource,
+  inkKey,
+  pieceRecords,
+  type CutPiece,
+  type ErasableInk,
+  type InkEraserMode,
+  type StrokeCut,
+} from "./ink-erase";
+import { inkFitMode } from "./ink-fit";
+import { mountInkLayer, type InkLayer, type InkLayerStroke } from "./ink-layer";
+import { cutInkStroke, fadeInkStroke, InkPathCache, paintBoard, paintCard, type DryStroke } from "./ink-paint";
+import { createPenMenu, type PenMenu } from "./pen-menu";
+import { readInkMouse, readPen, saveInkMouse, savePen, watchPreferences } from "./preferences";
+import { isTap, pinchCamera, type TouchCamera, type TouchPoint, type ZoomLimits } from "./touch";
+import {
+  DEFAULT_INK_CHOICE,
+  dryStroke,
+  inkLook,
+  type InkPenChoice,
+  foreignInkLayer,
+  inkLayerStates,
+  strokeRecord,
+  toDry,
+  type DrawableStroke,
+  type InkLayerRef,
+  type InkLayerState,
+} from "./ink-record";
+import {
+  addStrokePatch,
+  eraseStrokePatches,
   newNodeId,
   removeEdgePatch,
   removeNodePatch,
@@ -16,14 +55,27 @@ import {
   upsertNodePatch,
   type CanvasOperation,
   type CanvasPatch,
+  type InkPatch,
 } from "./operation";
-import { parseCanvas, type CanvasDocument, type CanvasEdge, type CanvasNode } from "./model";
-import { canvasNodeAt } from "./source-edit";
-import { byteToCharIndex } from "../../rules/offsets";
+import type { CanvasDocument, CanvasEdge, CanvasNode } from "./model";
+import {
+  CanvasCoreError,
+  canvasCoreReady,
+  openCoreNow,
+  type CanvasCore,
+  type CanvasCoreErrorCode,
+  type CanvasInkLayer,
+  type CanvasSourceEdit,
+} from "./wasm/core";
 
 export const CANVAS_SNAP = 8;
 export const CANVAS_MIN_SIZE = 40;
 export const MAX_CANVAS_HISTORY = 100;
+/** La pausa dopo l'ultimo tasto in una scheda, prima che il suo testo si registri. */
+export const CARD_PAUSE_MS = 250;
+/** Il testo più lungo di una scheda, in byte UTF-8: oltre, il nucleo rifiuta la lavagna (`invalid`). */
+const MAX_CARD_TEXT_BYTES = 1_048_576;
+const utf8 = new TextEncoder();
 const MAX_INTERACTIVE_NODES = 2_000;
 const MAX_INTERACTIVE_EDGES = 4_000;
 
@@ -47,8 +99,144 @@ export interface CanvasAttachmentPort {
   readonly expandFiles?: (data: DataTransfer) => Promise<readonly File[]>;
 }
 
+/**
+ * Dove la tela apre le sue lavagne: per difetto il nucleo condiviso della
+ * shell (`wasm/core.ts`). `openNow` apre subito, o dà `null` se il nucleo non
+ * è carico; `ready` lo carica.
+ */
+export interface CanvasCorePort {
+  readonly openNow: (text: string) => CanvasCore | null;
+  readonly ready: () => Promise<void>;
+}
+
+const SHARED_CORE: CanvasCorePort = { openNow: openCoreNow, ready: canvasCoreReady };
+
+/**
+ * Dove la lavagna ricorda l'interruttore «Scrivi col mouse»: `read` dà lo
+ * stato con cui una lavagna che si apre comincia (spento, salvo «Ricorda se
+ * scrivi col mouse» acceso); `save` ricorda una scelta fatta col pulsante.
+ * Per difetto lo stato di vista di questo computer (`preferences.ts`).
+ */
+export interface CanvasInkMouseMemory {
+  readonly read: () => Promise<boolean>;
+  readonly save: (on: boolean) => void;
+}
+
+const SHARED_INK_MOUSE: CanvasInkMouseMemory = { read: readInkMouse, save: saveInkMouse };
+
+/**
+ * Dove la lavagna ricorda la penna scelta nel menu (A19): `read` dà quella
+ * con cui una lavagna che si apre comincia, `save` ricorda una scelta fatta.
+ * Per difetto lo stato di vista `canvas.pen` di questo computer.
+ */
+export interface CanvasPenMemory {
+  readonly read: () => Promise<InkPenChoice>;
+  readonly save: (choice: InkPenChoice) => void;
+}
+
+const SHARED_PEN: CanvasPenMemory = { read: readPen, save: savePen };
+
+type CardField = "text" | "label" | "url" | "file";
+
+/** Il campo aperto su una scheda. */
+interface CardEditor {
+  readonly id: string;
+  readonly field: CardField;
+  readonly input: HTMLInputElement | HTMLTextAreaElement;
+  readonly article: HTMLElement;
+  readonly lifetime: AbortController;
+  /** Una composizione dell'IME o un tasto morto in corso: la pausa aspetta la sua fine. */
+  composing: boolean;
+  /** Invio in una scheda di testo: l'a capo che arriva si registra subito. */
+  recordOnInput: boolean;
+}
+
+/**
+ * Un passo d'annulla (o di ripeti). Due vie per farlo: se il testo è ancora
+ * quello che il passo ha lasciato (`version`), si rimette il tratto `removed`
+ * al posto di `inserted`, byte per byte, e il testo torna alla sua versione di
+ * prima (`restores`); se no si passano `patches` al nucleo, che le fonde con
+ * ciò che è cambiato da un'altra parte.
+ */
+interface CanvasStep {
+  /** Le toppe che fanno questo passo sul modello di adesso. */
+  readonly patches: CanvasPatch[];
+  /** Le toppe che disfano questo passo: valgono sul testo che il passo rimette. */
+  readonly back: CanvasPatch[];
+  /** Dove comincia il tratto, in unità UTF-16. */
+  readonly start: number;
+  /** Il tratto del testo di adesso che il passo toglie. */
+  readonly inserted: string;
+  /** Il tratto che il passo rimette al suo posto. */
+  readonly removed: string;
+  /** La versione del testo che il passo ha lasciato: se è ancora quella, la via è il tratto. */
+  readonly version: number;
+  /** La versione del testo che il passo rimette. */
+  readonly restores: number;
+}
+
+/**
+ * Un tratto spezzato al limite dei campioni (`split`) che continua nel pezzo
+ * dopo: il passo che tiene i pezzi già scritti e il testo di prima del primo
+ * pezzo. Il pezzo dopo si fonde in quel passo (A4).
+ */
+interface InkChain {
+  readonly step: CanvasStep;
+  readonly before: string;
+}
+
+/**
+ * Una passata della gomma: il tratto dell'adattatore che la fa, il registro
+ * di ciò che ha preso e i tratti disegnati che può prendere, fissati quando
+ * comincia. Con `"piece"` (T22) anche il cammino fatto, in coordinate della
+ * lavagna, e il taglio di adesso di ogni tratto toccato, per chiave.
+ */
+interface InkErase {
+  readonly id: number;
+  readonly sweep: EraseSweep<ErasableInk>;
+  readonly source: InkEraseSource;
+  readonly mode: InkEraserMode;
+  readonly path: Spot[];
+  readonly cuts: Map<string, InkErasing>;
+}
+
+/** Un tratto che la gomma «Solo il pezzo» sta tagliando. */
+interface InkErasing {
+  readonly unit: ErasableInk;
+  readonly pieces: readonly CutPiece[];
+  /** Il contorno dei pezzi, per l'anteprima. */
+  readonly preview: string;
+}
+
+/** Il tasto che fa scrivere il mouse finché è giù (regola 1). */
+function isInkKey(event: KeyboardEvent): boolean {
+  return event.key.toLowerCase() === "d";
+}
+
+/** Un campo dove i tasti scrivono. */
+function isTextTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false;
+  return target.tagName === "TEXTAREA" || target.tagName === "INPUT" || target.isContentEditable;
+}
+
+/** Gli stati dei livelli d'inchiostro, per il modello e i livelli del nucleo da cui vengono. */
+interface InkStates {
+  readonly doc: CanvasDocument;
+  readonly layers: readonly CanvasInkLayer[];
+  readonly states: readonly InkLayerState[];
+}
+
+/** Il testo del campo non ancora registrato: la scheda com'era, il campo, il testo. */
+interface PendingText {
+  card: CanvasNode;
+  readonly field: CardField;
+  text: string;
+}
+
 export interface CanvasEngineOptions {
   readonly surfaceId: string;
+  /** Il nucleo che apre le lavagne; i test ne passano uno che conta le chiamate. */
+  readonly core?: CanvasCorePort;
   readonly formatId?: string | null;
   readonly revision?: string;
   readonly onChange: (change: CanvasChange) => void;
@@ -67,6 +255,11 @@ export interface CanvasEngineOptions {
   readonly attachments?: CanvasAttachmentPort;
   readonly theme?: Theme;
   /**
+   * Il testo in sospeso di una scheda è cambiato: `true` se ne resta. Nessun
+   * lavoro in più: chi ascolta chiede `pendingText` quando gli serve.
+   */
+  readonly onPendingChange?: (pending: boolean) => void;
+  /**
    * Resa markdown reale di una card testo (stesso `renderMarkdown` della
    * lettura, con `mountMarkdown` per sanitizzazione/embed). Assente = testo
    * non interattivo: nessun secondo parser né scanner locale. `forms` sono le
@@ -79,6 +272,24 @@ export interface CanvasEngineOptions {
     host: HTMLElement,
     forms: readonly SyntaxForm[] | undefined,
   ) => (() => void) | void;
+  /**
+   * «Il dito sposta le schede», letto quando il primo dito si posa: un cambio
+   * vale dal tocco dopo. I test lo passano; assente, la lavagna segue le
+   * Impostazioni di questo computer (`watchPreferences`).
+   */
+  readonly fingerMovesCard?: () => boolean;
+  /**
+   * Dove si ricorda «Scrivi col mouse»: letto una volta all'apertura, scritto
+   * a ogni clic sul pulsante. I test lo passano; assente, lo stato di vista
+   * di questo computer.
+   */
+  readonly inkMouseMemory?: CanvasInkMouseMemory;
+  /**
+   * Dove si ricorda la penna del menu: letta una volta all'apertura, scritta
+   * a ogni scelta. I test lo passano; assente, lo stato di vista di questo
+   * computer.
+   */
+  readonly penMemory?: CanvasPenMemory;
 }
 
 interface Viewport {
@@ -87,8 +298,15 @@ interface Viewport {
   zoom: number;
 }
 
+/** Sotto il dito fanno come col mouse: i controlli sempre, le maniglie se la lavagna si cambia. */
+const FINGER_CONTROLS = "button, a, input, textarea, select, [contenteditable]:not([contenteditable='false'])";
+const FINGER_HANDLES = ".canvas-node-handle, [data-resize], [data-reconnect], [data-connect]";
+
+/** I limiti dello zoom: la rotella, i pulsanti e il pizzico. */
+const ZOOM_LIMITS: ZoomLimits = { min: 0.1, max: 4 };
+
 function clampZoom(zoom: number): number {
-  return Math.min(4, Math.max(0.1, zoom));
+  return Math.min(ZOOM_LIMITS.max, Math.max(ZOOM_LIMITS.min, zoom));
 }
 
 function snap(value: number): number {
@@ -142,9 +360,25 @@ export class CanvasEngine {
   #selection: string[] = [];
   #edgeSelection: string[] = [];
   #camera: Viewport = { x: 0, y: 0, zoom: 1 };
-  #readOnly = false;
-  #undo: CanvasPatch[][] = [];
-  #redo: CanvasPatch[][] = [];
+  /** La sola lettura del pannello (`setReadOnly`): i suoi motivi sono del pannello. */
+  #panelReadOnly = false;
+  /**
+   * La sola lettura della tela: il nucleo apre il testo ma non lo sa
+   * riscrivere senza perdere qualcosa (una chiave doppia, R3). Si somma a
+   * quella del pannello e se ne va da sola quando il testo torna riscrivibile.
+   */
+  #unwritable = false;
+  #undo: CanvasStep[] = [];
+  #redo: CanvasStep[] = [];
+  /**
+   * La versione del testo di adesso. Un testo nuovo (un gesto, un annulla
+   * passato dalle toppe, `setDoc`, una `syncDoc` che cambia il testo) ne
+   * prende una mai usata da `#versions`; l'annulla e il ripeti che rimettono
+   * un tratto byte per byte ridanno al testo la versione che aveva. Una
+   * versione dice sempre un testo solo.
+   */
+  #version = 0;
+  #versions = 0;
   #markdownTeardowns = new Map<string, () => void>();
   #destroyed = false;
   #intakeError = "";
@@ -152,10 +386,68 @@ export class CanvasEngine {
   #resize: { pointerId: number; id: string; startX: number; startY: number; width: number; height: number } | null = null;
   #pan: { pointerId: number; startX: number; startY: number; camX: number; camY: number } | null = null;
   #connect: { pointerId: number; from: string; edgeId?: string; endpoint?: "from" | "to" } | null = null;
-  #finishEditing: ((save: boolean) => void) | null = null;
+  /** Le dita giù che la lavagna segue, in coordinate del client. */
+  readonly #fingers = new Map<number, TouchPoint>();
+  /** Il dito che può ancora essere un tocco breve: dove e quando si è posato, e su che cosa. */
+  #tap: { pointerId: number; startX: number; startY: number; at: number; target: Element | null; shift: boolean } | null = null;
+  /** Il pizzico in corso: le due dita e la camera di quando il secondo si è posato. */
+  #pinch: { a: number; b: number; a0: TouchPoint; b0: TouchPoint; start: TouchCamera } | null = null;
+  /** «Il dito sposta le schede» dalle Impostazioni, quando non lo passano le opzioni. */
+  #fingerMovesCardSetting = false;
+  readonly #port: CanvasCorePort;
+  /** La lavagna aperta nel nucleo; `null` prima di aprirla o dopo una trappola. */
+  #core: CanvasCore | null = null;
+  /** Il giro di riapertura dopo una trappola: uno più nuovo rende vecchi gli altri. */
+  #revival = 0;
+  /** Le trappole di fila senza un commit riuscito in mezzo. */
+  #traps = 0;
+  #editor: CardEditor | null = null;
+  /** L'unico posto del testo di una scheda non ancora registrato. */
+  #pending: PendingText | null = null;
+  #pauseTimer: ReturnType<typeof setTimeout> | undefined = undefined;
+  /** Chi possiede l'inchiostro: lo scheduler del silenzio della penna e lo strato. Si chiude in `destroy`. */
+  readonly #life: Lifetime = openLifetime();
+  /** Il lavoro pesante (il ridisegno dopo una modifica da fuori) aspetta che la penna si alzi. */
+  readonly #quiet: PenQuiet;
+  /** Lo strato della penna; `null` in sola lettura, con la scena troppo grande o senza lavagna (A8). */
+  #inkLayer: InkLayer | null = null;
+  #inkLife: Lifetime | null = null;
+  readonly #inkPaths = new InkPathCache();
+  #inkStates: InkStates | null = null;
+  /** L'asciutto disegnato adesso: per scheda e sulla radice. */
+  #inkCards = new Map<string, readonly DryStroke[]>();
+  #inkBoard: readonly DryStroke[] = [];
+  #inkChain: InkChain | null = null;
+  /** La passata di gomma in corso; `null` se nessuna. */
+  #erase: InkErase | null = null;
+  /** D tenuto giù sul viewport: il mouse scrive finché non si alza. */
+  #inkKeyDown = false;
+  /** L'interruttore «Scrivi col mouse» (`setInkMouse`). */
+  #inkMouse = false;
+  /** Quante volte l'interruttore è cambiato: lo stato ricordato arriva solo se nessuno l'ha toccato prima. */
+  #inkMouseTurns = 0;
+  /** Il pulsante «Scrivi col mouse»: lo stesso elemento in ogni barra. */
+  readonly #inkMouseButton: HTMLButtonElement;
+  /**
+   * La penna scelta nel menu (A19): strumento, penna, colore, spessore e che
+   * cosa cancella la gomma (`setInkEraser`, di serie il tratto intero, A20).
+   */
+  #penChoice: InkPenChoice = DEFAULT_INK_CHOICE;
+  /** Quante volte la penna è cambiata: quella ricordata arriva solo se nessuno l'ha scelta prima. */
+  #penTurns = 0;
+  /** Il menu della penna, in testa alla barra: il suo pulsante è lo stesso in ogni barra. */
+  readonly #penMenu: PenMenu;
 
   constructor(parent: HTMLElement, options: CanvasEngineOptions) {
     this.#options = options;
+    this.#quiet = new PenQuiet(idleSchedule(this.#life));
+    this.#life.add(() => this.#quiet.dispose());
+    if (!options.fingerMovesCard) {
+      this.#life.add(watchPreferences((preferences) => {
+        this.#fingerMovesCardSetting = preferences.fingerMovesCard;
+      }));
+    }
+    this.#port = options.core ?? SHARED_CORE;
     this.#root = document.createElement("div");
     this.#root.className = "canvas-surface";
     this.#toolbar = document.createElement("div");
@@ -174,6 +466,26 @@ export class CanvasEngine {
     this.#edgeLayer.setAttribute("aria-hidden", "true");
     this.#viewport.append(this.#edgeLayer, this.#stage);
     this.#root.append(this.#toolbar, this.#viewport);
+    // I due comandi dell'inchiostro, in testa alla barra e gli stessi in ogni
+    // barra: il menu della penna (il rialzo aperto non si stacca quando la
+    // barra si rifà) e l'interruttore «Scrivi col mouse», che tiene il fuoco
+    // dopo il clic, così chi usa la tastiera sente lo stato nuovo.
+    this.#penMenu = createPenMenu({
+      lifetime: this.#life,
+      choice: () => this.#penChoice,
+      choose: (next, settled) => this.#choosePen(next, settled),
+      editable: () => !this.#readOnly && !this.#isSceneOversized(),
+      theme: () => ((this.#root.dataset.theme ?? options.theme) === "dark" ? "dark" : "light"),
+    });
+    const inkMouse = document.createElement("button");
+    inkMouse.type = "button";
+    inkMouse.dataset.canvasAction = "ink-mouse";
+    this.#life.listen(inkMouse, "click", (event) => {
+      event.preventDefault();
+      this.#recordPending();
+      this.#toggleInkMouse();
+    });
+    this.#inkMouseButton = inkMouse;
     parent.replaceChildren(this.#root);
     this.#stopLanguage = onLanguage(() => {
       this.#viewport.setAttribute("aria-label", t("canvas.surface"));
@@ -184,9 +496,19 @@ export class CanvasEngine {
     this.#viewport.addEventListener("pointerdown", (event) => this.#pointerDown(event), { signal });
     this.#viewport.addEventListener("pointermove", (event) => this.#pointerMove(event), { signal });
     this.#viewport.addEventListener("pointerup", (event) => this.#pointerUp(event), { signal });
-    this.#viewport.addEventListener("pointercancel", () => this.#cancelGestures(), { signal });
+    this.#viewport.addEventListener("pointercancel", (event) => {
+      if (event.pointerType === "touch") this.#fingers.delete(event.pointerId);
+      this.#cancelGestures();
+    }, { signal });
     this.#viewport.addEventListener("wheel", (event) => this.#wheel(event), { signal, passive: false });
     this.#viewport.addEventListener("keydown", (event) => this.#keydown(event), { signal });
+    // D lasciato ovunque, la finestra che perde il fuoco o si nasconde: il
+    // mouse torna a selezionare.
+    this.#life.listen(window, "keyup", (event) => {
+      if (isInkKey(event)) this.#releaseInkKey();
+    });
+    this.#life.listen(window, "blur", () => this.#releaseInkKey());
+    this.#life.listen(document, "visibilitychange", () => this.#releaseInkKey());
     this.#viewport.addEventListener("dblclick", (event) => this.#dblclick(event), { signal });
     this.#viewport.addEventListener("dragover", (event) => {
       if (!this.#readOnly && !this.#isSceneOversized() && event.dataTransfer
@@ -199,44 +521,79 @@ export class CanvasEngine {
       void this.#intake(event).catch((error: unknown) => this.#showIntakeError(error));
     }, { signal });
     this.#drawToolbar();
+    this.#restoreInkMouse(options.inkMouseMemory ?? SHARED_INK_MOUSE);
+    this.#restorePen(options.penMemory ?? SHARED_PEN);
   }
 
+  /**
+   * Apre il testo `source` nel nucleo, da capo: la storia dell'annulla
+   * ricomincia. Un testo che il nucleo non apre lancia, e la tela resta com'era.
+   */
   setDoc(source: string): void {
     if (this.#destroyed) return;
-    const document = parseCanvas(source);
+    // Il testo in sospeso è del documento di prima: si registra lì.
+    this.#closeField(true);
+    const document = this.#open(source);
+    // Un documento nuovo: la risposta di prima era dell'altro testo.
+    if (this.#unwritable) {
+      this.#unwritable = false;
+      this.#root.dataset.readOnly = String(this.#readOnly);
+    }
     this.#epoch++;
-    this.#finishEditing?.(true);
     this.#cancelGestures();
+    // Un documento nuovo: il tratto in corso era dell'altro.
+    this.#inkLayer?.cancel();
+    this.#inkChain = null;
     this.#source = source;
+    this.#version = ++this.#versions;
     this.#doc = document;
     this.#intakeError = "";
     this.#selection = [];
     this.#edgeSelection = [];
     this.#undo = [];
     this.#redo = [];
+    if (!document) {
+      void this.#revive();
+      return;
+    }
+    this.#checkWritable();
     this.#fitCamera(false);
     this.#render();
   }
 
+  /**
+   * Il testo cambiato da un'altra parte (un'altra superficie, un altro
+   * programma). Il campo aperto resta aperto, e il suo testo in sospeso si
+   * registra subito dopo, sulla scheda com'è nel testo nuovo.
+   */
   syncDoc(update: { readonly text: string; readonly operation: TextOperation | null } | string): void {
     if (this.#destroyed) return;
-    this.#finishEditing?.(true);
-    this.#cancelGestures();
     const source = typeof update === "string" ? update : update.text;
-    const parsed = parseCanvas(source);
+    const document = this.#open(source);
+    this.#cancelGestures();
     this.#epoch++;
     this.#intakeError = "";
-    const operation = typeof update === "string" ? null : update.operation;
-    // Gli offset sono sul testo a `\n`, come li conta la sessione.
-    const verified = operation ? tryApplyOperation(lineFeeds(this.#source), operation) : null;
-    const patched = operation && isCanvasOperation(operation) && this.#doc
-      && verified?.kind === "applied" && verified.text === lineFeeds(source)
-      && applyCanvasPatches(this.#doc, operation.patches)
-      && JSON.stringify(this.#doc) === JSON.stringify(parsed);
+    // Lo stesso testo (l'eco di un commit di qui) lascia valida la via del tratto.
+    const changed = source !== this.#source;
+    if (changed) this.#version = ++this.#versions;
     this.#source = source;
-    if (!patched) this.#doc = parsed;
+    if (!document) {
+      void this.#revive();
+      return;
+    }
+    this.#doc = document;
+    // Lo stesso testo si riscrive come prima: la domanda serve solo a un testo nuovo.
+    if (changed) this.#checkWritable();
     this.#pruneSelection();
-    this.#render();
+    // Modello e sorgente sono già quelli nuovi; il ridisegno, con una penna
+    // giù, aspetta che si alzi (A9). Il tratto in corso non si perde: la
+    // scheda si sceglie sul documento del momento in cui la penna si alza.
+    this.#quiet.defer("render", () => {
+      if (!this.#destroyed) this.#render();
+    });
+    // Fuori dalla consegna che ci ha portato il testo: la sessione la sta
+    // ancora facendo agli altri riquadri.
+    if (this.#pending) queueMicrotask(() => this.#deferPending());
   }
 
   getDoc(): string {
@@ -253,11 +610,17 @@ export class CanvasEngine {
    * when the offset is outside every card, or the scene is too large to draw.
    */
   revealSource(byteOffset: number): boolean {
-    if (this.#destroyed || !this.#doc || this.#isSceneOversized()) return false;
-    const index = canvasNodeAt(this.#source, byteToCharIndex(this.#source, byteOffset));
+    if (this.#destroyed || !this.#doc || !this.#core || this.#isSceneOversized()) return false;
+    let index: number | null;
+    try {
+      index = this.#core.nodeAt(byteOffset);
+    } catch (error) {
+      if (lostCore(error)) this.#lose();
+      return false;
+    }
     const node = index === null ? undefined : this.#doc.nodes[index];
     if (!node) return false;
-    this.#finishEditing?.(true);
+    this.#closeField(false);
     this.#cancelGestures();
     this.#selection = [node.id];
     this.#edgeSelection = [];
@@ -269,15 +632,63 @@ export class CanvasEngine {
   }
 
   setReadOnly(readOnly: boolean): void {
-    this.#finishEditing?.(true);
+    // In sola lettura il campo si chiude comunque: ciò che non si registra
+    // l'avviso l'ha già detto.
+    this.#closeField(readOnly);
     this.#cancelGestures();
-    this.#readOnly = readOnly;
-    this.#root.dataset.readOnly = String(readOnly);
+    this.#panelReadOnly = readOnly;
+    this.#root.dataset.readOnly = String(this.#readOnly);
     this.#render();
+  }
+
+  /** In sola lettura per il pannello o per la tela: nessun gesto cambia il testo. */
+  get #readOnly(): boolean {
+    return this.#panelReadOnly || this.#unwritable;
+  }
+
+  /**
+   * Chiede al nucleo se il testo di adesso si riscrive: un'anteprima senza
+   * toppe passa dallo stesso ritocco di ogni commit, e un testo che il
+   * ritocco rifiuta (una chiave doppia, anche annidata in un campo
+   * sconosciuto) risponde `rejected`. Allora la tela resta da guardare: il
+   * campo aperto si chiude come per la sola lettura del pannello, e l'avviso
+   * della barra dice perché. Un nucleo assente o morto non risponde: la
+   * risposta di prima resta finché `#revive` non riapre il testo.
+   */
+  #checkWritable(): void {
+    const core = this.#core;
+    if (!core) return;
+    let unwritable: boolean;
+    try {
+      core.preview([]);
+      unwritable = false;
+    } catch (error) {
+      if (lostCore(error)) {
+        this.#lose();
+        return;
+      }
+      if (!(error instanceof CanvasCoreError)) throw error;
+      unwritable = error.code === "rejected";
+    }
+    if (unwritable === this.#unwritable) return;
+    if (unwritable) {
+      this.#unwritable = true;
+      this.#closeField(true);
+      this.#cancelGestures();
+    } else {
+      this.#unwritable = false;
+    }
+    this.#root.dataset.readOnly = String(this.#readOnly);
+    // Subito, anche con una penna giù e il ridisegno rimandato: lo strato se
+    // ne va (il tratto in corso si annulla) o torna, e la barra dice perché.
+    this.#syncInkLayer();
+    this.#drawToolbar();
   }
 
   setTheme(theme: Theme): void {
     this.#root.dataset.theme = theme;
+    // I campioni che si leggono poco lo dicono per il tema di adesso (A23).
+    this.#penMenu.sync();
   }
 
   /**
@@ -287,38 +698,57 @@ export class CanvasEngine {
    */
   setSyntaxForms(forms: readonly SyntaxForm[]): void {
     this.#forms = forms;
-    if (!this.#finishEditing) this.#render();
+    if (!this.#editor) this.#render();
   }
 
+  /**
+   * Annulla l'ultimo passo: il testo di prima byte per byte se nessuno l'ha
+   * cambiato nel frattempo, se no le toppe inverse che il nucleo ha dato al
+   * suo commit.
+   */
   undo(): boolean {
-    this.#finishEditing?.(true);
-    const patches = this.#undo.pop();
-    if (!patches || !this.#doc) return false;
-    const inverse = inverseCanvasPatches(patches);
-    if (!this.#commitLocal(inverse, "undo", false)) {
-      this.#undo.push(patches);
+    // Con una penna giù annulla e ripeti non fanno niente (A5).
+    if (this.#penDown) return false;
+    const editing = this.#editor !== null;
+    if (!this.#closeField(false)) return false;
+    if (editing) this.#render();
+    const step = this.#undo.pop();
+    if (!step || !this.#doc) return false;
+    if (this.#replay(step, "undo", (again) => this.#redo.push(again)) !== true) {
+      this.#undo.push(step);
       return false;
     }
-    this.#redo.push(patches);
     return true;
   }
 
+  /** Rifà il passo annullato, con le stesse due vie dell'annulla. */
   redo(): boolean {
-    this.#finishEditing?.(true);
-    const patches = this.#redo.pop();
-    if (!patches || !this.#doc) return false;
-    if (!this.#commitLocal(patches, "redo", false)) {
-      this.#redo.push(patches);
+    if (this.#penDown) return false;
+    const editing = this.#editor !== null;
+    if (!this.#closeField(false)) return false;
+    if (editing) this.#render();
+    const step = this.#redo.pop();
+    if (!step || !this.#doc) return false;
+    if (this.#replay(step, "redo", (again) => this.#pushUndo(again, false)) !== true) {
+      this.#redo.push(step);
       return false;
     }
-    this.#undo.push(patches);
     return true;
   }
 
   destroy(): void {
     if (this.#destroyed) return;
-    this.#finishEditing?.(true);
+    // Il testo in sospeso va nel documento che il riquadro mostrava.
+    this.#closeField(true);
     this.#destroyed = true;
+    clearTimeout(this.#pauseTimer);
+    this.#pauseTimer = undefined;
+    this.#revival++;
+    // Un tratto in corso si perde senza errori: lo strato lo annulla, e la
+    // vita chiude lo scheduler e ciò che il silenzio della penna teneva.
+    this.#syncInkLayer();
+    this.#life.close();
+    this.#dropCore();
     for (const teardown of this.#markdownTeardowns.values()) teardown();
     this.#markdownTeardowns.clear();
     this.#stopLanguage();
@@ -331,25 +761,383 @@ export class CanvasEngine {
       || this.#doc.edges.length > MAX_INTERACTIVE_EDGES);
   }
 
-  #commitLocal(patches: readonly CanvasPatch[], origin: EditorChangeOrigin, recordHistory: boolean, render = true): boolean {
-    if (this.#destroyed || !this.#doc || this.#readOnly || this.#isSceneOversized() || !patches.length) return false;
-    const beforeSource = this.#source;
-    const committed = commitCanvasPatches(this.#doc, beforeSource, patches);
-    if (!committed) return false;
-    this.#source = committed.source;
-    if (recordHistory) {
-      this.#undo.push([...patches]);
-      if (this.#undo.length > MAX_CANVAS_HISTORY) this.#undo.shift();
-      this.#redo = [];
+  // --- il nucleo --------------------------------------------------------------
+
+  /**
+   * Il modello del testo `text` nel nucleo: `reset` della lavagna aperta, o
+   * una lavagna nuova. `null` se il nucleo non è carico o è morto (allora
+   * serve `#revive`); un testo che il nucleo rifiuta lancia.
+   */
+  #open(text: string): CanvasDocument | null {
+    if (this.#core) {
+      try {
+        return this.#core.reset(text);
+      } catch (error) {
+        if (!lostCore(error)) throw error;
+        this.#dropCore();
+      }
     }
+    let core: CanvasCore | null;
+    try {
+      core = this.#port.openNow(text);
+    } catch (error) {
+      if (lostCore(error)) return null;
+      throw error;
+    }
+    if (!core) return null;
+    this.#core = core;
+    return core.model();
+  }
+
+  /** Il modello del nucleo; `null` se non c'è o se è appena morto (allora si riapre). */
+  #coreModel(): CanvasDocument | null {
+    const core = this.#core;
+    if (!core) return null;
+    try {
+      return core.model();
+    } catch (error) {
+      if (!lostCore(error)) throw error;
+      this.#lose();
+      return null;
+    }
+  }
+
+  #dropCore(): void {
+    const core = this.#core;
+    this.#core = null;
+    try {
+      core?.close();
+    } catch {
+      // Un'istanza morta ha già perso le sue lavagne.
+    }
+  }
+
+  /** Una trappola: la lavagna si riapre su un'istanza nuova, dal testo della sessione. */
+  #lose(): void {
+    this.#dropCore();
+    this.#traps += 1;
+    // Due di fila: lo si dice, e si riprova soltanto al prossimo testo.
+    if (this.#traps > 1) {
+      this.#coreUnavailable();
+      return;
+    }
+    void this.#revive();
+  }
+
+  async #revive(): Promise<void> {
+    const revival = ++this.#revival;
+    try {
+      await this.#port.ready();
+    } catch {
+      if (!this.#destroyed && revival === this.#revival) this.#coreUnavailable();
+      return;
+    }
+    if (this.#destroyed || revival !== this.#revival || this.#core) return;
+    let document: CanvasDocument | null;
+    try {
+      document = this.#open(this.#source);
+    } catch {
+      document = null;
+    }
+    if (!document) {
+      this.#coreUnavailable();
+      return;
+    }
+    const first = this.#doc === null;
+    this.#doc = document;
+    this.#checkWritable();
+    this.#pruneSelection();
+    if (first) this.#fitCamera(false);
+    this.#render();
+    if (this.#pending) this.#recordPending();
+  }
+
+  #coreUnavailable(): void {
+    this.#showNotice(t("canvas.core_unavailable"));
+  }
+
+  /**
+   * Passa le toppe al nucleo: tutte o nessuna. Il testo nuovo è il tratto che
+   * il nucleo ha cambiato; `record` riceve il passo che lo disfa (le toppe
+   * inverse dello stesso commit e il tratto di prima) prima che la sessione
+   * sappia della modifica (che può tornare qui con un `syncDoc`). Il codice
+   * del rifiuto, se il nucleo rifiuta.
+   */
+  #commitLocal(
+    patches: readonly CanvasPatch[],
+    origin: EditorChangeOrigin,
+    record: ((step: CanvasStep) => void) | null,
+    render = true,
+  ): true | CanvasCoreErrorCode {
+    // Mai una lista vuota: su un sorgente vuoto il nucleo riscriverebbe tutto.
+    if (!patches.length) return "request";
+    if (this.#destroyed || !this.#doc || this.#readOnly || this.#isSceneOversized()) return "rejected";
+    const core = this.#core;
+    if (!core) return "trap";
+    const before = this.#source;
+    let committed: { readonly edit: CanvasSourceEdit; readonly inverse: CanvasPatch[] };
+    try {
+      committed = core.commit(patches);
+    } catch (error) {
+      if (lostCore(error)) {
+        this.#lose();
+        return "trap";
+      }
+      if (error instanceof CanvasCoreError) return error.code;
+      throw error;
+    }
+    this.#traps = 0;
+    const { edit } = committed;
+    const after = before.slice(0, edit.start) + edit.text + before.slice(edit.end);
+    const restores = this.#version;
+    this.#source = after;
+    this.#version = ++this.#versions;
+    this.#doc = this.#coreModel() ?? this.#doc;
+    const operation: CanvasOperation = {
+      kind: "canvas",
+      patches: copyPatches(patches),
+      ...sourceOperation(before, after, edit),
+    };
+    record?.({
+      patches: committed.inverse,
+      back: copyPatches(patches),
+      start: edit.start,
+      inserted: edit.text,
+      removed: before.slice(edit.start, edit.end),
+      version: this.#version,
+      restores,
+    });
     this.#pruneSelection();
     if (render) this.#render();
-    this.#options.onChange({ text: committed.source, operation: committed.operation, origin });
+    this.#options.onChange({ text: after, operation, origin });
     return true;
   }
 
+  /**
+   * Fa un passo d'annulla o di ripeti. Se il testo è quello che il passo ha
+   * lasciato, rimette il suo tratto con un `reset` sul testo esatto (una
+   * lettura intera: va bene per un annulla, non per ogni gesto); se no passa
+   * le sue toppe al nucleo. `record` riceve il passo opposto.
+   */
+  #replay(step: CanvasStep, origin: "undo" | "redo", record: (step: CanvasStep) => void): true | CanvasCoreErrorCode {
+    const before = this.#source;
+    const end = step.start + step.inserted.length;
+    // Un passo fatto solo di tratti cambia solo l'inchiostro: si ridisegna lo
+    // strato, non le schede.
+    const inkOnly = step.patches.length > 0 && step.patches.every((patch) => patch.kind === "ink");
+    if (step.version !== this.#version || before.slice(step.start, end) !== step.inserted) {
+      const code = this.#commitLocal(step.patches, origin, record, !inkOnly);
+      if (code === true && inkOnly) this.#paintInk();
+      return code;
+    }
+    if (this.#destroyed || !this.#doc || this.#readOnly || this.#isSceneOversized()) return "rejected";
+    const core = this.#core;
+    if (!core) return "trap";
+    const after = before.slice(0, step.start) + step.removed + before.slice(end);
+    let document: CanvasDocument;
+    try {
+      document = core.reset(after);
+    } catch (error) {
+      if (lostCore(error)) {
+        this.#lose();
+        return "trap";
+      }
+      // Il nucleo non riapre il testo di prima (non dovrebbe mai): restano le toppe.
+      if (error instanceof CanvasCoreError) {
+        const code = this.#commitLocal(step.patches, origin, record, !inkOnly);
+        if (code === true && inkOnly) this.#paintInk();
+        return code;
+      }
+      throw error;
+    }
+    this.#traps = 0;
+    this.#source = after;
+    this.#version = step.restores;
+    this.#doc = document;
+    const edit: CanvasSourceEdit = { start: step.start, end, text: step.removed };
+    const operation: CanvasOperation = {
+      kind: "canvas",
+      patches: copyPatches(step.patches),
+      ...sourceOperation(before, after, edit),
+    };
+    record({
+      patches: step.back,
+      back: step.patches,
+      start: step.start,
+      inserted: step.removed,
+      removed: step.inserted,
+      version: step.restores,
+      restores: step.version,
+    });
+    this.#pruneSelection();
+    if (inkOnly) this.#paintInk();
+    else this.#render();
+    this.#options.onChange({ text: after, operation, origin });
+    return true;
+  }
+
+  /** Un gesto della tela: prima il testo in sospeso, poi le sue toppe, un passo d'annulla. */
   #commit(patches: readonly CanvasPatch[], origin: EditorChangeOrigin): boolean {
-    return this.#commitLocal(patches, origin, true);
+    this.#recordPending();
+    return this.#commitLocal(patches, origin, (step) => this.#pushUndo(step, true)) === true;
+  }
+
+  #pushUndo(step: CanvasStep, fresh: boolean): void {
+    this.#undo.push(step);
+    if (this.#undo.length > MAX_CANVAS_HISTORY) this.#undo.shift();
+    if (fresh) this.#redo = [];
+  }
+
+  // --- il testo di una scheda ---------------------------------------------------
+
+  /**
+   * Registra il testo in sospeso: un commit, una modifica alla sessione, un
+   * passo d'annulla. `false` se resta da registrare (il nucleo l'ha rifiutato:
+   * il testo resta nel campo, e l'avviso dice perché).
+   */
+  #recordPending(): boolean {
+    clearTimeout(this.#pauseTimer);
+    this.#pauseTimer = undefined;
+    const pending = this.#pending;
+    if (!pending) return true;
+    if (!this.#doc || this.#readOnly || this.#destroyed) return false;
+    let code = "rejected" as true | CanvasCoreErrorCode;
+    for (let attempt = 0; attempt < 2 && code !== true; attempt++) {
+      const doc: CanvasDocument = this.#doc;
+      // La scheda com'è adesso; se non c'è più, com'era, col testo del campo.
+      const current = doc.nodes.find((node) => node.id === pending.card.id);
+      if (current) pending.card = current;
+      const next = { ...pending.card };
+      next[pending.field] = pending.text;
+      const patch = upsertNodePatch(doc, next);
+      if (!patch) {
+        this.#setPending(null);
+        return true;
+      }
+      code = this.#commitLocal([patch], "input", (step) => {
+        this.#setPending(null);
+        this.#pushUndo(step, true);
+      });
+      // Il testo è cambiato da un'altra parte: si riprova sulla scheda di adesso.
+      const fresh = code === "stale" ? this.#coreModel() : null;
+      if (!fresh) break;
+      this.#doc = fresh;
+    }
+    if (code === true) {
+      if (this.#intakeError) this.#showNotice("");
+      return true;
+    }
+    if (code === "invalid" || code === "limit") {
+      this.#showNotice(t(pending.field === "text" && utf8.encode(pending.text).length > MAX_CARD_TEXT_BYTES
+        ? "canvas.card_too_long" : "canvas.card_invalid"));
+    }
+    return false;
+  }
+
+  /**
+   * Chiude il campo aperto, dopo averne registrato il testo. Se il nucleo lo
+   * rifiuta il campo resta aperto col suo testo, a meno di `force` (la
+   * superficie si chiude, o diventa di sola lettura): allora quel testo si
+   * perde, e l'avviso l'ha già detto.
+   */
+  #closeField(force: boolean): boolean {
+    const recorded = this.#recordPending();
+    if (!recorded && !force) return false;
+    this.#setPending(null);
+    const editor = this.#editor;
+    if (!editor) return true;
+    this.#editor = null;
+    editor.lifetime.abort();
+    editor.input.disabled = true;
+    return true;
+  }
+
+  /** Esc, Invio, l'uscita dal campo: registra e chiude. */
+  #leaveField(focus: boolean): void {
+    if (!this.#closeField(false)) return;
+    this.#render();
+    if (focus) this.#viewport.focus();
+  }
+
+  #setPending(next: PendingText | null): void {
+    const had = this.#pending !== null;
+    this.#pending = next;
+    // Ogni tasto conta: la sessione arma la bozza su ogni cambio, non solo sul primo.
+    if (next || had) this.#options.onPendingChange?.(next !== null);
+  }
+
+  /**
+   * Il testo intero del documento col testo in sospeso dentro, come lo
+   * scriverebbe il commit, senza cambiare la lavagna; `null` se non c'è testo
+   * in sospeso o il nucleo non lo prende (allora vale l'ultimo testo accettato,
+   * e lo si annota nel registro).
+   */
+  pendingText(): string | null {
+    const pending = this.#pending;
+    if (!pending || this.#destroyed || !this.#doc) return null;
+    const core = this.#core;
+    if (!core) return null;
+    let doc: CanvasDocument = this.#doc;
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const current = doc.nodes.find((node) => node.id === pending.card.id);
+      const next = { ...(current ?? pending.card) };
+      next[pending.field] = pending.text;
+      const patch = upsertNodePatch(doc, next);
+      // Il campo dice ciò che la lavagna ha già.
+      if (!patch) return this.#source;
+      try {
+        return core.preview([patch]);
+      } catch (error) {
+        if (lostCore(error)) {
+          this.#lose();
+          return null;
+        }
+        if (!(error instanceof CanvasCoreError)) throw error;
+        const fresh = error.code === "stale" && attempt === 0 ? this.#coreModel() : null;
+        if (!fresh) {
+          console.warn(`canvas: il testo in sospeso non entra nella bozza (${error.code})`);
+          return null;
+        }
+        doc = fresh;
+      }
+    }
+    return null;
+  }
+
+  /** Registra adesso il testo in sospeso, come alla fine della pausa. */
+  commitPending(): void {
+    if (!this.#destroyed) this.#recordPending();
+  }
+
+  /** Se c'è testo di una scheda non ancora registrato. */
+  get hasPending(): boolean {
+    return this.#pending !== null;
+  }
+
+  #schedulePause(): void {
+    clearTimeout(this.#pauseTimer);
+    this.#pauseTimer = setTimeout(() => {
+      this.#pauseTimer = undefined;
+      this.#deferPending();
+    }, CARD_PAUSE_MS);
+  }
+
+  /**
+   * Registra il testo in sospeso adesso o, con una penna giù, quando si alza:
+   * il commit ridisegna le schede. Il tratto, quando finisce, lo registra da sé
+   * prima di scriversi.
+   */
+  #deferPending(): void {
+    if (this.#destroyed) return;
+    this.#quiet.defer("pending", () => {
+      if (!this.#destroyed) this.#recordPending();
+    });
+  }
+
+  #showNotice(text: string): void {
+    if (this.#destroyed || this.#intakeError === text) return;
+    this.#intakeError = text;
+    this.#drawToolbar();
   }
 
   #pruneSelection(): void {
@@ -381,12 +1169,558 @@ export class CanvasEngine {
     return this.#selection.map((id) => byId.get(id)!).filter(Boolean);
   }
 
+  // --- l'inchiostro -------------------------------------------------------------
+
+  /** Una penna è giù: un tratto della punta o della gomma è in corso. */
+  get #penDown(): boolean {
+    return this.#quiet.active || (this.#inkLayer?.drawing ?? false);
+  }
+
+  /**
+   * Monta lo strato della penna quando la lavagna si può cambiare e smontarlo
+   * quando no (sola lettura del pannello o della tela, scena troppo grande,
+   * lavagna chiusa: A8). Smontarlo annulla il tratto in corso: la scia sparisce.
+   */
+  #syncInkLayer(): void {
+    const wanted = !this.#destroyed && this.#doc !== null && !this.#readOnly && !this.#isSceneOversized();
+    if (wanted === (this.#inkLayer !== null)) return;
+    if (!wanted) {
+      const life = this.#inkLife;
+      this.#inkLayer = null;
+      this.#inkLife = null;
+      this.#inkChain = null;
+      life?.close();
+      this.#eraseDrop();
+      this.#applyInkMouse();
+      return;
+    }
+    const life = openLifetime();
+    this.#inkLife = life;
+    this.#inkLayer = mountInkLayer({
+      viewport: this.#viewport,
+      toWorld: (clientX, clientY) => this.#screenToWorld(clientX, clientY),
+      // La penna scelta (A11 prima di ogni scelta) allo zoom di quando il
+      // tratto comincia: una scelta a metà tratto vale dal tratto dopo.
+      look: (input) => inkLook(this.#penChoice, this.#camera.zoom, input.pressure),
+      // Lo strumento Gomma: la punta e il mouse che scrive cancellano (A21).
+      tipErases: () => this.#penChoice.tool === "eraser",
+      quiet: this.#quiet,
+      mouse: this.#inkMouseOn ? "ink" : "ignore",
+      onStroke: (stroke) => this.#inkStroke(stroke),
+      onCancel: (id) => this.#eraseCancel(id),
+      onEraseStart: (id, pointerType) => this.#eraseStart(id, pointerType),
+      onErase: (id, points) => this.#eraseAlong(id, points),
+      onEraseEnd: (id) => this.#eraseEnd(id),
+    }, life);
+    this.#inkLayer.setCamera(this.#camera.x, this.#camera.y, this.#camera.zoom);
+    this.#applyInkMouse();
+  }
+
+  /** Il mouse scrive: D tenuto o l'interruttore acceso. */
+  get #inkMouseOn(): boolean {
+    return this.#inkMouse || this.#inkKeyDown;
+  }
+
+  /**
+   * Fa scrivere il mouse (`on`) o lo lascia alla lavagna, dal prossimo
+   * appoggio: l'interruttore «Scrivi col mouse». Un tratto già giù finisce
+   * com'è. D tenuto lo fa scrivere anche da spento.
+   */
+  setInkMouse(on: boolean): void {
+    if (this.#destroyed) return;
+    this.#inkMouseTurns += 1;
+    this.#inkMouse = on;
+    this.#inkMouseButton.setAttribute("aria-pressed", String(on));
+    this.#applyInkMouse();
+  }
+
+  /**
+   * L'interruttore con cui la lavagna si apre: lo stato ricordato (spento con
+   * «Ricorda se scrivi col mouse» spento), letto una volta sola, così un
+   * cambio dell'impostazione a lavagna aperta vale dalla prossima apertura.
+   * Arriva solo se nel frattempo nessuno ha toccato l'interruttore; una
+   * lettura che non riesce lo lascia spento.
+   */
+  #restoreInkMouse(memory: CanvasInkMouseMemory): void {
+    const turns = this.#inkMouseTurns;
+    void memory.read().then((on) => {
+      if (on && !this.#destroyed && turns === this.#inkMouseTurns) this.setInkMouse(true);
+    }, () => undefined);
+  }
+
+  /** Il clic sul pulsante: cambia l'interruttore e lo ricorda. */
+  #toggleInkMouse(): void {
+    this.setInkMouse(!this.#inkMouse);
+    (this.#options.inkMouseMemory ?? SHARED_INK_MOUSE).save(this.#inkMouse);
+  }
+
+  /** D lasciato, la finestra senza fuoco o nascosta: il mouse torna com'era. */
+  #releaseInkKey(): void {
+    if (!this.#inkKeyDown) return;
+    this.#inkKeyDown = false;
+    this.#applyInkMouse();
+  }
+
+  /**
+   * Dice allo strato che cosa fa il mouse, e lo mostra sul viewport solo
+   * quando scrive davvero (lo strato c'è): `data-ink="pen"`, o `"eraser"` con
+   * lo strumento Gomma del menu.
+   */
+  #applyInkMouse(): void {
+    const on = this.#inkMouseOn;
+    const layer = this.#inkLayer;
+    layer?.setMouse(on ? "ink" : "ignore");
+    if (on && layer) this.#viewport.dataset.ink = this.#penChoice.tool === "eraser" ? "eraser" : "pen";
+    else delete this.#viewport.dataset.ink;
+  }
+
+  // --- il menu della penna (T21) -------------------------------------------
+
+  /**
+   * Una scelta del menu della penna: vale dal prossimo tratto o dalla
+   * prossima passata (quelli in corso finiscono come sono cominciati). Una
+   * scelta fatta (`settled`) si ricorda per le lavagne che si aprono dopo;
+   * quelle aperte tengono la loro.
+   */
+  #choosePen(next: InkPenChoice, settled: boolean): void {
+    if (this.#destroyed) return;
+    this.#penTurns += 1;
+    this.#penChoice = next;
+    this.#applyInkMouse();
+    this.#penMenu.sync();
+    if (settled) (this.#options.penMemory ?? SHARED_PEN).save(next);
+  }
+
+  /**
+   * La penna con cui la lavagna si apre: quella ricordata, letta una volta.
+   * Arriva solo se nel frattempo nessuno ha scelto; una lettura che non
+   * riesce lascia quella di serie.
+   */
+  #restorePen(memory: CanvasPenMemory): void {
+    const turns = this.#penTurns;
+    void memory.read().then((choice) => {
+      if (this.#destroyed || turns !== this.#penTurns) return;
+      this.#penChoice = choice;
+      this.#applyInkMouse();
+      this.#penMenu.sync();
+    }, () => undefined);
+  }
+
+  // --- la gomma: «Il tratto intero» (A20) e «Solo il pezzo» (T22) -----------
+
+  /**
+   * Che cosa fa la gomma dalla prossima passata: toglie il tratto intero
+   * (`"stroke"`, di serie) o ne taglia solo il pezzo strofinato (`"piece"`).
+   * Una passata già cominciata finisce com'è.
+   */
+  setInkEraser(mode: InkEraserMode): void {
+    if (this.#destroyed || (mode !== "stroke" && mode !== "piece")) return;
+    if (mode === this.#penChoice.eraser) return;
+    this.#penTurns += 1;
+    this.#penChoice = { ...this.#penChoice, eraser: mode };
+    this.#penMenu.sync();
+  }
+
+  /**
+   * Comincia una passata del retro della penna o del tasto laterale: i tratti
+   * che può prendere sono quelli disegnati adesso, dove si vedono.
+   */
+  #eraseStart(id: number, pointerType: InkPointerType): void {
+    this.#eraseDrop();
+    this.#erase = {
+      id,
+      sweep: new EraseSweep(ERASER, pointerType),
+      source: new InkEraseSource(erasableInk(this.#inkStateList())),
+      mode: this.#penChoice.eraser,
+      path: [],
+      cuts: new Map(),
+    };
+  }
+
+  /**
+   * Punti nuovi della passata: i tratti presi si attenuano, il resto no. Con
+   * `"piece"` si attenua solo il pezzo strofinato: i tratti vicini ai punti
+   * nuovi si ritagliano sul cammino fatto fin qui.
+   */
+  #eraseAlong(id: number, points: readonly InkSample[]): void {
+    const erase = this.#erase;
+    if (!erase || erase.id !== id || points.length === 0) return;
+    const zoom = this.#camera.zoom;
+    const before = erase.sweep.size;
+    if (erase.mode === "stroke") {
+      for (const point of points) erase.sweep.along(erase.source, [point.x, point.y], zoom);
+      const marked = erase.sweep.marked();
+      for (let i = before; i < marked.length; i++) this.#fadeInk(marked[i]!, true);
+      return;
+    }
+    const radius = erase.sweep.radius / zoom;
+    const last = erase.path[erase.path.length - 1];
+    let loX = last ? last[0] : Infinity;
+    let loY = last ? last[1] : Infinity;
+    let hiX = last ? last[0] : -Infinity;
+    let hiY = last ? last[1] : -Infinity;
+    for (const point of points) {
+      const spot: Spot = [point.x, point.y];
+      erase.path.push(spot);
+      erase.sweep.along(erase.source, spot, zoom);
+      loX = Math.min(loX, spot[0]);
+      loY = Math.min(loY, spot[1]);
+      hiX = Math.max(hiX, spot[0]);
+      hiY = Math.max(hiY, spot[1]);
+    }
+    loX -= radius;
+    loY -= radius;
+    hiX += radius;
+    hiY += radius;
+    const marked = erase.sweep.marked();
+    for (let i = 0; i < marked.length; i++) {
+      const unit = marked[i]!;
+      // Un tratto già preso cambia solo se i punti nuovi gli passano vicino.
+      if (i < before && (unit.maxX < loX || unit.minX > hiX || unit.maxY < loY || unit.minY > hiY)) continue;
+      const pieces = cutInk(unit, erase.path, radius);
+      if (pieces === null) {
+        if (erase.cuts.delete(unit.key)) this.#showCut(unit, null);
+        continue;
+      }
+      const preview = cutPath(pieces);
+      erase.cuts.set(unit.key, { unit, pieces, preview });
+      this.#showCut(unit, preview);
+    }
+  }
+
+  /**
+   * La passata è finita: i tratti presi si cancellano (o si tagliano) con un
+   * commit solo, un passo d'annulla, anche se stanno in più livelli. Niente
+   * preso, niente commit; un commit che non riesce rimette i tratti come
+   * erano.
+   */
+  #eraseEnd(id: number): void {
+    const erase = this.#erase;
+    if (!erase || erase.id !== id) return;
+    this.#erase = null;
+    if (erase.mode === "stroke" ? erase.sweep.size === 0 : erase.cuts.size === 0) return;
+    let done = false;
+    try {
+      done = erase.mode === "stroke" ? this.#eraseCommit(erase.sweep.marked()) : this.#cutCommit(this.#cutsOf(erase));
+    } finally {
+      if (!done) this.#restoreErase(erase);
+    }
+  }
+
+  /** La passata annullata (palmo, finestra nascosta, sola lettura): i tratti tornano normali. */
+  #eraseCancel(id: number): void {
+    if (this.#erase?.id === id) this.#eraseDrop();
+  }
+
+  #eraseDrop(): void {
+    const erase = this.#erase;
+    this.#erase = null;
+    if (erase) this.#restoreErase(erase);
+  }
+
+  /** Rimette come erano i tratti che la passata `erase` mostrava presi o tagliati. */
+  #restoreErase(erase: InkErase): void {
+    if (erase.mode === "stroke") for (const unit of erase.sweep.marked()) this.#fadeInk(unit, false);
+    else for (const { unit } of erase.cuts.values()) this.#showCut(unit, null);
+  }
+
+  /** I tagli della passata nell'ordine in cui la gomma ha preso i tratti. */
+  #cutsOf(erase: InkErase): InkErasing[] {
+    const cuts: InkErasing[] = [];
+    for (const unit of erase.sweep.marked()) {
+      const cut = erase.cuts.get(unit.key);
+      if (cut) cuts.push(cut);
+    }
+    return cuts;
+  }
+
+  /** L'elemento della scheda `node` sulla scena; `null` se non c'è. */
+  #inkOwner(node: string): HTMLElement | null {
+    return this.#stage.querySelector<HTMLElement>(`.canvas-node[data-node="${CSS.escape(node)}"]`);
+  }
+
+  /** Attenua o rimette il percorso disegnato di un tratto, senza ridisegnare. */
+  #fadeInk(unit: ErasableInk, faded: boolean): void {
+    if (unit.node === null) {
+      fadeInkStroke(this.#stage, "board", unit.id, faded);
+      return;
+    }
+    const element = this.#inkOwner(unit.node);
+    if (element) fadeInkStroke(element, "card", unit.id, faded);
+  }
+
+  /** Mostra il taglio `preview` di un tratto (o lo toglie con `null`), senza ridisegnare. */
+  #showCut(unit: ErasableInk, preview: string | null): void {
+    if (unit.node === null) {
+      cutInkStroke(this.#stage, "board", unit.id, preview);
+      return;
+    }
+    const element = this.#inkOwner(unit.node);
+    if (element) cutInkStroke(element, "card", unit.id, preview);
+  }
+
+  /** Il primo passo di un commit della gomma: il documento e i livelli di adesso, dopo il testo in sospeso. */
+  #inkEditStart(): { readonly doc: CanvasDocument; readonly layers: readonly CanvasInkLayer[] } | null {
+    if (this.#destroyed || !this.#doc || this.#readOnly || this.#isSceneOversized()) return null;
+    this.#recordPending();
+    const doc = this.#doc;
+    const layers = this.#inkLayersNow();
+    return layers ? { doc, layers } : null;
+  }
+
+  /**
+   * Un commit solo con le toppe della gomma, un passo d'annulla; ciò che il
+   * nucleo rifiuta lo dice l'avviso. `true` se è riuscito.
+   */
+  #commitInkEdit(patches: readonly InkPatch[]): boolean {
+    if (patches.length === 0) return false;
+    const code = this.#commitLocal(patches, "input", (step) => this.#pushUndo(step, true), false);
+    if (code !== true) {
+      // Una trappola la dice il nucleo che si riapre.
+      if (code !== "trap") this.#showNotice(t(code === "limit" ? "canvas.ink.full" : "canvas.ink.refused"));
+      return false;
+    }
+    this.#inkChain = null;
+    this.#paintInk();
+    if (this.#intakeError) this.#showNotice("");
+    return true;
+  }
+
+  /**
+   * Cancella i tratti `marked` dal documento di adesso: prima il testo in
+   * sospeso (un passo suo, come prima di ogni gesto), poi una toppa per
+   * tratto, livello per livello nell'ordine in cui la gomma li ha presi. Un
+   * tratto che nel frattempo non c'è più si lascia; un livello diventato
+   * estraneo non si tocca. `true` se il commit è riuscito.
+   */
+  #eraseCommit(marked: readonly ErasableInk[]): boolean {
+    const start = this.#inkEditStart();
+    if (!start) return false;
+    const { doc, layers } = start;
+    const present = new Set<string>();
+    for (const state of this.#inkStateList()) {
+      for (const entry of state.strokes) present.add(inkKey(state.layer, entry.id));
+    }
+    const groups = new Map<string, { readonly layer: InkLayerRef; readonly ids: string[] }>();
+    for (const unit of marked) {
+      if (!present.has(unit.key)) continue;
+      const group = unit.node === null ? "board" : `node\u0000${unit.node}`;
+      let entry = groups.get(group);
+      if (!entry) {
+        entry = { layer: unit.layer, ids: [] };
+        groups.set(group, entry);
+      }
+      entry.ids.push(unit.id);
+    }
+    const patches: InkPatch[] = [];
+    for (const { layer, ids } of groups.values()) {
+      const made = eraseStrokePatches(doc, layers, layer, ids);
+      if (made) patches.push(...made);
+    }
+    return this.#commitInkEdit(patches);
+  }
+
+  /**
+   * Taglia i tratti di `cuts` nel documento di adesso: prima il testo in
+   * sospeso, poi, livello per livello, i pezzi al posto di ogni tratto e nel
+   * suo ordine (`cutStrokePatches`), in un commit solo. Un tratto che nel
+   * frattempo non c'è più, o è cambiato, si lascia; un livello diventato
+   * estraneo non si tocca. `true` se il commit è riuscito.
+   */
+  #cutCommit(cuts: readonly InkErasing[]): boolean {
+    const start = this.#inkEditStart();
+    if (!start) return false;
+    const { doc, layers } = start;
+    const present = new Map<string, DrawableStroke>();
+    for (const state of this.#inkStateList()) {
+      for (const stroke of state.drawable) present.set(inkKey(state.layer, stroke.id), stroke);
+    }
+    const groups = new Map<string, { readonly layer: InkLayerRef; readonly cuts: StrokeCut[] }>();
+    for (const { unit, pieces } of cuts) {
+      const now = present.get(unit.key);
+      if (!now || now.inkText !== unit.stroke.inkText || now.brushText !== unit.stroke.brushText) continue;
+      const group = unit.node === null ? "board" : `node\u0000${unit.node}`;
+      let entry = groups.get(group);
+      if (!entry) {
+        entry = { layer: unit.layer, cuts: [] };
+        groups.set(group, entry);
+      }
+      entry.cuts.push({ id: unit.id, pieces: pieceRecords(now, pieces) });
+    }
+    const patches: InkPatch[] = [];
+    for (const { layer, cuts: layerCuts } of groups.values()) {
+      const made = cutStrokePatches(doc, layers, layer, layerCuts);
+      if (made) patches.push(...made);
+    }
+    return this.#commitInkEdit(patches);
+  }
+
+  /**
+   * I livelli d'inchiostro del testo di adesso: lo stato lo dice il nucleo, una
+   * volta per testo (`inkLayers()` li tiene fino al prossimo `reset` o
+   * `commit`), e qui si decodificano una volta per modello.
+   */
+  #inkStateList(): readonly InkLayerState[] {
+    const doc = this.#doc;
+    const layers = this.#inkLayersNow();
+    if (!doc || !layers) return [];
+    const cached = this.#inkStates;
+    if (cached && cached.doc === doc && cached.layers === layers) return cached.states;
+    const states = inkLayerStates(doc, layers);
+    this.#inkStates = { doc, layers, states };
+    return states;
+  }
+
+  /** I livelli del nucleo per il testo di adesso; `null` senza nucleo o se è appena morto. */
+  #inkLayersNow(): readonly CanvasInkLayer[] | null {
+    const core = this.#core;
+    if (!core) return null;
+    try {
+      return core.inkLayers();
+    } catch (error) {
+      if (lostCore(error)) {
+        this.#lose();
+        return null;
+      }
+      if (error instanceof CanvasCoreError) return null;
+      throw error;
+    }
+  }
+
+  /**
+   * Ridisegna l'asciutto di tutte le schede sulla scena e della radice, senza
+   * rifare le schede: dopo `#render`, o dopo un annulla fatto solo di tratti.
+   */
+  #paintInk(): void {
+    if (!this.#doc || this.#isSceneOversized()) return;
+    const cards = new Map<string, readonly DryStroke[]>();
+    let board: DryStroke[] = [];
+    // Ciò che la gomma ha preso resta attenuato (o tagliato) anche se lo
+    // strato si ridisegna.
+    const erase = this.#erase;
+    const faded = erase?.mode === "stroke" ? new Set(erase.sweep.marked().map((unit) => unit.key)) : null;
+    const cuts = erase?.mode === "piece" ? erase.cuts : null;
+    for (const state of this.#inkStateList()) {
+      const drys: DryStroke[] = [];
+      for (const stroke of state.drawable) {
+        const dry = dryStroke(stroke, this.#inkPaths);
+        if (!dry) continue;
+        const key = inkKey(state.layer, stroke.id);
+        const cut = cuts?.get(key);
+        if (cut && cut.unit.stroke.inkText === stroke.inkText) drys.push({ ...dry, cut: cut.preview });
+        else drys.push(faded?.has(key) ? { ...dry, faded: true } : dry);
+      }
+      if (state.node) cards.set(state.node.id, drys);
+      else board = drys;
+    }
+    const nodes = new Map(this.#doc.nodes.map((node) => [node.id, node]));
+    for (const element of this.#stage.children) {
+      if (!(element instanceof HTMLElement) || !element.classList.contains("canvas-node")) continue;
+      const node = nodes.get(element.dataset.node ?? "");
+      if (node) paintCard(element, cards.get(node.id) ?? [], inkFitMode(node));
+    }
+    paintBoard(this.#stage, board);
+    this.#inkCards = cards;
+    this.#inkBoard = board;
+    this.#inkPaths.sweep();
+  }
+
+  /** Un tratto della penna è finito: si scrive, e la sua scia va via nello stesso giro. */
+  #inkStroke(stroke: InkLayerStroke): void {
+    const layer = this.#inkLayer;
+    try {
+      this.#writeStroke(stroke);
+    } finally {
+      layer?.settle(stroke.id);
+    }
+  }
+
+  /**
+   * Scrive il tratto `stroke`: prima il testo in sospeso (un passo suo, A1),
+   * poi la scheda che lo tiene sul documento di adesso (A3, A9), il record,
+   * la toppa e un commit solo, senza ridisegnare le schede; l'asciutto del
+   * solo livello toccato si aggiunge qui. Un pezzo che continua un tratto
+   * spezzato si fonde nel passo del pezzo di prima (A4). Ciò che non si
+   * scrive lo dice l'avviso della barra.
+   */
+  #writeStroke(stroke: InkLayerStroke): void {
+    const chain = stroke.continued ? this.#inkChain : null;
+    this.#inkChain = null;
+    if (this.#destroyed || !this.#doc || this.#readOnly || this.#isSceneOversized()) return;
+    // Come prima di ogni gesto: il testo e poi il tratto, due passi. Il campo
+    // resta aperto col suo testo.
+    this.#recordPending();
+    const doc = this.#doc;
+    const layers = this.#inkLayersNow();
+    if (!layers) return;
+    const holder = anchorAt(doc.nodes, strokeBounds(stroke.samples, stroke.brush.size),
+      (node) => !foreignInkLayer(layers, { node: node.id }));
+    const ref: InkLayerRef = holder ? { node: holder.id } : "board";
+    if (foreignInkLayer(layers, ref)) {
+      this.#showNotice(t("canvas.ink.foreign"));
+      return;
+    }
+    const made = strokeRecord(stroke, holder, { brush: stroke.brush, color: stroke.color, tool: stroke.tool }, Date.now());
+    if (!made.ok) {
+      // Un tocco che non fa contorno non è niente da dire.
+      if (made.reason !== "empty") this.#showNotice(t(made.reason === "full" ? "canvas.ink.full" : "canvas.ink.refused"));
+      return;
+    }
+    const patch = addStrokePatch(doc, layers, ref, made.record);
+    if (!patch) {
+      this.#showNotice(t("canvas.ink.refused"));
+      return;
+    }
+    const before = this.#source;
+    const code = this.#commitLocal([patch], "input", (step) => this.#pushInkStep(step, chain), false);
+    if (code !== true) {
+      // Una trappola la dice il nucleo che si riapre.
+      if (code !== "trap") this.#showNotice(t(code === "limit" ? "canvas.ink.full" : "canvas.ink.refused"));
+      return;
+    }
+    const top = this.#undo[this.#undo.length - 1];
+    if (stroke.split && top) this.#inkChain = { step: top, before: chain?.before ?? before };
+    const dry = toDry(made.record, this.#inkPaths);
+    if (dry) this.#paintStroke(holder, dry);
+    if (this.#intakeError) this.#showNotice("");
+  }
+
+  /** Aggiunge l'asciutto di un tratto appena scritto al solo livello che lo tiene. */
+  #paintStroke(holder: CanvasNode | null, dry: DryStroke): void {
+    if (!holder) {
+      this.#inkBoard = [...this.#inkBoard, dry];
+      paintBoard(this.#stage, this.#inkBoard);
+      return;
+    }
+    const drys = [...(this.#inkCards.get(holder.id) ?? []), dry];
+    this.#inkCards.set(holder.id, drys);
+    const element = this.#stage.querySelector<HTMLElement>(`.canvas-node[data-node="${CSS.escape(holder.id)}"]`);
+    // Una scheda arrivata da fuori a penna giù non è ancora sulla scena: la
+    // disegna il ridisegno rimandato.
+    if (element) paintCard(element, drys, inkFitMode(holder));
+  }
+
+  /**
+   * Il passo d'annulla di un tratto: nuovo, o fuso col pezzo di prima dello
+   * stesso tratto se nel frattempo il testo non è cambiato.
+   */
+  #pushInkStep(step: CanvasStep, chain: InkChain | null): void {
+    const top = this.#undo[this.#undo.length - 1];
+    if (chain && top === chain.step && top.version === step.restores) {
+      this.#undo[this.#undo.length - 1] = mergeSteps(chain.before, top, step, this.#source);
+      this.#redo = [];
+      return;
+    }
+    this.#pushUndo(step, true);
+  }
+
   // --- camera ---------------------------------------------------------------
 
   #applyCamera(): void {
     // Camera transforms are immediate for both motion preferences.
     this.#stage.style.transform = `translate(${this.#camera.x}px, ${this.#camera.y}px) scale(${this.#camera.zoom})`;
     this.#edgeLayer.style.transform = `translate(${this.#camera.x}px, ${this.#camera.y}px) scale(${this.#camera.zoom})`;
+    this.#inkLayer?.setCamera(this.#camera.x, this.#camera.y, this.#camera.zoom);
   }
 
   #screenToWorld(clientX: number, clientY: number): { x: number; y: number } {
@@ -440,8 +1774,27 @@ export class CanvasEngine {
 
   #drawToolbar(): void {
     const bar = this.#toolbar;
-    bar.replaceChildren();
-    const mk = (action: string, label: string, run: () => void, disabled = false, mutates = true): HTMLButtonElement => {
+    // La barra si rifà da capo, salvo i due comandi dell'inchiostro, che
+    // restano gli stessi elementi al loro posto: il rialzo della penna aperto
+    // resta ancorato e il fuoco su uno dei due non si perde.
+    const pen = this.#penMenu.button;
+    const inkMouse = this.#inkMouseButton;
+    for (const child of [...bar.children]) if (child !== pen && child !== inkMouse) child.remove();
+    if (bar.firstElementChild !== pen || pen.nextElementSibling !== inkMouse) bar.prepend(pen, inkMouse);
+    this.#penMenu.sync();
+    // «Scrivi col mouse», subito dopo la penna.
+    inkMouse.textContent = t("canvas.ink.mouse");
+    inkMouse.title = t("canvas.ink.mouse_hint");
+    inkMouse.setAttribute("aria-pressed", String(this.#inkMouse));
+    inkMouse.disabled = this.#readOnly || this.#isSceneOversized();
+    const mk = (
+      action: string,
+      label: string,
+      run: () => void,
+      disabled = false,
+      mutates = true,
+      focusViewport = true,
+    ): HTMLButtonElement => {
       const button = document.createElement("button");
       button.type = "button";
       button.dataset.canvasAction = action;
@@ -449,8 +1802,9 @@ export class CanvasEngine {
       button.disabled = disabled || (mutates && (this.#readOnly || this.#isSceneOversized()));
       button.addEventListener("click", (e) => {
         e.preventDefault();
+        this.#recordPending();
         run();
-        this.#viewport.focus();
+        if (focusViewport) this.#viewport.focus();
       });
       bar.append(button);
       return button;
@@ -558,12 +1912,17 @@ export class CanvasEngine {
       const rect = this.#viewport.getBoundingClientRect();
       this.#zoomAt(rect.left + rect.width / 2, rect.top + rect.height / 2, 1 / 1.2);
     }, false, false);
-    if (this.#intakeError) {
+    // Un avviso solo, nel suo posto all'inizio della barra, dove si legge
+    // senza scorrere: quello dell'ultimo gesto, o la sola lettura della tela.
+    // Una scena oltre il limite ha già il suo, nella tela.
+    const notice = this.#intakeError
+      || (this.#unwritable && !this.#isSceneOversized() ? t("canvas.unwritable") : "");
+    if (notice) {
       const error = document.createElement("output");
       error.setAttribute("role", "alert");
       error.className = "canvas-intake-error";
-      error.textContent = this.#intakeError;
-      bar.append(error);
+      error.textContent = notice;
+      bar.prepend(error);
     }
   }
 
@@ -1030,6 +2389,13 @@ export class CanvasEngine {
   }
 
   #pointerDown(event: PointerEvent): void {
+    // Prima di ogni gesto, il testo in sospeso (non i clic dentro il campo).
+    if (!(event.target instanceof Node && this.#editor?.input.contains(event.target))) this.#recordPending();
+    if (event.pointerType === "touch") this.#touchDown(event);
+    else this.#mouseDown(event);
+  }
+
+  #mouseDown(event: PointerEvent): void {
     if (event.button === 1 || event.ctrlKey || event.metaKey || event.altKey) {
       this.#pan = { pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, camX: this.#camera.x, camY: this.#camera.y };
       this.#viewport.setPointerCapture?.(event.pointerId);
@@ -1068,61 +2434,206 @@ export class CanvasEngine {
     }
     const nodeId = this.#nodeAt(target);
     if (nodeId) {
-      const additive = event.shiftKey;
-      if (additive) {
-        this.#selection = this.#selection.includes(nodeId)
-          ? this.#selection.filter((id) => id !== nodeId)
-          : [...this.#selection, nodeId];
-        this.#edgeSelection = [];
-        this.#options.onSelectionChange();
-        this.#displaySelection();
-      } else if (!this.#selection.includes(nodeId)) {
-        this.#selection = [nodeId];
-        this.#edgeSelection = [];
-        this.#options.onSelectionChange();
-        this.#displaySelection();
-      }
+      this.#selectNode(nodeId, event.shiftKey);
       if (this.#readOnly || !this.#doc || !(target instanceof Element && target.closest(".canvas-node-handle"))) return;
-      const origin = new Map<string, { x: number; y: number }>();
-      for (const id of this.#selection) {
-        const node = this.#doc.nodes.find((n) => n.id === id);
-        if (node) origin.set(id, { x: node.x, y: node.y });
-      }
-      // A group carries every card fully inside it. Containment is geometric,
-      // not a second persisted parent relation that would conflict with Canvas.
-      for (const group of this.#doc.nodes.filter((node) => origin.has(node.id) && node.type === "group")) {
-        for (const child of this.#doc.nodes) {
-          if (child.id !== group.id && child.x >= group.x && child.y >= group.y
-            && child.x + child.width <= group.x + group.width
-            && child.y + child.height <= group.y + group.height) {
-            origin.set(child.id, { x: child.x, y: child.y });
-          }
-        }
-      }
-      this.#drag = { pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, origin, moved: false };
-      this.#viewport.setPointerCapture?.(event.pointerId);
-      event.preventDefault();
+      this.#beginDrag(event);
       return;
     }
     const edgeId = this.#edgeAt(target);
     if (edgeId) {
-      this.#edgeSelection = [edgeId];
-      this.#selection = [];
-      this.#options.onSelectionChange();
-      this.#displaySelection();
+      this.#selectEdge(edgeId);
       return;
     }
-    if (!event.shiftKey) {
-      this.#selection = [];
-      this.#edgeSelection = [];
-      this.#options.onSelectionChange();
-      this.#displaySelection();
+    if (!event.shiftKey) this.#clearSelection();
+    this.#beginPan(event.pointerId, event.clientX, event.clientY);
+  }
+
+  /** La scheda `nodeId` presa col clic: `additive` (Maiuscolo) la aggiunge o la toglie. */
+  #selectNode(nodeId: string, additive: boolean): void {
+    if (additive) {
+      this.#selection = this.#selection.includes(nodeId)
+        ? this.#selection.filter((id) => id !== nodeId)
+        : [...this.#selection, nodeId];
+    } else if (!this.#selection.includes(nodeId)) {
+      this.#selection = [nodeId];
+    } else {
+      return;
     }
-    this.#pan = { pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, camX: this.#camera.x, camY: this.#camera.y };
+    this.#edgeSelection = [];
+    this.#options.onSelectionChange();
+    this.#displaySelection();
+  }
+
+  #selectEdge(edgeId: string): void {
+    this.#edgeSelection = [edgeId];
+    this.#selection = [];
+    this.#options.onSelectionChange();
+    this.#displaySelection();
+  }
+
+  #clearSelection(): void {
+    this.#selection = [];
+    this.#edgeSelection = [];
+    this.#options.onSelectionChange();
+    this.#displaySelection();
+  }
+
+  /** Comincia a trascinare le schede scelte, e ciò che i gruppi scelti contengono. */
+  #beginDrag(event: PointerEvent): void {
+    if (!this.#doc) return;
+    const origin = new Map<string, { x: number; y: number }>();
+    for (const id of this.#selection) {
+      const node = this.#doc.nodes.find((n) => n.id === id);
+      if (node) origin.set(id, { x: node.x, y: node.y });
+    }
+    // A group carries every card fully inside it. Containment is geometric,
+    // not a second persisted parent relation that would conflict with Canvas.
+    for (const group of this.#doc.nodes.filter((node) => origin.has(node.id) && node.type === "group")) {
+      for (const child of this.#doc.nodes) {
+        if (child.id !== group.id && child.x >= group.x && child.y >= group.y
+          && child.x + child.width <= group.x + group.width
+          && child.y + child.height <= group.y + group.height) {
+          origin.set(child.id, { x: child.x, y: child.y });
+        }
+      }
+    }
+    this.#drag = { pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, origin, moved: false };
     this.#viewport.setPointerCapture?.(event.pointerId);
+    event.preventDefault();
+  }
+
+  #beginPan(pointerId: number, clientX: number, clientY: number): void {
+    this.#pan = { pointerId, startX: clientX, startY: clientY, camX: this.#camera.x, camY: this.#camera.y };
+    this.#viewport.setPointerCapture?.(pointerId);
+  }
+
+  // --- il dito -----------------------------------------------------------------
+
+  /** «Il dito sposta le schede», adesso. */
+  #fingerMovesCard(): boolean {
+    return this.#options.fingerMovesCard ? this.#options.fingerMovesCard() : this.#fingerMovesCardSetting;
+  }
+
+  /**
+   * Un dito si posa. Il primo sposta la lavagna, anche sopra le schede, e se
+   * si alza presto e vicino fa quello che fa un clic; con «Il dito sposta le
+   * schede» sopra una scheda la sposta. Le maniglie (testata, ridimensiona,
+   * collega) e i controlli (pulsanti, collegamenti, campi) fanno come col
+   * mouse; in sola lettura le maniglie spostano la lavagna. Il secondo dito
+   * comincia il pizzico, salvo durante un gesto su una scheda, che tiene il
+   * dito suo. Con una penna giù il dito non fa niente, e il palmo nemmeno.
+   */
+  #touchDown(event: PointerEvent): void {
+    if (this.#penDown || this.#palm(event.pointerId) || this.#drag || this.#resize || this.#connect || this.#pinch) return;
+    this.#fingers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+    if (this.#fingers.size >= 2) {
+      this.#beginPinch();
+      event.preventDefault();
+      return;
+    }
+    const target = event.target instanceof Element ? event.target : null;
+    if (target?.closest(FINGER_CONTROLS) || (!this.#readOnly && target?.closest(FINGER_HANDLES))) {
+      this.#mouseDown(event);
+      return;
+    }
+    const nodeId = this.#nodeAt(target);
+    if (nodeId && !this.#readOnly && this.#doc && this.#fingerMovesCard()) {
+      this.#selectNode(nodeId, event.shiftKey);
+      this.#beginDrag(event);
+      return;
+    }
+    this.#tap = { pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, at: event.timeStamp, target, shift: event.shiftKey };
+    this.#beginPan(event.pointerId, event.clientX, event.clientY);
+  }
+
+  /**
+   * Il dito `pointerId` è il palmo: lo decide la sessione della penna
+   * (`ink/input/roles.ts`), che fa palmo ogni dito con una penna giù o
+   * sospesa, e le dita già giù quando la penna arriva. Senza lo strato (sola
+   * lettura) non c'è penna che scriva, e nessun dito è palmo.
+   */
+  #palm(pointerId: number): boolean {
+    return this.#inkLayer?.roleOf(pointerId) === "ignore";
+  }
+
+  /** Le prime due dita giù diventano un pizzico: il pan e il tocco breve finiscono. */
+  #beginPinch(): void {
+    const [a, b] = [...this.#fingers.keys()];
+    if (a === undefined || b === undefined) return;
+    this.#pan = null;
+    this.#tap = null;
+    this.#pinch = { a, b, a0: this.#local(this.#fingers.get(a)!), b0: this.#local(this.#fingers.get(b)!), start: { ...this.#camera } };
+    this.#viewport.setPointerCapture?.(b);
+  }
+
+  /** Un punto del client in coordinate del viewport. */
+  #local(point: TouchPoint): TouchPoint {
+    const rect = this.#viewport.getBoundingClientRect();
+    return { x: point.x - rect.left, y: point.y - rect.top };
+  }
+
+  /** Un dito si muove: `true` se l'ha preso il dito, `false` se tocca al gesto comune. */
+  #touchMove(event: PointerEvent): boolean {
+    if (!this.#fingers.has(event.pointerId)) return true;
+    this.#fingers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+    // La penna vince, giù o sospesa: il dito si ferma, e una scheda che
+    // spostava torna dov'era.
+    if (this.#penDown || this.#palm(event.pointerId)) {
+      this.#cancelGestures();
+      return true;
+    }
+    const pinch = this.#pinch;
+    if (pinch) {
+      const a = this.#fingers.get(pinch.a);
+      const b = this.#fingers.get(pinch.b);
+      if (a && b && (event.pointerId === pinch.a || event.pointerId === pinch.b)) {
+        this.#camera = { ...pinchCamera(pinch.start, pinch.a0, pinch.b0, this.#local(a), this.#local(b), ZOOM_LIMITS) };
+        this.#applyCamera();
+      }
+      return true;
+    }
+    const tap = this.#tap;
+    if (tap?.pointerId === event.pointerId && !isTap(tap.startX, tap.startY, event.clientX, event.clientY, 0)) this.#tap = null;
+    return false;
+  }
+
+  /**
+   * Un dito si alza: `true` se l'ha preso il dito. Dal pizzico, il dito che
+   * resta sposta la lavagna; un tocco breve fa quello che fa un clic.
+   */
+  #touchUp(event: PointerEvent): boolean {
+    if (!this.#fingers.delete(event.pointerId)) return true;
+    const pinch = this.#pinch;
+    if (pinch) {
+      if (event.pointerId !== pinch.a && event.pointerId !== pinch.b) return true;
+      this.#pinch = null;
+      const rest = [...this.#fingers][0];
+      if (rest) this.#beginPan(rest[0], rest[1].x, rest[1].y);
+      return true;
+    }
+    const tap = this.#tap;
+    if (tap?.pointerId !== event.pointerId) return false;
+    this.#tap = null;
+    this.#pan = null;
+    if (isTap(tap.startX, tap.startY, event.clientX, event.clientY, event.timeStamp - tap.at)) this.#tapAt(tap.target, tap.shift);
+    return true;
+  }
+
+  /** Il tocco breve su `target`: sceglie come il clic del mouse. */
+  #tapAt(target: Element | null, additive: boolean): void {
+    if (!target?.isConnected) return;
+    const nodeId = this.#nodeAt(target);
+    if (nodeId) {
+      this.#selectNode(nodeId, additive);
+      return;
+    }
+    const edgeId = this.#edgeAt(target);
+    if (edgeId) this.#selectEdge(edgeId);
+    else if (!additive) this.#clearSelection();
   }
 
   #pointerMove(event: PointerEvent): void {
+    if (event.pointerType === "touch" && this.#touchMove(event)) return;
     if (this.#pan && event.pointerId === this.#pan.pointerId) {
       this.#camera.x = this.#pan.camX + (event.clientX - this.#pan.startX);
       this.#camera.y = this.#pan.camY + (event.clientY - this.#pan.startY);
@@ -1157,6 +2668,7 @@ export class CanvasEngine {
   }
 
   #pointerUp(event: PointerEvent): void {
+    if (event.pointerType === "touch" && this.#touchUp(event)) return;
     if (this.#pan && event.pointerId === this.#pan.pointerId) {
       this.#pan = null;
       return;
@@ -1199,17 +2711,26 @@ export class CanvasEngine {
     this.#resize = null;
     this.#pan = null;
     this.#connect = null;
-    if (active && this.#doc) {
-      this.#doc = parseCanvas(this.#source);
+    this.#fingers.clear();
+    this.#tap = null;
+    this.#pinch = null;
+    // Il gesto aveva mosso il modello in mano: torna quello del nucleo.
+    const model = active && this.#doc ? this.#coreModel() : null;
+    if (model) {
+      this.#doc = model;
       this.#render();
     }
   }
 
   #commitFromSource(origin: EditorChangeOrigin): void {
     if (!this.#doc) return;
-    // Ricostruisce le patch confrontando live vs sorgente: preimmagini vere,
+    // Ricostruisce le patch confrontando live vs nucleo: preimmagini vere,
     // mai snap del live come before.
-    const before = parseCanvas(this.#source);
+    const before = this.#coreModel();
+    if (!before) {
+      this.#render();
+      return;
+    }
     const patches: CanvasPatch[] = [];
     const beforeNodes = new Map(before.nodes.map((n) => [n.id, n]));
     const liveNodes = new Map(this.#doc.nodes.map((n) => [n.id, n]));
@@ -1262,6 +2783,17 @@ export class CanvasEngine {
 
   #keydown(event: KeyboardEvent): void {
     if (!this.#doc || event.defaultPrevented || this.#isSceneOversized()) return;
+    // D da solo, fuori dai campi: il mouse scrive finché il tasto è giù
+    // (regola 1). La ripetizione del tasto non cambia niente.
+    if (isInkKey(event) && !event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey
+      && !isTextTarget(event.target)) {
+      if (!event.repeat && !this.#inkKeyDown) {
+        this.#inkKeyDown = true;
+        this.#applyInkMouse();
+      }
+      return;
+    }
+    this.#recordPending();
     const modifier = event.ctrlKey || event.metaKey;
     if (modifier && event.key.toLowerCase() === "z") {
       event.preventDefault();
@@ -1379,27 +2911,45 @@ export class CanvasEngine {
 
   #render(): void {
     if (!this.#doc) return;
+    this.#syncInkLayer();
     for (const teardown of this.#markdownTeardowns.values()) teardown();
     this.#markdownTeardowns.clear();
     this.#applyCamera();
     this.#drawToolbar();
-    this.#stage.replaceChildren();
     this.#viewport.dataset.canvasNodes = String(this.#doc.nodes.length);
     this.#viewport.dataset.canvasEdges = String(this.#doc.edges.length);
     if (this.#isSceneOversized()) {
       this.#edgeLayer.replaceChildren();
+      this.#stage.replaceChildren();
       const fallback = document.createElement("p");
       fallback.className = "canvas-large-fallback";
       fallback.textContent = t("canvas.too_large");
       this.#stage.append(fallback);
       this.#viewport.dataset.canvasProtocol = "source-fallback";
+      // L'inchiostro si vede dove si vedono le schede (A8).
+      this.#inkCards = new Map();
+      this.#inkBoard = [];
+      this.#inkPaths.clear();
       return;
     }
     this.#drawEdges();
+    // La scheda col campo aperto resta quella: spostarla toglierebbe il fuoco
+    // al campo. Le altre le si mettono attorno.
+    const kept = this.#editor && this.#editor.article.parentElement === this.#stage ? this.#editor : null;
+    for (const child of [...this.#stage.children]) if (child !== kept?.article) child.remove();
+    let after = false;
     // Z-order = ordine array: primo sotto, ultimo sopra (come da spec).
     for (const node of this.#doc.nodes) {
-      this.#stage.append(this.#nodeEl(node));
+      if (kept && node.id === kept.id) {
+        after = true;
+        refreshCard(kept.article, node, this.#selection.includes(node.id));
+      } else if (kept && !after) {
+        this.#stage.insertBefore(this.#nodeEl(node), kept.article);
+      } else {
+        this.#stage.append(this.#nodeEl(node));
+      }
     }
+    this.#paintInk();
     this.#viewport.dataset.canvasProtocol = "source";
   }
 
@@ -1572,11 +3122,10 @@ export class CanvasEngine {
       }
       case "file": {
         const path = node.file ?? "";
-        const extension = path.split(".").pop()?.toLowerCase();
-        const kind = extension && ["png", "jpg", "jpeg", "gif", "webp", "svg", "avif"].includes(extension) ? "image"
-          : extension && ["mp3", "wav", "ogg", "m4a", "flac"].includes(extension) ? "audio"
-            : extension && ["mp4", "webm", "mov", "mkv"].includes(extension) ? "video"
-              : extension === "pdf" ? "pdf" : "file";
+        // Lo stesso tipo che decide come l'inchiostro segue la scheda
+        // (`inkFitMode`): resa e segnaposto non si contraddicono.
+        const media = mediaKindOfId(path);
+        const kind = media === "other" ? "file" : media;
         body.dataset.mediaKind = kind;
         if (kind !== "file") {
           const placeholder = document.createElement("span");
@@ -1635,76 +3184,156 @@ export class CanvasEngine {
     return body;
   }
 
-  #beginCardEdit(node: CanvasNode): void {
+  #beginCardEdit(target: CanvasNode): void {
     if (this.#readOnly || !this.#doc) return;
-    if (this.#finishEditing) {
-      this.#finishEditing(true);
+    const node = this.#doc.nodes.find((candidate) => candidate.id === target.id);
+    if (!node) return;
+    if (this.#editor) {
+      if (this.#editor.id === node.id) return;
+      // Il testo dell'altra scheda si registra prima; se non si può, resta lì.
+      if (!this.#closeField(false)) return;
       this.#render();
     }
-    const body = this.#stage.querySelector<HTMLElement>(`[data-node="${CSS.escape(node.id)}"] .canvas-card-body`);
-    if (!body) return;
-    const field = node.type === "text" ? "text" : node.type === "group" ? "label" : node.type === "link" ? "url" : "file";
-    const initial = node[field];
+    const article = this.#stage.querySelector<HTMLElement>(`[data-node="${CSS.escape(node.id)}"]`);
+    const body = article?.querySelector<HTMLElement>(".canvas-card-body");
+    if (!article || !body) return;
+    const field: CardField = node.type === "text" ? "text" : node.type === "group" ? "label" : node.type === "link" ? "url" : "file";
     const input = node.type === "text" ? document.createElement("textarea") : document.createElement("input");
     input.className = node.type === "text" ? "canvas-text-editor" : "canvas-field-editor";
-    input.value = initial ?? "";
+    input.value = node[field] ?? "";
     input.setAttribute("aria-label", t("canvas.edit_text", { id: node.id }));
     const lifetime = new AbortController();
-    let finished = false;
-    const applyValue = (value: string | undefined): void => {
-      const current = this.#doc?.nodes.find((candidate) => candidate.id === node.id);
-      if (!current || !this.#doc) return;
-      const next = { ...current };
-      if (value === undefined) delete next[field];
-      else next[field] = value;
-      const patch = upsertNodePatch(this.#doc, next);
-      if (patch && this.#commitLocal([patch], "input", false, false)) this.#redo = [];
+    const editor: CardEditor = { id: node.id, field, input, article, lifetime, composing: false, recordOnInput: false };
+    this.#editor = editor;
+    const signal = lifetime.signal;
+    const hold = (): void => {
+      const card = this.#doc?.nodes.find((candidate) => candidate.id === node.id) ?? this.#pending?.card ?? node;
+      this.#setPending({ card, field, text: input.value });
     };
-    const finish = (save: boolean): void => {
-      if (finished) return;
-      finished = true;
-      this.#finishEditing = null;
-      lifetime.abort();
-      if (!save) {
-        applyValue(initial);
-      } else {
-        const current = this.#doc?.nodes.find((candidate) => candidate.id === node.id);
-        if (current && this.#doc) {
-          const before = { ...current };
-          if (initial === undefined) delete before[field];
-          else before[field] = initial;
-          const inverse = upsertNodePatch(this.#doc, before);
-          if (inverse) {
-            this.#undo.push(inverseCanvasPatches([inverse]));
-            if (this.#undo.length > MAX_CANVAS_HISTORY) this.#undo.shift();
-          }
-        }
+    // Il testo resta qui finché non c'è una pausa: niente commit per tasto.
+    input.addEventListener("input", () => {
+      hold();
+      if (editor.composing) return;
+      if (editor.recordOnInput) {
+        editor.recordOnInput = false;
+        this.#recordPending();
+        return;
       }
-      input.disabled = true;
-    };
-    this.#finishEditing = finish;
-    // L'input entra subito nella sessione condivisa, non soltanto al blur.
-    // Il DOM del campo resta vivo; la history Canvas raggruppa l'intera edit.
-    input.addEventListener("input", () => applyValue(input.value), { signal: lifetime.signal });
+      this.#schedulePause();
+    }, { signal });
+    // Durante la composizione (IME) la pausa non corre: conta dalla fine.
+    input.addEventListener("compositionstart", () => {
+      editor.composing = true;
+      clearTimeout(this.#pauseTimer);
+      this.#pauseTimer = undefined;
+    }, { signal });
+    input.addEventListener("compositionend", () => {
+      editor.composing = false;
+      hold();
+      this.#schedulePause();
+    }, { signal });
     input.addEventListener("keydown", (event) => {
       if (!(event instanceof KeyboardEvent)) return;
+      // Col campo aperto i tasti, Ctrl+Z compreso, sono del campo.
       event.stopPropagation();
-      if (event.key === "Escape" || (event.key === "Enter" && (node.type !== "text" || event.ctrlKey || event.metaKey))) {
+      editor.recordOnInput = false;
+      if (event.isComposing || editor.composing) return;
+      if (event.key === "Escape") {
         event.preventDefault();
-        finish(event.key !== "Escape");
-        this.#render();
-        this.#viewport.focus();
+        this.#leaveField(true);
+      } else if (event.key === "Enter") {
+        if (field === "text" && !event.ctrlKey && !event.metaKey) {
+          // L'a capo entra nel campo, e con lui il testo si registra.
+          editor.recordOnInput = true;
+          return;
+        }
+        event.preventDefault();
+        this.#leaveField(true);
       }
-    }, { signal: lifetime.signal });
-    input.addEventListener("blur", () => {
-      finish(true);
-      this.#render();
-    }, { signal: lifetime.signal });
+    }, { signal });
+    input.addEventListener("blur", () => this.#leaveField(false), { signal });
     body.replaceChildren(input);
     input.focus();
     if (node.type === "text") input.setSelectionRange(input.value.length, input.value.length);
     else input.select();
   }
+}
+
+/** Una copia delle toppe, che chi le ha date può ancora cambiare. */
+function copyPatches(patches: readonly CanvasPatch[]): CanvasPatch[] {
+  return JSON.parse(JSON.stringify(patches)) as CanvasPatch[];
+}
+
+/**
+ * Due passi di fila in uno: `first` ha portato il testo da `before` a un
+ * testo di mezzo, `second` da quello ad `after`. Le toppe si fanno in fila
+ * (le inverse al contrario); il tratto del testo è la parte che cambia fra
+ * `before` e `after`, senza spezzare una coppia surrogata.
+ */
+function mergeSteps(before: string, first: CanvasStep, second: CanvasStep, after: string): CanvasStep {
+  const shorter = Math.min(before.length, after.length);
+  let start = 0;
+  while (start < shorter && before.charCodeAt(start) === after.charCodeAt(start)) start++;
+  let endBefore = before.length;
+  let endAfter = after.length;
+  while (endBefore > start && endAfter > start && before.charCodeAt(endBefore - 1) === after.charCodeAt(endAfter - 1)) {
+    endBefore--;
+    endAfter--;
+  }
+  if (start > 0 && isHighSurrogate(before.charCodeAt(start - 1))) start--;
+  // Il tratto finale si allarga di un'unità in tutti e due i testi, che lì sono uguali.
+  if (endBefore < before.length && isLowSurrogate(before.charCodeAt(endBefore))) {
+    endBefore++;
+    endAfter++;
+  }
+  return {
+    patches: [...second.patches, ...first.patches],
+    back: [...first.back, ...second.back],
+    start,
+    inserted: after.slice(start, endAfter),
+    removed: before.slice(start, endBefore),
+    version: second.version,
+    restores: first.restores,
+  };
+}
+
+function isHighSurrogate(unit: number): boolean {
+  return unit >= 0xd800 && unit <= 0xdbff;
+}
+
+function isLowSurrogate(unit: number): boolean {
+  return unit >= 0xdc00 && unit <= 0xdfff;
+}
+
+/** Una trappola o un'istanza persa: il nucleo va riaperto. */
+function lostCore(error: unknown): boolean {
+  return error instanceof CanvasCoreError && (error.code === "trap" || error.code === "handle");
+}
+
+/**
+ * La modifica al testo che il nucleo ha fatto, come `TextOperation`: il tratto
+ * cambiato così com'è, o, con dei CR nel testo, la differenza contata sui `\n`.
+ */
+function sourceOperation(before: string, after: string, edit: CanvasSourceEdit): Pick<TextOperation, "beforeLength" | "afterLength" | "edits"> {
+  if (before.includes("\r") || after.includes("\r")) {
+    return operationFromText(lineFeeds(before), lineFeeds(after));
+  }
+  const deleted = before.slice(edit.start, edit.end);
+  if (deleted === edit.text) return { beforeLength: before.length, afterLength: after.length, edits: [] };
+  return {
+    beforeLength: before.length,
+    afterLength: after.length,
+    edits: [{ from: edit.start, to: edit.end, deleted, inserted: edit.text }],
+  };
+}
+
+/** Aggiorna la scheda col campo aperto senza toglierla dalla scena. */
+function refreshCard(article: HTMLElement, node: CanvasNode, selected: boolean): void {
+  article.style.transform = `translate(${node.x}px, ${node.y}px)`;
+  article.style.width = `${node.width}px`;
+  article.style.height = `${node.height}px`;
+  article.style.background = nodeFill(node.color);
+  article.classList.toggle("selected", selected);
 }
 
 function nodeTitle(node: CanvasNode): string {

@@ -77,6 +77,16 @@ flowchart LR
     GXLSX --> GMODEL["gridcraft-model"]
 ```
 
+Anche i file delle app Craft stanno dietro una feature dell'host, `craft`, ma
+senza codice copiato: `fub-format-craft` legge i formati da sé e dipende solo da
+`fub-abi`:
+
+```mermaid
+flowchart LR
+    HOST["fub-host"] -. "feature craft" .-> CRAFT["fub-format-craft"]
+    CRAFT --> ABI["fub-abi"]
+```
+
 ## Tabella dei componenti
 
 | Componente | Possiede | Non deve possedere |
@@ -97,6 +107,7 @@ flowchart LR
 | `fub-format-svg` | i formati `svg` e `fubann`: modello per l'indice, segnaposto HTML o elenco delle annotazioni, documento nuovo e riscrittura dei riferimenti | disegno della scena, che resta della shell; verifica del PDF annotato |
 | `fub-format-rich` | documenti di videoscrittura (`.docx`, `.odt`, `.rtf`, `.doc`): codec, provider a byte, proiezione modificabile senza perdite silenziose e copie esportate con la perdita misurata; l'HTML lo disegna il provider Markdown dal modello comune | host, storage, Tauri, Wasmtime, superficie della shell |
 | `fub-format-xlsx` | cartelle di Excel: provider a byte, superficie `grid` della versione 2 sui byte con i valori del file senza ricalcolo all'apertura, i blocchi e gli avvisi di ciò che non mostra, l'innesto dei valori cambiati a livello di riga, la modalità a comandi sulla facciata di GridCraft e la riscrittura misurata con l'inventario del pacchetto | una riscrittura che perde qualcosa, ricalcolo di ciò che una modifica non raggiunge, host, storage, Tauri, superficie della shell |
+| `fub-format-craft` | i file delle app Craft (`.vectorcraft`, `.pcraft`, `.figcraft` e gli XMP di LightCraft): provider a byte con metadati, testo e file collegati, e il contratto `CraftPreview` dell'anteprima, secondo i [loro formati](../reference/craft-formats.md) | il motore delle app, ogni scrittura dei file, l'avvio delle app esterne, host, storage, superficie della shell |
 | `fub-importers` | import ed export ufficiali e comandi di conversione | kernel, Tauri |
 | `fub-features` | provider ufficiali indipendenti | conoscenza del desktop |
 | `wordcraft-proof` | correttore di WordCraft vendorizzato in `vendor/wordcraft/`, usato soltanto dalla feature `proof` | dipendenze da Fub |
@@ -204,4 +215,5 @@ indipendenti.
 | seam frontend | `apps/client/src/host/` |
 | shell | `apps/client/src/main.ts`, `desktop-shell.ts`, `panels/`, `state/`, `ui/` |
 | finestra | `apps/client/src/shells/scrittoio/`, `kit/`, `moto/`, `theme/scrittoio/` |
+| telefono | `apps/client/mobile.html`, `apps/client/src/shells/mobile/`, `apps/client/src/shells/scrittoio/mobile/` ([la cornice del telefono](phone-frame.md)) |
 | test | `crates/*/tests/`, `apps/client/src/**/*.test.ts` |

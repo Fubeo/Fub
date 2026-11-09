@@ -110,11 +110,28 @@ fn every_patch_has_the_typescript_json_shape() {
             CanvasPatch::UpsertEdge {
                 before: None,
                 after: canvas.edges[0].clone(),
+                at: None,
             },
             format!(r#"{{"kind":"upsert-edge","before":null,"after":{e1}}}"#),
         ),
         (
+            CanvasPatch::UpsertEdge {
+                before: None,
+                after: canvas.edges[0].clone(),
+                at: Some(0),
+            },
+            format!(r#"{{"kind":"upsert-edge","before":null,"after":{e1},"at":0}}"#),
+        ),
+        (
             remove_edge_patch(&canvas, "e1").expect("c'è"),
+            format!(r#"{{"kind":"remove-edge","before":{e1},"after":null,"at":0}}"#),
+        ),
+        (
+            CanvasPatch::RemoveEdge {
+                before: canvas.edges[0].clone(),
+                after: Null,
+                at: None,
+            },
             format!(r#"{{"kind":"remove-edge","before":{e1},"after":null}}"#),
         ),
         (
@@ -455,7 +472,8 @@ fn at_inside_at_the_end_and_past_the_end() {
         Err(PatchError::AtOutOfRange {
             index: 0,
             at: 4,
-            len: 3
+            len: 3,
+            list: "nodes"
         })
     );
     // L'inversa di un inserimento non porta `at`, come in TypeScript:
@@ -557,6 +575,7 @@ fn an_edge_needs_both_its_nodes() {
         CanvasPatch::UpsertEdge {
             before: None,
             after: edge.clone(),
+            at: None,
         },
     ];
     assert_eq!(
@@ -613,6 +632,7 @@ fn a_missing_or_unexpected_preimage_is_stale() {
             CanvasPatch::UpsertEdge {
                 before: None,
                 after: e1,
+                at: Some(0),
             },
             Subject::Edge("e1".into()),
         ),
@@ -620,6 +640,7 @@ fn a_missing_or_unexpected_preimage_is_stale() {
             CanvasPatch::UpsertEdge {
                 before: Some(ghost_edge.clone()),
                 after: ghost_edge.clone(),
+                at: None,
             },
             Subject::Edge("ghost".into()),
         ),
@@ -627,6 +648,7 @@ fn a_missing_or_unexpected_preimage_is_stale() {
             CanvasPatch::RemoveEdge {
                 before: ghost_edge,
                 after: Null,
+                at: Some(0),
             },
             Subject::Edge("ghost".into()),
         ),
@@ -767,22 +789,145 @@ fn the_inverse_travels_as_json() {
     round_trip(&canvas, &patches);
 }
 
-/// Un arco tolto e rimesso dall'inversa torna in fondo alla lista degli
-/// archi, come in TypeScript: le toppe degli archi non hanno `at`, e
-/// l'ordine degli archi non si vede sulla tela.
+/// Un arco tolto con [`remove_edge_patch`] porta la sua posizione, e
+/// l'inversa lo rimette lì; tolto senza `at`, torna in fondo alla lista.
 #[test]
-fn a_removed_edge_comes_back_at_the_end_of_the_edges() {
+fn a_removed_edge_comes_back_at_its_place() {
+    let canvas = three_edges();
+    let order = |canvas: &Canvas| -> Vec<String> {
+        canvas.edges.iter().map(|edge| edge.id.clone()).collect()
+    };
+    let remove = [remove_edge_patch(&canvas, "e2").expect("c'è")];
+    assert!(matches!(
+        remove[0],
+        CanvasPatch::RemoveEdge { at: Some(1), .. }
+    ));
+    let after = draft(&canvas, &remove).expect("si applica");
+    assert_eq!(order(&after), ["e1", "e3"]);
+    let back = draft(&after, &inverse(&remove)).expect("l'inversa si applica");
+    assert_eq!(order(&back), ["e1", "e2", "e3"]);
+    round_trip(&canvas, &remove);
+
+    let CanvasPatch::RemoveEdge { before, .. } = remove[0].clone() else {
+        unreachable!()
+    };
+    let without_at = [CanvasPatch::RemoveEdge {
+        before,
+        after: Null,
+        at: None,
+    }];
+    let after = draft(&canvas, &without_at).expect("si applica");
+    let back = draft(&after, &inverse(&without_at)).expect("l'inversa si applica");
+    assert_eq!(order(&back), ["e1", "e3", "e2"]);
+    assert_eq!(back.nodes, canvas.nodes);
+}
+
+/// Tre archi tolti nello stesso giro, in qualunque ordine, con gli `at` del
+/// modello di partenza: l'inversa li rimette per `at` crescente, e la lista
+/// torna com'era.
+#[test]
+fn edges_removed_together_come_back_in_their_order() {
+    let canvas = three_edges();
+    let patches: Vec<CanvasPatch> = ["e3", "e1", "e2"]
+        .iter()
+        .map(|id| remove_edge_patch(&canvas, id).expect("c'è"))
+        .collect();
+    let after = draft(&canvas, &patches).expect("le toppe si applicano");
+    assert!(after.edges.is_empty());
+    let back = draft(&after, &inverse(&patches)).expect("l'inversa si applica");
+    let order: Vec<&str> = back.edges.iter().map(|edge| edge.id.as_str()).collect();
+    assert_eq!(order, ["e1", "e2", "e3"]);
+    round_trip(&canvas, &patches);
+}
+
+/// Togliere una scheda e i suoi archi nello stesso giro, poi annullare: le
+/// schede tornano prima degli archi, e gli archi nel loro ordine.
+#[test]
+fn a_node_and_its_edges_come_back_in_their_order() {
+    let mut canvas = three_edges();
+    canvas.edges.push(
+        serde_json::from_value(json!({"id": "e4", "fromNode": "a", "toNode": "c"}))
+            .expect("l'arco si legge"),
+    );
+    let mut patches: Vec<CanvasPatch> = ["e3", "e1", "e2"]
+        .iter()
+        .map(|id| remove_edge_patch(&canvas, id).expect("c'è"))
+        .collect();
+    patches.push(remove_node_patch(&canvas, "b").expect("c'è"));
+    let undo = inverse(&patches);
+    assert!(matches!(
+        undo[0],
+        CanvasPatch::UpsertNode { before: None, .. }
+    ));
+    let after = draft(&canvas, &patches).expect("le toppe si applicano");
+    assert_eq!(ids(&after), ["a", "c"]);
+    let back = draft(&after, &undo).expect("l'inversa si applica");
+    let order: Vec<&str> = back.edges.iter().map(|edge| edge.id.as_str()).collect();
+    assert_eq!(order, ["e1", "e2", "e3", "e4"]);
+    assert_eq!(ids(&back), ["a", "b", "c"]);
+    round_trip(&canvas, &patches);
+}
+
+/// Un arco nuovo va in `at`; un `at` oltre la fine degli archi è un errore,
+/// e su un arco che c'è `at` non conta.
+#[test]
+fn a_new_edge_goes_at_its_place() {
+    let canvas = three_edges();
+    let fresh: CanvasEdge =
+        serde_json::from_value(json!({"id": "e0", "fromNode": "c", "toNode": "a"}))
+            .expect("si legge");
+    let insert = |at| CanvasPatch::UpsertEdge {
+        before: None,
+        after: fresh.clone(),
+        at,
+    };
+    let order = |canvas: &Canvas| -> Vec<String> {
+        canvas.edges.iter().map(|edge| edge.id.clone()).collect()
+    };
+    let after = draft(&canvas, &[insert(Some(0))]).expect("si applica");
+    assert_eq!(order(&after), ["e0", "e1", "e2", "e3"]);
+    let after = draft(&canvas, &[insert(Some(3))]).expect("si applica");
+    assert_eq!(order(&after), ["e1", "e2", "e3", "e0"]);
+    assert_eq!(
+        draft(&canvas, &[insert(Some(4))]),
+        Err(PatchError::AtOutOfRange {
+            index: 0,
+            at: 4,
+            len: 3,
+            list: "edges"
+        })
+    );
+    assert_eq!(
+        PatchError::AtOutOfRange {
+            index: 0,
+            at: 4,
+            len: 3,
+            list: "edges"
+        }
+        .to_string(),
+        "canvas patch 0: position 4 is past the end of the 3 edges"
+    );
+    let mut relabeled = canvas.edges[2].clone();
+    relabeled.label = Some("tre".into());
+    let patch = CanvasPatch::UpsertEdge {
+        before: Some(canvas.edges[2].clone()),
+        after: relabeled,
+        at: Some(0),
+    };
+    assert_eq!(
+        order(&draft(&canvas, &[patch]).expect("si applica")),
+        ["e1", "e2", "e3"]
+    );
+}
+
+/// `three()` con tre archi: e1 a→b, e2 b→c, e3 c→b.
+fn three_edges() -> Canvas {
     let mut canvas = three();
-    for (id, to) in [("e1", "b"), ("e2", "c")] {
+    for (id, from, to) in [("e1", "a", "b"), ("e2", "b", "c"), ("e3", "c", "b")] {
         canvas.edges.push(
-            serde_json::from_value(json!({"id": id, "fromNode": "a", "toNode": to}))
+            serde_json::from_value(json!({"id": id, "fromNode": from, "toNode": to}))
                 .expect("l'arco si legge"),
         );
     }
-    let remove = [remove_edge_patch(&canvas, "e1").expect("c'è")];
-    let after = draft(&canvas, &remove).expect("si applica");
-    let back = draft(&after, &inverse(&remove)).expect("l'inversa si applica");
-    let order: Vec<&str> = back.edges.iter().map(|edge| edge.id.as_str()).collect();
-    assert_eq!(order, ["e2", "e1"]);
-    assert_eq!(back.nodes, canvas.nodes);
+    canvas
 }

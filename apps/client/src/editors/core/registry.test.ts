@@ -1,10 +1,16 @@
 // @vitest-environment happy-dom
-import { describe, expect, it, vi } from "vitest";
+import { beforeAll, describe, expect, it, vi } from "vitest";
 import { createDocumentSurfaceRegistry } from "./bootstrap";
 import type { EditorSurface, SurfaceFamily, SurfaceFactory } from "./registry";
 import { DocumentSurfaceRegistry, SurfaceRegistrationConflict } from "./registry";
 import { forwardNotice } from "../../state/kernel";
 import { mountStrings } from "../../i18n/strings";
+import { canvasCoreReady } from "../canvas/wasm/core";
+
+// La tela si monta subito solo col nucleo già carico, come dopo la prima lavagna.
+beforeAll(async () => {
+  await canvasCoreReady();
+});
 
 const localeState = vi.hoisted(() => ({ value: "it" }));
 vi.mock("../../host/query", () => ({
@@ -150,6 +156,8 @@ describe("DocumentSurfaceRegistry", () => {
       profile: "workbook",
     });
     const parent = document.createElement("div");
+    // La griglia è di un componente: il suo codice arriva con `load`.
+    await registry.load({ formatId: "xlsx", sourceKind: "bytes", documentId: "conti.xlsx" });
     const surface = registry.mount(
       { formatId: "xlsx", sourceKind: "bytes", documentId: "conti.xlsx" },
       { paneId: "conti", documentId: "conti.xlsx", parent },
@@ -162,7 +170,7 @@ describe("DocumentSurfaceRegistry", () => {
     expect(parent.querySelector(".grid-surface")).toBeNull();
   });
 
-  it("selects canvas and local media profiles without a network fallback", () => {
+  it("selects canvas and local media profiles without a network fallback", async () => {
     const registry = createDocumentSurfaceRegistry({
       onChange: vi.fn(), onSelectionChange: vi.fn(), onOpenWikilink: vi.fn(),
       onOpenPath: vi.fn(), onOpenDocument: vi.fn(), onSearchTag: vi.fn(),
@@ -193,6 +201,7 @@ describe("DocumentSurfaceRegistry", () => {
       .toBeTruthy();
     expect(parent.querySelector("img, audio, video, iframe")).toBeNull();
     viewer.destroy();
+    await registry.load({ formatId: "canvas", sourceKind: "text", documentId: "board.canvas" });
     const board = registry.mount(
       { formatId: "canvas", sourceKind: "text", documentId: "board.canvas" },
       { paneId: "board", documentId: "board.canvas", parent },
@@ -206,7 +215,7 @@ describe("DocumentSurfaceRegistry", () => {
     board.destroy();
   });
 
-  it("declares the capabilities each built-in surface really has", () => {
+  it("declares the capabilities each built-in surface really has", async () => {
     const registry = createDocumentSurfaceRegistry({
       onChange: vi.fn(), onSelectionChange: vi.fn(), onOpenWikilink: vi.fn(),
       onOpenPath: vi.fn(), onOpenDocument: vi.fn(), onSearchTag: vi.fn(),
@@ -234,13 +243,14 @@ describe("DocumentSurfaceRegistry", () => {
     ] as const;
     for (const [request, documentId, expected] of cases) {
       const parent = document.createElement("div");
+      await registry.load({ ...request, documentId });
       const surface = registry.mount({ ...request, documentId }, { paneId: documentId, documentId, parent });
       expect(capabilities(surface), `${surface.family}/${surface.profile}`).toEqual(expected);
       surface.destroy();
     }
   });
 
-  it("keeps unknown canvas fields when an edit flows through the source surface", () => {
+  it("keeps unknown canvas fields when an edit flows through the source surface", async () => {
     const changes: Array<{ text: string }> = [];
     const registry = createDocumentSurfaceRegistry({
       onChange: (_pane, change) => changes.push(change),
@@ -249,6 +259,8 @@ describe("DocumentSurfaceRegistry", () => {
       completions: { searchNotes: async () => [], listTags: async () => [] },
     });
     const parent = document.createElement("div");
+    // La lavagna è di un componente: il suo codice arriva con `load`.
+    await registry.load({ formatId: "canvas", sourceKind: "text", documentId: "board.canvas" });
     const surface = registry.mount(
       { formatId: "canvas", sourceKind: "text", documentId: "board.canvas" },
       { paneId: "board", documentId: "board.canvas", parent, formatId: "canvas" },
@@ -269,13 +281,14 @@ describe("DocumentSurfaceRegistry", () => {
     surface.destroy();
   });
 
-  it("rejects corrupt canvas without changing its source and selects the existing error surface", () => {
+  it("rejects corrupt canvas without changing its source and selects the existing error surface", async () => {
     const registry = createDocumentSurfaceRegistry({
       onChange: vi.fn(), onSelectionChange: vi.fn(), onOpenWikilink: vi.fn(),
       onOpenPath: vi.fn(), onOpenDocument: vi.fn(), onSearchTag: vi.fn(),
       completions: { searchNotes: async () => [], listTags: async () => [] },
     });
     const parent = document.createElement("div");
+    await registry.load({ formatId: "canvas", sourceKind: "text", documentId: "bad.canvas" });
     const board = registry.mount(
       { formatId: "canvas", sourceKind: "text", documentId: "bad.canvas" },
       { paneId: "bad", documentId: "bad.canvas", parent },

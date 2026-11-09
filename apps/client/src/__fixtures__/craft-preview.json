@@ -1,0 +1,287 @@
+{
+  "version": 2,
+  "command": "craft.preview",
+  "photo_command": "craft.photo",
+  "job": "craft.render",
+  "ns": "fub.craft",
+  "samples": [
+    {
+      "version": 2,
+      "doc": "Disegni/logo.vectorcraft",
+      "revision": "sha256:224f9ac698d23fe78f077bd2e328df9a7ac24fed0f6e54557b35b57fcd0a2a00",
+      "size": "small",
+      "origin": "file",
+      "queued": false,
+      "image": {
+        "media_type": "image/png",
+        "data": "iVBORw0KGgoAAAANSUhEUgAAAAwAAAAMCAIAAADZF8uwAAAALUlEQVR42mPYcv0DQcRAsqJPM/XgCLsiZBVo6hhwqUBWNzCKiHI4sUFAaYgDALeJPdjKdhNUAAAAAElFTkSuQmCC",
+        "width": 12,
+        "height": 12,
+        "orientation": 1
+      },
+      "missing": null,
+      "limit_bytes": null,
+      "info": {
+        "app": "vectorcraft",
+        "editor": "VectorCraft",
+        "format_version": "4",
+        "bytes": 182344,
+        "photo": null,
+        "edits": [],
+        "xmp": null
+      },
+      "render": null
+    },
+    {
+      "version": 2,
+      "doc": "Disegni/logo.vectorcraft",
+      "revision": "sha256:224f9ac698d23fe78f077bd2e328df9a7ac24fed0f6e54557b35b57fcd0a2a00",
+      "size": "large",
+      "origin": "cli",
+      "queued": false,
+      "image": {
+        "media_type": "image/png",
+        "data": "iVBORw0KGgoAAAANSUhEUgAAAAwAAAAMCAIAAADZF8uwAAAALUlEQVR42mPYcv0DQcRAsqJPM/XgCLsiZBVo6hhwqUBWNzCKiHI4sUFAaYgDALeJPdjKdhNUAAAAAElFTkSuQmCC",
+        "width": 12,
+        "height": 12,
+        "orientation": 1
+      },
+      "missing": null,
+      "limit_bytes": null,
+      "info": {
+        "app": "vectorcraft",
+        "editor": "VectorCraft",
+        "format_version": "4",
+        "bytes": 182344,
+        "photo": null,
+        "edits": [],
+        "xmp": null
+      },
+      "render": null
+    },
+    {
+      "version": 2,
+      "doc": "Foto/ritratto.pcraft",
+      "revision": "sha256:08f88ceebf95fb52f2ab09c51f45e18495c7c4e3bb736a133e257a5e93ff1e9d",
+      "size": "large",
+      "origin": "none",
+      "queued": false,
+      "image": null,
+      "missing": "absent",
+      "limit_bytes": null,
+      "info": {
+        "app": "photocraft",
+        "editor": "PhotoCraft",
+        "format_version": "2",
+        "bytes": 4096,
+        "photo": null,
+        "edits": [],
+        "xmp": null
+      },
+      "render": {
+        "app": "PhotoCraft",
+        "consent": "ask"
+      }
+    },
+    {
+      "version": 2,
+      "doc": "Progetti/sito.figcraft",
+      "revision": "sha256:12f6decbb805a78c3ab837e4696052a9ee71bf33668f6c24d893a0fb804a0470",
+      "size": "small",
+      "origin": "none",
+      "queued": true,
+      "image": null,
+      "missing": "absent",
+      "limit_bytes": null,
+      "info": {
+        "app": "figcraft",
+        "editor": "FigCraft",
+        "format_version": null,
+        "bytes": 0,
+        "photo": null,
+        "edits": [],
+        "xmp": null
+      },
+      "render": {
+        "app": "FigCraft",
+        "consent": "on"
+      }
+    },
+    {
+      "version": 2,
+      "doc": "Foto/IMG_0001.CR3.xmp",
+      "revision": "sha256:7cbce0eb962e611b94dd66c4ce39518450eef9b4d7282873a6e8d9a475d39a48",
+      "size": "small",
+      "origin": "none",
+      "queued": false,
+      "image": null,
+      "missing": "absent",
+      "limit_bytes": null,
+      "info": {
+        "app": "xmp",
+        "editor": "LightCraft",
+        "format_version": null,
+        "bytes": 2311,
+        "photo": "Foto/IMG_0001.CR3",
+        "edits": [
+          "Foto/IMG_0001-Edit.psd"
+        ],
+        "xmp": {
+          "rating": 4,
+          "label": "Rosso",
+          "flag": "pick",
+          "keywords": [
+            "New York",
+            "mare"
+          ]
+        }
+      },
+      "render": null
+    },
+    {
+      "version": 2,
+      "doc": "IMG.xmp",
+      "revision": "sha256:5a59db58630ac0360cbbc2e11da958e4b1f01dc7738bcaa9205a0e47aea13d95",
+      "size": "large",
+      "origin": "none",
+      "queued": false,
+      "image": null,
+      "missing": "absent",
+      "limit_bytes": null,
+      "info": {
+        "app": "xmp",
+        "editor": "LightCraft",
+        "format_version": null,
+        "bytes": 120,
+        "photo": null,
+        "edits": [],
+        "xmp": {
+          "rating": -1,
+          "label": null,
+          "flag": "reject",
+          "keywords": []
+        }
+      },
+      "render": null
+    },
+    {
+      "version": 2,
+      "doc": "Foto/IMG_0001.CR3",
+      "revision": null,
+      "size": "large",
+      "origin": "file",
+      "queued": false,
+      "image": {
+        "media_type": "image/jpeg",
+        "data": "/9j/wAALCAQ4BlQBAREA/9k=",
+        "width": 1620,
+        "height": 1080,
+        "orientation": 6
+      },
+      "missing": null,
+      "limit_bytes": null,
+      "info": {
+        "app": "raw",
+        "editor": "LightCraft",
+        "format_version": null,
+        "bytes": 31457280,
+        "photo": null,
+        "edits": [],
+        "xmp": null
+      },
+      "render": null
+    },
+    {
+      "version": 2,
+      "doc": "Libri/manuale.pdf",
+      "revision": "sha256:5d761d045a1392bd2ea8af2165266030f99654b7432feeeadfb275152f5ab6eb",
+      "size": "small",
+      "origin": "none",
+      "queued": false,
+      "image": null,
+      "missing": "over_limit",
+      "limit_bytes": 67108864,
+      "info": {
+        "app": "pdf",
+        "editor": "PdfCraft",
+        "format_version": null,
+        "bytes": 67108865,
+        "photo": null,
+        "edits": [],
+        "xmp": null
+      },
+      "render": null
+    },
+    {
+      "version": 2,
+      "doc": "Lettere/lettera.docx",
+      "revision": "sha256:f33b21026620b4336564c87f4bd9dfc128e202fb4c5ddab205fcc27b2b79aea9",
+      "size": "large",
+      "origin": "none",
+      "queued": false,
+      "image": null,
+      "missing": "failed",
+      "limit_bytes": null,
+      "info": {
+        "app": "document",
+        "editor": "WordCraft",
+        "format_version": null,
+        "bytes": 18000,
+        "photo": null,
+        "edits": [],
+        "xmp": null
+      },
+      "render": {
+        "app": "WordCraft",
+        "consent": "off"
+      }
+    },
+    {
+      "version": 2,
+      "doc": "Disegni/rotto.vectorcraft",
+      "revision": "sha256:c5cca141dd2d78ec706dc2d0a0f0d273a0ebf0400c53a9ba6c007d8f75cea9ef",
+      "size": "small",
+      "origin": "none",
+      "queued": false,
+      "image": null,
+      "missing": "unreadable",
+      "limit_bytes": null,
+      "info": {
+        "app": "vectorcraft",
+        "editor": "VectorCraft",
+        "format_version": null,
+        "bytes": 9,
+        "photo": null,
+        "edits": [],
+        "xmp": null
+      },
+      "render": null
+    }
+  ],
+  "photos": [
+    {
+      "version": 2,
+      "doc": "Foto/IMG_0001.CR3",
+      "xmp": "Foto/IMG_0001.CR3.xmp",
+      "meta": {
+        "rating": 4,
+        "label": "Rosso",
+        "flag": "pick",
+        "keywords": [
+          "New York",
+          "mare"
+        ]
+      },
+      "edits": [
+        "Foto/IMG_0001-Edit.psd"
+      ]
+    },
+    {
+      "version": 2,
+      "doc": "Foto/IMG_0002.NEF",
+      "xmp": null,
+      "meta": null,
+      "edits": []
+    }
+  ]
+}

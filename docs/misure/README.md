@@ -43,6 +43,15 @@ e librerie.
 |---|---|---|---|
 | 2026-10-31 | Debian 13, kernel 6.12 | AMD Ryzen 7 7730U, senza scheda grafica | [I sei motori da soli](motori-2026-10-31-linux-ryzen.md) |
 
+## I cancelli
+
+Le misure prima e dopo di un piano, sulla stessa macchina, con il giudizio
+sul suo cancello.
+
+| Data | Piano | Macchina | Pagina |
+|---|---|---|---|
+| 2026-11-02 | K3, lo strato dei motori | `server-di-fub`, AMD Ryzen 7 7730U, WebKitGTK 2.54 sotto Xvfb | [Il cancello di K3](k3-motori-2026-11-02-server-di-fub.md) |
+
 ## Gli inventari
 
 Gli inventari di K0 sul codice dei motori: che cosa vive dove, con righe
@@ -62,6 +71,28 @@ in quella Rust compilata in WebAssembly
 | Data | Sistema | Macchina | Pagina |
 |---|---|---|---|
 | 2026-11-02 | Debian 13, kernel 6.12 | AMD Ryzen 7 7730U, scarica | [TypeScript contro WebAssembly](inchiostro-wasm-2026-11-02.md) |
+
+## Il nucleo della lavagna
+
+La misura di N3 (T15): il modulo `fub-canvas-wasm` in Node e nella WebView
+di Linux, con la CSP dell'app
+([`bench/webview/canvas.mjs`](../../apps/client/bench/webview/canvas.mjs),
+scenario L1).
+
+| Data | Sistema | Macchina | Pagina |
+|---|---|---|---|
+| 2026-11-03 | Debian 13, kernel 6.12, WebKitGTK 2.54 sotto Xvfb | AMD Ryzen 7 7730U, condivisa | [Il nucleo della lavagna in WebAssembly](lavagna-wasm-2026-11-03.md) |
+
+## L'inchiostro sulla lavagna
+
+Le due misure del cancello di N4 (S8 di
+[`bench/webview/run.mjs`](../../apps/client/bench/webview/run.mjs)): la
+prima sul caso simile, una tabella di testo sotto la penna; la seconda sul
+foglio vero dentro la lavagna, che chiude la voce.
+
+| Data | Sistema | Macchina | Pagina |
+|---|---|---|---|
+| 2026-11-09 | Debian 13, kernel 6.12, WebKitGTK 2.54 sotto Xvfb | AMD Ryzen 7 7730U, condivisa | [La penna sulla lavagna, la prima misura](lavagna-inchiostro-2026-11-09.md) |
 
 ## Le librerie a runtime
 

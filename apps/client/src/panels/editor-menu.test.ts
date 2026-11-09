@@ -211,6 +211,34 @@ describe("il compositore del menu dell'editor", () => {
     item!.run!();
     expect(order).toEqual(["cursore", "shell.mode.reading"]);
   });
+
+  it("un sottomenu da preparare diventa un sottomenu a cascata, con le voci della superficie", async () => {
+    const ran: string[] = [];
+    const host = hostFor(surfaceWith({}), []);
+    const { searchable } = composeEditorMenu({
+      target: { kind: "media" },
+      tail: [{
+        id: "open",
+        label: "Apri con un'altra app",
+        load: async () => [
+          { id: "system", label: "L'app predefinita del sistema", run: () => void ran.push("system") },
+          MENU_RULE,
+          { id: "spenta", label: "VectorCraft", enabled: false, description: "Non installata" },
+          { id: "muta", label: "Senza motivo", enabled: false },
+        ],
+      }],
+    }, host);
+    const [open] = searchable;
+    expect(open!.submenu).toBe(true);
+    expect(typeof open!.items).toBe("function");
+    const items = await (open!.items as () => Promise<readonly MenuItem[]>)();
+    expect(items.map((item) => [item.label, item.disabled, item.description])).toEqual([
+      ["L'app predefinita del sistema", false, undefined],
+      ["VectorCraft", true, "Non installata"],
+    ]);
+    items[0]!.run!();
+    expect(ran).toEqual(["system"]);
+  });
 });
 
 describe("l'apertura dal riquadro", () => {

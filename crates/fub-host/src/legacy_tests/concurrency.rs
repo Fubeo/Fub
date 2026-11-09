@@ -152,9 +152,11 @@ fn two_reads_can_be_in_the_workspace_at_the_same_time() {
     // rientrante, e risponderebbe di sì a tutti e due.
     let entered = {
         let (ws, id) = (ws.clone(), id.clone());
-        std::thread::spawn(move || ws.try_read().map(|w| w.render_preview(&id).is_ok()))
-            .join()
-            .expect("the second reader finishes")
+        std::thread::spawn(move || {
+            super::try_read_within(&ws, super::FREE_WITHIN).map(|w| w.render_preview(&id).is_ok())
+        })
+        .join()
+        .expect("the second reader finishes")
     };
     drop(first);
 
@@ -455,7 +457,8 @@ impl CommandProvider for NestedLockProbe {
 
 /// `ARCH-001`: il codice di un provider **non** gira mentre è detenuto il
 /// `Custody<Workspace>`. Il test fallisce con il vecchio `write_workspace`:
-/// mentre `LockProbe::invoke` è fermo, `try_read()` risponde `None`.
+/// mentre `LockProbe::invoke` è fermo, `try_read()` risponde `None` fino
+/// alla scadenza.
 #[test]
 fn a_command_provider_runs_without_holding_the_workspace_lock() {
     let _turn = bench_turn();
@@ -489,7 +492,7 @@ fn a_command_provider_runs_without_holding_the_workspace_lock() {
 
     let reader_progressed = {
         let ws = ws.clone();
-        std::thread::spawn(move || ws.try_read().is_some())
+        std::thread::spawn(move || super::read_comes_free(&ws))
             .join()
             .expect("reader probe finishes")
     };
@@ -548,7 +551,7 @@ fn a_nested_command_provider_runs_without_holding_the_workspace_lock() {
         .expect("inner provider entered through HostApi::run_command");
     let reader_progressed = {
         let ws = ws.clone();
-        std::thread::spawn(move || ws.try_read().is_some())
+        std::thread::spawn(move || super::read_comes_free(&ws))
             .join()
             .expect("reader probe finishes")
     };
@@ -667,7 +670,7 @@ fn a_service_provider_runs_without_holding_the_workspace_lock() {
         .expect("service entered after a successful host re-entry");
     let reader_progressed = {
         let ws = ws.clone();
-        std::thread::spawn(move || ws.try_read().is_some())
+        std::thread::spawn(move || super::read_comes_free(&ws))
             .join()
             .expect("reader probe finishes")
     };
@@ -715,12 +718,8 @@ fn the_before_write_hook_runs_without_holding_the_workspace_lock() {
                     .as_ref()
                     .expect("the probe custody is installed")
                     .clone();
-                let read = workspace.try_read();
-                let reader_progressed = read.is_some();
-                drop(read);
-                let write = workspace.try_write();
-                let writer_progressed = write.is_some();
-                drop(write);
+                let reader_progressed = super::read_comes_free(&workspace);
+                let writer_progressed = super::write_comes_free(&workspace);
 
                 entered_tx
                     .send((reader_progressed, writer_progressed))
@@ -752,7 +751,7 @@ fn the_before_write_hook_runs_without_holding_the_workspace_lock() {
     let (reader_progressed, writer_progressed) = entered_rx
         .recv_timeout(Duration::from_secs(10))
         .expect("before-write hook entered after a real HostApi read");
-    let foreign_reader_progressed = ws.try_read().is_some();
+    let foreign_reader_progressed = super::read_comes_free(&ws);
     release_tx.send(()).expect("release before-write hook");
     let outcome = outcome_rx
         .recv_timeout(Duration::from_secs(10))
@@ -820,8 +819,10 @@ fn a_before_write_error_aborts_the_write_and_the_next_write_still_works() {
         "# Note 0\nshould not be written\n",
         WriteBase::Dictated,
     );
-    let read_after_error = ws.try_read().is_some();
-    let write_after_error = ws.try_write().is_some();
+    // I `fub-job-*` dell'host possono prendere il workspace per un istante
+    // proprio adesso (#292): la guardia lasciata dalla scrittura rifiutata
+    // resterebbe presa fino alla scadenza, la loro no.
+    let free_after_error = super::comes_free(&ws, super::FREE_WITHIN);
     let source_after_error = host
         .read_document(None, &DocId::new("Note 0.md"))
         .expect("the document remains readable")
@@ -833,8 +834,7 @@ fn a_before_write_error_aborts_the_write_and_the_next_write_still_works() {
         "# Note 0\nwritten after the hook error\n",
         WriteBase::Dictated,
     );
-    let read_after_recovery = ws.try_read().is_some();
-    let write_after_recovery = ws.try_write().is_some();
+    let free_after_recovery = super::comes_free(&ws, super::FREE_WITHIN);
 
     assert!(
         matches!(&failed, Err(PluginError::BadArgs(_))),
@@ -845,12 +845,12 @@ fn a_before_write_error_aborts_the_write_and_the_next_write_still_works() {
         "a rejected before-write partially finalized the document"
     );
     assert!(
-        read_after_error && write_after_error,
+        free_after_error,
         "a before-write error left a workspace guard held"
     );
     recovered.expect("the next write succeeds after the hook recovers");
     assert!(
-        read_after_recovery && write_after_recovery,
+        free_after_recovery,
         "the recovered before-write left the workspace unusable"
     );
 }

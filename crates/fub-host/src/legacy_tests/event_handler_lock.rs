@@ -164,8 +164,9 @@ impl LockProbe {
     fn observe(&self, callback: Callback) -> LockObservation {
         let workspace = self.workspace.custody();
         // Il drain possiede il turno di scrittura: nessun altro thread può
-        // tenere il write, quindi un `try_read` fallito accusa solo questo.
-        let read_free = workspace.try_read().is_some();
+        // tenere il write, quindi un `try_read` che non entra entro la
+        // scadenza accusa solo questo.
+        let read_free = super::read_comes_free(&workspace);
         // Un `try_write` istantaneo misurerebbe anche i lettori del pool, che
         // sono leciti e passeggeri. Il write bloccante rientra nel turno di
         // questo thread e aspetta solo loro; un guard trattenuto qui non si
@@ -689,11 +690,11 @@ fn assert_fault_is_contained(fault: Fault) {
         "the handler was not reusable after {fault:?}"
     );
     assert!(
-        workspace.try_read().is_some(),
+        super::read_comes_free(&workspace),
         "read lock leaked after {fault:?}"
     );
     assert!(
-        workspace.try_write().is_some(),
+        super::write_comes_free(&workspace),
         "write lock or writer turn leaked after {fault:?}"
     );
     let mut saw_event_trouble = false;
@@ -794,11 +795,11 @@ fn assert_close_fault_is_contained(fault: Fault) {
         .expect("the completed close thread does not panic");
 
     assert!(
-        workspace.try_read().is_some(),
+        super::read_comes_free(&workspace),
         "read lock leaked after {fault:?}"
     );
     assert!(
-        workspace.try_write().is_some(),
+        super::write_comes_free(&workspace),
         "write lock or writer turn leaked after {fault:?}"
     );
     assert!(

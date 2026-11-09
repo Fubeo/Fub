@@ -1,12 +1,13 @@
 //! I vettori delle toppe sul testo, scritti a mano
 //! (`apps/client/src/__fixtures__/canvas-patches/`): la stessa cartella che
-//! `apps/client/src/editors/canvas/vectors.test.ts` fa girare contro
-//! `commitCanvasPatches`. Ogni vettore dà il testo grezzo di prima, le toppe
+//! `apps/client/src/editors/canvas/wasm/vectors.test.ts` fa girare contro lo
+//! stesso nucleo compilato in WebAssembly. Ogni vettore dà il testo grezzo di prima, le toppe
 //! e l'esito: per un commit riuscito il testo di dopo e quello dell'annulla
 //! (le toppe inverse applicate al testo di dopo; se manca, è quello di prima),
-//! per un rifiuto la ragione (`CommitError::reason`). Così Rust e TypeScript
-//! danno gli stessi byte e le stesse ragioni (`docs/reference/canvas-format.md`
-//! § «Parità»).
+//! per un rifiuto la ragione (`CommitError::reason`). Così la build nativa e
+//! quella a 32 bit danno gli stessi byte e le stesse ragioni
+//! (`docs/reference/canvas-format.md` § «Parità»). Per ogni vettore `Core::preview` dà il testo, o la ragione,
+//! di `commit`, e lascia la lavagna com'era.
 
 use std::path::PathBuf;
 
@@ -22,14 +23,24 @@ fn folder() -> PathBuf {
         .join("../../apps/client/src/__fixtures__/canvas-patches")
 }
 
-/// I vettori, in ordine di nome: `(file, json)`. Un file che non si legge fa
-/// fallire il test.
+/// Il numero davanti al nome del file (`07-…` → 7), per mettere `100-…` dopo
+/// `99-…`.
+fn number(path: &std::path::Path) -> u32 {
+    let name = path.file_name().unwrap().to_string_lossy();
+    name.split('-')
+        .next()
+        .and_then(|n| n.parse().ok())
+        .unwrap_or(u32::MAX)
+}
+
+/// I vettori, in ordine di numero e poi di nome: `(file, json)`. Un file che
+/// non si legge fa fallire il test.
 fn read_vectors() -> Vec<(String, Value)> {
     let mut files: Vec<PathBuf> = std::fs::read_dir(folder())
         .expect("la cartella dei vettori")
         .map(|entry| entry.expect("una voce della cartella").path())
         .collect();
-    files.sort();
+    files.sort_by(|a, b| number(a).cmp(&number(b)).then_with(|| a.cmp(b)));
     files
         .into_iter()
         .map(|path| {
@@ -60,7 +71,31 @@ fn run(vector: &Value) -> Result<(), String> {
     let patches: Vec<CanvasPatch> = serde_json::from_value(vector["patches"].clone())
         .map_err(|error| format!("le toppe non si leggono: {error}"))?;
     let mut core = Core::open(before).map_err(|error| format!("before non si apre: {error}"))?;
+    // `preview` dà il testo (o la ragione) di `commit` e lascia la lavagna
+    // com'era: si chiede prima del commit, e la lavagna deve restare quella.
+    let preview = core.preview(&patches);
+    if core.source() != before {
+        return Err("preview ha cambiato la lavagna".into());
+    }
     let outcome = core.commit(&patches);
+    match (&preview, &outcome) {
+        (Ok(text), Ok(committed)) if *text != committed.source => {
+            return Err(format!(
+                "preview dà un altro testo\n  preview: {text:?}\n  commit:  {:?}",
+                committed.source
+            ));
+        }
+        (Err(seen), Err(error))
+            if seen.reason() != error.reason() || seen.to_string() != error.to_string() =>
+        {
+            return Err(format!(
+                "preview rifiuta con «{seen}», commit con «{error}»"
+            ));
+        }
+        (Ok(_), Err(error)) => return Err(format!("preview passa, commit rifiuta: {error}")),
+        (Err(error), Ok(_)) => return Err(format!("preview rifiuta, commit passa: {error}")),
+        _ => {}
+    }
     match text(vector, "/expect/outcome") {
         Some("applied") => {
             let committed = outcome.map_err(|error| format!("rifiutato: {error}"))?;

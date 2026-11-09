@@ -142,7 +142,10 @@ fn l_elenco_dice_chi_e_acceso_perche_e_chi_lo_richiede() {
     assert_eq!(item(&list, "fub.markdown")["reason"], "core");
     let penna = item(&list, "fub.penna");
     assert_eq!(penna["reason"], "required");
-    assert_eq!(penna["required_by"], serde_json::json!(["fub.lavagna"]));
+    assert_eq!(
+        penna["required_by"],
+        serde_json::json!(["fub.lavagna", "fub.pdf"])
+    );
 
     // A pagine, con offset e limit.
     let page = json(&v, &["--limit", "2", "--offset", "1", "componenti"]);
@@ -191,7 +194,7 @@ fn perche_dice_scelto_richiesto_nucleo_e_spento() {
     );
     assert_eq!(
         text(&v, &["componenti", "perche", "fub.penna"]).trim(),
-        "fub.penna è attivo perché lo richiede: fub.lavagna."
+        "fub.penna è attivo perché lo richiedono: fub.lavagna, fub.pdf."
     );
     assert_eq!(
         text(&v, &["componenti", "perche", "fub.markdown"]).trim(),
@@ -412,4 +415,39 @@ fn dry_run_con_togli_mostra_l_effetto_e_non_cambia_niente() {
         &["componenti", "spegni", "fub.base", "--togli", "--tieni"],
     );
     assert_eq!(code, 2);
+}
+
+/// `config --set` legge la specie dallo schema: `on` e `off` sono le parole di
+/// una scelta, non un interruttore, e il consenso alle anteprime Craft lo dà
+/// chi usa Fub nel suo terminale.
+#[test]
+fn config_set_scrive_una_scelta_con_la_sua_parola() {
+    let v = vault();
+    let get = |v: &Vault| json(v, &["config", "--get", "craft.cli-previews"]);
+    assert_eq!(get(&v)["value"], "ask");
+    for word in ["on", "off", "ask"] {
+        text(
+            &v,
+            &[
+                "--yes",
+                "config",
+                "--set",
+                &format!("craft.cli-previews={word}"),
+            ],
+        );
+        assert_eq!(get(&v)["value"], word);
+    }
+    let (_, message) = refused(
+        &v,
+        &["--yes", "config", "--set", "craft.cli-previews=forse"],
+    );
+    assert!(message.contains("craft.cli-previews"), "{message}");
+    assert_eq!(get(&v)["value"], "ask");
+
+    // Un elenco di un elemento solo è un elenco.
+    text(
+        &v,
+        &["--yes", "config", "--set", "plugins.disabled=fub.graph"],
+    );
+    assert_eq!(disabled(&v), ["fub.graph"]);
 }

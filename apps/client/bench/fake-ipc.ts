@@ -36,7 +36,7 @@
 // poi rilegge l'impostazione dal canale dati, quindi il banco scrive tutte e
 // due — la cache qui sotto, prima che `main.ts` giri, e il valore di
 // `appearance.theme` fra le impostazioni che serve.
-import { createFakeHost, type GridBytesFake, type Options } from "../src/host/fake";
+import { COMPONENT_SCENARIO, createFakeHost, type GridBytesFake, type Options } from "../src/host/fake";
 import { MARKDOWN_SYNTAX } from "../src/rules/syntax.generated";
 import XLSX_GRID from "../src/__fixtures__/xlsx-grid.json";
 import RICH_PROJECTION from "../src/__fixtures__/rich-projection.json";
@@ -62,6 +62,25 @@ import { SPECS as SLASH_SPECS } from "../src/panels/slash/fixture.test-data";
 import { CONNECTORS_DOC, connectorsFixture, type ConnectorsFixture } from "./connectors-fixture";
 import { LARGE_DOC, largeFixture, type LargeFixture } from "./large-fixture";
 import { LIVE_DOC, liveCase } from "./live-fixture";
+import { PHOTO_CRAFT, photoCase, photoResources } from "./photo-fixture";
+import {
+  craftSceneCase,
+  craftSceneCraft,
+  craftSceneRender,
+  craftSceneResources,
+  pdfSceneCase,
+  pdfSceneFiles,
+  pdfScenePreview,
+  pdfSceneResources,
+  PDF_SCENE_WORDCRAFT,
+  treeSceneCase,
+  treeSceneFiles,
+  treeScenePreview,
+  treeSceneResources,
+  treeSceneSetting,
+} from "./craft-fixture";
+import { rawSceneCase, rawSceneCraft, rawScenePreview, rawSceneResources } from "./raw-fixture";
+import { CRAFT_BUNDLE_NS, CRAFT_PREVIEW_COMMAND, type CraftPreview } from "../src/host/craft";
 import { CORPUS, OUTPUT, RESOURCES } from "./corpus";
 import {
   generateGraphFixture as graphFixture,
@@ -240,6 +259,80 @@ globalThis.__fubLiveBench = Object.freeze({
 /// `fub-format-xlsx` produce davvero (`tests/ts_grid.rs`).
 const WORKBOOK_DOC = params.get("workbook") === "1" ? "Dati/Conti.xlsx" : null;
 
+/// Gli stati della barra dei fogli che la cartella generata non ha
+/// (`?grid=table|readonly`, insieme a `?workbook=1`): una copia delle sue
+/// finestre con una tabella dal nome lunghissimo sulla cella scelta, che
+/// accende la sezione della tabella, oppure una copia della sessione coi
+/// comandi che cambiano la cartella spenti, con il perché. Il JSON resta
+/// quello che `fub-format-xlsx` produce.
+const GRID_CASE = params.get("grid");
+const BENCH_TABLE = {
+  name: "Riepilogo_trimestrale_delle_spese_di_rappresentanza_2026",
+  row: 0,
+  column: 0,
+  rows: 6,
+  columns: 4,
+  header_row: true,
+  totals_row: false,
+  banded_rows: true,
+  banded_columns: false,
+  first_column: false,
+  last_column: false,
+  filter_button: true,
+  style: "TableStyleMedium2",
+};
+/// In sola lettura restano accesi soltanto i comandi che guardano.
+const LOOKING = /^(file|selection|view)\.|^edit\.(selectAll|goTo|goToSpecial|find)$/;
+function benchWindow<W extends { readonly sheet: string; readonly tables: readonly unknown[] }>(window: W): W {
+  return GRID_CASE === "table" && window.sheet === XLSX_GRID.session.active
+    ? { ...window, tables: [...window.tables, BENCH_TABLE] }
+    : window;
+}
+const BENCH_SESSION = GRID_CASE === "readonly"
+  ? {
+    ...XLSX_GRID.session,
+    commands: XLSX_GRID.session.commands.map((command) =>
+      LOOKING.test(command.id) ? command : { ...command, enabled: false, reason: "La cartella è aperta in sola lettura." }),
+  }
+  : XLSX_GRID.session;
+
+/// Il risultato dei comandi che leggono (`?result=stats|errors|empty`,
+/// insieme a `?workbook=1`): la risposta del provider alla prima esecuzione,
+/// senza modifiche alla cartella. Le statistiche di una selezione, cinquecento
+/// errori su un foglio dal nome lungo, nessun errore. Senza `result` il
+/// comando non è servito, e la finestra del risultato dice il perché.
+const RESULT_CASE = params.get("result");
+const RESULT_SHEET = "Movimenti del conto corrente cointestato 2026";
+const BENCH_RESULTS: Readonly<Record<string, unknown>> = {
+  stats: { count: 24, numeric: 24, sum: 16437.9, average: 684.9125, min: 88.6, max: 1403.15 },
+  errors: {
+    errors: Array.from({ length: 500 }, (_, i) => ({
+      sheet: RESULT_SHEET,
+      cell: `F${i + 2}`,
+      error: i % 7 === 3 ? "#VALUE!" : "#DIV/0!",
+      formula: `=D${i + 2}/E${i + 2}`,
+    })),
+    circular: [],
+  },
+  empty: { errors: [], circular: [] },
+};
+const BENCH_OUTCOMES = RESULT_CASE !== null && RESULT_CASE in BENCH_RESULTS
+  ? [{
+    commit: {
+      revision: BENCH_SESSION.revision,
+      edit: { from: 0, to: 0, deleted: "", inserted: "" },
+      invalidation: { kind: "cells", cells: [] },
+    },
+    sheets: BENCH_SESSION.sheets,
+    hidden: BENCH_SESSION.hidden,
+    selection: { sheet: BENCH_SESSION.active, selection: "B2:E7", active: "B2" },
+    result: JSON.stringify(BENCH_RESULTS[RESULT_CASE]),
+    dialog: null,
+    commands: BENCH_SESSION.commands,
+    book: BENCH_SESSION.book,
+  }]
+  : undefined;
+
 /// Il documento di videoscrittura delle scene `document-*` (`?rich=…`), con
 /// la proiezione che `fub-format-rich` dà davvero del file: quella con un po'
 /// di tutto (`tests/ts_projection.rs`), oppure un `.odt`, uno pieno di
@@ -254,6 +347,73 @@ const RICH_DOCS: Readonly<Record<string, { doc: string; text: string }>> = {
   closed: { doc: "Documenti/Chiuso.docx", text: RICH_CLOSED.source },
 };
 const RICH_DOC = RICH_DOCS[params.get("rich") ?? ""] ?? null;
+
+/// La foto delle scene `photo-*` (`?photo=xmp|senza`), col bundle `fub.craft`
+/// acceso: la riga dei dati di LightCraft sotto la foto. Soltanto le sue
+/// scene la hanno.
+const PHOTO = photoCase(params.get("photo"));
+
+/// Il disegno delle scene `craft-*` (`?craft-scheda=<caso>`, vedi
+/// `craft-fixture.ts`): la scheda di un file Craft senza anteprima, con la
+/// domanda, la riga «spente», «Preparo l'anteprima…» o la frase di `missing`.
+const CRAFT_SCENE = craftSceneCase(params.get("craft-scheda"));
+if (CRAFT_SCENE !== null && PHOTO !== null) throw new RangeError("craft-scheda is a vault of its own");
+
+/// Il RAW delle scene `raw-*` (`?raw-scheda=dritto|girato|senza`, vedi
+/// `raw-fixture.ts`): la scheda di una foto RAW col JPEG che ha dentro, dritto
+/// o girato, o senza JPEG con la domanda di LightCraft.
+const RAW_SCENE = rawSceneCase(params.get("raw-scheda"));
+if (RAW_SCENE !== null && (PHOTO !== null || CRAFT_SCENE !== null)) throw new RangeError("raw-scheda is a vault of its own");
+
+/// Il PDF e il Word delle scene T31 (`?pdf-scena=nota|nota-senza|domanda|due-righe`,
+/// vedi `craft-fixture.ts`): la nota che incorpora il PDF, la scheda del PDF
+/// con la domanda sulle anteprime, il Word prestato con la domanda.
+const PDF_SCENE = pdfSceneCase(params.get("pdf-scena"));
+if (PDF_SCENE !== null && (PHOTO !== null || CRAFT_SCENE !== null || RAW_SCENE !== null)) throw new RangeError("pdf-scena is a vault of its own");
+
+/// L'albero delle scene T26 (`?albero=miniature|xmp`, vedi
+/// `craft-fixture.ts`): le cartelle «Foto 2026» e «Progetti» con le miniature
+/// accese, e gli XMP mostrati o nascosti.
+const TREE_SCENE = treeSceneCase(params.get("albero"));
+if (TREE_SCENE !== null && (PHOTO !== null || CRAFT_SCENE !== null || RAW_SCENE !== null || PDF_SCENE !== null)) {
+  throw new RangeError("albero is a vault of its own");
+}
+
+/// Il cestino con tre file (`?cestino=3`): la scena del telefono che guarda
+/// i bottoni «Ripristina» di righe vicine. Le altre scene lo hanno vuoto.
+const TRASH_FULL = params.get("cestino") === "3";
+
+/// Il cestino pieno nella forma del provider `trash` (fub-features,
+/// `trash.rs`): una colonna con l'elenco, ogni voce una riga col nome, quando
+/// è stata cestinata e «Ripristina», e sotto «Svuota il cestino».
+function trashWithThree(): UiNode {
+  const row = (id: string, original: string, when: string): UiNode => ({
+    node: "stack",
+    key: id,
+    dir: "row",
+    gap: 1,
+    children: [
+      { node: "list_item", title: original, subtitle: `Cestinata il ${when}`, action: null, selected: false },
+      { node: "button", label: "Ripristina", intent: "primary", action: { action: "restore", payload: { entry: id, original } } },
+    ],
+  });
+  return {
+    node: "stack",
+    dir: "column",
+    gap: 1,
+    children: [
+      {
+        node: "list",
+        items: [
+          row("1-Bozza.md", "Bozza", "19 agosto 2026, 09:02"),
+          row("2-Lista della spesa.md", "Lista della spesa", "18 agosto 2026, 17:40"),
+          row("3-Prima idea.md", "Prima idea", "12 agosto 2026, 11:05"),
+        ],
+      },
+      { node: "button", label: "Svuota il cestino", intent: "danger", action: { action: "empty", payload: null } },
+    ],
+  };
+}
 
 /// Il disegno che il banco apre dall'albero, se ne ha uno.
 const DRAWING = CONNECTORS !== null
@@ -276,6 +436,13 @@ export const LIGHT: "dark" | "light" = params.get("light") === "light" ? "light"
 /// finestra senza vault — l'unica in cui metà delle superfici non esiste, e
 /// l'unica che si fotografa per vedere cosa resta.
 const ROOT = params.get("vault") === "vuoto" ? null : "/Bench vault";
+/// `?vault=nuovo`: la finestra parte senza vault e «Crea un vault nuovo…»
+/// apre una cartella vuota, coi componenti come li trova un vault appena
+/// creato (`partenze.nuovo`) — la scena che chiede il profilo.
+const NEW_VAULT = params.get("vault") === "nuovo";
+/// Lo stato da cui parte la pagina «Componenti»: un nome delle `partenze`
+/// dello scenario (`solo-note`, `tutto`). Senza, «Studio».
+const COMPONENTS_START = params.get("componenti");
 
 // `theme.ts` legge questa chiave prima di chiedere qualunque cosa al canale
 // dati. Scriverla qui — cioè all'`import` di questo module, che Vite mette
@@ -398,6 +565,11 @@ const SLASH_COMMANDS: readonly CommandSpec[] = params.get("slash") === "1" ? SLA
 /// Le settings: una per **ogni** specie di `SettingKind`, perché il pannello
 /// disegna un controllo diverso per ciascuna e una scena che ne mostrasse solo
 /// due fotograferebbe metà del form.
+/// Il gruppo Aspetto invece è **intero**, con le voci, i testi e l'ordine di
+/// `appearance_settings` (`fub-host/src/settings.rs`): la foto delle
+/// impostazioni è quella della shell vera, e `fake-ipc.test.ts` lo tiene.
+/// `appearance.theme-id` il form non lo mostra (ha il suo gesto nel catalogo
+/// dei temi), ma c'è, come nell'host.
 /// Lo spazio dell'interfaccia lo mostra solo la finestra principale
 /// (`index.html`): il telefono e la finestra documento non hanno la riga.
 const ON_SHELL = globalThis.window.location.pathname.endsWith("/index.html");
@@ -439,6 +611,19 @@ const SETTINGS: SettingEntry[] = [
   },
   {
     spec: {
+      key: "appearance.theme-id",
+      label: "Tema installato",
+      description: "L'id del tema montato; si sceglie dal catalogo dei temi.",
+      group: "Aspetto",
+      scope: "machine",
+      kind: { kind: "text", default: "fub.serie" },
+      program_writable: false,
+    },
+    value: "fub.serie",
+    source: "default",
+  },
+  {
+    spec: {
       key: "appearance.contrast",
       label: "Contrasto",
       description: "Segue il sistema oppure usa sempre il contrasto normale o alto.",
@@ -460,6 +645,19 @@ const SETTINGS: SettingEntry[] = [
   },
   {
     spec: {
+      key: "appearance.accent",
+      label: "Tinta dell'accento",
+      description: "Il colore di collegamenti, fuoco e selezione. Chiarezza e intensità si adattano da sole per restare leggibili.",
+      group: "Aspetto",
+      scope: "machine",
+      kind: { kind: "number", default: 160, min: 0, max: 360 },
+      program_writable: false,
+    },
+    value: 160,
+    source: "default",
+  },
+  {
+    spec: {
       key: "appearance.density",
       label: "Densità",
       description: "Compatta o allarga la spaziatura dei controlli senza cambiare la disposizione dei pannelli.",
@@ -477,6 +675,176 @@ const SETTINGS: SettingEntry[] = [
       program_writable: false,
     },
     value: "comfortable",
+    source: "default",
+  },
+  ...(ON_SHELL ? [CHROME_COMPACTNESS] : []),
+  {
+    spec: {
+      key: "appearance.zoom",
+      label: "Zoom interfaccia",
+      description: "Quanto è grande tutta l'interfaccia, dal 50% al 200%.",
+      group: "Aspetto",
+      scope: "machine",
+      kind: { kind: "number", default: 1, min: 0.5, max: 2 },
+      program_writable: false,
+    },
+    value: 1,
+    source: "default",
+  },
+  {
+    spec: {
+      key: "appearance.motion",
+      label: "Animazioni",
+      description: "Segue la preferenza del sistema, oppure toglie rimbalzi e scene, oppure riduce sempre le animazioni dell'interfaccia.",
+      group: "Aspetto",
+      scope: "machine",
+      kind: {
+        kind: "choice",
+        default: "",
+        options: [
+          { value: "", label: "Come il sistema" },
+          { value: "calm", label: "Calme" },
+          { value: "reduced", label: "Ridotte" },
+        ],
+      },
+      program_writable: false,
+    },
+    value: "",
+    source: "default",
+  },
+  {
+    spec: {
+      key: "appearance.frame-rate",
+      label: "Fotogrammi al secondo",
+      description: "Tetto delle animazioni disegnate dall'interfaccia. Il massimo segue il refresh dello schermo, qualunque sia.",
+      group: "Aspetto",
+      scope: "machine",
+      kind: {
+        kind: "choice",
+        default: "",
+        options: [
+          { value: "", label: "Massimo dello schermo" },
+          { value: "240", label: "240 fps" },
+          { value: "165", label: "165 fps" },
+          { value: "144", label: "144 fps" },
+          { value: "120", label: "120 fps" },
+          { value: "90", label: "90 fps" },
+          { value: "60", label: "60 fps" },
+          { value: "30", label: "30 fps" },
+        ],
+      },
+      program_writable: false,
+    },
+    value: "",
+    source: "default",
+  },
+  {
+    spec: {
+      key: "appearance.diagram-style",
+      label: "Stile dei diagrammi",
+      description: "Colori e tratto dei diagrammi Mermaid; «%% stile: nome» lo cambia per uno solo.",
+      group: "Aspetto",
+      scope: "machine",
+      kind: {
+        kind: "choice",
+        default: "armonia",
+        options: [
+          { value: "armonia", label: "Armonia — segue il tema" },
+          { value: "acquerello", label: "Acquerello — tinte pastello" },
+          { value: "aurora", label: "Aurora — colori vivi e profondi" },
+          { value: "blueprint", label: "Blueprint — tavola tecnica" },
+          { value: "inchiostro", label: "Inchiostro — editoriale" },
+        ],
+      },
+      program_writable: false,
+    },
+    value: "armonia",
+    source: "default",
+  },
+  {
+    spec: {
+      key: "appearance.content-look",
+      label: "Aspetto dei documenti",
+      description: "Come si mostra un file che ha un aspetto suo, come un documento: la sua pagina, o la pagina adattata alla luce del tema. Automatico sceglie la pagina, e quella adattata con il contrasto alto.",
+      group: "Aspetto",
+      scope: "machine",
+      kind: {
+        kind: "choice",
+        default: "auto",
+        options: [
+          { value: "auto", label: "Automatico" },
+          { value: "file", label: "Pagina" },
+          { value: "adattato", label: "Pagina adattata" },
+        ],
+      },
+      program_writable: false,
+    },
+    value: "auto",
+    source: "default",
+  },
+  {
+    spec: {
+      key: "appearance.font",
+      label: "Carattere di lettura",
+      description: "Famiglia usata per la prosa lunga.",
+      group: "Aspetto",
+      scope: "machine",
+      kind: {
+        kind: "choice",
+        default: "newsreader",
+        options: [
+          { value: "newsreader", label: "Newsreader" },
+          { value: "hanken", label: "Hanken Grotesk" },
+          { value: "literata", label: "Literata" },
+          { value: "inter", label: "Inter" },
+          { value: "system", label: "Del sistema" },
+        ],
+      },
+      program_writable: false,
+    },
+    value: "newsreader",
+    source: "default",
+  },
+  {
+    spec: {
+      key: "appearance.font-ui",
+      label: "Carattere dell'interfaccia",
+      description: "Famiglia di barre, cassetti, menu e finestre.",
+      group: "Aspetto",
+      scope: "machine",
+      kind: {
+        kind: "choice",
+        default: "hanken",
+        options: [
+          { value: "hanken", label: "Hanken Grotesk" },
+          { value: "inter", label: "Inter" },
+          { value: "system", label: "Del sistema" },
+        ],
+      },
+      program_writable: false,
+    },
+    value: "hanken",
+    source: "default",
+  },
+  {
+    spec: {
+      key: "appearance.font-mono",
+      label: "Carattere del codice",
+      description: "Famiglia a spaziatura fissa del codice e del sorgente.",
+      group: "Aspetto",
+      scope: "machine",
+      kind: {
+        kind: "choice",
+        default: "plex",
+        options: [
+          { value: "plex", label: "IBM Plex Mono" },
+          { value: "jetbrains", label: "JetBrains Mono" },
+          { value: "system", label: "Del sistema" },
+        ],
+      },
+      program_writable: false,
+    },
+    value: "plex",
     source: "default",
   },
   {
@@ -520,52 +888,15 @@ const SETTINGS: SettingEntry[] = [
   },
   {
     spec: {
-      key: "appearance.font",
-      label: "Carattere di lettura",
-      description: "Famiglia usata per la prosa lunga.",
+      key: "appearance.css-snippets",
+      label: "Frammenti CSS locali",
+      description: "Frammenti attivabili, locali e limitati agli hook visivi; nessuna rete o importazione CSS.",
       group: "Aspetto",
       scope: "machine",
-      kind: {
-        kind: "choice",
-        default: "newsreader",
-        options: [
-          { value: "newsreader", label: "Newsreader" },
-          { value: "hanken", label: "Hanken Grotesk" },
-          { value: "literata", label: "Literata" },
-          { value: "inter", label: "Inter" },
-          { value: "system", label: "Del sistema" },
-        ],
-      },
+      kind: { kind: "text", default: '{"version":1,"snippets":[]}' },
       program_writable: false,
     },
-    value: "newsreader",
-    source: "default",
-  },
-  {
-    spec: {
-      key: "appearance.accent",
-      label: "Tinta dell'accento",
-      description: "Il colore di collegamenti, fuoco e selezione. Chiarezza e intensità si adattano da sole per restare leggibili.",
-      group: "Aspetto",
-      scope: "machine",
-      kind: { kind: "number", default: 265, min: 0, max: 360 },
-      program_writable: false,
-    },
-    value: 265,
-    source: "default",
-  },
-  ...(ON_SHELL ? [CHROME_COMPACTNESS] : []),
-  {
-    spec: {
-      key: "appearance.zoom",
-      label: "Zoom interfaccia",
-      description: "Quanto è grande tutta l'interfaccia, dal 50% al 200%.",
-      group: "Aspetto",
-      scope: "machine",
-      kind: { kind: "number", default: 1, min: 0.5, max: 2 },
-      program_writable: false,
-    },
-    value: 1,
+    value: '{"version":1,"snippets":[]}',
     source: "default",
   },
   {
@@ -681,6 +1012,119 @@ const DRAW_WORKSPACE: readonly SettingEntry[] = [
     source: "default",
   },
 ];
+
+/// Il gruppo «App esterne» con le cinque impostazioni della feature `craft`,
+/// i testi del catalogo vero (`fub-host/src/settings.rs`). Solo con
+/// `?craft=1`, così le altre scene delle preferenze restano come sono.
+const CRAFT_SETTING_ENTRIES: readonly SettingEntry[] = [
+  {
+    spec: {
+      key: "craft.editor-paths",
+      label: "Dove sono le app Craft",
+      description:
+        "Una riga per programma, come vectorcraft=/opt/vc/vectorcraft, o vectorcraft-cli=… per la riga di comando. Il percorso intero vince su quello che Fub trova da solo.",
+      group: "App esterne",
+      scope: "machine",
+      kind: { kind: "list", default: [] },
+      program_writable: false,
+    },
+    value: [],
+    source: "default",
+  },
+  {
+    spec: {
+      key: "craft.cli-previews",
+      label: "Anteprime fatte dalle app",
+      description:
+        "Fub fa fare l'anteprima di un file che non ne ha una all'app che lo apre, su una copia, solo quando apri il file tu.",
+      group: "App esterne",
+      scope: "machine",
+      kind: {
+        kind: "choice",
+        default: "ask",
+        options: [
+          { value: "ask", label: "Chiedi la prima volta" },
+          { value: "on", label: "Accese" },
+          { value: "off", label: "Spente" },
+        ],
+      },
+      program_writable: false,
+    },
+    value: "ask",
+    source: "default",
+  },
+  {
+    spec: {
+      key: "craft.preview-max-mib",
+      label: "Peso massimo da leggere per un'anteprima (MiB)",
+      description:
+        "Un file che va letto intero per l'anteprima e pesa di più resta senza: i file che si leggono a pezzi non hanno limite.",
+      group: "App esterne",
+      scope: "machine",
+      kind: { kind: "number", default: 64, min: 1, max: 4096 },
+      program_writable: false,
+    },
+    value: 64,
+    source: "default",
+  },
+  {
+    spec: {
+      key: "craft.tree-thumbnails",
+      label: "Miniature nell'albero",
+      description:
+        "Accanto al nome di un file Craft, di un RAW, di un PDF o di un documento, la piccola anteprima che il file ha già. L'albero non avvia mai un'app.",
+      group: "App esterne",
+      scope: "machine",
+      kind: { kind: "toggle", default: false },
+      program_writable: false,
+    },
+    value: false,
+    source: "default",
+  },
+  {
+    spec: {
+      key: "craft.tree-show-xmp",
+      label: "Mostra i file XMP nell'albero",
+      description: "Spento, gli XMP spariscono dall'albero: la ricerca li trova e la foto mostra i loro dati.",
+      group: "App esterne",
+      scope: "machine",
+      kind: { kind: "toggle", default: true },
+      program_writable: false,
+    },
+    value: true,
+    source: "default",
+  },
+];
+const CRAFT_SETTINGS: readonly SettingEntry[] = params.get("craft") === "1" || TREE_SCENE !== null
+  ? CRAFT_SETTING_ENTRIES.map((entry) => {
+    // La scena dell'albero accende le miniature, e nasconde gli XMP se lo chiede.
+    const value = TREE_SCENE === null ? null : treeSceneSetting(TREE_SCENE, entry.spec.key);
+    return value === null ? entry : { ...entry, value, source: "machine" as const };
+  })
+  : [];
+
+/// I due pannelli ai lati, come li dichiara l'host vero (`fub-host`,
+/// `chrome.sidebar.visible` e `chrome.inspector.visible`). Le scene della barra
+/// dei fogli li chiudono per dare al foglio tutta la larghezza: senza la
+/// dichiarazione la scrittura fallirebbe, e la foto terrebbe l'avviso «Non ho
+/// potuto ricordare come hai lasciato i pannelli». Solo con `workbook=1`, così
+/// le scene delle Impostazioni non cambiano.
+const WORKBOOK_CHROME: readonly SettingEntry[] = WORKBOOK_DOC === null ? [] : [
+  ["chrome.sidebar.visible", "Mostra il pannello a sinistra"],
+  ["chrome.inspector.visible", "Mostra il pannello a destra"],
+].map(([key, label]): SettingEntry => ({
+  spec: {
+    key,
+    label,
+    description: "Lo affianca ai riquadri quando la finestra è larga abbastanza; altrimenti si apre a richiesta.",
+    group: "Aspetto",
+    scope: "machine",
+    kind: { kind: "toggle", default: true },
+    program_writable: false,
+  },
+  value: true,
+  source: "default",
+}));
 
 /// I componenti montati, per la scheda «Componenti» delle impostazioni.
 ///
@@ -965,7 +1409,7 @@ const TREES: Record<string, UiNode> = {
       selected: t.name === "tema",
     })),
   },
-  trash: {
+  trash: TRASH_FULL ? trashWithThree() : {
     node: "empty_state",
     title: "Il cestino è vuoto",
     detail: "Ciò che si cestina resta qui finché non lo si svuota.",
@@ -1000,7 +1444,7 @@ const TREES: Record<string, UiNode> = {
 // ---------------------------------------------------------------------------
 
 const options: Options = {
-  file: {
+  file: NEW_VAULT ? {} : {
     ...CORPUS,
     ...(DRAWING === null ? {} : { [DRAWING.doc]: DRAWING.text }),
     // Il testo di una cartella è il suo giornale, vuoto sul disco.
@@ -1009,26 +1453,72 @@ const options: Options = {
     ...(RICH_DOC === null ? {} : { [RICH_DOC.doc]: RICH_DOC.text }),
     // La nota della Live, per le scene che la chiedono.
     ...(LIVE === null ? {} : { [LIVE_DOC]: LIVE.text }),
+    ...(PDF_SCENE === null ? {} : pdfSceneFiles(PDF_SCENE)),
+    ...(TREE_SCENE === null ? {} : treeSceneFiles()),
   },
-  resources: RESOURCES,
+  resources: NEW_VAULT ? {} : {
+    ...RESOURCES,
+    ...(PHOTO === null ? {} : photoResources(PHOTO)),
+    ...(CRAFT_SCENE === null ? {} : craftSceneResources()),
+    ...(RAW_SCENE === null ? {} : rawSceneResources(RAW_SCENE)),
+    ...(PDF_SCENE === null ? {} : pdfSceneResources()),
+    ...(TREE_SCENE === null ? {} : treeSceneResources()),
+  },
   root: ROOT,
   view: VIEWS,
   commands: ON_MOBILE ? [...BENCH_COMMANDS, ...FORMAT_COMMANDS] : [...BENCH_COMMANDS, ...SLASH_COMMANDS],
-  settings: DRAWING === null ? SETTINGS : [...SETTINGS, ...DRAW_WORKSPACE],
+  settings: [...SETTINGS, ...(DRAWING === null ? [] : DRAW_WORKSPACE), ...CRAFT_SETTINGS, ...WORKBOOK_CHROME],
   syntaxForms: [...MARKDOWN_SYNTAX],
   ...(WORKBOOK_DOC === null ? {} : {
     // Il JSON allarga le unioni del contratto (`kind`, `lock`) a `string`.
     gridBytes: {
       surface: XLSX_GRID.surface,
-      session: XLSX_GRID.session,
-      windows: [...XLSX_GRID.windows, XLSX_GRID.edit.window],
+      session: BENCH_SESSION,
+      windows: [...XLSX_GRID.windows, XLSX_GRID.edit.window].map(benchWindow),
       commits: [XLSX_GRID.edit.commit],
+      ...(BENCH_OUTCOMES === undefined ? {} : { outcomes: BENCH_OUTCOMES }),
     } as GridBytesFake,
   }),
   ...(DRAWING === null ? {} : { draw: true }),
+  ...(PHOTO === null ? {} : { craft: PHOTO_CRAFT }),
+  ...(CRAFT_SCENE === null ? {} : {
+    craft: craftSceneCraft(CRAFT_SCENE),
+    craftRender: craftSceneRender(async (doc, size) =>
+      ((await host.module.api.invokeCommand("craft.preview", { doc, size })).effect as { payload: CraftPreview }).payload),
+  }),
+  ...(RAW_SCENE === null ? {} : { craft: rawSceneCraft(RAW_SCENE) }),
+  ...(PDF_SCENE === null ? {} : {
+    // Il bundle `fub.craft` acceso, e WordCraft installata per il prestito.
+    craft: { docs: {} },
+    externalEditors: async (doc: string | null) => (doc === null || doc.endsWith(".docx") ? [PDF_SCENE_WORDCRAFT] : []),
+    openWith: async (_path: string, editor: string) => ({ editor, how: "new_process" as const }),
+  }),
+  // Il bundle `fub.craft` acceso: le miniature le dice `treeScenePreview`.
+  ...(TREE_SCENE === null ? {} : { craft: { docs: {} } }),
+  // La pagina «Componenti» non è scenografia: sono le risposte registrate
+  // dall'host vero (vault di prova con «Studio»), le stesse dei test. Una
+  // scelta che lo scenario non ha la porta la rifiuta, come nei test.
+  // `?componenti=solo-note` parte da un altro stato registrato.
+  components: COMPONENT_SCENARIO,
+  ...(COMPONENTS_START === null ? {} : { componentsStart: COMPONENTS_START }),
+  ...(NEW_VAULT ? { initialVault: null, componentsStart: "nuovo" } : {}),
 };
 
 const host = createFakeHost(options);
+
+/// **Lo strato d'avvio fermo a uno stato**, per le scene che lo fotografano
+/// (`avvio-*` in `scene.mjs`). Si decide qui, alla nascita del fake, perché
+/// `window.bench` arriva quando l'avvio è già partito: con le porte che il fake
+/// ha già, senza un meccanismo nuovo.
+///
+/// - `avvio=attesa`: `openVault` resta in volo per sempre. La shell è in piedi
+///   (`data-pronta`), la fase è «vault», e lo strato resta sopra l'app.
+/// - `avvio=guasto`: `initialVault` rifiuta, `init()` lancia e
+///   `mountDesktopShell` finisce nel guasto dello strato. Non `openVault`:
+///   `openInitialVault` ne cattura l'errore e lo dice nell'app.
+const AVVIO = params.get("avvio");
+if (AVVIO === "attesa") host.throttle("openVault");
+else if (AVVIO === "guasto") host.fault("initialVault", "il ponte non risponde");
 
 /// L'host del banco, esposto sulla finestra perché il **fotografo** possa
 /// guidarlo da fuori: emettere un evento del kernel, guastare una porta,
@@ -1215,6 +1705,27 @@ function snippetOf(doc: string, text: string): Pick<DocumentMatch, "snippet" | "
 
 export const api: typeof host.module.api = {
   ...behind,
+  invokeCommand: async (id, args, ...rest) => {
+    // L'anteprima del RAW della scena: il finto non sa leggere un RAW.
+    const doc = (args as { doc?: unknown } | null)?.doc;
+    if (RAW_SCENE !== null && id === CRAFT_PREVIEW_COMMAND && typeof doc === "string") {
+      const size = (args as { size?: unknown }).size === "large" ? "large" : "small";
+      const payload = rawScenePreview(RAW_SCENE, doc, size);
+      if (payload !== null) return { notify: null, effect: { kind: "custom", ns: CRAFT_BUNDLE_NS, payload }, undo: null, partial: null };
+    }
+    // L'anteprima del PDF o del Word delle scene T31: il finto non li sa leggere.
+    if (PDF_SCENE !== null && id === CRAFT_PREVIEW_COMMAND && typeof doc === "string") {
+      const size = (args as { size?: unknown }).size === "large" ? "large" : "small";
+      const payload = pdfScenePreview(PDF_SCENE, doc, size);
+      if (payload !== null) return { notify: null, effect: { kind: "custom", ns: CRAFT_BUNDLE_NS, payload }, undo: null, partial: null };
+    }
+    // Le miniature dell'albero delle scene T26: il finto non sa leggere i file.
+    if (TREE_SCENE !== null && id === CRAFT_PREVIEW_COMMAND && typeof doc === "string") {
+      const payload = treeScenePreview(doc, (args as { size?: unknown }).size === "large" ? "large" : "small");
+      if (payload !== null) return { notify: null, effect: { kind: "custom", ns: CRAFT_BUNDLE_NS, payload }, undo: null, partial: null };
+    }
+    return behind.invokeCommand(id, args, ...rest);
+  },
   queryIndex: async (q) => {
     // Le note con un'icona (`icon:` nel frontmatter), come le legge l'indice:
     // il finto non sa leggere le proprietà, e del banco ce l'ha solo la nota

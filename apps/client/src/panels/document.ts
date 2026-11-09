@@ -18,6 +18,8 @@ import { iconEl } from "../ui/icons";
 import { api } from "../host/ipc";
 import { emit, on, state } from "../state/store";
 import { documentSessions } from "../state/document-session";
+import { lentTo, unlend } from "../state/lend";
+import { appPreviewSubject, CRAFT_CONSENT_SETTING, craftServed, forgetConsent, peekPreview, previewOf, renderPreview, watchCraftPreviews } from "../state/craft-previews";
 import { openDocument as openRecreated } from "../state/document-controller";
 import { clearRemovedNotice, dismissSheetNotice, limitedMode, removedNoticeOf, sheetNoticesOf, type SheetNoticeKind } from "../state/sheet-notices";
 import {
@@ -50,7 +52,8 @@ import { allCommands, ariaBinding, canCreateDrawing, displayBinding, newDrawing,
 import { notify } from "../ui/notify";
 import { errorText } from "../host/errors";
 import { t, type Key } from "../i18n/strings";
-import type { Lifetime } from "../ui/lifetime";
+import { openLifetime, type Lifetime } from "../ui/lifetime";
+import { textButton } from "../kit/button";
 import { setTooltip } from "../ui/tooltip";
 import { tabIndexForKey } from "../ui/tab-keys";
 import { createFormatBar, registerFormatIcons, type FormatBar } from "./format-bar";
@@ -94,6 +97,7 @@ import {
   type Pane,
   type PaneElements,
   type PaneView,
+  type FileOnly,
   runSlashCommand,
 } from "../state/document-controller";
 
@@ -123,7 +127,6 @@ export {
   publishContext,
   recoverDrafts,
   refreshLooks,
-  reloadCurrent,
   resetDocumentsForVault,
   reveal,
   runEditorAction,
@@ -197,6 +200,14 @@ export function mountDocument(lifetime: Lifetime, d: DocumentDeps): void {
       if (frame && current) drawEmptyPane(frame, current.tabs.length === 0);
     }
   }));
+  // La domanda sulle anteprime fatte dalle app (T31) segue le risposte dello
+  // store: un'anteprima arrivata, il consenso cambiato (allora `""`, tutti).
+  watchCraftPreviews(lifetime, (doc) => {
+    if (doc === "") consentAsked.clear();
+    else consentAsked.delete(doc);
+    redrawNoticesOf(doc);
+  });
+  lifetime.add(() => consentAsked.clear());
   mountDocumentController(lifetime, d, view);
 }
 
@@ -230,7 +241,70 @@ const view: PaneView = {
   focusTab: (pane, index) => focusPaneTab(frameOf(pane), index),
   focusedTab,
   recorderHost: (pane) => frameOf(pane).toolbarEl,
+  drawFileOnly: (_pane, host, file) => drawFileOnly(host, file),
 };
+
+/// La vita dei pulsanti dell'ultimo disegno di ciascun riquadro «solo come
+/// file»: il disegno dopo la chiude.
+const fileOnlyDrawn = new WeakMap<HTMLElement, Lifetime>();
+
+/// Il riquadro «solo come file» (K2): il file c'è, il suo editor è di un
+/// componente spento. Nome e dimensione, una frase che dice cosa manca, e i
+/// due gesti: accendere il componente qui, o aprire il file con un'altra app.
+/// I file non si toccano.
+function drawFileOnly(host: HTMLElement, file: FileOnly): void {
+  fileOnlyDrawn.get(host)?.close();
+  const drawn = openLifetime();
+  fileOnlyDrawn.set(host, drawn);
+  const focused = host.contains(document.activeElement) ? (document.activeElement as HTMLElement).dataset.action : undefined;
+
+  const title = document.createElement("p");
+  title.className = "file-only-title";
+  title.textContent = t("file_only.title");
+  const name = document.createElement("p");
+  name.className = "file-only-name";
+  name.textContent = file.name;
+  const size = document.createElement("p");
+  size.className = "file-only-size";
+  size.textContent = file.size ?? "";
+  size.hidden = file.size === null;
+  const note = document.createElement("p");
+  note.className = "file-only-note";
+  note.textContent = file.component ? t("file_only.note", { name: file.component }) : t("file_only.note_unnamed");
+
+  const actions = document.createElement("div");
+  actions.className = "file-only-actions";
+  if (file.component) {
+    const on = textButton({
+      label: file.busy ? t("file_only.switching_on", { name: file.component }) : t("file_only.switch_on", { name: file.component }),
+      kind: "primary",
+      lifetime: drawn,
+      onPress: () => file.switchOn(),
+    });
+    on.dataset.action = "switch-on";
+    // Mentre si accende resta al suo posto col fuoco, e non risponde.
+    if (file.busy) on.setAttribute("aria-disabled", "true");
+    actions.append(on);
+  }
+  const outside = textButton({
+    label: t("explorer.open_system"),
+    lifetime: drawn,
+    onPress: () => file.openOutside(),
+  });
+  outside.dataset.action = "open-outside";
+  actions.append(outside);
+
+  const problem = document.createElement("p");
+  problem.className = "file-only-problem";
+  problem.setAttribute("role", "alert");
+  problem.textContent = file.problem ?? "";
+  problem.hidden = file.problem === null;
+
+  host.setAttribute("aria-label", `${t("file_only.title")}: ${file.name}`);
+  host.replaceChildren(title, name, size, note, actions, problem);
+  // Il fuoco resta dov'era: ridisegnare il riquadro non lo butta via.
+  if (focused) (host.querySelector<HTMLElement>(`[data-action="${focused}"]`) ?? host).focus();
+}
 
 /// La linguetta col fuoco della tastiera, se il fuoco è su una linguetta — le
 /// frecce della striscia la raggiungono senza attivarla.
@@ -1208,6 +1282,8 @@ function openPaneMenu(r: Pane, event: MouseEvent): void {
 /// spiegazione, Mantieni mio / Usa disco, conferma esplicita con conseguenza,
 /// comandi shell.doc.conflict.* esistenti. Mai merge finto, mai risoluzione
 /// automatica; buffer recuperabile finché irrisolto (solo ridisegno + comandi).
+/// In una modalità di lettura una riga dice che il reso è il testo di chi
+/// scrive, non ancora salvato (R03): la Lettura disegna dal buffer.
 /// I conflitti rimandati: il banner si riduce a una riga finché chi scrive non
 /// torna a deciderlo. La decisione resta sua; rimandarla non la perde.
 const deferredConflicts = new Set<string>();
@@ -1250,6 +1326,15 @@ function drawConflict(r: PaneFrame, doc: string | null): void {
   const body = document.createElement("p");
   body.textContent = t("document.conflict.body");
   body.setAttribute("data-doc", current);
+  // In Lettura il reso viene dal buffer della sessione, lo stesso della
+  // scrittura: la riga dice che quel testo è quello di chi scrive, non
+  // ancora salvato, e non la versione sul disco (R03).
+  const pane = paneOf(r.id);
+  const reading = pane && selectedMode(pane)?.contextMode === "reading" ? document.createElement("p") : null;
+  if (reading) {
+    reading.dataset.conflictReading = "";
+    reading.textContent = t("document.conflict.reading");
+  }
   const actions = document.createElement("div");
   actions.className = "conflict-actions";
   const compare = document.createElement("button");
@@ -1300,7 +1385,7 @@ function drawConflict(r: PaneFrame, doc: string | null): void {
     drawConflict(r, current);
   });
   actions.append(compare, mine, theirs, cancel);
-  box.append(title, body, actions);
+  box.append(title, body, ...(reading ? [reading] : []), actions);
 }
 
 /// Gli avvisi della nota sotto il banner del conflitto. Alcuni si ricavano
@@ -1314,7 +1399,7 @@ interface SheetLine {
   readonly id: string;
   readonly tone: "info" | "warning" | "danger";
   readonly text: string;
-  readonly action?: { readonly label: string; readonly run: () => void };
+  readonly actions?: readonly { readonly label: string; readonly run: () => void }[];
   readonly dismiss?: () => void;
 }
 
@@ -1336,13 +1421,13 @@ function noticeLines(doc: string | null, pane: string): SheetLine[] {
       text: t("notice.removed", { doc: docTitle(removed.doc) }),
       ...(recreate
         ? {
-            action: {
+            actions: [{
               label: t("document.recreate"),
               run: () => {
                 clearRemovedNotice(pane);
                 void recreate().then(() => openRecreated(removed.doc));
               },
-            },
+            }],
           }
         : {}),
       dismiss: () => {
@@ -1369,15 +1454,28 @@ function noticeLinesOf(doc: string): SheetLine[] {
       id: "save_failed",
       tone: "danger",
       text: t("notice.save_failed", { doc: name }),
-      action: {
+      actions: [{
         label: t("app.retry"),
         run: () => void allCommands().find((entry) => entry.id === "shell.doc.save")?.run?.(),
-      },
+      }],
     });
   }
   if (documentSessions.isDeletionPending(doc)) {
     lines.push({ id: "read_only", tone: "warning", text: t("notice.read_only", { doc: name }) });
   }
+  // Il prestito a un'app Craft (T17): «Riprendi qui» lo finisce, e la scheda
+  // torna modificabile se nient'altro la tiene ferma.
+  const app = lentTo(doc);
+  if (app !== null) {
+    lines.push({
+      id: "lent",
+      tone: "info",
+      text: t("lend.notice", { app }),
+      actions: [{ label: t("lend.resume"), run: () => unlend(doc) }],
+    });
+  }
+  const consent = consentLineOf(doc);
+  if (consent) lines.push(consent);
   for (const notice of sheetNoticesOf(doc)) {
     const detail = notice.detail ? t(notice.detail) : "";
     lines.push({
@@ -1391,6 +1489,75 @@ function noticeLinesOf(doc: string): SheetLine[] {
     });
   }
   return lines;
+}
+
+/// I documenti di cui la domanda a `craft.preview` della riga del consenso è
+/// già partita senza una risposta tenuta (un guasto, il componente spento):
+/// un ridisegno non la rifà finché lo store non dice che qualcosa è cambiato.
+const consentAsked = new Set<string>();
+/// Una risposta alla domanda alla volta, in tutta la finestra.
+let consentPending = false;
+
+/// La riga che chiede di accendere le anteprime fatte dalle app (T31): un PDF
+/// o un documento senza anteprima, col consenso da chiedere e l'app che la
+/// farebbe installata (`render` c'è). La risposta tenuta dallo store basta;
+/// se non c'è, la si chiede senza avviare niente, e la risposta ridisegna.
+function consentLineOf(doc: string): SheetLine | null {
+  if (appPreviewSubject(doc) === null || !craftServed()) return null;
+  const answer = peekPreview(doc, "small");
+  if (!answer) {
+    if (!consentAsked.has(doc)) {
+      consentAsked.add(doc);
+      void previewOf(doc, "small").then((asked) => {
+        if (asked) {
+          consentAsked.delete(doc);
+          redrawNoticesOf(doc);
+        }
+      }, () => {});
+    }
+    return null;
+  }
+  const { preview } = answer;
+  if (preview.image || preview.queued || preview.render?.consent !== "ask") return null;
+  return {
+    id: "craft_consent",
+    tone: "info",
+    text: t("craft.consent.notice", { app: preview.render.app }),
+    actions: [
+      { label: t("craft.consent.yes"), run: () => void answerConsent(doc, "on") },
+      { label: t("craft.consent.no"), run: () => void answerConsent(doc, "off") },
+    ],
+  };
+}
+
+/// «Sì, accendi»: il consenso acceso, e l'anteprima chiesta adesso (il clic
+/// è il gesto); la risposta in coda toglie la riga. «No, lasciale spente»: le
+/// risposte tenute dicono ancora `ask`, e si dimenticano. Il cambio del
+/// consenso toglie la riga da ogni scheda.
+async function answerConsent(doc: string, value: "on" | "off"): Promise<void> {
+  if (consentPending) return;
+  consentPending = true;
+  try {
+    await api.setSetting(CRAFT_CONSENT_SETTING, value);
+  } catch (failure) {
+    notify(errorText(failure), "guasto");
+    return;
+  } finally {
+    consentPending = false;
+  }
+  if (value === "off") {
+    forgetConsent();
+    return;
+  }
+  await renderPreview(doc, "small").catch((failure: unknown) => notify(errorText(failure), "guasto"));
+}
+
+/// Ridisegna gli avvisi dei riquadri che mostrano `doc` (`""`: tutti).
+function redrawNoticesOf(doc: string): void {
+  for (const [pane, frame] of frames) {
+    const shown = activeDoc(pane);
+    if (doc === "" || shown === doc) drawNotices(frame, shown);
+  }
 }
 
 function drawNotices(r: PaneFrame, doc: string | null): void {
@@ -1413,12 +1580,12 @@ function drawNotices(r: PaneFrame, doc: string | null): void {
     text.className = "sheet-notice-text";
     text.textContent = line.text;
     row.append(text);
-    if (line.action) {
-      const run = line.action.run;
+    for (const action of line.actions ?? []) {
+      const run = action.run;
       const button = document.createElement("button");
       button.type = "button";
       button.className = "link-button";
-      button.textContent = line.action.label;
+      button.textContent = action.label;
       button.addEventListener("click", () => run());
       row.append(button);
     }

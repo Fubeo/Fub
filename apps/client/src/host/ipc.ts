@@ -12,6 +12,9 @@ import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import type {
   BundleInfo,
+  ComponentAction,
+  ComponentsApplied,
+  ComponentsMap,
   InstalledPluginInfo,
   CommandOutcome,
   CommandSpec,
@@ -61,6 +64,7 @@ import type {
   CatalogEntry,
 } from "./contract";
 import { openViewer, saveViewer, writeResource } from "../editors/media/transport";
+import { readCraftPreview, type CraftPreview, type CraftPreviewSize } from "./craft";
 import { createMobileBridge } from "../shells/mobile/bridge";
 import type { MobileBridge } from "../shells/mobile/bridge";
 
@@ -138,6 +142,21 @@ export type SaveArtifactOutcome = { status: "saved"; path: string } | { status: 
 export type PrintArtifactOutcome = { status: "opened" } | { status: "no_viewer" } | { status: "unwritable"; reason: string };
 /** How a vault entry went to the system: taken, no program took it, or a program that opening would run. */
 export type RevealOutcome = { status: "opened" } | { status: "no_opener" } | { status: "executable" };
+/// Un'app Craft vista da «Apri con» (`fub_host::open_with::ExternalEditor`):
+/// le estensioni che apre, minuscole e senza il punto; `installed` se Fub ha
+/// trovato il suo programma; `running` se Fub l'ha avviata e non è uscita.
+export interface ExternalEditor {
+  id: string;
+  name: string;
+  opens: string[];
+  installed: boolean;
+  running: boolean;
+}
+/// Come il file è arrivato all'app: passato alla sua finestra unica, ricevuto
+/// dall'app già aperta, o in un processo nuovo.
+export type OpenHow = "forwarded" | "in_running" | "new_process";
+/// L'esito di «Apri con» (`fub_host::open_with::OpenedWith`).
+export interface OpenedWith { editor: string; how: OpenHow }
 
 /// Il vault a cui una chiamata si rivolge, quando chi chiama lo sa (FUB-001).
 ///
@@ -192,8 +211,26 @@ export const api = {
   // revisione arrivi da qui invece di essere ricalcolata di qua è la stessa
   // regola per cui è opaca — due implementazioni della stessa impronta sono due
   // verità, e la seconda mente in silenzio.
+  //
+  // `readDocument` è una **lettura semplice**: l'anteprima, una ricerca, un
+  // confronto. Il documento non conta come aperto e l'host non tiene niente.
+  // `openDocument` è la stessa lettura sotto la chiave di apertura `open` di
+  // una sessione (da 1 a 64 fra lettere, cifre, `-` e `_`): la revisione resta
+  // segnata sotto la chiave finché `documentClosed(open)` non la chiude.
   readDocument: (id: string, vault?: string | null) =>
     invoke<DocumentSource>("read_document", toVault({ id }, vault)),
+  openDocument: (id: string, open: string, vault?: string | null) =>
+    invoke<DocumentSource>("read_document", toVault({ id, open }, vault)),
+  // I motori dei formati (fogli, documenti) si costruiscono alla prima
+  // apertura. Scaldare quello di un'estensione lo prepara prima, in
+  // sottofondo: un'estensione senza motore non fa niente e non è un errore.
+  warmEngine: (extension: string) => invoke<void>("warm_engine", { extension }),
+  // La shell ha chiuso la sessione con la chiave di apertura `open`: l'host
+  // dimentica le prove a vuoto che nessun'altra chiave tiene, e le cache dei
+  // documenti se non resta aperta nessuna chiave. Una chiave sconosciuta o già
+  // chiusa non è un errore.
+  documentClosed: (open: string, vault?: string | null) =>
+    invoke<void>("document_closed", toVault({ open }, vault)),
   resourceOpen: (id: string, vault: string | null = null) =>
     invoke<ResourceDescriptor>("resource_open", { id, vault }),
   resourceReadChunk: (handle: string, offset: number, len: number) =>
@@ -226,6 +263,26 @@ export const api = {
   /// (`open: true`) di una voce del vault, per percorso relativo alla radice.
   revealInSystem: (path: string, open: boolean, vault?: string | null) =>
     invoke<RevealOutcome>("reveal_in_system", toVault({ path, open }, vault)),
+  /// Le app Craft che aprono `doc` (percorso relativo alla radice), o senza
+  /// `doc` tutte quelle che Fub conosce. Soltanto dalla shell principale.
+  externalEditors: (doc: string | null, vault?: string | null) =>
+    invoke<ExternalEditor[]>("external_editors", toVault({ doc }, vault)),
+  /// Apre la voce `path` del vault con l'app Craft `editor`; `page` vale per
+  /// PdfCraft. Soltanto dalla shell principale.
+  openWith: (path: string, editor: string, page?: number | null, vault?: string | null) =>
+    invoke<OpenedWith>("open_with", toVault({ path, editor, page: page ?? null }, vault)),
+  /// L'anteprima di `doc` fatta dalla CLI della sua app, dopo un gesto: la
+  /// risposta ha `queued: true` quando il job `craft.render` è in coda, e il
+  /// risultato arriva come `job_done`. Una forma che non è quella del
+  /// contratto è un errore `internal`, non un oggetto a metà.
+  craftRender: async (doc: string, size: CraftPreviewSize, vault?: string | null): Promise<CraftPreview> => {
+    const answer = await invoke<unknown>("craft_render", toVault({ doc, size }, vault));
+    const preview = readCraftPreview(answer);
+    if (preview === null) {
+      throw { kind: "internal", message: "craft_render: the answer is not a CraftPreview" } satisfies PluginError;
+    }
+    return preview;
+  },
   listGridSurfaces: () => invoke<GridSurfaceSpec[]>("list_grid_surfaces"),
   openGridBytes: (surface: string, doc: string, journal: string, base: string) =>
     invoke<GridBytesSession>("open_grid_bytes", { surface, doc, journal, base }),
@@ -245,9 +302,14 @@ export const api = {
   // stato scritto niente**; `dictated` = «copri, è voluto». Prima era
   // `base: string | null = null`, cioè la guardia si perdeva non passandola —
   // e chi la perdeva non lo scriveva da nessuna parte. Torna la revisione
-  // prodotta, cioè la base della scrittura dopo.
-  writeDocument: (id: string, source: string, base: WriteBase, vault?: string | null) =>
-    invoke<string>("write_document", toVault({ id, source, base }, vault)),
+  // prodotta, cioè la base della scrittura dopo. Con `open`, la chiave della
+  // sessione che scrive, la revisione sovrascritta e quella nuova restano
+  // segnate sotto la chiave; senza, l'host non tiene niente.
+  writeDocument: (id: string, source: string, base: WriteBase, vault?: string | null, open?: string) =>
+    invoke<string>(
+      "write_document",
+      toVault(open === undefined ? { id, source, base } : { id, source, base, open }, vault),
+    ),
   // Il **buffer di crash** (§15.2): ciò che è nell'editor e non è ancora sul
   // disco. Due porte e non due comandi del registro, ed è l'unica coppia di
   // questo file la cui capacità mancante è voluta per sempre: il testo non
@@ -414,6 +476,15 @@ export const api = {
   // può ramificare.
   setPluginEnabled: (id: string, enabled: boolean) =>
     invoke<PluginError[]>("set_plugin_enabled", { id, enabled }),
+  // La pagina «Componenti» (A7): la mappa con lo stato del vault, e la scelta.
+  // `apply` assente è una prova: dice che cosa cambierebbe e non scrive. Un
+  // rifiuto (`{ risposta: "rifiuto" }`) è una risposta, non un errore; l'errore
+  // resta per il vault non aperto. Non passa dalle porte generiche: lo stato
+  // dei componenti lo cambia solo la shell, come `set_plugin_enabled`.
+  componentsMap: (vault?: string | null) =>
+    invoke<ComponentsMap>("components_map", { vault: vault ?? null }),
+  componentsApply: (azione: ComponentAction, apply?: boolean, vault?: string | null) =>
+    invoke<ComponentsApplied>("components_apply", { vault: vault ?? null, azione, apply: apply ?? null }),
   // L'inventario installato è macchina, quindi resta leggibile anche senza un
   // guest montato. `vault` serve soltanto a riferire lo stato runtime.
   listInstalledPlugins: (vault?: string) =>

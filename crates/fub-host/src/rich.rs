@@ -32,6 +32,29 @@ pub(crate) use fub_format_rich::Codec;
 #[derive(Clone, Copy, Debug)]
 pub(crate) enum Codec {}
 
+/// Svuota le cache dei motori che tengono documenti e dizionari: le prove a
+/// vuoto del motore dei documenti e i dizionari del correttore letti dal
+/// disco, poi restituisce al sistema la memoria liberata. La chiama la
+/// chiusura dell'ultimo vault, fuori da ogni lucchetto dell'host; con un altro
+/// vault aperto le cache restano al budget dei motori, che le toglie da solo.
+///
+/// Senza le feature `rich` e `proof` non c'è niente da svuotare, ma la memoria
+/// si restituisce lo stesso. Dà i byte stimati liberati.
+pub(crate) fn empty_engine_caches() -> u64 {
+    let mut freed = 0u64;
+    #[cfg(feature = "rich")]
+    {
+        use fub_motori::Voce as _;
+        freed += fub_format_rich::motore::MotoreDocumenti::processo().svuota();
+    }
+    #[cfg(feature = "proof")]
+    {
+        freed += fub_features::proof::empty_dictionaries();
+    }
+    fub_motori::rilascia_al_sistema();
+    freed
+}
+
 /// I provider di formato da registrare al montaggio.
 pub(crate) fn providers() -> Vec<Box<dyn FormatProvider>> {
     #[cfg(feature = "rich")]
@@ -67,8 +90,76 @@ pub(crate) fn register(registrar: &mut crate::registry::Registrar<'_>) -> Vec<St
     {
         failures.push(format!("rich commands not registered: {error}"));
     }
+    if let Err(error) = registrar
+        .register_command_provider(Box::new(crate::new_file::NewFileCommands(&NEW_DOCUMENT)))
+    {
+        failures.push(format!("{DOCUMENT_CREATE} not registered: {error}"));
+    }
     failures
 }
+
+/// Le frasi del bundle: quelle dell'esportatore e quelle di «Nuovo
+/// documento», sommate per lingua.
+#[cfg(feature = "rich")]
+pub(crate) fn catalog() -> Vec<fub_abi::text::StringCatalog> {
+    let mut catalogs = fub_format_rich::export::catalog();
+    catalogs.extend(NEW_DOCUMENT.catalog());
+    catalogs
+}
+
+/// «Nuovo documento»: un documento di Word vuoto, che si apre.
+#[cfg(feature = "rich")]
+pub const DOCUMENT_CREATE: &str = "document.create";
+
+/// Il documento di Word che nasce vuoto: i byte li scrive il codec, da un
+/// documento senza paragrafi, e si rileggono con la stessa apertura della
+/// superficie prima di arrivare nel vault.
+#[cfg(feature = "rich")]
+static NEW_DOCUMENT: crate::new_file::NewFile = crate::new_file::NewFile {
+    command: DOCUMENT_CREATE,
+    format: fub_format_rich::DOCX_FORMAT_ID,
+    extension: "docx",
+    words: &[
+        crate::new_file::Words {
+            locale: "it",
+            title: "Nuovo documento",
+            desc: "Crea un documento di Word vuoto e lo apre. Senza nome nasce «Documento senza \
+                   titolo», e se quel nome è preso «Documento senza titolo 1», «2», …",
+            untitled: "Documento senza titolo",
+            the: "il documento",
+            the_start: "Il documento",
+            of_the: "del documento",
+            a: "un documento",
+            a_new: "un documento nuovo",
+            all: "i documenti di Word",
+            extra: &[],
+        },
+        crate::new_file::Words {
+            locale: "en",
+            title: "New document",
+            desc: "Creates an empty Word document and opens it. Without a name it is called \
+                   «Untitled document», and if that name is taken «Untitled document 1», «2», …",
+            untitled: "Untitled document",
+            the: "the document",
+            the_start: "The document",
+            of_the: "the document",
+            a: "a document",
+            a_new: "a new document",
+            all: "Word documents",
+            extra: &[],
+        },
+    ],
+    blank: |_doc, _say| {
+        let codec = Codec::Docx;
+        let bytes = fub_format_rich::blank(codec).map_err(|error| error.to_string())?;
+        let opened =
+            fub_format_rich::open_unremembered(codec, &bytes).map_err(|error| error.to_string())?;
+        match opened.readonly {
+            None => Ok(bytes),
+            Some(reason) => Err(format!("read only ({})", read_only_name(reason))),
+        }
+    },
+};
 
 /// Il codec del formato di un documento, se è un documento di videoscrittura.
 pub(crate) fn codec(format: Option<&DocumentFormat>) -> Option<Codec> {
@@ -83,17 +174,37 @@ pub(crate) fn codec(format: Option<&DocumentFormat>) -> Option<Codec> {
     }
 }
 
+/// Se un'apertura tiene il documento aperto, e quindi ricorda la prova a
+/// vuoto dei suoi byte, o è una lettura semplice che la lascia cadere
+/// ([`crate::engines`]).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Opening {
+    /// Un'apertura sotto una chiave: la prova resta, per il salvataggio.
+    Kept,
+    /// Una lettura semplice: la stessa proiezione, nessuna prova ricordata.
+    Plain,
+}
+
 /// La proiezione dei byte di `doc`.
-pub(crate) fn open(codec: Codec, doc: &DocId, bytes: &[u8]) -> Result<String, PluginError> {
+pub(crate) fn open(
+    codec: Codec,
+    doc: &DocId,
+    bytes: &[u8],
+    opening: Opening,
+) -> Result<String, PluginError> {
     #[cfg(feature = "rich")]
     {
-        fub_format_rich::open(codec, bytes)
+        let opened = match opening {
+            Opening::Kept => fub_format_rich::open(codec, bytes),
+            Opening::Plain => fub_format_rich::open_unremembered(codec, bytes),
+        };
+        opened
             .map(|opened| opened.projection)
             .map_err(|error| plugin_error(doc, error))
     }
     #[cfg(not(feature = "rich"))]
     {
-        let _ = (doc, bytes);
+        let _ = (doc, bytes, opening);
         match codec {}
     }
 }
@@ -132,10 +243,20 @@ pub(crate) fn save(
 
 /// I byte di un file che non c'è ancora, scritto da `projection`: si parte da
 /// un documento vuoto, e il file si crea anche quando la proiezione è vuota.
-pub(crate) fn create(codec: Codec, doc: &DocId, projection: &str) -> Result<Vec<u8>, PluginError> {
+///
+/// Salvare sul documento vuoto può ricordarne la prova a vuoto: la sua
+/// revisione va in `left`, anche quando il salvataggio fallisce, perché chi
+/// scrive la dimentichi se nessuna chiave la tiene ([`crate::engines`]).
+pub(crate) fn create(
+    codec: Codec,
+    doc: &DocId,
+    projection: &str,
+    left: &mut Vec<fub_abi::Revision>,
+) -> Result<Vec<u8>, PluginError> {
     #[cfg(feature = "rich")]
     {
         let blank = fub_format_rich::blank(codec).map_err(|error| plugin_error(doc, error))?;
+        left.push(fub_abi::Revision::of_bytes(&blank));
         match save(codec, doc, &blank, projection)? {
             Save::Unchanged => Ok(blank),
             Save::Bytes(bytes) => Ok(bytes),
@@ -143,7 +264,7 @@ pub(crate) fn create(codec: Codec, doc: &DocId, projection: &str) -> Result<Vec<
     }
     #[cfg(not(feature = "rich"))]
     {
-        let _ = (doc, projection);
+        let _ = (doc, projection, left);
         match codec {}
     }
 }
