@@ -503,14 +503,33 @@ function indexAt(layout: AxisLayout, offset: number): number {
   return Math.min(layout.sizes.length - 1, low);
 }
 
-function boundedWindow(layout: AxisLayout, start: number, length: number) {
+/// Le righe (o le colonne) da disegnare attorno a ciò che si vede, da
+/// `start` per `length` px: un riquadro intero di margine prima e uno dopo.
+/// Lo scorrimento veloce arriva prima del disegno, e trova le righe già lì.
+function marginWindow(layout: AxisLayout, start: number, length: number) {
   if (!layout.sizes.length) return { start: 0, end: -1 };
-  const first = indexAt(layout, Math.max(0, start));
-  const last = indexAt(layout, Math.max(0, start + length));
+  const span = Math.max(0, length);
   return {
-    start: Math.max(0, first - GRID_OVERSCAN),
-    end: Math.min(layout.sizes.length - 1, last + GRID_OVERSCAN),
+    start: indexAt(layout, Math.max(0, start - span)),
+    end: indexAt(layout, Math.max(0, start + 2 * span)),
   };
+}
+/// La misura più comune dell'asse, la «di serie» su cui la carta ripete i
+/// suoi fili; `fallback` se l'asse è vuoto o tutto nascosto.
+function commonSize(layout: AxisLayout, fallback: number): number {
+  const counts = new Map<number, number>();
+  let best = fallback;
+  let most = 0;
+  for (const size of layout.sizes) {
+    if (size <= 0) continue;
+    const count = (counts.get(size) ?? 0) + 1;
+    counts.set(size, count);
+    if (count > most) {
+      most = count;
+      best = size;
+    }
+  }
+  return best;
 }
 function viewportRange(
   total: number,
@@ -546,6 +565,31 @@ function zoneOf(frozenColumn: boolean, frozenRow: boolean): Zone {
 const MARK_BLEED = 3;
 /// Ciò che un disegno mette in ogni livello del piano, nell'ordine.
 type Drawing = Map<HTMLElement, HTMLElement[]>;
+/// Una cella disegnata in una riga che resta: l'elemento, il suo bordo, la
+/// firma di ciò che mostra (`#cellSignature`), il suo HTML senza la
+/// selezione e le classi senza la selezione.
+interface DrawnCell {
+  readonly cell: HTMLElement;
+  border: HTMLElement | null;
+  signature: string;
+  html: string;
+  base: string;
+}
+/// Le misure del riquadro lette una volta, prima di scrivere (`#renderRows`).
+interface PaperView {
+  readonly scrollTop: number;
+  readonly scrollLeft: number;
+  readonly width: number;
+  readonly height: number;
+}
+/// Ciò che una riga disegnata ricorda: la sua misura, l'intestazione e le
+/// celle, per colonna (o per unione).
+interface DrawnRow {
+  place: string;
+  header: HTMLElement | null;
+  headerKey: string;
+  readonly cells: Map<string, DrawnCell>;
+}
 
 /// Dà a `target` gli attributi di `source`, e toglie quelli che lui non ha.
 function syncAttributes(target: Element, source: Element): void {
@@ -554,6 +598,26 @@ function syncAttributes(target: Element, source: Element): void {
   }
   for (const attribute of source.attributes) {
     if (target.getAttribute(attribute.name) !== attribute.value) target.setAttribute(attribute.name, attribute.value);
+  }
+}
+
+/// Se `element` è una riga di celle, nella testa o nel corpo (non la riga
+/// delle intestazioni di colonna).
+function isDataRow(element: Element): element is HTMLElement {
+  return element instanceof HTMLElement && element.classList.contains("grid-row") && !element.classList.contains("grid-column-header-row");
+}
+
+/// Mette `elements` in `parent`, nell'ordine, prima di `end`, e toglie i
+/// figli di `parent` che `owned` riconosce e che non ci sono più. Un elemento
+/// già al suo posto non si muove: una riga che resta non esce dal DOM.
+function placeInOrder(parent: HTMLElement, elements: readonly HTMLElement[], end: ChildNode | null, owned: (element: Element) => boolean): void {
+  const keep = new Set<Element>(elements);
+  for (const child of [...parent.children]) if (owned(child) && !keep.has(child)) child.remove();
+  let next: ChildNode | null = end;
+  for (let index = elements.length - 1; index >= 0; index -= 1) {
+    const element = elements[index];
+    if (element.parentNode !== parent || element.nextSibling !== next) parent.insertBefore(element, next);
+    next = element;
   }
 }
 
@@ -637,6 +701,22 @@ export class GridEngine {
   readonly #lifts: Readonly<Record<Zone, HTMLElement>>;
   /// Fermo nell'angolo del riquadro: la guida e la misura di un bordo tirato.
   readonly #fixed: HTMLElement;
+  /// La carta sotto le righe, coi suoi fili: dove una riga non è ancora
+  /// disegnata si vede la griglia vuota, mai il bianco. È grande quanto il
+  /// riquadro e ci sta ferma; i fili delle colonne in `#paperRulesHost`. La
+  /// sua copia nelle fasce ferme: la testa, la colonna ferma e l'angolo.
+  readonly #sheetPaper: HTMLElement;
+  readonly #paperRulesHost: HTMLElement;
+  readonly #paperTop: HTMLElement;
+  readonly #paperLeft: HTMLElement;
+  readonly #paperCorner: HTMLElement;
+  /// Ciò che la carta ha scritto l'ultima volta (`#placePaper`): la misura,
+  /// la fase dei fili delle righe e lo spostamento di quelli delle colonne.
+  #paperPlaced = "";
+  /// L'altezza di serie delle righe, su cui la carta ripete i fili.
+  #paperPeriod = DEFAULT_ROW_HEIGHT;
+  /// Le celle disegnate che aspettano di essere misurate (`#fitPending`).
+  #pendingFits: HTMLElement[] = [];
   readonly #corner: HTMLElement;
   readonly #cellEditorHost: HTMLElement;
   readonly #notice: HTMLElement;
@@ -690,9 +770,21 @@ export class GridEngine {
   #tabStart: number | null = null;
   /// Il disegno chiesto dallo scorrimento, uno per fotogramma.
   #renderFrame: number | null = null;
-  /// Ciò che ogni elemento disegnato era quando è nato, senza la selezione:
-  /// un elemento uguale a quello nuovo resta al suo posto (`#reconcile`).
-  readonly #drawn = new WeakMap<Element, string>();
+  /// Le righe disegnate restano: ognuna ricorda le sue celle, che cambiano
+  /// solo se cambia ciò che mostrano (`#drawRow`).
+  readonly #drawnRows = new WeakMap<HTMLElement, DrawnRow>();
+  /// Un numero per ogni oggetto letto (la cella della finestra, lo stile, la
+  /// carta): la firma di una cella li confronta per identità.
+  readonly #refIds = new WeakMap<object, number>();
+  #nextRefId = 1;
+  /// Cresce quando cambia ciò che una cella mostra senza che cambino i suoi
+  /// dati: la lingua (le descrizioni dei commenti).
+  #cellEpoch = 0;
+  /// Il foglio delle righe disegnate: un altro foglio le rifà tutte.
+  #drawnSheet: string | null = null;
+  /// I fili delle colonne della carta, per colonna: quelli delle colonne
+  /// disegnate, nella carta del corpo o in quella della colonna ferma.
+  readonly #paperRules = new Map<number, { readonly element: HTMLElement; left: number }>();
   #readOnly = false;
   /// L'effetto di un comando, da chi conosce il catalogo
   /// (`setCommandEffects`): in sola lettura passano soltanto `legge` e
@@ -814,16 +906,24 @@ export class GridEngine {
     this.#layers = { body, top: part("grid-marks-top"), left: part("grid-marks-left"), corner: part("grid-marks-corner") };
     this.#lifts = { body, top: part("grid-lift-top"), left: part("grid-lift-left"), corner: part("grid-lift-corner") };
     this.#fixed = part("grid-fixed");
+    this.#sheetPaper = part("grid-paper");
+    this.#paperRulesHost = part("grid-paper-rules", false);
+    this.#sheetPaper.append(this.#paperRulesHost);
+    this.#paperTop = part("grid-paper-top");
+    this.#paperCorner = part("grid-paper-corner");
+    this.#paperLeft = part("grid-paper-left");
+    this.#paperLeft.append(part("grid-paper-left-head", false), part("grid-paper-left-cells", false));
     // La testa prima del corpo, per chi legge: `sticky` e `z-index` la tengono
-    // sopra comunque. I livelli della testa stanno dopo le sue righe.
-    this.#head.append(this.#layers.top, this.#lifts.top, this.#layers.corner, this.#lifts.corner);
+    // sopra comunque. La sua carta sta sotto le sue righe, i suoi livelli
+    // dopo.
+    this.#head.append(this.#paperTop, this.#paperCorner, this.#layers.top, this.#lifts.top, this.#layers.corner, this.#lifts.corner);
     this.#corner = document.createElement("div");
     this.#corner.className = "grid-corner";
     this.#cellEditorHost = document.createElement("div");
     this.#cellEditorHost.className = "grid-cell-editor";
     this.#cellEditorHost.hidden = true;
     this.#cellEditorHost.setAttribute("aria-hidden", "true");
-    this.#plane.append(this.#head, this.#body, body, this.#layers.left, this.#lifts.left, this.#fixed, this.#cellEditorHost);
+    this.#plane.append(this.#sheetPaper, this.#head, this.#body, body, this.#paperLeft, this.#layers.left, this.#lifts.left, this.#fixed, this.#cellEditorHost);
     this.#viewport.append(this.#plane);
     this.#objectsSummary = document.createElement("p");
     this.#objectsSummary.className = "grid-objects-summary sr-only";
@@ -834,6 +934,7 @@ export class GridEngine {
     this.#root.append(this.#ribbonHost, this.#notice, this.#draftNotice, formula, this.#viewport, this.#objectsSummary, this.#objectsAnnounce, this.#sheetBar);
     parent.replaceChildren(this.#root);
     this.#stopLanguage = onLanguage(() => {
+      this.#cellEpoch += 1;
       this.#viewport.setAttribute("aria-label", t("grid.surface"));
       this.#decimal = decimalSeparator(resolvedLanguage());
       this.#showNotice();
@@ -876,9 +977,15 @@ export class GridEngine {
       extensions: () => cellProfile.extensions(),
     });
 
+    // Le righe si disegnano nel gestore dello scorrimento, non in un
+    // fotogramma dopo: quelle nuove ci sono già nel fotogramma che le mostra.
+    // Il resto (i segni, gli oggetti, la cella aperta) nel fotogramma. Il
+    // caricamento chiede le sue misure prima che le righe scrivano: dopo,
+    // obbligherebbe il browser a impaginare dentro il gestore.
     this.#viewport.addEventListener("scroll", () => {
-      this.#scheduleRender();
       void this.#loadViewport();
+      if (this.#workbook) this.#renderRows(this.#selectedRange(), true);
+      this.#scheduleRender();
     }, { signal });
     // L'editor della cella sta dentro la griglia, e i suoi eventi salgono fin
     // qui: battute, clic per spostare il cursore, appunti. Sono suoi, e la
@@ -2230,6 +2337,17 @@ export class GridEngine {
     plane.setProperty("--grid-h", `${this.#frame.columnHeader + this.#rows.total}px`);
     plane.setProperty("--grid-top-h", `${bands.top}px`);
     plane.setProperty("--grid-left-w", `${bands.left}px`);
+    // La carta: l'altezza di serie delle righe su cui ripete i fili, e la
+    // misura delle intestazioni, per la sua copia nelle fasce ferme.
+    this.#paperPeriod = commonSize(this.#rows, Math.round(DEFAULT_ROW_HEIGHT * zoom));
+    plane.setProperty("--grid-row", `${this.#paperPeriod}px`);
+    this.#paperPlaced = "";
+    plane.setProperty("--grid-head-h", `${this.#frame.columnHeader}px`);
+    plane.setProperty("--grid-head-w", `${this.#frame.rowHeader}px`);
+    this.#paperTop.hidden = bands.top === 0;
+    this.#paperLeft.hidden = bands.left === 0;
+    (this.#paperLeft.firstElementChild as HTMLElement).hidden = this.#frame.rowHeader === 0;
+    this.#paperCorner.hidden = bands.top === 0 || bands.left === 0;
     plane.fontSize = zoom === 1 ? "" : `${(zoom * 100).toFixed(1)}%`;
     this.#viewport.classList.toggle("no-gridlines", !view.gridlines);
     this.#viewport.setAttribute("aria-rowcount", String(sheet.rows.length + 1));
@@ -2243,9 +2361,10 @@ export class GridEngine {
   }
 
   /// Le righe (o le colonne) da disegnare: quelle bloccate, quelle dello
-  /// schermo e quella della cella che si scrive.
+  /// schermo con un riquadro di margine prima e dopo, e quella della cella
+  /// che si scrive.
   #renderedIndices(layout: AxisLayout, frozen: number, frozenSize: number, scroll: number, extent: number, editing: number | null): number[] {
-    const window = boundedWindow(layout, scroll + frozenSize, Math.max(0, extent - frozenSize));
+    const window = marginWindow(layout, scroll + frozenSize, Math.max(0, extent - frozenSize));
     const out: number[] = [];
     for (let index = 0; index < frozen; index += 1) out.push(index);
     for (let index = Math.max(frozen, window.start); index <= window.end; index += 1) out.push(index);
@@ -2294,90 +2413,14 @@ export class GridEngine {
     }
   }
 
-  #render(): void {
+  /// Il disegno intero: le righe (`rows`), poi i segni, la cella aperta e
+  /// ciò che chi legge sente. Il fotogramma chiesto dallo scorrimento, che
+  /// le righe le ha già disegnate nel suo gestore, non le rifà.
+  #render(rows = true): void {
     if (!this.#workbook) return;
-    const frame = this.#frame;
-    const scrollTop = this.#viewport.scrollTop;
-    const scrollLeft = this.#viewport.scrollLeft;
-    const editingPosition = this.#editing?.owner === "cell" ? this.#editing.position : null;
-    const renderedRows = this.#renderedIndices(
-      this.#rows, frame.frozenRows, frame.frozenHeight, scrollTop,
-      this.#viewport.clientHeight - frame.columnHeader, editingPosition?.row ?? null,
-    );
-    const renderedColumns = this.#renderedIndices(
-      this.#columns, frame.frozenColumns, frame.frozenWidth, scrollLeft,
-      this.#viewport.clientWidth - frame.rowHeader, editingPosition?.column ?? null,
-    );
     const range = this.#selectedRange();
-    const merges = this.#merges();
-    const firstRow = renderedRows[0] ?? 0;
-    const lastRow = renderedRows[renderedRows.length - 1] ?? -1;
-    const firstColumn = renderedColumns[0] ?? 0;
-    const lastColumn = renderedColumns[renderedColumns.length - 1] ?? -1;
-    // Le unioni sullo schermo: ognuna si disegna una volta, nella prima riga
-    // disegnata che copre, e le celle che copre non si disegnano.
-    const visibleMerges = mergesIn(merges, { rowStart: firstRow, rowEnd: lastRow, columnStart: firstColumn, columnEnd: lastColumn });
-    const covered = new Set<number>();
-    const anchorsByRow = new Map<number, GridMerge[]>();
-    for (const merge of visibleMerges) {
-      for (let row = Math.max(merge.row, firstRow); row <= Math.min(merge.row + merge.rows - 1, lastRow); row += 1) {
-        for (let column = Math.max(merge.column, firstColumn); column <= Math.min(merge.column + merge.columns - 1, lastColumn); column += 1) {
-          covered.add(cellKey({ row, column }));
-        }
-      }
-      const host = renderedRows.find((row) => row >= merge.row && this.#rows.sizes[row] > 0);
-      if (host !== undefined && host < merge.row + merge.rows) {
-        anchorsByRow.set(host, [...(anchorsByRow.get(host) ?? []), merge]);
-      }
-    }
-    const headRows: HTMLElement[] = [];
-    const bodyRows: HTMLElement[] = [];
-    const measures: HTMLElement[] = [];
-
-    if (frame.columnHeader > 0) headRows.push(this.#columnHeaders(renderedColumns, range));
-    for (const row of renderedRows) {
-      if (this.#rows.sizes[row] === 0) continue;
-      const frozen = row < frame.frozenRows;
-      const rowElement = document.createElement("div");
-      rowElement.className = frozen ? "grid-row frozen" : "grid-row";
-      rowElement.dataset.row = String(row);
-      rowElement.setAttribute("role", "row");
-      rowElement.setAttribute("aria-rowindex", String(row + 2));
-      // Una riga bloccata sta nella testa, che è ferma da sé; le altre nel
-      // corpo, che scorre. Tutte e due al loro posto nel piano.
-      this.#place(rowElement, 0, frame.columnHeader + this.#rows.offsets[row], frame.rowHeader + this.#columns.total, this.#rows.sizes[row]);
-      if (frame.rowHeader > 0) {
-        const header = document.createElement("div");
-        header.className = "grid-header grid-row-header";
-        if ([range, ...this.#others].some((area) => row >= area.rowStart && row <= area.rowEnd)) header.classList.add("selected");
-        if (row > 0 && this.#rows.sizes[row - 1] === 0) header.classList.add("after-hidden");
-        header.setAttribute("role", "rowheader");
-        header.setAttribute("aria-rowindex", String(row + 2));
-        header.setAttribute("aria-colindex", "1");
-        header.textContent = String(row + 1);
-        header.style.pointerEvents = "none";
-        if (frame.zoom !== 1) header.style.fontSize = `calc(var(--text-sm) * ${frame.zoom})`;
-        this.#stickLeft(header, 0, 0, frame.rowHeader, this.#rows.sizes[row]);
-        rowElement.append(header);
-      }
-      const borders: HTMLElement[] = [];
-      for (const column of renderedColumns) {
-        if (this.#columns.sizes[column] === 0 || covered.has(cellKey({ row, column }))) continue;
-        const element = this.#cellElement({ row, column }, range, null, row);
-        if (!element) continue;
-        rowElement.append(element.cell);
-        if (element.border) borders.push(element.border);
-        if (element.measure) measures.push(element.cell);
-      }
-      for (const merge of anchorsByRow.get(row) ?? []) {
-        const element = this.#cellElement({ row: merge.row, column: merge.column }, range, merge, row);
-        if (!element) continue;
-        rowElement.append(element.cell);
-        if (element.border) borders.push(element.border);
-      }
-      rowElement.append(...borders);
-      (frozen ? headRows : bodyRows).push(rowElement);
-    }
+    if (rows) this.#renderRows(range);
+    this.#fitPending();
     // I segni, ognuno nel livello della zona dove cade.
     const drawing: Drawing = new Map();
     this.#objectElements(drawing);
@@ -2395,20 +2438,9 @@ export class GridEngine {
     // Ciò che non cambia resta: la cella sotto il puntatore riceve il clic e
     // il doppio clic, e l'editor aperto non perde il fuoco.
     const focused = this.#cellEditorHost.contains(document.activeElement);
-    const rowsOf = (parent: HTMLElement) => [...parent.children].filter((element): element is HTMLElement =>
-      element instanceof HTMLElement && element.classList.contains("grid-row"));
-    // Le righe della testa stanno prima dei suoi livelli.
-    this.#reconcile(this.#head, rowsOf(this.#head), headRows, this.#layers.top);
-    this.#reconcile(this.#body, rowsOf(this.#body), bodyRows);
-    // Un gruppo di righe vuoto non è un gruppo, per chi legge.
-    for (const [group, rows] of [[this.#head, headRows], [this.#body, bodyRows]] as const) {
-      if (rows.length) group.setAttribute("role", "rowgroup");
-      else group.removeAttribute("role");
-    }
     for (const container of new Set([...Object.values(this.#layers), ...Object.values(this.#lifts), this.#fixed])) {
       this.#reconcile(container, [...container.children] as HTMLElement[], drawing.get(container) ?? []);
     }
-    this.#fitCells(measures.filter((cell) => cell.isConnected));
     const editing = this.#editing?.owner === "cell" ? this.#editing : null;
     if (editing) {
       const cell = this.#findCell(editing.position);
@@ -2439,19 +2471,372 @@ export class GridEngine {
     }
   }
 
-  /// Mette in `parent` gli elementi `fresh`, nell'ordine, al posto dei
-  /// `drawn`. Un elemento disegnato uguale a quello nuovo resta dov'è: una
-  /// riga con la stessa chiave prende gli attributi nuovi e si riconcilia
-  /// dentro, una cella uguale (`#drawn`) prende soltanto la selezione, il
-  /// resto si confronta per intero. Gli oggetti si rifanno sempre.
-  #reconcile(parent: HTMLElement, drawn: readonly HTMLElement[], fresh: readonly HTMLElement[], end: ChildNode | null = null): void {
-    const key = (element: HTMLElement): string | null => {
-      if (element.classList.contains("grid-object")) return null;
-      if (element.classList.contains("grid-cell")) return `cell:${element.dataset.row}:${element.dataset.column}`;
-      if (element.classList.contains("grid-column-header-row")) return "headers";
-      if (element.classList.contains("grid-row")) return `row:${element.dataset.row}`;
-      return `html:${element.outerHTML}`;
+  /// Le righe: quelle bloccate nella testa, le altre nel corpo, con un
+  /// riquadro di margine sopra e sotto (e a sinistra e a destra per le
+  /// colonne). Le righe che restano non si rifanno: uno scorrimento ne
+  /// aggiunge e ne toglie solo ai bordi, un salto (o un altro foglio) le
+  /// rifà tutte perché nessuna resta. Una cella cambia solo se cambia ciò che
+  /// mostra, e si aggiorna sul posto (`#drawRow`).
+  ///
+  /// Le misure del riquadro si leggono tutte prima di scrivere, così il
+  /// gestore dello scorrimento non obbliga il browser a impaginare a metà.
+  /// Le celle da misurare (i numeri, quelle che si stringono) le misura
+  /// `#fitPending`: subito, o con `deferFit` nel fotogramma chiesto, prima
+  /// che il fotogramma si dipinga.
+  #renderRows(range: GridRange, deferFit = false): void {
+    const frame = this.#frame;
+    const view: PaperView = {
+      scrollTop: this.#viewport.scrollTop,
+      scrollLeft: this.#viewport.scrollLeft,
+      width: this.#viewport.clientWidth,
+      height: this.#viewport.clientHeight,
     };
+    const sheet = this.#sheet().id;
+    if (sheet !== this.#drawnSheet) {
+      this.#drawnSheet = sheet;
+      for (const parent of [this.#head, this.#body]) {
+        for (const row of [...parent.children]) if (isDataRow(row)) row.remove();
+      }
+    }
+    const editingPosition = this.#editing?.owner === "cell" ? this.#editing.position : null;
+    const renderedRows = this.#renderedIndices(
+      this.#rows, frame.frozenRows, frame.frozenHeight, view.scrollTop,
+      view.height - frame.columnHeader, editingPosition?.row ?? null,
+    );
+    const renderedColumns = this.#renderedIndices(
+      this.#columns, frame.frozenColumns, frame.frozenWidth, view.scrollLeft,
+      view.width - frame.rowHeader, editingPosition?.column ?? null,
+    );
+    const merges = this.#merges();
+    const firstRow = renderedRows[0] ?? 0;
+    const lastRow = renderedRows[renderedRows.length - 1] ?? -1;
+    const firstColumn = renderedColumns[0] ?? 0;
+    const lastColumn = renderedColumns[renderedColumns.length - 1] ?? -1;
+    // Le unioni sullo schermo: ognuna si disegna una volta, nella prima riga
+    // disegnata che copre, e le celle che copre non si disegnano.
+    const visibleMerges = mergesIn(merges, { rowStart: firstRow, rowEnd: lastRow, columnStart: firstColumn, columnEnd: lastColumn });
+    const covered = new Set<number>();
+    const anchorsByRow = new Map<number, GridMerge[]>();
+    for (const merge of visibleMerges) {
+      for (let row = Math.max(merge.row, firstRow); row <= Math.min(merge.row + merge.rows - 1, lastRow); row += 1) {
+        for (let column = Math.max(merge.column, firstColumn); column <= Math.min(merge.column + merge.columns - 1, lastColumn); column += 1) {
+          covered.add(cellKey({ row, column }));
+        }
+      }
+      const host = renderedRows.find((row) => row >= merge.row && this.#rows.sizes[row] > 0);
+      if (host !== undefined && host < merge.row + merge.rows) {
+        anchorsByRow.set(host, [...(anchorsByRow.get(host) ?? []), merge]);
+      }
+    }
+    const drawnIn = (parent: HTMLElement) => {
+      const rows = new Map<number, HTMLElement>();
+      for (const element of parent.children) if (isDataRow(element)) rows.set(Number(element.dataset.row), element);
+      return rows;
+    };
+    const drawnHead = drawnIn(this.#head);
+    const drawnBody = drawnIn(this.#body);
+    const measures: HTMLElement[] = [];
+    const headRows: HTMLElement[] = [];
+    const bodyRows: HTMLElement[] = [];
+    for (const row of renderedRows) {
+      if (this.#rows.sizes[row] === 0) continue;
+      const frozen = row < frame.frozenRows;
+      const before = (frozen ? drawnHead : drawnBody).get(row);
+      const element = this.#drawRow(row, before, renderedColumns, covered, anchorsByRow.get(row) ?? [], range, measures);
+      (frozen ? headRows : bodyRows).push(element);
+    }
+
+    // La riga delle intestazioni di colonna si confronta per intero: è una
+    // sola, e cambia con le colonne disegnate.
+    const headerRow = [...this.#head.children].find((element): element is HTMLElement =>
+      element instanceof HTMLElement && element.classList.contains("grid-column-header-row")) ?? null;
+    let header: HTMLElement | null = null;
+    if (frame.columnHeader > 0) {
+      const fresh = this.#columnHeaders(renderedColumns, range);
+      if (headerRow) {
+        syncAttributes(headerRow, fresh);
+        this.#reconcile(headerRow, [...headerRow.children] as HTMLElement[], [...fresh.children] as HTMLElement[]);
+        header = headerRow;
+      } else {
+        header = fresh;
+      }
+    } else {
+      headerRow?.remove();
+    }
+    const head = header ? [header, ...headRows] : headRows;
+    // Le righe della testa stanno dopo la sua carta e prima dei suoi livelli.
+    placeInOrder(this.#head, head, this.#layers.top, (element) => element.classList.contains("grid-row"));
+    placeInOrder(this.#body, bodyRows, null, (element) => element.classList.contains("grid-row"));
+    // Un gruppo di righe vuoto non è un gruppo, per chi legge.
+    for (const [group, rows] of [[this.#head, head], [this.#body, bodyRows]] as const) {
+      if (rows.length) group.setAttribute("role", "rowgroup");
+      else group.removeAttribute("role");
+    }
+    this.#placePaper(view);
+    this.#paperColumns(renderedColumns);
+    this.#pendingFits.push(...measures);
+    if (!deferFit) this.#fitPending();
+  }
+
+  /// Misura le celle disegnate che aspettano (`#renderRows`): leggere la loro
+  /// larghezza impagina, e nel gestore dello scorrimento lo fa il fotogramma.
+  #fitPending(): void {
+    const cells = this.#pendingFits.filter((cell) => cell.isConnected);
+    this.#pendingFits = [];
+    if (cells.length) this.#fitCells(cells);
+  }
+
+  /// La riga `row`: quella già disegnata (`before`) aggiornata, o una nuova.
+  /// L'intestazione si rifà sul posto se cambia; ogni cella resta se la sua
+  /// firma non cambia, e prende soltanto la selezione; se cambia, si rifà
+  /// sul posto, nello stesso elemento; quelle uscite dal margine si tolgono.
+  #drawRow(
+    row: number,
+    before: HTMLElement | undefined,
+    columns: readonly number[],
+    covered: ReadonlySet<number>,
+    anchors: readonly GridMerge[],
+    range: GridRange,
+    measures: HTMLElement[],
+  ): HTMLElement {
+    const frame = this.#frame;
+    const frozen = row < frame.frozenRows;
+    const known = before ? this.#drawnRows.get(before) : undefined;
+    const element = known ? before! : document.createElement("div");
+    const state: DrawnRow = known ?? { place: "", header: null, headerKey: "", cells: new Map() };
+    if (!known) {
+      this.#drawnRows.set(element, state);
+      element.setAttribute("role", "row");
+    }
+    const className = frozen ? "grid-row frozen" : "grid-row";
+    if (element.className !== className) element.className = className;
+    if (element.dataset.row !== String(row)) element.dataset.row = String(row);
+    if (element.getAttribute("aria-rowindex") !== String(row + 2)) element.setAttribute("aria-rowindex", String(row + 2));
+    // Una riga bloccata sta nella testa, che è ferma da sé; le altre nel
+    // corpo, che scorre. Tutte e due al loro posto nel piano.
+    const top = frame.columnHeader + this.#rows.offsets[row];
+    const width = frame.rowHeader + this.#columns.total;
+    const place = `${top}|${width}|${this.#rows.sizes[row]}`;
+    if (state.place !== place) {
+      this.#place(element, 0, top, width, this.#rows.sizes[row]);
+      state.place = place;
+    }
+
+    const children: HTMLElement[] = [];
+    if (frame.rowHeader > 0) {
+      const selected = [range, ...this.#others].some((area) => row >= area.rowStart && row <= area.rowEnd);
+      const afterHidden = row > 0 && this.#rows.sizes[row - 1] === 0;
+      const headerKey = `${selected}|${afterHidden}|${frame.rowHeader}|${this.#rows.sizes[row]}|${frame.zoom}`;
+      if (!state.header || state.headerKey !== headerKey) {
+        const header = document.createElement("div");
+        header.className = "grid-header grid-row-header";
+        if (selected) header.classList.add("selected");
+        if (afterHidden) header.classList.add("after-hidden");
+        header.setAttribute("role", "rowheader");
+        header.setAttribute("aria-rowindex", String(row + 2));
+        header.setAttribute("aria-colindex", "1");
+        header.textContent = String(row + 1);
+        header.style.pointerEvents = "none";
+        if (frame.zoom !== 1) header.style.fontSize = `calc(var(--text-sm) * ${frame.zoom})`;
+        this.#stickLeft(header, 0, 0, frame.rowHeader, this.#rows.sizes[row]);
+        if (state.header) syncAttributes(state.header, header);
+        else state.header = header;
+        state.headerKey = headerKey;
+      }
+      children.push(state.header);
+    } else if (state.header) {
+      state.header.remove();
+      state.header = null;
+      state.headerKey = "";
+    }
+
+    const seen = new Set<string>();
+    const borders: HTMLElement[] = [];
+    const active = this.#active();
+    const visit = (position: GridPosition, merge: GridMerge | null, slot: string) => {
+      const signature = this.#cellSignature(position, merge, row);
+      if (signature === null) return;
+      let drawn = state.cells.get(slot);
+      if (!drawn || drawn.signature !== signature) {
+        const fresh = this.#cellElement(position, merge, row);
+        if (!fresh) return;
+        if (!drawn) {
+          drawn = { cell: fresh.cell, border: fresh.border, signature, html: fresh.html, base: fresh.cell.className };
+          state.cells.set(slot, drawn);
+          if (fresh.measure) measures.push(fresh.cell);
+        } else {
+          if (drawn.html !== fresh.html) {
+            this.#refillCell(drawn.cell, fresh.cell);
+            if (fresh.measure) measures.push(drawn.cell);
+          }
+          if (fresh.border && drawn.border) {
+            syncAttributes(drawn.border, fresh.border);
+          } else {
+            drawn.border?.remove();
+            drawn.border = fresh.border;
+          }
+          drawn.signature = signature;
+          drawn.html = fresh.html;
+          drawn.base = fresh.cell.className;
+        }
+      }
+      seen.add(slot);
+      const lastRow = merge ? merge.row + merge.rows - 1 : position.row;
+      const lastColumn = merge ? merge.column + merge.columns - 1 : position.column;
+      const selected = this.#inSelection(range, position.row, position.column, lastRow, lastColumn);
+      const classes = `${drawn.base}${selected ? " selected" : ""}${samePosition(position, active) ? " active" : ""}`;
+      if (drawn.cell.className !== classes) drawn.cell.className = classes;
+      if (drawn.cell.getAttribute("aria-selected") !== String(selected)) drawn.cell.setAttribute("aria-selected", String(selected));
+      children.push(drawn.cell);
+      if (drawn.border) borders.push(drawn.border);
+    };
+    for (const column of columns) {
+      if (this.#columns.sizes[column] === 0 || covered.has(cellKey({ row, column }))) continue;
+      visit({ row, column }, null, String(column));
+    }
+    for (const merge of anchors) visit({ row: merge.row, column: merge.column }, merge, `merge:${merge.row}:${merge.column}`);
+    for (const [slot, drawn] of state.cells) {
+      if (seen.has(slot)) continue;
+      drawn.cell.remove();
+      drawn.border?.remove();
+      state.cells.delete(slot);
+    }
+    // Prima l'intestazione e le celle, poi i bordi del file, sopra le celle.
+    children.push(...borders);
+    placeInOrder(element, children, null, () => true);
+    return element;
+  }
+
+  /// Rifà sul posto la cella `target` com'è `fresh`: gli attributi e il
+  /// contenuto, nello stesso elemento, così il clic e il doppio clic che ci
+  /// stanno sopra arrivano. La cella aperta, se ci sta dentro, resta dov'è e
+  /// non perde il fuoco.
+  #refillCell(target: HTMLElement, fresh: HTMLElement): void {
+    syncAttributes(target, fresh);
+    const editor = this.#cellEditorHost.parentElement === target ? this.#cellEditorHost : null;
+    for (const child of [...target.childNodes]) if (child !== editor) child.remove();
+    const content = document.createDocumentFragment();
+    content.append(...fresh.childNodes);
+    target.insertBefore(content, editor);
+  }
+
+  /// Ciò che la cella in `position`, disegnata nella riga `hostRow`, mostra:
+  /// gli oggetti letti (la cella della finestra, lo stile, la carta) per
+  /// identità, e la misura, il posto, il debordare e i bordi di un'unione.
+  /// Due firme uguali danno la stessa cella. `null` se la cella non ha
+  /// misura (una colonna o una riga nascosta).
+  #cellSignature(position: GridPosition, merge: GridMerge | null, hostRow: number): string | null {
+    const { row, column } = position;
+    const lastRow = merge ? merge.row + merge.rows - 1 : row;
+    const lastColumn = merge ? merge.column + merge.columns - 1 : column;
+    const width = this.#columns.offsets[lastColumn + 1] - this.#columns.offsets[column];
+    const height = this.#rows.offsets[lastRow + 1] - this.#rows.offsets[row];
+    if (width <= 0 || height <= 0) return null;
+    const workbookCell = this.#workbookCell(position);
+    const bytes = workbookCell?.bytes;
+    const style = workbookCell?.style;
+    const reach = !merge && bytes && spills(style, bytes) ? this.#spillReach(position, horizontalOf(style, bytes.value)) : 0;
+    // Un'unione prende i bordi di destra e di sotto dalle celle che stanno lì.
+    const edges = merge
+      ? `${this.#refId(this.#workbookCell({ row, column: lastColumn })?.style)}:${this.#refId(this.#workbookCell({ row: lastRow, column })?.style)}`
+      : "";
+    return [
+      this.#refId(bytes),
+      this.#refId(style),
+      merge ? `${merge.rows}x${merge.columns}` : "",
+      edges,
+      width,
+      height,
+      this.#columnLeft(column),
+      this.#rows.offsets[row] - this.#rows.offsets[hostRow],
+      column < this.#frame.frozenColumns ? 1 : 0,
+      reach,
+      this.#refId(this.#paper),
+      this.#cellEpoch,
+    ].join("|");
+  }
+
+  /// Il numero di `value` per le firme delle celle: lo stesso oggetto dà lo
+  /// stesso numero; niente dà zero.
+  #refId(value: object | null | undefined): number {
+    if (!value) return 0;
+    let id = this.#refIds.get(value);
+    if (id === undefined) {
+      id = this.#nextRefId;
+      this.#nextRefId += 1;
+      this.#refIds.set(value, id);
+    }
+    return id;
+  }
+
+  /// La carta grande quanto il riquadro (non più del foglio, che non deve
+  /// crescere per lei), e i suoi fili dove lo scorrimento li porta: la fase
+  /// dei fili delle righe dalla prima riga che si vede, i fili delle colonne
+  /// spostati di quanto si è scorso di lato. Lo scrive il gestore dello
+  /// scorrimento: fra lo scorrimento e lui, dove una riga non c'è ancora, i
+  /// fili sono quelli di un fotogramma prima.
+  #placePaper(view: PaperView): void {
+    const frame = this.#frame;
+    const { scrollTop, scrollLeft } = view;
+    const width = Math.max(0, Math.min(view.width, frame.rowHeader + this.#columns.total));
+    const height = Math.max(0, Math.min(view.height, frame.columnHeader + this.#rows.total));
+    const period = this.#paperPeriod;
+    const top = this.#rows.sizes.length ? this.#rows.offsets[indexAt(this.#rows, scrollTop)] : 0;
+    const phase = (((frame.columnHeader + top - scrollTop) % period) + period) % period;
+    const placed = `${width}|${height}|${phase}|${scrollLeft}|${this.#bands().left}`;
+    if (placed === this.#paperPlaced) return;
+    this.#paperPlaced = placed;
+    this.#sheetPaper.style.width = `${width}px`;
+    this.#paperLeft.style.width = `${Math.min(width, this.#bands().left)}px`;
+    for (const paper of [this.#sheetPaper, this.#paperLeft]) paper.style.height = `${height}px`;
+    for (const strip of [this.#sheetPaper, ...this.#paperLeft.children] as HTMLElement[]) strip.style.backgroundPositionY = `${phase}px`;
+    this.#paperRulesHost.style.transform = scrollLeft ? `translateX(${-scrollLeft}px)` : "";
+  }
+
+  /// I fili delle colonne della carta, uno per colonna disegnata, sull'ultimo
+  /// pixel della colonna: quelli delle colonne bloccate nella carta della
+  /// colonna ferma, gli altri nella carta del corpo. Restano quelli che
+  /// c'erano; si aggiungono e si tolgono ai bordi, come le celle.
+  #paperColumns(columns: readonly number[]): void {
+    const frame = this.#frame;
+    const wanted = new Set<number>();
+    for (const column of columns) {
+      if (this.#columns.sizes[column] === 0) continue;
+      wanted.add(column);
+      const parent = column < frame.frozenColumns ? this.#paperLeft : this.#paperRulesHost;
+      const left = frame.rowHeader + this.#columns.offsets[column + 1] - 1;
+      let rule = this.#paperRules.get(column);
+      if (rule && rule.element.parentElement !== parent) {
+        rule.element.remove();
+        rule = undefined;
+      }
+      if (!rule) {
+        const element = document.createElement("div");
+        element.className = "grid-rule-column";
+        rule = { element, left: Number.NaN };
+        this.#paperRules.set(column, rule);
+        parent.append(element);
+      }
+      if (rule.left !== left) {
+        rule.element.style.left = `${left}px`;
+        rule.left = left;
+      }
+    }
+    for (const [column, rule] of this.#paperRules) {
+      if (wanted.has(column)) continue;
+      rule.element.remove();
+      this.#paperRules.delete(column);
+    }
+  }
+
+  /// Mette in `parent` gli elementi `fresh`, nell'ordine, al posto dei
+  /// `drawn`. Un elemento disegnato uguale a quello nuovo, confrontato per
+  /// intero, resta dov'è. Gli oggetti si rifanno sempre. Le righe di celle
+  /// hanno il loro disegno (`#drawRow`); qui passano i segni e le
+  /// intestazioni di colonna.
+  #reconcile(parent: HTMLElement, drawn: readonly HTMLElement[], fresh: readonly HTMLElement[], end: ChildNode | null = null): void {
+    const key = (element: HTMLElement): string | null =>
+      element.classList.contains("grid-object") ? null : `html:${element.outerHTML}`;
     const old = new Map<string, HTMLElement>();
     for (const element of drawn) {
       const name = key(element);
@@ -2462,14 +2847,6 @@ export class GridEngine {
       const name = key(element);
       const before = name === null ? undefined : old.get(name);
       if (!before) return element;
-      if (element.classList.contains("grid-cell")) {
-        if (this.#drawn.get(before) !== this.#drawn.get(element)) return element;
-        before.className = element.className;
-        before.setAttribute("aria-selected", element.getAttribute("aria-selected") ?? "false");
-      } else if (element.classList.contains("grid-row")) {
-        syncAttributes(before, element);
-        this.#reconcile(before, [...before.children] as HTMLElement[], [...element.children] as HTMLElement[]);
-      }
       old.delete(name!);
       kept.add(before);
       return before;
@@ -3116,10 +3493,9 @@ export class GridEngine {
   /// che potrebbe non entrare.
   #cellElement(
     position: GridPosition,
-    range: GridRange,
     merge: GridMerge | null,
     hostRow: number,
-  ): { cell: HTMLElement; border: HTMLElement | null; measure: boolean } | null {
+  ): { cell: HTMLElement; border: HTMLElement | null; measure: boolean; html: string } | null {
     const { row, column } = position;
     const frame = this.#frame;
     const workbookCell = this.#workbookCell(position);
@@ -3144,7 +3520,6 @@ export class GridEngine {
       element.setAttribute("aria-rowspan", String(merge.rows));
       element.setAttribute("aria-colspan", String(merge.columns));
     }
-    const selected = this.#inSelection(range, row, column, lastRow, lastColumn);
     const text = document.createElement("span");
     text.className = "grid-cell-text";
     text.textContent = workbookCell?.cell.input ?? "";
@@ -3221,13 +3596,9 @@ export class GridEngine {
       paintBorders(border, borders);
       put(border, this.#columnLeft(column) - 1, top - 1, width + 1, height + 1);
     }
-    // Ciò che la cella è senza la selezione: `#reconcile` tiene quella
-    // disegnata se è uguale.
-    this.#drawn.set(element, element.outerHTML);
-    element.setAttribute("aria-selected", String(selected));
-    if (selected) element.classList.add("selected");
-    if (samePosition(position, this.#active())) element.classList.add("active");
-    return { cell: element, border, measure };
+    // Ciò che la cella è senza la selezione: `#drawRow` tiene quella
+    // disegnata se è uguale, e le dà la selezione.
+    return { cell: element, border, measure, html: element.outerHTML };
   }
 
   /// I bordi da disegnare attorno alla cella, o all'unione che finisce in
@@ -3321,10 +3692,7 @@ export class GridEngine {
     element.style.height = `${height}px`;
   }
   #findCell(position: GridPosition): HTMLElement | null {
-    for (const cell of this.#viewport.querySelectorAll<HTMLElement>(".grid-cell")) {
-      if (cell.dataset.row === String(position.row) && cell.dataset.column === String(position.column)) return cell;
-    }
-    return null;
+    return this.#viewport.querySelector<HTMLElement>(`.grid-cell[data-row="${position.row}"][data-column="${position.column}"]`);
   }
 
   #detachCellEditor(): void {
@@ -3770,12 +4138,13 @@ export class GridEngine {
     this.#options.onEditMode?.();
   }
 
-  /// Lo scorrimento chiede un disegno: uno per fotogramma.
+  /// Un disegno dei segni, uno per fotogramma: lo chiedono lo scorrimento
+  /// (le righe le disegna il suo gestore) e i riferimenti della formula.
   #scheduleRender(): void {
     if (this.#renderFrame !== null) return;
     this.#renderFrame = requestAnimationFrame(() => {
       this.#renderFrame = null;
-      if (!this.#destroyed) this.#render();
+      if (!this.#destroyed) this.#render(false);
     });
   }
 

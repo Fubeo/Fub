@@ -71,6 +71,18 @@ const AUTOSAVE_WAIT_MS = 1_200;
 /// in un fotogramma dello scorrimento: le intestazioni sono ferme, e quando
 /// spariscono al loro posto passano le celle, cioè quasi tutto il nastro.
 const HEADER_DIFF_LIMIT = 0.1;
+/// G2: le rotelle dello scorrimento veloce (il metodo `scorri` delle sonde
+/// del piano della griglia), e la fascia uniforme più alta che un fotogramma
+/// può mostrare: una riga di carta fra due fili.
+const G2_WHEELS = 14;
+const G2_WHEEL_PX = 900;
+const G2_WHEEL_MS = 16;
+const G2_BLANK_LIMIT = 28;
+/// La tolleranza per canale con cui due pixel della stessa riga sono uguali.
+const G2_SAME_PIXEL = 6;
+/// G2: lo scorrimento a passi, per contare le righe aggiunte e tolte.
+const G2_STEPS = 30;
+const G2_STEP_PX = 100;
 
 const only = process.argv
   .find((arg) => arg.startsWith("--only="))
@@ -907,6 +919,25 @@ const CONTROLS = [
       return { ok, seen: report.join("; ") };
     },
   },
+  // **La carta sotto le celle e le righe che restano** (griglia T2), sulla
+  // cartella grande: scorrendo veloci non si vede mai il bianco, e le righe
+  // si aggiungono e si tolgono solo ai bordi del margine.
+  {
+    id: "g2-scorrere-senza-bianco",
+    cantiere: "G2",
+    scene: LARGE_SCENE_ID,
+    title: `quattordici rotelle di ${G2_WHEEL_PX} px a ${G2_WHEEL_MS} ms l'una, filmate`,
+    expected: `in ogni fotogramma, nell'area delle celle (a destra della colonna bloccata, sotto la testa), nessuna fascia di righe di pixel tutte uguali più alta di ${G2_BLANK_LIMIT} px`,
+    run: (page, { shotPath }) => blankFilm(page, shotPath),
+  },
+  {
+    id: "g2-righe-ai-bordi",
+    cantiere: "G2",
+    scene: LARGE_SCENE_ID,
+    title: `${G2_STEPS} passi di rotella da ${G2_STEP_PX} px in giù`,
+    expected: "in ogni fotogramma il riquadro coperto da righe disegnate; ogni passo aggiunge le sole righe entrate nel margine e toglie le sole uscite, e nessuna riga o cella di una riga rimasta è rifatta",
+    run: (page) => rowsAtEdges(page),
+  },
 ];
 
 /// d42: filma uno scorrimento vero e confronta, fotogramma per fotogramma, il
@@ -1127,12 +1158,254 @@ async function frozenColumnFilm(page, shotPath) {
   };
 }
 
+/// G2: mette nella pagina gli orologi del gestore dello scorrimento. Un
+/// ascoltatore in cattura sul documento parte prima di quelli della griglia,
+/// uno sul riquadro aggiunto adesso parte dopo il suo: la differenza è il
+/// tempo del gestore. Anche i fotogrammi chiesti (`requestAnimationFrame`)
+/// hanno il loro orologio: prima di T2 il disegno stava lì.
+async function installScrollClocks(page) {
+  await page.evaluate(() => {
+    const viewport = document.querySelector(".pane.focus .grid-viewport");
+    const clocks = { on: false, start: 0, handler: [], frame: [] };
+    window.__g2Clocks = clocks;
+    document.addEventListener("scroll", (event) => {
+      if (event.target === viewport) clocks.start = performance.now();
+    }, { capture: true });
+    viewport.addEventListener("scroll", () => {
+      if (clocks.on && clocks.start) clocks.handler.push(performance.now() - clocks.start);
+      clocks.start = 0;
+    });
+    const request = window.requestAnimationFrame.bind(window);
+    window.requestAnimationFrame = (callback) => request((time) => {
+      const start = performance.now();
+      try {
+        callback(time);
+      } finally {
+        if (clocks.on) clocks.frame.push(performance.now() - start);
+      }
+    });
+  });
+}
+
+/// Il novantesimo percentile e il peggiore di una serie di tempi, in ms.
+function timing(values) {
+  if (!values.length) return { count: 0, p90: 0, worst: 0 };
+  const sorted = [...values].sort((a, b) => a - b);
+  const at = (q) => sorted[Math.min(sorted.length - 1, Math.ceil(q * sorted.length) - 1)];
+  const round = (value) => Math.round(value * 100) / 100;
+  return { count: values.length, p90: round(at(0.9)), worst: round(sorted.at(-1)) };
+}
+
+/// G2: la fascia più alta di righe di pixel tutte uguali (niente fili, niente
+/// testo, niente celle) nell'area `area` di un fotogramma.
+function blankBand(png, area) {
+  let run = 0;
+  let best = 0;
+  for (let y = area.y; y < area.y + area.height; y += 1) {
+    const row = (png.width * y + area.x) * 4;
+    let uniform = true;
+    for (let x = 1; x < area.width; x += 1) {
+      const p = row + x * 4;
+      if (Math.abs(png.data[p] - png.data[row]) > G2_SAME_PIXEL
+        || Math.abs(png.data[p + 1] - png.data[row + 1]) > G2_SAME_PIXEL
+        || Math.abs(png.data[p + 2] - png.data[row + 2]) > G2_SAME_PIXEL) {
+        uniform = false;
+        break;
+      }
+    }
+    run = uniform ? run + 1 : 0;
+    best = Math.max(best, run);
+  }
+  return best;
+}
+
+/// G2: filma lo scorrimento veloce in giù e misura, in ogni fotogramma, la
+/// fascia uniforme più alta nell'area delle celle che scorrono (a destra
+/// della colonna bloccata, sotto la testa, senza le barre di scorrimento).
+/// Misura anche il tempo del gestore dello scorrimento.
+async function blankFilm(page, shotPath) {
+  const box = await page.evaluate(() => {
+    const viewport = document.querySelector(".pane.focus .grid-viewport");
+    const plane = viewport.querySelector(".grid-plane");
+    const v = viewport.getBoundingClientRect();
+    const top = parseFloat(plane.style.getPropertyValue("--grid-top-h"));
+    const left = parseFloat(plane.style.getPropertyValue("--grid-left-w"));
+    return {
+      area: {
+        x: Math.round(v.left + viewport.clientLeft + left + 4),
+        y: Math.round(v.top + viewport.clientTop + top + 4),
+        width: Math.round(viewport.clientWidth - left - 8),
+        height: Math.round(viewport.clientHeight - top - 8),
+      },
+      centerX: Math.round(v.left + v.width / 2),
+      centerY: Math.round(v.top + v.height / 2),
+    };
+  });
+  await page.mouse.move(box.centerX, box.centerY);
+  await settle(page, 400);
+  await installScrollClocks(page);
+
+  const cdp = await page.context().newCDPSession(page);
+  const frames = [];
+  cdp.on("Page.screencastFrame", (frame) => {
+    frames.push(frame.data);
+    cdp.send("Page.screencastFrameAck", { sessionId: frame.sessionId }).catch(() => {});
+  });
+  await cdp.send("Page.startScreencast", { format: "png", everyNthFrame: 1 });
+  for (let wait = 0; frames.length === 0 && wait < 20; wait += 1) await settle(page, 50);
+  await page.evaluate(() => { window.__g2Clocks.on = true; });
+  for (let wheel = 0; wheel < G2_WHEELS; wheel += 1) {
+    await page.mouse.wheel(0, G2_WHEEL_PX);
+    await page.waitForTimeout(G2_WHEEL_MS);
+  }
+  await settle(page, 500);
+  await cdp.send("Page.stopScreencast");
+  await cdp.detach();
+  const clocks = await page.evaluate(() => {
+    const clocks = window.__g2Clocks;
+    clocks.on = false;
+    return { handler: clocks.handler, frame: clocks.frame, scrollTop: document.querySelector(".pane.focus .grid-viewport").scrollTop };
+  });
+
+  const pngs = frames
+    .map((data) => PNG.sync.read(Buffer.from(data, "base64")))
+    .filter((png) => png.width >= box.area.x + box.area.width && png.height >= box.area.y + box.area.height);
+  if (pngs.length < 3) {
+    return { skip: `lo screencast ha dato ${pngs.length} fotogrammi utili: troppo pochi per dire qualcosa`, frames: frames.length };
+  }
+  const bands = pngs.map((png) => blankBand(png, box.area));
+  const worst = bands.indexOf(Math.max(...bands));
+  await writeFile(shotPath, PNG.sync.write(pngs[worst]));
+  const over = bands.filter((band) => band > G2_BLANK_LIMIT).length;
+  const handler = timing(clocks.handler);
+  const frame = timing(clocks.frame);
+  return {
+    ok: over === 0 && clocks.scrollTop > G2_WHEEL_PX,
+    seen: `${pngs.length} fotogrammi, scorso fino a ${clocks.scrollTop} px: fascia uniforme più alta ${bands[worst]} px (n. ${worst}), oltre ${G2_BLANK_LIMIT} px in ${over}; gestore dello scorrimento ${handler.count} volte, p90 ${handler.p90} ms, peggiore ${handler.worst} ms; fotogrammi chiesti ${frame.count}, p90 ${frame.p90} ms, peggiore ${frame.worst} ms`,
+    frames: pngs.length,
+    bands,
+    over,
+    handler,
+    frame,
+  };
+}
+
+/// G2: scorre a passi e conta, a ogni passo, le righe del corpo che il DOM
+/// aggiunge e toglie (`MutationObserver`) contro quelle entrate e uscite dal
+/// margine disegnato; e in ogni fotogramma la parte del riquadro senza una
+/// riga disegnata sopra.
+async function rowsAtEdges(page) {
+  const viewport = await centerOf(page, ".pane.focus .grid-viewport");
+  await page.mouse.move(viewport.x, viewport.y);
+  await settle(page, 400);
+  await page.evaluate(() => {
+    const viewport = document.querySelector(".pane.focus .grid-viewport");
+    const plane = viewport.querySelector(".grid-plane");
+    const body = viewport.querySelector(".grid-rows");
+    const drawn = () => new Set([...body.children].filter((el) => el.classList.contains("grid-row")).map((el) => Number(el.dataset.row)));
+    const state = { before: drawn(), added: [], removed: [], cellsAdded: [], uncovered: [], on: true };
+    const rowOf = (node) => Number(node.closest?.(".grid-row")?.dataset.row ?? node.dataset?.row);
+    const handle = (records) => {
+      for (const record of records) {
+        for (const node of record.addedNodes) {
+          if (!(node instanceof HTMLElement)) continue;
+          if (node.classList.contains("grid-row") && node.parentElement === body) state.added.push(Number(node.dataset.row));
+          else if (node.classList.contains("grid-cell")) state.cellsAdded.push(rowOf(record.target));
+        }
+        for (const node of record.removedNodes) {
+          if (!(node instanceof HTMLElement)) continue;
+          if (node.classList.contains("grid-row") && record.target === body) state.removed.push(Number(node.dataset.row));
+          else if (node.classList.contains("grid-cell")) state.cellsAdded.push(-1 - rowOf(record.target));
+        }
+      }
+    };
+    const observer = new MutationObserver(handle);
+    observer.observe(body, { childList: true, subtree: true });
+    // In ogni fotogramma: quanta parte del corpo nel riquadro nessuna riga
+    // disegnata copre.
+    const sample = () => {
+      if (!state.on) return;
+      const v = viewport.getBoundingClientRect();
+      const top = v.top + viewport.clientTop + parseFloat(plane.style.getPropertyValue("--grid-top-h"));
+      const bottom = v.top + viewport.clientTop + viewport.clientHeight;
+      const spans = [...body.children]
+        .filter((el) => el.classList.contains("grid-row"))
+        .map((el) => el.getBoundingClientRect())
+        .filter((b) => b.bottom > top && b.top < bottom)
+        .map((b) => [Math.max(b.top, top), Math.min(b.bottom, bottom)])
+        .sort((a, b) => a[0] - b[0]);
+      let covered = 0;
+      let reach = top;
+      for (const [from, to] of spans) {
+        if (to <= reach) continue;
+        covered += to - Math.max(from, reach);
+        reach = to;
+      }
+      state.uncovered.push(Math.max(0, Math.round(bottom - top - covered)));
+      requestAnimationFrame(sample);
+    };
+    requestAnimationFrame(sample);
+    window.__g2Rows = {
+      step: () => {
+        handle(observer.takeRecords());
+        const now = drawn();
+        const entered = [...now].filter((row) => !state.before.has(row));
+        const exited = [...state.before].filter((row) => !now.has(row));
+        const kept = new Set([...now].filter((row) => state.before.has(row)));
+        const result = {
+          entered: entered.length,
+          exited: exited.length,
+          added: state.added.length,
+          removed: state.removed.length,
+          // Una riga che c'era prima e c'è dopo, ma è stata tolta e rimessa.
+          rebuilt: state.added.filter((row) => state.before.has(row)).length,
+          // Le celle aggiunte o tolte in una riga rimasta.
+          cells: state.cellsAdded.filter((row) => kept.has(row >= 0 ? row : -1 - row)).length,
+        };
+        state.before = now;
+        state.added = [];
+        state.removed = [];
+        state.cellsAdded = [];
+        return result;
+      },
+      stop: () => {
+        state.on = false;
+        observer.disconnect();
+        return state.uncovered;
+      },
+    };
+  });
+  const steps = [];
+  for (let step = 0; step < G2_STEPS; step += 1) {
+    await page.mouse.wheel(0, G2_STEP_PX);
+    await settle(page, 40);
+    steps.push(await page.evaluate(() => window.__g2Rows.step()));
+  }
+  const look = await page.evaluate(() => ({
+    uncovered: window.__g2Rows.stop(),
+    scrollTop: document.querySelector(".pane.focus .grid-viewport").scrollTop,
+  }));
+  const sum = (key) => steps.reduce((total, step) => total + step[key], 0);
+  const holes = look.uncovered.filter((px) => px > 0);
+  const extra = steps.filter((step) => step.added !== step.entered || step.removed !== step.exited).length;
+  const rebuilt = sum("rebuilt");
+  const cells = sum("cells");
+  return {
+    ok: look.scrollTop >= (G2_STEPS - 1) * G2_STEP_PX && holes.length === 0 && extra === 0 && rebuilt === 0 && cells === 0,
+    seen: `scorso fino a ${look.scrollTop} px in ${G2_STEPS} passi: ${look.uncovered.length} fotogrammi, senza righe in ${holes.length}${holes.length ? ` (fino a ${Math.max(...holes)} px)` : ""}; righe entrate ${sum("entered")} e aggiunte ${sum("added")}, uscite ${sum("exited")} e tolte ${sum("removed")}, passi fuori conto ${extra}; righe rifatte dentro il margine ${rebuilt}, celle aggiunte o tolte in una riga rimasta ${cells}`,
+    steps,
+  };
+}
+
 // ---------------------------------------------------------------------------
 // La corsa.
 // ---------------------------------------------------------------------------
 
 const cantieri = (control) => (Array.isArray(control.cantiere) ? control.cantiere : [control.cantiere]);
 const isOn = (control) => cantieri(control).every((sigla) => ACCESI.has(sigla));
+
+/// I controlli che salvano da sé la loro foto: il fotogramma peggiore.
+const FILMED = new Set(["d42-intestazioni-durante-scorrimento", "g1-colonna-ferma", "g2-scorrere-senza-bianco"]);
 
 async function runControl(stage, scene, control) {
   const page = await openPage(stage.browser, "dark", { clock: false });
@@ -1145,7 +1418,7 @@ async function runControl(stage, scene, control) {
     await gridSteady(page);
     const result = await control.run(page, { shotPath });
     Object.assign(row, result);
-    if (!result.skip && control.id !== "d42-intestazioni-durante-scorrimento" && control.id !== "g1-colonna-ferma") {
+    if (!result.skip && !FILMED.has(control.id)) {
       await page.screenshot({ path: shotPath });
     }
   } catch (error) {

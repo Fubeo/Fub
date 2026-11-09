@@ -255,16 +255,94 @@ describe("GridEngine", () => {
     expect(viewport.getAttribute("role")).toBe("grid");
     expect(viewport.getAttribute("aria-rowcount")).toBe("101");
     expect(viewport.getAttribute("aria-colcount")).toBe("51");
-    expect(engine.renderedCellCount()).toBeLessThan(200);
+    // Il riquadro (600 × 300, meno le intestazioni) e un riquadro intero di
+    // margine prima e dopo: righe di 28 px, colonne di 120.
+    const span = { rows: 300 - 28, columns: 600 - 52 };
+    const drawn = () => {
+      const cells = [...host.querySelectorAll<HTMLElement>(".grid-cell")];
+      const rows = cells.map((cell) => Number(cell.dataset.row));
+      const columns = cells.map((cell) => Number(cell.dataset.column));
+      return { minRow: Math.min(...rows), maxRow: Math.max(...rows), maxColumn: Math.max(...columns) };
+    };
+    expect(drawn()).toEqual({ minRow: 0, maxRow: Math.floor((2 * span.rows) / 28), maxColumn: Math.floor((2 * span.columns) / 120) });
     expect(host.querySelectorAll(".grid-cell").length).toBe(engine.renderedCellCount());
 
     viewport.scrollTop = 1_400;
     viewport.dispatchEvent(new Event("scroll"));
     await settle();
-    const renderedRows = [...host.querySelectorAll<HTMLElement>(".grid-cell")]
-      .map((cell) => Number(cell.dataset.row));
-    expect(Math.min(...renderedRows)).toBeGreaterThan(40);
-    expect(engine.renderedCellCount()).toBeLessThan(200);
+    expect(drawn().minRow).toBe(Math.floor((1_400 - span.rows) / 28));
+    expect(drawn().maxRow).toBe(Math.floor((1_400 + 2 * span.rows) / 28));
+    engine.destroy();
+  });
+
+  it("le righe restano: uno scorrimento le aggiunge e le toglie solo ai bordi, nel suo gestore", async () => {
+    const { engine, host, viewport } = await mounted(bytesHost({ rows: 400, cells: { "0,0": "1", "10,1": "x" } }));
+    const rows = () => new Map([...host.querySelectorAll<HTMLElement>(".grid-rows > .grid-row")].map((row) => [Number(row.dataset.row), row]));
+    const before = rows();
+    const cell = cellAt(host, 10, 1)!;
+    expect(cell.textContent).toBe("x");
+    // Il gestore dello scorrimento disegna le righe subito, senza aspettare
+    // un fotogramma.
+    viewport.scrollTop = 280;
+    viewport.dispatchEvent(new Event("scroll"));
+    const after = rows();
+    expect(Math.max(...after.keys())).toBe(Math.floor((280 + 2 * 272) / 28));
+    // Le righe che c'erano e ci sono ancora sono gli stessi elementi, con le
+    // stesse celle.
+    const kept = [...after.keys()].filter((row) => before.has(row));
+    expect(kept.length).toBeGreaterThan(10);
+    for (const row of kept) expect(after.get(row)).toBe(before.get(row));
+    expect(cellAt(host, 10, 1)).toBe(cell);
+    // Uno scorrimento lontano è un salto: nessuna riga resta, tutte nuove.
+    viewport.scrollTop = 300 * 28;
+    viewport.dispatchEvent(new Event("scroll"));
+    const far = rows();
+    expect([...far.values()].some((row) => [...after.values()].includes(row))).toBe(false);
+    expect(Math.min(...far.keys())).toBe(Math.floor((300 * 28 - 272) / 28));
+    engine.destroy();
+  });
+
+  it("una cella che cambia si aggiorna sul posto, e una che non cambia non si tocca", async () => {
+    const { engine, host, viewport } = await mounted(bytesHost({ cells: { "0,0": "1", "1,0": "2" } }));
+    const changed = cellAt(host, 0, 0)!;
+    const still = cellAt(host, 1, 0)!;
+    const text = still.querySelector(".grid-cell-text");
+    changed.dispatchEvent(new Event("pointerdown", { bubbles: true, cancelable: true }));
+    const formula = findTextEditorOrThrow(host.querySelector<HTMLElement>(".grid-formula-editor")!);
+    formula.focus();
+    formula.dispatch({ changes: { from: 0, to: formula.state.doc.length, insert: "uno" }, userEvent: "input" });
+    formula.contentDOM.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
+    await settle();
+    expect(cellAt(host, 0, 0)).toBe(changed);
+    expect(changed.textContent).toBe("uno");
+    expect(cellAt(host, 1, 0)).toBe(still);
+    expect(still.querySelector(".grid-cell-text")).toBe(text);
+    // La selezione si sposta sulle celle che restano, senza rifarle.
+    viewport.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowUp", bubbles: true }));
+    expect(changed.classList.contains("active")).toBe(true);
+    expect(changed.getAttribute("aria-selected")).toBe("true");
+    expect(still.classList.contains("active")).toBe(false);
+    engine.destroy();
+  });
+
+  it("la carta sotto le righe ha un filo per ogni colonna disegnata, e la sua copia nelle fasce ferme", async () => {
+    const { engine, host, viewport } = await mounted();
+    const plane = host.querySelector<HTMLElement>(".grid-plane")!;
+    const paper = plane.querySelector<HTMLElement>(":scope > .grid-paper")!;
+    expect(paper.getAttribute("aria-hidden")).toBe("true");
+    expect(plane.querySelector(".grid-head > .grid-paper-top")).not.toBeNull();
+    expect(plane.querySelector<HTMLElement>(":scope > .grid-paper-left")!.hidden).toBe(false);
+    expect(plane.style.getPropertyValue("--grid-row")).toBe("28px");
+    const rules = () => [...paper.querySelectorAll<HTMLElement>(".grid-rule-column")].map((rule) => rule.style.left);
+    const columns = new Set([...host.querySelectorAll<HTMLElement>(".grid-cell")].map((cell) => cell.dataset.column));
+    expect(rules()).toHaveLength(columns.size);
+    // Il filo sta sull'ultimo pixel della colonna, dopo le intestazioni.
+    expect(rules()[0]).toBe(`${52 + 120 - 1}px`);
+    // Scorrendo di lato i fili seguono le colonne disegnate.
+    viewport.scrollLeft = 2_400;
+    viewport.dispatchEvent(new Event("scroll"));
+    expect(rules()).toContain(`${52 + 25 * 120 - 1}px`);
+    expect(rules()).not.toContain(`${52 + 120 - 1}px`);
     engine.destroy();
   });
 

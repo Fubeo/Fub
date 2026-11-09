@@ -1526,6 +1526,92 @@ body {
   align-self: flex-start;
 }
 
+/* La carta sotto le righe, coi suoi fili: dove una riga non è ancora
+   disegnata (lo scorrimento veloce arriva prima del disegno) si vede la
+   griglia vuota, mai il bianco. La carta è grande quanto il riquadro e sta
+   ferma nel riquadro (`sticky`): così il browser l'ha sempre già dipinta,
+   anche quando lo scorrimento salta più in là delle righe dipinte, dove una
+   carta grande quanto il foglio sarebbe ancora da dipingere. I suoi fili
+   seguono lo scorrimento: le righe con la fase che la griglia scrive
+   (`background-position`) sull'altezza di serie (`--grid-row`), le colonne
+   in `.grid-paper-rules`, spostato di lato, un elemento sottile dove ogni
+   colonna disegnata finisce. Ha una copia nelle fasce ferme: la testa
+   (`-top`), la colonna ferma (`-left`, con la striscia delle intestazioni
+   delle righe e quella delle colonne bloccate) e l'angolo. Le misure le
+   scrive la griglia. Le celle sono opache, perché il filo della carta non si
+   sommi al loro; i colori della cornice (le strisce delle intestazioni) li
+   dà la pelle. */
+.grid-paper,
+.grid-paper-left {
+  position: sticky;
+  top: 0;
+  left: 0;
+  overflow: hidden;
+}
+.grid-paper {
+  z-index: 0;
+}
+.grid-paper-rules {
+  position: absolute;
+  inset: 0;
+}
+.grid-rule-column {
+  position: absolute;
+  top: 0;
+  width: 1px;
+  height: 100%;
+}
+.look-file .grid-paper,
+.look-adattato .grid-paper,
+.look-file .grid-paper-left-cells,
+.look-adattato .grid-paper-left-cells {
+  background:
+    repeating-linear-gradient(to bottom, transparent 0 calc(var(--grid-row, 28px) - 1px), var(--doc-rule, rgb(20 22 26 / 30%)) 0 var(--grid-row, 28px)),
+    var(--doc-bg, #ffffff);
+}
+.look-file .grid-rule-column,
+.look-adattato .grid-rule-column { background: var(--doc-rule, rgb(20 22 26 / 30%)); }
+/* Un foglio senza griglia: la carta senza fili, solo il fondo. */
+.look-file .no-gridlines .grid-paper,
+.look-adattato .no-gridlines .grid-paper,
+.look-file .no-gridlines .grid-paper-left-cells,
+.look-adattato .no-gridlines .grid-paper-left-cells { background: var(--doc-bg, #ffffff); }
+.no-gridlines .grid-rule-column { display: none; }
+/* La colonna ferma sta sopra le celle che le scorrono sotto, come le
+   intestazioni delle righe. */
+.grid-paper-left {
+  z-index: 2;
+  display: flex;
+}
+.grid-paper-left-head {
+  flex: none;
+  width: var(--grid-head-w, 0px);
+  box-sizing: border-box;
+}
+.grid-paper-left-cells {
+  flex: 1;
+}
+.grid-paper-top,
+.grid-paper-corner {
+  width: var(--grid-left-w, 0px);
+  height: var(--grid-top-h, 0px);
+}
+.grid-paper-top {
+  position: relative;
+  z-index: 0;
+  width: var(--grid-w, 0px);
+}
+.grid-paper-corner {
+  position: sticky;
+  left: 0;
+  z-index: 2;
+}
+.grid-paper-top[hidden],
+.grid-paper-left[hidden],
+.grid-paper-corner[hidden] {
+  display: none;
+}
+
 /* I livelli dei segni, uno per zona: il corpo che scorre, la testa che
    scorre solo di lato, la colonna ferma che scorre solo in giù, l'angolo che
    non scorre. Ognuno taglia ciò che esce dalla sua zona; le fasce opache
@@ -1634,7 +1720,9 @@ body {
    con i colori del file portati su di lei da `editors/grid/paint.ts`, fondo e
    testo in coppia. Il testo automatico è l'inchiostro della carta, e i fili
    della griglia sono quelli della carta. Le intestazioni di righe e colonne
-   sono cornice, e restano del tema. */
+   sono cornice, e restano del tema. Una cella senza riempimento ha il fondo
+   della carta: è opaca, e copre ciò che le passa sotto (la carta coi suoi
+   fili, una cella che scorre sotto la colonna ferma). */
 .look-file .grid-viewport,
 .look-adattato .grid-viewport { background-color: var(--doc-bg, #ffffff); }
 .look-file .grid-cell,
@@ -1645,21 +1733,17 @@ body {
   line-height: 1.3;
 }
 .look-file .grid-cell {
-  background-color: var(--file-fill, transparent);
+  background-color: var(--file-fill, var(--doc-bg, #ffffff));
   color: var(--file-color, var(--doc-fg, #14161a));
 }
 .look-adattato .grid-cell {
-  background-color: var(--file-fill-a, transparent);
+  background-color: var(--file-fill-a, var(--doc-bg, #ffffff));
   color: var(--file-color-a, var(--doc-fg, #14161a));
 }
 /* Un foglio senza griglia: i fili delle celle spariscono, i bordi del file
    restano. */
 .look-file .no-gridlines .grid-cell,
 .look-adattato .no-gridlines .grid-cell { border-color: transparent; }
-/* Ciò che resta fermo ha la carta sotto, perché le celle che scorrono gli
-   passano dietro. */
-.look-file .grid-cell.frozen { background-color: var(--file-fill, var(--doc-bg, #ffffff)); }
-.look-adattato .grid-cell.frozen { background-color: var(--file-fill-a, var(--doc-bg, #ffffff)); }
 /* Anche la testa ha la carta sotto: le righe bloccate hanno celle vuote, e
    ciò che scorre sotto di lei (un testo che deborda) non deve trasparire. */
 .look-file .grid-head,

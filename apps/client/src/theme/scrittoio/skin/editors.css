@@ -457,6 +457,20 @@
   font-variant-numeric: tabular-nums;
   font-weight: var(--weight-bold);
 }
+/* La carta sotto le intestazioni, dove la loro riga non è ancora disegnata:
+   la striscia delle intestazioni di colonna in cima alla testa e
+   nell'angolo, e quella delle intestazioni delle righe nella colonna ferma,
+   coi fili delle righe. */
+.grid-paper-top,
+.grid-paper-corner {
+  background: linear-gradient(var(--sheet-2) 0 var(--grid-head-h, 0px), var(--doc-bg) 0);
+}
+.grid-paper-left-head {
+  border-right: 1px solid var(--border);
+  background:
+    repeating-linear-gradient(to bottom, transparent 0 calc(var(--grid-row, 28px) - 1px), var(--border) 0 var(--grid-row, 28px)),
+    var(--sheet-2);
+}
 /* Le intestazioni della selezione prendono l'accento, come nei fogli di
    calcolo. */
 .grid-header.selected {
