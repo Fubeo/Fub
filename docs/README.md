@@ -83,7 +83,8 @@ all'export, dalla sessione dal tablet ai disegni grandi.
 
 ## Consultare i contratti
 
-- [ABI e WIT](reference/abi-and-wit.md), [contratto IPC](reference/ipc-contract.md),
+- [ABI e WIT](reference/abi-and-wit.md), [contratto IPC](reference/ipc-contract.md)
+  (con il [contratto dei componenti](reference/components-contract.md)),
   [layout su disco](reference/on-disk-layout.md) e
   [permessi e sicurezza](reference/permissions-and-security.md)
 - [Il formato della scena](reference/scene-format.md) con le sue

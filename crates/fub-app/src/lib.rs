@@ -44,7 +44,9 @@ use fub_abi::{
     GridBytesSession, GridBytesWindow, GridCommandOutcome, GridCommandRequest, GridCommandState,
     GridSelection, Notice, PluginError,
 };
-use fub_host::{componenti, doc_id, document_text, Delivery, DocumentText, EventSink, Host, OpenKey};
+use fub_host::{
+    componenti, doc_id, document_text, Delivery, DocumentText, EventSink, Host, OpenKey,
+};
 use fub_wasm_host::catalog::{CatalogEntry, CatalogError, CatalogTrust, SignedFeed};
 use fub_wasm_host::installed::Consent;
 use fub_wasm_host::managed::{InstalledOperation, InstalledPluginManager, InstalledShutdown};
