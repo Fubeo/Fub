@@ -1940,6 +1940,12 @@
 }
 /* Il foglio che scorre è l'arresto del Tab del documento: l'anello sta
    dentro il riquadro. */
+/* Chi copre il vassoio che si ritira ha il fondo del foglio, come nei fogli:
+   attraverso la pagina non si vede mai la barra. Pagina e Lettura hanno la
+   loro scrivania, più sotto. */
+.rich-page {
+  background: var(--sheet);
+}
 .rich-page:focus-visible {
   outline: none;
   box-shadow: inset 0 0 0 var(--focus-ring-width) var(--focus-ring);

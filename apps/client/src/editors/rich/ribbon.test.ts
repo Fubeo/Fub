@@ -4,6 +4,7 @@
 // le lettere non si confondono, e il catalogo spegne con la ragione.
 import { afterEach, describe, expect, it } from "vitest";
 import { groupControls } from "../../kit/ribbon/types";
+import { activeMotions, createManualDriver, liveState, setMotionDriver, setMotionPreference, type ManualDriver } from "../../moto";
 import { t } from "../../i18n/strings";
 import { reservedChord } from "../../ui/commands";
 import { closeContextMenu } from "../../ui/menu";
@@ -260,5 +261,116 @@ describe("la barra del documento", () => {
     expect(ribbon.element.querySelector<HTMLElement>('[data-command="rich.mode.document"]')!.hidden).toBe(true);
     expect(ribbon.element.querySelector<HTMLElement>('[data-command="rich.look.adapted"]')!.hidden).toBe(true);
     ribbon.destroy();
+  });
+});
+
+/// La barra nella sua superficie, col moto vero: l'ospite, la ricerca e la
+/// pagina in colonna, come le monta `surface.ts`. happy-dom non ha un layout:
+/// chi si vede ha un riquadro, e la pagina sta sotto il vassoio quando si
+/// vede, subito sotto le schede quando no.
+interface Moving {
+  readonly driver: ManualDriver;
+  readonly ribbon: ReturnType<typeof mountRichRibbon>;
+  readonly surface: HTMLElement;
+  readonly page: HTMLElement;
+  readonly panels: HTMLElement;
+  restore(): void;
+}
+
+function moving(): Moving {
+  const driver = createManualDriver();
+  setMotionDriver(driver);
+  const surface = document.createElement("div");
+  surface.className = "rich-surface";
+  const host = document.createElement("div");
+  host.className = "rich-ribbon-host";
+  const page = document.createElement("div");
+  page.className = "rich-page";
+  surface.append(host, page);
+  document.body.append(surface);
+  const ribbon = mountRichRibbon(engine([para("testo")]), () => null, {}, { host });
+  surface.insertBefore(ribbon.findBar, page);
+  const panels = ribbon.element.querySelector<HTMLElement>(".rich-ribbon-panels")!;
+  const hiddenUp = (el: Element): boolean => {
+    if (!el.isConnected) return true;
+    for (let at: Element | null = el; at; at = at.parentElement) if ((at as HTMLElement).hidden) return true;
+    return false;
+  };
+  const rect = HTMLElement.prototype.getBoundingClientRect;
+  const rects = HTMLElement.prototype.getClientRects;
+  HTMLElement.prototype.getBoundingClientRect = function (this: HTMLElement) {
+    if (hiddenUp(this)) return new DOMRect();
+    const top = this === page ? (panels.hidden ? 40 : 140) : 40;
+    const pose = liveState(this)?.pose;
+    return new DOMRect(pose?.x ?? 0, top + (pose?.y ?? 0), 400, this === page ? 400 : 60);
+  };
+  HTMLElement.prototype.getClientRects = function (this: HTMLElement) {
+    return (hiddenUp(this) ? [] : [this.getBoundingClientRect()]) as unknown as DOMRectList;
+  };
+  const restore = (): void => {
+    ribbon.destroy();
+    HTMLElement.prototype.getBoundingClientRect = rect;
+    HTMLElement.prototype.getClientRects = rects;
+    driver.advance(5000);
+    setMotionDriver(null);
+    setMotionPreference("system");
+  };
+  return { driver, ribbon, surface, page, panels, restore };
+}
+
+const tabNamed = (ribbon: Moving["ribbon"], key: Parameters<typeof t>[0]): HTMLElement =>
+  [...ribbon.element.querySelectorAll<HTMLElement>('[role="tab"]')].find((tab) => tab.textContent === t(key))!;
+const ctrlF1 = (surface: HTMLElement): boolean => surface.dispatchEvent(new KeyboardEvent("keydown", { key: "F1", ctrlKey: true, bubbles: true, cancelable: true }));
+
+describe("il movimento della barra del documento", () => {
+  it("cambiando scheda i foglietti della scheda nuova entrano uno dopo l'altro, come nei fogli", () => {
+    const { driver, ribbon, restore } = moving();
+    try {
+      tabNamed(ribbon, "rich.ribbon.tab.insert").click();
+      const panel = ribbon.element.querySelector<HTMLElement>('.rich-ribbon-panel[data-tab="insert"]')!;
+      expect(panel.hidden).toBe(false);
+      const groups = [...panel.querySelectorAll<HTMLElement>(".rich-ribbon-group")].filter((group) => !group.hidden);
+      expect(groups.length).toBeGreaterThan(1);
+      const starts = groups.map((group) => driver.plays.find((play) => play.el === group));
+      expect(starts.every(Boolean), "ogni foglietto entra").toBe(true);
+      expect(starts[1]!.timing.delay ?? 0).toBeGreaterThan(starts[0]!.timing.delay ?? 0);
+    } finally {
+      restore();
+    }
+    expect(activeMotions()).toBe(0);
+  });
+
+  it("Ctrl+F1 muove la tenda: la pagina sale sull'immagine del vassoio, e scende alla riapertura", () => {
+    const { driver, ribbon, surface, page, panels, restore } = moving();
+    try {
+      ctrlF1(surface);
+      expect(panels.hidden).toBe(true);
+      expect(ribbon.element.querySelectorAll("[inert]"), "l'immagine del vassoio svanisce").toHaveLength(1);
+      expect(driver.plays.some((play) => play.el === page), "la pagina sale").toBe(true);
+      driver.advance(400);
+      expect(ribbon.element.querySelectorAll("[inert]")).toHaveLength(0);
+      const before = driver.plays.length;
+      ctrlF1(surface);
+      expect(panels.hidden).toBe(false);
+      expect(driver.plays.slice(before).some((play) => play.el === page), "la pagina scende").toBe(true);
+    } finally {
+      restore();
+    }
+    expect(activeMotions()).toBe(0);
+  });
+
+  it("col moto ridotto lo stato cambia subito, senza corse", () => {
+    const { driver, ribbon, surface, page, panels, restore } = moving();
+    try {
+      setMotionPreference("reduced");
+      tabNamed(ribbon, "rich.ribbon.tab.insert").click();
+      expect(ribbon.element.querySelector<HTMLElement>('.rich-ribbon-panel[data-tab="insert"]')!.hidden).toBe(false);
+      ctrlF1(surface);
+      expect(panels.hidden).toBe(true);
+      expect(driver.plays).toHaveLength(0);
+      expect(liveState(page)).toBeNull();
+    } finally {
+      restore();
+    }
   });
 });

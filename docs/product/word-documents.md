@@ -16,13 +16,18 @@ schede **Home**, **Inserisci**, **Layout**, **Revisione** e **Visualizza**, e
 accanto alle schede. Alt o F10 mostrano le lettere di ogni scheda e di ogni
 comando, `Ctrl+F1` ritira la barra e la riapre; ritirata, una scheda scelta
 si apre per un gesto. Stretta, la barra raccoglie prima Modifica, Stili e
-Paragrafo in un pulsante ciascuno; un gruppo raccolto si apre sul posto,
+Paragrafo in un pulsante ciascuno, e per ultimo Carattere; un gruppo raccolto si apre sul posto,
 nella barra, e gli altri si raccolgono per fargli posto: Esc lo richiude e
 torna al suo pulsante. Un comando che adesso non si dà resta al suo posto,
 spento, e il suggerimento dice perché. La barra è quella dei fogli: le
 schede sono segmenti come le schede dell'ispettore, con la scelta su un
 foglietto, e i comandi stanno in foglietti su un vassoio un tono sotto la
-carta.
+carta. Si muove anche come quella dei fogli: cambiando scheda il segno scorre
+e i foglietti entrano uno dopo l'altro dal lato della scheda; ritirandola la
+ricerca e la pagina salgono sul vassoio che svanisce, e riaprendola
+riscendono, senza che lo scorrimento cambi; il gruppo che si apre sul posto
+si alza, e gli altri scivolano per fargli posto. Con il moto ridotto gli
+stessi stati arrivano subito.
 
 Si modificano:
 
@@ -291,7 +296,7 @@ il predefinito, se l'aspetto del contenuto in Preferenze › Aspetto è
 automatico. I segni di Fub (revisioni, correttore, ricerca, commenti)
 prendono i colori della carta su cui stanno.
 
-Cambiando modo, ritirando la barra o cambiando lo zoom si muove la carta, e
+Cambiando modo o cambiando lo zoom si muove la carta, e
 il testo è già al suo posto: il paragrafo in cima alla vista resta in cima, e
 lo zoom tiene fermo il centro della vista. Un foglio aperto da `Ctrl+Invio`
 esce da quello sopra; tolto il salto, la sua sagoma si dissolve. Un documento

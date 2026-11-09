@@ -173,18 +173,18 @@ function seen(paper: Rect, live: MotionState | null, scale: number): Rect {
 /// L'aspetto scritto in una classe (`look-*`).
 const lookIn = (classes: string | null): string => (classes ?? "").split(/\s+/).filter((name) => name.startsWith("look-")).sort().join(" ");
 
-/// Una mutazione che sposta la carta: un'altra modalità o un altro aspetto,
-/// la barra che si nasconde, o la barra intera che si raccoglie (non un suo
-/// gruppo che si stringe).
-function moves(record: MutationRecord, ribbon: HTMLElement | null): boolean {
+/// Una mutazione che sposta la carta: un'altra modalità o un altro aspetto, o
+/// la barra che si nasconde. La barra che si ritira e si riapre (Ctrl+F1) no:
+/// la pagina intera sale e scende con la tenda della barra
+/// (`kit/ribbon/ribbon-motion.ts`), con la carta e il testo dentro, e lo
+/// scorrimento resta quello di prima.
+function moves(record: MutationRecord): boolean {
   const target = record.target as Element;
   switch (record.attributeName) {
     case "class":
       return lookIn(record.oldValue) !== lookIn(target.getAttribute("class"));
     case "data-mode":
       return record.oldValue !== target.getAttribute("data-mode");
-    case "data-collapsed":
-      return target.parentElement === ribbon;
     default:
       return true;
   }
@@ -371,20 +371,17 @@ export class RichMotion {
   }
 
   /// Segue la modalità e l'aspetto: gli attributi di `targets` e la barra
-  /// `ribbon`, che si nasconde in Lettura e si raccoglie con Ctrl+F1.
+  /// `ribbon`, che si nasconde in Lettura.
   follow(targets: readonly HTMLElement[], ribbon: HTMLElement | null): void {
     if (this.#life.closed || typeof MutationObserver === "undefined") return;
     this.#ribbon = ribbon;
     this.#observer?.disconnect();
     const observer = new MutationObserver((records) => {
       if (this.#life.closed) return;
-      if (records.some((record) => moves(record, ribbon))) this.#settle(this.#snapshot, "top");
+      if (records.some(moves)) this.#settle(this.#snapshot, "top");
     });
     for (const target of targets) observer.observe(target, { attributes: true, attributeFilter: ["class", "data-mode"], attributeOldValue: true });
-    if (ribbon) {
-      observer.observe(ribbon, { attributes: true, attributeFilter: ["hidden"] });
-      observer.observe(ribbon, { attributes: true, attributeFilter: ["data-collapsed"], subtree: true });
-    }
+    if (ribbon) observer.observe(ribbon, { attributes: true, attributeFilter: ["hidden"] });
     this.#observer = observer;
     this.#life.add(() => observer.disconnect());
     this.remember();

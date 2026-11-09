@@ -384,9 +384,10 @@ export const RICH_TABS: readonly RichTab[] = [
     id: "home",
     label: "rich.ribbon.tab.home",
     keytip: "H",
-    // Stretta, la barra raccoglie prima Modifica e Stili, poi Paragrafo;
-    // Carattere resta.
-    fold: ["editing", "styles", "paragraph"],
+    // Stretta, la barra raccoglie prima Modifica e Stili, poi Paragrafo e
+    // infine Carattere, come i gruppi dei fogli: al telefono si raccolgono
+    // tutti, e a 700 px con Stili aperto sul posto Carattere non resta tagliato.
+    fold: ["editing", "styles", "paragraph", "font"],
     groups: [
       {
         id: "font",
@@ -1131,6 +1132,9 @@ export function mountRichRibbon(
     menuPrefix: "rich.menu.",
     // Come nei fogli, il gruppo raccolto si apre sul posto, nella barra.
     openInPlace: true,
+    // E si muove come la barra dei fogli (`kit/ribbon/ribbon-motion.ts`): la
+    // tenda è ciò che sta sotto l'ospite, la ricerca e la pagina.
+    motion: true,
     tabs: RICH_TABS,
     quick: RICH_QUICK,
     mini: RICH_MINI,

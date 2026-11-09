@@ -2475,6 +2475,16 @@ body {
 .rich-findbar-row { display: flex; flex-wrap: wrap; align-items: center; }
 .rich-findbar-row > .kit-field { flex: 0 1 240px; }
 .rich-findbar-close { margin-left: auto; }
+/* La ricerca e la pagina stanno sopra la barra, come la formula e la griglia
+   dei fogli: quando la barra si ritira o si riapre le salgono sopra e la
+   scoprono, e l'immagine del vassoio che svanisce (un riquadro fisso dentro
+   la barra) resta sotto di loro, che vengono dopo. Nessun `z-index`: la
+   pagina non diventa un contesto di sovrapposizione, così il disegno
+   ingrandito (`.rich-drawing-large`) resta sopra la ricerca, e il pulsante
+   dei commenti del telefono, che viene dopo, sopra la pagina. L'avviso sta
+   sopra la barra, fuori dalla tenda. */
+.rich-findbar,
+.rich-page { position: relative; }
 /* I riquadri della barra: titolo, campi, azioni in fondo. */
 .rich-strip-panel { display: flex; flex-direction: column; width: 288px; max-width: 100%; }
 .rich-strip-panel-body { display: flex; flex-direction: column; }
