@@ -491,7 +491,7 @@ Fatto quando:
 - la foto del banco di `live-01-panoramica`, in giorno e notte, a 1280 e a 700, col menu chiuso e aperto, sta accanto a `?stato=nota`, e quella di `document-docx` accanto a `?stato=documento`; la testata non ha più il bottone della modalità;
 - sul telefono, in giorno e notte: `mobile-startup` accanto a `?stato=tel-nota`, la stessa col fuoco fuori dal testo accanto a `?stato=tel-ferma`, `mobile-keyboard` accanto a `?stato=tel-tastiera`, `mobile-startup` a 844×390 accanto a `?stato=tel-sdraiato`, `mobile-document` accanto a `?stato=tel-doc`.
 Prova: scripts/check.sh --rapido
-Stato: [ ] da fare
+Stato: [x] fatto · dc57be1d..a4298fa9 · la modalità è una voce della banda (figura, nome, freccia; clic, Invio, Spazio e ↑; Esc rende il fuoco), sul telefono il tondo in basso a destra, piatto nella barra di formato mentre si scrive; nessun bottone nella testata; l'anello di PA T47 resta (6,2:1 in chiaro, 6,9:1 al buio) · differenze: dopo la scelta il fuoco va all'editor (lo fa setMode); il tondo nasce in createPane; `docs/architecture/shell-behaviours.md` aggiornata · l'orchestratore ha aggiunto a `icon-names.json` le icone di T2 (rosso dopo l'unione di main con PA T40) · resta: per un docx il tondo del telefono mostra la penna finché `useRichIcons` non si chiama al montaggio di `editors/rich/surface.ts` (da fare con T7 o T17)
 
 ## T4 · «Si scrive» nella banda
 
