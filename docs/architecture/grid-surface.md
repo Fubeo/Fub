@@ -120,11 +120,11 @@ uguale a quella di prima resta lo stesso nodo e cambia soltanto le classi
 della selezione, così il doppio clic arriva e l'editor aperto non perde il
 fuoco. Lo scorrimento disegna al più una volta per fotogramma.
 
-La riga delle intestazioni, l'angolo, i numeri delle righe e le righe
-bloccate stanno fermi con `position: sticky`: sono nel flusso del riquadro,
-davanti al canvas che dà la misura, e li tiene a posto il compositore nello
-stesso fotogramma dello scorrimento, non il disegno che segue. Le colonne
-bloccate e i fili del blocco si rimettono ancora a posto nel disegno.
+Il piano (`.grid-plane`) è grande quanto il foglio: testa (intestazioni,
+righe bloccate) e colonna ferma (numeri delle righe, colonne bloccate) restano
+a posto col solo `sticky`, nello stesso fotogramma dello scorrimento. Le
+quattro zone hanno un livello di segni ciascuna: `editors/grid/marks.ts`
+taglia un rettangolo per zona; il quadratino e gli oggetti stanno interi.
 
 ## La selezione e il riempimento
 
