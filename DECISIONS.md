@@ -99,6 +99,16 @@ ciò che non dipende dalla risposta.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-09 · PA (dopo il piano) · le funzioni avanzate non ancora
+  provate a fondo si potranno nascondere in una versione ridotta e solida:
+  spente e invisibili di serie, con un gruppo «In prova» chiuso in
+  Impostazioni › Componenti per chi vuole accenderle; si scoprono una alla
+  volta man mano che l'utente le prova. Scelta dell'utente fra «Spente +
+  In prova», «Nascoste del tutto» e «Tolte dal programma». Non si fa ora:
+  è lavoro dopo la fine del piano pre-alpha, e né l'elenco delle funzioni
+  né i coder cambiano. Da ricordare quando si pianifica: un vault senza
+  chiavi `components.*` oggi vale «tutto acceso», quindi il «nascosto di
+  serie» deve stare nel canale della build, non nel profilo del vault.
 - 2026-11-09 · PA T49 (D28) · il logo Marcuzzo e il nome «Fub» non sono
   open: «tutti i diritti riservati» per i file del logo (`assets/logo/`,
   le icone dell'app) e una regola scritta sul marchio (per esempio
