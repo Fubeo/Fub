@@ -8329,6 +8329,7 @@ kbd,
 .canvas-pen-swatch {
   width: 28px;
   height: 28px;
+  padding: 0;
   border-radius: var(--radius-pill);
   box-shadow: inset 0 0 0 1px transparent;
 }

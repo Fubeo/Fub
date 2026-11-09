@@ -88,7 +88,7 @@ const HEX6 = /^#[0-9a-f]{6}$/i;
 /// che cresce e cala, nelle unità di `viewBox="0 0 60 28"`.
 const KIND_SAMPLE = wave(4, 56, 14, 7, 24);
 /// La misura del tratto d'esempio: le penne si confrontano alla stessa misura.
-const KIND_SAMPLE_SIZE = 6;
+const KIND_SAMPLE_SIZE = 3;
 /// L'anteprima dello spessore: `viewBox="0 0 256 44"`; oltre 40 pixel il
 /// tratto si mostra a 40.
 const WIDTH_PREVIEW_MAX = 40;
