@@ -99,6 +99,19 @@ ciò che non dipende dalla risposta.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-09 · scrittoio-2 (orchestratore) · S2 T9 aggiunge l'intento
+  non privilegiato `fub.inspector.tab` (`fub_abi::ui::INSPECTOR_TAB_NS`,
+  payload `{ view }`): «e altri N» sotto la Struttura porta ai Collegamenti;
+  si accetta come aggiunta additiva, documentata nel contratto IPC · il
+  registro delle view non aveva un modo di cambiare scheda dell'ispettore,
+  e l'intento cambia solo ciò che si guarda, quindi non serve privilegio.
+- 2026-11-09 · scrittoio-2 (orchestratore) · `bench:a11y` rosso in 119
+  scene su «3 collegamenti» (S2 T12, già integrato): Invio e Spazio
+  lanciavano l'azione senza un clic; corretto dall'orchestratore (b22a6650)
+  perché sono poche righe, prima di integrare T27, T28, T9 e T13 · da ora
+  ogni integrazione chiude su `bench:a11y` sul ramo unito, non solo su
+  quello del coder; il disco pieno (ENOSPC, 0 byte) aveva fermato i giri
+  finali dei coder, ora si fa `cargo clean` nei worktree finiti.
 - 2026-11-09 · scrittoio-2 (orchestratore) · S2 T21 si integra con il
   banco dell'accessibilità rosso solo su `conflitto-lettura` (il clic sulla
   riga della nota va in timeout), rosso già prima del task e fuori dai suoi
