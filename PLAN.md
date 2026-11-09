@@ -981,7 +981,7 @@ Fatto quando: `cargo test -p fub-motori --test caratteri` passa con: prima
 `None`; dopo `fornisci` le stesse facce; il secondo `fornisci` restituisce
 `Err`; dieci thread che leggono insieme vedono la stessa `Arc`.
 Prova: scripts/check.sh --rapido; cargo test -p fub-motori --test caratteri
-Stato: [ ] da fare
+Stato: [x] fatto (2026-11-09) · 4d151cd0..cec942d0 · 8 test in `tests/caratteri.rs`; differenze: `Generiche` definita come struct con `serif`, `sans`, `mono`; `nuovi` prende `impl IntoIterator`; `Debug` di `Caratteri` scritto a mano (conta facce e byte, non li stampa); il paragrafo della pagina è corto per la soglia di 450 righe
 
 ## T8 · La sessione del motore nel client
 
