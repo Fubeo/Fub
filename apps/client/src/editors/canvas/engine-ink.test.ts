@@ -1,12 +1,15 @@
 // @vitest-environment happy-dom
 // La penna sulla lavagna (N4 T12): il tratto si scrive nel `.canvas` con un
-// passo d'annulla, segue la scheda, e il ridisegno aspetta la penna.
+// passo d'annulla, segue la scheda, e il ridisegno aspetta la penna. La gomma
+// (T13, T22) toglie i tratti interi o ne taglia il pezzo, in un passo.
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { t } from "../../i18n/strings";
+import { quantizeInk, type InkSample } from "../../ink/sample";
+import { encodeInk, inkFromQuantized } from "../spatial/ink/codec";
 import { CanvasEngine, type CanvasChange, type CanvasCorePort } from "./engine";
 import { INK_SCALE_ASPECT } from "./ink-paint";
 import type { CanvasPatch } from "./operation";
-import { canvasCoreReady, openCoreNow } from "./wasm/core";
+import { CanvasCoreError, canvasCoreReady, openCoreNow } from "./wasm/core";
 
 // Il limite dei campioni di un pezzo, piccolo: un tratto spezzato si prova con
 // qualche decina di eventi invece che con diecimila (la scia si rifà a ogni
@@ -20,8 +23,12 @@ beforeAll(async () => {
   await canvasCoreReady();
 });
 
+/** Il nucleo rifiuta ogni commit come troppo grande (`limit`). */
+let refuseCommits = false;
+
 afterEach(() => {
   document.body.replaceChildren();
+  refuseCommits = false;
 });
 
 type Init = PointerEventInit & { readonly timeStamp?: number };
@@ -68,6 +75,7 @@ function countingPort(calls: string[]): CanvasCorePort {
           if (typeof value !== "function") return value;
           return (...args: unknown[]) => {
             calls.push(String(prop));
+            if (prop === "commit" && refuseCommits) throw new CanvasCoreError("limit", "troppo grande");
             return (value as (...a: unknown[]) => unknown).apply(target, args);
           };
         },
@@ -622,5 +630,134 @@ describe("la gomma «Il tratto intero» e il tasto D", () => {
     const { host } = mounted();
     keyD(viewportOf(host), "keydown", { ctrlKey: true });
     expect(viewportOf(host).dataset.ink).toBeUndefined();
+  });
+});
+
+/** Un tratto libero scritto a mano: `count` campioni da `x0`, ogni `step`, sulla riga `y`. */
+function freeStroke(id: string, x0: number, y: number, count: number, step: number): Json {
+  const samples: InkSample[] = [];
+  for (let i = 0; i < count; i++) samples.push({ x: x0 + i * step, y, t: i * 10, p: 0.5 });
+  return {
+    id,
+    tool: "pen",
+    at: "2026-11-09T10:00:00.000Z",
+    brush: "pf1 size=2 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=0 pen=ballpoint",
+    color: "#0072b2",
+    anchor: { kind: "free" },
+    ink: encodeInk(inkFromQuantized(quantizeInk(samples, 100))),
+    "x-vendor": { keep: true },
+  };
+}
+
+/** Una lavagna coi tratti liberi `strokes` sulla radice. */
+function boardWith(strokes: readonly Json[]): string {
+  return JSON.stringify({ nodes: [], edges: [], "fub:ink": { v: 1, strokes } });
+}
+
+/** Una passata a metà, sulla lavagna di `host`: muove la gomma già giù in `world`. */
+function eraserMove(host: HTMLElement, world: readonly (readonly [number, number])[]): void {
+  const cam = camera(host);
+  for (const [x, y] of world) {
+    clock += 8;
+    viewportOf(host).dispatchEvent(pointerEvent("pointermove", {
+      ...ERASER_PEN, clientX: x * cam.zoom + cam.x, clientY: y * cam.zoom + cam.y, button: -1, buttons: 32, pressure: 0.5, timeStamp: clock,
+    }));
+  }
+}
+
+const cutPaths = (element: Element, selector: string) => [...element.querySelectorAll(`${selector} path[data-ink-cut]`)];
+
+describe("la gomma «Solo il pezzo»", () => {
+  it("con «piece» la passata sbiadisce il pezzo e alla fine taglia, un passo, anche su due livelli", () => {
+    const { engine, host, changes } = mounted();
+    pen(host, card(host, "t"), [[20, 50], [60, 52], [100, 54], [140, 56], [180, 58]]);
+    pen(host, viewportOf(host), [[100, 300], [140, 300], [180, 300], [220, 300], [260, 300]]);
+    const before = lastChange(changes).text;
+    const [inCard] = strokesOf(before, "t");
+    const [free] = strokesOf(before, null);
+
+    engine.setInkEraser("piece");
+    const lift = eraser(host, viewportOf(host), [[100, 20], [100, 90]], false);
+    // Il tratto della nota sbiadisce e sopra restano pieni i due pezzi.
+    expect(opacities(card(host, "t"))).toEqual(["0.25", null]);
+    expect(cutPaths(card(host, "t"), ".canvas-ink-card")).toHaveLength(1);
+    eraserMove(host, [[180, 200], [180, 280], [180, 320]]);
+    expect(opacities(host, ".canvas-ink-board path")).toEqual(["0.25", null]);
+    expect(changes).toHaveLength(2);
+    lift();
+
+    expect(changes).toHaveLength(3);
+    const patches = lastChange(changes).operation.patches as unknown as ReadonlyArray<{ before: unknown; after: unknown }>;
+    expect(patches.filter((patch) => patch.after === null)).toHaveLength(2);
+    expect(patches.filter((patch) => patch.before === null)).toHaveLength(4);
+    const text = lastChange(changes).text;
+    const cardPieces = strokesOf(text, "t");
+    const freePieces = strokesOf(text, null);
+    expect(cardPieces).toHaveLength(2);
+    expect(freePieces).toHaveLength(2);
+    for (const piece of [...cardPieces, ...freePieces]) expect(piece.id).not.toBe(inCard!.id);
+    expect(cardPieces.every((piece) => (piece.anchor as Json).kind === "card")).toBe(true);
+    expect(freePieces.every((piece) => piece.color === free!.color && piece.tool === free!.tool)).toBe(true);
+    // Dopo: niente sbiadito, niente anteprima, i pezzi disegnati.
+    expect(opacities(card(host, "t"))).toEqual([null, null]);
+    expect(cutPaths(host, ".canvas-ink-card")).toHaveLength(0);
+    expect(cutPaths(host, ".canvas-ink-board")).toHaveLength(0);
+
+    // Un passo: l'annulla ridà il testo di prima byte per byte, il ripeti i pezzi.
+    expect(engine.undo()).toBe(true);
+    expect(lastChange(changes).text).toBe(before);
+    expect(inkPaths(card(host, "t"))).toHaveLength(1);
+    expect(engine.redo()).toBe(true);
+    expect(lastChange(changes).text).toBe(text);
+  });
+
+  it("i campi del tratto, anche sconosciuti, passano ai pezzi; un tratto coperto tutto se ne va", () => {
+    const source = boardWith([freeStroke("a", 0, 0, 15, 40), freeStroke("b", 0, 100, 2, 2)]);
+    const { engine, host, changes } = mounted(source);
+    engine.setInkEraser("piece");
+    eraser(host, viewportOf(host), [[280, -30], [280, 30], [280, 60], [1, 100], [3, 100]]);
+    expect(changes).toHaveLength(1);
+    const pieces = strokesOf(lastChange(changes).text, null);
+    expect(pieces).toHaveLength(2);
+    for (const piece of pieces) {
+      expect(Object.keys(piece)).toEqual(["id", "tool", "at", "brush", "color", "anchor", "ink", "x-vendor"]);
+      expect(piece["x-vendor"]).toEqual({ keep: true });
+    }
+    expect(pieces[0]!.at).toBe("2026-11-09T10:00:00.000Z");
+    expect(pieces[1]!.at).not.toBe("2026-11-09T10:00:00.000Z");
+  });
+
+  it("una passata che fa mille pezzi è un commit e un passo", () => {
+    const strokes: Json[] = [];
+    for (let i = 0; i < 500; i++) strokes.push(freeStroke(`s${i}`, 0, i * 4, 15, 100));
+    const source = boardWith(strokes);
+    const { engine, host, changes, calls } = mounted(source);
+    engine.setInkEraser("piece");
+    const commits = calls.filter((call) => call === "commit").length;
+    eraser(host, viewportOf(host), [[700, -20], [700, 2020]]);
+    expect(calls.filter((call) => call === "commit").length).toBe(commits + 1);
+    expect(changes).toHaveLength(1);
+    expect(strokesOf(lastChange(changes).text, null)).toHaveLength(1000);
+    expect(engine.undo()).toBe(true);
+    expect(lastChange(changes).text).toBe(source);
+    expect(engine.undo()).toBe(false);
+  });
+
+  it("il rifiuto del nucleo non cambia niente e lo dice; la passata annullata rimette il tratto", () => {
+    const source = boardWith([freeStroke("a", 0, 0, 15, 40)]);
+    const { engine, host, changes } = mounted(source);
+    engine.setInkEraser("piece");
+    refuseCommits = true;
+    eraser(host, viewportOf(host), [[280, -30], [280, 30]]);
+    expect(changes).toEqual([]);
+    expect(host.querySelector('[role="alert"]')?.textContent).toBe(t("canvas.ink.full"));
+    expect(opacities(host, ".canvas-ink-board path")).toEqual([null]);
+    refuseCommits = false;
+
+    eraser(host, viewportOf(host), [[280, -30], [280, 30]], false);
+    expect(opacities(host, ".canvas-ink-board path")).toEqual(["0.25", null]);
+    document.dispatchEvent(pointerEvent("pointercancel", { ...ERASER_PEN, buttons: 0 }));
+    expect(opacities(host, ".canvas-ink-board path")).toEqual([null]);
+    expect(changes).toEqual([]);
   });
 });

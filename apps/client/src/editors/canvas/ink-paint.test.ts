@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { describe, expect, it, vi } from "vitest";
 import { FADED_OPACITY } from "../spatial/painter/svg-dom";
-import { fadeInkStroke, INK_FADED_OPACITY, INK_SCALE_ASPECT, InkPathCache, paintBoard, paintCard, type DryStroke } from "./ink-paint";
+import { cutInkStroke, fadeInkStroke, INK_FADED_OPACITY, INK_SCALE_ASPECT, InkPathCache, paintBoard, paintCard, type DryStroke } from "./ink-paint";
 
 const A: DryStroke = { id: "s1", path: "M0 0L10 0L10 10Z", fill: "#0072b2", ref: { width: 200, height: 100 } };
 const B: DryStroke = { id: "s2", path: "M5 5L20 5L20 20Z", fill: "#d55e00", ref: { width: 200, height: 100 } };
@@ -154,6 +154,37 @@ describe("l'inchiostro asciutto", () => {
     expect(fadeInkStroke(stage, "board", "s1", true)).toBe(true);
     expect(stage.querySelector(".canvas-ink-board path")!.getAttribute("opacity")).toBe(INK_FADED_OPACITY);
     expect(paths[0]!.hasAttribute("opacity")).toBe(false);
+  });
+
+  it("cutInkStroke attenua il tratto e gli mette sopra i pezzi pieni; null li toglie; il ridisegno li tiene", () => {
+    const host = cardElement();
+    paintCard(host, [A, B], "fixed");
+    const paths = [...host.querySelectorAll("path")];
+    expect(cutInkStroke(host, "card", "s1", "M0 0L2 0L2 2Z")).toBe(true);
+    const all = () => [...host.querySelectorAll("path")];
+    expect(all()).toHaveLength(3);
+    expect(all()[0]).toBe(paths[0]);
+    expect(all()[1]!.getAttribute("data-ink-cut")).toBe("s1");
+    expect(all()[1]!.getAttribute("fill")).toBe(A.fill);
+    expect(all()[1]!.hasAttribute("opacity")).toBe(false);
+    expect(paths[0]!.getAttribute("opacity")).toBe(INK_FADED_OPACITY);
+    // Un taglio nuovo cambia il percorso dei pezzi, non ne aggiunge un altro.
+    expect(cutInkStroke(host, "card", "s1", "M0 0L3 0L3 3Z")).toBe(true);
+    expect(all()).toHaveLength(3);
+    expect(all()[1]!.getAttribute("d")).toBe("M0 0L3 0L3 3Z");
+    // Coperto tutto: solo attenuato.
+    expect(cutInkStroke(host, "card", "s1", "")).toBe(true);
+    expect(all()).toEqual(paths);
+    expect(cutInkStroke(host, "card", "s1", null)).toBe(true);
+    expect(paths[0]!.hasAttribute("opacity")).toBe(false);
+    expect(cutInkStroke(host, "card", "nessuno", "M0 0Z")).toBe(false);
+    // Il ridisegno con `cut` mette i pezzi dopo il loro tratto; senza, li toglie.
+    paintCard(host, [{ ...A, cut: "M0 0L2 0L2 2Z" }, B], "fixed");
+    expect(all().map((path) => [path.getAttribute("data-ink-stroke"), path.getAttribute("data-ink-cut"), path.getAttribute("opacity")]))
+      .toEqual([["s1", null, INK_FADED_OPACITY], [null, "s1", null], ["s2", null, null]]);
+    paintCard(host, [A, B], "fixed");
+    expect(all().map((path) => path.getAttribute("data-ink-stroke"))).toEqual(["s1", "s2"]);
+    expect(all().some((path) => path.hasAttribute("data-ink-cut") || path.hasAttribute("opacity"))).toBe(false);
   });
 
   it("l'ordine dei tratti resta anche fra misure diverse; meno tratti tolgono il resto; nessun tratto toglie lo strato", () => {

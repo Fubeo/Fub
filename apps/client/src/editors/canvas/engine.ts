@@ -9,14 +9,26 @@ import type { InkPointerType } from "../../ink/input/pointer";
 import { PenQuiet } from "../../ink/quiet";
 import type { InkSample } from "../../ink/sample";
 import { ERASER } from "../../ink/tools/eraser";
-import { EraseSweep } from "../../ink/tools/sweep";
+import { EraseSweep, type Spot } from "../../ink/tools/sweep";
 import { openLifetime, type Lifetime } from "../../ui/lifetime";
 import { mediaKindOfId } from "../media/media-types";
 import { anchorAt, strokeBounds } from "./anchor";
-import { erasableInk, InkEraseSource, inkKey, type ErasableInk } from "./ink-erase";
+import {
+  cutInk,
+  cutPath,
+  cutStrokePatches,
+  erasableInk,
+  InkEraseSource,
+  inkKey,
+  pieceRecords,
+  type CutPiece,
+  type ErasableInk,
+  type InkEraserMode,
+  type StrokeCut,
+} from "./ink-erase";
 import { inkFitMode } from "./ink-fit";
 import { mountInkLayer, type InkLayer, type InkLayerStroke } from "./ink-layer";
-import { fadeInkStroke, InkPathCache, paintBoard, paintCard, type DryStroke } from "./ink-paint";
+import { cutInkStroke, fadeInkStroke, InkPathCache, paintBoard, paintCard, type DryStroke } from "./ink-paint";
 import { watchPreferences } from "./preferences";
 import { isTap, pinchCamera, type TouchCamera, type TouchPoint, type ZoomLimits } from "./touch";
 import {
@@ -26,6 +38,7 @@ import {
   inkLayerStates,
   strokeRecord,
   toDry,
+  type DrawableStroke,
   type InkLayerRef,
   type InkLayerState,
 } from "./ink-record";
@@ -145,14 +158,26 @@ interface InkChain {
 }
 
 /**
- * Una passata della gomma «Il tratto intero» (A20): il tratto dell'adattatore
- * che la fa, il registro di ciò che ha preso e i tratti disegnati che può
- * prendere, fissati quando comincia.
+ * Una passata della gomma: il tratto dell'adattatore che la fa, il registro
+ * di ciò che ha preso e i tratti disegnati che può prendere, fissati quando
+ * comincia. Con `"piece"` (T22) anche il cammino fatto, in coordinate della
+ * lavagna, e il taglio di adesso di ogni tratto toccato, per chiave.
  */
 interface InkErase {
   readonly id: number;
   readonly sweep: EraseSweep<ErasableInk>;
   readonly source: InkEraseSource;
+  readonly mode: InkEraserMode;
+  readonly path: Spot[];
+  readonly cuts: Map<string, InkErasing>;
+}
+
+/** Un tratto che la gomma «Solo il pezzo» sta tagliando. */
+interface InkErasing {
+  readonly unit: ErasableInk;
+  readonly pieces: readonly CutPiece[];
+  /** Il contorno dei pezzi, per l'anteprima. */
+  readonly preview: string;
 }
 
 /** Il tasto che fa scrivere il mouse finché è giù (regola 1). */
@@ -359,6 +384,8 @@ export class CanvasEngine {
   #inkKeyDown = false;
   /** L'interruttore «Scrivi col mouse» (`setInkMouse`). */
   #inkMouse = false;
+  /** Che cosa fa la gomma (`setInkEraser`): di serie il tratto intero (A20). */
+  #inkEraser: InkEraserMode = "stroke";
 
   constructor(parent: HTMLElement, options: CanvasEngineOptions) {
     this.#options = options;
@@ -1146,7 +1173,17 @@ export class CanvasEngine {
     else delete this.#viewport.dataset.ink;
   }
 
-  // --- la gomma «Il tratto intero» (A20) -------------------------------------
+  // --- la gomma: «Il tratto intero» (A20) e «Solo il pezzo» (T22) -----------
+
+  /**
+   * Che cosa fa la gomma dalla prossima passata: toglie il tratto intero
+   * (`"stroke"`, di serie) o ne taglia solo il pezzo strofinato (`"piece"`).
+   * Una passata già cominciata finisce com'è.
+   */
+  setInkEraser(mode: InkEraserMode): void {
+    if (this.#destroyed || (mode !== "stroke" && mode !== "piece")) return;
+    this.#inkEraser = mode;
+  }
 
   /**
    * Comincia una passata del retro della penna o del tasto laterale: i tratti
@@ -1158,35 +1195,79 @@ export class CanvasEngine {
       id,
       sweep: new EraseSweep(ERASER, pointerType),
       source: new InkEraseSource(erasableInk(this.#inkStateList())),
+      mode: this.#inkEraser,
+      path: [],
+      cuts: new Map(),
     };
   }
 
-  /** Punti nuovi della passata: i tratti presi si attenuano, il resto no. */
+  /**
+   * Punti nuovi della passata: i tratti presi si attenuano, il resto no. Con
+   * `"piece"` si attenua solo il pezzo strofinato: i tratti vicini ai punti
+   * nuovi si ritagliano sul cammino fatto fin qui.
+   */
   #eraseAlong(id: number, points: readonly InkSample[]): void {
     const erase = this.#erase;
-    if (!erase || erase.id !== id) return;
+    if (!erase || erase.id !== id || points.length === 0) return;
+    const zoom = this.#camera.zoom;
     const before = erase.sweep.size;
-    for (const point of points) erase.sweep.along(erase.source, [point.x, point.y], this.#camera.zoom);
+    if (erase.mode === "stroke") {
+      for (const point of points) erase.sweep.along(erase.source, [point.x, point.y], zoom);
+      const marked = erase.sweep.marked();
+      for (let i = before; i < marked.length; i++) this.#fadeInk(marked[i]!, true);
+      return;
+    }
+    const radius = erase.sweep.radius / zoom;
+    const last = erase.path[erase.path.length - 1];
+    let loX = last ? last[0] : Infinity;
+    let loY = last ? last[1] : Infinity;
+    let hiX = last ? last[0] : -Infinity;
+    let hiY = last ? last[1] : -Infinity;
+    for (const point of points) {
+      const spot: Spot = [point.x, point.y];
+      erase.path.push(spot);
+      erase.sweep.along(erase.source, spot, zoom);
+      loX = Math.min(loX, spot[0]);
+      loY = Math.min(loY, spot[1]);
+      hiX = Math.max(hiX, spot[0]);
+      hiY = Math.max(hiY, spot[1]);
+    }
+    loX -= radius;
+    loY -= radius;
+    hiX += radius;
+    hiY += radius;
     const marked = erase.sweep.marked();
-    for (let i = before; i < marked.length; i++) this.#fadeInk(marked[i]!, true);
+    for (let i = 0; i < marked.length; i++) {
+      const unit = marked[i]!;
+      // Un tratto già preso cambia solo se i punti nuovi gli passano vicino.
+      if (i < before && (unit.maxX < loX || unit.minX > hiX || unit.maxY < loY || unit.minY > hiY)) continue;
+      const pieces = cutInk(unit, erase.path, radius);
+      if (pieces === null) {
+        if (erase.cuts.delete(unit.key)) this.#showCut(unit, null);
+        continue;
+      }
+      const preview = cutPath(pieces);
+      erase.cuts.set(unit.key, { unit, pieces, preview });
+      this.#showCut(unit, preview);
+    }
   }
 
   /**
-   * La passata è finita: i tratti presi si cancellano con un commit solo, un
-   * passo d'annulla, anche se stanno in più livelli. Niente preso, niente
-   * commit; un commit che non riesce rimette i tratti come erano.
+   * La passata è finita: i tratti presi si cancellano (o si tagliano) con un
+   * commit solo, un passo d'annulla, anche se stanno in più livelli. Niente
+   * preso, niente commit; un commit che non riesce rimette i tratti come
+   * erano.
    */
   #eraseEnd(id: number): void {
     const erase = this.#erase;
     if (!erase || erase.id !== id) return;
     this.#erase = null;
-    const marked = erase.sweep.marked();
-    if (marked.length === 0) return;
+    if (erase.mode === "stroke" ? erase.sweep.size === 0 : erase.cuts.size === 0) return;
     let done = false;
     try {
-      done = this.#eraseCommit(marked);
+      done = erase.mode === "stroke" ? this.#eraseCommit(erase.sweep.marked()) : this.#cutCommit(this.#cutsOf(erase));
     } finally {
-      if (!done) for (const unit of marked) this.#fadeInk(unit, false);
+      if (!done) this.#restoreErase(erase);
     }
   }
 
@@ -1198,7 +1279,28 @@ export class CanvasEngine {
   #eraseDrop(): void {
     const erase = this.#erase;
     this.#erase = null;
-    if (erase) for (const unit of erase.sweep.marked()) this.#fadeInk(unit, false);
+    if (erase) this.#restoreErase(erase);
+  }
+
+  /** Rimette come erano i tratti che la passata `erase` mostrava presi o tagliati. */
+  #restoreErase(erase: InkErase): void {
+    if (erase.mode === "stroke") for (const unit of erase.sweep.marked()) this.#fadeInk(unit, false);
+    else for (const { unit } of erase.cuts.values()) this.#showCut(unit, null);
+  }
+
+  /** I tagli della passata nell'ordine in cui la gomma ha preso i tratti. */
+  #cutsOf(erase: InkErase): InkErasing[] {
+    const cuts: InkErasing[] = [];
+    for (const unit of erase.sweep.marked()) {
+      const cut = erase.cuts.get(unit.key);
+      if (cut) cuts.push(cut);
+    }
+    return cuts;
+  }
+
+  /** L'elemento della scheda `node` sulla scena; `null` se non c'è. */
+  #inkOwner(node: string): HTMLElement | null {
+    return this.#stage.querySelector<HTMLElement>(`.canvas-node[data-node="${CSS.escape(node)}"]`);
   }
 
   /** Attenua o rimette il percorso disegnato di un tratto, senza ridisegnare. */
@@ -1207,8 +1309,45 @@ export class CanvasEngine {
       fadeInkStroke(this.#stage, "board", unit.id, faded);
       return;
     }
-    const element = this.#stage.querySelector<HTMLElement>(`.canvas-node[data-node="${CSS.escape(unit.node)}"]`);
+    const element = this.#inkOwner(unit.node);
     if (element) fadeInkStroke(element, "card", unit.id, faded);
+  }
+
+  /** Mostra il taglio `preview` di un tratto (o lo toglie con `null`), senza ridisegnare. */
+  #showCut(unit: ErasableInk, preview: string | null): void {
+    if (unit.node === null) {
+      cutInkStroke(this.#stage, "board", unit.id, preview);
+      return;
+    }
+    const element = this.#inkOwner(unit.node);
+    if (element) cutInkStroke(element, "card", unit.id, preview);
+  }
+
+  /** Il primo passo di un commit della gomma: il documento e i livelli di adesso, dopo il testo in sospeso. */
+  #inkEditStart(): { readonly doc: CanvasDocument; readonly layers: readonly CanvasInkLayer[] } | null {
+    if (this.#destroyed || !this.#doc || this.#readOnly || this.#isSceneOversized()) return null;
+    this.#recordPending();
+    const doc = this.#doc;
+    const layers = this.#inkLayersNow();
+    return layers ? { doc, layers } : null;
+  }
+
+  /**
+   * Un commit solo con le toppe della gomma, un passo d'annulla; ciò che il
+   * nucleo rifiuta lo dice l'avviso. `true` se è riuscito.
+   */
+  #commitInkEdit(patches: readonly InkPatch[]): boolean {
+    if (patches.length === 0) return false;
+    const code = this.#commitLocal(patches, "input", (step) => this.#pushUndo(step, true), false);
+    if (code !== true) {
+      // Una trappola la dice il nucleo che si riapre.
+      if (code !== "trap") this.#showNotice(t(code === "limit" ? "canvas.ink.full" : "canvas.ink.refused"));
+      return false;
+    }
+    this.#inkChain = null;
+    this.#paintInk();
+    if (this.#intakeError) this.#showNotice("");
+    return true;
   }
 
   /**
@@ -1219,11 +1358,9 @@ export class CanvasEngine {
    * estraneo non si tocca. `true` se il commit è riuscito.
    */
   #eraseCommit(marked: readonly ErasableInk[]): boolean {
-    if (this.#destroyed || !this.#doc || this.#readOnly || this.#isSceneOversized()) return false;
-    this.#recordPending();
-    const doc = this.#doc;
-    const layers = this.#inkLayersNow();
-    if (!layers) return false;
+    const start = this.#inkEditStart();
+    if (!start) return false;
+    const { doc, layers } = start;
     const present = new Set<string>();
     for (const state of this.#inkStateList()) {
       for (const entry of state.strokes) present.add(inkKey(state.layer, entry.id));
@@ -1244,17 +1381,42 @@ export class CanvasEngine {
       const made = eraseStrokePatches(doc, layers, layer, ids);
       if (made) patches.push(...made);
     }
-    if (patches.length === 0) return false;
-    const code = this.#commitLocal(patches, "input", (step) => this.#pushUndo(step, true), false);
-    if (code !== true) {
-      // Una trappola la dice il nucleo che si riapre.
-      if (code !== "trap") this.#showNotice(t(code === "limit" ? "canvas.ink.full" : "canvas.ink.refused"));
-      return false;
+    return this.#commitInkEdit(patches);
+  }
+
+  /**
+   * Taglia i tratti di `cuts` nel documento di adesso: prima il testo in
+   * sospeso, poi, livello per livello, i pezzi al posto di ogni tratto e nel
+   * suo ordine (`cutStrokePatches`), in un commit solo. Un tratto che nel
+   * frattempo non c'è più, o è cambiato, si lascia; un livello diventato
+   * estraneo non si tocca. `true` se il commit è riuscito.
+   */
+  #cutCommit(cuts: readonly InkErasing[]): boolean {
+    const start = this.#inkEditStart();
+    if (!start) return false;
+    const { doc, layers } = start;
+    const present = new Map<string, DrawableStroke>();
+    for (const state of this.#inkStateList()) {
+      for (const stroke of state.drawable) present.set(inkKey(state.layer, stroke.id), stroke);
     }
-    this.#inkChain = null;
-    this.#paintInk();
-    if (this.#intakeError) this.#showNotice("");
-    return true;
+    const groups = new Map<string, { readonly layer: InkLayerRef; readonly cuts: StrokeCut[] }>();
+    for (const { unit, pieces } of cuts) {
+      const now = present.get(unit.key);
+      if (!now || now.inkText !== unit.stroke.inkText || now.brushText !== unit.stroke.brushText) continue;
+      const group = unit.node === null ? "board" : `node\u0000${unit.node}`;
+      let entry = groups.get(group);
+      if (!entry) {
+        entry = { layer: unit.layer, cuts: [] };
+        groups.set(group, entry);
+      }
+      entry.cuts.push({ id: unit.id, pieces: pieceRecords(now, pieces) });
+    }
+    const patches: InkPatch[] = [];
+    for (const { layer, cuts: layerCuts } of groups.values()) {
+      const made = cutStrokePatches(doc, layers, layer, layerCuts);
+      if (made) patches.push(...made);
+    }
+    return this.#commitInkEdit(patches);
   }
 
   /**
@@ -1297,14 +1459,20 @@ export class CanvasEngine {
     if (!this.#doc || this.#isSceneOversized()) return;
     const cards = new Map<string, readonly DryStroke[]>();
     let board: DryStroke[] = [];
-    // Ciò che la gomma ha preso resta attenuato anche se lo strato si ridisegna.
-    const faded = this.#erase ? new Set(this.#erase.sweep.marked().map((unit) => unit.key)) : null;
+    // Ciò che la gomma ha preso resta attenuato (o tagliato) anche se lo
+    // strato si ridisegna.
+    const erase = this.#erase;
+    const faded = erase?.mode === "stroke" ? new Set(erase.sweep.marked().map((unit) => unit.key)) : null;
+    const cuts = erase?.mode === "piece" ? erase.cuts : null;
     for (const state of this.#inkStateList()) {
       const drys: DryStroke[] = [];
       for (const stroke of state.drawable) {
         const dry = dryStroke(stroke, this.#inkPaths);
         if (!dry) continue;
-        drys.push(faded?.has(inkKey(state.layer, stroke.id)) ? { ...dry, faded: true } : dry);
+        const key = inkKey(state.layer, stroke.id);
+        const cut = cuts?.get(key);
+        if (cut && cut.unit.stroke.inkText === stroke.inkText) drys.push({ ...dry, cut: cut.preview });
+        else drys.push(faded?.has(key) ? { ...dry, faded: true } : dry);
       }
       if (state.node) cards.set(state.node.id, drys);
       else board = drys;

@@ -370,6 +370,12 @@ schede.
   attenuano (`fadeInkStroke`, opacità 0,25) senza ridisegnare il resto; alla
   fine un commit con una `eraseStrokePatches` per livello, un passo solo.
   Niente preso, niente commit; una passata annullata li rimette.
+  `setInkEraser("piece")` taglia invece solo il pezzo strofinato: `cutInk`
+  riporta il cammino nelle unità del tratto e usa `splitInk` e `cutBrush`;
+  durante la passata il tratto si attenua e sopra restano pieni i pezzi
+  (`cutInkStroke`). Alla fine `cutStrokePatches` mette i pezzi al posto del
+  tratto, nel suo ordine, in un commit; un rifiuto del nucleo non cambia
+  niente e lo dice l'avviso.
 - **Il tasto D.** D da solo sul viewport, fuori dai campi di testo, fa
   scrivere il mouse (`data-ink="pen"` sul viewport) finché non si alza; lo
   lasciano anche la finestra che perde il fuoco e `visibilitychange`. Un
@@ -399,7 +405,7 @@ schede.
 | la penna della lavagna non arriva alla lavagna; il mouse sì | `editors/canvas/ink-layer.test.ts` |
 | l'inchiostro di una scheda la segue senza ridisegnare | `editors/canvas/ink-paint.test.ts` |
 | un tratto è una toppa, un commit e un passo; il ridisegno aspetta la penna | `editors/canvas/engine-ink.test.ts` |
-| la gomma prende il tratto dove si vede e cancella in un passo; D fa scrivere il mouse | `editors/canvas/ink-erase.test.ts`, `editors/canvas/engine-ink.test.ts` |
+| la gomma prende il tratto dove si vede, cancella o taglia in un passo; D fa scrivere il mouse | `editors/canvas/ink-erase.test.ts`, `editors/canvas/engine-ink.test.ts` |
 | il dito sposta e pizzica la lavagna; la penna, anche sospesa, lo ferma | `editors/canvas/touch.test.ts`, `editors/canvas/engine-touch.test.ts` |
 | Rust e client nominano uguale le impostazioni della lavagna | `editors/canvas/settings-mirror.test.ts`, `fub-host/tests/lavagna_feature.rs` |
 | un puntatore fermo resta fermo nella scena se la vista si muove | `ink/dom/pointer-adapter.test.ts`, `tools/editor.test.ts` |

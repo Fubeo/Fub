@@ -224,6 +224,10 @@ fissa, la prima che vale in quest'ordine:
   `{"v": 1, "strokes": []}`, la chiave `fub:ink` sparisce. Se il livello ha
   altri campi, resta. Annullare rimette la chiave in fondo ai campi della
   scheda: il modello torna uguale per valore.
+- **I pezzi della gomma che taglia:** ogni pezzo è un tratto nuovo al posto
+  di quello tagliato, nel suo ordine, con un id nuovo, gli stessi campi
+  (anche gli sconosciuti), `at` spostato all'inizio del pezzo se c'era, il
+  suo `ink` e, ai tagli, `taperStart` o `taperEnd` a 0.
 - **Il resto del file** non cambia: spostare o ridimensionare una scheda non
   scrive niente per l'inchiostro, e un tratto nuovo tocca solo il suo livello.
 
