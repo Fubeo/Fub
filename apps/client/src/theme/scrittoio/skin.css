@@ -8280,8 +8280,8 @@ kbd,
 .canvas-ink-pen-name {
   color: inherit;
 }
-/* Il menu: un rialzo del kit, con le sezioni una sotto l'altra. */
-.kit-popover.canvas-pen-popover {
+/* Il menu: un rialzo del kit (questo pezzo viene dopo kit), con le sezioni una sotto l'altra. */
+.canvas-pen-popover {
   padding: var(--space-4);
 }
 .canvas-pen-menu {
