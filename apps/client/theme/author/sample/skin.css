@@ -3956,6 +3956,7 @@ kbd,
 .tab {
   display: inline-flex;
   align-items: center;
+  gap: var(--space-3);
   padding: 0 var(--space-2) 0 var(--space-5);
   border: none;
   border-radius: var(--radius-chip);
@@ -3972,7 +3973,7 @@ kbd,
 }
 .tab[aria-selected="true"] {
   color: var(--text);
-  font-weight: var(--weight-bold);
+  font-weight: var(--weight-medium);
 }
 .tab:focus-visible {
   outline: var(--focus-ring-width) solid var(--focus-ring);
@@ -3984,13 +3985,18 @@ kbd,
   overflow: hidden;
   text-overflow: ellipsis;
 }
+/* Ogni linguetta porta la figura del suo formato, anche la nota: tenue a
+   riposo, piena sull'attiva. */
 .tab-pin,
 .tab-format {
-  width: 12px;
-  height: 12px;
-  margin-right: var(--space-2);
+  width: 14px;
+  height: 14px;
+  margin-right: var(--space-4);
   color: var(--muted);
-  vertical-align: -1px;
+  vertical-align: -2px;
+}
+.tab[aria-selected="true"] .tab-format {
+  color: var(--text);
 }
 /* L'icona della pagina (`icon:`), un'emoji: grande quanto il nome, staccata
    come le figure. */
@@ -4638,13 +4644,14 @@ kbd,
   font-size: var(--text-base);
   text-align: left;
 }
+/* L'etichetta parla a voce bassa: in tondo, non in maiuscoletto. */
 .sheet-desk-label {
   padding: 0 var(--space-4);
   color: var(--muted);
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
   font-weight: var(--weight-medium);
-  letter-spacing: var(--tracking-caps);
-  text-transform: uppercase;
+  letter-spacing: 0;
+  text-transform: none;
 }
 .sheet-desk-row {
   padding: var(--space-3) var(--space-4);
