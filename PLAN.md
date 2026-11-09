@@ -796,7 +796,7 @@ Fatto quando:
 - in Sorgente la riga non c'è;
 - la foto di `live-01-panoramica`, in giorno e notte, a 1280 e a 700, sta accanto a `?stato=nota`, e quella di `mobile-startup` accanto a `?stato=tel-nota`.
 Prova: scripts/check.sh --rapido
-Stato: [ ] da fare
+Stato: [x] fatto
 
 ## T13 · «In entrata» sotto la Struttura
 
@@ -892,7 +892,7 @@ Dal prototipo: gli stati `icone` e `icone-emoji`.
 Casi limite: una scena che oggi conta sull'emoji di una cartella (va cercata con `grep` in `bench/`); il parametro sconosciuto; le sonde del banco che leggono il testo di una riga.
 Fatto quando: aprendo il banco con e senza `?icone=emoji` il cassetto mostra le emoji e le figure, e `npx vitest run bench` passa.
 Prova: scripts/check.sh --rapido
-Stato: [ ] da fare
+Stato: [x] fatto
 
 ## T16 · La barra in una fila e la colonna, nel kit
 
@@ -1155,7 +1155,7 @@ Fatto quando:
 - il menu delle modalità della banda, aperto su una lavagna, mostra la figura;
 - se N6 T49–T52 sono già in `main`, una foto della lavagna con la cornice comune sta accanto a `lavagna-schede.html` di N6; se non ci sono, il report lo dice.
 Prova: scripts/check.sh --rapido
-Stato: [ ] da fare
+Stato: [x] fatto
 
 ## T24 · Le scene nuove del banco
 
