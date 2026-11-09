@@ -86,6 +86,9 @@ describe("il costrutto delle icone", () => {
       // Il disegno nuovo e l'inchiostro di un documento di Word sono SVG del
       // documento (ADR 0226), non icone della shell.
       .filter(([path]) => !path.endsWith("/editors/rich/drawing.ts") && !path.endsWith("/editors/rich/ink-shape.ts"))
+      // Marcuzzo è il logo, non un'icona: la copia byte per byte di
+      // `assets/logo/marcuzzo.svg`, tenuta uguale da `marcuzzo.test.ts`.
+      .filter(([path]) => path !== "./marcuzzo.ts" && !path.endsWith("/ui/marcuzzo.ts"))
       .filter(([, text]) => /<svg\b/i.test(text))
       .map(([path]) => path);
     expect(offenders, `SVG fuori dal modulo icone: ${offenders.join(", ")}`).toEqual([]);
