@@ -99,6 +99,13 @@ ciò che non dipende dalla risposta.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-09 · K2 · dopo il merge di main `docs/reference/ipc-contract.md`
+  passava la soglia (589 righe contro 550): la sezione «Componenti» è
+  diventata `docs/reference/components-contract.md`, con un riassunto e il
+  link nel contratto IPC, come la sessione live · spezzare per argomento è la
+  regola delle pagine; i cinque test vitest rossi del controllo rapido erano
+  di tempo sotto carico, verdi rilanciati da soli. #290 segnata pronta a
+  be4b179a, CI completa in corso.
 - 2026-11-09 · griglia T1 · integrato con le differenze del coder: la
   cartella grande sta fra le scene dei soli gesti (niente baseline né a11y),
   i livelli dei segni sono a misura zero e li taglia `clip-path` (con livelli
