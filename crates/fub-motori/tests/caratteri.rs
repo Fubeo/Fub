@@ -87,7 +87,9 @@ fn zero_facce_sono_ammesse() {
 fn servizi_separati_hanno_caratteri_separati() {
     let primi = servizi();
     let secondi = servizi();
-    primi.fornisci_caratteri(caratteri()).expect("dati ai primi");
+    primi
+        .fornisci_caratteri(caratteri())
+        .expect("dati ai primi");
     assert!(secondi.caratteri().is_none());
 }
 
