@@ -99,6 +99,16 @@ ciò che non dipende dalla risposta.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-09 · K5 T6 · integrato senza aspettare la licenza IJG di
+  `jpeg-encoder` (lo usa `render` per il JPEG): oggi `cargo deny` di Fub è
+  verde perché nessun crate di Fub dipende dal motore, diventa rosso a T9; la
+  scelta (eccezione in `deny.toml`, IJG nell'elenco, o una patch 0003 che usa
+  l'encoder di `image`) è dell'utente, perché tocca la politica delle licenze ·
+  la regola «deny.toml solo chiedendo»; T7 e i task del client non ne
+  dipendono. In CI: due passi `check` e i test del workspace di VectorCraft
+  accanto a GridCraft; `vectorcraft` nella matrice di `motori-upstream.yml`,
+  le due librerie di craft-libs no (lo stesso repository aprirebbe due issue
+  per un tag).
 - 2026-11-09 · pre-alpha (utente) · rinviati: la prova con cinque persone
   (PA T17, e ciò che la usa), il giro a mano sugli installer (PA T23,
   «con calma quando avrò tempo») e la firma di Windows (PA T50, D20
