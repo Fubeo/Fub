@@ -451,7 +451,7 @@ cinque righe in più) e nessun pezzo sopra le fasce; `marks.test.ts` e
 `check-listeners` verdi.
 Prova: scripts/check.sh --rapido, poi `npm run bench:grid` e
 `npm run bench:a11y`
-Stato: [ ] da fare
+Stato: [x] fatto
 
 ## T2 · La carta sotto le celle e le righe che restano
 
