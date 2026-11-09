@@ -1257,7 +1257,7 @@ testo del `.canvas` (nessuna chiamata che scrive altri file);
 `engine.test.ts` passa invariato.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/canvas
-Stato: [ ] da fare
+Stato: [x] fatto
 
 ## T13 · La gomma e il tasto D
 
