@@ -417,8 +417,8 @@ o il disegno resta agli eventi di copia e incolla del browser.
 
 ## Superfici di editing
 
-Sessione documento, superfici, motori e profili, insieme al confine di
-CodeMirror e al suo guard, sono in [Superfici dell'editor](editor-surfaces.md).
+Sessione, superfici, motori, profili e confine di CodeMirror sono in
+[Superfici dell'editor](editor-surfaces.md), i componenti in [Editor dei componenti](component-editors.md).
 
 ## Guard del frontend
 

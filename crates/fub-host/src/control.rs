@@ -139,6 +139,17 @@ pub enum Call {
         key: String,
         value: SettingValue,
     },
+    /// La mappa dei componenti e il loro stato ([`Host::components`]).
+    Components {
+        vault: Option<String>,
+    },
+    /// Applica una scelta sui componenti, o la prova senza `apply`
+    /// ([`Host::apply_components`]).
+    ApplyComponents {
+        vault: Option<String>,
+        azione: crate::componenti::Azione,
+        apply: bool,
+    },
     ResetSetting {
         vault: Option<String>,
         key: String,
@@ -252,6 +263,12 @@ pub fn answer(host: &Host, call: Call) -> Result<Value, PluginError> {
         Call::SetPluginEnabled { vault, id, enabled } => {
             to_value(host.set_plugin_enabled(vault.as_deref(), &id, enabled)?)
         }
+        Call::Components { vault } => to_value(host.components(vault.as_deref())?),
+        Call::ApplyComponents {
+            vault,
+            azione,
+            apply,
+        } => to_value(host.apply_components(vault.as_deref(), azione, apply)?),
         Call::SetSetting { vault, key, value } => {
             to_value(host.set_setting_for_user(vault.as_deref(), &key, value)?)
         }
@@ -644,6 +661,8 @@ mod tests {
             Call::ViewAction { .. } => "view_action",
             Call::SetPluginEnabled { .. } => "set_plugin_enabled",
             Call::SetSetting { .. } => "set_setting",
+            Call::Components { .. } => "components",
+            Call::ApplyComponents { .. } => "apply_components",
             Call::ResetSetting { .. } => "reset_setting",
             Call::SessionNotice => "session_notice",
             Call::StartupDiagnostics { .. } => "startup_diagnostics",
@@ -654,7 +673,7 @@ mod tests {
         }
     }
 
-    const CALLS: usize = 22;
+    const CALLS: usize = 24;
 
     fn every_call() -> Vec<Call> {
         let vault = || Some("/v".to_string());
@@ -729,6 +748,14 @@ mod tests {
                 vault: vault(),
                 key: "craft.cli-previews".into(),
                 value: SettingValue::Text("ask".into()),
+            },
+            Call::Components { vault: vault() },
+            Call::ApplyComponents {
+                vault: vault(),
+                azione: crate::componenti::Azione::Accendi {
+                    id: "fub.graph".into(),
+                },
+                apply: false,
             },
             Call::ResetSetting {
                 vault: vault(),

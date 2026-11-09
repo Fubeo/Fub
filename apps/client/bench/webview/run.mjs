@@ -1,8 +1,9 @@
 // Gli scenari di N0, S7 di N13, la memoria (R1), le tessere (T1) e
-// l'indicizzazione (I1) di K0, e il nucleo della lavagna (L1) di N3, nella
-// WebView vera, guidati da WebDriver.
+// l'indicizzazione (I1) di K0, il nucleo della lavagna (L1) di N3 e i chunk
+// di ciascun profilo dei componenti (C1) di K2, nella WebView vera, guidati da
+// WebDriver.
 //
-//   node bench/webview/run.mjs --app=../../target/release/fub [--only=S1,S2,S3]
+//   node bench/webview/run.mjs --app=../../target/release/fub [--only=S1,S2,S3,C1]
 //        [--driver=tauri-driver] [--native-driver=/usr/bin/WebKitWebDriver]
 //        [--budgets=ci|targets] [--out=bench/.output/webview] [--dist=dist]
 //        [--gc=no]
@@ -43,7 +44,7 @@ const args = Object.fromEntries(process.argv.slice(2).map((arg) => {
   return [key, value];
 }));
 const app = resolve(args.app ?? join(here, "../../../../target/release/fub"));
-const only = new Set((args.only ?? "S1,S2,S3,S4,S5,S6,S7,R1,T1,I1,L1").split(","));
+const only = new Set((args.only ?? "S1,S2,S3,S4,S5,S6,S7,R1,T1,I1,L1,C1").split(","));
 const out = resolve(args.out ?? join(here, "../.output/webview"));
 const budgetsKind = args.budgets ?? "ci";
 const port = Number(args.port ?? 4444);
@@ -203,6 +204,68 @@ async function closeAll(session) {
     await pause(200);
   }
   return left;
+}
+
+/// I profili dei componenti che C1 misura, nell'ordine: il vault del banco
+/// resta all'ultimo, «Tutto», come chi non ha scelto niente.
+const C1_PROFILES = [["solo-note", "Solo note"], ["tutto", "Tutto"]];
+
+/// I file JavaScript che la pagina ha scaricato fin qui, con l'impronta
+/// (`editors-canvas-Bx3kQ9aZ.js`), in ordine.
+const CHUNKS_SCRIPT = `
+  // La WebView non mette sempre fra le risorse ciò che arriva dal protocollo
+  // dell'app: contano anche gli script della pagina e i modulepreload, che
+  // Vite scrive per gli import statici e per quelli di ogni import().
+  const urls = [
+    ...performance.getEntriesByType("resource").map((entry) => entry.name),
+    ...[...document.querySelectorAll("script[src]")].map((node) => node.src),
+    ...[...document.querySelectorAll("link[rel=modulepreload][href]")].map((node) => node.href),
+  ];
+  const names = urls
+    .map((url) => url.split("?")[0].split("/").pop() ?? "")
+    .filter((name) => name.endsWith(".js"));
+  return [...new Set(names)].sort();
+`;
+
+/// Il nome di un chunk senza l'impronta, per il referto
+/// (`editors-canvas-Bx3kQ9aZ.js` → `editors-canvas`).
+const chunkName = (file) => file.replace(/\.js$/, "").replace(/-[A-Za-z0-9_-]{8}$/, "");
+
+/// I chunk del build che contengono un pezzo di un componente spegnibile (il
+/// PDF, la lavagna, i disegni, i documenti, i fogli), con i moduli che ce lo
+/// portano: li scrive il plugin di `vite.config.ts` accanto a ciò che
+/// descrive. Nessuno deve arrivare nella WebView all'avvio o aprendo una
+/// nota, in nessun profilo (D-1, A8): arrivano quando si apre un loro file.
+function switchableChunks() {
+  const file = join(here, "../../dist/switchable-chunks.json");
+  let parsed;
+  try {
+    parsed = JSON.parse(readFileSync(file, "utf8"));
+  } catch (error) {
+    throw new Error(`manca l'elenco dei chunk spegnibili del build (${file}): serve \`npm run build\` prima dell'app (${error?.code ?? error})`);
+  }
+  const chunks = new Map();
+  for (const [what, files] of Object.entries(parsed)) {
+    for (const [name, modules] of Object.entries(files)) {
+      const shown = modules.length > 3 ? [...modules.slice(0, 3), `altri ${modules.length - 3}`] : modules;
+      const key = name.split("/").pop();
+      chunks.set(key, [...(chunks.get(key) ?? []), shown.length ? `${what}: ${shown.join(", ")}` : what]);
+    }
+  }
+  if (chunks.size === 0) throw new Error(`${file} non nomina nessun chunk: il build non separa più i componenti spegnibili`);
+  return chunks;
+}
+
+/// Applica un profilo dei componenti col comando vero dell'host, come la
+/// pagina Componenti: le chiavi del vault le scrive l'host, non il banco.
+async function applyProfile(session, nome) {
+  const answer = await session.executeAsync(`
+    const done = arguments[arguments.length - 1];
+    window.__TAURI_INTERNALS__.invoke("components_apply", { vault: null, azione: { azione: "profilo", nome: arguments[0] }, apply: true })
+      .then((result) => done(JSON.stringify(result)), (error) => done(JSON.stringify({ errore: String(error) })));
+  `, [nome]);
+  const parsed = JSON.parse(answer);
+  if (parsed.risposta !== "esito") throw new Error(`il profilo «${nome}» non si applica: ${answer.slice(0, 300)}`);
 }
 
 const SCENARIOS = {
@@ -548,6 +611,45 @@ const SCENARIOS = {
       samples: report.open?.count ?? 0,
     };
   },
+  /// I chunk di ciascun profilo dei componenti (K2): per «Solo note» e per
+  /// «Tutto» il profilo si applica, si lascia aperta la nota lunga, e l'app
+  /// riparte da capo. L'avvio a freddo (S6, la nota riaperta), i chunk
+  /// scaricati fin lì, e quelli in più dopo aver aperto un'altra nota. Con
+  /// «Solo note» all'avvio non arriva niente della lavagna, del PDF, dei
+  /// documenti o dei fogli: lo vieta già il build (D-1), qui si vede nella
+  /// WebView vera.
+  async C1(session) {
+    const switchable = switchableChunks();
+    const profiles = {};
+    const values = {};
+    let current = session;
+    try {
+      for (const [nome, label] of C1_PROFILES) {
+        await applyProfile(current, nome);
+        await openByName(current, "Lunga", "Una nota lunga");
+        await current.close();
+        current = null;
+        current = await openSession(base, app);
+        await current.waitFor("return !!window.__fubProbe && window.__fubProbe.stop().coldStart !== null", [], 120_000);
+        const report = await stop(current);
+        const startup = await current.execute(CHUNKS_SCRIPT);
+        await ready(current);
+        await indexed(current);
+        await openByName(current, noteName(1), noteName(1));
+        await pause(MEMORY_QUIET_MS);
+        const after = await current.execute(CHUNKS_SCRIPT);
+        const afterNote = after.filter((name) => !startup.includes(name));
+        const switchableSeen = after.filter((name) => switchable.has(name)).map((name) => `${chunkName(name)} (${switchable.get(name).join("; ")})`);
+        profiles[nome] = { label, coldStart: report.coldStart, startup: startup.map(chunkName), afterNote: afterNote.map(chunkName), switchable: switchableSeen };
+        values[`C1.${nome}.coldStart`] = report.coldStart;
+        values[`C1.${nome}.chunks`] = startup.length;
+        values[`C1.${nome}.spegnibili`] = switchableSeen.length;
+      }
+    } finally {
+      await current?.close();
+    }
+    return { profiles, values, samples: C1_PROFILES.length };
+  },
   /// Il nucleo della lavagna in WebAssembly (N3): il modulo che la build ha
   /// messo fra gli asset, compilato con la CSP dell'app, poi istanza, `open`
   /// e `commit` di uno spostamento su una lavagna di 50 e una di 2000 schede
@@ -685,8 +787,9 @@ async function main() {
     // R1 subito dopo il riscaldamento: l'avvio riapre soltanto la nota del
     // riscaldamento, non le schede degli altri scenari. I1 subito dopo, con
     // poche schede da riaprire. S6 dopo S1: l'avvio da misurare riapre la
-    // nota che S1 ha lasciato. L1 in fondo: non apre niente nel vault.
-    const order = ["R1", "I1", "S1", "S6", "S2", "S3", "S4", "S5", "S7", "T1", "L1"].filter((id) => only.has(id));
+    // nota che S1 ha lasciato. L1 dopo: non apre niente nel vault. C1 in
+    // fondo: cambia il profilo del vault, e lo lascia a «Tutto».
+    const order = ["R1", "I1", "S1", "S6", "S2", "S3", "S4", "S5", "S7", "T1", "L1", "C1"].filter((id) => only.has(id));
     for (const id of order) {
       // R1 con la raccolta forzata ha un driver suo, con il gancio acceso
       // nell'ambiente; lo scenario dopo torna su un driver senza.
@@ -723,7 +826,13 @@ async function main() {
           const limit = limits[key];
           const over = limit !== undefined && (value === null || value > limit);
           if (over) failed++;
-          console.log(`${over ? "✗" : "✓"} ${key} = ${value ?? "—"} ${key.endsWith("MiB") ? "MiB" : "ms"}${limit !== undefined ? ` (soglia ${limit})` : ""} · ${result.samples} campioni`);
+          const unit = key.endsWith("MiB") ? "MiB" : key.endsWith(".chunks") || key.endsWith(".spegnibili") ? "chunk" : "ms";
+          console.log(`${over ? "✗" : "✓"} ${key} = ${value ?? "—"} ${unit}${limit !== undefined ? ` (soglia ${limit})` : ""} · ${result.samples} campioni`);
+        }
+        for (const [nome, seen] of Object.entries(result.profiles ?? {})) {
+          console.log(`· ${seen.label}: all'avvio ${seen.startup.join(", ")}`);
+          console.log(`· ${seen.label}: dopo una nota ${seen.afterNote.join(", ") || "niente in più"}`);
+          console.log(`· ${seen.label}: dei componenti spegnibili ${seen.switchable.join(", ") || "niente"}`);
         }
         // R1 chiesta con la raccolta e misurata senza non passa in silenzio:
         // i numeri restano nel referto, ma lo scenario è rosso.
@@ -734,7 +843,8 @@ async function main() {
         results[id] = { error: String(error?.message ?? error) };
         console.log(`✗ ${id}: ${results[id].error}`);
       } finally {
-        await closeSession(session);
+        // C1 chiude da sé le sessioni che apre, anche la prima.
+        if (id !== "C1") await closeSession(session);
       }
     }
   } finally {
