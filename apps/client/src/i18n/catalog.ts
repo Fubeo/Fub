@@ -1501,33 +1501,33 @@ export const IT = { // --- la scocca -------------------------------------------
 "settings.components.installed.none": "Nessun componente installato.",
 "settings.components.install": "Installa un componente",
 "settings.components.install.hint":
-  "Scegli un file .wasm. L'installazione non lo abilita, non concede permessi e non lo esegue.",
+  "Scegli un file .wasm. L'installazione non lo accende, non concede permessi e non lo esegue.",
 "settings.components.install.pick": "Scegli file…",
 "settings.components.install_failed": "Componente non installato: {reason}",
 "settings.components.identity": "{id} · versione {version} · {trust}",
 "settings.components.runtime.mounted": "Attivo in questo vault",
 "settings.components.runtime.off": "Non attivo",
-"settings.components.enabled": "Abilitato",
+"settings.components.enabled": "Acceso",
 "settings.components.enabled.hint":
   "Scelta persistita su questa macchina. Il componente può avviarsi soltanto se anche il consenso è concesso.",
-"settings.components.enabled_failed": "Scelta di abilitazione non cambiata: {reason}",
+"settings.components.enabled_failed": "Componente non acceso né spento: {reason}",
 "settings.components.consent": "Consenso all'esecuzione",
 "settings.components.consent.hint":
-  "È distinto dall'abilitazione: negato o da decidere impediscono sempre l'esecuzione.",
+  "È distinto da acceso e spento: negato o da decidere impediscono sempre l'esecuzione.",
 "settings.components.consent.undecided": "Da decidere",
 "settings.components.consent.denied": "Negato",
 "settings.components.consent.granted": "Concesso",
 "settings.components.consent_failed": "Consenso non cambiato: {reason}",
 "settings.components.permissions.hint":
   "Capacità dichiarate dal file. Concedere il consenso le approva insieme; un consenso negato non esegue il componente.",
-"settings.components.remove": "Rimuovi",
+"settings.components.remove": "Togli",
 "settings.components.remove.hint":
-  "Rimuove l'installazione ma conserva i suoi dati nel vault.",
-"settings.components.remove.disabled": "Disabilita il componente prima di rimuoverlo.",
-"settings.components.remove.title": "Rimuovi componente",
+  "Toglie l'installazione; i suoi dati restano nel vault.",
+"settings.components.remove.disabled": "Spegni il componente prima di toglierlo.",
+"settings.components.remove.title": "Togli il componente",
 "settings.components.remove.confirm":
-  "Rimuovere «{name}»? I dati che il componente ha salvato nei vault verranno conservati.",
-"settings.components.remove_failed": "Componente non rimosso: {reason}",
+  "Togliere «{name}»? I dati che il componente ha salvato nei vault restano.",
+"settings.components.remove_failed": "Componente non tolto: {reason}",
 "settings.components.reload_failed": "Stato dei componenti non aggiornato: {reason}",
 
 // --- i permessi, come li legge chi deve accettarli (§23.17) ------------
@@ -4648,19 +4648,19 @@ export const EN: Record<Key, string> = { "app.skip_to_editor": "Skip to the edit
 "settings.components.installed.none": "No installed component.",
 "settings.components.install": "Install a component",
 "settings.components.install.hint":
-  "Choose a .wasm file. Installing it does not enable it, grant consent, or run it.",
+  "Choose a .wasm file. Installing it does not turn it on, grant consent, or run it.",
 "settings.components.install.pick": "Choose file…",
 "settings.components.install_failed": "Component not installed: {reason}",
 "settings.components.identity": "{id} · version {version} · {trust}",
 "settings.components.runtime.mounted": "Active in this vault",
 "settings.components.runtime.off": "Not active",
-"settings.components.enabled": "Enabled",
+"settings.components.enabled": "On",
 "settings.components.enabled.hint":
   "Persistent choice on this machine. The component can start only when consent is granted too.",
-"settings.components.enabled_failed": "Enabled choice not changed: {reason}",
+"settings.components.enabled_failed": "Component not turned on or off: {reason}",
 "settings.components.consent": "Consent to run",
 "settings.components.consent.hint":
-  "This is separate from enabling it: denied or undecided always prevent execution.",
+  "This is separate from turning it on or off: denied or undecided always prevent execution.",
 "settings.components.consent.undecided": "Undecided",
 "settings.components.consent.denied": "Denied",
 "settings.components.consent.granted": "Granted",
@@ -4670,7 +4670,7 @@ export const EN: Record<Key, string> = { "app.skip_to_editor": "Skip to the edit
 "settings.components.remove": "Remove",
 "settings.components.remove.hint":
   "Removes the installation but preserves its data in the vault.",
-"settings.components.remove.disabled": "Disable the component before removing it.",
+"settings.components.remove.disabled": "Turn the component off before removing it.",
 "settings.components.remove.title": "Remove component",
 "settings.components.remove.confirm":
   "Remove “{name}”? Data saved by the component in your vaults will be preserved.",

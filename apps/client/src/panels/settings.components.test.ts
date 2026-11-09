@@ -423,7 +423,7 @@ describe("inventario dei componenti installati", () => {
     await openComponents();
 
     let remove = [...document.querySelectorAll<HTMLButtonElement>("#settings-body button")].find(
-      (button) => button.textContent === "Rimuovi",
+      (button) => button.textContent === "Togli",
     )!;
     box.confirm = false;
     remove.click();
@@ -432,7 +432,7 @@ describe("inventario dei componenti installati", () => {
 
     box.confirm = true;
     remove = [...document.querySelectorAll<HTMLButtonElement>("#settings-body button")].find(
-      (button) => button.textContent === "Rimuovi",
+      (button) => button.textContent === "Togli",
     )!;
     remove.click();
     await vi.waitFor(() => expect(box.host!.atGate("removeInstalledPlugin")).toHaveLength(1));
@@ -442,6 +442,36 @@ describe("inventario dei componenti installati", () => {
       expect(document.querySelector<HTMLElement>("#settings-panel")!.hidden).toBe(true);
     });
   });
+  it("la scheda dice le parole del lessico: Acceso, e Togli spento con la sua frase", async () => {
+    box.host = createFakeHost({ installedPlugins: [installed({ enabled: true })] });
+    await openComponents();
+
+    expect(document.querySelector<HTMLLabelElement>('label[for="installed-enabled-41"]')?.textContent).toBe("Acceso");
+    const remove = [...document.querySelectorAll<HTMLButtonElement>("#settings-body button")].find(
+      (button) => button.textContent === "Togli",
+    )!;
+    expect(remove.disabled).toBe(true);
+    const hint = document.getElementById(remove.getAttribute("aria-describedby")!);
+    expect(hint?.textContent).toBe("Spegni il componente prima di toglierlo.");
+    const body = document.querySelector("#settings-body")!.textContent!;
+    expect(body).toContain("Toglie l'installazione; i suoi dati restano nel vault.");
+    expect(body).toContain("È distinto da acceso e spento:");
+    expect(body).not.toMatch(/Abilitato|Disabilita|Rimuov/u);
+  });
+
+  it("un interruttore che non cambia lo dice con le parole del lessico", async () => {
+    box.host = createFakeHost({ installedPlugins: [installed()] });
+    await openComponents();
+    vi.spyOn(box.host.module.api, "setInstalledPluginEnabled").mockRejectedValueOnce(new Error("disco pieno"));
+
+    const enabled = document.querySelector<HTMLInputElement>("#installed-enabled-41")!;
+    enabled.checked = true;
+    enabled.dispatchEvent(new Event("change", { bubbles: true }));
+    await vi.waitFor(() =>
+      expect(box.notify).toHaveBeenCalledWith(expect.stringMatching(/^Componente non acceso né spento: .*disco pieno/u), "guasto"),
+    );
+  });
+
   it("lascia scadere il ridisegno di una mutazione ancora in volo quando il pannello chiude", async () => {
     box.host = createFakeHost({ installedPlugins: [installed()] });
     const releaseMutation = box.host.throttle("setInstalledPluginEnabled");
