@@ -335,6 +335,28 @@ export async function vaultTags(window: PageWindow): Promise<TagCount[]> {
   return runQuery(query).then((page) => page.items);
 }
 
+/// Quante etichette di una nota sola si leggono al più: una nota con più di
+/// così ne mostra le prime, e la riga dei dati non diventa un elenco.
+const NOTE_TAGS_PAGE: Page = { offset: 0, limit: 200 };
+
+/// Le etichette di una nota, coi nomi come li dà l'indice (senza `#`): la
+/// stessa domanda di [`vaultTags`], ristretta a quel documento. Un id che non
+/// è nell'indice risponde con l'elenco vuoto.
+export async function noteTags(doc: string): Promise<string[]> {
+  const query: Extract<IndexQuery, { kind: "tags" }> = {
+    kind: "tags",
+    matching: theseDocuments([doc]),
+    page: NOTE_TAGS_PAGE,
+  };
+  return runQuery(query).then((page) => page.items.map((tag) => tag.name));
+}
+
+/// Quante note citano `doc`: il `total` dei backlink, chiedendone uno solo.
+/// Dice quante, non quali: l'elenco è della scheda Collegamenti.
+export async function backlinkCount(doc: string): Promise<number> {
+  return runQuery({ kind: "backlinks", target: doc, page: { offset: 0, limit: 1 } }).then((page) => page.total);
+}
+
 // `archiDelVault` stava qui: gli archi del grafo in una domanda sola, senza
 // finestra. **Non lo chiamava nessuno** — il grafo è un `ViewProvider` dalla
 // 0079 (`fub-features/src/graph.rs`) e li chiede da dentro il kernel, dove non

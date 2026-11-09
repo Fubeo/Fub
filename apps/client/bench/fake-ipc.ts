@@ -1242,6 +1242,25 @@ const TAG = [
 /// Ciò che non è qui dentro passa a `finto.ts` **intatto**, regola del lancio
 /// compresa: un banco che rispondesse a tutto non direbbe più quale query la
 /// shell ha imparato a fare da sola.
+/// I dati della riga sotto il titolo, per nota: Benvenuto ha due etichette,
+/// tre collegamenti ed è stata modificata due ore prima dell'ora del banco,
+/// come nel prototipo. La nota delle scene della Live (`?live=`) ha gli
+/// stessi, perché la loro foto si confronta con lo stesso stato.
+const BENVENUTO_FACTS = { tags: ["tema", "banco"], links: 3, mtime: Date.parse("2026-08-19T07:30:00+02:00") };
+const NOTE_FACTS: Record<string, { tags: string[]; links: number; mtime: number }> = {
+  "Benvenuto.md": BENVENUTO_FACTS,
+  [LIVE_DOC]: BENVENUTO_FACTS,
+};
+
+/// I documenti nominati da una domanda ristretta (`theseDocuments`), o `null`
+/// per una domanda su tutto il vault.
+function askedDocs(expr: QueryExpr): string[] | null {
+  if (expr.any.length === 0) return null;
+  const docs = expr.any.flatMap((clause) => clause.all.flatMap((literal) =>
+    !literal.negated && literal.predicate.kind === "docs" ? literal.predicate.docs : []));
+  return docs.length > 0 ? docs : null;
+}
+
 const RESPONSES: Partial<Record<IndexQuery["kind"], (q: IndexQuery) => IndexResult>> = {
   render_preview: (q) => {
     const doc = (q as { doc: string }).doc;
@@ -1257,7 +1276,19 @@ const RESPONSES: Partial<Record<IndexQuery["kind"], (q: IndexQuery) => IndexResu
     }
     return { kind: "render_embed", value: { doc_id: doc, html: OUTPUT[doc], parts: [] } };
   },
-  tags: () => ({ kind: "tags", value: { items: TAG, offset: 0, total: TAG.length } }),
+  // Le etichette di tutto il vault; quelle di una nota sola (la riga dei
+  // dati sotto il titolo) sono della nota Benvenuto, come il prototipo.
+  tags: (q) => {
+    const docs = q.kind === "tags" ? askedDocs(q.matching) : null;
+    if (docs === null) return { kind: "tags", value: { items: TAG, offset: 0, total: TAG.length } };
+    const items = docs.flatMap((doc) => NOTE_FACTS[doc]?.tags ?? []).map((name) => ({ name, count: 1 }));
+    return { kind: "tags", value: { items, offset: 0, total: items.length } };
+  },
+  // Quante note citano una nota: il finto non tiene i backlink.
+  backlinks: (q) => {
+    const total = q.kind === "backlinks" ? (NOTE_FACTS[q.target]?.links ?? 0) : 0;
+    return { kind: "backlinks", value: { items: [], offset: 0, total } };
+  },
   organization: () => ({ kind: "organization", value: ORGANIZATION }),
   jobs: () => ({ kind: "jobs", value: JOBS }),
 };
@@ -1743,6 +1774,14 @@ export const api: typeof host.module.api = {
           value: { ...result.value, items: result.value.items.map((hit) => hit.doc === LIVE_DOC ? { ...hit, properties: [{ key: "cssclasses", value }] } : hit) },
         };
       }
+    }
+    if (q.kind === "entries" && result.kind === "entries") {
+      // L'ultima modifica delle note della riga dei dati: il finto le dà
+      // tutte a zero.
+      return {
+        ...result,
+        value: { ...result.value, items: result.value.items.map((entry) => NOTE_FACTS[entry.id] ? { ...entry, mtime: NOTE_FACTS[entry.id]!.mtime } : entry) },
+      };
     }
     if (q.kind === "documents" && result.kind === "documents") {
       const text = searchedText(q.matching);

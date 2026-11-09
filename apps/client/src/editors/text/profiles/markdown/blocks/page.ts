@@ -17,6 +17,7 @@ import { propertyBlock, propertyList, propertyValue, setProperty } from "../prop
 import { imageHtml } from "../render-inline";
 import { liveStrings } from "../strings";
 import { blocksOptions, type BlocksOptions } from "./handles";
+import { noteFactsElement, noteFactsOf, sameLabels, type NoteFactsLabels } from "../note-facts";
 
 /// Le classi della pagina che il menu «…» scrive in `cssclasses`; il tema le
 /// applica al riquadro (`fub-note--*`). Le altre classi della nota restano.
@@ -33,6 +34,8 @@ export interface PageData {
   readonly readOnly: boolean;
   readonly renamable: boolean;
   readonly subpages: boolean;
+  /// La riga dei dati sotto il titolo (`../note-facts.ts`), o `null`.
+  readonly facts: NoteFactsLabels | null;
 }
 
 export function pageData(state: EditorState, options: BlocksOptions = state.facet(blocksOptions)): PageData {
@@ -49,10 +52,17 @@ export function pageData(state: EditorState, options: BlocksOptions = state.face
     readOnly: state.readOnly,
     renamable: options.rename !== undefined,
     subpages: options.subpage !== undefined,
+    facts: noteFactsOf(state),
   };
 }
 
 function sameData(a: PageData, b: PageData): boolean {
+  return sameHeader(a, b) && sameLabels(a.facts, b.facts);
+}
+
+/// La testata senza la riga dei dati: se cambia solo la riga, la testata
+/// resta quella (col titolo che si sta scrivendo) e si rifà soltanto la riga.
+function sameHeader(a: PageData, b: PageData): boolean {
   return a.title === b.title && a.folder === b.folder && a.icon === b.icon && a.cover === b.cover
     && a.readOnly === b.readOnly && a.renamable === b.renamable && a.subpages === b.subpages
     && a.classes.length === b.classes.length && a.classes.every((name, i) => name === b.classes[i]);
@@ -89,6 +99,16 @@ function writeProperty(view: EditorView, key: string, value: string | readonly s
 const refreshPage = StateEffect.define<null>();
 
 const lives = new WeakMap<HTMLElement, Lifetime>();
+/// Ciò che una testata disegnata mostra, e la vita della sua riga dei dati.
+const drawn = new WeakMap<HTMLElement, { data: PageData; facts: Lifetime }>();
+
+/// Mette sotto il titolo di `root` la riga dei dati dello stato, al posto di
+/// quella che c'era; la sua vita è `facts`, chiusa a ogni rifacimento.
+function placeFacts(root: HTMLElement, view: EditorView, facts: Lifetime): void {
+  root.querySelector(":scope > .note-facts")?.remove();
+  const row = noteFactsElement(view.state, facts);
+  if (row) root.querySelector(":scope > .cm-fub-page-title")?.after(row);
+}
 
 class PageHeaderWidget extends WidgetType {
   constructor(readonly data: PageData) { super(); }
@@ -233,12 +253,28 @@ class PageHeaderWidget extends WidgetType {
       }
     });
     life.listen(title, "blur", () => void commit());
+    const facts = openLifetime();
+    life.add(() => drawn.get(root)?.facts.close());
+    drawn.set(root, { data, facts });
+    placeFacts(root, view, facts);
     return root;
+  }
+
+  /// Cambiata solo la riga dei dati: si rifà la riga e la testata resta.
+  override updateDOM(dom: HTMLElement, view: EditorView): boolean {
+    const before = drawn.get(dom);
+    if (!before || !sameHeader(before.data, this.data)) return false;
+    before.facts.close();
+    const facts = openLifetime();
+    drawn.set(dom, { data: this.data, facts });
+    placeFacts(dom, view, facts);
+    return true;
   }
 
   override destroy(dom: HTMLElement): void {
     lives.get(dom)?.close();
     lives.delete(dom);
+    drawn.delete(dom);
   }
 
   /// La testata è un modulo, non testo: tasti e puntatore restano suoi.

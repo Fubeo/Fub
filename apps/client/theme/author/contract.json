@@ -644,6 +644,10 @@
     "fub-note--serif",
     "fub-note--sans",
     "fub-note--mono",
+    "note-facts",
+    "note-fact",
+    "note-fact-tags",
+    "note-tag",
     "cm-fub-frontmatter",
     "block-frontmatter-unparsed",
     "block-footnote-definition",
@@ -2178,6 +2182,10 @@
     "fub-note--serif": "contenuto",
     "fub-note--sans": "contenuto",
     "fub-note--mono": "contenuto",
+    "note-facts": "contenuto",
+    "note-fact": "contenuto",
+    "note-fact-tags": "contenuto",
+    "note-tag": "contenuto",
     "cm-fub-frontmatter": "contenuto",
     "block-frontmatter-unparsed": "contenuto",
     "block-footnote-definition": "contenuto",
@@ -4860,6 +4868,21 @@
         "fub-note--serif",
         "fub-note--sans",
         "fub-note--mono"
+      ],
+      "states": [
+        "rest",
+        "hover",
+        "focused"
+      ]
+    },
+    {
+      "name": "document-facts",
+      "part": "document",
+      "hooks": [
+        "note-facts",
+        "note-fact",
+        "note-fact-tags",
+        "note-tag"
       ],
       "states": [
         "rest",
@@ -8589,10 +8612,10 @@
   "counts": {
     "required_roles": 154,
     "optional_roles": 64,
-    "hooks": 1532,
+    "hooks": 1536,
     "state_names": 7,
-    "assigned_states": 748,
-    "components": 221,
+    "assigned_states": 751,
+    "components": 222,
     "preference_tokens": 187
   }
 }

@@ -13,7 +13,9 @@ import { currentTheme as getCurrentTheme, type Theme } from "../../../../theme/t
 import type { SyntaxForm } from "../../../../host/contract";
 import { byteToNormalizedCharIndices, normalizeLineBreaks } from "../../../../rules/offsets";
 import { isFolderPage, pageName, taskChecked } from "../../../../rules/mirrored";
-import { t } from "../../../../i18n/strings";
+import { onLanguage, t } from "../../../../i18n/strings";
+import type { NoteFacts, NoteFactsSource } from "../../../../state/note-facts";
+import { noteFactsChanged, noteFactsExtensions, noteFactsLabels, renderNoteFacts } from "./note-facts";
 import { liveStrings } from "./strings";
 import { pageIconsChanged } from "./livepreview";
 import { linkCardsChanged, type LinkCardSource } from "./link-card";
@@ -21,7 +23,7 @@ import { mountMarkdown, sourceElementAt, type MarkdownMountOptions } from "./mou
 import { acquireMarkdownResources } from "../../../../ui/markdown-resources";
 import { settings } from "../../../../host/query";
 import { onEvent } from "../../../../state/kernel";
-import { openLifetime } from "../../../../ui/lifetime";
+import { openLifetime, type Lifetime } from "../../../../ui/lifetime";
 import { notify } from "../../../../ui/notify";
 import { errorText } from "../../../../host/errors";
 import { clipboardSupports, readClipboard, writeClipboardData, writeClipboardText } from "../../../../platform/clipboard";
@@ -169,6 +171,10 @@ export interface MarkdownSurfaceOptions {
   pageIcons?: PageIcons;
   /// Le schede dei collegamenti (K8): senza, un URL da solo resta un link.
   linkCards?: LinkCardSource;
+  /// La riga dei dati sotto il titolo (modificata, collegamenti, etichette):
+  /// chi la legge, perché l'editor non chiama l'host da sé. Senza, la riga
+  /// non c'è.
+  noteFacts?: NoteFactsSource;
   /// Sorgenti per i completamenti del profilo Markdown.
   completions: CompletionSources;
   /// La slash palette è disponibile solo se la shell ne fornisce le capacità.
@@ -330,7 +336,14 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
     if (id !== "markdown.date" || typeof iso !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(iso)) return params;
     return dates ? dailyLink(iso, dates) : {};
   };
+  /// I dati della riga sotto il titolo, gli ultimi arrivati.
+  let facts: NoteFacts | null = null;
+  const factsActions = {
+    openLinks: () => opts.noteFacts?.openLinks(),
+    searchTag: (tag: string) => opts.onSearchTag(tag),
+  };
   const profile = createMarkdownProfile({
+    ...(opts.noteFacts ? { noteFacts: noteFactsExtensions({ current: () => facts, actions: factsActions }) } : {}),
     callbacks: {
       openWikilink,
       searchTag: opts.onSearchTag,
@@ -487,6 +500,43 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
   reading.setAttribute("role", "document");
   parent.append(reading);
   parent.dataset.markdownMode = mode;
+
+  /// La riga dei dati in Lettura: dopo il primo `h1` della resa (fuori dagli
+  /// embed), e senza titolo in cima. Si rimette a ogni resa e a ogni dato.
+  let readingFactsLife: Lifetime | null = null;
+  function placeReadingFacts(): void {
+    readingFactsLife?.close();
+    readingFactsLife = null;
+    for (const old of reading.querySelectorAll(":scope .note-facts")) old.remove();
+    if (mode !== "reading" || !opts.noteFacts) return;
+    const labels = noteFactsLabels(facts);
+    if (!labels) return;
+    readingFactsLife = openLifetime();
+    const row = renderNoteFacts(labels, factsActions, readingFactsLife);
+    const title = [...reading.querySelectorAll("h1")].find((h1) => !h1.closest(".embed-loaded, [data-ui-slot]"));
+    if (title) title.after(row);
+    else reading.prepend(row);
+  }
+  /// I dati nuovi (o la lingua nuova) nella Live, nei Blocchi e in Lettura.
+  const drawFacts = (): void => {
+    if (life.closed) return;
+    engine.runViewCommand((view) => {
+      view.dispatch({ effects: noteFactsChanged.of(facts) });
+      return true;
+    });
+    placeReadingFacts();
+  };
+  if (opts.noteFacts) {
+    life.add(opts.noteFacts.follow(() => resources?.documentId ?? documentId, (next) => {
+      facts = next;
+      drawFacts();
+    }));
+    life.add(onLanguage(drawFacts));
+    life.add(() => {
+      readingFactsLife?.close();
+      readingFactsLife = null;
+    });
+  }
   // «Interruzioni di riga rigorose» spente: in Lettura un a capo singolo
   // resta un'interruzione. La resa lo dice con un attributo, e la pelle lo
   // legge; il testo del documento non cambia. «Testo da destra a sinistra»
@@ -682,6 +732,7 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
       renderMarkdown(text, forms).html,
       renderedOptions(readOnly ? undefined : toggleTaskAt),
     );
+    placeReadingFacts();
     if (anchor) scrollReadingTo(anchor.from, anchor.top);
   }
 
@@ -746,6 +797,7 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
       parent.dataset.markdownMode = next;
       unmountReading?.();
       unmountReading = null;
+      placeReadingFacts();
       presentation(next);
       engine.reconfigure();
       // La selezione di scrittura non si è mai mossa: la lettura non la
@@ -1552,6 +1604,8 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
       // copia. Negli altri modi si rende il buffer corrente.
       if (mode === "reading") {
         host.replaceChildren(...Array.from(reading.childNodes, (node) => node.cloneNode(true)));
+        // La riga dei dati non è della nota: la copia non la porta.
+        for (const row of host.querySelectorAll(".note-facts")) row.remove();
         return () => host.replaceChildren();
       }
       return mountMarkdown(host, renderMarkdown(normalizeLineBreaks(engine.getDoc()), forms).html, renderedOptions());

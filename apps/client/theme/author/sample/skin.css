@@ -7184,6 +7184,49 @@ kbd,
     var(--shadow-3);
 }
 
+/* ── La riga dei dati, sotto il titolo ──────────────────────────────────── */
+/* Modificata, collegamenti, etichette: carattere dell'interfaccia, grafite,
+   le etichette come in testo. Non è testo della nota: non si seleziona col
+   corpo e non si scrive. */
+.note-facts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3) var(--space-7);
+  margin: 0;
+  padding: var(--space-4) 0 var(--space-6);
+  color: var(--muted);
+  font-family: var(--font-ui);
+  font-size: var(--text-md);
+  line-height: var(--leading-tight);
+  white-space: normal;
+  user-select: none;
+}
+.note-fact {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+.note-fact > svg {
+  width: 15px;
+  height: 15px;
+}
+.note-fact-tags {
+  gap: var(--space-2);
+}
+.note-tag {
+  padding: var(--space-1) var(--space-4);
+  border-radius: var(--radius-chip);
+  background: var(--accent-wash);
+  color: var(--accent);
+  font-size: var(--text-base);
+  font-weight: var(--weight-medium);
+}
+.markdown-rendered .tag,
+.cm-editor .cm-content .cm-fub-tag {
+  border-radius: var(--radius-chip);
+}
+
 /* ── skin/tabella.css ───────────────────────────────────────────────────── */
 
 /* ── La Tabella ──────────────────────────────────────────────────────────

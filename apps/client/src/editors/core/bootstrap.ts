@@ -8,6 +8,9 @@ import type { GridDialogs, GridRibbon } from "../grid/ribbon/ribbon";
 import type { GridPalette } from "../grid/palette/commands";
 import { onLanguage, resolvedLanguage, t, type Key } from "../../i18n/strings";
 import { onEvent } from "../../state/kernel";
+import { noteFactsSource } from "../../state/note-facts";
+import { notify } from "../../ui/notify";
+import { revealSidePanel } from "../../ui/side-panels";
 import { PROOF_NS, type ProofPorts } from "./proof-ports";
 import { currentTheme } from "../../theme/theme";
 import { GridEngine } from "../grid/engine";
@@ -235,6 +238,17 @@ export function createDocumentSurfaceRegistry(
   options: SurfaceBootstrapOptions,
 ): DocumentSurfaceRegistry {
   const registry = new DocumentSurfaceRegistry();
+  // La riga dei dati sotto il titolo delle note: la lettura (indice e
+  // anagrafe) la fa la shell, e l'editor la riceve; «3 collegamenti» apre la
+  // scheda Collegamenti dell'ispettore, come «Mostra le note che lo usano».
+  // L'ispettore (`ui/views.ts`) si carica al primo clic: al montaggio del
+  // modulo cerca il suo posto nella pagina, che qui non è detto ci sia.
+  const noteFacts = noteFactsSource(() => {
+    revealSidePanel("inspector");
+    void import("../../ui/views").then(({ selectInspectorTab }) => {
+      if (!selectInspectorTab("backlinks")) notify(t("explorer.used_by_missing"), "info");
+    }, () => {});
+  });
   registry.register({
     owner: "fub.shell.text",
     family: "text",
@@ -272,6 +286,7 @@ export function createDocumentSurfaceRegistry(
             onNewSubpage: options.onNewSubpage,
             pageIcons: options.pageIcons,
             linkCards: options.linkCards,
+            noteFacts,
             completions: options.completions,
             slash: options.slash,
             proof: {
