@@ -1462,11 +1462,16 @@ body {
    solo `sticky`, nello stesso fotogramma dello scorrimento, senza che lo
    script le rimetta. Le misure le scrive la griglia (`--grid-w`, `--grid-h`,
    `--grid-top-h`, `--grid-left-w`). Il piano non prende il puntatore: lo
-   prendono le righe, e dove non c'è niente va al riquadro. */
+   prendono le righe, e dove non c'è niente va al riquadro. Il piano è largo
+   e alto quanto il foglio, non quanto il riquadro: un elemento `sticky` non
+   esce dal suo contenitore, e in un piano largo quanto il riquadro la
+   colonna ferma se ne andrebbe con lo scorrimento. */
 .grid-plane {
   position: relative;
   display: grid;
   grid-template: var(--grid-h, 0px) / var(--grid-w, 0px);
+  width: var(--grid-w, 0px);
+  height: var(--grid-h, 0px);
   isolation: isolate;
   pointer-events: none;
 }
