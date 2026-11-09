@@ -71,7 +71,7 @@ fn unexpected(value: &Value) -> serde::de::Unexpected<'_> {
 ///
 /// La forma JSON è quella di `CanvasPatch` in TypeScript: il campo `kind`
 /// per primo, poi `before`, `after` e, se c'è, `at` (la posizione nella lista
-/// delle schede).
+/// delle schede o degli archi).
 #[allow(
     clippy::large_enum_variant,
     reason = "la forma è quella di TypeScript e una lista di toppe è corta: \
@@ -96,13 +96,22 @@ pub enum CanvasPatch {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         at: Option<usize>,
     },
-    /// Mette un arco: lo cambia se c'è, lo aggiunge in fondo se non c'è.
+    /// Mette un arco: lo cambia se c'è (`at` non conta), lo aggiunge se non
+    /// c'è, in `at` o in fondo alla lista.
     UpsertEdge {
         before: Option<CanvasEdge>,
         after: CanvasEdge,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        at: Option<usize>,
     },
-    /// Toglie un arco.
-    RemoveEdge { before: CanvasEdge, after: Null },
+    /// Toglie un arco. `at` è la posizione che aveva: serve all'inversa per
+    /// rimetterlo al suo posto; senza, l'inversa lo rimette in fondo.
+    RemoveEdge {
+        before: CanvasEdge,
+        after: Null,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        at: Option<usize>,
+    },
     /// Cambia l'ordine delle schede (la profondità): `before` è l'ordine di
     /// prima, `after` una sua permutazione.
     Reorder {
@@ -169,9 +178,15 @@ pub enum PatchError {
     /// frattempo, o la toppa è stata fatta su un altro modello.
     #[error("canvas patch {index}: the {subject} is not what the patch expects")]
     Stale { index: usize, subject: Subject },
-    /// `at` oltre la fine della lista delle schede.
-    #[error("canvas patch {index}: position {at} is past the end of the {len} nodes")]
-    AtOutOfRange { index: usize, at: usize, len: usize },
+    /// `at` oltre la fine della lista delle schede o degli archi: `list` è
+    /// `"nodes"` o `"edges"`.
+    #[error("canvas patch {index}: position {at} is past the end of the {len} {list}")]
+    AtOutOfRange {
+        index: usize,
+        at: usize,
+        len: usize,
+        list: &'static str,
+    },
     /// Una scheda da togliere ha ancora un arco: va tolto prima.
     #[error("canvas patch {index}: node {id:?} still has edge {edge:?}")]
     NodeHasEdges {
@@ -401,7 +416,12 @@ fn step(draft: &mut Canvas, index: usize, patch: &CanvasPatch) -> Result<(), Pat
                 (None, Some(at)) => {
                     let len = draft.nodes.len();
                     if at > len {
-                        return Err(PatchError::AtOutOfRange { index, at, len });
+                        return Err(PatchError::AtOutOfRange {
+                            index,
+                            at,
+                            len,
+                            list: "nodes",
+                        });
                     }
                     draft.nodes.insert(at, after.clone());
                 }
@@ -432,7 +452,7 @@ fn step(draft: &mut Canvas, index: usize, patch: &CanvasPatch) -> Result<(), Pat
             // Come `filter` in TypeScript: via ogni scheda con quell'id.
             draft.nodes.retain(|node| node.id != before.id);
         }
-        CanvasPatch::UpsertEdge { before, after } => {
+        CanvasPatch::UpsertEdge { before, after, at } => {
             let current = edge_position(draft, &after.id);
             match (before, current) {
                 (None, None) => {}
@@ -457,9 +477,25 @@ fn step(draft: &mut Canvas, index: usize, patch: &CanvasPatch) -> Result<(), Pat
                     });
                 }
             }
-            match current.and_then(|position| draft.edges.get_mut(position)) {
-                Some(slot) => *slot = after.clone(),
-                None => draft.edges.push(after.clone()),
+            // Come per le schede: `at` vale solo per un arco nuovo.
+            match (
+                current.and_then(|position| draft.edges.get_mut(position)),
+                *at,
+            ) {
+                (Some(slot), _) => *slot = after.clone(),
+                (None, Some(at)) => {
+                    let len = draft.edges.len();
+                    if at > len {
+                        return Err(PatchError::AtOutOfRange {
+                            index,
+                            at,
+                            len,
+                            list: "edges",
+                        });
+                    }
+                    draft.edges.insert(at, after.clone());
+                }
+                (None, None) => draft.edges.push(after.clone()),
             }
         }
         CanvasPatch::RemoveEdge { before, .. } => {
@@ -640,23 +676,27 @@ fn stale_node(index: usize, id: &str) -> PatchError {
 ///
 /// Le schede da rimettere che stanno vicine nella lista si riordinano per
 /// `at` crescente (quelle senza `at` per ultime, nell'ordine che avevano):
-/// gli `at` di una lista di `remove-node` sono le posizioni nel modello di
-/// partenza, e rimettendole dalla più bassa ogni scheda torna al suo posto.
+/// gli `at` di una serie di `remove-node` sono le posizioni nel modello
+/// all'inizio della serie, e rimettendole dalla più bassa ogni scheda torna
+/// al suo posto. Gli archi da rimettere vicini fanno lo stesso, fra loro:
+/// una serie di schede e una di archi non si mescolano, perché un arco va
+/// rimesso dopo le sue schede.
 pub fn inverse(patches: &[CanvasPatch]) -> Vec<CanvasPatch> {
     let mut inverse: Vec<CanvasPatch> = patches.iter().rev().map(invert).collect();
     let mut start = 0;
     while start < inverse.len() {
-        if !is_insert(&inverse[start]) {
+        let Some(list) = insert_list(&inverse[start]) else {
             start += 1;
             continue;
-        }
+        };
         let mut end = start + 1;
-        while end < inverse.len() && is_insert(&inverse[end]) {
+        while end < inverse.len() && insert_list(&inverse[end]) == Some(list) {
             end += 1;
         }
         // Stabile, come `Array.prototype.sort`.
         inverse[start..end].sort_by_key(|patch| match patch {
-            CanvasPatch::UpsertNode { at: Some(at), .. } => (false, *at),
+            CanvasPatch::UpsertNode { at: Some(at), .. }
+            | CanvasPatch::UpsertEdge { at: Some(at), .. } => (false, *at),
             _ => (true, 0),
         });
         start = end;
@@ -664,8 +704,19 @@ pub fn inverse(patches: &[CanvasPatch]) -> Vec<CanvasPatch> {
     inverse
 }
 
-fn is_insert(patch: &CanvasPatch) -> bool {
-    matches!(patch, CanvasPatch::UpsertNode { before: None, .. })
+/// La lista in cui una toppa aggiunge una voce nuova: le schede o gli archi.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum List {
+    Nodes,
+    Edges,
+}
+
+fn insert_list(patch: &CanvasPatch) -> Option<List> {
+    match patch {
+        CanvasPatch::UpsertNode { before: None, .. } => Some(List::Nodes),
+        CanvasPatch::UpsertEdge { before: None, .. } => Some(List::Edges),
+        _ => None,
+    }
 }
 
 fn invert(patch: &CanvasPatch) -> CanvasPatch {
@@ -696,20 +747,25 @@ fn invert(patch: &CanvasPatch) -> CanvasPatch {
         CanvasPatch::UpsertEdge {
             before: None,
             after,
+            ..
         } => CanvasPatch::RemoveEdge {
             before: after.clone(),
             after: Null,
+            at: None,
         },
         CanvasPatch::UpsertEdge {
             before: Some(before),
             after,
+            ..
         } => CanvasPatch::UpsertEdge {
             before: Some(after.clone()),
             after: before.clone(),
+            at: None,
         },
-        CanvasPatch::RemoveEdge { before, .. } => CanvasPatch::UpsertEdge {
+        CanvasPatch::RemoveEdge { before, at, .. } => CanvasPatch::UpsertEdge {
             before: None,
             after: before.clone(),
+            at: *at,
         },
         CanvasPatch::Reorder { before, after } => CanvasPatch::Reorder {
             before: after.clone(),
@@ -765,15 +821,18 @@ pub fn upsert_edge_patch(canvas: &Canvas, after: &CanvasEdge) -> Option<CanvasPa
     Some(CanvasPatch::UpsertEdge {
         before: before.cloned(),
         after: after.clone(),
+        at: None,
     })
 }
 
-/// La toppa che toglie l'arco `id` (`removeEdgePatch`): `None` se l'arco non
-/// c'è.
+/// La toppa che toglie l'arco `id`, con la sua posizione
+/// (`removeEdgePatch`): `None` se l'arco non c'è.
 pub fn remove_edge_patch(canvas: &Canvas, id: &str) -> Option<CanvasPatch> {
-    let before = canvas.edges.iter().find(|edge| edge.id == id)?.clone();
+    let at = edge_position(canvas, id)?;
+    let before = canvas.edges.get(at)?.clone();
     Some(CanvasPatch::RemoveEdge {
         before,
         after: Null,
+        at: Some(at),
     })
 }

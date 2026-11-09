@@ -62,6 +62,9 @@ pub use removal::{
     CommittedDocumentDeletion, CompletedDocumentDeletion, CompletedDocumentRemoval,
     FinalizedDocumentDeletion, PreparedDocumentDeletion, PreparedDocumentRemoval,
 };
+mod reads_in_flight;
+use reads_in_flight::ReadInFlight;
+pub use reads_in_flight::{Barred, ReadsInFlight};
 mod restore;
 pub use restore::{CompletedDocumentRestore, PendingDocumentRestore, PreparedDocumentRestore};
 
@@ -369,6 +372,7 @@ pub struct MovedExplicitAssetRename {
     stat: crate::storage::Stat,
     identity: Option<crate::storage::FileIdentity>,
     rewrites: Vec<(DocId, EditRequest)>,
+    stale_byte_links: Vec<String>,
     side_data: CompletedAssetRenameSideData,
     recovery: RenameRecoveryReceipt,
 }
@@ -379,6 +383,7 @@ pub struct PendingExplicitAssetRename {
     workspace_id: u64,
     installed: VaultEntry,
     rewrites: Vec<(DocId, EditRequest)>,
+    stale_byte_links: Vec<String>,
     side_data: CompletedAssetRenameSideData,
     recovery: RenameRecoveryReceipt,
     journal: Arc<Journal>,
@@ -397,6 +402,7 @@ pub struct CompletedExplicitAssetRename {
     to: DocId,
     owns_batch: bool,
     rewrite_failures: Vec<String>,
+    stale_byte_links: Vec<String>,
     journal_fault: Option<String>,
 }
 
@@ -410,6 +416,7 @@ pub struct ParsedExplicitRename {
     stat: crate::storage::Stat,
     identity: Option<crate::storage::FileIdentity>,
     rewrites: Vec<(DocId, EditRequest)>,
+    stale_byte_links: Vec<String>,
     side_data: CompletedRenameSideData,
     recovery: RenameRecoveryReceipt,
 }
@@ -419,6 +426,7 @@ pub struct ParsedExplicitRename {
 pub struct PendingExplicitRename {
     identity: PendingIdentityMigration,
     rewrites: Vec<(DocId, EditRequest)>,
+    stale_byte_links: Vec<String>,
     side_data: CompletedRenameSideData,
     recovery: RenameRecoveryReceipt,
     journal: Arc<Journal>,
@@ -436,6 +444,7 @@ pub struct CompletedExplicitRename {
     recovery: RenameRecoveryReceipt,
     owns_batch: bool,
     rewrite_failures: Vec<String>,
+    stale_byte_links: Vec<String>,
     journal_fault: Option<String>,
 }
 
@@ -868,7 +877,11 @@ impl PreparedExplicitRename {
             SourceKind::Bytes => DocumentSource::Bytes(bytes),
         };
         let model = parser.invoke(source)?;
-        let durable_rewrites = invoke_prepared_link_rewrites(storage.as_ref(), rewrites)?;
+        let PreparedLinkRewriteOutcome {
+            edits: durable_rewrites,
+            unwritable_bytes,
+        } = invoke_prepared_link_rewrites(storage.as_ref(), rewrites)?;
+        let stale_byte_links = stale_byte_link_lines(&unwritable_bytes, &snapshot.from);
 
         // Rename "case-only" (`nota.md` → `Nota.md`): su un filesystem
         // case-insensitive (macOS/Windows) `storage.exists` vede lo STESSO
@@ -958,6 +971,7 @@ impl PreparedExplicitRename {
             stat: after,
             identity,
             rewrites,
+            stale_byte_links,
             side_data,
             recovery,
         })
@@ -1059,6 +1073,7 @@ impl PendingExplicitRename {
         let PendingExplicitRename {
             identity,
             rewrites,
+            stale_byte_links,
             side_data,
             recovery,
             journal,
@@ -1082,6 +1097,7 @@ impl PendingExplicitRename {
             recovery,
             owns_batch,
             rewrite_failures: Vec::new(),
+            stale_byte_links,
             journal_fault,
         }
     }
@@ -1126,12 +1142,24 @@ impl CompletedExplicitRename {
 /// nel kernel, nessun provider sotto lock, nessuna omissione silenziosa.
 /// La CAS di [`EditRequest`] resta la preimmagine per-file; i conflitti restano
 /// [`KernelError::Stale`]/`AlreadyExists`, senza protocollo parallelo.
+///
+/// L'unica eccezione è una sorgente a byte ([`SourceKind::Bytes`]) che non sa
+/// riscriversi (provider assente o `Ok(None)`): i file Craft dichiarano i loro
+/// collegamenti ma Fub non li scrive mai (D-3). Quella sorgente non ferma il
+/// piano: resta com'è e finisce in [`PreparedLinkRewriteOutcome::unwritable_bytes`],
+/// e chi chiama decide che cosa dirne. Una sorgente a byte che risponde con
+/// degli edit resta un errore, come prima.
 fn invoke_prepared_link_rewrites(
     storage: &dyn crate::storage::VaultStorage,
     rewrites: Vec<PreparedExplicitLinkRewrite>,
-) -> Result<Vec<RenameRecoveryEdit>> {
+) -> Result<PreparedLinkRewriteOutcome> {
     let mut out = Vec::new();
+    let mut unwritable_bytes = Vec::new();
     for prepared in rewrites {
+        if prepared.source_kind == SourceKind::Bytes && prepared.provider.is_none() {
+            unwritable_bytes.push(prepared.destination);
+            continue;
+        }
         let bytes = storage
             .read(&prepared.source_path)
             .map_err(|source| KernelError::Io {
@@ -1157,10 +1185,7 @@ fn invoke_prepared_link_rewrites(
             DocumentSource::Bytes(bytes) => Revision::of_bytes(bytes),
         };
         let Some(provider) = prepared.provider.clone() else {
-            return Err(KernelError::Format(FormatError::Parse(format!(
-                "il formato di {} non offre la riscrittura dei link",
-                prepared.destination
-            ))));
+            return Err(no_link_rewrite(&prepared.destination));
         };
         let provider_id = prepared.provider_id.clone();
         let destination = prepared.destination.clone();
@@ -1172,12 +1197,15 @@ fn invoke_prepared_link_rewrites(
             destination.as_str(),
             FormatError::Parse,
             || provider.rewrite_links(&source, &ctx, &wanted),
-        )?
-        .ok_or_else(|| {
-            KernelError::Format(FormatError::Parse(format!(
-                "il formato di {destination} non offre la riscrittura dei link"
-            )))
-        })?;
+        )?;
+        let edits = match edits {
+            Some(edits) => edits,
+            None if prepared.source_kind == SourceKind::Bytes => {
+                unwritable_bytes.push(destination);
+                continue;
+            }
+            None => return Err(no_link_rewrite(&destination)),
+        };
         validate_rewrite_output(&wanted, &edits, &source, &destination)?;
         if edits.is_empty() {
             continue;
@@ -1199,7 +1227,34 @@ fn invoke_prepared_link_rewrites(
         };
         out.push(RenameRecoveryEdit::new(destination, request, result));
     }
-    Ok(out)
+    Ok(PreparedLinkRewriteOutcome {
+        edits: out,
+        unwritable_bytes,
+    })
+}
+
+/// Il risultato di [`invoke_prepared_link_rewrites`]: gli edit da applicare e
+/// le sorgenti a byte lasciate com'erano, nell'ordine del piano.
+struct PreparedLinkRewriteOutcome {
+    edits: Vec<RenameRecoveryEdit>,
+    unwritable_bytes: Vec<DocId>,
+}
+
+/// L'errore di una sorgente che il suo formato non sa riscrivere.
+fn no_link_rewrite(destination: &DocId) -> KernelError {
+    KernelError::Format(FormatError::Parse(format!(
+        "il formato di {destination} non offre la riscrittura dei link"
+    )))
+}
+
+/// Una riga per ogni file a byte che punta ancora al nome vecchio `from`: la
+/// rinomina è fatta, le note sono aggiornate, e queste righe arrivano a chi
+/// l'ha chiesta nell'esito parziale [`KernelError::LinkRewrite`].
+fn stale_byte_link_lines(unwritable: &[DocId], from: &DocId) -> Vec<String> {
+    unwritable
+        .iter()
+        .map(|src| format!("{src}: un file a byte non si riscrive, il link punta ancora a {from}"))
+        .collect()
 }
 
 /// Vincolo d'output della porta format-owned: copertura totale, confini
@@ -1290,7 +1345,11 @@ impl PreparedExplicitAssetRename {
             return Err(KernelError::Stale(snapshot.from.to_string()));
         }
         let identity = identity_after;
-        let durable_rewrites = invoke_prepared_link_rewrites(storage.as_ref(), rewrites)?;
+        let PreparedLinkRewriteOutcome {
+            edits: durable_rewrites,
+            unwritable_bytes,
+        } = invoke_prepared_link_rewrites(storage.as_ref(), rewrites)?;
+        let stale_byte_links = stale_byte_link_lines(&unwritable_bytes, &snapshot.from);
         let same_file = storage.same_file(&snapshot.from_path, &snapshot.to_path);
         if !same_file && storage.exists(&snapshot.to_path) {
             return Err(KernelError::AlreadyExists(snapshot.to.to_string()));
@@ -1360,6 +1419,7 @@ impl PreparedExplicitAssetRename {
             stat: after,
             identity,
             rewrites,
+            stale_byte_links,
             side_data,
             recovery,
         })
@@ -1469,6 +1529,7 @@ impl PendingExplicitAssetRename {
             workspace_id,
             installed,
             rewrites,
+            stale_byte_links,
             side_data,
             recovery,
             journal,
@@ -1508,6 +1569,7 @@ impl PendingExplicitAssetRename {
             to,
             owns_batch,
             rewrite_failures,
+            stale_byte_links,
             journal_fault,
         }
     }
@@ -2176,6 +2238,50 @@ pub type BeforeWriteHook =
 /// It can only undo that write while it is still the latest write to the key.
 pub struct PermissionInitialization(crate::settings::MachineSettingRevision);
 
+/// Il rifiuto di un comando che invoca sé stesso, con la catena che lo mostra.
+///
+/// Una frase sola per i quattro posti che lo controllano: la pila condivisa
+/// (sincrona, staccata, rebuild) e la catena di una lettura col suo frame.
+/// Il rifiuto di una lettura fermata: dal suo inizio, se chi smonta il
+/// proprietario l'ha sbarrata, o dalla sua fine, se il vault si è chiuso o il
+/// suo plugin si è spento mentre leggeva.
+fn read_stopped(command: &str) -> PluginError {
+    PluginError::Cancelled(
+        format!("il comando `{command}` è stato fermato: il vault si è chiuso o il suo plugin si sta spegnendo")
+            .into(),
+    )
+}
+
+fn self_invocation(stack: &[String], command: &str) -> PluginError {
+    let mut round = stack.to_vec();
+    round.push(command.to_string());
+    PluginError::BadArgs(
+        format!(
+            "un comando non può invocare sé stesso: {}",
+            round.join(" → ")
+        )
+        .into(),
+    )
+}
+
+/// Esegue il codice di un provider preparato, una volta sola: la porta comune
+/// di [`PreparedCommand::invoke`] e [`PreparedReadOnlyCommand::invoke`].
+fn invoke_prepared(
+    owner: &str,
+    command: &str,
+    args: &mut Option<serde_json::Value>,
+    mode: InvokeMode,
+    provider: &dyn CommandProvider,
+    host: &mut dyn HostApi,
+) -> std::result::Result<CommandOutcome, PluginError> {
+    let args = args.take().ok_or_else(|| {
+        PluginError::Internal("una chiamata preparata è stata invocata due volte".into())
+    })?;
+    crate::safety::calling(owner, Gate::Command, command, || {
+        provider.invoke(command, args, mode, host)
+    })
+}
+
 /// Una chiamata a `CommandProvider` preparata sotto lock e invocabile fuori.
 ///
 /// Contiene anche il frame da ripristinare al rientro: attore, batch, pila e
@@ -2218,14 +2324,96 @@ impl PreparedCommand {
         &mut self,
         host: &mut dyn HostApi,
     ) -> std::result::Result<CommandOutcome, PluginError> {
-        let args = self.args.take().ok_or_else(|| {
-            PluginError::Internal("una chiamata preparata è stata invocata due volte".into())
-        })?;
-        crate::safety::calling(&self.owner, Gate::Command, &self.command, || {
-            self.provider.invoke(&self.command, args, self.mode, host)
-        })
+        invoke_prepared(
+            &self.owner,
+            &self.command,
+            &mut self.args,
+            self.mode,
+            self.provider.as_ref(),
+            host,
+        )
     }
 }
+
+/// Una chiamata a un comando **di sola lettura**, preparata con un frame tutto
+/// suo ([`Workspace::prepare_read_only_provider_command`]).
+///
+/// A differenza di [`PreparedCommand`] non lascia niente nello stato condiviso
+/// del workspace: nessun attore scambiato, nessun batch aperto, nessuna voce
+/// sulla pila dei comandi, `in_provider_call` mai alzato. Per questo l'host la
+/// può eseguire **senza il turno di scrittura**, e due letture possono girare
+/// insieme fra loro e accanto a chi scrive. La pila della ricorsione viaggia
+/// dentro il token ([`chain`](Self::chain)): chi presta l'host al provider la
+/// porta avanti alle invocazioni annidate.
+pub struct PreparedReadOnlyCommand {
+    owner: String,
+    command: String,
+    args: Option<serde_json::Value>,
+    mode: InvokeMode,
+    provider: Arc<dyn CommandProvider>,
+    why: &'static str,
+    /// I comandi della catena fino a questo, compreso.
+    chain: Vec<String>,
+    /// Il workspace in cui è stata preparata: la fine non si applica a un
+    /// altro, né a questo se nel frattempo si è chiuso.
+    workspace_id: u64,
+    /// Il vault si stava già chiudendo alla preparazione? Allora è una
+    /// lettura della chiusura stessa (un `deactivate` o un handler di
+    /// `VaultClosed` che invoca un comando), e la chiusura non la invalida.
+    closed_at_prepare: bool,
+    /// La bandiera **propria** della lettura: alzata da uno smontaggio o dalla
+    /// chiusura, l'esito non si applica.
+    cancel: Arc<AtomicBool>,
+    /// L'iscrizione fra le letture in volo, che cade col token. `None` per una
+    /// lettura della chiusura stessa: la chiusura che l'ha lanciata non la
+    /// deve aspettare.
+    _in_flight: Option<ReadInFlight>,
+}
+
+impl PreparedReadOnlyCommand {
+    pub fn owner(&self) -> &str {
+        &self.owner
+    }
+
+    pub fn command(&self) -> &str {
+        &self.command
+    }
+
+    /// Modalità per le capacità annidate: sempre una simulazione, come per il
+    /// recinto di sola lettura del percorso condiviso.
+    pub fn host_mode(&self) -> InvokeMode {
+        InvokeMode::DryRun
+    }
+
+    /// Il motivo da dare a [`ReadOnly`](crate::ReadOnly), il recinto che l'host
+    /// mette **sempre** davanti al proxy di questa chiamata.
+    pub fn read_only_reason(&self) -> &'static str {
+        self.why
+    }
+
+    /// La catena dei comandi fino a questo, compreso: è ciò che l'host passa a
+    /// [`Workspace::prepare_read_only_provider_command`] per le invocazioni
+    /// annidate, perché un comando che invoca sé stesso resti rifiutato.
+    pub fn chain(&self) -> &[String] {
+        &self.chain
+    }
+
+    /// Esegue **soltanto** il codice del provider, senza guardie del workspace.
+    pub fn invoke(
+        &mut self,
+        host: &mut dyn HostApi,
+    ) -> std::result::Result<CommandOutcome, PluginError> {
+        invoke_prepared(
+            &self.owner,
+            &self.command,
+            &mut self.args,
+            self.mode,
+            self.provider.as_ref(),
+            host,
+        )
+    }
+}
+
 /// Frame del solo rebuild di manutenzione che l'host porta avanti senza una
 /// guardia del workspace. Attore, batch, pila e rinvio degli eventi restano
 /// aperti fino alla riconciliazione finale.
@@ -2664,6 +2852,82 @@ pub struct PreparedResourceOpen {
     id: DocId,
 }
 
+/// Il lettore delle lease di un vault, da tenere fuori dal workspace.
+///
+/// È la forma durevole di [`PreparedResourceOpen`] e
+/// [`PreparedResourceRead`]: tiene il [`Vault`](crate::vault::Vault) clonato,
+/// come `prepare_resource_open` lo clona a ogni apertura, in un posto che il
+/// workspace condivide con tutti i suoi lettori, e **non** il lucchetto del
+/// workspace. Chi lo tiene apre e legge a pezzi senza prendere
+/// la custodia, cioè anche da dentro un comando o un job che ha già il suo
+/// `HostApi`.
+///
+/// Le recinzioni sono quelle delle due `prepare_*`, con le stesse funzioni:
+/// [`valid_doc_id`] e `transfer::resource_open_on` all'apertura, il controllo
+/// della radice di `check_resource_lease` e `transfer::resource_read_at` a
+/// ogni pezzo (stat, identità e timbro prima e dopo, `Stale` se uno cambia).
+///
+/// Chiuso il vault ([`Workspace::prepare_close`]), il lettore non apre e non
+/// legge più: il pezzo dopo è un errore `Io` di specie `NotConnected`, mai un
+/// byte di un vault che non c'è più. La chiusura svuota il posto condiviso, e
+/// con lui la maniglia della cartella del vault: un lettore rimasto in giro
+/// (in una cache, in un biglietto) non tiene aperta la cartella, che su
+/// Windows altrimenti non si rinomina e non si cancella.
+#[derive(Clone)]
+pub struct ResourceReader {
+    root: Utf8PathBuf,
+    vault: Arc<Shelter<Option<crate::vault::Vault>>>,
+}
+
+impl ResourceReader {
+    /// Una lease su `id`, come [`Workspace::open_resource`].
+    pub fn open(&self, id: &DocId) -> Result<ResourceLease> {
+        let vault = self.vault()?;
+        crate::transfer::resource_open_on(&vault, &valid_doc_id(id.as_str())?)
+    }
+
+    /// Al più `len` byte da `offset` della lease, come
+    /// [`Workspace::read_resource`]: una lease di un altro vault è
+    /// `OutsideVault`, un file cambiato dall'apertura è `Stale`.
+    pub fn read_at(&self, lease: &ResourceLease, offset: u64, len: usize) -> Result<Vec<u8>> {
+        let vault = self.vault()?;
+        check_lease_root(vault.root(), lease)?;
+        crate::transfer::resource_read_at(vault.storage().as_ref(), lease, offset, len)
+    }
+
+    /// La radice canonica del vault che il lettore serve.
+    pub fn root(&self) -> &Utf8Path {
+        &self.root
+    }
+
+    /// Il vault ancora aperto, clonato fuori dal lucchetto del posto: la
+    /// lettura non trattiene la chiusura, e la chiusura che arriva a metà
+    /// lascia finire solo il pezzo già cominciato.
+    fn vault(&self) -> Result<crate::vault::Vault> {
+        if let Some(vault) = self.vault.acquire().as_ref() {
+            return Ok(vault.clone());
+        }
+        Err(KernelError::Io {
+            path: self.root.clone(),
+            source: std::io::Error::new(
+                std::io::ErrorKind::NotConnected,
+                "il vault è chiuso: il lettore delle risorse non legge più",
+            ),
+        })
+    }
+}
+
+/// Il controllo della radice di una lease: una lease aperta su un altro vault
+/// non si legge da questo.
+fn check_lease_root(root: &Utf8Path, lease: &ResourceLease) -> Result<()> {
+    if lease.root != *root {
+        return Err(KernelError::OutsideVault(
+            lease.root.join(lease.path.as_str()),
+        ));
+    }
+    Ok(())
+}
+
 /// Lettura bounded su lease condivisa: non copia path o buffer dell'allegato.
 pub struct PreparedResourceRead {
     storage: Arc<dyn crate::storage::VaultStorage>,
@@ -2699,13 +2963,23 @@ impl PreparedLinkRetarget {
     /// Gli edit, uno per documento che cambia, ciascuno sulla revisione dei
     /// byte appena letti: chi li applica li vede fallire se nel frattempo il
     /// documento è cambiato.
+    ///
+    /// Un file a byte che non sa riscriversi ferma il piano, come una sorgente
+    /// di testo senza riscrittura: qui non c'è una rinomina già fatta a cui
+    /// appendere l'avviso, e chi unisce le note cestinerebbe un file a cui quel
+    /// link punta ancora.
     pub fn edits(self) -> Result<Vec<(DocId, EditRequest)>> {
-        Ok(
-            invoke_prepared_link_rewrites(self.storage.as_ref(), self.rewrites)?
-                .into_iter()
-                .map(|edit| (edit.source().clone(), edit.request().clone()))
-                .collect(),
-        )
+        let PreparedLinkRewriteOutcome {
+            edits,
+            unwritable_bytes,
+        } = invoke_prepared_link_rewrites(self.storage.as_ref(), self.rewrites)?;
+        if let Some(destination) = unwritable_bytes.first() {
+            return Err(no_link_rewrite(destination));
+        }
+        Ok(edits
+            .into_iter()
+            .map(|edit| (edit.source().clone(), edit.request().clone()))
+            .collect())
     }
 }
 
@@ -3451,6 +3725,15 @@ pub struct Workspace {
     /// esattamente la frase che li riguarda tutti insieme. Serve a una cosa
     /// sola: chiudere due volte non è chiudere due volte.
     closed: bool,
+    /// I comandi di sola lettura in volo, che il turno non vede: lo
+    /// smontaggio di un loro proprietario risponde `Busy`, la chiusura li
+    /// ferma e li aspetta ([`ReadsInFlight`]).
+    reads_in_flight: ReadsInFlight,
+    /// Il vault che leggono i [`ResourceReader`] dati fuori, che non hanno il
+    /// workspace e devono smettere quando si chiude. Lo svuota
+    /// [`prepare_close`](Workspace::prepare_close), insieme a `closed`: così
+    /// nessun lettore tiene viva la maniglia della cartella del vault.
+    resource_readers_vault: Arc<Shelter<Option<crate::vault::Vault>>>,
     /// *Com'è configurato questo vault* (§11.1): gli schemi che i plugin
     /// dichiarano nel manifest, i valori dei due livelli, e la precedenza.
     ///
@@ -3977,14 +4260,16 @@ impl Workspace {
         // scrivendo in questo archivio viaggia con questo archivio. Condivise
         // con l'indice del kernel, che è chi risponde a chi le chiede (0019).
         let drafts = Arc::new(Drafts::open(root, Arc::clone(&storage)));
+        let docs = DocumentStore::new(
+            root,
+            Arc::clone(&registry),
+            Arc::clone(&storage),
+            Arc::clone(&settings),
+        )?;
+        let resource_readers_vault = Arc::new(Shelter::new(Some(docs.vault.clone())));
         Ok(Workspace {
             workspace_id: NEXT_WORKSPACE_ID.fetch_add(1, Ordering::Relaxed),
-            docs: DocumentStore::new(
-                root,
-                Arc::clone(&registry),
-                Arc::clone(&storage),
-                Arc::clone(&settings),
-            )?,
+            docs,
             indexes: Indexes::new(
                 registry,
                 Arc::clone(&settings),
@@ -4000,6 +4285,8 @@ impl Workspace {
             clock: Arc::new(crate::time::SystemClock),
             sources: Shelter::new(OpenSources::default()),
             closed: false,
+            reads_in_flight: ReadsInFlight::default(),
+            resource_readers_vault,
             settings,
             view_states: ViewStates::in_memory(),
             organization,
@@ -4478,7 +4765,7 @@ impl Workspace {
         if self.providers.plugins.get(plugin).is_none() {
             return Err(RegistryError::UnknownPlugin(plugin.to_string()));
         }
-        if self.dispatch.in_provider_call() {
+        if self.dispatch.in_provider_call() || self.reads_in_flight.busy(plugin) {
             return Err(RegistryError::Busy(plugin.to_string()));
         }
 
@@ -4656,6 +4943,7 @@ impl Workspace {
             return None;
         }
         self.closed = true;
+        self.resource_readers_vault.acquire().take();
 
         let root = self.docs.vault.root().to_string();
         self.as_actor(Actor::Kernel, |ws| {
@@ -6287,12 +6575,16 @@ impl Workspace {
     }
 
     fn check_resource_lease(&self, lease: &ResourceLease) -> Result<()> {
-        if lease.root != *self.docs.vault.root() {
-            return Err(KernelError::OutsideVault(
-                lease.root.join(lease.path.as_str()),
-            ));
+        check_lease_root(self.docs.vault.root(), lease)
+    }
+
+    /// Il lettore delle lease di questo vault, da tenere fuori dal lucchetto
+    /// (vedi [`ResourceReader`]). Smette di leggere quando il vault si chiude.
+    pub fn resource_reader(&self) -> ResourceReader {
+        ResourceReader {
+            root: self.docs.vault.root().to_owned(),
+            vault: Arc::clone(&self.resource_readers_vault),
         }
-        Ok(())
     }
 
     pub fn prepare_resource_read(
@@ -8784,6 +9076,7 @@ impl Workspace {
             stat: _,
             identity: _,
             rewrites,
+            stale_byte_links,
             side_data,
             recovery,
         } = parsed;
@@ -8793,6 +9086,7 @@ impl Workspace {
         Ok(PendingExplicitRename {
             identity,
             rewrites,
+            stale_byte_links,
             side_data,
             recovery,
             journal: Arc::clone(&self.journal),
@@ -8825,6 +9119,7 @@ impl Workspace {
             recovery: _,
             owns_batch,
             rewrite_failures,
+            stale_byte_links,
             journal_fault,
         } = completed;
         if self.finish_identity_migration(identity).is_err() {
@@ -8839,7 +9134,11 @@ impl Workspace {
                 None,
             );
         }
-        let failed = rewrite_failures;
+        // Le righe dei file a byte vanno in coda solo qui: l'intent di recupero
+        // si chiude quando le riscritture vere sono riuscite, e un file a byte
+        // che non si riscrive non ha niente da recuperare.
+        let mut failed = rewrite_failures;
+        failed.extend(stale_byte_links);
         // Dentro il lotto questo `index-updated` non esce: diventa il
         // `batch-ended` che la chiusura emette. Resta scritto qui perché il
         // rename **ha** aggiornato l'indice, e chi legge questo metodo non deve
@@ -8983,6 +9282,7 @@ impl Workspace {
             stat,
             identity: _,
             rewrites,
+            stale_byte_links,
             side_data,
             recovery,
         } = moved;
@@ -9001,6 +9301,7 @@ impl Workspace {
             workspace_id: snapshot.workspace_id,
             installed,
             rewrites,
+            stale_byte_links,
             side_data,
             recovery,
             journal: Arc::clone(&self.journal),
@@ -9032,9 +9333,11 @@ impl Workspace {
             from,
             to,
             owns_batch,
-            rewrite_failures,
+            mut rewrite_failures,
+            stale_byte_links,
             journal_fault,
         } = completed;
+        rewrite_failures.extend(stale_byte_links);
         for error in side_data.errors {
             self.doc_data_warnings.push(format!(
                 "lo stato per-documento di {} non ha potuto seguire la rinomina in {} — {error}",
@@ -11334,6 +11637,145 @@ impl Workspace {
         self.prepare_provider_command_here(command, args, mode, None)
     }
 
+    /// Prepara un comando che si è dichiarato **di sola lettura**
+    /// (`!spec.scope.writes`) con un frame tutto suo, che l'host può eseguire
+    /// senza il turno di scrittura.
+    ///
+    /// Prende `&self`: non tocca lo stato condiviso. Niente `swap_actor`,
+    /// niente batch, niente voce sulla pila dei comandi, `in_provider_call`
+    /// resta basso. Gli eventi che altri producono mentre il comando legge
+    /// arrivano subito, e la sua fine non spinge undo, non chiude batch e non
+    /// accoda eventi ([`finish_read_only_provider_command`]).
+    ///
+    /// `outer` è la catena dei comandi che stanno invocando questo (vuota per
+    /// un ingresso dall'utente): il rifiuto della ricorsione si calcola su di
+    /// lei e non sulla pila condivisa, che appartiene a chi tiene il turno.
+    ///
+    /// La lettura si iscrive fra quelle in volo ([`reads_in_flight`]) finché
+    /// il token vive, con `cancel`: la bandiera **sua**, che l'host che la
+    /// serve guarda insieme a quelle di chi la contiene (`outer_stops`, la
+    /// bandiera del job e delle letture fuori). Lo smontaggio del proprietario
+    /// alza solo `cancel`: il job che l'ha chiamata riceve un `Cancelled` da
+    /// `invoke_command` e decide lui. La chiusura del vault alza anche
+    /// `outer_stops`, perché lì si ferma tutto. Finché la lettura è in volo,
+    /// lo smontaggio del suo proprietario risponde `Busy`; mentre chi smonta
+    /// il proprietario ne tiene la sbarra ([`ReadsInFlight::bar`]), una nuova
+    /// lettura è rifiutata con `Cancelled`.
+    ///
+    /// [`reads_in_flight`]: Self::reads_in_flight
+    ///
+    /// `None` vuol dire «non è per questa porta»: il comando scrive, oppure è
+    /// manutenzione del kernel. Il chiamante passa allora dal percorso di
+    /// sempre ([`prepare_provider_command`], col turno). Vale anche per un
+    /// comando che scrive invocato in `DryRun`: è l'anteprima di una
+    /// scrittura, e la sua semantica resta quella del frame condiviso.
+    ///
+    /// [`finish_read_only_provider_command`]: Self::finish_read_only_provider_command
+    /// [`prepare_provider_command`]: Self::prepare_provider_command
+    pub fn prepare_read_only_provider_command(
+        &self,
+        command: &str,
+        args: serde_json::Value,
+        mode: InvokeMode,
+        outer: &[String],
+        cancel: &Arc<AtomicBool>,
+        outer_stops: &[Arc<AtomicBool>],
+    ) -> std::result::Result<Option<PreparedReadOnlyCommand>, PluginError> {
+        let at = self.command_owner(command)?;
+        let entry = &self.providers.commands[at];
+        if entry.id == crate::maintenance::MAINTENANCE_ID {
+            return Ok(None);
+        }
+        let spec = entry
+            .specs
+            .iter()
+            .find(|s| s.id == command)
+            .expect("il proprietario è stato trovato dichiarando questo comando");
+        if spec.scope.writes {
+            return Ok(None);
+        }
+        spec.validate_args(&args)?;
+
+        if outer.iter().any(|c| c == command) {
+            return Err(self_invocation(outer, command));
+        }
+        // Alla chiusura la lettura non si iscrive: chi si spegne può ancora
+        // invocare i comandi di chi resta, e la chiusura non aspetta le
+        // letture lanciate da sé. Altrimenti l'iscrizione è rifiutata se chi
+        // smonta il proprietario ne ha sbarrato le nuove letture.
+        let in_flight = if self.closed {
+            None
+        } else {
+            let entered =
+                self.reads_in_flight
+                    .enter(&entry.id, Arc::clone(cancel), outer_stops.to_vec());
+            Some(entered.ok_or_else(|| read_stopped(command))?)
+        };
+        let why = if mode.is_dry_run() {
+            "una simulazione non scrive"
+        } else {
+            "il comando si è dichiarato di sola lettura"
+        };
+        let mut chain = outer.to_vec();
+        chain.push(command.to_string());
+        Ok(Some(PreparedReadOnlyCommand {
+            owner: entry.id.clone(),
+            command: command.to_string(),
+            args: Some(args),
+            mode,
+            provider: Arc::clone(&entry.provider),
+            why,
+            chain,
+            workspace_id: self.workspace_id,
+            closed_at_prepare: self.closed,
+            cancel: Arc::clone(cancel),
+            _in_flight: in_flight,
+        }))
+    }
+
+    /// Chiude una [`PreparedReadOnlyCommand`]: il recinto degli intenti,
+    /// il completamento del piano e la localizzazione. Nient'altro: niente
+    /// undo (una lettura non ha niente da annullare, anche se il provider ne
+    /// dichiara uno), niente batch, niente eventi.
+    ///
+    /// Se il vault si è chiuso dopo la preparazione, o la lettura è stata
+    /// fermata (la sua bandiera, alzata da uno smontaggio), l'esito non si
+    /// applica: la chiamata risponde con [`PluginError::Cancelled`], anche se
+    /// il provider ha ingoiato il rifiuto dell'host. Una lettura preparata
+    /// quando la chiusura era già cominciata (chi si spegne può ancora
+    /// invocare comandi, come sul percorso condiviso) finisce normalmente.
+    pub fn finish_read_only_provider_command(
+        &self,
+        prepared: PreparedReadOnlyCommand,
+        outcome: std::result::Result<CommandOutcome, PluginError>,
+    ) -> std::result::Result<CommandOutcome, PluginError> {
+        let closed_meanwhile = self.closed && !prepared.closed_at_prepare;
+        let stopped = prepared.cancel.load(Ordering::Relaxed);
+        if prepared.workspace_id != self.workspace_id || closed_meanwhile || stopped {
+            return Err(read_stopped(&prepared.command));
+        }
+        let outcome = outcome.and_then(|outcome| {
+            self.guard_command_intent(&prepared.owner, &outcome)
+                .map(|()| outcome)
+        });
+        match outcome {
+            Err(and) => Err(self.localized(&prepared.owner, and)),
+            Ok(mut outcome) => {
+                if let CommandEffect::Plan(plan) = &mut outcome.effect {
+                    plan.complete();
+                }
+                self.localize(&prepared.owner, &mut outcome);
+                Ok(outcome)
+            }
+        }
+    }
+
+    /// Il registro delle letture in volo, da tenere **fuori** dal lucchetto:
+    /// chi chiude il vault lo usa per fermarle e aspettarle.
+    pub fn reads_in_flight(&self) -> ReadsInFlight {
+        self.reads_in_flight.clone()
+    }
+
     fn prepare_provider_command_here(
         &mut self,
         command: &str,
@@ -11351,15 +11793,7 @@ impl Workspace {
         spec.validate_args(&args)?;
 
         if self.providers.command_stack.iter().any(|c| c == command) {
-            let mut round = self.providers.command_stack.clone();
-            round.push(command.to_string());
-            return Err(PluginError::BadArgs(
-                format!(
-                    "un comando non può invocare sé stesso: {}",
-                    round.join(" → ")
-                )
-                .into(),
-            ));
+            return Err(self_invocation(&self.providers.command_stack, command));
         }
 
         if self.providers.commands[at].id == crate::maintenance::MAINTENANCE_ID {
@@ -11420,15 +11854,7 @@ impl Workspace {
         spec.validate_args(&args)?;
 
         if self.providers.command_stack.iter().any(|id| id == command) {
-            let mut round = self.providers.command_stack.clone();
-            round.push(command.to_string());
-            return Err(PluginError::BadArgs(
-                format!(
-                    "un comando non può invocare sé stesso: {}",
-                    round.join(" → ")
-                )
-                .into(),
-            ));
+            return Err(self_invocation(&self.providers.command_stack, command));
         }
 
         let owner = self.providers.commands[at].id.clone();
@@ -11630,15 +12056,7 @@ impl Workspace {
         // profondità da limitare con un numero: è un errore di chi lo ha
         // scritto, e l'unica risposta utile lo nomina.
         if self.providers.command_stack.iter().any(|c| c == command) {
-            let mut round = self.providers.command_stack.clone();
-            round.push(command.to_string());
-            return Err(PluginError::BadArgs(
-                format!(
-                    "un comando non può invocare sé stesso: {}",
-                    round.join(" → ")
-                )
-                .into(),
-            ));
+            return Err(self_invocation(&self.providers.command_stack, command));
         }
 
         // **La manutenzione la esegue il kernel** (§15.2). L'id è passato dalla
@@ -14408,5 +14826,37 @@ mod tests {
         );
         let sizes: Vec<usize> = slices(work).iter().map(Vec::len).collect();
         assert_eq!(sizes, [FEED_BATCH, 1]);
+    }
+
+    /// **Chiuso il vault, un lettore rimasto in giro non tiene la cartella.**
+    ///
+    /// Il bundle Craft tiene i lettori in una cache del processo: se il
+    /// lettore clonasse il vault per sé, la maniglia della cartella vivrebbe
+    /// oltre la chiusura, e su Windows la cartella non si rinomina né si
+    /// cancella più. Il supporto del vault deve morire col workspace anche se
+    /// un lettore resta vivo.
+    #[test]
+    fn a_reader_left_around_does_not_keep_the_vault_storage_alive() {
+        let dir = tempfile::tempdir().expect("la cartella del vault");
+        let root = Utf8PathBuf::from_path_buf(dir.path().to_path_buf()).expect("un path UTF-8");
+        std::fs::write(root.join("a.bin"), b"0123").expect("il file");
+        let mut ws = Workspace::new(&root, FormatRegistry::new()).expect("l'apertura");
+        let reader = ws.resource_reader();
+        let lease = reader.open(&DocId::new("a.bin")).expect("la lease");
+        assert_eq!(reader.read_at(&lease, 0, 4).unwrap(), b"0123");
+        let storage = Arc::downgrade(ws.storage());
+        assert!(ws.close().is_empty());
+        drop(ws);
+        assert!(
+            storage.upgrade().is_none(),
+            "il lettore tiene ancora il supporto del vault chiuso"
+        );
+        assert_eq!(reader.root(), lease.root.as_path());
+        let error = reader.read_at(&lease, 0, 4).unwrap_err();
+        assert!(
+            matches!(&error, KernelError::Io { source, .. }
+                if source.kind() == std::io::ErrorKind::NotConnected),
+            "{error:?}"
+        );
     }
 }

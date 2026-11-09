@@ -44,7 +44,7 @@ use fub_abi::{
     GridBytesSession, GridBytesWindow, GridCommandOutcome, GridCommandRequest, GridCommandState,
     GridSelection, Notice, PluginError,
 };
-use fub_host::{doc_id, document_text, Delivery, DocumentText, EventSink, Host};
+use fub_host::{doc_id, document_text, Delivery, DocumentText, EventSink, Host, OpenKey};
 use fub_wasm_host::catalog::{CatalogEntry, CatalogError, CatalogTrust, SignedFeed};
 use fub_wasm_host::installed::Consent;
 use fub_wasm_host::managed::{InstalledOperation, InstalledPluginManager, InstalledShutdown};
@@ -58,6 +58,7 @@ pub use fub_host::{
     BundleInfo, EmbedContent, ThemeInfo, ThemePayload, UnreadDoc, VaultEntry, VaultInfo,
 };
 pub use fub_wasm_host::managed::InstalledPluginInfo;
+mod avvio;
 mod document_windows;
 mod frame_rate;
 mod live;
@@ -486,15 +487,31 @@ where
         .map_err(|error| unfinished("document", error))?
 }
 
+/// La chiave di apertura facoltativa di `read_document` e `write_document`:
+/// assente o `null` è una lettura o una scrittura semplice, e una chiave
+/// malformata è `BadArgs` prima di toccare il disco (`OpenKey::parse`).
+fn open_key(open: Option<&str>) -> Result<Option<OpenKey>, PluginError> {
+    open.map(OpenKey::parse).transpose()
+}
+
+/// Legge un documento. Senza `open` è una lettura semplice: la stessa
+/// proiezione e la stessa revisione, ma il documento non conta come aperto.
+/// Con `open`, la chiave di una sessione della shell, la revisione letta
+/// resta segnata sotto la chiave finché `document_closed` non la chiude.
 #[tauri::command]
 async fn read_document(
     app: AppHandle,
     id: String,
     vault: Option<String>,
+    open: Option<String>,
 ) -> Result<DocumentSource, PluginError> {
     let id = doc_id(&id)?;
+    let key = open_key(open.as_deref())?;
     off_main(app, move |host| {
-        let (text, revision, format) = host.read_document_with_format(vault.as_deref(), &id)?;
+        let (text, revision, format) = match &key {
+            Some(key) => host.open_document_with_format(vault.as_deref(), &id, key)?,
+            None => host.read_document_with_format(vault.as_deref(), &id)?,
+        };
         let format_id = format.as_ref().map(|known| known.descriptor.id.clone());
         let text_kind = document_text(format.as_ref());
         let source_kind = format
@@ -507,6 +524,37 @@ async fn read_document(
             source_kind,
             text_kind,
         })
+    })
+    .await
+}
+
+/// Scalda in sottofondo il motore che apre questa estensione: la shell lo
+/// chiede quando il puntatore si ferma su un file o una cartella si apre.
+/// Un'estensione senza motore, o senza un provider attivo in un vault aperto,
+/// non fa niente e non è un errore (`Host::warm_engine`).
+#[tauri::command]
+async fn warm_engine(app: AppHandle, extension: String) -> Result<(), PluginError> {
+    off_main(app, move |host| {
+        host.warm_engine(&extension);
+        Ok(())
+    })
+    .await
+}
+
+/// La shell ha chiuso la sessione con questa chiave di apertura: l'host
+/// dimentica le prove delle sue revisioni che nessun'altra chiave tiene, e le
+/// cache dei documenti quando non resta aperta nessuna chiave
+/// (`Host::document_closed`). Una chiave sconosciuta o già chiusa, o un vault
+/// non aperto, non sono un errore; una chiave malformata è `BadArgs`.
+#[tauri::command]
+async fn document_closed(
+    app: AppHandle,
+    open: String,
+    vault: Option<String>,
+) -> Result<(), PluginError> {
+    let key = OpenKey::parse(&open)?;
+    off_main(app, move |host| {
+        host.document_closed(vault.as_deref(), &key)
     })
     .await
 }
@@ -770,6 +818,11 @@ fn close_grid_bytes(
 /// Fino alla decisione 0092 era un `Option<String>` col default `null`, e il
 /// default voleva dire «sovrascrivi comunque»: la guardia si perdeva
 /// **omettendola**, che è il modo in cui una guardia non protegge nessuno.
+///
+/// `open` è la chiave di apertura della sessione che scrive: con la chiave,
+/// la revisione sovrascritta e quella nuova restano segnate sotto la chiave,
+/// che si apre se non lo era; senza, le prove che il salvataggio ha lasciato
+/// e che nessuna chiave tiene si dimenticano subito.
 #[tauri::command]
 async fn write_document(
     app: AppHandle,
@@ -777,11 +830,16 @@ async fn write_document(
     source: String,
     base: WriteBase,
     vault: Option<String>,
+    open: Option<String>,
 ) -> Result<String, PluginError> {
     let id = doc_id(&id)?;
+    let key = open_key(open.as_deref())?;
     off_main(app, move |host| {
-        host.write_document(vault.as_deref(), &id, &source, base)
-            .map(|revision| revision.0)
+        match &key {
+            Some(key) => host.write_open_document(vault.as_deref(), &id, &source, base, key),
+            None => host.write_document(vault.as_deref(), &id, &source, base),
+        }
+        .map(|revision| revision.0)
     })
     .await
 }
@@ -1812,8 +1870,14 @@ fn guard_main_shell(window: &tauri::WebviewWindow, what: &str) -> Result<(), Plu
     let origin = window
         .url()
         .map_err(|error| PluginError::Internal(error.to_string().into()))?;
-    resources::guard_trusted_local(window.label(), origin.as_str())?;
-    if window.label() != "main" {
+    main_shell_only(window.label(), origin.as_str(), what)
+}
+
+/// La regola di [`guard_main_shell`] su label e origin letti lato nativo:
+/// una finestra locale fidata, e fra queste soltanto `main`.
+fn main_shell_only(label: &str, origin: &str, what: &str) -> Result<(), PluginError> {
+    resources::guard_trusted_local(label, origin)?;
+    if label != "main" {
         return Err(PluginError::PermissionDenied(
             format!("only the main shell may {what}").into(),
         ));
@@ -1949,6 +2013,89 @@ async fn reveal_in_system(
     tauri::async_runtime::spawn_blocking(move || reveal::hand_over(root.as_std_path(), &path, open))
         .await
         .map_err(|error| unfinished("reveal", error))?
+}
+
+// --- «Apri con» un'app Craft e l'anteprima fatta dalla sua CLI ---------------
+//
+// Tre comandi della sola shell principale, come `reveal_in_system`: avviano o
+// interrogano programmi della macchina, e un plugin o l'MCP, che raggiungono le
+// porte generiche (`invoke_command`), non devono arrivarci. Le regole stanno
+// in `fub-host` (`open_with.rs`, `craft_render.rs`); qui solo il cancello, il
+// thread di lavoro e l'errore localizzato. `fub-host` ha la feature `craft`
+// fra quelle di default, che l'app non spegne: i tre metodi ci sono sempre.
+
+/// Il lavoro di uno dei comandi Craft fuori dal thread principale, con
+/// l'errore dell'host nella lingua di chi guarda.
+async fn craft_off_main<T, F>(
+    app: AppHandle,
+    vault: Option<String>,
+    what: &'static str,
+    work: F,
+) -> Result<T, PluginError>
+where
+    T: Send + 'static,
+    F: FnOnce(&Host, Option<&str>) -> Result<T, PluginError> + Send + 'static,
+{
+    tauri::async_runtime::spawn_blocking(move || {
+        let host = app.state::<Host>();
+        let vault = vault.as_deref();
+        for_the_shell(&host, vault, work(&host, vault))
+    })
+    .await
+    .map_err(|error| unfinished(what, error))?
+}
+
+/// Le app Craft che aprono `doc` (percorso relativo alla radice del vault),
+/// nell'ordine della tabella; senza `doc` tutte quelle che Fub conosce.
+#[tauri::command]
+async fn external_editors(
+    window: tauri::WebviewWindow,
+    app: AppHandle,
+    vault: Option<String>,
+    doc: Option<String>,
+) -> Result<Vec<fub_host::open_with::ExternalEditor>, PluginError> {
+    guard_main_shell(&window, "list external editors")?;
+    craft_off_main(app, vault, "external editors", move |host, vault| {
+        host.external_editors(vault, doc.as_deref())
+    })
+    .await
+}
+
+/// Apre la voce `path` del vault con l'app Craft `editor`; `page` vale per
+/// PdfCraft.
+#[tauri::command]
+async fn open_with(
+    window: tauri::WebviewWindow,
+    app: AppHandle,
+    vault: Option<String>,
+    path: String,
+    editor: String,
+    page: Option<u32>,
+) -> Result<fub_host::open_with::OpenedWith, PluginError> {
+    guard_main_shell(&window, "open entries with an external editor")?;
+    craft_off_main(app, vault, "open with", move |host, vault| {
+        host.open_with(vault, &path, &editor, page)
+    })
+    .await
+}
+
+/// L'anteprima di `doc` fatta dalla CLI della sua app, dopo un gesto: mette in
+/// coda il job `craft.render` e risponde subito; il risultato arriva come
+/// `job_done`. Non è un comando del bundle `fub.craft`, perché avviare un
+/// programma non passa dalle porte che un plugin e l'MCP raggiungono.
+#[tauri::command]
+async fn craft_render(
+    window: tauri::WebviewWindow,
+    app: AppHandle,
+    vault: Option<String>,
+    doc: String,
+    size: fub_host::craft_render::PreviewSize,
+) -> Result<fub_host::craft_render::CraftPreview, PluginError> {
+    guard_main_shell(&window, "render previews with an external editor")?;
+    craft_off_main(app, vault, "craft render", move |host, vault| {
+        host.craft_render(vault, &doc, size)
+    })
+    .await
 }
 
 // --- superficie IPC da `support` (demo, diagnostica, recupero) ----------------
@@ -2634,10 +2781,21 @@ pub fn run() {
                 .and_then(|entry| entry.value.as_text())
                 == Some("system");
             for window in app.webview_windows().values() {
+                // Il fondo nativo copre l'attimo prima del primo disegno della
+                // pagina (`avvio.rs`). Un errore si ignora: la finestra resta
+                // col fondo di serie, un lampo e non un guasto; su mobile il
+                // fondo nativo non è supportato e non deve fermare l'avvio.
+                let _ = window.set_background_color(Some(avvio::fondo_di_macchina(&machine, window)));
                 window.set_zoom(zoom)?;
                 #[cfg(not(mobile))]
                 if window.label() == "main" {
                     window.set_decorations(system_frame)?;
+                    // La `main` nasce nascosta (`tauri.conf.json`) perché si
+                    // veda già col suo fondo: mostrarla non dipende dal colore,
+                    // e una finestra che non si mostra è peggio di un lampo.
+                    if let Err(error) = window.show() {
+                        tracing::warn!(%error, "main window not shown");
+                    }
                 }
             }
             #[cfg(not(any(target_os = "macos", target_os = "ios", target_os = "android")))]
@@ -2661,6 +2819,9 @@ pub fn run() {
             save_artifact,
             print_artifact,
             reveal_in_system,
+            external_editors,
+            open_with,
+            craft_render,
             demo_root,
             open_demo,
             close_demo,
@@ -2674,6 +2835,8 @@ pub fn run() {
             close_document_window,
             finish_main_close,
             read_document,
+            warm_engine,
+            document_closed,
             resource_open,
             resource_read_chunk,
             resource_close,
@@ -2850,6 +3013,32 @@ pub fn run() {
 mod installed_ipc_tests {
     use super::*;
 
+    /// I comandi che avviano programmi della macchina (`open_with`,
+    /// `craft_render`, `reveal_in_system`…) li chiede soltanto la shell
+    /// principale: una finestra di documento, il visore o una finestra
+    /// navigata su un remoto ricevono `permission_denied` prima del lavoro.
+    #[test]
+    fn only_the_local_main_shell_passes_the_main_shell_gate() {
+        const LOCAL: &str = "tauri://localhost/";
+        assert!(main_shell_only("main", LOCAL, "render").is_ok());
+        assert!(main_shell_only("main", "http://tauri.localhost/", "render").is_ok());
+        for (label, origin) in [
+            ("document-1", LOCAL),
+            ("fub-viewer", LOCAL),
+            ("MAIN", LOCAL),
+            ("main", "https://esempio.it/"),
+            ("main", "fub-asset://localhost/3"),
+        ] {
+            assert!(
+                matches!(
+                    main_shell_only(label, origin, "render"),
+                    Err(PluginError::PermissionDenied(_))
+                ),
+                "{label} su {origin} è passata"
+            );
+        }
+    }
+
     /// Una scelta d'avvio di cui il disco non sa dire se c'è non vale «avvio
     /// pieno»: illeggibile, vale limitato.
     #[cfg(unix)]
@@ -2874,6 +3063,20 @@ mod installed_ipc_tests {
         }
         let missing = config.with_file_name("assente");
         assert!(!limited_startup(Some(missing.as_path())).enabled);
+    }
+
+    /// `open` assente o `null` è una lettura semplice; una chiave malformata
+    /// è `BadArgs` prima che il comando tocchi l'host.
+    #[test]
+    fn the_open_key_is_optional_and_checked() {
+        assert!(open_key(None).unwrap().is_none());
+        assert_eq!(
+            open_key(Some("sessione-1")).unwrap().unwrap().as_str(),
+            "sessione-1"
+        );
+        for bad in ["", "a/b", "../x", "a b"] {
+            assert!(matches!(open_key(Some(bad)), Err(PluginError::BadArgs(_))));
+        }
     }
 
     #[test]

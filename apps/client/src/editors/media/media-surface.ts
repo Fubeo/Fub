@@ -19,6 +19,7 @@ import { decodeImage, mountImageView, type ImageView } from "./image-view";
 import { ZOOM_STEP } from "./zoom-view";
 import { mountAudioView, mountVideoView } from "./player-view";
 import { mountPdfView, pdfIdWithoutFragment, pdfPageFromFragment, type PdfEngineLoader, type PdfView } from "./pdf-view";
+import { openWithChoices, shellOpenWith, type OpenWithHost } from "../../state/external-editors";
 
 export interface MediaSurfaceDeps {
   transport: ResourceTransport;
@@ -26,11 +27,19 @@ export interface MediaSurfaceDeps {
   /// streaming: la forma dipende dalla piattaforma e la sa l'host.
   assetUrl: (handle: string) => string;
   pdfLoader?: PdfEngineLoader;
+  /// L'app predefinita del sistema: «Apri con un'altra app» c'è solo con lei.
   openExternal?: (id: string) => void | Promise<void>;
+  /// Le app Craft di «Apri con» (N7): con almeno una installata la voce
+  /// diventa un sottomenu. Senza, quelle della shell principale.
+  openWith?: OpenWithHost;
   copyText?: (text: string) => Promise<void>;
   /// «Annota» sul PDF: crea o apre le sue annotazioni. `available` dice se il
   /// kernel ha il comando, cioè se il vault serve le annotazioni.
   annotate?: { available(): boolean; run(pdf: string): Promise<void> };
+  /// I dati di LightCraft sotto una foto (N7): mostra in fondo a `root` la
+  /// riga dell'XMP accanto a `doc`, finché `life` è vivo. Senza, la foto è
+  /// sola; con, la riga arriva dopo la foto, che non la aspetta.
+  photoData?: { show(root: HTMLElement, doc: string, life: Lifetime): void };
 }
 
 const MEDIA_MODES: SurfaceMode[] = [
@@ -77,6 +86,9 @@ export function mountMediaSurface(
   let pendingPort: ResourcePort | null = null;
   // La view montata, per il menu del tasto destro.
   let mounted: Mounted = null;
+  /// La pagina chiesta dall'apertura (un link a `x.pdf#page=3`) o da un link
+  /// seguito mentre i byte si leggono ancora: il visore parte da lì.
+  let wantedPage: number | null = context.page ?? null;
 
   function message(key: Key): void {
     if (!active) return;
@@ -112,16 +124,29 @@ export function mountMediaSurface(
       } else {
         const bytes = await port.readAll();
         if (!active) return;
-        mounted = await mountBytes(descriptor, bytes, life, deps, root, context.documentId);
+        mounted = await mountBytes(descriptor, bytes, life, deps, root, context.documentId, wantedPage);
       }
       status.remove();
+      showPhotoData();
     } catch (error) {
       if (!active) return;
       status.textContent = error instanceof Error ? error.message : t("viewer.unavailable");
+      // Una foto che la vista non sa mostrare (un TIFF, un HEIC) ha la sua
+      // frase, e sotto i dati del suo XMP.
+      showPhotoData();
     } finally {
       if (pendingPort === port) pendingPort = null;
       await port?.close().catch(() => {});
     }
+  }
+
+  // La riga dei dati di LightCraft, dopo la foto o dopo la frase che dice
+  // perché non si vede: soltanto per una foto, e una volta.
+  let photoShown = false;
+  function showPhotoData(): void {
+    if (photoShown || !active || profile !== "media-image" || !deps.photoData) return;
+    photoShown = true;
+    deps.photoData.show(root, pdfIdWithoutFragment(context.documentId), life);
   }
 
   void load().catch(() => {});
@@ -137,6 +162,11 @@ export function mountMediaSurface(
     },
     focus() {
       root.focus();
+    },
+    showPage(page: number) {
+      if (!active || !Number.isSafeInteger(page) || page < 1) return;
+      if (mounted?.pdf) void mounted.pdf.goToPage(page).catch(() => {});
+      else if (!mounted) wantedPage = page;
     },
     contextMenu: (at) => mediaMenu(mounted, at, pdfIdWithoutFragment(context.documentId), deps),
     setTheme(theme) {
@@ -159,6 +189,7 @@ async function mountBytes(
   deps: MediaSurfaceDeps,
   root: HTMLElement,
   documentId: string,
+  wantedPage: number | null = null,
 ): Promise<Mounted> {
   const kind: MediaKind = mediaKindOfId(descriptor.id);
   const openExternal = deps.openExternal ? () => deps.openExternal!(descriptor.id) : undefined;
@@ -180,7 +211,7 @@ async function mountBytes(
       return { kind, element: view.element };
     }
     case "pdf": {
-      const page = pdfPageFromFragment(documentId);
+      const page = wantedPage ?? pdfPageFromFragment(documentId);
       const view = mountPdfView(
         descriptor,
         bytes,
@@ -216,7 +247,7 @@ async function mountBytes(
 
 /// Ciò che la superficie ha montato: la specie e, per immagini e PDF, la view
 /// con cui il menu agisce.
-type Mounted = {
+export type Mounted = {
   readonly kind: MediaKind;
   readonly element: HTMLElement;
   readonly image?: ImageView;
@@ -224,8 +255,9 @@ type Mounted = {
 } | null;
 
 /// Il menu del tasto destro sul file mostrato. Sul lettore di audio e video
-/// resta quello del sistema, che ha già velocità e ripetizione.
-function mediaMenu(mounted: Mounted, at: SurfacePoint | null, id: string, deps: MediaSurfaceDeps): SurfaceMenu | null {
+/// resta quello del sistema, che ha già velocità e ripetizione. Esportato per
+/// i casi del bilancio dei menu (`ui/menu-cases.ts`).
+export function mediaMenu(mounted: Mounted, at: SurfacePoint | null, id: string, deps: MediaSurfaceDeps): SurfaceMenu | null {
   if (!mounted) return null;
   const under = at ? document.elementFromPoint(at.x, at.y) : null;
   if (under instanceof HTMLMediaElement) return null;
@@ -281,9 +313,27 @@ function mediaMenu(mounted: Mounted, at: SurfacePoint | null, id: string, deps: 
   }
   if (deps.copyText) context.push({ id: "media.copy_embed", label: t("media_menu.copy_embed"), run: () => copy(`![[${id}]]`) });
   const tail: (SurfaceMenuItem | string)[] = [];
-  if (deps.openExternal) {
-    tail.push({ id: "media.open_external", label: t("media.open_external"), run: () => void Promise.resolve(deps.openExternal!(id)).catch(() => {}) });
-  }
+  if (deps.openExternal) tail.push(openWithItem(id, deps.openExternal, deps.openWith ?? shellOpenWith));
   tail.push("shell.explorer.reveal");
   return { target: { kind: mounted.kind === "pdf" ? "page" : "media", ref: id }, context, note: { kind: "file", id }, tail };
+}
+
+/// «Apri con un'altra app» sul file mostrato: la voce dell'app di sistema, o
+/// con un'app Craft installata il sottomenu che la mette per prima, come
+/// nell'albero (`panels/open-with.ts`). Le voci si chiedono all'host quando
+/// il sottomenu si apre.
+export function openWithItem(id: string, openExternal: (id: string) => void | Promise<void>, host: OpenWithHost): SurfaceMenuItem {
+  const system = (): void => void Promise.resolve(openExternal(id)).catch(() => {});
+  const item = { id: "media.open_external", label: t("media.open_external") };
+  if (!host.installed()) return { ...item, run: system };
+  return {
+    ...item,
+    load: async () => (await openWithChoices(id, system, host)).map((choice): SurfaceMenuItem => ({
+      id: `media.open_with.${choice.id}`,
+      label: choice.label,
+      ...(choice.note === undefined ? {} : { description: choice.note }),
+      ...(choice.disabled ? { enabled: false } : {}),
+      run: choice.run,
+    })),
+  };
 }

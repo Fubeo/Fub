@@ -115,6 +115,61 @@ apertura, attesa dell'indicizzazione e lettura del documento, poi chiusura.
 completo esercitato da questo drill. Il drill storico di #7 documenta il
 comportamento legacy e resta distinto dalla verifica del protocollo globale #5.
 
+### Corpus senza perdite della pre-alpha
+
+```bash
+cargo +1.95.0 test -p fub-host --test prealpha_corpus
+```
+
+Un file vero per ogni formato della pre-alpha, in
+[`tests/fixtures/prealpha-corpus/`](../../tests/fixtures/prealpha-corpus/README.md):
+Markdown con CRLF, con BOM, col frontmatter e con caratteri fuori dal piano
+base; un `.docx` modificabile e uno protetto; un `.xlsx` con formule; un SVG
+di Inkscape; un `.canvas` di Obsidian con CRLF e BOM; un PDF. Il `README.md`
+della cartella dice da quale corpus viene ciascuno.
+
+Il test copia il corpus in una cartella temporanea, apre il vault con `Host`
+e prova per ogni file:
+
+- aprire e chiudere come la shell non cambia un byte: la lettura sotto la
+  chiave di apertura e `document_closed` dei motori, la griglia per un foglio,
+  la risorsa per un PDF;
+- una scrittura da una revisione vecchia dà `Conflict`, e il file resta;
+- un file che sparisce fra la lettura e la scrittura dà un errore tipizzato e
+  non rinasce;
+- per Markdown e SVG una parola cambiata, per il `.canvas` una scheda spostata
+  con `canvas.apply`: i byte cambiano solo nello spazio della modifica, e i
+  fine riga e il BOM restano.
+
+La sola lettura si prova coi motivi che l'host conosce, uguali sui tre
+sistemi: il `.docx` protetto (`host.rich.readonly.protected`) e una cartella
+di Excel che la shell coprirebbe con dei byte suoi (`host.xlsx.readonly`). Il
+permesso del file non è uno di questi motivi: su Linux e macOS la scrittura
+atomica sostituisce anche un file senza permesso di scrittura.
+
+Le modifiche di un `.docx` e di un `.xlsx` hanno i loro corpus nei crate dei
+formati (`fub-format-rich`, `fub-format-xlsx`, test `corpus`). Un formato che
+entra nella pre-alpha aggiunge qui il suo file, con la provenienza.
+
+### Albero delle dipendenze
+
+Il [guard dei motori](../../.github/scripts/check-motori.mjs) legge l'albero
+di `fub-app` con `cargo tree`, solo gli archi normali, con tutte le feature e
+tutte le piattaforme, e pone due tetti a ciò che si installa.
+
+- Nessuna interfaccia di un'app Craft: `egui`, `eframe`, `egui-wgpu`,
+  `egui-winit`, `winit`, `rfd` e `accesskit_winit` fanno fallire il guard, con
+  la catena di chi li tira dentro. Fa eccezione `rfd` portato da
+  `tauri-plugin-dialog`, che apre i dialoghi di sistema della shell.
+- Le librerie presenti in due o più versioni non superano `librerie_doppie`
+  di [`budgets.json`](../reference/budgets.json). Il tetto si può soltanto
+  abbassare: quando il conto scende, il guard avvisa di scriverci il numero
+  nuovo.
+
+Un Cargo che non riesce a dare l'albero fa uscire il guard con 2, mai con un
+conto vuoto. `--self-test` prova il lettore su un albero finto; `--albero` e
+`--budgets` leggono l'albero e i tetti da file.
+
 
 ## Frontend
 
@@ -178,11 +233,33 @@ esaminato il diff; non va promosso a baseline. Un cambiamento intenzionale
 richiede invece revisione del foglio, spiegazione delle scene coinvolte e
 rigenerazione nell'ambiente Ubuntu validato.
 
+Lo strato d'avvio ha quattro scene: `avvio-attesa` (il marchio e la riga del
+vault che si apre), `avvio-lento` («Ci vuole più del solito.», a 10 s),
+`avvio-guasto` (il motivo, col fuoco su Riprova) e `avvio-telefono` (l'attesa
+su `mobile.html`). Il fake del banco ferma l'avvio dalla query: `avvio=attesa`
+trattiene `openVault`, `avvio=guasto` fa cadere `initialVault`. Una scena che
+non arriva a `data-bench="ready"` dichiara la sua condizione d'arrivo
+(`ready`), e il palco ferma la scia (`.avvio-scia`) prima dello scatto.
+
+La guardia del lampo (`npm run bench:lampo`, `-- --port <n> --strictPort` per
+un'altra porta) trattiene il modulo d'ingresso di `index.html` e di
+`mobile.html` e guarda la pagina com'è prima di ogni modulo, in luce scura,
+chiara e con una cache `fub.avvio` chiara su un sistema scuro: il fondo di
+`<html>` è pieno e della luce attesa, `.avvio` copre la finestra (nove punti
+cadono dentro di lui), `#app` è `inert` e nessun bottone dell'app si vede con
+l'aspetto nativo. Poi rilascia il modulo e, ad avvio finito, verifica che non
+restino `.avvio`, `#avvio-stile`, `data-avvio-*` né `--avvio-*` e che `#app`
+sia vivo. Esce diverso da zero nominando la pagina, il caso e il controllo
+caduto: senza il foglio dello strato in una pagina cade. In CI gira nel job
+del banco visivo, dopo le scene.
+
 Il banco del moto (`npm run bench:motion`) misura le coreografie dello
 Scrittoio nel browser: lo stato d'arrivo coincide con quello a moto ridotto,
 non resta nessuna animazione viva, i fotogrammi chiave toccano soltanto
 `transform` e `opacity`, un gesto invertito a metà torna allo stato di
-partenza, e un'uscita (un lanciatore, un cassetto, un dialogo che si chiude)
+partenza senza salti (ogni riquadro in corsa prosegue da dov'era, lui o la
+sua immagine che esce, e il referto dice com'era e com'è il riquadro che
+salta), e un'uscita (un lanciatore, un cassetto, un dialogo che si chiude)
 finisce entro 140 ms. Ogni file della shell e del kit che fa partire una corsa
 ha la sua coreografia. Anche il budget d'interazione (`npm run bench:interaction`) apre
 la pagina col movimento acceso e l'ora vera: misura in quanti millisecondi un

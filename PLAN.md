@@ -380,8 +380,8 @@ e si fa solo se la prova con Obsidian dice che l'inchiostro si perde.
   come dice D-1 (c) finché la prova con Obsidian non è fatta (T24). La
   decisione scritta da T5 resta «proposta» fino a T24, che la fa «accolta»
   oppure apre D-12.
-- A13 · **La decisione di N4 è la 0238**
-  (`docs/decisions/0238-inchiostro-sulla-lavagna.md`, scritta da T5); i
+- A13 · **La decisione di N4 è la 0241**
+  (`docs/decisions/0241-inchiostro-sulla-lavagna.md`, scritta da T5); i
   task di N4 la aggiornano, non ne aprono un'altra.
 - A14 · **Testi nuovi** in `apps/client/src/i18n/catalog.ts`, in italiano e
   in inglese, senza il gergo di `apps/client/src/i18n/gergo.ts`.
@@ -606,7 +606,7 @@ Trovate il 2026-11-02, rileggendo il codice per le risposte:
 - **La pagina `docs/reference/canvas-ink.md`, sezione «Obsidian», decide già**
   «A più una copia B» se Obsidian perde i livelli: contro D-1 (c), che
   rimanda la scelta all'utente. T24 la corregge.
-- **La decisione è la 0238**, non la 0237 che il piano pensava (A13).
+- **La decisione è la 0241**, non la 0237 che il piano pensava (A13).
 - **Note e disegni hanno già le due gomme** (`rich.ink.whole` nel catalogo,
   `draw.eraser.stroke` e `draw.eraser.precise`, `editors/spatial/tools/
   erase-precise.ts`): T22 riusa `ink/tools/split.ts` come loro.
@@ -632,7 +632,7 @@ Trovate il 2026-11-02, rileggendo il codice per le risposte:
 | spostare una scheda sposta il suo inchiostro; ridimensionarla lo scala senza deformarlo su immagini e PDF e lo lascia fermo sulle altre | i vettori `canvas-ops/move-card-with-ink.json`, `resize-card-with-ink.json` e `canvas-ink-fit/`; il test della tela che sposta, ridimensiona e legge la resa | T10, T12, T18 |
 | annulla e ripeti funzionano per tratto e per passata di gomma, anche quella che taglia | `engine-ink.test.ts` | T12, T13, T22 |
 | il `.xlsx` sotto l'inchiostro ha lo stesso hash prima e dopo | il test della tela (nessuna scrittura fuori dal `.canvas`) e lo sha256 nei rapporti delle due misure | T12, T15, T23 |
-| si sa che cosa fa Obsidian ai campi `fub:ink`, e il posto dell'inchiostro è deciso | il kit di T7, lanciato dall'utente; l'ADR 0238 «accolta», oppure la risposta a D-12 e i suoi task fatti; la riga in DECISIONS.md | T7, T24 e l'utente |
+| si sa che cosa fa Obsidian ai campi `fub:ink`, e il posto dell'inchiostro è deciso | il kit di T7, lanciato dall'utente; l'ADR 0241 «accolta», oppure la risposta a D-12 e i suoi task fatti; la riga in DECISIONS.md | T7, T24 e l'utente |
 | Rust e TypeScript leggono e cambiano l'inchiostro allo stesso modo, e dopo T17 le regole stanno in una copia sola (Rust, nel client per `.wasm`) | i vettori `canvas-ink/`, `canvas-patches/ink-*.json`, `canvas-ops/*ink*.json` in `cargo test -p fub-canvas-core` e in Vitest per `.wasm` | T8, T9, T10, T11, T17 |
 | le due impostazioni ci sono, si leggono in Impostazioni in italiano e in inglese e partono spente | i test di `fub-features` e `fub-host`, lo specchio nel client | T19, T14, T16 |
 | il menu della penna e «Scrivi col mouse» sono come il prototipo approvato, nei due temi | le schermate del banco accanto a `PLAN-ui/lavagna-penne.html` | T20, T16, T21 |
@@ -1534,7 +1534,7 @@ Tocca: `apps/client/src/editors/canvas/ink-fit.ts` (nuovo),
 `ink-fit.test.ts` (nuovo), `apps/client/src/__fixtures__/canvas-ink-fit/`
 (nuovo, un file per caso), `apps/client/src/editors/canvas/ink-paint.ts`,
 `ink-paint.test.ts`, `docs/reference/canvas-ink.md` («L'ancora», «Come si
-disegna»), `docs/decisions/0238-inchiostro-sulla-lavagna.md` (punto 3 e
+disegna»), `docs/decisions/0241-inchiostro-sulla-lavagna.md` (punto 3 e
 conseguenze; resta «proposta»), `docs/architecture/ink-and-tools.md` (la
 riga dell'asciutto che nomina `INK_ASPECT`).
 Non toccare: `engine.ts` (lo collega T12); il formato e i vettori di
@@ -1831,7 +1831,7 @@ l'uscita di `confronta.mjs`; da lì si decide se l'inchiostro resta solo nel
 `.canvas`. Oggi `docs/reference/canvas-ink.md` («Obsidian») dice già «A
 più una copia B» se i livelli si perdono: è una scelta che D-1 (c) lascia
 all'utente.
-Tocca: `docs/decisions/0238-inchiostro-sulla-lavagna.md`,
+Tocca: `docs/decisions/0241-inchiostro-sulla-lavagna.md`,
 `docs/reference/canvas-ink.md` (sezione «Obsidian»), `DECISIONS.md`;
 `PLAN.md` solo se servono i task di D-12.
 Non toccare: il codice; il kit di T7 (se l'uscita mostra un suo errore, è
@@ -1840,7 +1840,7 @@ Dipende da: T7, T18 (tutti e due toccano `canvas-ink.md`); l'uscita della
 prova incollata dall'utente
 Cosa fare (lo fa l'orchestratore, o un coder con l'uscita in mano):
 - Ogni livello intatto (le schede, anche quelle spostate e ridimensionate,
-  la radice e i livelli estranei; uscita 0): l'ADR 0238 passa ad «accolta»,
+  la radice e i livelli estranei; uscita 0): l'ADR 0241 passa ad «accolta»,
   con la versione di Obsidian e la data della prova; la sezione «Obsidian»
   dice che cosa si è visto e toglie la frase sulla copia B; una riga in
   DECISIONS.md.
@@ -1860,7 +1860,7 @@ Fatto quando: l'ADR è «accolta» con la sezione «Obsidian» aggiornata,
 oppure D-12 ha la risposta e i suoi task sono nel piano; la riga è in
 DECISIONS.md.
 Prova: node .github/scripts/check-doc-links.mjs; grep -n "Stato"
-docs/decisions/0238-inchiostro-sulla-lavagna.md
+docs/decisions/0241-inchiostro-sulla-lavagna.md
 Stato: [ ] da fare
 Aspetta: l'uscita della prova con Obsidian (il kit di T7), che incolla l'utente.
 

@@ -1,24 +1,17 @@
-import {
-  invertOperation,
-  lineFeeds,
-  operationFromText,
-  type TextOperation,
-} from "../core/text-operation";
-import { INK_KEY, INK_LAYER_VERSION, inkLayerWritable, type InkLayerRef } from "./ink-record";
-import { isValidCanvas, parseCanvas, type CanvasDocument, type CanvasEdge, type CanvasNode } from "./model";
-import {
-  orderedCanvasEdge,
-  orderedCanvasNode,
-  patchCanvasSource,
-  sameCanvasModel,
-  sameCanvasValue,
-} from "./source-edit";
+// Le toppe della tela: la forma che il nucleo (`crates/fub-canvas-core`,
+// caricato in WebAssembly da `wasm/core.ts`) applica al sorgente, e i
+// costruttori che il motore usa per farle. Il commit, il suo annulla e la
+// lettura del file stanno tutti nel nucleo; qui c'è solo ciò che serve a
+// descrivere un cambiamento.
+import type { TextOperation } from "../core/text-operation";
+import { INK_KEY, inkLayerWritable, type InkLayerRef } from "./ink-record";
+import type { CanvasDocument, CanvasEdge, CanvasNode } from "./model";
 
 export type CanvasPatch =
   | { readonly kind: "upsert-node"; readonly before: CanvasNode | null; readonly after: CanvasNode; readonly at?: number }
   | { readonly kind: "remove-node"; readonly before: CanvasNode; readonly after: null; readonly at?: number }
-  | { readonly kind: "upsert-edge"; readonly before: CanvasEdge | null; readonly after: CanvasEdge }
-  | { readonly kind: "remove-edge"; readonly before: CanvasEdge; readonly after: null }
+  | { readonly kind: "upsert-edge"; readonly before: CanvasEdge | null; readonly after: CanvasEdge; readonly at?: number }
+  | { readonly kind: "remove-edge"; readonly before: CanvasEdge; readonly after: null; readonly at?: number }
   | { readonly kind: "reorder"; readonly before: readonly string[]; readonly after: readonly string[] }
   | InkPatch;
 
@@ -40,6 +33,7 @@ export type LayerRef = InkLayerRef;
  * Aggiunge (`before` a `null`), toglie (`after` a `null`) o cambia il tratto
  * alla posizione `at` dei tratti del livello `layer`, come `CanvasPatch::Ink`
  * del nucleo Rust (`docs/reference/canvas-operations.md` § «Inchiostro»).
+ * La applica il nucleo, come le altre toppe.
  */
 export interface InkPatch {
   readonly kind: "ink";
@@ -54,8 +48,28 @@ export interface CanvasOperation extends TextOperation {
   readonly patches: readonly CanvasPatch[];
 }
 
-export function isCanvasOperation(operation: TextOperation | null): operation is CanvasOperation {
-  return operation !== null && "kind" in operation && operation.kind === "canvas";
+// L'ordine in cui si scrivono le chiavi note (R10), come `node_value` ed
+// `edge_value` in Rust; le sconosciute vengono dopo, nel loro ordine.
+const NODE_ORDER = [
+  "id", "type", "x", "y", "width", "height", "color", "text", "file", "subpath", "url", "label",
+  "background", "backgroundStyle",
+] as const;
+const EDGE_ORDER = ["id", "fromNode", "fromSide", "fromEnd", "toNode", "toSide", "toEnd", "color", "label"] as const;
+
+/**
+ * `value` con le chiavi note prima, in `order`, poi le altre nel loro ordine.
+ * `Object.fromEntries` definisce ogni chiave come propria, anche `__proto__`.
+ */
+function ordered<T extends object>(value: T, order: readonly string[]): T {
+  const record = value as Record<string, unknown>;
+  const entries: [string, unknown][] = [];
+  for (const key of order) {
+    if (Object.prototype.hasOwnProperty.call(record, key) && record[key] !== undefined) entries.push([key, record[key]]);
+  }
+  for (const [key, val] of Object.entries(record)) {
+    if (!order.includes(key)) entries.push([key, val]);
+  }
+  return Object.fromEntries(entries) as T;
 }
 
 // I campi noti facoltativi: in una toppa, come nel file, `null` vale come
@@ -74,16 +88,28 @@ function withoutNulls<T extends object>(value: T, keys: readonly string[]): T {
 // Una copia con le chiavi nell'ordine in cui si scrivono (R10), senza i campi
 // noti a `null` (R7).
 function cloneNode(node: CanvasNode): CanvasNode {
-  return orderedCanvasNode(withoutNulls(JSON.parse(JSON.stringify(node)) as CanvasNode, NODE_OPTIONAL));
+  return ordered(withoutNulls(JSON.parse(JSON.stringify(node)) as CanvasNode, NODE_OPTIONAL), NODE_ORDER);
 }
 
 function cloneEdge(edge: CanvasEdge): CanvasEdge {
-  return orderedCanvasEdge(withoutNulls(JSON.parse(JSON.stringify(edge)) as CanvasEdge, EDGE_OPTIONAL));
+  return ordered(withoutNulls(JSON.parse(JSON.stringify(edge)) as CanvasEdge, EDGE_OPTIONAL), EDGE_ORDER);
 }
 
 /** Uguali come valori JSON (R9): l'ordine delle chiavi non conta, come in `patch::same_value`. */
 function sameValue(left: unknown, right: unknown): boolean {
-  return sameCanvasValue(left, right);
+  if (left === right) return true;
+  if (Array.isArray(left) && Array.isArray(right)) {
+    return left.length === right.length && left.every((item, index) => sameValue(item, right[index]));
+  }
+  if (left && right && typeof left === "object" && typeof right === "object"
+    && !Array.isArray(left) && !Array.isArray(right)) {
+    const a = left as Record<string, unknown>;
+    const b = right as Record<string, unknown>;
+    const keys = Object.keys(a);
+    return keys.length === Object.keys(b).length
+      && keys.every((key) => Object.prototype.hasOwnProperty.call(b, key) && sameValue(a[key], b[key]));
+  }
+  return false;
 }
 
 function nodeById(doc: CanvasDocument, id: string): CanvasNode | undefined {
@@ -129,12 +155,6 @@ function isStoredStroke(value: unknown): value is StoredInkStroke {
   return isRecord(value) && typeof value.id === "string" && value.id !== "";
 }
 
-/** `"board"` o `{"node": id}`, senza altri campi: la forma di `LayerRef` in Rust. */
-function isLayerRef(value: unknown): value is LayerRef {
-  if (value === "board") return true;
-  return isRecord(value) && typeof value.node === "string" && Object.keys(value).length === 1;
-}
-
 /** Chi tiene il livello: la radice o la prima scheda con quell'id (`ink_holder`). */
 function inkHolder(doc: CanvasDocument, layer: LayerRef): Record<string, unknown> | undefined {
   return layer === "board" ? doc : nodeById(doc, layer.node);
@@ -150,300 +170,6 @@ function writableStrokes(doc: CanvasDocument, layer: LayerRef): readonly StoredI
   if (!holder || !inkLayerWritable(holder)) return null;
   if (!has(holder, INK_KEY)) return [];
   return (holder[INK_KEY] as { strokes: StoredInkStroke[] }).strokes;
-}
-
-/** Why a draft is refused: the word of `PatchError::reason` in the Rust core. */
-type DraftRefusal = "stale" | "invalid";
-
-/**
- * Un passo `ink` sulla bozza, come `ink_step` del nucleo Rust e con le sue
- * ragioni: `invalid` per una toppa che porterebbe a un livello che Fub non
- * scrive (senza tratto, livello estraneo, un id che il livello ha già, o una
- * toppa che il nucleo non saprebbe nemmeno leggere), `stale` per una scheda
- * che non c'è, un'immagine di prima che non torna o un `at` oltre la fine.
- */
-function inkStep(draft: CanvasDocument, patch: InkPatch): DraftRefusal | null {
-  const before: unknown = patch.before ?? null;
-  const after: unknown = patch.after ?? null;
-  if ((before !== null && !isStoredStroke(before)) || (after !== null && !isStoredStroke(after))
-    || !isLayerRef(patch.layer) || !Number.isSafeInteger(patch.at) || patch.at < 0) return "invalid";
-  if (before === null && after === null) return "invalid";
-  const holder = inkHolder(draft, patch.layer);
-  if (!holder) return "stale";
-  if (!inkLayerWritable(holder)) return "invalid";
-  const layer: Record<string, unknown> = has(holder, INK_KEY)
-    ? holder[INK_KEY] as Record<string, unknown>
-    : { v: INK_LAYER_VERSION, strokes: [] };
-  const strokes = [...layer.strokes as StoredInkStroke[]];
-  const at = patch.at;
-  if (before === null ? at > strokes.length : at >= strokes.length || !sameValue(strokes[at], before)) return "stale";
-  // Il posto che il tratto prende: con `before` quello del tratto di prima,
-  // che non conta come doppione.
-  if (after !== null && strokes.some((stroke, index) => (before === null || index !== at) && stroke.id === after.id)) {
-    return "invalid";
-  }
-  if (before === null) strokes.splice(at, 0, cloneStroke(after as StoredInkStroke));
-  else if (after === null) strokes.splice(at, 1);
-  else strokes[at] = cloneStroke(after);
-  const extra = Object.entries(layer).filter(([key]) => key !== "v" && key !== "strokes");
-  // L'ultimo tratto tolto da `{"v": 1, "strokes": [...]}`: la chiave sparisce.
-  // Altrimenti il livello si riscrive `v`, `strokes`, poi gli altri campi; una
-  // chiave che c'è resta al suo posto, una nuova va in fondo ai campi.
-  if (!strokes.length && !extra.length) delete holder[INK_KEY];
-  else holder[INK_KEY] = Object.fromEntries([["v", layer.v], ["strokes", strokes], ...extra]);
-  return null;
-}
-
-/** Validate every preimage on a private draft; the live graph is never partially mutated. */
-function canvasDraft(
-  doc: CanvasDocument,
-  patches: readonly CanvasPatch[],
-): { readonly draft: CanvasDocument } | { readonly refused: DraftRefusal } {
-  const draft = JSON.parse(JSON.stringify(doc)) as CanvasDocument;
-  const stale = { refused: "stale" } as const;
-  for (const patch of patches) {
-    switch (patch.kind) {
-      case "upsert-node": {
-        const current = nodeById(draft, patch.after.id);
-        if (patch.before === null ? current !== undefined
-          : !current || !sameValue(current, cloneNode(patch.before))) return stale;
-        const index = draft.nodes.findIndex((node) => node.id === patch.after.id);
-        if (index >= 0) draft.nodes[index] = cloneNode(patch.after);
-        else if (patch.at !== undefined && Number.isInteger(patch.at) && patch.at >= 0 && patch.at <= draft.nodes.length) {
-          draft.nodes.splice(patch.at, 0, cloneNode(patch.after));
-        } else if (patch.at !== undefined) return stale;
-        else draft.nodes.push(cloneNode(patch.after));
-        break;
-      }
-      case "remove-node": {
-        const current = nodeById(draft, patch.before.id);
-        if (!current || !sameValue(current, cloneNode(patch.before))
-          || draft.edges.some((edge) => edge.fromNode === current.id || edge.toNode === current.id)) return stale;
-        draft.nodes = draft.nodes.filter((node) => node.id !== current.id);
-        break;
-      }
-      case "upsert-edge": {
-        const current = edgeById(draft, patch.after.id);
-        if (patch.before === null ? current !== undefined
-          : !current || !sameValue(current, cloneEdge(patch.before))) return stale;
-        if (!nodeById(draft, patch.after.fromNode) || !nodeById(draft, patch.after.toNode)) return stale;
-        const index = draft.edges.findIndex((edge) => edge.id === patch.after.id);
-        if (index >= 0) draft.edges[index] = cloneEdge(patch.after);
-        else draft.edges.push(cloneEdge(patch.after));
-        break;
-      }
-      case "remove-edge": {
-        const current = edgeById(draft, patch.before.id);
-        if (!current || !sameValue(current, cloneEdge(patch.before))) return stale;
-        draft.edges = draft.edges.filter((edge) => edge.id !== current.id);
-        break;
-      }
-      case "reorder": {
-        const current = draft.nodes.map((node) => node.id);
-        if (!sameValue(current, [...patch.before])
-          || !sameValue([...patch.after].sort(), [...current].sort())) return stale;
-        const byId = new Map(draft.nodes.map((node) => [node.id, node]));
-        draft.nodes = patch.after.map((id) => byId.get(id)!).filter(Boolean);
-        break;
-      }
-      case "ink": {
-        const refused = inkStep(draft, patch);
-        if (refused !== null) return { refused };
-        break;
-      }
-      default:
-        // Una toppa che il nucleo non saprebbe leggere.
-        return { refused: "invalid" };
-    }
-  }
-  return { draft };
-}
-
-/**
- * `doc` diventa la bozza: le schede, gli archi e i campi della radice, dove
- * vive il livello dell'inchiostro libero. Un campo della radice uguale per
- * valore resta l'oggetto di prima; `defineProperty` scrive anche una chiave
- * `__proto__` come campo proprio.
- */
-function adoptDraft(doc: CanvasDocument, draft: CanvasDocument): void {
-  doc.nodes = draft.nodes;
-  doc.edges = draft.edges;
-  const root = doc as Record<string, unknown>;
-  for (const key of Object.keys(root)) if (!has(draft, key)) delete root[key];
-  for (const [key, value] of Object.entries(draft)) {
-    if (key === "nodes" || key === "edges" || (has(root, key) && sameValue(root[key], value))) continue;
-    Object.defineProperty(root, key, { value, writable: true, enumerable: true, configurable: true });
-  }
-}
-
-export function applyCanvasPatches(doc: CanvasDocument, patches: readonly CanvasPatch[]): boolean {
-  const result = canvasDraft(doc, patches);
-  if (!("draft" in result)) return false;
-  adoptDraft(doc, result.draft);
-  return true;
-}
-
-/**
- * Why a commit is refused, the same word as `CommitError::reason` in the Rust
- * core: `stale` (a patch does not fit the model, or the model is not the
- * source's), `invalid` (the canvas after the patches is not valid),
- * `rejected` (the source cannot be patched, for example a repeated key) or
- * `unstable` (the text written does not read back as the canvas after).
- */
-export type CanvasCommitReason = "stale" | "invalid" | "rejected" | "unstable";
-
-export type CanvasCommitOutcome =
-  | { readonly outcome: "applied"; readonly source: string; readonly operation: CanvasOperation }
-  | { readonly outcome: "rejected"; readonly reason: CanvasCommitReason };
-
-/**
- * Commit `patches` on `doc`, whose source is `beforeSource`: all of them or
- * none. On success `doc` becomes the canvas after; on a refusal it stays as it
- * was and the outcome says why, in the order the Rust core checks (the draft,
- * its validity, the patch of the source, the reread). An empty list is a
- * commit that changes nothing.
- */
-export function canvasCommitOutcome(
-  doc: CanvasDocument,
-  beforeSource: string,
-  patches: readonly CanvasPatch[],
-): CanvasCommitOutcome {
-  const result = canvasDraft(doc, patches);
-  if (!("draft" in result)) return { outcome: "rejected", reason: result.refused };
-  const draft = result.draft;
-  let before: CanvasDocument;
-  try {
-    before = parseCanvas(beforeSource);
-  } catch {
-    return { outcome: "rejected", reason: "stale" };
-  }
-  if (!sameCanvasModel(before, doc)) return { outcome: "rejected", reason: "stale" };
-  // La validità della bozza si guarda solo quando qualcosa non va: un testo
-  // che si rilegge come la bozza dice già che è valida.
-  const refused = (reason: CanvasCommitReason): CanvasCommitOutcome => ({
-    outcome: "rejected",
-    reason: isValidCanvas(draft) ? reason : "invalid",
-  });
-  let source: string;
-  try {
-    source = patchCanvasSource(beforeSource, before, draft);
-  } catch {
-    return refused("rejected");
-  }
-  try {
-    if (!sameCanvasModel(parseCanvas(source), draft)) return refused("unstable");
-  } catch {
-    return refused("unstable");
-  }
-  adoptDraft(doc, draft);
-  return {
-    outcome: "applied",
-    source,
-    operation: {
-      kind: "canvas",
-      patches: patches.map((patch) => {
-        switch (patch.kind) {
-          case "upsert-node":
-            return {
-              kind: patch.kind,
-              before: patch.before ? cloneNode(patch.before) : null,
-              after: cloneNode(patch.after),
-              at: patch.at,
-            } as CanvasPatch;
-          case "remove-node":
-            return { kind: patch.kind, before: cloneNode(patch.before), after: null, at: patch.at } as CanvasPatch;
-          case "upsert-edge":
-            return {
-              kind: patch.kind,
-              before: patch.before ? cloneEdge(patch.before) : null,
-              after: cloneEdge(patch.after),
-            } as CanvasPatch;
-          case "remove-edge":
-            return { kind: patch.kind, before: cloneEdge(patch.before), after: null } as CanvasPatch;
-          case "reorder":
-            return { kind: patch.kind, before: [...patch.before], after: [...patch.after] } as CanvasPatch;
-          case "ink":
-            return {
-              kind: patch.kind,
-              layer: cloneLayerRef(patch.layer),
-              at: patch.at,
-              before: patch.before ? cloneStroke(patch.before) : null,
-              after: patch.after ? cloneStroke(patch.after) : null,
-            } as CanvasPatch;
-        }
-      }),
-      // Gli offset di un'operazione si contano sul testo a `\n`, come li
-      // valida la sessione: su un file CRLF quelli del testo grezzo non
-      // tornerebbero e la modifica sparirebbe (#97). Il testo emesso tiene i
-      // terminatori del file: il patcher copia i separatori che trova.
-      ...operationFromText(lineFeeds(beforeSource), lineFeeds(source)),
-    },
-  };
-}
-
-export function commitCanvasPatches(
-  doc: CanvasDocument,
-  beforeSource: string,
-  patches: readonly CanvasPatch[],
-): { readonly source: string; readonly operation: CanvasOperation } | null {
-  if (!patches.length) return null;
-  const outcome = canvasCommitOutcome(doc, beforeSource, patches);
-  return outcome.outcome === "applied" ? { source: outcome.source, operation: outcome.operation } : null;
-}
-
-export function inverseCanvasPatches(patches: readonly CanvasPatch[]): CanvasPatch[] {
-  const inverse = [...patches].reverse().map((patch): CanvasPatch => {
-    switch (patch.kind) {
-      case "upsert-node":
-        return patch.before === null
-          ? { kind: "remove-node", before: cloneNode(patch.after), after: null }
-          : { kind: "upsert-node", before: cloneNode(patch.after), after: cloneNode(patch.before) };
-      case "remove-node":
-        return { kind: "upsert-node", before: null, after: cloneNode(patch.before), at: patch.at };
-      case "upsert-edge":
-        return patch.before === null
-          ? { kind: "remove-edge", before: cloneEdge(patch.after), after: null }
-          : { kind: "upsert-edge", before: cloneEdge(patch.after), after: cloneEdge(patch.before) };
-      case "remove-edge":
-        return { kind: "upsert-edge", before: null, after: cloneEdge(patch.before) };
-      case "reorder":
-        return { kind: "reorder", before: [...patch.after], after: [...patch.before] };
-      case "ink":
-        // Lo stesso `at`: le toppe si disfano in ordine inverso, quindi ogni
-        // tratto torna (o se ne va) dalla posizione che aveva dopo le toppe
-        // prima di lui. Una toppa `ink` interrompe un gruppo di schede da
-        // rimettere, come `is_insert` nel nucleo.
-        return {
-          kind: "ink",
-          layer: cloneLayerRef(patch.layer),
-          at: patch.at,
-          before: patch.after ? cloneStroke(patch.after) : null,
-          after: patch.before ? cloneStroke(patch.before) : null,
-        };
-    }
-  });
-  for (let start = 0; start < inverse.length;) {
-    if (inverse[start].kind !== "upsert-node" || inverse[start].before !== null) {
-      start++;
-      continue;
-    }
-    let end = start + 1;
-    while (end < inverse.length && inverse[end].kind === "upsert-node" && inverse[end].before === null) end++;
-    const group = inverse.slice(start, end);
-    group.sort((left, right) => (left.kind === "upsert-node" ? left.at ?? Infinity : Infinity)
-      - (right.kind === "upsert-node" ? right.at ?? Infinity : Infinity));
-    inverse.splice(start, group.length, ...group);
-    start = end;
-  }
-  return inverse;
-}
-
-export function invertCanvasOperation(operation: CanvasOperation): CanvasOperation {
-  return {
-    kind: "canvas",
-    patches: inverseCanvasPatches(operation.patches),
-    ...invertOperation(operation),
-  };
 }
 
 let canvasIds = 0;
@@ -486,10 +212,11 @@ export function upsertEdgePatch(
   };
 }
 
+/** `at` è la posizione dell'arco in `doc`: l'annulla lo rimette lì (R11). */
 export function removeEdgePatch(doc: CanvasDocument, id: string): Extract<CanvasPatch, { kind: "remove-edge" }> | null {
-  const before = edgeById(doc, id);
-  if (!before) return null;
-  return { kind: "remove-edge", before: cloneEdge(before), after: null };
+  const at = doc.edges.findIndex((edge) => edge.id === id);
+  if (at < 0) return null;
+  return { kind: "remove-edge", before: cloneEdge(doc.edges[at]!), after: null, at };
 }
 
 /**
@@ -527,7 +254,7 @@ export function eraseStrokePatches(doc: CanvasDocument, layer: LayerRef, ids: re
   for (const id of ids) {
     const at = remaining.findIndex((stroke) => stroke.id === id);
     if (at < 0) return null;
-    patches.push({ kind: "ink", layer: cloneLayerRef(layer), at, before: cloneStroke(remaining[at]), after: null });
+    patches.push({ kind: "ink", layer: cloneLayerRef(layer), at, before: cloneStroke(remaining[at]!), after: null });
     remaining.splice(at, 1);
   }
   return patches;

@@ -1,0 +1,28 @@
+{
+  "name": "prototype-keys",
+  "description": "Le chiavi __proto__ e constructor sono campi sconosciuti come gli altri",
+  "source": "{\"nodes\":[{\"id\":\"n\",\"type\":\"text\",\"x\":0,\"y\":0,\"width\":10,\"height\":10,\"text\":\"a\",\"constructor\":{\"keep\":1}}],\"edges\":[],\"__proto__\":{\"own\":true}}",
+  "expect": {
+    "outcome": "opened",
+    "nodes": [
+      {
+        "id": "n",
+        "type": "text",
+        "x": 0,
+        "y": 0,
+        "width": 10,
+        "height": 10,
+        "text": "a",
+        "constructor": {
+          "keep": 1
+        }
+      }
+    ],
+    "edges": [],
+    "extra": {
+      "__proto__": {
+        "own": true
+      }
+    }
+  }
+}

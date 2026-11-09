@@ -65,6 +65,27 @@ const anatomy = await vite.ssrLoadModule("/src/theme/scrittoio/anatomia.ts");
 /** @type {{ THEME_2_ENGINE: string, THEME_2_PROFILE: { requiredRoles: readonly string[], contrastPairs: readonly unknown[], optionalPairs?: readonly unknown[], preferenceTokens: readonly string[], vocabulary: { properties?: readonly string[], functions?: readonly string[], atRules?: readonly string[] } } }} */
 const profile = await vite.ssrLoadModule("/src/theme/scrittoio/profile.ts");
 
+/** @type {{ THEME_ICON_LIMITS: { icons: number, paths: number, icon_bytes: number, set_bytes: number } }} */
+const mirrored = await vite.ssrLoadModule("/src/rules/mirrored.ts");
+const iconLimits = mirrored.THEME_ICON_LIMITS;
+/** @type {string[]} I nomi che un tema può ridisegnare: li tiene uguali a `iconNames()` una prova. */
+const iconNames = JSON.parse(await readFile(join(AUTHOR, "icon-names.json"), "utf8"));
+
+/// I nomi in righe di al più 100 caratteri, per il blocco del README.
+function wrapNames(names) {
+  const lines = [];
+  let line = "";
+  for (const name of names) {
+    if (line !== "" && line.length + 1 + name.length > 100) {
+      lines.push(line);
+      line = "";
+    }
+    line = line === "" ? name : `${line} ${name}`;
+  }
+  if (line !== "") lines.push(line);
+  return lines;
+}
+
 let diffCount = 0;
 
 /// Scrive, o dice che è diverso. Il nome è quello che compare a video; `atteso`
@@ -172,13 +193,60 @@ try {
     "",
     "Una cartella installabile contiene `manifest.json`, un foglio per ogni luce dichiarata (`sheet-light.css` e/o `sheet-dark.css`), `skin.css` opzionale e asset locali. Il campione `sample/` è un bundle non-serie completo, generato dagli stessi cancelli.",
     "",
+    "## Partire dalla serie",
+    "",
+    "Con `\"extends\": \"fub.serie\"` nel manifest un tema parte dal tema di serie e porta solo ciò che cambia. I fogli diventano facoltativi: una luce senza foglio usa quello di serie della stessa luce e dello stesso contrasto, anche alto. Un foglio portato dal tema resta completo: passa i ruoli e i contrasti come ogni foglio. La pelle di serie resta montata, e `skin.css` si aggiunge dopo di lei: una regola del tema vince su quella di serie a parità di specificità, e un componente che il tema non nomina resta vestito dalla serie, anche quando arriva con una versione di Fub più nuova. Una `skin.css` assente o vuota è il caso normale. Quando la serie cambia, il tema eredita il cambio. Ereditare da un altro tema non si può.",
+    "",
     `Il manifest usa \`engine: ${engine}\`; l'id deve essere un singolo componente di path sicuro e \`asset_namespace\` deve essere esattamente \`theme://<id>/\`. Il tema non dichiara permessi; può dichiarare impostazioni sue (\`settings\`), che la shell mostra nelle Preferenze. Un engine sconosciuto, un id insicuro, un namespace diverso, un manifest malformato o una luce non dichiarata vengono rifiutati. Un tema \`theme-1\` resta installato ma la shell non lo monta: lo segnala con una diagnosi e ricade sul tema di serie.`,
+    "",
+    "## I caratteri del tema",
+    "",
+    "Un tema `theme-2` porta i suoi caratteri dichiarandoli nel manifest, non nel CSS: `@font-face` resta vietato nei fogli e nella pelle, perché un `src:` scritto a mano potrebbe chiamare la rete. Ogni voce di `fonts` ha `family`, `file`, `weight` e `style`:",
+    "",
+    "```json",
+    "\"fonts\": [",
+    "  { \"family\": \"Carta Serif\", \"file\": \"fonts/carta.woff2\", \"weight\": 400, \"style\": \"normal\" },",
+    "  { \"family\": \"Carta Serif\", \"file\": \"fonts/carta-italic.woff2\", \"weight\": 400, \"style\": \"italic\" }",
+    "]",
+    "```",
+    "",
+    "- `family`: lettere e cifre ASCII, `-` e spazi singoli, al massimo 64 caratteri; non può essere una famiglia di serie né una parola chiave del CSS (`serif`, `monospace`, …).",
+    "- `file`: un asset del tema, `fonts/<nome>.woff2`, cioè `theme://<id>/fonts/<nome>.woff2`. Solo WOFF2: il file deve cominciare con la firma `wOF2`.",
+    "- `weight`: da 100 a 900. `style`: `normal` o `italic`. La stessa faccia non si dichiara due volte.",
+    "",
+    "La shell scrive da sé le regole `@font-face`, coi valori del manifest e il file in un URL `data:`, e la pelle usa la famiglia per nome: `font-family: \"Carta Serif\", var(--font-ui);`. Cambiato tema, i caratteri del tema precedente se ne vanno.",
+    "",
+    "## Le icone del tema",
+    "",
+    "Un tema `theme-2` può ridisegnare per nome le icone della shell. Il manifest nomina un set, un file JSON accanto a sé: `\"icons\": \"icons.json\"`. Il file dà a ogni nome i suoi tracciati, cioè i `d` dei `<path>`:",
+    "",
+    "```json",
+    "{",
+    "  \"search\": [\"M10 17a7 7 0 1 0 0-14 7 7 0 0 0 0 14z\", \"M21 21l-5-5\"],",
+    "  \"folder\": [\"M3 7a2 2 0 0 1 2-2h3l2 2h9a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z\"]",
+    "}",
+    "```",
+    "",
+    "- Il file: `<nome>.json` accanto al manifest, in minuscolo, mai `manifest.json`.",
+    "- Un tracciato porta solo comandi e numeri di un tracciato SVG (`M`, `L`, `C`, `A`, `Z`…, cifre, `.`, `,`, segni e spazi). Niente markup, virgolette, `url(` o riferimenti: il set è rifiutato per intero.",
+    "- Il disegno sta nella griglia 24×24; tratto, angoli e colore (`currentColor`) restano quelli della shell e il tema non li cambia.",
+    `- Al massimo ${iconLimits.icons} nomi, ${iconLimits.paths} tracciati e ${iconLimits.icon_bytes / 1024} KiB di tracciati per nome, ${iconLimits.set_bytes / 1024} KiB per il file.`,
+    "",
+    "Il tema non aggiunge icone: ridisegna quelle che ci sono. Un alias ridisegnato vale per il nome a cui punta (`folder` è `vault`). Un nome che oggi nessuno disegna non rifiuta il tema (un modulo può registrarlo più tardi), ma non si vede. Cambiato tema, o annullata l'anteprima, le icone già sullo schermo tornano a quelle del tema scelto.",
+    "",
+    `I ${iconNames.length} nomi che un tema può ridisegnare (\`theme/author/icon-names.json\`, tenuto uguale a \`iconNames()\` da \`src/ui/icon-names.test.ts\`):`,
+    "",
+    "```text",
+    ...wrapNames(iconNames),
+    "```",
     "",
     "## Limiti e pubblicazione",
     "",
     "- `manifest.json`: massimo 64 KiB.",
     "- Ogni foglio CSS e `skin.css`: massimo 4 MiB.",
     "- Asset: massimo 1.024 file, 64 MiB per file e 256 MiB complessivi.",
+    "- Caratteri: massimo 8 voci in `fonts`, 2 MiB per file e 6 MiB complessivi.",
+    `- Icone: massimo ${iconLimits.icons} nomi, ${iconLimits.paths} tracciati e ${iconLimits.icon_bytes / 1024} KiB per nome, ${iconLimits.set_bytes / 1024} KiB per il file del set.`,
     "- Link simbolici, traversal e file non regolari sono rifiutati.",
     "- L'installazione copia in `<config>/themes/.tmp-…` e pubblica con rename atomico; un id già presente è una collisione e non viene sovrascritto.",
     "",

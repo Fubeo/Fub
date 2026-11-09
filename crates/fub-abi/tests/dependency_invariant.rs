@@ -840,6 +840,69 @@ const CANVAS_CORE_ALLOWED_MEMBERS: &[&str] = &["fub-ink-codec", "fub-ink"];
 const CANVAS_CORE_ALLOWED_DEPENDENTS: &[&str] =
     &["fub-format-canvas", "fub-features", "fub-canvas-wasm"];
 
+/// La facciata WebAssembly della lavagna è sottile e sta in fondo.
+///
+/// `fub-canvas-wasm` mette il nucleo della lavagna dietro un'interfaccia C
+/// scritta a mano, e il suo `.wasm` finisce nella WebView: ogni dipendenza in
+/// più è peso che paga chi apre una lavagna, e una libreria di collegamento
+/// (`wasm-bindgen` e simili) è proprio ciò che la decisione D-1 (a) del piano
+/// N3 ha escluso. Per questo le dirette sono un elenco chiuso (il nucleo,
+/// `serde`, `serde_json`), la chiusura non contiene altri membri del
+/// workspace che il nucleo né una famiglia proibita, e nessun membro dipende
+/// dalla facciata: la caricano la shell e i suoi test, non un crate.
+#[test]
+fn the_canvas_wasm_facade_stays_thin() {
+    let metadata = metadata();
+    let graph = Graph::new(&metadata);
+
+    let allowed: BTreeSet<&str> = CANVAS_WASM_ALLOWED_DIRECT.iter().copied().collect();
+    let extra: Vec<&str> = graph
+        .direct("fub-canvas-wasm")
+        .into_iter()
+        .filter(|d| !allowed.contains(d))
+        .collect();
+    assert!(
+        extra.is_empty(),
+        "`fub-canvas-wasm` dichiara {extra:?} fra le dipendenze normali, che non\n\
+         sono nell'elenco delle sue dirette ({CANVAS_WASM_ALLOWED_DIRECT:?}). La\n\
+         facciata della lavagna finisce nella WebView come `.wasm` e la sua\n\
+         interfaccia è scritta a mano: vedi docs/reference/canvas-operations.md\n\
+         § «WebAssembly» prima di allungare l'elenco."
+    );
+
+    let members = graph.members();
+    let trespassers: Vec<&str> = graph
+        .closure("fub-canvas-wasm")
+        .into_iter()
+        .filter(|n| {
+            (members.contains(n) && !matches!(*n, "fub-canvas-wasm" | "fub-canvas-core"))
+                || forbidden(n)
+        })
+        .collect();
+    assert!(
+        trespassers.is_empty(),
+        "`fub-canvas-wasm` raggiunge {trespassers:?} fra le dipendenze normali.\n\
+         La facciata vede solo il nucleo della lavagna\n\
+         (docs/reference/canvas-operations.md § «WebAssembly»)."
+    );
+
+    let dependents: Vec<&str> = members
+        .iter()
+        .copied()
+        .filter(|m| graph.direct(m).contains("fub-canvas-wasm"))
+        .collect();
+    assert!(
+        dependents.is_empty(),
+        "{dependents:?} dipendono da `fub-canvas-wasm`, che è la facciata della\n\
+         WebView e non una libreria: chi vuole il nucleo dipende da\n\
+         `fub-canvas-core` (docs/reference/canvas-operations.md § «WebAssembly»)."
+    );
+}
+
+/// Le sole dipendenze normali dirette della facciata WebAssembly. Elenco
+/// chiuso.
+const CANVAS_WASM_ALLOWED_DIRECT: &[&str] = &["fub-canvas-core", "serde", "serde_json"];
+
 /// La sessione live sta **fuori dal core**: `fub-live` non vede il contratto,
 /// il kernel, il montaggio né il toolkit (ADR 0205).
 ///

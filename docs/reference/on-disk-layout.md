@@ -28,8 +28,8 @@ La cartella viene scelta in ordine:
 | `settings.json` | autorevole | 1 | impostazioni della macchina |
 | `vaults.json` | autorevole | 1 | vault recenti, preferiti, nome e icona |
 | `view-state.json` | autorevole locale | 1 | stato delle view di questa macchina |
-| `themes/<id>/manifest.json` | installato | manifest | identità e compatibilità del tema |
-| `themes/<id>/` | installato | per tema | fogli, skin e asset |
+| `themes/<id>/manifest.json` | installato | manifest | identità e compatibilità del tema; `extends`, `fonts` e `icons` facoltativi |
+| `themes/<id>/` | installato | per tema | fogli (`sheet-light.css`, `sheet-dark.css`), `skin.css` e asset; con `extends` i fogli sono facoltativi (vedi [Temi installati](permissions-and-security.md#temi-installati)) |
 | `logs/fub.log` | diagnostica | n/a | log del processo |
 | `wasm-plugins/inventory.json` | autorevole | 1 | componenti installati e scelte della macchina |
 | `wasm-plugins/components/<installation>-<sha256>.wasm` | installato | componente | eseguibile verificato |
@@ -165,7 +165,7 @@ nomi simili restano dati dell'utente.
 | `.fub/data/trash/*.json` | sidecar | 1 | provenienza del cestino |
 | `.fub/plugins/<id>/` | per-plugin | proprio | storage persistente namespaced |
 | `.fub/plugins/fub.commands/archive-recovery.json` | autorevole operativo | 1 | `fub.commands` |
-| `.fub/data/plugins/fub.linkcard/cards/*.json` | derivata | 1 | schede dei collegamenti |
+| `.fub/data/plugins/fub.linkcard/cards/*.json`, `.fub/data/plugins/fub.craft/previews/*.json` | derivata | 1 | schede dei collegamenti (`fub.linkcard`), anteprime dei file Craft (`fub.craft`) |
 
 `properties.types` è un valore autorevole dentro `.fub/settings.json`. Il valore
 ha un proprio schema JSON `{ "version": 1, "types": { ... } }`: separa la

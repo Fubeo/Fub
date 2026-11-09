@@ -61,7 +61,7 @@ contratto della superficie vera (`apps/client/src/editors/spatial/lazy.ts`):
 finché `import()` non risolve tiene testo, modalità, sola lettura, fuoco e un
 rimando, e li consegna nell'ordine in cui la shell li avrebbe dati. Un `reveal`
 in attesa risponde di sì; se poi la scena non ci arriva, l'avviso è quello della
-shell. Un caricamento fallito lascia il testo alla sessione. Il campo di testo del disegno è un altro pezzo pigro ([ADR 0224](../decisions/0224-scrittura-il-nucleo-del-testo-ricco.md)).
+shell. Un caricamento fallito lascia il testo alla sessione. Il campo di testo del disegno è un altro pezzo pigro ([ADR 0224](../decisions/0224-scrittura-il-nucleo-del-testo-ricco.md)). Un'apertura può chiedere una pagina (un link a `x.pdf#page=3`, `OpenOptions.page`): la riceve il montaggio che l'apertura fa nascere o riporta in primo piano (`SurfaceMountContext.page`, l'`initialPage` del visore del PDF), o `EditorSurface.showPage` se la scheda era già attiva; resta del client, senza IPC.
 
 I comandi `shell.doc.source.open` («Apri come sorgente») e
 `shell.doc.source.close` («Chiudi la vista sorgente») impostano e tolgono la
@@ -275,9 +275,9 @@ TypeScript interni e iniettati dal chiamante; non attraversano IPC, WIT o ABI.
 
 ### Markdown: Source, Live e Reading
 
-Source, Live e Reading sono tre viste sullo stesso `TextEngine` e sullo stesso
-buffer della `DocumentSession`: il cambio modo riusa la vista di scrittura e
-Reading ridisegna dal buffer corrente, senza salvataggio imposto.
+Source, Live e Reading sono tre viste sullo stesso `TextEngine` e buffer della
+`DocumentSession`. Il cambio modo riusa la vista di scrittura; Reading ridisegna
+dal buffer senza salvare, e in conflitto la fascia (`drawConflict`) lo dice.
 
 I blocchi Live inattivi e Reading condividono lo stesso renderer locale in
 `apps/client/src/editors/text/profiles/markdown/render*.ts` e lo stesso
@@ -402,6 +402,19 @@ di un gesto (frecce, `Spazio`, `Invio`, `?`, `Tab` con una selezione) e
 `Mod-0`, il suo 100%; gli accordi che non usa, come `Mod-E`, arrivano alla
 shell (`apps/client/src/editors/spatial/tools/editor/vault-images.ts`).
 
+### La lavagna
+
+`CanvasEngine` (`editors/canvas/engine.ts`) disegna il modello che il nucleo
+della tela (`canvas/wasm/core.ts`) dà a ogni `reset` e `commit`. Un gesto passa
+le sue toppe al nucleo e il testo nuovo è il tratto cambiato. Annulla e ripeti
+rimettono il tratto di prima byte per byte con un `reset` se la versione del
+testo (un contatore del motore) è quella lasciata dal passo, se no le toppe
+inverse. Il nucleo si carica alla prima lavagna e poi resta; una trappola la
+riapre su un'istanza nuova dal testo della sessione. Il testo di una scheda si
+registra a 250 ms di pausa, all'uscita, con Invio o Esc e prima di ogni gesto;
+se il nucleo lo rifiuta resta nel campo con un avviso. È già nella [bozza](frontend-and-ipc.md#il-testo-in-sospeso);
+le toppe sono nelle [operazioni della lavagna](../reference/canvas-operations.md).
+
 ### La griglia
 
 La famiglia `grid` apre le cartelle di Excel sulla versione 2 del protocollo:
@@ -426,24 +439,11 @@ mantiene CodeMirror un servizio della shell testuale.
 
 - `apps/client/src/editors/text/engine.ts`
 - `apps/client/src/editors/text/history-footprints.ts`
-- `apps/client/src/editors/text/profiles/markdown/profile.ts`
-- `apps/client/src/editors/text/profiles/markdown/commands.ts`
-- `apps/client/src/editors/text/profiles/markdown/actions.ts`
-- `apps/client/src/editors/text/profiles/markdown/table-model.ts`
-- `apps/client/src/editors/text/profiles/markdown/table-grid.ts`
-- `apps/client/src/editors/text/profiles/markdown/table-widget.ts`
-- `apps/client/src/editors/core/editor-actions.ts`
+- `apps/client/src/editors/text/profiles/`
+- `apps/client/src/editors/core/`
 - `apps/client/src/panels/format-bar.ts`
-- `apps/client/src/editors/text/profiles/markdown/completions.ts`
-- `apps/client/src/editors/text/profiles/markdown/livepreview.ts`
-- `apps/client/src/editors/text/profiles/plain-text.ts`
-- `apps/client/src/editors/text/profiles/formula.ts`
-- `apps/client/src/editors/text/profiles/markdown/surface.ts`
-- `apps/client/src/editors/core/registry.ts`
-- `apps/client/src/editors/core/surface-modes.ts`
-- `apps/client/src/editors/core/bootstrap.ts`
 - `apps/client/src/editors/spatial/lazy.ts`
 - `apps/client/src/state/layout.ts`
 - `apps/client/src/editors/grid/`
-- `apps/client/src/editors/core/text-operation.ts`
+- `apps/client/src/editors/canvas/`
 - `apps/client/src/state/document-session.ts`

@@ -1,8 +1,8 @@
 //! Il sorgente di una `.canvas` si ritocca, non si riscrive: si cambiano solo
 //! i valori e gli oggetti toccati, il resto del file resta byte per byte.
 //!
-//! È il porto di `patchCanvasSource` e `canvasNodeAt`
-//! (`apps/client/src/editors/canvas/source-edit.ts`). Le regole di scrittura
+//! È l'unica copia di queste regole: la tela la usa compilata in WebAssembly
+//! (`crates/fub-canvas-wasm`). Le regole di scrittura
 //! (R6, R7, R10) sono in `docs/reference/canvas-format.md` § «Scrittura».
 //!
 //! - **Lo scanner** legge il sorgente una volta e ne tiene gli intervalli in
@@ -71,8 +71,14 @@ pub enum SourceError {
 /// - Un valore uguale (come valore JSON) resta byte per byte.
 /// - Un oggetto che tiene tutti i suoi campi e non ne aggiunge cambia solo i
 ///   valori; altrimenti si ricompone con il prefisso, il separatore e il
-///   suffisso che aveva: i campi tolti cadono (anche un `null` che il modello
-///   legge come assente, R7), quelli nuovi vanno in fondo, compatti.
+///   suffisso che aveva: i campi tolti cadono, quelli nuovi vanno in fondo,
+///   compatti.
+/// - Un `null` del sorgente che il modello legge come assente (un campo noto
+///   facoltativo, R7) resta dov'è finché il campo resta assente: non conta
+///   come tolto e l'oggetto non si ricompone per lui. Se il campo prende un
+///   valore, il valore va al posto del `null`.
+/// - Un `nodes` o un `edges` che il sorgente non ha non si aggiunge finché
+///   resta vuoto; con la prima voce arriva in fondo alla radice.
 /// - Gli array di oggetti con `id` si accoppiano per id; le voci nuove si
 ///   scrivono compatte, nell'ordine di R10.
 ///
@@ -460,7 +466,7 @@ impl<'a> Scanner<'a> {
 
 // --- Il ritocco -----------------------------------------------------------
 //
-// L'algoritmo è uno, quello di `patchCanvasSource`, su due rappresentazioni:
+// L'algoritmo è uno, su due rappresentazioni:
 // i valori JSON per i campi sconosciuti, e i tipi del modello per la radice,
 // le schede e gli archi. Così una scheda uguale prima e dopo si confronta
 // come struct, senza diventare un valore JSON: su una lavagna grande con una
@@ -579,7 +585,11 @@ impl Patcher<'_> {
             if present.contains(key) {
                 continue;
             }
+            // Un `nodes` o un `edges` che il file non ha arriva con la prima
+            // voce, non prima (R11).
             let value = match key {
+                "nodes" if after.nodes.is_empty() => continue,
+                "edges" if after.edges.is_empty() => continue,
                 "nodes" => encode(&entries_value(&after.nodes)?),
                 "edges" => encode(&entries_value(&after.edges)?),
                 _ => after.extra.get(key).map(encode).unwrap_or_default(),
@@ -590,8 +600,8 @@ impl Patcher<'_> {
             out,
             span,
             fields,
-            &|key| keys.contains_key(key),
-            &|key| same_root_field(key, before, after),
+            &|field| keys.contains_key(field.key.as_ref()),
+            &|field| same_root_field(field.key.as_ref(), before, after),
             &|out, field| match field.key.as_ref() {
                 "nodes" => self.entries(out, &field.value, &before.nodes, &after.nodes),
                 "edges" => self.entries(out, &field.value, &before.edges, &after.edges),
@@ -626,12 +636,22 @@ impl Patcher<'_> {
                     .filter(|(key, _)| !present.contains(key))
                     .map(|(key, value)| (key, encode(value)))
                     .collect();
+                // Un `null` che il modello di prima e quello di dopo non
+                // hanno è un campo noto letto come assente (R7): resta.
+                let kept_null = |field: &Field<'_>| {
+                    let key = field.key.as_ref();
+                    !old.contains_key(key) && !next.contains_key(key) && self.is_null(&field.value)
+                };
                 self.compose(
                     out,
                     span,
                     fields,
-                    &|key| next.contains_key(key),
-                    &|key| Ok(next.get(key).is_some_and(|value| same(old.get(key), value))),
+                    &|field| next.contains_key(field.key.as_ref()) || kept_null(field),
+                    &|field| {
+                        let key = field.key.as_ref();
+                        Ok(kept_null(field)
+                            || next.get(key).is_some_and(|value| same(old.get(key), value)))
+                    },
                     &|out, field| match next.get(field.key.as_ref()) {
                         Some(value) => {
                             self.render(out, &field.value, old.get(field.key.as_ref()), value)
@@ -655,27 +675,34 @@ impl Patcher<'_> {
         }
     }
 
-    /// Un oggetto che cambia. `kept` dice se il modello di dopo ha ancora
-    /// una chiave del sorgente, `same_field` se il suo valore è uguale prima
-    /// e dopo, `render_field` scrive il valore di dopo; `added` sono le
-    /// chiavi nuove, già scritte, nell'ordine di JavaScript.
+    /// Il valore di `span` nel sorgente è il letterale `null`.
+    fn is_null(&self, span: &Span<'_>) -> bool {
+        matches!(span.kind, SpanKind::Scalar)
+            && self.source.get(span.start..span.end) == Some("null")
+    }
+
+    /// Un oggetto che cambia. `kept` dice se un campo del sorgente resta
+    /// (il modello di dopo ha ancora la chiave, o è un `null` che resta),
+    /// `same_field` se il suo valore resta byte per byte, `render_field`
+    /// scrive il valore di dopo; `added` sono le chiavi nuove, già scritte,
+    /// nell'ordine di JavaScript.
     #[allow(clippy::too_many_arguments)]
     fn compose(
         &self,
         out: &mut String,
         span: &Span<'_>,
         fields: &[Field<'_>],
-        kept: &dyn Fn(&str) -> bool,
-        same_field: &dyn Fn(&str) -> Result<bool, SourceError>,
+        kept: &dyn Fn(&Field<'_>) -> bool,
+        same_field: &dyn Fn(&Field<'_>) -> Result<bool, SourceError>,
         render_field: &dyn Fn(&mut String, &Field<'_>) -> Result<(), SourceError>,
         added: Vec<(&str, String)>,
     ) -> Result<(), SourceError> {
-        let all_kept = fields.iter().all(|field| kept(field.key.as_ref()));
+        let all_kept = fields.iter().all(kept);
         if all_kept && added.is_empty() {
             // Solo i valori cambiano: il resto dell'oggetto resta com'era.
             let mut from = span.start;
             for field in fields {
-                if same_field(field.key.as_ref())? {
+                if same_field(field)? {
                     continue;
                 }
                 out.push_str(self.text(from, field.value.start)?);
@@ -701,13 +728,17 @@ impl Patcher<'_> {
         out.push('{');
         out.push_str(prefix);
         let mut first = true;
-        for field in fields.iter().filter(|field| kept(field.key.as_ref())) {
+        for field in fields.iter().filter(|field| kept(field)) {
             if !first {
                 out.push_str(separator);
             }
             first = false;
             out.push_str(self.text(field.start, field.value.start)?);
-            render_field(out, field)?;
+            if same_field(field)? {
+                self.verbatim(out, &field.value)?;
+            } else {
+                render_field(out, field)?;
+            }
         }
         for (key, value) in added {
             if !first {

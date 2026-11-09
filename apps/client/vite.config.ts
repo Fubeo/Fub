@@ -1,6 +1,7 @@
 import { searchForWorkspaceRoot } from "vite";
 import { defineConfig } from "vitest/config";
 import { fileURLToPath } from "node:url";
+import { canvasWasm } from "./build/canvas-wasm.mjs";
 
 const CHUNK_BUDGET = 500_000;
 // Il parser upstream arriva già precompilato: resta separato e solo lazy.
@@ -32,7 +33,12 @@ function withoutComments(css: string): string {
 // Config allineata a Tauri: porta fissa 1420, niente clear screen.
 export default defineConfig({
   clearScreen: false,
-  plugins: [{
+  plugins: [
+    // Il nucleo della lavagna in WebAssembly, compilato da cargo a ogni build
+    // (`build/canvas-wasm.mjs`): serve Rust col bersaglio
+    // wasm32-unknown-unknown.
+    canvasWasm(),
+    {
     // La pelle composta arriva come testo (`?raw`), e Vite non minimizza il
     // testo: un terzo erano commenti, che documentano i pezzi ma nel bundle
     // pesano come regole. Nella build si tolgono; in sviluppo e al banco la
@@ -283,5 +289,8 @@ export default defineConfig({
     // senza questa riga i presidi che guardano del testo passerebbero o
     // fallirebbero a seconda del locale della macchina che li lancia.
     setupFiles: ["./src/test-setup.ts"],
+    // Il nucleo della lavagna si compila prima delle prove, non dentro il
+    // tempo massimo della prima che lo importa: il perché sta nel file.
+    globalSetup: ["./build/canvas-wasm.global-setup.mjs"],
   },
 });

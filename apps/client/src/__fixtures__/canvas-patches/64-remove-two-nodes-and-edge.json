@@ -1,0 +1,10 @@
+{
+  "name": "remove-two-nodes-and-edge",
+  "description": "Togliere insieme l'arco e le due schede che lega; l'annulla rimette tutto",
+  "before": "{\"nodes\":[{\"id\":\"n1\",\"type\":\"text\",\"x\":0,\"y\":0,\"width\":200,\"height\":120,\"text\":\"vedi [[Nota]] e #tag\"},{\"id\":\"n2\",\"type\":\"file\",\"x\":300,\"y\":0,\"width\":200,\"height\":120,\"file\":\"foto.png\"}],\"edges\":[{\"id\":\"e1\",\"fromNode\":\"n1\",\"toNode\":\"n2\",\"toEnd\":\"arrow\",\"label\":\"usa\"}],\"xFuture\":{\"nested\":[1,2]}}",
+  "patches": [{"kind":"remove-edge","before":{"id":"e1","fromNode":"n1","toNode":"n2","toEnd":"arrow","label":"usa"},"after":null},{"kind":"remove-node","before":{"id":"n1","type":"text","x":0,"y":0,"width":200,"height":120,"text":"vedi [[Nota]] e #tag"},"after":null,"at":0},{"kind":"remove-node","before":{"id":"n2","type":"file","x":300,"y":0,"width":200,"height":120,"file":"foto.png"},"after":null,"at":1}],
+  "expect": {
+    "outcome": "applied",
+    "text": "{\"nodes\":[],\"edges\":[],\"xFuture\":{\"nested\":[1,2]}}"
+  }
+}

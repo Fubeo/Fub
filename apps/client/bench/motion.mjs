@@ -41,7 +41,9 @@
 //    ciò che il motore di resa ha ridipinto o tenuto da prima.
 // 2. **Nessun residuo.** A riposo non c'è un'animazione viva che il gesto abbia
 //    fatto partire, e nessun elemento tiene in linea `transform`, `opacity`,
-//    `translate`, `scale` o `rotate` che il moto ridotto non lascia.
+//    `translate`, `scale` o `rotate` che il moto ridotto non lascia. Non conta
+//    la `transform: scale(1, 1)` che CodeMirror scrive da sé sui suoi strati
+//    (`.cm-layer`) dopo aver misurato l'editor dentro un riquadro scalato.
 // 3. **Solo proprietà ammesse.** Ogni corsa di `moto`, ogni animazione o
 //    transizione CSS partita col gesto, ogni proprietà in linea riscritta a
 //    ogni fotogramma tocca soltanto quelle cinque. Il referto dice di ogni
@@ -75,7 +77,7 @@ import { PNG } from "pngjs";
 import pixelmatch from "pixelmatch";
 import { createServer } from "vite";
 import { SCENE, sceneUrl } from "./scene.mjs";
-import { openStage, prepareScene, stillShot, OUTPUT, WINDOW } from "./stage.mjs";
+import { openStage, prepareScene, stillShot, MOMENT, OUTPUT, WINDOW } from "./stage.mjs";
 import {
   CHOREOGRAPHIES,
   UNCOVERED,
@@ -104,6 +106,23 @@ const only = process.argv
   .filter(Boolean);
 
 // ── Ciò che gira nella pagina ───────────────────────────────────────────────
+
+/// Il calendario: `Date` parte da `MOMENT` a ogni documento e da lì scorre col
+/// tempo vero (`performance.now()`, i timer e le animazioni restano quelli del
+/// browser). La regola 1 confronta due pagine aperte in momenti diversi: un
+/// commento nuovo porta l'ora di quando nasce, e se le due corse cadevano a
+/// cavallo di un minuto la foto cambiava di una cifra (#280). Con la stessa
+/// origine le due corse leggono la stessa ora, a meno di un minuto di scena.
+const CALENDAR = (moment) => {
+  const RealDate = Date;
+  const start = performance.now();
+  const now = () => moment + (performance.now() - start);
+  globalThis.Date = new Proxy(RealDate, {
+    construct: (target, args, newTarget) => Reflect.construct(target, args.length === 0 ? [now()] : args, newTarget),
+    apply: () => new RealDate(now()).toString(),
+    get: (target, key, receiver) => (key === "now" ? now : Reflect.get(target, key, receiver)),
+  });
+};
 
 /// Il registro, installato prima di ogni script della pagina: ogni
 /// `Element.animate` e ogni transizione o animazione CSS che parte, con le
@@ -418,7 +437,7 @@ async function TOOLS() {
 // ── Il palco ─────────────────────────────────────────────────────────────────
 
 /// Una pagina del banco del moto. È quella di `stage.mjs` meno le due cose che
-/// questo banco non ferma: il moto, che qui si sceglie, e l'ora.
+/// questo banco non ferma: il moto, che qui si sceglie, e il tempo che scorre.
 async function openPage(browser, scene, reducedMotion) {
   const context = await browser.newContext({
     viewport: scene.viewport ?? WINDOW,
@@ -428,6 +447,7 @@ async function openPage(browser, scene, reducedMotion) {
     reducedMotion,
     colorScheme: LIGHT,
   });
+  await context.addInitScript(CALENDAR, MOMENT.getTime());
   await context.addInitScript(RECORDER);
   const page = await context.newPage();
   return { context, page };

@@ -44,7 +44,9 @@ import type {
   BundleInfo,
   InstalledPluginInfo,
   CommandSpec,
+  ParamSpec,
   DraftInfo,
+  DocumentSource,
   DocumentWindowEvent,
   DocumentWindowRequest,
   GridBytesSession,
@@ -86,8 +88,28 @@ import type {
   LiveStatus,
   LiveWriterStatus,
 } from "./contract";
-import type { PrintArtifactOutcome, RevealOutcome, SaveArtifactOutcome } from "./ipc";
+import type {
+  ExternalEditor,
+  OpenedWith,
+  PrintArtifactOutcome,
+  RevealOutcome,
+  SaveArtifactOutcome,
+} from "./ipc";
 import { mediaKindOfMime, mimeOrOctet } from "../editors/media/media-types";
+import {
+  CRAFT_BUNDLE_NS,
+  CRAFT_PHOTO_COMMAND,
+  CRAFT_PREVIEW_COMMAND,
+  CRAFT_PREVIEW_VERSION,
+  type CraftMissing,
+  type CraftPhotoSidecar,
+  type CraftPreview,
+  type CraftPreviewImage,
+  type CraftPreviewInfo,
+  type CraftPreviewSize,
+  type CraftPreviewSubject,
+  type CraftRenderConsent,
+} from "./craft";
 
 /// Una chiamata arrivata alla porta: quale, e con cosa.
 ///
@@ -194,10 +216,74 @@ export interface Options {
   printArtifact?: (suggestedName: string, mediaType: string, bytes: readonly number[]) => Promise<PrintArtifactOutcome>;
   /// Il sistema che riceve una voce del vault. Senza, la porta non è servita.
   revealInSystem?: (path: string, open: boolean) => Promise<RevealOutcome>;
+  /// Le app Craft della macchina per «Apri con» (`doc` è `null` quando la
+  /// shell le chiede tutte). Senza, la porta non è servita, come quella di
+  /// un'app vecchia che non ha il comando.
+  externalEditors?: (doc: string | null) => Promise<ExternalEditor[]>;
+  /// L'app Craft che riceve una voce del vault. Senza, la porta non è servita.
+  openWith?: (path: string, editor: string, page: number | null) => Promise<OpenedWith>;
+  /// L'anteprima fatta dalla CLI dopo un gesto. Senza, la porta non è
+  /// servita. Servita o no, ogni chiamata resta in `atGate("craftRender")`:
+  /// è da lì che i test della shell provano che una via senza gesto non la
+  /// chiama mai.
+  craftRender?: (doc: string, size: CraftPreviewSize) => Promise<CraftPreview>;
   /// La rete della macchina per la sessione live. Senza, le porte `live*` non
   /// sono servite; con zero indirizzi è un PC fuori da una rete locale, che
   /// l'app rifiuta con `unserved`.
   live?: LiveNetwork;
+  /// I file delle app Craft (N7). Con, un `.vectorcraft`, un `.pcraft`, un
+  /// `.figcraft` e un `.xmp` hanno il formato `craft-*` a byte, come con
+  /// `fub-format-craft` montato, e il bundle `fub.craft` risponde a
+  /// `craft.preview`. Senza, restano file senza formato.
+  craft?: FakeCraft;
+}
+
+/// Il bundle `fub.craft` del finto. I byte dei file stanno in `resources`.
+export interface FakeCraft {
+  /// Il componente «File delle app Craft»: spento, i formati restano e
+  /// `craft.preview` e `craft.photo` non ci sono (`unknown_command`), né
+  /// fra i comandi elencati. Di serie acceso.
+  component?: boolean;
+  /// Ciò che il bundle sa di ogni documento. Un file Craft che qui non c'è
+  /// risponde senza immagine, col peso dei suoi byte. Per `craft.photo`,
+  /// `info.xmp` di un XMP è ciò che l'XMP dice (`null`: rotto); senza, un
+  /// XMP che c'è non dice niente.
+  docs?: Record<string, FakeCraftDoc>;
+}
+
+/// Ciò che il bundle finto sa di un documento Craft.
+export interface FakeCraftDoc {
+  /// Ciò che si sa del file; ciò che manca si ricava dall'estensione e dai
+  /// byte.
+  info?: Partial<CraftPreviewInfo>;
+  /// L'immagine che il file porta (`origin: file`), per tutte e due le misure.
+  image?: CraftPreviewImage | null;
+  /// Perché l'immagine manca, quando manca; di serie `absent`. Con
+  /// `over_limit`, `limit_bytes` è il limite che la risposta dice.
+  missing?: CraftMissing;
+  limit_bytes?: number;
+  /// `null`: Fub ha letto solo dei pezzi del file, e la risposta non ha
+  /// revisione. Di serie quella del documento.
+  revision?: null;
+  /// L'app installata che può fare l'anteprima che manca, col consenso (di
+  /// serie `ask`). `craft.preview` non avvia mai niente: l'anteprima fatta
+  /// dall'app la porta un `job_done` di `craft.render`, che manda il banco.
+  render?: { app: string; consent?: CraftRenderConsent };
+}
+
+/// L'app di un file Craft dall'estensione, come i formati di `fub-format-craft`.
+const CRAFT_FAKE_APPS: Readonly<Record<string, { app: CraftPreviewSubject; editor: string }>> = {
+  vectorcraft: { app: "vectorcraft", editor: "VectorCraft" },
+  pcraft: { app: "photocraft", editor: "PhotoCraft" },
+  figcraft: { app: "figcraft", editor: "FigCraft" },
+  xmp: { app: "xmp", editor: "LightCraft" },
+};
+
+function craftExtensionOf(id: string): string | null {
+  const point = id.lastIndexOf(".");
+  if (point < 0 || point < id.lastIndexOf("/")) return null;
+  const extension = id.slice(point + 1);
+  return extension in CRAFT_FAKE_APPS ? extension : null;
 }
 
 /// Gli indirizzi privati delle interfacce attive, quello della rotta
@@ -219,6 +305,10 @@ export interface FakeHost {
   calls: Call[];
   /// Le chiamate a **quella** porta, in ordine.
   atGate(gate: string): Call[];
+  /// Le chiavi di apertura che tengono un documento di videoscrittura in
+  /// questo vault (`openDocument`, `writeDocument` con `open`), finché
+  /// `documentClosed` non le chiude.
+  openKeys(vault?: string | null): number;
   /// Rinomina un file **senza che la shell l'abbia chiesto**: è il `mv` da
   /// terminale, l'altra applicazione, il sync. Il file si muove e l'evento
   /// arriva, che è l'ordine in cui le due cose succedono davvero.
@@ -246,7 +336,10 @@ export interface FakeHost {
   /// Ciò che la porta avrebbe fatto **non lo fa**: una scrittura guasta non
   /// lascia i byte, o un banco che chiede «il disco rifiuta» leggerebbe il file
   /// nuovo e crederebbe di aver provato il contrario.
-  fault(gate: string, reason?: string): () => void;
+  ///
+  /// Un `PluginError` al posto della frase rifiuta con l'errore tipizzato,
+  /// come il backend vero: un permesso negato, un conflitto.
+  fault(gate: string, reason?: string | PluginError): () => void;
 
   /// Chiede di chiudere la finestra, e **aspetta** ciò che la shell fa prima.
   ///
@@ -435,7 +528,21 @@ export function createFakeHost(options: Options = {}): FakeHost {
     if (id.endsWith(".rtf")) return "rtf";
     if (id.endsWith(".doc") || id.endsWith(".dot")) return "doc";
     if (XLSX_FAKE_EXTENSIONS.some((extension) => id.toLowerCase().endsWith(`.${extension}`))) return "xlsx";
+    const craft = options.craft ? craftExtensionOf(id) : null;
+    if (craft) return `craft-${CRAFT_FAKE_APPS[craft]!.app}`;
     return null;
+  }
+
+  /// Ciò che `readDocument` e `openDocument` rispondono.
+  function sourceOf(id: string, doc: Document): DocumentSource {
+    return {
+      // Una cartella si apre col giornale vuoto: i byte sono suoi.
+      text: formatOf(id) === "xlsx" ? "" : doc.text,
+      revision: doc.revision,
+      format_id: formatOf(id),
+      source_kind: sourceKindOf(id),
+      text_kind: formatOf(id) === "xlsx" ? "grid_journal" : "source",
+    };
   }
 
   /// Come il registro dei formati dell'host: un documento di videoscrittura il
@@ -443,7 +550,7 @@ export function createFakeHost(options: Options = {}): FakeHost {
   /// (`fub-format-rich`).
   function sourceKindOf(id: string): "text" | "bytes" {
     const format = formatOf(id) ?? "";
-    return RICH_FAKE_FORMATS.has(format) || format === "xlsx" ? "bytes" : "text";
+    return RICH_FAKE_FORMATS.has(format) || format === "xlsx" || format.startsWith("craft-") ? "bytes" : "text";
   }
 
   /// Registra la chiamata e restituisce ciò che la porta risponde.
@@ -452,13 +559,32 @@ export function createFakeHost(options: Options = {}): FakeHost {
   const throttles = new Map<string, Promise<void>>();
 
   /// Le porte guaste, col motivo che rispondono.
-  const faults = new Map<string, string>();
+  const faults = new Map<string, string | PluginError>();
+  const faultError = (fault: string | PluginError): Error | PluginError =>
+    typeof fault === "string" ? new Error(fault) : fault;
 
   /// Gli argomenti di una porta con il **vault nominato** in coda, ma solo se la
   /// chiamata lo nomina: le asserzioni sulle chiamate senza vault restano quelle
   /// di sempre, e un banco che vuole provare «questa scrittura ha nominato il
   /// suo vault» lo legge dall'ultimo argomento (FUB-001).
   const named = (args: unknown[], vault?: string | null): unknown[] => (vault ? [...args, vault] : args);
+
+  // Le chiavi di apertura, per vault, come le tiene l'host: una chiave conta
+  // quando apre o scrive un documento di videoscrittura, e cade con
+  // `documentClosed`. Una nota o una cartella aperte sotto la chiave non
+  // segnano niente. Una chiave malformata è `bad_args`, come nell'host.
+  const openKeys = new Map<string, Set<string>>();
+  const OPEN_KEY = /^[A-Za-z0-9_-]{1,64}$/;
+  const badKey = (open: string): PluginError => ({
+    kind: "bad_args",
+    message: `host fake: la chiave di apertura «${open}» non è valida`,
+  });
+  const holdKey = (id: string, open: string, vault?: string | null) => {
+    if (!RICH_FAKE_FORMATS.has(formatOf(id) ?? "")) return;
+    const keys = openKeys.get(vault ?? "") ?? new Set<string>();
+    keys.add(open);
+    openKeys.set(vault ?? "", keys);
+  };
 
   function gate<T>(name: string, args: unknown[], result: T): T {
     calls.push({ gate: name, args });
@@ -468,7 +594,7 @@ export function createFakeHost(options: Options = {}): FakeHost {
       // **guardandola**: una promessa rifiutata che nessuno ascolta è un
       // avviso di runtime in mezzo all'output del banco.
       void (result as Promise<unknown>).catch(() => {});
-      return Promise.reject(new Error(fault)) as T;
+      return Promise.reject(faultError(fault)) as T;
     }
     const throttle = throttles.get(name);
     // La chiamata è **già registrata**: un banco che aspetta «la scrittura è
@@ -487,7 +613,7 @@ export function createFakeHost(options: Options = {}): FakeHost {
   ): Promise<T> {
     calls.push({ gate: name, args });
     const fault = faults.get(name);
-    if (fault !== undefined) return Promise.reject(new Error(fault));
+    if (fault !== undefined) return Promise.reject(faultError(fault));
     const run = () => Promise.resolve().then(effect);
     const throttle = throttles.get(name);
     return throttle ? throttle.then(run) : run();
@@ -505,7 +631,7 @@ export function createFakeHost(options: Options = {}): FakeHost {
   function liveSession(session: string): LiveSession {
     const live = liveSessions.get(session);
     if (live) return live;
-    throw { kind: "not_found", message: `no live session ${JSON.stringify(session)} in this window` } satisfies PluginError;
+    throw { kind: "not_found", message: `Questa finestra non ha la sessione live ${session}.` } satisfies PluginError;
   }
 
   /// Un contatore nella sua grafia unica, o un errore della shell: l'app
@@ -962,8 +1088,96 @@ export function createFakeHost(options: Options = {}): FakeHost {
   /// della palette usano per provare che un comando che non scrive non
   /// flussa — e un host finto che non lo sapesse eseguire lancerebbe al posto
   /// di rispondere.
+  /// L'anteprima del bundle finto per `doc` alla misura `size`.
+  function craftPreview(doc: string, size: CraftPreviewSize): CraftPreview {
+    const extension = craftExtensionOf(doc);
+    const stored = docs.get(doc);
+    if (!options.craft || !extension) {
+      throw { kind: "bad_args", message: `\`${doc}\` non è un file delle app Craft.` } satisfies PluginError;
+    }
+    if (!stored) throw { kind: "not_found", message: `host fake: «${doc}» non c'è` } satisfies PluginError;
+    const known = options.craft.docs?.[doc] ?? {};
+    const base = CRAFT_FAKE_APPS[extension]!;
+    const info: CraftPreviewInfo = {
+      app: base.app,
+      editor: base.editor,
+      format_version: null,
+      bytes: bytesOf(stored).byteLength,
+      photo: null,
+      edits: [],
+      xmp: null,
+      ...known.info,
+    };
+    const image = known.image ?? null;
+    const missing = image ? null : (known.missing ?? "absent");
+    return {
+      version: CRAFT_PREVIEW_VERSION,
+      doc,
+      revision: known.revision === null ? null : stored.revision,
+      size,
+      origin: image ? "file" : "none",
+      queued: false,
+      image,
+      missing,
+      limit_bytes: missing === "over_limit" ? (known.limit_bytes ?? 64 * 1024 * 1024) : null,
+      info,
+      render: image || !known.render ? null : { app: known.render.app, consent: known.render.consent ?? "ask" },
+    };
+  }
+
+  /// I comandi che il finto elenca: quelli dati, più i due del bundle
+  /// `fub.craft` di sola lettura quando il componente è acceso, come il
+  /// registro vero (`craft::bundle`).
+  function listedCommands(): CommandSpec[] {
+    const given = options.commands ?? [];
+    if (!options.craft || options.craft.component === false) return given;
+    const doc: ParamSpec = { name: "doc", title: "Documento", description: "", kind: { kind: "document" }, required: true };
+    const craft: CommandSpec[] = [
+      { id: CRAFT_PREVIEW_COMMAND, title: "Anteprima di un file Craft", description: "", keybinding: null, params: [doc], scope: { writes: false, reach: "session", reversible: true }, surfaces: [] },
+      { id: CRAFT_PHOTO_COMMAND, title: "Dati di LightCraft di una foto", description: "", keybinding: null, params: [doc], scope: { writes: false, reach: "session", reversible: true }, surfaces: [] },
+    ];
+    return [...given, ...craft.filter((spec) => !given.some((other) => other.id === spec.id))];
+  }
+
+  /// I dati della foto `doc` del bundle finto, con la regola di
+  /// `craft::photo`: il primo candidato XMP che c'è nel vault, niente per un
+  /// documento che è già un XMP, la copia `-Edit.psd` se c'è.
+  function craftPhoto(doc: string): CraftPhotoSidecar {
+    if (!docs.has(doc)) throw { kind: "not_found", message: `host fake: «${doc}» non c'è` } satisfies PluginError;
+    const answer: CraftPhotoSidecar = { version: CRAFT_PREVIEW_VERSION, doc, xmp: null, meta: null, edits: [] };
+    if (craftExtensionOf(doc) === "xmp") return answer;
+    const slash = doc.lastIndexOf("/");
+    const point = doc.lastIndexOf(".");
+    const stem = point > slash + 1 ? doc.slice(0, point) : doc;
+    const candidates = [`${doc}.xmp`, ...(stem !== doc ? [`${stem}.xmp`] : [])];
+    const xmp = candidates.find((candidate) => docs.has(candidate)) ?? null;
+    if (xmp !== null) {
+      const info = options.craft?.docs?.[xmp]?.info;
+      answer.xmp = xmp;
+      answer.meta = info && "xmp" in info ? (info.xmp ?? null) : { rating: null, label: null, flag: null, keywords: [] };
+    }
+    const edit = `${stem}-Edit.psd`;
+    if (docs.has(edit)) answer.edits.push(edit);
+    return answer;
+  }
+
   function command(id: string, args: Record<string, unknown> | null, mode: InvokeMode) {
     switch (id) {
+      case CRAFT_PHOTO_COMMAND: {
+        if (!options.craft || options.craft.component === false) {
+          throw { kind: "unknown_command", message: id } satisfies PluginError;
+        }
+        const photo = craftPhoto(String(args?.doc));
+        return { notify: null, effect: { kind: "custom" as const, ns: CRAFT_BUNDLE_NS, payload: photo }, undo: null, partial: null };
+      }
+      case CRAFT_PREVIEW_COMMAND: {
+        if (!options.craft || options.craft.component === false) {
+          throw { kind: "unknown_command", message: id } satisfies PluginError;
+        }
+        const size = args?.size === "large" ? "large" : "small";
+        const preview = craftPreview(String(args?.doc), size);
+        return { notify: null, effect: { kind: "custom" as const, ns: CRAFT_BUNDLE_NS, payload: preview }, undo: null, partial: null };
+      }
       case "search.open":
         return { notify: null, effect: { kind: "done" as const }, undo: null, partial: null };
       case "note.create": {
@@ -1257,7 +1471,7 @@ export function createFakeHost(options: Options = {}): FakeHost {
       configHealth: () => gate("configHealth", [], Promise.reject(new Error("host fake: configurazione di macchina non disponibile"))),
       recoverConfig: (path, action) => gate("recoverConfig", [path, action], Promise.reject(new Error("host fake: recovery senza disco"))),
       openVault: (path) => {
-        const extensions = ["md", "markdown", "docx", "odt", "rtf", "doc", "dot", ...XLSX_FAKE_EXTENSIONS, "canvas", "base", ...(options.draw === true ? ["svg", "fubann"] : [])];
+        const extensions = ["md", "markdown", "docx", "odt", "rtf", "doc", "dot", ...XLSX_FAKE_EXTENSIONS, "canvas", "base", ...(options.draw === true ? ["svg", "fubann"] : []), ...(options.craft ? Object.keys(CRAFT_FAKE_APPS) : [])];
         const info: VaultInfo = { root: path, extensions, plugins: [], unread: [] };
         return gate("openVault", [path], Promise.resolve(info));
       },
@@ -1265,14 +1479,20 @@ export function createFakeHost(options: Options = {}): FakeHost {
       readDocument: (id, vault) => {
         const doc = docs.get(id);
         if (!doc) return gate("readDocument", named([id], vault), Promise.reject(new Error(`«${id}» non c'è`)));
-        return gate("readDocument", named([id], vault), Promise.resolve({
-          // Una cartella si apre col giornale vuoto: i byte sono suoi.
-          text: formatOf(id) === "xlsx" ? "" : doc.text,
-          revision: doc.revision,
-          format_id: formatOf(id),
-          source_kind: sourceKindOf(id),
-          text_kind: formatOf(id) === "xlsx" ? "grid_journal" : "source",
-        }));
+        return gate("readDocument", named([id], vault), Promise.resolve(sourceOf(id, doc)));
+      },
+      openDocument: (id, open, vault) => {
+        if (!OPEN_KEY.test(open)) return gate("openDocument", named([id, open], vault), Promise.reject(badKey(open)));
+        const doc = docs.get(id);
+        if (!doc) return gate("openDocument", named([id, open], vault), Promise.reject(new Error(`«${id}» non c'è`)));
+        holdKey(id, open, vault);
+        return gate("openDocument", named([id, open], vault), Promise.resolve(sourceOf(id, doc)));
+      },
+      warmEngine: (extension) => gate("warmEngine", [extension], Promise.resolve()),
+      documentClosed: (open, vault) => {
+        if (!OPEN_KEY.test(open)) return gate("documentClosed", named([open], vault), Promise.reject(badKey(open)));
+        openKeys.get(vault ?? "")?.delete(open);
+        return gate("documentClosed", named([open], vault), Promise.resolve());
       },
       resourceOpen: (id, vault) => gate("resourceOpen", [id, vault], Promise.resolve().then((): ResourceDescriptor => {
         const doc = docs.get(id);
@@ -1344,6 +1564,18 @@ export function createFakeHost(options: Options = {}): FakeHost {
         options.revealInSystem
           ? gate("revealInSystem", [path, open], options.revealInSystem(path, open))
           : unavailable("revealInSystem", [path, open]),
+      externalEditors: (doc) =>
+        options.externalEditors
+          ? gate("externalEditors", [doc], options.externalEditors(doc))
+          : unavailable("externalEditors", [doc]),
+      openWith: (path, editor, page) =>
+        options.openWith
+          ? gate("openWith", [path, editor, page ?? null], options.openWith(path, editor, page ?? null))
+          : unavailable("openWith", [path, editor, page ?? null]),
+      craftRender: (doc, size) =>
+        options.craftRender
+          ? gate("craftRender", [doc, size], options.craftRender(doc, size))
+          : unavailable("craftRender", [doc, size]),
       listGridSurfaces: () => gate("listGridSurfaces", [], Promise.resolve(gridBytes ? [gridBytes.surface] : [])),
       // L'host legge i byte da sé: il finto controlla soltanto che il
       // documento ci sia e che la revisione da cui la shell parte sia ancora
@@ -1386,7 +1618,7 @@ export function createFakeHost(options: Options = {}): FakeHost {
         if (!session) throw new Error("host fake: grid session closed");
         const outcome = gridBytes?.outcomes?.[gridBytesOutcome++];
         if (!outcome) {
-          throw { kind: "bad_args", message: `host fake: grid command \`${request.command.id}\` is not served` } satisfies PluginError;
+          throw { kind: "bad_args", message: `host fake: il comando della griglia \`${request.command.id}\` non è servito` } satisfies PluginError;
         }
         gridBytesInstances.set(instance, {
           ...session,
@@ -1399,16 +1631,19 @@ export function createFakeHost(options: Options = {}): FakeHost {
       })),
       closeGridBytes: (_surface, instance) => gate("closeGridBytes", [instance], Promise.resolve().then(() => {
         if (!gridBytesInstances.delete(instance)) {
-          throw { kind: "not_found", message: "host fake: grid session closed" } satisfies PluginError;
+          throw { kind: "not_found", message: "host fake: la sessione della griglia è chiusa" } satisfies PluginError;
         }
       })),
-      writeDocument: (id, source, base, vault) => {
+      writeDocument: (id, source, base, vault, open) => {
+        if (open !== undefined && !OPEN_KEY.test(open)) {
+          return gate("writeDocument", named([id, source, base], vault), Promise.reject(badKey(open)));
+        }
         // Il guasto si chiede **prima** di posare i byte: `write` gira mentre
         // si compone l'argomento di `gate`, quindi una porta guasta che ci
         // passasse dentro risponderebbe «no» avendo già scritto.
         const fault = faults.get("writeDocument");
         if (fault !== undefined) {
-          return gate("writeDocument", named([id, source, base], vault), Promise.reject(new Error(fault)));
+          return gate("writeDocument", named([id, source, base], vault), Promise.reject(faultError(fault)));
         }
         // Nessun provider serve un file senza formato: il kernel rifiuta la
         // scrittura (`NoProvider`), e lo fa anche il finto — chi salva un
@@ -1443,7 +1678,9 @@ export function createFakeHost(options: Options = {}): FakeHost {
             Promise.reject(conflict),
           );
         }
-        return gate("writeDocument", named([id, source, base], vault), Promise.resolve(write(id, source)));
+        const written = write(id, source);
+        if (open !== undefined) holdKey(id, open, vault);
+        return gate("writeDocument", named([id, source, base], vault), Promise.resolve(written));
       },
       // La rete di sicurezza del §15.2: il testo che non si è salvato. Il
       // finto non ha un crash buffer — registra e basta — perché ciò che i
@@ -1471,13 +1708,13 @@ export function createFakeHost(options: Options = {}): FakeHost {
         throw new Error(`host fake: la view «${v}» non ha l'azione «${action}»`);
       },
       listCommands: (vault) =>
-        gate("listCommands", named([], vault), Promise.resolve(options.commands ?? [])),
+        gate("listCommands", named([], vault), Promise.resolve(listedCommands())),
       invokeCommand: (commandId, args, mode, vault) => {
         const callArgs = named([commandId, args, mode], vault);
         calls.push({ gate: "invokeCommand", args: callArgs });
         const execute = () => {
           const fault = faults.get("invokeCommand");
-          if (fault !== undefined) return Promise.reject(new Error(fault));
+          if (fault !== undefined) return Promise.reject(faultError(fault));
           // Un comando che rifiuta **rifiuta la promessa**, come attraverso l'IPC:
           // un'eccezione sincrona qui sfuggirebbe a chi aspetta con `.catch`.
           try {
@@ -1576,7 +1813,7 @@ export function createFakeHost(options: Options = {}): FakeHost {
         installedOperation("setInstalledPluginEnabled", [installation, enabled], () => {
           const plugin = installed(installation);
           if (enabled && plugin.revoked) throw {
-            kind: "permission_denied", message: "revoked catalog release cannot mount",
+            kind: "permission_denied", message: "Questa versione del catalogo è stata ritirata: non si monta.",
           } satisfies PluginError;
           plugin.enabled = enabled;
           reconcile(plugin);
@@ -1683,7 +1920,7 @@ export function createFakeHost(options: Options = {}): FakeHost {
           if ([...liveSessions.values()].some((live) => live.document === document)) {
             throw {
               kind: "already_exists",
-              message: `document ${JSON.stringify(document)} already has a live session`,
+              message: `«${document}» ha già una sessione live.`,
             } satisfies PluginError;
           }
           const chosen = request.address === undefined
@@ -1693,11 +1930,11 @@ export function createFakeHost(options: Options = {}): FakeHost {
             throw (request.address === undefined
               ? {
                   kind: "unserved",
-                  message: "the PC is not on a local network: no active interface has a private IPv4 address",
+                  message: "Il PC non è su una rete locale: nessuna interfaccia attiva ha un indirizzo IPv4 privato.",
                 }
               : {
                   kind: "not_found",
-                  message: `${request.address} is not a private address of an active interface`,
+                  message: `${request.address} non è l'indirizzo privato di un'interfaccia attiva.`,
                 }) satisfies PluginError;
           }
           const session = `live-${String(++nextLive).padStart(6, "0")}`;
@@ -1726,9 +1963,9 @@ export function createFakeHost(options: Options = {}): FakeHost {
         installedOperation("livePairing", [session, renew], () => {
           const live = liveSession(session);
           if (!renew) return live.pairing && liveCopy(live.pairing);
-          if (live.ended) throw { kind: "cancelled", message: "the live session has ended" } satisfies PluginError;
+          if (live.ended) throw { kind: "cancelled", message: "La sessione live è finita." } satisfies PluginError;
           if (live.writer?.connected) {
-            throw { kind: "already_exists", message: "a writer is connected to the session" } satisfies PluginError;
+            throw { kind: "already_exists", message: "Il tablet è collegato: un QR nuovo si chiede quando esce." } satisfies PluginError;
           }
           live.pairing = livePairing(session, live);
           // Lo scrittore che aspettava la ripresa la perde.
@@ -1740,10 +1977,10 @@ export function createFakeHost(options: Options = {}): FakeHost {
       liveSend: (session, message) =>
         installedOperation("liveSend", [session, message], () => {
           const live = liveSession(session);
-          if (live.ended) throw { kind: "cancelled", message: "the live session has ended" } satisfies PluginError;
+          if (live.ended) throw { kind: "cancelled", message: "La sessione live è finita." } satisfies PluginError;
           const regression = (seq: string): PluginError => ({
             kind: "conflict",
-            message: `seq ${seq} is behind the session seq ${live.seq}`,
+            message: `La sessione live ha rifiutato il messaggio: il seq ${seq} è indietro rispetto al ${live.seq} della sessione.`,
           });
           if (message.t === "ack" || message.t === "nack") {
             liveCounter(message.writer, "writer");
@@ -1752,7 +1989,7 @@ export function createFakeHost(options: Options = {}): FakeHost {
             if (at < 0) {
               throw {
                 kind: "not_found",
-                message: `commit ${message.c} of writer ${message.writer} is not awaiting an answer`,
+                message: `La sessione live ha rifiutato il messaggio: il commit ${message.c} dello scrittore ${message.writer} non aspetta una risposta.`,
               } satisfies PluginError;
             }
             // Un `ack` di un duplicato non porta operazioni nuove: il suo
@@ -1835,6 +2072,7 @@ export function createFakeHost(options: Options = {}): FakeHost {
 
   return {
     module,
+    openKeys: (vault) => openKeys.get(vault ?? "")?.size ?? 0,
     renameFromOutside: (from, to) => {
       const before = docs.get(from);
       if (!before) throw new Error(`host fake: «${from}» non esiste`);
@@ -1968,6 +2206,118 @@ function titled(source: string, title: string): string {
   const text = title.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   const root = new RegExp(`(<${"svg"}\\b[^>]*>)(\\s*<title>[\\s\\S]*?</title>)?`);
   return source.replace(root, (_, head: string, old: string | undefined) => (old === undefined ? `${head}\n  <title>${text}</title>` : `${head}${old.replace(/<title>[\s\S]*<\/title>/, () => `<title>${text}</title>`)}`));
+}
+
+/// Un tema installato che parte dalla serie (`extends`), pronto per le opzioni
+/// `themes` e `themePayloads` del finto: porta il foglio chiaro e una pelle, e
+/// la luce scura arriva con `sheet: null`, come la consegna l'host vero.
+export function extendingTheme(id = "acme.carta"): {
+  info: ThemeInfo;
+  payloads: Record<string, ThemePayload>;
+} {
+  const manifest: ThemeInfo["manifest"] = {
+    id,
+    name: "Carta",
+    version: "1.0.0",
+    engine: "theme-2",
+    lights: ["light", "dark"],
+    asset_namespace: `theme://${id}/`,
+    motion: ["opacity", "transform"],
+    extends: "fub.serie",
+  };
+  const skin = ".carta { color: inherit; }";
+  return {
+    info: { manifest, trust: "community" },
+    payloads: {
+      [`${id}:light`]: { manifest, light: "light", sheet: ":root { --carta: #fbf7ee; }", skin, assets: {} },
+      [`${id}:dark`]: { manifest, light: "dark", sheet: null, skin, assets: {} },
+    },
+  };
+}
+
+/// I byte di un WOFF2 finto: la firma `wOF2` e qualche byte dopo. Il finto non
+/// disegna caratteri: conta che la forma arrivi come la consegna l'host vero.
+export function fakeWoff2(size = 12): number[] {
+  return [0x77, 0x4f, 0x46, 0x32, ...Array.from({ length: Math.max(0, size - 4) }, (_, i) => i & 0xff)];
+}
+
+/// Un tema che parte dalla serie e porta due caratteri (`fonts`): il manifest
+/// li dichiara, il fascio porta i file fra gli asset anche se nessun CSS li
+/// nomina, e la pelle usa la famiglia per nome. Come per `extendingTheme`, la
+/// luce scura arriva con `sheet: null`.
+export function fontTheme(id = "acme.caratteri"): {
+  info: ThemeInfo;
+  payloads: Record<string, ThemePayload>;
+} {
+  const manifest: ThemeInfo["manifest"] = {
+    id,
+    name: "Caratteri",
+    version: "1.0.0",
+    engine: "theme-2",
+    lights: ["light", "dark"],
+    asset_namespace: `theme://${id}/`,
+    motion: ["opacity", "transform"],
+    extends: "fub.serie",
+    fonts: [
+      { family: "Carta Serif", file: "fonts/carta.woff2", weight: 400, style: "normal" },
+      { family: "Carta Serif", file: "fonts/carta-italic.woff2", weight: 400, style: "italic" },
+    ],
+  };
+  const skin = '.shell-tooltip { font-family: "Carta Serif", var(--font-ui); }';
+  const assets = {
+    [`theme://${id}/fonts/carta.woff2`]: fakeWoff2(12),
+    [`theme://${id}/fonts/carta-italic.woff2`]: fakeWoff2(9),
+  };
+  return {
+    info: { manifest, trust: "community" },
+    payloads: {
+      [`${id}:light`]: { manifest, light: "light", sheet: null, skin, assets },
+      [`${id}:dark`]: { manifest, light: "dark", sheet: null, skin, assets },
+    },
+  };
+}
+
+/// I byte UTF-8 di un set di icone del tema, come li consegna l'host vero fra
+/// gli asset del fascio.
+export function iconSetBytes(set: Readonly<Record<string, readonly string[]>>): number[] {
+  return [...new TextEncoder().encode(JSON.stringify(set))];
+}
+
+/// Un tema che parte dalla serie e ridisegna qualche icona (`icons`): il
+/// manifest nomina il set, il fascio lo porta fra gli asset anche se nessun
+/// CSS lo nomina. Ridisegna una icona di serie (`search`), un alias
+/// (`folder`, che vale per `vault`) e un nome che oggi nessuno disegna.
+export function iconTheme(id = "acme.icone"): {
+  info: ThemeInfo;
+  payloads: Record<string, ThemePayload>;
+  set: Record<string, string[]>;
+} {
+  const manifest: ThemeInfo["manifest"] = {
+    id,
+    name: "Icone",
+    version: "1.0.0",
+    engine: "theme-2",
+    lights: ["light", "dark"],
+    asset_namespace: `theme://${id}/`,
+    motion: ["opacity", "transform"],
+    extends: "fub.serie",
+    icons: "icons.json",
+  };
+  const set = {
+    search: ["M4 4h16v16H4z", "M8 12h8"],
+    folder: ["M3 6h18v12H3z"],
+    "modulo-spento": ["M12 3v18"],
+  };
+  const skin = ".shell-tooltip { white-space: nowrap; }\n";
+  const assets = { [`theme://${id}/icons.json`]: iconSetBytes(set) };
+  return {
+    info: { manifest, trust: "community" },
+    payloads: {
+      [`${id}:light`]: { manifest, light: "light", sheet: null, skin, assets },
+      [`${id}:dark`]: { manifest, light: "dark", sheet: null, skin, assets },
+    },
+    set,
+  };
 }
 
 /// L'id della view cestino del finto: la stessa che `fub-features` registra,

@@ -197,10 +197,20 @@ con la feature `http-client` dell'host:
 - parte soltanto dal pulsante «Controlla aggiornamenti», mai in sottofondo;
 - accoda un job, che chiede a GitHub l'ultima release pubblicata del
   repository e la confronta con `CARGO_PKG_VERSION`;
+- chi ha una release vera chiede `/releases/latest`, che GitHub dà solo per le
+  release vere, e non vede le pre-release; chi ha una pre-release (per esempio
+  `0.2.0-prealpha.1`) chiede la lista delle ultime 30 release e prende la
+  versione più alta fra i tag che si leggono, pre-release o no: decide il tag,
+  non il flag `prerelease`; le bozze e le voci senza tag non contano, un tag che
+  non è una versione si salta;
+- le versioni si confrontano come dice semver: una pre-release viene prima
+  della release che anticipa, e le parti della pre-release si confrontano una
+  per una, i numeri come numeri (`prealpha.10` dopo `prealpha.2`) e prima dei
+  testi;
 - il manifest concede la rete al solo `api.github.com`, e il `Guard` chiude ogni
   altro host;
 - l'esito è `{current, latest, newer, url}`: `latest` nullo vuol dire nessuna
-  release pubblicata, e `url` c'è soltanto se porta alle release del
+  release pubblicata (un 404, o una lista senza release), e `url` c'è soltanto se porta alle release del
   repository;
 - una risposta che non si usa (altro stato, corpo illeggibile, tag che non è
   una versione) è l'esito `{current, failed, status}`, che la shell dice nella

@@ -121,6 +121,51 @@
       "text_kind": "grid_journal"
     }
   ],
+  "ExternalEditor": [
+    {
+      "id": "vectorcraft",
+      "name": "VectorCraft",
+      "opens": [
+        "vectorcraft",
+        "svg"
+      ],
+      "installed": true,
+      "running": false
+    },
+    {
+      "id": "pdfcraft",
+      "name": "PdfCraft",
+      "opens": [
+        "pdf"
+      ],
+      "installed": false,
+      "running": false
+    },
+    {
+      "id": "photocraft",
+      "name": "PhotoCraft",
+      "opens": [
+        "pcraft",
+        "psd"
+      ],
+      "installed": true,
+      "running": true
+    }
+  ],
+  "OpenedWith": [
+    {
+      "editor": "lightcraft",
+      "how": "forwarded"
+    },
+    {
+      "editor": "photocraft",
+      "how": "in_running"
+    },
+    {
+      "editor": "vectorcraft",
+      "how": "new_process"
+    }
+  ],
   "BundleInfo": [
     {
       "id": "fub.versioning",
@@ -170,6 +215,34 @@
         ]
       },
       "trust": "community"
+    },
+    {
+      "manifest": {
+        "id": "acme.carta",
+        "name": "Carta",
+        "version": "1.0.0",
+        "engine": "theme-2",
+        "lights": [
+          "light",
+          "dark"
+        ],
+        "asset_namespace": "theme://acme.carta/",
+        "motion": [
+          "opacity",
+          "transform"
+        ],
+        "extends": "fub.serie",
+        "fonts": [
+          {
+            "family": "Carta Serif",
+            "file": "fonts/carta.woff2",
+            "weight": 400,
+            "style": "italic"
+          }
+        ],
+        "icons": "icons.json"
+      },
+      "trust": "community"
     }
   ],
   "ThemePayload": [
@@ -199,6 +272,37 @@
           3
         ]
       }
+    },
+    {
+      "manifest": {
+        "id": "acme.carta",
+        "name": "Carta",
+        "version": "1.0.0",
+        "engine": "theme-2",
+        "lights": [
+          "light",
+          "dark"
+        ],
+        "asset_namespace": "theme://acme.carta/",
+        "motion": [
+          "opacity",
+          "transform"
+        ],
+        "extends": "fub.serie",
+        "fonts": [
+          {
+            "family": "Carta Serif",
+            "file": "fonts/carta.woff2",
+            "weight": 400,
+            "style": "italic"
+          }
+        ],
+        "icons": "icons.json"
+      },
+      "light": "dark",
+      "sheet": null,
+      "skin": ".carta { color: inherit; }",
+      "assets": {}
     }
   ],
   "InstalledPluginInfo": [

@@ -1,25 +1,27 @@
-//! Lo specchio a caso del nucleo della lavagna, Rust ↔ TypeScript, legato da
-//! una fixture generata.
+//! Lo specchio a caso del nucleo della lavagna, build nativa ↔ build
+//! WebAssembly, legato da una fixture generata.
 //!
-//! La lavagna è scritta due volte: qui, il nucleo che fa fede, e in
-//! TypeScript (`apps/client/src/editors/canvas/{model,operation,source-edit}.ts`),
-//! la copia che la tela usa finché non carica il nucleo. I vettori scritti a
-//! mano (`apps/client/src/__fixtures__/canvas-patches/`) coprono i casi
-//! pensati; questo specchio, come quello dell'inchiostro
+//! La lavagna è scritta una volta sola, qui, ma gira in due build: quella
+//! nativa, che fa fede, e quella a 32 bit che la tela carica
+//! (`crates/fub-canvas-wasm`, con `usize` a 32 bit e un altro allocatore), dove
+//! una divergenza resta possibile. I vettori scritti a mano
+//! (`apps/client/src/__fixtures__/canvas-read/`, `canvas-patches/`) coprono i
+//! casi pensati; questo specchio, come quello dell'inchiostro
 //! (`crates/fub-ink/tests/ts_mirror.rs`), cerca quelli che nessuno ha
 //! pensato. Un generatore congruenziale con un seme fisso fa sorgenti (rientri,
 //! CRLF, BOM, campi sconosciuti annidati, numeri ai bordi, Unicode a 4 byte,
 //! chiavi che sembrano indici, `null`, chiavi doppie) e toppe sul loro
 //! modello; il nucleo dà l'esito. La fixture
 //! `apps/client/src/__fixtures__/canvas-mirror.json` porta caso per caso la
-//! risposta **di Rust**, e il gemello Vitest
-//! (`apps/client/src/editors/canvas/mirror.test.ts`) pretende la stessa da
-//! `parseCanvas`, `canvasCommitOutcome` e `commitCanvasPatches`, byte per
+//! risposta **della build nativa**, e il gemello Vitest
+//! (`apps/client/src/editors/canvas/wasm/mirror.test.ts`) pretende la stessa
+//! dal `.wasm` (`openCore`, `preview`, `commit` e il suo annulla), byte per
 //! byte.
 //!
-//! Cambiare una regola da un lato solo è rosso: se cambia Rust la fixture è
-//! vecchia (questo test), e rigenerandola (`UPDATE_MIRROR=1 cargo test -p
-//! fub-canvas-core --test ts_mirror`) il rosso si sposta di là.
+//! Una regola cambiata nel nucleo rende vecchia la fixture (questo test);
+//! rigenerarla (`UPDATE_MIRROR=1 cargo test -p fub-canvas-core --test
+//! ts_mirror`) la riallinea, e il gemello dice se la build a 32 bit dà ancora
+//! le stesse risposte.
 //!
 //! Una riga della fixture è un sorgente:
 //!

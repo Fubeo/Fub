@@ -323,7 +323,7 @@ pub(crate) fn mount_with_formats(
     let (providers, resources) = prepared_formats.into_parts();
     let mut format_resources = Some(resources);
     let mut formats = FormatRegistry::new();
-    #[cfg_attr(not(feature = "draw"), allow(unused_mut))]
+    #[cfg_attr(not(any(feature = "draw", feature = "craft")), allow(unused_mut))]
     let mut builtin = vec![
         MarkdownProvider::boxed(),
         fub_format_canvas::CanvasProvider::boxed(),
@@ -337,6 +337,11 @@ pub(crate) fn mount_with_formats(
     // feature un `.fubann` è un file di specie sconosciuta.
     #[cfg(feature = "draw")]
     builtin.push(fub_format_svg::FubannProvider::boxed());
+    // I file delle app Craft, in sola lettura: sono del formato e non del
+    // componente `fub.craft`, quindi la ricerca e i backlink restano anche con
+    // il componente spento (D-7).
+    #[cfg(feature = "craft")]
+    builtin.extend(fub_format_craft::providers());
     for provider in builtin
         .into_iter()
         .chain(crate::rich::providers())
@@ -434,10 +439,7 @@ pub(crate) fn mount_with_formats(
             "Word processing",
             crate::rich::register,
         )
-        .speaking(
-            crate::settings::CORE_DEFAULT_LOCALE,
-            fub_format_rich::export::catalog(),
-        )
+        .speaking(crate::settings::CORE_DEFAULT_LOCALE, crate::rich::catalog())
         .described_by(componenti::riga(crate::rich::RICH_ID).as_ref()),
     ));
 
@@ -452,7 +454,7 @@ pub(crate) fn mount_with_formats(
         )
         .speaking(
             crate::settings::CORE_DEFAULT_LOCALE,
-            fub_format_xlsx::export::catalog(),
+            crate::workbook::catalog(),
         )
         .described_by(componenti::riga(crate::workbook::WORKBOOK_ID).as_ref()),
     ));
@@ -511,6 +513,11 @@ pub(crate) fn mount_with_formats(
         bundles.push(Arc::new(crate::updates::UpdatesBundle));
         bundles.push(Arc::new(crate::link_card::LinkCardBundle));
     }
+
+    // L'anteprima dei file delle app Craft, con la sua cache. Spento il
+    // componente il comando non c'è, e i formati qui sopra restano.
+    #[cfg(feature = "craft")]
+    bundles.push(Arc::new(crate::craft::CraftBundle));
 
     let mut registry = BundleRegistry::new();
     for bundle in &bundles {

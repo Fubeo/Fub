@@ -106,6 +106,38 @@ export const ENGLISH: Readonly<Record<string, string>> = {
     "The colour of links, focus and selection. Lightness and intensity adapt by themselves to stay readable.",
   "Zoom interfaccia": "Interface zoom",
   "Quanto è grande tutta l'interfaccia, dal 50% al 200%.": "How large the whole interface is, from 50% to 200%.",
+  "Tema installato": "Installed theme",
+  "L'id del tema montato; si sceglie dal catalogo dei temi.": "The id of the mounted theme; chosen from the theme catalog.",
+  Animazioni: "Animations",
+  "Segue la preferenza del sistema, oppure toglie rimbalzi e scene, oppure riduce sempre le animazioni dell'interfaccia.":
+    "Follow the system preference, or drop bounces and scenes, or always reduce interface animations.",
+  Calme: "Calm",
+  Ridotte: "Reduced",
+  "Fotogrammi al secondo": "Frame rate",
+  "Tetto delle animazioni disegnate dall'interfaccia. Il massimo segue il refresh dello schermo, qualunque sia.":
+    "Cap for animations drawn by the interface. The maximum follows the display refresh rate, whatever it is.",
+  "Massimo dello schermo": "Display maximum",
+  "Stile dei diagrammi": "Diagram style",
+  "Colori e tratto dei diagrammi Mermaid; «%% stile: nome» lo cambia per uno solo.":
+    "Colors and stroke of Mermaid diagrams; “%% style: name” changes a single one.",
+  "Armonia — segue il tema": "Harmony — follows the theme",
+  "Acquerello — tinte pastello": "Watercolor — pastels on paper",
+  "Aurora — colori vivi e profondi": "Aurora — vivid and deep",
+  "Blueprint — tavola tecnica": "Blueprint — technical drawing",
+  "Inchiostro — editoriale": "Ink — editorial",
+  "Aspetto dei documenti": "Document appearance",
+  "Come si mostra un file che ha un aspetto suo, come un documento: la sua pagina, o la pagina adattata alla luce del tema. Automatico sceglie la pagina, e quella adattata con il contrasto alto.":
+    "How a file with a look of its own, such as a document, is shown: its own page, or the page adapted to the theme's light. Automatic picks the page, and the adapted one with high contrast.",
+  Automatico: "Automatic",
+  Pagina: "Page",
+  "Pagina adattata": "Adapted page",
+  "Carattere dell'interfaccia": "Interface font",
+  "Famiglia di barre, cassetti, menu e finestre.": "Font family of bars, drawers, menus and dialogs.",
+  "Carattere del codice": "Code font",
+  "Famiglia a spaziatura fissa del codice e del sorgente.": "Monospaced font family for code and source.",
+  "Frammenti CSS locali": "Local CSS snippets",
+  "Frammenti attivabili, locali e limitati agli hook visivi; nessuna rete o importazione CSS.":
+    "Toggleable, local, paint-only snippets scoped to visual hooks; no network or CSS imports.",
   "Numeri di riga": "Line numbers",
   "Mostra la grondaia con il numero di ogni riga.": "Shows the gutter with the number of each line.",
   "Larghezza della colonna": "Column width",
@@ -165,6 +197,25 @@ export const ENGLISH: Readonly<Record<string, string>> = {
   "Il cestino è vuoto": "The trash is empty",
   "Ciò che si cestina resta qui finché non lo si svuota.": "What you trash stays here until you empty it.",
   "Il grafo, per chi non sa disegnarlo.": "The graph, for those who cannot draw it.",
+  "App esterne": "External apps",
+  "Dove sono le app Craft": "Where the Craft apps are",
+  "Una riga per programma, come vectorcraft=/opt/vc/vectorcraft, o vectorcraft-cli=… per la riga di comando. Il percorso intero vince su quello che Fub trova da solo.":
+    "One line per program, like vectorcraft=/opt/vc/vectorcraft, or vectorcraft-cli=… for the command line. The full path wins over what Fub finds on its own.",
+  "Anteprime fatte dalle app": "Previews made by the apps",
+  "Fub fa fare l'anteprima di un file che non ne ha una all'app che lo apre, su una copia, solo quando apri il file tu.":
+    "Fub has the app that opens a file make the preview the file lacks, on a copy, only when you open the file yourself.",
+  "Chiedi la prima volta": "Ask the first time",
+  Accese: "On",
+  Spente: "Off",
+  "Peso massimo da leggere per un'anteprima (MiB)": "Largest file to read for a preview (MiB)",
+  "Un file che va letto intero per l'anteprima e pesa di più resta senza: i file che si leggono a pezzi non hanno limite.":
+    "A file that has to be read whole for its preview and weighs more stays without one: files read in pieces have no limit.",
+  "Miniature nell'albero": "Thumbnails in the tree",
+  "Accanto al nome di un file Craft, di un RAW, di un PDF o di un documento, la piccola anteprima che il file ha già. L'albero non avvia mai un'app.":
+    "Next to the name of a Craft file, a RAW, a PDF or a document, the small preview the file already has. The tree never starts an app.",
+  "Mostra i file XMP nell'albero": "Show XMP files in the tree",
+  "Spento, gli XMP spariscono dall'albero: la ricerca li trova e la foto mostra i loro dati.":
+    "Off, XMP files disappear from the tree: search finds them and the photo shows their data.",
 };
 
 /// La scenografia nella lingua in cui parla adesso la shell.

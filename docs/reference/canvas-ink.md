@@ -12,7 +12,7 @@ stesso di Obsidian, letto e scritto come dice il
 li conosce conserva o ignora. I punti di un tratto si scrivono con la stringa
 `fub:ink` dei disegni e il pennello con la grammatica di `fub:brush`
 ([formato della scena](scene-format.md), §5). Il perché di questa forma sta
-nell'[ADR 0238](../decisions/0238-inchiostro-sulla-lavagna.md).
+nell'[ADR 0241](../decisions/0241-inchiostro-sulla-lavagna.md).
 
 ## Esempio completo
 
@@ -233,7 +233,7 @@ Obsidian apre la stessa lavagna e non conosce i campi `fub:ink`.
 
 - **Che cosa si sa:** niente. Se Obsidian, quando riscrive il file, conserva
   i livelli, li riordina o li perde lo dice soltanto una prova con Obsidian
-  vero, e finché non c'è l'[ADR 0238](../decisions/0238-inchiostro-sulla-lavagna.md)
+  vero, e finché non c'è l'[ADR 0241](../decisions/0241-inchiostro-sulla-lavagna.md)
   resta proposta. Un riordino delle chiavi, o `640.0` al posto di `640`, non
   conta: i livelli si confrontano per valore.
 - **Come si prova:** col kit in `tools/prova-obsidian/`
@@ -248,7 +248,7 @@ Obsidian apre la stessa lavagna e non conosce i campi `fub:ink`.
   questa pagina resta l'unica copia dell'inchiostro (strada A). Se Obsidian
   perde o cambia i livelli, anche solo sulle schede che sposta, la decisione
   diventa A più una copia B: un SVG accanto alla lavagna, che gli altri
-  programmi sanno mostrare (fra le alternative dell'ADR 0238), scritto da Fub
+  programmi sanno mostrare (fra le alternative dell'ADR 0241), scritto da Fub
   in più; i campi `fub:ink` restano la fonte.
 
 ## Toppa e operazioni

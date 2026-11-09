@@ -1,0 +1,9 @@
+{
+  "name": "text-field-not-a-string",
+  "description": "Un campo di testo noto che non è una stringa è un errore, anche fuori dal suo tipo",
+  "source": "{\"nodes\":[{\"id\":\"n\",\"type\":\"group\",\"x\":0,\"y\":0,\"width\":10,\"height\":10,\"text\":5}],\"edges\":[]}",
+  "expect": {
+    "outcome": "rejected",
+    "reason": "source"
+  }
+}

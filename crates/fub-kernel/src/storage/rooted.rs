@@ -8,8 +8,8 @@ use cap_std::fs::{Dir, Metadata, OpenOptions};
 use cap_std::{ambient_authority, AmbientAuthority};
 
 use super::{
-    same_parent_resolution_name, temp_name, ConditionalWrite, DirEntry, EntryKind, FileIdentity,
-    Merge, Stat, VaultStorage,
+    refuse_read_only, same_parent_resolution_name, temp_name, ConditionalWrite, DirEntry,
+    EntryKind, FileIdentity, Merge, Stat, VaultStorage, WriteBits,
 };
 
 /// Filesystem di produzione ancorato alla directory aperta al mount.
@@ -463,7 +463,15 @@ impl RootedFsStorage {
         let rel = self.rel_buf(path)?;
         let name = path.file_name().unwrap_or("senza-nome");
         let parent = path.parent().unwrap_or(&self.root);
-        let permissions = self.dir.metadata(&rel).ok().map(|m| m.permissions());
+        // Ciò che c'è già al nome: un'assenza vuol dire file nuovo, ogni altro
+        // guasto risale, perché senza guardarlo non si sa se lo si può
+        // sovrascrivere. Un file in sola lettura si rifiuta qui, prima del
+        // temporaneo, così la cartella resta com'era (PA T59).
+        let existing = crate::error::optional(self.dir.metadata(&rel))?;
+        if let Some(metadata) = &existing {
+            refuse_read_only(path, WriteBits::of_cap(metadata))?;
+        }
+        let permissions = existing.map(|m| m.permissions());
 
         let mut options = OpenOptions::new();
         options.write(true).create_new(true);

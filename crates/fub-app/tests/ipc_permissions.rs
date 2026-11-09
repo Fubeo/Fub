@@ -192,3 +192,32 @@ fn the_extractor_reads_generics_and_line_breaks() {
             .collect(),
     );
 }
+
+/// I comandi Craft che avviano o interrogano programmi della macchina: solo
+/// la shell principale del desktop. Sono registrati e concessi da
+/// `allow-shell`, non da `allow-mobile` (sul telefono non si avviano app
+/// Craft), e il loro corpo comincia da `guard_main_shell`, prima di ogni
+/// lavoro: una finestra di documento o il visore ricevono `permission_denied`.
+#[test]
+fn the_craft_commands_are_for_the_main_shell_only() {
+    let registered = registered();
+    let shell = allowed("default.toml", "allow-shell");
+    let mobile = allowed("mobile.toml", "allow-mobile");
+    let lib = read(&root().join("src/lib.rs"));
+    for name in ["external_editors", "open_with", "craft_render"] {
+        assert!(registered.contains(name), "{name} non è registrato");
+        assert!(shell.contains(name), "{name} non è in allow-shell");
+        assert!(!mobile.contains(name), "{name} è concesso sul telefono");
+        let head = format!("#[tauri::command]\nasync fn {name}(");
+        let at = lib
+            .find(&head)
+            .unwrap_or_else(|| panic!("{name}: il comando non è in lib.rs"));
+        let body = &lib[at..];
+        let body = &body[body.find("{\n").expect("il corpo del comando") + 2..];
+        let first = body.lines().next().unwrap_or("").trim();
+        assert!(
+            first.starts_with("guard_main_shell(&window,"),
+            "{name} non comincia da guard_main_shell: {first}"
+        );
+    }
+}

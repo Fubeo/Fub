@@ -27,7 +27,7 @@ tracing = { workspace = true }
 # una `extern "C"` scritta a mano — è la forma che la 0001 ha già rifiutato
 # per il conteggio dei nomi su Windows: un `unsafe` che non si può rileggere.
 [target.'cfg(unix)'.dependencies]
-libc = "0.2"
+libc = { workspace = true }
 
 # INVARIANTE: niente comrak/pulldown, wasmtime, tauri qui dentro. Il core non
 # sa cosa sia il markdown.
@@ -45,7 +45,8 @@ libc = "0.2"
 # sbagliato. Fra un crate che non aggiunge niente e un `unsafe` che non si può
 # rileggere, questo repo prende il crate.
 [target.'cfg(windows)'.dependencies]
-windows-sys = { version = "0.61", features = [
+# La versione è quella della radice; le feature sono di questo crate.
+windows-sys = { workspace = true, features = [
     "Wdk_Storage_FileSystem",
     "Win32_Foundation",
     "Win32_Storage_FileSystem",
