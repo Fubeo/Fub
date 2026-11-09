@@ -32,7 +32,7 @@ export type LayerRef = InkLayerRef;
 /**
  * Aggiunge (`before` a `null`), toglie (`after` a `null`) o cambia il tratto
  * alla posizione `at` dei tratti del livello `layer`, come `CanvasPatch::Ink`
- * del nucleo Rust (`docs/reference/canvas-operations.md` § «Inchiostro»).
+ * del nucleo Rust (`docs/reference/canvas-ink.md` § «Toppa e operazioni»).
  * La applica il nucleo, come le altre toppe.
  */
 export interface InkPatch {

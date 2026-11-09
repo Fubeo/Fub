@@ -253,10 +253,77 @@ Obsidian apre la stessa lavagna e non conosce i campi `fub:ink`.
 
 ## Toppa e operazioni
 
-La toppa `ink`, che aggiunge, toglie o cambia un tratto con la sua inversa, e
-le operazioni `add_strokes` ed `erase_strokes` stanno con le altre operazioni
-della lavagna, nelle [operazioni sulla lavagna](canvas-operations.md)
-(sezione «Inchiostro»).
+Le toppe e le operazioni della lavagna sono nelle [operazioni sulla
+lavagna](canvas-operations.md); qui ci sono quelle dell'inchiostro, che il
+nucleo applica e disfa come le altre.
+
+L'inchiostro di una lavagna sta nei livelli `fub:ink` delle schede e della
+radice, nel formato [qui sopra](#il-livello). Un livello si indica con `"board"` (la radice) o `{"node": "<id>"}` (una scheda
+di ogni tipo, gruppi compresi).
+
+### La toppa `ink`
+
+`{"kind": "ink", "layer", "at", "before", "after"}` aggiunge (`before`
+uguale a `null`), toglie (`after` uguale a `null`) o cambia il tratto alla
+posizione `at` dei tratti del livello. Un tratto è scritto come nel file, e
+si confronta per valore come le schede. Un tratto nuovo può andare alla fine
+(`at` uguale al numero dei tratti), non oltre.
+
+```json
+{ "kind": "ink", "layer": { "node": "f1" }, "at": 0, "before": null,
+  "after": { "id": "s1", "tool": "pen", "brush": "pf1 size=3 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=0 pen=ballpoint",
+             "color": "#0072b2", "anchor": { "kind": "card", "width": 640, "height": 420 },
+             "ink": "1 s100 cxy 100,100 10,0" } }
+```
+
+- **Il livello nasce** con la prima toppa: una scheda senza `fub:ink` lo
+  prende in fondo ai suoi campi.
+- **L'ultimo tratto tolto**: se il livello resta esattamente
+  `{"v": 1, "strokes": []}`, la chiave sparisce; l'annulla la rimette in
+  fondo ai campi della scheda. Un livello con altri campi resta, vuoto.
+- **Un livello estraneo** non si tocca (`ForeignLayer`, ragione `invalid`).
+  Una scheda che non c'è o un'immagine di prima che non torna sono `Stale`.
+- Il sorgente si ritocca tratto per tratto: gli array di oggetti con `id` si
+  accoppiano per id a ogni profondità, quindi un tratto nuovo su una scheda
+  con 2000 tratti aggiunge al file solo quel tratto e il separatore
+  (`tests/ink_patch.rs`).
+- Spostare o ridimensionare una scheda resta un `upsert-node`: il file cambia
+  solo in `x`, `y`, `width` o `height`, ma la toppa porta il livello intero,
+  prima e dopo.
+
+### `add_strokes`
+
+Aggiunge i tratti `strokes` in fondo al livello `layer`, nell'ordine dato:
+una toppa `ink` per tratto. Ogni tratto è come nel file, campi sconosciuti
+compresi; `id` è facoltativo (assente o `null`: lo dà il seme, saltando gli
+id del livello). Un tratto che non si disegnerebbe in quel livello (per
+esempio un'ancora `free` su una scheda) è `Invalid`; un id che il livello ha
+già è `DuplicateId`; una scheda che non c'è è `UnknownNode`.
+
+```json
+{ "op": "add_strokes", "layer": "board",
+  "strokes": [{ "tool": "pen", "brush": "pf1 size=3 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=0 pen=ballpoint",
+                "color": "#0072b2", "anchor": { "kind": "free" }, "ink": "1 s100 cxy 4000,2500 120,40 95,-10" }] }
+```
+
+### `erase_strokes`
+
+Cancella dal livello `layer` i tratti `ids`, in un ordine qualunque: una
+toppa `ink` per tratto, con la posizione che il tratto ha dopo le
+cancellazioni prima di lui, così l'inversa li rimette tutti al loro posto.
+Un id che non c'è è `UnknownStroke`, uno ripetuto `DuplicateId`. Un tratto
+che Fub non sa disegnare si conserva e non si cancella: `Invalid`.
+
+```json
+{ "op": "erase_strokes", "layer": { "node": "f1" }, "ids": ["s1", "s3"] }
+```
+
+`move` e `resize` non toccano l'inchiostro: i punti di una scheda sono in
+unità della scheda, e la resa li porta alla misura di adesso come dice
+[«La misura della scheda»](#la-misura-della-scheda). `remove` porta
+via l'inchiostro della scheda con lei, e l'annulla lo rimette. I vettori
+sono `apps/client/src/__fixtures__/canvas-patches/*-ink-*.json` e
+`canvas-ops/*strokes*.json`, `canvas-ops/*-card-with-ink.json`.
 
 ## I vettori
 
