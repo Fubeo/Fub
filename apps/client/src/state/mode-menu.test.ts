@@ -34,6 +34,7 @@ import { SVG_MODES } from "../editors/text/profiles/svg";
 import { RICH_MODES } from "../editors/rich/surface";
 import { useRichIcons } from "../editors/rich/icons";
 import { PDF_MODES, VECTOR_MODES } from "../editors/spatial/modes";
+import { CANVAS_MODES } from "../editors/canvas/surface";
 import { loadKeyOverrides, registerShellCommand, resetShellCommands } from "../ui/commands";
 import { icon, registerIcon } from "../ui/icons";
 import { closeContextMenu } from "../ui/menu";
@@ -161,6 +162,21 @@ describe("le icone delle modalità", () => {
     } finally {
       retire();
     }
+  });
+
+  it("la lavagna: la sua figura e la sorgente col ruolo, senza la riga", () => {
+    paneWith(layout.focus, CANVAS_MODES);
+    const items = modeMenuItems(layout.focus);
+    expect(items.map((item) => item.label)).toEqual(["Lavagna", "Sorgente"]);
+    expect(items.map((item) => item.icon)).toEqual(["layout-dashboard", "code"]);
+    expect(icon("layout-dashboard")).not.toBe("");
+    expect(separators(layout.focus)).toEqual([]);
+    // La lavagna aperta sulla sorgente ha le stesse voci e le stesse figure.
+    paneWith(layout.focus, CANVAS_MODES, "source");
+    expect(modeMenuItems(layout.focus).map((item) => [item.label, item.icon, item.checked])).toEqual([
+      ["Lavagna", "layout-dashboard", false],
+      ["Sorgente", "code", true],
+    ]);
   });
 
   it("un'icona che il set non sa disegnare vale quella del ruolo", () => {

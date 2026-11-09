@@ -12,6 +12,7 @@
 
 import type {
   EditorSurface,
+  SurfaceMode,
   SurfaceMountContext,
 } from "../core/registry";
 import { CanvasEngine, type CanvasChange, type CanvasEngineOptions } from "./engine";
@@ -118,6 +119,16 @@ export const CANVAS_MOUNT: CanvasMountSignature = {
     [PDF_PROFILE]: { family: "text", profile: "svg" },
   },
 };
+
+/**
+ * Le due modalità della lavagna. La lavagna ha la figura sua (`layout-dashboard`)
+ * nel menu della banda e nel tondo del telefono; la sorgente prende quella del
+ * suo ruolo. Ogni modalità sta su una riga: `surface-looks.test.ts` le legge così.
+ */
+export const CANVAS_MODES: readonly SurfaceMode[] = [
+  { id: "canvas", label: () => t("mode.canvas"), presentation: "surface", contextMode: "live_preview", looks: ["tema"], icon: "layout-dashboard" },
+  { id: "source", label: () => t("mode.source"), presentation: "surface", contextMode: "source", looks: ["tema"] },
+];
 
 /** Crea la superficie canvas per un profilo; la registrazione resta a Main. */
 export function mountCanvasSurface(
@@ -256,15 +267,11 @@ export function mountCanvasSurface(
     void canvasCoreReady().then(settle, fail);
   }
   let mode: "canvas" | "source" = profile === CANVAS_SOURCE_PROFILE ? "source" : "canvas";
-  const modes = [
-    { id: "canvas", label: () => t("mode.canvas"), presentation: "surface" as const, contextMode: "live_preview" as const, looks: ["tema"] as const },
-    { id: "source", label: () => t("mode.source"), presentation: "surface" as const, contextMode: "source" as const, looks: ["tema"] as const },
-  ];
   const surface: EditorSurface = {
     family: CANVAS_FAMILY,
     profile: profile === CANVAS_SOURCE_PROFILE ? CANVAS_SOURCE_PROFILE : CANVAS_PROFILE,
     surfaceId: context.paneId,
-    modes,
+    modes: CANVAS_MODES,
     setMode(next: string): void {
       if (next !== "canvas" && next !== "source") {
         throw new Error(`canvas surface mode ${next} is not registered`);
