@@ -24,13 +24,16 @@ import { invalidateDocumentCaches } from "../state/document-caches";
 const releases: Array<() => void> = [];
 
 function apiFor(text: string): DocumentSessionApi {
+  const source = (): DocumentSource => ({
+    text,
+    revision: "rev-1",
+    format_id: "markdown",
+    source_kind: "text", text_kind: "source",
+  });
   return {
-    readDocument: vi.fn(async (): Promise<DocumentSource> => ({
-      text,
-      revision: "rev-1",
-      format_id: "markdown",
-      source_kind: "text", text_kind: "source",
-    })),
+    readDocument: vi.fn(async () => source()),
+    openDocument: vi.fn(async () => source()),
+    documentClosed: vi.fn(async () => {}),
     writeDocument: vi.fn(async () => "rev-2"),
     resourceWrite: vi.fn(async () => ({ revision: "rev-2" })),
     saveDraft: vi.fn(async () => {}),

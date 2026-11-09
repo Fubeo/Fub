@@ -48,7 +48,7 @@ import { mountKeyboard } from "./ui/keyboard";
 import { openVaultExport, VAULT_EXPORT } from "./ui/vault-export";
 import { IMPORT_PREPARE, openNoteImport } from "./ui/note-import";
 import { openLifetime, type Lifetime, type Teardown } from "./ui/lifetime";
-import { mountSidebarCommands, showPanel } from "./panels/sidebar";
+import { enterVaultPanel, mountSidebarCommands, showPanel } from "./panels/sidebar";
 import { revealSidePanel, setSidePanelController, toggleSidePanel, type SidePanel } from "./ui/side-panels";
 import { mountPanelHost, refreshAllPanels } from "./ui/panel-host";
 import { mountDeclaredViews, mountViewInvalidation } from "./ui/views";
@@ -71,8 +71,9 @@ import { applySlashSettings } from "./panels/slash/prefs";
 import { mountStrings, onLanguage, resolvedLanguage, t, type Key } from "./i18n/strings";
 import { mountSplitter } from "./kit";
 import { mountActivity } from "./panels/activity";
-import { mountSettings } from "./panels/settings";
+import { mountSettings, openSettingsAt } from "./panels/settings";
 import { currentTheme, mountTheme } from "./theme/theme";
+import { fallito, fase, pronta } from "./avvio/consegna";
 import { onContentLookChange } from "./theme/content-look";
 import { focusedContextMode, focusedModeId } from "./state/document-controller";
 import { reducedMotion } from "./theme/reduced-motion";
@@ -90,12 +91,15 @@ import { drainDocumentWindows, openCurrentInNewWindow } from "./state/document-w
 import { mountExplorer } from "./panels/explorer";
 import { mountPageIcons } from "./state/page-icons";
 import { mountPeople } from "./state/people";
+import { mountExternalEditors } from "./state/external-editors";
 import { mountDates } from "./state/dates";
 import { mountLinkCards } from "./state/link-cards";
+import { mountCraftPreviews } from "./state/craft-previews";
+import { mountCraftPhotos } from "./state/craft-photos";
 import { closeInDocumentSearch, mountDocSearch } from "./panels/doc-search";
 import { mountGraph } from "./panels/graph";
 import { mountQuickSwitcher } from "./panels/quick-switcher";
-import { clearSearch, mountSearch, searchFor } from "./panels/search";
+import { mountSearch, searchFor } from "./panels/search";
 import { errorText } from "./host/errors";
 import { pageName } from "./rules/mirrored";
 import { SHELL_WIDTH_LIMITS, type ShellGeometry } from "./state/shell-geometry";
@@ -571,6 +575,8 @@ function mountAdaptiveShell(): void {
     if (life.closed) return;
     state.vaultRoot = "";
     showVaultName("");
+    // La barra del vault lasciato resta sua, per quando ci si torna (R07).
+    enterVaultPanel("");
     await loadLayout(preferredPaneMode());
     if (life.closed) return;
     await synchronize();
@@ -756,6 +762,7 @@ async function init(): Promise<Teardown> {
   const alive = (): boolean => !lifetime.closed && pageEpoch === epoch;
   const clock = startupClock(() => performance.now());
   clock.mark("page");
+  fase("finestra");
   // Il tema **per primo**, e prima di qualunque cosa disegni (§12.4): applica
   // subito l'ultima scelta nota, così il primo fotogramma è già nella luce
   // giusta invece di correggersi mezzo secondo dopo. La preferenza di moto si
@@ -819,6 +826,7 @@ async function init(): Promise<Teardown> {
       const entry = allCommands().find((e) => e.id === id);
       if (entry) startCommand(entry, paletteHost);
     },
+    openSettings: (key) => void openSettingsAt(key),
   });
 
   // Subito dopo il pannello del documento, perché è il suo testo che protegge, e
@@ -847,6 +855,10 @@ async function init(): Promise<Teardown> {
   mountPeople(pageWindowLifetime);
   mountDates(pageWindowLifetime);
   mountLinkCards(pageWindowLifetime);
+  mountCraftPreviews(pageWindowLifetime);
+  // Le app Craft installate, per il sottomenu «Apri con un'altra app».
+  mountExternalEditors(pageWindowLifetime);
+  mountCraftPhotos(pageWindowLifetime);
   mountExplorer(pageWindowLifetime);
   mountLinkPreview(pageWindowLifetime);
   mountBookmarksPanel(pageWindowLifetime);
@@ -871,14 +883,15 @@ async function init(): Promise<Teardown> {
       const added = splitPane(parent, "row");
       if (!added) return;
       try {
-        await openDocument(doc);
+        await openDocument(doc, { gesture: true });
       } catch (error) {
         closePane(added);
         throw error;
       }
       return;
     }
-    await openDocument(doc);
+    // Scegliere nel passaggio veloce è un gesto: la scheda che nasce lo sa.
+    await openDocument(doc, { gesture: true });
   }));
   pageWindowLifetime.add(closeCommandPalette);
   pageWindowLifetime.add(closeInDocumentSearch);
@@ -1158,6 +1171,8 @@ async function init(): Promise<Teardown> {
   if (!alive()) return teardown;
   refreshTitlebarShortcuts();
   clock.mark("shell");
+  // La shell è in piedi: da qui un'attesa lunga è il vault, non un guasto.
+  pronta();
 
   const initial = await api.initialVault();
   if (!alive()) return teardown;
@@ -1169,7 +1184,11 @@ async function init(): Promise<Teardown> {
   // l'onboarding a vault vuoto e applica i breakpoint, senza toccare l'ordine
   // di apertura qui sotto.
   mountAdaptiveShell();
-  if (initial) await openInitialVault(initial, alive);
+  if (initial) {
+    // Il nome che la barra mostrerà per primo: la cartella.
+    fase("vault", folderName(initial));
+    await openInitialVault(initial, alive);
+  }
   else await synchronize();
   if (!alive()) return teardown;
   // Senza un vault iniziale l'avvio finisce nella scelta, che aspetta chi
@@ -1308,14 +1327,14 @@ export function openVault(dir: string): Promise<void> {
 }
 
 /// La sequenza vive in `state/vault-session.ts`; qui stanno le porte di resa
-/// di questa shell: il nome nella barra del titolo, la ricerca, le view
+/// di questa shell: il nome nella barra del titolo, la barra laterale, le view
 /// dichiarate, la rail e gli avvisi.
 const vaultSession = createVaultSession({
   alive: () => !pageWindowLifetime.closed,
   notify,
   setWatcherOff,
   showVaultName,
-  clearSearch,
+  enterSidebar: enterVaultPanel,
   mountDeclaredViews: () => mountDeclaredViews(pageWindowLifetime),
   syncRail,
 });
@@ -1348,7 +1367,9 @@ export function mountDesktopShell(): Promise<Teardown> {
     if (!alreadyClosed) {
       pageEpoch++;
       lifetime.close();
-      notify(t("app.start_failed", { reason }), "guasto");
+      // Sotto lo strato d'avvio un avviso non si vedrebbe: il guasto lo dice
+      // lo strato, con Riprova. Senza strato resta l'avviso.
+      if (!fallito(reason)) notify(t("app.start_failed", { reason }), "guasto");
       vaultPathEl.textContent = t("app.start_failed", { reason });
     }
     return () => lifetime.close();

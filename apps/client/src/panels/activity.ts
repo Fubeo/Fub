@@ -463,9 +463,11 @@ function redraw(): void {
   list.replaceChildren();
   // R05/U64/S17: query fallita = lista precedente + stale esplicito con retry.
   // Nessun-job e lista-non-aggiornata restano due righe diverse: la prima dice
-  // che non gira niente, la seconda che non lo si sa più.
+  // che non gira niente, la seconda che non lo si sa più — e non stanno mai
+  // insieme: sotto una lista non aggiornata «nessun lavoro» sarebbe proprio la
+  // bugia che lo stato esplicito serve a evitare.
   if (stale) list.appendChild(staleNote());
-  if (jobs.length === 0 && finished.length === 0 && past.length === 0) {
+  if (!stale && jobs.length === 0 && finished.length === 0 && past.length === 0) {
     const empty = document.createElement("li");
     empty.className = "muted";
     empty.textContent = t("activity.none");

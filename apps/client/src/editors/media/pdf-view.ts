@@ -356,6 +356,11 @@ export function mountPdfView(
   facing.hidden = true;
   const viewer = document.createElement("div");
   viewer.className = "media-pdf-page";
+  // Il piano scorre e tiene solo canvas: senza un posto nell'ordine del
+  // fuoco, con la tastiera non si percorre. Ha il nome della pagina che
+  // mostra, che `show` aggiorna.
+  viewer.tabIndex = 0;
+  viewer.setAttribute("role", "region");
   viewer.append(canvas, facing);
   // Le miniature, a lato del piano: si disegnano quando entrano in vista.
   const thumbs = document.createElement("nav");
@@ -412,9 +417,11 @@ export function mountPdfView(
     if (spread) clamped = spreadStart(clamped);
     page = clamped;
     const second = spread && clamped < count ? clamped + 1 : null;
-    status.textContent = second
+    const where = second
       ? t("media.pdf.pages", { first: clamped, last: second, count: engine.pageCount })
       : t("media.pdf.page", { page: clamped, count: engine.pageCount });
+    status.textContent = where;
+    viewer.setAttribute("aria-label", where);
     markThumbs(clamped, second);
     fitWidth = available();
     viewer.classList.toggle("media-pdf-spread", second !== null);
@@ -466,6 +473,7 @@ export function mountPdfView(
   const search = document.createElement("input");
   search.type = "search";
   search.placeholder = t("media.pdf.search");
+  search.setAttribute("aria-label", t("media.pdf.search_label"));
   life.listen(search, "change", () => {
     if (!engine || destroyed) return;
     const needle = search.value;

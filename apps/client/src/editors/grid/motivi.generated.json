@@ -1,0 +1,112 @@
+{
+  "$generato": "File generato da crates/fub-format-xlsx/tests/ts_risultati.rs, non modificare a mano; rigenera con UPDATE_MIRROR=1 cargo test -p fub-format-xlsx --test ts_risultati",
+  "frasi": [
+    {
+      "frase": "No dictionary is available on this system (GridCraft uses the system word list).",
+      "fonti": [
+        "motore"
+      ]
+    },
+    {
+      "frase": "command `{0}` is not available right now: {1}",
+      "fonti": [
+        "motore"
+      ]
+    },
+    {
+      "frase": "internal error in `{0}` (the workbook was kept as it was): {1}",
+      "fonti": [
+        "motore"
+      ]
+    },
+    {
+      "frase": "invalid parameters for `{cmd}`: {msg}",
+      "fonti": [
+        "motore"
+      ]
+    },
+    {
+      "frase": "no workbook open",
+      "fonti": [
+        "motore"
+      ]
+    },
+    {
+      "frase": "not available",
+      "fonti": [
+        "adattatore"
+      ]
+    },
+    {
+      "frase": "nothing to redo",
+      "fonti": [
+        "catalogo",
+        "motore"
+      ]
+    },
+    {
+      "frase": "nothing to undo",
+      "fonti": [
+        "catalogo",
+        "motore"
+      ]
+    },
+    {
+      "frase": "rewriting the workbook would lose {n} item(s)",
+      "fonti": [
+        "adattatore",
+        "catalogo"
+      ]
+    },
+    {
+      "frase": "select a cell in a PivotTable (or pass `pivot`)",
+      "fonti": [
+        "motore"
+      ]
+    },
+    {
+      "frase": "select a cell in a table",
+      "fonti": [
+        "motore"
+      ]
+    },
+    {
+      "frase": "the clipboard is empty",
+      "fonti": [
+        "catalogo",
+        "motore"
+      ]
+    },
+    {
+      "frase": "the workbook cannot be measured: {error}",
+      "fonti": [
+        "adattatore"
+      ]
+    },
+    {
+      "frase": "the workbook cannot be rewritten: {error}",
+      "fonti": [
+        "adattatore"
+      ]
+    },
+    {
+      "frase": "the workbook's sheets have no unique ids",
+      "fonti": [
+        "adattatore"
+      ]
+    },
+    {
+      "frase": "there are no comments in this workbook",
+      "fonti": [
+        "catalogo",
+        "motore"
+      ]
+    },
+    {
+      "frase": "unknown command `{0}`",
+      "fonti": [
+        "motore"
+      ]
+    }
+  ]
+}

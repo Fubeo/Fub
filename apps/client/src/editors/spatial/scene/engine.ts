@@ -982,7 +982,7 @@ export class SceneEngine {
     if (op.op === "adopt") return this.adopt(op);
     // Un SVG estraneo resta com'è finché «Modifica» non lo adotta (formato
     // della scena, §2).
-    if (this.t.status === "foreign") reject("foreign", "il documento non è di FubDraw: si modifica dopo «Modifica»");
+    if (this.t.status === "foreign") reject("foreign", "il documento non è un disegno di Fub: si modifica dopo «Modifica»");
     switch (op.op) {
       case "add":
         return "slot" in op ? this.restore(op) : this.add(op);
@@ -2712,11 +2712,11 @@ export class SceneEngine {
   /// allora resta com'è; mancano tutti e due, è un rifiuto. L'inversa rimette
   /// i valori di prima così come erano, anche fuori grammatica.
   private anchor(op: Record<string, unknown>): Op {
-    if (this.t.status !== "fubdraw") reject("invalid-elem", "il documento non è di FubDraw");
+    if (this.t.status !== "fubdraw") reject("invalid-elem", "il documento non è un disegno di Fub");
     const root = this.t.model.root;
     const { fragment, element, scope } = this.reread(root);
     const prefix = scope.attributePrefix(FUB_NS);
-    if (prefix === null) reject("invalid-elem", "la radice non dichiara il namespace di FubDraw");
+    if (prefix === null) reject("invalid-elem", "la radice non dichiara il namespace dei disegni di Fub");
     const written = (local: string): Attr | undefined =>
       element.attrs.find((a) => fragment.doc.namespaces[a.ns] === FUB_NS && a.local === local);
     const previous: AnchorPrevious = {
@@ -2783,7 +2783,7 @@ export class SceneEngine {
     const { fragment, element, scope } = this.reread(root);
     const head = root.head;
     if (op.undo !== true) {
-      if (this.t.status !== "foreign") reject("invalid-elem", "il documento è già di FubDraw");
+      if (this.t.status !== "foreign") reject("invalid-elem", "il documento è già un disegno di Fub");
       // Il prefisso di FubDraw: quello già legato al suo namespace, oppure
       // `fub`, oppure il primo `fubN` libero.
       let prefix = scope.attributePrefix(FUB_NS);
@@ -2802,7 +2802,7 @@ export class SceneEngine {
       this.t.setStatus("fubdraw");
       return { op: "adopt", undo: true };
     }
-    if (this.t.status !== "fubdraw") reject("invalid-elem", "il documento non è di FubDraw");
+    if (this.t.status !== "fubdraw") reject("invalid-elem", "il documento non è un disegno di Fub");
     const version = element.attrs.find((a) => fragment.doc.namespaces[a.ns] === FUB_NS && a.local === "version");
     if (version === undefined) reject("invalid-elem", "la radice non ha fub:version");
     const removed: Array<[number, number]> = [attributeSpan(fragment.doc, element, version)];

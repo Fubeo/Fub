@@ -51,6 +51,20 @@ export interface SurfaceMountContext {
   readonly revision?: string;
   /** Detail of a rejected document, displayed only by the inert error surface. */
   readonly errorReason?: string;
+  /**
+   * The mount was born from a user gesture that opened the document (a click
+   * or Enter on a tree row, a search result, a link in a note). Absent means
+   * `false`: a remount, a restored tab or a tab that only takes focus never
+   * carries it.
+   */
+  readonly gesture?: boolean;
+  /**
+   * The page the opening asks for, 1-based: a link to `x.pdf#page=3` in a
+   * note. Only a paged viewer reads it; beyond the last page it shows the
+   * last one. Like `gesture`, only the mount the opening gives birth to (or
+   * brings back on its tab) carries it.
+   */
+  readonly page?: number;
 }
 
 /** A selected range, in UTF-8 bytes of the document source, with its text. */
@@ -126,6 +140,20 @@ export interface SurfaceBuffer {
   setDoc(text: string): void;
   syncDoc(update: DocumentUpdate | string): void;
   getDoc(): string;
+  /**
+   * The whole document with the text this surface still holds back (a board
+   * card being typed, before its pause) inside; `null` when nothing is held
+   * back. It reaches the recovery drafts, never the file.
+   */
+  pendingText?(): string | null;
+  /** Records the held-back text now, as the end of its pause would. */
+  commitPending?(): void;
+  /**
+   * Calls `listener` each time the held-back text changes, with whether some
+   * is left. The call does no other work: the session asks `pendingText` only
+   * when it writes a draft. The returned disposer stops the calls.
+   */
+  watchPending?(listener: (pending: boolean) => void): () => void;
 }
 
 /**
@@ -371,6 +399,12 @@ export interface EditorSurface {
    * cannot get there, so that the shell says it instead of doing nothing.
    */
   reveal?(location: SurfaceLocation): boolean;
+  /**
+   * Goes to page `page` (1-based) of a paged document already shown: a link
+   * to `x.pdf#page=3` followed while its tab is the active one. A surface
+   * without pages leaves it out.
+   */
+  showPage?(page: number): void;
   selections?(): EditorSelections | undefined;
   /**
    * A surface without text ranges says what it has selected here instead of
@@ -438,7 +472,25 @@ export interface EditorSurface {
    * a sheet); without it the shell narrows the formatting bar.
    */
   miniBar?(): SurfaceMiniBar | null;
+  /**
+   * The commands this surface adds to the command palette while its pane has
+   * the focus (a sheet's catalog commands). Read each time the palette opens;
+   * an entry with `unavailable` is shown with that reason and not run.
+   */
+  paletteCommands?(): readonly SurfacePaletteCommand[];
   destroy(): void;
+}
+
+/** A command a surface offers to the command palette. */
+export interface SurfacePaletteCommand {
+  readonly id: string;
+  readonly title: string;
+  readonly description: string;
+  /** The group the palette shows beside the title («Foglio»). */
+  readonly group: string;
+  /** Why it cannot run now, or `null` when it can. */
+  readonly unavailable: string | null;
+  run(): void;
 }
 
 /**
@@ -797,4 +849,8 @@ export class DocumentSurfaceRegistry {
 export interface SurfaceCallbacks {
   onChange(paneId: string, change: EditorChange): void;
   onSelectionChange(paneId: string): void;
+  /// Una superficie montata che scopre dopo, da sola, di non poter tenere il
+  /// testo (una lavagna rotta che arriva mentre il nucleo si carica): il
+  /// riquadro passa alla superficie d'errore, come quando `setDoc` lancia.
+  onFail?(paneId: string, error: unknown): void;
 }

@@ -1,0 +1,21 @@
+{
+  "about": "Schede tolte in più operazioni e in un ordine qualunque: l'inversa le rimette tutte al loro posto nell'ordine di profondità.",
+  "before": { "nodes": [
+    { "id": "a", "type": "text", "x": 0, "y": 0, "width": 100, "height": 60, "text": "a" },
+    { "id": "b", "type": "text", "x": 0, "y": 0, "width": 100, "height": 60, "text": "b" },
+    { "id": "c", "type": "text", "x": 0, "y": 0, "width": 100, "height": 60, "text": "c" },
+    { "id": "d", "type": "text", "x": 0, "y": 0, "width": 100, "height": 60, "text": "d" },
+    { "id": "e", "type": "text", "x": 0, "y": 0, "width": 100, "height": 60, "text": "e" }
+  ] },
+  "ops": [
+    { "op": "remove", "ids": ["a"] },
+    { "op": "remove", "ids": ["e", "c"] }
+  ],
+  "expect": {
+    "outcome": "applied",
+    "after": { "nodes": [
+      { "id": "b", "type": "text", "x": 0, "y": 0, "width": 100, "height": 60, "text": "b" },
+      { "id": "d", "type": "text", "x": 0, "y": 0, "width": 100, "height": 60, "text": "d" }
+    ] }
+  }
+}

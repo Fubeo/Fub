@@ -310,6 +310,18 @@ function itemOf(
     }
     return items.length === 0 ? null : { ...base, items };
   }
+  if (entry.load !== undefined) {
+    const load = entry.load;
+    return {
+      ...base,
+      submenu: true,
+      items: async () => (await load()).flatMap((child) => {
+        if (child === MENU_RULE) return [];
+        const item = resolveEntry(child, surface, commands, titles, host);
+        return item ? [item] : [];
+      }),
+    };
+  }
   const then = entry.command;
   const find = entry.find;
   return {

@@ -15,9 +15,19 @@ on:
   push:
     branches: [main]
   pull_request:
+    # Ciò che soltanto il telefono costruisce o importa: il binario e i suoi
+    # template nativi, le due cartelle del telefono (la shell e la cornice di
+    # Scrittoio, con il suo foglio mobile.css), l'ingresso e la sua pagina. Il
+    # resto del client è comune: lo costruiscono già i job del desktop, che
+    # fanno il build Vite anche di mobile.html. `Cargo.lock` sì: un
+    # aggiornamento delle dipendenze (Tauri mobile compreso) può rompere solo
+    # il build Android o iOS. Le poche righe `cfg` del telefono nei crate
+    # comuni (fub-host, fub-kernel, fub-wasm-host) si provano sul push in main.
     paths:
+      - "Cargo.lock"
       - "crates/fub-app/**"
       - "apps/client/src/shells/mobile/**"
+      - "apps/client/src/shells/scrittoio/mobile/**"
       - "apps/client/src/entrypoints/mobile*"
       - "apps/client/mobile.html"
       - ".github/workflows/mobile.yml"
@@ -41,7 +51,7 @@ jobs:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
       - uses: dtolnay/rust-toolchain@035fceb3c12fb0c6a9461b52775e16473133e591 # 1.95
         with:
-          targets: aarch64-linux-android
+          targets: aarch64-linux-android, wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
       - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
@@ -89,7 +99,7 @@ jobs:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
       - uses: dtolnay/rust-toolchain@035fceb3c12fb0c6a9461b52775e16473133e591 # 1.95
         with:
-          targets: aarch64-apple-ios
+          targets: aarch64-apple-ios, wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
       - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:

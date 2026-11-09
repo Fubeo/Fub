@@ -1,0 +1,11 @@
+{
+  "name": "unknown-number-forms",
+  "description": "R6: i numeri nuovi dei campi sconosciuti si scrivono come Number.prototype.toString; quelli che non cambiano restano come sono (1.50)",
+  "before": "{\"nodes\":[],\"edges\":[],\"fub:k\":1.50}",
+  "patches": [{"kind":"upsert-node","before":null,"after":{"id":"n","type":"text","x":0,"y":0,"width":10,"height":10,"text":"","fub:a":1E21,"fub:b":0.000001,"fub:c":1e-7,"fub:d":100.0,"fub:e":-0.0,"fub:f":0.1,"fub:g":123456789012345680000}}],
+  "expect": {
+    "outcome": "applied",
+    "text": "{\"nodes\":[{\"id\":\"n\",\"type\":\"text\",\"x\":0,\"y\":0,\"width\":10,\"height\":10,\"text\":\"\",\"fub:a\":1e+21,\"fub:b\":0.000001,\"fub:c\":1e-7,\"fub:d\":100,\"fub:e\":0,\"fub:f\":0.1,\"fub:g\":123456789012345680000}],\"edges\":[],\"fub:k\":1.50}",
+    "undo": "{\"nodes\":[],\"edges\":[],\"fub:k\":1.50}"
+  }
+}

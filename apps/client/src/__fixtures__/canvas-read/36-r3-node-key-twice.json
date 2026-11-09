@@ -1,0 +1,9 @@
+{
+  "name": "r3-node-key-twice",
+  "description": "R3: una chiave nota due volte in una scheda",
+  "source": "{\"nodes\":[{\"id\":\"a\",\"type\":\"text\",\"x\":0,\"y\":0,\"width\":10,\"height\":10,\"text\":\"t\",\"x\":5}]}",
+  "expect": {
+    "outcome": "rejected",
+    "reason": "source"
+  }
+}

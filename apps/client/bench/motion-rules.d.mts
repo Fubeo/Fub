@@ -88,6 +88,7 @@ export declare function cssName(name: string): string;
 export declare function family(name: string): "allowed" | "paint" | "layout";
 export declare function foreignProperties(names: readonly string[]): string[];
 export declare function foreignInKeyframes(keyframes: readonly object[]): string[];
+export declare function editorLayerIdentity(entry: InlineEntry): boolean;
 export declare function residue(
   moving: readonly InlineEntry[],
   still: readonly InlineEntry[],

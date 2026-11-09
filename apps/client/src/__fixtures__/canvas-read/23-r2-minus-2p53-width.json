@@ -1,0 +1,9 @@
+{
+  "name": "r2-minus-2p53-width",
+  "description": "R2: -2^53 in width non è un intero sicuro",
+  "source": "{\"nodes\":[{\"id\":\"a\",\"type\":\"text\",\"x\":0,\"y\":0,\"width\":-9007199254740992,\"height\":10,\"text\":\"t\"}]}",
+  "expect": {
+    "outcome": "rejected",
+    "reason": "source"
+  }
+}

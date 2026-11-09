@@ -66,4 +66,8 @@ Nuove decisioni usano il [template](template.md).
 | [0233 — I motori arrivano in edizioni, non in librerie a runtime](0233-i-motori-arrivano-in-edizioni.md) | accolta | host | — |
 | [0234 — Il modello dei componenti](0234-il-modello-dei-componenti.md) | accolta | host | — |
 | [0235 — Un record pubblicato non cresce](0235-un-record-pubblicato-non-cresce.md) | accolta | contratto | — |
+| [0236 — Lo strato dei motori](0236-lo-strato-dei-motori.md) | proposta | host | — |
+| [0237 — La lavagna gira in WebAssembly nella WebView](0237-la-lavagna-in-webassembly-nella-webview.md) | accolta | sicurezza | — |
+| [0238 — Un caso o una funzione del confine non cresce](0238-un-caso-o-una-funzione-del-confine-non-cresce.md) | accolta | contratto | — |
 | [0239 — Il disegno passa dal motore vettoriale, e il file lo scrive il client](0239-il-disegno-sul-motore-vettoriale.md) | accolta | contratto | — |
+| [0240 — La pelle che eredita](0240-la-pelle-che-eredita.md) | accolta | frontend | — |

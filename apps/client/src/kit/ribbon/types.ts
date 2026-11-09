@@ -88,6 +88,23 @@ export interface MenuControl<V, K extends string> extends ControlBase<V, K> {
   readonly items: (view: V) => readonly MenuEntry<K>[] | Promise<readonly MenuEntry<K>[]>;
   /// I comandi che lo fanno vedere, quando le voci arrivano dopo.
   readonly requires?: readonly string[];
+  /// Apre da sé il suo menu sotto `anchor`, al posto delle voci `items`, che
+  /// allora non si leggono: un menu che la barra non sa comporre (tutti i
+  /// comandi, con la ricerca). Chi lo apre chiama `closed` quando il menu si
+  /// chiude; la barra gli passa la vista nuova finché resta aperto.
+  readonly open?: (anchor: HTMLElement, view: V, how: MenuOpening) => MenuSession<V>;
+}
+
+/// Come si apre un menu che si apre da sé.
+export interface MenuOpening {
+  /// L'ha aperto il puntatore, non la tastiera.
+  readonly pointer: boolean;
+  readonly closed: () => void;
+}
+
+/// Un menu aperto da sé, che rilegge la vista quando la barra la rilegge.
+export interface MenuSession<V> {
+  update(view: V): void;
 }
 
 /// Un elenco a discesa nativo: il carattere, la dimensione, il formato.

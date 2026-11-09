@@ -1,7 +1,7 @@
 # Formato della scena
 
-> **Ambito:** i disegni di FubDraw, cioè i file SVG che Fub indicizza con il
-> formato `svg` e modifica con la superficie spaziale. Versione 1.
+> **Ambito:** i disegni di Fub (FubDraw è il nome tecnico del formato): gli SVG
+> che Fub indicizza come `svg` e cambia con la superficie spaziale. Versione 1.
 > **Fonti autorevoli:** `crates/fub-scene/`, `crates/fub-format-svg/` e le
 > fixture generate in `apps/client/src/__fixtures__/scene/`.
 

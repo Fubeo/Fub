@@ -398,3 +398,47 @@ fn the_component_names_are_those_of_the_plan() {
         );
     }
 }
+
+/// I titoli dei comandi della lavagna sono quelli del piano, nelle due
+/// lingue: sono le parole della palette e della riga di comando.
+#[cfg(feature = "lavagna")]
+#[test]
+fn the_whiteboard_commands_have_the_titles_of_the_plan() {
+    let component = components()
+        .into_iter()
+        .find(|c| c.id == fub_features::LAVAGNA_ID)
+        .expect("il componente Lavagna");
+    let specs = fub_features::LavagnaCommands.commands();
+    for (id, italiano, english) in [
+        (
+            fub_features::CANVAS_APPLY,
+            "Applica operazioni alla lavagna",
+            "Apply operations to the whiteboard",
+        ),
+        (
+            fub_features::lavagna::CANVAS_CREATE,
+            "Nuova lavagna",
+            "New whiteboard",
+        ),
+    ] {
+        let spec = specs
+            .iter()
+            .find(|spec| spec.id == id)
+            .unwrap_or_else(|| panic!("manca «{id}»"));
+        let Some(message) = spec.title.as_message() else {
+            panic!("«{id}» ha un titolo cablato");
+        };
+        for (locale, expected) in [("it", italiano), ("en", english)] {
+            let catalog = component
+                .catalogs
+                .iter()
+                .find(|c| c.locale == locale)
+                .unwrap_or_else(|| panic!("manca il catalogo «{locale}»"));
+            assert_eq!(
+                catalog.entries.get(&message.key).map(String::as_str),
+                Some(expected),
+                "«{id}» in «{locale}»"
+            );
+        }
+    }
+}

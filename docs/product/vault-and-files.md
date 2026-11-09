@@ -140,7 +140,7 @@ la copia di un disegno del vault, e un modello e `from` insieme sono un errore.
 In tutti e due i casi il `title` della radice diventa il nome. La finestra che
 offre i modelli è in [Disegni, modelli e suggerimenti](drawing-new.md). La prova
 a vuoto fa gli stessi controlli e non scrive; l'annullamento manda il disegno nel
-cestino.
+cestino. Documenti e fogli: [Documenti e fogli nuovi](new-documents.md).
 
 «Annota il PDF» (`pdf.annotate`, con la feature `draw`) apre le annotazioni di
 un PDF del vault: il file `X.pdf.fubann` accanto a `X.pdf`, con il nome intero

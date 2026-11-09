@@ -413,3 +413,38 @@ fn dry_run_con_togli_mostra_l_effetto_e_non_cambia_niente() {
     );
     assert_eq!(code, 2);
 }
+
+/// `config --set` legge la specie dallo schema: `on` e `off` sono le parole di
+/// una scelta, non un interruttore, e il consenso alle anteprime Craft lo dà
+/// chi usa Fub nel suo terminale.
+#[test]
+fn config_set_scrive_una_scelta_con_la_sua_parola() {
+    let v = vault();
+    let get = |v: &Vault| json(v, &["config", "--get", "craft.cli-previews"]);
+    assert_eq!(get(&v)["value"], "ask");
+    for word in ["on", "off", "ask"] {
+        text(
+            &v,
+            &[
+                "--yes",
+                "config",
+                "--set",
+                &format!("craft.cli-previews={word}"),
+            ],
+        );
+        assert_eq!(get(&v)["value"], word);
+    }
+    let (_, message) = refused(
+        &v,
+        &["--yes", "config", "--set", "craft.cli-previews=forse"],
+    );
+    assert!(message.contains("craft.cli-previews"), "{message}");
+    assert_eq!(get(&v)["value"], "ask");
+
+    // Un elenco di un elemento solo è un elenco.
+    text(
+        &v,
+        &["--yes", "config", "--set", "plugins.disabled=fub.graph"],
+    );
+    assert_eq!(disabled(&v), ["fub.graph"]);
+}

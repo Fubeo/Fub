@@ -57,7 +57,7 @@ jobs:
         run: |
           if [ "$EVENT" != "pull_request" ]; then
             echo "client=true" >> "$GITHUB_OUTPUT"
-          elif git diff --name-only "origin/$BASE_REF...HEAD" | grep -qE '^(apps/client/|\.github/workflows/ci\.yml$)'; then
+          elif git diff --name-only "origin/$BASE_REF...HEAD" | grep -qE '^(apps/client/|crates/fub-canvas-(core|wasm)/|\.github/workflows/ci\.yml$)'; then
             echo "client=true" >> "$GITHUB_OUTPUT"
           else
             echo "client=false" >> "$GITHUB_OUTPUT"
@@ -81,10 +81,16 @@ jobs:
         run: cargo test -p fub-abi --test wit_additivity
       - name: invarianti di dipendenza (abi/kernel agnostici, features senza kernel)
         run: cargo test -p fub-abi --test dependency_invariant
+      - name: il nucleo della lavagna compila per la WebView (wasm32-unknown-unknown)
+        run: |
+          rustup target add wasm32-unknown-unknown
+          cargo check -p fub-canvas-core --target wasm32-unknown-unknown --locked
       - name: la shell raggiunge il workspace solo dalle porte strette dell'host
         run: node .github/scripts/check-host-workspace-boundary.mjs
       - name: soltanto gli adattatori nominano WordCraft e GridCraft nei sorgenti
         run: node .github/scripts/check-engine-boundary.mjs
+      - name: nessuna interfaccia delle app Craft in fub-app, librerie doppie sotto il tetto
+        run: node .github/scripts/check-motori.mjs --self-test && node .github/scripts/check-motori.mjs
       - name: la copia di WordCraft è l'upstream del lock più le patch di vendor/wordcraft/patches
         run: node tools/vendor-craft/vendor.mjs wordcraft check
       - name: la copia di GridCraft è l'upstream del lock più le patch di vendor/gridcraft/patches
@@ -336,6 +342,11 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      # Il nucleo della lavagna: Vite lo compila in .wasm a ogni build e
+      # Vitest lo usa (N3 T14).
+      - uses: dtolnay/rust-toolchain@035fceb3c12fb0c6a9461b52775e16473133e591 # 1.95
+        with:
+          targets: wasm32-unknown-unknown
       - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: 22.12.0
@@ -385,6 +396,11 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      # Vite compila il nucleo della lavagna in .wasm quando serve la pagina
+      # (N3 T14): senza il bersaglio la shell del banco non parte.
+      - uses: dtolnay/rust-toolchain@035fceb3c12fb0c6a9461b52775e16473133e591 # 1.95
+        with:
+          targets: wasm32-unknown-unknown
       - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: 22.12.0
@@ -406,6 +422,11 @@ jobs:
           name: banco-visivo-${{ github.sha }}
           path: apps/client/bench/.output/
           include-hidden-files: true
+      # Lo strato d'avvio copre la finestra prima di ogni modulo, nelle due
+      # luci e sul telefono: senza questa guardia il lampo bianco torna.
+      - name: niente lampo all'avvio
+        run: npm run bench:lampo
+        working-directory: apps/client
 
   a11y:
     # Le due luci sono due corse separate dello stesso banco: in fila
@@ -420,6 +441,11 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      # Vite compila il nucleo della lavagna in .wasm quando serve la pagina
+      # (N3 T14): senza il bersaglio la shell del banco non parte.
+      - uses: dtolnay/rust-toolchain@035fceb3c12fb0c6a9461b52775e16473133e591 # 1.95
+        with:
+          targets: wasm32-unknown-unknown
       - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: 22.12.0
@@ -441,6 +467,11 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      # Vite compila il nucleo della lavagna in .wasm quando serve la pagina
+      # (N3 T14): senza il bersaglio la shell del banco non parte.
+      - uses: dtolnay/rust-toolchain@035fceb3c12fb0c6a9461b52775e16473133e591 # 1.95
+        with:
+          targets: wasm32-unknown-unknown
       - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: 22.12.0
@@ -515,6 +546,11 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      # Vite compila il nucleo della lavagna in .wasm quando serve la pagina
+      # (N3 T14): senza il bersaglio la shell del banco non parte.
+      - uses: dtolnay/rust-toolchain@035fceb3c12fb0c6a9461b52775e16473133e591 # 1.95
+        with:
+          targets: wasm32-unknown-unknown
       - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: 22.12.0
@@ -587,6 +623,8 @@ jobs:
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
       - uses: dtolnay/rust-toolchain@035fceb3c12fb0c6a9461b52775e16473133e591 # 1.95
+        with:
+          targets: wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           cache-on-failure: true
@@ -610,8 +648,8 @@ jobs:
         run: cargo build --release --locked -p fub-app --features tauri/custom-protocol
       - name: tauri-driver, alla versione fissata
         run: cargo install tauri-driver --version "=2.1.0" --locked
-      - name: S1–S3, S7, la memoria (R1) e le tessere (T1) nella WebKitGTK
-        run: xvfb-run -a -s "-screen 0 1280x800x24 -maxclients 2048" npm run bench:webview -- --only=S1,S2,S3,S7,R1,T1,I1 --native-driver=/usr/bin/WebKitWebDriver
+      - name: S1–S3, S7, la memoria (R1), le tessere (T1) e il nucleo della lavagna (L1) nella WebKitGTK
+        run: xvfb-run -a -s "-screen 0 1280x800x24 -maxclients 2048" npm run bench:webview -- --only=S1,S2,S3,S7,R1,T1,I1,L1 --native-driver=/usr/bin/WebKitWebDriver
         working-directory: apps/client
       - name: il referto delle misure
         if: always()

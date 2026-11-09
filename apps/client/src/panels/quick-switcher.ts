@@ -73,7 +73,7 @@ const LIST_ID = `${OVERLAY_ID}-list`;
 const OPTION_ID_PREFIX = `${OVERLAY_ID}-option`;
 export type SwitcherOpenMode = "here" | "split" | "window";
 let dispatchOpen: (doc: string, mode: SwitcherOpenMode) => Promise<void> | void =
-  (doc) => openDocument(doc);
+  (doc) => openDocument(doc, { gesture: true });
 
 /// Ctrl/Cmd apre accanto, con Maiusc in una finestra nuova. Dove la
 /// piattaforma ha una finestra sola, Maiusc resta un'apertura accanto.
@@ -146,7 +146,7 @@ export function closeQuickSwitcher(): void {
 /// Qui parte anche la memoria corta: la mette in ascolto chi ha interesse, che è
 /// questo pannello e nessun altro.
 export function mountQuickSwitcher(
-  open: (doc: string, mode: SwitcherOpenMode) => Promise<void> | void = (doc) => openDocument(doc),
+  open: (doc: string, mode: SwitcherOpenMode) => Promise<void> | void = (doc) => openDocument(doc, { gesture: true }),
 ): () => void {
   dispatchOpen = open;
   const stopRemembering = rememberOpens();
@@ -184,7 +184,7 @@ export function mountQuickSwitcher(
   return () => {
     stopRemembering();
     closeQuickSwitcher();
-    if (dispatchOpen === open) dispatchOpen = (doc) => openDocument(doc);
+    if (dispatchOpen === open) dispatchOpen = (doc) => openDocument(doc, { gesture: true });
   };
 }
 

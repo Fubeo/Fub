@@ -22,12 +22,13 @@ use fub_abi::error::{FormatError, PluginError};
 use fub_abi::event::{Event, EventKind, EventMask, Notice};
 use fub_abi::format::{
     DocumentSource, FormatCapabilities, FormatDescriptor, LinkRewrite, ParseContext, RenderOptions,
+    SourceKind,
 };
 use fub_abi::model::{DocId, DocumentModel, Link, LinkTarget, Span};
 use fub_abi::options::syntax;
 use fub_abi::traits::{EventHandler, HostApi, JobSpec};
 use fub_abi::{FormatProvider, TextEdit};
-use fub_kernel::{FormatRegistry, Workspace};
+use fub_kernel::{FormatRegistry, KernelError, Workspace};
 
 struct LinkListProvider;
 
@@ -394,6 +395,330 @@ fn rename_rewrites_the_self_link_too() {
         "Rinominata",
         "il self-link deve seguire il rename, applicato al path nuovo"
     );
+}
+
+// ---------------------------------------------------------------------------
+// Rinomina con i file a byte (D-3)
+// ---------------------------------------------------------------------------
+
+/// Un formato a byte come quelli dei file Craft: ogni riga UTF-8 non vuota del
+/// file è un link a un percorso, le altre righe sono byte qualsiasi. Non sa
+/// riscrivere (il `rewrite_links` di serie, `Ok(None)`), a meno che non sia
+/// costruito con `rewrites: true`, nel qual caso risponde con un edit come
+/// farebbe un formato testuale.
+struct ByteLinkProvider {
+    rewrites: bool,
+}
+
+impl FormatProvider for ByteLinkProvider {
+    fn descriptor(&self) -> FormatDescriptor {
+        FormatDescriptor {
+            source: SourceKind::Bytes,
+            ..FormatDescriptor::text("bytelink", "Link in un file a byte (test)", &["blk"])
+        }
+    }
+
+    fn capabilities(&self) -> FormatCapabilities {
+        FormatCapabilities::of(&[])
+    }
+
+    fn parse(
+        &self,
+        source: &DocumentSource,
+        ctx: &ParseContext,
+    ) -> Result<DocumentModel, FormatError> {
+        let mut model = DocumentModel::empty(DocId::new(ctx.doc_id.clone()));
+        let mut offset = 0usize;
+        for line in source.bytes().split(|byte| *byte == b'\n') {
+            let span = Span::new(offset, offset + line.len());
+            offset += line.len() + 1;
+            let Ok(target) = std::str::from_utf8(line) else {
+                continue;
+            };
+            let target = target.trim();
+            if target.is_empty() {
+                continue;
+            }
+            model.links.push(Link {
+                target: LinkTarget::Path(target.to_string()),
+                embed: true,
+                span,
+                context: None,
+            });
+        }
+        Ok(model)
+    }
+
+    fn render_html(
+        &self,
+        _model: &DocumentModel,
+        _opts: &RenderOptions,
+    ) -> Result<String, FormatError> {
+        Ok(String::new())
+    }
+
+    fn serialize(&self, _model: &DocumentModel) -> Result<String, FormatError> {
+        Err(FormatError::Unsupported {
+            format: self.descriptor().id,
+            got: SourceKind::Text,
+        })
+    }
+
+    fn rewrite_links(
+        &self,
+        _source: &DocumentSource,
+        _ctx: &ParseContext,
+        rewrites: &[LinkRewrite],
+    ) -> Result<Option<Vec<TextEdit>>, FormatError> {
+        if !self.rewrites {
+            return Ok(None);
+        }
+        Ok(Some(
+            rewrites
+                .iter()
+                .map(|rewrite| TextEdit::replace(rewrite.span, rewrite.replacement.clone()))
+                .collect(),
+        ))
+    }
+}
+
+/// Un formato testuale che dichiara link ma non sa riscriverli: la sorgente di
+/// testo senza riscrittura, che ferma la rinomina.
+struct MuteTextProvider;
+
+impl FormatProvider for MuteTextProvider {
+    fn descriptor(&self) -> FormatDescriptor {
+        FormatDescriptor::text("mute", "Testo che non si riscrive (test)", &["mut"])
+    }
+
+    fn capabilities(&self) -> FormatCapabilities {
+        FormatCapabilities::of(&[])
+    }
+
+    fn parse(
+        &self,
+        source: &DocumentSource,
+        ctx: &ParseContext,
+    ) -> Result<DocumentModel, FormatError> {
+        let text = source.text().unwrap_or_default();
+        let mut model = DocumentModel::empty(DocId::new(ctx.doc_id.clone()));
+        let target = text.trim();
+        if !target.is_empty() {
+            model.links.push(Link {
+                target: LinkTarget::Path(target.to_string()),
+                embed: false,
+                span: Span::new(0, text.len()),
+                context: None,
+            });
+        }
+        model.text = text.to_string();
+        Ok(model)
+    }
+
+    fn render_html(
+        &self,
+        _model: &DocumentModel,
+        _opts: &RenderOptions,
+    ) -> Result<String, FormatError> {
+        Ok(String::new())
+    }
+
+    fn serialize(&self, model: &DocumentModel) -> Result<String, FormatError> {
+        Ok(model.text.clone())
+    }
+}
+
+/// Il vault dei test a byte: le note `.lnk`, i file a byte `.blk` e i testi
+/// muti `.mut`.
+fn byte_workspace(dir: &Utf8PathBuf, byte_rewrites: bool) -> Workspace {
+    let mut registry = FormatRegistry::new();
+    registry
+        .register(Box::new(LinkListProvider))
+        .expect("nessun conflitto di estensioni");
+    registry
+        .register(Box::new(ByteLinkProvider {
+            rewrites: byte_rewrites,
+        }))
+        .expect("nessun conflitto di estensioni");
+    registry
+        .register(Box::new(MuteTextProvider))
+        .expect("nessun conflitto di estensioni");
+    Workspace::new(dir, registry).expect("l'apertura del vault riesce")
+}
+
+/// Il contenuto di un file a byte che punta a `targets`: un byte che non è
+/// UTF-8 in testa, perché il file a byte sia davvero tale.
+fn byte_file(targets: &[&str]) -> Vec<u8> {
+    let mut bytes = vec![0xff, 0xfe, 0x00, b'\n'];
+    for target in targets {
+        bytes.extend_from_slice(target.as_bytes());
+        bytes.push(b'\n');
+    }
+    bytes
+}
+
+fn link_rewrite_message(outcome: fub_kernel::Result<()>) -> String {
+    match outcome {
+        Err(KernelError::LinkRewrite(message)) => message,
+        other => panic!("atteso l'esito parziale LinkRewrite, arrivato {other:?}"),
+    }
+}
+
+#[test]
+fn renaming_a_file_that_byte_files_point_to_succeeds_and_names_them() {
+    let dir = TempDir::new("rename-bytes-asset");
+    std::fs::write(dir.0.join("foto.png"), b"\x89PNG finto").unwrap();
+    let disegno = byte_file(&["foto.png"]);
+    let copia = byte_file(&["../foto.png", "altro.png"]);
+    std::fs::write(dir.0.join("disegno.blk"), &disegno).unwrap();
+    std::fs::create_dir_all(dir.0.join("sub")).unwrap();
+    std::fs::write(dir.0.join("sub/copia.blk"), &copia).unwrap();
+    std::fs::write(dir.0.join("nota.lnk"), "[foto](foto.png)").unwrap();
+    let mut ws = byte_workspace(&dir.0, false);
+    ws.reindex().unwrap();
+
+    let message = link_rewrite_message(
+        ws.rename_document(&DocId::new("foto.png"), &DocId::new("img/foto2.png")),
+    );
+
+    // Il file è rinominato.
+    assert!(!dir.0.join("foto.png").exists());
+    assert!(dir.0.join("img/foto2.png").exists());
+    // La nota testuale è aggiornata.
+    assert_eq!(
+        ws.read_source(&DocId::new("nota.lnk")).unwrap(),
+        "[foto](img/foto2.png)"
+    );
+    // I file a byte hanno gli stessi byte di prima.
+    assert_eq!(std::fs::read(dir.0.join("disegno.blk")).unwrap(), disegno);
+    assert_eq!(std::fs::read(dir.0.join("sub/copia.blk")).unwrap(), copia);
+    // E l'avviso li nomina tutti e due, col nome vecchio a cui puntano.
+    assert!(
+        message.contains(
+            "disegno.blk: un file a byte non si riscrive, il link punta ancora a foto.png"
+        ),
+        "{message}"
+    );
+    assert!(
+        message.contains(
+            "sub/copia.blk: un file a byte non si riscrive, il link punta ancora a foto.png"
+        ),
+        "{message}"
+    );
+    assert_eq!(message.matches("un file a byte non si riscrive").count(), 2);
+    assert!(!message.contains("nota.lnk"), "{message}");
+}
+
+#[test]
+fn renaming_a_note_that_a_byte_file_points_to_rewrites_the_other_notes() {
+    let dir = TempDir::new("rename-bytes-doc");
+    let disegno = byte_file(&["Nota.lnk"]);
+    std::fs::write(dir.0.join("disegno.blk"), &disegno).unwrap();
+    std::fs::write(dir.0.join("Nota.lnk"), "").unwrap();
+    std::fs::write(dir.0.join("a.lnk"), "Nota").unwrap();
+    let mut ws = byte_workspace(&dir.0, false);
+    ws.reindex().unwrap();
+
+    let message = link_rewrite_message(
+        ws.rename_document(&DocId::new("Nota.lnk"), &DocId::new("Rinominata.lnk")),
+    );
+
+    assert!(!dir.0.join("Nota.lnk").exists());
+    assert!(dir.0.join("Rinominata.lnk").exists());
+    assert_eq!(ws.read_source(&DocId::new("a.lnk")).unwrap(), "Rinominata");
+    assert_eq!(std::fs::read(dir.0.join("disegno.blk")).unwrap(), disegno);
+    assert_eq!(
+        message,
+        "disegno.blk: un file a byte non si riscrive, il link punta ancora a Nota.lnk"
+    );
+}
+
+#[test]
+fn a_byte_file_pointing_to_itself_moves_with_the_same_bytes() {
+    let dir = TempDir::new("rename-bytes-self");
+    let disegno = byte_file(&["disegno.blk"]);
+    std::fs::write(dir.0.join("disegno.blk"), &disegno).unwrap();
+    let mut ws = byte_workspace(&dir.0, false);
+    ws.reindex().unwrap();
+
+    let message = link_rewrite_message(
+        ws.rename_document(&DocId::new("disegno.blk"), &DocId::new("sub/logo.blk")),
+    );
+
+    assert!(!dir.0.join("disegno.blk").exists());
+    assert_eq!(std::fs::read(dir.0.join("sub/logo.blk")).unwrap(), disegno);
+    assert!(ws.documents().contains(&DocId::new("sub/logo.blk")));
+    assert_eq!(
+        message,
+        "sub/logo.blk: un file a byte non si riscrive, il link punta ancora a disegno.blk"
+    );
+}
+
+#[test]
+fn a_text_source_without_rewrite_still_stops_the_rename_beside_a_byte_file() {
+    let dir = TempDir::new("rename-bytes-mute");
+    std::fs::write(dir.0.join("foto.png"), b"\x89PNG finto").unwrap();
+    let disegno = byte_file(&["foto.png"]);
+    std::fs::write(dir.0.join("disegno.blk"), &disegno).unwrap();
+    std::fs::write(dir.0.join("muto.mut"), "foto.png").unwrap();
+    let mut ws = byte_workspace(&dir.0, false);
+    ws.reindex().unwrap();
+
+    let outcome = ws.rename_document(&DocId::new("foto.png"), &DocId::new("foto2.png"));
+
+    assert!(
+        matches!(outcome, Err(KernelError::Format(_))),
+        "la sorgente di testo senza riscrittura ferma la rinomina: {outcome:?}"
+    );
+    assert!(dir.0.join("foto.png").exists());
+    assert!(!dir.0.join("foto2.png").exists());
+    assert_eq!(std::fs::read(dir.0.join("disegno.blk")).unwrap(), disegno);
+    assert_eq!(std::fs::read(dir.0.join("muto.mut")).unwrap(), b"foto.png");
+}
+
+#[test]
+fn a_byte_provider_that_answers_with_edits_still_stops_the_rename() {
+    // `Ok(Some(..))` su una sorgente a byte resta quello che era: il kernel non
+    // applica edit testuali a dei byte, e la rinomina non parte.
+    let dir = TempDir::new("rename-bytes-some");
+    std::fs::write(dir.0.join("foto.png"), b"\x89PNG finto").unwrap();
+    let disegno = byte_file(&["foto.png"]);
+    std::fs::write(dir.0.join("disegno.blk"), &disegno).unwrap();
+    let mut ws = byte_workspace(&dir.0, true);
+    ws.reindex().unwrap();
+
+    let outcome = ws.rename_document(&DocId::new("foto.png"), &DocId::new("foto2.png"));
+
+    assert!(
+        matches!(outcome, Err(KernelError::Format(_))),
+        "{outcome:?}"
+    );
+    assert!(dir.0.join("foto.png").exists());
+    assert_eq!(std::fs::read(dir.0.join("disegno.blk")).unwrap(), disegno);
+}
+
+#[test]
+fn undoing_a_rename_beside_a_byte_file_leaves_the_byte_file_alone() {
+    let dir = TempDir::new("rename-bytes-undo");
+    std::fs::write(dir.0.join("foto.png"), b"\x89PNG finto").unwrap();
+    let disegno = byte_file(&["foto.png"]);
+    std::fs::write(dir.0.join("disegno.blk"), &disegno).unwrap();
+    std::fs::write(dir.0.join("nota.lnk"), "[foto](foto.png)").unwrap();
+    let mut ws = byte_workspace(&dir.0, false);
+    ws.reindex().unwrap();
+
+    link_rewrite_message(ws.rename_document(&DocId::new("foto.png"), &DocId::new("foto2.png")));
+    // Tornare al nome vecchio: la nota torna com'era, il file a byte non ha
+    // niente da annullare e, ora che il nome è quello giusto, non è nominato.
+    ws.rename_document(&DocId::new("foto2.png"), &DocId::new("foto.png"))
+        .unwrap();
+
+    assert!(dir.0.join("foto.png").exists());
+    assert_eq!(
+        ws.read_source(&DocId::new("nota.lnk")).unwrap(),
+        "[foto](foto.png)"
+    );
+    assert_eq!(std::fs::read(dir.0.join("disegno.blk")).unwrap(), disegno);
 }
 
 // ---------------------------------------------------------------------------

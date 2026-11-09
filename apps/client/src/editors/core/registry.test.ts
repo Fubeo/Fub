@@ -1,10 +1,16 @@
 // @vitest-environment happy-dom
-import { describe, expect, it, vi } from "vitest";
+import { beforeAll, describe, expect, it, vi } from "vitest";
 import { createDocumentSurfaceRegistry } from "./bootstrap";
 import type { EditorSurface, SurfaceFamily, SurfaceFactory } from "./registry";
 import { DocumentSurfaceRegistry, SurfaceRegistrationConflict } from "./registry";
 import { forwardNotice } from "../../state/kernel";
 import { mountStrings } from "../../i18n/strings";
+import { canvasCoreReady } from "../canvas/wasm/core";
+
+// La tela si monta subito solo col nucleo già carico, come dopo la prima lavagna.
+beforeAll(async () => {
+  await canvasCoreReady();
+});
 
 const localeState = vi.hoisted(() => ({ value: "it" }));
 vi.mock("../../host/query", () => ({

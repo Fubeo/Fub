@@ -25,6 +25,7 @@
 // ha una profondità.
 import { defineConfig, searchForWorkspaceRoot, type Plugin } from "vite";
 import { fileURLToPath } from "node:url";
+import { canvasWasm } from "./build/canvas-wasm.mjs";
 
 const here = (rel: string) => fileURLToPath(new URL(rel, import.meta.url));
 
@@ -96,7 +97,9 @@ function seamForBench(): Plugin {
 
 export default defineConfig({
   clearScreen: false,
-  plugins: [seamForBench()],
+  // Il nucleo della lavagna come nella config di sempre: la shell del banco
+  // è la shell vera.
+  plugins: [seamForBench(), canvasWasm()],
   server: {
     // Non 1420: quella è la porta di Tauri, e un banco che gira mentre l'app è
     // aperta non deve doverne chiudere una per fotografare l'altra.

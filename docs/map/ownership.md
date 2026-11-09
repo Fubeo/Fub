@@ -43,11 +43,15 @@
 | il mirror TypeScript non diverge dal Rust | i test `ts_*` dei crate | `UPDATE_MIRROR=1 cargo test …` e i banchi `mirror` |
 | le regole lato shell sono le stesse del contratto | `apps/client/src/rules/` | `crates/fub-abi/tests/rules_mirror.rs` |
 | l'inchiostro TypeScript è la copia calda di quello Rust | `apps/client/src/ink/` | `crates/fub-ink/tests/ts_mirror.rs` e la fixture `ink-samples.json` |
+| la lavagna si legge e si scrive con un codice solo, in nativo e nel `.wasm` a 32 bit della tela | `crates/fub-canvas-core/` (le regole), `crates/fub-canvas-wasm/` (la build della tela) | `read_vectors.rs`, `patch_vectors.rs` e `ts_mirror.rs` di `crates/fub-canvas-core/tests/`, e di là `editors/canvas/wasm/vectors.test.ts` e `wasm/mirror.test.ts` |
 | i disegni grandi si aprono e si muovono nei tempi | `apps/client/src/editors/spatial/painter/` | `npm run bench:large`, gate della CI |
 | la battuta sta nel budget di 4 ms di mediana | `apps/client/src/editors/text/profiles/markdown/` | `node bench/interaction.mjs --only=battuta` e `render-incremental.test.ts` |
 | una feature Cargo è accesa solo da chi la usa | `crates/fub-features/src/inventory.rs` | `crates/fub-features/tests/cargo_features.rs` e `check-cargo-feature-default.mjs` |
 | una feature spenta non rompe il build | `crates/fub-features/` | la CI compila `--no-default-features` |
 | i motori di terzi si nominano dai soli adattatori | `crates/fub-format-rich/`, `crates/fub-format-xlsx/` | `.github/scripts/check-engine-boundary.mjs` |
+| nessuna interfaccia delle app Craft in `fub-app`, librerie doppie sotto il tetto | `docs/reference/budgets.json` | `.github/scripts/check-motori.mjs` |
+| un motore si costruisce alla prima richiesta e una volta sola, senza lucchetto tenuto | `crates/fub-motori/src/pigro.rs` | `crates/fub-motori/tests/pigro.rs` |
+| le cache dei motori stanno sotto un tetto comune, dalla meno usata | `crates/fub-motori/src/memoria.rs` | `crates/fub-motori/tests/memoria.rs` |
 | la copia di un motore è derivata e verificata | `tools/vendor-craft/vendor.mjs` | `vendor.mjs check`, `verify-upstream`, `gate` |
 | i componenti WASM rispettano tempi e memoria | `crates/fub-wasm-host/src/limits.rs` | `crates/fub-wasm-host/tests/` |
 | i plugin installati si accendono e spengono per vault | `crates/fub-host/src/session.rs` | `crates/fub-kernel/tests/deactivation.rs` e `crates/fub-host/tests/draw_feature.rs` |

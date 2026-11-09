@@ -1019,3 +1019,20 @@ fn every_code_has_its_severity_and_a_message() {
     // Un documento malformato non ha diagnostica: è un errore.
     assert!(read("<svg").is_err());
 }
+
+#[test]
+fn no_message_names_fubdraw() {
+    // I messaggi arrivano alla shell e a MCP: FubDraw è il nome tecnico del
+    // formato (ADR 0203), chi legge sente parlare di Fub (PA T33).
+    use Code::*;
+    for code in [
+        S001, S002, S003, S004, S005, S006, S007, S008, S009, S010, S011, S012, S013, S014, S015,
+        S016, S017, S018,
+    ] {
+        assert!(!code.message().contains("FubDraw"), "{code:?}");
+    }
+    assert_eq!(
+        S002.message(),
+        "il documento contiene contenuto che Fub conserva ma non modifica"
+    );
+}

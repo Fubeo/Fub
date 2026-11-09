@@ -2,7 +2,7 @@
 //! and Linux; nothing is bundled) plus a user dictionary kept in the engine preferences.
 
 use std::collections::HashSet;
-use std::sync::OnceLock;
+use std::sync::{Arc, Mutex, PoisonError, RwLock};
 
 use gridcraft_core::{RangeRef, Value};
 use serde_json::{Value as Json, json};
@@ -18,27 +18,101 @@ pub fn specs() -> Vec<CommandSpec> {
     ]
 }
 
-fn dictionary() -> &'static HashSet<String> {
-    static DICT: OnceLock<HashSet<String>> = OnceLock::new();
-    DICT.get_or_init(|| {
-        #[cfg(target_arch = "wasm32")]
-        {
-            HashSet::new()
+/// A word list read on first use and kept until it is released ([`release_spelling_dictionary`]); the next use reads
+/// it again. Readers share it through an `Arc`, so releasing never invalidates a list in use: whoever holds it keeps it
+/// until done. The read happens outside the slot's lock (a release or a size query never waits for it), and one
+/// thread reads while the others wanting the list wait for that read instead of repeating it.
+struct WordList {
+    slot: RwLock<Option<(Arc<HashSet<String>>, usize)>>,
+    loading: Mutex<()>,
+}
+
+impl WordList {
+    const fn new() -> Self {
+        WordList { slot: RwLock::new(None), loading: Mutex::new(()) }
+    }
+
+    fn get(&self, read: impl FnOnce() -> HashSet<String>) -> Arc<HashSet<String>> {
+        let cached = || self.slot.read().unwrap_or_else(PoisonError::into_inner).as_ref().map(|(d, _)| d.clone());
+        if let Some(d) = cached() {
+            return d;
         }
-        #[cfg(not(target_arch = "wasm32"))]
-        {
-            let mut set = HashSet::new();
-            for path in ["/usr/share/dict/words", "/usr/share/dict/american-english", "/usr/share/dict/british-english"] {
-                if let Ok(text) = std::fs::read_to_string(path) {
-                    for w in text.lines().take(2_000_000) {
-                        set.insert(w.trim().to_lowercase());
-                    }
-                    break;
-                }
+        let _loading = self.loading.lock().unwrap_or_else(PoisonError::into_inner);
+        if let Some(d) = cached() {
+            return d;
+        }
+        let d = Arc::new(read());
+        let bytes = set_bytes(&d);
+        let mut slot = self.slot.write().unwrap_or_else(PoisonError::into_inner);
+        slot.get_or_insert((d, bytes)).0.clone()
+    }
+
+    fn bytes(&self) -> usize {
+        self.slot.read().unwrap_or_else(PoisonError::into_inner).as_ref().map_or(0, |(_, b)| *b)
+    }
+
+    fn release(&self) -> usize {
+        self.slot.write().unwrap_or_else(PoisonError::into_inner).take().map_or(0, |(_, b)| b)
+    }
+}
+
+/// Estimated heap bytes of a set of strings: the hash table (a `String` and a control byte per bucket, the buckets
+/// being the table's capacity over its 7/8 load factor, plus one group of control bytes) and each string's buffer
+/// by capacity. Allocator overhead isn't counted.
+fn set_bytes(set: &HashSet<String>) -> usize {
+    let cap = set.capacity();
+    let buckets = match cap {
+        0 => return set.iter().map(String::capacity).sum(),
+        1..7 => cap + 1,
+        _ => cap / 7 * 8,
+    };
+    buckets * (std::mem::size_of::<String>() + 1) + 16 + set.iter().map(String::capacity).sum::<usize>()
+}
+
+static DICT: WordList = WordList::new();
+
+/// The system word list, lower-cased; empty when there is none (or on the web).
+fn read_system_list() -> HashSet<String> {
+    #[cfg(target_arch = "wasm32")]
+    {
+        HashSet::new()
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        read_word_list(&["/usr/share/dict/words", "/usr/share/dict/american-english", "/usr/share/dict/british-english"])
+    }
+}
+
+/// The first of `paths` that can be read, one word per line (at most 2,000,000), lower-cased.
+#[cfg(not(target_arch = "wasm32"))]
+fn read_word_list(paths: &[&str]) -> HashSet<String> {
+    let mut set = HashSet::new();
+    for path in paths {
+        if let Ok(text) = std::fs::read_to_string(path) {
+            for w in text.lines().take(2_000_000) {
+                set.insert(w.trim().to_lowercase());
             }
-            set
+            break;
         }
-    })
+    }
+    set
+}
+
+fn dictionary() -> Arc<HashSet<String>> {
+    DICT.get(read_system_list)
+}
+
+/// Estimated heap bytes of the spelling word list now in memory (0 when it isn't loaded, or there is none). See
+/// [`set_bytes`] for how the estimate is made.
+pub fn spelling_dictionary_bytes() -> usize {
+    DICT.bytes()
+}
+
+/// Drop the spelling word list; the next spelling check or thesaurus lookup reads it again. A check running on
+/// another thread finishes with the list it has. Returns the estimated bytes released (0 when it wasn't loaded).
+/// The user dictionary is part of the preferences and stays.
+pub fn release_spelling_dictionary() -> usize {
+    DICT.release()
 }
 
 fn known(s: &Session, w: &str) -> bool {
@@ -179,7 +253,8 @@ fn thesaurus(_: &mut Session, p: &Json) -> Result<Json> {
         return Ok(json!([]));
     }
     let stem: String = w.chars().take(w.chars().count().saturating_sub(2).max(3)).collect();
-    let mut related: Vec<&String> = dictionary().iter().filter(|d| d.starts_with(&stem) && **d != w && d.len() <= w.len() + 4).collect();
+    let dict = dictionary();
+    let mut related: Vec<&String> = dict.iter().filter(|d| d.starts_with(&stem) && **d != w && d.len() <= w.len() + 4).collect();
     related.sort();
     related.truncate(20);
     Ok(json!(related))
@@ -195,5 +270,50 @@ mod tests {
         assert_eq!(edits1(&"a".repeat(MAX_SUGGEST_LEN)).len(), 54 * MAX_SUGGEST_LEN + 25);
         assert!(edits1(&"a".repeat(MAX_SUGGEST_LEN + 1)).is_empty());
         assert!(edits1(&"a".repeat(1_000_000)).is_empty());
+    }
+
+    #[test]
+    fn a_released_word_list_is_read_again() {
+        let path = std::env::temp_dir().join(format!("gridcraft-words-{}", std::process::id()));
+        std::fs::write(&path, "Apple\nbanana\ncherry\n").unwrap();
+        let path = path.to_str().unwrap().to_string();
+        let list = WordList::new();
+        let read = || read_word_list(&["/nonexistent/gridcraft/words", &path]);
+        assert_eq!(list.bytes(), 0);
+        let held = list.get(read);
+        assert!(held.contains("apple") && held.len() == 3);
+        let bytes = list.bytes();
+        assert!(bytes >= 3 * std::mem::size_of::<String>(), "{bytes}");
+        // Released while someone holds it: the holder keeps a working list, the slot is empty.
+        assert_eq!(list.release(), bytes);
+        assert_eq!(list.bytes(), 0);
+        assert!(held.contains("banana"));
+        assert_eq!(list.release(), 0, "releasing twice is harmless");
+        let again = list.get(read);
+        assert!(again.contains("cherry") && !Arc::ptr_eq(&held, &again));
+        assert_eq!(list.bytes(), bytes);
+        std::fs::remove_file(&path).unwrap();
+        // No word list on the system: an empty list, which holds nothing.
+        let none = WordList::new();
+        assert!(none.get(|| read_word_list(&["/nonexistent/gridcraft/words"])).is_empty());
+        assert_eq!(none.bytes(), 0);
+    }
+
+    #[test]
+    fn the_spelling_dictionary_comes_back_after_a_release() {
+        let mut s = Session::new();
+        s.execute("file.new", json!({})).unwrap();
+        s.execute("cell.set", json!({"cell": "A1", "input": "house wrold"})).unwrap();
+        release_spelling_dictionary();
+        release_spelling_dictionary();
+        let r = s.execute("review.spelling", json!({}));
+        if dictionary().is_empty() {
+            assert!(r.is_err(), "no system word list: {r:?}");
+            assert_eq!(spelling_dictionary_bytes(), 0);
+        } else {
+            assert!(spelling_dictionary_bytes() > 0);
+            let words: Vec<_> = r.unwrap()["issues"].as_array().unwrap().iter().map(|i| i["word"].clone()).collect();
+            assert_eq!(words, [json!("wrold")]);
+        }
     }
 }

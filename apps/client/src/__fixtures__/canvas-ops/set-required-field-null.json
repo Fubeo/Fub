@@ -1,0 +1,6 @@
+{
+  "about": "Togliere un campo che la scheda deve avere (il testo di una scheda di testo) è Invalid.",
+  "before": { "nodes": [{ "id": "a", "type": "text", "x": 0, "y": 0, "width": 100, "height": 60, "text": "a" }] },
+  "ops": [{ "op": "set", "id": "a", "fields": { "text": null } }],
+  "expect": { "outcome": "rejected", "error": { "kind": "Invalid", "index": 0 } }
+}

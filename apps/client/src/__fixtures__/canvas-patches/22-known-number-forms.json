@@ -1,0 +1,11 @@
+{
+  "name": "known-number-forms",
+  "description": "R2: 1.0, 1e2, -0 e 1E1 sono interi; resta scritto com'era ciò che non cambia, il numero nuovo è un intero",
+  "before": "{\"nodes\":[{\"id\":\"a\",\"type\":\"text\",\"x\":1.0,\"y\":1e2,\"width\":100,\"height\":50,\"text\":\"uno\"},{\"id\":\"b\",\"type\":\"text\",\"x\":-0,\"y\":0,\"width\":1E1,\"height\":50,\"text\":\"due\"}],\"edges\":[]}",
+  "patches": [{"kind":"upsert-node","before":{"id":"a","type":"text","x":1,"y":100,"width":100,"height":50,"text":"uno"},"after":{"id":"a","type":"text","x":1,"y":120,"width":100,"height":50,"text":"uno"}}],
+  "expect": {
+    "outcome": "applied",
+    "text": "{\"nodes\":[{\"id\":\"a\",\"type\":\"text\",\"x\":1.0,\"y\":120,\"width\":100,\"height\":50,\"text\":\"uno\"},{\"id\":\"b\",\"type\":\"text\",\"x\":-0,\"y\":0,\"width\":1E1,\"height\":50,\"text\":\"due\"}],\"edges\":[]}",
+    "undo": "{\"nodes\":[{\"id\":\"a\",\"type\":\"text\",\"x\":1.0,\"y\":100,\"width\":100,\"height\":50,\"text\":\"uno\"},{\"id\":\"b\",\"type\":\"text\",\"x\":-0,\"y\":0,\"width\":1E1,\"height\":50,\"text\":\"due\"}],\"edges\":[]}"
+  }
+}

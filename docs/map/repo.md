@@ -27,6 +27,8 @@ flowchart LR
     FEATURES --> VENDOR
     INKSC["fub-ink e fub-scene<br/>inchiostro e disegni"] --> ABI
     FMT --> INKSC
+    CANVASCORE["fub-canvas-core<br/>nucleo della lavagna"]
+    FMT --> CANVASCORE
     WASM["fub-wasm-host<br/>Wasmtime"] --> HOST
     APP --> WASM
     LIVE["fub-live<br/>sessione dal tablet"] --> APP
@@ -48,9 +50,12 @@ sotto `crates/` con gli altri e non compaiono nel disegno per non superare i
 | chi monta | `crates/fub-host/` | composition root: sessioni, bundle, job, watcher, impostazioni; niente Tauri | `cargo test -p fub-host` |
 | il desktop | `crates/fub-app/` | comandi Tauri sottili, finestre, risorse byte; delega presto all'host | `cargo test -p fub-app` |
 | le feature | `crates/fub-features/` | pannelli e comandi ufficiali, una feature Cargo ciascuna | `cargo test -p fub-features --features draw` |
-| i formati | `crates/fub-format-*/` | i provider: markdown, canvas, base, svg, rich, xlsx | il test del crate |
+| i formati | `crates/fub-format-*/` | i provider: markdown, canvas, base, svg, rich, xlsx, craft | il test del crate |
+| la lavagna | `crates/fub-canvas-core/` | il modello di una `.canvas` e la sua lettura, puro: lo usano il formato, i comandi e la WebView | `cargo test -p fub-canvas-core` |
+| la lavagna nella WebView | `crates/fub-canvas-wasm/` | la facciata WebAssembly del nucleo: un'interfaccia C scritta a mano, testo e JSON dentro e fuori | `cargo test -p fub-canvas-wasm` |
 | l'inchiostro | `crates/fub-ink/` | campioni, pressione, stabilizzatore, InkML; il gemello caldo sta in `apps/client/src/ink/` | `cargo test -p fub-ink` |
 | i disegni | `crates/fub-scene/` | lettura del formato scena e delle annotazioni PDF | `cargo test -p fub-scene` |
+| lo strato dei motori | `crates/fub-motori/` | motori costruiti alla prima richiesta, il loro gruppo di thread, il budget delle cache, il registro | `cargo test -p fub-motori` |
 | il runtime dei plugin | `crates/fub-wasm-host/` | l'unico crate che nomina Wasmtime | `cargo test -p fub-wasm-host` |
 | la riga di comando | `crates/fub-cli/` | automazione senza Tauri e il server MCP | `cargo test -p fub-cli` |
 | la sessione live | `crates/fub-live/` | PC host, tablet scrittore, QR e TLS | `cargo test -p fub-live` |
@@ -129,7 +134,7 @@ Le copie in `vendor/` sono derivati: upstream a un commit preciso più le
 patch numerate di `patches/`, con `upstream.lock` che ne conserva le impronte.
 L'interfaccia (`ui-egui`) e il server MCP dei due motori non sono copiati.
 
-## I sei confini che valgono sempre
+## I sette confini che valgono sempre
 
 | Confine | Presidio |
 |---|---|
@@ -139,3 +144,4 @@ L'interfaccia (`ui-egui`) e il server MCP dei due motori non sono copiati.
 | nella shell, solo `host/ipc.ts` e `host/dialog.ts` importano Tauri | `apps/client/src/host/no-tauri-outside-host.test.ts` |
 | CodeMirror resta in `editors/text/`, ProseMirror in `scrittura/` | `check-codemirror-boundary.mjs`, `check-prosemirror-boundary.mjs` |
 | i motori si nominano solo dai loro adattatori | `check-engine-boundary.mjs` |
+| `fub-app` non porta l'interfaccia di un'app Craft, e le librerie in due versioni non crescono | `check-motori.mjs`, tetto in `docs/reference/budgets.json` |

@@ -23,6 +23,7 @@ use fub_app_lib::{
     BundleInfo, DemoClosed, DocumentSource, EmbedContent, InstalledPluginInfo, LiveAddress,
     LiveStart, LiveStarted, OpenVaults, ThemeInfo, ThemePayload, UnreadDoc, VaultEntry, VaultInfo,
 };
+use fub_host::open_with::{ExternalEditor, OpenHow, OpenedWith};
 use fub_host::registry::BundleKind;
 use fub_host::support::{
     ConfigFileKind, ConfigReport, ConfigStatus, DemoOpened, DiagnosticSummary, ExportConsent,
@@ -47,6 +48,32 @@ use serde_json::{json, Value};
 
 fn to_value<T: serde::Serialize>(v: T) -> Value {
     serde_json::to_value(v).expect("serializza")
+}
+
+/// Il manifest di un tema `theme-2` che parte dalla serie e porta un
+/// carattere e un set di icone: i campi `extends`, `fonts` e `icons` sul filo.
+fn extending_manifest() -> fub_abi::theme::ThemeManifest {
+    fub_abi::theme::ThemeManifest {
+        id: "acme.carta".into(),
+        name: "Carta".into(),
+        version: "1.0.0".into(),
+        engine: fub_abi::theme::ThemeEngine::Theme2,
+        lights: vec![ThemeLight::Light, ThemeLight::Dark],
+        asset_namespace: "theme://acme.carta/".into(),
+        motion: vec![
+            fub_abi::theme::ThemeMotion::Opacity,
+            fub_abi::theme::ThemeMotion::Transform,
+        ],
+        settings: Vec::new(),
+        extends: Some(fub_host::theme::SERIES_ID.into()),
+        fonts: vec![fub_abi::theme::ThemeFont {
+            family: "Carta Serif".into(),
+            file: "fonts/carta.woff2".into(),
+            weight: 400,
+            style: fub_abi::theme::ThemeFontStyle::Italic,
+        }],
+        icons: Some("icons.json".into()),
+    }
 }
 
 fn expected() -> Value {
@@ -158,6 +185,48 @@ fn expected() -> Value {
                 text_kind: DocumentText::GridJournal,
             }),
         ],
+        // «Apri con» un'app Craft: una installata, una che Fub non ha
+        // trovato e una che Fub ha avviato ed è ancora aperta, perché il menu
+        // della shell distingue le tre righe.
+        "ExternalEditor": [
+            to_value(ExternalEditor {
+                id: "vectorcraft".into(),
+                name: "VectorCraft".into(),
+                opens: vec!["vectorcraft".into(), "svg".into()],
+                installed: true,
+                running: false,
+            }),
+            to_value(ExternalEditor {
+                id: "pdfcraft".into(),
+                name: "PdfCraft".into(),
+                opens: vec!["pdf".into()],
+                installed: false,
+                running: false,
+            }),
+            to_value(ExternalEditor {
+                id: "photocraft".into(),
+                name: "PhotoCraft".into(),
+                opens: vec!["pcraft".into(), "psd".into()],
+                installed: true,
+                running: true,
+            }),
+        ],
+        // I tre modi in cui il file arriva all'app: la shell dice una frase
+        // diversa per ciascuno.
+        "OpenedWith": [
+            to_value(OpenedWith {
+                editor: "lightcraft".into(),
+                how: OpenHow::Forwarded,
+            }),
+            to_value(OpenedWith {
+                editor: "photocraft".into(),
+                how: OpenHow::InRunning,
+            }),
+            to_value(OpenedWith {
+                editor: "vectorcraft".into(),
+                how: OpenHow::NewProcess,
+            }),
+        ],
         // I componenti che questo host sa montare (§11.1): il campione ne ha
         // uno acceso e uno spento, perché con uno solo il record non direbbe
         // ciò per cui esiste — che «spento» è uno stato, non un'assenza.
@@ -201,7 +270,14 @@ fn expected() -> Value {
                     fub_abi::theme::ThemeMotion::Transform,
                 ],
                 settings: Vec::new(),
+                extends: None,
+                fonts: Vec::new(),
+                icons: None,
             },
+            trust: "community",
+        }), to_value(ThemeInfo {
+            // Un tema che parte dalla serie: il campo `extends` sul filo.
+            manifest: extending_manifest(),
             trust: "community",
         })],
         "ThemePayload": [to_value(ThemePayload {
@@ -217,13 +293,24 @@ fn expected() -> Value {
                     fub_abi::theme::ThemeMotion::Transform,
                 ],
                 settings: Vec::new(),
+                extends: None,
+                fonts: Vec::new(),
+                icons: None,
             },
             light: ThemeLight::Light,
-            sheet: ":root { --paper: #fff; }".into(),
+            sheet: Some(":root { --paper: #fff; }".into()),
             skin: Some(".paper { color: var(--paper); }".into()),
             assets: [("theme://acme.paper/fonts/paper.woff2".into(), vec![1_u8, 2, 3])]
                 .into_iter()
                 .collect(),
+        }), to_value(ThemePayload {
+            // La luce di un tema che eredita e non porta il suo foglio:
+            // `sheet` è `null`, e la shell usa quello di serie.
+            manifest: extending_manifest(),
+            light: ThemeLight::Dark,
+            sheet: None,
+            skin: Some(".carta { color: inherit; }".into()),
+            assets: Default::default(),
         })],
         "InstalledPluginInfo": [to_value(InstalledPluginInfo {
             bundle: BundleInfo {

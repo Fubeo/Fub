@@ -1,0 +1,11 @@
+{
+  "name": "remove-without-at-undo-at-end",
+  "description": "T6: una scheda tolta senza at torna in fondo con l'annulla",
+  "before": "{\"nodes\":[{\"id\":\"a\",\"type\":\"text\",\"x\":0,\"y\":0,\"width\":100,\"height\":50,\"text\":\"uno\"},{\"id\":\"b\",\"type\":\"text\",\"x\":200,\"y\":0,\"width\":100,\"height\":50,\"text\":\"due\"}],\"edges\":[]}",
+  "patches": [{"kind":"remove-node","before":{"id":"a","type":"text","x":0,"y":0,"width":100,"height":50,"text":"uno"},"after":null}],
+  "expect": {
+    "outcome": "applied",
+    "text": "{\"nodes\":[{\"id\":\"b\",\"type\":\"text\",\"x\":200,\"y\":0,\"width\":100,\"height\":50,\"text\":\"due\"}],\"edges\":[]}",
+    "undo": "{\"nodes\":[{\"id\":\"b\",\"type\":\"text\",\"x\":200,\"y\":0,\"width\":100,\"height\":50,\"text\":\"due\"},{\"id\":\"a\",\"type\":\"text\",\"x\":0,\"y\":0,\"width\":100,\"height\":50,\"text\":\"uno\"}],\"edges\":[]}"
+  }
+}

@@ -217,6 +217,47 @@ la shell non offre la sessione. Il fake host li serve se riceve una rete con
 | `io` | interfacce di rete illeggibili, porta occupata |
 | `internal` | certificato, generatore casuale o QR non disponibili |
 
+## Apri con e anteprime Craft
+
+Tre comandi dell'app servono «Apri con» un'app Craft e l'anteprima fatta dalla
+riga di comando di un'app (`crates/fub-app/src/lib.rs`). Le regole sono
+dell'host, in [App esterne](external-editors.md) e in
+[Formati Craft](craft-formats.md); il comando IPC apre il cancello, lavora
+fuori dal thread principale e localizza l'errore.
+
+| Comando | Argomenti | Risposta |
+|---|---|---|
+| `external_editors` | `vault?`, `doc?` | `ExternalEditor[]`: `id`, `name`, `opens`, `installed`, `running` |
+| `open_with` | `vault?`, `path`, `editor`, `page?` | `OpenedWith`: `editor`, `how` (`forwarded`, `in_running`, `new_process`) |
+| `craft_render` | `vault?`, `doc`, `size` (`small`, `large`) | `CraftPreview`, con `queued: true` quando il job `craft.render` è in coda |
+
+Senza `doc`, `external_editors` elenca tutte le app che Fub conosce. `page`
+è un `u32`: un numero negativo o oltre quel limite lo rifiuta la
+deserializzazione, come una `size` che non è `small` o `large`, prima che il
+comando parta. L'esito di `craft_render` arriva come `job_done` del job
+`craft.render`; la shell legge la risposta con `readCraftPreview`, e una forma
+diversa da quella del contratto è un errore `internal`.
+
+I tre comandi sono della sola shell principale: `guard_main_shell` rifiuta con
+`permission_denied` una finestra di documento, il visore e ogni finestra fuori
+dall'origine locale, prima di ogni lavoro. Li concede `allow-shell`, non
+`allow-mobile`. `craft_render` non è un comando del bundle `fub.craft`: un
+plugin e l'MCP raggiungono `invoke_command`, e avviare il programma di un'app
+vuole il gesto di chi guarda la shell. Il comando del bundle,
+`craft.preview`, resta in sola lettura e non avvia niente.
+
+| Errore | Quando |
+|---|---|
+| `permission_denied` | la finestra non è la shell principale; `craft_render` senza il consenso `on` di `craft.cli-previews` |
+| `unserved` | il componente `fub.craft` è spento; `craft_render` per un file oltre il peso massimo |
+| `bad_args` | un'app che Fub non conosce, un'app che non apre quell'estensione, argomenti non validi |
+| `not_found` | vault chiuso fra due chiamate, app non installata, file sparito, CLI dell'app non trovata |
+| `io` | il programma dell'app non è partito |
+
+Un'app vecchia che non ha questi comandi li rifiuta; la shell tratta il
+rifiuto come «nessuna app Craft». L'host finto li serve solo con le opzioni
+`externalEditors`, `openWith` e `craftRender`, e registra ogni chiamata.
+
 ## Tipi principali
 
 La shell riceve forme per:
@@ -378,6 +419,32 @@ passa dalle stesse porte dei documenti, senza una porta in più:
 - `save_draft` conserva la proiezione come testo del buffer, come per ogni
   altro documento.
 
+Leggere un documento non lo apre. `read_document { id, vault? }` è una
+**lettura semplice** (l'anteprima, una ricerca, la CLI, un lavoro): la stessa
+proiezione, la stessa revisione e lo stesso `format_id` di un'apertura, ma
+l'host non tiene niente. Una sessione della shell apre il documento sotto la
+sua **chiave di apertura**, un campo `open` facoltativo:
+
+- `read_document { id, vault?, open? }`: con `open`, la revisione letta
+  resta segnata sotto la chiave, e il motore dei documenti ricorda la prova
+  a vuoto dei suoi byte, che il salvataggio dopo non rifà;
+- `write_document { id, source, base, vault?, open? }`: con `open`, la
+  revisione sovrascritta e quella nuova restano segnate sotto la chiave, che
+  si apre se non lo era; senza, le prove che il salvataggio ha lasciato e che
+  nessuna chiave tiene si dimenticano subito;
+- `document_closed { open, vault? }` chiude la chiave (vedi
+  [Motori dei formati](#motori-dei-formati)).
+
+Una chiave ha da 1 a 64 caratteri fra lettere ASCII, cifre, `-` e `_`; una
+chiave malformata è `BadArgs` prima che l'host legga il disco, e `open: null`
+vale come assente. Una chiave tiene le ultime otto revisioni che ha letto o
+scritto, anche di documenti diversi (una sessione rinominata tiene la stessa
+chiave). Un vault tiene al massimo 1024 chiavi: oltre, si chiude quella usata
+meno di recente, con le sue prove, e l'host lo scrive nel log. Le chiavi di un
+vault cadono quando il vault si chiude. Una nota, una cartella di Excel o un
+PDF aperti sotto una chiave si leggono e non segnano niente; senza la feature
+`rich` la chiave si valida e si ignora.
+
 `read_document` e `write_document` girano fuori dal thread principale
 dell'app, per ogni formato: aprire e salvare un `.docx` legge, proietta e
 misura il pacchetto, e la finestra non si ferma ad aspettarli. L'ordine delle
@@ -388,6 +455,25 @@ accoda, e una lettura superata la scarta. Le bozze (`save_draft`,
 La forma della proiezione (revisioni, commenti, pagina, oggetti, inchiostri e
 disegni, blocchi chiusi, versioni e schema dei dati opachi) è in
 [Proiezione dei documenti di videoscrittura](rich-projection.md).
+
+## Motori dei formati
+
+Due comandi della finestra principale (`allow-shell`), che girano fuori dal
+thread principale e restituiscono `()`:
+
+- `warm_engine { extension }`: scalda in sottofondo il motore che apre
+  l'estensione (`"docx"`, `".XLSX"`), se un vault aperto ha un provider
+  attivo per lei. Un'estensione senza motore, sconosciuta o malformata non fa
+  niente e non è un errore. Non apre file.
+- `document_closed { open, vault? }`: la shell ha chiuso la sessione con
+  questa chiave di apertura. L'host la toglie e dimentica le prove a vuoto
+  delle sue revisioni che nessun'altra chiave aperta tiene, in nessun vault;
+  se non resta aperta nessuna chiave, svuota le cache dei documenti e
+  restituisce al sistema la memoria libera. Una chiave malformata è
+  `BadArgs`; una chiave sconosciuta o già chiusa, o un vault non aperto, non
+  fanno niente.
+
+Il ciclo di vita dei motori è in [Lo strato dei motori](../architecture/motori.md#scaldare-e-chiudere-un-documento).
 
 ## Cartelle di Excel
 
