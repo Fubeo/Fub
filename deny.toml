@@ -66,7 +66,18 @@ allow = [
 # Una licenza ammessa che nessuno usa più è una riga da togliere, non da
 # lasciare a coprire un caso che non esiste.
 unused-allowed-license = "warn"
-exceptions = []
+exceptions = [
+    # `jpeg-encoder` (l'export JPEG del motore del disegno, via
+    # `vectorcraft-render`) è `(MIT OR Apache-2.0) AND IJG`: la trasformata
+    # discreta del coseno (`src/fdct.rs`, `src/avx2/fdct.rs`) deriva dal codice
+    # dell'Independent JPEG Group. L'IJG è permissiva e chiede solo, a chi
+    # distribuisce l'eseguibile, una frase di riconoscimento: sta in
+    # THIRD_PARTY_NOTICES.md, «Avvisi richiesti dalle dipendenze». Scelta
+    # dell'utente del 2026-11-09 (DECISIONS.md, piano K5 T9): un'eccezione per
+    # questo crate soltanto, non l'IJG nell'elenco generale, così un altro
+    # crate con la stessa licenza resta rosso finché qualcuno non decide.
+    { crate = "jpeg-encoder", allow = ["IJG"] },
+]
 
 [bans]
 # I duplicati sono un avviso: con tauri nell'albero le versioni multiple di

@@ -100,3 +100,75 @@ Con il motore nel workspace (T9), finché `usvg` resta a 0.45:
 soltanto `gif`, `image-webp`, `raster-images` e `text`. `fontdb` ha `fs` e
 `fontconfig` perché li accende `svg2pdf` (lo spiega il commento in
 `crates/fub-features/Cargo.toml`), come prima di T5.
+
+## Dopo T9: il motore nel workspace
+
+T9 ha aggiunto `crates/fub-disegno`, l'adattatore, con `vectorcraft-engine`
+senza le feature di serie, `vectorcraft-tools`, `-svg`, `-doc` e `-geom`.
+
+- commit base `a9c1f3c5` di Fub, ramo `coder/k5-t9`, 2026-11-09;
+- stessa macchina e stesso Rust; VectorCraft dalla copia in
+  `vendor/vectorcraft/` (revisione `cfb30d81`).
+
+`fub-app` non dipende ancora da `fub-disegno`: lo monterà `fub-host` (T13,
+T19). Il conto «dopo» è quindi quello dell'albero di `fub-app` più
+`fub-disegno`, con le feature unite come saranno allora:
+
+```bash
+cargo tree -p fub-app -p fub-disegno -e normal --prefix depth --all-features --target all > albero.txt
+node .github/scripts/check-motori.mjs --albero albero.txt
+```
+
+| Albero | Nomi in più versioni |
+|---|---|
+| `fub-app` (quello che `check-motori.mjs` misura oggi) | 45 |
+| `fub-app` più `fub-disegno` | 60 |
+
+Il tetto `librerie_doppie` di `docs/reference/budgets.json` passa da 45 a 60,
+una volta sola (D-3 (a)); finché `fub-host` non monta il motore la guardia
+avvisa che può scendere a 45, e non va abbassato.
+
+### Le librerie doppie nuove
+
+Chi porta ogni versione:
+`cargo tree -p fub-app -p fub-disegno -e normal --all-features --target all -i <crate>@<versione>`.
+
+| Libreria | Versione di Fub, portata da | Versione del motore, portata da | Perché resta doppia |
+|---|---|---|---|
+| `usvg` | 0.45.1, `resvg` e `svg2pdf` (`fub-features`) | 0.48.1, `vectorcraft-svg` | nessun `svg2pdf` usa la 0.48 (sopra) |
+| `svgtypes` | 0.15.3, `usvg` 0.45 e `resvg` | 0.16.2, `usvg` 0.48 e `vectorcraft-svg` | segue `usvg` |
+| `roxmltree` | 0.20.0, `usvg` 0.45 e `fontconfig-parser` | 0.21.2, `usvg` 0.48 e `vectorcraft-engine` | segue `usvg` |
+| `tiny-skia-path` | 0.11.4, `usvg` 0.45 e `tiny-skia` | 0.12.0, `usvg` 0.48 | segue `usvg` |
+| `imagesize` | 0.13.0, `usvg` 0.45 e `fub-features` | 0.15.0, `usvg` 0.48 | segue `usvg` |
+| `vello_cpu` | 0.0.5, `hayro` (il lettore PDF di `fub-features`) | 0.2.0, `vectorcraft-render` e `vectorcraft-text` | il disegnatore del motore; il `hayro` 0.5 di Fub usa la 0.0.5 |
+| `vello_common` | 0.0.5, `vello_cpu` 0.0.5 | 0.2.0, `vello_cpu` 0.2 e `vectorcraft-render` | segue `vello_cpu` |
+| `peniko` | 0.5.0, `vello_common` 0.0.5 | 0.6.1, `vello_common` 0.2 | segue `vello_cpu` |
+| `fearless_simd` | 0.3.0, `vello_common` 0.0.5 e `hayro-jpeg2000` 0.2 | 0.4.1, `vello_common` 0.2 e `hayro-jpeg2000` 0.3 | segue `vello_cpu` e `hayro-jpeg2000` |
+| `hayro-jpeg2000` | 0.2.0, `hayro-syntax` (`hayro`) | 0.3.5, `vectorcraft-engine` (la lettura dei JPEG 2000, `cmd/fileio/jp2read.rs`) | il motore la fissa a `=0.3.5`; il `hayro` 0.5 di Fub usa la 0.2 |
+| `hayro-ccitt` | 0.2.0, `hayro-syntax` e `hayro-jbig2` | 0.3.0, `vectorcraft-doc` (i TIFF a un bit) | come `hayro-jpeg2000` |
+| `font-types` | 0.11.3, `read-fonts` 0.37 e 0.39 | 0.12.7, `read-fonts` 0.43 e 0.44 | segue `skrifa` e `harfrust` del motore |
+| `windows-registry` | 0.5.3, `tauri-plugin-deep-link` | 0.6.1, `vectorcraft-text` (solo Windows: i caratteri installati fuori dalle cartelle di sistema) | `tauri-plugin-deep-link` 2.4.10 usa la 0.5 |
+| `windows-result` | 0.3.4, `windows-core` 0.61 e `windows-registry` 0.5 | 0.4.1, `windows-registry` 0.6 | segue `windows-registry` |
+| `windows-strings` | 0.4.2, `windows-core` 0.61 e `windows-registry` 0.5 | 0.5.1, `windows-registry` 0.6 | segue `windows-registry` |
+
+Due librerie già doppie prendono altre versioni, senza cambiare il conto dei
+nomi: `read-fonts` (0.37 e 0.39 di Fub, più 0.43.3 da `harfrust` e 0.44.0 da
+`skrifa` 0.47) e `skrifa` (0.40 e 0.42 di Fub, più 0.47.0 da
+`vectorcraft-text`). `kurbo` non prende una versione in più: il motore usa la
+0.13.1, che Fub ha già.
+
+### Le versioni scelte nel lock
+
+Il motore chiede `icu_segmenter` `2.3`. Lasciato libero, Cargo prende la 2.4,
+che porta tutte le `icu_*` di Fub a 2.4 e con loro `yoke-derive` 0.8.4, che
+aggiunge `synstructure` 0.14 accanto alla 0.13: una libreria doppia in più
+nello stesso `fub-app`, senza il motore. Il lock tiene `icu_segmenter` 2.3.0
+e le `icu_*` a 2.3, le versioni del `Cargo.lock` di `vendor/vectorcraft` con
+cui i test del motore passano; `yoke-derive` resta a 0.8.2.
+
+### Le feature spente
+
+`cargo tree --workspace --all-features -e features -i vectorcraft-text` non
+mostra `bundled-fonts`, e nell'albero normale del workspace non ci sono
+`vectorcraft-pdf`, `-eps`, `-metafile`, `-affinity`, `-plugins`, `krilla`
+né `wasmi`.

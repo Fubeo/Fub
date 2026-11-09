@@ -1,0 +1,33 @@
+[package]
+name = "fub-disegno"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "L'adattatore del motore del disegno: apre un SVG nel motore, tiene la scena in sincronia con il file, traduce gesti e comandi e dice ciò che il motore non sa modificare."
+
+# INVARIANTE (piano K5): questo è l'unico crate di Fub che nomina il motore del
+# disegno (`vectorcraft-*`); gli altri passano da qui. Presidiato da
+# `crates/fub-abi/tests/dependency_invariant.rs` (i `Cargo.toml`) e da
+# `.github/scripts/check-engine-boundary.mjs` (i sorgenti).
+[dependencies]
+# Senza le feature di serie (lo dice anche la riga del workspace, senza cui
+# cargo ignorerebbe questa): niente
+# `bundled-fonts` (i caratteri li dà `fub-motori`, dal binario di Fub), niente
+# importatori di altre app e niente plug-in WebAssembly (patch 0001 di
+# `vendor/vectorcraft`); il PDF e l'EPS sono fuori dal grafo del motore (patch
+# 0002). Una feature accesa qui le riaccenderebbe in tutto il workspace.
+vectorcraft-engine = { workspace = true, default-features = false }
+vectorcraft-tools = { workspace = true }
+vectorcraft-svg = { workspace = true }
+vectorcraft-doc = { workspace = true }
+vectorcraft-geom = { workspace = true }
+fub-motori = { workspace = true }
+fub-abi = { workspace = true }
+fub-scene = { workspace = true }
+serde_json = { workspace = true }
+uuid = { workspace = true }
+
+[dev-dependencies]
+# L'oracolo a pixel, per confrontare ciò che disegna il motore con la scena.
+fub-testkit = { workspace = true, features = ["pixel"] }

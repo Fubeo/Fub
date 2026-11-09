@@ -28,6 +28,9 @@ members = [
     # non dipende dagli adattatori: sono loro a iscriversi da lui.
     "crates/fub-motori",
     "crates/fub-scene",
+    # L'adattatore del motore del disegno (piano K5): l'unico membro che nomina
+    # `vectorcraft-*`.
+    "crates/fub-disegno",
     "crates/fub-format-svg",
     "crates/fub-format-rich",
     "crates/fub-format-xlsx",
@@ -221,6 +224,16 @@ gridcraft-xlsx = { path = "vendor/gridcraft/crates/xlsx", version = "0.11.1" }
 gridcraft-chart = { path = "vendor/gridcraft/crates/chart", version = "0.11.1" }
 gridcraft-pdf = { path = "vendor/gridcraft/crates/pdf", version = "0.11.1" }
 gridcraft-engine = { path = "vendor/gridcraft/crates/engine", version = "0.11.1" }
+# Il motore del disegno di VectorCraft, vendorizzato (vendor/vectorcraft/UPSTREAM.md).
+# Li prende soltanto `fub-disegno`. Il motore senza le feature di serie: niente
+# caratteri di VectorCraft (i caratteri li dà `fub-motori`), niente importatori
+# di altre app né plug-in; senza questa riga un `default-features = false` nel
+# crate non conterebbe.
+vectorcraft-engine = { path = "vendor/vectorcraft/crates/engine", default-features = false, version = "0.20.0" }
+vectorcraft-tools = { path = "vendor/vectorcraft/crates/tools", version = "0.20.0" }
+vectorcraft-svg = { path = "vendor/vectorcraft/crates/svg", version = "0.20.0" }
+vectorcraft-doc = { path = "vendor/vectorcraft/crates/doc", version = "0.20.0" }
+vectorcraft-geom = { path = "vendor/vectorcraft/crates/geom", version = "0.20.0" }
 # Le dipendenze che Fub ha in comune con la copia di WordCraft: le versioni
 # sono le stesse di vendor/wordcraft/Cargo.toml (`vendor.mjs check`). `image`
 # non accende niente qui: ogni crate dice quali decodificatori vuole.
