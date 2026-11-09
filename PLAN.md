@@ -1105,7 +1105,7 @@ Fatto quando:
 - la foto di `document-docx`, `document-docx-narrow`, `document-readonly` e `mobile-document`, in giorno e notte, sta accanto agli stati `documento`, `documento-700`, `sola-lettura` e `tel-doc`: il vassoio più chiaro e la sezione scelta come le schede dell'ispettore, uguali a quelle dei fogli;
 - `npm run bench:a11y` resta verde.
 Prova: scripts/check.sh --rapido
-Stato: [ ] da fare
+Stato: [x] fatto
 
 ## T22 · La testa del disegno
 
@@ -1132,7 +1132,7 @@ Fatto quando:
 - la foto di `draw-open`, in giorno e notte, a 1280 e a 700, sta accanto a `?stato=disegno`;
 - la testa ha un solo punto di Tab.
 Prova: scripts/check.sh --rapido
-Stato: [ ] da fare
+Stato: [x] fatto
 
 ## T23 · L'icona della modalità della lavagna
 
@@ -1286,6 +1286,7 @@ Cosa fare:
 - La tenda non cambia altezza mentre corre (`holding` del kit): controllare che la pagina del documento, che scorre, non salti né mostri una fascia vuota, e che la posizione di scorrimento resti quella di prima.
 - `ribbon.test.ts`: con `motion: true` il cambio di sezione fa entrare i foglietti e `Ctrl+F1` muove la tenda (come i test della barra dei fogli e di `kit/ribbon/ribbon-motion.test.ts`); col moto ridotto lo stato cambia subito.
 - Le due pagine di `docs/`: la barra del documento si muove come quella dei fogli.
+- `rich/ribbon.ts`, `RICH_TABS`: il gruppo «Carattere» (`font`) entra in coda all'elenco `fold` della scheda Home, così si raccoglie anche lui quando manca spazio, come nel prototipo `tel-doc` (al telefono tutti i gruppi raccolti) e come i gruppi dei fogli; a 700 px con «Stili» aperto sul posto «Carattere» non resta più tagliato a sinistra. Il resoconto di T21 lo ha trovato; decisione dell'orchestratore (2026-11-09).
 Casi limite:
 - il moto ridotto e il livello «calmo»: niente corse, solo lo stato (il banco gira già col moto ridotto, quindi le baseline non cambiano);
 - un gesto nuovo a metà corsa (due sezioni di fila, `Ctrl+F1` due volte): fa come nei fogli;
