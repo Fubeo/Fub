@@ -58,6 +58,8 @@ const ABSENT = "none";
 let ID;
 let NOME;
 let REPOSITORY;
+/// La copia di Fub dell'upstream, che il primo `update` scrive nel lock.
+let MIRROR;
 let VENDOR;
 let LOCK;
 let PATCHES;
@@ -71,6 +73,7 @@ function scegli(id) {
   ID = id;
   NOME = motore.nome;
   REPOSITORY = motore.repository;
+  MIRROR = motore.mirror ?? "";
   VENDOR = path.join(ROOT, "vendor", id);
   LOCK = path.join(VENDOR, "upstream.lock");
   PATCHES = path.join(VENDOR, "patches");
@@ -532,11 +535,17 @@ function untouched(lock) {
   }
 }
 
+/// Il lock di un motore che non ne ha ancora uno: la provenienza viene da
+/// `motori.mjs`, senza revisione e senza file.
+function firstLock() {
+  return { repository: REPOSITORY, mirror: MIRROR, rev: "", file: [] };
+}
+
 function update(rev, source, tag) {
   // La prima volta non c'è un lock: la copia di prima è quella fatta a mano, e
   // il diff di git dice se il risultato la riproduce.
-  // Senza lock, il repository dell'upstream è quello di `motori.mjs`.
-  const old = fs.existsSync(LOCK) ? readLock() : { repository: REPOSITORY, mirror: "", rev: "", file: [] };
+  // Senza lock, il repository dell'upstream e il mirror sono quelli di `motori.mjs`.
+  const old = fs.existsSync(LOCK) ? readLock() : firstLock();
   if (old.rev) untouched(old);
   const repo = repository(source ?? old.repository, rev);
   const moved = tag ? tagged(repo, tag, rev) : null;
@@ -808,6 +817,7 @@ function verifyUpstream(source) {
 
 /// Le tre vie su un upstream finto di due revisioni: una patch per stato.
 function selfTest() {
+  const problems = provenance();
   MANAGED = ["src"];
   const lines = (n, edits = {}) => Array.from({ length: n }, (_, i) => edits[i + 1] ?? `riga ${i + 1}`).join("\n") + "\n";
   const tree = (files) => {
@@ -843,7 +853,6 @@ function selfTest() {
     write("5-cade", { "e.txt": lines(12, { 2: "due" }), "f.txt": lines(12, { 2: "due" }) }),
   ];
   const { dir, rows } = rebase(v1, v2, stack);
-  const problems = [];
   const expect = (i, state, extra = () => true) => {
     if (rows[i].state !== state || !extra(rows[i])) problems.push(`${path.basename(stack[i])}: ${describe(rows[i]).trim()}`);
   };
@@ -863,7 +872,29 @@ function selfTest() {
   if (!applies(fresh, path.join(patches, "riscritta")).ok) problems.push("2-tre-vie: la patch riscritta non si applica sui file nuovi");
   for (const d of [v1, v2, patches, dir, fresh]) fs.rmSync(d, { recursive: true, force: true });
   if (problems.length > 0) fail(`autoprova di vendor.mjs fallita:\n- ${problems.join("\n- ")}`);
-  console.log("autoprova di vendor.mjs riuscita: applica, tre vie, conflitto, assorbita, file tolto.");
+  console.log("autoprova di vendor.mjs riuscita: mirror, applica, tre vie, conflitto, assorbita, file tolto.");
+}
+
+/// Ogni motore di `motori.mjs` ha un mirror di Fub; il primo `update` lo
+/// scrive nel lock, e il lock che c'è dice lo stesso repository e lo stesso
+/// mirror.
+function provenance() {
+  const problems = [];
+  for (const id of Object.keys(MOTORI)) {
+    scegli(id);
+    if (!/^https:\/\/github\.com\/Fubeo\/[A-Za-z0-9._-]+$/.test(MIRROR)) {
+      problems.push(`${id}: il mirror di motori.mjs non è un repository di Fubeo: "${MIRROR}"`);
+    }
+    const first = firstLock();
+    if (first.mirror !== MIRROR || first.repository !== REPOSITORY) {
+      problems.push(`${id}: il primo update non parte da repository e mirror di motori.mjs`);
+    }
+    if (!fs.existsSync(LOCK)) continue;
+    const lock = readLock();
+    if (lock.repository !== REPOSITORY) problems.push(`${id}: repository ${lock.repository} nel lock, ${REPOSITORY} in motori.mjs`);
+    if ((lock.mirror ?? "") !== MIRROR) problems.push(`${id}: mirror "${lock.mirror ?? ""}" nel lock, "${MIRROR}" in motori.mjs`);
+  }
+  return problems;
 }
 
 function option(args, name) {

@@ -6,6 +6,10 @@
 // La cartella è `vendor/<motore>/`, i crate si chiamano `<motore>-<crate>` sia
 // nel `Cargo.toml` di Fub sia in quello della cartella.
 //
+// `mirror` è la copia di Fub dell'upstream (`Fubeo/<motore>`): `update` lo
+// scrive nel primo `upstream.lock`, e `verify-upstream` prova la revisione anche
+// lì. Deve dire ciò che il lock dice già (`vendor.mjs self-test`).
+//
 // `gate` sono le prove di `vendor.mjs <motore> gate` dopo un aggiornamento:
 // [etichetta, comando, argomenti…], eseguite dalla radice del repository.
 //
@@ -17,6 +21,7 @@ export const MOTORI = {
   wordcraft: {
     nome: "WordCraft",
     repository: "https://github.com/storytold/wordcraft",
+    mirror: "https://github.com/Fubeo/wordcraft",
     gestiti: [
       "crates/geom",
       "crates/doc",
@@ -48,6 +53,7 @@ export const MOTORI = {
   gridcraft: {
     nome: "GridCraft",
     repository: "https://github.com/storytold/gridcraft",
+    mirror: "https://github.com/Fubeo/gridcraft",
     gestiti: [
       "crates/core",
       "crates/formula",
