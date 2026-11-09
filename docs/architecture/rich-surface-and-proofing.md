@@ -176,19 +176,14 @@ l'IPC.
   foglio) con le schede Home, Inserisci, Layout, Revisione, Visualizza e la
   contestuale Tabella, Annulla e Ripeti accanto alle schede, le lettere con
   Alt o F10 e Ctrl+F1 per ritirarla, i gruppi raccolti aperti nella barra
-  (`openInPlace`), forma e pelle del kit, e il moto del kit (`motion: true`,
-  `kit/ribbon/ribbon-motion.ts`), lo stesso dei fogli. La tenda è ciò che sta
-  sotto `.rich-ribbon-host`: la barra di ricerca e `.rich-page`, che
-  `structure.css` posiziona sopra il vassoio (senza `z-index`, così la pagina
-  non chiude in sé il disegno ingrandito) e la pelle dipinge col fondo del
-  foglio; l'avviso sta sopra la barra, fuori dalla tenda. Ogni controllo è un'azione del
-  motore (`RICH_ACTION_IDS`, con i suoi accordi), un valore che il motore
-  scrive (tipo, dimensione, stile del paragrafo, con la galleria che scrive
-  ogni nome nel carattere del documento), un riquadro di
-  `editors/rich/panels.ts` o una scheda del pannello di destra (`side.ts`).
-  Layout ha le gallerie veloci della pagina (Margini, Orientamento, Dimensione,
-  Colonne), con ciò che c'è segnato e una voce «Altre opzioni di pagina…» che
-  apre Proprietà; Conteggio apre Proprietà sul conteggio. Il catalogo della
+  (`openInPlace`), forma, pelle e moto del kit (`motion: true`, la tenda è la
+  ricerca con `.rich-page`). Ogni controllo è un'azione del motore
+  (`RICH_ACTION_IDS`, con i suoi accordi), un valore che il motore scrive
+  (tipo, dimensione, stile del paragrafo, con la galleria che scrive ogni
+  nome nel carattere del documento), un riquadro di `panels.ts` o una scheda
+  del pannello di destra (`side.ts`). Layout ha le gallerie veloci della
+  pagina (Margini, Orientamento, Dimensione, Colonne) con il segno e «Altre
+  opzioni di pagina…» per Proprietà, come Conteggio. Il catalogo della
   barra spegne col perché ciò che non si dà adesso: in sola lettura ciò che
   scrive (restano Trova, Conteggio, Commenti, scorrere le revisioni e lo zoom),
   mentre si registra il formato. La superficie dichiara `ownBar`, e la barra di
@@ -360,18 +355,16 @@ sull'elemento.
 
 Il moto della carta (`editors/rich/rich-motion.ts`) segue la regola del palco:
 il testo è sempre al suo posto finale, e si muove la sagoma di ogni foglio
-(`.rich-sheet-paper`). `RichMotion` osserva la classe `look-*`,
-`data-mode` e la barra che si nasconde in Lettura (non la barra che si
-ritira: lì la pagina intera sale e scende con la tenda del kit, e lo
-scorrimento non cambia), e tiene una fotografia del «prima» aggiornata a ogni
+(`.rich-sheet-paper`). `RichMotion` osserva la classe `look-*`, `data-mode`
+e la barra nascosta in Lettura (non quella ritirata, che muove la pagina
+come tenda), e tiene una fotografia del «prima» aggiornata a ogni
 scorrimento e a ogni misura: il paragrafo in cima alla vista resta in cima
 (`readingPoint`, `keepReadingPoint`), e ogni sagoma va dal rettangolo che si
 vedeva, anche a metà di una corsa, a quello nuovo. Lo zoom e i fogli rifatti
 da una modifica scritta li annuncia il motore: lo zoom tiene il centro della
 vista, un foglio nuovo esce da quello sopra, di uno tolto resta una sagoma
-(`.rich-sheet-ghost`) che si dissolve. Un documento aperto o cambiato da
-fuori non muove niente; le coreografie `rich-*` di `bench/motion-rules.mjs`
-lo misurano.
+(`.rich-sheet-ghost`) che si dissolve. Un documento aperto o cambiato da fuori
+non muove niente; le coreografie `rich-*` di `bench/motion-rules.mjs` lo misurano.
 
 Andare a un punto (Trova, la revisione dopo o prima, una voce di Commenti o
 di Revisioni) è una transazione col segno `GO_TO`. Il motore la scorre da sé,
