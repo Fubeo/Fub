@@ -100,6 +100,11 @@ const ROW_HEADER_WIDTH = 52;
 const COLUMN_HEADER_HEIGHT = 28;
 const EMPTY_SHEET: GridSheet = { id: "", name: "", rows: [], columns: [] };
 export { GRID_OVERSCAN, uniformRowRange } from "../core/row-window";
+/// Quante celle già disegnate rifà al più un disegno che arriva nel mezzo
+/// dello scorrimento (una finestra arrivata, il fotogramma dopo): le altre
+/// aspettano il fotogramma seguente, così un giro non si allunga oltre un
+/// fotogramma. Le celle nuove e quelle che cambiano posto si fanno sempre.
+const GRID_FRAME_REFILLS = 48;
 export const GRID_WINDOW_ROWS = 256;
 export const GRID_WINDOW_COLUMNS = 128;
 export const MAX_GRID_SESSION_WINDOWS = 256;
@@ -571,6 +576,7 @@ type Drawing = Map<HTMLElement, HTMLElement[]>;
 interface DrawnCell {
   readonly cell: HTMLElement;
   border: HTMLElement | null;
+  place: string;
   signature: string;
   html: string;
   base: string;
@@ -601,6 +607,37 @@ function syncAttributes(target: Element, source: Element): void {
   }
 }
 
+/// Porta i figli di `target` a essere come quelli di `source`, tranne
+/// `keep` (che resta in fondo, dov'è). Se hanno la stessa forma (gli stessi
+/// nodi, con gli stessi tag) si aggiornano sul posto: attributi e testo,
+/// senza togliere e rimettere nodi nel documento, che costa di più. Se no,
+/// quelli di `target` lasciano il posto a quelli di `source`.
+function morphChildren(target: Node, source: Node, keep: Node | null): void {
+  const before = [...target.childNodes].filter((child) => child !== keep);
+  const after = [...source.childNodes];
+  const same = before.length === after.length && before.every((child, index) => {
+    const other = after[index];
+    if (child.nodeType !== other.nodeType) return false;
+    return !(child instanceof Element) || child.tagName === (other as Element).tagName;
+  });
+  if (same) {
+    before.forEach((child, index) => {
+      const other = after[index];
+      if (child instanceof Element) {
+        syncAttributes(child, other as Element);
+        morphChildren(child, other, null);
+      } else if (child.nodeValue !== other.nodeValue) {
+        child.nodeValue = other.nodeValue;
+      }
+    });
+    return;
+  }
+  for (const child of before) child.remove();
+  const content = document.createDocumentFragment();
+  content.append(...after);
+  target.insertBefore(content, keep && keep.parentNode === target ? keep : null);
+}
+
 /// Se `element` è una riga di celle, nella testa o nel corpo (non la riga
 /// delle intestazioni di colonna).
 function isDataRow(element: Element): element is HTMLElement {
@@ -614,11 +651,29 @@ function placeInOrder(parent: HTMLElement, elements: readonly HTMLElement[], end
   const keep = new Set<Element>(elements);
   for (const child of [...parent.children]) if (owned(child) && !keep.has(child)) child.remove();
   let next: ChildNode | null = end;
+  // Gli elementi nuovi uno accanto all'altro (le righe che entrano da un
+  // bordo) entrano insieme, con un solo inserimento.
+  let fresh: HTMLElement[] = [];
+  const flush = () => {
+    if (!fresh.length) return;
+    const ordered = fresh.reverse();
+    const batch = document.createDocumentFragment();
+    batch.append(...ordered);
+    parent.insertBefore(batch, next);
+    next = ordered[0];
+    fresh = [];
+  };
   for (let index = elements.length - 1; index >= 0; index -= 1) {
     const element = elements[index];
-    if (element.parentNode !== parent || element.nextSibling !== next) parent.insertBefore(element, next);
+    if (element.parentNode !== parent) {
+      fresh.push(element);
+      continue;
+    }
+    flush();
+    if (element.nextSibling !== next) parent.insertBefore(element, next);
     next = element;
   }
+  flush();
 }
 
 /// Se `range` è esattamente un'unione: una cella sola, per Invio e Tab.
@@ -721,6 +776,10 @@ export class GridEngine {
   /// scrivere, buone fino al fotogramma chiesto: chi disegna in mezzo (una
   /// finestra arrivata) non obbliga il browser a impaginare per rileggerle.
   #scrollView: PaperView | null = null;
+  /// Quante celle già disegnate il disegno in corso può ancora rifare
+  /// (`#renderRows`), e se ne ha lasciate per il fotogramma dopo.
+  #refills = Infinity;
+  #rowsBehind = false;
   readonly #corner: HTMLElement;
   readonly #cellEditorHost: HTMLElement;
   readonly #notice: HTMLElement;
@@ -2434,7 +2493,8 @@ export class GridEngine {
   #render(rows = true, loaded = false): void {
     if (!this.#workbook) return;
     const range = this.#selectedRange();
-    if (rows) this.#renderRows(range, loaded, loaded ? this.#scrollView : null);
+    if (rows) this.#renderRows(range, loaded, loaded ? this.#scrollView : null, loaded ? GRID_FRAME_REFILLS : Infinity);
+    else if (this.#rowsBehind) this.#renderRows(range, true, this.#scrollView, GRID_FRAME_REFILLS);
     if (loaded) this.#scheduleRender();
     else this.#fitPending();
     // I segni, ognuno nel livello della zona dove cade.
@@ -2499,8 +2559,10 @@ export class GridEngine {
   /// Le celle da misurare (i numeri, quelle che si stringono) le misura
   /// `#fitPending`: subito, o con `deferFit` nel fotogramma chiesto, prima
   /// che il fotogramma si dipinga.
-  #renderRows(range: GridRange, deferFit = false, known: PaperView | null = null): void {
+  #renderRows(range: GridRange, deferFit = false, known: PaperView | null = null, refills = Infinity): void {
     const frame = this.#frame;
+    this.#refills = refills;
+    this.#rowsBehind = false;
     const view = known ?? this.#readView();
     const sheet = this.#sheet().id;
     if (sheet !== this.#drawnSheet) {
@@ -2587,6 +2649,7 @@ export class GridEngine {
     this.#paperColumns(renderedColumns);
     this.#pendingFits.push(...measures);
     if (!deferFit) this.#fitPending();
+    if (this.#rowsBehind) this.#scheduleRender();
   }
 
   /// Le misure del riquadro, lette tutte insieme.
@@ -2675,14 +2738,22 @@ export class GridEngine {
     const borders: HTMLElement[] = [];
     const active = this.#active();
     const visit = (position: GridPosition, merge: GridMerge | null, slot: string) => {
-      const signature = this.#cellSignature(position, merge, row);
-      if (signature === null) return;
+      const signed = this.#cellSignature(position, merge, row);
+      if (signed === null) return;
+      const { place, signature } = signed;
       let drawn = state.cells.get(slot);
-      if (!drawn || drawn.signature !== signature) {
+      // Una cella che resta dov'era e cambia soltanto ciò che mostra può
+      // aspettare il fotogramma dopo, se questo disegno ha finito i suoi
+      // rifacimenti (`#refills`): la si lascia com'è, e il disegno resta
+      // indietro (`#rowsBehind`).
+      if (drawn && drawn.signature !== signature && drawn.place === place && this.#refills <= 0) {
+        this.#rowsBehind = true;
+      } else if (!drawn || drawn.signature !== signature) {
+        if (drawn) this.#refills -= 1;
         const fresh = this.#cellElement(position, merge, row);
         if (!fresh) return;
         if (!drawn) {
-          drawn = { cell: fresh.cell, border: fresh.border, signature, html: fresh.html, base: fresh.cell.className };
+          drawn = { cell: fresh.cell, border: fresh.border, place, signature, html: fresh.html, base: fresh.cell.className };
           state.cells.set(slot, drawn);
           if (fresh.measure) measures.push(fresh.cell);
         } else {
@@ -2696,6 +2767,7 @@ export class GridEngine {
             drawn.border?.remove();
             drawn.border = fresh.border;
           }
+          drawn.place = place;
           drawn.signature = signature;
           drawn.html = fresh.html;
           drawn.base = fresh.cell.className;
@@ -2735,18 +2807,16 @@ export class GridEngine {
   #refillCell(target: HTMLElement, fresh: HTMLElement): void {
     syncAttributes(target, fresh);
     const editor = this.#cellEditorHost.parentElement === target ? this.#cellEditorHost : null;
-    for (const child of [...target.childNodes]) if (child !== editor) child.remove();
-    const content = document.createDocumentFragment();
-    content.append(...fresh.childNodes);
-    target.insertBefore(content, editor);
+    morphChildren(target, fresh, editor);
   }
 
   /// Ciò che la cella in `position`, disegnata nella riga `hostRow`, mostra:
   /// gli oggetti letti (la cella della finestra, lo stile, la carta) per
   /// identità, e la misura, il posto, il debordare e i bordi di un'unione.
-  /// Due firme uguali danno la stessa cella. `null` se la cella non ha
-  /// misura (una colonna o una riga nascosta).
-  #cellSignature(position: GridPosition, merge: GridMerge | null, hostRow: number): string | null {
+  /// Due firme uguali danno la stessa cella. `place` è la parte della firma
+  /// che dice dove sta e quanto è grande. `null` se la cella non ha misura
+  /// (una colonna o una riga nascosta).
+  #cellSignature(position: GridPosition, merge: GridMerge | null, hostRow: number): { place: string; signature: string } | null {
     const { row, column } = position;
     const lastRow = merge ? merge.row + merge.rows - 1 : row;
     const lastColumn = merge ? merge.column + merge.columns - 1 : column;
@@ -2761,20 +2831,24 @@ export class GridEngine {
     const edges = merge
       ? `${this.#refId(this.#workbookCell({ row, column: lastColumn })?.style)}:${this.#refId(this.#workbookCell({ row: lastRow, column })?.style)}`
       : "";
-    return [
-      this.#refId(bytes),
-      this.#refId(style),
+    const place = [
       merge ? `${merge.rows}x${merge.columns}` : "",
-      edges,
       width,
       height,
       this.#columnLeft(column),
       this.#rows.offsets[row] - this.#rows.offsets[hostRow],
       column < this.#frame.frozenColumns ? 1 : 0,
+    ].join("|");
+    const signature = [
+      place,
+      this.#refId(bytes),
+      this.#refId(style),
+      edges,
       reach,
       this.#refId(this.#paper),
       this.#cellEpoch,
     ].join("|");
+    return { place, signature };
   }
 
   /// Il numero di `value` per le firme delle celle: lo stesso oggetto dà lo
@@ -3668,11 +3742,21 @@ export class GridEngine {
   /// i cancelletti, come in Excel. Prima si legge tutto, poi si scrive.
   #fitCells(cells: readonly HTMLElement[]): void {
     const fits: { text: HTMLElement; shrink: boolean; ratio: number }[] = [];
+    // Il margine interno è lo stesso per le celle che non ne hanno uno loro
+    // (un rientro o un'icona lo allargano): si legge una volta per quelle.
+    let shared: number | null = null;
     for (const cell of cells) {
       const text = cell.querySelector<HTMLElement>(".grid-cell-text");
       if (!text) continue;
-      const computed = getComputedStyle(cell);
-      const room = cell.clientWidth - (parseFloat(computed.paddingLeft) || 0) - (parseFloat(computed.paddingRight) || 0);
+      let padding: number;
+      if (!cell.style.paddingInlineStart && !cell.style.paddingInlineEnd && shared !== null) {
+        padding = shared;
+      } else {
+        const computed = getComputedStyle(cell);
+        padding = (parseFloat(computed.paddingLeft) || 0) + (parseFloat(computed.paddingRight) || 0);
+        if (!cell.style.paddingInlineStart && !cell.style.paddingInlineEnd) shared = padding;
+      }
+      const room = cell.clientWidth - padding;
       const needed = text.scrollWidth;
       if (room > 0 && needed > room) fits.push({ text, shrink: cell.style.whiteSpace !== "pre-wrap" && cell.dataset.shrink === "true", ratio: room / needed });
     }
@@ -4160,13 +4244,15 @@ export class GridEngine {
   }
 
   /// Un disegno dei segni, uno per fotogramma: lo chiedono lo scorrimento
-  /// (le righe le disegna il suo gestore) e i riferimenti della formula.
+  /// (le righe le disegna il suo gestore), i riferimenti della formula e un
+  /// disegno rimasto indietro (`#rowsBehind`), che ci finisce le sue celle
+  /// con le misure lette dal gestore. Dopo, le misure si rileggono.
   #scheduleRender(): void {
     if (this.#renderFrame !== null) return;
     this.#renderFrame = requestAnimationFrame(() => {
       this.#renderFrame = null;
-      this.#scrollView = null;
       if (!this.#destroyed) this.#render(false);
+      this.#scrollView = null;
     });
   }
 
