@@ -12,14 +12,22 @@
 //   lavagna che si apre lo riprende solo se «Ricorda se scrivi col mouse» è
 //   acceso; altrimenti parte spento. Uno stato che manca o non si legge vale
 //   spento.
+// - **La penna scelta** nel menu della penna (A19) è lo stato della vista
+//   `canvas.pen`, uno per computer: strumento, penna, colore e spessore della
+//   Penna e dell'evidenziatore, che cosa cancella la gomma. Si scrive a ogni
+//   scelta e una lavagna che si apre la riprende. Uno stato che manca, rotto o
+//   di una versione futura vale la scelta di serie; un campo che non si legge
+//   vale il suo di serie, uno spessore fuori dall'intervallo va al bordo.
 //
 // L'ultima lettura resta qui: una lavagna nuova parte da lì, e la lettura che
 // fa la conferma o la corregge.
 
 import { api } from "../../host/ipc";
 import { settings } from "../../host/query";
+import { isPenId } from "../../ink/pens";
 import { onEvent } from "../../state/kernel";
 import type { SettingEntry } from "../../host/contract";
+import { DEFAULT_INK_CHOICE, inkWidthOf, type InkPenChoice, type InkPenKind } from "./ink-record";
 
 /// Il bundle che dichiara le impostazioni della lavagna.
 export const LAVAGNA_BUNDLE = "fub.lavagna";
@@ -137,4 +145,94 @@ export function saveInkMouse(on: boolean): void {
   lastInkMouse = on;
   inkSaves += 1;
   inkSaving = inkSaving.then(() => api.setViewState(INK_MOUSE_KEY, { on })).catch(() => undefined);
+}
+
+/// La chiave dello stato di vista che ricorda la penna scelta.
+export const PEN_KEY = "canvas.pen";
+
+/// La versione della forma di `canvas.pen` che questo client scrive e legge.
+export const PEN_STATE_VERSION = 1;
+
+/// Lo stato di vista `canvas.pen` come si scrive.
+export interface PenState {
+  readonly version: typeof PEN_STATE_VERSION;
+  readonly tool: InkPenChoice["tool"];
+  readonly pen: InkPenKind;
+  readonly penColor: string;
+  readonly penWidth: number;
+  readonly highlighterColor: string;
+  readonly highlighterWidth: number;
+  readonly eraser: InkPenChoice["eraser"];
+}
+
+/// L'ultima penna scelta o letta: `null` prima della prima.
+let lastPen: InkPenChoice | null = null;
+let penSaving: Promise<void> = Promise.resolve();
+let penSaves = 0;
+
+const HEX6 = /^#[0-9a-f]{6}$/i;
+
+/// Lo stato di vista della scelta `choice`.
+export function penStateOf(choice: InkPenChoice): PenState {
+  return {
+    version: PEN_STATE_VERSION,
+    tool: choice.tool,
+    pen: choice.pen,
+    penColor: choice.color.pen,
+    penWidth: choice.width.pen,
+    highlighterColor: choice.color.highlighter,
+    highlighterWidth: choice.width.highlighter,
+    eraser: choice.eraser,
+  };
+}
+
+/// `value` come penna scelta. Uno stato che non è un oggetto o non è della
+/// versione di questo client vale la scelta di serie, senza errore; un campo
+/// che non si legge vale il suo di serie; uno spessore fuori dall'intervallo
+/// va al bordo e al passo del cursore (A19).
+export function penChoiceOf(value: unknown): InkPenChoice {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return DEFAULT_INK_CHOICE;
+  const state = value as Record<string, unknown>;
+  if (state.version !== PEN_STATE_VERSION) return DEFAULT_INK_CHOICE;
+  const base = DEFAULT_INK_CHOICE;
+  const tool = state.tool === "pen" || state.tool === "highlighter" || state.tool === "eraser" ? state.tool : base.tool;
+  const pen = typeof state.pen === "string" && isPenId(state.pen) && state.pen !== "highlighter" ? state.pen : base.pen;
+  const color = (field: unknown, fallback: string): string => (typeof field === "string" && HEX6.test(field) ? field.toLowerCase() : fallback);
+  const eraser = state.eraser === "stroke" || state.eraser === "piece" ? state.eraser : base.eraser;
+  return {
+    tool,
+    pen,
+    color: { pen: color(state.penColor, base.color.pen), highlighter: color(state.highlighterColor, base.color.highlighter) },
+    width: {
+      pen: inkWidthOf("pen", state.penWidth) ?? base.width.pen,
+      highlighter: inkWidthOf("highlighter", state.highlighterWidth) ?? base.width.highlighter,
+    },
+    eraser,
+  };
+}
+
+/// La penna con cui una lavagna che si apre comincia: l'ultima ricordata su
+/// questo computer, o quella di serie. Legge dopo le scritture in corso; uno
+/// stato che non si legge lascia l'ultimo.
+export async function readPen(): Promise<InkPenChoice> {
+  await penSaving;
+  const ticket = penSaves;
+  try {
+    const read = penChoiceOf(await api.viewState<unknown>(PEN_KEY));
+    // Una scelta fatta mentre si leggeva è più recente di ciò che si è letto.
+    if (ticket === penSaves) lastPen = read;
+  } catch {
+    // Lo stato di vista che non si legge lascia l'ultimo.
+  }
+  return lastPen ?? DEFAULT_INK_CHOICE;
+}
+
+/// Ricorda la penna `choice`, appena scelta, per le lavagne che si aprono
+/// dopo. Le scritture vanno in fila, così resta l'ultima; una che non riesce
+/// non dice niente: la lavagna aperta tiene la sua scelta.
+export function savePen(choice: InkPenChoice): void {
+  lastPen = choice;
+  penSaves += 1;
+  const state = penStateOf(choice);
+  penSaving = penSaving.then(() => api.setViewState(PEN_KEY, state)).catch(() => undefined);
 }

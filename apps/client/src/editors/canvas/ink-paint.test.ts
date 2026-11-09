@@ -273,3 +273,17 @@ describe("la cache dei percorsi", () => {
     expect(compute).toHaveBeenCalledTimes(3);
   });
 });
+
+describe("l'opacità dei tratti", () => {
+  it("un tratto che copre meno di tutto porta fill-opacity, anche sui suoi pezzi tagliati; il ridisegno senza la toglie", () => {
+    const host = cardElement();
+    paintCard(host, [{ ...A, opacity: 0.5 }, B], "fixed");
+    const [first, second] = [...host.querySelectorAll("path")];
+    expect(first!.getAttribute("fill-opacity")).toBe("0.5");
+    expect(second!.hasAttribute("fill-opacity")).toBe(false);
+    expect(cutInkStroke(host, "card", "s1", "M0 0L2 0L2 2Z")).toBe(true);
+    expect(host.querySelector("[data-ink-cut]")!.getAttribute("fill-opacity")).toBe("0.5");
+    paintCard(host, [A, B], "fixed");
+    expect(host.querySelector('[data-ink-stroke="s1"]')!.hasAttribute("fill-opacity")).toBe(false);
+  });
+});

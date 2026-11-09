@@ -14,7 +14,8 @@
 // schede, in coordinate della lavagna, come gli archi.
 //
 // Il colore è un valore del file e va come attributo `fill` (mai una
-// variabile del tema). Ciò che si ridisegna si riconcilia: un tratto uguale
+// variabile del tema); quanto copre la penna (l'evidenziatore) va in
+// `fill-opacity`, così la gomma che attenua (`opacity`) si somma. Ciò che si ridisegna si riconcilia: un tratto uguale
 // tiene il suo `<path>` e non si riscrive.
 //
 // `InkPathCache` tiene i percorsi già calcolati per id, inchiostro e pennello,
@@ -47,6 +48,9 @@ export interface DryStroke {
   readonly path: string;
   /// Il colore del file.
   readonly fill: string;
+  /// Quanto copre la penna, sotto 1 (l'evidenziatore 0,5): va in
+  /// `fill-opacity`, senza `multiply` (A22); manca se copre tutto.
+  readonly opacity?: number;
   /// La misura della scheda quando il tratto è stato scritto; `null` per
   /// l'inchiostro libero.
   readonly ref: InkRef | null;
@@ -134,6 +138,7 @@ export function cutInkStroke(owner: HTMLElement, where: "card" | "board", id: st
   setAttr(overlay, "data-ink-cut", id);
   setAttr(overlay, "d", cut);
   setAttr(overlay, "fill", path.getAttribute("fill"));
+  setAttr(overlay, "fill-opacity", path.getAttribute("fill-opacity"));
   return true;
 }
 
@@ -181,6 +186,8 @@ function paintPaths(parent: SVGElement, strokes: readonly DryStroke[]): void {
     setAttr(path, "data-ink-stroke", stroke.id);
     setAttr(path, "d", stroke.path);
     setAttr(path, "fill", stroke.fill);
+    const covers = fillOpacity(stroke);
+    setAttr(path, "fill-opacity", covers);
     setAttr(path, "opacity", stroke.faded || stroke.cut !== undefined ? INK_FADED_OPACITY : null);
     if (!stroke.cut) continue;
     const overlay = childAt(parent, n++, "path");
@@ -188,9 +195,16 @@ function paintPaths(parent: SVGElement, strokes: readonly DryStroke[]): void {
     setAttr(overlay, "data-ink-cut", stroke.id);
     setAttr(overlay, "d", stroke.cut);
     setAttr(overlay, "fill", stroke.fill);
+    setAttr(overlay, "fill-opacity", covers);
     setAttr(overlay, "opacity", null);
   }
   trim(parent, n);
+}
+
+/// Il `fill-opacity` del tratto `stroke`: `null` se copre tutto.
+function fillOpacity(stroke: DryStroke): string | null {
+  const opacity = stroke.opacity;
+  return opacity !== undefined && Number.isFinite(opacity) && opacity >= 0 && opacity < 1 ? String(opacity) : null;
 }
 
 /// Il figlio `index` di `parent` se è un `<name>` SVG, altrimenti uno nuovo al

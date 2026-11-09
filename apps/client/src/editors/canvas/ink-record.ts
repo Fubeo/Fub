@@ -24,11 +24,13 @@
 import { brushForInput, checkInkBrush, formatInkBrush, parseInkBrush, type InkBrush } from "../../ink/brush";
 import { toLocal, type Affine } from "../../ink/geometry";
 import { inkPath } from "../../ink/outline";
-import { DEFAULT_PEN, penBrush } from "../../ink/pens";
+import { INK_HIGHLIGHTER_COLOR } from "../../ink/palette";
+import { penBrush, penLook, type PenId } from "../../ink/pens";
 import { INK_MAX_SAMPLES, type InkSample, type QuantizedInk } from "../../ink/sample";
 import { buildStroke } from "../../ink/tools/stroke";
 import { closedAtLimit } from "../../ink/tools/tool";
 import { decodeInk, encodeInk, inkFromQuantized, inkToQuantized, INK_MAX_BYTES, unknownChannels } from "../spatial/ink/codec";
+import type { InkEraserMode } from "./ink-erase";
 import type { InkLook } from "./ink-layer";
 import type { DryStroke, InkPathCache, InkRef } from "./ink-paint";
 import type { CanvasDocument, CanvasNode } from "./model";
@@ -225,12 +227,87 @@ export function foreignInkLayer(layers: readonly CanvasInkLayer[], layer: InkLay
   return layers.some((read) => read.state === "foreign" && sameLayer(read.layer, layer));
 }
 
+/// Lo strumento scelto nel menu della penna (T21): con la Gomma la punta e il
+/// mouse che scrive cancellano.
+export type InkMenuTool = InkStrokeTool | "eraser";
+
+/// Le penne della Penna: quelle di sistema tranne l'evidenziatore.
+export type InkPenKind = Exclude<PenId, "highlighter">;
+
+/// Lo spessore dell'evidenziatore di serie, in pixel dello schermo (A19).
+export const INK_HIGHLIGHTER_PX = 16;
+
+/// L'intervallo e il passo del cursore dello spessore, in pixel dello
+/// schermo, per ogni strumento che scrive.
+export const INK_WIDTH_RANGES: Readonly<Record<InkStrokeTool, { readonly min: number; readonly max: number; readonly step: number }>> = {
+  pen: { min: 0.5, max: 20, step: 0.5 },
+  highlighter: { min: 4, max: 48, step: 1 },
+};
+
+/// La scelta del menu della penna (A19): lo strumento, la penna della Penna,
+/// per la Penna e per l'evidenziatore ciascuno il suo colore (`#rrggbb`) e il
+/// suo spessore (pixel dello schermo), e che cosa cancella la gomma.
+export interface InkPenChoice {
+  readonly tool: InkMenuTool;
+  readonly pen: InkPenKind;
+  readonly color: Readonly<Record<InkStrokeTool, string>>;
+  readonly width: Readonly<Record<InkStrokeTool, number>>;
+  readonly eraser: InkEraserMode;
+}
+
+/// La scelta di serie (A11, A19): la Sfera blu da 4 pixel, l'evidenziatore
+/// giallo da 16, la gomma che toglie il tratto intero.
+export const DEFAULT_INK_CHOICE: InkPenChoice = Object.freeze({
+  tool: "pen",
+  pen: "ballpoint",
+  color: Object.freeze({ pen: INK_PEN_COLOR, highlighter: INK_HIGHLIGHTER_COLOR }),
+  width: Object.freeze({ pen: INK_PEN_PX, highlighter: INK_HIGHLIGHTER_PX }),
+  eraser: "stroke",
+});
+
+/// Lo spessore `value` di `tool` come lo dà il cursore: riportato
+/// all'intervallo e al suo passo; `null` se non è un numero.
+export function inkWidthOf(tool: InkStrokeTool, value: unknown): number | null {
+  if (typeof value !== "number" || !Number.isFinite(value)) return null;
+  const { min, max, step } = INK_WIDTH_RANGES[tool];
+  const steps = Math.round((Math.min(max, Math.max(min, value)) - min) / step);
+  // Niente code di virgola mobile: i passi sono mezzi pixel o pixel interi.
+  return Math.round(Math.min(max, min + steps * step) * 1000) / 1000;
+}
+
+/// Lo strumento che scrive con la scelta `choice`: con la Gomma la Penna, che
+/// serve solo se un tratto della punta comincia lo stesso.
+export function inkStrokeTool(choice: InkPenChoice): InkStrokeTool {
+  return choice.tool === "highlighter" ? "highlighter" : "pen";
+}
+
+/// La penna di sistema con cui scrive la scelta `choice`.
+export function inkPenOf(choice: InkPenChoice): PenId {
+  return inkStrokeTool(choice) === "highlighter" ? "highlighter" : choice.pen;
+}
+
+/// L'aspetto del tratto che comincia con la scelta `choice` allo zoom `zoom`:
+/// la penna scelta (l'evidenziatore col suo strumento), il suo colore e il suo
+/// spessore in pixel dello schermo portato in unità della lavagna. Senza la
+/// pressione del dispositivo il pennello la simula, se la penna la segue.
+export function inkLook(choice: InkPenChoice, zoom: number, pressure: boolean): InkLook {
+  if (!(Number.isFinite(zoom) && zoom > 0)) throw new RangeError(`zoom della lavagna non valido: ${zoom}`);
+  const tool = inkStrokeTool(choice);
+  return { brush: penBrush(inkPenOf(choice), choice.width[tool] / zoom, pressure), color: choice.color[tool], tool };
+}
+
 /// L'aspetto della penna di serie allo zoom `zoom` (A11): la biro, blu, 4
 /// pixel dello schermo in unità della lavagna. Senza la pressione del
 /// dispositivo il pennello la simula (`sim=1`).
 export function defaultInkLook(zoom: number, pressure: boolean): InkLook {
-  if (!(Number.isFinite(zoom) && zoom > 0)) throw new RangeError(`zoom della lavagna non valido: ${zoom}`);
-  return { brush: penBrush(DEFAULT_PEN, INK_PEN_PX / zoom, pressure), color: INK_PEN_COLOR, tool: "pen" };
+  return inkLook(DEFAULT_INK_CHOICE, zoom, pressure);
+}
+
+/// Quanto copre un tratto col pennello `brush` di `tool` sulla lavagna:
+/// l'opacità della sua penna (`penLook`; l'evidenziatore 0,5), senza la
+/// fusione `multiply`, che sulle schede scure lo spegnerebbe (A22).
+export function inkOpacity(brush: InkBrush, tool: string): number {
+  return penLook(brush, tool).opacity;
 }
 
 /// Il tratto finito che diventa record: i campioni in coordinate della
@@ -325,7 +402,8 @@ export function dryStroke(stroke: DrawableStroke, cache?: InkPathCache): DryStro
   } catch {
     return null;
   }
-  return { id: stroke.id, path, fill: stroke.color, ref: stroke.ref };
+  const opacity = inkOpacity(stroke.brush, stroke.tool);
+  return { id: stroke.id, path, fill: stroke.color, ref: stroke.ref, ...(opacity < 1 ? { opacity } : {}) };
 }
 
 /// Il `DryStroke` di un record: un tratto appena fatto da `strokeRecord`, o

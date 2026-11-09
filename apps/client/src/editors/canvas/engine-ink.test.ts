@@ -5,6 +5,7 @@
 // L'interruttore «Scrivi col mouse» (T16) si ricorda nello stato di vista.
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { t } from "../../i18n/strings";
+import { parseInkBrush, penOf } from "../../ink/brush";
 import { quantizeInk, type InkSample } from "../../ink/sample";
 import { encodeInk, inkFromQuantized } from "../spatial/ink/codec";
 import { CanvasEngine, type CanvasChange, type CanvasCorePort } from "./engine";
@@ -808,10 +809,12 @@ const settle = async (): Promise<void> => {
 const inkMouseButton = (host: HTMLElement) => host.querySelector<HTMLButtonElement>('[data-canvas-action="ink-mouse"]')!;
 
 describe("l'interruttore «Scrivi col mouse»", () => {
-  it("sta in testa alla barra, col nome, il suggerimento e lo stato per il lettore di schermo", () => {
+  it("sta in testa alla barra, subito dopo la penna, col nome, il suggerimento e lo stato per il lettore di schermo", () => {
     const { host } = mounted();
     const button = inkMouseButton(host);
-    expect(host.querySelector(".canvas-toolbar")!.firstElementChild).toBe(button);
+    const bar = host.querySelector(".canvas-toolbar")!;
+    expect(bar.firstElementChild).toBe(host.querySelector('[data-canvas-action="ink-pen"]'));
+    expect(bar.children[1]).toBe(button);
     expect(button.textContent).toBe(t("canvas.ink.mouse"));
     expect(button.title).toBe(t("canvas.ink.mouse_hint"));
     expect(button.getAttribute("aria-pressed")).toBe("false");
@@ -920,5 +923,164 @@ describe("l'interruttore «Scrivi col mouse»", () => {
     const next = mounted();
     await settle();
     expect(inkMouseButton(next.host).getAttribute("aria-pressed")).toBe("true");
+  });
+});
+
+const penButton = (host: HTMLElement) => host.querySelector<HTMLButtonElement>('[data-canvas-action="ink-pen"]')!;
+const penPopover = () => document.querySelector<HTMLElement>(".canvas-pen-popover");
+/** Sceglie la voce `value` del gruppo `group` nel menu aperto. */
+const pick = (group: string, value: string) =>
+  penPopover()!.querySelector<HTMLElement>(`[role="radio"][data-group="${group}"][data-value="${value}"]`)!.click();
+/** Porta il cursore dello spessore a `value` e lo lascia. */
+function slide(value: number): void {
+  const slider = penPopover()!.querySelector<HTMLInputElement>(".canvas-pen-width")!;
+  slider.value = String(value);
+  slider.dispatchEvent(new Event("input", { bubbles: true }));
+  slider.dispatchEvent(new Event("change", { bubbles: true }));
+}
+const brushOf = (stroke: Json) => parseInkBrush(stroke.brush as string);
+
+describe("il menu della penna", () => {
+  it("sta in testa alla barra e dice penna, colore e spessore; di serie la Sfera blu da 4 pixel", () => {
+    const { host } = mounted();
+    const button = penButton(host);
+    expect(host.querySelector(".canvas-toolbar")!.firstElementChild).toBe(button);
+    expect(button.getAttribute("aria-haspopup")).toBe("dialog");
+    expect(button.getAttribute("aria-expanded")).toBe("false");
+    expect(button.getAttribute("aria-label")).toBe(t("canvas.ink.pen.label", {
+      name: t("canvas.ink.kind.ballpoint"), color: t("canvas.ink.color.blue"), width: t("canvas.ink.width.value", { n: "4" }),
+    }));
+    expect(button.textContent).toBe(t("canvas.ink.kind.ballpoint"));
+  });
+
+  it("un tratto prende penna, colore e spessore scelti", () => {
+    const { host, changes } = mounted();
+    penButton(host).click();
+    expect(penPopover()).not.toBeNull();
+    pick("kind", "fountain");
+    pick("color", "#d55e00");
+    slide(8);
+    pen(host, card(host, "t"), across(0, 0));
+    const [stroke] = strokesOf(lastChange(changes).text, "t");
+    expect(stroke).toMatchObject({ tool: "pen", color: "#d55e00" });
+    const brush = brushOf(stroke!);
+    expect(penOf(brush)).toBe("fountain");
+    expect(brush.size).toBeCloseTo(8 / camera(host).zoom, 2);
+    expect(penButton(host).textContent).toBe(t("canvas.ink.kind.fountain"));
+  });
+
+  it("l'evidenziatore si salva col suo strumento e il suo colore, trasparente a metà senza multiply", () => {
+    const { host, changes } = mounted();
+    penButton(host).click();
+    pick("tool", "highlighter");
+    const lift = pen(host, card(host, "t"), across(0, 0), false);
+    const wet = host.querySelector(".canvas-ink-wet path")!;
+    expect(wet.getAttribute("fill")).toBe("#f0e442");
+    expect(wet.getAttribute("fill-opacity")).toBe("0.5");
+    lift();
+    const [stroke] = strokesOf(lastChange(changes).text, "t");
+    expect(stroke).toMatchObject({ tool: "highlighter", color: "#f0e442" });
+    expect(penOf(brushOf(stroke!))).toBe("highlighter");
+    expect(brushOf(stroke!).size).toBeCloseTo(16 / camera(host).zoom, 2);
+    const [dry] = inkPaths(card(host, "t"));
+    expect(dry!.getAttribute("fill-opacity")).toBe("0.5");
+    expect(dry!.getAttribute("style") ?? "").not.toContain("multiply");
+    expect(dry!.getAttribute("mix-blend-mode")).toBeNull();
+  });
+
+  it("la Gomma del menu: la penna toglie il tratto intero, il mouse taglia col modo scelto; il cursore è la cella", () => {
+    const { engine, host, changes } = mounted();
+    pen(host, viewportOf(host), [[100, 300], [140, 300], [180, 300], [220, 300], [260, 300]]);
+    const written = lastChange(changes).text;
+    penButton(host).click();
+    pick("tool", "eraser");
+    expect(penButton(host).getAttribute("aria-label")).toBe(t("canvas.ink.pen.eraser_stroke"));
+    // La punta della penna cancella: il tratto intero, di serie.
+    pen(host, viewportOf(host), [[180, 260], [180, 300], [180, 340]]);
+    expect(strokesOf(lastChange(changes).text, null)).toEqual([]);
+    expect(engine.undo()).toBe(true);
+    expect(lastChange(changes).text).toBe(written);
+
+    // Il mouse con l'interruttore acceso: la cella, e «Solo il pezzo» taglia.
+    penButton(host).click();
+    pick("eraser", "piece");
+    inkMouseButton(host).click();
+    expect(viewportOf(host).dataset.ink).toBe("eraser");
+    mouse(host, viewportOf(host), [[180, 260], [180, 300], [180, 340]]);
+    const pieces = strokesOf(lastChange(changes).text, null);
+    expect(pieces).toHaveLength(2);
+    expect(pieces.every((piece) => piece.color === "#0072b2")).toBe(true);
+
+    // Il retro della penna cancella anche con la Penna scelta, col modo
+    // scelto: il pezzo di sinistra si taglia in due.
+    penButton(host).click();
+    pick("tool", "pen");
+    expect(viewportOf(host).dataset.ink).toBe("pen");
+    eraser(host, viewportOf(host), [[120, 260], [120, 340]]);
+    expect(strokesOf(lastChange(changes).text, null)).toHaveLength(3);
+  });
+
+  it("una scelta a metà tratto vale dal tratto dopo", () => {
+    const { host, changes } = mounted();
+    const lift = pen(host, card(host, "t"), across(0, 0), false);
+    penButton(host).click();
+    pick("color", "#009e73");
+    lift();
+    expect(strokesOf(lastChange(changes).text, "t")[0]).toMatchObject({ color: "#0072b2" });
+    pen(host, card(host, "t"), across(0, 20));
+    expect(strokesOf(lastChange(changes).text, "t")[1]).toMatchObject({ color: "#009e73" });
+  });
+
+  it("riaprendo la lavagna la scelta torna; una scelta rotta o di una versione futura vale quella di serie", async () => {
+    const first = mounted();
+    await settle();
+    penButton(first.host).click();
+    pick("tool", "highlighter");
+    pick("color", "#56b4e9");
+    await settle();
+    expect(machine.views.get("canvas.pen")).toMatchObject({ version: 1, tool: "highlighter", highlighterColor: "#56b4e9" });
+    first.engine.destroy();
+    expect(penPopover()).toBeNull();
+
+    const again = mounted();
+    await settle();
+    expect(penButton(again.host).textContent).toBe(t("canvas.ink.tool.highlighter"));
+    pen(again.host, card(again.host, "t"), across(0, 0));
+    expect(strokesOf(lastChange(again.changes).text, "t")[0]).toMatchObject({ tool: "highlighter", color: "#56b4e9" });
+
+    machine.views.set("canvas.pen", { version: 99, tool: "highlighter" });
+    const future = mounted();
+    await settle();
+    expect(penButton(future.host).textContent).toBe(t("canvas.ink.kind.ballpoint"));
+    machine.views.set("canvas.pen", "rotto");
+    const broken = mounted();
+    await settle();
+    expect(penButton(broken.host).textContent).toBe(t("canvas.ink.kind.ballpoint"));
+  });
+
+  it("una ridisegnata non chiude il menu né cambia il pulsante; la sola lettura lo chiude e spegne il pulsante", () => {
+    const { engine, host, changes } = mounted();
+    const button = penButton(host);
+    button.click();
+    const open = penPopover();
+    expect(open).not.toBeNull();
+    expect(button.getAttribute("aria-expanded")).toBe("true");
+    // Una modifica da fuori rifà la barra.
+    const outside = JSON.parse(BOARD) as Json & { nodes: Json[] };
+    outside.nodes[2]!.x = 640;
+    engine.syncDoc(JSON.stringify(outside));
+    expect(changes).toEqual([]);
+    expect(penButton(host)).toBe(button);
+    expect(host.querySelector(".canvas-toolbar")!.firstElementChild).toBe(button);
+    expect(penPopover()).toBe(open);
+    expect(open!.isConnected).toBe(true);
+
+    engine.setReadOnly(true);
+    expect(penPopover()).toBeNull();
+    expect(button.disabled).toBe(true);
+    button.click();
+    expect(penPopover()).toBeNull();
+    engine.setReadOnly(false);
+    expect(button.disabled).toBe(false);
   });
 });

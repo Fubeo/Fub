@@ -2918,6 +2918,81 @@ body {
 .canvas-viewport[data-ink="pen"] {
   cursor: crosshair;
 }
+/* Con lo strumento Gomma del menu della penna: la cella. */
+.canvas-viewport[data-ink="eraser"] {
+  cursor: cell;
+}
+
+/* Il menu della penna: il pulsante col tondo del colore e il nome, e il
+   rialzo con le sezioni una sotto l'altra. */
+.canvas-ink-pen {
+  display: inline-flex;
+  align-items: center;
+}
+.canvas-ink-pen-chip {
+  flex: none;
+  width: 12px;
+  height: 12px;
+}
+.canvas-pen-menu {
+  display: flex;
+  flex-direction: column;
+  width: 288px;
+  max-width: calc(100vw - 16px);
+}
+.canvas-pen-section {
+  display: flex;
+  flex-direction: column;
+}
+.canvas-pen-section[hidden] {
+  display: none;
+}
+.canvas-pen-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.canvas-pen-item {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+.canvas-pen-preview {
+  flex: none;
+  width: 60px;
+  height: 28px;
+}
+.canvas-pen-swatches {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.canvas-pen-swatch {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+}
+.canvas-pen-swatch > svg {
+  width: 20px;
+  height: 20px;
+}
+.canvas-pen-more {
+  display: inline-flex;
+  align-items: center;
+}
+.canvas-pen-width-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+.canvas-pen-width {
+  width: 100%;
+}
+.canvas-pen-width-preview {
+  display: block;
+  width: 100%;
+  height: 44px;
+}
 
 .canvas-stage,
 .canvas-edges {

@@ -32,6 +32,7 @@ import type { InkBrush } from "../../ink/brush";
 import type { InkPointerType } from "../../ink/input/pointer";
 import { strokes, type MousePolicy, type PointerRole } from "../../ink/input/roles";
 import type { CancelReason, FinishedStroke } from "../../ink/input/session";
+import { penLook } from "../../ink/pens";
 import { outlinePath } from "../../ink/pf1";
 import type { PenQuiet } from "../../ink/quiet";
 import type { InkSample } from "../../ink/sample";
@@ -65,6 +66,10 @@ export interface InkLayerOptions {
   readonly toWorld: (clientX: number, clientY: number) => ScenePoint;
   /// L'aspetto del tratto che comincia: si legge una volta, all'inizio.
   readonly look: (input: StrokeInput) => InkLook;
+  /// La punta (e il mouse che scrive) cancella invece di scrivere: lo
+  /// strumento Gomma del menu della penna. Si legge all'inizio di ogni
+  /// tratto; il retro della penna e il tasto laterale cancellano sempre.
+  readonly tipErases?: () => boolean;
   readonly quiet: PenQuiet;
   /// Un tratto della punta è finito: la scia resta finché non si chiama
   /// `settle(id)`. Un tratto spezzato al limite dei campioni arriva a pezzi,
@@ -160,6 +165,9 @@ export function mountInkLayer(options: InkLayerOptions, owner: Lifetime): InkLay
     if (!trail.path) {
       trail.path = document.createElementNS(SVG_NS, "path");
       trail.path.setAttribute("fill", trail.look.color);
+      // Trasparente come l'asciutto, senza `multiply` (A22).
+      const covers = penLook(trail.look.brush, trail.look.tool).opacity;
+      if (covers < 1) trail.path.setAttribute("fill-opacity", String(covers));
       wet.append(trail.path);
     }
     trail.path.setAttribute("d", d);
@@ -172,7 +180,7 @@ export function mountInkLayer(options: InkLayerOptions, owner: Lifetime): InkLay
     scale: () => zoom,
     onStart: (stroke) => {
       const trail: Trail = {
-        kind: stroke.role === "ink" ? "ink" : "erase",
+        kind: stroke.role === "ink" && !(options.tipErases?.() ?? false) ? "ink" : "erase",
         look: null,
         preview: null,
         samples: [],

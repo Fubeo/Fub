@@ -1,11 +1,16 @@
 import { beforeAll, describe, expect, it } from "vitest";
-import { parseInkBrush, type Pf1Brush } from "../../ink/brush";
+import { parseInkBrush, penOf, type Pf1Brush } from "../../ink/brush";
 import type { InkSample } from "../../ink/sample";
 import { decodeInk } from "../spatial/ink/codec";
 import { InkPathCache } from "./ink-paint";
 import {
   decodeStroke,
+  DEFAULT_INK_CHOICE,
   defaultInkLook,
+  inkLook,
+  inkOpacity,
+  inkWidthOf,
+  type InkPenChoice,
   foreignInkLayer,
   inkLayerStates,
   INK_PEN_COLOR,
@@ -329,4 +334,35 @@ describe("i livelli da disegnare", () => {
   function record(): InkStrokeRecord {
     return written(strokeRecord(penStroke(10, 10), card(0, 0), defaultInkLook(1, true), NOW));
   }
+});
+
+describe("la penna scelta nel menu", () => {
+  it("inkWidthOf porta lo spessore al bordo e al passo del cursore; un non numero non vale", () => {
+    expect([0, 0.5, 3.3, 3.74, 20, 99].map((px) => inkWidthOf("pen", px))).toEqual([0.5, 0.5, 3.5, 3.5, 20, 20]);
+    expect([1, 4, 9.6, 48, 60].map((px) => inkWidthOf("highlighter", px))).toEqual([4, 4, 10, 48, 48]);
+    for (const bad of [Number.NaN, Infinity, "4", null, undefined]) expect(inkWidthOf("pen", bad)).toBeNull();
+  });
+
+  it("inkLook scrive con la penna, il colore e lo spessore dello strumento scelto, diviso lo zoom", () => {
+    const choice: InkPenChoice = { ...DEFAULT_INK_CHOICE, pen: "fountain", width: { pen: 8, highlighter: 24 } };
+    const pen = inkLook(choice, 2, true);
+    expect([pen.tool, pen.color, penOf(pen.brush), pen.brush.size]).toEqual(["pen", INK_PEN_COLOR, "fountain", 4]);
+    const highlighter = inkLook({ ...choice, tool: "highlighter" }, 0.5, false);
+    expect([highlighter.tool, highlighter.color, penOf(highlighter.brush), highlighter.brush.size]).toEqual(["highlighter", "#f0e442", "highlighter", 48]);
+    expect(inkOpacity(highlighter.brush, highlighter.tool)).toBe(0.5);
+    expect(inkOpacity(pen.brush, pen.tool)).toBe(1);
+    // Con la Gomma scrive la Penna: serve solo se un tratto comincia lo stesso.
+    expect(inkLook({ ...choice, tool: "eraser" }, 1, true).tool).toBe("pen");
+    expect(defaultInkLook(1, true)).toEqual(inkLook(DEFAULT_INK_CHOICE, 1, true));
+    for (const zoom of [0, -1, Number.NaN]) expect(() => inkLook(choice, zoom, true)).toThrow(RangeError);
+  });
+
+  it("un tratto dell'evidenziatore asciuga con la sua opacità, la biro senza", () => {
+    const look = inkLook({ ...DEFAULT_INK_CHOICE, tool: "highlighter" }, 1, true);
+    const highlighted = toDry(written(strokeRecord(penStroke(10, 10), card(0, 0), look, NOW)));
+    expect(highlighted?.opacity).toBe(0.5);
+    expect(highlighted?.fill).toBe("#f0e442");
+    const plain = toDry(written(strokeRecord(penStroke(10, 10), card(0, 0), defaultInkLook(1, true), NOW)));
+    expect(plain && "opacity" in plain).toBe(false);
+  });
 });

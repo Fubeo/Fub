@@ -259,3 +259,72 @@ describe("«Scrivi col mouse» ricordato", () => {
     gone();
   });
 });
+
+describe("la penna ricordata (canvas.pen)", () => {
+  const PEN = "canvas.pen";
+  const STATE = {
+    version: 1,
+    tool: "highlighter",
+    pen: "fountain",
+    penColor: "#D55E00",
+    penWidth: 7.5,
+    highlighterColor: "#56b4e9",
+    highlighterWidth: 24,
+    eraser: "piece",
+  };
+
+  it("legge la forma della versione 1; ogni campo rotto vale il suo di serie; un'altra versione vale la penna di serie", async () => {
+    const host = createFakeHost({ settings: [] });
+    const { penChoiceOf, penStateOf } = await boot(host);
+    const { DEFAULT_INK_CHOICE } = await import("./ink-record");
+    const choice = penChoiceOf(STATE);
+    expect(choice).toEqual({
+      tool: "highlighter",
+      pen: "fountain",
+      color: { pen: "#d55e00", highlighter: "#56b4e9" },
+      width: { pen: 7.5, highlighter: 24 },
+      eraser: "piece",
+    });
+    expect(penStateOf(choice)).toEqual({ ...STATE, penColor: "#d55e00" });
+    for (const other of [null, "penna", [], 3, { ...STATE, version: 2 }, { ...STATE, version: "1" }, { tool: "pen" }]) {
+      expect(penChoiceOf(other), JSON.stringify(other)).toEqual(DEFAULT_INK_CHOICE);
+    }
+    expect(
+      penChoiceOf({ version: 1, tool: "matita", pen: "highlighter", penColor: "blu", penWidth: "4", highlighterColor: "#fff", highlighterWidth: null, eraser: "tutto" }),
+    ).toEqual(DEFAULT_INK_CHOICE);
+    // Gli spessori fuori misura vanno al bordo e al passo del cursore.
+    expect(penChoiceOf({ ...STATE, penWidth: 0.1, highlighterWidth: 99 }).width).toEqual({ pen: 0.5, highlighter: 48 });
+    expect(penChoiceOf({ ...STATE, penWidth: 3.3, highlighterWidth: 9.6 }).width).toEqual({ pen: 3.5, highlighter: 10 });
+  });
+
+  it("si scrive in fila e la lettura aspetta le scritture; uno stato che non si legge lascia l'ultimo", async () => {
+    const host = createFakeHost({ settings: [] });
+    const { readPen, savePen, penChoiceOf } = await boot(host);
+    const { DEFAULT_INK_CHOICE } = await import("./ink-record");
+    expect(await readPen(), "nessuno stato").toEqual(DEFAULT_INK_CHOICE);
+    const release = host.throttle("setViewState");
+    const first = { ...DEFAULT_INK_CHOICE, tool: "eraser" as const };
+    const second = penChoiceOf(STATE);
+    savePen(first);
+    savePen(second);
+    const reading = readPen();
+    await settle();
+    expect(host.atGate("viewState").filter((call) => call.args[0] === PEN), "la lettura aspetta").toHaveLength(1);
+    release();
+    expect(await reading).toEqual(second);
+    expect(host.atGate("setViewState").map((call) => (call.args[1] as { tool: string }).tool)).toEqual(["eraser", "highlighter"]);
+
+    const broken = host.fault("viewState");
+    expect(await readPen(), "l'ultimo").toEqual(second);
+    broken();
+
+    // Una scrittura che non riesce non dice niente e non ferma la fila.
+    const failing = host.fault("setViewState");
+    savePen(first);
+    await settle();
+    failing();
+    savePen(DEFAULT_INK_CHOICE);
+    await settle();
+    expect(await host.module.api.viewState(PEN)).toMatchObject({ version: 1, tool: "pen" });
+  });
+});

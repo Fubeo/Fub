@@ -29,11 +29,14 @@ import {
 import { inkFitMode } from "./ink-fit";
 import { mountInkLayer, type InkLayer, type InkLayerStroke } from "./ink-layer";
 import { cutInkStroke, fadeInkStroke, InkPathCache, paintBoard, paintCard, type DryStroke } from "./ink-paint";
-import { readInkMouse, saveInkMouse, watchPreferences } from "./preferences";
+import { createPenMenu, type PenMenu } from "./pen-menu";
+import { readInkMouse, readPen, saveInkMouse, savePen, watchPreferences } from "./preferences";
 import { isTap, pinchCamera, type TouchCamera, type TouchPoint, type ZoomLimits } from "./touch";
 import {
-  defaultInkLook,
+  DEFAULT_INK_CHOICE,
   dryStroke,
+  inkLook,
+  type InkPenChoice,
   foreignInkLayer,
   inkLayerStates,
   strokeRecord,
@@ -120,6 +123,18 @@ export interface CanvasInkMouseMemory {
 }
 
 const SHARED_INK_MOUSE: CanvasInkMouseMemory = { read: readInkMouse, save: saveInkMouse };
+
+/**
+ * Dove la lavagna ricorda la penna scelta nel menu (A19): `read` dà quella
+ * con cui una lavagna che si apre comincia, `save` ricorda una scelta fatta.
+ * Per difetto lo stato di vista `canvas.pen` di questo computer.
+ */
+export interface CanvasPenMemory {
+  readonly read: () => Promise<InkPenChoice>;
+  readonly save: (choice: InkPenChoice) => void;
+}
+
+const SHARED_PEN: CanvasPenMemory = { read: readPen, save: savePen };
 
 type CardField = "text" | "label" | "url" | "file";
 
@@ -269,6 +284,12 @@ export interface CanvasEngineOptions {
    * di questo computer.
    */
   readonly inkMouseMemory?: CanvasInkMouseMemory;
+  /**
+   * Dove si ricorda la penna del menu: letta una volta all'apertura, scritta
+   * a ogni scelta. I test lo passano; assente, lo stato di vista di questo
+   * computer.
+   */
+  readonly penMemory?: CanvasPenMemory;
 }
 
 interface Viewport {
@@ -405,10 +426,17 @@ export class CanvasEngine {
   #inkMouse = false;
   /** Quante volte l'interruttore è cambiato: lo stato ricordato arriva solo se nessuno l'ha toccato prima. */
   #inkMouseTurns = 0;
-  /** Il pulsante «Scrivi col mouse» della barra di adesso. */
-  #inkMouseButton: HTMLButtonElement | null = null;
-  /** Che cosa fa la gomma (`setInkEraser`): di serie il tratto intero (A20). */
-  #inkEraser: InkEraserMode = "stroke";
+  /** Il pulsante «Scrivi col mouse»: lo stesso elemento in ogni barra. */
+  readonly #inkMouseButton: HTMLButtonElement;
+  /**
+   * La penna scelta nel menu (A19): strumento, penna, colore, spessore e che
+   * cosa cancella la gomma (`setInkEraser`, di serie il tratto intero, A20).
+   */
+  #penChoice: InkPenChoice = DEFAULT_INK_CHOICE;
+  /** Quante volte la penna è cambiata: quella ricordata arriva solo se nessuno l'ha scelta prima. */
+  #penTurns = 0;
+  /** Il menu della penna, in testa alla barra: il suo pulsante è lo stesso in ogni barra. */
+  readonly #penMenu: PenMenu;
 
   constructor(parent: HTMLElement, options: CanvasEngineOptions) {
     this.#options = options;
@@ -438,6 +466,26 @@ export class CanvasEngine {
     this.#edgeLayer.setAttribute("aria-hidden", "true");
     this.#viewport.append(this.#edgeLayer, this.#stage);
     this.#root.append(this.#toolbar, this.#viewport);
+    // I due comandi dell'inchiostro, in testa alla barra e gli stessi in ogni
+    // barra: il menu della penna (il rialzo aperto non si stacca quando la
+    // barra si rifà) e l'interruttore «Scrivi col mouse», che tiene il fuoco
+    // dopo il clic, così chi usa la tastiera sente lo stato nuovo.
+    this.#penMenu = createPenMenu({
+      lifetime: this.#life,
+      choice: () => this.#penChoice,
+      choose: (next, settled) => this.#choosePen(next, settled),
+      editable: () => !this.#readOnly && !this.#isSceneOversized(),
+      theme: () => ((this.#root.dataset.theme ?? options.theme) === "dark" ? "dark" : "light"),
+    });
+    const inkMouse = document.createElement("button");
+    inkMouse.type = "button";
+    inkMouse.dataset.canvasAction = "ink-mouse";
+    this.#life.listen(inkMouse, "click", (event) => {
+      event.preventDefault();
+      this.#recordPending();
+      this.#toggleInkMouse();
+    });
+    this.#inkMouseButton = inkMouse;
     parent.replaceChildren(this.#root);
     this.#stopLanguage = onLanguage(() => {
       this.#viewport.setAttribute("aria-label", t("canvas.surface"));
@@ -474,6 +522,7 @@ export class CanvasEngine {
     }, { signal });
     this.#drawToolbar();
     this.#restoreInkMouse(options.inkMouseMemory ?? SHARED_INK_MOUSE);
+    this.#restorePen(options.penMemory ?? SHARED_PEN);
   }
 
   /**
@@ -638,6 +687,8 @@ export class CanvasEngine {
 
   setTheme(theme: Theme): void {
     this.#root.dataset.theme = theme;
+    // I campioni che si leggono poco lo dicono per il tema di adesso (A23).
+    this.#penMenu.sync();
   }
 
   /**
@@ -1148,8 +1199,11 @@ export class CanvasEngine {
     this.#inkLayer = mountInkLayer({
       viewport: this.#viewport,
       toWorld: (clientX, clientY) => this.#screenToWorld(clientX, clientY),
-      // La penna di serie (A11) allo zoom di quando il tratto comincia.
-      look: (input) => defaultInkLook(this.#camera.zoom, input.pressure),
+      // La penna scelta (A11 prima di ogni scelta) allo zoom di quando il
+      // tratto comincia: una scelta a metà tratto vale dal tratto dopo.
+      look: (input) => inkLook(this.#penChoice, this.#camera.zoom, input.pressure),
+      // Lo strumento Gomma: la punta e il mouse che scrive cancellano (A21).
+      tipErases: () => this.#penChoice.tool === "eraser",
       quiet: this.#quiet,
       mouse: this.#inkMouseOn ? "ink" : "ignore",
       onStroke: (stroke) => this.#inkStroke(stroke),
@@ -1176,7 +1230,7 @@ export class CanvasEngine {
     if (this.#destroyed) return;
     this.#inkMouseTurns += 1;
     this.#inkMouse = on;
-    this.#inkMouseButton?.setAttribute("aria-pressed", String(on));
+    this.#inkMouseButton.setAttribute("aria-pressed", String(on));
     this.#applyInkMouse();
   }
 
@@ -1208,15 +1262,48 @@ export class CanvasEngine {
   }
 
   /**
-   * Dice allo strato che cosa fa il mouse, e lo mostra sul viewport con
-   * `data-ink="pen"` solo quando scrive davvero (lo strato c'è).
+   * Dice allo strato che cosa fa il mouse, e lo mostra sul viewport solo
+   * quando scrive davvero (lo strato c'è): `data-ink="pen"`, o `"eraser"` con
+   * lo strumento Gomma del menu.
    */
   #applyInkMouse(): void {
     const on = this.#inkMouseOn;
     const layer = this.#inkLayer;
     layer?.setMouse(on ? "ink" : "ignore");
-    if (on && layer) this.#viewport.dataset.ink = "pen";
+    if (on && layer) this.#viewport.dataset.ink = this.#penChoice.tool === "eraser" ? "eraser" : "pen";
     else delete this.#viewport.dataset.ink;
+  }
+
+  // --- il menu della penna (T21) -------------------------------------------
+
+  /**
+   * Una scelta del menu della penna: vale dal prossimo tratto o dalla
+   * prossima passata (quelli in corso finiscono come sono cominciati). Una
+   * scelta fatta (`settled`) si ricorda per le lavagne che si aprono dopo;
+   * quelle aperte tengono la loro.
+   */
+  #choosePen(next: InkPenChoice, settled: boolean): void {
+    if (this.#destroyed) return;
+    this.#penTurns += 1;
+    this.#penChoice = next;
+    this.#applyInkMouse();
+    this.#penMenu.sync();
+    if (settled) (this.#options.penMemory ?? SHARED_PEN).save(next);
+  }
+
+  /**
+   * La penna con cui la lavagna si apre: quella ricordata, letta una volta.
+   * Arriva solo se nel frattempo nessuno ha scelto; una lettura che non
+   * riesce lascia quella di serie.
+   */
+  #restorePen(memory: CanvasPenMemory): void {
+    const turns = this.#penTurns;
+    void memory.read().then((choice) => {
+      if (this.#destroyed || turns !== this.#penTurns) return;
+      this.#penChoice = choice;
+      this.#applyInkMouse();
+      this.#penMenu.sync();
+    }, () => undefined);
   }
 
   // --- la gomma: «Il tratto intero» (A20) e «Solo il pezzo» (T22) -----------
@@ -1228,7 +1315,10 @@ export class CanvasEngine {
    */
   setInkEraser(mode: InkEraserMode): void {
     if (this.#destroyed || (mode !== "stroke" && mode !== "piece")) return;
-    this.#inkEraser = mode;
+    if (mode === this.#penChoice.eraser) return;
+    this.#penTurns += 1;
+    this.#penChoice = { ...this.#penChoice, eraser: mode };
+    this.#penMenu.sync();
   }
 
   /**
@@ -1241,7 +1331,7 @@ export class CanvasEngine {
       id,
       sweep: new EraseSweep(ERASER, pointerType),
       source: new InkEraseSource(erasableInk(this.#inkStateList())),
-      mode: this.#inkEraser,
+      mode: this.#penChoice.eraser,
       path: [],
       cuts: new Map(),
     };
@@ -1684,7 +1774,19 @@ export class CanvasEngine {
 
   #drawToolbar(): void {
     const bar = this.#toolbar;
-    bar.replaceChildren();
+    // La barra si rifà da capo, salvo i due comandi dell'inchiostro, che
+    // restano gli stessi elementi al loro posto: il rialzo della penna aperto
+    // resta ancorato e il fuoco su uno dei due non si perde.
+    const pen = this.#penMenu.button;
+    const inkMouse = this.#inkMouseButton;
+    for (const child of [...bar.children]) if (child !== pen && child !== inkMouse) child.remove();
+    if (bar.firstElementChild !== pen || pen.nextElementSibling !== inkMouse) bar.prepend(pen, inkMouse);
+    this.#penMenu.sync();
+    // «Scrivi col mouse», subito dopo la penna.
+    inkMouse.textContent = t("canvas.ink.mouse");
+    inkMouse.title = t("canvas.ink.mouse_hint");
+    inkMouse.setAttribute("aria-pressed", String(this.#inkMouse));
+    inkMouse.disabled = this.#readOnly || this.#isSceneOversized();
     const mk = (
       action: string,
       label: string,
@@ -1707,13 +1809,6 @@ export class CanvasEngine {
       bar.append(button);
       return button;
     };
-    // L'interruttore «Scrivi col mouse», in testa alla barra (il menu della
-    // penna gli andrà davanti). Il fuoco resta sul pulsante, così chi usa la
-    // tastiera o un lettore di schermo sente lo stato nuovo.
-    const inkMouse = mk("ink-mouse", t("canvas.ink.mouse"), () => this.#toggleInkMouse(), false, true, false);
-    inkMouse.setAttribute("aria-pressed", String(this.#inkMouse));
-    inkMouse.title = t("canvas.ink.mouse_hint");
-    this.#inkMouseButton = inkMouse;
     mk("add-text", t("canvas.add_text"), () => this.#addNode("text"));
     if (this.#options.onPickFile) {
       mk("add-file", t("canvas.add_file"), () => {
