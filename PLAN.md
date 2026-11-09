@@ -2588,6 +2588,10 @@ campione.
 
 ### D20 · La firma degli installer
 
+**Sospesa dall'utente il 2026-11-09:** «se c'è da pagare Windows per ora
+evitiamo […] queste cose si vedranno più avanti al momento della release».
+PA T50 è rinviato; gli installer di Windows escono senza firma come il dmg.
+
 **Decisa dall'utente il 2026-11-07: Windows firmato, macOS per ora no.**
 Prima l'utente aveva scelto A (firmati tutti e due); poi, lo stesso giorno:
 «Quello di Apple per ora ce ne freghiamo assolutamente». Quindi niente
@@ -4145,7 +4149,7 @@ Casi limite: una persona su Windows senza permessi di amministratore
 Fatto quando: la pagina c'è e le guardie passano. Il «Fatto quando» 7 si
 chiude quando l'issue ha cinque risultati.
 Prova: scripts/check.sh --rapido
-Stato: [ ] da fare
+Stato: [ ] rinviato (2026-11-09, l'utente: la prova con cinque persone per ora non si fa; alla release proveranno i primi utenti). Non blocca T22 né T24
 
 ## T18 · I documenti della pre-alpha
 
@@ -4390,7 +4394,7 @@ Flatpak fa i suoi tre compiti, i tre giri MCP fanno ciò che dicono, il
 telefono ha i cinque passi; o i difetti che
 restano sono accettati dall'utente come noti.
 Prova: il resoconto dei giri.
-Stato: [ ] da fare
+Stato: [ ] rinviato (2026-11-09, l'utente: il giro a mano sugli installer «lo faremo con calma quando avrò tempo»). Non blocca T22; T24 lo aspetta solo se l'utente lo chiede
 
 ## T24 · Il tag e la pre-release
 
@@ -5679,7 +5683,7 @@ Fatto quando: la corsa a secco di T22 produce gli installer di Windows
 firmati e il dmg con la firma ad hoc, e i controlli dopo la firma passano.
 Prova: la corsa a secco (`gh workflow run release.yml`), coi log dei
 controlli.
-Stato: [ ] da fare (aspetta la risposta di SignPath Foundation)
+Stato: [ ] rinviato alla release (2026-11-09, l'utente: niente spese per la firma di Windows ora; si decide al momento della release). D20 sospesa: gli installer escono senza firma, e T22 non aspetta T50
 
 ## T51 · Flatpak
 

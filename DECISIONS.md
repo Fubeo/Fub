@@ -99,6 +99,13 @@ ciò che non dipende dalla risposta.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-09 · pre-alpha (utente) · rinviati: la prova con cinque persone
+  (PA T17, e ciò che la usa), il giro a mano sugli installer (PA T23,
+  «con calma quando avrò tempo») e la firma di Windows (PA T50, D20
+  sospesa: niente spese ora, si decide alla release); la prova di K2 (D-2)
+  la fa l'utente da solo · «tu fai il codice […] accontentiamoci di me che
+  provo il codice»; i coder lavorano sui task sbloccati di ogni fase mentre
+  un task aspetta l'utente.
 - 2026-11-09 · k5 (orchestratore) · K5 T6: il PDF del motore si spegne
   togliendo `vectorcraft-pdf` ed `eps` dal grafo di `engine` (patch 0002,
   codice dietro `cfg`), non con una feature spenta; `vendor.mjs check` si
