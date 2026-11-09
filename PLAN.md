@@ -1347,7 +1347,7 @@ sulla testata e penna che vince, con l'impostazione spenta e accesa (accesa:
 il dito sopra una scheda la sposta); `engine.test.ts` passa invariato.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/canvas
-Stato: [ ] da fare
+Stato: [x] fatto
 
 ## T15 · La misura S8
 
