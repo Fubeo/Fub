@@ -45,6 +45,7 @@ import { craftServed } from "../state/craft-previews";
 import { mountTreeThumbnails, type TreeThumbnails } from "../state/tree-thumbnails";
 import { iconEl } from "../ui/icons";
 import { pickIcon, showContextMenu, type ContextMenuOptions, type MenuItem } from "../ui/menu";
+import { drawPageMark, pageMarkText, readPageMark } from "../ui/page-mark";
 import { selectInspectorTab } from "../ui/views";
 import {
   canCreateDrawing,
@@ -950,7 +951,8 @@ function noteRow(id: string, opts: { draggable: boolean }): HTMLElement {
   row.dataset.path = id;
   setTooltip(row, id);
   // L'icona data dall'esplora vince; altrimenti quella della pagina (`icon:`).
-  const icon = state.meta.icons[id] ?? pageIcon(id);
+  // Un `fub:` che questa versione non sa disegnare vale come nessuna icona.
+  const icon = [state.meta.icons[id], pageIcon(id)].find((value) => readPageMark(value) !== null) ?? null;
   const kind = formatKindOf(id);
   if (icon) {
     row.appendChild(rowIcon(icon));
@@ -1340,7 +1342,8 @@ function folderRow(folder: VaultFolder): HTMLElement {
   // L'icona della cartella è quella della sua pagina, se l'esplora non gliene
   // ha data una sua.
   const pageMark = folderNoteId ? pageIcon(folderNoteId) : null;
-  row.appendChild(rowIcon(state.meta.icons[folder.path] ?? pageMark, "folder"));
+  const chosen = [state.meta.icons[folder.path], pageMark].find((value) => readPageMark(value) !== null) ?? null;
+  row.appendChild(rowIcon(chosen, "folder"));
 
   const name = document.createElement("span");
   name.className = "row-name";
@@ -1471,21 +1474,22 @@ function sortItems(): MenuItem[] {
   }));
 }
 
-/// L'icona di una riga: quella scelta da chi scrive, che resta com'è, o
-/// senza una scelta la figura a linea del kit (`line`).
+/// L'icona di una riga: quella scelta da chi scrive (un'emoji com'è, o una
+/// figura del set: `page-mark.ts`), o senza una scelta — o con una figura che
+/// questa versione non conosce — la figura a linea del kit (`line`).
 function rowIcon(icon: string | null, line?: string): HTMLElement {
   const span = document.createElement("span");
   span.className = "row-icon";
-  if (icon !== null) span.textContent = icon;
-  else if (line) span.append(iconEl(line) ?? "");
+  if (!drawPageMark(span, icon) && line) span.append(iconEl(line) ?? "");
   span.setAttribute("aria-hidden", "true");
   return span;
 }
 
 /// Il nome di una cartella preceduto dall'icona che chi scrive le ha dato, se
-/// gliene ha data una: nei menu e nei titoli una figura di ripiego è rumore.
+/// è un'emoji: nei menu e nei titoli una figura (scelta o di ripiego) è
+/// rumore, e nel testo non si scrive.
 function namedFolder(path: string, name = childName(path)): string {
-  const icon = state.meta.icons[path];
+  const icon = pageMarkText(state.meta.icons[path]);
   return icon ? `${icon} ${name}` : name;
 }
 
@@ -1737,7 +1741,7 @@ function togglePin(id: string): void {
 function chooseIcon(at: MouseEvent, path: string): void {
   pickIcon(at, (icon) => {
     void setIcon(path, icon ?? null);
-  });
+  }, { current: state.meta.icons[path] ?? null });
 }
 
 // Uno spazio è una cartella registrata nella striscia di icone in cima alla
@@ -1777,11 +1781,9 @@ function renderSpaceStrip(): void {
     const chip = document.createElement("button");
     chip.className = "space-chip";
     chip.setAttribute("aria-pressed", String(state.activeSpace === path));
-    const chosen = state.meta.icons[path];
     const icon = document.createElement("span");
     icon.className = "space-chip-icon";
-    if (chosen) icon.textContent = chosen;
-    else icon.append(iconEl("folder") ?? "");
+    if (!drawPageMark(icon, state.meta.icons[path])) icon.append(iconEl("folder") ?? "");
     chip.append(icon, chipName(childName(path)));
     // Nome annunciato (V15): l'emoji scelta e il nome dello spazio, non solo
     // il simbolo.

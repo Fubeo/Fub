@@ -171,6 +171,34 @@ describe("wikilink in Live", () => {
     }
   });
 
+  it("una figura del set accanto al wikilink è una maschera, un `fub:` sconosciuto niente (Scrittoio 2)", () => {
+    const parent = document.createElement("div");
+    document.body.append(parent);
+    const icons = new Map([["Libri", "fub:book"], ["Futuro", "fub:astronave"]]);
+    const engine = createTextEngine(parent, {
+      onChange() {},
+      onSelectionChange() {},
+      extensions: () => [
+        markdown({ base: markdownGrammar }),
+        livePreview({ openWikilink() {}, searchTag() {}, pageIcon: (page) => icons.get(page) ?? null }),
+      ],
+    });
+    try {
+      engine.setDoc("Primo\n\nVai a [[Libri]] e [[Futuro]]");
+      const links = [...parent.querySelectorAll<HTMLElement>(".cm-fub-wikilink")];
+      expect(links.map((link) => [link.dataset.pageFigure, link.dataset.pageIcon])).toEqual([
+        ["book", undefined],
+        [undefined, undefined],
+      ]);
+      // La figura non è testo: né nel documento né nel link.
+      expect(links[0]!.textContent).toBe("Libri");
+      expect(engine.getDoc()).toBe("Primo\n\nVai a [[Libri]] e [[Futuro]]");
+    } finally {
+      engine.destroy();
+      parent.remove();
+    }
+  });
+
   it("porta l'icona della pagina nominata, e la cambia quando le icone cambiano (K9)", () => {
     const parent = document.createElement("div");
     document.body.append(parent);

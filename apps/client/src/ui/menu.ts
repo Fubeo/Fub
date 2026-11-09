@@ -10,6 +10,7 @@ import { t } from "../i18n/strings";
 import { trapFocus } from "./a11y";
 import { icon, iconEl } from "./icons";
 import { openLifetime, type Lifetime } from "./lifetime";
+import { figureLabel, figureValue, PAGE_FIGURES } from "./page-mark";
 import { enterSurface, exitSurface } from "./motion";
 
 export interface MenuItem {
@@ -1060,10 +1061,16 @@ const ICON_PRESETS = [
   "🧠", "🛠️", "🎨", "🎵", "🏠", "💼", "🌱", "✈️", "❤️", "🧪",
 ];
 
-/// Un piccolo selettore accanto al punto del click: qualche emoji pronta, un
-/// campo per incollarne una qualsiasi, e il ritorno a "senza icona"
-/// (`null` al callback).
-export function pickIcon(at: MouseEvent, onPick: (icon: string | null) => void): void {
+/// Un piccolo selettore accanto al punto del click: le figure monocrome del
+/// set (`fub:<nome>`, vedi `page-mark.ts`) e qualche emoji pronta, ciascuna
+/// sotto il suo titolo, un campo per incollarne una qualsiasi, e il ritorno a
+/// "senza icona" (`null` al callback). `current` è il valore di oggi: il suo
+/// bottone si dice premuto.
+export function pickIcon(
+  at: MouseEvent,
+  onPick: (icon: string | null) => void,
+  options: { readonly current?: string | null } = {},
+): void {
   // Chiudere il precedente, non togliergli il nodo da sotto. La riga di prima
   // era `document.getElementById("icon-picker")?.remove()`: il selettore
   // spariva dallo schermo e il suo ascoltatore su `document` restava — e con
@@ -1078,7 +1085,7 @@ export function pickIcon(at: MouseEvent, onPick: (icon: string | null) => void):
   pop.setAttribute("role", "dialog");
   pop.setAttribute("aria-label", t("icons.choose"));
   pop.tabIndex = -1;
-  pop.style.left = `${Math.min(at.clientX, window.innerWidth - 240)}px`;
+  pop.style.left = `${Math.min(at.clientX, window.innerWidth - 256)}px`;
   pop.style.top = `${at.clientY}px`;
 
   const close = () => {
@@ -1092,23 +1099,48 @@ export function pickIcon(at: MouseEvent, onPick: (icon: string | null) => void):
     close();
     onPick(icon);
   };
+  const current = options.current?.trim() || null;
 
-  const grid = document.createElement("div");
-  grid.className = "icon-grid";
-  for (const emoji of ICON_PRESETS) {
+  /// Un gruppo col suo titolo: il titolo dà il nome alla griglia, per chi
+  /// ascolta come per chi guarda.
+  const group = (title: string, className: string): HTMLElement => {
+    const heading = document.createElement("div");
+    heading.className = "icon-picker-title";
+    heading.id = `icon-picker-${className}`;
+    heading.textContent = title;
+    const grid = document.createElement("div");
+    grid.className = `icon-grid ${className}`;
+    grid.setAttribute("role", "group");
+    grid.setAttribute("aria-labelledby", heading.id);
+    pop.append(heading, grid);
+    return grid;
+  };
+  const choice = (grid: HTMLElement, value: string, label: string, content: Node): void => {
     const b = document.createElement("button");
-    b.textContent = emoji;
+    b.type = "button";
+    b.dataset.icon = value;
+    b.append(content);
+    b.setAttribute("aria-label", label);
+    b.setAttribute("aria-pressed", String(value === current));
+    lifetime.listen(b, "click", () => apply(value));
+    grid.appendChild(b);
+  };
+
+  const figures = group(t("icons.figures"), "icon-grid--figures");
+  for (const name of PAGE_FIGURES) {
+    const drawn = iconEl(name);
+    if (drawn) choice(figures, figureValue(name), figureLabel(name), drawn);
+  }
+  const emoji = group(t("icons.emoji"), "icon-grid--emoji");
+  for (const char of ICON_PRESETS) {
     // Un pulsante il cui unico contenuto è un'emoji prende il nome dal nome
     // Unicode del carattere, letto in inglese in mezzo a un'interfaccia
     // italiana. Un nome migliore vorrebbe una tabella di traduzioni che questa
     // shell non ha e che non è di questa voce; dichiarare esplicitamente
     // l'emoji come nome accessibile almeno rende l'annuncio **uno** e
     // prevedibile, invece di lasciarlo a come ciascun motore descrive i simboli.
-    b.setAttribute("aria-label", emoji);
-    b.addEventListener("click", () => apply(emoji));
-    grid.appendChild(b);
+    choice(emoji, char, char, document.createTextNode(char));
   }
-  pop.appendChild(grid);
 
   const input = document.createElement("input");
   input.placeholder = t("icons.any");

@@ -26,6 +26,7 @@ import type { SyntaxNode } from "@lezer/common";
 import { taskChecked } from "../../../../rules/mirrored";
 import { t } from "../../../../i18n/strings";
 import { isAllowedLink } from "../../../../ui/sanitize";
+import { figureMask, PAGE_FIGURES, readPageMark } from "../../../../ui/page-mark";
 import type { SyntaxForm } from "../../../../host/contract";
 import {
   inlineDelimiters,
@@ -1444,14 +1445,17 @@ function inDecoration(d: LiveDeco, callbacks: LivePreviewCallbacks): Decoration 
       // puntatore, come l'anteprima al passaggio, non conosce la grammatica
       // di questo profilo.
       const target = parseWikilinkInner(d.data ?? "");
-      const icon = target.page ? callbacks.pageIcon?.(target.page) ?? null : null;
+      // Un'emoji si scrive col `::before`; una figura del set ha la sua
+      // maschera (`data-page-figure`); un `fub:` sconosciuto non si mostra.
+      const mark = readPageMark(target.page ? callbacks.pageIcon?.(target.page) ?? null : null);
       const person = target.page !== "" && callbacks.isPerson?.(target.page) === true;
       return Decoration.mark({
         class: person ? "cm-fub-wikilink cm-fub-person" : "cm-fub-wikilink",
         attributes: {
           [ATTR_WIKILINK]: d.data ?? "",
           "data-wikilink-page": target.page,
-          ...(icon ? { "data-page-icon": icon } : {}),
+          ...(mark?.kind === "text" ? { "data-page-icon": mark.text } : {}),
+          ...(mark?.kind === "figure" ? { "data-page-figure": mark.name } : {}),
           ...(target.heading ? { "data-wikilink-heading": target.heading } : {}),
           ...(target.block ? { "data-wikilink-block": target.block } : {}),
         },
@@ -1628,6 +1632,25 @@ const theme = EditorView.baseTheme({
     display: "inline-block",
     textDecoration: "none",
   },
+  // Una figura del set al posto dell'emoji: la forma dalla maschera, il colore
+  // dal testo del link, grande quanto una lettera.
+  ".cm-fub-wikilink[data-page-figure]::before": {
+    content: "\"\"",
+    width: "1em",
+    height: "1em",
+    marginInlineEnd: "0.2em",
+    display: "inline-block",
+    verticalAlign: "-0.15em",
+    backgroundColor: "currentColor",
+    maskRepeat: "no-repeat",
+    maskSize: "100% 100%",
+    WebkitMaskRepeat: "no-repeat",
+    WebkitMaskSize: "100% 100%",
+  },
+  ...Object.fromEntries(PAGE_FIGURES.map((name) => [
+    `.cm-fub-wikilink[data-page-figure="${name}"]::before`,
+    { maskImage: figureMask(name), WebkitMaskImage: figureMask(name) },
+  ])),
   ".cm-fub-highlight": { background: "var(--doc-highlight, rgba(255, 205, 0, 0.35))" },
   "&dark .cm-fub-highlight": { background: "var(--doc-highlight, rgba(255, 205, 0, 0.28))" },
   ".cm-fub-tag": {

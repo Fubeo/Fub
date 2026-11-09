@@ -156,7 +156,7 @@ nomi simili restano dati dell'utente.
 | Percorso | Classe | Schema | Proprietario |
 |---|---|---:|---|
 | `.fub/settings.json` | autorevole | 1 | kernel/host impostazioni |
-| `.fub/workspace.json` | autorevole | 1 | organizzazione |
+| `.fub/workspace.json` | autorevole | 1 | organizzazione; un'icona (`icons`) è un'emoji o `fub:<nome>`, una figura della shell, e una versione di prima ne mostra il testo |
 | `.fub/journal.jsonl` | autorevole operativo | 1 | registro mutazioni |
 | `.fub/mounts.json` | autorevole | 1 | kernel/host mount esterni espliciti |
 | `.fub/drafts/` | autorevole | 1 | bozze non consolidate |

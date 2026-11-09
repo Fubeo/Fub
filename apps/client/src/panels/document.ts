@@ -13,6 +13,7 @@
 import { promptText } from "../ui/dialogs";
 import { openCompare } from "../ui/compare";
 import { pageIcon } from "../state/page-icons";
+import { readPageMark } from "../ui/page-mark";
 import { modeIcon, openModeMenu } from "../state/mode-menu";
 import type { SurfaceMode } from "../editors/core/registry";
 import { FORMAT_ICON, formatKindOf, formatNameOf } from "../ui/format-kind";
@@ -948,17 +949,21 @@ function paintTab(tab: HTMLElement, target: Tab, selected: boolean, tabStop: boo
   // testa la figura del suo formato, anche la nota. Una nota con `icon:` nel
   // frontmatter porta invece la sua icona (K9), che dice di più.
   const kind = target.k === "doc" ? formatKindOf(target.doc) : null;
-  const pageMark = target.k === "doc" && (kind === "note" || kind === null) ? pageIcon(target.doc) : null;
-  const format = kind && !pageMark ? iconEl(FORMAT_ICON[kind]) : null;
+  // Un'emoji, o una figura del set (`page-mark.ts`) che sta dove sta la figura
+  // del formato e ne prende la misura e il colore; un `fub:` che questa
+  // versione non conosce vale come nessuna icona, e torna la figura del formato.
+  const written = target.k === "doc" && (kind === "note" || kind === null) ? pageIcon(target.doc) : null;
+  const pageMark = readPageMark(written);
+  const format = pageMark?.kind === "figure" ? iconEl(pageMark.name) : kind && !pageMark ? iconEl(FORMAT_ICON[kind]) : null;
   if (format) {
     format.classList.add("tab-format");
     name.prepend(format);
   }
-  if (pageMark) {
+  if (pageMark?.kind === "text") {
     const mark = document.createElement("span");
     mark.className = "tab-page-icon";
     mark.setAttribute("aria-hidden", "true");
-    mark.textContent = pageMark;
+    mark.textContent = pageMark.text;
     name.prepend(mark);
   }
   const pin = target.pinned ? iconEl("pin") : null;

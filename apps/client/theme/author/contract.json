@@ -377,7 +377,9 @@
     "palette-title",
     "palette-desc",
     "icon-picker",
+    "icon-picker-title",
     "icon-grid",
+    "icon-grid--figures",
     "icon-none",
     "views-status",
     "declared-view-panel",
@@ -1909,7 +1911,9 @@
     "palette-title": "cornice",
     "palette-desc": "cornice",
     "icon-picker": "cornice",
+    "icon-picker-title": "cornice",
     "icon-grid": "cornice",
+    "icon-grid--figures": "cornice",
     "icon-none": "cornice",
     "views-status": "cornice",
     "declared-view-panel": "cornice",
@@ -4068,7 +4072,9 @@
       "part": "drawers",
       "hooks": [
         "icon-picker",
+        "icon-picker-title",
         "icon-grid",
+        "icon-grid--figures",
         "icon-none"
       ],
       "states": [
@@ -8583,7 +8589,7 @@
   "counts": {
     "required_roles": 154,
     "optional_roles": 64,
-    "hooks": 1530,
+    "hooks": 1532,
     "state_names": 7,
     "assigned_states": 748,
     "components": 221,

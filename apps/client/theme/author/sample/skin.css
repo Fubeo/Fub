@@ -3283,20 +3283,31 @@ kbd,
   letter-spacing: 0;
 }
 
-/* **Il selettore dell'icona** (emoji) di una nota o di una cartella: un
-   foglietto che galleggia dove si è cliccato. */
+/* **Il selettore dell'icona** di una nota o di una cartella: un foglietto che
+   galleggia dove si è cliccato. Due sezioni col loro titolo in tondo: le
+   figure monocrome del set, che prendono il colore del testo come le icone
+   dell'albero, e le emoji, che restano una scelta piena. Quella scelta ha il
+   velo d'accento. */
 .icon-picker {
   position: fixed;
   z-index: var(--z-picker);
-  width: 232px;
+  width: 248px;
   padding: var(--space-4);
   background: var(--bg-elev);
-  border: 1px solid var(--border);
+  border: 0;
   border-radius: var(--radius-menu);
-  box-shadow: var(--shadow-3);
+  box-shadow: 0 0 0 1px var(--border), var(--shadow-3);
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
+}
+.icon-picker-title {
+  color: var(--muted);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+}
+.icon-picker .icon-grid + .icon-picker-title {
+  margin-top: var(--space-2);
 }
 .icon-picker .icon-grid {
   display: grid;
@@ -3308,17 +3319,28 @@ kbd,
   padding: 0;
   border-radius: var(--radius-chip);
   background: transparent;
+  color: var(--muted);
   font-size: var(--text-xl);
   line-height: 1;
 }
-/* Sotto il puntatore la matita blu, come le voci del menu da cui il selettore
-   si apre: il grigio della scrivania, su questa carta rialzata, al buio
-   sarebbe un buco più scuro del fondo. */
 .icon-picker .icon-grid button:hover {
-  background: var(--accent-wash);
+  background: var(--overlay-hover);
+  color: var(--text);
 }
 .icon-picker .icon-grid button:active {
-  background: var(--accent-veil);
+  background: var(--overlay-active);
+}
+.icon-picker .icon-grid button[aria-pressed="true"] {
+  background: var(--accent-wash);
+  color: var(--accent);
+}
+.icon-picker .icon-grid button:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: -2px;
+}
+.icon-picker .icon-grid--figures button > svg {
+  width: 18px;
+  height: 18px;
 }
 .icon-picker input {
   height: var(--control-h);
@@ -3347,8 +3369,8 @@ kbd,
   font-size: var(--text-sm);
 }
 .icon-picker .icon-none:hover {
-  background: var(--accent-wash);
-  color: var(--accent);
+  background: var(--overlay-hover);
+  color: var(--text);
 }
 .icon-picker .icon-none:active {
   background: var(--accent-veil);

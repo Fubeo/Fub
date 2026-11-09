@@ -54,7 +54,7 @@ export const DRAWERS: PartAnatomy = {
       states: [S("rest"), S("hover"), S("pressed"), S("selected"), S("focused")],
       hooks: ["bookmarks-panel", "workspaces-panel", "search-result", "palette-row", "palette-title", "palette-desc"],
     },
-    { name: "icon-picker", states: INTERACTIVE, hooks: ["icon-picker", "icon-grid", "icon-none"] },
+    { name: "icon-picker", states: INTERACTIVE, hooks: ["icon-picker", "icon-picker-title", "icon-grid", "icon-grid--figures", "icon-none"] },
     {
       name: "declared-view",
       states: [S("rest"), S("selected"), S("focused")],
