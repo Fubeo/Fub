@@ -395,7 +395,7 @@ function deepFreeze<T>(value: T): T {
   return value;
 }
 
-type Invoke =(target: Instance, input: Uint8Array | null, run: (ptr: number, len: number) => number) => Answer;
+type Invoke = (target: Instance, input: Uint8Array | null, run: (ptr: number, len: number) => number) => Answer;
 
 class Core implements CanvasCore {
   readonly #target: Instance;
