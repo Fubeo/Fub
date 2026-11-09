@@ -167,7 +167,7 @@ codice, nei rami e nelle issue il 2026-11-05.
 | N1 · FubDraw | In `main` (ADR 0231, tag `fubdraw-completo`). I 42 file `.rs` che nominano FubDraw sono codice vivo: FubDraw è il nome del formato (ADR 0203). La prova byte per byte c'è già: `editors/spatial/corpus-open.test.ts`, `crates/fub-scene/tests/corpus.rs` e i test del provider svg (ADR 0231, «Verifica») | fatto; dentro: il nome dove le persone lo vedono (D14 A) | Cancello passato; resta l'archivio | PA T33; #282, fuori |
 | N2 · MCP | In `main` (`crates/fub-cli/src/mcp.rs`, ADR 0232): 17 strumenti, vedi «Contratti» qui sotto | fatto; dentro: due flussi veri nel giro a mano | L'AI della definizione passa di qui | PA T23 |
 | N3 · la lavagna in Rust | In `main` (#297, #306, #307) | fatto | Base di N4, N6 e della lavagna in codice | — |
-| N4 · l'inchiostro | Ramo: 19 di 25 (T22 la gomma che taglia) | dentro | La penna della definizione | `piano/n4-inchiostro`, #298 |
+| N4 · l'inchiostro | Ramo: 20 di 25 (T16 «Scrivi col mouse») | dentro | La penna della definizione | `piano/n4-inchiostro`, #298 |
 | N5 · strati nativi | Senza piano | fuori | Vedi la tabella sopra | «Prossime fasi» |
 | N6 · la lavagna v1 | Ramo: 11 di 90 | dentro, senza T79–T85 e T88 | Le lavagne della definizione | `piano/n6-lavagna`, #302 |
 | N7 · file Craft | In `main` (#299) | fatto | Le anteprime ci sono | — |
@@ -375,7 +375,7 @@ Se una di queste cade, la stima si allunga.
 |---|---|---|---|---|---|---|
 | Griglia T1–T9 | griglia | 1 di 9 | #295 in `main` (il ramo nasce da K3); T2 e T3 mai insieme a S2 T20 (tutti e tre toccano `skin/editors.css`) | medio: il motore della griglia | L | griglia T8 (foto contro `celle-griglia`) |
 | PA T12 · #237 R04 | PA | da fare | griglia T4 | medio | M | test di Vitest sulla griglia |
-| N4 T15, T16, T21, T23–T25 | N4 | 19 di 25 | PA T2; T24 aspetta l'esito della prova con Obsidian, che incolla l'utente | medio: penna e latenza | L | N4 T25 |
+| N4 T15, T21, T23–T25 | N4 | 20 di 25 | PA T2; T24 aspetta l'esito della prova con Obsidian, che incolla l'utente | medio: penna e latenza | L | N4 T25 |
 | N6 v1, senza T79–T85 e T88 | N6 | 11 di 90 | N4 in `main` (il ramo nasce da N4, e T90 lo chiede); i task grafici dopo l'approvazione dei prototipi T26–T28 (D3) | alto: 79 task | XL | N6 T90 |
 | K5 T6, T7, T9, T11, T13–T24, T27–T30 | K5 | 12 di 30 | PA T2; T6 copia `Fubeo/vectorcraft` (c'è, pubblico, 2026-11-02); T22 dopo D5; T24 dopo K2 in `main` (fatto) | alto: motore vettoriale nuovo | XL | K5 T30 |
 | La lavagna in codice T1–T26 | lavagna in codice | 0 di 26 | T15–T18 dopo N4 in `main`; T14, T19, T23 e T24 dopo N6 in `main` (T72, T73, T19, T37, T48) | medio | L | lavagna in codice T26 |
