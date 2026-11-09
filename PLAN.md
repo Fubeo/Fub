@@ -337,7 +337,7 @@ Se una di queste cade, la stima si allunga.
 | PA T59 · un file in sola lettura non si sovrascrive | PA | fatto (in main, #317) | T13 | medio: la scrittura del kernel, tre sistemi | S | test del kernel e `prealpha_corpus` sui tre sistemi |
 | PA T60 · le altre prove del lucchetto a un colpo solo | PA | fatto (in main, #319) | T19 | basso: solo test | M | 200 corse verdi delle due cadute |
 | PA T61 · la CI Mobile per la cornice del telefono | PA | fatto (in main, #319; la CI Mobile è partita e passata) | nessuno | basso: solo il filtro di un workflow | S | una PR che tocca solo la cornice fa partire `mobile.yml` |
-| PA T62 · la WebView fa pulizia prima di leggere la memoria | PA | in corso | T21 | basso: un gancio spento di serie, acceso solo dal banco | M | 5 corse di R1 sotto soglia, confrontate con 5 senza |
+| PA T62 · la WebView fa pulizia prima di leggere la memoria | PA | fatto | T21 | basso: un gancio spento di serie, acceso solo dal banco | M | 5 corse di R1 sotto soglia, confrontate con 5 senza |
 | PA T19 · i test instabili del Rust | PA | fatto | nessuno | medio | M | 200 giri verdi o causa trovata |
 | PA T25 · il controllo degli aggiornamenti vede le pre-release | PA | fatto | nessuno | basso | S | test di `fub-host` (`updates.rs`) |
 | PA T32 · `![[x.pdf#page=3]]` apre il PDF a quella pagina | PA | fatto | nessuno | basso | S | Vitest di `media.ts` e dell'apertura |
@@ -6279,4 +6279,4 @@ nel resoconto e confrontato con 5 corse senza il gancio; un test prova che
 senza la variabile il gancio non c'è.
 Prova: scripts/check.sh --rapido; i test di `fub-app` del gancio; i test del
 banco; le 10 corse di R1 (5 con, 5 senza)
-Stato: [ ] da fare
+Stato: [x] fatto · fc4333a6..db322aaa · un'estensione web del banco (WebKitGTK 4.1 non ha un'API per la raccolta), caricata solo da una build con la feature `bench-gc`, che il job `webview` accende e il rilascio no; 5+5 corse R1 a macchina libera: col gancio la pendenza resta fra 1,8 e 3,2 MiB, senza va da 0,7 a 17,5
