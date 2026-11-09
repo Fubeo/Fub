@@ -665,7 +665,7 @@ describe("i file Craft dentro una nota", () => {
     const embeds = resources(() => ({ doc_id: LOGO, html: FIGURE, parts: [] }));
     const root = note('<span class="embed" data-embed-page="logo.vectorcraft">logo.vectorcraft</span>', embeds);
     await vi.waitFor(() => expect(root.querySelector(".embed")!.getAttribute("data-vault-media")).toBe("loaded"));
-    expect(root.querySelector(".craft-figure-box")!.textContent).toBe("logo.vectorcraft · Disegno di VectorCraft · 2.0 KiB · Nessuna anteprima");
+    expect(root.querySelector(".craft-figure-box")!.textContent).toBe("logo.vectorcraft · Disegno di VectorCraft · 2,0 KiB · Nessuna anteprima");
     expect(root.querySelector("img")).toBeNull();
   });
 

@@ -408,7 +408,7 @@ describe("la scheda di un RAW", () => {
     expect(image.style.imageOrientation).toBe("none");
     expect(image.style.transform).toContain("rotate(90deg)");
     expect(text(parent, ".zoom-info")).toMatch(/^JPEG · 800 × 1200 px · /);
-    expect(text(parent, ".craft-info")).toBe("Foto RAW · CR3 · 25.8 MiB");
+    expect(text(parent, ".craft-info")).toBe("Foto RAW · CR3 · 25,8 MiB");
     // I dati dell'XMP stanno nella scheda, dopo la riga del RAW.
     const card = parent.querySelector(".craft-card")!;
     expect([...card.children].map((child) => child.className)).toEqual(["media-image", "craft-info", "photo-data"]);
@@ -438,7 +438,7 @@ describe("la scheda di un RAW", () => {
     );
     await until(() => parent.querySelector(".craft-ask") !== null && parent.querySelector(".photo-data") !== null);
     expect(text(parent, ".craft-empty-name")).toBe("IMG_0412.CR3");
-    expect(text(parent, ".craft-info")).toBe("Foto RAW · CR3 · 25.8 MiB");
+    expect(text(parent, ".craft-info")).toBe("Foto RAW · CR3 · 25,8 MiB");
     expect(text(parent, ".craft-empty-state")).toBe("Il file non porta un'anteprima");
     expect(parent.querySelector(".craft-ask")?.textContent).toContain("LightCraft");
     // La riga dei dati è sorella del riquadro, dopo di lui.

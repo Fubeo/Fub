@@ -9,6 +9,7 @@
 // Nessun import Tauri qui dentro: i byte arrivano dalla porta iniettata
 // (`resource-port.ts`), mai da un canale diretto.
 
+import { resolvedLanguage } from "../../i18n/strings";
 import type {
   ResourceDescriptor as HostResourceDescriptor,
   ResourceKind,
@@ -114,11 +115,13 @@ function extOf(path: string): string | null {
   return ext ? ext : null;
 }
 
-/// Un peso leggibile: byte, KiB, MiB.
+/// Un peso leggibile: byte, KiB, MiB, con la virgola o il punto della lingua
+/// dell'interfaccia («2,4 MiB» in italiano, «2.4 MiB» in inglese).
 export function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KiB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MiB`;
+  const decimal = new Intl.NumberFormat(resolvedLanguage(), { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+  if (bytes < 1024 * 1024) return `${decimal.format(bytes / 1024)} KiB`;
+  return `${decimal.format(bytes / (1024 * 1024))} MiB`;
 }
 
 /// Il MIME dedotto dal nome, o `null` quando non si sa (risposta onesta).
