@@ -99,6 +99,13 @@ ciò che non dipende dalla risposta.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-09 · scrittoio-2 (orchestratore) · S2 T21 si integra con il
+  banco dell'accessibilità rosso solo su `conflitto-lettura` (il clic sulla
+  riga della nota va in timeout), rosso già prima del task e fuori dai suoi
+  file; il gruppo «Carattere» del documento entra fra quelli che si
+  raccolgono, in T28 · il clic rosso è un seguito già aperto del ramo;
+  senza «Carattere» fra i raccolti il telefono non è come il prototipo
+  approvato e a 700 px il gruppo resta tagliato.
 - 2026-11-09 · scrittoio-2 (utente, orchestratore) · nuovo S2 T28: la
   barra a schede del documento accende il movimento del kit
   (`motion: true`) come la barra dei fogli, con la tenda sopra il vassoio;
