@@ -9,7 +9,6 @@
 // Nessun import Tauri qui dentro: i byte arrivano dalla porta iniettata
 // (`resource-port.ts`), mai da un canale diretto.
 
-import { resolvedLanguage } from "../../i18n/strings";
 import type {
   ResourceDescriptor as HostResourceDescriptor,
   ResourceKind,
@@ -115,13 +114,19 @@ function extOf(path: string): string | null {
   return ext ? ext : null;
 }
 
-/// Un peso leggibile: byte, KiB, MiB, con la virgola o il punto della lingua
-/// dell'interfaccia («2,4 MiB» in italiano, «2.4 MiB» in inglese).
+/// Un peso leggibile: byte, KiB, MiB, coi decimali nella lingua della shell
+/// («47,1 KiB» in italiano). La lingua è quella che `i18n/strings.ts` scrive
+/// sulla radice del documento, come per gli altri numeri del client; senza,
+/// l'inglese.
 export function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
-  const decimal = new Intl.NumberFormat(resolvedLanguage(), { minimumFractionDigits: 1, maximumFractionDigits: 1 });
-  if (bytes < 1024 * 1024) return `${decimal.format(bytes / 1024)} KiB`;
-  return `${decimal.format(bytes / (1024 * 1024))} MiB`;
+  if (bytes < 1024 * 1024) return `${oneDecimal(bytes / 1024)} KiB`;
+  return `${oneDecimal(bytes / (1024 * 1024))} MiB`;
+}
+
+function oneDecimal(value: number): string {
+  const language = (typeof document === "undefined" ? "" : document.documentElement.lang) || "en";
+  return new Intl.NumberFormat(language, { minimumFractionDigits: 1, maximumFractionDigits: 1, useGrouping: false }).format(value);
 }
 
 /// Il MIME dedotto dal nome, o `null` quando non si sa (risposta onesta).
