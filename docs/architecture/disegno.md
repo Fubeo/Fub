@@ -190,19 +190,134 @@ superficie. L'elenco per ogni file del corpus sta in
 | Percorso | Contiene |
 |---|---|
 | `vendor/vectorcraft/` | la copia di VectorCraft, con le patch numerate e `UPSTREAM.md` (arriva con T6) |
-| `crates/fub-disegno/` | l'adattatore: apertura, mappa, sincronia, differenza, gesti, comandi, perdite (arriva con T9 e dopo) |
+| `crates/fub-disegno/` | l'adattatore: apertura, mappa, sincronia, differenza, gesti, comandi, perdite (i moduli si riempiono da T11) |
 | `crates/fub-host/src/drawing.rs` | le istanze per vault e i sei comandi lato host (arriva con T19) |
 | `crates/fub-abi/src/drawing.rs` | le forme condivise e i limiti (arriva con T4) |
 | `apps/client/src/editors/spatial/motore/` | la sessione, i gesti, i colori e il chip delle perdite (arriva con T8, T10, T12 e T21) |
 | `apps/client/src/editors/spatial/tools/` | gli strumenti TypeScript, riferimento dei gesti e strumenti del profilo `pdf` |
 
-`crates/fub-disegno` è l'unico crate che nomina `vectorcraft-*`
-(`.github/scripts/check-engine-boundary.mjs` e
-`crates/fub-abi/tests/dependency_invariant.rs`, arriva con T9). La prova
+`crates/fub-disegno` è l'unico crate che nomina `vectorcraft-*`, nei
+`Cargo.toml` e nei sorgenti (`.github/scripts/check-engine-boundary.mjs` e
+`VECTORCRAFT_OWNERS` in `crates/fub-abi/tests/dependency_invariant.rs`). La prova
 che il motore fa ciò che facevano gli strumenti TypeScript sono i vettori di
 `apps/client/src/__fixtures__/disegno-gesti/` (arrivano con T3); quella
 senza perdite è il cancello, `node tools/disegno-cancello/cancello.mjs`
 (arriva con T20).
+
+Il motore entra senza le feature di serie di `vectorcraft-engine`: niente
+caratteri di VectorCraft (`bundled-fonts`: i caratteri li dà `fub-motori`),
+niente importatori di altre app né plug-in (patch 0001), e il PDF e l'EPS
+fuori dal suo grafo (patch 0002). Le librerie che il motore porta in una
+seconda versione, e perché, sono in
+[le versioni del disegno](../misure/disegno-versioni-2026-11.md).
+
+Il blocco qui sotto è il seguito del [grafo dei crate](overview.md): l'adattatore,
+i crate di Fub da cui dipende e i crate di VectorCraft che porta. Lo confronta
+con `cargo metadata` lo stesso test della panoramica
+(`the_diagram_declares_the_real_dependencies`): gli archi pieni sono le
+dipendenze normali, quelli tratteggiati le sole dipendenze di prova.
+
+```mermaid
+flowchart LR
+    %% @grafo-dipendenze
+    %% Il seguito del grafo: fub-disegno e i crate di VectorCraft.
+
+    disegno["fub-disegno"]
+    abi["fub-abi"]
+    motori["fub-motori"]
+    scene["fub-scene"]
+    testkit["fub-testkit"]
+    cdocpath["craft-docpath"]
+    cformat["craft-vectorcraft-format"]
+    vbrush["vectorcraft-brush"]
+    vcad["vectorcraft-cad"]
+    vcolor["vectorcraft-color"]
+    vdoc["vectorcraft-doc"]
+    veffects["vectorcraft-effects"]
+    vengine["vectorcraft-engine"]
+    vformat["vectorcraft-format"]
+    vgeom["vectorcraft-geom"]
+    vpathops["vectorcraft-pathops"]
+    vrender["vectorcraft-render"]
+    vscriptcheck["vectorcraft-scriptcheck"]
+    vsvg["vectorcraft-svg"]
+    vtext["vectorcraft-text"]
+    vthreed["vectorcraft-three-d"]
+    vtools["vectorcraft-tools"]
+    vtrace["vectorcraft-trace"]
+
+    disegno --> abi
+    disegno --> motori
+    disegno --> scene
+    disegno --> vdoc
+    disegno --> vengine
+    disegno --> vgeom
+    disegno --> vsvg
+    disegno --> vtools
+    disegno -.-> testkit
+    vbrush --> vcolor
+    vbrush --> vdoc
+    vbrush --> vgeom
+    vcad --> vbrush
+    vcad --> vcolor
+    vcad --> vdoc
+    vcad --> veffects
+    vcad --> vgeom
+    vcad --> vpathops
+    vcad --> vtext
+    vdoc --> vcolor
+    vdoc --> vgeom
+    veffects --> vdoc
+    veffects --> vgeom
+    veffects --> vpathops
+    veffects --> vtext
+    veffects --> vthreed
+    veffects -.-> vcolor
+    vengine --> cdocpath
+    vengine --> vbrush
+    vengine --> vcad
+    vengine --> vcolor
+    vengine --> vdoc
+    vengine --> veffects
+    vengine --> vformat
+    vengine --> vgeom
+    vengine --> vpathops
+    vengine --> vrender
+    vengine --> vscriptcheck
+    vengine --> vsvg
+    vengine --> vtext
+    vengine --> vtools
+    vengine --> vtrace
+    vformat --> cformat
+    vformat --> vdoc
+    vformat -.-> vgeom
+    vpathops --> vgeom
+    vrender --> vbrush
+    vrender --> vcolor
+    vrender --> vdoc
+    vrender --> veffects
+    vrender --> vgeom
+    vrender --> vtext
+    vsvg --> cdocpath
+    vsvg --> vbrush
+    vsvg --> vcolor
+    vsvg --> vdoc
+    vsvg --> veffects
+    vsvg --> vgeom
+    vsvg --> vtext
+    vtext --> vdoc
+    vtext --> vgeom
+    vthreed --> vgeom
+    vthreed --> vpathops
+    vtools --> vbrush
+    vtools --> vcolor
+    vtools --> vdoc
+    vtools --> veffects
+    vtools --> vgeom
+    vtools --> vpathops
+    vtools --> vtext
+    vtrace --> vgeom
+```
 
 Per l'inchiostro e gli strumenti della superficie vedi
 [Inchiostro e strumenti](ink-and-tools.md); per le superfici e le sessioni

@@ -55,6 +55,7 @@ sotto `crates/` con gli altri e non compaiono nel disegno per non superare i
 | la lavagna nella WebView | `crates/fub-canvas-wasm/` | la facciata WebAssembly del nucleo: un'interfaccia C scritta a mano, testo e JSON dentro e fuori | `cargo test -p fub-canvas-wasm` |
 | l'inchiostro | `crates/fub-ink/` | campioni, pressione, stabilizzatore, InkML; il gemello caldo sta in `apps/client/src/ink/` | `cargo test -p fub-ink` |
 | i disegni | `crates/fub-scene/` | lettura del formato scena e delle annotazioni PDF | `cargo test -p fub-scene` |
+| il motore del disegno | `crates/fub-disegno/` | l'adattatore di VectorCraft, l'unico crate che lo nomina; i moduli si riempiono col piano K5 | `cargo check -p fub-disegno` |
 | lo strato dei motori | `crates/fub-motori/` | motori costruiti alla prima richiesta, il loro gruppo di thread, il budget delle cache, il registro | `cargo test -p fub-motori` |
 | il runtime dei plugin | `crates/fub-wasm-host/` | l'unico crate che nomina Wasmtime | `cargo test -p fub-wasm-host` |
 | la riga di comando | `crates/fub-cli/` | automazione senza Tauri e il server MCP | `cargo test -p fub-cli` |
@@ -126,7 +127,7 @@ parse (`crates/fub-kernel/tests/write_atomicity.rs`).
 |---|---|---|
 | WordCraft v0.10.0 | `vendor/wordcraft/` (6 crate) | `fub-format-rich` e il correttore di `fub-features` |
 | GridCraft v0.11.1 | `vendor/gridcraft/` (10 crate) | `fub-format-xlsx` |
-| VectorCraft | `tools/motori-prova/vettori/` | le prove; entra con K5 |
+| VectorCraft v0.20.0 | `vendor/vectorcraft/` (20 crate); le prove in `tools/motori-prova/vettori/` | `fub-disegno` |
 | PhotoCraft, LightCraft | `tools/motori-prova/foto/`, `luce/` | le prove; entrano con K7 e K8 |
 | PdfCraft | `tools/motori-prova/pdf/` | le prove; il client usa pdf.js (`editors/media/pdf-view.ts`) |
 

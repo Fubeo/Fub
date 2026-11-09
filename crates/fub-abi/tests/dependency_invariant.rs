@@ -19,8 +19,9 @@
 //!    prefisso non vedrebbe un parser markdown con un nome nuovo; un elenco
 //!    chiuso vede tutto ciò che compare, chiamato come vuole.
 //! 4. **Il diagramma dei componenti** — il grafo disegnato in
-//!    `../../../docs/architecture/overview.md` deve dire le stesse dipendenze che
-//!    dice `cargo metadata`, nei due versi.
+//!    `../../../docs/architecture/overview.md` (e, per il motore del disegno, in
+//!    `../../../docs/architecture/disegno.md`) deve dire le stesse dipendenze
+//!    che dice `cargo metadata`, nei due versi.
 //!
 //! Le maglie sono diverse di proposito: la seconda intercetta il gesto (`cargo
 //! add`), la prima il contrabbando, la terza l'ignoto. Sul kernel — che ha una
@@ -873,8 +874,19 @@ fn the_live_session_stays_outside_the_core() {
 // La quarta rete: il diagramma dei componenti.
 // ---------------------------------------------------------------------------
 
-/// Il documento che contiene il grafo, relativo alla radice del repo.
-const DIAGRAM_DOC: &str = "../../../docs/architecture/overview.md";
+/// I documenti che contengono il grafo, come li nominano i messaggi.
+const DIAGRAM_DOC: &str =
+    "../../../docs/architecture/overview.md (e ../../../docs/architecture/disegno.md)";
+
+/// Gli stessi documenti, relativi alla radice del repo. La panoramica tiene il
+/// grafo di Fub; la pagina del disegno il seguito con `fub-disegno` e i crate
+/// di VectorCraft, che nella panoramica non stanno sotto la soglia di righe di
+/// una pagina (`.github/scripts/check-doc-size.mjs`). I blocchi marcati di
+/// tutti e due sono un grafo solo.
+const DIAGRAM_DOCS: &[&str] = &[
+    "docs/architecture/overview.md",
+    "docs/architecture/disegno.md",
+];
 
 /// Il commento Mermaid che marca *quale* blocco è il grafo delle dipendenze.
 /// Serve perché quel documento ne contiene più d'uno, e il primo è disposto a
@@ -1023,12 +1035,14 @@ fn the_diagram_declares_the_real_dependencies() {
     let graph = Graph::new(&metadata);
     let members = graph.local();
 
-    let doc = concat!(
-        env!("CARGO_MANIFEST_DIR"),
-        "/../../docs/architecture/overview.md"
-    );
-    let source = std::fs::read_to_string(doc)
-        .unwrap_or_else(|and| panic!("{DIAGRAM_DOC} non si legge: {and}"));
+    let source: String = DIAGRAM_DOCS
+        .iter()
+        .map(|doc| {
+            let path = format!("{}/../../{doc}", env!("CARGO_MANIFEST_DIR"));
+            std::fs::read_to_string(&path).unwrap_or_else(|and| panic!("{doc} non si legge: {and}"))
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
     let drawn = read_diagram(&source);
 
     // 1. I riquadri sono i crate della repository, tutti e soli: i membri e i
@@ -1265,6 +1279,20 @@ const GRIDCRAFT_OWNERS: &[(&str, &str, Option<&str>)] = &[
 /// I crate che non devono vedere GridCraft nemmeno attraverso qualcun altro.
 const GRIDCRAFT_FREE: &[&str] = &["fub-abi", "fub-kernel", "fub-sdk"];
 
+/// Chi può dichiarare un crate di VectorCraft, come [`GRIDCRAFT_OWNERS`]: il
+/// motore del disegno entra da un adattatore soltanto, `fub-disegno` (vedi
+/// ../../../docs/decisions/0239-il-disegno-sul-motore-vettoriale.md).
+const VECTORCRAFT_OWNERS: &[(&str, &str, Option<&str>)] = &[
+    ("fub-disegno", "vectorcraft-doc", None),
+    ("fub-disegno", "vectorcraft-engine", None),
+    ("fub-disegno", "vectorcraft-geom", None),
+    ("fub-disegno", "vectorcraft-svg", None),
+    ("fub-disegno", "vectorcraft-tools", None),
+];
+
+/// I crate che non devono vedere VectorCraft nemmeno attraverso qualcun altro.
+const VECTORCRAFT_FREE: &[&str] = &["fub-abi", "fub-kernel", "fub-sdk"];
+
 /// I crate di un motore (`family`) fra le dipendenze dichiarate di un membro,
 /// con il genere e se sono opzionali.
 fn engine_declared<'a>(
@@ -1387,6 +1415,23 @@ fn the_core_does_not_reach_gridcraft() {
         GRIDCRAFT_FREE,
         "il motore del foglio di calcolo",
     );
+}
+
+/// I proprietari di VectorCraft: lo stesso confine, per il disegno.
+#[test]
+fn only_the_adapter_names_vectorcraft() {
+    only_owners_name(
+        "vectorcraft",
+        VECTORCRAFT_OWNERS,
+        "Il motore del disegno entra soltanto da `fub-disegno`. Un altro crate\n\
+         passa da quell'adattatore; se davvero serve, è una decisione da\n\
+         prendere aggiornando `VECTORCRAFT_OWNERS` qui e l'ADR 0239.",
+    );
+}
+
+#[test]
+fn the_core_does_not_reach_vectorcraft() {
+    the_core_does_not_reach("vectorcraft", VECTORCRAFT_FREE, "il motore del disegno");
 }
 
 /// Le cartelle di Excel restano una feature dell'host: una build di `fub-host`

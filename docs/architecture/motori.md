@@ -27,8 +27,8 @@ tutti nello stesso modo, da un posto solo:
 
 `fub-motori` non nomina nessun motore e non dipende da nessun adattatore. I
 motori di terzi si nominano soltanto dai loro adattatori
-(`check-engine-boundary.mjs`, `WORDCRAFT_OWNERS` e `GRIDCRAFT_OWNERS` in
-`dependency_invariant.rs`): sono gli adattatori a dipendere da `fub-motori`
+(`check-engine-boundary.mjs`, `WORDCRAFT_OWNERS`, `GRIDCRAFT_OWNERS` e
+`VECTORCRAFT_OWNERS` in `dependency_invariant.rs`): sono gli adattatori a dipendere da `fub-motori`
 e a iscrivervi il loro motore.
 
 ## I pezzi
