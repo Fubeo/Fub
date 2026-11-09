@@ -99,6 +99,12 @@ ciò che non dipende dalla risposta.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-09 · K5 T9 · `cargo fmt --all` segue le dipendenze a percorso e
+  con `fub-disegno` nel workspace controlla anche le copie di VectorCraft e
+  craft-libs: il `rustfmt.toml` dell'upstream entra fra i file gestiti
+  (come per WordCraft e GridCraft) e le patch si riformattano senza
+  cambiare effetto · scelta dell'orchestratore fra questo e togliere
+  `vendor/` dal controllo di fmt, che sarebbe diverso per motore.
 - 2026-11-09 · K5 T9 · la licenza IJG di `jpeg-encoder` entra con
   un'eccezione stretta in `deny.toml` (solo quel crate) e la frase di
   ringraziamento in `THIRD_PARTY_NOTICES.md`; l'IJG non entra nell'elenco

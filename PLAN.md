@@ -1084,7 +1084,7 @@ dependency_invariant` passano, e falliscono se un altro crate aggiunge
 .github/scripts/check-motori.mjs` sono verdi; il file di misura ha una riga
 per ogni libreria doppia nuova, con chi la porta e il perché.
 Prova: scripts/check.sh --rapido; cargo check -p fub-disegno
-Stato: [ ] da fare
+Stato: [x] fatto (2026-11-09) · differenze: `librerie_doppie` da 45 a 60, misurato su `fub-app` più `fub-disegno` perché `fub-app` lo prende solo con T13/T19 (intanto `check-motori` dice «il tetto può scendere», ed è voluto: non abbassarlo); le `icu_*` tenute a 2.3 come il lock del vendor; `check-engine-boundary` legge anche i `Cargo.toml`; il grafo in `docs/architecture/disegno.md`; niente `[lints]` (la radice non ha `[workspace.lints]`); `rustfmt.toml` dell'upstream fra i file gestiti di vectorcraft, craft-docpath e craft-vectorcraft-format, patch 0001/0002 riformattate (decisione dell'orchestratore); `windows-registry` 0.6 da `vectorcraft-text` provato solo su Linux
 
 ## T10 · I gesti nel client
 
