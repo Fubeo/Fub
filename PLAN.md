@@ -387,7 +387,7 @@ Se una di queste cade, la stima si allunga.
 |---|---|---|---|---|---|---|
 | PA T41 · gli hook congelati | PA | da fare | Fase C in `main`; T34–T40 | basso per il codice, alto se si sbaglia il momento | S | `contract-frozen.test.ts` |
 | PA T42 · tre temi d'esempio | PA | da fare (D17 C: Carta, Officina, Mare) | T41, T54 | basso | M | `examples.test.ts`, scene del banco |
-| PA T49 · il logo | PA | da fare: D28 chiusa il 2026-11-09 (logo e nome riservati, codice libero) | T48 | medio: icone, la ricetta e la serie dei temi; gli hook restano | M | le icone generate, le scene del banco |
+| PA T49 · il logo | PA | fatto sul ramo del piano (2026-11-09; D28: logo e nome riservati, codice libero); baseline dal runner con la consegna 4 | T48 | medio: icone, la ricetta e la serie dei temi; gli hook restano | M | le icone generate, le scene del banco |
 | PA T55 · il controllo di tutte le viste nel banco | PA | da fare (D19 A) | S2 in `main`; T47, T56 e T57; prima di T15 | basso | M | `bench:viste` verde, rosso sulla scena di prova |
 | PA T14 · il giro nel banco: lo scheletro e il primo avvio | PA | da fare | Fase B in `main` | medio | M | `npm run bench:giro` verde sui compiti 1–5 |
 | PA T26 · il giro: le note | PA | da fare | T14 | basso | M | compiti 6–11 verdi |
@@ -5640,7 +5640,7 @@ Prova: scripts/check.sh --rapido; cd apps/client && npm run theme:generate && np
   nome, e che il codice resta `MIT OR Apache-2.0`; il `README.md` e
   `THIRD_PARTY_NOTICES.md` lo nominano in una riga; `cargo deny` e lo SBOM
   non cambiano (il logo non è una dipendenza).
-Stato: [ ] da fare
+Stato: [x] fatto (2026-11-09, sul ramo del piano; le baseline delle scene col marchio vengono dal runner con la consegna 4) · differenze: i colori forzati in `structure.css` (la pelle vieta `forced-color-adjust`); pezzi nuovi dell'anatomia `logo` e `about-version`; anche `mobile.html`; una copia di `marcuzzo.svg` in `ui/marcuzzo.ts` con un test di guardia; `icon.png` a 512 come `cargo tauri icon` (il vecchio `icon.icns` era un PNG); le icone Android non arrivano ancora in `gen/android` (`install-mobile.sh`), la simbolica di Linux aspetta T51
 
 ## T50 · La firma degli installer
 
