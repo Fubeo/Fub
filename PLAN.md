@@ -9,7 +9,7 @@ Fuori scope:
 - il ritmo dei paragrafi, la scrittura di `Ctrl+O`, il colore del gettone del vault, il tasto «/» del filtro, i sottotitoli tenui, h5 e h6;
 - la lavagna oltre la cornice comune: la sua barra, le opzioni, la colonna, la banda e la tela (col suo contrasto, ~4,2:1) sono del piano N6 (`lavagna-schede.html`, T22 e T49–T52), che vince; qui la lavagna prende la cornice e l'icona della modalità (T23);
 - la striscia del foglio scuro della griglia (griglia T2);
-- il docx a 700 px e il movimento della barra dei fogli (K3 T19);
+- il docx a 700 px; il movimento della barra dei fogli (K3 T19) resta del kit, e T28 lo accende anche nel documento (aggiunto il 2026-11-09);
 - la colonna degli strumenti del disegno, che è di K5 (qui c'è solo la proposta);
 - la WebView vera, Windows e macOS, che si vedono solo in CI;
 - il telefono ridisegnato da capo: l'utente lo vuole cambiare a fondo («Comunque la GUI del telefono non mi piace proprio. Per ora do l'ok, la aggiustiamo più avanti, ma è sicuramente da modificare pesantemente»), e lo fa un piano successivo. Qui le righe del telefono restano piccole: quelle approvate per ora, e nessuna parte nuova.
@@ -24,7 +24,7 @@ Assunzioni:
   - (d) `#status-standing` nasce in JS dentro `status-band.ts`, non in `index.html`;
   - (e) il titolo della nota pesa 600 e non 500. Risposta (2026-11-04): 600;
   - (f) le scorciatoie del menu si leggono da `allCommands()` e `displayBinding`, che rispettano le scorciatoie cambiate dalla persona, e non da `ui/shell-keys.generated.ts`.
-Ondate: T1 T16 | T2 T11 | T5 T10 | T3 T6 | T7 T17 | T4 T8 | T18 T20 | T9 T19 | T14 T21 | T12 T22 | T13 T23 | T15 T27 | T24 | T25 | T26
+Ondate: T1 T16 | T2 T11 | T5 T10 | T3 T6 | T7 T17 | T4 T8 | T18 T20 | T9 T19 | T14 T21 | T12 T22 | T13 T23 | T15 T27 | T28 | T24 | T25 | T26
 Prototipo: `PLAN-ui/scrittoio-2.html`. Il computer è approvato (2026-11-04); il telefono è approvato per ora (2026-11-04), con la A, e la variante B è uscita. Le caselle «Rimetti com'era» (o `?prima=ombra,vassoio,sezioni`) rimettono l'ombra del foglio, il vassoio e le sezioni di oggi, per il confronto.
 
 ## Modifiche
@@ -1162,7 +1162,7 @@ Stato: [ ] da fare
 Perché: ciò che il piano cambia deve restare fotografato, compreso ciò che oggi non ha una scena (il menu delle modalità, la barra di formato sul computer, le figure, la nota a 700 px).
 Tocca: `apps/client/bench/scene.mjs`, `apps/client/bench/a11y.mjs`, `apps/client/bench/scene.test.ts`, `apps/client/bench/baseline/` (tutte le PNG, con `git rm`), `docs/development/testing-and-quality.md`
 Non toccare: le scene degli altri piani; `apps/client/bench/photos.mjs`; `.github/workflows/ci.yml`.
-Dipende da: T3–T23, T27
+Dipende da: T3–T23, T27, T28
 Cosa fare:
 - Le scene nuove in `scene.mjs`, ognuna con titolo e `prepare`:
   - `banda-modalita`: la nota col menu delle modalità aperto dalla banda (stato `nota`);
@@ -1271,6 +1271,31 @@ Fatto quando:
 - `npx vitest run src/theme/recipe.test.ts src/theme/scrittoio src/shells/scrittoio/stage-motion.test.ts src/shells/scrittoio/sheets/tab-drop.test.ts` e `npm run theme:verify` passano;
 - le foto delle scene della scrivania, `live-01-panoramica`, `tabs`, `desk`, `empty`, `nota-tre-modi`, `concentration`, `mobile-startup` e `mobile-landscape`, in giorno e notte, stanno accanto a `?stato=nota`, `?stato=documento`, `?stato=vuoto`, `?stato=tel-nota` e `?stato=tel-sdraiato`: l'ombra si vede ai fianchi e sfuma sotto, e i `getBoundingClientRect()` dei `.pane` sono quelli di prima del task; le baseline di queste scene le rifà T25 dal runner;
 - una sonda del banco clicca nei 20 px accanto al foglio e arriva al cassetto, all'ispettore e alla banda, e trascina il divisore del cassetto.
+Prova: scripts/check.sh --rapido
+Stato: [ ] da fare
+
+## T28 · Il movimento della barra a schede del documento
+
+Perché: l'utente, 2026-11-09, sul piano originale della barra dei fogli (K3 T18–T19, artifact «Menu comandi fogli»): «le animazioni sono completamente diverse dal piano originale della barra dei fogli, che doveva avere le stesse animazioni poi anche nelle altre». Questo piano aveva lasciato fuori il movimento (Fuori scope, K3 T19), e la barra del documento non lo accende: il kit lo dà solo a chi passa `motion: true`, e oggi lo passa solo `editors/grid/ribbon/ribbon.ts`. Una sonda del banco (moto non ridotto, ora vera) lo misura: cambiando sezione nei fogli si muovono il segno della sezione e i foglietti che entrano uno dopo l'altro, e `Ctrl+F1` muove la tenda; nel documento si muove solo il segno, e `Ctrl+F1` non muove niente. Con T21 il gruppo raccolto si apre sul posto; con T28 si muove anche come nei fogli. Decisione dell'orchestratore (DECISIONS.md, 2026-11-09).
+Tocca: `apps/client/src/editors/rich/ribbon.ts`, `apps/client/src/editors/rich/ribbon.test.ts`, `apps/client/src/theme/scrittoio/structure.css`, `docs/product/word-documents.md`, `docs/architecture/rich-surface-and-proofing.md`
+Non toccare: `apps/client/src/kit/ribbon/ribbon.ts` e `kit/ribbon/ribbon-motion.ts` (il movimento è già scritto una volta, nel kit: si accende, non si rifà); le costanti di `moto/`; `editors/grid/`; il livello «calmo» e il moto ridotto, che il kit rispetta già.
+Dipende da: T21
+Cosa fare:
+- `rich/ribbon.ts` passa `motion: true` al kit, come la barra dei fogli: le sezioni che entrano dal lato giusto, il segno che scorre, la tenda del ritiro e della riapertura (`Ctrl+F1`, doppio clic su una sezione, la sbirciata della barra ritirata), il foglietto che si apre sul posto e gli altri che gli fanno posto, la sezione contestuale «Tabella» che compare e svanisce, le lettere di Alt, la pressione dei pulsanti.
+- `structure.css`: ciò che nel documento sta sotto la barra (`.rich-page`, `.rich-notice`, la barra della ricerca) è la tenda: sta sopra il vassoio e ha il suo fondo, come `.grid-formula-bar`, `.grid-viewport` e gli avvisi dei fogli («La formula e la griglia stanno sopra la barra…»), così l'immagine del vassoio che svanisce resta sotto e non si vede mai una cosa attraverso l'altra. Il pannello laterale del documento e il pulsante dei commenti del telefono restano sopra la tenda.
+- La tenda non cambia altezza mentre corre (`holding` del kit): controllare che la pagina del documento, che scorre, non salti né mostri una fascia vuota, e che la posizione di scorrimento resti quella di prima.
+- `ribbon.test.ts`: con `motion: true` il cambio di sezione fa entrare i foglietti e `Ctrl+F1` muove la tenda (come i test della barra dei fogli e di `kit/ribbon/ribbon-motion.test.ts`); col moto ridotto lo stato cambia subito.
+- Le due pagine di `docs/`: la barra del documento si muove come quella dei fogli.
+Casi limite:
+- il moto ridotto e il livello «calmo»: niente corse, solo lo stato (il banco gira già col moto ridotto, quindi le baseline non cambiano);
+- un gesto nuovo a metà corsa (due sezioni di fila, `Ctrl+F1` due volte): fa come nei fogli;
+- la modalità Lettura, che nasconde la barra, e il documento in sola lettura;
+- il cursore e la selezione nel documento durante la tenda: restano dove sono;
+- il telefono (`mobile-document`): la barra raccolta e il tondo della modalità.
+Fatto quando:
+- `ribbon.test.ts` passa;
+- una sonda del banco con il moto non ridotto e l'ora vera, sullo stesso schema di quella dei fogli, conta le animazioni nel documento e nei fogli dopo un cambio di sezione, dopo `Ctrl+F1` (ritiro e riapertura) e dopo l'apertura sul posto a 700 px: sono le stesse corse, con le stesse molle; una serie di fotogrammi (0, 40, 80, 140, 260 ms) del documento e dei fogli sta nel resoconto;
+- `npm run bench:a11y` resta verde.
 Prova: scripts/check.sh --rapido
 Stato: [ ] da fare
 
