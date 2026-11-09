@@ -67,7 +67,8 @@ all'export, dalla sessione dal tablet ai disegni grandi.
   [la cornice del telefono](architecture/phone-frame.md)
 - [Superfici dell'editor](architecture/editor-surfaces.md), la
   [superficie ricca e il correttore](architecture/rich-surface-and-proofing.md)
-  e la [superficie dei fogli](architecture/grid-surface.md)
+  e la [superficie dei fogli](architecture/grid-surface.md), con gli
+  [editor dei componenti](architecture/component-editors.md)
 - [Inchiostro e strumenti](architecture/ink-and-tools.md) e
   [il disegno sul motore](architecture/disegno.md)
 - [Runtime dei plugin](architecture/plugin-runtime.md)
@@ -83,7 +84,8 @@ all'export, dalla sessione dal tablet ai disegni grandi.
 
 ## Consultare i contratti
 
-- [ABI e WIT](reference/abi-and-wit.md), [contratto IPC](reference/ipc-contract.md),
+- [ABI e WIT](reference/abi-and-wit.md), [contratto IPC](reference/ipc-contract.md)
+  (con il [contratto dei componenti](reference/components-contract.md)),
   [layout su disco](reference/on-disk-layout.md) e
   [permessi e sicurezza](reference/permissions-and-security.md)
 - [Il formato della scena](reference/scene-format.md) con le sue

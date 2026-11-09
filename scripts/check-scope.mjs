@@ -3,7 +3,9 @@
 //
 // Legge i file cambiati (uno per riga, da stdin) e stampa righe `chiave=valore`:
 //   crates=  i crate del workspace toccati più quelli che li usano, anche solo
-//            nei test (un cambio a `fub-abi` riguarda chiunque lo importi);
+//            nei test (un cambio a `fub-abi` riguarda chiunque lo importi), e
+//            quelli il cui codice nomina per percorso un file cambiato fuori
+//            dai crate (le guardie di `fub-abi` che leggono il client);
 //   all=1    quando cambia qualcosa che vale per tutto il workspace;
 //   client=1 / docs=1 / github=1 / vendor=1  le altre aree toccate;
 //   canvaswasm=1  cambia il nucleo della lavagna (`crates/fub-canvas-core/` o
@@ -73,41 +75,33 @@ while (queue.length) {
   }
 }
 
-// I test che leggono un file del client (le porte di `host/ipc.ts` in
-// `fub-app/tests/ipc_permissions.rs`, gli specchi TS dei tipi): il crate li
-// nomina con il percorso sotto `apps/client/src/`. Un diff che tocca quel file
-// fa girare i test di quel crate, non quelli di chi lo usa, perché il crate non
-// cambia. Chi legge una cartella intera del client senza nominare il file non
+// Un file fuori dai crate (il client, le doc) che il codice Rust di un crate
+// nomina per percorso, intero o relativo (`"../../apps/client/src/…"`): quel
+// crate lo legge nei suoi test, che vanno rifatti. Chi lo usa no: il file non
+// cambia la sua API. Chi legge una cartella intera senza nominare il file non
 // si vede: lo copre il ciclo completo.
-const clientFiles = files
-  .filter((f) => f.startsWith("apps/client/src/"))
-  .map((f) => f.slice("apps/client/src/".length));
-if (clientFiles.length) {
+const outside = files.filter((f) => !owner(f));
+if (outside.length) {
   const rsFiles = (dir) => {
     const out = [];
     const walk = (d) => {
-      let entries;
-      try {
-        entries = fs.readdirSync(d, { withFileTypes: true });
-      } catch {
-        return;
-      }
-      for (const e of entries) {
+      for (const e of fs.readdirSync(d, { withFileTypes: true })) {
+        if (e.name === "target" || e.name === "node_modules") continue;
         const full = path.join(d, e.name);
         if (e.isDirectory()) walk(full);
         else if (e.name.endsWith(".rs")) out.push(full);
       }
     };
-    for (const sub of ["src", "tests"]) walk(path.join(root, dir, sub));
+    walk(dir);
     return out;
   };
   for (const p of pkgs) {
     if (p.dir === "" || affected.has(p.name)) continue;
-    const reads = rsFiles(p.dir).some((file) => {
-      const text = fs.readFileSync(file, "utf8");
-      return clientFiles.some((c) => text.includes(`"${c}"`) || text.includes(`/${c}"`));
-    });
-    if (reads) affected.add(p.name);
+    const dir = path.join(root, p.dir);
+    if (rsFiles(dir).some((f) => {
+      const source = fs.readFileSync(f, "utf8");
+      return outside.some((changed) => source.includes(`"${changed}"`) || source.includes(`/${changed}"`));
+    })) affected.add(p.name);
   }
 }
 
