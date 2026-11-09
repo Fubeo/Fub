@@ -529,7 +529,7 @@ Fatto quando:
 - la foto di `document-docx` e `document-readonly`, in giorno e notte, a 1280 e a 700, sta accanto a `?stato=documento` e `?stato=sola-lettura`;
 - quella di `mobile-document` sta accanto a `?stato=tel-doc`.
 Prova: scripts/check.sh --rapido
-Stato: [ ] da fare
+Stato: [x] fatto · 27e7eaf0..0bd01781 · «Si scrive» lo dice la banda accanto alla modalità (apre la spiegazione del chip, segnale `standing-open`), sul telefono la prima voce di «…»; gli altri stati restano in testata; sotto gli 800 px la lingua lascia la banda · differenze: nessuna stringa nuova (il nome è quello del chip); corrette le regole `:has(> .pane-standing…)` della testata; la scena `mobile-document` misura il chip di PA T47 come «parti chiuse» per una misura sola · resta: baseline `document-docx*`, `document-objects`, `mobile-document` dal runner; il segno «Registra» del chip con `writes` lo dice solo la banda; il collegamento di `document.ts` a `standing-open` e alla voce di «…» è provato solo nel banco
 
 ## T5 · La testata: dove sei, se è salvato, «…»
 
