@@ -66,6 +66,14 @@ La più recente in cima: data · piano · decisione · perché.
   l'`engine.ts` di N4. Prove sul merge: `check.sh --rapido` verde (un
   rosso noto e instabile, `new-drawing.e2e`, verde da solo), vitest intero
   660 file / 11 620 test verdi.
+- 2026-11-09 · N6 · prototipo T26 (`PLAN-ui/lavagna-impianto.html`) fatto,
+  da approvare: l'impianto della lavagna copia i valori del disegno con
+  classi `canvas-*` nuove (`editors/spatial/` non si tocca, K5); il menu
+  delle penne di N4 passa nella riga delle opzioni; cinque note «Da
+  decidere guardando», consigliate: la colonna del disegno con le tendine,
+  il navigatore in basso a destra, l'ispettore chiuso la prima volta, sei
+  strumenti nello spazio Semplice · Perché: T49–T65 aspettano la riga
+  «Approvato» (A-26).
 - 2026-11-04 · N6 · prototipo T25 (`PLAN-ui/lavagna-schede.html`)
   approvato con le varianti consigliate: titolo sopra la scheda (D-21 (a)
   confermata), gemelle con la luce calda, «Esc per uscire» nella testata,

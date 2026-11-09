@@ -42,8 +42,9 @@ Ondate: T1 T2 T3 | T4 T5 T6 | T7 T8 T9 | T10 | T11 T25 | T26 T29 | T27 T12 | T28
 Prototipo: quattro pagine; approvata la prima (T25).
 `PLAN-ui/lavagna-schede.html` (T25): fatta il 2026-11-04, Approvato: 2026-11-04,
 con le varianti consigliate.
-`PLAN-ui/lavagna-impianto.html` (T26), `PLAN-ui/lavagna-modifica.html`
-(T27), `PLAN-ui/lavagna-estratti.html` (T28): da fare. Ognuna la
+`PLAN-ui/lavagna-impianto.html` (T26): fatta il 2026-11-09, da approvare.
+`PLAN-ui/lavagna-modifica.html` (T27), `PLAN-ui/lavagna-estratti.html`
+(T28): da fare. Ognuna la
 costruisce un coder con `.claude/skills/pianifica/prototipo.md` e la fa
 vedere l'orchestratore all'utente, finché non dice sì; nessun task
 grafico che ne dipende parte prima della riga «Approvato» (A-26).
@@ -119,6 +120,33 @@ nuovo passa da `sanitizeThemeCss`. Ogni classe va anche negli agganci di
 | Le maniglie: `canvas-resize` con `data-corner` | `engine.ts`, `structure.css`, `skin/editors.css` | T66 |
 | I quattro punti e il filo al passaggio: `canvas-port` con `data-side`, `canvas-edge` con `data-hover` | `engine.ts`, `structure.css`, `skin/editors.css` | T67 |
 | L'etichetta «Si attacca a…»: `canvas-ink-label` (`data-free` se il tratto resta libero), la scheda bersaglio `data-ink-target` | `engine.ts`, `structure.css`, `skin/editors.css` | T69 |
+
+Le classi nuove di `PLAN-ui/lavagna-impianto.html` (T26, fatta il
+2026-11-09, da approvare: le righe valgono quando c'è «Approvato»). Le
+regole segnate «come .draw-…» copiano i valori del disegno di oggi con i
+nomi della lavagna: `editors/spatial/` non si tocca (K5). Il blocco
+→ `skin/editors.css` passa `sanitizeThemeCss` senza scarti; gli avvisi
+«hook non dichiarato» spariscono quando le classi entrano in
+`anatomia/editors.ts`. Ogni classe va anche lì.
+
+| Pezzo | Destinazione | Task |
+|---|---|---|
+| La testata: `canvas-header`, `canvas-top`, `canvas-group`, `canvas-button` (con `data-label` se ha un nome scritto), `canvas-options`, `canvas-options-item`, `canvas-options-hint`; la superficie misura sé stessa (`container-type`) e si stringe con `data-narrow` | `editors/canvas/chrome/header.ts` (nuovo), `kit/options-bar.ts`, `structure.css`, `skin/editors.css` | T49, T50 |
+| Il menu delle penne di N4 nella riga delle opzioni: `canvas-ink-pen` prende `canvas-button` e il suo stato aperto in `.canvas-options` | `editors/canvas/chrome/header.ts`, `skin/editors.css` | T50 |
+| La colonna: `canvas-body`, `canvas-rail`, `canvas-tool`, `canvas-rail-finger` («Il dito scrive»), `canvas-rail-full` («Completo» nello spazio Semplice), `canvas-area`; le tendine sono `kit-rail-popover` di oggi; uno strumento spento in sola lettura `aria-disabled` | `editors/canvas/chrome/rail.ts` (nuovo), `kit/tool-rail.ts`, `structure.css`, `skin/editors.css` | T49, T64, T65 |
+| Le icone nuove `canvas-lasso`, `canvas-connect`, `canvas-finger`; Testo usa `fmt-text`, le punte dei fili `draw-tip-*` (con `ensureDrawIcons`) | `ui/icons.ts` (o il registro delle icone della lavagna) | T49, T50 |
+| La barra della selezione: `canvas-selection-bar`, il posto scritto dalla tela come `bubblePlace` | `editors/canvas/chrome/selection-bar.ts` (nuovo), `structure.css`, `skin/editors.css` | T51 |
+| La banda: gli `status-item` di oggi con `data-surface-item` (`zoom`, `chosen`, `twins`, `readonly`, `folder`); la cartella lunga si accorcia | `editors/canvas/chrome/band.ts` (nuovo), `structure.css` | T52 |
+| Senza interfaccia (Ctrl+.): `data-bare` sulla superficie | `engine.ts`, `structure.css` | T65 |
+| Il navigatore: `canvas-navigator` con una sola `<canvas>` `canvas-navigator-map` | `editors/canvas/chrome/navigator.ts` (nuovo), `structure.css`, `skin/editors.css` | T55 |
+| La ricerca (Ctrl+F): `canvas-find`, `canvas-find-input`, `canvas-find-count` (`data-none`), `canvas-find-mark`; le schede `data-card-found` (`current`) e `data-card-veiled` | `editors/canvas/chrome/find.ts` (nuovo), `engine.ts`, `structure.css`, `skin/editors.css` | T60 |
+| La lavagna vuota: `canvas-blank`, `canvas-blank-lines`, `canvas-blank-actions` (con «Incolla»), i pulsanti del kit | `editors/canvas/chrome/blank.ts` (nuovo), `structure.css`, `skin/editors.css` | T62 |
+| L'ispettore: `canvas-inspector`, `-filter`, `-heading`, `-list`, `-row` (`data-group`, `data-depth`), `-name`, `-kind`, `-numbers` (i `kit-number`), `-fields`, `-field` (`data-wide`), `-path`, `-raw` (`tr[data-locked]`), `-note`, `-actions`; il pallino del colore è `kit-color-well` | `editors/canvas/chrome/inspector.ts` (nuovo), `structure.css`, `skin/editors.css` | T58, T59, T61 |
+| Le fonti nell'ispettore: `canvas-sources-file`, `-head`, `-name`, `-count`, `-bar`, `-piece` (`data-used`) | `editors/canvas/sources.ts`, `structure.css`, `skin/editors.css` | T77 |
+| Il menu radiale e Ctrl+/: le classi `draw-radial-*` e `draw-commands-dialog` così come sono | `editors/spatial/` (si riusa, non si tocca), `engine.ts` | T48, T63 |
+| Lo spazio Semplice: `data-workspace="simple"` sulla superficie, caselle da 44 px | `editors/canvas/chrome/rail.ts`, `structure.css` | T65 |
+| La notifica «Tolta dalla lavagna. Il file resta.» con «Annulla» | `ui/notify.ts`, testi in `catalog.ts` | T17 |
+| I testi nuovi `canvas.*` della pagina | `apps/client/src/i18n/catalog.ts` | T49–T65 |
 
 ## Che cosa si vede
 
