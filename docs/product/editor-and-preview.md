@@ -27,14 +27,10 @@ o sotto) e **Anteprima**, o come [disegno](drawing.md) con la feature `draw`
 dell'host. L'anteprima si ridisegna
 dopo una pausa di scrittura, come immagine inerte; una versione rotta lascia
 l'ultima buona, attenuata, sotto il motivo con riga e colonna. I documenti
-`.xlsx` usano invece la famiglia Grid. Il commutatore è la voce della banda di
-stato, in basso a destra: dice la modalità del riquadro a fuoco, con la sua
-figura, e apre il menu delle modalità (clic, Invio, Spazio o ↑; Esc lo chiude e
-rende il fuoco alla voce). Sul telefono, dove la banda non c'è, è un tondo in
-basso a destra sulla carta, con la sola figura; mentre si scrive sta, piatto,
-in fondo alla fila della barra di formato, dopo Annulla e Ripeti. Il
-commutatore legge la dichiarazione della superficie a fuoco; con una sola
-modalità non si vede e non ci sono i comandi di modalità, che trovano la
+`.xlsx` usano invece la famiglia Grid. Il commutatore è la voce in basso a
+destra della banda di stato; sul telefono un tondo sulla carta
+([dettagli](../architecture/shell-behaviours.md)). Con una sola modalità
+non si vede e non ci sono i comandi di modalità, che trovano la
 modalità per ruolo (Live, sulla tela, riporta alle carte). Il riquadro ricorda
 la modalità scelta per ogni famiglia di superfici: una nota in Sorgente non fa
 aprire la tela seguente come JSON, e la tela non cambia la modalità in cui si

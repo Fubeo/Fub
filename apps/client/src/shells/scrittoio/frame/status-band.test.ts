@@ -420,7 +420,7 @@ describe("la modalità", () => {
     // la voce sceglie lo stesso per il suo.
     world.layout.focus = "p1";
     world.menu!.items[0]!.run!();
-    expect(world.focused.at(-1)).toBe("p2");
+    expect(world.focused[world.focused.length - 1]).toBe("p2");
     expect(world.layout.focus).toBe("p2");
     expect(world.modesSet).toEqual(["m1"]);
   });

@@ -47,7 +47,7 @@ function drawModeButton(button: HTMLElement, active: SurfaceMode | undefined): v
     button.hidden = true;
     if (button.firstChild) button.replaceChildren();
     delete button.dataset.icon;
-    button.removeAttribute("aria-label");
+    button.setAttribute("aria-label", t("document.toolbar.modes"));
     return;
   }
   const figure = modeIcon(active);
