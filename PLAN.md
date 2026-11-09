@@ -1459,7 +1459,7 @@ con «ricorda» spento riaprendo torna spento, acceso torna com'era (test);
 somigliano al prototipo.
 Prova: scripts/check.sh --rapido; cd apps/client && npm run theme:verify &&
 npx vitest run src/editors/canvas
-Stato: [ ] da fare
+Stato: [x] fatto
 
 ## T17 · L'inchiostro sul nucleo finito di N3
 
