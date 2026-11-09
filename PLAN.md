@@ -1469,7 +1469,7 @@ rimonta, che togliere distrugge; i test di `engine.test.ts` e di N4
 passano.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/canvas
-Stato: [ ] da fare
+Stato: [x] fatto (2026-11-10: resa a chiavi in `#placeCards`, il corpo si rifà solo se cambia `cardBodyKey`; 13 prove in `engine-cards.test.ts`, rosse tutte sul `#render` di prima; la frase sugli 879 ms in `docs/misure/lavagna-inchiostro-2026-11-09.md` si aggiorna con la rimisura di T24)
 
 ## T12 · Il collegamento
 
