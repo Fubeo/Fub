@@ -25,6 +25,7 @@
 | il modello e le regole della lavagna | `crates/fub-canvas-core/` e `docs/reference/canvas-format.md` |
 | la proiezione dei documenti ricchi | `docs/reference/rich-projection.md` |
 | il protocollo della sessione live | `docs/reference/live-session.md` |
+| le porte IPC del motore del disegno | `docs/reference/drawing-ipc.md` |
 | gli strumenti del server MCP | `docs/reference/mcp-server.md` |
 | la cattura del clipper | `apps/clipper/capture-v1.schema.json` |
 | il layout su disco di `.fub/` | `docs/reference/on-disk-layout.md` |
