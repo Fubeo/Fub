@@ -52,8 +52,13 @@ fn every_public_surface_family_has_shell_fallback_mirror_native_and_wasm() {
         [
             (
                 "shell",
+                "apps/client/src/editors/core/component-surfaces.ts",
+                "GRID_OWNER = \"fub.shell.grid\"",
+            ),
+            (
+                "shell",
                 "apps/client/src/editors/core/bootstrap.ts",
-                "owner: \"fub.shell.grid\"",
+                "owner: GRID_OWNER",
             ),
             (
                 "fallback",

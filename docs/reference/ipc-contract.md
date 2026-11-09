@@ -27,6 +27,7 @@ test usano un fake.
 | tema | manifest e artefatti della skin |
 | eventi | ascolto del canale tipizzato |
 | sessione live | avviare, interrogare e fermare la sessione di un disegno, rispondere allo scrittore |
+| componenti | leggere la mappa dei componenti di un vault e applicare una scelta |
 
 Le operazioni offerte da provider passano da porte generiche. Una feature non
 aggiunge una porta soltanto per evitare di usare il proprio registro.
@@ -156,6 +157,15 @@ la shell non offre la sessione. Il fake host li serve se riceve una rete con
 | `unserved` | nessuna interfaccia attiva ha un indirizzo IPv4 privato |
 | `io` | interfacce di rete illeggibili, porta occupata |
 | `internal` | certificato, generatore casuale o QR non disponibili |
+
+## Componenti
+
+La pagina «Componenti» ha due porte dedicate, `components_map` e
+`components_apply`, in `allow-shell` e quindi solo per la finestra
+principale: lo stato dei componenti non è `program_writable`, e un componente
+non deve poter spegnere gli altri. Le forme, i rifiuti tipati, l'avviso del
+rimontaggio e lo scenario dell'host finto sono nel
+[contratto dei componenti](components-contract.md).
 
 ## Apri con e anteprime Craft
 

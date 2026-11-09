@@ -48,7 +48,7 @@ import { pickIcon, showContextMenu, type ContextMenuOptions, type MenuItem } fro
 import { drawPageMark, pageMarkText, readPageMark } from "../ui/page-mark";
 import { selectInspectorTab } from "../ui/views";
 import {
-  canCreateDrawing,
+  newKinds,
   canImportDrawing,
   canImportFile,
   hasKernelCommand,
@@ -68,6 +68,7 @@ import { showPanel } from "./sidebar";
 import { writeClipboardText } from "../platform/clipboard";
 import { searchFor } from "../state/search-port";
 import { refreshOn, registerPanel, registeredPanels, unregisterPanel } from "../ui/panel-host";
+import { onComponents } from "../state/components";
 import { canShowFile, copyNoteLinks, focusEditor, openDocument, openDocumentBeside } from "../state/document-controller";
 import { addBookmark, loadBookmarks, type BookmarkTarget } from "../state/bookmarks";
 import { openCurrentInNewWindow } from "../state/document-windows";
@@ -388,6 +389,10 @@ export function mountExplorer(lifetime: Lifetime): void {
     // spento, lo dice l'elenco dei comandi.
     else paintThumbnails();
   }));
+  // Le porte di un componente (i disegni) seguono ciò che è acceso.
+  lifetime.add(onComponents(() => {
+    if (fileListEl.querySelector(".tree-empty") !== null) renderFileList();
+  }));
   lifetime.add(on("active-doc", markActive));
   // «Mostra la nota aperta»: cambiando nota l'albero segue, senza aprire il
   // pannello se è chiuso (a quello pensa il comando «Rivela»).
@@ -637,7 +642,7 @@ function renderFileList(): void {
     create.addEventListener("click", () => void newNote());
     li.append(text, create);
     // Il primo gesto può anche essere un disegno, se il kernel sa farli.
-    if (canCreateDrawing()) {
+    if (newKinds().includes("drawing")) {
       const draw = document.createElement("button");
       draw.type = "button";
       draw.className = "link-button";
@@ -1411,7 +1416,7 @@ function folderMenu(at: MouseEvent, path: string): void {
           { label: t("explorer.new.folder"), run: () => startNewFolder(path) },
           // Il disegno nasce se il kernel sa farli: la cartella arriva alla
           // galleria già scelta.
-          ...(canCreateDrawing() ? [{ label: t("explorer.new.drawing"), run: () => void newDrawing(path) }] : []),
+          ...(newKinds().includes("drawing") ? [{ label: t("explorer.new.drawing"), run: () => void newDrawing(path) }] : []),
         ],
       },
       importItems(path),
@@ -1453,7 +1458,7 @@ function rootMenu(at: MouseEvent): void {
   showContextMenu(at, [
     { label: t("explorer.new_note"), hint: chordOf("shell.note.new"), run: () => void newNote(state.activeSpace) },
     { label: t("explorer.new_folder"), run: () => startNewFolder(root) },
-    ...(canCreateDrawing() ? [{ label: t("explorer.new_drawing_menu"), run: () => void newDrawing(root) }] : []),
+    ...(newKinds().includes("drawing") ? [{ label: t("explorer.new_drawing_menu"), run: () => void newDrawing(root) }] : []),
     { separator: true, label: t("explorer.sort"), items: sortItems() },
     { label: t("explorer.collapse_all"), run: () => collapseAll() },
     { separator: true, ...importItems(root) },

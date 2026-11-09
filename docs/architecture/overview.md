@@ -60,6 +60,7 @@ flowchart TD
     host --> abi
     host --> base
     host --> canvas
+    host --> componenti
     host --> features
     host --> importers
     host --> markdown
@@ -67,7 +68,6 @@ flowchart TD
     host --> svg
     host --> kernel
     cli --> abi
-    cli --> componenti
     cli --> host
     services --> abi
     base --> abi
@@ -303,9 +303,11 @@ cosa è acceso, chi lo richiede e che cosa non serve più. Le frecce in
 ingresso sono due. Una viene da `fub-features`, che costruisce la mappa dei
 componenti di Fub (`src/componenti.rs`): una riga per componente, dietro la sua
 cargo feature, da cui `fub-host` prende anche `uses`, `kind`, `group` e `ui` dei
-manifest. L'altra viene da `fub-cli`, che per `fub-cli componenti` e gli
-strumenti `fub_components*` usa i tipi del risolutore (`Stato`, `Perche`,
-`Errore`, `Effetto`), che `fub-host` non riesporta.
+manifest. L'altra viene da `fub-host`, che tiene lo stato dei componenti di
+ogni vault (`src/componenti.rs`: `plugins.disabled` più le chiavi
+`components.*`), lo risolve con il risolutore e riesporta i suoi tipi
+(`Stato`, `Perche`, `Errore`, `Effetto`): `fub-cli componenti`, gli strumenti
+`fub_components*` e l'app passano tutti dall'host.
 
 `fub-motori`, lo strato dei motori, non ha frecce verso altri crate di Fub:
 dipende soltanto da `rayon`, `thiserror`, `tracing` e, su Linux con la glibc,
