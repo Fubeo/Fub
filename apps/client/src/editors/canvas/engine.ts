@@ -417,7 +417,6 @@ function nodeFill(color: string | undefined): string {
   return PRESET_FILL[color] ?? color;
 }
 
-/** Un path relativo alla radice del vault, senza risalite né caratteri di controllo. */
 /**
  * La misura di un'immagine dalla porta, o `null` se non arriva entro
  * `MEASURE_IMAGE_TIMEOUT_MS`, fallisce o non è una misura.
@@ -440,6 +439,7 @@ async function measuredImage(
   }
 }
 
+/** Un path relativo alla radice del vault, senza risalite né caratteri di controllo. */
 function isVaultPath(path: unknown): path is string {
   return typeof path === "string" && path.length > 0 && path.length <= 8192
     && !path.startsWith("/") && !path.includes("\\") && !path.split("/").includes("..")
