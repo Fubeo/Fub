@@ -29,8 +29,10 @@ sono quelli di `spatial/camera.ts` (`zoomAtPoint`, `fit`, `stepCamera`).
   (`#jumpCamera`), che ricorda il salto per Indietro e Avanti.
 - **Indietro e Avanti.** Alt+← e Alt+→ (i comandi della shell
   `shell.pane.back` e `shell.pane.forward`, come le frecce della barra del
-  titolo) chiedono prima alla lavagna col fuoco: ricordano i salti, non lo
-  zoom a passi né lo spostamento a mano. La storia (`jumps.ts`) sta in memoria,
+  titolo) chiedono prima alla lavagna col fuoco: ricordano i salti (anche il
+  link seguito a una scheda della lavagna, «Seguire un link» in
+  [canvas-input.md](canvas-input.md)), non lo zoom a passi né lo spostamento
+  a mano. La storia (`jumps.ts`) sta in memoria,
   per la lavagna aperta: al più 50 salti, un salto dopo un Indietro perde
   l'Avanti, una lavagna riaperta riparte vuota e due riquadri con la stessa
   lavagna hanno due storie. Con la storia vuota vale la cronologia del riquadro.
