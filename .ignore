@@ -1,0 +1,15 @@
+# Escluso dalle ricerche (ripgrep, e quindi Grep e Glob degli agenti), non dal
+# repo: i file restano leggibili e si cercano dando il percorso esplicito.
+# Qui stanno solo copie generate o congelate, che in una ricerca ripetono le
+# righe della fonte vera. La fonte e il comando per rigenerarle: docs/map/dove-sta-x.md.
+
+# la pelle del tema di serie, generata da apps/client/src/theme/scrittoio/skin/
+apps/client/src/theme/scrittoio/skin.css
+apps/client/theme/author/sample/skin.css
+
+# le istantanee congelate del contratto WIT: la fonte viva è crates/fub-abi/wit/fub/
+crates/fub-abi/wit/frozen/
+crates/fub-wasm-host/wit-legacy/
+
+# i dizionari e le tabelle dei motori in vendor/ (il codice resta cercabile)
+vendor/*/assets/

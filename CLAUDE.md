@@ -124,7 +124,8 @@ nextest print only failures; set the variable back for one command if you need
 a passing run in full. `scripts/check.sh` prints one line per step: open only
 the log of a red step. Read `git diff --stat` before a full diff, and filter CI
 logs with `grep` for the errors instead of reading them whole. Never cut a
-diagnostic that can change the conclusion.
+diagnostic that can change the conclusion. `.ignore` keeps generated and frozen
+copies out of searches; give their path explicitly to search them.
 
 ## Generated files
 
