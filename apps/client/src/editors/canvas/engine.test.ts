@@ -23,6 +23,7 @@ import { upsertNodePatch, type CanvasOperation, type CanvasPatch } from "./opera
 import { CanvasCoreError, canvasCoreReady, openCore, openCoreNow, type CanvasCore, type CanvasIntentOp } from "./wasm/core";
 import { DEFAULT_PREFERENCES, type CanvasPreferences, type WheelAction } from "./preferences";
 import { CANVAS_TOOL_IDS, toolCommandId } from "./chrome/commands";
+import { CARD_PANEL_ID, createCanvasInspector } from "./chrome/inspector";
 import { INERTIA_MS } from "../../spatial/camera";
 import { setReducedMotionPreference } from "../../theme/reduced-motion";
 import { createCardRegistry } from "./cards";
@@ -3967,5 +3968,44 @@ describe("CanvasEngine: spargi le pagine di un PDF (T72)", () => {
     choose(bare.engine, bare.host);
     expect(spreadCommand(bare.engine).disabled()).toBe(t("canvas.commands.why.no_pdf_reader"));
     bare.engine.destroy();
+  });
+});
+
+describe("l'ispettore sul motore (T59)", () => {
+  it("una modifica da «Avanzate» si annulla con gli stessi byte di prima", () => {
+    const { engine } = mounted();
+    const before = engine.getDoc();
+    const byteOf = (needle: string) => new TextEncoder().encode(before.slice(0, before.indexOf(needle))).length;
+    // Scegliere una scheda dal sorgente la sceglie anche per l'ispettore.
+    expect(engine.revealSource(byteOf('{"id":"t"'))).toBe(true);
+    expect(engine.selection()).toEqual({ nodes: ["t"], edges: [] });
+    const inspector = createCanvasInspector({
+      source: () => engine.getDoc(),
+      reveal: () => false,
+      edit: {
+        selection: () => engine.selection(),
+        doc: () => engine.doc(),
+        commit: (patches) => engine.commitPatches(patches),
+        readOnly: () => false,
+      },
+    });
+    inspector.offer(true);
+    const panel = inspector.panels.list().find((each) => each.id === CARD_PANEL_ID)!;
+    const host = document.createElement("div");
+    document.body.append(host);
+    const unmount = panel.mount(host);
+    host.querySelector<HTMLButtonElement>(".canvas-inspector-disclosure")!.click();
+    const x = [...host.querySelectorAll<HTMLTableRowElement>(".canvas-inspector-raw tr")]
+      .find((row) => row.querySelector("th")?.textContent === "x")!
+      .querySelector<HTMLInputElement>("input")!;
+    x.value = "300";
+    x.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter" }));
+    expect(engine.doc()!.nodes.find((node) => node.id === "t")!.x).toBe(300);
+    expect(engine.getDoc()).not.toBe(before);
+    // Un commit solo: un annulla riporta il testo di prima, byte per byte, e poi non ce n'è un altro.
+    expect(engine.undo()).toBe(true);
+    expect(engine.getDoc()).toBe(before);
+    expect(engine.undo()).toBe(false);
+    unmount();
   });
 });

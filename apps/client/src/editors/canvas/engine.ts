@@ -1637,6 +1637,29 @@ export class CanvasEngine {
     return this.#source;
   }
 
+  /**
+   * La scelta adesso, per l'ispettore (T59): le id delle schede e dei fili.
+   * Sono copie: chi le legge non cambia la scelta.
+   */
+  selection(): { readonly nodes: readonly string[]; readonly edges: readonly string[] } {
+    return { nodes: [...this.#selection], edges: [...this.#edgeSelection] };
+  }
+
+  /** Il modello della lavagna adesso, per l'ispettore (T59); `null` senza lavagna. */
+  doc(): CanvasDocument | null {
+    return this.#doc;
+  }
+
+  /**
+   * Un gesto dell'ispettore (T59): le toppe fanno un commit solo, col suo
+   * annulla, come un gesto della tela. Senza lavagna o in sola lettura non
+   * cambia niente, come gli altri gesti.
+   */
+  commitPatches(patches: readonly CanvasPatch[]): void {
+    if (patches.length === 0) return;
+    this.#commit(patches, "input");
+  }
+
   focus(): void {
     if (!this.#destroyed) this.#viewport.focus();
   }

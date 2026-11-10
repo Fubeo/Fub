@@ -190,9 +190,17 @@ export function mountCanvasSurface(
   const statusWatchers = new Set<() => void>();
   // L'ispettore (T58): legge il testo della lavagna e porta la vista su una
   // scheda per la strada di `reveal`. Si offre solo con la tela in vista.
+  // «Scheda» e «Fili» (T59): la scelta, il modello e il commit del motore. Un
+  // commit solo, col suo annulla; senza motore non c'è niente da scrivere.
   const inspector = createCanvasInspector({
     source: () => engine?.getDoc() ?? null,
     reveal: (byte) => mode === "canvas" && engine !== null && engine.revealSource(byte),
+    edit: {
+      selection: () => engine?.selection() ?? { nodes: [], edges: [] },
+      doc: () => engine?.doc() ?? null,
+      commit: (patches) => engine?.commitPatches(patches),
+      readOnly: () => heldReadOnly,
+    },
   });
   const offerInspector = (): void => inspector.offer(!destroyed && !failed && engine !== null && mode === "canvas");
   const createEngine = (): CanvasEngine => new CanvasEngine(host, {
