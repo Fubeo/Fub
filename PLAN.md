@@ -89,7 +89,13 @@ Fase A.
 
 ## Modifiche
 
-nessuna.
+- 2026-11-10 · L'utente aggiunge alla pre-alpha il piano «L'editor di Fub»
+  ([artifact](https://claude.ai/artifact/EYe7e9baTxYujXXnPirXjw), verificato su `main` 768caa2 il 2026-11-09): 83 task
+  in quattro onde (E1–E29), con le scelte D1–D12 e D16 prese, D13 e D14
+  ritirate, D15 e D17 sulla consigliata (A) finché l'utente non dice altro.
+  Cambia la sua D9 («dopo la pre-alpha»): ora è dentro, in Fase C. Prima di
+  implementarlo serve il suo `PLAN.md` su `piano/editor-completo`, scritto
+  da `/pianifica` con l'artifact come brief.
 
 ## La definizione
 
@@ -171,7 +177,7 @@ codice, nei rami e nelle issue il 2026-11-05.
 | N3 · la lavagna in Rust | In `main` (#297, #306, #307) | fatto | Base di N4, N6 e della lavagna in codice | — |
 | N4 · l'inchiostro | Ramo: 22 di 25 (T15 la prima misura, 205 ms sotto Xvfb) | dentro | La penna della definizione | `piano/n4-inchiostro`, #298 |
 | N5 · strati nativi | Senza piano | fuori | Vedi la tabella sopra | «Prossime fasi» |
-| N6 · la lavagna v1 | Ramo: 54 di 97 (T71 le guide e la griglia) | dentro, senza T79–T85 e T88 | Le lavagne della definizione | `piano/n6-lavagna`, #302 |
+| N6 · la lavagna v1 | Ramo: 55 di 98 (T95 i punti della griglia) | dentro, senza T79–T85 e T88 | Le lavagne della definizione | `piano/n6-lavagna`, #302 |
 | N7 · file Craft | In `main` (#299) | fatto | Le anteprime ci sono | — |
 | N8 · DOCX e XLSX | Sostituita da K6–K9 | — | Vedi K3 e K9 | — |
 | N9 · egui o Tauri | Senza piano | fuori | Vedi sopra | «Prossime fasi» |
@@ -187,6 +193,7 @@ codice, nei rami e nelle issue il 2026-11-05.
 | K5 · il disegno | Ramo: 13 di 30; T9 fatto (il crate `fub-disegno`, la licenza IJG con eccezione stretta) | dentro | Il disegno SVG | `piano/k5-disegno`, #300 |
 | K6 · il disegno completo | Ramo: 0 di 30 | fuori | Scelta dell'utente (D24 B) | #313 |
 | Griglia · le celle | Ramo: 2 di 9 (T1 il piano a strati, T2 la carta e le righe che restano); il prototipo approvato dall'utente il 2026-11-07 (D2 A) | dentro | Il foglio che risponde subito | `piano/griglia-celle`, senza PR |
+| L'editor di Fub | Senza `PLAN.md`: c'è l'[artifact](https://claude.ai/artifact/EYe7e9baTxYujXXnPirXjw) con 83 task in quattro onde, prototipo e scelte | dentro (dal 2026-11-10) | Le note all'altezza di Notion e Obsidian | `piano/editor-completo`, da scrivere con `/pianifica` |
 | Scrittoio 2 | Ramo: 25 di 29 (T1–T9, T11–T23, T27–T29; main unito, 54348679) | dentro | La cornice | `piano/scrittoio-2`, #309 |
 | La lavagna in codice | Ramo: 0 di 26 | dentro | L'AI che disegna e dispone | `piano/lavagna-in-codice`, #311 |
 | A1 · la base per l'AI | Ramo: 5 di 13 | dentro (F1) | Le ricette | `piano/a1-base-per-ai`, #305 |
@@ -315,6 +322,12 @@ prototipi. La firma di Windows può allungare la coda: la risposta di
 SignPath Foundation richiede giorni o settimane, e senza la firma PA T22
 non chiude (D20).
 
+**Con l'editor di Fub (2026-11-10).** L'artifact stima circa 900 ore
+(262 + 245 + 180 + 215, sulla stessa scala), cioè circa 600 di calendario
+con due coder: a circa 14 ore al giorno sono circa 6 settimane in più.
+Le onde 3 e 4 possono andare in parallelo a ciò che resta degli altri piani
+solo dove i file non si toccano.
+
 Le assunzioni della stima: le 2 ore vengono dai piani recenti (il piano del
 caricamento ha chiuso 4 task in circa 3 ore il 2026-11-04; i task M e L di
 K3 sono durati di più); i task L e XL non rifanno pezzi grandi; le baseline
@@ -379,9 +392,10 @@ Se una di queste cade, la stima si allunga.
 | Griglia T1–T9 | griglia | 2 di 9 | #295 in `main` (il ramo nasce da K3); T2 e T3 mai insieme a S2 T20 (tutti e tre toccano `skin/editors.css`) | medio: il motore della griglia | L | griglia T8 (foto contro `celle-griglia`) |
 | PA T12 · #237 R04 | PA | da fare | griglia T4 | medio | M | test di Vitest sulla griglia |
 | N4 T23–T25 | N4 | 22 di 25 | PA T2; T24 aspetta l'esito della prova con Obsidian, che incolla l'utente | medio: penna e latenza | L | N4 T25 |
-| N6 v1, senza T79–T85 e T88 | N6 | 54 di 97 | N4 in `main` (il ramo nasce da N4, e T90 lo chiede); i task grafici dopo l'approvazione dei prototipi T26–T28 (D3) | alto: 79 task | XL | N6 T90 |
+| N6 v1, senza T79–T85 e T88 | N6 | 55 di 98 | N4 in `main` (il ramo nasce da N4, e T90 lo chiede); i task grafici dopo l'approvazione dei prototipi T26–T28 (D3) | alto: 79 task | XL | N6 T90 |
 | K5 T11, T13–T24, T27–T30 | K5 | 13 di 30 | PA T2; T6 copia `Fubeo/vectorcraft` (c'è, pubblico, 2026-11-02); T22 dopo D5; T24 dopo K2 in `main` (fatto) | alto: motore vettoriale nuovo | XL | K5 T30 |
 | La lavagna in codice T1–T26 | lavagna in codice | 0 di 26 | T15–T18 dopo N4 in `main`; T14, T19, T23 e T24 dopo N6 in `main` (T72, T73, T19, T37, T48) | medio | L | lavagna in codice T26 |
+| L'editor di Fub, onde 1–4 (EC T1–T83) | editor | da pianificare: `PLAN.md` da `/pianifica` | onda 1 dopo S2 T2, T3, T12, T17 in `main` (T1, il trascinamento, può andare prima); onda 2 dopo l'onda 1; onda 3 dopo N6 in `main` (T50, T51, T55 prima); onda 4 dopo l'onda 1, comincia dalla prova T67 | alto: 83 task, la battuta nei 4 ms (T23) è il cancello dell'onda 1 | XL | EC T56 e T80 |
 | A1 T4, T5, T7, T9–T13 | A1 | 5 di 13 | T12 dopo S2 T10 (le impostazioni) | basso | M | A1 T13 |
 
 ### Fase D · la prova e la pre-release

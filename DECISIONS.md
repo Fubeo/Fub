@@ -103,6 +103,7 @@ ciò che non dipende dalla risposta.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-10 · pa · L'utente aggiunge alla pre-alpha «L'editor di Fub» (https://claude.ai/artifact/EYe7e9baTxYujXXnPirXjw): «questo si aggiunge al piano». Entra in Fase C come un piano suo, `piano/editor-completo`; il `PLAN.md` lo scrive `/pianifica` (l'orchestratore non avvia pianificatori); D15 e D17 restano sulla consigliata · Perché: 83 task con Tocca e Non toccare vanno disegnati prima di darli ai coder, e la regola degli agenti lascia all'utente l'avvio del pianificatore.
 - 2026-11-10 · fub-pre-alpha (utente) · i coder Haiku lavorano con
   `effort: "xhigh"`, non più `max`. Perché: lo chiede l'utente («cambia gli
   haiku coder da qui in avanti da effort max a xhigh»). Vale per i coder
