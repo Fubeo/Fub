@@ -40,11 +40,61 @@ fn src_dir() -> PathBuf {
     PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/src"))
 }
 
-fn parse(file: &str) -> syn::File {
-    let path = src_dir().join(file);
-    let src = std::fs::read_to_string(&path)
+fn parse_path(path: &std::path::Path) -> syn::File {
+    let src = std::fs::read_to_string(path)
         .unwrap_or_else(|and| panic!("cannot read {}: {and}", path.display()));
     syn::parse_file(&src).unwrap_or_else(|and| panic!("{} failed to parse: {and}", path.display()))
+}
+
+/// Un file di `src/` con i suoi **sotto-moduli su file** già incollati al
+/// posto del loro `mod x;`: `traits.rs` è diviso in `traits/*.rs`, e un enum
+/// che sta in `traits/query.rs` resta un enum «di `traits.rs`» per chi lo
+/// cerca. Senza questo passo il lettore vedrebbe solo le dichiarazioni `mod` e
+/// un enum spostato in un sotto-modulo sparirebbe in silenzio dal mirror.
+///
+/// `lib.rs` non si espande: i suoi `mod` sono gli altri file di `src/`, che
+/// [`fieldless_enums`] legge già uno per uno. I `#[cfg(test)] mod` restano fuori,
+/// come prima ne restavano fuori i `mod tests { … }` scritti dentro il file.
+fn parse(file: &str) -> syn::File {
+    let path = src_dir().join(file);
+    let mut ast = parse_path(&path);
+    if file != "lib.rs" {
+        ast.items = splice(&path, ast.items);
+    }
+    ast
+}
+
+fn is_cfg_test(attrs: &[syn::Attribute]) -> bool {
+    attrs.iter().any(|a| {
+        a.path().is_ident("cfg") && a.parse_args::<syn::Ident>().is_ok_and(|the| the == "test")
+    })
+}
+
+fn splice(path: &std::path::Path, items: Vec<syn::Item>) -> Vec<syn::Item> {
+    // `foo.rs` → `foo/`; `foo/mod.rs` → `foo/`.
+    let dir = if path.file_stem().is_some_and(|s| s == "mod") {
+        path.parent().expect("mod.rs has a folder").to_path_buf()
+    } else {
+        path.with_extension("")
+    };
+    let mut out = Vec::new();
+    for item in items {
+        match item {
+            syn::Item::Mod(m) if m.content.is_none() && !is_cfg_test(&m.attrs) => {
+                let name = m.ident.to_string();
+                let flat = dir.join(format!("{name}.rs"));
+                let child = if flat.exists() {
+                    flat
+                } else {
+                    dir.join(&name).join("mod.rs")
+                };
+                let inner = parse_path(&child);
+                out.extend(splice(&child, inner.items));
+            }
+            other => out.push(other),
+        }
+    }
+    out
 }
 
 fn serde_rename(and: &syn::Variant) -> Option<String> {
