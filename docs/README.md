@@ -102,6 +102,8 @@ all'export, dalla sessione dal tablet ai disegni grandi.
 - [Il server MCP](reference/mcp-server.md)
 - [Le schede della lavagna](reference/canvas-cards.md): specie, schede vive e
   ferme, il contratto dei renderer
+- [I tasti e i gesti della lavagna](reference/canvas-input.md): entrare in
+  una scheda, la rotella, i comandi e i loro tasti
 - [I formati dei file Craft](reference/craft-formats.md), gli
   [XMP accanto alle foto](reference/xmp-sidecars.md) e le
   [app esterne](reference/external-editors.md)
