@@ -2800,7 +2800,6 @@ describe("CanvasEngine: un colore che Fub non conosce non ferma la lavagna (T47b
     engine.destroy();
   });
 });
-});
 
 describe("i fili: collegare senza mirare, prendere un filo (T67)", () => {
   /**
