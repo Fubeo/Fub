@@ -59,6 +59,14 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-10 · N6 · T29 integrato seguendo «Cosa fare» e non il «Fatto
+  quando»: le misure di nascita si arrotondano a interi anche per PDF e
+  immagini (PDF 360×509, non 512), e il test di T9 che le agganciava è
+  riscritto; anche il rettangolo del gruppo resta coi lati interi, non
+  multipli di 8. Superano il registro del 2026-11-02 («480×304»,
+  «agganciate a 8 px») · Perché: è A-16 (le misure di nascita non si
+  agganciano, le posizioni sì); il «Fatto quando» aveva contato solo il
+  foglio.
 - 2026-11-10 · N6 · T12 integrato con due scostamenti accettati: `watch`
   delle schede ascolta `document_changed/removed/renamed` oltre agli
   `entry_*` (una nota cambiata manda solo `document_*`: col solo

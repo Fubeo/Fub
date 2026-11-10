@@ -2204,7 +2204,11 @@ almeno 24; gli altri test di T9 passano senza cambiare, salvo il 304 che
 diventa 300.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/canvas/drop-layout.test.ts
-Stato: [ ] da fare
+Stato: [x] fatto (2026-11-10). Differenza: arrotondare a interi (A-16)
+cambia anche altri test di T9: il PDF 360×512 nasce 360×509 (256 → 254) e
+la misura 321×243 resta tale, con la colonna dopo a 368; riscritti. Il
+rettangolo del gruppo (oltre 12) ha lati non multipli di 8, come le
+schede.
 
 ## T30 · Lo stesso contenuto: l'host
 
