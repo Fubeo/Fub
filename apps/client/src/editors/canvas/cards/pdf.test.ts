@@ -10,7 +10,7 @@ import type { PdfEngine } from "../../media/pdf-view";
 import { CardCache } from "../card-cache";
 import { snapshotPart, type CardContext, type CardMode, type CardView } from "../cards";
 import type { CanvasNode } from "../model";
-import { PDF_CARD_MAX_SCALE, pdfCardRenderer, pdfCardStartPage, type PdfCardPort } from "./pdf";
+import { PDF_CARD_MAX_SCALE, pdfCardFirstPage, pdfCardRenderer, pdfCardStartPage, type PdfCardPort } from "./pdf";
 
 const PATH = "Corsi/manuale.pdf";
 const WIDTH = 320;
@@ -74,7 +74,9 @@ interface Bench {
   readonly missing: { count: number };
   readonly size: { width: number; height: number };
   readonly zoom: { value: number };
-  mount(mode: CardMode, subpath?: string | null): CardView;
+  /// Le pagine dette con `pageChanged`, in ordine.
+  readonly changes: number[];
+  mount(mode: CardMode, subpath?: string | null, initialPage?: number | null): CardView;
 }
 
 function bench(options: {
@@ -89,6 +91,7 @@ function bench(options: {
   const missing = { count: 0 };
   const size = { width: WIDTH, height: 400 };
   const zoom = { value: 1 };
+  const changes: number[] = [];
   const port: Bench["port"] = {
     reads: 0,
     loads: 0,
@@ -119,8 +122,13 @@ function bench(options: {
     missing,
     size,
     zoom,
-    mount(mode, subpath = null) {
+    changes,
+    mount(mode, subpath = null, initialPage) {
       const context: CardContext = {
+        ...(initialPage === undefined ? {} : { initialPage }),
+        pageChanged: (page) => {
+          changes.push(page);
+        },
         path: PATH,
         subpath,
         documentId: "Lavagne/studio.canvas",
@@ -219,6 +227,84 @@ describe("la pagina di partenza", () => {
     const view = b.mount("live");
     await settle();
     expect(engine.renders[0]!.scale).toBe((WIDTH * PDF_CARD_MAX_SCALE) / 600);
+    view.destroy();
+  });
+});
+
+describe("la pagina ricordata (T36)", () => {
+  it("vince quella ricordata, poi il subpath, poi la prima", () => {
+    expect(pdfCardFirstPage({ subpath: "#page=3", initialPage: 7 })).toBe(7);
+    expect(pdfCardFirstPage({ subpath: "#page=3", initialPage: null })).toBe(3);
+    expect(pdfCardFirstPage({ subpath: "#page=3" })).toBe(3);
+    expect(pdfCardFirstPage({ subpath: null, initialPage: null })).toBe(1);
+    // Una pagina ricordata che non è un intero da 1 in su non conta.
+    expect(pdfCardFirstPage({ subpath: "#page=3", initialPage: 0 })).toBe(3);
+    expect(pdfCardFirstPage({ subpath: "#page=3", initialPage: 2.5 })).toBe(3);
+    expect(pdfCardFirstPage({ subpath: null, initialPage: Number.NaN })).toBe(1);
+  });
+
+  it("parte dalla pagina ricordata, anche con un altro #page", async () => {
+    const engine = fakeEngine(24);
+    const b = bench({ engine: async () => engine });
+    const view = b.mount("live", "#page=3", 9);
+    expect(view.page!()).toBe(9);
+    await settle();
+    expect(engine.renders.map((r) => r.index)).toEqual([8]);
+    expect(status(b.host).textContent).toBe(t("canvas.card.page", { page: 9, pages: 24 }));
+    // Partire da lì non è un cambio.
+    expect(b.changes).toEqual([]);
+    view.destroy();
+  });
+
+  it("ferma, mostra dalla cache la pagina ricordata", async () => {
+    const cache = new CardCache();
+    const first = bench({ cache, engine: async () => fakeEngine(5) });
+    const live = first.mount("live", null, 4);
+    await settle();
+    live.destroy();
+    const second = bench({ cache });
+    const view = second.mount("snapshot", null, 4);
+    expect(screen(second.host).hidden).toBe(false);
+    expect(second.port.reads).toBe(0);
+    view.destroy();
+  });
+
+  it("una pagina ricordata oltre la fine torna alla prima, e lo dice", async () => {
+    const engine = fakeEngine(5);
+    const b = bench({ engine: async () => engine });
+    const view = b.mount("live", "#page=3", 40);
+    await settle();
+    expect(view.page!()).toBe(1);
+    expect(engine.renders.map((r) => r.index)).toEqual([0]);
+    expect(b.changes).toEqual([1]);
+    view.destroy();
+  });
+
+  it("dice ogni pagina voltata, e niente quando la pagina non cambia", async () => {
+    const b = bench({ engine: async () => fakeEngine(4) });
+    const view = b.mount("live");
+    await settle();
+    press(view, "PageDown");
+    press(view, "End");
+    press(view, "PageDown");
+    press(view, "Home");
+    press(view, "PageUp");
+    await settle();
+    expect(b.changes).toEqual([2, 4, 1]);
+    view.destroy();
+  });
+
+  it("il file cambiato con meno pagine resta all'ultima, e lo dice", async () => {
+    let pages = 6;
+    const b = bench({ engine: async () => fakeEngine(pages) });
+    const view = b.mount("live", null, 6);
+    await settle();
+    expect(b.changes).toEqual([]);
+    pages = 3;
+    b.port.changed!();
+    await settle();
+    expect(view.page!()).toBe(3);
+    expect(b.changes).toEqual([3]);
     view.destroy();
   });
 });

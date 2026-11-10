@@ -148,8 +148,10 @@ breve:
   `CardView`.
 - `CardContext` dà al renderer il percorso del file senza `subpath`, il
   `subpath` a parte, l'id della lavagna, una `Lifetime` che si chiude con
-  `destroy`, la cache delle immagini ferme, la misura e lo zoom correnti, e
-  `missing()` per dire che il file non c'è.
+  `destroy`, la cache delle immagini ferme, la misura e lo zoom correnti,
+  `missing()` per dire che il file non c'è, e per il PDF `initialPage` (la
+  pagina ricordata, o `null`) e `pageChanged(pagina)` (vedi «Riaprire dove
+  eri»).
 - `CardView` risponde a `setMode` e a `destroy`; può rispondere anche a
   `resize` (a fine gesto), `enter` e `leave` (entrare nella scheda e
   uscirne; `enter` restituisce `false` se non c'è niente in cui entrare),
@@ -273,7 +275,10 @@ vive lo decide la tela subito dopo (vedi «Vive e ferme»). Il `context` porta:
 - `size()`, la misura di adesso in unità della lavagna, e `zoom()`;
 - `missing()`, che dice che il file non c'è: la vista si smonta e la scheda
   mostra «File mancante» (vedi «Il file che manca»). Da una vista già smontata
-  non fa niente.
+  non fa niente;
+- `initialPage`, la pagina ricordata della scheda, e `pageChanged(pagina)`,
+  che la ricorda (vedi «Riaprire dove eri»). Da una vista già smontata
+  `pageChanged` non fa niente.
 
 Sulla scheda montata ci sono `data-card-kind` (la specie) e `data-card-mode`.
 Un renderer che lancia in `mount` lascia il corpo di sempre e un avviso in
@@ -423,6 +428,56 @@ Il clic passa prima dalla tela (in cattura): fuori da una scheda attiva il
 contenuto non lo riceve. Nel tema (`structure.css`) il contenuto di una
 scheda non attiva non prende il puntatore e non scorre, salvo i link, i
 pulsanti e l'immagine; dentro una scheda attiva il corpo scorre.
+
+## Riaprire dove eri
+
+Riaprendo una lavagna tornano la vista di prima, le schede scelte e la
+pagina di ogni scheda PDF. Le ricorda Fub su questo computer, negli stati di
+vista; il file `.canvas` non cambia (niente `fub:page`, nessun campo nuovo).
+Il codice sta in `view-state.ts`; la tela lo usa se ha l'opzione
+`viewMemory` e un `documentId`, e la superficie della shell (`surface.ts`)
+gliela dà sopra `api.viewState` e `api.setViewState`, una sola per tutte le
+lavagne.
+
+Lo stato sta nella chiave `canvas.view:<documentId>`:
+
+```json
+{ "version": 1, "camera": { "x": 0, "y": 0, "zoom": 1 },
+  "selection": ["id"], "pages": { "id": 3 } }
+```
+
+- Al più 500 schede scelte (le prime della scelta) e 1000 pagine (le più
+  recenti). Le schede scelte sono solo schede: i fili scelti non si
+  ricordano.
+- Una `version` diversa da 1 è di un'altra versione: la lavagna parte come
+  se lo stato non ci fosse e non lo riscrive mai. Uno stato rotto (non un
+  oggetto, senza `version`) vale nessuno stato, e la prima scrittura lo
+  sostituisce. Dentro la versione 1 un campo che non si legge vale vuoto, e
+  i campi in più (il navigatore, la griglia, il tema per scheda dei passi
+  dopo) si conservano a ogni riscrittura.
+- **All'apertura** (`setDoc`) la tela inquadra tutto come prima, poi legge
+  lo stato: la camera ricordata vale se almeno una scheda cade nella vista
+  che dava, sennò resta «inquadra tutto»; la scelta torna con le sole schede
+  che ci sono ancora. Arriva solo ciò che nessuno ha cambiato nel frattempo:
+  una vista già spostata, o una scelta già fatta, restano. Le schede PDF
+  già montate su un'altra pagina si rimontano sulla loro.
+- **La pagina di una scheda PDF** è quella ricordata (`initialPage`), sennò
+  il `#page=N` del `subpath`, sennò la prima; una pagina ricordata oltre la
+  fine del file vale la prima. La scheda dice ogni pagina voltata con
+  `pageChanged`, anche quando corregge da sé una pagina che non c'è più.
+  Una scheda tolta e rimessa ha un id nuovo, e parte dalla prima.
+- **La scrittura** aspetta 500 ms dopo l'ultimo cambio della camera, della
+  scelta o di una pagina; alla chiusura della tela, e prima di un nuovo
+  `setDoc`, parte subito. Prima che la lettura sia arrivata non si scrive
+  niente, e dopo la chiusura nessuna scrittura parte più. Lo stesso stato
+  non si riscrive. Le letture e le scritture di una lavagna vanno in fila:
+  la lavagna riaperta legge dopo l'ultima scrittura di quella chiusa. Due
+  finestre sulla stessa lavagna: vince l'ultima scrittura.
+- Una scrittura che non riesce lascia una riga nel registro e la lavagna va
+  avanti. Una lettura che non riesce fa partire la lavagna come prima, e
+  quella lavagna non scrive (non si sa che cosa coprirebbe).
+- La shell non porta gli stati di vista con il nome: una lavagna rinominata
+  riparte dalla vista intera.
 
 ## Le porte della shell
 

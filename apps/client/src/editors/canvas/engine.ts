@@ -76,6 +76,7 @@ import {
   type InkPatch,
 } from "./operation";
 import type { CanvasDocument, CanvasEdge, CanvasNode } from "./model";
+import { CanvasViewRecorder, type CanvasView, type CanvasViewMemory, type CanvasViewSnapshot } from "./view-state";
 import {
   CanvasCoreError,
   canvasCoreReady,
@@ -341,6 +342,13 @@ export interface CanvasEngineOptions {
    * tabulazioni.
    */
   readonly clipboardMarkdown?: (data: DataTransfer) => Promise<string | null>;
+  /**
+   * Dove si ricorda la vista della lavagna su questo computer (T36): la
+   * camera, la scelta e la pagina dei PDF, lette all'apertura e scritte con
+   * un ritardo. Assente, o senza `documentId`: si inquadra tutto a ogni
+   * apertura, come prima.
+   */
+  readonly viewMemory?: CanvasViewMemory;
 }
 
 /**
@@ -409,6 +417,10 @@ function clampZoom(zoom: number): number {
  * Il rettangolo di `node` e `view` si sovrappongono davvero: una scheda che
  * tocca la vista solo sul bordo è fuori.
  */
+function sameViewport(a: Viewport, b: Viewport): boolean {
+  return a.x === b.x && a.y === b.y && a.zoom === b.zoom;
+}
+
 function overlaps(node: Rect, view: Rect): boolean {
   return node.x < view.x + view.width && node.x + node.width > view.x
     && node.y < view.y + view.height && node.y + node.height > view.y;
@@ -618,9 +630,24 @@ export class CanvasEngine {
   #penTurns = 0;
   /** Il menu della penna, in testa alla barra: il suo pulsante è lo stesso in ogni barra. */
   readonly #penMenu: PenMenu;
+  /** La vista ricordata su questo computer (T36); `null` senza memoria o senza lavagna. */
+  readonly #viewMemo: CanvasViewRecorder | null;
+  /** Cresce a ogni `setDoc`: la vista letta per un'apertura di prima non vale più. */
+  #viewRound = 0;
+  /**
+   * La camera e la scelta subito dopo l'apertura, finché la vista ricordata
+   * non arriva: la prende solo ciò che nessuno ha cambiato nel frattempo.
+   * `null` prima che la lavagna si mostri, e dopo che la vista è arrivata.
+   */
+  #openView: { readonly camera: Viewport; readonly selection: string } | null = null;
+  /** La vista letta prima che il nucleo aprisse il testo: la prende `#revive`. */
+  #heldView: { readonly round: number; readonly view: CanvasView } | null = null;
 
   constructor(parent: HTMLElement, options: CanvasEngineOptions) {
     this.#options = options;
+    this.#viewMemo = options.viewMemory && options.documentId
+      ? new CanvasViewRecorder(options.viewMemory, options.documentId, () => this.#viewSnapshot())
+      : null;
     this.#quiet = new PenQuiet(idleSchedule(this.#life));
     this.#life.add(() => this.#quiet.dispose());
     if (!options.fingerMovesCard) {
@@ -745,6 +772,13 @@ export class CanvasEngine {
     // Il testo in sospeso è del documento di prima: si registra lì.
     this.#closeField(true);
     const document = this.#open(source);
+    // La vista di prima si scrive adesso, poi si legge quella ricordata
+    // (T36): arriva dopo, e prende ciò che nessuno ha toccato.
+    const remembered = this.#viewMemo?.begin();
+    const viewRound = ++this.#viewRound;
+    this.#openView = null;
+    this.#heldView = null;
+    if (remembered) void remembered.then((view) => this.#restoreView(viewRound, view));
     // Un documento nuovo: la risposta di prima era dell'altro testo.
     if (this.#unwritable) {
       this.#unwritable = false;
@@ -772,6 +806,7 @@ export class CanvasEngine {
     this.#checkWritable();
     this.#fitCamera(false);
     this.#render();
+    this.#markOpenView();
   }
 
   /**
@@ -954,6 +989,8 @@ export class CanvasEngine {
     if (this.#destroyed) return;
     // Il testo in sospeso va nel documento che il riquadro mostrava.
     this.#closeField(true);
+    // L'ultima vista si scrive adesso; dopo, nessuna scrittura parte più.
+    this.#viewMemo?.close();
     this.#destroyed = true;
     clearTimeout(this.#pauseTimer);
     this.#pauseTimer = undefined;
@@ -1065,6 +1102,11 @@ export class CanvasEngine {
     this.#pruneSelection();
     if (first) this.#fitCamera(false);
     this.#render();
+    if (first) {
+      this.#markOpenView();
+      const held = this.#heldView;
+      if (held) this.#restoreView(held.round, held.view);
+    }
     if (this.#pending) this.#recordPending();
   }
 
@@ -1937,6 +1979,72 @@ export class CanvasEngine {
     this.#stage.style.transform = `translate(${this.#camera.x}px, ${this.#camera.y}px) scale(${this.#camera.zoom})`;
     this.#edgeLayer.style.transform = `translate(${this.#camera.x}px, ${this.#camera.y}px) scale(${this.#camera.zoom})`;
     this.#inkLayer?.setCamera(this.#camera.x, this.#camera.y, this.#camera.zoom);
+    // Anche la resa passa di qui: la scelta cambiata si ricorda con la camera.
+    this.#viewMemo?.changed();
+  }
+
+  // --- riaprire dove eri (T36) ------------------------------------------------
+
+  /** Ciò che si ricorda adesso: `null` se la lavagna non mostra un documento. */
+  #viewSnapshot(): CanvasViewSnapshot {
+    if (!this.#doc) return null;
+    return { camera: { ...this.#camera }, selection: [...this.#selection] };
+  }
+
+  /** La lavagna si è appena mostrata: la vista ricordata, se arriva, parte da qui. */
+  #markOpenView(): void {
+    if (!this.#viewMemo) return;
+    this.#openView = { camera: { ...this.#camera }, selection: this.#selection.join("\n") };
+  }
+
+  /**
+   * La vista ricordata per l'apertura `round`: la camera, se nessuno l'ha
+   * mossa e se almeno una scheda cade nella vista ricordata (se no resta
+   * «inquadra tutto»); la scelta, se è ancora vuota, con le sole schede che ci
+   * sono; e le schede PDF già montate su un'altra pagina si rimontano sulla
+   * loro. Arrivata prima che il nucleo aprisse il testo, aspetta `#revive`.
+   */
+  #restoreView(round: number, view: CanvasView | null): void {
+    if (this.#destroyed || round !== this.#viewRound || view === null) return;
+    const doc = this.#doc;
+    const open = this.#openView;
+    if (!doc || !open) {
+      this.#heldView = { round, view };
+      return;
+    }
+    this.#heldView = null;
+    this.#openView = null;
+    let moved = false;
+    const camera = view.camera;
+    if (camera && sameViewport(this.#camera, open.camera)) {
+      const next: Viewport = { x: camera.x, y: camera.y, zoom: clampZoom(camera.zoom) };
+      const seen = this.#viewRectOf(next);
+      if (doc.nodes.some((node) => overlaps(node, seen))) {
+        this.#camera = next;
+        moved = true;
+      }
+    }
+    let selected = false;
+    if (view.selection.length > 0 && this.#selection.join("\n") === open.selection && this.#edgeSelection.length === 0) {
+      const present = new Set(doc.nodes.map((node) => node.id));
+      const selection = view.selection.filter((id) => present.has(id));
+      if (selection.length > 0) {
+        this.#selection = selection;
+        selected = true;
+      }
+    }
+    let remount = false;
+    for (const entry of this.#cards.values()) {
+      const page = this.#viewMemo?.page(entry.id) ?? null;
+      const shown = entry.view?.page?.();
+      if (page === null || shown === undefined || shown === page) continue;
+      // Una chiave che nessun corpo ha: la resa smonta la vista e la rimonta.
+      entry.bodyKey = null;
+      remount = true;
+    }
+    if (!moved && !selected && !remount) return;
+    this.#render();
+    if (selected) this.#options.onSelectionChange();
   }
 
   #screenToWorld(clientX: number, clientY: number): { x: number; y: number } {
@@ -3427,11 +3535,16 @@ export class CanvasEngine {
    * `#fitCamera`: la camera è fatta su quella.
    */
   #viewRect(): { readonly view: Rect; readonly zoom: number } {
+    return { view: this.#viewRectOf(this.#camera), zoom: this.#camera.zoom };
+  }
+
+  /** La vista in coordinate della lavagna con la camera `camera`, con la misura di riserva di `#viewRect`. */
+  #viewRectOf(camera: Viewport): Rect {
     const rect = this.#viewport.getBoundingClientRect();
     const width = rect.width || 800;
     const height = rect.height || 600;
-    const { x, y, zoom } = this.#camera;
-    return { view: { x: -x / zoom, y: -y / zoom, width: width / zoom, height: height / zoom }, zoom };
+    const { x, y, zoom } = camera;
+    return { x: -x / zoom, y: -y / zoom, width: width / zoom, height: height / zoom };
   }
 
   // --- entrare e uscire (T14) ---------------------------------------------------
@@ -3875,6 +3988,12 @@ export class CanvasEngine {
       snapshots,
       size: () => ({ width: entry.node.width, height: entry.node.height }),
       zoom: () => this.#camera.zoom,
+      initialPage: this.#viewMemo?.page(node.id) ?? null,
+      pageChanged: (page) => {
+        // Una vista già smontata non parla più per questa scheda.
+        if (life.closed || entry.body !== body) return;
+        this.#viewMemo?.pageChanged(entry.id, page);
+      },
       missing: () => {
         // Una vista già distrutta non parla più per questa scheda; un link non manca mai.
         if (life.closed || entry.body !== body || entry.node.type !== "file") return;

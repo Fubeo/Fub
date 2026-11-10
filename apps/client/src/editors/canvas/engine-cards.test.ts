@@ -21,6 +21,7 @@ import {
 } from "./cards";
 import type { CanvasNode } from "./model";
 import { canvasCoreReady, openCoreNow } from "./wasm/core";
+import { canvasViewKey, createCanvasViewMemory } from "./view-state";
 
 beforeAll(async () => {
   await canvasCoreReady();
@@ -56,6 +57,8 @@ function fakeRenderer(kinds: readonly CardKind[] = ["note", "image", "pdf", "web
       host.append(content);
       return {
         setMode: () => {},
+        // Un PDF mostra la pagina con cui è partito (T36).
+        ...(node.file?.endsWith(".pdf") ? { page: () => context.initialPage ?? 1 } : {}),
         destroy: () => {
           record.destroyed++;
         },
@@ -1319,5 +1322,156 @@ describe("entrare e uscire da una scheda", () => {
     expect(activeOf(host)).toEqual([]);
     expect(host.querySelector(".canvas-exit-hint")).toBeNull();
     engine.destroy();
+  });
+});
+
+describe("riaprire dove eri (T36)", () => {
+  const PDF_BOARD = [
+    { id: "p", type: "file", x: 0, y: 0, width: 200, height: 260, file: "Corsi/manuale.pdf", subpath: "#page=2" },
+    image("a", 400, 0),
+    image("z", 1600, 1200),
+  ];
+
+  function viewStore(initial: Record<string, unknown> = {}) {
+    const states = new Map<string, unknown>(Object.entries(initial));
+    const writes: unknown[] = [];
+    const memory = createCanvasViewMemory({
+      get: async (key) => states.get(key) ?? null,
+      set: async (key, value) => {
+        writes.push(value);
+        states.set(key, value);
+      },
+    });
+    return { states, writes, memory };
+  }
+
+  /** Le viste montate della scheda `id`, dall'ultima. */
+  function mountsOf(mounts: readonly Mounted[], id: string): Mounted[] {
+    return mounts.filter((entry) => entry.node === id).reverse();
+  }
+
+  it("riaprendo tornano la camera, la scelta e la pagina del PDF; il .canvas non cambia", async () => {
+    const source = boardSource(PDF_BOARD);
+    const store = viewStore();
+    const first = fakeRenderer();
+    const a = mounted(source, { cards: cardsOf(first.renderer), viewMemory: store.memory });
+    await settle();
+    // Nessuno stato: si inquadra tutto, come prima.
+    const fitted = cameraOf(a.host);
+    panStart(a.viewport, -150, -40)();
+    clickOn(a.viewport, bodyOf(a.host, "a"));
+    expect(selectedOf(a.host)).toEqual(["a"]);
+    const camera = cameraOf(a.host);
+    expect(camera).not.toBe(fitted);
+    mountsOf(first.mounts, "p")[0]!.context.pageChanged!(5);
+    a.engine.destroy();
+    await settle();
+    expect(store.writes.length).toBe(1);
+    expect(store.states.get(canvasViewKey("board.canvas"))).toMatchObject({ version: 1, selection: ["a"], pages: { p: 5 } });
+    expect(a.changes).toEqual([]);
+    expect(a.engine.getDoc()).toBe(source);
+
+    const second = fakeRenderer();
+    const b = mounted(source, { cards: cardsOf(second.renderer), viewMemory: store.memory });
+    await settle();
+    expect(cameraOf(b.host)).toBe(camera);
+    expect(selectedOf(b.host)).toEqual(["a"]);
+    // La scheda montata prima che la vista arrivasse si rimonta sulla sua pagina.
+    const pdf = mountsOf(second.mounts, "p");
+    expect(pdf[0]!.context.initialPage).toBe(5);
+    expect(pdf[0]!.destroyed).toBe(0);
+    expect(pdf.slice(1).every((entry) => entry.destroyed === 1)).toBe(true);
+    // Le altre schede non si rimontano.
+    expect(mountsOf(second.mounts, "a").length).toBe(1);
+    // Il file resta identico byte per byte.
+    expect(b.engine.getDoc()).toBe(source);
+    expect(b.changes).toEqual([]);
+    b.engine.destroy();
+    await settle();
+    // Riaperta e richiusa senza cambiare niente: niente da riscrivere.
+    expect(store.writes.length).toBe(1);
+  });
+
+  it("una vista ricordata vuota inquadra tutto", async () => {
+    const source = boardSource(PDF_BOARD);
+    const plain = mounted(source, { cards: cardsOf(fakeRenderer().renderer) });
+    const fitted = cameraOf(plain.host);
+    plain.engine.destroy();
+    const store = viewStore({
+      [canvasViewKey("board.canvas")]: { version: 1, camera: { x: 90000, y: 90000, zoom: 1 }, selection: ["via"], pages: {} },
+    });
+    const b = mounted(source, { cards: cardsOf(fakeRenderer().renderer), viewMemory: store.memory });
+    await settle();
+    expect(cameraOf(b.host)).toBe(fitted);
+    // Una scheda scelta che non c'è più non si sceglie.
+    expect(selectedOf(b.host)).toEqual([]);
+    b.engine.destroy();
+  });
+
+  it("la scelta torna con le sole schede che ci sono ancora, e la camera da sola", async () => {
+    const store = viewStore({
+      [canvasViewKey("board.canvas")]: { version: 1, camera: { x: 10, y: 20, zoom: 0.5 }, selection: ["via", "z", "a"], pages: {} },
+    });
+    const b = mounted(boardSource(PDF_BOARD), { cards: cardsOf(fakeRenderer().renderer), viewMemory: store.memory });
+    await settle();
+    expect(cameraOf(b.host)).toBe("translate(10px, 20px) scale(0.5)");
+    expect(selectedOf(b.host)).toEqual(["a", "z"]);
+    b.engine.destroy();
+  });
+
+  it("uno stato di un'altra versione o rotto: si parte come oggi, e quello di un'altra versione non si riscrive", async () => {
+    const source = boardSource(PDF_BOARD);
+    const plain = mounted(source, { cards: cardsOf(fakeRenderer().renderer) });
+    const fitted = cameraOf(plain.host);
+    plain.engine.destroy();
+    const foreign = { version: 2, camera: { x: 10, y: 20, zoom: 0.5 }, selection: ["a"] };
+    for (const stored of [foreign, "rotto", { camera: { x: 10, y: 20, zoom: 0.5 } }]) {
+      const store = viewStore({ [canvasViewKey("board.canvas")]: stored });
+      const b = mounted(source, { cards: cardsOf(fakeRenderer().renderer), viewMemory: store.memory });
+      await settle();
+      expect(cameraOf(b.host)).toBe(fitted);
+      expect(selectedOf(b.host)).toEqual([]);
+      panStart(b.viewport, -150, 0)();
+      b.engine.destroy();
+      await settle();
+      if (stored === foreign) expect(store.writes).toEqual([]);
+      else expect(store.writes.length).toBe(1);
+    }
+  });
+
+  it("una vista mossa prima che quella ricordata arrivi resta com'è", async () => {
+    const store = viewStore({
+      [canvasViewKey("board.canvas")]: { version: 1, camera: { x: 10, y: 20, zoom: 0.5 }, selection: [], pages: {} },
+    });
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const viewMemory = {
+      read: async (doc: string) => {
+        await gate;
+        return store.memory.read(doc);
+      },
+      write: store.memory.write,
+    };
+    const b = mounted(boardSource(PDF_BOARD), { cards: cardsOf(fakeRenderer().renderer), viewMemory });
+    panStart(b.viewport, -150, 0)();
+    const moved = cameraOf(b.host);
+    release();
+    await settle();
+    expect(cameraOf(b.host)).toBe(moved);
+    b.engine.destroy();
+  });
+
+  it("senza lavagna non si legge e non si scrive niente", async () => {
+    const store = viewStore();
+    const read = vi.spyOn(store.memory, "read");
+    const b = mounted(boardSource(PDF_BOARD), { cards: cardsOf(fakeRenderer().renderer), viewMemory: store.memory, documentId: undefined });
+    await settle();
+    panStart(b.viewport, -150, 0)();
+    b.engine.destroy();
+    await settle();
+    expect(read).not.toHaveBeenCalled();
+    expect(store.writes).toEqual([]);
   });
 });

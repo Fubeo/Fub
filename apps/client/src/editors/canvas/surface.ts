@@ -37,6 +37,8 @@ import {
 } from "../core/component-surfaces";
 import type { PdfPorts } from "../spatial/pdf/surface";
 import type { Lifetime } from "../../ui/lifetime";
+import { api } from "../../host/ipc";
+import { createCanvasViewMemory } from "./view-state";
 
 // I descrittori stanno in un modulo leggero, che la shell legge all'avvio
 // senza caricare la lavagna.
@@ -131,6 +133,16 @@ export const CANVAS_MOUNT: CanvasMountSignature = {
   },
 };
 
+/**
+ * La vista ricordata delle lavagne (T36), negli stati di vista di questo
+ * computer: una sola memoria per tutte le superfici, così la lavagna
+ * riaperta legge dopo l'ultima scrittura di quella chiusa.
+ */
+const VIEW_MEMORY = createCanvasViewMemory({
+  get: (key) => api.viewState<unknown>(key),
+  set: (key, value) => api.setViewState(key, value),
+});
+
 /** Crea la superficie canvas per un profilo; la registrazione resta a Main. */
 export function mountCanvasSurface(
   profile: string,
@@ -170,6 +182,7 @@ export function mountCanvasSurface(
     ...(callbacks.cards ? { cards: callbacks.cards } : {}),
     ...(callbacks.measureImage ? { measureImage: callbacks.measureImage } : {}),
     ...(callbacks.clipboardMarkdown ? { clipboardMarkdown: callbacks.clipboardMarkdown } : {}),
+    viewMemory: VIEW_MEMORY,
     onPendingChange: (pending) => {
       for (const watcher of [...pendingWatchers]) watcher(pending);
     },

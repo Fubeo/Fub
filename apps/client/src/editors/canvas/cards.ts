@@ -149,6 +149,13 @@ export interface CardContext {
   zoom(): number;
   /// Il file non c'è: la tela mostra la scheda «File mancante»: il nome del file con «Ritrova…» e «Togli dalla lavagna» (T16).
   missing(): void;
+  /// La pagina (da 1) che la scheda mostrava l'ultima volta, ricordata su
+  /// questo computer (il PDF, T36); `null` o assente se non se ne ricorda una.
+  /// Una pagina oltre la fine del file vale la prima.
+  readonly initialPage?: number | null;
+  /// La scheda mostra un'altra pagina (da 1): la tela la ricorda. Assente,
+  /// non si ricorda niente.
+  pageChanged?(page: number): void;
 }
 
 /// Una scheda montata da un renderer.

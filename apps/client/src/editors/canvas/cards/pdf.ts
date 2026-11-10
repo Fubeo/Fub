@@ -14,7 +14,9 @@
 // dopo `destroy` nessuna risposta tardiva tocca il DOM né la cache.
 //
 // La scheda legge e basta: sfogliare non cambia il file né il `.canvas`
-// (D-5 del piano N6).
+// (D-5 del piano N6). La pagina mostrata la ricorda la tela su questo
+// computer (T36): la scheda parte da `initialPage`, e dice ogni cambio con
+// `pageChanged`.
 
 import { t } from "../../../i18n/strings";
 import { pdfPageFromFragment, type PdfEngine, type PdfEngineLoader } from "../../media/pdf-view";
@@ -45,6 +47,14 @@ export function pdfCardRenderer(port: PdfCardPort): CardRenderer {
 /// La pagina di partenza dal `subpath` (`#page=3`, da 1); `null` se non la dice.
 export function pdfCardStartPage(subpath: string | null): number | null {
   return subpath === null ? null : pdfPageFromFragment(subpath);
+}
+
+/// La pagina da cui parte la scheda: quella ricordata (`initialPage`), se è
+/// un intero da 1 in su, sennò quella del `subpath`, sennò la prima.
+export function pdfCardFirstPage(context: Pick<CardContext, "subpath" | "initialPage">): number {
+  const remembered = context.initialPage;
+  if (typeof remembered === "number" && Number.isSafeInteger(remembered) && remembered >= 1) return remembered;
+  return pdfCardStartPage(context.subpath) ?? 1;
 }
 
 function mountPdfCard(
@@ -87,8 +97,7 @@ function mountPdfCard(
   let drawing = 0;
   /// Le pagine del file, note dall'ultima apertura; `null` se mai aperto.
   let pageCount: number | null = null;
-  const start = pdfCardStartPage(context.subpath);
-  let page = start ?? 1;
+  let page = pdfCardFirstPage(context);
   /// La parte della cache che il canvas in vista mostra, o `null`.
   let shown: string | null = null;
 
@@ -200,7 +209,9 @@ function mountPdfCard(
     pageCount = count;
     // Al primo avvio una pagina fuori dall'intervallo torna alla prima; dopo
     // (il file è cambiato) si resta il più vicino possibile.
+    const wanted = page;
     page = first ? (page > count ? 1 : page) : Math.min(page, count);
+    if (page !== wanted) context.pageChanged?.(page);
     updateChrome();
     await draw();
   }
@@ -238,6 +249,7 @@ function mountPdfCard(
     const target = Math.min(Math.max(1, n), pageCount);
     if (target === page) return;
     page = target;
+    context.pageChanged?.(page);
     updateChrome();
     await draw();
   }
