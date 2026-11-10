@@ -53,6 +53,10 @@ export interface CanvasSurfaceCallbacks {
   readonly onFail?: (paneId: string, error: unknown) => void;
   readonly onOpenWikilink?: CanvasEngineOptions["onOpenWikilink"];
   readonly onOpenPath?: CanvasEngineOptions["onOpenPath"];
+  /** «Apri a lato» dal menu di una scheda di file (T17). */
+  readonly onOpenPathBeside?: CanvasEngineOptions["onOpenPathBeside"];
+  /** «Sposta anche il file nel cestino» dal menu di una scheda (T17): il gesto dell'albero. */
+  readonly onTrashPath?: CanvasEngineOptions["onTrashPath"];
   readonly onCreateNote?: CanvasEngineOptions["onCreateNote"];
   readonly onPickFile?: CanvasEngineOptions["onPickFile"];
   /** Apre le Impostazioni su una voce: la cartella dei file trascinati, dalla banda di stato. */
@@ -192,6 +196,8 @@ export function mountCanvasSurface(
     onSelectionChange: () => callbacks.onSelectionChange(context.paneId),
     onOpenWikilink: callbacks.onOpenWikilink,
     onOpenPath: callbacks.onOpenPath,
+    ...(callbacks.onOpenPathBeside ? { onOpenPathBeside: callbacks.onOpenPathBeside } : {}),
+    ...(callbacks.onTrashPath ? { onTrashPath: callbacks.onTrashPath } : {}),
     onCreateNote: callbacks.onCreateNote,
     onPickFile: callbacks.onPickFile,
     media: callbacks.media,

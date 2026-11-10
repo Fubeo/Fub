@@ -1,7 +1,7 @@
 import type { Theme } from "../../theme/theme";
 import type { SyntaxForm } from "../../host/contract";
 import { t, onLanguage } from "../../i18n/strings";
-import type { SurfaceMenu, SurfaceMenuEntry, SurfaceMenuItem } from "../core/editor-menu";
+import { MENU_RULE, type SurfaceMenu, type SurfaceMenuEntry, type SurfaceMenuItem } from "../core/editor-menu";
 import { writeClipboardText } from "../../platform/clipboard";
 import { lineFeeds, operationFromText, type EditorChangeOrigin, type TextOperation } from "../core/text-operation";
 import { idleSchedule } from "../../ink/dom/idle";
@@ -11,7 +11,6 @@ import type { InkSample } from "../../ink/sample";
 import { ERASER } from "../../ink/tools/eraser";
 import { EraseSweep, type Spot } from "../../ink/tools/sweep";
 import { openLifetime, type Lifetime } from "../../ui/lifetime";
-import { parseChords } from "../../ui/commands";
 import { mediaKindOfId } from "../media/media-types";
 import { anchorAt, strokeBounds } from "./anchor";
 import { parseTsv } from "../core/tsv";
@@ -49,10 +48,12 @@ import {
   CANVAS_ALIGN,
   CANVAS_COLORS,
   CANVAS_TIPS,
+  CANVAS_TOOL_KEYS,
   buildCanvasCommands,
   commandForKey,
   commandHint,
   isCommandSearchKey,
+  menuChord,
   toolOfCommand,
   type CanvasAlign,
   type CanvasColorId,
@@ -308,6 +309,18 @@ interface PendingText {
   text: string;
 }
 
+/**
+ * Una voce del menu del tasto destro dal comando `id` del catalogo: `args`
+ * dice su che cosa, `refocus` rimette il fuoco sulla tela dopo il gesto.
+ */
+type MenuEntryMaker = (id: string, args?: CanvasCommandArgs, refocus?: boolean, extra?: Partial<SurfaceMenuItem>) => SurfaceMenuItem;
+
+/**
+ * «Colore ›» col colore di adesso segnato (`undefined` quello di serie, `null`
+ * nessuno: colori diversi); con `radio` le voci sono scelte esclusive.
+ */
+type ColorMenuMaker = (current: string | null | undefined, args?: CanvasCommandArgs, radio?: boolean) => SurfaceMenuItem;
+
 export interface CanvasEngineOptions {
   readonly surfaceId: string;
   /** Il nucleo che apre le lavagne; i test ne passano uno che conta le chiamate. */
@@ -318,6 +331,15 @@ export interface CanvasEngineOptions {
   readonly onSelectionChange: () => void;
   readonly onOpenWikilink?: (page: string, heading: string | null, block: string | null) => void | Promise<void>;
   readonly onOpenPath?: (path: string, from?: string) => void | Promise<void>;
+  /** «Apri a lato» dal menu di una scheda di file: come `onOpenPath`, in un riquadro accanto. */
+  readonly onOpenPathBeside?: (path: string, from?: string) => void | Promise<void>;
+  /**
+   * «Sposta anche il file nel cestino» (T17): il file `path` del vault nel
+   * cestino, con il gesto dell'albero. `true` se il file è nel cestino,
+   * `false` se è rimasto (una domanda a cui si è detto di no); un rifiuto
+   * dell'host arriva come errore. Mai la conseguenza di un tasto.
+   */
+  readonly onTrashPath?: (path: string) => Promise<boolean>;
   readonly onCreateNote?: (initialText: string) => string | void | Promise<string | void>;
   /**
    * Sceglie il file del vault a cui punta una nuova card file; `null` o niente
@@ -644,7 +666,19 @@ export class CanvasEngine {
    * scheda entra nella scelta o ne esce, come con Maiuscolo.
    */
   #pan: { pointerId: number; startX: number; startY: number; camX: number; camY: number; toggle?: string } | null = null;
-  #connect: { pointerId: number; from: string; edgeId?: string; endpoint?: "from" | "to" } | null = null;
+  #connect: { pointerId: number; from: string; edgeId?: string; endpoint?: "from" | "to"; back?: boolean } | null = null;
+  /**
+   * «Collega…» dal menu o C con una scheda scelta (T17): la scheda da cui
+   * parte il filo; il prossimo clic su un'altra scheda lo chiude e la
+   * colonna torna alla Selezione. Esc o un altro strumento rinunciano.
+   */
+  #connectFrom: string | null = null;
+  /**
+   * L'avviso di «Togli dalla lavagna» (T17), col suo «Annulla»: il testo e il
+   * passo d'annulla del togliere. Vale finché quel passo è l'ultimo: la
+   * modifica dopo lo spegne, così «Annulla» annulla sempre il togliere.
+   */
+  #removal: { readonly text: string; readonly step: CanvasStep | undefined; readonly undo: boolean } | null = null;
   /** Le dita giù che la lavagna segue, in coordinate del client. */
   readonly #fingers = new Map<number, TouchPoint>();
   /** Il dito che può ancora essere un tocco breve: dove e quando si è posato, e su che cosa. */
@@ -960,6 +994,8 @@ export class CanvasEngine {
     this.#version = ++this.#versions;
     this.#doc = document;
     this.#intakeError = "";
+    this.#removal = null;
+    this.#connectFrom = null;
     // Un documento nuovo: si esce dalla scheda dell'altro.
     this.#leaveCard(false, false);
     this.#selection = [];
@@ -992,6 +1028,8 @@ export class CanvasEngine {
     // Lo stesso testo (l'eco di un commit di qui) lascia valida la via del tratto.
     const changed = source !== this.#source;
     if (changed) this.#version = ++this.#versions;
+    // Un testo cambiato altrove è una modifica dopo il togliere (T17).
+    if (changed) this.#removal = null;
     this.#source = source;
     if (!document) {
       void this.#revive();
@@ -1320,6 +1358,8 @@ export class CanvasEngine {
     this.#source = after;
     this.#version = ++this.#versions;
     this.#doc = this.#coreModel() ?? this.#doc;
+    // Una modifica nuova: l'avviso di un togliere di prima se ne va (T17).
+    this.#dropRemoval();
     const operation: CanvasOperation = {
       kind: "canvas",
       patches: copyPatches(patches),
@@ -1381,6 +1421,7 @@ export class CanvasEngine {
     this.#source = after;
     this.#version = step.restores;
     this.#doc = document;
+    this.#dropRemoval();
     const edit: CanvasSourceEdit = { start: step.start, end, text: step.removed };
     const operation: CanvasOperation = {
       kind: "canvas",
@@ -1689,8 +1730,27 @@ export class CanvasEngine {
     this.#setTool(tool);
   }
 
+  /**
+   * «Collega…» (T17): il filo parte dalla scheda `id`, come dal pulsante →
+   * della sua testata; il prossimo clic su un'altra scheda lo chiude. La
+   * colonna mostra Collega finché il filo non c'è.
+   */
+  #beginConnectFrom(id: string): void {
+    if (this.#destroyed || this.#readOnly || this.#isSceneOversized()) return;
+    if (!this.#doc?.nodes.some((node) => node.id === id)) return;
+    this.#pickTool("connect");
+    this.#connectFrom = id;
+  }
+
+  /** Il pulsante «Mostra l'anteprima» della scheda di pagina web `id`, se c'è adesso. */
+  #webPreviewButton(id: string): HTMLButtonElement | null {
+    return this.#cards.get(id)?.article.querySelector<HTMLButtonElement>(".canvas-card-web-preview") ?? null;
+  }
+
   /** Lo strumento di adesso, mostrato nella colonna, sull'interruttore e sul viewport. */
   #setTool(tool: CanvasToolId): void {
+    // Uno strumento scelto rinuncia al filo cominciato da «Collega…».
+    this.#connectFrom = null;
     this.#tool = tool;
     this.#inkMouseButton.setAttribute("aria-pressed", String(this.#inkMouse));
     this.#viewport.dataset.tool = tool;
@@ -2455,6 +2515,27 @@ export class CanvasEngine {
       error.textContent = notice;
       bar.prepend(error);
     }
+    // L'avviso di «Togli dalla lavagna» (T17), dopo quello dell'ultimo gesto:
+    // una notizia e non un guasto, con «Annulla» accanto.
+    const removal = this.#removal;
+    if (removal) {
+      const said = document.createElement("output");
+      said.setAttribute("role", "status");
+      said.className = "canvas-removal";
+      said.textContent = removal.text;
+      const place = bar.querySelector(".canvas-intake-error")?.nextSibling ?? inkMouse.nextSibling;
+      bar.insertBefore(said, place);
+      if (removal.undo && removal.step !== undefined) {
+        const undo = document.createElement("button");
+        undo.type = "button";
+        undo.dataset.canvasAction = "undo-removal";
+        undo.textContent = t("app.undo");
+        undo.title = t("canvas.card.removed_undo");
+        // Il pulsante si rifà con la barra: l'ascolto se ne va con lui.
+        undo.addEventListener("click", () => this.#undoRemoval());
+        bar.insertBefore(undo, said.nextSibling);
+      }
+    }
   }
 
   #showIntakeError(error: unknown): void {
@@ -2824,11 +2905,111 @@ export class CanvasEngine {
 
   #deleteSelection(): void {
     if (!this.#doc || this.#readOnly) return;
-    if (this.#removeNodes(this.#selection, this.#edgeSelection)) {
+    if (this.#removeCards(this.#selection, this.#edgeSelection)) {
       this.#selection = [];
       this.#edgeSelection = [];
       this.#options.onSelectionChange();
     }
+  }
+
+  /**
+   * «Togli dalla lavagna» (Canc, Backspace, il menu, la scheda mancante):
+   * toglie le schede `nodes` e le linee `edges`, mai i file, e lo dice con
+   * «Annulla». «I file restano» solo se fra le tolte c'è una scheda di file;
+   * togliere solo dei fili non dice niente.
+   */
+  #removeCards(nodes: readonly string[], edges: readonly string[]): boolean {
+    if (!this.#doc) return false;
+    const gone = this.#doc.nodes.filter((node) => nodes.includes(node.id));
+    if (!this.#removeNodes(nodes, edges)) return false;
+    if (gone.length > 0) {
+      const files = gone.some((node) => node.type === "file");
+      const many = gone.length > 1;
+      const key = files
+        ? (many ? "canvas.card.removed_many" : "canvas.card.removed")
+        : (many ? "canvas.card.removed_plain_many" : "canvas.card.removed_plain");
+      this.#showRemoval(t(key, { n: String(gone.length) }), true);
+    }
+    return true;
+  }
+
+  /**
+   * L'avviso di un togliere appena fatto, legato al suo passo d'annulla; con
+   * `undo` porta «Annulla». Va nel posto degli avvisi della tela.
+   */
+  #showRemoval(text: string, undo: boolean): void {
+    if (this.#destroyed) return;
+    this.#removal = { text, step: this.#undo[this.#undo.length - 1], undo };
+    this.#drawToolbar();
+  }
+
+  /** La modifica dopo il togliere: il suo avviso se ne va. */
+  #dropRemoval(): void {
+    if (this.#removal === null) return;
+    this.#removal = null;
+    this.#drawToolbar();
+  }
+
+  /**
+   * «Annulla» dell'avviso: ciò che fa Ctrl+Z, finché il togliere è l'ultimo
+   * passo; dopo, l'avviso non c'è già più.
+   */
+  #undoRemoval(): void {
+    const removal = this.#removal;
+    if (removal === null || removal.step === undefined || this.#undo[this.#undo.length - 1] !== removal.step) {
+      this.#dropRemoval();
+      return;
+    }
+    this.undo();
+    this.#dropRemoval();
+    this.#statusSettle();
+    this.#viewport.focus({ preventScroll: true });
+  }
+
+  /**
+   * «Sposta anche il file nel cestino» (T17): i file delle schede scelte nel
+   * cestino, uno alla volta, con la porta dell'host (il gesto dell'albero);
+   * poi via dalla lavagna ogni scheda di un file che ci è andato, anche quelle
+   * non scelte (la stessa nota in due schede), e le schede scelte senza file.
+   * Un file che l'host rifiuta lascia le sue schede, e l'errore dell'host si
+   * legge nel posto degli avvisi. Mai da un tasto: il comando non ne ha.
+   */
+  async #trashSelectedFiles(): Promise<void> {
+    const trash = this.#options.onTrashPath;
+    if (!trash || !this.#doc || this.#readOnly) return;
+    const chosen = this.#selectedNodes();
+    const paths = [...new Set(chosen.filter((node) => node.type === "file").map((node) => cardTarget(node).path))]
+      .filter(isVaultPath);
+    if (!paths.length) return;
+    const plain = chosen.filter((node) => node.type !== "file").map((node) => node.id);
+    const document = this.#source;
+    const trashed: string[] = [];
+    let failure: unknown = null;
+    for (const path of paths) {
+      try {
+        if (await trash(path)) trashed.push(path);
+      } catch (error) {
+        failure = error;
+        break;
+      }
+      if (this.#destroyed) return;
+    }
+    if (this.#destroyed) return;
+    if (failure !== null) this.#showIntakeError(failure);
+    if (!trashed.length || !this.#doc || this.#readOnly) return;
+    // Le schede dei file andati, come sono adesso: il documento può essere
+    // cambiato durante l'attesa. Le schede senza file si tolgono solo se il
+    // documento è quello di quando il gesto è partito.
+    const gone = new Set(trashed);
+    const cards = this.#doc.nodes.filter((node) => node.type === "file" && gone.has(cardTarget(node).path)).map((node) => node.id);
+    const ids = [...cards, ...(this.#source === document ? plain : [])];
+    if (!this.#removeNodes(ids, [])) return;
+    this.#pruneSelection();
+    this.#options.onSelectionChange();
+    const key = trashed.length > 1
+      ? "canvas.card.trashed_files"
+      : ids.length > 1 ? "canvas.card.trashed_many" : "canvas.card.trashed";
+    this.#showRemoval(t(key, { n: String(ids.length), name: fileName(trashed[0]!), files: String(trashed.length) }), false);
   }
 
   /**
@@ -2990,7 +3171,13 @@ export class CanvasEngine {
     if (tool !== null) {
       return {
         disabled: () => (CANVAS_WRITING_TOOLS.has(tool) ? writable() ?? (this.#isSceneOversized() ? t("canvas.too_large") : null) : null),
-        run: () => this.#pickTool(tool),
+        run: () => {
+          // C con una scheda scelta comincia il filo da lei, come «Collega…»
+          // (T17); senza, sceglie lo strumento.
+          const from = tool === "connect" && this.#edgeSelection.length === 0 ? only() : null;
+          if (from) this.#beginConnectFrom(from.id);
+          else this.#pickTool(tool);
+        },
       };
     }
     switch (id) {
@@ -2998,7 +3185,9 @@ export class CanvasEngine {
         return {
           disabled: () => (this.#selection.length || this.#edgeSelection.length || this.#tool !== "select" ? null : t("canvas.commands.why.no_selection")),
           run: () => {
-            if (this.#selection.length || this.#edgeSelection.length) this.#clearSelection();
+            // Un filo cominciato da «Collega…» si lascia prima di tutto.
+            if (this.#connectFrom !== null) this.#pickTool("select");
+            else if (this.#selection.length || this.#edgeSelection.length) this.#clearSelection();
             else this.#pickTool("select");
           },
         };
@@ -3067,6 +3256,71 @@ export class CanvasEngine {
             if (media.openViewer) void media.openViewer(destination);
             else void media.openExternal(destination);
           },
+        };
+      // Il menu della scheda (T17).
+      case "canvas.open_beside":
+        return {
+          disabled: () => {
+            const one = only();
+            if (one?.type !== "file" || !one.file) return t("canvas.commands.why.one_file");
+            return this.#options.onOpenPathBeside ? null : t("canvas.commands.why.no_beside");
+          },
+          run: () => {
+            const one = only();
+            const beside = this.#options.onOpenPathBeside;
+            if (one?.type !== "file" || !one.file || !beside) return;
+            const path = `/${one.file.replace(/^\/+/, "")}${one.subpath ?? ""}`;
+            void Promise.resolve(beside(path, this.#options.documentId)).catch((error: unknown) => this.#showIntakeError(error));
+          },
+        };
+      case "canvas.open_viewer":
+        return {
+          disabled: () => {
+            const one = only();
+            return one && cardKindOf(one) === "image" ? null : t("canvas.commands.why.one_image");
+          },
+          run: () => {
+            const one = only();
+            if (!one || cardKindOf(one) !== "image" || one.type !== "file" || !one.file) return;
+            const path = `/${cardTarget(one).path.replace(/^\/+/, "")}`;
+            void this.#options.onOpenPath?.(path, this.#options.documentId);
+          },
+        };
+      case "canvas.web_preview":
+        return {
+          disabled: () => {
+            const one = only();
+            if (one?.type !== "link") return t("canvas.commands.why.one_link");
+            const button = this.#webPreviewButton(one.id);
+            return button && !button.disabled ? null : t("canvas.commands.why.no_preview");
+          },
+          // Lo stesso gesto del pulsante della scheda: la sua porta, una
+          // richiesta sola.
+          run: () => {
+            const one = only();
+            const button = one ? this.#webPreviewButton(one.id) : null;
+            if (button && !button.disabled) button.click();
+          },
+        };
+      case "canvas.connect":
+        return {
+          disabled: () => writable() ?? (only() ? null : t("canvas.commands.why.one_card")),
+          run: () => {
+            const one = only();
+            if (one) this.#beginConnectFrom(one.id);
+          },
+        };
+      case "canvas.trash_file":
+        return {
+          disabled: () => {
+            const why = writable();
+            if (why !== null) return why;
+            if (!this.#options.onTrashPath) return t("canvas.commands.why.no_trash");
+            return this.#selectedNodes().some((node) => node.type === "file" && isVaultPath(cardTarget(node).path))
+              ? null
+              : t("canvas.commands.why.no_file_card");
+          },
+          run: () => void this.#trashSelectedFiles().catch((error: unknown) => this.#showIntakeError(error)),
         };
       case "canvas.edge.reverse":
         return {
@@ -3320,11 +3574,11 @@ export class CanvasEngine {
     // si può e perché no. Il menu dice solo quali voci, in che ordine e su
     // che cosa (`args`); `refocus` rimette il fuoco sulla tela dopo il gesto.
     const catalog = new Map(this.commands().map((command) => [command.id, command]));
-    const entry = (id: string, args?: CanvasCommandArgs, refocus = true, extra: Partial<SurfaceMenuItem> = {}): SurfaceMenuItem => {
+    const entry: MenuEntryMaker = (id, args, refocus = true, extra = {}) => {
       const command = catalog.get(id);
       if (!command) throw new Error(`canvas: il comando ${id} non è nel catalogo`);
       const why = command.disabled();
-      const chord = command.keys.find((key) => parseChords(key) !== null);
+      const chord = menuChord(command.keys);
       return {
         id,
         label: command.label,
@@ -3342,21 +3596,28 @@ export class CanvasEngine {
       };
     };
     const writable = !this.#readOnly;
-    const colors = (current: string | undefined, args?: CanvasCommandArgs): SurfaceMenuItem => ({
+    const colors: ColorMenuMaker = (current, args, radio = false) => ({
       id: "canvas.color",
       label: t("canvas_menu.color"),
       enabled: writable,
-      items: CANVAS_COLORS.map((value) => entry(`canvas.color.${value}`, args, true, { checked: (current ?? "") === (value === "none" ? "" : value) })),
+      // `null`: le schede scelte hanno colori diversi, e nessuno è segnato.
+      items: CANVAS_COLORS.map((value) => entry(`canvas.color.${value}`, args, true, {
+        checked: current !== null && (current ?? "") === (value === "none" ? "" : value),
+        ...(radio ? { radio: true } : {}),
+      })),
     });
     if (node) {
       const nodes = this.#selectedNodes();
       const one = nodes.length === 1 ? nodes[0]! : null;
-      const context: SurfaceMenuEntry[] = [];
-      if (one?.type === "text") context.push(entry("canvas.edit", undefined, false));
-      if (one?.type === "file" && one.file) context.push(entry("canvas.open", undefined, false));
-      if (one?.type === "link") context.push(entry("canvas.open_url", undefined, false));
-      context.push(
-        colors(one?.color),
+      const box = this.#stage.querySelector<HTMLElement>(`.canvas-node[data-node="${CSS.escape(node)}"]`)?.getBoundingClientRect();
+      const at = box ? { x: Math.round(box.left), y: Math.round(box.bottom) + 4 } : undefined;
+      const clipboard = { offers: { copy: true }, run: () => void writeClipboardText(this.selectedText()?.primary ?? "").catch(() => {}) };
+      if (one?.type !== "group") {
+        return { target: this.#cardMenuTarget(nodes, node), at, context: this.#cardMenu(nodes, entry, colors), clipboard };
+      }
+      // Un gruppo solo ha il suo menu di sempre.
+      const context: SurfaceMenuEntry[] = [
+        colors(one.color),
         entry("canvas.duplicate"),
         {
           id: "canvas.order",
@@ -3364,26 +3625,10 @@ export class CanvasEngine {
           enabled: writable,
           items: [entry("canvas.bring_front"), entry("canvas.send_back")],
         },
-      );
-      if (nodes.length >= 2) {
-        context.push({
-          id: "canvas.align",
-          label: t("canvas_menu.align"),
-          enabled: writable,
-          items: [
-            ...CANVAS_ALIGN.map((axis) => entry(`canvas.align.${axis}`)),
-            ...(nodes.length >= 3 ? [entry("canvas.distribute_x"), entry("canvas.distribute_y")] : []),
-          ],
-        });
-      }
-      context.push(entry("canvas.fit_selection", undefined, false), entry("canvas.delete"));
-      const box = this.#stage.querySelector<HTMLElement>(`.canvas-node[data-node="${CSS.escape(node)}"]`)?.getBoundingClientRect();
-      return {
-        target: { kind: one?.type === "group" ? "group" : "node", ref: node },
-        at: box ? { x: Math.round(box.left), y: Math.round(box.bottom) + 4 } : undefined,
-        context,
-        clipboard: { offers: { copy: true }, run: () => void writeClipboardText(this.selectedText()?.primary ?? "").catch(() => {}) },
-      };
+        entry("canvas.fit_selection", undefined, false),
+        entry("canvas.delete"),
+      ];
+      return { target: { kind: "group", ref: node }, at, context, clipboard };
     }
     if (edge) {
       const current = this.#doc.edges.find((one) => one.id === edge);
@@ -3412,6 +3657,79 @@ export class CanvasEngine {
         ...(at ? [entry("canvas.zoom_in", here, false), entry("canvas.zoom_out", here, false)] : []),
       ],
     };
+  }
+
+  /**
+   * La testata del menu di una scheda (T17): «Scheda di {specie}» col nome
+   * (il file, l'indirizzo, la prima riga del testo), o «{n} schede».
+   */
+  #cardMenuTarget(nodes: readonly CanvasNode[], ref: string): SurfaceMenu["target"] {
+    if (nodes.length !== 1) return { kind: "node", ref, label: t("canvas_menu.header_many", { n: String(nodes.length) }) };
+    const one = nodes[0]!;
+    const kind = one.type === "text" ? "text" : cardKindOf(one) ?? "file";
+    const label = t("canvas_menu.header", { kind: t(`canvas_menu.kind.${kind}`) });
+    const name = cardMenuName(one);
+    return name ? { kind: "node", ref, label, name } : { kind: "node", ref, label };
+  }
+
+  /**
+   * Il menu «Scheda della lavagna» (T17), voci del catalogo nell'ordine di
+   * `tasto-destro.md`: Apri, Apri a lato, Collega… · C; Colore › (scelte
+   * esclusive), Disponi ›, Duplica; in fondo, in rosso, Togli dalla lavagna e,
+   * con le schede di file, Sposta anche il file nel cestino. Con più schede
+   * niente Apri né Collega…; in sola lettura le voci che cambiano sono spente
+   * col perché, non nascoste.
+   */
+  #cardMenu(nodes: readonly CanvasNode[], entry: MenuEntryMaker, colors: ColorMenuMaker): SurfaceMenuEntry[] {
+    const one = nodes.length === 1 ? nodes[0]! : null;
+    const readOnly = this.#readOnly ? t("canvas.commands.why.read_only") : null;
+    const state = (why: string | null): Pick<SurfaceMenuItem, "enabled" | "description"> =>
+      why === null ? { enabled: true } : { enabled: false, description: why };
+    const context: SurfaceMenuEntry[] = [];
+    if (one?.type === "text") context.push(entry("canvas.edit", undefined, false));
+    if (one?.type === "file" && one.file) {
+      context.push(entry(cardKindOf(one) === "image" ? "canvas.open_viewer" : "canvas.open", undefined, false));
+      if (this.#options.onOpenPathBeside) context.push(entry("canvas.open_beside", undefined, false));
+    }
+    if (one?.type === "link") {
+      context.push(entry("canvas.open_url", undefined, false));
+      if (this.#options.cards) context.push(entry("canvas.web_preview", undefined, false));
+    }
+    // Collega… si fa anche con C, il tasto dello strumento.
+    if (one) context.push(entry("canvas.connect", undefined, true, { chord: menuChord([CANVAS_TOOL_KEYS.connect]) }));
+    if (context.length) context.push(MENU_RULE);
+    const two = nodes.length >= 2 ? null : t("canvas.commands.why.two");
+    const three = nodes.length >= 3 ? null : t("canvas.commands.why.three");
+    context.push(
+      { ...colors(this.#chosenColor(), undefined, true), ...state(readOnly) },
+      {
+        id: "canvas.arrange",
+        label: t("canvas_menu.arrange"),
+        ...state(readOnly),
+        items: [
+          entry("canvas.bring_front"),
+          entry("canvas.send_back"),
+          MENU_RULE,
+          {
+            id: "canvas.align",
+            label: t("canvas_menu.align_to"),
+            ...state(readOnly ?? two),
+            items: CANVAS_ALIGN.map((axis) => entry(`canvas.align.${axis}`)),
+          },
+          {
+            id: "canvas.distribute",
+            label: t("canvas_menu.distribute"),
+            ...state(readOnly ?? three),
+            items: [entry("canvas.distribute_x"), entry("canvas.distribute_y")],
+          },
+        ],
+      },
+      entry("canvas.duplicate"),
+      MENU_RULE,
+      entry("canvas.delete"),
+    );
+    if (this.#options.onTrashPath && nodes.some((node) => node.type === "file")) context.push(entry("canvas.trash_file", undefined, false));
+    return context;
   }
 
   // --- pointer ------------------------------------------------------------------
@@ -3501,7 +3819,13 @@ export class CanvasEngine {
     // Collega: da una scheda si trascina il filo fino a un'altra, come dalla
     // maniglia di collegamento.
     if (nodeId && this.#tool === "connect" && !this.#readOnly) {
-      this.#connect = { pointerId: event.pointerId, from: nodeId };
+      // Dopo «Collega…» il filo parte dalla scheda scelta allora, e il clic
+      // su un'altra lo chiude dove si alza (T17).
+      const from = this.#connectFrom;
+      this.#connectFrom = null;
+      this.#connect = from !== null && from !== nodeId
+        ? { pointerId: event.pointerId, from, back: true }
+        : { pointerId: event.pointerId, from: nodeId };
       this.#viewport.setPointerCapture?.(event.pointerId);
       event.preventDefault();
       return;
@@ -3811,6 +4135,8 @@ export class CanvasEngine {
           if (patch) this.#commit([patch], "input");
         }
       }
+      // Il filo di «Collega…» fatto, la colonna torna alla Selezione.
+      if (connect.back) this.#pickTool("select");
       this.#render();
     }
   }
@@ -4715,7 +5041,7 @@ export class CanvasEngine {
 
   /** «Togli dalla lavagna» di una scheda mancante: come Canc, per quella scheda sola. */
   #removeCard(id: string): void {
-    if (this.#removeNodes([id], [])) this.#options.onSelectionChange();
+    if (this.#removeCards([id], [])) this.#options.onSelectionChange();
   }
 
   /** Smonta ciò che tiene vivo il corpo di `entry` (Markdown, vista) e lo segna da rifare. */
@@ -5057,6 +5383,26 @@ function cardTarget(node: CanvasNode): { path: string; subpath: string | null } 
 /** Il nome di un file senza le cartelle: `Corsi/foto.png` → `foto.png`. */
 function fileName(path: string): string {
   return path.split("/").pop() ?? path;
+}
+
+/** Quanto è lungo, al più, il nome di una scheda nella testata del menu. */
+const MENU_NAME_MAX = 40;
+
+/**
+ * Il nome di una scheda nella testata del menu (T17): il file senza le
+ * cartelle, l'host di una pagina web, la prima riga di un testo, l'etichetta
+ * di un gruppo; accorciato con «…». `""` se non ne ha.
+ */
+function cardMenuName(node: CanvasNode): string {
+  let name = "";
+  if (node.type === "file") name = fileName(cardTarget(node).path);
+  else if (node.type === "link") {
+    const address = externalUrl(node.url ?? "");
+    name = address === null ? node.url ?? "" : new URL(address).host;
+  } else if (node.type === "text") name = (node.text ?? "").split("\n").map((line) => line.trim()).find(Boolean) ?? "";
+  else name = node.label ?? "";
+  name = name.trim();
+  return name.length > MENU_NAME_MAX ? `${name.slice(0, MENU_NAME_MAX - 1).trimEnd()}…` : name;
 }
 
 /**

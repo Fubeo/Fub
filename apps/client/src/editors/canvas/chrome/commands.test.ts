@@ -34,9 +34,10 @@ const STABLE_IDS = [
   "canvas.tool.eraser", "canvas.tool.text", "canvas.tool.connect", "canvas.escape",
   "canvas.add.text", "canvas.add.file", "canvas.add.link", "canvas.add.group", "canvas.duplicate",
   "canvas.select_all", "canvas.enter", "canvas.edit", "canvas.open", "canvas.open_url",
+  "canvas.open_beside", "canvas.open_viewer", "canvas.web_preview", "canvas.connect",
   "canvas.nudge.left", "canvas.nudge.right", "canvas.nudge.up", "canvas.nudge.down",
   "canvas.nudge.left.far", "canvas.nudge.right.far", "canvas.nudge.up.far", "canvas.nudge.down.far",
-  "canvas.edge.reverse", "canvas.delete",
+  "canvas.edge.reverse", "canvas.delete", "canvas.trash_file",
   "canvas.color.none", "canvas.color.1", "canvas.color.2", "canvas.color.3", "canvas.color.4", "canvas.color.5", "canvas.color.6",
   "canvas.bring_front", "canvas.send_back",
   "canvas.align.left", "canvas.align.center", "canvas.align.right", "canvas.align.top", "canvas.align.middle", "canvas.align.bottom",
@@ -186,21 +187,21 @@ function key(target: HTMLElement, init: KeyboardEventInit): KeyboardEvent {
 /// Le voci di un menu, coi sottomenu, come id annidati.
 function shape(entries: readonly SurfaceMenuEntry[]): unknown[] {
   return entries.map((entry) => {
-    const item = entry as SurfaceMenuItem;
-    return Array.isArray(item.items) ? { [item.id]: shape(item.items) } : item.id;
+    if (typeof entry === "string") return entry;
+    return Array.isArray(entry.items) ? { [entry.id]: shape(entry.items) } : entry.id;
   });
 }
 
-/// Ogni voce che si esegue, coi sottomenu aperti.
+/// Ogni voce che si esegue, coi sottomenu aperti (senza le righe fra i gruppi).
 function leaves(entries: readonly SurfaceMenuEntry[]): SurfaceMenuItem[] {
   return entries.flatMap((entry) => {
-    const item = entry as SurfaceMenuItem;
-    return Array.isArray(item.items) ? leaves(item.items) : [item];
+    if (typeof entry === "string") return [];
+    return Array.isArray(entry.items) ? leaves(entry.items) : [entry];
   });
 }
 
 describe("la tela legge il catalogo", () => {
-  it("ogni voce dei menu di oggi è un comando, con gli stessi nomi e lo stesso ordine", () => {
+  it("ogni voce dei menu è un comando, con gli stessi nomi e lo stesso ordine", () => {
     const { engine, host, viewport } = mounted();
     const catalog = new Map(engine.commands().map((command) => [command.id, command]));
     const pointing = vi.spyOn(document, "elementFromPoint");
@@ -211,22 +212,25 @@ describe("la tela legge il catalogo", () => {
     const card = (id: string) => host.querySelector(`.canvas-node[data-node="${id}"]`);
     const order = { "canvas.order": ["canvas.bring_front", "canvas.send_back"] };
     const colors = { "canvas.color": ["canvas.color.none", "canvas.color.1", "canvas.color.2", "canvas.color.3", "canvas.color.4", "canvas.color.5", "canvas.color.6"] };
+    // Il menu della scheda (T17): Disponi › con Allinea › e Distribuisci ›.
+    const arrange = { "canvas.arrange": ["canvas.bring_front", "canvas.send_back", "—",
+      { "canvas.align": ["canvas.align.left", "canvas.align.center", "canvas.align.right", "canvas.align.top", "canvas.align.middle", "canvas.align.bottom"] },
+      { "canvas.distribute": ["canvas.distribute_x", "canvas.distribute_y"] }] };
+    const tail = ["—", colors, arrange, "canvas.duplicate", "—", "canvas.delete"];
     const menus: Array<[readonly SurfaceMenuEntry[], unknown[]]> = [
-      [menuOn(card("t")), ["canvas.edit", colors, "canvas.duplicate", order, "canvas.fit_selection", "canvas.delete"]],
-      [menuOn(card("f")), ["canvas.open", colors, "canvas.duplicate", order, "canvas.fit_selection", "canvas.delete"]],
-      [menuOn(card("w")), ["canvas.open_url", colors, "canvas.duplicate", order, "canvas.fit_selection", "canvas.delete"]],
+      [menuOn(card("t")), ["canvas.edit", "canvas.connect", ...tail]],
+      // Una scheda d'immagine si apre nel visore.
+      [menuOn(card("f")), ["canvas.open_viewer", "canvas.connect", ...tail]],
+      [menuOn(card("w")), ["canvas.open_url", "canvas.connect", ...tail]],
+      // Un gruppo ha il menu di prima.
+      [menuOn(card("g")), [colors, "canvas.duplicate", order, "canvas.fit_selection", "canvas.delete"]],
       [menuOn(host.querySelector('.canvas-edge-hit[data-edge="e1"]')), [colors, "canvas.edge.reverse", "canvas.delete"]],
       [menuOn(viewport, { x: 300, y: 300 }), [{ "canvas.add": ["canvas.add.text", "canvas.add.link", "canvas.add.group"] }, "canvas.fit", "canvas.zoom_in", "canvas.zoom_out"]],
     ];
-    // Tutte le schede scelte: allinea e distribuisci.
+    // Tutte le schede scelte: niente Apri né Collega….
     pointing.mockRestore();
     key(viewport, { key: "a", ctrlKey: true });
-    menus.push([
-      engine.contextMenu(null)!.context ?? [],
-      [colors, "canvas.duplicate", order, {
-        "canvas.align": ["canvas.align.left", "canvas.align.center", "canvas.align.right", "canvas.align.top", "canvas.align.middle", "canvas.align.bottom", "canvas.distribute_x", "canvas.distribute_y"],
-      }, "canvas.fit_selection", "canvas.delete"],
-    ]);
+    menus.push([engine.contextMenu(null)!.context ?? [], tail.slice(1)]);
     for (const [menu, expected] of menus) {
       expect(shape(menu)).toEqual(expected);
       for (const item of leaves(menu)) {

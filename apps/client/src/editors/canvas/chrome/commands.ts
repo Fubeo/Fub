@@ -17,7 +17,7 @@
 // disegno.
 
 import type { Key } from "../../../i18n/strings";
-import { keyName, keyboardPlatform, modifierName, type KeyboardPlatform } from "../../../ui/commands";
+import { keyName, keyboardPlatform, modifierName, parseChords, type KeyboardPlatform } from "../../../ui/commands";
 
 /// Quando un comando vale: sempre, con uno strumento, con una selezione.
 export type CanvasCommandContext = "always" | "tool" | "selection";
@@ -145,6 +145,13 @@ export const CANVAS_COMMANDS: readonly CanvasCommandSpec[] = [
   { id: "canvas.edit", label: "canvas_menu.edit", group: "selection", keys: [], context: "selection" },
   { id: "canvas.open", label: "canvas_menu.open", group: "selection", keys: [], context: "selection" },
   { id: "canvas.open_url", label: "canvas.open_url", group: "selection", keys: [], context: "selection" },
+  // Il menu della scheda (T17): Apri a lato, il visore delle immagini,
+  // l'anteprima di una pagina web, Collega… da una scheda. Collega… non ha un
+  // tasto suo: C con una scheda scelta lo fa dallo strumento (un tasto solo).
+  { id: "canvas.open_beside", label: "canvas_menu.open_beside", group: "selection", keys: [], context: "selection" },
+  { id: "canvas.open_viewer", label: "canvas_menu.open_viewer", group: "selection", keys: [], context: "selection" },
+  { id: "canvas.web_preview", label: "canvas.card.show_preview", group: "selection", keys: [], context: "selection" },
+  { id: "canvas.connect", label: "canvas_menu.connect", group: "selection", keys: [], context: "selection" },
   ...CANVAS_NUDGE.map((way): CanvasCommandSpec => ({
     id: `canvas.nudge.${way}`, label: `canvas.commands.nudge.${way}`, group: "selection", keys: [ARROW[way]], context: "selection",
   })),
@@ -152,7 +159,10 @@ export const CANVAS_COMMANDS: readonly CanvasCommandSpec[] = [
     id: `canvas.nudge.${way}.far`, label: `canvas.commands.nudge.${way}.far`, group: "selection", keys: [`Shift-${ARROW[way]}`], context: "selection",
   })),
   { id: "canvas.edge.reverse", label: "canvas_menu.reverse", group: "selection", keys: [], context: "selection" },
-  { id: "canvas.delete", label: "canvas.delete", group: "selection", keys: ["Delete", "Backspace"], context: "selection", danger: true },
+  // Toglie le schede dalla lavagna, mai i loro file (T17).
+  { id: "canvas.delete", label: "canvas.card.remove", group: "selection", keys: ["Delete", "Backspace"], context: "selection", danger: true },
+  // Manda nel cestino anche il file: mai da un tasto (`lavagna.md`).
+  { id: "canvas.trash_file", label: "canvas_menu.trash_file", group: "selection", keys: [], context: "selection", danger: true },
   ...CANVAS_COLORS.map((color): CanvasCommandSpec => ({
     id: `canvas.color.${color}`, label: color === "none" ? "canvas.default" : `canvas_menu.color.${color}`, group: "color", keys: [], context: "selection",
   })),
@@ -332,6 +342,17 @@ export function displayCanvasKey(
 export function commandHint(command: Pick<CanvasCommand, "keys">): string {
   const first = command.keys[0];
   return first === undefined ? "" : displayCanvasKey(first);
+}
+
+/// Il tasto da scrivere accanto a una voce del menu del tasto destro
+/// (`SurfaceMenuItem.chord`), o `undefined`. Il menu legge le scorciatoie della
+/// shell, che non conoscono i tasti nudi (Canc, C): per quelli passa il nome
+/// già scritto (`Canc`, `C`), che il menu mostra com'è.
+export function menuChord(keys: readonly string[]): string | undefined {
+  const chord = keys.find((key) => parseChords(key) !== null);
+  if (chord !== undefined) return chord;
+  const first = keys[0];
+  return first === undefined ? undefined : displayCanvasKey(first);
 }
 
 /// Il tasto premuto apre la ricerca dei comandi?

@@ -84,6 +84,13 @@ export interface SurfaceBootstrapOptions extends SurfaceCallbacks {
   readonly onOpenFigure?: (doc: string) => void | Promise<void>;
   /// «Apri a lato» dal menu di un wikilink: la nota in un riquadro accanto.
   readonly onOpenWikilinkBeside?: (page: string, heading: string | null, block: string | null) => void | Promise<void>;
+  /// «Apri a lato» dal menu di una scheda della lavagna: il file `path` (con
+  /// il suo `#…`) in un riquadro accanto, come `onOpenPath`.
+  readonly onOpenPathBeside?: (path: string, from?: string) => void | Promise<void>;
+  /// «Sposta anche il file nel cestino» dal menu di una scheda della lavagna:
+  /// il documento `path` nel cestino col gesto dell'albero. `true` se ci è
+  /// andato, `false` se è rimasto; un rifiuto dell'host è un errore.
+  readonly onTrashPath?: (path: string) => Promise<boolean>;
   /// Un file nominato da una nota aperto con un'altra app o mostrato
   /// nell'esploratore.
   readonly onShowFile?: (target: SystemTarget, from: string, where: "app" | "explorer") => void | Promise<void>;
@@ -955,6 +962,8 @@ export const COMPONENT_EDITORS: Readonly<Record<string, readonly EditorPart[]>> 
               onFail: options.onFail,
               onOpenWikilink: options.onOpenWikilink,
               onOpenPath: options.onOpenPath,
+              ...(options.onOpenPathBeside ? { onOpenPathBeside: options.onOpenPathBeside } : {}),
+              ...(options.onTrashPath ? { onTrashPath: options.onTrashPath } : {}),
               onCreateNote: options.onCreateCanvasNote,
               onPickFile: options.onPickCanvasFile,
               ...(options.onOpenSettings ? { onOpenSettings: options.onOpenSettings } : {}),

@@ -146,6 +146,7 @@ import { confirm } from "../platform/confirm";
 import { registerShellCommand, type CommandEntry } from "../ui/commands";
 import type { LiveCommandTargets } from "../editors/spatial/live/commands";
 import { EXPORT_COMMAND } from "../ui/shell-ids.generated";
+import { trashWithConfirm } from "../panels/trash";
 import { showActivity } from "../panels/activity";
 import { notify } from "../ui/notify";
 import { applyIntent } from "../ui/intents";
@@ -1016,6 +1017,26 @@ export function mountDocumentController(lifetime: Lifetime, d: DocumentDeps, pan
       if (!target) throw new Error(t("preview.target_missing"));
       await openDocument(target.doc, { gesture: true });
       if (target.at) await reveal(target.doc, { span: target.at.span });
+    },
+    // Il menu di una scheda della lavagna (T17): «Apri a lato», come quello
+    // di un wikilink.
+    onOpenPathBeside: async (path, from) => {
+      const target = await resolvedReference({ kind: "path", value: path }, from ?? activeDoc() ?? undefined);
+      if (!target) throw new Error(t("preview.target_missing"));
+      await openDocumentBeside(target.doc, "row");
+      if (target.at) await reveal(target.doc, { span: target.at.span });
+    },
+    // «Sposta anche il file nel cestino»: lo stesso gesto dell'albero
+    // (`note.trash`, la domanda del cestino di sistema, l'avviso con
+    // «Annulla»). Se dopo il file c'è ancora, è rimasto: una domanda a cui si
+    // è detto di no, o un gesto già in corso.
+    onTrashPath: async (path) => {
+      try {
+        await trashWithConfirm(path);
+      } catch (error) {
+        throw new Error(errorText(error));
+      }
+      return !(await existingDocuments([path])).has(path);
     },
     onImportRemoteImage: importRemoteImage,
     onCreateCanvasNote: createCanvasNote,

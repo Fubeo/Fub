@@ -138,13 +138,13 @@ describe("CanvasEngine", () => {
     const pointing = vi.spyOn(document, "elementFromPoint");
     pointing.mockReturnValue(host.querySelector('.canvas-node[data-node="f"]'));
     const menu = engine.contextMenu({ x: 10, y: 10 })!;
-    expect(menu.target).toEqual({ kind: "node", ref: "f" });
+    expect(menu.target).toEqual({ kind: "node", ref: "f", label: "Scheda di immagine", name: "foto.png" });
     expect(host.querySelector('.canvas-node[data-node="f"]')!.classList.contains("selected")).toBe(true);
-    const items = menu.context as readonly SurfaceMenuItem[];
-    expect(items.map((item) => item.id)).toEqual(["canvas.open", "canvas.color", "canvas.duplicate", "canvas.order", "canvas.fit_selection", "canvas.delete"]);
+    const items = (menu.context ?? []).filter((entry): entry is SurfaceMenuItem => typeof entry !== "string");
+    expect(items.map((item) => item.id)).toEqual(["canvas.open_viewer", "canvas.connect", "canvas.color", "canvas.arrange", "canvas.duplicate", "canvas.delete"]);
     items[0]!.run!();
     expect(opened).toContainEqual({ path: "/allegati/foto.png" });
-    (items[1]!.items as readonly SurfaceMenuItem[]).find((item) => item.id === "canvas.color.4")!.run!();
+    (items[2]!.items as readonly SurfaceMenuItem[]).find((item) => item.id === "canvas.color.4")!.run!();
     expect(readCanvas(changes[changes.length - 1]!.text).nodes.find((node) => node.id === "f")!.color).toBe("4");
 
     pointing.mockReturnValue(host.querySelector(".canvas-viewport"));
@@ -2003,6 +2003,285 @@ describe("CanvasEngine: la rotella (T35)", () => {
     expect(cameraOf(host).zoom).toBe(0.1);
     expect(cameraOf(host).x).toBeCloseTo(bottom.x, 6);
     expect(cameraOf(host).y).toBeCloseTo(bottom.y, 6);
+    engine.destroy();
+  });
+});
+
+// --- il menu della scheda (T17) ------------------------------------------------
+
+describe("il menu della scheda (T17)", () => {
+  /** Due schede della stessa nota, una di testo e un'immagine. */
+  function board(): string {
+    return JSON.stringify({
+      nodes: [
+        { id: "n1", type: "file", x: 0, y: 0, width: 240, height: 140, file: "Note/Idee.md", color: "2" },
+        { id: "n2", type: "file", x: 300, y: 0, width: 240, height: 140, file: "Note/Idee.md" },
+        { id: "t", type: "text", x: 0, y: 200, width: 240, height: 140, text: "\n  Prima riga\nseconda" },
+        { id: "f", type: "file", x: 300, y: 200, width: 240, height: 140, file: "allegati/foto.png" },
+      ],
+      edges: [],
+    });
+  }
+
+  function open(overrides: Partial<CanvasEngineOptions> = {}) {
+    const trashed: string[] = [];
+    const beside: string[] = [];
+    const made = mounted(board(), {
+      onOpenPathBeside: (path) => {
+        beside.push(path);
+      },
+      onTrashPath: async (path) => {
+        trashed.push(path);
+        return true;
+      },
+      ...overrides,
+    });
+    const viewport = made.host.querySelector<HTMLElement>(".canvas-viewport")!;
+    return { ...made, viewport, trashed, beside };
+  }
+
+  type Entry = string | SurfaceMenuItem;
+  const card = (host: HTMLElement, id: string) => host.querySelector<HTMLElement>(`.canvas-node[data-node="${id}"]`)!;
+
+  /** Il tasto destro sulla scheda `element`: la sceglie e torna il menu. */
+  function menuOn(engine: CanvasEngine, element: Element) {
+    const pointing = vi.spyOn(document, "elementFromPoint").mockReturnValue(element);
+    try {
+      return engine.contextMenu({ x: 10, y: 10 })!;
+    } finally {
+      pointing.mockRestore();
+    }
+  }
+
+  function shape(entries: readonly Entry[]): unknown[] {
+    return entries.map((entry) => (typeof entry === "string"
+      ? entry
+      : Array.isArray(entry.items) ? { [entry.id]: shape(entry.items as readonly Entry[]) } : entry.id));
+  }
+
+  /** La voce `id`, anche dentro i sottomenu. */
+  function item(entries: readonly Entry[] | undefined, id: string): SurfaceMenuItem {
+    const find = (list: readonly Entry[]): SurfaceMenuItem | null => {
+      for (const entry of list) {
+        if (typeof entry === "string") continue;
+        if (entry.id === id) return entry;
+        const inner = Array.isArray(entry.items) ? find(entry.items as readonly Entry[]) : null;
+        if (inner) return inner;
+      }
+      return null;
+    };
+    const found = find(entries ?? []);
+    if (!found) throw new Error(`nessuna voce ${id}`);
+    return found;
+  }
+
+  function key(target: HTMLElement, init: KeyboardEventInit): KeyboardEvent {
+    const event = new KeyboardEvent("keydown", { bubbles: true, cancelable: true, ...init });
+    target.dispatchEvent(event);
+    return event;
+  }
+
+  const nodes = (engine: CanvasEngine) => readCanvas(engine.getDoc()).nodes;
+  const removal = (host: HTMLElement) => host.querySelector(".canvas-removal")?.textContent ?? null;
+  const undoButton = (host: HTMLElement) => host.querySelector<HTMLButtonElement>('[data-canvas-action="undo-removal"]');
+
+  it("l'ordine delle voci, la testata, il pericoloso in fondo e i colori come scelte esclusive", () => {
+    const { engine, host, beside } = open();
+    const menu = menuOn(engine, card(host, "n1"));
+    expect(menu.target).toEqual({ kind: "node", ref: "n1", label: "Scheda di nota", name: "Idee.md" });
+    const context = menu.context as readonly Entry[];
+    expect(shape(context)).toEqual([
+      "canvas.open", "canvas.open_beside", "canvas.connect", "—",
+      {
+        "canvas.color": ["canvas.color.none", "canvas.color.1", "canvas.color.2", "canvas.color.3", "canvas.color.4", "canvas.color.5", "canvas.color.6"],
+      },
+      {
+        "canvas.arrange": ["canvas.bring_front", "canvas.send_back", "—",
+          { "canvas.align": ["canvas.align.left", "canvas.align.center", "canvas.align.right", "canvas.align.top", "canvas.align.middle", "canvas.align.bottom"] },
+          { "canvas.distribute": ["canvas.distribute_x", "canvas.distribute_y"] }],
+      },
+      "canvas.duplicate", "—", "canvas.delete", "canvas.trash_file",
+    ]);
+    // I nomi e i tasti del catalogo.
+    expect(item(context, "canvas.connect")).toMatchObject({ label: "Collega…", chord: "C" });
+    expect(item(context, "canvas.delete")).toMatchObject({ label: "Togli dalla lavagna", danger: true });
+    expect(item(context, "canvas.trash_file")).toMatchObject({ label: "Sposta anche il file nel cestino", danger: true });
+    expect(item(context, "canvas.trash_file").chord).toBeUndefined();
+    expect(item(context, "canvas.duplicate").chord).toBe("Mod-d");
+    expect(item(context, "canvas.bring_front").chord).toBe("Mod-]");
+    expect(item(context, "canvas.send_back").chord).toBe("Mod-[");
+    // Rosso solo in fondo.
+    const flat = context.filter((entry): entry is SurfaceMenuItem => typeof entry !== "string");
+    expect(flat.map((entry) => entry.danger === true)).toEqual([false, false, false, false, false, false, true, true]);
+    // I colori: scelte esclusive, segnata quella della scheda.
+    const colors = item(context, "canvas.color").items as readonly SurfaceMenuItem[];
+    expect(colors.every((entry) => entry.radio === true)).toBe(true);
+    expect(colors.filter((entry) => entry.checked).map((entry) => entry.id)).toEqual(["canvas.color.2"]);
+    // Una scheda sola: allinea e distribuisci spenti, col perché.
+    expect(item(context, "canvas.align")).toMatchObject({ enabled: false, description: t("canvas.commands.why.two") });
+    // Apri a lato passa dalla porta nuova.
+    item(context, "canvas.open_beside").run!();
+    expect(beside).toEqual(["/Note/Idee.md"]);
+    engine.destroy();
+  });
+
+  it("la scheda di testo: la prima riga nella testata e niente cestino", () => {
+    const { engine, host } = open();
+    const menu = menuOn(engine, card(host, "t"));
+    expect(menu.target).toEqual({ kind: "node", ref: "t", label: "Scheda di testo", name: "Prima riga" });
+    const ids = (menu.context ?? []).flatMap((entry) => (typeof entry === "string" ? [] : [entry.id]));
+    expect(ids).toEqual(["canvas.edit", "canvas.connect", "canvas.color", "canvas.arrange", "canvas.duplicate", "canvas.delete"]);
+    engine.destroy();
+  });
+
+  it("più schede: la testata dice quante, niente Apri; in sola lettura le voci che cambiano sono spente, non nascoste", () => {
+    const { engine, host, viewport } = open();
+    viewport.focus();
+    key(viewport, { key: "a", ctrlKey: true });
+    const many = engine.contextMenu(null)!;
+    expect(many.target.label).toBe("4 schede");
+    const ids = (many.context ?? []).flatMap((entry) => (typeof entry === "string" ? [] : [entry.id]));
+    expect(ids).toEqual(["canvas.color", "canvas.arrange", "canvas.duplicate", "canvas.delete", "canvas.trash_file"]);
+    // Le schede hanno colori diversi: nessuno segnato.
+    expect((item(many.context, "canvas.color").items as readonly SurfaceMenuItem[]).some((entry) => entry.checked)).toBe(false);
+    expect(item(many.context, "canvas.distribute").enabled).toBe(true);
+
+    key(viewport, { key: "Escape" });
+    engine.setReadOnly(true);
+    const locked = menuOn(engine, card(host, "n1")).context;
+    const why = t("canvas.commands.why.read_only");
+    for (const id of ["canvas.color", "canvas.arrange", "canvas.duplicate", "canvas.delete", "canvas.trash_file", "canvas.connect"]) {
+      expect(item(locked, id), id).toMatchObject({ enabled: false, description: why });
+    }
+    // Apri e Apri a lato non cambiano la lavagna: restano accesi.
+    expect(item(locked, "canvas.open").enabled).toBe(true);
+    expect(item(locked, "canvas.open_beside").enabled).toBe(true);
+    engine.destroy();
+  });
+
+  it("C con una scheda scelta comincia il collegamento; mentre si scrive va nel testo", () => {
+    const { engine, host, viewport } = open();
+    menuOn(engine, card(host, "n1"));
+    viewport.focus();
+    expect(key(viewport, { key: "c" }).defaultPrevented).toBe(true);
+    expect(viewport.dataset.tool).toBe("connect");
+    // Il clic sull'altra scheda chiude il filo, e la colonna torna alla Selezione.
+    const target = card(host, "f");
+    const pointing = vi.spyOn(document, "elementFromPoint").mockReturnValue(target);
+    target.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, button: 0, pointerId: 2, clientX: 400, clientY: 300 }));
+    viewport.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, button: 0, pointerId: 2, clientX: 400, clientY: 300 }));
+    pointing.mockRestore();
+    expect(readCanvas(engine.getDoc()).edges.map((edge) => [edge.fromNode, edge.toNode])).toEqual([["n1", "f"]]);
+    expect(viewport.dataset.tool).toBe("select");
+
+    // Senza scheda scelta C sceglie lo strumento; Esc torna alla Selezione.
+    key(viewport, { key: "Escape" });
+    key(viewport, { key: "c" });
+    expect(viewport.dataset.tool).toBe("connect");
+    key(viewport, { key: "Escape" });
+    expect(viewport.dataset.tool).toBe("select");
+
+    // Dentro una scheda di testo C è una lettera.
+    card(host, "t").dispatchEvent(new MouseEvent("dblclick", { bubbles: true }));
+    const input = host.querySelector<HTMLTextAreaElement>(".canvas-text-editor")!;
+    expect(input).not.toBeNull();
+    expect(key(input, { key: "c" }).defaultPrevented).toBe(false);
+    expect(viewport.dataset.tool).toBe("select");
+    engine.destroy();
+  });
+
+  it("Ctrl+] e Ctrl+[ portano davanti e dietro", () => {
+    const { engine, host, viewport } = open();
+    menuOn(engine, card(host, "n1"));
+    viewport.focus();
+    expect(key(viewport, { key: "]", ctrlKey: true, code: "BracketRight" }).defaultPrevented).toBe(true);
+    expect(nodes(engine).map((node) => node.id)).toEqual(["n2", "t", "f", "n1"]);
+    key(viewport, { key: "[", ctrlKey: true, code: "BracketLeft" });
+    expect(nodes(engine).map((node) => node.id)).toEqual(["n1", "n2", "t", "f"]);
+    engine.destroy();
+  });
+
+  it("Togli dalla lavagna lo dice con Annulla, che fa ciò che fa Ctrl+Z; la modifica dopo spegne l'avviso", () => {
+    const { engine, host, viewport, trashed } = open();
+    menuOn(engine, card(host, "n1"));
+    viewport.focus();
+    key(viewport, { key: "Delete" });
+    expect(nodes(engine).map((node) => node.id)).toEqual(["n2", "t", "f"]);
+    expect(removal(host)).toBe("Tolta dalla lavagna. Il file resta.");
+    undoButton(host)!.click();
+    expect(nodes(engine).map((node) => node.id)).toEqual(["n1", "n2", "t", "f"]);
+    expect(removal(host)).toBeNull();
+
+    // Una scheda di testo: niente file.
+    item(menuOn(engine, card(host, "t")).context, "canvas.delete").run!();
+    expect(removal(host)).toBe("Scheda tolta.");
+    // Una modifica dopo il togliere: l'avviso se ne va, col suo Annulla.
+    menuOn(engine, card(host, "f"));
+    viewport.focus();
+    key(viewport, { key: "d", ctrlKey: true });
+    expect(nodes(engine)).toHaveLength(4);
+    expect(removal(host)).toBeNull();
+    expect(undoButton(host)).toBeNull();
+
+    // Più schede, una di file: «I file restano». Backspace come Canc.
+    key(viewport, { key: "a", ctrlKey: true });
+    key(viewport, { key: "Backspace" });
+    expect(nodes(engine)).toHaveLength(0);
+    expect(removal(host)).toBe("4 schede tolte dalla lavagna. I file restano.");
+    undoButton(host)!.click();
+    expect(nodes(engine)).toHaveLength(4);
+    // Mai il file.
+    expect(trashed).toEqual([]);
+    engine.destroy();
+  });
+
+  it("Sposta anche il file nel cestino chiama la porta una volta per file, toglie ogni sua scheda, e mai da tastiera", async () => {
+    const { engine, host, viewport, trashed } = open();
+    // Nessun tasto lo fa.
+    expect(engine.commands().find((one) => one.id === "canvas.trash_file")!.keys).toEqual([]);
+    viewport.focus();
+    key(viewport, { key: "a", ctrlKey: true });
+    for (const press of [{ key: "Delete" }, { key: "Delete", shiftKey: true }, { key: "Delete", ctrlKey: true }, { key: "Backspace", ctrlKey: true }]) {
+      key(viewport, { ...press });
+      engine.undo();
+      key(viewport, { key: "a", ctrlKey: true });
+    }
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(trashed).toEqual([]);
+    expect(nodes(engine)).toHaveLength(4);
+    key(viewport, { key: "Escape" });
+
+    // La nota in due schede: un file solo, tutte e due tolte.
+    item(menuOn(engine, card(host, "n1")).context, "canvas.trash_file").run!();
+    await vi.waitFor(() => expect(nodes(engine).map((node) => node.id)).toEqual(["t", "f"]));
+    expect(trashed).toEqual(["Note/Idee.md"]);
+    expect(removal(host)).toBe("2 schede tolte dalla lavagna. «Idee.md» è nel cestino.");
+    expect(undoButton(host)).toBeNull();
+
+    // Due file scelti: la porta una volta ciascuno.
+    key(viewport, { key: "a", ctrlKey: true });
+    item(engine.contextMenu(null)!.context, "canvas.trash_file").run!();
+    await vi.waitFor(() => expect(nodes(engine)).toHaveLength(0));
+    expect(trashed).toEqual(["Note/Idee.md", "allegati/foto.png"]);
+    engine.destroy();
+  });
+
+  it("il cestino che rifiuta lascia la scheda e dice l'errore dell'host; un no alla domanda la lascia in silenzio", async () => {
+    let answer: "refuse" | "no" = "refuse";
+    const { engine, host } = open({
+      onTrashPath: async () => {
+        if (answer === "refuse") throw new Error("Il cestino è pieno");
+        return false;
+      },
+    });
+    item(menuOn(engine, card(host, "f")).context, "canvas.trash_file").run!();
+    await vi.waitFor(() => expect(host.querySelector(".canvas-intake-error")?.textContent).toBe("Il cestino è pieno"));
+    expect(nodes(engine)).toHaveLength(4);
+    answer = "no";
+    item(menuOn(engine, card(host, "f")).context, "canvas.trash_file").run!();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(nodes(engine)).toHaveLength(4);
+    expect(removal(host)).toBeNull();
     engine.destroy();
   });
 });
