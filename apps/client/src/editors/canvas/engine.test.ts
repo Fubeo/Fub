@@ -20,6 +20,22 @@ import nestedDuplicate from "../../__fixtures__/canvas-patches/33-rejected-neste
 import { DocumentSessionCollection, type DocumentSessionApi } from "../../state/document-session";
 import { upsertNodePatch, type CanvasOperation, type CanvasPatch } from "./operation";
 import { CanvasCoreError, canvasCoreReady, openCore, openCoreNow, type CanvasCore, type CanvasIntentOp } from "./wasm/core";
+import { DEFAULT_PREFERENCES, type CanvasPreferences, type WheelAction } from "./preferences";
+
+// Le impostazioni della lavagna (T35): il motore monta `watchPreferences`, e la
+// prova tiene le sue funzioni per cambiare «La rotella del mouse» a lavagna
+// aperta, come farebbe un cambio da Impostazioni. Il resto del modulo è quello vero.
+const watched = vi.hoisted(() => ({ appliers: [] as Array<(preferences: CanvasPreferences) => void> }));
+
+vi.mock("./preferences", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("./preferences")>()),
+  watchPreferences: (apply: (preferences: CanvasPreferences) => void) => {
+    watched.appliers.push(apply);
+    return () => {
+      watched.appliers = watched.appliers.filter((other) => other !== apply);
+    };
+  },
+}));
 
 // Il nucleo si carica una volta: dopo, la tela si apre subito.
 beforeAll(async () => {
@@ -1789,6 +1805,186 @@ describe("CanvasEngine: trascinare e incollare (T15)", () => {
     // Del testo da un'altra app non nasce come file: niente fantasmi.
     dragover(host, transfer({ "text/plain": "ciao" }));
     expect(ghosts()).toHaveLength(0);
+    engine.destroy();
+  });
+});
+
+/** Lo scatto della rotella come lo prova la tela: il delta, la unità e i tasti. */
+type WheelInit = {
+  readonly deltaX?: number;
+  readonly deltaY?: number;
+  readonly deltaMode?: number;
+  readonly ctrlKey?: boolean;
+  readonly metaKey?: boolean;
+  readonly shiftKey?: boolean;
+  readonly clientX?: number;
+  readonly clientY?: number;
+};
+
+describe("CanvasEngine: la rotella (T35)", () => {
+  /** La camera come la mostra la tela: la trasformazione dello stage. */
+  function cameraOf(host: HTMLElement): { x: number; y: number; zoom: number } {
+    const transform = host.querySelector<HTMLElement>(".canvas-stage")!.style.transform;
+    const match = /translate\((-?[\d.e+-]+)px, (-?[\d.e+-]+)px\) scale\(([\d.e+-]+)\)/.exec(transform);
+    if (!match) throw new Error(`trasformazione inattesa: ${transform}`);
+    return { x: Number(match[1]), y: Number(match[2]), zoom: Number(match[3]) };
+  }
+
+  const viewportOf = (host: HTMLElement): HTMLElement => host.querySelector<HTMLElement>(".canvas-viewport")!;
+
+  /**
+   * Uno scatto della rotella sul bersaglio, con il puntatore a (300, 200) se non si dice.
+   * Il `WheelEvent` di happy-dom non prende tasti né punto dall'init: si mettono a mano.
+   */
+  function scroll(target: EventTarget, init: WheelInit = {}): WheelEvent {
+    const { ctrlKey = false, metaKey = false, shiftKey = false, clientX = 300, clientY = 200, ...wheel } = init;
+    const event = new WheelEvent("wheel", { bubbles: true, cancelable: true, ...wheel });
+    Object.defineProperties(event, {
+      ctrlKey: { value: ctrlKey },
+      metaKey: { value: metaKey },
+      shiftKey: { value: shiftKey },
+      clientX: { value: clientX },
+      clientY: { value: clientY },
+    });
+    target.dispatchEvent(event);
+    return event;
+  }
+
+  /** «La rotella del mouse» cambiata a lavagna aperta, come la manda un cambio da Impostazioni. */
+  function setWheel(wheel: WheelAction): void {
+    for (const apply of [...watched.appliers]) apply({ ...DEFAULT_PREFERENCES, wheel });
+  }
+
+  /** Il punto della lavagna sotto lo schermo (x, y), con la camera data. */
+  function boardPoint(camera: { x: number; y: number; zoom: number }, x: number, y: number): { x: number; y: number } {
+    return { x: (x - camera.x) / camera.zoom, y: (y - camera.y) / camera.zoom };
+  }
+
+  it("di serie la rotella sposta come prima, e Maiusc sposta di lato anche con il solo deltaY", () => {
+    const { engine, host } = mounted();
+    const start = cameraOf(host);
+    scroll(viewportOf(host), { deltaY: 100 });
+    expect(cameraOf(host)).toEqual({ ...start, y: start.y - 100 });
+    scroll(viewportOf(host), { deltaX: 40 });
+    expect(cameraOf(host)).toEqual({ ...start, x: start.x - 40, y: start.y - 100 });
+    const mid = cameraOf(host);
+    scroll(viewportOf(host), { deltaY: 100, shiftKey: true });
+    expect(cameraOf(host)).toEqual({ ...mid, x: mid.x - 100 });
+    engine.destroy();
+  });
+
+  it("«zoom»: la rotella ingrandisce intorno al puntatore; Maiusc e un gesto orizzontale spostano", () => {
+    const { engine, host } = mounted();
+    setWheel("zoom");
+    const start = cameraOf(host);
+    const under = boardPoint(start, 300, 200);
+    scroll(viewportOf(host), { deltaY: -100 });
+    const zoomed = cameraOf(host);
+    expect(zoomed.zoom).toBeCloseTo(start.zoom * 1.1, 9);
+    // Il punto della lavagna sotto il puntatore resta sotto il puntatore.
+    const kept = boardPoint(zoomed, 300, 200);
+    expect(kept.x).toBeCloseTo(under.x, 6);
+    expect(kept.y).toBeCloseTo(under.y, 6);
+    // Maiusc con la rotella sposta di lato, senza ingrandire.
+    scroll(viewportOf(host), { deltaY: 100, shiftKey: true });
+    expect(cameraOf(host)).toEqual({ ...zoomed, x: zoomed.x - 100 });
+    // Le due dita sul touchpad: una parte orizzontale sposta anche in «zoom».
+    const panned = cameraOf(host);
+    scroll(viewportOf(host), { deltaX: 30, deltaY: 10 });
+    expect(cameraOf(host)).toEqual({ ...panned, x: panned.x - 30, y: panned.y - 10 });
+    // Ctrl+rotella ingrandisce ancora.
+    const beforeCtrl = cameraOf(host);
+    scroll(viewportOf(host), { deltaY: -100, ctrlKey: true });
+    expect(cameraOf(host).zoom).toBeCloseTo(beforeCtrl.zoom * 1.1, 9);
+    engine.destroy();
+  });
+
+  it("sopra una scheda non attiva la rotella è della lavagna, e lo zoom la segue", () => {
+    const { engine, host } = mounted();
+    setWheel("zoom");
+    const before = cameraOf(host).zoom;
+    const card = host.querySelector<HTMLElement>('.canvas-node[data-node="t"]')!;
+    const event = scroll(card, { deltaY: -100 });
+    expect(event.defaultPrevented).toBe(true);
+    expect(cameraOf(host).zoom).toBeCloseTo(before * 1.1, 9);
+    engine.destroy();
+  });
+
+  it("il pizzico (Ctrl o Cmd con la rotella) ingrandisce in tutte e due le scelte", () => {
+    for (const wheel of ["pan", "zoom"] as const) {
+      const { engine, host } = mounted();
+      setWheel(wheel);
+      const start = cameraOf(host);
+      // Uno scatto piccolo, come lo manda il pizzico, e il browser non ingrandisce la pagina.
+      const pinch = scroll(viewportOf(host), { deltaY: -0.5, ctrlKey: true });
+      expect(pinch.defaultPrevented, wheel).toBe(true);
+      expect(cameraOf(host).zoom, wheel).toBeCloseTo(start.zoom * 1.1, 9);
+      // Ctrl senza parte verticale non ingrandisce e non sposta.
+      const after = cameraOf(host);
+      scroll(viewportOf(host), { deltaX: 5, ctrlKey: true });
+      expect(cameraOf(host), wheel).toEqual(after);
+      scroll(viewportOf(host), { deltaY: -0.5, metaKey: true });
+      expect(cameraOf(host).zoom, wheel).toBeCloseTo(after.zoom * 1.1, 9);
+      engine.destroy();
+    }
+  });
+
+  it("«La rotella del mouse» cambiata a lavagna aperta vale dallo scatto dopo, e smette con la lavagna", () => {
+    const watchers = watched.appliers.length;
+    const { engine, host } = mounted();
+    const viewport = viewportOf(host);
+    const start = cameraOf(host);
+    setWheel("pan");
+    scroll(viewport, { deltaY: 50 });
+    expect(cameraOf(host)).toEqual({ ...start, y: start.y - 50 });
+    setWheel("zoom");
+    scroll(viewport, { deltaY: -50 });
+    const zoomed = cameraOf(host);
+    expect(zoomed.zoom).toBeCloseTo(start.zoom * 1.1, 9);
+    setWheel("pan");
+    scroll(viewport, { deltaY: 50 });
+    expect(cameraOf(host)).toEqual({ ...zoomed, y: zoomed.y - 50 });
+    engine.destroy();
+    expect(watched.appliers).toHaveLength(watchers);
+  });
+
+  it("una riga vale 16 px e una pagina l'altezza della vista, qualunque sia la rotella", () => {
+    const { engine, host } = mounted();
+    const viewport = viewportOf(host);
+    const start = cameraOf(host);
+    scroll(viewport, { deltaY: 3, deltaMode: 1 });
+    expect(cameraOf(host)).toEqual({ ...start, y: start.y - 48 });
+    const page = vi.spyOn(viewport, "getBoundingClientRect").mockReturnValue({
+      left: 0, top: 0, right: 800, bottom: 500, width: 800, height: 500, x: 0, y: 0, toJSON: () => ({}),
+    } as DOMRect);
+    const lines = cameraOf(host);
+    scroll(viewport, { deltaY: 1, deltaMode: 2 });
+    expect(cameraOf(host)).toEqual({ ...lines, y: lines.y - 500 });
+    const pages = cameraOf(host);
+    scroll(viewport, { deltaX: 0.5, deltaMode: 2 });
+    expect(cameraOf(host)).toEqual({ ...pages, x: pages.x - 400 });
+    page.mockRestore();
+    engine.destroy();
+  });
+
+  it("lo zoom ai limiti resta fermo, senza salto", () => {
+    const { engine, host } = mounted();
+    setWheel("zoom");
+    const viewport = viewportOf(host);
+    for (let i = 0; i < 40; i++) scroll(viewport, { deltaY: -100 });
+    expect(cameraOf(host).zoom).toBe(4);
+    const top = cameraOf(host);
+    scroll(viewport, { deltaY: -100 });
+    expect(cameraOf(host).zoom).toBe(4);
+    expect(cameraOf(host).x).toBeCloseTo(top.x, 6);
+    expect(cameraOf(host).y).toBeCloseTo(top.y, 6);
+    for (let i = 0; i < 80; i++) scroll(viewport, { deltaY: 100 });
+    expect(cameraOf(host).zoom).toBe(0.1);
+    const bottom = cameraOf(host);
+    scroll(viewport, { deltaY: 100 });
+    expect(cameraOf(host).zoom).toBe(0.1);
+    expect(cameraOf(host).x).toBeCloseTo(bottom.x, 6);
+    expect(cameraOf(host).y).toBeCloseTo(bottom.y, 6);
     engine.destroy();
   });
 });

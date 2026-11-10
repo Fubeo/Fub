@@ -48,7 +48,7 @@ import { inkFitMode } from "./ink-fit";
 import { mountInkLayer, type InkLayer, type InkLayerStroke } from "./ink-layer";
 import { cutInkStroke, fadeInkStroke, InkPathCache, paintBoard, paintCard, type DryStroke } from "./ink-paint";
 import { createPenMenu, type PenMenu } from "./pen-menu";
-import { readInkMouse, readPen, saveInkMouse, savePen, watchPreferences } from "./preferences";
+import { DEFAULT_PREFERENCES, readInkMouse, readPen, saveInkMouse, savePen, watchPreferences, type WheelAction } from "./preferences";
 import { isTap, pinchCamera, type TouchCamera, type TouchPoint, type ZoomLimits } from "./touch";
 import {
   DEFAULT_INK_CHOICE,
@@ -94,6 +94,18 @@ export const MAX_CANVAS_HISTORY = 100;
 export const CARD_PAUSE_MS = 250;
 /** Quanto si aspetta dopo l'ultimo scatto della rotella prima di dire finito il gesto (A-7). */
 export const WHEEL_SETTLE_MS = 150;
+/** Una riga della rotella in pixel: un valore di partenza, come nella lavagna del grafo. */
+const WHEEL_LINE_PX = 16;
+
+/**
+ * Il delta della rotella in pixel, qualunque unità abbia scelto il browser:
+ * `deltaMode` 1 conta righe, 2 pagine, e la pagina è la misura della vista.
+ */
+function wheelPixels(delta: number, deltaMode: number, page: number): number {
+  if (deltaMode === 1) return delta * WHEEL_LINE_PX;
+  if (deltaMode === 2) return delta * page;
+  return delta;
+}
 
 /** I tasti che una scheda scelta e non attiva può prendere (`CardView.key`, T14). */
 const CARD_KEYS: ReadonlySet<string> = new Set(["PageUp", "PageDown", "Home", "End"]);
@@ -588,6 +600,8 @@ export class CanvasEngine {
   #pinch: { a: number; b: number; a0: TouchPoint; b0: TouchPoint; start: TouchCamera } | null = null;
   /** «Il dito sposta le schede» dalle Impostazioni, quando non lo passano le opzioni. */
   #fingerMovesCardSetting = false;
+  /** «La rotella del mouse» dalle Impostazioni: `pan` di serie, come prima di T35. */
+  #wheelSetting: WheelAction = DEFAULT_PREFERENCES.wheel;
   readonly #port: CanvasCorePort;
   /** La lavagna aperta nel nucleo; `null` prima di aprirla o dopo una trappola. */
   #core: CanvasCore | null = null;
@@ -656,6 +670,10 @@ export class CanvasEngine {
         this.#fingerMovesCardSetting = preferences.fingerMovesCard;
       }));
     }
+    // La rotella segue «La rotella del mouse» a ogni cambio: vale dallo scatto dopo.
+    this.#life.add(watchPreferences((preferences) => {
+      this.#wheelSetting = preferences.wheel;
+    }));
     this.#port = options.core ?? SHARED_CORE;
     this.#root = document.createElement("div");
     this.#root.className = "canvas-surface";
@@ -3280,13 +3298,31 @@ export class CanvasEngine {
       this.#wheelTimer = undefined;
       this.#refreshLive();
     }, WHEEL_SETTLE_MS);
+    // Il delta in pixel: la pagina della rotella è la vista, misurata solo se serve.
+    const page = event.deltaMode === 2 ? this.#viewport.getBoundingClientRect() : null;
+    const dx = wheelPixels(event.deltaX, event.deltaMode, page?.width ?? 0);
+    const dy = wheelPixels(event.deltaY, event.deltaMode, page?.height ?? 0);
+    // Ctrl+rotella e il pizzico ingrandiscono con qualunque impostazione; uno
+    // scatto senza parte verticale non ingrandisce.
     if (event.ctrlKey || event.metaKey) {
-      this.#zoomAt(event.clientX, event.clientY, event.deltaY < 0 ? 1.1 : 1 / 1.1);
-    } else {
-      this.#camera.x -= event.deltaX;
-      this.#camera.y -= event.deltaY;
-      this.#applyCamera();
+      if (dy !== 0) this.#zoomAt(event.clientX, event.clientY, dy < 0 ? 1.1 : 1 / 1.1);
+      return;
     }
+    // Maiusc sposta di lato. Dove il sistema non manda `deltaX`, si usa `deltaY`.
+    if (event.shiftKey) {
+      this.#camera.x -= dx !== 0 ? dx : dy;
+      this.#applyCamera();
+      return;
+    }
+    // `zoom`: la rotella ingrandisce. Un evento con una parte orizzontale (le due
+    // dita sul touchpad) sposta, come in `pan`, così il touchpad resta usabile.
+    if (this.#wheelSetting === "zoom" && dx === 0) {
+      if (dy !== 0) this.#zoomAt(event.clientX, event.clientY, dy < 0 ? 1.1 : 1 / 1.1);
+      return;
+    }
+    this.#camera.x -= dx;
+    this.#camera.y -= dy;
+    this.#applyCamera();
   }
 
   #dblclick(event: MouseEvent): void {
