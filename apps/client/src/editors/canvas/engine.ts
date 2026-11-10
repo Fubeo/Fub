@@ -167,12 +167,36 @@ export interface CanvasMediaPort {
 }
 /** External bytes become cards only after deposit returns; no implicit file writes. */
 export interface CanvasAttachmentPort {
-  /** Receipts contain vault-relative paths after collision-safe, explicit deposit. */
-  readonly deposit: (files: readonly File[], documentId: string) => Promise<readonly string[]>;
+  /** Receipts contain vault-relative paths after collision-safe, explicit deposit.
+   *  `cards` sono le schede che questo gesto farà nascere coi percorsi tornati:
+   *  un gesto dopo (la notifica «Fanne una copia», T32b) le ripunta per id. */
+  readonly deposit: (files: readonly File[], documentId: string, cards: CanvasDepositCards) => Promise<readonly string[]>;
   /** Resolve only existing trusted vault paths/folders, never local filesystem bytes. */
   readonly resolvePaths?: (data: DataTransfer, documentId: string) => Promise<readonly string[]>;
   /** Enumerate direct files and OS folder entries once; every result passes through deposit. */
   readonly expandFiles?: (data: DataTransfer) => Promise<readonly File[]>;
+}
+
+/** Una scheda da ripuntare: mostrava `from`, mostrerà `to`. */
+export interface CanvasRepoint {
+  readonly from: string;
+  readonly to: string;
+}
+
+/**
+ * Le schede nate da un deposito dal computer (T32b). La lavagna le ricorda per
+ * id, non per percorso: una scheda tolta dopo non si tocca, una spostata si
+ * ripunta lo stesso, e una che mostra già un altro file resta com'è. Una
+ * scheda che il vault aveva già sulla lavagna, con lo stesso file, non è di
+ * questo gesto e non cambia.
+ */
+export interface CanvasDepositCards {
+  /** Falso dopo che la lavagna è stata chiusa o è diventata di sola lettura:
+   *  l'azione di una notifica rimasta a galla non fa più niente. */
+  readonly live: () => boolean;
+  /** Ripunta le schede del gesto in un commit solo (un Ctrl+Z torna ai file di
+   *  prima) e dice quante ne ha cambiate. */
+  readonly repoint: (changes: readonly CanvasRepoint[]) => number;
 }
 
 /**
@@ -2670,9 +2694,13 @@ export class CanvasEngine {
     const existing = drop ? this.#nodeAt(document.elementFromPoint?.(event.clientX, event.clientY) ?? null) : null;
     const files = [...new Set(port?.expandFiles ? await port.expandFiles(data) : [...data.files])];
     if (files.length && (!port || !documentId)) return;
+    // Le schede che questo gesto fa nascere, per percorso: «Fanne una copia»
+    // le ripunta per id (T32b).
+    const born = new Map<string, string[]>();
+    const bear = (path: string, id: string): void => { born.set(path, [...(born.get(path) ?? []), id]); };
     // External bytes pass the explicit deposit. Internal folder paths resolve
     // only via the host port; never trust a raw DataTransfer path.
-    const paths = files.length ? await port!.deposit(files, documentId!)
+    const paths = files.length ? await port!.deposit(files, documentId!, this.#depositCards(born))
       : port?.resolvePaths && documentId ? await port.resolvePaths(data, documentId) : [];
     if (stale()) return;
     const unique = [...new Set(paths)].filter(isVaultPath);
@@ -2681,8 +2709,10 @@ export class CanvasEngine {
     const file = this.#doc!.nodes.find((node) => node.id === existing && node.type === "file");
     // Su una scheda di file il primo file ne prende il posto (A-8).
     if (file && unique.length) {
-      const patch = upsertNodePatch(this.#doc!, { ...file, file: unique.shift()!, subpath: undefined });
+      const path = unique.shift()!;
+      const patch = upsertNodePatch(this.#doc!, { ...file, file: path, subpath: undefined });
       if (patch) patches.push(patch);
+      bear(path, file.id);
     }
     if (unique.length) {
       const items = await this.#bornItems(unique);
@@ -2697,11 +2727,13 @@ export class CanvasEngine {
         if (patch) patches.push(patch);
       }
       for (const card of layout.cards) {
+        const id = newNodeId("n");
         const patch = upsertNodePatch(this.#doc!, {
-          id: newNodeId("n"), type: "file", file: card.path,
+          id, type: "file", file: card.path,
           x: card.x, y: card.y, width: card.width, height: card.height,
         });
         if (patch) patches.push(patch);
+        bear(card.path, id);
       }
     }
     if (!paths.length && text) {
@@ -2718,6 +2750,37 @@ export class CanvasEngine {
     }
     // Un commit solo: un annulla toglie tutto ciò che è nato.
     this.#commit(patches, "input");
+  }
+
+  /**
+   * La porta con cui un gesto dopo il deposito ripunta le schede che il
+   * deposito ha fatto nascere (`born`: percorso → id, riempita quando nascono).
+   * Ogni scheda si cerca per id e cambia solo se mostra ancora il file di
+   * prima: tolta, o già puntata altrove, resta com'è. Tutte in un commit solo.
+   */
+  #depositCards(born: ReadonlyMap<string, readonly string[]>): CanvasDepositCards {
+    const live = (): boolean => !this.#destroyed && !this.#readOnly && this.#doc !== null;
+    return {
+      live,
+      repoint: (changes) => {
+        if (!live()) return 0;
+        const doc = this.#doc!;
+        const patches: CanvasPatch[] = [];
+        const touched = new Set<string>();
+        for (const { from, to } of changes) {
+          if (!isVaultPath(to)) continue;
+          for (const id of born.get(from) ?? []) {
+            const node = doc.nodes.find((candidate) => candidate.id === id);
+            if (!node || touched.has(id) || node.type !== "file" || node.file !== from) continue;
+            const patch = upsertNodePatch(doc, { ...node, file: to });
+            if (patch) patches.push(patch);
+            touched.add(id);
+          }
+        }
+        if (patches.length) this.#commit(patches, "input");
+        return patches.length;
+      },
+    };
   }
 
   /**

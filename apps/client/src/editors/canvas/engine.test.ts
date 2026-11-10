@@ -3,7 +3,7 @@ import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import type { SurfaceMenuItem } from "../core/editor-menu";
 import { renderMarkdown } from "../text/profiles/markdown/render";
 import { mountMarkdown } from "../text/profiles/markdown/mount";
-import { CARD_PAUSE_MS, CanvasEngine, MAX_CANVAS_HISTORY, MEASURE_IMAGE_TIMEOUT_MS, type CanvasChange, type CanvasCorePort, type CanvasEngineOptions } from "./engine";
+import { CARD_PAUSE_MS, CanvasEngine, MAX_CANVAS_HISTORY, MEASURE_IMAGE_TIMEOUT_MS, type CanvasChange, type CanvasCorePort, type CanvasDepositCards, type CanvasEngineOptions } from "./engine";
 import type { CanvasDocument } from "./model";
 import { dropLayout } from "./drop-layout";
 import { ENTRIES_DRAG_TYPE } from "../../ui/drag-types";
@@ -496,7 +496,7 @@ describe("CanvasEngine", () => {
       files: [file], getData: () => "",
     } });
     host.querySelector(".canvas-viewport")!.dispatchEvent(clipboard);
-    await vi.waitFor(() => expect(deposit).toHaveBeenCalledWith([file], "board.canvas"));
+    await vi.waitFor(() => expect(deposit).toHaveBeenCalledWith([file], "board.canvas", expect.objectContaining({ repoint: expect.any(Function) })));
     await vi.waitFor(() => expect(readCanvas(engine.getDoc()).nodes.filter((node) => node.file === "attachments/photo.png")).toHaveLength(1));
     expect(host.querySelector(".canvas-media-placeholder")?.textContent).toContain("IMAGE");
     expect(host.querySelector("img,audio,video,iframe")).toBeNull();
@@ -561,6 +561,67 @@ describe("CanvasEngine", () => {
     expect(readCanvas(engine.getDoc()).nodes).toHaveLength(4);
     expect(readCanvas(engine.getDoc()).nodes[0].text).toBe("Remote version");
     engine.destroy();
+  });
+
+  describe("le schede di un deposito si ripuntano per id (T32b, «Fanne una copia»)", () => {
+    /// Incolla `names` sulla lavagna: il deposito torna `paths` e la porta
+    /// delle schede del gesto resta al test.
+    async function pasted(paths: readonly string[], source = canvasSource()) {
+      let cards: CanvasDepositCards | null = null;
+      const deposit = vi.fn(async (_files: readonly File[], _id: string, given: CanvasDepositCards) => {
+        cards = given;
+        return paths;
+      });
+      const view = mounted(source, { attachments: { deposit } });
+      const clipboard = new Event("paste", { bubbles: true, cancelable: true });
+      Object.defineProperty(clipboard, "clipboardData", { value: {
+        files: paths.map((path) => new File(["x"], path.split("/").pop()!)), getData: () => "",
+      } });
+      view.host.querySelector(".canvas-viewport")!.dispatchEvent(clipboard);
+      await vi.waitFor(() => expect(readCanvas(view.engine.getDoc()).nodes.filter((node) => paths.includes(node.file ?? ""))).toHaveLength(new Set(paths).size));
+      return { ...view, cards: cards! };
+    }
+    const files = (engine: CanvasEngine) => readCanvas(engine.getDoc()).nodes.filter((node) => node.type === "file").map((node) => node.file);
+
+    it("più schede in un commit solo, e un annulla torna ai file riusati", async () => {
+      const { engine, changes, cards } = await pasted(["Foto/a.png", "Foto/b.png"]);
+      const before = changes.length;
+      expect(cards.live()).toBe(true);
+      expect(cards.repoint([{ from: "Foto/a.png", to: "attachments/a.png" }, { from: "Foto/b.png", to: "attachments/b.png" }])).toBe(2);
+      expect(changes).toHaveLength(before + 1);
+      expect(files(engine)).toEqual(["allegati/foto.png", "attachments/a.png", "attachments/b.png"]);
+      expect(engine.undo()).toBe(true);
+      expect(files(engine)).toEqual(["allegati/foto.png", "Foto/a.png", "Foto/b.png"]);
+      engine.destroy();
+    });
+
+    it("una scheda sola: la sua, non quella che mostrava già lo stesso file", async () => {
+      const { engine, cards } = await pasted(["allegati/foto.png"]);
+      expect(files(engine)).toEqual(["allegati/foto.png", "allegati/foto.png"]);
+      expect(cards.repoint([{ from: "allegati/foto.png", to: "attachments/foto 1.png" }])).toBe(1);
+      const nodes = readCanvas(engine.getDoc()).nodes.filter((node) => node.type === "file");
+      expect(nodes.find((node) => node.id === "f")?.file).toBe("allegati/foto.png");
+      expect(nodes.filter((node) => node.id !== "f").map((node) => node.file)).toEqual(["attachments/foto 1.png"]);
+      engine.destroy();
+    });
+
+    it("la scheda tolta prima non si tocca; quella già puntata altrove nemmeno", async () => {
+      const { engine, cards } = await pasted(["Foto/a.png", "Foto/b.png"]);
+      const doc = JSON.parse(engine.getDoc()) as CanvasDocument;
+      doc.nodes = doc.nodes.filter((node) => node.file !== "Foto/a.png")
+        .map((node) => (node.file === "Foto/b.png" ? { ...node, file: "Altro/b.png" } : node));
+      engine.syncDoc(JSON.stringify(doc));
+      expect(cards.repoint([{ from: "Foto/a.png", to: "attachments/a.png" }, { from: "Foto/b.png", to: "attachments/b.png" }])).toBe(0);
+      expect(files(engine)).toEqual(["allegati/foto.png", "Altro/b.png"]);
+      engine.destroy();
+    });
+
+    it("chiusa la lavagna, la porta non fa più niente", async () => {
+      const { engine, cards } = await pasted(["Foto/a.png"]);
+      engine.destroy();
+      expect(cards.live()).toBe(false);
+      expect(cards.repoint([{ from: "Foto/a.png", to: "attachments/a.png" }])).toBe(0);
+    });
   });
 
   it("rende scene grandi con fallback deterministico invece di migliaia di DOM card", () => {

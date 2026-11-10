@@ -143,9 +143,19 @@ copiati.
 Dove finiscono lo dice `canvas.drop_folder` (`dropFolderFor`, in
 `state/canvas-intake.ts`): le note con `files.attachment-folder`, una
 cartella accanto alla lavagna o una del vault. La prima copia lo dice con una
-notifica, e «Cambia cartella» apre quella voce; la notifica dice anche se la
-cartella è esclusa da `files.excluded-folders`, dove i file non si trovano con
-la ricerca.
+notifica, e «Cambia cartella» apre quella voce. Se la cartella è esclusa da
+`files.excluded-folders`, dove i file non si trovano con la ricerca, la
+notifica lo dice a ogni gesto che ci copia.
+
+Un file che il vault ha già con gli stessi byte non si copia (`reuse`, lo
+decide l'host): la notifica «Già nel vault come…» offre «Fanne una copia»
+(«Fanne delle copie» per più file). Il clic deposita i byte senza `reuse`, con
+i nomi soliti («foto 1.png»), e ripunta le schede nate da quel gesto, per id,
+in un commit solo: Ctrl+Z torna al file riusato. La porta è
+`CanvasDepositCards`, data dal motore al deposito: una scheda tolta o già
+puntata altrove non cambia, e con la lavagna chiusa il gesto non fa niente.
+Un host che rifiuta `reuse` lo rifiuta una volta per seduta (`ReuseSupport`
+in `editors/media/transport.ts`, uno per finestra in `host/ipc.ts`).
 
 ## Il contratto
 

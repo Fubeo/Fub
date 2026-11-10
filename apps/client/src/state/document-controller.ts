@@ -1080,7 +1080,7 @@ export function mountDocumentController(lifetime: Lifetime, d: DocumentDeps, pan
       // Dal computer: una copia sola per file, e lo stesso file si riusa (G2).
       // Il vault che ha già quei byte lo dice l'host (`reuse`), non il client.
       // La cartella la sceglie `canvas.drop_folder`, letta a ogni trascinamento.
-      deposit: (files, documentId) => depositCanvasFiles(files, documentId, {
+      deposit: (files, documentId, cards) => depositCanvasFiles(files, documentId, {
         deposit: attachmentDeposit,
         dropFolder: async () => preferencesOf(await settings(LAVAGNA_BUNDLE)),
         excludedFolders,
@@ -1088,7 +1088,7 @@ export function mountDocumentController(lifetime: Lifetime, d: DocumentDeps, pan
         readState,
         writeState,
         revealSetting,
-      }),
+      }, cards),
     },
     onSearchTag: (tag) => deps.searchTag(tag),
     onRenamePage: renamePage,

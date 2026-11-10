@@ -5,7 +5,8 @@
 // produzione: così le letture del vault si contano sul finto.
 import { describe, expect, it, vi } from "vitest";
 import { createFakeHost, type FakeHost } from "../host/fake";
-import { RESOURCE_WRITE_HEADER, writeResource, type TauriInvoke } from "../editors/media/transport";
+import { RESOURCE_WRITE_HEADER, ReuseSupport, writeResource, type TauriInvoke } from "../editors/media/transport";
+import type { CanvasDepositCards, CanvasRepoint } from "../editors/canvas/engine";
 import { ENTRIES_DRAG_TYPE, NOTE_DRAG_TYPE } from "../ui/drag-types";
 import { DROP_FOLDER_KEY, DROP_FOLDER_PATH_KEY, preferencesOf } from "../editors/canvas/preferences";
 import type { SettingEntry } from "../host/contract";
@@ -84,14 +85,16 @@ describe("resolveCanvasPaths (dall'albero)", () => {
 
 /// Il `invoke` di Tauri verso il finto host, per il solo `resource_write`: i
 /// metadati arrivano nell'intestazione, come in produzione. `oldHost` è un host
-/// di prima, che rifiuta il campo `reuse` che non conosce.
-function hostInvoke(host: FakeHost, oldHost: boolean): TauriInvoke {
+/// di prima, che rifiuta il campo `reuse` che non conosce; `refusals` conta i
+/// suoi rifiuti.
+function hostInvoke(host: FakeHost, oldHost: boolean, refusals: { count: number }): TauriInvoke {
   const invoke = async (cmd: string, body?: unknown, options?: { headers?: Record<string, string> }) => {
     if (cmd !== "resource_write") throw new Error(`comando inatteso: ${cmd}`);
     const meta = JSON.parse(decodeURIComponent(options!.headers![RESOURCE_WRITE_HEADER]!)) as {
       id: string; vault: string | null; expected: string | null; reuse?: "same-content";
     };
     if (oldHost && meta.reuse !== undefined) {
+      refusals.count += 1;
       throw { kind: "bad_args", message: "resource_write metadata has an unknown field `reuse`" };
     }
     const reuse = meta.reuse === undefined ? undefined : { reuse: meta.reuse };
@@ -120,7 +123,10 @@ function depositVault(options: {
   const host = createFakeHost({
     resources: Object.fromEntries(Object.entries(options.files ?? {}).map(([id, value]) => [id, { bytes: value }])),
   });
-  const invoke = hostInvoke(host, options.oldHost === true);
+  const refusals = { count: 0 };
+  const invoke = hostInvoke(host, options.oldHost === true, refusals);
+  // Il ricordo della seduta, uno per vault finto come uno per finestra.
+  const support = new ReuseSupport();
   const state = new Map<string, unknown>();
   if (options.noticed !== undefined) state.set(ATTACHMENTS_NOTICED_KEY, options.noticed);
   const notices: { message: string; action?: NoticeAction }[] = [];
@@ -130,7 +136,7 @@ function depositVault(options: {
     deposit: async (documentId) => ({
       folder: options.notesFolder ?? "attachments",
       fromDocument: documentId,
-      write: (id, value, reuse) => writeResource(invoke, id, value, null, undefined, reuse),
+      write: (id, value, reuse) => writeResource(invoke, id, value, null, undefined, reuse, support),
     }),
     dropFolder: async () => scheme.choice,
     excludedFolders: async () => scheme.excluded,
@@ -142,7 +148,7 @@ function depositVault(options: {
     writeState: (key, value) => { state.set(key, value); },
     revealSetting,
   };
-  return { host, state, notices, revealSetting, scheme, deps };
+  return { host, state, notices, revealSetting, scheme, deps, support, refusals };
 }
 
 /// Le letture del vault che il client ha fatto sul finto: aprire un file e
@@ -355,5 +361,138 @@ describe("depositCanvasFiles, con la cartella di canvas.drop_folder", () => {
     const above = depositVault({ choice: BOARD, excluded: ["Corsi"] });
     await depositCanvasFiles([file("foto.png", 1)], "Corsi/Statistica/Lezioni.canvas", above.deps);
     expect(above.notices.map((notice) => notice.message)[0]).toContain("esclusa dall'indice");
+  });
+});
+
+/// La porta delle schede che la lavagna dà al deposito, finta: ricorda le
+/// richieste di ripuntare, e `state.alive` dice se la lavagna è ancora aperta.
+/// Che il ripuntare sia un commit solo con un annulla lo prova `engine.test.ts`.
+function fakeCards() {
+  const repoints: CanvasRepoint[][] = [];
+  const state = { alive: true };
+  const cards: CanvasDepositCards = {
+    live: () => state.alive,
+    repoint: (changes) => { repoints.push([...changes]); return changes.length; },
+  };
+  return { cards, repoints, state };
+}
+
+/// Per ogni `resource_write` arrivato al finto host, in ordine: se chiedeva
+/// `reuse`.
+function writesWithReuse(host: FakeHost): boolean[] {
+  return host.atGate("resourceWrite").map((call) => call.args[4] !== undefined);
+}
+
+describe("«Fanne una copia» (T32b)", () => {
+  it("un file: si copia senza `reuse` col suo nome, e la scheda del gesto passa al file nuovo", async () => {
+    const vault = depositVault({ noticed: true, files: { "Foto/lavagna.jpg": new Uint8Array([1, 2]) } });
+    const { cards, repoints } = fakeCards();
+    expect(await depositCanvasFiles([file("IMG_2042.jpg", 1, 2)], "Lavagne/studio.canvas", vault.deps, cards)).toEqual(["Foto/lavagna.jpg"]);
+    expect(vault.notices).toHaveLength(1);
+    expect(vault.notices[0]!.message).toBe("Già nel vault come Foto/lavagna.jpg, uso quello");
+    expect(vault.notices[0]!.action?.label).toBe("Fanne una copia");
+    expect(repoints).toEqual([]);
+    await vault.notices[0]!.action!.run();
+    expect(repoints).toEqual([[{ from: "Foto/lavagna.jpg", to: "attachments/IMG_2042.jpg" }]]);
+    expect(vault.host.files()["attachments/IMG_2042.jpg"]).toBeDefined();
+    expect(writesWithReuse(vault.host)).toEqual([true, false]);
+    expect(vaultReads(vault.host)).toEqual([]);
+  });
+
+  it("lo stesso nome già nel vault: la copia è «foto 1.png»", async () => {
+    const vault = depositVault({ noticed: true, files: { "attachments/foto.png": new Uint8Array([1, 2]) } });
+    const { cards, repoints } = fakeCards();
+    await depositCanvasFiles([file("foto.png", 1, 2)], "Lavagne/studio.canvas", vault.deps, cards);
+    await vault.notices[0]!.action!.run();
+    expect(repoints).toEqual([[{ from: "attachments/foto.png", to: "attachments/foto 1.png" }]]);
+  });
+
+  it("più file: una notifica sola con «Fanne delle copie», e tutte le schede in una richiesta sola", async () => {
+    const vault = depositVault({ noticed: true, files: { "Foto/a.png": new Uint8Array([1]), "Foto/b.png": new Uint8Array([2]) } });
+    const { cards, repoints } = fakeCards();
+    await depositCanvasFiles([file("uno.png", 1), file("tre.png", 3), file("due.png", 2)], "Lavagne/studio.canvas", vault.deps, cards);
+    expect(vault.notices.map((notice) => notice.message)).toEqual(["2 file già nel vault, uso quelli"]);
+    expect(vault.notices[0]!.action?.label).toBe("Fanne delle copie");
+    await vault.notices[0]!.action!.run();
+    expect(repoints).toEqual([[
+      { from: "Foto/a.png", to: "attachments/uno.png" },
+      { from: "Foto/b.png", to: "attachments/due.png" },
+    ]]);
+  });
+
+  it("due file uguali allo stesso file del vault sono una scheda: una copia sola", async () => {
+    const vault = depositVault({ noticed: true, files: { "Foto/a.png": new Uint8Array([1]) } });
+    const { cards, repoints } = fakeCards();
+    await depositCanvasFiles([file("uno.png", 1), file("bis.png", 1)], "Lavagne/studio.canvas", vault.deps, cards);
+    await vault.notices[0]!.action!.run();
+    expect(repoints).toEqual([[{ from: "Foto/a.png", to: "attachments/uno.png" }]]);
+    expect(Object.keys(vault.host.files()).filter((id) => id.startsWith("attachments/"))).toEqual(["attachments/uno.png"]);
+  });
+
+  it("la lavagna chiusa prima del clic: nessuna copia, nessuna scheda", async () => {
+    const vault = depositVault({ noticed: true, files: { "Foto/a.png": new Uint8Array([1]) } });
+    const { cards, repoints, state } = fakeCards();
+    await depositCanvasFiles([file("uno.png", 1)], "Lavagne/studio.canvas", vault.deps, cards);
+    state.alive = false;
+    await vault.notices[0]!.action!.run();
+    expect(repoints).toEqual([]);
+    expect(writesWithReuse(vault.host)).toEqual([true]);
+  });
+
+  it("senza le schede della lavagna, o dopo un errore, la copia non si offre", async () => {
+    const without = depositVault({ noticed: true, files: { "Foto/a.png": new Uint8Array([1]) } });
+    await depositCanvasFiles([file("uno.png", 1)], "Lavagne/studio.canvas", without.deps);
+    expect(without.notices[0]!.action).toBeUndefined();
+
+    const failed = depositVault({ noticed: true, files: { "Foto/a.png": new Uint8Array([1]) } });
+    const big = { name: "enorme.bin", size: 65 * 1024 * 1024, arrayBuffer: vi.fn() } as unknown as File;
+    await expect(depositCanvasFiles([file("uno.png", 1), big], "Lavagne/studio.canvas", failed.deps, fakeCards().cards)).rejects.toThrow();
+    expect(failed.notices.map((notice) => notice.message)).toEqual(["Già nel vault come Foto/a.png, uso quello"]);
+    expect(failed.notices[0]!.action).toBeUndefined();
+  });
+
+  it("due notifiche aperte: ognuna copia i suoi file e ripunta le schede del suo gesto", async () => {
+    const vault = depositVault({ noticed: true, files: { "Foto/a.png": new Uint8Array([1]), "Foto/b.png": new Uint8Array([2]) } });
+    const first = fakeCards();
+    const second = fakeCards();
+    await depositCanvasFiles([file("uno.png", 1)], "Lavagne/studio.canvas", vault.deps, first.cards);
+    await depositCanvasFiles([file("due.png", 2)], "Lavagne/studio.canvas", vault.deps, second.cards);
+    await vault.notices[1]!.action!.run();
+    await vault.notices[0]!.action!.run();
+    expect(first.repoints).toEqual([[{ from: "Foto/a.png", to: "attachments/uno.png" }]]);
+    expect(second.repoints).toEqual([[{ from: "Foto/b.png", to: "attachments/due.png" }]]);
+  });
+
+  it("una copia in una cartella esclusa dall'indice lo dice, anche dopo la prima volta", async () => {
+    const vault = depositVault({ noticed: true, excluded: ["attachments/"], files: { "Foto/a.png": new Uint8Array([1]) } });
+    await depositCanvasFiles([file("uno.png", 1)], "Lavagne/studio.canvas", vault.deps, fakeCards().cards);
+    await vault.notices[0]!.action!.run();
+    expect(vault.notices.map((notice) => notice.message)[1]).toContain("esclusa dall'indice");
+  });
+});
+
+describe("a ogni gesto: la cartella esclusa e l'host di prima (T32b)", () => {
+  it("una cartella esclusa dall'indice si dice a ogni gesto che ci copia; una non esclusa una volta per vault", async () => {
+    const vault = depositVault({ excluded: ["attachments/"] });
+    await depositCanvasFiles([file("a.png", 1)], "Lavagne/studio.canvas", vault.deps);
+    await depositCanvasFiles([file("b.png", 2)], "Lavagne/studio.canvas", vault.deps);
+    const excluded = "Copiati in attachments/: è una cartella esclusa dall'indice, lì i file non si troveranno con la ricerca";
+    expect(vault.notices.map((notice) => notice.message)).toEqual([excluded, excluded]);
+    vault.scheme.excluded = [];
+    await depositCanvasFiles([file("c.png", 3)], "Lavagne/studio.canvas", vault.deps);
+    expect(vault.notices).toHaveLength(2);
+  });
+
+  it("un host che non sa `reuse` lo rifiuta una volta sola per la seduta: i file dopo vanno senza", async () => {
+    const vault = depositVault({ oldHost: true, noticed: true, files: { "attachments/a.png": new Uint8Array([9]) } });
+    await depositCanvasFiles([file("a.png", 1), file("b.png", 2)], "Lavagne/studio.canvas", vault.deps);
+    await depositCanvasFiles([file("c.png", 3)], "Lavagne/studio.canvas", vault.deps);
+    expect(Object.keys(vault.host.files()).sort()).toEqual(["attachments/a 1.png", "attachments/a.png", "attachments/b.png", "attachments/c.png"]);
+    expect(vault.refusals.count).toBe(1);
+    expect(writesWithReuse(vault.host).every((reuse) => !reuse)).toBe(true);
+    // Il ricordo ha un padrone che lo azzera: dopo il reset si richiede.
+    vault.support.reset();
+    await depositCanvasFiles([file("d.png", 4)], "Lavagne/studio.canvas", vault.deps);
+    expect(vault.refusals.count).toBe(2);
   });
 });
