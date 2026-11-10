@@ -209,9 +209,13 @@ const ALLOWLIST: &[(&str, &str, usize, Reason)] = &[
         // compone i record `Record { v, mutation }` del formato di storage
         // del kernel, uno per riga, e la scrittura è l'append della coda o
         // lo snapshot della compattazione — serde, come gli altri tre.
+        // Due chiamate, non una: `store` (l'append della coda, o lo snapshot
+        // della compattazione) e `record_fingerprint`, che appende soltanto un
+        // `upsert` con l'impronta calcolata da `same_content`, e non riscrive
+        // mai la tabella.
         "crates/fub-kernel/src/entries.rs",
         "serialize",
-        1,
+        2,
         Reason::AnotherSerialize,
     ),
     (

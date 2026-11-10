@@ -262,6 +262,27 @@ impl StoredEntry {
             _ => false,
         }
     }
+
+    /// Questa voce descrive ancora il file **così come è stato osservato**?
+    ///
+    /// Misura, data e timbro devono coincidere. L'identità si confronta solo se
+    /// la voce ne conosce una, e allora dev'essere la stessa: stessi size e data
+    /// non bastano a dire che sia lo stesso file (vedi [`EntryStore::store`]).
+    pub(crate) fn describes_observed(&self, now: &Observed) -> bool {
+        self.describes(now.size, now.mtime)
+            && self.same_change_stamp(now.change_stamp)
+            && (self.identity.is_none() || self.identity == now.identity)
+    }
+
+    /// L'impronta che la voce porta, se descrive ancora il file osservato. Fuori
+    /// da questo criterio non si crede: l'impronta si rifà dai byte.
+    pub(crate) fn fingerprint_for(&self, now: &Observed) -> Option<&Revision> {
+        if self.describes_observed(now) {
+            self.fingerprint.as_ref()
+        } else {
+            None
+        }
+    }
 }
 
 /// Ciò che il kernel sapeva del vault l'ultima volta.
@@ -521,10 +542,35 @@ fn enrich(new: &mut BTreeMap<DocId, StoredEntry>, old: &BTreeMap<DocId, StoredEn
 /// §15.7, la verità non si rifiuta di aprire, si apre dicendo cosa non ha
 /// letto.
 fn decode(raw: &[u8]) -> Option<BTreeMap<DocId, StoredEntry>> {
+    decode_observed(raw).map(|decoded| decoded.table)
+}
+
+/// Ciò che una coda dice, letta per intero (vedi [`decode`]).
+struct Decoded {
+    table: BTreeMap<DocId, StoredEntry>,
+    /// Almeno una riga porta un record di un'altra versione di schema.
+    ///
+    /// La tabella si legge ancora per ciò che capisce, ma non è più **per
+    /// intero** di questa versione: chi chiede se un contenuto manca non può
+    /// crederle (T30). Chi la aggiorna non se ne cura — lì la regola resta quella
+    /// di sempre: scartare ciò che non si legge e andare avanti.
+    foreign: bool,
+    /// Quanti record di questa versione si sono letti. Una coda con righe e
+    /// nessun record che si legga è rotta, non vuota.
+    records: usize,
+}
+
+/// [`decode`], con in più ciò che serve a chi deve **rispondere** su quella
+/// tabella, non solo usarla.
+fn decode_observed(raw: &[u8]) -> Option<Decoded> {
     if !raw.starts_with(b"\n") {
         return None;
     }
-    let mut table = BTreeMap::new();
+    let mut decoded = Decoded {
+        table: BTreeMap::new(),
+        foreign: false,
+        records: 0,
+    };
     let mut rest = raw;
     while let Some(end) = rest.iter().position(|b| *b == b'\n') {
         let line = &rest[..end];
@@ -537,26 +583,41 @@ fn decode(raw: &[u8]) -> Option<BTreeMap<DocId, StoredEntry>> {
         let Ok(record) = serde_json::from_slice::<Record>(line) else {
             // Una riga rotta — la coda troncata da un crash — o di una forma
             // che non si conosce: si scarta, e ciò che viene prima si è letto
-            // tutto.
+            // tutto. Un JSON con un `v` di un'altra versione è un record di
+            // domani, anche se questa forma non lo legge.
+            decoded.foreign |= names_another_version(line);
             continue;
         };
         if record.v != SCHEMA_VERSION {
-            // Un record di domani: si salta come si salta una riga rotta.
+            // Un record di domani: si salta come si salta una riga rotta, ma
+            // la tabella non è più per intero di questa versione.
+            decoded.foreign = true;
             continue;
         }
+        decoded.records += 1;
         match record.mutation {
             Mutation::Upsert { id, entry } => {
-                table.insert(id, *entry);
+                decoded.table.insert(id, *entry);
             }
             Mutation::Remove { id } => {
-                table.remove(&id);
+                decoded.table.remove(&id);
             }
             Mutation::Snapshot { entries } => {
-                table = entries;
+                decoded.table = entries;
             }
         }
     }
-    Some(table)
+    Some(decoded)
+}
+
+/// Vero se la riga è JSON con un `v` numerico diverso da [`SCHEMA_VERSION`]:
+/// un record di un'altra versione, anche di una forma che questa versione non
+/// legge. Una riga che non è nemmeno JSON (la coda troncata) non lo è.
+fn names_another_version(line: &[u8]) -> bool {
+    serde_json::from_slice::<serde_json::Value>(line)
+        .ok()
+        .and_then(|value| value.get("v").and_then(serde_json::Value::as_u64))
+        .is_some_and(|v| v != u64::from(SCHEMA_VERSION.number()))
 }
 
 /// Le righe non vuote di una coda: quante mutazioni ci stanno, per decidere se
@@ -666,8 +727,140 @@ fn load(
     Ok(crate::error::optional(storage.read(path))?.and_then(|raw| decode(&raw)))
 }
 
+/// Ciò che si vede di un file **senza** leggerne i byte: il metro con cui si
+/// decide se una voce, e l'impronta che porta, descrivono ancora quel file.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct Observed {
+    pub(crate) size: u64,
+    pub(crate) mtime: u64,
+    pub(crate) change_stamp: Option<u64>,
+    pub(crate) identity: Option<FileIdentity>,
+}
+
+impl Observed {
+    /// Che cosa dice il supporto di `path` adesso, o `None` se lì non c'è un
+    /// file semplice, o se una delle sue domande non ha risposta.
+    ///
+    /// `None` è «non so» e non «non c'è»: un file di cui non si sa il timbro non
+    /// si può confrontare con una voce, e chi chiede lo salta. Un collegamento
+    /// non è un file, e non si segue: lo storage è radicato, e nessuna lettura
+    /// deve uscire dal vault.
+    pub(crate) fn of(storage: &dyn VaultStorage, path: &Utf8Path) -> Option<Observed> {
+        let stat = storage
+            .stat_no_follow(path)
+            .ok()
+            .filter(|stat| stat.is_file())?;
+        Some(Observed {
+            size: stat.size,
+            mtime: stat.mtime,
+            change_stamp: storage.change_stamp(path).ok()?,
+            identity: storage.file_identity(path).ok()?,
+        })
+    }
+}
+
+/// Perché la tabella non dice, per intero, quali file ci sono. Chi chiede se un
+/// contenuto è già nel vault non può rispondere «no» da una tabella così.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum TableFault {
+    /// Il file non c'è: il vault non è mai stato indicizzato, o l'hanno tolto.
+    Absent,
+    /// Il file c'è, ma il supporto non lo legge.
+    Unreadable(std::io::ErrorKind),
+    /// Non è una coda di questo formato, o non ne ha nessun record che si legga.
+    Broken,
+    /// Porta record di un'altra versione di schema.
+    ForeignVersion,
+}
+
+/// Le voci della misura `size`, in ordine di id, oppure il guasto che impedisce
+/// di darle tutte.
+///
+/// È una lettura: non crea e non riscrive niente. Un guasto della tabella non
+/// è una tabella vuota, perché «nessuna voce» sarebbe una risposta che non
+/// sappiamo dare (vedi [`TableFault`]).
+pub(crate) fn same_size(
+    root: &Utf8Path,
+    storage: &dyn VaultStorage,
+    size: u64,
+) -> Result<Vec<(DocId, StoredEntry)>, TableFault> {
+    let path = data_root(root).join(FILE);
+    let raw = match crate::error::optional(storage.read(&path)) {
+        Ok(Some(raw)) => raw,
+        Ok(None) => return Err(TableFault::Absent),
+        Err(and) => return Err(TableFault::Unreadable(and.kind())),
+    };
+    let decoded = decode_observed(&raw).ok_or(TableFault::Broken)?;
+    if decoded.foreign {
+        return Err(TableFault::ForeignVersion);
+    }
+    if decoded.records == 0 {
+        return Err(TableFault::Broken);
+    }
+    Ok(decoded
+        .table
+        .into_iter()
+        .filter(|(_, entry)| entry.size == size)
+        .collect())
+}
+
+/// Registra nella voce di `id` l'impronta appena calcolata, se la voce descrive
+/// ancora il file **così come è stato osservato**. Ritorna `Ok(true)` se ha
+/// appeso una riga.
+///
+/// È la disciplina di [`EntryStore::store`] ridotta a una riga: si rilegge la
+/// coda, si decide, si appende un solo `upsert`. Non crea una tabella, non
+/// riscrive una tabella che non si legge o di un'altra versione, non compatta e
+/// non crea voci: una voce nasce solo dalla scansione. Una data che non è
+/// strettamente nel passato rispetto a `observed_at` non si crede mai (la regola
+/// *racily clean* si pone dove si osserva, cioè qui), quindi non si registra.
+///
+/// Uno scarto non è un errore: un'impronta non registrata costa solo una
+/// rilettura. Un errore di scrittura sì, e chi chiama lo annota.
+pub(crate) fn record_fingerprint(
+    root: &Utf8Path,
+    storage: &dyn VaultStorage,
+    id: &DocId,
+    observed: &Observed,
+    observed_at: u64,
+    fingerprint: &Revision,
+) -> Result<bool, String> {
+    if observed.mtime == 0 || observed.mtime >= observed_at {
+        return Ok(false);
+    }
+    let path = data_root(root).join(FILE);
+    let raw = match crate::error::optional(storage.read(&path)) {
+        Ok(Some(raw)) => raw,
+        Ok(None) => return Ok(false),
+        Err(and) => return Err(format!("cannot read {path}: {and}")),
+    };
+    let Some(decoded) = decode_observed(&raw) else {
+        return Ok(false);
+    };
+    if decoded.foreign || decoded.records == 0 || count_records(&raw) >= CEILING {
+        return Ok(false);
+    }
+    let Some(stored) = decoded.table.get(id) else {
+        return Ok(false);
+    };
+    if !stored.describes_observed(observed) || stored.fingerprint.as_ref() == Some(fingerprint) {
+        return Ok(false);
+    }
+    let mut entry = stored.clone();
+    entry.fingerprint = Some(fingerprint.clone());
+    let lines = serialize(&[Mutation::Upsert {
+        id: id.clone(),
+        entry: Box::new(entry),
+    }]);
+    storage
+        .append(&path, &lines)
+        .map_err(|and| format!("cannot write {path}: {and}"))?;
+    Ok(true)
+}
+
 #[cfg(test)]
 mod tests {
+    use std::fs;
     use std::sync::atomic::{AtomicUsize, Ordering};
 
     use super::*;
@@ -1144,6 +1337,147 @@ mod tests {
             reread.known(&DocId::new("b.md")).is_none(),
             "and the broken line was discarded, not guessed"
         );
+    }
+
+    /// **Un record di un'altra versione rende la coda non più per intero nostra**
+    /// (T30): anche una riga di forma che questa versione non legge lo dice, e
+    /// una riga nostra rotta no.
+    #[test]
+    fn a_record_of_another_version_marks_the_queue_as_foreign_even_in_an_unknown_shape() {
+        let ours = b"\n{\"v\":5,\"op\":\"remove\",\"id\":\"a.md\"}\n";
+        let foreign_shape = b"\n{\"v\":6,\"forma\":\"nuova\"}\n";
+        let foreign_record = b"\n{\"v\":6,\"op\":\"upsert\",\"id\":\"a.md\",\"entry\":{}}\n";
+        let broken = b"\n{\"v\":5,\"op\":\"upsert\"\n";
+        assert!(!decode_observed(ours).expect("a queue").foreign);
+        assert!(decode_observed(foreign_shape).expect("a queue").foreign);
+        assert!(decode_observed(foreign_record).expect("a queue").foreign);
+        assert!(!decode_observed(broken).expect("a queue").foreign);
+    }
+
+    /// **Una coda con righe e nessun record che si legga è rotta, non vuota**
+    /// (T30): chi chiede su una tabella così non può rispondere «no». Uno
+    /// snapshot vuoto invece è una tabella vera, senza file.
+    #[test]
+    fn a_queue_without_a_readable_record_is_broken_and_an_empty_snapshot_is_not() {
+        let (_tmp, root) = tempdir();
+        let path = data_root(&root).join(FILE);
+        fs::create_dir_all(path.parent().expect("a table has a folder")).expect("folder");
+        let storage = crate::storage::FsStorage;
+        for raw in [&b"\n{rotto\n"[..], &b"\n"[..]] {
+            fs::write(&path, raw).expect("the queue");
+            assert_eq!(
+                same_size(&root, &storage, 1).err(),
+                Some(TableFault::Broken)
+            );
+        }
+        fs::write(&path, b"\n{\"v\":5,\"op\":\"snapshot\",\"entries\":{}}\n").expect("the queue");
+        assert!(same_size(&root, &storage, 1)
+            .expect("an empty table is a table")
+            .is_empty());
+    }
+
+    /// **Un'impronta si registra solo dove la voce descrive ancora il file, e
+    /// mai con una tabella che non si può riscrivere** (T30): nessuna tabella non
+    /// nasce, una tabella rotta o di un'altra versione non si tocca, una voce di
+    /// un altro file o di un'altra identità non riceve l'impronta, e la stessa
+    /// impronta due volte non scrive niente.
+    #[test]
+    fn a_fingerprint_is_appended_only_to_an_entry_that_describes_the_file() {
+        let (_tmp, root) = tempdir();
+        let storage = crate::storage::FsStorage;
+        let id = DocId::new("a.md");
+        let digest = Revision::new("0123456789abcdef");
+        let file = Observed {
+            size: 3,
+            mtime: 1_000,
+            change_stamp: None,
+            identity: None,
+        };
+        let path = data_root(&root).join(FILE);
+        let record = |observed: &Observed| {
+            record_fingerprint(&root, &storage, &id, observed, 2_000, &digest)
+        };
+
+        assert_eq!(record(&file), Ok(false), "nessuna tabella");
+        assert!(!path.exists(), "e la tabella non nasce");
+
+        // La cartella c'è, la tabella no: serve per scrivere le tabelle sbagliate.
+        fs::create_dir_all(path.parent().expect("a table has a folder")).expect("folder");
+        fs::write(&path, b"non e una coda").expect("a broken table");
+        assert_eq!(record(&file), Ok(false));
+        assert_eq!(fs::read(&path).expect("the table"), b"non e una coda");
+
+        fs::write(
+            &path,
+            b"\n{\"v\":6,\"op\":\"snapshot\",\"entries\":{\"a.md\":{\"size\":3,\"mtime\":1000}}}\n",
+        )
+        .expect("a foreign table");
+        let foreign = fs::read(&path).expect("the table");
+        assert_eq!(record(&file), Ok(false));
+        assert_eq!(fs::read(&path).expect("the table"), foreign);
+
+        // `store` accoda alla coda che trova, anche a una di domani: il test
+        // sostituisce quella straniera con una tabella nostra, perché le prove
+        // che seguono riguardano solo la misura e l'identità.
+        fs::remove_file(&path).expect("the foreign table of the test");
+        let store = |entry: StoredEntry| {
+            EntryStore::open(&root, Arc::new(crate::storage::FsStorage))
+                .store(BTreeMap::from([(id.clone(), entry)]))
+                .expect("the table");
+        };
+        store(entry(4, 1_000));
+        assert_eq!(
+            record(&file),
+            Ok(false),
+            "un'altra misura non è questo file"
+        );
+
+        // Una voce che conosce un'identità vuole un file che la porti uguale: un
+        // file senza identità, o con un'altra, non è questo (`describes_observed`).
+        // Chi scrive una fotografia senza identità non la cancella: `enrich` la
+        // riprende dalla voce precedente, e questa è la regola che lo rende giusto.
+        let mut with_identity = entry(3, 1_000);
+        with_identity.identity = Some(FileIdentity { volume: 1, file: 7 });
+        store(with_identity);
+        let same_file = Observed {
+            identity: Some(FileIdentity { volume: 1, file: 7 }),
+            ..file.clone()
+        };
+        let replaced = Observed {
+            identity: Some(FileIdentity { volume: 1, file: 8 }),
+            ..file.clone()
+        };
+        assert_eq!(record(&replaced), Ok(false), "un'altra identità nemmeno");
+        assert_eq!(record(&file), Ok(false), "senza identità non è questo file");
+
+        assert_eq!(
+            record(&same_file),
+            Ok(true),
+            "la voce descrive il file: una riga"
+        );
+        let known = EntryStore::open(&root, Arc::new(crate::storage::FsStorage))
+            .known(&id)
+            .expect("the entry");
+        assert_eq!(known.fingerprint, Some(digest.clone()));
+        let written = fs::read(&path).expect("the table");
+        assert_eq!(
+            record(&same_file),
+            Ok(false),
+            "la stessa impronta non si riscrive"
+        );
+        assert_eq!(fs::read(&path).expect("the table"), written);
+
+        // Una riga di domani nella coda la rende straniera per intero: anche una
+        // voce che descrive il file, con un'impronta nuova, non riceve niente.
+        let mut queue = written.clone();
+        queue.extend_from_slice(b"{\"v\":6,\"forma\":\"nuova\"}\n");
+        fs::write(&path, &queue).expect("the table");
+        let newer = Revision::new("fedcba9876543210");
+        assert_eq!(
+            record_fingerprint(&root, &storage, &id, &same_file, 2_000, &newer),
+            Ok(false)
+        );
+        assert_eq!(fs::read(&path).expect("the table"), queue);
     }
 
     // La regola *racily clean* aveva qui il suo banco, e presidiava la soglia

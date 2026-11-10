@@ -142,6 +142,7 @@ use crate::registry::FormatRegistry;
 use crate::rename_recovery::{self, RenameRecoveryEdit, RenameRecoveryReceipt, RenameRecoveryScan};
 use crate::renderer::RenderedDocument;
 use crate::safety::Gate;
+use crate::same_content::SameContent;
 use crate::session::{ContextChange, Session};
 use crate::settings::{MachineSettings, SettingsStore, SharedSettings};
 use crate::transfer::{MemorySink, OpenSources, ResourceLease, SourceBacking, PROLOGUE};
@@ -2852,6 +2853,14 @@ pub struct PreparedResourceOpen {
     id: DocId,
 }
 
+/// La domanda «c'è già questo contenuto nel vault?» sul vault attivo, eseguibile
+/// senza custodia workspace: il vault si prende sotto il lucchetto, il confronto
+/// si fa fuori (vedi
+/// [`Vault::same_content_bytes`](crate::vault::Vault::same_content_bytes)).
+pub struct PreparedSameContent {
+    vault: crate::vault::Vault,
+}
+
 /// Il lettore delle lease di un vault, da tenere fuori dal workspace.
 ///
 /// È la forma durevole di [`PreparedResourceOpen`] e
@@ -3607,6 +3616,14 @@ impl PreparedDocumentBytesWrite {
 impl PreparedResourceOpen {
     pub fn invoke(self) -> Result<ResourceLease> {
         crate::transfer::resource_open_on(&self.vault, &self.id)
+    }
+}
+
+impl PreparedSameContent {
+    /// Il contenuto, già in memoria, cercato fra i file del vault: vedi
+    /// [`SameContent`].
+    pub fn invoke(self, bytes: &[u8]) -> SameContent {
+        self.vault.same_content_bytes(bytes)
     }
 }
 
@@ -6572,6 +6589,15 @@ impl Workspace {
             vault: self.docs.vault.clone(),
             id: valid_doc_id(id.as_str())?,
         })
+    }
+
+    /// La domanda sul contenuto, da fare fuori dal lucchetto del workspace: si
+    /// prende il vault clonato e si rilascia la custodia (vedi
+    /// [`PreparedSameContent`]).
+    pub fn prepare_same_content(&self) -> PreparedSameContent {
+        PreparedSameContent {
+            vault: self.docs.vault.clone(),
+        }
     }
 
     fn check_resource_lease(&self, lease: &ResourceLease) -> Result<()> {
