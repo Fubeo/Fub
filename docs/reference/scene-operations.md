@@ -4,7 +4,7 @@
 > forma, esiti, validazione, limiti, `TextOperation`, undo e concorrenza nella
 > sessione live.
 > **Fonti autorevoli:** `apps/client/src/editors/spatial/scene/` (`ops.ts`,
-> `engine.ts`, `diff.ts`), la pila di undo in
+> `engine.ts` con `engine/`, `diff.ts`), la pila di undo in
 > `apps/client/src/editors/spatial/tools/history.ts` e i vettori scritti a
 > mano in `apps/client/src/__fixtures__/scene-ops/`.
 

@@ -136,7 +136,31 @@ fn walk_sources() -> Vec<(String, String)> {
 /// È la sesta specie del §16.7 — la *garanzia dichiarata che non è mai esistita*
 /// — presa dal verso in cui si può presidiare: una frase che rimanda a qualcosa
 /// di meccanico deve rimandare a un nome che una macchina sa cercare.
-const CONTRACT: &str = include_str!("../../fub-abi/src/traits.rs");
+///
+/// `traits.rs` è diviso in moduli (`traits/*.rs`): si leggono tutti, la radice
+/// e ogni file della cartella, così un trait spostato da un file all'altro resta
+/// trovato e uno nuovo entra senza che nessuno lo aggiunga a un elenco.
+fn contract() -> String {
+    let abi = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../fub-abi/src");
+    let mut files = vec![abi.join("traits.rs")];
+    let mut inside: Vec<_> = std::fs::read_dir(abi.join("traits"))
+        .expect("fub-abi/src/traits/ is readable")
+        .map(|and| and.expect("directory entry").path())
+        .filter(|p| p.extension().is_some_and(|e| e == "rs"))
+        .collect();
+    inside.sort();
+    assert!(
+        inside.len() > 1,
+        "fub-abi/src/traits/ holds {} files: this walk is looking at the wrong folder",
+        inside.len()
+    );
+    files.extend(inside);
+    files
+        .iter()
+        .map(|f| std::fs::read_to_string(f).unwrap_or_else(|and| panic!("{}: {and}", f.display())))
+        .collect::<Vec<_>>()
+        .join("\n")
+}
 
 // ---------------------------------------------------------------------------
 // Le ragioni
@@ -859,6 +883,7 @@ fn declared_debt_is_a_guarded_number() {
 /// l'aria di dirla giusta.
 #[test]
 fn every_named_capability_exists_in_the_contract() {
+    let contract = contract();
     for (command, why) in ALLOWLIST {
         let Why::ContractCapability(capability) = why else {
             continue;
@@ -868,7 +893,7 @@ fn every_named_capability_exists_in_the_contract() {
         });
 
         let opening = format!("pub trait {trt}");
-        let start = CONTRACT
+        let start = contract
             .lines()
             .position(|r| r.starts_with(&opening))
             .unwrap_or_else(|| {
@@ -880,7 +905,7 @@ fn every_named_capability_exists_in_the_contract() {
                 )
             });
         let sig = format!("fn {method}(");
-        let found = CONTRACT
+        let found = contract
             .lines()
             .skip(start + 1)
             .take_while(|r| !r.starts_with('}'))

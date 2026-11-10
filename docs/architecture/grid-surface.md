@@ -426,14 +426,14 @@ byte salvati, non la sessione, e il rapporto conta ciò che il PDF non porta.
 
 ## Dove si trova
 
-- `apps/client/src/editors/grid/engine.ts`
+- `apps/client/src/editors/grid/engine.ts`, `engine-geometry.ts`, `engine-host.ts`
 - `apps/client/src/editors/grid/workbook.ts`
 - `apps/client/src/editors/grid/objects.ts`
 - `apps/client/src/editors/grid/comment-card.ts`
 - `apps/client/src/editors/grid/ribbon/ribbon.ts`
 - `apps/client/src/kit/ribbon/ribbon.ts`
 - `apps/client/src/kit/ribbon/ribbon-motion.ts`
-- `apps/client/src/editors/grid/ribbon/tabs.ts`
+- `apps/client/src/editors/grid/ribbon/tabs.ts`, con le schede in `tabs/`
 - `apps/client/src/editors/grid/menu-comandi.ts`
 - `apps/client/src/editors/grid/dialogs/host.ts`
 - `apps/client/src/editors/grid/dialogs/catalog.ts`

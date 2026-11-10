@@ -37,8 +37,8 @@ Come dipendenza Git, un motore non porta le sue `[patch.crates-io]`: chi lo
 incorpora le ripete. E le patch dei motori non sono le stesse:
 
 - VectorCraft manda `hayro-*` e `krilla` a `storytold/craft-libs` `92d392c`;
-- PdfCraft manda `hayro-*`, `lopdf` e `vello_cpu`/`vello_common` alle sue copie
-  in `vendor/`;
+- PdfCraft manda `hayro-*`, `lopdf` e `vello_cpu`/`vello_common` alle revisioni
+  del suo repository, `storytold/pdfcraft` `c735fb7`;
 - WordCraft manda `krilla` a `craft-libs` `c348732`.
 
 In un workspace un crate si sostituisce una volta sola, quindi questi motori
@@ -72,13 +72,13 @@ Per ogni prova lo script:
 
 Il `Cargo.lock` di ogni prova è suo: partire da quello di Fub non si può,
 perché un motore chiede a volte una versione più nuova di quella fissata là
-(VectorCraft vuole `zerovec` 0.11.7, Fub ne ha 0.11.6). Due versioni
+(il `Cargo.lock` di VectorCraft ha `zerovec` 0.11.9, Fub ne ha 0.11.6). Due versioni
 compatibili per Cargo contano come una libreria già in Fub. I file di esempio sono quelli
 del banco WebView (`S5/Foglio.svg` e la cartella `R1/`), più una foto di
 3200 × 2000 e un PDF di quaranta pagine generati dallo script. Nessuna prova
 legge un vault vero.
 
-I numeri vanno in `docs/misure/motori-*.md`, con macchina, sistema e commit.
+I numeri vanno in `docs/misure/2026-*-motori-*.md`, con macchina, sistema e commit.
 
 ## I tetti
 
@@ -90,5 +90,5 @@ I numeri vanno in `docs/misure/motori-*.md`, con macchina, sistema e commit.
 - `obiettivi`, per prova e file: la prima apertura a freddo e la memoria che
   resta dopo «tutto chiuso» e `malloc_trim`, rispetto alla partenza. Sono
   misurati sulla macchina di
-  [`motori-2026-10-31-linux-ryzen`](../../docs/misure/motori-2026-10-31-linux-ryzen.md)
+  [`2026-10-31-motori-linux-ryzen`](../../docs/misure/2026-10-31-motori-linux-ryzen.md)
   e valgono soltanto lì: lo script li segnala senza fallire.

@@ -438,7 +438,7 @@ non è Markdown.
 - lo sleep del loop è preservato quando alpha, camera e trascinamento non
   richiedono lavoro;
 - i valori osservati e i criteri provvisori sono raccolti nel
-  [budget di performance](performance-budget.md#budget-proposti-e-stato) e nei
+  [budget di performance](performance-budget.md#budget-proposti) e nei
   [criteri di acceptance](acceptance.md);
 - il benchmark misura una fixture deterministica, non ogni grafo possibile:
   quadtree con nodi clustered o coincidenti può avvicinarsi al caso peggiore
