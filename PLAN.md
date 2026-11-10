@@ -3159,7 +3159,20 @@ che un tasto di una lettera non vale mentre si scrive;
 `engine.test.ts` sui menu passano.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/canvas
-Stato: [ ] da fare
+Stato: [x] fatto (2026-11-10). Differenze: `disabled()` dà il perché, o
+`null` se il comando si usa; `run(args)` riceve il punto del clic o il filo
+sotto il puntatore; in più `keys[]`, `boardKeys` (Invio solo col fuoco
+sulla tela o su una scheda) e `danger`. Le frecce sono otto comandi
+(`canvas.nudge.*`), Invio è `canvas.enter`. Tasti nuovi dalla tabella:
+Maiusc+1, Maiusc+2, Ctrl+] e Ctrl+[, + e − da soli; T resta alla colonna
+(T49). Un tasto vale solo coi modificatori scritti: Ctrl+Maiusc+A non
+sceglie più tutto e Alt+freccia non sposta più le schede (Alt+← torna
+Indietro nello Scrittoio). Il menu mostra il tasto e il perché delle voci
+spente. I recenti stanno nello stato di vista `canvas.commands:<documento>`.
+I tasti non si cambiano (Fub non lo sa fare per una superficie). La
+sezione «Comandi e tasti», con «Entrare e uscire» e «La rotella», è
+andata in una pagina nuova, `docs/reference/canvas-input.md`: insieme
+`canvas-cards.md` superava le 550 righe.
 
 ## T49 · La colonna degli strumenti
 

@@ -59,6 +59,14 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-10 · n6 · T48 integrato. (1) I tasti valgono solo coi
+  modificatori scritti, anche se Ctrl+Maiusc+A e Alt+frecce smettono di
+  fare ciò che facevano. (2) «Entrare e uscire», «La rotella» e «Comandi e
+  tasti» passano da `canvas-cards.md` a `canvas-input.md`. · Perché: (1)
+  un tasto con un modificatore in più è un altro tasto, e Alt+← è
+  Indietro dello Scrittoio (ADR 0223); (2) con T35 e T48 la pagina era a
+  573 righe su 550, e quelle tre sezioni parlano della tela, non dei
+  renderer.
 - 2026-11-10 · n6 · T35 integrato così com'è: anche in `pan` le righe e
   le pagine della rotella si convertono in pixel. · Perché: un mouse che
   manda righe spostava la lavagna di pochi pixel a scatto; la conversione
