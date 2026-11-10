@@ -3551,7 +3551,15 @@ Fatto quando: il test prova quando compare e sparisce, le azioni per una
 e più schede, la sola lettura; le foto del banco somigliano al prototipo.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/canvas
-Stato: [ ] da fare
+Stato: [x] fatto (2026-11-10). Differenze: il catalogo non aveva «Raggruppa»:
+c'è `canvas.group` (Ctrl+G, come nel disegno), un gruppo senza nome attorno
+alle schede con 24 px di margine, dietro la prima, poi scelto; `canvas.connect`
+collega due schede (D-19 (a)) e con tre o più è spento con «Scegli una o due
+schede.» (il prototipo lo mostra acceso con venti); Apri solo con una scheda di
+file o di pagina web; nomi e scorciatoie vengono dai comandi del catalogo; il
+colore vuoto mostra il segno «nessuno» del kit; a 700 px la barra sta sopra
+quando c'è posto. Il ritorno dopo un tratto di penna è provato solo con le
+regole pure.
 
 ## T52 · La banda di stato
 
