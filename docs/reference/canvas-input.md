@@ -127,6 +127,38 @@ sono quelli di `spatial/camera.ts` (`zoomAtPoint`, `fit`, `stepCamera`).
   di zoom e la finestra che perde il fuoco fermano l'inerzia e il volo; la
   lavagna chiusa li spegne.
 
+## La griglia e le guide
+
+La griglia è un punto ogni 8 unità della lavagna (`CANVAS_SNAP`, A-23): sta
+sotto le schede, segue la vista e cade sulle intersezioni. Sotto il 50% di
+zoom, dove i punti sarebbero più fitti di 4 px, non si disegna.
+
+- **`canvas.grid`** (Impostazioni) mostra la griglia; è accesa di serie.
+- **Ctrl+'** (`canvas.grid_toggle`, lo stesso tasto del disegno) la mostra o
+  la nasconde per questa lavagna. La scelta si ricorda con la vista della
+  lavagna, come il navigatore, e vale finché non si cambia.
+- **`canvas.snap`** (Impostazioni) accende l'aggancio. Spento, una scheda va
+  in unità intere, senza griglia e senza guide.
+- **Le guide.** Mentre si sposta una scheda, o si tira un angolo di una scheda
+  sola, il bordo e il centro della scheda si agganciano ai bordi e ai centri
+  delle altre schede in vista, entro 6 px sullo schermo. Spostando più schede
+  insieme conta il riquadro di tutte. Contano solo le schede in vista, anche
+  con duemila schede sulla lavagna.
+- **Spazi uguali.** Tre schede in fila (sovrapposte sull'altro asse): la scheda
+  che si muove si mette dopo, prima o in mezzo, con due spazi uguali a quello
+  fra le altre due; due trattini chiudono lo spazio.
+- **Precedenza.** Su ogni asse vince la guida più vicina; a parità, il bordo o
+  il centro prima dello spazio. Dove una guida vince, la griglia non si applica
+  su quell'asse; sull'altro, sì.
+- **Come si vedono.** Le guide sono linee sottili dell'accento sopra le schede,
+  in un solo elemento (`.canvas-guides`) che non prende il puntatore. Spariscono
+  al rilascio e con `Esc`.
+- **Alt** tenuto mentre si sposta o si tira spegne l'aggancio per quel gesto:
+  niente guide e niente griglia, la scheda va dove la porta il puntatore. Premuto
+  sul corpo di una scheda, Alt tira invece un filo ([I fili](#i-fili)).
+
+Spostare e ridimensionare restano un commit e un annulla, come prima.
+
 ## Il navigatore
 
 In basso a destra della vista, 168 × 120 px: la mappa dei gruppi (il filo) e
@@ -179,6 +211,7 @@ scrive, valgono quelli della sessione). `Esc` torna dov'eri, anche in un campo.
 | `canvas.bring_front`, `canvas.send_back` | `Ctrl+]`, `Ctrl+[` |
 | `canvas.fit`, `canvas.fit_selection` | `Maiusc+1`, `Ctrl+0`; `Maiusc+2` |
 | `canvas.zoom_in`, `canvas.zoom_out`, `canvas.zoom_reset` | `+`, `Ctrl+=`; `-`, `Ctrl+-`; `0` |
+| `canvas.grid_toggle` (mostra o nasconde la griglia di questa lavagna) | `Ctrl+'` |
 | `canvas.add.*`, `canvas.edit`, `canvas.open`, `canvas.open_url`, `canvas.edge.reverse`, `canvas.color.*`, `canvas.align.*`, `canvas.distribute_*` | nessuno |
 | `canvas.open_beside`, `canvas.open_viewer`, `canvas.web_preview`, `canvas.spread_pages` (solo su un PDF), `canvas.connect`, `canvas.trash_file` (il menu della scheda) | nessuno (`canvas.connect` anche con `C`, vedi sotto) |
 | `canvas.pen_menu`, `canvas.color_menu`, `canvas.align_menu`, `canvas.tips.none`, `.start`, `.end` (la riga delle opzioni) | nessuno |
@@ -290,11 +323,14 @@ la pelle ci divide le misure. Il cursore dice la direzione (`nwse-resize`,
 nessuna scheda ne ha.
 
 - **Tirare un angolo** sposta quell'angolo; l'opposto resta fermo. La misura
-  si aggancia a 8 px e non scende sotto 40 px (`CANVAS_MIN_SIZE`).
+  si aggancia alle guide ([La griglia e le guide](#la-griglia-e-le-guide)) o
+  alla griglia di 8 px, se `canvas.snap` è acceso; e non scende sotto 40 px
+  (`CANVAS_MIN_SIZE`).
 - **Maiusc** tiene le proporzioni di partenza: vince il lato che cresce di
   più, e l'aggancio non c'è. **Alt** tiene fermo il centro e cambia la misura
-  dai due lati. Tutti e due insieme valgono insieme. I tasti si leggono mentre
-  si tira: Alt su una maniglia non sposta la lavagna.
+  dai due lati, senza aggancio per quel gesto. Tutti e due insieme valgono
+  insieme. I tasti si leggono mentre si tira: Alt su una maniglia non sposta la
+  lavagna.
 - **Un clic** sulla maniglia, senza muovere più di 3 px, non cambia niente.
 - **Doppio clic** su una maniglia adatta la scheda al suo contenuto:
   una scheda di testo prende la larghezza del testo senza andare a capo,
