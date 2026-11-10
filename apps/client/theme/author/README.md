@@ -63,11 +63,11 @@ Un tema `theme-2` può ridisegnare per nome le icone della shell. Il manifest no
 
 Il tema non aggiunge icone: ridisegna quelle che ci sono. Un alias ridisegnato vale per il nome a cui punta (`folder` è `vault`). Un nome che oggi nessuno disegna non rifiuta il tema (un modulo può registrarlo più tardi), ma non si vede. Cambiato tema, o annullata l'anteprima, le icone già sullo schermo tornano a quelle del tema scelto.
 
-I 441 nomi che un tema può ridisegnare (`theme/author/icon-names.json`, tenuto uguale a `iconNames()` da `src/ui/icon-names.test.ts`):
+I 442 nomi che un tema può ridisegnare (`theme/author/icon-names.json`, tenuto uguale a `iconNames()` da `src/ui/icon-names.test.ts`):
 
 ```text
-activity arrow-left arrow-right backlinks backup bell canvas-connect caret-down check chevron close
-cloud collection command component copy cut dashboard draw-access draw-access-info
+activity arrow-left arrow-right backlinks backup bell canvas-connect canvas-text caret-down check
+chevron close cloud collection command component copy cut dashboard draw-access draw-access-info
 draw-access-warning draw-align draw-align-bottom draw-align-center draw-align-left draw-align-middle
 draw-align-right draw-align-top draw-anchor-end draw-anchor-middle draw-anchor-start draw-arrow
 draw-back draw-color-more draw-commands draw-cover draw-design draw-distribute-x draw-distribute-y

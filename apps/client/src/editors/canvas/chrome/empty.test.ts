@@ -277,4 +277,17 @@ describe("transferOf: che cosa diventa una scheda", () => {
     expect(data!.files[0]!.name).toBe("image.png");
     expect(data!.files[0]!.type).toBe("image/png");
   });
+
+  it("le schede copiate da una lavagna arrivano col loro tipo, anche col prefisso web degli appunti asincroni", async () => {
+    const shape = JSON.stringify({ version: 1, nodes: [], edges: [] });
+    const entry = (types: string[]) => ({
+      types,
+      getType: async (type: string) => new Blob([type === "text/plain" ? "- testo" : shape]),
+    }) as unknown as ClipboardEntry;
+    const web = await transferOf([entry(["text/plain", "web application/x-fub-canvas+json"])]);
+    expect(web?.getData("application/x-fub-canvas+json")).toBe(shape);
+    expect(web?.getData("text/plain")).toBe("- testo");
+    const plain = await transferOf([entry(["application/x-fub-canvas+json"])]);
+    expect(plain?.getData("application/x-fub-canvas+json")).toBe(shape);
+  });
 });

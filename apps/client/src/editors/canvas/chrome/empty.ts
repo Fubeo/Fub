@@ -19,6 +19,7 @@
 import { textButton } from "../../../kit/button";
 import { t } from "../../../i18n/strings";
 import { readClipboard, type ClipboardEntry } from "../../../platform/clipboard";
+import { CANVAS_CLIPBOARD_TYPE } from "../clipboard";
 import { openLifetime, type Lifetime } from "../../../ui/lifetime";
 import { notify } from "../../../ui/notify";
 import { INK_KEY } from "../ink-record";
@@ -70,8 +71,16 @@ function hasStrokes(ink: unknown): boolean {
 export async function transferOf(entries: readonly ClipboardEntry[]): Promise<DataTransfer | null> {
   let text: string | null = null;
   let html: string | null = null;
+  let cards: string | null = null;
   const images: File[] = [];
+  const web = `web ${CANVAS_CLIPBOARD_TYPE}`;
   for (const entry of entries) {
+    // Le schede copiate da una lavagna (T68): col tipo loro, o col prefisso
+    // `web ` degli appunti asincroni, che è il solo modo di leggerle qui.
+    if (cards === null) {
+      const type = entry.types.includes(CANVAS_CLIPBOARD_TYPE) ? CANVAS_CLIPBOARD_TYPE : entry.types.includes(web) ? web : null;
+      if (type !== null) cards = await readText(entry, type);
+    }
     if (text === null && entry.types.includes("text/plain")) text = await readText(entry, "text/plain");
     if (html === null && entry.types.includes("text/html")) html = await readText(entry, "text/html");
     const image = entry.types.find((type) => type.startsWith("image/"));
@@ -81,8 +90,9 @@ export async function transferOf(entries: readonly ClipboardEntry[]): Promise<Da
     }
   }
   const plain = text ?? "";
-  if (plain === "" && images.length === 0) return null;
+  if (plain === "" && images.length === 0 && !cards) return null;
   const data = new DataTransfer();
+  if (cards) data.setData(CANVAS_CLIPBOARD_TYPE, cards);
   if (plain !== "") data.setData("text/plain", plain);
   if (html) data.setData("text/html", html);
   for (const file of images) data.items.add(file);

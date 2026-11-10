@@ -3180,19 +3180,11 @@ export class CanvasEngine {
     );
   }
 
-  /** «Incolla» del menu: gli appunti letti come li legge la lavagna vuota, più le schede di Fub se ci sono. */
+  /** «Incolla» del menu: gli appunti letti come li legge la lavagna vuota (`transferOf`, schede di Fub comprese). */
   #pasteFromMenu(): void {
     if (this.#readOnly || this.#destroyed) return;
-    const web = `web ${CANVAS_CLIPBOARD_TYPE}`;
     readClipboard().then(async (entries) => {
-      let data = await transferOf(entries);
-      const entry = entries.find((one) => one.types.includes(CANVAS_CLIPBOARD_TYPE) || one.types.includes(web));
-      if (entry) {
-        const type = entry.types.includes(CANVAS_CLIPBOARD_TYPE) ? CANVAS_CLIPBOARD_TYPE : web;
-        const raw = await (await entry.getType(type)).text();
-        data ??= new DataTransfer();
-        data.setData(CANVAS_CLIPBOARD_TYPE, raw);
-      }
+      const data = await transferOf(entries);
       if (this.#destroyed) return;
       if (data === null) this.#showNotice(t("canvas.blank.paste_none"));
       else this.#receive(data);
