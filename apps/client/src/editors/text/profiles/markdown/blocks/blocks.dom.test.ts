@@ -18,6 +18,7 @@ import { setContentColor } from "../color";
 import { blockModel } from "./model";
 import { closeContextMenu } from "../../../../../ui/menu";
 import { openSlashMenu, slashMenuExtension, type SlashMenuSource } from "../slash";
+import { propertiesDisplay } from "../../../properties-display";
 
 // I Blocchi nell'editor vero: maniglie, menu, selezione di blocchi, tasti.
 
@@ -276,5 +277,86 @@ describe("il menu della maniglia", () => {
     expect(colors[0]!.items.map((item) => item.label)).toContain("Arancione");
     items.find((item) => item.label === "Duplica")!.run!();
     expect(view.state.doc.toString()).toBe("Uno\n\nUno\n\nDue");
+  });
+});
+
+describe("il trascinamento solleva soltanto il blocco", () => {
+  /// Trascina la maniglia del blocco `index` quanto basta a sollevarlo, e dà
+  /// la parte dell'immagine sollevata che contiene le righe clonate.
+  function lifted(view: EditorView, index: number): HTMLElement {
+    const handles = view.plugin(handlesView)!;
+    const block = view.state.field(blockModel).blocks[index]!;
+    handles.shown = { from: block.from, depth: block.depth };
+    const grip = view.dom.querySelector<HTMLElement>(".cm-fub-block-grip")!;
+    grip.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, button: 0, pointerId: 1, clientX: 0, clientY: 0 }));
+    grip.dispatchEvent(new PointerEvent("pointermove", { bubbles: true, pointerId: 1, clientX: 0, clientY: 40 }));
+    const el = view.scrollDOM.querySelector<HTMLElement>(".cm-fub-block-lift");
+    expect(el, "il blocco si solleva").not.toBeNull();
+    return el!.firstElementChild as HTMLElement;
+  }
+  /// Il testo di ogni riga o widget che l'immagine porta.
+  const rows = (inner: HTMLElement) => Array.from(inner.children, (row) => row.textContent?.trim());
+
+  it("il primo blocco di una nota senza frontmatter non porta la testata", () => {
+    const view = mount("Uno\n\nDue", 0);
+    expect(view.contentDOM.querySelector(".cm-fub-page")).not.toBeNull();
+    const inner = lifted(view, 0);
+    expect(inner.querySelector(".cm-fub-page"), "la testata resta ferma").toBeNull();
+    expect(rows(inner)).toEqual(["Uno"]);
+  });
+
+  it("il frontmatter, primo blocco di una nota con frontmatter, non porta la testata", () => {
+    const doc = "---\nicon: 🌿\n---\nUno\n\nDue";
+    const view = mount(doc, doc.indexOf("Due"), undefined, propertiesDisplay.of("visible"));
+    const inner = lifted(view, 0);
+    expect(inner.querySelector(".cm-fub-page"), "la testata resta ferma").toBeNull();
+    // Le proprietà sono il blocco del frontmatter: salgono con lui.
+    expect(inner.querySelector(".cm-fub-properties")).not.toBeNull();
+    expect(rows(inner).join("|")).not.toContain("Uno");
+  });
+
+  it("col frontmatter scritto come righe, il primo blocco non porta la testata", () => {
+    const view = mount("---\nicon: 🌿\n---\nUno\n\nDue", 0);
+    const inner = lifted(view, 0);
+    expect(inner.querySelector(".cm-fub-page"), "la testata resta ferma").toBeNull();
+    expect(rows(inner).join("|")).not.toContain("Uno");
+  });
+
+  it("il primo blocco di testo dopo il frontmatter non porta la testata né le proprietà", () => {
+    const doc = "---\nicon: 🌿\n---\nUno\n\nDue";
+    const view = mount(doc, doc.indexOf("Due"), undefined, propertiesDisplay.of("visible"));
+    const inner = lifted(view, 1);
+    expect(inner.querySelector(".cm-fub-page"), "la testata resta ferma").toBeNull();
+    expect(inner.querySelector(".cm-fub-properties"), "le proprietà restano ferme").toBeNull();
+    expect(rows(inner)).toEqual(["Uno"]);
+  });
+
+  it("ultimo blocco, voce annidata, codice, tabella e riquadro portano soltanto le loro righe", () => {
+    const last = mount("Uno\n\nDue", 6);
+    expect(rows(lifted(last, 1))).toEqual(["Due"]);
+
+    const nested = mount("- uno\n  - due\n- tre", 0);
+    const due = lifted(nested, 1);
+    expect(due.querySelector(".cm-fub-page")).toBeNull();
+    expect(rows(due).join("|")).toContain("due");
+    expect(rows(due).join("|")).not.toContain("tre");
+
+    const code = mount("Prima\n\n```\ncodice\n```\n\nDopo", 0);
+    const block = code.state.field(blockModel).blocks.findIndex((b) => b.kind === "code");
+    const fenced = lifted(code, block);
+    expect(fenced.querySelector(".cm-fub-page")).toBeNull();
+    expect(rows(fenced).join("|")).toContain("codice");
+    expect(rows(fenced).join("|")).not.toContain("Dopo");
+
+    const table = mount("| a | b |\n| - | - |\n| 1 | 2 |\n\nDopo", 0);
+    const grid = lifted(table, 0);
+    expect(grid.querySelector(".cm-fub-page")).toBeNull();
+    expect(rows(grid).join("|")).not.toContain("Dopo");
+
+    const callout = mount("> [!note] Titolo\n> testo\n\nDopo", 0);
+    const box = lifted(callout, 0);
+    expect(box.querySelector(".cm-fub-page")).toBeNull();
+    expect(rows(box).join("|")).toContain("testo");
+    expect(rows(box).join("|")).not.toContain("Dopo");
   });
 });

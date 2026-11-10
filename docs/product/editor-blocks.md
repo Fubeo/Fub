@@ -89,9 +89,10 @@ delle righe prima che CodeMirror le riscriva e le anima dal posto vecchio con
 `moto`, soltanto con `transform` e `opacity`.
 
 - **Sollevare e posare.** Trascinato, il blocco sale (scala 1,015 e ombra) e i
-  fratelli fra il suo posto e la linea si scostano. Al rilascio ognuno scivola
-  al suo posto e il blocco atterra dall'immagine sollevata con un piccolo
-  rimbalzo e un alone d'accento; Esc lo riporta indietro allo stesso modo.
+  fratelli fra il suo posto e la linea si scostano. Sale soltanto il blocco: la
+  testata della pagina e i widget degli altri blocchi restano fermi. Al rilascio
+  ognuno scivola al suo posto e il blocco atterra dall'immagine sollevata con un
+  piccolo rimbalzo e un alone d'accento; Esc lo riporta indietro allo stesso modo.
 - **Scambiare.** Mod+Shift+↑/↓ fa scivolare le righe dal posto vecchio.
 - **Trasformare.** Il testo cresce o cala sul posto con la scala dei
   caratteri, il segno nuovo entra con un rimbalzo e i blocchi sotto scivolano.
