@@ -2456,7 +2456,8 @@ descrizioni, l'ordine; le disegna `panels/settings.ts`, niente CSS nuovo.
 Casi limite: la feature `lavagna` spenta (`--no-default-features`); un
 valore scritto a mano che non è fra le scelte (vale quello di serie, e il
 file non si riscrive); `canvas.drop_folder_path` vuoto, con `..` o dentro
-`.fub/` (vale `Allegati`, e la riga lo dice); il cambio da un'altra
+`.fub/` (vale `Allegati`; il testo approvato della riga non cambia, la
+notifica di T34 dice dove sono andati i file); il cambio da un'altra
 finestra; l'interfaccia in inglese; «Il tasto della penna» su un computer
 senza penna (la riga c'è, non fa niente).
 Fatto quando: `cargo test -p fub-features` e `cargo test -p fub-host
@@ -2487,8 +2488,11 @@ Cosa fare:
   `Corsi/Statistica/Lezioni.canvas`); `folder` → `canvas.drop_folder_path`
   dalla radice del vault.
 - Il percorso passa dalla stessa pulizia dei percorsi degli allegati
-  (`sanitizeFileName` per ogni pezzo, niente `..`, niente `.fub/`); un
-  valore che non vale usa la cartella delle note, e la notifica lo dice.
+  (`sanitizeFileName` per ogni pezzo, niente `..`, niente `.fub/`). Lo
+  specchio di T33 dà già `Allegati` per un valore vuoto, con `..`,
+  assoluto o dentro `.fub/` (scelta del 2026-11-10, DECISIONS); se la
+  pulizia svuota comunque il percorso, si usa la cartella delle note. La
+  notifica dice dove sono andati i file.
 - La prima notifica («Copiati in {folder}») e «Cambia cartella» aprono
   `canvas.drop_folder` (`revealSetting`), non più
   `files.attachment-folder`.

@@ -59,6 +59,17 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-10 · n6 · T33: (1) `canvas.toolbar` si registra in
+  `panels/settings.ts` come `draw.toolbar`, con le caselle del prototipo
+  approvato (il piano diceva che il pannello disegna le righe da sé, ma per
+  le liste serve la registrazione). (2) Un `canvas.drop_folder_path` che
+  non vale (vuoto, `..`, assoluto, dentro `.fub/`) vale `Allegati`, il
+  valore di serie della chiave; il testo approvato della riga non cambia,
+  e a dire dove sono andati i file ci pensa la notifica di T34. T34
+  aggiornato: la cartella delle note solo se la pulizia svuota il percorso.
+  Perché: fedeltà al prototipo approvato, e una regola sola per il valore
+  che non vale (quella di ogni impostazione: vale quello di serie).
+
 - 2026-11-10 · n6 · T16: se il file torna o la scheda cambia mentre
   «Ritrova…» è aperto, la scelta si scarta. Perché: regola di CLAUDE.md,
   un risultato vecchio non sovrascrive lo stato nuovo; il file tornato
