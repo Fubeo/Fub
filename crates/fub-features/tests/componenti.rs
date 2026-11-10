@@ -9,6 +9,7 @@
 use std::collections::BTreeSet;
 
 use fub_abi::Delivery;
+#[cfg(feature = "lavagna")]
 use fub_componenti::ErroreMappa;
 use fub_features::componenti::{self, Riga, NUCLEO, SOLO_DELLA_MAPPA};
 
@@ -208,10 +209,12 @@ fn studio_accende_la_penna_e_i_motori() {
     let studio = componenti::profilo("studio").expect("il profilo «Studio»");
     let (stato, _) = mappa.applica_profilo(&Default::default(), &studio.profilo());
     let attivi = mappa.attivi(&stato);
-    for id in ["fub.penna", "fub.lavagna", "fub.pdf"] {
+    for id in ["fub.penna", "fub.pdf"] {
         assert!(attivi.contains(id), "«{id}» con «Studio»");
     }
-    // Grafo e correttore sono righe solo nelle build che li compilano.
+    // Lavagna, grafo e correttore sono righe solo nelle build che li compilano.
+    #[cfg(feature = "lavagna")]
+    assert!(attivi.contains("fub.lavagna"));
     #[cfg(feature = "graph")]
     assert!(attivi.contains("fub.graph"));
     #[cfg(feature = "proof")]
@@ -288,6 +291,7 @@ fn i_gruppi_sono_quelli_con_almeno_una_riga() {
 fn le_righe_con_un_editor_dicono_quale() {
     let attese: &[(&str, &[&str])] = &[
         ("fub.pdf", &["editors/media"]),
+        #[cfg(feature = "lavagna")]
         ("fub.lavagna", &["editors/canvas"]),
         #[cfg(feature = "rich")]
         ("fub.rich", &["editors/rich"]),
