@@ -426,7 +426,8 @@ byte salvati, non la sessione, e il rapporto conta ciò che il PDF non porta.
 
 ## Dove si trova
 
-- `apps/client/src/editors/grid/engine.ts`
+- `apps/client/src/editors/grid/engine.ts`, con `engine-geometry.ts` (misure e
+  gesti) ed `engine-host.ts` (l'host, le opzioni e la sessione dei byte)
 - `apps/client/src/editors/grid/workbook.ts`
 - `apps/client/src/editors/grid/objects.ts`
 - `apps/client/src/editors/grid/comment-card.ts`
