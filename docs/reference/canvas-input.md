@@ -2,8 +2,8 @@
 
 > **Ambito:** come la tela della lavagna prende la tastiera, il puntatore e
 > la rotella: entrare in una scheda e uscirne, la rotella, il catalogo dei
-> comandi e i loro tasti, i fili, la lavagna vuota, la colonna degli
-> strumenti, la riga delle opzioni, la banda di stato e l'ispettore.
+> comandi e i loro tasti, i fili, le maniglie, la lavagna vuota, la colonna
+> degli strumenti, la riga delle opzioni, la banda di stato e l'ispettore.
 > **Fonti autorevoli:** `apps/client/src/editors/canvas/engine.ts`
 > (`#keydown`, `#wheel`, le schede attive) e le prove in
 > `apps/client/src/editors/canvas/engine.test.ts` e
@@ -193,6 +193,45 @@ lati è D6, v2).
   `remove-edge` che dice `at`, e `Ctrl+Z` lo rimette al suo posto.
 - In sola lettura non ci sono punti né prese, `Alt` non collega, e i fili si
   scelgono per leggerli. La penna scrive e non collega mai (D3 è v2).
+
+## Le maniglie
+
+La scheda scelta ha quattro maniglie agli angoli (`.canvas-resize` con
+`data-corner`): un quadratino di 10 px col filo d'accento, dentro un'area di
+presa di 20 px centrata sull'angolo. Le due misure restano quelle sullo
+schermo a ogni zoom: la tela scrive lo zoom in `--canvas-zoom` sulla scena e
+la pelle ci divide le misure. Il cursore dice la direzione (`nwse-resize`,
+`nesw-resize`). Le schede non scelte non hanno maniglie; in sola lettura
+nessuna scheda ne ha.
+
+- **Tirare un angolo** sposta quell'angolo; l'opposto resta fermo. La misura
+  si aggancia a 8 px e non scende sotto 40 px (`CANVAS_MIN_SIZE`).
+- **Maiusc** tiene le proporzioni di partenza: vince il lato che cresce di
+  più, e l'aggancio non c'è. **Alt** tiene fermo il centro e cambia la misura
+  dai due lati. Tutti e due insieme valgono insieme. I tasti si leggono mentre
+  si tira: Alt su una maniglia non sposta la lavagna.
+- **Un clic** sulla maniglia, senza muovere più di 3 px, non cambia niente.
+- **Doppio clic** su una maniglia adatta la scheda al suo contenuto:
+  una scheda di testo prende la larghezza del testo senza andare a capo,
+  fino a 480 px, e l'altezza che allora le serve, testata compresa (per
+  eccesso, sulla griglia di 8 px); un'immagine o un PDF tengono la larghezza
+  e prendono le proporzioni del contenuto disegnato; le altre non cambiano.
+  L'angolo in alto a sinistra resta.
+- **Più schede scelte** hanno una cornice tratteggiata attorno a tutte
+  (`.canvas-selection-frame`), con le sue quattro maniglie; quelle delle
+  schede si nascondono. Tirarla scala posizioni e misure di tutte, Maiusc e
+  Alt compresi, senza aggancio e senza che una scheda scenda sotto 40 px; il
+  doppio clic adatta ognuna.
+- **Una scheda piccolissima sullo schermo** (un lato sotto 24 px) tiene solo la
+  maniglia in basso a destra (`data-handles="one"`), perché le quattro si
+  coprirebbero; così anche la cornice.
+- **Il dito** prende un angolo della scheda scelta, o della cornice, entro
+  22 px sullo schermo: un'area di 44 px. Lo decide il tipo di puntatore
+  (`touch`); un pulsante sotto il dito resta suo.
+
+Ogni ridimensionamento, e ogni doppio clic, è un commit e un annulla.
+L'inchiostro attaccato a una scheda sta nella scheda e la segue: il file non
+cambia, cambia la resa ([L'inchiostro della lavagna](canvas-ink.md)).
 
 ## La lavagna vuota
 

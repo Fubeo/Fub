@@ -94,7 +94,8 @@ Le misure di nascita non si agganciano alla griglia di 8 px: si arrotondano
 all'intero più vicino, e nessun lato scende sotto 40 px, la misura minima
 della tela. Così un'immagine 16:9 nasce 480×270, esatta. Un'immagine molto
 stretta, come 1×4000, ha il lato corto a 40 px: lì la proporzione non si
-tiene. Ridimensionare a mano una scheda, invece, aggancia a 8 px come prima.
+tiene. Ridimensionare a mano una scheda, invece, aggancia a 8 px come prima
+(salvo con Maiusc, che tiene le proporzioni).
 
 Quando si lasciano insieme più schede, si dispongono in griglia: `ceil(sqrt(n))`
 colonne, riempite per righe nell'ordine del nome del file. Le posizioni si
@@ -275,7 +276,8 @@ La resa è a chiavi: la tela tiene una mappa id → scheda sulla scena, con
 l'elemento `.canvas-node`, il corpo e ciò che lo tiene vivo. A ogni resa:
 
 - chi c'è già si aggiorna sul posto: posizione, misura, colore, titolo,
-  scelta, la maniglia per ridimensionare (non in sola lettura);
+  scelta, le quattro maniglie per ridimensionare (non in sola lettura; i
+  gesti sono in [I tasti e i gesti](canvas-input.md#le-maniglie));
 - chi è nuovo nasce, chi non c'è più si distrugge;
 - l'ordine sulla scena segue il file (la prima sotto, l'ultima sopra), e una
   scheda si sposta nel DOM solo se è fuori posto;
