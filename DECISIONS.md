@@ -59,6 +59,13 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-10 · n6 · T30 integrato: l'impronta calcolata da «lo stesso
+  contenuto» si registra con un append fuori dal lucchetto del workspace,
+  dopo aver riosservato il file e riletto la coda, invece di rientrare
+  nella custodia come diceva il piano. · Perché: è la stessa disciplina
+  che `EntryStore::store` già segue (0067) per un dato ricostruibile; il
+  caso peggiore è un'impronta persa o una voce vecchia, che la prossima
+  scansione rifà, mai una risposta sbagliata (i byte decidono sempre).
 - 2026-11-10 · n6 · T33 integrato: il campo «Strumenti della colonna» usa
   le caselle a chip della skin (come `draw.toolbar`), non le caselle
   grigie del prototipo, e a valore vuoto mostra accesi i sette strumenti di

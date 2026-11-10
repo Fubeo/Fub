@@ -2316,7 +2316,18 @@ cestino escluso, il limite, il file cambiato a metà senza impronta
 registrata, l'errore di lettura saltato; i test di `entries.rs` passano.
 Prova: scripts/check.sh --rapido; cargo test -p fub-kernel; cargo test -p
 fub-host
-Stato: [ ] da fare
+Stato: [x] fatto (2026-11-10). Differenze: toccati anche
+`crates/fub-kernel/src/workspace.rs` (`PreparedSameContent`: il vault si
+prende sotto la custodia e il confronto si fa fuori), `crates/fub-host/tests/same_content.rs`
+e l'elenco di `crates/fub-abi/tests/serialize_non_riscrive.rs` (in
+`entries.rs` le chiamate a `serialize` sono due: la nuova
+`record_fingerprint` appende un solo `upsert`). In più di
+`Vault::same_content` c'è `Vault::same_content_bytes`, per chi ha già i
+byte in memoria (l'host). L'impronta si registra con l'append senza
+lucchetto, come già fa `EntryStore::store` (0067), dopo aver riletto il
+file e la coda: un record perso o una voce vecchia costano una rilettura.
+Una tabella con un record di un'altra versione, rotta o assente dà «non
+so».
 
 ## T31 · Lo stesso contenuto: `resource_write`
 
