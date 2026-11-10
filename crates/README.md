@@ -2,9 +2,9 @@
 
 I 25 crate in gruppi; la descrizione è il campo `description` del `Cargo.toml`
 di ciascuno. La mappa con aree, percorsi e prove è in
-[`docs/map/repo.md`](../../docs/map/repo.md); il grafo delle dipendenze (con i
+[`docs/map/repo.md`](../docs/map/repo.md); il grafo delle dipendenze (con i
 marcatori letti dal test `dependency_invariant`) in
-[`docs/architecture/overview.md`](../../docs/architecture/overview.md).
+[`docs/architecture/overview.md`](../docs/architecture/overview.md).
 Le frecce delle dipendenze puntano sempre verso `fub-abi`.
 
 ## Contratto e nucleo
@@ -12,13 +12,13 @@ Le frecce delle dipendenze puntano sempre verso `fub-abi`.
 - `fub-abi` — il contratto: modello documento comune e trait di estensione,
   definito una volta sola, senza markdown, Tauri o WASM.
 - `fub-kernel` — il nucleo agnostico: vault, grafo dei link, registro dei
-  provider, event bus; niente markdown, WASM o Tauri.
+  provider, bus degli eventi; niente markdown, WASM o Tauri.
 - `fub-host` — l'host: registro delle feature, sessione del vault aperto e
   watcher dietro un trait; niente Tauri.
 - `fub-app` — il binario Tauri v2: comandi ed eventi IPC, finestre, dialoghi.
 - `fub-componenti` — il risolutore dei componenti: cosa è acceso, chi lo
   richiede, cosa non serve più; puro, senza I/O.
-- `fub-motori` — lo strato dei motori: costruzione alla prima richiesta, pool
+- `fub-motori` — lo strato dei motori: costruzione alla prima richiesta, gruppo
   di thread e budget delle cache, senza nominare alcun motore.
 
 ## Formati
@@ -35,19 +35,20 @@ Le frecce delle dipendenze puntano sempre verso `fub-abi`.
 
 - `fub-features` — le feature ufficiali come implementazioni di trait native.
 - `fub-importers` — import/export ufficiali (parser locali e connettori API).
-- `fub-services` — backend self-hostable di account, sync e publish.
+- `fub-services` — backend da ospitare in proprio per account, sincronizzazione
+  e pubblicazione.
 - `fub-ink` — nucleo condiviso dell'inchiostro: campioni, pressione,
   stabilizzatore; puro, niente DOM.
 - `fub-scene` — lettura delle scene FubDraw e diagnostica; puro.
-- `fub-canvas-core` — nucleo della lavagna: modello JSON Canvas 1.0,
-  unknown-preserving; compila per `wasm32`.
+- `fub-canvas-core` — nucleo della lavagna: modello JSON Canvas 1.0 con i
+  campi sconosciuti conservati; compila per `wasm32-unknown-unknown`.
 - `fub-canvas-wasm` — la facciata WebAssembly del nucleo lavagna per la WebView.
-- `fub-live` — sessione di disegno live PC–tablet: protocollo, pairing, TLS.
+- `fub-live` — sessione di disegno live PC–tablet: protocollo, abbinamento, TLS.
 
 ## Composizione e binari
 
 - `fub-sdk` — API comode per scrivere provider, con `MemoryHost` per le prove.
-- `fub-wasm-host` — il runtime WASM per i plugin di terzi (unico crate che
-  nomina Wasmtime).
+- `fub-wasm-host` — il runtime WASM per i plugin di terzi (l'unico crate che
+  dipende da Wasmtime).
 - `fub-cli` — automazione da riga di comando e server MCP, sopra `fub-host`.
 - `fub-testkit` — banco di integrazione host/kernel, solo dev-dependency.

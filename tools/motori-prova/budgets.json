@@ -39,7 +39,7 @@
     }
   },
   "obiettivi": {
-    "macchina": "motori-2026-10-31-linux-ryzen",
+    "macchina": "2026-10-31-motori-linux-ryzen",
     "vettori": {
       "Foglio.svg": {
         "prima_apertura_ms": 43,

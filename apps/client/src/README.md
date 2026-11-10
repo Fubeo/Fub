@@ -37,13 +37,15 @@ Una riga per cartella di primo livello. La mappa completa con aree e prove è in
 - `avvio/` — la logica TypeScript dello strato d'avvio (vedi sotto).
 - `scrittura/` — Scrittura, il nucleo del testo ricco (ProseMirror).
 - `perf/` — le sonde delle prestazioni (N0).
-- `entrypoints/` — gli ingressi: desktop e mobile.
+- `entrypoints/` — l'ingresso mobile: `mobile-main.ts` (lo script di
+  `mobile.html`) e `mobile.ts` (il montaggio); il desktop entra da `main.ts`.
 - `spatial/` — la camera 2D del mondo (matematica pura, niente DOM).
 
 ## File in radice
 
 `main.ts` (entry Vite), `desktop-shell.ts` (montaggio della shell),
-`test-setup.ts`, i test e2e `*.e2e.test.ts`.
+`test-setup.ts`, `redraw.test.ts` (il banco del ridisegno), i test e2e
+`*.e2e.test.ts`.
 
 ## Le coppie che confondono
 
@@ -56,7 +58,7 @@ Una riga per cartella di primo livello. La mappa completa con aree e prove è in
   (vista ProseMirror, marche, font); `editors/rich/` è l'implementazione
   dell'editor ricco/documentale.
 - `spatial/` vs `editors/spatial/`: `spatial/camera.ts` è la camera 2D pura;
-  `editors/spatial/` è l'editor della lavagna FubDraw.
+  `editors/spatial/` è l'editor dei disegni FubDraw (file `.svg`).
 - `src/avvio/` vs `public/avvio/`: `public/avvio/` è lo strato statico caricato
   in `<head>` prima di ogni JS (valido anche senza JS); `src/avvio/` è la
   logica che a runtime consegna quello strato all'app.

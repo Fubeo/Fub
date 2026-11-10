@@ -12,7 +12,8 @@ specifici); i comandi si lanciano dalla radice del repo.
   `node tools/librerie-runtime/prova.mjs --out DIR`.
 - `varco-wasm/` — «il varco»: compila il mondo `plugin-world` di
   `crates/fub-abi/wit/fub/abi.wit` per `wasm32-unknown-unknown`; se compila, il
-  contratto attraversa il confine. Eseguibile solo dalla CI.
+  contratto attraversa il confine. La compila la CI e, se c'è il bersaglio,
+  anche `scripts/check.sh`.
 - `ink-wasm-banco/` — `fub-ink` dietro interfaccia C per misurare le
   prestazioni in WASM; lo carica `apps/client/src/ink/wasm.bench.ts`, non la
   shell.
@@ -22,5 +23,5 @@ specifici); i comandi si lanciano dalla radice del repo.
   `verify-upstream` / `gate` per singolo motore.
 - `fubdraw-inventory.mjs` — inventario della chiusura di FubDraw (ADR 0231):
   segue gli import dai tre ingressi Vite e lista i moduli raggiunti;
-  `node tools/fubdraw-inventory.mjs` (con `--orfani` elenca i moduli morti di
-  `editors/spatial`).
+  `node tools/fubdraw-inventory.mjs` (con `--orfani` elenca i moduli di
+  `editors/spatial` che l'app non raggiunge più: `morto` o `solo-test`).
