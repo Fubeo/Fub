@@ -413,14 +413,15 @@ function clampZoom(zoom: number): number {
   return Math.min(ZOOM_LIMITS.max, Math.max(ZOOM_LIMITS.min, zoom));
 }
 
-/**
- * Il rettangolo di `node` e `view` si sovrappongono davvero: una scheda che
- * tocca la vista solo sul bordo è fuori.
- */
+/** Le due camere sono la stessa. */
 function sameViewport(a: Viewport, b: Viewport): boolean {
   return a.x === b.x && a.y === b.y && a.zoom === b.zoom;
 }
 
+/**
+ * Il rettangolo di `node` e `view` si sovrappongono davvero: una scheda che
+ * tocca la vista solo sul bordo è fuori.
+ */
 function overlaps(node: Rect, view: Rect): boolean {
   return node.x < view.x + view.width && node.x + node.width > view.x
     && node.y < view.y + view.height && node.y + node.height > view.y;
