@@ -548,8 +548,7 @@ ordine e su che cosa. `Ctrl+/` apre la ricerca dei comandi
 (`chrome/command-search.ts`) in un popover, con `rankCommands` e l'aspetto del
 disegno: un comando spento si vede col perché; i cinque usati da poco in quella
 lavagna stanno in cima (stato di vista `canvas.commands:<documento>`; se non si
-scrive, valgono quelli della sessione). Da una scheda in scrittura `Esc` torna
-nel campo.
+scrive, valgono quelli della sessione). `Esc` torna dov'eri, anche in un campo.
 
 | Comandi | Tasti |
 |---|---|
