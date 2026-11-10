@@ -6,7 +6,9 @@ to the right sources without wasting context.
 
 Machine-local facts (toolchain paths, env vars, services to keep up) live in
 `CLAUDE_DEVICE.md` at the repo root: ignored by git, one per machine, never
-committed. Read it before building or testing.
+committed. Read it before building, testing or starting anything. If it is
+missing, the machine has no special instructions: don't create it without
+asking.
 
 @CLAUDE_DEVICE.md
 
@@ -43,25 +45,31 @@ that was needed or an unverified architectural change.
   against `main`; pushing and opening the PR are part of the work. **Merging
   a PR needs the maintainer's explicit OK.** If `gh` isn't authenticated,
   ask.
-- No subagents or parallel sessions unless the maintainer allows them; then
-  they are read-only (the plan workflow's coders are the standing exception).
+- No subagents, workflows or parallel sessions unless the maintainer allows them
+  for that task; then they are read-only (the plan workflow's coders are the
+  standing exception).
 - Work only inside the repository; don't install system packages or change
   system settings — give the exact command and why.
 - Tests and probes never use the maintainer's real vault or files: use the
   bench fixtures and temporary directories.
 - No destructive commands: no `rm -rf` outside directories you created, no
   `git reset --hard`, no `git clean`, no `git push --force` on branches that
-  are not yours.
+  are not yours. Keep an eye on disk space.
 - Never send personal data (an email address, a token) to an external service,
   not even in a header.
 - **Plans.** A plan is `PLAN.md` on its plan branch (see "Plan workflow"):
-  follow it to the letter; when plan and code disagree, the code wins — write
-  it down.
+  follow it to the letter and re-read it at the start of every session. When
+  plan and code disagree, the code wins — write it down. Status lives in the
+  plan's `Stato:` lines, decisions in `DECISIONS.md`.
 - **Final report** in Italian, readable on its own: behaviour, where it lives
-  (paths, branch, PR), checks run and not run, residual risks, next command.
-  Don't present assumptions as verified.
+  (paths, branch, PR), checks run and not run (and why), residual risks, next
+  command. Don't present assumptions as verified.
 
 ## Before changing anything
+
+First, check the branch, the working tree and the changes already there: tell
+your diff apart from work that isn't yours, and don't discard, rewrite or absorb
+unrelated work.
 
 Read [`CONTRIBUTING.md`](CONTRIBUTING.md) and [`docs/README.md`](docs/README.md);
 for paths, owners and "where is this defined" start from
@@ -69,8 +77,8 @@ for paths, owners and "where is this defined" start from
 (cross-cutting:
 [`docs/architecture/components-and-boundaries.md`](docs/architecture/components-and-boundaries.md);
 persistent contracts: [`docs/reference/`](docs/reference/)). Read an ADR only
-for the reason behind a choice; check in code that the docs still describe the
-present.
+for the reason behind a choice, and status pages or TODOs only when the task is
+about that work. Check in code that the docs still describe the present.
 
 Before implementing, answer:
 
@@ -81,10 +89,18 @@ Before implementing, answer:
 - which consumers and boundaries can regress?
 - what is the cheapest proof that fails without the change and passes with it?
 
-When two sources disagree, the hierarchy in [`docs/README.md`](docs/README.md)
-decides. A status page, a TODO or a candidate API is not current architecture;
-planning files (`PLAN.md` on `piano/*`, `piano_feature.md`) describe work in
-progress, not architecture.
+Keep only the context that can change the conclusion; stop exploring once the
+evidence is enough for the next step, and resume as soon as a material doubt
+appears.
+
+When sources disagree, the higher one wins: code and executable tests; WIT,
+persistent schemas and serialized formats; architecture pages and canonical
+references; ADRs, for their reasons only; active status pages and TODOs; Git
+history ([`docs/README.md`](docs/README.md)). A status page, a TODO or a
+candidate API is not current architecture: don't promote a candidate shape into
+`fub-abi`, WIT or IPC. Contracts are born when real cases, compatibility, limits
+and fallbacks have proved them. Planning files (`PLAN.md` on `piano/*`,
+`piano_feature.md`) describe work in progress, not architecture.
 
 ## Commands
 
@@ -94,33 +110,52 @@ scripts/check.sh              # all Linux CI checks, benches excluded
 scripts/check.sh --banchi     # plus the frontend benches
 ```
 
-A `SALTA` line is not a proof; the report says so. `npm run typecheck` is the
-TS check that counts; every other command is in
+One line per step; full logs go to `target/check/`. A `SALTA` line is not a
+proof; the report says so. While iterating, use the narrowest check:
+
+```bash
+cargo test -p <crate>                 # one crate
+cargo test -p <crate> --test <file>   # one integration test file
+cargo test -p <crate> --lib <path>::  # unit tests under one module path
+npx vitest run <file>                 # from apps/client/: one test file
+npx vitest run -t "<name>"            # from apps/client/: tests matching a name
+```
+
+`npm run typecheck` is the TS check that counts; `npm run build` does not
+type-check. Theme derivatives must regenerate byte for byte:
+`npm run theme:generate && npm run theme:verify`. Every other command is in
 [`CONTRIBUTING.md`](CONTRIBUTING.md).
 
 ## Generated files
 
-Never by hand; each generated file's header names the exact command. Mirrors
-and fixtures regenerate with `UPDATE_MIRROR=1`; visual baselines only from the
-Linux runner; `crates/fub-abi/wit/frozen/*.wit` never edited to make a test
-pass. Full list: [`docs/map/dove-sta-x.md`](docs/map/dove-sta-x.md).
+Never edit them by hand; each generated file's header names the exact command.
+Mirrors and fixtures regenerate with `UPDATE_MIRROR=1`; visual baselines only
+from the Linux runner; `crates/fub-abi/wit/frozen/*.wit` is never edited to make
+a test pass. Full list: [`docs/map/dove-sta-x.md`](docs/map/dove-sta-x.md).
 
 ## CI
 
-In `.github/workflows/ci.yml`; what an agent most often gets wrong:
+The checks live in `.github/workflows/ci.yml` (and `npm-supply-chain.yml`).
+Pitfalls an agent most often hits:
 
+- A push runs CI only on `main`; a PR runs it on each push, and a newer push
+  cancels the older run.
 - A **draft** PR gets the short CI (Linux only, no benches); ready for review
-  runs the full CI, Windows and macOS included. `main` always runs
-  everything.
+  runs the full CI, Windows and macOS included (the frontend benches only when
+  the client changed). `main` always runs everything.
 - `gh pr edit` fails on this repository: update a PR body with
   `gh api -X PATCH repos/Fubeo/Fub/pulls/<n> -F body=@file`.
 - A test known to be flaky has an open issue: rerun its failed jobs once; if a
   job is still red, investigate before calling it flaky.
 - To read a run: `gh run view <run> --json jobs`; a job's log:
-  `gh api repos/Fubeo/Fub/actions/jobs/<job>/logs`.
+  `gh api repos/Fubeo/Fub/actions/jobs/<job>/logs`; an artifact:
+  `gh api repos/Fubeo/Fub/actions/artifacts/<id>/zip`, because `gh run download`
+  refuses some of them.
 
 The rest (rust-cache policy, nextest profile, fuzzers, release gate) is in
 [`docs/development/testing-and-quality.md`](docs/development/testing-and-quality.md).
+Ask for the deeper fuzz run (`fuzz_completo`) after larger changes to the
+Markdown provider, not on every push.
 
 ## Architecture
 
@@ -128,17 +163,23 @@ Dependencies point toward `fub-abi`, enforced by
 `cargo test -p fub-abi --test dependency_invariant`. Crates and areas:
 [`docs/map/repo.md`](docs/map/repo.md); the dependency graph:
 [`docs/architecture/overview.md`](docs/architecture/overview.md). Use the
-component that owns the responsibility.
+component that owns the responsibility; don't solve a problem in the most
+convenient layer. `esempi/*-wasm` and `tools/varco-wasm` sit outside the
+workspace on purpose (they target wasm); `fub-wasm-host` tests build the
+examples from source.
 
-Generic ports come before new IPC — no IPC per keystroke: `query_index` for
-data, `list_commands`/`invoke_command` for actions, `list_views`/`render_view`/
-`view_action` for views (a declarative `UiNode` tree, not DOM).
+Generic ports come before new IPC: `query_index` for data,
+`list_commands`/`invoke_command` for actions, `list_views`/`render_view`/
+`view_action` for views (a declarative `UiNode` tree, not DOM). No IPC or WASM
+call per keystroke, and no DOM, JavaScript callbacks or CodeMirror objects cross
+the contract.
 
 Frontend (`apps/client/src/`): `host/` is the seam — only `host/ipc.ts` and
-`host/dialog.ts` may import `@tauri-apps`. CodeMirror stays inside the text
-editor package. One `DocumentSession` per document owns the buffer and the
-save/draft queues; each pane has its own `EditorSurface` (cursor, scroll,
-focus, local undo).
+`host/dialog.ts` may import `@tauri-apps`; panels use that interface, never
+`invoke`. CodeMirror stays inside the text editor package. One `DocumentSession`
+per document owns the buffer and the save/draft queues; each pane has its own
+`EditorSurface` (cursor, scroll, focus, local undo). Changes synced from another
+surface are not keystrokes in the local undo history.
 
 ## Rules by kind of change
 
@@ -158,10 +199,34 @@ One line per invariant; details in the linked pages:
 - Plugins and security: one `Guard`; a WASM component gets no implicit WASI,
   filesystem, network, DOM or webview; the UI is untrusted
   ([`docs/reference/permissions-and-security.md`](docs/reference/permissions-and-security.md)).
-- Third-party code lives in `vendor/<project>/` with an `UPSTREAM.md`;
-  `cargo deny check` must pass.
+- Denied capabilities, timeouts, memory limits, traps, partial mounts and
+  teardown are test cases, not optional details.
+- An extensible contract has stable ids, ownership, limits and a fallback; no
+  universal untyped JSON port.
+
+### Reusing code from other projects
+
+- Reuse before rewriting: look for an existing crate, port, registry or helper
+  (here or upstream) first.
+- Feature code (proofing, dictionary, commands) stays independent of formats: a
+  format contributes an adapter, never a fork. No plugin depends on another's
+  private details; only on its registered commands, `query_index` routes,
+  settings and views.
+- Markdown stays native: it never depends on DOCX or another provider.
+- Use the existing registries and contracts (`inventory.rs`, `HostWiring`,
+  `SurfaceEditorActions`, format bar, command ids); keep public ids stable.
+- Third-party code lives in `vendor/<project>/` with an `UPSTREAM.md` (repo,
+  commit SHA, license, every local patch); `cargo deny check` must pass. Don't
+  change the license or supply-chain policy without asking.
+- Test reuse for real: feature on and off (`--no-default-features`), a format
+  turned off while the shared feature still works, and mount/unmount teardown.
 
 ## Verifying
+
+Iterate with the narrowest check that gives a signal, then widen it by blast
+radius before finishing. Before the PR, read the final diff for accidental
+changes, duplication, premature APIs, hand-edited generated files and missing
+teardown. Don't mix refactor, feature and cleanup in one change.
 
 | Change | Minimum check |
 |---|---|
@@ -171,13 +236,15 @@ One line per invariant; details in the linked pages:
 | Rust/WIT contract | conformance, frozen additivity, projections |
 | IPC | TS mirrors, fixtures, fake host, shell tests |
 | frontend | Vitest next to the module, typecheck, build |
+| rendering | the relevant visual and accessibility benches |
 | WASM runtime | a real component, positive and negative cases |
 | documentation | every documentation guard |
 | cross-cutting | the full relevant cycle and the guards in `CONTRIBUTING.md` |
 
-A focused green test doesn't prove a boundary it doesn't exercise. Don't say
-"all green" unless you ran the checks on the final state; if a required check
-couldn't run, say which one and why.
+A focused green test doesn't prove a boundary it doesn't exercise. An
+end-to-end test doesn't replace the unit test of the rule, and a structural
+guard doesn't replace behaviour. Don't say "all green" unless you ran the checks
+on the final state; if a required check couldn't run, say which one and why.
 
 ## Documentation
 
@@ -186,7 +253,9 @@ page in the same PR when behaviour, a contract, a command, a layout or an
 invariant changes.** Follow the taxonomy and style of
 [`docs/development/documentation-style.md`](docs/development/documentation-style.md):
 a task lives in a GitHub issue, an ADR keeps the reason for a costly choice,
-no archives or future specs in canonical pages.
+no archives or future specs in canonical pages. Code and docs that disagree are
+a bug. Update this file the same way when a working rule changes. If you find a
+gap outside your scope, report it in the result.
 
 ## Looking at the UI
 
@@ -207,13 +276,21 @@ bench and its pitfalls:
 - Don't use `reset --hard`, `clean`, destructive checkouts or anything else
   that drops changes without an explicit instruction. Don't overwrite changes
   that aren't yours. Don't change branch or rewrite history unless the task
-  needs it.
+  needs it. Don't add unrelated files just to get a clean working tree.
 
 ## Plan workflow
 
-Three roles, each in its own session: planner (`/pianifica`), orchestrator
-(`/orchestra`), coders (`.claude/agents/coder.md`). `PLAN.md` on `piano/<slug>`
-is the only hand-off; only the orchestrator pushes. Details:
+Three roles, each in its own session: planner (`/pianifica`, Opus, effort
+xhigh), orchestrator (`/orchestra`, Opus, effort high), coders
+(`.claude/agents/coder.md`, Opus, effort medium). `PLAN.md` (and `PLAN-ui/` for a
+prototype) on `piano/<slug>` is the only hand-off: a message only points at a
+pushed commit, and the file is what counts. `DECISIONS.md` says what the
+orchestrator decides alone and what it asks, and logs the choices made during
+the work. Coders never push, open PRs or touch CI; only the orchestrator pushes,
+once per integrated task, to a draft PR. Start each plan in a new session (or
+after `/clear`), and start the orchestrator with a lower compaction threshold,
+for example `CLAUDE_AUTOCOMPACT_PCT_OVERRIDE=60 claude`; compact at natural
+pauses, because the state is in `PLAN.md` and git. Details:
 [`.claude/skills/orchestra/SKILL.md`](.claude/skills/orchestra/SKILL.md),
 [`.claude/skills/pianifica/SKILL.md`](.claude/skills/pianifica/SKILL.md),
 [`.claude/agents/coder.md`](.claude/agents/coder.md).
@@ -223,9 +300,11 @@ is the only hand-off; only the orchestrator pushes. Details:
 Before calling a task done:
 
 - is the requested behaviour really implemented, not just masked?
-- does the rule live in the right owner and reuse existing contracts?
+- does the rule live in the right owner and reuse existing contracts, without a
+  forbidden dependency, a duplicate or an avoidable special case?
 - are compatibility, user data, permissions, errors and teardown preserved?
-- did you recover every omitted piece that could flip the conclusion?
-- do the tests cover the boundaries actually touched, and does `docs/`
-  describe the present?
+- did you recover every omitted, summarized or delegated piece that could flip
+  the conclusion?
+- do the tests cover the boundaries actually touched, does `docs/` describe the
+  present, and is the remaining work tracked in the right place?
 - does the diff hold only needed changes, generated files included?
