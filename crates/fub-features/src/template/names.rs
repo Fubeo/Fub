@@ -1,5 +1,5 @@
-//! I nomi delle note nuove: cartella e nome della nota del giorno, mesi e
-//! giorni, note uniche e note a caso.
+//! I nomi delle note nuove: cartella, formato e template della nota del
+//! giorno, note uniche e note a caso (`daily_name` sta nella radice).
 
 use super::*;
 
@@ -29,117 +29,6 @@ pub(super) fn daily_format(host: &dyn ReadApi) -> String {
         }
         _ => DAILY_FORMAT_DEFAULT.into(),
     }
-}
-
-pub(super) const MONTHS_IT: [&str; 12] = [
-    "gennaio",
-    "febbraio",
-    "marzo",
-    "aprile",
-    "maggio",
-    "giugno",
-    "luglio",
-    "agosto",
-    "settembre",
-    "ottobre",
-    "novembre",
-    "dicembre",
-];
-pub(super) const MONTHS_EN: [&str; 12] = [
-    "January",
-    "February",
-    "March",
-    "April",
-    "May",
-    "June",
-    "July",
-    "August",
-    "September",
-    "October",
-    "November",
-    "December",
-];
-pub(super) const WEEKDAYS_IT: [&str; 7] = [
-    "lunedì",
-    "martedì",
-    "mercoledì",
-    "giovedì",
-    "venerdì",
-    "sabato",
-    "domenica",
-];
-pub(super) const WEEKDAYS_EN: [&str; 7] = [
-    "Monday",
-    "Tuesday",
-    "Wednesday",
-    "Thursday",
-    "Friday",
-    "Saturday",
-    "Sunday",
-];
-
-/// Il nome della giornaliera di `date` (già valida, `YYYY-MM-DD`) nel formato
-/// dichiarato. I nomi di mesi e giorni sono nella lingua di chi legge
-/// (italiano o, per ogni altra, inglese); un token più lungo vince sul più
-/// corto, e `[…]` protegge il testo che somiglia a un token.
-pub(super) fn daily_name(format: &str, date: &str, language: &str) -> String {
-    let year: i32 = date[..4].parse().unwrap_or_default();
-    let month: u8 = date[5..7].parse().unwrap_or(1);
-    let day: u8 = date[8..10].parse().unwrap_or(1);
-    let weekday = fub_abi::traits::CivilTime {
-        year,
-        month,
-        day,
-        hour: 0,
-        minute: 0,
-        second: 0,
-    }
-    .weekday()
-    .iso();
-    let (months, weekdays) = if language == "it" {
-        (MONTHS_IT, WEEKDAYS_IT)
-    } else {
-        (MONTHS_EN, WEEKDAYS_EN)
-    };
-    let month_name = months[usize::from(month.clamp(1, 12)) - 1];
-    let weekday_name = weekdays[usize::from(weekday.clamp(1, 7)) - 1];
-    let short = |name: &str| name.chars().take(3).collect::<String>();
-    let mut out = String::new();
-    let mut rest = format;
-    while let Some(c) = rest.chars().next() {
-        if c == '[' {
-            if let Some(end) = rest.find(']') {
-                out.push_str(&rest[1..end]);
-                rest = &rest[end + 1..];
-                continue;
-            }
-        }
-        let value = [
-            ("YYYY", format!("{year:04}")),
-            ("YY", format!("{:02}", year.rem_euclid(100))),
-            ("MMMM", month_name.to_string()),
-            ("MMM", short(month_name)),
-            ("MM", format!("{month:02}")),
-            ("M", month.to_string()),
-            ("DD", format!("{day:02}")),
-            ("D", day.to_string()),
-            ("dddd", weekday_name.to_string()),
-            ("ddd", short(weekday_name)),
-        ]
-        .into_iter()
-        .find(|(token, _)| rest.starts_with(token));
-        match value {
-            Some((token, value)) => {
-                out.push_str(&value);
-                rest = &rest[token.len()..];
-            }
-            None => {
-                out.push(c);
-                rest = &rest[c.len_utf8()..];
-            }
-        }
-    }
-    out
 }
 
 pub(super) fn daily_template(host: &dyn HostApi) -> String {
