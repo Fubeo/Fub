@@ -33,6 +33,12 @@ lavagna, scritto una volta sola:
   livello resta nei campi sconosciuti di chi lo tiene, e `InkLayer::to_value`
   lo riscrive uguale per valore. Le regole sono in [L'inchiostro della
   lavagna](canvas-ink.md); i vettori li legge `tests/ink_vectors.rs`.
+- `parts`: gli estratti `fub:parts` delle schede di file.
+  `read_parts(&canvas)` li dà nell'ordine di `nodes`, `node_parts(&node)`
+  uno solo, `write_parts(file, &parts)` il `subpath` e il campo da
+  scrivere. Il campo resta nei campi sconosciuti della scheda; le regole
+  sono in [Gli estratti della lavagna](canvas-parts.md), i vettori li legge
+  `tests/parts_vectors.rs`.
 - `js`, `source`, `patch`, `ops`: la scrittura come la fa JavaScript, il
   ritocco del sorgente, le toppe con la loro inversa e le operazioni
   d'intento.

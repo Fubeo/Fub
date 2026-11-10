@@ -160,7 +160,9 @@ breve:
   `destroy`, la cache delle immagini ferme, la misura e lo zoom correnti,
   `missing()` per dire che il file non c'è, e per il PDF `initialPage` (la
   pagina ricordata, o `null`) e `pageChanged(pagina)` (vedi «Riaprire dove
-  eri»).
+  eri»). `parts` porta le parti di un estratto già lette e provate, o
+  `null` se la scheda mostra solo il suo `subpath` ([Gli estratti della
+  lavagna](canvas-parts.md)).
 - `CardView` risponde a `setMode` e a `destroy`; può rispondere anche a
   `resize` (a fine gesto), `enter` e `leave` (entrare nella scheda e
   uscirne; `enter` restituisce `false` se non c'è niente in cui entrare),

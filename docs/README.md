@@ -98,7 +98,7 @@ all'export, dalla sessione dal tablet ai disegni grandi.
   le [operazioni sulla lavagna](reference/canvas-operations.md): le toppe e
   la loro inversa
 - [L'inchiostro della lavagna](reference/canvas-ink.md), i campi `fub:ink`
-  di un `.canvas`
+  di un `.canvas`, e [gli estratti](reference/canvas-parts.md), `fub:parts`
 - [Il server MCP](reference/mcp-server.md)
 - [Le schede della lavagna](reference/canvas-cards.md): specie, schede vive e
   ferme, il contratto dei renderer
