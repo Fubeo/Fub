@@ -54,7 +54,7 @@ const ICON: Readonly<Record<CanvasToolId, string>> = {
   pen: "draw-pen",
   highlighter: "draw-highlighter",
   eraser: "draw-eraser",
-  text: "fmt-text",
+  text: "canvas-text",
   connect: "canvas-connect",
 };
 

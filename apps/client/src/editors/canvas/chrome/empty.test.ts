@@ -181,7 +181,7 @@ describe("«Aggiungi file…»", () => {
     const file = new File(["immagine"], "foto.png", { type: "image/png" });
     Object.defineProperty(picker(), "files", { value: [file] });
     picker().dispatchEvent(new Event("change"));
-    await vi.waitFor(() => expect(deposit).toHaveBeenCalledWith([file], "lavagna.canvas"));
+    await vi.waitFor(() => expect(deposit).toHaveBeenCalledWith([file], "lavagna.canvas", expect.objectContaining({ live: expect.any(Function) })));
     await vi.waitFor(() => expect(cardsOf(engine).some((node) => node.file === "attachments/foto.png")).toBe(true));
     expect(blankOf(host).hidden).toBe(true);
   });

@@ -11,6 +11,9 @@ import { icon, registerIcon } from "../../../ui/icons";
 import { ensureDrawIcons } from "../../spatial/icons";
 
 const CANVAS_ICONS: Readonly<Record<string, readonly string[]>> = {
+  // Testo: la T della barra del formato (`fmt-text`), col nome suo, perché
+  // quella si registra solo quando la barra c'è e la colonna restava vuota.
+  "canvas-text": ["M6 6h12M12 6v13"],
   // Collega: due schede e il filo che va dall'una all'altra.
   "canvas-connect": [
     "M4.5 4h4a1.5 1.5 0 0 1 1.5 1.5v3a1.5 1.5 0 0 1-1.5 1.5h-4A1.5 1.5 0 0 1 3 8.5v-3A1.5 1.5 0 0 1 4.5 4z",
