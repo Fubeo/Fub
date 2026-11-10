@@ -69,6 +69,9 @@ export function makeResourceTransport(invoke: TauriInvoke, vault?: string): Reso
  * (`bad_args`): è un «non so», e il deposito si rifà senza `reuse` — nel
  * dubbio si scrive. Se anche quello è `bad_args`, l'errore è suo e arriva a
  * chi chiama.
+ *
+ * `support` ricorda il rifiuto per la seduta (T32b): dopo il primo, i depositi
+ * con `reuse` vanno subito senza, e non pagano un giro in più all'host.
  */
 export async function writeResource(
   invoke: TauriInvoke,
@@ -77,6 +80,7 @@ export async function writeResource(
   expected: string | null,
   vault?: string,
   options?: ResourceWriteOptions,
+  support?: ReuseSupport,
 ): Promise<ResourceWriteReceipt> {
   const send = async (reuse: ResourceWriteOptions["reuse"]): Promise<ResourceWriteReceipt> => {
     const fields = reuse === undefined
@@ -93,11 +97,46 @@ export async function writeResource(
   if (expected !== null) {
     throw { kind: "bad_args", message: "resource_write cannot reuse the same content while overwriting at a revision" };
   }
+  if (support?.refused) return send(undefined);
   try {
     return await send(reuse);
   } catch (error) {
     if (!isBadArgs(error)) throw error;
-    return send(undefined);
+  }
+  try {
+    const receipt = await send(undefined);
+    support?.refuse();
+    return receipt;
+  } catch (error) {
+    // Un `bad_args` anche senza `reuse` non parlava di `reuse` (un id che
+    // l'host rifiuta): non è un host di prima, e non si ricorda niente.
+    if (!isBadArgs(error)) support?.refuse();
+    throw error;
+  }
+}
+
+/**
+ * Il ricordo, per la seduta, che l'host non sa `reuse` (T32b). Lo tiene chi
+ * possiede il trasporto: `host/ipc.ts` uno per finestra, che dura quanto la
+ * seduta; i test ne fanno uno loro e lo azzerano con `reset`. Mai un globale di
+ * questo modulo: `writeResource` senza `support` riprova ogni volta.
+ */
+export class ReuseSupport {
+  #refused = false;
+
+  /** Vero dopo che l'host ha rifiutato `reuse` in questa seduta. */
+  get refused(): boolean {
+    return this.#refused;
+  }
+
+  /** L'host ha rifiutato `reuse` e accettato il deposito senza. */
+  refuse(): void {
+    this.#refused = true;
+  }
+
+  /** Si torna a chiedere `reuse` (un host nuovo, o un test). */
+  reset(): void {
+    this.#refused = false;
   }
 }
 

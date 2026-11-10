@@ -22,7 +22,7 @@ import { makePdfJsLoader, pdfIdWithoutFragment, pdfPageFromFragment, type PdfJsM
 import { mountSlideDeck, splitRenderedSlides } from "../../ui/slides";
 import { printDocument } from "./print-view";
 import { createViewStateCrashDeposit } from "./recorder-store";
-import { RESOURCE_WRITE_HEADER, writeResource, type TauriInvoke } from "./transport";
+import { RESOURCE_WRITE_HEADER, ReuseSupport, writeResource, type TauriInvoke } from "./transport";
 
 describe("le specie media vengono dal nome, come di la'", () => {
   it("immagini, audio, video e PDF per estensione, senza distinguere il caso", () => {
@@ -308,6 +308,33 @@ describe("il deposito viaggia grezzo con metadati in header", () => {
       { id: "Lavagna/b.png", vault: null, expected: null },
     ]);
     expect(receipt).toEqual({ id: "Lavagna/b.png", revision: "sha256:b", reused: false });
+  });
+
+  it("il rifiuto di `reuse` si ricorda per la seduta: i depositi dopo vanno subito senza (T32b)", async () => {
+    const metas: Record<string, unknown>[] = [];
+    const invoke: TauriInvoke = async <T>(_cmd: string, _args?: unknown, options?: { headers?: Record<string, string> }): Promise<T> => {
+      const meta = JSON.parse(decodeURIComponent(options?.headers?.[RESOURCE_WRITE_HEADER] ?? "")) as Record<string, unknown>;
+      metas.push(meta);
+      if ("reuse" in meta) throw { kind: "bad_args", message: "resource_write metadata has an unknown field `reuse`" };
+      return { id: String(meta["id"]), revision: "sha256:b" } as T;
+    };
+    const support = new ReuseSupport();
+    await writeResource(invoke, "a.png", new Uint8Array([1]), null, undefined, { reuse: "same-content" }, support);
+    await writeResource(invoke, "b.png", new Uint8Array([2]), null, undefined, { reuse: "same-content" }, support);
+    expect(metas.filter((meta) => "reuse" in meta)).toHaveLength(1);
+    expect(metas.map((meta) => meta["id"])).toEqual(["a.png", "a.png", "b.png"]);
+    // Il padrone lo azzera: si torna a chiedere.
+    support.reset();
+    await writeResource(invoke, "c.png", new Uint8Array([3]), null, undefined, { reuse: "same-content" }, support);
+    expect(metas.filter((meta) => "reuse" in meta)).toHaveLength(2);
+  });
+
+  it("un `bad_args` anche senza `reuse` non è un host di prima: non si ricorda", async () => {
+    const invoke = vi.fn(async <T>(): Promise<T> => { throw { kind: "bad_args", message: "id rifiutato" }; });
+    const support = new ReuseSupport();
+    await expect(writeResource(invoke as TauriInvoke, "a.png", new Uint8Array([1]), null, undefined, { reuse: "same-content" }, support))
+      .rejects.toMatchObject({ kind: "bad_args" });
+    expect(support.refused).toBe(false);
   });
 
   it("un altro errore con reuse arriva a chi chiama, senza un secondo deposito", async () => {
