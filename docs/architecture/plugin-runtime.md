@@ -341,11 +341,11 @@ certificazione G3 sono riferite nello [stato del progetto](../project/status.md)
 
 ## UI non fidata
 
-`UiNode` contiene forme riservate al codice fidato, come HTML o webview. Nel
-percorso `ViewProvider` WASM ogni albero prodotto da un provider non fidato
-(`Trust::Community`) passa da `UiNode::validate_untrusted()` prima della shell;
-la stessa regola vale per `render_view` e per gli aggiornamenti restituiti da
-`on_action`. I provider `Trust::Core` possono produrre `Html` e `WebView`.
+Nel percorso `ViewProvider` WASM ogni albero di un provider non fidato
+(`Trust::Community`) passa da `UiNode::validate_untrusted()` prima della shell.
+La policy completa — che cosa un componente di terzi non può ottenere e quali
+intenti sono privilegiati — è in
+[permissions-and-security.md](../reference/permissions-and-security.md#ui-non-fidata).
 
 ## Renderer nativi
 

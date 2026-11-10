@@ -210,6 +210,26 @@ Le eccezioni per i motori privati di Mermaid e gli strumenti Node sono
 limitate alle versioni verificate: una versione diversa o una copia
 aggiuntiva richiede una nuova valutazione, non un override fra major.
 
+## Banchi
+
+Tutti i comandi girano da `apps/client/`; gli script sorgente sono in
+`apps/client/package.json` e in `bench/`:
+
+| Comando | Che cosa misura |
+|---|---|
+| `npm run bench:verify` | le scene del banco visivo contro le baseline Linux |
+| `npm run bench:update` | rigenera le baseline (solo dal runner Linux) |
+| `npm run bench:a11y` | accessibilità della pagina resa |
+| `npm run bench:motion` | le coreografie del moto dello Scrittoio |
+| `npm run bench:lampo` | lo strato d'avvio prima di ogni modulo |
+| `npm run bench:interaction` | il budget d'interazione (menu, palette, nota) |
+| `npm run bench:ink` | l'inchiostro in WASM contro la copia nativa |
+| `npm run bench:fidelity` | la fedeltà pixel dei disegni (foglio, PNG, Lettura) |
+| `npm run bench:grid` | i gesti della griglia con mouse e tastiera veri |
+| `npm run bench:graph-scale` | il grafo a 2k/10k nodi: tempi, heap, soak |
+| `npm run bench:large` | i disegni grandi (da 200 a 49 900 elementi) nell'app vera |
+| `npm run bench:webview` | le misure nella WebView vera (vedi [webview-measurements.md](webview-measurements.md)) |
+
 ## Visuale e accessibilità
 
 Il banco visuale usa scene deterministiche e baseline del runner Linux. In caso

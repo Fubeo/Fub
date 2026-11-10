@@ -13,34 +13,10 @@
 
 ## I componenti
 
-```mermaid
-flowchart LR
-    CLIENT["apps/client<br/>shell Scrittoio, editor, stato"] --> APP["fub-app<br/>Tauri e IPC"]
-    APP --> HOST["fub-host<br/>composizione, sessioni, job"]
-    HOST --> KERNEL["fub-kernel<br/>vault, storage, indici"]
-    KERNEL --> ABI["fub-abi<br/>contratto, regole, WIT"]
-    HOST --> ABI
-    FEATURES["fub-features<br/>feature ufficiali"] --> ABI
-    HOST --> FEATURES
-    FMT["fub-format-*<br/>markdown, canvas, base, svg, rich, xlsx"] --> ABI
-    HOST --> FMT
-    FMT --> VENDOR["vendor/wordcraft, vendor/gridcraft<br/>motori di terzi"]
-    FEATURES --> VENDOR
-    INKSC["fub-ink e fub-scene<br/>inchiostro e disegni"] --> ABI
-    FMT --> INKSC
-    CANVASCORE["fub-canvas-core<br/>nucleo della lavagna"]
-    FMT --> CANVASCORE
-    WASM["fub-wasm-host<br/>Wasmtime"] --> HOST
-    APP --> WASM
-    LIVE["fub-live<br/>sessione dal tablet"] --> APP
-    CLI["fub-cli<br/>riga di comando e MCP"] --> HOST
-    SVCS["fub-services<br/>account, sync, publish"]
-```
-
-Le frecce puntano verso `fub-abi`: è il verso delle dipendenze. I servizi di
-supporto alla scrittura (`fub-sdk`, `fub-testkit`, `fub-importers`) stanno
-sotto `crates/` con gli altri e non compaiono nel disegno per non superare i
-20 nodi: la tabella sotto li copre.
+Il grafo delle dipendenze del workspace, con i marcatori `@grafo-dipendenze`
+letti dal test `dependency_invariant`, è in
+[overview.md](../architecture/overview.md#dipendenze-del-workspace-rust). Le
+aree con percorso, responsabilità e prova sono nella tabella qui sotto.
 
 ## Le aree, una riga ciascuna
 

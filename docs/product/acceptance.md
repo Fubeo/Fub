@@ -8,17 +8,8 @@ eseguibili dai budget numerici ancora soggetti a review.
 
 ## Comandi canonici
 
-Da `apps/client/`:
-
-```bash
-npm run bench:graph-scale -- --nodes 2000 --seed 6 --cycles 3
-npm run bench:graph-scale -- --nodes 10000 --seed 6 --cycles 1 --soak-windows 8
-npm run bench:graph-scale -- --nodes 10000 --seed 6 --cycles 1 --soak-windows 16
-npm run bench:verify
-npm run bench:fidelity
-npm run bench:grid
-npm run bench:large
-```
+I comandi dei banchi sono in
+[testing-and-quality.md](../development/testing-and-quality.md#banchi).
 
 Le fixture ammesse hanno digest `eeeacc27` per 2k/seed 6 e `abcf614b` per
 10k/seed 6. Un digest diverso non è una distribuzione confrontabile.

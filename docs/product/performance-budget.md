@@ -14,17 +14,10 @@ non sono claim universali sulle macchine, sui browser o sui grafi arbitrari.
 ## Ambiente e comandi
 
 Il runner registra Node, Chromium, piattaforma, CPU, viewport e preferenze media
-nel referto. I comandi canonici sono lo script
-[`graph-scale.mjs`](../../apps/client/bench/graph-scale.mjs), richiamato dagli
-script npm in [`apps/client/package.json`](../../apps/client/package.json#L15-L26):
-
-```bash
-cd apps/client
-npm run bench:graph-scale -- --nodes 2000 --seed 6 --cycles 3
-npm run bench:graph-scale -- --nodes 10000 --seed 6 --cycles 1 --soak-windows 8
-npm run bench:graph-scale -- --nodes 10000 --seed 6 --cycles 1 --soak-windows 16
-npm run bench:verify
-```
+nel referto. I comandi canonici dei banchi sono in
+[testing-and-quality.md](../development/testing-and-quality.md#banchi) (lo
+script è [`graph-scale.mjs`](../../apps/client/bench/graph-scale.mjs), richiamato
+dagli script npm di [`apps/client/package.json`](../../apps/client/package.json)).
 
 La stessa sequenza di scala è nel job «banchi del grafo (scala e heap)» di
 [`ci.yml`](../../.github/workflows/ci.yml). Il timeout di sicurezza

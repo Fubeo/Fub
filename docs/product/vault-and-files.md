@@ -78,11 +78,11 @@ essere semplici chiamate filesystem dalla UI.
 ## Rinomine e archiviazione recuperabili
 
 Prima di una rinomina Fub fotografa la revisione del file e le modifiche
-necessarie ai backlink. Pubblica quindi un intent schema 1 sotto `.fub/` prima
-di spostare dati per-documento o contenuto. Se il processo si interrompe, la
-riapertura attende l'indice completo e confronta i byte osservati con la
-preimmagine: riprende la rinomina in avanti, completa i backlink già preparati
-oppure termina un rollback già dichiarato.
+necessarie ai backlink, e pubblica un intent sotto `.fub/` (formato su disco in
+[on-disk-layout.md](../reference/on-disk-layout.md)). Se il processo si
+interrompe, la riapertura reprende la rinomina in avanti, completa i backlink
+già preparati oppure termina un rollback già dichiarato (meccanismo in
+[storage-and-identity.md](../architecture/storage-and-identity.md#rename)).
 
 La posizione dei file non basta a giustificare una sovrascrittura. Se compare
 una destinazione, cambia la sorgente o entrambe le posizioni sono ambigue, Fub
@@ -284,6 +284,11 @@ del vault la cancellazione non chiede conferma e offre «Annulla» nell'avviso;
 col cestino di sistema, da cui Fub non può ripristinare, chiede conferma.
 Svuotare il cestino interno resta un comando irreversibile separato.
 
+Il meccanismo (coda, journal, lock) è in
+[storage-and-identity.md](../architecture/storage-and-identity.md#cancellazione);
+i byte del sidecar e di `.trash/` sono in
+[on-disk-layout.md](../reference/on-disk-layout.md#cestino).
+
 ## Versioning
 
 Il versioning conserva snapshot del contenuto. L'impostazione del vault
@@ -388,31 +393,11 @@ riapertura, non copiate come se fossero autorità. In particolare,
 `.fub/data/plugins/<id>/` è cache soltanto se contiene `.fub-cache-root`; senza
 quel marker resta storage autorevole legacy.
 
-`fub_kernel::snapshot` prepara e valida in memoria un manifest schema 1 con
-path relativo normalizzato, classe, owner, schema quando applicabile, size e
-digest SHA-256. Il kernel non possiede il `FormatRegistry`: documenti, allegati
-e sconosciuti hanno la classe unica `user`, mentre i dati core, del cestino,
-sidecar e plugin hanno classi proprie. Rifiuta prima di ogni mutazione schema
-futuro, entry mancante o duplicata, traversal, symlink/file speciali e mismatch
-di size o digest.
-La base revision è il digest deterministico del manifest autorevole live e viene
-ricontrollata immediatamente prima del commit.
-
-L'applicazione richiede un vault chiuso e quiescente e una radice già canonica,
-senza symlink. Un lock sibling stabile, staging privato, record persistente e
-le fasi `prepare`/`commit`/`finalize` conservano il contenitore precedente fino
-alla pubblicazione verificata. Dopo un crash, l'host esegue la recovery prima
-dell'apertura: riconosce soltanto i propri artefatti con schema e transaction id
-validi, completa o annulla la fase deterministica e preserva file ignoti. La
-garanzia all-or-old-or-new vale tra writer cooperativi; writer esterni,
-filesystem senza rename/fsync durevoli e rollback impossibile restano limiti
-espliciti.
-
-Per lo schema 1 la pubblicazione usa directory POSIX `0700` e file `0600`;
-owner, ACL, xattr e bit executable non sono portabili nel manifest e quindi
-non vengono preservati. Su Windows ACL e proprietà restano quelle applicate
-dal filesystem alla creazione dello staging, normalmente ereditate dal
-parent, e non sono rappresentate né garantite dallo snapshot.
+Il meccanismo dello snapshot (manifest schema 1, preflight, staging, recovery
+al crash e lock sibling) è in
+[storage-and-identity.md](../architecture/storage-and-identity.md#snapshot-globale);
+il formato su disco del contenitore è in
+[on-disk-layout.md](../reference/on-disk-layout.md#snapshot-globale-offline).
 
 Questo flusso è distinto da `fub.versioning`:
 `version.restore` ripristina un solo documento con CAS per-file e non è una
