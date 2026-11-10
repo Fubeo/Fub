@@ -65,6 +65,7 @@ import {
   type CanvasToolId,
 } from "./chrome/commands";
 import { CANVAS_INK_TOOLS, CANVAS_WRITING_TOOLS, createCanvasRail, type CanvasRail } from "./chrome/rail";
+import { createCanvasEmpty, isEmptyBoard, type CanvasEmpty } from "./chrome/empty";
 import { createCanvasOptions, type CanvasOptions } from "./chrome/options";
 import type { OptionItem } from "../../kit/options-bar";
 import {
@@ -767,6 +768,8 @@ export class CanvasEngine {
   #tool: CanvasToolId = "select";
   /** La colonna degli strumenti, a sinistra della lavagna o sotto (stretta). */
   readonly #rail: CanvasRail;
+  /** La lavagna vuota (T62): al centro, quando non c'è niente. */
+  readonly #empty: CanvasEmpty;
   /** Quante volte l'interruttore è cambiato: lo stato ricordato arriva solo se nessuno l'ha toccato prima. */
   #inkMouseTurns = 0;
   /** Il pulsante «Scrivi col mouse»: lo stesso elemento in ogni barra. */
@@ -867,9 +870,17 @@ export class CanvasEngine {
       toolbar: currentPreferences().toolbar,
       lifetime: this.#life,
     });
+    // La lavagna vuota (T62) è un fratello della vista, non un suo figlio: i
+    // suoi pulsanti non passano dal puntatore della vista.
+    this.#empty = createCanvasEmpty({
+      lifetime: this.#life,
+      write: () => this.#placeText(),
+      receive: (data) => this.#receive(data),
+      addFiles: options.attachments !== undefined && options.documentId !== undefined,
+    });
     const area = document.createElement("div");
     area.className = "canvas-area";
-    area.append(this.#viewport);
+    area.append(this.#viewport, this.#empty.element);
     const body = document.createElement("div");
     body.className = "canvas-body";
     body.append(this.#rail.element, area);
@@ -926,6 +937,7 @@ export class CanvasEngine {
       this.#toolbar.setAttribute("aria-label", t("canvas.surface"));
       this.#drawToolbar();
       this.#rail.relabel();
+      this.#empty.relabel();
       this.#canvasOptions.sync();
     });
     // I tasti degli strumenti valgono anche col fuoco sulla colonna (dopo un
@@ -1044,6 +1056,7 @@ export class CanvasEngine {
     this.#undo = [];
     this.#redo = [];
     this.#statusSettle();
+    this.#syncEmpty();
     if (!document) {
       void this.#revive();
       return;
@@ -4029,13 +4042,36 @@ export class CanvasEngine {
     this.#beginPan(event.pointerId, event.clientX, event.clientY);
   }
 
-  /** La scheda di testo dello strumento Testo, nel punto `clientX`, `clientY` della finestra. */
-  #placeText(clientX: number, clientY: number): void {
-    const placed = this.#addNode("text", undefined, this.#screenToWorld(clientX, clientY));
+  /**
+   * La scheda di testo dello strumento Testo, nel punto `clientX`, `clientY` della
+   * finestra; senza punto, al centro della vista («Scrivi una scheda», T62). Si
+   * apre in scrittura.
+   */
+  #placeText(clientX?: number, clientY?: number): void {
+    const at = clientX === undefined || clientY === undefined ? undefined : this.#screenToWorld(clientX, clientY);
+    const placed = this.#addNode("text", undefined, at);
     if (!placed) return;
     this.#pickTool("select");
     this.#render();
     this.#beginCardEdit(placed);
+  }
+
+  /** La lavagna vuota (T62): le righe e i pulsanti, se la lavagna è vuota e si può scrivere. */
+  #syncEmpty(): void {
+    const doc = this.#doc;
+    this.#empty.sync({
+      empty: !this.#destroyed && doc !== null && isEmptyBoard(doc),
+      editable: !this.#readOnly && !this.#isSceneOversized(),
+    });
+  }
+
+  /**
+   * Ciò che la lavagna vuota riceve, dagli appunti o dal selettore dei file: lo
+   * stesso evento di Ctrl+V sulla vista, così passa dalla stessa strada
+   * (`#intake`) e dal deposito, come un rilascio.
+   */
+  #receive(data: DataTransfer): void {
+    this.#viewport.dispatchEvent(new ClipboardEvent("paste", { clipboardData: data, bubbles: true, cancelable: true }));
   }
 
   /** La scheda `nodeId` presa col clic: `additive` (Maiuscolo) la aggiunge o la toglie. */
@@ -4540,6 +4576,7 @@ export class CanvasEngine {
   }
 
   #render(): void {
+    this.#syncEmpty();
     // Dopo `destroy` niente rinasce: una vista montata qui non avrebbe padrone.
     if (!this.#doc || this.#destroyed) return;
     this.#syncInkLayer();
