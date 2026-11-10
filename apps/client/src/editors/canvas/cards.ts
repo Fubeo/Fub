@@ -174,6 +174,52 @@ export interface CardView {
   destroy(): void;
 }
 
+/// Come si apre l'editor dentro una scheda (T40).
+export interface CardEditorOptions {
+  /// La scheda è piccola: l'editor senza le sue barre, dove la superficie lo
+  /// sa fare. Il segno resta sul contenitore (`data-card-editor`).
+  readonly compact: boolean;
+  /// Chi apre vuole solo leggere: l'editor si monta in sola lettura.
+  readonly readOnly: boolean;
+  /// La vita della scheda: chiusa lei, l'editor si smonta da sé, anche se
+  /// `open` sta ancora aspettando.
+  readonly lifetime: Lifetime;
+}
+
+/// A che punto è ciò che si scrive nella scheda: salvato, ancora da salvare,
+/// in conflitto con il disco, o non scrivibile adesso (la scheda, la policy,
+/// una cancellazione in sospeso, la sessione chiusa).
+export type CardEditorState = "clean" | "pending" | "conflict" | "readonly";
+
+/// L'editor vero di un file, montato dentro una scheda sulla stessa sessione
+/// di un riquadro: bozze, conflitti e salvataggio sono quelli della sessione,
+/// l'annulla è suo.
+export interface CardEditor {
+  focus(): void;
+  /// Esce dalla scrittura: il testo che l'editor tiene ancora diventa una
+  /// modifica della sessione e si salva adesso. L'editor resta montato.
+  leave(): Promise<void>;
+  state(): CardEditorState;
+  /// Avvisa a ogni cambio di `state()`; restituisce come smettere.
+  onState(listener: (state: CardEditorState) => void): () => void;
+  /// Stacca l'editor dalla sessione e lo smonta, una volta sola.
+  destroy(): void;
+}
+
+/// La porta con cui una scheda scrive nel suo file. La tela non conosce gli
+/// editor: la porta, data dalla shell, li sceglie e li monta.
+export interface CardEditorPort {
+  /// L'editor del file `path` montato in `host`; `null` se il file non ha un
+  /// editor o la sua sessione non si apre: la scheda resta in lettura.
+  open(path: string, host: HTMLElement, options: CardEditorOptions): Promise<CardEditor | null>;
+}
+
+/// Le schede di una tela con la porta per scriverci dentro, accanto al
+/// registro dei renderer: la forma che `surface.ts` passa alla tela.
+export interface CardEditing {
+  readonly editors: CardEditorPort;
+}
+
 /// Chi sa mostrare una o più specie.
 export interface CardRenderer {
   readonly kinds: readonly CardKind[];

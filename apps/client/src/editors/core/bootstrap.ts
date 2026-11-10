@@ -28,7 +28,7 @@ import { showPhotoData } from "../craft/photo-data";
 import { makePdfJsLoader, pdfIdWithoutFragment, type PdfEngineLoader, type PdfJsModule } from "../media/pdf-view";
 import type { CanvasAttachmentPort, CanvasCards, CanvasMediaPort } from "../canvas/engine";
 import type { DrawingImagePort } from "../canvas/surface";
-import type { CardMode, CardRenderer, CardSnapshots, CardView } from "../canvas/cards";
+import type { CardEditorPort, CardMode, CardRenderer, CardSnapshots, CardView } from "../canvas/cards";
 import type { NoteCardPort } from "../canvas/cards/note";
 import type { WebCardPort } from "../canvas/cards/web";
 import type { SheetCardPort } from "../grid/card";
@@ -154,7 +154,8 @@ export interface SurfaceBootstrapOptions extends SurfaceCallbacks {
 }
 
 /// Ciò che la shell dà alle schede della lavagna. Ogni porta legge e basta:
-/// nessuna scheda scrive il file che mostra.
+/// nessun renderer scrive il file che mostra. Si scrive soltanto con
+/// `editors`, sulla sessione del documento.
 export interface CanvasCardPorts {
   /// La nota resa dentro la scheda: `renderEmbed` e la montatura delle schede
   /// di testo.
@@ -169,6 +170,9 @@ export interface CanvasCardPorts {
   /// Avvisa quando il file `path` cambia, sparisce o cambia nome; restituisce
   /// come smettere.
   watch(path: string, changed: () => void): () => void;
+  /// La porta per scrivere dentro le schede (T40): l'editor vero del file,
+  /// sulla stessa sessione di un riquadro. Senza, le schede restano in lettura.
+  readonly editors?: CardEditorPort;
 }
 
 /// Le porte del correttore legate al vault in cui la superficie nasce: le
@@ -963,6 +967,7 @@ export const COMPONENT_EDITORS: Readonly<Record<string, readonly EditorPart[]>> 
               media: options.canvasMedia,
               attachments: options.canvasAttachments,
               cards: cards?.(context),
+              cardEditors: options.canvasCards?.editors,
               ...(options.media ? { measureImage: measureCanvasImage(options.media.transport) } : {}),
               clipboardMarkdown: clipboardMarkdown,
             }),

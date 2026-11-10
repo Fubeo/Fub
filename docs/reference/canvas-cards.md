@@ -172,8 +172,10 @@ contesto, come vuole `check-listeners.mjs`.
 Un renderer legge e basta. Nessun renderer scrive nel file della sua scheda,
 né quando è vivo né quando si chiude: sfogliare un PDF, scorrere un foglio o
 scegliere delle celle non cambia il file. Le sole scritture che partono
-dalla lavagna sono il file `.canvas` e i file che vi si depositano dal
-computer o si incollano.
+dalla lavagna sono il file `.canvas`, i file che vi si depositano dal
+computer o si incollano, e ciò che si scrive dentro una scheda con l'editor
+vero del file (vedi «Scrivere dentro una scheda»), che passa dalla sessione
+del documento e non dal renderer.
 
 ## Le immagini ferme
 
@@ -471,3 +473,48 @@ ascolta il file con questo stesso `watch` quando la scheda è mancante (vedi
 La cache delle immagini ferme è una sola per finestra, per tutte le lavagne
 che vi si aprono. Si svuota quando una lavagna si monta in un vault diverso
 da quello in cui la cache si è riempita: lo stesso percorso è un altro file.
+
+## Scrivere dentro una scheda
+
+Chi scrive dentro una scheda usa l'editor vero del file, sulla stessa
+`DocumentSession` di un riquadro: le stesse bozze, gli stessi conflitti, lo
+stesso salvataggio. La tela non importa nessun editor (il confine di
+CodeMirror): riceve una porta, `CardEditorPort` in `editors/canvas/cards.ts`,
+che la shell costruisce in `state/card-editors.ts` con la collezione delle
+sessioni e il registro delle superfici della finestra. Arriva alla tela
+dall'opzione `canvasCards.editors`, passando da `surface.ts` accanto al
+registro dei renderer (`CardEditing`). Senza porta le schede restano in
+lettura.
+
+`open(path, host, { compact, readOnly, lifetime })`:
+
+- prenota la sessione (`retain`) e la tiene finché l'editor vive: un
+  riquadro che si chiude non la chiude sotto la scheda;
+- legge il file con `readForSurface` e chiede la superficie al registro per
+  `format_id` e `source_kind`, come un riquadro, nella sua modalità
+  predefinita; la monta in `host` e la attacca (`attachSurface`);
+- dà `null`, senza lasciare niente montato né prenotato, se il file non ha
+  un editor (il registro ripiegherebbe sulla superficie d'errore, o la
+  superficie non tiene il testo), se la sessione non si apre, o se la vita
+  della scheda si chiude mentre `open` aspetta.
+
+L'annulla è della superficie: un cambio arrivato da un riquadro, o da
+un'altra scheda sullo stesso file, entra con `syncDoc` e non si annulla qui.
+Una battuta rimasta indietro si ribasa sul testo autorevole come in un
+riquadro. Due `open` sullo stesso file sono due superfici e una sessione.
+
+`state()` dice `clean`, `pending` (da salvare, o testo tenuto dall'editor),
+`conflict` (lo stato `conflitto` della sessione) o `readonly`: chiesto dalla
+scheda, la chiusura della finestra, una cancellazione in sospeso, il
+prestito a un'app (la stessa regola dei riquadri, `heldReadOnly`), oppure la
+sessione chiusa sotto l'editor (il file tolto). Allora la superficie resta
+ferma in sola lettura, e nessuna battuta finisce dove non si salva. La
+sessione segue le rinomine, e la scheda con lei. `leave()` registra il testo
+tenuto dall'editor e salva adesso; `destroy()` lo registra, stacca, smonta e
+lascia la prenotazione, una volta sola.
+
+Chiusa la lavagna (o la scheda), se nessun riquadro e nessun'altra scheda
+tiene il file, la sessione decide come alla chiusura di un riquadro: salva e
+si chiude. Se non può salvare, un conflitto o un disco che rifiuta, la bozza
+è già scritta e la sessione resta aperta con il testo: il lavoro non si
+perde.

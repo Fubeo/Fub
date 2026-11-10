@@ -88,6 +88,7 @@ import { revealSetting } from "../panels/settings";
 import { CASE_KEY, caseOf, toRecover } from "./drafts";
 import { addSheetNotice, clearAllRemovedNotices, clearSheetNotices, dismissSheetNotice, moveSheetNotices, setLimitedMode, setRemovedNotice } from "./sheet-notices";
 import { syntaxForms, unsavedDrafts } from "../host/query";
+import { createCardEditorPort } from "./card-editors";
 import type { ComponentRefusal, ComponentRow, DraftInfo, Origin } from "../host/contract";
 import {
   documentSessions,
@@ -480,10 +481,23 @@ function watchCardFile(path: string, changed: () => void): () => void {
   };
 }
 
+/// La porta per scrivere dentro le schede (N6 T40): le stesse sessioni e lo
+/// stesso registro delle superfici dei riquadri di questa finestra, e la
+/// stessa sola lettura (`heldReadOnly`).
+const cardEditors = createCardEditorPort({
+  sessions: documentSessions,
+  surfaces: () => surfaceRegistry ?? null,
+  held: heldReadOnly,
+  shownInPane: isOpen,
+  theme: () => theme,
+  forms: syntaxForms,
+});
+
 /// Le porte delle schede della lavagna (N6 T12). Le immagini e i PDF si
 /// leggono dalla `transport` dei media (`mediaTransport`), i fogli con le
 /// chiamate di `gridHost`: le passa la registrazione della lavagna.
 const canvasCards: CanvasCardPorts = {
+  editors: cardEditors,
   note: {
     show: async (path, heading, host, life) => {
       const content = await renderEmbed(path, heading, null);
@@ -940,12 +954,18 @@ export function mountDocumentController(lifetime: Lifetime, d: DocumentDeps, pan
     window.clearTimeout(contextTimer);
     contextTimer = undefined;
   });
+  // Gli editor dentro le schede muoiono con la shell, come i riquadri.
+  lifetime.add(() => cardEditors.destroyAll());
   surfaceRegistry = createDocumentSurfaceRegistry({
-    onChange: written,
+    // Una superficie di scheda scrive dalla sua porta; le altre sono riquadri.
+    onChange: (paneId, change) => {
+      if (!cardEditors.written(paneId, change)) written(paneId, change);
+    },
     onSelectionChange: (paneId) => {
       if (layout.focus === paneId) scheduleContext();
     },
     onFail: (paneId, error) => {
+      if (cardEditors.failed(paneId, error)) return;
       const r = panes.get(paneId);
       if (r?.shown?.k === "doc") failSurface(r, r.shown.doc, error);
     },
@@ -1850,7 +1870,8 @@ export async function releaseTab(paneId: string, tab: Tab | null): Promise<void>
 /// Un documento che nessun riquadro mostra più viene rilasciato dalla sessione:
 /// il flush, la bozza e la chiusura sono una sola decisione del suo owner.
 async function dismissIfUnwatched(doc: string, paneId: string = layout.focus): Promise<void> {
-  if (panesWithDoc(doc).length > 0) return;
+  // Anche una scheda della lavagna che ci scrive dentro la tiene aperta.
+  if (panesWithDoc(doc).length > 0 || cardEditors.holds(doc)) return;
   const outcome = await documentSessions.release(doc);
   if (outcome.kind === "unsaved") await keepOrDiscardUnsaved(doc, paneId);
 }
@@ -2199,6 +2220,7 @@ function setReadOnlyForDocument(doc: string, readOnly: boolean): void {
   for (const paneId of panesWithDoc(doc)) {
     panes.get(paneId)?.surface?.setReadOnly?.(readOnly || closeDraining || lendHeld(doc));
   }
+  cardEditors.refreshReadOnly();
 }
 
 /// Perché una scheda di `doc` non accetta modifiche: la chiusura in corso,
@@ -2215,6 +2237,7 @@ export function freezeDocumentSurfaces(frozen: boolean): void {
     const doc = activeDoc(paneId);
     if (doc) pane.surface?.setReadOnly?.(frozen || documentSessions.isDeletionPending(doc) || lendHeld(doc));
   }
+  cardEditors.refreshReadOnly();
 }
 
 /// Come si chiama una tab.
@@ -3215,7 +3238,7 @@ export async function openDocument(id: string, options: OpenOptions = {}): Promi
     releaseIntent();
     // A failed or superseded opening must not leave the owner retained solely
     // by its reservation. A tab already present still counts as a watcher.
-    if (!isOpen(id)) await documentSessions.release(id);
+    if (!isOpen(id) && !cardEditors.holds(id)) await documentSessions.release(id);
   }
 }
 
@@ -3757,4 +3780,5 @@ export function setEditorTheme(t: Theme): void {
   // U26: solo `setTheme` sulla superficie viva, mai `setDoc`/rimonto:
   // selezione, scroll e history restano dove sono.
   for (const r of panes.values()) r.surface?.setTheme?.(t);
+  cardEditors.setTheme(t);
 }

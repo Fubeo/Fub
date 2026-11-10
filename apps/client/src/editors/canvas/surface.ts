@@ -14,7 +14,8 @@ import type {
   EditorSurface,
   SurfaceMountContext,
 } from "../core/registry";
-import { CanvasEngine, type CanvasChange, type CanvasEngineOptions } from "./engine";
+import { CanvasEngine, type CanvasCards, type CanvasChange, type CanvasEngineOptions } from "./engine";
+import type { CardEditing, CardEditorPort } from "./cards";
 import { canvasCoreLoaded, canvasCoreReady } from "./wasm/core";
 import { t } from "../../i18n/strings";
 import { errorText } from "../../host/errors";
@@ -65,6 +66,8 @@ export interface CanvasSurfaceCallbacks {
   readonly renderMarkdownForCard?: CanvasEngineOptions["renderMarkdownForCard"];
   /** Le schede di file e di link (N6): senza, il corpo di sempre. */
   readonly cards?: CanvasEngineOptions["cards"];
+  /** La porta per scrivere dentro le schede (T40): arriva alla tela con `cards`. */
+  readonly cardEditors?: CardEditorPort;
   /** La misura di un'immagine del vault, per la scheda che nasce dal rilascio (T15): senza, la misura di serie. */
   readonly measureImage?: CanvasEngineOptions["measureImage"];
   /** L'HTML degli appunti come Markdown, per le celle incollate (T15): senza, solo il testo a tabulazioni. */
@@ -143,6 +146,17 @@ const VIEW_MEMORY = createCanvasViewMemory({
   set: (key, value) => api.setViewState(key, value),
 });
 
+/**
+ * Le schede della tela con la porta per scriverci dentro (T40), se la shell
+ * la dà: la tela la trova accanto al registro (`CardEditing`) e non importa
+ * nessun editor. Senza porta, le schede di sempre.
+ */
+function withEditors(cards: CanvasCards, editors: CardEditorPort | undefined): CanvasCards {
+  if (!editors) return cards;
+  const editing: CanvasCards & CardEditing = { ...cards, editors };
+  return editing;
+}
+
 /** Crea la superficie canvas per un profilo; la registrazione resta a Main. */
 export function mountCanvasSurface(
   profile: string,
@@ -179,7 +193,7 @@ export function mountCanvasSurface(
     media: callbacks.media,
     attachments: callbacks.attachments,
     renderMarkdownForCard: callbacks.renderMarkdownForCard,
-    ...(callbacks.cards ? { cards: callbacks.cards } : {}),
+    ...(callbacks.cards ? { cards: withEditors(callbacks.cards, callbacks.cardEditors) } : {}),
     ...(callbacks.measureImage ? { measureImage: callbacks.measureImage } : {}),
     ...(callbacks.clipboardMarkdown ? { clipboardMarkdown: callbacks.clipboardMarkdown } : {}),
     viewMemory: VIEW_MEMORY,
