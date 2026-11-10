@@ -88,7 +88,7 @@ import { revealSetting } from "../panels/settings";
 import { CASE_KEY, caseOf, toRecover } from "./drafts";
 import { addSheetNotice, clearAllRemovedNotices, clearSheetNotices, dismissSheetNotice, moveSheetNotices, setLimitedMode, setRemovedNotice } from "./sheet-notices";
 import { syntaxForms, unsavedDrafts } from "../host/query";
-import { createCardEditorPort } from "./card-editors";
+import { createCardEditorPort, type CardEditorHub } from "./card-editors";
 import type { ComponentRefusal, ComponentRow, DraftInfo, Origin } from "../host/contract";
 import {
   documentSessions,
@@ -483,15 +483,29 @@ function watchCardFile(path: string, changed: () => void): () => void {
 
 /// La porta per scrivere dentro le schede (N6 T40): le stesse sessioni e lo
 /// stesso registro delle superfici dei riquadri di questa finestra, e la
-/// stessa sola lettura (`heldReadOnly`).
-const cardEditors = createCardEditorPort({
-  sessions: documentSessions,
-  surfaces: () => surfaceRegistry ?? null,
-  held: heldReadOnly,
-  shownInPane: isOpen,
-  theme: () => theme,
-  forms: syntaxForms,
-});
+/// stessa sola lettura (`heldReadOnly`). Nasce al primo uso: caricare il
+/// modulo non legge ancora la collezione delle sessioni.
+let cardEditorHub: CardEditorHub | null = null;
+function cardEditorsHub(): CardEditorHub {
+  cardEditorHub ??= createCardEditorPort({
+    sessions: documentSessions,
+    surfaces: () => surfaceRegistry ?? null,
+    held: heldReadOnly,
+    shownInPane: isOpen,
+    theme: () => theme,
+    forms: syntaxForms,
+  });
+  return cardEditorHub;
+}
+const cardEditors: CardEditorHub = {
+  open: (path, host, options) => cardEditorsHub().open(path, host, options),
+  written: (surfaceId, change) => cardEditorHub?.written(surfaceId, change) ?? false,
+  failed: (surfaceId, error) => cardEditorHub?.failed(surfaceId, error) ?? false,
+  holds: (path) => cardEditorHub?.holds(path) ?? false,
+  refreshReadOnly: () => cardEditorHub?.refreshReadOnly(),
+  setTheme: (next) => cardEditorHub?.setTheme(next),
+  destroyAll: () => cardEditorHub?.destroyAll(),
+};
 
 /// Le porte delle schede della lavagna (N6 T12). Le immagini e i PDF si
 /// leggono dalla `transport` dei media (`mediaTransport`), i fogli con le
