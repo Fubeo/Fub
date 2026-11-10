@@ -25,6 +25,8 @@ import { DEFAULT_PREFERENCES, type CanvasPreferences, type WheelAction } from ".
 import { CANVAS_TOOL_IDS, toolCommandId } from "./chrome/commands";
 import { INERTIA_MS } from "../../spatial/camera";
 import { setReducedMotionPreference } from "../../theme/reduced-motion";
+import { createCardRegistry } from "./cards";
+import { CardCache } from "./card-cache";
 
 // Le impostazioni della lavagna (T35): il motore monta `watchPreferences`, e la
 // prova tiene le sue funzioni per cambiare «La rotella del mouse» a lavagna
@@ -3751,5 +3753,219 @@ describe("CanvasEngine: spostare e ingrandire (T53)", () => {
     expect(frames.size).toBe(1);
     engine.destroy();
     expect(frames.size).toBe(0);
+  });
+});
+
+describe("CanvasEngine: spargi le pagine di un PDF (T72)", () => {
+  /** Un PDF a sinistra (`p`), una nota più in basso (`t`). */
+  const pdfBoard = () => JSON.stringify({
+    nodes: [
+      { id: "p", type: "file", x: 0, y: 0, width: 360, height: 480, file: "docs/manuale.pdf" },
+      { id: "t", type: "text", x: 0, y: 600, width: 240, height: 140, text: "nota" },
+    ],
+    edges: [],
+  });
+
+  /** Il lettore delle pagine finto: `count` pagine (`null`: il PDF non si apre), misura 612×792. */
+  function pdfPages(count: number | null) {
+    return {
+      count: vi.fn(async (_path: string) => count),
+      sizes: vi.fn(async (_path: string, wanted: readonly number[]) => wanted.map(() => ({ width: 612, height: 792 }))),
+    };
+  }
+
+  function open(count: number | null = 24, overrides: Partial<CanvasEngineOptions> = {}) {
+    const pages = pdfPages(count);
+    const watches: Array<{ path: string; changed: () => void; stop: ReturnType<typeof vi.fn> }> = [];
+    const made = mounted(pdfBoard(), {
+      cards: {
+        registry: createCardRegistry([]),
+        snapshots: new CardCache(),
+        watch: (path, changed) => {
+          const stop = vi.fn();
+          watches.push({ path, changed, stop });
+          return stop;
+        },
+        pdfPages: pages,
+      },
+      ...overrides,
+    });
+    return { ...made, pages, watches };
+  }
+
+  /** Sceglie la scheda `id` col tasto destro, come il gesto. */
+  function choose(engine: CanvasEngine, host: HTMLElement, id = "p") {
+    const pointing = vi.spyOn(document, "elementFromPoint").mockReturnValue(host.querySelector<HTMLElement>(`.canvas-node[data-node="${id}"]`));
+    try {
+      return engine.contextMenu({ x: 10, y: 10 });
+    } finally {
+      pointing.mockRestore();
+    }
+  }
+
+  function spreadCommand(engine: CanvasEngine) {
+    return engine.commands().find((command) => command.id === "canvas.spread_pages")!;
+  }
+
+  function spread(engine: CanvasEngine): void {
+    spreadCommand(engine).run();
+  }
+
+  /** Il dialogo aperto per ultimo. */
+  function dialog(): HTMLElement {
+    const all = document.querySelectorAll<HTMLElement>(".kit-dialog");
+    return all[all.length - 1]!;
+  }
+
+  function dialogField(): HTMLInputElement {
+    return dialog().querySelector<HTMLInputElement>(".kit-field-input")!;
+  }
+
+  function dialogNote(): string {
+    return dialog().querySelector(".kit-dialog-body p")?.textContent ?? "";
+  }
+
+  function answer(action: "spread" | "cancel"): void {
+    dialog().querySelector<HTMLButtonElement>(`[data-action="${action}"]`)!.click();
+  }
+
+  /** Le schede nate dalle pagine (quelle con `subpath`, senza il gruppo). */
+  function placed(engine: CanvasEngine) {
+    return readCanvas(engine.getDoc()).nodes.filter((node) => node.subpath !== undefined);
+  }
+
+  it("chiede le pagine (di serie tutte) e mette una scheda per pagina accanto al PDF, con un gruppo oltre 12", async () => {
+    const { engine, host, pages } = open(24);
+    choose(engine, host);
+    spread(engine);
+    await vi.waitFor(() => expect(dialogField().value).toBe("1-24"));
+    answer("spread");
+    await vi.waitFor(() => expect(placed(engine)).toHaveLength(24));
+    expect(pages.count).toHaveBeenCalledWith("docs/manuale.pdf");
+    expect(pages.sizes).toHaveBeenCalledWith("docs/manuale.pdf", Array.from({ length: 24 }, (_, index) => index + 1));
+    const cards = placed(engine);
+    expect(cards.map((node) => node.subpath)).toEqual(Array.from({ length: 24 }, (_, index) => `#page=${index + 1}`));
+    expect(cards.every((node) => node.type === "file" && node.file === "docs/manuale.pdf")).toBe(true);
+    // Le misure di nascita del PDF (T29): 360 di larghezza, l'altezza segue la pagina; in riga dopo il PDF.
+    expect(cards[0]).toMatchObject({ x: 384, y: 0, width: 360, height: 466 });
+    expect(cards[10]).toMatchObject({ x: 384, y: 496 });
+    const group = readCanvas(engine.getDoc()).nodes.find((node) => node.type === "group");
+    expect(group?.label).toBe(t("canvas.spread.group", { count: "24" }));
+    engine.destroy();
+  });
+
+  it("un intervallo fa nascere solo le sue pagine, e sotto le 13 niente gruppo", async () => {
+    const { engine, host } = open(24);
+    choose(engine, host);
+    spread(engine);
+    await vi.waitFor(() => expect(dialogField().value).toBe("1-24"));
+    type(dialogField(), "3-7, 9");
+    expect(dialogNote()).toBe(t("canvas.spread.count", { n: "6" }));
+    answer("spread");
+    await vi.waitFor(() => expect(placed(engine)).toHaveLength(6));
+    expect(placed(engine).map((node) => node.subpath)).toEqual(["#page=3", "#page=4", "#page=5", "#page=6", "#page=7", "#page=9"]);
+    expect(readCanvas(engine.getDoc()).nodes.some((node) => node.type === "group")).toBe(false);
+    engine.destroy();
+  });
+
+  it("un intervallo oltre l'ultima pagina si taglia e si dice", async () => {
+    const { engine, host } = open(24);
+    choose(engine, host);
+    spread(engine);
+    await vi.waitFor(() => expect(dialogField().value).toBe("1-24"));
+    type(dialogField(), "20-40");
+    expect(dialogNote()).toBe(t("canvas.spread.cut", { pages: "24", n: "5" }));
+    answer("spread");
+    await vi.waitFor(() => expect(placed(engine)).toHaveLength(5));
+    expect(placed(engine).map((node) => node.subpath)).toEqual(["#page=20", "#page=21", "#page=22", "#page=23", "#page=24"]);
+    engine.destroy();
+  });
+
+  it("un testo che non si legge non chiude il dialogo, e Annulla non tocca la lavagna", async () => {
+    const { engine, host, changes } = open(24);
+    choose(engine, host);
+    spread(engine);
+    await vi.waitFor(() => expect(dialogField().value).toBe("1-24"));
+    type(dialogField(), "3-x");
+    expect(dialogNote()).toBe(t("canvas.spread.bad", { text: "3-x" }));
+    answer("spread");
+    expect(document.querySelectorAll(".kit-dialog")).toHaveLength(1);
+    expect(placed(engine)).toHaveLength(0);
+    answer("cancel");
+    expect(placed(engine)).toHaveLength(0);
+    expect(changes).toHaveLength(0);
+    engine.destroy();
+  });
+
+  it("più di 200 schede chiede conferma: Annulla non fa nulla, Spargi le fa nascere", async () => {
+    const { engine, host } = open(201);
+    choose(engine, host);
+    spread(engine);
+    await vi.waitFor(() => expect(dialogField().value).toBe("1-201"));
+    answer("spread");
+    await vi.waitFor(() => expect(dialog().querySelector(".kit-dialog-title")?.textContent).toBe(t("canvas.spread.confirm.title", { n: "201" })));
+    answer("cancel");
+    expect(placed(engine)).toHaveLength(0);
+    spread(engine);
+    await vi.waitFor(() => expect(dialogField().value).toBe("1-201"));
+    answer("spread");
+    await vi.waitFor(() => expect(dialog().querySelector(".kit-dialog-title")?.textContent).toBe(t("canvas.spread.confirm.title", { n: "201" })));
+    answer("spread");
+    await vi.waitFor(() => expect(placed(engine)).toHaveLength(201));
+    engine.destroy();
+  }, 20_000);
+
+  it("tutte le schede nate da «Spargi» tornano con un solo annulla", async () => {
+    const { engine, host } = open(24);
+    const before = readCanvas(engine.getDoc()).nodes.map((node) => node.id);
+    choose(engine, host);
+    spread(engine);
+    await vi.waitFor(() => expect(dialogField().value).toBe("1-24"));
+    answer("spread");
+    await vi.waitFor(() => expect(placed(engine)).toHaveLength(24));
+    engine.undo();
+    expect(readCanvas(engine.getDoc()).nodes.map((node) => node.id)).toEqual(before);
+    engine.destroy();
+  });
+
+  it("un PDF che non si apre lo dice, e la voce resta spenta finché il file non cambia", async () => {
+    const { engine, host, watches } = open(null);
+    choose(engine, host);
+    spread(engine);
+    await vi.waitFor(() => expect(host.querySelector(".canvas-intake-error")?.textContent).toContain(t("canvas.card.unreadable", { name: "manuale.pdf" })));
+    expect(document.querySelector(".kit-dialog")).toBeNull();
+    expect(spreadCommand(engine).disabled()).toBe(t("canvas.commands.why.pdf_unreadable"));
+    expect(watches.map((watch) => watch.path)).toEqual(["docs/manuale.pdf"]);
+    // Il file cambia: il comando torna acceso, e il suo ascolto si scioglie.
+    watches[0]!.changed();
+    expect(spreadCommand(engine).disabled()).toBeNull();
+    expect(watches[0]!.stop).toHaveBeenCalledTimes(1);
+    engine.destroy();
+  });
+
+  it("in sola lettura la voce è spenta col perché, e non apre niente", () => {
+    const { engine, host, pages } = open(24);
+    choose(engine, host);
+    engine.setReadOnly(true);
+    expect(spreadCommand(engine).disabled()).toBe(t("canvas.commands.why.read_only"));
+    spread(engine);
+    expect(pages.count).not.toHaveBeenCalled();
+    expect(document.querySelector(".kit-dialog")).toBeNull();
+    engine.destroy();
+  });
+
+  it("il menu del PDF ha «Spargi le pagine…» dopo «Apri a lato»; una nota non ce l'ha, e senza lettore è spenta", () => {
+    const { engine, host } = open(24, { onOpenPathBeside: () => {} });
+    const idsOf = (menu: ReturnType<CanvasEngine["contextMenu"]>) => (menu?.context ?? [])
+      .filter((entry): entry is SurfaceMenuItem => typeof entry !== "string")
+      .map((item) => item.id);
+    expect(idsOf(choose(engine, host)).slice(0, 4)).toEqual(["canvas.open", "canvas.open_beside", "canvas.spread_pages", "canvas.connect"]);
+    expect(idsOf(choose(engine, host, "t"))).not.toContain("canvas.spread_pages");
+    expect(spreadCommand(engine).disabled()).toBe(t("canvas.commands.why.no_pdf"));
+    engine.destroy();
+    const bare = mounted(pdfBoard());
+    choose(bare.engine, bare.host);
+    expect(spreadCommand(bare.engine).disabled()).toBe(t("canvas.commands.why.no_pdf_reader"));
+    bare.engine.destroy();
   });
 });

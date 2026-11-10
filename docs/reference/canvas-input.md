@@ -171,7 +171,7 @@ scrive, valgono quelli della sessione). `Esc` torna dov'eri, anche in un campo.
 | `canvas.fit`, `canvas.fit_selection` | `Maiusc+1`, `Ctrl+0`; `Maiusc+2` |
 | `canvas.zoom_in`, `canvas.zoom_out`, `canvas.zoom_reset` | `+`, `Ctrl+=`; `-`, `Ctrl+-`; `0` |
 | `canvas.add.*`, `canvas.edit`, `canvas.open`, `canvas.open_url`, `canvas.edge.reverse`, `canvas.color.*`, `canvas.align.*`, `canvas.distribute_*` | nessuno |
-| `canvas.open_beside`, `canvas.open_viewer`, `canvas.web_preview`, `canvas.connect`, `canvas.trash_file` (il menu della scheda) | nessuno (`canvas.connect` anche con `C`, vedi sotto) |
+| `canvas.open_beside`, `canvas.open_viewer`, `canvas.web_preview`, `canvas.spread_pages` (solo su un PDF), `canvas.connect`, `canvas.trash_file` (il menu della scheda) | nessuno (`canvas.connect` anche con `C`, vedi sotto) |
 | `canvas.pen_menu`, `canvas.color_menu`, `canvas.align_menu`, `canvas.tips.none`, `.start`, `.end` (la riga delle opzioni) | nessuno |
 
 I tasti sono quelli della tabella «Tasti» della lavagna dove fanno la stessa
@@ -196,7 +196,7 @@ comandi del catalogo col loro nome e il loro tasto:
 1. la riga degli appunti; Apri (Modifica il testo per una scheda di testo,
    Apri nel visore per un'immagine, Apri la pagina web e Mostra l'anteprima
    per una pagina); Apri a lato, per una scheda di file, se l'host la dà
-   (`onOpenPathBeside`); Collega… · `C`;
+   (`onOpenPathBeside`); Spargi le pagine…, per un PDF (sotto); Collega… · `C`;
 2. Colore › come scelte esclusive: Nessuno, i sei di JSON Canvas col
    pallino, «Colori delle note ›» coi nove, «Altro…», che apre il selettore
    del kit (i colori in `canvas-format.md`); Disponi › (Porta davanti,
@@ -207,6 +207,16 @@ comandi del catalogo col loro nome e il loro tasto:
 Con più schede non ci sono Apri né Collega…; in sola lettura le voci che
 cambiano la lavagna sono spente col perché, non nascoste.
 
+- **Spargi le pagine…** (T72), su un PDF, chiede quali pagine: il campo parte
+  con tutte (`1-N`) e accetta «3-7, 9» o «20-» fino all'ultima. Ogni pagina
+  nasce come scheda di file con `#page=N`, in una riga di dieci accanto al PDF,
+  a capo dopo dieci, con le misure di nascita del PDF (vedi `canvas-cards.md`).
+  Oltre dodici schede nascono in un gruppo «N pagine». Un intervallo oltre
+  l'ultima pagina si taglia, e il campo lo dice; un pezzo che non si legge lo
+  dice e il dialogo resta aperto. Oltre 200 pagine chiedono conferma, e
+  «Annulla» non fa nulla. Il tutto è un solo commit, che «Annulla» riporta. Se
+  il PDF non si apre, il comando lo dice e resta spento col perché finché il
+  file non cambia; in sola lettura è spento col perché.
 - **`C`** con una scheda scelta comincia il filo da lei, come «Collega…» e il
   pulsante → della testata: il prossimo clic su un'altra scheda lo chiude e la
   colonna torna alla Selezione; `Esc` rinuncia. Con due schede scelte le

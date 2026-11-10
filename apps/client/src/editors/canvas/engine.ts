@@ -14,7 +14,9 @@ import { openLifetime, type Lifetime } from "../../ui/lifetime";
 import { mediaKindOfId } from "../media/media-types";
 import { anchorAt, strokeBounds, StrokeBox, type Bounds } from "./anchor";
 import { parseTsv } from "../core/tsv";
-import { bornSize, dropLayout, markdownTable, type DropItem } from "./drop-layout";
+import { bornSize, dropLayout, markdownTable, spreadLayout, type DropItem } from "./drop-layout";
+import { parsePageRanges } from "./page-ranges";
+import type { PdfPagesReader } from "./cards/pdf";
 import { ENTRIES_DRAG_TYPE, NOTE_DRAG_TYPE } from "../../ui/drag-types";
 import {
   cardKindOf,
@@ -105,7 +107,7 @@ import {
   writeColor,
   type CanvasColorChoice,
 } from "./colors";
-import { createColorPicker, openPopover, type PopoverHandle } from "../../kit";
+import { createColorPicker, openDialog, openPopover, textField, type PopoverHandle } from "../../kit";
 import { DEFAULT_PREFERENCES, currentPreferences, readInkMouse, readPen, saveInkMouse, savePen, watchPreferences, type WheelAction } from "./preferences";
 import { isTap, pinchCamera, type TouchCamera, type TouchPoint, type ZoomLimits } from "./touch";
 import { fit, stepCamera, zoomAtPoint, type Camera, type MotionState, type ScaleLimits } from "../../spatial/camera";
@@ -164,6 +166,8 @@ export const CANVAS_MIN_SIZE = 40;
 export const MAX_CANVAS_HISTORY = 100;
 /** La pausa dopo l'ultimo tasto in una scheda, prima che il suo testo si registri. */
 export const CARD_PAUSE_MS = 250;
+/** Oltre questo numero di schede nuove, «Spargi le pagine» (T72) chiede conferma. */
+export const SPREAD_CONFIRM_ABOVE = 200;
 /** Quanto si aspetta dopo l'ultimo scatto della rotella prima di dire finito il gesto (A-7). */
 export const WHEEL_SETTLE_MS = 150;
 /** Una riga della rotella in pixel: un valore di partenza, come nella lavagna del grafo. */
@@ -557,6 +561,11 @@ export interface CanvasCards {
   readonly snapshots: CardSnapshots;
   /** Avvisa quando il file `path` cambia, sparisce o torna; restituisce come smettere. */
   watch(path: string, changed: () => void): () => void;
+  /**
+   * Le pagine di un PDF per «Spargi le pagine» (T72). Assente (senza il lettore
+   * dei PDF): il comando è spento col perché.
+   */
+  readonly pdfPages?: PdfPagesReader;
 }
 
 /**
@@ -1112,6 +1121,12 @@ export class CanvasEngine {
    * modifica dopo lo spegne, così «Annulla» annulla sempre il togliere.
    */
   #removal: { readonly text: string; readonly step: CanvasStep | undefined; readonly undo: boolean } | null = null;
+  /**
+   * I PDF che non si sono aperti con «Spargi le pagine» (T72), per percorso, con
+   * ciò che smette di guardarne il file: il comando resta spento finché il file
+   * cambia, sparisce o torna (`watch`), o la lavagna si chiude.
+   */
+  readonly #pdfBroken = new Map<string, () => void>();
   /** Le dita giù che la lavagna segue, in coordinate del client. */
   readonly #fingers = new Map<number, TouchPoint>();
   /** Il dito che può ancora essere un tocco breve: dove e quando si è posato, e su che cosa. */
@@ -1779,6 +1794,9 @@ export class CanvasEngine {
     this.#dropCore();
     // Ogni vista si distrugge qui, una volta: `#releaseBody` la dimentica.
     this.#dropCards();
+    // I PDF guasti smettono di guardare i loro file (T72).
+    for (const stop of this.#pdfBroken.values()) stop();
+    this.#pdfBroken.clear();
     this.#stopLanguage();
     this.#abort.abort();
     this.#root.remove();
@@ -4294,6 +4312,146 @@ export class CanvasEngine {
   }
 
   /**
+   * «Spargi le pagine…» (T72): una scheda per pagina del PDF scelto, in riga
+   * accanto alla sua, a capo ogni 10 e in gruppo oltre 12. Chiede le pagine (di
+   * serie tutte), chiede conferma oltre `SPREAD_CONFIRM_ABOVE`, misura ogni
+   * pagina come nasce un PDF (T29) e mette tutto in un commit solo: un annulla
+   * le toglie. Il file non si cambia.
+   */
+  async #spreadPages(): Promise<void> {
+    const pages = this.#options.cards?.pdfPages;
+    const chosen = this.#selectedNodes();
+    const one = chosen.length === 1 ? chosen[0]! : null;
+    if (!pages || !this.#doc || this.#readOnly || one?.type !== "file" || cardKindOf(one) !== "pdf") return;
+    const path = cardTarget(one).path;
+    if (!isVaultPath(path)) return;
+    const id = one.id;
+    const epoch = this.#epoch;
+    // Dopo ogni attesa: la lavagna è ancora quella, e la scheda c'è ancora.
+    const alive = (): boolean => !this.#destroyed && !this.#readOnly && this.#epoch === epoch
+      && this.#doc !== null && this.#doc.nodes.some((node) => node.id === id);
+    const count = await pages.count(path);
+    if (!alive()) return;
+    if (count === null) {
+      this.#markBroken(path);
+      this.#showIntakeError(t("canvas.card.unreadable", { name: fileName(path) }));
+      return;
+    }
+    this.#forgetBroken(path);
+    const wanted = await this.#askPages(fileName(path), count);
+    if (wanted === null || !alive()) return;
+    if (wanted.length > SPREAD_CONFIRM_ABOVE && !(await this.#confirmSpread(wanted.length))) return;
+    if (!alive()) return;
+    const measured = await pages.sizes(path, wanted);
+    if (!alive()) return;
+    const doc = this.#doc;
+    const beside = doc?.nodes.find((node) => node.id === id);
+    if (!doc || !beside) return;
+    const layout = spreadLayout(wanted.map((_, index) => bornSize("pdf", measured[index] ?? undefined)), beside);
+    const patches: CanvasPatch[] = [];
+    if (layout.group) {
+      const patch = upsertNodePatch(doc, {
+        id: newNodeId("n"), type: "group", ...layout.group,
+        label: t("canvas.spread.group", { count: String(wanted.length) }),
+      });
+      if (patch) patches.push(patch);
+    }
+    wanted.forEach((page, index) => {
+      const patch = upsertNodePatch(doc, {
+        id: newNodeId("n"), type: "file", file: path, subpath: `#page=${page}`, ...layout.rects[index]!,
+      });
+      if (patch) patches.push(patch);
+    });
+    if (patches.length) this.#commit(patches, "input");
+  }
+
+  /**
+   * Chiede quali pagine «Spargi le pagine» deve fare (T72): `null` se si rinuncia.
+   * Il campo parte da tutte le pagine e dice a ogni tasto che cosa nascerà; un
+   * pezzo che non si legge non chiude il dialogo, e il dialogo dice quale.
+   */
+  #askPages(name: string, count: number): Promise<readonly number[] | null> {
+    const own = openLifetime();
+    this.#life.add(() => own.close());
+    const note = document.createElement("p");
+    note.className = "kit-dialog-description";
+    const field = textField({
+      label: t("canvas.spread.field"),
+      value: count > 1 ? `1-${count}` : "1",
+      placeholder: t("canvas.spread.placeholder"),
+      lifetime: own,
+      onInput: () => say(),
+    });
+    const say = (): void => {
+      const ranges = parsePageRanges(field.value(), count);
+      note.textContent = ranges.ok
+        ? (ranges.cut
+          ? t("canvas.spread.cut", { pages: String(count), n: String(ranges.pages.length) })
+          : t("canvas.spread.count", { n: String(ranges.pages.length) }))
+        : ranges.bad === null
+          ? t("canvas.spread.none", { pages: String(count) })
+          : t("canvas.spread.bad", { text: ranges.bad });
+    };
+    const body = document.createElement("div");
+    body.append(field.element, note);
+    say();
+    const handle = openDialog<"spread" | "cancel">({
+      title: t("canvas.spread.title"),
+      description: t("canvas.spread.description", { name, pages: String(count) }),
+      body,
+      actions: [
+        { id: "cancel", label: t("app.cancel"), value: "cancel" },
+        { id: "spread", label: t("canvas.spread.action"), kind: "primary", value: "spread" },
+      ],
+      dismissValue: "cancel",
+      lifetime: own,
+      submit: "spread",
+      confirm: (value) => value === "cancel" || parsePageRanges(field.value(), count).ok,
+    });
+    return handle.result.then((value) => {
+      own.close();
+      if (value !== "spread") return null;
+      const ranges = parsePageRanges(field.value(), count);
+      return ranges.ok ? ranges.pages : null;
+    });
+  }
+
+  /** La conferma prima di far nascere più di `SPREAD_CONFIRM_ABOVE` schede (T72); «Annulla» di serie. */
+  #confirmSpread(count: number): Promise<boolean> {
+    const own = openLifetime();
+    this.#life.add(() => own.close());
+    const handle = openDialog<boolean>({
+      title: t("canvas.spread.confirm.title", { n: String(count) }),
+      description: t("canvas.spread.confirm.description", { n: String(count) }),
+      actions: [
+        { id: "cancel", label: t("app.cancel"), value: false, autofocus: true },
+        { id: "spread", label: t("canvas.spread.action"), kind: "primary", value: true },
+      ],
+      dismissValue: false,
+      lifetime: own,
+    });
+    return handle.result.then((yes) => {
+      own.close();
+      return yes;
+    });
+  }
+
+  /** Un PDF che non si apre: «Spargi le pagine» si spegne, finché il file non cambia (T72). */
+  #markBroken(path: string): void {
+    if (this.#destroyed || this.#pdfBroken.has(path)) return;
+    const stop = this.#options.cards?.watch(path, () => this.#forgetBroken(path));
+    this.#pdfBroken.set(path, stop ?? (() => {}));
+  }
+
+  /** Il file di un PDF guasto è cambiato, è tornato o si è aperto: il comando torna acceso. */
+  #forgetBroken(path: string): void {
+    const stop = this.#pdfBroken.get(path);
+    if (stop === undefined) return;
+    this.#pdfBroken.delete(path);
+    stop();
+  }
+
+  /**
    * Toglie le schede `nodes` e le linee `edges`, con le linee che le tengono:
    * un commit solo, che un annulla riporta. `false` se non c'era niente da togliere.
    */
@@ -4613,6 +4771,18 @@ export class CanvasEngine {
               : t("canvas.commands.why.no_file_card");
           },
           run: () => void this.#trashSelectedFiles().catch((error: unknown) => this.#showIntakeError(error)),
+        };
+      case "canvas.spread_pages":
+        return {
+          disabled: () => {
+            const why = writable();
+            if (why !== null) return why;
+            const one = only();
+            if (one?.type !== "file" || cardKindOf(one) !== "pdf" || !isVaultPath(cardTarget(one).path)) return t("canvas.commands.why.no_pdf");
+            if (!this.#options.cards?.pdfPages) return t("canvas.commands.why.no_pdf_reader");
+            return this.#pdfBroken.has(cardTarget(one).path) ? t("canvas.commands.why.pdf_unreadable") : null;
+          },
+          run: () => void this.#spreadPages().catch((error: unknown) => this.#showIntakeError(error)),
         };
       case "canvas.edge.reverse":
         return {
@@ -5105,6 +5275,8 @@ export class CanvasEngine {
     if (one?.type === "file" && one.file) {
       context.push(entry(cardKindOf(one) === "image" ? "canvas.open_viewer" : "canvas.open", undefined, false));
       if (this.#options.onOpenPathBeside) context.push(entry("canvas.open_beside", undefined, false));
+      // «Spargi le pagine…» (T72): solo su un PDF; spenta, col perché, se non si apre.
+      if (cardKindOf(one) === "pdf") context.push(entry("canvas.spread_pages", undefined, false));
     }
     if (one?.type === "link") {
       context.push(entry("canvas.open_url", undefined, false));

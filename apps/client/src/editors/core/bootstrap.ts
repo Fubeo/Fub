@@ -31,6 +31,7 @@ import type { DrawingImagePort } from "../canvas/surface";
 import type { CardEditorPort, CardMode, CardRenderer, CardSnapshots, CardView } from "../canvas/cards";
 import type { NoteCardPort } from "../canvas/cards/note";
 import type { WebCardPort } from "../canvas/cards/web";
+import type { PdfCardPort } from "../canvas/cards/pdf";
 import type { SheetCardPort } from "../grid/card";
 import { openResourcePort, type ResourcePort, type ResourceTransport } from "../media/resource-port";
 import { isErrorKind } from "../../host/errors";
@@ -351,7 +352,21 @@ async function loadCanvasCards(options: SurfaceBootstrapOptions, ports: CanvasCa
     web.webCardRenderer(ports.web),
   ];
   const media = options.media;
-  if (media) {
+  // La porta dei PDF: la scheda la legge, e «Spargi le pagine» ne conta le pagine (T72).
+  const pdfPort: PdfCardPort | null = media ? {
+    read: async (path) => {
+      const port = await openCardResource(media.transport, path);
+      if (!port) return null;
+      try {
+        return await port.readAll();
+      } finally {
+        await port.close();
+      }
+    },
+    load: media.pdfLoader ?? loadPdf,
+    watch,
+  } : null;
+  if (media && pdfPort) {
     const transport = media.transport;
     fixed.push(
       image.imageCardRenderer({
@@ -370,19 +385,7 @@ async function loadCanvasCards(options: SurfaceBootstrapOptions, ports: CanvasCa
         open: (path) => open(path, null),
         watch,
       }),
-      pdf.pdfCardRenderer({
-        read: async (path) => {
-          const port = await openCardResource(transport, path);
-          if (!port) return null;
-          try {
-            return await port.readAll();
-          } finally {
-            await port.close();
-          }
-        },
-        load: media.pdfLoader ?? loadPdf,
-        watch,
-      }),
+      pdf.pdfCardRenderer(pdfPort),
     );
   }
   const grid = options.gridHost;
@@ -408,7 +411,12 @@ async function loadCanvasCards(options: SurfaceBootstrapOptions, ports: CanvasCa
       }));
     }
     // Lo stesso ascolto dei renderer: una scheda mancante aspetta il file con questo.
-    return { registry: cards.createCardRegistry(renderers), snapshots, watch };
+    return {
+      registry: cards.createCardRegistry(renderers),
+      snapshots,
+      watch,
+      ...(pdfPort ? { pdfPages: pdf.pdfPagesReader(pdfPort) } : {}),
+    };
   };
 }
 

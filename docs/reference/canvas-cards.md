@@ -91,6 +91,10 @@ misure stanno in `drop-layout.ts`, con `bornSize` e `dropLayout`:
 | `web` | 320×120 |
 | `file`, `craft` | 320×160 |
 
+«Spargi le pagine…» (T72) dà a ogni pagina la misura della sua: la stessa
+`bornSize`, con le proporzioni di quella pagina. La disposizione delle schede
+(`spreadLayout`, righe di dieci, gruppo oltre dodici) sta in `drop-layout.ts`.
+
 Le misure di nascita non si agganciano alla griglia di 8 px: si arrotondano
 all'intero più vicino, e nessun lato scende sotto 40 px, la misura minima
 della tela. Così un'immagine 16:9 nasce 480×270, esatta. Un'immagine molto

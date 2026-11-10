@@ -154,6 +154,8 @@ export const CANVAS_COMMANDS: readonly CanvasCommandSpec[] = [
   { id: "canvas.open_viewer", label: "canvas_menu.open_viewer", group: "selection", keys: [], context: "selection" },
   { id: "canvas.web_preview", label: "canvas.card.show_preview", group: "selection", keys: [], context: "selection" },
   { id: "canvas.connect", label: "canvas_menu.connect", group: "selection", keys: [], context: "selection" },
+  // Una scheda per pagina di un PDF (T72): nasce qualcosa, quindi «Creare».
+  { id: "canvas.spread_pages", label: "canvas_menu.spread_pages", group: "create", keys: [], context: "selection" },
   ...CANVAS_NUDGE.map((way): CanvasCommandSpec => ({
     id: `canvas.nudge.${way}`, label: `canvas.commands.nudge.${way}`, group: "selection", keys: [ARROW[way]], context: "selection",
   })),
