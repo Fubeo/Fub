@@ -2874,6 +2874,7 @@ describe("i fili: collegare senza mirare, prendere un filo (T67)", () => {
   }
 
   const patchesOf = (change: CanvasChange): readonly CanvasPatch[] => (change.operation as CanvasOperation).patches ?? [];
+  const last = <T,>(list: readonly T[]): T => list[list.length - 1]!;
 
   it("quattro punti sui lati; si tira da un punto e si rilascia su qualsiasi parte di un'altra scheda, il lato lo sceglie Fub", () => {
     const { engine, host, viewport, changes } = open();
@@ -2889,14 +2890,14 @@ describe("i fili: collegare senza mirare, prendere un filo (T67)", () => {
     expect(changes).toHaveLength(0);
     pointer(viewport, "pointerup", screen(host, 150, 380));
     pointing.mockRestore();
-    expect(doc(engine).edges.at(-1)).toMatchObject({ fromNode: "a", fromSide: "bottom", toNode: "c", toSide: "top", toEnd: "arrow" });
+    expect(last(doc(engine).edges)).toMatchObject({ fromNode: "a", fromSide: "bottom", toNode: "c", toSide: "top", toEnd: "arrow" });
     expect(changes).toHaveLength(1);
     expect(host.querySelector(".canvas-edge-draft")).toBeNull();
     expect(card(host, "c").hasAttribute("data-connect-target")).toBe(false);
 
     // Due schede sovrapposte: il bersaglio è quella sopra (lo dà `elementFromPoint`).
     pull(host, port(host, "b", "bottom"), screen(host, 500, 100), screen(host, 520, 340), card(host, "e"));
-    expect(doc(engine).edges.at(-1)).toMatchObject({ fromNode: "b", toNode: "e", fromSide: "bottom", toSide: "top" });
+    expect(last(doc(engine).edges)).toMatchObject({ fromNode: "b", toNode: "e", fromSide: "bottom", toSide: "top" });
     expect(changes).toHaveLength(2);
 
     // Sulla scheda da cui parte non nasce niente.
@@ -2951,7 +2952,7 @@ describe("i fili: collegare senza mirare, prendere un filo (T67)", () => {
   it("Alt+trascina dal corpo di una scheda tira un filo; nel vuoto Alt sposta ancora la vista", () => {
     const { engine, host, viewport } = open();
     pull(host, body(host, "a"), screen(host, 100, 60), screen(host, 100, 350), card(host, "c"), { altKey: true });
-    expect(doc(engine).edges.at(-1)).toMatchObject({ fromNode: "a", fromSide: "bottom", toNode: "c", toSide: "top" });
+    expect(last(doc(engine).edges)).toMatchObject({ fromNode: "a", fromSide: "bottom", toNode: "c", toSide: "top" });
     const edges = doc(engine).edges.length;
     const stage = host.querySelector<HTMLElement>(".canvas-stage")!;
     const camera = stage.style.transform;
@@ -2971,7 +2972,7 @@ describe("i fili: collegare senza mirare, prendere un filo (T67)", () => {
     const c = new KeyboardEvent("keydown", { key: "c", bubbles: true, cancelable: true });
     viewport.dispatchEvent(c);
     expect(c.defaultPrevented).toBe(true);
-    expect(doc(engine).edges.at(-1)).toMatchObject({ fromNode: "a", fromSide: "bottom", toNode: "c", toSide: "top", toEnd: "arrow" });
+    expect(last(doc(engine).edges)).toMatchObject({ fromNode: "a", fromSide: "bottom", toNode: "c", toSide: "top", toEnd: "arrow" });
     expect(viewport.dataset.tool).toBe("select");
 
     click(host, body(host, "b"), screen(host, 500, 30));
@@ -3023,7 +3024,7 @@ describe("i fili: collegare senza mirare, prendere un filo (T67)", () => {
     const before = engine.getDoc();
     viewport.focus();
     viewport.dispatchEvent(new KeyboardEvent("keydown", { key: "Delete", bubbles: true, cancelable: true }));
-    expect(patchesOf(changes.at(-1)!)).toEqual([expect.objectContaining({ kind: "remove-edge", at: 0, after: null })]);
+    expect(patchesOf(last(changes))).toEqual([expect.objectContaining({ kind: "remove-edge", at: 0, after: null })]);
     expect(doc(engine).edges).toHaveLength(0);
     expect(doc(engine).nodes).toHaveLength(6);
     expect(engine.undo()).toBe(true);

@@ -4314,7 +4314,7 @@ export class CanvasEngine {
       return;
     }
     // Un filo entro 8 px vince sulla scheda dove si vede, fuori dalla scheda (T67).
-    const wire = this.#insideActive(target, false) ? null : this.#edgeUnder(event.clientX, event.clientY, nodeId);
+    const wire = this.#wireAt(target, event.clientX, event.clientY);
     if (wire) {
       this.#selectEdge(wire);
       return;
@@ -4846,13 +4846,20 @@ export class CanvasEngine {
     return card && insideBox(hit.point, card) ? null : hit.id;
   }
 
+  /**
+   * Il filo che un clic o il passaggio su `target` prende: mai dentro la
+   * scheda attiva né sopra un controllo (un punto, una maniglia, un pulsante,
+   * un link, un campo), che restano loro.
+   */
+  #wireAt(target: EventTarget | null, clientX: number, clientY: number): string | null {
+    if (this.#insideActive(target, false)) return null;
+    if (target instanceof Element && target.closest(".canvas-port, [data-resize], button, a, input, textarea, select")) return null;
+    return this.#edgeUnder(clientX, clientY, this.#nodeAt(target));
+  }
+
   /** Il passaggio del mouse: il filo sotto si scurisce (`data-hover`). */
   #hoverEdge(clientX: number, clientY: number, target: EventTarget | null): void {
-    if (this.#insideActive(target, false) || (target instanceof Element && target.closest(".canvas-port, [data-resize], button, a, input, textarea"))) {
-      this.#setEdgeHover(null);
-      return;
-    }
-    this.#setEdgeHover(this.#edgeUnder(clientX, clientY, this.#nodeAt(target)));
+    this.#setEdgeHover(this.#wireAt(target, clientX, clientY));
   }
 
   #setEdgeHover(id: string | null): void {

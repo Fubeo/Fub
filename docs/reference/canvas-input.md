@@ -168,7 +168,8 @@ cambiano la lavagna sono spente col perché, non nascoste.
 ## I fili
 
 La geometria è pura, in `editors/canvas/edges.ts`; i gesti li fa `engine.ts`.
-La forma del filo resta quella di oggi (la curva che segue i lati è D6, v2).
+Il filo è una curva che esce e arriva in orizzontale (quella che segue i
+lati è D6, v2).
 
 - **Tirare.** Passando sopra una scheda compaiono quattro punti a metà dei lati
   (`.canvas-port`, `data-side`). Da un punto, dal pulsante → della testata, con
