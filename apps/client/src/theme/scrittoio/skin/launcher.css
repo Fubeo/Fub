@@ -325,10 +325,8 @@
   margin: 0;
   padding: var(--space-4) var(--space-6) 0;
   color: var(--muted);
-  font-size: var(--text-xs);
-  font-weight: var(--weight-bold);
-  letter-spacing: var(--tracking-caps);
-  text-transform: uppercase;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
 }
 .modale .docsearch-summary:empty {
   display: none;
