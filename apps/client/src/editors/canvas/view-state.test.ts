@@ -103,18 +103,33 @@ describe("la forma dello stato", () => {
   });
 
   it("conserva i campi in più, e li riscrive", () => {
-    const read = parseCanvasView({ version: 1, selection: [], pages: {}, navigator: { open: true }, grid: 8 });
+    const read = parseCanvasView({ version: 1, selection: [], pages: {}, snap: { open: true }, grid: 8 });
     if (read.kind !== "state") throw new Error("atteso uno stato");
-    expect(read.extra).toEqual({ navigator: { open: true }, grid: 8 });
+    expect(read.extra).toEqual({ snap: { open: true }, grid: 8 });
     const written = serializeCanvasView({ camera: { x: 1, y: 2, zoom: 1.5 }, selection: ["n"], pages: new Map([["p", 2]]) }, read.extra);
     expect(written).toEqual({
-      navigator: { open: true },
+      snap: { open: true },
       grid: 8,
       version: 1,
       camera: { x: 1, y: 2, zoom: 1.5 },
       selection: ["n"],
       pages: { p: 2 },
     });
+  });
+
+  it("«Nascondi il navigatore» si scrive solo spento, e si rilegge (T55)", () => {
+    const hidden = parseCanvasView({ version: 1, selection: [], pages: {}, navigator: false });
+    if (hidden.kind !== "state") throw new Error("atteso uno stato");
+    expect(hidden.view.navigatorHidden).toBe(true);
+    expect(hidden.extra).toEqual({});
+    expect(serializeCanvasView(hidden.view)).toEqual({ version: 1, selection: [], pages: {}, navigator: false });
+    // Acceso non si scrive; un valore che non è `false` vale acceso.
+    for (const navigator of [true, "no", { open: false }, undefined]) {
+      const read = parseCanvasView({ version: 1, navigator });
+      if (read.kind !== "state") throw new Error("atteso uno stato");
+      expect(read.view.navigatorHidden).toBeUndefined();
+      expect(serializeCanvasView(read.view, read.extra)).toEqual({ version: 1, selection: [], pages: {} });
+    }
   });
 
   it("i campi in più non coprono quelli di questo client", () => {
@@ -189,8 +204,8 @@ describe("la memoria", () => {
 });
 
 describe("il registratore", () => {
-  let view: { camera: { x: number; y: number; zoom: number }; selection: string[] } | null;
-  const snapshot = (): CanvasViewSnapshot => (view ? { camera: { ...view.camera }, selection: [...view.selection] } : null);
+  let view: { camera: { x: number; y: number; zoom: number }; selection: string[]; navigatorHidden?: boolean } | null;
+  const snapshot = (): CanvasViewSnapshot => (view ? { camera: { ...view.camera }, selection: [...view.selection], navigatorHidden: view.navigatorHidden } : null);
 
   beforeEach(() => {
     vi.useFakeTimers();
@@ -325,7 +340,7 @@ describe("il registratore", () => {
   });
 
   it("riscrivendo conserva i campi in più della versione 1", async () => {
-    const store = memoryStore({ [canvasViewKey(DOC)]: { version: 1, selection: [], pages: {}, navigator: { open: false }, dark: { a: true } } });
+    const store = memoryStore({ [canvasViewKey(DOC)]: { version: 1, selection: [], pages: {}, snap: { open: false }, dark: { a: true } } });
     const memo = recorder(store);
     await memo.begin();
     view!.camera = { x: 3, y: 4, zoom: 1 };
@@ -333,13 +348,32 @@ describe("il registratore", () => {
     memo.close();
     await settle();
     expect(store.states.get(canvasViewKey(DOC))).toEqual({
-      navigator: { open: false },
+      snap: { open: false },
       dark: { a: true },
       version: 1,
       camera: { x: 3, y: 4, zoom: 1 },
       selection: [],
       pages: {},
     });
+  });
+
+  it("il navigatore spento torna all'apertura e si ricorda col resto (T55)", async () => {
+    const store = memoryStore({ [canvasViewKey(DOC)]: { version: 1, selection: [], pages: {}, navigator: false } });
+    const memo = recorder(store);
+    expect((await memo.begin())?.navigatorHidden).toBe(true);
+    view = { camera: { x: 1, y: 1, zoom: 1 }, selection: [] };
+    memo.changed();
+    memo.close();
+    await settle();
+    // Riacceso: il campo sparisce.
+    expect(store.states.get(canvasViewKey(DOC))).toEqual({ version: 1, camera: { x: 1, y: 1, zoom: 1 }, selection: [], pages: {} });
+    const again = recorder(store);
+    await again.begin();
+    view = { camera: { x: 1, y: 1, zoom: 1 }, selection: [], navigatorHidden: true };
+    again.changed();
+    again.close();
+    await settle();
+    expect(store.states.get(canvasViewKey(DOC))).toEqual({ version: 1, camera: { x: 1, y: 1, zoom: 1 }, selection: [], pages: {}, navigator: false });
   });
 
   it("le pagine: la più recente va in fondo, e quelle voltate mentre si leggeva vincono", async () => {

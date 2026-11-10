@@ -8611,6 +8611,26 @@ kbd,
 .canvas-blank-actions {
   gap: var(--space-4);
 }
+/* Il navigatore (T55, come .draw-navigator). La mappa è una <canvas>: la tela
+   la dipinge leggendo queste variabili, una volta per disegno. Le schede
+   senza colore e i gruppi col filo marcato, quelle colorate col loro
+   `--canvas-color` (lo stesso dei fili), il riquadro della vista con
+   l'accento. */
+.canvas-navigator {
+  --canvas-navigator-card: var(--border-strong);
+  --canvas-navigator-group: var(--border-strong);
+  --canvas-navigator-view: var(--accent);
+  --canvas-navigator-view-fill: var(--accent-wash);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg);
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+}
+.canvas-navigator:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: 2px;
+}
 .canvas-viewport {
   outline: none;
 }

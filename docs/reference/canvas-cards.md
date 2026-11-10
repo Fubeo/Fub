@@ -427,7 +427,7 @@ Lo stato sta nella chiave `canvas.view:<documentId>`:
 
 ```json
 { "version": 1, "camera": { "x": 0, "y": 0, "zoom": 1 },
-  "selection": ["id"], "pages": { "id": 3 } }
+  "selection": ["id"], "pages": { "id": 3 }, "navigator": false }
 ```
 
 - Al più 500 schede scelte (le prime della scelta) e 1000 pagine (le più
@@ -437,8 +437,8 @@ Lo stato sta nella chiave `canvas.view:<documentId>`:
   se lo stato non ci fosse e non lo riscrive mai. Uno stato rotto (non un
   oggetto, senza `version`) vale nessuno stato, e la prima scrittura lo
   sostituisce. Dentro la versione 1 un campo che non si legge vale vuoto, e
-  i campi in più (il navigatore, la griglia, il tema per scheda dei passi
-  dopo) si conservano a ogni riscrittura.
+  i campi in più (la griglia, il tema per scheda) si conservano a ogni
+  riscrittura. `"navigator": false` c'è solo col navigatore nascosto.
 - **All'apertura** (`setDoc`) la tela inquadra tutto come prima, poi legge
   lo stato: la camera ricordata vale se almeno una scheda cade nella vista
   che dava, sennò resta «inquadra tutto»; la scelta torna con le sole schede

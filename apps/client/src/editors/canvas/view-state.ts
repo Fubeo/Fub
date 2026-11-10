@@ -5,11 +5,14 @@
 // Lo stato sta nello stato di vista `canvas.view:<documentId>`:
 //
 //   { "version": 1, "camera": { "x", "y", "zoom" }, "selection": [id…],
-//     "pages": { nodeId: pagina } }
+//     "pages": { nodeId: pagina }, "navigator": false }
+//
+// `"navigator": false` c'è solo quando «Nascondi il navigatore» l'ha spento per
+// questa lavagna (T55); senza, il navigatore è acceso.
 //
 // Al più 500 schede scelte e 1000 pagine (le più recenti). Una versione che
 // questo client non conosce si ignora e non si riscrive mai; i campi in più
-// della versione 1 (il navigatore, la griglia, il tema per scheda dei passi
+// della versione 1 (la griglia, il tema per scheda dei passi
 // dopo) si conservano a ogni riscrittura. Uno stato rotto vale come nessuno
 // stato: la lavagna parte come se non ci fosse, e la prima scrittura lo
 // sostituisce.
@@ -45,6 +48,8 @@ export interface CanvasView {
   readonly selection: readonly string[];
   /// La pagina (da 1) di ogni scheda PDF, dalla meno alla più recente.
   readonly pages: ReadonlyMap<string, number>;
+  /// «Nascondi il navigatore» per questa lavagna (T55); assente vale acceso.
+  readonly navigatorHidden?: boolean;
 }
 
 /// Ciò che si legge dallo stato di vista.
@@ -56,7 +61,7 @@ export type CanvasViewRead =
   /// Una versione che questo client non conosce: si parte come oggi, e non si scrive.
   | { readonly kind: "foreign" };
 
-const KNOWN_FIELDS = new Set(["version", "camera", "selection", "pages"]);
+const KNOWN_FIELDS = new Set(["version", "camera", "selection", "pages", "navigator"]);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -102,7 +107,8 @@ export function parseCanvasView(value: unknown): CanvasViewRead {
   for (const [field, entry] of Object.entries(value)) {
     if (!KNOWN_FIELDS.has(field)) extra[field] = entry;
   }
-  return { kind: "state", view: { camera, selection, pages }, extra };
+  const view: CanvasView = value.navigator === false ? { camera, selection, pages, navigatorHidden: true } : { camera, selection, pages };
+  return { kind: "state", view, extra };
 }
 
 /// Toglie le pagine più vecchie oltre il limite.
@@ -132,6 +138,7 @@ export function serializeCanvasView(
   if (view.camera) out.camera = { x: view.camera.x, y: view.camera.y, zoom: view.camera.zoom };
   out.selection = view.selection.slice(0, CANVAS_VIEW_SELECTION_MAX);
   out.pages = pages;
+  if (view.navigatorHidden === true) out.navigator = false;
   return out;
 }
 
@@ -180,7 +187,12 @@ export function createCanvasViewMemory(store: CanvasViewStore): CanvasViewMemory
 
 /// Ciò che la tela ha adesso: la camera e la scelta; `null` se non mostra
 /// niente da ricordare (nessun documento aperto).
-export type CanvasViewSnapshot = { readonly camera: CanvasViewCamera; readonly selection: readonly string[] } | null;
+export type CanvasViewSnapshot = {
+  readonly camera: CanvasViewCamera;
+  readonly selection: readonly string[];
+  /// Il navigatore spento per questa lavagna (T55).
+  readonly navigatorHidden?: boolean;
+} | null;
 
 type RecorderStatus = "idle" | "reading" | "ready" | "frozen" | "closed";
 
@@ -248,7 +260,7 @@ export class CanvasViewRecorder {
     this.#status = "ready";
     // Una pagina voltata mentre si leggeva è già un cambio da scrivere.
     if (this.#touched.size > 0) this.changed();
-    return read.kind === "state" ? { camera: read.view.camera, selection: read.view.selection, pages } : null;
+    return read.kind === "state" ? { ...read.view, pages } : null;
   }
 
   /// La lettura del giro `round` non vale più: un'apertura dopo, o la chiusura.
@@ -302,7 +314,12 @@ export class CanvasViewRecorder {
     if (this.#status !== "ready") return;
     const snapshot = this.#snapshot();
     if (snapshot === null) return;
-    const value = serializeCanvasView({ camera: snapshot.camera, selection: snapshot.selection, pages: this.#pages }, this.#extra);
+    const value = serializeCanvasView({
+      camera: snapshot.camera,
+      selection: snapshot.selection,
+      pages: this.#pages,
+      ...(snapshot.navigatorHidden === true ? { navigatorHidden: true } : {}),
+    }, this.#extra);
     const text = JSON.stringify(value);
     if (text === this.#last) return;
     this.#last = text;

@@ -38,6 +38,9 @@ export const EDITORS: PartAnatomy = {
     // La lavagna vuota (T62): le tre righe e i pulsanti al centro. I pulsanti
     // sono del kit; qui solo il testo.
     { name: "canvas-empty", states: REST, hooks: ["canvas-blank", "canvas-blank-lines", "canvas-blank-actions"] },
+    // Il navigatore della lavagna (T55): la mappa è una sola <canvas> dipinta
+    // coi colori della pelle; il campione nascosto presta `--canvas-color`.
+    { name: "canvas-navigator", states: [S("rest"), S("focused")], hooks: ["canvas-navigator", "canvas-navigator-map", "canvas-navigator-swatch"] },
     // La riga delle opzioni della lavagna (T50): la testata, i gruppi e i
     // pulsanti della riga del kit, il pozzo del colore delle schede scelte.
     { name: "canvas-options", states: [S("rest"), S("hover"), S("pressed"), S("focused"), S("selected"), S("disabled")], hooks: ["canvas-header", "canvas-options", "canvas-options-hint", "canvas-group", "canvas-button", "canvas-color-well"] },

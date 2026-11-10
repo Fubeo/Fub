@@ -66,6 +66,7 @@ import {
 } from "./chrome/commands";
 import { CANVAS_INK_TOOLS, CANVAS_WRITING_TOOLS, createCanvasRail, type CanvasRail } from "./chrome/rail";
 import { createCanvasEmpty, isEmptyBoard, transferOf, type CanvasEmpty } from "./chrome/empty";
+import { createCanvasNavigator, type CanvasNavigator } from "./chrome/navigator";
 import {
   CANVAS_CLIPBOARD_TYPE,
   CANVAS_PASTE_STEP,
@@ -1229,7 +1230,7 @@ export class CanvasEngine {
    * non arriva: la prende solo ciò che nessuno ha cambiato nel frattempo.
    * `null` prima che la lavagna si mostri, e dopo che la vista è arrivata.
    */
-  #openView: { readonly camera: Viewport; readonly selection: string } | null = null;
+  #openView: { readonly camera: Viewport; readonly selection: string; readonly navigatorHidden: boolean } | null = null;
   /** La vista letta prima che il nucleo aprisse il testo: la prende `#revive`. */
   #heldView: { readonly round: number; readonly view: CanvasView } | null = null;
   /**
@@ -1239,6 +1240,10 @@ export class CanvasEngine {
    */
   #statusShown = "";
   #attachmentDeclared: string | null = null;
+  /** Il navigatore (T55), in basso a destra della vista. */
+  readonly #navigator: CanvasNavigator;
+  /** «Nascondi il navigatore» per questa lavagna (T55): si ricorda nella vista (T36). */
+  #navigatorHidden = false;
   /** `canvas.drop_folder` e il suo percorso (T34), dal vivo; `null` finché non arriva. */
   #dropChoice: DropFolderChoice | null = null;
 
@@ -1308,9 +1313,30 @@ export class CanvasEngine {
       receive: (data) => this.#receive(data),
       addFiles: options.attachments !== undefined && options.documentId !== undefined,
     });
+    // Il navigatore (T55): un fratello della vista, come la lavagna vuota; un
+    // clic è un salto (`#jumpCamera`), un trascinamento sposta la vista.
+    this.#navigator = createCanvasNavigator({
+      lifetime: this.#life,
+      nodes: () => (this.#doc && !this.#isSceneOversized() ? this.#doc.nodes : null),
+      view: () => {
+        const rect = this.#viewport.getBoundingClientRect();
+        return { camera: { ...this.#camera }, width: rect.width || 800, height: rect.height || 600 };
+      },
+      enabled: () => !this.#navigatorHidden,
+      jump: (camera) => this.#jumpCamera(camera),
+      pan: (camera) => {
+        this.#stopMotion(false);
+        this.#camera = { x: camera.x, y: camera.y, zoom: clampZoom(camera.zoom) };
+        this.#applyCamera();
+      },
+      settled: () => {
+        this.#refreshLive();
+        this.#statusSettle();
+      },
+    });
     const area = document.createElement("div");
     area.className = "canvas-area";
-    area.append(this.#viewport, this.#empty.element);
+    area.append(this.#viewport, this.#empty.element, this.#navigator.element);
     const body = document.createElement("div");
     body.className = "canvas-body";
     body.append(this.#rail.element, area);
@@ -1368,6 +1394,7 @@ export class CanvasEngine {
       this.#drawToolbar();
       this.#rail.relabel();
       this.#empty.relabel();
+      this.#navigator.relabel();
       this.#canvasOptions.sync();
     });
     // I tasti degli strumenti valgono anche col fuoco sulla colonna (dopo un
@@ -1390,6 +1417,8 @@ export class CanvasEngine {
       const observer = new ResizeObserver(() => {
         this.#syncNarrow();
         this.#refreshLive();
+        // La lavagna può stare tutta nella vista nuova, o non più (T55).
+        this.#statusSettle();
       });
       observer.observe(this.#viewport);
       this.#life.add(() => observer.disconnect());
@@ -3039,13 +3068,15 @@ export class CanvasEngine {
   /** Ciò che si ricorda adesso: `null` se la lavagna non mostra un documento. */
   #viewSnapshot(): CanvasViewSnapshot {
     if (!this.#doc) return null;
-    return { camera: { ...this.#camera }, selection: [...this.#selection] };
+    const camera = { ...this.#camera };
+    const selection = [...this.#selection];
+    return this.#navigatorHidden ? { camera, selection, navigatorHidden: true } : { camera, selection };
   }
 
   /** La lavagna si è appena mostrata: la vista ricordata, se arriva, parte da qui. */
   #markOpenView(): void {
     if (!this.#viewMemo) return;
-    this.#openView = { camera: { ...this.#camera }, selection: this.#selection.join("\n") };
+    this.#openView = { camera: { ...this.#camera }, selection: this.#selection.join("\n"), navigatorHidden: this.#navigatorHidden };
   }
 
   /**
@@ -3083,6 +3114,12 @@ export class CanvasEngine {
         this.#selection = selection;
         selected = true;
       }
+    }
+    // «Nascondi il navigatore» (T55), se nessuno l'ha cambiato nel frattempo.
+    const hidden = view.navigatorHidden === true;
+    if (this.#navigatorHidden === open.navigatorHidden && hidden !== this.#navigatorHidden) {
+      this.#navigatorHidden = hidden;
+      this.#statusSettle();
     }
     let remount = false;
     for (const entry of this.#cards.values()) {
@@ -3178,6 +3215,34 @@ export class CanvasEngine {
       targetScale: goal.zoom, targetTx: goal.x, targetTy: goal.y,
       vx: 0, vy: 0,
     });
+  }
+
+  /**
+   * «Nascondi il navigatore» e «Mostra il navigatore» (T55): per questa
+   * lavagna, ricordato nella vista (T36). Il fuoco che stava sul navigatore
+   * torna alla lavagna.
+   */
+  #setNavigatorHidden(hidden: boolean): void {
+    if (this.#navigatorHidden === hidden) return;
+    this.#navigatorHidden = hidden;
+    const focused = this.#navigator.element.contains(document.activeElement);
+    this.#viewMemo?.changed();
+    this.#statusSettle();
+    if (focused && this.#navigator.element.hidden) this.#viewport.focus();
+  }
+
+  /**
+   * F6 dentro la lavagna (`EditorSurface.zone`): la vista, poi il navigatore
+   * se si vede (T55). `false` quando non resta una zona da quella parte.
+   */
+  zone(step: 1 | -1): boolean {
+    if (this.#destroyed) return false;
+    const zones = [this.#viewport, this.#navigator.element].filter((zone) => !zone.hidden);
+    const at = zones.findIndex((zone) => zone.contains(document.activeElement));
+    const target = zones[at < 0 ? (step > 0 ? 0 : zones.length - 1) : at + step];
+    if (target === undefined) return false;
+    target.focus();
+    return true;
   }
 
   /** «0»: il 100% sul centro della vista. */
@@ -4312,6 +4377,8 @@ export class CanvasEngine {
    */
   #statusSettle(): void {
     if (this.#destroyed || !this.#doc || this.#gestureActive()) return;
+    // Il navigatore si rilegge con la banda, a fine gesto e al cambio del documento (T55).
+    this.#navigator.settle();
     const shown = statusSignature(canvasStatusItems(this.#statusPort()));
     if (shown === this.#statusShown) return;
     this.#statusShown = shown;
@@ -4585,6 +4652,13 @@ export class CanvasEngine {
         };
       case "canvas.zoom_reset":
         return { disabled: () => null, run: () => this.#zoomToActual() };
+      // Il navigatore (T55): c'è la voce che serve adesso, Nascondi o Mostra.
+      case "canvas.navigator.hide":
+      case "canvas.navigator.show": {
+        const hide = id === "canvas.navigator.hide";
+        if (hide === this.#navigatorHidden) return null;
+        return { disabled: () => null, run: () => this.#setNavigatorHidden(hide) };
+      }
       case "canvas.zoom_in":
       case "canvas.zoom_out":
         return {
@@ -4981,6 +5055,8 @@ export class CanvasEngine {
         },
         entry("canvas.fit", undefined, false),
         ...(at ? [entry("canvas.zoom_in", here, false), entry("canvas.zoom_out", here, false)] : []),
+        // Nascondi o Mostra il navigatore (T55), quella che c'è.
+        ...["canvas.navigator.hide", "canvas.navigator.show"].filter((id) => catalog.has(id)).map((id) => entry(id, undefined, false)),
       ],
     };
   }
@@ -6287,7 +6363,8 @@ export class CanvasEngine {
 
   /** Un gesto in corso, rotella, volo e inerzia compresi (T53): nessuna scheda cambia modo. */
   #gestureActive(): boolean {
-    return this.#gestureMoving() || this.#wheelTimer !== undefined || this.#motion !== null;
+    // Il riquadro del navigatore trascinato è un gesto anche lui (T55).
+    return this.#gestureMoving() || this.#wheelTimer !== undefined || this.#motion !== null || this.#navigator.dragging();
   }
 
   /**

@@ -180,6 +180,9 @@ export const CANVAS_COMMANDS: readonly CanvasCommandSpec[] = [
   { id: "canvas.zoom_in", label: "canvas.zoom_in", group: "view", keys: ["+", "Mod-=", "Mod-+"], context: "always" },
   { id: "canvas.zoom_out", label: "canvas.zoom_out", group: "view", keys: ["-", "Mod--"], context: "always" },
   { id: "canvas.zoom_reset", label: "canvas.zoom_reset", group: "view", keys: ["0"], context: "always" },
+  // Il navigatore (T55): la tela dà solo la voce che serve adesso.
+  { id: "canvas.navigator.hide", label: "canvas.navigator.hide", group: "view", keys: [], context: "always" },
+  { id: "canvas.navigator.show", label: "canvas.navigator.show", group: "view", keys: [], context: "always" },
   // La riga delle opzioni (T50): i menu che apre e le punte di Collega.
   { id: "canvas.pen_menu", label: "canvas.options.pen_menu", group: "tools", keys: [], context: "always" },
   { id: "canvas.color_menu", label: "canvas.options.color_menu", group: "color", keys: [], context: "selection" },

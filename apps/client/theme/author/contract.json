@@ -842,6 +842,9 @@
     "canvas-blank",
     "canvas-blank-lines",
     "canvas-blank-actions",
+    "canvas-navigator",
+    "canvas-navigator-map",
+    "canvas-navigator-swatch",
     "canvas-header",
     "canvas-options",
     "canvas-options-hint",
@@ -2460,6 +2463,9 @@
     "canvas-blank": "cornice",
     "canvas-blank-lines": "cornice",
     "canvas-blank-actions": "cornice",
+    "canvas-navigator": "cornice",
+    "canvas-navigator-map": "cornice",
+    "canvas-navigator-swatch": "cornice",
     "canvas-header": "cornice",
     "canvas-options": "cornice",
     "canvas-options-hint": "cornice",
@@ -5502,6 +5508,19 @@
       ],
       "states": [
         "rest"
+      ]
+    },
+    {
+      "name": "canvas-navigator",
+      "part": "editors",
+      "hooks": [
+        "canvas-navigator",
+        "canvas-navigator-map",
+        "canvas-navigator-swatch"
+      ],
+      "states": [
+        "rest",
+        "focused"
       ]
     },
     {
@@ -8870,10 +8889,10 @@
   "counts": {
     "required_roles": 154,
     "optional_roles": 63,
-    "hooks": 1616,
+    "hooks": 1619,
     "state_names": 7,
-    "assigned_states": 762,
-    "components": 226,
+    "assigned_states": 764,
+    "components": 227,
     "preference_tokens": 186
   }
 }

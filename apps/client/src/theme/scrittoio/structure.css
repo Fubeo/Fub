@@ -3028,6 +3028,27 @@ body {
   justify-content: center;
   pointer-events: auto;
 }
+/* Il navigatore (T55), in basso a destra della vista (come .draw-navigator;
+   una sola <canvas>). */
+.canvas-navigator {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  z-index: 1;
+  box-sizing: border-box;
+  width: 168px;
+  height: 120px;
+  cursor: pointer;
+  touch-action: none;
+}
+.canvas-navigator[hidden] {
+  display: none;
+}
+.canvas-navigator-map {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
 /* Stretta (finestra fino a 700 px o riquadro fino a 480): la colonna va
    sotto la lavagna e si stende in riga (come .draw-editor[data-narrow]). */
 .canvas-surface[data-narrow] .canvas-body {

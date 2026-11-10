@@ -47,6 +47,7 @@ const STABLE_IDS = [
   "canvas.align.left", "canvas.align.center", "canvas.align.right", "canvas.align.top", "canvas.align.middle", "canvas.align.bottom",
   "canvas.distribute_x", "canvas.distribute_y",
   "canvas.fit", "canvas.fit_selection", "canvas.zoom_in", "canvas.zoom_out", "canvas.zoom_reset",
+  "canvas.navigator.hide", "canvas.navigator.show",
   "canvas.pen_menu", "canvas.color_menu", "canvas.align_menu",
   "canvas.tips.none", "canvas.tips.start", "canvas.tips.end",
 ];
@@ -232,7 +233,7 @@ describe("la tela legge il catalogo", () => {
       // Un gruppo ha il menu di prima.
       [menuOn(card("g")), [colors, "canvas.duplicate", order, "canvas.fit_selection", "canvas.delete"]],
       [menuOn(host.querySelector('.canvas-edge-hit[data-edge="e1"]')), [colors, "canvas.edge.reverse", "canvas.delete"]],
-      [menuOn(viewport, { x: 300, y: 300 }), [{ "canvas.add": ["canvas.add.text", "canvas.add.link", "canvas.add.group"] }, "canvas.fit", "canvas.zoom_in", "canvas.zoom_out"]],
+      [menuOn(viewport, { x: 300, y: 300 }), [{ "canvas.add": ["canvas.add.text", "canvas.add.link", "canvas.add.group"] }, "canvas.fit", "canvas.zoom_in", "canvas.zoom_out", "canvas.navigator.hide"]],
     ];
     // Tutte le schede scelte: niente Apri né Collega….
     pointing.mockRestore();

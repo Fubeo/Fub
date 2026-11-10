@@ -119,6 +119,34 @@ sono quelli di `spatial/camera.ts` (`zoomAtPoint`, `fit`, `stepCamera`).
   di zoom e la finestra che perde il fuoco fermano l'inerzia e il volo; la
   lavagna chiusa li spegne.
 
+## Il navigatore
+
+In basso a destra della vista, 168 × 120 px: la mappa dei gruppi (il filo) e
+delle schede (piene, del loro colore, `--canvas-color` come i fili) col
+riquadro di ciò che si vede (`chrome/navigator.ts`). L'inquadratura è
+`navigatorBox` del disegno: la lavagna e la vista, con un margine; una scheda
+lontanissima ci sta.
+
+- **Un clic** porta il centro della vista lì: è un salto (`#jumpCamera`), che
+  vola come `Maiusc+1`, o arriva subito col movimento ridotto.
+- **Trascinare** sposta la vista sotto la mano, subito, senza volo; preso
+  dentro il riquadro, il riquadro non salta. È un gesto: le schede vive, la
+  banda e la mappa si rifanno al rilascio.
+- **Sparisce da solo** quando tutta la lavagna sta già nella vista, e su una
+  lavagna vuota. «Nascondi il navigatore» (`canvas.navigator.hide`, nel
+  gruppo Vista del catalogo e nel menu del vuoto) lo spegne per questa
+  lavagna, ricordato nella vista (`"navigator": false`, [Riaprire dove
+  eri](canvas-cards.md#riaprire-dove-eri)); «Mostra il navigatore»
+  (`canvas.navigator.show`) lo riaccende. C'è sempre una sola delle due.
+- **La tastiera.** F6 dalla lavagna ci arriva (`EditorSurface.zone`: la
+  vista, poi il navigatore se si vede); le frecce spostano il riquadro di un
+  decimo della vista, con Maiusc di metà.
+- **Il disegno.** Una sola `<canvas>`, mai un elemento per scheda; si
+  ridipinge a fine gesto e al cambio del documento, se la lavagna o la vista
+  sono cambiate. I colori sono variabili della pelle
+  (`--canvas-navigator-card`, `-group`, `-view`, `-view-fill`), lette una
+  volta per disegno.
+
 ## Comandi e tasti
 
 Ogni cosa che la tela sa fare è un comando di `CANVAS_COMMANDS`
