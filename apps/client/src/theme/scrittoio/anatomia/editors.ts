@@ -77,7 +77,7 @@ export const EDITORS: PartAnatomy = {
     // scrive, «Esc per uscire» pieno, lo stato del salvataggio e «Sola
     // lettura» nella riga del titolo, l'editor della nota e il conflitto nel
     // corpo, la barra di formato nella riga delle opzioni.
-    { name: "canvas-card-writing", states: [S("rest"), S("focused")], hooks: ["canvas-card-note", "canvas-exit-hint", "canvas-card-lock", "save-state", "format-bar", "conflict-banner", "conflict-actions", "cm-fub-heading-line"] },
+    { name: "canvas-card-writing", layers: { "cm-fub-heading-line": "contenuto" }, states: [S("rest"), S("focused")], hooks: ["canvas-card-note", "canvas-exit-hint", "canvas-card-lock", "save-state", "format-bar", "conflict-banner", "conflict-actions", "cm-fub-heading-line"] },
     // Mentre si scrive (T69): l'etichetta accanto alla penna, che dice a che
     // cosa si attaccherà il tratto, e il bordo tratteggiato attorno alla
     // scheda, che è un segno di Fub sulla lavagna.
