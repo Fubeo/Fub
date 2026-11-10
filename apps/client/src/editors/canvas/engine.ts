@@ -23,6 +23,7 @@ import {
   liveCardIds,
   updateLiveCards,
   type CardContext,
+  type CardEditorContext,
   type CardEditorPort,
   type CardEditorState,
   type CardKind,
@@ -1059,6 +1060,13 @@ export class CanvasEngine {
    * `data-card-editing` arriva quando la vista dice che l'editor c'è.
    */
   #writingId: string | null = null;
+  /**
+   * Il contesto di ciò che si scrive nella scheda `#writingId` (T42: la cella
+   * attiva di un foglio e la sua formula), e l'elemento della riga delle
+   * opzioni che lo mostra, aggiornato sul posto a ogni cambio.
+   */
+  #writingContext: CardEditorContext | null = null;
+  #formulaItem: { readonly cell: HTMLElement; readonly formula: HTMLElement } | null = null;
   /** La scheda in cui si sta entrando: la scelta delle vive la accende con le altre. */
   #enteringId: string | null = null;
   /**
@@ -4745,7 +4753,9 @@ export class CanvasEngine {
         const id = this.#writingId;
         const entry = id === null ? undefined : this.#cards.get(id);
         if (!entry || entry.article.dataset.cardEditing === undefined) return null;
-        return writingName(entry.node);
+        // In un foglio, anche la cella: «Misure.xlsx · D4» (T27).
+        const cell = this.#writingContext?.cell ?? "";
+        return cell === "" ? writingName(entry.node) : `${writingName(entry.node)} · ${cell}`;
       },
       readOnlyWhy: () => (this.#readOnly
         ? (this.#unwritable ? t("canvas.unwritable") : t("canvas.status.readonly.panel"))
@@ -7154,8 +7164,8 @@ export class CanvasEngine {
    * Invio, o il doppio clic su una nota: scrive dentro se si può (T41),
    * altrimenti entra, altrimenti ciò che faceva (il campo).
    */
-  #enterOrEdit(node: CanvasNode): void {
-    if (node.type !== "text" && (this.#beginWriting(node.id) || this.#enterCard(node.id))) return;
+  #enterOrEdit(node: CanvasNode, from?: EventTarget | null): void {
+    if (node.type !== "text" && (this.#beginWriting(node.id, from) || this.#enterCard(node.id))) return;
     this.#beginCardEdit(node);
   }
 
@@ -7165,7 +7175,7 @@ export class CanvasEngine {
    * (non ha `edit`) o la lavagna è di sola lettura; se `edit()` dice no la
    * scheda resta attiva, da leggere, e la risposta è `true`.
    */
-  #beginWriting(id: string): boolean {
+  #beginWriting(id: string, from?: EventTarget | null): boolean {
     if (this.#writingId === id) return true;
     const entry = this.#cards.get(id);
     const view = entry?.view;
@@ -7173,7 +7183,7 @@ export class CanvasEngine {
     if (!this.#enterCard(id)) return false;
     let started = false;
     try {
-      started = view.edit() === true;
+      started = view.edit(from) === true;
     } catch (error) {
       console.warn(`canvas: nella scheda ${id} non si scrive`, error);
     }
@@ -7190,12 +7200,20 @@ export class CanvasEngine {
     if (this.#writingId !== entry.id) return;
     if (writing === null) {
       this.#writingId = null;
+      this.#clearWritingContext();
       delete entry.article.dataset.cardEditing;
       this.setCardOptions(null);
       this.#statusSettle();
       return;
     }
     entry.article.dataset.cardEditing = "";
+    const context = writing.context ?? null;
+    if (context !== null) {
+      this.#showWritingContext(context);
+      this.#statusSettle();
+      return;
+    }
+    this.#clearWritingContext();
     if (writing.toolbar) {
       const item = document.createElement("div");
       item.className = "canvas-options-item";
@@ -7206,6 +7224,44 @@ export class CanvasEngine {
       this.setCardOptions(null);
     }
     this.#statusSettle();
+  }
+
+  /**
+   * Il contesto della scheda che scrive nella riga delle opzioni (T42, come
+   * nel prototipo T27): il nome della cella e la sua formula, nella forma
+   * della barra della formula del foglio. Il primo arrivo monta l'elemento,
+   * i successivi ne cambiano soltanto il testo.
+   */
+  #showWritingContext(context: CardEditorContext): void {
+    this.#writingContext = context;
+    let item = this.#formulaItem;
+    if (item === null) {
+      const element = document.createElement("div");
+      element.className = "canvas-options-item";
+      element.dataset.option = "formula";
+      const bar = document.createElement("div");
+      bar.className = "grid-formula-bar";
+      const cell = document.createElement("span");
+      cell.className = "grid-cell-name";
+      const formula = document.createElement("div");
+      formula.className = "grid-formula-editor";
+      const text = document.createElement("span");
+      text.className = "canvas-formula-text";
+      formula.append(text);
+      bar.append(cell, formula);
+      element.append(bar);
+      item = { cell, formula: text };
+      this.#formulaItem = item;
+      this.setCardOptions([{ id: "formula", element, priority: 1 }]);
+    }
+    item.cell.textContent = context.cell;
+    item.formula.textContent = context.formula;
+    item.formula.title = context.formula;
+  }
+
+  #clearWritingContext(): void {
+    this.#writingContext = null;
+    this.#formulaItem = null;
   }
 
   /**
@@ -7316,6 +7372,7 @@ export class CanvasEngine {
     this.#cardEditState(entry, null, null);
     if (this.#writingId === entry.id || article.dataset.cardEditing !== undefined) {
       this.#writingId = null;
+      this.#clearWritingContext();
       delete article.dataset.cardEditing;
       this.setCardOptions(null);
       this.#statusSettle();
@@ -7529,13 +7586,13 @@ export class CanvasEngine {
       // Dentro la scheda attiva il doppio clic è del contenuto (una parola);
       // in una nota che si legge comincia a scriverci (T41).
       if (this.#activeId === id) {
-        if (this.#writingId !== id) this.#beginWriting(id);
+        if (this.#writingId !== id) this.#beginWriting(id, e.target);
         return;
       }
       const kind = this.#hasLiveContent(entry) ? cardKindOf(entry.node) : null;
       // Il visore lo apre la vista dell'immagine, che ascolta il suo doppio clic (T5).
       if (kind === "image") return;
-      if (kind !== null && DOUBLE_CLICK_ENTERS.has(kind)) this.#enterOrEdit(entry.node);
+      if (kind !== null && DOUBLE_CLICK_ENTERS.has(kind)) this.#enterOrEdit(entry.node, e.target);
       else this.#beginCardEdit(entry.node);
     });
     return entry;

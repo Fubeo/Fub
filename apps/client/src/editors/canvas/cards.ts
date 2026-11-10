@@ -175,9 +175,22 @@ export interface CardContext {
   editState?(state: CardEditorState | null, reason?: string): void;
 }
 
-/// Una scheda che scrive (T41): la barra di formato dell'editor, se ne ha una.
+/// Una scheda che scrive (T41): la barra di formato dell'editor, se ne ha una,
+/// e il contesto di ciò che si scrive (T42), se l'editor ne dà uno.
 export interface CardWriting {
   readonly toolbar: HTMLElement | null;
+  /// Dove si scrive adesso, come dati: la tela lo mostra dove dice il
+  /// prototipo T27 (la riga delle opzioni). La scheda richiama `writing` a
+  /// ogni cambio.
+  readonly context?: CardEditorContext | null;
+}
+
+/// Il contesto di ciò che si scrive in una scheda (T42): la cella attiva di un
+/// foglio (`B3`) e il suo contenuto com'è scritto (la formula, o il valore).
+/// Sono dati, non DOM: chi ospita la scheda decide dove e come mostrarli.
+export interface CardEditorContext {
+  readonly cell: string;
+  readonly formula: string;
 }
 
 /// Una scheda montata da un renderer.
@@ -196,8 +209,10 @@ export interface CardView {
   /// Entra in scrittura (T41, T42): l'editor vero del file prende il corpo. Il
   /// montaggio arriva dopo, e la scheda lo dice con `context.writing`; `false`
   /// se qui non si scrive (un documento Word, nessuna porta, una scheda ferma).
-  /// `leave()` esce anche dalla scrittura.
-  edit?(): boolean;
+  /// `leave()` esce anche dalla scrittura. `from` è l'elemento sotto il gesto
+  /// che ha chiesto di scrivere (il doppio clic), se c'è: una scheda di
+  /// foglio apre la cella che c'era lì (T42).
+  edit?(from?: EventTarget | null): boolean;
   destroy(): void;
 }
 
@@ -236,6 +251,11 @@ export interface CardEditor {
   /// stanno in cima), da mettere nella riga delle opzioni (T41); `null` se
   /// l'editor non ne ha. La barra vive quanto l'editor.
   toolbar?(): HTMLElement | null;
+  /// Il contesto di ciò che si scrive (T42: la cella attiva e la sua formula),
+  /// o `null` se l'editor non ne ha.
+  context?(): CardEditorContext | null;
+  /// Avvisa quando `context()` cambia; restituisce come smettere.
+  onContext?(listener: (context: CardEditorContext | null) => void): () => void;
   /// Stacca l'editor dalla sessione e lo smonta, una volta sola.
   destroy(): void;
 }

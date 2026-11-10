@@ -20,8 +20,15 @@
 //   disegnate, `inert`. Una scheda mai stata viva mostra la specie e il
 //   percorso, il segnaposto di oggi.
 //
-// La scheda non scrive mai: non chiama `applyGridBytes` né i comandi (A-4,
-// D-7). Ogni sessione aperta si chiude una volta sola, anche se l'apertura
+// La resa non scrive mai: non chiama `applyGridBytes` né i comandi (A-4,
+// D-7). Si scrive solo con `edit()` (T42, D-7 (b)): la scheda chiede alla
+// porta di T40 (`context.editors`) la superficie vera del foglio, in modo
+// compatto (`editors/grid/compact.ts`: niente nastro, linguette, finestre né
+// comandi di struttura), sulla stessa sessione di un riquadro, e la mette al
+// posto della resa. La cella attiva e la sua formula arrivano alla tela come
+// contesto (`CardWriting.context`), non come DOM. Mentre si scrive la
+// sessione di lettura è chiusa; uscendo si riapre e la resa mostra i valori
+// nuovi. Ogni sessione aperta si chiude una volta sola, anche se l'apertura
 // risponde dopo un cambio di modo o dopo `destroy`: un contatore di
 // generazione scarta le risposte tardive, e chi le riceve chiude ciò che
 // hanno aperto.
@@ -35,9 +42,11 @@ import { adapter, type Adapter, type Paper } from "../../theme/adapt";
 import { markLook } from "../../theme/content-look";
 import { formatKindOf, formatNameOf } from "../../ui/format-kind";
 import { openLifetime, type Lifetime } from "../../ui/lifetime";
-import type { CardContext, CardMode, CardRenderer, CardView } from "../canvas/cards";
+import { notify } from "../../ui/notify";
+import type { CardContext, CardEditor, CardEditorState, CardMode, CardRenderer, CardView } from "../canvas/cards";
 import type { CanvasNode } from "../canvas/model";
 import { tsvRows } from "../core/tsv";
+import { editCellIn } from "./compact";
 import type { GridHost } from "./engine";
 import { expandToMerges, mergeAt, type GridRange } from "./merges";
 import { columnLabel, type GridPosition } from "./model";
@@ -145,11 +154,22 @@ class SheetCard implements CardView {
   #stateLife: Lifetime | null = null;
   #unwatch: (() => void) | null;
   #paper: Adapter | null = null;
+  /// Il corpo della scheda, dove sta anche il contenitore della griglia che
+  /// scrive.
+  readonly #host: HTMLElement;
+  /// La scrittura (T42): la vita della griglia in apertura o aperta (chiusa,
+  /// la griglia si smonta), il suo contenitore e l'editor, quando c'è.
+  #editLife: Lifetime | null = null;
+  #writer: HTMLElement | null = null;
+  #editor: CardEditor | null = null;
+  /// L'uscita in corso: il giornale va alla sessione, poi la resa si rilegge.
+  #leaving: Promise<void> | null = null;
 
   constructor(port: SheetCardPort, host: HTMLElement, mode: CardMode, context: CardContext) {
     this.#port = port;
     this.#context = context;
     this.#mode = mode;
+    this.#host = host;
     this.#root = document.createElement("div");
     this.#root.className = "canvas-card-sheet";
     this.#root.dataset.cardKind = "sheet";
@@ -196,6 +216,7 @@ class SheetCard implements CardView {
   }
 
   leave(): void {
+    this.#leaveEditing();
     this.#entered = false;
     this.#dragging = false;
     delete this.#root.dataset.cardEntered;
@@ -218,9 +239,166 @@ class SheetCard implements CardView {
     return true;
   }
 
+  edit(from?: EventTarget | null): boolean {
+    if (this.#editLife !== null) return true;
+    const editors = this.#context.editors;
+    if (this.#destroyed || this.#leaving !== null || this.#mode !== "live" || !editors) return false;
+    if (this.#state !== "content") return false;
+    // La cella sotto il doppio clic, o quella scelta sulla resa (Invio).
+    const cell = this.#cellAt(from) ?? this.#selection?.focus ?? null;
+    const life = openLifetime();
+    this.#editLife = life;
+    const writer = document.createElement("div");
+    writer.className = "canvas-card-sheet";
+    writer.dataset.cardKind = "sheet";
+    writer.dataset.cardState = "editing";
+    writer.style.position = "relative";
+    writer.style.width = "100%";
+    writer.style.height = "100%";
+    // La griglia porta i colori del file come la resa: sulla carta del tema
+    // (adattato) o sulla sua.
+    markLook(writer, this.#paper ? "adattato" : "file");
+    // Nascosto finché la griglia non c'è: fino ad allora si vede la resa.
+    writer.hidden = true;
+    this.#writer = writer;
+    this.#host.append(writer);
+    let opened: Promise<CardEditor | null>;
+    try {
+      opened = editors.open(this.#context.path, writer, { compact: true, readOnly: false, lifetime: life });
+    } catch (error) {
+      opened = Promise.reject(error);
+    }
+    opened.then(
+      (editor) => this.#opened(life, editor, cell),
+      (error: unknown) => {
+        console.warn(`canvas: il foglio ${this.#context.path} non si scrive`, error);
+        this.#opened(life, null, null);
+      },
+    );
+    return true;
+  }
+
+  /// La griglia è arrivata (o no) per la scrittura che ha vita `life`.
+  #opened(life: Lifetime, editor: CardEditor | null, cell: GridPosition | null): void {
+    if (life.closed || this.#editLife !== life) {
+      editor?.destroy();
+      return;
+    }
+    if (editor === null) {
+      // Nessuna griglia per questo file: la scheda resta a leggere.
+      this.#stopEditing();
+      this.#context.writing?.(null);
+      return;
+    }
+    if (editor.state() === "readonly") {
+      // Un foglio di sola lettura non si scrive: la scheda resta attiva per
+      // scorrere e copiare, la riga del titolo e una notifica dicono perché.
+      editor.destroy();
+      this.#stopEditing();
+      const reason = t("canvas.card.readonly_why", { name: baseName(this.#context.path) });
+      this.#context.editState?.("readonly", reason);
+      this.#context.writing?.(null);
+      notify(reason, "info");
+      return;
+    }
+    this.#editor = editor;
+    const writer = this.#writer!;
+    writer.hidden = false;
+    this.#root.hidden = true;
+    // Mentre si scrive la resa non legge: una sola sessione sul file, quella
+    // della griglia; la selezione della resa non serve più.
+    this.#generation += 1;
+    this.#closeSession();
+    this.#selection = null;
+    const report = (state: CardEditorState): void => {
+      if (this.#editLife === life) this.#context.editState?.(state === "clean" ? null : state);
+    };
+    life.add(editor.onState(report));
+    report(editor.state());
+    // La cella attiva e la sua formula: dati per la tela, a ogni cambio.
+    const tell = (): void => {
+      if (this.#editLife === life) this.#context.writing?.({ toolbar: null, context: editor.context?.() ?? null });
+    };
+    const stop = editor.onContext?.(tell);
+    if (stop) life.add(stop);
+    tell();
+    editor.focus();
+    if (cell) this.#editCellWhenShown(life, writer, cell);
+  }
+
+  /// Apre la cella `cell` appena la griglia la disegna (la sessione si apre e
+  /// legge le sue finestre dopo il montaggio). Si smette di aspettare quando
+  /// la scrittura finisce.
+  #editCellWhenShown(life: Lifetime, writer: HTMLElement, cell: GridPosition): void {
+    if (editCellIn(writer, cell)) return;
+    const watch = new MutationObserver(() => {
+      if (life.closed || editCellIn(writer, cell)) watch.disconnect();
+    });
+    watch.observe(writer, { subtree: true, childList: true });
+    life.add(() => watch.disconnect());
+  }
+
+  /// Esce dalla scrittura: il giornale va alla sessione (e si salva), la resa
+  /// si rilegge col file nuovo, poi la griglia si smonta. Fino ad allora la
+  /// griglia resta lì, ferma: niente lampo dei valori vecchi.
+  #leaveEditing(): void {
+    const life = this.#editLife;
+    if (life === null) return;
+    const editor = this.#editor;
+    const writer = this.#writer;
+    this.#editLife = null;
+    this.#editor = null;
+    this.#writer = null;
+    if (editor === null || writer === null) {
+      // La griglia non era ancora arrivata: la sua apertura si ferma.
+      life.close();
+      writer?.remove();
+      return;
+    }
+    writer.inert = true;
+    const leaving = editor.leave()
+      .catch((error: unknown) => {
+        console.warn(`canvas: il foglio ${this.#context.path} non si salva uscendo`, error);
+      })
+      .then(() => (!this.#destroyed && this.#mode === "live" ? this.#start() : undefined))
+      .catch(() => {})
+      .finally(() => {
+        if (this.#leaving === leaving) this.#leaving = null;
+        life.close();
+        writer.remove();
+        if (!this.#destroyed) this.#root.hidden = false;
+      });
+    this.#leaving = leaving;
+  }
+
+  /// Smette di scrivere subito: la griglia si smonta (la porta porta alla
+  /// sessione ciò che teneva) e la resa torna com'era.
+  #stopEditing(): void {
+    const life = this.#editLife;
+    if (life === null) return;
+    const writer = this.#writer;
+    const wrote = this.#editor !== null;
+    this.#editLife = null;
+    this.#editor = null;
+    this.#writer = null;
+    life.close();
+    writer?.remove();
+    this.#root.hidden = false;
+    // La resa aveva chiuso la sua sessione: da viva si riapre.
+    if (wrote && !this.#destroyed && this.#mode === "live") void this.#start();
+  }
+
+  /// La cella della resa sotto `from`, se c'è.
+  #cellAt(from: EventTarget | null | undefined): GridPosition | null {
+    const target = from instanceof Element ? from.closest<HTMLElement>(".grid-cell[data-row][data-column]") : null;
+    if (!target || !this.#root.contains(target)) return null;
+    return { row: Number(target.dataset.row), column: Number(target.dataset.column) };
+  }
+
   destroy(): void {
     if (this.#destroyed) return;
     this.#destroyed = true;
+    this.#stopEditing();
     this.#entered = false;
     this.#generation += 1;
     this.#closeSession();
@@ -333,6 +511,9 @@ class SheetCard implements CardView {
   }
 
   #freeze(): void {
+    // Una scheda ferma non scrive: la griglia si smonta (il giornale va alla
+    // sessione) e restano le celle disegnate.
+    this.#stopEditingFrozen();
     this.#generation += 1;
     this.#closeSession();
     this.#entered = false;
@@ -350,6 +531,9 @@ class SheetCard implements CardView {
 
   #changed(): void {
     if (this.#destroyed) return;
+    // Mentre si scrive la griglia segue la sessione da sé; la resa si rilegge
+    // uscendo.
+    if (this.#editLife !== null || this.#leaving !== null) return;
     if (this.#mode === "live") {
       void this.#start();
       return;
@@ -671,6 +855,20 @@ class SheetCard implements CardView {
     void this.#load();
   }
 
+  /// Smette di scrivere perché la scheda si ferma: come `#stopEditing`, ma
+  /// senza riaprire la lettura; la prossima accensione la riapre.
+  #stopEditingFrozen(): void {
+    const life = this.#editLife;
+    if (life === null) return;
+    const writer = this.#writer;
+    this.#editLife = null;
+    this.#editor = null;
+    this.#writer = null;
+    life.close();
+    writer?.remove();
+    this.#root.hidden = false;
+  }
+
   #cellOf(event: Event): GridPosition | null {
     const target = event.target instanceof Element ? event.target.closest<HTMLElement>(".grid-cell[data-row][data-column]") : null;
     if (!target || !this.#root.contains(target)) return null;
@@ -844,4 +1042,8 @@ function place(element: HTMLElement, left: number, top: number, width: number, h
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
+}
+
+function baseName(path: string): string {
+  return path.split("/").pop() || path;
 }

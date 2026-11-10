@@ -4,6 +4,7 @@ import type { LinkCardSource } from "../text/profiles/markdown/link-card";
 import { api } from "../../host/ipc";
 import { openVaultRoot, state as shellState, vaultArg } from "../../state/store";
 import type { GridHost } from "../grid/engine";
+import { openLifetime } from "../../ui/lifetime";
 import type { GridDialogs, GridRibbon } from "../grid/ribbon/ribbon";
 import type { GridMenuHost } from "../grid/menu";
 import type { GridPalette } from "../grid/palette/commands";
@@ -727,15 +728,23 @@ function mountViewer(options: SurfaceBootstrapOptions, profile: string, context:
 
 type GridModule = typeof import("../grid/engine");
 type GridMenuModule = typeof import("../grid/menu");
+type GridCompactModule = typeof import("../grid/compact");
 
 function mountGrid(
   options: SurfaceBootstrapOptions,
   grid: GridModule,
   menu: GridMenuModule,
+  compactKit: GridCompactModule,
   profile: string,
   context: SurfaceMountContext,
 ): EditorSurface {
     if (profile !== GRID_PROFILE) throw new Error(`grid surface profile ${profile} is not registered`);
+    // Dentro una scheda della lavagna (N6 T42; la porta delle schede segna il
+    // contenitore `data-card-editor="compact"`) il foglio scrive soltanto
+    // valori e formule: niente nastro, finestre, tavolozza, linguette né
+    // comandi di struttura (`editors/grid/compact.ts`).
+    const compact = context.parent.dataset.cardEditor === "compact";
+    const compactLife = openLifetime();
     // La barra multifunzione e le finestre arrivano con un `import()`: chi
     // non apre una cartella di Excel non le scarica. La barra si aggiorna
     // con i richiami del motore, al più una volta per fotogramma; una
@@ -763,11 +772,11 @@ function mountGrid(
       onEditMode: () => {
         for (const listener of statusListeners) listener();
       },
-      onDialog: (dialog) => {
+      onDialog: compact ? undefined : (dialog) => {
         if (dialogs) dialogs.open(dialog);
         else waiting = dialog;
       },
-      grid: options.gridHost,
+      grid: compact && options.gridHost ? compactKit.compactGridHost(options.gridHost) : options.gridHost,
       theme: currentTheme(),
       pdf: options.media?.pdfLoader ?? loadPdf,
       exportPdf: options.exportDocument && {
@@ -782,13 +791,14 @@ function mountGrid(
     engine.setPaper(adaptedPaper(context.parent));
     // I comandi del catalogo nella tavolozza arrivano allo stesso modo.
     let palette: GridPalette | null = null;
-    void import("../grid/palette/commands").then(
+    if (compact) compactKit.guardCompactKeys(context.parent, () => engine.editMode(), compactLife);
+    if (!compact) void import("../grid/palette/commands").then(
       ({ mountGridPalette }) => {
         if (!destroyed) palette = mountGridPalette(engine);
       },
       () => {},
     );
-    void import("../grid/ribbon/ribbon").then(
+    if (!compact) void import("../grid/ribbon/ribbon").then(
       ({ mountRibbon, mountGridDialogs }) => {
         if (destroyed) return;
         ribbon = mountRibbon(engine);
@@ -842,6 +852,7 @@ function mountGrid(
       },
       destroy: () => {
         destroyed = true;
+        compactLife.close();
         statusListeners.clear();
         looks.disconnect();
         ribbon?.destroy();
@@ -911,8 +922,8 @@ export const COMPONENT_EDITORS: Readonly<Record<string, readonly EditorPart[]>> 
       formats: { [GRID_FORMAT]: GRID_PROFILE },
       factory: {
         load: async () => {
-          const [grid, menu] = await Promise.all([import("../grid/engine"), import("../grid/menu")]);
-          return { mount: (profile, context) => mountGrid(options, grid, menu, profile, context) };
+          const [grid, menu, compact] = await Promise.all([import("../grid/engine"), import("../grid/menu"), import("../grid/compact")]);
+          return { mount: (profile, context) => mountGrid(options, grid, menu, compact, profile, context) };
         },
       },
     }),

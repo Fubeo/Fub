@@ -14,6 +14,7 @@
 
 import type {
   CardEditor,
+  CardEditorContext,
   CardEditorOptions,
   CardEditorPort,
   CardEditorState,
@@ -107,6 +108,13 @@ interface OpenCardEditor {
   readonly notice: HTMLElement | null;
   /// La barra di formato, nata alla prima richiesta, e la sua vita.
   toolbar: { readonly element: HTMLElement | null; readonly life: Lifetime } | null;
+  /// Il contenitore della superficie, dentro la scheda.
+  readonly host: HTMLElement;
+  /// Chi ascolta il contesto (T42), l'osservatore che lo rilegge e l'ultimo
+  /// mandato.
+  readonly contextListeners: Set<(context: CardEditorContext | null) => void>;
+  contextWatch: MutationObserver | null;
+  lastContext: CardEditorContext | null;
   /// La sessione si è chiusa sotto l'editor, o la superficie ha ceduto.
   stopped: boolean;
   destroyed: boolean;
@@ -279,8 +287,45 @@ export function createCardEditorPort(deps: CardEditorDeps): CardEditorHub {
         }
         return editor.toolbar.element;
       },
+      context: () => (editor.destroyed ? null : contextIn(editor.host)),
+      onContext: (listener) => {
+        if (editor.destroyed) return () => {};
+        editor.contextListeners.add(listener);
+        watchContext(editor);
+        return () => {
+          editor.contextListeners.delete(listener);
+        };
+      },
       destroy: () => destroy(editor),
     };
+  }
+
+  /// Rilegge il contesto a ogni cambio di ciò che la superficie mostra, e lo
+  /// manda a chi ascolta quando è diverso. Un osservatore per editor, nato al
+  /// primo ascolto e spento con l'editor.
+  function watchContext(editor: OpenCardEditor): void {
+    if (editor.contextWatch !== null) return;
+    editor.lastContext = contextIn(editor.host);
+    const watch = new MutationObserver(() => {
+      if (editor.destroyed) return;
+      const next = contextIn(editor.host);
+      const last = editor.lastContext;
+      if (next?.cell === last?.cell && next?.formula === last?.formula) return;
+      editor.lastContext = next;
+      for (const listener of [...editor.contextListeners]) {
+        try {
+          listener(next);
+        } catch (error) {
+          console.error(error);
+        }
+      }
+    });
+    watch.observe(editor.host, { subtree: true, childList: true, characterData: true });
+    editor.contextWatch = watch;
+    editor.teardowns.push(() => {
+      watch.disconnect();
+      editor.contextListeners.clear();
+    });
   }
 
   async function openEditor(path: string, host: HTMLElement, options: CardEditorOptions): Promise<CardEditor | null> {
@@ -375,6 +420,10 @@ export function createCardEditorPort(deps: CardEditorDeps): CardEditorHub {
         teardowns: [],
         notice,
         toolbar: null,
+        host,
+        contextListeners: new Set(),
+        contextWatch: null,
+        lastContext: null,
         stopped: false,
         destroyed: false,
         last: "clean",
@@ -499,4 +548,20 @@ export function headingOffset(text: string, heading: string): number | null {
     bytes += encoder.encode(line).length;
   }
   return null;
+}
+
+/// Il contesto di ciò che si scrive in una scheda (T42), letto da ciò che la
+/// superficie montata in `host` mostra: per un foglio, il nome della cella
+/// attiva e il suo contenuto nella barra della formula (che nella scheda non
+/// si vede: la tela li mostra dove dice il prototipo T27). `null` per una
+/// superficie che non ha una cella attiva.
+export function contextIn(host: HTMLElement): CardEditorContext | null {
+  const bar = host.querySelector(".grid-formula-bar");
+  if (!bar) return null;
+  const cell = bar.querySelector(".grid-cell-name")?.textContent?.trim() ?? "";
+  const lines = bar.querySelectorAll(".grid-formula-editor .cm-line");
+  const formula = lines.length > 0
+    ? Array.from(lines, (line) => line.textContent ?? "").join("\n")
+    : (bar.querySelector(".grid-formula-editor")?.textContent ?? "");
+  return { cell, formula };
 }
