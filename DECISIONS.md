@@ -103,6 +103,14 @@ ciò che non dipende dalla risposta.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-10 · fub-pre-alpha (utente) · i coder Haiku lavorano con
+  `effort: "xhigh"`, non più `max`. Perché: lo chiede l'utente («cambia gli
+  haiku coder da qui in avanti da effort max a xhigh»). Vale per i coder
+  avviati da qui in avanti; quelli già al lavoro finiscono come sono partiti.
+  Con lo stesso effort girano i tester del collaudo (uno alla volta,
+  `~/.cache/fub-prealpha/collaudo/`, difetti in
+  `~/.cache/fub-prealpha/funzionalitarotte.md`).
+
 - 2026-11-10 · fub-pre-alpha (utente) · a Haiku vanno anche task medi,
   non solo i ritocchi: restano a Opus solo quelli molto complessi (scelte
   di disegno aperte, contratti pubblici e formati su disco, sicurezza,

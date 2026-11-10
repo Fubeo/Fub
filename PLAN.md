@@ -2957,8 +2957,8 @@ che serve in più per questo piano.
   che rifà le baseline, T54 con S2 T20 o con la griglia T2–T3). Nel
   dubbio, uno alla volta.
 - **I task medi e piccoli a Haiku** (regola dell'utente del 2026-11-10): un
-  task può andare a un coder Haiku 5.5 con ragionamento massimo
-  (`model: "haiku"`, `effort: "max"`), in più dei due Opus e senza un
+  task può andare a un coder Haiku 5.5 con ragionamento alto
+  (`model: "haiku"`, `effort: "xhigh"`, dal 2026-11-10 sera; prima `max`), in più dei due Opus e senza un
   numero massimo fissato dall'utente. Haiku è un buon coder: gli vanno anche
   task non banali, non solo i ritocchi. Va a Haiku un task che il piano
   descrive bene («Cosa fare», casi limite e prova scritti), di taglia
