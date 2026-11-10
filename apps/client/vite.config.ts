@@ -314,7 +314,7 @@ export default defineConfig({
           // intelligenti e la griglia; le librerie di simboli, i nodi di
           // Bézier, dove va la barra della selezione e l'ordine cambiato.
           // Dipendono dal formato e dalla geometria, e l'editor li chiama.
-          if (/\/src\/editors\/spatial\/(tools\/(hit|hit\/[a-z-]+|clips|edit|palette|arrange|outline|transform|topath|look|apply|inkshape|paths|width|combine|nodable|scissors|builder|place|layers|selecting|naming|trace-ops|rich|wrap|measure|text-path|boards|swatches|gradients|tips|crop|masks|effects|hatches|patterns|connectors|connector-ops|connector-copies|label-hosts|labels|follow|repeat-ops|symmetry|clipboard|history|audit|attributes|quantity|export-plan|frame|reshape|eyedropper|guides|grid|symbol-library|symbol-libraries|bezier|bar|order-changes)|describe)\.ts$/.test(id)) {
+          if (/\/src\/editors\/spatial\/(tools\/(hit|hit\/[a-z-]+|clips|edit|palette|arrange|outline|transform|topath|look|apply|inkshape|paths|width|combine|nodable|scissors|builder|place|layers|selecting|naming|trace-ops|rich|wrap|measure|text-path|boards|swatches|gradients|tips|crop|masks|effects|hatches|patterns|connectors|connector-ops|connector-copies|label-hosts|labels|follow|repeat-ops|symmetry|clipboard|clipboard\/[a-z-]+|history|audit|attributes|quantity|export-plan|frame|reshape|eyedropper|guides|grid|symbol-library|symbol-libraries|bezier|bar|order-changes)|describe)\.ts$/.test(id)) {
             return "drawing-commands";
           }
           // I pannelli dei disegni: le proprietà coi loro campi e coi colori
