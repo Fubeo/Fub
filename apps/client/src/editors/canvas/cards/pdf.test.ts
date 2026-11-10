@@ -10,7 +10,7 @@ import { makePdfJsLoader, PDFJS_VERSION, type PdfEngine, type PdfJsModule } from
 import { CardCache } from "../card-cache";
 import { snapshotPart, type CardContext, type CardMode, type CardView } from "../cards";
 import type { CanvasNode } from "../model";
-import { PDF_CARD_MAX_SCALE, pdfCardFirstPage, pdfCardRenderer, pdfCardStartPage, type PdfCardPort } from "./pdf";
+import { PDF_CARD_MAX_SCALE, pdfCardFirstPage, pdfCardRenderer, pdfCardStartPage, pdfPagesReader, type PdfCardPort } from "./pdf";
 
 const PATH = "Corsi/manuale.pdf";
 const WIDTH = 320;
@@ -635,5 +635,57 @@ describe("smontare una scheda PDF (T91)", () => {
     expect(b.host.querySelector(".canvas-card-pdf")).toBeNull();
     expect(warn).not.toHaveBeenCalled();
     warn.mockRestore();
+  });
+});
+
+describe("le pagine per «Spargi le pagine» (T72)", () => {
+  /** Una porta che legge `bytes` (o niente) e apre il motore `engine`. */
+  function pagesPort(options: {
+    bytes?: Uint8Array | null;
+    read?: () => Promise<Uint8Array | null>;
+    load?: () => Promise<PdfEngine>;
+  }) {
+    const loaded: FakeEngine[] = [];
+    const port: PdfCardPort = {
+      read: options.read ?? (async () => (options.bytes === undefined ? new Uint8Array([1]) : options.bytes)),
+      load: async () => {
+        if (options.load) return options.load();
+        const engine = fakeEngine(24, [612, 792]);
+        loaded.push(engine);
+        return engine;
+      },
+      watch: () => () => {},
+    };
+    return { port, loaded };
+  }
+
+  it("conta le pagine e chiude il motore", async () => {
+    const { port, loaded } = pagesPort({});
+    expect(await pdfPagesReader(port).count("a.pdf")).toBe(24);
+    expect(loaded).toHaveLength(1);
+    expect(loaded[0]!.destroyed).toBe(1);
+  });
+
+  it("misura le pagine chieste, nello stesso ordine, e chiude il motore una volta", async () => {
+    const { port, loaded } = pagesPort({});
+    const sizes = await pdfPagesReader(port).sizes("a.pdf", [3, 9]);
+    expect(sizes).toEqual([{ width: 612, height: 792 }, { width: 612, height: 792 }]);
+    expect(loaded).toHaveLength(1);
+    expect(loaded[0]!.destroyed).toBe(1);
+  });
+
+  it("un file che manca, o non si apre, dà null e non lancia", async () => {
+    expect(await pdfPagesReader(pagesPort({ bytes: null }).port).count("a.pdf")).toBeNull();
+    expect(await pdfPagesReader(pagesPort({ bytes: null }).port).sizes("a.pdf", [1, 2])).toEqual([null, null]);
+    const broken = pagesPort({ load: async () => { throw new Error("rotto"); } });
+    expect(await pdfPagesReader(broken.port).count("a.pdf")).toBeNull();
+    const unreadable = pagesPort({ read: async () => { throw new Error("niente"); } });
+    expect(await pdfPagesReader(unreadable.port).count("a.pdf")).toBeNull();
+  });
+
+  it("un PDF senza pagine non si conta, e una pagina senza misura è null da sola", async () => {
+    expect(await pdfPagesReader(pagesPort({ load: async () => fakeEngine(0) }).port).count("a.pdf")).toBeNull();
+    const odd = pagesPort({ load: async () => ({ ...fakeEngine(2), async pageSize(index: number) { if (index === 1) throw new Error("x"); return [600, 800] as const; } }) });
+    expect(await pdfPagesReader(odd.port).sizes("a.pdf", [1, 2])).toEqual([{ width: 600, height: 800 }, null]);
   });
 });

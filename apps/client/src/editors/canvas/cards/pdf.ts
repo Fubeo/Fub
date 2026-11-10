@@ -338,6 +338,78 @@ function mountPdfCard(
   };
 }
 
+/// Le pagine di un PDF per «Spargi le pagine» (T72), con la stessa porta della
+/// scheda: si apre il file per ogni chiamata e si chiude subito dopo.
+export interface PdfPagesReader {
+  /// Quante pagine ha il PDF `path` (almeno una); `null` se il file manca o non si apre.
+  count(path: string): Promise<number | null>;
+  /// La misura in punti (come la legge pdf.js) delle pagine `pages` (da 1), nello
+  /// stesso ordine; `null` per una pagina che non si legge.
+  sizes(path: string, pages: readonly number[]): Promise<readonly (PdfPageSize | null)[]>;
+}
+
+/// La misura di una pagina in punti.
+export interface PdfPageSize {
+  readonly width: number;
+  readonly height: number;
+}
+
+export function pdfPagesReader(port: PdfCardPort): PdfPagesReader {
+  return {
+    count: async (path) => (await withPdf(port, path, async (engine) => {
+      const count = Math.floor(engine.pageCount);
+      return count >= 1 ? count : null;
+    })) ?? null,
+    sizes: async (path, pages) => {
+      const sizes = await withPdf(port, path, async (engine) => {
+        const found: (PdfPageSize | null)[] = [];
+        for (const page of pages) found.push(await pageSizeOf(engine, page));
+        return found;
+      });
+      return sizes ?? pages.map(() => null);
+    },
+  };
+}
+
+/// Apre il PDF `path` con la porta, chiama `use` e chiude il motore. `null` se il
+/// file manca, non si apre o `use` fallisce: chi chiama non riceve mai un errore.
+async function withPdf<T>(
+  port: PdfCardPort,
+  path: string,
+  use: (engine: PdfEngine) => Promise<T>,
+): Promise<T | null> {
+  let bytes: Uint8Array | null;
+  try {
+    bytes = await port.read(path);
+  } catch {
+    return null;
+  }
+  if (bytes === null) return null;
+  let engine: PdfEngine;
+  try {
+    engine = await port.load(bytes);
+  } catch {
+    return null;
+  }
+  try {
+    return await use(engine);
+  } catch {
+    return null;
+  } finally {
+    engine.destroy();
+  }
+}
+
+/// La misura della pagina `page` (da 1); `null` se pdf.js non la dà o non è una misura.
+async function pageSizeOf(engine: PdfEngine, page: number): Promise<PdfPageSize | null> {
+  try {
+    const [width, height] = await engine.pageSize(page - 1);
+    return Number.isFinite(width) && Number.isFinite(height) && width > 0 && height > 0 ? { width, height } : null;
+  } catch {
+    return null;
+  }
+}
+
 function arrow(className: string, glyph: string, label: string): HTMLButtonElement {
   const button = document.createElement("button");
   button.type = "button";
