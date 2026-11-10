@@ -12,12 +12,18 @@
 // dell'host (`reuse`): qui il vault non si legge mai per confrontare. Le
 // notifiche lo dicono — il percorso se è un file solo, il numero se sono di
 // più, e la prima volta che la lavagna copia file dove sono andati, con il
-// gesto per cambiare cartella.
+// gesto per cambiare cartella (la voce `canvas.drop_folder`).
+//
+// La cartella dove finisce una copia la sceglie `canvas.drop_folder`
+// (`dropFolderFor`): quella degli allegati delle note, una accanto alla
+// lavagna, o una del vault. Le note non cambiano.
 //
 // Le dipendenze arrivano da fuori (`document-controller.ts` in produzione,
 // porte finte nei test): questo modulo non parla all'host da sé.
 import { draggedEntries, ENTRIES_DRAG_TYPE, NOTE_DRAG_TYPE, type DraggedEntry } from "../ui/drag-types";
-import { depositOrReuse, type AttachmentDeposit } from "../editors/media/attachment-target";
+import { depositOrReuse, sanitizeFileName, type AttachmentDeposit } from "../editors/media/attachment-target";
+import { DROP_FOLDER_KEY, type CanvasPreferences } from "../editors/canvas/preferences";
+import { folderContains, nameFault, normalizedName } from "../rules/mirrored";
 import type { NoticeAction } from "../ui/notify";
 import { t } from "../i18n/strings";
 
@@ -77,16 +83,53 @@ function folderOf(id: string): string {
   return cut < 0 ? "" : id.slice(0, cut);
 }
 
+/// Le due impostazioni che scelgono la cartella dei file trascinati, già
+/// giudicate da `preferencesOf` (un valore rotto vale quello di serie).
+export type DropFolderChoice = Pick<CanvasPreferences, "dropFolder" | "dropFolderPath">;
+
 export interface CanvasDepositDeps {
-  /// Il deposito degli allegati per la lavagna `documentId` (la cartella di
-  /// `files.attachment-folder` e la scrittura atomica dell'host, che sa
-  /// `reuse`).
+  /// Il deposito degli allegati per la lavagna `documentId`, con la cartella
+  /// di `files.attachment-folder` e la scrittura atomica dell'host, che sa
+  /// `reuse`. La lavagna ne cambia la cartella con `dropFolder`.
   deposit(documentId: string): Promise<AttachmentDeposit>;
+  /// La scelta di `canvas.drop_folder`, letta a ogni trascinamento.
+  dropFolder(): Promise<DropFolderChoice>;
+  /// Le cartelle che `files.excluded-folders` tiene fuori dal vault.
+  excludedFolders(): Promise<readonly string[]>;
   notify(message: string, tone?: "info", action?: NoticeAction): void;
   readState(key: string): Promise<unknown>;
   writeState(key: string, value: unknown): void;
-  /// Apre le Impostazioni sulla cartella dei file trascinati.
-  changeFolder(): void | Promise<void>;
+  /// Apre le Impostazioni sulla voce `key`: quella dei file trascinati.
+  revealSetting(key: string): void | Promise<void>;
+}
+
+/// La cartella dove finiscono le copie dal computer sulla lavagna `documentId`.
+/// `notesFolder` è `files.attachment-folder` così com'è, anche `./…`: `notes` la
+/// torna intatta, e la segue `folderForNote` come oggi per le note. `board` è la
+/// cartella accanto alla lavagna (alla radice, il percorso da sé); `folder` è
+/// il percorso dalla radice del vault. Un percorso che la pulizia degli
+/// allegati non accetta vale `notesFolder`.
+export function dropFolderFor(choice: DropFolderChoice, documentId: string, notesFolder: string): string {
+  if (choice.dropFolder === "notes") return notesFolder;
+  const typed = cleanFolderPath(choice.dropFolderPath);
+  if (typed === null) return notesFolder;
+  if (choice.dropFolder === "folder") return typed;
+  const own = folderOf(documentId);
+  return own === "" ? typed : `${own}/${typed}`;
+}
+
+/// Il percorso scritto nelle Impostazioni, con la pulizia degli allegati: i
+/// nomi nuovi di `nameFault` (niente `..`, `.fub`, nomi nascosti, caratteri che
+/// il sistema si riserva) e ogni pezzo che `sanitizeFileName` torna com'è. Una
+/// barra in coda si toglie. `null` se non resta niente.
+function cleanFolderPath(typed: string): string | null {
+  const path = normalizedName(typed.trim()).replace(/\/+$/, "");
+  if (nameFault(path, "new") !== null) return null;
+  try {
+    return path.split("/").every((part) => sanitizeFileName(part) === part) ? path : null;
+  } catch {
+    return null;
+  }
 }
 
 /// Deposita i file del sistema nel vault per la lavagna `documentId` e torna
@@ -101,7 +144,11 @@ export async function depositCanvasFiles(
   documentId: string,
   deps: CanvasDepositDeps,
 ): Promise<string[]> {
-  const deposit = await deps.deposit(documentId);
+  const notes = await deps.deposit(documentId);
+  const deposit: AttachmentDeposit = {
+    ...notes,
+    folder: dropFolderFor(await deps.dropFolder(), documentId, notes.folder),
+  };
   const paths: string[] = [];
   const copied: string[] = [];
   const reused: string[] = [];
@@ -122,14 +169,27 @@ export async function depositCanvasFiles(
 }
 
 /// La notifica «Copiati in attachments/», una volta per vault. Uno stato che
-/// non si legge vale come «mai vista»: rivederla è meglio che non saperlo.
+/// non si legge vale come «mai vista»: rivederla è meglio che non saperlo. Se la
+/// cartella è esclusa dall'indice, la notifica lo dice: lì i file non si
+/// troveranno con la ricerca.
 async function noticeFirstCopy(deps: CanvasDepositDeps, first: string): Promise<void> {
   const noticed = await deps.readState(ATTACHMENTS_NOTICED_KEY).catch(() => null);
   if (noticed === true) return;
   const folder = folderOf(first);
-  deps.notify(t("canvas.intake.copied", { folder: folder === "" ? "/" : `${folder}/` }), "info", {
+  const shown = folder === "" ? "/" : `${folder}/`;
+  const message = (await isExcluded(deps, folder))
+    ? t("canvas.intake.copied_excluded", { folder: shown })
+    : t("canvas.intake.copied", { folder: shown });
+  deps.notify(message, "info", {
     label: t("canvas.intake.change_folder"),
-    run: () => deps.changeFolder(),
+    run: () => deps.revealSetting(DROP_FOLDER_KEY),
   });
   deps.writeState(ATTACHMENTS_NOTICED_KEY, true);
+}
+
+/// Una cartella è esclusa se sta dentro una cartella che `files.excluded-folders`
+/// esclude: si chiede come si chiederebbe di un documento che ci sta dentro.
+async function isExcluded(deps: CanvasDepositDeps, folder: string): Promise<boolean> {
+  const excluded = await deps.excludedFolders().catch((): readonly string[] => []);
+  return excluded.some((item) => folderContains(item, `${folder}/`));
 }

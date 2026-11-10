@@ -7,9 +7,18 @@ import { describe, expect, it, vi } from "vitest";
 import { createFakeHost, type FakeHost } from "../host/fake";
 import { RESOURCE_WRITE_HEADER, writeResource, type TauriInvoke } from "../editors/media/transport";
 import { ENTRIES_DRAG_TYPE, NOTE_DRAG_TYPE } from "../ui/drag-types";
-import type { AttachmentDeposit } from "../editors/media/attachment-target";
+import { DROP_FOLDER_KEY, DROP_FOLDER_PATH_KEY, preferencesOf } from "../editors/canvas/preferences";
+import type { SettingEntry } from "../host/contract";
 import type { NoticeAction } from "../ui/notify";
-import { ATTACHMENTS_NOTICED_KEY, depositCanvasFiles, resolveCanvasPaths, type CanvasDepositDeps, type CanvasPathDeps } from "./canvas-intake";
+import {
+  ATTACHMENTS_NOTICED_KEY,
+  depositCanvasFiles,
+  dropFolderFor,
+  resolveCanvasPaths,
+  type CanvasDepositDeps,
+  type CanvasPathDeps,
+  type DropFolderChoice,
+} from "./canvas-intake";
 
 function transfer(values: Record<string, string>): DataTransfer {
   return { getData: (type: string) => values[type] ?? "" } as unknown as DataTransfer;
@@ -91,13 +100,22 @@ function hostInvoke(host: FakeHost, oldHost: boolean): TauriInvoke {
   return invoke as unknown as TauriInvoke;
 }
 
+/// Il valore di serie di `canvas.drop_folder`: le note, con la loro cartella.
+const NOTES: DropFolderChoice = { dropFolder: "notes", dropFolderPath: "Allegati" };
+
 /// Un vault finto per i depositi: il finto host vero con i suoi file, le
 /// scritture che passano da `writeResource`, lo stato di vista e le notifiche.
+/// `notesFolder` è `files.attachment-folder`; `scheme` è la scelta di
+/// `canvas.drop_folder` e le cartelle escluse, lette a ogni trascinamento, e il
+/// test la può cambiare fra due trascinamenti.
 function depositVault(options: {
   files?: Record<string, Uint8Array>;
   noticed?: unknown;
   readFails?: boolean;
   oldHost?: boolean;
+  notesFolder?: string;
+  choice?: DropFolderChoice;
+  excluded?: string[];
 } = {}) {
   const host = createFakeHost({
     resources: Object.fromEntries(Object.entries(options.files ?? {}).map(([id, value]) => [id, { bytes: value }])),
@@ -106,23 +124,25 @@ function depositVault(options: {
   const state = new Map<string, unknown>();
   if (options.noticed !== undefined) state.set(ATTACHMENTS_NOTICED_KEY, options.noticed);
   const notices: { message: string; action?: NoticeAction }[] = [];
-  const changeFolder = vi.fn();
-  const deposit: AttachmentDeposit = {
-    folder: "attachments",
-    fromDocument: "Lavagne/studio.canvas",
-    write: (id, value, reuse) => writeResource(invoke, id, value, null, undefined, reuse),
-  };
+  const revealSetting = vi.fn();
+  const scheme = { choice: options.choice ?? NOTES, excluded: options.excluded ?? [] };
   const deps: CanvasDepositDeps = {
-    deposit: async () => deposit,
+    deposit: async (documentId) => ({
+      folder: options.notesFolder ?? "attachments",
+      fromDocument: documentId,
+      write: (id, value, reuse) => writeResource(invoke, id, value, null, undefined, reuse),
+    }),
+    dropFolder: async () => scheme.choice,
+    excludedFolders: async () => scheme.excluded,
     notify: (message, _tone, action) => notices.push({ message, ...(action ? { action } : {}) }),
     readState: async (key) => {
       if (options.readFails) throw new Error("stato illeggibile");
       return state.get(key) ?? null;
     },
     writeState: (key, value) => { state.set(key, value); },
-    changeFolder,
+    revealSetting,
   };
-  return { host, state, notices, changeFolder, deps };
+  return { host, state, notices, revealSetting, scheme, deps };
 }
 
 /// Le letture del vault che il client ha fatto sul finto: aprire un file e
@@ -143,7 +163,8 @@ describe("depositCanvasFiles (dal computer)", () => {
     expect(vault.notices[0]!.message).toBe("Copiati in attachments/");
     expect(vault.notices[0]!.action?.label).toBe("Cambia cartella");
     await vault.notices[0]!.action!.run();
-    expect(vault.changeFolder).toHaveBeenCalledTimes(1);
+    expect(vault.revealSetting).toHaveBeenCalledTimes(1);
+    expect(vault.revealSetting).toHaveBeenCalledWith("canvas.drop_folder");
     expect(vault.state.get(ATTACHMENTS_NOTICED_KEY)).toBe(true);
 
     vault.notices.length = 0;
@@ -214,5 +235,125 @@ describe("depositCanvasFiles (dal computer)", () => {
     expect(paths.slice(0, 10)).toEqual(Array.from({ length: 10 }, (_, i) => `Foto/f${i}.png`));
     expect(vault.notices.map((notice) => notice.message)).toEqual(["10 file già nel vault, uso quelli", "Copiati in attachments/"]);
     expect(vaultReads(vault.host)).toEqual([]);
+  });
+});
+
+/// Una voce di `settings()` come la dà il bundle: `preferencesOf` guarda solo la
+/// chiave e il valore.
+function setting(key: string, value: unknown): SettingEntry {
+  return { spec: { key }, value } as unknown as SettingEntry;
+}
+
+describe("dropFolderFor: dove vanno i file trascinati", () => {
+  const DOC = "Corsi/Statistica/Lezioni.canvas";
+
+  it("notes: la cartella degli allegati delle note, come oggi, anche `./` relativo alla lavagna", () => {
+    expect(dropFolderFor(NOTES, DOC, "attachments")).toBe("attachments");
+    expect(dropFolderFor(NOTES, DOC, "./img")).toBe("./img");
+  });
+
+  it("board: accanto alla lavagna; alla radice del vault il percorso da sé", () => {
+    const board: DropFolderChoice = { dropFolder: "board", dropFolderPath: "Allegati" };
+    expect(dropFolderFor(board, DOC, "attachments")).toBe("Corsi/Statistica/Allegati");
+    expect(dropFolderFor(board, "Lezioni.canvas", "attachments")).toBe("Allegati");
+  });
+
+  it("folder: dalla radice del vault, qualunque sia la lavagna", () => {
+    expect(dropFolderFor({ dropFolder: "folder", dropFolderPath: "Foto/Lavagne" }, DOC, "attachments")).toBe("Foto/Lavagne");
+  });
+
+  it("una lavagna spostata o rinominata prende la cartella della sua nuova posizione", () => {
+    const board: DropFolderChoice = { dropFolder: "board", dropFolderPath: "Allegati" };
+    expect(dropFolderFor(board, "Archivio/Lezioni.canvas", "attachments")).toBe("Archivio/Allegati");
+    expect(dropFolderFor(board, "Corsi/Statistica/Esame.canvas", "attachments")).toBe("Corsi/Statistica/Allegati");
+  });
+
+  it("una barra in coda si toglie; un percorso che la pulizia degli allegati non accetta vale la cartella delle note", () => {
+    expect(dropFolderFor({ dropFolder: "folder", dropFolderPath: "Foto/" }, DOC, "attachments")).toBe("Foto");
+    for (const bad of ["..", "Foto/../x", "Foto//x", "./Foto", "/Foto", "Foto/.fub", ".fub", "Foto\\x", "Foto/.nascosta", "Foto:ferie", "   ", ""]) {
+      expect(dropFolderFor({ dropFolder: "folder", dropFolderPath: bad }, DOC, "attachments"), bad).toBe("attachments");
+    }
+  });
+
+  it("il valore rotto delle Impostazioni vale Allegati (lo specchio di T33), non la cartella delle note", () => {
+    const choice = (path: string) => preferencesOf([setting(DROP_FOLDER_KEY, "folder"), setting(DROP_FOLDER_PATH_KEY, path)]);
+    for (const bad of ["../fuori", "/assoluta", "Foto:ferie", ".fub", ""]) {
+      expect(dropFolderFor(choice(bad), DOC, "attachments"), bad).toBe("Allegati");
+    }
+    // Una scelta che non esiste vale quella di serie: le note.
+    expect(dropFolderFor(preferencesOf([setting(DROP_FOLDER_KEY, "altrove")]), DOC, "attachments")).toBe("attachments");
+  });
+});
+
+describe("depositCanvasFiles, con la cartella di canvas.drop_folder", () => {
+  const BOARD: DropFolderChoice = { dropFolder: "board", dropFolderPath: "Allegati" };
+
+  it("le note continuano a usare files.attachment-folder, anche `./` relativo; la lavagna con board no", async () => {
+    const notes = depositVault({ notesFolder: "./img" });
+    expect(await depositCanvasFiles([file("foto.png", 1)], "Corsi/Statistica/Lezioni.canvas", notes.deps)).toEqual(["Corsi/Statistica/img/foto.png"]);
+    const board = depositVault({ notesFolder: "./img", choice: BOARD });
+    expect(await depositCanvasFiles([file("foto.png", 1)], "Corsi/Statistica/Lezioni.canvas", board.deps)).toEqual(["Corsi/Statistica/Allegati/foto.png"]);
+  });
+
+  it("board: il file va accanto alla lavagna, la notifica dice dove, e «Cambia cartella» apre canvas.drop_folder", async () => {
+    const vault = depositVault({ choice: BOARD });
+    expect(await depositCanvasFiles([file("foto.png", 1, 2)], "Corsi/Statistica/Lezioni.canvas", vault.deps)).toEqual(["Corsi/Statistica/Allegati/foto.png"]);
+    expect(vault.notices.map((notice) => notice.message)).toEqual(["Copiati in Corsi/Statistica/Allegati/"]);
+    await vault.notices[0]!.action!.run();
+    expect(vault.revealSetting).toHaveBeenCalledWith("canvas.drop_folder");
+  });
+
+  it("board alla radice del vault: Allegati/ alla radice", async () => {
+    const vault = depositVault({ choice: BOARD });
+    expect(await depositCanvasFiles([file("foto.png", 1)], "Lezioni.canvas", vault.deps)).toEqual(["Allegati/foto.png"]);
+    expect(vault.notices.map((notice) => notice.message)).toEqual(["Copiati in Allegati/"]);
+  });
+
+  it("folder: la cartella del vault, e ogni trascinamento rilegge la scelta", async () => {
+    const vault = depositVault({ choice: BOARD, noticed: true });
+    expect(await depositCanvasFiles([file("a.png", 1)], "Corsi/Statistica/Lezioni.canvas", vault.deps)).toEqual(["Corsi/Statistica/Allegati/a.png"]);
+    vault.scheme.choice = { dropFolder: "folder", dropFolderPath: "Foto/Lavagne" };
+    expect(await depositCanvasFiles([file("b.png", 2)], "Corsi/Statistica/Lezioni.canvas", vault.deps)).toEqual(["Foto/Lavagne/b.png"]);
+  });
+
+  it("una lavagna spostata: i file nuovi vanno accanto alla nuova posizione, i vecchi restano dove sono", async () => {
+    const vault = depositVault({ choice: BOARD, noticed: true });
+    await depositCanvasFiles([file("a.png", 1)], "Corsi/Statistica/Lezioni.canvas", vault.deps);
+    expect(await depositCanvasFiles([file("b.png", 2)], "Archivio/Lezioni.canvas", vault.deps)).toEqual(["Archivio/Allegati/b.png"]);
+    expect(Object.keys(vault.host.files())).toEqual(expect.arrayContaining(["Corsi/Statistica/Allegati/a.png", "Archivio/Allegati/b.png"]));
+  });
+
+  it("un valore rotto nelle Impostazioni: i file vanno in Allegati, e la notifica dice Allegati/", async () => {
+    const vault = depositVault({ choice: preferencesOf([setting(DROP_FOLDER_KEY, "folder"), setting(DROP_FOLDER_PATH_KEY, "../fuori")]) });
+    expect(await depositCanvasFiles([file("foto.png", 1)], "Corsi/Statistica/Lezioni.canvas", vault.deps)).toEqual(["Allegati/foto.png"]);
+    expect(vault.notices.map((notice) => notice.message)).toEqual(["Copiati in Allegati/"]);
+  });
+
+  it("un file che il vault ha già non si copia in nessuna cartella, nemmeno in quella della lavagna", async () => {
+    const vault = depositVault({ choice: BOARD, files: { "Foto/lavagna.jpg": new Uint8Array([1, 2]) } });
+    expect(await depositCanvasFiles([file("IMG_2042.jpg", 1, 2)], "Corsi/Statistica/Lezioni.canvas", vault.deps)).toEqual(["Foto/lavagna.jpg"]);
+    expect(Object.keys(vault.host.files()).filter((id) => id.includes("Allegati"))).toEqual([]);
+    expect(vault.notices.map((notice) => notice.message)).toEqual(["Già nel vault come Foto/lavagna.jpg, uso quello"]);
+  });
+
+  it("una cartella esclusa dall'indice: la notifica lo dice, e «Cambia cartella» resta", async () => {
+    const vault = depositVault({ choice: BOARD, excluded: ["Corsi/Statistica/Allegati/"] });
+    await depositCanvasFiles([file("foto.png", 1)], "Corsi/Statistica/Lezioni.canvas", vault.deps);
+    expect(vault.notices.map((notice) => notice.message)).toEqual([
+      "Copiati in Corsi/Statistica/Allegati/: è una cartella esclusa dall'indice, lì i file non si troveranno con la ricerca",
+    ]);
+    expect(vault.notices[0]!.action?.label).toBe("Cambia cartella");
+  });
+
+  it("esclusa vuol dire che la cartella ci sta dentro: una più in basso o di nome simile non la copre", async () => {
+    const below = depositVault({ choice: BOARD, excluded: ["Corsi/Statistica/Allegati/Foto"] });
+    await depositCanvasFiles([file("foto.png", 1)], "Corsi/Statistica/Lezioni.canvas", below.deps);
+    expect(below.notices.map((notice) => notice.message)).toEqual(["Copiati in Corsi/Statistica/Allegati/"]);
+    const similar = depositVault({ choice: BOARD, excluded: ["Corsi/Stat"] });
+    await depositCanvasFiles([file("foto.png", 1)], "Corsi/Statistica/Lezioni.canvas", similar.deps);
+    expect(similar.notices.map((notice) => notice.message)).toEqual(["Copiati in Corsi/Statistica/Allegati/"]);
+    const above = depositVault({ choice: BOARD, excluded: ["Corsi"] });
+    await depositCanvasFiles([file("foto.png", 1)], "Corsi/Statistica/Lezioni.canvas", above.deps);
+    expect(above.notices.map((notice) => notice.message)[0]).toContain("esclusa dall'indice");
   });
 });

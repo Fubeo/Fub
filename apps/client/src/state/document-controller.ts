@@ -84,6 +84,7 @@ import { onEvent } from "./kernel";
 import { drawingFonts } from "./drawing-fonts";
 import { emit, on, readState, state, writeState } from "./store";
 import { depositCanvasFiles, resolveCanvasPaths } from "./canvas-intake";
+import { LAVAGNA_BUNDLE, preferencesOf } from "../editors/canvas/preferences";
 import { revealSetting } from "../panels/settings";
 import { CASE_KEY, caseOf, toRecover } from "./drafts";
 import { addSheetNotice, clearAllRemovedNotices, clearSheetNotices, dismissSheetNotice, moveSheetNotices, setLimitedMode, setRemovedNotice } from "./sheet-notices";
@@ -613,6 +614,12 @@ async function attachmentDeposit(doc: string): Promise<AttachmentDeposit> {
   };
 }
 
+/// Le cartelle che `files.excluded-folders` tiene fuori dal vault: indice e albero.
+async function excludedFolders(): Promise<readonly string[]> {
+  const value = (await settings()).find((entry) => entry.spec.key === "files.excluded-folders")?.value;
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
+}
+
 /// Un'immagine remota di `doc` scaricata fra i suoi allegati, dopo il «sì»
 /// dell'utente: la chiede l'host, che accetta soltanto `https` e il sito che
 /// la domanda nomina, e il link che torna è relativo alla nota (L04). La
@@ -1051,12 +1058,15 @@ export function mountDocumentController(lifetime: Lifetime, d: DocumentDeps, pan
       }),
       // Dal computer: una copia sola per file, e lo stesso file si riusa (G2).
       // Il vault che ha già quei byte lo dice l'host (`reuse`), non il client.
+      // La cartella la sceglie `canvas.drop_folder`, letta a ogni trascinamento.
       deposit: (files, documentId) => depositCanvasFiles(files, documentId, {
         deposit: attachmentDeposit,
+        dropFolder: async () => preferencesOf(await settings(LAVAGNA_BUNDLE)),
+        excludedFolders,
         notify,
         readState,
         writeState,
-        changeFolder: () => revealSetting("files.attachment-folder"),
+        revealSetting,
       }),
     },
     onSearchTag: (tag) => deps.searchTag(tag),
