@@ -126,10 +126,48 @@ pub fn resource_mime_or_octet(id: &DocId) -> &str {
 /// stringa, `Revision` stringa opaca).
 /// Rispecchiata in `apps/client/src/editors/media/transport.ts`
 /// (`ResourceWriteReceipt`).
+///
+/// `reused` dice se il deposito ha riusato un file che il vault aveva gia'
+/// ([`ResourceReuse::SameContent`]): allora non si e' scritto niente, e `id` e
+/// `revision` sono quelli del file che c'era. Senza il campo (una ricevuta di
+/// un host di prima) vale `false`: quella ricevuta nomina sempre un file
+/// scritto.
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct ResourceWriteReceipt {
     pub id: DocId,
     pub revision: Revision,
+    #[serde(default)]
+    pub reused: bool,
+}
+
+/// Che cosa fa un deposito quando il vault ha gia' un file con gli stessi byte
+/// (D-3 (b)). La forma lo dice sempre, come `expected`: nessun riuso nascosto.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum ResourceReuse {
+    /// Si scrive sempre: il deposito di sempre.
+    #[default]
+    Never,
+    /// Se un file del vault ha esattamente questi byte (anche con un altro
+    /// nome), non si scrive e la ricevuta nomina quel file. Vale solo per un
+    /// file nuovo (`expected` nullo). Quando l'host non sa rispondere (limiti,
+    /// tabella delle voci assente o rotta), si scrive: nel dubbio si deposita,
+    /// mai si perde un deposito.
+    SameContent,
+}
+
+impl ResourceReuse {
+    /// Il valore di `reuse` sul filo per [`ResourceReuse::SameContent`].
+    pub const SAME_CONTENT: &'static str = "same-content";
+
+    /// Il valore del campo `reuse` dei metadati del deposito. Un valore che
+    /// l'host non conosce e' `None`: chi decodifica lo rifiuta (`BadArgs`), mai
+    /// lo ignora in silenzio.
+    pub fn from_wire(value: &str) -> Option<Self> {
+        match value {
+            Self::SAME_CONTENT => Some(Self::SameContent),
+            _ => None,
+        }
+    }
 }
 
 /// Tutto cio' che serve a disegnare una risorsa senza aprirla: poche centinaia
@@ -352,6 +390,12 @@ pub trait ResourceHost: Send + Sync {
 ///   byte. Chi scrive ha letto il descrittore (`revision: Option<String>`) e
 ///   ricontrolla prima di coprire.
 ///
+/// `reuse` e' anch'esso nella forma, mai un default nascosto:
+/// [`ResourceReuse::Never`] e' il deposito di sempre,
+/// [`ResourceReuse::SameContent`] chiede prima se il vault ha gia' questi byte
+/// e, se si', non scrive. Con `expected` dato e' `BadArgs`: ricoprire un file e
+/// riusarne un altro non sono la stessa domanda.
+///
 /// Torna la ricevuta, non un descrittore con handle: registrare un handle dopo
 /// il commit potrebbe fallire per quota o close e far apparire fallita una
 /// scrittura gia' riuscita. Chi vuole leggere apre la risorsa separatamente.
@@ -362,6 +406,7 @@ pub trait ResourceWrite: Send + Sync {
         id: &DocId,
         bytes: &[u8],
         expected: Option<Revision>,
+        reuse: ResourceReuse,
     ) -> Result<ResourceWriteReceipt, PluginError>;
 }
 
@@ -718,6 +763,7 @@ mod tests {
         let receipt = ResourceWriteReceipt {
             id: doc("allegati/foto.png"),
             revision: Revision::of_bytes(b"\x00\xffBOM\r\n"),
+            reused: false,
         };
         let json = serde_json::to_value(&receipt).unwrap();
         assert_eq!(
@@ -725,10 +771,35 @@ mod tests {
             serde_json::json!({
                 "id": "allegati/foto.png",
                 "revision": Revision::of_bytes(b"\x00\xffBOM\r\n").0,
+                "reused": false,
             }),
             "id/revision viaggiano come i tipi canonici, byte-identici compresi"
         );
         let back: ResourceWriteReceipt = serde_json::from_value(json).unwrap();
         assert_eq!(back, receipt);
+    }
+
+    #[test]
+    fn a_receipt_without_reused_reads_as_a_written_file() {
+        // La ricevuta di un host di prima non ha `reused`: nomina un file scritto.
+        let old = serde_json::json!({
+            "id": "allegati/foto.png",
+            "revision": Revision::of_bytes(b"x").0,
+        });
+        let back: ResourceWriteReceipt = serde_json::from_value(old).unwrap();
+        assert!(!back.reused);
+        assert_eq!(back.id, doc("allegati/foto.png"));
+    }
+
+    #[test]
+    fn reuse_has_one_wire_value_and_refuses_the_rest() {
+        assert_eq!(
+            ResourceReuse::from_wire("same-content"),
+            Some(ResourceReuse::SameContent)
+        );
+        for unknown in ["", "same_content", "Same-Content", "always", "never"] {
+            assert_eq!(ResourceReuse::from_wire(unknown), None, "{unknown:?}");
+        }
+        assert_eq!(ResourceReuse::default(), ResourceReuse::Never);
     }
 }

@@ -23,7 +23,8 @@
 //! - [`resource_write_body`] + [`resource_write_cmd`] — deposito byte veri via
 //!   `H: ResourceWrite` (puro in `fub-host`, impl Main su `Host` via
 //!   `Host::write_document_bytes`): `None` = create-only atomico,
-//!   `Some(Revision)` = CAS, mai `Dictated`;
+//!   `Some(Revision)` = CAS, mai `Dictated`; `reuse: "same-content"` (solo con
+//!   `expected` nullo) non scrive se il vault ha gia' questi byte;
 //! - [`handle_asset_request`] — il corpo del protocollo `fub-asset:`: solo
 //!   handle aperti, `Range` valido -> `206` con `Content-Range` misurato sul
 //!   servito, `Range` insoddisfacibile -> `416` con `bytes */len`, senza
@@ -51,8 +52,8 @@ use fub_abi::text::{Arg, Text};
 use fub_abi::traits::HostNetwork;
 use fub_abi::PluginError;
 use fub_host::resources::{
-    ResourceDescriptor, ResourceHandle, ResourceHost, ResourceWrite, ResourceWriteReceipt,
-    RESOURCE_CHUNK_BYTES, RESOURCE_MAX_INLINE_BYTES,
+    ResourceDescriptor, ResourceHandle, ResourceHost, ResourceReuse, ResourceWrite,
+    ResourceWriteReceipt, RESOURCE_CHUNK_BYTES, RESOURCE_MAX_INLINE_BYTES,
 };
 
 use crate::web_viewer::{
@@ -181,18 +182,24 @@ pub const RESOURCE_WRITE_META_MAX_BYTES: usize = 16 * 1024;
 /// `vault` opzionale, `expected` OBBLIGATORIO (`null` = create-only, stringa =
 /// CAS grezza). `expected` omesso = `BadArgs`: il chiamante deve dire se sta
 /// creando o ricoprendo, e un default nascosto coprirebbe per sbaglio.
+/// `reuse` facoltativo: assente = [`ResourceReuse::Never`] (il deposito di
+/// sempre), `"same-content"` = [`ResourceReuse::SameContent`]; ogni altro
+/// valore, `null` compreso, e' `BadArgs`. La coppia con `expected` la giudica
+/// l'host (`ResourceWrite`), che ne e' il padrone.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ResourceWriteMeta {
     pub id: String,
     pub vault: Option<String>,
     pub expected: Option<String>,
+    pub reuse: ResourceReuse,
 }
 
 /// Decodifica rigorosa dei metadati: percent-decoding UTF-8 -> oggetto JSON
-/// tipizzato con i soli campi `id`/`vault`/`expected` -> validazione.
+/// tipizzato con i soli campi `id`/`vault`/`expected`/`reuse` -> validazione.
 /// Malformazione a qualsiasi passo (header assente, oltre tetto, percent
 /// invalido, UTF-8 invalido, JSON non-oggetto, campi extra o tipi sbagliati,
-/// `expected` omesso, id/vault non stringhe) = `BadArgs` prima di I/O.
+/// `expected` omesso, id/vault non stringhe, `reuse` sconosciuto) = `BadArgs`
+/// prima di I/O.
 pub fn decode_resource_write_meta(
     headers: &tauri::http::HeaderMap,
     body_len: usize,
@@ -220,7 +227,7 @@ pub fn decode_resource_write_meta(
         PluginError::BadArgs("resource_write metadata must be a JSON object".into())
     })?;
     for key in object.keys() {
-        if key != "id" && key != "vault" && key != "expected" {
+        if key != "id" && key != "vault" && key != "expected" && key != "reuse" {
             return Err(PluginError::BadArgs(
                 format!("resource_write metadata has an unknown field `{key}`").into(),
             ));
@@ -252,10 +259,34 @@ pub fn decode_resource_write_meta(
             ));
         }
     };
+    let reuse = match object.get("reuse") {
+        None => ResourceReuse::Never,
+        Some(serde_json::Value::String(value)) => {
+            ResourceReuse::from_wire(value).ok_or_else(|| {
+                PluginError::BadArgs(
+                    format!(
+                        "resource_write metadata has an unknown `reuse` value `{value}` (only `{}`)",
+                        ResourceReuse::SAME_CONTENT
+                    )
+                    .into(),
+                )
+            })?
+        }
+        Some(_) => {
+            return Err(PluginError::BadArgs(
+                format!(
+                    "resource_write metadata needs `reuse` absent or the string `{}`",
+                    ResourceReuse::SAME_CONTENT
+                )
+                .into(),
+            ));
+        }
+    };
     Ok(ResourceWriteMeta {
         id,
         vault,
         expected,
+        reuse,
     })
 }
 
@@ -314,7 +345,8 @@ pub fn resource_write_body<'a>(
 /// argomenti JSON Tauri. Rifiuta oltre il tetto inline con `Io` prima di
 /// allocare: un deposito da 500 MiB via IPC non parte nemmeno. Torna la
 /// ricevuta (id fenced scritto + revisione dei byte), mai un handle: fallire
-/// l'open dopo non fa fallire il deposito.
+/// l'open dopo non fa fallire il deposito. Con `reuse: "same-content"` la
+/// ricevuta puo' nominare il file che c'era (`reused: true`, niente scritto).
 pub fn resource_write_cmd<H: ResourceWrite>(
     host: &H,
     window_label: &str,
@@ -327,7 +359,7 @@ pub fn resource_write_cmd<H: ResourceWrite>(
     let meta = decode_resource_write_meta(headers, bytes.len())?;
     let id = fub_host::doc_id(&meta.id)?;
     let expected = meta.expected.map(Revision::new);
-    host.resource_write(meta.vault.as_deref(), &id, bytes, expected)
+    host.resource_write(meta.vault.as_deref(), &id, bytes, expected, meta.reuse)
 }
 
 // ---------------------------------------------------------------------------
@@ -811,7 +843,7 @@ where
     for n in 0..=10_000 {
         let candidate = fub_host::resources::attachment_candidate(stem, ext, n);
         let id = fub_host::doc_id(&format!("{clean_folder}/{candidate}"))?;
-        match host.resource_write(vault, &id, &response.body, None) {
+        match host.resource_write(vault, &id, &response.body, None, ResourceReuse::Never) {
             Err(PluginError::AlreadyExists(_)) => continue,
             result => return result,
         }
@@ -1214,6 +1246,349 @@ mod tests {
             decode_resource_write_meta(&tauri::http::HeaderMap::new(), 10),
             Err(PluginError::BadArgs(_))
         ));
+    }
+
+    /// I metadati come li manda la shell: `encodeURIComponent(JSON.stringify(meta))`.
+    fn headers_of(meta: &serde_json::Value) -> tauri::http::HeaderMap {
+        let json = meta.to_string();
+        let mut encoded = String::new();
+        for byte in json.bytes() {
+            if byte.is_ascii_alphanumeric() || b"-_.!~*'()".contains(&byte) {
+                encoded.push(byte as char);
+            } else {
+                encoded.push_str(&format!("%{byte:02X}"));
+            }
+        }
+        let mut headers = tauri::http::HeaderMap::new();
+        headers.insert(
+            RESOURCE_WRITE_HEADER,
+            encoded.parse().expect("header value"),
+        );
+        headers
+    }
+
+    #[test]
+    fn reuse_is_optional_and_only_same_content_is_known() {
+        let decode = |meta: serde_json::Value| decode_resource_write_meta(&headers_of(&meta), 3);
+        // Senza `reuse`, il deposito di sempre.
+        let plain =
+            decode(serde_json::json!({ "id": "a.png", "vault": null, "expected": null })).unwrap();
+        assert_eq!(plain.reuse, ResourceReuse::Never);
+        let reuse = decode(serde_json::json!({
+            "id": "a.png", "vault": null, "expected": null, "reuse": "same-content",
+        }))
+        .unwrap();
+        assert_eq!(reuse.reuse, ResourceReuse::SameContent);
+        // Un valore sconosciuto non si ignora: `BadArgs`, mai un deposito diverso
+        // da quello chiesto.
+        for bad in [
+            serde_json::json!("copy"),
+            serde_json::json!("same_content"),
+            serde_json::json!(""),
+            serde_json::json!(null),
+            serde_json::json!(true),
+            serde_json::json!({ "same-content": true }),
+        ] {
+            let meta = serde_json::json!({
+                "id": "a.png", "vault": null, "expected": null, "reuse": bad,
+            });
+            assert!(
+                matches!(decode(meta), Err(PluginError::BadArgs(_))),
+                "`reuse: {bad}` deve essere BadArgs"
+            );
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // Il deposito con `reuse` sull'host vero, attraverso il comando IPC.
+    // -----------------------------------------------------------------------
+
+    /// I file del vault dello scenario: due della stessa misura con byte
+    /// diversi, e una nota.
+    const SCENARIO_FILES: &[(&str, &str)] = &[
+        ("Allegati/a.png", "contenuto-uno"),
+        ("Allegati/b.png", "contenuto-due"),
+        ("Note/nota.md", "# Nota\n"),
+    ];
+
+    /// Un vault con questi file, aperto e indicizzato (la tabella delle voci c'è).
+    fn scenario_vault() -> (tempfile::TempDir, camino::Utf8PathBuf, fub_host::Host) {
+        scenario_vault_with(&[])
+    }
+
+    /// Il vault dello scenario con altri file, scritti prima di aprirlo.
+    fn scenario_vault_with(
+        extra: &[(&str, &[u8])],
+    ) -> (tempfile::TempDir, camino::Utf8PathBuf, fub_host::Host) {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let root = camino::Utf8PathBuf::from_path_buf(dir.path().to_owned()).expect("utf8");
+        let files = SCENARIO_FILES
+            .iter()
+            .map(|(rel, text)| (*rel, text.as_bytes()))
+            .chain(extra.iter().copied());
+        for (rel, bytes) in files {
+            let path = root.join(rel);
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            std::fs::write(path, bytes).unwrap();
+        }
+        let host = fub_host::Host::without_watcher();
+        host.open(&root).expect("il vault si apre");
+        host.wait_indexed(Some(root.as_str())).expect("indicizzato");
+        (dir, root, host)
+    }
+
+    /// I passi dello scenario: id chiesto, byte (testo), metadati come li manda
+    /// la shell, senza `id`.
+    fn scenario_steps() -> Vec<(&'static str, &'static str, serde_json::Value)> {
+        use serde_json::json;
+        let reuse = json!({ "vault": null, "expected": null, "reuse": "same-content" });
+        let plain = json!({ "vault": null, "expected": null });
+        vec![
+            // Gli stessi byte di `Allegati/a.png`, con un altro nome: si riusa.
+            ("Lavagna/nuova.png", "contenuto-uno", reuse.clone()),
+            // La stessa misura, byte diversi da tutti: si scrive.
+            ("Lavagna/nuova.png", "contenuto-tre", reuse.clone()),
+            // `reuse` con `expected`: rifiutato, niente scritto.
+            (
+                "Lavagna/altra.png",
+                "contenuto-uno",
+                json!({ "vault": null, "expected": "sha256:abc", "reuse": "same-content" }),
+            ),
+            // Un valore sconosciuto: rifiutato, mai ignorato.
+            (
+                "Lavagna/altra.png",
+                "contenuto-uno",
+                json!({ "vault": null, "expected": null, "reuse": "copy" }),
+            ),
+            // Senza `reuse`, come sempre: un nome preso è `already_exists`...
+            ("Allegati/a.png", "contenuto-uno", plain.clone()),
+            // ... e un nome libero riceve una copia, anche di byte che ci sono.
+            ("Lavagna/copia.png", "contenuto-uno", plain),
+            // Due file con gli stessi byte: si nomina il primo per percorso.
+            ("Lavagna/terza.png", "contenuto-uno", reuse.clone()),
+            // Un file da 0 byte che il vault non ha: si scrive.
+            ("Lavagna/vuoto.png", "", reuse),
+        ]
+    }
+
+    /// Lo scenario giocato sull'host vero: ogni passo con la sua risposta
+    /// (`{ id, reused }` o `{ error: <kind> }`). Controlla anche ciò che il JSON
+    /// non porta: la revisione della ricevuta è quella dei byte sul disco, e un
+    /// riuso o un rifiuto non toccano il file chiesto.
+    fn resource_write_scenario() -> serde_json::Value {
+        let (_dir, root, host) = scenario_vault();
+        let mut steps = Vec::new();
+        for (id, text, meta) in scenario_steps() {
+            let mut full = serde_json::json!({ "id": id });
+            full.as_object_mut()
+                .unwrap()
+                .extend(meta.as_object().unwrap().clone());
+            let before = std::fs::read(root.join(id)).ok();
+            let written =
+                resource_write_cmd(&host, "main", LOCAL, &headers_of(&full), text.as_bytes());
+            let answer = match written {
+                Ok(receipt) => {
+                    let on_disk = std::fs::read(root.join(receipt.id.as_str())).unwrap();
+                    assert_eq!(
+                        on_disk,
+                        text.as_bytes(),
+                        "{id}: la ricevuta nomina questi byte"
+                    );
+                    assert_eq!(receipt.revision, Revision::of_bytes(&on_disk), "{id}");
+                    if receipt.reused {
+                        assert_ne!(
+                            receipt.id.as_str(),
+                            id,
+                            "{id}: un riuso nomina un altro file"
+                        );
+                        assert_eq!(
+                            std::fs::read(root.join(id)).ok(),
+                            before,
+                            "{id}: un riuso non scrive"
+                        );
+                    } else {
+                        assert_eq!(receipt.id.as_str(), id, "{id}");
+                    }
+                    serde_json::json!({ "id": receipt.id.as_str(), "reused": receipt.reused })
+                }
+                Err(error) => {
+                    assert_eq!(
+                        std::fs::read(root.join(id)).ok(),
+                        before,
+                        "{id}: un rifiuto non scrive"
+                    );
+                    serde_json::json!({ "error": serde_json::to_value(&error).unwrap()["kind"] })
+                }
+            };
+            steps.push(serde_json::json!({ "meta": full, "text": text, "answer": answer }));
+        }
+        let files: serde_json::Map<String, serde_json::Value> = SCENARIO_FILES
+            .iter()
+            .map(|(id, text)| ((*id).to_string(), serde_json::Value::from(*text)))
+            .collect();
+        serde_json::json!({ "files": files, "steps": steps })
+    }
+
+    #[test]
+    fn reuse_answers_with_the_file_that_was_there_and_writes_nothing() {
+        use serde_json::json;
+        let scenario = resource_write_scenario();
+        let answers: Vec<serde_json::Value> = scenario["steps"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|step| step["answer"].clone())
+            .collect();
+        assert_eq!(
+            answers,
+            vec![
+                json!({ "id": "Allegati/a.png", "reused": true }),
+                json!({ "id": "Lavagna/nuova.png", "reused": false }),
+                json!({ "error": "bad_args" }),
+                json!({ "error": "bad_args" }),
+                json!({ "error": "already_exists" }),
+                json!({ "id": "Lavagna/copia.png", "reused": false }),
+                json!({ "id": "Allegati/a.png", "reused": true }),
+                json!({ "id": "Lavagna/vuoto.png", "reused": false }),
+            ]
+        );
+    }
+
+    #[test]
+    fn without_reuse_the_old_deposit_is_unchanged() {
+        let (_dir, root, host) = scenario_vault();
+        let meta =
+            serde_json::json!({ "id": "Lavagna/copia.png", "vault": null, "expected": null });
+        let receipt =
+            resource_write_cmd(&host, "main", LOCAL, &headers_of(&meta), b"contenuto-uno").unwrap();
+        // La ricevuta di sempre, con `reused: false` sul filo.
+        assert_eq!(
+            serde_json::to_value(&receipt).unwrap(),
+            serde_json::json!({
+                "id": "Lavagna/copia.png",
+                "revision": Revision::of_bytes(b"contenuto-uno").0,
+                "reused": false,
+            })
+        );
+        assert_eq!(
+            std::fs::read(root.join("Lavagna/copia.png")).unwrap(),
+            b"contenuto-uno"
+        );
+        // Il CAS di sempre: ricoprire alla revisione giusta.
+        let cas = serde_json::json!({
+            "id": "Lavagna/copia.png", "vault": null, "expected": receipt.revision.0,
+        });
+        let again =
+            resource_write_cmd(&host, "main", LOCAL, &headers_of(&cas), b"contenuto-due").unwrap();
+        assert!(!again.reused);
+        assert_eq!(
+            std::fs::read(root.join("Lavagna/copia.png")).unwrap(),
+            b"contenuto-due"
+        );
+    }
+
+    #[test]
+    fn reuse_with_a_cas_is_refused_even_when_the_bytes_are_there() {
+        let (_dir, root, host) = scenario_vault();
+        let base = Revision::of_bytes(b"contenuto-uno");
+        let meta = serde_json::json!({
+            "id": "Allegati/a.png", "vault": null, "expected": base.0, "reuse": "same-content",
+        });
+        let refused =
+            resource_write_cmd(&host, "main", LOCAL, &headers_of(&meta), b"contenuto-uno");
+        assert!(
+            matches!(refused, Err(PluginError::BadArgs(_))),
+            "{refused:?}"
+        );
+        assert_eq!(
+            std::fs::read(root.join("Allegati/a.png")).unwrap(),
+            b"contenuto-uno"
+        );
+        // Anche dal trait, senza l'IPC: la regola è dell'host.
+        let direct = host.resource_write(
+            None,
+            &DocId::new("Allegati/a.png"),
+            b"contenuto-uno",
+            Some(base),
+            ResourceReuse::SameContent,
+        );
+        assert!(matches!(direct, Err(PluginError::BadArgs(_))), "{direct:?}");
+    }
+
+    #[test]
+    fn reuse_passes_the_same_gate_as_any_deposit() {
+        let (_dir, _root, host) = scenario_vault();
+        let meta = serde_json::json!({
+            "id": "Lavagna/nuova.png", "vault": null, "expected": null, "reuse": "same-content",
+        });
+        let denied = resource_write_cmd(
+            &host,
+            "fub-viewer",
+            LOCAL,
+            &headers_of(&meta),
+            b"contenuto-uno",
+        );
+        assert!(
+            matches!(denied, Err(PluginError::PermissionDenied(_))),
+            "{denied:?}"
+        );
+    }
+
+    #[test]
+    fn reuse_holds_at_exactly_the_deposit_limit() {
+        let limit = RESOURCE_MAX_INLINE_BYTES as usize;
+        let big: Vec<u8> = (0..limit).map(|at| (at % 251) as u8).collect();
+        let (_dir, root, host) = scenario_vault_with(&[("Allegati/grande.bin", &big)]);
+        let meta = serde_json::json!({
+            "id": "Lavagna/grande.bin", "vault": null, "expected": null, "reuse": "same-content",
+        });
+        // 64 MiB esatti passano, e si riusano.
+        let receipt = resource_write_cmd(&host, "main", LOCAL, &headers_of(&meta), &big).unwrap();
+        assert_eq!(receipt.id.as_str(), "Allegati/grande.bin");
+        assert!(receipt.reused);
+        assert!(!root.join("Lavagna/grande.bin").exists());
+        // Un byte in più è il tetto del deposito, prima di ogni domanda.
+        let mut over = big;
+        over.push(0);
+        let refused = resource_write_cmd(&host, "main", LOCAL, &headers_of(&meta), &over);
+        assert!(matches!(refused, Err(PluginError::Io(_))), "{refused:?}");
+        assert!(!root.join("Lavagna/grande.bin").exists());
+    }
+
+    fn scenario_path() -> std::path::PathBuf {
+        std::path::PathBuf::from(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../apps/client/src/__fixtures__/resource-write-scenario.json"
+        ))
+    }
+
+    /// Lo scenario che l'host finto (`apps/client/src/host/fake.ts`) gioca in
+    /// `apps/client/src/host/fake-resources.test.ts`: le stesse domande, le
+    /// stesse risposte dell'host vero.
+    #[test]
+    fn the_fake_hosts_resource_write_scenario_is_what_the_real_host_answers() {
+        let expected = resource_write_scenario();
+        let path = scenario_path();
+        if std::env::var_os("UPDATE_MIRROR").is_some() {
+            let mut json = serde_json::to_string_pretty(&expected).expect("pretty");
+            json.push('\n');
+            std::fs::write(&path, json).expect("scrive lo scenario");
+            return;
+        }
+        let committed = std::fs::read_to_string(&path).unwrap_or_else(|and| {
+            panic!(
+                "scenario dei depositi mancante ({}): {and}. Rigeneralo con \
+                 `UPDATE_MIRROR=1 cargo test -p fub-app --lib resources::tests`.",
+                path.display()
+            )
+        });
+        let committed: serde_json::Value =
+            serde_json::from_str(&committed).expect("scenario JSON valido");
+        assert_eq!(
+            committed, expected,
+            "lo scenario dei depositi del fake è stantio: l'host risponde altro \
+             (`UPDATE_MIRROR=1 cargo test -p fub-app --lib resources::tests`)."
+        );
     }
 
     #[test]

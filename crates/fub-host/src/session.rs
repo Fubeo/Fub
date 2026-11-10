@@ -5025,8 +5025,21 @@ impl crate::resources::ResourceWrite for Host {
         id: &DocId,
         bytes: &[u8],
         expected: Option<Revision>,
+        reuse: crate::resources::ResourceReuse,
     ) -> Result<crate::resources::ResourceWriteReceipt, PluginError> {
         let id = doc_id(id.as_str())?;
+        let reuse_same = reuse == crate::resources::ResourceReuse::SameContent;
+        // Riusare un file che c'è e ricoprirne uno alla sua revisione sono due
+        // domande diverse: insieme non hanno un senso da indovinare.
+        if reuse_same && expected.is_some() {
+            return Err(PluginError::BadArgs(
+                format!(
+                    "resource_write cannot reuse the same content while overwriting `{}` at a revision",
+                    id.as_str()
+                )
+                .into(),
+            ));
+        }
         // La shell scrive una cartella di Excel soltanto creandola: coprirne
         // una con dei byte suoi aggirerebbe la sola lettura.
         if expected.is_some() {
@@ -5035,8 +5048,55 @@ impl crate::resources::ResourceWrite for Host {
                 return Err(crate::workbook::read_only(&id));
             }
         }
+        if reuse_same {
+            if let Some(receipt) = self.reused_resource(vault, bytes) {
+                return Ok(receipt);
+            }
+        }
         let revision = self.write_document_bytes(vault, &id, bytes, expected)?;
-        Ok(crate::resources::ResourceWriteReceipt { id, revision })
+        Ok(crate::resources::ResourceWriteReceipt {
+            id,
+            revision,
+            reused: false,
+        })
+    }
+}
+
+impl Host {
+    /// La ricevuta del file che il vault ha già con questi byte, o `None`:
+    /// allora si scrive. `None` vale anche per «non so» (limiti, tabella delle
+    /// voci assente o rotta) e per una domanda che fallisce: nel dubbio si
+    /// deposita, mai si perde un deposito.
+    ///
+    /// Il confronto è quello di [`Host::same_content`] (vault preso sotto la
+    /// custodia, byte confrontati fuori). Prima di rispondere si ricontrolla,
+    /// coi soli metadati e fuori dalla custodia, che il file trovato ci sia
+    /// ancora e abbia ancora questa misura: un file sparito fra il confronto e
+    /// la risposta non si nomina, si scrive.
+    fn reused_resource(
+        &self,
+        vault: Option<&str>,
+        bytes: &[u8],
+    ) -> Option<crate::resources::ResourceWriteReceipt> {
+        let SameContent::Found { id } = self.same_content(vault, bytes).ok()? else {
+            return None;
+        };
+        let prepared = self
+            .read_workspace(vault, |workspace| {
+                workspace
+                    .prepare_resource_open(&id)
+                    .map_err(PluginError::from)
+            })
+            .ok()?;
+        let lease = prepared.invoke().ok()?;
+        let still_there = lease.stat.is_file() && lease.stat.size == bytes.len() as u64;
+        still_there.then(|| crate::resources::ResourceWriteReceipt {
+            id,
+            // I byte trovati sono questi, confrontati uno per uno: la loro
+            // revisione è quella dei byte che arrivano.
+            revision: Revision::of_bytes(bytes),
+            reused: true,
+        })
     }
 }
 
