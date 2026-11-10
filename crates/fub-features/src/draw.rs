@@ -386,18 +386,15 @@ mod write;
 
 use embed::{
     data_uri, external_note, fub_fonts, glyphs_note, heading, listed, lock, missing_glyphs,
-    options, raster, title, vault_note, vault_path, ImagesRead, LeftOut, Refused, VaultImages,
-    FACES, HREF_SHOWN, MONO, RASTER_TYPES, SANS, SERIF, UNBLED_NOTE, VAULT_IMAGES_MAX,
-    VAULT_IMAGES_MIB,
+    options, title, vault_note, vault_path, LeftOut, Refused, VaultImages, HREF_SHOWN, MONO, SANS,
+    SERIF, UNBLED_NOTE,
 };
-use export::{
-    artifact_names, check_target, derive_problem, export_drawings, files, is_drawing, not_utf8,
-    unreadable, Derived, Drawing, File, Format, Outcome, Page, Problem, Writer,
-};
+use export::{check_target, not_utf8, unreadable, Drawing, File, Format, Outcome, Page};
 pub use export::{DrawioExport, ExcalidrawExport, JpegExport, PdfExport, PngExport, SvgExport};
-use write::{
-    deliver, encode_jpeg, encode_png, write_pdf, write_raster, write_svg, OnWhite, SinkWriter,
-};
+use write::{write_pdf, write_raster, write_svg};
+
+#[cfg(test)]
+use embed::{raster, FACES};
 
 #[cfg(test)]
 mod tests {

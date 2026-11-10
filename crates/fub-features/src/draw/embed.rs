@@ -121,11 +121,11 @@ pub(super) fn heading(blocks: &[Block]) -> Option<String> {
 pub(super) struct Refused {
     /// I riferimenti esterni, senza ripetizioni e in ordine: fuori dal vault
     /// per un disegno, fuori dal documento per le annotazioni.
-    external: BTreeSet<String>,
+    pub(super) external: BTreeSet<String>,
     /// Le immagini incorporate che non sono raster leggibili.
-    embedded: usize,
+    pub(super) embedded: usize,
     /// Le immagini del vault rimaste fuori, per motivo.
-    vault: BTreeMap<LeftOut, BTreeSet<String>>,
+    pub(super) vault: BTreeMap<LeftOut, BTreeSet<String>>,
 }
 
 impl Refused {
@@ -133,7 +133,7 @@ impl Refused {
     /// disegno. Le pagine sono lo stesso contenuto guardato in punti diversi:
     /// i riferimenti si contano una volta, e le immagini incorporate rotte
     /// quante ne ha la pagina che ne ha di più.
-    fn merge(&mut self, other: Refused) {
+    pub(super) fn merge(&mut self, other: Refused) {
         self.external.extend(other.external);
         self.embedded = self.embedded.max(other.embedded);
         for (why, images) in other.vault {
@@ -235,12 +235,12 @@ pub(super) fn raster(data: Arc<Vec<u8>>) -> Option<ImageKind> {
 
 /// Quanti MiB di immagini del vault porta al più un disegno: i byte restano in
 /// memoria finché il disegno non è uscito.
-pub(super) const VAULT_IMAGES_MIB: usize = 64;
-pub(super) const VAULT_IMAGES_MAX: usize = VAULT_IMAGES_MIB * 1024 * 1024;
+const VAULT_IMAGES_MIB: usize = 64;
+const VAULT_IMAGES_MAX: usize = VAULT_IMAGES_MIB * 1024 * 1024;
 
 /// I tipi dei file che l'export legge come immagini del vault: i raster che
 /// `resvg` e `svg2pdf` sanno disegnare.
-pub(super) const RASTER_TYPES: [&str; 4] = ["image/png", "image/jpeg", "image/gif", "image/webp"];
+const RASTER_TYPES: [&str; 4] = ["image/png", "image/jpeg", "image/gif", "image/webp"];
 
 /// Il percorso del vault che un `href` d'immagine nomina, letto come lo legge
 /// il client (`href` in `apps/client/src/editors/spatial/scene/values.ts`),
@@ -303,7 +303,7 @@ pub(super) struct VaultImages<'h> {
 
 /// Ciò che le immagini del vault di un disegno hanno già dato.
 #[derive(Default)]
-pub(super) struct ImagesRead {
+struct ImagesRead {
     /// L'esito di ogni percorso già chiesto.
     paths: BTreeMap<String, Result<ImageKind, LeftOut>>,
     /// L'esito di ogni file già letto.
@@ -313,7 +313,7 @@ pub(super) struct ImagesRead {
 }
 
 impl<'h> VaultImages<'h> {
-    fn new(host: &'h dyn ReadApi, from: &DocId) -> Self {
+    pub(super) fn new(host: &'h dyn ReadApi, from: &DocId) -> Self {
         VaultImages {
             host,
             from: from.clone(),
@@ -322,7 +322,7 @@ impl<'h> VaultImages<'h> {
     }
 
     /// L'immagine del vault a `path`, o perché resta fuori.
-    fn image(&self, path: &str) -> Result<ImageKind, LeftOut> {
+    pub(super) fn image(&self, path: &str) -> Result<ImageKind, LeftOut> {
         // Come per `Refused`: nessuno va in panico tenendo il lucchetto, e ciò
         // che è già stato letto resterebbe valido.
         let mut read = self
@@ -423,18 +423,18 @@ pub(super) const MONO: &str = "JetBrains Mono";
 /// TrueType. La licenza è la SIL Open Font License 1.1 di tutti e tre i
 /// caratteri, in `fonts/OFL.txt` accanto ai file.
 pub(super) const FACES: [&[u8]; 12] = [
-    include_bytes!("../fonts/inter-400.ttf"),
-    include_bytes!("../fonts/inter-700.ttf"),
-    include_bytes!("../fonts/inter-italic-400.ttf"),
-    include_bytes!("../fonts/inter-italic-700.ttf"),
-    include_bytes!("../fonts/literata-400.ttf"),
-    include_bytes!("../fonts/literata-700.ttf"),
-    include_bytes!("../fonts/literata-italic-400.ttf"),
-    include_bytes!("../fonts/literata-italic-700.ttf"),
-    include_bytes!("../fonts/jetbrains-mono-400.ttf"),
-    include_bytes!("../fonts/jetbrains-mono-700.ttf"),
-    include_bytes!("../fonts/jetbrains-mono-italic-400.ttf"),
-    include_bytes!("../fonts/jetbrains-mono-italic-700.ttf"),
+    include_bytes!("../../fonts/inter-400.ttf"),
+    include_bytes!("../../fonts/inter-700.ttf"),
+    include_bytes!("../../fonts/inter-italic-400.ttf"),
+    include_bytes!("../../fonts/inter-italic-700.ttf"),
+    include_bytes!("../../fonts/literata-400.ttf"),
+    include_bytes!("../../fonts/literata-700.ttf"),
+    include_bytes!("../../fonts/literata-italic-400.ttf"),
+    include_bytes!("../../fonts/literata-italic-700.ttf"),
+    include_bytes!("../../fonts/jetbrains-mono-400.ttf"),
+    include_bytes!("../../fonts/jetbrains-mono-700.ttf"),
+    include_bytes!("../../fonts/jetbrains-mono-italic-400.ttf"),
+    include_bytes!("../../fonts/jetbrains-mono-italic-700.ttf"),
 ];
 
 /// Il database dei caratteri di serie, costruito una volta per processo e

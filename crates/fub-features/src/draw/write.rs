@@ -67,7 +67,7 @@ pub(super) fn write_raster(
 /// Apre l'artefatto `path`, ci scrive quello che `encode` scrive, e lo
 /// consegna. L'errore del sink resta il suo; quello dell'encoder è un
 /// [`E_WRITE`].
-pub(super) fn deliver<E: std::fmt::Display>(
+fn deliver<E: std::fmt::Display>(
     out: &mut dyn ArtifactSink,
     path: &str,
     media_type: &str,
@@ -100,7 +100,7 @@ pub(super) fn deliver<E: std::fmt::Display>(
 
 /// Scrive il PNG a righe, dritto nel sink: la pixmap è già in memoria, una
 /// seconda copia compressa non serve.
-pub(super) fn encode_png(
+fn encode_png(
     pixmap: &Pixmap,
     scale: f32,
     title: &str,
@@ -144,11 +144,7 @@ pub(super) fn encode_png(
 /// blocchi di 8 × 8 da [`OnWhite`], quindi l'immagine sul bianco non si
 /// copia; scrive il colore senza sottocampionarlo (4:4:4), e dei segmenti
 /// facoltativi soltanto il JFIF con la densità.
-pub(super) fn encode_jpeg(
-    pixmap: &Pixmap,
-    scale: f32,
-    sink: &mut SinkWriter<'_>,
-) -> Result<(), String> {
+fn encode_jpeg(pixmap: &Pixmap, scale: f32, sink: &mut SinkWriter<'_>) -> Result<(), String> {
     let mut buffered = BufWriter::with_capacity(CHUNK, sink);
     let mut encoder = JpegEncoder::new_with_quality(&mut buffered, JPEG_QUALITY);
     // I punti per pollice: `scale` pixel per pixel CSS. Il JFIF li scrive
@@ -166,7 +162,7 @@ pub(super) fn encode_jpeg(
 
 /// La pixmap posata sul bianco, come `image` legge un'immagine: ciò che è
 /// trasparente diventa bianco, ciò che è velato si schiarisce.
-pub(super) struct OnWhite<'p>(&'p Pixmap);
+struct OnWhite<'p>(&'p Pixmap);
 
 impl GenericImageView for OnWhite<'_> {
     type Pixel = Rgb<u8>;
@@ -193,7 +189,7 @@ impl GenericImageView for OnWhite<'_> {
 
 /// Un [`ArtifactSink`] visto come `io::Write`, per l'encoder. L'errore del
 /// sink resta qui, tipizzato, invece di diventare un `io::Error` qualunque.
-pub(super) struct SinkWriter<'a> {
+struct SinkWriter<'a> {
     out: &'a mut dyn ArtifactSink,
     handle: ArtifactHandle,
     failure: Option<PluginError>,

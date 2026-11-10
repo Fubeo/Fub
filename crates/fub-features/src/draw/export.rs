@@ -274,7 +274,7 @@ pub(super) enum Outcome {
 /// Perché i file di un disegno non si scrivono: una richiesta che non vale
 /// per quel disegno ferma l'export prima di ogni file, un disegno che non si
 /// legge ferma soltanto sé.
-pub(super) enum Problem {
+enum Problem {
     Stop(PluginError),
     Failed(String),
 }
@@ -283,23 +283,23 @@ pub(super) enum Problem {
 /// derivato, per una tavola il suo nome e, se il testo ha l'abbondanza di un
 /// PDF intorno, la misura in pixel CSS della pagina senza.
 pub(super) struct Page<'b> {
-    text: Cow<'b, [u8]>,
-    scope: Scope,
-    board: Option<String>,
-    frame: Option<[f64; 2]>,
+    pub(super) text: Cow<'b, [u8]>,
+    pub(super) scope: Scope,
+    pub(super) board: Option<String>,
+    pub(super) frame: Option<[f64; 2]>,
 }
 
 /// Un file da scrivere: il percorso, e le pagine, che sono una tranne nel PDF
 /// delle tavole.
 pub(super) struct File<'b> {
-    path: String,
-    pages: Vec<Page<'b>>,
+    pub(super) path: String,
+    pub(super) pages: Vec<Page<'b>>,
 }
 
 impl File<'_> {
     /// Ciò che precede la nota di un file che non è il disegno intero: il
     /// nome della tavola, quando il disegno ha più file.
-    fn about(&self) -> String {
+    pub(super) fn about(&self) -> String {
         match &self.pages[..] {
             [Page {
                 board: Some(name), ..
@@ -310,7 +310,7 @@ impl File<'_> {
 }
 
 /// Scrive un file nel formato del provider.
-pub(super) type Writer<'a> = dyn FnMut(
+type Writer<'a> = dyn FnMut(
         &mut Drawing<'_>,
         &File<'_>,
         &mut dyn ArtifactSink,
@@ -320,7 +320,7 @@ pub(super) type Writer<'a> = dyn FnMut(
 
 /// Il percorso comune ai formati: la selezione ridotta ai disegni, un nome
 /// per ciascuno, i file di ciascuno, la scrittura, il log.
-pub(super) fn export_drawings(
+fn export_drawings(
     request: &ExportRequest,
     host: &dyn ReadApi,
     out: &mut dyn ArtifactSink,
@@ -419,7 +419,7 @@ pub(super) fn export_drawings(
 /// dice il formato che il vault gli assegna, non l'estensione: un `.svg` resta
 /// un allegato finché il formato `svg` non è montato, e allora non è un
 /// disegno nemmeno qui.
-pub(super) fn is_drawing(host: &dyn ReadApi, doc: &DocId) -> bool {
+fn is_drawing(host: &dyn ReadApi, doc: &DocId) -> bool {
     host.format_of(doc)
         .is_some_and(|format| format.descriptor.id == FORMAT_ID)
 }
@@ -432,7 +432,7 @@ pub(super) fn is_drawing(host: &dyn ReadApi, doc: &DocId) -> bool {
 /// nome del disegno (`<nome> 1`, `<nome> 1 (exported)`), con la stessa chiave con cui il sink rifiuterebbe il
 /// secondo ([`Names`]). I nomi si danno prima di leggere, quindi non
 /// dipendono da quali disegni si lasciano leggere.
-pub(super) fn artifact_names(docs: &[DocId], extension: &str, label: Option<&str>) -> Vec<String> {
+fn artifact_names(docs: &[DocId], extension: &str, label: Option<&str>) -> Vec<String> {
     let mut names = Names::default();
     docs.iter()
         .map(|doc| {
@@ -453,7 +453,7 @@ pub(super) fn artifact_names(docs: &[DocId], extension: &str, label: Option<&str
 
 /// Il testo di una pagina e, se ha l'abbondanza intorno, la misura della
 /// pagina senza ([`Page::frame`]).
-pub(super) type Derived<'b> = (Cow<'b, [u8]>, Option<[f64; 2]>);
+type Derived<'b> = (Cow<'b, [u8]>, Option<[f64; 2]>);
 
 /// I file di un disegno per `choice`, con il nome `path` del disegno intero.
 ///
@@ -465,7 +465,7 @@ pub(super) type Derived<'b> = (Cow<'b, [u8]>, Option<[f64; 2]>);
 /// L'abbondanza di un PDF è in millimetri sulla carta: la derivazione la
 /// vuole in pixel della pagina, quindi divisa per la scala con cui la pagina
 /// va sulla carta ([`print::layout`]).
-pub(super) fn files<'b>(
+fn files<'b>(
     doc: &DocId,
     bytes: &'b [u8],
     choice: &Choice,
@@ -570,7 +570,7 @@ pub(super) fn files<'b>(
 }
 
 /// Ciò che una derivazione rifiutata vuol dire per l'export.
-pub(super) fn derive_problem(doc: &DocId, error: DeriveError) -> Problem {
+fn derive_problem(doc: &DocId, error: DeriveError) -> Problem {
     let stop =
         |key: &str, args: Vec<Arg>| Problem::Stop(PluginError::BadArgs(Text::message(key, args)));
     match error {
@@ -610,22 +610,22 @@ pub(super) fn unreadable(error: &ReadError) -> String {
 /// pagine nominano, lette una volta per tutte, e ciò che la lettura ha
 /// lasciato fuori.
 pub(super) struct Drawing<'h> {
-    doc: DocId,
-    title: String,
+    pub(super) doc: DocId,
+    pub(super) title: String,
     images: VaultImages<'h>,
     /// I caratteri che le sue pagine nominano, di Fub e del vault.
-    typefaces: Typefaces<'h>,
+    pub(super) typefaces: Typefaces<'h>,
     refused: Refused,
     /// I caratteri che nessuno dei suoi caratteri ha.
     missing: BTreeSet<char>,
     /// Vero se il PDF ha chiesto l'abbondanza e il disegno intero non dice
     /// la sua misura, quindi non ne ha.
-    unbled: bool,
+    pub(super) unbled: bool,
     /// I byte che l'export tiene ancora, entro [`PLUGIN_EXPORT_LIMIT`]: l'SVG
     /// pulito ci misura le immagini che porta dentro, così un file che non
     /// ci starebbe tiene il percorso di quelle di troppo invece di fallire.
     /// La stessa regola vale con ogni host, e i file restano gli stessi.
-    room: usize,
+    pub(super) room: usize,
 }
 
 impl<'h> Drawing<'h> {
@@ -644,7 +644,7 @@ impl<'h> Drawing<'h> {
 
     /// L'albero di una pagina. `Err` è il motivo, per il log: un disegno che
     /// non si legge non ferma gli altri.
-    fn tree(&mut self, text: &[u8]) -> Result<Tree, String> {
+    pub(super) fn tree(&mut self, text: &[u8]) -> Result<Tree, String> {
         let refused = Arc::new(Mutex::new(Refused::default()));
         let tree = Tree::from_data(
             text,
@@ -661,7 +661,7 @@ impl<'h> Drawing<'h> {
     /// vault, non porterebbe a niente. `None` per ciò che non è un percorso,
     /// che resta com'è, e per un'immagine che resta fuori, che il log dice;
     /// anche per una che non sta più in `room`, i byte che il file ha ancora.
-    fn embed(&mut self, href: &str, room: &mut usize) -> Option<String> {
+    pub(super) fn embed(&mut self, href: &str, room: &mut usize) -> Option<String> {
         let path = vault_path(href)?;
         let found = self.images.image(&path).and_then(|kind| {
             data_uri(&kind)
