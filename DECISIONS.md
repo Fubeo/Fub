@@ -59,6 +59,11 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-10 · n6 · T52 integrato: la banda dice la cartella dove il
+  deposito scrive davvero oggi, non quella che `canvas.drop_folder`
+  prometterà con T34. · Perché: una banda che dice una cartella sbagliata
+  inganna; T34 cambia il deposito e `dropFolderOf` insieme.
+
 - 2026-11-10 · n6 · T50 integrato senza misura e allineamento del testo,
   in attesa della risposta dell'utente. · Perché: servono un campo nuovo
   nel `.canvas`, formato che leggono altri programmi (Obsidian): è fra le

@@ -3414,7 +3414,18 @@ cartella e l'aggiornamento a fine gesto; le foto del banco somigliano al
 prototipo.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/canvas
-Stato: [ ] da fare
+Stato: [x] fatto (2026-11-10). Differenze: la cartella dei file
+trascinati è quella dove il deposito scrive oggi (`files.attachment-folder`,
+`dropFolderOf` in `chrome/status.ts`), non ancora `canvas.drop_folder`:
+T34 la cambia in quel punto solo, e il clic apre la voce che vale. La voce
+si legge all'apertura della lavagna. Le gemelle di C14 non ci sono (nel
+codice non c'è ancora il conteggio delle copie: con T22). La voce
+«Lavagna» non c'è: la shell mostra già il modo. Il menu dello zoom chiama
+`zoomTo` e i comandi «adatta» che ci sono, senza comandi `canvas.zoom_*`
+nuovi. La sola lettura non ha il tono d'avviso (`SurfaceStatusItem` non ha
+il campo). Toccati in più: `surface.ts`, `bootstrap.ts` (la porta della
+banda), `structure.css`. Il menu dello zoom si apre sopra la banda e copre
+il pannello Struttura.
 
 ## T53 · Spostare e ingrandire
 
