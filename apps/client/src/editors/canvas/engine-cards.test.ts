@@ -829,6 +829,12 @@ describe("entrare e uscire da una scheda", () => {
     expect(selectedOf(host)).toEqual(["n"]);
     expect(activeOf(host)).toEqual([]);
     expect(log).toEqual([]);
+    // Il mouse giù sul link: il fuoco va alla scheda, non al link.
+    const down = new PointerEvent("pointerdown", { bubbles: true, cancelable: true, button: 0, pointerId: 6 });
+    linkOf(host, "n").dispatchEvent(down);
+    viewport.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, button: 0, pointerId: 6 }));
+    expect(down.defaultPrevented).toBe(true);
+    expect(focused()).toBe(card(host, "n"));
     clickOn(viewport, linkOf(host, "n"));
     expect(followed).toEqual([]);
     expect(log).toEqual(["n:enter"]);

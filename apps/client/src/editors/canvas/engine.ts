@@ -2779,6 +2779,7 @@ export class CanvasEngine {
     const nodeId = this.#nodeAt(target);
     if (nodeId) {
       this.#selectNode(nodeId, event.shiftKey);
+      this.#keepContentFocus(event, nodeId);
       if (this.#readOnly || !this.#doc || !(target instanceof Element && target.closest(".canvas-node-handle"))) return;
       this.#beginDrag(event);
       return;
@@ -3465,6 +3466,23 @@ export class CanvasEngine {
     event.preventDefault();
     event.stopPropagation();
     if (!modifier && !event.shiftKey && !event.altKey && pressed === id) this.#enterCard(id);
+  }
+
+  /**
+   * Il mouse giù nel contenuto di una scheda non attiva: il fuoco va alla
+   * scheda, non a un link o al testo del contenuto (che fuori non prendono
+   * la tastiera), e il testo non si comincia a scegliere. Un pulsante della
+   * vista resta suo.
+   */
+  #keepContentFocus(event: PointerEvent, id: string): void {
+    const target = event.target;
+    const entry = this.#cards.get(id);
+    if (!(target instanceof Element) || !entry || this.#activeId === id || !this.#hasLiveContent(entry)) return;
+    if (!entry.body.contains(target)) return;
+    const button = target.closest("button");
+    if (button !== null && entry.body.contains(button)) return;
+    event.preventDefault();
+    entry.article.focus({ preventScroll: true });
   }
 
   /** Invio, o il doppio clic su una nota: entra se si può, altrimenti ciò che faceva (il campo). */
