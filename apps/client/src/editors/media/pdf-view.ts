@@ -98,7 +98,8 @@ export interface PdfJsModule {
           cancel(): void;
         };
       }>;
-      destroy(): Promise<void>;
+      // Il documento non ha `destroy` in pdf.js 6: lo chiude il task (`getDocument`),
+      // e `destroy` del motore passa da lì (T91, rotta 6).
       getOutline?(): Promise<PdfJsOutline[] | null>;
       getDestination?(id: string): Promise<unknown[] | null>;
       getPageIndex?(ref: unknown): Promise<number>;
@@ -271,7 +272,9 @@ export function makePdfJsLoader(
         renderGeneration++;
         activeRender?.cancel();
         for (const task of thumbnails) task.cancel();
-        void document.destroy();
+        // Il task di caricamento chiude il documento e il suo worker (pdf.js 6:
+        // `PDFDocumentProxy` non ha `destroy`). T91, rotta 6.
+        void loading.destroy();
       },
     };
   };

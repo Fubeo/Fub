@@ -6,7 +6,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { t } from "../../../i18n/strings";
 import { openLifetime, type Lifetime } from "../../../ui/lifetime";
-import type { PdfEngine } from "../../media/pdf-view";
+import { makePdfJsLoader, PDFJS_VERSION, type PdfEngine, type PdfJsModule } from "../../media/pdf-view";
 import { CardCache } from "../card-cache";
 import { snapshotPart, type CardContext, type CardMode, type CardView } from "../cards";
 import type { CanvasNode } from "../model";
@@ -594,5 +594,46 @@ describe("i casi limite", () => {
     expect(engine.destroyed).toBe(1);
     expect(b.host.childElementCount).toBe(0);
     expect(b.port.unwatched).toBe(1);
+  });
+});
+
+/// Un pdf.js come la 6.3.289 (quella fissata): il documento caricato non ha
+/// `destroy`, lo ha il task di caricamento. Il finto è questo, non il vecchio
+/// documento con `destroy`, così il test segue l'API vera (T91, rotta 6).
+function pdfJsSix(): { module: PdfJsModule; closedTasks: { count: number } } {
+  const closedTasks = { count: 0 };
+  const document = {
+    numPages: 3,
+    getPage: async (): Promise<never> => {
+      throw new Error("in questo test nessuna pagina si disegna");
+    },
+  };
+  const module = {
+    version: PDFJS_VERSION,
+    GlobalWorkerOptions: { workerSrc: "" },
+    getDocument: () => ({
+      promise: Promise.resolve(document),
+      destroy: async () => {
+        closedTasks.count += 1;
+      },
+    }),
+  } as unknown as PdfJsModule;
+  return { module, closedTasks };
+}
+
+describe("smontare una scheda PDF (T91)", () => {
+  it("con pdf.js 6 chiude il task di caricamento e non avvisa", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const { module, closedTasks } = pdfJsSix();
+    const load = makePdfJsLoader(async () => module, new URL("/pdf.worker.mjs", location.href).href);
+    const b = bench({ engine: () => load(new Uint8Array([1, 2, 3])) });
+    const view = b.mount("live");
+    await settle();
+    expect(b.host.querySelector(".canvas-card-pdf")).not.toBeNull();
+    expect(() => view.destroy()).not.toThrow();
+    expect(closedTasks.count).toBe(1);
+    expect(b.host.querySelector(".canvas-card-pdf")).toBeNull();
+    expect(warn).not.toHaveBeenCalled();
+    warn.mockRestore();
   });
 });

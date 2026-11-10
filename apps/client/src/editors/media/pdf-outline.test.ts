@@ -13,7 +13,6 @@ function module(): PdfJsModule {
   const document = {
     numPages: 3,
     getPage: async () => { throw new Error("non serve"); },
-    destroy: async () => {},
     getOutline: async () => [
       { title: "Capitolo", dest: "uno", items: [{ title: "Sezione", dest: [PAGE_REF], items: [] }] },
       { title: "Rotto", dest: "nessuno", items: [{ title: "Figlia", dest: [0], items: [] }] },
