@@ -2560,7 +2560,14 @@ Ctrl, un evento col pizzico, un evento orizzontale in `zoom`, e il cambio
 dell'impostazione a lavagna aperta.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/canvas/engine.test.ts
-Stato: [ ] da fare
+Stato: [x] fatto (2026-11-10). Differenze: Ctrl+rotella senza parte
+verticale non ingrandisce più (prima sì); Maiusc sposta di lato in tutte e
+due le scelte, e dove il sistema non manda `deltaX` usa `deltaY`; in
+`zoom` un evento con una parte orizzontale sposta anche in verticale. Le
+righe (`deltaMode` 1) valgono 16 px e le pagine la misura della vista,
+anche in `pan` (prima il delta si prendeva com'era). Il motore legge le
+preferenze due volte all'apertura (dita e rotella). Provato solo con
+eventi finti: né touchpad né WebKitGTK veri.
 
 ## T36 · Riaprire dove eri
 

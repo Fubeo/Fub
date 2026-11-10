@@ -59,6 +59,10 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-10 · n6 · T35 integrato così com'è: anche in `pan` le righe e
+  le pagine della rotella si convertono in pixel. · Perché: un mouse che
+  manda righe spostava la lavagna di pochi pixel a scatto; la conversione
+  è la stessa della lavagna del grafo.
 - 2026-11-10 · n6 · T30 integrato: l'impronta calcolata da «lo stesso
   contenuto» si registra con un append fuori dal lucchetto del workspace,
   dopo aver riosservato il file e riletto la coda, invece di rientrare
