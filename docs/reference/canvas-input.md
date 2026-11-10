@@ -39,8 +39,11 @@ volta. Lo decide la tela (`engine.ts`); il renderer risponde con `enter`,
   scheda, «Esc per uscire» (`canvas.card.exit_hint`, `.canvas-exit-hint`)
   nella testata, il fuoco nel corpo. Se dice `false`, o la vista non ha
   `enter`, Invio e il doppio clic fanno ciò che facevano (il campo della
-  scheda). Si entra anche in sola lettura; non si entra in una scheda fuori
-  dalla vista né con la penna giù.
+  scheda), tranne su una scheda di file che manca: lì fanno «Ritrova…», come
+  il suo pulsante, o in sola lettura e senza un selettore dicono «File
+  mancante» nella barra, e il campo del percorso non si apre (T93). Si entra
+  anche in sola lettura; non si entra in una scheda fuori dalla vista né con
+  la penna giù.
 - **Dentro.** I clic arrivano al contenuto (i link si seguono con un clic),
   la rotella sopra il corpo lo scorre (Ctrl+rotella e il pizzico ingrandiscono
   sempre la lavagna, A-11), i tasti sono del contenuto e la tela non li usa,
