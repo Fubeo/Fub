@@ -102,6 +102,42 @@ larga o la più alta della riga. Dopo un foglio alto 300 la riga sotto parte
 328 px più in basso, con 28 px di spazio. Oltre 12 schede, un gruppo le
 raccoglie con 24 px di margine per lato.
 
+### Il rilascio e l'incolla
+
+La tela (`#intake` in `engine.ts`) usa queste regole quando arrivano file
+trascinati dal computer o dall'albero, o incollati:
+
+- la griglia parte dal punto del rilascio. Un incolla parte dall'ultimo
+  punto in cui il puntatore è stato visto sulla vista. Se il puntatore ne è
+  uscito, parte dal centro della vista;
+- la misura di un'immagine viene dalla porta `measureImage` (in
+  `editors/core/bootstrap.ts`: i byte dalla `ResourceTransport`, la misura
+  da `decodeImage` o dall'immagine decodificata). Se la porta manca,
+  fallisce o non risponde entro 3 s (`MEASURE_IMAGE_TIMEOUT_MS`), l'immagine
+  nasce 480×360. Si misurano quattro immagini alla volta;
+- oltre 12 file nasce anche il gruppo, con l'etichetta «{count} file»
+  (`canvas.intake.group`). Il gruppo sta prima delle schede nel documento,
+  cioè sotto di loro;
+- le schede, il gruppo e il file cambiato di una scheda (sotto) entrano in
+  un commit solo, che un annulla toglie tutto insieme;
+- lasciato su una scheda di file, il primo file ne prende il posto e gli
+  altri nascono in griglia;
+- le celle copiate diventano una scheda di testo con una tabella Markdown.
+  Per l'HTML con una tabella c'è la porta `clipboardMarkdown`, la stessa
+  conversione dell'incolla dell'editor Markdown. Il testo a tabulazioni su
+  più righe passa da `parseTsv` e `markdownTable`. Una riga sola resta
+  testo;
+- mentre si trascinano file o voci dell'albero, rettangoli tratteggiati
+  (`canvas-drop-ghost`) mostrano dove nasceranno le schede. Il loro numero
+  è quello dei file in `dataTransfer.items`. Se non si sa, cioè per le voci
+  dell'albero e quando il browser (WebKit) non dice i tipi, ce n'è uno.
+  Spariscono all'uscita e al rilascio.
+
+Il deposito dei file del computer (`depositCanvasFiles`) dà tutto o niente:
+se l'host rifiuta un file a metà, l'errore compare nella barra
+(`canvas-intake-error`) e non nasce nessuna scheda, nemmeno per i file già
+copiati.
+
 ## Il contratto
 
 I tipi stanno in `cards.ts`, con i commenti che ne spiegano i campi. In
