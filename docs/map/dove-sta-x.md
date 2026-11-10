@@ -47,7 +47,7 @@
 | il catalogo dei comandi dei fogli | `crates/fub-abi/src/grid_bytes.rs`, servito in `crates/fub-format-xlsx` |
 | il lessico dei menu | `apps/client/src/i18n/lexicon.ts` |
 | le stringhe della shell | `apps/client/src/i18n/catalog.ts` |
-| le stringhe dell'editor dei disegni | `apps/client/src/editors/spatial/strings.ts` |
+| le stringhe dell'editor dei disegni | `apps/client/src/editors/spatial/strings.ts`, con le voci per area (italiano e inglese insieme) in `strings/` |
 | la tavolozza dell'inchiostro | `apps/client/src/ink/palette.ts` (Okabe–Ito) |
 | i sei colori della lavagna | `apps/client/src/editors/canvas/engine.ts` |
 | il limite dei 64 MiB per i media | `apps/client/src/editors/media/media-types.ts` |
