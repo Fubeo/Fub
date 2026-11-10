@@ -139,7 +139,7 @@ describe("la forma dello stato", () => {
     const kept = Object.keys(written.pages as Record<string, number>);
     expect(kept.length).toBe(CANVAS_VIEW_PAGES_MAX);
     expect(kept[0]).toBe("p200");
-    expect(kept.at(-1)).toBe("p1199");
+    expect(kept[kept.length - 1]).toBe("p1199");
     const read = parseCanvasView({ version: 1, pages: Object.fromEntries(pages) });
     if (read.kind !== "state") throw new Error("atteso uno stato");
     expect(read.view.pages.size).toBe(CANVAS_VIEW_PAGES_MAX);
