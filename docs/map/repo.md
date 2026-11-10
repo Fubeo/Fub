@@ -8,6 +8,7 @@
 > [`components-and-boundaries.md`](../architecture/components-and-boundaries.md),
 > il percorso guidato in
 > [`repository-tour.md`](../getting-started/repository-tour.md),
+> l'indice domanda → pagina in [`pagine.md`](pagine.md),
 > l'inventario completo in `docs-inventario/RIFERIMENTO.md` quando esiste.
 
 ## I componenti

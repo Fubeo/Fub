@@ -26,6 +26,8 @@ flowchart LR
 | [La mappa del repository](map/repo.md) | dove sta ogni cosa, e come si prova da sola |
 | [Chi possiede che cosa](map/ownership.md) | ogni regola, il file che la possiede e il test che la presidia |
 | [Dove sta X](map/dove-sta-x.md) | un tipo, un comando, un'impostazione: il file che lo definisce |
+| [Le pagine per domanda](map/pagine.md) | ogni pagina di `docs/`, con la domanda a cui risponde |
+| [Le sigle](map/sigle.md) | che cosa sono K3, N6, P17, M5, S1, T17, D07, A1 |
 | [Orientarsi nella repository](getting-started/repository-tour.md) | il percorso guidato, per chi comincia |
 
 ## Iniziare
@@ -52,7 +54,7 @@ flowchart LR
 | [Budget prestazionali](product/performance-budget.md) | i numeri e i gate della CI |
 | [Criteri di accettazione](product/acceptance.md) | quando una modifica è accettabile |
 
-I disegni sono una famiglia di trenta pagine, con l'indice dentro
+I disegni sono una famiglia di pagine, con l'indice dentro
 [Disegni](product/drawing.md): dalla penna alle tavole, dall'import
 all'export, dalla sessione dal tablet ai disegni grandi.
 
@@ -88,7 +90,7 @@ all'export, dalla sessione dal tablet ai disegni grandi.
   [layout su disco](reference/on-disk-layout.md) e
   [permessi e sicurezza](reference/permissions-and-security.md)
 - [Il formato della scena](reference/scene-format.md) con le sue
-  quindici pagine di dettaglio, e le
+  pagine di dettaglio, e le
   [operazioni sulla scena](reference/scene-operations.md)
 - [Le annotazioni PDF](reference/annotation-format.md), la
   [proiezione dei documenti di videoscrittura](reference/rich-projection.md)
@@ -111,21 +113,6 @@ all'export, dalla sessione dal tablet ai disegni grandi.
 ## Capire le decisioni
 
 - [Indice ADR](decisions/README.md)
-
-## Le pagine che verranno
-
-Nomi già scelti, pagine non ancora scritte: ciascuna nasce quando la sua
-fase passa il cancello (l'ordine sta in [Stato](project/status.md)).
-
-| Pagina | La fase che la scrive |
-|---|---|
-| `misure/motori-*.md` | K0, le misure dei motori |
-| `architecture/componenti.md` | K1 e K2, il modello a componenti |
-| `product/lavagna.md` | la lavagna, prima versione |
-| `product/pdf-lettore.md` | P2, il visore PDF |
-| `product/pdf-completo.md` | P5, la modifica completa |
-| `product/disegno-completo.md` | K6, tutti gli strumenti del disegno |
-| `product/foto.md` e `product/libreria-foto.md` | K7 e K8 |
 
 ## Gerarchia delle fonti
 
