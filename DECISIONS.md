@@ -59,6 +59,11 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-10 · n6 · T50 integrato senza misura e allineamento del testo,
+  in attesa della risposta dell'utente. · Perché: servono un campo nuovo
+  nel `.canvas`, formato che leggono altri programmi (Obsidian): è fra le
+  cose che si chiedono sempre.
+
 - 2026-11-10 · n6 · T32 diviso in T32 (il riuso chiesto all'host, fatto) e
   T32b («Fanne una copia» con la scheda ripuntata, e il ricordo della
   seduta per l'host senza `reuse`), stesso «Fatto quando». · Perché:

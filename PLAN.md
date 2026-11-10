@@ -3336,7 +3336,23 @@ i test di N4 su `pen-menu.ts` passano; le foto del banco somigliano al
 prototipo.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/canvas
-Stato: [ ] da fare
+Stato: [x] fatto (2026-11-10). Differenze: la riga del Testo ha solo il
+suggerimento e la Vista: misura e allineamento del prototipo chiedono un
+campo nuovo nel `.canvas`, che Obsidian legge (domanda all'utente,
+aperta). Il gruppo in alto della testata (≡, Annulla, Ripeti) non è qui
+(non era nel «Cosa fare»). Il pozzo del colore apre i sei colori di JSON
+Canvas; l'esadecimale resta nella barra di N4 fino a T47, e il pallino di
+una scheda esadecimale non si colora. Le punte del filo valgono per la
+lavagna aperta. I controlli spenti usano `aria-disabled` col perché.
+Comandi nuovi: `canvas.pen_menu`, `color_menu`, `align_menu`,
+`tips.none/start/end`; `pen-menu.ts` ha `open()`. La barra di N4 tiene
+«Scrivi col mouse», aggiungi, duplica, togli, inquadra la selezione, fili
+e colore esadecimale (T51). L'ingresso per T41/T42 è
+`CanvasEngine.setCardOptions(items | null)`, provato con una barra finta.
+La riga si rifà dalle chiamate di `#drawToolbar` e `#setTool`: uno stato
+nuovo che non passa di lì non la aggiorna. Toccati in più:
+`chrome/commands.ts`, `structure.css`, i file del tema rigenerati, i test
+di engine, `docs/development/ink-input-smoke-test.md`.
 
 ## T51 · La barra della selezione
 
