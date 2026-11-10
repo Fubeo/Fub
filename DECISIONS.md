@@ -59,6 +59,12 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-10 · n6 · T17 integrato con l'avviso di «Togli» senza stile suo
+  e Ctrl+] che sulla tastiera italiana non si fa. · Perché: nessun file
+  della pelle era nel task (lo stile arriva con T22/T89), e cambiare un
+  tasto del catalogo è una scelta che il piano non ha fatto: resta scritta
+  per chi rivede i tasti.
+
 - 2026-11-10 · n6 · T73 integrato: `fub:parts` ha un lettore TypeScript in
   proprio accanto a quello Rust, tenuti uguali dai vettori comuni; ADR
   0242. · Perché: le schede leggono il campo senza aspettare il `.wasm`,

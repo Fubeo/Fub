@@ -1793,7 +1793,23 @@ fondo, i colori radio, C, Ctrl+] e Ctrl+[, la notifica di «Togli» col suo
 cestino una volta per file e mai da tastiera.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/canvas/engine.test.ts
-Stato: [ ] da fare
+Stato: [x] fatto (2026-11-10). Differenze: l'etichetta di
+`canvas.delete` è «Togli dalla lavagna» anche nel menu dei fili;
+«Adatta alla selezione» resta solo nel menu del gruppo; sulla scheda
+d'immagine «Apri nel visore» prende il posto di Apri; Allinea e
+Distribuisci sono sottomenu senza «…». «Collega…» mostra C, che passa dal
+comando dello strumento con una scheda scelta (nessun tasto doppio); per
+Canc il suggerimento dice «Del», il nome della shell. L'avviso «Scheda
+tolta.» con «Annulla» sta nella fascia degli avvisi della barra di N4
+(classe `canvas-removal`), senza stile suo: lo rifiniscono T22/T89. Il
+cestino passa da `trashWithConfirm` dell'albero (un import nuovo
+`document-controller` ↔ `panels/trash`, solo funzioni) e la scheda si
+toglie quando il file non c'è più (`existingDocuments`): se l'indice resta
+indietro la scheda può restare; all'avviso della lavagna si aggiunge il
+toast della shell. Tastiera italiana: Ctrl+[ si fa con Ctrl+è, Ctrl+] non
+si può fare (c'è il + dello zoom): scritto nella pagina, il tasto è
+rimasto. Toccati in più: `chrome/commands.ts` e il suo test,
+`canvas-input.md`, `canvas-cards.md`.
 
 ## T18 · La scheda dei file Craft
 
