@@ -869,7 +869,6 @@
     "canvas-inspector-heading",
     "canvas-inspector-list",
     "canvas-inspector-row",
-    "canvas-inspector-name",
     "canvas-inspector-kind",
     "canvas-inspector-note",
     "canvas-node",
@@ -2482,7 +2481,6 @@
     "canvas-inspector-heading": "cornice",
     "canvas-inspector-list": "cornice",
     "canvas-inspector-row": "cornice",
-    "canvas-inspector-name": "cornice",
     "canvas-inspector-kind": "cornice",
     "canvas-inspector-note": "cornice",
     "canvas-node": "contenuto",
@@ -5553,7 +5551,6 @@
         "canvas-inspector-heading",
         "canvas-inspector-list",
         "canvas-inspector-row",
-        "canvas-inspector-name",
         "canvas-inspector-kind",
         "canvas-inspector-note"
       ],
@@ -8845,7 +8842,7 @@
   "counts": {
     "required_roles": 154,
     "optional_roles": 63,
-    "hooks": 1611,
+    "hooks": 1610,
     "state_names": 7,
     "assigned_states": 760,
     "components": 225,
