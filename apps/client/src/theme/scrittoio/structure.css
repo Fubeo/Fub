@@ -3483,6 +3483,12 @@ body {
   overflow: auto;
   overscroll-behavior: contain;
 }
+/* Nella scheda niente colonna dei numeri di riga né delle pieghe, anche
+   quando i riquadri la mostrano: la nota sulla lavagna resta la nota letta,
+   col cursore (prototipo T27). */
+.canvas-card-note > .cm-editor .cm-gutters {
+  display: none;
+}
 
 /* Il conflitto in cima al corpo, sopra il testo, che spinge giù; il testo
    continua a scorrere sotto. */
