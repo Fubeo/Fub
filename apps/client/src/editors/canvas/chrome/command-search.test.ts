@@ -120,7 +120,7 @@ describe("i recenti, per lavagna", () => {
     expect(recents.list("uno.canvas")).toEqual(["canvas.b", "canvas.f", "canvas.e", "canvas.d", "canvas.c"]);
     expect(recents.list("due.canvas")).toEqual([]);
     await new Promise((resolve) => setTimeout(resolve, 0));
-    expect(store.writes.at(-1)).toEqual(["uno.canvas", { version: RECENT_COMMANDS_VERSION, recent: ["canvas.b", "canvas.f", "canvas.e", "canvas.d", "canvas.c"] }]);
+    expect(store.writes[store.writes.length - 1]).toEqual(["uno.canvas", { version: RECENT_COMMANDS_VERSION, recent: ["canvas.b", "canvas.f", "canvas.e", "canvas.d", "canvas.c"] }]);
   });
 
   it("si leggono una volta; quelli scelti intanto restano davanti", async () => {

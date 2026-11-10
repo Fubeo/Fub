@@ -202,7 +202,7 @@ describe("la tela legge il catalogo", () => {
     const pointing = vi.spyOn(document, "elementFromPoint");
     const menuOn = (element: Element | null, at: { x: number; y: number } | null = { x: 10, y: 10 }) => {
       pointing.mockReturnValue(element);
-      return engine.contextMenu(at)!.context;
+      return engine.contextMenu(at)!.context ?? [];
     };
     const card = (id: string) => host.querySelector(`.canvas-node[data-node="${id}"]`);
     const order = { "canvas.order": ["canvas.bring_front", "canvas.send_back"] };
@@ -218,7 +218,7 @@ describe("la tela legge il catalogo", () => {
     pointing.mockRestore();
     key(viewport, { key: "a", ctrlKey: true });
     menus.push([
-      engine.contextMenu(null)!.context,
+      engine.contextMenu(null)!.context ?? [],
       [colors, "canvas.duplicate", order, {
         "canvas.align": ["canvas.align.left", "canvas.align.center", "canvas.align.right", "canvas.align.top", "canvas.align.middle", "canvas.align.bottom", "canvas.distribute_x", "canvas.distribute_y"],
       }, "canvas.fit_selection", "canvas.delete"],

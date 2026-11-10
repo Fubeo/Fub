@@ -161,13 +161,19 @@ export function openCommandSearch(options: CommandSearchOptions): CommandSearchH
   input.autocomplete = "off";
   input.spellcheck = false;
   field.append(name, input);
+  // Lo scorrimento sta fuori dalla lista: dentro un contenitore alto al più
+  // mezza finestra le righe della lista (in colonna flessibile) si
+  // stringerebbero, e il perché di un comando spento finirebbe sotto la riga
+  // dopo.
+  const scroller = document.createElement("div");
+  scroller.className = "draw-commands-list";
   const rows = document.createElement("div");
-  rows.className = "draw-commands-list";
   rows.setAttribute("aria-label", t("canvas.commands"));
+  scroller.append(rows);
   const empty = document.createElement("p");
   empty.className = "draw-commands-empty";
   empty.setAttribute("role", "status");
-  body.append(field, rows, empty);
+  body.append(field, scroller, empty);
 
   let chosen: CanvasCommand | null = null;
   const popover = openPopover({
