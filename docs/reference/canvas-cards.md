@@ -240,8 +240,9 @@ nessuna scheda cambia modo.
 
 La tela (`editors/canvas/engine.ts`) riceve le schede con l'opzione
 `cards?: CanvasCards`, cioè `{ registry: CardRegistry; snapshots:
-CardSnapshots }`. Senza (un'altra finestra, le prove vecchie) ogni scheda ha
-il corpo di sempre: il percorso del file, il segnaposto, l'indirizzo.
+CardSnapshots; watch(path, changed) }`. Senza (un'altra finestra, le prove
+vecchie) ogni scheda ha il corpo di sempre: il percorso del file, il
+segnaposto, l'indirizzo.
 
 La resa è a chiavi: la tela tiene una mappa id → scheda sulla scena, con
 l'elemento `.canvas-node`, il corpo e ciò che lo tiene vivo. A ogni resa:
@@ -270,9 +271,9 @@ vive lo decide la tela subito dopo (vedi «Vive e ferme»). Il `context` porta:
   percorso; una scheda di link ha `path` vuoto e l'indirizzo in `node.url`;
 - `documentId`, la lavagna; `lifetime`, una `Lifetime` per vista;
 - `size()`, la misura di adesso in unità della lavagna, e `zoom()`;
-- `missing()`, che per ora mette il segnaposto di sempre e
-  `data-card-missing="true"` sulla scheda; da una vista già smontata non fa
-  niente.
+- `missing()`, che dice che il file non c'è: la vista si smonta e la scheda
+  mostra «File mancante» (vedi «Il file che manca»). Da una vista già smontata
+  non fa niente.
 
 Sulla scheda montata ci sono `data-card-kind` (la specie) e `data-card-mode`.
 Un renderer che lancia in `mount` lascia il corpo di sempre e un avviso in
@@ -286,6 +287,39 @@ della lavagna troppo grande e nessuna vista; tornati sotto, le schede
 rinascono. L'inchiostro sulle schede si ridisegna dopo ogni resa sullo
 stesso elemento, e un tratto scritto aggiorna solo il suo livello, senza
 resa.
+
+## Il file che manca
+
+Quando un renderer scopre che il file non c'è, chiama `context.missing()`. La
+tela smonta la vista e mostra il segnaposto «File mancante: {percorso}»
+(`canvas.card.missing`), con `data-card-missing="true"` sulla scheda e due
+gesti in testo:
+
+- **Ritrova…** (`canvas.card.relink`) apre il selettore dei file del vault,
+  col nome del file che manca. Gli omonimi vengono per primi. Con un nome il
+  selettore chiede tutto il vault, una volta, al clic, perché un omonimo oltre
+  le 500 voci della lista non si troverebbe. Il file scelto sostituisce il
+  percorso della scheda in un commit solo; il `#…` che la scheda aveva nel
+  percorso e il `subpath` restano. Un annulla torna al file di prima.
+- **Togli dalla lavagna** (`canvas.card.remove`) toglie la scheda e le sue
+  linee, come Canc, per quella scheda sola. Un annulla la riporta.
+
+Le regole:
+
+- La tela ascolta il file con `watch` finché la scheda è mancante. Quando il
+  file torna o cambia, la scheda si rimonta da sé con la sua vista; se il
+  renderer dice di nuovo che manca, torna mancante.
+- Se il file torna, o la scheda cambia, mentre il selettore di «Ritrova…» è
+  aperto, la scelta è vecchia e non tocca niente.
+- Il segnaposto si rifà quando cambiano la lingua o la sola lettura, e quando
+  la scheda cambia (allora il file si chiede di nuovo). Uno spostamento o un
+  colore di un'altra scheda non lo tocca.
+- In sola lettura il segnaposto c'è, senza gesti. Senza un selettore
+  (`onPickFile` assente) manca «Ritrova…», e «Togli» resta.
+- Una scheda di link non manca mai: il suo `missing()` non fa niente.
+- Il doppio clic su una scheda mancante apre il campo del file, come per ogni
+  scheda senza vista. Il campo fa dimenticare il file mancante: alla sua
+  chiusura la scheda si rimonta e il file si chiede di nuovo.
 
 ## Quando la tela cambia il modo
 
@@ -418,7 +452,9 @@ di sempre; senza `canvasCards` tutte le schede.
 formato serve (note, fogli), le loro varianti `entry_*` per gli altri
 (immagini, PDF). Ogni ascolto ha il suo smontaggio. Prima di avvisare la
 scheda, la cache delle immagini ferme dimentica il file (`forget`): nessuna
-scheda, nemmeno su un'altra lavagna, ritrova l'immagine di prima.
+scheda, nemmeno su un'altra lavagna, ritrova l'immagine di prima. La tela
+ascolta il file con questo stesso `watch` quando la scheda è mancante (vedi
+«Il file che manca»).
 
 La cache delle immagini ferme è una sola per finestra, per tutte le lavagne
 che vi si aprono. Si svuota quando una lavagna si monta in un vault diverso
