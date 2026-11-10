@@ -147,7 +147,7 @@ export interface CardContext {
   /// La misura della scheda, in unità della lavagna.
   size(): CardSize;
   zoom(): number;
-  /// Il file non c'è: la tela mostra la scheda «File mancante» (arriva con T16).
+  /// Il file non c'è: la tela mostra la scheda «File mancante»: il nome del file con «Ritrova…» e «Togli dalla lavagna» (T16).
   missing(): void;
 }
 
