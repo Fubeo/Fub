@@ -135,10 +135,11 @@ trascinati dal computer o dall'albero, o incollati:
   dell'albero e quando il browser (WebKit) non dice i tipi, ce n'è uno.
   Spariscono all'uscita e al rilascio.
 
-Il deposito dei file del computer (`depositCanvasFiles`) dà tutto o niente:
-se l'host rifiuta un file a metà, l'errore compare nella barra
-(`canvas-intake-error`) e non nasce nessuna scheda, nemmeno per i file già
-copiati.
+Il deposito dei file del computer (`depositCanvasFiles`) si ferma al primo
+file che l'host rifiuta. Il rifiuto è un `CanvasDepositError`, che porta i
+percorsi già depositati: le loro schede nascono in un commit solo, e l'errore
+compare nella barra (`canvas-intake-error`) dopo di loro. Se nessun file è
+andato, c'è solo l'errore, e gli appunti non diventano testo.
 
 Dove finiscono lo dice `canvas.drop_folder` (`dropFolderFor`, in
 `state/canvas-intake.ts`): le note con `files.attachment-folder`, una
@@ -151,7 +152,8 @@ Un file che il vault ha già con gli stessi byte non si copia (`reuse`, lo
 decide l'host): la notifica «Già nel vault come…» offre «Fanne una copia»
 («Fanne delle copie» per più file). Il clic deposita i byte senza `reuse`, con
 i nomi soliti («foto 1.png»), e ripunta le schede nate da quel gesto, per id,
-in un commit solo: Ctrl+Z torna al file riusato. La porta è
+in un commit solo: Ctrl+Z torna al file riusato; si offre anche dopo un
+errore, per i file riusati prima di esso. La porta è
 `CanvasDepositCards`, data dal motore al deposito: una scheda tolta o già
 puntata altrove non cambia, e con la lavagna chiusa il gesto non fa niente.
 Un host che rifiuta `reuse` lo rifiuta una volta per seduta (`ReuseSupport`
