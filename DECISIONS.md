@@ -59,6 +59,13 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-10 · n6 · T40 integrato: le battute di una scheda passano dal
+  registro delle superfici della finestra (`onChange` con un id
+  `card-editor:<n>`) e la porta le smista, invece di un registro a parte.
+  · Perché: una sola strada per le modifiche, la stessa dei riquadri;
+  i due casi rari della rinomina e di `release` diretto restano scritti
+  nello `Stato:` per T41, che è il primo a usare la porta.
+
 - 2026-11-10 · n6 · T49 integrato: la colonna degli strumenti affianca la
   barra di N4 invece di toglierla subito, e la sola lettura spegne tutti
   gli strumenti che scrivono. · Perché: il menu della penna e le azioni

@@ -2832,7 +2832,21 @@ chiusura, il formato senza superficie; `check-codemirror-boundary.mjs`
 passa.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/state/card-editors.test.ts; node .github/scripts/check-codemirror-boundary.mjs
-Stato: [ ] da fare
+Stato: [x] fatto (2026-11-10). Differenze: la porta della shell
+(`CardEditorHub` in `state/card-editors.ts`) fa più di `open`: `written`
+e `failed` ricevono le battute e gli errori delle superfici di scheda
+(ids `card-editor:<n>`), che arrivano dall'`onChange`/`onFail` del
+registro della finestra; poi `holds`, `refreshReadOnly`, `setTheme`,
+`destroyAll`. `document-controller.ts` non chiude una sessione che una
+scheda tiene (`dismissIfUnwatched` e la fine di `openDocument`) e gira
+luce e sola lettura anche alle schede; la porta nasce al primo uso. La
+porta arriva alla tela con `canvasCards.editors` → `cardEditors` di
+`surface.ts`; `engine.ts` non la legge ancora: T41 aggiunge `editors?` a
+`CanvasCards`. `compact` per ora dà solo `data-card-editor` sul
+contenitore (`SurfaceMountContext` non ha il campo). Da guardare in T41:
+dopo una rinomina il `retain` resta sul nome vecchio, e
+`document-bridge.ts` e `shell-layout.ts` chiamano `release` senza
+sapere di `holds`.
 
 ## T41 · Scrivere in una scheda di nota
 
