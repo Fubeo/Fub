@@ -388,7 +388,7 @@ tema di CodeMirror (`editors/text/theme.ts`) dà solo la luce e le classi
 hook nel contratto. CodeMirror mette i suoi stili prima della pelle, che vince
 a parità di peso: ogni regola pesa quanto quella del tema che sostituisce.
 
-La finestra documento a parte (`apps/client/src/shells/document/`) non ha IPC:
+La finestra documento a parte (`apps/client/src/shells/scrittoio/document/`) non ha IPC:
 riceve dalla finestra principale il profilo di testo che il registro ha risolto
 per il documento (`DocumentWindowRequest.profile`) e lo monta su un
 `TextEngine` nudo, senza completamenti dal vault né slash palette. Un documento

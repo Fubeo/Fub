@@ -9,7 +9,7 @@
 > `apps/client/src/__fixtures__/scene-repeat/cases.json`, che valgono per
 > tutte e due; `scene/classify.ts` e `classify.rs`, che leggono allo stesso
 > modo; il riepilogo in `scene/analysis.ts` e nel suo gemello Rust; la
-> scrittura in `scene/serialize.ts`, le operazioni in `scene/engine.ts`, coi
+> scrittura in `scene/serialize.ts`, le operazioni in `scene/engine/`, coi
 > vettori di prova da 89 a 93 ([operazioni sulla scena](scene-operations.md),
 > §9); l'SVG pulito in `crates/fub-scene/src/export/clean.rs`.
 

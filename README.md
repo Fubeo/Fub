@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/logo/marcuzzo.svg" alt="Marcuzzo, il gufo di Fub che esce da una cartella" width="180">
+</p>
+
 # Fub
 
 Fub è un gestore della conoscenza **local-first**, un vero e proprio sistema
@@ -50,9 +54,9 @@ Tauri, Wasmtime o Markdown; `fub-host` non conosce Tauri; soltanto
   `EventHandler`;
 
 M5 è consegnata in `main`: installazione, consenso, lifecycle, UI non fidata e
-i provider WASM esercitati sono documentati nella
-[retrospettiva M5](docs/project/m5-wasm-runtime.md). I limiti di quota di
-processo hanno un tracker dedicato.
+i provider WASM esercitati sono documentati nel
+[runtime dei plugin](docs/architecture/plugin-runtime.md). I limiti di quota
+di processo hanno un tracker dedicato.
 
 ## Avvio
 

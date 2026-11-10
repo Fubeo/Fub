@@ -19,7 +19,7 @@ Il core non dipende dal formato, dal toolkit desktop o dal motore WASM.
 
 ## Dipendenze del workspace Rust
 
-I quattro diagrammi seguenti sono, insieme, la fotografia completa delle
+I cinque diagrammi seguenti sono, insieme, la fotografia completa delle
 dipendenze dichiarate fra i crate del workspace. Le frecce continue indicano
 dipendenze normali; quelle tratteggiate esistono soltanto in
 `[dev-dependencies]`. Un test confronta l'unione dei blocchi con
