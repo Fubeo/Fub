@@ -243,8 +243,11 @@ describe("la tela tiene le schede", () => {
     expect(mounts.slice(4).map((entry) => [entry.node, entry.context.subpath])).toEqual([["n", "#Titolo"], ["w", null]]);
     expect(alive(mounts)).toEqual(["i", "n", "w"]);
     // Il file cambiato dal campo della scheda: il campo prende il posto della
-    // vista, e alla chiusura nasce quella del file nuovo.
-    card(host, "i").dispatchEvent(new MouseEvent("dblclick", { bubbles: true }));
+    // vista, e alla chiusura nasce quella del file nuovo. Il doppio clic su
+    // un'immagine è del visore (T14): il campo lo apre Invio, perché
+    // nell'immagine non si entra.
+    card(host, "i").focus();
+    card(host, "i").dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
     const field = host.querySelector<HTMLInputElement>(".canvas-field-editor")!;
     expect(mounts[3]!.destroyed).toBe(1);
     field.value = "img/terza.png";
@@ -684,6 +687,395 @@ describe("vivono solo le schede utili", () => {
     drag(viewport, card(host, "b").querySelector<HTMLElement>(".canvas-node-handle")!, 40, 0, 5);
     syncNode(engine, "b", { height: 200 });
     expect(resized).toEqual(["a", "b"]);
+    engine.destroy();
+  });
+});
+
+// --- Entrare e uscire (N6 T14) --------------------------------------------------
+
+/**
+ * Un renderer che scrive ogni chiamata della tela. Il contenuto ha un link
+ * che, come la montatura delle note (`mount.ts`), si segue al clic se nessuno
+ * lo ha fermato prima; con `data-cells` il contenuto usa Esc da sé (un
+ * rettangolo di celle che si sta scegliendo). Si entra solo nelle note.
+ */
+function probeRenderer() {
+  const log: string[] = [];
+  const followed: string[] = [];
+  const renderer: CardRenderer = {
+    kinds: ["note", "pdf", "image"],
+    mount(node: CanvasNode, host: HTMLElement): CardView {
+      const content = document.createElement("div");
+      content.className = "probe";
+      const link = document.createElement("a");
+      link.className = "probe-link";
+      link.setAttribute("href", "Altra.md");
+      link.textContent = "Altra";
+      const text = document.createElement("p");
+      text.className = "probe-text";
+      text.textContent = "testo";
+      content.append(link, text);
+      content.addEventListener("click", (event) => {
+        if (event.defaultPrevented) return;
+        const anchor = event.target instanceof Element ? event.target.closest("a") : null;
+        if (!anchor) return;
+        event.preventDefault();
+        followed.push(`${node.id}:${anchor.getAttribute("href")}`);
+      });
+      content.addEventListener("keydown", (event) => {
+        if (event.key !== "Escape" || content.dataset.cells === undefined) return;
+        event.preventDefault();
+        delete content.dataset.cells;
+        log.push(`${node.id}:cells`);
+      });
+      host.append(content);
+      const enterable = (node.file ?? "").endsWith(".md");
+      return {
+        setMode: (mode) => {
+          log.push(`${node.id}:${mode}`);
+        },
+        enter: () => {
+          log.push(`${node.id}:enter`);
+          return enterable;
+        },
+        leave: () => {
+          log.push(`${node.id}:leave`);
+        },
+        key: (event) => {
+          if (!["PageUp", "PageDown", "Home", "End"].includes(event.key)) return false;
+          log.push(`${node.id}:key ${event.key}`);
+          return true;
+        },
+        destroy: () => {
+          log.push(`${node.id}:destroy`);
+        },
+      };
+    },
+  };
+  return { renderer, log, followed };
+}
+
+/** Una nota, un PDF, un'immagine e un testo, tutti in vista a zoom 1. */
+const BOARD = [
+  { id: "n", type: "file", x: 0, y: 0, width: 200, height: 100, file: "Note/idea.md" },
+  { id: "p", type: "file", x: 400, y: 0, width: 200, height: 100, file: "doc/libro.pdf" },
+  { id: "i", type: "file", x: 200, y: 0, width: 100, height: 100, file: "img/foto.png" },
+  { id: "t", type: "text", x: 0, y: -50, width: 100, height: 40, text: "testo" },
+];
+
+function linkOf(host: HTMLElement, id: string): HTMLElement {
+  return card(host, id).querySelector<HTMLElement>(".probe-link")!;
+}
+
+function textOf(host: HTMLElement, id: string): HTMLElement {
+  return card(host, id).querySelector<HTMLElement>(".probe-text")!;
+}
+
+/** Un clic col mouse su `target`: giù, su e il `click`. Dà il `click`. */
+function clickOn(viewport: HTMLElement, target: HTMLElement, init: MouseEventInit = {}): MouseEvent {
+  const at = { bubbles: true, cancelable: true, button: 0, pointerId: 5, clientX: 50, clientY: 50, ...init };
+  target.dispatchEvent(new PointerEvent("pointerdown", at));
+  viewport.dispatchEvent(new PointerEvent("pointerup", at));
+  const click = new MouseEvent("click", { bubbles: true, cancelable: true, button: 0, ...init });
+  target.dispatchEvent(click);
+  return click;
+}
+
+/** Uno scatto di rotella su `target`, con Ctrl o senza. */
+function wheelOn(target: HTMLElement, ctrl = false, deltaY = 100): WheelEvent {
+  const event = new WheelEvent("wheel", { bubbles: true, cancelable: true, deltaY });
+  // Il `WheelEvent` di happy-dom non prende i tasti né il punto dall'init.
+  Object.defineProperties(event, { ctrlKey: { value: ctrl }, clientX: { value: 400 }, clientY: { value: 300 } });
+  target.dispatchEvent(event);
+  return event;
+}
+
+function press(target: HTMLElement, key: string): KeyboardEvent {
+  const event = new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true });
+  target.dispatchEvent(event);
+  return event;
+}
+
+function focused(): HTMLElement {
+  return document.activeElement as HTMLElement;
+}
+
+function cameraOf(host: HTMLElement): string {
+  return host.querySelector<HTMLElement>(".canvas-stage")!.style.transform;
+}
+
+function selectedOf(host: HTMLElement): string[] {
+  return [...host.querySelectorAll<HTMLElement>(".canvas-node.selected")].map((el) => el.dataset.node!).sort();
+}
+
+function activeOf(host: HTMLElement): string[] {
+  return [...host.querySelectorAll<HTMLElement>(".canvas-node[data-card-active]")].map((el) => el.dataset.node!);
+}
+
+/** Tab sulla scheda e Invio. */
+function enterWithKeys(host: HTMLElement, id: string): void {
+  card(host, id).focus();
+  press(card(host, id), "Enter");
+}
+
+describe("entrare e uscire da una scheda", () => {
+  it("un clic sceglie la scheda, anche sul link, e non lo segue; il clic dopo entra senza seguirlo", () => {
+    const { renderer, log, followed } = probeRenderer();
+    const { engine, host, viewport } = mounted(boardSource(BOARD), { cards: cardsOf(renderer) });
+    log.length = 0;
+    const first = clickOn(viewport, linkOf(host, "n"));
+    expect(first.defaultPrevented).toBe(true);
+    expect(followed).toEqual([]);
+    expect(selectedOf(host)).toEqual(["n"]);
+    expect(activeOf(host)).toEqual([]);
+    expect(log).toEqual([]);
+    clickOn(viewport, linkOf(host, "n"));
+    expect(followed).toEqual([]);
+    expect(log).toEqual(["n:enter"]);
+    expect(activeOf(host)).toEqual(["n"]);
+    expect(card(host, "n").querySelector(".canvas-exit-hint")?.textContent).toBe("Esc per uscire");
+    // Dentro, un clic sul link lo segue.
+    clickOn(viewport, linkOf(host, "n"));
+    expect(followed).toEqual(["n:Altra.md"]);
+    engine.destroy();
+  });
+
+  it("Ctrl+clic e Meta+clic su un link lo seguono subito, attiva o no; fuori da un link aggiungono alla scelta", () => {
+    const { renderer, followed } = probeRenderer();
+    const { engine, host, viewport } = mounted(boardSource(BOARD), { cards: cardsOf(renderer) });
+    const before = cameraOf(host);
+    clickOn(viewport, linkOf(host, "n"), { ctrlKey: true });
+    expect(followed).toEqual(["n:Altra.md"]);
+    clickOn(viewport, linkOf(host, "p"), { metaKey: true });
+    expect(followed).toEqual(["n:Altra.md", "p:Altra.md"]);
+    expect(selectedOf(host)).toEqual([]);
+    expect(activeOf(host)).toEqual([]);
+    // Fuori da un link: la scelta cresce, la lavagna non si sposta.
+    clickOn(viewport, textOf(host, "n"));
+    clickOn(viewport, textOf(host, "p"), { ctrlKey: true });
+    expect(selectedOf(host)).toEqual(["n", "p"]);
+    clickOn(viewport, card(host, "i"), { metaKey: true });
+    expect(selectedOf(host)).toEqual(["i", "n", "p"]);
+    expect(cameraOf(host)).toBe(before);
+    expect(activeOf(host)).toEqual([]);
+    // Dentro una scheda attiva, anche.
+    clickOn(viewport, viewport);
+    clickOn(viewport, textOf(host, "n"));
+    clickOn(viewport, textOf(host, "n"));
+    expect(activeOf(host)).toEqual(["n"]);
+    clickOn(viewport, linkOf(host, "n"), { ctrlKey: true });
+    expect(followed).toEqual(["n:Altra.md", "p:Altra.md", "n:Altra.md"]);
+    expect(activeOf(host)).toEqual(["n"]);
+    engine.destroy();
+  });
+
+  it("Invio con la scheda scelta entra; Esc esce e il fuoco torna alla scheda", () => {
+    const { renderer, log } = probeRenderer();
+    const { engine, host } = mounted(boardSource(BOARD), { cards: cardsOf(renderer) });
+    log.length = 0;
+    const article = card(host, "n");
+    article.focus();
+    expect(press(article, "Enter").defaultPrevented).toBe(true);
+    expect(log).toEqual(["n:enter"]);
+    expect(activeOf(host)).toEqual(["n"]);
+    expect(host.querySelector(".canvas-field-editor")).toBeNull();
+    // Il fuoco va dentro: i tasti sono del contenuto, non della tela.
+    expect(article.contains(focused())).toBe(true);
+    expect(focused()).not.toBe(article);
+    expect(press(focused(), "Delete").defaultPrevented).toBe(false);
+    expect(readNodes(engine.getDoc()).map((node) => node.id)).toContain("n");
+    expect(press(focused(), "Escape").defaultPrevented).toBe(true);
+    expect(log).toEqual(["n:enter", "n:leave"]);
+    expect(activeOf(host)).toEqual([]);
+    expect(article.querySelector(".canvas-exit-hint")).toBeNull();
+    expect(focused()).toBe(article);
+    // Una scheda di testo: Invio scrive, come prima.
+    enterWithKeys(host, "t");
+    expect(host.querySelector(".canvas-text-editor")).not.toBeNull();
+    expect(activeOf(host)).toEqual([]);
+    engine.destroy();
+  });
+
+  it("Esc che il contenuto usa (un rettangolo di celle) non esce", () => {
+    const { renderer, log } = probeRenderer();
+    const { engine, host } = mounted(boardSource(BOARD), { cards: cardsOf(renderer) });
+    log.length = 0;
+    enterWithKeys(host, "n");
+    const probe = card(host, "n").querySelector<HTMLElement>(".probe")!;
+    probe.dataset.cells = "";
+    press(probe, "Escape");
+    expect(log).toEqual(["n:enter", "n:cells"]);
+    expect(activeOf(host)).toEqual(["n"]);
+    press(probe, "Escape");
+    expect(log).toEqual(["n:enter", "n:cells", "n:leave"]);
+    expect(activeOf(host)).toEqual([]);
+    engine.destroy();
+  });
+
+  it("un clic fuori esce; un clic sulla testata della scheda attiva no", () => {
+    const { renderer, log } = probeRenderer();
+    const { engine, host, viewport } = mounted(boardSource(BOARD), { cards: cardsOf(renderer) });
+    clickOn(viewport, textOf(host, "n"));
+    clickOn(viewport, textOf(host, "n"));
+    expect(activeOf(host)).toEqual(["n"]);
+    log.length = 0;
+    clickOn(viewport, card(host, "n").querySelector<HTMLElement>(".canvas-node-handle")!);
+    expect(activeOf(host)).toEqual(["n"]);
+    clickOn(viewport, viewport);
+    expect(log).toEqual(["n:leave"]);
+    expect(activeOf(host)).toEqual([]);
+    expect(selectedOf(host)).toEqual([]);
+    // Un clic su un'altra scheda, anche: esce e sceglie quella.
+    clickOn(viewport, textOf(host, "n"));
+    clickOn(viewport, textOf(host, "n"));
+    expect(activeOf(host)).toEqual(["n"]);
+    clickOn(viewport, textOf(host, "p"));
+    expect(activeOf(host)).toEqual([]);
+    expect(selectedOf(host)).toEqual(["p"]);
+    engine.destroy();
+  });
+
+  it("la rotella fuori sposta la lavagna; sopra la scheda attiva va a lei, con Ctrl ingrandisce", () => {
+    const { renderer } = probeRenderer();
+    const { engine, host } = mounted(boardSource(BOARD), { cards: cardsOf(renderer) });
+    let camera = cameraOf(host);
+    expect(wheelOn(textOf(host, "n"), false, 10).defaultPrevented).toBe(true);
+    expect(cameraOf(host)).not.toBe(camera);
+    enterWithKeys(host, "n");
+    expect(activeOf(host)).toEqual(["n"]);
+    camera = cameraOf(host);
+    expect(wheelOn(textOf(host, "n"), false, 10).defaultPrevented).toBe(false);
+    expect(cameraOf(host)).toBe(camera);
+    // Fuori dalla scheda attiva, ancora la lavagna.
+    expect(wheelOn(textOf(host, "p"), false, 10).defaultPrevented).toBe(true);
+    expect(cameraOf(host)).not.toBe(camera);
+    expect(wheelOn(textOf(host, "n"), true).defaultPrevented).toBe(true);
+    expect(zoomOf(host)).toBeLessThan(1);
+    expect(activeOf(host)).toEqual(["n"]);
+    engine.destroy();
+  });
+
+  it("PgGiù, PgSu, Home e Fine vanno alla scheda scelta e non attiva", () => {
+    const { renderer, log } = probeRenderer();
+    const { engine, host } = mounted(boardSource(BOARD), { cards: cardsOf(renderer) });
+    log.length = 0;
+    const article = card(host, "p");
+    article.focus();
+    expect(press(article, "PageDown").defaultPrevented).toBe(true);
+    press(article, "PageUp");
+    press(article, "Home");
+    press(article, "End");
+    expect(log).toEqual(["p:key PageDown", "p:key PageUp", "p:key Home", "p:key End"]);
+    // Le frecce restano della tela: spostano la scheda.
+    press(article, "ArrowRight");
+    expect(log).toHaveLength(4);
+    expect(readNodes(engine.getDoc()).find((node) => node.id === "p")!.x).toBeGreaterThan(400);
+    // Dentro una scheda attiva i tasti sono del contenuto: `key` non c'entra.
+    enterWithKeys(host, "n");
+    log.length = 0;
+    press(focused(), "PageDown");
+    expect(log).toEqual([]);
+    engine.destroy();
+  });
+
+  it("la scheda attiva resta viva sotto lo zoom delle schede vive, ed esce quando lascia la vista", () => {
+    vi.useFakeTimers();
+    try {
+      const { renderer, log } = probeRenderer();
+      const { engine, host, viewport } = mounted(boardSource(BOARD), { cards: cardsOf(renderer) });
+      enterWithKeys(host, "n");
+      log.length = 0;
+      for (let tick = 0; tick < 12; tick++) wheelOn(viewport, true);
+      vi.advanceTimersByTime(WHEEL_SETTLE_MS);
+      expect(zoomOf(host)).toBeLessThan(LIVE_ZOOM_MIN);
+      expect([...log].sort()).toEqual(["i:snapshot", "p:snapshot"]);
+      expect(liveOf(host)).toEqual(["n"]);
+      expect(activeOf(host)).toEqual(["n"]);
+      log.length = 0;
+      // Lontano: la scheda esce dalla vista, e allora esce e si spegne.
+      panStart(viewport, -20_000, 0)();
+      expect(log).toEqual(["n:leave", "n:snapshot"]);
+      expect(activeOf(host)).toEqual([]);
+      engine.destroy();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("entrare in una scheda ferma la accende, poi entra; uscendo torna ferma", () => {
+    vi.useFakeTimers();
+    try {
+      const { renderer, log } = probeRenderer();
+      const { engine, host, viewport } = mounted(boardSource(BOARD), { cards: cardsOf(renderer) });
+      for (let tick = 0; tick < 12; tick++) wheelOn(viewport, true);
+      vi.advanceTimersByTime(WHEEL_SETTLE_MS);
+      expect(liveOf(host)).toEqual([]);
+      log.length = 0;
+      enterWithKeys(host, "n");
+      expect(log).toEqual(["n:live", "n:enter"]);
+      expect(activeOf(host)).toEqual(["n"]);
+      press(focused(), "Escape");
+      expect(log).toEqual(["n:live", "n:enter", "n:leave", "n:snapshot"]);
+      engine.destroy();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("senza niente in cui entrare, Invio fa ciò che faceva; il doppio clic sull'immagine non apre il campo", () => {
+    const { renderer, log } = probeRenderer();
+    const { engine, host } = mounted(boardSource(BOARD), { cards: cardsOf(renderer) });
+    log.length = 0;
+    card(host, "i").dispatchEvent(new MouseEvent("dblclick", { bubbles: true }));
+    expect(host.querySelector(".canvas-field-editor")).toBeNull();
+    expect(activeOf(host)).toEqual([]);
+    expect(log).toEqual([]);
+    // Il doppio clic sulla nota è come Invio.
+    card(host, "n").dispatchEvent(new MouseEvent("dblclick", { bubbles: true }));
+    expect(log).toEqual(["n:enter"]);
+    expect(activeOf(host)).toEqual(["n"]);
+    press(focused(), "Escape");
+    // Il PDF non ha dove entrare: Invio apre il campo del file, come prima.
+    log.length = 0;
+    enterWithKeys(host, "p");
+    expect(log[0]).toBe("p:enter");
+    expect(activeOf(host)).toEqual([]);
+    expect(host.querySelector(".canvas-field-editor")).not.toBeNull();
+    engine.destroy();
+  });
+
+  it("in sola lettura si entra; una scheda attiva tolta da fuori esce, e si rientra", () => {
+    const { renderer, log } = probeRenderer();
+    const { engine, host } = mounted(boardSource(BOARD), { cards: cardsOf(renderer) });
+    engine.setReadOnly(true);
+    log.length = 0;
+    enterWithKeys(host, "n");
+    expect(activeOf(host)).toEqual(["n"]);
+    engine.setReadOnly(false);
+    engine.syncDoc(boardSource(BOARD.filter((node) => node.id !== "n")));
+    expect(log).toEqual(["n:enter", "n:leave", "n:destroy"]);
+    expect(activeOf(host)).toEqual([]);
+    engine.syncDoc(boardSource(BOARD));
+    enterWithKeys(host, "n");
+    expect(activeOf(host)).toEqual(["n"]);
+    engine.destroy();
+  });
+
+  it("la scheda attiva tolta da un annulla esce", () => {
+    const { renderer, log } = probeRenderer();
+    const { engine, host, viewport } = mounted(boardSource(BOARD), { cards: cardsOf(renderer) });
+    // Una copia della nota, scelta: Invio ci entra, l'annulla la toglie.
+    card(host, "n").focus();
+    viewport.dispatchEvent(new KeyboardEvent("keydown", { key: "d", ctrlKey: true, bubbles: true, cancelable: true }));
+    const copy = readNodes(engine.getDoc()).map((node) => node.id).find((id) => !BOARD.some((node) => node.id === id))!;
+    expect(copy).toBeDefined();
+    log.length = 0;
+    press(viewport, "Enter");
+    expect(activeOf(host)).toEqual([copy]);
+    engine.undo();
+    expect(log).toEqual([`${copy}:enter`, `${copy}:leave`, `${copy}:destroy`]);
+    expect(activeOf(host)).toEqual([]);
+    expect(host.querySelector(".canvas-exit-hint")).toBeNull();
     engine.destroy();
   });
 });

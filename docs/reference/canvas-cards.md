@@ -309,6 +309,51 @@ tela chiama anche `resize()` sulle viste la cui scheda ha cambiato misura
 (un ridimensionamento, un annulla, una modifica da fuori), una volta per
 misura nuova; durante un ridimensionamento non lo chiama.
 
+## Entrare e uscire
+
+Una scheda scelta si guarda; una scheda **attiva** si usa: il suo contenuto
+prende il puntatore, la tastiera e la rotella. Una sola scheda è attiva alla
+volta. Lo decide la tela (`engine.ts`); il renderer risponde con `enter`,
+`leave` e `key`.
+
+- **Scegliere.** Un clic su una scheda la sceglie, anche se cade su un link
+  del contenuto, e il link non si segue (A-12). Ctrl+clic (Cmd+clic su
+  macOS) su un link lo segue subito, nella scheda attiva o no (D-18 (c));
+  fuori da un link aggiunge la scheda alla scelta, o la toglie, come
+  Maiuscolo; Ctrl con uno spostamento sposta la lavagna, come prima. Un
+  pulsante della vista («Apri») risponde a un clic anche fuori.
+- **Entrare.** Un clic dentro una scheda che era già la sola scelta, Invio
+  con una scheda scelta che non è di testo, o il doppio clic su una nota, un
+  documento o un foglio chiamano `enter()`. Una scheda ferma prima si
+  accende (la scelta delle schede vive la accende con le altre), poi entra.
+  Se `enter()` dice `true` la scheda è attiva: `data-card-active` sulla
+  scheda, «Esc per uscire» (`canvas.card.exit_hint`, `.canvas-exit-hint`)
+  nella testata, il fuoco nel corpo. Se dice `false`, o la vista non ha
+  `enter`, Invio e il doppio clic fanno ciò che facevano (il campo della
+  scheda). Si entra anche in sola lettura; non si entra in una scheda fuori
+  dalla vista né con la penna giù.
+- **Dentro.** I clic arrivano al contenuto (i link si seguono con un clic),
+  la rotella sopra il corpo lo scorre (Ctrl+rotella e il pizzico ingrandiscono
+  sempre la lavagna, A-11), i tasti sono del contenuto e la tela non li usa,
+  salvo Esc. La scheda attiva resta viva anche se la regola delle schede vive
+  la spegnerebbe (lo zoom sotto 0,35, il limite).
+- **Uscire.** Esc (se il contenuto non lo usa da sé, per esempio per
+  annullare un rettangolo di celle che si sta scegliendo: allora chiama
+  `preventDefault`), un clic fuori dalla scheda, la scheda che esce dalla
+  vista a fine gesto, la scheda tolta (un annulla, una modifica da fuori) o
+  un documento nuovo chiamano `leave()`. Con Esc il fuoco torna sulla
+  scheda. Uscita, la scheda torna alla regola: può diventare ferma.
+- **Scelta e non attiva.** PgSu, PgGiù, Home e Fine vanno a `key()`; se
+  dice `true` la tela non li usa (il PDF volta pagina). Gli altri tasti
+  restano della tela.
+- **Il doppio clic su un'immagine** apre il visore: lo ascolta la vista
+  dell'immagine, la tela non apre il campo.
+
+Il clic passa prima dalla tela (in cattura): fuori da una scheda attiva il
+contenuto non lo riceve. Nel tema (`structure.css`) il contenuto di una
+scheda non attiva non prende il puntatore e non scorre, salvo i link, i
+pulsanti e l'immagine; dentro una scheda attiva il corpo scorre.
+
 ## Le porte della shell
 
 Nella shell le schede arrivano alla tela dalla registrazione della lavagna

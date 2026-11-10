@@ -3078,6 +3078,25 @@ body {
   overscroll-behavior: contain;
 }
 
+/* Entrare e uscire (N6 T14). Fuori da una scheda attiva il contenuto di una
+   vista non prende il puntatore e non scorre: il clic sceglie la scheda e la
+   rotella sposta la lavagna. Dentro sì, e il corpo scorre. I link e i
+   pulsanti lo prendono sempre (Ctrl+clic segue un link, «Apri»), e così
+   l'immagine, il cui doppio clic apre il visore. Il segnaposto di un file
+   mancante resta com'è. */
+.canvas-node[data-card-kind]:not([data-card-active]):not([data-card-missing]) > .canvas-card-body {
+  overflow: hidden;
+}
+
+.canvas-node[data-card-kind]:not([data-card-active]):not([data-card-missing]) > .canvas-card-body > * {
+  pointer-events: none;
+}
+
+.canvas-node[data-card-kind]:not([data-card-active]):not([data-card-missing]) > .canvas-card-body :is(a, button),
+.canvas-node[data-card-kind="image"]:not([data-card-active]):not([data-card-missing]) > .canvas-card-body > * {
+  pointer-events: auto;
+}
+
 .canvas-text-editor,
 .canvas-field-editor {
   width: 100%;

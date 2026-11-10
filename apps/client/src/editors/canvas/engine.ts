@@ -26,6 +26,7 @@ import {
   type CardSize,
   type CardSnapshots,
   type CardView,
+  type Rect,
 } from "./cards";
 import {
   cutInk,
@@ -89,6 +90,12 @@ export const MAX_CANVAS_HISTORY = 100;
 export const CARD_PAUSE_MS = 250;
 /** Quanto si aspetta dopo l'ultimo scatto della rotella prima di dire finito il gesto (A-7). */
 export const WHEEL_SETTLE_MS = 150;
+
+/** I tasti che una scheda scelta e non attiva può prendere (`CardView.key`, T14). */
+const CARD_KEYS: ReadonlySet<string> = new Set(["PageUp", "PageDown", "Home", "End"]);
+
+/** Le specie in cui il doppio clic entra, come Invio (T14). */
+const DOUBLE_CLICK_ENTERS: ReadonlySet<CardKind> = new Set(["note", "document", "sheet"]);
 /** Il testo più lungo di una scheda, in byte UTF-8: oltre, il nucleo rifiuta la lavagna (`invalid`). */
 const MAX_CARD_TEXT_BYTES = 1_048_576;
 const utf8 = new TextEncoder();
@@ -362,6 +369,15 @@ function clampZoom(zoom: number): number {
   return Math.min(ZOOM_LIMITS.max, Math.max(ZOOM_LIMITS.min, zoom));
 }
 
+/**
+ * Il rettangolo di `node` e `view` si sovrappongono davvero: una scheda che
+ * tocca la vista solo sul bordo è fuori.
+ */
+function overlaps(node: Rect, view: Rect): boolean {
+  return node.x < view.x + view.width && node.x + node.width > view.x
+    && node.y < view.y + view.height && node.y + node.height > view.y;
+}
+
 function snap(value: number): number {
   return Math.round(value / CANVAS_SNAP) * CANVAS_SNAP;
 }
@@ -442,6 +458,18 @@ export class CanvasEngine {
   readonly #views = new Map<string, CardView>();
   /** Il modo che ogni vista montata ha davvero (il `current` di `updateLiveCards`). */
   readonly #liveModes = new Map<string, CardMode>();
+  /**
+   * La scheda attiva (T14): `enter()` ha detto sì, e il suo contenuto prende
+   * puntatore, tastiera e rotella finché non si esce. Una sola alla volta.
+   */
+  #activeId: string | null = null;
+  /** La scheda in cui si sta entrando: la scelta delle vive la accende con le altre. */
+  #enteringId: string | null = null;
+  /**
+   * La scheda sotto l'ultimo `pointerdown`, se era già la sola scelta: il
+   * `click` che segue ci entra. Un clic che la sceglie soltanto non entra.
+   */
+  #pressedSelected: string | null = null;
   /** Il gesto della rotella finisce `WHEEL_SETTLE_MS` dopo l'ultimo scatto. */
   #wheelTimer: ReturnType<typeof setTimeout> | undefined = undefined;
   /**
@@ -470,7 +498,12 @@ export class CanvasEngine {
   #intakeError = "";
   #drag: { pointerId: number; startX: number; startY: number; origin: Map<string, { x: number; y: number }>; moved: boolean } | null = null;
   #resize: { pointerId: number; id: string; startX: number; startY: number; width: number; height: number } | null = null;
-  #pan: { pointerId: number; startX: number; startY: number; camX: number; camY: number } | null = null;
+  /**
+   * Lo spostamento della lavagna in corso. `toggle` è la scheda sotto un
+   * Ctrl+clic (Cmd+clic): se il puntatore si alza senza essersi mosso, la
+   * scheda entra nella scelta o ne esce, come con Maiuscolo.
+   */
+  #pan: { pointerId: number; startX: number; startY: number; camX: number; camY: number; toggle?: string } | null = null;
   #connect: { pointerId: number; from: string; edgeId?: string; endpoint?: "from" | "to" } | null = null;
   /** Le dita giù che la lavagna segue, in coordinate del client. */
   readonly #fingers = new Map<number, TouchPoint>();
@@ -605,6 +638,9 @@ export class CanvasEngine {
     this.#life.listen(window, "blur", () => this.#releaseInkKey());
     this.#life.listen(document, "visibilitychange", () => this.#releaseInkKey());
     this.#viewport.addEventListener("dblclick", (event) => this.#dblclick(event), { signal });
+    // Prima del contenuto delle schede: fuori da una scheda attiva il clic
+    // sceglie, entra, o segue un link con Ctrl, e non arriva al contenuto.
+    this.#viewport.addEventListener("click", (event) => this.#cardClick(event), { signal, capture: true });
     this.#viewport.addEventListener("dragover", (event) => {
       if (!this.#readOnly && !this.#isSceneOversized() && event.dataTransfer
         && (this.#options.attachments || event.dataTransfer.types.includes("text/plain"))) event.preventDefault();
@@ -643,6 +679,8 @@ export class CanvasEngine {
     this.#version = ++this.#versions;
     this.#doc = document;
     this.#intakeError = "";
+    // Un documento nuovo: si esce dalla scheda dell'altro.
+    this.#leaveCard(false, false);
     this.#selection = [];
     this.#edgeSelection = [];
     this.#undo = [];
@@ -2498,13 +2536,27 @@ export class CanvasEngine {
   #pointerDown(event: PointerEvent): void {
     // Prima di ogni gesto, il testo in sospeso (non i clic dentro il campo).
     if (!(event.target instanceof Node && this.#editor?.input.contains(event.target))) this.#recordPending();
+    const pressed = this.#nodeAt(event.target);
+    this.#pressedSelected = pressed !== null && this.#selection.length === 1 && this.#selection[0] === pressed
+      ? pressed
+      : null;
+    // Un clic fuori dalla scheda attiva ne esce. La penna no: scrive sopra
+    // anche una scheda attiva (N4).
+    if (this.#activeId !== null && event.pointerType !== "pen" && !this.#insideActive(event.target, false)) {
+      this.#leaveCard(false);
+    }
     if (event.pointerType === "touch") this.#touchDown(event);
     else this.#mouseDown(event);
   }
 
   #mouseDown(event: PointerEvent): void {
-    if (event.button === 1 || event.ctrlKey || event.metaKey || event.altKey) {
-      this.#pan = { pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, camX: this.#camera.x, camY: this.#camera.y };
+    const modifier = event.ctrlKey || event.metaKey;
+    // Ctrl+clic (Cmd+clic) su un link di una scheda lo segue (D-18 (c)): il
+    // `click` deve arrivare al link, non a uno spostamento della lavagna.
+    if (event.button === 0 && modifier && this.#cardLinkAt(event.target) !== null) return;
+    if (event.button === 1 || modifier || event.altKey) {
+      const toggle = event.button === 0 && modifier && !event.altKey ? this.#nodeAt(event.target) ?? undefined : undefined;
+      this.#pan = { pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, camX: this.#camera.x, camY: this.#camera.y, toggle };
       this.#viewport.setPointerCapture?.(event.pointerId);
       event.preventDefault();
       return;
@@ -2788,7 +2840,16 @@ export class CanvasEngine {
   #pointerRelease(event: PointerEvent): void {
     if (event.pointerType === "touch" && this.#touchUp(event)) return;
     if (this.#pan && event.pointerId === this.#pan.pointerId) {
+      const pan = this.#pan;
       this.#pan = null;
+      // Ctrl+clic fermo su una scheda: la aggiunge alla scelta, o la toglie.
+      if (pan.toggle !== undefined
+        && Math.abs(event.clientX - pan.startX) + Math.abs(event.clientY - pan.startY) <= 3) {
+        this.#camera.x = pan.camX;
+        this.#camera.y = pan.camY;
+        this.#applyCamera();
+        this.#selectNode(pan.toggle, true);
+      }
       return;
     }
     if (this.#resize && event.pointerId === this.#resize.pointerId && this.#doc) {
@@ -2889,6 +2950,9 @@ export class CanvasEngine {
   }
 
   #wheel(event: WheelEvent): void {
+    // Sopra la scheda attiva la rotella scorre lei (A-11); Ctrl+rotella e il
+    // pizzico ingrandiscono sempre la lavagna.
+    if (!event.ctrlKey && !event.metaKey && this.#insideActive(event.target, true)) return;
     event.preventDefault();
     // Prima di muovere la camera: lo zoom della rotella è un gesto in corso.
     clearTimeout(this.#wheelTimer);
@@ -2919,6 +2983,16 @@ export class CanvasEngine {
       if (!event.repeat && !this.#inkKeyDown) {
         this.#inkKeyDown = true;
         this.#applyInkMouse();
+      }
+      return;
+    }
+    // Dentro la scheda attiva i tasti sono del contenuto; Esc, se il
+    // contenuto non lo usa (un rettangolo di celle che si sta scegliendo),
+    // esce e rimette il fuoco sulla scheda.
+    if (this.#activeId !== null && this.#insideActive(event.target, false)) {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        this.#leaveCard(true);
       }
       return;
     }
@@ -2967,6 +3041,20 @@ export class CanvasEngine {
       return;
     }
     const focus = this.#selection[0] ? this.#doc.nodes.find((n) => n.id === this.#selection[0]) : undefined;
+    // La scheda scelta e non attiva riceve le pagine (il PDF), se li vuole.
+    if (focus && this.#selection.length === 1 && CARD_KEYS.has(event.key) && this.#onCardOrBoard(event.target)) {
+      const view = this.#cards.get(focus.id)?.view;
+      let used = false;
+      try {
+        used = view?.key?.(event) === true;
+      } catch (error) {
+        console.warn(`canvas: la scheda ${focus.id} non prende il tasto`, error);
+      }
+      if (used) {
+        event.preventDefault();
+        return;
+      }
+    }
     switch (event.key) {
       case "Delete":
       case "Backspace": {
@@ -3012,9 +3100,9 @@ export class CanvasEngine {
         break;
       }
       case "Enter": {
-        if (focus && (event.target === this.#viewport || (event.target as HTMLElement)?.classList.contains("canvas-node"))) {
+        if (focus && this.#onCardOrBoard(event.target)) {
           event.preventDefault();
-          this.#beginCardEdit(focus);
+          this.#enterOrEdit(focus);
         }
         break;
       }
@@ -3103,16 +3191,183 @@ export class CanvasEngine {
     const doc = this.#doc;
     if (this.#destroyed || !doc || this.#views.size === 0) return;
     if (this.#gestureActive() || !this.#isShown()) return;
-    const rect = this.#viewport.getBoundingClientRect();
-    // La stessa misura di riserva di `#fitCamera`: la camera è fatta su quella.
-    const width = rect.width || 800;
-    const height = rect.height || 600;
-    const { x, y, zoom } = this.#camera;
-    const view = { x: -x / zoom, y: -y / zoom, width: width / zoom, height: height / zoom };
+    const { view, zoom } = this.#viewRect();
     // Contano solo le schede con una vista: una specie senza renderer non
     // toglie posto a quelle che si accendono.
     const nodes = doc.nodes.filter((node) => this.#views.has(node.id));
-    updateLiveCards(this.#views, liveCardIds(nodes, view, zoom), this.#liveModes, this.#cardQuiet);
+    // La scheda attiva che esce dalla vista (non da quella allargata) ne esce.
+    const active = this.#activeId;
+    if (active !== null) {
+      const node = nodes.find((candidate) => candidate.id === active);
+      if (!node || !overlaps(node, view)) this.#leaveCard(true, false);
+    }
+    // La scheda attiva, e quella in cui si sta entrando, restano vive anche
+    // se la regola le spegnerebbe (lo zoom, il limite).
+    const wanted = liveCardIds(nodes, view, zoom);
+    for (const id of [this.#activeId, this.#enteringId]) {
+      if (id !== null && this.#views.has(id)) wanted.add(id);
+    }
+    updateLiveCards(this.#views, wanted, this.#liveModes, this.#cardQuiet);
+  }
+
+  /**
+   * La vista di adesso in coordinate della lavagna, e lo zoom. Senza misura
+   * (happy-dom, una vista non ancora disposta) vale quella di riserva di
+   * `#fitCamera`: la camera è fatta su quella.
+   */
+  #viewRect(): { readonly view: Rect; readonly zoom: number } {
+    const rect = this.#viewport.getBoundingClientRect();
+    const width = rect.width || 800;
+    const height = rect.height || 600;
+    const { x, y, zoom } = this.#camera;
+    return { view: { x: -x / zoom, y: -y / zoom, width: width / zoom, height: height / zoom }, zoom };
+  }
+
+  // --- entrare e uscire (T14) ---------------------------------------------------
+
+  /** La scheda ha la vista di un renderer, e non è il segnaposto di un file mancante. */
+  #hasLiveContent(entry: CardEntry): boolean {
+    return entry.view !== null && entry.article.dataset.cardMissing === undefined;
+  }
+
+  /**
+   * `target` sta nella scheda attiva: in tutta la scheda, o solo nel corpo
+   * (`bodyOnly`), dove sta il contenuto della vista.
+   */
+  #insideActive(target: EventTarget | null, bodyOnly: boolean): boolean {
+    const id = this.#activeId;
+    if (id === null || !(target instanceof Node)) return false;
+    const entry = this.#cards.get(id);
+    if (!entry) return false;
+    return (bodyOnly ? entry.body : entry.article).contains(target);
+  }
+
+  /** Il tasto arriva alla lavagna o a una scheda col fuoco, non a un campo o al contenuto. */
+  #onCardOrBoard(target: EventTarget | null): boolean {
+    return target === this.#viewport || (target instanceof HTMLElement && target.classList.contains("canvas-node"));
+  }
+
+  /** Il link sotto `target`, se sta nel contenuto della vista di una scheda. */
+  #cardLinkAt(target: EventTarget | null): HTMLAnchorElement | null {
+    if (!(target instanceof Element)) return null;
+    const id = this.#nodeAt(target);
+    const entry = id === null ? undefined : this.#cards.get(id);
+    if (!entry || !this.#hasLiveContent(entry)) return null;
+    const link = target.closest("a");
+    return link !== null && entry.body.contains(link) ? link : null;
+  }
+
+  /**
+   * Il clic nel contenuto di una scheda, prima che lo veda il contenuto.
+   * Dentro la scheda attiva passa. Fuori, Ctrl+clic (Cmd+clic) su un link
+   * passa e il link si segue (D-18 (c)); un pulsante della vista passa (il
+   * suo «Apri»); ogni altro clic si ferma qui (A-12: sceglie, non segue), e
+   * se la scheda era già la sola scelta prima del clic ci entra.
+   */
+  #cardClick(event: MouseEvent): void {
+    const pressed = this.#pressedSelected;
+    this.#pressedSelected = null;
+    if (event.button !== 0 || !(event.target instanceof Element)) return;
+    const target = event.target;
+    const id = this.#nodeAt(target);
+    const entry = id === null ? undefined : this.#cards.get(id);
+    if (!id || !entry || !this.#hasLiveContent(entry) || !entry.body.contains(target)) return;
+    if (this.#activeId === id) return;
+    const modifier = event.ctrlKey || event.metaKey;
+    if (modifier && this.#cardLinkAt(target) !== null) return;
+    const button = target.closest("button");
+    if (button !== null && entry.body.contains(button) && !modifier) return;
+    event.preventDefault();
+    event.stopPropagation();
+    if (!modifier && !event.shiftKey && !event.altKey && pressed === id) this.#enterCard(id);
+  }
+
+  /** Invio, o il doppio clic su una nota: entra se si può, altrimenti ciò che faceva (il campo). */
+  #enterOrEdit(node: CanvasNode): void {
+    if (node.type !== "text" && this.#enterCard(node.id)) return;
+    this.#beginCardEdit(node);
+  }
+
+  /**
+   * Entra nella scheda `id`: se è ferma la accende (passando dalla scelta
+   * delle vive, che la tiene accesa con le altre), poi chiama `enter()`. Se
+   * dice sì, la scheda è attiva: `data-card-active`, «Esc per uscire» nella
+   * testata, il fuoco nel corpo. Una scheda fuori dalla vista, o che non si
+   * accende adesso (la penna giù, la lavagna nascosta), non entra.
+   */
+  #enterCard(id: string): boolean {
+    if (this.#activeId === id) return true;
+    const entry = this.#cards.get(id);
+    const view = entry?.view;
+    if (this.#destroyed || !entry || !view?.enter || !this.#hasLiveContent(entry)) return false;
+    if (!overlaps(entry.node, this.#viewRect().view)) return false;
+    this.#leaveCard(false);
+    if (this.#liveModes.get(id) !== "live") {
+      // Un clic o un tasto chiudono il gesto della rotella: la scelta si rifà adesso.
+      clearTimeout(this.#wheelTimer);
+      this.#wheelTimer = undefined;
+      this.#enteringId = id;
+      try {
+        this.#refreshLive();
+      } finally {
+        this.#enteringId = null;
+      }
+      if (this.#liveModes.get(id) !== "live") {
+        this.#refreshLive();
+        return false;
+      }
+    }
+    let entered = false;
+    try {
+      entered = view.enter() === true;
+    } catch (error) {
+      console.warn(`canvas: non si entra nella scheda ${id}`, error);
+    }
+    if (!entered) {
+      // Accesa per entrare e poi no: torna a ciò che dice la regola.
+      this.#refreshLive();
+      return false;
+    }
+    this.#activeId = id;
+    const article = entry.article;
+    article.dataset.cardActive = "";
+    const hint = document.createElement("span");
+    hint.className = "canvas-exit-hint";
+    hint.textContent = t("canvas.card.exit_hint");
+    article.querySelector(":scope > .canvas-node-handle")?.append(hint);
+    entry.body.tabIndex = -1;
+    entry.body.focus({ preventScroll: true });
+    return true;
+  }
+
+  /**
+   * Esce dalla scheda attiva, se c'è: `leave()`, via segno e suggerimento.
+   * Con `refocus` il fuoco che era dentro torna sulla scheda; con `refresh`
+   * la scelta delle vive si rifà (la scheda può tornare ferma).
+   */
+  #leaveCard(refocus: boolean, refresh = true): void {
+    const id = this.#activeId;
+    if (id === null) return;
+    this.#activeId = null;
+    const entry = this.#cards.get(id);
+    if (entry) {
+      this.#unmarkActive(entry, refocus);
+      try {
+        entry.view?.leave?.();
+      } catch (error) {
+        console.warn(`canvas: la scheda ${id} non esce`, error);
+      }
+    }
+    if (refresh) this.#refreshLive();
+  }
+
+  #unmarkActive(entry: CardEntry, refocus: boolean): void {
+    const article = entry.article;
+    const focusInside = article.contains(document.activeElement) && document.activeElement !== article;
+    delete article.dataset.cardActive;
+    article.querySelector(":scope > .canvas-node-handle > .canvas-exit-hint")?.remove();
+    entry.body.removeAttribute("tabindex");
+    if (refocus && focusInside && article.isConnected) article.focus({ preventScroll: true });
   }
 
   /**
@@ -3300,7 +3555,13 @@ export class CanvasEngine {
     });
     el.addEventListener("dblclick", (e) => {
       e.stopPropagation();
-      this.#beginCardEdit(entry.node);
+      // Dentro la scheda attiva il doppio clic è del contenuto (una parola).
+      if (this.#activeId === id) return;
+      const kind = this.#hasLiveContent(entry) ? cardKindOf(entry.node) : null;
+      // Il visore lo apre la vista dell'immagine, che ascolta il suo doppio clic (T5).
+      if (kind === "image") return;
+      if (kind !== null && DOUBLE_CLICK_ENTERS.has(kind)) this.#enterOrEdit(entry.node);
+      else this.#beginCardEdit(entry.node);
     });
     return entry;
   }
@@ -3429,6 +3690,17 @@ export class CanvasEngine {
     if (view) {
       this.#views.delete(entry.id);
       this.#liveModes.delete(entry.id);
+    }
+    // La scheda attiva che perde il corpo (tolta, un annulla, un file
+    // cambiato, il campo che prende il posto della vista) ne esce prima.
+    if (this.#activeId === entry.id) {
+      this.#activeId = null;
+      this.#unmarkActive(entry, false);
+      try {
+        view?.leave?.();
+      } catch (error) {
+        console.warn(`canvas: la scheda ${entry.id} non esce`, error);
+      }
     }
     delete entry.article.dataset.cardKind;
     delete entry.article.dataset.cardMode;
