@@ -251,7 +251,7 @@ rinascono. L'inchiostro sulle schede si ridisegna dopo ogni resa sullo
 stesso elemento, e un tratto scritto aggiorna solo il suo livello, senza
 resa.
 
-## Vive e ferme
+## Quando la tela cambia il modo
 
 La tela sceglie le schede vive con `liveCardIds` e cambia loro il modo con
 `updateLiveCards`, nel silenzio della penna della tela (la stessa

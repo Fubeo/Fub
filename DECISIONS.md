@@ -59,6 +59,15 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-10 · N6 · T13 integrato con gli scostamenti del coder: la
+  scelta delle schede vive si rifà anche dopo ogni resa e con lo zoom da
+  pulsanti e tasti; la lavagna conta nascosta se un antenato è `[hidden]` o
+  `checkVisibility()` è falso (una vista nascosta con `visibility` o fuori
+  schermo resta trattata come visibile: le schede in vista restano vive,
+  niente si perde); la sezione nuova della pagina si chiama «Quando la tela
+  cambia il modo», per non confondersi con «Schede vive e ferme» · Perché:
+  ogni cambio di camera e di documento deve finire in una scelta nuova, e
+  il caso scoperto costa solo memoria.
 - 2026-11-10 · N6 · T29 integrato seguendo «Cosa fare» e non il «Fatto
   quando»: le misure di nascita si arrotondano a interi anche per PDF e
   immagini (PDF 360×509, non 512), e il test di T9 che le agganciava è

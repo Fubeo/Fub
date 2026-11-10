@@ -1567,7 +1567,12 @@ che mai più di `MAX_LIVE_CARDS`, e che con la penna finta giù nessuna
 cambia modo fino a quando si alza.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/canvas/engine-cards.test.ts
-Stato: [ ] da fare
+Stato: [x] fatto (2026-11-10). Differenze: la lavagna nascosta è anche
+un antenato `[hidden]` o `checkVisibility()` falso, e il ritorno lo dice il
+`ResizeObserver` del viewport; la scelta si rifà anche dopo ogni resa e con
+lo zoom dai pulsanti e dai tasti; a `liveCardIds` vanno solo le schede con
+una vista; `WHEEL_SETTLE_MS = 150` esportato; `data-card-mode` cambia solo
+se `setMode` riesce. La prova e2e non chiama più `setMode`.
 
 ## T14 · Entrare e uscire
 
