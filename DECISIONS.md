@@ -59,6 +59,13 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-10 · n6 · T34 integrato; la banda di T52 segue subito
+  `canvas.drop_folder` (correzione dell'orchestratore), e l'avviso della
+  cartella esclusa uscirà a ogni deposito in una cartella esclusa (in
+  T32b, che tocca lo stesso file). · Perché: banda e deposito devono dire
+  la stessa cartella; e un avviso solo la prima volta tacerebbe proprio
+  quando la cartella cambia verso una esclusa.
+
 - 2026-11-10 · n6 · T52 integrato: la banda dice la cartella dove il
   deposito scrive davvero oggi, non quella che `canvas.drop_folder`
   prometterà con T34. · Perché: una banda che dice una cartella sbagliata

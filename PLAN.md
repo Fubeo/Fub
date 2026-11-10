@@ -2466,6 +2466,10 @@ Cosa fare:
   scheda passa al file nuovo con un commit che si annulla (Ctrl+Z torna
   al file riusato). L'azione vive quanto il suo toast; la lavagna chiusa
   la spegne.
+- La notifica della cartella esclusa dall'indice (T34) esce a ogni
+  deposito che copia in una cartella esclusa, una per gesto, non solo la
+  prima volta per vault (scelta dell'orchestratore, 2026-11-10: il caso
+  limite di T34 dice «la notifica lo dice»).
 - Un host che risponde `bad_args` a `reuse`: si deposita senza, e lo si
   ricorda per la seduta (un padrone con un reset, niente globale di modulo
   senza reset nei test), così i file dopo non pagano un giro in più.
@@ -2590,7 +2594,20 @@ rotto, la lavagna alla radice, «Cambia cartella» che apre la voce giusta,
 e che le note continuano a usare `files.attachment-folder`.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/state/canvas-intake.test.ts
-Stato: [ ] da fare
+Stato: [x] fatto (2026-11-10). Differenze: la scelta della cartella è
+`dropFolderFor` in `canvas-intake.ts`, con le porte `dropFolder()` ed
+`excludedFolders()` date da `document-controller.ts`; `changeFolder()` è
+diventato `revealSetting(key)`. La pulizia usa anche `nameFault` (lo
+specchio di T33), oltre a `sanitizeFileName` per pezzo. La notifica della
+cartella esclusa legge solo `files.excluded-folders` (il `.gitignore` il
+client non lo vede) e, come la prima notifica, esce una volta per vault:
+che avvisi a ogni deposito in una cartella esclusa lo fa T32b. Dopo
+l'unione l'orchestratore ha allineato la banda di T52 (`dropFolderOf` usa
+`dropFolderFor` e segue `canvas.drop_folder` dal vivo; il clic apre
+`canvas.drop_folder`) e accorciato `ink-and-tools.md`, arrivato a 451
+righe. Pagine aggiornate: `ink-and-tools.md`, `canvas-cards.md`,
+`canvas-input.md`, `docs/map/dove-sta-x.md`,
+`docs/product/explorer-and-folders.md`.
 
 ## T35 · La rotella
 
