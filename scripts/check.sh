@@ -215,7 +215,7 @@ if [ "$MODE" = rapido ]; then
       case " $CRATES " in *" fub-wasm-host "*) wasm_prep ;; esac
       run "test (crate toccati e chi li usa)" tests $SEL
       case " $CRATES " in *" fub-features "*)
-        run "fub-features senza feature" cargo check -p fub-features --no-default-features --all-targets ;;
+        run "fub-features senza feature" cargo test -p fub-features --no-default-features ;;
       esac
     fi
     rust_guards
