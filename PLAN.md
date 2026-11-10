@@ -2375,7 +2375,24 @@ vecchia senza `reused`; `npx vitest run src/host` passa con i campioni
 nuovi; il fake e il vero rispondono uguale sugli stessi casi.
 Prova: scripts/check.sh --rapido; cargo test -p fub-app; cargo test -p
 fub-host; cd apps/client && npx vitest run src/host
-Stato: [ ] da fare
+Stato: [x] fatto (2026-11-10). Differenze: `ResourceWrite::resource_write`
+ha un parametro in più, `reuse: ResourceReuse { Never, SameContent }`
+(`fub_host::resources`), detto sempre come `expected`; aggiornati i
+chiamanti (`fub-app`, le prove `prealpha_corpus` e `xlsx_workbooks`).
+Una chiave nuova nel catalogo dell'host
+(`host.resource.reuse_with_expected`, `settings.rs`). Con il riuso la
+revisione della ricevuta è quella dei byte arrivati (confrontati uno per
+uno). Prima di rispondere l'host ricontrolla, coi soli metadati e fuori
+dalla custodia, che il file trovato ci sia ancora con la stessa misura;
+se no, o se la domanda fallisce, scrive. Il corpo vero di
+`ipc.resourceWrite` è `writeResource` in `editors/media/transport.ts`
+(toccati anche quello e `media-invariants.test.ts`): con un host vecchio
+un `bad_args` fa rifare il deposito senza `reuse`. Le forme
+`ResourceWriteReceipt` e `ResourceWriteOptions` stanno in `contract.ts`.
+Nuovo campione `__fixtures__/resource-write-scenario.json`, registrato
+dall'host vero e rigiocato sul finto (`UPDATE_MIRROR=1 cargo test -p
+fub-app --lib resources::tests`). La sezione «Depositare un file» è corta:
+la pagina è a 548 righe su 550.
 
 ## T32 · La lavagna riusa lo stesso contenuto
 

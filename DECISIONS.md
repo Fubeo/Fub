@@ -59,6 +59,12 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-10 · n6 · T31 integrato: il riuso è un parametro esplicito del
+  trait `ResourceWrite` (non un default nascosto), e il client rifà il
+  deposito senza `reuse` quando l'host risponde `bad_args`. · Perché: la
+  forma deve dire sempre che cosa fa un deposito, come `expected`; e un
+  host di prima rifiuta il campo che non conosce: per lui è un «non so»,
+  e nel dubbio si scrive.
 - 2026-11-10 · n6 · T48 integrato. (1) I tasti valgono solo coi
   modificatori scritti, anche se Ctrl+Maiusc+A e Alt+frecce smettono di
   fare ciò che facevano. (2) «Entrare e uscire», «La rotella» e «Comandi e
