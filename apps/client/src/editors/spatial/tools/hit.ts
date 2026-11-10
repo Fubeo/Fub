@@ -572,14 +572,57 @@ export class SceneIndex {
   /// soltanto quelli che l'albero dei riquadri dà per il riquadro di `near`,
   /// fatto con gli stessi conti: sono proprio quelli che `touches` non
   /// scarterebbe subito.
+  ///
+  /// Un gruppo o un collegamento non si prende intero perché il segmento ne
+  /// tocca un figlio: la gomma scende fra i figli e prende soltanto quelli
+  /// toccati, fino in fondo («la gomma non cancella ciò che non ha toccato»).
+  /// Un livello di Inkscape, che per Fub è un `<g>` qualsiasi, con dentro
+  /// tutto il disegno non sparisce perché la gomma ha sfiorato una parola.
   along(a: Point, b: Point, tolerance: number, marked?: ReadonlyMap<string, Unit>): Unit[] {
     if (this.tree === undefined) this.tree = this.units.length < TREE_FROM ? null : new BoxTree(this.units.map((unit) => unit.bounds));
     const touched = (unit: Unit): boolean => marked?.get(unit.key) !== unit && unit.touches(a, b, tolerance);
-    if (this.tree === null) return this.units.filter(touched);
+    const deep = (unit: Unit): Unit[] => this.deepAlong(unit, a, b, tolerance, marked);
+    if (this.tree === null) return this.units.filter(touched).flatMap(deep);
     const found: Unit[] = [];
     const near = this.tree.search(Math.min(a[0], b[0]) - tolerance, Math.min(a[1], b[1]) - tolerance, Math.max(a[0], b[0]) + tolerance, Math.max(a[1], b[1]) + tolerance);
-    for (const i of near) if (touched(this.units[i]!)) found.push(this.units[i]!);
+    for (const i of near) if (touched(this.units[i]!)) found.push(...deep(this.units[i]!));
     return found;
+  }
+
+  /// Ciò che la gomma prende di `unit`, che il segmento tocca: lui intero se
+  /// non è un gruppo o un collegamento con dei figli, o se è una ripetizione
+  /// (che si prende intera); sennò i figli toccati, e così via. Il
+  /// contenitore si prende intero soltanto quando lo stesso segmento prende
+  /// interi tutti i suoi figli, nessuno era già segnato e non ha altri figli
+  /// (bloccati, nascosti, titoli, blocchi estranei): così non resta un `<g>`
+  /// o un `<a>` vuoto, niente si toglie due volte, e niente che la gomma non
+  /// tocca se ne va col contenitore. Un figlio già segnato non si riprova; un
+  /// figlio bloccato non è fra i figli (`childrenOf`), quindi non si prende
+  /// mai.
+  private deepAlong(unit: Unit, a: Point, b: Point, tolerance: number, marked?: ReadonlyMap<string, Unit>): Unit[] {
+    const node = unit.node;
+    if (node.kind !== "container") return [unit];
+    const role = node.details?.role;
+    if ((role !== "group" && role !== "link") || node.details?.repeat !== undefined) return [unit];
+    const children = this.children(unit);
+    // Soltanto figli bloccati o che non si scelgono: la gomma li lascia.
+    if (children.length === 0) return elementChildren(node).length === 0 ? [unit] : [];
+    const out: Unit[] = [];
+    let whole = children.length === elementChildren(node).length;
+    for (const child of children) {
+      if (marked?.get(child.key) === child) {
+        whole = false;
+        continue;
+      }
+      if (!child.touches(a, b, tolerance)) {
+        whole = false;
+        continue;
+      }
+      const taken = this.deepAlong(child, a, b, tolerance, marked);
+      if (taken.length !== 1 || taken[0] !== child) whole = false;
+      out.push(...taken);
+    }
+    return whole ? [unit] : out;
   }
 
   /// Gli oggetti che stanno interi dentro il lazo `points`, un poligono della

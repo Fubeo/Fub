@@ -86,6 +86,11 @@ La **Gomma** (`E`) ha due modi, nella riga delle opzioni:
   campioni e la loro penna. Un oggetto che non è un tratto a mano, o un tratto
   che non si ridisegna, si toglie intero come con l'altro modo.
 
+Dentro un gruppo o un collegamento la gomma prende soltanto ciò che tocca: un
+livello di Inkscape con tutto il disegno dentro non sparisce perché la gomma
+ha sfiorato una parola. Il gruppo se ne va soltanto quando la gomma ne tocca
+tutti i figli, e i figli bloccati restano.
+
 ## Ripennare e levigare
 
 Con dei tratti scelti, cambiare penna, misura, colore o opacità nella riga
