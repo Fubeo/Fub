@@ -15,6 +15,7 @@ import { openLifetime } from "./lifetime";
 import { THEME_ICON_LIMITS, themeIconFault } from "../rules/mirrored";
 import { mountFrameIcons } from "../shells/scrittoio/icons";
 import { ensureDrawIcons } from "../editors/spatial/icons";
+import { ensureCanvasIcons } from "../editors/canvas/chrome/icons";
 import { useRichIcons } from "../editors/rich/icons";
 import { useRibbonIcons } from "../editors/grid/ribbon/icons";
 import { registerFormatIcons } from "../panels/format-bar";
@@ -25,6 +26,7 @@ import { createColorPicker, type ColorPickerText } from "../kit/color/picker";
 const REGISTRARS = [
   "../shells/scrittoio/icons.ts",
   "../editors/spatial/icons.ts",
+  "../editors/canvas/chrome/icons.ts",
   "../editors/rich/icons.ts",
   "../editors/grid/ribbon/icons.ts",
   "../panels/format-bar.ts",
@@ -60,6 +62,7 @@ describe("i nomi che un tema può ridisegnare", () => {
   it("sono quelli dell'elenco del kit autore, con ogni registrazione montata", () => {
     mountFrameIcons(life);
     ensureDrawIcons();
+    ensureCanvasIcons();
     life.add(useRichIcons());
     life.add(useRibbonIcons());
     life.add(registerFormatIcons());

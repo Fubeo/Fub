@@ -32,6 +32,9 @@ export const EDITORS: PartAnatomy = {
     { name: "base-kanban", layer: "contenuto", states: DRAGGABLE, hooks: ["base-kanban", "base-kanban-column", "base-kanban-card"] },
     { name: "base-map", layer: "contenuto", layers: { "base-map-attribution": "cornice" }, states: [S("rest"), S("focused")], hooks: ["base-map-atlas", "base-map-attribution", "base-map-marker"] },
     { name: "canvas-surface", layers: { "canvas-viewport": "contenuto", "canvas-source": "contenuto" }, states: INTERACTIVE, hooks: ["canvas-surface", "canvas-toolbar", "canvas-intake-error", "canvas-viewport", "canvas-large-fallback", "canvas-source"] },
+    // La colonna degli strumenti della lavagna (T49): quella del kit, con le
+    // caselle `canvas-tool`; uno strumento spento in sola lettura si vede.
+    { name: "canvas-rail", states: [S("rest"), S("hover"), S("pressed"), S("focused"), S("disabled")], hooks: ["canvas-rail", "canvas-tool"] },
     // Il menu della penna della lavagna (N4 T21): il pulsante in testa alla
     // barra e il suo rialzo. Le anteprime sono inchiostro su carta.
     { name: "canvas-pen-menu", states: SELECTABLE, hooks: ["canvas-ink-pen", "canvas-ink-pen-name", "canvas-pen-popover", "canvas-pen-menu", "canvas-pen-section", "canvas-pen-heading", "canvas-pen-list", "canvas-pen-item", "canvas-pen-preview", "canvas-pen-swatches", "canvas-pen-swatch", "canvas-pen-more", "canvas-pen-note", "canvas-pen-width", "canvas-pen-width-value", "canvas-pen-width-preview"] },

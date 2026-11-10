@@ -837,6 +837,8 @@
     "canvas-viewport",
     "canvas-large-fallback",
     "canvas-source",
+    "canvas-rail",
+    "canvas-tool",
     "canvas-ink-pen",
     "canvas-ink-pen-name",
     "canvas-pen-popover",
@@ -2431,6 +2433,8 @@
     "canvas-viewport": "contenuto",
     "canvas-large-fallback": "cornice",
     "canvas-source": "contenuto",
+    "canvas-rail": "cornice",
+    "canvas-tool": "cornice",
     "canvas-ink-pen": "cornice",
     "canvas-ink-pen-name": "cornice",
     "canvas-pen-popover": "cornice",
@@ -5420,6 +5424,21 @@
         "canvas-viewport",
         "canvas-large-fallback",
         "canvas-source"
+      ],
+      "states": [
+        "rest",
+        "hover",
+        "pressed",
+        "focused",
+        "disabled"
+      ]
+    },
+    {
+      "name": "canvas-rail",
+      "part": "editors",
+      "hooks": [
+        "canvas-rail",
+        "canvas-tool"
       ],
       "states": [
         "rest",
@@ -8740,10 +8759,10 @@
   "counts": {
     "required_roles": 154,
     "optional_roles": 63,
-    "hooks": 1592,
+    "hooks": 1594,
     "state_names": 7,
-    "assigned_states": 744,
-    "components": 221,
+    "assigned_states": 749,
+    "components": 222,
     "preference_tokens": 186
   }
 }

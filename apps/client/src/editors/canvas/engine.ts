@@ -51,19 +51,22 @@ import {
   buildCanvasCommands,
   commandForKey,
   isCommandSearchKey,
+  toolOfCommand,
   type CanvasAlign,
   type CanvasColorId,
   type CanvasCommand,
   type CanvasCommandArgs,
   type CanvasCommandBehaviour,
   type CanvasNudge,
+  type CanvasToolId,
 } from "./chrome/commands";
+import { CANVAS_INK_TOOLS, CANVAS_WRITING_TOOLS, createCanvasRail, type CanvasRail } from "./chrome/rail";
 import { SHARED_RECENT_COMMANDS, openCommandSearch, type CommandSearchHandle, type RecentCommands } from "./chrome/command-search";
 import { inkFitMode } from "./ink-fit";
 import { mountInkLayer, type InkLayer, type InkLayerStroke } from "./ink-layer";
 import { cutInkStroke, fadeInkStroke, InkPathCache, paintBoard, paintCard, type DryStroke } from "./ink-paint";
 import { createPenMenu, type PenMenu } from "./pen-menu";
-import { DEFAULT_PREFERENCES, readInkMouse, readPen, saveInkMouse, savePen, watchPreferences, type WheelAction } from "./preferences";
+import { DEFAULT_PREFERENCES, currentPreferences, readInkMouse, readPen, saveInkMouse, savePen, watchPreferences, type WheelAction } from "./preferences";
 import { isTap, pinchCamera, type TouchCamera, type TouchPoint, type ZoomLimits } from "./touch";
 import {
   DEFAULT_INK_CHOICE,
@@ -437,6 +440,13 @@ interface Viewport {
 
 /** Sotto il dito fanno come col mouse: i controlli sempre, le maniglie se la lavagna si cambia. */
 const FINGER_CONTROLS = "button, a, input, textarea, select, [contenteditable]:not([contenteditable='false'])";
+/**
+ * Fino a questa larghezza della finestra, in px, la colonna degli strumenti
+ * sta sotto la lavagna; e così in un riquadro largo fino a `NARROW_PANE`,
+ * anche in una finestra larga (gli stessi valori del disegno).
+ */
+const NARROW_WIDTH = 700;
+const NARROW_PANE = 480;
 const FINGER_HANDLES = ".canvas-node-handle, [data-resize], [data-reconnect], [data-connect]";
 
 /** I limiti dello zoom: la rotella, i pulsanti e il pizzico. */
@@ -655,8 +665,14 @@ export class CanvasEngine {
   #erase: InkErase | null = null;
   /** D tenuto giù sul viewport: il mouse scrive finché non si alza. */
   #inkKeyDown = false;
-  /** L'interruttore «Scrivi col mouse» (`setInkMouse`). */
-  #inkMouse = false;
+  /**
+   * Lo strumento della colonna (T49): che cosa fa il mouse sulla lavagna. Con
+   * Penna, Evidenziatore o Gomma il mouse scrive con la penna del menu, ed è
+   * lo stesso stato dell'interruttore «Scrivi col mouse» (`setInkMouse`).
+   */
+  #tool: CanvasToolId = "select";
+  /** La colonna degli strumenti, a sinistra della lavagna o sotto (stretta). */
+  readonly #rail: CanvasRail;
   /** Quante volte l'interruttore è cambiato: lo stato ricordato arriva solo se nessuno l'ha toccato prima. */
   #inkMouseTurns = 0;
   /** Il pulsante «Scrivi col mouse»: lo stesso elemento in ogni barra. */
@@ -695,9 +711,12 @@ export class CanvasEngine {
         this.#fingerMovesCardSetting = preferences.fingerMovesCard;
       }));
     }
-    // La rotella segue «La rotella del mouse» a ogni cambio: vale dallo scatto dopo.
+    // La rotella segue «La rotella del mouse» a ogni cambio: vale dallo scatto
+    // dopo. La colonna segue quella scelta nelle Impostazioni
+    // (`canvas.toolbar`), dal vivo; la lettura arriva dopo il costruttore.
     this.#life.add(watchPreferences((preferences) => {
       this.#wheelSetting = preferences.wheel;
+      this.#rail.setToolbar(preferences.toolbar);
     }));
     this.#port = options.core ?? SHARED_CORE;
     this.#root = document.createElement("div");
@@ -717,7 +736,26 @@ export class CanvasEngine {
     this.#edgeLayer.classList.add("canvas-edges");
     this.#edgeLayer.setAttribute("aria-hidden", "true");
     this.#viewport.append(this.#edgeLayer, this.#stage);
-    this.#root.append(this.#toolbar, this.#viewport);
+    // Il corpo: la colonna degli strumenti (T49) e l'area della lavagna, come
+    // il corpo del disegno. Stretta, la colonna va sotto, in riga.
+    this.#rail = createCanvasRail({
+      tool: () => this.#tool,
+      pick: (tool) => {
+        this.#recordPending();
+        this.#pickTool(tool);
+      },
+      editable: () => !this.#readOnly && !this.#isSceneOversized(),
+      toolbar: currentPreferences().toolbar,
+      lifetime: this.#life,
+    });
+    const area = document.createElement("div");
+    area.className = "canvas-area";
+    area.append(this.#viewport);
+    const body = document.createElement("div");
+    body.className = "canvas-body";
+    body.append(this.#rail.element, area);
+    this.#root.append(this.#toolbar, body);
+    this.#viewport.dataset.tool = this.#tool;
     // I due comandi dell'inchiostro, in testa alla barra e gli stessi in ogni
     // barra: il menu della penna (il rialzo aperto non si stacca quando la
     // barra si rifà) e l'interruttore «Scrivi col mouse», che tiene il fuoco
@@ -745,15 +783,24 @@ export class CanvasEngine {
       this.#viewport.setAttribute("aria-label", t("canvas.surface"));
       this.#toolbar.setAttribute("aria-label", t("canvas.surface"));
       this.#drawToolbar();
+      this.#rail.relabel();
     });
+    // I tasti degli strumenti valgono anche col fuoco sulla colonna (dopo un
+    // clic su una casella); gli altri tasti lì sono della colonna.
+    this.#life.listen(this.#rail.element, "keydown", (event) => this.#railKeydown(event));
     const signal = this.#abort.signal;
     this.#viewport.addEventListener("pointerdown", (event) => this.#pointerDown(event), { signal });
     this.#viewport.addEventListener("pointermove", (event) => this.#pointerMove(event), { signal });
     this.#viewport.addEventListener("pointerup", (event) => this.#pointerUp(event), { signal });
     // La vista che cambia misura, o che torna in vista da un'altra linguetta
-    // (da zero alla sua misura), rifà la scelta delle schede vive.
+    // (da zero alla sua misura), rifà la scelta delle schede vive. La vista
+    // cambia misura anche quando cambia quella della superficie: allora la
+    // colonna va sotto la lavagna, o torna di lato (`#syncNarrow`).
     if (typeof ResizeObserver !== "undefined") {
-      const observer = new ResizeObserver(() => this.#refreshLive());
+      const observer = new ResizeObserver(() => {
+        this.#syncNarrow();
+        this.#refreshLive();
+      });
       observer.observe(this.#viewport);
       this.#life.add(() => observer.disconnect());
     }
@@ -1518,21 +1565,58 @@ export class CanvasEngine {
     this.#applyInkMouse();
   }
 
-  /** Il mouse scrive: D tenuto o l'interruttore acceso. */
+  /** L'interruttore «Scrivi col mouse»: lo strumento della colonna è dell'inchiostro. */
+  get #inkMouse(): boolean {
+    return CANVAS_INK_TOOLS.has(this.#tool);
+  }
+
+  /** Il mouse scrive: D tenuto, o uno strumento dell'inchiostro nella colonna. */
   get #inkMouseOn(): boolean {
     return this.#inkMouse || this.#inkKeyDown;
   }
 
   /**
    * Fa scrivere il mouse (`on`) o lo lascia alla lavagna, dal prossimo
-   * appoggio: l'interruttore «Scrivi col mouse». Un tratto già giù finisce
+   * appoggio: l'interruttore «Scrivi col mouse». Acceso, la colonna passa
+   * allo strumento della penna del menu (Penna, Evidenziatore o Gomma);
+   * spento, dall'inchiostro torna alla Selezione. Un tratto già giù finisce
    * com'è. D tenuto lo fa scrivere anche da spento.
    */
   setInkMouse(on: boolean): void {
     if (this.#destroyed) return;
     this.#inkMouseTurns += 1;
-    this.#inkMouse = on;
-    this.#inkMouseButton.setAttribute("aria-pressed", String(on));
+    if (on) this.#setTool(this.#penChoice.tool);
+    else if (this.#inkMouse) this.#setTool("select");
+  }
+
+  /** Lo strumento scelto adesso nella colonna. */
+  get tool(): CanvasToolId {
+    return this.#tool;
+  }
+
+  /**
+   * Sceglie lo strumento (il comando `canvas.tool.<id>`, la colonna, il suo
+   * tasto). In sola lettura gli strumenti che scrivono non si scelgono. Penna,
+   * Evidenziatore e Gomma chiamano la penna del menu di N4 (la scelta si
+   * ricorda come una scelta del menu) e fanno scrivere il mouse.
+   */
+  #pickTool(tool: CanvasToolId): void {
+    if (this.#destroyed) return;
+    if (CANVAS_WRITING_TOOLS.has(tool) && (this.#readOnly || this.#isSceneOversized())) return;
+    // Uno strumento scelto: l'interruttore ricordato non arriva più a cambiarlo.
+    this.#inkMouseTurns += 1;
+    if (CANVAS_INK_TOOLS.has(tool) && this.#penChoice.tool !== tool) {
+      this.#choosePen({ ...this.#penChoice, tool: tool as InkPenChoice["tool"] }, true);
+    }
+    this.#setTool(tool);
+  }
+
+  /** Lo strumento di adesso, mostrato nella colonna, sull'interruttore e sul viewport. */
+  #setTool(tool: CanvasToolId): void {
+    this.#tool = tool;
+    this.#inkMouseButton.setAttribute("aria-pressed", String(this.#inkMouse));
+    this.#viewport.dataset.tool = tool;
+    this.#rail.sync();
     this.#applyInkMouse();
   }
 
@@ -1588,9 +1672,18 @@ export class CanvasEngine {
     if (this.#destroyed) return;
     this.#penTurns += 1;
     this.#penChoice = next;
-    this.#applyInkMouse();
+    this.#followPen();
     this.#penMenu.sync();
     if (settled) (this.#options.penMemory ?? SHARED_PEN).save(next);
+  }
+
+  /**
+   * La penna cambiata: se il mouse scrive con la colonna, la colonna passa
+   * allo strumento della penna (la Gomma del menu è la Gomma della colonna).
+   */
+  #followPen(): void {
+    if (this.#inkMouse && this.#tool !== this.#penChoice.tool) this.#setTool(this.#penChoice.tool);
+    else this.#applyInkMouse();
   }
 
   /**
@@ -1603,7 +1696,7 @@ export class CanvasEngine {
     void memory.read().then((choice) => {
       if (this.#destroyed || turns !== this.#penTurns) return;
       this.#penChoice = choice;
-      this.#applyInkMouse();
+      this.#followPen();
       this.#penMenu.sync();
     }, () => undefined);
   }
@@ -2159,6 +2252,8 @@ export class CanvasEngine {
     for (const child of [...bar.children]) if (child !== pen && child !== inkMouse) child.remove();
     if (bar.firstElementChild !== pen || pen.nextElementSibling !== inkMouse) bar.prepend(pen, inkMouse);
     this.#penMenu.sync();
+    // La colonna: lo strumento e la sola lettura di adesso.
+    this.#rail.sync();
     // «Scrivi col mouse», subito dopo la penna.
     inkMouse.textContent = t("canvas.ink.mouse");
     inkMouse.title = t("canvas.ink.mouse_hint");
@@ -2617,9 +2712,9 @@ export class CanvasEngine {
   }
 
   /** Una card nuova al centro della vista, o in `at` (coordinate del mondo);
-   *  una card file vuole il suo `file`. */
-  #addNode(type: CanvasNode["type"], file?: string, at?: { x: number; y: number }): void {
-    if (!this.#doc || this.#readOnly || (type === "file" && !file)) return;
+   *  una card file vuole il suo `file`. Torna la card messa, o `null`. */
+  #addNode(type: CanvasNode["type"], file?: string, at?: { x: number; y: number }): CanvasNode | null {
+    if (!this.#doc || this.#readOnly || (type === "file" && !file)) return null;
     const rect = this.#viewport.getBoundingClientRect();
     const center = at
       ? { x: at.x + 160, y: at.y + 80 }
@@ -2641,7 +2736,9 @@ export class CanvasEngine {
       this.#selection = [node.id];
       this.#edgeSelection = [];
       this.#options.onSelectionChange();
+      return node;
     }
+    return null;
   }
 
   #duplicateSelection(): void {
@@ -2761,7 +2858,22 @@ export class CanvasEngine {
       const dy = way === "up" ? -step : way === "down" ? step : 0;
       return { disabled: withNodes, run: () => this.#nudge(dx, dy, way === "down" || way === "right") };
     }
+    const tool = toolOfCommand(id);
+    if (tool !== null) {
+      return {
+        disabled: () => (CANVAS_WRITING_TOOLS.has(tool) ? writable() ?? (this.#isSceneOversized() ? t("canvas.too_large") : null) : null),
+        run: () => this.#pickTool(tool),
+      };
+    }
     switch (id) {
+      case "canvas.escape":
+        return {
+          disabled: () => (this.#selection.length || this.#edgeSelection.length || this.#tool !== "select" ? null : t("canvas.commands.why.no_selection")),
+          run: () => {
+            if (this.#selection.length || this.#edgeSelection.length) this.#clearSelection();
+            else this.#pickTool("select");
+          },
+        };
       case "canvas.undo":
         return { disabled: () => (this.#undo.length || this.#pending ? null : t("canvas.commands.why.no_undo")), run: () => void this.undo() };
       case "canvas.redo":
@@ -3172,6 +3284,12 @@ export class CanvasEngine {
       return;
     }
     if (event.button !== 0) return;
+    // La Mano sposta la lavagna, anche sopra le schede, e non sceglie niente.
+    if (this.#tool === "hand") {
+      this.#beginPan(event.pointerId, event.clientX, event.clientY);
+      event.preventDefault();
+      return;
+    }
     const target = event.target;
     const resizeHandle = target instanceof Element ? target.closest<HTMLElement>("[data-resize]") : null;
     if (resizeHandle) {
@@ -3202,6 +3320,14 @@ export class CanvasEngine {
       return;
     }
     const nodeId = this.#nodeAt(target);
+    // Collega: da una scheda si trascina il filo fino a un'altra, come dalla
+    // maniglia di collegamento.
+    if (nodeId && this.#tool === "connect" && !this.#readOnly) {
+      this.#connect = { pointerId: event.pointerId, from: nodeId };
+      this.#viewport.setPointerCapture?.(event.pointerId);
+      event.preventDefault();
+      return;
+    }
     if (nodeId) {
       this.#selectNode(nodeId, event.shiftKey);
       this.#keepContentFocus(event, nodeId);
@@ -3214,8 +3340,24 @@ export class CanvasEngine {
       this.#selectEdge(edgeId);
       return;
     }
+    // Testo: un clic sul vuoto mette lì una scheda di testo, col campo aperto,
+    // e la colonna torna alla Selezione.
+    if (this.#tool === "text" && !this.#readOnly) {
+      event.preventDefault();
+      this.#placeText(event.clientX, event.clientY);
+      return;
+    }
     if (!event.shiftKey) this.#clearSelection();
     this.#beginPan(event.pointerId, event.clientX, event.clientY);
+  }
+
+  /** La scheda di testo dello strumento Testo, nel punto `clientX`, `clientY` della finestra. */
+  #placeText(clientX: number, clientY: number): void {
+    const placed = this.#addNode("text", undefined, this.#screenToWorld(clientX, clientY));
+    if (!placed) return;
+    this.#pickTool("select");
+    this.#render();
+    this.#beginCardEdit(placed);
   }
 
   /** La scheda `nodeId` presa col clic: `additive` (Maiuscolo) la aggiunge o la toglie. */
@@ -3661,8 +3803,39 @@ export class CanvasEngine {
 
   /** Il tasto è del comando `command`: lo prende, e il comando parte se si può. */
   #runKey(event: KeyboardEvent, command: CanvasCommand): void {
+    // Esc senza niente da togliere resta a chi sta fuori (la shell).
+    if (command.id === "canvas.escape" && command.disabled() !== null) return;
     event.preventDefault();
     if (command.disabled() === null) command.run();
+  }
+
+  /**
+   * Un tasto col fuoco sulla colonna: gli strumenti e la ricerca dei comandi
+   * valgono anche qui; frecce, Invio e Spazio restano della colonna (il kit).
+   */
+  #railKeydown(event: KeyboardEvent): void {
+    if (event.defaultPrevented || !this.#doc || this.#isSceneOversized()) return;
+    if (isCommandSearchKey(event)) {
+      event.preventDefault();
+      this.#openCommandSearch();
+      return;
+    }
+    const tools = this.commands().filter((command) => toolOfCommand(command.id) !== null);
+    const command = commandForKey(tools, event, { writing: false, onBoard: false });
+    if (command) this.#runKey(event, command);
+  }
+
+  /**
+   * Stretta (la finestra fino a 700 px, o il riquadro fino a 480): la colonna
+   * va sotto la lavagna, in riga, come nel disegno.
+   */
+  #syncNarrow(): void {
+    const width = this.#root.clientWidth;
+    if (width === 0) return;
+    const narrow = width <= NARROW_PANE || window.innerWidth <= NARROW_WIDTH;
+    if (narrow === this.#root.hasAttribute("data-narrow")) return;
+    this.#root.toggleAttribute("data-narrow", narrow);
+    this.#rail.setNarrow(narrow);
   }
 
   // --- render -------------------------------------------------------------------

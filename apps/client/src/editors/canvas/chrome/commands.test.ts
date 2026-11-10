@@ -30,6 +30,8 @@ afterEach(() => {
 /// uno deve far fallire questa prova.
 const STABLE_IDS = [
   "canvas.undo", "canvas.redo", "canvas.commands",
+  "canvas.tool.select", "canvas.tool.hand", "canvas.tool.pen", "canvas.tool.highlighter",
+  "canvas.tool.eraser", "canvas.tool.text", "canvas.tool.connect", "canvas.escape",
   "canvas.add.text", "canvas.add.file", "canvas.add.link", "canvas.add.group", "canvas.duplicate",
   "canvas.select_all", "canvas.enter", "canvas.edit", "canvas.open", "canvas.open_url",
   "canvas.nudge.left", "canvas.nudge.right", "canvas.nudge.up", "canvas.nudge.down",

@@ -8268,6 +8268,20 @@ kbd,
   background: var(--accent-wash);
   color: var(--accent);
 }
+/* La colonna degli strumenti: lo stesso fondo della testata, un filo verso
+   la lavagna (come .draw-rail). */
+.canvas-rail {
+  gap: var(--space-2);
+  padding: var(--space-1);
+  background: var(--bg-elev);
+  border-style: solid;
+  border-color: var(--border);
+}
+/* Uno strumento spento in sola lettura: si vede, non si sceglie. */
+.canvas-tool[aria-disabled="true"] {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
 /* Il pulsante della penna: il colore e il nome della penna di adesso. Il
    menu aperto tiene il velo del passaggio. */
 .canvas-ink-pen {

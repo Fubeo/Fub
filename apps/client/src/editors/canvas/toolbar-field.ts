@@ -7,47 +7,24 @@
 
 import type { SettingEntry } from "../../host/contract";
 import { catalog, t } from "../../i18n/strings";
+import { CANVAS_RAIL_TOOLS, isCanvasTool, type CanvasToolId } from "./chrome/rail";
 
-/// Le stringhe che la lavagna non ha ancora nel catalogo della shell. Penna,
-/// evidenziatore e gomma ci sono già (`canvas.ink.tool.*`) e si usano quelle.
+/// La stringa che il catalogo della shell non ha: i nomi degli strumenti sono
+/// quelli della colonna (`canvas.tool.*`).
 const IT = {
-  "canvas.toolbar.select": "Selezione",
-  "canvas.toolbar.hand": "Mano",
-  "canvas.toolbar.text": "Testo",
-  "canvas.toolbar.connect": "Collega",
   "canvas.toolbar.default": "Quelli di serie",
 } as const;
 
 const EN = {
-  "canvas.toolbar.select": "Select",
-  "canvas.toolbar.hand": "Hand",
-  "canvas.toolbar.text": "Text",
-  "canvas.toolbar.connect": "Connect",
   "canvas.toolbar.default": "The default ones",
 } as const;
 
 const strings = catalog(IT, { en: EN });
 
-/// Gli strumenti della colonna, nell'ordine del piano (T48) e come nel
-/// prototipo approvato. La colonna di serie arriva con T49: quando c'è, la lista
-/// di serie si prende da lì.
-export const CANVAS_TOOLS = ["select", "hand", "pen", "highlighter", "eraser", "text", "connect"] as const;
+/// Gli strumenti della colonna, nell'ordine della colonna di serie (T49).
+export const CANVAS_TOOLS: readonly CanvasToolId[] = CANVAS_RAIL_TOOLS;
 
-type CanvasTool = (typeof CANVAS_TOOLS)[number];
-
-const LABEL: Readonly<Record<CanvasTool, () => string>> = {
-  select: () => strings.t("canvas.toolbar.select"),
-  hand: () => strings.t("canvas.toolbar.hand"),
-  pen: () => t("canvas.ink.tool.pen"),
-  highlighter: () => t("canvas.ink.tool.highlighter"),
-  eraser: () => t("canvas.ink.tool.eraser"),
-  text: () => strings.t("canvas.toolbar.text"),
-  connect: () => strings.t("canvas.toolbar.connect"),
-};
-
-function isCanvasTool(name: string): name is CanvasTool {
-  return (CANVAS_TOOLS as readonly string[]).includes(name);
-}
+const label = (tool: CanvasToolId): string => t(`canvas.tool.${tool}`);
 
 /// Chi riceve una scelta: l'elenco intero da scrivere, lo strumento cambiato col
 /// suo nome, e se ora è scelto.
@@ -69,7 +46,7 @@ export function canvasToolbarField(entry: SettingEntry, id: string, write: Toolb
   const group = document.createElement("fieldset");
   group.className = "setting-features-group";
   for (const tool of CANVAS_TOOLS) {
-    const name = LABEL[tool]();
+    const name = label(tool);
     const item = document.createElement("label");
     item.className = "setting-feature";
     const box = document.createElement("input");
@@ -91,5 +68,5 @@ export function canvasToolbarField(entry: SettingEntry, id: string, write: Toolb
 /// che la lavagna non conosce si dice com'è.
 export function describeCanvasToolbar(value: readonly string[]): string {
   if (value.length === 0) return strings.t("canvas.toolbar.default");
-  return value.map((name) => (isCanvasTool(name) ? LABEL[name]() : name)).join(", ");
+  return value.map((name) => (isCanvasTool(name) ? label(name) : name)).join(", ");
 }

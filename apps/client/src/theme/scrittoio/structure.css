@@ -2905,6 +2905,61 @@ body {
   flex: none;
 }
 
+/* Il corpo: la colonna degli strumenti e l'area della lavagna (come
+   .draw-body). */
+.canvas-body {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+/* La colonna, a sinistra della lavagna: scorre in verticale quando la
+   finestra è bassa (come .draw-rail). */
+.canvas-rail {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border-width: 0;
+  border-inline-end-width: 1px;
+}
+/* L'area: la vista e ciò che le sta sopra (come .draw-stage). */
+.canvas-area {
+  position: relative;
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+.canvas-area > .canvas-viewport {
+  flex: 1;
+  min-width: 0;
+}
+/* Stretta (finestra fino a 700 px o riquadro fino a 480): la colonna va
+   sotto la lavagna e si stende in riga (come .draw-editor[data-narrow]). */
+.canvas-surface[data-narrow] .canvas-body {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr) auto;
+}
+.canvas-surface[data-narrow] .canvas-area {
+  grid-column: 1;
+  grid-row: 1;
+}
+.canvas-surface[data-narrow] .canvas-rail {
+  grid-column: 1 / -1;
+  grid-row: 2;
+  flex-direction: row;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  border-inline-end-width: 0;
+  border-block-start-width: 1px;
+}
+
 .canvas-viewport {
   position: relative;
   flex: 1;
@@ -2912,6 +2967,20 @@ body {
   overflow: hidden;
   touch-action: none;
   overscroll-behavior: none;
+}
+/* Gli strumenti della colonna: la Mano prende la lavagna, il Testo la
+   scrive, Collega tira un filo. Il mouse che scrive (sotto) vince. */
+.canvas-viewport[data-tool="hand"] {
+  cursor: grab;
+}
+.canvas-viewport[data-tool="hand"]:not([data-ink]):active {
+  cursor: grabbing;
+}
+.canvas-viewport[data-tool="text"] {
+  cursor: text;
+}
+.canvas-viewport[data-tool="connect"] {
+  cursor: alias;
 }
 /* Il mouse che scrive (D tenuto o «Scrivi col mouse»): la croce, come
    l'inchiostro delle note. */

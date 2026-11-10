@@ -52,7 +52,7 @@ export interface CanvasCommand {
 }
 
 /// Il gruppo di un comando, come nella tabella «Tasti».
-type Group = "create" | "selection" | "color" | "arrange" | "view" | "find" | "always";
+type Group = "tools" | "create" | "selection" | "color" | "arrange" | "view" | "find" | "always";
 
 /// I dati di un comando: tutto tranne lo stato.
 export interface CanvasCommandSpec {
@@ -67,6 +67,7 @@ export interface CanvasCommandSpec {
 
 /// Il nome del gruppo, che fa da posto.
 export const CANVAS_COMMAND_GROUPS: Readonly<Record<Group, Key>> = {
+  tools: "canvas.commands.group.tools",
   create: "canvas.commands.group.create",
   selection: "canvas.commands.group.selection",
   color: "canvas_menu.color",
@@ -88,6 +89,34 @@ export type CanvasAlign = (typeof CANVAS_ALIGN)[number];
 export const CANVAS_NUDGE = ["left", "right", "up", "down"] as const;
 export type CanvasNudge = (typeof CANVAS_NUDGE)[number];
 
+/// Gli strumenti della colonna (T49), nell'ordine della colonna di serie. Il
+/// lazo (Q) arriva con T86.
+export const CANVAS_TOOL_IDS = ["select", "hand", "pen", "highlighter", "eraser", "text", "connect"] as const;
+export type CanvasToolId = (typeof CANVAS_TOOL_IDS)[number];
+
+/// Il tasto di ogni strumento, come nella tabella «Tasti» (gli stessi del
+/// disegno). D tenuto non è uno strumento: presta la penna (N4).
+export const CANVAS_TOOL_KEYS: Readonly<Record<CanvasToolId, string>> = {
+  select: "v",
+  hand: "h",
+  pen: "p",
+  highlighter: "Shift-p",
+  eraser: "e",
+  text: "t",
+  connect: "c",
+};
+
+/// L'id del comando che sceglie lo strumento `tool`.
+export function toolCommandId(tool: CanvasToolId): string {
+  return `canvas.tool.${tool}`;
+}
+
+/// Lo strumento che il comando `id` sceglie, o `null` se non ne sceglie uno.
+export function toolOfCommand(id: string): CanvasToolId | null {
+  const tool = id.startsWith("canvas.tool.") ? id.slice("canvas.tool.".length) : "";
+  return (CANVAS_TOOL_IDS as readonly string[]).includes(tool) ? (tool as CanvasToolId) : null;
+}
+
 const ARROW: Readonly<Record<CanvasNudge, string>> = { left: "ArrowLeft", right: "ArrowRight", up: "ArrowUp", down: "ArrowDown" };
 
 /// Il catalogo: tutti i comandi della lavagna, nell'ordine in cui la ricerca
@@ -96,6 +125,11 @@ export const CANVAS_COMMANDS: readonly CanvasCommandSpec[] = [
   { id: "canvas.undo", label: "canvas.commands.undo", group: "always", keys: ["Mod-z"], context: "always" },
   { id: "canvas.redo", label: "canvas.commands.redo", group: "always", keys: ["Mod-Shift-z", "Mod-y"], context: "always" },
   { id: "canvas.commands", label: "canvas.commands.open", group: "find", keys: ["Mod-/"], context: "always" },
+  ...CANVAS_TOOL_IDS.map((tool): CanvasCommandSpec => ({
+    id: toolCommandId(tool), label: `canvas.tool.${tool}`, group: "tools", keys: [CANVAS_TOOL_KEYS[tool]], context: "always",
+  })),
+  // Esc toglie la scelta; senza scelta torna alla Selezione (la tabella «Tasti»).
+  { id: "canvas.escape", label: "canvas.commands.escape", group: "selection", keys: ["Escape"], context: "always" },
   { id: "canvas.add.text", label: "canvas.add_text", group: "create", keys: [], context: "always" },
   { id: "canvas.add.file", label: "canvas.add_file", group: "create", keys: [], context: "always" },
   { id: "canvas.add.link", label: "canvas.add_link", group: "create", keys: [], context: "always" },
