@@ -5,13 +5,12 @@
 // di `drawing.e2e.test.ts` — `main.ts` sulla scocca vera, contro l'host finto
 // — con il registro vero.
 //
-// Quali schede sono vive lo decide la tela (T13). Finché la tela non lo fa da
-// sé, la prova accende le schede montate come lo farà lei, con `setMode`
-// sulle viste che il registro vero ha montato: il registro è avvolto solo per
-// tenere le viste, i renderer restano quelli veri.
+// Quali schede sono vive lo decide la tela (T13): inquadrate, le schede in
+// vista si accendono da sole, e la prova non chiama `setMode`. Il registro è
+// avvolto solo per tenere le viste montate, i renderer restano quelli veri.
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { FakeHost } from "./host/fake";
-import type { CardMode, CardRegistry, CardRenderer, CardView } from "./editors/canvas/cards";
+import type { CardRegistry, CardRenderer, CardView } from "./editors/canvas/cards";
 
 vi.setConfig({ testTimeout: 20_000 });
 
@@ -147,8 +146,8 @@ async function waitFor(thing: string, cond: () => boolean, within = 5000): Promi
 
 const card = (id: string) => document.querySelector<HTMLElement>(`.canvas-node[data-node="${id}"]`);
 
-/// Apre la lavagna, la inquadra e accende le schede montate, come la tela
-/// farà da sé con quelle in vista (T13).
+/// Apre la lavagna e la inquadra: la tela accende da sé le schede in vista
+/// (T13).
 async function openBoard(): Promise<void> {
   const { openDocument } = await import("./panels/document");
   await openDocument("lavagna.canvas");
@@ -162,11 +161,10 @@ async function openBoard(): Promise<void> {
   expect(fit).not.toBeNull();
   fit!.click();
   await settle();
-  live();
-}
-
-function live(mode: CardMode = "live"): void {
-  for (const { view } of box.views) view.setMode(mode);
+  await waitFor(
+    "la tela accende le schede in vista",
+    () => card("nota")?.dataset.cardMode === "live" && card("logo")?.dataset.cardMode === "live",
+  );
 }
 
 afterEach(() => {

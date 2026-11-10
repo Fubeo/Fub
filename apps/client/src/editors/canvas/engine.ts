@@ -13,7 +13,20 @@ import { EraseSweep, type Spot } from "../../ink/tools/sweep";
 import { openLifetime, type Lifetime } from "../../ui/lifetime";
 import { mediaKindOfId } from "../media/media-types";
 import { anchorAt, strokeBounds } from "./anchor";
-import { cardKindOf, type CardContext, type CardKind, type CardRegistry, type CardRenderer, type CardSnapshots, type CardView } from "./cards";
+import {
+  cardKindOf,
+  liveCardIds,
+  updateLiveCards,
+  type CardContext,
+  type CardKind,
+  type CardMode,
+  type CardQuiet,
+  type CardRegistry,
+  type CardRenderer,
+  type CardSize,
+  type CardSnapshots,
+  type CardView,
+} from "./cards";
 import {
   cutInk,
   cutPath,
@@ -74,6 +87,8 @@ export const CANVAS_MIN_SIZE = 40;
 export const MAX_CANVAS_HISTORY = 100;
 /** La pausa dopo l'ultimo tasto in una scheda, prima che il suo testo si registri. */
 export const CARD_PAUSE_MS = 250;
+/** Quanto si aspetta dopo l'ultimo scatto della rotella prima di dire finito il gesto (A-7). */
+export const WHEEL_SETTLE_MS = 150;
 /** Il testo più lungo di una scheda, in byte UTF-8: oltre, il nucleo rifiuta la lavagna (`invalid`). */
 const MAX_CARD_TEXT_BYTES = 1_048_576;
 const utf8 = new TextEncoder();
@@ -326,6 +341,8 @@ interface CardEntry {
   /** La vista del renderer e la sua vita; `null` col corpo di sempre. */
   view: CardView | null;
   viewLife: Lifetime | null;
+  /** La misura che la vista conosce: quella del montaggio o dell'ultimo `resize()`. */
+  viewSize: CardSize | null;
 }
 
 interface Viewport {
@@ -417,6 +434,31 @@ export class CanvasEngine {
   #versions = 0;
   /** Le schede sulla scena, per id: sopravvivono a una resa che non le riguarda. */
   readonly #cards = new Map<string, CardEntry>();
+  /**
+   * Le viste montate, per id, come le legge `updateLiveCards`: la mappa è
+   * viva, perché il lavoro rimandato la legge quando gira. Ogni voce avvolge
+   * la vista del renderer e, se `setMode` riesce, scrive il modo sulla scheda.
+   */
+  readonly #views = new Map<string, CardView>();
+  /** Il modo che ogni vista montata ha davvero (il `current` di `updateLiveCards`). */
+  readonly #liveModes = new Map<string, CardMode>();
+  /** Il gesto della rotella finisce `WHEEL_SETTLE_MS` dopo l'ultimo scatto. */
+  #wheelTimer: ReturnType<typeof setTimeout> | undefined = undefined;
+  /**
+   * Il silenzio della penna come lo vuole `updateLiveCards`. Il lavoro che
+   * gira quando la penna si alza non cambia modi a gesto in corso (lo rifà la
+   * fine del gesto) e non lascia uscire l'errore di una vista: va in console.
+   */
+  readonly #cardQuiet: CardQuiet = {
+    defer: (key, work) => this.#quiet.defer(key, () => {
+      if (this.#destroyed || this.#gestureActive()) return;
+      try {
+        work();
+      } catch (error) {
+        console.warn("canvas: una scheda non cambia modo", error);
+      }
+    }),
+  };
   /**
    * Crescono quando cambia ciò che i corpi di sempre leggono oltre alla
    * scheda: la lingua (tutti) e le sintassi del Markdown (le schede di
@@ -542,6 +584,13 @@ export class CanvasEngine {
     this.#viewport.addEventListener("pointerdown", (event) => this.#pointerDown(event), { signal });
     this.#viewport.addEventListener("pointermove", (event) => this.#pointerMove(event), { signal });
     this.#viewport.addEventListener("pointerup", (event) => this.#pointerUp(event), { signal });
+    // La vista che cambia misura, o che torna in vista da un'altra linguetta
+    // (da zero alla sua misura), rifà la scelta delle schede vive.
+    if (typeof ResizeObserver !== "undefined") {
+      const observer = new ResizeObserver(() => this.#refreshLive());
+      observer.observe(this.#viewport);
+      this.#life.add(() => observer.disconnect());
+    }
     this.#viewport.addEventListener("pointercancel", (event) => {
       if (event.pointerType === "touch") this.#fingers.delete(event.pointerId);
       this.#cancelGestures();
@@ -790,6 +839,8 @@ export class CanvasEngine {
     this.#destroyed = true;
     clearTimeout(this.#pauseTimer);
     this.#pauseTimer = undefined;
+    clearTimeout(this.#wheelTimer);
+    this.#wheelTimer = undefined;
     this.#revival++;
     // Un tratto in corso si perde senza errori: lo strato lo annulla, e la
     // vita chiude lo scheduler e ciò che il silenzio della penna teneva.
@@ -1781,7 +1832,10 @@ export class CanvasEngine {
   #fitCamera(announce = true, nodes = this.#doc?.nodes ?? []): void {
     if (!nodes.length) {
       this.#camera = { x: 24, y: 24, zoom: 1 };
-      if (announce) this.#applyCamera();
+      if (announce) {
+        this.#applyCamera();
+        this.#refreshLive();
+      }
       return;
     }
     let minX = Infinity;
@@ -1805,7 +1859,10 @@ export class CanvasEngine {
       x: (viewW - width * zoom) / 2 - minX * zoom,
       y: (viewH - height * zoom) / 2 - minY * zoom,
     };
-    if (announce) this.#applyCamera();
+    if (announce) {
+      this.#applyCamera();
+      this.#refreshLive();
+    }
   }
 
   #zoomAt(clientX: number, clientY: number, factor: number): void {
@@ -1815,6 +1872,9 @@ export class CanvasEngine {
     this.#camera.x = clientX - rect.left - before.x * this.#camera.zoom;
     this.#camera.y = clientY - rect.top - before.y * this.#camera.zoom;
     this.#applyCamera();
+    // Dai pulsanti e dai tasti lo zoom è un gesto finito; dalla rotella il
+    // gesto è ancora in corso e `#refreshLive` aspetta che finisca.
+    this.#refreshLive();
   }
 
   // --- toolbar ----------------------------------------------------------------
@@ -2714,7 +2774,18 @@ export class CanvasEngine {
     }
   }
 
+  /**
+   * Il rilascio di un puntatore. Se chiude uno spostamento, un pizzico, un
+   * trascinamento o un ridimensionamento (A-7), le schede vive si rifanno
+   * sulla vista e sulle schede di adesso.
+   */
   #pointerUp(event: PointerEvent): void {
+    const moving = this.#gestureMoving();
+    this.#pointerRelease(event);
+    if (moving) this.#refreshLive();
+  }
+
+  #pointerRelease(event: PointerEvent): void {
     if (event.pointerType === "touch" && this.#touchUp(event)) return;
     if (this.#pan && event.pointerId === this.#pan.pointerId) {
       this.#pan = null;
@@ -2754,6 +2825,7 @@ export class CanvasEngine {
 
   #cancelGestures(): void {
     const active = this.#drag !== null || this.#resize !== null;
+    const moving = this.#gestureMoving();
     this.#drag = null;
     this.#resize = null;
     this.#pan = null;
@@ -2767,6 +2839,10 @@ export class CanvasEngine {
       this.#doc = model;
       this.#render();
     }
+    // Un gesto fermato (la penna che si posa sotto il dito, un pointercancel)
+    // è un gesto finito: la vista è quella dove si è fermato. Con la penna
+    // giù il cambio aspetta che si alzi.
+    if (moving) this.#refreshLive();
   }
 
   #commitFromSource(origin: EditorChangeOrigin): void {
@@ -2814,6 +2890,12 @@ export class CanvasEngine {
 
   #wheel(event: WheelEvent): void {
     event.preventDefault();
+    // Prima di muovere la camera: lo zoom della rotella è un gesto in corso.
+    clearTimeout(this.#wheelTimer);
+    this.#wheelTimer = setTimeout(() => {
+      this.#wheelTimer = undefined;
+      this.#refreshLive();
+    }, WHEEL_SETTLE_MS);
     if (event.ctrlKey || event.metaKey) {
       this.#zoomAt(event.clientX, event.clientY, event.deltaY < 0 ? 1.1 : 1 / 1.1);
     } else {
@@ -2983,6 +3065,73 @@ export class CanvasEngine {
     this.#placeCards(this.#doc.nodes);
     this.#paintInk();
     this.#viewport.dataset.canvasProtocol = "source";
+    this.#refreshLive();
+  }
+
+  // --- le schede vive ---------------------------------------------------------
+
+  /** Un gesto che muove la vista o le schede: il puntatore è ancora giù. */
+  #gestureMoving(): boolean {
+    return this.#drag !== null || this.#resize !== null || this.#pan !== null || this.#pinch !== null;
+  }
+
+  /** Un gesto in corso, rotella compresa: nessuna scheda cambia modo. */
+  #gestureActive(): boolean {
+    return this.#gestureMoving() || this.#wheelTimer !== undefined;
+  }
+
+  /**
+   * La lavagna si vede: è nel documento, nessun antenato è `hidden` (la
+   * linguetta di un altro riquadro) e, dove il browser lo sa dire, niente la
+   * toglie dalla pagina (`display: none`).
+   */
+  #isShown(): boolean {
+    const viewport = this.#viewport;
+    if (!viewport.isConnected || viewport.closest("[hidden]") !== null) return false;
+    return typeof viewport.checkVisibility === "function" ? viewport.checkVisibility() : true;
+  }
+
+  /**
+   * Sceglie le schede vive con la vista di adesso, in coordinate della
+   * lavagna, e lo zoom (`liveCardIds`), poi cambia il modo a chi lo deve
+   * cambiare (`updateLiveCards`, nel silenzio della penna: con la penna giù
+   * aspetta che si alzi). Non fa niente a gesto in corso (lo rifà la fine del
+   * gesto) e con la lavagna nascosta (lo rifà la vista che torna e cambia
+   * misura): le schede restano come sono.
+   */
+  #refreshLive(): void {
+    const doc = this.#doc;
+    if (this.#destroyed || !doc || this.#views.size === 0) return;
+    if (this.#gestureActive() || !this.#isShown()) return;
+    const rect = this.#viewport.getBoundingClientRect();
+    // La stessa misura di riserva di `#fitCamera`: la camera è fatta su quella.
+    const width = rect.width || 800;
+    const height = rect.height || 600;
+    const { x, y, zoom } = this.#camera;
+    const view = { x: -x / zoom, y: -y / zoom, width: width / zoom, height: height / zoom };
+    // Contano solo le schede con una vista: una specie senza renderer non
+    // toglie posto a quelle che si accendono.
+    const nodes = doc.nodes.filter((node) => this.#views.has(node.id));
+    updateLiveCards(this.#views, liveCardIds(nodes, view, zoom), this.#liveModes, this.#cardQuiet);
+  }
+
+  /**
+   * Dice alla vista di `entry` che la scheda ha cambiato misura, a gesto
+   * finito: durante un ridimensionamento aspetta il rilascio, e il primo
+   * disegno dopo lo dice una volta sola.
+   */
+  #resizeView(entry: CardEntry): void {
+    const view = entry.view;
+    const known = entry.viewSize;
+    if (!view || !known || this.#resize !== null) return;
+    const { width, height } = entry.node;
+    if (known.width === width && known.height === height) return;
+    entry.viewSize = { width, height };
+    try {
+      view.resize?.();
+    } catch (error) {
+      console.warn(`canvas: la scheda ${entry.id} non cambia misura`, error);
+    }
   }
 
   #drawEdges(): void {
@@ -3110,6 +3259,7 @@ export class CanvasEngine {
       }
       index++;
       this.#refreshCard(entry, node, entry !== kept);
+      this.#resizeView(entry);
     }
   }
 
@@ -3138,7 +3288,7 @@ export class CanvasEngine {
     el.append(header, body);
     const entry: CardEntry = {
       id, article: el, title, connect, node, type: node.type, body,
-      bodyKey: null, resize: null, teardown: null, view: null, viewLife: null,
+      bodyKey: null, resize: null, teardown: null, view: null, viewLife: null, viewSize: null,
     };
     el.addEventListener("focus", () => {
       if (!this.#selection.includes(id)) {
@@ -3250,8 +3400,20 @@ export class CanvasEngine {
     }
     entry.view = view;
     entry.viewLife = life;
-    entry.article.dataset.cardKind = kind;
-    entry.article.dataset.cardMode = "snapshot";
+    entry.viewSize = { width: node.width, height: node.height };
+    const article = entry.article;
+    article.dataset.cardKind = kind;
+    article.dataset.cardMode = "snapshot";
+    // Nasce ferma: la tela non le chiede «ferma» di nuovo.
+    this.#liveModes.set(entry.id, "snapshot");
+    this.#views.set(entry.id, {
+      setMode: (mode) => {
+        view.setMode(mode);
+        article.dataset.cardMode = mode;
+      },
+      // Questa voce serve solo al cambio di modo: la vista la smonta `#releaseBody`.
+      destroy: () => {},
+    });
   }
 
   /** Smonta ciò che tiene vivo il corpo di `entry` (Markdown, vista) e lo segna da rifare. */
@@ -3262,7 +3424,12 @@ export class CanvasEngine {
     entry.teardown = null;
     entry.view = null;
     entry.viewLife = null;
+    entry.viewSize = null;
     entry.bodyKey = null;
+    if (view) {
+      this.#views.delete(entry.id);
+      this.#liveModes.delete(entry.id);
+    }
     delete entry.article.dataset.cardKind;
     delete entry.article.dataset.cardMode;
     delete entry.article.dataset.cardMissing;

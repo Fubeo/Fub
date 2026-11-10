@@ -1,11 +1,14 @@
 // @vitest-environment happy-dom
 // La tela tiene le schede (N6 T11): la resa è a chiavi, e una vista montata
-// sopravvive a una modifica che non riguarda la sua scheda.
+// sopravvive a una modifica che non riguarda la sua scheda. Vivono solo le
+// schede utili (N6 T13): quelle in vista, a gesto finito, con la penna su.
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import type { SurfaceMenuItem } from "../core/editor-menu";
-import { CARD_PAUSE_MS, CanvasEngine, type CanvasCards, type CanvasChange, type CanvasEngineOptions } from "./engine";
+import { CARD_PAUSE_MS, CanvasEngine, WHEEL_SETTLE_MS, type CanvasCards, type CanvasChange, type CanvasEngineOptions } from "./engine";
 import {
   createCardRegistry,
+  LIVE_ZOOM_MIN,
+  MAX_LIVE_CARDS,
   type CardContext,
   type CardKind,
   type CardMode,
@@ -152,7 +155,8 @@ describe("la tela tiene le schede", () => {
     expect(card(host, "n").dataset.cardKind).toBe("note");
     expect(card(host, "i").dataset.cardKind).toBe("image");
     expect(card(host, "w").dataset.cardKind).toBe("web");
-    expect(card(host, "n").dataset.cardMode).toBe("snapshot");
+    // Montata ferma, poi accesa dalla tela perché è in vista (T13).
+    expect(card(host, "n").dataset.cardMode).toBe("live");
     // Il testo si disegna come prima: nessuna specie, nessuna vista.
     expect(card(host, "t").dataset.cardKind).toBeUndefined();
     expect(mounts[0]!.host).toBe(bodyOf(host, "n"));
@@ -407,6 +411,279 @@ describe("la tela tiene le schede", () => {
     engine.setSyntaxForms([]);
     expect(bodyOf(host, "t")).not.toBe(textBody);
     expect(bodyOf(host, "i")).toBe(fileBody);
+    engine.destroy();
+  });
+});
+
+// --- Vive solo le schede utili (N6 T13) -----------------------------------------
+
+/** Un renderer che scrive ogni `setMode` e ogni `resize` delle sue viste. */
+function modeRenderer() {
+  const log: [string, CardMode][] = [];
+  const resized: string[] = [];
+  const renderer: CardRenderer = {
+    kinds: ["image"],
+    mount: (node) => ({
+      setMode: (mode) => {
+        log.push([node.id, mode]);
+      },
+      resize: () => {
+        resized.push(node.id);
+      },
+      destroy: () => {},
+    }),
+  };
+  return { renderer, log, resized };
+}
+
+/** Le schede che la tela dice vive (`data-card-mode`), in ordine. */
+function liveOf(host: HTMLElement): string[] {
+  return [...host.querySelectorAll<HTMLElement>('.canvas-node[data-card-mode="live"]')]
+    .map((el) => el.dataset.node!).sort();
+}
+
+function image(id: string, x: number, y: number, width = 200, height = 100): Record<string, unknown> {
+  return { id, type: "file", x, y, width, height, file: `img/${id}.png` };
+}
+
+/**
+ * Due immagini che la tela inquadra a zoom 1 in una vista di 800 × 600 (la
+ * misura di riserva della tela, perché happy-dom non ha layout): la vista,
+ * in coordinate della lavagna, va da (-100, -250) a (700, 350).
+ */
+const TWO = [image("a", 0, 0), image("b", 400, 0)];
+
+function zoomOf(host: HTMLElement): number {
+  const transform = host.querySelector<HTMLElement>(".canvas-stage")!.style.transform;
+  return Number(/scale\(([\d.e+-]+)\)/.exec(transform)![1]);
+}
+
+/** Il tasto centrale giù sul viewport, una mossa: la vista si sposta di `dx`, `dy`. Dà il rilascio. */
+function panStart(viewport: HTMLElement, dx: number, dy: number, pointerId = 9): () => void {
+  viewport.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, button: 1, pointerId, clientX: 400, clientY: 300 }));
+  viewport.dispatchEvent(new PointerEvent("pointermove", { bubbles: true, pointerId, clientX: 400 + dx, clientY: 300 + dy }));
+  return () => {
+    viewport.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, pointerId, clientX: 400 + dx, clientY: 300 + dy }));
+  };
+}
+
+/** Uno scatto di Ctrl+rotella sul centro della vista. */
+function wheelTick(viewport: HTMLElement, zoomIn: boolean): void {
+  const event = new WheelEvent("wheel", { bubbles: true, cancelable: true, deltaY: zoomIn ? -100 : 100 });
+  // Il `WheelEvent` di happy-dom non prende i tasti né il punto dall'init.
+  Object.defineProperties(event, { ctrlKey: { value: true }, clientX: { value: 400 }, clientY: { value: 300 } });
+  viewport.dispatchEvent(event);
+}
+
+/** Un evento della penna (o, con `pointerType`, del dito). */
+function penEvent(type: string, init: PointerEventInit): PointerEvent {
+  return new PointerEvent(type, {
+    bubbles: true, cancelable: true, composed: true, altitudeAngle: Math.PI / 2, azimuthAngle: 0,
+    pointerId: 7, pointerType: "pen", isPrimary: true, ...init,
+  });
+}
+
+describe("vivono solo le schede utili", () => {
+  it("dopo lo spostamento le schede in vista sono vive e le altre ferme; durante, nessuna cambia", () => {
+    const { renderer, log } = modeRenderer();
+    const { engine, host, viewport } = mounted(boardSource(TWO), { cards: cardsOf(renderer) });
+    // Inquadrate, tutte e due in vista: vive, e chiamate una volta.
+    expect(liveOf(host)).toEqual(["a", "b"]);
+    expect(log).toEqual([["a", "live"], ["b", "live"]]);
+    log.length = 0;
+    // A sinistra di 800 px: la vista va da 700 a 1500, allargata da 300 a
+    // 1900. «a» (0–200) ne esce, «b» (400–600) resta.
+    const up = panStart(viewport, -800, 0);
+    expect(log).toEqual([]);
+    expect(liveOf(host)).toEqual(["a", "b"]);
+    up();
+    expect(log).toEqual([["a", "snapshot"]]);
+    expect(liveOf(host)).toEqual(["b"]);
+    expect(card(host, "a").dataset.cardMode).toBe("snapshot");
+    // Si torna: «a» si riaccende, «b» non riceve niente.
+    panStart(viewport, 800, 0)();
+    expect(log).toEqual([["a", "snapshot"], ["a", "live"]]);
+    engine.destroy();
+  });
+
+  it("una scheda trascinata da fuori a dentro la vista si accende a fine gesto", () => {
+    const { renderer, log } = modeRenderer();
+    const { engine, host, viewport } = mounted(boardSource(TWO), { cards: cardsOf(renderer) });
+    // Una scheda arrivata da fuori, lontana: nasce ferma e resta ferma.
+    engine.syncDoc(boardSource([...TWO, image("c", 5000, 0)]));
+    expect(liveOf(host)).toEqual(["a", "b"]);
+    log.length = 0;
+    const handle = card(host, "c").querySelector<HTMLElement>(".canvas-node-handle")!;
+    handle.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, button: 0, pointerId: 3, clientX: 10, clientY: 10 }));
+    viewport.dispatchEvent(new PointerEvent("pointermove", { bubbles: true, pointerId: 3, clientX: 10 - 4800, clientY: 10 + 200 }));
+    expect(log).toEqual([]);
+    viewport.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, pointerId: 3, clientX: 10 - 4800, clientY: 10 + 200 }));
+    expect(readNodes(engine.getDoc()).find((node) => node.id === "c")!.x).toBe(200);
+    expect(log).toEqual([["c", "live"]]);
+    expect(liveOf(host)).toEqual(["a", "b", "c"]);
+    engine.destroy();
+  });
+
+  it("sotto 0,35 nessuna è viva; lo zoom che attraversa 0,35 in un gesto solo non cambia niente", () => {
+    vi.useFakeTimers();
+    try {
+      const { renderer, log } = modeRenderer();
+      const { engine, host, viewport } = mounted(boardSource(TWO), { cards: cardsOf(renderer) });
+      // La misura vera del viewport: i tasti ingrandiscono attorno al suo centro.
+      vi.spyOn(viewport, "getBoundingClientRect").mockReturnValue(new DOMRect(0, 0, 800, 600));
+      log.length = 0;
+      // Dodici scatti indietro e dodici avanti, senza fermarsi: lo zoom passa
+      // sotto 0,35 e torna, e nessuna scheda cambia modo.
+      for (const zoomIn of [...Array<boolean>(12).fill(false), ...Array<boolean>(12).fill(true)]) {
+        wheelTick(viewport, zoomIn);
+        vi.advanceTimersByTime(WHEEL_SETTLE_MS - 50);
+      }
+      expect(zoomOf(host)).toBeCloseTo(1);
+      vi.advanceTimersByTime(WHEEL_SETTLE_MS);
+      expect(log).toEqual([]);
+      // Dodici scatti indietro e poi fermi: sotto 0,35, ma solo a gesto finito.
+      for (let tick = 0; tick < 12; tick++) {
+        wheelTick(viewport, false);
+        vi.advanceTimersByTime(WHEEL_SETTLE_MS - 50);
+      }
+      expect(zoomOf(host)).toBeLessThan(LIVE_ZOOM_MIN);
+      expect(log).toEqual([]);
+      expect(liveOf(host)).toEqual(["a", "b"]);
+      vi.advanceTimersByTime(WHEEL_SETTLE_MS);
+      expect(liveOf(host)).toEqual([]);
+      expect(log).toEqual([["a", "snapshot"], ["b", "snapshot"]]);
+      // Dai tasti lo zoom è un gesto finito: risale e si riaccendono subito.
+      log.length = 0;
+      for (let step = 0; step < 6; step++) {
+        viewport.dispatchEvent(new KeyboardEvent("keydown", { key: "+", ctrlKey: true, bubbles: true, cancelable: true }));
+      }
+      expect(zoomOf(host)).toBeGreaterThan(LIVE_ZOOM_MIN);
+      expect(liveOf(host)).toEqual(["a", "b"]);
+      engine.destroy();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("300 schede in vista a zoom 0,4: ne vivono 40, e mai più di MAX_LIVE_CARDS", () => {
+    vi.useFakeTimers();
+    try {
+      const { renderer, log } = modeRenderer();
+      // 20 × 15 schede di 40 × 40 ogni 50: la tela le inquadra a zoom 0,66.
+      const many = Array.from({ length: 300 }, (_, index) => image(`c${index}`, (index % 20) * 50, Math.floor(index / 20) * 50, 40, 40));
+      const { engine, host, viewport } = mounted(boardSource(many), { cards: cardsOf(renderer) });
+      let most = 0;
+      const live = new Set<string>();
+      const replay = () => {
+        for (const [id, mode] of log.splice(0)) {
+          if (mode === "live") live.add(id);
+          else live.delete(id);
+          most = Math.max(most, live.size);
+        }
+      };
+      replay();
+      expect(live.size).toBe(MAX_LIVE_CARDS);
+      for (let tick = 0; tick < 5; tick++) wheelTick(viewport, false);
+      vi.advanceTimersByTime(WHEEL_SETTLE_MS);
+      expect(zoomOf(host)).toBeGreaterThanOrEqual(LIVE_ZOOM_MIN);
+      expect(zoomOf(host)).toBeLessThan(0.42);
+      replay();
+      expect(liveOf(host)).toHaveLength(MAX_LIVE_CARDS);
+      expect(live.size).toBe(MAX_LIVE_CARDS);
+      expect(most).toBe(MAX_LIVE_CARDS);
+      engine.destroy();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("con la penna giù nessuna scheda cambia modo fino a quando si alza", async () => {
+    const { renderer, log } = modeRenderer();
+    const { engine, host, viewport } = mounted(boardSource(TWO), { cards: cardsOf(renderer) });
+    log.length = 0;
+    viewport.dispatchEvent(penEvent("pointerdown", { clientX: 300, clientY: 500, button: 0, buttons: 1, pressure: 0.5 }));
+    panStart(viewport, -800, 0)();
+    await new Promise((resolve) => setTimeout(resolve, 40));
+    expect(log).toEqual([]);
+    expect(liveOf(host)).toEqual(["a", "b"]);
+    document.dispatchEvent(penEvent("pointerup", { clientX: 300, clientY: 500, button: 0, buttons: 0, pressure: 0 }));
+    await vi.waitFor(() => expect(log).toEqual([["a", "snapshot"]]));
+    expect(liveOf(host)).toEqual(["b"]);
+    engine.destroy();
+  });
+
+  it("la penna che si posa durante uno spostamento col dito: il cambio aspetta che si alzi", async () => {
+    const { renderer, log } = modeRenderer();
+    const { engine, host, viewport } = mounted(boardSource(TWO), { cards: cardsOf(renderer) });
+    log.length = 0;
+    const touch = { pointerId: 1, pointerType: "touch", isPrimary: false, width: 10, height: 10 } as const;
+    viewport.dispatchEvent(penEvent("pointerdown", { ...touch, clientX: 400, clientY: 300, button: 0, buttons: 1, pressure: 0.5 }));
+    viewport.dispatchEvent(penEvent("pointermove", { ...touch, clientX: -400, clientY: 300, button: -1, buttons: 1, pressure: 0.5 }));
+    // La penna si posa lontano dal dito: il dito si ferma dov'è arrivato.
+    viewport.dispatchEvent(penEvent("pointerdown", { clientX: 100, clientY: 550, button: 0, buttons: 1, pressure: 0.5 }));
+    viewport.dispatchEvent(penEvent("pointermove", { ...touch, clientX: -380, clientY: 300, button: -1, buttons: 1, pressure: 0.5 }));
+    viewport.dispatchEvent(penEvent("pointerup", { ...touch, clientX: -380, clientY: 300, button: 0, buttons: 0, pressure: 0 }));
+    await new Promise((resolve) => setTimeout(resolve, 40));
+    expect(log).toEqual([]);
+    document.dispatchEvent(penEvent("pointerup", { clientX: 100, clientY: 550, button: 0, buttons: 0, pressure: 0 }));
+    await vi.waitFor(() => expect(log).toEqual([["a", "snapshot"]]));
+    expect(liveOf(host)).toEqual(["b"]);
+    engine.destroy();
+  });
+
+  it("la lavagna nascosta non cambia niente finché non torna in vista", () => {
+    const observers: (() => void)[] = [];
+    vi.stubGlobal("ResizeObserver", class {
+      readonly #callback: () => void;
+      constructor(callback: () => void) {
+        this.#callback = callback;
+      }
+      observe(): void {
+        observers.push(this.#callback);
+      }
+      disconnect(): void {
+        observers.splice(observers.indexOf(this.#callback), 1);
+      }
+    });
+    try {
+      const { renderer, log } = modeRenderer();
+      const { engine, host, viewport } = mounted(boardSource(TWO), { cards: cardsOf(renderer) });
+      expect(observers).toHaveLength(1);
+      log.length = 0;
+      // Un'altra linguetta: il riquadro della lavagna è nascosto.
+      host.hidden = true;
+      panStart(viewport, -800, 0)();
+      engine.syncDoc(boardSource([...TWO, image("c", 600, 100)]));
+      for (const notify of [...observers]) notify();
+      expect(log).toEqual([]);
+      expect(liveOf(host)).toEqual(["a", "b"]);
+      // Torna in vista: la vista cambia misura e la scelta si rifà.
+      host.hidden = false;
+      for (const notify of [...observers]) notify();
+      expect(log).toEqual([["a", "snapshot"], ["c", "live"]]);
+      expect(liveOf(host)).toEqual(["b", "c"]);
+      engine.destroy();
+      expect(observers).toHaveLength(0);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("resize() arriva alla scheda ridimensionata a fine gesto, una volta", () => {
+    const { renderer, resized } = modeRenderer();
+    const { engine, host, viewport } = mounted(boardSource(TWO), { cards: cardsOf(renderer) });
+    const grip = card(host, "a").querySelector<HTMLElement>("[data-resize]")!;
+    grip.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, button: 0, pointerId: 4, clientX: 10, clientY: 10 }));
+    viewport.dispatchEvent(new PointerEvent("pointermove", { bubbles: true, pointerId: 4, clientX: 30, clientY: 30 }));
+    viewport.dispatchEvent(new PointerEvent("pointermove", { bubbles: true, pointerId: 4, clientX: 50, clientY: 50 }));
+    expect(resized).toEqual([]);
+    viewport.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, pointerId: 4, clientX: 50, clientY: 50 }));
+    expect(readNodes(engine.getDoc()).find((node) => node.id === "a")!.width).toBe(240);
+    expect(resized).toEqual(["a"]);
+    // Spostare non è ridimensionare; una misura arrivata da fuori sì.
+    drag(viewport, card(host, "b").querySelector<HTMLElement>(".canvas-node-handle")!, 40, 0, 5);
+    syncNode(engine, "b", { height: 200 });
+    expect(resized).toEqual(["a", "b"]);
     engine.destroy();
   });
 });

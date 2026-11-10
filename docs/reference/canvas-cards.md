@@ -228,7 +228,7 @@ il campo si apre, e il corpo si rifà alla prima resa dopo che si chiude.
 
 Per una scheda con una specie e un renderer la tela chiama
 `mount(node, corpo, "snapshot", context)`: nasce ferma, e quali schede sono
-vive lo decide la tela dopo. Il `context` porta:
+vive lo decide la tela subito dopo (vedi «Vive e ferme»). Il `context` porta:
 
 - `path`, il file senza `#…`, e `subpath`, da `subpath` o dal `#` nel
   percorso; una scheda di link ha `path` vuoto e l'indirizzo in `node.url`;
@@ -250,6 +250,64 @@ della lavagna troppo grande e nessuna vista; tornati sotto, le schede
 rinascono. L'inchiostro sulle schede si ridisegna dopo ogni resa sullo
 stesso elemento, e un tratto scritto aggiorna solo il suo livello, senza
 resa.
+
+## Vive e ferme
+
+La tela sceglie le schede vive con `liveCardIds` e cambia loro il modo con
+`updateLiveCards`, nel silenzio della penna della tela (la stessa
+`PenQuiet` dell'inchiostro). La vista passata a `liveCardIds` è il viewport
+in coordinate della lavagna (la camera divisa per lo zoom), con lo zoom
+della camera; contano solo le schede con una vista montata, così una specie
+senza renderer non toglie posto alle altre.
+
+La scelta si rifà:
+
+- **a fine gesto**: al rilascio del puntatore dopo uno spostamento della
+  lavagna, un pizzico, un trascinamento o un ridimensionamento di schede, e
+  `WHEEL_SETTLE_MS` (150 ms) dopo l'ultimo scatto della rotella; anche un
+  gesto fermato a metà (un `pointercancel`, la penna che si posa sotto il
+  dito) è un gesto finito;
+- **dopo ogni resa**: un documento nuovo o cambiato da fuori, un annulla,
+  una scheda aggiunta o tolta;
+- **quando la vista cambia misura** (un `ResizeObserver` sul viewport, che
+  si stacca con la tela), e lo zoom dei pulsanti e dei tasti, che è un gesto
+  già finito.
+
+Durante un gesto nessuna scheda cambia modo, nemmeno se lo zoom passa sotto
+0,35 e torna sopra nello stesso gesto: conta solo dove il gesto finisce.
+Con la penna giù il cambio aspetta che si alzi; il lavoro che arriva quando
+la penna si alza non fa niente se intanto è cominciato un altro gesto (la
+sua fine rifà la scelta). Con la lavagna nascosta (dentro un elemento
+`hidden`, come la linguetta di un altro riquadro, o fuori dalla pagina) le
+schede restano come sono; quando torna in vista la vista cambia misura e la
+scelta si rifà.
+
+Il percorso di uno spostamento col tasto centrale:
+
+```mermaid
+sequenceDiagram
+  participant P as puntatore
+  participant T as tela
+  participant Q as PenQuiet
+  participant V as viste
+  P->>T: pointerdown (comincia lo spostamento)
+  P->>T: pointermove… (solo la camera, nessun modo cambia)
+  P->>T: pointerup
+  T->>T: liveCardIds(schede con una vista, vista, zoom)
+  T->>Q: updateLiveCards → defer("cards")
+  alt penna su
+    Q->>V: setMode solo dove il modo cambia
+  else penna giù
+    Q-->>Q: aspetta che la penna si alzi
+    Q->>V: setMode, se nessun gesto è cominciato
+  end
+```
+
+Il modo riuscito si scrive sulla scheda in `data-card-mode`; un `setMode`
+che lancia lascia il modo di prima e un avviso in console. A fine gesto la
+tela chiama anche `resize()` sulle viste la cui scheda ha cambiato misura
+(un ridimensionamento, un annulla, una modifica da fuori), una volta per
+misura nuova; durante un ridimensionamento non lo chiama.
 
 ## Le porte della shell
 
