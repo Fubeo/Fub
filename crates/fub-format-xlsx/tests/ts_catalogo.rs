@@ -7,7 +7,7 @@
 //! `UPDATE_MIRROR=1`, e il test fallisce se è stantio.
 //!
 //! Le schede e i gruppi che non sono soltanto del menu devono essere quelli
-//! della barra dei fogli (`apps/client/src/editors/grid/ribbon/tabs.ts`), e
+//! della barra dei fogli (`apps/client/src/editors/grid/ribbon/tabs/`), e
 //! un comando che la barra mostra ha il posto dove la barra lo mostra per
 //! primo.
 
@@ -133,13 +133,53 @@ fn un_catalogo_vecchio_si_vede() {
     assert_eq!(nuovo, ordine, "il file non dipende dall'ordine del motore");
 }
 
+/// I file delle schede, nell'ordine della barra (`RIBBON_TABS` in `tabs.ts`).
+const FILE_DELLA_BARRA: &[&str] = &[
+    "home",
+    "insert",
+    "page-formulas",
+    "data-review-view",
+    "contextual",
+];
+
+/// Le schede della barra, una dopo l'altra come in `RIBBON_TABS`: stanno in
+/// `tabs/`, e `tabs.ts` le mette in fila. Un file nuovo in `tabs/` che manca
+/// da `FILE_DELLA_BARRA` ferma il test invece di restare fuori dal controllo.
 fn barra() -> String {
-    let path = client("editors/grid/ribbon/tabs.ts");
-    std::fs::read_to_string(&path).unwrap_or_else(|error| panic!("{}: {error}", path.display()))
+    let cartella = client("editors/grid/ribbon/tabs");
+    let mut presenti: Vec<String> = std::fs::read_dir(&cartella)
+        .unwrap_or_else(|error| panic!("{}: {error}", cartella.display()))
+        .filter_map(|voce| {
+            let nome = voce.ok()?.file_name().into_string().ok()?;
+            nome.strip_suffix(".ts").map(str::to_owned)
+        })
+        .filter(|nome| nome != "base")
+        .collect();
+    presenti.sort();
+    let mut attesi: Vec<String> = FILE_DELLA_BARRA
+        .iter()
+        .map(|nome| (*nome).to_owned())
+        .collect();
+    attesi.sort();
+    assert_eq!(
+        presenti,
+        attesi,
+        "i file delle schede in {}",
+        cartella.display()
+    );
+    FILE_DELLA_BARRA
+        .iter()
+        .map(|nome| {
+            let path = cartella.join(format!("{nome}.ts"));
+            std::fs::read_to_string(&path)
+                .unwrap_or_else(|error| panic!("{}: {error}", path.display()))
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 /// Il primo posto dove la barra mostra ogni comando che nomina per esteso:
-/// in `tabs.ts` una scheda è un `id: "…"` senza punto rientrato di due
+/// nei file di `tabs/` una scheda è un `id: "…"` senza punto rientrato di due
 /// spazi, un gruppo uno rientrato di sei, un comando un id con il punto
 /// dentro l'oggetto della scheda; le schede sono scritte nell'ordine della
 /// barra. I comandi che la barra nomina con una costante o con un aiuto
@@ -243,6 +283,6 @@ fn un_comando_della_barra_ha_il_posto_dove_la_barra_lo_mostra_per_primo() {
     );
     assert!(
         controllati > 100,
-        "la lettura di tabs.ts ha trovato solo {controllati} comandi"
+        "la lettura di tabs/ ha trovato solo {controllati} comandi"
     );
 }
