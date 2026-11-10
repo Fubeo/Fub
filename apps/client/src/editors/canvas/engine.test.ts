@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
-import type { SurfaceMenuItem } from "../core/editor-menu";
+import { MENU_RULE, type SurfaceMenuItem } from "../core/editor-menu";
 import { renderMarkdown } from "../text/profiles/markdown/render";
 import { mountMarkdown } from "../text/profiles/markdown/mount";
 import { CARD_PAUSE_MS, CanvasEngine, MAX_CANVAS_HISTORY, MEASURE_IMAGE_TIMEOUT_MS, type CanvasChange, type CanvasCorePort, type CanvasDepositCards, type CanvasEngineOptions } from "./engine";
@@ -441,20 +441,93 @@ describe("CanvasEngine", () => {
     const { engine, host, changes } = mounted();
     const viewport = host.querySelector<HTMLElement>(".canvas-viewport")!;
     viewport.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true }));
-    const color = host.querySelector<HTMLSelectElement>('select[data-canvas-field="node-color"]')!;
-    color.value = "2";
-    color.dispatchEvent(new Event("change", { bubbles: true }));
+    // Il colore passa dai comandi del menu (T47): la barra di N4 non ha più
+    // il suo `select`.
+    expect(host.querySelector('[data-canvas-field="node-color"]')).toBeNull();
+    const run = (id: string) => engine.commands().find((command) => command.id === id)!.run();
+    run("canvas.color.2");
     expect(readCanvas(engine.getDoc()).nodes[0].color).toBe("2");
-    const custom = host.querySelector<HTMLSelectElement>('select[data-canvas-field="node-color"]')!;
-    custom.value = "custom";
-    custom.dispatchEvent(new Event("change", { bubbles: true }));
-    const hex = host.querySelector<HTMLInputElement>('input[data-canvas-field="node-color-hex"]')!;
-    hex.value = "#aabbcc";
-    hex.dispatchEvent(new Event("change", { bubbles: true }));
+    run("canvas.color.other");
+    const input = document.querySelector<HTMLInputElement>(".kit-color-popover .kit-color-input")!;
+    input.value = "#AABBCC";
+    input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+    // Si scrive minuscolo.
     expect(readCanvas(engine.getDoc()).nodes[0].color).toBe("#aabbcc");
     expect(changes).toHaveLength(2);
     expect(engine.undo()).toBe(true);
     expect(readCanvas(engine.getDoc()).nodes[0].color).toBe("2");
+    engine.destroy();
+    // Il selettore si chiude con la lavagna.
+    expect(document.querySelector(".kit-color-popover")).toBeNull();
+  });
+
+  it("i colori sul nodo e sul filo vanno alla pelle: la chiave e il colore libero (T47)", () => {
+    // Un colore che non è un colore («7», «rosso») non arriva qui: il nucleo
+    // non apre la lavagna (`CanvasColor`), e `colors.test.ts` prova che la
+    // tela non lo disegnerebbe.
+    const source = JSON.stringify({
+      nodes: [
+        { id: "a", type: "text", x: 0, y: 0, width: 100, height: 80, text: "a", color: "3" },
+        { id: "b", type: "text", x: 200, y: 0, width: 100, height: 80, text: "b", color: "#0064B0" },
+        { id: "c", type: "text", x: 400, y: 0, width: 100, height: 80, text: "c", color: "#ABC" },
+        { id: "e", type: "text", x: 800, y: 0, width: 100, height: 80, text: "e" },
+      ],
+      edges: [
+        { id: "e1", fromNode: "a", toNode: "b", color: "5" },
+        { id: "e2", fromNode: "b", toNode: "c", color: "#7b3fa0" },
+      ],
+    });
+    const { engine, host, changes } = mounted(source);
+    const node = (id: string) => host.querySelector<HTMLElement>(`.canvas-node[data-node="${id}"]`)!;
+    expect(node("a").dataset.canvasColor).toBe("3");
+    expect(node("b").dataset.canvasColor).toBe("blue");
+    expect(node("c").dataset.canvasColor).toBe("custom");
+    expect(node("c").style.getPropertyValue("--canvas-color")).toBe("#ABC");
+    expect(node("e").dataset.canvasColor).toBeUndefined();
+    // Nessun fondo in linea: la carta la dà la pelle.
+    for (const id of ["a", "b", "c", "e"]) expect(node(id).style.background).toBe("");
+    // Il nome del colore arriva a chi ascolta.
+    expect(node("a").getAttribute("aria-label")).toBe(`text a, ${t("canvas.options.color_value", { name: "Giallo" })}`);
+    expect(node("b").getAttribute("aria-label")).toBe(`text b, ${t("canvas.options.color_value", { name: "Blu delle note" })}`);
+    expect(node("c").getAttribute("aria-label")).toBe(`text c, ${t("canvas.options.color_value", { name: "#abc" })}`);
+    expect(node("e").getAttribute("aria-label")).toBe("text e");
+    const edge = (id: string) => host.querySelector<SVGPathElement>(`.canvas-edge-line[data-edge="${id}"]`)!.parentElement!;
+    expect(edge("e1").dataset.canvasColor).toBe("5");
+    expect(edge("e2").dataset.canvasColor).toBe("custom");
+    expect((edge("e2") as unknown as SVGElement).style.getPropertyValue("--canvas-color")).toBe("#7b3fa0");
+    expect(host.querySelector(".canvas-edge-line")!.hasAttribute("stroke")).toBe(false);
+    // Aprire e guardare non scrive niente.
+    expect(changes).toHaveLength(0);
+    // Togliere il colore toglie la chiave.
+    host.querySelector(".canvas-viewport")!.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true }));
+    engine.commands().find((command) => command.id === "canvas.color.none")!.run();
+    expect(node("a").dataset.canvasColor).toBeUndefined();
+    engine.destroy();
+  });
+
+  it("una lavagna coi sei colori di oggi resta identica byte per byte; un colore letto non si riscrive (T47)", () => {
+    const source = '{\n  "nodes": [\n'
+      + ["1", "2", "3", "4", "5", "6"].map((color, index) =>
+        `    {"id":"n${index}","type":"text","x":${index * 200},"y":0,"width":100,"height":80,"color":"${color}","text":"${color}"}`).join(",\n")
+      + ',\n    {"id":"x","type":"text","x":0,"y":200,"width":100,"height":80,"color":"#ABC","text":"x"}'
+      + ',\n    {"id":"y","type":"text","x":200,"y":200,"width":100,"height":80,"color":"#aabbccdd","text":"y"}'
+      + ',\n    {"id":"z","type":"text","x":400,"y":200,"width":100,"height":80,"color":"#0064B0","text":"z"}'
+      + '\n  ],\n  "edges": [\n    {"id":"e","fromNode":"n0","toNode":"n1","color":"4"}\n  ]\n}\n';
+    const { engine, host, changes } = mounted(source);
+    // Aperta, resa e rifatta: nessuna scrittura.
+    engine.setTheme("dark");
+    engine.setTheme("light");
+    expect(changes).toHaveLength(0);
+    expect(engine.getDoc()).toBe(source);
+    // Un gesto su un'altra cosa: cambia soltanto quella.
+    const viewport = host.querySelector<HTMLElement>(".canvas-viewport")!;
+    viewport.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true }));
+    viewport.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }));
+    expect(engine.getDoc()).toBe(source.replace('"id":"n0","type":"text","x":0,"y":0', '"id":"n0","type":"text","x":0,"y":8'));
+    // Lo stesso colore scelto di nuovo non scrive.
+    const before = changes.length;
+    engine.commands().find((command) => command.id === "canvas.color.1")!.run();
+    expect(changes).toHaveLength(before);
     engine.destroy();
   });
 
@@ -652,9 +725,9 @@ describe("CanvasEngine", () => {
     const side = host.querySelector<HTMLSelectElement>('select[data-canvas-field="edge-fromSide"]')!;
     side.value = "bottom";
     side.dispatchEvent(new Event("change", { bubbles: true }));
-    const color = host.querySelector<HTMLSelectElement>('select[data-canvas-field="edge-color"]')!;
-    color.value = "6";
-    color.dispatchEvent(new Event("change", { bubbles: true }));
+    // Il colore del filo sta nel menu dei colori (T47), come quello delle schede.
+    expect(host.querySelector('[data-canvas-field="edge-color"]')).toBeNull();
+    engine.commands().find((command) => command.id === "canvas.color.6")!.run({ edge: "e1" });
     expect(readCanvas(engine.getDoc()).edges[0]).toMatchObject({
       label: "nuova relazione", toNode: "w", fromSide: "bottom", color: "6",
     });
@@ -2154,7 +2227,9 @@ describe("il menu della scheda (T17)", () => {
     expect(shape(context)).toEqual([
       "canvas.open", "canvas.open_beside", "canvas.connect", "—",
       {
-        "canvas.color": ["canvas.color.none", "canvas.color.1", "canvas.color.2", "canvas.color.3", "canvas.color.4", "canvas.color.5", "canvas.color.6"],
+        "canvas.color": ["canvas.color.none", "canvas.color.1", "canvas.color.2", "canvas.color.3", "canvas.color.4", "canvas.color.5", "canvas.color.6", "—",
+          { "canvas.color.notes": ["canvas.color.gray", "canvas.color.brown", "canvas.color.orange", "canvas.color.yellow", "canvas.color.green", "canvas.color.blue", "canvas.color.purple", "canvas.color.pink", "canvas.color.red"] },
+          "canvas.color.other"],
       },
       {
         "canvas.arrange": ["canvas.bring_front", "canvas.send_back", "—",
@@ -2175,7 +2250,9 @@ describe("il menu della scheda (T17)", () => {
     const flat = context.filter((entry): entry is SurfaceMenuItem => typeof entry !== "string");
     expect(flat.map((entry) => entry.danger === true)).toEqual([false, false, false, false, false, false, true, true]);
     // I colori: scelte esclusive, segnata quella della scheda.
-    const colors = item(context, "canvas.color").items as readonly SurfaceMenuItem[];
+    const colors = (item(context, "canvas.color").items as readonly Entry[])
+      .flatMap((entry) => (typeof entry === "string" ? [] : Array.isArray(entry.items) ? (entry.items as readonly SurfaceMenuItem[]) : [entry]));
+    expect(colors).toHaveLength(17);
     expect(colors.every((entry) => entry.radio === true)).toBe(true);
     expect(colors.filter((entry) => entry.checked).map((entry) => entry.id)).toEqual(["canvas.color.2"]);
     // Una scheda sola: allinea e distribuisci spenti, col perché.
@@ -2183,6 +2260,53 @@ describe("il menu della scheda (T17)", () => {
     // Apri a lato passa dalla porta nuova.
     item(context, "canvas.open_beside").run!();
     expect(beside).toEqual(["/Note/Idee.md"]);
+    engine.destroy();
+  });
+
+  it("il menu dei colori (T47): i nomi, «Colori delle note», «Altro…» e la scelta segnata", () => {
+    const { engine, host, changes } = open();
+    let menu = menuOn(engine, card(host, "n2")).context as readonly Entry[];
+    const color = item(menu, "canvas.color");
+    // I nomi del menu: corti, il sottomenu dice di che cosa.
+    expect(item(menu, "canvas.color.none")).toMatchObject({ label: "Nessuno", radio: true, checked: true, swatches: ["transparent"] });
+    expect(item(menu, "canvas.color.5").label).toBe("Azzurro");
+    expect(item(menu, "canvas.color.notes").label).toBe("Colori delle note");
+    expect(item(menu, "canvas.color.blue")).toMatchObject({ label: "Blu", radio: true, checked: false });
+    expect(item(menu, "canvas.color.other")).toMatchObject({ label: "Altro…", radio: true, checked: false });
+    expect(color.items).toContain(MENU_RULE);
+    // Uno dei nove si scrive col suo esadecimale chiaro, e torna segnato.
+    item(menu, "canvas.color.blue").run!();
+    expect(nodes(engine).find((node) => node.id === "n2")!.color).toBe("#0064b0");
+    expect(card(host, "n2").dataset.canvasColor).toBe("blue");
+    menu = menuOn(engine, card(host, "n2")).context as readonly Entry[];
+    expect(item(menu, "canvas.color.blue").checked).toBe(true);
+    expect(item(menu, "canvas.color.none").checked).toBe(false);
+    // «Altro…» apre il selettore del kit sotto la scheda, coi nove fra i consigliati.
+    item(menu, "canvas.color.other").run!();
+    const popover = document.querySelector<HTMLElement>(".kit-color-popover")!;
+    expect(popover).not.toBeNull();
+    expect(popover.getAttribute("aria-label")).toBe("Altro colore…");
+    expect([...popover.querySelectorAll<HTMLElement>(".kit-color-swatch")].map((swatch) => swatch.dataset.color))
+      .toEqual(["#5e626b", "#84573e", "#984b00", "#795f00", "#007231", "#0064b0", "#7847a6", "#9e366f", "#b7191c"]);
+    const input = popover.querySelector<HTMLInputElement>(".kit-color-input")!;
+    input.value = "#7B3FA0";
+    input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+    expect(nodes(engine).find((node) => node.id === "n2")!.color).toBe("#7b3fa0");
+    expect(card(host, "n2").style.getPropertyValue("--canvas-color")).toBe("#7b3fa0");
+    menu = menuOn(engine, card(host, "n2")).context as readonly Entry[];
+    expect(item(menu, "canvas.color.other").checked).toBe(true);
+    expect(changes).toHaveLength(2);
+    engine.destroy();
+  });
+
+  it("più schede con colori diversi: nessuna scelta segnata (T47)", () => {
+    const { engine, host, viewport } = open();
+    key(viewport, { key: "a", ctrlKey: true });
+    const menu = engine.contextMenu(null)!.context as readonly Entry[];
+    const leaves = (entries: readonly Entry[]): SurfaceMenuItem[] => entries.flatMap((entry) =>
+      typeof entry === "string" ? [] : Array.isArray(entry.items) ? leaves(entry.items as readonly Entry[]) : [entry]);
+    expect(leaves(item(menu, "canvas.color").items as readonly Entry[]).filter((entry) => entry.checked)).toEqual([]);
+    expect(host.querySelectorAll(".canvas-node.selected")).toHaveLength(4);
     engine.destroy();
   });
 

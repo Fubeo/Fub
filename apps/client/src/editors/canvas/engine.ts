@@ -80,7 +80,20 @@ import { SHARED_RECENT_COMMANDS, openCommandSearch, type CommandSearchHandle, ty
 import { inkFitMode } from "./ink-fit";
 import { mountInkLayer, type InkLayer, type InkLayerStroke } from "./ink-layer";
 import { cutInkStroke, fadeInkStroke, InkPathCache, paintBoard, paintCard, type DryStroke } from "./ink-paint";
-import { createPenMenu, type PenMenu } from "./pen-menu";
+import { createPenMenu, pickerText as canvasPickerText, type PenMenu } from "./pen-menu";
+// I colori delle schede e dei fili (T47).
+import {
+  JSON_CANVAS_COLORS,
+  NOTE_COLORS,
+  colorChoiceOf,
+  colorLook,
+  colorMenuLabel,
+  colorName,
+  colorValueOf,
+  writeColor,
+  type CanvasColorChoice,
+} from "./colors";
+import { createColorPicker, openPopover, type PopoverHandle } from "../../kit";
 import { DEFAULT_PREFERENCES, currentPreferences, readInkMouse, readPen, saveInkMouse, savePen, watchPreferences, type WheelAction } from "./preferences";
 import { isTap, pinchCamera, type TouchCamera, type TouchPoint, type ZoomLimits } from "./touch";
 import {
@@ -341,9 +354,9 @@ type MenuEntryMaker = (id: string, args?: CanvasCommandArgs, refocus?: boolean, 
 
 /**
  * «Colore ›» col colore di adesso segnato (`undefined` quello di serie, `null`
- * nessuno: colori diversi); con `radio` le voci sono scelte esclusive.
+ * nessuno: colori diversi), le voci come scelte esclusive (T47).
  */
-type ColorMenuMaker = (current: string | null | undefined, args?: CanvasCommandArgs, radio?: boolean) => SurfaceMenuItem;
+type ColorMenuMaker = (current: string | null | undefined, args?: CanvasCommandArgs) => SurfaceMenuItem;
 
 export interface CanvasEngineOptions {
   readonly surfaceId: string;
@@ -542,19 +555,18 @@ function snap(value: number): number {
   return Math.round(value / CANVAS_SNAP) * CANVAS_SNAP;
 }
 
-const PRESET_FILL: Record<string, string> = {
-  "1": "color-mix(in srgb, var(--danger) 18%, transparent)",
-  "2": "color-mix(in srgb, var(--warning) 22%, transparent)",
-  "3": "color-mix(in srgb, yellow 22%, transparent)",
-  "4": "color-mix(in srgb, var(--success) 18%, transparent)",
-  "5": "color-mix(in srgb, var(--info) 20%, transparent)",
-  "6": "color-mix(in srgb, var(--accent) 18%, transparent)",
-};
-const CANVAS_COLOR = /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/;
-
-function nodeFill(color: string | undefined): string {
-  if (!color) return "var(--doc-bg)";
-  return PRESET_FILL[color] ?? color;
+/**
+ * Il colore `color` sull'elemento `el` di una scheda o di un filo (T47): la
+ * chiave in `data-canvas-color` e, per un colore libero, il suo valore in
+ * `--canvas-color`, com'è nel file. L'aspetto lo dà la pelle; un valore che
+ * non è un colore non segna niente.
+ */
+function paintColor(el: HTMLElement | SVGElement, color: string | undefined): void {
+  const look = colorLook(color);
+  if (look) el.dataset.canvasColor = look.key;
+  else delete el.dataset.canvasColor;
+  if (look?.custom) el.style.setProperty("--canvas-color", look.custom);
+  else el.style.removeProperty("--canvas-color");
 }
 
 /**
@@ -730,6 +742,8 @@ export class CanvasEngine {
   #pauseTimer: ReturnType<typeof setTimeout> | undefined = undefined;
   /** Chi possiede l'inchiostro: lo scheduler del silenzio della penna e lo strato. Si chiude in `destroy`. */
   readonly #life: Lifetime = openLifetime();
+  /** Il selettore di «Altro…» aperto (T47); si chiude con la vita della lavagna. */
+  #colorPicker: PopoverHandle | null = null;
   /** Il lavoro pesante (il ridisegno dopo una modifica da fuori) aspetta che la penna si alzi. */
   readonly #quiet: PenQuiet;
   /** Lo strato della penna; `null` in sola lettura, con la scena troppo grande o senza lavagna (A8). */
@@ -865,6 +879,8 @@ export class CanvasEngine {
     // barra: il menu della penna (il rialzo aperto non si stacca quando la
     // barra si rifà) e l'interruttore «Scrivi col mouse», che tiene il fuoco
     // dopo il clic, così chi usa la tastiera sente lo stato nuovo.
+    // Il selettore di «Altro…» (T47) non resta aperto senza la lavagna.
+    this.#life.add(() => this.#colorPicker?.close());
     this.#penMenu = createPenMenu({
       lifetime: this.#life,
       choice: () => this.#penChoice,
@@ -887,6 +903,7 @@ export class CanvasEngine {
         if (command && command.disabled() === null) command.run();
       },
       penMenu: this.#penMenu,
+      swatches: () => this.#colorSwatches(),
     });
     const header = document.createElement("div");
     header.className = "canvas-header";
@@ -2487,46 +2504,9 @@ export class CanvasEngine {
       });
       bar.append(picker);
     }
-    const colorEditor = (field: "node-color" | "edge-color", label: string, hexLabel: string, current: string | undefined, update: (value: string | undefined) => void): void => {
-      const select = document.createElement("select");
-      select.dataset.canvasField = field;
-      select.setAttribute("aria-label", label);
-      for (const value of ["", "1", "2", "3", "4", "5", "6", "custom"]) {
-        const option = document.createElement("option");
-        option.value = value;
-        option.textContent = value || t("canvas.default");
-        select.append(option);
-      }
-      select.value = current && !PRESET_FILL[current] ? "custom" : current ?? "";
-      const hex = document.createElement("input");
-      hex.type = "text";
-      hex.dataset.canvasField = `${field}-hex`;
-      hex.placeholder = "#rrggbb";
-      hex.setAttribute("aria-label", hexLabel);
-      hex.value = current?.startsWith("#") ? current : "";
-      hex.disabled = this.#readOnly;
-      hex.hidden = select.value !== "custom";
-      select.disabled = this.#readOnly;
-      select.addEventListener("change", () => {
-        hex.hidden = select.value !== "custom";
-        if (select.value !== "custom") update(select.value || undefined);
-      });
-      hex.addEventListener("change", () => {
-        if (CANVAS_COLOR.test(hex.value)) update(hex.value);
-        else hex.value = current?.startsWith("#") ? current : "";
-      });
-      bar.append(select, hex);
-    };
-    if (!this.#isSceneOversized() && this.#selection.length) colorEditor("node-color", t("canvas.node_color"), t("canvas.node_color_hex"), this.#selectedNodes()[0]?.color, (color) => {
-      const patches = this.#selectedNodes().map((node) => {
-        const next = { ...node };
-        if (color === undefined) delete next.color;
-        else next.color = color;
-        return upsertNodePatch(this.#doc!, next);
-      }).filter((patch): patch is NonNullable<typeof patch> => patch !== null);
-      this.#commit(patches, "input");
-    });
-    if (!this.#isSceneOversized() && this.#edgeSelection.length === 1) this.#drawEdgeInspector(bar, colorEditor);
+    // Il colore delle schede e dei fili non sta più qui: è nel menu «Colore»
+    // del tasto destro e nel pozzo della riga delle opzioni (T47).
+    if (!this.#isSceneOversized() && this.#edgeSelection.length === 1) this.#drawEdgeInspector(bar);
     // Un avviso solo, nel suo posto all'inizio della barra, dove si legge
     // senza scorrere: quello dell'ultimo gesto, o la sola lettura della tela.
     // Una scena oltre il limite ha già il suo, nella tela.
@@ -2606,9 +2586,7 @@ export class CanvasEngine {
     this.#commit(patches, "input");
   }
 
-  #drawEdgeInspector(bar: HTMLElement, colorEditor: (
-    field: "node-color" | "edge-color", label: string, hexLabel: string, current: string | undefined, update: (value: string | undefined) => void
-  ) => void): void {
+  #drawEdgeInspector(bar: HTMLElement): void {
     const id = this.#edgeSelection[0];
     const edge = this.#doc?.edges.find((entry) => entry.id === id);
     if (!edge) return;
@@ -2668,7 +2646,6 @@ export class CanvasEngine {
       select.addEventListener("change", () => change({ [field]: select.value || undefined } as Partial<CanvasEdge>));
       bar.append(select);
     }
-    colorEditor("edge-color", t("canvas.edge_color"), t("canvas.edge_color_hex"), edge.color, (color) => change({ color }));
   }
 
   async #intake(event: DragEvent | ClipboardEvent): Promise<void> {
@@ -3198,10 +3175,17 @@ export class CanvasEngine {
       run: (args) => this.#addNode(type, undefined, world(args)),
     });
     if (id.startsWith("canvas.color.")) {
-      const color = id.slice("canvas.color.".length) as CanvasColorId;
+      // I colori (T47): nessuno, i sei, i nove delle note; «Altro…» apre il
+      // selettore del kit.
+      const choice = id.slice("canvas.color.".length) as CanvasColorId;
+      if (!(CANVAS_COLORS as readonly string[]).includes(choice)) return null;
       return {
         disabled: () => writable() ?? (this.#selectedNodes().length || this.#edgeSelection.length ? null : t("canvas.commands.why.no_selection")),
-        run: (args) => this.#colorSelection(color === "none" ? undefined : color, args?.edge),
+        run: (args) => {
+          const value = colorValueOf(choice);
+          if (value === null) this.#openColorPicker(args?.edge);
+          else this.#colorSelection(value, args?.edge);
+        },
       };
     }
     if (id.startsWith("canvas.align.")) {
@@ -3550,6 +3534,90 @@ export class CanvasEngine {
     if (patches.length) this.#commit(patches, "input");
   }
 
+  // --- i colori (T47) ---------------------------------------------------------
+
+  /**
+   * Il colore di ciò che il menu colora: il filo `edge`, o le schede scelte,
+   * o i fili scelti. `undefined` quello di serie, `null` se sono diversi.
+   */
+  #targetColor(edge?: string): string | null | undefined {
+    if (edge !== undefined) return this.#doc?.edges.find((one) => one.id === edge)?.color;
+    if (this.#selectedNodes().length) return this.#chosenColor();
+    const colors = new Set((this.#doc?.edges ?? []).filter((one) => this.#edgeSelection.includes(one.id)).map((one) => one.color ?? ""));
+    if (colors.size > 1) return null;
+    const [only] = colors;
+    return only ? only : undefined;
+  }
+
+  /**
+   * I pallini del menu dei colori: il colore che la pelle dà a ogni scelta,
+   * letto da un campione con la sua chiave dentro la lavagna. Così il menu
+   * mostra le tinte del tema di adesso e non ne scrive una sua; «Nessuno» è
+   * un pallino vuoto, «Altro…» non ne ha.
+   */
+  #colorSwatches(): ReadonlyMap<CanvasColorChoice, string> {
+    const swatches = new Map<CanvasColorChoice, string>([["none", "transparent"]]);
+    const probe = document.createElement("span");
+    probe.hidden = true;
+    this.#root.append(probe);
+    try {
+      for (const choice of [...JSON_CANVAS_COLORS, ...NOTE_COLORS.map((color) => color.id)]) {
+        probe.dataset.canvasColor = choice;
+        const value = getComputedStyle(probe).getPropertyValue("--canvas-color").trim();
+        if (value) swatches.set(choice, value);
+      }
+    } finally {
+      probe.remove();
+    }
+    return swatches;
+  }
+
+  /**
+   * «Altro…» (T47): il selettore del kit sotto la scheda scelta (o sulla
+   * lavagna, per un filo), col colore di adesso, i nove delle note fra i
+   * consigliati e i colori liberi della lavagna fra quelli del documento. Un
+   * colore scelto si scrive `#rrggbb` minuscolo; Esc o un clic fuori lo
+   * chiudono, e con la lavagna si chiude anche lui.
+   */
+  #openColorPicker(edge?: string): void {
+    if (!this.#doc || this.#readOnly || this.#destroyed) return;
+    this.#colorPicker?.close();
+    const current = this.#targetColor(edge);
+    const own = openLifetime();
+    const free = new Set<string>();
+    for (const one of [...this.#doc.nodes, ...this.#doc.edges]) {
+      if (colorLook(one.color)?.key === "custom" && free.size < 12) free.add(one.color!.toLowerCase());
+    }
+    const picker = createColorPicker({
+      value: current && colorLook(current) && current.startsWith("#") ? current : null,
+      text: canvasPickerText(),
+      recommended: NOTE_COLORS.map((color) => ({ color: color.hex, name: colorMenuLabel(color.id) })),
+      documentColors: [...free].map((color) => ({ color, name: color })),
+      onChange: (color) => {
+        const value = writeColor(color);
+        if (value === null) return;
+        this.#recordPending();
+        this.#colorSelection(value, edge);
+      },
+      lifetime: own,
+    });
+    const first = edge === undefined && this.#selection[0];
+    const card = first ? this.#stage.querySelector<HTMLElement>(`.canvas-node[data-node="${CSS.escape(first)}"]`) : null;
+    const handle = openPopover({
+      anchor: card ?? this.#viewport,
+      content: picker.element,
+      label: t("canvas.color.command.other"),
+      className: "kit-color-popover",
+      lifetime: own,
+      onClose: () => {
+        if (this.#colorPicker === handle) this.#colorPicker = null;
+        own.close();
+      },
+    });
+    this.#colorPicker = handle;
+    picker.focus();
+  }
+
   /** Il filo `edge` va nell'altro verso: estremi, lati e punte si scambiano. */
   #reverseEdge(edge: string | undefined): void {
     if (!this.#doc || this.#readOnly || edge === undefined) return;
@@ -3659,16 +3727,41 @@ export class CanvasEngine {
       };
     };
     const writable = !this.#readOnly;
-    const colors: ColorMenuMaker = (current, args, radio = false) => ({
-      id: "canvas.color",
-      label: t("canvas_menu.color"),
-      enabled: writable,
-      // `null`: le schede scelte hanno colori diversi, e nessuno è segnato.
-      items: CANVAS_COLORS.map((value) => entry(`canvas.color.${value}`, args, true, {
-        checked: current !== null && (current ?? "") === (value === "none" ? "" : value),
-        ...(radio ? { radio: true } : {}),
-      })),
-    });
+    // «Colore ›» (T47): Nessuno e i sei di JSON Canvas col loro pallino,
+    // «Colori delle note ›» coi nove, «Altro…» che apre il selettore. Tutte
+    // scelte esclusive, segnata quella di adesso; `null` (colori diversi) non
+    // ne segna nessuna, come un colore che non è un colore.
+    let swatches: ReadonlyMap<CanvasColorChoice, string> | null = null;
+    const colors: ColorMenuMaker = (current, args) => {
+      swatches ??= this.#colorSwatches();
+      const chosen = current === null ? null : colorChoiceOf(current);
+      const choice = (value: CanvasColorChoice): SurfaceMenuItem => {
+        const swatch = swatches!.get(value);
+        return entry(`canvas.color.${value}`, args, value !== "other", {
+          label: colorMenuLabel(value),
+          radio: true,
+          checked: chosen === value,
+          ...(swatch === undefined ? {} : { swatches: [swatch] }),
+        });
+      };
+      return {
+        id: "canvas.color",
+        label: t("canvas_menu.color"),
+        enabled: writable,
+        items: [
+          choice("none"),
+          ...JSON_CANVAS_COLORS.map(choice),
+          MENU_RULE,
+          {
+            id: "canvas.color.notes",
+            label: t("canvas_menu.color.notes"),
+            enabled: writable,
+            items: NOTE_COLORS.map((color) => choice(color.id)),
+          },
+          choice("other"),
+        ],
+      };
+    };
     if (node) {
       const nodes = this.#selectedNodes();
       const one = nodes.length === 1 ? nodes[0]! : null;
@@ -3764,7 +3857,7 @@ export class CanvasEngine {
     const two = nodes.length >= 2 ? null : t("canvas.commands.why.two");
     const three = nodes.length >= 3 ? null : t("canvas.commands.why.three");
     context.push(
-      { ...colors(this.#chosenColor(), undefined, true), ...state(readOnly) },
+      { ...colors(this.#chosenColor()), ...state(readOnly) },
       {
         id: "canvas.arrange",
         label: t("canvas_menu.arrange"),
@@ -4738,7 +4831,8 @@ export class CanvasEngine {
       const d = `M ${a.x} ${a.y} C ${a.x + (b.x - a.x) / 2} ${a.y}, ${b.x - (b.x - a.x) / 2} ${b.y}, ${b.x} ${b.y}`;
       hit.setAttribute("d", d);
       line.setAttribute("d", d);
-      if (edge.color) line.setAttribute("stroke", PRESET_FILL[edge.color] ?? edge.color);
+      // Il colore del filo, per la pelle: il tratto e le punte (T47).
+      paintColor(group, edge.color);
       group.append(hit, line);
       for (const [endpoint, point, end] of [
         ["from", a, edge.fromEnd], ["to", b, edge.toEnd],
@@ -4902,10 +4996,14 @@ export class CanvasEngine {
     el.style.transform = `translate(${node.x}px, ${node.y}px)`;
     el.style.width = `${node.width}px`;
     el.style.height = `${node.height}px`;
-    el.style.background = nodeFill(node.color);
+    // La carta e il colore li dà la pelle (T47); il nome del colore arriva a
+    // chi ascolta.
+    paintColor(el, node.color);
     if (node.type === "group" && node.backgroundStyle) el.dataset.backgroundStyle = node.backgroundStyle;
     else delete el.dataset.backgroundStyle;
-    el.setAttribute("aria-label", `${node.type} ${node.id}`);
+    el.setAttribute("aria-label", node.color
+      ? `${node.type} ${node.id}, ${t("canvas.options.color_value", { name: colorName(node.color) })}`
+      : `${node.type} ${node.id}`);
     el.classList.toggle("selected", this.#selection.includes(node.id));
     const title = nodeTitle(node);
     if (entry.title.textContent !== title) entry.title.textContent = title;

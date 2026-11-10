@@ -118,7 +118,8 @@ function pixels(value: number): string {
 }
 
 /// I testi del selettore dei colori: quelli dell'inchiostro dei documenti.
-function pickerText(): ColorPickerText {
+/// Li usa anche «Altro…» del colore delle schede (T47).
+export function pickerText(): ColorPickerText {
   return {
     area: t("rich.ink.picker.area"),
     areaValue: (saturation, value) => t("rich.ink.picker.area.value", { s: String(saturation), v: String(value) }),

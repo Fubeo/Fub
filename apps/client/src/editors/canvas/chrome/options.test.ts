@@ -202,10 +202,15 @@ describe("la Selezione con delle schede scelte", () => {
     expect(well.querySelector(".kit-color-chip")!.getAttribute("data-canvas-color")).toBe("4");
     well.click();
     expect(well.getAttribute("aria-expanded")).toBe("true");
+    // Lo stesso menu del tasto destro (T47): Nessuno, i sei, «Colori delle
+    // note ›», «Altro…».
     expect(menuLabels()).toEqual([
-      t("canvas.default"), t("canvas_menu.color.1"), t("canvas_menu.color.2"), t("canvas_menu.color.3"),
+      t("canvas_menu.color.none"), t("canvas_menu.color.1"), t("canvas_menu.color.2"), t("canvas_menu.color.3"),
       t("canvas_menu.color.4"), t("canvas_menu.color.5"), t("canvas_menu.color.6"),
+      t("canvas_menu.color.notes"), t("canvas_menu.color.other"),
     ]);
+    expect(menuEntry(t("canvas_menu.color.notes")).getAttribute("aria-haspopup")).toBe("menu");
+    expect(menuEntry(t("canvas_menu.color.other")).getAttribute("role")).toBe("menuitemradio");
     expect(menuEntry(t("canvas_menu.color.4")).getAttribute("aria-checked")).toBe("true");
     menuEntry(t("canvas_menu.color.1")).click();
     expect(readCanvas(engine.getDoc()).nodes.find((node) => node.id === "b")!.color).toBe("1");

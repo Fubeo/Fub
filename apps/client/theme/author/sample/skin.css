@@ -8334,28 +8334,13 @@ kbd,
   color: var(--muted);
   font-size: var(--text-sm);
 }
-/* Il pozzo del colore delle schede scelte: i sei colori di JSON Canvas
-   come li dipinge la lavagna; spento in sola lettura. */
+/* Il pozzo del colore delle schede scelte: il colore come lo dipinge la
+   lavagna (T47, più sotto, «I colori»); spento in sola lettura. */
 .canvas-color-well[aria-disabled="true"] {
   opacity: 0.4;
 }
-.canvas-options .canvas-color-well [data-canvas-color="1"] {
-  background: var(--danger);
-}
-.canvas-options .canvas-color-well [data-canvas-color="2"] {
-  background: var(--warning);
-}
-.canvas-options .canvas-color-well [data-canvas-color="3"] {
-  background: color-mix(in srgb, yellow 70%, var(--text));
-}
-.canvas-options .canvas-color-well [data-canvas-color="4"] {
-  background: var(--success);
-}
-.canvas-options .canvas-color-well [data-canvas-color="5"] {
-  background: var(--info);
-}
-.canvas-options .canvas-color-well [data-canvas-color="6"] {
-  background: var(--accent);
+.canvas-options .canvas-color-well [data-canvas-color] {
+  background: var(--canvas-color);
 }
 /* Il pulsante della penna, nella riga: il colore e il nome della penna di
    adesso. Il menu aperto tiene il velo del passaggio. */
@@ -8543,10 +8528,64 @@ kbd,
   color: var(--muted);
   text-align: center;
 }
-/* Il fondo del nodo lo scrive il motore, in linea, ed è la carta stessa: a
+/* I colori delle schede e dei fili (T47, D-13 c). La lavagna scrive sul nodo
+   la chiave del colore (`data-canvas-color`) e, per un colore libero
+   («Altro…»), il suo valore in `--canvas-color`: un dato del file, non un
+   ruolo del tema, e non `--file-color`, che la griglia del foglio legge per le
+   sue celle e che dalla scheda colerebbe dentro il foglio. Qui ogni chiave
+   punta `--canvas-color` al suo ruolo: lo leggono il filo, il pallino del
+   menu e quello del pozzo. Il 6, «Viola», resta l'accento; il 3 prende il
+   giallo dei documenti, che al buio regge; i nove delle note usano i colori
+   dei Blocchi. Nel file i nove restano il loro esadecimale chiaro: la lavagna
+   li riconosce e scrive il nome, così al buio seguono i Blocchi. */
+.canvas-surface [data-canvas-color="1"] {
+  --canvas-color: var(--danger);
+}
+.canvas-surface [data-canvas-color="2"] {
+  --canvas-color: var(--warning);
+}
+.canvas-surface [data-canvas-color="3"],
+.canvas-surface [data-canvas-color="yellow"] {
+  --canvas-color: var(--doc-color-yellow);
+}
+.canvas-surface [data-canvas-color="4"] {
+  --canvas-color: var(--success);
+}
+.canvas-surface [data-canvas-color="5"] {
+  --canvas-color: var(--info);
+}
+.canvas-surface [data-canvas-color="6"] {
+  --canvas-color: var(--accent);
+}
+.canvas-surface [data-canvas-color="gray"] {
+  --canvas-color: var(--doc-color-gray);
+}
+.canvas-surface [data-canvas-color="brown"] {
+  --canvas-color: var(--doc-color-brown);
+}
+.canvas-surface [data-canvas-color="orange"] {
+  --canvas-color: var(--doc-color-orange);
+}
+.canvas-surface [data-canvas-color="green"] {
+  --canvas-color: var(--doc-color-green);
+}
+.canvas-surface [data-canvas-color="blue"] {
+  --canvas-color: var(--doc-color-blue);
+}
+.canvas-surface [data-canvas-color="purple"] {
+  --canvas-color: var(--doc-color-purple);
+}
+.canvas-surface [data-canvas-color="pink"] {
+  --canvas-color: var(--doc-color-pink);
+}
+.canvas-surface [data-canvas-color="red"] {
+  --canvas-color: var(--doc-color-red);
+}
+/* La carta della scheda viene dal tema, non più da uno stile in linea. A
    staccare la scheda dalla lavagna restano il filo e l'ombra, e al buio
    l'ombra non si vede — quindi il filo è quello marcato. */
 .canvas-node {
+  background: var(--doc-bg);
   border-radius: var(--radius-menu);
   box-shadow:
     0 0 0 1px var(--border-strong),
@@ -8569,6 +8608,62 @@ kbd,
   border-style: solid;
   border-color: var(--accent);
   box-shadow: 0 0 0 1px var(--accent);
+}
+/* Una scheda colorata: la tinta del colore come carta, col filo di sempre
+   attorno. I sei di JSON Canvas con le dosi di sempre, piene sulla carta
+   della scheda: le lavagne che ci sono si vedono come prima. I nove (e il 3)
+   con le tinte dei Blocchi. Un colore libero tinge la carta con un po' di
+   sé: il filo marcato resta, e un colore molto chiaro non lo sbiadisce. Sulla
+   carta colorata il grigio della testata non basta (4,4:1 sul 2 al buio): va
+   di un quarto verso il testo. */
+.canvas-node[data-canvas-color="1"] {
+  background: color-mix(in srgb, var(--danger) 18%, var(--doc-bg));
+}
+.canvas-node[data-canvas-color="2"] {
+  background: color-mix(in srgb, var(--warning) 22%, var(--doc-bg));
+}
+.canvas-node[data-canvas-color="3"],
+.canvas-node[data-canvas-color="yellow"] {
+  background: var(--doc-tint-yellow);
+}
+.canvas-node[data-canvas-color="4"] {
+  background: color-mix(in srgb, var(--success) 18%, var(--doc-bg));
+}
+.canvas-node[data-canvas-color="5"] {
+  background: color-mix(in srgb, var(--info) 20%, var(--doc-bg));
+}
+.canvas-node[data-canvas-color="6"] {
+  background: color-mix(in srgb, var(--accent) 18%, var(--doc-bg));
+}
+.canvas-node[data-canvas-color="gray"] {
+  background: var(--doc-tint-gray);
+}
+.canvas-node[data-canvas-color="brown"] {
+  background: var(--doc-tint-brown);
+}
+.canvas-node[data-canvas-color="orange"] {
+  background: var(--doc-tint-orange);
+}
+.canvas-node[data-canvas-color="green"] {
+  background: var(--doc-tint-green);
+}
+.canvas-node[data-canvas-color="blue"] {
+  background: var(--doc-tint-blue);
+}
+.canvas-node[data-canvas-color="purple"] {
+  background: var(--doc-tint-purple);
+}
+.canvas-node[data-canvas-color="pink"] {
+  background: var(--doc-tint-pink);
+}
+.canvas-node[data-canvas-color="red"] {
+  background: var(--doc-tint-red);
+}
+.canvas-node[data-canvas-color="custom"] {
+  background: color-mix(in srgb, var(--canvas-color) 14%, var(--doc-bg));
+}
+.canvas-node[data-canvas-color] > .canvas-node-handle {
+  color: color-mix(in srgb, var(--text) 25%, var(--muted));
 }
 .canvas-node-handle {
   gap: var(--space-2);
@@ -8753,18 +8848,23 @@ kbd,
   fill: none;
   stroke: transparent;
 }
-/* Un collegamento con un colore suo lo scrive il canvas come attributo, e una
-   regola lo coprirebbe: il tratto di default vale solo per chi non ne ha. */
+/* Un collegamento col suo colore (T47) ha la chiave sul suo gruppo, come le
+   schede: il tratto e le punte prendono il colore pieno; scelto, l'accento. */
 .canvas-edge-line {
   fill: none;
+  stroke: var(--border-strong);
   stroke-linecap: round;
   stroke-width: 1.5;
   vector-effect: non-scaling-stroke;
 }
-.canvas-edge-line:not([stroke]) {
-  stroke: var(--border-strong);
+.canvas-surface [data-canvas-color] > .canvas-edge-line {
+  stroke: var(--canvas-color);
 }
-.canvas-edge-line.selected {
+.canvas-surface [data-canvas-color] > .canvas-edge-arrow {
+  fill: var(--canvas-color);
+}
+.canvas-edge-line.selected,
+.canvas-surface [data-canvas-color] > .canvas-edge-line.selected {
   stroke: var(--accent);
   stroke-width: 2.5;
 }
@@ -13621,6 +13721,16 @@ h6.ui-heading {
 .context-menu .menu-swatch {
   width: 6px;
   height: 20px;
+}
+/* Il pallino del colore (T47): una voce con un solo campione lo mostra tondo,
+   accanto al nome; le strisce di più colori (gli aspetti del disegno) restano
+   come sono. */
+.context-menu .menu-swatch:only-child {
+  width: 14px;
+  height: 14px;
+}
+.context-menu .menu-swatches:has(> .menu-swatch:only-child) {
+  border-radius: var(--radius-pill);
 }
 /* Le voci con una figura: 24 px prima del nome, nel colore della voce, che
    la spenta attenua con le parole. Chi non ha la sua ne tiene il posto, e il

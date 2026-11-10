@@ -98,6 +98,16 @@
   width: 6px;
   height: 20px;
 }
+/* Il pallino del colore (T47): una voce con un solo campione lo mostra tondo,
+   accanto al nome; le strisce di più colori (gli aspetti del disegno) restano
+   come sono. */
+.context-menu .menu-swatch:only-child {
+  width: 14px;
+  height: 14px;
+}
+.context-menu .menu-swatches:has(> .menu-swatch:only-child) {
+  border-radius: var(--radius-pill);
+}
 /* Le voci con una figura: 24 px prima del nome, nel colore della voce, che
    la spenta attenua con le parole. Chi non ha la sua ne tiene il posto, e il
    nome si centra sulla figura invece di restare sulla riga di base. */

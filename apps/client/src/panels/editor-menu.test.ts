@@ -177,6 +177,19 @@ describe("il compositore del menu dell'editor", () => {
     expect(surface.editorActions!.run).toHaveBeenCalledWith("markdown.heading.3");
   });
 
+  it("il pallino di una voce colore arriva al menu (T47)", () => {
+    const host = hostFor(surfaceWith({}), []);
+    const { items } = composeEditorMenu({
+      target: { kind: "node" },
+      context: [
+        { id: "red", label: "Rosso", radio: true, checked: true, swatches: ["#b7191c"], run: () => {} },
+        { id: "plain", label: "Senza", run: () => {} },
+      ],
+    }, host);
+    expect(items[0]).toMatchObject({ label: "Rosso", choice: "radio", checked: true, swatches: ["#b7191c"] });
+    expect(items[1]!.swatches).toBeUndefined();
+  });
+
   it("un sottomenu senza voci risolte sparisce, e i comandi del vault si eseguono per la via del «/»", () => {
     const surface = surfaceWith({});
     const host = hostFor(surface, [spec("note.daily", "Nota del giorno", ["slash"]), spec("note.extract", "Estrai")]);

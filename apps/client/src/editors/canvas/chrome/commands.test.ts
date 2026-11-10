@@ -16,6 +16,8 @@ import {
   type CanvasKeyPress,
 } from "./commands";
 import { RecentCommands } from "./command-search";
+import { colorCommandLabel, colorMenuLabel, type CanvasColorChoice } from "../colors";
+import { t } from "../../../i18n/strings";
 
 beforeAll(async () => {
   await canvasCoreReady();
@@ -39,6 +41,8 @@ const STABLE_IDS = [
   "canvas.nudge.left.far", "canvas.nudge.right.far", "canvas.nudge.up.far", "canvas.nudge.down.far",
   "canvas.edge.reverse", "canvas.delete", "canvas.trash_file",
   "canvas.color.none", "canvas.color.1", "canvas.color.2", "canvas.color.3", "canvas.color.4", "canvas.color.5", "canvas.color.6",
+  "canvas.color.gray", "canvas.color.brown", "canvas.color.orange", "canvas.color.yellow", "canvas.color.green",
+  "canvas.color.blue", "canvas.color.purple", "canvas.color.pink", "canvas.color.red", "canvas.color.other",
   "canvas.bring_front", "canvas.send_back",
   "canvas.align.left", "canvas.align.center", "canvas.align.right", "canvas.align.top", "canvas.align.middle", "canvas.align.bottom",
   "canvas.distribute_x", "canvas.distribute_y",
@@ -211,7 +215,10 @@ describe("la tela legge il catalogo", () => {
     };
     const card = (id: string) => host.querySelector(`.canvas-node[data-node="${id}"]`);
     const order = { "canvas.order": ["canvas.bring_front", "canvas.send_back"] };
-    const colors = { "canvas.color": ["canvas.color.none", "canvas.color.1", "canvas.color.2", "canvas.color.3", "canvas.color.4", "canvas.color.5", "canvas.color.6"] };
+    // I colori (T47): Nessuno e i sei, «Colori delle note ›» coi nove, «Altro…».
+    const colors = { "canvas.color": ["canvas.color.none", "canvas.color.1", "canvas.color.2", "canvas.color.3", "canvas.color.4", "canvas.color.5", "canvas.color.6", "—",
+      { "canvas.color.notes": ["canvas.color.gray", "canvas.color.brown", "canvas.color.orange", "canvas.color.yellow", "canvas.color.green", "canvas.color.blue", "canvas.color.purple", "canvas.color.pink", "canvas.color.red"] },
+      "canvas.color.other"] };
     // Il menu della scheda (T17): Disponi › con Allinea › e Distribuisci ›.
     const arrange = { "canvas.arrange": ["canvas.bring_front", "canvas.send_back", "—",
       { "canvas.align": ["canvas.align.left", "canvas.align.center", "canvas.align.right", "canvas.align.top", "canvas.align.middle", "canvas.align.bottom"] },
@@ -236,7 +243,12 @@ describe("la tela legge il catalogo", () => {
       for (const item of leaves(menu)) {
         const command = catalog.get(item.id);
         expect(command, item.id).toBeDefined();
-        expect(item.label).toBe(command!.label);
+        // Un colore ha nel menu il nome corto del suo sottomenu («Blu»,
+        // «Nessuno»), nella ricerca quello che dice di che cosa («Blu delle
+        // note», «Nessun colore»): è lo stesso comando (T47).
+        const color = item.id.startsWith("canvas.color.") ? (item.id.slice("canvas.color.".length) as CanvasColorChoice) : null;
+        expect(item.label).toBe(color ? colorMenuLabel(color) : command!.label);
+        if (color) expect(command!.label).toBe(t(colorCommandLabel(color)));
       }
     }
     engine.destroy();

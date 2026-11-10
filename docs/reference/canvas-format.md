@@ -200,6 +200,35 @@ Le regole dei byte nuovi:
 Il lavoro è lineare: una scheda uguale prima e dopo si confronta come struct
 e non diventa un valore JSON.
 
+## I colori
+
+`color`, su una scheda o su un arco, è uno dei sei colori di JSON Canvas
+(`"1"`…`"6"`: Rosso, Arancione, Giallo, Verde, Azzurro, Viola) o un colore
+esatto `#rgb`, `#rgba`, `#rrggbb`, `#rrggbbaa`. Il nucleo legge questi e
+basta: un altro valore (`"7"`, `"rosso"`) è un errore di lettura e la lavagna
+non si apre. La lista, i nomi e le regole della tela stanno in
+`apps/client/src/editors/canvas/colors.ts`.
+
+- **Che cosa scrive Fub.** Il numero per i sei; per i nove «Colori delle
+  note», gli stessi dei Blocchi, il loro esadecimale chiaro fisso (grigio
+  `#5e626b`, marrone `#84573e`, arancione `#984b00`, giallo `#795f00`,
+  verde `#007231`, blu `#0064b0`, viola `#7847a6`, rosa `#9e366f`, rosso
+  `#b7191c`); per «Altro…» il colore scelto, `#rrggbb` minuscolo (con le due
+  cifre dell'opacità solo se non è pieno). Obsidian e ogni altro lettore di
+  JSON Canvas mostrano i nove come quei colori esatti.
+- **Che cosa legge.** Ogni colore com'è: `#ABC` o `#aabbccdd` restano scritti
+  così finché nessuno cambia il colore di quella scheda, e scegliere il
+  colore che c'è già non scrive niente. Un esadecimale dei nove, anche in
+  maiuscolo, si riconosce.
+- **Come si disegna.** Lo dice la pelle (`skin/editors.css`): la tela mette
+  sulla scheda e sul gruppo dell'arco `data-canvas-color` (`1`…`6`, il nome
+  di uno dei nove, `custom`) e, per un colore libero, il valore del file in
+  `--canvas-color`. La carta prende la tinta del colore (i sei con le dosi
+  di sempre, i nove con `--doc-tint-*`, un colore libero col 14% di sé), il
+  filo e le punte di un arco il colore pieno; al buio i nove seguono i
+  Blocchi (`--doc-color-*`). Il nome del colore arriva al lettore di schermo
+  nel nome della scheda.
+
 ## Parità
 
 Le regole di lettura e scrittura sono scritte una volta, in

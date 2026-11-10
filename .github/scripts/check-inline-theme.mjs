@@ -37,7 +37,7 @@ const SEPARATE = new Map([
 /// Le occorrenze di oggi, per file. Possono solo scendere.
 const EXCEPTIONS = new Map([
   // La Lavagna dipinge le sue carte con stili in linea.
-  [`${EDITORS}canvas/engine.ts`, 8],
+  [`${EDITORS}canvas/engine.ts`, 2],
   [`${EDITORS}grid/engine.ts`, 2],
   // La stampa compone una pagina sua, fuori dalla pelle.
   [`${EDITORS}media/print-view.ts`, 2],

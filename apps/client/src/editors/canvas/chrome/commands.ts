@@ -18,6 +18,7 @@
 
 import type { Key } from "../../../i18n/strings";
 import { keyName, keyboardPlatform, modifierName, parseChords, type KeyboardPlatform } from "../../../ui/commands";
+import { CANVAS_COLOR_CHOICES, colorCommandLabel, type CanvasColorChoice } from "../colors";
 
 /// Quando un comando vale: sempre, con uno strumento, con una selezione.
 export type CanvasCommandContext = "always" | "tool" | "selection";
@@ -77,9 +78,10 @@ export const CANVAS_COMMAND_GROUPS: Readonly<Record<Group, Key>> = {
   always: "canvas.commands.group.always",
 };
 
-/// I colori delle schede e dei fili, nell'ordine del menu; `none` è il colore di serie.
-export const CANVAS_COLORS = ["none", "1", "2", "3", "4", "5", "6"] as const;
-export type CanvasColorId = (typeof CANVAS_COLORS)[number];
+/// I colori delle schede e dei fili, nell'ordine del menu: la lista di
+/// `colors.ts` (nessuno, i sei di JSON Canvas, i nove delle note, «Altro…»).
+export const CANVAS_COLORS = CANVAS_COLOR_CHOICES;
+export type CanvasColorId = CanvasColorChoice;
 
 /// I lati e i modi di allineare, nell'ordine del menu.
 export const CANVAS_ALIGN = ["left", "center", "right", "top", "middle", "bottom"] as const;
@@ -164,7 +166,7 @@ export const CANVAS_COMMANDS: readonly CanvasCommandSpec[] = [
   // Manda nel cestino anche il file: mai da un tasto (`lavagna.md`).
   { id: "canvas.trash_file", label: "canvas_menu.trash_file", group: "selection", keys: [], context: "selection", danger: true },
   ...CANVAS_COLORS.map((color): CanvasCommandSpec => ({
-    id: `canvas.color.${color}`, label: color === "none" ? "canvas.default" : `canvas_menu.color.${color}`, group: "color", keys: [], context: "selection",
+    id: `canvas.color.${color}`, label: colorCommandLabel(color), group: "color", keys: [], context: "selection",
   })),
   { id: "canvas.bring_front", label: "canvas.bring_front", group: "arrange", keys: ["Mod-]"], context: "selection" },
   { id: "canvas.send_back", label: "canvas.send_back", group: "arrange", keys: ["Mod-["], context: "selection" },

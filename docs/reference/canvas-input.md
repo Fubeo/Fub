@@ -133,7 +133,9 @@ comandi del catalogo col loro nome e il loro tasto:
    Apri nel visore per un'immagine, Apri la pagina web e Mostra l'anteprima
    per una pagina); Apri a lato, per una scheda di file, se l'host la dà
    (`onOpenPathBeside`); Collega… · `C`;
-2. Colore › con i sei colori come scelte esclusive; Disponi › (Porta davanti,
+2. Colore › come scelte esclusive: Nessuno, i sei di JSON Canvas col
+   pallino, «Colori delle note ›» coi nove, «Altro…», che apre il selettore
+   del kit (i colori in `canvas-format.md`); Disponi › (Porta davanti,
    Porta dietro, Allinea ›, Distribuisci ›); Duplica;
 3. in fondo, in rosso: Togli dalla lavagna · `Canc`; Sposta anche il file nel
    cestino, solo con schede di file e se l'host dà `onTrashPath`.

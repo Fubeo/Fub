@@ -34,8 +34,16 @@ import { closeContextMenu, showContextMenu, type MenuItem } from "../../../ui/me
 import { setTooltip } from "../../../ui/tooltip";
 import type { PenMenu } from "../pen-menu";
 import {
+  JSON_CANVAS_COLORS,
+  NOTE_COLORS,
+  colorChoiceOf,
+  colorLook,
+  colorMenuLabel,
+  colorName,
+  type CanvasColorChoice,
+} from "../colors";
+import {
   CANVAS_ALIGN,
-  CANVAS_COLORS,
   CANVAS_TIPS,
   displayCanvasKey,
   type CanvasCommand,
@@ -83,6 +91,9 @@ export interface CanvasOptionsContext {
   readonly run: (id: string) => void;
   /// Il menu delle penne di N4: la riga ne monta il pulsante.
   readonly penMenu: PenMenu;
+  /// I pallini del menu dei colori (T47), come li dipinge la lavagna: il
+  /// colore di ogni scelta. Senza, il menu non ha pallini.
+  readonly swatches?: () => ReadonlyMap<string, string>;
 }
 
 export interface CanvasOptions {
@@ -117,12 +128,10 @@ const SVG_ICON = (name: string): SVGElement | null => {
   return svg;
 };
 
-/// Il nome di un colore delle schede.
-function colorName(color: CanvasChosenColor): string {
-  if (color === null) return t("canvas.options.color_mixed");
-  if (color === undefined || color === "") return t("canvas.default");
-  if (/^[1-6]$/.test(color)) return t(`canvas_menu.color.${color as "1"}`);
-  return color.toLowerCase();
+/// Il nome di un colore delle schede: quello di `colors.ts`, o «Colori
+/// diversi».
+function wellColorName(color: CanvasChosenColor): string {
+  return color === null ? t("canvas.options.color_mixed") : colorName(color);
 }
 
 /// Monta la riga delle opzioni della lavagna.
@@ -335,10 +344,27 @@ export function createCanvasOptions(ctx: CanvasOptionsContext): CanvasOptions {
   const openColorMenu = (): void => {
     const catalog = catalogNow();
     const current = ctx.color();
-    const items = CANVAS_COLORS.map((value) => entry(catalog, `canvas.color.${value}`, {
-      choice: "radio",
-      checked: current !== null && (current ?? "") === (value === "none" ? "" : value),
-    })).filter((one): one is MenuItem => one !== null);
+    // Lo stesso menu del tasto destro (T47): Nessuno e i sei, «Colori delle
+    // note ›» coi nove, «Altro…»; segnata la scelta di adesso.
+    const chosen = current === null ? null : colorChoiceOf(current);
+    const swatches = ctx.swatches?.() ?? new Map<string, string>();
+    const choice = (value: CanvasColorChoice, extra: Partial<MenuItem> = {}): MenuItem | null => {
+      const swatch = swatches.get(value);
+      return entry(catalog, `canvas.color.${value}`, {
+        label: colorMenuLabel(value),
+        choice: "radio",
+        checked: chosen === value,
+        ...(swatch === undefined ? {} : { swatches: [swatch] }),
+        ...extra,
+      });
+    };
+    const notes = NOTE_COLORS.map((color) => choice(color.id)).filter((one): one is MenuItem => one !== null);
+    const items = [
+      choice("none"),
+      ...JSON_CANVAS_COLORS.map((value) => choice(value)),
+      notes.length ? { label: t("canvas_menu.color.notes"), separator: true, items: notes } : null,
+      choice("other"),
+    ].filter((one): one is MenuItem => one !== null);
     openMenu(wellButton, "canvas.options.color_menu", items);
   };
 
@@ -381,13 +407,17 @@ export function createCanvasOptions(ctx: CanvasOptionsContext): CanvasOptions {
     for (const control of controls) paintControl(control.element, catalog.get(control.command), control.checked?.());
     // Il pozzo: il colore delle schede scelte, col suo nome.
     const color = ctx.color();
-    const name = colorName(color);
+    const name = wellColorName(color);
     if (chipName.textContent !== name) chipName.textContent = name;
     chip.classList.toggle("none", color === undefined || color === "");
     chip.classList.toggle("mixed", color === null);
-    if (color && /^[1-6]$/.test(color)) chip.dataset.canvasColor = color;
-    else if (color) chip.dataset.canvasColor = "custom";
+    // Il pallino come la carta della scheda (T47): la chiave del colore e,
+    // per un colore libero, il suo valore.
+    const look = color === null ? null : colorLook(color);
+    if (look) chip.dataset.canvasColor = look.key;
     else delete chip.dataset.canvasColor;
+    if (look?.custom) chip.style.setProperty("--canvas-color", look.custom);
+    else chip.style.removeProperty("--canvas-color");
     const wellCommand = catalog.get("canvas.color_menu");
     paintControl(wellButton, wellCommand);
     // Il pozzo dice il colore; il perché, se è spento, nel suggerimento.
