@@ -309,8 +309,6 @@ mod engine;
 mod index;
 mod provider;
 mod schema;
-#[cfg(test)]
-mod tests;
 
 pub use catalog::{catalog, settings};
 use catalog::{
@@ -326,3 +324,6 @@ pub use provider::SearchSettings;
 #[cfg(test)]
 use schema::schema_fingerprint;
 use schema::{build_schema, fingerprint, tag_names, task_states, Fields, Manifest};
+
+#[cfg(test)]
+mod tests;

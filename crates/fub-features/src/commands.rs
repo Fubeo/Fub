@@ -315,8 +315,6 @@ mod notes;
 mod provider;
 mod rewrite;
 mod tasks;
-#[cfg(test)]
-mod tests;
 
 pub use catalog::catalog;
 use folders::{folder_rename, folder_trash};
@@ -952,3 +950,6 @@ fn display(value: &SettingValue) -> String {
         SettingValue::List(the) => the.join(", "),
     }
 }
+
+#[cfg(test)]
+mod tests;

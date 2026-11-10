@@ -74,8 +74,6 @@ mod fs_atomic;
 mod fs_storage;
 mod fs_trait;
 mod mem;
-#[cfg(test)]
-mod tests;
 
 pub use api::{ConditionalWrite, DirEntry, EntryKind, FileIdentity, Merge, Stat, VaultStorage};
 #[cfg(test)]
@@ -107,3 +105,6 @@ pub(crate) use fs_storage::{
     TEMP_FILE_EXPIRY_MS,
 };
 pub use mem::MemStorage;
+
+#[cfg(test)]
+mod tests;

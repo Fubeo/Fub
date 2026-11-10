@@ -37,8 +37,6 @@ mod job;
 mod plugin;
 mod query;
 mod stores;
-#[cfg(test)]
-mod tests;
 mod vault;
 mod views;
 
@@ -69,3 +67,6 @@ pub use vault::{EntryKind, FolderScope, TrashEntry, VaultEntry, VaultFolder};
 pub use views::{
     CommandProvider, ViewInstance, ViewInterests, ViewProvider, ViewSpec, ViewSurface,
 };
+
+#[cfg(test)]
+mod tests;

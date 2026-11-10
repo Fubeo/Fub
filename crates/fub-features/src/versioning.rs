@@ -214,8 +214,6 @@ mod diff;
 mod handler;
 mod persist;
 mod store;
-#[cfg(test)]
-mod tests;
 mod view;
 
 pub use catalog::catalog;
@@ -246,3 +244,6 @@ use store::{
 use view::tree;
 use view::{read_snapshot, version_source_doc, A_PREVIEW, TS};
 pub use view::{HistoryView, HISTORY_VIEW, VERSION_CLEAR, VERSION_RESTORE};
+
+#[cfg(test)]
+mod tests;
