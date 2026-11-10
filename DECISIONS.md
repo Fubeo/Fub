@@ -59,6 +59,7 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-10 · n6 · L'utente sceglie (a) per la griglia di T71: i punti si vedono ogni 32 unità, la griglia resta accesa di serie, l'aggancio resta di 8; task T95, fatto dall'orchestratore · Perché: lo sfondo resta calmo come nel prototipo e la griglia si scopre da sola; le guide verdi restano (l'utente non ha chiesto altro).
 - 2026-11-10 · n6 · T71 integrato con guide d'accento e punti della griglia ogni 8 px, accesi di serie come dice il piano; l'aspetto (densità dei punti, griglia accesa di serie) è chiesto all'utente perché il prototipo T26 non lo mostra · Perché: è una scelta visibile su ogni lavagna, e il prototipo approvato ha lo sfondo liscio.
 - 2026-11-10 · n6 · L'utente sceglie (a) per il tratto libero negli appunti lasciato fuori da T68: un campo `fub:ink` alla radice della forma, versione sempre 1; task nuovo T94, dopo il lazo (T86) · Perché: è la stessa forma del livello della radice del `.canvas`, e chi non conosce il campo lo ignora senza rompersi.
 - 2026-11-10 · n6 · L'utente sceglie (a) per il doppio clic su una scheda mancante o illeggibile (diagnosi di T91): «Ritrova…» o «Apri» al posto del campo del percorso; task nuovo T93 · Perché: il campo del percorso lì non aiuta, i pulsanti di T16 dicono già che cosa fare.

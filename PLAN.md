@@ -5417,6 +5417,29 @@ Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/canvas
 Stato: [ ] da fare
 
+## T95 · I punti della griglia più radi
+
+Perché: il 2026-11-10 l'utente ha visto le foto di T71 (un punto ogni 8
+unità, acceso di serie: lo sfondo pieno di punti, mentre il prototipo T26 è
+liscio) e ha scelto (a): i punti si vedono ogni 32 unità, la griglia resta
+accesa di serie, l'aggancio resta di 8.
+Tocca: `apps/client/src/editors/canvas/engine.ts` (`#paintGrid`),
+`apps/client/src/editors/canvas/engine.test.ts`,
+`docs/reference/canvas-input.md`.
+Non toccare: `CANVAS_SNAP` (8); le guide; il valore di serie di
+`canvas.grid`.
+Dipende da: T71
+Cosa fare:
+- `CANVAS_GRID_DOT_STEPS = 4`: il passo dei punti è quattro passi
+  dell'aggancio, sugli incroci dell'aggancio.
+- La soglia sotto cui la griglia non si disegna si misura fra due punti
+  (16 px sullo schermo): resta il 50% di zoom.
+Fatto quando: `engine.test.ts` prova i punti ogni 32 px al 100%, rosso
+prima e verde dopo; i test dell'aggancio di T71 restano verdi.
+Prova: cd apps/client && npx vitest run src/editors/canvas/engine.test.ts
+Stato: [x] fatto (2026-11-10) dall'orchestratore, task di poche righe. Non
+fotografato nel banco: si vede sulla 1432.
+
 ## Non verificato stanotte
 
 - Niente è stato compilato né provato: la macchina era carica e il disco
