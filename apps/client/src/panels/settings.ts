@@ -1532,6 +1532,10 @@ const OWN_LIST_FIELDS = new Map<string, () => Promise<OwnListField>>([
     () => import("../editors/spatial/toolbar-field").then(({ toolbarField, describeToolbar }) => ({ field: toolbarField, describe: describeToolbar })),
   ],
   [
+    "canvas.toolbar",
+    () => import("../editors/canvas/toolbar-field").then(({ canvasToolbarField, describeCanvasToolbar }) => ({ field: canvasToolbarField, describe: describeCanvasToolbar })),
+  ],
+  [
     "uri.allowed",
     () => import("../ui/uri-allowed-field").then(({ uriAllowedField, describeUriAllowed }) => ({ field: uriAllowedField, describe: describeUriAllowed })),
   ],
