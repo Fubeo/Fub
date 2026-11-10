@@ -2,7 +2,8 @@
 
 > **Domanda:** come usa Fub gli stessi contratti per provider nativi e
 > componenti WASM, applicando permessi e limiti in un solo punto?
-> **Fonti autorevoli:** `crates/fub-abi/src/traits.rs`,
+> **Fonti autorevoli:** `crates/fub-abi/src/traits.rs` (e i suoi moduli in
+> `traits/`),
 > `crates/fub-host/src/mount.rs`, `crates/fub-wasm-host/src/`.
 
 ## Modello

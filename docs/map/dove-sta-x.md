@@ -12,7 +12,7 @@
 | Contratto | Definito da |
 |---|---|
 | il modello di documento comune | `crates/fub-abi/src/model.rs` |
-| i trait di estensione e il manifest dei plugin | `crates/fub-abi/src/traits.rs` |
+| i trait di estensione e il manifest dei plugin | `crates/fub-abi/src/traits.rs`, diviso in `traits/` (capacità in `stores.rs` e `host.rs`, provider in `views.rs`, `index_provider.rs`, `plugin.rs`) |
 | il `FormatProvider` | `crates/fub-abi/src/format.rs` |
 | l'edit chirurgico e le revisioni | `crates/fub-abi/src/edit.rs` |
 | gli eventi e i lotti | `crates/fub-abi/src/event.rs` |
@@ -38,7 +38,7 @@
 | `TextEngine` (il padrone di CodeMirror) | `apps/client/src/editors/text/engine.ts` |
 | il registro delle superfici | `apps/client/src/editors/core/registry.ts` |
 | `SHELL_COMMANDS` e i suoi mirror | `crates/fub-host/src/shell.rs` e `apps/client/src/ui/shell-keys.generated.ts` |
-| `PluginManifest` (`provides`, `requires`) | `crates/fub-abi/src/traits.rs` |
+| `PluginManifest` (`provides`, `requires`) | `crates/fub-abi/src/traits/plugin.rs` |
 | `plugins.disabled` (spegnere per vault) | `crates/fub-host/src/settings.rs` |
 | `SettingSpec` e i livelli delle impostazioni | `crates/fub-abi/src/settings.rs` |
 | `perf.probe` (la sonda N0) | `crates/fub-host/src/settings.rs`, montata da `apps/client/src/perf/` |
