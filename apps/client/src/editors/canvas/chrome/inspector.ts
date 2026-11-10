@@ -3,11 +3,16 @@
 // con `inspectorChrome`. La shell mette la testata, le linguette e il titolo
 // del pannello; qui c'è il contenuto.
 //
-// Per ora c'è la parte «Schede»: tutte le schede in ordine di lettura
-// (`reading-order.ts`), coi gruppi come cartelle, filtrabili per nome e per
-// specie; un clic (o Invio) porta la vista sulla scheda e la sceglie. È anche
-// il percorso del lettore di schermo. «Scheda» e «Fili» arrivano con T59,
-// «Fonti» con T77: finché non ci sono, le loro linguette non nascono.
+// Le parti: «Schede», tutte le schede in ordine di lettura (`reading-order.ts`),
+// coi gruppi come cartelle, filtrabili per nome e per specie; un clic (o Invio)
+// porta la vista sulla scheda e la sceglie, ed è anche il percorso del lettore
+// di schermo. «Scheda» (i numeri, il colore, il file e «Avanzate», il nodo
+// grezzo) e «Fili» (l'etichetta, le punte, i lati, l'inversione) T59: nascono
+// solo con la porta `edit`, che la tela non dà ancora. «Fonti» arriva con T77.
+//
+// Le modifiche non le fa l'ispettore: chiede alla tela (`CanvasEditPort`) la
+// scelta, il modello e un commit di toppe. Il commit è quello del nucleo di N3
+// e il suo annulla sta nel motore.
 //
 // L'ispettore legge il documento (il testo della lavagna) e chiama la tela
 // per il salto: non tocca il motore. Il salto passa dalla strada che la
@@ -20,17 +25,27 @@
 // disegnano solo quelle che si vedono, come i Livelli del disegno.
 
 import type { SurfacePanel, SurfacePanels } from "../../core/registry";
-import { onLanguage, t } from "../../../i18n/strings";
+import { onLanguage, t, type Key } from "../../../i18n/strings";
 import { identifier } from "../../../ui/a11y";
 import { iconEl } from "../../../ui/icons";
-import { openLifetime } from "../../../ui/lifetime";
+import { openLifetime, type Lifetime } from "../../../ui/lifetime";
+import { createColorPicker, numberField, openPopover, type NumberField, type PopoverHandle } from "../../../kit";
 import { cardKindOf } from "../cards";
-import type { CanvasNode } from "../model";
+import { colorChoiceOf, colorLook, colorMenuLabel, colorName, colorValueOf, NOTE_COLORS, writeColor, type CanvasColorChoice } from "../colors";
+import { DROP_MIN_SIZE } from "../drop-layout";
+import type { CanvasDocument, CanvasEdge, CanvasEdgeSide, CanvasNode } from "../model";
+import { upsertEdgePatch, upsertNodePatch, type CanvasPatch } from "../operation";
+import { pickerText } from "../pen-menu";
 import { readingOrder, type ReadingEntry } from "../reading-order";
+import { rawFields, setRawField, type RawProblem } from "./raw-node";
 import { ensureCanvasIcons } from "./icons";
 
 /** L'id della linguetta «Schede»: l'ispettore lo ricorda. */
 export const CARDS_PANEL_ID = "canvas.cards";
+/** L'id della linguetta «Scheda» (T59). */
+export const CARD_PANEL_ID = "canvas.card";
+/** L'id della linguetta «Fili» (T59). */
+export const EDGE_PANEL_ID = "canvas.edge";
 
 /** Oltre queste righe l'elenco disegna solo quelle che si vedono. */
 export const VIRTUAL_AFTER = 500;
@@ -321,6 +336,27 @@ function fold(text: string): string {
 
 // --- l'ispettore ------------------------------------------------------------------
 
+/** La scelta della lavagna adesso: le id delle schede e dei fili scelti. */
+export interface CanvasSelection {
+  readonly nodes: readonly string[];
+  readonly edges: readonly string[];
+}
+
+/**
+ * Ciò che le parti «Scheda» e «Fili» chiedono alla tela (T59). Senza, l'ispettore
+ * offre solo «Schede». Il commit è un solo passo del nucleo di N3, col suo
+ * annulla: l'ispettore non scrive il file da sé.
+ */
+export interface CanvasEditPort {
+  readonly selection: () => CanvasSelection;
+  /** Il modello della lavagna adesso; `null` senza lavagna. */
+  readonly doc: () => CanvasDocument | null;
+  /** Le toppe, mai vuote: un commit solo, col suo annulla. */
+  readonly commit: (patches: readonly CanvasPatch[]) => void;
+  /** Vero in sola lettura: tutto si legge, niente si cambia. */
+  readonly readOnly: () => boolean;
+}
+
 /** Ciò che l'ispettore chiede alla superficie. */
 export interface CanvasInspectorPort {
   /** Il testo della lavagna adesso; `null` senza lavagna. */
@@ -330,6 +366,8 @@ export interface CanvasInspectorPort {
    * sceglie (`revealSource` della tela). `false` se non ci arriva.
    */
   readonly reveal: (byte: number) => boolean;
+  /** La scelta e le modifiche per «Scheda» e «Fili» (T59); senza, solo «Schede». */
+  readonly edit?: CanvasEditPort;
 }
 
 export interface CanvasInspector {
@@ -408,13 +446,48 @@ export function createCanvasInspector(port: CanvasInspectorPort): CanvasInspecto
     },
   };
 
+  /// «Scheda» e «Fili» (T59): montano chi sta scelto, e se non c'è niente da
+  /// scegliere non si offrono.
+  const editing = (mountPart: (host: HTMLElement, edit: CanvasEditPort) => { readonly handle: Mounted; unmount(): void }): ((host: HTMLElement) => () => void) => (host) => {
+    const edit = port.edit;
+    if (disposed || !edit) return () => {};
+    const view = mountPart(host, edit);
+    mounted.add(view.handle);
+    return () => {
+      mounted.delete(view.handle);
+      view.unmount();
+    };
+  };
+  const card: SurfacePanel = { id: CARD_PANEL_ID, title: () => t("canvas.inspector.card"), icon: "properties", mount: editing(mountCard) };
+  const edge: SurfacePanel = { id: EDGE_PANEL_ID, title: () => t("canvas.inspector.edges"), icon: "canvas-connect", mount: editing(mountEdge) };
+
+  /// Le linguette che si offrono adesso: «Schede», poi «Scheda» se c'è una
+  /// scheda scelta, «Fili» se c'è un filo scelto.
+  const tabs = (): SurfacePanel[] => {
+    const out = [tab];
+    if (!port.edit) return out;
+    const { nodes, edges } = chosenOf(port.edit);
+    if (nodes.length > 0) out.push(card);
+    if (edges.length > 0) out.push(edge);
+    return out;
+  };
+
   const notify = (): void => {
     for (const listener of [...listeners]) listener();
   };
 
+  /// La lista delle linguette è cambiata: lo dice la shell, una volta sola.
+  let announced = "";
+  const announce = (): void => {
+    const key = offered && !disposed ? tabs().map((each) => each.id).join(" ") : "";
+    if (key === announced) return;
+    announced = key;
+    notify();
+  };
+
   return {
     panels: {
-      list: () => (offered && !disposed ? [tab] : []),
+      list: () => (offered && !disposed ? tabs() : []),
       subscribe(listener) {
         listeners.add(listener);
         return () => listeners.delete(listener);
@@ -430,22 +503,24 @@ export function createCanvasInspector(port: CanvasInspectorPort): CanvasInspecto
     offer(on) {
       if (disposed || on === offered) return;
       offered = on;
-      notify();
+      announce();
     },
     changed() {
       stale = true;
+      announce();
       if (mounted.size === 0) return;
       for (const view of mounted) view.refresh();
     },
     selectionChanged() {
-      if (picking || picked === null) return;
-      picked = null;
+      if (!picking && picked !== null) picked = null;
+      announce();
       for (const view of mounted) view.mark();
     },
     dispose() {
       if (disposed) return;
       disposed = true;
       offered = false;
+      announced = "";
       notify();
       listeners.clear();
       reveals.clear();
@@ -727,6 +802,771 @@ function mountCards(host: HTMLElement, port: CardsPort): { readonly handle: Moun
   refresh();
   return {
     handle: { refresh, mark },
+    unmount: () => life.close(),
+  };
+}
+
+// --- la parte «Scheda» e «Fili» (T59) -------------------------------------------------
+
+/** Un pezzo montato: il suo aggiornamento e la sua fine. */
+interface Mount {
+  readonly handle: Mounted;
+  unmount(): void;
+}
+
+/** Le schede e i fili scelti, nell'ordine del documento; senza lavagna, niente. */
+function chosenOf(edit: CanvasEditPort): { readonly nodes: CanvasNode[]; readonly edges: CanvasEdge[] } {
+  const doc = edit.doc();
+  if (doc === null) return { nodes: [], edges: [] };
+  const picked = edit.selection();
+  const nodeIds = new Set(picked.nodes);
+  const edgeIds = new Set(picked.edges);
+  return {
+    nodes: doc.nodes.filter((node) => nodeIds.has(node.id)),
+    edges: doc.edges.filter((edge) => edgeIds.has(edge.id)),
+  };
+}
+
+/** Il valore che hanno tutti, o `null` se sono diversi (o non ce n'è nessuno). */
+export function commonValue<T>(values: readonly T[]): T | null {
+  const first = values[0];
+  if (first === undefined) return null;
+  return values.every((value) => value === first) ? first : null;
+}
+
+/** Le toppe che fanno `change` alle schede `ids`: una per scheda che cambia davvero. */
+export function nodePatches(doc: CanvasDocument, ids: readonly string[], change: (node: CanvasNode) => CanvasNode): CanvasPatch[] {
+  const patches: CanvasPatch[] = [];
+  for (const id of ids) {
+    const node = doc.nodes.find((each) => each.id === id);
+    if (node === undefined) continue;
+    const patch = upsertNodePatch(doc, change({ ...node }));
+    if (patch !== null) patches.push(patch);
+  }
+  return patches;
+}
+
+/** Come `nodePatches`, per i fili `ids`. */
+export function edgePatches(doc: CanvasDocument, ids: readonly string[], change: (edge: CanvasEdge) => CanvasEdge): CanvasPatch[] {
+  const patches: CanvasPatch[] = [];
+  for (const id of ids) {
+    const edge = doc.edges.find((each) => each.id === id);
+    if (edge === undefined) continue;
+    const patch = upsertEdgePatch(doc, change({ ...edge }));
+    if (patch !== null) patches.push(patch);
+  }
+  return patches;
+}
+
+/** Un commit solo sulle schede `ids`; niente se non cambia qualcosa o se è sola lettura. */
+function writeNodes(edit: CanvasEditPort, ids: readonly string[], change: (node: CanvasNode) => CanvasNode): void {
+  const doc = edit.doc();
+  if (doc === null || edit.readOnly()) return;
+  const patches = nodePatches(doc, ids, change);
+  if (patches.length > 0) edit.commit(patches);
+}
+
+/** Come `writeNodes`, per i fili. */
+function writeEdges(edit: CanvasEditPort, ids: readonly string[], change: (edge: CanvasEdge) => CanvasEdge): void {
+  const doc = edit.doc();
+  if (doc === null || edit.readOnly()) return;
+  const patches = edgePatches(doc, ids, change);
+  if (patches.length > 0) edit.commit(patches);
+}
+
+/** La scheda col colore `color` (`undefined`: quello di serie, il campo se ne va). */
+export function withColor(node: CanvasNode, color: string | undefined): CanvasNode {
+  const next = { ...node };
+  if (color === undefined) delete next.color;
+  else next.color = color;
+  return next;
+}
+
+/** Il colore comune delle schede: `undefined` quello di serie, `null` se sono diversi. */
+export function colorOf(nodes: readonly CanvasNode[]): string | undefined | null {
+  const common = commonValue(nodes.map((node) => node.color ?? ""));
+  if (common === null) return null;
+  return common === "" ? undefined : common;
+}
+
+/** Le punte di un filo, come le sceglie «Punte». */
+export type EdgeTips = "none" | "start" | "end";
+
+/**
+ * Le punte di un filo come le sceglie «Punte»; `null` se ne ha due, che la
+ * scelta non dice. Senza `fromEnd` e `toEnd` il filo è come JSON Canvas lo
+ * legge: nessuna punta all'inizio, una alla fine.
+ */
+export function tipsOf(edge: CanvasEdge): EdgeTips | null {
+  const from = edge.fromEnd ?? "none";
+  const to = edge.toEnd ?? "arrow";
+  if (from === to) return from === "none" ? "none" : null;
+  return from === "arrow" ? "start" : "end";
+}
+
+/** Il filo con le punte `tips`, scritte per intero da tutte e due le parti. */
+export function withTips(edge: CanvasEdge, tips: EdgeTips): CanvasEdge {
+  return { ...edge, fromEnd: tips === "start" ? "arrow" : "none", toEnd: tips === "end" ? "arrow" : "none" };
+}
+
+/** Le scelte di «Lato»: `auto` toglie il lato dal file. */
+export type SideChoice = "auto" | CanvasEdgeSide;
+export const SIDE_CHOICES: readonly SideChoice[] = ["auto", "top", "right", "bottom", "left"];
+
+/** Il filo con il lato `side` di una sua estremità; `auto` lo toglie. */
+export function withSide(edge: CanvasEdge, end: "from" | "to", side: SideChoice): CanvasEdge {
+  const next = { ...edge };
+  const key = end === "from" ? "fromSide" : "toSide";
+  if (side === "auto") delete next[key];
+  else next[key] = side;
+  return next;
+}
+
+/** Il filo con la direzione invertita: le estremità scambiate, con le punte al loro posto. */
+export function reversedEdge(edge: CanvasEdge): CanvasEdge {
+  const next: CanvasEdge = {
+    ...edge,
+    fromNode: edge.toNode,
+    toNode: edge.fromNode,
+    fromEnd: edge.toEnd ?? "arrow",
+    toEnd: edge.fromEnd ?? "none",
+  };
+  if (edge.toSide === undefined) delete next.fromSide;
+  else next.fromSide = edge.toSide;
+  if (edge.fromSide === undefined) delete next.toSide;
+  else next.toSide = edge.fromSide;
+  return next;
+}
+
+/** Il filo con l'etichetta `label`; il testo vuoto la toglie. */
+export function withLabel(edge: CanvasEdge, label: string): CanvasEdge {
+  const next = { ...edge };
+  if (label === "") delete next.label;
+  else next.label = label;
+  return next;
+}
+
+/** Il valore del pozzo: `undefined` quello di serie, `null` se è misto. */
+type WellValue = string | undefined | null;
+
+interface ColorWell {
+  readonly element: HTMLElement;
+  setValue(value: WellValue): void;
+  setDisabled(disabled: boolean): void;
+}
+
+/**
+ * Il pozzo del colore della scheda (T47): un pulsante col colore e il suo
+ * nome, che apre la lista delle scelte del menu della tela; «Altro…» mette il
+ * selettore del kit nella stessa finestra. `write` riceve il colore da
+ * scrivere, `undefined` per toglierlo.
+ */
+function colorWell(life: Lifetime, dom: Document, write: (color: string | undefined) => void, readOnly: () => boolean): ColorWell {
+  let value: WellValue = undefined;
+  let popover: PopoverHandle | null = null;
+
+  const element = dom.createElement("div");
+  element.className = "kit-color-well";
+  const button = dom.createElement("button");
+  button.type = "button";
+  button.className = "kit-color-well-button";
+  button.id = identifier("canvas-inspector-color");
+  button.setAttribute("aria-haspopup", "dialog");
+  button.setAttribute("aria-expanded", "false");
+  const chip = dom.createElement("span");
+  chip.className = "kit-color-chip";
+  chip.setAttribute("aria-hidden", "true");
+  const name = dom.createElement("span");
+  button.append(chip, name);
+  element.append(button);
+
+  const paint = (): void => {
+    chip.classList.toggle("none", value === undefined);
+    chip.classList.toggle("mixed", value === null);
+    const look = typeof value === "string" ? colorLook(value) : null;
+    if (look) chip.dataset.canvasColor = look.key;
+    else delete chip.dataset.canvasColor;
+    if (look?.custom) chip.style.setProperty("--canvas-color", look.custom);
+    else chip.style.removeProperty("--canvas-color");
+    const shown = value === null ? t("canvas.inspector.color_mixed") : colorName(value);
+    name.textContent = shown;
+    button.setAttribute("aria-label", t("canvas.options.color_value", { name: shown }));
+  };
+
+  const close = (): void => {
+    popover?.close();
+  };
+
+  const pick = (list: HTMLElement, own: Lifetime): void => {
+    const current = typeof value === "string" && value.startsWith("#") ? value : null;
+    const picker = createColorPicker({
+      value: current,
+      text: pickerText(),
+      free: true,
+      lifetime: own,
+      onChange: (color) => {
+        const written = writeColor(color);
+        if (written !== null) write(written);
+        close();
+      },
+    });
+    list.replaceChildren(picker.element);
+    picker.focus();
+  };
+
+  const open = (): void => {
+    if (popover !== null || readOnly()) return;
+    const own = openLifetime();
+    const list = dom.createElement("div");
+    list.className = "canvas-inspector-swatches";
+    list.setAttribute("role", "radiogroup");
+    list.setAttribute("aria-label", t("canvas_menu.color"));
+    const chosen = value === null ? null : colorChoiceOf(value ?? undefined);
+    const swatch = (choice: CanvasColorChoice): HTMLButtonElement => {
+      const item = dom.createElement("button");
+      item.type = "button";
+      item.className = "canvas-inspector-swatch";
+      item.setAttribute("role", "radio");
+      item.setAttribute("aria-checked", String(choice === chosen));
+      const dot = dom.createElement("span");
+      dot.className = "kit-color-chip";
+      dot.setAttribute("aria-hidden", "true");
+      const color = colorValueOf(choice);
+      if (choice === "none") dot.classList.add("none");
+      else if (typeof color === "string") {
+        const look = colorLook(color);
+        if (look) dot.dataset.canvasColor = look.key;
+      }
+      const label = dom.createElement("span");
+      label.textContent = colorMenuLabel(choice);
+      item.append(dot, label);
+      own.listen(item, "click", () => {
+        if (choice === "other") {
+          pick(list, own);
+          return;
+        }
+        write(colorValueOf(choice) ?? undefined);
+        close();
+      });
+      return item;
+    };
+    const notes = dom.createElement("p");
+    notes.className = "canvas-inspector-heading";
+    notes.textContent = t("canvas_menu.color.notes");
+    const plain: CanvasColorChoice[] = ["none", "1", "2", "3", "4", "5", "6"];
+    list.append(
+      ...plain.map(swatch),
+      notes,
+      ...NOTE_COLORS.map((note) => swatch(note.id)),
+      swatch("other"),
+    );
+    popover = openPopover({
+      anchor: button,
+      content: list,
+      label: t("canvas_menu.color"),
+      className: "canvas-inspector-popover",
+      lifetime: own,
+      onClose: () => {
+        button.setAttribute("aria-expanded", "false");
+        popover = null;
+        own.close();
+      },
+    });
+    button.setAttribute("aria-expanded", "true");
+  };
+
+  life.listen(button, "click", () => {
+    if (popover !== null) close();
+    else open();
+  });
+  life.add(close);
+  paint();
+
+  return {
+    element,
+    setValue(next) {
+      value = next;
+      paint();
+    },
+    setDisabled(disabled) {
+      button.disabled = disabled;
+      if (disabled) close();
+    },
+  };
+}
+
+/** Il nome di un problema del nodo grezzo, per chi legge. */
+function rawProblemText(problem: RawProblem): string {
+  switch (problem) {
+    case "json":
+      return t("canvas.inspector.raw.problem.json");
+    case "number":
+      return t("canvas.inspector.raw.problem.number");
+    case "text":
+      return t("canvas.inspector.raw.problem.text");
+    case "small":
+      return t("canvas.inspector.raw.problem.small", { min: String(DROP_MIN_SIZE) });
+    case "id":
+      return t("canvas.inspector.raw.problem.id");
+    case "type":
+      return t("canvas.inspector.raw.problem.type");
+    case "ink":
+      return t("canvas.inspector.raw.problem.ink");
+    case "shape":
+      return t("canvas.inspector.raw.problem.shape");
+  }
+}
+
+/** La tabella di «Avanzate»: i campi del nodo, ognuno col suo JSON, scritto a mano. */
+interface RawTable {
+  readonly element: HTMLElement;
+  /** Il nodo com'è adesso: i campi che non si stanno scrivendo si rileggono. */
+  sync(node: CanvasNode): void;
+}
+
+function rawTable(dom: Document, life: Lifetime, edit: CanvasEditPort, node: CanvasNode): RawTable {
+  let current = node;
+  /// I campi con un JSON che non si è preso: restano scritti finché non si corregge.
+  const drafts = new Set<string>();
+  const inputs = new Map<string, HTMLInputElement>();
+
+  const table = dom.createElement("table");
+  table.className = "canvas-inspector-raw";
+  const error = dom.createElement("p");
+  error.className = "canvas-inspector-note";
+  error.setAttribute("aria-live", "polite");
+  error.hidden = true;
+  const show = (message: string | null): void => {
+    error.textContent = message ?? "";
+    error.hidden = message === null;
+  };
+  const textOf = (key: string): string => rawFields(current).find((field) => field.key === key)?.text ?? "";
+
+  const commit = (key: string, input: HTMLInputElement): void => {
+    const now = edit.doc()?.nodes.find((each) => each.id === current.id);
+    if (now === undefined || edit.readOnly()) return;
+    const edited = setRawField(now, key, input.value);
+    if ("problem" in edited) {
+      drafts.add(key);
+      input.setAttribute("aria-invalid", "true");
+      show(t("canvas.inspector.raw.field_problem", { field: key, problem: rawProblemText(edited.problem) }));
+      return;
+    }
+    drafts.delete(key);
+    input.removeAttribute("aria-invalid");
+    show(null);
+    writeNodes(edit, [now.id], () => edited.node);
+  };
+
+  for (const field of rawFields(node)) {
+    const row = dom.createElement("tr");
+    const head = dom.createElement("th");
+    head.scope = "row";
+    const id = identifier("canvas-inspector-raw");
+    const name = dom.createElement("label");
+    name.htmlFor = id;
+    name.textContent = field.key;
+    head.append(name);
+    const cell = dom.createElement("td");
+    if (field.lock === "ink" || field.lock === "shape") {
+      row.dataset.locked = "";
+      cell.textContent = t(field.lock === "ink" ? "canvas.inspector.ink_locked" : "canvas.inspector.shape_locked");
+    } else {
+      const input = dom.createElement("input");
+      input.type = "text";
+      input.id = id;
+      input.value = field.text;
+      input.spellcheck = false;
+      input.autocomplete = "off";
+      // `id` e `type` si leggono e si copiano, non si scrivono.
+      input.readOnly = field.lock !== null;
+      inputs.set(field.key, input);
+      if (field.lock === null) {
+        const key = field.key;
+        life.listen(input, "change", () => commit(key, input));
+        life.listen(input, "keydown", (event) => {
+          if (event.key === "Enter") {
+            event.preventDefault();
+            commit(key, input);
+          } else if (event.key === "Escape") {
+            event.preventDefault();
+            event.stopPropagation();
+            drafts.delete(key);
+            input.removeAttribute("aria-invalid");
+            show(null);
+            input.value = textOf(key);
+          }
+        });
+      }
+      cell.append(input);
+    }
+    row.append(head, cell);
+    table.append(row);
+  }
+
+  const wrap = dom.createElement("div");
+  const note = dom.createElement("p");
+  note.className = "canvas-inspector-note";
+  note.textContent = t("canvas.inspector.raw_note");
+  wrap.append(table, error, note);
+
+  return {
+    element: wrap,
+    sync(next) {
+      current = next;
+      for (const field of rawFields(next)) {
+        const input = inputs.get(field.key);
+        if (input === undefined || input === dom.activeElement || drafts.has(field.key)) continue;
+        input.value = field.text;
+      }
+    },
+  };
+}
+
+/** I numeri della scheda: la chiave del campo. */
+type GeometryKey = "x" | "y" | "width" | "height";
+
+/** I campi dei numeri, nell'ordine di «Scheda», con la loro etichetta. */
+const GEOMETRY: readonly (readonly [GeometryKey, Key])[] = [
+  ["x", "canvas.inspector.x"],
+  ["y", "canvas.inspector.y"],
+  ["width", "canvas.inspector.width"],
+  ["height", "canvas.inspector.height"],
+];
+
+/** Un campo con la sua etichetta, come una `label` sul controllo. */
+function labelled(dom: Document, text: string, control: HTMLElement): HTMLElement {
+  const field = dom.createElement("div");
+  field.className = "canvas-inspector-field";
+  const name = dom.createElement("label");
+  name.htmlFor = control.id;
+  name.textContent = text;
+  field.append(name, control);
+  return field;
+}
+
+/** La parte «Scheda»: i numeri, il colore, il file e «Avanzate», il nodo grezzo di una scheda sola. */
+function mountCard(host: HTMLElement, edit: CanvasEditPort): Mount {
+  ensureCanvasIcons();
+  const life = openLifetime();
+  const dom = host.ownerDocument;
+  const box = dom.createElement("div");
+  box.className = "canvas-inspector";
+  box.dataset.part = "card";
+  host.append(box);
+  life.add(() => box.remove());
+
+  /// Le schede scelte, nell'ordine del documento: si costruisce di nuovo solo
+  /// quando la scelta cambia, così il pozzo e i numeri (col fuoco) restano.
+  let built: string | null = null;
+  /// Gli ascolti dell'ultima costruzione.
+  let inner: Lifetime | null = null;
+  /// «Avanzate» aperto: si ricorda da una scelta all'altra.
+  let advanced = false;
+  let numbers: Record<GeometryKey, NumberField> | null = null;
+  let well: ColorWell | null = null;
+  let path: HTMLElement | null = null;
+  let raw: RawTable | null = null;
+  /// La tabella di «Avanzate» e i suoi ascolti, con i campi che mostra.
+  let rawBody: HTMLElement | null = null;
+  let rawLife: Lifetime | null = null;
+  let rawKeys: string | null = null;
+
+  /// La tabella di «Avanzate»: si rifà solo quando cambiano i campi del nodo (un
+  /// colore nuovo aggiunge `color`), senza toccare il pozzo né i numeri.
+  const showRaw = (only: CanvasNode): void => {
+    if (rawBody === null) return;
+    const keys = Object.keys(only).join("\n");
+    if (keys === rawKeys) return;
+    rawLife?.close();
+    rawLife = openLifetime();
+    rawKeys = keys;
+    rawBody.replaceChildren();
+    raw = rawTable(dom, rawLife, edit, only);
+    rawBody.append(raw.element);
+  };
+
+  const build = (nodes: CanvasNode[]): void => {
+    inner?.close();
+    const own = openLifetime();
+    inner = own;
+    box.replaceChildren();
+    numbers = null;
+    well = null;
+    path = null;
+    raw = null;
+    rawLife?.close();
+    rawLife = null;
+    rawKeys = null;
+    rawBody = null;
+    const [only] = nodes;
+    if (nodes.length === 0) {
+      const gone = dom.createElement("p");
+      gone.className = "canvas-inspector-note";
+      gone.textContent = t("canvas.inspector.card_gone");
+      box.append(gone);
+      return;
+    }
+    const ids = nodes.map((node) => node.id);
+    if (nodes.length > 1) {
+      const many = dom.createElement("p");
+      many.className = "canvas-inspector-note";
+      many.textContent = t("canvas.inspector.many", { n: String(nodes.length) });
+      box.append(many);
+    }
+
+    const grid = dom.createElement("div");
+    grid.className = "canvas-inspector-numbers";
+    const made = {} as Record<GeometryKey, NumberField>;
+    for (const [key, labelKey] of GEOMETRY) {
+      const field = numberField({
+        label: t(labelKey),
+        value: commonValue(nodes.map((node) => node[key])),
+        unit: "px",
+        places: 2,
+        ...(key === "width" || key === "height" ? { min: DROP_MIN_SIZE } : {}),
+        mixedText: t("canvas.inspector.mixed"),
+        problem: (problem) => t(`canvas.inspector.problem.${problem}`),
+        onCommit: (next) => writeNodes(edit, ids, (node) => ({ ...node, [key]: next })),
+        lifetime: own,
+      });
+      made[key] = field;
+      grid.append(field.element);
+    }
+    numbers = made;
+    box.append(grid);
+
+    const colorRow = dom.createElement("div");
+    colorRow.className = "canvas-inspector-field";
+    colorRow.dataset.wide = "";
+    const colorLabel = dom.createElement("span");
+    colorLabel.textContent = t("canvas_menu.color");
+    well = colorWell(own, dom, (color) => writeNodes(edit, ids, (node) => withColor(node, color)), () => edit.readOnly());
+    colorRow.append(colorLabel, well.element);
+    box.append(colorRow);
+
+    if (only !== undefined && nodes.length === 1) {
+      if (only.type === "file") {
+        const row = dom.createElement("div");
+        row.className = "canvas-inspector-field";
+        row.dataset.wide = "";
+        const label = dom.createElement("span");
+        label.textContent = t("canvas.inspector.file");
+        path = dom.createElement("span");
+        path.className = "canvas-inspector-path";
+        row.append(label, path);
+        box.append(row);
+      }
+      const panelId = identifier("canvas-inspector-advanced");
+      const toggle = dom.createElement("button");
+      toggle.type = "button";
+      toggle.className = "canvas-inspector-disclosure";
+      toggle.setAttribute("aria-expanded", String(advanced));
+      toggle.setAttribute("aria-controls", panelId);
+      const toggleText = dom.createElement("span");
+      toggleText.textContent = t("canvas.inspector.advanced");
+      toggle.append(toggleText);
+      const chevron = iconEl("draw-section");
+      if (chevron) {
+        chevron.setAttribute("aria-hidden", "true");
+        toggle.append(chevron);
+      }
+      const heading = dom.createElement("h3");
+      heading.className = "canvas-inspector-heading";
+      heading.append(toggle);
+      const body = dom.createElement("div");
+      body.id = panelId;
+      body.hidden = !advanced;
+      own.listen(toggle, "click", () => {
+        advanced = !advanced;
+        toggle.setAttribute("aria-expanded", String(advanced));
+        body.hidden = !advanced;
+      });
+      rawBody = body;
+      showRaw(only);
+      box.append(heading, body);
+    }
+  };
+
+  const sync = (nodes: CanvasNode[]): void => {
+    if (numbers === null || well === null) return;
+    const readOnly = edit.readOnly();
+    for (const [key] of GEOMETRY) {
+      numbers[key].setValue(commonValue(nodes.map((node) => node[key])));
+      numbers[key].setDisabled(readOnly);
+    }
+    well.setValue(colorOf(nodes));
+    well.setDisabled(readOnly);
+    const [only] = nodes;
+    if (path !== null && only !== undefined) path.textContent = typeof only.file === "string" ? only.file : "";
+    if (only !== undefined && nodes.length === 1) showRaw(only);
+    if (raw !== null && only !== undefined) raw.sync(only);
+  };
+
+  const refresh = (): void => {
+    if (life.closed) return;
+    const { nodes } = chosenOf(edit);
+    const signature = nodes.map((node) => node.id).join("\n");
+    if (signature !== built) {
+      built = signature;
+      build(nodes);
+    }
+    sync(nodes);
+  };
+
+  life.add(() => {
+    inner?.close();
+    inner = null;
+    rawLife?.close();
+    rawLife = null;
+  });
+  refresh();
+  return {
+    handle: { refresh, mark: refresh },
+    unmount: () => life.close(),
+  };
+}
+
+/** Il filo scelto: l'etichetta, le punte, i lati e l'inversione. */
+interface EdgeParts {
+  readonly label: HTMLInputElement;
+  readonly tips: ReadonlyMap<EdgeTips, HTMLButtonElement>;
+  readonly from: HTMLSelectElement;
+  readonly to: HTMLSelectElement;
+  readonly reverse: HTMLButtonElement;
+}
+
+/** La parte «Fili»: il filo scelto, con la sua etichetta, le punte, i lati e l'inversione. */
+function mountEdge(host: HTMLElement, edit: CanvasEditPort): Mount {
+  ensureCanvasIcons();
+  const life = openLifetime();
+  const dom = host.ownerDocument;
+  const box = dom.createElement("div");
+  box.className = "canvas-inspector";
+  box.dataset.part = "edge";
+  host.append(box);
+  life.add(() => box.remove());
+
+  let built: string | null = null;
+  let inner: Lifetime | null = null;
+  let parts: EdgeParts | null = null;
+
+  const build = (edges: CanvasEdge[]): void => {
+    inner?.close();
+    const own = openLifetime();
+    inner = own;
+    box.replaceChildren();
+    parts = null;
+    const [only] = edges;
+    if (only === undefined || edges.length > 1) {
+      const note = dom.createElement("p");
+      note.className = "canvas-inspector-note";
+      note.textContent = only === undefined ? t("canvas.inspector.edge_gone") : t("canvas.inspector.edges_many", { n: String(edges.length) });
+      box.append(note);
+      return;
+    }
+    const id = only.id;
+
+    const label = dom.createElement("input");
+    label.type = "text";
+    label.id = identifier("canvas-inspector-edge-label");
+    label.autocomplete = "off";
+    label.spellcheck = false;
+    own.listen(label, "change", () => writeEdges(edit, [id], (edge) => withLabel(edge, label.value)));
+
+    const tipsHeading = dom.createElement("h3");
+    tipsHeading.className = "canvas-inspector-heading";
+    tipsHeading.textContent = t("canvas.options.tips");
+    const group = dom.createElement("div");
+    group.className = "segmented canvas-inspector-tips";
+    group.setAttribute("role", "radiogroup");
+    group.setAttribute("aria-label", t("canvas.options.tips"));
+    const tips = new Map<EdgeTips, HTMLButtonElement>();
+    for (const choice of ["none", "start", "end"] as const) {
+      const option = dom.createElement("button");
+      option.type = "button";
+      option.className = "segmented-option";
+      option.setAttribute("role", "radio");
+      option.textContent = t(`canvas.options.tips.${choice}`);
+      own.listen(option, "click", () => writeEdges(edit, [id], (edge) => withTips(edge, choice)));
+      tips.set(choice, option);
+      group.append(option);
+    }
+
+    const side = (end: "from" | "to"): HTMLSelectElement => {
+      const select = dom.createElement("select");
+      select.id = identifier("canvas-inspector-side");
+      for (const choice of SIDE_CHOICES) {
+        const option = dom.createElement("option");
+        option.value = choice;
+        option.textContent = t(`canvas.inspector.side.${choice}`);
+        select.append(option);
+      }
+      own.listen(select, "change", () => {
+        const choice = SIDE_CHOICES.find((each) => each === select.value);
+        if (choice !== undefined) writeEdges(edit, [id], (edge) => withSide(edge, end, choice));
+      });
+      return select;
+    };
+    const from = side("from");
+    const to = side("to");
+    const sides = dom.createElement("div");
+    sides.className = "canvas-inspector-fields";
+    sides.append(
+      labelled(dom, t("canvas.edge_from_side"), from),
+      labelled(dom, t("canvas.edge_to_side"), to),
+    );
+
+    const actions = dom.createElement("div");
+    actions.className = "canvas-inspector-actions";
+    const reverse = dom.createElement("button");
+    reverse.type = "button";
+    reverse.className = "kit-button";
+    reverse.dataset.kind = "normal";
+    reverse.textContent = t("canvas_menu.reverse");
+    own.listen(reverse, "click", () => writeEdges(edit, [id], reversedEdge));
+    actions.append(reverse);
+
+    box.append(labelled(dom, t("canvas.edge_label"), label), tipsHeading, group, sides, actions);
+    parts = { label, tips, from, to, reverse };
+  };
+
+  const sync = (edges: CanvasEdge[]): void => {
+    const [only] = edges;
+    if (parts === null || only === undefined || edges.length !== 1) return;
+    const readOnly = edit.readOnly();
+    if (parts.label !== dom.activeElement) parts.label.value = only.label ?? "";
+    parts.label.readOnly = readOnly;
+    const current = tipsOf(only);
+    for (const [choice, option] of parts.tips) {
+      option.setAttribute("aria-checked", String(choice === current));
+      option.disabled = readOnly;
+    }
+    if (parts.from !== dom.activeElement) parts.from.value = only.fromSide ?? "auto";
+    if (parts.to !== dom.activeElement) parts.to.value = only.toSide ?? "auto";
+    parts.from.disabled = readOnly;
+    parts.to.disabled = readOnly;
+    parts.reverse.disabled = readOnly;
+  };
+
+  const refresh = (): void => {
+    if (life.closed) return;
+    const { edges } = chosenOf(edit);
+    const signature = edges.map((edge) => edge.id).join("\n");
+    if (signature !== built) {
+      built = signature;
+      build(edges);
+    }
+    sync(edges);
+  };
+
+  life.add(() => {
+    inner?.close();
+    inner = null;
+  });
+  refresh();
+  return {
+    handle: { refresh, mark: refresh },
     unmount: () => life.close(),
   };
 }

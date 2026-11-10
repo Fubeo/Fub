@@ -2,18 +2,36 @@
 // L'ispettore della lavagna (T58): la lettura delle schede dal testo, l'elenco
 // in ordine di lettura, il filtro, il clic che porta la vista sulla scheda e
 // la sceglie, l'elenco virtuale, e la superficie che lo offre e lo spegne.
+// Poi «Scheda» e «Fili» (T59): la porta di modifica è finta, applica le toppe
+// come la tela, e i controlli sono quelli veri del kit.
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import type { EditorSurface, SurfacePanel } from "../../core/registry";
-import type { CanvasNode } from "../model";
+import type { CanvasDocument, CanvasEdge, CanvasNode } from "../model";
+import type { CanvasPatch } from "../operation";
+import { DROP_MIN_SIZE } from "../drop-layout";
 import { canvasCoreReady } from "../wasm/core";
 import { mountCanvasSurface } from "../surface";
 import {
   boardCards,
+  CARD_PANEL_ID,
   cardName,
   CARDS_PANEL_ID,
+  colorOf,
+  commonValue,
   createCanvasInspector,
+  EDGE_PANEL_ID,
+  edgePatches,
   filterEntries,
+  nodePatches,
+  reversedEdge,
+  tipsOf,
   VIRTUAL_AFTER,
+  withColor,
+  withLabel,
+  withSide,
+  withTips,
+  type CanvasEditPort,
+  type CanvasInspector,
 } from "./inspector";
 import { readingOrder } from "../reading-order";
 
@@ -276,5 +294,222 @@ describe("la superficie della lavagna con l'ispettore", () => {
     for (let i = 0; i < 3; i++) mountPanel(panels.list()[0]!).unmount();
     expect(document.querySelectorAll(".canvas-inspector")).toHaveLength(0);
     surface.destroy();
+  });
+});
+
+// --- «Scheda» e «Fili» (T59) --------------------------------------------------------
+
+/** Un modello che applica le toppe come la tela, e ricorda le toppe chieste. */
+function fakeEdit(nodes: CanvasNode[], edges: CanvasEdge[], sel: { nodes: string[]; edges: string[] }, readOnly = false) {
+  let doc: CanvasDocument = { nodes: structuredClone(nodes), edges: structuredClone(edges) };
+  const commits: CanvasPatch[][] = [];
+  const hooks = { changed: (): void => {} };
+  const port: CanvasEditPort = {
+    selection: () => ({ nodes: [...sel.nodes], edges: [...sel.edges] }),
+    doc: () => doc,
+    commit(patches) {
+      commits.push([...patches]);
+      for (const patch of patches) {
+        if (patch.kind === "upsert-node") doc = { ...doc, nodes: doc.nodes.map((each) => (each.id === patch.after.id ? structuredClone(patch.after) : each)) };
+        if (patch.kind === "upsert-edge") doc = { ...doc, edges: doc.edges.map((each) => (each.id === patch.after.id ? structuredClone(patch.after) : each)) };
+      }
+      hooks.changed();
+    },
+    readOnly: () => readOnly,
+  };
+  return { port, commits, doc: () => doc, hooks };
+}
+
+/** Una lavagna offerta con la scelta `sel` e la sua porta di modifica. */
+function editing(nodes: CanvasNode[], edges: CanvasEdge[] = [], sel = { nodes: [] as string[], edges: [] as string[] }, readOnly = false) {
+  const edit = fakeEdit(nodes, edges, sel, readOnly);
+  const inspector = createCanvasInspector({ source: () => source(nodes), reveal: () => true, edit: edit.port });
+  edit.hooks.changed = () => inspector.changed();
+  inspector.offer(true);
+  return { ...edit, inspector, sel };
+}
+
+/** L'elemento della linguetta `id`, montato in un contenitore nuovo. */
+function partOf(inspector: CanvasInspector, id: string): HTMLElement {
+  const panel = inspector.panels.list().find((each) => each.id === id);
+  if (!panel) throw new Error(`nessuna linguetta ${id}`);
+  return mountPanel(panel).host;
+}
+
+/** I numeri della scheda, nell'ordine x, y, larghezza, altezza. */
+const numberInputs = (host: HTMLElement): HTMLInputElement[] => [...host.querySelectorAll<HTMLInputElement>(".canvas-inspector-numbers input")];
+
+/** Invio sul campo: così si conferma un numero o un JSON. */
+const enter = (input: HTMLInputElement): void => {
+  input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter" }));
+};
+
+describe("le parti «Scheda» e «Fili» (T59)", () => {
+  const card = (id: string, extra: Partial<CanvasNode> = {}): CanvasNode => node(id, 40, 60, { width: 240, height: 120, text: id, ...extra });
+
+  it("le punte, il lato, l'inversione e l'etichetta del filo, come scritture pure", () => {
+    const plain: CanvasEdge = { id: "e", fromNode: "a", toNode: "b", toEnd: "arrow" };
+    expect(tipsOf(plain)).toBe("end");
+    expect(tipsOf({ ...plain, fromEnd: "arrow", toEnd: "arrow" })).toBeNull();
+    expect(tipsOf({ ...plain, toEnd: "none" })).toBe("none");
+    const start = withTips(plain, "start");
+    expect(start).toMatchObject({ fromEnd: "arrow", toEnd: "none" });
+    expect(tipsOf(start)).toBe("start");
+    const reversed = reversedEdge({ ...plain, fromSide: "right" });
+    expect(reversed).toMatchObject({ fromNode: "b", toNode: "a", fromEnd: "arrow", toEnd: "none", toSide: "right" });
+    expect("fromSide" in reversed).toBe(false);
+    expect(withSide(plain, "to", "top")).toMatchObject({ toSide: "top" });
+    expect("toSide" in withSide({ ...plain, toSide: "top" }, "to", "auto")).toBe(false);
+    expect(withLabel(plain, "uso").label).toBe("uso");
+    expect("label" in withLabel({ ...plain, label: "uso" }, "")).toBe(false);
+  });
+
+  it("le toppe solo per ciò che cambia davvero, e i valori comuni", () => {
+    const doc: CanvasDocument = { nodes: [card("a"), card("b", { color: "2" })], edges: [{ id: "e", fromNode: "a", toNode: "b" }] };
+    expect(nodePatches(doc, ["a"], (each) => withColor(each, undefined))).toEqual([]);
+    const painted = nodePatches(doc, ["a", "b"], (each) => withColor(each, "3"));
+    expect(painted).toHaveLength(2);
+    expect(painted.every((patch) => patch.kind === "upsert-node")).toBe(true);
+    expect(edgePatches(doc, ["e"], (edge) => withLabel(edge, ""))).toEqual([]);
+    expect(commonValue([40, 40])).toBe(40);
+    expect(commonValue([40, 41])).toBeNull();
+    expect(commonValue<number>([])).toBeNull();
+    expect(colorOf([card("a"), card("b")])).toBeUndefined();
+    expect(colorOf([card("a", { color: "1" }), card("b", { color: "1" })])).toBe("1");
+    expect(colorOf([card("a", { color: "1" }), card("b")])).toBeNull();
+  });
+
+  it("le linguette: «Scheda» con una scheda scelta, «Fili» con un filo", () => {
+    const { inspector, sel } = editing([card("a")], [{ id: "e", fromNode: "a", toNode: "a", toEnd: "arrow" }]);
+    const ids = (): string[] => inspector.panels.list().map((panel) => panel.id);
+    expect(ids()).toEqual([CARDS_PANEL_ID]);
+    sel.nodes = ["a"];
+    inspector.selectionChanged();
+    expect(ids()).toEqual([CARDS_PANEL_ID, CARD_PANEL_ID]);
+    sel.nodes = [];
+    sel.edges = ["e"];
+    inspector.selectionChanged();
+    expect(ids()).toEqual([CARDS_PANEL_ID, EDGE_PANEL_ID]);
+  });
+
+  it("i numeri: 120+15 si prende su Invio, e il valore va alla scheda scelta", () => {
+    const { inspector, doc, commits } = editing([card("a", { x: 40 })], [], { nodes: ["a"], edges: [] });
+    const [x] = numberInputs(partOf(inspector, CARD_PANEL_ID));
+    x!.value = "120+15";
+    enter(x!);
+    expect(doc().nodes[0]!.x).toBe(135);
+    expect(commits).toHaveLength(1);
+  });
+
+  it("più schede: il valore misto è vuoto e dice «—», e un valore nuovo va a tutte", () => {
+    const { inspector, doc } = editing([card("a", { x: 10 }), card("b", { x: 20 })], [], { nodes: ["a", "b"], edges: [] });
+    const host = partOf(inspector, CARD_PANEL_ID);
+    const [x] = numberInputs(host);
+    expect(x!.value).toBe("");
+    expect(x!.placeholder).toBe("—");
+    expect(host.querySelector(".canvas-inspector-note")!.textContent).toContain("2");
+    x!.value = "5";
+    enter(x!);
+    expect(doc().nodes.map((each) => each.x)).toEqual([5, 5]);
+  });
+
+  it("una larghezza sotto il minimo non scende: si prende il minimo", () => {
+    const { inspector, doc } = editing([card("a")], [], { nodes: ["a"], edges: [] });
+    const [, , width] = numberInputs(partOf(inspector, CARD_PANEL_ID));
+    width!.value = "10";
+    enter(width!);
+    expect(doc().nodes[0]!.width).toBe(DROP_MIN_SIZE);
+  });
+
+  it("il colore: una nota si scrive col suo esadecimale, «Nessuno» lo toglie", () => {
+    const { inspector, doc } = editing([card("a")], [], { nodes: ["a"], edges: [] });
+    const host = partOf(inspector, CARD_PANEL_ID);
+    const well = host.querySelector<HTMLButtonElement>(".kit-color-well-button")!;
+    const choose = (label: string): void => {
+      const item = [...document.querySelectorAll<HTMLButtonElement>(".canvas-inspector-popover [role='radio']")].find((each) => each.textContent === label);
+      if (!item) throw new Error(`nessuna scelta «${label}»`);
+      item.click();
+    };
+    well.click();
+    choose("Blu");
+    expect(doc().nodes[0]!.color).toBe("#0064b0");
+    expect(host.querySelector<HTMLElement>(".kit-color-chip")!.dataset.canvasColor).toBe("blue");
+    well.click();
+    choose("Nessuno");
+    expect("color" in doc().nodes[0]!).toBe(false);
+  });
+
+  it("«Avanzate»: un JSON che non si legge non si prende, quello buono sì", () => {
+    const { inspector, doc, commits } = editing([card("a", { owner: { n: 1 } })], [], { nodes: ["a"], edges: [] });
+    const host = partOf(inspector, CARD_PANEL_ID);
+    const toggle = host.querySelector<HTMLButtonElement>(".canvas-inspector-disclosure")!;
+    expect(toggle.getAttribute("aria-expanded")).toBe("false");
+    toggle.click();
+    expect(toggle.getAttribute("aria-expanded")).toBe("true");
+    const rowOf = (key: string): HTMLTableRowElement => [...host.querySelectorAll<HTMLTableRowElement>(".canvas-inspector-raw tr")].find((row) => row.querySelector("th")?.textContent === key)!;
+    const x = rowOf("x").querySelector<HTMLInputElement>("input")!;
+    x.value = "12 ore";
+    enter(x);
+    expect(x.getAttribute("aria-invalid")).toBe("true");
+    expect(host.querySelector("[aria-live='polite']")!.textContent).toContain("Non è JSON");
+    expect(commits).toHaveLength(0);
+    expect(doc().nodes[0]!.x).toBe(40);
+    x.value = "300";
+    enter(x);
+    expect(doc().nodes[0]!.x).toBe(300);
+    expect(x.hasAttribute("aria-invalid")).toBe(false);
+  });
+
+  it("«Avanzate»: id e type non si scrivono, i tratti di penna sono bloccati", () => {
+    const { inspector } = editing([card("a", { "fub:ink": { strokes: [] } })], [], { nodes: ["a"], edges: [] });
+    const host = partOf(inspector, CARD_PANEL_ID);
+    host.querySelector<HTMLButtonElement>(".canvas-inspector-disclosure")!.click();
+    const rowOf = (key: string): HTMLTableRowElement => [...host.querySelectorAll<HTMLTableRowElement>(".canvas-inspector-raw tr")].find((row) => row.querySelector("th")?.textContent === key)!;
+    expect(rowOf("id").querySelector<HTMLInputElement>("input")!.readOnly).toBe(true);
+    expect(rowOf("type").querySelector<HTMLInputElement>("input")!.readOnly).toBe(true);
+    expect(rowOf("fub:ink").hasAttribute("data-locked")).toBe(true);
+    expect(rowOf("fub:ink").querySelector("input")).toBeNull();
+  });
+
+  it("un file scelto mostra il suo percorso, e non ha «Sostituisci»", () => {
+    const { inspector } = editing([card("v", { type: "file", file: "Statistica/Varianza.md", text: undefined })], [], { nodes: ["v"], edges: [] });
+    const host = partOf(inspector, CARD_PANEL_ID);
+    expect(host.querySelector(".canvas-inspector-path")!.textContent).toBe("Statistica/Varianza.md");
+    expect(host.textContent).not.toContain("Sostituisci");
+  });
+
+  it("sola lettura: numeri, colore e nodo grezzo sono spenti, e niente si scrive", () => {
+    const { inspector, commits } = editing([card("a")], [], { nodes: ["a"], edges: [] }, true);
+    const host = partOf(inspector, CARD_PANEL_ID);
+    const [x] = numberInputs(host);
+    expect(x!.disabled).toBe(true);
+    expect(host.querySelector<HTMLButtonElement>(".kit-color-well-button")!.disabled).toBe(true);
+    x!.value = "9";
+    enter(x!);
+    expect(commits).toHaveLength(0);
+  });
+
+  it("un filo: le punte, il lato, l'etichetta e l'inversione scrivono il filo", () => {
+    const edges: CanvasEdge[] = [{ id: "e1", fromNode: "a", toNode: "b", toEnd: "arrow" }];
+    const { inspector, doc, commits } = editing([card("a"), card("b")], edges, { nodes: [], edges: ["e1"] });
+    const host = partOf(inspector, EDGE_PANEL_ID);
+    const tips = [...host.querySelectorAll<HTMLButtonElement>(".segmented-option")];
+    const checked = (): (string | null)[] => tips.map((button) => button.getAttribute("aria-checked"));
+    expect(checked()).toEqual(["false", "false", "true"]);
+    tips[1]!.click();
+    expect(doc().edges[0]).toMatchObject({ fromEnd: "arrow", toEnd: "none" });
+    expect(checked()).toEqual(["false", "true", "false"]);
+    const reverse = [...host.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent === "Inverti la direzione")!;
+    reverse.click();
+    expect(doc().edges[0]).toMatchObject({ fromNode: "b", toNode: "a" });
+    const label = host.querySelector<HTMLInputElement>(".canvas-inspector-field > input")!;
+    label.value = "uso";
+    label.dispatchEvent(new Event("change"));
+    expect(doc().edges[0]!.label).toBe("uso");
+    const [from] = host.querySelectorAll<HTMLSelectElement>("select");
+    from!.value = "top";
+    from!.dispatchEvent(new Event("change"));
+    expect(doc().edges[0]!.fromSide).toBe("top");
+    expect(commits).toHaveLength(4);
   });
 });

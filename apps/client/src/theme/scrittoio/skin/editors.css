@@ -1946,6 +1946,191 @@
   outline: var(--focus-ring-width) solid var(--focus-ring);
   outline-offset: 0;
 }
+/* Le parti «Scheda» e «Fili» (T59): i numeri a coppie, il colore col suo pozzo,
+   «Avanzate» col nodo grezzo, e le punte e i lati del filo. */
+.canvas-inspector[data-part="card"],
+.canvas-inspector[data-part="edge"] {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+.canvas-inspector-numbers,
+.canvas-inspector-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-3);
+}
+.canvas-inspector-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+}
+.canvas-inspector-field[data-wide] {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+.canvas-inspector-field > label,
+.canvas-inspector-field > span {
+  color: var(--muted);
+  font-size: var(--text-xs);
+}
+.canvas-inspector-field > input,
+.canvas-inspector-field > select {
+  width: 100%;
+  min-width: 0;
+  height: 28px;
+  padding: 0 var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+}
+.canvas-inspector-field > input:focus-visible,
+.canvas-inspector-field > select:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: 0;
+}
+.canvas-inspector-field > .canvas-inspector-path {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text);
+  font-size: var(--text-sm);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.canvas-inspector-disclosure {
+  display: inline-flex;
+  gap: var(--space-2);
+  align-items: center;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  font-size: var(--text-xs);
+  font-weight: var(--weight-bold);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+.canvas-inspector-disclosure:hover {
+  color: var(--text);
+}
+.canvas-inspector-disclosure:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: 2px;
+}
+.canvas-inspector-disclosure > svg {
+  width: 14px;
+  height: 14px;
+}
+.canvas-inspector-disclosure[aria-expanded="true"] > svg {
+  transform: rotate(180deg);
+}
+.canvas-inspector-raw {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-xs);
+}
+.canvas-inspector-raw th,
+.canvas-inspector-raw td {
+  padding: var(--space-1) var(--space-2);
+  border-bottom: 1px solid var(--border);
+  text-align: start;
+  vertical-align: top;
+}
+.canvas-inspector-raw th {
+  width: 34%;
+  color: var(--muted);
+  font-weight: var(--weight-medium);
+}
+.canvas-inspector-raw input {
+  width: 100%;
+  min-width: 0;
+  height: 26px;
+  padding: 0 var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+}
+.canvas-inspector-raw input[readonly] {
+  border-color: transparent;
+  background: transparent;
+  color: var(--muted);
+}
+.canvas-inspector-raw input[aria-invalid="true"] {
+  border-color: var(--danger);
+}
+.canvas-inspector-raw input:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: 0;
+}
+.canvas-inspector-raw tr[data-locked] td {
+  color: var(--muted);
+}
+.canvas-inspector-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+/* Le punte nel pannello stretto: le tre scelte vanno a capo, non escono dal bordo. */
+[role="radiogroup"].canvas-inspector-tips {
+  display: flex;
+  flex-wrap: wrap;
+  width: 100%;
+}
+.canvas-inspector-tips > [role="radio"] {
+  flex: 1 1 auto;
+  white-space: nowrap;
+}
+.canvas-inspector-swatches {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 200px;
+  padding: var(--space-2);
+}
+.canvas-inspector-swatches > .canvas-inspector-heading {
+  padding: var(--space-2) var(--space-3) var(--space-1);
+}
+.canvas-inspector-swatch {
+  display: flex;
+  gap: var(--space-3);
+  align-items: center;
+  height: 28px;
+  padding: 0 var(--space-3);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: var(--text-sm);
+  text-align: start;
+  cursor: pointer;
+}
+.canvas-inspector-swatch:hover {
+  background: var(--overlay-hover);
+}
+.canvas-inspector-swatch[aria-checked="true"] {
+  background: var(--accent-wash);
+  color: var(--accent);
+}
+.canvas-inspector-swatch:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: -2px;
+}
+/* Il pallino del colore nell'ispettore e nel suo popover: il colore che la
+   chiave porta (vedi «I colori», più sotto). */
+.canvas-inspector [data-canvas-color],
+.canvas-inspector-popover [data-canvas-color] {
+  background: var(--canvas-color);
+}
 .canvas-toolbar > select,
 .canvas-toolbar > input {
   flex: none;
@@ -2025,48 +2210,80 @@
    menu e quello del pozzo. Il 6, «Viola», resta l'accento; il 3 prende il
    giallo dei documenti, che al buio regge; i nove delle note usano i colori
    dei Blocchi. Nel file i nove restano il loro esadecimale chiaro: la lavagna
-   li riconosce e scrive il nome, così al buio seguono i Blocchi. */
-.canvas-surface [data-canvas-color="1"] {
+   li riconosce e scrive il nome, così al buio seguono i Blocchi. L'ispettore
+   (`.canvas-inspector`, T59) e il suo popover stanno fuori da `.canvas-surface`:
+   le stesse chiavi valgono anche lì. */
+.canvas-surface [data-canvas-color="1"],
+.canvas-inspector [data-canvas-color="1"],
+.canvas-inspector-popover [data-canvas-color="1"] {
   --canvas-color: var(--danger);
 }
-.canvas-surface [data-canvas-color="2"] {
+.canvas-surface [data-canvas-color="2"],
+.canvas-inspector [data-canvas-color="2"],
+.canvas-inspector-popover [data-canvas-color="2"] {
   --canvas-color: var(--warning);
 }
 .canvas-surface [data-canvas-color="3"],
-.canvas-surface [data-canvas-color="yellow"] {
+.canvas-inspector [data-canvas-color="3"],
+.canvas-inspector-popover [data-canvas-color="3"],
+.canvas-surface [data-canvas-color="yellow"],
+.canvas-inspector [data-canvas-color="yellow"],
+.canvas-inspector-popover [data-canvas-color="yellow"] {
   --canvas-color: var(--doc-color-yellow);
 }
-.canvas-surface [data-canvas-color="4"] {
+.canvas-surface [data-canvas-color="4"],
+.canvas-inspector [data-canvas-color="4"],
+.canvas-inspector-popover [data-canvas-color="4"] {
   --canvas-color: var(--success);
 }
-.canvas-surface [data-canvas-color="5"] {
+.canvas-surface [data-canvas-color="5"],
+.canvas-inspector [data-canvas-color="5"],
+.canvas-inspector-popover [data-canvas-color="5"] {
   --canvas-color: var(--info);
 }
-.canvas-surface [data-canvas-color="6"] {
+.canvas-surface [data-canvas-color="6"],
+.canvas-inspector [data-canvas-color="6"],
+.canvas-inspector-popover [data-canvas-color="6"] {
   --canvas-color: var(--accent);
 }
-.canvas-surface [data-canvas-color="gray"] {
+.canvas-surface [data-canvas-color="gray"],
+.canvas-inspector [data-canvas-color="gray"],
+.canvas-inspector-popover [data-canvas-color="gray"] {
   --canvas-color: var(--doc-color-gray);
 }
-.canvas-surface [data-canvas-color="brown"] {
+.canvas-surface [data-canvas-color="brown"],
+.canvas-inspector [data-canvas-color="brown"],
+.canvas-inspector-popover [data-canvas-color="brown"] {
   --canvas-color: var(--doc-color-brown);
 }
-.canvas-surface [data-canvas-color="orange"] {
+.canvas-surface [data-canvas-color="orange"],
+.canvas-inspector [data-canvas-color="orange"],
+.canvas-inspector-popover [data-canvas-color="orange"] {
   --canvas-color: var(--doc-color-orange);
 }
-.canvas-surface [data-canvas-color="green"] {
+.canvas-surface [data-canvas-color="green"],
+.canvas-inspector [data-canvas-color="green"],
+.canvas-inspector-popover [data-canvas-color="green"] {
   --canvas-color: var(--doc-color-green);
 }
-.canvas-surface [data-canvas-color="blue"] {
+.canvas-surface [data-canvas-color="blue"],
+.canvas-inspector [data-canvas-color="blue"],
+.canvas-inspector-popover [data-canvas-color="blue"] {
   --canvas-color: var(--doc-color-blue);
 }
-.canvas-surface [data-canvas-color="purple"] {
+.canvas-surface [data-canvas-color="purple"],
+.canvas-inspector [data-canvas-color="purple"],
+.canvas-inspector-popover [data-canvas-color="purple"] {
   --canvas-color: var(--doc-color-purple);
 }
-.canvas-surface [data-canvas-color="pink"] {
+.canvas-surface [data-canvas-color="pink"],
+.canvas-inspector [data-canvas-color="pink"],
+.canvas-inspector-popover [data-canvas-color="pink"] {
   --canvas-color: var(--doc-color-pink);
 }
-.canvas-surface [data-canvas-color="red"] {
+.canvas-surface [data-canvas-color="red"],
+.canvas-inspector [data-canvas-color="red"],
+.canvas-inspector-popover [data-canvas-color="red"] {
   --canvas-color: var(--doc-color-red);
 }
 /* La carta della scheda viene dal tema, non più da uno stile in linea. A
