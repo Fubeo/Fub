@@ -1689,7 +1689,7 @@ Tocca: `apps/client/src/state/canvas-intake.ts`, `canvas-intake.test.ts`,
 `apps/client/src/editors/canvas/engine.ts`, `engine.test.ts`,
 `docs/reference/canvas-cards.md`.
 Non toccare: l'host; `drop-layout.ts`.
-Dipende da: T15, T32, T34 (toccano `canvas-intake.ts` prima)
+Dipende da: T15, T32, T32b, T34 (toccano `canvas-intake.ts` prima)
 Cosa fare: un errore tipizzato del deposito che porta i percorsi già
 depositati; `#intake` fa nascere le loro schede (griglia e un annulla come
 T15) e poi mostra l'errore in `canvas-intake-error` come oggi.
@@ -1941,7 +1941,7 @@ Tocca: `apps/client/src/canvas-cards.e2e.test.ts` (da T12),
 `docs/development/ink-input-smoke-test.md` (una sezione «Le schede vive»).
 Non toccare: il codice di prodotto (se la prova trova un difetto, il coder
 lo scrive nel rapporto e il pianificatore apre un task).
-Dipende da: T15, T17, T32 (lo stesso contenuto), T34 (la cartella); N4 T12
+Dipende da: T15, T17, T32 e T32b (lo stesso contenuto), T34 (la cartella); N4 T12
 (nella base)
 Cosa fare:
 - Nella prova e2e: un `File` `.xlsx` (byte noti) rilasciato sulla lavagna;
@@ -2435,6 +2435,49 @@ non sa `reuse`, e che il client non legge più i file del vault per
 confrontare; la foto della notifica somiglia al prototipo.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/state/canvas-intake.test.ts src/editors/media/attachment-target.test.ts
+Stato: [x] fatto in parte (2026-11-10); il resto è T32b. Fatto:
+`depositOrReuse` deposita con `{ reuse: "same-content" }` e non legge più
+i file del vault (via `same` e la porta `open` in
+`document-controller.ts`, toccato come chiamante); la notifica «Già nel
+vault come {path}, uso quello» e quella per più file, senza azione.
+Differenze: «Fanne una copia» con la scheda ripuntata richiede `engine.ts`
+(qui «Non toccare», e altri due task ci lavoravano), e il ricordo «per la
+seduta» dell'host senza `reuse` non si può tenere da qui perché
+`writeResource` riprova da solo: tutti e due passano a T32b. Il caso
+«uguale solo nel cestino» lo prova l'host (T30). La cartella del testo
+«Copiati in …/» è quella vera delle impostazioni, non l'«Allegati» del
+prototipo.
+
+## T32b · «Fanne una copia» e il ricordo della seduta
+
+Perché: la seconda metà di T32 (diviso dall'orchestratore il 2026-11-10,
+stesso «Fatto quando»): l'azione della notifica del riuso e l'host che non
+sa `reuse`.
+Tocca: `apps/client/src/state/canvas-intake.ts` e `canvas-intake.test.ts`,
+`apps/client/src/editors/canvas/engine.ts` (una porta per ripuntare la
+scheda) e `engine.test.ts`, `apps/client/src/editors/media/transport.ts`
+(`writeResource`: il ricordo dell'host senza `reuse`) e
+`media-invariants.test.ts`, `apps/client/src/i18n/catalog.ts`.
+Non toccare: `depositAttachment` e il deposito delle note; l'host.
+Dipende da: T32, T50, T52 (toccano `engine.ts`)
+Cosa fare:
+- «Fanne una copia» (o «Fanne delle copie» per più file) nella notifica
+  del riuso: deposita i byte senza `reuse`, come una scrittura nuova, e la
+  scheda passa al file nuovo con un commit che si annulla (Ctrl+Z torna
+  al file riusato). L'azione vive quanto il suo toast; la lavagna chiusa
+  la spegne.
+- Un host che risponde `bad_args` a `reuse`: si deposita senza, e lo si
+  ricorda per la seduta (un padrone con un reset, niente globale di modulo
+  senza reset nei test), così i file dopo non pagano un giro in più.
+Casi limite: quelli di T32 su «Fanne una copia» e sull'host vecchio; la
+scheda tolta o spostata prima del clic (la copia si fa e nessuna scheda
+cambia, oppure cambia quella giusta per id); due notifiche aperte.
+Fatto quando: `canvas-intake.test.ts` e `engine.test.ts` provano «Fanne
+una copia» (una scheda e più schede, un solo annulla) e il ricordo della
+seduta (una sola chiamata con `reuse` rifiutata); la foto della notifica
+con l'azione somiglia al prototipo T25.
+Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
+src/state/canvas-intake.test.ts src/editors/canvas/engine.test.ts
 Stato: [ ] da fare
 
 ## T33 · Le impostazioni della lavagna, seconda parte

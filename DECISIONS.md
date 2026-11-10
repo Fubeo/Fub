@@ -59,6 +59,13 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-10 · n6 · T32 diviso in T32 (il riuso chiesto all'host, fatto) e
+  T32b («Fanne una copia» con la scheda ripuntata, e il ricordo della
+  seduta per l'host senza `reuse`), stesso «Fatto quando». · Perché:
+  l'azione richiede una porta in `engine.ts`, che T32 non poteva toccare
+  e che T50 e T52 stavano cambiando; T32b parte dopo di loro. Fino ad
+  allora, sul ramo, un file già nel vault non si ricopia dalla lavagna.
+
 - 2026-11-10 · n6 · T40 integrato: le battute di una scheda passano dal
   registro delle superfici della finestra (`onChange` con un id
   `card-editor:<n>`) e la porta le smista, invece di un registro a parte.
