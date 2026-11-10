@@ -10,7 +10,19 @@ import type { PaintAttr, PaintBuilder } from "../../painter/paint";
 import { scaleOf, transformedBounds } from "../clips";
 import type { Holder, ShapeCache, Style } from "./base";
 import { includeInflated } from "./geometry";
-import { ASCENT_EM, attr, CHAR_EM, DESCENT_EM, hidden, len, lineStart, readable, shapeSegments, styleOf, transformOf } from "./shapes";
+import {
+  ASCENT_EM,
+  attr,
+  CHAR_EM,
+  DESCENT_EM,
+  hidden,
+  len,
+  lineStart,
+  readable,
+  shapeSegments,
+  styleOf,
+  transformOf,
+} from "./shapes";
 
 /// Quante forme si stimano in un blocco estraneo: oltre, il blocco conta
 /// come il suo riquadro, che costa poco da toccare.

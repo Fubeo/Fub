@@ -9,7 +9,18 @@ import type { Target } from "../../scene/ops";
 import type { PaintNode } from "../../painter/paint";
 import { scaleOf, transformedBounds } from "../clips";
 import type { Part, Sampled, Style, TextLook } from "./base";
-import { holds, includeSeen, type Lasso, localBounds, near, partHits, partSample, partTouches, solidInside, visibleInside } from "./geometry";
+import {
+  holds,
+  includeSeen,
+  type Lasso,
+  localBounds,
+  near,
+  partHits,
+  partSample,
+  partTouches,
+  solidInside,
+  visibleInside,
+} from "./geometry";
 
 /// Un blocco estraneo fuori dagli oggetti, con le forme che se ne stimano.
 export class ForeignBlock {

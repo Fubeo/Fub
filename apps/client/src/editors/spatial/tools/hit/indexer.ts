@@ -16,12 +16,38 @@ import type { Elem } from "../../scene/serialize";
 import { reference } from "../../scene/values";
 import type { PaintAttr, PaintBuilder, PaintNode, PaintResource, PaintShape } from "../../painter/paint";
 import { Clip, needsBox, Region, sameMatrix, scaleOf, transformedBounds, type ClipLook } from "../clips";
-import { type Holder, INITIAL, type LayerInfo, MAX_INSTANCE_PARTS, MAX_SYMBOL_DEPTH, type Part, type ShapeCache, type Style, type SymbolInfo, type Via } from "./base";
+import {
+  type Holder,
+  INITIAL,
+  type LayerInfo,
+  MAX_INSTANCE_PARTS,
+  MAX_SYMBOL_DEPTH,
+  type Part,
+  type ShapeCache,
+  type Style,
+  type SymbolInfo,
+  type Via,
+} from "./base";
 import { ForeignShapes } from "./foreign";
 import { fixed, includeInflated, includeSeen } from "./geometry";
 import { childLoop, defsChild, hasLink, Lookup, pickable, push, symbolPath } from "./lookup";
 import { SceneIndex } from "./scene-index";
-import { attr, clipLook, elemBounds, elemSegments, hidden, MARKED, MARKER_PROPERTIES, type MarkerLook, markerLook, shapeSegments, styleOf, textLook, textSegments, transformOf } from "./shapes";
+import {
+  attr,
+  clipLook,
+  elemBounds,
+  elemSegments,
+  hidden,
+  MARKED,
+  MARKER_PROPERTIES,
+  type MarkerLook,
+  markerLook,
+  shapeSegments,
+  styleOf,
+  textLook,
+  textSegments,
+  transformOf,
+} from "./shapes";
 import { ForeignBlock, Unit } from "./unit";
 
 /// Chi riceve gli oggetti di un documento: il nodo, il suo percorso, il
