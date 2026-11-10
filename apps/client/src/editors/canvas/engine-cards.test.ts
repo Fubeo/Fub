@@ -541,6 +541,101 @@ describe("la tela tiene le schede", () => {
     engine.destroy();
   });
 
+  it("il doppio clic su una scheda mancante fa «Ritrova…», non apre il campo del percorso (T93)", async () => {
+    const files = fakeFiles();
+    const { renderer, mounts } = fakeRenderer();
+    const asked: (string | undefined)[] = [];
+    const { engine, host, changes } = mounted(boardSource(), {
+      cards: cardsWith(files, renderer),
+      onPickFile: (name) => {
+        asked.push(name);
+        return "Archivio/foto.png";
+      },
+    });
+    mounts[1]!.context.missing();
+    card(host, "i").dispatchEvent(new MouseEvent("dblclick", { bubbles: true }));
+    await settle();
+    expect(host.querySelector(".canvas-field-editor")).toBeNull();
+    expect(asked).toEqual(["foto.png"]);
+    expect(readNodes(engine.getDoc()).find((node) => node.id === "i")!.file).toBe("Archivio/foto.png");
+    expect(changes).toHaveLength(1);
+    // Lo stesso commit del pulsante: un annulla riporta il file di prima.
+    expect(engine.undo()).toBe(true);
+    expect(readNodes(engine.getDoc()).find((node) => node.id === "i")!.file).toBe("img/foto.png");
+    engine.destroy();
+  });
+
+  it("Invio su una scheda mancante fa «Ritrova…», non apre il campo del percorso (T93)", async () => {
+    const files = fakeFiles();
+    const { renderer, mounts } = fakeRenderer();
+    const asked: (string | undefined)[] = [];
+    const { engine, host, changes } = mounted(boardSource(), {
+      cards: cardsWith(files, renderer),
+      onPickFile: (name) => {
+        asked.push(name);
+        return "Archivio/foto.png";
+      },
+    });
+    mounts[1]!.context.missing();
+    enterWithKeys(host, "i");
+    await settle();
+    expect(host.querySelector(".canvas-field-editor")).toBeNull();
+    expect(asked).toEqual(["foto.png"]);
+    expect(readNodes(engine.getDoc()).find((node) => node.id === "i")!.file).toBe("Archivio/foto.png");
+    expect(changes).toHaveLength(1);
+    engine.destroy();
+  });
+
+  it("il file che torna mentre il selettore del gesto è aperto: la scelta vecchia non tocca niente (T93)", async () => {
+    const files = fakeFiles();
+    const { renderer, mounts } = fakeRenderer();
+    let answer: (path: string | null) => void = () => {};
+    let opened = 0;
+    const { engine, host, changes } = mounted(boardSource(), {
+      cards: cardsWith(files, renderer),
+      onPickFile: () => {
+        opened++;
+        return new Promise<string | null>((resolve) => {
+          answer = resolve;
+        });
+      },
+    });
+    mounts[1]!.context.missing();
+    card(host, "i").dispatchEvent(new MouseEvent("dblclick", { bubbles: true }));
+    expect(opened).toBe(1);
+    files.fire("img/foto.png");
+    answer("Archivio/altra.png");
+    await settle();
+    expect(changes).toHaveLength(0);
+    expect(readNodes(engine.getDoc()).find((node) => node.id === "i")!.file).toBe("img/foto.png");
+    engine.destroy();
+  });
+
+  it("in sola lettura il doppio clic su una scheda mancante dice «File mancante» e non apre il campo (T93)", () => {
+    const files = fakeFiles();
+    const { renderer, mounts } = fakeRenderer();
+    const { engine, host, changes } = mounted(boardSource(), { cards: cardsWith(files, renderer), onPickFile: () => "Archivio/foto.png" });
+    mounts[1]!.context.missing();
+    engine.setReadOnly(true);
+    card(host, "i").dispatchEvent(new MouseEvent("dblclick", { bubbles: true }));
+    expect(host.querySelector(".canvas-field-editor")).toBeNull();
+    expect(host.querySelector(".canvas-intake-error")?.textContent).toBe("File mancante: img/foto.png");
+    expect(changes).toHaveLength(0);
+    engine.destroy();
+  });
+
+  it("senza un selettore il doppio clic su una scheda mancante dice «File mancante» e non apre il campo (T93)", () => {
+    const files = fakeFiles();
+    const { renderer, mounts } = fakeRenderer();
+    const { engine, host, changes } = mounted(boardSource(), { cards: cardsWith(files, renderer), onPickFile: undefined });
+    mounts[1]!.context.missing();
+    card(host, "i").dispatchEvent(new MouseEvent("dblclick", { bubbles: true }));
+    expect(host.querySelector(".canvas-field-editor")).toBeNull();
+    expect(host.querySelector(".canvas-intake-error")?.textContent).toBe("File mancante: img/foto.png");
+    expect(changes).toHaveLength(0);
+    engine.destroy();
+  });
+
   it("una scheda di link non manca mai: il suo missing() non fa niente", () => {
     const files = fakeFiles();
     const { renderer, mounts } = fakeRenderer();

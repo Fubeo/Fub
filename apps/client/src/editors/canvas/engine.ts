@@ -6915,8 +6915,12 @@ export class CanvasEngine {
     entry.article.focus({ preventScroll: true });
   }
 
-  /** Invio, o il doppio clic su una nota: entra se si può, altrimenti ciò che faceva (il campo). */
+  /**
+   * Invio, o il doppio clic su una nota: entra se si può, altrimenti ciò che faceva (il campo).
+   * Su una scheda di file che manca il gesto è «Ritrova…» (T93), mai il campo.
+   */
   #enterOrEdit(node: CanvasNode): void {
+    if (this.#missingGesture(node.id)) return;
     if (node.type !== "text" && this.#enterCard(node.id)) return;
     this.#beginCardEdit(node);
   }
@@ -7207,6 +7211,8 @@ export class CanvasEngine {
       }
       // Dentro la scheda attiva il doppio clic è del contenuto (una parola).
       if (this.#activeId === id) return;
+      // Il file che manca: «Ritrova…» (T93), non il campo del percorso.
+      if (this.#missingGesture(id)) return;
       const kind = this.#hasLiveContent(entry) ? cardKindOf(entry.node) : null;
       // Il visore lo apre la vista dell'immagine, che ascolta il suo doppio clic (T5).
       if (kind === "image") return;
@@ -7399,7 +7405,7 @@ export class CanvasEngine {
       relink.textContent = t("canvas.card.relink");
       life.listen(relink, "click", (event) => {
         event.stopPropagation();
-        this.#relinkCard(id, pick).catch((error: unknown) => this.#showIntakeError(error));
+        this.#relink(id, pick);
       });
       body.append(relink);
     }
@@ -7432,6 +7438,27 @@ export class CanvasEngine {
     if (!now) return;
     const patch = upsertNodePatch(this.#doc, { ...now, file: relinkedFile(now, chosen) });
     if (patch) this.#commit([patch], "input");
+  }
+
+  /** «Ritrova…» di una scheda mancante, dal pulsante o dal gesto (T93): un errore dice perché non è andata. */
+  #relink(id: string, pick: NonNullable<CanvasEngineOptions["onPickFile"]>): void {
+    this.#relinkCard(id, pick).catch((error: unknown) => this.#showIntakeError(error));
+  }
+
+  /**
+   * Il doppio clic o Invio su una scheda di file che manca (T93): «Ritrova…», la
+   * stessa strada del pulsante (T16). In sola lettura, o senza un selettore, dice
+   * «File mancante» nella barra, come l'avviso di un gesto. Il campo del percorso
+   * non si apre in nessun caso. `false` se la scheda non manca: il gesto fa ciò
+   * che faceva.
+   */
+  #missingGesture(id: string): boolean {
+    const entry = this.#cards.get(id);
+    if (!entry || entry.article.dataset.cardMissing === undefined) return false;
+    const pick = this.#options.onPickFile;
+    if (this.#readOnly || !pick) this.#showNotice(t("canvas.card.missing", { path: cardTarget(entry.node).path }));
+    else this.#relink(id, pick);
+    return true;
   }
 
   /** «Togli dalla lavagna» di una scheda mancante: come Canc, per quella scheda sola. */
