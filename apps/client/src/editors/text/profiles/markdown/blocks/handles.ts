@@ -22,7 +22,7 @@ import { blockModel, kindName, type Block } from "./model";
 import { type BlockRun, moveRun, moveSiblings, siblingsOf } from "./move";
 import { blockSelection, cursorBlock, deleteRun, duplicateRun, runOfSelection, selectBlocks, setBlockSelection } from "./selection";
 import { canTransform, targetOf, transformTo, type TransformTarget, unwrap } from "./transform";
-import { dragPose, type DragPose, LIFT_SCALE, setDragPose } from "./motion";
+import { dragPose, type DragPose, LIFT_SCALE, ownsRow, setDragPose } from "./motion";
 import { animate, halt, liveState } from "../../../../../moto";
 
 export interface BlocksOptions {
@@ -715,20 +715,15 @@ class HandlesView {
   }
 
   /// Solleva il blocco: un'immagine delle sue righe galleggia sopra il
-  /// foglio e segue il puntatore, mentre al suo posto resta il vuoto.
+  /// foglio e segue il puntatore, mentre al suo posto resta il vuoto. Sale
+  /// soltanto ciò che appartiene al tratto del blocco: la testata della pagina
+  /// e i widget degli altri blocchi restano fermi.
   liftUp(drag: Drag): void {
     const view = this.view;
     const span = this.liftedSpan(drag);
     if (!span) return;
-    const rows = Array.from(view.contentDOM.children).filter((child): child is HTMLElement => {
-      if (!(child instanceof HTMLElement)) return false;
-      try {
-        const pos = view.posAtDOM(child, 0);
-        return pos >= span.from && pos <= span.to;
-      } catch {
-        return false;
-      }
-    });
+    const rows = Array.from(view.contentDOM.children).filter((child): child is HTMLElement =>
+      child instanceof HTMLElement && ownsRow(view, child, span));
     if (rows.length === 0) return;
     const scroller = view.scrollDOM.getBoundingClientRect();
     const rects = rows.map((row) => row.getBoundingClientRect());
