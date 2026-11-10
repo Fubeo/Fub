@@ -2589,7 +2589,15 @@ vista ricordata vuota inquadra tutto; `pdf.test.ts` prova `initialPage` e
 `pageChanged`; il `.canvas` resta identico byte per byte.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/canvas
-Stato: [ ] da fare
+Stato: [x] fatto (2026-11-10). Differenze: la shell non porta gli stati
+di vista con il nome: una lavagna rinominata riparte dalla vista intera e
+la chiave vecchia resta lì, orfana (piccola: si potrà pulire quando la
+shell sposterà gli stati con il nome). La vista ricordata arriva dopo
+l'apertura: prende solo la camera e la scelta che nessuno ha toccato nel
+frattempo, e le schede PDF già montate su un'altra pagina si rimontano.
+`initialPage` è `number | null` opzionale. Una lettura che fallisce
+ferma le scritture fino alla prossima apertura (potrebbe essere di
+un'altra versione).
 
 ## T37 · L'ancora alle celle: il formato
 

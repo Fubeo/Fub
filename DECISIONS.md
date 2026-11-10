@@ -59,6 +59,14 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-10 · n6 · T36 integrato: la vista ricordata si applica quando
+  arriva, ma solo a ciò che nessuno ha cambiato dall'apertura (camera,
+  scelta); se la lettura fallisce non si scrive fino alla prossima
+  apertura. Le rinominate ripartono dalla vista intera e lasciano una
+  chiave orfana: la shell non porta gli stati di vista con il nome. ·
+  Perché: lo stato si legge in modo asincrono e non deve coprire un gesto
+  dell'utente né uno stato di un'altra versione; spostare gli stati con il
+  nome è lavoro della shell, fuori da T36.
 - 2026-11-10 · n6 · T33: (1) `canvas.toolbar` si registra in
   `panels/settings.ts` come `draw.toolbar`, con le caselle del prototipo
   approvato (il piano diceva che il pannello disegna le righe da sé, ma per
