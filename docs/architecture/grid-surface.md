@@ -433,7 +433,7 @@ byte salvati, non la sessione, e il rapporto conta ciò che il PDF non porta.
 - `apps/client/src/editors/grid/ribbon/ribbon.ts`
 - `apps/client/src/kit/ribbon/ribbon.ts`
 - `apps/client/src/kit/ribbon/ribbon-motion.ts`
-- `apps/client/src/editors/grid/ribbon/tabs.ts`
+- `apps/client/src/editors/grid/ribbon/tabs.ts`, con le schede in `tabs/`
 - `apps/client/src/editors/grid/menu-comandi.ts`
 - `apps/client/src/editors/grid/dialogs/host.ts`
 - `apps/client/src/editors/grid/dialogs/catalog.ts`
