@@ -843,8 +843,6 @@
     "canvas-blank-lines",
     "canvas-blank-actions",
     "canvas-navigator",
-    "canvas-navigator-map",
-    "canvas-navigator-swatch",
     "canvas-header",
     "canvas-options",
     "canvas-options-hint",
@@ -2464,8 +2462,6 @@
     "canvas-blank-lines": "cornice",
     "canvas-blank-actions": "cornice",
     "canvas-navigator": "cornice",
-    "canvas-navigator-map": "cornice",
-    "canvas-navigator-swatch": "cornice",
     "canvas-header": "cornice",
     "canvas-options": "cornice",
     "canvas-options-hint": "cornice",
@@ -5514,9 +5510,7 @@
       "name": "canvas-navigator",
       "part": "editors",
       "hooks": [
-        "canvas-navigator",
-        "canvas-navigator-map",
-        "canvas-navigator-swatch"
+        "canvas-navigator"
       ],
       "states": [
         "rest",
@@ -8889,7 +8883,7 @@
   "counts": {
     "required_roles": 154,
     "optional_roles": 63,
-    "hooks": 1619,
+    "hooks": 1617,
     "state_names": 7,
     "assigned_states": 764,
     "components": 227,

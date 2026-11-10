@@ -271,7 +271,8 @@ describe("il navigatore sulla lavagna", () => {
     pointer(viewport, "pointerup", { clientX: 200, clientY: 200 });
     expect(paint.calls.fillRect).toBeGreaterThan(painted);
     expect(cameraOf(host).x).not.toBe(0);
-  });
+    // 2000 schede vere sulla lavagna di happy-dom: sotto carico ci vuole tempo.
+  }, 30_000);
 
   it("«Nascondi il navigatore» lo spegne per questa lavagna e si ricorda; «Mostra» lo riaccende", async () => {
     const writes: unknown[] = [];
@@ -299,10 +300,10 @@ describe("il navigatore sulla lavagna", () => {
     expect(ids()).toEqual(["canvas.navigator.show"]);
     engine.destroy();
     await Promise.resolve();
-    expect(writes.at(-1)).toMatchObject({ navigator: false });
+    expect(writes[writes.length - 1]).toMatchObject({ navigator: false });
 
     // Riaperta, la lavagna lo ritrova spento; Mostra lo riaccende.
-    const again = mounted(source(), { viewMemory: { read: async () => writes.at(-1), write: async () => {} } });
+    const again = mounted(source(), { viewMemory: { read: async () => writes[writes.length - 1], write: async () => {} } });
     for (let i = 0; i < 10; i++) await Promise.resolve();
     zoomIn(again.viewport);
     expect(again.navigator.hidden).toBe(true);
