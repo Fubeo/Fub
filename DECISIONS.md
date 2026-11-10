@@ -59,6 +59,11 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-10 · n6 · T66: la cornice di più schede scelte (non disegnata nel prototipo
+  T25) è tratteggiata d'accento come il fantasma del rilascio, e i gruppi tengono le
+  maniglie anche se il prototipo non le mostra. · Perché: il piano chiede la cornice, e
+  senza maniglie un gruppo non si ridimensiona più; il linguaggio è quello già approvato.
+
 - 2026-11-10 · n6 · T58: «prima i gruppi» resta alla lettera, e la regola
   «più di metà» vince sull'esempio del prototipo. · Perché: è quello che
   dice il piano, l'ordine serve anche al lettore di schermo (T61) e una

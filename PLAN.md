@@ -4097,7 +4097,11 @@ presa, Maiusc, Alt, il doppio clic per testo e immagine, e un solo
 annulla; le foto del banco somigliano al prototipo.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/canvas/engine.test.ts
-Stato: [ ] da fare
+Stato: [x] fatto (cafe68da0, 9098da4fe): quattro maniglie con `data-corner`, presa di 20 px
+a ogni zoom (`--canvas-zoom`), Maiusc e Alt, minimo 40, il dito entro 22 px, doppio clic che
+adatta testo, immagine e PDF leggendo il DOM, cornice di più schede (`.canvas-selection-frame`);
+prove in `engine.test.ts` «le maniglie delle schede (T66)». Le maniglie vincono su Alt (che
+ora tira un filo, T67). Restano: lo spazio Semplice (T65), `contentAspect` (T39) per i PDF.
 
 ## T67 · I fili: collegare senza mirare, prendere un filo
 
