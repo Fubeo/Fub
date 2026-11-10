@@ -8,38 +8,18 @@
 > [`components-and-boundaries.md`](../architecture/components-and-boundaries.md),
 > il percorso guidato in
 > [`repository-tour.md`](../getting-started/repository-tour.md),
-> l'inventario completo in `docs-inventario/RIFERIMENTO.md` quando esiste.
+> l'indice domanda → pagina in [`pagine.md`](pagine.md).
+> **README di codice:** [`crates/`](../../crates/README.md),
+> [`esempi/`](../../esempi/README.md), [`tools/`](../../tools/README.md),
+> [`apps/client/src/`](../../apps/client/src/README.md).
 
 ## I componenti
 
-```mermaid
-flowchart LR
-    CLIENT["apps/client<br/>shell Scrittoio, editor, stato"] --> APP["fub-app<br/>Tauri e IPC"]
-    APP --> HOST["fub-host<br/>composizione, sessioni, job"]
-    HOST --> KERNEL["fub-kernel<br/>vault, storage, indici"]
-    KERNEL --> ABI["fub-abi<br/>contratto, regole, WIT"]
-    HOST --> ABI
-    FEATURES["fub-features<br/>feature ufficiali"] --> ABI
-    HOST --> FEATURES
-    FMT["fub-format-*<br/>markdown, canvas, base, svg, rich, xlsx"] --> ABI
-    HOST --> FMT
-    FMT --> VENDOR["vendor/wordcraft, vendor/gridcraft<br/>motori di terzi"]
-    FEATURES --> VENDOR
-    INKSC["fub-ink, fub-ink-codec e fub-scene<br/>inchiostro e disegni"] --> ABI
-    FMT --> INKSC
-    CANVASCORE["fub-canvas-core<br/>nucleo della lavagna"]
-    FMT --> CANVASCORE
-    WASM["fub-wasm-host<br/>Wasmtime"] --> HOST
-    APP --> WASM
-    LIVE["fub-live<br/>sessione dal tablet"] --> APP
-    CLI["fub-cli<br/>riga di comando e MCP"] --> HOST
-    SVCS["fub-services<br/>account, sync, publish"]
-```
-
-Le frecce puntano verso `fub-abi`: è il verso delle dipendenze. I servizi di
-supporto alla scrittura (`fub-sdk`, `fub-testkit`, `fub-importers`) stanno
-sotto `crates/` con gli altri e non compaiono nel disegno per non superare i
-20 nodi: la tabella sotto li copre.
+Il grafo delle dipendenze del workspace, con i marcatori `@grafo-dipendenze`
+letti dal test `dependency_invariant`, è in
+[overview.md](../architecture/overview.md#dipendenze-del-workspace-rust). Le
+dipendenze puntano verso `fub-abi`. Le aree con percorso, responsabilità e
+prova sono nella tabella qui sotto.
 
 ## Le aree, una riga ciascuna
 
@@ -50,6 +30,7 @@ sotto `crates/` con gli altri e non compaiono nel disegno per non superare i
 | chi monta | `crates/fub-host/` | composition root: sessioni, bundle, job, watcher, impostazioni; niente Tauri | `cargo test -p fub-host` |
 | il desktop | `crates/fub-app/` | comandi Tauri sottili, finestre, risorse byte; delega presto all'host | `cargo test -p fub-app` |
 | le feature | `crates/fub-features/` | pannelli e comandi ufficiali, una feature Cargo ciascuna | `cargo test -p fub-features --features draw` |
+| i componenti | `crates/fub-componenti/` | il risolutore: che cosa è acceso, chi lo richiede, che cosa non serve più; puro, senza I/O né `fub-abi` | `cargo test -p fub-componenti` |
 | i formati | `crates/fub-format-*/` | i provider: markdown, canvas, base, svg, rich, xlsx, craft | il test del crate |
 | la lavagna | `crates/fub-canvas-core/` | il modello di una `.canvas` e la sua lettura, puro: lo usano il formato, i comandi e la WebView | `cargo test -p fub-canvas-core` |
 | la lavagna nella WebView | `crates/fub-canvas-wasm/` | la facciata WebAssembly del nucleo: un'interfaccia C scritta a mano, testo e JSON dentro e fuori | `cargo test -p fub-canvas-wasm` |
@@ -58,7 +39,7 @@ sotto `crates/` con gli altri e non compaiono nel disegno per non superare i
 | i disegni | `crates/fub-scene/` | lettura del formato scena e delle annotazioni PDF | `cargo test -p fub-scene` |
 | lo strato dei motori | `crates/fub-motori/` | motori costruiti alla prima richiesta, il loro gruppo di thread, il budget delle cache, il registro | `cargo test -p fub-motori` |
 | il runtime dei plugin | `crates/fub-wasm-host/` | l'unico crate che nomina Wasmtime | `cargo test -p fub-wasm-host` |
-| la riga di comando | `crates/fub-cli/` | automazione senza Tauri e il server MCP | `cargo test -p fub-cli` |
+| la riga di comando | `crates/fub-cli/` | automazione senza Tauri, il server MCP e l'host di messaggistica nativa del clipper | `cargo test -p fub-cli` |
 | la sessione live | `crates/fub-live/` | PC host, tablet scrittore, QR e TLS | `cargo test -p fub-live` |
 | i servizi | `crates/fub-services/` | backend self-hostable di account, sync e publish | `cargo test -p fub-services` |
 | gli autori | `crates/fub-sdk/` | API comode e `MemoryHost` per provare un provider | `cargo test -p fub-sdk` |
@@ -128,8 +109,8 @@ parse (`crates/fub-kernel/tests/write_atomicity.rs`).
 |---|---|---|
 | WordCraft v0.10.0 | `vendor/wordcraft/` (6 crate) | `fub-format-rich` e il correttore di `fub-features` |
 | GridCraft v0.11.1 | `vendor/gridcraft/` (10 crate) | `fub-format-xlsx` |
-| VectorCraft | `tools/motori-prova/vettori/` | le prove; entra con K5 |
-| PhotoCraft, LightCraft | `tools/motori-prova/foto/`, `luce/` | le prove; entrano con K7 e K8 |
+| VectorCraft | `tools/motori-prova/vettori/` | le prove di K5 |
+| PhotoCraft, LightCraft | `tools/motori-prova/foto/`, `luce/` | le prove di K7 e K8 |
 | PdfCraft | `tools/motori-prova/pdf/` | le prove; il client usa pdf.js (`editors/media/pdf-view.ts`) |
 
 Le copie in `vendor/` sono derivati: upstream a un commit preciso più le

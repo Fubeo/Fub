@@ -1,6 +1,6 @@
 # 0214 — GridCraft è il motore del foglio di calcolo, e una cartella di Excel si apre in sola lettura
 
-- **Stato:** accolta
+- **Stato:** sostituita
 - **Data:** 2026-10-21
 - **Ambito:** contratto
 - **Sostituisce:** —

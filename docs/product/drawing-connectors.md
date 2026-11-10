@@ -90,24 +90,8 @@ la linea quando la linea si ricalcola.
 
 ## Nel file
 
-Un connettore è un `path` con `fub:shape="connector"`: `fub:geom` dice il
-tipo e i punti del percorso già calcolato, `d` ne viene, e `fub:from` e
-`fub:to` dicono a quali oggetti è agganciato e a che punto. L'etichetta è un
-`text` con `fub:along`. La punta è un marcatore fra le
-[risorse](drawing-resources.md), come per ogni linea.
-
-```xml
-<marker id="r5n2p8w3k" fub:role="shared" fub:marker="triangle medium end"
-  refX="3.44" refY="3" markerWidth="5.34" markerHeight="6" orient="auto">
-  <path d="M4.84 3 L0.51 5.5 L0.51 0.5 Z" fill="#000000"/>
-</marker>
-…
-<path id="o7k2m9x4q" fub:shape="connector" fub:geom="elbow 200 220 200 310 600 310 600 400" fub:from="o2b3c4d5e auto" fub:to="o3c4d5e6f auto" d="M200 220 L200 310 L600 310 L600 400" fill="none" stroke="#000000" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#r5n2p8w3k)"/>
-<text id="o8m3n4p5r" fub:along="o7k2m9x4q 0.5 4" x="0" y="0" text-anchor="middle" transform="matrix(1 0 0 1 400 302)"><tspan x="0" dy="0">sì</tspan></text>
-```
-
-Il connettore unisce due rettangoli, `o2b3c4d5e` e `o3c4d5e6f`, e il testo
-«sì» è la sua etichetta. Un altro programma vede un tracciato qualunque, e
-non ricalcola la linea quando un oggetto si sposta. La grammatica, gli
-agganci e il percorso sono in [Formato della scena,
+Un connettore è un `path` con `fub:shape="connector"`, agganciato agli oggetti
+con `fub:from` e `fub:to`; l'etichetta è un `text` con `fub:along`. La
+grammatica completa, gli agganci e il percorso sono in [Formato della scena,
 connettori](../reference/scene-format-connectors.md).
+

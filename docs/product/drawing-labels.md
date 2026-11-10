@@ -82,20 +82,8 @@ righe in un'ellisse, in un rettangolo tondo e girato, e in un rombo.
 
 ## Nel file
 
-L'etichetta è un `text` con `fub:inside`, che porta l'id della forma, nello
-stesso gruppo della forma. `fub:wrap` è la larghezza in cui va a capo, e il
-`transform` la mette già al centro.
-
-```xml
-<g id="o4d5e6f7g">
-  <rect id="o2b3c4d5e" x="100" y="100" width="200" height="120" fill="#e69f00"/>
-  <text id="o8m3n4p5r" fub:inside="o2b3c4d5e" fub:wrap="188" x="0" y="0" fill="#000000" font-family="Inter, sans-serif" font-size="32" text-anchor="middle" transform="matrix(1 0 0 1 200 168.8)">
-    <tspan x="0" dy="0">Inizio</tspan>
-  </text>
-</g>
-```
-
-Un altro programma vede il testo dove lo mostra Fub, e non lo rimette al
-centro quando la forma cambia. Chi è l'etichetta di chi, il riquadro del
-testo e il seguire sono in [Formato della scena,
+L'etichetta è un `text` con `fub:inside` (l'id della forma) e `fub:wrap` (la
+larghezza di capo). Chi è l'etichetta di chi, il riquadro del testo e il
+seguire sono in [Formato della scena,
 etichette](../reference/scene-format-labels.md).
+

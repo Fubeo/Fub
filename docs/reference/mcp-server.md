@@ -198,5 +198,3 @@ risorse, né come bersaglio di un link risolto.
 - I messaggi d'errore passano dalla stessa redazione della CLI, e il server
   non scrive log.
 
-## Non ancora
-

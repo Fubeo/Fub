@@ -33,7 +33,7 @@ Nuove decisioni usano il [template](template.md).
 | [0198 — Le feature ufficiali restano moduli indipendenti](0198-feature-ufficiali-modulari.md) | accolta | host | 0073, 0129 |
 | [0199 — History nativa CodeMirror e gate conservativo sugli overlap](0199-history-nativa-e-gate-di-overlap.md) | accolta | frontend | — |
 | [0200 — L'inventario installato è distinto dal runtime e dai dati plugin](0200-inventario-componenti-installati.md) | accolta | storage | 0187 |
-| [0201 — Le superfici strutturate usano sessioni, finestre e patch coordinate](0201-superfici-strutturate-a-finestre.md) | accolta | contratto | — |
+| [0201 — Le superfici strutturate usano sessioni, finestre e patch coordinate](0201-superfici-strutturate-a-finestre.md) | sostituita | contratto | — |
 | [0202 — Snapshot globali offline recuperabili](0202-snapshot-globali-recuperabili.md) | accolta | storage | — |
 | [0203 — Le superfici spaziali modificano sorgenti SVG con operazioni testuali](0203-superfici-spaziali.md) | accolta | frontend | — |
 | [0204 — L'inchiostro è un componente di sistema, non di un prodotto](0204-nucleo-inchiostro.md) | proposta | frontend | 0203 |
@@ -46,7 +46,7 @@ Nuove decisioni usano il [template](template.md).
 | [0211 — HTML, testo, LaTeX e Word XML sono copie esportate, con la perdita misurata](0211-copie-esportate-con-la-perdita-misurata.md) | accolta | contratto | — |
 | [0212 — La preservazione di un `.docx` si misura sul pacchetto, e la garanzia è di Fub](0212-preservazione-misurata-sul-pacchetto.md) | accolta | storage | — |
 | [0213 — I motori esterni sono una copia derivata, con proprietari e aggiornamenti decisi](0213-provenienza-dei-motori-esterni.md) | accolta | sicurezza | — |
-| [0214 — GridCraft è il motore del foglio di calcolo, e una cartella di Excel si apre in sola lettura](0214-gridcraft-motore-del-foglio-di-calcolo.md) | accolta | contratto | — |
+| [0214 — GridCraft è il motore del foglio di calcolo, e una cartella di Excel si apre in sola lettura](0214-gridcraft-motore-del-foglio-di-calcolo.md) | sostituita | contratto | — |
 | [0215 — Un salvataggio che tocca soltanto il corpo di un `.docx` è un innesto nel file com'era](0215-salvataggio-docx-per-innesto.md) | accolta | storage | — |
 | [0216 — Il protocollo `grid` 2 apre una sorgente a byte nella custodia dell'host, e la modifica è un giornale di celle](0216-protocollo-grid-2-sorgente-a-byte.md) | accolta | contratto | 0214 (in parte) |
 | [0218 — Il `.fubsheet` e la versione 1 di `grid` escono da Fub](0218-via-il-fubsheet-e-la-versione-1-di-grid.md) | accolta | contratto | 0201 (in parte) |

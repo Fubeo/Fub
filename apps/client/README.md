@@ -3,11 +3,11 @@
 Il client unificato di Fub: una sola applicazione, una sola logica e più shell
 di presentazione.
 
-- `src/main.ts` seleziona l'entrypoint corrente;
-- `src/entrypoints/desktop.ts` avvia la shell desktop;
+- `src/main.ts` è l'ingresso di Vite per il desktop;
+- `src/shells/scrittoio/bootstrap.ts` avvia la shell desktop;
 - `src/desktop-shell.ts` compone l'interfaccia desktop esistente;
-- `src/shells/desktop/` possiede il bootstrap e le capacità desktop;
-- `src/shells/mobile/` definisce il confine della futura shell mobile;
+- `src/shells/desktop/` possiede le capacità desktop (`DESKTOP_SHELL`);
+- `src/shells/mobile/` è la shell mobile (ponte, storage, viewport, tocco);
 - `src/platform/` descrive capacità concrete, senza condizioni globali
   `isMobile`.
 

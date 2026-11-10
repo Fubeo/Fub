@@ -11,7 +11,7 @@ isolati; e gli oggetti si bloccano e si nascondono uno per uno, non
 solo per livello. Scegliere e isolare non cambiano il file; bloccare e
 nascondere sì, e sono passi di annulla
 (`apps/client/src/editors/spatial/tools/selecting.ts`, l'indice in
-`apps/client/src/editors/spatial/tools/hit.ts`). Lo strumento Lazo se n'è
+`apps/client/src/editors/spatial/tools/hit/`). Lo strumento Lazo se n'è
 andato col livello Standard (decisione 0231): il riquadro che la freccia tira
 sul vuoto sceglie ciò che racchiude per intero.
 

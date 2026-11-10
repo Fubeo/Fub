@@ -1853,6 +1853,33 @@ async function openWorkbook(page) {
     return grid?.getAttribute("data-grid-protocol") === "v2"
       && (grid?.querySelectorAll('[role="gridcell"]').length ?? 0) > 0;
   });
+  await gridAtRest(page);
+}
+
+/// Aspetta che la griglia stia ferma al suo posto. Le celle compaiono prima
+/// della barra multifunzione, che la superficie carica con un `import()` e
+/// che, quando arriva, spinge la griglia in giù di più di cento pixel: un
+/// punto misurato prima (il bordo di un'intestazione, una cella) cade poi
+/// sulla barra. Il puntatore resta così sopra un suo pulsante, e la scena
+/// fotografa il suo tooltip invece del gesto che dichiara, o un gesto non
+/// trova la griglia dove l'aveva vista.
+async function gridAtRest(page) {
+  await page.waitForSelector(".pane.focus .grid-ribbon");
+  await page.evaluate(() => {
+    delete window.__gridViewportBox;
+  });
+  await page.waitForFunction(
+    () => {
+      const box = document.querySelector(".pane.focus .grid-viewport")?.getBoundingClientRect();
+      if (!box) return false;
+      const now = `${box.x},${box.y},${box.width},${box.height}`;
+      const before = window.__gridViewportBox;
+      window.__gridViewportBox = now;
+      return before === now;
+    },
+    null,
+    { polling: 100 },
+  );
 }
 
 /// Apre la cartella per le scene della barra dei fogli, col foglio largo

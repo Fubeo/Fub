@@ -12,7 +12,7 @@
 | Contratto | Definito da |
 |---|---|
 | il modello di documento comune | `crates/fub-abi/src/model.rs` |
-| i trait di estensione e il manifest dei plugin | `crates/fub-abi/src/traits.rs` |
+| i trait di estensione e il manifest dei plugin | `crates/fub-abi/src/traits.rs`, diviso in `traits/` (capacità in `stores.rs` e `host.rs`, provider in `views.rs`, `index_provider.rs`, `plugin.rs`) |
 | il `FormatProvider` | `crates/fub-abi/src/format.rs` |
 | l'edit chirurgico e le revisioni | `crates/fub-abi/src/edit.rs` |
 | gli eventi e i lotti | `crates/fub-abi/src/event.rs` |
@@ -38,17 +38,17 @@
 | `TextEngine` (il padrone di CodeMirror) | `apps/client/src/editors/text/engine.ts` |
 | il registro delle superfici | `apps/client/src/editors/core/registry.ts` |
 | `SHELL_COMMANDS` e i suoi mirror | `crates/fub-host/src/shell.rs` e `apps/client/src/ui/shell-keys.generated.ts` |
-| `PluginManifest` (`provides`, `requires`) | `crates/fub-abi/src/traits.rs` |
+| `PluginManifest` (`provides`, `requires`) | `crates/fub-abi/src/traits/plugin.rs` |
 | `plugins.disabled` (spegnere per vault) | `crates/fub-host/src/settings.rs` |
 | `SettingSpec` e i livelli delle impostazioni | `crates/fub-abi/src/settings.rs` |
 | `perf.probe` (la sonda N0) | `crates/fub-host/src/settings.rs`, montata da `apps/client/src/perf/` |
 | `draw.workspace` (Semplice o Completo) | le impostazioni della feature `draw`, `crates/fub-features/src/draw.rs` |
 | `canvas.ink_mouse_remember`, `canvas.finger_moves_card` | le impostazioni della feature `lavagna`, `crates/fub-features/src/lavagna.rs`; le legge `apps/client/src/editors/canvas/preferences.ts` |
-| il registro dei comandi del vault | `crates/fub-features/src/commands.rs` (dogfood del `CommandProvider`) |
+| il registro dei comandi del vault | `crates/fub-features/src/commands.rs` e i suoi moduli in `commands/` (dogfood del `CommandProvider`) |
 | il catalogo dei comandi dei fogli | `crates/fub-abi/src/grid_bytes.rs`, servito in `crates/fub-format-xlsx` |
 | il lessico dei menu | `apps/client/src/i18n/lexicon.ts` |
 | le stringhe della shell | `apps/client/src/i18n/catalog.ts` |
-| le stringhe dell'editor dei disegni | `apps/client/src/editors/spatial/strings.ts` |
+| le stringhe dell'editor dei disegni | `apps/client/src/editors/spatial/strings.ts`, con le voci per area (italiano e inglese insieme) in `strings/` |
 | la tavolozza dell'inchiostro | `apps/client/src/ink/palette.ts` (Okabe–Ito) |
 | i sei colori della lavagna | `apps/client/src/editors/canvas/engine.ts` |
 | il limite dei 64 MiB per i media | `apps/client/src/editors/media/media-types.ts` |
