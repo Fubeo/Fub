@@ -4376,7 +4376,16 @@ precedenza; `engine.test.ts` prova l'aggancio con le guide, Alt, Ctrl+' e
 le due impostazioni.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/canvas
-Stato: [ ] da fare
+Stato: [x] fatto (2026-11-10). Differenze: il prototipo non mostra guide
+né griglia, quindi guide nel colore d'accento, punti della griglia al 70%
+del contorno, due trattini agli spazi uguali (l'aspetto è chiesto
+all'utente); prima il motore non leggeva `canvas.snap`, ora spento vuol
+dire niente aggancio né guide; Alt mentre si ridimensiona spegne anche la
+griglia (il test di T66 ora si aspetta [16,20,288,180]); la griglia non si
+disegna sotto il 50% di zoom; Ctrl+' si salva per lavagna nello stato di
+vista e resta anche se cambia `canvas.grid`. Il filtro «solo schede in
+vista» con 2000 schede non ha un test suo; `canvas-cards.md` dice ancora
+che la griglia è un campo in più (pagina al limite di righe).
 
 ## T72 · Spargi le pagine
 

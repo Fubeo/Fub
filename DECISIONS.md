@@ -59,6 +59,7 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-10 · n6 · T71 integrato con guide d'accento e punti della griglia ogni 8 px, accesi di serie come dice il piano; l'aspetto (densità dei punti, griglia accesa di serie) è chiesto all'utente perché il prototipo T26 non lo mostra · Perché: è una scelta visibile su ogni lavagna, e il prototipo approvato ha lo sfondo liscio.
 - 2026-11-10 · n6 · L'utente sceglie (a) per il tratto libero negli appunti lasciato fuori da T68: un campo `fub:ink` alla radice della forma, versione sempre 1; task nuovo T94, dopo il lazo (T86) · Perché: è la stessa forma del livello della radice del `.canvas`, e chi non conosce il campo lo ignora senza rompersi.
 - 2026-11-10 · n6 · L'utente sceglie (a) per il doppio clic su una scheda mancante o illeggibile (diagnosi di T91): «Ritrova…» o «Apri» al posto del campo del percorso; task nuovo T93 · Perché: il campo del percorso lì non aiuta, i pulsanti di T16 dicono già che cosa fare.
 - 2026-11-10 · n6 · T74 integrato: il selettore va sotto la scheda dove a destra non c'è posto, la lista non è virtualizzata, le sezioni si scrivono nell'ordine della nota · Perché: sotto è la variante approvata a 700 px; `kit/list` non virtualizza e 300 righe reggono; l'ordine della nota è quello che la scheda mostra.
