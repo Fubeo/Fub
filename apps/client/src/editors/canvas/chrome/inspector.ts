@@ -610,6 +610,7 @@ function mountCards(host: HTMLElement, port: CardsPort): { readonly handle: Moun
     if (life.closed) return;
     const all = port.entries();
     shown = filterEntries(all, search.value, kind.value as InspectorKind);
+    const hadFocus = list.contains(doc.activeElement);
     for (const row of drawn.values()) row.remove();
     drawn = new Map();
     // Il passo di una riga: la misura di una riga vera, quando c'è.
@@ -623,6 +624,8 @@ function mountCards(host: HTMLElement, port: CardsPort): { readonly handle: Moun
     note.hidden = shown.length > 0;
     note.textContent = all.length === 0 ? t("canvas.inspector.empty") : t("canvas.inspector.none_found");
     paint();
+    // Le righe sono nuove: il fuoco che stava nell'elenco torna alla sua fermata.
+    if (hadFocus) drawn.get(stopAt())?.focus({ preventScroll: true });
   };
 
   /// Porta il fuoco sulla riga `at` dell'elenco, disegnandola se serve.

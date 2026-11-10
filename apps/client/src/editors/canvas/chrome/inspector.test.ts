@@ -165,8 +165,11 @@ describe("la parte «Schede»", () => {
     const { host, unmount } = mountPanel(inspector.panels.list()[0]!);
     set(source([...BOARD, node("nuova", 0, 900, { text: "Nuova" })]));
     expect(names(host)).toHaveLength(6);
+    host.querySelector<HTMLElement>(".canvas-inspector-row[tabindex='0']")!.focus();
     inspector.changed();
     expect(names(host)).toHaveLength(7);
+    // Il fuoco che stava nell'elenco resta sulla sua riga, rifatta.
+    expect((document.activeElement as HTMLElement).dataset.node).toBe("statistica");
     unmount();
     expect(host.childElementCount).toBe(0);
     // Smontato, un avviso non tocca più niente.
