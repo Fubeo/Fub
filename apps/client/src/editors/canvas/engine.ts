@@ -448,6 +448,15 @@ type MenuEntryMaker = (id: string, args?: CanvasCommandArgs, refocus?: boolean, 
  */
 type ColorMenuMaker = (current: string | null | undefined, args?: CanvasCommandArgs) => SurfaceMenuItem;
 
+/**
+ * Dove porta un link scritto in una scheda (N6 T57): un wikilink
+ * `[[pagina#sezione^blocco]]`, o un percorso del vault che la montatura
+ * riconosce come file (`a.internal-path`).
+ */
+export type CardLinkRef =
+  | { readonly kind: "wiki"; readonly page: string; readonly heading: string | null; readonly block: string | null }
+  | { readonly kind: "path"; readonly path: string };
+
 export interface CanvasEngineOptions {
   readonly surfaceId: string;
   /** Il nucleo che apre le lavagne; i test ne passano uno che conta le chiamate. */
@@ -460,6 +469,16 @@ export interface CanvasEngineOptions {
   readonly onOpenPath?: (path: string, from?: string) => void | Promise<void>;
   /** «Apri a lato» dal menu di una scheda di file: come `onOpenPath`, in un riquadro accanto. */
   readonly onOpenPathBeside?: (path: string, from?: string) => void | Promise<void>;
+  /** «Apri a lato» di un wikilink di una scheda che non è sulla lavagna (T57), come quello di una nota. */
+  readonly onOpenWikilinkBeside?: (page: string, heading: string | null, block: string | null) => void | Promise<void>;
+  /**
+   * Dove porta un link scritto in una scheda (T57): il file del vault a cui
+   * punta, o `null` se non c'è (un link rotto). `from` è la nota in cui il link
+   * è scritto, o la lavagna. La risolve la shell come per le note: la tela non
+   * conosce i nomi. Assente, i link delle schede si seguono come prima, dalla
+   * montatura.
+   */
+  readonly resolveCardLink?: (link: CardLinkRef, from?: string) => Promise<string | null>;
   /**
    * «Sposta anche il file nel cestino» (T17): il file `path` del vault nel
    * cestino, con il gesto dell'albero. `true` se il file è nel cestino,
@@ -693,6 +712,12 @@ export const EDGE_SCROLL_MAX = 1.2;
 
 /** L'inerzia parte solo da un dito che va almeno a tanto, in px al ms. */
 const INERTIA_MIN_SPEED = 0.05;
+
+/**
+ * Quanto resta il lampo di una scheda raggiunta da un link (T57): l'animazione
+ * del CSS dura un po' meno; col movimento ridotto l'anello resta fermo per tutto.
+ */
+const CARD_FLASH_MS = 1000;
 
 /** La velocità del dito si misura sugli ultimi ms del gesto. */
 const INERTIA_WINDOW_MS = 100;
@@ -1205,6 +1230,8 @@ export class CanvasEngine {
   /** L'unico posto del testo di una scheda non ancora registrato. */
   #pending: PendingText | null = null;
   #pauseTimer: ReturnType<typeof setTimeout> | undefined = undefined;
+  /** La scheda che lampeggia dopo un link (T57), col suo timer: un solo lampo alla volta. */
+  #flashing: { readonly article: HTMLElement; readonly timer: ReturnType<typeof setTimeout> } | null = null;
   /** Chi possiede l'inchiostro: lo scheduler del silenzio della penna e lo strato. Si chiude in `destroy`. */
   readonly #life: Lifetime = openLifetime();
   /** Il selettore di «Altro…» aperto (T47); si chiude con la vita della lavagna. */
@@ -1855,6 +1882,7 @@ export class CanvasEngine {
     this.#pauseTimer = undefined;
     clearTimeout(this.#wheelTimer);
     this.#wheelTimer = undefined;
+    this.#endFlash();
     this.#revival++;
     // Un tratto in corso si perde senza errori: lo strato lo annulla, e la
     // vita chiude lo scheduler e ciò che il silenzio della penna teneva.
@@ -7085,7 +7113,8 @@ export class CanvasEngine {
    * Dentro la scheda attiva passa. Fuori, Ctrl+clic (Cmd+clic) su un link
    * passa e il link si segue (D-18 (c)); un pulsante della vista passa (il
    * suo «Apri»); ogni altro clic si ferma qui (A-12: sceglie, non segue), e
-   * se la scheda era già la sola scelta prima del clic ci entra.
+   * se la scheda era già la sola scelta prima del clic ci entra. Un link che
+   * porta a un file del vault lo segue la tela (T57), non la montatura.
    */
   #cardClick(event: MouseEvent): void {
     const pressed = this.#pressedSelected;
@@ -7095,14 +7124,115 @@ export class CanvasEngine {
     const id = this.#nodeAt(target);
     const entry = id === null ? undefined : this.#cards.get(id);
     if (!id || !entry || !this.#hasLiveContent(entry) || !entry.body.contains(target)) return;
-    if (this.#activeId === id) return;
     const modifier = event.ctrlKey || event.metaKey;
+    if ((modifier || this.#activeId === id) && this.#followCardLink(event, entry)) return;
+    if (this.#activeId === id) return;
     if (modifier && this.#cardLinkAt(target) !== null) return;
     const button = target.closest("button");
     if (button !== null && entry.body.contains(button) && !modifier) return;
     event.preventDefault();
     event.stopPropagation();
     if (!modifier && !event.shiftKey && !event.altKey && pressed === id) this.#enterCard(id);
+  }
+
+  // --- seguire un link (T57) ----------------------------------------------------
+
+  /**
+   * Il clic su un link di una scheda che porta a un file del vault (T57): la
+   * tela lo prende (`preventDefault`, `stopPropagation`) e lo segue con
+   * `#openCardLink`. `false` se il link non è di quelli (un indirizzo web, un
+   * link senza `resolveCardLink`): allora vale la montatura di sempre.
+   */
+  #followCardLink(event: MouseEvent, entry: CardEntry): boolean {
+    if (!this.#options.resolveCardLink || !(event.target instanceof Element)) return false;
+    const anchor = this.#cardLinkAt(event.target);
+    const link = anchor === null ? null : cardLinkOf(anchor);
+    if (link === null) return false;
+    event.preventDefault();
+    event.stopPropagation();
+    const node = entry.node;
+    const from = node.type === "file" && node.file ? node.file : this.#options.documentId;
+    void this.#openCardLink(link, from).catch((error: unknown) => this.#showIntakeError(error));
+    return true;
+  }
+
+  /**
+   * Segue un link di una scheda (T57). Se il file a cui punta ha una scheda su
+   * questa lavagna, la vista vola fino a lei e la scheda lampeggia (con
+   * `#jumpCamera`, dunque Indietro torna qui). Altrimenti il file si apre
+   * accanto, come il wikilink di una nota. Un link rotto va dove va quello delle
+   * note: il riquadro, che per un wikilink crea la nota che manca.
+   */
+  async #openCardLink(link: CardLinkRef, from: string | undefined): Promise<void> {
+    const resolve = this.#options.resolveCardLink;
+    if (!resolve) return;
+    const doc = await resolve(link, from);
+    // La lavagna chiusa mentre la shell risolveva: il link non porta più a niente.
+    if (this.#destroyed) return;
+    if (doc === null) {
+      if (link.kind === "wiki") await this.#options.onOpenWikilink?.(link.page, link.heading, link.block);
+      else await this.#options.onOpenPath?.(link.path, from);
+      return;
+    }
+    const node = linkedCardOf(this.#doc?.nodes ?? [], doc, link, this.#viewCenter());
+    if (node) {
+      this.#jumpToCard(node);
+      return;
+    }
+    if (link.kind === "wiki") await (this.#options.onOpenWikilinkBeside ?? this.#options.onOpenWikilink)?.(link.page, link.heading, link.block);
+    else await (this.#options.onOpenPathBeside ?? this.#options.onOpenPath)?.(link.path, from);
+  }
+
+  /** Il centro della vista, in coordinate della lavagna: quale scheda di un file è la più vicina. */
+  #viewCenter(): { x: number; y: number } {
+    const rect = this.#viewport.getBoundingClientRect();
+    return {
+      x: ((rect.width || 800) / 2 - this.#camera.x) / this.#camera.zoom,
+      y: ((rect.height || 600) / 2 - this.#camera.y) / this.#camera.zoom,
+    };
+  }
+
+  /**
+   * Il salto a una scheda (T57): la vista la mette al centro col zoom di adesso,
+   * come ogni salto (`#jumpCamera`, che lo ricorda per Indietro), e la scheda
+   * lampeggia una volta.
+   */
+  #jumpToCard(node: CanvasNode): void {
+    const rect = this.#viewport.getBoundingClientRect();
+    const zoom = this.#camera.zoom;
+    this.#jumpCamera({
+      x: (rect.width || 800) / 2 - (node.x + node.width / 2) * zoom,
+      y: (rect.height || 600) / 2 - (node.y + node.height / 2) * zoom,
+      zoom,
+    });
+    this.#flashCard(node.id);
+  }
+
+  /**
+   * Il lampo di una scheda: `data-card-flash` sulla sua `article`, che il CSS
+   * anima una volta (`pulse`), o che resta fermo (`still`) col movimento ridotto.
+   * Un solo lampo alla volta: un altro lo spegne. Il timer lo toglie, e la
+   * distruzione della lavagna lo ferma.
+   */
+  #flashCard(id: string): void {
+    const entry = this.#cards.get(id);
+    if (!entry) return;
+    this.#endFlash();
+    const article = entry.article;
+    // Via e poi di nuovo, con una lettura in mezzo: il lampo riparte da capo se
+    // la stessa scheda si raggiunge due volte di fila.
+    article.removeAttribute("data-card-flash");
+    void article.offsetWidth;
+    article.dataset.cardFlash = this.#reducedMotion ? "still" : "pulse";
+    this.#flashing = { article, timer: setTimeout(() => this.#endFlash(), CARD_FLASH_MS) };
+  }
+
+  #endFlash(): void {
+    const flashing = this.#flashing;
+    if (!flashing) return;
+    this.#flashing = null;
+    clearTimeout(flashing.timer);
+    delete flashing.article.dataset.cardFlash;
   }
 
   /**
@@ -8061,4 +8191,70 @@ function partsChosen(node: CanvasNode): string[] {
   const subpath = typeof node.subpath === "string" ? node.subpath : null;
   if (subpath === null || noteHeadingOf(subpath) === null) return [];
   return [subpath.replace(/^#/, "")];
+}
+
+/**
+ * Il link di un'ancora della resa di una scheda, se porta a un file del vault
+ * (T57). Le stesse classi che la montatura riconosce: `a.internal-path` col
+ * percorso, `a.wikilink` con i dati del wikilink. Il resto (un indirizzo web)
+ * `null`: lo segue la montatura.
+ */
+function cardLinkOf(anchor: HTMLAnchorElement): CardLinkRef | null {
+  if (anchor.classList.contains("internal-path")) {
+    const path = anchor.dataset.path ?? "";
+    return path === "" ? null : { kind: "path", path };
+  }
+  const page = anchor.dataset.wikilinkPage;
+  if (anchor.classList.contains("wikilink") && page !== undefined) {
+    return {
+      kind: "wiki",
+      page,
+      heading: anchor.dataset.wikilinkHeading ?? null,
+      block: anchor.dataset.wikilinkBlock ?? null,
+    };
+  }
+  return null;
+}
+
+/**
+ * Il percorso di un file del vault senza la barra in testa e senza il frammento
+ * (`#page=3`, o la query), come `pdfIdWithoutFragment`: così un `doc` risolto e
+ * il `file` di una scheda si confrontano.
+ */
+function vaultPathOf(id: string): string {
+  const cut = [id.indexOf("#"), id.indexOf("?")].filter((at) => at >= 0);
+  const bare = cut.length ? id.slice(0, Math.min(...cut)) : id;
+  return bare.replace(/^\/+/, "");
+}
+
+/**
+ * La scheda di `nodes` che un link porta a vedere (T57): una scheda del file
+ * `doc`, quella che ha la sezione del link nel suo `subpath` se ce n'è una, poi
+ * la più vicina al centro della vista `center`. `undefined` se il file non ha
+ * schede sulla lavagna.
+ */
+function linkedCardOf(
+  nodes: readonly CanvasNode[],
+  doc: string,
+  link: CardLinkRef,
+  center: { readonly x: number; readonly y: number },
+): CanvasNode | undefined {
+  const target = vaultPathOf(doc);
+  const cards = nodes.filter((node) => node.type === "file" && vaultPathOf(node.file ?? "") === target);
+  if (cards.length === 0) return undefined;
+  const heading = link.kind === "wiki" ? link.heading?.trim() : undefined;
+  const sectioned = heading ? cards.filter((node) => noteHeadingOf(node.subpath ?? null) === heading) : [];
+  const pool = sectioned.length > 0 ? sectioned : cards;
+  let best: CanvasNode | undefined;
+  let bestDistance = Infinity;
+  for (const node of pool) {
+    const dx = node.x + node.width / 2 - center.x;
+    const dy = node.y + node.height / 2 - center.y;
+    const distance = dx * dx + dy * dy;
+    if (distance < bestDistance) {
+      best = node;
+      bestDistance = distance;
+    }
+  }
+  return best;
 }

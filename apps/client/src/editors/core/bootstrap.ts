@@ -26,7 +26,7 @@ import { CRAFT_PREVIEW_COMMAND } from "../../host/craft";
 import { isRawPhoto } from "../../ui/format-kind";
 import { showPhotoData } from "../craft/photo-data";
 import { makePdfJsLoader, pdfIdWithoutFragment, type PdfEngineLoader, type PdfJsModule } from "../media/pdf-view";
-import type { CanvasAttachmentPort, CanvasCards, CanvasMediaPort } from "../canvas/engine";
+import type { CanvasAttachmentPort, CanvasCards, CanvasMediaPort, CardLinkRef } from "../canvas/engine";
 import type { DrawingImagePort } from "../canvas/surface";
 import type { CardEditorPort, CardMode, CardRenderer, CardSnapshots, CardView } from "../canvas/cards";
 import type { NoteCardPort } from "../canvas/cards/note";
@@ -90,6 +90,9 @@ export interface SurfaceBootstrapOptions extends SurfaceCallbacks {
   /// «Apri a lato» dal menu di una scheda della lavagna: il file `path` (con
   /// il suo `#…`) in un riquadro accanto, come `onOpenPath`.
   readonly onOpenPathBeside?: (path: string, from?: string) => void | Promise<void>;
+  /// Dove porta un link scritto in una scheda della lavagna (N6 T57): il file
+  /// del vault a cui punta, o `null` se non c'è. Lo risolve la shell.
+  readonly resolveCardLink?: (link: CardLinkRef, from?: string) => Promise<string | null>;
   /// «Sposta anche il file nel cestino» dal menu di una scheda della lavagna:
   /// il documento `path` nel cestino col gesto dell'albero. `true` se ci è
   /// andato, `false` se è rimasto; un rifiuto dell'host è un errore.
@@ -983,6 +986,8 @@ export const COMPONENT_EDITORS: Readonly<Record<string, readonly EditorPart[]>> 
               onOpenWikilink: options.onOpenWikilink,
               onOpenPath: options.onOpenPath,
               ...(options.onOpenPathBeside ? { onOpenPathBeside: options.onOpenPathBeside } : {}),
+              ...(options.onOpenWikilinkBeside ? { onOpenWikilinkBeside: options.onOpenWikilinkBeside } : {}),
+              ...(options.resolveCardLink ? { resolveCardLink: options.resolveCardLink } : {}),
               ...(options.onTrashPath ? { onTrashPath: options.onTrashPath } : {}),
               onCreateNote: options.onCreateCanvasNote,
               onPickFile: options.onPickCanvasFile,

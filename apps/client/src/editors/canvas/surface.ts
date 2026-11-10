@@ -56,6 +56,10 @@ export interface CanvasSurfaceCallbacks {
   readonly onOpenPath?: CanvasEngineOptions["onOpenPath"];
   /** «Apri a lato» dal menu di una scheda di file (T17). */
   readonly onOpenPathBeside?: CanvasEngineOptions["onOpenPathBeside"];
+  /** «Apri a lato» di un wikilink di una scheda che non è sulla lavagna (T57). */
+  readonly onOpenWikilinkBeside?: CanvasEngineOptions["onOpenWikilinkBeside"];
+  /** Dove porta un link scritto in una scheda (T57): il file del vault, o `null`. */
+  readonly resolveCardLink?: CanvasEngineOptions["resolveCardLink"];
   /** «Sposta anche il file nel cestino» dal menu di una scheda (T17): il gesto dell'albero. */
   readonly onTrashPath?: CanvasEngineOptions["onTrashPath"];
   readonly onCreateNote?: CanvasEngineOptions["onCreateNote"];
@@ -221,6 +225,8 @@ export function mountCanvasSurface(
     onOpenWikilink: callbacks.onOpenWikilink,
     onOpenPath: callbacks.onOpenPath,
     ...(callbacks.onOpenPathBeside ? { onOpenPathBeside: callbacks.onOpenPathBeside } : {}),
+    ...(callbacks.onOpenWikilinkBeside ? { onOpenWikilinkBeside: callbacks.onOpenWikilinkBeside } : {}),
+    ...(callbacks.resolveCardLink ? { resolveCardLink: callbacks.resolveCardLink } : {}),
     ...(callbacks.onTrashPath ? { onTrashPath: callbacks.onTrashPath } : {}),
     onCreateNote: callbacks.onCreateNote,
     onPickFile: callbacks.onPickFile,
