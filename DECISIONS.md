@@ -59,6 +59,7 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-10 · n6 · T55: Nascondi e Mostra il navigatore sono due comandi del catalogo, non una spunta in un menu Vista che non c'è; i tratti d'inchiostro non contano per i bordi della mappa · Perché: esiste solo ciò che si può usare, e la mappa delle schede resta leggibile.
 - 2026-11-10 · n6 · T69: il bordo del tratto in corso è fatto di quattro lati sulla scena e l'etichetta vive nella vista, in coordinate dello schermo; `#render` non toglie `.canvas-ink-frames` né la cornice della scelta di T66 · Perché: il contorno sulla scheda ridipingeva tutta la scena di S8 e creava nodi a ogni tratto; così S8 resta come prima.
 - 2026-11-10 · n6 · T53: l'inerzia dopo uno spostamento viene solo dal dito, non dal
   touchpad; + e − e lo zoom della banda non volano, volano i salti (0, Maiusc+1, Maiusc+2).

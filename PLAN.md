@@ -3655,7 +3655,7 @@ Fatto quando: il test prova il clic, il trascinamento, quando sparisce e
 «Nascondi»; le foto del banco somigliano al prototipo.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/canvas
-Stato: [ ] da fare
+Stato: [x] fatto (2026-11-10). Differenze: al posto della spunta del prototipo due comandi, «Nascondi il navigatore» e «Mostra il navigatore» (gruppo Vista, Ctrl+/ e menu dell'area vuota), perché il prodotto non ha un menu Vista; `role="group"` invece di `img`, perché si usa con le frecce; la vista salva `"navigator": false` solo da nascosto; l'inchiostro non allarga la mappa, quindi una lavagna di solo inchiostro non mostra il navigatore
 
 ## T56 · Indietro e Avanti
 
