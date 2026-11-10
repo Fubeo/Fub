@@ -4396,7 +4396,7 @@ Fatto quando: `engine.test.ts` prova tutte le pagine, un intervallo, il
 gruppo oltre 12, la conferma oltre 200 e un solo annulla.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/canvas/engine.test.ts
-Stato: [ ] da fare
+Stato: [x] fatto (2026-11-10). Differenze: un PDF che non si apre spegne la voce dopo il primo tentativo fallito, col perché «Questo PDF non si apre.», finché il file non cambia (il menu si costruisce subito, senza aspettare pdf.js); la soglia dei 200 conta le pagine scelte; la voce sta dopo «Apri a lato», senza tasto, e in Ctrl+/ nel gruppo «Creare»; il gruppo oltre 12 si chiama «{count} pagine»; il campo è `kit/field.ts`, vuoto vuol dire tutte. Il dialogo non è ancora stato guardato nel banco
 
 ## T73 · Il formato degli estratti: `fub:parts`
 
