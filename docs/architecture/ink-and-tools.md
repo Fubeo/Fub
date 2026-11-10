@@ -377,12 +377,11 @@ schede.
   unità del tratto, sopra il tratto attenuato restano pieni i pezzi
   (`cutInkStroke`) e alla fine `cutStrokePatches` li mette al suo posto in
   un commit; un rifiuto del nucleo non cambia niente e lo dice l'avviso.
-- **Il tasto D.** D da solo sul viewport, fuori dai campi di testo, fa
-  scrivere il mouse (`data-ink="pen"` sul viewport) finché non si alza; lo
-  lasciano anche la finestra che perde il fuoco e `visibilitychange`. Un
-  tratto già giù finisce. Il pulsante «Scrivi col mouse» (`setInkMouse`)
-  fa lo stesso finché non si spegne; ogni clic lo scrive con `saveInkMouse`,
-  e la lavagna che si apre lo riprende una volta con `readInkMouse`.
+- **Il tasto D.** D da solo sul viewport, fuori dai campi, fa scrivere il
+  mouse (`data-ink="pen"`) finché non si alza, o la finestra perde il fuoco
+  o si nasconde; un tratto già giù finisce. «Scrivi col mouse»
+  (`setInkMouse`, `saveInkMouse`, `readInkMouse` all'apertura) è lo stato
+  di Penna, Evidenziatore e Gomma della [colonna](../reference/canvas-input.md).
 - **Il dito.** Un dito sposta la vista, anche sopra le schede; testata,
   maniglie, `[data-connect]` e controlli fanno come col mouse (in sola
   lettura la testata sposta la vista). Due dita pizzicano (`pinchCamera` di

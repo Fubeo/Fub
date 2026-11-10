@@ -2,13 +2,13 @@
 
 > **Ambito:** come la tela della lavagna prende la tastiera, il puntatore e
 > la rotella: entrare in una scheda e uscirne, la rotella, il catalogo dei
-> comandi e i loro tasti.
+> comandi e i loro tasti, la colonna degli strumenti.
 > **Fonti autorevoli:** `apps/client/src/editors/canvas/engine.ts`
 > (`#keydown`, `#wheel`, le schede attive) e le prove in
 > `apps/client/src/editors/canvas/engine.test.ts` e
 > `engine-cards.test.ts`; per i comandi,
-> `apps/client/src/editors/canvas/chrome/commands.ts`, `command-search.ts` e
-> le loro prove.
+> `apps/client/src/editors/canvas/chrome/commands.ts`, `command-search.ts`,
+> `rail.ts` e le loro prove.
 
 Questa pagina viene da [Le schede della lavagna](canvas-cards.md), che tiene
 il contratto dei renderer.
@@ -95,6 +95,8 @@ scrive, valgono quelli della sessione). `Esc` torna dov'eri, anche in un campo.
 
 | Comandi | Tasti |
 |---|---|
+| `canvas.tool.select`, `.hand`, `.pen`, `.highlighter`, `.eraser`, `.text`, `.connect` | `V`, `H`, `P`, `Maiusc+P`, `E`, `T`, `C` |
+| `canvas.escape` (toglie la scelta; senza scelta torna alla Selezione) | `Esc` |
 | `canvas.undo`, `canvas.redo` | `Ctrl+Z`; `Ctrl+Maiusc+Z`, `Ctrl+Y` |
 | `canvas.commands`, `canvas.select_all`, `canvas.duplicate` | `Ctrl+/`, `Ctrl+A`, `Ctrl+D` |
 | `canvas.enter` (col fuoco sulla tela o su una scheda), `canvas.delete` | `Invio`; `Canc`, `Backspace` |
@@ -111,5 +113,24 @@ dello Scrittoio); prima vince il segno scritto, poi il posto del tasto
 (`Maiusc+1`). Dello Scrittoio la tela prende solo lo zoom (`Ctrl+=`, `Ctrl+-`,
 `Ctrl+0`, `CANVAS_DECLARED_SHELL_KEYS`), com'era già. Restano com'erano e
 diversi dalla tabella: `Ctrl+0` mostra tutto, le frecce spostano di 8
-(`Maiusc` 32). I tasti degli strumenti (`T` compreso) arrivano con la colonna;
-come nel disegno, i tasti della lavagna non si cambiano ancora.
+(`Maiusc` 32). Come nel disegno, i tasti della lavagna non si cambiano ancora.
+
+## La colonna degli strumenti
+
+A sinistra della lavagna sta la colonna degli strumenti
+(`chrome/rail.ts`, sulla colonna del kit come quella del disegno): Selezione,
+Mano, Penna (con l'Evidenziatore in tendina), Gomma, Testo e Collega. Ogni
+casella è il comando `canvas.tool.<id>`; i tasti valgono sulla lavagna e col
+fuoco sulla colonna, mai mentre si scrive. La Mano sposta la lavagna anche
+sopra le schede; il Testo mette una scheda di testo dove si fa clic, col campo
+aperto, e torna alla Selezione; Collega tira un filo da una scheda a un'altra.
+Penna, Evidenziatore e Gomma fanno scrivere il mouse con la penna del menu di
+N4: sono lo stesso stato dell'interruttore «Scrivi col mouse», e la scelta
+passa al menu della penna. `D` tenuto presta la penna a ogni strumento.
+
+`canvas.toolbar` sceglie quali strumenti stanno nella colonna e in che ordine
+(`canvasRailLayout`): vuota è quella di serie; un nome che la lavagna non
+conosce si salta, la Selezione sta sempre in cima, uno strumento tolto resta
+nei tasti e in `Ctrl+/`. In sola lettura gli strumenti che scrivono si vedono
+spenti col perché nel nome; Selezione e Mano restano. Con la finestra fino a
+700 px, o un riquadro fino a 480, la colonna va sotto la lavagna, in riga.
