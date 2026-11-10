@@ -204,9 +204,11 @@ e non diventa un valore JSON.
 
 `color`, su una scheda o su un arco, è uno dei sei colori di JSON Canvas
 (`"1"`…`"6"`: Rosso, Arancione, Giallo, Verde, Azzurro, Viola) o un colore
-esatto `#rgb`, `#rgba`, `#rrggbb`, `#rrggbbaa`. Il nucleo legge questi e
-basta: un altro valore (`"7"`, `"rosso"`) è un errore di lettura e la lavagna
-non si apre. La lista, i nomi e le regole della tela stanno in
+esatto `#rgb`, `#rgba`, `#rrggbb`, `#rrggbbaa`. Un altro testo (`"7"`,
+`"rosso"`, `""`, `"#12"`) è un colore che Fub non conosce: la lavagna si apre,
+il testo resta com'è e la scheda si disegna senza colore. Un valore che non è
+una stringa (`7`, `true`) non è un colore: è un errore di lettura. La lista,
+i nomi e le regole della tela stanno in
 `apps/client/src/editors/canvas/colors.ts`.
 
 - **Che cosa scrive Fub.** Il numero per i sei; per i nove «Colori delle
@@ -220,10 +222,18 @@ non si apre. La lista, i nomi e le regole della tela stanno in
   così finché nessuno cambia il colore di quella scheda, e scegliere il
   colore che c'è già non scrive niente. Un esadecimale dei nove, anche in
   maiuscolo, si riconosce.
+- **Che cosa riscrive con un colore che non conosce.** Il testo resta uguale
+  quando la scheda cambia di posto o di testo, e scegliere un colore dal menu
+  lo sostituisce. Il nucleo scrive di nuovo un colore che non conosce solo se
+  la lavagna l'ha letto: un annulla riporta il testo di prima, una scheda
+  copiata lo porta con sé. Un colore inventato è un rifiuto `invalid`, come
+  prima. Una lavagna riaperta da un file che quel colore non ce l'ha più non
+  lo riscrive, e un annulla che lo riporta è rifiutato.
 - **Come si disegna.** Lo dice la pelle (`skin/editors.css`): la tela mette
   sulla scheda e sul gruppo dell'arco `data-canvas-color` (`1`…`6`, il nome
   di uno dei nove, `custom`) e, per un colore libero, il valore del file in
-  `--canvas-color`. La carta prende la tinta del colore (i sei con le dosi
+  `--canvas-color`. Un colore che Fub non conosce non mette né l'una né
+  l'altra. La carta prende la tinta del colore (i sei con le dosi
   di sempre, i nove con `--doc-tint-*`, un colore libero col 14% di sé), il
   filo e le punte di un arco il colore pieno; al buio i nove seguono i
   Blocchi (`--doc-color-*`). Il nome del colore arriva al lettore di schermo
