@@ -389,15 +389,26 @@ async function createCanvasNote(text: string): Promise<string> {
 const CANVAS_FILE_CHOICES = 500;
 
 /// Il file a cui punta una nuova card file del canvas: uno che c'è, scelto
-/// dall'utente, non un segnaposto.
-async function pickCanvasFile(): Promise<string | null> {
-  const page = await vaultEntries({ offset: 0, limit: CANVAS_FILE_CHOICES });
+/// dall'utente, non un segnaposto. Con `name` (il file di una scheda che non
+/// c'è più, «Ritrova…») gli omonimi vanno per primi, e si chiede tutto il
+/// vault: un omonimo oltre il tetto della lista non si troverebbe.
+async function pickCanvasFile(name?: string): Promise<string | null> {
+  const page = await vaultEntries(name === undefined ? { offset: 0, limit: CANVAS_FILE_CHOICES } : WITHOUT_PAGE);
+  const entries = name === undefined ? page.items : namesakesFirst(page.items, name).slice(0, CANVAS_FILE_CHOICES);
   return pickFromList<string>({
     title: t("canvas.pick_file"),
     placeholder: t("canvas.pick_file_filter"),
-    items: page.items.map((entry) => ({ label: pageName(entry.id), detail: entry.id, value: entry.id })),
-    more: Math.max(0, page.total - page.offset - page.items.length),
+    items: entries.map((entry) => ({ label: pageName(entry.id), detail: entry.id, value: entry.id })),
+    more: Math.max(0, page.total - entries.length),
   });
+}
+
+/// Le voci che hanno lo stesso nome (senza cartelle, senza distinguere le
+/// maiuscole) in testa, nell'ordine che avevano; il resto dopo, com'era.
+function namesakesFirst<T extends { readonly id: string }>(entries: readonly T[], name: string): T[] {
+  const wanted = name.toLocaleLowerCase();
+  const same = (entry: T): boolean => (entry.id.split("/").pop() ?? entry.id).toLocaleLowerCase() === wanted;
+  return [...entries.filter(same), ...entries.filter((entry) => !same(entry))];
 }
 
 /// Il documento a cui porta un collegamento del disegno `from`: uno che c'è,

@@ -278,8 +278,10 @@ export interface CanvasEngineOptions {
    * Sceglie il file del vault a cui punta una nuova card file; `null` o niente
    * se l'utente rinuncia. Assente = niente bottone «aggiungi file»: una card
    * che punta a un file inventato è un rimando rotto scritto nel documento.
+   * Con `name` (il nome del file di una scheda che non c'è più, «Ritrova…») la
+   * scelta mette per prima una voce con quel nome.
    */
-  readonly onPickFile?: () => string | null | void | Promise<string | null | void>;
+  readonly onPickFile?: (name?: string) => string | null | void | Promise<string | null | void>;
   readonly documentId?: string;
   readonly media?: CanvasMediaPort;
   readonly attachments?: CanvasAttachmentPort;
@@ -341,10 +343,16 @@ export interface CanvasEngineOptions {
   readonly clipboardMarkdown?: (data: DataTransfer) => Promise<string | null>;
 }
 
-/** Le schede della tela: il registro dei renderer e la cache delle immagini ferme. */
+/**
+ * Le schede della tela: il registro dei renderer, la cache delle immagini ferme
+ * e l'ascolto dei file. Una scheda il cui file manca non ha una vista: `watch`
+ * avvisa quando il file torna, e la scheda si rimonta da sé (T16).
+ */
 export interface CanvasCards {
   readonly registry: CardRegistry;
   readonly snapshots: CardSnapshots;
+  /** Avvisa quando il file `path` cambia, sparisce o torna; restituisce come smettere. */
+  watch(path: string, changed: () => void): () => void;
 }
 
 /**
@@ -365,11 +373,19 @@ interface CardEntry {
   resize: HTMLElement | null;
   /** Lo smontaggio del Markdown di una scheda di testo. */
   teardown: (() => void) | null;
-  /** La vista del renderer e la sua vita; `null` col corpo di sempre. */
+  /**
+   * La vista del renderer e la sua vita; `null` col corpo di sempre. Col file
+   * mancante la vita tiene l'ascolto del file e i gesti, al posto della vista.
+   */
   view: CardView | null;
   viewLife: Lifetime | null;
   /** La misura che la vista conosce: quella del montaggio o dell'ultimo `resize()`. */
   viewSize: CardSize | null;
+  /**
+   * Il file della scheda non c'è: la chiave della vista (`cardBodyKey`) con cui
+   * il renderer l'ha detto. `null` se il file c'è, o non si sa.
+   */
+  missingFor: string | null;
 }
 
 interface Viewport {
@@ -2500,13 +2516,26 @@ export class CanvasEngine {
 
   #deleteSelection(): void {
     if (!this.#doc || this.#readOnly) return;
-    const patches: CanvasPatch[] = [];
-    const selected = new Set(this.#selection);
-    const edges = new Set(this.#edgeSelection);
-    for (const edge of this.#doc.edges) {
-      if (selected.has(edge.fromNode) || selected.has(edge.toNode)) edges.add(edge.id);
+    if (this.#removeNodes(this.#selection, this.#edgeSelection)) {
+      this.#selection = [];
+      this.#edgeSelection = [];
+      this.#options.onSelectionChange();
     }
-    for (const id of edges) {
+  }
+
+  /**
+   * Toglie le schede `nodes` e le linee `edges`, con le linee che le tengono:
+   * un commit solo, che un annulla riporta. `false` se non c'era niente da togliere.
+   */
+  #removeNodes(nodes: readonly string[], edges: readonly string[]): boolean {
+    if (!this.#doc) return false;
+    const patches: CanvasPatch[] = [];
+    const selected = new Set(nodes);
+    const removed = new Set(edges);
+    for (const edge of this.#doc.edges) {
+      if (selected.has(edge.fromNode) || selected.has(edge.toNode)) removed.add(edge.id);
+    }
+    for (const id of removed) {
       const patch = removeEdgePatch(this.#doc, id);
       if (patch) patches.push(patch);
     }
@@ -2514,11 +2543,7 @@ export class CanvasEngine {
       const patch = removeNodePatch(this.#doc, id);
       if (patch) patches.push(patch);
     }
-    if (patches.length && this.#commit(patches, "input")) {
-      this.#selection = [];
-      this.#edgeSelection = [];
-      this.#options.onSelectionChange();
-    }
+    return patches.length > 0 && this.#commit(patches, "input");
   }
 
   #reorderSelection(where: "front" | "back"): void {
@@ -3746,7 +3771,7 @@ export class CanvasEngine {
     el.append(header, body);
     const entry: CardEntry = {
       id, article: el, title, connect, node, type: node.type, body,
-      bodyKey: null, resize: null, teardown: null, view: null, viewLife: null, viewSize: null,
+      bodyKey: null, resize: null, teardown: null, view: null, viewLife: null, viewSize: null, missingFor: null,
     };
     el.addEventListener("focus", () => {
       if (!this.#selection.includes(id)) {
@@ -3810,9 +3835,14 @@ export class CanvasEngine {
     // Una vista dipende solo dalla scheda; il corpo di sempre anche dalla
     // lingua, e quello di testo dalle sintassi e dalla sola lettura (il
     // pulsante che ne fa una nota).
-    const key = cardBodyKey(node, renderer ? "view"
+    const viewKey = cardBodyKey(node, renderer ? "view"
       : node.type === "text" ? `${this.#languageRound}:${this.#formsRound}:${this.#readOnly}`
       : `${this.#languageRound}`);
+    // Il file cambiato (o la scheda) non è più quello che mancava: si riprova.
+    if (entry.missingFor !== null && entry.missingFor !== viewKey) entry.missingFor = null;
+    // Il segnaposto di un file mancante dipende dalla lingua e dalla sola lettura (i gesti).
+    const missing = entry.missingFor !== null && cards !== undefined;
+    const key = missing ? cardBodyKey(node, `missing:${this.#languageRound}:${this.#readOnly}`) : viewKey;
     if (key === entry.bodyKey) return;
     this.#releaseBody(entry);
     const body = document.createElement("div");
@@ -3820,7 +3850,8 @@ export class CanvasEngine {
     entry.body.replaceWith(body);
     entry.body = body;
     entry.bodyKey = key;
-    if (renderer && kind && cards) this.#mountView(entry, node, kind, renderer, cards.snapshots);
+    if (missing && cards) this.#fillMissing(entry, body, node, cards);
+    else if (renderer && kind && cards) this.#mountView(entry, node, kind, renderer, cards.snapshots);
     else this.#fillBody(entry, body, node);
   }
 
@@ -3833,6 +3864,9 @@ export class CanvasEngine {
     const body = entry.body;
     const life = openLifetime();
     const target = cardTarget(node);
+    // Finché il renderer monta, un «file mancante» si registra a montaggio finito.
+    let mounting = true;
+    let missingWhileMounting = false;
     const context: CardContext = {
       path: target.path,
       subpath: target.subpath,
@@ -3842,12 +3876,13 @@ export class CanvasEngine {
       size: () => ({ width: entry.node.width, height: entry.node.height }),
       zoom: () => this.#camera.zoom,
       missing: () => {
-        // Una vista già distrutta non parla più per questa scheda.
-        if (life.closed || entry.body !== body) return;
-        // Per ora il segnaposto di sempre (T16 lo cambia).
-        body.replaceChildren();
-        this.#fillBody(entry, body, entry.node);
-        entry.article.dataset.cardMissing = "true";
+        // Una vista già distrutta non parla più per questa scheda; un link non manca mai.
+        if (life.closed || entry.body !== body || entry.node.type !== "file") return;
+        if (mounting) {
+          missingWhileMounting = true;
+          return;
+        }
+        this.#markMissing(entry);
       },
     };
     let view: CardView;
@@ -3861,6 +3896,8 @@ export class CanvasEngine {
         this.#fillBody(entry, body, node);
       }
       return;
+    } finally {
+      mounting = false;
     }
     entry.view = view;
     entry.viewLife = life;
@@ -3878,6 +3915,96 @@ export class CanvasEngine {
       // Questa voce serve solo al cambio di modo: la vista la smonta `#releaseBody`.
       destroy: () => {},
     });
+    if (missingWhileMounting) this.#markMissing(entry);
+  }
+
+  /**
+   * Il renderer dice che il file della scheda non c'è: la vista si smonta, e il
+   * corpo diventa «File mancante» con i suoi gesti. La scheda resta così finché
+   * il file non torna (o cambia): allora la sua vista si rimonta.
+   */
+  #markMissing(entry: CardEntry): void {
+    entry.missingFor = cardBodyKey(entry.node, "view");
+    this.#refreshCard(entry, entry.node, true);
+  }
+
+  /**
+   * Il file di una scheda mancante è tornato (o è cambiato): la scheda si
+   * rimonta da sé, con la sua vista, e la tela decide se si accende.
+   */
+  #fileBack(id: string): void {
+    const entry = this.#cards.get(id);
+    if (this.#destroyed || !entry || entry.missingFor === null) return;
+    entry.missingFor = null;
+    this.#refreshCard(entry, entry.node, true);
+    this.#refreshLive();
+  }
+
+  /**
+   * Il corpo di una scheda il cui file non c'è: il nome del file, e «Ritrova…» e
+   * «Togli dalla lavagna» se la lavagna si può cambiare. Il file si ascolta da
+   * qui (la vita del corpo): quando torna, `#fileBack` rimonta la vista.
+   */
+  #fillMissing(entry: CardEntry, body: HTMLElement, node: CanvasNode, cards: CanvasCards): void {
+    const id = node.id;
+    const path = cardTarget(node).path;
+    const life = openLifetime();
+    entry.viewLife = life;
+    entry.article.dataset.cardMissing = "true";
+    const message = document.createElement("span");
+    message.className = "canvas-media-placeholder";
+    message.textContent = t("canvas.card.missing", { path });
+    body.append(message);
+    life.add(cards.watch(path, () => this.#fileBack(id)));
+    if (this.#readOnly) return;
+    const pick = this.#options.onPickFile;
+    if (pick) {
+      const relink = document.createElement("button");
+      relink.type = "button";
+      // La classe dei gesti di testo dentro una scheda: nessun aspetto nuovo.
+      relink.className = "canvas-file-link";
+      relink.dataset.cardAction = "relink";
+      relink.textContent = t("canvas.card.relink");
+      life.listen(relink, "click", (event) => {
+        event.stopPropagation();
+        this.#relinkCard(id, pick).catch((error: unknown) => this.#showIntakeError(error));
+      });
+      body.append(relink);
+    }
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.className = "canvas-file-link";
+    remove.dataset.cardAction = "remove";
+    remove.textContent = t("canvas.card.remove");
+    life.listen(remove, "click", (event) => {
+      event.stopPropagation();
+      this.#removeCard(id);
+    });
+    body.append(remove);
+  }
+
+  /**
+   * «Ritrova…»: il file scelto (con il nome di quello che manca in testa) sostituisce
+   * il percorso della scheda, in un commit solo. La scelta vale solo se la scheda è
+   * ancora mancante per lo stesso file: se il file è tornato, o la scheda è cambiata
+   * mentre il selettore era aperto, la scelta è vecchia e non tocca niente.
+   */
+  async #relinkCard(id: string, pick: NonNullable<CanvasEngineOptions["onPickFile"]>): Promise<void> {
+    const expected = this.#cards.get(id)?.missingFor ?? null;
+    const shown = this.#doc?.nodes.find((candidate) => candidate.id === id);
+    if (expected === null || !shown) return;
+    const chosen = await pick(fileName(cardTarget(shown).path));
+    if (!isVaultPath(chosen) || this.#destroyed || this.#readOnly || !this.#doc) return;
+    if (this.#cards.get(id)?.missingFor !== expected) return;
+    const now = this.#doc.nodes.find((candidate) => candidate.id === id);
+    if (!now) return;
+    const patch = upsertNodePatch(this.#doc, { ...now, file: relinkedFile(now, chosen) });
+    if (patch) this.#commit([patch], "input");
+  }
+
+  /** «Togli dalla lavagna» di una scheda mancante: come Canc, per quella scheda sola. */
+  #removeCard(id: string): void {
+    if (this.#removeNodes([id], [])) this.#options.onSelectionChange();
   }
 
   /** Smonta ciò che tiene vivo il corpo di `entry` (Markdown, vista) e lo segna da rifare. */
@@ -4048,8 +4175,10 @@ export class CanvasEngine {
     if (!entry || entry.article.parentElement !== this.#stage) return;
     const { article, body } = entry;
     // Il campo prende il posto del corpo: la vista o il Markdown si smontano,
-    // e il corpo si rifà alla prima resa dopo che il campo si chiude.
+    // e il corpo si rifà alla prima resa dopo che il campo si chiude. Anche il
+    // «file mancante» e il suo ascolto se ne vanno: alla chiusura il file si chiede di nuovo.
     this.#releaseBody(entry);
+    entry.missingFor = null;
     const field: CardField = node.type === "text" ? "text" : node.type === "group" ? "label" : node.type === "link" ? "url" : "file";
     const input = node.type === "text" ? document.createElement("textarea") : document.createElement("input");
     input.className = node.type === "text" ? "canvas-text-editor" : "canvas-field-editor";
@@ -4205,6 +4334,21 @@ function cardTarget(node: CanvasNode): { path: string; subpath: string | null } 
   const path = hash < 0 ? file : file.slice(0, hash);
   const subpath = typeof node.subpath === "string" && node.subpath ? node.subpath : hash < 0 ? null : file.slice(hash);
   return { path, subpath };
+}
+
+/** Il nome di un file senza le cartelle: `Corsi/foto.png` → `foto.png`. */
+function fileName(path: string): string {
+  return path.split("/").pop() ?? path;
+}
+
+/**
+ * Il `file` di una scheda dopo «Ritrova…»: il percorso scelto, col `#…` che la
+ * scheda aveva in linea (il titolo o la pagina). Il `subpath` separato resta com'è.
+ */
+function relinkedFile(node: CanvasNode, chosen: string): string {
+  const file = typeof node.file === "string" ? node.file : "";
+  const hash = file.indexOf("#");
+  return hash < 0 ? chosen : `${chosen}${file.slice(hash)}`;
 }
 
 function nodeTitle(node: CanvasNode): string {

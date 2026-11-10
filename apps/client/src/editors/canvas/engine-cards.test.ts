@@ -2,6 +2,8 @@
 // La tela tiene le schede (N6 T11): la resa è a chiavi, e una vista montata
 // sopravvive a una modifica che non riguarda la sua scheda. Vivono solo le
 // schede utili (N6 T13): quelle in vista, a gesto finito, con la penna su.
+// Il file che manca (N6 T16): il segnaposto con «Ritrova…» e «Togli», e la
+// vista che si rimonta quando il file torna.
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import type { SurfaceMenuItem } from "../core/editor-menu";
 import { CARD_PAUSE_MS, CanvasEngine, WHEEL_SETTLE_MS, type CanvasCards, type CanvasChange, type CanvasEngineOptions } from "./engine";
@@ -74,8 +76,44 @@ function memorySnapshots(): CardSnapshots {
   };
 }
 
+/** I file del vault che il test fa cambiare: chi li ascolta con `watch`, e `fire` che avvisa. */
+function fakeFiles() {
+  const listeners = new Map<string, Set<() => void>>();
+  return {
+    watch(path: string, changed: () => void): () => void {
+      const set = listeners.get(path) ?? new Set<() => void>();
+      set.add(changed);
+      listeners.set(path, set);
+      return () => {
+        set.delete(changed);
+      };
+    },
+    fire(path: string): void {
+      for (const changed of [...(listeners.get(path) ?? [])]) changed();
+    },
+    /** Quanti ascolti ha ancora `path`. */
+    count(path: string): number {
+      return listeners.get(path)?.size ?? 0;
+    },
+  };
+}
+
+function cardsWith(files: ReturnType<typeof fakeFiles>, ...renderers: CardRenderer[]): CanvasCards {
+  return { registry: createCardRegistry(renderers), snapshots: memorySnapshots(), watch: (path, changed) => files.watch(path, changed) };
+}
+
 function cardsOf(...renderers: CardRenderer[]): CanvasCards {
-  return { registry: createCardRegistry(renderers), snapshots: memorySnapshots() };
+  return cardsWith(fakeFiles(), ...renderers);
+}
+
+/** Lascia correre le promesse in attesa (il selettore, il commit). */
+async function settle(): Promise<void> {
+  for (let i = 0; i < 10; i++) await Promise.resolve();
+}
+
+/** Il gesto «Ritrova…» o «Togli» del segnaposto di una scheda mancante, se c'è. */
+function actionOf(host: HTMLElement, id: string, action: "relink" | "remove"): HTMLButtonElement | null {
+  return bodyOf(host, id).querySelector<HTMLButtonElement>(`[data-card-action="${action}"]`);
 }
 
 function boardSource(nodes: readonly Record<string, unknown>[] = defaultNodes()): string {
@@ -354,18 +392,216 @@ describe("la tela tiene le schede", () => {
     expect(destroyed).toEqual(["n", "i", "w"]);
   });
 
-  it("missing() mostra il segnaposto di sempre, finché la vista è della scheda", () => {
+  it("missing() dice che il file manca, smonta la vista e ascolta il file; una vista già distrutta non parla più", () => {
+    const files = fakeFiles();
     const { renderer, mounts } = fakeRenderer();
-    const { engine, host } = mounted(boardSource(), { cards: cardsOf(renderer) });
+    const { engine, host } = mounted(boardSource(), { cards: cardsWith(files, renderer), onPickFile: () => null });
     mounts[1]!.context.missing();
     expect(card(host, "i").dataset.cardMissing).toBe("true");
-    expect(bodyOf(host, "i").querySelector(".canvas-media-placeholder")?.textContent).toBe("IMAGE · img/foto.png");
-    expect(bodyOf(host, "i").querySelector(".canvas-file-link")).not.toBeNull();
-    // Una vista già distrutta non parla più.
+    expect(card(host, "i").dataset.cardKind).toBeUndefined();
+    expect(mounts[1]!.destroyed).toBe(1);
+    expect(bodyOf(host, "i").querySelector(".canvas-media-placeholder")?.textContent).toBe("File mancante: img/foto.png");
+    expect(actionOf(host, "i", "relink")).not.toBeNull();
+    expect(actionOf(host, "i", "remove")).not.toBeNull();
+    expect(files.count("img/foto.png")).toBe(1);
+    // Una vista già distrutta non parla più: né per la sua scheda, né dopo.
+    mounts[1]!.context.missing();
+    expect(mounts).toHaveLength(3);
     syncNode(engine, "n", { file: "Note/altra.md" });
     mounts[0]!.context.missing();
     expect(card(host, "n").dataset.cardMissing).toBeUndefined();
     expect(bodyOf(host, "n").textContent).toBe("n:Note/altra.md");
+    engine.destroy();
+    expect(files.count("img/foto.png")).toBe(0);
+  });
+
+  it("il file che torna rimonta la vista da sé; se manca ancora, la scheda torna mancante", () => {
+    const files = fakeFiles();
+    const { renderer, mounts } = fakeRenderer();
+    const { engine, host } = mounted(boardSource(), { cards: cardsWith(files, renderer), onPickFile: () => null });
+    mounts[1]!.context.missing();
+    files.fire("img/foto.png");
+    expect(mounts).toHaveLength(4);
+    expect(mounts[3]!.node).toBe("i");
+    expect(card(host, "i").dataset.cardMissing).toBeUndefined();
+    expect(card(host, "i").dataset.cardKind).toBe("image");
+    expect(bodyOf(host, "i").textContent).toBe("i:img/foto.png");
+    expect(files.count("img/foto.png")).toBe(0);
+    // Il file c'è ancora nella lista ma non si apre: il renderer dice di nuovo «manca».
+    mounts[3]!.context.missing();
+    expect(card(host, "i").dataset.cardMissing).toBe("true");
+    expect(files.count("img/foto.png")).toBe(1);
+    engine.destroy();
+  });
+
+  it("«Ritrova…» chiede il file col nome di quello che manca, lo mette al posto del percorso in un commit solo, e un annulla lo riporta", async () => {
+    const files = fakeFiles();
+    const { renderer, mounts } = fakeRenderer();
+    const asked: (string | undefined)[] = [];
+    const { engine, host, changes } = mounted(boardSource(), {
+      cards: cardsWith(files, renderer),
+      onPickFile: (name) => {
+        asked.push(name);
+        return "Archivio/foto.png";
+      },
+    });
+    mounts[1]!.context.missing();
+    actionOf(host, "i", "relink")!.click();
+    await settle();
+    expect(asked).toEqual(["foto.png"]);
+    expect(readNodes(engine.getDoc()).find((node) => node.id === "i")!.file).toBe("Archivio/foto.png");
+    expect(changes).toHaveLength(1);
+    // La scheda ha la vista del file nuovo, e non è più mancante.
+    const last = mounts[mounts.length - 1]!;
+    expect(last.node).toBe("i");
+    expect(last.file).toBe("Archivio/foto.png");
+    expect(card(host, "i").dataset.cardMissing).toBeUndefined();
+    expect(files.count("img/foto.png")).toBe(0);
+    // Un annulla riporta il file di prima.
+    expect(engine.undo()).toBe(true);
+    expect(readNodes(engine.getDoc()).find((node) => node.id === "i")!.file).toBe("img/foto.png");
+    engine.destroy();
+  });
+
+  it("«Ritrova…» annullato, o senza un file scelto, non cambia niente", async () => {
+    const files = fakeFiles();
+    const { renderer, mounts } = fakeRenderer();
+    const { engine, host, changes } = mounted(boardSource(), { cards: cardsWith(files, renderer), onPickFile: () => null });
+    mounts[1]!.context.missing();
+    actionOf(host, "i", "relink")!.click();
+    await settle();
+    expect(changes).toHaveLength(0);
+    expect(readNodes(engine.getDoc()).find((node) => node.id === "i")!.file).toBe("img/foto.png");
+    expect(card(host, "i").dataset.cardMissing).toBe("true");
+    engine.destroy();
+  });
+
+  it("il file torna mentre il selettore è aperto: la scelta vecchia non tocca la scheda", async () => {
+    const files = fakeFiles();
+    const { renderer, mounts } = fakeRenderer();
+    let answer: (path: string | null) => void = () => {};
+    const { engine, host, changes } = mounted(boardSource(), {
+      cards: cardsWith(files, renderer),
+      onPickFile: () => new Promise<string | null>((resolve) => {
+        answer = resolve;
+      }),
+    });
+    mounts[1]!.context.missing();
+    actionOf(host, "i", "relink")!.click();
+    files.fire("img/foto.png");
+    expect(card(host, "i").dataset.cardMissing).toBeUndefined();
+    expect(card(host, "i").dataset.cardKind).toBe("image");
+    answer("Archivio/altra.png");
+    await settle();
+    expect(changes).toHaveLength(0);
+    expect(readNodes(engine.getDoc()).find((node) => node.id === "i")!.file).toBe("img/foto.png");
+    engine.destroy();
+  });
+
+  it("«Togli dalla lavagna» toglie la scheda come Canc, e un annulla la riporta", () => {
+    const files = fakeFiles();
+    const { renderer, mounts } = fakeRenderer();
+    const { engine, host, changes } = mounted(boardSource(), { cards: cardsWith(files, renderer), onPickFile: () => null });
+    mounts[1]!.context.missing();
+    actionOf(host, "i", "remove")!.click();
+    expect(readNodes(engine.getDoc()).map((node) => node.id)).toEqual(["n", "t", "w"]);
+    expect(changes).toHaveLength(1);
+    expect(host.querySelector('.canvas-node[data-node="i"]')).toBeNull();
+    expect(mounts[1]!.destroyed).toBe(1);
+    expect(files.count("img/foto.png")).toBe(0);
+    expect(engine.undo()).toBe(true);
+    expect(readNodes(engine.getDoc()).map((node) => node.id).sort()).toEqual(["i", "n", "t", "w"]);
+    engine.destroy();
+  });
+
+  it("in sola lettura il segnaposto dice che il file manca e non ha gesti; tornando scrivibile li riprende", () => {
+    const files = fakeFiles();
+    const { renderer, mounts } = fakeRenderer();
+    const { engine, host } = mounted(boardSource(), { cards: cardsWith(files, renderer), onPickFile: () => null });
+    mounts[1]!.context.missing();
+    engine.setReadOnly(true);
+    expect(bodyOf(host, "i").querySelector(".canvas-media-placeholder")?.textContent).toBe("File mancante: img/foto.png");
+    expect(host.querySelector("[data-card-action]")).toBeNull();
+    engine.setReadOnly(false);
+    expect(actionOf(host, "i", "relink")).not.toBeNull();
+    expect(actionOf(host, "i", "remove")).not.toBeNull();
+    engine.destroy();
+  });
+
+  it("senza un selettore di file «Ritrova…» non c'è, e «Togli» sì", () => {
+    const files = fakeFiles();
+    const { renderer, mounts } = fakeRenderer();
+    const { engine, host } = mounted(boardSource(), { cards: cardsWith(files, renderer), onPickFile: undefined });
+    mounts[1]!.context.missing();
+    expect(actionOf(host, "i", "relink")).toBeNull();
+    expect(actionOf(host, "i", "remove")).not.toBeNull();
+    engine.destroy();
+  });
+
+  it("una scheda di link non manca mai: il suo missing() non fa niente", () => {
+    const files = fakeFiles();
+    const { renderer, mounts } = fakeRenderer();
+    const { engine, host } = mounted(boardSource(), { cards: cardsWith(files, renderer), onPickFile: () => null });
+    const link = mounts.find((entry) => entry.node === "w")!;
+    link.context.missing();
+    expect(card(host, "w").dataset.cardMissing).toBeUndefined();
+    expect(link.destroyed).toBe(0);
+    engine.destroy();
+  });
+
+  it("un renderer che dice «manca» mentre monta: la scheda è mancante quando la vista c'è, e la vista si smonta una volta", () => {
+    const files = fakeFiles();
+    let destroyed = 0;
+    const renderer: CardRenderer = {
+      kinds: ["image"],
+      mount: (_node, _host, _mode, context) => {
+        context.missing();
+        return {
+          setMode: () => {},
+          destroy: () => {
+            destroyed++;
+          },
+        };
+      },
+    };
+    const { engine, host } = mounted(boardSource([defaultNodes()[1]!]), { cards: cardsWith(files, renderer), onPickFile: () => null });
+    expect(card(host, "i").dataset.cardMissing).toBe("true");
+    expect(destroyed).toBe(1);
+    expect(files.count("img/foto.png")).toBe(1);
+    engine.destroy();
+    expect(destroyed).toBe(1);
+  });
+
+  it("molte schede mancanti insieme: ognuna ha il suo file, e ritorna solo quella il cui file torna", () => {
+    const files = fakeFiles();
+    const { renderer, mounts } = fakeRenderer(["image"]);
+    const many = Array.from({ length: 5 }, (_, index) => ({
+      id: `f${index}`, type: "file", x: index * 300, y: 0, width: 240, height: 160, file: `Cartella/f${index}.png`,
+    }));
+    const { engine, host } = mounted(boardSource(many), { cards: cardsWith(files, renderer), onPickFile: () => null });
+    for (const entry of mounts) entry.context.missing();
+    for (let index = 0; index < 5; index++) {
+      expect(card(host, `f${index}`).dataset.cardMissing).toBe("true");
+      expect(files.count(`Cartella/f${index}.png`)).toBe(1);
+    }
+    files.fire("Cartella/f2.png");
+    expect(mounts).toHaveLength(6);
+    expect(mounts[5]!.node).toBe("f2");
+    expect(card(host, "f2").dataset.cardMissing).toBeUndefined();
+    for (const index of [0, 1, 3, 4]) expect(card(host, `f${index}`).dataset.cardMissing).toBe("true");
+    engine.destroy();
+  });
+
+  it("un file mancante non si rifà a ogni resa: spostare un'altra scheda lascia il suo segnaposto com'è", () => {
+    const files = fakeFiles();
+    const { renderer, mounts } = fakeRenderer();
+    const { engine, host } = mounted(boardSource(), { cards: cardsWith(files, renderer), onPickFile: () => null });
+    mounts[1]!.context.missing();
+    const placeholder = bodyOf(host, "i");
+    syncNode(engine, "n", { x: 40 });
+    expect(bodyOf(host, "i")).toBe(placeholder);
+    expect(mounts).toHaveLength(3);
+    expect(card(host, "i").dataset.cardMissing).toBe("true");
     engine.destroy();
   });
 

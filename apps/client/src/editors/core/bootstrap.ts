@@ -124,7 +124,9 @@ export interface SurfaceBootstrapOptions extends SurfaceCallbacks {
   readonly canvasMedia?: CanvasMediaPort;
   readonly canvasAttachments?: CanvasAttachmentPort;
   readonly onCreateCanvasNote?: (text: string) => Promise<string>;
-  readonly onPickCanvasFile?: () => Promise<string | null>;
+  /// Il file del vault per una scheda: scelto dall'utente. Con `name` (il nome
+  /// di un file mancante, «Ritrova…») gli omonimi vengono per primi.
+  readonly onPickCanvasFile?: (name?: string) => Promise<string | null>;
   /// Il documento a cui porta un collegamento del disegno `from`, scelto
   /// dall'utente; `current` è l'`href` del collegamento che si cambia.
   readonly onPickDrawingLink?: (from: string, current: string | null) => Promise<string | null>;
@@ -394,7 +396,8 @@ async function loadCanvasCards(options: SurfaceBootstrapOptions, ports: CanvasCa
         });
       }));
     }
-    return { registry: cards.createCardRegistry(renderers), snapshots };
+    // Lo stesso ascolto dei renderer: una scheda mancante aspetta il file con questo.
+    return { registry: cards.createCardRegistry(renderers), snapshots, watch };
   };
 }
 
