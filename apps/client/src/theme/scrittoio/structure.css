@@ -3627,6 +3627,154 @@ body {
   height: var(--row-h, 28px);
 }
 
+/* Il selettore delle sezioni (T74, `parts-picker.ts`): un `kit-popover`
+   attaccato alla scheda appena rilasciata. In alto il titolo e il campo; in
+   mezzo la lista e l'anteprima; in fondo il piede che dice che cosa farà
+   Invio. La posizione accanto o sotto la scheda la scrive il codice. Il
+   margine interno vince su quello del popover (due classi). */
+.kit-popover.canvas-parts-picker {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4, 8px);
+  box-sizing: border-box;
+  width: 560px;
+  height: 420px;
+  max-height: calc(100% - 16px);
+  overflow: hidden;
+  padding: var(--space-5, 12px);
+}
+.canvas-parts-head {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--space-3, 6px);
+}
+.canvas-parts-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.canvas-parts-close {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+}
+.canvas-parts-close > svg {
+  width: 16px;
+  height: 16px;
+}
+.canvas-parts-field {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  gap: var(--space-2, 4px);
+}
+.canvas-parts-field > input {
+  box-sizing: border-box;
+  width: 100%;
+}
+.canvas-parts-field-hint {
+  flex: none;
+  min-height: 1lh;
+  margin: 0;
+}
+.canvas-parts-body {
+  display: grid;
+  flex: 1 1 auto;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr);
+  gap: var(--space-5, 12px);
+  min-height: 0;
+}
+.canvas-parts-list {
+  position: relative;
+  min-height: 0;
+  overflow: auto;
+}
+.canvas-parts-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4, 8px);
+}
+.canvas-parts-row[data-depth="2"] {
+  padding-left: calc(var(--space-4, 8px) + 20px);
+}
+.canvas-parts-row[data-depth="3"] {
+  padding-left: calc(var(--space-4, 8px) + 40px);
+}
+.canvas-parts-check {
+  display: inline-grid;
+  flex: none;
+  place-content: center;
+  box-sizing: border-box;
+  width: 16px;
+  height: 16px;
+}
+.canvas-parts-check::before {
+  width: 10px;
+  height: 10px;
+  content: "";
+}
+.canvas-parts-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.canvas-parts-preview {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3, 6px);
+  min-height: 0;
+  overflow: hidden;
+}
+.canvas-parts-preview > .canvas-card-note-content {
+  flex: 1 1 auto;
+  height: auto;
+  min-height: 0;
+  overflow: hidden;
+}
+.canvas-parts-preview-title {
+  flex: none;
+  margin: 0;
+}
+.canvas-parts-foot {
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3, 6px) var(--space-5, 12px);
+}
+.canvas-parts-keys {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+}
+.canvas-parts-count {
+  flex: none;
+}
+/* Dove a destra non c'è posto (e sempre a 700 px) il selettore va sotto la
+   scheda, largo come la lavagna: una colonna sola, senza l'anteprima. La
+   larghezza e l'altezza le scrive il codice. */
+.kit-popover.canvas-parts-picker[data-narrow] {
+  width: auto;
+  height: 360px;
+}
+.canvas-parts-picker[data-narrow] .canvas-parts-body {
+  grid-template-columns: minmax(0, 1fr);
+}
+.canvas-parts-picker[data-narrow] .canvas-parts-preview {
+  display: none;
+}
+
 .base-surface {
   display: flex;
   flex-direction: column;

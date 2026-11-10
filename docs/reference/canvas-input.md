@@ -202,7 +202,8 @@ Il tasto destro su una scheda (non un gruppo, che tiene il suo menu) apre
 l'host della pagina, la prima riga del testo), o «{n} schede». Le voci, tutte
 comandi del catalogo col loro nome e il loro tasto:
 
-1. la riga degli appunti; Apri (Modifica il testo per una scheda di testo,
+1. la riga degli appunti; Parti…, per una scheda di nota sola (il selettore
+   delle sezioni, in `canvas-parts.md`); Apri (Modifica il testo per una scheda di testo,
    Apri nel visore per un'immagine, Apri la pagina web e Mostra l'anteprima
    per una pagina); Apri a lato, per una scheda di file, se l'host la dà
    (`onOpenPathBeside`); Spargi le pagine…, per un PDF (sotto); Collega… · `C`;

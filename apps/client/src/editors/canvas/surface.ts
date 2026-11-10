@@ -79,6 +79,8 @@ export interface CanvasSurfaceCallbacks {
   readonly measureImage?: CanvasEngineOptions["measureImage"];
   /** L'HTML degli appunti come Markdown, per le celle incollate (T15): senza, solo il testo a tabulazioni. */
   readonly clipboardMarkdown?: CanvasEngineOptions["clipboardMarkdown"];
+  /** Il sommario di una nota e la resa di una sua sezione, per il selettore delle sezioni (T74): senza, niente selettore. */
+  readonly parts?: CanvasEngineOptions["parts"];
   /** Where annotations read their PDF: without it the pages are blank. */
   readonly pdf?: PdfPorts;
   /** Runs a shell command, like the export window a drawing's «Export» opens. */
@@ -228,6 +230,7 @@ export function mountCanvasSurface(
     ...(callbacks.cards ? { cards: withEditors(callbacks.cards, callbacks.cardEditors) } : {}),
     ...(callbacks.measureImage ? { measureImage: callbacks.measureImage } : {}),
     ...(callbacks.clipboardMarkdown ? { clipboardMarkdown: callbacks.clipboardMarkdown } : {}),
+    ...(callbacks.parts ? { parts: callbacks.parts } : {}),
     viewMemory: VIEW_MEMORY,
     onPendingChange: (pending) => {
       for (const watcher of [...pendingWatchers]) watcher(pending);

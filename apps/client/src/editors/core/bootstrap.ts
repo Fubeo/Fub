@@ -30,6 +30,8 @@ import type { CanvasAttachmentPort, CanvasCards, CanvasMediaPort } from "../canv
 import type { DrawingImagePort } from "../canvas/surface";
 import type { CardEditorPort, CardMode, CardRenderer, CardSnapshots, CardView } from "../canvas/cards";
 import type { NoteCardPort } from "../canvas/cards/note";
+import type { PartsPickerPort } from "../canvas/parts-picker";
+import { documentOutline } from "../../host/query";
 import type { WebCardPort } from "../canvas/cards/web";
 import type { PdfCardPort } from "../canvas/cards/pdf";
 import type { SheetCardPort } from "../grid/card";
@@ -417,6 +419,16 @@ async function loadCanvasCards(options: SurfaceBootstrapOptions, ports: CanvasCa
       watch,
       ...(pdfPort ? { pdfPages: pdf.pdfPagesReader(pdfPort) } : {}),
     };
+  };
+}
+
+/// Il selettore delle sezioni della lavagna (T74): il sommario che l'indice
+/// ha già (`documentOutline`, la domanda `outline`) e la resa di una sezione
+/// con la stessa porta della scheda di nota. Nessuna porta nuova.
+function canvasParts(ports: CanvasCardPorts): PartsPickerPort {
+  return {
+    outline: async (path) => (await documentOutline(path)).map((heading) => ({ level: heading.level, text: heading.text })),
+    show: (path, heading, host, life) => ports.note.show(path, heading, host, life),
   };
 }
 
@@ -988,6 +1000,7 @@ export const COMPONENT_EDITORS: Readonly<Record<string, readonly EditorPart[]>> 
               cardEditors: options.canvasCards?.editors,
               ...(options.media ? { measureImage: measureCanvasImage(options.media.transport) } : {}),
               clipboardMarkdown: clipboardMarkdown,
+              ...(options.canvasCards ? { parts: canvasParts(options.canvasCards) } : {}),
             }),
           };
         },

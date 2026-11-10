@@ -156,6 +156,9 @@ export const CANVAS_COMMANDS: readonly CanvasCommandSpec[] = [
   { id: "canvas.connect", label: "canvas_menu.connect", group: "selection", keys: [], context: "selection" },
   // Una scheda per pagina di un PDF (T72): nasce qualcosa, quindi «Creare».
   { id: "canvas.spread_pages", label: "canvas_menu.spread_pages", group: "create", keys: [], context: "selection" },
+  // «Parti…» (T74): il selettore delle sezioni di una scheda di nota, da
+  // riaprire quando si vuole; si apre da sé al rilascio.
+  { id: "canvas.parts", label: "canvas.parts", group: "selection", keys: [], context: "selection" },
   ...CANVAS_NUDGE.map((way): CanvasCommandSpec => ({
     id: `canvas.nudge.${way}`, label: `canvas.commands.nudge.${way}`, group: "selection", keys: [ARROW[way]], context: "selection",
   })),

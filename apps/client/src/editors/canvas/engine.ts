@@ -109,6 +109,9 @@ import {
   type CanvasColorChoice,
 } from "./colors";
 import { createColorPicker, openDialog, openPopover, textField, type PopoverHandle } from "../../kit";
+import { PARTS_KEY, nodeParts, partsFit, writeParts, type CanvasParts, type PartsExtra } from "./parts";
+import { PARTS_PICKER_MIN_SECTIONS, openPartsPicker, partsSections, type PartsHeading, type PartsPickerHandle, type PartsPickerPlace, type PartsPickerPort } from "./parts-picker";
+import { noteHeadingOf } from "./cards/note";
 import { DEFAULT_PREFERENCES, currentPreferences, readInkMouse, readPen, saveInkMouse, savePen, watchPreferences, type WheelAction } from "./preferences";
 import { isTap, pinchCamera, type TouchCamera, type TouchPoint, type ZoomLimits } from "./touch";
 import { fit, stepCamera, zoomAtPoint, type Camera, type MotionState, type ScaleLimits } from "../../spatial/camera";
@@ -550,6 +553,11 @@ export interface CanvasEngineOptions {
    * apertura, come prima.
    */
   readonly viewMemory?: CanvasViewMemory;
+  /**
+   * Il sommario di una nota e la resa di una sua sezione, per il selettore
+   * delle sezioni (T74). Assente: niente selettore e niente «Parti…».
+   */
+  readonly parts?: PartsPickerPort;
 }
 
 /**
@@ -1138,6 +1146,15 @@ export class CanvasEngine {
   #fingerMovesCardSetting = false;
   /** «La rotella del mouse» dalle Impostazioni: `pan` di serie, come prima di T35. */
   #wheelSetting: WheelAction = DEFAULT_PREFERENCES.wheel;
+  // --- il selettore delle sezioni (T74) ---
+  /** «Selettore delle parti» dalle Impostazioni (`canvas.parts_picker`): si apre da sé al rilascio. */
+  #partsPickerSetting = DEFAULT_PREFERENCES.partsPicker;
+  /** Il selettore aperto e la scheda a cui è attaccato. */
+  #partsPicker: { readonly handle: PartsPickerHandle; readonly node: string; readonly path: string } | null = null;
+  /** Cresce a ogni richiesta del sommario: una risposta vecchia non apre niente. */
+  #partsRound = 0;
+  /** Quante sezioni ha una nota, dall'ultimo sommario letto: spegne «Parti…» se meno di due. */
+  readonly #partsCounts = new Map<string, number>();
   // --- muoversi (T53) ---
   /** Spazio tenuto sulla lavagna: il tasto principale sposta la vista, con qualsiasi strumento. */
   #spaceHeld = false;
@@ -1285,6 +1302,7 @@ export class CanvasEngine {
     // (`canvas.toolbar`), dal vivo; la lettura arriva dopo il costruttore.
     this.#life.add(watchPreferences((preferences) => {
       this.#wheelSetting = preferences.wheel;
+      this.#partsPickerSetting = preferences.partsPicker;
       this.#rail.setToolbar(preferences.toolbar);
       this.#dropChoice = { dropFolder: preferences.dropFolder, dropFolderPath: preferences.dropFolderPath };
       this.#statusSettle();
@@ -3113,6 +3131,8 @@ export class CanvasEngine {
     // schermo a ogni zoom (T66): la pelle divide per `--canvas-zoom`.
     this.#stage.style.setProperty("--canvas-zoom", String(this.#camera.zoom));
     this.#markAllHandles();
+    // Il selettore delle sezioni resta attaccato alla sua scheda (T74).
+    this.#partsPicker?.handle.reposition();
     // Anche la resa passa di qui: la scelta cambiata si ricorda con la camera.
     this.#viewMemo?.changed();
     // Ogni cambio di zoom passa di qui (bottoni, tasti, menu, `fitCamera`): la
@@ -3787,6 +3807,10 @@ export class CanvasEngine {
       const unique = [...new Set(paths)].filter(isVaultPath);
       if ((!unique.length && !text) || (paths.length > 0 && !unique.length)) return;
       const patches: CanvasPatch[] = [];
+      // Una nota sola rilasciata dal vault, senza Alt: dopo il commit si apre
+      // il selettore delle sezioni (T74). Un file depositato dal computer non
+      // è ancora nell'indice: lo si sceglie dopo, con «Parti…».
+      const single = drop && !files.length && unique.length === 1 && !(event as DragEvent).altKey ? unique[0]! : null;
       const file = this.#doc!.nodes.find((node) => node.id === existing && node.type === "file");
       // Su una scheda di file il primo file ne prende il posto (A-8).
       if (file && unique.length) {
@@ -3832,7 +3856,9 @@ export class CanvasEngine {
         if (patch) patches.push(patch);
       }
       // Un commit solo: un annulla toglie tutto ciò che è nato.
-      this.#commit(patches, "input");
+      const committed = this.#commit(patches, "input");
+      const card = single === null ? undefined : born.get(single)?.[0];
+      if (committed && card !== undefined && this.#partsPickerSetting) void this.#openParts(card, "drop");
     } finally {
       // Dopo le schede, e in ogni uscita: uscire presto non deve perdere l'errore.
       if (failure) this.#showIntakeError(failure);
@@ -4690,6 +4716,25 @@ export class CanvasEngine {
         },
       };
     }
+    if (id === "canvas.parts") {
+      // «Parti…» (T74): una sola scheda di nota; spenta se la nota, l'ultima
+      // volta che se ne è letto il sommario, non aveva due sezioni.
+      if (!this.#options.parts) return null;
+      return {
+        disabled: () => {
+          const why = writable();
+          if (why !== null) return why;
+          const one = only();
+          if (!one || !this.#partsNote(one)) return t("canvas.commands.why.one_note");
+          const count = this.#partsCounts.get(one.file!);
+          return count !== undefined && count < PARTS_PICKER_MIN_SECTIONS ? t("canvas.commands.why.no_sections") : null;
+        },
+        run: () => {
+          const one = only();
+          if (one && this.#partsNote(one)) void this.#openParts(one.id, "command");
+        },
+      };
+    }
     switch (id) {
       case "canvas.escape":
         return {
@@ -5165,6 +5210,123 @@ export class CanvasEngine {
     });
   }
 
+  // --- il selettore delle sezioni (T74) ---------------------------------------
+
+  /** La scheda mostra una nota di cui si possono scegliere le sezioni (`.md`, T73). */
+  #partsNote(node: CanvasNode): node is CanvasNode & { file: string } {
+    return node.type === "file" && isVaultPath(node.file) && partsFit(SECTIONS_PROBE, node.file);
+  }
+
+  /**
+   * Apre il selettore delle sezioni sulla scheda `id`: dopo il rilascio
+   * (`drop`, e solo se la scheda mostra ancora la nota intera) o da «Parti…»
+   * (`command`, con le sezioni di adesso già spuntate). Il sommario arriva
+   * dall'indice; una nota con meno di due titoli non apre niente, e da
+   * «Parti…» la barra dice perché. Una risposta arrivata dopo un'altra
+   * richiesta, o dopo che la scheda è cambiata o sparita, non apre niente.
+   */
+  async #openParts(id: string, from: "drop" | "command"): Promise<void> {
+    const port = this.#options.parts;
+    const node = this.#doc?.nodes.find((one) => one.id === id);
+    if (!port || !node || !this.#partsNote(node) || this.#readOnly || this.#destroyed) return;
+    const path = node.file;
+    const round = ++this.#partsRound;
+    this.#closePartsPicker();
+    let headings: readonly PartsHeading[];
+    try {
+      headings = await port.outline(path);
+    } catch {
+      headings = [];
+    }
+    if (round !== this.#partsRound || this.#destroyed || this.#readOnly || !this.#doc || this.#isSceneOversized()) return;
+    const now = this.#doc.nodes.find((one) => one.id === id);
+    if (!now || !this.#partsNote(now) || now.file !== path) return;
+    if (from === "drop" && (now.subpath !== undefined || Object.prototype.hasOwnProperty.call(now, PARTS_KEY))) return;
+    const sections = partsSections(headings);
+    this.#partsCounts.set(path, sections.length);
+    if (sections.length < PARTS_PICKER_MIN_SECTIONS) {
+      if (from === "command") this.#showNotice(t("canvas.commands.why.no_sections"));
+      return;
+    }
+    let opened: PartsPickerHandle | null = null;
+    const forget = (): void => {
+      if (opened !== null && this.#partsPicker?.handle === opened) this.#partsPicker = null;
+    };
+    const show = port.show;
+    opened = openPartsPicker({
+      path,
+      sections,
+      chosen: partsChosen(now),
+      place: () => this.#partsPlace(id),
+      ...(show ? { show: (file: string, heading: string | null, host: HTMLElement, life: Lifetime) => show.call(port, file, heading, host, life) } : {}),
+      onPut: (keys) => {
+        forget();
+        this.#putParts(id, path, keys);
+      },
+      onClose: forget,
+      lifetime: this.#life,
+    });
+    if (!opened.closed) this.#partsPicker = { handle: opened, node: id, path };
+  }
+
+  /**
+   * Scrive le sezioni scelte sulla scheda, in un commit (un annulla riporta
+   * la nota intera): una sezione è il `subpath` `#Titolo`; due o più anche
+   * `fub:parts` `sections` (T73); nessuna toglie l'una e l'altro. I campi
+   * sconosciuti di un `fub:parts` di sezioni valido restano.
+   */
+  #putParts(id: string, path: string, keys: readonly string[]): void {
+    const doc = this.#doc;
+    const node = doc?.nodes.find((one) => one.id === id);
+    if (!doc || !node || node.type !== "file" || node.file !== path || this.#readOnly || this.#destroyed) return;
+    const next: CanvasNode = { ...node };
+    delete next.subpath;
+    delete next[PARTS_KEY];
+    if (keys.length > 0) {
+      const read = nodeParts(node);
+      const extra: PartsExtra = read?.state === "ok" && read.parts.kind === "sections" ? read.parts.extra : {};
+      const written = writeParts(path, { kind: "sections", sections: keys, extra });
+      if (written.outcome !== "written") return;
+      if (written.subpath !== null) next.subpath = written.subpath;
+      if (written.parts !== null) next[PARTS_KEY] = written.parts;
+    }
+    const patch = upsertNodePatch(doc, next);
+    if (patch) this.#commit([patch], "input");
+  }
+
+  /** Chiude il selettore se la sua scheda non c'è più, mostra un altro file o la lavagna non si scrive. */
+  #syncPartsPicker(): void {
+    const open = this.#partsPicker;
+    if (!open) return;
+    const node = this.#doc?.nodes.find((one) => one.id === open.node);
+    const alive = node !== undefined && node.type === "file" && node.file === open.path;
+    if (alive && !this.#readOnly && !this.#destroyed && !this.#isSceneOversized()) return;
+    this.#closePartsPicker();
+  }
+
+  #closePartsPicker(): void {
+    const open = this.#partsPicker;
+    this.#partsPicker = null;
+    open?.handle.close();
+  }
+
+  /** Dove sono la scheda `id` (con la testata sopra, T39) e la lavagna, nella finestra. */
+  #partsPlace(id: string): PartsPickerPlace {
+    const rect = this.#viewport.getBoundingClientRect();
+    const board = { left: rect.left, top: rect.top, width: rect.width, height: rect.height };
+    const node = this.#doc?.nodes.find((one) => one.id === id);
+    const zoom = this.#camera.zoom;
+    let card = node
+      ? { left: rect.left + this.#camera.x + node.x * zoom, top: rect.top + this.#camera.y + node.y * zoom, width: node.width * zoom, height: node.height * zoom }
+      : { left: rect.left, top: rect.top, width: 0, height: 0 };
+    const handle = this.#stage.querySelector(`.canvas-node[data-node="${CSS.escape(id)}"] > .canvas-node-handle`)?.getBoundingClientRect();
+    if (handle && handle.height > 0 && handle.top < card.top) {
+      card = { ...card, top: handle.top, height: card.top + card.height - handle.top };
+    }
+    return { card, board, narrow: this.#root.hasAttribute("data-narrow") };
+  }
+
+
   // --- menu -----------------------------------------------------------------------
 
   /** Il menu del tasto destro nel punto `at` della finestra (`null`: dalla
@@ -5331,6 +5493,8 @@ export class CanvasEngine {
     const state = (why: string | null): Pick<SurfaceMenuItem, "enabled" | "description"> =>
       why === null ? { enabled: true } : { enabled: false, description: why };
     const context: SurfaceMenuEntry[] = [];
+    // «Parti…» per prima, come nel prototipo (T28): riapre il selettore.
+    if (one && this.#options.parts && this.#partsNote(one)) context.push(entry("canvas.parts", undefined, false));
     if (one?.type === "text") context.push(entry("canvas.edit", undefined, false));
     if (one?.type === "file" && one.file) {
       context.push(entry(cardKindOf(one) === "image" ? "canvas.open_viewer" : "canvas.open", undefined, false));
@@ -6568,6 +6732,7 @@ export class CanvasEngine {
 
   #render(): void {
     this.#syncEmpty();
+    this.#syncPartsPicker();
     // Dopo `destroy` niente rinasce: una vista montata qui non avrebbe padrone.
     if (!this.#doc || this.#destroyed) return;
     this.#syncInkLayer();
@@ -7672,4 +7837,21 @@ function nodeText(node: CanvasNode): string {
     case "link": return node.url ?? "";
     default: return node.label ?? "";
   }
+}
+
+/// Una specie `sections` qualunque: dice se un file è una nota per `fub:parts`.
+const SECTIONS_PROBE: CanvasParts = { kind: "sections", sections: ["_"], extra: {} };
+
+/**
+ * Le sezioni che la scheda mostra adesso, come chiavi del selettore (T74):
+ * quelle di un `fub:parts` di sezioni valido, sennò quella del `subpath`
+ * (`#Titolo`, anche `#Capitolo#Titolo`); nessuna per la nota intera o un
+ * blocco `#^id`.
+ */
+function partsChosen(node: CanvasNode): string[] {
+  const read = nodeParts(node);
+  if (read?.state === "ok" && read.parts.kind === "sections") return [...read.parts.sections];
+  const subpath = typeof node.subpath === "string" ? node.subpath : null;
+  if (subpath === null || noteHeadingOf(subpath) === null) return [];
+  return [subpath.replace(/^#/, "")];
 }

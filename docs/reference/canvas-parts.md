@@ -136,6 +136,34 @@ sopra; una chiave sconosciuta che sembra un indice (`"1"`) va prima, come
 in un oggetto JavaScript. Nel nucleo è `write_parts`, nella shell
 `writeParts`; i due danno gli stessi byte.
 
+## Il selettore delle sezioni
+
+Si sceglie da «Parti di {nota}», che si apre accanto alla scheda appena
+posata quando sulla lavagna cade una nota sola, dall'albero, con almeno due
+titoli. Non si apre con `Alt` tenuto, con l'impostazione
+`canvas.parts_picker` spenta, con più file o con file portati da fuori. Lo
+riapre «Parti…» (`canvas.parts`, nel menu di una scheda di nota),
+con le sezioni di adesso già spuntate; senza titoli, o in sola lettura, la
+voce è spenta col perché.
+
+Ogni titolo della nota è una riga, rientrata fino al terzo livello; il
+campo, che ha il fuoco, tiene le righe col titolo che contiene ciò che si
+scrive. `↑` e `↓` muovono, `Spazio` (a campo vuoto o dopo le frecce) e il
+clic spuntano, `Invio` o il pulsante del piede mettono: «Metti tutta la
+nota» senza spunte, «Metti la sezione», «Metti {n} sezioni». `Esc`, la
+crocetta o un clic fuori chiudono senza cambiare niente. La colonna a
+destra mostra la sezione sotto il cursore. Se a destra della scheda non c'è
+posto, e sempre in una finestra stretta, il selettore va sotto, in una
+colonna sola.
+
+Mettere è un commit solo, che `Ctrl+Z` annulla: le sezioni scelte, una
+volta e nell'ordine della nota, diventano il `subpath` e la specie
+`sections` con le regole di sopra; nessuna spunta toglie `subpath` e
+`fub:parts`. La chiave di una sezione è il suo titolo; due titoli uguali
+prendono quello del capitolo che li contiene (`Capitolo#Titolo`); se anche
+così sono uguali, il piede avvisa che si vedrà il primo. Nel codice è
+`parts-picker.ts`.
+
 ## Che cosa vede Obsidian
 
 Obsidian conosce il `subpath` e non `fub:parts`, che per lui è un campo

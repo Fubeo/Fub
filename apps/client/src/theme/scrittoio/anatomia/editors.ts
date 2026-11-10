@@ -51,6 +51,10 @@ export const EDITORS: PartAnatomy = {
     // ordine di lettura, nel pannello della shell. T59: «Scheda» e «Fili», con
     // i numeri, il pozzo del colore, «Avanzate» e il popover dei colori.
     { name: "canvas-inspector", states: [S("rest"), S("hover"), S("focused"), S("selected")], hooks: ["canvas-inspector", "canvas-inspector-filter", "canvas-inspector-heading", "canvas-inspector-list", "canvas-inspector-row", "canvas-inspector-kind", "canvas-inspector-note", "canvas-inspector-numbers", "canvas-inspector-fields", "canvas-inspector-field", "canvas-inspector-path", "canvas-inspector-disclosure", "canvas-inspector-raw", "canvas-inspector-actions", "canvas-inspector-tips", "canvas-inspector-swatches", "canvas-inspector-swatch", "canvas-inspector-popover"] },
+    // Il selettore delle sezioni di una nota (T74): un popover del kit
+    // attaccato alla scheda, con il campo, la lista a caselle, l'anteprima
+    // (la resa della scheda di nota) e il piede.
+    { name: "canvas-parts-picker", states: [S("rest"), S("hover"), S("focused"), S("selected")], hooks: ["canvas-parts-title", "canvas-parts-close", "canvas-parts-field-hint", "canvas-parts-row", "canvas-parts-check", "canvas-parts-preview", "canvas-parts-preview-title", "canvas-card-note-content", "canvas-parts-keys", "canvas-parts-count"] },
     { name: "canvas-node", layer: "contenuto", layers: { "canvas-node-handle": "segno", "canvas-connect": "segno", "canvas-resize": "segno", "canvas-port": "segno", "canvas-selection-frame": "segno", "canvas-convert-note": "cornice", "canvas-open-url": "cornice" }, states: DRAGGABLE, hooks: ["canvas-node", "canvas-node-group", "canvas-node-handle", "canvas-connect", "canvas-resize", "canvas-port", "canvas-selection-frame", "canvas-card-body", "canvas-markdown", "canvas-empty", "canvas-group-label", "canvas-group-bg", "canvas-url-text", "canvas-media-placeholder", "canvas-convert-note", "canvas-open-url", "canvas-file-link", "canvas-text-editor", "canvas-field-editor"] },
     // La barra multifunzione del documento: quella del kit, come la barra del
     // foglio, con l'accesso rapido e la galleria degli stili.

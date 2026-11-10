@@ -4120,3 +4120,207 @@ describe("l'ispettore sul motore (T59)", () => {
     unmount();
   });
 });
+
+describe("il selettore delle sezioni (T74)", () => {
+  const NOTE = "Note/Relazione.md";
+  const HEADINGS = [
+    { level: 1, text: "Relazione" },
+    { level: 2, text: "Scopo" },
+    { level: 2, text: "Misure" },
+    { level: 2, text: "Calcoli" },
+  ];
+
+  function setup(overrides: Partial<CanvasEngineOptions> = {}, headings = HEADINGS, paths = [NOTE]) {
+    const outline = vi.fn(async (_path: string) => headings);
+    const show = vi.fn(async (_path: string, heading: string | null, host: HTMLElement) => {
+      host.textContent = heading ?? "";
+    });
+    const made = mounted(canvasSource(), {
+      attachments: { deposit: vi.fn(), resolvePaths: async () => paths },
+      parts: { outline, show },
+      ...overrides,
+    });
+    return { ...made, outline, show };
+  }
+
+  function drop(host: HTMLElement, alt = false): void {
+    const data = { files: [], items: [], types: [], getData: () => "" } as unknown as DataTransfer;
+    const event = new DragEvent("drop", { bubbles: true, cancelable: true });
+    Object.defineProperties(event, { dataTransfer: { value: data }, clientX: { value: 200 }, clientY: { value: 120 }, altKey: { value: alt } });
+    host.querySelector<HTMLElement>(".canvas-viewport")!.dispatchEvent(event);
+  }
+
+  const picker = (): HTMLElement | null => document.querySelector<HTMLElement>(".canvas-parts-picker");
+  const field = (): HTMLInputElement => picker()!.querySelector<HTMLInputElement>(".canvas-parts-field > input")!;
+  const row = (name: string): HTMLElement =>
+    [...picker()!.querySelectorAll<HTMLElement>(".canvas-parts-row")].find((one) => one.textContent === name)!;
+  const born = (engine: CanvasEngine) => readCanvas(engine.getDoc()).nodes.find((node) => node.file === NOTE);
+  const enter = (): void => {
+    field().dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
+  };
+  /** Il tasto destro sulla scheda `id`: la sceglie e torna il menu. */
+  const menuOn = (engine: CanvasEngine, host: HTMLElement, id: string) => {
+    const element = host.querySelector<HTMLElement>(`.canvas-node[data-node="${id}"]`)!;
+    const pointing = vi.spyOn(document, "elementFromPoint").mockReturnValue(element);
+    try {
+      return engine.contextMenu({ x: 10, y: 10 })!;
+    } finally {
+      pointing.mockRestore();
+    }
+  };
+
+  async function dropped(made: ReturnType<typeof setup>): Promise<void> {
+    drop(made.host);
+    await vi.waitFor(() => expect(picker()).not.toBeNull());
+  }
+
+  it("rilasciando una nota con più titoli la scheda nasce intera e accanto si apre il selettore, col campo pronto", async () => {
+    const made = setup();
+    await dropped(made);
+    expect(made.changes).toHaveLength(1);
+    expect(born(made.engine)?.subpath).toBeUndefined();
+    expect(made.outline).toHaveBeenCalledWith(NOTE);
+    expect(picker()!.querySelector(".canvas-parts-title")!.textContent).toBe(t("canvas.parts.title", { name: "Relazione" }));
+    expect([...picker()!.querySelectorAll(".canvas-parts-row")].map((one) => one.textContent)).toEqual(["Relazione", "Scopo", "Misure", "Calcoli"]);
+    expect(document.activeElement).toBe(field());
+    made.engine.destroy();
+    expect(picker()).toBeNull();
+  });
+
+  it("Esc, la crocetta o un clic fuori tengono tutta la nota: niente cambia", async () => {
+    const made = setup();
+    await dropped(made);
+    const before = made.engine.getDoc();
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
+    expect(picker()).toBeNull();
+    expect(made.engine.getDoc()).toBe(before);
+    // «Parti…» lo riapre; la crocetta e un clic fuori lo chiudono allo stesso modo.
+    menuOn(made.engine, made.host, born(made.engine)!.id);
+    const command = made.engine.commands().find((one) => one.id === "canvas.parts")!;
+    expect(command.disabled()).toBeNull();
+    command.run();
+    await vi.waitFor(() => expect(picker()).not.toBeNull());
+    picker()!.querySelector<HTMLButtonElement>(".canvas-parts-close")!.click();
+    expect(picker()).toBeNull();
+    command.run();
+    await vi.waitFor(() => expect(picker()).not.toBeNull());
+    document.body.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
+    expect(picker()).toBeNull();
+    expect(made.engine.getDoc()).toBe(before);
+    expect(made.changes).toHaveLength(1);
+    made.engine.destroy();
+  });
+
+  it("Alt tenuto al rilascio salta il selettore", async () => {
+    const made = setup();
+    drop(made.host, true);
+    await vi.waitFor(() => expect(made.changes).toHaveLength(1));
+    await Promise.resolve();
+    expect(made.outline).not.toHaveBeenCalled();
+    expect(picker()).toBeNull();
+    made.engine.destroy();
+  });
+
+  it("«Selettore delle parti» spento nelle Impostazioni: la scheda nasce intera e basta", async () => {
+    const made = setup();
+    for (const apply of watched.appliers) apply({ ...DEFAULT_PREFERENCES, partsPicker: false });
+    drop(made.host);
+    await vi.waitFor(() => expect(made.changes).toHaveLength(1));
+    await Promise.resolve();
+    expect(made.outline).not.toHaveBeenCalled();
+    expect(picker()).toBeNull();
+    made.engine.destroy();
+  });
+
+  it("niente selettore per una nota con un titolo solo, per più file insieme e senza la porta del sommario", async () => {
+    const one = setup({}, [{ level: 1, text: "Solo" }]);
+    drop(one.host);
+    await vi.waitFor(() => expect(one.outline).toHaveBeenCalled());
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(picker()).toBeNull();
+    // Il sommario letto spegne «Parti…», col perché.
+    menuOn(one.engine, one.host, born(one.engine)!.id);
+    expect(one.engine.commands().find((command) => command.id === "canvas.parts")!.disabled()).toBe(t("canvas.commands.why.no_sections"));
+    one.engine.destroy();
+    const many = setup({}, HEADINGS, [NOTE, "Note/Altra.md"]);
+    drop(many.host);
+    await vi.waitFor(() => expect(many.changes).toHaveLength(1));
+    await Promise.resolve();
+    expect(many.outline).not.toHaveBeenCalled();
+    many.engine.destroy();
+    const bare = mounted(canvasSource(), { attachments: { deposit: vi.fn(), resolvePaths: async () => [NOTE] } });
+    expect(bare.engine.commands().some((command) => command.id === "canvas.parts")).toBe(false);
+    bare.engine.destroy();
+  });
+
+  it("una sezione scrive il solo `subpath`, due anche `fub:parts` come dice canvas-parts.md; «Parti…» riapre con le sezioni di adesso; ogni scelta è un annulla", async () => {
+    const made = setup();
+    await dropped(made);
+    row("Misure").click();
+    expect(picker()!.querySelector(".kit-button")!.textContent).toBe(t("canvas.parts.put_section"));
+    enter();
+    expect(picker()).toBeNull();
+    expect(made.changes).toHaveLength(2);
+    const one = born(made.engine)!;
+    expect(one.subpath).toBe("#Misure");
+    expect(Object.prototype.hasOwnProperty.call(one, "fub:parts")).toBe(false);
+
+    // «Parti…» dal menu della scheda, per prima: le sezioni di adesso già spuntate.
+    const menu = menuOn(made.engine, made.host, one.id);
+    const entry = (menu.context ?? [])[0] as SurfaceMenuItem;
+    expect(entry.id).toBe("canvas.parts");
+    expect(entry.label).toBe(t("canvas.parts"));
+    entry.run!();
+    await vi.waitFor(() => expect(picker()).not.toBeNull());
+    expect(row("Misure").getAttribute("aria-selected")).toBe("true");
+    expect(row("Scopo").getAttribute("aria-selected")).toBe("false");
+    row("Scopo").click();
+    expect(picker()!.querySelector(".kit-button")!.textContent).toBe(t("canvas.parts.put_sections", { n: 2 }));
+    enter();
+    const two = born(made.engine)!;
+    // Nell'ordine della nota; il `subpath` è la prima.
+    expect(two.subpath).toBe("#Scopo");
+    expect(two["fub:parts"]).toEqual({ kind: "sections", sections: ["Scopo", "Misure"] });
+    expect(made.engine.getDoc()).toContain('"subpath":"#Scopo"');
+    expect(made.engine.getDoc()).toContain('"fub:parts":{"kind":"sections","sections":["Scopo","Misure"]}');
+    expect(made.changes).toHaveLength(3);
+
+    // Ogni scelta è un passo: la sezione sola, la nota intera, il vuoto.
+    expect(made.engine.undo()).toBe(true);
+    expect(born(made.engine)!.subpath).toBe("#Misure");
+    expect(made.engine.undo()).toBe(true);
+    const whole = born(made.engine)!;
+    expect(whole.subpath).toBeUndefined();
+    expect(Object.prototype.hasOwnProperty.call(whole, "fub:parts")).toBe(false);
+    expect(made.engine.undo()).toBe(true);
+    expect(born(made.engine)).toBeUndefined();
+    made.engine.destroy();
+  });
+
+  it("Invio subito dopo il rilascio scrive le sezioni in un solo commit: un annulla riporta la nota intera, un altro toglie la scheda", async () => {
+    const made = setup();
+    await dropped(made);
+    row("Scopo").click();
+    row("Calcoli").click();
+    enter();
+    expect(made.changes).toHaveLength(2);
+    expect(born(made.engine)!["fub:parts"]).toEqual({ kind: "sections", sections: ["Scopo", "Calcoli"] });
+    expect(made.engine.undo()).toBe(true);
+    expect(born(made.engine)!.subpath).toBeUndefined();
+    expect(made.engine.undo()).toBe(true);
+    expect(born(made.engine)).toBeUndefined();
+    made.engine.destroy();
+  });
+
+  it("la scheda annullata col selettore aperto lo chiude, e in sola lettura «Parti…» è spento", async () => {
+    const made = setup();
+    await dropped(made);
+    expect(made.engine.undo()).toBe(true);
+    expect(picker()).toBeNull();
+    expect(made.engine.redo()).toBe(true);
+    menuOn(made.engine, made.host, born(made.engine)!.id);
+    made.engine.setReadOnly(true);
+    expect(made.engine.commands().find((command) => command.id === "canvas.parts")!.disabled()).toBe(t("canvas.commands.why.read_only"));
+    made.engine.destroy();
+  });
+});

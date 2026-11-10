@@ -883,6 +883,16 @@
     "canvas-inspector-swatches",
     "canvas-inspector-swatch",
     "canvas-inspector-popover",
+    "canvas-parts-title",
+    "canvas-parts-close",
+    "canvas-parts-field-hint",
+    "canvas-parts-row",
+    "canvas-parts-check",
+    "canvas-parts-preview",
+    "canvas-parts-preview-title",
+    "canvas-card-note-content",
+    "canvas-parts-keys",
+    "canvas-parts-count",
     "canvas-node",
     "canvas-node-group",
     "canvas-node-handle",
@@ -2513,6 +2523,16 @@
     "canvas-inspector-swatches": "cornice",
     "canvas-inspector-swatch": "cornice",
     "canvas-inspector-popover": "cornice",
+    "canvas-parts-title": "cornice",
+    "canvas-parts-close": "cornice",
+    "canvas-parts-field-hint": "cornice",
+    "canvas-parts-row": "cornice",
+    "canvas-parts-check": "cornice",
+    "canvas-parts-preview": "cornice",
+    "canvas-parts-preview-title": "cornice",
+    "canvas-card-note-content": "cornice",
+    "canvas-parts-keys": "cornice",
+    "canvas-parts-count": "cornice",
     "canvas-node": "contenuto",
     "canvas-node-group": "contenuto",
     "canvas-node-handle": "segno",
@@ -5611,6 +5631,28 @@
         "canvas-inspector-swatches",
         "canvas-inspector-swatch",
         "canvas-inspector-popover"
+      ],
+      "states": [
+        "rest",
+        "hover",
+        "focused",
+        "selected"
+      ]
+    },
+    {
+      "name": "canvas-parts-picker",
+      "part": "editors",
+      "hooks": [
+        "canvas-parts-title",
+        "canvas-parts-close",
+        "canvas-parts-field-hint",
+        "canvas-parts-row",
+        "canvas-parts-check",
+        "canvas-parts-preview",
+        "canvas-parts-preview-title",
+        "canvas-card-note-content",
+        "canvas-parts-keys",
+        "canvas-parts-count"
       ],
       "states": [
         "rest",
@@ -8916,10 +8958,10 @@
   "counts": {
     "required_roles": 154,
     "optional_roles": 63,
-    "hooks": 1628,
+    "hooks": 1638,
     "state_names": 7,
-    "assigned_states": 764,
-    "components": 227,
+    "assigned_states": 768,
+    "components": 228,
     "preference_tokens": 186
   }
 }
