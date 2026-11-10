@@ -8,11 +8,14 @@
 ## Rinomine e archiviazione recuperabili
 
 Prima di una rinomina Fub fotografa la revisione del file e le modifiche
-necessarie ai backlink, e pubblica un intent sotto `.fub/` (formato su disco in
-[on-disk-layout.md](../reference/on-disk-layout.md)). Se il processo si
-interrompe, la riapertura reprende la rinomina in avanti, completa i backlink
-già preparati oppure termina un rollback già dichiarato (meccanismo in
-[storage-and-identity.md](../architecture/storage-and-identity.md#rename)).
+necessarie ai backlink. Pubblica quindi un intent schema 1 sotto `.fub/` prima
+di spostare dati per-documento o contenuto. Se il processo si interrompe, la
+riapertura attende l'indice completo e confronta i byte osservati con la
+preimmagine: riprende la rinomina in avanti, completa i backlink già preparati
+oppure termina un rollback già dichiarato. Il formato dell'intent e le sue
+regole di recupero sono in [on-disk-layout.md](../reference/on-disk-layout.md#stato-del-vault);
+le regole che una rinomina deve rispettare sono in
+[storage-and-identity.md](../architecture/storage-and-identity.md#rename).
 
 La posizione dei file non basta a giustificare una sovrascrittura. Se compare
 una destinazione, cambia la sorgente o entrambe le posizioni sono ambigue, Fub

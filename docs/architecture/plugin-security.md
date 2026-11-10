@@ -49,12 +49,16 @@ intenti sono privilegiati — è in
 
 ## Limiti non promessi
 
-- `IndexProvider` WASM ed `EventHandler` inbound non sono esposti finché una
-  route reale o un componente reale non provano il caso (WASM-002, issue #57);
+- il rischio WASM-002 (issue #57) riguardava `IndexProvider` ed `EventHandler`
+  inbound: il codice li espone e un componente reale li prova in
+  `crates/fub-wasm-host/tests/deferred_providers.rs`; `host-events` outbound
+  resta supportato;
 - deadline a epoche e limite di memoria confinano il guest, ma non sono una
   quota assoluta CPU/RAM dell'intero processo (WASM-003, issue #58);
 - operazioni non esercitate dagli esempi e dai test di parità non sono
   promesse per inferenza.
 
 Questi sono confini del prodotto corrente, non lavoro necessario a rendere
-valida l'integrazione già avvenuta.
+valida l'integrazione già avvenuta. Gli altri rischi accettati dal gate G15,
+come i writer esterni e i rename concorrenti, sono limiti di storage e
+lifecycle: vedi [storage e identità](storage-and-identity.md).

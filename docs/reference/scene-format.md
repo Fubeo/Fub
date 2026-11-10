@@ -23,7 +23,7 @@ operazioni, che cita quelle dell'altra.
 | §4 Elementi modificabili | questa pagina (tabella); dettaglio nelle pagine per elemento |
 | §5 Tratti a mano libera | [penne](scene-format-pens.md), [inchiostro del tratto](scene-format-ink.md) |
 | §6 Forme sintetiche | [poligoni e stelle](scene-format-shapes.md), [connettori](scene-format-connectors.md) |
-| §9 Modello per l'indice | [esportazione e modello](scene-format-export.md), [modello del documento](../architecture/document-model.md) |
+| §9 Modello per l'indice | questa pagina; [esportazione](scene-format-export.md) e [modello del documento](../architecture/document-model.md) |
 
 
 ## 1. Principi
@@ -226,16 +226,25 @@ Un tratto a mano libera è un `path` con `fub:tool` (`pen` o `highlighter`),
 ```
 
 L'evidenziatore usa `fub:tool="highlighter"` e, per default, il giallo. Le
-[penne e la punta plattta `nib1`](scene-format-pens.md) dicono l'aspetto; i
+[penne e la punta piatta `nib1`](scene-format-pens.md) dicono l'aspetto; i
 campioni, il pennello e il tempo sono in
 [inchiostro del tratto](scene-format-ink.md).
 
 ## 6. Forme sintetiche
 
-Una forma sintetica (freccia, connettore, poligono regolare, stella, spessore
-variabile) è un `path` con `fub:shape` e `fub:geom`. La grammatica è in
-[poligoni e stelle](scene-format-shapes.md) e in
-[connettori](scene-format-connectors.md).
+Una forma sintetica è un `path` con `fub:shape` e `fub:geom`; `d` si rigenera
+dalla geometria. Poligono regolare e stella: [poligoni e stelle](scene-format-shapes.md);
+il contorno che si allarga e si stringe: [spessore variabile](scene-format-width.md);
+la linea che unisce due oggetti e li segue: [connettori](scene-format-connectors.md).
+
+- **Freccia:** `fub:shape="arrow"`, `fub:geom="x1 y1 x2 y2"`. `d` contiene l'asta e la
+  punta aperta: `M x1 y1 L x2 y2 M hx1 hy1 L x2 y2 L hx2 hy2`. Attributi: `fill="none"`,
+  `stroke-linecap="round"`, `stroke-linejoin="round"`. La punta è lunga
+  3 × `stroke-width` + 6 unità, e ogni lato forma 30° con l'asta.
+- **Forma sconosciuta:** un `fub:shape` sconosciuto, o un `fub:geom` fuori
+  dalla grammatica della sua forma, come una freccia senza quattro numeri SVG,
+  è un tracciato normale: la geometria si legge da `d`, gli attributi restano.
+
 ## 7. Identità e serializzazione canonica
 
 ### Id
@@ -290,12 +299,106 @@ non converte `d`. Solo i valori nuovi seguono le regole sui numeri.
    identici byte per byte.
 
 
+## 8. Contenuto estraneo
+
+- **Cos'è:** ogni nodo non modificabile secondo §4. Comprende commenti,
+  istruzioni di elaborazione, sezioni CDATA, la dichiarazione `<?xml …?>` e i
+  riferimenti a entità.
+- **`<!DOCTYPE>`:** un documento che lo contiene si apre solo in lettura.
+- **Conservazione:** il testo resta identico. Un blocco estraneo non viene
+  riordinato, salvo con un `move` esplicito.
+- **Visualizzazione:** in lettura il documento intero è un `<img>` da blob; in
+  disegno ogni sequenza contigua di nodi estranei è uno strato `<img>`, con gli
+  attributi della radice, i `<defs>` e `<style>` del file e i tag di apertura
+  dei `g` antenati, nell'ordine del documento. Nessun nodo estraneo entra nel
+  DOM vivo, e gli script non partono: si conservano e producono S005.
+- **Operazioni ammesse:** `remove` e `move`.
+- **Caratteri:** un `<img>` da blob porta dentro i caratteri di Fub e del
+  vault che i `font-family` nominano, come li sceglie l'export ([testo](scene-format-text.md), §9).
+
 ## 9. Modello per l'indice
 
-`fub-format-svg` produce il [modello del documento](../architecture/document-model.md)
-dalla scena: `title` e `desc` della radice diventano titolo e paragrafo, ogni
-tavola una voce di `outline`. Il dettaglio è in
-[esportazione e modello](scene-format-export.md).
+`fub-format-svg` produce il modello del documento di Fub
+([architettura](../architecture/document-model.md)):
+
+| Sorgente | Modello |
+|---|---|
+| `<title>` della radice | heading di livello 1 e voce di `outline` |
+| `<desc>` della radice | paragrafo |
+| ogni [tavola](scene-format-boards.md), in ordine | heading di livello 2 col suo nome e voce di `outline`, sullo span del `view` |
+| ogni `text`, in ordine di documento | paragrafo, con le righe unite da uno spazio, o da niente dove un testo in area spezza una parola |
+| `a` con `href` verso il vault | collegamento: backlink e grafo valgono anche per i disegni |
+| `image` con percorso del vault | collegamento con `embed` (le immagini in data URI si contano soltanto) |
+| documento intero | blocco custom `fub.scene.summary` |
+| titolo, descrizione e testi | campo `text`, per la ricerca |
+
+L'indice legge il documento intero, contenuto estraneo compreso: un disegno di
+Inkscape o un diagramma di sequenza di Mermaid si cercano per i loro testi.
+Sono testi solo gli elementi `text` di SVG: le etichette XHTML dentro
+`foreignObject`, come quelle dei diagrammi di flusso di Mermaid, non entrano
+nell'indice. In un `text` ogni figlio elemento è una riga, e i pezzi ne fanno parte; i `tspan`
+di un carattere ciascuno, come li scrive Illustrator, escono separati da spazi.
+Gli spazi XML di titolo, descrizione e testi si riducono a uno.
+
+Il blocco `fub.scene.summary` porta in `attrs`:
+
+- `version`, `foreign`, `truncated`;
+- `layers` e `boards`: nomi dei livelli e delle tavole;
+- `counts`: tratti, forme, testi, immagini, collegamenti, blocchi estranei;
+- `ink`: campioni e durata totale;
+- `bbox`: il rettangolo degli elementi modificabili visibili, in coordinate
+  della radice dopo ogni `transform`, senza la carta né lo spessore del tratto;
+  i tracciati contano per i punti estremi delle curve, i testi per i punti
+  d'ancoraggio o per il tracciato che seguono; i valori si arrotondano al centesimo (§7);
+- `sections`: il titolo, se non è vuoto, cioè il disegno intero, e le tavole:
+  un altro nome non è una sezione ([tavole](scene-format-boards.md), §6).
+
+Chi non conosce il blocco legge i suoi figli: titolo, descrizione e testi.
+
+**Span e annidamento.** Gli span sono in byte UTF-8 e indicano l'elemento
+nella sorgente: `reveal` dalla ricerca o da un backlink seleziona l'oggetto. Il
+riepilogo va dal primo byte dopo il BOM alla fine del file e contiene gli altri
+blocchi, annidati come gli elementi nel file. Un collegamento attorno a testi o
+immagini li porta come etichetta; uno dentro un `text` sta nel paragrafo di
+quel testo. Oltre 128 livelli di elementi indicizzati annidati, i più profondi
+si appendono al 128º senza perdersi.
+
+**Collegamenti.** Il percorso è il testo dell'URL: valore dell'attributo senza
+gli spazi ai bordi, frammento compreso. Il contesto di un backlink è l'etichetta
+del collegamento o, senza, il testo che lo contiene, fino a 220 caratteri.
+
+**Errori.** Un file che non è una scena (§2) non si legge: il provider
+restituisce l'errore con il byte, e l'apertura del vault lo mette fra gli
+scarti senza fermarsi. Un file oltre 20 MiB porta all'indice solo titolo,
+descrizione e riepilogo, con `truncated: true` (§11).
+
+### Anteprima, documento nuovo e riferimenti
+
+- **`render_html`** emette solo un segnaposto `figure` con classe `fub-scene`,
+  `data-embed-kind="scene"`, `data-embed-doc` con l'id del documento e una
+  `figcaption` col titolo; mai un `<img>` né un URL di risorsa: l'immagine la
+  mette la shell coi media. Senza titolo la didascalia è il nome del file, il
+  nome accessibile della figura e il testo alternativo in una nota.
+- **`serialize`** genera un documento nuovo con radice, titolo, carta e
+  «Livello 1», in forma canonica, con righe LF e a capo finale. Il titolo è il
+  primo heading di livello 1 del modello, oppure il nome del file, su una riga
+  sola e senza i caratteri che XML 1.0 non ammette. L'id del livello viene dal
+  nome del documento, con FNV-1a a 64 bit, perché un provider è una funzione
+  pura. Il documento si rilegge come scena modificabile prima di uscire.
+- **`rewrite_links`** riscrive, quando la destinazione cambia nome, solo i byte
+  del valore di `href` di `a` e `image`, virgolette escluse, con gli escape di
+  §7. Un `xlink:href` con lo stesso URL accanto a `href` si riscrive insieme,
+  perché un lettore SVG 1.1 legge quello. Ogni valore scritto si rilegge con
+  `fub-scene` e deve dare il percorso chiesto; un nome il cui primo segmento
+  sembra uno schema (`nota:1.md`) prende `./` davanti. Una richiesta che non
+  corrisponde a un collegamento della sorgente è un errore.
+- **`format_link`** scrive un percorso del vault relativo alla cartella del
+  disegno, con il frammento, già escapato per stare fra virgolette doppie. Un
+  `image` si scrive come un `a`, e l'etichetta non conta. Wikilink e URL non si
+  scrivono in un disegno; un percorso fuori dal vault è un errore.
+- **[Export](scene-format-export.md)** in PNG, JPEG, SVG e PDF: immagini raster
+  in data URI e del vault, fino a 64 MiB, e caratteri di Fub e del vault; il resto nel log.
+
 ## 10. Versioni e compatibilità
 
 - `fub:version` è un intero positivo scritto in cifre decimali. Una versione

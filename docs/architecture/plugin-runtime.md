@@ -76,13 +76,13 @@ va in trap, il proxy panica e il confine `Workspace` converte il panic in
 `PluginError::Internal`. Non esiste quindi un canale `Result` nell'interesse e
 non serve alcun cambiamento al contratto Rust o al WIT.
 
-
 ## Indice delle pagine
 
 - [Provider WASM e confine host](wasm-providers.md): provider nativo, formati,
   componente WASM, istanza, disabilitazione e I/O;
 - [Capability, sandbox e UI non fidata](plugin-security.md): capability,
   sandbox, validazione della UI e limiti non promessi.
+
 ## Renderer nativi
 
 I renderer nativi `Html`/`Ui` restano sul percorso kernel in
@@ -100,12 +100,49 @@ dei recinti Markdown. I motori non supportati e i payload non riconosciuti
 mantengono il fallback dichiarativo; il passaggio fra viewer e fallback
 smonta il componente precedente.
 
-
 ## Inventario installato
 
-L'inventario dei componenti installati è distinto dal runtime: schema e
-percorso su disco sono in
-[on-disk-layout.md](../reference/on-disk-layout.md#componenti-wasm-installati).
+`InstalledPluginStore` in `fub-wasm-host` fornisce agli host nativi
+installazione da un singolo file, inventario persistente, consenso
+all'esecuzione, scelta enabled, load verificato e rimozione dell'eseguibile.
+Lo store conserva componenti identificati dal contenuto nella configurazione
+della macchina. Non salva né scopre componenti installati nello storage
+persistente `.fub/plugins/<id>/` del vault e non lo cancella.
+
+L'installazione valida componente, manifest e ABI senza chiamare `activate`.
+Listing e load verificano solo inventario e digest: non compilano, istanziano o
+chiamano il guest. La validazione attiva esplicita produce un `WasmBundle` con
+`Trust::Community` e ricontrolla il manifest. Nessuna di queste operazioni monta
+l'istanza o concede capability: `BundleMount` conserva il lifecycle comune e un
+solo `Guard` applica permessi e scope. Consenso, scelta enabled e stato del mount
+restano tre fatti distinti.
+
+Il bootstrap desktop sceglie una sola directory di configurazione per log,
+host e store. Filtra i record con `enabled && consent == granted` prima di
+leggere il blob o validare attivamente il componente. I record esclusi restano
+metadata nello store: un loro blob corrotto non viene eseguito né diagnosticato
+durante l'avvio.
+
+`InstalledPluginManager` implementa `StartupSource`;
+`Host::with_startup_source` prepara i bundle e i relativi `BundleClaim` per il
+registry comune prima della custodia del workspace. Feature ufficiali, temi e
+primo bundle registrato conservano la propria identità; una collisione non li
+sostituisce e non trasferisce l'autorità sul claim. Un plugin opzionale fallito
+viene diagnosticato senza pubblicare registrazioni parziali né impedire
+l'apertura del vault. Il riavvio rilegge le scelte persistite; lo store resta
+separato dalle istanze delle sessioni.
+
+`InstalledPluginManager` serve le operazioni IPC desktop: inventario,
+installazione da file, consenso, abilitazione e rimozione, il catalogo firmato
+(ricerca, installazione, aggiornamento, rollback e revoca, per plugin e temi) e
+la lettura dei budget di processo. Persiste le decisioni e riconcilia i vault
+aperti. La rimozione richiede prima la disabilitazione, ritira
+soltanto i claim posseduti, quindi elimina record e blob senza cancellare
+`.fub/plugins/<id>/`.
+
+Schema, atomicità e rimozione sono descritti nel
+[layout su disco](../reference/on-disk-layout.md#componenti-wasm-installati).
+
 ## Invarianti
 
 - Wasmtime resta in `fub-wasm-host`;
