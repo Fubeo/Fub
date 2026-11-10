@@ -3246,6 +3246,47 @@ lettore di schermo; `check-inline-theme.mjs` passa col conto nuovo; le
 foto del banco, chiaro e scuro, somigliano al prototipo.
 Prova: scripts/check.sh --rapido; node .github/scripts/check-inline-theme.mjs;
 cd apps/client && npx vitest run src/editors/canvas
+Stato: [x] fatto (2026-11-10), tranne il caso limite di un colore `"7"`
+o `"rosso"` scritto a mano, che passa a T47b: il nucleo di N3 lo rifiuta
+(`validate_color` in `fub-canvas-core/src/model.rs`) e la lavagna non si
+apre. Differenze: la proprietà è `--canvas-color`, come nel prototipo (il
+piano diceva `--file-color`); il 6 «Viola» usa l'accento, come nel
+prototipo; «Nessuno» è un cerchio vuoto e non un quadratino; nel menu le
+etichette sono corte («Blu», «Altro…»), nei comandi e nella ricerca lunghe
+(«Blu delle note», «Altro colore…»); il vecchio selettore dei colori della
+barra di N4 è tolto (il colore sta nel menu e nella riga delle opzioni,
+dalla stessa lista di `colors.ts`). L'anello delle schede di file
+(`data-card-kind`) è rimandato: l'attributo non c'è ancora e l'anatomia
+vieta selettori orfani. Il conto di `engine.ts` in `check-inline-theme.mjs`
+scende da 8 a 2. Toccati in più: `pen-menu.ts` (esporta `pickerText`),
+`editors/core/editor-menu.ts` e `panels/editor-menu.ts` (un campo
+`swatches` per i pallini, aggiunto), `skin/menus.css`, `canvas-input.md`.
+
+## T47b · Un colore che Fub non conosce non ferma la lavagna
+
+Perché: caso limite di T47 rimasto aperto: un `color` scritto a mano che
+non è uno dei sei né un esadecimale (`"7"`, `"rosso"`) fa rifiutare tutto
+il file al nucleo, e la lavagna non si apre; il piano vuole che si tenga
+com'è e si disegni senza colore.
+Tocca: `crates/fub-canvas-core/src/model.rs` e i suoi test,
+`crates/fub-canvas-core/tests/` (un vettore),
+`apps/client/src/editors/canvas/engine.test.ts`,
+`docs/reference/canvas-format.md` (di N3: i colori).
+Non toccare: `apps/client/src/editors/canvas/colors.ts` (sa già che un
+valore sconosciuto non ha nome); il formato scritto (Fub non scrive mai un
+valore così).
+Dipende da: T47
+Cosa fare: il nucleo tiene un colore sconosciuto come dato opaco (una
+variante, o il testo così com'è) e lo riscrive uguale; la lavagna si apre e
+la scheda non ha `data-canvas-color`. Scegliere un colore lo sostituisce.
+Casi limite: `"7"`, `"rosso"`, `""`, un numero JSON invece di una stringa
+(resta un errore chiaro, come oggi, se il nucleo non lo può tenere);
+la riscrittura byte per byte del resto del file.
+Fatto quando: un test del nucleo apre e riscrive uguale un file con
+`"color": "rosso"`; `engine.test.ts` prova che la lavagna si apre e la
+scheda non ha colore.
+Prova: scripts/check.sh --rapido; cargo test -p fub-canvas-core; cd
+apps/client && npx vitest run src/editors/canvas
 Stato: [ ] da fare
 
 ## T48 · Il catalogo dei comandi

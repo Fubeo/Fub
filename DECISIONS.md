@@ -59,6 +59,13 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-10 · n6 · T47 integrato senza il caso del colore sconosciuto, che
+  diventa T47b (sul nucleo); tolto il vecchio selettore dei colori della
+  barra di N4. · Perché: il rifiuto viene da `validate_color` del nucleo,
+  fuori dalla riga «Tocca» di T47; il colore resta raggiungibile dal menu e
+  dalla riga delle opzioni con la stessa lista, quindi un secondo selettore
+  diverso sarebbe un doppione.
+
 - 2026-11-10 · n6 · T32b integrato con il ricordo di `reuse` tenuto da
   `host/ipc.ts`, fuori dalla riga «Tocca». · Perché: è l'unico chiamante
   di `writeResource` con la vita di una finestra; un globale di modulo
