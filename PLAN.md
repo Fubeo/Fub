@@ -3036,7 +3036,16 @@ sola lettura; la prova e2e passa; le foto del banco, chiaro e scuro,
 somigliano al prototipo.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/canvas src/canvas-edit.e2e.test.ts
-Stato: [ ] da fare
+Stato: [x] fatto (2026-11-10). Differenze: nella riga delle opzioni la voce è
+`data-option="format"`; l'anello e la pillola valgono solo su
+`[data-card-editing]`, finché non c'è la pelle di T22; gli stati mostrati sono
+solo «Non salvato» e «Cambiato su disco», senza avviso di bozza ritrovata; una
+lavagna in sola lettura entra solo per leggere; il tasto centrale non fa uscire
+dalla scrittura; i numeri di riga nella scheda sono nascosti; la barra di
+formato c'è solo con i comandi di fub.formatting. Restano aperti due punti di
+T40: la sessione tenuta attraverso una rinomina e il `release` diretto in
+document-bridge e shell-layout. La vista, la griglia e il navigatore passano in
+`docs/reference/canvas-view.md` (le pagine superavano la soglia).
 
 ## T42 · Scrivere nelle celle di un foglio
 
