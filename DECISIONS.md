@@ -59,6 +59,13 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-10 · n6 · T33 integrato: il campo «Strumenti della colonna» usa
+  le caselle a chip della skin (come `draw.toolbar`), non le caselle
+  grigie del prototipo, e a valore vuoto mostra accesi i sette strumenti di
+  serie. · Perché: `.setting-features` è condiviso con `draw.toolbar`,
+  l'esclusione della sincronizzazione e gli indirizzi permessi; cambiarlo
+  per una riga li cambierebbe tutti, e il pannello deve avere un solo
+  aspetto per le liste. Le caselle accese dicono che cosa c'è davvero.
 - 2026-11-10 · n6 · T36 integrato: la vista ricordata si applica quando
   arriva, ma solo a ciò che nessuno ha cambiato dall'apertura (camera,
   scelta); se la lettura fallisce non si scrive fino alla prossima

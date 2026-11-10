@@ -2467,7 +2467,17 @@ sono nel rapporto accanto a quelle del prototipo.
 Prova: scripts/check.sh --rapido; cargo test -p fub-features; cargo test
 -p fub-host --test lavagna_feature; cd apps/client && npx vitest run
 src/editors/canvas/preferences.test.ts src/editors/canvas/settings-mirror.test.ts
-Stato: [ ] da fare
+Stato: [x] fatto (2026-11-10). Differenze: la colonna della lavagna non
+c'è ancora (T49), quindi il campo «Strumenti della colonna» elenca i sette
+strumenti del prototipo, da prendere dalla colonna di serie quando T49
+arriva; il valore vuoto mostra le sette caselle accese (vuota = quelli di
+serie) e togliendole tutte torna vuoto. Il campo usa le caselle a chip già
+in uso per `draw.toolbar` (`.setting-features`), non quelle grigie del
+prototipo: lo stile è condiviso con altri tre campi. A 700 px il pannello
+mette il controllo sotto la descrizione (layout di `panels/settings.ts`).
+La cartella ripiega su `Allegati` per tutto ciò che `nameFault` respinge
+(non solo vuoto, `..`, assoluto, `.fub/`); il ripiego resta silenzioso
+finché T34 non porta la notifica. Toccata anche `docs/map/dove-sta-x.md`.
 
 ## T34 · Dove vanno i file trascinati
 
