@@ -168,3 +168,10 @@
 - Qual è l'indice degli ADR con stati e sostituzioni? → [decisions/README.md](../decisions/README.md)
 - Quali campi deve avere un nuovo ADR? → [decisions/template.md](../decisions/template.md)
 - Perché valgono le scelte degli ADR da 0179 a 0240? → le singole pagine `decisions/0NNN-*.md`, una per domanda
+
+## README delle cartelle di codice
+
+- Come è fatto il workspace Rust (i 25 crate in gruppi)? → [crates/README.md](../../crates/README.md)
+- Quali componenti WASM di prova esistono e perché sono fuori dal workspace? → [esempi/README.md](../../esempi/README.md)
+- Quali strumenti di misura e gestione ci sono fuori dal workspace? → [tools/README.md](../../tools/README.md)
+- Come è organizada la shell del client (`apps/client/src/`)? → [apps/client/src/README.md](../../apps/client/src/README.md)

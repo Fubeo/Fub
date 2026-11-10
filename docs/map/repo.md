@@ -10,6 +10,9 @@
 > [`repository-tour.md`](../getting-started/repository-tour.md),
 > l'indice domanda → pagina in [`pagine.md`](pagine.md),
 > l'inventario completo in `docs-inventario/RIFERIMENTO.md` quando esiste.
+> **README di codice:** [`crates/`](../../crates/README.md),
+> [`esempi/`](../../esempi/README.md), [`tools/`](../../tools/README.md),
+> [`apps/client/src/`](../../apps/client/src/README.md).
 
 ## I componenti
 
