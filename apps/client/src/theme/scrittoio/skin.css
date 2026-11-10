@@ -9062,6 +9062,24 @@ kbd,
 .canvas-node:focus-visible {
   outline-offset: 3px;
 }
+/* Il lampo di una scheda raggiunta da un link (N6 T57): un anello d'accento
+   che si spegne in un solo giro. Col movimento ridotto (`still`) non si muove:
+   resta acceso per un momento. */
+.canvas-node[data-card-flash] {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+.canvas-node[data-card-flash="pulse"] {
+  animation: canvas-card-flash 900ms ease-out 1 both;
+}
+@keyframes canvas-card-flash {
+  from {
+    outline-color: var(--accent);
+  }
+  to {
+    outline-color: transparent;
+  }
+}
 /* Un gruppo non è una scheda: è un recinto tratteggiato, senza rilievo. */
 .canvas-node-group {
   border: 1px dashed var(--border-strong);
