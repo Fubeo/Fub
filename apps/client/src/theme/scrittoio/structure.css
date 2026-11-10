@@ -1165,6 +1165,19 @@ body {
   flex: none;
 }
 
+/* La cartella dei file trascinati (T52): un nome lunghissimo si accorcia con
+   i puntini; lo zoom e le schede restano. Un testo ha bisogno di un blocco, non
+   della riga flessibile della voce. */
+#status-band [data-surface-item="folder"] {
+  display: inline-block;
+  min-width: 0;
+  max-width: 28ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
 #key-pending {
   position: fixed;
   left: 50%;

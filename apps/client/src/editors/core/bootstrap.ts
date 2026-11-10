@@ -957,6 +957,7 @@ export const COMPONENT_EDITORS: Readonly<Record<string, readonly EditorPart[]>> 
               onOpenPath: options.onOpenPath,
               onCreateNote: options.onCreateCanvasNote,
               onPickFile: options.onPickCanvasFile,
+              ...(options.onOpenSettings ? { onOpenSettings: options.onOpenSettings } : {}),
               onPickDrawingLink: options.onPickDrawingLink,
               drawingImages: options.drawingImages,
               drawingFonts: options.drawingFonts,

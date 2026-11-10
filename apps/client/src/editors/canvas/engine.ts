@@ -51,6 +51,7 @@ import {
   CANVAS_TIPS,
   buildCanvasCommands,
   commandForKey,
+  commandHint,
   isCommandSearchKey,
   toolOfCommand,
   type CanvasAlign,
@@ -65,6 +66,14 @@ import {
 import { CANVAS_INK_TOOLS, CANVAS_WRITING_TOOLS, createCanvasRail, type CanvasRail } from "./chrome/rail";
 import { createCanvasOptions, type CanvasOptions } from "./chrome/options";
 import type { OptionItem } from "../../kit/options-bar";
+import {
+  canvasStatusItems,
+  dropFolderOf,
+  readAttachmentFolder,
+  statusSignature,
+  type CanvasStatusPort,
+} from "./chrome/status";
+import type { SurfaceStatusItem } from "../core/registry";
 import { SHARED_RECENT_COMMANDS, openCommandSearch, type CommandSearchHandle, type RecentCommands } from "./chrome/command-search";
 import { inkFitMode } from "./ink-fit";
 import { mountInkLayer, type InkLayer, type InkLayerStroke } from "./ink-layer";
@@ -326,6 +335,14 @@ export interface CanvasEngineOptions {
    * lavoro in più: chi ascolta chiede `pendingText` quando gli serve.
    */
   readonly onPendingChange?: (pending: boolean) => void;
+  /**
+   * Una voce della banda di stato può essere cambiata: a fine gesto, mai a
+   * ogni fotogramma (`chrome/status.ts`). Chi ascolta la rilegge con
+   * `statusItems`.
+   */
+  readonly onStatusChange?: () => void;
+  /** Apre le Impostazioni su una voce (la cartella dei file trascinati, dalla banda). */
+  readonly onOpenSettings?: (key: string) => void;
   /**
    * Resa markdown reale di una card testo (stesso `renderMarkdown` della
    * lettura, con `mountMarkdown` per sanitizzazione/embed). Assente = testo
@@ -709,6 +726,13 @@ export class CanvasEngine {
   #openView: { readonly camera: Viewport; readonly selection: string } | null = null;
   /** La vista letta prima che il nucleo aprisse il testo: la prende `#revive`. */
   #heldView: { readonly round: number; readonly view: CanvasView } | null = null;
+  /**
+   * La firma delle voci della banda che la shell ha: si avvisa solo se cambia.
+   * `#attachmentDeclared` è `files.attachment-folder` com'è scritto (`null`
+   * finché non arriva, o se non è un testo): la banda mostra la cartella del deposito.
+   */
+  #statusShown = "";
+  #attachmentDeclared: string | null = null;
 
   constructor(parent: HTMLElement, options: CanvasEngineOptions) {
     this.#options = options;
@@ -730,6 +754,13 @@ export class CanvasEngine {
       this.#rail.setToolbar(preferences.toolbar);
     }));
     this.#port = options.core ?? SHARED_CORE;
+    // La cartella dei file trascinati arriva da `files.attachment-folder`, letta
+    // una volta: la banda la mostra quando arriva. Una lettura che fallisce
+    // lascia la cartella di serie.
+    void readAttachmentFolder().then((declared) => {
+      this.#attachmentDeclared = declared;
+      this.#statusSettle();
+    }, () => undefined);
     this.#root = document.createElement("div");
     this.#root.className = "canvas-surface";
     this.#toolbar = document.createElement("div");
@@ -823,7 +854,12 @@ export class CanvasEngine {
     const signal = this.#abort.signal;
     this.#viewport.addEventListener("pointerdown", (event) => this.#pointerDown(event), { signal });
     this.#viewport.addEventListener("pointermove", (event) => this.#pointerMove(event), { signal });
-    this.#viewport.addEventListener("pointerup", (event) => this.#pointerUp(event), { signal });
+    // A fine gesto (e dopo ogni tasto) la banda di stato si rilegge: dentro un
+    // gesto `#statusSettle` non dice niente.
+    this.#viewport.addEventListener("pointerup", (event) => {
+      this.#pointerUp(event);
+      this.#statusSettle();
+    }, { signal });
     // La vista che cambia misura, o che torna in vista da un'altra linguetta
     // (da zero alla sua misura), rifà la scelta delle schede vive. La vista
     // cambia misura anche quando cambia quella della superficie: allora la
@@ -841,7 +877,10 @@ export class CanvasEngine {
       this.#cancelGestures();
     }, { signal });
     this.#viewport.addEventListener("wheel", (event) => this.#wheel(event), { signal, passive: false });
-    this.#viewport.addEventListener("keydown", (event) => this.#keydown(event), { signal });
+    this.#viewport.addEventListener("keydown", (event) => {
+      this.#keydown(event);
+      this.#statusSettle();
+    }, { signal });
     // D lasciato ovunque, la finestra che perde il fuoco o si nasconde: il
     // mouse torna a selezionare.
     this.#life.listen(window, "keyup", (event) => {
@@ -922,6 +961,7 @@ export class CanvasEngine {
     this.#edgeSelection = [];
     this.#undo = [];
     this.#redo = [];
+    this.#statusSettle();
     if (!document) {
       void this.#revive();
       return;
@@ -1010,6 +1050,7 @@ export class CanvasEngine {
     this.#panelReadOnly = readOnly;
     this.#root.dataset.readOnly = String(this.#readOnly);
     this.#render();
+    this.#statusSettle();
   }
 
   /** In sola lettura per il pannello o per la tela: nessun gesto cambia il testo. */
@@ -2151,6 +2192,9 @@ export class CanvasEngine {
     this.#inkLayer?.setCamera(this.#camera.x, this.#camera.y, this.#camera.zoom);
     // Anche la resa passa di qui: la scelta cambiata si ricorda con la camera.
     this.#viewMemo?.changed();
+    // Ogni cambio di zoom passa di qui (bottoni, tasti, menu, `fitCamera`): la
+    // banda lo legge a fine gesto, dentro un gesto `#statusSettle` tace.
+    this.#statusSettle();
   }
 
   // --- riaprire dove eri (T36) ------------------------------------------------
@@ -2827,6 +2871,64 @@ export class CanvasEngine {
     return buildCanvasCommands((id) => this.#commandBehaviour(id), t);
   }
 
+  // --- la banda di stato (T52) ------------------------------------------------
+
+  /** Le voci della banda adesso (`EditorSurface.status`): nessuna senza una lavagna. */
+  statusItems(): SurfaceStatusItem[] {
+    if (this.#destroyed || !this.#doc) return [];
+    return canvasStatusItems(this.#statusPort());
+  }
+
+  /** Ciò che la banda legge della lavagna e ciò che può chiederle. */
+  #statusPort(): CanvasStatusPort {
+    const port: CanvasStatusPort = {
+      zoomPercent: () => Math.round(this.#camera.zoom * 100),
+      chosenCount: () => this.#selection.length,
+      readOnlyWhy: () => (this.#readOnly
+        ? (this.#unwritable ? t("canvas.unwritable") : t("canvas.status.readonly.panel"))
+        : null),
+      folder: () => dropFolderOf(this.#attachmentDeclared, this.#options.documentId ?? ""),
+      zoomTo: (zoom) => {
+        if (this.#destroyed || !this.#doc) return;
+        const rect = this.#viewport.getBoundingClientRect();
+        this.#zoomAt(rect.left + rect.width / 2, rect.top + rect.height / 2, zoom / this.#camera.zoom);
+        this.#statusSettle();
+      },
+      command: (id) => {
+        const found = this.commands().find((command) => command.id === id);
+        if (!found) return null;
+        return {
+          label: found.label,
+          hint: commandHint(found),
+          disabled: found.disabled(),
+          run: () => {
+            found.run();
+            this.#statusSettle();
+          },
+        };
+      },
+      zoomMenuAt: () => {
+        const rect = this.#viewport.getBoundingClientRect();
+        return { x: Math.round(rect.right), y: Math.round(rect.bottom) };
+      },
+    };
+    const openSettings = this.#options.onOpenSettings;
+    return openSettings ? { ...port, openSettings } : port;
+  }
+
+  /**
+   * Avvisa la banda se una sua voce è cambiata, a fine gesto: dentro un gesto
+   * (un trascinamento, una panoramica, la rotella che gira) non dice niente, e
+   * con la stessa firma di prima non avvisa.
+   */
+  #statusSettle(): void {
+    if (this.#destroyed || !this.#doc || this.#gestureActive()) return;
+    const shown = statusSignature(canvasStatusItems(this.#statusPort()));
+    if (shown === this.#statusShown) return;
+    this.#statusShown = shown;
+    this.#options.onStatusChange?.();
+  }
+
   /** Che cosa fa il comando `id` su questa tela, o `null` se non lo conosce. */
   #commandBehaviour(id: string): CanvasCommandBehaviour | null {
     const writable = (): string | null => (this.#readOnly ? t("canvas.commands.why.read_only") : null);
@@ -3176,6 +3278,7 @@ export class CanvasEngine {
           if (editor) this.#leaveField(true);
           recents.remember(documentId, chosen.id);
           if (chosen.disabled() === null) chosen.run();
+          this.#statusSettle();
           return;
         }
         // Esc riporta il fuoco nel campo; un gesto fuori lo lascia, come
@@ -3228,6 +3331,7 @@ export class CanvasEngine {
         run: () => {
           if (command.disabled() !== null) return;
           command.run(args);
+          this.#statusSettle();
           if (refocus) this.#viewport.focus();
         },
       };
@@ -3726,6 +3830,7 @@ export class CanvasEngine {
     // è un gesto finito: la vista è quella dove si è fermato. Con la penna
     // giù il cambio aspetta che si alzi.
     if (moving) this.#refreshLive();
+    this.#statusSettle();
   }
 
   #commitFromSource(origin: EditorChangeOrigin): void {
@@ -3781,6 +3886,8 @@ export class CanvasEngine {
     this.#wheelTimer = setTimeout(() => {
       this.#wheelTimer = undefined;
       this.#refreshLive();
+      // La rotella finita è un gesto finito: la banda legge lo zoom nuovo.
+      this.#statusSettle();
     }, WHEEL_SETTLE_MS);
     // Il delta in pixel: la pagina della rotella è la vista, misurata solo se serve.
     const page = event.deltaMode === 2 ? this.#viewport.getBoundingClientRect() : null;
@@ -3876,6 +3983,7 @@ export class CanvasEngine {
     if (command.id === "canvas.escape" && command.disabled() !== null) return;
     event.preventDefault();
     if (command.disabled() === null) command.run();
+    this.#statusSettle();
   }
 
   /**

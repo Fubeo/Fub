@@ -55,6 +55,8 @@ export interface CanvasSurfaceCallbacks {
   readonly onOpenPath?: CanvasEngineOptions["onOpenPath"];
   readonly onCreateNote?: CanvasEngineOptions["onCreateNote"];
   readonly onPickFile?: CanvasEngineOptions["onPickFile"];
+  /** Apre le Impostazioni su una voce: la cartella dei file trascinati, dalla banda di stato. */
+  readonly onOpenSettings?: (key: string) => void;
   /** The vault document a drawing's link goes to, chosen by the user: `from` is the drawing, `current` the `href` of the link being changed. */
   readonly onPickDrawingLink?: (from: string, current: string | null) => Promise<string | null>;
   /** The vault images of drawing `from`, resolved by the shell. */
@@ -179,6 +181,8 @@ export function mountCanvasSurface(
   context.parent.append(host, source);
   // Chi ascolta il testo in sospeso delle schede: la sessione, tramite il controller.
   const pendingWatchers = new Set<(pending: boolean) => void>();
+  // Chi ascolta la banda di stato (T52): la shell, quando la lavagna ha il fuoco.
+  const statusWatchers = new Set<() => void>();
   const createEngine = (): CanvasEngine => new CanvasEngine(host, {
     surfaceId: context.paneId,
     formatId: context.formatId,
@@ -200,6 +204,10 @@ export function mountCanvasSurface(
     onPendingChange: (pending) => {
       for (const watcher of [...pendingWatchers]) watcher(pending);
     },
+    onStatusChange: () => {
+      for (const watcher of [...statusWatchers]) watcher();
+    },
+    ...(callbacks.onOpenSettings ? { onOpenSettings: callbacks.onOpenSettings } : {}),
   });
   // La tela usa il nucleo, che si carica alla prima lavagna aperta e poi
   // resta. Finché non c'è la superficie tiene ciò che la shell le dice, e lo
@@ -310,6 +318,18 @@ export function mountCanvasSurface(
         return () => pendingWatchers.delete(listener);
       },
     },
+    // Le voci della banda (zoom, schede scelte, sola lettura, cartella) le
+    // legge la tela adesso; la shell le disegna e le rilegge ad ogni avviso.
+    status: {
+      counts: true,
+      items: () => engine?.statusItems() ?? [],
+      subscribe(listener) {
+        statusWatchers.add(listener);
+        return () => {
+          statusWatchers.delete(listener);
+        };
+      },
+    },
     focus: (): void => {
       if (mode === "source") source.focus();
       else if (engine) engine.focus();
@@ -347,6 +367,7 @@ export function mountCanvasSurface(
       engine?.destroy();
       engine = null;
       pendingWatchers.clear();
+      statusWatchers.clear();
     },
   };
   surface.setMode(mode);
