@@ -302,7 +302,7 @@ else
     skip "fub-canvas-core per wasm32-unknown-unknown" "target mancante: rustup target add wasm32-unknown-unknown"
   fi
   if [ "$NEXTEST" = 1 ]; then
-    run "cargo nextest run --workspace --no-fail-fast" cargo nextest run --workspace $EXCLUDE --no-fail-fast --profile ci
+    run "cargo nextest run --workspace --no-fail-fast --profile ci" cargo nextest run --workspace $EXCLUDE --no-fail-fast --profile ci
   else
     run "cargo test --workspace --no-fail-fast" cargo test --workspace $EXCLUDE --no-fail-fast
   fi

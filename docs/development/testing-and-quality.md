@@ -321,6 +321,20 @@ attributi sopra il doc, niente intestazioni di sezione spezzate. Gli attributi
 stanno fra il doc e l'item: uno sopra il doc passa all'item di un altro doc
 appena qualcuno inserisce un item nel mezzo.
 
+## La CI in breve
+
+- Una PR **bozza** riceve la CI corta: solo Linux, senza banchi. Pronta per
+  la revisione gira la CI completa, Windows e macOS compresi; su `main` gira
+  sempre tutto.
+- I test del workspace girano con `cargo nextest run --workspace --profile ci`
+  più `cargo test --workspace --doc`; i fuzzer del Markdown girano a 2000 casi
+  (20000 nella corsa settimanale e con `fuzz_completo`).
+- La cache Rust salva solo da `main` (budget di 10 GB); i job che possono
+  riutilizzarla leggono la test cache di Linux con `shared-key: test` e non la
+  risalvano.
+- Il gate di release è `.github/scripts/check-release-gate.mjs`: aggiungere o
+  rinominare un job richiede di aggiornarlo.
+
 ## Matrice per modifica
 
 | Modifica | Test necessari |
