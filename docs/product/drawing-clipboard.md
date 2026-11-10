@@ -149,7 +149,7 @@ stile che seguiva ([Disegni, stili](drawing-styles.md)).
 ## Chi monta l'editor
 
 Le regole stanno in `apps/client/src/editors/spatial/tools/clipboard.ts` e nei
-suoi moduli in `clipboard/`, lo stile in `look.ts` e il PNG in `png.ts`. Chi monta l'editor gli dice dove sta
-il disegno con `place`, che riscrive i percorsi del vault fra un disegno e
-l'altro. Gli appunti di sistema passano dalla porta della shell,
-`apps/client/src/platform/clipboard.ts`.
+suoi moduli in `clipboard/`, lo stile in `look.ts` e il PNG in `png.ts`. Chi
+monta l'editor gli dice dove sta il disegno con `place`, che riscrive i
+percorsi del vault fra un disegno e l'altro. Gli appunti di sistema passano
+dalla porta della shell, `apps/client/src/platform/clipboard.ts`.
