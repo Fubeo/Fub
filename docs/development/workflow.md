@@ -62,6 +62,14 @@ cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace
 ```
 
+Mentre iteri usa il controllo più stretto che dà un segnale:
+
+```bash
+cargo test -p <crate>                 # un crate
+cargo test -p <crate> --test <file>   # un file di test d'integrazione
+cargo test -p <crate> --lib <modulo>::  # i test unitari di un modulo
+```
+
 ### Frontend
 
 ```bash
@@ -69,6 +77,8 @@ cd apps/client
 npm run typecheck
 npm test
 npm run build
+npx vitest run <file>     # un file di test
+npx vitest run -t "<nome>"  # i test che corrispondono a un nome
 ```
 
 ### Documentazione
@@ -118,6 +128,28 @@ type-check, test, build, resa e accessibilità quando cambia l'interfaccia.
 
 Costruisci il componente dai sorgenti. Verifica successo, capability negata,
 timeout, memoria, trap, teardown e compatibilità ABI.
+
+### Riuso di codice da altri progetti
+
+Vale per WordCraft e progetti simili.
+
+- Riusa prima di riscrivere: cerca un crate, una porta, un registry o un helper
+  esistente, qui o a monte.
+- Le funzioni di scrittura (correzione, dizionario, comandi) restano
+  indipendenti dai formati: un formato porta un adattatore, mai una copia
+  divergente della funzione. Nessun plugin dipende dai dettagli privati di un
+  altro: solo dai suoi comandi registrati, dalle route di `query_index`, dalle
+  impostazioni e dalle view.
+- Il Markdown resta nativo: non dipende da DOCX né da un altro provider.
+- Usa i registry e i contratti esistenti (`inventory.rs`, `HostWiring`,
+  `SurfaceEditorActions`, la barra del formato, gli id dei comandi) e tieni
+  stabili gli id pubblici.
+- Il codice di terzi sta in `vendor/<progetto>/` con un `UPSTREAM.md` (repo,
+  SHA del commit, licenza, ogni patch locale); `cargo deny check` deve passare.
+  Licenza e politica della supply chain non si cambiano senza chiedere.
+- Prova il riuso davvero: funzione accesa e spenta (`--no-default-features`),
+  un formato spento mentre la funzione condivisa continua a funzionare, e il
+  teardown di ogni registrazione a mount e unmount.
 
 ## 6. Commit
 

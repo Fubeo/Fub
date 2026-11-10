@@ -111,16 +111,9 @@ scripts/check.sh --banchi     # plus the frontend benches
 ```
 
 One line per step; full logs go to `target/check/`. A `SALTA` line is not a
-proof; the report says so. While iterating, use the narrowest check:
-
-```bash
-cargo test -p <crate>                 # one crate
-cargo test -p <crate> --test <file>   # one integration test file
-cargo test -p <crate> --lib <path>::  # unit tests under one module path
-npx vitest run <file>                 # from apps/client/: one test file
-npx vitest run -t "<name>"            # from apps/client/: tests matching a name
-```
-
+proof; the report says so. The narrow commands for iterating (one crate, one
+test file, one Vitest file) are in
+[`docs/development/workflow.md`](docs/development/workflow.md).
 `npm run typecheck` is the TS check that counts; `npm run build` does not
 type-check. Theme derivatives must regenerate byte for byte:
 `npm run theme:generate && npm run theme:verify`. Every other command is in
@@ -136,26 +129,16 @@ a test pass. Full list: [`docs/map/dove-sta-x.md`](docs/map/dove-sta-x.md).
 ## CI
 
 The checks live in `.github/workflows/ci.yml` (and `npm-supply-chain.yml`).
-Pitfalls an agent most often hits:
 
-- A push runs CI only on `main`; a PR runs it on each push, and a newer push
-  cancels the older run.
 - A **draft** PR gets the short CI (Linux only, no benches); ready for review
-  runs the full CI, Windows and macOS included (the frontend benches only when
-  the client changed). `main` always runs everything.
+  runs the full CI, Windows and macOS included. `main` always runs everything.
 - `gh pr edit` fails on this repository: update a PR body with
   `gh api -X PATCH repos/Fubeo/Fub/pulls/<n> -F body=@file`.
-- A test known to be flaky has an open issue: rerun its failed jobs once; if a
-  job is still red, investigate before calling it flaky.
-- To read a run: `gh run view <run> --json jobs`; a job's log:
-  `gh api repos/Fubeo/Fub/actions/jobs/<job>/logs`; an artifact:
-  `gh api repos/Fubeo/Fub/actions/artifacts/<id>/zip`, because `gh run download`
-  refuses some of them.
+- Ask for the deeper fuzz run (`fuzz_completo`) after larger changes to the
+  Markdown provider, not on every push.
 
-The rest (rust-cache policy, nextest profile, fuzzers, release gate) is in
-[`docs/development/testing-and-quality.md`](docs/development/testing-and-quality.md).
-Ask for the deeper fuzz run (`fuzz_completo`) after larger changes to the
-Markdown provider, not on every push.
+How to read runs, logs and artifacts, flaky tests, cache, nextest and the
+release gate: [`docs/development/testing-and-quality.md`](docs/development/testing-and-quality.md#la-ci-in-breve).
 
 ## Architecture
 
@@ -206,40 +189,20 @@ One line per invariant; details in the linked pages:
 
 ### Reusing code from other projects
 
-- Reuse before rewriting: look for an existing crate, port, registry or helper
-  (here or upstream) first.
-- Feature code (proofing, dictionary, commands) stays independent of formats: a
-  format contributes an adapter, never a fork. No plugin depends on another's
-  private details; only on its registered commands, `query_index` routes,
-  settings and views.
-- Markdown stays native: it never depends on DOCX or another provider.
-- Use the existing registries and contracts (`inventory.rs`, `HostWiring`,
-  `SurfaceEditorActions`, format bar, command ids); keep public ids stable.
-- Third-party code lives in `vendor/<project>/` with an `UPSTREAM.md` (repo,
-  commit SHA, license, every local patch); `cargo deny check` must pass. Don't
-  change the license or supply-chain policy without asking.
-- Test reuse for real: feature on and off (`--no-default-features`), a format
-  turned off while the shared feature still works, and mount/unmount teardown.
+Before reusing code from WordCraft or similar projects, read
+[`docs/development/workflow.md`](docs/development/workflow.md#riuso-di-codice-da-altri-progetti):
+features stay independent of formats, Markdown stays native, third-party code
+lives in `vendor/<project>/` with an `UPSTREAM.md`, and the license or
+supply-chain policy never changes without asking.
 
 ## Verifying
 
 Iterate with the narrowest check that gives a signal, then widen it by blast
 radius before finishing. Before the PR, read the final diff for accidental
 changes, duplication, premature APIs, hand-edited generated files and missing
-teardown. Don't mix refactor, feature and cleanup in one change.
-
-| Change | Minimum check |
-|---|---|
-| local helper | a unit test next to it |
-| provider | unit tests and `MemoryHost` |
-| kernel, storage, session | crate tests and `fub-testkit` integration |
-| Rust/WIT contract | conformance, frozen additivity, projections |
-| IPC | TS mirrors, fixtures, fake host, shell tests |
-| frontend | Vitest next to the module, typecheck, build |
-| rendering | the relevant visual and accessibility benches |
-| WASM runtime | a real component, positive and negative cases |
-| documentation | every documentation guard |
-| cross-cutting | the full relevant cycle and the guards in `CONTRIBUTING.md` |
+teardown. Don't mix refactor, feature and cleanup in one change. The minimum
+check for each kind of change is the matrix in
+[`docs/development/testing-and-quality.md`](docs/development/testing-and-quality.md#matrice-per-modifica).
 
 A focused green test doesn't prove a boundary it doesn't exercise. An
 end-to-end test doesn't replace the unit test of the rule, and a structural

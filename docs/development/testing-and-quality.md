@@ -366,6 +366,14 @@ appena qualcuno inserisce un item nel mezzo.
   risalvano.
 - Il gate di release è `.github/scripts/check-release-gate.mjs`: aggiungere o
   rinominare un job richiede di aggiornarlo.
+- Un push fa girare la CI solo su `main`; una PR la fa girare a ogni push, e un
+  push più recente annulla la corsa precedente.
+- Un test noto come instabile ha un'issue aperta: rilancia una volta i job
+  falliti; se un job resta rosso, indaga prima di dirlo instabile.
+- Per leggere una corsa: `gh run view <corsa> --json jobs`; il log di un job:
+  `gh api repos/Fubeo/Fub/actions/jobs/<job>/logs`; un artefatto:
+  `gh api repos/Fubeo/Fub/actions/artifacts/<id>/zip`, perché `gh run
+  download` ne rifiuta alcuni.
 
 ## Matrice per modifica
 
@@ -373,13 +381,15 @@ appena qualcuno inserisce un item nel mezzo.
 |---|---|
 | helper puro | unit test |
 | provider | unit test e `MemoryHost` |
-| mount o sessione | integrazione `fub-testkit` |
+| kernel, mount o sessione | test del crate e integrazione `fub-testkit` |
 | storage | integrazione, corruzione e interruzione |
 | IPC | mirror, fixture e test shell |
 | UI | Vitest, type-check, build, accessibilità |
 | resa | banco visuale |
 | WIT | conformità, additività e componente reale |
+| runtime WASM | componente reale, casi positivi e negativi di limiti e ciclo di vita |
 | docs | tutti i guard documentali |
+| trasversale | il ciclo Rust e frontend pertinente e i guard di `CONTRIBUTING.md` |
 
 ## Qualità della prova
 
