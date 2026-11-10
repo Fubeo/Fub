@@ -191,6 +191,17 @@ describe("la parte «Schede»", () => {
     expect(drawn.length).toBeGreaterThan(0);
     expect(drawn.length).toBeLessThan(200);
     expect(drawn[0]!.getAttribute("aria-setsize")).toBe("2000");
+    // Scorso a metà: si disegnano le righe che si vedono, e la fermata del
+    // Tab (la prima riga) resta, se no da tastiera non ci si arriva più.
+    host.style.overflowY = "auto";
+    const box = (top: number, height: number) => ({ top, bottom: top + height, height, left: 0, right: 300, width: 300, x: 0, y: top, toJSON: () => ({}) }) as DOMRect;
+    host.getBoundingClientRect = () => box(0, 290);
+    list.getBoundingClientRect = () => box(-29 * 1000, 29 * 2000);
+    document.dispatchEvent(new Event("scroll"));
+    const nodes = [...host.querySelectorAll<HTMLElement>(".canvas-inspector-row")].map((row) => row.dataset.node);
+    expect(nodes).toContain("c1000");
+    expect(nodes).not.toContain("c500");
+    expect(host.querySelector<HTMLElement>(".canvas-inspector-row[tabindex='0']")!.dataset.node).toBe("c0");
     const search = host.querySelector<HTMLInputElement>(".canvas-inspector-filter > input")!;
     search.value = "Scheda 1999";
     search.dispatchEvent(new Event("input"));

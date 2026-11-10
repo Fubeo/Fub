@@ -549,10 +549,16 @@ function mountCards(host: HTMLElement, port: CardsPort): { readonly handle: Moun
     return row;
   };
 
+  /// Dove sta la fermata del Tab: la riga attiva se c'è ancora, se no la prima.
+  const stopAt = (): number => {
+    const at = active === null ? -1 : shown.findIndex((entry) => entry.node.id === active);
+    return at >= 0 ? at : shown.length > 0 ? 0 : -1;
+  };
+
   /// La scelta e il fuoco sulle righe disegnate.
   const mark = (): void => {
     const picked = port.picked();
-    const focusable = active !== null && shown.some((entry) => entry.node.id === active) ? active : shown[0]?.node.id ?? null;
+    const focusable = shown[stopAt()]?.node.id ?? null;
     for (const row of drawn.values()) {
       row.setAttribute("aria-selected", String(row.dataset.node === picked));
       row.tabIndex = row.dataset.node === focusable ? 0 : -1;
@@ -572,7 +578,9 @@ function mountCards(host: HTMLElement, port: CardsPort): { readonly handle: Moun
     const last = Math.min(shown.length - 1, first + count);
     const out: number[] = [];
     for (let at = first; at <= last; at++) out.push(at);
-    const current = shown.findIndex((entry) => entry.node.id === active);
+    // La fermata del Tab resta disegnata anche fuori dalla finestra: senza,
+    // l'elenco scorso non si raggiungerebbe più da tastiera.
+    const current = stopAt();
     if (current >= 0 && (current < first || current > last)) out.push(current);
     return out;
   };
