@@ -13,6 +13,7 @@ import type { SettingEntry } from "../host/contract";
 import type { NoticeAction } from "../ui/notify";
 import {
   ATTACHMENTS_NOTICED_KEY,
+  CanvasDepositError,
   depositCanvasFiles,
   dropFolderFor,
   resolveCanvasPaths,
@@ -244,6 +245,58 @@ describe("depositCanvasFiles (dal computer)", () => {
   });
 });
 
+/// Il deposito che deve fermarsi: il suo errore, che non dev'essere andato a buon fine.
+async function stoppedBy(deposit: Promise<unknown>): Promise<CanvasDepositError> {
+  const outcome = await deposit.then(() => null, (error: unknown) => error);
+  expect(outcome).toBeInstanceOf(CanvasDepositError);
+  return outcome as CanvasDepositError;
+}
+
+describe("depositCanvasFiles: un rifiuto a metà (T15b)", () => {
+  /// Il vault finto la cui scrittura di un file con `name` nel nome è rifiutata
+  /// con `cause`: come l'host, con `{ kind, message }` e non con un `Error`.
+  function refusing(vault: ReturnType<typeof depositVault>, name: string, cause: unknown): void {
+    const deposit = vault.deps.deposit;
+    vault.deps.deposit = async (documentId) => {
+      const real = await deposit(documentId);
+      return { ...real, write: (id, bytes, options) => (id.includes(name) ? Promise.reject(cause) : real.write(id, bytes, options)) };
+    };
+  }
+
+  it("il file che l'host rifiuta ferma il deposito: l'errore porta i percorsi già fatti, con la frase dell'host", async () => {
+    const vault = depositVault();
+    refusing(vault, "rotto", { kind: "io", message: "disco pieno" });
+    const error = await stoppedBy(depositCanvasFiles([file("a.png", 1), file("rotto.png", 2), file("c.png", 3)], "Lavagne/studio.canvas", vault.deps));
+    expect(error.paths).toEqual(["attachments/a.png"]);
+    expect(error.message).toBe("disco pieno");
+    expect(Reflect.get(error, "cause")).toEqual({ kind: "io", message: "disco pieno" });
+    expect(vault.host.files()["attachments/c.png"]).toBeUndefined();
+    // La copia di a.png si dice anche se il deposito si è fermato dopo.
+    expect(vault.notices.map((notice) => notice.message)).toEqual(["Copiati in attachments/"]);
+  });
+
+  it("il primo file rifiutato: nessun percorso, nessuna notifica, solo l'errore", async () => {
+    const vault = depositVault();
+    refusing(vault, "rotto", { kind: "io", message: "disco pieno" });
+    const error = await stoppedBy(depositCanvasFiles([file("rotto.png", 1), file("c.png", 2)], "Lavagne/studio.canvas", vault.deps));
+    expect(error.paths).toEqual([]);
+    expect(error.message).toBe("disco pieno");
+    expect(vault.host.files()["attachments/c.png"]).toBeUndefined();
+    expect(vault.notices).toEqual([]);
+  });
+
+  it("un file riusato prima del rifiuto porta il suo percorso del vault, e la copia lo ripunta", async () => {
+    const vault = depositVault({ noticed: true, files: { "Foto/a.png": new Uint8Array([1]) } });
+    refusing(vault, "rotto", { kind: "io", message: "disco pieno" });
+    const { cards, repoints } = fakeCards();
+    const error = await stoppedBy(depositCanvasFiles([file("uno.png", 1), file("rotto.png", 2)], "Lavagne/studio.canvas", vault.deps, cards));
+    expect(error.paths).toEqual(["Foto/a.png"]);
+    expect(vault.notices.map((notice) => notice.message)).toEqual(["Già nel vault come Foto/a.png, uso quello"]);
+    await vault.notices[0]!.action!.run();
+    expect(repoints).toEqual([[{ from: "Foto/a.png", to: "attachments/uno.png" }]]);
+  });
+});
+
 /// Una voce di `settings()` come la dà il bundle: `preferencesOf` guarda solo la
 /// chiave e il valore.
 function setting(key: string, value: unknown): SettingEntry {
@@ -439,16 +492,21 @@ describe("«Fanne una copia» (T32b)", () => {
     expect(writesWithReuse(vault.host)).toEqual([true]);
   });
 
-  it("senza le schede della lavagna, o dopo un errore, la copia non si offre", async () => {
+  it("senza le schede della lavagna la copia non si offre; dopo un errore sì, per i file riusati prima di esso", async () => {
     const without = depositVault({ noticed: true, files: { "Foto/a.png": new Uint8Array([1]) } });
     await depositCanvasFiles([file("uno.png", 1)], "Lavagne/studio.canvas", without.deps);
     expect(without.notices[0]!.action).toBeUndefined();
 
+    // Il file grande ferma il deposito, ma il primo era già riusato e la sua
+    // scheda nasce: la copia si offre, e ripunta quella scheda.
     const failed = depositVault({ noticed: true, files: { "Foto/a.png": new Uint8Array([1]) } });
     const big = { name: "enorme.bin", size: 65 * 1024 * 1024, arrayBuffer: vi.fn() } as unknown as File;
-    await expect(depositCanvasFiles([file("uno.png", 1), big], "Lavagne/studio.canvas", failed.deps, fakeCards().cards)).rejects.toThrow();
+    const { cards, repoints } = fakeCards();
+    await expect(depositCanvasFiles([file("uno.png", 1), big], "Lavagne/studio.canvas", failed.deps, cards)).rejects.toThrow();
     expect(failed.notices.map((notice) => notice.message)).toEqual(["Già nel vault come Foto/a.png, uso quello"]);
-    expect(failed.notices[0]!.action).toBeUndefined();
+    expect(failed.notices[0]!.action?.label).toBe("Fanne una copia");
+    await failed.notices[0]!.action!.run();
+    expect(repoints).toEqual([[{ from: "Foto/a.png", to: "attachments/uno.png" }]]);
   });
 
   it("due notifiche aperte: ognuna copia i suoi file e ripunta le schede del suo gesto", async () => {

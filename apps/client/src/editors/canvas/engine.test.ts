@@ -18,6 +18,7 @@ import knownNumberForms from "../../__fixtures__/canvas-patches/22-known-number-
 import duplicateUnknownKey from "../../__fixtures__/canvas-patches/32-rejected-duplicate-unknown-key.json";
 import nestedDuplicate from "../../__fixtures__/canvas-patches/33-rejected-nested-duplicate.json";
 import { DocumentSessionCollection, type DocumentSessionApi } from "../../state/document-session";
+import { CanvasDepositError } from "../../state/canvas-intake";
 import { upsertNodePatch, type CanvasOperation, type CanvasPatch } from "./operation";
 import { CanvasCoreError, canvasCoreReady, openCore, openCoreNow, type CanvasCore, type CanvasIntentOp } from "./wasm/core";
 import { DEFAULT_PREFERENCES, type CanvasPreferences, type WheelAction } from "./preferences";
@@ -1875,6 +1876,54 @@ describe("CanvasEngine: trascinare e incollare (T15)", () => {
     drop(host, transfer({}, { files: [new File(["x"], "x.png")] }));
     await vi.waitFor(() => expect(host.querySelector(".canvas-intake-error")?.textContent).toBe("troppo grande"));
     expect(changes).toHaveLength(0);
+    engine.destroy();
+  });
+
+  it("un deposito fermato a metà: le schede dei file già fatti nascono in un annulla solo, poi l'errore", async () => {
+    const deposit = vi.fn(async (_files: readonly File[], _id: string, _cards: CanvasDepositCards): Promise<readonly string[]> => {
+      throw new CanvasDepositError({ kind: "io", message: "disco pieno" }, ["Foto/a.png", "Foto/b.png"]);
+    });
+    const { engine, host, changes } = mounted(canvasSource(), { attachments: { deposit } });
+    drop(host, transfer({}, { files: [new File(["x"], "a.png"), new File(["y"], "b.png"), new File(["z"], "c.png")] }));
+    await vi.waitFor(() => expect(changes).toHaveLength(1));
+    expect(born(engine).map((node) => node.file)).toEqual(["Foto/a.png", "Foto/b.png"]);
+    expect(host.querySelector(".canvas-intake-error")?.textContent).toBe("disco pieno");
+    // Le schede si ricordano per id: la porta le ripunta in un commit solo.
+    const cards = deposit.mock.calls[0]![2];
+    expect(cards.repoint([{ from: "Foto/a.png", to: "attachments/a.png" }, { from: "Foto/b.png", to: "attachments/b.png" }])).toBe(2);
+    expect(born(engine).map((node) => node.file)).toEqual(["attachments/a.png", "attachments/b.png"]);
+    expect(engine.undo()).toBe(true);
+    expect(born(engine).map((node) => node.file)).toEqual(["Foto/a.png", "Foto/b.png"]);
+    expect(engine.undo()).toBe(true);
+    expect(born(engine)).toEqual([]);
+    engine.destroy();
+  });
+
+  it("il primo file rifiutato: solo l'errore, nessuna scheda, e gli appunti non diventano testo", async () => {
+    const deposit = vi.fn(async (): Promise<readonly string[]> => {
+      throw new CanvasDepositError({ kind: "io", message: "disco pieno" }, []);
+    });
+    const { engine, host, changes } = mounted(canvasSource(), { attachments: { deposit } });
+    paste(host, transfer({ "text/plain": "testo degli appunti" }, { files: [new File(["x"], "x.png")] }));
+    await vi.waitFor(() => expect(host.querySelector(".canvas-intake-error")?.textContent).toBe("disco pieno"));
+    expect(changes).toHaveLength(0);
+    expect(born(engine)).toEqual([]);
+    engine.destroy();
+  });
+
+  it("la lavagna cambiata mentre il deposito si ferma: niente schede, ma l'errore si vede", async () => {
+    let fail!: (error: unknown) => void;
+    const deposit = vi.fn(() => new Promise<readonly string[]>((_resolve, reject) => { fail = reject; }));
+    const { engine, host } = mounted(canvasSource(), { attachments: { deposit } });
+    drop(host, transfer({}, { files: [new File(["x"], "tardi.png")] }));
+    expect(deposit).toHaveBeenCalledTimes(1);
+    const remote = JSON.parse(canvasSource());
+    remote.nodes[0].text = "Versione remota";
+    engine.syncDoc(JSON.stringify(remote));
+    fail(new CanvasDepositError({ kind: "io", message: "disco pieno" }, ["attachments/tardi.png"]));
+    await vi.waitFor(() => expect(host.querySelector(".canvas-intake-error")?.textContent).toBe("disco pieno"));
+    expect(readCanvas(engine.getDoc()).nodes).toHaveLength(4);
+    expect(readCanvas(engine.getDoc()).nodes[0]!.text).toBe("Versione remota");
     engine.destroy();
   });
 

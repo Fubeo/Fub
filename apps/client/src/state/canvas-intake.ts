@@ -29,6 +29,7 @@ import { DROP_FOLDER_KEY, type CanvasPreferences } from "../editors/canvas/prefe
 import { folderContains, nameFault, normalizedName } from "../rules/mirrored";
 import type { NoticeAction } from "../ui/notify";
 import { t } from "../i18n/strings";
+import { errorText } from "../host/errors";
 
 /// La chiave dello stato di vista che ricorda che la notifica «Copiati in…»
 /// è già stata mostrata in questo vault.
@@ -142,15 +143,33 @@ interface ReusedFile {
   readonly file: File;
 }
 
+/// Il deposito dal computer che si ferma a metà: `cause` è il rifiuto che l'ha
+/// fermato (l'host, o il tetto dei 64 MiB), `paths` i percorsi dei file già
+/// depositati, copiati o riusati, nell'ordine dei file. La lavagna ne fa
+/// nascere le schede e poi mostra l'errore (T15b). Il messaggio è la frase da
+/// mostrare: `errorText` legge anche l'errore `{ kind, message }` dell'host.
+export class CanvasDepositError extends Error {
+  readonly paths: readonly string[];
+
+  constructor(cause: unknown, paths: readonly string[]) {
+    super(errorText(cause));
+    this.name = "CanvasDepositError";
+    // `cause` a mano, come in `CanvasCoreError`: la shell punta a ES2021.
+    Object.defineProperty(this, "cause", { value: cause, configurable: true, writable: true });
+    this.paths = paths;
+  }
+}
+
 /// Deposita i file del sistema nel vault per la lavagna `documentId` e torna
 /// i loro id, nell'ordine dei file. Un file che il vault ha già con gli stessi
 /// byte si riusa, e l'host lo dice senza scrivere. Alla fine una notifica dice
 /// quali sono stati riusati (il percorso, se è uno solo; il numero, se sono
 /// di più), con «Fanne una copia» se la lavagna ha dato le sue schede
 /// (`cards`); un'altra dice dove sono andati i file copiati, con «Cambia
-/// cartella». Le notifiche dicono anche ciò che è stato fatto prima di un
-/// errore, che poi risale; dopo un errore le schede non nascono, e la copia
-/// non si offre.
+/// cartella». Il primo file che l'host rifiuta ferma il deposito: l'errore
+/// risale come `CanvasDepositError`, con i percorsi già fatti, e le notifiche
+/// dicono lo stesso ciò che è stato fatto. Anche per quei file la copia si
+/// offre, perché le loro schede nascono.
 export async function depositCanvasFiles(
   files: readonly File[],
   documentId: string,
@@ -165,7 +184,6 @@ export async function depositCanvasFiles(
   const paths: string[] = [];
   const copied: string[] = [];
   const reused: ReusedFile[] = [];
-  let done = false;
   try {
     for (const file of files) {
       if (file.size > MAX_DROPPED_BYTES) throw new Error(t("errors.attachment.too_large", { name: file.name }));
@@ -174,9 +192,10 @@ export async function depositCanvasFiles(
       if (saved.reused) reused.push({ path: saved.receipt.id, file });
       else copied.push(saved.receipt.id);
     }
-    done = true;
+  } catch (error) {
+    throw new CanvasDepositError(error, [...paths]);
   } finally {
-    noticeReused(deps, deposit, reused, done ? cards : undefined);
+    noticeReused(deps, deposit, reused, cards);
     await noticeCopies(deps, copied);
   }
   return paths;

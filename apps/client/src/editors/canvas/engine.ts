@@ -75,7 +75,7 @@ import {
   type CanvasStatusPort,
 } from "./chrome/status";
 import type { SurfaceStatusItem } from "../core/registry";
-import type { DropFolderChoice } from "../../state/canvas-intake";
+import { CanvasDepositError, type DropFolderChoice } from "../../state/canvas-intake";
 import { SHARED_RECENT_COMMANDS, openCommandSearch, type CommandSearchHandle, type RecentCommands } from "./chrome/command-search";
 import { inkFitMode } from "./ink-fit";
 import { mountInkLayer, type InkLayer, type InkLayerStroke } from "./ink-layer";
@@ -2677,56 +2677,76 @@ export class CanvasEngine {
     const bear = (path: string, id: string): void => { born.set(path, [...(born.get(path) ?? []), id]); };
     // External bytes pass the explicit deposit. Internal folder paths resolve
     // only via the host port; never trust a raw DataTransfer path.
-    const paths = files.length ? await port!.deposit(files, documentId!, this.#depositCards(born))
-      : port?.resolvePaths && documentId ? await port.resolvePaths(data, documentId) : [];
-    if (stale()) return;
-    const unique = [...new Set(paths)].filter(isVaultPath);
-    if ((!unique.length && !text) || (paths.length > 0 && !unique.length)) return;
-    const patches: CanvasPatch[] = [];
-    const file = this.#doc!.nodes.find((node) => node.id === existing && node.type === "file");
-    // Su una scheda di file il primo file ne prende il posto (A-8).
-    if (file && unique.length) {
-      const path = unique.shift()!;
-      const patch = upsertNodePatch(this.#doc!, { ...file, file: path, subpath: undefined });
-      if (patch) patches.push(patch);
-      bear(path, file.id);
+    // Un deposito fermato a metà porta i percorsi già fatti: le loro schede
+    // nascono lo stesso, e l'errore si mostra dopo, in ogni uscita (T15b).
+    let paths: readonly string[] = [];
+    let failure: CanvasDepositError | null = null;
+    if (files.length) {
+      try {
+        paths = await port!.deposit(files, documentId!, this.#depositCards(born));
+      } catch (error) {
+        if (!(error instanceof CanvasDepositError)) throw error;
+        paths = error.paths;
+        failure = error;
+      }
+    } else if (port?.resolvePaths && documentId) {
+      paths = await port.resolvePaths(data, documentId);
     }
-    if (unique.length) {
-      const items = await this.#bornItems(unique);
+    try {
       if (stale()) return;
-      const layout = dropLayout(items, point);
-      if (layout.group) {
-        // Il gruppo prima delle schede, così sta sotto di loro.
-        const patch = upsertNodePatch(this.#doc!, {
-          id: newNodeId("n"), type: "group", ...layout.group,
-          label: t("canvas.intake.group", { count: String(layout.cards.length) }),
-        });
+      const unique = [...new Set(paths)].filter(isVaultPath);
+      if ((!unique.length && !text) || (paths.length > 0 && !unique.length)) return;
+      const patches: CanvasPatch[] = [];
+      const file = this.#doc!.nodes.find((node) => node.id === existing && node.type === "file");
+      // Su una scheda di file il primo file ne prende il posto (A-8).
+      if (file && unique.length) {
+        const path = unique.shift()!;
+        const patch = upsertNodePatch(this.#doc!, { ...file, file: path, subpath: undefined });
+        if (patch) patches.push(patch);
+        bear(path, file.id);
+      }
+      if (unique.length) {
+        const items = await this.#bornItems(unique);
+        if (stale()) return;
+        const layout = dropLayout(items, point);
+        if (layout.group) {
+          // Il gruppo prima delle schede, così sta sotto di loro.
+          const patch = upsertNodePatch(this.#doc!, {
+            id: newNodeId("n"), type: "group", ...layout.group,
+            label: t("canvas.intake.group", { count: String(layout.cards.length) }),
+          });
+          if (patch) patches.push(patch);
+        }
+        for (const card of layout.cards) {
+          const id = newNodeId("n");
+          const patch = upsertNodePatch(this.#doc!, {
+            id, type: "file", file: card.path,
+            x: card.x, y: card.y, width: card.width, height: card.height,
+          });
+          if (patch) patches.push(patch);
+          bear(card.path, id);
+        }
+      }
+      // Gli appunti diventano testo solo se non c'era un file da depositare:
+      // un file rifiutato non si trasforma in una scheda di testo (T15b).
+      if (!paths.length && text && !failure) {
+        const table = await this.#pastedTable(data, text);
+        if (stale()) return;
+        const url = table === null ? externalUrl(text.trim()) : null;
+        const node: CanvasNode = {
+          id: newNodeId("n"), type: url ? "link" : "text",
+          x: snap(point.x), y: snap(point.y), width: 320, height: 160,
+          ...(url ? { url } : { text: table ?? text }),
+        };
+        const patch = upsertNodePatch(this.#doc!, node);
         if (patch) patches.push(patch);
       }
-      for (const card of layout.cards) {
-        const id = newNodeId("n");
-        const patch = upsertNodePatch(this.#doc!, {
-          id, type: "file", file: card.path,
-          x: card.x, y: card.y, width: card.width, height: card.height,
-        });
-        if (patch) patches.push(patch);
-        bear(card.path, id);
-      }
+      // Un commit solo: un annulla toglie tutto ciò che è nato.
+      this.#commit(patches, "input");
+    } finally {
+      // Dopo le schede, e in ogni uscita: uscire presto non deve perdere l'errore.
+      if (failure) this.#showIntakeError(failure);
     }
-    if (!paths.length && text) {
-      const table = await this.#pastedTable(data, text);
-      if (stale()) return;
-      const url = table === null ? externalUrl(text.trim()) : null;
-      const node: CanvasNode = {
-        id: newNodeId("n"), type: url ? "link" : "text",
-        x: snap(point.x), y: snap(point.y), width: 320, height: 160,
-        ...(url ? { url } : { text: table ?? text }),
-      };
-      const patch = upsertNodePatch(this.#doc!, node);
-      if (patch) patches.push(patch);
-    }
-    // Un commit solo: un annulla toglie tutto ciò che è nato.
-    this.#commit(patches, "input");
   }
 
   /**
