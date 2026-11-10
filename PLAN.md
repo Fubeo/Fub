@@ -2251,7 +2251,7 @@ nelle celle colorate del file.
 Fatto quando: la pagina c'è, passa `sanitizeThemeCss`, e ha «Approvato» con
 la data nella pagina e nel piano.
 Prova: grep -n "Approvato" PLAN-ui/lavagna-modifica.html PLAN.md
-Stato: [ ] da fare
+Stato: [x] fatto (2026-11-10, Approvato: 2026-11-10, con le varianti consigliate: la barra di formato e la formula nella riga delle opzioni; la scheda in scrittura con l'anello di T25 e «Esc per uscire» pieno d'accento; «Apri a lato su B3», «… su «Scopo»», «… alla pagina 3». L'utente sa che cambierà più avanti)
 
 ## T28 · Il prototipo degli estratti
 
@@ -2285,7 +2285,7 @@ non c'è più; il selettore su una finestra di 700 px.
 Fatto quando: la pagina c'è, passa `sanitizeThemeCss`, e ha «Approvato» con
 la data nella pagina e nel piano.
 Prova: grep -n "Approvato" PLAN-ui/lavagna-estratti.html PLAN.md
-Stato: [ ] da fare
+Stato: [x] fatto (2026-11-10, Approvato: 2026-11-10, con le varianti consigliate: il selettore si apre al rilascio (Alt lo salta, `canvas.parts_picker` lo spegne); un estratto si riconosce dalla testata con le parti; «Mostra tutto il file» nel menu della scheda e in Ctrl+/; a 700 px il selettore va sotto la scheda, in una colonna. L'utente sa che cambierà più avanti)
 
 ## T29 · Il foglio nasce 480×300
 
