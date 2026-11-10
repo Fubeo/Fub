@@ -43,7 +43,7 @@
 | `SettingSpec` e i livelli delle impostazioni | `crates/fub-abi/src/settings.rs` |
 | `perf.probe` (la sonda N0) | `crates/fub-host/src/settings.rs`, montata da `apps/client/src/perf/` |
 | `draw.workspace` (Semplice o Completo) | le impostazioni della feature `draw`, `crates/fub-features/src/draw.rs` |
-| il registro dei comandi del vault | `crates/fub-features/src/commands.rs` (dogfood del `CommandProvider`) |
+| il registro dei comandi del vault | `crates/fub-features/src/commands.rs` e i suoi moduli in `commands/` (dogfood del `CommandProvider`) |
 | il catalogo dei comandi dei fogli | `crates/fub-abi/src/grid_bytes.rs`, servito in `crates/fub-format-xlsx` |
 | il lessico dei menu | `apps/client/src/i18n/lexicon.ts` |
 | le stringhe della shell | `apps/client/src/i18n/catalog.ts` |
