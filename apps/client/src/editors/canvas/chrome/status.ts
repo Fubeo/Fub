@@ -1,0 +1,131 @@
+// La banda di stato della lavagna (T52): sotto la lavagna, nella banda della
+// shell, lo zoom (un clic apre 50%, 100%, 200%, Mostra tutta la lavagna,
+// Inquadra la selezione), le schede scelte, la sola lettura col perché e la
+// cartella dove vanno i file trascinati (un clic apre le Impostazioni su
+// `files.attachment-folder`, la voce che «Cambia cartella» apre già).
+//
+// Il modello è la banda del disegno (`editors/spatial/tools/editor/chrome/
+// status.ts`): la tela tiene le voci, la superficie le dà alla shell
+// (`EditorSurface.status`), e la shell le disegna solo quando la lavagna ha il
+// fuoco. Le voci si leggono quando la shell le disegna; la tela le dice
+// cambiate a fine gesto (`onStatusChange`), non a ogni fotogramma.
+//
+// Che cosa non c'è ancora: le copie della stessa nota (C14, T22: non c'è un
+// modo per contarle sulla lavagna), e il modo della lavagna, che la shell dice
+// già con le sue modalità.
+
+import { settings } from "../../../host/query";
+import { t } from "../../../i18n/strings";
+import { folderForNote } from "../../../rules/mirrored";
+import type { SurfaceStatusItem } from "../../core/registry";
+import { DEFAULT_ATTACHMENT_FOLDER } from "../../media/attachment-target";
+import { showContextMenu, type MenuItem, type MenuPoint } from "../../../ui/menu";
+
+/// L'impostazione che la cartella dei file trascinati segue (`canvas.drop_folder`
+/// non ancora: T34). È la voce che «Cambia cartella» e la banda aprono.
+export const ATTACHMENT_FOLDER_KEY = "files.attachment-folder";
+
+/// Le misure dello zoom del menu, in percentuale: 100 è 1:1.
+export const CANVAS_ZOOM_PRESETS: readonly number[] = [50, 100, 200];
+
+/// Un comando del catalogo come la banda lo mostra nel suo menu.
+export interface CanvasStatusCommand {
+  readonly label: string;
+  readonly hint: string;
+  /// Perché adesso non si può, o `null`.
+  readonly disabled: string | null;
+  run(): void;
+}
+
+/// Ciò che la banda legge della lavagna e ciò che la banda può chiedere.
+export interface CanvasStatusPort {
+  /// Lo zoom in percentuale intera.
+  zoomPercent(): number;
+  /// Quante schede sono scelte adesso.
+  chosenCount(): number;
+  /// Perché la lavagna non si cambia adesso, o `null` se si cambia.
+  readOnlyWhy(): string | null;
+  /// La cartella dove vanno i file trascinati adesso.
+  folder(): string;
+  /// Lo zoom assoluto, al centro della vista.
+  zoomTo(zoom: number): void;
+  /// Un comando del catalogo per id, o `null` se la lavagna non lo conosce.
+  command(id: string): CanvasStatusCommand | null;
+  /// Il punto della finestra dove si apre il menu dello zoom.
+  zoomMenuAt(): MenuPoint;
+  /// Apre le Impostazioni su una voce; assente se non c'è un modo per farlo.
+  openSettings?: (key: string) => void;
+}
+
+/// La cartella degli allegati delle note come la scrive l'impostazione, o `null`
+/// se non è un testo: il deposito fa lo stesso (`document-controller`).
+export async function readAttachmentFolder(): Promise<string | null> {
+  const entry = (await settings()).find((item) => item.spec.key === ATTACHMENT_FOLDER_KEY);
+  return typeof entry?.value === "string" ? entry.value : null;
+}
+
+/// La cartella dove vanno i file trascinati nella lavagna `documentId`: quella
+/// degli allegati della nota, con la stessa regola del deposito (`folderForNote`).
+export function dropFolderOf(declared: string | null, documentId: string): string {
+  return folderForNote(declared ?? DEFAULT_ATTACHMENT_FOLDER, documentId);
+}
+
+/// Le voci della banda adesso, nell'ordine in cui la shell le mette.
+export function canvasStatusItems(port: CanvasStatusPort): SurfaceStatusItem[] {
+  const items: SurfaceStatusItem[] = [];
+  const percent = port.zoomPercent();
+  items.push({
+    id: "zoom",
+    text: `${percent}%`,
+    hint: t("canvas.status.zoom", { n: percent }),
+    open: () => openZoomMenu(port),
+  });
+  const chosen = port.chosenCount();
+  if (chosen === 1) items.push({ id: "chosen", text: t("canvas.status.chosen.one") });
+  else if (chosen > 1) items.push({ id: "chosen", text: t("canvas.status.chosen", { n: chosen }) });
+  const why = port.readOnlyWhy();
+  if (why !== null) items.push({ id: "readonly", text: t("canvas.status.readonly"), hint: why });
+  const folder = port.folder();
+  const openSettings = port.openSettings;
+  if (openSettings) {
+    items.push({
+      id: "folder",
+      text: folder,
+      hint: t("canvas.status.folder.open", { folder }),
+      open: () => openSettings(ATTACHMENT_FOLDER_KEY),
+    });
+  } else {
+    items.push({ id: "folder", text: folder, hint: t("canvas.status.folder", { folder }) });
+  }
+  return items;
+}
+
+/// Il menu dello zoom: le misure, poi «Mostra tutta la lavagna» e «Inquadra la
+/// selezione» coi loro comandi (i tasti e il perché, se spenti, sono i loro).
+export function openZoomMenu(port: CanvasStatusPort): void {
+  const current = port.zoomPercent();
+  const items: MenuItem[] = CANVAS_ZOOM_PRESETS.map((percent): MenuItem => ({
+    label: t("canvas.zoom.preset", { n: percent }),
+    choice: "radio",
+    checked: percent === current,
+    run: () => port.zoomTo(percent / 100),
+  }));
+  for (const id of ["canvas.fit", "canvas.fit_selection"]) {
+    const command = port.command(id);
+    if (command === null) continue;
+    items.push({
+      label: command.label,
+      hint: command.hint || undefined,
+      description: command.disabled ?? undefined,
+      disabled: command.disabled !== null,
+      separator: id === "canvas.fit",
+      run: () => command.run(),
+    });
+  }
+  showContextMenu(port.zoomMenuAt(), items, { label: t("canvas.status.zoom.menu") });
+}
+
+/// Una firma delle voci: la tela avvisa la banda solo quando cambia.
+export function statusSignature(items: readonly SurfaceStatusItem[]): string {
+  return items.map((item) => `${item.id}\u0000${item.text}\u0000${item.hint ?? ""}`).join("\u0001");
+}
