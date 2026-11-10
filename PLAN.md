@@ -2498,7 +2498,23 @@ seduta (una sola chiamata con `reuse` rifiutata); la foto della notifica
 con l'azione somiglia al prototipo T25.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/state/canvas-intake.test.ts src/editors/canvas/engine.test.ts
-Stato: [ ] da fare
+Stato: [x] fatto (2026-11-10). Differenze: la porta del motore è
+`CanvasDepositCards` (`live()`, `repoint(changes)`), terzo argomento di
+`CanvasAttachmentPort.deposit`; il motore ricorda per id le schede nate dal
+gesto, e un solo Ctrl+Z torna ai file riusati. `depositCanvasFiles` ha un
+quarto argomento facoltativo `cards`: senza, la notifica esce senza azione.
+Il ricordo dell'host senza `reuse` è la classe `ReuseSupport` di
+`transport.ts`, ultimo argomento facoltativo di `writeResource`, con un
+padrone per finestra in `host/ipc.ts` (toccato come chiamante); si ricorda
+solo se senza `reuse` l'host non dà più `bad_args`. Due file trascinati
+uguali allo stesso file del vault fanno una copia sola (una sola scheda).
+Dopo la copia esce anche «Copiati in…» o la notifica della cartella
+esclusa, con la regola del deposito. La copia rilegge il `File` al clic:
+se è cambiato sul disco, l'errore esce come notifica; una lavagna chiusa a
+metà di più copie lascia nel vault le copie già fatte. L'accento della
+notifica è quello della shell (verde), non il blu del prototipo: è il CSS
+di `notify` di prima. Toccati in più: `document-controller.ts` (passa
+`cards`), `canvas-cards.md`.
 
 ## T33 · Le impostazioni della lavagna, seconda parte
 

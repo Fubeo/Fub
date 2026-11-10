@@ -59,6 +59,11 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-10 · n6 · T32b integrato con il ricordo di `reuse` tenuto da
+  `host/ipc.ts`, fuori dalla riga «Tocca». · Perché: è l'unico chiamante
+  di `writeResource` con la vita di una finestra; un globale di modulo
+  non si potrebbe azzerare nei test.
+
 - 2026-11-10 · n6 · T17 integrato con l'avviso di «Togli» senza stile suo
   e Ctrl+] che sulla tastiera italiana non si fa. · Perché: nessun file
   della pelle era nel task (lo stile arriva con T22/T89), e cambiare un
