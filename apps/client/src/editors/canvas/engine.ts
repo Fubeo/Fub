@@ -107,6 +107,8 @@ import {
 import { createColorPicker, openPopover, type PopoverHandle } from "../../kit";
 import { DEFAULT_PREFERENCES, currentPreferences, readInkMouse, readPen, saveInkMouse, savePen, watchPreferences, type WheelAction } from "./preferences";
 import { isTap, pinchCamera, type TouchCamera, type TouchPoint, type ZoomLimits } from "./touch";
+import { fit, stepCamera, zoomAtPoint, type Camera, type MotionState, type ScaleLimits } from "../../spatial/camera";
+import { onReducedMotionChange, reducedMotion } from "../../theme/reduced-motion";
 import {
   DEFAULT_INK_CHOICE,
   dryStroke,
@@ -543,6 +545,16 @@ interface Viewport {
   zoom: number;
 }
 
+/** Un punto della scia di uno spostamento, in px del client, col suo tempo in ms (T53). */
+interface PanSample {
+  readonly t: number;
+  readonly x: number;
+  readonly y: number;
+}
+
+/** Dove sta il puntatore di un trascinamento, e i tasti tenuti: ciò che serve per rifare il passo (T53). */
+type PointerAt = Pick<PointerEvent, "pointerId" | "clientX" | "clientY" | "shiftKey" | "altKey">;
+
 /** Sotto il dito fanno come col mouse: i controlli sempre, le maniglie se la lavagna si cambia. */
 const FINGER_CONTROLS = "button, a, input, textarea, select, [contenteditable]:not([contenteditable='false'])";
 /**
@@ -579,11 +591,59 @@ interface ConnectGesture {
 
 const FINGER_HANDLES = ".canvas-node-handle, [data-resize], [data-resize-frame], [data-reconnect], [data-connect], .canvas-port";
 
-/** I limiti dello zoom: la rotella, i pulsanti e il pizzico. */
-const ZOOM_LIMITS: ZoomLimits = { min: 0.1, max: 4 };
+/** I limiti dello zoom, dal 5% al 400% (T53): la rotella, i tasti, i pulsanti e il pizzico. */
+const ZOOM_LIMITS: ZoomLimits = { min: 0.05, max: 4 };
 
 function clampZoom(zoom: number): number {
   return Math.min(ZOOM_LIMITS.max, Math.max(ZOOM_LIMITS.min, zoom));
+}
+
+// --- muoversi (T53) ---------------------------------------------------------
+
+/** Il passo di + e −, lo stesso del disegno (`ZOOM_STEP` dei disegni, 1,25). */
+export const CANVAS_ZOOM_STEP = 1.25;
+
+/**
+ * «Mostra tutto» non ingrandisce oltre il 100%, e lascia attorno alle schede
+ * un margine di `FIT_MARGIN` unità della lavagna per lato, come prima.
+ */
+const FIT_LIMITS: ScaleLimits = { min: ZOOM_LIMITS.min, max: 1 };
+const FIT_MARGIN = 80;
+
+/** A meno di tanti px dal bordo della vista, un trascinamento la fa scorrere. */
+export const EDGE_SCROLL_ZONE = 40;
+
+/** La velocità dello scorrimento al bordo, in px dello schermo al ms, sul bordo e fuori. */
+export const EDGE_SCROLL_MAX = 1.2;
+
+/** L'inerzia parte solo da un dito che va almeno a tanto, in px al ms. */
+const INERTIA_MIN_SPEED = 0.05;
+
+/** La velocità del dito si misura sugli ultimi ms del gesto. */
+const INERTIA_WINDOW_MS = 100;
+
+/** Il passo più lungo di un fotogramma, in ms: dopo una pausa del browser la vista non salta. */
+const MAX_FRAME_MS = 64;
+
+/** La camera della tela nella forma di `spatial/camera.ts`, e ritorno. */
+function toCamera(view: Viewport): Camera {
+  return { scale: view.zoom, tx: view.x, ty: view.y };
+}
+
+function fromCamera(camera: Camera): Viewport {
+  return { x: camera.tx, y: camera.ty, zoom: camera.scale };
+}
+
+/**
+ * La velocità dello scorrimento al bordo su un asse, in px al ms: `near` è la
+ * distanza dal bordo di inizio, `far` da quello di fine (negative fuori dalla
+ * vista). Positiva verso la fine, negativa verso l'inizio, zero fuori dalla
+ * fascia; più veloce più si è vicini, la massima sul bordo e oltre.
+ */
+export function edgeScrollSpeed(near: number, far: number): number {
+  const pull = (distance: number): number =>
+    distance >= EDGE_SCROLL_ZONE ? 0 : EDGE_SCROLL_MAX * Math.min(1, 1 - Math.max(0, distance) / EDGE_SCROLL_ZONE);
+  return pull(far) - pull(near);
 }
 
 /** Le due camere sono la stessa. */
@@ -966,7 +1026,16 @@ export class CanvasEngine {
    * Ctrl+clic (Cmd+clic): se il puntatore si alza senza essersi mosso, la
    * scheda entra nella scelta o ne esce, come con Maiuscolo.
    */
-  #pan: { pointerId: number; startX: number; startY: number; camX: number; camY: number; toggle?: string } | null = null;
+  #pan: {
+    pointerId: number;
+    startX: number;
+    startY: number;
+    camX: number;
+    camY: number;
+    toggle?: string;
+    /** Gli ultimi punti del puntatore, col loro tempo: la velocità dell'inerzia del dito (T53). */
+    trail?: PanSample[];
+  } | null = null;
   /** Il filo che si sta tirando (T67). */
   #connect: ConnectGesture | null = null;
   /** Il tratto del filo in corso, nello strato dei fili; e la scheda sotto il puntatore. */
@@ -996,6 +1065,24 @@ export class CanvasEngine {
   #fingerMovesCardSetting = false;
   /** «La rotella del mouse» dalle Impostazioni: `pan` di serie, come prima di T35. */
   #wheelSetting: WheelAction = DEFAULT_PREFERENCES.wheel;
+  // --- muoversi (T53) ---
+  /** Spazio tenuto sulla lavagna: il tasto principale sposta la vista, con qualsiasi strumento. */
+  #spaceHeld = false;
+  /**
+   * Il volo di un salto o l'inerzia del dito: lo stato che `stepCamera`
+   * insegue, e il tempo dell'ultimo fotogramma. `null` a vista ferma.
+   */
+  #motion: { state: MotionState; last: number | null } | null = null;
+  #motionFrame: number | undefined = undefined;
+  /**
+   * Lo scorrimento al bordo mentre si tira una scheda, una maniglia o un filo:
+   * l'ultimo punto del puntatore, i tasti tenuti e il tempo dell'ultimo
+   * fotogramma. `null` fuori dalla fascia del bordo.
+   */
+  #edgeScroll: { pointerId: number; clientX: number; clientY: number; shiftKey: boolean; altKey: boolean; last: number | null } | null = null;
+  #edgeFrame: number | undefined = undefined;
+  /** Il movimento ridotto, di sistema o dalle Impostazioni, letto dal vivo. */
+  #reducedMotion = reducedMotion();
   readonly #port: CanvasCorePort;
   /** La lavagna aperta nel nucleo; `null` prima di aprirla o dopo una trappola. */
   #core: CanvasCore | null = null;
@@ -1257,6 +1344,29 @@ export class CanvasEngine {
     });
     this.#life.listen(window, "blur", () => this.#releaseInkKey());
     this.#life.listen(document, "visibilitychange", () => this.#releaseInkKey());
+    // Muoversi (T53). Spazio lasciato ovunque, o la finestra che perde il
+    // fuoco: il tasto principale torna allo strumento. Con la finestra che
+    // perde il fuoco l'inerzia e lo scorrimento al bordo si fermano, e un
+    // volo arriva dove andava.
+    this.#life.listen(window, "keyup", (event) => {
+      if (event.key === " ") this.#releaseSpace();
+    });
+    this.#life.listen(window, "blur", () => this.#stillCamera());
+    this.#life.listen(document, "visibilitychange", () => {
+      if (document.hidden) this.#stillCamera();
+    });
+    this.#life.add(onReducedMotionChange((reduced) => {
+      this.#reducedMotion = reduced;
+      // Cambiato a lavagna aperta: un volo arriva subito, l'inerzia si ferma.
+      if (reduced) this.#stopMotion(true);
+    }));
+    this.#life.add(() => {
+      this.#stopMotion(false);
+      this.#stopEdgeScroll();
+    });
+    // Prima dello strato della penna, che ferma i suoi eventi: ogni
+    // appoggio, anche della penna, ferma la vista che scorre da sola.
+    this.#viewport.addEventListener("pointerdown", () => this.#stopMotion(false), { signal, capture: true });
     this.#viewport.addEventListener("dblclick", (event) => this.#dblclick(event), { signal });
     // Prima del contenuto delle schede: fuori da una scheda attiva il clic
     // sceglie, entra, o segue un link con Ctrl, e non arriva al contenuto.
@@ -2131,7 +2241,8 @@ export class CanvasEngine {
    * lo strumento Gomma del menu.
    */
   #applyInkMouse(): void {
-    const on = this.#inkMouseOn;
+    // Con Spazio tenuto il mouse sposta la vista (T53).
+    const on = this.#inkMouseOn && !this.#spaceHeld;
     const layer = this.#inkLayer;
     layer?.setMouse(on ? "ink" : "ignore");
     if (on && layer) this.#viewport.dataset.ink = this.#penChoice.tool === "eraser" ? "eraser" : "pen";
@@ -2678,14 +2789,21 @@ export class CanvasEngine {
   }
 
   #fitCamera(announce = true, nodes = this.#doc?.nodes ?? []): void {
-    if (!nodes.length) {
-      this.#camera = { x: 24, y: 24, zoom: 1 };
-      if (announce) {
-        this.#applyCamera();
-        this.#refreshLive();
-      }
-      return;
+    this.#stopMotion(false);
+    this.#camera = this.#fitTarget(nodes);
+    if (announce) {
+      this.#applyCamera();
+      this.#refreshLive();
     }
+  }
+
+  /**
+   * La camera che mostra tutte le schede `nodes` (T53: con `fit` di
+   * `spatial/camera.ts`): al centro, con `FIT_MARGIN` per lato, mai oltre il
+   * 100%. Senza schede, il 100% con l'origine in alto a sinistra.
+   */
+  #fitTarget(nodes: readonly CanvasNode[]): Viewport {
+    if (!nodes.length) return { x: 24, y: 24, zoom: 1 };
     let minX = Infinity;
     let minY = Infinity;
     let maxX = -Infinity;
@@ -2696,33 +2814,225 @@ export class CanvasEngine {
       maxX = Math.max(maxX, node.x + node.width);
       maxY = Math.max(maxY, node.y + node.height);
     }
-    const width = Math.max(1, maxX - minX);
-    const height = Math.max(1, maxY - minY);
     const rect = this.#viewport.getBoundingClientRect();
-    const viewW = Math.max(1, rect.width || 800);
-    const viewH = Math.max(1, rect.height || 600);
-    const zoom = clampZoom(Math.min(viewW / (width + 160), viewH / (height + 160), 1));
-    this.#camera = {
-      zoom,
-      x: (viewW - width * zoom) / 2 - minX * zoom,
-      y: (viewH - height * zoom) / 2 - minY * zoom,
+    const view = { w: Math.max(1, rect.width || 800), h: Math.max(1, rect.height || 600) };
+    // Il margine sta nei bordi, in unità della lavagna: il centro non cambia.
+    const bounds = {
+      minX: minX - FIT_MARGIN,
+      minY: minY - FIT_MARGIN,
+      maxX: Math.max(minX + 1, maxX) + FIT_MARGIN,
+      maxY: Math.max(minY + 1, maxY) + FIT_MARGIN,
     };
-    if (announce) {
-      this.#applyCamera();
-      this.#refreshLive();
-    }
+    return fromCamera(fit(bounds, view, 0, 0, FIT_LIMITS));
   }
 
   #zoomAt(clientX: number, clientY: number, factor: number): void {
-    const before = this.#screenToWorld(clientX, clientY);
-    this.#camera.zoom = clampZoom(this.#camera.zoom * factor);
+    this.#stopMotion(false);
     const rect = this.#viewport.getBoundingClientRect();
-    this.#camera.x = clientX - rect.left - before.x * this.#camera.zoom;
-    this.#camera.y = clientY - rect.top - before.y * this.#camera.zoom;
+    const at = { x: clientX - rect.left, y: clientY - rect.top };
+    this.#camera = fromCamera(zoomAtPoint(toCamera(this.#camera), factor, at, ZOOM_LIMITS));
     this.#applyCamera();
     // Dai pulsanti e dai tasti lo zoom è un gesto finito; dalla rotella il
     // gesto è ancora in corso e `#refreshLive` aspetta che finisca.
     this.#refreshLive();
+  }
+
+  // --- muoversi (T53) ---------------------------------------------------------
+
+  /**
+   * Il salto della camera a `target`: Maiusc+1, Maiusc+2 e 0. È il solo posto
+   * da cui la vista salta (il navigatore di T55 e Indietro e Avanti di T56
+   * passeranno di qui). Vola con `stepCamera`; col movimento ridotto arriva
+   * subito, senza volo.
+   */
+  #jumpCamera(target: Viewport): void {
+    this.#stopMotion(false);
+    const goal: Viewport = { x: target.x, y: target.y, zoom: clampZoom(target.zoom) };
+    if (this.#reducedMotion || sameViewport(goal, this.#camera)) {
+      this.#camera = goal;
+      this.#applyCamera();
+      this.#refreshLive();
+      return;
+    }
+    const from = this.#camera;
+    this.#runMotion({
+      scale: from.zoom, tx: from.x, ty: from.y,
+      targetScale: goal.zoom, targetTx: goal.x, targetTy: goal.y,
+      vx: 0, vy: 0,
+    });
+  }
+
+  /** «0»: il 100% sul centro della vista. */
+  #zoomToActual(): void {
+    const rect = this.#viewport.getBoundingClientRect();
+    const center = { x: (rect.width || 800) / 2, y: (rect.height || 600) / 2 };
+    this.#jumpCamera(fromCamera(zoomAtPoint(toCamera(this.#camera), 1 / this.#camera.zoom, center, ZOOM_LIMITS)));
+  }
+
+  /**
+   * L'inerzia dopo uno spostamento col dito: la vista va avanti alla
+   * velocità del gesto (px al ms) e rallenta con `stepCamera`. Col movimento
+   * ridotto niente.
+   */
+  #fling(vx: number, vy: number): void {
+    if (this.#reducedMotion || Math.hypot(vx, vy) < INERTIA_MIN_SPEED) return;
+    const at = this.#camera;
+    this.#runMotion({ scale: at.zoom, tx: at.x, ty: at.y, targetScale: at.zoom, targetTx: at.x, targetTy: at.y, vx, vy });
+  }
+
+  /** La velocità alla fine di uno spostamento, in px al ms, sugli ultimi `INERTIA_WINDOW_MS` della scia. */
+  #panSpeed(trail: readonly PanSample[], end: PanSample): { vx: number; vy: number } {
+    const first = trail.find((point) => end.t - point.t <= INERTIA_WINDOW_MS);
+    if (!first || end.t - first.t <= 0) return { vx: 0, vy: 0 };
+    return { vx: (end.x - first.x) / (end.t - first.t), vy: (end.y - first.y) / (end.t - first.t) };
+  }
+
+  #runMotion(state: MotionState): void {
+    this.#motion = { state, last: null };
+    if (this.#motionFrame === undefined) this.#motionFrame = requestAnimationFrame((now) => this.#motionStep(now));
+  }
+
+  #motionStep(now: number): void {
+    this.#motionFrame = undefined;
+    const motion = this.#motion;
+    if (!motion || this.#destroyed) return;
+    if (this.#reducedMotion) {
+      this.#stopMotion(true);
+      return;
+    }
+    const dt = motion.last === null ? 16 : Math.min(MAX_FRAME_MS, Math.max(0, now - motion.last));
+    motion.last = now;
+    const state = stepCamera(motion.state, dt);
+    motion.state = state;
+    const resting = Math.abs(state.scale - state.targetScale) < 0.001
+      && Math.abs(state.tx - state.targetTx) < 0.5
+      && Math.abs(state.ty - state.targetTy) < 0.5
+      && state.vx === 0 && state.vy === 0;
+    if (resting) {
+      this.#stopMotion(true);
+      return;
+    }
+    this.#camera = { x: state.tx, y: state.ty, zoom: state.scale };
+    this.#applyCamera();
+    this.#motionFrame = requestAnimationFrame((later) => this.#motionStep(later));
+  }
+
+  /**
+   * Ferma il volo o l'inerzia. Con `arrive` la vista va dove andava (il volo
+   * finisce sul suo bersaglio, l'inerzia dov'è) e le schede vive si rifanno.
+   */
+  #stopMotion(arrive: boolean): void {
+    if (this.#motionFrame !== undefined) cancelAnimationFrame(this.#motionFrame);
+    this.#motionFrame = undefined;
+    const motion = this.#motion;
+    if (!motion) return;
+    this.#motion = null;
+    if (!arrive || this.#destroyed) return;
+    const { targetScale, targetTx, targetTy } = motion.state;
+    this.#camera = { x: targetTx, y: targetTy, zoom: targetScale };
+    this.#applyCamera();
+    this.#refreshLive();
+  }
+
+  /** La finestra perde il fuoco: niente scorre più da solo, e Spazio non è più tenuto. */
+  #stillCamera(): void {
+    this.#releaseSpace();
+    this.#stopEdgeScroll();
+    this.#stopMotion(true);
+  }
+
+  /**
+   * Spazio giù sulla lavagna o su una scheda (non in un campo né dentro la
+   * scheda attiva): `true` se l'ha preso. Con una penna giù non vale (la
+   * penna ha la precedenza), ma la pagina non scorre.
+   */
+  #holdSpace(event: KeyboardEvent): boolean {
+    if (event.key !== " " || event.ctrlKey || event.metaKey || event.altKey) return false;
+    if (isTextTarget(event.target) || !this.#onCardOrBoard(event.target)) return false;
+    event.preventDefault();
+    if (this.#spaceHeld || this.#penDown) return true;
+    this.#spaceHeld = true;
+    this.#viewport.toggleAttribute("data-space-pan", true);
+    // Il mouse che scrive torna alla lavagna finché Spazio è giù.
+    this.#applyInkMouse();
+    return true;
+  }
+
+  #releaseSpace(): void {
+    if (!this.#spaceHeld) return;
+    this.#spaceHeld = false;
+    this.#viewport.removeAttribute("data-space-pan");
+    if (!this.#destroyed) this.#applyInkMouse();
+  }
+
+  /**
+   * Un trascinamento (una scheda, una maniglia, un filo) si è mosso a
+   * `event`: vicino al bordo della vista la fa scorrere, fuori dalla fascia
+   * smette. Il primo fotogramma parte da qui.
+   */
+  #trackEdge(event: PointerEvent): void {
+    const speed = this.#edgeSpeed(event.clientX, event.clientY);
+    if (speed.x === 0 && speed.y === 0) {
+      this.#stopEdgeScroll();
+      return;
+    }
+    const last = this.#edgeScroll?.last ?? null;
+    this.#edgeScroll = {
+      pointerId: event.pointerId, clientX: event.clientX, clientY: event.clientY,
+      shiftKey: event.shiftKey, altKey: event.altKey, last,
+    };
+    if (this.#edgeFrame === undefined) this.#edgeFrame = requestAnimationFrame((now) => this.#edgeStep(now));
+  }
+
+  /** La velocità dello scorrimento al bordo nel punto, in px al ms, verso dove va la vista. */
+  #edgeSpeed(clientX: number, clientY: number): { x: number; y: number } {
+    const rect = this.#viewport.getBoundingClientRect();
+    if (!rect.width || !rect.height) return { x: 0, y: 0 };
+    return {
+      x: edgeScrollSpeed(clientX - rect.left, rect.right - clientX),
+      y: edgeScrollSpeed(clientY - rect.top, rect.bottom - clientY),
+    };
+  }
+
+  #edgeStep(now: number): void {
+    this.#edgeFrame = undefined;
+    const edge = this.#edgeScroll;
+    if (!edge || this.#destroyed) return;
+    const drag = this.#drag?.pointerId === edge.pointerId ? this.#drag : null;
+    const resize = this.#resize?.pointerId === edge.pointerId ? this.#resize : null;
+    const connect = this.#connect?.pointerId === edge.pointerId ? this.#connect : null;
+    if (!drag && !resize && !connect) {
+      this.#stopEdgeScroll();
+      return;
+    }
+    const dt = edge.last === null ? 16 : Math.min(MAX_FRAME_MS, Math.max(0, now - edge.last));
+    edge.last = now;
+    const speed = this.#edgeSpeed(edge.clientX, edge.clientY);
+    // La vista va verso il bordo: la lavagna scorre al contrario.
+    const dx = -speed.x * dt;
+    const dy = -speed.y * dt;
+    this.#camera = { ...this.#camera, x: this.#camera.x + dx, y: this.#camera.y + dy };
+    this.#applyCamera();
+    // Ciò che si tira resta sotto il puntatore fermo: il punto di partenza
+    // del gesto scorre con la lavagna.
+    if (drag) {
+      drag.startX += dx;
+      drag.startY += dy;
+      this.#moveDrag(edge);
+    } else if (resize) {
+      resize.startX += dx;
+      resize.startY += dy;
+      this.#moveResize(edge);
+    } else {
+      this.#moveConnect(edge.clientX, edge.clientY);
+    }
+    this.#edgeFrame = requestAnimationFrame((later) => this.#edgeStep(later));
+  }
+
+  #stopEdgeScroll(): void {
+    if (this.#edgeFrame !== undefined) cancelAnimationFrame(this.#edgeFrame);
+    this.#edgeFrame = undefined;
+    this.#edgeScroll = null;
   }
 
   // --- toolbar ----------------------------------------------------------------
@@ -3947,23 +4257,23 @@ export class CanvasEngine {
       case "canvas.fit":
         return {
           disabled: () => null,
-          run: () => {
-            this.#fitCamera();
-            this.#render();
-          },
+          // Un salto (T53): vola, o arriva subito col movimento ridotto.
+          run: () => this.#jumpCamera(this.#fitTarget(this.#doc?.nodes ?? [])),
         };
       case "canvas.fit_selection":
         return {
           disabled: () => (this.#selectedNodes().length ? null : t("canvas.commands.why.no_selection")),
-          run: () => this.#fitCamera(true, this.#selectedNodes()),
+          run: () => this.#jumpCamera(this.#fitTarget(this.#selectedNodes())),
         };
+      case "canvas.zoom_reset":
+        return { disabled: () => null, run: () => this.#zoomToActual() };
       case "canvas.zoom_in":
       case "canvas.zoom_out":
         return {
           disabled: () => null,
           run: (args) => {
             const at = args?.at ?? center();
-            this.#zoomAt(at.x, at.y, id === "canvas.zoom_in" ? 1.2 : 1 / 1.2);
+            this.#zoomAt(at.x, at.y, id === "canvas.zoom_in" ? CANVAS_ZOOM_STEP : 1 / CANVAS_ZOOM_STEP);
           },
         };
       default:
@@ -4473,6 +4783,15 @@ export class CanvasEngine {
     // Ctrl+clic (Cmd+clic) su un link di una scheda lo segue (D-18 (c)): il
     // `click` deve arrivare al link, non a uno spostamento della lavagna.
     if (event.button === 0 && modifier && this.#cardLinkAt(event.target) !== null) return;
+    // Spazio tenuto: il tasto principale sposta la vista, con qualsiasi
+    // strumento e sopra ogni cosa (T53).
+    if (event.button === 0 && this.#spaceHeld) {
+      // Il clic che segue non entra nella scheda scelta sotto il puntatore.
+      this.#pressedSelected = null;
+      this.#beginPan(event.pointerId, event.clientX, event.clientY);
+      event.preventDefault();
+      return;
+    }
     // Una maniglia vince su Alt (dal centro) e su Maiusc (le proporzioni):
     // i tasti si leggono mentre si tira (T66). La Mano sposta e basta.
     if (event.button === 0 && !modifier && this.#tool !== "hand" && this.#resizeFromHandle(event)) return;
@@ -4880,7 +5199,7 @@ export class CanvasEngine {
    * senza che una scheda scenda sotto il minimo. L'inchiostro attaccato sta
    * nella scheda e la segue nella resa (N4).
    */
-  #moveResize(event: PointerEvent): void {
+  #moveResize(event: PointerAt): void {
     const resize = this.#resize;
     const doc = this.#doc;
     if (!resize || !doc) return;
@@ -5009,6 +5328,8 @@ export class CanvasEngine {
     if (event.pointerType === "touch" && this.#touchMove(event)) return;
     if (this.#connect && event.pointerId === this.#connect.pointerId) {
       this.#moveConnect(event.clientX, event.clientY);
+      // Vicino al bordo la vista scorre da sola (T53).
+      if (this.#connect.moved) this.#trackEdge(event);
       return;
     }
     if (!this.#pan && !this.#resize && !this.#drag && event.pointerType === "mouse") {
@@ -5017,28 +5338,44 @@ export class CanvasEngine {
     if (this.#pan && event.pointerId === this.#pan.pointerId) {
       this.#camera.x = this.#pan.camX + (event.clientX - this.#pan.startX);
       this.#camera.y = this.#pan.camY + (event.clientY - this.#pan.startY);
+      // La scia del dito, per l'inerzia del rilascio (T53).
+      if (event.pointerType === "touch") {
+        const trail = this.#pan.trail ??= [];
+        trail.push({ t: event.timeStamp, x: event.clientX, y: event.clientY });
+        while (trail.length > 1 && event.timeStamp - trail[0]!.t > INERTIA_WINDOW_MS) trail.shift();
+      }
       this.#applyCamera();
       return;
     }
     if (this.#resize && event.pointerId === this.#resize.pointerId && this.#doc) {
       this.#moveResize(event);
+      if (this.#resize.moved) this.#trackEdge(event);
       return;
     }
     if (this.#drag && event.pointerId === this.#drag.pointerId && this.#doc) {
-      const dx = (event.clientX - this.#drag.startX) / this.#camera.zoom;
-      const dy = (event.clientY - this.#drag.startY) / this.#camera.zoom;
-      if (Math.abs(event.clientX - this.#drag.startX) + Math.abs(event.clientY - this.#drag.startY) > 3) {
-        this.#drag.moved = true;
-      }
-      for (const [id, origin] of this.#drag.origin) {
-        const node = this.#doc.nodes.find((n) => n.id === id);
-        if (node) {
-          node.x = snap(origin.x + dx);
-          node.y = snap(origin.y + dy);
-        }
-      }
-      this.#renderLive();
+      this.#moveDrag(event);
+      if (this.#drag.moved) this.#trackEdge(event);
     }
+  }
+
+  /** Le schede che si trascinano seguono il puntatore `at`. */
+  #moveDrag(at: PointerAt): void {
+    const drag = this.#drag;
+    const doc = this.#doc;
+    if (!drag || !doc) return;
+    const dx = (at.clientX - drag.startX) / this.#camera.zoom;
+    const dy = (at.clientY - drag.startY) / this.#camera.zoom;
+    if (Math.abs(at.clientX - drag.startX) + Math.abs(at.clientY - drag.startY) > 3) {
+      drag.moved = true;
+    }
+    for (const [id, origin] of drag.origin) {
+      const node = doc.nodes.find((n) => n.id === id);
+      if (node) {
+        node.x = snap(origin.x + dx);
+        node.y = snap(origin.y + dy);
+      }
+    }
+    this.#renderLive();
   }
 
   /**
@@ -5053,10 +5390,17 @@ export class CanvasEngine {
   }
 
   #pointerRelease(event: PointerEvent): void {
+    // Il rilascio ferma lo scorrimento al bordo, anche fuori dalla finestra (T53).
+    if (this.#edgeScroll?.pointerId === event.pointerId) this.#stopEdgeScroll();
     if (event.pointerType === "touch" && this.#touchUp(event)) return;
     if (this.#pan && event.pointerId === this.#pan.pointerId) {
       const pan = this.#pan;
       this.#pan = null;
+      // Il dito lasciato in corsa: la vista va avanti da sola (T53).
+      if (event.pointerType === "touch" && pan.trail) {
+        const speed = this.#panSpeed(pan.trail, { t: event.timeStamp, x: event.clientX, y: event.clientY });
+        this.#fling(speed.vx, speed.vy);
+      }
       // Ctrl+clic fermo su una scheda: la aggiunge alla scelta, o la toglie.
       if (pan.toggle !== undefined
         && Math.abs(event.clientX - pan.startX) + Math.abs(event.clientY - pan.startY) <= 3) {
@@ -5345,6 +5689,7 @@ export class CanvasEngine {
     this.#resize = null;
     this.#pan = null;
     this.#endConnect();
+    this.#stopEdgeScroll();
     this.#fingers.clear();
     this.#tap = null;
     this.#pinch = null;
@@ -5409,6 +5754,8 @@ export class CanvasEngine {
     // pizzico ingrandiscono sempre la lavagna.
     if (!event.ctrlKey && !event.metaKey && this.#insideActive(event.target, true)) return;
     event.preventDefault();
+    // La rotella prende la vista: un volo o un'inerzia si fermano (T53).
+    this.#stopMotion(false);
     // Prima di muovere la camera: lo zoom della rotella è un gesto in corso.
     clearTimeout(this.#wheelTimer);
     this.#wheelTimer = setTimeout(() => {
@@ -5458,7 +5805,11 @@ export class CanvasEngine {
   }
 
   #keydown(event: KeyboardEvent): void {
-    if (!this.#doc || event.defaultPrevented || this.#isSceneOversized()) return;
+    if (!this.#doc || event.defaultPrevented) return;
+    // Spazio tenuto sulla lavagna sposta la vista, anche in una lavagna troppo
+    // grande (T53); in un campo o dentro la scheda attiva resta uno spazio.
+    if (!(this.#activeId !== null && this.#insideActive(event.target, false)) && this.#holdSpace(event)) return;
+    if (this.#isSceneOversized()) return;
     // Esc mentre si tira un filo lo lascia, e nient'altro (T67).
     if (event.key === "Escape" && this.#connect) {
       event.preventDefault();
@@ -5616,9 +5967,9 @@ export class CanvasEngine {
     return this.#drag !== null || this.#resize !== null || this.#pan !== null || this.#pinch !== null;
   }
 
-  /** Un gesto in corso, rotella compresa: nessuna scheda cambia modo. */
+  /** Un gesto in corso, rotella, volo e inerzia compresi (T53): nessuna scheda cambia modo. */
   #gestureActive(): boolean {
-    return this.#gestureMoving() || this.#wheelTimer !== undefined;
+    return this.#gestureMoving() || this.#wheelTimer !== undefined || this.#motion !== null;
   }
 
   /**

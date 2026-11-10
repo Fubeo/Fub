@@ -12,7 +12,8 @@
 Questa pagina serve a chi scrive un renderer di scheda (la parte che mostra
 una nota, un foglio, un PDF, un'immagine o una pagina web dentro la scheda) e
 a chi lavora sul motore della lavagna che li monta.
-Come si entra in una scheda, la rotella e i comandi con i loro tasti stanno in
+Come si entra in una scheda, la rotella, come ci si muove (lo zoom, Spazio, i
+salti, il bordo, l'inerzia) e i comandi con i loro tasti stanno in
 [I tasti e i gesti della lavagna](canvas-input.md).
 
 ## Schede vive e ferme

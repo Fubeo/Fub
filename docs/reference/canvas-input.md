@@ -1,7 +1,7 @@
 # I tasti e i gesti della lavagna
 
 > **Ambito:** come la tela della lavagna prende la tastiera, il puntatore e
-> la rotella: entrare in una scheda e uscirne, la rotella, il catalogo dei
+> la rotella: entrare in una scheda e uscirne, la rotella, muoversi, il catalogo dei
 > comandi e i loro tasti, i fili, le maniglie, la lavagna vuota, la colonna
 > degli strumenti, la riga delle opzioni, la banda di stato e l'ispettore.
 > **Fonti autorevoli:** `apps/client/src/editors/canvas/engine.ts`
@@ -81,10 +81,43 @@ dallo scatto dopo, senza riaprire la lavagna.
   touchpad resta usabile.
 - **Unità.** Una riga di `deltaMode` 1 vale 16 px, una pagina di `deltaMode`
   2 la misura della vista. Sono valori di partenza, non misure.
-- **Ai limiti** lo zoom (da 0,1 a 4) resta fermo, senza salto: il punto
+- **Ai limiti** lo zoom (da 0,05 a 4) resta fermo, senza salto: il punto
   sotto il puntatore non si sposta.
 - **Sopra una scheda non attiva** la rotella è della lavagna. **Dentro una
   scheda attiva** scorre la scheda, e Ctrl+rotella ingrandisce la lavagna.
+
+## Muoversi
+
+La vista si sposta e si ingrandisce dal 5% al 400% (`ZOOM_LIMITS`, 0,05–4),
+con la rotella, i tasti, il pizzico e la banda di stato. I conti della camera
+sono quelli di `spatial/camera.ts` (`zoomAtPoint`, `fit`, `stepCamera`).
+
+- **`+` e `-`** ingrandiscono e riducono a passi di 1,25 (`CANVAS_ZOOM_STEP`,
+  il passo del disegno) intorno al centro della vista, o al punto del menu.
+- **I salti.** `Maiusc+1` mostra tutte le schede, `Maiusc+2` la selezione
+  (senza selezione niente), `0` porta al 100% sul centro della vista. Mostra
+  tutto non va oltre il 100% e lascia 80 unità per lato. Il salto vola con
+  `stepCamera`; col movimento ridotto (di sistema o delle Impostazioni, letto
+  anche a lavagna aperta) arriva subito. Passa tutto da un solo punto
+  (`#jumpCamera`).
+- **Spazio tenuto** e trascina sposta la vista con qualsiasi strumento, anche
+  sopra una scheda e col mouse che scrive; la mano viene dal tema
+  (`data-space-pan`). Mentre si scrive in una scheda, o dentro la scheda
+  attiva, Spazio è uno spazio; con la penna giù non vale (la penna vince).
+- **Il tasto centrale** trascina e sposta, senza scegliere. Ctrl, Cmd e Alt
+  con un trascinamento nel vuoto spostano come prima; Alt dal corpo di una
+  scheda tira un filo ([I fili](#i-fili)).
+- **Al bordo.** Tirando una scheda, una maniglia o un filo a meno di 40 px dal
+  bordo della vista (`EDGE_SCROLL_ZONE`), la vista scorre da sola, più veloce
+  più si è vicini, fino a 1,2 px al ms sul bordo e fuori dalla finestra; ciò
+  che si tira resta sotto il puntatore. Si ferma al rilascio, con Esc, quando
+  il puntatore torna dentro e quando la finestra perde il fuoco.
+- **L'inerzia.** Il dito lasciato in corsa fa andare avanti la vista alla sua
+  velocità (gli ultimi 100 ms), che rallenta con `stepCamera`; col movimento
+  ridotto niente. Il touchpad arriva come rotella, con l'inerzia del sistema
+  dove il sistema la dà: la tela non ne aggiunge un'altra. Un appoggio, la rotella, un tasto
+  di zoom e la finestra che perde il fuoco fermano l'inerzia e il volo; la
+  lavagna chiusa li spegne.
 
 ## Comandi e tasti
 
@@ -108,7 +141,7 @@ scrive, valgono quelli della sessione). `Esc` torna dov'eri, anche in un campo.
 | `canvas.nudge.<lato>`, `canvas.nudge.<lato>.far` | frecce; `Maiusc`+frecce |
 | `canvas.bring_front`, `canvas.send_back` | `Ctrl+]`, `Ctrl+[` |
 | `canvas.fit`, `canvas.fit_selection` | `Maiusc+1`, `Ctrl+0`; `Maiusc+2` |
-| `canvas.zoom_in`, `canvas.zoom_out` | `+`, `Ctrl+=`; `-`, `Ctrl+-` |
+| `canvas.zoom_in`, `canvas.zoom_out`, `canvas.zoom_reset` | `+`, `Ctrl+=`; `-`, `Ctrl+-`; `0` |
 | `canvas.add.*`, `canvas.edit`, `canvas.open`, `canvas.open_url`, `canvas.edge.reverse`, `canvas.color.*`, `canvas.align.*`, `canvas.distribute_*` | nessuno |
 | `canvas.open_beside`, `canvas.open_viewer`, `canvas.web_preview`, `canvas.connect`, `canvas.trash_file` (il menu della scheda) | nessuno (`canvas.connect` anche con `C`, vedi sotto) |
 | `canvas.pen_menu`, `canvas.color_menu`, `canvas.align_menu`, `canvas.tips.none`, `.start`, `.end` (la riga delle opzioni) | nessuno |

@@ -3071,6 +3071,15 @@ body {
 .canvas-viewport[data-tool="connect"] {
   cursor: alias;
 }
+/* Spazio tenuto: la mano, con ogni strumento e sopra le schede. */
+.canvas-viewport[data-space-pan],
+.canvas-viewport[data-space-pan] * {
+  cursor: grab;
+}
+.canvas-viewport[data-space-pan]:active,
+.canvas-viewport[data-space-pan]:active * {
+  cursor: grabbing;
+}
 /* Il mouse che scrive (D tenuto o «Scrivi col mouse»): la croce, come
    l'inchiostro delle note. */
 .canvas-viewport[data-ink="pen"] {

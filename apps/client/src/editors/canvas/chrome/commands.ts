@@ -179,6 +179,7 @@ export const CANVAS_COMMANDS: readonly CanvasCommandSpec[] = [
   { id: "canvas.fit_selection", label: "canvas.fit_selection", group: "view", keys: ["Shift-2"], context: "selection" },
   { id: "canvas.zoom_in", label: "canvas.zoom_in", group: "view", keys: ["+", "Mod-=", "Mod-+"], context: "always" },
   { id: "canvas.zoom_out", label: "canvas.zoom_out", group: "view", keys: ["-", "Mod--"], context: "always" },
+  { id: "canvas.zoom_reset", label: "canvas.zoom_reset", group: "view", keys: ["0"], context: "always" },
   // La riga delle opzioni (T50): i menu che apre e le punte di Collega.
   { id: "canvas.pen_menu", label: "canvas.options.pen_menu", group: "tools", keys: [], context: "always" },
   { id: "canvas.color_menu", label: "canvas.options.color_menu", group: "color", keys: [], context: "selection" },
