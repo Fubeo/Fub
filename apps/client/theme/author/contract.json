@@ -876,6 +876,7 @@
     "canvas-node-handle",
     "canvas-connect",
     "canvas-resize",
+    "canvas-port",
     "canvas-card-body",
     "canvas-markdown",
     "canvas-empty",
@@ -1023,6 +1024,8 @@
     "rich-running-label",
     "rich-running-area",
     "rich-token",
+    "canvas-edge",
+    "canvas-edge-draft",
     "canvas-edge-hit",
     "canvas-edge-line",
     "canvas-edge-arrow",
@@ -2488,6 +2491,7 @@
     "canvas-node-handle": "segno",
     "canvas-connect": "segno",
     "canvas-resize": "segno",
+    "canvas-port": "segno",
     "canvas-card-body": "contenuto",
     "canvas-markdown": "contenuto",
     "canvas-empty": "contenuto",
@@ -2635,6 +2639,8 @@
     "rich-running-label": "segno",
     "rich-running-area": "segno",
     "rich-token": "segno",
+    "canvas-edge": "contenuto",
+    "canvas-edge-draft": "segno",
     "canvas-edge-hit": "segno",
     "canvas-edge-line": "contenuto",
     "canvas-edge-arrow": "contenuto",
@@ -5570,6 +5576,7 @@
         "canvas-node-handle",
         "canvas-connect",
         "canvas-resize",
+        "canvas-port",
         "canvas-card-body",
         "canvas-markdown",
         "canvas-empty",
@@ -5795,6 +5802,8 @@
       "name": "canvas-edge",
       "part": "editors",
       "hooks": [
+        "canvas-edge",
+        "canvas-edge-draft",
         "canvas-edge-hit",
         "canvas-edge-line",
         "canvas-edge-arrow",
@@ -5803,6 +5812,7 @@
       ],
       "states": [
         "rest",
+        "hover",
         "selected",
         "dragging"
       ]
@@ -8842,9 +8852,9 @@
   "counts": {
     "required_roles": 154,
     "optional_roles": 63,
-    "hooks": 1610,
+    "hooks": 1613,
     "state_names": 7,
-    "assigned_states": 760,
+    "assigned_states": 761,
     "components": 225,
     "preference_tokens": 186
   }

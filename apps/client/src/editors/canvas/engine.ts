@@ -133,6 +133,18 @@ import {
   type InkPatch,
 } from "./operation";
 import type { CanvasDocument, CanvasEdge, CanvasNode } from "./model";
+import {
+  EDGE_SIDES,
+  edgeAt,
+  edgePathData,
+  insideBox,
+  linkedCardPlacement,
+  nearestSides,
+  sidePoint,
+  type EdgePoint,
+  type EdgeSide,
+  type PlacedEdge,
+} from "./edges";
 import { CanvasViewRecorder, type CanvasView, type CanvasViewMemory, type CanvasViewSnapshot } from "./view-state";
 import {
   CanvasCoreError,
@@ -539,7 +551,32 @@ const FINGER_CONTROLS = "button, a, input, textarea, select, [contenteditable]:n
  */
 const NARROW_WIDTH = 700;
 const NARROW_PANE = 480;
-const FINGER_HANDLES = ".canvas-node-handle, [data-resize], [data-reconnect], [data-connect]";
+/** Il filo con cui nasce una scheda lasciata nel vuoto (T67): da `from`, dal lato `fromSide` se c'è. */
+interface CardLink {
+  readonly from: string;
+  readonly fromSide?: EdgeSide;
+}
+
+/**
+ * Il filo che si sta tirando (T67): da `from`, partito dal punto `fromSide`
+ * (senza: il lato lo sceglie `edges.ts` al rilascio), o l'estremità
+ * `endpoint` del filo `edgeId` che si riattacca. `back`: il filo di
+ * «Collega…», finito il quale la colonna torna alla Selezione. `moved` dice
+ * se il puntatore si è mosso: un clic fermo su un punto non fa una scheda.
+ */
+interface ConnectGesture {
+  readonly pointerId: number;
+  readonly from: string;
+  readonly fromSide?: EdgeSide;
+  readonly edgeId?: string;
+  readonly endpoint?: "from" | "to";
+  readonly back?: boolean;
+  readonly startX: number;
+  readonly startY: number;
+  moved: boolean;
+}
+
+const FINGER_HANDLES = ".canvas-node-handle, [data-resize], [data-reconnect], [data-connect], .canvas-port";
 
 /** I limiti dello zoom: la rotella, i pulsanti e il pizzico. */
 const ZOOM_LIMITS: ZoomLimits = { min: 0.1, max: 4 };
@@ -713,7 +750,13 @@ export class CanvasEngine {
    * scheda entra nella scelta o ne esce, come con Maiuscolo.
    */
   #pan: { pointerId: number; startX: number; startY: number; camX: number; camY: number; toggle?: string } | null = null;
-  #connect: { pointerId: number; from: string; edgeId?: string; endpoint?: "from" | "to"; back?: boolean } | null = null;
+  /** Il filo che si sta tirando (T67). */
+  #connect: ConnectGesture | null = null;
+  /** Il tratto del filo in corso, nello strato dei fili; e la scheda sotto il puntatore. */
+  #connectDraft: SVGPathElement | null = null;
+  #connectTarget: string | null = null;
+  /** Il filo sotto il puntatore, che si scurisce (T67). */
+  #edgeHover: string | null = null;
   /**
    * «Collega…» dal menu o C con una scheda scelta (T17): la scheda da cui
    * parte il filo; il prossimo clic su un'altra scheda lo chiude e la
@@ -1008,6 +1051,8 @@ export class CanvasEngine {
     }, { signal });
     this.#viewport.addEventListener("pointerleave", () => {
       this.#pointerSeen = null;
+      // Il puntatore fuori dalla lavagna: nessun filo si scurisce (T67).
+      this.#setEdgeHover(null);
     }, { signal });
     this.#viewport.addEventListener("dragover", (event) => {
       if (!this.#readOnly && !this.#isSceneOversized() && event.dataTransfer
@@ -2953,10 +2998,20 @@ export class CanvasEngine {
 
   /** Una card nuova al centro della vista, o in `at` (coordinate del mondo);
    *  una card file vuole il suo `file`. Torna la card messa, o `null`. */
-  #addNode(type: CanvasNode["type"], file?: string, at?: { x: number; y: number }): CanvasNode | null {
+  #addNode(type: CanvasNode["type"], file?: string, at?: { x: number; y: number }, link?: CardLink): CanvasNode | null {
     if (!this.#doc || this.#readOnly || (type === "file" && !file)) return null;
     const rect = this.#viewport.getBoundingClientRect();
-    const center = at
+    const width = type === "group" ? 480 : 320;
+    const height = type === "group" ? 320 : type === "link" ? 120 : 160;
+    // Collegata (T67): il lato verso l'altro capo cade sotto il puntatore.
+    const source = link ? this.#doc.nodes.find((one) => one.id === link.from) : undefined;
+    const anchor = source && (link?.fromSide
+      ? sidePoint(source, link.fromSide)
+      : { x: source.x + source.width / 2, y: source.y + source.height / 2 });
+    const facing = anchor && at ? linkedCardPlacement(anchor, at, width, height) : null;
+    const center = facing
+      ? { x: facing.x + 160, y: facing.y + 80 }
+      : at
       ? { x: at.x + 160, y: at.y + 80 }
       : this.#screenToWorld(rect.left + (rect.width || 800) / 2, rect.top + (rect.height || 600) / 2);
     const node: CanvasNode = {
@@ -2964,15 +3019,24 @@ export class CanvasEngine {
       type,
       x: snap(center.x - 160),
       y: snap(center.y - 80),
-      width: type === "group" ? 480 : 320,
-      height: type === "group" ? 320 : type === "link" ? 120 : 160,
+      width,
+      height,
       ...(type === "text" ? { text: "" } : {}),
       ...(type === "file" ? { file } : {}),
       ...(type === "link" ? { url: "https://" } : {}),
       ...(type === "group" ? { label: "" } : {}),
     };
+    const patches: CanvasPatch[] = [];
     const patch = upsertNodePatch(this.#doc, node);
-    if (patch && this.#commit([patch], "input")) {
+    if (patch) patches.push(patch);
+    if (patch && source && facing) {
+      const fromSide = link?.fromSide ?? nearestSides(node, source, facing.side).toSide;
+      const edgePatch = upsertEdgePatch(this.#doc, {
+        id: newNodeId("e"), fromNode: source.id, toNode: node.id, fromSide, toSide: facing.side, ...this.#tipEnds(),
+      });
+      if (edgePatch) patches.push(edgePatch);
+    }
+    if (patches.length && this.#commit(patches, "input")) {
       this.#selection = [node.id];
       this.#edgeSelection = [];
       this.#options.onSelectionChange();
@@ -3470,9 +3534,11 @@ export class CanvasEngine {
         disabled: () => (CANVAS_WRITING_TOOLS.has(tool) ? writable() ?? (this.#isSceneOversized() ? t("canvas.too_large") : null) : null),
         run: () => {
           // C con una scheda scelta comincia il filo da lei, come «Collega…»
-          // (T17); senza, sceglie lo strumento.
-          const from = tool === "connect" && this.#edgeSelection.length === 0 ? only() : null;
-          if (from) this.#beginConnectFrom(from.id);
+          // (T17); con due le collega (T67, D-19 (a)); senza, sceglie lo
+          // strumento.
+          const chosen = tool === "connect" && this.#edgeSelection.length === 0 ? this.#selectedNodes() : [];
+          if (chosen.length === 2) this.#connectPair(chosen[0]!, chosen[1]!);
+          else if (chosen.length === 1) this.#beginConnectFrom(chosen[0]!.id);
           else this.#pickTool(tool);
         },
       };
@@ -4183,6 +4249,13 @@ export class CanvasEngine {
     // Ctrl+clic (Cmd+clic) su un link di una scheda lo segue (D-18 (c)): il
     // `click` deve arrivare al link, non a uno spostamento della lavagna.
     if (event.button === 0 && modifier && this.#cardLinkAt(event.target) !== null) return;
+    // Alt+trascina dal corpo di una scheda tira un filo (T67); nel vuoto Alt
+    // sposta ancora la vista.
+    if (event.button === 0 && event.altKey && !modifier && this.#tool !== "hand"
+      && !this.#insideActive(event.target, false)) {
+      const from = this.#nodeAt(event.target);
+      if (from && this.#beginConnect(event, { from })) return;
+    }
     if (event.button === 1 || modifier || event.altKey) {
       const toggle = event.button === 0 && modifier && !event.altKey ? this.#nodeAt(event.target) ?? undefined : undefined;
       this.#pan = { pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, camX: this.#camera.x, camY: this.#camera.y, toggle };
@@ -4213,17 +4286,20 @@ export class CanvasEngine {
       const edge = this.#doc?.edges.find((entry) => entry.id === endpoint.dataset.reconnect);
       if (!edge) return;
       const side = endpoint.dataset.endpoint === "from" ? "from" : "to";
-      this.#connect = { pointerId: event.pointerId, from: edge.fromNode, edgeId: edge.id, endpoint: side };
-      this.#viewport.setPointerCapture?.(event.pointerId);
-      event.preventDefault();
+      this.#beginConnect(event, { from: edge.fromNode, edgeId: edge.id, endpoint: side });
       return;
     }
     const connectHandle = target instanceof Element ? target.closest<HTMLElement>("[data-connect]") : null;
     if (connectHandle) {
       if (this.#readOnly) return;
-      this.#connect = { pointerId: event.pointerId, from: connectHandle.dataset.connect! };
-      this.#viewport.setPointerCapture?.(event.pointerId);
-      event.preventDefault();
+      this.#beginConnect(event, { from: connectHandle.dataset.connect! });
+      return;
+    }
+    // I quattro punti sui lati (T67): il filo parte da quel lato.
+    const port = target instanceof Element ? target.closest<HTMLElement>(".canvas-port") : null;
+    const portOwner = port ? this.#nodeAt(port) : null;
+    if (port && portOwner) {
+      this.#beginConnect(event, { from: portOwner, fromSide: port.dataset.side as EdgeSide });
       return;
     }
     const nodeId = this.#nodeAt(target);
@@ -4234,11 +4310,13 @@ export class CanvasEngine {
       // su un'altra lo chiude dove si alza (T17).
       const from = this.#connectFrom;
       this.#connectFrom = null;
-      this.#connect = from !== null && from !== nodeId
-        ? { pointerId: event.pointerId, from, back: true }
-        : { pointerId: event.pointerId, from: nodeId };
-      this.#viewport.setPointerCapture?.(event.pointerId);
-      event.preventDefault();
+      this.#beginConnect(event, from !== null && from !== nodeId ? { from, back: true } : { from: nodeId });
+      return;
+    }
+    // Un filo entro 8 px vince sulla scheda dove si vede, fuori dalla scheda (T67).
+    const wire = this.#insideActive(target, false) ? null : this.#edgeUnder(event.clientX, event.clientY, nodeId);
+    if (wire) {
+      this.#selectEdge(wire);
       return;
     }
     if (nodeId) {
@@ -4267,11 +4345,12 @@ export class CanvasEngine {
   /**
    * La scheda di testo dello strumento Testo, nel punto `clientX`, `clientY` della
    * finestra; senza punto, al centro della vista («Scrivi una scheda», T62). Si
-   * apre in scrittura.
+   * apre in scrittura. Con `link` (un filo lasciato nel vuoto, T67) nasce
+   * collegata alla scheda `link.from`, nello stesso commit.
    */
-  #placeText(clientX?: number, clientY?: number): void {
+  #placeText(clientX?: number, clientY?: number, link?: CardLink): void {
     const at = clientX === undefined || clientY === undefined ? undefined : this.#screenToWorld(clientX, clientY);
-    const placed = this.#addNode("text", undefined, at);
+    const placed = this.#addNode("text", undefined, at, link);
     if (!placed) return;
     this.#pickTool("select");
     this.#render();
@@ -4482,6 +4561,13 @@ export class CanvasEngine {
 
   #pointerMove(event: PointerEvent): void {
     if (event.pointerType === "touch" && this.#touchMove(event)) return;
+    if (this.#connect && event.pointerId === this.#connect.pointerId) {
+      this.#moveConnect(event.clientX, event.clientY);
+      return;
+    }
+    if (!this.#pan && !this.#resize && !this.#drag && event.pointerType === "mouse") {
+      this.#hoverEdge(event.clientX, event.clientY, event.target);
+    }
     if (this.#pan && event.pointerId === this.#pan.pointerId) {
       this.#camera.x = this.#pan.camX + (event.clientX - this.#pan.startX);
       this.#camera.y = this.#pan.camY + (event.clientY - this.#pan.startY);
@@ -4554,24 +4640,252 @@ export class CanvasEngine {
     }
     if (this.#connect && event.pointerId === this.#connect.pointerId) {
       const connect = this.#connect;
-      this.#connect = null;
-      const hit = document.elementFromPoint(event.clientX, event.clientY);
-      const target = this.#nodeAt(hit);
-      if (target && this.#doc && !this.#readOnly) {
-        const existing = this.#doc.edges.find((edge) => edge.id === connect.edgeId);
-        const edge: CanvasEdge | null = existing
-          ? { ...existing, [connect.endpoint === "from" ? "fromNode" : "toNode"]: target }
-          : target !== connect.from ? {
-            id: newNodeId("e"), fromNode: connect.from, toNode: target, ...this.#tipEnds(),
-          } : null;
-        if (edge) {
-          const patch = upsertEdgePatch(this.#doc, edge);
-          if (patch) this.#commit([patch], "input");
-        }
-      }
+      this.#endConnect();
       // Il filo di «Collega…» fatto, la colonna torna alla Selezione.
       if (connect.back) this.#pickTool("select");
+      // Nel vuoto nasce una scheda già in scrittura: la disegna `#placeText`.
+      if (this.#finishConnect(connect, event.clientX, event.clientY)) return;
       this.#render();
+    }
+  }
+
+  // --- i fili (T67) --------------------------------------------------------------
+
+  /**
+   * Comincia a tirare un filo (`gesture`): dai punti, da →, con Alt dal
+   * corpo, con lo strumento Collega o riattaccando un'estremità. Mai in sola
+   * lettura e mai con la penna, che scrive (D3 è v2). Il fuoco va sulla vista,
+   * così Esc arriva e annulla.
+   */
+  #beginConnect(
+    event: PointerEvent,
+    gesture: Omit<ConnectGesture, "pointerId" | "startX" | "startY" | "moved">,
+  ): boolean {
+    if (this.#readOnly || !this.#doc || event.pointerType === "pen" || this.#isSceneOversized()) return false;
+    if (!this.#doc.nodes.some((node) => node.id === gesture.from)) return false;
+    this.#endConnect();
+    this.#connect = { ...gesture, pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, moved: false };
+    this.#viewport.setPointerCapture?.(event.pointerId);
+    event.preventDefault();
+    if (!this.#viewport.contains(document.activeElement)) this.#viewport.focus({ preventScroll: true });
+    const draft = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    draft.classList.add("canvas-edge-draft");
+    this.#connectDraft = draft;
+    this.#edgeLayer.append(draft);
+    this.#viewport.toggleAttribute("data-connecting", true);
+    this.#setEdgeHover(null);
+    return true;
+  }
+
+  /** Il filo in corso segue il puntatore; sopra una scheda arriva al lato che sceglierà. */
+  #moveConnect(clientX: number, clientY: number): void {
+    const connect = this.#connect;
+    if (!connect || !this.#doc) return;
+    if (!connect.moved && Math.abs(clientX - connect.startX) + Math.abs(clientY - connect.startY) > 3) {
+      connect.moved = true;
+    }
+    const target = this.#connectTargetAt(connect, clientX, clientY);
+    this.#markConnectTarget(target);
+    const ends = this.#connectEnds(connect, target, this.#screenToWorld(clientX, clientY));
+    if (ends && this.#connectDraft) this.#connectDraft.setAttribute("d", edgePathData(ends.start, ends.end));
+  }
+
+  /**
+   * La scheda dove il filo arriverebbe sotto `clientX`, `clientY`: la più in
+   * alto, perché `elementFromPoint` dà quella sopra. Un filo nuovo non torna
+   * sulla scheda da cui parte.
+   */
+  #connectTargetAt(connect: ConnectGesture, clientX: number, clientY: number): CanvasNode | null {
+    const id = this.#nodeAt(document.elementFromPoint(clientX, clientY));
+    if (id === null || (!connect.edgeId && id === connect.from)) return null;
+    return this.#doc?.nodes.find((node) => node.id === id) ?? null;
+  }
+
+  /** I due capi del filo in corso: il capo fermo e quello che segue il puntatore. */
+  #connectEnds(
+    connect: ConnectGesture,
+    target: CanvasNode | null,
+    pointer: EdgePoint,
+  ): { start: EdgePoint; end: EdgePoint } | null {
+    const doc = this.#doc;
+    if (!doc) return null;
+    const byId = new Map(doc.nodes.map((node) => [node.id, node]));
+    let anchor: CanvasNode | undefined;
+    let anchorSide: EdgeSide | undefined;
+    if (connect.edgeId) {
+      const edge = doc.edges.find((one) => one.id === connect.edgeId);
+      if (!edge) return null;
+      anchor = byId.get(connect.endpoint === "from" ? edge.toNode : edge.fromNode);
+      anchorSide = connect.endpoint === "from" ? edge.toSide ?? "left" : edge.fromSide ?? "right";
+    } else {
+      anchor = byId.get(connect.from);
+      anchorSide = connect.fromSide;
+    }
+    if (!anchor) return null;
+    if (target) {
+      const sides = nearestSides(anchor, target, anchorSide, target.id === anchor.id);
+      return { start: sidePoint(anchor, sides.fromSide), end: sidePoint(target, sides.toSide) };
+    }
+    const side = anchorSide ?? nearestSides(anchor, { x: pointer.x, y: pointer.y, width: 0, height: 0 }).fromSide;
+    return { start: sidePoint(anchor, side), end: pointer };
+  }
+
+  /** La scheda su cui il filo arriverebbe porta `data-connect-target`. */
+  #markConnectTarget(target: CanvasNode | null): void {
+    const id = target?.id ?? null;
+    if (id === this.#connectTarget) return;
+    if (this.#connectTarget !== null) this.#cards.get(this.#connectTarget)?.article.removeAttribute("data-connect-target");
+    this.#connectTarget = id;
+    if (id !== null) this.#cards.get(id)?.article.toggleAttribute("data-connect-target", true);
+  }
+
+  /** Il filo in corso finisce: niente tratto, niente bersaglio, niente gesto. */
+  #endConnect(): void {
+    this.#connect = null;
+    this.#connectDraft?.remove();
+    this.#connectDraft = null;
+    this.#markConnectTarget(null);
+    this.#viewport.removeAttribute("data-connecting");
+  }
+
+  /** Esc mentre si tira un filo: non resta niente, come se non fosse cominciato. */
+  #cancelConnect(): void {
+    const connect = this.#connect;
+    if (!connect) return;
+    this.#endConnect();
+    try {
+      this.#viewport.releasePointerCapture?.(connect.pointerId);
+    } catch {
+      // Il puntatore era già libero.
+    }
+    if (connect.back) this.#pickTool("select");
+  }
+
+  /**
+   * Il rilascio del filo `connect` in `clientX`, `clientY`. Su una scheda: il
+   * filo, coi lati scelti da `edges.ts`; un'estremità riattaccata cambia
+   * scheda. Nel vuoto: un filo nuovo fa nascere lì una scheda di testo
+   * collegata, in un commit solo (`true`: la scheda è in scrittura);
+   * un'estremità torna dov'era. Sulla scheda di partenza non succede niente.
+   */
+  #finishConnect(connect: ConnectGesture, clientX: number, clientY: number): boolean {
+    const doc = this.#doc;
+    if (!doc || this.#readOnly) return false;
+    const hit = document.elementFromPoint(clientX, clientY);
+    const target = this.#connectTargetAt(connect, clientX, clientY);
+    if (connect.edgeId) {
+      const existing = doc.edges.find((edge) => edge.id === connect.edgeId);
+      if (!existing || !target) return false;
+      const movesFrom = connect.endpoint === "from";
+      const other = doc.nodes.find((node) => node.id === (movesFrom ? existing.toNode : existing.fromNode));
+      if (!other) return false;
+      const otherSide = movesFrom ? existing.toSide ?? "left" : existing.fromSide ?? "right";
+      const side = nearestSides(other, target, otherSide, other.id === target.id).toSide;
+      const edge: CanvasEdge = movesFrom
+        ? { ...existing, fromNode: target.id, fromSide: side }
+        : { ...existing, toNode: target.id, toSide: side };
+      const patch = upsertEdgePatch(doc, edge);
+      if (patch) this.#commit([patch], "input");
+      return false;
+    }
+    const source = doc.nodes.find((node) => node.id === connect.from);
+    if (!source) return false;
+    if (target) {
+      const sides = nearestSides(source, target, connect.fromSide);
+      const patch = upsertEdgePatch(doc, {
+        id: newNodeId("e"), fromNode: source.id, toNode: target.id, ...sides, ...this.#tipEnds(),
+      });
+      if (patch) this.#commit([patch], "input");
+      return false;
+    }
+    // Nel vuoto, solo dopo un vero tiro e dentro la vista (non sulla
+    // scheda di partenza, né fuori dalla lavagna).
+    if (!connect.moved || !hit || !this.#viewport.contains(hit) || this.#nodeAt(hit) !== null) return false;
+    this.#placeText(clientX, clientY, { from: source.id, fromSide: connect.fromSide });
+    return true;
+  }
+
+  /** C con due schede scelte (D-19 (a)): un filo dalla prima alla seconda, coi lati di `edges.ts`. */
+  #connectPair(from: CanvasNode, to: CanvasNode): void {
+    if (!this.#doc || this.#readOnly) return;
+    const patch = upsertEdgePatch(this.#doc, {
+      id: newNodeId("e"), fromNode: from.id, toNode: to.id, ...nearestSides(from, to), ...this.#tipEnds(),
+    });
+    if (patch) this.#commit([patch], "input");
+  }
+
+  /** I fili con i loro capi sulla lavagna, per cercare quello sotto il puntatore. */
+  #placedEdges(): PlacedEdge[] {
+    const doc = this.#doc;
+    if (!doc) return [];
+    const byId = new Map(doc.nodes.map((node) => [node.id, node]));
+    const placed: PlacedEdge[] = [];
+    for (const edge of doc.edges) {
+      const from = byId.get(edge.fromNode);
+      const to = byId.get(edge.toNode);
+      if (from && to) placed.push({ id: edge.id, a: sidePoint(from, edge.fromSide ?? "right"), b: sidePoint(to, edge.toSide ?? "left") });
+    }
+    return placed;
+  }
+
+  /**
+   * Il filo entro 8 px dello schermo da `clientX`, `clientY`, fra quelli in
+   * vista. Sopra la scheda `over` il filo vince solo dove si vede, fuori da
+   * lei: altrove la scheda (D8).
+   */
+  #edgeUnder(clientX: number, clientY: number, over: string | null): string | null {
+    const doc = this.#doc;
+    if (!doc || doc.edges.length === 0 || this.#isSceneOversized()) return null;
+    const rect = this.#viewport.getBoundingClientRect();
+    const corner = this.#screenToWorld(rect.left, rect.top);
+    const zoom = this.#camera.zoom;
+    const view = { x: corner.x, y: corner.y, width: (rect.width || 800) / zoom, height: (rect.height || 600) / zoom };
+    const hit = edgeAt(this.#screenToWorld(clientX, clientY), this.#placedEdges(), zoom, view);
+    if (!hit) return null;
+    const card = over === null ? undefined : doc.nodes.find((node) => node.id === over);
+    return card && insideBox(hit.point, card) ? null : hit.id;
+  }
+
+  /** Il passaggio del mouse: il filo sotto si scurisce (`data-hover`). */
+  #hoverEdge(clientX: number, clientY: number, target: EventTarget | null): void {
+    if (this.#insideActive(target, false) || (target instanceof Element && target.closest(".canvas-port, [data-resize], button, a, input, textarea"))) {
+      this.#setEdgeHover(null);
+      return;
+    }
+    this.#setEdgeHover(this.#edgeUnder(clientX, clientY, this.#nodeAt(target)));
+  }
+
+  #setEdgeHover(id: string | null): void {
+    if (id === this.#edgeHover) return;
+    if (this.#edgeHover !== null) this.#edgeGroup(this.#edgeHover)?.removeAttribute("data-hover");
+    this.#edgeHover = id;
+    if (id !== null) this.#edgeGroup(id)?.toggleAttribute("data-hover", true);
+    this.#viewport.toggleAttribute("data-edge-hover", id !== null);
+  }
+
+  /** Il gruppo SVG del filo `id` sulla scena. */
+  #edgeGroup(id: string): SVGGElement | null {
+    for (const hit of this.#edgeLayer.querySelectorAll<SVGPathElement>(".canvas-edge-hit")) {
+      if (hit.dataset.edge === id) return hit.parentElement as SVGGElement | null;
+    }
+    return null;
+  }
+
+  /** I quattro punti sui lati della scheda `el` (T67): ci sono solo se si può scrivere. */
+  #syncPorts(el: HTMLElement): void {
+    const ports = el.querySelectorAll<HTMLElement>(":scope > .canvas-port");
+    if (this.#readOnly) {
+      for (const port of ports) port.remove();
+      return;
+    }
+    if (ports.length === EDGE_SIDES.length) return;
+    for (const port of ports) port.remove();
+    for (const side of EDGE_SIDES) {
+      const port = document.createElement("div");
+      port.className = "canvas-port";
+      port.dataset.side = side;
+      port.setAttribute("aria-hidden", "true");
+      el.append(port);
     }
   }
 
@@ -4581,7 +4895,7 @@ export class CanvasEngine {
     this.#drag = null;
     this.#resize = null;
     this.#pan = null;
-    this.#connect = null;
+    this.#endConnect();
     this.#fingers.clear();
     this.#tap = null;
     this.#pinch = null;
@@ -4688,6 +5002,12 @@ export class CanvasEngine {
 
   #keydown(event: KeyboardEvent): void {
     if (!this.#doc || event.defaultPrevented || this.#isSceneOversized()) return;
+    // Esc mentre si tira un filo lo lascia, e nient'altro (T67).
+    if (event.key === "Escape" && this.#connect) {
+      event.preventDefault();
+      this.#cancelConnect();
+      return;
+    }
     // D da solo, fuori dai campi: il mouse scrive finché il tasto è giù
     // (regola 1). La ripetizione del tasto non cambia niente.
     if (isInkKey(event) && !event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey
@@ -5095,11 +5415,13 @@ export class CanvasEngine {
       const from = byId.get(edge.fromNode);
       const to = byId.get(edge.toNode);
       if (!from || !to) continue;
-      const a = edgePoint(from, edge.fromSide ?? "right", true);
-      const b = edgePoint(to, edge.toSide ?? "left", false);
+      const a = sidePoint(from, edge.fromSide ?? "right");
+      const b = sidePoint(to, edge.toSide ?? "left");
       const selected = this.#edgeSelection.includes(edge.id);
       const group = document.createElementNS("http://www.w3.org/2000/svg", "g");
       group.classList.add("canvas-edge");
+      // Il filo sotto il puntatore si scurisce (T67).
+      if (this.#edgeHover === edge.id) group.toggleAttribute("data-hover", true);
       const hit = document.createElementNS("http://www.w3.org/2000/svg", "path");
       hit.classList.add("canvas-edge-hit");
       hit.dataset.edge = edge.id;
@@ -5107,7 +5429,7 @@ export class CanvasEngine {
       line.classList.add("canvas-edge-line");
       line.dataset.edge = edge.id;
       if (selected) line.classList.add("selected");
-      const d = `M ${a.x} ${a.y} C ${a.x + (b.x - a.x) / 2} ${a.y}, ${b.x - (b.x - a.x) / 2} ${b.y}, ${b.x} ${b.y}`;
+      const d = edgePathData(a, b);
       hit.setAttribute("d", d);
       line.setAttribute("d", d);
       // Il colore del filo, per la pelle: il tratto e le punte (T47).
@@ -5142,15 +5464,13 @@ export class CanvasEngine {
           handle.setAttribute("cx", String(point.x));
           handle.setAttribute("cy", String(point.y));
           handle.setAttribute("r", "8");
-          handle.setAttribute("fill", "var(--accent)");
-          handle.setAttribute("stroke", "var(--doc-bg)");
-          handle.style.cursor = "grab";
-          handle.style.pointerEvents = "all";
           group.append(handle);
         }
       }
       this.#edgeLayer.append(group);
     }
+    // Il filo che si sta tirando resta sopra gli altri.
+    if (this.#connectDraft) this.#edgeLayer.append(this.#connectDraft);
   }
 
   #worldSize(): { w: number; h: number } {
@@ -5287,6 +5607,7 @@ export class CanvasEngine {
     const title = nodeTitle(node);
     if (entry.title.textContent !== title) entry.title.textContent = title;
     entry.connect.setAttribute("aria-label", t("canvas.connect", { id: node.id }));
+    this.#syncPorts(el);
     if (this.#readOnly) {
       entry.resize?.remove();
       entry.resize = null;
@@ -5865,23 +6186,6 @@ function nodeTitle(node: CanvasNode): string {
       return node.url ?? node.id;
     case "group":
       return node.label || node.id;
-  }
-}
-
-function edgePoint(
-  node: CanvasNode,
-  side: "top" | "right" | "bottom" | "left",
-  _from: boolean,
-): { x: number; y: number } {
-  switch (side) {
-    case "top":
-      return { x: node.x + node.width / 2, y: node.y };
-    case "bottom":
-      return { x: node.x + node.width / 2, y: node.y + node.height };
-    case "left":
-      return { x: node.x, y: node.y + node.height / 2 };
-    case "right":
-      return { x: node.x + node.width, y: node.y + node.height / 2 };
   }
 }
 

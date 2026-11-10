@@ -3305,6 +3305,59 @@ body {
   pointer-events: none;
 }
 
+/* I quattro punti a metà dei lati, al passaggio (T67): da lì parte un filo.
+   Restano di 16 px sullo schermo a ogni zoom. */
+.canvas-port {
+  position: absolute;
+  z-index: 1;
+  width: calc(16px / var(--canvas-zoom, 1));
+  height: calc(16px / var(--canvas-zoom, 1));
+  cursor: crosshair;
+  transform: translate(-50%, -50%);
+  touch-action: none;
+}
+
+.canvas-port[data-side="top"] {
+  top: 0;
+  left: 50%;
+}
+
+.canvas-port[data-side="right"] {
+  top: 50%;
+  left: 100%;
+}
+
+.canvas-port[data-side="bottom"] {
+  top: 100%;
+  left: 50%;
+}
+
+.canvas-port[data-side="left"] {
+  top: 50%;
+  left: 0;
+}
+
+/* Le prese del filo scelto, il filo che si tira e i cursori dei fili (T67). */
+.canvas-edge-reconnect {
+  cursor: grab;
+  pointer-events: all;
+}
+
+.canvas-edge-draft {
+  fill: none;
+  pointer-events: none;
+}
+
+.canvas-viewport[data-edge-hover],
+.canvas-edge-hit {
+  cursor: pointer;
+}
+
+.canvas-viewport[data-connecting],
+.canvas-viewport[data-connecting] * {
+  cursor: crosshair;
+}
+
 /* L'ispettore della lavagna (T58): le parti dentro il pannello. */
 .canvas-inspector {
   display: flex;

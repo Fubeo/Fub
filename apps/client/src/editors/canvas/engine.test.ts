@@ -2800,3 +2800,258 @@ describe("CanvasEngine: un colore che Fub non conosce non ferma la lavagna (T47b
     engine.destroy();
   });
 });
+});
+
+describe("i fili: collegare senza mirare, prendere un filo (T67)", () => {
+  /**
+   * `a` e `b` affiancate col filo `e1` dritto fra loro (da 200,50 a 400,50);
+   * `c` sotto `a`; `s` sotto il filo, col bordo alto a 5 dal filo; `d` ed
+   * `e` sovrapposte, `e` sopra.
+   */
+  function board(): string {
+    return JSON.stringify({
+      nodes: [
+        { id: "a", type: "text", x: 0, y: 0, width: 200, height: 100, text: "a" },
+        { id: "b", type: "text", x: 400, y: 0, width: 200, height: 100, text: "b" },
+        { id: "c", type: "text", x: 0, y: 300, width: 200, height: 100, text: "c" },
+        { id: "s", type: "text", x: 250, y: 55, width: 100, height: 60, text: "s" },
+        { id: "d", type: "text", x: 400, y: 300, width: 200, height: 100, text: "d" },
+        { id: "e", type: "text", x: 450, y: 320, width: 200, height: 100, text: "e" },
+      ],
+      edges: [{ id: "e1", fromNode: "a", fromSide: "right", toNode: "b", toSide: "left", toEnd: "arrow" }],
+    });
+  }
+
+  function open() {
+    const made = mounted(board());
+    const viewport = made.host.querySelector<HTMLElement>(".canvas-viewport")!;
+    return { ...made, viewport };
+  }
+
+  const card = (host: HTMLElement, id: string) => host.querySelector<HTMLElement>(`.canvas-node[data-node="${id}"]`)!;
+  const body = (host: HTMLElement, id: string) => card(host, id).querySelector<HTMLElement>(".canvas-card-body")!;
+  const port = (host: HTMLElement, id: string, side: string) =>
+    card(host, id).querySelector<HTMLElement>(`:scope > .canvas-port[data-side="${side}"]`)!;
+  const doc = (engine: CanvasEngine) => readCanvas(engine.getDoc());
+
+  /** Il punto dello schermo di un punto della lavagna, dalla camera di adesso. */
+  function screen(host: HTMLElement, x: number, y: number): { clientX: number; clientY: number } {
+    const transform = host.querySelector<HTMLElement>(".canvas-stage")!.style.transform;
+    const [, tx, ty, zoom] = /translate\(([-\d.e]+)px, ([-\d.e]+)px\) scale\(([-\d.e]+)\)/.exec(transform) ?? [];
+    return { clientX: x * Number(zoom ?? 1) + Number(tx ?? 0), clientY: y * Number(zoom ?? 1) + Number(ty ?? 0) };
+  }
+
+  function pointer(target: EventTarget, type: string, at: { clientX: number; clientY: number }, init: PointerEventInit = {}): PointerEvent {
+    const event = new PointerEvent(type, { bubbles: true, cancelable: true, button: 0, pointerId: 7, pointerType: "mouse", ...at, ...init });
+    target.dispatchEvent(event);
+    return event;
+  }
+
+  /** Un clic sul punto `at` di `target`. */
+  function click(host: HTMLElement, target: EventTarget, at: { clientX: number; clientY: number }, init: PointerEventInit = {}): void {
+    pointer(target, "pointerdown", at, init);
+    pointer(host.querySelector(".canvas-viewport")!, "pointerup", at, init);
+  }
+
+  /** Tira un filo da `from` (un punto, una presa, o Alt sul corpo) fino a `to`, dove sotto il puntatore c'è `under`. */
+  function pull(
+    host: HTMLElement,
+    from: EventTarget,
+    start: { clientX: number; clientY: number },
+    to: { clientX: number; clientY: number },
+    under: Element | null,
+    init: PointerEventInit = {},
+  ): void {
+    const viewport = host.querySelector<HTMLElement>(".canvas-viewport")!;
+    const pointing = vi.spyOn(document, "elementFromPoint").mockReturnValue(under);
+    try {
+      pointer(from, "pointerdown", start, init);
+      pointer(viewport, "pointermove", to, init);
+      pointer(viewport, "pointerup", to, init);
+    } finally {
+      pointing.mockRestore();
+    }
+  }
+
+  const patchesOf = (change: CanvasChange): readonly CanvasPatch[] => (change.operation as CanvasOperation).patches ?? [];
+
+  it("quattro punti sui lati; si tira da un punto e si rilascia su qualsiasi parte di un'altra scheda, il lato lo sceglie Fub", () => {
+    const { engine, host, viewport, changes } = open();
+    expect([...card(host, "a").querySelectorAll<HTMLElement>(":scope > .canvas-port")].map((one) => one.dataset.side))
+      .toEqual(["top", "right", "bottom", "left"]);
+    const pointing = vi.spyOn(document, "elementFromPoint").mockReturnValue(body(host, "c"));
+    pointer(port(host, "a", "bottom"), "pointerdown", screen(host, 100, 100));
+    pointer(viewport, "pointermove", screen(host, 150, 380));
+    // Durante il tiro: il tratto fino al lato che Fub sceglierà, la scheda
+    // bersaglio segnata, niente ancora nel file.
+    expect(host.querySelector(".canvas-edge-draft")?.getAttribute("d")).toBe("M 100 100 C 100 100, 100 300, 100 300");
+    expect(card(host, "c").hasAttribute("data-connect-target")).toBe(true);
+    expect(changes).toHaveLength(0);
+    pointer(viewport, "pointerup", screen(host, 150, 380));
+    pointing.mockRestore();
+    expect(doc(engine).edges.at(-1)).toMatchObject({ fromNode: "a", fromSide: "bottom", toNode: "c", toSide: "top", toEnd: "arrow" });
+    expect(changes).toHaveLength(1);
+    expect(host.querySelector(".canvas-edge-draft")).toBeNull();
+    expect(card(host, "c").hasAttribute("data-connect-target")).toBe(false);
+
+    // Due schede sovrapposte: il bersaglio è quella sopra (lo dà `elementFromPoint`).
+    pull(host, port(host, "b", "bottom"), screen(host, 500, 100), screen(host, 520, 340), card(host, "e"));
+    expect(doc(engine).edges.at(-1)).toMatchObject({ fromNode: "b", toNode: "e", fromSide: "bottom", toSide: "top" });
+    expect(changes).toHaveLength(2);
+
+    // Sulla scheda da cui parte non nasce niente.
+    pull(host, port(host, "a", "right"), screen(host, 200, 50), screen(host, 120, 60), card(host, "a"));
+    expect(changes).toHaveLength(2);
+    engine.destroy();
+  });
+
+  it("rilasciato nel vuoto nasce una scheda di testo collegata, già in scrittura, e un solo annulla toglie scheda e filo", () => {
+    const { engine, host, viewport, changes } = open();
+    const before = engine.getDoc();
+    pull(host, port(host, "b", "right"), screen(host, 600, 50), screen(host, 900, 60), viewport);
+    expect(changes).toHaveLength(1);
+    expect(patchesOf(changes[0]!).map((patch) => patch.kind)).toEqual(["upsert-node", "upsert-edge"]);
+    const after = doc(engine);
+    const made = after.nodes.find((node) => !["a", "b", "c", "s", "d", "e"].includes(node.id))!;
+    expect(made).toMatchObject({ type: "text", width: 320, height: 160 });
+    // Il lato sinistro, verso `b`, cade sotto il puntatore (alla griglia).
+    expect(Math.abs(made.x - 900)).toBeLessThanOrEqual(8);
+    expect(Math.abs(made.y + made.height / 2 - 60)).toBeLessThanOrEqual(8);
+    expect(after.edges.find((edge) => edge.toNode === made.id)).toMatchObject({ fromNode: "b", fromSide: "right", toSide: "left" });
+    expect(host.querySelector(".canvas-text-editor")).not.toBeNull();
+    expect(engine.undo()).toBe(true);
+    expect(engine.getDoc()).toBe(before);
+
+    // Un clic fermo su un punto non fa una scheda.
+    const pointing = vi.spyOn(document, "elementFromPoint").mockReturnValue(viewport);
+    click(host, port(host, "a", "top"), screen(host, 100, 0));
+    pointing.mockRestore();
+    expect(engine.getDoc()).toBe(before);
+    engine.destroy();
+  });
+
+  it("Esc durante il tiro annulla tutto: niente tratto, niente filo, niente scheda", () => {
+    const { engine, host, viewport, changes } = open();
+    const before = engine.getDoc();
+    const pointing = vi.spyOn(document, "elementFromPoint").mockReturnValue(viewport);
+    pointer(port(host, "a", "bottom"), "pointerdown", screen(host, 100, 100));
+    pointer(viewport, "pointermove", screen(host, 100, 600));
+    expect(host.querySelector(".canvas-edge-draft")).not.toBeNull();
+    const escape = new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true });
+    viewport.dispatchEvent(escape);
+    expect(escape.defaultPrevented).toBe(true);
+    expect(host.querySelector(".canvas-edge-draft")).toBeNull();
+    pointer(viewport, "pointerup", screen(host, 100, 600));
+    pointing.mockRestore();
+    expect(changes).toHaveLength(0);
+    expect(engine.getDoc()).toBe(before);
+    engine.destroy();
+  });
+
+  it("Alt+trascina dal corpo di una scheda tira un filo; nel vuoto Alt sposta ancora la vista", () => {
+    const { engine, host, viewport } = open();
+    pull(host, body(host, "a"), screen(host, 100, 60), screen(host, 100, 350), card(host, "c"), { altKey: true });
+    expect(doc(engine).edges.at(-1)).toMatchObject({ fromNode: "a", fromSide: "bottom", toNode: "c", toSide: "top" });
+    const edges = doc(engine).edges.length;
+    const stage = host.querySelector<HTMLElement>(".canvas-stage")!;
+    const camera = stage.style.transform;
+    pointer(viewport, "pointerdown", { clientX: 900, clientY: 900 }, { altKey: true, pointerId: 8 });
+    pointer(viewport, "pointermove", { clientX: 940, clientY: 920 }, { altKey: true, pointerId: 8 });
+    pointer(viewport, "pointerup", { clientX: 940, clientY: 920 }, { altKey: true, pointerId: 8 });
+    expect(stage.style.transform).not.toBe(camera);
+    expect(doc(engine).edges).toHaveLength(edges);
+    engine.destroy();
+  });
+
+  it("C con due schede scelte le collega; con una comincia il collegamento", () => {
+    const { engine, host, viewport } = open();
+    click(host, body(host, "a"), screen(host, 100, 30));
+    click(host, body(host, "c"), screen(host, 100, 350), { shiftKey: true });
+    viewport.focus();
+    const c = new KeyboardEvent("keydown", { key: "c", bubbles: true, cancelable: true });
+    viewport.dispatchEvent(c);
+    expect(c.defaultPrevented).toBe(true);
+    expect(doc(engine).edges.at(-1)).toMatchObject({ fromNode: "a", fromSide: "bottom", toNode: "c", toSide: "top", toEnd: "arrow" });
+    expect(viewport.dataset.tool).toBe("select");
+
+    click(host, body(host, "b"), screen(host, 500, 30));
+    viewport.dispatchEvent(new KeyboardEvent("keydown", { key: "c", bubbles: true, cancelable: true }));
+    expect(viewport.dataset.tool).toBe("connect");
+    engine.destroy();
+  });
+
+  it("riattaccare: su un'altra scheda l'estremità cambia scheda e lato; nel vuoto torna dov'era, niente cancellato", () => {
+    const { engine, host, viewport, changes } = open();
+    const handle = () => host.querySelector<SVGElement>('[data-reconnect="e1"][data-endpoint="to"]');
+    click(host, viewport, screen(host, 300, 45));
+    expect(handle()).not.toBeNull();
+    const before = engine.getDoc();
+    pull(host, handle()!, screen(host, 400, 50), screen(host, 800, 700), viewport);
+    expect(engine.getDoc()).toBe(before);
+    expect(changes).toHaveLength(0);
+    click(host, viewport, screen(host, 300, 45));
+    pull(host, handle()!, screen(host, 400, 50), screen(host, 100, 380), card(host, "c"));
+    expect(doc(engine).edges).toHaveLength(1);
+    expect(doc(engine).edges[0]).toMatchObject({ id: "e1", fromNode: "a", fromSide: "right", toNode: "c", toSide: "top" });
+    expect(changes).toHaveLength(1);
+    engine.destroy();
+  });
+
+  it("un filo si prende entro 8 px e si scurisce al passaggio; sopra una scheda vince dove si vede; Canc lo toglie con la patch `at`", () => {
+    const { engine, host, viewport, changes } = open();
+    const line = () => host.querySelector<SVGElement>('.canvas-edge-line[data-edge="e1"]')!;
+    const group = () => line().parentElement!;
+    // Il passaggio: entro 8 px il filo si scurisce, fuori no.
+    pointer(viewport, "pointermove", screen(host, 300, 43));
+    expect(group().hasAttribute("data-hover")).toBe(true);
+    pointer(viewport, "pointermove", screen(host, 300, 30));
+    expect(group().hasAttribute("data-hover")).toBe(false);
+    // A 10 px non si prende.
+    click(host, viewport, screen(host, 300, 40));
+    expect(line().classList.contains("selected")).toBe(false);
+    // Sopra `s`, a 7 px dal filo che lì si vede (fuori da `s`): il filo.
+    click(host, body(host, "s"), screen(host, 300, 57));
+    expect(line().classList.contains("selected")).toBe(true);
+    expect(card(host, "s").classList.contains("selected")).toBe(false);
+    // Più giù su `s`, fuori dagli 8 px: la scheda.
+    click(host, body(host, "s"), screen(host, 300, 80));
+    expect(card(host, "s").classList.contains("selected")).toBe(true);
+    expect(line().classList.contains("selected")).toBe(false);
+    // Entro 8 px nel vuoto: il filo; Canc lo toglie con `at`, Ctrl+Z lo rimette lì.
+    click(host, viewport, screen(host, 220, 44));
+    expect(line().classList.contains("selected")).toBe(true);
+    const before = engine.getDoc();
+    viewport.focus();
+    viewport.dispatchEvent(new KeyboardEvent("keydown", { key: "Delete", bubbles: true, cancelable: true }));
+    expect(patchesOf(changes.at(-1)!)).toEqual([expect.objectContaining({ kind: "remove-edge", at: 0, after: null })]);
+    expect(doc(engine).edges).toHaveLength(0);
+    expect(doc(engine).nodes).toHaveLength(6);
+    expect(engine.undo()).toBe(true);
+    expect(engine.getDoc()).toBe(before);
+    engine.destroy();
+  });
+
+  it("in sola lettura niente punti né prese, Alt non collega, ma i fili si scelgono per leggerli", () => {
+    const { engine, host, viewport, changes } = open();
+    engine.setReadOnly(true);
+    expect(host.querySelector(".canvas-port")).toBeNull();
+    click(host, viewport, screen(host, 300, 45));
+    expect(host.querySelector('.canvas-edge-line[data-edge="e1"]')!.classList.contains("selected")).toBe(true);
+    expect(host.querySelector("[data-reconnect]")).toBeNull();
+    pull(host, body(host, "a"), screen(host, 100, 60), screen(host, 100, 350), card(host, "c"), { altKey: true });
+    expect(host.querySelector(".canvas-edge-draft")).toBeNull();
+    expect(changes).toHaveLength(0);
+    engine.setReadOnly(false);
+    expect(card(host, "a").querySelectorAll(":scope > .canvas-port")).toHaveLength(4);
+    engine.destroy();
+  });
+
+  it("la penna scrive, non collega: da un punto non tira un filo", () => {
+    const { engine, host, changes } = open();
+    pull(host, port(host, "a", "bottom"), screen(host, 100, 100), screen(host, 100, 350), card(host, "c"), { pointerType: "pen" });
+    expect(host.querySelector(".canvas-edge-draft")).toBeNull();
+    expect(doc(engine).edges.map((edge) => edge.id)).toEqual(["e1"]);
+    expect(changes.filter((change) => patchesOf(change).some((patch) => patch.kind === "upsert-edge"))).toHaveLength(0);
+    engine.destroy();
+  });
+});

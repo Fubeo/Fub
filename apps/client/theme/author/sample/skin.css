@@ -8967,7 +8967,57 @@ kbd,
   fill: var(--border-strong);
 }
 .canvas-edge-reconnect {
+  fill: var(--accent);
+  stroke: var(--sheet);
   stroke-width: 2;
+}
+/* I quattro punti (T67): un cerchietto al passaggio; da lì parte un filo. */
+.canvas-port::after {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: calc(10px / var(--canvas-zoom, 1));
+  height: calc(10px / var(--canvas-zoom, 1));
+  box-sizing: border-box;
+  border: calc(1.5px / var(--canvas-zoom, 1)) solid var(--outline);
+  border-radius: var(--radius-pill);
+  background: var(--bg-elev);
+  content: "";
+  opacity: 0;
+  transform: translate(-50%, -50%);
+}
+.canvas-node:hover > .canvas-port::after,
+.canvas-node:focus-within > .canvas-port::after {
+  opacity: 1;
+}
+.canvas-port:hover::after {
+  border-color: var(--accent);
+  background: var(--accent);
+}
+/* Il filo al passaggio (T67) si scurisce; scelto, anche le punte prendono
+   l'accento. */
+.canvas-edge[data-hover] > .canvas-edge-line:not(.selected) {
+  stroke-width: 2;
+}
+.canvas-edge[data-hover]:not([data-canvas-color]) > .canvas-edge-line:not(.selected) {
+  stroke: var(--outline);
+}
+.canvas-edge[data-hover]:not([data-canvas-color]) > .canvas-edge-arrow {
+  fill: var(--outline);
+}
+.canvas-edge-line.selected ~ .canvas-edge-arrow {
+  fill: var(--accent);
+}
+/* Il filo che si tira e la scheda dove arriverebbe (T67). */
+.canvas-edge-draft {
+  stroke: var(--accent);
+  stroke-linecap: round;
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+}
+.canvas-node[data-connect-target] {
+  outline: 2px solid var(--accent);
+  outline-offset: 4px;
 }
 .canvas-edge-label {
   fill: var(--muted);

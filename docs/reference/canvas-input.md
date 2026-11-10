@@ -2,8 +2,8 @@
 
 > **Ambito:** come la tela della lavagna prende la tastiera, il puntatore e
 > la rotella: entrare in una scheda e uscirne, la rotella, il catalogo dei
-> comandi e i loro tasti, la lavagna vuota, la colonna degli strumenti, la
-> riga delle opzioni, la banda di stato e l'ispettore.
+> comandi e i loro tasti, i fili, la lavagna vuota, la colonna degli
+> strumenti, la riga delle opzioni, la banda di stato e l'ispettore.
 > **Fonti autorevoli:** `apps/client/src/editors/canvas/engine.ts`
 > (`#keydown`, `#wheel`, le schede attive) e le prove in
 > `apps/client/src/editors/canvas/engine.test.ts` e
@@ -12,7 +12,8 @@
 > `rail.ts`, `options.ts` e le loro prove; per la lavagna vuota,
 > `chrome/empty.ts` ed `chrome/empty.test.ts`; per la banda, `chrome/status.ts` e
 > `engine-status.test.ts`; per l'ispettore, `chrome/inspector.ts`,
-> `reading-order.ts` e le loro prove.
+> `reading-order.ts` e le loro prove; per i fili, `edges.ts` ed
+> `edges.test.ts`.
 
 Questa pagina viene da [Le schede della lavagna](canvas-cards.md), che tiene
 il contratto dei renderer.
@@ -147,7 +148,8 @@ cambiano la lavagna sono spente col perché, non nascoste.
 
 - **`C`** con una scheda scelta comincia il filo da lei, come «Collega…» e il
   pulsante → della testata: il prossimo clic su un'altra scheda lo chiude e la
-  colonna torna alla Selezione; `Esc` rinuncia. Senza scheda `C` sceglie lo
+  colonna torna alla Selezione; `Esc` rinuncia. Con due schede scelte le
+  collega, dalla prima alla seconda (D-19 (a)). Senza scheda `C` sceglie lo
   strumento Collega. Mentre si scrive in una scheda, `C` è una lettera.
 - **Togli dalla lavagna** (e `Canc`, `Backspace`, e il pulsante della scheda
   mancante) toglie le schede, mai i file, e lo dice nel posto degli avvisi:
@@ -162,6 +164,34 @@ cambiano la lavagna sono spente col perché, non nascoste.
   «Idee.md» è nel cestino.»). Un file che l'host rifiuta lascia le sue schede e
   l'errore dell'host nel posto degli avvisi. Non è mai la conseguenza di un
   tasto: il comando non ne ha.
+
+## I fili
+
+La geometria è pura, in `editors/canvas/edges.ts`; i gesti li fa `engine.ts`.
+La forma del filo resta quella di oggi (la curva che segue i lati è D6, v2).
+
+- **Tirare.** Passando sopra una scheda compaiono quattro punti a metà dei lati
+  (`.canvas-port`, `data-side`). Da un punto, dal pulsante → della testata, con
+  `Alt` trascinando il corpo di una scheda o con lo strumento Collega si tira un
+  filo (`.canvas-edge-draft`); si rilascia su qualsiasi parte di un'altra
+  scheda, quella più in alto se due si coprono (`data-connect-target` mentre si
+  tira). Il lato d'arrivo lo sceglie `edges.ts`: i punti di mezzo più vicini;
+  partito da un punto, il lato di partenza è quello. `Alt` nel vuoto sposta
+  ancora la vista.
+- **Nel vuoto** nasce una scheda di testo col lato verso l'altro capo sotto il
+  puntatore, collegata e già in scrittura: un commit e un solo `Ctrl+Z`. Un clic
+  fermo su un punto, o il rilascio sulla scheda di partenza, non fanno niente.
+  `Esc` durante il tiro lo lascia senza traccia.
+- **Riattaccare.** Il filo scelto ha due prese (`.canvas-edge-reconnect`): una
+  trascinata su un'altra scheda cambia scheda e lato; nel vuoto il filo torna
+  dov'era e niente si cancella.
+- **Prendere.** Un filo si prende entro 8 px sullo schermo, a ogni zoom, e
+  al passaggio si scurisce (`data-hover`); la ricerca guarda solo i fili in
+  vista. Sopra una scheda il filo vince solo dove si vede, fuori dalla scheda;
+  altrove vince la scheda. Un clic lo sceglie, `Canc` lo toglie con la patch
+  `remove-edge` che dice `at`, e `Ctrl+Z` lo rimette al suo posto.
+- In sola lettura non ci sono punti né prese, `Alt` non collega, e i fili si
+  scelgono per leggerli. La penna scrive e non collega mai (D3 è v2).
 
 ## La lavagna vuota
 
