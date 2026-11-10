@@ -1617,7 +1617,13 @@ stesso link lo segue subito e Ctrl+clic fuori da un link aggiunge alla
 scelta.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/canvas/engine-cards.test.ts
-Stato: [ ] da fare
+Stato: [x] fatto (2026-11-10). Differenze: Ctrl+trascinare sposta ancora la
+lavagna (il codice lo faceva già); Ctrl+clic fermo su una scheda la
+aggiunge o la toglie dalla scelta. Invio o doppio clic dove non si entra
+(PDF, web) aprono il campo come prima; il doppio clic sull'immagine lo
+lascia al visore (T5). Link, pulsanti e immagine prendono il puntatore
+anche fuori dalla scheda attiva; il clic semplice lo ferma la tela. Il
+link lo segue la montatura sicura di `mount.ts`. `cards.ts` non cambia.
 
 ## T15 · Trascinare e incollare
 

@@ -59,6 +59,13 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-10 · N6 · T14 integrato tenendo Ctrl+trascinare per spostare
+  la lavagna (il piano diceva che Ctrl+clic «oggi aggiunge alla scelta», il
+  codice invece sposta): Ctrl+clic senza movimento aggiunge o toglie dalla
+  scelta, Ctrl+clic su un link lo segue · Perché: togliere uno spostamento
+  che c'era è un cambio non chiesto; così valgono tutte e tre le cose. Una
+  scheda ferma ha il contenuto `inert`: Ctrl+clic sui suoi link non li
+  trova (solo le schede vive, cioè in vista, li seguono).
 - 2026-11-10 · N6 · T13 integrato con gli scostamenti del coder: la
   scelta delle schede vive si rifà anche dopo ogni resa e con lo zoom da
   pulsanti e tasti; la lavagna conta nascosta se un antenato è `[hidden]` o
