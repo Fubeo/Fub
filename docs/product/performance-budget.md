@@ -14,17 +14,10 @@ non sono claim universali sulle macchine, sui browser o sui grafi arbitrari.
 ## Ambiente e comandi
 
 Il runner registra Node, Chromium, piattaforma, CPU, viewport e preferenze media
-nel referto. I comandi canonici sono lo script
-[`graph-scale.mjs`](../../apps/client/bench/graph-scale.mjs), richiamato dagli
-script npm in [`apps/client/package.json`](../../apps/client/package.json#L15-L26):
-
-```bash
-cd apps/client
-npm run bench:graph-scale -- --nodes 2000 --seed 6 --cycles 3
-npm run bench:graph-scale -- --nodes 10000 --seed 6 --cycles 1 --soak-windows 8
-npm run bench:graph-scale -- --nodes 10000 --seed 6 --cycles 1 --soak-windows 16
-npm run bench:verify
-```
+nel referto. I comandi canonici dei banchi sono in
+[testing-and-quality.md](../development/testing-and-quality.md#banchi) (lo
+script è [`graph-scale.mjs`](../../apps/client/bench/graph-scale.mjs), richiamato
+dagli script npm di [`apps/client/package.json`](../../apps/client/package.json)).
 
 La stessa sequenza di scala è nel job «banchi del grafo (scala e heap)» di
 [`ci.yml`](../../.github/workflows/ci.yml). Il timeout di sicurezza
@@ -82,14 +75,14 @@ fixture 10k/seed 6.
 I tempi e la pendenza sono osservazioni di queste distribuzioni, non una
 promessa di prestazione per ogni ambiente.
 
-## Budget proposti e stato
+## Budget proposti
 
 Sono budget per la review, non ancora gate CI numerici:
 
-| Scenario | p95 | max | Tempo | Campionamento esatto | Stato |
-|---|---:|---:|---:|---|---|
-| 2k | ≤ 25 ms | ≤ 50 ms | total ≤ 10 s | initial: 120 frame | **Review-only**, non CI-enforced |
-| 10k | initial ≤ 35 ms | ≤ 50 ms | total soak ≤ 60 s | initial: 120 frame; soak: 8 × 120 = 960 frame | **Review-only**, non CI-enforced |
+| Scenario | p95 | max | Tempo | Campionamento esatto |
+|---|---:|---:|---:|---|
+| 2k | ≤ 25 ms | ≤ 50 ms | total ≤ 10 s | initial: 120 frame |
+| 10k | initial ≤ 35 ms | ≤ 50 ms | total soak ≤ 60 s | initial: 120 frame; soak: 8 × 120 = 960 frame |
 
 Il runner fallisce su digest inatteso, campione incompleto, interazione non
 causale, risorse positive dopo close, errori primari o cleanup non riuscito.
@@ -136,12 +129,7 @@ con seed 6, non una garanzia per un grafo arbitrario. Digest, pass, interazione,
 120 frame iniziali, soak richiesto e teardown sono qualità osservabili distinte
 dalla complessità asintotica.
 
-## Stato e ricalibrazione
-
-#12 e #40 sono chiuse come consegna integrata. Il residuo heap di
-[#6](https://github.com/Fubeo/Fub/issues/6), posseduto da [#56](https://github.com/Fubeo/Fub/issues/56),
-è stato soddisfatto da esecuzioni consecutive verdi del gate prolungato.
-Entrambe le issue risultano chiuse; i budget di frame time restano osservazionali.
+## Ricalibrazione
 
 Ricalibrare dopo ulteriori distribuzioni o quando cambiano browser, sistema,
 hardware, fixture, renderer o algoritmo. Confrontare sempre la stessa fixture e

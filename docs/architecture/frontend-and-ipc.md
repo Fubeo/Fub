@@ -51,11 +51,9 @@ Il mirror non è una seconda implementazione della logica. Contiene soltanto:
 
 ## Interi
 
-JSON non preserva tutti gli interi `u64`. Identità, revisioni e hash che possono
-superare `2^53 - 1` attraversano IPC come stringhe.
-
-Un valore temporale in millisecondi può restare `number` quando il proprio
-dominio è dimostrabilmente sicuro e viene usato per aritmetica.
+Le identità, revisioni e hash `u64` attraversano IPC come stringhe; la regola
+canonica (e quando un valore può restare `number`) è in
+[`ipc-contract.md`](../reference/ipc-contract.md#u64).
 
 ## Porte generiche
 

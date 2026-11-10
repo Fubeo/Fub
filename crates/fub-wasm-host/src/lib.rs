@@ -1,4 +1,4 @@
-//! **Il secondo backend** (§16.1, [M5](../../../docs/project/m5-wasm-runtime.md)):
+//! **Il secondo backend** (§16.1, [M5](../../../docs/architecture/plugin-runtime.md)):
 //! un componente WASM che il kernel vede come qualunque altro provider.
 //!
 //! Il contratto vivo è `fub:abi@0.2.0`; le baseline congelate e il bridge

@@ -1,5 +1,9 @@
 # Spike WASM — rapporto
 
+Rapporto storico dello spike del 2026-08-13, conservato per la misura che
+contiene: il runtime che qui risulta mancante esiste come
+[`crates/fub-wasm-host`](../../crates/fub-wasm-host/Cargo.toml).
+
 Misura eseguita il 2026-08-13 su `c5d3786`, con Rust/Cargo 1.97.1 e target
 `wasm32-unknown-unknown` già installato. Il deliverable è questa misura: non è
 stato aggiunto un runtime e non è iniziata M5.
@@ -92,7 +96,7 @@ compila. Non è un controllo testuale del mirror.
 ## 4. La chiamata minima non ha ancora un host
 
 La latenza del confine, i byte copiati da una chiamata e il costo di
-serializzare un `Document` non sono misurabili onestamente oggi:
+serializzare un `Document` non sono misurabili onestamente in questa misura:
 
 - `fub-wasm-host` è ancora solo la voce commentata di M5 nel `Cargo.toml`;
 - il core vieta motori quali Wasmtime/Wasmer con

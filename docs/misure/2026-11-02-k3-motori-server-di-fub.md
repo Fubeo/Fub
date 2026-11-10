@@ -257,7 +257,7 @@ lati. `cargo bloat` non è installato: il peso per crate non c'è.
   dentro le prove.
 - La prima apertura di `Documento.docx` sta fra 13,9 e 17 ms nei due lati,
   sopra l'obiettivo di 11 ms scritto con la
-  [misura di K0](motori-2026-10-31-linux-ryzen.md) sulla stessa macchina
+  [misura di K0](2026-10-31-motori-linux-ryzen.md) sulla stessa macchina
   (10,5 ms): non è un effetto di K3, ed è da rivedere a parte.
 
 ## 2026-11-04: i documenti che si chiudono
