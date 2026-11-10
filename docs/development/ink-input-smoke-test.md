@@ -138,6 +138,49 @@ in testa alla barra di sotto.
    poi alza senza muovere: l'oggetto resta. Con la penna lo stesso gesto non
    lascia una coda dritta.
 
+## Le schede vive
+
+Questa prova copre il cancello di N6 sui file che arrivano dal sistema: un
+`.xlsx` vero trascinato dal file manager sulla lavagna, una penna sopra la
+scheda di foglio, poi chiudi e riapri. Il file del computer non deve cambiare, e
+nel vault non deve comparire nient'altro. La fanno anche chi cambia
+`state/canvas-intake.ts`, `editors/media/attachment-target.ts` o la scelta
+«Dove vanno i file trascinati». Il vault è una cartella di prova, mai quello di
+lavoro: il `.xlsx` sta fuori dal vault, per esempio sul desktop.
+
+Prima della prova, in un terminale (Linux):
+
+```bash
+VAULT=$(mktemp -d)                                  # il vault di prova
+printf '{"nodes":[],"edges":[]}\n' > "$VAULT/lavagna.canvas"
+sha256sum ~/Scrivania/prova.xlsx                    # prima: annota l'impronta
+```
+
+Apri `$VAULT` nell'app (il comando è quello della Preparazione) e segui la
+tabella.
+
+| N. | Gesto | Atteso |
+|---|---|---|
+| 1 | Apri `lavagna.canvas` dall'albero | la lavagna vuota |
+| 2 | Trascina `prova.xlsx` dal file manager su uno spazio vuoto della lavagna e rilascia | nasce una scheda di foglio nel punto del rilascio; la notifica dice «Copiati in attachments/», con «Cambia cartella» |
+| 3 | Con la penna (o col mouse, con «Scrivi col mouse» acceso), un tratto sopra la scheda di foglio | il tratto resta sulla scheda e la segue quando la sposti |
+| 4 | Chiudi la lavagna, chiudi l'app, riaprila e riapri il vault | foglio e tratto al loro posto; niente altra copia |
+| 5 | Trascina di nuovo `prova.xlsx` sulla lavagna | nessun file nuovo in `attachments/`; la notifica dice «Già nel vault come attachments/prova.xlsx, uso quello», con «Fanne una copia» |
+| 6 | Nel terminale: `mv "$VAULT/attachments/prova.xlsx" "$VAULT/attachments/bilancio.xlsx"`, poi trascina `prova.xlsx` ancora | la notifica trova `attachments/bilancio.xlsx`; ancora nessun file nuovo |
+| 7 | Guarda le celle del foglio nella scheda | le celle del `.xlsx` vero, come nel file. È l'unica parte che la prova automatica non fa: il finto non apre i fogli |
+
+Alla fine, nel terminale, le impronte e i file del vault:
+
+```bash
+sha256sum ~/Scrivania/prova.xlsx "$VAULT"/attachments/*.xlsx   # dopo: uguali a prima
+find "$VAULT" -type f -not -path "*/.fub/*"                    # solo la lavagna e la copia
+```
+
+Su Windows e su macOS la prova la fa l'utente con gli stessi passi, e
+l'impronta si calcola con `certutil -hashfile <file> SHA256` e con
+`shasum -a 256 <file>`. Annota il commit (`git rev-parse --short HEAD`), il
+sistema e la webview, come nelle altre sezioni.
+
 ## Che cosa annotare
 
 Per ogni riga scrivi uno di tre esiti:
