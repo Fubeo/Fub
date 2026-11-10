@@ -1,0 +1,19 @@
+{
+  "name": "write-image-askew",
+  "description": "Fub scrive solo multipli di 90 gradi.",
+  "file": "foto.png",
+  "parts": {
+    "kind": "image",
+    "rect": [
+      0,
+      0,
+      1,
+      1
+    ],
+    "rotate": 45
+  },
+  "expect": {
+    "outcome": "refused",
+    "reason": "rotate"
+  }
+}

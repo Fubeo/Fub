@@ -12,6 +12,9 @@
 //! lo verifica (`the_canvas_core_stands_alone`), e il giro completo di
 //! `scripts/check.sh` lo compila per quel bersaglio.
 //!
+//! Gli estratti di una scheda di file, il campo `fub:parts`, li legge e li
+//! scrive [`parts`].
+//!
 //! Regola d'oro: **i byte che non si interpretano non si toccano**. Ogni
 //! livello del modello conserva i campi sconosciuti (`extra`).
 //!
@@ -24,6 +27,7 @@ pub mod ink;
 pub mod js;
 pub mod model;
 pub mod ops;
+pub mod parts;
 pub mod patch;
 pub mod read;
 pub mod source;

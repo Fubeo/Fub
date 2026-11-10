@@ -19,6 +19,7 @@ import { formatKindOf } from "../../ui/format-kind";
 import type { Lifetime } from "../../ui/lifetime";
 import { mediaKindOfId } from "../media/media-types";
 import type { CanvasNode } from "./model";
+import type { CanvasParts } from "./parts";
 
 /// Viva: il renderer ha aperto il file. Ferma: nessuna risorsa aperta.
 export type CardMode = "live" | "snapshot";
@@ -156,6 +157,10 @@ export interface CardContext {
   /// La scheda mostra un'altra pagina (da 1): la tela la ricorda. Assente,
   /// non si ricorda niente.
   pageChanged?(page: number): void;
+  /// Le parti dell'estratto (`fub:parts`, `docs/reference/canvas-parts.md`),
+  /// già lette e provate col file e il `subpath` (`cardParts` di `parts.ts`);
+  /// `null` o assente: la scheda mostra ciò che dice il `subpath`.
+  readonly parts?: CanvasParts | null;
 }
 
 /// Una scheda montata da un renderer.

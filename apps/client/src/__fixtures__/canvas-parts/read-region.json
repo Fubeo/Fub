@@ -1,0 +1,15 @@
+{
+  "name": "read-region",
+  "description": "Un rettangolo della pagina 7 con l'impronta della pagina.",
+  "source": "{\n  \"nodes\": [\n    { \"id\": \"n1\", \"type\": \"file\", \"file\": \"Libro.pdf\", \"subpath\": \"#page=7\", \"x\": 0, \"y\": 0, \"width\": 400, \"height\": 500,\n      \"fub:parts\": { \"kind\": \"region\", \"page\": 7, \"rect\": [0.1, 0.306, 0.8, 0.141], \"key\": \"p4:9f2c\" } }\n  ],\n  \"edges\": []\n}\n",
+  "expect": {
+    "cards": [
+      {
+        "node": "n1",
+        "state": "ok",
+        "parts": "{\"kind\":\"region\",\"page\":7,\"rect\":[0.1,0.306,0.8,0.141],\"key\":\"p4:9f2c\"}",
+        "shows": "#page=7"
+      }
+    ]
+  }
+}

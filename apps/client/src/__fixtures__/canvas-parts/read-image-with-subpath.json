@@ -1,0 +1,15 @@
+{
+  "name": "read-image-with-subpath",
+  "description": "Un'immagine non ha subpath: se qualcuno ne ha messo uno, vince lui.",
+  "source": "{\n  \"nodes\": [\n    { \"id\": \"n1\", \"type\": \"file\", \"file\": \"foto.png\", \"subpath\": \"#page=1\", \"x\": 0, \"y\": 0, \"width\": 400, \"height\": 500,\n      \"fub:parts\": { \"kind\": \"image\", \"rect\": [0, 0, 1, 0.5] } }\n  ],\n  \"edges\": []\n}\n",
+  "expect": {
+    "cards": [
+      {
+        "node": "n1",
+        "state": "kept",
+        "reason": "subpath",
+        "shows": "#page=1"
+      }
+    ]
+  }
+}

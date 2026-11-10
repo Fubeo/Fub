@@ -1,0 +1,20 @@
+{
+  "name": "write-pages-four",
+  "description": "Quattro pagine: il subpath della prima e il campo intero.",
+  "file": "Libro.pdf",
+  "parts": {
+    "kind": "pages",
+    "pages": [
+      3,
+      4,
+      5,
+      8
+    ],
+    "layout": "one"
+  },
+  "expect": {
+    "outcome": "written",
+    "subpath": "#page=3",
+    "parts": "{\"kind\":\"pages\",\"pages\":[3,4,5,8],\"layout\":\"one\"}"
+  }
+}

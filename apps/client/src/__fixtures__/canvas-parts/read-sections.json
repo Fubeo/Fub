@@ -1,0 +1,15 @@
+{
+  "name": "read-sections",
+  "description": "Due sezioni di una nota: il subpath è la prima.",
+  "source": "{\n  \"nodes\": [\n    { \"id\": \"n1\", \"type\": \"file\", \"file\": \"Appunti/Statistica.md\", \"subpath\": \"#Varianza\", \"x\": 0, \"y\": 0, \"width\": 400, \"height\": 500,\n      \"fub:parts\": { \"kind\": \"sections\", \"sections\": [\"Varianza\", \"Media\"] } }\n  ],\n  \"edges\": []\n}\n",
+  "expect": {
+    "cards": [
+      {
+        "node": "n1",
+        "state": "ok",
+        "parts": "{\"kind\":\"sections\",\"sections\":[\"Varianza\",\"Media\"]}",
+        "shows": "#Varianza"
+      }
+    ]
+  }
+}

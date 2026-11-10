@@ -1,0 +1,16 @@
+{
+  "name": "read-pages-default-layout",
+  "description": "Due pagine senza layout: vale la regola di serie, in fila; il file non riceve il campo.",
+  "source": "{\n  \"nodes\": [\n    { \"id\": \"n1\", \"type\": \"file\", \"file\": \"Libro.pdf\", \"subpath\": \"#page=2\", \"x\": 0, \"y\": 0, \"width\": 400, \"height\": 500,\n      \"fub:parts\": { \"kind\": \"pages\", \"pages\": [2, 5] } }\n  ],\n  \"edges\": []\n}\n",
+  "expect": {
+    "cards": [
+      {
+        "node": "n1",
+        "state": "ok",
+        "parts": "{\"kind\":\"pages\",\"pages\":[2,5]}",
+        "shows": "#page=2",
+        "layout": "row"
+      }
+    ]
+  }
+}
