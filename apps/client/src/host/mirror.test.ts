@@ -136,6 +136,7 @@ import type {
   LiveStopReport,
   LiveView,
   LiveWriterStatus,
+  ResourceWriteReceipt,
 } from "./contract";
 import type {
   ConfigFileKind, ConfigReport, ConfigStatus, DemoClosed, DemoOpened, DiagnosticSummary,
@@ -962,6 +963,8 @@ const APP_RECORD_KEYS: Record<string, string[]> = {
   }),
   ConfigReport: keysOf<ConfigReport>({ kind: true, path: true, status: true }),
   RecoverOutcome: keysOf<RecoverOutcome>({ backup: true, detail: true, restart_required: true }),
+  // La ricevuta di `resource_write` (`fub_host::resources`).
+  ResourceWriteReceipt: keysOf<ResourceWriteReceipt>({ id: true, revision: true, reused: true }),
   // La sessione live: le chiavi sono i nomi dei tipi di `fub_live::host`,
   // che di qua portano il prefisso `Live`.
   LiveStarted: keysOf<LiveStarted>({ session: true, pairing: true, addresses: true }),

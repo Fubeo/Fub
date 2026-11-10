@@ -988,6 +988,29 @@ export interface ResourceDescriptor {
   revision: string | null;
 }
 
+/**
+ * La ricevuta di `resource_write`; rispecchia
+ * `fub_host::resources::ResourceWriteReceipt`. `reused` vero: il vault aveva
+ * già questi byte (`reuse: "same-content"`), niente è stato scritto, e `id` e
+ * `revision` sono quelli del file che c'era. Una ricevuta senza il campo (un
+ * host di prima) arriva a chi chiama con `reused: false`.
+ */
+export interface ResourceWriteReceipt {
+  readonly id: string;
+  readonly revision: string;
+  readonly reused: boolean;
+}
+
+/**
+ * Come depositare: `reuse: "same-content"` chiede all'host di non scrivere se
+ * un file del vault ha esattamente questi byte, anche con un altro nome. Vale
+ * solo per un file nuovo (`expected` nullo: altrimenti `bad_args`). Quando
+ * l'host non sa rispondere, scrive: nel dubbio si deposita.
+ */
+export interface ResourceWriteOptions {
+  readonly reuse?: "same-content";
+}
+
 /** IPC della sola finestra documento locale. Il vault è fissato dal parent. */
 export interface DocumentWindowRequest {
   surface: "document";

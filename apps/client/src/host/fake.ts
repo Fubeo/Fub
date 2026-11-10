@@ -68,6 +68,7 @@ import type {
   PlannedEdit,
   QueryExpr,
   ResourceDescriptor,
+  ResourceWriteReceipt,
   QueryPredicate,
   SettingEntry,
   SettingValue,
@@ -215,6 +216,11 @@ interface Lease {
 
 /// Il tetto di una fetta di `resourceReadChunk`, come quello del kernel.
 const CHUNK_MAX = 64 * 1024;
+/// I limiti della domanda «lo stesso contenuto» (`fub_kernel::same_content`,
+/// A-17): al più tante voci della stessa misura e tanti byte letti; oltre, «non
+/// so», e il deposito si scrive.
+const SAME_CONTENT_MAX_CANDIDATES = 64;
+const SAME_CONTENT_MAX_BYTES = 512 * 1024 * 1024;
 /// I formati di `fub-format-rich` con la feature `rich` dell'host.
 const RICH_FAKE_FORMATS: ReadonlySet<string> = new Set(["docx", "odt", "rtf", "doc"]);
 /// Le estensioni delle cartelle di `fub-format-xlsx`, con la feature `xlsx`
@@ -631,6 +637,27 @@ export function createFakeHost(options: Options = {}): FakeHost {
   /// I byte di un documento come li vedrebbe il disco.
   function bytesOf(doc: Document): Uint8Array {
     return doc.bytes ?? new TextEncoder().encode(doc.text);
+  }
+
+  /// Il file finto che ha esattamente questi byte, il primo per percorso, o
+  /// `null` (nessuno, o «non so» oltre i limiti): la stessa domanda di
+  /// `Vault::same_content_bytes`. Il cestino del finto non sta in `docs`, e
+  /// `.fub/` non conta.
+  function sameContent(wanted: Uint8Array): string | null {
+    if (wanted.byteLength > SAME_CONTENT_MAX_BYTES) return null;
+    const candidates = [...docs.entries()]
+      .filter(([id]) => !id.startsWith(".fub/"))
+      .map(([id, doc]) => [id, bytesOf(doc)] as const)
+      .filter(([, bytes]) => bytes.byteLength === wanted.byteLength)
+      .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
+    if (candidates.length > SAME_CONTENT_MAX_CANDIDATES) return null;
+    let read = 0;
+    for (const [id, bytes] of candidates) {
+      read += bytes.byteLength;
+      if (read > SAME_CONTENT_MAX_BYTES) return null;
+      if (bytes.every((byte, at) => byte === wanted[at])) return id;
+    }
+    return null;
   }
 
   /// Il formato che il registro dei provider riconoscerebbe dall'estensione,
@@ -1646,8 +1673,23 @@ export function createFakeHost(options: Options = {}): FakeHost {
         return lease.url;
       },
       // `expected` null è «solo creazione», una stringa è il CAS sulla
-      // revisione: è il contratto di `resource_write`.
-      resourceWrite: (id, bytes, expected, vault) => gate("resourceWrite", [id, bytes, expected, vault], Promise.resolve().then(() => {
+      // revisione: è il contratto di `resource_write`. Con `reuse:
+      // "same-content"` un file con gli stessi byte risponde al posto della
+      // scrittura (lo scenario dell'host vero lo lega in
+      // `fake-resources.test.ts`).
+      resourceWrite: (id, bytes, expected, vault, options) => gate("resourceWrite", options === undefined ? [id, bytes, expected, vault] : [id, bytes, expected, vault, options], Promise.resolve().then((): ResourceWriteReceipt => {
+        const reuse: unknown = options?.reuse;
+        if (reuse !== undefined && reuse !== "same-content") {
+          throw { kind: "bad_args", message: `host fake: \`reuse\` sconosciuto (${String(reuse)})` } satisfies PluginError;
+        }
+        if (reuse !== undefined && expected !== null) {
+          throw { kind: "bad_args", message: `host fake: \`reuse\` con \`expected\` per «${id}»` } satisfies PluginError;
+        }
+        if (reuse !== undefined) {
+          const found = sameContent(bytes);
+          const there = found === null ? undefined : docs.get(found);
+          if (found !== null && there) return { id: found, revision: there.revision, reused: true };
+        }
         const before = docs.get(id);
         if (expected === null && before) {
           throw { kind: "already_exists", message: `host fake: «${id}» esiste già` } satisfies PluginError;
@@ -1658,7 +1700,7 @@ export function createFakeHost(options: Options = {}): FakeHost {
         const rev = writeBytes(id, bytes, before?.bytes ? before.mime : undefined);
         const kind = entryKind(id);
         emit(kind === "document" ? { type: "document_changed", id } : { type: "entry_changed", id, kind });
-        return { id, revision: rev };
+        return { id, revision: rev, reused: false };
       })),
       viewerOpen: (url, title, policy) =>
         gate("viewerOpen", [url, title, policy], Promise.reject(new Error("host fake: isolated viewer is unavailable"))),

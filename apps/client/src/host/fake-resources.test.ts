@@ -5,6 +5,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type { KernelEvent, LinkTarget } from "./contract";
 import { createFakeHost } from "./fake";
+import resourceWriteScenario from "../__fixtures__/resource-write-scenario.json";
 
 const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0]);
 
@@ -118,5 +119,68 @@ describe("i riferimenti agli allegati nell'host finto", () => {
     expect(await resolve({ kind: "path", value: "../../fuori.png" })).toBeNull();
     expect(await resolve({ kind: "wiki", value: { page: "schema.png", heading: null, block: null } })).toBe("Risorse/schema.png");
     expect(await resolve({ kind: "wiki", value: { page: "Una nota", heading: null, block: null } })).toBe("Guida/Una nota.md");
+  });
+});
+
+// Lo scenario registrato sull'host vero da `crates/fub-app/src/resources.rs`
+// (`the_fake_hosts_resource_write_scenario_is_what_the_real_host_answers`): le
+// stesse domande a `resourceWrite`, le stesse risposte.
+interface ScenarioStep {
+  meta: { id: string; vault: null; expected: string | null; reuse?: string };
+  text: string;
+  answer: { id: string; reused: boolean } | { error: string };
+}
+
+describe("resourceWrite con reuse risponde come l'host vero", () => {
+  it("gioca lo scenario registrato sull'host vero", async () => {
+    const scenario = resourceWriteScenario as { files: Record<string, string>; steps: ScenarioStep[] };
+    const encoder = new TextEncoder();
+    const resources = Object.fromEntries(
+      Object.entries(scenario.files).map(([id, text]) => [id, { bytes: encoder.encode(text) }]),
+    );
+    const { module } = createFakeHost({ resources });
+    const { api } = module;
+    expect(scenario.steps.length).toBeGreaterThan(0);
+    for (const step of scenario.steps) {
+      const { id, expected, reuse } = step.meta;
+      const options = reuse === undefined ? undefined : { reuse: reuse as "same-content" };
+      const answer = await api.resourceWrite(id, encoder.encode(step.text), expected, undefined, options).then(
+        async (receipt) => {
+          // La revisione della ricevuta è quella del file che nomina.
+          const opened = await api.resourceOpen(receipt.id);
+          expect(receipt.revision, id).toBe(opened.revision);
+          await api.resourceClose(opened.handle);
+          return { id: receipt.id, reused: receipt.reused };
+        },
+        (error: { kind: string }) => ({ error: error.kind }),
+      );
+      expect(answer, `${id} ${JSON.stringify(step.meta)}`).toEqual(step.answer);
+    }
+  });
+
+  it("un riuso non scrive e non emette eventi", async () => {
+    const png = new Uint8Array([1, 2, 3, 4]);
+    const host = createFakeHost({ resources: { "Allegati/a.png": { bytes: png } } });
+    const events: KernelEvent[] = [];
+    await host.module.onKernelEvent((notice) => events.push(notice.event));
+    const receipt = await host.module.api.resourceWrite("Lavagna/b.png", png.slice(), null, undefined, { reuse: "same-content" });
+    expect(receipt).toMatchObject({ id: "Allegati/a.png", reused: true });
+    await expect(host.module.api.resourceOpen("Lavagna/b.png")).rejects.toMatchObject({ kind: "not_found" });
+    expect(events).toEqual([]);
+  });
+
+  it("oltre 64 candidati della stessa misura non sa, e scrive", async () => {
+    const resources: Record<string, { bytes: Uint8Array }> = {};
+    for (let n = 0; n < 65; n += 1) resources[`Pile/${String(n).padStart(3, "0")}.bin`] = { bytes: new Uint8Array([n, 0, 0, 0]) };
+    const { module } = createFakeHost({ resources });
+    // Gli stessi byte di `Pile/000.bin`: con 65 candidati la risposta è «non so».
+    const receipt = await module.api.resourceWrite("Nuovo.bin", new Uint8Array([0, 0, 0, 0]), null, undefined, { reuse: "same-content" });
+    expect(receipt).toMatchObject({ id: "Nuovo.bin", reused: false });
+    // Con 64 candidati si risponde.
+    const fewer = { ...resources };
+    delete fewer["Pile/064.bin"];
+    const small = createFakeHost({ resources: fewer });
+    await expect(small.module.api.resourceWrite("Nuovo.bin", new Uint8Array([0, 0, 0, 0]), null, undefined, { reuse: "same-content" }))
+      .resolves.toMatchObject({ id: "Pile/000.bin", reused: true });
   });
 });

@@ -37,6 +37,7 @@ import type {
   InvokeMode,
   KernelNotice,
   ResourceDescriptor,
+  ResourceWriteOptions,
   Locale,
   PluginError,
   SettingValue,
@@ -242,8 +243,11 @@ export const api = {
   /// e la sa soltanto Tauri: costruirla a mano rompeva le immagini delle note
   /// su Windows. L'handle è un numero: niente percorso, niente query.
   assetUrl: (handle: string) => convertFileSrc(handle, "fub-asset"),
-  resourceWrite: (id: string, bytes: Uint8Array, expected: string | null, vault?: string | null) =>
-    writeResource(mediaInvoke, id, bytes, expected, vault ?? undefined),
+  /// Deposita byte grezzi: `expected` null crea soltanto, una stringa è il CAS.
+  /// `options.reuse: "same-content"` non scrive se il vault ha già questi byte
+  /// (vedi `writeResource` e la sezione «Depositare un file» del contratto).
+  resourceWrite: (id: string, bytes: Uint8Array, expected: string | null, vault?: string | null, options?: ResourceWriteOptions) =>
+    writeResource(mediaInvoke, id, bytes, expected, vault ?? undefined, options),
   viewerOpen: (url: string, title: string, policy: { allowRemote: boolean; allowlist: readonly string[] }) =>
     openViewer(mediaInvoke, url, title, policy),
   viewerSave: (url: string, title: string, allowlist: readonly string[], attachmentFolder: string, vault?: string) =>
