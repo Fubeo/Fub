@@ -5,15 +5,17 @@
 // Lo stato sta nello stato di vista `canvas.view:<documentId>`:
 //
 //   { "version": 1, "camera": { "x", "y", "zoom" }, "selection": [id…],
-//     "pages": { nodeId: pagina }, "navigator": false }
+//     "pages": { nodeId: pagina }, "navigator": false, "grid": true }
 //
 // `"navigator": false` c'è solo quando «Nascondi il navigatore» l'ha spento per
-// questa lavagna (T55); senza, il navigatore è acceso.
+// questa lavagna (T55); senza, il navigatore è acceso. `"grid"` c'è solo quando
+// Ctrl+' ha scelto la griglia per questa lavagna (T71); senza, vale
+// `canvas.grid` delle impostazioni.
 //
 // Al più 500 schede scelte e 1000 pagine (le più recenti). Una versione che
 // questo client non conosce si ignora e non si riscrive mai; i campi in più
-// della versione 1 (la griglia, il tema per scheda dei passi
-// dopo) si conservano a ogni riscrittura. Uno stato rotto vale come nessuno
+// della versione 1 (il tema per scheda dei passi dopo) si conservano a ogni
+// riscrittura. Uno stato rotto vale come nessuno
 // stato: la lavagna parte come se non ci fosse, e la prima scrittura lo
 // sostituisce.
 //
@@ -50,6 +52,8 @@ export interface CanvasView {
   readonly pages: ReadonlyMap<string, number>;
   /// «Nascondi il navigatore» per questa lavagna (T55); assente vale acceso.
   readonly navigatorHidden?: boolean;
+  /// La griglia scelta con Ctrl+' per questa lavagna (T71); assente vale `canvas.grid`.
+  readonly grid?: boolean;
 }
 
 /// Ciò che si legge dallo stato di vista.
@@ -61,7 +65,7 @@ export type CanvasViewRead =
   /// Una versione che questo client non conosce: si parte come oggi, e non si scrive.
   | { readonly kind: "foreign" };
 
-const KNOWN_FIELDS = new Set(["version", "camera", "selection", "pages", "navigator"]);
+const KNOWN_FIELDS = new Set(["version", "camera", "selection", "pages", "navigator", "grid"]);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -107,7 +111,13 @@ export function parseCanvasView(value: unknown): CanvasViewRead {
   for (const [field, entry] of Object.entries(value)) {
     if (!KNOWN_FIELDS.has(field)) extra[field] = entry;
   }
-  const view: CanvasView = value.navigator === false ? { camera, selection, pages, navigatorHidden: true } : { camera, selection, pages };
+  const view: CanvasView = {
+    camera,
+    selection,
+    pages,
+    ...(value.navigator === false ? { navigatorHidden: true } : {}),
+    ...(typeof value.grid === "boolean" ? { grid: value.grid } : {}),
+  };
   return { kind: "state", view, extra };
 }
 
@@ -139,6 +149,7 @@ export function serializeCanvasView(
   out.selection = view.selection.slice(0, CANVAS_VIEW_SELECTION_MAX);
   out.pages = pages;
   if (view.navigatorHidden === true) out.navigator = false;
+  if (view.grid !== undefined) out.grid = view.grid;
   return out;
 }
 
@@ -192,6 +203,8 @@ export type CanvasViewSnapshot = {
   readonly selection: readonly string[];
   /// Il navigatore spento per questa lavagna (T55).
   readonly navigatorHidden?: boolean;
+  /// La griglia scelta con Ctrl+' per questa lavagna (T71); assente se non l'ha scelta.
+  readonly grid?: boolean;
 } | null;
 
 type RecorderStatus = "idle" | "reading" | "ready" | "frozen" | "closed";
@@ -319,6 +332,7 @@ export class CanvasViewRecorder {
       selection: snapshot.selection,
       pages: this.#pages,
       ...(snapshot.navigatorHidden === true ? { navigatorHidden: true } : {}),
+      ...(snapshot.grid !== undefined ? { grid: snapshot.grid } : {}),
     }, this.#extra);
     const text = JSON.stringify(value);
     if (text === this.#last) return;

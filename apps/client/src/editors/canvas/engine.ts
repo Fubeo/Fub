@@ -155,6 +155,7 @@ import {
   type PlacedEdge,
 } from "./edges";
 import { CanvasViewRecorder, type CanvasView, type CanvasViewMemory, type CanvasViewSnapshot } from "./view-state";
+import { GUIDE_SCREEN_PX, snapGuides, type GuideRect, type GuideResult, type GuideSegment, type GuideSide } from "./guides";
 import {
   CanvasCoreError,
   canvasCoreReady,
@@ -166,6 +167,8 @@ import {
 } from "./wasm/core";
 
 export const CANVAS_SNAP = 8;
+/** Sotto questi pixel sullo schermo la griglia non si disegna (T71): la sua cella è più piccola. */
+export const CANVAS_GRID_MIN_PX = 4;
 export const CANVAS_MIN_SIZE = 40;
 export const MAX_CANVAS_HISTORY = 100;
 /** La pausa dopo l'ultimo tasto in una scheda, prima che il suo testo si registri. */
@@ -736,6 +739,9 @@ function snap(value: number): number {
   return Math.round(value / CANVAS_SNAP) * CANVAS_SNAP;
 }
 
+/** Spostando una scheda o una selezione, tutti e tre i punti di ogni asse si agganciano (T71). */
+const MOVE_SIDES: readonly GuideSide[] = ["start", "center", "end"];
+
 // --- ridimensionare (T66) -------------------------------------------------------
 
 /** Un angolo di una scheda, o della cornice della scelta: dove sta una maniglia. */
@@ -777,6 +783,8 @@ export interface ResizeOptions {
   readonly fromCenter: boolean;
   /** L'aggancio delle misure a `CANVAS_SNAP` (A-23); con le proporzioni tenute non c'è. */
   readonly snap: boolean;
+  /** Gli assi che una guida ha già messo (T71): su quelli la misura non si aggancia alla griglia. */
+  readonly guided?: { readonly x: boolean; readonly y: boolean };
   readonly minWidth: number;
   readonly minHeight: number;
 }
@@ -803,8 +811,8 @@ export function resizeBox(start: ResizeBox, corner: ResizeCorner, dx: number, dy
     width = start.width * scale;
     height = start.height * scale;
   } else if (options.snap) {
-    width = snap(width);
-    height = snap(height);
+    if (!options.guided?.x) width = snap(width);
+    if (!options.guided?.y) height = snap(height);
   }
   width = Math.round(Math.max(options.minWidth, Number.isFinite(width) ? width : start.width));
   height = Math.round(Math.max(options.minHeight, Number.isFinite(height) ? height : start.height));
@@ -1070,6 +1078,15 @@ export class CanvasEngine {
   #pointerSeen: { x: number; y: number } | null = null;
   /** I rettangoli tratteggiati di un trascinamento in corso sopra la vista. */
   #dropGhosts: HTMLElement | null = null;
+  /** La griglia (T71): i punti sotto le schede, nella vista; `null` prima del montaggio. */
+  #grid: HTMLElement | null = null;
+  /** Le guide del gesto in corso (T71): un solo elemento sopra le schede; `null` a gesto fermo. */
+  #guideLayer: HTMLElement | null = null;
+  /** `canvas.grid` e `canvas.snap` (impostazioni del vault), dal vivo. */
+  #gridSetting = DEFAULT_PREFERENCES.grid;
+  #snapSetting = DEFAULT_PREFERENCES.snap;
+  /** Ctrl+' per questa lavagna (T71): `null` segue `canvas.grid`; si ricorda con la vista. */
+  #gridOverride: boolean | null = null;
   #drag: { pointerId: number; startX: number; startY: number; origin: Map<string, { x: number; y: number }>; moved: boolean } | null = null;
   /**
    * Il ridimensionamento in corso (T66): la maniglia `corner`, la cornice di
@@ -1266,7 +1283,7 @@ export class CanvasEngine {
    * non arriva: la prende solo ciò che nessuno ha cambiato nel frattempo.
    * `null` prima che la lavagna si mostri, e dopo che la vista è arrivata.
    */
-  #openView: { readonly camera: Viewport; readonly selection: string; readonly navigatorHidden: boolean } | null = null;
+  #openView: { readonly camera: Viewport; readonly selection: string; readonly navigatorHidden: boolean; readonly grid: boolean | null } | null = null;
   /** La vista letta prima che il nucleo aprisse il testo: la prende `#revive`. */
   #heldView: { readonly round: number; readonly view: CanvasView } | null = null;
   /**
@@ -1303,6 +1320,9 @@ export class CanvasEngine {
     this.#life.add(watchPreferences((preferences) => {
       this.#wheelSetting = preferences.wheel;
       this.#partsPickerSetting = preferences.partsPicker;
+      this.#gridSetting = preferences.grid;
+      this.#snapSetting = preferences.snap;
+      this.#paintGrid();
       this.#rail.setToolbar(preferences.toolbar);
       this.#dropChoice = { dropFolder: preferences.dropFolder, dropFolderPath: preferences.dropFolderPath };
       this.#statusSettle();
@@ -1340,7 +1360,12 @@ export class CanvasEngine {
     this.#handleLayer = document.createElementNS("http://www.w3.org/2000/svg", "svg");
     this.#handleLayer.classList.add("canvas-edge-handles");
     this.#handleLayer.setAttribute("aria-hidden", "true");
-    this.#viewport.append(this.#stage, this.#handleLayer);
+    // La griglia (T71) sta sotto lo stage: i suoi punti non passano sopra le schede.
+    this.#grid = document.createElement("div");
+    this.#grid.className = "canvas-grid";
+    this.#grid.setAttribute("aria-hidden", "true");
+    this.#viewport.append(this.#grid, this.#stage, this.#handleLayer);
+    this.#paintGrid();
     // Il corpo: la colonna degli strumenti (T49) e l'area della lavagna, come
     // il corpo del disegno. Stretta, la colonna va sotto, in riga.
     this.#rail = createCanvasRail({
@@ -1835,6 +1860,7 @@ export class CanvasEngine {
     // vita chiude lo scheduler e ciò che il silenzio della penna teneva.
     this.#syncInkLayer();
     this.#life.close();
+    this.#hideGuides();
     this.#dropCore();
     // Ogni vista si distrugge qui, una volta: `#releaseBody` la dimentica.
     this.#dropCards();
@@ -3127,6 +3153,7 @@ export class CanvasEngine {
     // Il filo sta nello stage (T91): la sua camera è quella dello stage. Le prese no.
     this.#handleLayer.style.transform = `translate(${this.#camera.x}px, ${this.#camera.y}px) scale(${this.#camera.zoom})`;
     this.#inkLayer?.setCamera(this.#camera.x, this.#camera.y, this.#camera.zoom);
+    this.#paintGrid();
     // Le maniglie e i segni sopra le schede restano della stessa misura sullo
     // schermo a ogni zoom (T66): la pelle divide per `--canvas-zoom`.
     this.#stage.style.setProperty("--canvas-zoom", String(this.#camera.zoom));
@@ -3147,13 +3174,23 @@ export class CanvasEngine {
     if (!this.#doc) return null;
     const camera = { ...this.#camera };
     const selection = [...this.#selection];
-    return this.#navigatorHidden ? { camera, selection, navigatorHidden: true } : { camera, selection };
+    return {
+      camera,
+      selection,
+      ...(this.#navigatorHidden ? { navigatorHidden: true } : {}),
+      ...(this.#gridOverride !== null ? { grid: this.#gridOverride } : {}),
+    };
   }
 
   /** La lavagna si è appena mostrata: la vista ricordata, se arriva, parte da qui. */
   #markOpenView(): void {
     if (!this.#viewMemo) return;
-    this.#openView = { camera: { ...this.#camera }, selection: this.#selection.join("\n"), navigatorHidden: this.#navigatorHidden };
+    this.#openView = {
+      camera: { ...this.#camera },
+      selection: this.#selection.join("\n"),
+      navigatorHidden: this.#navigatorHidden,
+      grid: this.#gridOverride,
+    };
   }
 
   /**
@@ -3197,6 +3234,11 @@ export class CanvasEngine {
     if (this.#navigatorHidden === open.navigatorHidden && hidden !== this.#navigatorHidden) {
       this.#navigatorHidden = hidden;
       this.#statusSettle();
+    }
+    // La griglia di Ctrl+' per questa lavagna (T71), se nessuno l'ha cambiata nel frattempo.
+    if (view.grid !== undefined && this.#gridOverride === open.grid && this.#gridOverride !== view.grid) {
+      this.#gridOverride = view.grid;
+      this.#paintGrid();
     }
     let remount = false;
     for (const entry of this.#cards.values()) {
@@ -3998,6 +4040,91 @@ export class CanvasEngine {
   #hideDropGhosts(): void {
     this.#dropGhosts?.remove();
     this.#dropGhosts = null;
+  }
+
+  // --- la griglia e le guide (T71) -------------------------------------------
+
+  /**
+   * I punti della griglia, ogni `CANVAS_SNAP` unità della lavagna, nella vista
+   * e sotto le schede. Il livello segue la camera con la sua posizione e il
+   * suo passo, senza variabili CSS (lo stage ne ha già). Il punto sta al
+   * centro della sua cella, così cade sulle intersezioni. Sotto
+   * `CANVAS_GRID_MIN_PX` sullo schermo non si disegna.
+   */
+  #paintGrid(): void {
+    const grid = this.#grid;
+    if (!grid) return;
+    const step = CANVAS_SNAP * this.#camera.zoom;
+    grid.hidden = !(this.#gridOverride ?? this.#gridSetting) || step < CANVAS_GRID_MIN_PX;
+    if (grid.hidden) return;
+    grid.style.backgroundSize = `${step}px ${step}px`;
+    grid.style.backgroundPosition = `${this.#camera.x - step / 2}px ${this.#camera.y - step / 2}px`;
+  }
+
+  /** Ctrl+' (T71): mostra o nasconde la griglia di questa lavagna, e la ricorda con la vista. */
+  #toggleGrid(): void {
+    this.#gridOverride = !(this.#gridOverride ?? this.#gridSetting);
+    this.#paintGrid();
+    this.#viewMemo?.changed();
+  }
+
+  /**
+   * Le guide del gesto: un elemento solo sopra le schede, con un segno per
+   * segmento, nelle coordinate dello schermo. Si svuota a ogni passo; `[]`
+   * le toglie.
+   */
+  #showGuides(segments: readonly GuideSegment[]): void {
+    if (segments.length === 0) {
+      this.#hideGuides();
+      return;
+    }
+    let layer = this.#guideLayer;
+    if (!layer) {
+      layer = document.createElement("div");
+      layer.className = "canvas-guides";
+      layer.setAttribute("aria-hidden", "true");
+      this.#viewport.insertBefore(layer, this.#handleLayer);
+      this.#guideLayer = layer;
+    }
+    const { x, y, zoom } = this.#camera;
+    layer.replaceChildren(...segments.map((segment) => {
+      const line = document.createElement("div");
+      const vertical = segment.x1 === segment.x2;
+      line.className = "canvas-guide";
+      line.dataset.kind = segment.kind;
+      line.dataset.axis = vertical ? "v" : "h";
+      if (vertical) {
+        line.style.left = `${segment.x1 * zoom + x}px`;
+        line.style.top = `${Math.min(segment.y1, segment.y2) * zoom + y}px`;
+        line.style.height = `${Math.abs(segment.y2 - segment.y1) * zoom}px`;
+      } else {
+        line.style.left = `${Math.min(segment.x1, segment.x2) * zoom + x}px`;
+        line.style.top = `${segment.y1 * zoom + y}px`;
+        line.style.width = `${Math.abs(segment.x2 - segment.x1) * zoom}px`;
+      }
+      return line;
+    }));
+  }
+
+  #hideGuides(): void {
+    this.#guideLayer?.remove();
+    this.#guideLayer = null;
+  }
+
+  /**
+   * Le schede in vista che un gesto può agganciare: quelle che non si
+   * muovono (`moving`) e che stanno nella vista, così con 2000 schede si
+   * guarda solo quello che si vede.
+   */
+  #snapTargets(moving: ReadonlyMap<string, unknown>): GuideRect[] {
+    const doc = this.#doc;
+    if (!doc) return [];
+    const { view } = this.#viewRect();
+    const out: GuideRect[] = [];
+    for (const node of doc.nodes) {
+      if (!moving.has(node.id) && overlaps(node, view)) out.push(node);
+    }
+    return out;
   }
 
   async #convertTextToNote(node: CanvasNode): Promise<void> {
@@ -4940,6 +5067,9 @@ export class CanvasEngine {
         };
       case "canvas.zoom_reset":
         return { disabled: () => null, run: () => this.#zoomToActual() };
+      // La griglia di questa lavagna (T71): la vista, anche in sola lettura.
+      case "canvas.grid_toggle":
+        return { disabled: () => null, run: () => this.#toggleGrid() };
       // Il navigatore (T55): c'è la voce che serve adesso, Nascondi o Mostra.
       case "canvas.navigator.hide":
       case "canvas.navigator.show": {
@@ -6016,12 +6146,39 @@ export class CanvasEngine {
     const starts = [...resize.origin.values()];
     const narrowest = Math.max(1, Math.min(...starts.map((start) => start.width)));
     const shortest = Math.max(1, Math.min(...starts.map((start) => start.height)));
-    const box = resizeBox(resize.box, resize.corner, dx, dy, {
+    const minWidth = single ? CANVAS_MIN_SIZE : resize.box.width * Math.min(1, CANVAS_MIN_SIZE / narrowest);
+    const minHeight = single ? CANVAS_MIN_SIZE : resize.box.height * Math.min(1, CANVAS_MIN_SIZE / shortest);
+    // Le guide (T71) portano il lato che tira sulle schede vicine. Solo per una
+    // scheda sola, senza Alt (che spegne l'aggancio per il gesto), senza Maiusc
+    // (le proporzioni) e con `canvas.snap` acceso.
+    const aligning = single && this.#snapSetting && !event.altKey && !event.shiftKey;
+    let guided = { x: false, y: false };
+    let ddx = dx;
+    let ddy = dy;
+    if (aligning) {
+      const east = resize.corner === "ne" || resize.corner === "se";
+      const south = resize.corner === "se" || resize.corner === "sw";
+      const free = resizeBox(resize.box, resize.corner, dx, dy, { keepRatio: false, fromCenter: false, snap: false, minWidth, minHeight });
+      const guide = snapGuides({
+        moving: free,
+        others: this.#snapTargets(resize.origin),
+        threshold: GUIDE_SCREEN_PX / this.#camera.zoom,
+        sides: { x: [east ? "end" : "start"], y: [south ? "end" : "start"] },
+      });
+      this.#showGuides(guide.segments);
+      ddx = dx + guide.dx;
+      ddy = dy + guide.dy;
+      guided = { x: guide.guidedX, y: guide.guidedY };
+    } else {
+      this.#hideGuides();
+    }
+    const box = resizeBox(resize.box, resize.corner, ddx, ddy, {
       keepRatio: event.shiftKey,
       fromCenter: event.altKey,
-      snap: single,
-      minWidth: single ? CANVAS_MIN_SIZE : resize.box.width * Math.min(1, CANVAS_MIN_SIZE / narrowest),
-      minHeight: single ? CANVAS_MIN_SIZE : resize.box.height * Math.min(1, CANVAS_MIN_SIZE / shortest),
+      snap: single && this.#snapSetting && !event.altKey,
+      guided,
+      minWidth,
+      minHeight,
     });
     for (const [id, start] of resize.origin) {
       const node = doc.nodes.find((entry) => entry.id === id);
@@ -6171,14 +6328,61 @@ export class CanvasEngine {
     if (Math.abs(at.clientX - drag.startX) + Math.abs(at.clientY - drag.startY) > 3) {
       drag.moved = true;
     }
+    const byId = new Map(doc.nodes.map((node) => [node.id, node] as const));
+    // Alt tenuto, o `canvas.snap` spento: la scheda va dove la porta il puntatore,
+    // in unità intere. Altrimenti le guide (T71) vincono sulla griglia, su ogni asse.
+    const free = at.altKey || !this.#snapSetting;
+    const guide = drag.moved && !free ? this.#dragGuide(drag.origin, byId, dx, dy) : null;
+    if (guide === null) this.#hideGuides();
     for (const [id, origin] of drag.origin) {
-      const node = doc.nodes.find((n) => n.id === id);
-      if (node) {
+      const node = byId.get(id);
+      if (!node) continue;
+      if (free) {
+        node.x = Math.round(origin.x + dx);
+        node.y = Math.round(origin.y + dy);
+      } else if (guide) {
+        node.x = guide.guidedX ? Math.round(origin.x + dx + guide.dx) : snap(origin.x + dx);
+        node.y = guide.guidedY ? Math.round(origin.y + dy + guide.dy) : snap(origin.y + dy);
+      } else {
         node.x = snap(origin.x + dx);
         node.y = snap(origin.y + dy);
       }
     }
     this.#renderLive();
+  }
+
+  /**
+   * Le guide di uno spostamento: il riquadro delle schede trascinate nella
+   * posizione libera, con le schede in vista che restano. Mostra i segmenti
+   * che vincono e dà lo spostamento; `null` se non c'è nulla da portare.
+   */
+  #dragGuide(
+    origin: ReadonlyMap<string, { readonly x: number; readonly y: number }>,
+    byId: ReadonlyMap<string, CanvasNode>,
+    dx: number,
+    dy: number,
+  ): GuideResult | null {
+    let left = Infinity;
+    let top = Infinity;
+    let right = -Infinity;
+    let bottom = -Infinity;
+    for (const [id, start] of origin) {
+      const node = byId.get(id);
+      if (!node) continue;
+      left = Math.min(left, start.x + dx);
+      top = Math.min(top, start.y + dy);
+      right = Math.max(right, start.x + dx + node.width);
+      bottom = Math.max(bottom, start.y + dy + node.height);
+    }
+    if (!(left <= right)) return null;
+    const guide = snapGuides({
+      moving: { x: left, y: top, width: right - left, height: bottom - top },
+      others: this.#snapTargets(origin),
+      threshold: GUIDE_SCREEN_PX / this.#camera.zoom,
+      sides: { x: MOVE_SIDES, y: MOVE_SIDES },
+    });
+    this.#showGuides(guide.segments);
+    return guide;
   }
 
   /**
@@ -6217,6 +6421,7 @@ export class CanvasEngine {
     if (this.#resize && event.pointerId === this.#resize.pointerId && this.#doc) {
       const resize = this.#resize;
       this.#resize = null;
+      this.#hideGuides();
       this.#handleTap = resize.moved ? null : [...resize.origin.keys()];
       this.#commitFromSource("input");
       return;
@@ -6224,6 +6429,7 @@ export class CanvasEngine {
     if (this.#drag && event.pointerId === this.#drag.pointerId) {
       const drag = this.#drag;
       this.#drag = null;
+      this.#hideGuides();
       if (drag.moved) this.#commitFromSource("input");
       return;
     }
@@ -6490,6 +6696,7 @@ export class CanvasEngine {
     const moving = this.#gestureMoving();
     this.#drag = null;
     this.#resize = null;
+    this.#hideGuides();
     this.#pan = null;
     this.#endConnect();
     this.#stopEdgeScroll();

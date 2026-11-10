@@ -103,13 +103,13 @@ describe("la forma dello stato", () => {
   });
 
   it("conserva i campi in più, e li riscrive", () => {
-    const read = parseCanvasView({ version: 1, selection: [], pages: {}, snap: { open: true }, grid: 8 });
+    const read = parseCanvasView({ version: 1, selection: [], pages: {}, snap: { open: true }, tema: "scuro" });
     if (read.kind !== "state") throw new Error("atteso uno stato");
-    expect(read.extra).toEqual({ snap: { open: true }, grid: 8 });
+    expect(read.extra).toEqual({ snap: { open: true }, tema: "scuro" });
     const written = serializeCanvasView({ camera: { x: 1, y: 2, zoom: 1.5 }, selection: ["n"], pages: new Map([["p", 2]]) }, read.extra);
     expect(written).toEqual({
       snap: { open: true },
-      grid: 8,
+      tema: "scuro",
       version: 1,
       camera: { x: 1, y: 2, zoom: 1.5 },
       selection: ["n"],
@@ -128,6 +128,21 @@ describe("la forma dello stato", () => {
       const read = parseCanvasView({ version: 1, navigator });
       if (read.kind !== "state") throw new Error("atteso uno stato");
       expect(read.view.navigatorHidden).toBeUndefined();
+      expect(serializeCanvasView(read.view, read.extra)).toEqual({ version: 1, selection: [], pages: {} });
+    }
+  });
+
+  it("la griglia di Ctrl+' si scrive solo se l'hanno scelta, e si rilegge (T71)", () => {
+    const shown = parseCanvasView({ version: 1, selection: [], pages: {}, grid: false });
+    if (shown.kind !== "state") throw new Error("atteso uno stato");
+    expect(shown.view.grid).toBe(false);
+    expect(shown.extra).toEqual({});
+    expect(serializeCanvasView(shown.view)).toEqual({ version: 1, selection: [], pages: {}, grid: false });
+    // Un valore che non è un interruttore non vale niente: vale la griglia di impostazione.
+    for (const grid of [8, "no", null, undefined]) {
+      const read = parseCanvasView({ version: 1, grid });
+      if (read.kind !== "state") throw new Error("atteso uno stato");
+      expect(read.view.grid).toBeUndefined();
       expect(serializeCanvasView(read.view, read.extra)).toEqual({ version: 1, selection: [], pages: {} });
     }
   });
@@ -204,8 +219,8 @@ describe("la memoria", () => {
 });
 
 describe("il registratore", () => {
-  let view: { camera: { x: number; y: number; zoom: number }; selection: string[]; navigatorHidden?: boolean } | null;
-  const snapshot = (): CanvasViewSnapshot => (view ? { camera: { ...view.camera }, selection: [...view.selection], navigatorHidden: view.navigatorHidden } : null);
+  let view: { camera: { x: number; y: number; zoom: number }; selection: string[]; navigatorHidden?: boolean; grid?: boolean } | null;
+  const snapshot = (): CanvasViewSnapshot => (view ? { camera: { ...view.camera }, selection: [...view.selection], navigatorHidden: view.navigatorHidden, grid: view.grid } : null);
 
   beforeEach(() => {
     vi.useFakeTimers();
@@ -355,6 +370,17 @@ describe("il registratore", () => {
       selection: [],
       pages: {},
     });
+  });
+
+  it("la griglia scelta con Ctrl+' per questa lavagna si ricorda e si rilegge (T71)", async () => {
+    const store = memoryStore({ [canvasViewKey(DOC)]: { version: 1, selection: [], pages: {}, grid: false } });
+    const memo = recorder(store);
+    expect((await memo.begin())?.grid).toBe(false);
+    view = { camera: { x: 1, y: 1, zoom: 1 }, selection: [], grid: true };
+    memo.changed();
+    memo.close();
+    await settle();
+    expect(store.states.get(canvasViewKey(DOC))).toEqual({ version: 1, camera: { x: 1, y: 1, zoom: 1 }, selection: [], pages: {}, grid: true });
   });
 
   it("il navigatore spento torna all'apertura e si ricorda col resto (T55)", async () => {

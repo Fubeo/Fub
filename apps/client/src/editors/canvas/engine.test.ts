@@ -3219,8 +3219,9 @@ describe("le maniglie delle schede (T66)", () => {
     expect(boxOf(engine, "t")).toEqual([40, 40, 360, 210]);
     engine.undo();
     pull(host, handle(host, "t", "se"), 24, 20, { altKey: true });
-    // 240 + 2·24 = 288; 140 + 2·20 = 180, agganciato a 184; il centro resta.
-    expect(boxOf(engine, "t")).toEqual([16, 18, 288, 184]);
+    // 240 + 2·24 = 288; 140 + 2·20 = 180. Alt spegne l'aggancio (T71), quindi
+    // niente griglia sull'altezza; il centro resta.
+    expect(boxOf(engine, "t")).toEqual([16, 20, 288, 180]);
     engine.undo();
     pull(host, handle(host, "t", "se"), 60, 0, { shiftKey: true, altKey: true });
     expect(boxOf(engine, "t")).toEqual([-20, 5, 360, 210]);
@@ -4322,5 +4323,224 @@ describe("il selettore delle sezioni (T74)", () => {
     made.engine.setReadOnly(true);
     expect(made.engine.commands().find((command) => command.id === "canvas.parts")!.disabled()).toBe(t("canvas.commands.why.read_only"));
     made.engine.destroy();
+  });
+});
+
+describe("CanvasEngine: la griglia e le guide (T71)", () => {
+  afterEach(() => {
+    setReducedMotionPreference(false);
+    vi.restoreAllMocks();
+    applyPreferences({});
+  });
+
+  /** `t` ferma in alto a sinistra (40, 40, 240 × 160), `m` da spostare più in basso. */
+  function guideBoard(): string {
+    return JSON.stringify({
+      nodes: [
+        { id: "t", type: "text", x: 40, y: 40, width: 240, height: 160, text: "ferma" },
+        { id: "m", type: "text", x: 100, y: 300, width: 100, height: 60, text: "mossa" },
+      ],
+      edges: [],
+    });
+  }
+
+  /** Tre schede in fila (`p`, `q` con uno spazio di 160), e `m` sotto, da portare nel posto dopo `q`. */
+  function rowBoard(): string {
+    return JSON.stringify({
+      nodes: [
+        { id: "p", type: "text", x: 40, y: 300, width: 100, height: 60, text: "uno" },
+        { id: "q", type: "text", x: 300, y: 300, width: 100, height: 60, text: "due" },
+        { id: "m", type: "text", x: 100, y: 440, width: 60, height: 60, text: "tre" },
+      ],
+      edges: [],
+    });
+  }
+
+  /** `t` (40, 40, 240 × 160) e `f` a destra (404, 300): il lato destro di `t` s'aggancia a `f`. */
+  function edgeBoard(): string {
+    return JSON.stringify({
+      nodes: [
+        { id: "t", type: "text", x: 40, y: 40, width: 240, height: 160, text: "ferma" },
+        { id: "f", type: "text", x: 404, y: 300, width: 240, height: 140, text: "vicina" },
+      ],
+      edges: [],
+    });
+  }
+
+  const card = (host: HTMLElement, id: string): HTMLElement => host.querySelector<HTMLElement>(`.canvas-node[data-node="${id}"]`)!;
+  const viewportOf = (host: HTMLElement): HTMLElement => host.querySelector<HTMLElement>(".canvas-viewport")!;
+  const gridOf = (host: HTMLElement): HTMLElement => host.querySelector<HTMLElement>(".canvas-grid")!;
+  const guidesOf = (host: HTMLElement): HTMLElement[] => [...host.querySelectorAll<HTMLElement>(".canvas-guide")];
+  const nodeOf = (engine: CanvasEngine, id: string) => readCanvas(engine.getDoc()).nodes.find((node) => node.id === id)!;
+  const zoomOf = (host: HTMLElement): number => Number(/scale\(([\d.e+-]+)\)/.exec(host.querySelector<HTMLElement>(".canvas-stage")!.style.transform)![1]);
+
+  /** La vista misura 800 × 600 a partire da (0, 0): happy-dom non dispone niente. */
+  function sized(host: HTMLElement): void {
+    vi.spyOn(viewportOf(host), "getBoundingClientRect").mockReturnValue({
+      x: 0, y: 0, left: 0, top: 0, right: 800, bottom: 600, width: 800, height: 600, toJSON: () => ({}),
+    } as DOMRect);
+  }
+
+  /** La lavagna al 100% subito (movimento ridotto): l'unità della lavagna è un pixel. */
+  function atHundred(host: HTMLElement): void {
+    setReducedMotionPreference(true);
+    const viewport = viewportOf(host);
+    viewport.focus();
+    viewport.dispatchEvent(new KeyboardEvent("keydown", { key: "0", bubbles: true, cancelable: true }));
+    expect(zoomOf(host)).toBe(1);
+  }
+
+  function pointer(target: EventTarget, type: string, init: PointerEventInit): void {
+    target.dispatchEvent(new PointerEvent(type, { bubbles: true, cancelable: true, button: 0, pointerId: 5, pointerType: "mouse", ...init }));
+  }
+
+  /** Le impostazioni cambiate a lavagna aperta, come da «Impostazioni» (T35). */
+  function applyPreferences(patch: Partial<CanvasPreferences>): void {
+    for (const apply of [...watched.appliers]) apply({ ...DEFAULT_PREFERENCES, ...patch });
+  }
+
+  /**
+   * Trascina la scheda `id` di (dx, dy) unità (a zoom 1) dalla sua maniglia; lasciata lì se
+   * `release` è falso. Alt sul premere è il trascinamento della vista (T53): i tasti del gesto
+   * stanno sul movimento e sul rilascio.
+   */
+  function moveCard(host: HTMLElement, id: string, dx: number, dy: number, keys: PointerEventInit = {}, release = true): void {
+    const handle = card(host, id).querySelector<HTMLElement>(".canvas-node-handle")!;
+    pointer(handle, "pointerdown", { clientX: 500, clientY: 500 });
+    pointer(viewportOf(host), "pointermove", { clientX: 500 + dx, clientY: 500 + dy, ...keys });
+    if (release) releaseAt(host, dx, dy, keys);
+  }
+
+  function releaseAt(host: HTMLElement, dx: number, dy: number, init: PointerEventInit = {}): void {
+    pointer(viewportOf(host), "pointerup", { clientX: 500 + dx, clientY: 500 + dy, ...init });
+  }
+
+  /** Tira l'angolo `corner` di `id` di (dx, dy) unità (a zoom 1), senza rilasciarlo: il rilascio lo fa il chiamante. */
+  function pullCorner(host: HTMLElement, id: string, corner: string, dx: number, dy: number): void {
+    const grip = card(host, id).querySelector<HTMLElement>(`.canvas-resize[data-corner="${corner}"]`)!;
+    pointer(grip, "pointerdown", { clientX: 100, clientY: 100, buttons: 1, pointerId: 7 });
+    pointer(viewportOf(host), "pointermove", { clientX: 100 + dx, clientY: 100 + dy, buttons: 1, pointerId: 7 });
+  }
+
+  it("una scheda che si sposta s'aggancia al bordo di un'altra, non alla griglia, e la guida si vede mentre tira", () => {
+    const { engine, host } = mounted(guideBoard());
+    sized(host);
+    atHundred(host);
+    // Il bordo sinistro di `m` va a 45: la griglia darebbe 48, il bordo di `t` è 40.
+    moveCard(host, "m", -55, 0, {}, false);
+    expect(guidesOf(host).some((line) => line.dataset.kind === "edge" && line.dataset.axis === "v")).toBe(true);
+    releaseAt(host, -55, 0);
+    expect(nodeOf(engine, "m").x).toBe(40);
+    expect(guidesOf(host)).toHaveLength(0);
+    expect(engine.undo()).toBe(true);
+    expect(nodeOf(engine, "m").x).toBe(100);
+    engine.destroy();
+  });
+
+  it("il centro della scheda s'allinea al centro di un'altra, e la guida è di centro", () => {
+    const { engine, host } = mounted(guideBoard());
+    sized(host);
+    atHundred(host);
+    // Il centro di `m` va a 162, a 2 unità dal centro di `t` (160): la griglia darebbe 112.
+    moveCard(host, "m", 12, 0, {}, false);
+    expect(guidesOf(host).some((line) => line.dataset.kind === "center")).toBe(true);
+    releaseAt(host, 12, 0);
+    expect(nodeOf(engine, "m").x).toBe(110);
+    engine.destroy();
+  });
+
+  it("uno spazio uguale fra tre schede in fila si mostra con due segni, e porta la scheda al suo posto", () => {
+    const { engine, host } = mounted(rowBoard());
+    sized(host);
+    atHundred(host);
+    // Lo spazio fra `p` e `q` è 160: dopo `q` la scheda va a 560. Il bordo va a 565.
+    moveCard(host, "m", 465, -140, {}, false);
+    expect(guidesOf(host).filter((line) => line.dataset.kind === "gap")).toHaveLength(2);
+    releaseAt(host, 465, -140);
+    expect(nodeOf(engine, "m")).toMatchObject({ x: 560, y: 300 });
+    engine.destroy();
+  });
+
+  it("tirando l'angolo di una scheda, il lato che tira s'aggancia a una scheda vicina", () => {
+    const { engine, host } = mounted(edgeBoard());
+    sized(host);
+    atHundred(host);
+    // Il lato destro di `t` va a 402, a 2 unità dal bordo di `f` (404).
+    pullCorner(host, "t", "se", 122, 0);
+    expect(guidesOf(host).some((line) => line.dataset.axis === "v")).toBe(true);
+    pointer(viewportOf(host), "pointerup", { clientX: 222, clientY: 100, pointerId: 7 });
+    expect(nodeOf(engine, "t")).toMatchObject({ x: 40, y: 40, width: 364, height: 160 });
+    expect(guidesOf(host)).toHaveLength(0);
+    engine.destroy();
+  });
+
+  it("Alt tenuto spegne l'aggancio per quel gesto: niente guide e niente griglia, la scheda va dove la porta il puntatore", () => {
+    const { engine, host } = mounted(guideBoard());
+    sized(host);
+    atHundred(host);
+    moveCard(host, "m", -55, 0, { altKey: true }, false);
+    expect(guidesOf(host)).toHaveLength(0);
+    releaseAt(host, -55, 0, { altKey: true });
+    expect(nodeOf(engine, "m")).toMatchObject({ x: 45, y: 300 });
+    engine.destroy();
+  });
+
+  it("con canvas.snap spento non c'è aggancio né guide: la scheda va in unità intere", () => {
+    const { engine, host } = mounted(guideBoard());
+    sized(host);
+    atHundred(host);
+    applyPreferences({ snap: false });
+    moveCard(host, "m", -55, 0, {}, false);
+    expect(guidesOf(host)).toHaveLength(0);
+    releaseAt(host, -55, 0);
+    expect(nodeOf(engine, "m")).toMatchObject({ x: 45, y: 300 });
+    engine.destroy();
+  });
+
+  it("Ctrl+' mostra e nasconde la griglia, e la griglia sta sulle unità di 8 px", () => {
+    const { engine, host } = mounted(guideBoard());
+    sized(host);
+    atHundred(host);
+    const viewport = viewportOf(host);
+    expect(gridOf(host).hidden).toBe(false);
+    expect(gridOf(host).style.backgroundSize).toBe("8px 8px");
+    viewport.dispatchEvent(new KeyboardEvent("keydown", { key: "'", ctrlKey: true, bubbles: true, cancelable: true }));
+    expect(gridOf(host).hidden).toBe(true);
+    viewport.dispatchEvent(new KeyboardEvent("keydown", { key: "'", ctrlKey: true, bubbles: true, cancelable: true }));
+    expect(gridOf(host).hidden).toBe(false);
+    engine.destroy();
+  });
+
+  it("canvas.grid spento nasconde la griglia, acceso la mostra", () => {
+    const { engine, host } = mounted(guideBoard());
+    expect(gridOf(host).hidden).toBe(false);
+    applyPreferences({ grid: false });
+    expect(gridOf(host).hidden).toBe(true);
+    applyPreferences({ grid: true });
+    expect(gridOf(host).hidden).toBe(false);
+    engine.destroy();
+  });
+
+  it("sotto il 50% la griglia non si disegna, perché i punti sarebbero più fitti di 4 px", () => {
+    const { engine, host } = mounted(guideBoard());
+    const viewport = viewportOf(host);
+    for (let i = 0; i < 30; i++) viewport.dispatchEvent(new KeyboardEvent("keydown", { key: "-", bubbles: true, cancelable: true }));
+    expect(zoomOf(host)).toBe(0.05);
+    expect(gridOf(host).hidden).toBe(true);
+    for (let i = 0; i < 12; i++) viewport.dispatchEvent(new KeyboardEvent("keydown", { key: "+", bubbles: true, cancelable: true }));
+    expect(zoomOf(host)).toBeGreaterThanOrEqual(0.5);
+    expect(gridOf(host).hidden).toBe(false);
+    engine.destroy();
+  });
+
+  it("una guida lasciata in volo non sopravvive alla lavagna chiusa", () => {
+    const { engine, host } = mounted(guideBoard());
+    sized(host);
+    atHundred(host);
+    moveCard(host, "m", -55, 0, {}, false);
+    const layer = host.querySelector(".canvas-guides");
+    expect(layer).not.toBeNull();
+    engine.destroy();
+    expect(layer!.isConnected).toBe(false);
   });
 });

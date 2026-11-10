@@ -2283,6 +2283,49 @@
 .canvas-viewport:focus-visible {
   box-shadow: inset 0 0 0 var(--focus-ring-width) var(--focus-ring);
 }
+/* La griglia (T71): un punto sottile per intersezione, velato dal contorno,
+   così si legge sul fondo senza far rumore. Passo e posizione li scrive la
+   tela; qui solo il punto. */
+.canvas-grid {
+  background-image: radial-gradient(circle, color-mix(in srgb, var(--outline) 70%, transparent) 1px, transparent 1.5px);
+  background-repeat: repeat;
+}
+/* Le guide di un gesto (T71): una linea sottile dell'accento sopra le schede.
+   Quelle di spaziatura uguale hanno due trattini alle estremità, che le
+   chiudono e le fanno leggere come misura. */
+.canvas-guide {
+  background: var(--accent);
+}
+.canvas-guide[data-kind="gap"]::before,
+.canvas-guide[data-kind="gap"]::after {
+  content: "";
+  position: absolute;
+  background: var(--accent);
+}
+.canvas-guide[data-kind="gap"][data-axis="v"]::before,
+.canvas-guide[data-kind="gap"][data-axis="v"]::after {
+  left: -3px;
+  width: 7px;
+  height: 1px;
+}
+.canvas-guide[data-kind="gap"][data-axis="v"]::before {
+  top: 0;
+}
+.canvas-guide[data-kind="gap"][data-axis="v"]::after {
+  bottom: 0;
+}
+.canvas-guide[data-kind="gap"][data-axis="h"]::before,
+.canvas-guide[data-kind="gap"][data-axis="h"]::after {
+  top: -3px;
+  width: 1px;
+  height: 7px;
+}
+.canvas-guide[data-kind="gap"][data-axis="h"]::before {
+  left: 0;
+}
+.canvas-guide[data-kind="gap"][data-axis="h"]::after {
+  right: 0;
+}
 .canvas-large-fallback {
   margin: 0;
   padding: var(--space-9);

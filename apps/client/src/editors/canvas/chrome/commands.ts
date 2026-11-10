@@ -185,6 +185,8 @@ export const CANVAS_COMMANDS: readonly CanvasCommandSpec[] = [
   { id: "canvas.zoom_in", label: "canvas.zoom_in", group: "view", keys: ["+", "Mod-=", "Mod-+"], context: "always" },
   { id: "canvas.zoom_out", label: "canvas.zoom_out", group: "view", keys: ["-", "Mod--"], context: "always" },
   { id: "canvas.zoom_reset", label: "canvas.zoom_reset", group: "view", keys: ["0"], context: "always" },
+  // La griglia di questa lavagna (T71): Ctrl+' la mostra o la nasconde, come nel disegno.
+  { id: "canvas.grid_toggle", label: "canvas.grid_toggle", group: "view", keys: ["Mod-'"], context: "always" },
   // Il navigatore (T55): la tela dà solo la voce che serve adesso.
   { id: "canvas.navigator.hide", label: "canvas.navigator.hide", group: "view", keys: [], context: "always" },
   { id: "canvas.navigator.show", label: "canvas.navigator.show", group: "view", keys: [], context: "always" },

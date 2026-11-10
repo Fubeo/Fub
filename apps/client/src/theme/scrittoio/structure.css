@@ -3211,6 +3211,37 @@ body {
   pointer-events: auto;
 }
 
+/* La griglia (T71): i punti nella vista, sotto le schede. Il livello non
+   prende il puntatore; la posizione e il passo li scrive la tela. */
+.canvas-grid {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+/* Le guide di un gesto (T71): un solo elemento sopra le schede, con una linea
+   per guida. La tela ne dà la posizione e la lunghezza sullo schermo; qui
+   c'è solo lo spessore di un pixel. */
+.canvas-guides {
+  position: absolute;
+  inset: 0;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.canvas-guide {
+  position: absolute;
+  pointer-events: none;
+}
+
+.canvas-guide[data-axis="v"] {
+  width: 1px;
+}
+
+.canvas-guide[data-axis="h"] {
+  height: 1px;
+}
+
 /* Dove nasceranno le schede di un trascinamento: rettangoli tratteggiati
    sopra la scena, nelle coordinate della lavagna. Solo la forma: l'aspetto è
    della pelle. */

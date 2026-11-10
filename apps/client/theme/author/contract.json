@@ -837,6 +837,8 @@
     "canvas-viewport",
     "canvas-large-fallback",
     "canvas-source",
+    "canvas-grid",
+    "canvas-guide",
     "canvas-rail",
     "canvas-tool",
     "canvas-blank",
@@ -2477,6 +2479,8 @@
     "canvas-viewport": "contenuto",
     "canvas-large-fallback": "cornice",
     "canvas-source": "contenuto",
+    "canvas-grid": "segno",
+    "canvas-guide": "segno",
     "canvas-rail": "cornice",
     "canvas-tool": "cornice",
     "canvas-blank": "cornice",
@@ -5511,7 +5515,9 @@
         "canvas-intake-error",
         "canvas-viewport",
         "canvas-large-fallback",
-        "canvas-source"
+        "canvas-source",
+        "canvas-grid",
+        "canvas-guide"
       ],
       "states": [
         "rest",
@@ -8958,7 +8964,7 @@
   "counts": {
     "required_roles": 154,
     "optional_roles": 63,
-    "hooks": 1638,
+    "hooks": 1640,
     "state_names": 7,
     "assigned_states": 768,
     "components": 228,
