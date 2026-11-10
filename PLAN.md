@@ -3721,7 +3721,13 @@ mouse no; una prova del controller prova che le frecce chiedono prima
 alla lavagna e poi al riquadro.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/canvas src/state
-Stato: [ ] da fare
+Stato: [x] fatto (2026-11-10). Differenze: Alt+← e Alt+→ non entrano nel
+catalogo della lavagna: il tasto è già di `shell.pane.back`/`forward`
+(`fub-host` `shell.rs`), che ora chiede prima alla lavagna e, a storia
+vuota, va alla cronologia del riquadro; il «prima» di un salto è la camera
+del momento, anche a metà volo; T57, T60 e T52 non sono ancora collegati
+(non c'erano), `revealSource` (T58) resta su `#fitCamera`. Il controller ha
+solo la prova e2e (`canvas-cards.e2e.test.ts`), non un test unitario.
 
 ## T57 · Seguire un link
 
@@ -4240,7 +4246,8 @@ Stato: [x] fatto (2026-11-10), tranne il caso limite del tratto libero
 copiato insieme alle schede: nessuna selezione prende oggi i tratti liberi
 e la forma `{ version, nodes, edges }` non ha un posto per loro; la scelta
 (un campo `fub:ink` alla radice della forma, o niente) è chiesta
-all'utente, perché la forma è letta anche da altri programmi. Differenze:
+all'utente, perché la forma è letta anche da altri programmi; il
+2026-11-10 ha scelto il campo alla radice: T94. Differenze:
 Ctrl+C e Ctrl+X si ascoltano su `document` e la lavagna li prende solo col
 fuoco suo (niente campo, scheda attiva o testo scelto); un incolla fuori
 dalla vista, col fuoco sulla lavagna, passa da `#intake`. Il menu del tasto
@@ -4545,7 +4552,17 @@ file come dice `canvas-parts.md`, un solo annulla e «Parti…»; le foto del
 banco somigliano al prototipo.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/canvas
-Stato: [ ] da fare
+Stato: [x] fatto (2026-11-10). Differenze: la lista non è virtualizzata
+(`kit/list` non lo fa: 300 titoli, 300 righe); Spazio spunta a campo vuoto
+o dopo le frecce, dopo una parola scritta scrive uno spazio; le sezioni si
+scrivono nell'ordine della nota, non in quello della scelta; dove a destra
+non c'è posto il selettore va sotto la scheda (la variante approvata a
+700 px); «Parti…» si spegne col perché solo dopo aver letto i titoli,
+prima il comando lo dice con un avviso; si apre per le note trascinate
+dall'albero, non per i file portati da fuori, e anche quando la nota cade
+su una scheda che c'è già. Due titoli uguali anche col capitolo davanti
+mostrano il primo (il piede lo avvisa). Foto da una pagina di prova col
+selettore e il tema veri, non dalla shell intera.
 
 ## T75 · La scheda-estratto di una nota
 
@@ -5276,8 +5293,8 @@ fili, prima contava l'ordine del file. Diagnosi: «Non riesco a mostrare»
 e la nota mancante senza «Ritrova…» vengono dall'ambiente del collaudo
 (`fub-ipc-collaudo.ts` manda `render_embed` all'host finto, che lancia un
 errore senza tipo), non dalla lavagna; il doppio clic che apre il campo
-del percorso su una nota mancante o illeggibile è vero nel prodotto e
-chiede una scelta all'utente.
+del percorso su una nota mancante o illeggibile è vero nel prodotto; il
+2026-11-10 l'utente ha scelto le azioni al posto del campo: T93.
 
 ## T92 · Misura e allineamento del testo
 
@@ -5315,6 +5332,80 @@ provano i due controlli, il ritorno ai valori di serie che toglie il campo
 e un solo annulla; le foto del banco somigliano al prototipo.
 Prova: scripts/check.sh --rapido; cargo test -p fub-canvas-core; cd
 apps/client && npx vitest run src/editors/canvas
+Stato: [ ] da fare
+
+## T93 · Il doppio clic su una scheda mancante
+
+Perché: la diagnosi di T91: su una scheda di file il cui file manca, o che
+non si lascia leggere, `enter()` (`cards/note.ts`) dice no e il doppio clic
+o Invio cadono nel campo del percorso (`#enterOrEdit` e il `dblclick` della
+scheda in `engine.ts` chiamano `#beginCardEdit`), che lì non aiuta. Il
+2026-11-10 l'utente ha scelto (a): al posto del campo, l'azione che serve,
+come i pulsanti di T16.
+Tocca: `apps/client/src/editors/canvas/engine.ts`,
+`apps/client/src/editors/canvas/engine-cards.test.ts`,
+`apps/client/src/i18n/catalog.ts` (solo se serve un annuncio nuovo),
+`docs/reference/canvas-input.md`.
+Non toccare: `context.missing()` e i suoi due pulsanti (T16); le schede di
+testo (il doppio clic resta il loro campo); una scheda di file viva (come
+oggi); il doppio clic su una maniglia (T66); il formato.
+Dipende da: T16, T91
+Cosa fare:
+- Doppio clic o Invio su una scheda di file che dice «File mancante»: parte
+  «Ritrova…» di T16, lo stesso selettore, lo stesso commit e lo stesso
+  annulla; il campo del percorso non si apre.
+- Doppio clic o Invio su una scheda il cui file c'è ma non si mostra
+  («Non riesco a mostrare»): il file si apre nel riquadro, come «Apri» del
+  menu della scheda (T17).
+- Una scheda ancora in caricamento («Apro…»): niente campo; il gesto non fa
+  niente finché la resa non arriva.
+Casi limite: sola lettura (niente «Ritrova…»: si annuncia «File mancante»;
+«Apri» resta, non scrive); il file torna mentre il selettore è aperto (come
+T16: la scelta vecchia si scarta); molte schede scelte insieme (il gesto
+vale per la scheda sotto il puntatore, Invio per quella attiva).
+Fatto quando: `engine-cards.test.ts` prova, rosso prima e verde dopo, che
+doppio clic e Invio su una scheda mancante aprono «Ritrova…» e non il
+campo; che su una scheda illeggibile aprono il file; la sola lettura; una
+scheda in caricamento.
+Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
+src/editors/canvas
+Stato: [ ] da fare
+
+## T94 · Il tratto libero negli appunti
+
+Perché: T68 ha lasciato fuori il tratto libero copiato insieme alle schede:
+la forma `{ version, nodes, edges }` non ha un posto per lui. Il
+2026-11-10 l'utente ha scelto (a): un campo `fub:ink` alla radice della
+forma, come quello della radice del `.canvas`.
+Tocca: `apps/client/src/editors/canvas/clipboard.ts` e `clipboard.test.ts`,
+`apps/client/src/editors/canvas/engine.ts` (copia, taglia, incolla),
+`apps/client/src/editors/canvas/engine.test.ts`,
+`docs/reference/canvas-format.md` («Negli appunti»).
+Non toccare: la versione della forma (resta 1: il campo è in più, chi non
+lo conosce lo ignora); l'inchiostro attaccato, che viaggia già nel
+`fub:ink` della sua scheda; il lazo (T86).
+Dipende da: T68, T86 (il lazo è il modo di scegliere i tratti liberi)
+Cosa fare:
+- Copiando una scelta del lazo con tratti liberi: `"fub:ink"` alla radice
+  degli appunti, con i soli tratti scelti, nella forma del livello della
+  radice del `.canvas` (`canvas-format.md`), le coordinate della lavagna.
+- Incollando: i tratti entrano nel livello della radice con id nuovi,
+  spostati come le schede (sotto il puntatore, T15), nello stesso commit e
+  nello stesso annulla delle schede. Solo tratti, senza schede: si incollano
+  lo stesso.
+- Taglia: toglie anche i tratti liberi scelti, in un commit.
+- Un `fub:ink` rotto o fuori dai limiti dell'inchiostro: la notifica di
+  oggi per la forma rifiutata, mai a metà.
+- `text/plain` non cambia: i tratti non hanno Markdown.
+Casi limite: solo tratti negli appunti; un tratto che con lo spostamento
+uscirebbe dai numeri dell'inchiostro (rifiuto intero); incollare due volte
+(la seconda sfalsata, id nuovi); appunti di una versione di Fub senza il
+campo (si incollano le schede come oggi); la sola lettura (niente).
+Fatto quando: `clipboard.test.ts` prova la forma con e senza il campo, il
+campo rotto e i limiti; `engine.test.ts` prova copia e incolla di schede
+e tratti liberi in un'altra lavagna, solo tratti, taglia e un solo annulla.
+Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
+src/editors/canvas
 Stato: [ ] da fare
 
 ## Non verificato stanotte
