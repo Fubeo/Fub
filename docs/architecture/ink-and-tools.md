@@ -323,10 +323,11 @@ coordinate della lavagna e `onEraseEnd`.
   penna che torna giù prima annulla la consegna.
 - **Le preferenze.** `editors/canvas/preferences.ts` legge le dodici
   impostazioni di `fub.lavagna` (`lavagna.rs`). `watchPreferences` le segue
-  con `setting_changed` e torna il disposer. Una cartella di file trascinati
-  non valida (vuota, assoluta, con `..`, dentro `.fub`, o un nome che
-  `nameFault` respinge) vale `Allegati` (`dropFolderPathOf`). `canvas.toolbar`
-  è una casella per strumento (`toolbar-field.ts`). L'ultimo «Scrivi col
+  con `setting_changed` e torna il disposer. Una cartella dei file trascinati
+  non valida vale `Allegati` (`dropFolderPathOf`); dove vanno i file dal
+  computer lo dice `canvas.drop_folder` (`dropFolderFor`, in
+  `state/canvas-intake.ts`). `canvas.toolbar` è una casella per strumento
+  (`toolbar-field.ts`). L'ultimo «Scrivi col
   mouse» è lo stato di vista `canvas.ink_mouse`, uno per computer:
   `saveInkMouse` lo scrive a ogni cambio, `readInkMouse` lo ridà solo con
   «Ricorda» acceso, altrimenti spento.

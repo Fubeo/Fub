@@ -27,7 +27,8 @@ cestina come una nota: il kernel lo toglie dall'anagrafe con `EntryRemoved` e
 il ripristino lo rimette dov'era, byte per byte.
 «Mostra la cartella degli allegati», dalla palette, apre nell'albero la
 cartella di `files.attachment-folder`, dove finiscono gli allegati incollati o
-trascinati. Se la cartella non c'è ancora lo dice e non la crea: la crea il
+trascinati nelle note (i file portati sulla lavagna vanno dove dice
+`canvas.drop_folder`). Se la cartella non c'è ancora lo dice e non la crea: la crea il
 primo allegato. Una cartella che comincia con `./` segue la nota, come in
 Obsidian: con `./` l'allegato va accanto alla nota, con `./allegati` in una sua
 sottocartella, e un `![[foto.png]]` nudo si cerca prima lì. Il comando apre

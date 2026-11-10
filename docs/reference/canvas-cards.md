@@ -140,6 +140,13 @@ se l'host rifiuta un file a metà, l'errore compare nella barra
 (`canvas-intake-error`) e non nasce nessuna scheda, nemmeno per i file già
 copiati.
 
+Dove finiscono lo dice `canvas.drop_folder` (`dropFolderFor`, in
+`state/canvas-intake.ts`): le note con `files.attachment-folder`, una
+cartella accanto alla lavagna o una del vault. La prima copia lo dice con una
+notifica, e «Cambia cartella» apre quella voce; la notifica dice anche se la
+cartella è esclusa da `files.excluded-folders`, dove i file non si trovano con
+la ricerca.
+
 ## Il contratto
 
 I tipi stanno in `cards.ts`, con i commenti che ne spiegano i campi. In
