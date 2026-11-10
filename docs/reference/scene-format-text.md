@@ -13,7 +13,7 @@
 > ([operazioni sulla scena](scene-operations.md), §9); gli a capo che
 > l'editor scrive in `tools/wrap.ts`, con la misura dei caratteri in
 > `tools/measure.ts`; i caratteri in `crates/fub-features/src/draw/fonts.rs`
-> e `typefaces.rs`, con la stessa scelta in `fonts/faces.ts` e i vettori di
+> (con i suoi moduli in `fonts/`) e `typefaces.rs`, con la stessa scelta in `fonts/faces.ts` e i vettori di
 > `apps/client/src/__fixtures__/scene-fonts/choose.json`.
 
 Lo strumento Testo se n'è andato col livello Standard, e il testo in area
