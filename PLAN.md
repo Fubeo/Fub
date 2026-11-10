@@ -1977,7 +1977,17 @@ l'utente.
 Fatto quando: la prova e2e passa; la sezione c'è e dice i comandi.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/canvas-cards.e2e.test.ts
-Stato: [ ] da fare
+Stato: [x] fatto (2026-11-10; la prova a mano sull'app vera, con un
+`.xlsx` vero e su Windows e macOS, è scritta in «Le schede vive» ma non
+eseguita). Differenze: le bozze in `.fub/drafts` non contano fra le
+scritture (la prova aspetta che l'ultima sia buttata); «chiudi e riapri» è
+una shell nuova su un vault copiato dal disco, perché il finto non tiene la
+memoria della shell; la penna finta è quella della lavagna
+(`pointerType: "pen"`); il foglio non si apre nel finto, la prova conta i
+byte. Le mutazioni (tolto `reuse`, ignorata `canvas.drop_folder`) fanno
+fallire i test giusti. Nessun difetto trovato. Visto: dopo un rinomino da
+fuori la scheda resta sul percorso vecchio (il `.canvas` non si riscrive),
+e un terzo rilascio riusa il file rinominato.
 
 ## T22 · L'aspetto
 
