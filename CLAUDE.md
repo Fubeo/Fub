@@ -42,9 +42,17 @@ that was needed or an unverified architectural change.
 ## Working with the maintainer
 
 - Never work on `main` directly: each change gets its own branch and a PR
-  against `main`; pushing and opening the PR are part of the work. **Merging
-  a PR needs the maintainer's explicit OK.** If `gh` isn't authenticated,
-  ask.
+  against `main`; pushing and opening the PR are part of the work, and so is
+  the merge. **Merge your own PR** once it is ready (not a draft), the full CI
+  is green on its last commit and you have read the final diff:
+  `gh pr merge <n> --merge --delete-branch`. Never `--admin`, never with a
+  required job red or skipped, except a known flaky test with its issue,
+  rerun once and passed. A merge that turns out wrong is fixed by a revert or
+  a fix PR, never by pushing to `main`. If `gh` isn't authenticated, ask.
+- **Still the maintainer's call**: licenses, trademarks and supply-chain
+  policy, secrets and CI permissions, publishing a release or a tag, deleting
+  user data, tests with people, and a choice of taste the maintainer asked to
+  see. For those, ask and wait.
 - No subagents, workflows or parallel sessions unless the maintainer allows them
   for that task; then they are read-only (the plan workflow's coders are the
   standing exception).
@@ -62,8 +70,9 @@ that was needed or an unverified architectural change.
   plan and code disagree, the code wins — write it down. Status lives in the
   plan's `Stato:` lines, decisions in `DECISIONS.md`.
 - **Final report** in Italian, readable on its own: behaviour, where it lives
-  (paths, branch, PR), checks run and not run (and why), residual risks, next
-  command. Don't present assumptions as verified.
+  (paths, branch, PR), what you merged, checks run and not run (and why),
+  residual risks, next command. Don't present assumptions as verified. Before
+  ending a session, list your PRs still open and say what each one waits for.
 
 ## Before changing anything
 
