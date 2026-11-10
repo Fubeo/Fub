@@ -59,6 +59,11 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-10 · n6 · T62: «Aggiungi file…» col selettore del browser
+  (`<input type="file">`) invece di `host/dialog.ts`. · Perché: il deposito
+  vuole dei `File` come un rilascio, `pickFile` dà un percorso solo; lo fa
+  già «Importa file…» dell'esplora, quindi non è una strada nuova.
+
 - 2026-11-10 · n6 · T15b: «Fanne una copia» si offre anche quando il
   deposito si ferma a metà, per i file riusati prima dell'errore. · Perché:
   quelle schede nascono come nel deposito riuscito, e negare la copia solo

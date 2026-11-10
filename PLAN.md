@@ -3914,7 +3914,22 @@ la sola lettura, gli appunti vuoti; le foto del banco somigliano al
 prototipo.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/canvas
-Stato: [ ] da fare
+Stato: [x] fatto (2026-11-10). Differenze: «Aggiungi file…» usa un
+`<input type="file" multiple>` nascosto, come «Importa file…»
+dell'esplora, e non `host/dialog.ts`: `pickFile` dà un solo percorso e
+filtra, mentre il deposito vuole dei `File` come un rilascio; il pulsante
+c'è solo con la porta del deposito. «Incolla» passa da `#intake` con un
+`ClipboardEvent` costruito sul viewport, come `TextEngine.paste`, provato
+in happy-dom e nel Chromium del banco, non in WebKitGTK o WebView2.
+`#placeText` prende un punto facoltativo (senza, al centro). La lavagna è
+vuota solo senza schede, fili e inchiostro. Il riquadro non prende il
+puntatore, solo i pulsanti. `surface.ts` non è toccato; toccati in più
+`structure.css` e `canvas-input.md`. Integrando: la T dello strumento Testo
+della colonna (T49) non si vedeva fuori dalla barra del formato (`fmt-text`
+si registra con lei): ora è `canvas-text` delle icone della lavagna; la
+prova di «Aggiungi file…» segue il terzo argomento del deposito di T32b. Il
+fondo della lavagna nel banco è più verde del prototipo: da guardare in
+T22.
 
 ## T63 · Il menu radiale e i gesti
 
