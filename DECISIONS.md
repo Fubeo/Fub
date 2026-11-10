@@ -59,6 +59,13 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-10 · n6 · T49 integrato: la colonna degli strumenti affianca la
+  barra di N4 invece di toglierla subito, e la sola lettura spegne tutti
+  gli strumenti che scrivono. · Perché: il menu della penna e le azioni
+  della barra hanno già i loro task (T50, T51), e spostarli qui avrebbe
+  rifatto il loro lavoro; spegnere e non nascondere segue il prototipo
+  approvato.
+
 - 2026-11-10 · n6 · T31 integrato: il riuso è un parametro esplicito del
   trait `ResourceWrite` (non un default nascosto), e il client rifà il
   deposito senza `reuse` quando l'host risponde `bad_args`. · Perché: la

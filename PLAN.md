@@ -3228,7 +3228,22 @@ passano; le foto del banco, chiaro e scuro, piena e 700 px, somigliano al
 prototipo.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/canvas
-Stato: [ ] da fare
+Stato: [x] fatto (2026-11-10). Differenze: la colonna è
+`editors/canvas/chrome/rail.ts` (sette strumenti, ciascuno un comando
+`canvas.tool.*` del catalogo di T48, più `canvas.escape`); la barra di N4
+resta, e il menu della penna e le sue azioni passano a T50/T51. «Scrivi
+col mouse» è lo stesso stato di Penna, Evidenziatore e Gomma. In sola
+lettura si spengono tutti gli strumenti che scrivono (Penna,
+Evidenziatore, Gomma, Testo, Collega), come nel prototipo. Esc prima
+toglie la scelta, poi torna alla Selezione; un Esc spento passa allo
+Scrittoio. Il Testo, messa la scheda, torna alla Selezione. Toccati fuori
+da «Tocca»: `chrome/commands.ts` e il suo test, `chrome/icons.ts` (nuovo,
+l'icona `canvas-connect`, con `icon-names.json` e i file del tema
+rigenerati), `scrittoio/structure.css` (l'impianto della colonna),
+`toolbar-field.ts` (la colonna di serie letta da `rail.ts`, eccezione
+ammessa), `docs/architecture/ink-and-tools.md`. `surface.ts` non serviva.
+Semplice (T65) e lazo (T86) non sono qui. Il pezzo delle impostazioni ora
+importa `rail.ts`, e con lui la colonna del kit e le icone di spatial.
 
 ## T50 · La riga delle opzioni
 
