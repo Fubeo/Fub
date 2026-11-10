@@ -226,6 +226,58 @@ descrivono stato o provenienza. Deve avere:
   possibile;
 - fallback che non distrugga il documento.
 
+## Lo stesso contenuto
+
+Il vault non tiene un indice per contenuto. La domanda «c'è già un file con
+questi byte?» si risponde con le voci dell'anagrafe, e dove l'anagrafe non
+basta la risposta è «non so». Chi copia un contenuto nel vault la usa per
+riusare un file che c'è già, anche con un altro nome, invece di duplicarlo.
+`Vault::same_content` la risponde a chi ha un lettore, `Vault::same_content_bytes`
+a chi ha già i byte in memoria, e l'host la espone come `Host::same_content`.
+
+```mermaid
+flowchart TD
+    Q["contenuto che arriva"] --> T{"anagrafe leggibile?"}
+    T -- "no" --> U["non so: si copia"]
+    T -- "sì" --> C{"al più 64 candidati?"}
+    C -- "no" --> U
+    C -- "sì" --> H["impronta registrata o calcolata"]
+    H --> B{"byte uguali?"}
+    B -- "sì" --> F["trovato: il primo per percorso"]
+    B -- "no" --> N["non trovato"]
+```
+
+I candidati sono le voci dell'anagrafe della stessa misura, fuori dal cestino,
+da `.fub/` e dalle cartelle escluse. Un file che l'anagrafe non conosce ancora
+non è un candidato: la risposta è «non trovato», e chi chiede copia.
+
+Ogni candidato porta un'impronta: quella registrata nella voce, se la voce
+descrive ancora il file (misura, data, segno del cambio e identità), oppure una
+calcolata leggendo il file a pezzi. L'impronta sceglie il candidato, ma solo un
+confronto dei byte intero dà «trovato». Un candidato che non si legge, che
+cambia mentre lo si legge o che non ha più la misura cercata si salta, e della
+sua impronta non si registra niente.
+
+Un'impronta calcolata si registra nella voce soltanto se misura, data, segno
+del cambio e identità sono ancora quelli letti, e se la data del file è
+anteriore alla domanda: una data uguale all'istante della domanda può ancora
+cambiare senza cambiare la misura. La registrazione non riscrive una tabella
+rotta o di un'altra versione, e non crea una tabella che manca. Il formato non
+cambia: l'impronta è il campo che la voce già porta.
+
+Ci sono due limiti, costanti con nome: `MAX_CANDIDATES`, 64 candidati, e
+`MAX_BYTES_READ`, 512 MiB letti per domanda. Oltre questi limiti, o quando la
+tabella manca, non si legge o è rotta, la risposta è «non so» e chi chiede
+copia: nel dubbio si copia.
+
+Un contenuto che arriva da un lettore si copia in memoria una volta sola, entro
+lo stesso limite. Un contenuto già in memoria si confronta dove sta, senza copia.
+
+Il lucchetto del vault non si tiene mentre si legge. La domanda prende le voci,
+lascia il lucchetto, legge, rientra e ricontrolla il segno del cambio prima di
+registrare un'impronta. I collegamenti simbolici non si seguono: lo storage è
+radicato nel vault, e nessuna lettura ne esce.
+
 ## Schemi
 
 Ogni formato persistente ha una propria `SchemaVersion`. Gli schemi non
