@@ -42,6 +42,16 @@ Ordine consigliato:
 Un bug corretto soltanto da un test end-to-end resta difficile da localizzare.
 Un contratto testato soltanto in un modulo può divergere al confine.
 
+### Contesto
+
+Tieni nel contesto solo ciò che può cambiare la conclusione: parti dai percorsi
+e dai simboli probabili, non mappare tutta la repository senza un motivo
+concreto. Non riversare log enormi, diff, file generati o alberi di dipendenze
+quando una vista mirata basta; non troncare una diagnostica che può servire,
+recuperala quando serve. Non rileggere file o comandi senza cambiamenti per
+rassicurazione. Ferma l'esplorazione quando la prova basta per il passo
+successivo.
+
 ## 4. Verificare durante il lavoro
 
 ### Rust
