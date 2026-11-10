@@ -4270,7 +4270,21 @@ un file con `fub:parts` sconosciuto torna identico dopo uno spostamento
 della scheda; la pagina e l'ADR ci sono e `check-doc-links` passa.
 Prova: scripts/check.sh --rapido; cargo test -p fub-canvas-core; cd
 apps/client && npx vitest run src/editors/canvas/parts.test.ts
-Stato: [ ] da fare
+Stato: [x] fatto (2026-11-10). Differenze: l'ADR è 0242 (0241 è
+l'inchiostro di N4, che in `main` non c'è ancora: all'unione in `main` il
+numero va ricontrollato). 46 vettori (30 di lettura, 16 di scrittura) in
+`__fixtures__/canvas-parts/`. Il TypeScript legge in proprio, senza il
+`.wasm`, con le stesse regole; la specie del file viene da `cardKindOf`, in
+Rust da una lista di estensioni uguale (`PartsFile::of`): le tengono
+allineate solo i vettori comuni. Rifiutati anche sezioni doppie o vuote e
+`null` in `layout`/`key`/`rotate` (vale solo l'assenza); il `subpath` si
+confronta esatto. Un'immagine intera e dritta non scrive né `subpath` né
+campo; la rotazione scritta si riporta a 0, 90, 180 o 270; `layout` si
+scrive solo se scelto. I campi sconosciuti vanno dopo i noti. La riga di
+`docs/README.md` è unita a quella dell'inchiostro (limite di 150 righe).
+Toccati in più: `canvas-cards.md` (`CardContext.parts`) e
+`crates/fub-abi/tests/a_named_rule_is_declared.rs` (la regola
+dell'estensione, famiglia AsciiCase).
 
 ## T74 · Il selettore delle sezioni
 

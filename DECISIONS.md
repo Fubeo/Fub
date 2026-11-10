@@ -59,6 +59,12 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-10 · n6 · T73 integrato: `fub:parts` ha un lettore TypeScript in
+  proprio accanto a quello Rust, tenuti uguali dai vettori comuni; ADR
+  0242. · Perché: le schede leggono il campo senza aspettare il `.wasm`,
+  e i vettori scritti a mano sono la prova del formato pubblico; il
+  numero dell'ADR va ricontrollato quando N4 e N6 arrivano in `main`.
+
 - 2026-11-10 · n6 · T34 integrato; la banda di T52 segue subito
   `canvas.drop_folder` (correzione dell'orchestratore), e l'avviso della
   cartella esclusa uscirà a ogni deposito in una cartella esclusa (in
