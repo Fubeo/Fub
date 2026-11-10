@@ -3,8 +3,10 @@ import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import type { SurfaceMenuItem } from "../core/editor-menu";
 import { renderMarkdown } from "../text/profiles/markdown/render";
 import { mountMarkdown } from "../text/profiles/markdown/mount";
-import { CARD_PAUSE_MS, CanvasEngine, MAX_CANVAS_HISTORY, type CanvasChange, type CanvasCorePort, type CanvasEngineOptions } from "./engine";
+import { CARD_PAUSE_MS, CanvasEngine, MAX_CANVAS_HISTORY, MEASURE_IMAGE_TIMEOUT_MS, type CanvasChange, type CanvasCorePort, type CanvasEngineOptions } from "./engine";
 import type { CanvasDocument } from "./model";
+import { dropLayout } from "./drop-layout";
+import { ENTRIES_DRAG_TYPE } from "../../ui/drag-types";
 import { applyOperation, lineFeeds, operationFromText } from "../core/text-operation";
 import { t } from "../../i18n/strings";
 import agentBoard from "../../__fixtures__/canvas-ops/agent-board.json";
@@ -1581,6 +1583,212 @@ describe("CanvasEngine: una lavagna che il nucleo apre ma non riscrive (R3)", ()
     expectUnwritable(host);
     tryEveryGesture(engine, host);
     expect(changes).toHaveLength(0);
+    engine.destroy();
+  });
+});
+
+describe("CanvasEngine: trascinare e incollare (T15)", () => {
+  const BASE_IDS = ["t", "f", "g", "w"];
+
+  function viewport(host: HTMLElement): HTMLElement {
+    return host.querySelector<HTMLElement>(".canvas-viewport")!;
+  }
+
+  function transfer(values: Record<string, string> = {}, extra: Record<string, unknown> = {}): DataTransfer {
+    return { files: [], items: [], types: Object.keys(values), getData: (type: string) => values[type] ?? "", ...extra } as unknown as DataTransfer;
+  }
+
+  function drop(host: HTMLElement, data: DataTransfer, x = 200, y = 120): void {
+    const event = new DragEvent("drop", { bubbles: true, cancelable: true });
+    Object.defineProperties(event, { dataTransfer: { value: data }, clientX: { value: x }, clientY: { value: y } });
+    viewport(host).dispatchEvent(event);
+  }
+
+  function paste(host: HTMLElement, data: DataTransfer): void {
+    const event = new Event("paste", { bubbles: true, cancelable: true });
+    Object.defineProperty(event, "clipboardData", { value: data });
+    viewport(host).dispatchEvent(event);
+  }
+
+  function dragover(host: HTMLElement, data: DataTransfer, x = 200, y = 120): void {
+    const event = new DragEvent("dragover", { bubbles: true, cancelable: true });
+    Object.defineProperties(event, { dataTransfer: { value: data }, clientX: { value: x }, clientY: { value: y } });
+    viewport(host).dispatchEvent(event);
+  }
+
+  /** Le schede nate, nell'ordine del documento. */
+  function born(engine: CanvasEngine): CanvasDocument["nodes"] {
+    return readCanvas(engine.getDoc()).nodes.filter((node) => !BASE_IDS.includes(node.id));
+  }
+
+  it("più file nascono in griglia, in ordine di nome, con la misura della specie, e un annulla li toglie", async () => {
+    const resolvePaths = vi.fn(async () => ["b/z.md", "a/foto 10.png", "x/libro.xlsx", "a/foto 2.png"]);
+    const measureImage = vi.fn(async (path: string) => (path === "a/foto 2.png" ? { width: 1000, height: 500 } : null));
+    const { engine, host, changes } = mounted(canvasSource(), { attachments: { deposit: vi.fn(), resolvePaths }, measureImage });
+    drop(host, transfer());
+    await vi.waitFor(() => expect(changes).toHaveLength(1));
+    const nodes = born(engine);
+    expect(nodes.map((node) => node.file)).toEqual(["a/foto 2.png", "a/foto 10.png", "x/libro.xlsx", "b/z.md"]);
+    // La misura: l'immagine misurata col lato lungo di 480, quella senza
+    // misura 480×360, il foglio 480×300, la nota 320×240.
+    expect(nodes.map((node) => [node.width, node.height])).toEqual([[480, 240], [480, 360], [480, 300], [320, 240]]);
+    // La griglia di `dropLayout` a partire dal punto del rilascio.
+    const first = nodes[0]!;
+    const expected = dropLayout(nodes.map((node) => ({ path: node.file!, kind: "file", size: { width: node.width, height: node.height } })), first);
+    expect(nodes.map((node) => ({ path: node.file, x: node.x, y: node.y }))).toEqual(expected.cards.map((card) => ({ path: card.path, x: card.x, y: card.y })));
+    expect(nodes[1]!.x).toBe(first.x + 504);
+    expect(nodes[2]!.y).toBe(first.y + 384);
+    expect(measureImage).toHaveBeenCalledTimes(2);
+    expect(engine.undo()).toBe(true);
+    expect(born(engine)).toEqual([]);
+    engine.destroy();
+  });
+
+  it("oltre 12 file nasce anche un gruppo «{count} file», sotto le schede, nello stesso annulla", async () => {
+    const paths = Array.from({ length: 13 }, (_, index) => `note/n${index + 1}.md`);
+    const { engine, host, changes } = mounted(canvasSource(), { attachments: { deposit: vi.fn(), resolvePaths: async () => paths } });
+    drop(host, transfer());
+    await vi.waitFor(() => expect(changes).toHaveLength(1));
+    const nodes = born(engine);
+    expect(nodes).toHaveLength(14);
+    expect(nodes[0]).toMatchObject({ type: "group", label: t("canvas.intake.group", { count: 13 }) });
+    const group = nodes[0]!;
+    for (const card of nodes.slice(1)) {
+      expect(card.type).toBe("file");
+      expect(card.x).toBeGreaterThanOrEqual(group.x + 24);
+      expect(card.y).toBeGreaterThanOrEqual(group.y + 24);
+      expect(card.x + card.width).toBeLessThanOrEqual(group.x + group.width - 24);
+      expect(card.y + card.height).toBeLessThanOrEqual(group.y + group.height - 24);
+    }
+    expect(engine.undo()).toBe(true);
+    expect(born(engine)).toEqual([]);
+    engine.destroy();
+  });
+
+  it("su una scheda di file il primo file ne prende il posto, gli altri nascono accanto (A-8)", async () => {
+    const { engine, host, changes } = mounted(canvasSource(), {
+      attachments: { deposit: vi.fn(), resolvePaths: async () => ["nuovo/uno.pdf", "nuovo/due.md"] },
+    });
+    vi.spyOn(document, "elementFromPoint").mockReturnValue(host.querySelector('.canvas-node[data-node="f"]'));
+    drop(host, transfer());
+    await vi.waitFor(() => expect(changes).toHaveLength(1));
+    expect(readCanvas(engine.getDoc()).nodes.find((node) => node.id === "f")!.file).toBe("nuovo/uno.pdf");
+    expect(born(engine).map((node) => [node.file, node.width, node.height])).toEqual([["nuovo/due.md", 320, 240]]);
+    vi.restoreAllMocks();
+    engine.destroy();
+  });
+
+  it("una misura che fallisce o non arriva lascia quella di serie", async () => {
+    vi.useFakeTimers();
+    try {
+      const measureImage = vi.fn((path: string) => (path.endsWith("a.png")
+        ? Promise.reject(new Error("non si legge"))
+        : new Promise<null>(() => {})));
+      const { engine, host, changes } = mounted(canvasSource(), {
+        attachments: { deposit: vi.fn(), resolvePaths: async () => ["a.png", "b.png"] }, measureImage,
+      });
+      drop(host, transfer());
+      await vi.advanceTimersByTimeAsync(MEASURE_IMAGE_TIMEOUT_MS - 1);
+      expect(changes).toHaveLength(0);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(changes).toHaveLength(1);
+      expect(born(engine).map((node) => [node.file, node.width, node.height])).toEqual([["a.png", 480, 360], ["b.png", 480, 360]]);
+      engine.destroy();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("un deposito che l'host rifiuta lo dice nella barra, come prima", async () => {
+    const deposit = vi.fn(async (): Promise<readonly string[]> => {
+      throw new Error("troppo grande");
+    });
+    const { engine, host, changes } = mounted(canvasSource(), { attachments: { deposit } });
+    drop(host, transfer({}, { files: [new File(["x"], "x.png")] }));
+    await vi.waitFor(() => expect(host.querySelector(".canvas-intake-error")?.textContent).toBe("troppo grande"));
+    expect(changes).toHaveLength(0);
+    engine.destroy();
+  });
+
+  it("incollare mette la scheda sotto il puntatore visto sulla vista, sennò al centro", async () => {
+    const { engine, host, changes } = mounted();
+    drop(host, transfer({ "text/plain": "lasciato" }), 300, 200);
+    await vi.waitFor(() => expect(changes).toHaveLength(1));
+    const dropped = born(engine)[0]!;
+
+    viewport(host).dispatchEvent(new PointerEvent("pointermove", { bubbles: true, clientX: 300, clientY: 200 }));
+    paste(host, transfer({ "text/plain": "sotto il puntatore" }));
+    await vi.waitFor(() => expect(changes).toHaveLength(2));
+    const pointed = born(engine)[1]!;
+    expect([pointed.text, pointed.x, pointed.y]).toEqual(["sotto il puntatore", dropped.x, dropped.y]);
+
+    viewport(host).dispatchEvent(new PointerEvent("pointerleave", { clientX: 900, clientY: 900 }));
+    paste(host, transfer({ "text/plain": "al centro" }));
+    await vi.waitFor(() => expect(changes).toHaveLength(3));
+    const centered = born(engine)[2]!;
+    expect(centered.text).toBe("al centro");
+    expect([centered.x, centered.y]).not.toEqual([dropped.x, dropped.y]);
+    engine.destroy();
+  });
+
+  it("le celle copiate diventano una scheda di testo con la tabella Markdown", async () => {
+    const clipboardMarkdown = vi.fn(async () => "| x | y |\n| --- | --- |\n| 1 | 2 |");
+    const { engine, host, changes } = mounted(canvasSource(), { clipboardMarkdown });
+    paste(host, transfer({ "text/plain": "Nome\tVoto\nAda\t10|lode\n" }));
+    await vi.waitFor(() => expect(changes).toHaveLength(1));
+    expect(born(engine)[0]).toMatchObject({ type: "text", text: "| Nome | Voto |\n| --- | --- |\n| Ada | 10\\|lode |" });
+    expect(clipboardMarkdown).not.toHaveBeenCalled();
+
+    const html = transfer({ "text/plain": "x\ty\n1\t2", "text/html": "<meta charset=utf-8><table><tr><td>x</td></tr></table>" });
+    paste(host, html);
+    await vi.waitFor(() => expect(changes).toHaveLength(2));
+    expect(clipboardMarkdown).toHaveBeenCalledWith(html);
+    expect(born(engine)[1]).toMatchObject({ type: "text", text: "| x | y |\n| --- | --- |\n| 1 | 2 |" });
+
+    // Una riga sola con una tabulazione resta testo.
+    paste(host, transfer({ "text/plain": "solo\tuna" }));
+    await vi.waitFor(() => expect(changes).toHaveLength(3));
+    expect(born(engine)[2]).toMatchObject({ type: "text", text: "solo\tuna" });
+    engine.destroy();
+  });
+
+  it("incollare mentre si scrive in una scheda di testo va nel testo", async () => {
+    const { engine, host, changes } = mounted();
+    const field = document.createElement("textarea");
+    viewport(host).append(field);
+    const event = new Event("paste", { bubbles: true, cancelable: true });
+    Object.defineProperty(event, "clipboardData", { value: transfer({ "text/plain": "a\tb\nc\td" }) });
+    field.dispatchEvent(event);
+    await Promise.resolve();
+    expect(event.defaultPrevented).toBe(false);
+    expect(changes).toHaveLength(0);
+    engine.destroy();
+  });
+
+  it("trascinando file o voci dell'albero, rettangoli tratteggiati dove nasceranno; spariscono all'uscita e al rilascio", async () => {
+    const { engine, host } = mounted(canvasSource(), { attachments: { deposit: vi.fn(async () => []), resolvePaths: async () => [] } });
+    const ghosts = () => [...host.querySelectorAll<HTMLElement>(".canvas-drop-ghost")];
+    const files = transfer({}, { types: ["Files"], items: [{ kind: "file" }, { kind: "file" }, { kind: "file" }] });
+    dragover(host, files);
+    expect(ghosts()).toHaveLength(3);
+    expect(ghosts().map((ghost) => [ghost.style.width, ghost.style.height])).toEqual([["320px", "160px"], ["320px", "160px"], ["320px", "160px"]]);
+    viewport(host).dispatchEvent(new DragEvent("dragleave", { bubbles: true }));
+    expect(ghosts()).toHaveLength(0);
+
+    // Le voci dell'albero non si contano prima del rilascio: una.
+    dragover(host, transfer({ [ENTRIES_DRAG_TYPE]: "", "text/plain": "" }));
+    expect(ghosts()).toHaveLength(1);
+    drop(host, transfer());
+    expect(ghosts()).toHaveLength(0);
+
+    // WebKit: nessun tipo leggibile, uno.
+    dragover(host, transfer({}, { types: [], items: [] }));
+    expect(ghosts()).toHaveLength(1);
+    viewport(host).dispatchEvent(new DragEvent("dragleave", { bubbles: true }));
+
+    // Del testo da un'altra app non nasce come file: niente fantasmi.
+    dragover(host, transfer({ "text/plain": "ciao" }));
+    expect(ghosts()).toHaveLength(0);
     engine.destroy();
   });
 });

@@ -63,6 +63,10 @@ export interface CanvasSurfaceCallbacks {
   readonly renderMarkdownForCard?: CanvasEngineOptions["renderMarkdownForCard"];
   /** Le schede di file e di link (N6): senza, il corpo di sempre. */
   readonly cards?: CanvasEngineOptions["cards"];
+  /** La misura di un'immagine del vault, per la scheda che nasce dal rilascio (T15): senza, la misura di serie. */
+  readonly measureImage?: CanvasEngineOptions["measureImage"];
+  /** L'HTML degli appunti come Markdown, per le celle incollate (T15): senza, solo il testo a tabulazioni. */
+  readonly clipboardMarkdown?: CanvasEngineOptions["clipboardMarkdown"];
   /** Where annotations read their PDF: without it the pages are blank. */
   readonly pdf?: PdfPorts;
   /** Runs a shell command, like the export window a drawing's «Export» opens. */
@@ -164,6 +168,8 @@ export function mountCanvasSurface(
     attachments: callbacks.attachments,
     renderMarkdownForCard: callbacks.renderMarkdownForCard,
     ...(callbacks.cards ? { cards: callbacks.cards } : {}),
+    ...(callbacks.measureImage ? { measureImage: callbacks.measureImage } : {}),
+    ...(callbacks.clipboardMarkdown ? { clipboardMarkdown: callbacks.clipboardMarkdown } : {}),
     onPendingChange: (pending) => {
       for (const watcher of [...pendingWatchers]) watcher(pending);
     },

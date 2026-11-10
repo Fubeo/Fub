@@ -408,6 +408,52 @@ async function openCardResource(transport: ResourceTransport, path: string): Pro
   }
 }
 
+/// Il tetto dei byte che si leggono per misurare un'immagine: quello della
+/// scheda d'immagine e del deposito.
+const MEASURE_IMAGE_MAX_BYTES = 64 * 1024 * 1024;
+
+/// La misura in pixel di un'immagine del vault, per la scheda che nasce dal
+/// rilascio sulla lavagna (T15): dall'intestazione del file se la dice
+/// (`decodeImage`), sennò dall'immagine decodificata. `null` se il file non
+/// c'è, è oltre il tetto, o non si decodifica: la tela usa la misura di serie.
+function measureCanvasImage(transport: ResourceTransport) {
+  return async (path: string): Promise<{ width: number; height: number } | null> => {
+    try {
+      const port = await openCardResource(transport, path);
+      if (!port) return null;
+      let bytes: Uint8Array;
+      try {
+        if (port.descriptor.len > MEASURE_IMAGE_MAX_BYTES) return null;
+        bytes = await port.readAll();
+      } finally {
+        await port.close().catch(() => undefined);
+      }
+      const { decodeImage } = await import("../media/image-view");
+      const decoded = decodeImage(port.descriptor, bytes);
+      try {
+        if (decoded.width && decoded.height) return { width: decoded.width, height: decoded.height };
+        const image = new Image();
+        image.src = decoded.url;
+        await image.decode();
+        return image.naturalWidth > 0 && image.naturalHeight > 0
+          ? { width: image.naturalWidth, height: image.naturalHeight }
+          : null;
+      } finally {
+        URL.revokeObjectURL(decoded.url);
+      }
+    } catch {
+      return null;
+    }
+  };
+}
+
+/// L'HTML degli appunti come Markdown, con la stessa conversione dell'incolla
+/// dell'editor Markdown: il suo codice arriva al primo incolla di celle.
+async function clipboardMarkdown(data: DataTransfer): Promise<string | null> {
+  const { markdownFromClipboard } = await import("../text/profiles/markdown/paste");
+  return markdownFromClipboard(data);
+}
+
 /// Il renderer delle schede di foglio, il cui codice arriva col primo foglio.
 /// Finché non c'è, la vista tiene il modo che la tela le chiede e lo passa
 /// alla scheda vera appena montata; una vista distrutta prima non monta
@@ -914,6 +960,8 @@ export const COMPONENT_EDITORS: Readonly<Record<string, readonly EditorPart[]>> 
               media: options.canvasMedia,
               attachments: options.canvasAttachments,
               cards: cards?.(context),
+              ...(options.media ? { measureImage: measureCanvasImage(options.media.transport) } : {}),
+              clipboardMarkdown: clipboardMarkdown,
             }),
           };
         },

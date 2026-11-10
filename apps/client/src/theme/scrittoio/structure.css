@@ -3007,6 +3007,27 @@ body {
   overflow: visible;
 }
 
+/* Dove nasceranno le schede di un trascinamento: rettangoli tratteggiati
+   sopra la scena, nelle coordinate della lavagna. Solo la forma: l'aspetto è
+   della pelle. */
+.canvas-drop-ghosts {
+  position: absolute;
+  top: 0;
+  left: 0;
+  transform-origin: 0 0;
+  pointer-events: none;
+}
+
+.canvas-drop-ghost {
+  position: absolute;
+  top: 0;
+  left: 0;
+  box-sizing: border-box;
+  border-width: 1px;
+  border-style: dashed;
+  pointer-events: none;
+}
+
 /* L'inchiostro della lavagna: la scia sopra lo stage, l'asciutto dentro la
    scheda e sullo stage. Il colore è del tratto (`fill`), non del tema. */
 .canvas-ink-wet,

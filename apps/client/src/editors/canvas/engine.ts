@@ -13,6 +13,9 @@ import { EraseSweep, type Spot } from "../../ink/tools/sweep";
 import { openLifetime, type Lifetime } from "../../ui/lifetime";
 import { mediaKindOfId } from "../media/media-types";
 import { anchorAt, strokeBounds } from "./anchor";
+import { parseTsv } from "../core/tsv";
+import { bornSize, dropLayout, markdownTable, type DropItem } from "./drop-layout";
+import { ENTRIES_DRAG_TYPE, NOTE_DRAG_TYPE } from "../../ui/drag-types";
 import {
   cardKindOf,
   liveCardIds,
@@ -98,6 +101,10 @@ const CARD_KEYS: ReadonlySet<string> = new Set(["PageUp", "PageDown", "Home", "E
 const DOUBLE_CLICK_ENTERS: ReadonlySet<CardKind> = new Set(["note", "document", "sheet"]);
 /** Il testo più lungo di una scheda, in byte UTF-8: oltre, il nucleo rifiuta la lavagna (`invalid`). */
 const MAX_CARD_TEXT_BYTES = 1_048_576;
+/** Quanto si aspetta la misura di un'immagine portata dentro, prima di usare quella di serie. */
+export const MEASURE_IMAGE_TIMEOUT_MS = 3_000;
+/** Quante immagini si misurano insieme quando ne arrivano tante. */
+const MEASURE_IMAGE_PARALLEL = 4;
 const utf8 = new TextEncoder();
 const MAX_INTERACTIVE_NODES = 2_000;
 const MAX_INTERACTIVE_EDGES = 4_000;
@@ -319,6 +326,19 @@ export interface CanvasEngineOptions {
    * col percorso e il segnaposto.
    */
   readonly cards?: CanvasCards;
+  /**
+   * La misura in pixel dell'immagine `path` del vault, per la misura di
+   * nascita della sua scheda (T15); `null` se non si sa. Assente, o una
+   * risposta che non arriva in tempo: la misura di serie della specie.
+   */
+  readonly measureImage?: (path: string) => Promise<{ readonly width: number; readonly height: number } | null>;
+  /**
+   * Il Markdown dell'HTML degli appunti (una tabella copiata da un foglio o da
+   * una pagina), come lo incolla l'editor Markdown; `null` se non ce n'è.
+   * Assente: l'HTML non si legge, e le celle arrivano solo dal testo a
+   * tabulazioni.
+   */
+  readonly clipboardMarkdown?: (data: DataTransfer) => Promise<string | null>;
 }
 
 /** Le schede della tela: il registro dei renderer e la cache delle immagini ferme. */
@@ -398,6 +418,28 @@ function nodeFill(color: string | undefined): string {
 }
 
 /** Un path relativo alla radice del vault, senza risalite né caratteri di controllo. */
+/**
+ * La misura di un'immagine dalla porta, o `null` se non arriva entro
+ * `MEASURE_IMAGE_TIMEOUT_MS`, fallisce o non è una misura.
+ */
+async function measuredImage(
+  measure: NonNullable<CanvasEngineOptions["measureImage"]>,
+  path: string,
+): Promise<{ width: number; height: number } | null> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const late = new Promise<null>((resolve) => {
+    timer = setTimeout(() => resolve(null), MEASURE_IMAGE_TIMEOUT_MS);
+  });
+  try {
+    const size = await Promise.race([measure(path).catch(() => null), late]);
+    return size && Number.isFinite(size.width) && Number.isFinite(size.height) && size.width > 0 && size.height > 0
+      ? { width: size.width, height: size.height }
+      : null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 function isVaultPath(path: unknown): path is string {
   return typeof path === "string" && path.length > 0 && path.length <= 8192
     && !path.startsWith("/") && !path.includes("\\") && !path.split("/").includes("..")
@@ -496,6 +538,10 @@ export class CanvasEngine {
   #formsRound = 0;
   #destroyed = false;
   #intakeError = "";
+  /** L'ultimo punto (dello schermo) in cui il puntatore è stato visto sulla vista; `null` se ne è uscito. */
+  #pointerSeen: { x: number; y: number } | null = null;
+  /** I rettangoli tratteggiati di un trascinamento in corso sopra la vista. */
+  #dropGhosts: HTMLElement | null = null;
   #drag: { pointerId: number; startX: number; startY: number; origin: Map<string, { x: number; y: number }>; moved: boolean } | null = null;
   #resize: { pointerId: number; id: string; startX: number; startY: number; width: number; height: number } | null = null;
   /**
@@ -641,11 +687,29 @@ export class CanvasEngine {
     // Prima del contenuto delle schede: fuori da una scheda attiva il clic
     // sceglie, entra, o segue un link con Ctrl, e non arriva al contenuto.
     this.#viewport.addEventListener("click", (event) => this.#cardClick(event), { signal, capture: true });
+    // Dove si incolla: l'ultimo punto visto sulla vista, finché il puntatore
+    // non ne esce.
+    this.#viewport.addEventListener("pointermove", (event) => {
+      this.#pointerSeen = { x: event.clientX, y: event.clientY };
+    }, { signal });
+    this.#viewport.addEventListener("pointerleave", () => {
+      this.#pointerSeen = null;
+    }, { signal });
     this.#viewport.addEventListener("dragover", (event) => {
       if (!this.#readOnly && !this.#isSceneOversized() && event.dataTransfer
-        && (this.#options.attachments || event.dataTransfer.types.includes("text/plain"))) event.preventDefault();
+        && (this.#options.attachments || event.dataTransfer.types.includes("text/plain"))) {
+        event.preventDefault();
+        this.#showDropGhosts(event);
+      }
+    }, { signal });
+    this.#viewport.addEventListener("dragleave", (event) => {
+      // Passare da un figlio all'altro della vista non è uscire.
+      const next = event.relatedTarget;
+      if (next instanceof Node && this.#viewport.contains(next)) return;
+      this.#hideDropGhosts();
     }, { signal });
     this.#viewport.addEventListener("drop", (event) => {
+      this.#hideDropGhosts();
       void this.#intake(event).catch((error: unknown) => this.#showIntakeError(error));
     }, { signal });
     this.#viewport.addEventListener("paste", (event) => {
@@ -2195,45 +2259,166 @@ export class CanvasEngine {
     event.preventDefault();
     const before = this.#source;
     const epoch = this.#epoch;
+    const stale = (): boolean => this.#destroyed || this.#readOnly || this.#source !== before
+      || this.#epoch !== epoch || !this.#doc;
+    // Il punto e la scheda sotto si prendono subito: durante il deposito il
+    // puntatore si muove.
+    const point = this.#intakePoint(event, drop);
+    const existing = drop ? this.#nodeAt(document.elementFromPoint?.(event.clientX, event.clientY) ?? null) : null;
     const files = [...new Set(port?.expandFiles ? await port.expandFiles(data) : [...data.files])];
     if (files.length && (!port || !documentId)) return;
     // External bytes pass the explicit deposit. Internal folder paths resolve
     // only via the host port; never trust a raw DataTransfer path.
     const paths = files.length ? await port!.deposit(files, documentId!)
       : port?.resolvePaths && documentId ? await port.resolvePaths(data, documentId) : [];
-    if (this.#destroyed || this.#readOnly || this.#source !== before || this.#epoch !== epoch || !this.#doc) return;
+    if (stale()) return;
     const unique = [...new Set(paths)].filter(isVaultPath);
     if ((!unique.length && !text) || (paths.length > 0 && !unique.length)) return;
-    const point = drop ? this.#screenToWorld(event.clientX, event.clientY)
-      : this.#screenToWorld(this.#viewport.getBoundingClientRect().left + this.#viewport.clientWidth / 2,
-        this.#viewport.getBoundingClientRect().top + this.#viewport.clientHeight / 2);
-    const existing = drop ? this.#nodeAt(document.elementFromPoint?.(event.clientX, event.clientY) ?? null) : null;
-    const file = this.#doc.nodes.find((node) => node.id === existing && node.type === "file");
     const patches: CanvasPatch[] = [];
+    const file = this.#doc!.nodes.find((node) => node.id === existing && node.type === "file");
+    // Su una scheda di file il primo file ne prende il posto (A-8).
     if (file && unique.length) {
-      const patch = upsertNodePatch(this.#doc, { ...file, file: unique.shift()!, subpath: undefined });
+      const patch = upsertNodePatch(this.#doc!, { ...file, file: unique.shift()!, subpath: undefined });
       if (patch) patches.push(patch);
     }
-    unique.forEach((path, index) => {
-      const node: CanvasNode = {
-        id: newNodeId("n"), type: "file", file: path,
-        x: snap(point.x + index * 32), y: snap(point.y + index * 32),
-        width: 320, height: 160,
-      };
-      const patch = upsertNodePatch(this.#doc!, node);
-      if (patch) patches.push(patch);
-    });
+    if (unique.length) {
+      const items = await this.#bornItems(unique);
+      if (stale()) return;
+      const layout = dropLayout(items, point);
+      if (layout.group) {
+        // Il gruppo prima delle schede, così sta sotto di loro.
+        const patch = upsertNodePatch(this.#doc!, {
+          id: newNodeId("n"), type: "group", ...layout.group,
+          label: t("canvas.intake.group", { count: String(layout.cards.length) }),
+        });
+        if (patch) patches.push(patch);
+      }
+      for (const card of layout.cards) {
+        const patch = upsertNodePatch(this.#doc!, {
+          id: newNodeId("n"), type: "file", file: card.path,
+          x: card.x, y: card.y, width: card.width, height: card.height,
+        });
+        if (patch) patches.push(patch);
+      }
+    }
     if (!paths.length && text) {
-      const url = externalUrl(text.trim());
+      const table = await this.#pastedTable(data, text);
+      if (stale()) return;
+      const url = table === null ? externalUrl(text.trim()) : null;
       const node: CanvasNode = {
         id: newNodeId("n"), type: url ? "link" : "text",
         x: snap(point.x), y: snap(point.y), width: 320, height: 160,
-        ...(url ? { url } : { text }),
+        ...(url ? { url } : { text: table ?? text }),
       };
-      const patch = upsertNodePatch(this.#doc, node);
+      const patch = upsertNodePatch(this.#doc!, node);
       if (patch) patches.push(patch);
     }
+    // Un commit solo: un annulla toglie tutto ciò che è nato.
     this.#commit(patches, "input");
+  }
+
+  /**
+   * Il punto della lavagna in cui nasce ciò che arriva: quello del rilascio;
+   * per un incolla, l'ultimo punto in cui il puntatore è stato visto sulla
+   * vista, sennò il centro della vista.
+   */
+  #intakePoint(event: DragEvent | ClipboardEvent, drop: boolean): { x: number; y: number } {
+    if (drop && "clientX" in event) return this.#screenToWorld(event.clientX, event.clientY);
+    if (this.#pointerSeen) return this.#screenToWorld(this.#pointerSeen.x, this.#pointerSeen.y);
+    const rect = this.#viewport.getBoundingClientRect();
+    return this.#screenToWorld(rect.left + this.#viewport.clientWidth / 2, rect.top + this.#viewport.clientHeight / 2);
+  }
+
+  /**
+   * I file con la specie e la misura di nascita. Le immagini chiedono la loro
+   * misura alla porta, poche alla volta; una misura che non c'è, fallisce o
+   * non arriva in tempo lascia quella di serie.
+   */
+  async #bornItems(paths: readonly string[]): Promise<DropItem[]> {
+    const items: DropItem[] = paths.map((path) => {
+      const kind = cardKindOf({ id: "", type: "file", file: path, x: 0, y: 0, width: 0, height: 0 }) ?? "file";
+      return { path, kind, size: bornSize(kind) };
+    });
+    const measure = this.#options.measureImage;
+    if (!measure) return items;
+    const images = items.map((item, index) => ({ item, index })).filter(({ item }) => item.kind === "image");
+    let next = 0;
+    const worker = async (): Promise<void> => {
+      while (next < images.length && !this.#destroyed) {
+        const { item, index } = images[next++]!;
+        const size = await measuredImage(measure, item.path);
+        if (size) items[index] = { ...item, size: bornSize("image", size) };
+      }
+    };
+    await Promise.all(Array.from({ length: Math.min(MEASURE_IMAGE_PARALLEL, images.length) }, worker));
+    return items;
+  }
+
+  /**
+   * Le celle copiate come tabella Markdown: l'HTML con una tabella, tramite
+   * la porta; sennò il testo a tabulazioni su più righe. `null` se non sono
+   * celle.
+   */
+  async #pastedTable(data: DataTransfer, text: string): Promise<string | null> {
+    const convert = this.#options.clipboardMarkdown;
+    if (convert && /<table[\s>]/i.test(data.getData("text/html") ?? "")) {
+      const markdown = await convert(data).catch(() => null);
+      if (markdown && markdown.trim()) return markdown;
+    }
+    if (!text.includes("\t")) return null;
+    const rows = parseTsv(text);
+    if (rows.length < 2) return null;
+    return markdownTable(rows) || null;
+  }
+
+  /**
+   * I rettangoli tratteggiati dove nasceranno le schede di un trascinamento
+   * di file o di voci dell'albero: uno per file, se si sa quanti sono, sennò
+   * uno (le voci dell'albero non si leggono prima del rilascio).
+   */
+  #showDropGhosts(event: DragEvent): void {
+    const data = event.dataTransfer;
+    if (!data || !this.#options.attachments) return;
+    const types = [...(data.types ?? [])];
+    // Senza tipi leggibili (WebKit durante il trascinamento) può essere un file.
+    const carries = types.length === 0 || types.includes("Files")
+      || types.includes(ENTRIES_DRAG_TYPE) || types.includes(NOTE_DRAG_TYPE);
+    if (!carries) {
+      this.#hideDropGhosts();
+      return;
+    }
+    const count = Math.max(1, [...(data.items ?? [])].filter((item) => item.kind === "file").length);
+    // Nomi che tengono l'ordine dato: la griglia è quella del rilascio.
+    const items: DropItem[] = Array.from({ length: count }, (_, index) => ({
+      path: String(index).padStart(8, "0"), kind: "file", size: bornSize("file"),
+    }));
+    const layout = dropLayout(items, this.#screenToWorld(event.clientX, event.clientY));
+    let layer = this.#dropGhosts;
+    if (!layer) {
+      layer = document.createElement("div");
+      layer.className = "canvas-drop-ghosts";
+      layer.setAttribute("aria-hidden", "true");
+      this.#viewport.append(layer);
+      this.#dropGhosts = layer;
+    }
+    layer.style.transform = `translate(${this.#camera.x}px, ${this.#camera.y}px) scale(${this.#camera.zoom})`;
+    while (layer.children.length > layout.cards.length) layer.lastElementChild!.remove();
+    layout.cards.forEach((card, index) => {
+      let ghost = layer.children[index] as HTMLElement | undefined;
+      if (!ghost) {
+        ghost = document.createElement("div");
+        ghost.className = "canvas-drop-ghost";
+        layer.append(ghost);
+      }
+      ghost.style.transform = `translate(${card.x}px, ${card.y}px)`;
+      ghost.style.width = `${card.width}px`;
+      ghost.style.height = `${card.height}px`;
+    });
+  }
+
+  #hideDropGhosts(): void {
+    this.#dropGhosts?.remove();
+    this.#dropGhosts = null;
   }
 
   async #convertTextToNote(node: CanvasNode): Promise<void> {
