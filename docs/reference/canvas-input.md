@@ -46,6 +46,21 @@ volta. Lo decide la tela (`engine.ts`); il renderer risponde con `enter`,
   sempre la lavagna, A-11), i tasti sono del contenuto e la tela non li usa,
   salvo Esc. La scheda attiva resta viva anche se la regola delle schede vive
   la spegnerebbe (lo zoom sotto 0,35, il limite).
+- **Seguire un link.** Un link a un file del vault (un wikilink `[[…]]` o un
+  percorso Markdown) si segue con Ctrl+clic (Cmd+clic su macOS), o con un clic
+  dentro la scheda attiva; lo prende la tela, non la montatura (N6 T57). Se il
+  file ha una scheda su questa lavagna, la vista vola fino a lei, al centro e
+  col zoom di adesso, e la scheda lampeggia una volta: `data-card-flash` sulla
+  scheda, `pulse` che il CSS anima, o `still` col movimento ridotto, che resta
+  acceso per un momento senza muoversi. Il salto è un salto come gli altri:
+  Indietro (Alt+←) torna al punto di partenza. Con più schede dello stesso
+  file vince quella che ha la sezione del link nel suo `subpath`, poi la più
+  vicina al centro della vista. Se il file non ha una scheda qui, si apre
+  accanto, come il wikilink di una nota. Un link rotto va dove va quello delle
+  note: il riquadro, che per un wikilink crea la nota che manca. Un percorso
+  relativo si risolve dalla nota in cui è scritto (la scheda di nota) o dalla
+  lavagna (la scheda di testo). Un indirizzo web non è di questi: resta alla
+  montatura, che lo apre come sempre.
 - **Uscire.** Esc (se il contenuto non lo usa da sé, per esempio per
   annullare un rettangolo di celle che si sta scegliendo: allora chiama
   `preventDefault`), un clic fuori dalla scheda, la scheda che esce dalla
@@ -102,8 +117,9 @@ sono quelli di `spatial/camera.ts` (`zoomAtPoint`, `fit`, `stepCamera`).
   (`#jumpCamera`), che ricorda il salto per Indietro e Avanti.
 - **Indietro e Avanti.** Alt+← e Alt+→ (i comandi della shell
   `shell.pane.back` e `shell.pane.forward`, come le frecce della barra del
-  titolo) chiedono prima alla lavagna col fuoco: ricordano i salti, non lo
-  zoom a passi né lo spostamento a mano. La storia (`jumps.ts`) sta in memoria,
+  titolo) chiedono prima alla lavagna col fuoco: ricordano i salti (anche il
+  link seguito a una scheda della lavagna, «Seguire un link»), non lo zoom a
+  passi né lo spostamento a mano. La storia (`jumps.ts`) sta in memoria,
   per la lavagna aperta: al più 50 salti, un salto dopo un Indietro perde
   l'Avanti, una lavagna riaperta riparte vuota e due riquadri con la stessa
   lavagna hanno due storie. Con la storia vuota vale la cronologia del riquadro.
