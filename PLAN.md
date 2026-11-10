@@ -1623,7 +1623,10 @@ aggiunge o la toglie dalla scelta. Invio o doppio clic dove non si entra
 (PDF, web) aprono il campo come prima; il doppio clic sull'immagine lo
 lascia al visore (T5). Link, pulsanti e immagine prendono il puntatore
 anche fuori dalla scheda attiva; il clic semplice lo ferma la tela. Il
-link lo segue la montatura sicura di `mount.ts`. `cards.ts` non cambia.
+link lo segue la montatura sicura di `mount.ts`. `cards.ts` non cambia. Provato in
+Chromium (sei punti, 2026-11-10): il mouse giù nel contenuto di una scheda
+non attiva ora dà il fuoco alla scheda (prima andava al link, e Invio ed Esc
+non arrivavano alla tela).
 
 ## T15 · Trascinare e incollare
 

@@ -59,6 +59,12 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-10 · n6 · T14 provato in un Chromium vero (link non seguiti
+  fuori dalla scheda attiva, Ctrl+clic li segue, rotella dentro e fuori,
+  Esc, visore dell'immagine, «Apri»): un difetto, corretto prima di
+  chiudere (il fuoco andava al link e non alla scheda). Perché: i test di
+  jsdom non vedono il fuoco vero; la prova nel browser sì.
+
 - 2026-11-10 · n6 · T15 integrato senza il caso «l'host rifiuta un file a
   metà»: va al task nuovo T15b, dopo T32 e T34. Perché: serve un errore
   tipizzato in `canvas-intake.ts`, che T15 non poteva toccare e che T32 e
