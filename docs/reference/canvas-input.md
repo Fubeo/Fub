@@ -2,14 +2,15 @@
 
 > **Ambito:** come la tela della lavagna prende la tastiera, il puntatore e
 > la rotella: entrare in una scheda e uscirne, la rotella, il catalogo dei
-> comandi e i loro tasti, la colonna degli strumenti, la riga delle opzioni
-> e la banda di stato.
+> comandi e i loro tasti, la lavagna vuota, la colonna degli strumenti, la
+> riga delle opzioni e la banda di stato.
 > **Fonti autorevoli:** `apps/client/src/editors/canvas/engine.ts`
 > (`#keydown`, `#wheel`, le schede attive) e le prove in
 > `apps/client/src/editors/canvas/engine.test.ts` e
 > `engine-cards.test.ts`; per i comandi,
 > `apps/client/src/editors/canvas/chrome/commands.ts`, `command-search.ts`,
-> `rail.ts`, `options.ts` e le loro prove; per la banda, `chrome/status.ts` e
+> `rail.ts`, `options.ts` e le loro prove; per la lavagna vuota,
+> `chrome/empty.ts` ed `chrome/empty.test.ts`; per la banda, `chrome/status.ts` e
 > `engine-status.test.ts`.
 
 Questa pagina viene da [Le schede della lavagna](canvas-cards.md), che tiene
@@ -160,6 +161,21 @@ cambiano la lavagna sono spente col perché, non nascoste.
   «Idee.md» è nel cestino.»). Un file che l'host rifiuta lascia le sue schede e
   l'errore dell'host nel posto degli avvisi. Non è mai la conseguenza di un
   tasto: il comando non ne ha.
+
+## La lavagna vuota
+
+Una lavagna senza schede, collegamenti né inchiostro mostra al centro tre
+righe e tre pulsanti (`chrome/empty.ts`). **Scrivi una scheda** mette una
+scheda di testo al centro della vista, già in scrittura. **Aggiungi file…**
+apre il selettore del sistema e manda i file scelti al deposito, come un
+rilascio; c'è solo dove la lavagna può depositare i file. **Incolla** fa ciò
+che fa Ctrl+V, e legge gli appunti solo al clic. Un gruppo vuoto o l'inchiostro
+sulla lavagna non la rendono vuota. Alla prima scheda i pulsanti spariscono, e
+tornano quando la lavagna torna vuota, annulla compreso. In sola lettura
+restano solo le tre righe.
+
+Appunti vuoti, o che il sistema nega, dicono con un avviso normale che non c'è
+niente da incollare: non è un errore. Un selettore annullato non fa nulla.
 
 ## La colonna degli strumenti
 
