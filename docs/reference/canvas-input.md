@@ -101,12 +101,13 @@ scrive, valgono quelli della sessione). `Esc` torna dov'eri, anche in un campo.
 | `canvas.escape` (toglie la scelta; senza scelta torna alla Selezione) | `Esc` |
 | `canvas.undo`, `canvas.redo` | `Ctrl+Z`; `Ctrl+Maiusc+Z`, `Ctrl+Y` |
 | `canvas.commands`, `canvas.select_all`, `canvas.duplicate` | `Ctrl+/`, `Ctrl+A`, `Ctrl+D` |
-| `canvas.enter` (col fuoco sulla tela o su una scheda), `canvas.delete` | `Invio`; `Canc`, `Backspace` |
+| `canvas.enter` (col fuoco sulla tela o su una scheda), `canvas.delete` («Togli dalla lavagna») | `Invio`; `Canc`, `Backspace` |
 | `canvas.nudge.<lato>`, `canvas.nudge.<lato>.far` | frecce; `Maiusc`+frecce |
 | `canvas.bring_front`, `canvas.send_back` | `Ctrl+]`, `Ctrl+[` |
 | `canvas.fit`, `canvas.fit_selection` | `Maiusc+1`, `Ctrl+0`; `Maiusc+2` |
 | `canvas.zoom_in`, `canvas.zoom_out` | `+`, `Ctrl+=`; `-`, `Ctrl+-` |
 | `canvas.add.*`, `canvas.edit`, `canvas.open`, `canvas.open_url`, `canvas.edge.reverse`, `canvas.color.*`, `canvas.align.*`, `canvas.distribute_*` | nessuno |
+| `canvas.open_beside`, `canvas.open_viewer`, `canvas.web_preview`, `canvas.connect`, `canvas.trash_file` (il menu della scheda) | nessuno (`canvas.connect` anche con `C`, vedi sotto) |
 | `canvas.pen_menu`, `canvas.color_menu`, `canvas.align_menu`, `canvas.tips.none`, `.start`, `.end` (la riga delle opzioni) | nessuno |
 
 I tasti sono quelli della tabella «Tasti» della lavagna dove fanno la stessa
@@ -117,6 +118,46 @@ dello Scrittoio); prima vince il segno scritto, poi il posto del tasto
 `Ctrl+0`, `CANVAS_DECLARED_SHELL_KEYS`), com'era già. Restano com'erano e
 diversi dalla tabella: `Ctrl+0` mostra tutto, le frecce spostano di 8
 (`Maiusc` 32). Come nel disegno, i tasti della lavagna non si cambiano ancora.
+Sulla tastiera italiana le quadre non hanno un tasto loro: `Ctrl+[` si preme
+con `Ctrl+è`, dal posto del tasto; `Ctrl+]` non c'è, perché al suo posto sta
+`+` e `Ctrl++` resta lo zoom. Porta davanti si fa dal menu o da `Ctrl+/`.
+
+### Il menu della scheda
+
+Il tasto destro su una scheda (non un gruppo, che tiene il suo menu) apre
+«Scheda della lavagna»: la testata dice «Scheda di {specie}» col nome (il file,
+l'host della pagina, la prima riga del testo), o «{n} schede». Le voci, tutte
+comandi del catalogo col loro nome e il loro tasto:
+
+1. la riga degli appunti; Apri (Modifica il testo per una scheda di testo,
+   Apri nel visore per un'immagine, Apri la pagina web e Mostra l'anteprima
+   per una pagina); Apri a lato, per una scheda di file, se l'host la dà
+   (`onOpenPathBeside`); Collega… · `C`;
+2. Colore › con i sei colori come scelte esclusive; Disponi › (Porta davanti,
+   Porta dietro, Allinea ›, Distribuisci ›); Duplica;
+3. in fondo, in rosso: Togli dalla lavagna · `Canc`; Sposta anche il file nel
+   cestino, solo con schede di file e se l'host dà `onTrashPath`.
+
+Con più schede non ci sono Apri né Collega…; in sola lettura le voci che
+cambiano la lavagna sono spente col perché, non nascoste.
+
+- **`C`** con una scheda scelta comincia il filo da lei, come «Collega…» e il
+  pulsante → della testata: il prossimo clic su un'altra scheda lo chiude e la
+  colonna torna alla Selezione; `Esc` rinuncia. Senza scheda `C` sceglie lo
+  strumento Collega. Mentre si scrive in una scheda, `C` è una lettera.
+- **Togli dalla lavagna** (e `Canc`, `Backspace`, e il pulsante della scheda
+  mancante) toglie le schede, mai i file, e lo dice nel posto degli avvisi:
+  «Tolta dalla lavagna. Il file resta.», «{n} schede tolte dalla lavagna. I
+  file restano.», o «Scheda tolta.» senza schede di file. «Annulla» accanto fa
+  ciò che fa `Ctrl+Z`; la modifica dopo spegne l'avviso, così «Annulla» annulla
+  sempre il togliere e niente altro.
+- **Sposta anche il file nel cestino** manda ogni file scelto nel cestino col
+  gesto dell'albero (`note.trash`, la domanda del cestino di sistema, l'avviso
+  della shell con «Annulla»), una volta per file; poi toglie ogni scheda di
+  quel file, anche non scelta, e lo dice («2 schede tolte dalla lavagna.
+  «Idee.md» è nel cestino.»). Un file che l'host rifiuta lascia le sue schede e
+  l'errore dell'host nel posto degli avvisi. Non è mai la conseguenza di un
+  tasto: il comando non ne ha.
 
 ## La colonna degli strumenti
 

@@ -320,7 +320,8 @@ gesti in testo:
   percorso della scheda in un commit solo; il `#…` che la scheda aveva nel
   percorso e il `subpath` restano. Un annulla torna al file di prima.
 - **Togli dalla lavagna** (`canvas.card.remove`) toglie la scheda e le sue
-  linee, come Canc, per quella scheda sola. Un annulla la riporta.
+  linee, come Canc, per quella scheda sola, con lo stesso avviso e il suo
+  «Annulla» ([il menu della scheda](canvas-input.md#il-menu-della-scheda)).
 
 Le regole:
 
