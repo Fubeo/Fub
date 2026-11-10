@@ -1,12 +1,12 @@
 // Le preferenze della lavagna su questo computer.
 //
-// - **Le due impostazioni** della macchina che il bundle `fub.lavagna`
-//   dichiara (`crates/fub-features/src/lavagna.rs`), spente di serie:
-//   `canvas.ink_mouse_remember` («Ricorda se scrivi col mouse») e
-//   `canvas.finger_moves_card` («Il dito sposta le schede»). Si leggono dal
-//   canale dati e si seguono con `setting_changed`, così un cambio nelle
-//   Impostazioni, anche da un'altra finestra, vale subito nelle lavagne
-//   aperte. Un valore che non è un interruttore vale spento.
+// - **Le dodici impostazioni** del gruppo «Lavagna» che il bundle `fub.lavagna`
+//   dichiara (`crates/fub-features/src/lavagna.rs`), ciascuna col suo valore di
+//   serie. Si leggono dal canale dati e si seguono con `setting_changed`, così
+//   un cambio nelle Impostazioni, anche da un'altra finestra, vale subito nelle
+//   lavagne aperte. Un valore che non regge la sua specie vale il suo di serie,
+//   e la lettura non scrive niente. La cartella dei file trascinati si giudica
+//   con le regole dei nomi nuovi (`dropFolderPathOf`).
 // - **L'ultimo stato di «Scrivi col mouse»** è uno stato della vista,
 //   `canvas.ink_mouse`, uno per computer: si scrive a ogni cambio, e una
 //   lavagna che si apre lo riprende solo se «Ricorda se scrivi col mouse» è
@@ -25,6 +25,7 @@
 import { api } from "../../host/ipc";
 import { settings } from "../../host/query";
 import { isPenId } from "../../ink/pens";
+import { nameFault, normalizedName } from "../../rules/mirrored";
 import { onEvent } from "../../state/kernel";
 import type { SettingEntry } from "../../host/contract";
 import { DEFAULT_INK_CHOICE, inkWidthOf, type InkPenChoice, type InkPenKind } from "./ink-record";
@@ -38,6 +39,67 @@ export const INK_MOUSE_REMEMBER_KEY = "canvas.ink_mouse_remember";
 /// L'impostazione «Il dito sposta le schede».
 export const FINGER_MOVES_CARD_KEY = "canvas.finger_moves_card";
 
+/// L'impostazione «Il dito scrive».
+export const FINGER_WRITES_KEY = "canvas.finger_writes";
+
+/// L'impostazione «Il tasto della penna».
+export const PEN_BUTTON_KEY = "canvas.pen_button";
+
+/// L'impostazione «La rotella del mouse».
+export const WHEEL_KEY = "canvas.wheel";
+
+/// L'impostazione «Spazio di lavoro».
+export const WORKSPACE_KEY = "canvas.workspace";
+
+/// L'impostazione «Strumenti della colonna».
+export const TOOLBAR_KEY = "canvas.toolbar";
+
+/// L'impostazione «Griglia».
+export const GRID_KEY = "canvas.grid";
+
+/// L'impostazione «Aggancia le schede».
+export const SNAP_KEY = "canvas.snap";
+
+/// L'impostazione «Scegli le parti di una nota».
+export const PARTS_PICKER_KEY = "canvas.parts_picker";
+
+/// L'impostazione «Dove vanno i file trascinati».
+export const DROP_FOLDER_KEY = "canvas.drop_folder";
+
+/// L'impostazione «Cartella dei file trascinati».
+export const DROP_FOLDER_PATH_KEY = "canvas.drop_folder_path";
+
+/// Le chiavi che la lavagna segue: un cambio di una di queste rilegge.
+const FOLLOWED_KEYS: ReadonlySet<string> = new Set([
+  INK_MOUSE_REMEMBER_KEY,
+  FINGER_MOVES_CARD_KEY,
+  FINGER_WRITES_KEY,
+  PEN_BUTTON_KEY,
+  WHEEL_KEY,
+  WORKSPACE_KEY,
+  TOOLBAR_KEY,
+  GRID_KEY,
+  SNAP_KEY,
+  PARTS_PICKER_KEY,
+  DROP_FOLDER_KEY,
+  DROP_FOLDER_PATH_KEY,
+]);
+
+/// Le scelte, come le scrive la macchina nel Rust; la prima è quella di serie.
+export const PEN_BUTTON_VALUES = ["radial", "eraser", "pan"] as const;
+export const WHEEL_VALUES = ["pan", "zoom"] as const;
+export const WORKSPACE_VALUES = ["auto", "full", "simple"] as const;
+export const DROP_FOLDER_VALUES = ["notes", "board", "folder"] as const;
+
+/// Il valore di serie di «Cartella dei file trascinati».
+export const DROP_FOLDER_PATH_DEFAULT = "Allegati";
+
+/// Le scelte come le usa il client.
+export type PenButtonAction = (typeof PEN_BUTTON_VALUES)[number];
+export type WheelAction = (typeof WHEEL_VALUES)[number];
+export type WorkspaceMode = (typeof WORKSPACE_VALUES)[number];
+export type DropFolderTarget = (typeof DROP_FOLDER_VALUES)[number];
+
 /// La chiave dello stato di vista che ricorda «Scrivi col mouse».
 export const INK_MOUSE_KEY = "canvas.ink_mouse";
 
@@ -47,10 +109,43 @@ export interface CanvasPreferences {
   readonly inkMouseRemember: boolean;
   /// Il dito sposta la scheda che tocca, e la lavagna solo sul vuoto.
   readonly fingerMovesCard: boolean;
+  /// Su uno schermo touch il dito scrive con la penna scelta.
+  readonly fingerWrites: boolean;
+  /// Che cosa fa il tasto sul fianco della penna.
+  readonly penButton: PenButtonAction;
+  /// Che cosa fa la rotella fuori da una scheda attiva.
+  readonly wheel: WheelAction;
+  /// Quanti strumenti e pannelli mostra la lavagna.
+  readonly workspace: WorkspaceMode;
+  /// Gli strumenti della colonna, nell'ordine; una lista vuota vale quella di serie.
+  readonly toolbar: readonly string[];
+  /// Mostra i punti della griglia.
+  readonly grid: boolean;
+  /// I bordi di una scheda che si sposta si agganciano alle schede vicine e alla griglia.
+  readonly snap: boolean;
+  /// Una nota con titoli, portata sulla lavagna, apre l'elenco delle sue parti.
+  readonly partsPicker: boolean;
+  /// Dove si copiano i file portati sulla lavagna.
+  readonly dropFolder: DropFolderTarget;
+  /// La cartella per `folder`, già giudicata da `dropFolderPathOf`.
+  readonly dropFolderPath: string;
 }
 
-/// Le impostazioni di serie: tutte e due spente.
-export const DEFAULT_PREFERENCES: CanvasPreferences = Object.freeze({ inkMouseRemember: false, fingerMovesCard: false });
+/// Le impostazioni di serie, come le scrive la macchina.
+export const DEFAULT_PREFERENCES: CanvasPreferences = Object.freeze<CanvasPreferences>({
+  inkMouseRemember: false,
+  fingerMovesCard: false,
+  fingerWrites: false,
+  penButton: "radial",
+  wheel: "pan",
+  workspace: "auto",
+  toolbar: Object.freeze<string[]>([]),
+  grid: true,
+  snap: true,
+  partsPicker: true,
+  dropFolder: "notes",
+  dropFolderPath: DROP_FOLDER_PATH_DEFAULT,
+});
 
 let lastPreferences: CanvasPreferences = DEFAULT_PREFERENCES;
 let preferenceReads = 0;
@@ -62,11 +157,47 @@ let lastInkMouse: boolean | null = null;
 let inkSaving: Promise<void> = Promise.resolve();
 let inkSaves = 0;
 
-/// Le impostazioni dalle righe `entries` del bundle. Una chiave che manca, o
-/// un valore che non è un interruttore, vale spento.
+/// Le impostazioni dalle righe `entries` del bundle. Una chiave che manca, o un
+/// valore che non regge la sua specie, vale il suo di serie: spento per le
+/// prime, acceso per `grid`, `snap` e `partsPicker`. La lista della barra si
+/// copia, e tiene solo i testi.
 export function preferencesOf(entries: readonly SettingEntry[]): CanvasPreferences {
-  const on = (key: string): boolean => entries.find((entry) => entry.spec.key === key)?.value === true;
-  return { inkMouseRemember: on(INK_MOUSE_REMEMBER_KEY), fingerMovesCard: on(FINGER_MOVES_CARD_KEY) };
+  const valueOf = (key: string): unknown => entries.find((entry) => entry.spec.key === key)?.value;
+  const flag = (key: string, fallback: boolean): boolean => {
+    const value = valueOf(key);
+    return typeof value === "boolean" ? value : fallback;
+  };
+  const choice = <T extends string>(key: string, values: readonly T[], fallback: T): T => {
+    const value = valueOf(key);
+    return typeof value === "string" && (values as readonly string[]).includes(value) ? (value as T) : fallback;
+  };
+  const toolbar = valueOf(TOOLBAR_KEY);
+  return {
+    inkMouseRemember: flag(INK_MOUSE_REMEMBER_KEY, DEFAULT_PREFERENCES.inkMouseRemember),
+    fingerMovesCard: flag(FINGER_MOVES_CARD_KEY, DEFAULT_PREFERENCES.fingerMovesCard),
+    fingerWrites: flag(FINGER_WRITES_KEY, DEFAULT_PREFERENCES.fingerWrites),
+    penButton: choice(PEN_BUTTON_KEY, PEN_BUTTON_VALUES, DEFAULT_PREFERENCES.penButton),
+    wheel: choice(WHEEL_KEY, WHEEL_VALUES, DEFAULT_PREFERENCES.wheel),
+    workspace: choice(WORKSPACE_KEY, WORKSPACE_VALUES, DEFAULT_PREFERENCES.workspace),
+    toolbar: Array.isArray(toolbar) ? toolbar.filter((tool): tool is string => typeof tool === "string") : [],
+    grid: flag(GRID_KEY, DEFAULT_PREFERENCES.grid),
+    snap: flag(SNAP_KEY, DEFAULT_PREFERENCES.snap),
+    partsPicker: flag(PARTS_PICKER_KEY, DEFAULT_PREFERENCES.partsPicker),
+    dropFolder: choice(DROP_FOLDER_KEY, DROP_FOLDER_VALUES, DEFAULT_PREFERENCES.dropFolder),
+    dropFolderPath: dropFolderPathOf(valueOf(DROP_FOLDER_PATH_KEY)),
+  };
+}
+
+/// La cartella dei file trascinati come si usa, da ciò che è scritto nelle
+/// Impostazioni. Il testo si scrive nella forma di un nome nuovo
+/// (`normalizedName`: spazi ai bordi, NFC) e perde gli slash ai bordi; vale se
+/// `nameFault` non trova niente. Vuoto, con un `..`, dentro `.fub` o `.trash`,
+/// nascosto, con un carattere che un filesystem si riserva, o non testo: vale
+/// `Allegati`. Il Rust tiene il testo com'è scritto e non lo giudica.
+export function dropFolderPathOf(value: unknown): string {
+  if (typeof value !== "string") return DROP_FOLDER_PATH_DEFAULT;
+  const path = normalizedName(value).replace(/^\/+|\/+$/g, "");
+  return path !== "" && nameFault(path, "new") === null ? path : DROP_FOLDER_PATH_DEFAULT;
 }
 
 /// Le impostazioni dell'ultima lettura: quelle di serie prima della prima.
@@ -90,7 +221,7 @@ async function readPreferences(): Promise<CanvasPreferences> {
   }
 }
 
-/// Legge le impostazioni adesso e a ogni cambio delle due chiavi, e le dà a
+/// Legge le impostazioni adesso e a ogni cambio delle dodici chiavi, e le dà a
 /// `apply`; una lettura superata da una più recente non arriva. Torna la
 /// funzione che smette: chi chiama ne è il proprietario.
 export function watchPreferences(apply: (preferences: CanvasPreferences) => void): () => void {
@@ -103,7 +234,7 @@ export function watchPreferences(apply: (preferences: CanvasPreferences) => void
     });
   };
   const stop = onEvent("setting_changed", (event) => {
-    if (event.key === INK_MOUSE_REMEMBER_KEY || event.key === FINGER_MOVES_CARD_KEY) read();
+    if (FOLLOWED_KEYS.has(event.key)) read();
   });
   read();
   return () => {

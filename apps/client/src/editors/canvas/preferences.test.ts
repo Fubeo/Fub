@@ -1,11 +1,12 @@
 // @vitest-environment happy-dom
 //
-// Le preferenze della lavagna contro l'host finto: le due impostazioni della
-// macchina che il bundle `fub.lavagna` dichiara, e lo stato di vista che
-// ricorda «Scrivi col mouse». Ogni caso riparte da moduli nuovi, perché
-// `preferences.ts` ricorda l'ultima lettura.
+// Le preferenze della lavagna contro l'host finto: le dodici impostazioni del
+// gruppo «Lavagna» che il bundle `fub.lavagna` dichiara, la cartella dei file
+// trascinati giudicata come nome nuovo, e lo stato di vista che ricorda «Scrivi
+// col mouse». Ogni caso riparte da moduli nuovi, perché `preferences.ts`
+// ricorda l'ultima lettura.
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { SettingEntry } from "../../host/contract";
+import type { SettingEntry, SettingValue } from "../../host/contract";
 import type { FakeHost } from "../../host/fake";
 
 const box = vi.hoisted(() => ({ host: null as FakeHost | null }));
@@ -31,24 +32,73 @@ const { createFakeHost } = await import("../../host/fake");
 
 const REMEMBER = "canvas.ink_mouse_remember";
 const FINGER = "canvas.finger_moves_card";
+const FINGER_WRITES = "canvas.finger_writes";
+const PEN_BUTTON = "canvas.pen_button";
+const WHEEL = "canvas.wheel";
+const WORKSPACE = "canvas.workspace";
+const TOOLBAR = "canvas.toolbar";
+const GRID = "canvas.grid";
+const SNAP = "canvas.snap";
+const PARTS_PICKER = "canvas.parts_picker";
+const DROP_FOLDER = "canvas.drop_folder";
+const DROP_FOLDER_PATH = "canvas.drop_folder_path";
 const INK_MOUSE = "canvas.ink_mouse";
 
-/// Una riga di `fub.lavagna`: un interruttore della macchina, spento di serie,
-/// col valore `value` (anche uno sbagliato, come da un file scritto a mano).
-function lavagnaEntry(key: string, value: unknown): SettingEntry {
+type Scope = "machine" | "vault";
+
+/// Le impostazioni di serie: quelle che valgono quando nessuno ha deciso.
+const SERIE = {
+  inkMouseRemember: false,
+  fingerMovesCard: false,
+  fingerWrites: false,
+  penButton: "radial",
+  wheel: "pan",
+  workspace: "auto",
+  toolbar: [] as string[],
+  grid: true,
+  snap: true,
+  partsPicker: true,
+  dropFolder: "notes",
+  dropFolderPath: "Allegati",
+};
+
+/// Le impostazioni di serie con qualche campo diverso.
+const cambiate = (changes: Partial<typeof SERIE>) => ({ ...SERIE, ...changes });
+
+/// Una riga di `fub.lavagna`, col valore `value` (anche uno sbagliato, come da
+/// un file scritto a mano). Il client guarda la chiave e il valore.
+function lavagnaEntry(key: string, value: unknown, scope: Scope = "machine"): SettingEntry {
   return {
     spec: {
       key,
       label: key,
       description: "",
       group: "Lavagna",
-      scope: "machine",
+      scope,
       kind: { kind: "toggle", default: false },
       program_writable: false,
     },
     value,
     source: value === false ? "default" : "machine",
   } as SettingEntry;
+}
+
+/// Le dodici righe della lavagna col valore di serie, nell'ordine del pannello.
+function serieEntries(): SettingEntry[] {
+  return [
+    lavagnaEntry(REMEMBER, false),
+    lavagnaEntry(FINGER, false),
+    lavagnaEntry(FINGER_WRITES, false),
+    lavagnaEntry(PEN_BUTTON, "radial"),
+    lavagnaEntry(WHEEL, "pan"),
+    lavagnaEntry(WORKSPACE, "auto", "vault"),
+    lavagnaEntry(TOOLBAR, [], "vault"),
+    lavagnaEntry(GRID, true, "vault"),
+    lavagnaEntry(SNAP, true, "vault"),
+    lavagnaEntry(PARTS_PICKER, true, "vault"),
+    lavagnaEntry(DROP_FOLDER, "notes", "vault"),
+    lavagnaEntry(DROP_FOLDER_PATH, "Allegati", "vault"),
+  ];
 }
 
 /// Un'altra impostazione, che la lavagna non guarda.
@@ -92,65 +142,149 @@ beforeEach(() => {
 });
 
 describe("le impostazioni della lavagna", () => {
-  it("prima di leggere e senza le chiavi sono spente", async () => {
+  it("prima di leggere e senza le chiavi valgono quelle di serie", async () => {
     const host = createFakeHost({ settings: [OTHER] });
     const { DEFAULT_PREFERENCES, currentPreferences, watchPreferences } = await boot(host);
-    expect(DEFAULT_PREFERENCES).toEqual({ inkMouseRemember: false, fingerMovesCard: false });
-    expect(currentPreferences()).toEqual(DEFAULT_PREFERENCES);
+    expect(DEFAULT_PREFERENCES).toEqual(SERIE);
+    expect(currentPreferences()).toEqual(SERIE);
     const applied: unknown[] = [];
     const stop = watchPreferences((preferences) => applied.push(preferences));
     await settle();
-    expect(applied).toEqual([{ inkMouseRemember: false, fingerMovesCard: false }]);
+    expect(applied).toEqual([SERIE]);
     stop();
   });
 
-  it("si leggono dal bundle, e un valore che non è un interruttore vale spento", async () => {
-    const host = createFakeHost({ settings: [lavagnaEntry(REMEMBER, true), lavagnaEntry(FINGER, true), OTHER] });
+  it("si leggono dal bundle, e un valore che non regge la sua specie vale il suo di serie", async () => {
+    const host = createFakeHost({
+      settings: [
+        lavagnaEntry(REMEMBER, true),
+        lavagnaEntry(FINGER, true),
+        lavagnaEntry(FINGER_WRITES, true),
+        lavagnaEntry(PEN_BUTTON, "eraser"),
+        lavagnaEntry(WHEEL, "zoom"),
+        lavagnaEntry(WORKSPACE, "simple", "vault"),
+        lavagnaEntry(TOOLBAR, ["pen", "text"], "vault"),
+        lavagnaEntry(GRID, false, "vault"),
+        lavagnaEntry(SNAP, false, "vault"),
+        lavagnaEntry(PARTS_PICKER, false, "vault"),
+        lavagnaEntry(DROP_FOLDER, "folder", "vault"),
+        lavagnaEntry(DROP_FOLDER_PATH, "Materiali", "vault"),
+        OTHER,
+      ],
+    });
     const { currentPreferences, preferencesOf, watchPreferences } = await boot(host);
+    const cambio = {
+      inkMouseRemember: true,
+      fingerMovesCard: true,
+      fingerWrites: true,
+      penButton: "eraser",
+      wheel: "zoom",
+      workspace: "simple",
+      toolbar: ["pen", "text"],
+      grid: false,
+      snap: false,
+      partsPicker: false,
+      dropFolder: "folder",
+      dropFolderPath: "Materiali",
+    };
     const applied: unknown[] = [];
     const stop = watchPreferences((preferences) => applied.push(preferences));
     await settle();
-    expect(applied).toEqual([{ inkMouseRemember: true, fingerMovesCard: true }]);
-    expect(currentPreferences()).toEqual({ inkMouseRemember: true, fingerMovesCard: true });
+    expect(applied).toEqual([cambio]);
+    expect(currentPreferences()).toEqual(cambio);
     expect(settingsReads(host)).toEqual([{ kind: "settings", plugin: "fub.lavagna" }]);
     stop();
 
     for (const wrong of ["sì", "true", 1, null, { on: true }, [true]]) {
-      expect(preferencesOf([lavagnaEntry(REMEMBER, wrong), lavagnaEntry(FINGER, true)]), JSON.stringify(wrong)).toEqual({
-        inkMouseRemember: false,
-        fingerMovesCard: true,
-      });
+      expect(preferencesOf([lavagnaEntry(REMEMBER, wrong), lavagnaEntry(FINGER, true)]), JSON.stringify(wrong)).toEqual(
+        cambiate({ fingerMovesCard: true }),
+      );
     }
   });
 
-  it("seguono il cambio da setting_changed, anche da un'altra finestra, e smettono quando si chiude", async () => {
-    const host = createFakeHost({ settings: [lavagnaEntry(REMEMBER, false), lavagnaEntry(FINGER, false), OTHER] });
+  it("un valore che non regge la sua specie vale il suo di serie, e la lettura non scrive", async () => {
+    const wrong = [
+      lavagnaEntry(REMEMBER, "sì"),
+      lavagnaEntry(FINGER, 7),
+      lavagnaEntry(FINGER_WRITES, "sì"),
+      lavagnaEntry(PEN_BUTTON, "laser"),
+      lavagnaEntry(WHEEL, 3),
+      lavagnaEntry(WORKSPACE, "gigante", "vault"),
+      lavagnaEntry(TOOLBAR, "pen", "vault"),
+      lavagnaEntry(GRID, "no", "vault"),
+      lavagnaEntry(SNAP, 0, "vault"),
+      lavagnaEntry(PARTS_PICKER, null, "vault"),
+      lavagnaEntry(DROP_FOLDER, "cestino", "vault"),
+      lavagnaEntry(DROP_FOLDER_PATH, 5, "vault"),
+    ];
+    const host = createFakeHost({ settings: wrong });
     const { currentPreferences, watchPreferences } = await boot(host);
     const applied: unknown[] = [];
     const stop = watchPreferences((preferences) => applied.push(preferences));
     await settle();
-    expect(applied).toEqual([{ inkMouseRemember: false, fingerMovesCard: false }]);
+    expect(applied).toEqual([SERIE]);
+    expect(currentPreferences()).toEqual(SERIE);
+    expect(host.atGate("setSetting"), "la lettura non scrive").toHaveLength(0);
+    stop();
+  });
+
+  it("la lista della barra si copia e tiene solo i testi", async () => {
+    const host = createFakeHost({ settings: [] });
+    const { preferencesOf } = await boot(host);
+    const list = ["pen", "text"];
+    const prefs = preferencesOf([lavagnaEntry(TOOLBAR, list, "vault")]);
+    expect(prefs.toolbar).toEqual(list);
+    expect(prefs.toolbar, "una copia, non la stessa lista").not.toBe(list);
+    expect(preferencesOf([lavagnaEntry(TOOLBAR, ["pen", 3, null, "text"], "vault")]).toolbar).toEqual(["pen", "text"]);
+  });
+
+  it("seguono il cambio da setting_changed, anche da un'altra finestra, e smettono quando si chiude", async () => {
+    const host = createFakeHost({ settings: [...serieEntries(), OTHER] });
+    const { currentPreferences, watchPreferences } = await boot(host);
+    const applied: unknown[] = [];
+    const stop = watchPreferences((preferences) => applied.push(preferences));
+    await settle();
+    expect(applied).toEqual([SERIE]);
 
     await host.module.api.setSetting("editor.line_numbers", false);
     await settle();
     expect(settingsReads(host), "un'altra impostazione non fa rileggere").toHaveLength(1);
 
-    // La scrittura dell'host è la stessa da qualunque finestra arrivi: il
-    // backend emette `setting_changed` a tutte.
-    await host.module.api.setSetting(FINGER, true);
-    await settle();
-    expect(applied[applied.length - 1]).toEqual({ inkMouseRemember: false, fingerMovesCard: true });
-    await host.module.api.setSetting(REMEMBER, true);
-    await settle();
-    expect(applied[applied.length - 1]).toEqual({ inkMouseRemember: true, fingerMovesCard: true });
-    expect(currentPreferences()).toEqual({ inkMouseRemember: true, fingerMovesCard: true });
+    // Ciascuna delle dodici, cambiata, si rilegge: la scrittura dell'host è la
+    // stessa da qualunque finestra arrivi, e il backend emette `setting_changed`
+    // a tutte.
+    const changes: [string, SettingValue, Partial<typeof SERIE>][] = [
+      [REMEMBER, true, { inkMouseRemember: true }],
+      [FINGER, true, { fingerMovesCard: true }],
+      [FINGER_WRITES, true, { fingerWrites: true }],
+      [PEN_BUTTON, "eraser", { penButton: "eraser" }],
+      [WHEEL, "zoom", { wheel: "zoom" }],
+      [WORKSPACE, "simple", { workspace: "simple" }],
+      [TOOLBAR, ["pen"], { toolbar: ["pen"] }],
+      [GRID, false, { grid: false }],
+      [SNAP, false, { snap: false }],
+      [PARTS_PICKER, false, { partsPicker: false }],
+      [DROP_FOLDER, "board", { dropFolder: "board" }],
+      [DROP_FOLDER_PATH, "Foto/2026", { dropFolderPath: "Foto/2026" }],
+    ];
+    let expected: Record<string, unknown> = { ...SERIE };
+    let reads = settingsReads(host).length;
+    for (const [key, value, change] of changes) {
+      await host.module.api.setSetting(key, value);
+      await settle();
+      expected = { ...expected, ...change };
+      expect(applied[applied.length - 1], key).toEqual(expected);
+      reads += 1;
+      expect(settingsReads(host), `${key} rilegge una volta`).toHaveLength(reads);
+    }
+    expect(currentPreferences()).toEqual(expected);
 
     stop();
     const count = applied.length;
     await host.module.api.setSetting(FINGER, false);
     await settle();
     expect(applied, "dopo stop").toHaveLength(count);
-    expect(settingsReads(host), "dopo stop nessuno rilegge").toHaveLength(3);
+    expect(settingsReads(host), "dopo stop nessuno rilegge").toHaveLength(reads);
   });
 
   it("una lettura che non riesce lascia le ultime, e una superata non arriva", async () => {
@@ -163,7 +297,7 @@ describe("le impostazioni della lavagna", () => {
     const broken = host.fault("queryIndex");
     await host.module.api.setSetting(FINGER, true);
     await settle();
-    expect(applied[applied.length - 1], "le ultime lette").toEqual({ inkMouseRemember: true, fingerMovesCard: false });
+    expect(applied[applied.length - 1], "le ultime lette").toEqual(cambiate({ inkMouseRemember: true }));
     broken();
 
     const slow = host.throttle("queryIndex");
@@ -171,9 +305,48 @@ describe("le impostazioni della lavagna", () => {
     await host.module.api.setSetting(REMEMBER, false);
     slow();
     await settle();
-    expect(applied[applied.length - 1]).toEqual({ inkMouseRemember: false, fingerMovesCard: true });
-    expect(currentPreferences()).toEqual({ inkMouseRemember: false, fingerMovesCard: true });
+    expect(applied[applied.length - 1]).toEqual(cambiate({ fingerMovesCard: true }));
+    expect(currentPreferences()).toEqual(cambiate({ fingerMovesCard: true }));
     stop();
+  });
+});
+
+describe("la cartella dei file trascinati", () => {
+  it("vale com'è scritta se è un percorso del vault, altrimenti Allegati", async () => {
+    const host = createFakeHost({ settings: [] });
+    const { dropFolderPathOf } = await boot(host);
+    const cases: [unknown, string][] = [
+      ["Materiali", "Materiali"],
+      ["  Materiali  ", "Materiali"],
+      ["/Materiali/", "Materiali"],
+      ["Foto/2026", "Foto/2026"],
+      ["Cartella con spazi", "Cartella con spazi"],
+      ["Café", "Café"],
+      ["x".repeat(255), "x".repeat(255)],
+      ["", "Allegati"],
+      ["   ", "Allegati"],
+      ["/", "Allegati"],
+      [".", "Allegati"],
+      ["..", "Allegati"],
+      ["Foto/../x", "Allegati"],
+      ["Foto//x", "Allegati"],
+      [".fub", "Allegati"],
+      ["Foto/.fub", "Allegati"],
+      [".trash/x", "Allegati"],
+      [".nascosta", "Allegati"],
+      ["Foto\\x", "Allegati"],
+      ["a:b", "Allegati"],
+      ["CON", "Allegati"],
+      ["CON.txt", "Allegati"],
+      ["nome.", "Allegati"],
+      ["x".repeat(256), "Allegati"],
+      [42, "Allegati"],
+      [null, "Allegati"],
+      [undefined, "Allegati"],
+    ];
+    for (const [value, expected] of cases) {
+      expect(dropFolderPathOf(value), String(value)).toBe(expected);
+    }
   });
 });
 
