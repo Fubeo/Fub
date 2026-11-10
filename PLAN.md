@@ -4266,7 +4266,7 @@ dell'etichetta; S8 di N4 non peggiora (il numero nel rapporto); le foto
 del banco somigliano al prototipo.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/canvas
-Stato: [ ] da fare
+Stato: [x] fatto (2026-11-10). Differenze: il bordo sono quattro lati `.canvas-ink-frame` sulla scena, non un contorno della scheda (il contorno ridipingeva la tabella di S8); l'etichetta sta nella vista, con la stessa misura a ogni zoom; Alt decide anche l'ancora all'alzata; S8 non peggiora (stacco massimo a penna 210–263 ms contro 254–307), il ritardo del primo input sale da 33 a 36–64 ms sotto Xvfb
 
 ## T70 · Convertire
 
