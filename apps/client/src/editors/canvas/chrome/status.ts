@@ -48,6 +48,9 @@ export interface CanvasStatusPort {
   zoomPercent(): number;
   /// Quante schede sono scelte adesso.
   chosenCount(): number;
+  /// Il nome della scheda in cui si scrive adesso (T41), o `null`; assente,
+  /// non si scrive mai.
+  writing?(): string | null;
   /// Perché la lavagna non si cambia adesso, o `null` se si cambia.
   readOnlyWhy(): string | null;
   /// La cartella dove vanno i file trascinati adesso.
@@ -91,7 +94,10 @@ export function canvasStatusItems(port: CanvasStatusPort): SurfaceStatusItem[] {
     open: () => openZoomMenu(port),
   });
   const chosen = port.chosenCount();
-  if (chosen === 1) items.push({ id: "chosen", text: t("canvas.status.chosen.one") });
+  // Mentre si scrive in una scheda la banda dice dove, al posto della scelta.
+  const writing = port.writing?.() ?? null;
+  if (writing !== null) items.push({ id: "writing", text: t("canvas.status.writing", { name: writing }) });
+  else if (chosen === 1) items.push({ id: "chosen", text: t("canvas.status.chosen.one") });
   else if (chosen > 1) items.push({ id: "chosen", text: t("canvas.status.chosen", { n: chosen }) });
   const why = port.readOnlyWhy();
   if (why !== null) items.push({ id: "readonly", text: t("canvas.status.readonly"), hint: why });

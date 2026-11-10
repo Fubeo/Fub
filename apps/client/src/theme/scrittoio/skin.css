@@ -9289,6 +9289,97 @@ kbd,
   font: inherit;
   line-height: var(--leading-normal);
 }
+/* Scrivere in una scheda di nota (N6 T41, prototipo T27). La barra di
+   formattazione nella riga delle opzioni: niente filo sotto (la testata
+   della lavagna ha già il suo) e niente margine, perché la riga ha il suo
+   passo. */
+.canvas-options .format-bar {
+  padding: 0;
+  box-shadow: none;
+}
+/* La scheda che scrive: l'anello e l'alone della scheda attiva (T25), e
+   «Esc per uscire» pieno d'accento invece che velato. Si vede da lontano
+   che lì dentro si scrive, e non solo che è scelta. */
+.canvas-node[data-card-editing] {
+  box-shadow:
+    0 0 0 2px var(--accent),
+    0 0 0 6px var(--accent-veil),
+    var(--shadow-2);
+}
+.canvas-node[data-card-editing] > .canvas-node-handle > .canvas-connect {
+  display: none;
+}
+.canvas-node[data-card-editing] > .canvas-node-handle > .canvas-exit-hint {
+  margin-left: auto;
+  padding: 0 var(--space-4);
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+  color: var(--accent-contrast);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-bold);
+  line-height: 20px;
+}
+/* La nota che si scrive ha la tipografia della nota letta sulla scheda
+   (T25): entrando in scrittura il testo resta dov'è, cambia solo che c'è il
+   cursore. */
+.canvas-card-note .cm-editor {
+  background: transparent;
+  color: var(--doc-fg);
+}
+.canvas-card-note .cm-editor.cm-focused {
+  outline: none;
+}
+.canvas-card-note .cm-content {
+  padding: var(--space-5) var(--space-6);
+  font-family: var(--font-reading);
+  font-size: var(--text-md);
+  line-height: var(--leading-normal);
+}
+.canvas-card-note .cm-content > .cm-line {
+  padding-inline: 0;
+}
+.canvas-card-note .cm-editor .cm-content .cm-fub-heading-line {
+  padding-top: 0;
+  padding-bottom: var(--space-3);
+  font-size: var(--text-lg);
+  font-weight: var(--weight-bold);
+  letter-spacing: 0;
+  line-height: var(--leading-tight);
+}
+/* Il conflitto dentro la scheda: il banner dei riquadri, col passo della
+   scheda invece di quello della pagina. */
+.canvas-card-note > .conflict-banner {
+  margin: 0;
+  padding: var(--space-4) var(--space-5);
+  border-radius: 0;
+  font-size: var(--text-sm);
+}
+.canvas-card-note > .conflict-banner > .conflict-actions {
+  gap: var(--space-2) var(--space-3);
+}
+/* Lo stato del salvataggio nella riga del titolo: la parola della testata
+   dei riquadri (.save-state), in piccolo. */
+.canvas-node-handle > .save-state {
+  margin-left: auto;
+  font-size: var(--text-xs);
+}
+.canvas-node-handle > .save-state ~ .canvas-exit-hint,
+.canvas-node-handle > .canvas-card-lock ~ .canvas-exit-hint,
+.canvas-node[data-card-editing] > .canvas-node-handle > .save-state ~ .canvas-exit-hint {
+  margin-left: var(--space-3);
+}
+/* Una nota di sola lettura non entra in scrittura e lo dice nella riga del
+   titolo, con la parola della banda. */
+.canvas-card-lock {
+  margin-left: auto;
+  padding: 0 var(--space-4);
+  border-radius: var(--radius-pill);
+  background: var(--warning-wash);
+  color: var(--text);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-bold);
+  line-height: 20px;
+}
 /* Le quattro maniglie (T66): un quadratino col filo d'accento, di 10 px
    sullo schermo a ogni zoom, solo sulla scheda scelta e sulla cornice della
    scelta. */

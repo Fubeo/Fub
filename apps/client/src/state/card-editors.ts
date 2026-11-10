@@ -22,6 +22,7 @@ import type { EditorSurface, SurfaceRequest } from "../editors/core/registry";
 import { rebaseStaleChange, type EditorChange } from "../editors/core/text-operation";
 import type { SyntaxForm } from "../host/contract";
 import type { Theme } from "../theme/theme";
+import { openLifetime, type Lifetime } from "../ui/lifetime";
 import type {
   DocumentSession,
   DocumentSessionCollection,
@@ -64,6 +65,12 @@ export interface CardEditorDeps {
   readonly theme?: () => Theme | null;
   /// Le forme di sintassi del documento, come per un riquadro.
   readonly forms?: (path: string) => Promise<readonly SyntaxForm[]>;
+  /// La barra di formato della superficie, come quella di un riquadro ma
+  /// senza Annulla e Ripeti (T41); vive quanto `life`. Assente: niente barra.
+  readonly toolbar?: (surface: EditorSurface, life: Lifetime) => HTMLElement | null;
+  /// Disegna in `box` la scelta del conflitto del documento `path`, quella di
+  /// un riquadro (T41), o lo svuota e lo nasconde se non c'è conflitto.
+  readonly conflict?: (box: HTMLElement, path: string) => void;
 }
 
 /// La porta, più ciò che la shell le chiede per tenerla al passo.
@@ -96,6 +103,10 @@ interface OpenCardEditor {
   readonly options: CardEditorOptions;
   readonly listeners: Set<(state: CardEditorState) => void>;
   readonly teardowns: (() => void)[];
+  /// La scelta del conflitto in cima alla scheda (T41), se la shell la disegna.
+  readonly notice: HTMLElement | null;
+  /// La barra di formato, nata alla prima richiesta, e la sua vita.
+  toolbar: { readonly element: HTMLElement | null; readonly life: Lifetime } | null;
   /// La sessione si è chiusa sotto l'editor, o la superficie ha ceduto.
   stopped: boolean;
   destroyed: boolean;
@@ -122,9 +133,26 @@ export function createCardEditorPort(deps: CardEditorDeps): CardEditorHub {
     return "clean";
   }
 
+  /// La scelta del conflitto, ridisegnata quando il conflitto comincia o
+  /// finisce: c'è finché la sessione è in conflitto, e il corpo della scheda
+  /// lo sa (`data-card-notice`).
+  function drawNotice(editor: OpenCardEditor): void {
+    const box = editor.notice;
+    if (!box || !deps.conflict) return;
+    try {
+      deps.conflict(box, docOf(editor));
+    } catch (error) {
+      console.error(error);
+      box.hidden = true;
+    }
+    const host = box.parentElement;
+    if (host) host.toggleAttribute("data-card-notice", !box.hidden);
+  }
+
   function announce(editor: OpenCardEditor): void {
     if (editor.destroyed) return;
     const state = stateOf(editor);
+    if (state !== editor.last && (state === "conflict" || editor.last === "conflict")) drawNotice(editor);
     if (state === editor.last) return;
     editor.last = state;
     for (const listener of [...editor.listeners]) {
@@ -233,6 +261,24 @@ export function createCardEditorPort(deps: CardEditorDeps): CardEditorHub {
           editor.listeners.delete(listener);
         };
       },
+      toolbar: () => {
+        if (editor.destroyed || !deps.toolbar) return null;
+        if (!editor.toolbar) {
+          const life = openLifetime();
+          let element: HTMLElement | null = null;
+          try {
+            element = deps.toolbar(editor.surface, life);
+          } catch (error) {
+            console.error(error);
+          }
+          editor.toolbar = { element, life };
+          editor.teardowns.push(() => {
+            life.close();
+            element?.remove();
+          });
+        }
+        return editor.toolbar.element;
+      },
       destroy: () => destroy(editor),
     };
   }
@@ -302,7 +348,24 @@ export function createCardEditorPort(deps: CardEditorDeps): CardEditorHub {
       surface.setSyntaxForms?.(forms);
       // Il testo da montare si prende adesso, dopo le attese: un riquadro può
       // averlo cambiato nel frattempo.
-      buffer.setDoc(sessions.text(path) ?? source.text);
+      const text = sessions.text(path) ?? source.text;
+      buffer.setDoc(text);
+      // Con `Nota#Titolo` la nota intera, vista dal titolo (T41).
+      const offset = options.heading ? headingOffset(text, options.heading) : null;
+      if (offset !== null) {
+        try {
+          surface.reveal?.({ span: { start: offset, end: offset } });
+        } catch (error) {
+          console.error(error);
+        }
+      }
+      // La scelta del conflitto sta in cima alla scheda, sopra l'editor.
+      let notice: HTMLElement | null = null;
+      if (deps.conflict) {
+        notice = document.createElement("div");
+        notice.hidden = true;
+        host.prepend(notice);
+      }
       const editor: OpenCardEditor = {
         surfaceId,
         surface,
@@ -310,6 +373,8 @@ export function createCardEditorPort(deps: CardEditorDeps): CardEditorHub {
         options,
         listeners: new Set(),
         teardowns: [],
+        notice,
+        toolbar: null,
         stopped: false,
         destroyed: false,
         last: "clean",
@@ -337,6 +402,7 @@ export function createCardEditorPort(deps: CardEditorDeps): CardEditorHub {
           } finally {
             host.replaceChildren();
             delete host.dataset.cardEditor;
+            host.removeAttribute("data-card-notice");
           }
         },
         attached,
@@ -349,6 +415,7 @@ export function createCardEditorPort(deps: CardEditorDeps): CardEditorHub {
       open.set(surfaceId, editor);
       editor.last = stateOf(editor);
       editor.surface.setReadOnly?.(readOnly(editor));
+      if (editor.last === "conflict") drawNotice(editor);
       life.add(() => destroy(editor));
       return handle(editor);
     } catch (error) {
@@ -407,4 +474,29 @@ export function createCardEditorPort(deps: CardEditorDeps): CardEditorHub {
       for (const editor of [...open.values()]) destroy(editor);
     },
   };
+}
+
+/// Il byte (UTF-8) dove comincia la riga del titolo `heading` di un testo
+/// Markdown: il primo titolo `#` con quel testo, fuori dai blocchi di codice;
+/// `null` se non c'è. Serve a mostrare `Nota#Titolo` dal suo titolo (T41).
+export function headingOffset(text: string, heading: string): number | null {
+  const wanted = heading.trim().toLowerCase();
+  if (wanted === "") return null;
+  const encoder = new TextEncoder();
+  let bytes = 0;
+  let fence: string | null = null;
+  for (const line of text.split(/(?<=\n)/)) {
+    const bare = line.replace(/\r?\n$/, "");
+    const opening = /^ {0,3}(`{3,}|~{3,})/.exec(bare);
+    if (fence !== null) {
+      if (opening && opening[1]!.startsWith(fence)) fence = null;
+    } else if (opening) {
+      fence = opening[1]!;
+    } else {
+      const match = /^ {0,3}#{1,6}(?:[ \t]+(.*?))?(?:[ \t]+#+)?[ \t]*$/.exec(bare);
+      if (match && (match[1] ?? "").trim().toLowerCase() === wanted) return bytes;
+    }
+    bytes += encoder.encode(line).length;
+  }
+  return null;
 }

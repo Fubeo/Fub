@@ -161,6 +161,23 @@ export interface CardContext {
   /// già lette e provate col file e il `subpath` (`cardParts` di `parts.ts`);
   /// `null` o assente: la scheda mostra ciò che dice il `subpath`.
   readonly parts?: CanvasParts | null;
+  /// La porta per scrivere dentro la scheda (T40); assente, la scheda si legge
+  /// e basta (T41).
+  readonly editors?: CardEditorPort;
+  /// La scheda scrive nel suo file (`writing` con la barra dell'editor), o ha
+  /// smesso (`null`): la tela segna `data-card-editing` e mette la barra
+  /// nella riga delle opzioni (T41). Una scheda che smette da sé (la porta
+  /// dice no, la nota è di sola lettura) lo dice qui.
+  writing?(writing: CardWriting | null): void;
+  /// A che punto è ciò che si scrive (T41), per la riga del titolo: da
+  /// salvare, in conflitto, di sola lettura (`reason` dice perché); `null`,
+  /// niente da dire.
+  editState?(state: CardEditorState | null, reason?: string): void;
+}
+
+/// Una scheda che scrive (T41): la barra di formato dell'editor, se ne ha una.
+export interface CardWriting {
+  readonly toolbar: HTMLElement | null;
 }
 
 /// Una scheda montata da un renderer.
@@ -176,6 +193,11 @@ export interface CardView {
   key?(event: KeyboardEvent): boolean;
   /// La pagina mostrata, da 1 (il PDF).
   page?(): number;
+  /// Entra in scrittura (T41, T42): l'editor vero del file prende il corpo. Il
+  /// montaggio arriva dopo, e la scheda lo dice con `context.writing`; `false`
+  /// se qui non si scrive (un documento Word, nessuna porta, una scheda ferma).
+  /// `leave()` esce anche dalla scrittura.
+  edit?(): boolean;
   destroy(): void;
 }
 
@@ -189,6 +211,9 @@ export interface CardEditorOptions {
   /// La vita della scheda: chiusa lei, l'editor si smonta da sé, anche se
   /// `open` sta ancora aspettando.
   readonly lifetime: Lifetime;
+  /// Il titolo a cui la vista scorre appena montato l'editor (`Nota#Titolo`,
+  /// T41): si scrive la nota intera, vista da lì. Assente o `null`: l'inizio.
+  readonly heading?: string | null;
 }
 
 /// A che punto è ciò che si scrive nella scheda: salvato, ancora da salvare,
@@ -207,6 +232,10 @@ export interface CardEditor {
   state(): CardEditorState;
   /// Avvisa a ogni cambio di `state()`; restituisce come smettere.
   onState(listener: (state: CardEditorState) => void): () => void;
+  /// La barra di formato dell'editor, senza Annulla e Ripeti (sulla lavagna
+  /// stanno in cima), da mettere nella riga delle opzioni (T41); `null` se
+  /// l'editor non ne ha. La barra vive quanto l'editor.
+  toolbar?(): HTMLElement | null;
   /// Stacca l'editor dalla sessione e lo smonta, una volta sola.
   destroy(): void;
 }

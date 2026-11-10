@@ -4,8 +4,14 @@
 // La resa non la fa la scheda: arriva da una porta (`NoteCardPort.show`), che
 // nella shell è `renderEmbed` più la stessa montatura sicura delle schede di
 // testo, fatta in `document-controller.ts` (T12). Così la tela non importa
-// niente di `editors/text/` né dell'host, e la scheda non ha un editor dentro
-// (D-7): legge e basta, non scrive mai il file (A-4).
+// niente di `editors/text/` né dell'host.
+//
+// Si scrive solo con `edit()` (T41, D-7 (b)): la scheda chiede alla porta di
+// T40 (`context.editors`) l'editor vero della nota, sulla stessa sessione di
+// un riquadro, e lo mette nel corpo al posto della resa; bozze, conflitti e
+// salvataggio sono della sessione, l'annulla dell'editor. `leave()` porta il
+// testo alla sessione, smonta l'editor e rifà la resa col testo nuovo. Un
+// documento Word o ODT (D-14 (a)) resta in lettura.
 //
 // I modi:
 //
@@ -27,7 +33,8 @@ import { isErrorKind } from "../../../host/errors";
 import { t } from "../../../i18n/strings";
 import { formatKindOf, formatNameOf } from "../../../ui/format-kind";
 import { openLifetime, type Lifetime } from "../../../ui/lifetime";
-import type { CardContext, CardMode, CardRenderer, CardView } from "../cards";
+import { notify } from "../../../ui/notify";
+import type { CardContext, CardEditor, CardEditorState, CardMode, CardRenderer, CardView } from "../cards";
 import type { CanvasNode } from "../model";
 
 /// Ciò che la scheda di nota chiede alla shell.
@@ -83,11 +90,21 @@ class NoteCard implements CardView {
   #generation = 0;
   #unwatch: (() => void) | null;
   #destroyed = false;
+  /// Il corpo della scheda, dove sta anche il contenitore dell'editor.
+  readonly #host: HTMLElement;
+  /// La scrittura (T41): la vita dell'editor in apertura o aperto (chiusa,
+  /// l'editor si smonta), il suo contenitore e l'editor, quando c'è.
+  #editLife: Lifetime | null = null;
+  #writer: HTMLElement | null = null;
+  #editor: CardEditor | null = null;
+  /// L'uscita in corso: il testo va alla sessione prima di tornare alla resa.
+  #leaving: Promise<void> | null = null;
 
   constructor(port: NoteCardPort, host: HTMLElement, mode: CardMode, context: CardContext) {
     this.#port = port;
     this.#context = context;
     this.#mode = mode;
+    this.#host = host;
     this.#root = document.createElement("div");
     this.#root.className = "canvas-card-note";
     this.#root.dataset.cardKind = "note";
@@ -108,6 +125,9 @@ class NoteCard implements CardView {
       return;
     }
     this.#root.inert = true;
+    // Una scheda ferma non scrive: il testo va alla sessione (lo fa la porta
+    // smontando l'editor) e la resa torna.
+    this.#stopEditing();
     this.#cancelPending();
     this.#contentLife?.close();
     this.#contentLife = null;
@@ -124,12 +144,137 @@ class NoteCard implements CardView {
   }
 
   leave(): void {
-    // Lo scorrimento resta dov'è: la radice non si tocca.
+    // Lo scorrimento della resa resta dov'è: la radice non si tocca. Se si
+    // scriveva, si esce anche dalla scrittura.
+    this.#leaveEditing();
+  }
+
+  edit(): boolean {
+    if (this.#editLife !== null) return true;
+    const editors = this.#context.editors;
+    if (this.#destroyed || this.#leaving !== null || this.#mode !== "live" || !editors) return false;
+    // Un documento Word o ODT si legge e basta (D-14 (a)).
+    if (formatKindOf(this.#context.path) !== "note") return false;
+    if (this.#state !== "content" && this.#state !== "loading") return false;
+    const life = openLifetime();
+    this.#editLife = life;
+    const writer = document.createElement("div");
+    writer.className = "canvas-card-note";
+    writer.dataset.cardKind = "note";
+    writer.dataset.cardState = "editing";
+    // Nascosto finché l'editor non c'è: fino ad allora si vede la resa.
+    writer.hidden = true;
+    this.#writer = writer;
+    this.#host.append(writer);
+    let opened: Promise<CardEditor | null>;
+    try {
+      opened = editors.open(this.#context.path, writer, {
+        compact: false,
+        readOnly: false,
+        lifetime: life,
+        heading: noteHeadingOf(this.#context.subpath),
+      });
+    } catch (error) {
+      opened = Promise.reject(error);
+    }
+    opened.then(
+      (editor) => this.#opened(life, editor),
+      (error: unknown) => {
+        console.warn(`canvas: la nota ${this.#context.path} non si scrive`, error);
+        this.#opened(life, null);
+      },
+    );
+    return true;
+  }
+
+  /// L'editor è arrivato (o no) per la scrittura che ha vita `life`.
+  #opened(life: Lifetime, editor: CardEditor | null): void {
+    if (life.closed || this.#editLife !== life) {
+      editor?.destroy();
+      return;
+    }
+    if (editor === null) {
+      // Nessun editor per questo file: la scheda resta a leggere.
+      this.#stopEditing();
+      this.#context.writing?.(null);
+      return;
+    }
+    if (editor.state() === "readonly") {
+      // Una nota di sola lettura non si scrive: la scheda resta attiva per
+      // scorrere e copiare, la riga del titolo e una notifica dicono perché.
+      editor.destroy();
+      this.#stopEditing();
+      const reason = t("canvas.card.readonly_why", { name: baseName(this.#context.path) });
+      this.#context.editState?.("readonly", reason);
+      this.#context.writing?.(null);
+      notify(reason, "info");
+      return;
+    }
+    this.#editor = editor;
+    const writer = this.#writer;
+    if (writer) writer.hidden = false;
+    this.#root.hidden = true;
+    // Dopo l'uscita la riga del titolo non dice più niente, anche se il
+    // salvataggio arriva dopo.
+    const report = (state: CardEditorState): void => {
+      if (this.#editLife === life) this.#context.editState?.(state === "clean" ? null : state);
+    };
+    life.add(editor.onState(report));
+    report(editor.state());
+    this.#context.writing?.({ toolbar: editor.toolbar?.() ?? null });
+    editor.focus();
+  }
+
+  /// Esce dalla scrittura: il testo va alla sessione (e si salva), poi
+  /// l'editor si smonta e la resa torna col testo nuovo.
+  #leaveEditing(): void {
+    const life = this.#editLife;
+    if (life === null) return;
+    const editor = this.#editor;
+    const writer = this.#writer;
+    this.#editLife = null;
+    this.#editor = null;
+    this.#writer = null;
+    if (editor === null || writer === null) {
+      // L'editor non era ancora arrivato: la sua apertura si ferma.
+      life.close();
+      writer?.remove();
+      return;
+    }
+    // Fino al salvataggio l'editor resta lì, fermo: niente lampo della resa
+    // vecchia.
+    writer.inert = true;
+    const leaving = editor.leave().catch((error: unknown) => {
+      console.warn(`canvas: la nota ${this.#context.path} non si salva uscendo`, error);
+    }).finally(() => {
+      if (this.#leaving === leaving) this.#leaving = null;
+      life.close();
+      writer.remove();
+      if (this.#destroyed) return;
+      this.#root.hidden = false;
+      if (this.#mode === "live") this.#render();
+    });
+    this.#leaving = leaving;
+  }
+
+  /// Smette di scrivere subito: l'editor si smonta (la porta porta alla
+  /// sessione il testo che teneva) e la resa torna com'era.
+  #stopEditing(): void {
+    const life = this.#editLife;
+    if (life === null) return;
+    const writer = this.#writer;
+    this.#editLife = null;
+    this.#editor = null;
+    this.#writer = null;
+    life.close();
+    writer?.remove();
+    this.#root.hidden = false;
   }
 
   destroy(): void {
     if (this.#destroyed) return;
     this.#destroyed = true;
+    this.#stopEditing();
     this.#generation += 1;
     this.#cancelPending();
     this.#contentLife?.close();
@@ -144,7 +289,9 @@ class NoteCard implements CardView {
 
   #changed(): void {
     if (this.#destroyed) return;
-    // Da ferma non si fa niente: ogni accensione rifà la resa dal file.
+    // Da ferma non si fa niente: ogni accensione rifà la resa dal file. Mentre
+    // si scrive l'editor segue la sessione da sé, e la resa si rifà uscendo.
+    if (this.#editLife !== null || this.#leaving !== null) return;
     if (this.#mode === "live") this.#render();
   }
 

@@ -1330,6 +1330,234 @@ describe("entrare e uscire da una scheda", () => {
   });
 });
 
+/**
+ * Un renderer di note che scrive (T41): `edit()` dice sì per le note `.md`,
+ * e la prova risponde da sé come risponderebbe la porta (`context.writing`,
+ * `context.editState`). Dentro c'è un campo, al posto dell'editor vero.
+ */
+function writerRenderer() {
+  const log: string[] = [];
+  const contexts = new Map<string, CardContext>();
+  const renderer: CardRenderer = {
+    kinds: ["note", "pdf"],
+    mount(node: CanvasNode, host: HTMLElement, _mode: CardMode, context: CardContext): CardView {
+      contexts.set(node.id, context);
+      const field = document.createElement("textarea");
+      field.className = "writer-field";
+      host.append(field);
+      const md = (node.file ?? "").endsWith(".md");
+      return {
+        setMode: (mode) => log.push(`${node.id}:${mode}`),
+        enter: () => {
+          log.push(`${node.id}:enter`);
+          return md;
+        },
+        leave: () => log.push(`${node.id}:leave`),
+        ...(md ? {
+          edit: () => {
+            log.push(`${node.id}:edit`);
+            return true;
+          },
+        } : {}),
+        destroy: () => log.push(`${node.id}:destroy`),
+      };
+    },
+  };
+  /** La porta ha montato l'editor della scheda `id`: la barra e il fuoco nel campo. */
+  const opened = (id: string, toolbar: HTMLElement | null = formatBar()): void => {
+    contexts.get(id)!.writing?.({ toolbar });
+    contexts.get(id)!.editState?.(null);
+    fieldOf(id)?.focus();
+  };
+  let boardHost: HTMLElement | null = null;
+  const fieldOf = (id: string): HTMLTextAreaElement | null =>
+    boardHost?.querySelector<HTMLTextAreaElement>(`.canvas-node[data-node="${id}"] .writer-field`) ?? null;
+  return { renderer, log, contexts, opened, bind: (host: HTMLElement) => (boardHost = host) };
+}
+
+function formatBar(): HTMLElement {
+  const bar = document.createElement("div");
+  bar.className = "format-bar";
+  return bar;
+}
+
+function editingOf(host: HTMLElement): string[] {
+  return [...host.querySelectorAll<HTMLElement>(".canvas-node[data-card-editing]")].map((el) => el.dataset.node!);
+}
+
+function optionsBar(host: HTMLElement): HTMLElement | null {
+  return host.querySelector<HTMLElement>('.canvas-options [data-option="format"] .format-bar');
+}
+
+function fieldIn(host: HTMLElement, id: string): HTMLTextAreaElement {
+  return card(host, id).querySelector<HTMLTextAreaElement>(".writer-field")!;
+}
+
+describe("scrivere in una scheda di nota (T41)", () => {
+  it("Invio entra in scrittura: il segno, la barra nella riga delle opzioni, il nome nella banda", () => {
+    const writer = writerRenderer();
+    const { engine, host } = mounted(boardSource(BOARD), { cards: cardsOf(writer.renderer) });
+    writer.bind(host);
+    writer.log.length = 0;
+    enterWithKeys(host, "n");
+    expect(writer.log).toEqual(["n:enter", "n:edit"]);
+    expect(activeOf(host)).toEqual(["n"]);
+    // Finché l'editor non c'è la scheda è attiva, non ancora in scrittura.
+    expect(editingOf(host)).toEqual([]);
+    expect(optionsBar(host)).toBeNull();
+    writer.opened("n");
+    expect(editingOf(host)).toEqual(["n"]);
+    expect(optionsBar(host)).not.toBeNull();
+    expect(card(host, "n").querySelector(".canvas-exit-hint")?.textContent).toBe("Esc per uscire");
+    expect(engine.statusItems().find((item) => item.id === "writing")?.text).toBe("In scrittura: idea");
+    expect(engine.statusItems().some((item) => item.id === "chosen")).toBe(false);
+    engine.destroy();
+  });
+
+  it("il primo Esc esce dalla scrittura e lascia la scheda scelta; la riga torna allo strumento", () => {
+    const writer = writerRenderer();
+    const { engine, host } = mounted(boardSource(BOARD), { cards: cardsOf(writer.renderer) });
+    writer.bind(host);
+    enterWithKeys(host, "n");
+    writer.opened("n");
+    writer.log.length = 0;
+    expect(press(fieldIn(host, "n"), "Escape").defaultPrevented).toBe(true);
+    expect(writer.log).toEqual(["n:leave"]);
+    expect(editingOf(host)).toEqual([]);
+    expect(activeOf(host)).toEqual([]);
+    expect(optionsBar(host)).toBeNull();
+    expect(selectedOf(host)).toEqual(["n"]);
+    expect(focused()).toBe(card(host, "n"));
+    expect(engine.statusItems().some((item) => item.id === "writing")).toBe(false);
+    // Una risposta tardiva della scheda che ha già smesso non la rimette in scrittura.
+    writer.contexts.get("n")!.writing?.({ toolbar: formatBar() });
+    expect(editingOf(host)).toEqual([]);
+    engine.destroy();
+  });
+
+  it("un clic fuori esce dalla scrittura come Esc", () => {
+    const writer = writerRenderer();
+    const { engine, host, viewport } = mounted(boardSource(BOARD), { cards: cardsOf(writer.renderer) });
+    writer.bind(host);
+    enterWithKeys(host, "n");
+    writer.opened("n");
+    writer.log.length = 0;
+    clickOn(viewport, viewport);
+    expect(writer.log).toEqual(["n:leave"]);
+    expect(editingOf(host)).toEqual([]);
+    expect(optionsBar(host)).toBeNull();
+    engine.destroy();
+  });
+
+  it("mentre si scrive i tasti di una lettera della lavagna tacciono, e Ctrl+Z è della nota", () => {
+    const writer = writerRenderer();
+    const { engine, host } = mounted(boardSource(BOARD), { cards: cardsOf(writer.renderer) });
+    writer.bind(host);
+    // Un passo d'annulla della lavagna, prima di scrivere.
+    card(host, "p").focus();
+    press(card(host, "p"), "ArrowRight");
+    const moved = engine.getDoc();
+    enterWithKeys(host, "n");
+    writer.opened("n");
+    const field = fieldIn(host, "n");
+    for (const key of ["c", "t", "h", "d", "Delete", "Backspace", " "]) {
+      expect(press(field, key).defaultPrevented, key).toBe(false);
+    }
+    const undo = new KeyboardEvent("keydown", { key: "z", ctrlKey: true, bubbles: true, cancelable: true });
+    field.dispatchEvent(undo);
+    expect(undo.defaultPrevented).toBe(false);
+    expect(engine.getDoc()).toBe(moved);
+    expect(readNodes(engine.getDoc()).map((node) => node.id)).toContain("n");
+    expect(editingOf(host)).toEqual(["n"]);
+    engine.destroy();
+  });
+
+  it("il doppio clic su una nota scelta, o già attiva da leggere, la scrive", () => {
+    const writer = writerRenderer();
+    const { engine, host, viewport } = mounted(boardSource(BOARD), { cards: cardsOf(writer.renderer) });
+    writer.bind(host);
+    card(host, "n").dispatchEvent(new MouseEvent("dblclick", { bubbles: true }));
+    expect(writer.log.filter((entry) => entry.endsWith(":edit"))).toEqual(["n:edit"]);
+    press(fieldIn(host, "n"), "Escape");
+    // Attiva per leggere (il clic dentro la scheda scelta), poi il doppio clic.
+    clickOn(viewport, fieldIn(host, "n"));
+    expect(activeOf(host)).toEqual(["n"]);
+    writer.log.length = 0;
+    fieldIn(host, "n").dispatchEvent(new MouseEvent("dblclick", { bubbles: true }));
+    expect(writer.log).toEqual(["n:edit"]);
+    // Dentro una scheda che scrive il doppio clic è del testo.
+    writer.opened("n");
+    writer.log.length = 0;
+    fieldIn(host, "n").dispatchEvent(new MouseEvent("dblclick", { bubbles: true }));
+    expect(writer.log).toEqual([]);
+    expect(editingOf(host)).toEqual(["n"]);
+    engine.destroy();
+  });
+
+  it("lo stato del salvataggio e la sola lettura stanno nella riga del titolo", () => {
+    const writer = writerRenderer();
+    const { engine, host } = mounted(boardSource(BOARD), { cards: cardsOf(writer.renderer) });
+    writer.bind(host);
+    enterWithKeys(host, "n");
+    writer.opened("n");
+    const context = writer.contexts.get("n")!;
+    const handle = card(host, "n").querySelector<HTMLElement>(".canvas-node-handle")!;
+    context.editState?.("pending");
+    expect(handle.querySelector(".save-state")?.textContent).toBe("Non salvato");
+    expect(handle.querySelector<HTMLElement>(".save-state")?.dataset.state).toBe("non_salvato");
+    context.editState?.("conflict");
+    expect(handle.querySelectorAll(".save-state")).toHaveLength(1);
+    expect(handle.querySelector(".save-state")?.textContent).toBe("Cambiato su disco");
+    context.editState?.(null);
+    expect(handle.querySelector(".save-state")).toBeNull();
+    // La nota di sola lettura: la scheda smette di scrivere e resta attiva.
+    context.editState?.("readonly", "idea.md è di sola lettura");
+    context.writing?.(null);
+    expect(editingOf(host)).toEqual([]);
+    expect(activeOf(host)).toEqual(["n"]);
+    expect(optionsBar(host)).toBeNull();
+    const lock = handle.querySelector<HTMLElement>(".canvas-card-lock");
+    expect(lock?.textContent).toBe("Sola lettura");
+    expect(lock?.title).toBe("idea.md è di sola lettura");
+    press(fieldIn(host, "n"), "Escape");
+    expect(handle.querySelector(".canvas-card-lock")).toBeNull();
+    engine.destroy();
+  });
+
+  it("la lavagna di sola lettura entra per leggere e non scrive", () => {
+    const writer = writerRenderer();
+    const { engine, host } = mounted(boardSource(BOARD), { cards: cardsOf(writer.renderer) });
+    engine.setReadOnly(true);
+    writer.log.length = 0;
+    enterWithKeys(host, "n");
+    expect(writer.log).toEqual(["n:enter"]);
+    expect(activeOf(host)).toEqual(["n"]);
+    engine.destroy();
+  });
+
+  it("la scheda che scrive resta viva fuori dalla vista e sotto lo zoom delle vive", () => {
+    vi.useFakeTimers();
+    try {
+      const writer = writerRenderer();
+      const { engine, host, viewport } = mounted(boardSource(BOARD), { cards: cardsOf(writer.renderer) });
+      writer.bind(host);
+      enterWithKeys(host, "n");
+      writer.opened("n");
+      writer.log.length = 0;
+      for (let tick = 0; tick < 12; tick++) wheelOn(viewport, true);
+      vi.advanceTimersByTime(WHEEL_SETTLE_MS);
+      expect(zoomOf(host)).toBeLessThan(LIVE_ZOOM_MIN);
+      panStart(viewport, -20_000, 0)();
+      expect(writer.log).not.toContain("n:leave");
+      expect(liveOf(host)).toEqual(["n"]);
+      expect(editingOf(host)).toEqual(["n"]);
+      engine.destroy();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
 describe("riaprire dove eri (T36)", () => {
   const PDF_BOARD = [
     { id: "p", type: "file", x: 0, y: 0, width: 200, height: 260, file: "Corsi/manuale.pdf", subpath: "#page=2" },

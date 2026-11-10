@@ -15,7 +15,7 @@ import {
 import { operationFromText, type EditorChange } from "../editors/core/text-operation";
 import { createFakeHost, type FakeHost } from "../host/fake";
 import { openLifetime, type Lifetime } from "../ui/lifetime";
-import { createCardEditorPort, type CardEditorHub } from "./card-editors";
+import { createCardEditorPort, headingOffset, type CardEditorHub } from "./card-editors";
 import {
   DocumentSessionCollection,
   type DocumentSessionApi,
@@ -437,5 +437,21 @@ describe("la porta per scrivere dentro le schede", () => {
     setup();
     expect(hub.written("pane-1", { text: "x", operation: operationFromText("", "x"), origin: "input" })).toBe(false);
     expect(hub.failed("pane-1", new Error("no"))).toBe(false);
+  });
+});
+
+describe("dove comincia un titolo (T41, `Nota#Titolo`)", () => {
+  it("dà il byte UTF-8 della riga del titolo, senza badare a maiuscole e cancelletti in coda", () => {
+    const text = "# Perché\n\nUn paragrafo con è.\n\n## Più giù ##\nfine\n";
+    expect(headingOffset(text, "Perché")).toBe(0);
+    expect(headingOffset(text, "più giù")).toBe(new TextEncoder().encode("# Perché\n\nUn paragrafo con è.\n\n").length);
+    expect(headingOffset(text, "Assente")).toBeNull();
+    expect(headingOffset(text, "  ")).toBeNull();
+  });
+
+  it("salta i titoli dentro un blocco di codice e regge i fine riga CRLF", () => {
+    const text = "```md\r\n# Finto\r\n```\r\n# Finto\r\n";
+    expect(headingOffset(text, "Finto")).toBe("```md\r\n# Finto\r\n```\r\n".length);
+    expect(headingOffset("~~~\n# Dentro\n", "Dentro")).toBeNull();
   });
 });

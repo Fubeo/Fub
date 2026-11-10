@@ -73,6 +73,11 @@ export const EDITORS: PartAnatomy = {
     // Sono segni di Fub sulla carta, non il testo del file.
     { name: "rich-sheet-marks", layer: "segno", states: [S("rest"), S("focused")], hooks: ["rich-sheet-head", "rich-sheet-foot", "rich-sheet-name", "rich-running-bar", "rich-running-label", "rich-running-area", "rich-token"] },
     { name: "canvas-edge", layer: "contenuto", layers: { "canvas-edge-hit": "segno", "canvas-edge-reconnect": "segno", "canvas-edge-draft": "segno" }, states: [S("rest"), S("hover"), S("selected"), S("dragging")], hooks: ["canvas-edge", "canvas-edge-draft", "canvas-edge-hit", "canvas-edge-line", "canvas-edge-arrow", "canvas-edge-label", "canvas-edge-reconnect"] },
+    // Si scrive in una scheda di nota (T41): l'anello della scheda che
+    // scrive, «Esc per uscire» pieno, lo stato del salvataggio e «Sola
+    // lettura» nella riga del titolo, l'editor della nota e il conflitto nel
+    // corpo, la barra di formato nella riga delle opzioni.
+    { name: "canvas-card-writing", states: [S("rest"), S("focused")], hooks: ["canvas-card-note", "canvas-exit-hint", "canvas-card-lock", "save-state", "format-bar", "conflict-banner", "conflict-actions", "cm-fub-heading-line"] },
     // Mentre si scrive (T69): l'etichetta accanto alla penna, che dice a che
     // cosa si attaccherà il tratto, e il bordo tratteggiato attorno alla
     // scheda, che è un segno di Fub sulla lavagna.

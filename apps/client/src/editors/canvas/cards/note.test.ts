@@ -5,7 +5,16 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { t } from "../../../i18n/strings";
 import { openLifetime, type Lifetime } from "../../../ui/lifetime";
-import type { CardContext, CardMode, CardView } from "../cards";
+import type {
+  CardContext,
+  CardEditor,
+  CardEditorOptions,
+  CardEditorPort,
+  CardEditorState,
+  CardMode,
+  CardView,
+  CardWriting,
+} from "../cards";
 import type { CanvasNode } from "../model";
 import { noteCardRenderer, noteHeadingOf, type NoteCardPort } from "./note";
 
@@ -78,7 +87,13 @@ function node(file: string): CanvasNode {
   return { id: `n-${file}`, type: "file", x: 0, y: 0, width: 300, height: 200, file };
 }
 
-function mount(port: FakePort, mode: CardMode, path = "Corsi/nota.md", subpath: string | null = null): Mounted {
+function mount(
+  port: FakePort,
+  mode: CardMode,
+  path = "Corsi/nota.md",
+  subpath: string | null = null,
+  extra: Partial<CardContext> = {},
+): Mounted {
   const host = document.createElement("div");
   document.body.append(host);
   const lifetime = openLifetime();
@@ -94,6 +109,7 @@ function mount(port: FakePort, mode: CardMode, path = "Corsi/nota.md", subpath: 
     missing() {
       context.missed += 1;
     },
+    ...extra,
   };
   const view = noteCardRenderer(port).mount(node(path), host, mode, context);
   return { view, host, context, lifetime };
@@ -430,5 +446,278 @@ describe("noteCardRenderer", () => {
     const { view } = mount(port, "live");
     view.setMode("live");
     expect(port.calls).toHaveLength(1);
+  });
+});
+
+// --- scrivere nella scheda (T41) ---------------------------------------------
+
+interface OpenCall {
+  readonly path: string;
+  readonly host: HTMLElement;
+  readonly options: CardEditorOptions;
+  resolve(editor: CardEditor | null): void;
+  reject(error: unknown): void;
+}
+
+/// Un editor finto: dice lo stato che gli si dà, conta uscite e smontaggi.
+class FakeEditor implements CardEditor {
+  current: CardEditorState = "clean";
+  focused = 0;
+  left = 0;
+  destroyed = 0;
+  readonly listeners = new Set<(state: CardEditorState) => void>();
+  readonly bar = document.createElement("div");
+  leaving: Promise<void> = Promise.resolve();
+  constructor(
+    readonly host: HTMLElement,
+    life: Lifetime,
+  ) {
+    const cm = document.createElement("div");
+    cm.className = "cm-editor";
+    host.append(cm);
+    this.bar.className = "format-bar";
+    // Come la porta: chiusa la vita della scheda, l'editor si smonta.
+    life.add(() => this.destroy());
+  }
+  focus(): void {
+    this.focused += 1;
+  }
+  leave(): Promise<void> {
+    this.left += 1;
+    return this.leaving;
+  }
+  state(): CardEditorState {
+    return this.current;
+  }
+  onState(listener: (state: CardEditorState) => void): () => void {
+    this.listeners.add(listener);
+    return () => this.listeners.delete(listener);
+  }
+  set(state: CardEditorState): void {
+    this.current = state;
+    for (const listener of [...this.listeners]) listener(state);
+  }
+  toolbar(): HTMLElement {
+    return this.bar;
+  }
+  destroy(): void {
+    // Una volta sola, come la porta.
+    if (this.destroyed > 0) return;
+    this.destroyed = 1;
+    this.host.replaceChildren();
+  }
+}
+
+class FakeEditors implements CardEditorPort {
+  readonly calls: OpenCall[] = [];
+  open(path: string, host: HTMLElement, options: CardEditorOptions): Promise<CardEditor | null> {
+    return new Promise((resolve, reject) => this.calls.push({ path, host, options, resolve, reject }));
+  }
+  last(): OpenCall {
+    const call = this.calls[this.calls.length - 1];
+    if (!call) throw new Error("open non è stato chiamato");
+    return call;
+  }
+  /// Risponde all'ultima apertura con un editor finto montato nel suo host.
+  give(): FakeEditor {
+    const call = this.last();
+    const editor = new FakeEditor(call.host, call.options.lifetime);
+    call.resolve(editor);
+    return editor;
+  }
+}
+
+interface Writing {
+  readonly writings: (CardWriting | null)[];
+  readonly states: { state: CardEditorState | null; reason: string | undefined }[];
+  readonly extra: Partial<CardContext>;
+}
+
+function writing(editors: CardEditorPort | undefined): Writing {
+  const writings: (CardWriting | null)[] = [];
+  const states: { state: CardEditorState | null; reason: string | undefined }[] = [];
+  return {
+    writings,
+    states,
+    extra: {
+      ...(editors ? { editors } : {}),
+      writing: (value) => writings.push(value),
+      editState: (state, reason) => states.push({ state, reason }),
+    },
+  };
+}
+
+/// Una scheda viva con la resa arrivata, pronta a scrivere.
+async function shown(port: FakePort, editors: FakeEditors | undefined, path = "Corsi/nota.md", subpath: string | null = null) {
+  const spy = writing(editors);
+  const mounted = mount(port, "live", path, subpath, spy.extra);
+  port.last().resolve("<h1>Titolo</h1><p>testo</p>");
+  await settle();
+  return { ...mounted, ...spy };
+}
+
+const writers = (host: HTMLElement): HTMLElement[] =>
+  [...host.querySelectorAll<HTMLElement>('.canvas-card-note[data-card-state="editing"]')];
+
+describe("scrivere nella scheda di nota (T41)", () => {
+  it("edit() chiede l'editor alla porta e lo mette al posto della resa", async () => {
+    const port = new FakePort();
+    const editors = new FakeEditors();
+    const card = await shown(port, editors, "Corsi/nota.md", "#Titolo");
+
+    expect(card.view.edit?.()).toBe(true);
+    expect(editors.calls).toHaveLength(1);
+    const call = editors.last();
+    expect(call.path).toBe("Corsi/nota.md");
+    expect(call.options.readOnly).toBe(false);
+    // Con `Nota#Titolo` la nota intera, vista dal titolo.
+    expect(call.options.heading).toBe("Titolo");
+    // Finché l'editor non c'è si vede la resa.
+    expect(writers(card.host)[0]!.hidden).toBe(true);
+    expect(root(card.host).hidden).toBe(false);
+    // Un secondo edit() mentre si apre non apre un altro editor.
+    expect(card.view.edit?.()).toBe(true);
+    expect(editors.calls).toHaveLength(1);
+
+    const editor = editors.give();
+    await settle();
+    expect(root(card.host).hidden).toBe(true);
+    expect(writers(card.host)[0]!.hidden).toBe(false);
+    expect(writers(card.host)[0]!.querySelector(".cm-editor")).not.toBeNull();
+    expect(card.writings).toEqual([{ toolbar: editor.bar }]);
+    expect(editor.focused).toBe(1);
+
+    // Lo stato va alla riga del titolo; «pulito» non dice niente.
+    editor.set("pending");
+    editor.set("conflict");
+    editor.set("clean");
+    expect(card.states.map((each) => each.state)).toEqual([null, "pending", "conflict", null]);
+  });
+
+  it("leave() porta il testo alla sessione, smonta l'editor e rifà la resa col testo nuovo", async () => {
+    const port = new FakePort();
+    const editors = new FakeEditors();
+    const card = await shown(port, editors);
+    card.view.edit?.();
+    const editor = editors.give();
+    let saved!: () => void;
+    editor.leaving = new Promise((resolve) => (saved = resolve));
+    await settle();
+    const before = port.calls.length;
+
+    card.view.leave?.();
+    expect(editor.left).toBe(1);
+    // Fino al salvataggio l'editor resta, fermo.
+    expect(editor.destroyed).toBe(0);
+    expect(writers(card.host)[0]!.inert).toBe(true);
+    // Uno stato che arriva dopo l'uscita non scrive più nella riga del titolo.
+    const states = card.states.length;
+    editor.set("pending");
+    expect(card.states).toHaveLength(states);
+
+    saved();
+    await settle();
+    expect(editor.destroyed).toBe(1);
+    expect(writers(card.host)).toHaveLength(0);
+    expect(root(card.host).hidden).toBe(false);
+    expect(port.calls.length).toBe(before + 1);
+    port.last().resolve("<p>testo nuovo</p>");
+    await settle();
+    expect(root(card.host).textContent).toBe("testo nuovo");
+  });
+
+  it("mentre si scrive i cambi del file non rifanno la resa", async () => {
+    const port = new FakePort();
+    const editors = new FakeEditors();
+    const card = await shown(port, editors);
+    card.view.edit?.();
+    editors.give();
+    await settle();
+    const before = port.calls.length;
+    port.change("Corsi/nota.md");
+    expect(port.calls.length).toBe(before);
+    expect(card.writings).toHaveLength(1);
+  });
+
+  it("senza editor per il file la scheda resta a leggere", async () => {
+    const port = new FakePort();
+    const editors = new FakeEditors();
+    const card = await shown(port, editors);
+    card.view.edit?.();
+    editors.last().resolve(null);
+    await settle();
+    expect(card.writings).toEqual([null]);
+    expect(writers(card.host)).toHaveLength(0);
+    expect(root(card.host).hidden).toBe(false);
+    expect(root(card.host).textContent).toBe("Titolotesto");
+  });
+
+  it("una nota di sola lettura non si scrive e dice perché", async () => {
+    const port = new FakePort();
+    const editors = new FakeEditors();
+    const card = await shown(port, editors);
+    card.view.edit?.();
+    const call = editors.last();
+    const editor = new FakeEditor(call.host, call.options.lifetime);
+    editor.current = "readonly";
+    call.resolve(editor);
+    await settle();
+    expect(editor.destroyed).toBe(1);
+    expect(card.writings).toEqual([null]);
+    const reason = t("canvas.card.readonly_why", { name: "nota.md" });
+    expect(card.states).toEqual([{ state: "readonly", reason }]);
+    expect(root(card.host).hidden).toBe(false);
+  });
+
+  it("non scrive senza porta, in un documento Word, da ferma o senza resa", async () => {
+    const port = new FakePort();
+    const editors = new FakeEditors();
+    expect((await shown(port, undefined)).view.edit?.()).toBe(false);
+    expect((await shown(port, editors, "Corsi/lettera.docx")).view.edit?.()).toBe(false);
+    const still = mount(port, "snapshot", "Corsi/nota.md", null, writing(editors).extra);
+    expect(still.view.edit?.()).toBe(false);
+    const failing = mount(port, "live", "Corsi/rotta.md", null, writing(editors).extra);
+    port.last().reject(new Error("guasto"));
+    await settle();
+    expect(failing.view.edit?.()).toBe(false);
+    expect(editors.calls).toHaveLength(0);
+  });
+
+  it("Esc prima che l'editor arrivi ferma l'apertura; l'editor tardivo si smonta", async () => {
+    const port = new FakePort();
+    const editors = new FakeEditors();
+    const card = await shown(port, editors);
+    card.view.edit?.();
+    const call = editors.last();
+    card.view.leave?.();
+    expect(call.options.lifetime.closed).toBe(true);
+    expect(writers(card.host)).toHaveLength(0);
+    const late = new FakeEditor(call.host, openLifetime());
+    call.resolve(late);
+    await settle();
+    expect(late.destroyed).toBe(1);
+    expect(card.writings).toEqual([]);
+  });
+
+  it("ferma o distrutta, la scheda smette di scrivere e smonta l'editor", async () => {
+    const port = new FakePort();
+    const editors = new FakeEditors();
+    const card = await shown(port, editors);
+    card.view.edit?.();
+    const editor = editors.give();
+    await settle();
+    card.view.setMode("snapshot");
+    expect(editor.destroyed).toBe(1);
+    expect(root(card.host).hidden).toBe(false);
+
+    card.view.setMode("live");
+    port.last().resolve("<p>di nuovo</p>");
+    await settle();
+    card.view.edit?.();
+    const second = editors.give();
+    await settle();
+    card.view.destroy();
+    expect(second.destroyed).toBe(1);
+    expect(card.host.childNodes).toHaveLength(0);
   });
 });

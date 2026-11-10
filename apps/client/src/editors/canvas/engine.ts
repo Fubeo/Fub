@@ -23,6 +23,8 @@ import {
   liveCardIds,
   updateLiveCards,
   type CardContext,
+  type CardEditorPort,
+  type CardEditorState,
   type CardKind,
   type CardMode,
   type CardQuiet,
@@ -31,6 +33,7 @@ import {
   type CardSize,
   type CardSnapshots,
   type CardView,
+  type CardWriting,
   type Rect,
 } from "./cards";
 import {
@@ -576,6 +579,11 @@ export interface CanvasEngineOptions {
 export interface CanvasCards {
   readonly registry: CardRegistry;
   readonly snapshots: CardSnapshots;
+  /**
+   * La porta per scrivere dentro le schede (T40), che la tela passa alle
+   * viste (`CardContext.editors`); assente, le schede si leggono e basta.
+   */
+  readonly editors?: CardEditorPort;
   /** Avvisa quando il file `path` cambia, sparisce o torna; restituisce come smettere. */
   watch(path: string, changed: () => void): () => void;
   /**
@@ -1046,6 +1054,11 @@ export class CanvasEngine {
    * puntatore, tastiera e rotella finché non si esce. Una sola alla volta.
    */
   #activeId: string | null = null;
+  /**
+   * La scheda attiva che scrive nel suo file (T41): `edit()` ha detto sì.
+   * `data-card-editing` arriva quando la vista dice che l'editor c'è.
+   */
+  #writingId: string | null = null;
   /** La scheda in cui si sta entrando: la scelta delle vive la accende con le altre. */
   #enteringId: string | null = null;
   /**
@@ -4728,6 +4741,12 @@ export class CanvasEngine {
     const port: CanvasStatusPort = {
       zoomPercent: () => Math.round(this.#camera.zoom * 100),
       chosenCount: () => this.#selection.length,
+      writing: () => {
+        const id = this.#writingId;
+        const entry = id === null ? undefined : this.#cards.get(id);
+        if (!entry || entry.article.dataset.cardEditing === undefined) return null;
+        return writingName(entry.node);
+      },
       readOnlyWhy: () => (this.#readOnly
         ? (this.#unwritable ? t("canvas.unwritable") : t("canvas.status.readonly.panel"))
         : null),
@@ -5709,8 +5728,10 @@ export class CanvasEngine {
       ? pressed
       : null;
     // Un clic fuori dalla scheda attiva ne esce. La penna no: scrive sopra
-    // anche una scheda attiva (N4).
-    if (this.#activeId !== null && event.pointerType !== "pen" && !this.#insideActive(event.target, false)) {
+    // anche una scheda attiva (N4); e il tasto centrale, che sposta la vista,
+    // non toglie la scrittura (T41).
+    const panning = event.button === 1 && this.#writingId !== null;
+    if (this.#activeId !== null && event.pointerType !== "pen" && !panning && !this.#insideActive(event.target, false)) {
       this.#leaveCard(false);
     }
     if (event.pointerType === "touch") this.#touchDown(event);
@@ -7023,7 +7044,8 @@ export class CanvasEngine {
     const active = this.#activeId;
     if (active !== null) {
       const node = nodes.find((candidate) => candidate.id === active);
-      if (!node || !overlaps(node, view)) this.#leaveCard(true, false);
+      // Quella che scrive resta finché si scrive (T41).
+      if (!node || (!overlaps(node, view) && this.#writingId !== active)) this.#leaveCard(true, false);
     }
     // La scheda attiva, e quella in cui si sta entrando, restano vive anche
     // se la regola le spegnerebbe (lo zoom, il limite).
@@ -7128,10 +7150,87 @@ export class CanvasEngine {
     entry.article.focus({ preventScroll: true });
   }
 
-  /** Invio, o il doppio clic su una nota: entra se si può, altrimenti ciò che faceva (il campo). */
+  /**
+   * Invio, o il doppio clic su una nota: scrive dentro se si può (T41),
+   * altrimenti entra, altrimenti ciò che faceva (il campo).
+   */
   #enterOrEdit(node: CanvasNode): void {
-    if (node.type !== "text" && this.#enterCard(node.id)) return;
+    if (node.type !== "text" && (this.#beginWriting(node.id) || this.#enterCard(node.id))) return;
     this.#beginCardEdit(node);
+  }
+
+  /**
+   * Entra nella scheda `id` e ci scrive (T41): la scheda diventa attiva, poi
+   * `edit()` monta l'editor vero del file. `false` se la vista non scrive mai
+   * (non ha `edit`) o la lavagna è di sola lettura; se `edit()` dice no la
+   * scheda resta attiva, da leggere, e la risposta è `true`.
+   */
+  #beginWriting(id: string): boolean {
+    if (this.#writingId === id) return true;
+    const entry = this.#cards.get(id);
+    const view = entry?.view;
+    if (this.#readOnly || !entry || !view?.edit) return false;
+    if (!this.#enterCard(id)) return false;
+    let started = false;
+    try {
+      started = view.edit() === true;
+    } catch (error) {
+      console.warn(`canvas: nella scheda ${id} non si scrive`, error);
+    }
+    if (started) this.#writingId = id;
+    return true;
+  }
+
+  /**
+   * La vista dice che scrive (con la sua barra) o che ha smesso: il segno
+   * `data-card-editing`, la barra nella riga delle opzioni al posto di quelle
+   * dello strumento, il nome nella banda.
+   */
+  #cardWriting(entry: CardEntry, writing: CardWriting | null): void {
+    if (this.#writingId !== entry.id) return;
+    if (writing === null) {
+      this.#writingId = null;
+      delete entry.article.dataset.cardEditing;
+      this.setCardOptions(null);
+      this.#statusSettle();
+      return;
+    }
+    entry.article.dataset.cardEditing = "";
+    if (writing.toolbar) {
+      const item = document.createElement("div");
+      item.className = "canvas-options-item";
+      item.dataset.option = "format";
+      item.append(writing.toolbar);
+      this.setCardOptions([{ id: "format", element: item, priority: 1 }]);
+    } else {
+      this.setCardOptions(null);
+    }
+    this.#statusSettle();
+  }
+
+  /**
+   * A che punto è ciò che si scrive nella scheda, nella riga del titolo
+   * (T41): «Non salvato», «Cambiato su disco» (la parola della testata dei
+   * riquadri, `.save-state`) o «Sola lettura» col perché (`.canvas-card-lock`).
+   */
+  #cardEditState(entry: CardEntry, state: CardEditorState | null, reason: string | null): void {
+    const handle = entry.connect.parentElement;
+    if (!handle) return;
+    handle.querySelector(":scope > .save-state")?.remove();
+    handle.querySelector(":scope > .canvas-card-lock")?.remove();
+    if (state === null || state === "clean") return;
+    const mark = document.createElement("span");
+    if (state === "readonly") {
+      mark.className = "canvas-card-lock";
+      mark.textContent = t("canvas.card.readonly");
+      if (reason) mark.title = reason;
+    } else {
+      const word = state === "conflict" ? "conflitto" : "non_salvato";
+      mark.className = "save-state";
+      mark.dataset.state = word;
+      mark.textContent = t(state === "conflict" ? "save.conflitto" : "save.unsaved");
+    }
+    entry.connect.before(mark);
   }
 
   /**
@@ -7212,6 +7311,15 @@ export class CanvasEngine {
     const focusInside = article.contains(document.activeElement) && document.activeElement !== article;
     delete article.dataset.cardActive;
     article.querySelector(":scope > .canvas-node-handle > .canvas-exit-hint")?.remove();
+    // Uscendo si smette anche di scrivere (T41): la riga delle opzioni torna
+    // allo strumento, la riga del titolo perde stato e lucchetto.
+    this.#cardEditState(entry, null, null);
+    if (this.#writingId === entry.id || article.dataset.cardEditing !== undefined) {
+      this.#writingId = null;
+      delete article.dataset.cardEditing;
+      this.setCardOptions(null);
+      this.#statusSettle();
+    }
     entry.body.removeAttribute("tabindex");
     if (refocus && focusInside && article.isConnected) article.focus({ preventScroll: true });
   }
@@ -7418,8 +7526,12 @@ export class CanvasEngine {
         this.#fitToContent(tap);
         return;
       }
-      // Dentro la scheda attiva il doppio clic è del contenuto (una parola).
-      if (this.#activeId === id) return;
+      // Dentro la scheda attiva il doppio clic è del contenuto (una parola);
+      // in una nota che si legge comincia a scriverci (T41).
+      if (this.#activeId === id) {
+        if (this.#writingId !== id) this.#beginWriting(id);
+        return;
+      }
       const kind = this.#hasLiveContent(entry) ? cardKindOf(entry.node) : null;
       // Il visore lo apre la vista dell'immagine, che ascolta il suo doppio clic (T5).
       if (kind === "image") return;
@@ -7519,6 +7631,15 @@ export class CanvasEngine {
         // Una vista già smontata non parla più per questa scheda.
         if (life.closed || entry.body !== body) return;
         this.#viewMemo?.pageChanged(entry.id, page);
+      },
+      ...(this.#options.cards?.editors ? { editors: this.#options.cards.editors } : {}),
+      writing: (writing) => {
+        if (life.closed || entry.body !== body) return;
+        this.#cardWriting(entry, writing);
+      },
+      editState: (state, reason) => {
+        if (life.closed || entry.body !== body) return;
+        this.#cardEditState(entry, state, reason ?? null);
       },
       missing: () => {
         // Una vista già distrutta non parla più per questa scheda; un link non manca mai.
@@ -8028,6 +8149,13 @@ function relinkedFile(node: CanvasNode, chosen: string): string {
   const file = typeof node.file === "string" ? node.file : "";
   const hash = file.indexOf("#");
   return hash < 0 ? chosen : `${chosen}${file.slice(hash)}`;
+}
+
+/** Il nome di una scheda che scrive, per la banda (T41): il file senza cartella né `.md`. */
+function writingName(node: CanvasNode): string {
+  if (node.type !== "file" || !node.file) return nodeTitle(node);
+  const base = node.file.split("/").pop() || node.file;
+  return base.replace(/\.(md|markdown)$/i, "");
 }
 
 function nodeTitle(node: CanvasNode): string {

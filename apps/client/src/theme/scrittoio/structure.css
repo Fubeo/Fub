@@ -3452,6 +3452,62 @@ body {
   pointer-events: auto;
 }
 
+/* Scrivere in una scheda di nota (N6 T41, prototipo T27). La barra di
+   formattazione sta nella riga delle opzioni: un elemento della riga, largo
+   quanto resta; nasconde da sola i gruppi che non stanno (`fit()` di
+   format-bar.ts) e li mette nel suo «…». */
+.canvas-options-item[data-option="format"] {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.canvas-options > .kit-options-row:has(> .canvas-options-item[data-option="format"]) {
+  flex: 1 1 auto;
+}
+.canvas-options .format-bar {
+  flex: 1 1 auto;
+  height: 32px;
+}
+
+/* La scheda che scrive sta sopra le altre, come quella che si trascina. */
+.canvas-node[data-card-editing] {
+  z-index: 1;
+}
+
+/* L'editor della nota prende il corpo della scheda e scorre lì dentro; la
+   scheda non cambia misura. */
+.canvas-card-note > .cm-editor {
+  height: 100%;
+}
+.canvas-card-note > .cm-editor > .cm-scroller {
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+
+/* Il conflitto in cima al corpo, sopra il testo, che spinge giù; il testo
+   continua a scorrere sotto. */
+.canvas-card-note[data-card-notice] {
+  display: flex;
+  flex-direction: column;
+}
+.canvas-card-note[data-card-notice] > .cm-editor {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+.canvas-card-note > .conflict-banner {
+  flex: none;
+}
+
+/* Lo stato del salvataggio e «Sola lettura» nella riga del titolo: una
+   parola che non si stringe mai; il titolo si taglia prima. */
+.canvas-node-handle > .save-state,
+.canvas-node-handle > .canvas-card-lock {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  white-space: nowrap;
+}
+
 .canvas-text-editor,
 .canvas-field-editor {
   width: 100%;

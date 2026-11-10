@@ -237,6 +237,7 @@ const view: PaneView = {
   },
   drawToolbar,
   drawConflict: (pane, doc) => drawConflict(frameOf(pane), doc),
+  drawCardConflict,
   drawSave,
   focusTab: (pane, index) => focusPaneTab(frameOf(pane), index),
   focusedTab,
@@ -1290,7 +1291,23 @@ const deferredConflicts = new Set<string>();
 
 function drawConflict(r: PaneFrame, doc: string | null): void {
   drawNotices(r, doc);
-  const box = r.conflictEl;
+  // In Lettura il reso viene dal buffer della sessione, lo stesso della
+  // scrittura: la riga dice che quel testo è quello di chi scrive, non
+  // ancora salvato, e non la versione sul disco (R03).
+  const pane = paneOf(r.id);
+  const reading = pane !== undefined && selectedMode(pane)?.contextMode === "reading";
+  fillConflict(r.conflictEl, doc, reading, () => drawConflict(r, doc));
+}
+
+/// La stessa scelta dentro una scheda della lavagna che scrive nel documento
+/// (N6 T41): il banner del riquadro, nel corpo della scheda.
+function drawCardConflict(box: HTMLElement, doc: string): void {
+  fillConflict(box, doc, false, () => drawCardConflict(box, doc));
+}
+
+/// Il banner del conflitto di `doc` in `box`, o `box` vuoto e nascosto se
+/// non c'è conflitto. `redraw` lo ridisegna dopo «Decidi dopo» e «Riprendi».
+function fillConflict(box: HTMLElement, doc: string | null, readingMode: boolean, redraw: () => void): void {
   box.replaceChildren();
   if (!doc || documentSessions.saveState(doc) !== "conflitto") {
     if (doc) deferredConflicts.delete(doc);
@@ -1314,7 +1331,7 @@ function drawConflict(r: PaneFrame, doc: string | null): void {
     reopen.textContent = t("document.conflict.resume");
     reopen.addEventListener("click", () => {
       deferredConflicts.delete(current);
-      drawConflict(r, current);
+      redraw();
     });
     box.append(line, reopen);
     return;
@@ -1326,11 +1343,7 @@ function drawConflict(r: PaneFrame, doc: string | null): void {
   const body = document.createElement("p");
   body.textContent = t("document.conflict.body");
   body.setAttribute("data-doc", current);
-  // In Lettura il reso viene dal buffer della sessione, lo stesso della
-  // scrittura: la riga dice che quel testo è quello di chi scrive, non
-  // ancora salvato, e non la versione sul disco (R03).
-  const pane = paneOf(r.id);
-  const reading = pane && selectedMode(pane)?.contextMode === "reading" ? document.createElement("p") : null;
+  const reading = readingMode ? document.createElement("p") : null;
   if (reading) {
     reading.dataset.conflictReading = "";
     reading.textContent = t("document.conflict.reading");
@@ -1382,7 +1395,7 @@ function drawConflict(r: PaneFrame, doc: string | null): void {
   theirs.addEventListener("click", () => void ask("theirs"));
   cancel.addEventListener("click", () => {
     deferredConflicts.add(current);
-    drawConflict(r, current);
+    redraw();
   });
   actions.append(compare, mine, theirs, cancel);
   box.append(title, body, ...(reading ? [reading] : []), actions);

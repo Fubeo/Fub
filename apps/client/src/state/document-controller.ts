@@ -90,6 +90,7 @@ import { CASE_KEY, caseOf, toRecover } from "./drafts";
 import { addSheetNotice, clearAllRemovedNotices, clearSheetNotices, dismissSheetNotice, moveSheetNotices, setLimitedMode, setRemovedNotice } from "./sheet-notices";
 import { syntaxForms, unsavedDrafts } from "../host/query";
 import { createCardEditorPort, type CardEditorHub } from "./card-editors";
+import { createFormatBar, type GroupId } from "../panels/format-bar";
 import type { ComponentRefusal, ComponentRow, DraftInfo, Origin } from "../host/contract";
 import {
   documentSessions,
@@ -248,6 +249,9 @@ export interface PaneView {
   drawToolbar(pane: Pane): void;
   /// Il banner del conflitto per il documento attivo del riquadro, o niente.
   drawConflict(pane: Pane, doc: string | null): void;
+  /// Lo stesso banner dentro una scheda della lavagna che scrive nel
+  /// documento (N6 T41): in `box`, o `box` vuoto e nascosto.
+  drawCardConflict(box: HTMLElement, doc: string): void;
   /// Lo stato del salvataggio del documento col fuoco. Senza un posto dove
   /// scriverlo non fa niente.
   drawSave(): void;
@@ -345,6 +349,10 @@ let view: PaneView = {
   drawViewSurface: unmounted,
   drawToolbar: unmounted,
   drawConflict: unmounted,
+  drawCardConflict: (box) => {
+    box.replaceChildren();
+    box.hidden = true;
+  },
   drawSave: () => {},
   focusTab: unmounted,
   focusedTab: () => null,
@@ -496,8 +504,31 @@ function cardEditorsHub(): CardEditorHub {
     shownInPane: isOpen,
     theme: () => theme,
     forms: syntaxForms,
+    toolbar: cardToolbar,
+    conflict: (box, path) => view.drawCardConflict(box, path),
   });
   return cardEditorHub;
+}
+
+/// I gruppi della barra di formato di una scheda (T41): tutti tranne la
+/// cronologia, perché sulla lavagna Annulla e Ripeti stanno in cima e,
+/// mentre si scrive, valgono per il testo.
+const CARD_TOOLBAR_GROUPS: readonly GroupId[] = ["block", "inline", "links", "lists", "blocks", "table", "other"];
+
+/// La barra di formato di una scheda che scrive: la stessa dei riquadri, per
+/// la superficie della scheda, ridisegnata quando cambiano i comandi.
+function cardToolbar(surface: EditorSurface, life: Lifetime): HTMLElement {
+  const bar = createFormatBar({
+    surface: () => surface,
+    writing: () => true,
+    focusPane: () => {},
+    runCommand: (id) => deps.runCommand(id),
+    only: CARD_TOOLBAR_GROUPS,
+  });
+  bar.update(state.commandSpecs);
+  life.add(on("commands", () => bar.update(state.commandSpecs)));
+  life.add(() => bar.destroy());
+  return bar.element;
 }
 const cardEditors: CardEditorHub = {
   open: (path, host, options) => cardEditorsHub().open(path, host, options),

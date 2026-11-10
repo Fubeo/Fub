@@ -1056,6 +1056,10 @@
     "canvas-edge-arrow",
     "canvas-edge-label",
     "canvas-edge-reconnect",
+    "canvas-card-note",
+    "canvas-exit-hint",
+    "canvas-card-lock",
+    "save-state",
     "canvas-ink-label",
     "canvas-ink-frame",
     "draw-header",
@@ -1509,7 +1513,6 @@
     "toast-more",
     "toast-close",
     "pane-status",
-    "save-state",
     "key-pending",
     "dock-panel",
     "dock-panel--notify",
@@ -2698,6 +2701,10 @@
     "canvas-edge-arrow": "contenuto",
     "canvas-edge-label": "contenuto",
     "canvas-edge-reconnect": "segno",
+    "canvas-card-note": "cornice",
+    "canvas-exit-hint": "cornice",
+    "canvas-card-lock": "cornice",
+    "save-state": "cornice",
     "canvas-ink-label": "cornice",
     "canvas-ink-frame": "segno",
     "draw-header": "cornice",
@@ -3151,7 +3158,6 @@
     "toast-more": "cornice",
     "toast-close": "cornice",
     "pane-status": "cornice",
-    "save-state": "cornice",
     "key-pending": "cornice",
     "dock-panel": "cornice",
     "dock-panel--notify": "cornice",
@@ -5916,6 +5922,24 @@
         "hover",
         "selected",
         "dragging"
+      ]
+    },
+    {
+      "name": "canvas-card-writing",
+      "part": "editors",
+      "hooks": [
+        "canvas-card-note",
+        "canvas-exit-hint",
+        "canvas-card-lock",
+        "save-state",
+        "format-bar",
+        "conflict-banner",
+        "conflict-actions",
+        "cm-fub-heading-line"
+      ],
+      "states": [
+        "rest",
+        "focused"
       ]
     },
     {
@@ -8964,10 +8988,10 @@
   "counts": {
     "required_roles": 154,
     "optional_roles": 63,
-    "hooks": 1640,
+    "hooks": 1643,
     "state_names": 7,
-    "assigned_states": 768,
-    "components": 228,
+    "assigned_states": 770,
+    "components": 229,
     "preference_tokens": 186
   }
 }
