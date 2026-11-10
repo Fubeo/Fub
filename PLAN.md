@@ -38,7 +38,7 @@ riviste con le risposte dell'utente a D-1…D-19 (2026-11-02); A-15…A-29
 nate dalle risposte e dai consigli di `lavagna.md` per le sue domande
 aperte. N6 va avanti sopra il ramo di N4, non sopra `main` (A-15). Restano
 tre domande nuove, D-20, D-21 e D-22: i task che le aspettano lo dicono.
-Ondate: T1 T2 T3 | T4 T5 T6 | T7 T8 T9 | T10 | T11 T25 | T26 T29 | T27 T12 | T28 T13 | T30 T14 | T24 T31 | T15 T20 | T33 T16 | T32 T19 | T48 T73 | T34 T37 | T17 | T40 T47 | T39 T21 | T38 | T41 | T42 | T43 | T44 | T35 T46 | T53 | T36 | T54 | T49 | T50 | T45 | T51 | T52 | T55 | T56 T65 | T57 | T58 T68 | T59 | T60 | T61 | T62 | T63 | T64 | T66 | T67 | T69 | T70 | T71 | T72 | T74 | T75 | T76 | T77 | T78 | T22 | T86 | T87 | T89 | T23 | T18 | T79 | T80 T88 | T81 | T82 | T83 | T84 | T85 | T90
+Ondate: T1 T2 T3 | T4 T5 T6 | T7 T8 T9 | T10 | T11 T25 | T26 T29 | T27 T12 | T28 T13 | T30 T14 | T24 T31 | T15 T20 | T33 T16 | T32 T19 | T48 T73 | T34 T37 | T17 | T40 T47 | T39 T21 | T38 | T41 | T96 T42 | T43 | T44 | T35 T46 | T53 | T36 | T54 | T49 | T50 | T45 | T51 | T52 | T55 | T56 T65 | T57 | T58 T68 | T59 | T60 | T61 | T62 | T63 | T64 | T66 | T67 | T69 | T70 | T71 | T72 | T74 | T75 | T76 | T77 | T78 | T22 | T86 | T87 | T89 | T23 | T18 | T79 | T80 T88 | T81 | T82 | T83 | T84 | T85 | T90
 Prototipo: quattro pagine, tutte approvate.
 `PLAN-ui/lavagna-schede.html` (T25): fatta il 2026-11-04, Approvato: 2026-11-04,
 con le varianti consigliate.
@@ -53,6 +53,14 @@ vedere l'orchestratore all'utente, finché non dice sì; nessun task
 grafico che ne dipende parte prima della riga «Approvato» (A-26).
 
 ## Modifiche
+
+- 2026-11-10 · Le differenze di T41 si chiudono con la soluzione di qualità
+  più alta (richiesta dell'utente): T96 porta nella scheda gli stati, la
+  bozza ritrovata, la sola lettura della nota e la rinomina, e chiude i due
+  punti di T40; T22 dà l'anello e la pillola anche fuori dalla scheda
+  attiva come nel prototipo. Restano come sono, scritte in DECISIONS.md: il
+  tasto centrale sposta la vista senza uscire dalla scrittura, niente numeri
+  di riga nella scheda, la barra di formato solo con `fub.formatting`.
 
 - 2026-11-03 · Le risposte dell'utente a D-1…D-19 (2026-11-02): la v1
   intera di `lavagna.md` (D-1 (b)); la cartella dei file trascinati con
@@ -341,6 +349,7 @@ cambiata, lo dice tra parentesi.
 | T39 · il titolo sopra, l'inchiostro sul contenuto | dopo T19, T25 | N4 T18 (nella base) | **D-21** (col prototipo) |
 | T40 · la porta per scrivere dentro | dopo T12 | nessuno | nessuna |
 | T41 · scrivere in una nota | dopo T40, T27, T14 | nessuno | nessuna |
+| T96 · la nota nella scheda come in un riquadro | dopo T41 | nessuno | nessuna |
 | T42 · scrivere nelle celle | dopo T41, T27 | nessuno | nessuna |
 | T43 · la scheda di testo in Live | dopo T41, T27 | N3 T16, T19 (nella base) | nessuna |
 | T44 · la scheda di testo cresce | dopo T43 | nessuno | nessuna |
@@ -2046,6 +2055,9 @@ Cosa fare:
 - C14: passando sopra «×2» (o col fuoco), le altre schede della stessa
   nota si illuminano (`data-card-twin`), anche fuori vista: la banda di
   stato dice dove (T52, se c'è).
+- L'anello e la pillola della scheda in scrittura, che T41 tiene solo su
+  `[data-card-editing]`, entrano nella pelle comune della scheda attiva,
+  come nel prototipo T27.
 - Le classi nuove dichiarate in `anatomia/editors.ts`.
 Casi limite: tema scuro e alto contrasto; moto ridotto (niente animazioni
 sulle schede che si accendono); una testata stretta (i numeri prima del
@@ -5448,6 +5460,61 @@ prima e verde dopo; i test dell'aggancio di T71 restano verdi.
 Prova: cd apps/client && npx vitest run src/editors/canvas/engine.test.ts
 Stato: [x] fatto (2026-11-10) dall'orchestratore, task di poche righe. Non
 fotografato nel banco: si vede sulla 1432.
+
+## T96 · La nota che si scrive nella scheda, come in un riquadro
+
+Perché: il 2026-11-10 l'utente ha chiesto di chiudere le differenze di T41
+con la soluzione più pulita e di qualità più alta, anche se costa più tempo.
+La scheda in scrittura deve dire e fare ciò che dice e fa un riquadro sulla
+stessa nota: gli stati del salvataggio, la bozza ritrovata, la sola lettura
+col suo perché, la rinomina. Restano anche i due punti aperti di T40.
+Tocca: `apps/client/src/state/card-editors.ts` e `card-editors.test.ts`,
+`apps/client/src/editors/canvas/cards/note.ts` e `note.test.ts`,
+`apps/client/src/editors/canvas/engine.ts` (l'entrata in scrittura),
+`apps/client/src/editors/canvas/engine-cards.test.ts`,
+`apps/client/src/state/document-bridge.ts`, `apps/client/src/shell-layout.ts`
+(solo il `release`), `apps/client/src/canvas-edit.e2e.test.ts`,
+`apps/client/src/i18n/catalog.ts`, `docs/reference/canvas-cards.md`.
+Non toccare: `editors/text/` (si usa dalla porta di T40);
+`state/document-session.ts` (la regola delle bozze e dei conflitti è sua e
+non si copia); la pelle della scheda (T22).
+Dipende da: T41
+Cosa fare:
+- Gli stati del salvataggio nella scheda sono quelli del riquadro, presi
+  dalla sessione e dalla stessa funzione che li dice nella banda: si salva,
+  salvato, non salvato, cambiato su disco, errore di salvataggio, sola
+  lettura. Nessuna lista copiata.
+- La bozza ritrovata: entrando in una nota che ha una bozza, la scheda mostra
+  lo stesso avviso del riquadro con le stesse azioni (tieni la bozza, torna
+  al file); la scelta fatta in un posto vale anche nell'altro.
+- La sola lettura segue la nota, non la lavagna: una lavagna che non si può
+  scrivere (`#unwritable`, il `.canvas` che il nucleo rifiuta, o il `.canvas`
+  prestato a un'app) non toglie la scrittura di una nota scrivibile, che è un
+  altro file con la sua sessione. Una nota in sola lettura (`heldReadOnly` di
+  quella nota, la finestra che si chiude, la nota prestata a un'app) apre la
+  scheda in lettura e dice perché, come un riquadro.
+- La rinomina: rinominata la nota mentre si scrive, la scheda resta sulla
+  stessa sessione col nome nuovo; il `retain` segue la sessione, non il nome
+  (il punto aperto di T40).
+- `document-bridge.ts` e `shell-layout.ts` lasciano una sessione solo dalla
+  collezione, che sa di `holds`: un riquadro chiuso non chiude mai la
+  sessione sotto una scheda che scrive (l'altro punto di T40).
+Casi limite: la bozza ritrovata in due schede e un riquadro della stessa nota
+(un avviso per superficie, una scelta sola); la nota rinominata da fuori
+(il watcher) mentre si scrive; la nota tolta mentre si scrive (la scheda
+passa a «Il file che manca», il testo resta nella bozza); la lavagna
+rinominata mentre una sua scheda scrive; il disco che rifiuta il salvataggio
+mentre la scheda è fuori vista.
+Fatto quando: `card-editors.test.ts` prova la rinomina con il `retain` sulla
+sessione, e che chiudere un riquadro non chiude la sessione tenuta da una
+scheda, passando da `document-bridge` e `shell-layout`, rosso prima e verde
+dopo; `note.test.ts` prova ogni stato, l'avviso della bozza e la sola lettura
+che segue la nota; `canvas-edit.e2e.test.ts` prova una lavagna `#unwritable`
+con la nota che si scrive e si salva; le foto del banco mostrano gli stati e
+l'avviso come nel riquadro.
+Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
+src/state/card-editors.test.ts src/editors/canvas src/canvas-edit.e2e.test.ts
+Stato: [ ] da fare
 
 ## Non verificato stanotte
 
