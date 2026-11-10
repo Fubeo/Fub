@@ -645,7 +645,7 @@ const STRINGS: &[(&str, &str, &str)] = &[
     (
         S_FINGER_WRITES_DESC,
         "Sullo schermo touch un dito scrive con la penna scelta, come una penna vera; due dita spostano e ingrandiscono. Si cambia anche dall'interruttore in fondo alla colonna.",
-        "On a touch screen a finger writes with the chosen pen, like a real pen; two fingers move and zoom. It can also be changed from the switch at the bottom of the column.",
+        "On a touch screen, a finger writes with the chosen pen, like a real pen. Two fingers move and zoom. It can also be changed with the switch at the bottom of the column.",
     ),
     (S_PEN_BUTTON, "Il tasto della penna", "The pen button"),
     (
@@ -660,7 +660,7 @@ const STRINGS: &[(&str, &str, &str)] = &[
     (
         S_WHEEL_DESC,
         "Che cosa fa la rotella fuori da una scheda attiva. Ctrl+rotella e il pizzico ingrandiscono sempre; dentro una scheda attiva la rotella scorre la scheda.",
-        "What the wheel does outside an active card. Ctrl+wheel and pinch always zoom; inside an active card the wheel scrolls the card.",
+        "What the wheel does outside an active card. Ctrl+wheel and pinch always zoom. Inside an active card, the wheel scrolls the card.",
     ),
     (S_WHEEL_PAN, "Sposta la lavagna", "Moves the whiteboard"),
     (S_WHEEL_ZOOM, "Ingrandisce", "Zooms"),
@@ -668,7 +668,7 @@ const STRINGS: &[(&str, &str, &str)] = &[
     (
         S_WORKSPACE_DESC,
         "Completo offre tutti gli strumenti, il navigatore e l'ispettore; Semplice ha la colonna ridotta e caselle grandi, per il dito e la penna. Automatico sceglie Semplice sui dispositivi che hanno solo il tocco.",
-        "Full offers all the tools, the navigator and the inspector; Simple has a reduced column and large boxes, for the finger and the pen. Automatic chooses Simple on devices that only have touch.",
+        "Full shows all the tools, the navigator and the inspector. Simple has a smaller column and large boxes, for the finger and the pen. Automatic chooses Simple on devices that only have touch.",
     ),
     (S_WORKSPACE_AUTO, "Automatico", "Automatic"),
     (S_WORKSPACE_FULL, "Completo", "Full"),
@@ -677,7 +677,7 @@ const STRINGS: &[(&str, &str, &str)] = &[
     (
         S_TOOLBAR_DESC,
         "Gli strumenti che la colonna della lavagna mostra, in ordine; vuota, quelli di serie. Uno strumento tolto resta raggiungibile dai tasti e da Ctrl+/.",
-        "The tools the whiteboard column shows, in order; empty, the default ones. A removed tool stays reachable from the keys and from Ctrl+/.",
+        "The tools the whiteboard column shows, in order. When it is empty, it shows the default ones. A tool you remove can still be used with its key or with Ctrl+/.",
     ),
     (S_GRID, "Griglia", "Grid"),
     (
@@ -695,13 +695,13 @@ const STRINGS: &[(&str, &str, &str)] = &[
     (
         S_PARTS_PICKER_DESC,
         "Portando sulla lavagna una nota con almeno due titoli, accanto alla scheda si apre l'elenco dei titoli per tenerne solo alcuni. Con Alt, mentre la lasci, arriva intera.",
-        "Bringing a note with at least two headings onto the whiteboard opens, next to the card, the list of its headings to keep only some. With Alt, while you drop it, it arrives whole.",
+        "When you bring a note with at least two headings onto the whiteboard, a list of its headings opens next to the card, so you can keep only some. Hold Alt while you drop it to bring the whole note.",
     ),
     (S_DROP_FOLDER, "Dove vanno i file trascinati", "Where dragged files go"),
     (
         S_DROP_FOLDER_DESC,
         "I file portati sulla lavagna dal computer, o incollati, si copiano nel vault qui. «Con le note» segue la cartella degli allegati delle note; «Con la lavagna» li mette in una cartella accanto alla lavagna; «In una cartella» sempre nella stessa cartella del vault. Un file che è già nel vault non si copia.",
-        "Files brought onto the whiteboard from the computer, or pasted, are copied into the vault here. «With the notes» follows the attachments folder of the notes; «With the whiteboard» puts them in a folder next to the whiteboard; «In a folder» always in the same folder of the vault. A file already in the vault is not copied.",
+        "Files you bring onto the whiteboard from your computer, or paste, are copied into the vault here. «With the notes» uses the attachments folder of the notes. «With the whiteboard» uses a folder next to the whiteboard. «In a folder» always uses the same folder of the vault. A file already in the vault is not copied.",
     ),
     (S_DROP_FOLDER_NOTES, "Con le note", "With the notes"),
     (S_DROP_FOLDER_BOARD, "Con la lavagna", "With the whiteboard"),
@@ -710,7 +710,7 @@ const STRINGS: &[(&str, &str, &str)] = &[
     (
         S_DROP_FOLDER_PATH_DESC,
         "Il nome della cartella accanto alla lavagna, o il percorso nel vault per «In una cartella». Con «Con le note» non si usa.",
-        "The name of the folder next to the whiteboard, or the path in the vault for «In a folder». With «With the notes» it is not used.",
+        "The name of a folder next to the whiteboard, or the path in the vault for «In a folder». It is not used with «With the notes».",
     ),
 ];
 
