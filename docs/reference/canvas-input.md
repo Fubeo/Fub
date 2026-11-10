@@ -1,7 +1,7 @@
 # I tasti e i gesti della lavagna
 
 > **Ambito:** come la tela della lavagna prende la tastiera, il puntatore e
-> la rotella: entrare in una scheda e uscirne, scrivere in una nota, la rotella, muoversi, il catalogo dei
+> la rotella: entrare in una scheda e uscirne, scrivere in una nota, la rotella, il catalogo dei
 > comandi e i loro tasti, i fili, le maniglie, la lavagna vuota, la colonna
 > degli strumenti, la riga delle opzioni, la banda di stato e l'ispettore.
 > **Fonti autorevoli:** `apps/client/src/editors/canvas/engine.ts`
@@ -16,7 +16,8 @@
 > `edges.test.ts`.
 
 Questa pagina viene da [Le schede della lavagna](canvas-cards.md), che tiene
-il contratto dei renderer.
+il contratto dei renderer. Come ci si muove, la griglia, le guide e il
+navigatore stanno in [La vista della lavagna](canvas-view.md).
 
 ## Entrare e uscire
 
@@ -122,110 +123,6 @@ dallo scatto dopo, senza riaprire la lavagna.
   sotto il puntatore non si sposta.
 - **Sopra una scheda non attiva** la rotella è della lavagna. **Dentro una
   scheda attiva** scorre la scheda, e Ctrl+rotella ingrandisce la lavagna.
-
-## Muoversi
-
-La vista si sposta e si ingrandisce dal 5% al 400% (`ZOOM_LIMITS`, 0,05–4),
-con la rotella, i tasti, il pizzico e la banda di stato. I conti della camera
-sono quelli di `spatial/camera.ts` (`zoomAtPoint`, `fit`, `stepCamera`).
-
-- **`+` e `-`** ingrandiscono e riducono a passi di 1,25 (`CANVAS_ZOOM_STEP`,
-  il passo del disegno) intorno al centro della vista, o al punto del menu.
-- **I salti.** `Maiusc+1` mostra tutte le schede, `Maiusc+2` la selezione
-  (senza selezione niente), `0` porta al 100% sul centro della vista. Mostra
-  tutto non va oltre il 100% e lascia 80 unità per lato. Il salto vola con
-  `stepCamera`; col movimento ridotto (di sistema o delle Impostazioni, letto
-  anche a lavagna aperta) arriva subito. Passa tutto da un solo punto
-  (`#jumpCamera`), che ricorda il salto per Indietro e Avanti.
-- **Indietro e Avanti.** Alt+← e Alt+→ (i comandi della shell
-  `shell.pane.back` e `shell.pane.forward`, come le frecce della barra del
-  titolo) chiedono prima alla lavagna col fuoco: ricordano i salti, non lo
-  zoom a passi né lo spostamento a mano. La storia (`jumps.ts`) sta in memoria,
-  per la lavagna aperta: al più 50 salti, un salto dopo un Indietro perde
-  l'Avanti, una lavagna riaperta riparte vuota e due riquadri con la stessa
-  lavagna hanno due storie. Con la storia vuota vale la cronologia del riquadro.
-  Il volo è quello dei salti, o arriva subito col movimento ridotto.
-- **Spazio tenuto** e trascina sposta la vista con qualsiasi strumento, anche
-  sopra una scheda e col mouse che scrive; la mano viene dal tema
-  (`data-space-pan`). Mentre si scrive in una scheda, o dentro la scheda
-  attiva, Spazio è uno spazio; con la penna giù non vale (la penna vince).
-- **Il tasto centrale** trascina e sposta, senza scegliere. Ctrl, Cmd e Alt
-  con un trascinamento nel vuoto spostano come prima; Alt dal corpo di una
-  scheda tira un filo ([I fili](#i-fili)).
-- **Al bordo.** Tirando una scheda, una maniglia o un filo a meno di 40 px dal
-  bordo della vista (`EDGE_SCROLL_ZONE`), la vista scorre da sola, più veloce
-  più si è vicini, fino a 1,2 px al ms sul bordo e fuori dalla finestra; ciò
-  che si tira resta sotto il puntatore. Si ferma al rilascio, con Esc, quando
-  il puntatore torna dentro e quando la finestra perde il fuoco.
-- **L'inerzia.** Il dito lasciato in corsa fa andare avanti la vista alla sua
-  velocità (gli ultimi 100 ms), che rallenta con `stepCamera`; col movimento
-  ridotto niente. Il touchpad arriva come rotella, con l'inerzia del sistema
-  dove il sistema la dà: la tela non ne aggiunge un'altra. Un appoggio, la rotella, un tasto
-  di zoom e la finestra che perde il fuoco fermano l'inerzia e il volo; la
-  lavagna chiusa li spegne.
-
-## La griglia e le guide
-
-La griglia aggancia ogni 8 unità della lavagna (`CANVAS_SNAP`, A-23), ma i
-suoi punti si vedono ogni 32 (`CANVAS_GRID_DOT_STEPS`), su incroci
-dell'aggancio: lo sfondo resta calmo. Sta sotto le schede e segue la vista.
-Sotto il 50% di zoom, dove i punti sarebbero più fitti di 16 px, non si
-disegna.
-
-- **`canvas.grid`** (Impostazioni) mostra la griglia; è accesa di serie.
-- **Ctrl+'** (`canvas.grid_toggle`, lo stesso tasto del disegno) la mostra o
-  la nasconde per questa lavagna. La scelta si ricorda con la vista della
-  lavagna, come il navigatore, e vale finché non si cambia.
-- **`canvas.snap`** (Impostazioni) accende l'aggancio. Spento, una scheda va
-  in unità intere, senza griglia e senza guide.
-- **Le guide.** Mentre si sposta una scheda, o si tira un angolo di una scheda
-  sola, il bordo e il centro della scheda si agganciano ai bordi e ai centri
-  delle altre schede in vista, entro 6 px sullo schermo. Spostando più schede
-  insieme conta il riquadro di tutte. Contano solo le schede in vista, anche
-  con duemila schede sulla lavagna.
-- **Spazi uguali.** Tre schede in fila (sovrapposte sull'altro asse): la scheda
-  che si muove si mette dopo, prima o in mezzo, con due spazi uguali a quello
-  fra le altre due; due trattini chiudono lo spazio.
-- **Precedenza.** Su ogni asse vince la guida più vicina; a parità, il bordo o
-  il centro prima dello spazio. Dove una guida vince, la griglia non si applica
-  su quell'asse; sull'altro, sì.
-- **Come si vedono.** Le guide sono linee sottili dell'accento sopra le schede,
-  in un solo elemento (`.canvas-guides`) che non prende il puntatore. Spariscono
-  al rilascio e con `Esc`.
-- **Alt** tenuto mentre si sposta o si tira spegne l'aggancio per quel gesto:
-  niente guide e niente griglia, la scheda va dove la porta il puntatore. Premuto
-  sul corpo di una scheda, Alt tira invece un filo ([I fili](#i-fili)).
-
-Spostare e ridimensionare restano un commit e un annulla, come prima.
-
-## Il navigatore
-
-In basso a destra della vista, 168 × 120 px: la mappa dei gruppi (il filo) e
-delle schede (piene, del loro colore, `--canvas-color` come i fili) col
-riquadro di ciò che si vede (`chrome/navigator.ts`). L'inquadratura è
-`navigatorBox` del disegno: la lavagna e la vista, con un margine; una scheda
-lontanissima ci sta.
-
-- **Un clic** porta il centro della vista lì: è un salto (`#jumpCamera`), che
-  vola come `Maiusc+1`, o arriva subito col movimento ridotto, e Indietro lo
-  ricorda.
-- **Trascinare** sposta la vista sotto la mano, subito, senza volo; preso
-  dentro il riquadro, il riquadro non salta. È un gesto: le schede vive, la
-  banda e la mappa si rifanno al rilascio.
-- **Sparisce da solo** quando tutta la lavagna sta già nella vista, e su una
-  lavagna vuota. «Nascondi il navigatore» (`canvas.navigator.hide`, nel
-  gruppo Vista del catalogo e nel menu del vuoto) lo spegne per questa
-  lavagna, ricordato nella vista (`"navigator": false`, [Riaprire dove
-  eri](canvas-cards.md#riaprire-dove-eri)); «Mostra il navigatore»
-  (`canvas.navigator.show`) lo riaccende. C'è sempre una sola delle due.
-- **La tastiera.** F6 dalla lavagna ci arriva (`EditorSurface.zone`: la
-  vista, poi il navigatore se si vede); le frecce spostano il riquadro di un
-  decimo della vista, con Maiusc di metà.
-- **Il disegno.** Una sola `<canvas>`, mai un elemento per scheda; si
-  ridipinge a fine gesto e al cambio del documento, se la lavagna o la vista
-  sono cambiate. I colori sono variabili della pelle
-  (`--canvas-navigator-card`, `-group`, `-view`, `-view-fill`), lette una
-  volta per disegno.
 
 ## Comandi e tasti
 
@@ -362,7 +259,7 @@ la pelle ci divide le misure. Il cursore dice la direzione (`nwse-resize`,
 nessuna scheda ne ha.
 
 - **Tirare un angolo** sposta quell'angolo; l'opposto resta fermo. La misura
-  si aggancia alle guide ([La griglia e le guide](#la-griglia-e-le-guide)) o
+  si aggancia alle guide ([La griglia e le guide](canvas-view.md#la-griglia-e-le-guide)) o
   alla griglia di 8 px, se `canvas.snap` è acceso; e non scende sotto 40 px
   (`CANVAS_MIN_SIZE`).
 - **Maiusc** tiene le proporzioni di partenza: vince il lato che cresce di

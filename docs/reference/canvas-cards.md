@@ -12,9 +12,9 @@
 Questa pagina serve a chi scrive un renderer di scheda (la parte che mostra
 una nota, un foglio, un PDF, un'immagine o una pagina web dentro la scheda) e
 a chi lavora sul motore della lavagna che li monta.
-Come si entra in una scheda, la rotella, come ci si muove (lo zoom, Spazio, i
-salti, il bordo, l'inerzia) e i comandi con i loro tasti stanno in
-[I tasti e i gesti della lavagna](canvas-input.md).
+Come si entra in una scheda, la rotella e i comandi con i loro tasti stanno in
+[I tasti e i gesti della lavagna](canvas-input.md); come ci si muove e la
+vista che torna riaprendo la lavagna, in [La vista della lavagna](canvas-view.md).
 
 ## Schede vive e ferme
 
@@ -416,56 +416,6 @@ che lancia lascia il modo di prima e un avviso in console. A fine gesto la
 tela chiama anche `resize()` sulle viste la cui scheda ha cambiato misura
 (un ridimensionamento, un annulla, una modifica da fuori), una volta per
 misura nuova; durante un ridimensionamento non lo chiama.
-
-## Riaprire dove eri
-
-Riaprendo una lavagna tornano la vista di prima, le schede scelte e la
-pagina di ogni scheda PDF. Le ricorda Fub su questo computer, negli stati di
-vista; il file `.canvas` non cambia (niente `fub:page`, nessun campo nuovo).
-Il codice sta in `view-state.ts`; la tela lo usa se ha l'opzione
-`viewMemory` e un `documentId`, e la superficie della shell (`surface.ts`)
-gliela dà sopra `api.viewState` e `api.setViewState`, una sola per tutte le
-lavagne.
-
-Lo stato sta nella chiave `canvas.view:<documentId>`:
-
-```json
-{ "version": 1, "camera": { "x": 0, "y": 0, "zoom": 1 },
-  "selection": ["id"], "pages": { "id": 3 }, "navigator": false }
-```
-
-- Al più 500 schede scelte (le prime della scelta) e 1000 pagine (le più
-  recenti). Le schede scelte sono solo schede: i fili scelti non si
-  ricordano.
-- Una `version` diversa da 1 è di un'altra versione: la lavagna parte come
-  se lo stato non ci fosse e non lo riscrive mai. Uno stato rotto (non un
-  oggetto, senza `version`) vale nessuno stato, e la prima scrittura lo
-  sostituisce. Dentro la versione 1 un campo che non si legge vale vuoto, e
-  i campi in più (la griglia, il tema per scheda) si conservano a ogni
-  riscrittura. `"navigator": false` c'è solo col navigatore nascosto.
-- **All'apertura** (`setDoc`) la tela inquadra tutto come prima, poi legge
-  lo stato: la camera ricordata vale se almeno una scheda cade nella vista
-  che dava, sennò resta «inquadra tutto»; la scelta torna con le sole schede
-  che ci sono ancora. Arriva solo ciò che nessuno ha cambiato nel frattempo:
-  una vista già spostata, o una scelta già fatta, restano. Le schede PDF
-  già montate su un'altra pagina si rimontano sulla loro.
-- **La pagina di una scheda PDF** è quella ricordata (`initialPage`), sennò
-  il `#page=N` del `subpath`, sennò la prima; una pagina ricordata oltre la
-  fine del file vale la prima. La scheda dice ogni pagina voltata con
-  `pageChanged`, anche quando corregge da sé una pagina che non c'è più.
-  Una scheda tolta e rimessa ha un id nuovo, e parte dalla prima.
-- **La scrittura** aspetta 500 ms dopo l'ultimo cambio della camera, della
-  scelta o di una pagina; alla chiusura della tela, e prima di un nuovo
-  `setDoc`, parte subito. Prima che la lettura sia arrivata non si scrive
-  niente, e dopo la chiusura nessuna scrittura parte più. Lo stesso stato
-  non si riscrive. Le letture e le scritture di una lavagna vanno in fila:
-  la lavagna riaperta legge dopo l'ultima scrittura di quella chiusa. Due
-  finestre sulla stessa lavagna: vince l'ultima scrittura.
-- Una scrittura che non riesce lascia una riga nel registro e la lavagna va
-  avanti. Una lettura che non riesce fa partire la lavagna come prima, e
-  quella lavagna non scrive (non si sa che cosa coprirebbe).
-- La shell non porta gli stati di vista con il nome: una lavagna rinominata
-  riparte dalla vista intera.
 
 ## Le porte della shell
 
