@@ -1230,8 +1230,10 @@ export class CanvasEngine {
   /** L'unico posto del testo di una scheda non ancora registrato. */
   #pending: PendingText | null = null;
   #pauseTimer: ReturnType<typeof setTimeout> | undefined = undefined;
-  /** La scheda che lampeggia dopo un link (T57), col suo timer: un solo lampo alla volta. */
-  #flashing: { readonly article: HTMLElement; readonly timer: ReturnType<typeof setTimeout> } | null = null;
+  /** La scheda che lampeggia dopo un link (T57): un solo lampo alla volta. */
+  #flashing: HTMLElement | null = null;
+  /** Il timer che spegne il lampo (T57): lo cancella `#endFlash`, e `destroy` lo chiude. */
+  #flashTimer: ReturnType<typeof setTimeout> | undefined = undefined;
   /** Chi possiede l'inchiostro: lo scheduler del silenzio della penna e lo strato. Si chiude in `destroy`. */
   readonly #life: Lifetime = openLifetime();
   /** Il selettore di «Altro…» aperto (T47); si chiude con la vita della lavagna. */
@@ -7224,15 +7226,17 @@ export class CanvasEngine {
     article.removeAttribute("data-card-flash");
     void article.offsetWidth;
     article.dataset.cardFlash = this.#reducedMotion ? "still" : "pulse";
-    this.#flashing = { article, timer: setTimeout(() => this.#endFlash(), CARD_FLASH_MS) };
+    this.#flashing = article;
+    this.#flashTimer = setTimeout(() => this.#endFlash(), CARD_FLASH_MS);
   }
 
   #endFlash(): void {
-    const flashing = this.#flashing;
-    if (!flashing) return;
+    clearTimeout(this.#flashTimer);
+    this.#flashTimer = undefined;
+    const article = this.#flashing;
+    if (!article) return;
     this.#flashing = null;
-    clearTimeout(flashing.timer);
-    delete flashing.article.dataset.cardFlash;
+    delete article.dataset.cardFlash;
   }
 
   /**
