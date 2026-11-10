@@ -429,6 +429,29 @@ contenuto non lo riceve. Nel tema (`structure.css`) il contenuto di una
 scheda non attiva non prende il puntatore e non scorre, salvo i link, i
 pulsanti e l'immagine; dentro una scheda attiva il corpo scorre.
 
+## La rotella
+
+Fuori da una scheda attiva la rotella fa ciò che dice «La rotella del mouse»
+(`canvas.wheel`, Impostazioni › Lavagna, di questo computer): `pan`, di
+serie, sposta la lavagna come prima; `zoom` la ingrandisce intorno al
+puntatore (A-11, D-17 (b)). La tela legge l'impostazione a ogni cambio: vale
+dallo scatto dopo, senza riaprire la lavagna.
+
+- **Ctrl+rotella** (Cmd su macOS) e il **pizzico** del touchpad, che arriva
+  come Ctrl+rotella, ingrandiscono sempre, in `pan` e in `zoom`. Uno scatto
+  senza parte verticale non ingrandisce.
+- **Maiusc+rotella** sposta di lato, in tutte e due. Dove il sistema non
+  manda `deltaX` (WebKitGTK), vale il `deltaY` dello scatto.
+- **In `zoom`** uno scatto solo verticale ingrandisce. Un evento con una
+  parte orizzontale (le due dita sul touchpad) sposta come in `pan`, così il
+  touchpad resta usabile.
+- **Unità.** Una riga di `deltaMode` 1 vale 16 px, una pagina di `deltaMode`
+  2 la misura della vista. Sono valori di partenza, non misure.
+- **Ai limiti** lo zoom (da 0,1 a 4) resta fermo, senza salto: il punto
+  sotto il puntatore non si sposta.
+- **Sopra una scheda non attiva** la rotella è della lavagna. **Dentro una
+  scheda attiva** scorre la scheda, e Ctrl+rotella ingrandisce la lavagna.
+
 ## Riaprire dove eri
 
 Riaprendo una lavagna tornano la vista di prima, le schede scelte e la
