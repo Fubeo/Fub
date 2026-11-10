@@ -487,58 +487,26 @@ finestre è di `crates/fub-format-xlsx/src/grid.rs`; la fixture
 
 ## Depositare un file
 
-`resource_write` deposita byte grezzi nel vault: un'immagine incollata, un
-file trascinato, un download esplicito, l'ultimo pezzo del registratore. Il
-corpo del comando sono i byte (`Uint8Array`, mai JSON o base64); i parametri
-stanno soltanto nella testata `x-fub-resource-write`, un oggetto JSON passato da
-`encodeURIComponent`, al più 16 KiB:
+`resource_write` deposita byte grezzi: il corpo sono i byte (`Uint8Array`, mai
+JSON o base64), i parametri stanno nella testata `x-fub-resource-write` (JSON
+in `encodeURIComponent`, al più 16 KiB): `id`, `vault` (`null` = il corrente),
+`expected` obbligatorio (`null` crea soltanto, una stringa è il CAS sulla
+revisione) e `reuse`, facoltativo. Un campo in più, un tipo sbagliato o un
+`reuse` diverso da `"same-content"` è `bad_args` prima del disco; `reuse` con
+`expected` dato pure. Senza `reuse` il deposito è quello di sempre.
 
-| Campo | Valore |
-|---|---|
-| `id` | il percorso del file nel vault, obbligatorio |
-| `vault` | la radice del vault, o `null` per quello corrente |
-| `expected` | obbligatorio: `null` crea soltanto (mai copre un file che c'è), una stringa è il CAS sulla revisione del file |
-| `reuse` | facoltativo: `"same-content"`, solo con `expected` nullo |
-
-Ogni altro campo, un tipo sbagliato o un valore di `reuse` diverso da
-`"same-content"` è `bad_args`, prima di toccare il disco: un campo che l'host
-non conosce non si ignora. Senza `reuse` il deposito è quello di sempre.
-
-Con `reuse: "same-content"` l'host chiede prima se un file del vault ha
-esattamente questi byte, anche con un altro nome (vedi
-[Lo stesso contenuto](../architecture/storage-and-identity.md)). Se c'è, non
-scrive niente; se non c'è, o se non sa rispondere (oltre i limiti della
-domanda, senza una tabella delle voci che si legga), scrive come senza il
-campo: nel dubbio si deposita, mai si perde un deposito. Prima di nominare il
-file trovato l'host ricontrolla che ci sia ancora, con la stessa misura: un
-file sparito nel frattempo non si nomina, si scrive. `reuse` con `expected`
-dato è `bad_args`.
-
-La ricevuta (`ResourceWriteReceipt`, in `contract.ts`) è:
-
-- `id`: il file scritto, o con `reused` vero il file che c'era;
-- `revision`: la revisione dei suoi byte, la stessa che `read_document`
-  darebbe;
-- `reused`: vero solo quando non si è scritto niente. Una ricevuta senza il
-  campo, da un host di prima, vale `false`.
-
-Nessun handle: per leggere il file si apre la risorsa a parte, e un'apertura
-che fallisce non rende fallito un deposito riuscito.
-
-Gli errori sono quelli di una scrittura: `already_exists` per un nome preso con
-`expected` nullo, `conflict` per una revisione che non è più quella,
-`permission_denied` da una finestra che non è locale e fidata o per una
-cartella di Excel da coprire (`host.xlsx.readonly`), `io` oltre i 64 MiB di un
-deposito (il tetto si controlla prima di leggere la testata). I 64 MiB esatti
-passano.
-
-Un client che manda `reuse` a un host di prima riceve `bad_args` per il campo
-sconosciuto: `writeResource` (in `editors/media/transport.ts`) lo prende come
-«non so» e rifà il deposito senza `reuse`. Se anche quello è `bad_args`,
-l'errore arriva a chi chiama. L'host finto (`host/fake.ts`) fa la stessa
-domanda sui suoi file, con gli stessi limiti; lo scenario
-`apps/client/src/__fixtures__/resource-write-scenario.json`, registrato
-sull'host vero da `crates/fub-app/src/resources.rs`, lega le risposte dei due.
+Con `reuse: "same-content"` l'host cerca un file del vault con esattamente
+questi byte ([Lo stesso contenuto](../architecture/storage-and-identity.md)) e
+ricontrolla che ci sia ancora: allora non scrive niente. Se non c'è, o se non
+sa rispondere, scrive: nel dubbio si deposita. La ricevuta
+(`ResourceWriteReceipt`) porta `id` e `revision` del file scritto, o di quello
+che c'era, e `reused` (vero solo se non si è scritto; assente in una ricevuta
+di prima = `false`). Gli errori sono quelli di una scrittura (`already_exists`,
+`conflict`, `permission_denied`, `host.xlsx.readonly`); oltre 64 MiB è `io`,
+prima di leggere la testata, e 64 MiB esatti passano. Un host di prima
+rifiuta `reuse` con `bad_args`: `writeResource` lo prende come «non so» e
+deposita senza. Lo scenario `__fixtures__/resource-write-scenario.json`,
+registrato sull'host vero, lega l'host finto alle stesse risposte.
 
 ## Percorsi
 
