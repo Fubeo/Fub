@@ -43,6 +43,19 @@ describe("spostare", () => {
     expect(moveBy("Uno\n\nDue", "Due", 1)).toBe("Uno\n\nDue");
   });
 
+  it("il frontmatter resta il primo: niente gli passa davanti e lui non scende", () => {
+    const doc = "---\nicon: 🌿\n---\nUno\n\nDue";
+    // Il primo testo non sale sopra il frontmatter, né con la tastiera né con la tratta.
+    expect(moveBy(doc, "Uno", -1)).toBe(doc);
+    const state = stateOf(doc);
+    const blocks = blocksOf(state);
+    expect(blocks[0]!.kind).toBe("frontmatter");
+    expect(moveSiblings(state, blocks, indexAt(state, "Due"), indexAt(state, "Due"), 0)).toBeNull();
+    // Il frontmatter non scende, nemmeno col cursore dentro di lui.
+    expect(moveBy(doc, "icon", 1)).toBe(doc);
+    expect(moveSiblings(state, blocks, 0, 0, indexAt(state, "Uno"))).toBeNull();
+  });
+
   it("un file senza a capo finale resta senza", () => {
     expect(moveBy("# Titolo\n\nTesto", "Testo", -1)).toBe("Testo\n\n# Titolo");
   });

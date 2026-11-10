@@ -19,7 +19,7 @@ import { colorsAt, CONTENT_COLORS, lineText, setContentColor, type ColorKind, ty
 import { blockAnchor, blockLink } from "./anchor";
 import { columnsRun, dropAsColumn, intoColumns } from "./columns";
 import { blockModel, kindName, type Block } from "./model";
-import { type BlockRun, moveRun, moveSiblings, siblingsOf } from "./move";
+import { type BlockRun, moveRun, moveSiblings, pinnedFirst, siblingsOf } from "./move";
 import { blockSelection, cursorBlock, deleteRun, duplicateRun, runOfSelection, selectBlocks, setBlockSelection } from "./selection";
 import { canTransform, targetOf, transformTo, type TransformTarget, unwrap } from "./transform";
 import { dragPose, type DragPose, LIFT_SCALE, ownsRow, setDragPose } from "./motion";
@@ -512,10 +512,12 @@ class HandlesView {
       },
       run.first === run.last && { label: liveStrings.t("blocks.menu.link"), run: act(() => this.copyLink(key)) },
     ], [
-      sibs.indexOf(run.first) > 0 && {
+      // Su e giù si vedono solo se la tratta può davvero muoversi: il primo
+      // testo sotto il frontmatter non sale, e il frontmatter non scende.
+      moveRun(view.state, blocks, run, -1) !== null && {
         label: liveStrings.t("blocks.menu.up"), hint: displayBinding("Mod-Shift-ArrowUp"), run: act(moveSpec(-1)),
       },
-      sibs.indexOf(run.last) < sibs.length - 1 && {
+      moveRun(view.state, blocks, run, 1) !== null && {
         label: liveStrings.t("blocks.menu.down"), hint: displayBinding("Mod-Shift-ArrowDown"), run: act(moveSpec(1)),
       },
       // Il blocco col fratello che lo segue, o la tratta, uno per colonna (K3).
@@ -695,11 +697,15 @@ class HandlesView {
       const bottom = view.lineBlockAt(blocks[sib]!.to).bottom;
       if (height > (top + bottom) / 2) gap++;
     }
+    // Il frontmatter resta il primo: il punto più alto è subito dopo di lui, e
+    // lui non si trascina via (la sua linea d'arrivo non c'è).
+    const pinned = pinnedFirst(blocks, sibs);
+    if (pinned) gap = Math.max(gap, 1);
     const before = gap < sibs.length ? sibs[gap]! : -1;
     const a = sibs.indexOf(run.first);
     const b = sibs.indexOf(run.last);
     // Davanti a sé o subito dopo di sé non si sposta niente.
-    drag.before = gap >= a && gap <= b + 1 ? null : before;
+    drag.before = (gap >= a && gap <= b + 1) || (pinned && a === 0) ? null : before;
     this.part(drag, drag.before === null ? null : this.parting(blocks, sibs, run, a, b, gap));
     if (drag.before === null) {
       this.drop.hidden = true;
