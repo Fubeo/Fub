@@ -3055,3 +3055,280 @@ describe("i fili: collegare senza mirare, prendere un filo (T67)", () => {
     engine.destroy();
   });
 });
+
+// Le maniglie per ridimensionare (T66): quattro angoli, Maiusc e Alt, la
+// presa a ogni zoom e del dito, il doppio clic che adatta al contenuto, la
+// cornice di più schede scelte; ogni gesto è un commit e un annulla.
+describe("le maniglie delle schede (T66)", () => {
+  const INK_STROKE = {
+    id: "s-1", tool: "pen",
+    brush: "pf1 size=3 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=0 pen=ballpoint",
+    color: "#0072b2", anchor: { kind: "card", width: 240, height: 140 },
+    ink: "1 s100 cxy 4000,2500 120,40 95,-10",
+  };
+
+  function board(): string {
+    return JSON.stringify({
+      nodes: [
+        { id: "t", type: "text", x: 40, y: 40, width: 240, height: 140, text: "una nota", "fub:ink": { v: 1, strokes: [INK_STROKE] } },
+        { id: "f", type: "file", x: 400, y: 40, width: 240, height: 140, file: "allegati/foto.png" },
+        { id: "w", type: "link", x: 400, y: 240, width: 240, height: 100, url: "https://example.com/x" },
+        { id: "p", type: "text", x: 40, y: 400, width: 40, height: 40, text: "." },
+      ],
+      edges: [],
+    });
+  }
+
+  const viewportOf = (host: HTMLElement): HTMLElement => host.querySelector<HTMLElement>(".canvas-viewport")!;
+  const stageOf = (host: HTMLElement): HTMLElement => host.querySelector<HTMLElement>(".canvas-stage")!;
+  const card = (host: HTMLElement, id: string): HTMLElement => host.querySelector<HTMLElement>(`.canvas-node[data-node="${id}"]`)!;
+  const handle = (host: HTMLElement, id: string, corner: string): HTMLElement =>
+    card(host, id).querySelector<HTMLElement>(`.canvas-resize[data-corner="${corner}"]`)!;
+
+  function zoomOf(host: HTMLElement): number {
+    const match = /scale\(([\d.e+-]+)\)/.exec(stageOf(host).style.transform);
+    if (!match) throw new Error("niente zoom");
+    return Number(match[1]);
+  }
+
+  function nodeOf(engine: CanvasEngine, id: string): CanvasDocument["nodes"][number] {
+    return readCanvas(engine.getDoc()).nodes.find((node) => node.id === id)!;
+  }
+
+  function boxOf(engine: CanvasEngine, id: string): [number, number, number, number] {
+    const node = nodeOf(engine, id);
+    return [node.x, node.y, node.width, node.height];
+  }
+
+  /** Tira `grip` di `(dx, dy)` unità della lavagna, coi tasti `keys` tenuti giù. */
+  function pull(host: HTMLElement, grip: HTMLElement, dx: number, dy: number, keys: { shiftKey?: boolean; altKey?: boolean } = {}): void {
+    const zoom = zoomOf(host);
+    grip.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, cancelable: true, button: 0, buttons: 1, pointerId: 7, pointerType: "mouse", clientX: 100, clientY: 100, ...keys }));
+    const at = { clientX: 100 + dx * zoom, clientY: 100 + dy * zoom };
+    viewportOf(host).dispatchEvent(new PointerEvent("pointermove", { bubbles: true, buttons: 1, pointerId: 7, pointerType: "mouse", ...at, ...keys }));
+    viewportOf(host).dispatchEvent(new PointerEvent("pointerup", { bubbles: true, pointerId: 7, pointerType: "mouse", ...at, ...keys }));
+  }
+
+  function choose(host: HTMLElement, id: string): void {
+    card(host, id).dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, button: 0, pointerId: 3, clientX: 0, clientY: 0 }));
+    viewportOf(host).dispatchEvent(new PointerEvent("pointerup", { bubbles: true, pointerId: 3, clientX: 0, clientY: 0 }));
+  }
+
+  function chooseAll(host: HTMLElement): void {
+    const viewport = viewportOf(host);
+    viewport.focus();
+    viewport.dispatchEvent(new KeyboardEvent("keydown", { key: "a", ctrlKey: true, bubbles: true }));
+  }
+
+  function zoomKey(host: HTMLElement, key: "+" | "-"): void {
+    viewportOf(host).dispatchEvent(new KeyboardEvent("keydown", { key, ctrlKey: true, bubbles: true }));
+  }
+
+  it("ogni scheda ha quattro maniglie agli angoli, in sola lettura nessuna", () => {
+    const { engine, host } = mounted(board());
+    for (const id of ["t", "f", "w", "p"]) {
+      const grips = [...card(host, id).querySelectorAll<HTMLElement>(".canvas-resize")];
+      expect(grips.map((grip) => grip.dataset.corner)).toEqual(["se", "sw", "ne", "nw"]);
+      for (const grip of grips) expect(grip.dataset.resize).toBe(id);
+    }
+    engine.setReadOnly(true);
+    expect(host.querySelector(".canvas-resize")).toBeNull();
+    engine.setReadOnly(false);
+    expect(host.querySelectorAll(".canvas-resize")).toHaveLength(16);
+    engine.destroy();
+  });
+
+  it.each([
+    ["se", 48, 36, [40, 40, 288, 176]],
+    ["sw", -48, 36, [-8, 40, 288, 176]],
+    ["ne", 48, -36, [40, 4, 288, 176]],
+    ["nw", -48, -36, [-8, 4, 288, 176]],
+  ] as const)("la maniglia %s tira il suo angolo e l'opposto resta fermo, un commit e un annulla", (corner, dx, dy, expected) => {
+    const { engine, host, changes } = mounted(board());
+    const before = engine.getDoc();
+    choose(host, "t");
+    pull(host, handle(host, "t", corner), dx, dy);
+    expect(boxOf(engine, "t")).toEqual(expected);
+    expect(changes).toHaveLength(1);
+    // L'inchiostro attaccato resta nella scheda, e la segue.
+    expect(nodeOf(engine, "t")["fub:ink"]).toEqual({ v: 1, strokes: [INK_STROKE] });
+    expect(engine.undo()).toBe(true);
+    expect(engine.getDoc()).toBe(before);
+    expect(engine.undo()).toBe(false);
+    engine.destroy();
+  });
+
+  it("Maiusc tiene le proporzioni, Alt ridimensiona dal centro, e tutti e due insieme", () => {
+    const { engine, host } = mounted(board());
+    choose(host, "t");
+    pull(host, handle(host, "t", "se"), 120, 0, { shiftKey: true });
+    expect(boxOf(engine, "t")).toEqual([40, 40, 360, 210]);
+    engine.undo();
+    pull(host, handle(host, "t", "se"), 24, 20, { altKey: true });
+    // 240 + 2·24 = 288; 140 + 2·20 = 180, agganciato a 184; il centro resta.
+    expect(boxOf(engine, "t")).toEqual([16, 18, 288, 184]);
+    engine.undo();
+    pull(host, handle(host, "t", "se"), 60, 0, { shiftKey: true, altKey: true });
+    expect(boxOf(engine, "t")).toEqual([-20, 5, 360, 210]);
+    engine.destroy();
+  });
+
+  it("non scende sotto il minimo di una scheda", () => {
+    const { engine, host } = mounted(board());
+    choose(host, "t");
+    pull(host, handle(host, "t", "nw"), 1000, 1000);
+    expect(boxOf(engine, "t")).toEqual([240, 140, 40, 40]);
+    engine.destroy();
+  });
+
+  it("l'area di presa è di 20 px sullo schermo a ogni zoom: la lavagna dice lo zoom alla pelle", async () => {
+    const { engine, host } = mounted(board());
+    const stage = stageOf(host);
+    expect(stage.style.getPropertyValue("--canvas-zoom")).toBe(String(zoomOf(host)));
+    const first = zoomOf(host);
+    zoomKey(host, "-");
+    expect(zoomOf(host)).not.toBe(first);
+    expect(stage.style.getPropertyValue("--canvas-zoom")).toBe(String(zoomOf(host)));
+    const structure = (await import("../../theme/scrittoio/structure.css?raw")).default;
+    expect(structure).toContain("width: calc(20px / var(--canvas-zoom, 1));");
+    expect(structure).toContain("height: calc(20px / var(--canvas-zoom, 1));");
+    engine.destroy();
+  });
+
+  it("una scheda piccolissima sullo schermo tiene solo la maniglia in basso a destra", () => {
+    const { engine, host } = mounted(board());
+    for (let i = 0; i < 20 && zoomOf(host) * 40 >= 24; i++) zoomKey(host, "-");
+    expect(zoomOf(host) * 40).toBeLessThan(24);
+    expect(card(host, "p").dataset.handles).toBe("one");
+    expect(card(host, "t").dataset.handles).toBeUndefined();
+    for (let i = 0; i < 40 && zoomOf(host) * 40 < 24; i++) zoomKey(host, "+");
+    expect(card(host, "p").dataset.handles).toBeUndefined();
+    engine.destroy();
+  });
+
+  it("col dito l'angolo della scheda scelta si prende entro 22 px, più in là no", () => {
+    const { engine, host, changes } = mounted(board());
+    choose(host, "t");
+    const zoom = zoomOf(host);
+    const match = /translate\((-?[\d.e+-]+)px, (-?[\d.e+-]+)px\)/.exec(stageOf(host).style.transform)!;
+    const corner = { x: Number(match[1]) + (40 + 240) * zoom, y: Number(match[2]) + (40 + 140) * zoom };
+    const touch = (type: string, x: number, y: number, pointerId: number) =>
+      viewportOf(host).dispatchEvent(new PointerEvent(type, { bubbles: true, cancelable: true, button: 0, buttons: 1, pointerId, pointerType: "touch", clientX: x, clientY: y }));
+    // A 30 px dall'angolo il dito sposta la lavagna, la scheda resta.
+    touch("pointerdown", corner.x + 30, corner.y + 30, 11);
+    touch("pointermove", corner.x + 30 + 40 * zoom, corner.y + 30, 11);
+    touch("pointerup", corner.x + 30 + 40 * zoom, corner.y + 30, 11);
+    expect(boxOf(engine, "t")).toEqual([40, 40, 240, 140]);
+    expect(changes).toHaveLength(0);
+    // A 20 px la prende: la camera si è mossa, l'angolo con lei.
+    const moved = /translate\((-?[\d.e+-]+)px, (-?[\d.e+-]+)px\)/.exec(stageOf(host).style.transform)!;
+    const grip = { x: Number(moved[1]) + (40 + 240) * zoom + 20, y: Number(moved[2]) + (40 + 140) * zoom + 20 };
+    touch("pointerdown", grip.x, grip.y, 12);
+    touch("pointermove", grip.x + 48 * zoom, grip.y + 36 * zoom, 12);
+    touch("pointerup", grip.x + 48 * zoom, grip.y + 36 * zoom, 12);
+    expect(boxOf(engine, "t")).toEqual([40, 40, 288, 176]);
+    expect(changes).toHaveLength(1);
+    engine.destroy();
+  });
+
+  it("più schede scelte: la cornice della scelta scala tutto, l'inchiostro attaccato segue, un annulla", () => {
+    const { engine, host, changes } = mounted(board());
+    const before = engine.getDoc();
+    chooseAll(host);
+    expect(stageOf(host).dataset.selection).toBe("many");
+    const frame = host.querySelector<HTMLElement>(".canvas-selection-frame")!;
+    expect(frame.parentElement).toBe(stageOf(host));
+    expect(frame.querySelectorAll(".canvas-resize[data-resize-frame]")).toHaveLength(4);
+    // La scelta va da (40, 40) a (640, 440): 600 × 400.
+    expect([frame.style.transform, frame.style.width, frame.style.height]).toEqual(["translate(40px, 40px)", "600px", "400px"]);
+    pull(host, frame.querySelector<HTMLElement>('.canvas-resize[data-corner="se"]')!, 600, 400);
+    // Tutto raddoppia dall'angolo in alto a sinistra della scelta.
+    expect(boxOf(engine, "t")).toEqual([40, 40, 480, 280]);
+    expect(boxOf(engine, "f")).toEqual([760, 40, 480, 280]);
+    expect(boxOf(engine, "w")).toEqual([760, 440, 480, 200]);
+    expect(boxOf(engine, "p")).toEqual([40, 760, 80, 80]);
+    expect(nodeOf(engine, "t")["fub:ink"]).toEqual({ v: 1, strokes: [INK_STROKE] });
+    expect(changes).toHaveLength(1);
+    expect(host.querySelector<HTMLElement>(".canvas-selection-frame")!.style.width).toBe("1200px");
+    expect(engine.undo()).toBe(true);
+    expect(engine.getDoc()).toBe(before);
+    // Una scheda sola: niente cornice.
+    choose(host, "t");
+    expect(stageOf(host).dataset.selection).toBe("many");
+    viewportOf(host).dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    choose(host, "t");
+    expect(stageOf(host).dataset.selection).toBeUndefined();
+    expect(host.querySelector(".canvas-selection-frame")).toBeNull();
+    engine.destroy();
+  });
+
+  it("la cornice non lascia una scheda sotto il minimo", () => {
+    const { engine, host } = mounted(board());
+    chooseAll(host);
+    pull(host, host.querySelector<HTMLElement>('.canvas-selection-frame .canvas-resize[data-corner="se"]')!, -2000, -2000);
+    for (const id of ["t", "f", "w", "p"]) {
+      const node = nodeOf(engine, id);
+      expect(node.width, id).toBeGreaterThanOrEqual(40);
+      expect(node.height, id).toBeGreaterThanOrEqual(40);
+    }
+    expect(boxOf(engine, "p").slice(2)).toEqual([40, 40]);
+    engine.destroy();
+  });
+
+  it("doppio clic su una maniglia: la scheda di testo prende la misura del testo, fino a 480 px", () => {
+    const { engine, host, changes } = mounted(board());
+    const before = engine.getDoc();
+    const article = card(host, "t");
+    const body = article.querySelector<HTMLElement>(".canvas-card-body")!;
+    // Un'impaginazione finta: il testo vuole 620 px su una riga, a 480 va su
+    // più righe e chiede 150 px; la testata è di 28.
+    let natural = 620;
+    let lines = 150;
+    Object.defineProperty(article, "offsetWidth", { configurable: true, get: () => article.style.width === "max-content" ? natural : parseFloat(article.style.width) });
+    Object.defineProperty(article, "offsetHeight", { configurable: true, get: () => parseFloat(article.style.height) || 0 });
+    Object.defineProperty(body, "offsetHeight", { configurable: true, get: () => Math.max(0, (parseFloat(article.style.height) || 0) - 28) });
+    Object.defineProperty(body, "scrollHeight", { configurable: true, get: () => lines });
+    handle(host, "t", "ne").dispatchEvent(new MouseEvent("dblclick", { bubbles: true }));
+    expect(boxOf(engine, "t")).toEqual([40, 40, 480, 184]);
+    expect(changes).toHaveLength(1);
+    // Lo stile della scheda è quello della misura nuova, non della misura.
+    expect([article.style.width, article.style.height]).toEqual(["480px", "184px"]);
+    // Il doppio clic sulla maniglia non apre il campo.
+    expect(host.querySelector(".canvas-text-editor, .canvas-field-editor")).toBeNull();
+    expect(engine.undo()).toBe(true);
+    expect(engine.getDoc()).toBe(before);
+    // Un testo corto: la sua larghezza, agganciata per eccesso.
+    natural = 130;
+    lines = 60;
+    handle(host, "t", "se").dispatchEvent(new MouseEvent("dblclick", { bubbles: true }));
+    expect(boxOf(engine, "t")).toEqual([40, 40, 136, 88]);
+    engine.destroy();
+  });
+
+  it("doppio clic su una maniglia: un'immagine prende le proporzioni del contenuto alla larghezza di adesso; le altre non cambiano", () => {
+    const { engine, host, changes } = mounted(board());
+    const before = engine.getDoc();
+    const picture = document.createElement("img");
+    Object.defineProperty(picture, "naturalWidth", { value: 400 });
+    Object.defineProperty(picture, "naturalHeight", { value: 300 });
+    card(host, "f").querySelector(".canvas-card-body")!.append(picture);
+    handle(host, "f", "sw").dispatchEvent(new MouseEvent("dblclick", { bubbles: true }));
+    expect(boxOf(engine, "f")).toEqual([400, 40, 240, 180]);
+    expect(changes).toHaveLength(1);
+    expect(engine.undo()).toBe(true);
+    expect(engine.getDoc()).toBe(before);
+    // Come in Chromium: la maniglia presa e lasciata cattura il puntatore, e
+    // il doppio clic arriva alla vista. Adatta lo stesso, senza nuove schede.
+    for (let i = 0; i < 2; i++) pull(host, handle(host, "f", "se"), 0, 0);
+    viewportOf(host).dispatchEvent(new MouseEvent("dblclick", { bubbles: true }));
+    expect(boxOf(engine, "f")).toEqual([400, 40, 240, 180]);
+    expect(readCanvas(engine.getDoc()).nodes).toHaveLength(4);
+    expect(engine.undo()).toBe(true);
+    // Una pagina web non ha una misura sua: niente cambia.
+    const count = changes.length;
+    handle(host, "w", "se").dispatchEvent(new MouseEvent("dblclick", { bubbles: true }));
+    expect(changes).toHaveLength(count);
+    expect(engine.getDoc()).toBe(before);
+    engine.destroy();
+  });
+});

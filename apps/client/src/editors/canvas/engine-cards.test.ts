@@ -615,7 +615,8 @@ describe("la tela tiene le schede", () => {
     expect(host.querySelector("[data-resize]")).toBeNull();
     expect(host.querySelector(".canvas-convert-note")).toBeNull();
     engine.setReadOnly(false);
-    expect(host.querySelectorAll("[data-resize]")).toHaveLength(4);
+    // Quattro schede, quattro maniglie ciascuna (T66).
+    expect(host.querySelectorAll("[data-resize]")).toHaveLength(16);
     expect(mounts).toHaveLength(3);
     expect(alive(mounts)).toEqual(["i", "n", "w"]);
     engine.destroy();

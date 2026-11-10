@@ -518,7 +518,8 @@ interface CardEntry {
   body: HTMLElement;
   /** La chiave del corpo (`cardBodyKey`): se cambia, il corpo si rifà; `null`, da rifare. */
   bodyKey: string | null;
-  resize: HTMLElement | null;
+  /** Le quattro maniglie agli angoli (T66); `null` in sola lettura. */
+  resize: readonly HTMLElement[] | null;
   /** Lo smontaggio del Markdown di una scheda di testo. */
   teardown: (() => void) | null;
   /**
@@ -576,7 +577,7 @@ interface ConnectGesture {
   moved: boolean;
 }
 
-const FINGER_HANDLES = ".canvas-node-handle, [data-resize], [data-reconnect], [data-connect], .canvas-port";
+const FINGER_HANDLES = ".canvas-node-handle, [data-resize], [data-resize-frame], [data-reconnect], [data-connect], .canvas-port";
 
 /** I limiti dello zoom: la rotella, i pulsanti e il pizzico. */
 const ZOOM_LIMITS: ZoomLimits = { min: 0.1, max: 4 };
@@ -601,6 +602,198 @@ function overlaps(node: Rect, view: Rect): boolean {
 
 function snap(value: number): number {
   return Math.round(value / CANVAS_SNAP) * CANVAS_SNAP;
+}
+
+// --- ridimensionare (T66) -------------------------------------------------------
+
+/** Un angolo di una scheda, o della cornice della scelta: dove sta una maniglia. */
+export type ResizeCorner = "nw" | "ne" | "sw" | "se";
+
+/**
+ * Le quattro maniglie, nell'ordine in cui stanno nel DOM: prima quella in
+ * basso a destra, la maniglia di sempre, che resta l'unica sotto
+ * `RESIZE_ONE_HANDLE_PX`.
+ */
+const RESIZE_CORNERS: readonly ResizeCorner[] = ["se", "sw", "ne", "nw"];
+
+/** Sotto questa misura sullo schermo, in px, una scheda ha solo la maniglia in basso a destra. */
+export const RESIZE_ONE_HANDLE_PX = 24;
+
+/**
+ * La metà della presa del dito, in px sullo schermo: un'area di 44 px
+ * centrata sull'angolo. Col mouse la presa è l'elemento della maniglia, 20
+ * px, misurata dalla pelle.
+ */
+export const RESIZE_FINGER_GRIP_PX = 22;
+
+/** La larghezza più grande che il doppio clic su una maniglia dà a una scheda di testo (T44). */
+export const CANVAS_TEXT_FIT_MAX_WIDTH = 480;
+
+/** Un rettangolo nella lavagna. */
+export interface ResizeBox {
+  readonly x: number;
+  readonly y: number;
+  readonly width: number;
+  readonly height: number;
+}
+
+/** Come si tira una maniglia. */
+export interface ResizeOptions {
+  /** Maiusc: le proporzioni di partenza restano. */
+  readonly keepRatio: boolean;
+  /** Alt: il centro resta fermo e la misura cambia dai due lati. */
+  readonly fromCenter: boolean;
+  /** L'aggancio delle misure a `CANVAS_SNAP` (A-23); con le proporzioni tenute non c'è. */
+  readonly snap: boolean;
+  readonly minWidth: number;
+  readonly minHeight: number;
+}
+
+/**
+ * Il rettangolo `start` tirato dalla maniglia `corner` di `(dx, dy)`, in
+ * unità della lavagna. Senza Alt sta fermo l'angolo opposto, con Alt il
+ * centro; con Maiusc vince il lato che cresce di più, e l'altro lo segue.
+ * Mai sotto il minimo, mai `NaN`.
+ */
+export function resizeBox(start: ResizeBox, corner: ResizeCorner, dx: number, dy: number, options: ResizeOptions): ResizeBox {
+  const east = corner === "ne" || corner === "se";
+  const south = corner === "sw" || corner === "se";
+  const reach = options.fromCenter ? 2 : 1;
+  let width = start.width + (east ? dx : -dx) * reach;
+  let height = start.height + (south ? dy : -dy) * reach;
+  if (options.keepRatio && start.width > 0 && start.height > 0) {
+    const scale = Math.max(
+      width / start.width,
+      height / start.height,
+      options.minWidth / start.width,
+      options.minHeight / start.height,
+    );
+    width = start.width * scale;
+    height = start.height * scale;
+  } else if (options.snap) {
+    width = snap(width);
+    height = snap(height);
+  }
+  width = Math.round(Math.max(options.minWidth, Number.isFinite(width) ? width : start.width));
+  height = Math.round(Math.max(options.minHeight, Number.isFinite(height) ? height : start.height));
+  const x = options.fromCenter
+    ? Math.round(start.x + (start.width - width) / 2)
+    : east ? start.x : start.x + start.width - width;
+  const y = options.fromCenter
+    ? Math.round(start.y + (start.height - height) / 2)
+    : south ? start.y : start.y + start.height - height;
+  return { x, y, width, height };
+}
+
+/** Il rettangolo che contiene tutte le schede `nodes`; `null` senza schede. */
+export function boxAround(nodes: readonly ResizeBox[]): ResizeBox | null {
+  if (nodes.length === 0) return null;
+  let left = Infinity;
+  let top = Infinity;
+  let right = -Infinity;
+  let bottom = -Infinity;
+  for (const node of nodes) {
+    left = Math.min(left, node.x);
+    top = Math.min(top, node.y);
+    right = Math.max(right, node.x + node.width);
+    bottom = Math.max(bottom, node.y + node.height);
+  }
+  return { x: left, y: top, width: right - left, height: bottom - top };
+}
+
+/**
+ * La scheda `node` dentro la cornice `from` portata nella cornice `to`: la
+ * posizione e la misura scalano come la cornice (le maniglie della scelta).
+ */
+export function scaleInto(node: ResizeBox, from: ResizeBox, to: ResizeBox, min: number): ResizeBox {
+  const sx = from.width > 0 ? to.width / from.width : 1;
+  const sy = from.height > 0 ? to.height / from.height : 1;
+  return {
+    x: Math.round(to.x + (node.x - from.x) * sx),
+    y: Math.round(to.y + (node.y - from.y) * sy),
+    width: Math.max(min, Math.round(node.width * sx)),
+    height: Math.max(min, Math.round(node.height * sy)),
+  };
+}
+
+/** Il primo multiplo di `CANVAS_SNAP` che non taglia `value`. */
+function snapUp(value: number): number {
+  return Math.ceil(value / CANVAS_SNAP) * CANVAS_SNAP;
+}
+
+/** L'angolo scritto su una maniglia; senza, quello in basso a destra. */
+function cornerOf(value: string | undefined): ResizeCorner {
+  return value === "nw" || value === "ne" || value === "sw" ? value : "se";
+}
+
+/** Un lato del rettangolo `box` è sotto `RESIZE_ONE_HANDLE_PX` sullo schermo. */
+function tinyOnScreen(box: ResizeBox, zoom: number): boolean {
+  return box.width * zoom < RESIZE_ONE_HANDLE_PX || box.height * zoom < RESIZE_ONE_HANDLE_PX;
+}
+
+/**
+ * Una maniglia: l'area di presa all'angolo `corner`, che la pelle misura e
+ * disegna. `node` è la scheda che ridimensiona; `null` per la cornice della
+ * scelta, che ridimensiona tutte le schede scelte.
+ */
+function resizeHandle(corner: ResizeCorner, node: string | null): HTMLElement {
+  const handle = document.createElement("div");
+  handle.className = "canvas-resize";
+  handle.dataset.corner = corner;
+  if (node === null) handle.dataset.resizeFrame = "";
+  else handle.dataset.resize = node;
+  handle.setAttribute("aria-hidden", "true");
+  return handle;
+}
+
+/** Una scheda (o la cornice) troppo piccola sullo schermo tiene solo la maniglia in basso a destra: le altre la coprirebbero. */
+function markHandles(el: HTMLElement, box: ResizeBox, zoom: number): void {
+  if (tinyOnScreen(box, zoom)) el.dataset.handles = "one";
+  else delete el.dataset.handles;
+}
+
+/**
+ * La misura del testo di una scheda (`article`, col corpo `body`): la
+ * larghezza che il testo vuole senza andare a capo, fino a
+ * `CANVAS_TEXT_FIT_MAX_WIDTH`, e l'altezza che allora gli serve, la testata
+ * compresa; agganciate per eccesso a `CANVAS_SNAP`, così niente si taglia.
+ * Misura sullo stile della scheda e lo rimette com'era. `null` senza
+ * impaginazione.
+ */
+function measureText(article: HTMLElement, body: HTMLElement): { width: number; height: number } | null {
+  const { width, height } = article.style;
+  try {
+    article.style.width = "max-content";
+    // La larghezza usata, coi decimali: `offsetWidth` arrotonda, e un testo
+    // largo 320,3 px a 320 andrebbe a capo.
+    let measured = Math.max(article.offsetWidth, parseFloat(getComputedStyle(article).width) || 0);
+    if (measured > CANVAS_TEXT_FIT_MAX_WIDTH) {
+      article.style.width = `${CANVAS_TEXT_FIT_MAX_WIDTH}px`;
+      measured = CANVAS_TEXT_FIT_MAX_WIDTH;
+    } else {
+      article.style.width = `${measured}px`;
+    }
+    // La testata e i bordi: quello che non è il corpo. Poi il corpo a zero,
+    // perché scorra tutto e `scrollHeight` dica l'altezza del testo.
+    const chrome = Math.max(0, article.offsetHeight - body.offsetHeight);
+    article.style.height = `${chrome}px`;
+    const content = body.scrollHeight;
+    if (measured <= 0 || content <= 0) return null;
+    return { width: Math.min(CANVAS_TEXT_FIT_MAX_WIDTH, snapUp(measured)), height: snapUp(chrome + content) };
+  } finally {
+    article.style.width = width;
+    article.style.height = height;
+  }
+}
+
+/** La misura del contenuto disegnato nel corpo: l'immagine, o la pagina del PDF. `null` se non c'è ancora. */
+function naturalSize(body: HTMLElement): { width: number; height: number } | null {
+  for (const picture of body.querySelectorAll<HTMLImageElement | HTMLCanvasElement>("img, canvas")) {
+    const width = picture instanceof HTMLImageElement ? picture.naturalWidth : picture.width;
+    const height = picture instanceof HTMLImageElement ? picture.naturalHeight : picture.height;
+    if (width > 0 && height > 0) return { width, height };
+  }
+  return null;
 }
 
 /**
@@ -743,7 +936,31 @@ export class CanvasEngine {
   /** I rettangoli tratteggiati di un trascinamento in corso sopra la vista. */
   #dropGhosts: HTMLElement | null = null;
   #drag: { pointerId: number; startX: number; startY: number; origin: Map<string, { x: number; y: number }>; moved: boolean } | null = null;
-  #resize: { pointerId: number; id: string; startX: number; startY: number; width: number; height: number } | null = null;
+  /**
+   * Il ridimensionamento in corso (T66): la maniglia `corner`, la cornice di
+   * partenza `box` (la scheda, o la cornice della scelta) e le schede che
+   * cambiano, ognuna col suo rettangolo di partenza.
+   */
+  #resize: {
+    pointerId: number;
+    corner: ResizeCorner;
+    startX: number;
+    startY: number;
+    box: ResizeBox;
+    origin: Map<string, ResizeBox>;
+    /** Il puntatore si è mosso di più di 3 px: non è un clic sulla maniglia. */
+    moved: boolean;
+  } | null = null;
+  /**
+   * Le schede dell'ultima maniglia presa e lasciata senza muoversi: il doppio
+   * clic che segue le adatta al contenuto. Serve perché, con la cattura del
+   * puntatore, il `dblclick` arriva alla vista e non alla maniglia.
+   */
+  #handleTap: readonly string[] | null = null;
+  /** La cornice della scelta con le sue maniglie, con due schede scelte o più (T66). */
+  #selectionFrame: HTMLElement | null = null;
+  /** Lo zoom con cui si sono contate le schede troppo piccole per quattro maniglie. */
+  #handlesZoom = 0;
   /**
    * Lo spostamento della lavagna in corso. `toggle` è la scheda sotto un
    * Ctrl+clic (Cmd+clic): se il puntatore si alza senza essersi mosso, la
@@ -2377,6 +2594,10 @@ export class CanvasEngine {
     this.#stage.style.transform = `translate(${this.#camera.x}px, ${this.#camera.y}px) scale(${this.#camera.zoom})`;
     this.#edgeLayer.style.transform = `translate(${this.#camera.x}px, ${this.#camera.y}px) scale(${this.#camera.zoom})`;
     this.#inkLayer?.setCamera(this.#camera.x, this.#camera.y, this.#camera.zoom);
+    // Le maniglie e i segni sopra le schede restano della stessa misura sullo
+    // schermo a ogni zoom (T66): la pelle divide per `--canvas-zoom`.
+    this.#stage.style.setProperty("--canvas-zoom", String(this.#camera.zoom));
+    this.#markAllHandles();
     // Anche la resa passa di qui: la scelta cambiata si ricorda con la camera.
     this.#viewMemo?.changed();
     // Ogni cambio di zoom passa di qui (bottoni, tasti, menu, `fitCamera`): la
@@ -4225,10 +4446,13 @@ export class CanvasEngine {
       el.classList.toggle("selected", this.#selection.includes(el.dataset.node ?? ""));
     }
     if (this.#doc && !this.#isSceneOversized()) this.#drawEdges();
+    this.#syncSelectionFrame();
     this.#drawToolbar();
   }
 
   #pointerDown(event: PointerEvent): void {
+    // Un clic fuori dalle maniglie chiude il doppio clic che le adatta (T66).
+    if (!(event.target instanceof Element && event.target.closest("[data-resize], [data-resize-frame]"))) this.#handleTap = null;
     // Prima di ogni gesto, il testo in sospeso (non i clic dentro il campo).
     if (!(event.target instanceof Node && this.#editor?.input.contains(event.target))) this.#recordPending();
     const pressed = this.#nodeAt(event.target);
@@ -4249,6 +4473,9 @@ export class CanvasEngine {
     // Ctrl+clic (Cmd+clic) su un link di una scheda lo segue (D-18 (c)): il
     // `click` deve arrivare al link, non a uno spostamento della lavagna.
     if (event.button === 0 && modifier && this.#cardLinkAt(event.target) !== null) return;
+    // Una maniglia vince su Alt (dal centro) e su Maiusc (le proporzioni):
+    // i tasti si leggono mentre si tira (T66). La Mano sposta e basta.
+    if (event.button === 0 && !modifier && this.#tool !== "hand" && this.#resizeFromHandle(event)) return;
     // Alt+trascina dal corpo di una scheda tira un filo (T67); nel vuoto Alt
     // sposta ancora la vista.
     if (event.button === 0 && event.altKey && !modifier && this.#tool !== "hand"
@@ -4271,16 +4498,6 @@ export class CanvasEngine {
       return;
     }
     const target = event.target;
-    const resizeHandle = target instanceof Element ? target.closest<HTMLElement>("[data-resize]") : null;
-    if (resizeHandle) {
-      const id = resizeHandle.dataset.resize!;
-      const node = this.#doc?.nodes.find((n) => n.id === id);
-      if (!node || this.#readOnly) return;
-      this.#resize = { pointerId: event.pointerId, id, startX: event.clientX, startY: event.clientY, width: node.width, height: node.height };
-      this.#viewport.setPointerCapture?.(event.pointerId);
-      event.preventDefault();
-      return;
-    }
     const endpoint = target instanceof Element ? target.closest<SVGElement>("[data-reconnect]") : null;
     if (endpoint && !this.#readOnly) {
       const edge = this.#doc?.edges.find((entry) => entry.id === endpoint.dataset.reconnect);
@@ -4459,6 +4676,9 @@ export class CanvasEngine {
       return;
     }
     const target = event.target instanceof Element ? event.target : null;
+    // Vicino a un angolo della scelta il dito prende la maniglia (T66); un
+    // controllo sotto il dito (il pulsante del filo) resta suo.
+    if (!target?.closest(FINGER_CONTROLS) && this.#resizeFromFinger(event)) return;
     if (target?.closest(FINGER_CONTROLS) || (!this.#readOnly && target?.closest(FINGER_HANDLES))) {
       this.#mouseDown(event);
       return;
@@ -4559,6 +4779,232 @@ export class CanvasEngine {
     else if (!additive) this.#clearSelection();
   }
 
+  // --- ridimensionare (T66) ---------------------------------------------------
+
+  /**
+   * Il mouse (o il dito, o la penna) giù su una maniglia: comincia il
+   * ridimensionamento della sua scheda, o della scelta se è una maniglia
+   * della cornice. `false` se sotto non c'è una maniglia che si possa tirare.
+   */
+  #resizeFromHandle(event: PointerEvent): boolean {
+    if (this.#readOnly || !this.#doc) return false;
+    const target = event.target instanceof Element ? event.target : null;
+    const handle = target?.closest<HTMLElement>("[data-resize], [data-resize-frame]");
+    if (!handle) return false;
+    const corner = cornerOf(handle.dataset.corner);
+    const ids = handle.dataset.resize !== undefined ? [handle.dataset.resize] : this.#resizableSelection();
+    if (!this.#beginResize(event, corner, ids)) return false;
+    event.preventDefault();
+    return true;
+  }
+
+  /**
+   * Il dito giù vicino a un angolo della scheda scelta, o della cornice della
+   * scelta: la presa è di 44 px sullo schermo a ogni zoom, più larga di
+   * quella del mouse. Lo spazio Semplice (T65) non c'è ancora: decide il
+   * tipo di puntatore.
+   */
+  #resizeFromFinger(event: PointerEvent): boolean {
+    if (this.#readOnly || !this.#doc || this.#isSceneOversized()) return false;
+    const ids = this.#resizableSelection();
+    const box = this.#boxOf(ids);
+    if (!box) return false;
+    const rect = this.#viewport.getBoundingClientRect();
+    const { x: camX, y: camY, zoom } = this.#camera;
+    let best: { corner: ResizeCorner; distance: number } | null = null;
+    for (const corner of this.#cornersOf(box)) {
+      const east = corner === "ne" || corner === "se";
+      const south = corner === "sw" || corner === "se";
+      const x = rect.left + camX + (box.x + (east ? box.width : 0)) * zoom;
+      const y = rect.top + camY + (box.y + (south ? box.height : 0)) * zoom;
+      const distance = Math.max(Math.abs(event.clientX - x), Math.abs(event.clientY - y));
+      if (distance <= RESIZE_FINGER_GRIP_PX && (!best || distance < best.distance)) best = { corner, distance };
+    }
+    if (!best || !this.#beginResize(event, best.corner, ids)) return false;
+    event.preventDefault();
+    return true;
+  }
+
+  /**
+   * Le schede che un doppio clic su una maniglia adatta: quelle dell'ultima
+   * maniglia presa senza muoversi, o quelle della maniglia sotto `target`;
+   * `null` se il doppio clic non è su una maniglia. Si usa una volta.
+   */
+  #takeHandleTap(target: EventTarget | null): readonly string[] | null {
+    const tap = this.#handleTap;
+    this.#handleTap = null;
+    if (tap) return tap;
+    const handle = target instanceof Element ? target.closest<HTMLElement>("[data-resize], [data-resize-frame]") : null;
+    if (!handle) return null;
+    return handle.dataset.resize !== undefined ? [handle.dataset.resize] : this.#resizableSelection();
+  }
+
+  /** Le schede scelte che il documento ha. */
+  #resizableSelection(): string[] {
+    const doc = this.#doc;
+    if (!doc) return [];
+    return this.#selection.filter((id) => doc.nodes.some((node) => node.id === id));
+  }
+
+  /** Il rettangolo attorno alle schede `ids` del documento di adesso. */
+  #boxOf(ids: readonly string[]): ResizeBox | null {
+    const doc = this.#doc;
+    if (!doc) return null;
+    return boxAround(ids.flatMap((id) => doc.nodes.filter((node) => node.id === id)));
+  }
+
+  /** Le maniglie che una cornice mostra a questo zoom: troppo piccola, solo quella in basso a destra. */
+  #cornersOf(box: ResizeBox): readonly ResizeCorner[] {
+    return tinyOnScreen(box, this.#camera.zoom) ? ["se"] : RESIZE_CORNERS;
+  }
+
+  #beginResize(event: PointerEvent, corner: ResizeCorner, ids: readonly string[]): boolean {
+    const doc = this.#doc;
+    if (!doc) return false;
+    const origin = new Map<string, ResizeBox>();
+    for (const id of ids) {
+      const node = doc.nodes.find((entry) => entry.id === id);
+      if (node) origin.set(id, { x: node.x, y: node.y, width: node.width, height: node.height });
+    }
+    const box = boxAround([...origin.values()]);
+    if (!box) return false;
+    this.#resize = { pointerId: event.pointerId, corner, startX: event.clientX, startY: event.clientY, box, origin, moved: false };
+    this.#viewport.setPointerCapture?.(event.pointerId);
+    return true;
+  }
+
+  /**
+   * Il puntatore che tira una maniglia: Maiusc tiene le proporzioni, Alt
+   * tiene fermo il centro, tutti e due insieme. Una scheda sola ha
+   * l'aggancio di 8 px (A-23); la scelta scala tutto, posizioni comprese,
+   * senza che una scheda scenda sotto il minimo. L'inchiostro attaccato sta
+   * nella scheda e la segue nella resa (N4).
+   */
+  #moveResize(event: PointerEvent): void {
+    const resize = this.#resize;
+    const doc = this.#doc;
+    if (!resize || !doc) return;
+    // Un clic sulla maniglia (o il primo dei due del doppio clic) non cambia
+    // la scheda: senza questo l'aggancio la porterebbe subito sulla griglia.
+    if (Math.abs(event.clientX - resize.startX) + Math.abs(event.clientY - resize.startY) > 3) resize.moved = true;
+    if (!resize.moved) return;
+    const dx = (event.clientX - resize.startX) / this.#camera.zoom;
+    const dy = (event.clientY - resize.startY) / this.#camera.zoom;
+    const single = resize.origin.size === 1;
+    const starts = [...resize.origin.values()];
+    const narrowest = Math.max(1, Math.min(...starts.map((start) => start.width)));
+    const shortest = Math.max(1, Math.min(...starts.map((start) => start.height)));
+    const box = resizeBox(resize.box, resize.corner, dx, dy, {
+      keepRatio: event.shiftKey,
+      fromCenter: event.altKey,
+      snap: single,
+      minWidth: single ? CANVAS_MIN_SIZE : resize.box.width * Math.min(1, CANVAS_MIN_SIZE / narrowest),
+      minHeight: single ? CANVAS_MIN_SIZE : resize.box.height * Math.min(1, CANVAS_MIN_SIZE / shortest),
+    });
+    for (const [id, start] of resize.origin) {
+      const node = doc.nodes.find((entry) => entry.id === id);
+      if (!node) continue;
+      const next = single ? box : scaleInto(start, resize.box, box, CANVAS_MIN_SIZE);
+      node.x = next.x;
+      node.y = next.y;
+      node.width = next.width;
+      node.height = next.height;
+    }
+    this.#renderLive();
+  }
+
+  /**
+   * La cornice della scelta: con due schede scelte o più, attorno a tutte,
+   * con le sue quattro maniglie che scalano tutto; le maniglie delle schede
+   * allora si nascondono (`data-selection="many"`). In sola lettura niente.
+   */
+  #syncSelectionFrame(): void {
+    const ids = !this.#readOnly && !this.#isSceneOversized() ? this.#resizableSelection() : [];
+    const box = ids.length >= 2 ? this.#boxOf(ids) : null;
+    if (box) this.#stage.dataset.selection = "many";
+    else delete this.#stage.dataset.selection;
+    if (!box) {
+      this.#selectionFrame?.remove();
+      return;
+    }
+    let frame = this.#selectionFrame;
+    if (!frame) {
+      frame = document.createElement("div");
+      frame.className = "canvas-selection-frame";
+      frame.setAttribute("aria-hidden", "true");
+      for (const corner of RESIZE_CORNERS) frame.append(resizeHandle(corner, null));
+      this.#selectionFrame = frame;
+    }
+    frame.style.transform = `translate(${box.x}px, ${box.y}px)`;
+    frame.style.width = `${box.width}px`;
+    frame.style.height = `${box.height}px`;
+    markHandles(frame, box, this.#camera.zoom);
+    // Sopra le schede e l'inchiostro libero: le sue maniglie si prendono.
+    if (frame.parentElement !== this.#stage || frame.nextSibling) this.#stage.append(frame);
+  }
+
+  /** Lo zoom è cambiato: le schede (e la cornice) troppo piccole tengono solo una maniglia. */
+  #markAllHandles(): void {
+    const zoom = this.#camera.zoom;
+    if (zoom === this.#handlesZoom) return;
+    this.#handlesZoom = zoom;
+    for (const entry of this.#cards.values()) markHandles(entry.article, entry.node, zoom);
+    const frame = this.#selectionFrame;
+    const box = frame?.isConnected ? this.#boxOf(this.#resizableSelection()) : null;
+    if (frame && box) markHandles(frame, box, zoom);
+  }
+
+  /**
+   * Il doppio clic su una maniglia: ogni scheda `ids` prende la misura del
+   * suo contenuto, in un commit e un annulla. Una scheda di testo la misura
+   * del suo testo, fino a `CANVAS_TEXT_FIT_MAX_WIDTH` di larghezza;
+   * un'immagine o un PDF le proporzioni del contenuto alla larghezza di
+   * adesso; le altre non cambiano. L'angolo in alto a sinistra resta.
+   */
+  #fitToContent(ids: readonly string[]): void {
+    const doc = this.#doc;
+    if (!doc || this.#readOnly || this.#isSceneOversized()) return;
+    let changed = false;
+    for (const id of ids) {
+      const node = doc.nodes.find((entry) => entry.id === id);
+      const entry = this.#cards.get(id);
+      if (!node || !entry) continue;
+      const size = this.#contentSize(entry, node);
+      if (!size || (size.width === node.width && size.height === node.height)) continue;
+      node.width = size.width;
+      node.height = size.height;
+      changed = true;
+    }
+    if (changed) this.#commitFromSource("input");
+  }
+
+  /** La misura del contenuto della scheda `node`; `null` se non c'è o non si sa. */
+  #contentSize(entry: CardEntry, node: CanvasNode): { width: number; height: number } | null {
+    if (node.type === "text") {
+      // Col campo aperto il testo è nel campo, che non ha una misura sua.
+      if (this.#editor?.id === node.id) return null;
+      const measured = measureText(entry.article, entry.body);
+      return measured && { width: Math.max(CANVAS_MIN_SIZE, measured.width), height: Math.max(CANVAS_MIN_SIZE, measured.height) };
+    }
+    if (node.type !== "file" || typeof node.file !== "string") return null;
+    const media = mediaKindOfId(node.file);
+    if (media !== "image" && media !== "pdf") return null;
+    const natural = naturalSize(entry.body);
+    if (!natural) return null;
+    // Il riquadro del contenuto: il corpo senza il suo margine interno; il
+    // resto della scheda (la testata) resta com'è. Senza misure (prima della
+    // prima impaginazione) il contenuto è tutta la scheda.
+    const style = getComputedStyle(entry.body);
+    const padX = (parseFloat(style.paddingLeft) || 0) + (parseFloat(style.paddingRight) || 0);
+    const padY = (parseFloat(style.paddingTop) || 0) + (parseFloat(style.paddingBottom) || 0);
+    const innerWidth = entry.body.clientWidth - padX;
+    const innerHeight = entry.body.clientHeight - padY;
+    const known = innerWidth > 0 && innerHeight > 0;
+    const width = known ? innerWidth : node.width;
+    const rest = known ? node.height - innerHeight : 0;
+    return { width: node.width, height: Math.max(CANVAS_MIN_SIZE, Math.round(rest + width * natural.height / natural.width)) };
+  }
+
   #pointerMove(event: PointerEvent): void {
     if (event.pointerType === "touch" && this.#touchMove(event)) return;
     if (this.#connect && event.pointerId === this.#connect.pointerId) {
@@ -4575,13 +5021,7 @@ export class CanvasEngine {
       return;
     }
     if (this.#resize && event.pointerId === this.#resize.pointerId && this.#doc) {
-      const node = this.#doc.nodes.find((n) => n.id === this.#resize!.id);
-      if (!node) return;
-      const dx = (event.clientX - this.#resize.startX) / this.#camera.zoom;
-      const dy = (event.clientY - this.#resize.startY) / this.#camera.zoom;
-      node.width = Math.max(CANVAS_MIN_SIZE, snap(this.#resize.width + dx));
-      node.height = Math.max(CANVAS_MIN_SIZE, snap(this.#resize.height + dy));
-      this.#renderLive();
+      this.#moveResize(event);
       return;
     }
     if (this.#drag && event.pointerId === this.#drag.pointerId && this.#doc) {
@@ -4628,7 +5068,9 @@ export class CanvasEngine {
       return;
     }
     if (this.#resize && event.pointerId === this.#resize.pointerId && this.#doc) {
+      const resize = this.#resize;
       this.#resize = null;
+      this.#handleTap = resize.moved ? null : [...resize.origin.keys()];
       this.#commitFromSource("input");
       return;
     }
@@ -5004,6 +5446,14 @@ export class CanvasEngine {
 
   #dblclick(event: MouseEvent): void {
     if (this.#readOnly || this.#nodeAt(event.target)) return;
+    // Su una maniglia della cornice della scelta: tutte le schede scelte
+    // prendono la misura del loro contenuto (T66). Con la cattura del
+    // puntatore il doppio clic su una maniglia arriva qui.
+    const tap = this.#takeHandleTap(event.target);
+    if (tap) {
+      this.#fitToContent(tap);
+      return;
+    }
     this.#addNode("text");
   }
 
@@ -5111,7 +5561,7 @@ export class CanvasEngine {
 
   #renderLive(): void {
     // Drag/resize updates moved nodes and connected edges without replacing cards.
-    const moved = this.#drag?.origin.keys() ?? this.#selection.values();
+    const moved = this.#drag?.origin.keys() ?? this.#resize?.origin.keys() ?? this.#selection.values();
     for (const id of moved) {
       const node = this.#doc?.nodes.find((n) => n.id === id);
       const el = this.#stage.querySelector<HTMLElement>(`[data-node="${CSS.escape(id)}"]`);
@@ -5119,9 +5569,11 @@ export class CanvasEngine {
         el.style.transform = `translate(${node.x}px, ${node.y}px)`;
         el.style.width = `${node.width}px`;
         el.style.height = `${node.height}px`;
+        markHandles(el, node, this.#camera.zoom);
       }
     }
     this.#drawEdges();
+    this.#syncSelectionFrame();
   }
 
   #render(): void {
@@ -5137,6 +5589,7 @@ export class CanvasEngine {
       this.#dropCards();
       this.#edgeLayer.replaceChildren();
       this.#stage.replaceChildren();
+      delete this.#stage.dataset.selection;
       const fallback = document.createElement("p");
       fallback.className = "canvas-large-fallback";
       fallback.textContent = t("canvas.too_large");
@@ -5151,6 +5604,7 @@ export class CanvasEngine {
     this.#drawEdges();
     this.#placeCards(this.#doc.nodes);
     this.#paintInk();
+    this.#syncSelectionFrame();
     this.#viewport.dataset.canvasProtocol = "source";
     this.#refreshLive();
   }
@@ -5517,7 +5971,7 @@ export class CanvasEngine {
     // grande) va via; l'inchiostro libero resta, `#paintInk` lo rimette in cima.
     const ours = new Set<Element>([...this.#cards.values()].map((entry) => entry.article));
     for (const child of [...this.#stage.children]) {
-      if (!ours.has(child) && !child.classList.contains("canvas-ink-board")) child.remove();
+      if (!ours.has(child) && !child.classList.contains("canvas-ink-board") && child !== this.#selectionFrame) child.remove();
     }
     const children = this.#stage.children;
     let index = 0;
@@ -5577,6 +6031,12 @@ export class CanvasEngine {
     });
     el.addEventListener("dblclick", (e) => {
       e.stopPropagation();
+      // Il doppio clic su una maniglia adatta la scheda al contenuto (T66).
+      const tap = this.#takeHandleTap(e.target);
+      if (tap) {
+        this.#fitToContent(tap);
+        return;
+      }
       // Dentro la scheda attiva il doppio clic è del contenuto (una parola).
       if (this.#activeId === id) return;
       const kind = this.#hasLiveContent(entry) ? cardKindOf(entry.node) : null;
@@ -5615,18 +6075,17 @@ export class CanvasEngine {
     if (entry.title.textContent !== title) entry.title.textContent = title;
     entry.connect.setAttribute("aria-label", t("canvas.connect", { id: node.id }));
     this.#syncPorts(el);
+    // Le quattro maniglie (T66): in sola lettura nessuna.
     if (this.#readOnly) {
-      entry.resize?.remove();
+      for (const handle of entry.resize ?? []) handle.remove();
       entry.resize = null;
     } else if (!entry.resize) {
-      const resize = document.createElement("div");
-      resize.className = "canvas-resize";
-      resize.dataset.resize = node.id;
-      resize.setAttribute("aria-hidden", "true");
+      const handles = RESIZE_CORNERS.map((corner) => resizeHandle(corner, node.id));
       // Dopo il corpo, prima dell'inchiostro della scheda: come quando nasce.
-      entry.body.after(resize);
-      entry.resize = resize;
+      entry.body.after(...handles);
+      entry.resize = handles;
     }
+    markHandles(el, node, this.#camera.zoom);
     if (!withBody) return;
     const kind = cardKindOf(node);
     const cards = this.#options.cards;

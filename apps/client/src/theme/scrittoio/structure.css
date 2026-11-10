@@ -3293,6 +3293,63 @@ body {
   touch-action: none;
 }
 
+/* Le quattro maniglie agli angoli della scheda scelta (T66): l'area di presa
+   è di 20 px sullo schermo a ogni ingrandimento, centrata sull'angolo; il
+   segno dentro è di 10 px. */
+.canvas-resize[data-corner] {
+  z-index: 1;
+  right: auto;
+  bottom: auto;
+  width: calc(20px / var(--canvas-zoom, 1));
+  height: calc(20px / var(--canvas-zoom, 1));
+}
+.canvas-resize[data-corner="nw"],
+.canvas-resize[data-corner="sw"] {
+  left: calc(-10px / var(--canvas-zoom, 1));
+}
+.canvas-resize[data-corner="ne"],
+.canvas-resize[data-corner="se"] {
+  left: calc(100% - 10px / var(--canvas-zoom, 1));
+}
+.canvas-resize[data-corner="nw"],
+.canvas-resize[data-corner="ne"] {
+  top: calc(-10px / var(--canvas-zoom, 1));
+}
+.canvas-resize[data-corner="sw"],
+.canvas-resize[data-corner="se"] {
+  top: calc(100% - 10px / var(--canvas-zoom, 1));
+}
+.canvas-resize[data-corner="nw"],
+.canvas-resize[data-corner="se"] {
+  cursor: nwse-resize;
+}
+.canvas-resize[data-corner="ne"],
+.canvas-resize[data-corner="sw"] {
+  cursor: nesw-resize;
+}
+
+/* Le maniglie si prendono solo dove si vedono: sulla scheda scelta, e con
+   più schede scelte solo sulla cornice della scelta, che scala tutto. Sotto
+   24 px sullo schermo resta quella in basso a destra (`data-handles="one"`). */
+.canvas-node:not(.selected) > .canvas-resize[data-corner],
+.canvas-stage[data-selection="many"] > .canvas-node > .canvas-resize[data-corner],
+.canvas-node[data-handles="one"] > .canvas-resize:not([data-corner="se"]),
+.canvas-selection-frame[data-handles="one"] > .canvas-resize:not([data-corner="se"]) {
+  display: none;
+}
+
+.canvas-selection-frame {
+  position: absolute;
+  top: 0;
+  left: 0;
+  box-sizing: border-box;
+  pointer-events: none;
+}
+
+.canvas-selection-frame > .canvas-resize {
+  pointer-events: auto;
+}
+
 .canvas-edge-hit {
   pointer-events: stroke;
   stroke-width: 16;

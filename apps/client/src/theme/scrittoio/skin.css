@@ -8921,23 +8921,32 @@ kbd,
   font: inherit;
   line-height: var(--leading-normal);
 }
-/* La presa per ridimensionare: due tratti nell'angolo, visibili quando la
-   scheda è sotto il puntatore o scelta. */
+/* Le quattro maniglie (T66): un quadratino col filo d'accento, di 10 px
+   sullo schermo a ogni zoom, solo sulla scheda scelta e sulla cornice della
+   scelta. */
 .canvas-resize::after {
   position: absolute;
-  right: 4px;
-  bottom: 4px;
-  width: 6px;
-  height: 6px;
-  border-right: 1.5px solid var(--outline);
-  border-bottom: 1.5px solid var(--outline);
-  border-bottom-right-radius: 2px;
+  top: 50%;
+  left: 50%;
+  width: calc(10px / var(--canvas-zoom, 1));
+  height: calc(10px / var(--canvas-zoom, 1));
+  box-sizing: border-box;
+  border: calc(1.5px / var(--canvas-zoom, 1)) solid var(--accent);
+  border-radius: calc(3px / var(--canvas-zoom, 1));
+  background: var(--bg-elev);
   content: "";
   opacity: 0;
+  transform: translate(-50%, -50%);
 }
-.canvas-node:hover > .canvas-resize::after,
-.canvas-node.selected > .canvas-resize::after {
+.canvas-node.selected > .canvas-resize::after,
+.canvas-selection-frame > .canvas-resize::after {
   opacity: 1;
+}
+/* La cornice di più schede scelte: un tratteggio d'accento attorno a tutte,
+   come il fantasma del rilascio; le sue maniglie scalano la scelta. */
+.canvas-selection-frame {
+  border: calc(1px / var(--canvas-zoom, 1)) dashed var(--accent);
+  border-radius: var(--radius-menu);
 }
 .canvas-edge-hit {
   fill: none;
