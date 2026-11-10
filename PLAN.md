@@ -3851,7 +3851,7 @@ modifica, il JSON non valido, `id` e `type` vietati, il campo sconosciuto
 che resta; le foto del banco somigliano al prototipo.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/canvas
-Stato: [ ] da fare
+Stato: [x] fatto (2026-11-10), in due passate. Differenze: `engine.ts` e `surface.ts` toccati (prima «Non toccare»): il motore dà `selection()`, `doc()` e `commitPatches()`, che passa da `#commit`, e la superficie mostra in produzione «Scheda» e «Fili»; «Avanzate» è una parte richiudibile dentro «Scheda», come nel prototipo; il file è in sola lettura e «Sostituisci il file…» arriva con T70; il colore del filo non è in «Fili». Le foto vengono dal banco del kit, non dalla shell
 
 ## T60 · Cerca nella lavagna
 

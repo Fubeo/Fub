@@ -59,6 +59,7 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-10 · n6 · T59 diviso in due passate (opzione c): prima l'ispettore con una porta finta, poi, dopo T69, tre metodi pubblici del motore (`selection()`, `doc()`, `commitPatches()`) e il cablaggio nella superficie; «Avanzate» resta dentro «Scheda» come nel prototipo · Perché: il motore era in mano a T69 e T53; un commit e un annulla passano da `#commit`, senza una seconda strada per scrivere.
 - 2026-11-10 · n6 · T72: «Spargi le pagine…» resta accesa finché un PDF non si è rivelato illeggibile, poi si spegne col perché; la soglia della conferma (200) conta le pagine scelte · Perché: il menu si costruisce senza aspettare pdf.js, e la conferma serve a non creare troppe schede, non a giudicare il file.
 - 2026-11-10 · n6 · T91 aggiunto al piano dopo il collaudo dell'area 12, e fatto: i gruppi stanno sempre sotto i fili, le prese di riattacco sopra i punti, la scheda PDF chiude il task di pdf.js 6 · Perché: erano difetti visti sulla 1432; l'ordine del file decideva se un gruppo copriva i fili, e un gruppo sotto è ciò che la persona si aspetta.
 - 2026-11-10 · n6 · L'utente sceglie (a) per la misura e l'allineamento del testo lasciati fuori da T50: un task nuovo, T92, con un campo `fub:text` accanto a `fub:ink` e `fub:parts` · Perché: il formato resta JSON Canvas, che Obsidian legge, e il campo nuovo sta fra quelli che gli altri programmi conservano o ignorano.
