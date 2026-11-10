@@ -1057,6 +1057,18 @@ export function mountDocumentController(lifetime: Lifetime, d: DocumentDeps, pan
       await openDocumentBeside(target.doc, "row");
       if (target.at) await reveal(target.doc, { span: target.at.span });
     },
+    // Un link di una scheda della lavagna (N6 T57) porta al file del vault che
+    // risolve, come un link di una nota: `null` se non c'è (un link rotto). Chi
+    // sceglie se la scheda è già sulla lavagna lo decide la tela.
+    resolveCardLink: async (link, from) => {
+      const target = await resolvedReference(
+        link.kind === "wiki"
+          ? { kind: "wiki", value: { page: link.page, heading: link.heading, block: link.block } }
+          : { kind: "path", value: link.path },
+        from ?? activeDoc() ?? undefined,
+      );
+      return target?.doc ?? null;
+    },
     // «Sposta anche il file nel cestino»: lo stesso gesto dell'albero
     // (`note.trash`, la domanda del cestino di sistema, l'avviso con
     // «Annulla»). Se dopo il file c'è ancora, è rimasto: una domanda a cui si

@@ -6,7 +6,7 @@
 // vista che si rimonta quando il file torna.
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import type { SurfaceMenuItem } from "../core/editor-menu";
-import { CARD_PAUSE_MS, CanvasEngine, WHEEL_SETTLE_MS, type CanvasCards, type CanvasChange, type CanvasEngineOptions } from "./engine";
+import { CARD_PAUSE_MS, CanvasEngine, WHEEL_SETTLE_MS, type CanvasCards, type CanvasChange, type CanvasEngineOptions, type CardLinkRef } from "./engine";
 import {
   createCardRegistry,
   LIVE_ZOOM_MIN,
@@ -22,6 +22,7 @@ import {
 import type { CanvasNode } from "./model";
 import { canvasCoreReady, openCoreNow } from "./wasm/core";
 import { canvasViewKey, createCanvasViewMemory } from "./view-state";
+import { setReducedMotionPreference } from "../../theme/reduced-motion";
 
 beforeAll(async () => {
   await canvasCoreReady();
@@ -1706,5 +1707,268 @@ describe("riaprire dove eri (T36)", () => {
     await settle();
     expect(read).not.toHaveBeenCalled();
     expect(store.writes).toEqual([]);
+  });
+});
+
+/**
+ * Una nota con i link che la resa Markdown mette nelle schede: un wikilink con
+ * o senza sezione (`a.wikilink`), un percorso del vault (`a.internal-path`), un
+ * link rotto e un indirizzo web. La montatura (`followed`) li segue solo se la
+ * tela non li ha presi prima: T57 prende quelli che portano a un file.
+ */
+function linkNoteRenderer() {
+  const followed: string[] = [];
+  const renderer: CardRenderer = {
+    kinds: ["note"],
+    mount(node: CanvasNode, host: HTMLElement): CardView {
+      const content = document.createElement("div");
+      content.className = "link-note";
+      content.innerHTML = [
+        '<a class="wikilink" href="#" data-link="wiki" data-wikilink-page="Altra">Altra</a>',
+        '<a class="wikilink" href="#" data-link="sec" data-wikilink-page="Altra" data-wikilink-heading="Titolo">Altra#Titolo</a>',
+        '<a class="internal-path" href="Altra.md" data-link="path" data-path="Altra.md">Altra.md</a>',
+        '<a class="wikilink" href="#" data-link="rotta" data-wikilink-page="Rotta">Rotta</a>',
+        '<a href="https://example.com" data-link="web">web</a>',
+        '<p class="link-text">testo</p>',
+      ].join("");
+      content.addEventListener("click", (event) => {
+        if (event.defaultPrevented) return;
+        const anchor = event.target instanceof Element ? event.target.closest("a") : null;
+        if (!anchor) return;
+        event.preventDefault();
+        followed.push(`${node.id}:${anchor.dataset.link}`);
+      });
+      host.append(content);
+      const enterable = (node.file ?? "").endsWith(".md");
+      return {
+        setMode: () => {},
+        enter: () => enterable,
+        leave: () => {},
+        destroy: () => {},
+      };
+    },
+  };
+  return { renderer, followed };
+}
+
+/**
+ * La lavagna di prova dei link. Il fit la inquadra con `n` sopra a sinistra:
+ * `near` è la scheda di `Altra.md` più vicina al centro della vista, `far` la
+ * più lontana, e ha la sezione `Titolo` nel suo `subpath`.
+ */
+const LINK_BOARD = [
+  { id: "n", type: "file", x: 0, y: 0, width: 200, height: 100, file: "Note/idea.md" },
+  { id: "far", type: "file", x: 800, y: 0, width: 200, height: 100, file: "Altra.md", subpath: "#Titolo" },
+  { id: "near", type: "file", x: 0, y: 250, width: 200, height: 200, file: "Altra.md" },
+];
+
+/** La porta di risoluzione del test: `targets` dice a quale file di vault va ogni link (`null`: un link rotto). */
+function resolving(targets: Record<string, string | null>) {
+  return vi.fn(async (link: CardLinkRef): Promise<string | null> => {
+    const key = link.kind === "wiki" ? link.page : link.path;
+    return key in targets ? targets[key]! : null;
+  });
+}
+
+/** L'ancora `data-link="name"` della scheda `id`. */
+function anchorOf(host: HTMLElement, id: string, name: string): HTMLElement {
+  return card(host, id).querySelector<HTMLElement>(`a[data-link="${name}"]`)!;
+}
+
+/** La camera che la lavagna ha scritto sulla scena: `translate(x, y) scale(zoom)`. */
+function cameraValues(host: HTMLElement): { x: number; y: number; zoom: number } {
+  const match = /translate\((-?[\d.e-]+)px, (-?[\d.e-]+)px\) scale\(([\d.e-]+)\)/.exec(cameraOf(host));
+  if (!match) throw new Error(`camera non letta: ${cameraOf(host)}`);
+  return { x: Number(match[1]), y: Number(match[2]), zoom: Number(match[3]) };
+}
+
+describe("seguire un link (T57)", () => {
+  afterEach(() => {
+    setReducedMotionPreference(false);
+    vi.useRealTimers();
+  });
+
+  it("Ctrl+clic su un link a una nota con una scheda sulla lavagna: la tela la prende, la scheda lampeggia e la montatura non segue niente", async () => {
+    const { renderer, followed } = linkNoteRenderer();
+    const { engine, host, viewport } = mounted(boardSource(LINK_BOARD), {
+      cards: cardsOf(renderer),
+      resolveCardLink: resolving({ Altra: "Altra.md" }),
+    });
+    const click = clickOn(viewport, anchorOf(host, "n", "wiki"), { ctrlKey: true });
+    await settle();
+    expect(click.defaultPrevented).toBe(true);
+    expect(followed).toEqual([]);
+    // Ctrl+clic su un link non sceglie la scheda, come prima.
+    expect(selectedOf(host)).toEqual([]);
+    expect(card(host, "near").dataset.cardFlash).toBe("pulse");
+    expect(card(host, "far").dataset.cardFlash).toBeUndefined();
+    engine.destroy();
+  });
+
+  it("il salto vola alla scheda, la mette al centro della vista e Indietro torna dov'era; col movimento ridotto il lampo resta fermo", async () => {
+    setReducedMotionPreference(true);
+    const { renderer } = linkNoteRenderer();
+    const { engine, host, viewport } = mounted(boardSource(LINK_BOARD), {
+      cards: cardsOf(renderer),
+      resolveCardLink: resolving({ Altra: "Altra.md" }),
+    });
+    const before = cameraOf(host);
+    clickOn(viewport, anchorOf(host, "n", "wiki"), { ctrlKey: true });
+    await settle();
+    expect(card(host, "near").dataset.cardFlash).toBe("still");
+    // La vista di prova è 800 × 600; il centro di `near` (100, 350) sta al centro.
+    const view = cameraValues(host);
+    expect(view.x + 100 * view.zoom).toBeCloseTo(400, 3);
+    expect(view.y + 350 * view.zoom).toBeCloseTo(300, 3);
+    // È un salto come gli altri: Indietro lo disfa, e riporta alla vista di prima.
+    expect(engine.jumpBack()).toBe(true);
+    expect(cameraOf(host)).toBe(before);
+    expect(engine.jumpForward()).toBe(true);
+    expect(cameraValues(host).x).toBeCloseTo(view.x, 6);
+    engine.destroy();
+  });
+
+  it("fra più schede dello stesso file vince la più vicina alla vista, e una con la sezione del link vince su tutte", async () => {
+    setReducedMotionPreference(true);
+    const { renderer } = linkNoteRenderer();
+    const { engine, host, viewport } = mounted(boardSource(LINK_BOARD), {
+      cards: cardsOf(renderer),
+      resolveCardLink: resolving({ Altra: "Altra.md" }),
+    });
+    clickOn(viewport, anchorOf(host, "n", "wiki"), { ctrlKey: true });
+    await settle();
+    expect(card(host, "near").dataset.cardFlash).toBe("still");
+    expect(card(host, "far").dataset.cardFlash).toBeUndefined();
+    // Con la sezione `Titolo` la scheda di `far` ce l'ha nel subpath: vince anche se è lontana.
+    clickOn(viewport, anchorOf(host, "n", "sec"), { ctrlKey: true });
+    await settle();
+    expect(card(host, "far").dataset.cardFlash).toBe("still");
+    // Un solo lampo alla volta: quello di `near` si spegne.
+    expect(card(host, "near").dataset.cardFlash).toBeUndefined();
+    engine.destroy();
+  });
+
+  it("un percorso del vault segue la stessa strada del wikilink", async () => {
+    setReducedMotionPreference(true);
+    const { renderer, followed } = linkNoteRenderer();
+    const resolve = resolving({ "Altra.md": "Altra.md" });
+    const { engine, host, viewport } = mounted(boardSource(LINK_BOARD), { cards: cardsOf(renderer), resolveCardLink: resolve });
+    clickOn(viewport, anchorOf(host, "n", "path"), { ctrlKey: true });
+    await settle();
+    expect(resolve).toHaveBeenCalledWith({ kind: "path", path: "Altra.md" }, "Note/idea.md");
+    expect(followed).toEqual([]);
+    // Un percorso non ha sezione: vince la più vicina, come il wikilink senza `#`.
+    expect(card(host, "near").dataset.cardFlash).toBe("still");
+    expect(card(host, "far").dataset.cardFlash).toBeUndefined();
+    engine.destroy();
+  });
+
+  it("un link a una nota che non è sulla lavagna si apre accanto, col wikilink com'è, e la vista non si muove", async () => {
+    setReducedMotionPreference(true);
+    const { renderer, followed } = linkNoteRenderer();
+    const onOpenWikilinkBeside = vi.fn();
+    const onOpenWikilink = vi.fn();
+    const { engine, host, viewport } = mounted(boardSource(LINK_BOARD), {
+      cards: cardsOf(renderer),
+      resolveCardLink: resolving({ Altra: "Lontana.md" }),
+      onOpenWikilinkBeside,
+      onOpenWikilink,
+    });
+    const before = cameraOf(host);
+    clickOn(viewport, anchorOf(host, "n", "sec"), { ctrlKey: true });
+    await settle();
+    expect(onOpenWikilinkBeside).toHaveBeenCalledWith("Altra", "Titolo", null);
+    expect(onOpenWikilink).not.toHaveBeenCalled();
+    expect(followed).toEqual([]);
+    expect(cameraOf(host)).toBe(before);
+    expect(card(host, "far").dataset.cardFlash).toBeUndefined();
+    expect(engine.jumpBack()).toBe(false);
+    engine.destroy();
+  });
+
+  it("un link rotto va dove va quello delle note: al riquadro, che per un wikilink crea la nota che manca", async () => {
+    const { renderer } = linkNoteRenderer();
+    const onOpenWikilinkBeside = vi.fn();
+    const onOpenWikilink = vi.fn();
+    const { engine, host, viewport } = mounted(boardSource(LINK_BOARD), {
+      cards: cardsOf(renderer),
+      resolveCardLink: resolving({}),
+      onOpenWikilinkBeside,
+      onOpenWikilink,
+    });
+    clickOn(viewport, anchorOf(host, "n", "rotta"), { ctrlKey: true });
+    await settle();
+    expect(onOpenWikilink).toHaveBeenCalledWith("Rotta", null, null);
+    expect(onOpenWikilinkBeside).not.toHaveBeenCalled();
+    engine.destroy();
+  });
+
+  it("dentro la scheda attiva un clic su un link a un file lo segue la tela; un indirizzo web resta alla montatura", async () => {
+    const { renderer, followed } = linkNoteRenderer();
+    const { engine, host, viewport } = mounted(boardSource(LINK_BOARD), {
+      cards: cardsOf(renderer),
+      resolveCardLink: resolving({ Altra: "Altra.md" }),
+    });
+    // Due clic sul testo: il primo sceglie, il secondo entra.
+    clickOn(viewport, card(host, "n").querySelector<HTMLElement>(".link-text")!);
+    clickOn(viewport, card(host, "n").querySelector<HTMLElement>(".link-text")!);
+    expect(activeOf(host)).toEqual(["n"]);
+    clickOn(viewport, anchorOf(host, "n", "wiki"));
+    await settle();
+    expect(followed).toEqual([]);
+    expect(card(host, "near").dataset.cardFlash).toBe("pulse");
+    clickOn(viewport, anchorOf(host, "n", "web"));
+    expect(followed).toEqual(["n:web"]);
+    engine.destroy();
+  });
+
+  it("senza la porta di risoluzione i link delle schede si seguono come prima, dalla montatura", () => {
+    const { renderer, followed } = linkNoteRenderer();
+    const { engine, host, viewport } = mounted(boardSource(LINK_BOARD), { cards: cardsOf(renderer) });
+    clickOn(viewport, anchorOf(host, "n", "wiki"), { ctrlKey: true });
+    expect(followed).toEqual(["n:wiki"]);
+    expect(card(host, "near").dataset.cardFlash).toBeUndefined();
+    engine.destroy();
+  });
+
+  it("la lavagna chiusa mentre la shell risolve il link non apre né salta niente", async () => {
+    const { renderer } = linkNoteRenderer();
+    let answer: (doc: string | null) => void = () => {};
+    const resolve = vi.fn(() => new Promise<string | null>((done) => {
+      answer = done;
+    }));
+    const onOpenWikilinkBeside = vi.fn();
+    const { engine, host, viewport } = mounted(boardSource(LINK_BOARD), {
+      cards: cardsOf(renderer),
+      resolveCardLink: resolve,
+      onOpenWikilinkBeside,
+    });
+    clickOn(viewport, anchorOf(host, "n", "sec"), { ctrlKey: true });
+    engine.destroy();
+    answer("Lontana.md");
+    await settle();
+    expect(resolve).toHaveBeenCalledTimes(1);
+    expect(onOpenWikilinkBeside).not.toHaveBeenCalled();
+  });
+
+  it("il lampo dura un momento e il timer lo toglie; distruggere la lavagna lo ferma senza errori", async () => {
+    vi.useFakeTimers();
+    const { renderer } = linkNoteRenderer();
+    const { engine, host, viewport } = mounted(boardSource(LINK_BOARD), {
+      cards: cardsOf(renderer),
+      resolveCardLink: resolving({ Altra: "Altra.md" }),
+    });
+    clickOn(viewport, anchorOf(host, "n", "wiki"), { ctrlKey: true });
+    await settle();
+    expect(card(host, "near").dataset.cardFlash).toBe("pulse");
+    vi.advanceTimersByTime(999);
+    expect(card(host, "near").dataset.cardFlash).toBe("pulse");
+    vi.advanceTimersByTime(1);
+    expect(card(host, "near").dataset.cardFlash).toBeUndefined();
+    clickOn(viewport, anchorOf(host, "n", "wiki"), { ctrlKey: true });
+    await settle();
+    expect(card(host, "near").dataset.cardFlash).toBe("pulse");
+    engine.destroy();
+    expect(() => vi.advanceTimersByTime(2000)).not.toThrow();
   });
 });
