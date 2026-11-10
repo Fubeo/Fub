@@ -244,9 +244,13 @@ lati è D6, v2).
   puntatore, collegata e già in scrittura: un commit e un solo `Ctrl+Z`. Un clic
   fermo su un punto, o il rilascio sulla scheda di partenza, non fanno niente.
   `Esc` durante il tiro lo lascia senza traccia.
-- **Riattaccare.** Il filo scelto ha due prese (`.canvas-edge-reconnect`): una
-  trascinata su un'altra scheda cambia scheda e lato; nel vuoto il filo torna
-  dov'era e niente si cancella.
+- **Riattaccare.** Il filo scelto ha due prese (`.canvas-edge-reconnect`, nel
+  livello `.canvas-edge-handles` sopra le schede: la presa vince sul punto della
+  scheda che la copre): una trascinata su un'altra scheda cambia scheda e lato;
+  nel vuoto il filo torna dov'era e niente si cancella.
+- **Strati.** I fili stanno nello stage, sotto le schede. Un gruppo sta sotto
+  ogni filo, quindi un filo che attraversa un gruppo si vede sopra il suo
+  sfondo. Le schede stanno sopra i fili, nell'ordine del file.
 - **Prendere.** Un filo si prende entro 8 px sullo schermo, a ogni zoom, e
   al passaggio si scurisce (`data-hover`); la ricerca guarda solo i fili in
   vista. Sopra una scheda il filo vince solo dove si vede, fuori dalla scheda;
