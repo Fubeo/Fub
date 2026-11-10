@@ -62,6 +62,7 @@ use fub_abi::{
 use fub_features::{VersionRef, VersionStore, VERSIONING_ID};
 use fub_kernel::host::authorize_path;
 use fub_kernel::os_trash::{FallbackReason, OsTrashBackend, OsTrashReceipt, TrashVia};
+use fub_kernel::same_content::SameContent;
 use fub_kernel::{
     Capability, Guard, JournalRead, MachineSettings, MountRegistry, MountRoute, ReadOnly,
     Subscription, SystemLocale, ViewStates, Workspace,
@@ -3967,6 +3968,20 @@ impl Host {
     ) -> Result<Revision, PluginError> {
         let workspace = self.with_session(vault, |session| session.workspace.clone())?;
         Self::write_bytes_in(&workspace, id, bytes, expected)
+    }
+
+    /// Cerca fra i file del vault quello che ha questi byte (`None`: il vault
+    /// corrente), anche con un altro nome: vedi [`SameContent`]. Il vault si
+    /// prende sotto la custodia per un attimo, e il confronto si fa fuori da essa,
+    /// sui byte già in memoria.
+    pub fn same_content(
+        &self,
+        vault: Option<&str>,
+        bytes: &[u8],
+    ) -> Result<SameContent, PluginError> {
+        let prepared =
+            self.read_workspace(vault, |workspace| Ok(workspace.prepare_same_content()))?;
+        Ok(prepared.invoke(bytes))
     }
 
     /// Scrive la proiezione `source` di un documento di videoscrittura.
