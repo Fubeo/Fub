@@ -1728,7 +1728,15 @@ Fatto quando: `engine-cards.test.ts` prova lo stato, «Ritrova…» con un
 percorso scelto e annullato, «Togli», e il ritorno del file.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/canvas/engine-cards.test.ts
-Stato: [ ] da fare
+Stato: [x] fatto (2026-11-10). Differenze: `CanvasCards` ha `watch()`
+(la vista di una scheda mancante si smonta, quindi la tela ascolta da sé il
+ritorno del file); Canc e «Togli dalla lavagna» condividono
+`#removeNodes`; «Ritrova…» con un nome chiede tutto il vault e mette gli
+omonimi in testa (senza nome, come prima: 500 voci); `missing()` non vale
+per le schede di link. Una scelta di «Ritrova…» arrivata dopo che il file
+è tornato, o la scheda è cambiata, si scarta (un risultato vecchio non
+copre lo stato nuovo). Non guardato nel banco: i due pulsanti hanno la
+classe dei gesti di testo, l'aspetto lo dà T22.
 
 ## T17 · Il menu della scheda
 

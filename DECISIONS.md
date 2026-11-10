@@ -59,6 +59,12 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-10 · n6 · T16: se il file torna o la scheda cambia mentre
+  «Ritrova…» è aperto, la scelta si scarta. Perché: regola di CLAUDE.md,
+  un risultato vecchio non sovrascrive lo stato nuovo; il file tornato
+  rimonta già la scheda da sé. Primo task di un Haiku a effort xhigh:
+  diff pulito, un commento vecchio in `cards.ts` sistemato da me.
+
 - 2026-11-10 · n6 · T14 provato in un Chromium vero (link non seguiti
   fuori dalla scheda attiva, Ctrl+clic li segue, rotella dentro e fuori,
   Esc, visore dell'immagine, «Apri»): un difetto, corretto prima di
