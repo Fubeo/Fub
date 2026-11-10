@@ -5246,6 +5246,39 @@ revisione non ha errori aperti; l'utente ha detto sì al merge.
 Prova: gh pr checks 302; scripts/check.sh
 Stato: [ ] da fare
 
+## T91 · Tre difetti della lavagna visti dal collaudo
+
+Perché: il collaudo dell'area 12 (2026-11-10, `funzionalitarotte.md`) ha
+trovato sulla 1432 fili nascosti dallo sfondo dei gruppi, la presa di
+riattacco di un filo sotto i punti `.canvas-port` e una scheda PDF che non
+si smonta (`document.destroy is not a function`); più tre casi da capire:
+le schede di nota che dicono «Non riesco a mostrare», il doppio clic che
+apre il campo del percorso e la nota mancante senza «Ritrova…».
+Tocca: `apps/client/src/editors/canvas/engine.ts`,
+`apps/client/src/editors/canvas/engine.test.ts`,
+`apps/client/src/theme/scrittoio/structure.css`,
+`apps/client/src/media/pdf-view.ts`, `cards/pdf.test.ts`,
+`docs/reference/canvas-input.md`.
+Non toccare: il formato; i casi da capire si diagnosticano soltanto.
+Dipende da: T53
+Cosa fare:
+- I fili stanno sotto le schede ma sopra i gruppi, a prescindere
+  dall'ordine del file; le prese di riattacco stanno sopra i punti.
+- Smontare una scheda PDF chiude il task di pdf.js 6.
+- Diagnosi di «Non riesco a mostrare», del doppio clic e della nota
+  mancante.
+Fatto quando: un test per ogni difetto, rosso prima e verde dopo; le
+diagnosi nel rapporto.
+Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
+src/editors/canvas
+Stato: [x] fatto (2026-11-10). Differenze: i gruppi stanno sempre sotto i
+fili, prima contava l'ordine del file. Diagnosi: «Non riesco a mostrare»
+e la nota mancante senza «Ritrova…» vengono dall'ambiente del collaudo
+(`fub-ipc-collaudo.ts` manda `render_embed` all'host finto, che lancia un
+errore senza tipo), non dalla lavagna; il doppio clic che apre il campo
+del percorso su una nota mancante o illeggibile è vero nel prodotto e
+chiede una scelta all'utente.
+
 ## T92 · Misura e allineamento del testo
 
 Perché: il prototipo della riga delle opzioni (T26) dà al Testo la misura
