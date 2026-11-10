@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/logo/marcuzzo.svg" alt="Marcuzzo, il gufo di Fub che esce da una cartella" width="180">
+</p>
+
 # Fub
 
 Fub è un gestore della conoscenza **local-first**, un vero e proprio sistema
@@ -98,3 +102,5 @@ GitHub Issues; la cronologia resta in Git.
 
 Fub è distribuito, a scelta, con licenza
 [MIT](LICENSE-MIT) oppure [Apache-2.0](LICENSE-APACHE).
+Il nome «Fub» e il logo (Marcuzzo) non sono sotto queste licenze: vedi
+[`TRADEMARKS.md`](TRADEMARKS.md).
