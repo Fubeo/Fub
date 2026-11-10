@@ -59,6 +59,11 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-10 · n6 · T53: l'inerzia dopo uno spostamento viene solo dal dito, non dal
+  touchpad; + e − e lo zoom della banda non volano, volano i salti (0, Maiusc+1, Maiusc+2).
+  · Perché: il touchpad arriva come rotella e la tela non lo distingue dal mouse; un'inerzia
+  nostra raddoppierebbe quella del sistema. I passi piccoli col volo sembrano lenti.
+
 - 2026-11-10 · n6 · T66: la cornice di più schede scelte (non disegnata nel prototipo
   T25) è tratteggiata d'accento come il fantasma del rilascio, e i gruppi tengono le
   maniglie anche se il prototipo non le mostra. · Perché: il piano chiede la cornice, e

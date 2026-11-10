@@ -3582,7 +3582,12 @@ tenuto con ogni strumento e dentro una scheda in scrittura, il tasto
 centrale, lo scorrimento al bordo, l'inerzia e il movimento ridotto.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/canvas/engine.test.ts
-Stato: [ ] da fare
+Stato: [x] fatto (24637e8e2): zoom fra 0,05 e 4, + e − a passi di 1,25, 0 al 100% (`canvas.zoom_reset`),
+Maiusc+1 e Maiusc+2 con volo (subito col movimento ridotto) da un solo metodo `#jumpCamera`, pronto
+per T55 e T56; Spazio tenuto con ogni strumento (`data-space-pan`), tasto centrale, scorrimento al
+bordo per scheda, maniglia e filo, inerzia del dito; prove «spostare e ingrandire (T53)» in
+`engine.test.ts`, la sezione «Muoversi» in `canvas-input.md`. L'inerzia è solo del dito: il touchpad
+arriva come rotella, che ha già quella del sistema. Il rettangolo di scelta non c'è ancora.
 
 ## T54 · I livelli di dettaglio
 
