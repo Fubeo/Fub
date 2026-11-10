@@ -7,7 +7,7 @@
 > e `crates/fub-scene/src/classify.rs`, che leggono allo stesso modo; il
 > riepilogo e l'accessibilità in `scene/analysis.ts`,
 > `scene/accessibility.ts` e nei loro gemelli Rust; la scrittura in
-> `scene/serialize.ts`, le operazioni in `scene/engine.ts`, coi vettori di
+> `scene/serialize.ts`, le operazioni in `scene/engine/`, coi vettori di
 > prova da 84 a 88 ([operazioni sulla scena](scene-operations.md), §9);
 > l'SVG pulito in `crates/fub-scene/src/export/clean.rs`.
 

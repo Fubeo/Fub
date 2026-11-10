@@ -6,7 +6,7 @@
 > del disegno. Versione 1.
 > **Fonti autorevoli:** `apps/client/src/editors/spatial/scene/classify.ts`
 > e `analysis.ts`, con `crates/fub-scene/src/classify.rs` e `analysis.rs`, che
-> leggono allo stesso modo; le operazioni in `scene/engine.ts`, con i vettori
+> leggono allo stesso modo; le operazioni in `scene/engine/`, con i vettori
 > di prova da 65 a 73 ([operazioni sulla scena](scene-operations.md), §9);
 > l'indice in `crates/fub-format-svg/src/parse.rs`.
 
