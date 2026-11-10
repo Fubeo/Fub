@@ -7,7 +7,7 @@
 > **Fonti autorevoli:** `apps/client/src/editors/spatial/scene/classify.ts`
 > e `crates/fub-scene/src/classify.rs`, che leggono allo stesso modo; i
 > valori in `scene/values.ts` e `crates/fub-scene/src/values.rs`; la
-> scrittura in `scene/serialize.ts`, le operazioni in `scene/engine.ts`, con
+> scrittura in `scene/serialize.ts`, le operazioni in `scene/engine/`, con
 > i vettori di prova da 50 a 59, 63, 64, 76 e 77 ([operazioni sulla
 > scena](scene-operations.md), §9), il disegno in `painter/paint.ts`, e le
 > punte delle linee in `tools/tips.ts`, coi vertici in `scene/markers.ts`;
