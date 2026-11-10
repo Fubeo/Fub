@@ -127,8 +127,8 @@ parse (`crates/fub-kernel/tests/write_atomicity.rs`).
 |---|---|---|
 | WordCraft v0.10.0 | `vendor/wordcraft/` (6 crate) | `fub-format-rich` e il correttore di `fub-features` |
 | GridCraft v0.11.1 | `vendor/gridcraft/` (10 crate) | `fub-format-xlsx` |
-| VectorCraft | `tools/motori-prova/vettori/` | le prove; entra con K5 |
-| PhotoCraft, LightCraft | `tools/motori-prova/foto/`, `luce/` | le prove; entrano con K7 e K8 |
+| VectorCraft | `tools/motori-prova/vettori/` | le prove di K5 |
+| PhotoCraft, LightCraft | `tools/motori-prova/foto/`, `luce/` | le prove di K7 e K8 |
 | PdfCraft | `tools/motori-prova/pdf/` | le prove; il client usa pdf.js (`editors/media/pdf-view.ts`) |
 
 Le copie in `vendor/` sono derivati: upstream a un commit preciso più le

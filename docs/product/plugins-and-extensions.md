@@ -103,30 +103,12 @@ Un componente WASM non riceve filesystem o rete direttamente. Le host function
 inoltrano a un `HostApi` già protetto. Le famiglie non linkate rendono
 impossibile il mount e vengono nominate nell'errore.
 
-## Stato del runtime WASM
+Lo stato del runtime WASM (le capacità consegnate in `main`) è in
+[stato del progetto](../project/status.md).
 
-In `main` sono consegnati:
-
-- caricamento e istanziazione di un componente;
-- manifest e lifecycle `Plugin`;
-- `CommandProvider`, `FormatProvider`, `ViewProvider` e `GridBytesProvider`
-  nei casi esercitati;
-- `IndexProvider` ed `EventHandler` inbound reali, con feed, query, flush,
-  close, `up_to_date`, reconcile e consegna delle notifiche nello stesso
-  registro del nativo;
-- lettura del modello ed eventi host;
-- inventario macchina, installazione, consenso, enabled/disabled, restart e
-  remove tramite il percorso desktop;
-- catalogo firmato con installazione, aggiornamento, rollback e revoca;
-- errori e permessi tipizzati;
-- timeout a epoche e limite di memoria;
-- validazione della UI non fidata, teardown e parità nativo/WASM nei casi
-  coperti.
-
-Anche un provider consegnato non è montato automaticamente: capability dichiarata, consenso
-`granted`, scelta `enabled` e capability effettiva del `Guard` restano fatti
-distinti. Il percorso è consegnato in `main`; le famiglie ancora differite
-restano elencate nella pagina di stato.
+Anche un provider consegnato non è montato automaticamente: capability
+dichiarata, consenso `granted`, scelta `enabled` e capability effettiva del
+`Guard` restano fatti distinti.
 
 ## Compatibilità
 

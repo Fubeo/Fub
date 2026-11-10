@@ -21,7 +21,7 @@
 ## Stato e progetto (`project/`)
 
 - Dove siamo, qual è l'ordine di lavoro e come funziona il rilascio? → [project/status.md](../project/status.md)
-- Come è andata la milestone M5 (runtime WASM dei plugin) consegnata in `main`? → [project/m5-wasm-runtime.md](../project/m5-wasm-runtime.md)
+
 
 ## Misure (`misure/`)
 

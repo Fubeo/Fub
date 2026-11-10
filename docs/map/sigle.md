@@ -48,7 +48,7 @@ Definite nella tabella «L'ordine di lavoro» di
 
 | Sigla | Che cos'è | Dove vive |
 |---|---|---|
-| M5 | milestone #5: il runtime WASM dei plugin, consegnato in `main` | `architecture/plugin-runtime.md`; la retrospettiva era in `project/m5-wasm-runtime.md` |
+| M5 | milestone #5: il runtime WASM dei plugin, consegnato in `main` | `architecture/plugin-runtime.md` |
 | G3 | tranche/certificazione citata in `architecture/plugin-runtime.md` e nelle issue | non tracciata in status.md |
 | S1–S3 | scenari del banco WebView (S1 battuta, S2 cambio nota, S3 pan/zoom lavagna) | `development/webview-measurements.md:35-37`, misure in `misure/` |
 | T1–T42 | task in cui un piano spezza il lavoro (`PLAN.md` sul ramo `piano/<slug>`) | `.claude/skills/pianifica/PLAN.modello.md`; rami `wip/n6-t42` ecc. |

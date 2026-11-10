@@ -1,6 +1,6 @@
 # Stato del progetto
 
-> **Aggiornato al 31 ottobre 2026.**
+> **Aggiornato al 10 novembre 2026.**
 > **Per chi:** chi apre una sessione e deve sapere che cosa esiste, che cosa
 > gira e che cosa viene dopo.
 > **Risultato:** partire dal presente, non dalla cronologia.
@@ -20,7 +20,7 @@
   FubDraw con l'[ADR 0231](../decisions/0231-la-chiusura-di-fubdraw.md) e
   il server MCP con l'[ADR 0232](../decisions/0232-il-server-mcp-di-fub.md).
   Il tag `fubdraw-completo` su `main` conserva l'ultimo FubDraw intero.
-- **In corso, K0: le misure dei motori** (ramo `fase/k0-misure`). Le sei
+- **In corso, K0: le misure dei motori**. Le sei
   prove in `tools/motori-prova/` (VectorCraft, PdfCraft, PhotoCraft,
   LightCraft, WordCraft, GridCraft) misurano peso, RAM, tempi e librerie
   doppie; lo scenario R1 misura la memoria nella WebView vera dal banco
@@ -66,7 +66,7 @@ dell'unione.
 | N2 · Server MCP | `fub-cli mcp`, stdio e JSON-RPC | conformità, conflitti senza perdite, radici di scrittura | in pila (#268) |
 | K0 · Misure e prove | i sei motori misurati da soli | [misura di K0](../misure/2026-10-31-motori-linux-ryzen.md), tetti in `budgets.json`, P0 passato | in corso |
 | K1 · K2 · Componenti | il modello a componenti e la sua pagina | nessun attivo con un requisito spento; il profilo al primo avvio | da fare |
-| K3 · Strato dei motori | `fub-motori`: registro pigro e servizi comuni | RAM che torna dopo «chiudi tutto»; avvio invariato | da fare |
+| K3 · Strato dei motori | `fub-motori`: registro pigro e servizi comuni | RAM che torna dopo «chiudi tutto»; avvio invariato | cancello misurato il 2026-11-02 e 2026-11-04, non passato per intero su R1 — [misura](../misure/2026-11-02-k3-motori-server-di-fub.md) |
 | P1 · Motore dei PDF | PdfCraft sotto il visore di oggi | alla pari o meglio di pdf.js sul corpus | da fare |
 | N3 · N4 · N7 | logica in Rust, inchiostro su tutto, file Craft | le fixture di parità; l'inchiostro segue le schede | da fare |
 | K5 · Il disegno | VectorCraft come motore, la penna di Fub guida | il corpus senza perdite visibili; `bench:ink` invariato | da fare |
@@ -98,7 +98,9 @@ supportate; documentazione di avvio coerente col prodotto.
 - vault local-first: revisioni, bozze, cestino, versioning con snapshot
   globale offline e ripristino;
 - ricerca full-text, link, backlink, Graph View con gate di memoria e
-  [budget prestazionali](../product/performance-budget.md);
+  [budget prestazionali](../product/performance-budget.md); criteri di
+  accettazione della Graph View consegnati e chiusi (SHA `4383a7c9`, CI #808 e
+  #809 verdi, gate a 16 finestre superato in esecuzioni consecutive);
 - superfici condivise per documento (`DocumentSession` e registro delle
   superfici), con la versione 2 del protocollo dei fogli a byte e la barra
   dei fogli sopra la facciata di GridCraft (ADR 0219);
@@ -108,8 +110,10 @@ supportate; documentazione di avvio coerente col prodotto.
   l'editor ridotto ai due spazi di lavoro (ADR 0231 in pila);
 - la finestra Scrittoio, i temi installabili (`theme-1`, `theme-2`) e il
   banco visuale con a11y;
-- runtime WASM dei plugin (M5): capability, catalogo firmato, limiti,
-  [retrospettiva](m5-wasm-runtime.md);
+- runtime WASM dei plugin (M5): capability, catalogo firmato, limiti;
+  `IndexProvider` ed `EventHandler` inbound presenti; i limiti non promessi
+  (nessuna quota assoluta CPU/RAM di processo, vedi #57 e #58) sono in
+  [runtime dei plugin](../architecture/plugin-runtime.md);
 - automazione locale: CLI con REPL, `fub://`, clipper del browser, canale di
   controllo.
 
@@ -119,6 +123,8 @@ supportate; documentazione di avvio coerente col prodotto.
   esclusa dalla prima release; resta OPEN come lavoro futuro. Watcher,
   catch-up, rejoin e sincronizzazione fra superfici restano capacità locali.
   Rientra in scope soltanto con una capacità end-to-end dimostrata.
+- Database, collaborazione, publishing, AI e marketplace non sono capacità
+  consegnate.
 - [#57](https://github.com/Fubeo/Fub/issues/57) e
   [#58](https://github.com/Fubeo/Fub/issues/58): follow-up WASM esplicitamente
   differiti (provider in ingresso, quote assolute CPU/RAM di processo).
@@ -139,7 +145,6 @@ collegamenti alle PR e, se un cancello è passato, i numeri in
 
 ## Fonti
 
-- [M5 — retrospettiva](m5-wasm-runtime.md)
 - [Changelog](../../CHANGELOG.md)
 - [Issue aperte](https://github.com/Fubeo/Fub/issues)
 - [La mappa del repository](../map/repo.md)

@@ -1,7 +1,6 @@
 # Criteri di accettazione della Graph View
 
 > **Ambito:** scala, lifecycle e teardown della Graph View.
-> **Stato:** criteri consegnati e chiusi con la consegna integrata.
 
 I numeri e le condizioni prestazionali sono definiti nel
 [budget prestazionale](performance-budget.md). Questa pagina separa i controlli
@@ -45,23 +44,12 @@ Le fixture ammesse hanno digest `eeeacc27` per 2k/seed 6 e `abcf614b` per
 Il timeout di sicurezza del runner resta 30 s per campione. Non è un budget di
 frame e non sostituisce la review dei percentili.
 
-## Evidenza corrente
+## Evidenza
 
-Lo SHA applicativo `4383a7c9d54b1e6557d070501e5ad998224ff294` ha tre
-distribuzioni confrontabili: locale, CI push e CI pull request. I comandi storici
-2k/10k hanno restituito `pass`, heap complete e resource delta `0`; il gate
-prolungato a 16 finestre è stato poi superato da due esecuzioni ordinarie
-consecutive sullo SHA finale della PR #61, chiudendo il residuo di #56 e #6.
-Le misure complete sono nella
+L'evidenza corrente (SHA, distribuzioni, run CI verdi) è in
+[stato del progetto](../project/status.md). Le misure complete sono nella
 [tabella delle distribuzioni](performance-budget.md#evidenza-delle-tre-distribuzioni).
-I workflow [CI #808](https://github.com/Fubeo/Fub/actions/runs/34958062374) e
-[CI #809](https://github.com/Fubeo/Fub/actions/runs/34958069328) sono verdi sullo
-stesso SHA.
 
 Questa evidenza vale per la fixture deterministica. I limiti di qualità e
 complessità della [Graph View](search-links-and-graph.md#graph-view) impediscono
 di estenderla a grafi arbitrari o a ogni ambiente.
-Le consegne integrate sono chiuse. Il residuo heap trasferito da
-[#6](https://github.com/Fubeo/Fub/issues/6) a [#56](https://github.com/Fubeo/Fub/issues/56)
-è stato soddisfatto dal gate a 16 finestre in esecuzioni consecutive sullo stesso
-SHA; i budget di frame time restano review-only.

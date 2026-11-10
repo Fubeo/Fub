@@ -1,8 +1,9 @@
 # Lo strato dei motori
 
 Questa pagina spiega come Fub costruisce i motori copiati (GridCraft per i
-fogli, WordCraft per i documenti, e quelli che verranno) soltanto quando
-servono, come li fa lavorare e come ne tiene le cache sotto un tetto comune.
+fogli, WordCraft per i documenti) soltanto quando servono, come li fa lavorare
+e come ne tiene le cache sotto un tetto comune. I motori in programma con le
+fasi sono nell'ordine di lavoro di [stato](../project/status.md).
 
 > **Ambito:** `crates/fub-motori` e il modo in cui un adattatore di formato vi
 > iscrive il suo motore.

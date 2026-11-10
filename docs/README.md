@@ -108,7 +108,8 @@ all'export, dalla sessione dal tablet ai disegni grandi.
 
 - [Stato del progetto](project/status.md): dove siamo, l'ordine di lavoro, il
   rilascio
-- [M5, il runtime WASM](project/m5-wasm-runtime.md): la retrospettiva
+- [Runtime dei plugin](architecture/plugin-runtime.md): provider WASM e stato
+  di M5
 
 ## Capire le decisioni
 

@@ -407,28 +407,20 @@ soltanto i claim posseduti, quindi elimina record e blob senza cancellare
 Schema, atomicità e rimozione sono descritti nel
 [layout su disco](../reference/on-disk-layout.md).
 
-## Stato di M5
+Lo stato di M5 (le capacità presenti in `main`) è in
+[stato del progetto](../project/status.md).
 
-| Capacità | Stato |
-|---|---|
-| lifecycle `Plugin` | presente |
-| `CommandProvider` | presente |
-| `FormatProvider` | presente: parse/render/serialize e validazione |
-| `ViewProvider` | presente: spec/interests/render/`Replace`/`Patch` |
-| `GridBytesProvider` | presente: protocollo `grid` 2, nativo/WASM, finestre, giornale e innesto |
-| lettura modello | presente |
-| eventi host | presente |
-| timeout e memoria | presenti |
-| capability negate | presenti |
-| `IndexProvider` e `EventHandler` inbound | presenti |
-| inventario, installazione, consenso, enabled, restart e remove | presenti |
-| startup autorizzato e gestione desktop | presenti |
-| UI non fidata | presente per provider `Trust::Community`; `Trust::Core` ammesso |
+## Limiti non promessi
 
-Queste capacità sono presenti in `main` dalla PR #53; i limiti accettati da
-G15 restano documentati separatamente e non retrocedono le famiglie consegnate.
+- `IndexProvider` WASM ed `EventHandler` inbound non sono esposti finché una
+  route reale o un componente reale non provano il caso (WASM-002, issue #57);
+- deadline a epoche e limite di memoria confinano il guest, ma non sono una
+  quota assoluta CPU/RAM dell'intero processo (WASM-003, issue #58);
+- operazioni non esercitate dagli esempi e dai test di parità non sono
+  promesse per inferenza.
 
-Vedi [`../project/m5-wasm-runtime.md`](../project/m5-wasm-runtime.md).
+Questi sono confini del prodotto corrente, non lavoro necessario a rendere
+valida l'integrazione già avvenuta.
 
 ## Invarianti
 
