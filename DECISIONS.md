@@ -59,6 +59,8 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-10 · n6 · L'utente sceglie (a) per la misura e l'allineamento del testo lasciati fuori da T50: un task nuovo, T92, con un campo `fub:text` accanto a `fub:ink` e `fub:parts` · Perché: il formato resta JSON Canvas, che Obsidian legge, e il campo nuovo sta fra quelli che gli altri programmi conservano o ignorano.
+- 2026-11-10 · n6 · L'utente approva i prototipi T27 (la modifica) e T28 (gli estratti) con le varianti consigliate, sapendo che cambieranno più avanti · Perché: sbloccano T41–T46 e T74–T78.
 - 2026-11-10 · n6 · T55: Nascondi e Mostra il navigatore sono due comandi del catalogo, non una spunta in un menu Vista che non c'è; i tratti d'inchiostro non contano per i bordi della mappa · Perché: esiste solo ciò che si può usare, e la mappa delle schede resta leggibile.
 - 2026-11-10 · n6 · T69: il bordo del tratto in corso è fatto di quattro lati sulla scena e l'etichetta vive nella vista, in coordinate dello schermo; `#render` non toglie `.canvas-ink-frames` né la cornice della scelta di T66 · Perché: il contorno sulla scheda ridipingeva tutta la scena di S8 e creava nodi a ogni tratto; così S8 resta come prima.
 - 2026-11-10 · n6 · T53: l'inerzia dopo uno spostamento viene solo dal dito, non dal

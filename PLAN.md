@@ -5219,6 +5219,44 @@ revisione non ha errori aperti; l'utente ha detto sì al merge.
 Prova: gh pr checks 302; scripts/check.sh
 Stato: [ ] da fare
 
+## T92 · Misura e allineamento del testo
+
+Perché: il prototipo della riga delle opzioni (T26) dà al Testo la misura
+e l'allineamento; T50 li ha lasciati fuori perché chiedono un campo nuovo
+nel `.canvas`. Il 2026-11-10 l'utente ha scelto un task a parte, con un
+campo `fub:` come `fub:ink` e `fub:parts`.
+Tocca: `crates/fub-canvas-core` (il campo letto e scritto, coi suoi
+limiti e vettori), `apps/client/src/editors/canvas/chrome/options.ts`,
+`apps/client/src/editors/canvas/engine.ts`, `apps/client/src/i18n/catalog.ts`,
+`apps/client/src/theme/scrittoio/skin/editors.css`,
+`apps/client/src/theme/scrittoio/anatomia/editors.ts`,
+`docs/reference/canvas-format.md` (il campo) e `docs/reference/canvas-input.md`.
+Non toccare: i campi di JSON Canvas (`text`, `width`, `height`, `color`);
+il testo della scheda, che resta Markdown puro.
+Dipende da: T50, T48
+Cosa fare:
+- Un campo `fub:text` sulle schede di testo, per esempio
+  `"fub:text": { "v": 1, "size": "l", "align": "center" }`: misure `s`,
+  `m` (di serie, il campo non si scrive), `l`, `xl`; allineamento `start`
+  (di serie), `center`, `end`. Il campo resta fra i campi sconosciuti di
+  chi lo tiene, come `fub:parts`, e `fub-canvas-core` lo legge e lo
+  riscrive uguale per valore.
+- Nella riga del Testo, e con una scheda di testo scelta, i due controlli
+  del prototipo; ogni controllo è un comando del catalogo (T48); un
+  cambio è un commit e un annulla, anche su più schede scelte.
+- Tornati ai valori di serie, il campo sparisce dal file.
+Casi limite: un campo con una versione futura o valori che Fub non
+conosce (si mostra di serie e il campo resta com'è finché non si cambia);
+un file scritto da Obsidian, che non ha il campo; una scheda di file o di
+gruppo (i controlli sono spenti); la sola lettura.
+Fatto quando: i vettori di `fub-canvas-core` provano lettura, scrittura e
+il campo sconosciuto conservato; `options.test.ts` e `engine.test.ts`
+provano i due controlli, il ritorno ai valori di serie che toglie il campo
+e un solo annulla; le foto del banco somigliano al prototipo.
+Prova: scripts/check.sh --rapido; cargo test -p fub-canvas-core; cd
+apps/client && npx vitest run src/editors/canvas
+Stato: [ ] da fare
+
 ## Non verificato stanotte
 
 - Niente è stato compilato né provato: la macchina era carica e il disco
