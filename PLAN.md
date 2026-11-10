@@ -3751,7 +3751,24 @@ sovrapposizioni; il test dell'ispettore prova l'elenco, il filtro e il
 clic; le foto del banco somigliano al prototipo.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/canvas
-Stato: [ ] da fare
+Stato: [x] fatto (2026-11-10). Differenze: il salto usa la strada che
+la superficie ha già, `engine.revealSource(byte)` (sceglie e inquadra),
+senza toccare `engine.ts`; il byte lo trova `boardCards()` leggendo il
+testo come `node_at` del nucleo; T56 potrà sostituirlo. La riga segnata è
+quella scelta dall'elenco e si spegne quando la scelta cambia per un'altra
+strada (le id scelte dal motore non sono pubbliche). Nasce solo «Schede»:
+«Scheda», «Fili», «Fonti» arrivano con T59 e T77; restano le linguette
+Backlink e Cronologia della shell, che il prototipo non ha.
+`inspectorChrome` del disegno non si importa (legato ai suoi pezzi): se ne
+imita la forma. `kit/list.ts` non è virtuale: l'elenco virtuale sta in
+`inspector.ts`, sul modello dei Livelli del disegno. Testi in più: la
+lavagna vuota, nessun risultato col filtro, i nomi delle specie. «Prima i
+gruppi» alla lettera (a ogni livello i gruppi, poi le schede): vale anche
+per T61. Nell'esempio del prototipo «Correzione di Bessel» viene prima di
+«Domande per giovedì»; con la regola «più di metà» viene dopo (si
+sovrappongono esattamente a metà): vince la regola. L'elenco si rilegge a
+ogni commit col pannello aperto (fine gesto). Toccati in più:
+`structure.css`, i file generati del tema, `canvas-input.md`.
 
 ## T59 · L'ispettore: la scheda, i numeri, il nodo grezzo, i fili
 

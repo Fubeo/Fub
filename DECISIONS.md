@@ -59,6 +59,12 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-10 · n6 · T58: «prima i gruppi» resta alla lettera, e la regola
+  «più di metà» vince sull'esempio del prototipo. · Perché: è quello che
+  dice il piano, l'ordine serve anche al lettore di schermo (T61) e una
+  regola scritta si prova; l'esempio del prototipo cadeva proprio sul
+  confine della metà.
+
 - 2026-11-10 · n6 · T62: «Aggiungi file…» col selettore del browser
   (`<input type="file">`) invece di `host/dialog.ts`. · Perché: il deposito
   vuole dei `File` come un rilascio, `pickFile` dà un percorso solo; lo fa
