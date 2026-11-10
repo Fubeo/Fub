@@ -2401,6 +2401,24 @@
   outline: 2px solid var(--accent);
   outline-offset: 4px;
 }
+/* Mentre si scrive (T69): la scheda a cui il tratto si attaccherà ha un
+   bordo tratteggiato (i suoi quattro lati, `structure.css`); accanto alla
+   penna, l'etichetta. */
+.canvas-ink-frame {
+  border-color: var(--accent);
+}
+.canvas-ink-label {
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius-pill);
+  background: var(--bg-elev);
+  box-shadow: var(--shadow-2);
+  color: var(--text);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-medium);
+}
+.canvas-ink-label[data-free] {
+  color: var(--muted);
+}
 .canvas-edge-label {
   fill: var(--muted);
   font-family: var(--font-ui);

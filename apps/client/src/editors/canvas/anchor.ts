@@ -3,7 +3,8 @@ import type { CanvasNode } from "./model";
 /**
  * A quale scheda appartiene un tratto. Solo geometria sulle coordinate della
  * lavagna: niente DOM, niente formato dell'inchiostro. Lo strato d'inchiostro
- * (N4 T12) lo chiede una volta, quando la penna si alza.
+ * (N4 T12) lo chiede quando la penna si alza, e l'etichetta della penna (N6
+ * T69) mentre è giù, con la stessa regola.
  */
 
 /** Un riquadro allineato agli assi, in unità della lavagna; `width` e `height` non sono mai negativi. */
@@ -25,22 +26,54 @@ export interface Bounds {
  * libero.
  */
 export function strokeBounds(points: Iterable<{ x: number; y: number }>, size: number): Bounds {
-  let minX = Infinity;
-  let minY = Infinity;
-  let maxX = -Infinity;
-  let maxY = -Infinity;
-  for (const point of points) {
-    if (!Number.isFinite(point.x) || !Number.isFinite(point.y)) continue;
-    if (point.x < minX) minX = point.x;
-    if (point.x > maxX) maxX = point.x;
-    if (point.y < minY) minY = point.y;
-    if (point.y > maxY) maxY = point.y;
+  const box = new StrokeBox();
+  for (const point of points) box.add(point.x, point.y);
+  return box.bounds(size);
+}
+
+/**
+ * Il riquadro di un tratto che cresce un punto alla volta, mentre la penna è
+ * giù (N6 T69): `bounds(size)` dà lo stesso riquadro di `strokeBounds` sugli
+ * stessi punti, con le stesse regole, così l'ancora che si mostra prima
+ * dell'alzata è quella che `anchorAt` darà alla fine.
+ */
+export class StrokeBox {
+  #minX = Infinity;
+  #minY = Infinity;
+  #maxX = -Infinity;
+  #maxY = -Infinity;
+
+  /** Aggiunge un punto; vero se il riquadro è cresciuto. Un punto non finito non conta. */
+  add(x: number, y: number): boolean {
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return false;
+    let grew = false;
+    if (x < this.#minX) {
+      this.#minX = x;
+      grew = true;
+    }
+    if (x > this.#maxX) {
+      this.#maxX = x;
+      grew = true;
+    }
+    if (y < this.#minY) {
+      this.#minY = y;
+      grew = true;
+    }
+    if (y > this.#maxY) {
+      this.#maxY = y;
+      grew = true;
+    }
+    return grew;
   }
-  if (minX > maxX) return { x: 0, y: 0, width: 0, height: 0 };
-  const half = Number.isFinite(size) && size > 0 ? size / 2 : 0;
-  const x = minX - half;
-  const y = minY - half;
-  return { x, y, width: maxX + half - x, height: maxY + half - y };
+
+  /** Il riquadro dei punti aggiunti, allargato di metà `size`: come `strokeBounds`. */
+  bounds(size: number): Bounds {
+    if (this.#minX > this.#maxX) return { x: 0, y: 0, width: 0, height: 0 };
+    const half = Number.isFinite(size) && size > 0 ? size / 2 : 0;
+    const x = this.#minX - half;
+    const y = this.#minY - half;
+    return { x, y, width: this.#maxX + half - x, height: this.#maxY + half - y };
+  }
 }
 
 /**

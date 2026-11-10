@@ -1100,3 +1100,198 @@ describe("il menu della penna", () => {
     expect(button.disabled).toBe(false);
   });
 });
+
+describe("a chi appartiene il tratto (T69)", () => {
+  /** La penna giù su `target` nel punto `world`: dà chi la muove e chi la alza. */
+  function penDown(host: HTMLElement, target: Element, world: readonly [number, number], init: PointerEventInit = {}) {
+    const cam = camera(host);
+    const at = ([x, y]: readonly [number, number]) => ({ clientX: x * cam.zoom + cam.x, clientY: y * cam.zoom + cam.y });
+    let last = world;
+    target.dispatchEvent(pointerEvent("pointerdown", { ...PEN, ...at(world), ...init, button: 0, buttons: 1, pressure: 0.5, timeStamp: clock }));
+    return {
+      move(point: readonly [number, number], more: PointerEventInit = {}) {
+        clock += 8;
+        last = point;
+        target.dispatchEvent(pointerEvent("pointermove", { ...PEN, ...at(point), ...init, ...more, button: -1, buttons: 1, pressure: 0.5, timeStamp: clock }));
+      },
+      lift() {
+        clock += 4;
+        document.dispatchEvent(pointerEvent("pointerup", { ...PEN, ...at(last), ...init, button: 0, buttons: 0, pressure: 0, timeStamp: clock }));
+        clock += 100;
+      },
+    };
+  }
+
+  const label = (host: HTMLElement) => host.querySelector<HTMLElement>(".canvas-ink-label:not([data-idle])");
+  /** Le schede col bordo tratteggiato: il contenitore dei lati sullo stage dice di chi è. */
+  const targets = (host: HTMLElement) =>
+    [...host.querySelectorAll<HTMLElement>(".canvas-stage > .canvas-ink-frames:not([hidden])")].map((el) => el.dataset.node);
+  const said = (host: HTMLElement) => host.querySelector<HTMLElement>(".canvas-ink-said")?.textContent ?? null;
+  /** Il livello che tiene l'ultimo tratto scritto: l'id della scheda, o `null` per la radice. */
+  function layerOfLast(changes: readonly CanvasChange[]): string | null {
+    const [patch] = lastChange(changes).operation.patches as readonly { layer: "board" | { node: string } }[];
+    return patch!.layer === "board" ? null : patch!.layer.node;
+  }
+
+  it("sopra una scheda: bordo tratteggiato ed etichetta col nome mentre si scrive; all'alzata il tratto è suo e l'etichetta se ne va", () => {
+    const { host, changes } = mounted();
+    const stroke = penDown(host, card(host, "img"), [340, 40]);
+    // Un appoggio senza movimento non mostra niente.
+    expect(label(host)).toBeNull();
+    stroke.move([360, 50]);
+    stroke.move([390, 55]);
+    expect(label(host)?.textContent).toBe(t("canvas.ink.attach", { name: "foto.heic" }));
+    expect(label(host)?.hasAttribute("data-free")).toBe(false);
+    // Il lettore di schermo non la sente mentre cambia.
+    expect(label(host)?.getAttribute("aria-hidden")).toBe("true");
+    expect(said(host)).toBeNull();
+    expect(targets(host)).toEqual(["img"]);
+    // Quattro lati attorno al riquadro della scheda, in unità della lavagna;
+    // la scheda stessa non cambia (niente contorno da ridipingere).
+    const frames = host.querySelector<HTMLElement>(".canvas-stage > .canvas-ink-frames")!;
+    const sides = [...frames.querySelectorAll<HTMLElement>(".canvas-ink-frame")];
+    expect(sides.map((side) => side.dataset.side)).toEqual(["top", "right", "bottom", "left"]);
+    // I lati ereditano la misura dal contenitore.
+    expect(["x", "y", "w", "h"].map((key) => frames.style.getPropertyValue(`--canvas-frame-${key}`))).toEqual(["300px", "0px", "200px", "100px"]);
+    expect(card(host, "img").hasAttribute("data-ink-target")).toBe(false);
+    // L'etichetta sta nella vista, accanto alla punta.
+    expect(label(host)!.parentElement).toBe(viewportOf(host));
+    const cam = camera(host);
+    expect(label(host)!.style.getPropertyValue("--canvas-ink-x")).toBe(`${390 * cam.zoom + cam.x}px`);
+
+    stroke.lift();
+    expect(changes).toHaveLength(1);
+    expect(layerOfLast(changes)).toBe("img");
+    expect(label(host)).toBeNull();
+    expect(targets(host)).toEqual([]);
+    // All'alzata l'ancora si annuncia, con le parole dell'etichetta.
+    expect(said(host)).toBe(t("canvas.ink.attach", { name: "foto.heic" }));
+  });
+
+  it("un tratto che passa da una scheda a due: l'etichetta segue la regola, e l'alzata scrive ciò che diceva", () => {
+    const { host, changes } = mounted();
+    const stroke = penDown(host, card(host, "t"), [120, 40]);
+    stroke.move([150, 50]);
+    expect(label(host)?.textContent).toBe(t("canvas.ink.attach", { name: "nota" }));
+    expect(targets(host)).toEqual(["t"]);
+    // A cavallo della nota e dell'immagine: nessuna delle due ne ha metà.
+    stroke.move([250, 50]);
+    stroke.move([350, 50]);
+    expect(label(host)?.textContent).toBe(t("canvas.ink.free"));
+    expect(label(host)?.hasAttribute("data-free")).toBe(true);
+    expect(targets(host)).toEqual([]);
+
+    stroke.lift();
+    expect(layerOfLast(changes)).toBeNull();
+    expect(strokesOf(lastChange(changes).text, null)).toHaveLength(1);
+    expect(said(host)).toBe(t("canvas.ink.free"));
+  });
+
+  it("con Alt tenuto il tratto resta libero, anche sopra una scheda e a punta ferma; lasciato Alt, il prossimo si attacca", () => {
+    const { host, changes } = mounted();
+    const points = across(0, 0);
+    const stroke = penDown(host, card(host, "t"), points[0]!);
+    stroke.move(points[1]!);
+    expect(targets(host)).toEqual(["t"]);
+    // Alt preso a punta ferma: l'etichetta lo dice subito.
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "Alt", altKey: true }));
+    expect(label(host)?.textContent).toBe(t("canvas.ink.free"));
+    expect(targets(host)).toEqual([]);
+    stroke.move(points[2]!, { altKey: true });
+    expect(label(host)?.textContent).toBe(t("canvas.ink.free"));
+    stroke.lift();
+    expect(layerOfLast(changes)).toBeNull();
+    expect(strokesOf(lastChange(changes).text, "t")).toEqual([]);
+
+    window.dispatchEvent(new KeyboardEvent("keyup", { key: "Alt" }));
+    pen(host, card(host, "t"), points);
+    expect(layerOfLast(changes)).toBe("t");
+    expect(said(host)).toBe(t("canvas.ink.attach", { name: "nota" }));
+  });
+
+  it("Alt lasciato a metà tratto riattacca il tratto alla scheda, come dice l'etichetta", () => {
+    const { host, changes } = mounted();
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "Alt", altKey: true }));
+    const stroke = penDown(host, card(host, "doc"), [640, 40], { altKey: true });
+    stroke.move([660, 50], { altKey: true });
+    expect(label(host)?.textContent).toBe(t("canvas.ink.free"));
+    window.dispatchEvent(new KeyboardEvent("keyup", { key: "Alt" }));
+    expect(label(host)?.textContent).toBe(t("canvas.ink.attach", { name: "carta.pdf" }));
+    expect(targets(host)).toEqual(["doc"]);
+    stroke.lift();
+    expect(layerOfLast(changes)).toBe("doc");
+  });
+
+  it("dentro il riquadro già visto la regola non si rifà: nessun lavoro in più per movimento", () => {
+    const { host, calls } = mounted();
+    const stroke = penDown(host, card(host, "t"), [20, 20]);
+    stroke.move([120, 80]);
+    const asked = calls.filter((name) => name === "inkLayers").length;
+    const text = label(host)!.firstChild;
+    for (const point of [[60, 40], [100, 60], [40, 70], [110, 30]] as const) stroke.move(point);
+    expect(calls.filter((name) => name === "inkLayers").length).toBe(asked);
+    // Lo stesso nodo di testo: l'etichetta non si è riscritta.
+    expect(label(host)!.firstChild).toBe(text);
+    stroke.lift();
+  });
+
+  it("l'etichetta si misura dopo il layout e resta la stessa da un tratto all'altro; vicino al bordo destro va a sinistra", () => {
+    let measured: (() => void) | null = null;
+    vi.stubGlobal("ResizeObserver", class {
+      constructor(callback: () => void) {
+        measured = callback;
+      }
+      observe(): void {}
+      disconnect(): void {}
+    });
+    try {
+      const { host } = mounted();
+      const viewport = viewportOf(host);
+      viewport.getBoundingClientRect = () => new DOMRect(0, 0, 800, 600);
+      const cam = camera(host);
+      // Un punto della lavagna a `screen` px dal bordo sinistro della vista.
+      const atScreen = (screen: number): [number, number] => [(screen - cam.x) / cam.zoom, (300 - cam.y) / cam.zoom];
+      const first = penDown(host, viewport, atScreen(380));
+      first.move(atScreen(400));
+      const node = label(host)!;
+      Object.defineProperty(node, "offsetWidth", { configurable: true, value: 200 });
+      Object.defineProperty(node, "offsetHeight", { configurable: true, value: 30 });
+      // Prima della misura nessuna lettura del layout: niente da girare.
+      expect(node.hasAttribute("data-flip-x")).toBe(false);
+      measured!();
+      expect(node.hasAttribute("data-flip-x")).toBe(false);
+      first.move(atScreen(700));
+      expect(node.hasAttribute("data-flip-x")).toBe(true);
+      first.lift();
+      expect(label(host)).toBeNull();
+
+      const second = penDown(host, viewport, atScreen(100));
+      second.move(atScreen(120));
+      expect(label(host)).toBe(node);
+      expect(node.hasAttribute("data-flip-x")).toBe(false);
+      expect(host.querySelectorAll(".canvas-ink-label")).toHaveLength(1);
+      expect(host.querySelectorAll(".canvas-ink-frames")).toHaveLength(1);
+      second.lift();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("un tratto annullato toglie etichetta e bordo e non annuncia niente; la gomma non ha etichetta", () => {
+    const { host, changes } = mounted();
+    const stroke = penDown(host, card(host, "t"), [20, 20]);
+    stroke.move([60, 40]);
+    expect(label(host)).not.toBeNull();
+    window.dispatchEvent(new Event("blur"));
+    expect(label(host)).toBeNull();
+    expect(targets(host)).toEqual([]);
+    expect(changes).toEqual([]);
+    expect(said(host)).toBeNull();
+
+    pen(host, card(host, "t"), across(0, 0));
+    const lift = eraser(host, viewportOf(host), [[60, 5], [60, 30], [60, 45]], false);
+    expect(label(host)).toBeNull();
+    expect(targets(host)).toEqual([]);
+    lift();
+  });
+});

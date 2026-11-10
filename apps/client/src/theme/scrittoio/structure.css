@@ -3223,6 +3223,98 @@ body {
   overflow: visible;
 }
 
+/* L'etichetta accanto alla penna, mentre si scrive (T69): sopra a destra
+   della punta, mai sotto; `data-flip-x` e `data-flip-y` la portano a
+   sinistra o sotto quando lì non c'è posto. Il punto della punta arriva
+   dalla lavagna (`--canvas-ink-x`, `--canvas-ink-y`, in pixel della vista). */
+.canvas-ink-label {
+  --canvas-ink-label-gap: 16px;
+  --canvas-ink-dx: var(--canvas-ink-label-gap);
+  --canvas-ink-dy: calc(-1 * var(--canvas-ink-label-gap) - 100%);
+  position: absolute;
+  top: 0;
+  left: 0;
+  max-width: 280px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  pointer-events: none;
+  /* Segue la punta a ogni movimento: un suo strato, senza ridipingere la lavagna sotto. */
+  will-change: transform;
+  transform: translate(calc(var(--canvas-ink-x, 0px) + var(--canvas-ink-dx)), calc(var(--canvas-ink-y, 0px) + var(--canvas-ink-dy)));
+}
+
+.canvas-ink-label[data-flip-x] {
+  --canvas-ink-dx: calc(-1 * var(--canvas-ink-label-gap) - 100%);
+}
+
+.canvas-ink-label[data-flip-y] {
+  --canvas-ink-dy: var(--canvas-ink-label-gap);
+}
+
+/* A penna su: al suo posto e misurata, ma non si vede. */
+.canvas-ink-label[data-idle] {
+  visibility: hidden;
+}
+
+/* Il bordo tratteggiato della scheda a cui il tratto si attaccherà (T69):
+   quattro lati sottili sullo stage, a 4 px dalla scheda, come il contorno
+   del prototipo. Non è il contorno della scheda: mostrarlo o toglierlo
+   ridipinge i lati e non tutto il contenuto. Il riquadro della scheda arriva
+   dalla lavagna (`--canvas-frame-x`, `-y`, `-w`, `-h`, in unità della
+   lavagna); il colore è della pelle. */
+.canvas-ink-frames {
+  position: absolute;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+}
+
+.canvas-ink-frame {
+  --canvas-frame-gap: 4px;
+  --canvas-frame-size: 2px;
+  --canvas-frame-out: calc(var(--canvas-frame-gap) + var(--canvas-frame-size));
+  position: absolute;
+  top: 0;
+  left: 0;
+  box-sizing: border-box;
+  border-width: 0;
+  border-style: dashed;
+  pointer-events: none;
+}
+
+.canvas-ink-frame[data-side="top"],
+.canvas-ink-frame[data-side="bottom"] {
+  width: calc(var(--canvas-frame-w, 0px) + 2 * var(--canvas-frame-out));
+  height: var(--canvas-frame-size);
+}
+
+.canvas-ink-frame[data-side="left"],
+.canvas-ink-frame[data-side="right"] {
+  width: var(--canvas-frame-size);
+  height: calc(var(--canvas-frame-h, 0px) + 2 * var(--canvas-frame-out));
+}
+
+.canvas-ink-frame[data-side="top"] {
+  border-top-width: var(--canvas-frame-size);
+  transform: translate(calc(var(--canvas-frame-x, 0px) - var(--canvas-frame-out)), calc(var(--canvas-frame-y, 0px) - var(--canvas-frame-out)));
+}
+
+.canvas-ink-frame[data-side="bottom"] {
+  border-bottom-width: var(--canvas-frame-size);
+  transform: translate(calc(var(--canvas-frame-x, 0px) - var(--canvas-frame-out)), calc(var(--canvas-frame-y, 0px) + var(--canvas-frame-h, 0px) + var(--canvas-frame-gap)));
+}
+
+.canvas-ink-frame[data-side="left"] {
+  border-left-width: var(--canvas-frame-size);
+  transform: translate(calc(var(--canvas-frame-x, 0px) - var(--canvas-frame-out)), calc(var(--canvas-frame-y, 0px) - var(--canvas-frame-out)));
+}
+
+.canvas-ink-frame[data-side="right"] {
+  border-right-width: var(--canvas-frame-size);
+  transform: translate(calc(var(--canvas-frame-x, 0px) + var(--canvas-frame-w, 0px) + var(--canvas-frame-gap)), calc(var(--canvas-frame-y, 0px) - var(--canvas-frame-out)));
+}
+
 .canvas-node {
   position: absolute;
   top: 0;

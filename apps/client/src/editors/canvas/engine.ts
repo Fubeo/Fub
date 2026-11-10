@@ -12,7 +12,7 @@ import { ERASER } from "../../ink/tools/eraser";
 import { EraseSweep, type Spot } from "../../ink/tools/sweep";
 import { openLifetime, type Lifetime } from "../../ui/lifetime";
 import { mediaKindOfId } from "../media/media-types";
-import { anchorAt, strokeBounds } from "./anchor";
+import { anchorAt, strokeBounds, StrokeBox, type Bounds } from "./anchor";
 import { parseTsv } from "../core/tsv";
 import { bornSize, dropLayout, markdownTable, type DropItem } from "./drop-layout";
 import { ENTRIES_DRAG_TYPE, NOTE_DRAG_TYPE } from "../../ui/drag-types";
@@ -344,6 +344,59 @@ interface InkErasing {
   readonly pieces: readonly CutPiece[];
   /** Il contorno dei pezzi, per l'anteprima. */
   readonly preview: string;
+}
+
+// --- a chi appartiene il tratto (T69) ---
+/**
+ * Il tratto della punta in corso e l'ancora che avrebbe se finisse adesso: il
+ * riquadro cresce coi punti che la vista vede (`pointermove`, dopo la scia),
+ * il bordo tratteggiato e il testo dell'etichetta cambiano solo quando cambia
+ * l'ancora.
+ */
+interface InkTarget {
+  readonly pointerId: number;
+  readonly box: StrokeBox;
+  /** Lo spessore del tratto in unità della lavagna: il pennello che la scia usa. */
+  readonly size: number;
+  /** Dove sta la vista sullo schermo, letto all'inizio del tratto: nessuna lettura del layout mentre si scrive. */
+  readonly view: DOMRect;
+  readonly label: HTMLElement;
+  /** Il contenitore dei quattro lati del bordo, sullo stage. */
+  readonly frames: HTMLElement;
+  /** L'id della scheda mostrata, `null` se il tratto è libero; `undefined` prima del primo giro. */
+  holder: string | null | undefined;
+}
+
+/**
+ * L'etichetta e i lati del bordo, nati al primo tratto e tenuti per i tratti
+ * dopo (nascosti a penna su): un tratto che comincia non crea nodi e non
+ * chiede il layout. La misura dell'etichetta arriva da un `ResizeObserver`,
+ * dopo il layout che il browser fa comunque: mai una lettura forzata.
+ */
+interface InkMarks {
+  readonly label: HTMLElement;
+  /**
+   * Il bordo tratteggiato attorno alla scheda: quattro lati sottili in un
+   * contenitore sullo stage, non il contorno della scheda. Mostrarlo o
+   * toglierlo ridipinge solo i lati: il contorno ridipingerebbe tutta la
+   * scheda (una tabella di diecimila celle in S8) due volte per tratto. Il
+   * contenitore resta sullo stage: un tratto non vi aggiunge né toglie nodi.
+   */
+  readonly frames: HTMLElement;
+  /** La misura dell'etichetta e lo stacco dalla punta; zero finché non è misurata. */
+  width: number;
+  height: number;
+  gap: number;
+}
+
+/** I quattro lati del bordo tratteggiato della scheda sotto la penna. */
+const INK_FRAME_SIDES = ["top", "right", "bottom", "left"] as const;
+
+/** Il punto dove comincia il tratto che sta per nascere: l'ultimo appoggio, poi l'ultimo movimento visto. */
+interface InkPoint {
+  pointerId: number;
+  clientX: number;
+  clientY: number;
 }
 
 /** Il tasto che fa scrivere il mouse finché è giù (regola 1). */
@@ -1117,6 +1170,19 @@ export class CanvasEngine {
   #erase: InkErase | null = null;
   /** D tenuto giù sul viewport: il mouse scrive finché non si alza. */
   #inkKeyDown = false;
+  // --- a chi appartiene il tratto (T69) ---
+  /** Un tratto della punta è appena cominciato: lo spessore e la vista, finché il primo movimento non apre l'etichetta. */
+  #inkStarting: { readonly size: number; readonly view: DOMRect } | null = null;
+  /** Il tratto in corso e l'ancora mostrata; `null` a penna su. */
+  #inkTarget: InkTarget | null = null;
+  /** L'ultimo punto della penna che la vista ha visto: da qui parte il riquadro. */
+  readonly #inkAt: InkPoint = { pointerId: -1, clientX: 0, clientY: 0 };
+  /** Alt tenuto: il tratto resta libero sulla lavagna. */
+  #altHeld = false;
+  /** Per il lettore di schermo: l'ancora dell'ultimo tratto, detta all'alzata. */
+  #inkSaid: HTMLElement | null = null;
+  /** L'etichetta e il bordo, tenuti fra un tratto e l'altro. */
+  #inkMarks: InkMarks | null = null;
   // --- copia e incolla (T68) ---
   /** «Copia» o «Taglia» del menu mentre manda la copia del browser: l'evento è nostro anche col fuoco nel menu. */
   #clipboardCommand: "copy" | "cut" | null = null;
@@ -1376,6 +1442,18 @@ export class CanvasEngine {
     this.#viewport.addEventListener("pointermove", (event) => {
       this.#pointerSeen = { x: event.clientX, y: event.clientY };
     }, { signal });
+    // A chi appartiene il tratto (T69). L'appoggio si legge in cattura, prima
+    // dello strato della penna che lo ferma: è solo un punto. I movimenti si
+    // leggono dopo, quando la scia è già disegnata; Alt si legge ovunque.
+    this.#viewport.addEventListener("pointerdown", (event) => this.#inkSeen(event), { signal, capture: true });
+    this.#viewport.addEventListener("pointermove", (event) => this.#inkTargetMove(event), { signal });
+    this.#life.listen(window, "keydown", (event) => {
+      if (event.key === "Alt") this.#setAltHeld(true);
+    });
+    this.#life.listen(window, "keyup", (event) => {
+      if (event.key === "Alt") this.#setAltHeld(false);
+    });
+    this.#life.listen(window, "blur", () => this.#setAltHeld(false));
     this.#viewport.addEventListener("pointerleave", () => {
       this.#pointerSeen = null;
       // Il puntatore fuori dalla lavagna: nessun filo si scurisce (T67).
@@ -2107,6 +2185,7 @@ export class CanvasEngine {
       this.#inkLife = null;
       this.#inkChain = null;
       life?.close();
+      this.#inkTargetClose();
       this.#eraseDrop();
       this.#applyInkMouse();
       return;
@@ -2118,13 +2197,20 @@ export class CanvasEngine {
       toWorld: (clientX, clientY) => this.#screenToWorld(clientX, clientY),
       // La penna scelta (A11 prima di ogni scelta) allo zoom di quando il
       // tratto comincia: una scelta a metà tratto vale dal tratto dopo.
-      look: (input) => inkLook(this.#penChoice, this.#camera.zoom, input.pressure),
+      look: (input) => {
+        const look = inkLook(this.#penChoice, this.#camera.zoom, input.pressure);
+        this.#inkTargetStarting(look.brush.size);
+        return look;
+      },
       // Lo strumento Gomma: la punta e il mouse che scrive cancellano (A21).
       tipErases: () => this.#penChoice.tool === "eraser",
       quiet: this.#quiet,
       mouse: this.#inkMouseOn ? "ink" : "ignore",
       onStroke: (stroke) => this.#inkStroke(stroke),
-      onCancel: (id) => this.#eraseCancel(id),
+      onCancel: (id) => {
+        this.#inkTargetClose();
+        this.#eraseCancel(id);
+      },
       onEraseStart: (id, pointerType) => this.#eraseStart(id, pointerType),
       onErase: (id, points) => this.#eraseAlong(id, points),
       onEraseEnd: (id) => this.#eraseEnd(id),
@@ -2612,6 +2698,8 @@ export class CanvasEngine {
   /** Un tratto della penna è finito: si scrive, e la sua scia va via nello stesso giro. */
   #inkStroke(stroke: InkLayerStroke): void {
     const layer = this.#inkLayer;
+    // L'etichetta sparisce all'alzata; il tratto si attacca a ciò che diceva.
+    this.#inkTargetClose();
     try {
       this.#writeStroke(stroke);
     } finally {
@@ -2637,8 +2725,7 @@ export class CanvasEngine {
     const doc = this.#doc;
     const layers = this.#inkLayersNow();
     if (!layers) return;
-    const holder = anchorAt(doc.nodes, strokeBounds(stroke.samples, stroke.brush.size),
-      (node) => !foreignInkLayer(layers, { node: node.id }));
+    const holder = this.#inkHolder(doc.nodes, layers, strokeBounds(stroke.samples, stroke.brush.size));
     const ref: InkLayerRef = holder ? { node: holder.id } : "board";
     if (foreignInkLayer(layers, ref)) {
       this.#showNotice(t("canvas.ink.foreign"));
@@ -2667,6 +2754,8 @@ export class CanvasEngine {
     const dry = toDry(made.record, this.#inkPaths);
     if (dry) this.#paintStroke(holder, dry);
     if (this.#intakeError) this.#showNotice("");
+    // Il pezzo di un tratto spezzato non si annuncia: lo dice l'ultimo.
+    if (!stroke.split) this.#sayInkHolder(holder);
   }
 
   /** Aggiunge l'asciutto di un tratto appena scritto al solo livello che lo tiene. */
@@ -2696,6 +2785,235 @@ export class CanvasEngine {
       return;
     }
     this.#pushUndo(step, true);
+  }
+
+  // --- a chi appartiene il tratto (T69) -------------------------------------
+
+  /**
+   * La scheda a cui si attacca il tratto di riquadro `bounds`, o `null` se
+   * resta libero: la regola di N4 (`anchorAt`), che non sceglie le schede col
+   * livello d'inchiostro di un altro programma; con Alt tenuto, libero.
+   * L'etichetta e l'alzata la chiedono qui tutte e due.
+   */
+  #inkHolder(nodes: readonly CanvasNode[], layers: readonly CanvasInkLayer[], bounds: Bounds): CanvasNode | null {
+    if (this.#altHeld) return null;
+    return anchorAt(nodes, bounds, (node) => !foreignInkLayer(layers, { node: node.id }));
+  }
+
+  /** Un appoggio sulla vista: il punto da cui partirà il riquadro, se diventa un tratto. */
+  #inkSeen(event: PointerEvent): void {
+    const at = this.#inkAt;
+    at.pointerId = event.pointerId;
+    at.clientX = event.clientX;
+    at.clientY = event.clientY;
+  }
+
+  /**
+   * Comincia un tratto della punta (chiamato da `look`, una volta per tratto e
+   * per pezzo): si ricordano lo spessore e la vista, già misurata da chi ha
+   * appena portato l'appoggio nella lavagna. L'etichetta nasce al primo
+   * movimento: un tocco non la mostra.
+   */
+  #inkTargetStarting(size: number): void {
+    this.#inkTargetClose();
+    if (this.#destroyed) return;
+    this.#inkStarting = { size, view: this.#viewport.getBoundingClientRect() };
+  }
+
+  /**
+   * Un movimento sulla vista, dopo lo strato della penna: la scia è già
+   * disegnata. A penna su non fa niente; a penna giù allarga il riquadro coi
+   * punti dell'evento e rifà l'ancora solo se il riquadro è cresciuto. Il
+   * browser manda un `pointermove` per fotogramma: al più un aggiornamento per
+   * fotogramma, senza `requestAnimationFrame` (DEC-26).
+   */
+  #inkTargetMove(event: PointerEvent): void {
+    if (!this.#inkTarget && !this.#inkStarting) return;
+    const target = this.#inkTarget ?? this.#inkTargetOpen(event.pointerId);
+    if (!target || event.pointerId !== target.pointerId) return;
+    // Alt preso o lasciato senza che la finestra lo sapesse (il fuoco altrove).
+    if (event.altKey !== this.#altHeld) {
+      this.#altHeld = event.altKey;
+      target.holder = undefined;
+    }
+    const { zoom, x, y } = this.#camera;
+    const { left, top } = target.view;
+    const coalesced = typeof event.getCoalescedEvents === "function" ? event.getCoalescedEvents() : [];
+    let grew = false;
+    for (const one of coalesced.length > 0 ? coalesced : [event]) {
+      if (target.box.add((one.clientX - left - x) / zoom, (one.clientY - top - y) / zoom)) grew = true;
+    }
+    this.#inkSeen(event);
+    this.#inkTargetShow(target, grew);
+  }
+
+  /** Apre l'etichetta del tratto appena cominciato, dal punto dell'appoggio. */
+  #inkTargetOpen(pointerId: number): InkTarget | null {
+    const starting = this.#inkStarting;
+    this.#inkStarting = null;
+    if (!starting || this.#destroyed || !this.#doc) return null;
+    const marks = this.#inkMarksNow();
+    marks.label.removeAttribute("data-idle");
+    const target: InkTarget = {
+      pointerId,
+      box: new StrokeBox(),
+      size: starting.size,
+      view: starting.view,
+      label: marks.label,
+      frames: marks.frames,
+      holder: undefined,
+    };
+    this.#inkTarget = target;
+    const at = this.#inkAt;
+    if (at.pointerId === pointerId) {
+      const { zoom, x, y } = this.#camera;
+      target.box.add((at.clientX - starting.view.left - x) / zoom, (at.clientY - starting.view.top - y) / zoom);
+    }
+    return target;
+  }
+
+  /**
+   * Mostra l'ancora del riquadro di adesso: il bordo tratteggiato passa alla
+   * scheda nuova e il testo cambia solo quando l'ancora cambia (`grew` dice se
+   * c'è da rifarla); l'etichetta segue la punta, accanto e mai sotto.
+   */
+  #inkTargetShow(target: InkTarget, grew: boolean): void {
+    // Un ridisegno della scena toglie ciò che non è una scheda: i lati si rimettono.
+    if (target.holder && !target.frames.isConnected) target.holder = undefined;
+    if (grew || target.holder === undefined) {
+      const doc = this.#doc;
+      const layers = this.#inkLayersNow();
+      const holder = doc && layers ? this.#inkHolder(doc.nodes, layers, target.box.bounds(target.size)) : null;
+      const id = holder?.id ?? null;
+      if (id !== target.holder) {
+        target.holder = id;
+        this.#placeInkFrame(target, holder);
+        const text = inkHolderText(holder);
+        // Lo stesso testo del tratto prima non si riscrive: niente misura nuova.
+        if (target.label.textContent !== text) target.label.textContent = text;
+        target.label.toggleAttribute("data-free", holder === null);
+      }
+    }
+    this.#placeInkLabel(target);
+  }
+
+  /** L'etichetta accanto alla punta, con la misura che ha già: nessuna lettura del layout. */
+  #placeInkLabel(target: InkTarget): void {
+    const marks = this.#inkMarks;
+    if (!marks) return;
+    const { left, top, width } = target.view;
+    const px = this.#inkAt.clientX - left;
+    const py = this.#inkAt.clientY - top;
+    // Sopra a destra della punta; a sinistra o sotto se lì non c'è posto.
+    target.label.toggleAttribute("data-flip-x", px + marks.gap + marks.width > width);
+    target.label.toggleAttribute("data-flip-y", py - marks.gap - marks.height < 0);
+    target.label.style.setProperty("--canvas-ink-x", `${px}px`);
+    target.label.style.setProperty("--canvas-ink-y", `${py}px`);
+  }
+
+  /**
+   * Mette il bordo tratteggiato attorno a `holder`, nelle coordinate della
+   * lavagna (lo stage lo porta con la camera), o lo toglie se il tratto è
+   * libero. Lo stacco e lo spessore sono in `structure.css`, il colore nella pelle.
+   */
+  #placeInkFrame(target: InkTarget, holder: CanvasNode | null): void {
+    const frames = target.frames;
+    if (!holder) {
+      frames.hidden = true;
+      return;
+    }
+    // I lati ereditano la misura dal contenitore: quattro scritture, non sedici.
+    frames.dataset.node = holder.id;
+    frames.style.setProperty("--canvas-frame-x", `${holder.x}px`);
+    frames.style.setProperty("--canvas-frame-y", `${holder.y}px`);
+    frames.style.setProperty("--canvas-frame-w", `${holder.width}px`);
+    frames.style.setProperty("--canvas-frame-h", `${holder.height}px`);
+    if (!frames.isConnected) this.#stage.append(frames);
+    frames.hidden = false;
+  }
+
+  /** L'etichetta e i lati del bordo: creati la prima volta, poi gli stessi. */
+  #inkMarksNow(): InkMarks {
+    if (this.#inkMarks) return this.#inkMarks;
+    const label = document.createElement("div");
+    label.className = "canvas-ink-label";
+    // A penna su resta al suo posto, invisibile: mostrarla non rifà il layout.
+    label.setAttribute("data-idle", "");
+    // Il lettore di schermo la sente all'alzata, non a ogni cambio.
+    label.setAttribute("aria-hidden", "true");
+    this.#viewport.append(label);
+    const frames = document.createElement("div");
+    frames.className = "canvas-ink-frames";
+    frames.hidden = true;
+    frames.setAttribute("aria-hidden", "true");
+    for (const side of INK_FRAME_SIDES) {
+      const edge = document.createElement("div");
+      edge.className = "canvas-ink-frame";
+      edge.dataset.side = side;
+      frames.append(edge);
+    }
+    this.#stage.append(frames);
+    const marks: InkMarks = {
+      label,
+      frames,
+      width: 0,
+      height: 0,
+      gap: 0,
+    };
+    this.#inkMarks = marks;
+    if (typeof ResizeObserver !== "undefined") {
+      // Il testo cambiato si misura dopo il layout del fotogramma, non quando cambia.
+      const observer = new ResizeObserver(() => {
+        marks.width = label.offsetWidth;
+        marks.height = label.offsetHeight;
+        if (marks.gap === 0) marks.gap = parseFloat(getComputedStyle(label).getPropertyValue("--canvas-ink-label-gap")) || 0;
+        if (this.#inkTarget) this.#placeInkLabel(this.#inkTarget);
+      });
+      observer.observe(label);
+      this.#life.add(() => observer.disconnect());
+    }
+    return marks;
+  }
+
+  /** Il tratto è finito o non c'è più: via l'etichetta e il bordo. */
+  #inkTargetClose(): void {
+    this.#inkStarting = null;
+    const target = this.#inkTarget;
+    if (!target) return;
+    this.#inkTarget = null;
+    target.frames.hidden = true;
+    target.label.setAttribute("data-idle", "");
+  }
+
+  /** Alt tenuto o lasciato: a penna giù l'etichetta lo dice subito, anche se la punta è ferma. */
+  #setAltHeld(held: boolean): void {
+    if (held === this.#altHeld) return;
+    this.#altHeld = held;
+    const target = this.#inkTarget;
+    if (target) {
+      target.holder = undefined;
+      this.#inkTargetShow(target, false);
+    }
+  }
+
+  /**
+   * Dice al lettore di schermo a che cosa si è attaccato il tratto appena
+   * scritto, con le parole dell'etichetta; lo stesso testo di prima non si
+   * ripete, così una pagina di tratti sulla stessa scheda resta in silenzio.
+   */
+  #sayInkHolder(holder: CanvasNode | null): void {
+    if (this.#destroyed) return;
+    let said = this.#inkSaid;
+    if (!said) {
+      said = document.createElement("div");
+      said.className = "sr-only canvas-ink-said";
+      said.setAttribute("role", "status");
+      said.setAttribute("aria-live", "polite");
+      this.#root.append(said);
+      this.#inkSaid = said;
+    }
+    const text = inkHolderText(holder);
+    if (said.textContent !== text) said.textContent = text;
   }
 
   // --- camera ---------------------------------------------------------------
@@ -6319,10 +6637,13 @@ export class CanvasEngine {
       entry.article.remove();
     }
     // Ciò che sulla scena non è una scheda (il messaggio della scena troppo
-    // grande) va via; l'inchiostro libero resta, `#paintInk` lo rimette in cima.
+    // grande) va via; l'inchiostro libero resta, `#paintInk` lo rimette in cima,
+    // e il bordo del tratto in corso pure.
     const ours = new Set<Element>([...this.#cards.values()].map((entry) => entry.article));
     for (const child of [...this.#stage.children]) {
-      if (!ours.has(child) && !child.classList.contains("canvas-ink-board") && child !== this.#selectionFrame) child.remove();
+      // Il bordo del tratto in corso (T69) e la cornice della scelta restano:
+      // non sono della scena.
+      if (!ours.has(child) && !child.classList.contains("canvas-ink-board") && !child.classList.contains("canvas-ink-frames") && child !== this.#selectionFrame) child.remove();
     }
     const children = this.#stage.children;
     let index = 0;
@@ -6956,6 +7277,13 @@ function cardTarget(node: CanvasNode): { path: string; subpath: string | null } 
   const path = hash < 0 ? file : file.slice(0, hash);
   const subpath = typeof node.subpath === "string" && node.subpath ? node.subpath : hash < 0 ? null : file.slice(hash);
   return { path, subpath };
+}
+
+/** Che cosa dice l'etichetta della penna (T69): la scheda col suo nome, o il tratto libero. */
+function inkHolderText(holder: CanvasNode | null): string {
+  if (!holder) return t("canvas.ink.free");
+  const name = cardMenuName(holder);
+  return name ? t("canvas.ink.attach", { name }) : t("canvas.ink.attach_card");
 }
 
 /** Il nome di un file senza le cartelle: `Corsi/foto.png` → `foto.png`. */

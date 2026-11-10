@@ -64,5 +64,9 @@ export const EDITORS: PartAnatomy = {
     // Sono segni di Fub sulla carta, non il testo del file.
     { name: "rich-sheet-marks", layer: "segno", states: [S("rest"), S("focused")], hooks: ["rich-sheet-head", "rich-sheet-foot", "rich-sheet-name", "rich-running-bar", "rich-running-label", "rich-running-area", "rich-token"] },
     { name: "canvas-edge", layer: "contenuto", layers: { "canvas-edge-hit": "segno", "canvas-edge-reconnect": "segno", "canvas-edge-draft": "segno" }, states: [S("rest"), S("hover"), S("selected"), S("dragging")], hooks: ["canvas-edge", "canvas-edge-draft", "canvas-edge-hit", "canvas-edge-line", "canvas-edge-arrow", "canvas-edge-label", "canvas-edge-reconnect"] },
+    // Mentre si scrive (T69): l'etichetta accanto alla penna, che dice a che
+    // cosa si attaccherà il tratto, e il bordo tratteggiato attorno alla
+    // scheda, che è un segno di Fub sulla lavagna.
+    { name: "canvas-ink-target", layers: { "canvas-ink-frame": "segno" }, states: REST, hooks: ["canvas-ink-label", "canvas-ink-frame"] },
   ],
 };

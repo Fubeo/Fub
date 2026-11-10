@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { anchorAt, strokeBounds, type Bounds } from "./anchor";
+import { anchorAt, StrokeBox, strokeBounds, type Bounds } from "./anchor";
 import type { CanvasNode } from "./model";
 import anchorSource from "./anchor.ts?raw";
 
@@ -66,6 +66,34 @@ describe("strokeBounds", () => {
       2,
     );
     expect(b).toEqual({ x: -Number.MAX_VALUE, y: -1, width: Infinity, height: 2 });
+  });
+});
+
+describe("StrokeBox", () => {
+  it("un punto alla volta dà lo stesso riquadro di strokeBounds, anche coi punti non finiti", () => {
+    const points = [
+      { x: 10, y: 20 },
+      { x: Number.NaN, y: 0 },
+      { x: 30, y: 5 },
+      { x: Infinity, y: 9 },
+      { x: 18, y: 40 },
+    ];
+    const box = new StrokeBox();
+    for (let i = 0; i < points.length; i++) {
+      box.add(points[i]!.x, points[i]!.y);
+      for (const size of [0, 4, -1, Number.NaN]) expect(box.bounds(size)).toEqual(strokeBounds(points.slice(0, i + 1), size));
+    }
+    expect(new StrokeBox().bounds(4)).toEqual(strokeBounds([], 4));
+  });
+
+  it("add dice se il riquadro è cresciuto: un punto dentro, ripetuto o non finito no", () => {
+    const box = new StrokeBox();
+    expect(box.add(10, 10)).toBe(true);
+    expect(box.add(10, 10)).toBe(false);
+    expect(box.add(20, 5)).toBe(true);
+    expect(box.add(15, 8)).toBe(false);
+    expect(box.add(Number.NaN, 100)).toBe(false);
+    expect(box.add(15, 11)).toBe(true);
   });
 });
 

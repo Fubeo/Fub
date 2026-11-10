@@ -1032,6 +1032,8 @@
     "canvas-edge-arrow",
     "canvas-edge-label",
     "canvas-edge-reconnect",
+    "canvas-ink-label",
+    "canvas-ink-frame",
     "draw-header",
     "draw-toolbar",
     "draw-export",
@@ -2648,6 +2650,8 @@
     "canvas-edge-arrow": "contenuto",
     "canvas-edge-label": "contenuto",
     "canvas-edge-reconnect": "segno",
+    "canvas-ink-label": "cornice",
+    "canvas-ink-frame": "segno",
     "draw-header": "cornice",
     "draw-toolbar": "cornice",
     "draw-export": "cornice",
@@ -5821,6 +5825,17 @@
       ]
     },
     {
+      "name": "canvas-ink-target",
+      "part": "editors",
+      "hooks": [
+        "canvas-ink-label",
+        "canvas-ink-frame"
+      ],
+      "states": [
+        "rest"
+      ]
+    },
+    {
       "name": "draw-editor",
       "part": "draw",
       "hooks": [
@@ -8855,10 +8870,10 @@
   "counts": {
     "required_roles": 154,
     "optional_roles": 63,
-    "hooks": 1614,
+    "hooks": 1616,
     "state_names": 7,
-    "assigned_states": 761,
-    "components": 225,
+    "assigned_states": 762,
+    "components": 226,
     "preference_tokens": 186
   }
 }
