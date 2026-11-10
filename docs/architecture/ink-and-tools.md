@@ -327,10 +327,9 @@ coordinate della lavagna e `onEraseEnd`.
   non valida vale `Allegati` (`dropFolderPathOf`); dove vanno i file dal
   computer lo dice `canvas.drop_folder` (`dropFolderFor`, in
   `state/canvas-intake.ts`). `canvas.toolbar` è una casella per strumento
-  (`toolbar-field.ts`). L'ultimo «Scrivi col
-  mouse» è lo stato di vista `canvas.ink_mouse`, uno per computer:
-  `saveInkMouse` lo scrive a ogni cambio, `readInkMouse` lo ridà solo con
-  «Ricorda» acceso, altrimenti spento.
+  (`toolbar-field.ts`). L'ultimo «Scrivi col mouse» è lo stato di vista
+  `canvas.ink_mouse`, uno per computer: `saveInkMouse` lo scrive a ogni
+  cambio, `readInkMouse` lo ridà solo con «Ricorda» acceso, altrimenti spento.
 
 ## Come lo usa la lavagna
 

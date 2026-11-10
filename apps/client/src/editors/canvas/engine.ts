@@ -74,6 +74,7 @@ import {
   type CanvasStatusPort,
 } from "./chrome/status";
 import type { SurfaceStatusItem } from "../core/registry";
+import type { DropFolderChoice } from "../../state/canvas-intake";
 import { SHARED_RECENT_COMMANDS, openCommandSearch, type CommandSearchHandle, type RecentCommands } from "./chrome/command-search";
 import { inkFitMode } from "./ink-fit";
 import { mountInkLayer, type InkLayer, type InkLayerStroke } from "./ink-layer";
@@ -733,6 +734,8 @@ export class CanvasEngine {
    */
   #statusShown = "";
   #attachmentDeclared: string | null = null;
+  /** `canvas.drop_folder` e il suo percorso (T34), dal vivo; `null` finché non arriva. */
+  #dropChoice: DropFolderChoice | null = null;
 
   constructor(parent: HTMLElement, options: CanvasEngineOptions) {
     this.#options = options;
@@ -752,6 +755,8 @@ export class CanvasEngine {
     this.#life.add(watchPreferences((preferences) => {
       this.#wheelSetting = preferences.wheel;
       this.#rail.setToolbar(preferences.toolbar);
+      this.#dropChoice = { dropFolder: preferences.dropFolder, dropFolderPath: preferences.dropFolderPath };
+      this.#statusSettle();
     }));
     this.#port = options.core ?? SHARED_CORE;
     // La cartella dei file trascinati arriva da `files.attachment-folder`, letta
@@ -2887,7 +2892,7 @@ export class CanvasEngine {
       readOnlyWhy: () => (this.#readOnly
         ? (this.#unwritable ? t("canvas.unwritable") : t("canvas.status.readonly.panel"))
         : null),
-      folder: () => dropFolderOf(this.#attachmentDeclared, this.#options.documentId ?? ""),
+      folder: () => dropFolderOf(this.#attachmentDeclared, this.#dropChoice, this.#options.documentId ?? ""),
       zoomTo: (zoom) => {
         if (this.#destroyed || !this.#doc) return;
         const rect = this.#viewport.getBoundingClientRect();

@@ -191,11 +191,13 @@ disegna da `EditorSurface.status`; le voci vengono da `engine.statusItems()`
   sola lettura o perché il file ha una chiave doppia. Il suggerimento dice
   perché.
 - **Cartella dei file trascinati**: dove finiscono i file trascinati sulla
-  lavagna, con la regola del deposito: `files.attachment-folder`, di serie
-  `attachments` alla radice del vault; un nome che comincia con `./` sta accanto
-  alla lavagna. Un clic apre le Impostazioni su `files.attachment-folder`. Il
-  nome si legge quando la lavagna si apre: se l'impostazione cambia mentre la
-  lavagna è aperta, si vede alla prossima apertura.
+  lavagna, con la regola del deposito (`dropFolderFor`, T34): con
+  `canvas.drop_folder` su «notes» la cartella degli allegati delle note
+  (`files.attachment-folder`, di serie `attachments` alla radice; un nome che
+  comincia con `./` sta accanto alla lavagna), su «board» il percorso accanto
+  alla lavagna, su «folder» dalla radice del vault. Un clic apre le
+  Impostazioni su `canvas.drop_folder`. La scelta della lavagna si segue dal
+  vivo; `files.attachment-folder` si legge quando la lavagna si apre.
 
 La banda si rilegge a fine gesto: una rotella che gira non la tocca finché non
 si ferma, e una panoramica non ne cambia le voci.

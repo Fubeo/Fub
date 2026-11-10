@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { t } from "../../../i18n/strings";
 import { closeContextMenu } from "../../../ui/menu";
 import {
-  ATTACHMENT_FOLDER_KEY,
+  BAND_FOLDER_KEY,
   canvasStatusItems,
   dropFolderOf,
   openZoomMenu,
@@ -74,13 +74,14 @@ describe("le voci della banda", () => {
     expect(readonly).toMatchObject({ text: t("canvas.status.readonly"), hint: why });
   });
 
-  it("la cartella: il clic apre le Impostazioni sugli allegati, senza modo resta testo", () => {
+  it("la cartella: il clic apre le Impostazioni su canvas.drop_folder, senza modo resta testo", () => {
     const opened: string[] = [];
     const clickable = byId(fake({ folder: () => "Corsi/Attachments", openSettings: (key) => opened.push(key) })).get("folder");
     expect(clickable?.text).toBe("Corsi/Attachments");
     expect(clickable?.hint).toBe(t("canvas.status.folder.open", { folder: "Corsi/Attachments" }));
     clickable?.open?.();
-    expect(opened).toEqual([ATTACHMENT_FOLDER_KEY]);
+    expect(opened).toEqual([BAND_FOLDER_KEY]);
+    expect(BAND_FOLDER_KEY).toBe("canvas.drop_folder");
     const text = byId(fake({ folder: () => "attachments" })).get("folder");
     expect(text).toMatchObject({ text: "attachments", hint: t("canvas.status.folder", { folder: "attachments" }) });
     expect(text?.open).toBeUndefined();
@@ -95,13 +96,25 @@ describe("le voci della banda", () => {
 describe("la cartella dei file trascinati", () => {
   it("segue la regola del deposito: il default è una cartella del vault, un «./» è accanto alla lavagna", () => {
     // Senza impostazione il deposito usa `attachments` alla radice del vault.
-    expect(dropFolderOf(null, "Corsi/Stat/Lezioni.canvas")).toBe("attachments");
-    expect(dropFolderOf("./Foto", "Corsi/Stat/Lezioni.canvas")).toBe("Corsi/Stat/Foto");
-    expect(dropFolderOf("Materiale", "Corsi/Stat/Lezioni.canvas")).toBe("Materiale");
+    // Con «notes» (o la scelta non ancora letta) segue la cartella delle note.
+    const notes = { dropFolder: "notes", dropFolderPath: "Allegati" } as const;
+    expect(dropFolderOf(null, null, "Corsi/Stat/Lezioni.canvas")).toBe("attachments");
+    expect(dropFolderOf("./Foto", notes, "Corsi/Stat/Lezioni.canvas")).toBe("Corsi/Stat/Foto");
+    expect(dropFolderOf("Materiale", notes, "Corsi/Stat/Lezioni.canvas")).toBe("Materiale");
   });
 
   it("una lavagna alla radice con «./» ha la cartella alla radice", () => {
-    expect(dropFolderOf("./Foto", "Lezioni.canvas")).toBe("Foto");
+    expect(dropFolderOf("./Foto", null, "Lezioni.canvas")).toBe("Foto");
+  });
+
+  it("segue canvas.drop_folder come il deposito (T34): accanto alla lavagna e dalla radice", () => {
+    const board = { dropFolder: "board", dropFolderPath: "Allegati" } as const;
+    const folder = { dropFolder: "folder", dropFolderPath: "Materiali/Foto" } as const;
+    expect(dropFolderOf(null, board, "Corsi/Statistica/Lezioni.canvas")).toBe("Corsi/Statistica/Allegati");
+    expect(dropFolderOf(null, board, "Lezioni.canvas")).toBe("Allegati");
+    expect(dropFolderOf("./x", folder, "Corsi/Lezioni.canvas")).toBe("Materiali/Foto");
+    // Un percorso che la pulizia svuota torna alla cartella delle note.
+    expect(dropFolderOf(null, { dropFolder: "folder", dropFolderPath: "../fuori" }, "Corsi/Lezioni.canvas")).toBe("attachments");
   });
 });
 

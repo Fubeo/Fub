@@ -2,7 +2,7 @@
 // shell, lo zoom (un clic apre 50%, 100%, 200%, Mostra tutta la lavagna,
 // Inquadra la selezione), le schede scelte, la sola lettura col perché e la
 // cartella dove vanno i file trascinati (un clic apre le Impostazioni su
-// `files.attachment-folder`, la voce che «Cambia cartella» apre già).
+// `canvas.drop_folder`, la voce che «Cambia cartella» apre già, T34).
 //
 // Il modello è la banda del disegno (`editors/spatial/tools/editor/chrome/
 // status.ts`): la tela tiene le voci, la superficie le dà alla shell
@@ -19,11 +19,16 @@ import { t } from "../../../i18n/strings";
 import { folderForNote } from "../../../rules/mirrored";
 import type { SurfaceStatusItem } from "../../core/registry";
 import { DEFAULT_ATTACHMENT_FOLDER } from "../../media/attachment-target";
+import { dropFolderFor, type DropFolderChoice } from "../../../state/canvas-intake";
+import { DROP_FOLDER_KEY } from "../preferences";
 import { showContextMenu, type MenuItem, type MenuPoint } from "../../../ui/menu";
 
-/// L'impostazione che la cartella dei file trascinati segue (`canvas.drop_folder`
-/// non ancora: T34). È la voce che «Cambia cartella» e la banda aprono.
+/// La cartella degli allegati delle note: la lavagna la segue quando
+/// `canvas.drop_folder` vale «notes» (o non è ancora arrivato).
 export const ATTACHMENT_FOLDER_KEY = "files.attachment-folder";
+
+/// La voce che «Cambia cartella» e la banda aprono (T34).
+export const BAND_FOLDER_KEY = DROP_FOLDER_KEY;
 
 /// Le misure dello zoom del menu, in percentuale: 100 è 1:1.
 export const CANVAS_ZOOM_PRESETS: readonly number[] = [50, 100, 200];
@@ -64,10 +69,15 @@ export async function readAttachmentFolder(): Promise<string | null> {
   return typeof entry?.value === "string" ? entry.value : null;
 }
 
-/// La cartella dove vanno i file trascinati nella lavagna `documentId`: quella
-/// degli allegati della nota, con la stessa regola del deposito (`folderForNote`).
-export function dropFolderOf(declared: string | null, documentId: string): string {
-  return folderForNote(declared ?? DEFAULT_ATTACHMENT_FOLDER, documentId);
+/// La cartella dove vanno i file trascinati nella lavagna `documentId`, con la
+/// regola del deposito: `dropFolderFor` di T34 sceglie fra la cartella delle
+/// note (`declared`), accanto alla lavagna e dalla radice; `folderForNote` la
+/// risolve come fa `depositAttachment`. `choice` `null` (non ancora letta) vale
+/// «notes», il valore di serie.
+export function dropFolderOf(declared: string | null, choice: DropFolderChoice | null, documentId: string): string {
+  const notes = declared ?? DEFAULT_ATTACHMENT_FOLDER;
+  const folder = choice === null ? notes : dropFolderFor(choice, documentId, notes);
+  return folderForNote(folder, documentId);
 }
 
 /// Le voci della banda adesso, nell'ordine in cui la shell le mette.
@@ -92,7 +102,7 @@ export function canvasStatusItems(port: CanvasStatusPort): SurfaceStatusItem[] {
       id: "folder",
       text: folder,
       hint: t("canvas.status.folder.open", { folder }),
-      open: () => openSettings(ATTACHMENT_FOLDER_KEY),
+      open: () => openSettings(BAND_FOLDER_KEY),
     });
   } else {
     items.push({ id: "folder", text: folder, hint: t("canvas.status.folder", { folder }) });

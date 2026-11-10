@@ -162,13 +162,13 @@ describe("la banda di stato della lavagna (T52)", () => {
     expect(transform).toContain("scale(2)");
   });
 
-  it("la cartella dei file trascinati apre le Impostazioni sugli allegati", () => {
+  it("la cartella dei file trascinati apre le Impostazioni su canvas.drop_folder (T34)", () => {
     const opened: string[] = [];
     const { engine } = mounted({ onOpenSettings: (key) => opened.push(key) });
     const folder = item(engine, "folder");
     expect(folder?.text).toBe("attachments");
     folder!.open!();
-    expect(opened).toEqual(["files.attachment-folder"]);
+    expect(opened).toEqual(["canvas.drop_folder"]);
   });
 
   it("senza un modo per aprire le Impostazioni la cartella resta testo", () => {
