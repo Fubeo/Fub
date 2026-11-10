@@ -5032,13 +5032,10 @@ impl crate::resources::ResourceWrite for Host {
         // Riusare un file che c'è e ricoprirne uno alla sua revisione sono due
         // domande diverse: insieme non hanno un senso da indovinare.
         if reuse_same && expected.is_some() {
-            return Err(PluginError::BadArgs(
-                format!(
-                    "resource_write cannot reuse the same content while overwriting `{}` at a revision",
-                    id.as_str()
-                )
-                .into(),
-            ));
+            return Err(PluginError::BadArgs(Text::message(
+                "host.resource.reuse_with_expected",
+                vec![Arg::text("doc", id.as_str())],
+            )));
         }
         // La shell scrive una cartella di Excel soltanto creandola: coprirne
         // una con dei byte suoi aggirerebbe la sola lettura.

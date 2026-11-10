@@ -259,28 +259,14 @@ pub fn decode_resource_write_meta(
             ));
         }
     };
+    // `reuse` assente e' il deposito di sempre; ogni valore che non sia
+    // `"same-content"` (anche `null`, anche un tipo diverso) si rifiuta.
     let reuse = match object.get("reuse") {
         None => ResourceReuse::Never,
-        Some(serde_json::Value::String(value)) => {
-            ResourceReuse::from_wire(value).ok_or_else(|| {
-                PluginError::BadArgs(
-                    format!(
-                        "resource_write metadata has an unknown `reuse` value `{value}` (only `{}`)",
-                        ResourceReuse::SAME_CONTENT
-                    )
-                    .into(),
-                )
-            })?
-        }
-        Some(_) => {
-            return Err(PluginError::BadArgs(
-                format!(
-                    "resource_write metadata needs `reuse` absent or the string `{}`",
-                    ResourceReuse::SAME_CONTENT
-                )
-                .into(),
-            ));
-        }
+        Some(value) => value
+            .as_str()
+            .and_then(ResourceReuse::from_wire)
+            .ok_or_else(|| bad_meta("`reuse` must be absent or the string `same-content`"))?,
     };
     Ok(ResourceWriteMeta {
         id,
