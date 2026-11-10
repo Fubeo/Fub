@@ -92,3 +92,13 @@ tre sistemi della CI.
 | Data | Sistemi | Pagina |
 |---|---|---|
 | 2026-10-31 | Linux, macOS, Windows (runner) | [Le librerie a runtime](librerie-runtime-2026-10-31.md) |
+
+## Gli spike
+
+La misura del varco WASM di M5, presa prima del runtime
+([`tools/varco-wasm`](../../tools/varco-wasm/)), sui gradini che si potevano
+provare senza un host.
+
+| Data | Oggetto | Pagina |
+|---|---|---|
+| 2026-08-13 | il mondo dei plugin compilato a `wasm32-unknown-unknown` | [Spike WASM — rapporto](2026-08-13-spike-wasm-host.md) |
