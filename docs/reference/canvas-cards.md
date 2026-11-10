@@ -537,3 +537,69 @@ ascolta il file con questo stesso `watch` quando la scheda è mancante (vedi
 La cache delle immagini ferme è una sola per finestra, per tutte le lavagne
 che vi si aprono. Si svuota quando una lavagna si monta in un vault diverso
 da quello in cui la cache si è riempita: lo stesso percorso è un altro file.
+
+## Comandi e tasti
+
+Ogni cosa che la tela sa fare è un comando del catalogo
+(`apps/client/src/editors/canvas/chrome/commands.ts`, prove in
+`commands.test.ts`): un id che comincia con `canvas.`, il nome, il posto
+(«Lavagna › Vista») e i tasti. L'id è un dato stabile: lo ricordano i recenti
+e lo leggeranno le Impostazioni › Tasti. Il menu del tasto destro prende dal
+catalogo il nome, il tasto, se la voce si può e perché no; sceglie solo quali
+voci mostrare, in che ordine e su che cosa (il punto del clic, il
+collegamento sotto il puntatore).
+
+`Ctrl+/` apre la ricerca dei comandi in un popover sopra la tela, con
+`rankCommands` del disegno e il suo aspetto (`chrome/command-search.ts`). Un
+comando spento si vede, col perché, e non si sceglie; i cinque usati di
+recente in quella lavagna stanno in cima. I recenti sono una comodità di
+questo computer, nello stato di vista `canvas.commands:<documento>`: se non si
+leggono o non si scrivono, valgono quelli della sessione. `Ctrl+/` si apre
+anche mentre si scrive in una scheda, ed `Esc` riporta il fuoco nel campo.
+
+| Id | Tasti |
+|---|---|
+| `canvas.undo`, `canvas.redo` | `Ctrl+Z`; `Ctrl+Maiusc+Z` e `Ctrl+Y` |
+| `canvas.commands` | `Ctrl+/` |
+| `canvas.add.text`, `canvas.add.file`, `canvas.add.link`, `canvas.add.group` | nessuno |
+| `canvas.duplicate` | `Ctrl+D` |
+| `canvas.select_all` | `Ctrl+A` |
+| `canvas.enter` | `Invio`, col fuoco sulla lavagna o su una scheda |
+| `canvas.edit`, `canvas.open`, `canvas.open_url`, `canvas.edge.reverse` | nessuno |
+| `canvas.nudge.left`, `.right`, `.up`, `.down` | le frecce |
+| `canvas.nudge.left.far`, `.right.far`, `.up.far`, `.down.far` | `Maiusc`+frecce |
+| `canvas.delete` | `Canc`, `Backspace` |
+| `canvas.color.none`, `canvas.color.1`…`canvas.color.6` | nessuno |
+| `canvas.bring_front`, `canvas.send_back` | `Ctrl+]`, `Ctrl+[` |
+| `canvas.align.left`, `.center`, `.right`, `.top`, `.middle`, `.bottom` | nessuno |
+| `canvas.distribute_x`, `canvas.distribute_y` | nessuno |
+| `canvas.fit` | `Maiusc+1`, `Ctrl+0` |
+| `canvas.fit_selection` | `Maiusc+2` |
+| `canvas.zoom_in`, `canvas.zoom_out` | `+`, `Ctrl+=` (`Ctrl++`); `-`, `Ctrl+-` |
+
+Le regole dei tasti:
+
+- sono quelli della tabella «Tasti» della lavagna dove fanno la stessa cosa
+  (gli stessi del disegno, ADR 0223); nessun tasto è di due comandi, e la
+  prova lo vieta;
+- un tasto senza `Ctrl` né `Alt` (una lettera, `Canc`, le frecce, `Invio`,
+  `+`) non vale mentre si scrive in una scheda o in un campo; dentro una
+  scheda attiva i tasti sono del contenuto, tranne `Esc` e `Ctrl+/`;
+- un tasto vale con i modificatori scritti e con nessun altro: `Ctrl+Maiusc+A`
+  non sceglie tutto, `Alt+←` resta dello Scrittoio (Indietro);
+- un segno si riconosce anche dal posto del tasto, dove la tastiera scrive
+  altro (`Maiusc+1`; le quadre sulla tastiera italiana); prima però vince il
+  segno scritto, così `Ctrl++` resta lo zoom anche dove il `+` sta al posto
+  di `]`, e lì `Ctrl+]` non ha un tasto;
+- dello Scrittoio la lavagna prende, col fuoco su di sé, solo lo zoom
+  (`Ctrl+=`, `Ctrl+-`, `Ctrl+0`), com'era già, dichiarato in
+  `CANVAS_DECLARED_SHELL_KEYS`.
+
+Dove la tela fa già una cosa in modo diverso dalla tabella, resta com'era:
+`Ctrl+0` mostra tutta la lavagna invece del 100% (che ancora non c'è); le
+frecce spostano di 8 (`Maiusc` 32) e non di 10 (`Maiusc` 50, `Alt` 1); in
+sola lettura le frecce passano alla scheda dopo o prima. `T` (scheda di testo
+al centro) e gli altri tasti degli strumenti arrivano con la colonna degli
+strumenti. I tasti della lavagna non si cambiano ancora, come quelli del
+disegno: le Impostazioni › Tasti sanno cambiare solo i comandi dello
+Scrittoio.

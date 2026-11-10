@@ -1,6 +1,6 @@
 import type { Theme } from "../../theme/theme";
 import type { SyntaxForm } from "../../host/contract";
-import { t, onLanguage, type Key } from "../../i18n/strings";
+import { t, onLanguage } from "../../i18n/strings";
 import type { SurfaceMenu, SurfaceMenuEntry, SurfaceMenuItem } from "../core/editor-menu";
 import { writeClipboardText } from "../../platform/clipboard";
 import { lineFeeds, operationFromText, type EditorChangeOrigin, type TextOperation } from "../core/text-operation";
@@ -11,6 +11,7 @@ import type { InkSample } from "../../ink/sample";
 import { ERASER } from "../../ink/tools/eraser";
 import { EraseSweep, type Spot } from "../../ink/tools/sweep";
 import { openLifetime, type Lifetime } from "../../ui/lifetime";
+import { parseChords } from "../../ui/commands";
 import { mediaKindOfId } from "../media/media-types";
 import { anchorAt, strokeBounds } from "./anchor";
 import { parseTsv } from "../core/tsv";
@@ -44,6 +45,20 @@ import {
   type InkEraserMode,
   type StrokeCut,
 } from "./ink-erase";
+import {
+  CANVAS_ALIGN,
+  CANVAS_COLORS,
+  buildCanvasCommands,
+  commandForKey,
+  isCommandSearchKey,
+  type CanvasAlign,
+  type CanvasColorId,
+  type CanvasCommand,
+  type CanvasCommandArgs,
+  type CanvasCommandBehaviour,
+  type CanvasNudge,
+} from "./chrome/commands";
+import { SHARED_RECENT_COMMANDS, openCommandSearch, type CommandSearchHandle, type RecentCommands } from "./chrome/command-search";
 import { inkFitMode } from "./ink-fit";
 import { mountInkLayer, type InkLayer, type InkLayerStroke } from "./ink-layer";
 import { cutInkStroke, fadeInkStroke, InkPathCache, paintBoard, paintCard, type DryStroke } from "./ink-paint";
@@ -336,6 +351,12 @@ export interface CanvasEngineOptions {
    */
   readonly penMemory?: CanvasPenMemory;
   /**
+   * Dove si ricordano i comandi usati di recente in ogni lavagna, per la
+   * ricerca dei comandi (T48). I test lo passano; assente, lo stato di vista
+   * di questo computer.
+   */
+  readonly recentCommands?: RecentCommands;
+  /**
    * Le schede di file e di link: chi le disegna per specie e le immagini
    * ferme. Assente (un'altra finestra, le prove vecchie): il corpo di sempre,
    * col percorso e il segnaposto.
@@ -610,6 +631,10 @@ export class CanvasEngine {
   /** Le trappole di fila senza un commit riuscito in mezzo. */
   #traps = 0;
   #editor: CardEditor | null = null;
+  /** La ricerca dei comandi aperta (Ctrl+/, T48): finché c'è, il campo di una scheda non si chiude perdendo il fuoco. */
+  #commandSearch: CommandSearchHandle | null = null;
+  /** Vero dall'apertura della ricerca alla sua chiusura, anche mentre si apre e prende il fuoco. */
+  #searching = false;
   /** L'unico posto del testo di una scheda non ancora registrato. */
   #pending: PendingText | null = null;
   #pauseTimer: ReturnType<typeof setTimeout> | undefined = undefined;
@@ -2683,6 +2708,307 @@ export class CanvasEngine {
     this.#commit([{ kind: "reorder", before: ids, after }], "input");
   }
 
+  // --- i comandi (T48) --------------------------------------------------------------
+
+  /**
+   * I comandi della lavagna adesso: il catalogo (`chrome/commands.ts`) con
+   * ciò che fanno qui. Li leggono il menu del tasto destro, i tasti e la
+   * ricerca dei comandi.
+   */
+  commands(): CanvasCommand[] {
+    if (this.#destroyed) return [];
+    return buildCanvasCommands((id) => this.#commandBehaviour(id), t);
+  }
+
+  /** Che cosa fa il comando `id` su questa tela, o `null` se non lo conosce. */
+  #commandBehaviour(id: string): CanvasCommandBehaviour | null {
+    const writable = (): string | null => (this.#readOnly ? t("canvas.commands.why.read_only") : null);
+    const withSelection = (): string | null =>
+      writable() ?? (this.#selectedNodes().length > 0 ? null : t("canvas.commands.why.no_selection"));
+    const withNodes = (): string | null => (this.#doc?.nodes.length ? null : t("canvas.commands.why.empty"));
+    const only = (): CanvasNode | null => {
+      const nodes = this.#selectedNodes();
+      return nodes.length === 1 ? nodes[0]! : null;
+    };
+    const center = (): { x: number; y: number } => {
+      const rect = this.#viewport.getBoundingClientRect();
+      return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+    };
+    const world = (args?: CanvasCommandArgs) => (args?.at ? this.#screenToWorld(args.at.x, args.at.y) : undefined);
+    const add = (type: CanvasNode["type"]): CanvasCommandBehaviour => ({
+      disabled: writable,
+      run: (args) => this.#addNode(type, undefined, world(args)),
+    });
+    if (id.startsWith("canvas.color.")) {
+      const color = id.slice("canvas.color.".length) as CanvasColorId;
+      return {
+        disabled: () => writable() ?? (this.#selectedNodes().length || this.#edgeSelection.length ? null : t("canvas.commands.why.no_selection")),
+        run: (args) => this.#colorSelection(color === "none" ? undefined : color, args?.edge),
+      };
+    }
+    if (id.startsWith("canvas.align.")) {
+      const axis = id.slice("canvas.align.".length) as CanvasAlign;
+      if (!(CANVAS_ALIGN as readonly string[]).includes(axis)) return null;
+      return {
+        disabled: () => writable() ?? (this.#selectedNodes().length >= 2 ? null : t("canvas.commands.why.two")),
+        run: () => this.#layoutSelection(axis),
+      };
+    }
+    if (id.startsWith("canvas.nudge.")) {
+      const [way, far] = id.slice("canvas.nudge.".length).split(".") as [CanvasNudge, string | undefined];
+      const step = far === "far" ? CANVAS_SNAP * 4 : CANVAS_SNAP;
+      const dx = way === "left" ? -step : way === "right" ? step : 0;
+      const dy = way === "up" ? -step : way === "down" ? step : 0;
+      return { disabled: withNodes, run: () => this.#nudge(dx, dy, way === "down" || way === "right") };
+    }
+    switch (id) {
+      case "canvas.undo":
+        return { disabled: () => (this.#undo.length || this.#pending ? null : t("canvas.commands.why.no_undo")), run: () => void this.undo() };
+      case "canvas.redo":
+        return { disabled: () => (this.#redo.length ? null : t("canvas.commands.why.no_redo")), run: () => void this.redo() };
+      case "canvas.commands":
+        return { disabled: () => null, run: () => this.#openCommandSearch() };
+      case "canvas.add.text":
+        return add("text");
+      case "canvas.add.link":
+        return add("link");
+      case "canvas.add.group":
+        return add("group");
+      case "canvas.add.file":
+        return {
+          disabled: () => writable() ?? (this.#options.onPickFile ? null : t("canvas.commands.why.no_file_picker")),
+          run: (args) => void this.#addFileNode(world(args)).catch((error: unknown) => this.#showIntakeError(error)),
+        };
+      case "canvas.duplicate":
+        return { disabled: withSelection, run: () => this.#duplicateSelection() };
+      case "canvas.select_all":
+        return { disabled: withNodes, run: () => this.#selectAll() };
+      case "canvas.enter":
+        return {
+          disabled: () => (this.#selectionFocus() ? null : t("canvas.commands.why.no_selection")),
+          run: () => {
+            const focus = this.#selectionFocus();
+            if (focus) this.#enterOrEdit(focus);
+          },
+        };
+      case "canvas.edit":
+        return {
+          disabled: () => writable() ?? (only()?.type === "text" ? null : t("canvas.commands.why.one_text")),
+          run: () => {
+            const one = only();
+            if (one?.type === "text") this.#beginCardEdit(one);
+          },
+        };
+      case "canvas.open":
+        return {
+          disabled: () => {
+            const one = only();
+            return one?.type === "file" && one.file ? null : t("canvas.commands.why.one_file");
+          },
+          run: () => {
+            const one = only();
+            if (one?.type !== "file" || !one.file) return;
+            const path = `/${one.file.replace(/^\/+/, "")}${one.subpath ?? ""}`;
+            void this.#options.onOpenPath?.(path, this.#options.documentId);
+          },
+        };
+      case "canvas.open_url":
+        return {
+          disabled: () => {
+            const one = only();
+            if (one?.type !== "link") return t("canvas.commands.why.one_link");
+            return externalUrl(one.url ?? "") !== null && this.#options.media ? null : t("canvas.commands.why.no_url");
+          },
+          run: () => {
+            const one = only();
+            const destination = one?.type === "link" ? externalUrl(one.url ?? "") : null;
+            const media = this.#options.media;
+            if (!destination || !media) return;
+            if (media.openViewer) void media.openViewer(destination);
+            else void media.openExternal(destination);
+          },
+        };
+      case "canvas.edge.reverse":
+        return {
+          disabled: () => writable() ?? (this.#edgeSelection.length ? null : t("canvas.commands.why.no_edge")),
+          run: (args) => this.#reverseEdge(args?.edge ?? this.#edgeSelection[0]),
+        };
+      case "canvas.delete":
+        return {
+          disabled: () => writable() ?? (this.#selection.length || this.#edgeSelection.length ? null : t("canvas.commands.why.no_selection")),
+          run: () => this.#deleteSelection(),
+        };
+      case "canvas.bring_front":
+        return { disabled: withSelection, run: () => this.#reorderSelection("front") };
+      case "canvas.send_back":
+        return { disabled: withSelection, run: () => this.#reorderSelection("back") };
+      case "canvas.distribute_x":
+      case "canvas.distribute_y":
+        return {
+          disabled: () => writable() ?? (this.#selectedNodes().length >= 3 ? null : t("canvas.commands.why.three")),
+          run: () => this.#layoutSelection(id === "canvas.distribute_x" ? "distribute-x" : "distribute-y"),
+        };
+      case "canvas.fit":
+        return {
+          disabled: () => null,
+          run: () => {
+            this.#fitCamera();
+            this.#render();
+          },
+        };
+      case "canvas.fit_selection":
+        return {
+          disabled: () => (this.#selectedNodes().length ? null : t("canvas.commands.why.no_selection")),
+          run: () => this.#fitCamera(true, this.#selectedNodes()),
+        };
+      case "canvas.zoom_in":
+      case "canvas.zoom_out":
+        return {
+          disabled: () => null,
+          run: (args) => {
+            const at = args?.at ?? center();
+            this.#zoomAt(at.x, at.y, id === "canvas.zoom_in" ? 1.2 : 1 / 1.2);
+          },
+        };
+      default:
+        return null;
+    }
+  }
+
+  /** La prima scheda scelta, a cui vanno le frecce e Invio. */
+  #selectionFocus(): CanvasNode | undefined {
+    const first = this.#selection[0];
+    return first ? this.#doc?.nodes.find((n) => n.id === first) : undefined;
+  }
+
+  #selectAll(): void {
+    if (!this.#doc) return;
+    this.#selection = this.#doc.nodes.map((n) => n.id);
+    this.#edgeSelection = [];
+    this.#options.onSelectionChange();
+    this.#render();
+  }
+
+  /**
+   * Le frecce: con la lavagna scrivibile spostano la scelta di `dx`, `dy`;
+   * in sola lettura passano alla scheda dopo (`forward`) o prima; senza
+   * scelta prendono la prima scheda.
+   */
+  #nudge(dx: number, dy: number, forward: boolean): void {
+    if (!this.#doc) return;
+    const focus = this.#selectionFocus();
+    if (focus && !this.#readOnly) {
+      const patches: CanvasPatch[] = [];
+      for (const id of this.#selection) {
+        const node = this.#doc.nodes.find((n) => n.id === id);
+        if (node) {
+          const patch = upsertNodePatch(this.#doc, { ...node, x: node.x + dx, y: node.y + dy });
+          if (patch) patches.push(patch);
+        }
+      }
+      this.#commit(patches, "input");
+    } else if (focus) {
+      const index = this.#doc.nodes.indexOf(focus);
+      const next = this.#doc.nodes[index + (forward ? 1 : -1)];
+      if (next) {
+        this.#selection = [next.id];
+        this.#options.onSelectionChange();
+        this.#render();
+      }
+    } else if (this.#doc.nodes.length) {
+      this.#selection = [this.#doc.nodes[0].id];
+      this.#options.onSelectionChange();
+      this.#render();
+    }
+  }
+
+  /** Il colore `color` (`undefined`: quello di serie) al filo `edge`, o alle schede scelte, o ai fili scelti. */
+  #colorSelection(color: string | undefined, edge?: string): void {
+    if (!this.#doc || this.#readOnly) return;
+    const paint = <T extends { color?: string }>(current: T): T => {
+      const next = { ...current };
+      if (color === undefined) delete next.color;
+      else next.color = color;
+      return next;
+    };
+    const nodes = edge === undefined ? this.#selectedNodes() : [];
+    if (nodes.length) {
+      const patches = nodes.map((current) => upsertNodePatch(this.#doc!, paint(current)));
+      this.#commit(patches.filter((patch): patch is NonNullable<typeof patch> => patch !== null), "input");
+      return;
+    }
+    const ids = edge === undefined ? this.#edgeSelection : [edge];
+    const patches = this.#doc.edges
+      .filter((one) => ids.includes(one.id))
+      .map((current) => upsertEdgePatch(this.#doc!, paint(current)))
+      .filter((patch): patch is NonNullable<typeof patch> => patch !== null);
+    if (patches.length) this.#commit(patches, "input");
+  }
+
+  /** Il filo `edge` va nell'altro verso: estremi, lati e punte si scambiano. */
+  #reverseEdge(edge: string | undefined): void {
+    if (!this.#doc || this.#readOnly || edge === undefined) return;
+    const current = this.#doc.edges.find((one) => one.id === edge);
+    if (!current) return;
+    const next = { ...current, fromNode: current.toNode, toNode: current.fromNode };
+    for (const [from, to] of [["fromSide", "toSide"], ["fromEnd", "toEnd"]] as const) {
+      const a = current[from];
+      const b = current[to];
+      if (b === undefined) delete next[from];
+      else (next as Record<string, unknown>)[from] = b;
+      if (a === undefined) delete next[to];
+      else (next as Record<string, unknown>)[to] = a;
+    }
+    const patch = upsertEdgePatch(this.#doc, next);
+    if (patch) this.#commit([patch], "input");
+  }
+
+  /**
+   * Apre la ricerca dei comandi sopra la tela, in alto al centro. Esc la
+   * chiude e rimette il fuoco dov'era, anche nel campo di una scheda; un
+   * comando scelto chiude prima il campo (il testo si registra) e poi parte.
+   */
+  #openCommandSearch(): void {
+    if (this.#destroyed || !this.#doc || this.#searching) return;
+    const recents = this.#options.recentCommands ?? SHARED_RECENT_COMMANDS;
+    const documentId = this.#options.documentId ?? "";
+    const viewport = this.#viewport;
+    const anchor = {
+      getBoundingClientRect: () => {
+        const rect = viewport.getBoundingClientRect();
+        return { left: rect.left, top: rect.top + 8, width: rect.width, height: 0 };
+      },
+    };
+    const commands = this.commands().filter((command) => command.id !== "canvas.commands");
+    this.#searching = true;
+    const search = openCommandSearch({
+      anchor,
+      commands,
+      recent: () => recents.list(documentId),
+      lifetime: this.#life,
+      onClose: (reason, chosen) => {
+        this.#commandSearch = null;
+        this.#searching = false;
+        if (this.#destroyed) return;
+        const editor = this.#editor;
+        if (chosen) {
+          if (editor) this.#leaveField(true);
+          recents.remember(documentId, chosen.id);
+          if (chosen.disabled() === null) chosen.run();
+          return;
+        }
+        // Esc riporta il fuoco nel campo; un gesto fuori lo lascia, come
+        // l'avrebbe lasciato senza la ricerca.
+        if (editor && reason !== "escape" && document.activeElement !== editor.input) this.#leaveField(false);
+      },
+    });
+    this.#commandSearch = search;
+    // I recenti ricordati arrivano dopo la prima lettura, e l'elenco si rifà.
+    void recents.load(documentId).then(() => {
+      if (this.#commandSearch === search) search.refresh();
+    });
+  }
+
   // --- menu -----------------------------------------------------------------------
 
   /** Il menu del tasto destro nel punto `at` della finestra (`null`: dalla
@@ -2701,84 +3027,66 @@ export class CanvasEngine {
       this.#options.onSelectionChange();
       this.#displaySelection();
     }
-    const writable = !this.#readOnly;
-    const then = (run: () => void) => () => {
-      run();
-      this.#viewport.focus();
+    // Le voci vengono dal catalogo dei comandi (T48): il nome, il tasto, se
+    // si può e perché no. Il menu dice solo quali voci, in che ordine e su
+    // che cosa (`args`); `refocus` rimette il fuoco sulla tela dopo il gesto.
+    const catalog = new Map(this.commands().map((command) => [command.id, command]));
+    const entry = (id: string, args?: CanvasCommandArgs, refocus = true, extra: Partial<SurfaceMenuItem> = {}): SurfaceMenuItem => {
+      const command = catalog.get(id);
+      if (!command) throw new Error(`canvas: il comando ${id} non è nel catalogo`);
+      const why = command.disabled();
+      const chord = command.keys.find((key) => parseChords(key) !== null);
+      return {
+        id,
+        label: command.label,
+        ...(chord === undefined ? {} : { chord }),
+        enabled: why === null,
+        ...(why === null ? {} : { description: why }),
+        ...(command.danger ? { danger: true } : {}),
+        ...extra,
+        run: () => {
+          if (command.disabled() !== null) return;
+          command.run(args);
+          if (refocus) this.#viewport.focus();
+        },
+      };
     };
-    const colors = (current: string | undefined, apply: (color: string | undefined) => void): SurfaceMenuItem => ({
+    const writable = !this.#readOnly;
+    const colors = (current: string | undefined, args?: CanvasCommandArgs): SurfaceMenuItem => ({
       id: "canvas.color",
       label: t("canvas_menu.color"),
       enabled: writable,
-      items: ["", "1", "2", "3", "4", "5", "6"].map((value) => ({
-        id: `canvas.color.${value || "none"}`,
-        label: value ? t(`canvas_menu.color.${value}` as Key) : t("canvas.default"),
-        checked: (current ?? "") === value,
-        run: then(() => apply(value || undefined)),
-      })),
+      items: CANVAS_COLORS.map((value) => entry(`canvas.color.${value}`, args, true, { checked: (current ?? "") === (value === "none" ? "" : value) })),
     });
     if (node) {
       const nodes = this.#selectedNodes();
       const one = nodes.length === 1 ? nodes[0]! : null;
       const context: SurfaceMenuEntry[] = [];
-      if (one?.type === "text") context.push({ id: "canvas.edit", label: t("canvas_menu.edit"), enabled: writable, run: () => this.#beginCardEdit(one) });
-      if (one?.type === "file" && one.file) {
-        const path = `/${one.file.replace(/^\/+/, "")}${one.subpath ?? ""}`;
-        context.push({ id: "canvas.open", label: t("canvas_menu.open"), run: () => void this.#options.onOpenPath?.(path, this.#options.documentId) });
-      }
-      if (one?.type === "link") {
-        const destination = externalUrl(one.url ?? "");
-        const media = this.#options.media;
-        context.push({
-          id: "canvas.open_url",
-          label: t("canvas.open_url"),
-          enabled: destination !== null && !!media,
-          run: () => {
-            if (!destination) return;
-            if (media?.openViewer) void media.openViewer(destination);
-            else if (media) void media.openExternal(destination);
-          },
-        });
-      }
+      if (one?.type === "text") context.push(entry("canvas.edit", undefined, false));
+      if (one?.type === "file" && one.file) context.push(entry("canvas.open", undefined, false));
+      if (one?.type === "link") context.push(entry("canvas.open_url", undefined, false));
       context.push(
-        colors(one?.color, (color) => this.#commit(this.#selectedNodes().map((current) => {
-          const next = { ...current };
-          if (color === undefined) delete next.color;
-          else next.color = color;
-          return upsertNodePatch(this.#doc!, next);
-        }).filter((patch): patch is NonNullable<typeof patch> => patch !== null), "input")),
-        { id: "canvas.duplicate", label: t("canvas.duplicate"), enabled: writable, run: then(() => this.#duplicateSelection()) },
+        colors(one?.color),
+        entry("canvas.duplicate"),
         {
           id: "canvas.order",
           label: t("canvas_menu.order"),
           enabled: writable,
-          items: [
-            { id: "canvas.bring_front", label: t("canvas.bring_front"), run: then(() => this.#reorderSelection("front")) },
-            { id: "canvas.send_back", label: t("canvas.send_back"), run: then(() => this.#reorderSelection("back")) },
-          ],
+          items: [entry("canvas.bring_front"), entry("canvas.send_back")],
         },
       );
       if (nodes.length >= 2) {
-        const axes = ["left", "center", "right", "top", "middle", "bottom"] as const;
         context.push({
           id: "canvas.align",
           label: t("canvas_menu.align"),
           enabled: writable,
           items: [
-            ...axes.map((axis) => ({ id: `canvas.align.${axis}`, label: t(`canvas.align_${axis}`), run: then(() => this.#layoutSelection(axis)) })),
-            ...(nodes.length >= 3
-              ? [
-                  { id: "canvas.distribute_x", label: t("canvas.distribute_x"), run: then(() => this.#layoutSelection("distribute-x")) },
-                  { id: "canvas.distribute_y", label: t("canvas.distribute_y"), run: then(() => this.#layoutSelection("distribute-y")) },
-                ]
-              : []),
+            ...CANVAS_ALIGN.map((axis) => entry(`canvas.align.${axis}`)),
+            ...(nodes.length >= 3 ? [entry("canvas.distribute_x"), entry("canvas.distribute_y")] : []),
           ],
         });
       }
-      context.push(
-        { id: "canvas.fit_selection", label: t("canvas.fit_selection"), run: () => this.#fitCamera(true, this.#selectedNodes()) },
-        { id: "canvas.delete", label: t("canvas.delete"), enabled: writable, danger: true, run: then(() => this.#deleteSelection()) },
-      );
+      context.push(entry("canvas.fit_selection", undefined, false), entry("canvas.delete"));
       const box = this.#stage.querySelector<HTMLElement>(`.canvas-node[data-node="${CSS.escape(node)}"]`)?.getBoundingClientRect();
       return {
         target: { kind: one?.type === "group" ? "group" : "node", ref: node },
@@ -2792,38 +3100,10 @@ export class CanvasEngine {
       if (!current) return null;
       return {
         target: { kind: "edge", ref: edge },
-        context: [
-          colors(current.color, (color) => {
-            const next = { ...current };
-            if (color === undefined) delete next.color;
-            else next.color = color;
-            const patch = upsertEdgePatch(this.#doc!, next);
-            if (patch) this.#commit([patch], "input");
-          }),
-          {
-            id: "canvas.edge.reverse",
-            label: t("canvas_menu.reverse"),
-            enabled: writable,
-            run: then(() => {
-              const next = { ...current, fromNode: current.toNode, toNode: current.fromNode };
-              for (const [from, to] of [["fromSide", "toSide"], ["fromEnd", "toEnd"]] as const) {
-                const a = current[from];
-                const b = current[to];
-                if (b === undefined) delete next[from];
-                else (next as Record<string, unknown>)[from] = b;
-                if (a === undefined) delete next[to];
-                else (next as Record<string, unknown>)[to] = a;
-              }
-              const patch = upsertEdgePatch(this.#doc!, next);
-              if (patch) this.#commit([patch], "input");
-            }),
-          },
-          { id: "canvas.delete", label: t("canvas.delete"), enabled: writable, danger: true, run: then(() => this.#deleteSelection()) },
-        ],
+        context: [colors(current.color, { edge }), entry("canvas.edge.reverse", { edge }), entry("canvas.delete")],
       };
     }
-    const point = at ? this.#screenToWorld(at.x, at.y) : undefined;
-    const add = (type: CanvasNode["type"], label: string): SurfaceMenuItem => ({ id: `canvas.add.${type}`, label, run: then(() => this.#addNode(type, undefined, point)) });
+    const here = at ? { at } : undefined;
     return {
       target: { kind: "empty" },
       context: [
@@ -2832,21 +3112,14 @@ export class CanvasEngine {
           label: t("canvas_menu.add_here"),
           enabled: writable,
           items: [
-            add("text", t("canvas.add_text")),
-            ...(this.#options.onPickFile
-              ? [{ id: "canvas.add.file", label: t("canvas.add_file"), run: () => void this.#addFileNode(point).catch((error: unknown) => this.#showIntakeError(error)) }]
-              : []),
-            add("link", t("canvas.add_link")),
-            add("group", t("canvas.add_group")),
+            entry("canvas.add.text", here),
+            ...(this.#options.onPickFile ? [entry("canvas.add.file", here, false)] : []),
+            entry("canvas.add.link", here),
+            entry("canvas.add.group", here),
           ],
         },
-        { id: "canvas.fit", label: t("canvas.fit"), run: () => { this.#fitCamera(); this.#render(); } },
-        ...(at
-          ? [
-              { id: "canvas.zoom_in", label: t("canvas.zoom_in"), run: () => this.#zoomAt(at.x, at.y, 1.2) },
-              { id: "canvas.zoom_out", label: t("canvas.zoom_out"), run: () => this.#zoomAt(at.x, at.y, 1 / 1.2) },
-            ]
-          : []),
+        entry("canvas.fit", undefined, false),
+        ...(at ? [entry("canvas.zoom_in", here, false), entry("canvas.zoom_out", here, false)] : []),
       ],
     };
   }
@@ -3349,54 +3622,23 @@ export class CanvasEngine {
       if (event.key === "Escape") {
         event.preventDefault();
         this.#leaveCard(true);
+      } else if (isCommandSearchKey(event)) {
+        // Ctrl+/ si apre anche da dentro la scheda, ed Esc ci torna.
+        event.preventDefault();
+        this.#openCommandSearch();
       }
       return;
     }
     this.#recordPending();
-    const modifier = event.ctrlKey || event.metaKey;
-    if (modifier && event.key.toLowerCase() === "z") {
-      event.preventDefault();
-      if (event.shiftKey) this.redo();
-      else this.undo();
+    const commands = this.commands();
+    const where = { writing: isTextTarget(event.target), onBoard: this.#onCardOrBoard(event.target) };
+    // Prima i tasti con Ctrl o Alt: valgono anche col fuoco in un campo.
+    const held = commandForKey(commands, event, { ...where, writing: true });
+    if (held) {
+      this.#runKey(event, held);
       return;
     }
-    if (modifier && event.key.toLowerCase() === "y") {
-      event.preventDefault();
-      this.redo();
-      return;
-    }
-    if (modifier && event.key.toLowerCase() === "a") {
-      event.preventDefault();
-      this.#selection = this.#doc.nodes.map((n) => n.id);
-      this.#edgeSelection = [];
-      this.#options.onSelectionChange();
-      this.#render();
-      return;
-    }
-    if (modifier && event.key.toLowerCase() === "d") {
-      event.preventDefault();
-      this.#duplicateSelection();
-      return;
-    }
-    if (modifier && (event.key === "+" || event.key === "=")) {
-      event.preventDefault();
-      const rect = this.#viewport.getBoundingClientRect();
-      this.#zoomAt(rect.left + rect.width / 2, rect.top + rect.height / 2, 1.2);
-      return;
-    }
-    if (modifier && event.key === "-") {
-      event.preventDefault();
-      const rect = this.#viewport.getBoundingClientRect();
-      this.#zoomAt(rect.left + rect.width / 2, rect.top + rect.height / 2, 1 / 1.2);
-      return;
-    }
-    if (modifier && event.key === "0") {
-      event.preventDefault();
-      this.#fitCamera();
-      this.#render();
-      return;
-    }
-    const focus = this.#selection[0] ? this.#doc.nodes.find((n) => n.id === this.#selection[0]) : undefined;
+    const focus = this.#selectionFocus();
     // La scheda scelta e non attiva riceve le pagine (il PDF), se li vuole.
     if (focus && this.#selection.length === 1 && CARD_KEYS.has(event.key) && this.#onCardOrBoard(event.target)) {
       const view = this.#cards.get(focus.id)?.view;
@@ -3411,58 +3653,16 @@ export class CanvasEngine {
         return;
       }
     }
-    switch (event.key) {
-      case "Delete":
-      case "Backspace": {
-        if ((event.target as HTMLElement)?.tagName === "TEXTAREA"
-          || (event.target as HTMLElement)?.tagName === "INPUT") return;
-        event.preventDefault();
-        this.#deleteSelection();
-        break;
-      }
-      case "ArrowUp":
-      case "ArrowDown":
-      case "ArrowLeft":
-      case "ArrowRight": {
-        if ((event.target as HTMLElement)?.tagName === "TEXTAREA"
-          || (event.target as HTMLElement)?.tagName === "INPUT") return;
-        event.preventDefault();
-        const step = event.shiftKey ? CANVAS_SNAP * 4 : CANVAS_SNAP;
-        const dx = event.key === "ArrowLeft" ? -step : event.key === "ArrowRight" ? step : 0;
-        const dy = event.key === "ArrowUp" ? -step : event.key === "ArrowDown" ? step : 0;
-        if (focus && !this.#readOnly) {
-          const patches: CanvasPatch[] = [];
-          for (const id of this.#selection) {
-            const node = this.#doc.nodes.find((n) => n.id === id);
-            if (node) {
-              const patch = upsertNodePatch(this.#doc, { ...node, x: node.x + dx, y: node.y + dy });
-              if (patch) patches.push(patch);
-            }
-          }
-          this.#commit(patches, "input");
-        } else if (focus) {
-          const index = this.#doc.nodes.indexOf(focus);
-          const next = this.#doc.nodes[index + (event.key === "ArrowDown" || event.key === "ArrowRight" ? 1 : -1)];
-          if (next) {
-            this.#selection = [next.id];
-            this.#options.onSelectionChange();
-            this.#render();
-          }
-        } else if (this.#doc.nodes.length) {
-          this.#selection = [this.#doc.nodes[0].id];
-          this.#options.onSelectionChange();
-          this.#render();
-        }
-        break;
-      }
-      case "Enter": {
-        if (focus && this.#onCardOrBoard(event.target)) {
-          event.preventDefault();
-          this.#enterOrEdit(focus);
-        }
-        break;
-      }
-    }
+    // Poi i tasti che scrivono (Canc, le frecce, Invio, i segni): mai mentre
+    // si scrive in un campo.
+    const bare = commandForKey(commands, event, where);
+    if (bare) this.#runKey(event, bare);
+  }
+
+  /** Il tasto è del comando `command`: lo prende, e il comando parte se si può. */
+  #runKey(event: KeyboardEvent, command: CanvasCommand): void {
+    event.preventDefault();
+    if (command.disabled() === null) command.run();
   }
 
   // --- render -------------------------------------------------------------------
@@ -4376,7 +4576,11 @@ export class CanvasEngine {
       event.stopPropagation();
       editor.recordOnInput = false;
       if (event.isComposing || editor.composing) return;
-      if (event.key === "Escape") {
+      if (isCommandSearchKey(event)) {
+        // Ctrl+/ si apre anche mentre si scrive; Esc torna nel campo.
+        event.preventDefault();
+        this.#openCommandSearch();
+      } else if (event.key === "Escape") {
         event.preventDefault();
         this.#leaveField(true);
       } else if (event.key === "Enter") {
@@ -4389,7 +4593,10 @@ export class CanvasEngine {
         this.#leaveField(true);
       }
     }, { signal });
-    input.addEventListener("blur", () => this.#leaveField(false), { signal });
+    // Il fuoco che va nella ricerca dei comandi non chiude il campo: ci torna.
+    input.addEventListener("blur", () => {
+      if (!this.#searching) this.#leaveField(false);
+    }, { signal });
     body.replaceChildren(input);
     input.focus();
     if (node.type === "text") input.setSelectionRange(input.value.length, input.value.length);
