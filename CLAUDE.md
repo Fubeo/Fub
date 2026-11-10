@@ -119,6 +119,13 @@ type-check. Theme derivatives must regenerate byte for byte:
 `npm run theme:generate && npm run theme:verify`. Every other command is in
 [`CONTRIBUTING.md`](CONTRIBUTING.md).
 
+Keep command output small. `.claude/settings.json` makes cargo quiet and
+nextest print only failures; set the variable back for one command if you need
+a passing run in full. `scripts/check.sh` prints one line per step: open only
+the log of a red step. Read `git diff --stat` before a full diff, and filter CI
+logs with `grep` for the errors instead of reading them whole. Never cut a
+diagnostic that can change the conclusion.
+
 ## Generated files
 
 Never edit them by hand; each generated file's header names the exact command.

@@ -400,5 +400,14 @@ export default defineConfig({
     // Il nucleo della lavagna si compila prima delle prove, non dentro il
     // tempo massimo della prima che lo importa: il perché sta nel file.
     globalSetup: ["./build/canvas-wasm.global-setup.mjs"],
+    // happy-dom non carica i fogli di stile esterni e, per ogni `<link
+    // rel="stylesheet">` che una prova monta (le pagine `index.html`,
+    // `document.html`, `mobile.html`), scrive su stderr un errore con tutta la
+    // pila: circa 170 per corsa, quasi 280 KB di testo che coprono i messaggi
+    // veri. Il caricamento resta spento; il foglio mancante conta come caricato
+    // (evento `load`), e nessun codice dell'app ascolta quell'evento sui `<link>`.
+    environmentOptions: {
+      happyDOM: { settings: { handleDisabledFileLoadingAsSuccess: true } },
+    },
   },
 });
