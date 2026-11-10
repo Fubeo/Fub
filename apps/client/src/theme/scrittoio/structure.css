@@ -3028,6 +3028,20 @@ body {
   justify-content: center;
   pointer-events: auto;
 }
+/* La barra della selezione (T51), sopra ciò che è scelto (come .draw-arrange;
+   il posto lo scrive la tela in linea con bubblePlace). */
+.canvas-selection-bar {
+  position: absolute;
+  z-index: 1;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  box-sizing: border-box;
+  max-width: calc(100% - 16px);
+}
+.canvas-selection-bar[hidden] {
+  display: none;
+}
 /* Il navigatore (T55), in basso a destra della vista (come .draw-navigator;
    una sola <canvas>). */
 .canvas-navigator {

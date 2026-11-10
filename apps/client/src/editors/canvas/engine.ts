@@ -84,6 +84,7 @@ import {
   type CanvasClipboard,
 } from "./clipboard";
 import { createCanvasOptions, type CanvasOptions } from "./chrome/options";
+import { createCanvasSelectionBar, selectionBarWanted, type CanvasSelectionBar } from "./chrome/selection-bar";
 import type { OptionItem } from "../../kit/options-bar";
 import {
   canvasStatusItems,
@@ -177,6 +178,8 @@ export const CANVAS_SNAP = 8;
 export const CANVAS_GRID_DOT_STEPS = 4;
 /** Sotto questi pixel fra due punti, sullo schermo, la griglia non si disegna (T71): sotto il 50%. */
 export const CANVAS_GRID_MIN_PX = 16;
+/** Il margine di un gruppo fatto con Raggruppa attorno alle sue schede (T51), valore di partenza. */
+const CANVAS_GROUP_MARGIN = 24;
 export const CANVAS_MIN_SIZE = 40;
 export const MAX_CANVAS_HISTORY = 100;
 /** La pausa dopo l'ultimo tasto in una scheda, prima che il suo testo si registri. */
@@ -1290,6 +1293,8 @@ export class CanvasEngine {
    * e delle schede scelte, o la barra di una scheda in scrittura.
    */
   readonly #canvasOptions: CanvasOptions;
+  /** La barra della selezione (T51), sopra le schede scelte, a fine gesto. */
+  readonly #selectionBar: CanvasSelectionBar;
   /** Le punte dei fili che lo strumento Collega tira (T50); di serie alla fine. */
   #tips: CanvasTip = "end";
   /** La vista ricordata su questo computer (T36); `null` senza memoria o senza lavagna. */
@@ -1463,6 +1468,25 @@ export class CanvasEngine {
       penMenu: this.#penMenu,
       swatches: () => this.#colorSwatches(),
     });
+    // La barra della selezione (T51): una sorella della vista, come il
+    // navigatore, così i suoi clic non passano dal puntatore della lavagna.
+    this.#selectionBar = createCanvasSelectionBar({
+      lifetime: this.#life,
+      commands: () => this.commands(),
+      run: (id, trigger) => {
+        this.#recordPending();
+        const command = this.commands().find((one) => one.id === id);
+        if (!command || command.disabled() !== null) return;
+        // I menu si aprono sotto il pulsante della barra.
+        if (id === "canvas.color_menu") this.#canvasOptions.openColorMenu(trigger);
+        else if (id === "canvas.align_menu") this.#canvasOptions.openAlignMenu(trigger);
+        else command.run();
+        this.#statusSettle();
+      },
+      color: () => this.#chosenColor(),
+      back: () => this.#viewport.focus({ preventScroll: true }),
+    });
+    area.append(this.#selectionBar.element);
     const header = document.createElement("div");
     header.className = "canvas-header";
     header.append(this.#canvasOptions.element);
@@ -1487,12 +1511,17 @@ export class CanvasEngine {
       this.#empty.relabel();
       this.#navigator.relabel();
       this.#canvasOptions.sync();
+      this.#selectionBar.relabel();
     });
     // I tasti degli strumenti valgono anche col fuoco sulla colonna (dopo un
     // clic su una casella); gli altri tasti lì sono della colonna.
     this.#life.listen(this.#rail.element, "keydown", (event) => this.#railKeydown(event));
     const signal = this.#abort.signal;
-    this.#viewport.addEventListener("pointerdown", (event) => this.#pointerDown(event), { signal });
+    // Un gesto che comincia toglie la barra della selezione: torna a fine gesto.
+    this.#viewport.addEventListener("pointerdown", (event) => {
+      this.#selectionBar.hide();
+      this.#pointerDown(event);
+    }, { signal });
     this.#viewport.addEventListener("pointermove", (event) => this.#pointerMove(event), { signal });
     // A fine gesto (e dopo ogni tasto) la banda di stato si rilegge: dentro un
     // gesto `#statusSettle` non dice niente.
@@ -4785,6 +4814,8 @@ export class CanvasEngine {
    * con la stessa firma di prima non avvisa.
    */
   #statusSettle(): void {
+    // La barra della selezione si rilegge anche lei qui: dentro un gesto sparisce.
+    this.#syncSelectionBar();
     if (this.#destroyed || !this.#doc || this.#gestureActive()) return;
     // Il navigatore si rilegge con la banda, a fine gesto e al cambio del documento (T55).
     this.#navigator.settle();
@@ -5010,12 +5041,25 @@ export class CanvasEngine {
           },
         };
       case "canvas.connect":
+        // Con una scheda comincia il filo da lei; con due le collega, come C
+        // (T67, D-19 (a)): così vale anche nella barra della selezione (T51).
         return {
-          disabled: () => writable() ?? (only() ? null : t("canvas.commands.why.one_card")),
-          run: () => {
-            const one = only();
-            if (one) this.#beginConnectFrom(one.id);
+          disabled: () => {
+            const why = writable();
+            if (why !== null) return why;
+            const count = this.#selectedNodes().length;
+            return count === 1 || count === 2 ? null : t("canvas.commands.why.one_or_two");
           },
+          run: () => {
+            const chosen = this.#selectedNodes();
+            if (chosen.length === 2) this.#connectPair(chosen[0]!, chosen[1]!);
+            else if (chosen.length === 1) this.#beginConnectFrom(chosen[0]!.id);
+          },
+        };
+      case "canvas.group":
+        return {
+          disabled: () => withSelection() ?? (this.#isSceneOversized() ? t("canvas.too_large") : null),
+          run: () => this.#groupSelection(),
         };
       case "canvas.trash_file":
         return {
@@ -5144,6 +5188,73 @@ export class CanvasEngine {
   setCardOptions(items: readonly OptionItem[] | null): void {
     if (this.#destroyed) return;
     this.#canvasOptions.setWriting(items);
+    this.#syncSelectionBar();
+  }
+
+  // --- la barra della selezione (T51) ------------------------------------------
+
+  /**
+   * Mostra la barra della selezione sopra le schede scelte, o la toglie: la
+   * toglie durante un gesto, con la penna giù e mentre si scrive in una scheda
+   * (`selectionBarWanted`), e quando le schede sono tutte fuori dalla vista.
+   * Con la penna giù torna quando si alza (il silenzio della penna).
+   */
+  #syncSelectionBar(): void {
+    const bar = this.#selectionBar as CanvasSelectionBar | undefined;
+    // Le preferenze arrivano anche durante il costruttore, prima della barra.
+    if (!bar) return;
+    const nodes = this.#doc && !this.#destroyed && !this.#isSceneOversized() && this.#isShown() ? this.#selectedNodes() : [];
+    const pen = this.#penDown;
+    const writing = this.#editor !== null || this.#activeId !== null || this.#canvasOptions.mode === "writing";
+    if (!selectionBarWanted({ chosen: nodes.length, gesture: this.#gestureActive(), pen, writing })) {
+      bar.hide();
+      if (pen && nodes.length > 0 && this.#quiet.active) this.#quiet.defer("selection-bar", () => this.#syncSelectionBar());
+      return;
+    }
+    const zoom = this.#camera.zoom;
+    const box = {
+      left: Math.min(...nodes.map((node) => node.x)) * zoom + this.#camera.x,
+      top: Math.min(...nodes.map((node) => node.y)) * zoom + this.#camera.y,
+      right: Math.max(...nodes.map((node) => node.x + node.width)) * zoom + this.#camera.x,
+      bottom: Math.max(...nodes.map((node) => node.y + node.height)) * zoom + this.#camera.y,
+    };
+    const rect = this.#viewport.getBoundingClientRect();
+    const one = nodes.length === 1 ? nodes[0]! : null;
+    const open = one?.type === "file" && one.file ? "canvas.open" : one?.type === "link" ? "canvas.open_url" : null;
+    bar.show({
+      chosen: nodes.length,
+      open,
+      box,
+      view: { width: rect.width || 800, height: rect.height || 600 },
+      offset: { left: this.#viewport.offsetLeft, top: this.#viewport.offsetTop },
+    });
+  }
+
+  /**
+   * Raggruppa (T51): un gruppo attorno alle schede scelte, con un margine,
+   * messo nella pila subito sotto la prima di loro, così resta dietro; poi è
+   * scelto lui. Un passo d'annulla solo.
+   */
+  #groupSelection(): void {
+    const doc = this.#doc;
+    const nodes = this.#selectedNodes();
+    if (!doc || this.#readOnly || this.#isSceneOversized() || nodes.length === 0) return;
+    const left = snap(Math.min(...nodes.map((node) => node.x)) - CANVAS_GROUP_MARGIN);
+    const top = snap(Math.min(...nodes.map((node) => node.y)) - CANVAS_GROUP_MARGIN);
+    const right = snap(Math.max(...nodes.map((node) => node.x + node.width)) + CANVAS_GROUP_MARGIN);
+    const bottom = snap(Math.max(...nodes.map((node) => node.y + node.height)) + CANVAS_GROUP_MARGIN);
+    const group: CanvasNode = { id: newNodeId("n"), type: "group", x: left, y: top, width: right - left, height: bottom - top, label: "" };
+    const patch = upsertNodePatch(doc, group);
+    if (!patch) return;
+    const ids = doc.nodes.map((node) => node.id);
+    const chosen = new Set(nodes.map((node) => node.id));
+    const first = ids.findIndex((id) => chosen.has(id));
+    const after = [...ids.slice(0, first), group.id, ...ids.slice(first)];
+    if (!this.#commit([patch, { kind: "reorder", before: [...ids, group.id], after }], "input")) return;
+    this.#selection = [group.id];
+    this.#edgeSelection = [];
+    this.#options.onSelectionChange();
+    this.#render();
   }
 
   /** La prima scheda scelta, a cui vanno le frecce e Invio. */
@@ -7274,6 +7385,7 @@ export class CanvasEngine {
       return false;
     }
     this.#activeId = id;
+    this.#syncSelectionBar();
     const article = entry.article;
     article.dataset.cardActive = "";
     const hint = document.createElement("span");
@@ -7304,6 +7416,7 @@ export class CanvasEngine {
       }
     }
     if (refresh) this.#refreshLive();
+    this.#syncSelectionBar();
   }
 
   #unmarkActive(entry: CardEntry, refocus: boolean): void {
@@ -7953,6 +8066,8 @@ export class CanvasEngine {
     const lifetime = new AbortController();
     const editor: CardEditor = { id: node.id, field, input, article, lifetime, composing: false, recordOnInput: false };
     this.#editor = editor;
+    // Mentre si scrive nella scheda la barra della selezione non c'è (T51).
+    this.#syncSelectionBar();
     const signal = lifetime.signal;
     const hold = (): void => {
       const card = this.#doc?.nodes.find((candidate) => candidate.id === node.id) ?? this.#pending?.card ?? node;

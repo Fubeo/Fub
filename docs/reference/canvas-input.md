@@ -3,13 +3,14 @@
 > **Ambito:** come la tela della lavagna prende la tastiera, il puntatore e
 > la rotella: entrare in una scheda e uscirne, scrivere in una nota, la rotella, il catalogo dei
 > comandi e i loro tasti, i fili, le maniglie, la lavagna vuota, la colonna
-> degli strumenti, la riga delle opzioni, la banda di stato e l'ispettore.
+> degli strumenti, la riga delle opzioni, la barra della selezione, la banda
+> di stato e l'ispettore.
 > **Fonti autorevoli:** `apps/client/src/editors/canvas/engine.ts`
 > (`#keydown`, `#wheel`, le schede attive) e le prove in
 > `apps/client/src/editors/canvas/engine.test.ts` e
 > `engine-cards.test.ts`; per i comandi,
 > `apps/client/src/editors/canvas/chrome/commands.ts`, `command-search.ts`,
-> `rail.ts`, `options.ts` e le loro prove; per la lavagna vuota,
+> `rail.ts`, `options.ts`, `selection-bar.ts` e le loro prove; per la lavagna vuota,
 > `chrome/empty.ts` ed `chrome/empty.test.ts`; per la banda, `chrome/status.ts` e
 > `engine-status.test.ts`; per l'ispettore, `chrome/inspector.ts`,
 > `reading-order.ts` e le loro prove; per i fili, `edges.ts` ed
@@ -144,7 +145,7 @@ scrive, valgono quelli della sessione). `Esc` torna dov'eri, anche in un campo.
 | `canvas.commands`, `canvas.select_all`, `canvas.duplicate` | `Ctrl+/`, `Ctrl+A`, `Ctrl+D` |
 | `canvas.enter` (col fuoco sulla tela o su una scheda), `canvas.delete` («Togli dalla lavagna») | `Invio`; `Canc`, `Backspace` |
 | `canvas.nudge.<lato>`, `canvas.nudge.<lato>.far` | frecce; `Maiusc`+frecce |
-| `canvas.bring_front`, `canvas.send_back` | `Ctrl+]`, `Ctrl+[` |
+| `canvas.group` (Raggruppa), `canvas.bring_front`, `canvas.send_back` | `Ctrl+G`; `Ctrl+]`, `Ctrl+[` |
 | `canvas.fit`, `canvas.fit_selection` | `Maiusc+1`, `Ctrl+0`; `Maiusc+2` |
 | `canvas.zoom_in`, `canvas.zoom_out`, `canvas.zoom_reset` | `+`, `Ctrl+=`; `-`, `Ctrl+-`; `0` |
 | `canvas.grid_toggle` (mostra o nasconde la griglia di questa lavagna) | `Ctrl+'` |
@@ -199,8 +200,8 @@ cambiano la lavagna sono spente col perché, non nascoste.
 - **`C`** con una scheda scelta comincia il filo da lei, come «Collega…» e il
   pulsante → della testata: il prossimo clic su un'altra scheda lo chiude e la
   colonna torna alla Selezione; `Esc` rinuncia. Con due schede scelte le
-  collega, dalla prima alla seconda (D-19 (a)). Senza scheda `C` sceglie lo
-  strumento Collega. Mentre si scrive in una scheda, `C` è una lettera.
+  collega, dalla prima alla seconda (D-19 (a)); così anche `canvas.connect`,
+  spento con tre o più. Senza scheda `C` sceglie lo strumento Collega. Mentre si scrive in una scheda, `C` è una lettera.
 - **Togli dalla lavagna** (e `Canc`, `Backspace`, e il pulsante della scheda
   mancante) toglie le schede, mai i file, e lo dice nel posto degli avvisi:
   «Tolta dalla lavagna. Il file resta.», «{n} schede tolte dalla lavagna. I
@@ -388,6 +389,34 @@ barra di formato della nota (T41) e della formula della cella (T42).
 La barra di sotto, quella di N4, tiene ciò che non è ancora passato altrove:
 «Scrivi col mouse», aggiungi, duplica, togli, inquadra la selezione, i fili e
 il colore esatto (`#rrggbb`) delle schede.
+
+## La barra della selezione
+
+Sopra le schede scelte sta la barra della selezione
+(`chrome/selection-bar.ts`, `.canvas-selection-bar`, una pillola come
+«Disponi» del disegno): Colore (il pallino e il menu dei colori di T47, che si
+apre sotto di lei), Collega… (`canvas.connect`), Raggruppa (`canvas.group`),
+«Allinea e distribuisci» con più schede, Apri con una scheda che si apre
+(`canvas.open` per un file, `canvas.open_url` per una pagina web), Togli dalla
+lavagna. Ogni pulsante è un comando del catalogo, col nome, il tasto e il
+perché quando è spento (`aria-disabled`); in sola lettura restano accesi solo
+quelli che non cambiano il file (Apri). I fili scelti da soli non la mostrano.
+
+- **Quando.** Compare a fine gesto (il rilascio del clic, la rotella ferma, un
+  tasto), mai durante: un `pointerdown` nella vista la toglie, e non torna
+  finché la vista si muove, la penna è giù (torna quando si alza) o si scrive
+  in una scheda (il campo del testo, una scheda attiva, una barra data con
+  `setCardOptions`).
+- **Dove.** Sopra il riquadro delle schede scelte, centrata, a 26 px dalle
+  schede per lasciare il titolo (T39); al bordo alto va sotto; dentro la vista
+  ai lati (`bubblePlace` della bolla del testo). Con le schede tutte fuori
+  dalla vista non c'è; con lo zoom cambiato si rimette a fine gesto.
+- **Raggruppa** fa un gruppo senza nome attorno alle schede scelte, con 24 px
+  di margine (valore di partenza), messo nella pila subito sotto la prima di
+  loro, e sceglie il gruppo: un commit solo, che «Annulla» riporta.
+- **Tastiera.** È una `toolbar` dopo la vista: un solo punto di tabulazione,
+  le frecce, `Inizio` e `Fine`; `Esc` torna alla lavagna, e il fuoco ci torna
+  anche quando la barra sparisce (dopo Togli).
 
 ## La banda di stato
 

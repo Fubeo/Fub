@@ -851,6 +851,8 @@
     "canvas-group",
     "canvas-button",
     "canvas-color-well",
+    "canvas-selection-bar",
+    "canvas-selection-chip",
     "canvas-ink-pen",
     "canvas-ink-pen-name",
     "canvas-pen-popover",
@@ -2496,6 +2498,8 @@
     "canvas-group": "cornice",
     "canvas-button": "cornice",
     "canvas-color-well": "cornice",
+    "canvas-selection-bar": "cornice",
+    "canvas-selection-chip": "cornice",
     "canvas-ink-pen": "cornice",
     "canvas-ink-pen-name": "cornice",
     "canvas-pen-popover": "cornice",
@@ -5588,6 +5592,21 @@
         "pressed",
         "focused",
         "selected",
+        "disabled"
+      ]
+    },
+    {
+      "name": "canvas-selection-bar",
+      "part": "editors",
+      "hooks": [
+        "canvas-selection-bar",
+        "canvas-selection-chip"
+      ],
+      "states": [
+        "rest",
+        "hover",
+        "pressed",
+        "focused",
         "disabled"
       ]
     },
@@ -8988,10 +9007,10 @@
   "counts": {
     "required_roles": 154,
     "optional_roles": 63,
-    "hooks": 1643,
+    "hooks": 1645,
     "state_names": 7,
-    "assigned_states": 770,
-    "components": 229,
+    "assigned_states": 775,
+    "components": 230,
     "preference_tokens": 186
   }
 }

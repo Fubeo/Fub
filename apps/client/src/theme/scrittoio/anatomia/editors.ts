@@ -45,6 +45,9 @@ export const EDITORS: PartAnatomy = {
     // La riga delle opzioni della lavagna (T50): la testata, i gruppi e i
     // pulsanti della riga del kit, il pozzo del colore delle schede scelte.
     { name: "canvas-options", states: [S("rest"), S("hover"), S("pressed"), S("focused"), S("selected"), S("disabled")], hooks: ["canvas-header", "canvas-options", "canvas-options-hint", "canvas-group", "canvas-button", "canvas-color-well"] },
+    // La barra della selezione della lavagna (T51): una pillola sopra le
+    // schede scelte, coi pulsanti della riga e il pallino del colore.
+    { name: "canvas-selection-bar", states: [S("rest"), S("hover"), S("pressed"), S("focused"), S("disabled")], hooks: ["canvas-selection-bar", "canvas-selection-chip"] },
     // Il menu della penna della lavagna (N4 T21): il pulsante nella riga
     // delle opzioni e il suo rialzo. Le anteprime sono inchiostro su carta.
     { name: "canvas-pen-menu", states: SELECTABLE, hooks: ["canvas-ink-pen", "canvas-ink-pen-name", "canvas-pen-popover", "canvas-pen-menu", "canvas-pen-section", "canvas-pen-heading", "canvas-pen-list", "canvas-pen-item", "canvas-pen-preview", "canvas-pen-swatches", "canvas-pen-swatch", "canvas-pen-more", "canvas-pen-note", "canvas-pen-width", "canvas-pen-width-value", "canvas-pen-width-preview"] },

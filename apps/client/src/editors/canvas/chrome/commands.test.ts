@@ -43,7 +43,7 @@ const STABLE_IDS = [
   "canvas.color.none", "canvas.color.1", "canvas.color.2", "canvas.color.3", "canvas.color.4", "canvas.color.5", "canvas.color.6",
   "canvas.color.gray", "canvas.color.brown", "canvas.color.orange", "canvas.color.yellow", "canvas.color.green",
   "canvas.color.blue", "canvas.color.purple", "canvas.color.pink", "canvas.color.red", "canvas.color.other",
-  "canvas.bring_front", "canvas.send_back",
+  "canvas.group", "canvas.bring_front", "canvas.send_back",
   "canvas.align.left", "canvas.align.center", "canvas.align.right", "canvas.align.top", "canvas.align.middle", "canvas.align.bottom",
   "canvas.distribute_x", "canvas.distribute_y",
   "canvas.fit", "canvas.fit_selection", "canvas.zoom_in", "canvas.zoom_out", "canvas.zoom_reset", "canvas.grid_toggle",

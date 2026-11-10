@@ -2257,6 +2257,28 @@
 .canvas-blank-actions {
   gap: var(--space-4);
 }
+/* La barra della selezione (T51): una pillola sopra le schede (come
+   .draw-arrange). Il pallino del colore come la carta della scheda (T47). */
+.canvas-selection-bar {
+  gap: var(--space-1);
+  padding: var(--space-1);
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  box-shadow: var(--shadow-md);
+}
+.canvas-selection-bar .canvas-button {
+  border-radius: var(--radius-pill);
+}
+.canvas-selection-chip {
+  width: 16px;
+  height: 16px;
+  border: none;
+  box-shadow: inset 0 0 0 1px var(--border-strong);
+}
+.canvas-selection-chip[data-canvas-color] {
+  background: var(--canvas-color);
+}
 /* Il navigatore (T55, come .draw-navigator). La mappa è una <canvas>: la tela
    la dipinge leggendo queste variabili, una volta per disegno. Le schede
    senza colore e i gruppi col filo marcato, quelle colorate col loro

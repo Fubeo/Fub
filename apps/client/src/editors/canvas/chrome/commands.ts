@@ -173,6 +173,8 @@ export const CANVAS_COMMANDS: readonly CanvasCommandSpec[] = [
   ...CANVAS_COLORS.map((color): CanvasCommandSpec => ({
     id: `canvas.color.${color}`, label: colorCommandLabel(color), group: "color", keys: [], context: "selection",
   })),
+  // Raggruppa (T51): un gruppo attorno alle schede scelte, come Ctrl+G del disegno.
+  { id: "canvas.group", label: "canvas.commands.make_group", group: "arrange", keys: ["Mod-g"], context: "selection" },
   { id: "canvas.bring_front", label: "canvas.bring_front", group: "arrange", keys: ["Mod-]"], context: "selection" },
   { id: "canvas.send_back", label: "canvas.send_back", group: "arrange", keys: ["Mod-["], context: "selection" },
   ...CANVAS_ALIGN.map((axis): CanvasCommandSpec => ({

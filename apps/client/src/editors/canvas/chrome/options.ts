@@ -106,10 +106,11 @@ export interface CanvasOptions {
   sync(): void;
   /// La barra di una scheda in scrittura (T41, T42), o `null` quando esce.
   setWriting(items: readonly OptionItem[] | null): void;
-  /// Apre il menu dei colori delle schede scelte.
-  openColorMenu(): void;
-  /// Apre il menu «Allinea e distribuisci».
-  openAlignMenu(): void;
+  /// Apre il menu dei colori delle schede scelte, sotto `trigger` se c'è (la
+  /// barra della selezione, T51), se no sotto il pozzo della riga.
+  openColorMenu(trigger?: HTMLButtonElement): void;
+  /// Apre il menu «Allinea e distribuisci», sotto `trigger` se c'è.
+  openAlignMenu(trigger?: HTMLButtonElement): void;
   /// Chiude il rialzo della penna e i menu aperti dalla riga.
   closeMenus(): void;
 }
@@ -132,6 +133,21 @@ const SVG_ICON = (name: string): SVGElement | null => {
 /// diversi».
 function wellColorName(color: CanvasChosenColor): string {
   return color === null ? t("canvas.options.color_mixed") : colorName(color);
+}
+
+/// Dipinge il pallino `chip` col colore delle schede scelte, come la carta
+/// della scheda (T47): la chiave del colore e, per un colore libero, il suo
+/// valore; senza colore e con colori diversi i segni del kit. Dà il nome del
+/// colore. Lo usano il pozzo della riga e la barra della selezione (T51).
+export function paintColorChip(chip: HTMLElement, color: CanvasChosenColor): string {
+  chip.classList.toggle("none", color === undefined || color === "");
+  chip.classList.toggle("mixed", color === null);
+  const look = color === null ? null : colorLook(color);
+  if (look) chip.dataset.canvasColor = look.key;
+  else delete chip.dataset.canvasColor;
+  if (look?.custom) chip.style.setProperty("--canvas-color", look.custom);
+  else chip.style.removeProperty("--canvas-color");
+  return wellColorName(color);
 }
 
 /// Monta la riga delle opzioni della lavagna.
@@ -312,8 +328,8 @@ export function createCanvasOptions(ctx: CanvasOptionsContext): CanvasOptions {
 
   /// Apre il menu `items` sotto `trigger`, o sotto la riga se `trigger` non
   /// si vede (il comando arriva da Ctrl+/ con un'altra riga).
-  const openMenu = (trigger: HTMLButtonElement, label: Key, items: MenuItem[]): void => {
-    const visible = trigger.isConnected && !trigger.closest("[hidden]") && element.contains(trigger);
+  const openMenu = (trigger: HTMLButtonElement, label: Key, items: MenuItem[], outside = false): void => {
+    const visible = trigger.isConnected && !trigger.closest("[hidden]") && (outside || element.contains(trigger));
     const anchor = visible ? trigger : more && !more.hidden ? more : element;
     if (menuFrom) closeContextMenu();
     menuFrom = trigger;
@@ -341,7 +357,7 @@ export function createCanvasOptions(ctx: CanvasOptionsContext): CanvasOptions {
   };
   const catalogNow = (): Map<string, CanvasCommand> => new Map(ctx.commands().map((command) => [command.id, command]));
 
-  const openColorMenu = (): void => {
+  const openColorMenu = (trigger?: HTMLButtonElement): void => {
     const catalog = catalogNow();
     const current = ctx.color();
     // Lo stesso menu del tasto destro (T47): Nessuno e i sei, «Colori delle
@@ -365,17 +381,17 @@ export function createCanvasOptions(ctx: CanvasOptionsContext): CanvasOptions {
       notes.length ? { label: t("canvas_menu.color.notes"), separator: true, items: notes } : null,
       choice("other"),
     ].filter((one): one is MenuItem => one !== null);
-    openMenu(wellButton, "canvas.options.color_menu", items);
+    openMenu(trigger ?? wellButton, "canvas.options.color_menu", items, trigger !== undefined);
   };
 
-  const openAlignMenu = (): void => {
+  const openAlignMenu = (trigger?: HTMLButtonElement): void => {
     const catalog = catalogNow();
     const items = [
       ...CANVAS_ALIGN.map((axis) => entry(catalog, `canvas.align.${axis}`, { icon: `draw-align-${axis}` })),
       entry(catalog, "canvas.distribute_x", { icon: "draw-distribute-x", separator: true }),
       entry(catalog, "canvas.distribute_y", { icon: "draw-distribute-y" }),
     ].filter((one): one is MenuItem => one !== null);
-    openMenu(align, "canvas.options.align_menu", items);
+    openMenu(trigger ?? align, "canvas.options.align_menu", items, trigger !== undefined);
   };
 
   /// Nome, suggerimento, tasto, scelta e perché di un controllo.
@@ -406,18 +422,8 @@ export function createCanvasOptions(ctx: CanvasOptionsContext): CanvasOptions {
     }
     for (const control of controls) paintControl(control.element, catalog.get(control.command), control.checked?.());
     // Il pozzo: il colore delle schede scelte, col suo nome.
-    const color = ctx.color();
-    const name = wellColorName(color);
+    const name = paintColorChip(chip, ctx.color());
     if (chipName.textContent !== name) chipName.textContent = name;
-    chip.classList.toggle("none", color === undefined || color === "");
-    chip.classList.toggle("mixed", color === null);
-    // Il pallino come la carta della scheda (T47): la chiave del colore e,
-    // per un colore libero, il suo valore.
-    const look = color === null ? null : colorLook(color);
-    if (look) chip.dataset.canvasColor = look.key;
-    else delete chip.dataset.canvasColor;
-    if (look?.custom) chip.style.setProperty("--canvas-color", look.custom);
-    else chip.style.removeProperty("--canvas-color");
     const wellCommand = catalog.get("canvas.color_menu");
     paintControl(wellButton, wellCommand);
     // Il pozzo dice il colore; il perché, se è spento, nel suggerimento.
