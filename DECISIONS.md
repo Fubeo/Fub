@@ -59,6 +59,14 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-10 · n6 · T15 integrato senza il caso «l'host rifiuta un file a
+  metà»: va al task nuovo T15b, dopo T32 e T34. Perché: serve un errore
+  tipizzato in `canvas-intake.ts`, che T15 non poteva toccare e che T32 e
+  T34 cambiano prima; farlo dopo di loro evita conflitti, e intanto
+  l'errore si vede come prima (nessuna scheda nasce, i file copiati restano
+  nel vault). Ho anche rimesso al suo posto il commento di `isVaultPath`,
+  spostato per sbaglio sopra `measuredImage`.
+
 - 2026-11-10 · N6 · T14 integrato tenendo Ctrl+trascinare per spostare
   la lavagna (il piano diceva che Ctrl+clic «oggi aggiunge alla scelta», il
   codice invece sposta): Ctrl+clic senza movimento aggiunge o toglie dalla

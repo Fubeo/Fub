@@ -1666,6 +1666,36 @@ ordine, gruppo oltre 12, un solo annulla, incolla sotto il puntatore, celle
 come tabella.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/canvas/engine.test.ts
+Stato: [x] fatto (2026-11-10). Differenze: durante `dragover` si contano
+solo gli item di tipo file (le voci dell'albero non si contano prima del
+rilascio): zero fa un fantasma. La misura di un'immagine aspetta al più 3 s
+(`MEASURE_IMAGE_TIMEOUT_MS`), quattro alla volta, e legge al più 64 MiB; le
+porte `measureImage` e `clipboardMarkdown` in `bootstrap.ts` caricano il
+loro codice solo quando servono. Punto e scheda sotto il puntatore si
+prendono prima del deposito. La scheda nata dalle celle resta 320×160
+(D-11 non dà misura alle schede di testo). Il caso «l'host rifiuta un file
+a metà» non è fatto (serve `canvas-intake.ts`): va a T15b. In più la
+pagina `docs/reference/canvas-cards.md` («Il rilascio e l'incolla»).
+
+## T15b · Il rifiuto a metà del deposito
+
+Perché: caso limite di T15 rimasto aperto: oggi `depositCanvasFiles` lancia
+l'errore e scarta i percorsi già depositati, così non nasce nessuna scheda
+e i file già copiati restano nel vault senza scheda.
+Tocca: `apps/client/src/state/canvas-intake.ts`, `canvas-intake.test.ts`,
+`apps/client/src/editors/canvas/engine.ts`, `engine.test.ts`,
+`docs/reference/canvas-cards.md`.
+Non toccare: l'host; `drop-layout.ts`.
+Dipende da: T15, T32, T34 (toccano `canvas-intake.ts` prima)
+Cosa fare: un errore tipizzato del deposito che porta i percorsi già
+depositati; `#intake` fa nascere le loro schede (griglia e un annulla come
+T15) e poi mostra l'errore in `canvas-intake-error` come oggi.
+Casi limite: il primo file già rifiutato (nessuna scheda, solo l'errore);
+la lavagna cambiata durante il deposito (niente schede, come oggi).
+Fatto quando: `canvas-intake.test.ts` prova che l'errore porta i percorsi
+andati; `engine.test.ts` che le loro schede nascono e l'errore si vede.
+Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
+src/state/canvas-intake.test.ts src/editors/canvas/engine.test.ts
 Stato: [ ] da fare
 
 ## T16 · Il file mancante
