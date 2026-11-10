@@ -1797,6 +1797,17 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
                  stretta — là la chiave è del registro dei formati e la piegatura è larga.",
             ),
         ),
+        (
+            "crates/fub-canvas-core/src/parts.rs::of",
+            (
+                Family::AsciiCase,
+                "abbassa l'estensione del file di una scheda per dire se un estratto \
+                 `fub:parts` le va bene (`.pdf`, `.md`, `.png`, …): sono token di formato, ASCII \
+                 per definizione. Diverge da `parse.rs::is_media_path` perché il nucleo della \
+                 lavagna non vede `fub-format-canvas`, e la lista è quella di `cardKindOf` \
+                 nella shell, che i vettori di `canvas-parts/` tengono uguale.",
+            ),
+        ),
         // -- CasoAscii: importatori (estensioni e nomi di formato) -------------
         (
             "crates/fub-importers/src/archive.rs::route_entry",
