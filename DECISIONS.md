@@ -247,6 +247,15 @@ La più recente in cima: data · piano · decisione · perché.
   «agganciate a 8 px») · Perché: è A-16 (le misure di nascita non si
   agganciano, le posizioni sì); il «Fatto quando» aveva contato solo il
   foglio.
+- 2026-11-10 · N6 · T28 fatto, da approvare: `PLAN-ui/lavagna-estratti.html`
+  con otto stati (selettore di nota e di PDF, blocchi, scheda-estratto,
+  lettore, fonti, ritaglio, menu) e quattro note «Da decidere guardando»
+  (consigliate: al rilascio, la testata con le parti, «Mostra tutto il
+  file» nel menu, sotto la scheda a 700 px); una lavagna senza file dice
+  una riga nella linguetta Fonti invece di togliere la sezione. · Perché:
+  A-26 vuole la pagina prima di T74–T85; la quarta nota nasce dal caso
+  limite dei 700 px, e una linguetta vuota senza parole sembrava rotta.
+
 - 2026-11-10 · N6 · T12 integrato con due scostamenti accettati: `watch`
   delle schede ascolta `document_changed/removed/renamed` oltre agli
   `entry_*` (una nota cambiata manda solo `document_*`: col solo

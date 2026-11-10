@@ -71,7 +71,7 @@ grafico che ne dipende parte prima della riga «Approvato» (A-26).
 ## Dal prototipo
 
 Le pagine di T25 (2026-11-04) e di T26 (2026-11-10) sono approvate;
-quelle di T27 e T28 non ci sono ancora. Ogni parte visibile riusa un pezzo che c'è già; la tabella dice
+quella di T28 (2026-11-10) è da approvare; quella di T27 non c'è ancora. Ogni parte visibile riusa un pezzo che c'è già; la tabella dice
 dove finisce e chi la fa. I task fino a T21 usano le classi di oggi e la
 sola struttura che serve a funzionare (`structure.css`); l'aspetto vero
 lo danno i task che dipendono dal loro prototipo. Quando un prototipo è
@@ -150,6 +150,31 @@ nomi della lavagna: `editors/spatial/` non si tocca (K5). Il blocco
 | Lo spazio Semplice: `data-workspace="simple"` sulla superficie, caselle da 44 px | `editors/canvas/chrome/rail.ts`, `structure.css` | T65 |
 | La notifica «Tolta dalla lavagna. Il file resta.» con «Annulla» | `ui/notify.ts`, testi in `catalog.ts` | T17 |
 | I testi nuovi `canvas.*` della pagina | `apps/client/src/i18n/catalog.ts` | T49–T65 |
+
+Le classi nuove di `PLAN-ui/lavagna-estratti.html` (T28, fatta il
+2026-11-10, da approvare; le righe valgono con le varianti consigliate e
+si correggono se l'utente ne sceglie un'altra). Il blocco
+→ `skin/editors.css` e quello delle varianti passano `validateThemeBundle`
+senza scarti; restano gli avvisi «hook non dichiarato», che spariscono
+quando le classi entrano in `anatomia/editors.ts`. Ogni classe va anche
+lì. Le parti segnate «aspetta PdfCraft» nella pagina (miniature, numeri
+stampati, sommario e parola di un PDF, blocchi e figure, il lettore di un
+PDF) arrivano con PdfCraft P1 e P4 (A-24).
+
+| Pezzo | Destinazione | Task |
+|---|---|---|
+| Il selettore di una nota: `canvas-parts-picker` (`data-source="note"`, `data-narrow` sotto la scheda a 700 px) dentro un `kit-popover`, `-head`, `-title`, `-close`, `-field` (il filtro), `-body`, `-list` (un `kit-list` multiplo), `-row` (`data-depth`), `-check`, `-name`, `-preview`, `-preview-title`, `-field-hint` (`data-tone`: due titoli uguali), `-foot`, `-keys`, `-count`; «Metti 2 sezioni / la sezione / tutta la nota» | `editors/canvas/parts-picker.ts` (nuovo), `structure.css`, `skin/editors.css` | T74 |
+| Il selettore di un PDF: `data-source="pdf"`, le linguette `canvas-parts-tabs` (un `segmented`: Pagine, Sommario), il campo e la riga che lo legge, `-thumbs`, `-thumb` (`data-found`, `data-veiled`), `-thumb-page`, `-thumb-label` (il numero stampato), `-thumb-order`, `-thumb-there` (il pallino «già sulla lavagna»), `-range` (pagine di un capitolo), `-pager`, `-page`, `-again` («È già lì: vai, o mettine un'altra?»); le miniature virtualizzate | `editors/canvas/parts-picker.ts`, `page-range.ts`, `structure.css`, `skin/editors.css` | T80 |
+| Blocchi e figure al passaggio: `canvas-parts-preview[data-blocks]`, `canvas-parts-block` (`data-block-kind`, `data-hover`), `canvas-parts-zone`; «Metti il blocco / la figura / la zona» | `editors/canvas/parts-picker.ts`, `structure.css`, `skin/editors.css` | T81 |
+| La scheda-estratto: `data-card-excerpt` (`pages`, `region`, `sections`, `image`) sul `.canvas-node`, nella testata `canvas-excerpt-parts` e `canvas-excerpt-open` (↗); il corpo `canvas-excerpt-region`, `-section`, `-section-title`; la sezione sparita `canvas-excerpt-missing`, `-missing-actions` («Scegli di nuovo…», «Mostra tutta la nota») | `editors/canvas/excerpt.ts` (nuovo), `engine.ts` (`#nodeEl`), `structure.css`, `skin/editors.css` | T75 |
+| Le pagine di un estratto: `canvas-excerpt-pages` (`data-layout`: `one`, `row`, `column`), `canvas-excerpt-page`, «p. 4 · 2 di 3» nello `canvas-card-pdf-status` di oggi, `canvas-excerpt-more` (`data-side`: «+ p. 2», «+ p. 6»); nella riga delle opzioni la disposizione (un `radiogroup` di `canvas-button`) e «Pagine scure» | `editors/canvas/excerpt.ts`, `chrome/header.ts`, `structure.css`, `skin/editors.css` | T82 |
+| Le icone nuove `canvas-layout-one`, `canvas-layout-row`, `canvas-layout-column` | `ui/icons.ts` (o il registro delle icone della lavagna) | T82 |
+| «Parti…», «Mostra tutto il file», «Leggi da vicino», «Ritaglia e ruota» nel menu della scheda (le voci di `ui/menu.ts`) e in Ctrl+/ | `engine.ts` (`SurfaceMenu`), i comandi della lavagna | T74, T75, T76, T78 |
+| Il lettore: `canvas-reader` (`role="dialog"`, `data-source`) sopra l'area della lavagna, `-head`, `-title`, `-hint`, `-outline`, `-outline-row` (`data-in-excerpt`, `aria-current`), `-doc`, `-page`, `-section` (`data-in-excerpt`, `data-current`), `-add` («+ Aggiungi all'estratto») | `editors/canvas/reader.ts` (nuovo), `structure.css`, `skin/editors.css` | T76 |
+| Il lettore di un PDF: `canvas-reader-sheet`, `-zone`, `-foot`, `-actions`, `-where`, `-strip`, `-thumb` («Metti sulla lavagna») | `editors/canvas/reader.ts`, `structure.css`, `skin/editors.css` | T83 |
+| Le fonti, in più di T26: `canvas-sources-loose` («pp. 3, 7»), `canvas-sources-state` («File mancante», `data-missing` sulla riga), `-piece[data-whole]` («tutta»), `canvas-sources-empty` | `editors/canvas/sources.ts`, `structure.css`, `skin/editors.css` | T77 |
+| Il ritaglio di un'immagine: `canvas-crop`, `-box`, `-handle` (`data-corner`, `role="slider"`), `-bar` (↺ ↻, «Togli il ritaglio», «Fatto»), `-note` (il tratto che resta); la scheda `data-card-crop` | `editors/canvas/crop.ts` (nuovo), `structure.css`, `skin/editors.css` | T78 |
+| I testi nuovi `canvas.parts.*`, `canvas.excerpt.*`, `canvas.reader.*`, `canvas.crop.*`, `canvas.inspector.sources.*` della pagina | `apps/client/src/i18n/catalog.ts` | T74–T78, T80–T83 |
 
 ## Che cosa si vede
 
