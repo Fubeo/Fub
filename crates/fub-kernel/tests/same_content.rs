@@ -435,6 +435,61 @@ fn a_file_changed_while_it_is_read_is_no_match_and_records_nothing() {
 }
 
 #[test]
+fn a_file_rewritten_right_after_it_is_compared_is_no_match() {
+    // Il confronto dei byte riesce: il file ha esattamente i byte cercati. Subito
+    // dopo, prima della risposta, lo si riscrive più lungo. Un file cambiato mentre
+    // lo si confronta non è una risposta: si salta, e la domanda dice «no». Il solo
+    // confronto dei byte direbbe «sì».
+    for by_reader in [true, false] {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let root = root_of(&dir);
+        put(&root, "a.md", b"stesso");
+        let plain = Vault::open(&root).expect("vault");
+        // L'impronta della voce descrive il file, quindi il confronto è la sola lettura.
+        write_table(&root, [("a.md", entry(&plain, "a.md", Some(b"stesso")))]);
+        let interposed = Interposed {
+            inner: RootedFsStorage::open(&root).expect("radice"),
+            failing: Vec::new(),
+            rewritten_after_read: Mutex::new(Some((
+                root.join("a.md"),
+                b"molto piu lungo di prima".to_vec(),
+            ))),
+        };
+        let vault = Vault::on(&root, Arc::new(interposed)).expect("vault");
+        let answer = if by_reader {
+            vault
+                .same_content(b"stesso".len() as u64, &mut &b"stesso"[..])
+                .expect("la domanda riesce")
+        } else {
+            vault.same_content_bytes(b"stesso")
+        };
+        assert_eq!(answer, SameContent::NotFound, "con un lettore: {by_reader}");
+    }
+}
+
+#[test]
+fn a_fingerprint_that_no_longer_describes_the_file_is_not_believed() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let root = root_of(&dir);
+    // La voce porta l'impronta di «vecchio», con la data di allora. Il file cambia a
+    // parità di misura, con altri byte e un'altra data: quell'impronta non lo
+    // descrive più, e non si crede. Si rifà dai byte, e il file c'è.
+    put(&root, "a.md", b"vecchio");
+    let plain = Vault::open(&root).expect("vault");
+    write_table(&root, [("a.md", entry(&plain, "a.md", Some(b"vecchio")))]);
+    fs::write(root.join("a.md"), b"novita!").expect("riscrittura");
+    fs::OpenOptions::new()
+        .write(true)
+        .open(root.join("a.md"))
+        .expect("apertura del file")
+        .set_modified(SystemTime::now() - Duration::from_secs(7200))
+        .expect("data nel passato");
+    let vault = Vault::open(&root).expect("vault");
+
+    assert_eq!(ask(&vault, b"novita!"), found("a.md"));
+}
+
+#[test]
 fn a_candidate_that_cannot_be_read_is_skipped() {
     let dir = tempfile::tempdir().expect("tempdir");
     let root = root_of(&dir);
