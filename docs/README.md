@@ -40,6 +40,8 @@ flowchart LR
 |---|---|
 | [Panoramica](product/overview.md) | che cosa offre Fub |
 | [Vault e file](product/vault-and-files.md) | che cosa Fub legge, scrive e conserva |
+| [Operazioni sul vault](product/vault-operazioni.md) | note, cartelle, cattura, import/export |
+| [Recupero e versioni](product/vault-recupero-e-versioni.md) | cestino, rinomine, versioni, snapshot |
 | [Explorer e cartelle](product/explorer-and-folders.md) | l'albero, le appuntate, gli spazi |
 | [Editor e anteprima](product/editor-and-preview.md) | le superfici di scrittura |
 | [Blocchi](product/editor-blocks.md) | la superficie a blocchi |
@@ -72,7 +74,7 @@ all'export, dalla sessione dal tablet ai disegni grandi.
   e la [superficie dei fogli](architecture/grid-surface.md), con gli
   [editor dei componenti](architecture/component-editors.md)
 - [Inchiostro e strumenti](architecture/ink-and-tools.md)
-- [Runtime dei plugin](architecture/plugin-runtime.md)
+- [Runtime dei plugin](architecture/plugin-runtime.md), i [provider WASM](architecture/wasm-providers.md) e [capability e sandbox](architecture/plugin-security.md)
 - [Lo strato dei motori](architecture/motori.md)
 
 ## Sviluppare
