@@ -55,7 +55,7 @@ comuni in una libreria condivisa.
   (niente inlining né LTO fra un componente e `comune`).
 - Le edizioni (livello 2) tolgono già il codice dei motori che un profilo
   non usa (fra 6,5 e 64,6 MiB per motore, vedi
-  [I sei motori da soli](motori-2026-10-31-linux-ryzen.md)) senza nessuno di
+  [I sei motori da soli](2026-10-31-motori-linux-ryzen.md)) senza nessuno di
   questi vincoli.
 
 Restano fuori dalla prova la firma vera (notarizzazione, Authenticode), il

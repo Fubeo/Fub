@@ -64,7 +64,7 @@ dell'unione.
 | N13 · blocco vivo | il moto dei Blocchi dentro CodeMirror | le coreografie nei tre livelli; battuta invariata | in pila (#261) |
 | N1 · Chiudere FubDraw | l'editor alla Illustrator si riduce e si chiude | corpus aperto e salvato byte per byte, ADR 0231 | in pila (#262–#267) |
 | N2 · Server MCP | `fub-cli mcp`, stdio e JSON-RPC | conformità, conflitti senza perdite, radici di scrittura | in pila (#268) |
-| K0 · Misure e prove | i sei motori misurati da soli | `docs/misure/motori-*.md`, tetti in `budgets.json`, P0 passato | in corso |
+| K0 · Misure e prove | i sei motori misurati da soli | [misura di K0](../misure/2026-10-31-motori-linux-ryzen.md), tetti in `budgets.json`, P0 passato | in corso |
 | K1 · K2 · Componenti | il modello a componenti e la sua pagina | nessun attivo con un requisito spento; il profilo al primo avvio | da fare |
 | K3 · Strato dei motori | `fub-motori`: registro pigro e servizi comuni | RAM che torna dopo «chiudi tutto»; avvio invariato | da fare |
 | P1 · Motore dei PDF | PdfCraft sotto il visore di oggi | alla pari o meglio di pdf.js sul corpus | da fare |

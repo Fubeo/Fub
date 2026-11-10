@@ -90,5 +90,5 @@ I numeri vanno in `docs/misure/motori-*.md`, con macchina, sistema e commit.
 - `obiettivi`, per prova e file: la prima apertura a freddo e la memoria che
   resta dopo «tutto chiuso» e `malloc_trim`, rispetto alla partenza. Sono
   misurati sulla macchina di
-  [`motori-2026-10-31-linux-ryzen`](../../docs/misure/motori-2026-10-31-linux-ryzen.md)
+  [`motori-2026-10-31-linux-ryzen`](../../docs/misure/2026-10-31-motori-linux-ryzen.md)
   e valgono soltanto lì: lo script li segnala senza fallire.
