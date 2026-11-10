@@ -99,7 +99,15 @@ sono quelli di `spatial/camera.ts` (`zoomAtPoint`, `fit`, `stepCamera`).
   tutto non va oltre il 100% e lascia 80 unità per lato. Il salto vola con
   `stepCamera`; col movimento ridotto (di sistema o delle Impostazioni, letto
   anche a lavagna aperta) arriva subito. Passa tutto da un solo punto
-  (`#jumpCamera`).
+  (`#jumpCamera`), che ricorda il salto per Indietro e Avanti.
+- **Indietro e Avanti.** Alt+← e Alt+→ (i comandi della shell
+  `shell.pane.back` e `shell.pane.forward`, come le frecce della barra del
+  titolo) chiedono prima alla lavagna col fuoco: ricordano i salti, non lo
+  zoom a passi né lo spostamento a mano. La storia (`jumps.ts`) sta in memoria,
+  per la lavagna aperta: al più 50 salti, un salto dopo un Indietro perde
+  l'Avanti, una lavagna riaperta riparte vuota e due riquadri con la stessa
+  lavagna hanno due storie. Con la storia vuota vale la cronologia del riquadro.
+  Il volo è quello dei salti, o arriva subito col movimento ridotto.
 - **Spazio tenuto** e trascina sposta la vista con qualsiasi strumento, anche
   sopra una scheda e col mouse che scrive; la mano viene dal tema
   (`data-space-pan`). Mentre si scrive in una scheda, o dentro la scheda
@@ -128,7 +136,8 @@ riquadro di ciò che si vede (`chrome/navigator.ts`). L'inquadratura è
 lontanissima ci sta.
 
 - **Un clic** porta il centro della vista lì: è un salto (`#jumpCamera`), che
-  vola come `Maiusc+1`, o arriva subito col movimento ridotto.
+  vola come `Maiusc+1`, o arriva subito col movimento ridotto, e Indietro lo
+  ricorda.
 - **Trascinare** sposta la vista sotto la mano, subito, senza volo; preso
   dentro il riquadro, il riquadro non salta. È un gesto: le schede vive, la
   banda e la mappa si rifanno al rilascio.
