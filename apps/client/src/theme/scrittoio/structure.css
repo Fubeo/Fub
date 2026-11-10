@@ -2999,6 +2999,35 @@ body {
   flex: 1;
   min-width: 0;
 }
+/* La lavagna vuota (T62): al centro della vista, sopra di lei. Le sue righe non
+   prendono il puntatore, così il doppio clic nel vuoto arriva alla vista; i
+   pulsanti sì. */
+.canvas-blank {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  box-sizing: border-box;
+  transform: translate(-50%, -50%);
+  text-align: center;
+  pointer-events: none;
+}
+.canvas-blank[hidden],
+.canvas-blank-actions[hidden] {
+  display: none;
+}
+.canvas-blank-lines {
+  margin: 0;
+}
+.canvas-blank-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  pointer-events: auto;
+}
 /* Stretta (finestra fino a 700 px o riquadro fino a 480): la colonna va
    sotto la lavagna e si stende in riga (come .draw-editor[data-narrow]). */
 .canvas-surface[data-narrow] .canvas-body {

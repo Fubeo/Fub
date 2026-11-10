@@ -35,6 +35,9 @@ export const EDITORS: PartAnatomy = {
     // La colonna degli strumenti della lavagna (T49): quella del kit, con le
     // caselle `canvas-tool`; uno strumento spento in sola lettura si vede.
     { name: "canvas-rail", states: [S("rest"), S("hover"), S("pressed"), S("focused"), S("disabled")], hooks: ["canvas-rail", "canvas-tool"] },
+    // La lavagna vuota (T62): le tre righe e i pulsanti al centro. I pulsanti
+    // sono del kit; qui solo il testo.
+    { name: "canvas-empty", states: REST, hooks: ["canvas-blank", "canvas-blank-lines", "canvas-blank-actions"] },
     // La riga delle opzioni della lavagna (T50): la testata, i gruppi e i
     // pulsanti della riga del kit, il pozzo del colore delle schede scelte.
     { name: "canvas-options", states: [S("rest"), S("hover"), S("pressed"), S("focused"), S("selected"), S("disabled")], hooks: ["canvas-header", "canvas-options", "canvas-options-hint", "canvas-group", "canvas-button", "canvas-color-well"] },

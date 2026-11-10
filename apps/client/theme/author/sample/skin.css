@@ -8516,6 +8516,28 @@ kbd,
   color: var(--danger);
   font-size: var(--text-sm);
 }
+/* La lavagna vuota (T62): tre righe e tre pulsanti, al centro. La prima riga
+   è il titolo. */
+.canvas-blank {
+  width: min(30rem, calc(100% - 32px));
+  gap: var(--space-6);
+  color: var(--muted);
+}
+.canvas-blank-lines {
+  font-size: var(--text-base);
+  line-height: var(--leading-normal);
+}
+.canvas-blank-lines > span {
+  display: block;
+}
+.canvas-blank-lines > span:first-child {
+  color: var(--text);
+  font-family: var(--font-reading);
+  font-size: var(--text-lg);
+}
+.canvas-blank-actions {
+  gap: var(--space-4);
+}
 .canvas-viewport {
   outline: none;
 }

@@ -839,6 +839,9 @@
     "canvas-source",
     "canvas-rail",
     "canvas-tool",
+    "canvas-blank",
+    "canvas-blank-lines",
+    "canvas-blank-actions",
     "canvas-header",
     "canvas-options",
     "canvas-options-hint",
@@ -2441,6 +2444,9 @@
     "canvas-source": "contenuto",
     "canvas-rail": "cornice",
     "canvas-tool": "cornice",
+    "canvas-blank": "cornice",
+    "canvas-blank-lines": "cornice",
+    "canvas-blank-actions": "cornice",
     "canvas-header": "cornice",
     "canvas-options": "cornice",
     "canvas-options-hint": "cornice",
@@ -5458,6 +5464,18 @@
         "pressed",
         "focused",
         "disabled"
+      ]
+    },
+    {
+      "name": "canvas-empty",
+      "part": "editors",
+      "hooks": [
+        "canvas-blank",
+        "canvas-blank-lines",
+        "canvas-blank-actions"
+      ],
+      "states": [
+        "rest"
       ]
     },
     {
@@ -8791,10 +8809,10 @@
   "counts": {
     "required_roles": 154,
     "optional_roles": 63,
-    "hooks": 1600,
+    "hooks": 1603,
     "state_names": 7,
-    "assigned_states": 755,
-    "components": 223,
+    "assigned_states": 756,
+    "components": 224,
     "preference_tokens": 186
   }
 }
