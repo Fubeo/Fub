@@ -3195,6 +3195,22 @@ body {
   overflow: visible;
 }
 
+/* Le prese del filo scelto (T91): un livello sopra lo stage, con la stessa
+   camera. Il livello non prende il puntatore; le prese sì, così vincono sui
+   punti delle schede che le coprono. */
+.canvas-edge-handles {
+  position: absolute;
+  top: 0;
+  left: 0;
+  transform-origin: 0 0;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.canvas-edge-reconnect {
+  pointer-events: auto;
+}
+
 /* Dove nasceranno le schede di un trascinamento: rettangoli tratteggiati
    sopra la scena, nelle coordinate della lavagna. Solo la forma: l'aspetto è
    della pelle. */
@@ -3345,6 +3361,13 @@ body {
   min-width: 0;
   min-height: 0;
   pointer-events: auto;
+}
+
+/* Un gruppo è un recinto: il suo sfondo sta sotto i fili (che sono nello
+   stage, prima di ogni scheda), così un filo che lo attraversa si vede (T91).
+   Le schede no: restano sopra i fili, nell'ordine del file. */
+.canvas-node-group {
+  z-index: -1;
 }
 
 .canvas-node-handle {

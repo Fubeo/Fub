@@ -3000,6 +3000,54 @@ describe("i fili: collegare senza mirare, prendere un filo (T67)", () => {
     engine.destroy();
   });
 
+  it("le prese del filo scelto stanno sopra le schede: un livello dopo lo stage, e il riattacco non nasce da un punto (T91)", async () => {
+    const { engine, host, viewport, changes } = open();
+    click(host, viewport, screen(host, 300, 45));
+    const handle = host.querySelector<SVGElement>('[data-reconnect="e1"][data-endpoint="to"]')!;
+    // Le prese non stanno nello stage (dove i punti delle schede le coprono): sono un livello dopo di lui.
+    const layer = handle.closest(".canvas-edge-handles");
+    const stage = host.querySelector(".canvas-stage")!;
+    expect(layer).not.toBeNull();
+    expect(stage.contains(handle)).toBe(false);
+    expect(stage.compareDocumentPosition(layer!) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
+    const structure = (await import("../../theme/scrittoio/structure.css?raw")).default;
+    expect(structure).toMatch(/\.canvas-edge-reconnect\s*\{\s*pointer-events:\s*auto;/);
+    // Trascinata su «c», la presa riattacca il filo: un commit, nessun filo nuovo, e l'annulla lo riporta.
+    const before = engine.getDoc();
+    pull(host, handle, screen(host, 400, 50), screen(host, 100, 380), card(host, "c"));
+    expect(doc(engine).edges).toHaveLength(1);
+    expect(doc(engine).edges[0]).toMatchObject({ id: "e1", fromNode: "a", toNode: "c" });
+    expect(changes).toHaveLength(1);
+    expect(engine.undo()).toBe(true);
+    expect(engine.getDoc()).toBe(before);
+    engine.destroy();
+  });
+
+  it("i fili stanno nello stage, prima di ogni scheda: un gruppo sta sotto il filo, le schede sopra (T91)", async () => {
+    const grouped = JSON.stringify({
+      nodes: [
+        { id: "g", type: "group", x: 150, y: -20, width: 300, height: 140, label: "Gruppo" },
+        { id: "a", type: "text", x: 0, y: 0, width: 200, height: 100, text: "a" },
+        { id: "b", type: "text", x: 400, y: 0, width: 200, height: 100, text: "b" },
+      ],
+      edges: [{ id: "e1", fromNode: "a", fromSide: "right", toNode: "b", toSide: "left", toEnd: "arrow" }],
+    });
+    const { engine, host } = mounted(grouped);
+    const stage = host.querySelector(".canvas-stage")!;
+    const edges = host.querySelector(".canvas-edges")!;
+    // Il livello dei fili è il primo figlio dello stage: ogni scheda gli sta sopra nell'ordine del DOM.
+    expect(stage.firstElementChild).toBe(edges);
+    expect(host.querySelector('.canvas-node[data-node="g"]')!.classList.contains("canvas-node-group")).toBe(true);
+    // Scegliere una scheda ricompone lo stage: il filo resta il primo.
+    click(host, body(host, "b"), screen(host, 500, 30));
+    expect(card(host, "b").classList.contains("selected")).toBe(true);
+    expect(stage.firstElementChild).toBe(edges);
+    // Il gruppo va sotto i fili (z-index negativo), le schede no: lo dice la pelle della struttura.
+    const structure = (await import("../../theme/scrittoio/structure.css?raw")).default;
+    expect(structure).toMatch(/\.canvas-node-group\s*\{\s*z-index:\s*-1;/);
+    engine.destroy();
+  });
+
   it("un filo si prende entro 8 px e si scurisce al passaggio; sopra una scheda vince dove si vede; Canc lo toglie con la patch `at`", () => {
     const { engine, host, viewport, changes } = open();
     const line = () => host.querySelector<SVGElement>('.canvas-edge-line[data-edge="e1"]')!;

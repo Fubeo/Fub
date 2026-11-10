@@ -967,7 +967,10 @@ export class CanvasEngine {
   readonly #toolbar: HTMLElement;
   readonly #viewport: HTMLElement;
   readonly #stage: HTMLElement;
+  /** I fili, primo figlio dello stage (T91, rotta 4): un gruppo gli sta sotto, le schede sopra. */
   readonly #edgeLayer: SVGSVGElement;
+  /** Le prese dei fili scelti, sopra lo stage (T91, rotta 5): il puntatore le prende prima dei punti. */
+  readonly #handleLayer: SVGSVGElement;
   readonly #options: CanvasEngineOptions;
   #forms: readonly SyntaxForm[] | undefined;
   readonly #stopLanguage: () => void;
@@ -1289,10 +1292,19 @@ export class CanvasEngine {
     this.#viewport.setAttribute("aria-label", t("canvas.surface"));
     this.#stage = document.createElement("div");
     this.#stage.className = "canvas-stage";
+    // I fili sono il primo figlio dello stage, nella stessa pila delle schede
+    // (T91, rotta 4): sotto le schede, ma sopra lo sfondo di un gruppo, che CSS
+    // mette sotto. Lo stage ha la camera; il filo non ne ha una sua.
     this.#edgeLayer = document.createElementNS("http://www.w3.org/2000/svg", "svg");
     this.#edgeLayer.classList.add("canvas-edges");
     this.#edgeLayer.setAttribute("aria-hidden", "true");
-    this.#viewport.append(this.#edgeLayer, this.#stage);
+    this.#stage.append(this.#edgeLayer);
+    // Le prese dei fili scelti stanno sopra lo stage, così il puntatore le
+    // prende prima dei punti delle schede che le coprono (T91, rotta 5).
+    this.#handleLayer = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    this.#handleLayer.classList.add("canvas-edge-handles");
+    this.#handleLayer.setAttribute("aria-hidden", "true");
+    this.#viewport.append(this.#stage, this.#handleLayer);
     // Il corpo: la colonna degli strumenti (T49) e l'area della lavagna, come
     // il corpo del disegno. Stretta, la colonna va sotto, in riga.
     this.#rail = createCanvasRail({
@@ -3050,7 +3062,8 @@ export class CanvasEngine {
   #applyCamera(): void {
     // Camera transforms are immediate for both motion preferences.
     this.#stage.style.transform = `translate(${this.#camera.x}px, ${this.#camera.y}px) scale(${this.#camera.zoom})`;
-    this.#edgeLayer.style.transform = `translate(${this.#camera.x}px, ${this.#camera.y}px) scale(${this.#camera.zoom})`;
+    // Il filo sta nello stage (T91): la sua camera è quella dello stage. Le prese no.
+    this.#handleLayer.style.transform = `translate(${this.#camera.x}px, ${this.#camera.y}px) scale(${this.#camera.zoom})`;
     this.#inkLayer?.setCamera(this.#camera.x, this.#camera.y, this.#camera.zoom);
     // Le maniglie e i segni sopra le schede restano della stessa misura sullo
     // schermo a ogni zoom (T66): la pelle divide per `--canvas-zoom`.
@@ -6333,7 +6346,9 @@ export class CanvasEngine {
     if (this.#isSceneOversized()) {
       this.#dropCards();
       this.#edgeLayer.replaceChildren();
-      this.#stage.replaceChildren();
+      this.#handleLayer.replaceChildren();
+      // Il livello dei fili resta il primo figlio dello stage (T91).
+      this.#stage.replaceChildren(this.#edgeLayer);
       delete this.#stage.dataset.selection;
       const fallback = document.createElement("p");
       fallback.className = "canvas-large-fallback";
@@ -6614,10 +6629,14 @@ export class CanvasEngine {
     if (!this.#doc) return;
     const byId = new Map(this.#doc.nodes.map((n) => [n.id, n]));
     this.#edgeLayer.replaceChildren();
+    this.#handleLayer.replaceChildren();
     const worldW = this.#worldSize();
-    this.#edgeLayer.setAttribute("viewBox", `0 0 ${worldW.w} ${worldW.h}`);
-    this.#edgeLayer.style.width = `${worldW.w}px`;
-    this.#edgeLayer.style.height = `${worldW.h}px`;
+    // Le prese stanno nelle stesse coordinate dei fili (T91).
+    for (const layer of [this.#edgeLayer, this.#handleLayer]) {
+      layer.setAttribute("viewBox", `0 0 ${worldW.w} ${worldW.h}`);
+      layer.style.width = `${worldW.w}px`;
+      layer.style.height = `${worldW.h}px`;
+    }
     for (const edge of this.#doc.edges) {
       const from = byId.get(edge.fromNode);
       const to = byId.get(edge.toNode);
@@ -6671,7 +6690,8 @@ export class CanvasEngine {
           handle.setAttribute("cx", String(point.x));
           handle.setAttribute("cy", String(point.y));
           handle.setAttribute("r", "8");
-          group.append(handle);
+          // Sopra lo stage, non nel filo: un punto della scheda non la copre (T91, rotta 5).
+          this.#handleLayer.append(handle);
         }
       }
       this.#edgeLayer.append(group);
@@ -6696,6 +6716,7 @@ export class CanvasEngine {
    * non c'è più si distrugge. Il corpo si rifà solo se cambia la sua chiave
    * (`cardBodyKey`): una vista viva sopravvive a ciò che non la riguarda.
    * L'ordine sulla scena è quello del file: la prima sotto, l'ultima sopra.
+   * I gruppi però stanno sempre sotto i fili, quindi sotto ogni scheda (T91).
    */
   #placeCards(nodes: readonly CanvasNode[]): void {
     // La scheda col campo aperto non si sposta e non rifà il corpo: muoverla
@@ -6718,12 +6739,13 @@ export class CanvasEngine {
     // e il bordo del tratto in corso pure.
     const ours = new Set<Element>([...this.#cards.values()].map((entry) => entry.article));
     for (const child of [...this.#stage.children]) {
-      // Il bordo del tratto in corso (T69) e la cornice della scelta restano:
-      // non sono della scena.
-      if (!ours.has(child) && !child.classList.contains("canvas-ink-board") && !child.classList.contains("canvas-ink-frames") && child !== this.#selectionFrame) child.remove();
+      // Lo strato dei fili (T91, primo figlio della scena: le schede gli
+      // vanno dopo), il bordo del tratto in corso (T69) e la
+      // cornice della scelta restano: non sono della scena.
+      if (child !== this.#edgeLayer && !ours.has(child) && !child.classList.contains("canvas-ink-board") && !child.classList.contains("canvas-ink-frames") && child !== this.#selectionFrame) child.remove();
     }
     const children = this.#stage.children;
-    let index = 0;
+    let index = children[0] === this.#edgeLayer ? 1 : 0;
     for (const node of nodes) {
       let entry = this.#cards.get(node.id);
       if (!entry) {
