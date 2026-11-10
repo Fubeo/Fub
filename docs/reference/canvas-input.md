@@ -2,13 +2,15 @@
 
 > **Ambito:** come la tela della lavagna prende la tastiera, il puntatore e
 > la rotella: entrare in una scheda e uscirne, la rotella, il catalogo dei
-> comandi e i loro tasti, la colonna degli strumenti e la riga delle opzioni.
+> comandi e i loro tasti, la colonna degli strumenti, la riga delle opzioni
+> e la banda di stato.
 > **Fonti autorevoli:** `apps/client/src/editors/canvas/engine.ts`
 > (`#keydown`, `#wheel`, le schede attive) e le prove in
 > `apps/client/src/editors/canvas/engine.test.ts` e
 > `engine-cards.test.ts`; per i comandi,
 > `apps/client/src/editors/canvas/chrome/commands.ts`, `command-search.ts`,
-> `rail.ts`, `options.ts` e le loro prove.
+> `rail.ts`, `options.ts` e le loro prove; per la banda, `chrome/status.ts` e
+> `engine-status.test.ts`.
 
 Questa pagina viene da [Le schede della lavagna](canvas-cards.md), che tiene
 il contratto dei renderer.
@@ -171,3 +173,29 @@ barra di formato della nota (T41) e della formula della cella (T42).
 La barra di sotto, quella di N4, tiene ciò che non è ancora passato altrove:
 «Scrivi col mouse», aggiungi, duplica, togli, inquadra la selezione, i fili e
 il colore esatto (`#rrggbb`) delle schede.
+
+## La banda di stato
+
+La banda di stato dello Scrittoio dice della lavagna quattro cose. La shell la
+disegna da `EditorSurface.status`; le voci vengono da `engine.statusItems()`
+(`chrome/status.ts`).
+
+- **Zoom**: la percentuale di adesso, per esempio `140%`. Un clic apre il menu
+  dello zoom, accanto all'angolo in basso a destra della lavagna: 50%, 100% e
+  200% (quella di adesso è segnata, se è una di queste), poi «Mostra tutta la
+  lavagna» e «Inquadra la selezione». Quest'ultima è spenta senza una scheda
+  scelta, e dice perché.
+- **Schede scelte**: «N schede scelte», o «Una scheda scelta». Compare solo con
+  una scelta.
+- **Sola lettura**: compare quando la lavagna non si cambia, per il pannello in
+  sola lettura o perché il file ha una chiave doppia. Il suggerimento dice
+  perché.
+- **Cartella dei file trascinati**: dove finiscono i file trascinati sulla
+  lavagna, con la regola del deposito: `files.attachment-folder`, di serie
+  `attachments` alla radice del vault; un nome che comincia con `./` sta accanto
+  alla lavagna. Un clic apre le Impostazioni su `files.attachment-folder`. Il
+  nome si legge quando la lavagna si apre: se l'impostazione cambia mentre la
+  lavagna è aperta, si vede alla prossima apertura.
+
+La banda si rilegge a fine gesto: una rotella che gira non la tocca finché non
+si ferma, e una panoramica non ne cambia le voci.
