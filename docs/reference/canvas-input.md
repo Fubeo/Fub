@@ -266,6 +266,34 @@ Ogni ridimensionamento, e ogni doppio clic, è un commit e un annulla.
 L'inchiostro attaccato a una scheda sta nella scheda e la segue: il file non
 cambia, cambia la resa ([L'inchiostro della lavagna](canvas-ink.md)).
 
+## Mentre la penna scrive
+
+Si sa prima di alzare la penna a che cosa si attaccherà il tratto (T69).
+Dal primo movimento la scheda che lo terrebbe se finisse adesso ha quattro
+lati tratteggiati (`.canvas-ink-frame`, in `.canvas-ink-frames` sullo
+stage) e accanto alla punta,
+sopra a destra e mai sotto, l'etichetta `.canvas-ink-label` dice «Si attacca a
+{nome}» o «Libero sulla lavagna». La regola è quella dell'alzata
+(`anchorAt` di `anchor.ts`, col riquadro che cresce in `StrokeBox`), quindi
+il tratto si attacca a ciò che l'etichetta diceva; a cavallo di due schede,
+dove nessuna ha metà del riquadro, è libero. Con `Alt` tenuto il tratto resta
+libero, e l'etichetta lo dice subito anche a punta ferma.
+
+- La lavagna legge i `pointermove` dopo lo strato della penna, uno per
+  fotogramma, senza `requestAnimationFrame`: rifà la regola solo quando il
+  riquadro cresce o `Alt` cambia, e il testo e i lati solo quando cambia
+  l'ancora. La scia e `ink/` non si toccano.
+- Etichetta e lati nascono al primo tratto e restano per i tratti dopo,
+  nascosti a penna su: un tratto che comincia non crea nodi. La misura
+  dell'etichetta (per girarla a sinistra o sotto vicino al bordo) arriva da
+  un `ResizeObserver` dopo il layout, mai da una lettura forzata.
+- I lati non sono il contorno della scheda: mostrarlo e toglierlo ridipinge
+  tutta la scheda, e su una scheda grande (S8) la penna rallentava.
+- All'alzata, o se il tratto si annulla, etichetta e lati si nascondono. Il
+  lettore di schermo non sente l'etichetta (`aria-hidden`): una regione
+  `status` nascosta dice l'ancora del tratto scritto, solo se è cambiata.
+  Niente si anima, nemmeno col movimento pieno. La gomma non ha etichetta.
+
 ## La lavagna vuota
 
 Una lavagna senza schede, collegamenti né inchiostro mostra al centro tre

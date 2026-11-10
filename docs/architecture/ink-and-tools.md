@@ -344,11 +344,11 @@ schede.
 - **Chi decide la scheda.** Il tratto finito sceglie la scheda sul documento
   del momento in cui la penna si alza: `anchorAt` col riquadro di
   `strokeBounds`, e un livello che il nucleo dice estraneo non tiene il
-  tratto (`foreignInkLayer`). Fuori da ogni scheda il tratto è libero, nel
-  livello della radice; se anche quello è estraneo non si scrive e la barra
-  lo dice. Lo stato dei livelli viene dal nucleo (`CanvasCore.inkLayers()`),
-  una volta per testo; il tipo della scheda (`mediaKindOfId`) decide insieme
-  `data-media-kind` e il modo dell'inchiostro (`inkFitMode`).
+  tratto (`foreignInkLayer`). Fuori da ogni scheda, o con `Alt` tenuto, è
+  libero, nella radice; se anche quella è estranea non si scrive e la barra
+  lo dice ([l'etichetta](../reference/canvas-input.md#mentre-la-penna-scrive)
+  lo mostra prima). I livelli li dà il nucleo (`CanvasCore.inkLayers()`) una
+  volta per testo; `mediaKindOfId` decide `data-media-kind` e `inkFitMode`.
 - **Il passo di annulla.** Un tratto è `strokeRecord`, `addStrokePatch` e un
   commit solo, senza ridisegnare le schede: nello stesso giro si aggiunge
   l'asciutto del livello toccato e la scia va via (`settle`). Prima si
