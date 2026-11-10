@@ -77,6 +77,18 @@ function canvasSource(): string {
   });
 }
 
+/**
+ * «Allinea e distribuisci» dalla riga delle opzioni (T50; prima erano
+ * pulsanti della barra di N4): apre il menu e sceglie la voce `label`.
+ */
+function alignFromOptions(host: HTMLElement, label: string): void {
+  host.querySelector<HTMLButtonElement>('.canvas-options [data-canvas-action="align-menu"]')!.click();
+  const entry = [...document.querySelectorAll<HTMLElement>(".context-menu [role=menuitem]")]
+    .find((item) => item.querySelector(".menu-label")?.textContent === label);
+  if (!entry) throw new Error(`nessuna voce «${label}» nel menu`);
+  entry.click();
+}
+
 function mounted(source = canvasSource(), overrides: Partial<CanvasEngineOptions> = {}) {
   const host = document.createElement("div");
   document.body.append(host);
@@ -354,7 +366,7 @@ describe("CanvasEngine", () => {
     const { engine, host, changes } = mounted();
     const viewport = host.querySelector<HTMLElement>(".canvas-viewport")!;
     viewport.dispatchEvent(new KeyboardEvent("keydown", { key: "a", ctrlKey: true, bubbles: true }));
-    host.querySelector<HTMLButtonElement>('[data-canvas-action="left"]')!.click();
+    alignFromOptions(host, "Allinea a sinistra");
     expect(changes).toHaveLength(1);
     expect(changes[0].operation.patches.length).toBeGreaterThan(1);
     expect(readCanvas(engine.getDoc()).nodes.map((node) => node.x)).toEqual([40, 40, 40, 40]);
@@ -417,7 +429,7 @@ describe("CanvasEngine", () => {
     host.querySelector(".canvas-viewport")!.dispatchEvent(new KeyboardEvent("keydown", {
       key: "a", ctrlKey: true, bubbles: true,
     }));
-    host.querySelector<HTMLButtonElement>('[data-canvas-action="distribute-x"]')!.click();
+    alignFromOptions(host, "Distribuisci orizzontalmente");
     expect(readCanvas(engine.getDoc()).nodes.map((node) => node.x)).toEqual([0, 200, 400]);
     expect(changes[0].operation.patches).toHaveLength(1);
     expect(engine.undo()).toBe(true);
@@ -1431,12 +1443,18 @@ describe("CanvasEngine: una lavagna che il nucleo apre ma non riscrive (R3)", ()
     expect(shown[0]!.textContent).toBe(t("canvas.unwritable"));
     // All'inizio della barra, dove si legge senza scorrere.
     expect(shown[0]!.parentElement?.firstElementChild).toBe(shown[0]);
-    for (const name of ["add-text", "add-link", "add-group", "duplicate", "delete", "bring-front", "send-back"]) {
+    for (const name of ["add-text", "add-link", "add-group", "duplicate", "delete"]) {
       expect(button(host, name).disabled, name).toBe(true);
     }
+    // Davanti e dietro stanno nella riga delle opzioni (T50) con delle
+    // schede scelte: spenti, col perché.
+    for (const name of ["bring-front", "send-back"]) {
+      const shown = button(host, name);
+      if (shown?.isConnected) expect(shown.getAttribute("aria-disabled"), name).toBe("true");
+    }
     // Guardare resta: la camera non cambia il testo.
-    expect(button(host, "zoom-in").disabled).toBe(false);
-    expect(button(host, "fit").disabled).toBe(false);
+    expect(button(host, "zoom-in").getAttribute("aria-disabled")).toBeNull();
+    expect(button(host, "fit").getAttribute("aria-disabled")).toBeNull();
   }
 
   /** Ogni gesto che cambierebbe la lavagna, provato sulla scheda `a`. */

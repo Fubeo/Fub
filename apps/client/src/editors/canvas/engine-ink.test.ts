@@ -809,12 +809,11 @@ const settle = async (): Promise<void> => {
 const inkMouseButton = (host: HTMLElement) => host.querySelector<HTMLButtonElement>('[data-canvas-action="ink-mouse"]')!;
 
 describe("l'interruttore «Scrivi col mouse»", () => {
-  it("sta in testa alla barra, subito dopo la penna, col nome, il suggerimento e lo stato per il lettore di schermo", () => {
+  it("sta in testa alla barra di N4 (la penna è nella riga delle opzioni), col nome, il suggerimento e lo stato per il lettore di schermo", () => {
     const { host } = mounted();
     const button = inkMouseButton(host);
     const bar = host.querySelector(".canvas-toolbar")!;
-    expect(bar.firstElementChild).toBe(host.querySelector('[data-canvas-action="ink-pen"]'));
-    expect(bar.children[1]).toBe(button);
+    expect(bar.firstElementChild).toBe(button);
     expect(button.textContent).toBe(t("canvas.ink.mouse"));
     expect(button.title).toBe(t("canvas.ink.mouse_hint"));
     expect(button.getAttribute("aria-pressed")).toBe("false");
@@ -927,6 +926,20 @@ describe("l'interruttore «Scrivi col mouse»", () => {
 });
 
 const penButton = (host: HTMLElement) => host.querySelector<HTMLButtonElement>('[data-canvas-action="ink-pen"]')!;
+/**
+ * Apre il menu della penna come Ctrl+/ o la riga delle opzioni (T50): il
+ * comando `canvas.pen_menu` sceglie lo strumento della penna di adesso, se
+ * serve (la riga mostra il pulsante solo con Penna, Evidenziatore e Gomma), e
+ * apre il rialzo; un rialzo già aperto resta.
+ */
+const openPen = (engine: CanvasEngine) => engine.commands().find((command) => command.id === "canvas.pen_menu")!.run();
+/** Il pulsante della penna in vista nella riga: lo strumento della penna, il rialzo chiuso. */
+function shownPenButton(engine: CanvasEngine, host: HTMLElement): HTMLButtonElement {
+  openPen(engine);
+  const button = penButton(host);
+  button.click();
+  return button;
+}
 const penPopover = () => document.querySelector<HTMLElement>(".canvas-pen-popover");
 /** Sceglie la voce `value` del gruppo `group` nel menu aperto. */
 const pick = (group: string, value: string) =>
@@ -941,10 +954,12 @@ function slide(value: number): void {
 const brushOf = (stroke: Json) => parseInkBrush(stroke.brush as string);
 
 describe("il menu della penna", () => {
-  it("sta in testa alla barra e dice penna, colore e spessore; di serie la Sfera blu da 4 pixel", () => {
-    const { host } = mounted();
-    const button = penButton(host);
-    expect(host.querySelector(".canvas-toolbar")!.firstElementChild).toBe(button);
+  it("sta nella riga delle opzioni con la Penna e dice penna, colore e spessore; di serie la Sfera blu da 4 pixel", () => {
+    const { engine, host } = mounted();
+    // Con la Selezione la riga non ha la penna; con la Penna sì.
+    expect(penButton(host)).toBeNull();
+    const button = shownPenButton(engine, host);
+    expect(host.querySelector('.canvas-options [data-option="pen"] .canvas-group')!.firstElementChild).toBe(button);
     expect(button.getAttribute("aria-haspopup")).toBe("dialog");
     expect(button.getAttribute("aria-expanded")).toBe("false");
     expect(button.getAttribute("aria-label")).toBe(t("canvas.ink.pen.label", {
@@ -954,8 +969,8 @@ describe("il menu della penna", () => {
   });
 
   it("un tratto prende penna, colore e spessore scelti", () => {
-    const { host, changes } = mounted();
-    penButton(host).click();
+    const { engine, host, changes } = mounted();
+    openPen(engine);
     expect(penPopover()).not.toBeNull();
     pick("kind", "fountain");
     pick("color", "#d55e00");
@@ -970,8 +985,8 @@ describe("il menu della penna", () => {
   });
 
   it("l'evidenziatore si salva col suo strumento e il suo colore, trasparente a metà senza multiply", () => {
-    const { host, changes } = mounted();
-    penButton(host).click();
+    const { engine, host, changes } = mounted();
+    openPen(engine);
     pick("tool", "highlighter");
     const lift = pen(host, card(host, "t"), across(0, 0), false);
     const wet = host.querySelector(".canvas-ink-wet path")!;
@@ -992,7 +1007,7 @@ describe("il menu della penna", () => {
     const { engine, host, changes } = mounted();
     pen(host, viewportOf(host), [[100, 300], [140, 300], [180, 300], [220, 300], [260, 300]]);
     const written = lastChange(changes).text;
-    penButton(host).click();
+    openPen(engine);
     pick("tool", "eraser");
     expect(penButton(host).getAttribute("aria-label")).toBe(t("canvas.ink.pen.eraser_stroke"));
     // La punta della penna cancella: il tratto intero, di serie.
@@ -1001,10 +1016,11 @@ describe("il menu della penna", () => {
     expect(engine.undo()).toBe(true);
     expect(lastChange(changes).text).toBe(written);
 
-    // Il mouse con l'interruttore acceso: la cella, e «Solo il pezzo» taglia.
-    penButton(host).click();
+    // Il mouse con l'interruttore acceso (la Gomma scelta dalla riga delle
+    // opzioni lo accende già, T50): la cella, e «Solo il pezzo» taglia.
+    openPen(engine);
     pick("eraser", "piece");
-    inkMouseButton(host).click();
+    expect(inkMouseButton(host).getAttribute("aria-pressed")).toBe("true");
     expect(viewportOf(host).dataset.ink).toBe("eraser");
     mouse(host, viewportOf(host), [[180, 260], [180, 300], [180, 340]]);
     const pieces = strokesOf(lastChange(changes).text, null);
@@ -1013,7 +1029,7 @@ describe("il menu della penna", () => {
 
     // Il retro della penna cancella anche con la Penna scelta, col modo
     // scelto: il pezzo di sinistra si taglia in due.
-    penButton(host).click();
+    openPen(engine);
     pick("tool", "pen");
     expect(viewportOf(host).dataset.ink).toBe("pen");
     eraser(host, viewportOf(host), [[120, 260], [120, 340]]);
@@ -1021,9 +1037,9 @@ describe("il menu della penna", () => {
   });
 
   it("una scelta a metà tratto vale dal tratto dopo", () => {
-    const { host, changes } = mounted();
+    const { engine, host, changes } = mounted();
     const lift = pen(host, card(host, "t"), across(0, 0), false);
-    penButton(host).click();
+    openPen(engine);
     pick("color", "#009e73");
     lift();
     expect(strokesOf(lastChange(changes).text, "t")[0]).toMatchObject({ color: "#0072b2" });
@@ -1034,7 +1050,7 @@ describe("il menu della penna", () => {
   it("riaprendo la lavagna la scelta torna; una scelta rotta o di una versione futura vale quella di serie", async () => {
     const first = mounted();
     await settle();
-    penButton(first.host).click();
+    openPen(first.engine);
     pick("tool", "highlighter");
     pick("color", "#56b4e9");
     await settle();
@@ -1044,23 +1060,23 @@ describe("il menu della penna", () => {
 
     const again = mounted();
     await settle();
-    expect(penButton(again.host).textContent).toBe(t("canvas.ink.tool.highlighter"));
+    expect(shownPenButton(again.engine, again.host).textContent).toBe(t("canvas.ink.tool.highlighter"));
     pen(again.host, card(again.host, "t"), across(0, 0));
     expect(strokesOf(lastChange(again.changes).text, "t")[0]).toMatchObject({ tool: "highlighter", color: "#56b4e9" });
 
     machine.views.set("canvas.pen", { version: 99, tool: "highlighter" });
     const future = mounted();
     await settle();
-    expect(penButton(future.host).textContent).toBe(t("canvas.ink.kind.ballpoint"));
+    expect(shownPenButton(future.engine, future.host).textContent).toBe(t("canvas.ink.kind.ballpoint"));
     machine.views.set("canvas.pen", "rotto");
     const broken = mounted();
     await settle();
-    expect(penButton(broken.host).textContent).toBe(t("canvas.ink.kind.ballpoint"));
+    expect(shownPenButton(broken.engine, broken.host).textContent).toBe(t("canvas.ink.kind.ballpoint"));
   });
 
   it("una ridisegnata non chiude il menu né cambia il pulsante; la sola lettura lo chiude e spegne il pulsante", () => {
     const { engine, host, changes } = mounted();
-    const button = penButton(host);
+    const button = shownPenButton(engine, host);
     button.click();
     const open = penPopover();
     expect(open).not.toBeNull();
@@ -1071,7 +1087,7 @@ describe("il menu della penna", () => {
     engine.syncDoc(JSON.stringify(outside));
     expect(changes).toEqual([]);
     expect(penButton(host)).toBe(button);
-    expect(host.querySelector(".canvas-toolbar")!.firstElementChild).toBe(button);
+    expect(host.querySelector(".canvas-options")!.contains(button)).toBe(true);
     expect(penPopover()).toBe(open);
     expect(open!.isConnected).toBe(true);
 

@@ -1,10 +1,11 @@
 // Il menu della penna della lavagna (N4 T21, `PLAN-ui/lavagna-penne.html`).
 //
-// In testa alla barra un pulsante col tondo del colore e il nome della penna
-// di adesso; apre un rialzo del kit (`openPopover`) con le sezioni del
-// prototipo: Strumento (Penna, Evidenziatore, Gomma), Tipo di penna (le sei
-// penne della Penna di `ink/pens.ts`, con l'anteprima disegnata da `inkPath`
-// col pennello di `penBrush`, come `penPreview` dei disegni), Colore (gli otto
+// Nella riga delle opzioni (T50, `chrome/options.ts`) un pulsante col tondo
+// del colore e il nome della penna di adesso; apre un rialzo del kit
+// (`openPopover`) con le sezioni del prototipo: Strumento (Penna,
+// Evidenziatore, Gomma), Tipo di penna (le sei penne della Penna di
+// `ink/pens.ts`, con l'anteprima disegnata da `inkPath` col pennello di
+// `penBrush`, come `penPreview` dei disegni), Colore (gli otto
 // di `INK_PALETTE` e «Altro colore…» col selettore del kit), Spessore (un
 // cursore in pixel dello schermo, col valore accanto e il tratto vero sotto),
 // «La gomma cancella» e la nota sui tratti già scritti.
@@ -12,7 +13,7 @@
 // Il menu non tiene la scelta: la legge da chi lo monta (`choice`) e gli dà
 // ogni scelta nuova (`choose`); chi lo monta la applica, la ricorda e chiama
 // `sync`. Il pulsante resta lo stesso elemento per tutta la vita del menu,
-// così la barra si può rifare con il rialzo aperto.
+// così la riga si può rifare con il rialzo aperto.
 //
 // La tastiera come il prototipo: Invio o Spazio sul pulsante apre, le frecce
 // si muovono e scelgono dentro un gruppo, Tab passa al gruppo dopo, Esc chiude
@@ -177,13 +178,16 @@ export interface PenMenuOptions {
 }
 
 export interface PenMenu {
-  /// Il pulsante della barra: sempre lo stesso elemento.
+  /// Il pulsante della riga: sempre lo stesso elemento.
   readonly button: HTMLButtonElement;
   /// Il rialzo è aperto.
   readonly isOpen: boolean;
   /// Ridice la scelta sul pulsante e nel rialzo aperto, nella lingua di
   /// adesso; in sola lettura chiude il rialzo.
   sync(): void;
+  /// Apre il rialzo, se si può scrivere e non è già aperto: lo stesso del
+  /// clic sul pulsante (il comando `canvas.pen_menu` della riga delle opzioni).
+  open(): void;
   /// Chiude il rialzo, se è aperto.
   close(): void;
 }
@@ -206,7 +210,7 @@ interface OpenMenu {
   picker: PopoverHandle | null;
 }
 
-/// Il menu della penna: il pulsante si mette nella barra da chi lo monta.
+/// Il menu della penna: il pulsante si mette nella riga da chi lo monta.
 export function createPenMenu(options: PenMenuOptions): PenMenu {
   const { lifetime } = options;
 
@@ -594,6 +598,7 @@ export function createPenMenu(options: PenMenuOptions): PenMenu {
       paintButton();
       if (menu) paintMenu(menu);
     },
+    open,
     close,
   };
 }

@@ -880,11 +880,15 @@ describe("vivono solo le schede utili", () => {
       constructor(callback: () => void) {
         this.#callback = callback;
       }
-      observe(): void {
-        observers.push(this.#callback);
+      // Solo quello della vista: la riga delle opzioni (T50) ha il suo, che
+      // misura la riga e non le schede.
+      observe(target: Element): void {
+        if (target.classList.contains("canvas-viewport")) observers.push(this.#callback);
       }
+      unobserve(): void {}
       disconnect(): void {
-        observers.splice(observers.indexOf(this.#callback), 1);
+        const at = observers.indexOf(this.#callback);
+        if (at >= 0) observers.splice(at, 1);
       }
     });
     try {

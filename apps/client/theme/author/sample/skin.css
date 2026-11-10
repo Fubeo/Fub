@@ -8282,12 +8282,87 @@ kbd,
   opacity: 0.4;
   cursor: not-allowed;
 }
-/* Il pulsante della penna: il colore e il nome della penna di adesso. Il
-   menu aperto tiene il velo del passaggio. */
+/* La testata con la riga delle opzioni (T50): lo stesso fondo della
+   colonna, un filo verso la lavagna (come .draw-header). */
+.canvas-header {
+  gap: var(--space-2) var(--space-5);
+  padding: var(--space-2);
+  background: var(--bg-elev);
+  border-bottom: 1px solid var(--border);
+}
+.canvas-options {
+  gap: var(--space-2) var(--space-5);
+}
+.canvas-group {
+  gap: var(--space-1);
+}
+/* I pulsanti della riga (come .draw-button). */
+.canvas-button {
+  color: var(--muted);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-sm);
+  transition:
+    background var(--duration-fast) var(--ease),
+    color var(--duration-fast) var(--ease),
+    box-shadow var(--duration-fast) var(--ease);
+}
+.canvas-button:hover:not(:disabled, [aria-disabled="true"]) {
+  background: var(--overlay-hover);
+  color: var(--text);
+}
+.canvas-button[aria-checked="true"],
+.canvas-button[aria-pressed="true"] {
+  background: var(--accent-wash);
+  color: var(--accent);
+}
+.canvas-button[aria-expanded="true"] {
+  background: var(--overlay-active);
+  color: var(--text);
+}
+.canvas-button:disabled,
+.canvas-button[aria-disabled="true"] {
+  opacity: 0.4;
+}
+.canvas-button:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: 0;
+}
+.canvas-button[data-label] {
+  color: var(--text);
+}
+.canvas-options-hint {
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+/* Il pozzo del colore delle schede scelte: i sei colori di JSON Canvas
+   come li dipinge la lavagna; spento in sola lettura. */
+.canvas-color-well[aria-disabled="true"] {
+  opacity: 0.4;
+}
+.canvas-options .canvas-color-well [data-canvas-color="1"] {
+  background: var(--danger);
+}
+.canvas-options .canvas-color-well [data-canvas-color="2"] {
+  background: var(--warning);
+}
+.canvas-options .canvas-color-well [data-canvas-color="3"] {
+  background: color-mix(in srgb, yellow 70%, var(--text));
+}
+.canvas-options .canvas-color-well [data-canvas-color="4"] {
+  background: var(--success);
+}
+.canvas-options .canvas-color-well [data-canvas-color="5"] {
+  background: var(--info);
+}
+.canvas-options .canvas-color-well [data-canvas-color="6"] {
+  background: var(--accent);
+}
+/* Il pulsante della penna, nella riga: il colore e il nome della penna di
+   adesso. Il menu aperto tiene il velo del passaggio. */
 .canvas-ink-pen {
   gap: var(--space-3);
 }
-.canvas-toolbar > .canvas-ink-pen[aria-expanded="true"] {
+.canvas-options .canvas-ink-pen[aria-expanded="true"] {
   background: var(--overlay-active);
   color: var(--text);
 }

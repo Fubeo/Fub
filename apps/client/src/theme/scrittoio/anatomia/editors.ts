@@ -35,8 +35,11 @@ export const EDITORS: PartAnatomy = {
     // La colonna degli strumenti della lavagna (T49): quella del kit, con le
     // caselle `canvas-tool`; uno strumento spento in sola lettura si vede.
     { name: "canvas-rail", states: [S("rest"), S("hover"), S("pressed"), S("focused"), S("disabled")], hooks: ["canvas-rail", "canvas-tool"] },
-    // Il menu della penna della lavagna (N4 T21): il pulsante in testa alla
-    // barra e il suo rialzo. Le anteprime sono inchiostro su carta.
+    // La riga delle opzioni della lavagna (T50): la testata, i gruppi e i
+    // pulsanti della riga del kit, il pozzo del colore delle schede scelte.
+    { name: "canvas-options", states: [S("rest"), S("hover"), S("pressed"), S("focused"), S("selected"), S("disabled")], hooks: ["canvas-header", "canvas-options", "canvas-options-hint", "canvas-group", "canvas-button", "canvas-color-well"] },
+    // Il menu della penna della lavagna (N4 T21): il pulsante nella riga
+    // delle opzioni e il suo rialzo. Le anteprime sono inchiostro su carta.
     { name: "canvas-pen-menu", states: SELECTABLE, hooks: ["canvas-ink-pen", "canvas-ink-pen-name", "canvas-pen-popover", "canvas-pen-menu", "canvas-pen-section", "canvas-pen-heading", "canvas-pen-list", "canvas-pen-item", "canvas-pen-preview", "canvas-pen-swatches", "canvas-pen-swatch", "canvas-pen-more", "canvas-pen-note", "canvas-pen-width", "canvas-pen-width-value", "canvas-pen-width-preview"] },
     { name: "canvas-node", layer: "contenuto", layers: { "canvas-node-handle": "segno", "canvas-connect": "segno", "canvas-resize": "segno", "canvas-convert-note": "cornice", "canvas-open-url": "cornice" }, states: DRAGGABLE, hooks: ["canvas-node", "canvas-node-group", "canvas-node-handle", "canvas-connect", "canvas-resize", "canvas-card-body", "canvas-markdown", "canvas-empty", "canvas-group-label", "canvas-group-bg", "canvas-url-text", "canvas-media-placeholder", "canvas-convert-note", "canvas-open-url", "canvas-file-link", "canvas-text-editor", "canvas-field-editor"] },
     // La barra multifunzione del documento: quella del kit, come la barra del

@@ -42,6 +42,8 @@ const STABLE_IDS = [
   "canvas.align.left", "canvas.align.center", "canvas.align.right", "canvas.align.top", "canvas.align.middle", "canvas.align.bottom",
   "canvas.distribute_x", "canvas.distribute_y",
   "canvas.fit", "canvas.fit_selection", "canvas.zoom_in", "canvas.zoom_out",
+  "canvas.pen_menu", "canvas.color_menu", "canvas.align_menu",
+  "canvas.tips.none", "canvas.tips.start", "canvas.tips.end",
 ];
 
 /// Un tasto in forma confrontabile: Ctrl è `mod`, e un segno che non è una

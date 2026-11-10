@@ -2905,6 +2905,53 @@ body {
   flex: none;
 }
 
+/* La testata: la riga delle opzioni dello strumento (T50; come
+   .draw-header). */
+.canvas-header {
+  display: flex;
+  flex: none;
+  align-items: center;
+  min-width: 0;
+}
+.canvas-options {
+  flex: 1 1 auto;
+}
+.canvas-group {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+}
+.canvas-group[hidden],
+.canvas-options-item[hidden] {
+  display: none;
+}
+.canvas-button {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  min-width: 32px;
+  min-height: 32px;
+  padding: 0;
+}
+@media (pointer: coarse) {
+  .canvas-button {
+    min-width: 44px;
+    min-height: 44px;
+  }
+}
+/* Un pulsante con un nome scritto (la penna): il testo accanto. */
+.canvas-button[data-label] {
+  gap: var(--space-3, 6px);
+  padding: 0 var(--space-4, 8px);
+  white-space: nowrap;
+}
+.canvas-options-hint {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* Il corpo: la colonna degli strumenti e l'area della lavagna (come
    .draw-body). */
 .canvas-body {

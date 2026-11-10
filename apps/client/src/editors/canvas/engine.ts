@@ -48,6 +48,7 @@ import {
 import {
   CANVAS_ALIGN,
   CANVAS_COLORS,
+  CANVAS_TIPS,
   buildCanvasCommands,
   commandForKey,
   isCommandSearchKey,
@@ -58,9 +59,12 @@ import {
   type CanvasCommandArgs,
   type CanvasCommandBehaviour,
   type CanvasNudge,
+  type CanvasTip,
   type CanvasToolId,
 } from "./chrome/commands";
 import { CANVAS_INK_TOOLS, CANVAS_WRITING_TOOLS, createCanvasRail, type CanvasRail } from "./chrome/rail";
+import { createCanvasOptions, type CanvasOptions } from "./chrome/options";
+import type { OptionItem } from "../../kit/options-bar";
 import { SHARED_RECENT_COMMANDS, openCommandSearch, type CommandSearchHandle, type RecentCommands } from "./chrome/command-search";
 import { inkFitMode } from "./ink-fit";
 import { mountInkLayer, type InkLayer, type InkLayerStroke } from "./ink-layer";
@@ -684,8 +688,15 @@ export class CanvasEngine {
   #penChoice: InkPenChoice = DEFAULT_INK_CHOICE;
   /** Quante volte la penna è cambiata: quella ricordata arriva solo se nessuno l'ha scelta prima. */
   #penTurns = 0;
-  /** Il menu della penna, in testa alla barra: il suo pulsante è lo stesso in ogni barra. */
+  /** Il menu della penna, nella riga delle opzioni: il suo pulsante è sempre lo stesso. */
   readonly #penMenu: PenMenu;
+  /**
+   * La riga delle opzioni sopra la lavagna (T50): le opzioni dello strumento
+   * e delle schede scelte, o la barra di una scheda in scrittura.
+   */
+  readonly #canvasOptions: CanvasOptions;
+  /** Le punte dei fili che lo strumento Collega tira (T50); di serie alla fine. */
+  #tips: CanvasTip = "end";
   /** La vista ricordata su questo computer (T36); `null` senza memoria o senza lavagna. */
   readonly #viewMemo: CanvasViewRecorder | null;
   /** Cresce a ogni `setDoc`: la vista letta per un'apertura di prima non vale più. */
@@ -767,6 +778,26 @@ export class CanvasEngine {
       editable: () => !this.#readOnly && !this.#isSceneOversized(),
       theme: () => ((this.#root.dataset.theme ?? options.theme) === "dark" ? "dark" : "light"),
     });
+    // La testata, sopra la barra di N4 e la lavagna: la riga delle opzioni
+    // (T50), col menu della penna dentro.
+    this.#canvasOptions = createCanvasOptions({
+      lifetime: this.#life,
+      tool: () => this.#tool,
+      chosen: () => this.#selectedNodes().length,
+      color: () => this.#chosenColor(),
+      tips: () => this.#tips,
+      commands: () => this.commands(),
+      run: (id) => {
+        this.#recordPending();
+        const command = this.commands().find((one) => one.id === id);
+        if (command && command.disabled() === null) command.run();
+      },
+      penMenu: this.#penMenu,
+    });
+    const header = document.createElement("div");
+    header.className = "canvas-header";
+    header.append(this.#canvasOptions.element);
+    this.#toolbar.before(header);
     const inkMouse = document.createElement("button");
     inkMouse.type = "button";
     inkMouse.dataset.canvasAction = "ink-mouse";
@@ -784,6 +815,7 @@ export class CanvasEngine {
       this.#toolbar.setAttribute("aria-label", t("canvas.surface"));
       this.#drawToolbar();
       this.#rail.relabel();
+      this.#canvasOptions.sync();
     });
     // I tasti degli strumenti valgono anche col fuoco sulla colonna (dopo un
     // clic su una casella); gli altri tasti lì sono della colonna.
@@ -1617,6 +1649,7 @@ export class CanvasEngine {
     this.#inkMouseButton.setAttribute("aria-pressed", String(this.#inkMouse));
     this.#viewport.dataset.tool = tool;
     this.#rail.sync();
+    this.#canvasOptions.sync();
     this.#applyInkMouse();
   }
 
@@ -2244,17 +2277,21 @@ export class CanvasEngine {
 
   #drawToolbar(): void {
     const bar = this.#toolbar;
-    // La barra si rifà da capo, salvo i due comandi dell'inchiostro, che
-    // restano gli stessi elementi al loro posto: il rialzo della penna aperto
-    // resta ancorato e il fuoco su uno dei due non si perde.
-    const pen = this.#penMenu.button;
+    // La barra di N4 si rifà da capo, salvo l'interruttore «Scrivi col
+    // mouse», che resta lo stesso elemento in testa: il fuoco non si perde.
+    // Ciò che è passato nella riga delle opzioni (T50: il menu della penna,
+    // davanti e dietro, allinea e distribuisci, la Vista) non c'è più; il
+    // resto aspetta i suoi task (la barra della selezione T51, i fili e il
+    // colore esatto T47 e T59, la lavagna vuota T62).
     const inkMouse = this.#inkMouseButton;
-    for (const child of [...bar.children]) if (child !== pen && child !== inkMouse) child.remove();
-    if (bar.firstElementChild !== pen || pen.nextElementSibling !== inkMouse) bar.prepend(pen, inkMouse);
+    for (const child of [...bar.children]) if (child !== inkMouse) child.remove();
+    if (bar.firstElementChild !== inkMouse) bar.prepend(inkMouse);
     this.#penMenu.sync();
-    // La colonna: lo strumento e la sola lettura di adesso.
+    // La colonna e la riga delle opzioni: lo strumento, la scelta e la sola
+    // lettura di adesso.
     this.#rail.sync();
-    // «Scrivi col mouse», subito dopo la penna.
+    this.#canvasOptions.sync();
+    // «Scrivi col mouse», in testa.
     inkMouse.textContent = t("canvas.ink.mouse");
     inkMouse.title = t("canvas.ink.mouse_hint");
     inkMouse.setAttribute("aria-pressed", String(this.#inkMouse));
@@ -2292,26 +2329,7 @@ export class CanvasEngine {
     const hasSelection = this.#selection.length > 0 || this.#edgeSelection.length > 0;
     mk("duplicate", t("canvas.duplicate"), () => this.#duplicateSelection(), !hasSelection);
     mk("delete", t("canvas.delete"), () => this.#deleteSelection(), !hasSelection);
-    mk("bring-front", t("canvas.bring_front"), () => this.#reorderSelection("front"), this.#selection.length === 0);
-    mk("send-back", t("canvas.send_back"), () => this.#reorderSelection("back"), this.#selection.length === 0);
-    mk("fit", t("canvas.fit"), () => {
-      this.#fitCamera();
-      this.#render();
-    }, false, false);
     mk("fit-selection", t("canvas.fit_selection"), () => this.#fitCamera(true, this.#selectedNodes()), this.#selection.length === 0, false);
-    const layoutLabels = {
-      left: t("canvas.align_left"),
-      center: t("canvas.align_center"),
-      right: t("canvas.align_right"),
-      top: t("canvas.align_top"),
-      middle: t("canvas.align_middle"),
-      bottom: t("canvas.align_bottom"),
-      "distribute-x": t("canvas.distribute_x"),
-      "distribute-y": t("canvas.distribute_y"),
-    } as const;
-    for (const axis of ["left", "center", "right", "top", "middle", "bottom", "distribute-x", "distribute-y"] as const) {
-      mk(axis, layoutLabels[axis], () => this.#layoutSelection(axis), this.#selection.length < (axis.startsWith("distribute") ? 3 : 2));
-    }
     if (!this.#isSceneOversized() && this.#doc?.edges.length && this.#doc.edges.length <= MAX_INTERACTIVE_EDGES) {
       const picker = document.createElement("select");
       picker.dataset.canvasField = "select-edge";
@@ -2376,14 +2394,6 @@ export class CanvasEngine {
       this.#commit(patches, "input");
     });
     if (!this.#isSceneOversized() && this.#edgeSelection.length === 1) this.#drawEdgeInspector(bar, colorEditor);
-    mk("zoom-in", t("canvas.zoom_in"), () => {
-      const rect = this.#viewport.getBoundingClientRect();
-      this.#zoomAt(rect.left + rect.width / 2, rect.top + rect.height / 2, 1.2);
-    }, false, false);
-    mk("zoom-out", t("canvas.zoom_out"), () => {
-      const rect = this.#viewport.getBoundingClientRect();
-      this.#zoomAt(rect.left + rect.width / 2, rect.top + rect.height / 2, 1 / 1.2);
-    }, false, false);
     // Un avviso solo, nel suo posto all'inizio della barra, dove si legge
     // senza scorrere: quello dell'ultimo gesto, o la sola lettura della tela.
     // Una scena oltre il limite ha già il suo, nella tela.
@@ -2851,6 +2861,17 @@ export class CanvasEngine {
         run: () => this.#layoutSelection(axis),
       };
     }
+    if (id.startsWith("canvas.tips.")) {
+      const tip = id.slice("canvas.tips.".length) as CanvasTip;
+      if (!(CANVAS_TIPS as readonly string[]).includes(tip)) return null;
+      return {
+        disabled: writable,
+        run: () => {
+          this.#tips = tip;
+          this.#canvasOptions.sync();
+        },
+      };
+    }
     if (id.startsWith("canvas.nudge.")) {
       const [way, far] = id.slice("canvas.nudge.".length).split(".") as [CanvasNudge, string | undefined];
       const step = far === "far" ? CANVAS_SNAP * 4 : CANVAS_SNAP;
@@ -2960,6 +2981,24 @@ export class CanvasEngine {
           disabled: () => writable() ?? (this.#selectedNodes().length >= 3 ? null : t("canvas.commands.why.three")),
           run: () => this.#layoutSelection(id === "canvas.distribute_x" ? "distribute-x" : "distribute-y"),
         };
+      // I menu della riga delle opzioni (T50).
+      case "canvas.pen_menu":
+        return {
+          disabled: () => writable() ?? (this.#isSceneOversized() ? t("canvas.too_large") : null),
+          run: () => {
+            // Con uno strumento che non scrive a mano, prima lo strumento
+            // della penna: la riga mostra il pulsante e il menu ci si apre.
+            if (!CANVAS_INK_TOOLS.has(this.#tool)) this.#pickTool(this.#penChoice.tool);
+            this.#penMenu.open();
+          },
+        };
+      case "canvas.color_menu":
+        return { disabled: withSelection, run: () => this.#canvasOptions.openColorMenu() };
+      case "canvas.align_menu":
+        return {
+          disabled: () => writable() ?? (this.#selectedNodes().length >= 2 ? null : t("canvas.commands.why.two")),
+          run: () => this.#canvasOptions.openAlignMenu(),
+        };
       case "canvas.fit":
         return {
           disabled: () => null,
@@ -2985,6 +3024,36 @@ export class CanvasEngine {
       default:
         return null;
     }
+  }
+
+  /**
+   * Le punte di un filo nuovo, come dice la riga delle opzioni: alla fine
+   * (`toEnd: "arrow"`, come sempre), all'inizio, o nessuna. JSON Canvas mette
+   * la punta alla fine quando `toEnd` manca: «nessuna» la scrive.
+   */
+  #tipEnds(): Pick<CanvasEdge, "fromEnd" | "toEnd"> {
+    if (this.#tips === "none") return { toEnd: "none" };
+    if (this.#tips === "start") return { fromEnd: "arrow", toEnd: "none" };
+    return { toEnd: "arrow" };
+  }
+
+  /** Il colore delle schede scelte: `undefined` quello di serie, `null` se sono diversi. */
+  #chosenColor(): string | null | undefined {
+    const colors = new Set(this.#selectedNodes().map((node) => node.color ?? ""));
+    if (colors.size > 1) return null;
+    const [only] = colors;
+    return only ? only : undefined;
+  }
+
+  /**
+   * La barra di una scheda in scrittura nella riga delle opzioni (T50): la
+   * barra di formato della nota (T41) o la formula della cella (T42), al
+   * posto delle opzioni dello strumento. `null` quando la scheda esce: la
+   * riga torna allo strumento.
+   */
+  setCardOptions(items: readonly OptionItem[] | null): void {
+    if (this.#destroyed) return;
+    this.#canvasOptions.setWriting(items);
   }
 
   /** La prima scheda scelta, a cui vanno le frecce e Invio. */
@@ -3626,7 +3695,7 @@ export class CanvasEngine {
         const edge: CanvasEdge | null = existing
           ? { ...existing, [connect.endpoint === "from" ? "fromNode" : "toNode"]: target }
           : target !== connect.from ? {
-            id: newNodeId("e"), fromNode: connect.from, toNode: target, toEnd: "arrow",
+            id: newNodeId("e"), fromNode: connect.from, toNode: target, ...this.#tipEnds(),
           } : null;
         if (edge) {
           const patch = upsertEdgePatch(this.#doc, edge);

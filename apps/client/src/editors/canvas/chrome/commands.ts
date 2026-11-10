@@ -89,6 +89,11 @@ export type CanvasAlign = (typeof CANVAS_ALIGN)[number];
 export const CANVAS_NUDGE = ["left", "right", "up", "down"] as const;
 export type CanvasNudge = (typeof CANVAS_NUDGE)[number];
 
+/// Le punte dei fili che lo strumento Collega tira (T50): nessuna, una
+/// all'inizio, una alla fine (quella di serie, come JSON Canvas).
+export const CANVAS_TIPS = ["none", "start", "end"] as const;
+export type CanvasTip = (typeof CANVAS_TIPS)[number];
+
 /// Gli strumenti della colonna (T49), nell'ordine della colonna di serie. Il
 /// lazo (Q) arriva con T86.
 export const CANVAS_TOOL_IDS = ["select", "hand", "pen", "highlighter", "eraser", "text", "connect"] as const;
@@ -162,6 +167,13 @@ export const CANVAS_COMMANDS: readonly CanvasCommandSpec[] = [
   { id: "canvas.fit_selection", label: "canvas.fit_selection", group: "view", keys: ["Shift-2"], context: "selection" },
   { id: "canvas.zoom_in", label: "canvas.zoom_in", group: "view", keys: ["+", "Mod-=", "Mod-+"], context: "always" },
   { id: "canvas.zoom_out", label: "canvas.zoom_out", group: "view", keys: ["-", "Mod--"], context: "always" },
+  // La riga delle opzioni (T50): i menu che apre e le punte di Collega.
+  { id: "canvas.pen_menu", label: "canvas.options.pen_menu", group: "tools", keys: [], context: "always" },
+  { id: "canvas.color_menu", label: "canvas.options.color_menu", group: "color", keys: [], context: "selection" },
+  { id: "canvas.align_menu", label: "canvas.options.align_menu", group: "arrange", keys: [], context: "selection" },
+  ...CANVAS_TIPS.map((tip): CanvasCommandSpec => ({
+    id: `canvas.tips.${tip}`, label: `canvas.options.tips.${tip}`, group: "tools", keys: [], context: "tool",
+  })),
 ];
 
 /// I tasti dello Scrittoio che la lavagna prende, col fuoco su di sé, per

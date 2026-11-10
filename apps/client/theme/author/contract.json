@@ -839,6 +839,12 @@
     "canvas-source",
     "canvas-rail",
     "canvas-tool",
+    "canvas-header",
+    "canvas-options",
+    "canvas-options-hint",
+    "canvas-group",
+    "canvas-button",
+    "canvas-color-well",
     "canvas-ink-pen",
     "canvas-ink-pen-name",
     "canvas-pen-popover",
@@ -2435,6 +2441,12 @@
     "canvas-source": "contenuto",
     "canvas-rail": "cornice",
     "canvas-tool": "cornice",
+    "canvas-header": "cornice",
+    "canvas-options": "cornice",
+    "canvas-options-hint": "cornice",
+    "canvas-group": "cornice",
+    "canvas-button": "cornice",
+    "canvas-color-well": "cornice",
     "canvas-ink-pen": "cornice",
     "canvas-ink-pen-name": "cornice",
     "canvas-pen-popover": "cornice",
@@ -5445,6 +5457,26 @@
         "hover",
         "pressed",
         "focused",
+        "disabled"
+      ]
+    },
+    {
+      "name": "canvas-options",
+      "part": "editors",
+      "hooks": [
+        "canvas-header",
+        "canvas-options",
+        "canvas-options-hint",
+        "canvas-group",
+        "canvas-button",
+        "canvas-color-well"
+      ],
+      "states": [
+        "rest",
+        "hover",
+        "pressed",
+        "focused",
+        "selected",
         "disabled"
       ]
     },
@@ -8759,10 +8791,10 @@
   "counts": {
     "required_roles": 154,
     "optional_roles": 63,
-    "hooks": 1594,
+    "hooks": 1600,
     "state_names": 7,
-    "assigned_states": 749,
-    "components": 222,
+    "assigned_states": 755,
+    "components": 223,
     "preference_tokens": 186
   }
 }
