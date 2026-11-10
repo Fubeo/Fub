@@ -6,7 +6,7 @@
 use fub_canvas_core::commit::{CommitError, Core, Edit};
 use fub_canvas_core::model::MAX_SOURCE_BYTES;
 use fub_canvas_core::patch::{upsert_node_patch, CanvasPatch, PatchError};
-use fub_canvas_core::{CanvasError, CanvasNode};
+use fub_canvas_core::{CanvasColor, CanvasError, CanvasNode, PresetColor};
 
 const ONE: &str = r#"{"nodes":[{"id":"a","type":"text","x":0,"y":0,"width":100,"height":50,"text":"uno"}],"edges":[]}"#;
 
@@ -198,4 +198,76 @@ fn the_edit_of_a_commit_next_to_wide_characters() {
         ),
         committed.source
     );
+}
+
+/// La scheda `a` di `ROSSO` ha un colore che Fub non conosce; `b` non ne ha.
+const ROSSO: &str = r#"{"nodes":[{"id":"a","type":"text","x":0,"y":0,"width":100,"height":50,"color":"rosso","text":"uno"},{"id":"b","type":"text","x":200,"y":0,"width":100,"height":50,"text":"due"}],"edges":[]}"#;
+
+fn recoloured(core: &Core, id: &str, color: Option<CanvasColor>) -> CanvasPatch {
+    let mut after = node(core, id);
+    after.color = color;
+    upsert_node_patch(core.canvas(), &after).expect("il colore cambia")
+}
+
+#[test]
+fn t47b_a_card_with_an_unknown_colour_moves_and_keeps_the_colour_as_it_was() {
+    let mut core = Core::open(ROSSO).unwrap();
+    let committed = core.commit(&[moved(&core, 10)]).unwrap();
+    assert_eq!(committed.source, ROSSO.replace(r#""x":0"#, r#""x":10"#));
+    assert_eq!(core.commit(&[]).unwrap().source, committed.source);
+}
+
+#[test]
+fn t47b_an_undo_brings_the_unknown_colour_back_byte_for_byte() {
+    let mut core = Core::open(ROSSO).unwrap();
+    let committed = core
+        .commit(&[recoloured(
+            &core,
+            "a",
+            Some(CanvasColor::Preset(PresetColor::Red)),
+        )])
+        .unwrap();
+    assert!(committed.source.contains(r#""color":"1""#));
+    let undone = core.commit(&committed.inverse).unwrap();
+    assert_eq!(undone.source, ROSSO);
+}
+
+#[test]
+fn t47b_a_copied_card_takes_an_unknown_colour_the_board_read() {
+    let mut core = Core::open(ROSSO).unwrap();
+    let mut copy = node(&core, "a");
+    copy.id = "c".into();
+    copy.x = 400;
+    let patch = upsert_node_patch(core.canvas(), &copy).expect("la copia è nuova");
+    let committed = core.commit(&[patch]).unwrap();
+    assert_eq!(committed.source.matches(r#""color":"rosso""#).count(), 2);
+}
+
+#[test]
+fn t47b_an_unknown_colour_the_board_never_read_is_still_invalid() {
+    let mut core = Core::open(ONE).unwrap();
+    for text in ["rosso", "#12", "7", ""] {
+        let patch = recoloured(&core, "a", Some(CanvasColor::Unknown(text.into())));
+        let error = core.commit(&[patch]).unwrap_err();
+        assert_eq!(error.reason(), "invalid", "{text:?}");
+        unchanged(&core, ONE);
+    }
+}
+
+#[test]
+fn t47b_a_reset_keeps_the_colours_read_before() {
+    let mut core = Core::open(ROSSO).unwrap();
+    let committed = core
+        .commit(&[recoloured(
+            &core,
+            "a",
+            Some(CanvasColor::Preset(PresetColor::Red)),
+        )])
+        .unwrap();
+    core.reset(committed.source.as_str()).unwrap();
+    assert_eq!(core.commit(&committed.inverse).unwrap().source, ROSSO);
+    // Una lavagna aperta dal file di adesso non ha più «rosso» da riscrivere.
+    let mut fresh = Core::open(committed.source.as_str()).unwrap();
+    let error = fresh.commit(&committed.inverse).unwrap_err();
+    assert_eq!(error.reason(), "invalid");
 }

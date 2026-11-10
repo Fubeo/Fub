@@ -8,8 +8,9 @@
 //!
 //! 1. la bozza delle toppe su una copia del modello ([`patch::draft`]): una
 //!    toppa che non torna è [`CommitError::Stale`];
-//! 2. la validazione del modello di dopo ([`Canvas::validate`]):
-//!    [`CommitError::Invalid`];
+//! 2. la validazione del modello di dopo ([`Canvas::validate`]) e dei colori
+//!    che Fub non conosce ([`CommitError::Invalid`]): un colore sconosciuto si
+//!    scrive solo se la lavagna l'ha letto (vedi [`Core`]);
 //! 3. il ritocco del sorgente ([`patch_source`]): un sorgente che il ritocco
 //!    non sa leggere (una chiave doppia, anche sconosciuta, R3) è
 //!    [`CommitError::Rejected`];
@@ -22,9 +23,11 @@
 //! le stesse ragioni in Rust e in TypeScript
 //! (`docs/reference/canvas-format.md` § «Parità»).
 
+use std::collections::BTreeSet;
+
 use thiserror::Error;
 
-use crate::model::{Canvas, CanvasError};
+use crate::model::{Canvas, CanvasColor, CanvasError};
 use crate::patch::{self, same_edge, same_map, same_node, CanvasPatch, PatchError};
 use crate::read::parse;
 use crate::source::{patch_source, SourceError};
@@ -33,10 +36,17 @@ use crate::source::{patch_source, SourceError};
 ///
 /// Il modello è sempre quello del sorgente: lo cambiano solo
 /// [`Core::commit`] e [`Core::reset`], e un errore non lo tocca.
+///
+/// Un colore che Fub non conosce (`"rosso"`) si legge e si riscrive com'è.
+/// Per scriverlo di nuovo la lavagna deve averlo letto: `unknown_colors` ne
+/// tiene i testi, dal file aperto e da quelli ricaricati con [`Core::reset`].
+/// Così un annulla riporta il colore che c'era, e una scheda che si copia lo
+/// porta con sé; un colore inventato resta un errore `invalid`.
 #[derive(Clone, Debug)]
 pub struct Core {
     source: String,
     canvas: Canvas,
+    unknown_colors: BTreeSet<String>,
 }
 
 /// Un commit riuscito.
@@ -152,7 +162,13 @@ impl Core {
     pub fn open(source: impl Into<String>) -> Result<Self, CanvasError> {
         let source = source.into();
         let canvas = parse(&source)?;
-        Ok(Self { source, canvas })
+        let mut unknown_colors = BTreeSet::new();
+        remember_unknown_colors(&mut unknown_colors, &canvas);
+        Ok(Self {
+            source,
+            canvas,
+            unknown_colors,
+        })
     }
 
     /// Il modello della lavagna.
@@ -169,7 +185,11 @@ impl Core {
     /// Riapre la lavagna da un sorgente nuovo (il file è cambiato da fuori).
     /// Con un errore la lavagna resta com'era.
     pub fn reset(&mut self, source: impl Into<String>) -> Result<(), CanvasError> {
-        *self = Self::open(source)?;
+        // I colori già letti restano scrivibili: un annulla dopo il
+        // ricaricamento riporta lo stesso testo di prima.
+        let mut next = Self::open(source)?;
+        next.unknown_colors.append(&mut self.unknown_colors);
+        *self = next;
         Ok(())
     }
 
@@ -204,6 +224,7 @@ impl Core {
     fn written(&self, patches: &[CanvasPatch]) -> Result<(String, Canvas), CommitError> {
         let draft = patch::draft(&self.canvas, patches)?;
         draft.validate().map_err(CommitError::Invalid)?;
+        check_colors(&draft, &self.unknown_colors).map_err(CommitError::Invalid)?;
         let source = patch_source(&self.source, &self.canvas, &draft)?;
         let reread = parse(&source).map_err(|error| CommitError::Unstable {
             reread: Some(error),
@@ -213,6 +234,36 @@ impl Core {
         }
         Ok((source, reread))
     }
+}
+
+/// I colori di schede e archi, nell'ordine del modello.
+fn colors(canvas: &Canvas) -> impl Iterator<Item = &CanvasColor> {
+    let nodes = canvas.nodes.iter().filter_map(|node| node.color.as_ref());
+    let edges = canvas.edges.iter().filter_map(|edge| edge.color.as_ref());
+    nodes.chain(edges)
+}
+
+/// Ricorda i colori che Fub non conosce di `canvas`.
+fn remember_unknown_colors(known: &mut BTreeSet<String>, canvas: &Canvas) {
+    known.extend(
+        colors(canvas)
+            .filter(|color| !color.is_known())
+            .map(|color| color.as_str().to_owned()),
+    );
+}
+
+/// Un colore che Fub conosce si scrive sempre; uno che non conosce solo se la
+/// lavagna l'ha letto. Un colore inventato è `invalid`, come prima di T47b.
+fn check_colors(draft: &Canvas, read: &BTreeSet<String>) -> Result<(), CanvasError> {
+    for color in colors(draft) {
+        if !color.is_known() && !read.contains(color.as_str()) {
+            return Err(CanvasError::Invalid(format!(
+                "invalid canvas color {:?}",
+                color.as_str()
+            )));
+        }
+    }
+    Ok(())
 }
 
 /// Due lavagne uguali come valori JSON (R9): le schede e gli archi nello

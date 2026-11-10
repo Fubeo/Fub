@@ -423,6 +423,8 @@ fn string_field(rng: &mut Lcg, key: &str, text: &str) -> (String, J) {
 }
 
 fn color(rng: &mut Lcg) -> &'static str {
+    // I colori che Fub non conosce («rosso», «7», `#12`) si leggono e si
+    // riscrivono com'erano: la lavagna li tiene (T47b).
     rng.pick(&[
         "1",
         "2",
@@ -434,6 +436,9 @@ fn color(rng: &mut Lcg) -> &'static str {
         "#A1B2C3",
         "#a1b2c3d4",
         "#0f0f",
+        "rosso",
+        "7",
+        "#12",
     ])
 }
 
@@ -664,11 +669,8 @@ fn break_it(rng: &mut Lcg, root: &mut J) {
             ),
             5 => set_field(node, "width", rng.pick(&["0", "-0", "-5", "0.0"])),
             6 => set_field(node, "type", "\"card\""),
-            7 => set_field(
-                node,
-                "color",
-                rng.pick(&["\"#12\"", "\"7\"", "\"red\"", "1"]),
-            ),
+            // Un colore che non è una stringa non è un colore: il resto si legge.
+            7 => set_field(node, "color", rng.pick(&["1", "true", "[\"rosso\"]"])),
             8 => {
                 remove_field(node, "text");
                 remove_field(node, "url");
@@ -932,14 +934,16 @@ fn edit_node(rng: &mut Lcg, mut node: Map<String, Value>) -> Map<String, Value> 
     node
 }
 
-/// Una scheda di dopo che la validazione rifiuta.
+/// Una scheda di dopo che la validazione rifiuta. Un colore inventato («#zz»,
+/// che nessuna lavagna del generatore ha letto) si rifiuta come prima: è
+/// `invalid` (T47b).
 fn invalid_node(rng: &mut Lcg, mut node: Map<String, Value>) -> Map<String, Value> {
     match rng.below(5) {
         0 => {
             node.insert("width".into(), json!(0));
         }
         1 => {
-            node.insert("color".into(), json!("#12"));
+            node.insert("color".into(), json!("#zz"));
         }
         2 => {
             node.insert("type".into(), json!("link"));

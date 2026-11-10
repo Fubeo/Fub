@@ -5,6 +5,7 @@
 
 use fub_canvas_core::model::MAX_SAFE_INTEGER;
 use fub_canvas_core::read::is_blank;
+use fub_canvas_core::source::canvas_value;
 use fub_canvas_core::{parse, Canvas, CanvasError};
 use serde_json::{json, Value};
 
@@ -254,6 +255,37 @@ fn r8_background_style_keeps_any_string() {
     // Una stringa, non qualunque valore.
     assert!(matches!(
         parse(&node_with(r#""backgroundStyle":1"#)),
+        Err(CanvasError::Json(_))
+    ));
+}
+
+#[test]
+fn t47b_a_colour_fub_does_not_know_opens_and_reads_as_it_was() {
+    // Un colore che Fub non conosce non ferma la lavagna: si apre, il testo
+    // resta com'è e il modello lo riscrive uguale. Vale per una scheda e per un arco.
+    for text in ["\"7\"", "\"rosso\"", "\"\"", "\"#12\"", "\"Rosso\""] {
+        let source = node_with(&format!(r#""color":{text}"#));
+        let canvas = parse(&source).unwrap_or_else(|error| panic!("{text}: {error}"));
+        let color = canvas.nodes[0].color.as_ref().expect("il colore c'è");
+        assert!(!color.is_known(), "{text}");
+        let value = canvas_value(&canvas).expect("la lavagna si scrive");
+        assert_eq!(value["nodes"][0]["color"], json!(text.trim_matches('"')));
+        let edge = format!(
+            r#"{{"nodes":[{{"id":"a","type":"text","text":"","x":0,"y":0,"width":1,"height":1}}],"edges":[{{"id":"e","fromNode":"a","toNode":"a","color":{text}}}]}}"#
+        );
+        let canvas = parse(&edge).unwrap_or_else(|error| panic!("arco {text}: {error}"));
+        assert!(!canvas.edges[0]
+            .color
+            .as_ref()
+            .expect("il colore dell'arco")
+            .is_known());
+    }
+    // `null` è assente (R7), e un valore che non è una stringa non è un colore.
+    assert!(parse(&node_with(r#""color":null"#)).unwrap().nodes[0]
+        .color
+        .is_none());
+    assert!(matches!(
+        parse(&node_with(r#""color":7"#)),
         Err(CanvasError::Json(_))
     ));
 }

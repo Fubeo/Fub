@@ -4,7 +4,8 @@
 //! Ogni livello conserva `extra: Map<String, Value>` — radice, nodi, archi —
 //! e il serializzatore li riemette tali e quali. I tipi noti seguono
 //! https://jsoncanvas.org/spec/1.0/ (nodi in ordine di z crescente, colori
-//! preset `"1"`–`"6"` oppure hex, lati/estremi degli archi).
+//! preset `"1"`–`"6"`, hex o un colore che Fub non conosce, lati/estremi degli
+//! archi).
 //!
 //! L'id del formato e la versione dello schema non stanno qui: sono del
 //! provider (`fub-format-canvas`), non del modello.
@@ -13,7 +14,7 @@ use std::collections::{HashMap, HashSet};
 use std::fmt;
 
 use serde::de::{self, Visitor};
-use serde::{Deserialize, Deserializer, Serialize};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_json::{Map, Value};
 use thiserror::Error;
 
@@ -183,11 +184,73 @@ pub enum CanvasNodeType {
     Group,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(untagged)]
+/// Il colore di una scheda o di un arco (`color` in JSON Canvas).
+///
+/// Il testo si legge com'è e si riscrive uguale. Tre forme: uno dei sei
+/// preset, un esadecimale `#rgb`, `#rgba`, `#rrggbb` o `#rrggbbaa` (com'è
+/// scritto, maiuscole comprese), o un colore che Fub non conosce (`"7"`,
+/// `"rosso"`, `""`): quello non ferma la lavagna, non si disegna, e si scrive
+/// solo se la lavagna l'ha letto ([`crate::commit::Core`]). Un valore che non
+/// è una stringa non è un colore: è un errore di lettura.
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum CanvasColor {
+    /// Uno dei sei preset `"1"`…`"6"`.
     Preset(PresetColor),
+    /// Un esadecimale valido, com'è scritto.
     Hex(String),
+    /// Un testo che non è né un preset né un esadecimale valido.
+    Unknown(String),
+}
+
+impl CanvasColor {
+    /// Il colore com'è scritto nel file.
+    pub fn as_str(&self) -> &str {
+        match self {
+            Self::Preset(preset) => preset.as_str(),
+            Self::Hex(text) | Self::Unknown(text) => text,
+        }
+    }
+
+    /// `true` per i sei preset e per un esadecimale valido: il colore che Fub
+    /// conosce, che può scrivere da sé.
+    pub fn is_known(&self) -> bool {
+        match self {
+            Self::Preset(_) => true,
+            Self::Hex(text) | Self::Unknown(text) => is_hex(text),
+        }
+    }
+
+    /// Il colore letto da un testo: un preset, un esadecimale, o il resto.
+    fn from_text(text: String) -> Self {
+        if let Some(preset) = PresetColor::from_text(&text) {
+            Self::Preset(preset)
+        } else if is_hex(&text) {
+            Self::Hex(text)
+        } else {
+            Self::Unknown(text)
+        }
+    }
+}
+
+impl Serialize for CanvasColor {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(self.as_str())
+    }
+}
+
+impl<'de> Deserialize<'de> for CanvasColor {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        // Un numero, un oggetto o `true` non è un colore: l'errore dice il tipo.
+        String::deserialize(deserializer).map(Self::from_text)
+    }
+}
+
+/// Un esadecimale `#rgb`, `#rgba`, `#rrggbb` o `#rrggbbaa`: la stessa
+/// grammatica di `CANVAS_COLOR` in `apps/client/src/editors/canvas/colors.ts`.
+fn is_hex(text: &str) -> bool {
+    text.strip_prefix('#').is_some_and(|digits| {
+        matches!(digits.len(), 3 | 4 | 6 | 8) && digits.bytes().all(|byte| byte.is_ascii_hexdigit())
+    })
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -204,6 +267,33 @@ pub enum PresetColor {
     Cyan,
     #[serde(rename = "6")]
     Purple,
+}
+
+impl PresetColor {
+    const ALL: [Self; 6] = [
+        Self::Red,
+        Self::Orange,
+        Self::Yellow,
+        Self::Green,
+        Self::Cyan,
+        Self::Purple,
+    ];
+
+    /// Il numero che il file scrive per il preset (`"1"`…`"6"`).
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Red => "1",
+            Self::Orange => "2",
+            Self::Yellow => "3",
+            Self::Green => "4",
+            Self::Cyan => "5",
+            Self::Purple => "6",
+        }
+    }
+
+    fn from_text(text: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|preset| preset.as_str() == text)
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -264,26 +354,6 @@ pub(crate) fn validate_id(kind: &'static str, id: &str) -> Result<(), CanvasErro
     Ok(())
 }
 
-fn validate_color(color: &CanvasColor) -> Result<(), CanvasError> {
-    match color {
-        CanvasColor::Preset(_) => Ok(()),
-        CanvasColor::Hex(hex) => {
-            let digits = hex
-                .strip_prefix('#')
-                .ok_or_else(|| CanvasError::Invalid(format!("invalid canvas color {hex:?}")))?;
-            let ok_len = matches!(digits.len(), 3 | 4 | 6 | 8);
-            let ok_hex = digits.bytes().all(|b| b.is_ascii_hexdigit());
-            if ok_len && ok_hex {
-                Ok(())
-            } else {
-                Err(CanvasError::Invalid(format!(
-                    "invalid canvas color {hex:?}"
-                )))
-            }
-        }
-    }
-}
-
 impl Canvas {
     pub fn validate(&self) -> Result<(), CanvasError> {
         if self.nodes.len() > MAX_NODES {
@@ -330,9 +400,6 @@ impl Canvas {
                     edge.id, edge.to_node
                 )));
             }
-            if let Some(color) = &edge.color {
-                validate_color(color)?;
-            }
             if edge
                 .label
                 .as_ref()
@@ -364,9 +431,6 @@ impl CanvasNode {
                 "node {:?} must have positive width and height",
                 self.id
             )));
-        }
-        if let Some(color) = &self.color {
-            validate_color(color)?;
         }
         match self.node_type {
             CanvasNodeType::Text => {
@@ -424,5 +488,52 @@ impl CanvasNode {
             }
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn a_colour_is_a_preset_a_hex_or_kept_as_it_is() {
+        for (text, known) in [
+            ("1", true),
+            ("6", true),
+            ("#ABC", true),
+            ("#aabbccdd", true),
+            ("7", false),
+            ("rosso", false),
+            ("", false),
+            ("#12", false),
+            ("#0f0f ", false),
+        ] {
+            let color: CanvasColor = serde_json::from_value(json!(text)).unwrap();
+            assert_eq!(color.as_str(), text);
+            assert_eq!(color.is_known(), known, "{text:?}");
+            assert_eq!(serde_json::to_value(&color).unwrap(), json!(text));
+        }
+        let hex: CanvasColor = serde_json::from_value(json!("#ABC")).unwrap();
+        assert!(matches!(hex, CanvasColor::Hex(_)));
+        let unknown: CanvasColor = serde_json::from_value(json!("rosso")).unwrap();
+        assert!(matches!(unknown, CanvasColor::Unknown(_)));
+    }
+
+    #[test]
+    fn a_value_that_is_not_a_string_is_not_a_colour() {
+        for value in [json!(7), json!(true), json!(["1"]), json!({"c": "1"})] {
+            assert!(serde_json::from_value::<CanvasColor>(value).is_err());
+        }
+    }
+
+    #[test]
+    fn the_preset_names_are_the_serde_names() {
+        for preset in PresetColor::ALL {
+            assert_eq!(
+                serde_json::to_value(preset).unwrap(),
+                json!(preset.as_str())
+            );
+        }
     }
 }
