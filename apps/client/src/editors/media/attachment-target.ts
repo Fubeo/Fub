@@ -10,6 +10,7 @@
 // Gemello Rust: `sanitize_file_name`, `attachment_candidate`,
 // `split_file_name`, `relative_url` in `crates/fub-host/src/resources.rs`.
 import type { Lifetime } from "../../ui/lifetime";
+import type { ResourceWriteOptions } from "../../host/contract";
 import { t } from "../../i18n/strings";
 import { folderForNote } from "../../rules/mirrored";
 
@@ -98,9 +99,17 @@ export interface AttachmentReceipt {
   readonly revision: string;
 }
 
+/** La ricevuta di una scrittura. `reused` vero vuol dire che l'host non ha
+ *  scritto: il vault aveva già questi byte (`options.reuse`), e `id` e
+ *  `revision` sono quelli del file che c'era. */
+export interface AttachmentWrite extends AttachmentReceipt {
+  readonly reused?: boolean;
+}
+
 export interface AttachmentDeposit {
-  /** Must create atomically; an existing path must reject with kind already_exists. */
-  write(id: string, bytes: Uint8Array): Promise<AttachmentReceipt>;
+  /** Must create atomically; an existing path must reject with kind already_exists.
+   *  Con `options.reuse` l'host può rispondere col file che ha già questi byte. */
+  write(id: string, bytes: Uint8Array, options?: ResourceWriteOptions): Promise<AttachmentWrite>;
   folder: string;
   fromDocument: string;
 }
@@ -135,45 +144,31 @@ export async function depositAttachment(
   throw new Error(t("errors.attachment.no_name", { name }));
 }
 
-/// La ricevuta di `depositOrReuse`: quella di una scrittura nuova, o il file
-/// che c'era già. Per un file riusato la revisione è quella del descrittore
-/// che `same` ha letto, `null` se `same` non la porta.
-export interface ReusableReceipt {
-  readonly id: string;
-  readonly revision: string | null;
-}
-
-/// La risposta di `same`: `false` se il file del vault ha altri byte; `true`,
-/// o la revisione del descrittore con cui l'ha letto, se ha gli stessi byte.
-export type SameFile = boolean | { readonly revision: string | null };
-
-/// Il deposito della lavagna (D-3, G2 di `lavagna.md`): prova gli stessi
-/// candidati di `depositAttachment` («foto.png», «foto 1.png», …) e, dove
-/// l'host risponde `already_exists`, chiede a `same` se il file che c'è ha
-/// gli stessi byte; se sì lo riusa invece di creare un doppione. Un `same` che
-/// risponde `false` o lancia passa al candidato dopo, come una collisione.
-/// Ogni altro errore dell'host (un nome che il vault rifiuta, l'I/O) risale.
-/// Le note e il registratore restano su `depositAttachment`.
+/// Il deposito della lavagna (D-3, G2 di `lavagna.md`). Chiede all'host di
+/// depositare con `reuse: "same-content"`: se il vault ha già questi byte, con
+/// qualsiasi nome, l'host risponde col file che c'è (`reused`) e non scrive;
+/// altrimenti scrive al candidato, come `depositAttachment`. Il client non
+/// legge i file del vault per confrontarli: il confronto è dell'host, che lo
+/// fa prima di rispondere e, nel dubbio, scrive. I candidati sono quelli di
+/// `depositAttachment` («foto.png», «foto 1.png», …): un `already_exists`
+/// passa al successivo, ogni altro errore dell'host (un nome che il vault
+/// rifiuta, l'I/O) risale. Le note e il registratore restano su
+/// `depositAttachment`.
 export async function depositOrReuse(
   deposit: AttachmentDeposit,
   originalName: string,
   bytes: Uint8Array,
-  same: (id: string, bytes: Uint8Array) => Promise<SameFile>,
-): Promise<{ receipt: ReusableReceipt; reused: boolean }> {
+): Promise<{ receipt: AttachmentReceipt; reused: boolean }> {
   const name = sanitizeFileName(originalName);
   if (bytes.byteLength > MAX_ATTACHMENT_BYTES) {
     throw new Error(t("errors.attachment.too_large", { name }));
   }
   for (const candidate of attachmentCandidates(deposit, name)) {
     try {
-      return { receipt: await deposit.write(candidate, bytes), reused: false };
+      const written = await deposit.write(candidate, bytes, { reuse: "same-content" });
+      return { receipt: { id: written.id, revision: written.revision }, reused: written.reused === true };
     } catch (error) {
       if (!isAlreadyExists(error)) throw error;
-    }
-    const answer = await same(candidate, bytes).catch((): SameFile => false);
-    if (answer !== false) {
-      const revision = answer === true ? null : answer.revision;
-      return { receipt: { id: candidate, revision }, reused: true };
     }
   }
   throw new Error(t("errors.attachment.no_name", { name }));

@@ -609,7 +609,7 @@ async function attachmentDeposit(doc: string): Promise<AttachmentDeposit> {
   return {
     folder,
     fromDocument: doc,
-    write: (id, bytes) => api.resourceWrite(id, bytes, null, vault),
+    write: (id, bytes, options) => api.resourceWrite(id, bytes, null, vault, options),
   };
 }
 
@@ -1050,19 +1050,14 @@ export function mountDocumentController(lifetime: Lifetime, d: DocumentDeps, pan
         folderEntries: async (folder) => new Set((await vaultEntries(WITHOUT_PAGE, undefined, { path: folder, descendants: false })).items.map((entry) => entry.id)),
       }),
       // Dal computer: una copia sola per file, e lo stesso file si riusa (G2).
-      deposit: (files, documentId) => {
-        // Il vault in cui si deposita, preso prima di aspettare: le letture
-        // per riconoscere un doppione vanno allo stesso.
-        const vault = openVaultRoot();
-        return depositCanvasFiles(files, documentId, {
-          deposit: attachmentDeposit,
-          open: (id) => openResourcePort(mediaTransport, id, vault),
-          notify,
-          readState,
-          writeState,
-          changeFolder: () => revealSetting("files.attachment-folder"),
-        });
-      },
+      // Il vault che ha già quei byte lo dice l'host (`reuse`), non il client.
+      deposit: (files, documentId) => depositCanvasFiles(files, documentId, {
+        deposit: attachmentDeposit,
+        notify,
+        readState,
+        writeState,
+        changeFolder: () => revealSetting("files.attachment-folder"),
+      }),
     },
     onSearchTag: (tag) => deps.searchTag(tag),
     onRenamePage: renamePage,

@@ -7,18 +7,19 @@
 // l'host conferma, e mai il `text/plain`, che è il testo di un'altra app.
 //
 // Dal computer arrivano byte, e passano tutti dal deposito degli allegati
-// (`depositOrReuse`): un file che il vault ha già, con gli stessi byte, si
-// riusa invece di copiarlo due volte. Le notifiche lo dicono — una sola per i
-// riusati, col numero, e la prima volta che la lavagna copia file dove sono
-// andati, con il gesto per cambiare cartella.
+// (`depositOrReuse`): un file che il vault ha già, con gli stessi byte e
+// qualsiasi nome, si riusa invece di copiarlo due volte. La decisione è
+// dell'host (`reuse`): qui il vault non si legge mai per confrontare. Le
+// notifiche lo dicono — il percorso se è un file solo, il numero se sono di
+// più, e la prima volta che la lavagna copia file dove sono andati, con il
+// gesto per cambiare cartella.
 //
 // Le dipendenze arrivano da fuori (`document-controller.ts` in produzione,
 // porte finte nei test): questo modulo non parla all'host da sé.
 import { draggedEntries, ENTRIES_DRAG_TYPE, NOTE_DRAG_TYPE, type DraggedEntry } from "../ui/drag-types";
-import { depositOrReuse, type AttachmentDeposit, type SameFile } from "../editors/media/attachment-target";
-import type { ResourcePort } from "../editors/media/resource-port";
+import { depositOrReuse, type AttachmentDeposit } from "../editors/media/attachment-target";
 import type { NoticeAction } from "../ui/notify";
-import { plural, t } from "../i18n/strings";
+import { t } from "../i18n/strings";
 
 /// La chiave dello stato di vista che ricorda che la notifica «Copiati in…»
 /// è già stata mostrata in questo vault.
@@ -78,11 +79,9 @@ function folderOf(id: string): string {
 
 export interface CanvasDepositDeps {
   /// Il deposito degli allegati per la lavagna `documentId` (la cartella di
-  /// `files.attachment-folder` e la scrittura atomica dell'host).
+  /// `files.attachment-folder` e la scrittura atomica dell'host, che sa
+  /// `reuse`).
   deposit(documentId: string): Promise<AttachmentDeposit>;
-  /// Apre un file del vault per leggerne la lunghezza e i byte; chi la riceve
-  /// la chiude.
-  open(id: string): Promise<ResourcePort>;
   notify(message: string, tone?: "info", action?: NoticeAction): void;
   readState(key: string): Promise<unknown>;
   writeState(key: string, value: unknown): void;
@@ -91,49 +90,35 @@ export interface CanvasDepositDeps {
 }
 
 /// Deposita i file del sistema nel vault per la lavagna `documentId` e torna
-/// i loro id, nell'ordine dei file. Un file che c'è già con gli stessi byte si
-/// riusa; alla fine una notifica sola dice quanti sono stati riusati, e la
-/// prima volta che la lavagna copia file un'altra dice dove sono andati, con
-/// «Cambia cartella». Le notifiche dicono anche ciò che è stato fatto prima di
-/// un errore, che poi risale.
+/// i loro id, nell'ordine dei file. Un file che il vault ha già con gli stessi
+/// byte si riusa, e l'host lo dice senza scrivere. Alla fine una notifica dice
+/// quali sono stati riusati (il percorso, se è uno solo; il numero, se sono
+/// di più), e la prima volta che la lavagna copia file un'altra dice dove sono
+/// andati, con «Cambia cartella». Le notifiche dicono anche ciò che è stato
+/// fatto prima di un errore, che poi risale.
 export async function depositCanvasFiles(
   files: readonly File[],
   documentId: string,
   deps: CanvasDepositDeps,
 ): Promise<string[]> {
   const deposit = await deps.deposit(documentId);
-  const same = (id: string, bytes: Uint8Array) => sameBytes(deps, id, bytes);
   const paths: string[] = [];
   const copied: string[] = [];
-  let reused = 0;
+  const reused: string[] = [];
   try {
     for (const file of files) {
       if (file.size > MAX_DROPPED_BYTES) throw new Error(t("errors.attachment.too_large", { name: file.name }));
-      const saved = await depositOrReuse(deposit, file.name, new Uint8Array(await file.arrayBuffer()), same);
+      const saved = await depositOrReuse(deposit, file.name, new Uint8Array(await file.arrayBuffer()));
       paths.push(saved.receipt.id);
-      if (saved.reused) reused += 1;
+      if (saved.reused) reused.push(saved.receipt.id);
       else copied.push(saved.receipt.id);
     }
   } finally {
-    if (reused > 0) deps.notify(plural(reused, "canvas.intake.reused.one", "canvas.intake.reused"));
+    if (reused.length === 1) deps.notify(t("canvas.intake.reused.path", { path: reused[0]! }));
+    else if (reused.length > 1) deps.notify(t("canvas.intake.reused", { count: String(reused.length) }));
     if (copied.length > 0) await noticeFirstCopy(deps, copied[0]!);
   }
   return paths;
-}
-
-/// Se il file `id` del vault ha esattamente `bytes`: prima la lunghezza, e i
-/// byte solo se coincide (un file più lungo del tetto non si legge mai).
-async function sameBytes(deps: CanvasDepositDeps, id: string, bytes: Uint8Array): Promise<SameFile> {
-  const port = await deps.open(id);
-  try {
-    if (port.descriptor.len !== bytes.byteLength) return false;
-    const stored = await port.readAll();
-    if (stored.byteLength !== bytes.byteLength) return false;
-    for (let i = 0; i < stored.byteLength; i += 1) if (stored[i] !== bytes[i]) return false;
-    return { revision: port.descriptor.revision };
-  } finally {
-    await port.close().catch(() => undefined);
-  }
 }
 
 /// La notifica «Copiati in attachments/», una volta per vault. Uno stato che

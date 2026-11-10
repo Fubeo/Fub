@@ -1,10 +1,13 @@
-// Le porte della lavagna per portare dentro (T10 di N6): dall'albero arrivano
-// solo gli id che il vault conferma, dal computer lo stesso file non si copia
-// due volte, e le notifiche dicono cosa è successo. Porte finte, nessun host.
+// Le porte della lavagna per portare dentro (T10 di N6, T32): dall'albero
+// arrivano solo gli id che il vault conferma; dal computer lo stesso file non
+// si copia due volte, e la decisione è dell'host (`reuse`), non del client.
+// Il deposito passa da `writeResource` verso il finto host vero, come in
+// produzione: così le letture del vault si contano sul finto.
 import { describe, expect, it, vi } from "vitest";
+import { createFakeHost, type FakeHost } from "../host/fake";
+import { RESOURCE_WRITE_HEADER, writeResource, type TauriInvoke } from "../editors/media/transport";
 import { ENTRIES_DRAG_TYPE, NOTE_DRAG_TYPE } from "../ui/drag-types";
 import type { AttachmentDeposit } from "../editors/media/attachment-target";
-import type { ResourcePort } from "../editors/media/resource-port";
 import type { NoticeAction } from "../ui/notify";
 import { ATTACHMENTS_NOTICED_KEY, depositCanvasFiles, resolveCanvasPaths, type CanvasDepositDeps, type CanvasPathDeps } from "./canvas-intake";
 
@@ -70,36 +73,47 @@ describe("resolveCanvasPaths (dall'albero)", () => {
   });
 });
 
-/// Un vault finto per i depositi: le scritture atomiche, le letture con la
-/// porta dei byte, lo stato di vista e le notifiche.
-function depositVault(options: { noticed?: unknown; readFails?: boolean } = {}) {
-  const files = new Map<string, Uint8Array>();
+/// Il `invoke` di Tauri verso il finto host, per il solo `resource_write`: i
+/// metadati arrivano nell'intestazione, come in produzione. `oldHost` è un host
+/// di prima, che rifiuta il campo `reuse` che non conosce.
+function hostInvoke(host: FakeHost, oldHost: boolean): TauriInvoke {
+  const invoke = async (cmd: string, body?: unknown, options?: { headers?: Record<string, string> }) => {
+    if (cmd !== "resource_write") throw new Error(`comando inatteso: ${cmd}`);
+    const meta = JSON.parse(decodeURIComponent(options!.headers![RESOURCE_WRITE_HEADER]!)) as {
+      id: string; vault: string | null; expected: string | null; reuse?: "same-content";
+    };
+    if (oldHost && meta.reuse !== undefined) {
+      throw { kind: "bad_args", message: "resource_write metadata has an unknown field `reuse`" };
+    }
+    const reuse = meta.reuse === undefined ? undefined : { reuse: meta.reuse };
+    return host.module.api.resourceWrite(meta.id, body as Uint8Array, meta.expected, meta.vault, reuse);
+  };
+  return invoke as unknown as TauriInvoke;
+}
+
+/// Un vault finto per i depositi: il finto host vero con i suoi file, le
+/// scritture che passano da `writeResource`, lo stato di vista e le notifiche.
+function depositVault(options: {
+  files?: Record<string, Uint8Array>;
+  noticed?: unknown;
+  readFails?: boolean;
+  oldHost?: boolean;
+} = {}) {
+  const host = createFakeHost({
+    resources: Object.fromEntries(Object.entries(options.files ?? {}).map(([id, value]) => [id, { bytes: value }])),
+  });
+  const invoke = hostInvoke(host, options.oldHost === true);
   const state = new Map<string, unknown>();
   if (options.noticed !== undefined) state.set(ATTACHMENTS_NOTICED_KEY, options.noticed);
   const notices: { message: string; action?: NoticeAction }[] = [];
-  const reads: string[] = [];
-  const closes: string[] = [];
   const changeFolder = vi.fn();
   const deposit: AttachmentDeposit = {
     folder: "attachments",
     fromDocument: "Lavagne/studio.canvas",
-    write: async (id, bytes) => {
-      if (files.has(id)) throw Object.assign(new Error("exists"), { kind: "already_exists" });
-      files.set(id, bytes);
-      return { id, revision: "1" };
-    },
+    write: (id, value, reuse) => writeResource(invoke, id, value, null, undefined, reuse),
   };
   const deps: CanvasDepositDeps = {
     deposit: async () => deposit,
-    open: async (id): Promise<ResourcePort> => {
-      const bytes = files.get(id);
-      if (!bytes) throw new Error(`manca ${id}`);
-      return {
-        descriptor: { handle: id, id, len: bytes.byteLength, mime: "application/octet-stream", kind: "other", revision: "7" },
-        readAll: async () => { reads.push(id); return bytes; },
-        close: async () => { closes.push(id); },
-      };
-    },
     notify: (message, _tone, action) => notices.push({ message, ...(action ? { action } : {}) }),
     readState: async (key) => {
       if (options.readFails) throw new Error("stato illeggibile");
@@ -108,7 +122,13 @@ function depositVault(options: { noticed?: unknown; readFails?: boolean } = {}) 
     writeState: (key, value) => { state.set(key, value); },
     changeFolder,
   };
-  return { files, state, notices, reads, closes, changeFolder, deps };
+  return { host, state, notices, changeFolder, deps };
+}
+
+/// Le letture del vault che il client ha fatto sul finto: aprire un file e
+/// leggerne le fette. Un deposito dal computer non ne deve fare nessuna.
+function vaultReads(host: FakeHost): string[] {
+  return [...host.atGate("resourceOpen"), ...host.atGate("resourceReadChunk")].map((call) => call.gate);
 }
 
 function file(name: string, ...bytes: number[]): File {
@@ -129,38 +149,46 @@ describe("depositCanvasFiles (dal computer)", () => {
     vault.notices.length = 0;
     await depositCanvasFiles([file("altra.png", 3)], "Lavagne/studio.canvas", vault.deps);
     expect(vault.notices).toEqual([]);
-    expect(vault.files.has("attachments/altra.png")).toBe(true);
+    expect(Object.keys(vault.host.files())).toContain("attachments/altra.png");
   });
 
-  it("lo stesso file trascinato due volte si riusa, con una notifica sola col numero", async () => {
+  it("lo stesso file trascinato di nuovo si riusa: la notifica dice il percorso, o il numero se sono più d'uno", async () => {
     const vault = depositVault({ noticed: true });
     await depositCanvasFiles([file("a.png", 1, 2), file("b.png", 3)], "Lavagne/studio.canvas", vault.deps);
     expect(vault.notices).toEqual([]);
+
     const again = await depositCanvasFiles([file("a.png", 1, 2), file("b.png", 3), file("c.png", 4)], "Lavagne/studio.canvas", vault.deps);
     expect(again).toEqual(["attachments/a.png", "attachments/b.png", "attachments/c.png"]);
-    expect([...vault.files.keys()].sort()).toEqual(["attachments/a.png", "attachments/b.png", "attachments/c.png"]);
+    expect(Object.keys(vault.host.files()).filter((id) => id.startsWith("attachments/")).sort())
+      .toEqual(["attachments/a.png", "attachments/b.png", "attachments/c.png"]);
     expect(vault.notices.map((notice) => notice.message)).toEqual(["2 file già nel vault, uso quelli"]);
-    expect(vault.closes.sort()).toEqual(["attachments/a.png", "attachments/b.png"]);
 
     vault.notices.length = 0;
     await depositCanvasFiles([file("c.png", 4)], "Lavagne/studio.canvas", vault.deps);
-    expect(vault.notices.map((notice) => notice.message)).toEqual(["Già nel vault, uso quello"]);
+    expect(vault.notices.map((notice) => notice.message)).toEqual(["Già nel vault come attachments/c.png, uso quello"]);
   });
 
-  it("un file con lo stesso nome e altri byte non si legge se è più lungo, e diventa «nome 1»", async () => {
-    const vault = depositVault({ noticed: true });
-    vault.files.set("attachments/foto.png", new Uint8Array(70 * 1024 * 1024));
+  it("il file del vault con un altro nome si riusa: l'host lo trova, e il client non lo apre", async () => {
+    const vault = depositVault({ noticed: true, files: { "Foto/lavagna.jpg": new Uint8Array([1, 2]) } });
+    const result = await depositCanvasFiles([file("IMG_2042.jpg", 1, 2)], "Lavagne/studio.canvas", vault.deps);
+    expect(result).toEqual(["Foto/lavagna.jpg"]);
+    expect(vault.notices.map((notice) => notice.message)).toEqual(["Già nel vault come Foto/lavagna.jpg, uso quello"]);
+    expect(vaultReads(vault.host)).toEqual([]);
+    expect(vault.host.atGate("resourceWrite").map((call) => call.args[4])).toEqual([{ reuse: "same-content" }]);
+  });
+
+  it("un file del vault con lo stesso nome e altri byte: nasce «foto 1.png», e nessun file del vault si legge", async () => {
+    const vault = depositVault({ noticed: true, files: { "attachments/foto.png": new Uint8Array([9, 9]) } });
     expect(await depositCanvasFiles([file("foto.png", 1, 2)], "Lavagne/studio.canvas", vault.deps)).toEqual(["attachments/foto 1.png"]);
-    expect(vault.reads).toEqual([]);
-    expect(vault.closes).toEqual(["attachments/foto.png"]);
+    expect(vaultReads(vault.host)).toEqual([]);
     expect(vault.notices).toEqual([]);
   });
 
-  it("stessa lunghezza ma byte diversi: un file nuovo", async () => {
-    const vault = depositVault({ noticed: true });
-    vault.files.set("attachments/foto.png", new Uint8Array([9, 9]));
-    expect(await depositCanvasFiles([file("foto.png", 1, 2)], "Lavagne/studio.canvas", vault.deps)).toEqual(["attachments/foto 1.png"]);
-    expect(vault.reads).toEqual(["attachments/foto.png"]);
+  it("un host che non sa `reuse`: il file si deposita senza, e la prima volta si dice dove", async () => {
+    const vault = depositVault({ oldHost: true, files: { "Foto/lavagna.jpg": new Uint8Array([1, 2]) } });
+    expect(await depositCanvasFiles([file("IMG_2042.jpg", 1, 2)], "Lavagne/studio.canvas", vault.deps)).toEqual(["attachments/IMG_2042.jpg"]);
+    expect(vault.notices.map((notice) => notice.message)).toEqual(["Copiati in attachments/"]);
+    expect(vaultReads(vault.host)).toEqual([]);
   });
 
   it("uno stato di vista che non si legge mostra la notifica lo stesso", async () => {
@@ -175,5 +203,16 @@ describe("depositCanvasFiles (dal computer)", () => {
     await expect(depositCanvasFiles([file("foto.png", 1), big], "Lavagne/studio.canvas", vault.deps)).rejects.toThrow();
     expect((big.arrayBuffer as ReturnType<typeof vi.fn>)).not.toHaveBeenCalled();
     expect(vault.notices.map((notice) => notice.message)).toEqual(["Copiati in attachments/"]);
+  });
+
+  it("40 foto di cui 10 già nel vault: una notifica sola col numero, e le altre 30 si copiano", async () => {
+    const existing = Object.fromEntries(Array.from({ length: 10 }, (_, i) => [`Foto/f${i}.png`, new Uint8Array([65 + i, 66, 67])]));
+    const vault = depositVault({ files: existing });
+    const photos = Array.from({ length: 40 }, (_, i) => (i < 10 ? file(`IMG_${i}.jpg`, 65 + i, 66, 67) : file(`IMG_${i}.jpg`, 100 + i, 101, 102)));
+    const paths = await depositCanvasFiles(photos, "Lavagne/studio.canvas", vault.deps);
+    expect(paths).toHaveLength(40);
+    expect(paths.slice(0, 10)).toEqual(Array.from({ length: 10 }, (_, i) => `Foto/f${i}.png`));
+    expect(vault.notices.map((notice) => notice.message)).toEqual(["10 file già nel vault, uso quelli", "Copiati in attachments/"]);
+    expect(vaultReads(vault.host)).toEqual([]);
   });
 });

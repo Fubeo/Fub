@@ -1,33 +1,41 @@
 // Il deposito degli allegati: `depositAttachment` com'è oggi (note e
-// registratore) e `depositOrReuse` della lavagna, che riusa lo stesso file
-// invece di farne un doppione (D-3).
+// registratore) e `depositOrReuse` della lavagna, che chiede all'host di
+// riusare il file che il vault ha già con gli stessi byte (D-3, T32). Il vault
+// finto risponde a `reuse` come l'host: cerca i byte in tutto il vault.
 import { describe, expect, it } from "vitest";
-import { depositAttachment, depositOrReuse, type AttachmentDeposit, type SameFile } from "./attachment-target";
+import { depositAttachment, depositOrReuse, type AttachmentDeposit } from "./attachment-target";
 
 const MIB = 1024 * 1024;
 
-/// Un vault finto create-only: `write` rifiuta con `already_exists` un path preso.
+const sameBytes = (a: Uint8Array, b: Uint8Array) => a.length === b.length && a.every((byte, i) => byte === b[i]);
+
+/// Un vault finto create-only. Con `reuse` risponde come l'host: il primo file
+/// per percorso con gli stessi byte, in tutto il vault, senza scrivere. Senza
+/// `reuse` rifiuta con `already_exists` un path preso.
 function fakeVault(initial: Record<string, Uint8Array> = {}, folder = "attachments", fromDocument = "lavagne/studio.canvas") {
   const files = new Map(Object.entries(initial));
+  const revisions = new Map(Object.keys(initial).map((id) => [id, `iniziale:${id}`]));
   const attempts: string[] = [];
+  const reuses: boolean[] = [];
   let revision = 0;
   const deposit: AttachmentDeposit = {
     folder,
     fromDocument,
-    async write(id, bytes) {
+    async write(id, bytes, options) {
       attempts.push(id);
+      reuses.push(options?.reuse === "same-content");
+      if (options?.reuse === "same-content") {
+        const twin = [...files.keys()].sort().find((there) => sameBytes(files.get(there)!, bytes));
+        if (twin !== undefined) return { id: twin, revision: revisions.get(twin)!, reused: true };
+      }
       if (files.has(id)) throw { kind: "already_exists", message: `«${id}» c'è già` };
       files.set(id, bytes);
       revision += 1;
+      revisions.set(id, `r${revision}`);
       return { id, revision: `r${revision}` };
     },
   };
-  /// `same` che legge davvero il file del vault finto e confronta i byte.
-  const same = async (id: string, bytes: Uint8Array): Promise<SameFile> => {
-    const there = files.get(id);
-    return there !== undefined && there.length === bytes.length && there.every((b, i) => b === bytes[i]);
-  };
-  return { files, attempts, deposit, same };
+  return { files, attempts, reuses, deposit };
 }
 
 const bytes = (...values: number[]) => new Uint8Array(values);
@@ -38,6 +46,12 @@ describe("depositAttachment (il comportamento di oggi)", () => {
     const result = await depositAttachment(vault.deposit, "foto.png", bytes(1, 2));
     expect(vault.attempts).toEqual(["attachments/foto.png", "attachments/foto 1.png"]);
     expect(result).toEqual({ receipt: { id: "attachments/foto 1.png", revision: "r1" }, link: "../attachments/foto%201.png" });
+  });
+
+  it("le note non chiedono il riuso: nessuna scrittura con `reuse`", async () => {
+    const vault = fakeVault({ "attachments/foto.png": bytes(1, 2) });
+    await depositAttachment(vault.deposit, "foto.png", bytes(1, 2));
+    expect(vault.reuses).toEqual([false, false]);
   });
 
   it("un errore che non è already_exists risale senza altri tentativi", async () => {
@@ -78,124 +92,80 @@ describe("depositAttachment (il comportamento di oggi)", () => {
 });
 
 describe("depositOrReuse (la lavagna)", () => {
-  it("un file nuovo si scrive come in depositAttachment", async () => {
+  it("un file nuovo si chiede all'host con `reuse` e si scrive al candidato", async () => {
     const vault = fakeVault();
-    const result = await depositOrReuse(vault.deposit, "foto.png", bytes(1, 2), vault.same);
+    const result = await depositOrReuse(vault.deposit, "foto.png", bytes(1, 2));
     expect(result).toEqual({ receipt: { id: "attachments/foto.png", revision: "r1" }, reused: false });
     expect(vault.files.get("attachments/foto.png")).toEqual(bytes(1, 2));
+    expect(vault.reuses).toEqual([true]);
   });
 
-  it("lo stesso file trascinato due volte non si duplica", async () => {
+  it("lo stesso file trascinato due volte non si duplica: l'host risponde col primo", async () => {
     const vault = fakeVault();
-    const first = await depositOrReuse(vault.deposit, "foto.png", bytes(1, 2), vault.same);
-    const second = await depositOrReuse(vault.deposit, "foto.png", bytes(1, 2), vault.same);
-    expect(second).toEqual({ receipt: { id: first.receipt.id, revision: null }, reused: true });
+    const first = await depositOrReuse(vault.deposit, "foto.png", bytes(1, 2));
+    const second = await depositOrReuse(vault.deposit, "foto.png", bytes(1, 2));
+    expect(second).toEqual({ receipt: first.receipt, reused: true });
     expect([...vault.files.keys()]).toEqual(["attachments/foto.png"]);
+  });
+
+  it("lo stesso file con un altro nome nel vault: si riusa quello, con la sua revisione", async () => {
+    const vault = fakeVault({ "Foto/lavagna.jpg": bytes(1, 2) });
+    const result = await depositOrReuse(vault.deposit, "IMG_2042.jpg", bytes(1, 2));
+    expect(result).toEqual({ receipt: { id: "Foto/lavagna.jpg", revision: "iniziale:Foto/lavagna.jpg" }, reused: true });
+    expect(vault.attempts).toEqual(["attachments/IMG_2042.jpg"]);
+    expect(vault.files.size).toBe(1);
   });
 
   it("stesso nome e byte diversi: nasce «nome 1.ext»", async () => {
     const vault = fakeVault({ "attachments/foto.png": bytes(9) });
-    const result = await depositOrReuse(vault.deposit, "foto.png", bytes(1, 2), vault.same);
+    const result = await depositOrReuse(vault.deposit, "foto.png", bytes(1, 2));
     expect(result).toEqual({ receipt: { id: "attachments/foto 1.png", revision: "r1" }, reused: false });
-  });
-
-  it("«nome.ext» diverso e «nome 1.ext» uguale: si riusa «nome 1.ext»", async () => {
-    const vault = fakeVault({ "attachments/foto.png": bytes(9), "attachments/foto 1.png": bytes(1, 2) });
-    const result = await depositOrReuse(vault.deposit, "foto.png", bytes(1, 2), vault.same);
-    expect(result).toEqual({ receipt: { id: "attachments/foto 1.png", revision: null }, reused: true });
     expect(vault.attempts).toEqual(["attachments/foto.png", "attachments/foto 1.png"]);
+    expect(vault.reuses).toEqual([true, true]);
   });
 
-  it("la revisione del riuso è quella del descrittore che same porta", async () => {
-    const vault = fakeVault({ "attachments/foto.png": bytes(1) });
-    const result = await depositOrReuse(vault.deposit, "foto.png", bytes(1), async () => ({ revision: "rev-7" }));
-    expect(result).toEqual({ receipt: { id: "attachments/foto.png", revision: "rev-7" }, reused: true });
-    const withoutRevision = await depositOrReuse(vault.deposit, "foto.png", bytes(1), async () => ({ revision: null }));
-    expect(withoutRevision.receipt.revision).toBeNull();
+  it("«nome.ext» diverso e «nome 1.ext» uguale: l'host trova «nome 1.ext» al primo tentativo", async () => {
+    const vault = fakeVault({ "attachments/foto.png": bytes(9), "attachments/foto 1.png": bytes(1, 2) });
+    const result = await depositOrReuse(vault.deposit, "foto.png", bytes(1, 2));
+    expect(result).toEqual({ receipt: { id: "attachments/foto 1.png", revision: "iniziale:attachments/foto 1.png" }, reused: true });
+    expect(vault.attempts).toEqual(["attachments/foto.png"]);
   });
 
-  it("same chiamato solo dopo already_exists, col path e i byte del candidato", async () => {
-    const vault = fakeVault({ "attachments/foto.png": bytes(9) });
-    const asked: Array<[string, Uint8Array]> = [];
-    const payload = bytes(1, 2);
-    await depositOrReuse(vault.deposit, "foto.png", payload, async (id, b) => { asked.push([id, b]); return false; });
-    expect(asked).toEqual([["attachments/foto.png", payload]]);
-    expect(asked[0]?.[1]).toBe(payload);
+  it("una ricevuta senza `reused` (un host che non riusa) è una scrittura nuova", async () => {
+    const deposit: AttachmentDeposit = {
+      folder: "attachments",
+      fromDocument: "a.canvas",
+      async write(id) { return { id, revision: "r" }; },
+    };
+    expect(await depositOrReuse(deposit, "foto.png", bytes(1))).toEqual({ receipt: { id: "attachments/foto.png", revision: "r" }, reused: false });
   });
 
-  it("un same che lancia vale come diverso: si passa al candidato dopo", async () => {
-    const vault = fakeVault({ "attachments/foto.png": bytes(1) });
-    const result = await depositOrReuse(vault.deposit, "foto.png", bytes(1), async () => { throw new Error("lettura fallita"); });
-    expect(result).toEqual({ receipt: { id: "attachments/foto 1.png", revision: "r1" }, reused: false });
-  });
-
-  it("same lento e un altro che scrive nel frattempo il candidato dopo", async () => {
-    const vault = fakeVault({ "attachments/foto.png": bytes(9) });
-    let release!: () => void;
-    const gate = new Promise<void>((resolve) => { release = resolve; });
-    let asked = 0;
-    const pending = depositOrReuse(vault.deposit, "foto.png", bytes(1, 2), async (id, b) => {
-      asked += 1;
-      if (asked === 1) await gate;
-      return vault.same(id, b);
-    });
-    // Mentre `same` aspetta, un altro deposita «foto 1.png» con altri byte.
-    await new Promise((resolve) => setTimeout(resolve, 0));
-    vault.files.set("attachments/foto 1.png", bytes(5));
-    release();
-    const result = await pending;
-    expect(result).toEqual({ receipt: { id: "attachments/foto 2.png", revision: "r1" }, reused: false });
-    expect(vault.files.get("attachments/foto 1.png")).toEqual(bytes(5));
-  });
-
-  it("un altro che scrive gli stessi byte nel frattempo: si riusa il suo", async () => {
-    const vault = fakeVault({ "attachments/foto.png": bytes(9) });
-    let release!: () => void;
-    const gate = new Promise<void>((resolve) => { release = resolve; });
-    let asked = 0;
-    const pending = depositOrReuse(vault.deposit, "foto.png", bytes(1, 2), async (id, b) => {
-      asked += 1;
-      if (asked === 1) await gate;
-      return vault.same(id, b);
-    });
-    await new Promise((resolve) => setTimeout(resolve, 0));
-    vault.files.set("attachments/foto 1.png", bytes(1, 2));
-    release();
-    expect(await pending).toEqual({ receipt: { id: "attachments/foto 1.png", revision: null }, reused: true });
-  });
-
-  it("byte vuoti: si scrivono, e un file vuoto uguale si riusa", async () => {
-    const vault = fakeVault();
-    expect((await depositOrReuse(vault.deposit, "vuoto.txt", bytes(), vault.same)).reused).toBe(false);
-    expect(await depositOrReuse(vault.deposit, "vuoto.txt", bytes(), vault.same))
-      .toEqual({ receipt: { id: "attachments/vuoto.txt", revision: null }, reused: true });
-    const other = await depositOrReuse(vault.deposit, "vuoto.txt", bytes(3), vault.same);
-    expect(other.receipt.id).toBe("attachments/vuoto 1.txt");
-  });
-
-  it("un nome che il vault rifiuta: l'errore dell'host risale, same non è chiesto", async () => {
+  it("un errore dell'host che non è already_exists risale, senza altri candidati", async () => {
     const failure = { kind: "invalid_path", message: "nome rifiutato" };
-    let asked = 0;
+    const attempts: string[] = [];
     await expect(depositOrReuse({
       folder: "attachments",
       fromDocument: "a.canvas",
-      async write() { throw failure; },
-    }, "con:.png", bytes(1), async () => { asked += 1; return true; })).rejects.toBe(failure);
-    expect(asked).toBe(0);
+      async write(id) { attempts.push(id); throw failure; },
+    }, "con:.png", bytes(1))).rejects.toBe(failure);
+    expect(attempts).toEqual(["attachments/con:.png"]);
   });
 
-  it("gli stessi limiti di depositAttachment: nome vuoto, 64 MiB, candidati finiti", async () => {
+  it("gli stessi limiti di depositAttachment: nome vuoto e oltre 64 MiB sono rifiutati prima di chiedere", async () => {
     const vault = fakeVault();
-    await expect(depositOrReuse(vault.deposit, " ", bytes(1), vault.same)).rejects.toThrow();
-    await expect(depositOrReuse(vault.deposit, "grande.bin", new Uint8Array(64 * MIB + 1), vault.same)).rejects.toThrow();
+    await expect(depositOrReuse(vault.deposit, " ", bytes(1))).rejects.toThrow();
+    await expect(depositOrReuse(vault.deposit, "grande.bin", new Uint8Array(64 * MIB + 1))).rejects.toThrow();
     expect(vault.attempts).toEqual([]);
-    let asked = 0;
+  });
+
+  it("finiti i candidati, errors.attachment.no_name", async () => {
+    let attempts = 0;
     await expect(depositOrReuse({
       folder: "attachments",
       fromDocument: "a.canvas",
-      async write() { throw { kind: "already_exists" }; },
-    }, "foto.png", bytes(1), async () => { asked += 1; return false; })).rejects.toThrow(/foto\.png/);
-    expect(asked).toBe(10_001);
+      async write() { attempts += 1; throw { kind: "already_exists" }; },
+    }, "foto.png", bytes(1))).rejects.toThrow(/foto\.png/);
+    expect(attempts).toBe(10_001);
   });
 
   it("prova i candidati nello stesso ordine di depositAttachment, per ogni cartella", async () => {
@@ -220,7 +190,7 @@ describe("depositOrReuse (la lavagna)", () => {
       const viaNotes: string[] = [];
       const viaCanvas: string[] = [];
       await depositAttachment(taken(viaNotes), "C:\\foto\\😊 x.png", bytes(1));
-      await depositOrReuse(taken(viaCanvas), "C:\\foto\\😊 x.png", bytes(1), async () => false);
+      await depositOrReuse(taken(viaCanvas), "C:\\foto\\😊 x.png", bytes(1));
       expect(viaCanvas).toEqual(viaNotes);
     }
   });
@@ -228,7 +198,7 @@ describe("depositOrReuse (la lavagna)", () => {
   it("una cartella non valida è rifiutata prima di scrivere, come in depositAttachment", async () => {
     const vault = fakeVault({}, "../fuori");
     await expect(depositAttachment(vault.deposit, "foto.png", bytes(1))).rejects.toThrow();
-    await expect(depositOrReuse(vault.deposit, "foto.png", bytes(1), vault.same)).rejects.toThrow();
+    await expect(depositOrReuse(vault.deposit, "foto.png", bytes(1))).rejects.toThrow();
     expect(vault.attempts).toEqual([]);
   });
 });
