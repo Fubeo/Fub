@@ -4497,13 +4497,13 @@ describe("CanvasEngine: la griglia e le guide (T71)", () => {
     engine.destroy();
   });
 
-  it("Ctrl+' mostra e nasconde la griglia, e la griglia sta sulle unità di 8 px", () => {
+  it("Ctrl+' mostra e nasconde la griglia, e i punti si vedono ogni 32 unità (T95)", () => {
     const { engine, host } = mounted(guideBoard());
     sized(host);
     atHundred(host);
     const viewport = viewportOf(host);
     expect(gridOf(host).hidden).toBe(false);
-    expect(gridOf(host).style.backgroundSize).toBe("8px 8px");
+    expect(gridOf(host).style.backgroundSize).toBe("32px 32px");
     viewport.dispatchEvent(new KeyboardEvent("keydown", { key: "'", ctrlKey: true, bubbles: true, cancelable: true }));
     expect(gridOf(host).hidden).toBe(true);
     viewport.dispatchEvent(new KeyboardEvent("keydown", { key: "'", ctrlKey: true, bubbles: true, cancelable: true }));
@@ -4521,7 +4521,7 @@ describe("CanvasEngine: la griglia e le guide (T71)", () => {
     engine.destroy();
   });
 
-  it("sotto il 50% la griglia non si disegna, perché i punti sarebbero più fitti di 4 px", () => {
+  it("sotto il 50% la griglia non si disegna, perché i punti sarebbero più fitti di 16 px", () => {
     const { engine, host } = mounted(guideBoard());
     const viewport = viewportOf(host);
     for (let i = 0; i < 30; i++) viewport.dispatchEvent(new KeyboardEvent("keydown", { key: "-", bubbles: true, cancelable: true }));

@@ -167,8 +167,13 @@ import {
 } from "./wasm/core";
 
 export const CANVAS_SNAP = 8;
-/** Sotto questi pixel sullo schermo la griglia non si disegna (T71): la sua cella è più piccola. */
-export const CANVAS_GRID_MIN_PX = 4;
+/**
+ * I punti della griglia si vedono ogni tanti passi di `CANVAS_SNAP` (T95: ogni
+ * 32 unità): l'aggancio resta di 8, lo sfondo non si riempie di punti.
+ */
+export const CANVAS_GRID_DOT_STEPS = 4;
+/** Sotto questi pixel fra due punti, sullo schermo, la griglia non si disegna (T71): sotto il 50%. */
+export const CANVAS_GRID_MIN_PX = 16;
 export const CANVAS_MIN_SIZE = 40;
 export const MAX_CANVAS_HISTORY = 100;
 /** La pausa dopo l'ultimo tasto in una scheda, prima che il suo testo si registri. */
@@ -4045,7 +4050,8 @@ export class CanvasEngine {
   // --- la griglia e le guide (T71) -------------------------------------------
 
   /**
-   * I punti della griglia, ogni `CANVAS_SNAP` unità della lavagna, nella vista
+   * I punti della griglia, ogni `CANVAS_GRID_DOT_STEPS` passi di `CANVAS_SNAP`
+   * (32 unità della lavagna, su incroci dell'aggancio), nella vista
    * e sotto le schede. Il livello segue la camera con la sua posizione e il
    * suo passo, senza variabili CSS (lo stage ne ha già). Il punto sta al
    * centro della sua cella, così cade sulle intersezioni. Sotto
@@ -4054,7 +4060,7 @@ export class CanvasEngine {
   #paintGrid(): void {
     const grid = this.#grid;
     if (!grid) return;
-    const step = CANVAS_SNAP * this.#camera.zoom;
+    const step = CANVAS_SNAP * CANVAS_GRID_DOT_STEPS * this.#camera.zoom;
     grid.hidden = !(this.#gridOverride ?? this.#gridSetting) || step < CANVAS_GRID_MIN_PX;
     if (grid.hidden) return;
     grid.style.backgroundSize = `${step}px ${step}px`;

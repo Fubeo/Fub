@@ -129,9 +129,11 @@ sono quelli di `spatial/camera.ts` (`zoomAtPoint`, `fit`, `stepCamera`).
 
 ## La griglia e le guide
 
-La griglia è un punto ogni 8 unità della lavagna (`CANVAS_SNAP`, A-23): sta
-sotto le schede, segue la vista e cade sulle intersezioni. Sotto il 50% di
-zoom, dove i punti sarebbero più fitti di 4 px, non si disegna.
+La griglia aggancia ogni 8 unità della lavagna (`CANVAS_SNAP`, A-23), ma i
+suoi punti si vedono ogni 32 (`CANVAS_GRID_DOT_STEPS`), su incroci
+dell'aggancio: lo sfondo resta calmo. Sta sotto le schede e segue la vista.
+Sotto il 50% di zoom, dove i punti sarebbero più fitti di 16 px, non si
+disegna.
 
 - **`canvas.grid`** (Impostazioni) mostra la griglia; è accesa di serie.
 - **Ctrl+'** (`canvas.grid_toggle`, lo stesso tasto del disegno) la mostra o
