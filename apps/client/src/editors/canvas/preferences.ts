@@ -189,14 +189,20 @@ export function preferencesOf(entries: readonly SettingEntry[]): CanvasPreferenc
 }
 
 /// La cartella dei file trascinati come si usa, da ciò che è scritto nelle
-/// Impostazioni. Il testo si scrive nella forma di un nome nuovo
-/// (`normalizedName`: spazi ai bordi, NFC) e perde gli slash ai bordi; vale se
-/// `nameFault` non trova niente. Vuoto, con un `..`, dentro `.fub` o `.trash`,
-/// nascosto, con un carattere che un filesystem si riserva, o non testo: vale
-/// `Allegati`. Il Rust tiene il testo com'è scritto e non lo giudica.
+/// Impostazioni. Vale `Allegati` se non è testo, se è vuota, se è assoluta (con
+/// una barra o una barra rovesciata in testa, o una lettera di drive), o se
+/// `nameFault` la respinge come un nome nuovo: un `..`, dentro `.fub` o
+/// `.trash`, nascosta, con un carattere che un filesystem si riserva, troppo
+/// lunga. Il testo si scrive nella forma di un nome nuovo (`normalizedName`:
+/// spazi ai bordi, NFC) e una barra in coda, che indica una cartella, si toglie.
+/// Il Rust tiene il testo com'è scritto e non lo giudica.
 export function dropFolderPathOf(value: unknown): string {
   if (typeof value !== "string") return DROP_FOLDER_PATH_DEFAULT;
-  const path = normalizedName(value).replace(/^\/+|\/+$/g, "");
+  const typed = value.trim();
+  // Assoluta: si guarda prima di togliere le barre, altrimenti `/Foto` diventerebbe
+  // `Foto`, un percorso del vault che l'utente non ha scritto.
+  if (/^([\\/]|[A-Za-z]:)/.test(typed)) return DROP_FOLDER_PATH_DEFAULT;
+  const path = normalizedName(typed).replace(/\/+$/, "");
   return path !== "" && nameFault(path, "new") === null ? path : DROP_FOLDER_PATH_DEFAULT;
 }
 

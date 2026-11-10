@@ -318,7 +318,7 @@ describe("la cartella dei file trascinati", () => {
     const cases: [unknown, string][] = [
       ["Materiali", "Materiali"],
       ["  Materiali  ", "Materiali"],
-      ["/Materiali/", "Materiali"],
+      ["Materiali/", "Materiali"],
       ["Foto/2026", "Foto/2026"],
       ["Cartella con spazi", "Cartella con spazi"],
       ["Café", "Café"],
@@ -346,6 +346,14 @@ describe("la cartella dei file trascinati", () => {
     ];
     for (const [value, expected] of cases) {
       expect(dropFolderPathOf(value), String(value)).toBe(expected);
+    }
+  });
+
+  it("un percorso assoluto non è nel vault: vale Allegati, anche se la barra è preceduta da spazi", async () => {
+    const host = createFakeHost({ settings: [] });
+    const { dropFolderPathOf } = await boot(host);
+    for (const value of ["/Materiali", "/Materiali/", "  /Materiali", "\\Materiali", "\\\\rete\\Materiali", "C:/Materiali", "c:Materiali"]) {
+      expect(dropFolderPathOf(value), value).toBe("Allegati");
     }
   });
 });
