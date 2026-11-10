@@ -1,7 +1,7 @@
 # I tasti e i gesti della lavagna
 
 > **Ambito:** come la tela della lavagna prende la tastiera, il puntatore e
-> la rotella: entrare in una scheda e uscirne, la rotella, muoversi, il catalogo dei
+> la rotella: entrare in una scheda e uscirne, scrivere in una nota, la rotella, muoversi, il catalogo dei
 > comandi e i loro tasti, i fili, le maniglie, la lavagna vuota, la colonna
 > degli strumenti, la riga delle opzioni, la banda di stato e l'ispettore.
 > **Fonti autorevoli:** `apps/client/src/editors/canvas/engine.ts`
@@ -62,6 +62,43 @@ Il clic passa prima dalla tela (in cattura): fuori da una scheda attiva il
 contenuto non lo riceve. Nel tema (`structure.css`) il contenuto di una
 scheda non attiva non prende il puntatore e non scorre, salvo i link, i
 pulsanti e l'immagine; dentro una scheda attiva il corpo scorre.
+
+## Scrivere in una scheda di nota
+
+Una nota Markdown sulla lavagna si scrive sul posto, con l'editor Live vero
+e sulla stessa `DocumentSession` di un riquadro (la porta è in
+[Scrivere dentro una scheda](canvas-cards.md#scrivere-dentro-una-scheda)). La
+tela chiede alla vista `edit()` prima di `enter()`; la nota
+(`cards/note.ts`) dice `true` solo per un `.md` viva, con la resa arrivata.
+
+- **Entrare.** Invio con la nota scelta, o il doppio clic sulla nota (scelta,
+  attiva per leggere o no). La scheda prima diventa attiva, poi la nota
+  chiede l'editor alla porta; finché non arriva si vede la resa. Arrivato,
+  l'editor prende il posto della resa con la tipografia della scheda, il
+  fuoco va nel testo, e la tela mette `data-card-editing` sulla scheda:
+  l'anello pieno e «Esc per uscire» pieno d'accento (prototipo T27). Con
+  `Nota#Titolo` si scrive la nota intera, vista dal titolo. Un documento
+  Word o ODT resta in lettura (D-14 (a)); la lavagna in sola lettura entra
+  per leggere e non scrive.
+- **Dentro.** I tasti sono dell'editor: le lettere della lavagna (`C`, `T`,
+  `H`, Canc…) e Spazio scrivono, e Ctrl+Z annulla solo ciò che si è scritto
+  in quella scheda, non la lavagna né un riquadro sulla stessa nota. Quello
+  che si scrive si vede nei riquadri della nota, e viceversa, senza
+  rileggere il disco. Fuori dalla vista, o sotto lo zoom delle schede vive,
+  la scheda che scrive resta viva; il tasto centrale sposta la lavagna senza
+  togliere la scrittura.
+- **La barra di formato** della nota, quella dei riquadri senza annulla e
+  ripeti, va nella riga delle opzioni (`setCardOptions`, voce `format`). La
+  banda dice «In scrittura: Nota» al posto delle schede scelte.
+- **Lo stato** sta nella riga del titolo della scheda: «Non salvato» mentre
+  c'è testo da salvare, «Cambiato su disco» col conflitto, e dentro la
+  scheda il banner del conflitto dei riquadri con le sue scelte. Una nota
+  di sola lettura (chiusura in corso, cancellazione in sospeso, prestito a
+  un'app) non entra in scrittura: resta attiva per leggere, con «Sola
+  lettura» nella riga del titolo e un avviso che dice perché.
+- **Uscire.** Esc, un clic fuori o la scheda che si spegne: l'editor registra
+  il testo e salva (`leave()`), poi si smonta e la nota rifà la resa col
+  testo nuovo. Con Esc la scheda resta scelta, col fuoco.
 
 ## La rotella
 
@@ -467,7 +504,7 @@ disegna da `EditorSurface.status`; le voci vengono da `engine.statusItems()`
   lavagna» e «Inquadra la selezione». Quest'ultima è spenta senza una scheda
   scelta, e dice perché.
 - **Schede scelte**: «N schede scelte», o «Una scheda scelta». Compare solo con
-  una scelta.
+  una scelta. Mentre si scrive in una nota, al suo posto «In scrittura: Nota».
 - **Sola lettura**: compare quando la lavagna non si cambia, per il pannello in
   sola lettura o perché il file ha una chiave doppia. Il suggerimento dice
   perché.

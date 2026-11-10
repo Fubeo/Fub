@@ -515,7 +515,10 @@ dall'opzione `canvasCards.editors`, passando da `surface.ts` accanto al
 registro dei renderer (`CardEditing`). Senza porta le schede restano in
 lettura.
 
-`open(path, host, { compact, readOnly, lifetime })`:
+`open(path, host, { compact, readOnly, lifetime, heading })`, con `heading` che
+porta la vista al titolo (`headingOffset`); l'editor dà la sua barra di formato
+(`toolbar()`) e il banner del conflitto, come un riquadro. Come la nota la usa:
+[Scrivere in una scheda di nota](canvas-input.md#scrivere-in-una-scheda-di-nota).
 
 - prenota la sessione (`retain`) e la tiene finché l'editor vive: un
   riquadro che si chiude non la chiude sotto la scheda;
