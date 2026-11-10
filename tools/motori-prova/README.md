@@ -78,7 +78,7 @@ del banco WebView (`S5/Foglio.svg` e la cartella `R1/`), più una foto di
 3200 × 2000 e un PDF di quaranta pagine generati dallo script. Nessuna prova
 legge un vault vero.
 
-I numeri vanno in `docs/misure/motori-*.md`, con macchina, sistema e commit.
+I numeri vanno in `docs/misure/2026-*-motori-*.md`, con macchina, sistema e commit.
 
 ## I tetti
 
