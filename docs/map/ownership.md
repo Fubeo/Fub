@@ -19,7 +19,7 @@
 | le entità HTML si scrivono in un posto solo | `crates/fub-abi/src/html.rs` | `crates/fub-abi/tests/one_escape_table.rs` | [reference/abi-and-wit.md](../reference/abi-and-wit.md) |
 | l'impronta FNV-1a si calcola in un posto solo | `crates/fub-abi/src/edit.rs` | `crates/fub-abi/tests/one_fingerprint.rs` | [reference/abi-and-wit.md](../reference/abi-and-wit.md) |
 | il bersaglio di un clic non entra nel contesto di sessione | `crates/fub-abi/src/session.rs` | `crates/fub-abi/tests/context_has_four_fields.rs` | [reference/ipc-contract.md](../reference/ipc-contract.md) |
-| `serialize` non riscrive un documento esistente | i provider, `crates/fub-abi/src/format.rs` | `crates/fub-abi/tests/serialize_non_riscrive.rs` | [—](../—) |
+| `serialize` non riscrive un documento esistente | i provider, `crates/fub-abi/src/format.rs` | `crates/fub-abi/tests/serialize_non_riscrive.rs` | [reference/abi-and-wit.md](../reference/abi-and-wit.md) |
 | la scrittura è atomica rispetto al parse | `crates/fub-kernel/src/workspace.rs` | `crates/fub-kernel/tests/write_atomicity.rs` | [architecture/storage-and-identity.md](../architecture/storage-and-identity.md) |
 | la storage accede dai soli handle, la radice non si ripete | `crates/fub-kernel/src/storage/` | `crates/fub-kernel/tests/rooted_cas.rs` | [architecture/storage-and-identity.md](../architecture/storage-and-identity.md) |
 | cancellare è spostare nel cestino, mai distruggere | `crates/fub-kernel/src/os_trash.rs` e `rules/trash.rs` | `crates/fub-kernel/tests/trash.rs` | [product/vault-and-files.md](../product/vault-and-files.md) |
@@ -76,7 +76,7 @@ Quando un gesto può essere lungo, il posto giusto è deciso da tre domande
 (`crates/fub-host/src/jobs.rs` e `crates/fub-kernel/src/dispatcher.rs`):
 
 | Lavoro | Dove vive | La regola |
-|---|---|---|---|
+|---|---|---|
 | un evento | coda del kernel, `BatchId` per il lotto | accodato, mai rientrante |
 | un lavoro lungo | job dell'host con stato e cancellazione | mai un lucchetto tenuto mentre si chiama fuori |
 | una risposta immediata | il chiamante | il custode del workspace non aspetta |

@@ -52,7 +52,7 @@ Definite nella tabella «L'ordine di lavoro» di
 | G3 | tranche/certificazione citata in `architecture/plugin-runtime.md` e nelle issue | non tracciata in status.md |
 | S1–S3 | scenari del banco WebView (S1 battuta, S2 cambio nota, S3 pan/zoom lavagna) | `development/webview-measurements.md:35-37`, misure in `misure/` |
 | T1–T42 | task in cui un piano spezza il lavoro (`PLAN.md` sul ramo `piano/<slug>`) | `.claude/skills/pianifica/PLAN.modello.md`; rami `wip/n6-t42` ecc. |
-| D01–D23 | decisioni aperte del proprietario (ora nelle issue preparate, vedi `issue-da-aprire.md` fuori repo) | ex `todo.md`, ora issue GitHub |
+| D01–D23 | decisioni aperte del proprietario (ora nelle issue preparate, vedi `issue-da-aprire.md` fuori repo) | ex file di lavoro in radice (ora rimosso), ora issue GitHub |
 | A1 | piano «base per AI», ramo `piano/a1-base-per-ai` | ramo `piano/a1-base-per-ai` |
 
 Attenzione alle collisioni: «A1» è anche una cella Excel e un arco SVG;

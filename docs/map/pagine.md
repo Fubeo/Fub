@@ -27,7 +27,7 @@
 
 - Quali misure dei tempi di Fub nella WebView vera sono conservate, e quando? → [misure/README.md](../misure/README.md)
 - Quanto è valso lo spike WASM del 2026-08-13? → [misure/2026-08-13-spike-wasm-host.md](../misure/2026-08-13-spike-wasm-host.md)
-- Quanto ha pesato la prima misura della WebView vera sul runner CI (WebKitGTK)? → [misure/2026-10-30-linux-webkitgtk-runner.md](../misure/2026-10-30-linux-webkitgtk-runner.md)
+- Quanto ha pesato la prima misura della WebView vera sul runner CI? → [misure/2026-10-30-linux-webkitgtk-runner.md](../misure/2026-10-30-linux-webkitgtk-runner.md)
 - Quali sono le due misure di K0 nella WebView vera (memoria e tessere)? → [misure/2026-10-31-linux-webkitgtk-runner-k0.md](../misure/2026-10-31-linux-webkitgtk-runner-k0.md)
 - Quanto pesano i sei motori Craft da soli (prima misura di K0)? → [misure/2026-10-31-motori-linux-ryzen.md](../misure/2026-10-31-motori-linux-ryzen.md)
 - Quanto pesano le librerie a runtime doppie sui tre sistemi (prova di K0, livello 3)? → [misure/2026-10-31-librerie-runtime.md](../misure/2026-10-31-librerie-runtime.md)
