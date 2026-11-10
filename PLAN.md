@@ -1699,7 +1699,15 @@ Fatto quando: `canvas-intake.test.ts` prova che l'errore porta i percorsi
 andati; `engine.test.ts` che le loro schede nascono e l'errore si vede.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/state/canvas-intake.test.ts src/editors/canvas/engine.test.ts
-Stato: [ ] da fare
+Stato: [x] fatto (2026-11-10). Differenze: l'errore è
+`CanvasDepositError` di `state/canvas-intake.ts`, che il motore importa a
+runtime (prima solo un tipo; nessun ciclo). «Fanne una copia» si offre
+anche dopo un errore, per i file riusati prima di esso: le loro schede
+nascono e il motore le ricorda per id come le altre del gesto. Il messaggio
+passa da `errorText(causa)`, così un errore `{kind, message}` dell'host si
+legge come frase. Nessuna stringa nuova. Il check del coder era rosso solo
+per scadenze di vitest sotto carico (13 file, verdi da soli); integrato,
+79 file e 1333 test verdi.
 
 ## T16 · Il file mancante
 

@@ -59,6 +59,12 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-10 · n6 · T15b: «Fanne una copia» si offre anche quando il
+  deposito si ferma a metà, per i file riusati prima dell'errore. · Perché:
+  quelle schede nascono come nel deposito riuscito, e negare la copia solo
+  perché un altro file è stato rifiutato lascerebbe la persona senza modo
+  di separarle.
+
 - 2026-11-10 · n6 · T47 integrato senza il caso del colore sconosciuto, che
   diventa T47b (sul nucleo); tolto il vecchio selettore dei colori della
   barra di N4. · Perché: il rifiuto viene da `validate_color` del nucleo,
