@@ -9,6 +9,7 @@ import {
   bornSize,
   dropLayout,
   markdownTable,
+  spreadLayout,
   type DropCard,
   type DropItem,
 } from "./drop-layout";
@@ -467,5 +468,76 @@ describe("markdownTable", () => {
   it("senza celle dà la stringa vuota", () => {
     expect(markdownTable([])).toBe("");
     expect(markdownTable([[], []])).toBe("");
+  });
+});
+
+describe("spreadLayout (T72)", () => {
+  /** La scheda PDF di partenza, a sinistra delle pagine. */
+  const beside = { x: 0, y: 0, width: 360, height: 480 };
+  const page = (width = 360, height = 466) => ({ width, height });
+
+  it("con nessuna pagina non dispone niente", () => {
+    expect(spreadLayout([], beside)).toEqual({ rects: [], group: null });
+  });
+
+  it("mette la prima pagina accanto alla scheda, al primo multiplo di 8 che lascia 24 px", () => {
+    expect(spreadLayout([page()], beside)).toEqual({
+      rects: [{ x: 384, y: 0, width: 360, height: 466 }],
+      group: null,
+    });
+  });
+
+  it("va a capo ogni 10 pagine, e ogni riga parte dove parte la prima", () => {
+    const { rects } = spreadLayout(Array.from({ length: 24 }, () => page()), beside);
+    const rows = [...new Set(rects.map((rect) => rect.y))].sort((a, b) => a - b);
+    expect(rows).toHaveLength(3);
+    expect(rects.filter((rect) => rect.y === rows[0])).toHaveLength(10);
+    expect(rects.filter((rect) => rect.y === rows[1])).toHaveLength(10);
+    expect(rects.filter((rect) => rect.y === rows[2])).toHaveLength(4);
+    for (const row of rows) {
+      expect(Math.min(...rects.filter((rect) => rect.y === row).map((rect) => rect.x))).toBe(384);
+    }
+  });
+
+  it("le posizioni sono multipli di 8, e ogni spazio è il primo che lascia 24 px, in riga e fra le righe", () => {
+    const sizes = Array.from({ length: 24 }, (_, index) => page(360 + (index % 3) * 7, 466 - (index % 2) * 33));
+    const { rects } = spreadLayout(sizes, beside);
+    for (const rect of rects) {
+      expect(rect.x % DROP_SNAP).toBe(0);
+      expect(rect.y % DROP_SNAP).toBe(0);
+    }
+    const rows = [...new Set(rects.map((rect) => rect.y))].sort((a, b) => a - b);
+    for (const row of rows) {
+      const line = rects.filter((rect) => rect.y === row).sort((a, b) => a.x - b.x);
+      for (let index = 1; index < line.length; index++) {
+        const end = line[index - 1]!.x + line[index - 1]!.width;
+        expect(line[index]!.x - end).toBeGreaterThanOrEqual(DROP_GAP);
+        expect(line[index]!.x - DROP_SNAP - end).toBeLessThan(DROP_GAP);
+      }
+    }
+    for (let index = 1; index < rows.length; index++) {
+      const bottom = Math.max(...rects.filter((rect) => rect.y === rows[index - 1]).map((rect) => rect.y + rect.height));
+      expect(rows[index]! - bottom).toBeGreaterThanOrEqual(DROP_GAP);
+      expect(rows[index]! - DROP_SNAP - bottom).toBeLessThan(DROP_GAP);
+    }
+  });
+
+  it("oltre 12 pagine un gruppo le raccoglie con 24 px di margine; fino a 12 no", () => {
+    expect(spreadLayout(Array.from({ length: 12 }, () => page()), beside).group).toBeNull();
+    const { rects, group } = spreadLayout(Array.from({ length: 13 }, () => page()), beside);
+    expect(group).not.toBeNull();
+    const right = Math.max(...rects.map((rect) => rect.x + rect.width));
+    const bottom = Math.max(...rects.map((rect) => rect.y + rect.height));
+    // Il gruppo parte a 24 px dalla scheda accanto, e avvolge le pagine con 24 px per lato.
+    expect(group).toEqual({ x: 360, y: -24, width: right - 384 + 48, height: bottom + 48 });
+    for (const rect of rects) {
+      expect(rect.x).toBeGreaterThanOrEqual(group!.x + DROP_GAP);
+      expect(rect.y).toBeGreaterThanOrEqual(group!.y + DROP_GAP);
+    }
+  });
+
+  it("arrotonda le misure a interi e non scende sotto la misura minima", () => {
+    const { rects } = spreadLayout([{ width: 359.6, height: 10 }], beside);
+    expect(rects[0]).toEqual({ x: 384, y: 0, width: 360, height: DROP_MIN_SIZE });
   });
 });

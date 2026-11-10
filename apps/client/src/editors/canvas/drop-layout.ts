@@ -166,6 +166,52 @@ export function dropLayout(
   return { cards, group };
 }
 
+/// Quante pagine per riga, in «Spargi le pagine» (T72): a capo dopo 10.
+export const SPREAD_ROW = 10;
+
+/// Dove nascono le pagine sparse da una scheda PDF (T72): in riga accanto alla
+/// scheda `beside`, a destra di lei, e a capo ogni `SPREAD_ROW` pagine. Ogni
+/// riga ricomincia dove comincia la prima; in riga e fra le righe la scheda
+/// dopo parte al primo multiplo di 8 che lascia `DROP_GAP`, come `dropLayout`.
+/// Oltre `DROP_GROUP_THRESHOLD` pagine, `group` le raccoglie con 24 px di
+/// margine per lato. `sizes` sono le misure di nascita, nell'ordine di pagina.
+export function spreadLayout(
+  sizes: readonly CardSize[],
+  beside: Rect,
+): { readonly rects: readonly Rect[]; readonly group: Rect | null } {
+  if (sizes.length === 0) return { rects: [], group: null };
+  const originX = nextStart(beside.x + beside.width);
+  const originY = snap(beside.y);
+  const rects: Rect[] = [];
+  let rowY = originY;
+  for (let first = 0; first < sizes.length; first += SPREAD_ROW) {
+    let x = originX;
+    let rowHeight = 0;
+    for (const size of sizes.slice(first, first + SPREAD_ROW).map(roundSize)) {
+      rects.push({ x, y: rowY, width: size.width, height: size.height });
+      x = nextStart(x + size.width);
+      rowHeight = Math.max(rowHeight, size.height);
+    }
+    rowY = nextStart(rowY + rowHeight);
+  }
+  if (sizes.length <= DROP_GROUP_THRESHOLD) return { rects, group: null };
+  let right = -Infinity;
+  let bottom = -Infinity;
+  for (const rect of rects) {
+    right = Math.max(right, rect.x + rect.width);
+    bottom = Math.max(bottom, rect.y + rect.height);
+  }
+  return {
+    rects,
+    group: {
+      x: originX - DROP_GAP,
+      y: originY - DROP_GAP,
+      width: right - originX + 2 * DROP_GAP,
+      height: bottom - originY + 2 * DROP_GAP,
+    },
+  };
+}
+
 /// Le celle come tabella Markdown. La prima riga è l'intestazione; ogni riga
 /// ha tante celle quante la più lunga (le corte si allungano con celle
 /// vuote). Nelle celle la barra verticale si scrive `\|` e gli a capo
