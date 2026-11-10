@@ -4144,7 +4144,21 @@ riattacco nel vuoto che non cancella, la presa entro 8 px e Canc con la
 patch `at`; le foto del banco somigliano al prototipo.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/canvas
-Stato: [ ] da fare
+Stato: [x] fatto (2026-11-10). Differenze: un filo sopra una scheda
+vince entro 8 px solo dove si vede (il suo punto più vicino fuori dalla
+scheda), così non si prendono fili nascosti; il rilascio sulla scheda di
+partenza non crea niente, mentre i fili da una scheda a sé stessa già nel
+file si disegnano, si scelgono e si riattaccano. In più del prototipo: il
+tratto del tiro `.canvas-edge-draft` e il contorno d'accento della scheda
+bersaglio (`data-connect-target`). Partito da un punto, il lato di partenza
+è quello del punto; la scheda nata nel vuoto mette sotto il puntatore il
+lato che guarda l'altro capo. `edgePoint` diventa `sidePoint` in
+`edges.ts`, la forma del filo non cambia. Il pulsante «Collega» della barra
+della selezione resta a T51. Il tiro dà il fuoco alla vista per ricevere
+Esc: dopo la tastiera Chromium ne mostra l'anello. Le prese non hanno più
+stili in linea: il conto di `engine.ts` in `check-inline-theme.mjs` va a
+0 e la riga esce dalle eccezioni (toccato in più); anche i file generati
+del tema e `canvas-input.md`.
 
 ## T68 · Copia e incolla le schede
 
