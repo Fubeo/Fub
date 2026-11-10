@@ -8,8 +8,7 @@
 > [`components-and-boundaries.md`](../architecture/components-and-boundaries.md),
 > il percorso guidato in
 > [`repository-tour.md`](../getting-started/repository-tour.md),
-> l'indice domanda → pagina in [`pagine.md`](pagine.md),
-> l'inventario completo in `docs-inventario/RIFERIMENTO.md` quando esiste.
+> l'indice domanda → pagina in [`pagine.md`](pagine.md).
 > **README di codice:** [`crates/`](../../crates/README.md),
 > [`esempi/`](../../esempi/README.md), [`tools/`](../../tools/README.md),
 > [`apps/client/src/`](../../apps/client/src/README.md).
@@ -19,7 +18,8 @@
 Il grafo delle dipendenze del workspace, con i marcatori `@grafo-dipendenze`
 letti dal test `dependency_invariant`, è in
 [overview.md](../architecture/overview.md#dipendenze-del-workspace-rust). Le
-aree con percorso, responsabilità e prova sono nella tabella qui sotto.
+dipendenze puntano verso `fub-abi`. Le aree con percorso, responsabilità e
+prova sono nella tabella qui sotto.
 
 ## Le aree, una riga ciascuna
 
@@ -30,6 +30,7 @@ aree con percorso, responsabilità e prova sono nella tabella qui sotto.
 | chi monta | `crates/fub-host/` | composition root: sessioni, bundle, job, watcher, impostazioni; niente Tauri | `cargo test -p fub-host` |
 | il desktop | `crates/fub-app/` | comandi Tauri sottili, finestre, risorse byte; delega presto all'host | `cargo test -p fub-app` |
 | le feature | `crates/fub-features/` | pannelli e comandi ufficiali, una feature Cargo ciascuna | `cargo test -p fub-features --features draw` |
+| i componenti | `crates/fub-componenti/` | il risolutore: che cosa è acceso, chi lo richiede, che cosa non serve più; puro, senza I/O né `fub-abi` | `cargo test -p fub-componenti` |
 | i formati | `crates/fub-format-*/` | i provider: markdown, canvas, base, svg, rich, xlsx, craft | il test del crate |
 | la lavagna | `crates/fub-canvas-core/` | il modello di una `.canvas` e la sua lettura, puro: lo usano il formato, i comandi e la WebView | `cargo test -p fub-canvas-core` |
 | la lavagna nella WebView | `crates/fub-canvas-wasm/` | la facciata WebAssembly del nucleo: un'interfaccia C scritta a mano, testo e JSON dentro e fuori | `cargo test -p fub-canvas-wasm` |
@@ -37,7 +38,7 @@ aree con percorso, responsabilità e prova sono nella tabella qui sotto.
 | i disegni | `crates/fub-scene/` | lettura del formato scena e delle annotazioni PDF | `cargo test -p fub-scene` |
 | lo strato dei motori | `crates/fub-motori/` | motori costruiti alla prima richiesta, il loro gruppo di thread, il budget delle cache, il registro | `cargo test -p fub-motori` |
 | il runtime dei plugin | `crates/fub-wasm-host/` | l'unico crate che nomina Wasmtime | `cargo test -p fub-wasm-host` |
-| la riga di comando | `crates/fub-cli/` | automazione senza Tauri e il server MCP | `cargo test -p fub-cli` |
+| la riga di comando | `crates/fub-cli/` | automazione senza Tauri, il server MCP e l'host di messaggistica nativa del clipper | `cargo test -p fub-cli` |
 | la sessione live | `crates/fub-live/` | PC host, tablet scrittore, QR e TLS | `cargo test -p fub-live` |
 | i servizi | `crates/fub-services/` | backend self-hostable di account, sync e publish | `cargo test -p fub-services` |
 | gli autori | `crates/fub-sdk/` | API comode e `MemoryHost` per provare un provider | `cargo test -p fub-sdk` |

@@ -32,7 +32,7 @@ Definite nella tabella «L'ordine di lavoro» di
 | N2 | server MCP | in pila (#268) |
 | N3, N4, N7 | logica in Rust, inchiostro, file Craft | da fare (misure di N3 già in `misure/`) |
 | N5, N9 | strati nativi della penna, egui o Tauri | da fare |
-| N6 | la lavagna | da fare (ramo `piano/n6-lavagna`) |
+| N6 | la lavagna | «Lavagna v1» in status.md: da fare (ramo `piano/n6-lavagna`) |
 | N12, N13 | menu «/» e blocco vivo | in pila (#259, #261) |
 
 ## Fasi P — due serie con la stessa lettera
@@ -49,12 +49,12 @@ Definite nella tabella «L'ordine di lavoro» di
 | Sigla | Che cos'è | Dove vive |
 |---|---|---|
 | M5 | milestone #5: il runtime WASM dei plugin, consegnato in `main` | `architecture/plugin-runtime.md` |
-| G3 | tranche/certificazione citata in `architecture/plugin-runtime.md` e nelle issue | non tracciata in status.md |
+| G3 | certificazione G3/ARCH del runtime WASM, chiusa prima dello slice 1 di #8 (il suo handoff non è più nel repo) | citata in `architecture/wasm-providers.md`; non tracciata in status.md |
 | S1–S3 | scenari del banco WebView (S1 battuta, S2 cambio nota, S3 pan/zoom lavagna) | `development/webview-measurements.md:35-37`, misure in `misure/` |
-| T1–T42 | task in cui un piano spezza il lavoro (`PLAN.md` sul ramo `piano/<slug>`) | `.claude/skills/pianifica/PLAN.modello.md`; rami `wip/n6-t42` ecc. |
-| D01–D23 | decisioni aperte del proprietario (ora nelle issue preparate, vedi `issue-da-aprire.md` fuori repo) | ex file di lavoro in radice (ora rimosso), ora issue GitHub |
+| T1, T17, T96… | task numerati in cui un piano spezza il lavoro (`PLAN.md` sul ramo `piano/<slug>`) | `.claude/skills/pianifica/PLAN.modello.md`; rami `wip/n6-t42`, `wip/n6-t57`, `wip/n6-t93` |
+| D14, D-7 | decisioni: quelle del proprietario (D14 in `DECISIONS.md`) e quelle locali a un piano (D-7 nel piano K3) | `DECISIONS.md` in radice e i rami `piano/*`; le D01–D23 della vecchia lista di lavoro, tolta dalla radice, diventano issue GitHub |
 | A1 | piano «base per AI», ramo `piano/a1-base-per-ai` | ramo `piano/a1-base-per-ai` |
 
-Attenzione alle collisioni: «A1» è anche una cella Excel e un arco SVG;
+Attenzione alle collisioni: «A1» è anche una cella Excel;
 «S2» e «T1» sono anche nomi di schermate/scenari del banco; «P» vale per
 entrambe le serie sopra.

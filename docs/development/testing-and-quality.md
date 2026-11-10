@@ -223,12 +223,24 @@ Tutti i comandi girano da `apps/client/`; gli script sorgente sono in
 | `npm run bench:motion` | le coreografie del moto dello Scrittoio |
 | `npm run bench:lampo` | lo strato d'avvio prima di ogni modulo |
 | `npm run bench:interaction` | il budget d'interazione (menu, palette, nota) |
-| `npm run bench:ink` | l'inchiostro in WASM contro la copia nativa |
+| `npm run bench:ink` | l'inchiostro in TypeScript e in WebAssembly, fianco a fianco |
 | `npm run bench:fidelity` | la fedeltà pixel dei disegni (foglio, PNG, Lettura) |
 | `npm run bench:grid` | i gesti della griglia con mouse e tastiera veri |
 | `npm run bench:graph-scale` | il grafo a 2k/10k nodi: tempi, heap, soak |
 | `npm run bench:large` | i disegni grandi (da 200 a 49 900 elementi) nell'app vera |
 | `npm run bench:webview` | le misure nella WebView vera (vedi [webview-measurements.md](webview-measurements.md)) |
+
+Varianti usate dalle prove di accettazione della Graph View e dei disegni
+grandi:
+
+```bash
+cd apps/client
+npm run bench:graph-scale -- --nodes 2000 --seed 6 --cycles 3
+npm run bench:graph-scale -- --nodes 10000 --seed 6 --cycles 1 --soak-windows 8
+npm run bench:graph-scale -- --nodes 10000 --seed 6 --cycles 1 --soak-windows 16
+npm run bench:large -- --elements 30000   # da 200 a 49 900 elementi, senza soglie
+npm run bench:large -- --cpu 4            # la pagina quattro volte più lenta
+```
 
 ## Visuale e accessibilità
 

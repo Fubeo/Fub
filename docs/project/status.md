@@ -82,6 +82,37 @@ col motore vettoriale; K4 dopo la lavagna perché le edizioni hanno senso
 quando i componenti grandi esistono; N9 prima delle foto perché decide come
 si mostra la loro tela.
 
+Pagine che le fasi scriveranno (nomi già scelti, ancora da scrivere): ciascuna
+nasce quando la sua fase passa il cancello. `misure/motori-*.md` (K0),
+`architecture/componenti.md` (K1 e K2), `product/lavagna.md` (lavagna v1),
+`product/pdf-lettore.md` (P2), `product/pdf-completo.md` (P5),
+`product/disegno-completo.md` (K6), `product/foto.md` e
+`product/libreria-foto.md` (K7 e K8).
+
+## Stato di M5
+
+Il runtime WASM dei plugin è consegnato in `main` dalla
+[PR #53](https://github.com/Fubeo/Fub/pull/53). Le capacità presenti:
+
+| Capacità | Stato |
+|---|---|
+| lifecycle `Plugin` | presente |
+| `CommandProvider` | presente |
+| `FormatProvider` | presente: parse/render/serialize e validazione |
+| `ViewProvider` | presente: spec/interests/render/`Replace`/`Patch` |
+| `GridBytesProvider` | presente: protocollo `grid` 2, nativo/WASM, finestre, giornale e innesto |
+| lettura modello | presente |
+| eventi host | presente |
+| timeout e memoria | presenti |
+| capability negate | presenti |
+| `IndexProvider` e `EventHandler` inbound | presenti |
+| inventario, installazione, consenso, enabled, restart e remove | presenti |
+| startup autorizzato e gestione desktop | presenti |
+| UI non fidata | presente per provider `Trust::Community`; `Trust::Core` ammesso |
+
+Queste famiglie non retrocedono. I limiti accettati da G15 (WASM-002 e
+WASM-003) sono in [sicurezza dei plugin](../architecture/plugin-security.md).
+
 ## Il rilascio
 
 Un tag `vX.Y.Z` costruisce gli installer desktop sulle tre piattaforme e li
@@ -100,7 +131,9 @@ supportate; documentazione di avvio coerente col prodotto.
 - ricerca full-text, link, backlink, Graph View con gate di memoria e
   [budget prestazionali](../product/performance-budget.md); criteri di
   accettazione della Graph View consegnati e chiusi (SHA `4383a7c9`, CI #808 e
-  #809 verdi, gate a 16 finestre superato in esecuzioni consecutive);
+  #809 verdi, gate a 16 finestre superato in esecuzioni consecutive); #12 e
+  #40 sono chiuse come consegna integrata, e i budget di frame time restano
+  review-only, non gate CI;
 - superfici condivise per documento (`DocumentSession` e registro delle
   superfici), con la versione 2 del protocollo dei fogli a byte e la barra
   dei fogli sopra la facciata di GridCraft (ADR 0219);
@@ -110,10 +143,11 @@ supportate; documentazione di avvio coerente col prodotto.
   l'editor ridotto ai due spazi di lavoro (ADR 0231 in pila);
 - la finestra Scrittoio, i temi installabili (`theme-1`, `theme-2`) e il
   banco visuale con a11y;
-- runtime WASM dei plugin (M5): capability, catalogo firmato, limiti;
-  `IndexProvider` ed `EventHandler` inbound presenti; i limiti non promessi
-  (nessuna quota assoluta CPU/RAM di processo, vedi #57 e #58) sono in
-  [runtime dei plugin](../architecture/plugin-runtime.md);
+- plugin nativi e runtime WASM dei plugin (M5): installazione da file con
+  consenso, capability, catalogo firmato, limiti; `IndexProvider` ed
+  `EventHandler` inbound presenti (tabella [Stato di M5](#stato-di-m5)); i
+  limiti non promessi (nessuna quota assoluta CPU/RAM di processo, vedi #57 e
+  #58) sono in [sicurezza dei plugin](../architecture/plugin-security.md);
 - automazione locale: CLI con REPL, `fub://`, clipper del browser, canale di
   controllo.
 
@@ -127,7 +161,8 @@ supportate; documentazione di avvio coerente col prodotto.
   consegnate.
 - [#57](https://github.com/Fubeo/Fub/issues/57) e
   [#58](https://github.com/Fubeo/Fub/issues/58): follow-up WASM esplicitamente
-  differiti (provider in ingresso, quote assolute CPU/RAM di processo).
+  differiti (esercitare i provider in ingresso, quote assolute CPU/RAM di
+  processo).
 - La battuta sulle note grandi: in Live e Blocchi a 7.201 righe supera il
   budget di [prestazioni](../product/performance-budget.md#la-battuta);
   serve un passo di ottimizzazione con misura prima e dopo.

@@ -85,8 +85,11 @@ disegni che si aprono dopo. Spenta, i tratti tenuti fermi restano inchiostro;
 ## Nel file
 
 La forma sintetizzata dal tratto è scritta come la scrivono gli strumenti
-(`rect`, `ellipse`, `polygon`…) con `fub:shape` e `fub:geom`. La grammatica è
-in [Formato della scena, forme sintetiche](../reference/scene-format.md#6-forme-sintetiche)
+(`rect`, `ellipse`, `polygon`…) con `fub:shape` e `fub:geom`. Il tratto lascia
+il posto alla forma: lo stesso id, lo stesso posto fra gli altri oggetti, la
+stessa trasformazione, e titolo, descrizione e gli attributi che non riguardano
+l'inchiostro restano. Un rettangolo girato ha la rotazione in `transform`. La
+grammatica è in [Formato della scena, forme sintetiche](../reference/scene-format.md#6-forme-sintetiche)
 e in [poligoni e stelle](../reference/scene-format-shapes.md).
 
 ## Chi monta l'editor

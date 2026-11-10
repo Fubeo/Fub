@@ -9,7 +9,7 @@
 
 ## Orientarsi (`map/`, `getting-started/`)
 
-- Quale è la porta della documentazione e come si naviga per domande? → [docs/README.md](../README.md)
+- Qual è la porta della documentazione e come si naviga per domande? → [docs/README.md](../README.md)
 - Dove sta ogni cosa nella repository e come si prova da sola? → [map/repo.md](repo.md)
 - Chi possiede ogni regola, quale file e quale test la presidia, e quale pagina la spiega? → [map/ownership.md](ownership.md)
 - Dove si definisce un tipo, un comando o un'impostazione (avendo in mano un nome)? → [map/dove-sta-x.md](dove-sta-x.md)
@@ -21,7 +21,6 @@
 ## Stato e progetto (`project/`)
 
 - Dove siamo, qual è l'ordine di lavoro e come funziona il rilascio? → [project/status.md](../project/status.md)
-
 
 ## Misure (`misure/`)
 
@@ -42,14 +41,14 @@
 - Quali componenti esistono, da chi possono dipendere e chi può toccarli? → [architecture/components-and-boundaries.md](../architecture/components-and-boundaries.md)
 - Come la shell carica soltanto gli editor dei componenti accesi? → [architecture/component-editors.md](../architecture/component-editors.md)
 - Come Fub rappresenta documenti di formati diversi senza perdere la sorgente? → [architecture/document-model.md](../architecture/document-model.md)
-- Come si dividono il lavoro sessione documento, superfici, motori e profili? → [architecture/editor-surfaces.md](../architecture/editor-surfaces.md)
+- Come si dividono il lavoro fra sessione documento, superfici, motori e profili? → [architecture/editor-surfaces.md](../architecture/editor-surfaces.md)
 - Come comunica la shell TypeScript con il core senza diffondere Tauri? → [architecture/frontend-and-ipc.md](../architecture/frontend-and-ipc.md)
 - Come la shell apre, mostra e modifica una cartella di Excel, e che cosa resta al provider? → [architecture/grid-surface.md](../architecture/grid-surface.md)
 - Come Fub raccoglie l'inchiostro e dove vivono penna, evidenziatore e gomma? → [architecture/ink-and-tools.md](../architecture/ink-and-tools.md)
 - Come Fub costruisce e inserisce i motori copiati (GridCraft e gli altri Craft)? → [architecture/motori.md](../architecture/motori.md)
 - Dove sta la cornice dello Scrittoio su un telefono, quando parte e che cosa cambia? → [architecture/phone-frame.md](../architecture/phone-frame.md)
 - Come usa Fub gli stessi contratti per provider nativi e componenti WASM con un solo Guard? → [architecture/plugin-runtime.md](../architecture/plugin-runtime.md)
-- Come un componente WASM implementa i trait e come l'host lo confine? → [architecture/wasm-providers.md](../architecture/wasm-providers.md)
+- Come un componente WASM implementa i trait e come l'host lo confina? → [architecture/wasm-providers.md](../architecture/wasm-providers.md)
 - Che cosa può fare un componente di terzi e come viene confinato? → [architecture/plugin-security.md](../architecture/plugin-security.md)
 - Come la shell modifica un documento di videoscrittura e come il correttore serve ogni superficie? → [architecture/rich-surface-and-proofing.md](../architecture/rich-surface-and-proofing.md)
 - Come attraversano Fub operazioni brevi, eventi e lavoro lungo (job)? → [architecture/runtime-events-and-jobs.md](../architecture/runtime-events-and-jobs.md)
@@ -143,7 +142,7 @@
 - Quali toppe cambiano il modello di una lavagna, e quali errori possono fallire? → [reference/canvas-operations.md](../reference/canvas-operations.md)
 - Quali operazioni modificano un disegno di FubDraw (versione 1)? → [reference/scene-operations.md](../reference/scene-operations.md)
 
-### Famiglia formato della scena (15 pagine `scene-format-*` + l'indice)
+### Famiglia formato della scena (16 pagine `scene-format-*` + l'indice)
 
 - Qual è il formato della scena (SVG) dei disegni di FubDraw? → [reference/scene-format.md](../reference/scene-format.md)
 - Come si presenta un disegno a chi non lo vede (accessibilità)? → [reference/scene-format-accessibility.md](../reference/scene-format-accessibility.md)
@@ -152,7 +151,7 @@
 - Come sono effetti (ombre, bagliori, sfocature) e modi di fusione? → [reference/scene-format-effects.md](../reference/scene-format-effects.md)
 - Che cosa diventa un disegno quando esce da Fub (opzioni di export)? → [reference/scene-format-export.md](../reference/scene-format-export.md)
 - Com'è fatta l'etichetta (testo dentro una forma)? → [reference/scene-format-labels.md](../reference/scene-format-labels.md)
-- Come sono le penne (tratto a mano libera) e la punta plattta? → [reference/scene-format-pens.md](../reference/scene-format-pens.md)
+- Come sono le penne (tratto a mano libera) e la punta piatta? → [reference/scene-format-pens.md](../reference/scene-format-pens.md)
 - Come sono i campioni, il pennello e il tempo di un tratto (`fub:ink`)? → [reference/scene-format-ink.md](../reference/scene-format-ink.md)
 - Come sono le ripetizioni (radiali, a griglia, a percorso)? → [reference/scene-format-repeats.md](../reference/scene-format-repeats.md)
 - Come sono le risorse del disegno (sfumature, campioni, motivi, punte)? → [reference/scene-format-resources.md](../reference/scene-format-resources.md)
@@ -167,11 +166,11 @@
 
 - Qual è l'indice degli ADR con stati e sostituzioni? → [decisions/README.md](../decisions/README.md)
 - Quali campi deve avere un nuovo ADR? → [decisions/template.md](../decisions/template.md)
-- Perché valgono le scelte degli ADR da 0179 a 0240? → le singole pagine `decisions/0NNN-*.md`, una per domanda
+- Perché una scelta è fatta così (ADR da 0179 a 0240)? → la pagina del singolo ADR, `decisions/0NNN-*.md`, una per domanda; l'indice è in [decisions/README.md](../decisions/README.md)
 
 ## README delle cartelle di codice
 
 - Come è fatto il workspace Rust (i 25 crate in gruppi)? → [crates/README.md](../../crates/README.md)
 - Quali componenti WASM di prova esistono e perché sono fuori dal workspace? → [esempi/README.md](../../esempi/README.md)
 - Quali strumenti di misura e gestione ci sono fuori dal workspace? → [tools/README.md](../../tools/README.md)
-- Come è organizada la shell del client (`apps/client/src/`)? → [apps/client/src/README.md](../../apps/client/src/README.md)
+- Come è organizzata la shell del client (`apps/client/src/`)? → [apps/client/src/README.md](../../apps/client/src/README.md)

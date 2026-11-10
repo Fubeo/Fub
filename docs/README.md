@@ -109,9 +109,9 @@ all'export, dalla sessione dal tablet ai disegni grandi.
 ## Vedere stato e direzione
 
 - [Stato del progetto](project/status.md): dove siamo, l'ordine di lavoro, il
-  rilascio
-- [Runtime dei plugin](architecture/plugin-runtime.md): provider WASM e stato
-  di M5
+  rilascio e lo stato di M5
+- [Runtime dei plugin](architecture/plugin-runtime.md), con i
+  [provider WASM](architecture/wasm-providers.md)
 
 ## Capire le decisioni
 
