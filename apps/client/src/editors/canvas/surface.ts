@@ -376,6 +376,11 @@ export function mountCanvasSurface(
     // F6 dentro la lavagna: la vista, poi il navigatore se si vede (T55). Il
     // resto del giro (l'ispettore, la banda) è della shell.
     zone: (step): boolean => (mode === "canvas" && engine ? engine.zone(step) : false),
+    // Indietro e Avanti (T56): i salti della vista, prima della cronologia del riquadro.
+    jumps: {
+      back: (): boolean => (mode === "canvas" && engine ? engine.jumpBack() : false),
+      forward: (): boolean => (mode === "canvas" && engine ? engine.jumpForward() : false),
+    },
     // Un punto del modello è dentro una carta: la tela la seleziona e la
     // inquadra. Il sorgente grezzo non ha un cursore da portarci.
     reveal: ({ span }) => {

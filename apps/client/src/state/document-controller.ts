@@ -1814,11 +1814,16 @@ export function closeUnpinnedTabs(): void {
 }
 
 /// Cronologia avanti/indietro del riquadro col fuoco (shell.pane.back/forward).
+/// Prima chiede alla superficie del riquadro, che può avere una storia sua (i
+/// salti della vista di una lavagna, T56); solo se lei dice `false` vale la
+/// cronologia del riquadro.
 export function paneBack(): void {
+  if (panes.get(layout.focus)?.surface?.jumps?.back()) return;
   if (goBack(layout.focus)) void synchronize();
 }
 
 export function paneForward(): void {
+  if (panes.get(layout.focus)?.surface?.jumps?.forward()) return;
   if (goForward(layout.focus)) void synchronize();
 }
 

@@ -69,6 +69,7 @@ import {
 import { CANVAS_INK_TOOLS, CANVAS_WRITING_TOOLS, createCanvasRail, type CanvasRail } from "./chrome/rail";
 import { createCanvasEmpty, isEmptyBoard, transferOf, type CanvasEmpty } from "./chrome/empty";
 import { createCanvasNavigator, type CanvasNavigator } from "./chrome/navigator";
+import { CanvasJumps } from "./jumps";
 import {
   CANVAS_CLIPBOARD_TYPE,
   CANVAS_PASTE_STEP,
@@ -1262,6 +1263,8 @@ export class CanvasEngine {
   readonly #navigator: CanvasNavigator;
   /** «Nascondi il navigatore» per questa lavagna (T55): si ricorda nella vista (T36). */
   #navigatorHidden = false;
+  /** I salti della vista per Indietro e Avanti (T56): solo in memoria, per questa lavagna aperta. */
+  readonly #jumps = new CanvasJumps();
   /** `canvas.drop_folder` e il suo percorso (T34), dal vivo; `null` finché non arriva. */
   #dropChoice: DropFolderChoice | null = null;
 
@@ -3249,12 +3252,23 @@ export class CanvasEngine {
   // --- muoversi (T53) ---------------------------------------------------------
 
   /**
-   * Il salto della camera a `target`: Maiusc+1, Maiusc+2 e 0. È il solo posto
-   * da cui la vista salta (il navigatore di T55 e Indietro e Avanti di T56
-   * passeranno di qui). Vola con `stepCamera`; col movimento ridotto arriva
-   * subito, senza volo.
+   * Il salto della camera a `target`: Maiusc+1, Maiusc+2, 0 e il clic nel
+   * navigatore (T55). È il solo posto da cui la vista salta: qui il salto entra
+   * nella storia di Indietro e Avanti (T56), se sposta la vista. Vola con
+   * `stepCamera`; col movimento ridotto arriva subito, senza volo.
    */
   #jumpCamera(target: Viewport): void {
+    const goal: Viewport = { x: target.x, y: target.y, zoom: clampZoom(target.zoom) };
+    // Un salto che non sposta niente non entra nella storia.
+    if (!sameViewport(goal, this.#camera)) this.#jumps.record(this.#camera, goal);
+    this.#flyCamera(goal);
+  }
+
+  /**
+   * Porta la vista a `target` senza ricordarlo: è il volo di ogni salto, e
+   * anche di Indietro e Avanti (T56), che non scrivono una storia loro.
+   */
+  #flyCamera(target: Viewport): void {
     this.#stopMotion(false);
     const goal: Viewport = { x: target.x, y: target.y, zoom: clampZoom(target.zoom) };
     if (this.#reducedMotion || sameViewport(goal, this.#camera)) {
@@ -3269,6 +3283,29 @@ export class CanvasEngine {
       targetScale: goal.zoom, targetTx: goal.x, targetTy: goal.y,
       vx: 0, vy: 0,
     });
+  }
+
+  // --- indietro e avanti (T56) ------------------------------------------------
+
+  /**
+   * Indietro (`EditorSurface.jumps`): torna al salto precedente, in volo. `false`
+   * se non ci sono salti a cui tornare: allora vale la cronologia del riquadro.
+   */
+  jumpBack(): boolean {
+    if (this.#destroyed || !this.#doc) return false;
+    const target = this.#jumps.back();
+    if (target === null) return false;
+    this.#flyCamera(target);
+    return true;
+  }
+
+  /** Avanti (`EditorSurface.jumps`): rifà il salto che Indietro ha lasciato. `false` se non c'è. */
+  jumpForward(): boolean {
+    if (this.#destroyed || !this.#doc) return false;
+    const target = this.#jumps.forward();
+    if (target === null) return false;
+    this.#flyCamera(target);
+    return true;
   }
 
   /**

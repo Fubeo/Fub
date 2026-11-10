@@ -3755,6 +3755,117 @@ describe("CanvasEngine: spostare e ingrandire (T53)", () => {
     engine.destroy();
     expect(frames.size).toBe(0);
   });
+
+  // --- indietro e avanti (T56) ---
+
+  it("Indietro e Avanti rifanno i salti (Maiusc+1), non lo zoom a passi", () => {
+    const { engine, host } = mounted();
+    const viewport = viewportOf(host);
+    const all = cameraOf(host);
+    key(viewport, { key: "+" });
+    const zoomed = cameraOf(host);
+    // Lo zoom a passi non è un salto: la storia è ancora vuota.
+    expect(engine.jumpBack()).toBe(false);
+    key(viewport, { key: "!", code: "Digit1", shiftKey: true });
+    settle();
+    expect(cameraOf(host).zoom).toBeCloseTo(all.zoom, 6);
+    expect(engine.jumpBack()).toBe(true);
+    settle();
+    expect(cameraOf(host).zoom).toBeCloseTo(zoomed.zoom, 6);
+    expect(cameraOf(host).x).toBeCloseTo(zoomed.x, 3);
+    expect(cameraOf(host).y).toBeCloseTo(zoomed.y, 3);
+    // Niente prima del salto: Indietro ora dice di no, e la cronologia del riquadro entra.
+    expect(engine.jumpBack()).toBe(false);
+    expect(engine.jumpForward()).toBe(true);
+    settle();
+    expect(cameraOf(host).zoom).toBeCloseTo(all.zoom, 6);
+    expect(engine.jumpForward()).toBe(false);
+    engine.destroy();
+  });
+
+  it("un clic nel navigatore è un salto, uno spostamento a mano no: Indietro torna prima del salto", () => {
+    const { engine, host } = mounted();
+    const viewport = viewportOf(host);
+    const navigator = host.querySelector<HTMLElement>(".canvas-navigator")!;
+    // La mappa misura 168 × 120 da (0, 0): happy-dom non dispone niente.
+    vi.spyOn(navigator, "getBoundingClientRect").mockReturnValue({
+      x: 0, y: 0, left: 0, top: 0, right: 168, bottom: 120, width: 168, height: 120, toJSON: () => ({}),
+    } as DOMRect);
+    for (let i = 0; i < 4; i++) key(viewport, { key: "+" });
+    settle();
+    const zoomed = cameraOf(host);
+    // Il clic sulla mappa vola: è un salto.
+    const tap = (type: string): void => {
+      navigator.dispatchEvent(new PointerEvent(type, {
+        bubbles: true, cancelable: true, button: 0, pointerId: 7, pointerType: "mouse", isPrimary: true, clientX: 150, clientY: 100,
+      }));
+    };
+    tap("pointerdown");
+    tap("pointerup");
+    expect(frames.size).toBe(1);
+    settle();
+    const jumped = cameraOf(host);
+    expect(jumped).not.toEqual(zoomed);
+    // Lo spostamento a mano (il tasto centrale) non entra nella storia.
+    drag(host, viewport, { x: 300, y: 300 }, { x: 350, y: 330 }, { button: 1, buttons: 4 });
+    expect(cameraOf(host)).not.toEqual(jumped);
+    // Indietro torna prima del salto, non al punto dove la mano ha lasciato la vista.
+    expect(engine.jumpBack()).toBe(true);
+    settle();
+    expect(cameraOf(host).zoom).toBeCloseTo(zoomed.zoom, 6);
+    expect(cameraOf(host).x).toBeCloseTo(zoomed.x, 3);
+    expect(cameraOf(host).y).toBeCloseTo(zoomed.y, 3);
+    expect(engine.jumpBack()).toBe(false);
+    engine.destroy();
+  });
+
+  it("col movimento ridotto Indietro e Avanti arrivano subito, senza volo", () => {
+    const { engine, host } = mounted();
+    const viewport = viewportOf(host);
+    const all = cameraOf(host);
+    key(viewport, { key: "+" });
+    const zoomed = cameraOf(host);
+    setReducedMotionPreference(true);
+    key(viewport, { key: "!", code: "Digit1", shiftKey: true });
+    expect(cameraOf(host).zoom).toBeCloseTo(all.zoom, 6);
+    expect(engine.jumpBack()).toBe(true);
+    expect(cameraOf(host)).toEqual(zoomed);
+    expect(engine.jumpForward()).toBe(true);
+    expect(cameraOf(host).zoom).toBeCloseTo(all.zoom, 6);
+    expect(frames.size).toBe(0);
+    engine.destroy();
+  });
+
+  it("una lavagna aperta ricomincia senza salti, e due lavagne hanno ciascuna la sua storia", () => {
+    const first = mounted();
+    const viewportFirst = viewportOf(first.host);
+    key(viewportFirst, { key: "+" });
+    key(viewportFirst, { key: "!", code: "Digit1", shiftKey: true });
+    settle();
+    const second = mounted();
+    expect(second.engine.jumpBack()).toBe(false);
+    expect(first.engine.jumpBack()).toBe(true);
+    first.engine.destroy();
+    second.engine.destroy();
+  });
+
+  it("a fine volo la banda di stato è avvisata, perché lo zoom è cambiato", () => {
+    let statusChanges = 0;
+    const { engine, host } = mounted(canvasSource(), {
+      onStatusChange: () => {
+        statusChanges++;
+      },
+    });
+    const viewport = viewportOf(host);
+    key(viewport, { key: "+" });
+    const before = statusChanges;
+    key(viewport, { key: "!", code: "Digit1", shiftKey: true });
+    // Durante il volo la banda aspetta, come in ogni gesto.
+    expect(statusChanges).toBe(before);
+    settle();
+    expect(statusChanges).toBeGreaterThan(before);
+    engine.destroy();
+  });
 });
 
 describe("CanvasEngine: spargi le pagine di un PDF (T72)", () => {

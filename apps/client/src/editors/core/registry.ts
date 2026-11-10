@@ -381,6 +381,12 @@ export interface EditorSurface {
    */
   zone?(step: 1 | -1): boolean;
   /**
+   * The surface keeps a history of its own places: a board's view jumps (T56).
+   * Back and Forward ask the focused surface first, and the pane's own history
+   * only when it answers `false` (nothing to go back to, or no history here).
+   */
+  readonly jumps?: { back(): boolean; forward(): boolean };
+  /**
    * The surface draws its own bar of commands (the document ribbon): the
    * shell's format bar then stays out of the way, while the selection
    * bubble and the `fub.editor.action` commands keep working.

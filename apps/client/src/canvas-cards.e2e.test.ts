@@ -453,3 +453,43 @@ describe("il cancello di N6: un file dal sistema sulla lavagna", () => {
     expect(xlsxFiles(host)).toEqual(["Materiali/Foglio.xlsx"]);
   });
 });
+
+/// Un tasto premuto sulla vista della lavagna: arriva alla shell, se la tela non lo prende.
+function press(target: EventTarget, init: KeyboardEventInit): void {
+  target.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, cancelable: true, ...init }));
+}
+
+/// Aspetta che la vista smetta di volare, e dà la sua camera ferma.
+async function still(): Promise<{ x: number; y: number; zoom: number }> {
+  let last = camera();
+  for (let i = 0; i < 200; i += 1) {
+    await new Promise((r) => setTimeout(r, 25));
+    const now = camera();
+    if (now.x === last.x && now.y === last.y && now.zoom === last.zoom) return now;
+    last = now;
+  }
+  throw new Error("la vista non si ferma mai");
+}
+
+describe("Indietro e Avanti della lavagna nella shell (T56)", () => {
+  it("Alt+← torna al salto di Maiusc+1 e Alt+→ lo rifà; lo zoom a passi non è un salto", async () => {
+    await start();
+    await openBoard();
+    const fitted = await still();
+    const viewport = document.querySelector<HTMLElement>(".canvas-viewport")!;
+    // Lo zoom a passi non è un salto: Indietro, da solo, non torna a niente.
+    press(viewport, { key: "+" });
+    const zoomed = await still();
+    expect(zoomed.zoom).toBeGreaterThan(fitted.zoom);
+    // Maiusc+1 mostra tutto: è un salto, e Alt+← lo ricorda dalla shell.
+    press(viewport, { key: "!", code: "Digit1", shiftKey: true });
+    expect((await still()).zoom).toBeCloseTo(fitted.zoom, 6);
+    press(viewport, { key: "ArrowLeft", code: "ArrowLeft", altKey: true });
+    const back = await still();
+    expect(back.zoom).toBeCloseTo(zoomed.zoom, 6);
+    expect(back.x).toBeCloseTo(zoomed.x, 3);
+    expect(back.y).toBeCloseTo(zoomed.y, 3);
+    press(viewport, { key: "ArrowRight", code: "ArrowRight", altKey: true });
+    expect((await still()).zoom).toBeCloseTo(fitted.zoom, 6);
+  });
+});
