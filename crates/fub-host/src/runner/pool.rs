@@ -20,7 +20,7 @@ struct WorkerStartGate {
 }
 
 impl WorkerStartGate {
-    pub(super) fn new() -> Self {
+    fn new() -> Self {
         Self {
             state: Mutex::new(WorkerStart::Waiting),
             changed: Condvar::new(),
@@ -28,7 +28,7 @@ impl WorkerStartGate {
     }
 
     /// Torna `true` soltanto quando il pool è nato per intero.
-    pub(super) fn wait(&self) -> bool {
+    fn wait(&self) -> bool {
         let mut state = self
             .state
             .lock()
@@ -42,7 +42,7 @@ impl WorkerStartGate {
         *state == WorkerStart::Running
     }
 
-    pub(super) fn release(&self, state: WorkerStart) {
+    fn release(&self, state: WorkerStart) {
         *self
             .state
             .lock()

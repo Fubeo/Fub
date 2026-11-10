@@ -61,7 +61,7 @@ impl El {
 
     /// Scrive l'elemento come §7: una riga per elemento, due spazi di rientro
     /// per livello, il testo sulla riga del tag, i gruppi vuoti aperti.
-    pub(super) fn write(&self, depth: usize, newline: &str, out: &mut String) {
+    fn write(&self, depth: usize, newline: &str, out: &mut String) {
         let indent = "  ".repeat(depth);
         out.push_str(&indent);
         out.push('<');

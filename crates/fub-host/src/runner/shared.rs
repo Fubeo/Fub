@@ -58,7 +58,7 @@ struct OpeningCompletion<'a> {
 }
 
 impl<'a> OpeningCompletion<'a> {
-    pub(super) fn new(shared: &'a Shared, in_progress: &InProgress) -> Self {
+    fn new(shared: &'a Shared, in_progress: &InProgress) -> Self {
         Self {
             shared,
             id: in_progress.id,
@@ -366,7 +366,7 @@ impl Shared {
     }
 
     /// Prende in carico un lotto appena drenato ([`Flags::claim`]).
-    pub(super) fn claim(&self, jobs: &[PendingJob]) -> Result<(), PluginError> {
+    fn claim(&self, jobs: &[PendingJob]) -> Result<(), PluginError> {
         let mut flags = self.flags.write()?;
         for job in jobs {
             flags.claim(job.id);
@@ -657,7 +657,7 @@ impl Shared {
     /// sveglie; l'evento si emette **dopo** averlo lasciato. Il cursore si scrive
     /// prima dell'evento, così un riavvio durante il dispatch non ripete
     /// l'occorrenza e due worker non possono invertire le fotografie persistite.
-    pub(super) fn ring(&self) -> Result<(), PluginError> {
+    fn ring(&self) -> Result<(), PluginError> {
         let zone = self.machine_zone()?;
         let expired = {
             let mut alarms = self.alarms.write()?;
