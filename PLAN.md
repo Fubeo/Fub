@@ -3295,7 +3295,18 @@ Fatto quando: un test del nucleo apre e riscrive uguale un file con
 scheda non ha colore.
 Prova: scripts/check.sh --rapido; cargo test -p fub-canvas-core; cd
 apps/client && npx vitest run src/editors/canvas
-Stato: [ ] da fare
+Stato: [x] fatto (2026-11-10). Differenze: il nucleo scrive un colore
+sconosciuto solo se l'ha letto nella seduta (un insieme dei colori letti):
+senza, il vettore 31 e l'annulla da «rosso» a Rosso non reggono; ne
+seguono due limiti: incollare in un'altra lavagna una scheda con un colore
+sconosciuto è rifiutato tutto (la notifica di T68, mai a metà), e una
+lavagna riaperta senza quel colore non lo rimette con l'annulla. «#12»
+ora si legge come sconosciuto e si tiene (prima era rifiutato); un colore
+non stringa resta un errore, con un testo di serde diverso. Il nome grezzo
+di un colore sconosciuto non ha limite di lunghezza nell'aria-label.
+Toccati in più: `commit.rs`, `tests/read_rules.rs`, `tests/ts_mirror.rs`,
+il mirror `__fixtures__/canvas-mirror.json` rigenerato con
+`UPDATE_MIRROR=1`.
 
 ## T48 · Il catalogo dei comandi
 
