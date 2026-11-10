@@ -321,15 +321,15 @@ coordinate della lavagna e `onEraseEnd`.
   `ink/dom/idle.ts`, che la fa girare quando il thread è libero
   (`requestIdleCallback` con un `timeout`, altrimenti `setTimeout(0)`). Una
   penna che torna giù prima annulla la consegna.
-- **Le preferenze.** `editors/canvas/preferences.ts` legge i due
-  interruttori della macchina di `fub.lavagna` (`lavagna.rs`), spenti di
-  serie: `canvas.ink_mouse_remember` («Ricorda se scrivi col mouse») e
-  `canvas.finger_moves_card` («Il dito sposta le schede»). `watchPreferences`
-  li segue con `setting_changed` e torna il disposer; un valore che non è un
-  interruttore vale spento. L'ultimo «Scrivi col mouse» è lo stato di vista
-  `canvas.ink_mouse`, uno per computer: `saveInkMouse` lo scrive a ogni
-  cambio, `readInkMouse` lo ridà solo con «Ricorda» acceso, altrimenti
-  spento.
+- **Le preferenze.** `editors/canvas/preferences.ts` legge le dodici
+  impostazioni del gruppo «Lavagna» di `fub.lavagna` (`lavagna.rs`): cinque
+  della macchina e sette del vault, ciascuna col suo default. `watchPreferences`
+  le segue con `setting_changed` e torna il disposer; un valore che non regge
+  la sua specie vale il default, e una cartella di file trascinati che non è un
+  nome nuovo (`dropFolderPathOf`) vale `Allegati`. L'ultimo «Scrivi col mouse»
+  è lo stato di vista `canvas.ink_mouse`, uno per computer: `saveInkMouse` lo
+  scrive a ogni cambio, `readInkMouse` lo ridà solo con «Ricorda» acceso,
+  altrimenti spento.
 
 ## Come lo usa la lavagna
 
@@ -410,7 +410,7 @@ schede.
 | un tratto è una toppa, un commit e un passo; il ridisegno aspetta la penna | `editors/canvas/engine-ink.test.ts` |
 | la gomma prende il tratto dove si vede, cancella o taglia in un passo; D fa scrivere il mouse; il menu vale dal tratto dopo | `editors/canvas/ink-erase.test.ts`, `editors/canvas/engine-ink.test.ts`, `editors/canvas/pen-menu.test.ts` |
 | il dito sposta e pizzica la lavagna; la penna, anche sospesa, lo ferma | `editors/canvas/touch.test.ts`, `editors/canvas/engine-touch.test.ts` |
-| Rust e client nominano uguale le impostazioni della lavagna | `editors/canvas/settings-mirror.test.ts`, `fub-host/tests/lavagna_feature.rs` |
+| Rust e client nominano, ordinano e danno gli stessi default alle dodici impostazioni della lavagna; un valore sbagliato vale il default | `editors/canvas/settings-mirror.test.ts`, `editors/canvas/preferences.test.ts`, `fub-host/tests/lavagna_feature.rs` |
 | un puntatore fermo resta fermo nella scena se la vista si muove | `ink/dom/pointer-adapter.test.ts`, `tools/editor.test.ts` |
 
 Il percorso caldo ha due banchi:
