@@ -1029,9 +1029,12 @@ describe("i ritagli dei contenitori", () => {
     expect(index.inside([[15, 15], [85, 15], [85, 65], [15, 65]]).map((unit) => unit.key)).toEqual(["grp"]);
     expect(index.inside([[25, 25], [85, 25], [85, 65], [25, 65]])).toEqual([]);
     expect(index.along([0, 55], [15, 55], 1)).toEqual([]);
-    expect(index.along([0, 55], [25, 55], 1).map((unit) => unit.key)).toEqual(["grp"]);
+    // La gomma scende nel gruppo e prende soltanto il figlio che tocca, nella
+    // parte che si vede.
+    expect(index.along([0, 55], [25, 55], 1).map((unit) => unit.key)).toEqual(["im"]);
     expect(index.along([85, 55], [100, 55], 1)).toEqual([]);
-    expect(index.along([65, 55], [100, 55], 1).map((unit) => unit.key)).toEqual(["grp"]);
+    expect(index.along([65, 55], [100, 55], 1).map((unit) => unit.key)).toEqual(["rc"]);
+    expect(index.along([0, 55], [100, 55], 1).map((unit) => unit.key)).toEqual(["grp"]);
   });
 
   it("isolato il gruppo, i figli sono ritagliati dal suo cerchio, che non si sposta con loro", () => {
