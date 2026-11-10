@@ -1,8 +1,8 @@
 import type { Theme } from "../../theme/theme";
 import type { SyntaxForm } from "../../host/contract";
 import { t, onLanguage } from "../../i18n/strings";
-import { MENU_RULE, type SurfaceMenu, type SurfaceMenuEntry, type SurfaceMenuItem } from "../core/editor-menu";
-import { writeClipboardText } from "../../platform/clipboard";
+import { MENU_RULE, type SurfaceClipboardOp, type SurfaceMenu, type SurfaceMenuClipboard, type SurfaceMenuEntry, type SurfaceMenuItem } from "../core/editor-menu";
+import { clipboardSupports, readClipboard, writeClipboardData, writeClipboardText } from "../../platform/clipboard";
 import { lineFeeds, operationFromText, type EditorChangeOrigin, type TextOperation } from "../core/text-operation";
 import { idleSchedule } from "../../ink/dom/idle";
 import type { InkPointerType } from "../../ink/input/pointer";
@@ -65,7 +65,17 @@ import {
   type CanvasToolId,
 } from "./chrome/commands";
 import { CANVAS_INK_TOOLS, CANVAS_WRITING_TOOLS, createCanvasRail, type CanvasRail } from "./chrome/rail";
-import { createCanvasEmpty, isEmptyBoard, type CanvasEmpty } from "./chrome/empty";
+import { createCanvasEmpty, isEmptyBoard, transferOf, type CanvasEmpty } from "./chrome/empty";
+import {
+  CANVAS_CLIPBOARD_TYPE,
+  CANVAS_PASTE_STEP,
+  cardsMarkdown,
+  clipboardJson,
+  copiedCards,
+  placedCards,
+  readCanvasClipboard,
+  type CanvasClipboard,
+} from "./clipboard";
 import { createCanvasOptions, type CanvasOptions } from "./chrome/options";
 import type { OptionItem } from "../../kit/options-bar";
 import {
@@ -760,6 +770,13 @@ export class CanvasEngine {
   #erase: InkErase | null = null;
   /** D tenuto giù sul viewport: il mouse scrive finché non si alza. */
   #inkKeyDown = false;
+  // --- copia e incolla (T68) ---
+  /** «Copia» o «Taglia» del menu mentre manda la copia del browser: l'evento è nostro anche col fuoco nel menu. */
+  #clipboardCommand: "copy" | "cut" | null = null;
+  /** L'ultimo incolla delle schede di Fub: lo stesso testo nello stesso punto si sfalsa di nuovo. */
+  #lastPaste: { readonly raw: string; readonly x: number; readonly y: number; readonly count: number } | null = null;
+  /** L'ultimo Ctrl+D: le schede di partenza e le copie, nello stesso ordine; il prossimo ne ripete lo spostamento. */
+  #lastDuplicate: { readonly sources: readonly string[]; readonly copies: readonly string[] } | null = null;
   /**
    * Lo strumento della colonna (T49): che cosa fa il mouse sulla lavagna. Con
    * Penna, Evidenziatore o Gomma il mouse scrive con la penna del menu, ed è
@@ -1012,6 +1029,12 @@ export class CanvasEngine {
     this.#viewport.addEventListener("paste", (event) => {
       void this.#intake(event).catch((error: unknown) => this.#showIntakeError(error));
     }, { signal });
+    // Copia, taglia e incolla delle schede (T68). Il browser manda l'evento a
+    // chi ha il fuoco o alla selezione di testo, che può stare altrove (il
+    // corpo della pagina): si ascolta il documento e si guarda il fuoco.
+    this.#life.listen(document, "copy", (event) => this.#copyEvent(event, false));
+    this.#life.listen(document, "cut", (event) => this.#copyEvent(event, true));
+    this.#life.listen(document, "paste", (event) => this.#pasteFromOutside(event));
     this.#drawToolbar();
     this.#restoreInkMouse(options.inkMouseMemory ?? SHARED_INK_MOUSE);
     this.#restorePen(options.penMemory ?? SHARED_PEN);
@@ -2668,8 +2691,12 @@ export class CanvasEngine {
     const port = this.#options.attachments;
     const documentId = this.#options.documentId;
     if (!data || this.#readOnly || !this.#doc || this.#destroyed || this.#isSceneOversized()) return;
+    // Le schede di Fub negli appunti (T68) vincono sul loro Markdown; una
+    // forma rotta si incolla come testo.
+    const cards = drop ? "" : data.getData(CANVAS_CLIPBOARD_TYPE) || "";
+    if (cards && this.#pasteCards(event, cards)) return;
     if (!port && data.files.length) return;
-    const text = data.getData("text/plain");
+    const text = data.getData("text/plain") || cards;
     if (!port && !text) return;
     this.#intakeError = "";
     this.#drawToolbar();
@@ -2958,22 +2985,220 @@ export class CanvasEngine {
     if (!this.#doc || this.#readOnly) return;
     const nodes = this.#selectedNodes();
     if (!nodes.length) return;
+    // Le copie dell'ultimo Ctrl+D ripetono il suo spostamento (T68).
+    const repeat = this.#repeatedOffset(nodes);
     const idMap = new Map<string, string>();
     for (const node of nodes) idMap.set(node.id, newNodeId("n"));
     const patches: CanvasPatch[] = [];
     for (const node of nodes) {
       const copy: CanvasNode = JSON.parse(JSON.stringify(node)) as CanvasNode;
       copy.id = idMap.get(node.id)!;
-      copy.x = snap(node.x + 32);
-      copy.y = snap(node.y + 32);
+      copy.x = repeat ? node.x + repeat.x : snap(node.x + CANVAS_PASTE_STEP);
+      copy.y = repeat ? node.y + repeat.y : snap(node.y + CANVAS_PASTE_STEP);
       const patch = upsertNodePatch(this.#doc, copy);
       if (patch) patches.push(patch);
     }
     if (patches.length && this.#commit(patches, "input")) {
+      this.#lastDuplicate = { sources: nodes.map((node) => node.id), copies: nodes.map((node) => idMap.get(node.id)!) };
       this.#selection = [...idMap.values()];
       this.#edgeSelection = [];
       this.#options.onSelectionChange();
     }
+  }
+
+  // --- copia e incolla le schede (T68) --------------------------------------------
+
+  /**
+   * Lo spostamento che Ctrl+D ripete: le schede `nodes` sono proprio le copie
+   * dell'ultimo Ctrl+D e la prima scheda di partenza c'è ancora; si ripete la
+   * distanza di adesso fra le due, anche se la copia è stata spostata. `null`
+   * sennò, o se la copia sta sopra la sua scheda.
+   */
+  #repeatedOffset(nodes: readonly CanvasNode[]): { readonly x: number; readonly y: number } | null {
+    const last = this.#lastDuplicate;
+    if (!last || !this.#doc || last.copies.length !== nodes.length) return null;
+    const chosen = new Set(nodes.map((node) => node.id));
+    if (!last.copies.every((id) => chosen.has(id))) return null;
+    const copy = this.#doc.nodes.find((node) => node.id === last.copies[0]);
+    const source = this.#doc.nodes.find((node) => node.id === last.sources[0]);
+    if (!copy || !source) return null;
+    const x = copy.x - source.x;
+    const y = copy.y - source.y;
+    return x === 0 && y === 0 ? null : { x, y };
+  }
+
+  /**
+   * Gli appunti sono della lavagna: lo chiede il menu, oppure il fuoco è sulla
+   * vista o su una scheda, non in un campo né nel contenuto della scheda
+   * attiva, e dentro la lavagna non c'è un testo scelto (quello lo copia il
+   * browser, com'è).
+   */
+  #ownsClipboard(): boolean {
+    if (this.#clipboardCommand !== null) return true;
+    const active = document.activeElement;
+    if (!(active instanceof HTMLElement) || !this.#viewport.contains(active)) return false;
+    if (isTextTarget(active) || this.#insideActive(active, false)) return false;
+    const selection = document.getSelection();
+    return !(selection && !selection.isCollapsed && this.#viewport.contains(selection.anchorNode));
+  }
+
+  /** Ctrl+C e Ctrl+X, e «Copia» e «Taglia» del menu: le schede scelte negli appunti; tagliando, poi tolte. */
+  #copyEvent(event: ClipboardEvent, cut: boolean): void {
+    if (event.defaultPrevented || !event.clipboardData || !this.#doc || this.#destroyed) return;
+    if (!this.#ownsClipboard()) return;
+    const cutting = cut || this.#clipboardCommand === "cut";
+    if (cutting && this.#readOnly) return;
+    const clipboard = copiedCards(this.#doc, this.#selection);
+    if (!clipboard) return;
+    event.preventDefault();
+    event.clipboardData.setData(CANVAS_CLIPBOARD_TYPE, clipboardJson(clipboard));
+    event.clipboardData.setData("text/plain", cardsMarkdown(clipboard.nodes));
+    // Appunti nuovi: il prossimo incolla parte di nuovo sotto il puntatore.
+    this.#lastPaste = null;
+    if (cutting) this.#cutCards(clipboard.nodes.map((node) => node.id));
+  }
+
+  /** Toglie le schede tagliate come «Togli dalla lavagna»: i file restano, e l'avviso lo dice col suo «Annulla». */
+  #cutCards(ids: readonly string[]): void {
+    if (this.#readOnly || !this.#removeCards(ids, [])) return;
+    this.#selection = this.#selection.filter((id) => !ids.includes(id));
+    this.#edgeSelection = [];
+    this.#options.onSelectionChange();
+  }
+
+  /**
+   * Un incolla che il browser manda fuori dalla vista (al corpo della pagina,
+   * o dove sta la selezione di testo) mentre il fuoco è sulla lavagna: passa
+   * da `#intake` come uno sulla vista. Quello sulla vista l'ha già preso lei.
+   */
+  #pasteFromOutside(event: ClipboardEvent): void {
+    if (event.defaultPrevented || (event.target instanceof Node && this.#viewport.contains(event.target))) return;
+    if (this.#clipboardCommand !== null || !this.#ownsClipboard()) return;
+    void this.#intake(event).catch((error: unknown) => this.#showIntakeError(error));
+  }
+
+  /**
+   * Incolla le schede di Fub dal testo `raw` degli appunti, nel punto
+   * dell'incolla (T15): un commit, un annulla, le schede incollate scelte. Lo
+   * stesso testo incollato di nuovo nello stesso punto si sfalsa. Una versione
+   * futura non incolla niente e lo dice. `false` se `raw` non è la forma di
+   * Fub: allora si incolla come testo.
+   */
+  #pasteCards(event: ClipboardEvent | DragEvent, raw: string): boolean {
+    const read = readCanvasClipboard(raw);
+    if (read.kind === "broken") return false;
+    event.preventDefault();
+    this.#recordPending();
+    if (read.kind === "future") {
+      this.#showNotice(t("canvas.clipboard.future"));
+      return true;
+    }
+    const point = this.#intakePoint(event, false);
+    const x = snap(point.x);
+    const y = snap(point.y);
+    const last = this.#lastPaste;
+    const count = last && last.raw === raw && last.x === x && last.y === y ? last.count + 1 : 0;
+    const step = count * CANVAS_PASTE_STEP;
+    if (!this.#commitPasted(read.clipboard, { x: x + step, y: y + step })) {
+      this.#showNotice(t("canvas.clipboard.refused"));
+      return true;
+    }
+    this.#lastPaste = { raw, x, y, count };
+    this.#showNotice("");
+    return true;
+  }
+
+  /** Le schede di `clipboard` con l'angolo del loro riquadro in `at`, in un commit solo, poi scelte. `false` se il nucleo le rifiuta. */
+  #commitPasted(clipboard: CanvasClipboard, at: { readonly x: number; readonly y: number }): boolean {
+    const doc = this.#doc;
+    if (!doc || this.#readOnly) return false;
+    const placed = placedCards(clipboard, at, newNodeId);
+    const patches: CanvasPatch[] = [];
+    for (const node of placed.nodes) {
+      const patch = upsertNodePatch(doc, node);
+      if (patch) patches.push(patch);
+    }
+    for (const edge of placed.edges) {
+      const patch = upsertEdgePatch(doc, edge);
+      if (patch) patches.push(patch);
+    }
+    if (!this.#commit(patches, "input")) return false;
+    this.#selection = placed.nodes.map((node) => node.id);
+    this.#edgeSelection = [];
+    this.#options.onSelectionChange();
+    return true;
+  }
+
+  /**
+   * «Copia», «Taglia» e «Incolla» del tasto destro. Copia e taglia mandano la
+   * copia del browser, la stessa di Ctrl+C; dove non parte, scrivono con gli
+   * appunti della shell (il tipo di Fub solo dove la shell lo accetta, come
+   * formato della pagina). Incolla legge gli appunti e passa da `#intake`
+   * come un Ctrl+V.
+   */
+  #clipboardMenu(op: SurfaceClipboardOp): void {
+    if (op === "paste") {
+      this.#pasteFromMenu();
+      return;
+    }
+    if (op !== "copy" && op !== "cut") return;
+    this.#clipboardCommand = op;
+    let sent = false;
+    try {
+      sent = typeof document.execCommand === "function" && document.execCommand("copy");
+    } catch {
+      sent = false;
+    } finally {
+      this.#clipboardCommand = null;
+    }
+    if (!sent) this.#writeCards(op === "cut");
+  }
+
+  /** Scrive le schede scelte con gli appunti della shell; con `cut` le toglie, solo dopo averle scritte. */
+  #writeCards(cut: boolean): void {
+    if (!this.#doc || (cut && this.#readOnly)) return;
+    const clipboard = copiedCards(this.#doc, this.#selection);
+    if (!clipboard) return;
+    const markdown = cardsMarkdown(clipboard.nodes);
+    const web = `web ${CANVAS_CLIPBOARD_TYPE}`;
+    const write = clipboardSupports(web)
+      ? writeClipboardData({
+          "text/plain": new Blob([markdown], { type: "text/plain" }),
+          [web]: new Blob([clipboardJson(clipboard)], { type: CANVAS_CLIPBOARD_TYPE }),
+        })
+      : writeClipboardText(markdown);
+    const ids = clipboard.nodes.map((node) => node.id);
+    const source = this.#source;
+    this.#lastPaste = null;
+    void write.then(
+      () => {
+        if (cut && !this.#destroyed && this.#source === source) this.#cutCards(ids);
+      },
+      () => {
+        if (!this.#destroyed) this.#showNotice(t("editor_menu.copy_failed"));
+      },
+    );
+  }
+
+  /** «Incolla» del menu: gli appunti letti come li legge la lavagna vuota, più le schede di Fub se ci sono. */
+  #pasteFromMenu(): void {
+    if (this.#readOnly || this.#destroyed) return;
+    const web = `web ${CANVAS_CLIPBOARD_TYPE}`;
+    readClipboard().then(async (entries) => {
+      let data = await transferOf(entries);
+      const entry = entries.find((one) => one.types.includes(CANVAS_CLIPBOARD_TYPE) || one.types.includes(web));
+      if (entry) {
+        const type = entry.types.includes(CANVAS_CLIPBOARD_TYPE) ? CANVAS_CLIPBOARD_TYPE : web;
+        const raw = await (await entry.getType(type)).text();
+        data ??= new DataTransfer();
+        data.setData(CANVAS_CLIPBOARD_TYPE, raw);
+      }
+      if (this.#destroyed) return;
+      if (data === null) this.#showNotice(t("canvas.blank.paste_none"));
+      else this.#receive(data);
+    }).catch(() => {
+      if (!this.#destroyed) this.#showNotice(t("editor_menu.paste_failed"));
+    });
   }
 
   #deleteSelection(): void {
@@ -3800,7 +4025,11 @@ export class CanvasEngine {
       const one = nodes.length === 1 ? nodes[0]! : null;
       const box = this.#stage.querySelector<HTMLElement>(`.canvas-node[data-node="${CSS.escape(node)}"]`)?.getBoundingClientRect();
       const at = box ? { x: Math.round(box.left), y: Math.round(box.bottom) + 4 } : undefined;
-      const clipboard = { offers: { copy: true }, run: () => void writeClipboardText(this.selectedText()?.primary ?? "").catch(() => {}) };
+      // Copia, Taglia e Incolla portano le schede, i fili fra loro e l'inchiostro (T68).
+      const clipboard: SurfaceMenuClipboard = {
+        offers: { cut: writable, copy: true, paste: writable },
+        run: (op) => this.#clipboardMenu(op),
+      };
       if (one?.type !== "group") {
         return { target: this.#cardMenuTarget(nodes, node), at, context: this.#cardMenu(nodes, entry, colors), clipboard };
       }
@@ -3830,6 +4059,7 @@ export class CanvasEngine {
     const here = at ? { at } : undefined;
     return {
       target: { kind: "empty" },
+      clipboard: { offers: { paste: writable }, run: (op) => this.#clipboardMenu(op) },
       context: [
         {
           id: "canvas.add",

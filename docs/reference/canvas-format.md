@@ -229,6 +229,66 @@ non si apre. La lista, i nomi e le regole della tela stanno in
   Blocchi (`--doc-color-*`). Il nome del colore arriva al lettore di schermo
   nel nome della scheda.
 
+## Negli appunti
+
+Copiando delle schede (Ctrl+C, Ctrl+X, «Copia» e «Taglia» del tasto destro)
+la tela scrive negli appunti due tipi insieme. La forma, la lettura e il
+Markdown stanno in `apps/client/src/editors/canvas/clipboard.ts`.
+
+- **`application/x-fub-canvas+json`:** le schede, per un'altra lavagna di Fub.
+
+  ```json
+  { "version": 1, "nodes": [ … ], "edges": [ … ] }
+  ```
+
+  `nodes` sono le schede scelte, nell'ordine del file (la profondità);
+  `edges` i soli fili che uniscono due schede copiate. Ogni scheda e ogni
+  filo sono quelli del modello, campi sconosciuti compresi: l'inchiostro
+  attaccato viaggia nel campo `fub:ink` della sua scheda. Altri campi alla
+  radice non ci sono.
+- **`text/plain`:** il Markdown delle schede, per gli altri programmi: in
+  ordine di lettura (dall'alto in basso, a pari altezza da sinistra), una
+  scheda per paragrafo. Una scheda di testo dà il suo testo, una di file il
+  link `[[…]]` (una nota senza `.md`, col suo `subpath`), una di link
+  l'indirizzo, un gruppo il nome.
+
+Dal menu, dove il browser non manda la copia, la tela scrive con gli appunti
+della shell: il tipo di Fub va come formato della pagina
+(`web application/x-fub-canvas+json`) solo dove la shell lo accetta, sennò
+resta il Markdown.
+
+**La versione.** `version` è un intero. Fub legge la versione 1 e rifiuta
+una versione più alta per intero, con un avviso: niente si incolla a metà.
+Un testo che non è JSON, o non ha la forma (`version` mancante o non intero,
+`nodes` o `edges` che non sono array, una scheda senza `id`, con un tipo
+sconosciuto, una posizione o una misura non numeriche, un `id` ripetuto, un
+filo verso una scheda che negli appunti non c'è) non è la forma di Fub: si
+incolla come testo, il `text/plain` o, senza, il testo stesso.
+
+**Incollando** (Ctrl+V, «Incolla»), sempre in una lavagna che si può
+scrivere:
+
+- schede e fili prendono id nuovi, e i fili si riattaccano alle schede
+  nuove; i tratti dentro `fub:ink` tengono i loro id, unici nel livello;
+- le schede restano alle stesse distanze fra loro, con l'angolo in alto a
+  sinistra del loro riquadro nel punto dell'incolla (l'ultimo punto del
+  puntatore sulla vista, sennò il centro), agganciato a 8;
+- un commit solo, cioè un annulla; il commit del nucleo controlla tutto
+  (colori, limiti, inchiostro), e se rifiuta non entra niente;
+- gli stessi appunti incollati di nuovo nello stesso punto si sfalsano di
+  32 per volta; copiare di nuovo riparte dal punto.
+
+**In un'altra lavagna** le schede arrivano uguali. **In un altro vault** una
+scheda di file punta allo stesso percorso: se lì il file non c'è, è una
+scheda «File mancante», come ogni scheda il cui file manca, e torna da sola
+se il file arriva.
+
+**Tagliare** copia e poi toglie le schede come «Togli dalla lavagna»: i file
+restano, e l'avviso lo dice con «Annulla». Ctrl+D (Duplica) fa una copia
+sfalsata di 32; se le schede scelte sono le copie dell'ultimo Ctrl+D, la
+copia nuova ripete la distanza che c'è adesso fra quelle e le schede di
+partenza, anche dopo averle spostate.
+
 ## Parità
 
 Le regole di lettura e scrittura sono scritte una volta, in

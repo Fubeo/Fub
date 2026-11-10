@@ -2519,3 +2519,237 @@ describe("il menu della scheda (T17)", () => {
     engine.destroy();
   });
 });
+
+describe("CanvasEngine: copia e incolla le schede (T68)", () => {
+  const TYPE = "application/x-fub-canvas+json";
+  const STROKE = {
+    id: "s-1", tool: "pen",
+    brush: "pf1 size=3 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=0 pen=ballpoint",
+    color: "#0072b2", anchor: { kind: "card", width: 240, height: 140 }, ink: "1 s100 cxy 4000,2500 120,40 95,-10",
+  };
+
+  function source(): string {
+    return JSON.stringify({
+      nodes: [
+        { id: "a", type: "text", x: 40, y: 40, width: 240, height: 140, text: "Prima" },
+        { id: "b", type: "text", x: 400, y: 104, width: 240, height: 140, text: "Seconda", "fub:ink": { v: 1, strokes: [STROKE] }, vendor: { keep: true } },
+        { id: "f", type: "file", x: 40, y: 320, width: 240, height: 140, file: "Corsi/voti.xlsx" },
+      ],
+      edges: [{ id: "e1", fromNode: "a", toNode: "b", toEnd: "arrow", label: "poi" }],
+    });
+  }
+
+  /** Gli appunti di una prova: ciò che si scrive si rilegge. */
+  function store(values: Record<string, string> = {}): DataTransfer & { values: Record<string, string> } {
+    return {
+      values, files: [], items: [],
+      get types() { return Object.keys(values); },
+      getData: (type: string) => values[type] ?? "",
+      setData: (type: string, value: string) => { values[type] = value; },
+    } as unknown as DataTransfer & { values: Record<string, string> };
+  }
+
+  function viewportOf(host: HTMLElement): HTMLElement {
+    return host.querySelector<HTMLElement>(".canvas-viewport")!;
+  }
+
+  function clipboardEvent(type: "copy" | "cut" | "paste", target: HTMLElement, data: DataTransfer): Event {
+    const event = new Event(type, { bubbles: true, cancelable: true });
+    Object.defineProperty(event, "clipboardData", { value: data });
+    target.dispatchEvent(event);
+    return event;
+  }
+
+  /** Ctrl+A col fuoco sulla vista: tutte le schede scelte. */
+  function selectAll(host: HTMLElement): void {
+    const viewport = viewportOf(host);
+    viewport.focus();
+    viewport.dispatchEvent(new KeyboardEvent("keydown", { key: "a", ctrlKey: true, bubbles: true }));
+  }
+
+  function nodesOf(engine: CanvasEngine): CanvasDocument["nodes"] {
+    return readCanvas(engine.getDoc()).nodes;
+  }
+
+  it("copia schede, filo e inchiostro e li incolla in un'altra lavagna sotto il puntatore: un commit, un annulla", async () => {
+    const from = mounted(source());
+    selectAll(from.host);
+    expect(document.activeElement).toBe(viewportOf(from.host));
+    const data = store();
+    const copied = clipboardEvent("copy", viewportOf(from.host), data);
+    expect(copied.defaultPrevented).toBe(true);
+    expect(from.changes).toHaveLength(0);
+    expect(JSON.parse(data.values[TYPE]!)).toEqual({ version: 1, ...readCanvas(source()) });
+    expect(data.values["text/plain"]).toBe("Prima\n\nSeconda\n\n[[Corsi/voti.xlsx]]");
+    from.engine.destroy();
+
+    // Un'altra lavagna, di un altro vault: il file che lì non c'è resta un
+    // percorso, e la scheda mostra «File mancante» (T16).
+    const other = JSON.stringify({ nodes: [{ id: "q", type: "text", x: 0, y: 0, width: 200, height: 100, text: "qui" }], edges: [] });
+    const to = mounted(other, { documentId: "altro/board.canvas" });
+    viewportOf(to.host).dispatchEvent(new PointerEvent("pointermove", { bubbles: true, clientX: 300, clientY: 200 }));
+    clipboardEvent("paste", viewportOf(to.host), data);
+    await vi.waitFor(() => expect(to.changes).toHaveLength(1));
+    const doc = readCanvas(to.engine.getDoc());
+    const [a, b, f] = doc.nodes.slice(1);
+    expect(doc.nodes).toHaveLength(4);
+    expect(new Set([a!.id, b!.id, f!.id, "q"]).size).toBe(4);
+    expect([a!.id, b!.id, f!.id]).not.toContain("a");
+    // Le stesse distanze, l'angolo agganciato alla griglia.
+    expect([b!.x - a!.x, b!.y - a!.y, f!.x - a!.x, f!.y - a!.y]).toEqual([360, 64, 0, 280]);
+    expect([a!.x % 8 === 0, a!.y % 8 === 0]).toEqual([true, true]);
+    expect(b).toMatchObject({ text: "Seconda", "fub:ink": { v: 1, strokes: [STROKE] }, vendor: { keep: true } });
+    expect(f).toMatchObject({ type: "file", file: "Corsi/voti.xlsx" });
+    expect(doc.edges).toEqual([{ id: doc.edges[0]!.id, fromNode: a!.id, toNode: b!.id, toEnd: "arrow", label: "poi" }]);
+    expect(doc.edges[0]!.id).not.toBe("e1");
+    // Le schede incollate sono le scelte.
+    expect(to.engine.selectedText()).toEqual({ primary: "Corsi/voti.xlsx", secondary: ["Prima", "Seconda"] });
+    expect(to.engine.undo()).toBe(true);
+    expect(to.engine.getDoc()).toBe(other);
+    to.engine.destroy();
+  });
+
+  it("incollare due volte fa due copie, la seconda sfalsata; copiare di nuovo riparte dal puntatore", async () => {
+    const from = mounted(source());
+    selectAll(from.host);
+    const data = store();
+    clipboardEvent("copy", viewportOf(from.host), data);
+    viewportOf(from.host).dispatchEvent(new PointerEvent("pointermove", { bubbles: true, clientX: 300, clientY: 200 }));
+    clipboardEvent("paste", viewportOf(from.host), data);
+    clipboardEvent("paste", viewportOf(from.host), data);
+    await vi.waitFor(() => expect(from.changes).toHaveLength(2));
+    const pasted = nodesOf(from.engine).slice(3);
+    expect(pasted).toHaveLength(6);
+    expect([pasted[3]!.x - pasted[0]!.x, pasted[3]!.y - pasted[0]!.y]).toEqual([32, 32]);
+    expect(readCanvas(from.engine.getDoc()).edges).toHaveLength(3);
+    // Copiare le incollate fa appunti nuovi: il prossimo incolla torna al punto.
+    const again = store();
+    clipboardEvent("copy", viewportOf(from.host), again);
+    clipboardEvent("paste", viewportOf(from.host), again);
+    await vi.waitFor(() => expect(from.changes).toHaveLength(3));
+    expect([nodesOf(from.engine)[9]!.x, nodesOf(from.engine)[9]!.y]).toEqual([pasted[0]!.x, pasted[0]!.y]);
+    from.engine.destroy();
+  });
+
+  it("taglia: copia e toglie in un annulla, le schede di file restano file e l'avviso lo dice", async () => {
+    const { engine, host, changes } = mounted(source());
+    selectAll(host);
+    const data = store();
+    clipboardEvent("cut", viewportOf(host), data);
+    expect(changes).toHaveLength(1);
+    expect(nodesOf(engine)).toHaveLength(0);
+    expect(readCanvas(engine.getDoc()).edges).toHaveLength(0);
+    expect(JSON.parse(data.values[TYPE]!).nodes).toHaveLength(3);
+    expect(host.querySelector(".canvas-removal")?.textContent).toBe(t("canvas.card.removed_many", { n: "3" }));
+    expect(engine.undo()).toBe(true);
+    expect(engine.getDoc()).toBe(source());
+    // Incollate di nuovo, tornano con filo e inchiostro.
+    clipboardEvent("paste", viewportOf(host), data);
+    await vi.waitFor(() => expect(changes).toHaveLength(3));
+    expect(nodesOf(engine)).toHaveLength(6);
+    expect(readCanvas(engine.getDoc()).edges).toHaveLength(2);
+    engine.destroy();
+  });
+
+  it("una versione futura si rifiuta con l'avviso, mai a metà; un JSON rotto si incolla come testo", async () => {
+    const { engine, host, changes } = mounted(source());
+    viewportOf(host).focus();
+    const future = JSON.stringify({ version: 2, nodes: readCanvas(source()).nodes, edges: [] });
+    const event = clipboardEvent("paste", viewportOf(host), store({ [TYPE]: future, "text/plain": "Prima" }));
+    expect(event.defaultPrevented).toBe(true);
+    await vi.waitFor(() => expect(host.querySelector(".canvas-intake-error")?.textContent).toBe(t("canvas.clipboard.future")));
+    expect(changes).toHaveLength(0);
+
+    clipboardEvent("paste", viewportOf(host), store({ [TYPE]: "{\"version\": 1, \"nodes\": [", "text/plain": "come testo" }));
+    await vi.waitFor(() => expect(changes).toHaveLength(1));
+    expect(nodesOf(engine).slice(3)).toEqual([expect.objectContaining({ type: "text", text: "come testo" })]);
+    // Senza testo accanto, è il JSON rotto a diventare il testo.
+    clipboardEvent("paste", viewportOf(host), store({ [TYPE]: "{rotto" }));
+    await vi.waitFor(() => expect(changes).toHaveLength(2));
+    expect(nodesOf(engine)[4]).toMatchObject({ type: "text", text: "{rotto" });
+    engine.destroy();
+  });
+
+  it("schede che il nucleo rifiuta non entrano, nemmeno una: l'avviso lo dice", async () => {
+    const { engine, host, changes } = mounted(source());
+    const bad = JSON.stringify({ version: 1, nodes: [
+      { id: "x", type: "text", x: 0, y: 0, width: 10, height: 10, text: "buona" },
+      { id: "y", type: "text", x: 0, y: 0, width: 10, height: 10, text: "colore", color: "rosso" },
+    ], edges: [] });
+    clipboardEvent("paste", viewportOf(host), store({ [TYPE]: bad, "text/plain": "buona" }));
+    await vi.waitFor(() => expect(host.querySelector(".canvas-intake-error")?.textContent).toBe(t("canvas.clipboard.refused")));
+    expect(changes).toHaveLength(0);
+    expect(engine.getDoc()).toBe(source());
+    engine.destroy();
+  });
+
+  it("in sola lettura copiare si può, tagliare e incollare no", async () => {
+    const { engine, host, changes } = mounted(source());
+    engine.setReadOnly(true);
+    selectAll(host);
+    const data = store();
+    clipboardEvent("copy", viewportOf(host), data);
+    expect(JSON.parse(data.values[TYPE]!).nodes).toHaveLength(3);
+    const cut = clipboardEvent("cut", viewportOf(host), store());
+    expect(cut.defaultPrevented).toBe(false);
+    clipboardEvent("paste", viewportOf(host), data);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(changes).toHaveLength(0);
+    expect(engine.getDoc()).toBe(source());
+    engine.destroy();
+  });
+
+  it("gli appunti restano del campo in cui si scrive, e di chi ha il fuoco fuori dalla lavagna", () => {
+    const { engine, host } = mounted(source());
+    selectAll(host);
+    const field = document.createElement("textarea");
+    viewportOf(host).append(field);
+    field.focus();
+    expect(clipboardEvent("copy", field, store()).defaultPrevented).toBe(false);
+    const outside = document.createElement("input");
+    document.body.append(outside);
+    outside.focus();
+    expect(clipboardEvent("copy", outside, store()).defaultPrevented).toBe(false);
+    engine.destroy();
+  });
+
+  it("il menu della scheda offre Taglia, Copia e Incolla; quello del vuoto Incolla", () => {
+    const { engine, host } = mounted(source());
+    selectAll(host);
+    const card = host.querySelector<HTMLElement>('.canvas-node[data-node="a"]')!;
+    const pointing = vi.spyOn(document, "elementFromPoint").mockReturnValue(card);
+    expect(engine.contextMenu({ x: 10, y: 10 })!.clipboard!.offers).toEqual({ cut: true, copy: true, paste: true });
+    pointing.mockReturnValue(viewportOf(host));
+    expect(engine.contextMenu({ x: 900, y: 900 })!.clipboard!.offers).toEqual({ paste: true });
+    engine.setReadOnly(true);
+    pointing.mockReturnValue(card);
+    expect(engine.contextMenu({ x: 10, y: 10 })!.clipboard!.offers).toEqual({ cut: false, copy: true, paste: false });
+    pointing.mockRestore();
+    engine.destroy();
+  });
+
+  it("Ctrl+D dopo aver spostato la copia ripete lo stesso spostamento", () => {
+    const { engine, host } = mounted(JSON.stringify({
+      nodes: [{ id: "a", type: "text", x: 40, y: 40, width: 240, height: 140, text: "uno" }], edges: [],
+    }));
+    const viewport = viewportOf(host);
+    selectAll(host);
+    const press = (init: KeyboardEventInit): void => {
+      viewport.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, ...init }));
+    };
+    press({ key: "d", ctrlKey: true });
+    expect(nodesOf(engine).map((node) => [node.x, node.y])).toEqual([[40, 40], [72, 72]]);
+    // La copia si sposta di due passi a destra: 48, 32 dalla prima.
+    press({ key: "ArrowRight" });
+    press({ key: "ArrowRight" });
+    expect(nodesOf(engine)[1]).toMatchObject({ x: 88, y: 72 });
+    press({ key: "d", ctrlKey: true });
+    press({ key: "d", ctrlKey: true });
+    expect(nodesOf(engine).map((node) => [node.x, node.y])).toEqual([[40, 40], [88, 72], [136, 104], [184, 136]]);
+    // Un'altra scelta riparte dallo sfalsamento di sempre.
+    selectAll(host);
+    press({ key: "d", ctrlKey: true });
+    expect(nodesOf(engine).slice(4).map((node) => [node.x, node.y])).toEqual([[72, 72], [120, 104], [168, 136], [216, 168]]);
+    engine.destroy();
+  });
+});
