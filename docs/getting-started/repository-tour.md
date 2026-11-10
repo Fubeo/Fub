@@ -5,26 +5,9 @@
 
 ## Mappa
 
-```text
-Fub/
-├── crates/                 workspace Rust
-│   ├── fub-abi/
-│   ├── fub-kernel/
-│   ├── fub-host/
-│   ├── fub-app/
-│   ├── fub-sdk/
-│   ├── fub-testkit/
-│   ├── fub-format-markdown/
-│   ├── fub-features/
-│   └── fub-wasm-host/
-├── apps/client/           shell Vite e TypeScript
-├── apps/clipper/          estensione del browser
-├── vendor/                i motori copiati: wordcraft, gridcraft
-├── esempi/                componenti WASM eseguiti dai test
-├── tools/                 verifiche fuori dal workspace
-├── docs/                  documentazione canonica
-└── .github/               workflow e guard
-```
+La mappa della repository — cartelle, crate, aree e come si provano — è in
+[map/repo.md](../map/repo.md); l'indice domanda → pagina di tutta `docs/` è in
+[map/pagine.md](../map/pagine.md).
 
 ## Dove modificare cosa
 
@@ -45,30 +28,8 @@ Fub/
 
 ## I crate
 
-| Crate | Responsabilità |
-|---|---|
-| `fub-abi` | tipi, trait, errori, regole, WIT e forme IPC |
-| `fub-kernel` | workspace, storage, indici, policy ed eventi |
-| `fub-host` | composition root, sessioni, bundle, watcher e job |
-| `fub-app` | binario Tauri e adattatori IPC |
-| `fub-cli` | CLI di automazione e host di messaggistica nativa del clipper |
-| `fub-sdk` | helper per gli autori e `MemoryHost` |
-| `fub-testkit` | banco di integrazione host/kernel |
-| `fub-format-markdown` | provider Markdown |
-| `fub-format-base` | provider `.base`: viste YAML sulle proprietà delle note |
-| `fub-format-canvas` | provider JSON Canvas (`.canvas`) |
-| `fub-canvas-core` | nucleo della lavagna: modello e lettura di una `.canvas` |
-| `fub-format-rich` | documenti di videoscrittura (`.docx`, `.odt`, `.rtf`, `.doc`) |
-| `fub-format-xlsx` | cartelle di Excel (`.xlsx`) sopra i motori di GridCraft |
-| `fub-format-svg` | provider delle scene di FubDraw (`.svg`) |
-| `fub-format-craft` | file delle app Craft (`.vectorcraft`, `.pcraft`, `.figcraft`, `.xmp`) in sola lettura |
-| `fub-features` | feature ufficiali dietro feature Cargo |
-| `fub-importers` | import ed export ufficiali (HTML, CSV, ZIP, ENEX, PDF, connettori) |
-| `fub-services` | servizio locale di account, sincronizzazione e pubblicazione |
-| `fub-scene` | lettura e diagnostica delle scene di FubDraw |
-| `fub-ink` | nucleo dell'inchiostro: campioni, pressione, stabilizzatore |
-| `fub-live` | sessione di disegno dal vivo fra PC e tablet |
-| `fub-wasm-host` | adattatore Wasmtime verso i trait comuni |
+I 25 crate con la responsabilità di ciascuno sono nella tabella delle aree in
+[map/repo.md](../map/repo.md#le-aree-una-riga-ciascuna).
 
 ## Flusso per tipo di modifica
 

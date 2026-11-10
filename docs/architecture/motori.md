@@ -1,8 +1,9 @@
 # Lo strato dei motori
 
 Questa pagina spiega come Fub costruisce i motori copiati (GridCraft per i
-fogli, WordCraft per i documenti, e quelli che verranno) soltanto quando
-servono, come li fa lavorare e come ne tiene le cache sotto un tetto comune.
+fogli, WordCraft per i documenti) soltanto quando servono, come li fa lavorare
+e come ne tiene le cache sotto un tetto comune. I motori in programma con le
+fasi sono nell'ordine di lavoro di [stato](../project/status.md).
 
 > **Ambito:** `crates/fub-motori` e il modo in cui un adattatore di formato vi
 > iscrive il suo motore.
@@ -151,7 +152,7 @@ funzioni pure sul testo, e la `Sorgente` del testo si sostituisce nelle prove
 
 glibc trattiene le pagine liberate: chiudere un motore non abbassa la memoria
 del processo finché non si chiede di renderla
-([misure di K0](../misure/motori-2026-10-31-linux-ryzen.md)).
+([misure di K0](../misure/2026-10-31-motori-linux-ryzen.md)).
 `rilascia_al_sistema()` su Linux con glibc chiama `malloc_trim(0)`; altrove non
 fa niente. Un adattatore la chiama dopo aver svuotato le cache, quando l'ultimo
 documento del suo motore si chiude.

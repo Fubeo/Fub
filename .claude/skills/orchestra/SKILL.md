@@ -15,8 +15,8 @@ fine; a whole task is a coder's job.
 The plan is `$ARGUMENTS`, or `PLAN.md` at the root of the plan branch.
 
 `CLAUDE.md` applies. In this workflow it allows what it otherwise forbids:
-coder subagents that write, each in its own worktree. Only you push; only the
-user merges.
+coder subagents that write, each in its own worktree. Only you push, and you
+merge under the rule in `CLAUDE.md`.
 
 ## Start
 
@@ -71,8 +71,9 @@ user merges.
    `docs(piano): il piano <titolo> è concluso`. They stay in the branch history.
 3. Push, mark the PR ready (`gh pr ready`, or the GitHub tools): the full CI
    runs once, Windows, macOS and benches included. Wait in the background.
-4. Green: the final report in Italian (format in `CLAUDE.md`) and ask the user
-   to merge. **Never merge without the user's explicit OK.**
+4. Green: merge under the rule in `CLAUDE.md` (what stays the maintainer's
+   call: ask and wait), then the final report in Italian, format in
+   `CLAUDE.md`.
 
 ## Spend little
 

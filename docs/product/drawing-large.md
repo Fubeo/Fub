@@ -73,13 +73,9 @@ abbassarlo è ricavare dal testo solo la parte che il passo ha cambiato.
 
 ## Il banco
 
-```bash
-cd apps/client
-npm run bench:large                     # 5 000, 20 000 e 49 900 elementi, con le soglie
-npm run bench:large -- --elements 30000 # da 200 a 49 900 elementi, senza soglie
-npm run bench:large -- --cpu 4          # la pagina quattro volte più lenta
-```
-
+Il banco si lancia con `npm run bench:large` (da `apps/client/`; l'elenco
+completo dei comandi è in
+[testing-and-quality.md](../development/testing-and-quality.md#banchi)).
 Il banco ([`large.mjs`](../../apps/client/bench/large.mjs)) apre il disegno
 nell'app vera, nello spazio Completo, e fa otto corse: lo zoom coi tasti, la
 rotella che porta un rettangolo al centro della vista, Ctrl+rotella su di

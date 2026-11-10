@@ -175,7 +175,8 @@ const ALLOWLIST: &[(&str, &str, usize, Reason)] = &[
         Reason::AnotherSerialize,
     ),
     (
-        "crates/fub-abi/src/traits.rs",
+        // `JobId`: da quando `traits.rs` è diviso in moduli sta in `traits/job.rs`.
+        "crates/fub-abi/src/traits/job.rs",
         "u64_string::serialize",
         1,
         Reason::AnotherSerialize,

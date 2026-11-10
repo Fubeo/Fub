@@ -264,7 +264,7 @@ FubDraw è il primo consumatore e non il proprietario.
 - `tools/editor/ink-gestures.ts` (`writeInk`, `eraseAlong`) costruisce il
   tratto con `buildStroke`, lo scrive in un'unica operazione nello storico e fa
   correre la gomma con `EraseSweep` sull'indice della scena.
-- `tools/hit.ts` (`SceneIndex.along`) è la fonte della gomma e non riprova ciò
+- `tools/hit/scene-index.ts` (`SceneIndex.along`) è la fonte della gomma e non riprova ciò
   che `marked` ha già segnato. Da 256 oggetti in su (`TREE_FROM`) prova
   soltanto quelli che l'albero dei riquadri (`tools/box-tree.ts`) dà
   vicini al segmento. L'albero è un R-tree impacchettato una volta per indice,
