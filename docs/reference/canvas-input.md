@@ -3,7 +3,7 @@
 > **Ambito:** come la tela della lavagna prende la tastiera, il puntatore e
 > la rotella: entrare in una scheda e uscirne, la rotella, il catalogo dei
 > comandi e i loro tasti, la lavagna vuota, la colonna degli strumenti, la
-> riga delle opzioni e la banda di stato.
+> riga delle opzioni, la banda di stato e l'ispettore.
 > **Fonti autorevoli:** `apps/client/src/editors/canvas/engine.ts`
 > (`#keydown`, `#wheel`, le schede attive) e le prove in
 > `apps/client/src/editors/canvas/engine.test.ts` e
@@ -11,7 +11,8 @@
 > `apps/client/src/editors/canvas/chrome/commands.ts`, `command-search.ts`,
 > `rail.ts`, `options.ts` e le loro prove; per la lavagna vuota,
 > `chrome/empty.ts` ed `chrome/empty.test.ts`; per la banda, `chrome/status.ts` e
-> `engine-status.test.ts`.
+> `engine-status.test.ts`; per l'ispettore, `chrome/inspector.ts`,
+> `reading-order.ts` e le loro prove.
 
 Questa pagina viene da [Le schede della lavagna](canvas-cards.md), che tiene
 il contratto dei renderer.
@@ -260,3 +261,39 @@ disegna da `EditorSurface.status`; le voci vengono da `engine.statusItems()`
 
 La banda si rilegge a fine gesto: una rotella che gira non la tocca finché non
 si ferma, e una panoramica non ne cambia le voci.
+
+## L'ispettore
+
+La lavagna porta nell'ispettore dello Scrittoio le sue linguette
+(`EditorSurface.panels`, `chrome/inspector.ts`), come il disegno. Per ora ce
+n'è una, «Schede»; «Scheda», «Fili» e «Fonti» non ci sono ancora. Si offre
+solo con la tela in vista: nel Sorgente, o senza nucleo, l'ispettore non ha
+linguette della lavagna. Titoli, note a piè di pagina e proprietà, che di una
+lavagna non dicono niente, restano fuori (`covers`).
+
+«Schede» elenca tutte le schede in **ordine di lettura** (`readingOrder` in
+`reading-order.ts`, una regola pura):
+
+- una scheda sta in un gruppo se il suo rettangolo è tutto dentro quello del
+  gruppo, come quando la tela sposta un gruppo; conta il gruppo più piccolo che
+  la contiene. Due gruppi identici non si contengono a vicenda: quello sotto
+  (prima nell'array) contiene l'altro;
+- a ogni livello vengono prima i gruppi, poi le altre schede; dopo un gruppo
+  il suo contenuto, rientrato, con le stesse regole;
+- le schede vanno in righe, dall'alto in basso, e ogni riga da sinistra a
+  destra. Due schede stanno sulla stessa riga se si sovrappongono in altezza
+  per più di metà della più bassa; la riga la apre la scheda più in alto. A
+  parità di tutto viene prima quella sotto.
+
+Ogni riga ha la figura, il nome (l'etichetta del gruppo, la prima riga del
+testo, il file senza cartelle, l'host della pagina web) e la specie. Il filtro
+tiene le schede col nome che contiene ciò che si scrive (senza badare a
+maiuscole e accenti) e della specie scelta (note, testi, gruppi, PDF), coi
+gruppi che le contengono. Un clic, Invio o Spazio porta la vista sulla scheda
+e la sceglie (`revealSource` della tela, al byte dove comincia l'oggetto della
+scheda); la riga resta segnata finché la scelta della lavagna non cambia per
+un'altra strada. Le frecce, Inizio, Fine e PagSu/PagGiù muovono il fuoco fra
+le righe, con una sola fermata del Tab.
+
+L'elenco si rilegge a fine gesto (ogni commit) e quando arriva un testo nuovo.
+Oltre 500 righe disegna solo quelle che si vedono, più la fermata del Tab.
