@@ -463,9 +463,8 @@ describe("CanvasEngine", () => {
   });
 
   it("i colori sul nodo e sul filo vanno alla pelle: la chiave e il colore libero (T47)", () => {
-    // Un colore che non è un colore («7», «rosso») non arriva qui: il nucleo
-    // non apre la lavagna (`CanvasColor`), e `colors.test.ts` prova che la
-    // tela non lo disegnerebbe.
+    // Un colore che Fub non conosce («7», «rosso») non sta qui: lo prova il
+    // blocco T47b in fondo al file, e `colors.test.ts` che la tela non lo disegna.
     const source = JSON.stringify({
       nodes: [
         { id: "a", type: "text", x: 0, y: 0, width: 100, height: 80, text: "a", color: "3" },
@@ -2750,6 +2749,54 @@ describe("CanvasEngine: copia e incolla le schede (T68)", () => {
     selectAll(host);
     press({ key: "d", ctrlKey: true });
     expect(nodesOf(engine).slice(4).map((node) => [node.x, node.y])).toEqual([[72, 72], [120, 104], [168, 136], [216, 168]]);
+    engine.destroy();
+  });
+});
+
+describe("CanvasEngine: un colore che Fub non conosce non ferma la lavagna (T47b)", () => {
+  // «rosso», «7» e il vuoto non sono colori di Fub: il nucleo li tiene come
+  // sono, la tela non li disegna e non li segna nel menu.
+  const source = JSON.stringify({
+    nodes: [
+      { id: "a", type: "text", x: 0, y: 0, width: 100, height: 80, color: "rosso", text: "a" },
+      { id: "b", type: "text", x: 200, y: 0, width: 100, height: 80, color: "7", text: "b" },
+      { id: "c", type: "text", x: 400, y: 0, width: 100, height: 80, color: "", text: "c" },
+    ],
+    edges: [{ id: "e1", fromNode: "a", toNode: "b", color: "rosso" }],
+  });
+
+  it("si apre; la scheda e il filo non hanno colore, e aprire non scrive", () => {
+    const { engine, host, changes } = mounted(source);
+    expect(engine.getDoc()).toBe(source);
+    for (const id of ["a", "b", "c"]) {
+      const card = host.querySelector<HTMLElement>(`.canvas-node[data-node="${id}"]`)!;
+      expect(card).not.toBeNull();
+      expect(card.dataset.canvasColor).toBeUndefined();
+      expect(card.style.getPropertyValue("--canvas-color")).toBe("");
+    }
+    const edge = host.querySelector<SVGPathElement>('.canvas-edge-line[data-edge="e1"]')!.parentElement!;
+    expect(edge.dataset.canvasColor).toBeUndefined();
+    expect(changes).toHaveLength(0);
+    engine.destroy();
+  });
+
+  it("scegliere un colore lo sostituisce, e l'annulla riporta il testo di prima", () => {
+    const { engine, host, changes } = mounted(source);
+    host.querySelector<HTMLElement>(".canvas-viewport")!.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true }));
+    engine.commands().find((command) => command.id === "canvas.color.1")!.run();
+    expect(readCanvas(engine.getDoc()).nodes[0].color).toBe("1");
+    expect(changes).toHaveLength(1);
+    expect(engine.undo()).toBe(true);
+    expect(engine.getDoc()).toBe(source);
+    engine.destroy();
+  });
+
+  it("spostare la scheda riscrive soltanto la sua posizione: il colore che Fub non conosce resta com'era", () => {
+    const { engine, host } = mounted(source);
+    const viewport = host.querySelector<HTMLElement>(".canvas-viewport")!;
+    viewport.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true }));
+    viewport.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }));
+    expect(engine.getDoc()).toBe(source.replace('"x":0,"y":0,', '"x":0,"y":8,'));
     engine.destroy();
   });
 });
