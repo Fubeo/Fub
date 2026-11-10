@@ -2,13 +2,13 @@
 
 > **Ambito:** come la tela della lavagna prende la tastiera, il puntatore e
 > la rotella: entrare in una scheda e uscirne, la rotella, il catalogo dei
-> comandi e i loro tasti, la colonna degli strumenti.
+> comandi e i loro tasti, la colonna degli strumenti e la riga delle opzioni.
 > **Fonti autorevoli:** `apps/client/src/editors/canvas/engine.ts`
 > (`#keydown`, `#wheel`, le schede attive) e le prove in
 > `apps/client/src/editors/canvas/engine.test.ts` e
 > `engine-cards.test.ts`; per i comandi,
 > `apps/client/src/editors/canvas/chrome/commands.ts`, `command-search.ts`,
-> `rail.ts` e le loro prove.
+> `rail.ts`, `options.ts` e le loro prove.
 
 Questa pagina viene da [Le schede della lavagna](canvas-cards.md), che tiene
 il contratto dei renderer.
@@ -105,6 +105,7 @@ scrive, valgono quelli della sessione). `Esc` torna dov'eri, anche in un campo.
 | `canvas.fit`, `canvas.fit_selection` | `Maiusc+1`, `Ctrl+0`; `Maiusc+2` |
 | `canvas.zoom_in`, `canvas.zoom_out` | `+`, `Ctrl+=`; `-`, `Ctrl+-` |
 | `canvas.add.*`, `canvas.edit`, `canvas.open`, `canvas.open_url`, `canvas.edge.reverse`, `canvas.color.*`, `canvas.align.*`, `canvas.distribute_*` | nessuno |
+| `canvas.pen_menu`, `canvas.color_menu`, `canvas.align_menu`, `canvas.tips.none`, `.start`, `.end` (la riga delle opzioni) | nessuno |
 
 I tasti sono quelli della tabella «Tasti» della lavagna dove fanno la stessa
 cosa (ADR 0223), e nessuno è di due comandi. Un tasto senza `Ctrl` né `Alt`
@@ -134,3 +135,39 @@ conosce si salta, la Selezione sta sempre in cima, uno strumento tolto resta
 nei tasti e in `Ctrl+/`. In sola lettura gli strumenti che scrivono si vedono
 spenti col perché nel nome; Selezione e Mano restano. Con la finestra fino a
 700 px, o un riquadro fino a 480, la colonna va sotto la lavagna, in riga.
+
+## La riga delle opzioni
+
+Sopra la lavagna, nella testata (`.canvas-header`), sta la riga delle opzioni
+(`chrome/options.ts`, sulla barra delle opzioni del kit come quella del
+disegno). Che cosa mostra lo dice `canvasOptionsMode`, dallo strumento e dalle
+schede scelte:
+
+- **Penna, Evidenziatore, Gomma:** il pulsante del menu della penna di N4
+  (`pen-menu.ts`, il contenuto com'è); passare fra i tre dal menu non lo
+  chiude. `canvas.pen_menu` lo apre anche da `Ctrl+/`: con un altro
+  strumento prima sceglie quello della penna.
+- **Selezione con delle schede scelte:** il colore (un pozzo col colore e il
+  nome, «Colori diversi» se non sono uguali, che apre i colori
+  `canvas.color.*`) e Disponi: davanti, dietro, «Allinea e distribuisci»
+  (`canvas.align_menu`, spento con meno di due schede).
+- **Selezione senza schede, Testo, Collega:** una riga che spiega il gesto;
+  Collega ha le punte del filo che tira (`canvas.tips.*`: nessuna, all'inizio,
+  alla fine, quella di serie, che scrive `toEnd: "arrow"` come prima). La
+  punta scelta vale finché la lavagna resta aperta.
+- **In ogni riga** la Vista: riduci, ingrandisci, mostra tutto.
+
+Ogni controllo è un comando del catalogo: il nome e il tasto vengono da lì,
+uno spento si vede col perché (`aria-disabled`) e il clic non fa niente.
+Cambiando riga si chiudono il menu della penna e i menu che la riga ha
+aperto. Quando non c'è posto i controlli vanno in «…», prima la Vista. La
+riga è una `toolbar` con un solo punto di tabulazione e le frecce.
+
+Mentre si scrive dentro una scheda, chi scrive dà la sua barra con
+`CanvasEngine.setCardOptions(items)` e la riga la mostra al posto delle
+opzioni dello strumento; con `null` torna allo strumento. È il posto della
+barra di formato della nota (T41) e della formula della cella (T42).
+
+La barra di sotto, quella di N4, tiene ciò che non è ancora passato altrove:
+«Scrivi col mouse», aggiungi, duplica, togli, inquadra la selezione, i fili e
+il colore esatto (`#rrggbb`) delle schede.

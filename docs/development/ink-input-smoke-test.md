@@ -100,8 +100,9 @@ un segno prima che la penna tocchi, il ruolo è stato deciso troppo tardi.
 ## La lavagna
 
 Apri un file `.canvas` con una scheda di testo. Strumenti: la penna, la gomma
-(il retro della penna), il tasto D, il menu della penna e, subito dopo, il
-pulsante «Scrivi col mouse», in testa alla barra.
+(il retro della penna), il tasto D, il menu della penna (nella riga delle
+opzioni, con la Penna scelta nella colonna) e il pulsante «Scrivi col mouse»,
+in testa alla barra di sotto.
 
 | N. | Gesto | Atteso |
 |---|---|---|

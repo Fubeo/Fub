@@ -366,6 +366,7 @@ schede.
   spessore in pixel dello schermo e modo della gomma, dal tratto dopo
   (`inkLook`; `penLook` dà la copertura, `fill-opacity`). Lo stato di vista
   `canvas.pen` (versione 1; un campo rotto vale il suo di serie) lo ricorda.
+  Sta nella riga delle opzioni (`chrome/options.ts`, T50).
 - **La gomma.** Il retro della penna, il tasto laterale e la punta con la
   Gomma del menu (`tipErases`) tolgono il tratto intero (A20). `EraseSweep`
   cerca nei tratti disegnati portati in coordinate della lavagna
