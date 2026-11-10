@@ -3305,6 +3305,73 @@ body {
   pointer-events: none;
 }
 
+/* L'ispettore della lavagna (T58): le parti dentro il pannello. */
+.canvas-inspector {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.canvas-inspector-filter {
+  display: flex;
+}
+.canvas-inspector-filter > input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.canvas-inspector-filter > select {
+  flex: none;
+}
+.canvas-inspector-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.canvas-inspector-row {
+  display: flex;
+  align-items: center;
+  box-sizing: border-box;
+  width: 100%;
+  min-height: var(--row-h, 28px);
+  text-align: start;
+  cursor: default;
+}
+.canvas-inspector-row > svg {
+  flex: none;
+}
+.canvas-inspector-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.canvas-inspector-kind {
+  flex: none;
+}
+.canvas-inspector-row[data-depth="1"] {
+  padding-inline-start: 28px;
+}
+.canvas-inspector-row[data-depth="2"] {
+  padding-inline-start: 44px;
+}
+.canvas-inspector-row[data-depth="3"] {
+  padding-inline-start: 60px;
+}
+.canvas-inspector-row[data-depth="4"] {
+  padding-inline-start: 76px;
+}
+/* Oltre le cinquecento righe se ne disegnano solo alcune, al loro posto. */
+.canvas-inspector-list[data-virtual] {
+  position: relative;
+  display: block;
+}
+.canvas-inspector-list[data-virtual] > .canvas-inspector-row {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: var(--row-h, 28px);
+}
+
 .base-surface {
   display: flex;
   flex-direction: column;

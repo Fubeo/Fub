@@ -40,6 +40,7 @@ import type { PdfPorts } from "../spatial/pdf/surface";
 import type { Lifetime } from "../../ui/lifetime";
 import { api } from "../../host/ipc";
 import { createCanvasViewMemory } from "./view-state";
+import { createCanvasInspector } from "./chrome/inspector";
 
 // I descrittori stanno in un modulo leggero, che la shell legge all'avvio
 // senza caricare la lavagna.
@@ -187,13 +188,26 @@ export function mountCanvasSurface(
   const pendingWatchers = new Set<(pending: boolean) => void>();
   // Chi ascolta la banda di stato (T52): la shell, quando la lavagna ha il fuoco.
   const statusWatchers = new Set<() => void>();
+  // L'ispettore (T58): legge il testo della lavagna e porta la vista su una
+  // scheda per la strada di `reveal`. Si offre solo con la tela in vista.
+  const inspector = createCanvasInspector({
+    source: () => engine?.getDoc() ?? null,
+    reveal: (byte) => mode === "canvas" && engine !== null && engine.revealSource(byte),
+  });
+  const offerInspector = (): void => inspector.offer(!destroyed && !failed && engine !== null && mode === "canvas");
   const createEngine = (): CanvasEngine => new CanvasEngine(host, {
     surfaceId: context.paneId,
     formatId: context.formatId,
     revision: context.revision,
     documentId: context.documentId,
-    onChange: (change) => callbacks.onChange(context.paneId, change),
-    onSelectionChange: () => callbacks.onSelectionChange(context.paneId),
+    onChange: (change) => {
+      inspector.changed();
+      callbacks.onChange(context.paneId, change);
+    },
+    onSelectionChange: () => {
+      inspector.selectionChanged();
+      callbacks.onSelectionChange(context.paneId);
+    },
     onOpenWikilink: callbacks.onOpenWikilink,
     onOpenPath: callbacks.onOpenPath,
     ...(callbacks.onOpenPathBeside ? { onOpenPathBeside: callbacks.onOpenPathBeside } : {}),
@@ -247,6 +261,8 @@ export function mountCanvasSurface(
       notify(t("document.reveal_unavailable", { doc: docTitle(context.documentId) }), "info");
     }
     heldReveal = null;
+    inspector.changed();
+    offerInspector();
   };
   // Il testo tenuto durante il caricamento non è una lavagna: lo stesso esito
   // di un `setDoc` che lancia, la superficie d'errore della shell. Il motore
@@ -255,6 +271,7 @@ export function mountCanvasSurface(
     if (destroyed) return;
     engine?.destroy();
     engine = null;
+    offerInspector();
     if (callbacks.onFail) callbacks.onFail(context.paneId, error);
     else fail(error);
   };
@@ -272,6 +289,7 @@ export function mountCanvasSurface(
     notice.append(text);
     host.replaceChildren(notice);
     failed = true;
+    offerInspector();
     source.hidden = false;
     notify(errorText(error), "guasto");
   };
@@ -300,11 +318,16 @@ export function mountCanvasSurface(
       host.hidden = next === "source";
       // Senza tela il testo resta in vista.
       source.hidden = next !== "source" && !failed;
+      offerInspector();
     },
     buffer: {
       setDoc: (text: string): void => {
         source.textContent = canvasSourceFallback(text);
-        if (engine) return engine.setDoc(text);
+        if (engine) {
+          engine.setDoc(text);
+          inspector.changed();
+          return;
+        }
         // Mentre il nucleo si carica il testo si tiene: se non è una lavagna,
         // `settle` lo dice alla shell (`onFail`), che mostra la superficie
         // d'errore come per un `setDoc` che lancia.
@@ -314,6 +337,7 @@ export function mountCanvasSurface(
         const text = typeof update === "string" ? update : update.text;
         if (engine) engine.syncDoc(update);
         else held = text;
+        inspector.changed();
         source.textContent = canvasSourceFallback(text);
       },
       getDoc: (): string => engine?.getDoc() ?? held ?? "",
@@ -353,6 +377,8 @@ export function mountCanvasSurface(
     // Le carte scelte, col loro testo; il sorgente grezzo non seleziona niente.
     selectedText: () => mode === "canvas" ? engine?.selectedText() ?? null : null,
     contextMenu: (at) => mode === "canvas" ? engine?.contextMenu(at) ?? null : null,
+    // «Schede» nell'ispettore (T58), come le linguette del disegno.
+    panels: inspector.panels,
     // La stampa la disegna il provider del canvas (`render_html`).
     printable: true,
     setReadOnly: (readOnly: boolean): void => {
@@ -374,6 +400,7 @@ export function mountCanvasSurface(
       engine = null;
       pendingWatchers.clear();
       statusWatchers.clear();
+      inspector.dispose();
     },
   };
   surface.setMode(mode);

@@ -864,6 +864,14 @@
     "canvas-pen-width",
     "canvas-pen-width-value",
     "canvas-pen-width-preview",
+    "canvas-inspector",
+    "canvas-inspector-filter",
+    "canvas-inspector-heading",
+    "canvas-inspector-list",
+    "canvas-inspector-row",
+    "canvas-inspector-name",
+    "canvas-inspector-kind",
+    "canvas-inspector-note",
     "canvas-node",
     "canvas-node-group",
     "canvas-node-handle",
@@ -2469,6 +2477,14 @@
     "canvas-pen-width": "cornice",
     "canvas-pen-width-value": "cornice",
     "canvas-pen-width-preview": "cornice",
+    "canvas-inspector": "cornice",
+    "canvas-inspector-filter": "cornice",
+    "canvas-inspector-heading": "cornice",
+    "canvas-inspector-list": "cornice",
+    "canvas-inspector-row": "cornice",
+    "canvas-inspector-name": "cornice",
+    "canvas-inspector-kind": "cornice",
+    "canvas-inspector-note": "cornice",
     "canvas-node": "contenuto",
     "canvas-node-group": "contenuto",
     "canvas-node-handle": "segno",
@@ -5525,6 +5541,26 @@
         "pressed",
         "focused",
         "disabled",
+        "selected"
+      ]
+    },
+    {
+      "name": "canvas-inspector",
+      "part": "editors",
+      "hooks": [
+        "canvas-inspector",
+        "canvas-inspector-filter",
+        "canvas-inspector-heading",
+        "canvas-inspector-list",
+        "canvas-inspector-row",
+        "canvas-inspector-name",
+        "canvas-inspector-kind",
+        "canvas-inspector-note"
+      ],
+      "states": [
+        "rest",
+        "hover",
+        "focused",
         "selected"
       ]
     },
@@ -8809,10 +8845,10 @@
   "counts": {
     "required_roles": 154,
     "optional_roles": 63,
-    "hooks": 1603,
+    "hooks": 1611,
     "state_names": 7,
-    "assigned_states": 756,
-    "components": 224,
+    "assigned_states": 760,
+    "components": 225,
     "preference_tokens": 186
   }
 }
