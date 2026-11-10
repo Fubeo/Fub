@@ -4175,7 +4175,24 @@ in un'altra lavagna con fili e inchiostro, taglia, un solo annulla e
 Ctrl+D ripetuto.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/canvas
-Stato: [ ] da fare
+Stato: [x] fatto (2026-11-10), tranne il caso limite del tratto libero
+copiato insieme alle schede: nessuna selezione prende oggi i tratti liberi
+e la forma `{ version, nodes, edges }` non ha un posto per loro; la scelta
+(un campo `fub:ink` alla radice della forma, o niente) è chiesta
+all'utente, perché la forma è letta anche da altri programmi. Differenze:
+Ctrl+C e Ctrl+X si ascoltano su `document` e la lavagna li prende solo col
+fuoco suo (niente campo, scheda attiva o testo scelto); un incolla fuori
+dalla vista, col fuoco sulla lavagna, passa da `#intake`. Il menu del tasto
+destro ha Taglia, Copia, Incolla (sul vuoto Incolla): con
+`execCommand("copy")`, e dove non parte il Markdown più
+`web application/x-fub-canvas+json` dove la shell lo accetta. Ctrl+D non
+ripeteva lo spostamento: ora ripete la distanza fra le copie dell'ultimo
+Ctrl+D e le loro schede di partenza. Un JSON rotto senza `text/plain` si
+incolla come testo. Integrando: «Incolla» della lavagna vuota (T62) e del
+menu leggono le schede di Fub con lo stesso `transferOf`; il nome
+`canvas-text` aggiunto in `theme/author/icon-names.json` (lo chiedeva
+`icon-names.test.ts` dopo la correzione di T62). Copia e incolla provati in
+happy-dom, non in WebKitGTK o WebView2.
 
 ## T69 · A chi appartiene un tratto
 
