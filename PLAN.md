@@ -3222,7 +3222,7 @@ sezione e una pagina, la voce nel tasto destro di una cella, e il
 riquadro già aperto.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/canvas/engine.test.ts
-Stato: [ ] da fare
+Stato: [~] in corso · coder Opus · base 22514344d
 
 ## T46 · Le misure dopo la modifica
 
