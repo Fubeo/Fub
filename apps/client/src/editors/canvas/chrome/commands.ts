@@ -166,6 +166,12 @@ export const CANVAS_COMMANDS: readonly CanvasCommandSpec[] = [
   ...CANVAS_NUDGE.map((way): CanvasCommandSpec => ({
     id: `canvas.nudge.${way}.far`, label: `canvas.commands.nudge.${way}.far`, group: "selection", keys: [`Shift-${ARROW[way]}`], context: "selection",
   })),
+  // Di 1 con Alt+Maiusc (A-23, T61); Alt da solo va alla scheda vicina. Solo
+  // sulla lavagna: in un campo Alt+Maiusc+frecce sceglie il testo.
+  ...CANVAS_NUDGE.map((way): CanvasCommandSpec => ({
+    id: `canvas.nudge.${way}.fine`, label: `canvas.commands.nudge.${way}.fine`, group: "selection", keys: [`Alt-Shift-${ARROW[way]}`], context: "selection",
+    boardKeys: true,
+  })),
   { id: "canvas.edge.reverse", label: "canvas_menu.reverse", group: "selection", keys: [], context: "selection" },
   // Toglie le schede dalla lavagna, mai i loro file (T17).
   { id: "canvas.delete", label: "canvas.card.remove", group: "selection", keys: ["Delete", "Backspace"], context: "selection", danger: true },

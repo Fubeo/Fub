@@ -492,11 +492,18 @@ describe("CanvasEngine", () => {
     expect(node("e").dataset.canvasColor).toBeUndefined();
     // Nessun fondo in linea: la carta la dà la pelle.
     for (const id of ["a", "b", "c", "e"]) expect(node(id).style.background).toBe("");
-    // Il nome del colore arriva a chi ascolta.
-    expect(node("a").getAttribute("aria-label")).toBe(`text a, ${t("canvas.options.color_value", { name: "Giallo" })}`);
-    expect(node("b").getAttribute("aria-label")).toBe(`text b, ${t("canvas.options.color_value", { name: "Blu delle note" })}`);
-    expect(node("c").getAttribute("aria-label")).toBe(`text c, ${t("canvas.options.color_value", { name: "#abc" })}`);
-    expect(node("e").getAttribute("aria-label")).toBe("text e");
+    // Il nome del colore arriva a chi ascolta, in coda al nome della scheda
+    // (T61), che la scheda col fuoco ha subito.
+    const label = (id: string): string => {
+      node(id).focus();
+      return node(id).getAttribute("aria-label") ?? "";
+    };
+    const color = (name: string): string => ` ${t("canvas.options.color_value", { name })}.`;
+    expect(label("e")).toBe(`${t("canvas_menu.header", { kind: t("canvas_menu.kind.text") })} e.`);
+    expect(label("b").endsWith(color("Blu delle note"))).toBe(true);
+    expect(label("c").endsWith(color("#abc"))).toBe(true);
+    // «a» per ultima: col fuoco è la scheda scelta, a cui si toglie il colore.
+    expect(label("a").endsWith(color("Giallo"))).toBe(true);
     const edge = (id: string) => host.querySelector<SVGPathElement>(`.canvas-edge-line[data-edge="${id}"]`)!.parentElement!;
     expect(edge("e1").dataset.canvasColor).toBe("5");
     expect(edge("e2").dataset.canvasColor).toBe("custom");
@@ -5560,6 +5567,8 @@ describe("CanvasEngine: il menu radiale e i gesti (T63)", () => {
       const { engine, host } = mounted();
       run(engine, "canvas.select_all");
       run(engine, "canvas.delete");
+      // Il commit lo dice la regione viva (T61); le dita dopo non dicono niente.
+      const told = said(host);
       const viewport = viewportOf(host);
       const a = finger(host, 61, viewport, 600, 400);
       const b = finger(host, 62, viewport, 700, 400);
@@ -5575,7 +5584,7 @@ describe("CanvasEngine: il menu radiale e i gesti (T63)", () => {
       c.up();
       d.up();
       expect(nodeIds(engine)).toEqual([]);
-      expect(said(host)).toBe("");
+      expect(said(host)).toBe(told);
       engine.destroy();
     });
 
@@ -5624,6 +5633,203 @@ describe("CanvasEngine: il menu radiale e i gesti (T63)", () => {
     // Un documento nuovo chiude il menu dell'altro.
     engine.setDoc(canvasSource());
     expect(radial()).toBeNull();
+    engine.destroy();
+  });
+});
+
+describe("CanvasEngine: tutto da tastiera e col lettore di schermo (T61)", () => {
+  // L'ordine di lettura di `canvasSource`: il gruppo «Idee» (g), la pagina web
+  // che contiene (w), poi la riga di sopra: il testo (t) e la foto (f).
+  const viewportOf = (host: HTMLElement): HTMLElement => host.querySelector<HTMLElement>(".canvas-viewport")!;
+  const cardOf = (host: HTMLElement, id: string): HTMLElement => host.querySelector<HTMLElement>(`.canvas-node[data-node="${id}"]`)!;
+  const focusedCard = (): string | null => (document.activeElement as HTMLElement | null)?.dataset.node ?? null;
+  const said = (host: HTMLElement): string => host.querySelector(".canvas-gesture-said")?.textContent?.trim() ?? "";
+  const textTitle = (name: string): string => `${t("canvas_menu.header", { kind: t("canvas_menu.kind.text") })} ${name}`;
+  const webTitle = `${t("canvas_menu.header", { kind: t("canvas_menu.kind.web") })} example.com`;
+  const run = (engine: CanvasEngine, id: string): void => engine.commands().find((command) => command.id === id)!.run();
+
+  beforeEach(() => setReducedMotionPreference(true));
+  afterEach(() => setReducedMotionPreference(false));
+
+  it("Tab e Maiusc+Tab percorrono le schede in ordine di lettura; il fuoco e la scelta seguono", () => {
+    const { engine, host } = mounted();
+    const viewport = viewportOf(host);
+    viewport.focus();
+    const visited: Array<string | null> = [];
+    for (let i = 0; i < 4; i++) {
+      expect(press(document.activeElement as HTMLElement, "Tab").defaultPrevented).toBe(true);
+      visited.push(focusedCard());
+      expect(engine.selection().nodes).toEqual([focusedCard()]);
+    }
+    expect(visited).toEqual(["g", "w", "t", "f"]);
+    expect(press(cardOf(host, "f"), "Tab", { shiftKey: true }).defaultPrevented).toBe(true);
+    expect(focusedCard()).toBe("t");
+    // Prima della prima scheda si torna alla lavagna; da lì Maiusc+Tab esce come sempre.
+    cardOf(host, "g").focus();
+    expect(press(cardOf(host, "g"), "Tab", { shiftKey: true }).defaultPrevented).toBe(true);
+    expect(document.activeElement).toBe(viewport);
+    expect(press(viewport, "Tab", { shiftKey: true }).defaultPrevented).toBe(false);
+    // Dalla lavagna Tab torna alla scheda scelta.
+    expect(engine.selection().nodes).toEqual(["g"]);
+    press(viewport, "Tab");
+    expect(focusedCard()).toBe("g");
+    engine.destroy();
+  });
+
+  it("Tab dopo l'ultima scheda esce dalla vista; la lavagna vuota e un campo aperto non lo prendono", () => {
+    const { engine, host } = mounted();
+    const after = document.createElement("button");
+    document.body.append(after);
+    cardOf(host, "f").focus();
+    expect(press(cardOf(host, "f"), "Tab").defaultPrevented).toBe(true);
+    expect(viewportOf(host).contains(document.activeElement)).toBe(false);
+    expect(document.activeElement).not.toBe(document.body);
+    // Una scheda in scrittura: il Tab è del campo (Esc prima).
+    const field = openField(host, "t");
+    expect(press(field, "Tab").defaultPrevented).toBe(false);
+    engine.destroy();
+    const empty = mounted(JSON.stringify({ nodes: [], edges: [] }));
+    viewportOf(empty.host).focus();
+    expect(press(viewportOf(empty.host), "Tab").defaultPrevented).toBe(false);
+    empty.engine.destroy();
+  });
+
+  it("Tab porta in vista una scheda lontana, senza volo col movimento ridotto e senza un salto di Indietro", () => {
+    const source = JSON.stringify({
+      nodes: [
+        { id: "a", type: "text", x: 0, y: 0, width: 200, height: 100, text: "Qui" },
+        { id: "b", type: "text", x: 6000, y: 0, width: 200, height: 100, text: "Lontano" },
+      ],
+      edges: [],
+    });
+    const { engine, host } = mounted(source);
+    const stage = host.querySelector<HTMLElement>(".canvas-stage")!;
+    const camera = (): { x: number; zoom: number } => {
+      const match = /translate\((-?[\d.e+-]+)px, (-?[\d.e+-]+)px\) scale\(([\d.e+-]+)\)/.exec(stage.style.transform)!;
+      return { x: Number(match[1]), zoom: Number(match[3]) };
+    };
+    // Da vicino, così la scheda lontana è fuori dalla vista.
+    run(engine, "canvas.zoom_reset");
+    cardOf(host, "a").focus();
+    const before = stage.style.transform;
+    press(cardOf(host, "a"), "Tab");
+    expect(focusedCard()).toBe("b");
+    expect(stage.style.transform).not.toBe(before);
+    // Il centro della scheda al centro della vista (800 di riserva in happy-dom).
+    expect(camera().x + (6000 + 100) * camera().zoom).toBeCloseTo(400);
+    // Un passo della tastiera non è un salto da cui Indietro torna (T56).
+    expect(engine.jumpBack()).toBe(true);
+    expect(engine.jumpBack()).toBe(false);
+    engine.destroy();
+  });
+
+  it("Alt+↑ e Alt+↓ vanno alla scheda più vicina; Alt+← e Alt+→ restano dello Scrittoio", () => {
+    const { engine, host } = mounted();
+    cardOf(host, "t").focus();
+    expect(press(cardOf(host, "t"), "ArrowDown", { altKey: true }).defaultPrevented).toBe(true);
+    expect(focusedCard()).toBe("g");
+    // Sopra il gruppo il testo e la foto sono alla stessa distanza: vince il
+    // testo, prima nell'ordine di lettura.
+    press(cardOf(host, "g"), "ArrowUp", { altKey: true });
+    expect(focusedCard()).toBe("t");
+    // Sopra il testo non c'è niente: lo dice la regione viva.
+    press(cardOf(host, "t"), "ArrowUp", { altKey: true });
+    expect(focusedCard()).toBe("t");
+    expect(said(host)).toBe(t("canvas.a11y.none_that_way"));
+    // Indietro e Avanti (T56): la lavagna non li prende.
+    expect(press(cardOf(host, "t"), "ArrowLeft", { altKey: true }).defaultPrevented).toBe(false);
+    expect(press(cardOf(host, "t"), "ArrowRight", { altKey: true }).defaultPrevented).toBe(false);
+    expect(focusedCard()).toBe("t");
+    // Senza fuoco su una scheda né scelta, Alt+↓ prende la prima.
+    run(engine, "canvas.escape");
+    viewportOf(host).focus();
+    press(viewportOf(host), "ArrowDown", { altKey: true });
+    expect(focusedCard()).toBe("g");
+    engine.destroy();
+  });
+
+  it("le frecce spostano di 8 e Alt+Maiusc+frecce di 1 (A-23); spostare e togliere si annunciano", () => {
+    const { engine, host } = mounted();
+    const x = (): number => engine.doc()!.nodes.find((node) => node.id === "t")!.x;
+    cardOf(host, "t").focus();
+    press(cardOf(host, "t"), "ArrowRight");
+    expect(x()).toBe(48);
+    expect(press(cardOf(host, "t"), "ArrowRight", { altKey: true, shiftKey: true }).defaultPrevented).toBe(true);
+    expect(x()).toBe(49);
+    press(cardOf(host, "t"), "ArrowLeft", { altKey: true, shiftKey: true });
+    expect(x()).toBe(48);
+    expect(said(host)).toBe(t("canvas.a11y.moved_one", { name: textTitle("vedi Altra e #tag") }));
+    run(engine, "canvas.delete");
+    expect(said(host)).toBe(t("canvas.a11y.removed_one", { name: textTitle("vedi Altra e #tag") }));
+    engine.destroy();
+  });
+
+  it("F6 passa dalla lavagna alla colonna e alla riga, poi lascia la strada alla shell", () => {
+    const { engine, host } = mounted();
+    const rail = host.querySelector<HTMLElement>(".canvas-rail")!;
+    const options = host.querySelector<HTMLElement>(".canvas-options")!;
+    const navigator = host.querySelector<HTMLElement>(".canvas-navigator");
+    cardOf(host, "t").focus();
+    const steps: string[] = [];
+    while (steps.length < 6 && engine.zone(1)) {
+      const active = document.activeElement;
+      steps.push(rail.contains(active) ? "colonna" : options.contains(active) ? "riga" : navigator?.contains(active) ? "navigatore" : "altro");
+    }
+    expect(steps.filter((step) => step !== "navigatore")).toEqual(["colonna", "riga"]);
+    // Maiusc+F6 torna indietro fino alla lavagna, e da lì esce.
+    let back = 0;
+    while (back < 6 && document.activeElement !== viewportOf(host) && engine.zone(-1)) back++;
+    expect(document.activeElement).toBe(viewportOf(host));
+    expect(engine.zone(-1)).toBe(false);
+    engine.destroy();
+  });
+
+  it("Maiusc+F10 sulla scheda raggiunta col Tab apre il suo menu", () => {
+    const { engine, host } = mounted();
+    viewportOf(host).focus();
+    for (let i = 0; i < 3; i++) press(document.activeElement as HTMLElement, "Tab");
+    expect(focusedCard()).toBe("t");
+    // Maiusc+F10 non ha un punto: il menu è quello della scelta.
+    const menu = engine.contextMenu(null)!;
+    expect(menu.target).toMatchObject({ kind: "node", ref: "t", label: t("canvas_menu.header", { kind: t("canvas_menu.kind.text") }) });
+    engine.destroy();
+  });
+
+  it("il nome della scheda col fuoco dice gruppo e fili; gli altri arrivano a thread libero, solo quando cambiano", async () => {
+    const { engine, host } = mounted();
+    cardOf(host, "w").focus();
+    expect(cardOf(host, "w").getAttribute("aria-label")).toBe(`${webTitle}, ${t("canvas.a11y.in_group", { name: "Idee" })}.`);
+    await vi.waitFor(() => expect(cardOf(host, "t").getAttribute("aria-label")).toBe(
+      `${textTitle("vedi Altra e #tag")}, ${t("canvas.a11y.linked_one", { name: "foto.png, usa" })}.`,
+    ));
+    // Una resa senza un documento nuovo (la scelta che cambia) non riscrive i nomi.
+    const writes: string[] = [];
+    const observer = new MutationObserver((records) => {
+      for (const record of records) {
+        const card = record.target as HTMLElement;
+        if (card.classList.contains("canvas-node")) writes.push(card.dataset.node ?? "");
+      }
+    });
+    observer.observe(host, { attributes: true, attributeFilter: ["aria-label"], subtree: true });
+    run(engine, "canvas.select_all");
+    run(engine, "canvas.escape");
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(writes).toEqual([]);
+    // Un filo nuovo cambia il nome delle due schede che tocca, e solo quello.
+    engine.commitPatches([{ kind: "upsert-edge", before: null, after: { id: "e2", fromNode: "w", toNode: "t" } }]);
+    expect(said(host)).toBe(t("canvas.a11y.linked_now", { from: webTitle, to: textTitle("vedi Altra e #tag") }));
+    await vi.waitFor(() => expect(new Set(writes)).toEqual(new Set(["w", "t"])));
+    observer.disconnect();
+    engine.destroy();
+  });
+
+  it("con più schede di un passo il giro dei nomi riprende fino all'ultima", async () => {
+    const nodes = Array.from({ length: 600 }, (_, i) => ({
+      id: `n${i}`, type: "text", x: (i % 30) * 120, y: Math.floor(i / 30) * 80, width: 100, height: 60, text: `Scheda ${i}`,
+    }));
+    const { engine, host } = mounted(JSON.stringify({ nodes, edges: [] }));
+    await vi.waitFor(() => expect(cardOf(host, "n599").getAttribute("aria-label")).toBe(`${textTitle("Scheda 599")}.`));
+    expect(host.querySelectorAll(".canvas-node:not([aria-label])")).toHaveLength(0);
     engine.destroy();
   });
 });

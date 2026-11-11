@@ -322,12 +322,24 @@ describe("il navigatore sulla lavagna", () => {
     expect(cameraOf(host)).toEqual({ ...before, x: before.x - 800 * NAVIGATOR_KEY_STEP });
     key(navigator, { key: "ArrowUp" });
     expect(cameraOf(host).y).toBeCloseTo(before.y + 600 * NAVIGATOR_KEY_STEP);
-    // Dopo il navigatore F6 esce dalla lavagna; indietro torna alla vista.
+    // Dopo il navigatore vengono la colonna e la riga (T61), poi F6 esce dalla
+    // lavagna; indietro torna al navigatore e alla vista.
+    const rail = host.querySelector<HTMLElement>(".canvas-rail")!;
+    const options = host.querySelector<HTMLElement>(".canvas-options")!;
+    expect(engine.zone(1)).toBe(true);
+    expect(rail.contains(document.activeElement)).toBe(true);
+    expect(engine.zone(1)).toBe(true);
+    expect(options.contains(document.activeElement)).toBe(true);
     expect(engine.zone(1)).toBe(false);
     expect(engine.zone(-1)).toBe(true);
+    expect(rail.contains(document.activeElement)).toBe(true);
+    expect(engine.zone(-1)).toBe(true);
+    expect(document.activeElement).toBe(navigator);
+    expect(engine.zone(-1)).toBe(true);
     expect(document.activeElement).toBe(viewport);
-    // Senza navigatore la vista è la sola zona.
+    // Senza navigatore dalla vista si va alla colonna.
     engine.commands().find((command) => command.id === "canvas.navigator.hide")!.run();
-    expect(engine.zone(1)).toBe(false);
+    expect(engine.zone(1)).toBe(true);
+    expect(rail.contains(document.activeElement)).toBe(true);
   });
 });

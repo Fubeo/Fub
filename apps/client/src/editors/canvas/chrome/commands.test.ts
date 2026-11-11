@@ -39,6 +39,7 @@ const STABLE_IDS = [
   "canvas.open_beside", "canvas.open_viewer", "canvas.web_preview", "canvas.connect", "canvas.spread_pages", "canvas.parts",
   "canvas.nudge.left", "canvas.nudge.right", "canvas.nudge.up", "canvas.nudge.down",
   "canvas.nudge.left.far", "canvas.nudge.right.far", "canvas.nudge.up.far", "canvas.nudge.down.far",
+  "canvas.nudge.left.fine", "canvas.nudge.right.fine", "canvas.nudge.up.fine", "canvas.nudge.down.fine",
   "canvas.edge.reverse", "canvas.delete", "canvas.trash_file",
   "canvas.color.none", "canvas.color.1", "canvas.color.2", "canvas.color.3", "canvas.color.4", "canvas.color.5", "canvas.color.6",
   "canvas.color.gray", "canvas.color.brown", "canvas.color.orange", "canvas.color.yellow", "canvas.color.green",

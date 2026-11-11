@@ -6,11 +6,12 @@ import { clipboardSupports, readClipboard, writeClipboardData, writeClipboardTex
 import { lineFeeds, operationFromText, type EditorChangeOrigin, type TextOperation } from "../core/text-operation";
 import { idleSchedule } from "../../ink/dom/idle";
 import type { InkPointerType } from "../../ink/input/pointer";
-import { PenQuiet } from "../../ink/quiet";
+import { PenQuiet, type Schedule } from "../../ink/quiet";
 import type { InkSample } from "../../ink/sample";
 import { ERASER } from "../../ink/tools/eraser";
 import { EraseSweep, type Spot } from "../../ink/tools/sweep";
 import { openLifetime, type Lifetime } from "../../ui/lifetime";
+import { focusableElements, focusZone } from "../../ui/a11y";
 import { mediaKindOfId } from "../media/media-types";
 import { anchorAt, strokeBounds, StrokeBox, type Bounds } from "./anchor";
 import { parseTsv } from "../core/tsv";
@@ -39,6 +40,7 @@ import {
   type Rect,
 } from "./cards";
 import { textCardName } from "./card-name";
+import { boardReading, cardLabel, changeAnnouncement, nearestCard, stepInOrder, type BoardReading, type CardDirection } from "./a11y";
 import { applyCardDetails, cardDetail, detailLevel, farTitle, type CardDetail } from "./lod";
 import {
   cutInk,
@@ -123,7 +125,6 @@ import {
   colorChoiceOf,
   colorLook,
   colorMenuLabel,
-  colorName,
   colorValueOf,
   writeColor,
   type CanvasColorChoice,
@@ -226,6 +227,21 @@ function wheelPixels(delta: number, deltaMode: number, page: number): number {
 
 /** I tasti che una scheda scelta e non attiva può prendere (`CardView.key`, T14). */
 const CARD_KEYS: ReadonlySet<string> = new Set(["PageUp", "PageDown", "Home", "End"]);
+
+/**
+ * Le frecce che con Alt vanno alla scheda più vicina (T61, M1). Alt+← e Alt+→
+ * non ci sono: sono Indietro e Avanti dello Scrittoio (DECISIONS.md, T56).
+ */
+const NEAREST_CARD_KEYS: ReadonlyMap<string, CardDirection> = new Map([["ArrowUp", "up"], ["ArrowDown", "down"]]);
+
+/**
+ * Quante schede nomina un passo del giro dei nomi (T61), fra un momento libero
+ * del thread e l'altro. Misurato in Vitest (Node, non la WebView) sul PC di
+ * sviluppo, con 2000 schede, 2000 fili e 50 gruppi: 7–9 ms per tutti i nomi
+ * più 2–4 ms per la lettura (`boardReading`, una volta per documento), cioè
+ * circa 1 ms ogni 250 nomi.
+ */
+const LABEL_BATCH = 250;
 
 /** Le specie in cui il doppio clic entra, come Invio (T14). */
 const DOUBLE_CLICK_ENTERS: ReadonlySet<CardKind> = new Set(["note", "document", "sheet"]);
@@ -775,6 +791,8 @@ interface CardEntry {
    * il renderer l'ha detto. `null` se il file c'è, o non si sa.
    */
   missingFor: string | null;
+  /** Il nome per il lettore di schermo scritto adesso su `article` (T61); `null` se non ancora. */
+  label: string | null;
 }
 
 interface Viewport {
@@ -1503,6 +1521,16 @@ export class CanvasEngine {
   /** La regione viva dei gesti, e il suo spazio alterno per ridire la stessa frase. */
   #gestureSaid: HTMLElement | null = null;
   #gestureEcho = false;
+  // --- tastiera e lettore di schermo (T61) ---
+  /** La lettura della lavagna (ordine, gruppi, fili) del documento `doc`: si rifà solo se il documento cambia. */
+  #reading: { readonly doc: CanvasDocument; readonly value: BoardReading } | null = null;
+  /** I nomi delle schede sono scritti per questo documento e questa lingua; `stale` dopo una scheda nuova. */
+  #labelled: { doc: CanvasDocument | null; round: number; stale: boolean } = { doc: null, round: -1, stale: true };
+  /** La scrittura dei nomi rimandata a quando il thread è libero, se ce n'è una in attesa. */
+  #labelsPending: (() => void) | null = null;
+  /** Il giro dei nomi a metà: le schede da nominare e fin dove è arrivato. */
+  #labelRun: { readonly doc: CanvasDocument; readonly round: number; readonly queue: readonly CardEntry[]; at: number } | null = null;
+  readonly #labelsSchedule: Schedule;
   /** «La rotella del mouse» dalle Impostazioni: `pan` di serie, come prima di T35. */
   #wheelSetting: WheelAction = DEFAULT_PREFERENCES.wheel;
   // --- il selettore delle sezioni (T74) ---
@@ -1674,6 +1702,7 @@ export class CanvasEngine {
       ? new CanvasViewRecorder(options.viewMemory, options.documentId, () => this.#viewSnapshot())
       : null;
     this.#quiet = new PenQuiet(idleSchedule(this.#life));
+    this.#labelsSchedule = idleSchedule(this.#life);
     this.#life.add(() => this.#quiet.dispose());
     if (!options.fingerMovesCard) {
       this.#life.add(watchPreferences((preferences) => {
@@ -1861,6 +1890,7 @@ export class CanvasEngine {
     this.#stopLanguage = onLanguage(() => {
       // I corpi di sempre hanno parole: alla prossima resa si rifanno.
       this.#languageRound++;
+      this.#scheduleLabels();
       this.#viewport.setAttribute("aria-label", t("canvas.surface"));
       this.#toolbar.setAttribute("aria-label", t("canvas.surface"));
       this.#drawToolbar();
@@ -2548,7 +2578,12 @@ export class CanvasEngine {
   /** Un gesto della tela: prima il testo in sospeso, poi le sue toppe, un passo d'annulla. */
   #commit(patches: readonly CanvasPatch[], origin: EditorChangeOrigin): boolean {
     this.#recordPending();
-    return this.#commitLocal(patches, origin, (step) => this.#pushUndo(step, true)) === true;
+    const done = this.#commitLocal(patches, origin, (step) => this.#pushUndo(step, true)) === true;
+    // Una scheda tolta, un filo nuovo, una scheda spostata: lo dice la regione
+    // viva della tela (T61).
+    const said = done && this.#doc ? changeAnnouncement(patches, this.#doc) : null;
+    if (said !== null) this.#sayGesture(said);
+    return done;
   }
 
   #pushUndo(step: CanvasStep, fresh: boolean): void {
@@ -4428,16 +4463,182 @@ export class CanvasEngine {
   }
 
   /**
-   * F6 dentro la lavagna (`EditorSurface.zone`): la vista, poi il navigatore
-   * se si vede (T55). `false` quando non resta una zona da quella parte.
+   * F6 dentro la lavagna (`EditorSurface.zone`): la vista, il navigatore se si
+   * vede (T55), la colonna degli strumenti e la riga delle opzioni (T61); dopo,
+   * la shell passa all'ispettore. `false` quando non resta una zona da quella
+   * parte. La vista e il navigatore prendono il fuoco loro; la colonna e la
+   * riga lo danno al controllo che il Tab raggiunge (`focusZone`).
    */
   zone(step: 1 | -1): boolean {
     if (this.#destroyed) return false;
-    const zones = [this.#viewport, this.#navigator.element].filter((zone) => !zone.hidden);
+    const own = new Set<HTMLElement>([this.#viewport, this.#navigator.element]);
+    const zones = [this.#viewport, this.#navigator.element, this.#rail.element, this.#canvasOptions.element]
+      .filter((zone) => zone.closest("[hidden]") === null);
     const at = zones.findIndex((zone) => zone.contains(document.activeElement));
     const target = zones[at < 0 ? (step > 0 ? 0 : zones.length - 1) : at + step];
     if (target === undefined) return false;
-    target.focus();
+    if (own.has(target)) target.focus();
+    else focusZone(target);
+    return true;
+  }
+
+  // --- tastiera e lettore di schermo (T61) ------------------------------------
+
+  /** La lettura della lavagna di adesso (`boardReading`): si rifà solo se il documento è cambiato. */
+  #boardReading(): BoardReading | null {
+    const doc = this.#doc;
+    if (!doc) return null;
+    if (this.#reading?.doc !== doc) this.#reading = { doc, value: boardReading(doc) };
+    return this.#reading.value;
+  }
+
+  /** I nomi scritti sulle schede sono quelli del documento e della lingua di adesso. */
+  #labelsCurrent(): boolean {
+    const done = this.#labelled;
+    return !done.stale && done.doc === this.#doc && done.round === this.#languageRound;
+  }
+
+  /**
+   * I nomi delle schede vecchi (un documento nuovo, una scheda nuova, un'altra
+   * lingua): li riscrive quando il thread è libero, non durante la resa. La
+   * scheda che prende il fuoco prima non aspetta: il suo lo scrive subito.
+   */
+  #scheduleLabels(): void {
+    if (this.#labelsPending !== null || this.#destroyed || this.#labelsCurrent()) return;
+    this.#labelsPending = this.#labelsSchedule(() => this.#labelStep());
+  }
+
+  /**
+   * Un passo del giro dei nomi: `LABEL_BATCH` schede, poi il thread torna
+   * libero e il giro riprende dove era. Un documento nuovo, una lingua nuova o
+   * una scheda nata nel frattempo lo fanno ricominciare da capo.
+   */
+  #labelStep(): void {
+    this.#labelsPending = null;
+    const doc = this.#doc;
+    if (!doc || this.#destroyed || this.#isSceneOversized()) return;
+    let run = this.#labelRun;
+    if (!run || run.doc !== doc || run.round !== this.#languageRound || this.#labelled.stale) {
+      run = { doc, round: this.#languageRound, queue: [...this.#cards.values()], at: 0 };
+      this.#labelled = { doc: null, round: -1, stale: false };
+    }
+    const end = Math.min(run.queue.length, run.at + LABEL_BATCH);
+    for (; run.at < end; run.at++) {
+      const entry = run.queue[run.at]!;
+      if (this.#cards.get(entry.id) === entry) this.#labelCard(entry);
+    }
+    if (run.at < run.queue.length) {
+      this.#labelRun = run;
+      this.#labelsPending = this.#labelsSchedule(() => this.#labelStep());
+      return;
+    }
+    this.#labelRun = null;
+    this.#labelled = { doc, round: run.round, stale: false };
+  }
+
+  /** Il nome della scheda `entry` com'è adesso, scritto sul suo nodo se è cambiato. */
+  #labelCard(entry: CardEntry): void {
+    const doc = this.#doc;
+    const reading = this.#boardReading();
+    if (!doc || !reading) return;
+    const label = cardLabel(entry.node, doc, reading);
+    if (entry.label === label) return;
+    entry.label = label;
+    entry.article.setAttribute("aria-label", label);
+  }
+
+  /**
+   * Sceglie la scheda `node`, la porta in vista e le dà il fuoco: Tab e
+   * Alt+frecce. In vista vuol dire tutta dentro la vista; se no la vista vola
+   * fino a metterla al centro col zoom di adesso (col movimento ridotto arriva
+   * subito). Non è un salto di Indietro e Avanti: è un passo della tastiera,
+   * come uno spostamento a mano.
+   */
+  #focusCard(node: CanvasNode): void {
+    const entry = this.#cards.get(node.id);
+    if (!entry) return;
+    if (this.#selection.length !== 1 || this.#selection[0] !== node.id || this.#edgeSelection.length > 0) {
+      this.#selection = [node.id];
+      this.#edgeSelection = [];
+      this.#options.onSelectionChange();
+      this.#displaySelection();
+    }
+    const { view, zoom } = this.#viewRect();
+    const inside = node.x >= view.x && node.y >= view.y
+      && node.x + node.width <= view.x + view.width && node.y + node.height <= view.y + view.height;
+    if (!inside) {
+      const rect = this.#viewport.getBoundingClientRect();
+      this.#flyCamera({
+        x: (rect.width || 800) / 2 - (node.x + node.width / 2) * zoom,
+        y: (rect.height || 600) / 2 - (node.y + node.height / 2) * zoom,
+        zoom,
+      });
+    }
+    entry.article.focus({ preventScroll: true });
+  }
+
+  /**
+   * Tab e Maiusc+Tab col fuoco sulla lavagna o su una scheda: la scheda dopo
+   * o prima nell'ordine di lettura (T58). Dalla lavagna Tab va alla scheda
+   * scelta, o alla prima; Maiusc+Tab dalla lavagna esce come sempre. Prima
+   * della prima scheda si torna alla lavagna; dopo l'ultima il fuoco esce
+   * dalla vista, verso ciò che la segue. Una lavagna senza schede non prende
+   * il Tab: va ai pulsanti della lavagna vuota (T62). `true` se il tasto è suo.
+   */
+  #tabKey(event: KeyboardEvent): boolean {
+    if (event.key !== "Tab" || event.ctrlKey || event.metaKey || event.altKey) return false;
+    if (!this.#onCardOrBoard(event.target)) return false;
+    const reading = this.#boardReading();
+    if (!reading || reading.order.length === 0) return false;
+    const step = event.shiftKey ? -1 : 1;
+    const from = event.target === this.#viewport ? null : this.#nodeAt(event.target);
+    if (from === null && step < 0) return false;
+    const next = from === null ? this.#selectionFocus() ?? stepInOrder(reading, null, 1) : stepInOrder(reading, from, step);
+    if (next) {
+      event.preventDefault();
+      this.#focusCard(next);
+      return true;
+    }
+    if (step < 0) {
+      event.preventDefault();
+      this.#viewport.focus({ preventScroll: true });
+      return true;
+    }
+    const after = this.#afterViewport();
+    if (!after) return false;
+    event.preventDefault();
+    after.focus();
+    return true;
+  }
+
+  /** Il primo elemento che il Tab raggiunge dopo la vista e fuori da lei. */
+  #afterViewport(): HTMLElement | null {
+    const viewport = this.#viewport;
+    return focusableElements(document.body).find((el) => !viewport.contains(el)
+      && (viewport.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0) ?? null;
+  }
+
+  /**
+   * Alt+frecce col fuoco sulla lavagna o su una scheda (M1): la scheda più
+   * vicina in quella direzione (`nearestCard`), da quella col fuoco o da
+   * quella scelta; senza, la prima nell'ordine di lettura. Se da quella parte
+   * non c'è niente lo dice la regione viva. Solo le frecce di
+   * `NEAREST_CARD_KEYS`: Alt+← e Alt+→ restano Indietro e Avanti dello
+   * Scrittoio (`shell.pane.back`/`forward`, DECISIONS.md, T56). `true` se il
+   * tasto è suo.
+   */
+  #nearestKey(event: KeyboardEvent): boolean {
+    if (!event.altKey || event.shiftKey || event.ctrlKey || event.metaKey) return false;
+    const direction = NEAREST_CARD_KEYS.get(event.key);
+    if (direction === undefined || !this.#onCardOrBoard(event.target)) return false;
+    const reading = this.#boardReading();
+    if (!reading || reading.order.length === 0) return false;
+    event.preventDefault();
+    const fromId = this.#nodeAt(event.target) ?? (this.#selection.length === 1 ? this.#selection[0]! : null);
+    const from = fromId === null ? undefined : reading.byId.get(fromId);
+    const next = from ? nearestCard(from, reading, direction) : stepInOrder(reading, null, 1);
+    if (next) this.#focusCard(next);
+    else this.#sayGesture(t("canvas.a11y.none_that_way"));
     return true;
   }
 
@@ -5889,7 +6090,7 @@ export class CanvasEngine {
     }
     if (id.startsWith("canvas.nudge.")) {
       const [way, far] = id.slice("canvas.nudge.".length).split(".") as [CanvasNudge, string | undefined];
-      const step = far === "far" ? CANVAS_SNAP * 4 : CANVAS_SNAP;
+      const step = far === "far" ? CANVAS_SNAP * 4 : far === "fine" ? 1 : CANVAS_SNAP;
       const dx = way === "left" ? -step : way === "right" ? step : 0;
       const dy = way === "up" ? -step : way === "down" ? step : 0;
       return { disabled: withNodes, run: () => this.#nudge(dx, dy, way === "down" || way === "right") };
@@ -7467,8 +7668,10 @@ export class CanvasEngine {
   }
 
   /**
-   * Dice al lettore di schermo ciò che un gesto non ha fatto. La stessa frase
-   * si ridice: uno spazio fermo in coda, alterno, la fa annunciare di nuovo.
+   * La regione viva della tela: dice al lettore di schermo ciò che un gesto
+   * non ha fatto (T63), ciò che un commit ha cambiato e la scheda che da una
+   * parte non c'è (T61). La stessa frase si ridice: uno spazio fermo in coda,
+   * alterno, la fa annunciare di nuovo.
    */
   #sayGesture(text: string): void {
     if (this.#destroyed) return;
@@ -8345,6 +8548,9 @@ export class CanvasEngine {
       return;
     }
     this.#recordPending();
+    // Tab e Alt+frecce muovono il fuoco fra le schede (T61): non sono comandi,
+    // non cambiano il file.
+    if (this.#tabKey(event) || this.#nearestKey(event)) return;
     const commands = this.commands();
     const where = { writing: isTextTarget(event.target), onBoard: this.#onCardOrBoard(event.target) };
     // Prima i tasti con Ctrl o Alt: valgono anche col fuoco in un campo.
@@ -8461,6 +8667,7 @@ export class CanvasEngine {
     }
     this.#drawEdges();
     this.#placeCards(this.#doc.nodes);
+    this.#scheduleLabels();
     // La ricerca aperta si rifà col documento di adesso; una scheda nata ora
     // prende il suo segno (T60).
     this.#findBar.refresh();
@@ -9207,6 +9414,8 @@ export class CanvasEngine {
     el.dataset.node = id;
     el.tabIndex = 0;
     el.setAttribute("role", "group");
+    // Una scheda nuova non ha ancora il suo nome (T61).
+    this.#labelled.stale = true;
     const header = document.createElement("div");
     header.className = "canvas-node-handle";
     header.dataset.drag = id;
@@ -9230,9 +9439,12 @@ export class CanvasEngine {
     const entry: CardEntry = {
       id, article: el, title, connect, node, type: node.type, body,
       bodyKey: null, resize: null, teardown: null, view: null, viewLife: null, viewSize: null, missingFor: null,
-      far, detail: null, find: null,
+      far, detail: null, find: null, label: null,
     };
     el.addEventListener("focus", () => {
+      // Col fuoco il nome dev'essere quello di adesso, anche prima del giro
+      // rimandato di `#syncLabels`.
+      if (!this.#labelsCurrent()) this.#labelCard(entry);
       if (!this.#selection.includes(id)) {
         this.#selection = [id];
         this.#edgeSelection = [];
@@ -9290,9 +9502,8 @@ export class CanvasEngine {
     paintColor(el, node.color);
     if (node.type === "group" && node.backgroundStyle) el.dataset.backgroundStyle = node.backgroundStyle;
     else delete el.dataset.backgroundStyle;
-    el.setAttribute("aria-label", node.color
-      ? `${node.type} ${node.id}, ${t("canvas.options.color_value", { name: colorName(node.color) })}`
-      : `${node.type} ${node.id}`);
+    // Il nome per il lettore di schermo (T61) lo scrive `#syncLabels`, solo
+    // quando il documento cambia: non qui, a ogni resa.
     el.classList.toggle("selected", this.#selection.includes(node.id));
     const title = nodeTitle(node);
     if (entry.title.textContent !== title) entry.title.textContent = title;
