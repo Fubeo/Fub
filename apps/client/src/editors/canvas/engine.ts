@@ -6822,12 +6822,13 @@ export class CanvasEngine {
 
   /**
    * La misura e l'allineamento che la riga segna (T92): quelli delle schede
-   * di testo scelte (`null` se sono diversi), senza, quelli delle prossime
-   * dello strumento Testo.
+   * di testo scelte (`null` se sono diversi); senza, col Testo quelli delle
+   * sue prossime schede, e nessuno con le altre schede (i controlli sono
+   * spenti).
    */
   #chosenText(): CanvasChosenText {
     const nodes = this.#chosenTextNodes();
-    if (nodes.length === 0) return this.#textNext;
+    if (nodes.length === 0) return this.#tool === "text" ? this.#textNext : { size: null, align: null };
     const styles = nodes.map(textStyle);
     const first = styles[0]!;
     return {

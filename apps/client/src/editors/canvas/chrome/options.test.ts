@@ -341,6 +341,9 @@ describe("la misura e l'allineamento del testo (T92)", () => {
     expect(large.getAttribute("aria-label")).toBe(t("canvas.options.off", { name: t("canvas.options.text_size.l"), why: t("canvas.commands.why.no_text_card") }));
     large.click();
     expect(changes).toHaveLength(0);
+    // Spenti, non segnano un valore.
+    expect(checked(host, "text-size")).toEqual([]);
+    expect(checked(host, "text-align")).toEqual([]);
     engine.destroy();
   });
 });

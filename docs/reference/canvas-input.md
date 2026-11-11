@@ -426,15 +426,16 @@ schede scelte:
   grandi come la misura (`canvas.text_size.s`, `.m`, `.l`, `.xl`: Piccolo,
   Medio, Grande, Molto grande), e «Allineamento» (`canvas.text_align.start`,
   `.center`, `.end`: a sinistra, al centro, a destra). Segnano il valore
-  delle schede di testo scelte, nessuno se sono diversi; senza schede di
-  testo scelte, quello delle prossime schede del Testo (di serie Medio e a
-  sinistra, finché la lavagna resta aperta). Un clic cambia le schede di
-  testo scelte in un commit, un solo annulla anche su più schede; ognuna
-  tiene l'altro valore suo, e le schede che si mostrano già così non si
-  toccano. Il valore va nel campo `fub:text` della scheda ([il
+  delle schede di testo scelte, nessuno se sono diversi; col Testo e senza
+  schede di testo scelte, quello delle prossime schede del Testo: l'ultimo
+  scelto nella riga, di serie Medio e a sinistra, finché la lavagna resta
+  aperta. Un clic cambia le schede di testo scelte in un commit, un solo
+  annulla anche su più schede; ognuna tiene l'altro valore suo, e le schede
+  che si mostrano già così non si toccano. Il valore va nel campo
+  `fub:text` della scheda ([il
   formato](canvas-format.md#la-misura-e-lallineamento-del-testo)), mai nel
   testo. Con sole schede di file, di link o gruppi i controlli si vedono
-  spenti col perché; in sola lettura anche.
+  spenti col perché e senza un valore segnato; in sola lettura anche.
 - **In ogni riga** la Vista (riduci, ingrandisci, mostra tutto); prima, con una scheda attiva, [«Apri a lato» sul punto](canvas-view.md#apri-a-lato-per-questo).
 
 Ogni controllo è un comando del catalogo: il nome e il tasto vengono da lì,
