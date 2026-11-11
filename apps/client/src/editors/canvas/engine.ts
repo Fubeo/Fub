@@ -9458,7 +9458,7 @@ export class CanvasEngine {
     };
     el.addEventListener("focus", () => {
       // Col fuoco il nome dev'essere quello di adesso, anche prima del giro
-      // rimandato di `#syncLabels`.
+      // rimandato di `#scheduleLabels`.
       if (!this.#labelsCurrent()) this.#labelCard(entry);
       if (!this.#selection.includes(id)) {
         this.#selection = [id];
@@ -9517,7 +9517,7 @@ export class CanvasEngine {
     paintColor(el, node.color);
     if (node.type === "group" && node.backgroundStyle) el.dataset.backgroundStyle = node.backgroundStyle;
     else delete el.dataset.backgroundStyle;
-    // Il nome per il lettore di schermo (T61) lo scrive `#syncLabels`, solo
+    // Il nome per il lettore di schermo (T61) lo scrive `#scheduleLabels`, solo
     // quando il documento cambia: non qui, a ogni resa.
     el.classList.toggle("selected", this.#selection.includes(node.id));
     const title = nodeTitle(node);
