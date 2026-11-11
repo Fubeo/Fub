@@ -19,7 +19,9 @@ Ciò che la shell fa sopra le porte generiche, senza contratti propri:
   ha un «Annulla» unico: l'annullamento del vault disfa l'ultima operazione, e
   le note tornano dal cestino una a una. Avvisi e attività dicono l'ora come
   «adesso», «2 min fa», poi l'ora senza secondi (i secondi nel suggerimento).
-  Un vault senza rilevamento delle modifiche esterne lo dice in testa al
+  Finché un menu è aperto la pila dei toast si fa da parte (`structure.css`)
+  e torna quando si chiude: un menu non sta mai sotto un avviso, nemmeno quello
+  della modalità che si apre dalla banda dove scende la pila. Un vault senza rilevamento delle modifiche esterne lo dice in testa al
   centro con «Riapri il vault», che scrive ciò che è in sospeso, chiude il
   vault nell'host e lo riapre.
 - **Scrittura.** Con la barra di formattazione spenta

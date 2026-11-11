@@ -1245,6 +1245,17 @@ body {
   }
 }
 
+/* Un menu aperto non sta mai sotto un toast. La pila sta nel `body`, sopra
+   `#app` che isola i suoi piani, e il menu nasce dentro `#app`: nessun
+   `z-index` lo porterebbe sopra. La voce della modalità apre il suo menu in
+   basso a destra, proprio dove scende la pila, e un guasto resta finché non lo
+   si chiude: senza questa regola la voce che si vuole scegliere starebbe sotto
+   l'avviso. Finché il menu è aperto la pila si fa da parte, e torna intera
+   quando si chiude; la regione viva ha già detto il testo. */
+body:has(#context-menu:not([hidden])) > .toast-stack {
+  visibility: hidden;
+}
+
 #key-pending {
   position: fixed;
   left: 50%;
