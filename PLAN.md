@@ -3943,7 +3943,7 @@ e la risposta vecchia scartata; `engine-cards.test.ts` prova il velo e il
 salto; le foto del banco somigliano al prototipo.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/canvas
-Stato: [ ] da fare
+Stato: [~] in corso · coder Opus · base d63433a5f
 
 ## T61 · Tutto da tastiera e col lettore di schermo
 
