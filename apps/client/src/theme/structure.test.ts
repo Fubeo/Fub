@@ -374,3 +374,31 @@ describe("la pelle non veste per id", () => {
     ).toEqual([]);
   });
 });
+
+describe("la carta ha uno strato suo", () => {
+  /// Le dichiarazioni dei blocchi il cui selettore è esattamente `selector`,
+  /// senza commenti.
+  function blocksOf(css: string, selector: string): string[] {
+    const withoutComments = css.replace(/\/\*[\s\S]*?\*\//g, "");
+    return [...withoutComments.matchAll(/([^{}]+)\{([^{}]*)\}/g)]
+      .filter((b) => b[1]!.split(",").some((s) => s.trim() === selector))
+      .map((b) => b[2]!);
+  }
+
+  it("la struttura mette la carta del foglio (`.pane::before`) in uno strato a parte", () => {
+    // L'ombra del foglio è sfumata e a più strati. Nello stesso strato del
+    // testo ogni battuta la ridipingeva, e la WebView che dipinge senza GPU
+    // (WebKitGTK sotto Xvfb, S1 del banco WebView) ci metteva quasi il doppio
+    // dal tasto al fotogramma. Uno strato suo la dipinge una volta. Non
+    // `will-change: transform`, che Chromium allinea al pixel intero.
+    const own = blocksOf(structure, ".pane::before").filter((b) => /(^|;)\s*transform:\s*translateZ\(0\)\s*;/.test(b));
+    expect(own, "`.pane::before` deve dichiarare `transform: translateZ(0)` nella struttura").toHaveLength(1);
+  });
+
+  it("la pelle non toglie lo strato alla carta", () => {
+    for (const selector of [".pane::before", ".pane.focus::before"]) {
+      const undone = blocksOf(skin, selector).filter((b) => /(^|;)\s*(transform|will-change)\s*:/.test(b));
+      expect(undone, `${selector} nella pelle non riscrive \`transform\` né \`will-change\``).toEqual([]);
+    }
+  });
+});

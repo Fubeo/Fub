@@ -728,13 +728,23 @@ body {
 }
 
 /* La carta comincia `--tab-lap` sopra il fondo della striscia: lì la linguetta
-   attiva la copre, e il giunto resta chiuso anche a uno zoom frazionario. */
+   attiva la copre, e il giunto resta chiuso anche a uno zoom frazionario.
+
+   La carta ha uno strato suo (`translateZ(0)`): la sua ombra, sfumata e a più
+   strati, si dipinge una volta e non a ogni battuta. Nello stesso strato del
+   testo ogni carattere scritto ridipingeva anche l'ombra, e dove la WebView
+   dipinge senza GPU (WebKitGTK sotto Xvfb, una macchina senza accelerazione)
+   il tasto arrivava sullo schermo in quasi il doppio del tempo. Non
+   `will-change: transform`: Chromium allinea quello strato al pixel intero, e
+   con fogli larghi un numero frazionario di pixel il bordo della carta si
+   spostava di uno. */
 .pane::before {
   content: "";
   position: absolute;
   inset: calc(var(--tab-h) - var(--tab-lap)) 0 0 0;
   z-index: -1;
   pointer-events: none;
+  transform: translateZ(0);
 }
 
 /* Senza linguette non c'è carta da raccordare: il segnaposto prende tutto il
