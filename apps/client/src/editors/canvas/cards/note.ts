@@ -43,8 +43,9 @@ import type { CanvasNode } from "../model";
 export interface NoteCardPort {
   /// Rende la nota (o la sola sezione `heading`) dentro `host`. Gli
   /// ascoltatori della resa passano da `life`, che la scheda chiude quando
-  /// la resa non serve più. Un errore con `kind: "not_found"` vuol dire che
-  /// il file non c'è.
+  /// la resa non è più viva: chiusa `life`, la resa resta in `host`, ferma,
+  /// perché la scheda ferma la mostra. Un errore con `kind: "not_found"` vuol
+  /// dire che il file non c'è.
   show(path: string, heading: string | null, host: HTMLElement, life: Lifetime): Promise<void>;
   /// Ascolta i cambi del file; restituisce come smettere.
   watch(path: string, changed: () => void): () => void;

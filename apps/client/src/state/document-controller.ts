@@ -561,7 +561,8 @@ const canvasCards: CanvasCardPorts = {
     show: async (path, heading, host, life) => {
       const content = await renderEmbed(path, heading, null);
       if (life.closed) return;
-      life.add(mountMarkdown(host, content.html, canvasMarkdownMount(path)));
+      // Chiusa la vita, la resa resta, ferma: la scheda ferma la mostra.
+      life.add(mountMarkdown(host, content.html, { ...canvasMarkdownMount(path), keepOnTeardown: true }));
     },
   },
   sheet: {
