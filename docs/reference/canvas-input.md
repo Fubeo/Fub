@@ -414,9 +414,7 @@ schede scelte:
   strumento prima sceglie quello della penna.
 - **Selezione o Lazo con schede scelte:** il colore (un pozzo col colore e il
   nome, «Colori diversi» se non sono uguali, che apre i colori
-  `canvas.color.*`), [la misura e l'allineamento del testo](canvas-format.md#nella-riga-delle-opzioni)
-  e Disponi: davanti, dietro, «Allinea e distribuisci» (`canvas.align_menu`,
-  spento con meno di due schede).
+  `canvas.color.*`), [la misura e l'allineamento del testo](canvas-format.md#nella-riga-delle-opzioni) e Disponi: davanti, dietro, «Allinea e distribuisci» (`canvas.align_menu`, spento con meno di due schede).
 - **Testo:** [la misura e l'allineamento del testo](canvas-format.md#nella-riga-delle-opzioni).
 - **Selezione o Lazo senza schede, Collega:** una riga sul gesto; Collega ha le
   punte del filo (`canvas.tips.*`: nessuna, all'inizio, alla fine, quella di
