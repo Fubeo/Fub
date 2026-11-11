@@ -2872,7 +2872,7 @@ foglio di tre righe (il tratto si sposta con B3), lo scorre finché B3 esce
 `cellRect`.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/canvas src/editors/grid/card.test.ts
-Stato: [ ] da fare
+Stato: [~] in corso · coder Opus · base 513959ba3
 
 ## T39 · Il titolo sopra la scheda e l'inchiostro sul contenuto
 
@@ -4756,7 +4756,7 @@ su un pezzo che porta alla scheda e quello che apre il selettore; le foto
 del banco somigliano al prototipo.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/canvas
-Stato: [ ] da fare
+Stato: [~] in corso · coder Opus · base 513959ba3
 
 ## T78 · La zona di un'immagine
 
