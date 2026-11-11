@@ -305,8 +305,8 @@ scheda (`openPathBeside` in `state/document-controller.ts`): la shell lo
 risolve come un link (`resolvedReference`); `#page=N` di un PDF arriva alla
 pagina, un punto che la risoluzione porta si rivela (`reveal`), e un altro
 frammento apre il file in cima con l'avviso «Questa vista di … non sa portare
-a quel punto.». Oggi è il caso della cella: la griglia non riceve ancora un
-punto da un link. Se il riquadro vicino, quello che la divisione metterebbe
+a quel punto.». È il caso della cella: la griglia non riceve un punto da un
+link. Se il riquadro vicino, quello che la divisione metterebbe
 a destra, mostra già il file, si torna lì invece di dividere
 (`openDocumentBeside` con `reuse`; un `fub://open` divide sempre). Nella
 finestra stretta (`data-narrow`) va invece a `onOpenPath`, nello stesso
