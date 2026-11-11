@@ -7448,7 +7448,8 @@ export class CanvasEngine {
   /**
    * Che cosa mostra una scheda di file (T93): il segnaposto di un file mancante
    * lo dice la tela (`cardMissing`); carica o non si mostra lo dice la radice
-   * della vista in `data-card-state`, come fanno la nota, l'immagine e il foglio.
+   * della vista in `data-card-state`, come fanno la nota, l'immagine, il foglio
+   * e il PDF (vedi `docs/reference/canvas-cards.md`).
    */
   #fileShowing(entry: CardEntry): FileShowing {
     if (entry.article.dataset.cardMissing !== undefined) return "missing";
