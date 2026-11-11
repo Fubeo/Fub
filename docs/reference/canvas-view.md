@@ -3,11 +3,12 @@
 > **Ambito:** come ci si muove sulla lavagna (lo zoom, i salti, Indietro e
 > Avanti, Spazio, il bordo, l'inerzia), la griglia e le guide, il navigatore
 > e la vista che torna quando la lavagna si riapre; il menu radiale e i gesti
-> delle dita; come si vedono le schede da lontano; Cerca nella lavagna.
+> delle dita; come si vedono le schede da lontano; Cerca nella lavagna; la
+> lavagna da tastiera e col lettore di schermo.
 > **Fonti autorevoli:** `apps/client/src/editors/canvas/engine.ts`
-> (`#jumpCamera`, `#paintGrid`, `#refreshDetail`), `jumps.ts`, `guides.ts`,
-> `chrome/navigator.ts`, `chrome/radial.ts`, `view-state.ts`, `lod.ts`, `find.ts` e
-> `chrome/find-bar.ts`, con le loro prove;
+> (`#jumpCamera`, `#paintGrid`, `#refreshDetail`, `#keydown`), `jumps.ts`, `guides.ts`,
+> `chrome/navigator.ts`, `chrome/radial.ts`, `view-state.ts`, `lod.ts`, `find.ts`,
+> `chrome/find-bar.ts` e `a11y.ts`, con le loro prove;
 > i conti della camera in `apps/client/src/editors/spatial/camera.ts`.
 
 Questa pagina viene da [I tasti e i gesti della lavagna](canvas-input.md),
@@ -156,7 +157,7 @@ lontanissima ci sta.
   eri](#riaprire-dove-eri)); «Mostra il navigatore»
   (`canvas.navigator.show`) lo riaccende. C'è sempre una sola delle due.
 - **La tastiera.** F6 dalla lavagna ci arriva (`EditorSurface.zone`: la
-  vista, poi il navigatore se si vede); le frecce spostano il riquadro di un
+  vista, poi il navigatore se si vede, poi la colonna e la riga); le frecce spostano il riquadro di un
   decimo della vista, con Maiusc di metà.
 - **Il disegno.** Una sola `<canvas>`, mai un elemento per scheda; si
   ridipinge a fine gesto e al cambio del documento, se la lavagna o la vista
@@ -243,6 +244,42 @@ della vista (`chrome/find-bar.ts`, N6 T60): il campo, il contatore
   ridotto senza volo; Indietro torna da dove si era partiti.
 - **Esc** e la × chiudono: il velo se ne va, la vista resta dov'è arrivata e
   il fuoco torna alla lavagna. Riaperta, la barra rifà la ricerca di prima.
+
+## Da tastiera e col lettore di schermo
+
+Le regole pure stanno in `a11y.ts`; il motore le chiama da `#keydown` e
+scrive i nomi sulle schede.
+
+- **Tab e Maiusc+Tab**, col fuoco sulla lavagna o su una scheda, vanno alla
+  scheda dopo o prima nell'ordine di lettura dell'ispettore (`readingOrder`):
+  il fuoco e la scelta la seguono e, se non è tutta in vista, la vista vola
+  fino a metterla al centro col zoom di adesso (col movimento ridotto arriva
+  subito). Non è un salto: Indietro non ci torna. Dalla lavagna Tab va alla
+  scheda scelta o alla prima, e Maiusc+Tab esce come sempre; prima della
+  prima scheda si torna alla lavagna, dopo l'ultima il fuoco esce dalla vista.
+  Dentro una scheda attiva o in un campo il Tab è loro (Esc prima); senza
+  schede va ai pulsanti della lavagna vuota.
+- **Alt+↑ e Alt+↓** vanno alla scheda più vicina da quella parte: il centro
+  più vicino dentro un cono di 90°, a pari distanza la prima in ordine di
+  lettura; se non c'è niente lo dice la regione viva. Alt+← e Alt+→ restano
+  Indietro e Avanti dello Scrittoio. Le frecce da sole spostano di 8,
+  con Maiusc di 32 e con Alt+Maiusc di 1 (`canvas.nudge.<lato>.fine`).
+- **F6 e Maiusc+F6** (`EditorSurface.zone`): la lavagna, il navigatore se si
+  vede, la colonna degli strumenti, la riga delle opzioni; poi la shell passa
+  all'ispettore. **Maiusc+F10** apre il menu della scheda scelta.
+- **Il nome di una scheda** (`cardLabel`, l'`aria-label` del nodo) dice la
+  specie e il nome come la testata del menu, il gruppo che la contiene più da
+  vicino, le schede collegate con l'etichetta del filo e il colore: «Scheda di
+  nota Varianza, nel gruppo Media e varianza, collegata a 2 schede: Media
+  aritmetica, vedi; istogramma, si vede qui.» Più fili verso la stessa scheda
+  la contano una volta; oltre 6 schede dice solo «collegata a 200 schede» e
+  l'elenco sta nell'ispettore. I nomi si riscrivono solo quando cambia il
+  documento o la lingua, a thread libero, 250 schede per passo, e solo dove il
+  testo cambia; la scheda che prende il fuoco ha subito il suo.
+- **La regione viva** della tela (quella di «Niente da annullare.») dice ciò
+  che un commit ha cambiato: «Hai tolto dalla lavagna: …», «Hai collegato … a
+  …», «Hai spostato: …» (una frase, in quest'ordine), o quante schede. Testo,
+  colore e misura non si annunciano.
 
 ## Riaprire dove eri
 

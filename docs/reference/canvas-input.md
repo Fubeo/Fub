@@ -191,7 +191,7 @@ scrive, valgono quelli della sessione). `Esc` torna dov'eri, anche in un campo.
 | `canvas.undo`, `canvas.redo` | `Ctrl+Z`; `Ctrl+Maiusc+Z`, `Ctrl+Y` |
 | `canvas.commands`, `canvas.select_all`, `canvas.duplicate` | `Ctrl+/`, `Ctrl+A`, `Ctrl+D` |
 | `canvas.enter` (col fuoco sulla tela o su una scheda), `canvas.delete` («Togli dalla lavagna») | `Invio`; `Canc`, `Backspace` |
-| `canvas.nudge.<lato>`, `canvas.nudge.<lato>.far` | frecce; `Maiusc`+frecce |
+| `canvas.nudge.<lato>`, `.far`, `.fine` (questo solo col fuoco sulla tela o su una scheda) | frecce; `Maiusc`+frecce; `Alt+Maiusc`+frecce |
 | `canvas.group` (Raggruppa), `canvas.bring_front`, `canvas.send_back` | `Ctrl+G`; `Ctrl+]`, `Ctrl+[` |
 | `canvas.fit`, `canvas.fit_selection` | `Maiusc+1`, `Ctrl+0`; `Maiusc+2` |
 | `canvas.zoom_in`, `canvas.zoom_out`, `canvas.zoom_reset` | `+`, `Ctrl+=`; `-`, `Ctrl+-`; `0` |
@@ -207,7 +207,7 @@ dello Scrittoio); prima vince il segno scritto, poi il posto del tasto
 (`Maiusc+1`). Dello Scrittoio la tela prende solo lo zoom (`Ctrl+=`, `Ctrl+-`,
 `Ctrl+0`, `CANVAS_DECLARED_SHELL_KEYS`), com'era già. Restano com'erano e
 diversi dalla tabella: `Ctrl+0` mostra tutto, le frecce spostano di 8
-(`Maiusc` 32). Come nel disegno, i tasti della lavagna non si cambiano ancora.
+(`Maiusc` 32, `Alt+Maiusc` 1); Tab e `Alt+↑`/`Alt+↓` muovono il fuoco ([la vista](canvas-view.md#da-tastiera-e-col-lettore-di-schermo)). Come nel disegno, i tasti della lavagna non si cambiano ancora.
 Sulla tastiera italiana le quadre non hanno un tasto loro: `Ctrl+[` si preme
 con `Ctrl+è`, dal posto del tasto; `Ctrl+]` non c'è, perché al suo posto sta
 `+` e `Ctrl++` resta lo zoom. Porta davanti si fa dal menu o da `Ctrl+/`.
