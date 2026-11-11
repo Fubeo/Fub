@@ -46,14 +46,25 @@ nota c'è, con «Apri».
 Su una scheda di nota sola. Mette accanto, al primo posto libero a destra,
 una scheda di testo col testo della nota (quello della sessione aperta, se
 la nota è aperta, anche non ancora salvato), e la sceglie; la nota non
-cambia. La scheda nuova è larga come quella della nota e alta come lei, ma
+cambia. Di una scheda-estratto ([gli estratti](canvas-parts.md)) copia solo
+le sezioni che mostra, nel suo ordine, separate da una riga vuota
+(`noteSectionsText` in `excerpt.ts`). I titoli vengono dal sommario del
+provider Markdown (la domanda `outline`, col byte dove comincia ognuno), e
+una chiave trova il suo titolo con la regola del selettore delle sezioni
+(`sectionOfKey` in `parts-picker.ts`, la stessa di «Fonti»); una sezione va
+dal suo titolo al titolo dopo di livello uguale o più alto, tagliata in byte
+UTF-8. Una sezione sparita dalla nota non si copia e non è un errore; se non
+ne resta nessuna non nasce niente, e la lavagna dice quali mancano. Se il
+sommario non arriva, o non combacia col testo (il byte non cade sulla riga
+del titolo), si copia la nota intera. La scheda nuova è larga come quella della nota e alta come lei, ma
 non più della vista: una nota lunga scorre dentro la scheda. Un testo oltre
 il limite di una scheda (1 MiB) non nasce, e la lavagna lo dice.
 
 ## Sostituisci il file…
 
-Su una scheda di file sola. Apre il selettore dei file di sempre (quello di
-«Aggiungi file»); la scheda punta al file scelto e perde ciò che era del
+Su una scheda di file sola, dal menu della scheda o dall'ispettore
+(«Scheda», sotto il file: [l'ispettore](canvas-inspector.md)). Apre il
+selettore dei file di sempre (quello di «Aggiungi file»); la scheda punta al file scelto e perde ciò che era del
 file di prima: la sezione o la pagina (`subpath`) e le parti (`fub:parts`).
 Con un file di un'altra specie la scheda cambia specie; l'inchiostro resta
 nel file com'era e si disegna con la regola della specie nuova

@@ -37,6 +37,7 @@ import {
   type CanvasSourcesPort,
 } from "./inspector";
 import { readingOrder } from "../reading-order";
+import { t } from "../../../i18n/strings";
 
 beforeAll(async () => {
   await canvasCoreReady();
@@ -254,12 +255,13 @@ describe("la parte «Schede»", () => {
 });
 
 describe("la superficie della lavagna con l'ispettore", () => {
-  function mountBoard(text: string): { surface: EditorSurface; parent: HTMLElement } {
+  function mountBoard(text: string, onPickFile?: () => Promise<string | null>): { surface: EditorSurface; parent: HTMLElement } {
     const parent = document.createElement("div");
     document.body.append(parent);
     const surface = mountCanvasSurface("canvas", { paneId: "p", documentId: "board.canvas", parent }, {
       onChange: () => {},
       onSelectionChange: () => {},
+      ...(onPickFile ? { onPickFile } : {}),
     });
     surface.buffer!.setDoc(text);
     return { surface, parent };
@@ -282,6 +284,26 @@ describe("la superficie della lavagna con l'ispettore", () => {
     expect(row.getAttribute("aria-selected")).toBe("false");
     surface.destroy();
     expect(panels.list()).toEqual([]);
+  });
+
+  it("il salto da «Schede» entra in Indietro, e «Sostituisci il file…» passa dal selettore della tela (T99)", async () => {
+    const onPickFile = vi.fn(async () => "foto/gita.png");
+    const { surface, parent } = mountBoard(source(), onPickFile);
+    const panels = surface.panels!;
+    const { host } = mountPanel(panels.list()[0]!);
+    expect(surface.jumps!.back()).toBe(false);
+    const row = [...host.querySelectorAll<HTMLElement>(".canvas-inspector-row")].find((each) => each.dataset.node === "varianza")!;
+    row.click();
+    expect(parent.querySelector('.canvas-node[data-node="varianza"]')!.classList.contains("selected")).toBe(true);
+    expect(surface.jumps!.back()).toBe(true);
+    const card = mountPanel(panels.list().find((panel) => panel.id === CARD_PANEL_ID)!).host;
+    card.querySelector<HTMLButtonElement>('[data-action="replace-file"]')!.click();
+    expect(onPickFile).toHaveBeenCalledTimes(1);
+    await vi.waitFor(() => expect(surface.buffer!.getDoc()).toContain('"file": "foto/gita.png"'));
+    // In sola lettura il pulsante se ne va.
+    surface.setReadOnly!(true);
+    expect(card.querySelector('[data-action="replace-file"]')).toBeNull();
+    surface.destroy();
   });
 
   it("nel sorgente non offre niente, e l'elenco segue il testo che arriva", () => {
@@ -489,11 +511,44 @@ describe("le parti «Scheda» e «Fili» (T59)", () => {
     expect(rowOf("fub:ink").querySelector("input")).toBeNull();
   });
 
-  it("un file scelto mostra il suo percorso, e non ha «Sostituisci»", () => {
+  it("un file scelto mostra il suo percorso; senza il selettore dei file non ha «Sostituisci»", () => {
     const { inspector } = editing([card("v", { type: "file", file: "Statistica/Varianza.md", text: undefined })], [], { nodes: ["v"], edges: [] });
     const host = partOf(inspector, CARD_PANEL_ID);
     expect(host.querySelector(".canvas-inspector-path")!.textContent).toBe("Statistica/Varianza.md");
-    expect(host.textContent).not.toContain("Sostituisci");
+    expect(host.querySelector('[data-action="replace-file"]')).toBeNull();
+  });
+
+  it("«Sostituisci il file…» (T99): sotto il file, chiama l'azione della tela; non per un testo, e non in sola lettura", () => {
+    const nodes = [card("v", { type: "file", file: "Statistica/Varianza.md", text: undefined }), card("t")];
+    const sel = { nodes: ["v"], edges: [] as string[] };
+    let readOnly = false;
+    const edit = fakeEdit(nodes, [], sel);
+    const replaceFile = vi.fn();
+    const inspector = createCanvasInspector({
+      source: () => source(nodes),
+      reveal: () => true,
+      edit: { ...edit.port, readOnly: () => readOnly, replaceFile },
+    });
+    inspector.offer(true);
+    const host = partOf(inspector, CARD_PANEL_ID);
+    const button = (): HTMLButtonElement | null => host.querySelector<HTMLButtonElement>('[data-action="replace-file"]');
+    expect(button()!.textContent).toBe(t("canvas.replace_file"));
+    // Subito sotto la riga del file.
+    expect(button()!.parentElement!.previousElementSibling!.querySelector(".canvas-inspector-path")).not.toBeNull();
+    button()!.click();
+    expect(replaceFile).toHaveBeenCalledTimes(1);
+    // In sola lettura non c'è; torna quando la lavagna si scrive di nuovo.
+    readOnly = true;
+    inspector.changed();
+    expect(button()).toBeNull();
+    readOnly = false;
+    inspector.changed();
+    expect(button()).not.toBeNull();
+    // Una scheda di testo non ha un file da sostituire.
+    sel.nodes = ["t"];
+    inspector.selectionChanged();
+    expect(button()).toBeNull();
+    expect(replaceFile).toHaveBeenCalledTimes(1);
   });
 
   it("sola lettura: numeri, colore e nodo grezzo sono spenti, e niente si scrive", () => {

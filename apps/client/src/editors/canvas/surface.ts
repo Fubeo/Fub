@@ -201,12 +201,23 @@ export function mountCanvasSurface(
   // commit solo, col suo annulla; senza motore non c'è niente da scrivere.
   const inspector = createCanvasInspector({
     source: () => engine?.getDoc() ?? null,
-    reveal: (byte) => mode === "canvas" && engine !== null && engine.revealSource(byte),
+    // Il salto dall'ispettore entra nella storia di Indietro (T99), come gli altri salti.
+    reveal: (byte) => mode === "canvas" && engine !== null && engine.revealSource(byte, "jump"),
     edit: {
       selection: () => engine?.selection() ?? { nodes: [], edges: [] },
       doc: () => engine?.doc() ?? null,
       commit: (patches) => engine?.commitPatches(patches),
       readOnly: () => heldReadOnly,
+      // «Sostituisci il file…» (T99): il comando del menu della scheda, che
+      // vuole il selettore dei file e una scheda di file sola.
+      ...(callbacks.onPickFile
+        ? {
+          replaceFile: () => {
+            const replace = engine?.commands().find((command) => command.id === "canvas.replace_file");
+            if (mode === "canvas" && replace && replace.disabled() === null) replace.run();
+          },
+        }
+        : {}),
     },
     // «Fonti» (T77): le pagine di un PDF e il sommario di una nota con le
     // porte di «Spargi le pagine» e del selettore delle sezioni; i file
@@ -223,7 +234,7 @@ export function mountCanvasSurface(
         return ids;
       },
       take: (byte) => {
-        if (mode !== "canvas" || engine === null || !engine.revealSource(byte)) return false;
+        if (mode !== "canvas" || engine === null || !engine.revealSource(byte, "jump")) return false;
         const parts = engine.commands().find((command) => command.id === "canvas.parts");
         if (parts && parts.disabled() === null) parts.run();
         return true;
@@ -437,6 +448,8 @@ export function mountCanvasSurface(
     setReadOnly: (readOnly: boolean): void => {
       heldReadOnly = readOnly;
       engine?.setReadOnly(readOnly);
+      // «Scheda» e «Fili» si spengono (e «Sostituisci il file…» se ne va) subito.
+      inspector.changed();
     },
     setTheme: (theme): void => {
       heldTheme = theme;

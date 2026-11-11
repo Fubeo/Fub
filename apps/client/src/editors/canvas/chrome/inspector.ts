@@ -372,6 +372,12 @@ export interface CanvasEditPort {
   readonly commit: (patches: readonly CanvasPatch[]) => void;
   /** Vero in sola lettura: tutto si legge, niente si cambia. */
   readonly readOnly: () => boolean;
+  /**
+   * «Sostituisci il file…» della scheda di file scelta (T70, T99): la stessa
+   * azione del menu della scheda (`canvas.replace_file`), che apre il
+   * selettore dei file. Senza (nessun selettore dei file), niente pulsante.
+   */
+  readonly replaceFile?: () => void;
 }
 
 /** Ciò che l'ispettore chiede alla superficie. */
@@ -1822,6 +1828,9 @@ function mountCard(host: HTMLElement, edit: CanvasEditPort): Mount {
   let numbers: Record<GeometryKey, NumberField> | null = null;
   let well: ColorWell | null = null;
   let path: HTMLElement | null = null;
+  /// La riga di «Sostituisci il file…», con una scheda di file sola: sta
+  /// subito dopo la riga del file (`path`), e in sola lettura fuori dal DOM.
+  let replace: HTMLElement | null = null;
   let raw: RawTable | null = null;
   /// La tabella di «Avanzate» e i suoi ascolti, con i campi che mostra.
   let rawBody: HTMLElement | null = null;
@@ -1850,6 +1859,7 @@ function mountCard(host: HTMLElement, edit: CanvasEditPort): Mount {
     numbers = null;
     well = null;
     path = null;
+    replace = null;
     raw = null;
     rawLife?.close();
     rawLife = null;
@@ -1912,6 +1922,25 @@ function mountCard(host: HTMLElement, edit: CanvasEditPort): Mount {
         path.className = "canvas-inspector-path";
         row.append(label, path);
         box.append(row);
+        const replaceFile = edit.replaceFile;
+        if (replaceFile) {
+          // «Sostituisci il file…» (T99): l'azione del menu della scheda; in
+          // sola lettura non c'è (`sync` la toglie e la rimette).
+          const actions = dom.createElement("div");
+          actions.className = "canvas-inspector-actions";
+          const button = dom.createElement("button");
+          button.type = "button";
+          button.className = "kit-button";
+          button.dataset.kind = "normal";
+          button.dataset.action = "replace-file";
+          button.textContent = t("canvas.replace_file");
+          own.listen(button, "click", () => {
+            if (!edit.readOnly()) replaceFile();
+          });
+          actions.append(button);
+          box.append(actions);
+          replace = actions;
+        }
       }
       const panelId = identifier("canvas-inspector-advanced");
       const toggle = dom.createElement("button");
@@ -1955,6 +1984,11 @@ function mountCard(host: HTMLElement, edit: CanvasEditPort): Mount {
     well.setDisabled(readOnly);
     const [only] = nodes;
     if (path !== null && only !== undefined) path.textContent = typeof only.file === "string" ? only.file : "";
+    // Fuori dal DOM, non `hidden`: la pelle dà `display: flex` alla riga.
+    if (replace !== null && path !== null) {
+      if (readOnly) replace.remove();
+      else if (!replace.isConnected) path.parentElement?.after(replace);
+    }
     if (only !== undefined && nodes.length === 1) showRaw(only);
     if (raw !== null && only !== undefined) raw.sync(only);
   };

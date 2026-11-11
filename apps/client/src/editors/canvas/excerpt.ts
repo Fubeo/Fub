@@ -16,6 +16,7 @@ import { t } from "../../i18n/strings";
 import { cardKindOf } from "./cards";
 import type { CanvasNode } from "./model";
 import { nodeParts, type CanvasParts } from "./parts";
+import { partsSections, sectionOfKey, type PartsHeading } from "./parts-picker";
 
 /// Il segno di una sezione nella testata e nel corpo.
 export const SECTION_SIGN = "§";
@@ -76,6 +77,62 @@ export function excerptSourcePath(file: string, excerpt: NoteExcerpt): string {
 function sourceName(file: string): string {
   const base = file.split("/").pop() || file;
   return base.replace(/\.[^.]+$/, "") || base;
+}
+
+/// Il testo delle sezioni `keys` di una nota, per «Copia il testo qui» di un
+/// estratto (T99): nell'ordine dato, separate da una riga vuota. I titoli
+/// vengono dal sommario del provider Markdown (`outline`, col byte dove
+/// comincia ognuno: `PartsHeading.start`), non da una lettura del testo qui;
+/// una chiave trova il suo titolo con la regola del selettore
+/// (`partsSections`, `sectionOfKey`). Una sezione va dal byte del suo titolo
+/// al titolo dopo di livello uguale o più alto, o alla fine (come
+/// `section_end` di `fub-features/src/outline.rs`), senza le righe vuote in
+/// coda; si taglia in byte UTF-8. `missing` sono le chiavi che la nota non ha
+/// più: non si copiano.
+///
+/// `null` quando il sommario non basta per tagliare con certezza: un titolo
+/// senza byte, o un byte che nel testo non cade all'inizio della riga del suo
+/// titolo (il sommario è di un'altra versione del file). Allora chi copia
+/// prende la nota intera: mai testo perso in silenzio.
+export function noteSectionsText(
+  text: string,
+  headings: readonly PartsHeading[],
+  keys: readonly string[],
+): { readonly text: string; readonly missing: readonly string[] } | null {
+  if (headings.some((heading) => heading.start === undefined)) return null;
+  const bytes = new TextEncoder().encode(text);
+  const decoder = new TextDecoder();
+  const sections = partsSections(headings);
+  const found: string[] = [];
+  const missing: string[] = [];
+  for (const key of keys) {
+    const section = sectionOfKey(sections, key);
+    if (section === null) {
+      missing.push(key);
+      continue;
+    }
+    const heading = headings[section.index]!;
+    const start = heading.start!;
+    let next = section.index + 1;
+    while (next < headings.length && headings[next]!.level > heading.level) next++;
+    const end = next < headings.length ? headings[next]!.start! : bytes.length;
+    if (!headingAt(bytes, decoder, start, end, section.text)) return null;
+    found.push(decoder.decode(bytes.subarray(start, end)).replace(/\s+$/, ""));
+  }
+  return { text: found.join("\n\n"), missing };
+}
+
+/// Il byte `start` è davvero il titolo `title`: dentro il testo, prima di
+/// `end`, all'inizio di una riga (al più spazi prima) e su una riga che
+/// contiene il titolo.
+function headingAt(bytes: Uint8Array, decoder: TextDecoder, start: number, end: number, title: string): boolean {
+  if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end) || start < 0 || end > bytes.length || end <= start) return false;
+  let back = start;
+  while (back > 0 && (bytes[back - 1] === 0x20 || bytes[back - 1] === 0x09)) back--;
+  if (back > 0 && bytes[back - 1] !== 0x0a) return false;
+  const newline = bytes.indexOf(0x0a, start);
+  const line = decoder.decode(bytes.subarray(start, newline < 0 || newline > end ? end : newline));
+  return line.toLocaleLowerCase().includes(title.toLocaleLowerCase());
 }
 
 /// Mette la testata dell'estratto nella riga del titolo della scheda (T39),

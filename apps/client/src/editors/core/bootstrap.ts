@@ -434,7 +434,8 @@ async function loadCanvasCards(options: SurfaceBootstrapOptions, ports: CanvasCa
 /// con la stessa porta della scheda di nota. Nessuna porta nuova.
 function canvasParts(ports: CanvasCardPorts): PartsPickerPort {
   return {
-    outline: async (path) => (await documentOutline(path)).map((heading) => ({ level: heading.level, text: heading.text })),
+    // Il byte del titolo (`span.start`) serve alla copia di un estratto (T99).
+    outline: async (path) => (await documentOutline(path)).map((heading) => ({ level: heading.level, text: heading.text, start: heading.span.start })),
     show: (path, heading, host, life) => ports.note.show(path, heading, host, life),
   };
 }

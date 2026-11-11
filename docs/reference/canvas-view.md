@@ -36,8 +36,10 @@ sono quelli di `spatial/camera.ts` (`zoomAtPoint`, `fit`, `stepCamera`).
   titolo; col fuoco su una scheda Alt+← e Alt+→ vanno invece alla scheda
   vicina, sotto) chiedono prima alla lavagna col fuoco: ricordano i salti (anche il
   link seguito a una scheda della lavagna, «Seguire un link» in
-  [canvas-input.md](canvas-input.md)), non lo zoom a passi né lo spostamento
-  a mano. La storia (`jumps.ts`) sta in memoria,
+  [canvas-input.md](canvas-input.md), e il salto a una scheda dall'ispettore,
+  «Schede» e «Fonti» in [canvas-inspector.md](canvas-inspector.md)), non lo
+  zoom a passi né lo spostamento a mano. La shell che porta la vista a un
+  punto della lavagna (`reveal`) non è un salto. La storia (`jumps.ts`) sta in memoria,
   per la lavagna aperta: al più 50 salti, un salto dopo un Indietro perde
   l'Avanti, una lavagna riaperta riparte vuota e due riquadri con la stessa
   lavagna hanno due storie. Con la storia vuota vale la cronologia del riquadro.

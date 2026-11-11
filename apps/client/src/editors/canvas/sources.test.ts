@@ -3,7 +3,7 @@
 import { describe, expect, it } from "vitest";
 import type { CanvasNode } from "./model";
 import { PARTS_KEY } from "./parts";
-import { boardSources, SOURCE_BAR_MAX_PIECES, sourceBar, sourceName, sourceNeeds, subpathPage, type BoardSource } from "./sources";
+import { boardSources, cardTarget, SOURCE_BAR_MAX_PIECES, sourceBar, sourceName, sourceNeeds, subpathPage, type BoardSource } from "./sources";
 
 const file = (id: string, path: string, extra: Partial<CanvasNode> = {}): CanvasNode => ({ id, type: "file", x: 0, y: 0, width: 200, height: 200, file: path, ...extra });
 const text = (id: string): CanvasNode => ({ id, type: "text", x: 0, y: 0, width: 100, height: 40, text: id });
@@ -13,6 +13,23 @@ const only = (nodes: readonly CanvasNode[], path: string): BoardSource => {
   if (!found) throw new Error(`nessuna fonte ${path}`);
   return found;
 };
+
+describe("cardTarget", () => {
+  it("il file senza #… e il subpath: dal campo, sennò dal # nel percorso; il campo vince", () => {
+    expect(cardTarget(file("a", "Corsi/Lezione 4.pdf"))).toEqual({ path: "Corsi/Lezione 4.pdf", subpath: null });
+    expect(cardTarget(file("b", "Nota.md#Titolo"))).toEqual({ path: "Nota.md", subpath: "#Titolo" });
+    expect(cardTarget(file("c", "Nota.md", { subpath: "#Varianza" }))).toEqual({ path: "Nota.md", subpath: "#Varianza" });
+    expect(cardTarget(file("d", "Nota.md#Titolo", { subpath: "#Varianza" }))).toEqual({ path: "Nota.md", subpath: "#Varianza" });
+    // Un subpath vuoto non conta: vale il # del percorso, se c'è.
+    expect(cardTarget(file("e", "Nota.md#Titolo", { subpath: "" }))).toEqual({ path: "Nota.md", subpath: "#Titolo" });
+  });
+
+  it("una scheda che non è di file, o senza un file di testo, ha il percorso vuoto", () => {
+    expect(cardTarget(text("t"))).toEqual({ path: "", subpath: null });
+    expect(cardTarget({ id: "w", type: "link", x: 0, y: 0, width: 10, height: 10, url: "https://example.org/#x" })).toEqual({ path: "", subpath: null });
+    expect(cardTarget({ id: "f", type: "file", x: 0, y: 0, width: 10, height: 10, file: 3 as unknown as string })).toEqual({ path: "", subpath: null });
+  });
+});
 
 describe("subpathPage", () => {
   it("legge #page=N come la scheda del PDF, e nient'altro", () => {
