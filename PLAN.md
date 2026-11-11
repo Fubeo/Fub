@@ -5171,7 +5171,7 @@ colore e lo spessore in un solo annulla ciascuno; i tratti non toccati
 restano identici byte per byte.
 Prova: scripts/check.sh --rapido; cargo test -p fub-canvas-core; cd
 apps/client && npx vitest run src/editors/canvas
-Stato: [ ] da fare
+Stato: [~] in corso · coder Opus · base a0b0b2427
 
 ## T87 · Forme dal tratto e linea dritta
 
