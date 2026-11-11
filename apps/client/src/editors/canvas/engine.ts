@@ -1,6 +1,6 @@
 import type { Theme } from "../../theme/theme";
 import type { SyntaxForm } from "../../host/contract";
-import { t, onLanguage } from "../../i18n/strings";
+import { t, onLanguage, type Key } from "../../i18n/strings";
 import { MENU_RULE, type SurfaceClipboardOp, type SurfaceMenu, type SurfaceMenuClipboard, type SurfaceMenuEntry, type SurfaceMenuItem } from "../core/editor-menu";
 import { clipboardSupports, readClipboard, writeClipboardData, writeClipboardText } from "../../platform/clipboard";
 import { lineFeeds, operationFromText, type EditorChangeOrigin, type TextOperation } from "../core/text-operation";
@@ -829,6 +829,25 @@ const FINGER_CONTROLS = "button, a, input, textarea, select, [contenteditable]:n
  */
 const NARROW_WIDTH = 700;
 const NARROW_PANE = 480;
+
+/**
+ * I nomi di «Apri a lato per questo» (T45), per il punto: accanto, o «qui»
+ * nella finestra stretta, dove si apre nello stesso riquadro.
+ */
+const BESIDE_HERE_NAMES = {
+  beside: {
+    cell: "canvas.open_beside.cell",
+    section: "canvas.open_beside.section",
+    page: "canvas.open_beside.page",
+    none: "canvas.open_beside_here",
+  },
+  here: {
+    cell: "canvas.open_here.cell",
+    section: "canvas.open_here.section",
+    page: "canvas.open_here.page",
+    none: "canvas.open_here_this",
+  },
+} as const satisfies Record<"beside" | "here", Record<"cell" | "section" | "page" | "none", Key>>;
 /** Il filo con cui nasce una scheda lasciata nel vuoto (T67): da `from`, dal lato `fromSide` se c'è. */
 interface CardLink {
   readonly from: string;
@@ -8653,6 +8672,8 @@ export class CanvasEngine {
     if (narrow === this.#root.hasAttribute("data-narrow")) return;
     this.#root.toggleAttribute("data-narrow", narrow);
     this.#rail.setNarrow(narrow);
+    // «Apri a lato» diventa «Apri qui» e al contrario (T45).
+    this.#canvasOptions.sync();
   }
 
   // --- render -------------------------------------------------------------------
@@ -9072,8 +9093,12 @@ export class CanvasEngine {
     const file = target.path.replace(/^\/+/, "");
     if (file === "") return null;
     const at = (subpath: string, label: string) => ({ path: `/${file}${subpath}`, label });
+    // Nella finestra stretta si apre nello stesso riquadro, e il nome lo dice.
+    const here = this.#root.hasAttribute("data-narrow");
+    const name = (point: "cell" | "section" | "page" | null, args: Record<string, string> = {}): string =>
+      t((here ? BESIDE_HERE_NAMES.here : BESIDE_HERE_NAMES.beside)[point ?? "none"], args);
     const cell = this.#writingId === id ? this.#writingContext?.cell ?? "" : "";
-    if (cell !== "") return at(`#${cell}`, t("canvas.open_beside.cell", { cell }));
+    if (cell !== "") return at(`#${cell}`, name("cell", { cell }));
     const kind = cardKindOf(node);
     if (kind === "pdf") {
       let page: number | undefined;
@@ -9083,13 +9108,13 @@ export class CanvasEngine {
         console.warn(`canvas: la scheda ${node.id} non dice la pagina`, error);
       }
       if (page !== undefined && Number.isSafeInteger(page) && page >= 1) {
-        return at(`#page=${page}`, t("canvas.open_beside.page", { n: String(page) }));
+        return at(`#page=${page}`, name("page", { n: String(page) }));
       }
     }
     const subpath = target.subpath ?? "";
     const heading = kind === "note" ? noteHeadingOf(target.subpath) : null;
-    if (heading !== null) return at(subpath, t("canvas.open_beside.section", { name: heading }));
-    return at(subpath, t("canvas.open_beside_here"));
+    if (heading !== null) return at(subpath, name("section", { name: heading }));
+    return at(subpath, name(null));
   }
 
   /**

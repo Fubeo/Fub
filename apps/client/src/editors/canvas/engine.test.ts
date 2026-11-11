@@ -6051,7 +6051,10 @@ describe("«Apri a lato per questo» (T45)", () => {
     enter(host, "s");
     contexts.get("s")!.writing?.({ toolbar: null, context: { cell: "A1", formula: "" } });
     expect(command(engine).disabled()).toBeNull();
+    expect(command(engine).label).toBe("Apri a lato su A1");
     host.querySelector(".canvas-surface")!.setAttribute("data-narrow", "");
+    // Il nome dice che si apre qui, non a lato.
+    expect(command(engine).label).toBe("Apri qui su A1");
     command(engine).run();
     expect(opened).toEqual(["/Conti/voti.xlsx#A1"]);
     expect(beside).toEqual([]);

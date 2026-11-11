@@ -1062,14 +1062,9 @@ export function mountDocumentController(lifetime: Lifetime, d: DocumentDeps, pan
       await openDocument(target.doc, { gesture: true });
       if (target.at) await reveal(target.doc, { span: target.at.span });
     },
-    // Il menu di una scheda della lavagna (T17): «Apri a lato», come quello
-    // di un wikilink.
-    onOpenPathBeside: async (path, from) => {
-      const target = await resolvedReference({ kind: "path", value: path }, from ?? activeDoc() ?? undefined);
-      if (!target) throw new Error(t("preview.target_missing"));
-      await openDocumentBeside(target.doc, "row");
-      if (target.at) await reveal(target.doc, { span: target.at.span });
-    },
+    // Il menu di una scheda della lavagna (T17) e «Apri a lato per questo»
+    // (T45): accanto, allo stesso punto.
+    onOpenPathBeside: openPathBeside,
     // Un link di una scheda della lavagna (N6 T57) porta al file del vault che
     // risolve, come un link di una nota: `null` se non c'è (un link rotto). Chi
     // sceglie se la scheda è già sulla lavagna lo decide la tela.
@@ -3401,12 +3396,74 @@ export async function openFromView(id: string): Promise<void> {
   await openDocument(id);
 }
 
+/// Come si apre un documento accanto.
+export interface BesideOptions extends OpenOptions {
+  /// Se il riquadro vicino (quello che `split` metterebbe accanto: il
+  /// fratello dopo, nella stessa fila) mostra già il documento, si va lì
+  /// invece di dividere, e la pagina chiesta arriva alla superficie che c'è.
+  /// Assente: si divide sempre, come per un `fub://open`.
+  readonly reuse?: boolean;
+}
+
 /// Apre un documento in un riquadro nuovo accanto a quello col fuoco, a
-/// destra (`row`) o sotto (`col`): è il `split` di un `fub://open`.
-export async function openDocumentBeside(id: string, dir: "row" | "col", options: OpenOptions = {}): Promise<void> {
-  const other = split(layout.focus, dir);
+/// destra (`row`) o sotto (`col`): è il `split` di un `fub://open`. Con
+/// `reuse` torna al vicino che lo mostra già.
+export async function openDocumentBeside(id: string, dir: "row" | "col", options: BesideOptions = {}): Promise<void> {
+  const { reuse, ...open } = options;
+  const near = reuse === true ? neighbourShowing(layout.focus, dir, id) : null;
+  const other = near ?? split(layout.focus, dir);
   if (other) focusPane(other);
-  await openDocument(id, options);
+  await openDocument(id, open);
+}
+
+/// Il riquadro accanto a `pane` nella direzione `dir` (il fratello dopo, nella
+/// fila di quella direzione: dove `split` mette il riquadro nuovo), se la sua
+/// scheda attiva è `doc`; `null` se non c'è o mostra altro.
+function neighbourShowing(pane: string, dir: "row" | "col", doc: string): string | null {
+  const firstLeaf = (node: LayoutNode): string => (node.k === "leaf" ? node.pane : firstLeaf(node.children[0]!));
+  const find = (node: LayoutNode): string | null => {
+    if (node.k === "leaf") return null;
+    if (node.dir === dir) {
+      const at = node.children.findIndex((child) => child.k === "leaf" && child.pane === pane);
+      if (at >= 0) {
+        const next = node.children[at + 1];
+        return next === undefined ? null : firstLeaf(next);
+      }
+    }
+    for (const child of node.children) {
+      const found = find(child);
+      if (found !== null) return found;
+    }
+    return null;
+  };
+  const near = find(layout.tree);
+  return near !== null && activeDoc(near) === doc ? near : null;
+}
+
+/// Il frammento di un percorso dopo il `#` (`page=3`, `Titolo`, `B3`), o
+/// `null` se non ce n'è uno.
+function pathFragment(path: string): string | null {
+  const at = path.indexOf("#");
+  const fragment = at < 0 ? "" : path.slice(at + 1).trim();
+  return fragment === "" ? null : fragment;
+}
+
+/// «Apri a lato» di un percorso del vault (il menu di una scheda della
+/// lavagna, T17; «Apri a lato per questo», T45): accanto, o nel riquadro
+/// vicino che lo mostra già, allo stesso punto. `#page=N` di un PDF arriva
+/// alla pagina; un punto che la risoluzione porta (`at`) si rivela; un altro
+/// frammento che non arriva da nessuna parte (una cella, `#B3`: la griglia
+/// non sa ancora riceverla) apre il file in cima, e lo dice.
+export async function openPathBeside(path: string, from?: string): Promise<void> {
+  const target = await resolvedReference({ kind: "path", value: path }, from ?? activeDoc() ?? undefined);
+  if (!target) throw new Error(t("preview.target_missing"));
+  const fragment = pathFragment(path);
+  const page = fragment === null ? null : linkedPdfPage(target.doc, fragment);
+  await openDocumentBeside(target.doc, "row", { reuse: true, ...(page === null ? {} : { page }) });
+  if (target.at) await reveal(target.doc, { span: target.at.span });
+  else if (fragment !== null && page === null && activeDoc() === target.doc) {
+    notify(t("document.reveal_unavailable", { doc: docTitle(target.doc) }), "info");
+  }
 }
 
 /// Chiude il documento aperto **in ogni riquadro**, senza salvarlo: lo si usa

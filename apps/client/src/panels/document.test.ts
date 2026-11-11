@@ -625,6 +625,83 @@ describe("il collegamento a una pagina di un PDF (T32)", () => {
   });
 });
 
+// T45: «Apri a lato» di un percorso col punto (la lavagna, `onOpenPathBeside`),
+// sulla shell vera contro l'host finto.
+describe("«Apri a lato» di un percorso col punto (T45)", () => {
+  beforeEach(() => {
+    activeStop?.();
+    activeStop = null;
+    document.body.innerHTML = "";
+    localStorage.clear();
+    box.pages = 5;
+  });
+
+  afterEach(() => {
+    box.pages = 1;
+  });
+
+  /// La pagina che il visore del PDF nel riquadro col fuoco dice di mostrare.
+  const focusedPage = () =>
+    [...document.querySelectorAll<HTMLElement>(".pane.focus .media-pdf-page")].find((page) => !page.closest("[hidden]"))
+      ?.getAttribute("aria-label") ?? null;
+  const layoutNow = async () => (await import("../state/layout"));
+  const paneIds = async () => (await layoutNow()).panes();
+  const toasts = () => [...document.querySelectorAll(".toast")].map((each) => each.textContent ?? "");
+
+  it("un PDF con #page=3 si apre accanto a quella pagina", async () => {
+    await start("off");
+    await open("Benvenuto.md");
+    const { openPathBeside } = await import("../state/document-controller");
+    await openPathBeside(`/${GUIDA}#page=3`, "Benvenuto.md");
+    await settle();
+    expect(await paneIds()).toHaveLength(2);
+    const { activeDoc } = await layoutNow();
+    expect(activeDoc()).toBe(GUIDA);
+    await waitFor("la pagina 3", () => focusedPage() === "Pagina 3 di 5");
+  });
+
+  it("col riquadro accanto che mostra già il PDF ci torna e porta la pagina nuova, senza dividere", async () => {
+    await start("off");
+    await open("Benvenuto.md");
+    const { openPathBeside } = await import("../state/document-controller");
+    await openPathBeside(`/${GUIDA}#page=3`, "Benvenuto.md");
+    await waitFor("la pagina 3", () => focusedPage() === "Pagina 3 di 5");
+    const [left, right] = await paneIds();
+    (await layoutNow()).focusPane(left!);
+    await settle();
+    await openPathBeside(`/${GUIDA}#page=4`, "Benvenuto.md");
+    await settle();
+    expect(await paneIds()).toEqual([left, right]);
+    expect((await layoutNow()).layout.focus).toBe(right);
+    await waitFor("la pagina 4", () => focusedPage() === "Pagina 4 di 5");
+    expect(toasts().some((text) => text.includes("non sa portare"))).toBe(false);
+  });
+
+  it("senza `reuse` (un `fub://open`) si divide come sempre", async () => {
+    await start("off");
+    await open("Benvenuto.md");
+    const { openDocumentBeside } = await import("../state/document-controller");
+    await openDocumentBeside(GUIDA, "row");
+    await settle();
+    const [left] = await paneIds();
+    (await layoutNow()).focusPane(left!);
+    await openDocumentBeside(GUIDA, "row");
+    await settle();
+    expect(await paneIds()).toHaveLength(3);
+  });
+
+  it("un punto che non arriva da nessuna parte (una cella, #B3) apre il file in cima e lo dice", async () => {
+    await start("off");
+    await open("Benvenuto.md");
+    const { openPathBeside } = await import("../state/document-controller");
+    const { t } = await import("../i18n/strings");
+    await openPathBeside("/Altra.md#B3", "Benvenuto.md");
+    await settle();
+    expect((await layoutNow()).activeDoc()).toBe("Altra.md");
+    await waitFor("l'avviso", () => toasts().some((text) => text.includes(t("document.reveal_unavailable", { doc: "Altra" }))));
+  });
+});
+
 // #237 R01 e R02: il testo non salvato davanti ai gesti che toccano la sua
 // sessione senza passare dalla chiusura di una linguetta. Salvataggio e bozza
 // falliscono; dopo il gesto la sessione è viva e sporca, la nota riaperta

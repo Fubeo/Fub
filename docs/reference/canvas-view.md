@@ -301,9 +301,17 @@ col perché. Il punto, e il nome che lo dice:
 | altrove | il file col `subpath` della scheda | «Apri a lato per questo» |
 
 Il percorso va a `onOpenPathBeside`, come «Apri a lato» del menu della
-scheda: la shell lo risolve come un link (`resolvedReference`) e, se ne esce
-un punto, lo porta all'editor (`reveal`). Nella finestra stretta
-(`data-narrow`) va invece a `onOpenPath`, nello stesso riquadro, come «Apri».
+scheda (`openPathBeside` in `state/document-controller.ts`): la shell lo
+risolve come un link (`resolvedReference`); `#page=N` di un PDF arriva alla
+pagina, un punto che la risoluzione porta si rivela (`reveal`), e un altro
+frammento apre il file in cima con l'avviso «Questa vista di … non sa portare
+a quel punto.». Oggi è il caso della cella: la griglia non riceve ancora un
+punto da un link. Se il riquadro vicino, quello che la divisione metterebbe
+a destra, mostra già il file, si torna lì invece di dividere
+(`openDocumentBeside` con `reuse`; un `fub://open` divide sempre). Nella
+finestra stretta (`data-narrow`) va invece a `onOpenPath`, nello stesso
+riquadro come «Apri», e il nome lo dice: «Apri qui su B3», «Apri qui per
+questo».
 Il comando sta in `Ctrl+/`, in testa al menu del tasto destro dato dentro il
 contenuto della scheda attiva (una cella, la nota che si scrive, la pagina;
 sulla testata resta il menu della scheda) e nella riga delle opzioni, un
