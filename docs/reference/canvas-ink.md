@@ -111,15 +111,61 @@ L'ancora dice in quali unità sono i punti del tratto.
 |---|---|---|
 | `{"kind": "card", "width": W, "height": H}` | solo nel livello di una scheda | unità della scheda alla misura `W × H`, origine nell'angolo in alto a sinistra |
 | `{"kind": "free"}` | solo nel livello della radice | coordinate della lavagna |
+| `{"kind": "page", "page": N, "width": W, "height": H}` | solo nel livello di una scheda | punti PDF dall'angolo in alto a sinistra della pagina `N` (sotto, «L'ancora di pagina») |
 
 - **`W`, `H`:** la misura della scheda quando il tratto si è scritto, numeri
   finiti maggiori di zero. Dicono in che unità sono i punti; come seguono la
   misura di adesso lo dice «La misura della scheda». Si confrontano per valore: `640.0` e `6.4e2` sono
   640.
-- **Fuori posto:** un'ancora `card` alla radice o `free` su una scheda non è
-  valida, e il tratto non si disegna.
+- **Fuori posto:** un'ancora `card` o `page` alla radice, o `free` su una
+  scheda, non è valida, e il tratto non si disegna.
 - **Altri campi dell'ancora:** si conservano dopo quelli noti e non cambiano
   il significato.
+- **Un `kind` sconosciuto** (di una versione più nuova): il tratto si
+  conserva com'è e non si disegna. Il perché delle ancore di contenuto sta
+  nell'[ADR 0243](../decisions/0243-le-ancore-di-contenuto.md).
+
+### L'ancora di pagina
+
+Un tratto scritto sulla pagina di una scheda PDF è della pagina, non della
+scheda: si vede solo quando la scheda mostra quella pagina.
+
+```json
+{ "id": "s-7", "tool": "pen", "brush": "pf1 size=7.9 pen=ballpoint",
+  "color": "#0072b2",
+  "anchor": { "kind": "page", "page": 3, "width": 595, "height": 842 },
+  "ink": "1 s100 cxy 9917,11900 120,40 95,-10" }
+```
+
+- **`page`:** la pagina, da 1, un intero per valore (`3`, `3.0`). Zero, un
+  numero negativo o non intero, o un valore che non è un numero: l'ancora
+  non vale.
+- **`width`, `height`:** la misura della pagina in punti PDF (1/72 di
+  pollice) quando il tratto si è scritto, la pagina come si vede, con la sua
+  rotazione: una A4 ruotata è `842 × 595`. Numeri finiti maggiori di zero,
+  anche decimali (`595.276`).
+- **I punti** (e lo spessore del pennello) sono in punti PDF dall'angolo in
+  alto a sinistra di quella pagina. Un programma che ha il PDF ritrova il
+  posto senza sapere come Fub disegna la scheda.
+- **Quando nasce:** un tratto che `anchorAt` dà a una scheda PDF e che
+  comincia dentro la pagina che la scheda mostra, i bordi compresi. Sopra la
+  scheda ma fuori dalla pagina (la testata) prende l'ancora `card`. Conta
+  dove comincia: un tratto che parte sulla pagina e ne esce resta della
+  pagina.
+- **Come si disegna:** solo quando la scheda mostra la pagina `N`, da viva o
+  da ferma (l'immagine ferma è quella di una pagina). La pagina `W × H` va
+  sul rettangolo dove la scheda la mostra (`pageBox()`, nelle [schede della
+  lavagna](canvas-cards.md#il-contratto)) con `s = min(w / W, h / H)`,
+  dall'angolo in alto a sinistra: SVG con `viewBox="0 0 W H"` e
+  `preserveAspectRatio="xMinYMin meet"`. Ciò che esce dalla pagina si vede
+  fino al bordo della scheda, e lì si taglia. Voltata la pagina il tratto
+  sparisce; tornati, ricompare. Il file non cambia.
+- **Il PDF cambiato:** una pagina con un'altra misura scala il tratto sulla
+  pagina nuova (la misura scritta serve a chi non ha il PDF); una pagina che
+  non c'è più lascia il tratto nel file, e non si vede.
+- **Il nucleo** non sa dove la pagina sta nella scheda: `move_strokes` e lo
+  spessore di `restyle_strokes` su un tratto di pagina sono `Invalid`, e il
+  Lazo non lo sceglie. La gomma lo prende dove si vede; il colore si cambia.
 
 ## Come si disegna
 
@@ -132,7 +178,8 @@ L'ancora dice in quali unità sono i punti del tratto.
   porta il tratto da `W × H` alla misura di adesso `w × h` dipende dalla
   scheda (sotto, «La misura della scheda»).
 - **Un tratto che esce dalla scheda** resta valido: i punti non hanno limiti
-  di posizione, e ciò che esce si vede, non si taglia.
+  di posizione, e ciò che esce si vede, non si taglia (un tratto di pagina
+  invece si taglia alla scheda, sopra).
 
 ### La misura della scheda
 
@@ -197,7 +244,7 @@ fissa, la prima che vale in quest'ordine:
 | Ragione | Quando |
 |---|---|
 | `tool` | `tool` manca o non è `"pen"` né `"highlighter"` |
-| `anchor` | `anchor` manca, non è un oggetto, ha un `kind` sconosciuto o fuori posto, o una misura che manca o non è un numero maggiore di zero |
+| `anchor` | `anchor` manca, non è un oggetto, ha un `kind` sconosciuto o fuori posto, una misura che manca o non è un numero maggiore di zero, o (`page`) una pagina che non è un intero da 1 in su |
 | `color` | `color` manca o non è `#rrggbb` |
 | `brush` | `brush` manca o non è un pennello valido della §5 |
 | `ink` | `ink` manca, non rispetta la grammatica o i limiti della §5, o ha un canale sconosciuto |
@@ -216,8 +263,8 @@ fissa, la prima che vale in quest'ordine:
 
 - **Ordine dei campi del tratto:** `id`, `tool`, `at`, `brush`, `color`,
   `anchor`, `ink`, poi gli sconosciuti nell'ordine in cui erano.
-- **Ordine dei campi dell'ancora:** `kind`, `width`, `height`, poi gli
-  sconosciuti.
+- **Ordine dei campi dell'ancora:** `kind`, `page` (solo l'ancora di
+  pagina), `width`, `height`, poi gli sconosciuti.
 - **Il primo tratto** di una scheda o della radice crea il livello
   `{"v": 1, "strokes": [...]}` in fondo ai campi di chi lo tiene.
 - **L'ultimo tratto tolto:** se il livello resta esattamente
@@ -265,7 +312,8 @@ delle opzioni spiega il gesto finché non c'è una scheda scelta.
 - **Il giro** si chiude da solo e segue la regola pari-dispari. Una scheda è
   dentro se lo è tutto il suo rettangolo, un tratto se lo sono tutti i suoi
   punti. Un tratto di una scheda scelta non si sceglie: va con lei. Un
-  livello estraneo e un tratto che non si disegna non si scelgono. Con
+  livello estraneo, un tratto che non si disegna e un tratto di pagina
+  (sopra, «L'ancora di pagina») non si scelgono. Con
   `Maiusc` il giro aggiunge alla scelta; un clic senza giro sceglie la
   scheda sotto, o toglie la scelta. `Esc` e un altro strumento la tolgono.
 - **I tratti scelti** hanno il contorno d'accento e una cornice tratteggiata
