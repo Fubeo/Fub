@@ -325,11 +325,8 @@ fallisce su `main` e passa col task; i test di `move.ts` e `motion.ts`
 dicono che nessuna riga fuori dal tratto si muove.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/text/profiles/markdown/blocks
-Stato: [~] in corso · ramo `coder/editor-t1` (35727014f, «fix(blocchi):
-Alt+↑/↓ e Mod+D non spostano il corpo dentro il frontmatter», sopra 6ddc11951
-«il frontmatter resta il primo blocco»), copia di lavoro `wip/editor-t1`
-(ef01eba04, da `main` 90ab04599); la PR verso `main` si chiamerà
-`fix/blocchi-solleva-solo-il-blocco`.
+Stato: [x] fatto (2026-11-11) · PR #334 in `main` (5cc2122a9), CI completa
+verde.
 
 ## T2 · I gesti ai bordi, con scene e test
 
