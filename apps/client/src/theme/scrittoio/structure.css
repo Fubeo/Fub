@@ -950,21 +950,13 @@ body {
   order: 1;
 }
 
-/* L'etichetta del formato sta subito dopo il percorso: il titolo, che di
-   solito spinge il resto a destra (`sheets/sheets.css`), le cede lo spazio. */
-.pane-toolbar > .pane-format {
-  flex: none;
-  order: 1;
-  margin-inline-end: auto;
-  white-space: nowrap;
-}
-.pane-toolbar:has(> .pane-format:not([hidden])) > .muted,
+/* Lo stato del documento sta subito dopo il percorso: il titolo, che di
+   solito spinge il resto a destra (`sheets/sheets.css`), gli cede lo spazio. */
 .pane-toolbar:has(> .pane-standing:not([hidden]):not([data-standing="writes"])) > .muted {
   margin-right: 0;
 }
 
-/* Lo stato del documento viene dopo il formato, e spinge lui il resto a
-   destra. */
+/* Lo stato spinge lui il resto a destra. */
 .pane-toolbar > .pane-standing {
   display: inline-flex;
   flex: none;
@@ -974,9 +966,6 @@ body {
 }
 .pane-toolbar > .pane-standing[hidden] {
   display: none;
-}
-.pane-toolbar:has(> .pane-standing:not([hidden]):not([data-standing="writes"])) > .pane-format {
-  margin-inline-end: 0;
 }
 
 /* «Si scrive» è lo stato normale di un documento: non lo dice la testata ma
@@ -1010,7 +999,6 @@ body {
   .pane-toolbar > .muted {
     visibility: hidden;
   }
-  .pane-toolbar > .pane-format,
   .pane-toolbar > .pane-standing {
     display: none;
   }
