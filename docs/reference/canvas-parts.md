@@ -93,6 +93,15 @@ della scheda ([Le schede della lavagna](canvas-cards.md)): `.pdf`; `.md` e
 - `rotate`, facoltativo: gradi in senso orario, di serie 0. Fub legge
   qualsiasi numero e scrive solo 90, 180 o 270.
 
+Lo scrive «Ritaglia e ruota» (menu della scheda, barra della selezione,
+Ctrl+/; non in sola lettura): «Fatto» o Invio scrive la zona, il lato
+minimo è 1/100, in un solo commit che toglie il `subpath` e dà alla scheda
+le proporzioni della zona ruotata a parità di larghezza; «Togli il
+ritaglio» toglie il campo; Esc non scrive. Il file dell'immagine non si
+tocca mai, e l'inchiostro resta attaccato alla scheda. La scheda dipinge la
+zona dall'immagine vera (`editors/canvas/crop.ts`, `cards/image.ts`), e
+l'immagine ferma ha la zona nel nome della parte.
+
 ## Lettura
 
 Leggere non cambia il file. Le regole valgono nell'ordine in cui sono
