@@ -197,7 +197,7 @@ scrive, valgono quelli della sessione). `Esc` torna dov'eri, anche in un campo.
 | `canvas.zoom_in`, `canvas.zoom_out`, `canvas.zoom_reset` | `+`, `Ctrl+=`; `-`, `Ctrl+-`; `0` |
 | `canvas.grid_toggle` (mostra o nasconde la griglia di questa lavagna) | `Ctrl+'` |
 | `canvas.add.*`, `canvas.edit`, `canvas.open`, `canvas.open_url`, `canvas.edge.reverse`, `canvas.color.*`, `canvas.align.*`, `canvas.distribute_*` | nessuno |
-| `canvas.open_beside`, `canvas.open_viewer`, `canvas.web_preview`, `canvas.spread_pages` (solo su un PDF), `canvas.connect`, `canvas.trash_file` (il menu della scheda) | nessuno (`canvas.connect` anche con `C`, vedi sotto) |
+| `canvas.open_beside`, `canvas.open_viewer`, `canvas.web_preview`, `canvas.spread_pages` (solo su un PDF), `canvas.connect`, `canvas.trash_file` (il menu della scheda); `canvas.open_beside_here` ([la vista](canvas-view.md#apri-a-lato-per-questo)) | nessuno (`canvas.connect` anche con `C`, vedi sotto) |
 | `canvas.pen_menu`, `canvas.color_menu`, `canvas.align_menu`, `canvas.tips.none`, `.start`, `.end` (la riga delle opzioni) | nessuno |
 
 I tasti sono quelli della tabella «Tasti» della lavagna dove fanno la stessa
@@ -420,7 +420,7 @@ schede scelte:
   Collega ha le punte del filo che tira (`canvas.tips.*`: nessuna, all'inizio,
   alla fine, quella di serie, che scrive `toEnd: "arrow"` come prima). La
   punta scelta vale finché la lavagna resta aperta.
-- **In ogni riga** la Vista: riduci, ingrandisci, mostra tutto.
+- **In ogni riga** la Vista (riduci, ingrandisci, mostra tutto); prima, con una scheda attiva, [«Apri a lato» sul punto](canvas-view.md#apri-a-lato-per-questo).
 
 Ogni controllo è un comando del catalogo: il nome e il tasto vengono da lì,
 uno spento si vede col perché (`aria-disabled`) e il clic non fa niente.

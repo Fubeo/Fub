@@ -4,7 +4,7 @@
 > Avanti, Spazio, il bordo, l'inerzia), la griglia e le guide, il navigatore
 > e la vista che torna quando la lavagna si riapre; il menu radiale e i gesti
 > delle dita; come si vedono le schede da lontano; Cerca nella lavagna; la
-> lavagna da tastiera e col lettore di schermo.
+> lavagna da tastiera e col lettore di schermo; «Apri a lato per questo».
 > **Fonti autorevoli:** `apps/client/src/editors/canvas/engine.ts`
 > (`#jumpCamera`, `#paintGrid`, `#refreshDetail`, `#keydown`), `jumps.ts`, `guides.ts`,
 > `chrome/navigator.ts`, `chrome/radial.ts`, `view-state.ts`, `lod.ts`, `find.ts`,
@@ -284,6 +284,31 @@ scrive i nomi sulle schede.
   che un commit ha cambiato: «Hai tolto dalla lavagna: …», «Hai collegato … a
   …», «Hai spostato: …» (una frase, in quest'ordine), o quante schede. Testo,
   colore e misura non si annunciano.
+
+## Apri a lato per questo
+
+Ciò che una scheda non fa (righe e colonne di un foglio, un documento Word,
+la nota intera) si fa nell'editor del file, aperto accanto allo stesso punto:
+`canvas.open_beside_here` (`#besideHere` in `engine.ts`). Vale per la scheda
+di file attiva, anche in sola lettura (aprire è guardare); senza, è spento
+col perché. Il punto, e il nome che lo dice:
+
+| Dove si è | Il percorso | Il nome |
+|---|---|---|
+| una cella che si scrive (il contesto della scheda, T42) | `/Conti/voti.xlsx#B3` | «Apri a lato su B3» |
+| un PDF (la pagina che mostra, `CardView.page`) | `/Libri/manuale.pdf#page=3` | «Apri a lato alla pagina 3» |
+| una scheda di nota con una sezione (il suo `subpath`) | `/Note/Fisica.md#Scopo` | «Apri a lato su «Scopo»» |
+| altrove | il file col `subpath` della scheda | «Apri a lato per questo» |
+
+Il percorso va a `onOpenPathBeside`, come «Apri a lato» del menu della
+scheda: la shell lo risolve come un link (`resolvedReference`) e, se ne esce
+un punto, lo porta all'editor (`reveal`). Nella finestra stretta
+(`data-narrow`) va invece a `onOpenPath`, nello stesso riquadro, come «Apri».
+Il comando sta in `Ctrl+/`, in testa al menu del tasto destro dato dentro il
+contenuto della scheda attiva (una cella, la nota che si scrive, la pagina;
+sulla testata resta il menu della scheda) e nella riga delle opzioni, un
+pulsante col nome scritto (`[data-option="beside"]`) dopo la barra di chi
+scrive o prima della Vista. Il nome segue la cella e la pagina.
 
 ## Riaprire dove eri
 

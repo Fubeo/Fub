@@ -15,6 +15,9 @@
 // - **Mentre si scrive in una scheda** la riga mostra la barra che chi scrive
 //   le dà (`setWriting`): la barra di formato della nota (T41) o la formula
 //   della cella (T42). Senza, torna allo strumento.
+// - **Con una scheda attiva** la riga ha anche «Apri a lato» sul punto in cui
+//   si è (T45, `activeCard`): un pulsante col nome scritto, che lo dice («Apri
+//   a lato su B3»), prima della Vista o dopo la barra di chi scrive.
 // - **Ogni controllo è un comando** del catalogo (`commands.ts`): il nome, il
 //   tasto nel suggerimento, spento col perché (`aria-disabled`, così il
 //   lettore di schermo ci arriva e lo sente); il clic lo esegue.
@@ -96,6 +99,9 @@ export interface CanvasOptionsContext {
   /// I pallini del menu dei colori (T47), come li dipinge la lavagna: il
   /// colore di ogni scelta. Senza, il menu non ha pallini.
   readonly swatches?: () => ReadonlyMap<string, string>;
+  /// C'è una scheda attiva (T45): la riga offre «Apri a lato» sul punto in
+  /// cui si è (`canvas.open_beside_here`), col nome che lo dice. Senza, mai.
+  readonly activeCard?: () => boolean;
 }
 
 export interface CanvasOptions {
@@ -264,6 +270,16 @@ export function createCanvasOptions(ctx: CanvasOptionsContext): CanvasOptions {
     ...CANVAS_TIPS.map((tip) => button(`canvas.tips.${tip}`, TIP_ICON[tip], `tips-${tip}`, { checked: () => ctx.tips() === tip })),
   ));
 
+  // «Apri a lato per questo» (T45, come nel prototipo T27): un pulsante col
+  // nome scritto, che dice il punto («Apri a lato su B3»), dopo la barra di
+  // chi scrive e prima della Vista.
+  const beside = button("canvas.open_beside_here", "draw-open-link", "open-beside-here");
+  beside.dataset.label = "";
+  const besideName = document.createElement("span");
+  beside.append(besideName);
+  // Va in «…» dopo la Vista (0) e prima della barra di chi scrive (1).
+  const besideItem = item("beside", 0.5, group("group", "explorer.open_beside", beside));
+
   // La riga che spiega il gesto.
   const hint = document.createElement("span");
   hint.className = "canvas-options-hint";
@@ -277,8 +293,10 @@ export function createCanvasOptions(ctx: CanvasOptionsContext): CanvasOptions {
 
   let writing: readonly OptionItem[] | null = null;
   let shown: CanvasOptionsMode | null = null;
+  /// La riga mostra «Apri a lato per questo» (c'è una scheda attiva).
+  let shownBeside = false;
 
-  const itemsFor = (mode: CanvasOptionsMode): readonly OptionItem[] => {
+  const itemsOf = (mode: CanvasOptionsMode): readonly OptionItem[] => {
     switch (mode) {
       case "writing":
         return writing ?? [];
@@ -296,12 +314,21 @@ export function createCanvasOptions(ctx: CanvasOptionsContext): CanvasOptions {
         return [view];
     }
   };
+  /// Gli elementi della riga: quelli di `mode` e, con una scheda attiva,
+  /// «Apri a lato per questo» prima della Vista (in scrittura, dopo la barra).
+  const itemsFor = (mode: CanvasOptionsMode, withBeside: boolean): readonly OptionItem[] => {
+    const items = itemsOf(mode);
+    if (!withBeside) return items;
+    const at = items.indexOf(view);
+    return at < 0 ? [...items, besideItem] : [...items.slice(0, at), besideItem, ...items.slice(at)];
+  };
 
   /// I controlli della riga che si vedono, nell'ordine.
+  /// In scrittura la barra di chi scrive ha la sua tastiera: della riga resta
+  /// solo «Apri a lato per questo».
   const reachable = (): HTMLElement[] =>
-    shown === "writing"
-      ? []
-      : [...element.querySelectorAll<HTMLElement>(".kit-options-row button")].filter((control) => !control.closest("[hidden]"));
+    [...element.querySelectorAll<HTMLElement>(".kit-options-row button")]
+      .filter((control) => !control.closest("[hidden]") && (shown !== "writing" || control === beside));
 
   /// Un solo punto di tabulazione: quello che aveva il fuoco, o il primo.
   const rove = (focus?: HTMLElement): void => {
@@ -436,6 +463,9 @@ export function createCanvasOptions(ctx: CanvasOptionsContext): CanvasOptions {
     const wellLabel = why === null ? said : t("canvas.options.off", { name: said, why });
     wellButton.setAttribute("aria-label", wellLabel);
     setTooltip(wellButton, wellLabel);
+    // Il nome di «Apri a lato per questo» dice il punto, e cambia con lui.
+    const besideLabel = catalog.get("canvas.open_beside_here")?.label ?? "";
+    if (besideName.textContent !== besideLabel) besideName.textContent = besideLabel;
     const key = shown ? HINT[shown] : undefined;
     const text = key ? t(key) : "";
     if (hint.textContent !== text) hint.textContent = text;
@@ -449,13 +479,23 @@ export function createCanvasOptions(ctx: CanvasOptionsContext): CanvasOptions {
   const sync = (): void => {
     if (lifetime.closed) return;
     const mode = canvasOptionsMode(ctx.tool(), ctx.chosen(), writing !== null);
+    const withBeside = ctx.activeCard?.() === true;
     if (mode !== shown) {
       // Un'altra riga: il rialzo della penna e i menu della riga di prima si
       // chiudono (passando fra Penna, Evidenziatore e Gomma la riga resta).
       closeMenus();
       shown = mode;
+      shownBeside = withBeside;
       paint();
-      bar.setItems(itemsFor(mode));
+      bar.setItems(itemsFor(mode, withBeside));
+      rove();
+      return;
+    }
+    if (withBeside !== shownBeside) {
+      // La stessa riga, con o senza «Apri a lato per questo»: i menu restano.
+      shownBeside = withBeside;
+      paint();
+      bar.setItems(itemsFor(mode, withBeside));
       rove();
       return;
     }

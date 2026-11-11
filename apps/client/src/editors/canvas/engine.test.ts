@@ -26,7 +26,15 @@ import { CANVAS_TOOL_IDS, toolCommandId } from "./chrome/commands";
 import { CARD_PANEL_ID, createCanvasInspector } from "./chrome/inspector";
 import { INERTIA_MS } from "../../spatial/camera";
 import { setReducedMotionPreference } from "../../theme/reduced-motion";
-import { createCardRegistry, type CardEditorPort, type CardTextEditor, type CardTextOptions } from "./cards";
+import {
+  createCardRegistry,
+  type CardContext,
+  type CardEditorPort,
+  type CardRenderer,
+  type CardTextEditor,
+  type CardTextOptions,
+  type CardView,
+} from "./cards";
 import { CardCache } from "./card-cache";
 
 // Le impostazioni della lavagna (T35): il motore monta `watchPreferences`, e la
@@ -5865,6 +5873,196 @@ describe("CanvasEngine: tutto da tastiera e col lettore di schermo (T61)", () =>
     const { engine, host } = mounted(JSON.stringify({ nodes, edges: [] }));
     await vi.waitFor(() => expect(cardOf(host, "n599").getAttribute("aria-label")).toBe(`${textTitle("Scheda 599")}.`));
     expect(host.querySelectorAll(".canvas-node:not([aria-label])")).toHaveLength(0);
+    engine.destroy();
+  });
+});
+
+// --- «Apri a lato per questo» (T45) --------------------------------------------
+
+describe("«Apri a lato per questo» (T45)", () => {
+  const BOARD = [
+    { id: "s", type: "file", x: 0, y: 0, width: 400, height: 200, file: "Conti/voti.xlsx" },
+    { id: "n", type: "file", x: 0, y: 260, width: 400, height: 200, file: "Note/Fisica.md", subpath: "#Scopo" },
+    { id: "p", type: "file", x: 460, y: 0, width: 300, height: 400, file: "Libri/manuale.pdf" },
+    { id: "w", type: "file", x: 460, y: 460, width: 300, height: 200, file: "Note/Tutta.md" },
+  ];
+
+  /**
+   * Le schede vive per le prove: il foglio e le note scrivono (`edit`), il
+   * PDF dice la pagina che mostra; i contesti restano per rispondere come
+   * risponderebbe la porta (`writing`).
+   */
+  function board(overrides: Partial<CanvasEngineOptions> = {}) {
+    const contexts = new Map<string, CardContext>();
+    let page = 3;
+    const renderer: CardRenderer = {
+      kinds: ["sheet", "note", "pdf"],
+      mount(node, host, _mode, context): CardView {
+        contexts.set(node.id, context);
+        const cell = document.createElement("div");
+        cell.className = "probe-cell";
+        cell.tabIndex = -1;
+        host.append(cell);
+        const pdf = (node.file ?? "").endsWith(".pdf");
+        return {
+          setMode: () => {},
+          enter: () => true,
+          leave: () => {},
+          ...(pdf ? { page: () => page } : { edit: () => true }),
+          destroy: () => {},
+        };
+      },
+    };
+    const beside: string[] = [];
+    const made = mounted(JSON.stringify({ nodes: BOARD, edges: [] }), {
+      cards: { registry: createCardRegistry([renderer]), snapshots: new CardCache(), watch: () => () => {} },
+      onOpenPathBeside: (path) => {
+        beside.push(path);
+      },
+      ...overrides,
+    });
+    return { ...made, contexts, beside, turnTo: (n: number) => (page = n) };
+  }
+
+  const cardEl = (host: HTMLElement, id: string) => host.querySelector<HTMLElement>(`.canvas-node[data-node="${id}"]`)!;
+
+  /** Tab sulla scheda e Invio: si entra, e dove si scrive si scrive. */
+  function enter(host: HTMLElement, id: string): void {
+    const article = cardEl(host, id);
+    article.focus();
+    article.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
+  }
+
+  /** Il menu del tasto destro su `element`. */
+  function menuOn(engine: CanvasEngine, element: Element) {
+    const pointing = vi.spyOn(document, "elementFromPoint").mockReturnValue(element);
+    try {
+      return engine.contextMenu({ x: 10, y: 10 })!;
+    } finally {
+      pointing.mockRestore();
+    }
+  }
+
+  const command = (engine: CanvasEngine) => engine.commands().find((one) => one.id === "canvas.open_beside_here")!;
+  const rowButton = (host: HTMLElement) =>
+    host.querySelector<HTMLButtonElement>('.canvas-options [data-option="beside"] [data-command="canvas.open_beside_here"]');
+
+  it("da una cella che si scrive apre il foglio accanto su quella cella; il nome e il pulsante dicono la cella", () => {
+    const { engine, host, contexts, beside } = board();
+    expect(command(engine).disabled()).toBe(t("canvas.commands.why.no_active_card"));
+    expect(rowButton(host)).toBeNull();
+    enter(host, "s");
+    contexts.get("s")!.writing?.({ toolbar: null, context: { cell: "B3", formula: "=B1+B2" } });
+    expect(command(engine).label).toBe("Apri a lato su B3");
+    expect(command(engine).disabled()).toBeNull();
+    // Nella riga delle opzioni, dopo la formula: il pulsante col nome scritto.
+    const button = rowButton(host)!;
+    expect(button.textContent).toBe("Apri a lato su B3");
+    expect(button.hasAttribute("data-label")).toBe(true);
+    const items = [...host.querySelectorAll<HTMLElement>(".canvas-options .canvas-options-item")]
+      .filter((item) => item.parentElement?.closest(".canvas-options-item") === null)
+      .map((item) => item.dataset.option);
+    expect(items).toEqual(["formula", "beside"]);
+    button.click();
+    expect(beside).toEqual(["/Conti/voti.xlsx#B3"]);
+    // Un'altra cella: il nome la segue.
+    contexts.get("s")!.writing?.({ toolbar: null, context: { cell: "C4", formula: "" } });
+    expect(rowButton(host)!.textContent).toBe("Apri a lato su C4");
+    engine.destroy();
+  });
+
+  it("col riquadro accanto già aperto porta lì il punto nuovo, ogni volta", () => {
+    const { engine, host, contexts, beside } = board();
+    enter(host, "s");
+    contexts.get("s")!.writing?.({ toolbar: null, context: { cell: "B3", formula: "" } });
+    command(engine).run();
+    contexts.get("s")!.writing?.({ toolbar: null, context: { cell: "D7", formula: "" } });
+    command(engine).run();
+    // Lo stesso file col punto di adesso: chi apre a lato (la shell,
+    // `onOpenPathBeside`) riceve ogni volta la cella nuova.
+    expect(beside).toEqual(["/Conti/voti.xlsx#B3", "/Conti/voti.xlsx#D7"]);
+    engine.destroy();
+  });
+
+  it("da una scheda di nota apre la sezione che mostra", () => {
+    const { engine, host, contexts, beside } = board();
+    enter(host, "n");
+    contexts.get("n")!.writing?.({ toolbar: null });
+    expect(command(engine).label).toBe("Apri a lato su «Scopo»");
+    command(engine).run();
+    expect(beside).toEqual(["/Note/Fisica.md#Scopo"]);
+    engine.destroy();
+  });
+
+  it("da un PDF apre la pagina mostrata, e il nome segue la pagina", () => {
+    const { engine, host, contexts, beside, turnTo } = board();
+    enter(host, "p");
+    expect(command(engine).label).toBe("Apri a lato alla pagina 3");
+    expect(rowButton(host)!.textContent).toBe("Apri a lato alla pagina 3");
+    turnTo(5);
+    contexts.get("p")!.pageChanged?.(5);
+    expect(rowButton(host)!.textContent).toBe("Apri a lato alla pagina 5");
+    command(engine).run();
+    expect(beside).toEqual(["/Libri/manuale.pdf#page=5"]);
+    engine.destroy();
+  });
+
+  it("senza un punto apre il file com'è, col nome di sempre; uscendo il pulsante se ne va", () => {
+    const { engine, host, beside } = board();
+    enter(host, "w");
+    expect(command(engine).label).toBe("Apri a lato per questo");
+    command(engine).run();
+    expect(beside).toEqual(["/Note/Tutta.md"]);
+    expect(rowButton(host)).not.toBeNull();
+    const body = cardEl(host, "w").querySelector<HTMLElement>(".canvas-card-body")!;
+    body.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
+    expect(host.querySelector(".canvas-node[data-card-active]")).toBeNull();
+    expect(rowButton(host)).toBeNull();
+    expect(command(engine).disabled()).toBe(t("canvas.commands.why.no_active_card"));
+    engine.destroy();
+  });
+
+  it("il tasto destro su una cella della scheda in scrittura ha in testa «Apri a lato» su quella cella", () => {
+    const { engine, host, contexts, beside } = board();
+    enter(host, "s");
+    contexts.get("s")!.writing?.({ toolbar: null, context: { cell: "B3", formula: "" } });
+    const menu = menuOn(engine, cardEl(host, "s").querySelector(".probe-cell")!);
+    const first = menu.context![0] as SurfaceMenuItem;
+    expect(first.id).toBe("canvas.open_beside_here");
+    expect(first.label).toBe("Apri a lato su B3");
+    expect(first.enabled).toBe(true);
+    expect(menu.context![1]).toBe(MENU_RULE);
+    first.run!();
+    expect(beside).toEqual(["/Conti/voti.xlsx#B3"]);
+    // Sulla testata, fuori dal contenuto, resta il menu della scheda.
+    const plain = menuOn(engine, cardEl(host, "s").querySelector(".canvas-node-handle")!);
+    expect((plain.context ?? []).some((entry) => typeof entry !== "string" && entry.id === "canvas.open_beside_here")).toBe(false);
+    engine.destroy();
+  });
+
+  it("nella finestra stretta apre nello stesso riquadro, come «Apri»; in sola lettura si apre lo stesso", () => {
+    const opened: string[] = [];
+    const { engine, host, contexts, beside } = board({
+      onOpenPath: (path) => {
+        opened.push(path);
+      },
+    });
+    engine.setReadOnly(true);
+    enter(host, "s");
+    contexts.get("s")!.writing?.({ toolbar: null, context: { cell: "A1", formula: "" } });
+    expect(command(engine).disabled()).toBeNull();
+    host.querySelector(".canvas-surface")!.setAttribute("data-narrow", "");
+    command(engine).run();
+    expect(opened).toEqual(["/Conti/voti.xlsx#A1"]);
+    expect(beside).toEqual([]);
+    engine.destroy();
+  });
+
+  it("senza chi apre a lato la voce è spenta col perché", () => {
+    const { engine, host } = board({ onOpenPathBeside: undefined });
+    enter(host, "p");
+    expect(command(engine).label).toBe("Apri a lato alla pagina 3");
+    expect(command(engine).disabled()).toBe(t("canvas.commands.why.no_beside"));
     engine.destroy();
   });
 });

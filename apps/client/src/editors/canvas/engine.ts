@@ -1861,6 +1861,7 @@ export class CanvasEngine {
       },
       penMenu: this.#penMenu,
       swatches: () => this.#colorSwatches(),
+      activeCard: () => this.#besideHere() !== null,
     });
     // La barra della selezione (T51): una sorella della vista, come il
     // navigatore, così i suoi clic non passano dal puntatore della lavagna.
@@ -6234,6 +6235,21 @@ export class CanvasEngine {
             void Promise.resolve(beside(path, this.#options.documentId)).catch((error: unknown) => this.#showIntakeError(error));
           },
         };
+      // «Apri a lato per questo» (T45): la scheda attiva, allo stesso punto.
+      case "canvas.open_beside_here":
+        return {
+          label: () => this.#besideHere()?.label ?? null,
+          disabled: () => {
+            if (this.#besideHere() === null) return t("canvas.commands.why.no_active_card");
+            return this.#besideOpener() ? null : t("canvas.commands.why.no_beside");
+          },
+          run: () => {
+            const here = this.#besideHere();
+            const open = this.#besideOpener();
+            if (!here || !open) return;
+            void Promise.resolve(open(here.path, this.#options.documentId)).catch((error: unknown) => this.#showIntakeError(error));
+          },
+        };
       case "canvas.open_viewer":
         return {
           disabled: () => {
@@ -6930,7 +6946,11 @@ export class CanvasEngine {
         run: (op) => this.#clipboardMenu(op),
       };
       if (one?.type !== "group") {
-        return { target: this.#cardMenuTarget(nodes, node), at, context: this.#cardMenu(nodes, entry, colors), clipboard };
+        // Dentro la scheda attiva (una cella, la nota che si scrive, la
+        // pagina), o dalla tastiera con la scheda attiva, il menu porta in
+        // testa «Apri a lato» su quel punto (T45).
+        const inside = node === this.#activeId && (element === null || this.#insideActive(element, true));
+        return { target: this.#cardMenuTarget(nodes, node), at, context: this.#cardMenu(nodes, entry, colors, inside), clipboard };
       }
       // Un gruppo solo ha il suo menu di sempre.
       const context: SurfaceMenuEntry[] = [
@@ -7001,14 +7021,19 @@ export class CanvasEngine {
    * esclusive), Disponi ›, Duplica; in fondo, in rosso, Togli dalla lavagna e,
    * con le schede di file, Sposta anche il file nel cestino. Con più schede
    * niente Apri né Collega…; in sola lettura le voci che cambiano sono spente
-   * col perché, non nascoste.
+   * col perché, non nascoste. Con `inside` (il tasto destro dentro la scheda
+   * attiva) in testa c'è «Apri a lato» sul punto in cui si è (T45): ciò che
+   * la scheda non fa, nell'editor intero.
    */
-  #cardMenu(nodes: readonly CanvasNode[], entry: MenuEntryMaker, colors: ColorMenuMaker): SurfaceMenuEntry[] {
+  #cardMenu(nodes: readonly CanvasNode[], entry: MenuEntryMaker, colors: ColorMenuMaker, inside = false): SurfaceMenuEntry[] {
     const one = nodes.length === 1 ? nodes[0]! : null;
     const readOnly = this.#readOnly ? t("canvas.commands.why.read_only") : null;
     const state = (why: string | null): Pick<SurfaceMenuItem, "enabled" | "description"> =>
       why === null ? { enabled: true } : { enabled: false, description: why };
     const context: SurfaceMenuEntry[] = [];
+    if (inside && one?.type === "file" && this.#besideHere() !== null) {
+      context.push(entry("canvas.open_beside_here", undefined, false, { icon: "draw-open-link" }), MENU_RULE);
+    }
     // «Parti…» per prima, come nel prototipo (T28): riapre il selettore.
     if (one && this.#options.parts && this.#partsNote(one)) context.push(entry("canvas.parts", undefined, false));
     if (one?.type === "text") context.push(entry("canvas.edit", undefined, false));
@@ -9029,6 +9054,53 @@ export class CanvasEngine {
     return "shown";
   }
 
+  /**
+   * Dove porta «Apri a lato per questo» (T45): il file della scheda attiva col
+   * punto in cui si è dentro, e il nome della voce che lo dice. Il punto è la
+   * cella che si scrive (`#B3`, dal contesto della scheda, T42), la pagina
+   * mostrata da un PDF (`#page=3`), la sezione che la scheda di nota mostra
+   * (`#Titolo`, il suo `subpath`); senza, il `subpath` della scheda, com'è.
+   * `null` senza una scheda di file attiva. La sola lettura non conta: aprire
+   * è guardare.
+   */
+  #besideHere(): { readonly path: string; readonly label: string } | null {
+    const id = this.#activeId;
+    const entry = id === null ? undefined : this.#cards.get(id);
+    const node = entry?.node;
+    if (!entry || node?.type !== "file") return null;
+    const target = cardTarget(node);
+    const file = target.path.replace(/^\/+/, "");
+    if (file === "") return null;
+    const at = (subpath: string, label: string) => ({ path: `/${file}${subpath}`, label });
+    const cell = this.#writingId === id ? this.#writingContext?.cell ?? "" : "";
+    if (cell !== "") return at(`#${cell}`, t("canvas.open_beside.cell", { cell }));
+    const kind = cardKindOf(node);
+    if (kind === "pdf") {
+      let page: number | undefined;
+      try {
+        page = entry.view?.page?.();
+      } catch (error) {
+        console.warn(`canvas: la scheda ${node.id} non dice la pagina`, error);
+      }
+      if (page !== undefined && Number.isSafeInteger(page) && page >= 1) {
+        return at(`#page=${page}`, t("canvas.open_beside.page", { n: String(page) }));
+      }
+    }
+    const subpath = target.subpath ?? "";
+    const heading = kind === "note" ? noteHeadingOf(target.subpath) : null;
+    if (heading !== null) return at(subpath, t("canvas.open_beside.section", { name: heading }));
+    return at(subpath, t("canvas.open_beside_here"));
+  }
+
+  /**
+   * Chi apre per «Apri a lato per questo» (T45): accanto o, nella finestra
+   * stretta, nello stesso riquadro come «Apri»; `null` se da qui non si può.
+   */
+  #besideOpener(): ((path: string, from?: string) => void | Promise<void>) | null {
+    if (this.#root.hasAttribute("data-narrow")) return this.#options.onOpenPath ?? null;
+    return this.#options.onOpenPathBeside ?? null;
+  }
+
   /** «Apri» del menu di una scheda di file (T17): il file si apre nel riquadro. */
   #openFileNode(node: CanvasNode): void {
     if (node.type !== "file" || !node.file) return;
@@ -9126,6 +9198,8 @@ export class CanvasEngine {
     item.cell.textContent = context.cell;
     item.formula.textContent = context.formula;
     item.formula.title = context.formula;
+    // «Apri a lato su B3» segue la cella (T45).
+    this.#canvasOptions.sync();
   }
 
   #clearWritingContext(): void {
@@ -9200,6 +9274,8 @@ export class CanvasEngine {
     }
     this.#activeId = id;
     this.#syncSelectionBar();
+    // La riga delle opzioni offre «Apri a lato» su questa scheda (T45).
+    this.#canvasOptions.sync();
     const article = entry.article;
     article.dataset.cardActive = "";
     const hint = document.createElement("span");
@@ -9231,6 +9307,7 @@ export class CanvasEngine {
     }
     if (refresh) this.#refreshLive();
     this.#syncSelectionBar();
+    this.#canvasOptions.sync();
   }
 
   #unmarkActive(entry: CardEntry, refocus: boolean): void {
@@ -9589,6 +9666,8 @@ export class CanvasEngine {
         // Una vista già smontata non parla più per questa scheda.
         if (life.closed || entry.body !== body) return;
         this.#viewMemo?.pageChanged(entry.id, page);
+        // «Apri a lato alla pagina 3» segue la pagina della scheda attiva (T45).
+        if (this.#activeId === entry.id) this.#canvasOptions.sync();
       },
       ...(this.#options.cards?.editors ? { editors: this.#options.cards.editors } : {}),
       writing: (writing) => {
@@ -9763,6 +9842,7 @@ export class CanvasEngine {
       } catch (error) {
         console.warn(`canvas: la scheda ${entry.id} non esce`, error);
       }
+      this.#canvasOptions.sync();
     }
     delete entry.article.dataset.cardKind;
     delete entry.article.dataset.cardMode;

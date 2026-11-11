@@ -152,6 +152,9 @@ export const CANVAS_COMMANDS: readonly CanvasCommandSpec[] = [
   // l'anteprima di una pagina web, Collega… da una scheda. Collega… non ha un
   // tasto suo: C con una scheda scelta lo fa dallo strumento (un tasto solo).
   { id: "canvas.open_beside", label: "canvas_menu.open_beside", group: "selection", keys: [], context: "selection" },
+  // «Apri a lato per questo» (T45): il file della scheda attiva accanto, allo
+  // stesso punto (la cella, la sezione, la pagina); il nome dice il punto.
+  { id: "canvas.open_beside_here", label: "canvas.open_beside_here", group: "selection", keys: [], context: "selection" },
   { id: "canvas.open_viewer", label: "canvas_menu.open_viewer", group: "selection", keys: [], context: "selection" },
   { id: "canvas.web_preview", label: "canvas.card.show_preview", group: "selection", keys: [], context: "selection" },
   { id: "canvas.connect", label: "canvas_menu.connect", group: "selection", keys: [], context: "selection" },
@@ -218,6 +221,9 @@ export const CANVAS_DECLARED_SHELL_KEYS: readonly string[] = ["Mod-=", "Mod--", 
 
 /// Che cosa fa un comando: lo dà la tela.
 export interface CanvasCommandBehaviour {
+  /// Il nome di adesso, quando dice qualcosa che il catalogo non sa («Apri a
+  /// lato su B3», T45); `null` o assente: il nome del catalogo.
+  label?(): string | null;
   disabled(): string | null;
   run(args?: CanvasCommandArgs): void;
 }
@@ -235,7 +241,7 @@ export function buildCanvasCommands(
     if (does === null) continue;
     found.push({
       id: spec.id,
-      label: text(spec.label),
+      label: does.label?.() ?? text(spec.label),
       path: `${root} › ${text(CANVAS_COMMAND_GROUPS[spec.group])}`,
       keys: spec.keys,
       context: spec.context,
