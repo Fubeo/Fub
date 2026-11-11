@@ -3150,7 +3150,7 @@ che Esc e Ctrl+Invio registrano, che i byte di un testo non toccato non
 cambiano, e che i test di N3 su `#pending` passano senza cambiare.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/canvas
-Stato: [ ] da fare
+Stato: [~] in corso · coder Opus · base 598163c9e
 
 ## T44 · La scheda di testo cresce, e i suoi tasti
 
