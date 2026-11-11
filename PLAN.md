@@ -711,7 +711,7 @@ Dal prototipo: le righe sopra; gli stati `impostazioni`, `componenti`, `grafo`, 
 Casi limite: un'etichetta lunga in inglese; il contrasto alto; la densità compatta; le impostazioni a 700 px; i menu del tasto destro con un'intestazione; il pannello «/» con l'anteprima.
 Fatto quando: la foto di `settings`, `settings-components`, `graph`, `launcher-search`, `launcher-empty`, `menu` ed `empty`, in giorno e notte, sta accanto a `?stato=impostazioni`, `?stato=componenti`, `?stato=grafo`, `?stato=zero` e `?stato=vuoto`, e nessuna etichetta è più in maiuscolo.
 Prova: scripts/check.sh --rapido
-Stato: [ ] da fare
+Stato: [x] fatto (2026-11-11, f3e43e870). Differenze: le regole del prototipo sono fuse nelle vecchie (tolti uppercase e spaziatura invece di scavalcarli); tolti il pallino delle scelte radio e il rientro della colonna di sinistra, inutili con la spunta a destra del menu B; non copiata `.context-menu button > svg` (nel DOM le icone stanno in `.menu-icon`); `.menu-more` senza velo né filo, perché la freccia del sottomenu non diventi un tasto. Restano etichette in maiuscolo in `skin/document.css`, `editors.css` e `nodes.css`, fuori da T10
 
 ## T11 · La tipografia del foglio
 
@@ -1185,7 +1185,7 @@ Fatto quando:
 - in locale `npm run bench:a11y` passa sulle scene nuove;
 - ogni scena nuova si apre nel banco e la sua foto locale sta accanto al suo stato del prototipo.
 Prova: scripts/check.sh --rapido
-Stato: [ ] da fare
+Stato: [~] in corso · coder Opus · base f3e43e870
 
 ## T25 · Le baseline dal runner
 
