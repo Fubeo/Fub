@@ -754,3 +754,52 @@ describe("il testo non salvato resta (#237)", () => {
     expect(host.files()[BENVENUTO]).toBe(restored);
   });
 });
+
+describe("il cambio di nota fa il suo lavoro una volta", () => {
+  beforeEach(() => {
+    activeStop?.();
+    activeStop = null;
+    document.body.innerHTML = "";
+    localStorage.clear();
+  });
+
+  afterEach(async () => {
+    vi.restoreAllMocks();
+    (await import("../state/document-session")).documentSessions.closeAll();
+  });
+
+  it("ridipinge la striscia una volta, e porta in vista la linguetta al fotogramma dopo", async () => {
+    await start("off");
+    await open("Benvenuto.md");
+    await open("Altra.md");
+    await waitFor("l'editor della nota", () => mountedTextEditors().length > 0);
+    const strip = document.querySelector<HTMLElement>(".pane.focus .pane-tabs")!;
+    expect(strip.querySelectorAll(".tab")).toHaveLength(2);
+    // Ogni ridisegno della striscia riscrive `aria-selected` su ogni linguetta.
+    const painted: string[] = [];
+    const keyOf = (record: MutationRecord): string => (record.target as HTMLElement).dataset.key ?? "";
+    const observer = new MutationObserver((records) => painted.push(...records.map(keyOf)));
+    observer.observe(strip, { subtree: true, attributes: true, attributeFilter: ["aria-selected"] });
+    // `scrollIntoView` chiede stile e layout aggiornati: durante il cambio
+    // sarebbe un layout forzato fra la superficie smontata e quella nuova.
+    const scrolled: HTMLElement[] = [];
+    vi.spyOn(HTMLElement.prototype, "scrollIntoView").mockImplementation(function (this: HTMLElement) {
+      if (strip.contains(this)) scrolled.push(this);
+    });
+
+    const { openDocument } = await import("./document");
+    await openDocument("Benvenuto.md");
+    painted.push(...observer.takeRecords().map(keyOf));
+    observer.disconnect();
+
+    // L'apertura muta il layout (il segnale chiede un giro) e chiede il
+    // proprio giro: i due sono uno solo, e ogni linguetta si dipinge una volta.
+    expect(painted).toHaveLength(2);
+    expect(new Set(painted).size).toBe(2);
+    expect(scrolled).toEqual([]);
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    expect(scrolled).toHaveLength(1);
+    expect(scrolled[0]!.dataset.key).toContain("Benvenuto.md");
+    expect(scrolled[0]!.getAttribute("aria-selected")).toBe("true");
+  });
+});
