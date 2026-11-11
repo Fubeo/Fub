@@ -5218,7 +5218,7 @@ Fatto quando: `ink-shapes.test.ts` prova le sei forme e il tratto che non
 Maiusc a 15° e la penna lungo il righello; il file ha solo tratti `fub:ink`.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/canvas
-Stato: [~] in corso · coder Opus · base 4b6d319a5
+Stato: [x] fatto · a94121ac5 (merge 2733d2afb) · differenze: file in più del `Tocca`: `ink-layer.ts` (la guida e il ridisegno), `ink-ruler.ts` (nuovo), `chrome/icons.ts`, il tema (con i rigenerati) e `canvas-ink.md`/`canvas-input.md`; «catalogo» letto come catalogo i18n: il righello sta nella colonna, senza un comando `canvas.*` (`chrome/commands.ts` non era in `Tocca`); PLAN-ui non ha il righello: l'aspetto segue l'editor di disegno; `recognize` e `stillFrom` passano da `heldShape`, Maiusc usa `straight(samples, RULER_STEP)`; la forma sostituisce il tratto con lo stesso id in una toppa sola; dopo la pausa la penna che si muove regola la forma, come nel disegno. Rischi: i campioni della forma hanno tutti la pressione mediana; l'etichetta dell'angolo gira col righello; guardato solo nel banco headless, non nella WebView
 
 ## T88 · La scheda CSV
 
