@@ -11,7 +11,9 @@
 // un riquadro, e lo mette nel corpo al posto della resa; bozze, conflitti e
 // salvataggio sono della sessione, l'annulla dell'editor. `leave()` porta il
 // testo alla sessione, smonta l'editor e rifà la resa col testo nuovo. Un
-// documento Word o ODT (D-14 (a)) resta in lettura.
+// documento Word o ODT (D-14 (a)) resta in lettura. La riga del titolo dice
+// lo stato della sessione con le parole di un riquadro (T96), e la sola
+// lettura col perché che dà la porta: è della nota, non della lavagna.
 //
 // I modi:
 //
@@ -201,10 +203,11 @@ class NoteCard implements CardView {
     }
     if (editor.state() === "readonly") {
       // Una nota di sola lettura non si scrive: la scheda resta attiva per
-      // scorrere e copiare, la riga del titolo e una notifica dicono perché.
+      // scorrere e copiare, la riga del titolo e una notifica dicono perché,
+      // con le parole di un riquadro (la porta le sa).
+      const reason = this.#readOnlyWhy(editor);
       editor.destroy();
       this.#stopEditing();
-      const reason = t("canvas.card.readonly_why", { name: baseName(this.#context.path) });
       this.#context.editState?.("readonly", reason);
       this.#context.writing?.(null);
       notify(reason, "info");
@@ -217,12 +220,29 @@ class NoteCard implements CardView {
     // Dopo l'uscita la riga del titolo non dice più niente, anche se il
     // salvataggio arriva dopo.
     const report = (state: CardEditorState): void => {
-      if (this.#editLife === life) this.#context.editState?.(state === "clean" ? null : state);
+      if (this.#editLife !== life) return;
+      if (state === "readonly" && editor.closed?.() === true) {
+        // Il file se n'è andato mentre si scriveva: il testo è nella bozza
+        // della sessione, e la scheda torna alla resa, che dice se manca.
+        this.#stopEditing();
+        this.#context.editState?.(null);
+        this.#context.writing?.(null);
+        if (this.#mode === "live") this.#render();
+        return;
+      }
+      if (state === "readonly") this.#context.editState?.("readonly", this.#readOnlyWhy(editor));
+      else this.#context.editState?.(state);
     };
     life.add(editor.onState(report));
     report(editor.state());
     this.#context.writing?.({ toolbar: editor.toolbar?.() ?? null });
     editor.focus();
+  }
+
+  /// Perché la nota non si scrive: la porta lo sa con le parole di un
+  /// riquadro; se non lo dice, la frase della scheda.
+  #readOnlyWhy(editor: CardEditor): string {
+    return editor.readOnlyWhy?.() ?? t("canvas.card.readonly_why", { name: baseName(this.#context.path) });
   }
 
   /// Esce dalla scrittura: il testo va alla sessione (e si salva), poi

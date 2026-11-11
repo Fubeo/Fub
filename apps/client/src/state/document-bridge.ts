@@ -1,6 +1,7 @@
 import type { DocumentWindowRequest } from "../host/contract";
 export type { DocumentWindowRequest } from "../host/contract";
 import { operationFromText, transformPair, tryApplyOperation, validateOperation, type TextOperation } from "../editors/core/text-operation";
+import { releaseSession } from "./card-editors";
 import { documentSessions, type DocumentSession, type DocumentSurfaceDescriptor } from "./document-session";
 import { on, state } from "./store";
 import { mountedTheme, type MirroredTheme } from "../theme/loader";
@@ -347,7 +348,7 @@ export async function attachRemoteSurface(
         disposing = (async () => {
           releaseLease();
           try {
-            await documentSessions.release(owner.id);
+            await releaseSession(owner.id);
           } catch (error) {
             releaseLease = documentSessions.retain(doc);
             throw error;

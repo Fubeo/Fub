@@ -24,10 +24,12 @@ import { rebaseStaleChange, type EditorChange } from "../editors/core/text-opera
 import type { SyntaxForm } from "../host/contract";
 import type { Theme } from "../theme/theme";
 import { openLifetime, type Lifetime } from "../ui/lifetime";
-import type {
-  DocumentSession,
-  DocumentSessionCollection,
-  DocumentSurfaceUpdate,
+import {
+  documentSessions,
+  type CloseResult,
+  type DocumentSession,
+  type DocumentSessionCollection,
+  type DocumentSurfaceUpdate,
 } from "./document-session";
 
 /// Ciò che la porta usa della collezione delle sessioni: la stessa di ogni
@@ -60,6 +62,8 @@ export interface CardEditorDeps {
   /// cancellazione in sospeso, il prestito a un'app (la stessa regola dei
   /// riquadri).
   readonly held: (path: string) => boolean;
+  /// Perché `held` dice sì, con le parole di un riquadro (T96).
+  readonly heldWhy?: (path: string) => string | null;
   /// Se un riquadro mostra il documento: allora la sua sessione resta.
   readonly shownInPane: (path: string) => boolean;
   /// La luce di adesso, per la superficie che nasce.
@@ -72,6 +76,20 @@ export interface CardEditorDeps {
   /// Disegna in `box` la scelta del conflitto del documento `path`, quella di
   /// un riquadro (T41), o lo svuota e lo nasconde se non c'è conflitto.
   readonly conflict?: (box: HTMLElement, path: string) => void;
+  /// Disegna in `box` gli avvisi del documento `path()` (sempre il nome di
+  /// adesso), quelli di un riquadro con le loro azioni: la bozza ritrovata, il
+  /// salvataggio fallito, la sola lettura col suo perché (T96). Li ridisegna
+  /// da sé quando un avviso si chiude altrove; `drawn` arriva dopo ogni
+  /// disegno.
+  readonly notices?: (box: HTMLElement, path: () => string, drawn: () => void) => CardNotices;
+}
+
+/// Gli avvisi disegnati dentro una scheda (`CardEditorDeps.notices`).
+export interface CardNotices {
+  /// Li ridisegna: lo stato della sessione o la sola lettura sono cambiati.
+  redraw(): void;
+  /// Smette di disegnarli: la scheda non scrive più.
+  dispose(): void;
 }
 
 /// La porta, più ciò che la shell le chiede per tenerla al passo.
@@ -84,6 +102,9 @@ export interface CardEditorHub extends CardEditorPort {
   failed(surfaceId: string, error: unknown): boolean;
   /// Se qualche scheda scrive adesso nel documento `path`.
   holds(path: string): boolean;
+  /// Un documento ha cambiato nome: le prenotazioni seguono le sessioni, non i
+  /// nomi (T96).
+  renamed(): void;
   /// Rilegge la sola lettura della finestra (`held`) per ogni scheda aperta.
   refreshReadOnly(): void;
   /// La luce nuova, per ogni scheda aperta.
@@ -96,6 +117,29 @@ export interface CardEditorHub extends CardEditorPort {
 /// usa mai, così una modifica sa a chi tornare.
 const CARD_SURFACE_PREFIX = "card-editor:";
 
+/// Le sessioni tenute dalle schede che scrivono, di ogni porta della finestra:
+/// la sessione di ciascuna (che segue le rinomine).
+const writing = new Set<{ readonly session: DocumentSession }>();
+
+/// Se una scheda della lavagna scrive adesso nel documento `path`.
+export function cardWrites(path: string): boolean {
+  for (const editor of writing) if (editor.session.id === path) return true;
+  return false;
+}
+
+/// Lascia la sessione di `path` per chi non la guarda più (un riquadro chiuso,
+/// un layout nuovo, una finestra del documento che se ne va): se una scheda
+/// ci scrive, la sessione resta (`active`) e la lascerà la scheda uscendo.
+/// È l'unica strada per lasciare una sessione fuori da `document-controller.ts`
+/// (T96).
+export async function releaseSession(
+  path: string,
+  sessions: Pick<DocumentSessionCollection, "release"> = documentSessions,
+): Promise<CloseResult> {
+  if (cardWrites(path)) return { kind: "active" };
+  return sessions.release(path);
+}
+
 /// Un editor montato in una scheda, dalla nascita allo smontaggio.
 interface OpenCardEditor {
   readonly surfaceId: string;
@@ -104,12 +148,20 @@ interface OpenCardEditor {
   readonly options: CardEditorOptions;
   readonly listeners: Set<(state: CardEditorState) => void>;
   readonly teardowns: (() => void)[];
+  /// La prenotazione della sessione e il nome su cui è presa: dopo una
+  /// rinomina si riprende sul nome nuovo (T96).
+  retained: { readonly path: string; readonly release: () => void };
   /// La scelta del conflitto in cima alla scheda (T41), se la shell la disegna.
   readonly notice: HTMLElement | null;
+  /// Gli avvisi di un riquadro, sotto il conflitto (T96), se la shell li disegna.
+  readonly noticeBox: HTMLElement | null;
+  notices: CardNotices | null;
   /// La barra di formato, nata alla prima richiesta, e la sua vita.
   toolbar: { readonly element: HTMLElement | null; readonly life: Lifetime } | null;
   /// La sessione si è chiusa sotto l'editor, o la superficie ha ceduto.
   stopped: boolean;
+  /// La sessione si è chiusa sotto l'editor (il file tolto).
+  closed: boolean;
   destroyed: boolean;
   last: CardEditorState;
 }
@@ -126,17 +178,45 @@ export function createCardEditorPort(deps: CardEditorDeps): CardEditorHub {
     return editor.options.readOnly || editor.stopped || deps.held(docOf(editor));
   }
 
+  /// Lo stato del salvataggio è quello della sessione, lo stesso che la
+  /// testata di un riquadro dice (`saveState`, `saveStateKey`): nessuna
+  /// regola qui.
   function stateOf(editor: OpenCardEditor): CardEditorState {
     if (readOnly(editor)) return "readonly";
-    const saved = sessions.saveState(docOf(editor));
-    if (saved === "conflitto") return "conflict";
-    if (editor.session.hasPending() || (saved !== null && saved !== "salvato")) return "pending";
-    return "clean";
+    return sessions.saveState(docOf(editor)) ?? "salvato";
+  }
+
+  function readOnlyWhy(editor: OpenCardEditor): string | null {
+    if (editor.destroyed || !readOnly(editor) || editor.options.readOnly) return null;
+    try {
+      return deps.heldWhy?.(docOf(editor)) ?? null;
+    } catch (error) {
+      console.error(error);
+      return null;
+    }
+  }
+
+  /// La prenotazione segue la sessione: dopo una rinomina si prende sul nome
+  /// nuovo, poi si lascia quella sul nome vecchio, così nessun momento resta
+  /// senza (un riquadro chiuso sul nome nuovo non chiude la sessione).
+  function follow(editor: OpenCardEditor): void {
+    const path = docOf(editor);
+    if (editor.destroyed || editor.retained.path === path) return;
+    const previous = editor.retained;
+    editor.retained = { path, release: sessions.retain(path) };
+    previous.release();
+  }
+
+  /// Il corpo della scheda sa se c'è un avviso in cima (`data-card-notice`).
+  function markNotices(editor: OpenCardEditor): void {
+    const host = (editor.notice ?? editor.noticeBox)?.parentElement;
+    if (!host) return;
+    const shown = (editor.notice !== null && !editor.notice.hidden) || (editor.noticeBox !== null && !editor.noticeBox.hidden);
+    host.toggleAttribute("data-card-notice", shown);
   }
 
   /// La scelta del conflitto, ridisegnata quando il conflitto comincia o
-  /// finisce: c'è finché la sessione è in conflitto, e il corpo della scheda
-  /// lo sa (`data-card-notice`).
+  /// finisce: c'è finché la sessione è in conflitto.
   function drawNotice(editor: OpenCardEditor): void {
     const box = editor.notice;
     if (!box || !deps.conflict) return;
@@ -146,14 +226,25 @@ export function createCardEditorPort(deps: CardEditorDeps): CardEditorHub {
       console.error(error);
       box.hidden = true;
     }
-    const host = box.parentElement;
-    if (host) host.toggleAttribute("data-card-notice", !box.hidden);
+    markNotices(editor);
+  }
+
+  function redrawNotices(editor: OpenCardEditor): void {
+    try {
+      editor.notices?.redraw();
+    } catch (error) {
+      console.error(error);
+    }
   }
 
   function announce(editor: OpenCardEditor): void {
     if (editor.destroyed) return;
+    follow(editor);
+    // Gli avvisi dipendono dalla sessione e dalla sola lettura, non solo dallo
+    // stato: si ridisegnano a ogni evento (lo stesso disegno non tocca il DOM).
+    redrawNotices(editor);
     const state = stateOf(editor);
-    if (state !== editor.last && (state === "conflict" || editor.last === "conflict")) drawNotice(editor);
+    if (state !== editor.last && (state === "conflitto" || editor.last === "conflitto")) drawNotice(editor);
     if (state === editor.last) return;
     editor.last = state;
     for (const listener of [...editor.listeners]) {
@@ -180,6 +271,13 @@ export function createCardEditorPort(deps: CardEditorDeps): CardEditorHub {
     if (editor.stopped) return;
     editor.stopped = true;
     applyReadOnly(editor);
+  }
+
+  /// La sessione si è chiusa sotto l'editor: si ferma, e la scheda lo sa
+  /// (`closed()`) prima di sentire lo stato.
+  function close(editor: OpenCardEditor): void {
+    editor.closed = true;
+    stop(editor);
   }
 
   /// Il dato autorevole della sessione: entra con `syncDoc`, fuori dall'annulla
@@ -227,6 +325,7 @@ export function createCardEditorPort(deps: CardEditorDeps): CardEditorHub {
     }
     editor.destroyed = true;
     open.delete(editor.surfaceId);
+    writing.delete(editor);
     editor.listeners.clear();
     const teardowns = editor.teardowns.splice(0);
     for (let i = teardowns.length - 1; i >= 0; i--) {
@@ -255,6 +354,8 @@ export function createCardEditorPort(deps: CardEditorDeps): CardEditorHub {
         announce(editor);
       },
       state: () => (editor.destroyed ? "readonly" : stateOf(editor)),
+      readOnlyWhy: () => readOnlyWhy(editor),
+      closed: () => editor.closed,
       onState: (listener) => {
         if (editor.destroyed) return () => {};
         editor.listeners.add(listener);
@@ -307,7 +408,8 @@ export function createCardEditorPort(deps: CardEditorDeps): CardEditorHub {
     const surfaces = deps.surfaces();
     if (!surfaces) return null;
     // La prenotazione tiene la sessione mentre la scheda la legge e per tutta
-    // la vita dell'editor: un riquadro che si chiude non la chiude sotto.
+    // la vita dell'editor: un riquadro che si chiude non la chiude sotto. Dopo
+    // il montaggio la tiene l'editor (`retained`), che la sposta col nome.
     const releaseIntent = sessions.retain(path);
     let mounted: EditorSurface | null = null;
     let detach: (() => void) | null = null;
@@ -378,7 +480,15 @@ export function createCardEditorPort(deps: CardEditorDeps): CardEditorHub {
           console.error(error);
         }
       }
-      // La scelta del conflitto sta in cima alla scheda, sopra l'editor.
+      // In cima alla scheda, sopra l'editor, come in un riquadro: la scelta
+      // del conflitto, poi gli avvisi della nota.
+      let noticeBox: HTMLElement | null = null;
+      if (deps.notices) {
+        noticeBox = document.createElement("div");
+        noticeBox.className = "sheet-notices";
+        noticeBox.hidden = true;
+        host.prepend(noticeBox);
+      }
       let notice: HTMLElement | null = null;
       if (deps.conflict) {
         notice = document.createElement("div");
@@ -392,16 +502,20 @@ export function createCardEditorPort(deps: CardEditorDeps): CardEditorHub {
         options,
         listeners: new Set(),
         teardowns: [],
+        retained: { path, release: releaseIntent },
         notice,
+        noticeBox,
+        notices: null,
         toolbar: null,
         stopped: false,
+        closed: false,
         destroyed: false,
-        last: "clean",
+        last: "salvato",
       };
       detach = sessions.attachSurface(path, {
         id: surfaceId,
         sync: (update) => sync(editor, update),
-        closed: () => stop(editor),
+        closed: () => close(editor),
         pendingText: buffer.pendingText ? () => buffer.pendingText?.() ?? null : undefined,
         commitPending: buffer.commitPending ? () => buffer.commitPending?.() : undefined,
         watchPending: buffer.watchPending ? (listener) => buffer.watchPending!(listener) : undefined,
@@ -414,7 +528,7 @@ export function createCardEditorPort(deps: CardEditorDeps): CardEditorHub {
       // Dall'ultimo al primo: si smette di ascoltare, si stacca dalla
       // sessione, si smonta, si rilascia la prenotazione.
       editor.teardowns.push(
-        releaseIntent,
+        () => editor.retained.release(),
         () => {
           try {
             surface.destroy();
@@ -427,14 +541,20 @@ export function createCardEditorPort(deps: CardEditorDeps): CardEditorHub {
         attached,
         unsubscribe,
       );
-      if (buffer.watchPending) {
-        const unwatch = buffer.watchPending(() => announce(editor));
-        editor.teardowns.push(unwatch);
-      }
       open.set(surfaceId, editor);
+      writing.add(editor);
+      if (noticeBox && deps.notices) {
+        try {
+          const notices = deps.notices(noticeBox, () => docOf(editor), () => markNotices(editor));
+          editor.notices = notices;
+          editor.teardowns.push(() => notices.dispose());
+        } catch (error) {
+          console.error(error);
+        }
+      }
       editor.last = stateOf(editor);
       editor.surface.setReadOnly?.(readOnly(editor));
-      if (editor.last === "conflict") drawNotice(editor);
+      if (editor.last === "conflitto") drawNotice(editor);
       life.add(() => destroy(editor));
       return handle(editor);
     } catch (error) {
@@ -477,6 +597,9 @@ export function createCardEditorPort(deps: CardEditorDeps): CardEditorHub {
       return true;
     },
     holds,
+    renamed() {
+      for (const editor of [...open.values()]) follow(editor);
+    },
     refreshReadOnly() {
       for (const editor of [...open.values()]) applyReadOnly(editor);
     },

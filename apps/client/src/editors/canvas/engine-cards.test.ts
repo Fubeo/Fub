@@ -1503,12 +1503,20 @@ describe("scrivere in una scheda di nota (T41)", () => {
     writer.opened("n");
     const context = writer.contexts.get("n")!;
     const handle = card(host, "n").querySelector<HTMLElement>(".canvas-node-handle")!;
-    context.editState?.("pending");
-    expect(handle.querySelector(".save-state")?.textContent).toBe("Non salvato");
-    expect(handle.querySelector<HTMLElement>(".save-state")?.dataset.state).toBe("non_salvato");
-    context.editState?.("conflict");
-    expect(handle.querySelectorAll(".save-state")).toHaveLength(1);
-    expect(handle.querySelector(".save-state")?.textContent).toBe("Cambiato su disco");
+    // Ogni stato con la parola della testata di un riquadro (T96).
+    const words = {
+      salvato: "Salvato",
+      in_corso: "Salvataggio…",
+      non_salvato: "Non salvato",
+      fallito: "Salvataggio fallito",
+      conflitto: "Cambiato su disco",
+    } as const;
+    for (const [state, word] of Object.entries(words) as [keyof typeof words, string][]) {
+      context.editState?.(state);
+      expect(handle.querySelectorAll(".save-state"), state).toHaveLength(1);
+      expect(handle.querySelector(".save-state")?.textContent).toBe(word);
+      expect(handle.querySelector<HTMLElement>(".save-state")?.dataset.state).toBe(state);
+    }
     context.editState?.(null);
     expect(handle.querySelector(".save-state")).toBeNull();
     // La nota di sola lettura: la scheda smette di scrivere e resta attiva.
@@ -1525,14 +1533,27 @@ describe("scrivere in una scheda di nota (T41)", () => {
     engine.destroy();
   });
 
-  it("la lavagna di sola lettura entra per leggere e non scrive", () => {
+  it("la lavagna di sola lettura non toglie la scrittura della nota, che è un altro file (T96)", () => {
     const writer = writerRenderer();
     const { engine, host } = mounted(boardSource(BOARD), { cards: cardsOf(writer.renderer) });
+    writer.bind(host);
     engine.setReadOnly(true);
     writer.log.length = 0;
     enterWithKeys(host, "n");
-    expect(writer.log).toEqual(["n:enter"]);
-    expect(activeOf(host)).toEqual(["n"]);
+    expect(writer.log).toEqual(["n:enter", "n:edit"]);
+    writer.opened("n");
+    expect(editingOf(host)).toEqual(["n"]);
+    // La lavagna resta ferma: i tasti di una lettera tacciono, niente si sposta.
+    const before = engine.getDoc();
+    for (const key of ["c", "Delete"]) expect(press(fieldIn(host, "n"), key).defaultPrevented, key).toBe(false);
+    expect(engine.getDoc()).toBe(before);
+    // Fermarla mentre la nota scrive non ferma la nota.
+    engine.setReadOnly(false);
+    engine.setReadOnly(true);
+    expect(editingOf(host)).toEqual(["n"]);
+    expect(writer.log).not.toContain("n:leave");
+    press(fieldIn(host, "n"), "Escape");
+    expect(editingOf(host)).toEqual([]);
     engine.destroy();
   });
 

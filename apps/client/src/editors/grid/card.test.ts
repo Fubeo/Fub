@@ -845,7 +845,7 @@ interface WritingPort extends CardEditorPort {
   turn(state: CardEditorState): void;
 }
 
-function writingPort(state: CardEditorState = "clean"): WritingPort {
+function writingPort(state: CardEditorState = "salvato"): WritingPort {
   const grid = workbookHost();
   const listeners = new Set<(state: CardEditorState) => void>();
   const port: WritingPort = {
@@ -947,7 +947,7 @@ const gridViewport = (made: Bench) => writer(made)!.querySelector<HTMLElement>("
 
 /// Una scheda viva con la porta, e la scrittura cominciata col doppio clic
 /// sulla cella (`row`, `column`) della resa.
-async function writingOn(row: number, column: number, state: CardEditorState = "clean") {
+async function writingOn(row: number, column: number, state: CardEditorState = "salvato") {
   const port = writingPort(state);
   const made = bench({ editors: port });
   const view = made.mount("live");
@@ -1076,15 +1076,15 @@ describe("la scheda di foglio che scrive (T42)", () => {
     const opens = made.grid.opens.length;
     const sources = made.port.sources;
 
-    port.turn("conflict");
-    expect(made.states[made.states.length - 1]).toEqual(["conflict", undefined]);
+    port.turn("conflitto");
+    expect(made.states[made.states.length - 1]).toEqual(["conflitto", undefined]);
     // Il file cambia mentre si scrive: la griglia segue la sessione da sé,
     // e la resa non apre una sessione sua sotto.
     for (const changed of made.port.changed) changed();
     await settle();
     expect(made.grid.opens.length).toBe(opens);
 
-    port.turn("clean");
+    port.turn("salvato");
     expect(made.states[made.states.length - 1]).toEqual([null, undefined]);
     view.leave!();
     await until("la griglia si smonta", () => writer(made) === null);

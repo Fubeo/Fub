@@ -3504,8 +3504,9 @@ body {
   display: none;
 }
 
-/* Il conflitto in cima al corpo, sopra il testo, che spinge giù; il testo
-   continua a scorrere sotto. */
+/* Il conflitto e gli avvisi della nota (la bozza ritrovata, T96) in cima al
+   corpo, sopra il testo, che spingono giù; il testo continua a scorrere
+   sotto. */
 .canvas-card-note[data-card-notice] {
   display: flex;
   flex-direction: column;
@@ -3514,7 +3515,8 @@ body {
   flex: 1 1 auto;
   min-height: 0;
 }
-.canvas-card-note > .conflict-banner {
+.canvas-card-note > .conflict-banner,
+.canvas-card-note > .sheet-notices {
   flex: none;
 }
 

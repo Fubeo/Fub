@@ -96,6 +96,7 @@ import {
 } from "./chrome/status";
 import type { SurfaceStatusItem } from "../core/registry";
 import { CanvasDepositError, type DropFolderChoice } from "../../state/canvas-intake";
+import { saveStateKey } from "../../state/saving";
 import { SHARED_RECENT_COMMANDS, openCommandSearch, type CommandSearchHandle, type RecentCommands } from "./chrome/command-search";
 import { inkFitMode } from "./ink-fit";
 import { mountInkLayer, type InkLayer, type InkLayerStroke } from "./ink-layer";
@@ -7417,14 +7418,16 @@ export class CanvasEngine {
   /**
    * Entra nella scheda `id` e ci scrive (T41): la scheda diventa attiva, poi
    * `edit()` monta l'editor vero del file. `false` se la vista non scrive mai
-   * (non ha `edit`) o la lavagna è di sola lettura; se `edit()` dice no la
-   * scheda resta attiva, da leggere, e la risposta è `true`.
+   * (non ha `edit`); se `edit()` dice no la scheda resta attiva, da leggere, e
+   * la risposta è `true`. La sola lettura della lavagna non conta (T96): la
+   * scheda scrive in un altro file, con la sua sessione e la sua sola
+   * lettura, che dice la porta.
    */
   #beginWriting(id: string, from?: EventTarget | null): boolean {
     if (this.#writingId === id) return true;
     const entry = this.#cards.get(id);
     const view = entry?.view;
-    if (this.#readOnly || !entry || !view?.edit) return false;
+    if (!entry || !view?.edit) return false;
     if (!this.#enterCard(id)) return false;
     let started = false;
     try {
@@ -7511,25 +7514,25 @@ export class CanvasEngine {
 
   /**
    * A che punto è ciò che si scrive nella scheda, nella riga del titolo
-   * (T41): «Non salvato», «Cambiato su disco» (la parola della testata dei
-   * riquadri, `.save-state`) o «Sola lettura» col perché (`.canvas-card-lock`).
+   * (T41, T96): lo stato del salvataggio con la parola della testata dei
+   * riquadri (`.save-state`, `saveStateKey`) o «Sola lettura» col perché
+   * (`.canvas-card-lock`).
    */
   #cardEditState(entry: CardEntry, state: CardEditorState | null, reason: string | null): void {
     const handle = entry.connect.parentElement;
     if (!handle) return;
     handle.querySelector(":scope > .save-state")?.remove();
     handle.querySelector(":scope > .canvas-card-lock")?.remove();
-    if (state === null || state === "clean") return;
+    if (state === null) return;
     const mark = document.createElement("span");
     if (state === "readonly") {
       mark.className = "canvas-card-lock";
       mark.textContent = t("canvas.card.readonly");
       if (reason) mark.title = reason;
     } else {
-      const word = state === "conflict" ? "conflitto" : "non_salvato";
       mark.className = "save-state";
-      mark.dataset.state = word;
-      mark.textContent = t(state === "conflict" ? "save.conflitto" : "save.unsaved");
+      mark.dataset.state = state;
+      mark.textContent = t(saveStateKey(state));
     }
     entry.connect.before(mark);
   }

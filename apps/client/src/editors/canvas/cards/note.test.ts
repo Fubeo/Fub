@@ -461,7 +461,12 @@ interface OpenCall {
 
 /// Un editor finto: dice lo stato che gli si dà, conta uscite e smontaggi.
 class FakeEditor implements CardEditor {
-  current: CardEditorState = "clean";
+  current: CardEditorState = "salvato";
+  /// Il perché della sola lettura che la porta darebbe; `undefined`: la porta
+  /// non lo sa dire (niente `readOnlyWhy`).
+  why: string | null | undefined = undefined;
+  /// La sessione chiusa sotto l'editor (il file tolto).
+  gone = false;
   focused = 0;
   left = 0;
   destroyed = 0;
@@ -496,6 +501,10 @@ class FakeEditor implements CardEditor {
   set(state: CardEditorState): void {
     this.current = state;
     for (const listener of [...this.listeners]) listener(state);
+  }
+  readonly readOnlyWhy = (): string | null => this.why ?? null;
+  closed(): boolean {
+    return this.gone;
   }
   toolbar(): HTMLElement {
     return this.bar;
@@ -587,11 +596,20 @@ describe("scrivere nella scheda di nota (T41)", () => {
     expect(card.writings).toEqual([{ toolbar: editor.bar }]);
     expect(editor.focused).toBe(1);
 
-    // Lo stato va alla riga del titolo; «pulito» non dice niente.
-    editor.set("pending");
-    editor.set("conflict");
-    editor.set("clean");
-    expect(card.states.map((each) => each.state)).toEqual([null, "pending", "conflict", null]);
+    // Lo stato della sessione va alla riga del titolo, ognuno com'è (T96).
+    editor.set("in_corso");
+    editor.set("non_salvato");
+    editor.set("fallito");
+    editor.set("conflitto");
+    editor.set("salvato");
+    expect(card.states).toEqual([
+      { state: "salvato", reason: undefined },
+      { state: "in_corso", reason: undefined },
+      { state: "non_salvato", reason: undefined },
+      { state: "fallito", reason: undefined },
+      { state: "conflitto", reason: undefined },
+      { state: "salvato", reason: undefined },
+    ]);
   });
 
   it("leave() porta il testo alla sessione, smonta l'editor e rifà la resa col testo nuovo", async () => {
@@ -612,7 +630,7 @@ describe("scrivere nella scheda di nota (T41)", () => {
     expect(writers(card.host)[0]!.inert).toBe(true);
     // Uno stato che arriva dopo l'uscita non scrive più nella riga del titolo.
     const states = card.states.length;
-    editor.set("pending");
+    editor.set("non_salvato");
     expect(card.states).toHaveLength(states);
 
     saved();
@@ -652,7 +670,7 @@ describe("scrivere nella scheda di nota (T41)", () => {
     expect(root(card.host).textContent).toBe("Titolotesto");
   });
 
-  it("una nota di sola lettura non si scrive e dice perché", async () => {
+  it("una nota di sola lettura non si scrive e dice perché, con le parole della porta (T96)", async () => {
     const port = new FakePort();
     const editors = new FakeEditors();
     const card = await shown(port, editors);
@@ -660,13 +678,86 @@ describe("scrivere nella scheda di nota (T41)", () => {
     const call = editors.last();
     const editor = new FakeEditor(call.host, call.options.lifetime);
     editor.current = "readonly";
+    editor.why = "Aperto in Craft. Fub non lo modifica finché non lo riprendi.";
     call.resolve(editor);
     await settle();
     expect(editor.destroyed).toBe(1);
     expect(card.writings).toEqual([null]);
-    const reason = t("canvas.card.readonly_why", { name: "nota.md" });
-    expect(card.states).toEqual([{ state: "readonly", reason }]);
+    expect(card.states).toEqual([{ state: "readonly", reason: editor.why }]);
     expect(root(card.host).hidden).toBe(false);
+    // Una porta che non sa dire perché: la frase della scheda.
+    const plain = await shown(port, editors);
+    plain.view.edit?.();
+    const next = editors.last();
+    const quiet = new FakeEditor(next.host, next.options.lifetime);
+    quiet.current = "readonly";
+    next.resolve(quiet);
+    await settle();
+    expect(plain.states).toEqual([{ state: "readonly", reason: t("canvas.card.readonly_why", { name: "nota.md" }) }]);
+  });
+
+  it("la sola lettura che arriva mentre si scrive resta nella riga del titolo, col perché", async () => {
+    const port = new FakePort();
+    const editors = new FakeEditors();
+    const card = await shown(port, editors);
+    card.view.edit?.();
+    const editor = editors.give();
+    await settle();
+    editor.why = "«nota.md» è in sola lettura: aspetta la tua risposta sulla cancellazione.";
+    editor.set("readonly");
+    expect(card.states[card.states.length - 1]).toEqual({ state: "readonly", reason: editor.why });
+    // La scheda continua a mostrare l'editor (fermo): si legge e si copia.
+    expect(editor.destroyed).toBe(0);
+    expect(card.writings).toHaveLength(1);
+    editor.why = null;
+    editor.set("non_salvato");
+    expect(card.states[card.states.length - 1]).toEqual({ state: "non_salvato", reason: undefined });
+  });
+
+  it("il file tolto mentre si scrive: la scheda torna alla resa, che dice che manca", async () => {
+    const port = new FakePort();
+    const editors = new FakeEditors();
+    const card = await shown(port, editors);
+    card.view.edit?.();
+    const editor = editors.give();
+    await settle();
+    const before = port.calls.length;
+    editor.gone = true;
+    editor.set("readonly");
+    expect(editor.destroyed).toBe(1);
+    expect(card.writings).toEqual([{ toolbar: editor.bar }, null]);
+    expect(card.states[card.states.length - 1]).toEqual({ state: null, reason: undefined });
+    expect(writers(card.host)).toHaveLength(0);
+    expect(port.calls.length).toBe(before + 1);
+    port.last().reject({ kind: "not_found", message: "il file non c'è" });
+    await settle();
+    expect(state(card.host)).toBe("missing");
+    expect(card.context.missed).toBe(1);
+  });
+
+  it("un avviso che la porta mette in cima all'editor si vede nella scheda", async () => {
+    const port = new FakePort();
+    // La porta vera disegna gli avvisi di un riquadro nel contenitore
+    // dell'editor (`state/card-editors.ts`): qui li mette a mano.
+    const editors: CardEditorPort = {
+      open: (_path, host, options) => {
+        const notices = document.createElement("div");
+        notices.className = "sheet-notices";
+        notices.textContent = "Bozza ritrovata.";
+        host.prepend(notices);
+        return Promise.resolve(new FakeEditor(host, options.lifetime));
+      },
+    };
+    const spy = writing(editors);
+    const writer = mount(port, "live", "Corsi/nota.md", null, spy.extra);
+    port.last().resolve("<p>testo</p>");
+    await settle();
+    expect(writer.view.edit?.()).toBe(true);
+    await settle();
+    const box = writers(writer.host)[0]!;
+    expect(box.hidden).toBe(false);
+    expect(box.firstElementChild?.className).toBe("sheet-notices");
+    expect(box.querySelector(".cm-editor")).not.toBeNull();
   });
 
   it("non scrive senza porta, in un documento Word, da ferma o senza resa", async () => {

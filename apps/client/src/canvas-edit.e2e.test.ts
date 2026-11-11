@@ -9,8 +9,11 @@
 // `.xlsx` in un riquadro e su una scheda; il doppio clic su una cella monta
 // il foglio vero in modo compatto, e il valore scritto arriva al riquadro e
 // al file. Il cablaggio è quello di `canvas-cards.e2e.test.ts` — `main.ts`
-// sulla scocca vera, contro l'host finto — senza cartelle vere.
+// sulla scocca vera, contro l'host finto — senza cartelle vere. **E come un
+// riquadro** (T96): la sola lettura è della nota, non della lavagna, e la
+// bozza ritrovata si annuncia nella scheda con l'avviso del riquadro.
 import { afterEach, describe, expect, it, vi } from "vitest";
+import type { DraftInfo } from "./host/contract";
 import type { FakeHost, GridBytesFake } from "./host/fake";
 import { findTextEditorOrThrow, mountedTextEditors, undoDepth } from "./editors/text/test-support";
 import XLSX from "./__fixtures__/xlsx-grid.json";
@@ -64,6 +67,9 @@ const BOARD = JSON.stringify({
 });
 const VAULT = { [NOTE]: TEXT, "lavagna.canvas": BOARD };
 
+/// Le bozze che l'indice dà quando le si chiede (il finto non ne ha).
+const pendingDrafts: DraftInfo[] = [];
+
 /// Il finto non rende le note: `render_embed` risponde come il kernel vero,
 /// col titolo della nota diventato un `<h1>`.
 function renderNotes(host: FakeHost): void {
@@ -74,6 +80,10 @@ function renderNotes(host: FakeHost): void {
     if (asked.kind === "render_embed" && asked.page === NOTE) {
       const title = /^# (.*)$/m.exec(host.files()[NOTE] ?? "")?.[1] ?? "";
       return Promise.resolve({ kind: "render_embed", value: { doc_id: NOTE, html: `<h1>${title}</h1>`, parts: [] } });
+    }
+    if (asked.kind === "drafts") {
+      const items = pendingDrafts.splice(0);
+      return Promise.resolve({ kind: "drafts", value: { items, offset: 0, total: items.length } });
     }
     return query(q, ...rest);
   };
@@ -182,6 +192,76 @@ describe("scrivere in una scheda di nota (T41)", () => {
     await waitFor("la scheda torna alla resa", () => card()?.querySelector(".cm-editor") === null);
     await waitFor("il testo arriva al disco", () => host.files()[NOTE] === `Dal riquadro. ${TEXT}`, 10_000);
     expect(mountedTextEditors(), "resta l'editor del riquadro").toEqual([inPane]);
+  });
+});
+
+describe("la scheda di nota dice e fa ciò che dice e fa un riquadro (T96)", () => {
+  it("su una lavagna che non si può riscrivere la nota si scrive e si salva", async () => {
+    // Una chiave doppia in un campo sconosciuto: il nucleo legge la lavagna
+    // ma rifiuta di riscriverla (`#unwritable`).
+    const unwritable = BOARD.replace(/}$/, ',"fub:k":1,"fub:k":2}');
+    const host = await start({ file: { [NOTE]: TEXT, "lavagna.canvas": unwritable } });
+    await noteBesideBoard();
+    await waitFor("la lavagna è in sola lettura", () =>
+      document.querySelector<HTMLElement>(".canvas-surface[data-read-only]")?.dataset.readOnly === "true");
+    const { inCard, inPane } = await writeInCard();
+    expect(card()!.querySelector(".canvas-card-lock"), "la nota non è in sola lettura").toBeNull();
+
+    inCard.dispatch({ changes: { from: inCard.state.doc.length, insert: "Scritto sulla lavagna ferma." } });
+    await settle();
+    expect(inPane.state.doc.toString()).toBe(`${TEXT}Scritto sulla lavagna ferma.`);
+    // La riga del titolo dice lo stato della sessione, come la testata del riquadro.
+    await waitFor("la riga del titolo dice lo stato del salvataggio", () =>
+      card()?.querySelector(".canvas-node-handle > .save-state") !== null);
+
+    inCard.contentDOM.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, cancelable: true, key: "Escape" }));
+    await waitFor("la scheda smette di scrivere", () => card()?.hasAttribute("data-card-editing") === false);
+    await waitFor("il testo arriva al disco", () => host.files()[NOTE] === `${TEXT}Scritto sulla lavagna ferma.`, 10_000);
+    // La lavagna non è stata riscritta.
+    expect(host.files()["lavagna.canvas"]).toBe(unwritable);
+  });
+
+  it("la bozza ritrovata si annuncia nella scheda come nel riquadro, con le stesse scelte, e una scelta vale in tutti e due", async () => {
+    pendingDrafts.length = 0;
+    const host = await start();
+    await noteBesideBoard();
+    // Una bozza di cui non si sa la base: si sceglie quale testo tenere.
+    const draft = `${TEXT}Dalla bozza.\n`;
+    pendingDrafts.push({ doc: NOTE, at: 1, base: null, exists: true, current: null, text: draft });
+    const { recoverDrafts } = await import("./panels/document");
+    expect(await recoverDrafts()).toBe(1);
+    const outside = (selector: string) => [...document.querySelectorAll<HTMLElement>(selector)]
+      .find((element) => !card()?.contains(element) && !element.hidden) ?? null;
+    const inside = (selector: string) => [...(card()?.querySelectorAll<HTMLElement>(selector) ?? [])]
+      .find((element) => !element.hidden) ?? null;
+    const NOTICE = '.sheet-notice[data-notice="recovered"]';
+    await waitFor("il riquadro annuncia la bozza", () => outside(NOTICE) !== null && outside(".conflict-banner") !== null);
+
+    const { inCard, inPane } = await writeInCard();
+    await waitFor("la scheda annuncia la stessa bozza", () => inside(NOTICE) !== null);
+    expect(inside(NOTICE)!.querySelector(".sheet-notice-text")?.textContent)
+      .toBe(outside(NOTICE)!.querySelector(".sheet-notice-text")?.textContent);
+    // Le stesse scelte del riquadro: tenere la bozza o tornare al file.
+    expect(inside('.conflict-banner [data-choice="mine"]')).not.toBeNull();
+    expect(inside('.conflict-banner [data-choice="theirs"]')).not.toBeNull();
+    expect(card()!.querySelector("[data-card-notice]"), "il corpo della scheda fa posto agli avvisi").not.toBeNull();
+
+    // L'avviso chiuso nella scheda se ne va anche dal riquadro.
+    [...inside(NOTICE)!.querySelectorAll<HTMLButtonElement>("button")].pop()!.click();
+    await settle();
+    expect(inside(NOTICE)).toBeNull();
+    expect(outside(NOTICE)).toBeNull();
+
+    // Tornati al file dalla scheda, il riquadro non chiede più niente e
+    // mostra il file, come la scheda.
+    inside('.conflict-banner [data-choice="theirs"]')!.click();
+    await waitFor("la shell chiede conferma", () => document.querySelector('.kit-dialog [data-action="confirm"]') !== null);
+    document.querySelector<HTMLButtonElement>('.kit-dialog [data-action="confirm"]')!.click();
+    await waitFor("la scelta vale anche nel riquadro", () => outside(".conflict-banner") === null && inside(".conflict-banner") === null);
+    expect(inCard.state.doc.toString()).toBe(TEXT);
+    expect(inPane.state.doc.toString()).toBe(TEXT);
+    expect(host.files()[NOTE]).toBe(TEXT);
+    expect(card()!.querySelector("[data-card-notice]")).toBeNull();
   });
 });
 

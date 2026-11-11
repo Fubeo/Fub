@@ -89,7 +89,7 @@ import { revealSetting } from "../panels/settings";
 import { CASE_KEY, caseOf, toRecover } from "./drafts";
 import { addSheetNotice, clearAllRemovedNotices, clearSheetNotices, dismissSheetNotice, moveSheetNotices, setLimitedMode, setRemovedNotice } from "./sheet-notices";
 import { syntaxForms, unsavedDrafts } from "../host/query";
-import { createCardEditorPort, type CardEditorHub } from "./card-editors";
+import { createCardEditorPort, type CardEditorHub, type CardNotices } from "./card-editors";
 import { createFormatBar, type GroupId } from "../panels/format-bar";
 import type { ComponentRefusal, ComponentRow, DraftInfo, Origin } from "../host/contract";
 import {
@@ -142,7 +142,7 @@ import {
   type Tab,
 } from "./layout";
 import { createNote, handToSystem, loadCommandSpecs, openVaultRoot, vaultArg } from "./vault";
-import { lendHeld, lentDocuments, mountLends, onLendChanged, provideLendGate, renameLend, unlend } from "./lend";
+import { lendHeld, lentDocuments, lentTo, mountLends, onLendChanged, provideLendGate, renameLend, unlend } from "./lend";
 import { confirm } from "../platform/confirm";
 import { registerShellCommand, type CommandEntry } from "../ui/commands";
 import type { LiveCommandTargets } from "../editors/spatial/live/commands";
@@ -252,6 +252,9 @@ export interface PaneView {
   /// Lo stesso banner dentro una scheda della lavagna che scrive nel
   /// documento (N6 T41): in `box`, o `box` vuoto e nascosto.
   drawCardConflict(box: HTMLElement, doc: string): void;
+  /// Gli avvisi del documento dentro una scheda della lavagna che ci scrive
+  /// (N6 T96), quelli di un riquadro, in `box`; `drawn` dopo ogni disegno.
+  drawCardNotices(box: HTMLElement, doc: () => string, drawn: () => void): CardNotices;
   /// Lo stato del salvataggio del documento col fuoco. Senza un posto dove
   /// scriverlo non fa niente.
   drawSave(): void;
@@ -352,6 +355,11 @@ let view: PaneView = {
   drawCardConflict: (box) => {
     box.replaceChildren();
     box.hidden = true;
+  },
+  drawCardNotices: (box) => {
+    box.replaceChildren();
+    box.hidden = true;
+    return { redraw: () => {}, dispose: () => {} };
   },
   drawSave: () => {},
   focusTab: unmounted,
@@ -501,11 +509,13 @@ function cardEditorsHub(): CardEditorHub {
     sessions: documentSessions,
     surfaces: () => surfaceRegistry ?? null,
     held: heldReadOnly,
+    heldWhy,
     shownInPane: isOpen,
     theme: () => theme,
     forms: syntaxForms,
     toolbar: cardToolbar,
     conflict: (box, path) => view.drawCardConflict(box, path),
+    notices: (box, path, drawn) => view.drawCardNotices(box, path, drawn),
   });
   return cardEditorHub;
 }
@@ -535,6 +545,7 @@ const cardEditors: CardEditorHub = {
   written: (surfaceId, change) => cardEditorHub?.written(surfaceId, change) ?? false,
   failed: (surfaceId, error) => cardEditorHub?.failed(surfaceId, error) ?? false,
   holds: (path) => cardEditorHub?.holds(path) ?? false,
+  renamed: () => cardEditorHub?.renamed(),
   refreshReadOnly: () => cardEditorHub?.refreshReadOnly(),
   setTheme: (next) => cardEditorHub?.setTheme(next),
   destroyAll: () => cardEditorHub?.destroyAll(),
@@ -1359,6 +1370,9 @@ export function mountDocumentController(lifetime: Lifetime, d: DocumentDeps, pan
   const renamed = (from: string, to: string): void => {
     const outcome = documentSessions.rename(from, to);
     if (outcome.kind !== "collision") {
+      // Le schede che scrivono nella nota tengono la sessione col nome nuovo
+      // (anche se la rinomina l'ha già fatta la sessione, `already-renamed`).
+      cardEditors.renamed();
       moveSheetNotices(from, to);
       renameInDocumentCaches(from, to);
       // Il prestito segue il file col nome nuovo, come le schede qui sotto.
@@ -2316,6 +2330,17 @@ function setReadOnlyForDocument(doc: string, readOnly: boolean): void {
 /// soltanto prenotato.
 function heldReadOnly(doc: string): boolean {
   return closeDraining || documentSessions.isDeletionPending(doc) || lendHeld(doc);
+}
+
+/// Perché `doc` è fermo (`heldReadOnly`), con le parole delle righe di un
+/// riquadro; `null` se non lo è. Lo dice una scheda della lavagna che non
+/// entra in scrittura (N6 T96).
+function heldWhy(doc: string): string | null {
+  if (documentSessions.isDeletionPending(doc)) return t("notice.read_only", { doc: docTitle(doc) });
+  const app = lentTo(doc);
+  if (app !== null) return t("lend.notice", { app });
+  if (closeDraining || lendHeld(doc)) return t("canvas.card.readonly_why", { name: docTitle(doc) });
+  return null;
 }
 
 /** Ferma gli input locali prima del drain delle finestre e del salvataggio. */

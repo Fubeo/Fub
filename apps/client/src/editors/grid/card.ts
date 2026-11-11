@@ -311,7 +311,7 @@ class SheetCard implements CardView {
     this.#closeSession();
     this.#selection = null;
     const report = (state: CardEditorState): void => {
-      if (this.#editLife === life) this.#context.editState?.(state === "clean" ? null : state);
+      if (this.#editLife === life) this.#context.editState?.(state === "salvato" ? null : state);
     };
     life.add(editor.onState(report));
     report(editor.state());

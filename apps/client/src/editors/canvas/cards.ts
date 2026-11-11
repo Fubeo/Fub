@@ -16,6 +16,7 @@
 // `docs/reference/canvas-cards.md`.
 
 import { formatKindOf } from "../../ui/format-kind";
+import type { SaveState } from "../../state/saving";
 import type { Lifetime } from "../../ui/lifetime";
 import { mediaKindOfId } from "../media/media-types";
 import type { CanvasNode } from "./model";
@@ -169,9 +170,9 @@ export interface CardContext {
   /// nella riga delle opzioni (T41). Una scheda che smette da sé (la porta
   /// dice no, la nota è di sola lettura) lo dice qui.
   writing?(writing: CardWriting | null): void;
-  /// A che punto è ciò che si scrive (T41), per la riga del titolo: da
-  /// salvare, in conflitto, di sola lettura (`reason` dice perché); `null`,
-  /// niente da dire.
+  /// A che punto è ciò che si scrive (T41, T96), per la riga del titolo: lo
+  /// stato del salvataggio della sessione, o la sola lettura (`reason` dice
+  /// perché); `null`, niente da dire.
   editState?(state: CardEditorState | null, reason?: string): void;
 }
 
@@ -231,10 +232,13 @@ export interface CardEditorOptions {
   readonly heading?: string | null;
 }
 
-/// A che punto è ciò che si scrive nella scheda: salvato, ancora da salvare,
-/// in conflitto con il disco, o non scrivibile adesso (la scheda, la policy,
-/// una cancellazione in sospeso, la sessione chiusa).
-export type CardEditorState = "clean" | "pending" | "conflict" | "readonly";
+/// A che punto è ciò che si scrive nella scheda (T96): lo stato del
+/// salvataggio della sessione, lo stesso che la testata di un riquadro dice
+/// della stessa nota (salvato, si salva, non salvato, salvataggio fallito,
+/// cambiato su disco), o `readonly`: non scrivibile adesso (la scheda, la
+/// finestra che si chiude, una cancellazione in sospeso, il prestito a
+/// un'app, la sessione chiusa).
+export type CardEditorState = SaveState | "readonly";
 
 /// L'editor vero di un file, montato dentro una scheda sulla stessa sessione
 /// di un riquadro: bozze, conflitti e salvataggio sono quelli della sessione,
@@ -247,6 +251,12 @@ export interface CardEditor {
   state(): CardEditorState;
   /// Avvisa a ogni cambio di `state()`; restituisce come smettere.
   onState(listener: (state: CardEditorState) => void): () => void;
+  /// Perché `state()` è `readonly`, con le parole di un riquadro (T96);
+  /// `null` se si scrive, o se la sola lettura l'ha chiesta la scheda.
+  readOnlyWhy?(): string | null;
+  /// La sessione si è chiusa sotto l'editor (il file tolto, T96): la scheda
+  /// torna alla resa del file, che dice se manca.
+  closed?(): boolean;
   /// La barra di formato dell'editor, senza Annulla e Ripeti (sulla lavagna
   /// stanno in cima), da mettere nella riga delle opzioni (T41); `null` se
   /// l'editor non ne ha. La barra vive quanto l'editor.

@@ -2,8 +2,11 @@
 // La porta per scrivere dentro le schede (N6 T40): la sessione vera sull'host
 // finto, il registro vero delle superfici con una superficie finta che tiene
 // il suo annulla come un editor (le battute sì, i cambi arrivati dalla
-// sessione no).
+// sessione no). Chi lascia le sessioni fuori dal controllore
+// (`shell-layout.ts`, `document-bridge.ts`) le lascia dalla collezione delle
+// schede (T96): qui la loro `documentSessions` è la collezione della prova.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type * as SessionModule from "./document-session";
 
 import type { CardEditorOptions, CardEditorState } from "../editors/canvas/cards";
 import {
@@ -22,6 +25,30 @@ import {
   type DocumentSessionApi,
   type DocumentSurfaceUpdate,
 } from "./document-session";
+import { defaultLayout, openIn, setLayout } from "./layout";
+import { state as store } from "./store";
+
+/// La collezione della prova, dietro la `documentSessions` della finestra.
+const live = vi.hoisted(() => ({ sessions: null as object | null }));
+
+vi.mock("./document-session", async (importOriginal) => {
+  const real = await importOriginal<typeof SessionModule>();
+  const documentSessions = new Proxy({}, {
+    get: (_target, key) => {
+      const sessions = live.sessions;
+      if (!sessions) throw new Error("nessuna collezione nella prova");
+      const value: unknown = Reflect.get(sessions, key, sessions);
+      return typeof value === "function" ? (value as (...args: unknown[]) => unknown).bind(sessions) : value;
+    },
+  });
+  return { ...real, documentSessions };
+});
+
+// `applyShellLayout` ridisegna la shell a layout pubblicato: qui non c'è.
+vi.mock("./document-controller", () => ({
+  synchronize: async () => {},
+  publishContext: async () => {},
+}));
 
 const VAULT = "/vault";
 
@@ -142,6 +169,8 @@ describe("la porta per scrivere dentro le schede", () => {
   let hub: CardEditorHub;
   let editors: FakeEditor[];
   let held: Set<string>;
+  /// Il perché di `held`, come lo direbbe un riquadro.
+  let why: Map<string, string>;
   let panes: Set<string>;
   let life: Lifetime;
   let error: ReturnType<typeof vi.spyOn>;
@@ -187,15 +216,22 @@ describe("la porta per scrivere dentro le schede", () => {
       },
     });
     held = new Set();
+    why = new Map();
     panes = new Set();
+    live.sessions = sessions;
     hub = createCardEditorPort({
       sessions,
       surfaces: () => registry,
       held: (path) => held.has(path),
+      heldWhy: (path) => (held.has(path) ? why.get(path) ?? null : null),
       shownInPane: (path) => panes.has(path),
+      ...extraDeps,
     });
     life = openLifetime();
   }
+
+  /// Le porte in più della prova che le vuole (gli avvisi, il conflitto).
+  let extraDeps: Partial<Parameters<typeof createCardEditorPort>[0]> = {};
 
   const options = (overrides: Partial<CardEditorOptions> = {}): CardEditorOptions => ({
     compact: true,
@@ -217,6 +253,7 @@ describe("la porta per scrivere dentro le schede", () => {
 
   beforeEach(() => {
     nextCell = undefined;
+    extraDeps = {};
     error = vi.spyOn(console, "error").mockImplementation(() => {});
   });
   afterEach(() => {
@@ -235,7 +272,7 @@ describe("la porta per scrivere dentro le schede", () => {
     expect(editors[0]!.mode).toBe("live_preview");
     expect(card.dataset.cardEditor).toBe("compact");
     expect(hub.holds("Nota.md")).toBe(true);
-    expect(editor!.state()).toBe("clean");
+    expect(editor!.state()).toBe("salvato");
     expect(host.atGate("documentClosed")).toHaveLength(0);
 
     // Una sessione trattenuta non si chiuderebbe: la scheda la tiene.
@@ -308,7 +345,7 @@ describe("la porta per scrivere dentro le schede", () => {
     expect(pane.syncs[pane.syncs.length - 1]?.kind).toBe("operation");
     expect(pane.undo).toEqual(["ciao"]);
     expect(card.undo).toEqual(["ciao dal riquadro"]);
-    expect(editor!.state()).toBe("pending");
+    expect(editor!.state()).toBe("non_salvato");
 
     // La scheda si chiude: la sessione resta del riquadro.
     editor!.destroy();
@@ -365,10 +402,10 @@ describe("la porta per scrivere dentro le schede", () => {
     editor!.onState((state) => states.push(state));
 
     editors[0]!.type("il mio testo");
-    expect(editor!.state()).toBe("pending");
+    expect(editor!.state()).toBe("non_salvato");
     await editor!.leave();
-    expect(editor!.state()).toBe("conflict");
-    expect(states).toEqual(["pending", "conflict"]);
+    expect(editor!.state()).toBe("conflitto");
+    expect(states).toEqual(["non_salvato", "in_corso", "conflitto"]);
 
     editor!.destroy();
     await settled();
@@ -421,7 +458,7 @@ describe("la porta per scrivere dentro le schede", () => {
     held.delete("Nota.md");
     hub.refreshReadOnly();
     expect(editors[0]!.readOnly).toBe(false);
-    expect(states).toEqual(["clean"]);
+    expect(states).toEqual(["salvato"]);
     editor!.destroy();
 
     const reading = await hub.open("Nota.md", document.createElement("div"), options({ readOnly: true, compact: false }));
@@ -505,6 +542,149 @@ describe("la porta per scrivere dentro le schede", () => {
     editor!.onContext!((context) => seen.push(context));
     expect(seen).toEqual([]);
     editor!.destroy();
+  });
+
+  it("rinominata la nota, la prenotazione segue la sessione: un rilascio col nome nuovo non la chiude (T96)", async () => {
+    setup();
+    const editor = await hub.open("Nota.md", document.createElement("div"), options());
+    expect(sessions.rename("Nota.md", "Altra.md").kind).toBe("renamed");
+    hub.renamed();
+
+    // Il riquadro sul nome nuovo si chiude e lascia la sessione: la scheda la tiene.
+    await expect(sessions.release("Altra.md")).resolves.toEqual({ kind: "active" });
+    // Il nome vecchio non è più tenuto: un documento nuovo con quel nome si chiude.
+    await expect(sessions.release("Nota.md")).resolves.toEqual({ kind: "missing" });
+    expect(editor!.state()).toBe("salvato");
+    editors[0]!.type("scritto dopo la rinomina");
+    expect(sessions.text("Altra.md")).toBe("scritto dopo la rinomina");
+
+    editor!.destroy();
+    await settled();
+    expect(host.files()["Altra.md"]).toBe("scritto dopo la rinomina");
+    expect(sessions.get("Altra.md")).toBeUndefined();
+    expect(unclosedKeys()).toEqual([]);
+  });
+
+  it("un layout senza più il riquadro della nota non chiude la sessione di una scheda che scrive (shell-layout, T96)", async () => {
+    setup();
+    const editor = await hub.open("Nota.md", document.createElement("div"), options());
+    // Rinominata da chi tiene il buffer (l'esploratore): la sessione ha il
+    // nome nuovo prima che la shell ne sappia niente.
+    expect(sessions.rename("Nota.md", "Altra.md").kind).toBe("renamed");
+    await sessions.read("Altra.md");
+    const before = defaultLayout();
+    openIn(before.focus, "Altra.md", before);
+    setLayout(before);
+
+    const { applyShellLayout } = await import("./shell-layout");
+    await applyShellLayout(defaultLayout());
+
+    expect(sessions.get("Altra.md")?.snapshot().lifecycle).toBe("open");
+    expect(editor!.state()).toBe("salvato");
+    expect(editors[0]!.readOnly).toBe(false);
+    editors[0]!.type("la scheda scrive ancora");
+    editor!.destroy();
+    await settled();
+    expect(host.files()["Altra.md"]).toBe("la scheda scrive ancora");
+    expect(sessions.get("Altra.md")).toBeUndefined();
+  });
+
+  it("la finestra del documento che se ne va non chiude la sessione di una scheda che scrive (document-bridge, T96)", async () => {
+    setup();
+    store.vaultRoot = VAULT;
+    const editor = await hub.open("Nota.md", document.createElement("div"), options());
+    expect(sessions.rename("Nota.md", "Altra.md").kind).toBe("renamed");
+
+    const { attachRemoteSurface } = await import("./document-bridge");
+    const { handle } = await attachRemoteSurface("Altra.md", VAULT, () => "markdown");
+    await handle.dispose();
+
+    expect(sessions.get("Altra.md")?.snapshot().lifecycle).toBe("open");
+    expect(editor!.state()).toBe("salvato");
+    editors[0]!.type("dopo la finestra");
+    expect(sessions.text("Altra.md")).toBe("dopo la finestra");
+    editor!.destroy();
+    await settled();
+    expect(sessions.get("Altra.md")).toBeUndefined();
+  });
+
+  it("la sola lettura dice perché con le parole di un riquadro, e il file tolto chiude l'editor (T96)", async () => {
+    setup();
+    const editor = await hub.open("Nota.md", document.createElement("div"), options());
+    expect(editor!.readOnlyWhy!()).toBeNull();
+    held.add("Nota.md");
+    why.set("Nota.md", "Aperto in Craft. Fub non lo modifica finché non lo riprendi.");
+    hub.refreshReadOnly();
+    expect(editor!.state()).toBe("readonly");
+    expect(editor!.readOnlyWhy!()).toBe("Aperto in Craft. Fub non lo modifica finché non lo riprendi.");
+    expect(editor!.closed!()).toBe(false);
+    held.delete("Nota.md");
+    hub.refreshReadOnly();
+    expect(editor!.readOnlyWhy!()).toBeNull();
+
+    // La sola lettura chiesta dalla scheda non ha un perché da dire.
+    const reading = await hub.open("Nota.md", document.createElement("div"), options({ readOnly: true }));
+    expect(reading!.readOnlyWhy!()).toBeNull();
+    reading!.destroy();
+
+    sessions.handleExternalRemoval("Nota.md");
+    expect(editor!.state()).toBe("readonly");
+    expect(editor!.closed!()).toBe(true);
+    editor!.destroy();
+  });
+
+  it("gli avvisi di un riquadro stanno in cima alla scheda, sotto il conflitto, e seguono la sessione (T96)", async () => {
+    const drawn: { box: HTMLElement; doc: () => string; drawn: () => void; redraws: number; disposed: boolean }[] = [];
+    extraDeps = {
+      conflict: (box) => {
+        box.hidden = true;
+      },
+      notices: (box, doc, done) => {
+        const entry = { box, doc, drawn: done, redraws: 0, disposed: false };
+        drawn.push(entry);
+        return {
+          redraw: () => {
+            entry.redraws += 1;
+          },
+          dispose: () => {
+            entry.disposed = true;
+          },
+        };
+      },
+    };
+    setup();
+    const card = document.createElement("div");
+    const editor = await hub.open("Nota.md", card, options());
+    expect(drawn).toHaveLength(1);
+    const [entry] = drawn;
+    // Come in un riquadro: il conflitto, gli avvisi, poi il testo.
+    expect(card.children[1]).toBe(entry!.box);
+    expect(entry!.box.className).toBe("sheet-notices");
+    expect(card.lastChild?.textContent).toBe("editor");
+    expect(entry!.doc()).toBe("Nota.md");
+
+    // Un avviso disegnato: il corpo della scheda lo sa.
+    entry!.box.hidden = false;
+    entry!.drawn();
+    expect(card.hasAttribute("data-card-notice")).toBe(true);
+    entry!.box.hidden = true;
+    entry!.drawn();
+    expect(card.hasAttribute("data-card-notice")).toBe(false);
+
+    // Ogni evento della sessione e ogni cambio della sola lettura li ridisegna.
+    const redraws = entry!.redraws;
+    editors[0]!.type("una battuta");
+    expect(entry!.redraws).toBeGreaterThan(redraws);
+    const typed = entry!.redraws;
+    hub.refreshReadOnly();
+    expect(entry!.redraws).toBe(typed + 1);
+
+    // La rinomina: gli avvisi sono del nome nuovo.
+    sessions.rename("Nota.md", "Altra.md");
+    expect(entry!.doc()).toBe("Altra.md");
+
+    editor!.destroy();
+    expect(entry!.disposed).toBe(true);
   });
 
   it("le modifiche dei riquadri non sono della porta", () => {
