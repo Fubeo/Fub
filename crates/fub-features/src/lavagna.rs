@@ -927,7 +927,10 @@ mod tests {
                 other => panic!("{key} non è una scelta: {}", other.name()),
             }
         };
-        assert_eq!(values(CANVAS_PEN_BUTTON_KEY), ["radial", "eraser", "pan"]);
+        assert_eq!(
+            values(CANVAS_PEN_BUTTON_KEY),
+            ["radial", "eraser", "pan", "lasso"]
+        );
         assert_eq!(values(CANVAS_WHEEL_KEY), ["pan", "zoom"]);
         assert_eq!(values(CANVAS_WORKSPACE_KEY), ["auto", "full", "simple"]);
         assert_eq!(values(CANVAS_DROP_FOLDER_KEY), ["notes", "board", "folder"]);
@@ -967,7 +970,7 @@ mod tests {
             ),
             (
                 "Il tasto della penna",
-                "Che cosa fa il tasto sul fianco della penna: apre il menu radiale, cancella come il retro della penna, o sposta la lavagna. Su un computer senza penna non fa niente.",
+                "Che cosa fa il tasto sul fianco della penna: apre il menu radiale, cancella come il retro della penna, sposta la lavagna o sceglie col lazo. Su un computer senza penna non fa niente.",
             ),
             (
                 "La rotella del mouse",
@@ -1024,7 +1027,12 @@ mod tests {
         };
         assert_eq!(
             labels(CANVAS_PEN_BUTTON_KEY, "it"),
-            ["Apre il menu", "Cancella", "Sposta la lavagna"]
+            [
+                "Apre il menu",
+                "Cancella",
+                "Sposta la lavagna",
+                "Sceglie col lazo"
+            ]
         );
         assert_eq!(
             labels(CANVAS_WHEEL_KEY, "it"),
@@ -1040,7 +1048,12 @@ mod tests {
         );
         assert_eq!(
             labels(CANVAS_PEN_BUTTON_KEY, "en"),
-            ["Opens the menu", "Erases", "Moves the whiteboard"]
+            [
+                "Opens the menu",
+                "Erases",
+                "Moves the whiteboard",
+                "Selects with the lasso"
+            ]
         );
         assert_eq!(
             labels(CANVAS_WHEEL_KEY, "en"),

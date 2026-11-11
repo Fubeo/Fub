@@ -759,7 +759,7 @@ impl Compiler {
     fn frame(&self, index: usize, layer: &LayerRef) -> Result<Frame, OpError> {
         match layer {
             LayerRef::Board => Ok(Frame::Board),
-            LayerRef::Node(id) => Ok(Frame::Card(self.node(index, id)?.clone())),
+            LayerRef::Node(id) => Ok(Frame::Card(Box::new(self.node(index, id)?.clone()))),
         }
     }
 
@@ -848,8 +848,8 @@ impl Compiler {
         let mut remaining = ink.strokes;
         let mut patches = Vec::with_capacity(found.len() * 2);
         let mut additions = Vec::with_capacity(found.len());
-        let mut end = target_ink.strokes.len();
-        for (id, (_, drawn)) in ids.iter().zip(found) {
+        // Ogni tratto entra in fondo a `to`, dopo quelli che ha già.
+        for (end, (id, (_, drawn))) in (target_ink.strokes.len()..).zip(ids.iter().zip(found)) {
             let at = remaining
                 .iter()
                 .position(|stroke| stroke.id == *id)
@@ -868,8 +868,8 @@ impl Compiler {
                 start.0 + fit.x + delta.0 - origin.0,
                 start.1 + fit.y + delta.1 - origin.1,
             );
-            let moved =
-                shifted(&drawn.ink, fit.s, offset).map_err(|reason| stroke_error(index, id, &reason))?;
+            let moved = shifted(&drawn.ink, fit.s, offset)
+                .map_err(|reason| stroke_error(index, id, &reason))?;
             let mut after = before.clone();
             after.ink = Some(Value::String(moved));
             after.anchor = Some(anchor.to_value());
@@ -877,7 +877,8 @@ impl Compiler {
                 // Lo spessore segue i punti: il tratto si vede uguale.
                 let brush = before.brush.as_ref().and_then(Value::as_str).unwrap_or("");
                 let size = brush_size(&drawn.brush) * fit.s;
-                let resized = resized_brush(brush, size).map_err(|reason| stroke_error(index, id, &reason))?;
+                let resized = resized_brush(brush, size)
+                    .map_err(|reason| stroke_error(index, id, &reason))?;
                 after.brush = Some(Value::String(resized));
             }
             if taken.contains(&after.id) {
@@ -909,7 +910,6 @@ impl Compiler {
                 before: None,
                 after: Some(after),
             });
-            end += 1;
         }
         patches.extend(additions);
         Ok(patches)
@@ -963,8 +963,8 @@ impl Compiler {
                     return Err(hidden(index, &before.id));
                 }
                 let brush = before.brush.as_ref().and_then(Value::as_str).unwrap_or("");
-                let resized =
-                    resized_brush(brush, size / fit.s).map_err(|reason| stroke_error(index, &before.id, &reason))?;
+                let resized = resized_brush(brush, size / fit.s)
+                    .map_err(|reason| stroke_error(index, &before.id, &reason))?;
                 after.brush = Some(Value::String(resized));
             }
             if patch::same_stroke(before, &after) {
@@ -1000,7 +1000,7 @@ impl Compiler {
 /// Dove si disegna un livello: la radice, o la scheda che lo tiene.
 enum Frame {
     Board,
-    Card(CanvasNode),
+    Card(Box<CanvasNode>),
 }
 
 impl Frame {
@@ -1017,7 +1017,9 @@ impl Frame {
     /// di `docs/reference/canvas-ink.md`.
     fn fit(&self, anchor: &InkAnchor) -> Fit {
         match (self, anchor) {
-            (Frame::Card(node), InkAnchor::Card { width, height }) => ink_fit(node, *width, *height),
+            (Frame::Card(node), InkAnchor::Card { width, height }) => {
+                ink_fit(node, *width, *height)
+            }
             _ => Fit::IDENTITY,
         }
     }
@@ -1126,8 +1128,12 @@ fn shifted(ink: &Ink, scale: f64, offset: (f64, f64)) -> Result<String, String> 
         let sample = ink.sample(i);
         let (x, y) = if scale == 1.0 {
             (
-                sample[0].checked_add(step.0).ok_or("the moved points are out of range")?,
-                sample[1].checked_add(step.1).ok_or("the moved points are out of range")?,
+                sample[0]
+                    .checked_add(step.0)
+                    .ok_or("the moved points are out of range")?,
+                sample[1]
+                    .checked_add(step.1)
+                    .ok_or("the moved points are out of range")?,
             )
         } else {
             #[allow(clippy::cast_precision_loss)]
@@ -1166,12 +1172,16 @@ fn resized_brush(brush: &str, size: f64) -> Result<String, String> {
     match tokens.iter().position(|token| token.starts_with("size=")) {
         Some(at) => tokens[at] = value,
         None => {
-            let at = tokens.iter().position(|token| !token.is_empty()).map_or(tokens.len(), |at| at + 1);
+            let at = tokens
+                .iter()
+                .position(|token| !token.is_empty())
+                .map_or(tokens.len(), |at| at + 1);
             tokens.insert(at, value);
         }
     }
     let text = tokens.join(" ");
-    InkBrush::parse(&text).map_err(|error| format!("the brush does not take the new size ({error})"))?;
+    InkBrush::parse(&text)
+        .map_err(|error| format!("the brush does not take the new size ({error})"))?;
     Ok(text)
 }
 
@@ -1365,7 +1375,10 @@ mod tests {
             let fit = ink_fit(&node, width, height);
             for (key, got) in [("s", fit.s), ("x", fit.x), ("y", fit.y)] {
                 let want = expect[key].as_f64().expect("un numero");
-                assert!((got - want).abs() < 1e-9, "{name}: {key} = {got}, non {want}");
+                assert!(
+                    (got - want).abs() < 1e-9,
+                    "{name}: {key} = {got}, non {want}"
+                );
             }
             seen += 1;
         }
