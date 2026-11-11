@@ -4103,7 +4103,7 @@ scrive e due spostano, e senza il dito sposta come oggi; il primo segno
 tolto quando arriva il secondo dito.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/canvas
-Stato: [ ] da fare
+Stato: [~] in corso · coder Opus · base 0ceff2fa2
 
 ## T65 · Lo spazio Semplice
 
