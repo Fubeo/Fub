@@ -95,7 +95,8 @@ import {
   readCanvasClipboard,
   type CanvasClipboard,
 } from "./clipboard";
-import { createCanvasOptions, type CanvasOptions } from "./chrome/options";
+import { createCanvasOptions, type CanvasChosenText, type CanvasOptions } from "./chrome/options";
+import { DEFAULT_TEXT_STYLE, isTextAlign, isTextSize, textStyle, withTextStyle, type TextStyle } from "./text-style";
 import { createCanvasWorkspace, isBareKey, type CanvasWorkspaceControl } from "./chrome/workspace";
 import {
   createCanvasSelectionBar,
@@ -1323,6 +1324,19 @@ function paintColor(el: HTMLElement | SVGElement, color: string | undefined): vo
 }
 
 /**
+ * La misura e l'allineamento del testo di una scheda (T92, `fub:text`) su
+ * `el`, in `data-text-size` e `data-text-align`; quelli di serie non si
+ * segnano. L'aspetto lo dà la pelle.
+ */
+function paintTextStyle(el: HTMLElement, node: CanvasNode): void {
+  const style = node.type === "text" ? textStyle(node) : DEFAULT_TEXT_STYLE;
+  if (style.size === DEFAULT_TEXT_STYLE.size) delete el.dataset.textSize;
+  else if (el.dataset.textSize !== style.size) el.dataset.textSize = style.size;
+  if (style.align === DEFAULT_TEXT_STYLE.align) delete el.dataset.textAlign;
+  else if (el.dataset.textAlign !== style.align) el.dataset.textAlign = style.align;
+}
+
+/**
  * La misura di un'immagine dalla porta, o `null` se non arriva entro
  * `MEASURE_IMAGE_TIMEOUT_MS`, fallisce o non è una misura.
  */
@@ -1760,6 +1774,11 @@ export class CanvasEngine {
   readonly #area: HTMLElement;
   /** Le punte dei fili che lo strumento Collega tira (T50); di serie alla fine. */
   #tips: CanvasTip = "end";
+  /**
+   * La misura e l'allineamento delle prossime schede dello strumento Testo
+   * (T92): l'ultimo scelto nella riga, di serie medio e a sinistra.
+   */
+  #textNext: TextStyle = DEFAULT_TEXT_STYLE;
   /** La vista ricordata su questo computer (T36); `null` senza memoria o senza lavagna. */
   readonly #viewMemo: CanvasViewRecorder | null;
   /** Cresce a ogni `setDoc`: la vista letta per un'apertura di prima non vale più. */
@@ -1974,6 +1993,7 @@ export class CanvasEngine {
       chosen: () => this.#selectedNodes().length,
       color: () => this.#chosenColor(),
       tips: () => this.#tips,
+      text: () => this.#chosenText(),
       commands: () => this.commands(),
       run: (id) => {
         this.#recordPending();
@@ -5742,7 +5762,7 @@ export class CanvasEngine {
       : at
       ? { x: at.x + 160, y: at.y + 80 }
       : this.#screenToWorld(rect.left + (rect.width || 800) / 2, rect.top + (rect.height || 600) / 2);
-    const node: CanvasNode = {
+    const born: CanvasNode = {
       id: newNodeId("n"),
       type,
       x: snap(center.x - 160),
@@ -5754,6 +5774,9 @@ export class CanvasEngine {
       ...(type === "link" ? { url: "https://" } : {}),
       ...(type === "group" ? { label: "" } : {}),
     };
+    // Una scheda dello strumento Testo nasce con la misura e l'allineamento
+    // scelti nella sua riga (T92).
+    const node = (type === "text" && this.#tool === "text" ? withTextStyle(born, this.#textNext) : null) ?? born;
     const patches: CanvasPatch[] = [];
     const patch = upsertNodePatch(this.#doc, node);
     if (patch) patches.push(patch);
@@ -6392,6 +6415,20 @@ export class CanvasEngine {
         run: () => this.#layoutSelection(axis),
       };
     }
+    if (id.startsWith("canvas.text_size.") || id.startsWith("canvas.text_align.")) {
+      // La misura e l'allineamento del testo (T92): delle schede di testo
+      // scelte, in un commit, e delle prossime dello strumento Testo.
+      const size = id.startsWith("canvas.text_size.") ? id.slice("canvas.text_size.".length) : null;
+      const align = id.startsWith("canvas.text_align.") ? id.slice("canvas.text_align.".length) : null;
+      const change: Partial<TextStyle> | null = isTextSize(size) ? { size } : isTextAlign(align) ? { align } : null;
+      if (change === null) return null;
+      return {
+        disabled: () => writable()
+          ?? (this.#isSceneOversized() ? t("canvas.too_large") : null)
+          ?? (this.#tool === "text" || this.#chosenTextNodes().length > 0 ? null : t("canvas.commands.why.no_text_card")),
+        run: () => this.#styleText(change),
+      };
+    }
     if (id.startsWith("canvas.tips.")) {
       const tip = id.slice("canvas.tips.".length) as CanvasTip;
       if (!(CANVAS_TIPS as readonly string[]).includes(tip)) return null;
@@ -6776,6 +6813,51 @@ export class CanvasEngine {
     if (this.#tips === "none") return { toEnd: "none" };
     if (this.#tips === "start") return { fromEnd: "arrow", toEnd: "none" };
     return { toEnd: "arrow" };
+  }
+
+  /** Le schede di testo fra quelle scelte. */
+  #chosenTextNodes(): CanvasNode[] {
+    return this.#selectedNodes().filter((node) => node.type === "text");
+  }
+
+  /**
+   * La misura e l'allineamento che la riga segna (T92): quelli delle schede
+   * di testo scelte (`null` se sono diversi); senza, col Testo quelli delle
+   * sue prossime schede, e nessuno con le altre schede (i controlli sono
+   * spenti).
+   */
+  #chosenText(): CanvasChosenText {
+    const nodes = this.#chosenTextNodes();
+    if (nodes.length === 0) return this.#tool === "text" ? this.#textNext : { size: null, align: null };
+    const styles = nodes.map(textStyle);
+    const first = styles[0]!;
+    return {
+      size: styles.every((style) => style.size === first.size) ? first.size : null,
+      align: styles.every((style) => style.align === first.align) ? first.align : null,
+    };
+  }
+
+  /**
+   * Cambia la misura o l'allineamento (T92): le prossime schede dello
+   * strumento Testo lo prendono, e le schede di testo scelte lo scrivono in
+   * `fub:text`, tutte in un commit (un annulla). Ogni scheda tiene l'altro
+   * valore suo; una che si mostra già così non cambia, e tornata di serie
+   * perde il campo. Il testo della scheda non si tocca.
+   */
+  #styleText(change: Partial<TextStyle>): void {
+    if (this.#readOnly || this.#destroyed) return;
+    this.#textNext = { ...this.#textNext, ...change };
+    const doc = this.#doc;
+    const patches: CanvasPatch[] = [];
+    if (doc) {
+      for (const node of this.#chosenTextNodes()) {
+        const next = withTextStyle(node, { ...textStyle(node), ...change });
+        const patch = next ? upsertNodePatch(doc, next) : null;
+        if (patch) patches.push(patch);
+      }
+    }
+    if (patches.length) this.#commit(patches, "input");
+    this.#canvasOptions.sync();
   }
 
   /** Il colore delle schede scelte: `undefined` quello di serie, `null` se sono diversi. */
@@ -10248,6 +10330,7 @@ export class CanvasEngine {
     // La carta e il colore li dà la pelle (T47); il nome del colore arriva a
     // chi ascolta.
     paintColor(el, node.color);
+    paintTextStyle(el, node);
     if (node.type === "group" && node.backgroundStyle) el.dataset.backgroundStyle = node.backgroundStyle;
     else delete el.dataset.backgroundStyle;
     // Il nome per il lettore di schermo (T61) lo scrive `#scheduleLabels`, solo

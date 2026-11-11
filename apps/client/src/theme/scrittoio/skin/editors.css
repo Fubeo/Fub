@@ -1727,6 +1727,24 @@
 .canvas-ink-pen-name {
   color: inherit;
 }
+/* La misura del testo nella riga (T92): una «A» per misura, grande come
+   la misura che sceglie. */
+.canvas-text-size > span {
+  font-weight: var(--weight-bold);
+  line-height: 1;
+}
+.canvas-text-size[data-size="s"] > span {
+  font-size: 12px;
+}
+.canvas-text-size[data-size="m"] > span {
+  font-size: 16px;
+}
+.canvas-text-size[data-size="l"] > span {
+  font-size: 21px;
+}
+.canvas-text-size[data-size="xl"] > span {
+  font-size: 26px;
+}
 /* Il menu: un rialzo del kit (questo pezzo viene dopo kit), con le sezioni una sotto l'altra. */
 .canvas-pen-popover {
   padding: var(--space-4);
@@ -2781,6 +2799,34 @@
 }
 .canvas-markdown > :last-child {
   margin-bottom: 0;
+}
+/* La misura e l'allineamento del testo di una scheda (T92, `fub:text`), sul
+   testo letto, sul campo e sulla nota che si scrive: «m» e «start» sono il
+   testo di sempre e non segnano la scheda. */
+.canvas-node[data-text-size="s"] .canvas-markdown,
+.canvas-node[data-text-size="s"] .canvas-text-editor,
+.canvas-node[data-text-size="s"] .canvas-card-note .cm-content {
+  font-size: var(--text-base);
+}
+.canvas-node[data-text-size="l"] .canvas-markdown,
+.canvas-node[data-text-size="l"] .canvas-text-editor,
+.canvas-node[data-text-size="l"] .canvas-card-note .cm-content {
+  font-size: var(--text-2xl);
+}
+.canvas-node[data-text-size="xl"] .canvas-markdown,
+.canvas-node[data-text-size="xl"] .canvas-text-editor,
+.canvas-node[data-text-size="xl"] .canvas-card-note .cm-content {
+  font-size: var(--text-3xl);
+}
+.canvas-node[data-text-align="center"] .canvas-markdown,
+.canvas-node[data-text-align="center"] .canvas-text-editor,
+.canvas-node[data-text-align="center"] .canvas-card-note .cm-content {
+  text-align: center;
+}
+.canvas-node[data-text-align="end"] .canvas-markdown,
+.canvas-node[data-text-align="end"] .canvas-text-editor,
+.canvas-node[data-text-align="end"] .canvas-card-note .cm-content {
+  text-align: end;
 }
 .canvas-empty,
 .canvas-group-bg {

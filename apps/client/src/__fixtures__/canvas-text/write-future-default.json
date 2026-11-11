@@ -1,0 +1,25 @@
+{
+  "name": "write-future-default",
+  "description": "Un campo di una versione futura riportato di serie sparisce.",
+  "node": {
+    "id": "t1",
+    "type": "text",
+    "x": 0,
+    "y": 0,
+    "width": 300,
+    "height": 120,
+    "text": "nota",
+    "fub:text": {
+      "v": 2,
+      "size": "huge"
+    }
+  },
+  "style": {
+    "size": "m",
+    "align": "start"
+  },
+  "expect": {
+    "outcome": "written",
+    "text": null
+  }
+}

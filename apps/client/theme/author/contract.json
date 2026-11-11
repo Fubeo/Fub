@@ -855,6 +855,7 @@
     "canvas-group",
     "canvas-button",
     "canvas-color-well",
+    "canvas-text-size",
     "canvas-selection-bar",
     "canvas-selection-chip",
     "canvas-ink-pen",
@@ -2517,6 +2518,7 @@
     "canvas-group": "cornice",
     "canvas-button": "cornice",
     "canvas-color-well": "cornice",
+    "canvas-text-size": "cornice",
     "canvas-selection-bar": "cornice",
     "canvas-selection-chip": "cornice",
     "canvas-ink-pen": "cornice",
@@ -5630,7 +5632,8 @@
         "canvas-options-hint",
         "canvas-group",
         "canvas-button",
-        "canvas-color-well"
+        "canvas-color-well",
+        "canvas-text-size"
       ],
       "states": [
         "rest",
@@ -9084,7 +9087,7 @@
   "counts": {
     "required_roles": 154,
     "optional_roles": 63,
-    "hooks": 1660,
+    "hooks": 1661,
     "state_names": 7,
     "assigned_states": 783,
     "components": 233,

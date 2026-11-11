@@ -1,0 +1,26 @@
+{
+  "name": "write-defaults-written-removes",
+  "description": "I valori di serie scritti da qualcuno se ne vanno con il primo cambio.",
+  "node": {
+    "id": "t1",
+    "type": "text",
+    "x": 0,
+    "y": 0,
+    "width": 300,
+    "height": 120,
+    "text": "nota",
+    "fub:text": {
+      "v": 1,
+      "size": "m",
+      "align": "start"
+    }
+  },
+  "style": {
+    "size": "m",
+    "align": "center"
+  },
+  "expect": {
+    "outcome": "written",
+    "text": "{\"v\":1,\"align\":\"center\"}"
+  }
+}

@@ -47,8 +47,9 @@ export const EDITORS: PartAnatomy = {
     // quelli della riga (`canvas-button`).
     { name: "canvas-find", states: [S("rest"), S("hover"), S("focused"), S("disabled")], hooks: ["canvas-find", "canvas-find-input", "canvas-find-count", "canvas-find-scope"] },
     // La riga delle opzioni della lavagna (T50): la testata, i gruppi e i
-    // pulsanti della riga del kit, il pozzo del colore delle schede scelte.
-    { name: "canvas-options", states: [S("rest"), S("hover"), S("pressed"), S("focused"), S("selected"), S("disabled")], hooks: ["canvas-header", "canvas-options", "canvas-options-hint", "canvas-group", "canvas-button", "canvas-color-well"] },
+    // pulsanti della riga del kit, il pozzo del colore delle schede scelte,
+    // le «A» della misura del testo (T92).
+    { name: "canvas-options", states: [S("rest"), S("hover"), S("pressed"), S("focused"), S("selected"), S("disabled")], hooks: ["canvas-header", "canvas-options", "canvas-options-hint", "canvas-group", "canvas-button", "canvas-color-well", "canvas-text-size"] },
     // La barra della selezione della lavagna (T51): una pillola sopra le
     // schede scelte, coi pulsanti della riga e il pallino del colore.
     { name: "canvas-selection-bar", states: [S("rest"), S("hover"), S("pressed"), S("focused"), S("disabled")], hooks: ["canvas-selection-bar", "canvas-selection-chip"] },

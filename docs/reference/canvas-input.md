@@ -198,7 +198,7 @@ scrive, valgono quelli della sessione). `Esc` torna dov'eri, anche in un campo.
 | `canvas.grid_toggle` (la griglia di questa lavagna), `canvas.bare` (l'interfaccia, [lo spazio di lavoro](canvas-view.md#lo-spazio-di-lavoro)): le mostrano e le nascondono | `Ctrl+'`; `Ctrl+.` |
 | `canvas.add.*`, `canvas.edit`, `canvas.open`, `canvas.open_url`, `canvas.edge.reverse`, `canvas.color.*`, `canvas.align.*`, `canvas.distribute_*` | nessuno |
 | `canvas.open_beside`, `canvas.open_viewer`, `canvas.web_preview`, `canvas.spread_pages` (solo su un PDF), `canvas.connect`, `canvas.trash_file`, `canvas.extract_note`, `canvas.copy_note_text`, `canvas.replace_file` ([convertire](canvas-convert.md)) (il menu della scheda); `canvas.open_beside_here` ([la vista](canvas-view.md#apri-a-lato-per-questo)); `canvas.finger_writes` («Il dito scrive» della colonna, anche in sola lettura) | nessuno (`canvas.connect` anche con `C`, vedi sotto) |
-| `canvas.pen_menu`, `canvas.color_menu`, `canvas.align_menu`, `canvas.tips.none`, `.start`, `.end` (la riga delle opzioni) | nessuno |
+| `canvas.pen_menu`, `canvas.color_menu`, `canvas.align_menu`, `canvas.tips.none`, `.start`, `.end`, `canvas.text_size.s`, `.m`, `.l`, `.xl`, `canvas.text_align.start`, `.center`, `.end` (la riga delle opzioni) | nessuno |
 
 I tasti sono quelli della tabella «Tasti» della lavagna dove fanno la stessa
 cosa (ADR 0223), e nessuno è di due comandi. Un tasto senza `Ctrl` né `Alt`
@@ -414,12 +414,11 @@ schede scelte:
   strumento prima sceglie quello della penna.
 - **Selezione o Lazo con schede scelte:** il colore (un pozzo col colore e il
   nome, «Colori diversi» se non sono uguali, che apre i colori
-  `canvas.color.*`) e Disponi: davanti, dietro, «Allinea e distribuisci»
-  (`canvas.align_menu`, spento con meno di due schede).
-- **Selezione o Lazo senza schede, Testo, Collega:** una riga sul gesto;
-  Collega ha le punte del filo che tira (`canvas.tips.*`: nessuna, all'inizio,
-  alla fine, quella di serie, che scrive `toEnd: "arrow"` come prima). La
-  punta scelta vale finché la lavagna resta aperta.
+  `canvas.color.*`), [la misura e l'allineamento del testo](canvas-format.md#nella-riga-delle-opzioni) e Disponi: davanti, dietro, «Allinea e distribuisci» (`canvas.align_menu`, spento con meno di due schede).
+- **Testo:** [la misura e l'allineamento del testo](canvas-format.md#nella-riga-delle-opzioni).
+- **Selezione o Lazo senza schede, Collega:** una riga sul gesto; Collega ha le
+  punte del filo (`canvas.tips.*`: nessuna, all'inizio, alla fine, quella di
+  serie, `toEnd: "arrow"`), che valgono finché la lavagna resta aperta.
 - **In ogni riga** la Vista (riduci, ingrandisci, mostra tutto); prima, con una scheda attiva, [«Apri a lato» sul punto](canvas-view.md#apri-a-lato-per-questo).
 
 Ogni controllo è un comando del catalogo: il nome e il tasto vengono da lì,
