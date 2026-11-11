@@ -15,7 +15,7 @@ import { notify } from "../../ui/notify";
 import { searchedName } from "../../rules/searched-name";
 import { focusableElements, focusZone } from "../../ui/a11y";
 import { mediaKindOfId } from "../media/media-types";
-import { anchorAt, pageAnchorAt, strokeBounds, StrokeBox, type Bounds } from "./anchor";
+import { anchorAt, cellAnchorAt, pageAnchorAt, strokeBounds, StrokeBox, type Bounds } from "./anchor";
 import { parseTsv } from "../core/tsv";
 import { bornSize, dropLayout, markdownTable, spreadLayout, type DropItem } from "./drop-layout";
 import { parsePageRanges } from "./page-ranges";
@@ -27,6 +27,7 @@ import {
   updateLiveCards,
   type CardContext,
   type CardEditorContext,
+  type CardCellBox,
   type CardEditorPort,
   type CardEditorState,
   type CardKind,
@@ -3254,7 +3255,7 @@ export class CanvasEngine {
     this.#erase = {
       id,
       sweep: new EraseSweep(ERASER, pointerType),
-      source: new InkEraseSource(erasableInk(this.#inkStateList(), this.#pagesShown, this.#aspectsShown)),
+      source: new InkEraseSource(erasableInk(this.#inkStateList(), this.#pagesShown, this.#aspectsShown, this.#cellsShown)),
       mode: this.#penChoice.eraser,
       path: [],
       cuts: new Map(),
@@ -3589,15 +3590,18 @@ export class CanvasEngine {
     const doc = this.#doc;
     const layers = this.#inkLayersNow();
     if (!layers) return;
-    const holder = this.#inkHolder(doc.nodes, layers, strokeBounds(stroke.samples, stroke.brush.size));
+    const bounds = strokeBounds(stroke.samples, stroke.brush.size);
+    const holder = this.#inkHolder(doc.nodes, layers, bounds);
     const ref: InkLayerRef = holder ? { node: holder.id } : "board";
     if (foreignInkLayer(layers, ref)) {
       this.#showNotice(t("canvas.ink.foreign"));
       return;
     }
-    // Sulla pagina di un PDF il tratto è della pagina se comincia lì (T19).
+    // Sulla pagina di un PDF il tratto è della pagina se comincia lì (T19);
+    // sulla griglia di un foglio, della cella sotto il centro (T37, T38).
     const page = holder ? pageAnchorAt(holder, this.#pageBoxOf(holder.id), stroke.samples[0]) : null;
-    const made = strokeRecord(stroke, holder, { brush: stroke.brush, color: stroke.color, tool: stroke.tool }, Date.now(), page);
+    const cell = holder && !page ? cellAnchorAt(holder, bounds, (point) => this.#cellAtOf(holder.id, point)) : null;
+    const made = strokeRecord(stroke, holder, { brush: stroke.brush, color: stroke.color, tool: stroke.tool }, Date.now(), page ?? cell);
     if (!made.ok) {
       // Un tocco che non fa contorno non è niente da dire.
       if (made.reason !== "empty") this.#showNotice(t(made.reason === "full" ? "canvas.ink.full" : "canvas.ink.refused"));
@@ -3644,6 +3648,42 @@ export class CanvasEngine {
   readonly #pagesShown = (id: string): CardPageBox | null => this.#pageBoxOf(id);
 
   /**
+   * La cella sotto `point` (dall'angolo della scheda) nella scheda di foglio
+   * `id` (T38): la chiede alla sua vista; `null` se la scheda non ha una
+   * vista o lì non c'è una cella.
+   */
+  #cellAtOf(id: string, point: { readonly x: number; readonly y: number }): CardCellBox | null {
+    const view = this.#cards.get(id)?.view;
+    if (!view?.cellAt) return null;
+    try {
+      return view.cellAt(point);
+    } catch (error) {
+      // Una vista che lancia non ferma l'inchiostro: il tratto è della scheda.
+      console.warn(`canvas: la cella della scheda ${id} non si trova`, error);
+      return null;
+    }
+  }
+
+  /**
+   * Dove la scheda di foglio `id` mostra la cella `cell` del foglio `sheet`
+   * (T38): lo chiede alla sua vista; `null` se non la mostra.
+   */
+  #cellRectOf(id: string, sheet: string, cell: string): CardCellBox | null {
+    const view = this.#cards.get(id)?.view;
+    if (!view?.cellRect) return null;
+    try {
+      return view.cellRect(sheet, cell);
+    } catch (error) {
+      // Una vista che lancia non ferma l'inchiostro: la cella non si vede.
+      console.warn(`canvas: la cella ${cell} della scheda ${id} non si misura`, error);
+      return null;
+    }
+  }
+
+  /** `#cellRectOf` come funzione, per la gomma e il Lazo (`erasableInk`). */
+  readonly #cellsShown = (id: string, sheet: string, cell: string): CardCellBox | null => this.#cellRectOf(id, sheet, cell);
+
+  /**
    * La proporzione del contenuto che la scheda `id` mostra (T39): la chiede
    * alla sua vista; `null` se la scheda non ha una vista o non la sa.
    */
@@ -3665,19 +3705,23 @@ export class CanvasEngine {
 
   /**
    * Disegna i tratti `drys` dentro l'elemento della scheda `node`: col modo
-   * della scheda, la pagina che mostra (T19) e la proporzione del suo
-   * contenuto (T39), che chiede solo alle schede `scale`.
+   * della scheda, la pagina che mostra (T19), le celle che mostra (T38) e la
+   * proporzione del suo contenuto (T39), che chiede solo alle schede `scale`.
    */
   #paintCardInk(element: HTMLElement, node: CanvasNode, drys: readonly DryStroke[]): void {
     const mode = inkFitMode(node);
     const aspect = mode === "scale" && drys.length > 0 ? this.#contentAspectOf(node.id) : null;
-    paintCard(element, drys, mode, drys.length > 0 ? this.#pageBoxOf(node.id) : null, aspect);
+    const cells = drys.some((dry) => dry.cell !== undefined)
+      ? (sheet: string, cell: string) => this.#cellRectOf(node.id, sheet, cell)
+      : null;
+    paintCard(element, drys, mode, drys.length > 0 ? this.#pageBoxOf(node.id) : null, aspect, cells);
   }
 
   /**
-   * La scheda `entry` mostra un'altra pagina, o nessuna (T19), o il suo
-   * contenuto ha cambiato proporzione (T39): si ridisegna il suo solo
-   * inchiostro, coi tratti già calcolati.
+   * La scheda `entry` mostra un'altra pagina, o nessuna (T19), il suo
+   * contenuto ha cambiato proporzione (T39) o le sue celle si sono spostate
+   * (T38): si ridisegna il suo solo inchiostro, coi tratti già calcolati,
+   * subito, nello stesso fotogramma della scheda.
    */
   #pageShown(entry: CardEntry): void {
     if (this.#destroyed || !this.#doc || this.#isSceneOversized()) return;
@@ -3962,7 +4006,7 @@ export class CanvasEngine {
   #chosenStrokes(): ErasableInk[] {
     if (this.#strokeSelection.size === 0 || !this.#doc || this.#isSceneOversized()) return [];
     const cards = new Set(this.#selection);
-    return erasableInk(this.#inkStateList(), this.#pagesShown, this.#aspectsShown)
+    return erasableInk(this.#inkStateList(), this.#pagesShown, this.#aspectsShown, this.#cellsShown)
       .filter((unit) => this.#strokeSelection.has(unit.key) && (unit.node === null || !cards.has(unit.node)));
   }
 
@@ -4127,11 +4171,12 @@ export class CanvasEngine {
     const selection = lasso.additive ? [...this.#selection, ...cards.filter((id) => !this.#selection.includes(id))] : cards;
     const held = new Set(selection);
     const strokes: string[] = [];
-    for (const unit of erasableInk(this.#inkStateList(), this.#pagesShown, this.#aspectsShown)) {
+    for (const unit of erasableInk(this.#inkStateList(), this.#pagesShown, this.#aspectsShown, this.#cellsShown)) {
       if (unit.node !== null && held.has(unit.node)) continue;
-      // Un tratto di pagina (T19) il Lazo non lo prende: il nucleo non sa
-      // dove la pagina sta nella scheda, e non lo sposta né lo ridimensiona.
-      if (unit.stroke.page !== null) continue;
+      // Un tratto di pagina (T19) o di cella (T38) il Lazo non lo prende: il
+      // nucleo non sa dove la pagina o la cella sta nella scheda, e non lo
+      // sposta né lo ridimensiona.
+      if (unit.stroke.page !== null || unit.stroke.cell !== null) continue;
       // Il riquadro prima dei punti: i tratti lontani si lasciano subito.
       if (unit.maxX < loop.minX || unit.minX > loop.maxX || unit.maxY < loop.minY || unit.minY > loop.maxY) continue;
       if (loop.containsPoints(unit.points)) strokes.push(unit.key);
@@ -10647,6 +10692,11 @@ export class CanvasEngine {
       },
       // L'inchiostro `scale` segue il contenuto che si vede (T39), come sopra.
       contentShown: () => {
+        if (life.closed || entry.body !== body || mounting) return;
+        this.#pageShown(entry);
+      },
+      // L'inchiostro di cella segue il foglio che scorre (T38), come sopra.
+      cellsShown: () => {
         if (life.closed || entry.body !== body || mounting) return;
         this.#pageShown(entry);
       },

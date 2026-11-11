@@ -32,6 +32,15 @@
 // risponde dopo un cambio di modo o dopo `destroy`: un contatore di
 // generazione scarta le risposte tardive, e chi le riceve chiude ciò che
 // hanno aperto.
+//
+// L'inchiostro di cella (T38, D-6 (b)): `cellAt` e `cellRect` dicono quale
+// cella sta sotto un punto e dove sta una cella, sulle celle **disegnate**
+// (`#shown`, preso in `#paint`), non sulla vista che una lettura in volo ha
+// già spostato: così il tratto e le celle cambiano posto insieme. Dopo ogni
+// disegno che sposta le celle la scheda lo dice con `cellsShown`, e la tela
+// ridisegna i tratti nello stesso fotogramma. Ferma, valgono le celle
+// rimaste; mentre si scrive (la griglia vera al posto della resa) e senza
+// celle non si vede nessuna cella.
 
 import type { GridBytesCell, GridBytesSession, GridBytesWindow, GridCellStyle, GridMerge, GridWindowRequest } from "../../host/contract";
 import { GRID_BYTES_PROTOCOL_VERSION, GRID_FAMILY } from "../../host/contract";
@@ -43,12 +52,12 @@ import { markLook } from "../../theme/content-look";
 import { formatKindOf, formatNameOf } from "../../ui/format-kind";
 import { openLifetime, type Lifetime } from "../../ui/lifetime";
 import { notify } from "../../ui/notify";
-import type { CardContext, CardEditor, CardEditorState, CardMode, CardRenderer, CardView } from "../canvas/cards";
+import type { CardCellBox, CardContext, CardEditor, CardEditorState, CardMode, CardRenderer, CardView } from "../canvas/cards";
 import type { CanvasNode } from "../canvas/model";
 import { tsvRows } from "../core/tsv";
 import { editCellIn } from "./compact";
 import type { GridHost } from "./engine";
-import { expandToMerges, mergeAt, type GridRange } from "./merges";
+import { cellA1, expandToMerges, mergeAnchor, mergeAt, parseCellA1, type GridRange } from "./merges";
 import { columnLabel, type GridPosition } from "./model";
 import { hasBorders, paintBorders, paintCell } from "./paint";
 import { cellKey, validateBytesSession, validateBytesWindow, WORKBOOK_SCALE } from "./workbook";
@@ -89,6 +98,10 @@ const MAX_WINDOW_COLUMNS = 128;
 /// solo celle lette, e una selezione che perde le sue si toglie.
 const MAX_KEPT_WINDOWS = 8;
 const MAX_PINNED_WINDOWS = 32;
+/// Di quante righe (o colonne) al più si conta la misura per trovare
+/// l'angolo di un'unione scorsa via (`cellRect`): oltre, la cella non si
+/// vede.
+const MAX_SPAN = 65_536;
 /// Quante letture al più per coprire la vista: una riga alta o nascosta
 /// cambia quante righe servono, e la lettura dopo lo sa.
 const MAX_WINDOW_PASSES = 4;
@@ -123,6 +136,25 @@ interface Selection {
   focus: GridPosition;
 }
 
+/// La misura di una riga (o colonna) letta: `null` quella di serie.
+interface AxisMetric {
+  readonly size: number | null;
+  readonly hidden: boolean;
+}
+
+/// Le celle come sono disegnate (T38): il foglio, le righe e le colonne in
+/// vista, le unioni e le misure lette, per `cellAt` e `cellRect`.
+interface ShownCells {
+  readonly sheet: string;
+  readonly rows: readonly AxisSlot[];
+  readonly columns: readonly AxisSlot[];
+  readonly merges: readonly GridMerge[];
+  readonly heights: ReadonlyMap<number, AxisMetric>;
+  readonly widths: ReadonlyMap<number, AxisMetric>;
+  /// La forma della disposizione: cambiata lei, l'inchiostro si ridisegna.
+  readonly key: string;
+}
+
 /// La porta dice che il file non c'è.
 class SheetMissing extends Error {}
 
@@ -149,6 +181,13 @@ class SheetCard implements CardView {
   #grid: HTMLElement | null = null;
   #rows: AxisSlot[] = [];
   #columns: AxisSlot[] = [];
+  #heights = new Map<number, AxisMetric>();
+  #widths = new Map<number, AxisMetric>();
+  /// Le celle disegnate (T38); `null` senza celle.
+  #shown: ShownCells | null = null;
+  /// Dov'è l'angolo della resa nella scheda, in unità della lavagna,
+  /// misurato una volta (cambia solo con la misura della scheda).
+  #origin: { readonly x: number; readonly y: number } | null = null;
   #loading: Promise<void> | null = null;
   #loadQueued = false;
   #stateLife: Lifetime | null = null;
@@ -205,6 +244,7 @@ class SheetCard implements CardView {
 
   resize(): void {
     if (this.#destroyed) return;
+    this.#origin = null;
     if (this.#mode === "live" && this.#open) void this.#load();
   }
 
@@ -304,7 +344,7 @@ class SheetCard implements CardView {
     this.#editor = editor;
     const writer = this.#writer!;
     writer.hidden = false;
-    this.#root.hidden = true;
+    this.#hideRender(true);
     // Mentre si scrive la resa non legge: una sola sessione sul file, quella
     // della griglia; la selezione della resa non serve più.
     this.#generation += 1;
@@ -362,7 +402,7 @@ class SheetCard implements CardView {
         if (this.#leaving === leaving) this.#leaving = null;
         life.close();
         writer.remove();
-        if (!this.#destroyed) this.#root.hidden = false;
+        if (!this.#destroyed) this.#hideRender(false);
       });
     this.#leaving = leaving;
   }
@@ -379,7 +419,7 @@ class SheetCard implements CardView {
     this.#writer = null;
     life.close();
     writer?.remove();
-    this.#root.hidden = false;
+    this.#hideRender(false);
     // La resa aveva chiuso la sua sessione: da viva si riapre.
     if (wrote && !this.#destroyed && this.#mode === "live") void this.#start();
   }
@@ -389,6 +429,103 @@ class SheetCard implements CardView {
     const target = from instanceof Element ? from.closest<HTMLElement>(".grid-cell[data-row][data-column]") : null;
     if (!target || !this.#root.contains(target)) return null;
     return { row: Number(target.dataset.row), column: Number(target.dataset.column) };
+  }
+
+  // ── Le celle per l'inchiostro (T38) ────────────────────────────────────
+
+  cellAt(point: { readonly x: number; readonly y: number }): CardCellBox | null {
+    const shown = this.#visibleCells();
+    if (!shown) return null;
+    const card = this.#context.size();
+    if (!(point.x >= 0 && point.x < card.width && point.y >= 0 && point.y < card.height)) return null;
+    const origin = this.#originInCard();
+    const x = point.x - origin.x;
+    const y = point.y - origin.y;
+    // Le intestazioni non sono celle.
+    if (!(x >= SHEET_CARD_ROW_HEADER) || !(y >= SHEET_CARD_COLUMN_HEADER)) return null;
+    const row = shown.rows.find((slot) => y >= slot.offset && y < slot.offset + slot.size);
+    const column = shown.columns.find((slot) => x >= slot.offset && x < slot.offset + slot.size);
+    if (!row || !column) return null;
+    // Sopra un'unione, la sua cella in alto a sinistra.
+    const anchor = mergeAnchor(shown.merges, { row: row.index, column: column.index });
+    return this.#cellBox(shown, origin, anchor, cellA1(anchor));
+  }
+
+  cellRect(sheet: string, cell: string): CardCellBox | null {
+    const shown = this.#visibleCells();
+    if (!shown || sheet !== shown.sheet) return null;
+    const position = parseCellA1(cell);
+    if (!position) return null;
+    return this.#cellBox(shown, this.#originInCard(), position, cell);
+  }
+
+  /// Le celle disegnate, se si vedono: non mentre la griglia vera sta al
+  /// posto della resa.
+  #visibleCells(): ShownCells | null {
+    if (this.#destroyed || this.#root.hidden || this.#state !== "content") return null;
+    return this.#shown;
+  }
+
+  /// La cella `position` (scritta `cell`) nella scheda: il suo rettangolo, o
+  /// quello della sua unione se ne è la cella in alto a sinistra, anche con
+  /// l'angolo scorso via. `null` se non si vede niente di lei.
+  #cellBox(
+    shown: ShownCells,
+    origin: { readonly x: number; readonly y: number },
+    position: GridPosition,
+    cell: string,
+  ): CardCellBox | null {
+    const merge = mergeAt(shown.merges, position);
+    const own = merge !== undefined && merge.row === position.row && merge.column === position.column ? merge : undefined;
+    const rows = axisSpan(shown.rows, position.row, own?.rows ?? 1, shown.heights, SHEET_CARD_ROW_HEIGHT);
+    const columns = axisSpan(shown.columns, position.column, own?.columns ?? 1, shown.widths, SHEET_CARD_COLUMN_WIDTH);
+    if (!rows || !columns) return null;
+    return {
+      sheet: shown.sheet,
+      cell,
+      rect: { x: origin.x + columns.start, y: origin.y + rows.start, width: columns.size, height: rows.size },
+      // La scheda mostra il foglio al 100%: un pixel del foglio è un'unità
+      // della lavagna.
+      zoom: 1,
+    };
+  }
+
+  /// L'angolo della resa nella scheda, in unità della lavagna: misurato
+  /// sullo schermo e diviso per la scala della scheda (come la pagina del
+  /// PDF, T19), dentro il bordo; se non si misura (il corpo nascosto da
+  /// lontano, nessun layout) l'ultima misura, o l'angolo della scheda.
+  #originInCard(): { readonly x: number; readonly y: number } {
+    if (this.#origin) return this.#origin;
+    const card = this.#host.closest<HTMLElement>(".canvas-node") ?? this.#host;
+    const outer = card.getBoundingClientRect();
+    const inner = this.#root.getBoundingClientRect();
+    const { width } = this.#context.size();
+    if (outer.width > 0 && inner.width > 0 && width > 0) {
+      const k = width / outer.width;
+      const origin = { x: (inner.left - outer.left) * k - card.clientLeft, y: (inner.top - outer.top) * k - card.clientTop };
+      if (Number.isFinite(origin.x) && Number.isFinite(origin.y)) {
+        this.#origin = origin;
+        return origin;
+      }
+    }
+    return { x: 0, y: 0 };
+  }
+
+  /// Le celle disegnate adesso sono `shown`: se sono cambiate di posto, la
+  /// tela ridisegna l'inchiostro di cella.
+  #showCells(shown: ShownCells | null): void {
+    const before = this.#shown;
+    this.#shown = shown;
+    if (before?.key === shown?.key || this.#destroyed) return;
+    this.#context.cellsShown?.();
+  }
+
+  /// Nasconde la resa (la griglia vera scrive al suo posto) o la rimostra:
+  /// le sue celle spariscono e tornano per l'inchiostro.
+  #hideRender(hidden: boolean): void {
+    if (this.#root.hidden === hidden) return;
+    this.#root.hidden = hidden;
+    if (this.#shown !== null && !this.#destroyed) this.#context.cellsShown?.();
   }
 
   destroy(): void {
@@ -666,13 +803,15 @@ class SheetCard implements CardView {
       return;
     }
     const card = this.#context.size();
-    const heights = new Map<number, { readonly size: number | null; readonly hidden: boolean }>();
-    const widths = new Map<number, { readonly size: number | null; readonly hidden: boolean }>();
+    const heights = new Map<number, AxisMetric>();
+    const widths = new Map<number, AxisMetric>();
     for (const window of this.#windows) {
       if (window.sheet !== this.#sheet) continue;
       for (const row of window.rows) heights.set(row.index, { size: row.height, hidden: row.hidden });
       for (const column of window.columns) widths.set(column.index, { size: column.width, hidden: column.hidden });
     }
+    this.#heights = heights;
+    this.#widths = widths;
     this.#rows = axisSlots(this.#top, size.rows, card.height - SHEET_CARD_COLUMN_HEADER, SHEET_CARD_COLUMN_HEADER, heights, SHEET_CARD_ROW_HEIGHT, MAX_WINDOW_ROWS);
     this.#columns = axisSlots(this.#left, size.columns, card.width - SHEET_CARD_ROW_HEADER, SHEET_CARD_ROW_HEADER, widths, SHEET_CARD_COLUMN_WIDTH, MAX_WINDOW_COLUMNS);
   }
@@ -813,6 +952,29 @@ class SheetCard implements CardView {
     this.#grid = grid;
     markLook(this.#root, this.#paper ? "adattato" : "file");
     this.#setState("content", [grid]);
+    // Le celle sono al loro posto nuovo: l'inchiostro le segue adesso, nello
+    // stesso fotogramma.
+    this.#showCells(this.#shownNow(merges));
+  }
+
+  /// Le celle che `#paint` ha appena disegnato; `null` senza il nome del
+  /// foglio.
+  #shownNow(merges: readonly GridMerge[]): ShownCells | null {
+    const sheet = this.#open?.session.sheets.find((candidate) => candidate.id === this.#sheet)?.name;
+    if (sheet === undefined || sheet === "") return null;
+    const rows = this.#rows;
+    const columns = this.#columns;
+    const slots = (each: readonly AxisSlot[]) => each.map((slot) => `${slot.index}:${slot.offset}:${slot.size}`).join(",");
+    const spans = merges.map((merge) => `${merge.row}:${merge.column}:${merge.rows}:${merge.columns}`).join(",");
+    return {
+      sheet,
+      rows,
+      columns,
+      merges,
+      heights: this.#heights,
+      widths: this.#widths,
+      key: `${JSON.stringify(sheet)}|${slots(rows)}|${slots(columns)}|${spans}`,
+    };
   }
 
   #header(className: string, label: string, font: string): HTMLElement {
@@ -862,7 +1024,7 @@ class SheetCard implements CardView {
     this.#writer = null;
     life.close();
     writer?.remove();
-    this.#root.hidden = false;
+    this.#hideRender(false);
   }
 
   #cellOf(event: Event): GridPosition | null {
@@ -944,6 +1106,8 @@ class SheetCard implements CardView {
     this.#state = state;
     this.#root.dataset.cardState = state;
     this.#root.replaceChildren(...children);
+    // Senza celle l'inchiostro di cella non si vede.
+    if (state !== "content") this.#showCells(null);
   }
 
   #showMissing(): void {
@@ -999,7 +1163,7 @@ function axisSlots(
   count: number,
   extent: number,
   start: number,
-  known: ReadonlyMap<number, { readonly size: number | null; readonly hidden: boolean }>,
+  known: ReadonlyMap<number, AxisMetric>,
   fallback: number,
   most: number,
 ): AxisSlot[] {
@@ -1007,17 +1171,53 @@ function axisSlots(
   let offset = start;
   const end = start + Math.max(0, extent);
   for (let index = first; index < count && offset < end; index++) {
-    const metric = known.get(index);
-    if (metric?.hidden) continue;
-    const size = metric?.size !== null && metric?.size !== undefined && Number.isFinite(metric.size) && metric.size > 0
-      ? metric.size * WORKBOOK_SCALE
-      : fallback;
+    const size = axisSize(known.get(index), fallback);
+    if (size === 0) continue;
     slots.push({ index, offset, size });
     offset += size;
     // Mai più righe (o colonne) di quante una finestra ne porti.
     if (slots.length >= most) break;
   }
   return slots;
+}
+
+/// La misura di una riga (o colonna): 0 se è nascosta, quella di serie se
+/// non è letta.
+function axisSize(metric: AxisMetric | undefined, fallback: number): number {
+  if (metric?.hidden) return 0;
+  return metric?.size !== null && metric?.size !== undefined && Number.isFinite(metric.size) && metric.size > 0
+    ? metric.size * WORKBOOK_SCALE
+    : fallback;
+}
+
+/// Dove comincia e quanto è lunga la fila di `count` righe (o colonne) da
+/// `index` nella vista `slots` (in ordine): dall'inizio della prima, anche
+/// scorsa via prima della vista, alla fine dell'ultima, anche oltre la
+/// vista. `null` se nessuna di loro è in vista, o se la fila è più lunga di
+/// `MAX_SPAN`.
+function axisSpan(
+  slots: readonly AxisSlot[],
+  index: number,
+  count: number,
+  known: ReadonlyMap<number, AxisMetric>,
+  fallback: number,
+): { readonly start: number; readonly size: number } | null {
+  if (count > MAX_SPAN) return null;
+  const last = index + count - 1;
+  let first: AxisSlot | undefined;
+  let final: AxisSlot | undefined;
+  for (const slot of slots) {
+    if (slot.index < index || slot.index > last) continue;
+    first ??= slot;
+    final = slot;
+  }
+  if (!first || !final) return null;
+  let start = first.offset;
+  for (let at = index; at < first.index; at++) start -= axisSize(known.get(at), fallback);
+  let end = final.offset + final.size;
+  for (let at = final.index + 1; at <= last; at++) end += axisSize(known.get(at), fallback);
+  const size = end - start;
+  return Number.isFinite(start) && size > 0 ? { start, size } : null;
 }
 
 /// L'ultima riga (o colonna) in vista fino a `index` compreso.

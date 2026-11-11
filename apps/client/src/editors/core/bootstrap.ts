@@ -540,6 +540,11 @@ function lazySheetRenderer(load: () => Promise<CardRenderer>): CardRenderer {
         // Scrivere nelle celle (T42): prima che la scheda vera ci sia non si
         // scrive, e la tela la lascia attiva da leggere.
         edit: (from) => view?.edit?.(from) ?? false,
+        // L'inchiostro di cella (T38): prima che la scheda vera ci sia non
+        // si vede nessuna cella; quando le disegna, lo dice lei alla tela
+        // (`cellsShown`).
+        cellAt: (point) => view?.cellAt?.(point) ?? null,
+        cellRect: (sheet, cell) => view?.cellRect?.(sheet, cell) ?? null,
         destroy() {
           destroyed = true;
           const mounted = view;

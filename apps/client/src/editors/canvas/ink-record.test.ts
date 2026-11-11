@@ -447,9 +447,15 @@ describe("l'inchiostro attaccato alla cella di un foglio (T37)", () => {
     }
   });
 
-  it("un tratto di cella non si disegna finché la scheda non dice dove sta la cella (T38)", () => {
+  it("il tratto di cella asciutto porta la sua cella: dove sta lo dice la scheda quando si disegna (T38)", () => {
     const record = written(strokeRecord(penStroke(165, 125), sheet, defaultInkLook(1, true), NOW, box));
-    expect(toDry(record)).toBeNull();
+    const dry = toDry(record)!;
+    expect(dry.cell).toEqual({ sheet: "Conti 'Q1' \"bis\"", cell: "B3" });
+    expect(dry.ref).toBeNull();
+    expect(dry.page).toBeUndefined();
+    expect(dry.path).not.toBe("");
+    // Gli altri tratti non portano una cella.
+    expect(toDry(written(strokeRecord(penStroke(10, 10), card(0, 0), defaultInkLook(1, true), NOW)))!.cell).toBeUndefined();
   });
 
   it("una cella che non vale, o senza la scheda, è un errore di chi chiama", () => {

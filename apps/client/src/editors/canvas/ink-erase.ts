@@ -25,7 +25,7 @@ import { dequantizeSample, quantizeInk, type QuantizedInk } from "../../ink/samp
 import { cutBrush, splitInk } from "../../ink/tools/split";
 import type { EraseSource, Erasable, Spot } from "../../ink/tools/sweep";
 import { encodeInk, inkFromQuantized } from "../spatial/ink/codec";
-import type { CardPageBox } from "./cards";
+import type { CardCellBox, CardPageBox } from "./cards";
 import { fitPoint, inkFit, inkFitMode, type InkFit } from "./ink-fit";
 import { pageFit, type DrawableStroke, type InkLayerRef, type InkLayerState } from "./ink-record";
 import type { CanvasDocument } from "./model";
@@ -73,11 +73,14 @@ const IDENTITY: InkFit = { s: 1, x: 0, y: 0 };
 /// nemmeno un tratto di pagina (T19) se la sua scheda non mostra quella
 /// pagina: `pages` dà la pagina che una scheda mostra e dove (`pageBox`).
 /// `aspects` dà la proporzione del contenuto di una scheda (`contentAspect`,
-/// T39), che i tratti `scale` seguono come in `paintCard`.
+/// T39), che i tratti `scale` seguono come in `paintCard`. Un tratto di cella
+/// (T38) c'è solo se la sua scheda mostra la cella: `cells` dice dove
+/// (`cellRect`).
 export function erasableInk(
   states: readonly InkLayerState[],
   pages: (node: string) => CardPageBox | null = () => null,
   aspects: (node: string) => number | null = () => null,
+  cells: (node: string, sheet: string, cell: string) => CardCellBox | null = () => null,
 ): ErasableInk[] {
   const units: ErasableInk[] = [];
   for (const state of states) {
@@ -89,11 +92,13 @@ export function erasableInk(
     let shown: CardPageBox | null | undefined;
     let aspect: number | null | undefined;
     for (const stroke of state.drawable) {
-      // Un tratto di cella (T37) non si disegna finché la scheda di foglio
-      // non dice dove sta la cella (T38, `dryStroke`): la gomma non lo vede.
-      if (stroke.cell !== null) continue;
       let fit: InkFit;
-      if (stroke.page !== null) {
+      if (stroke.cell !== null) {
+        // Dove la scheda di foglio mostra la cella, come in `paintCard`.
+        const box = node ? cells(node.id, stroke.cell.sheet, stroke.cell.cell) : null;
+        if (!box || !(box.zoom > 0) || !Number.isFinite(box.rect.x) || !Number.isFinite(box.rect.y)) continue;
+        fit = { s: box.zoom, x: box.rect.x, y: box.rect.y };
+      } else if (stroke.page !== null) {
         // Sulla pagina che la scheda mostra, come in `paintCard`.
         if (node && shown === undefined) shown = pages(node.id);
         if (!node || !shown || shown.page !== stroke.page || !stroke.ref) continue;
