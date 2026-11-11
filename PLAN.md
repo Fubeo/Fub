@@ -5627,7 +5627,7 @@ Fatto quando: un test per ogni punto, rosso prima e verde dopo dove il
 comportamento cambia.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/canvas
-Stato: [~] in corso · coder Opus · base 083d3056c
+Stato: [x] fatto · 9ec41e5a3 (merge e68071f60) · differenze: `revealSource(byte, "frame"|"jump")`, salto in Indietro solo dall'ispettore («Schede», «Fonti»); «Sostituisci il file…» con la porta facoltativa `CanvasEditPort.replaceFile` (comando `canvas.replace_file`, solo con `onPickFile`), fuori dal DOM in sola lettura; `surface.setReadOnly` avvisa l'ispettore; la copia di un estratto taglia le sezioni coi titoli del provider (`PartsHeading.start` in byte, da `documentOutline` in `editors/core/bootstrap.ts`) e abbina le chiavi con `keyMatchesSection`/`sectionOfKey` di `parts-picker.ts`, la stessa regola che ora usa «Fonti»; senza sommario o se non combacia col testo copia la nota intera; tutte le sezioni sparite: nessuna scheda e l'avviso «Sezioni non trovate»; `canvasFreeName` esportata e provata in `document-controller.test.ts` (nuovo). Fuori dal `Tocca`: `surface.ts`, `excerpt.ts`, `parts-picker.ts`, `bootstrap.ts`, `canvas-convert.md`, `canvas-view.md`
 
 ## Non verificato stanotte
 
