@@ -197,7 +197,7 @@ scrive, valgono quelli della sessione). `Esc` torna dov'eri, anche in un campo.
 | `canvas.zoom_in`, `canvas.zoom_out`, `canvas.zoom_reset` | `+`, `Ctrl+=`; `-`, `Ctrl+-`; `0` |
 | `canvas.grid_toggle` (la griglia di questa lavagna), `canvas.bare` (l'interfaccia, [lo spazio di lavoro](canvas-view.md#lo-spazio-di-lavoro)): le mostrano e le nascondono | `Ctrl+'`; `Ctrl+.` |
 | `canvas.add.*`, `canvas.edit`, `canvas.open`, `canvas.open_url`, `canvas.edge.reverse`, `canvas.color.*`, `canvas.align.*`, `canvas.distribute_*` | nessuno |
-| `canvas.open_beside`, `canvas.open_viewer`, `canvas.web_preview`, `canvas.spread_pages` (solo su un PDF), `canvas.connect`, `canvas.trash_file` (il menu della scheda); `canvas.open_beside_here` ([la vista](canvas-view.md#apri-a-lato-per-questo)) | nessuno (`canvas.connect` anche con `C`, vedi sotto) |
+| `canvas.open_beside`, `canvas.open_viewer`, `canvas.web_preview`, `canvas.spread_pages` (solo su un PDF), `canvas.connect`, `canvas.trash_file`, `canvas.extract_note`, `canvas.copy_note_text`, `canvas.replace_file` ([convertire](canvas-convert.md)) (il menu della scheda); `canvas.open_beside_here` ([la vista](canvas-view.md#apri-a-lato-per-questo)); `canvas.finger_writes` («Il dito scrive» della colonna, anche in sola lettura) | nessuno (`canvas.connect` anche con `C`, vedi sotto) |
 | `canvas.pen_menu`, `canvas.color_menu`, `canvas.align_menu`, `canvas.tips.none`, `.start`, `.end` (la riga delle opzioni) | nessuno |
 
 I tasti sono quelli della tabella «Tasti» della lavagna dove fanno la stessa
@@ -223,7 +223,7 @@ comandi del catalogo col loro nome e il loro tasto:
    delle sezioni, in `canvas-parts.md`); Apri (Modifica il testo per una scheda di testo,
    Apri nel visore per un'immagine, Apri la pagina web e Mostra l'anteprima
    per una pagina); Apri a lato, per una scheda di file, se l'host la dà
-   (`onOpenPathBeside`); Spargi le pagine…, per un PDF (sotto); Collega… · `C`;
+   (`onOpenPathBeside`); Spargi le pagine…, per un PDF (sotto); Estrai in una nota…, Copia il testo qui, Sostituisci il file… ([convertire](canvas-convert.md)); Collega… · `C`;
 2. Colore › come scelte esclusive: Nessuno, i sei di JSON Canvas col
    pallino, «Colori delle note ›» coi nove, «Altro…», che apre il selettore
    del kit (i colori in `canvas-format.md`); Disponi › (Porta davanti,
