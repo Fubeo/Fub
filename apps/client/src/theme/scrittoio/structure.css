@@ -3598,7 +3598,7 @@ body {
    nel titolo in piccolo sopra di lei: non si ripete. */
 .canvas-node-file > .canvas-node-handle > .canvas-excerpt-parts {
   flex: none;
-  margin-inline-start: var(--space-3);
+  margin-inline-start: var(--space-3, 6px);
   white-space: nowrap;
 }
 .canvas-node-file > .canvas-node-handle > .canvas-node-title {
@@ -3614,12 +3614,12 @@ body {
   padding: 0;
 }
 .canvas-excerpt-section + .canvas-excerpt-section {
-  margin-top: var(--space-5);
-  padding-top: var(--space-4);
+  margin-top: var(--space-5, 12px);
+  padding-top: var(--space-4, 8px);
 }
 .canvas-excerpt-section-title {
   display: block;
-  margin-bottom: var(--space-2);
+  margin-bottom: var(--space-2, 4px);
 }
 .canvas-excerpt-section-body > :is(h1, h2, h3, h4, h5, h6):first-child {
   display: none;
@@ -3627,16 +3627,16 @@ body {
 .canvas-excerpt-missing {
   display: flex;
   flex-direction: column;
-  gap: var(--space-3);
-  padding: var(--space-4) var(--space-5);
+  gap: var(--space-3, 6px);
+  padding: var(--space-4, 8px) var(--space-5, 12px);
 }
 .canvas-excerpt-section + .canvas-excerpt-missing {
-  margin-top: var(--space-5);
+  margin-top: var(--space-5, 12px);
 }
 .canvas-excerpt-missing-actions {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--space-3);
+  gap: var(--space-3, 6px);
 }
 
 /* Entrare e uscire (N6 T14). Fuori da una scheda attiva il contenuto di una
