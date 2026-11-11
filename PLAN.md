@@ -5418,7 +5418,7 @@ campo; che su una scheda illeggibile aprono il file; la sola lettura; una
 scheda in caricamento.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/canvas
-Stato: [ ] da fare
+Stato: [~] in corso · coder Haiku · base 8f0b9120e
 
 ## T94 · Il tratto libero negli appunti
 
