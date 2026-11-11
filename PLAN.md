@@ -3100,7 +3100,18 @@ l'assenza dei menu di struttura e `Stale`; la prova e2e passa; le foto del
 banco somigliano al prototipo.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/grid/card.test.ts src/canvas-edit.e2e.test.ts
-Stato: [~] in corso · coder Opus · base 0f39b861f (dal ramo `wip/n6-t42`)
+Stato: [x] fatto (2026-11-11). Differenze: la cella attiva arriva alla tela
+come dato (`EditorSurface.activeCell`, `SurfaceMountContext.compact` in
+`editors/core/registry.ts`, interni al client, niente IPC); la formula si
+legge ancora dalla barra della formula nascosta del motore, solo sui suoi
+richiami, finché il motore non la espone (T97); corretti anche il doppio clic
+che cadeva sul corpo della scheda, le misure della griglia sotto lo zoom
+della lavagna per l'entrata in una cella e `lazySheetRenderer` che non
+inoltrava `edit`. Restano al motore della griglia: la cella aperta nelle
+righe bloccate esce dalla vista (anche nel riquadro, già prima: issue), i
+gesti sulle intestazioni ignorano lo zoom della scheda; l'avviso «Alcune
+formule…» e la riga della formula sopra la barra delle azioni (il prototipo
+la mette nella riga delle opzioni) vanno a T26.
 
 ## T43 · La scheda di testo in Live
 
@@ -5578,3 +5589,27 @@ Stato: [ ] da fare
 - Che importare `recognize.ts` e `ruler.ts` (T87) non porti il motore del
   disegno nel pezzo della lavagna che si carica per primo (N3 T16, il
   montaggio pigro): se lo porta, T87 li carica quando serve.
+
+## T97 · La formula della cella attiva dal motore della griglia
+
+Perché: T42 legge la formula della cella attiva dalla barra della formula
+nascosta del motore, cioè dal DOM; un accessore di sola lettura del motore la
+dà come dato e toglie la dipendenza dalla forma della barra.
+Tocca: `apps/client/src/editors/grid/engine.ts` (un accessore di sola lettura
+della cella attiva e del suo testo com'è scritto, con l'avviso di cambio),
+`apps/client/src/editors/grid/card.ts` e `card.test.ts`,
+`apps/client/src/editors/grid/compact.ts` e `compact.test.ts`.
+Non toccare: `editors/core/registry.ts` (il canale di T42 resta com'è);
+la pelle.
+Dipende da: T42; il motore della griglia portato sui moduli di `main` dal
+piano griglia (i conflitti di `grid/engine.ts`): mai insieme a un task della
+griglia che tocca `grid/engine.ts`.
+Cosa fare:
+- Il motore espone la cella attiva e la sua formula come dato e avvisa quando
+  cambiano; `card.ts`/`compact.ts` usano quello e non leggono più la barra.
+- Nessun cambio di ciò che si vede.
+Fatto quando:
+- nessuna lettura del DOM della barra della formula in `editors/grid/card.ts`
+  e `compact.ts`; i test di T42 restano verdi.
+Prova: scripts/check.sh --rapido
+Stato: [ ] da fare
