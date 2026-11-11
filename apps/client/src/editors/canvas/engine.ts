@@ -3700,6 +3700,18 @@ export class CanvasEngine {
     }
   }
 
+  /**
+   * La proporzione del contenuto della scheda che tiene il livello `layer`,
+   * per le operazioni che il nucleo compila (`move_strokes`,
+   * `restyle_strokes`, T98): la stessa della resa, così il tratto va dove lo
+   * porta il puntatore. `null` per la radice e per le schede che non scalano.
+   */
+  #layerAspect(layer: InkLayerRef): number | null {
+    if (layer === "board") return null;
+    const node = this.#doc?.nodes.find((one) => one.id === layer.node);
+    return node && inkFitMode(node) === "scale" ? this.#contentAspectOf(node.id) : null;
+  }
+
   /** `#contentAspectOf` come funzione, per la gomma e il Lazo (`erasableInk`). */
   readonly #aspectsShown = (id: string): number | null => this.#contentAspectOf(id);
 
@@ -4366,7 +4378,7 @@ export class CanvasEngine {
       const same = sameLayer(layer, to);
       if (same && dx === 0 && dy === 0) continue;
       if (!same) passed = true;
-      ops.push(moveStrokesOp(layer, ids, dx, dy, to));
+      ops.push(moveStrokesOp(layer, ids, dx, dy, to, this.#layerAspect(layer)));
     }
     const patches = ops.length > 0 ? this.#compileOps(ops) : null;
     if (!patches || patches.length === 0) {
@@ -4440,7 +4452,7 @@ export class CanvasEngine {
       this.#dropRemoval();
       return;
     }
-    const patches = this.#compileOps([moveStrokesOp(free.layer, free.ids, 0, 0, "board")]);
+    const patches = this.#compileOps([moveStrokesOp(free.layer, free.ids, 0, 0, "board", this.#layerAspect(free.layer))]);
     if (patches && patches.length > 0 && this.#commitChosen(patches)) this.#dropRemoval();
     this.#statusSettle();
     this.#viewport.focus({ preventScroll: true });
@@ -4462,7 +4474,9 @@ export class CanvasEngine {
       if (!(size > 0)) return;
       style = { size };
     }
-    const ops = strokesByLayer(units).map(({ layer, ids }) => restyleStrokesOp(layer, ids, style));
+    const ops = strokesByLayer(units).map(({ layer, ids }) =>
+      restyleStrokesOp(layer, ids, style, "size" in style ? this.#layerAspect(layer) : null),
+    );
     const patches = this.#compileOps(ops);
     if (patches && patches.length > 0) this.#commitChosen(patches);
     this.#statusSettle();

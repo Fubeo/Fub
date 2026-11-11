@@ -9,6 +9,7 @@
 // il foglio scorre; la scheda di foglio è finta allo stesso modo (`cellAt`,
 // `cellRect`, `cellsShown`, come `grid/card.ts`).
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
+import { parseInkBrush } from "../../ink/brush";
 import { CanvasEngine, type CanvasChange } from "./engine";
 import { createCardRegistry, type CardCellBox, type CardContext, type CardPageBox, type CardRenderer, type CardSnapshot, type CardSnapshots } from "./cards";
 import { canvasCoreReady } from "./wasm/core";
@@ -281,7 +282,72 @@ describe("l'inchiostro sul contenuto di un'immagine (T39)", () => {
     expect(engine.getDoc()).toBe(source);
     engine.destroy();
   });
+
+  it("il Lazo sposta un tratto su un'immagine ridimensionata con un'altra proporzione dove dice il puntatore, e lo spessore si vede come è chiesto (T98)", () => {
+    // Un'immagine 2:1 scritta in una scheda 300 × 300 (l'immagine 300 × 150 a
+    // y = 75) e ora in una 600 × 200 (400 × 200 a x = 100): s = 4/3, e il
+    // punto (150, 150) dell'ancora sta in (300, 100) nella scheda, cioè in
+    // (300, 300) sulla lavagna. Senza la proporzione il nucleo userebbe
+    // s = min(600/300, 200/300) = 2/3 e il tratto andrebbe al doppio.
+    const resized = {
+      ...IMAGE,
+      width: 600,
+      height: 200,
+      "fub:ink": {
+        v: 1,
+        strokes: [{ id: "s", tool: "pen", brush, color: "#0072b2", anchor: { kind: "card", width: 300, height: 300 }, ink: "1 s100 cxy 15000,15000 1000,0 1000,0" }],
+      },
+    };
+    const host = document.createElement("div");
+    document.body.append(host);
+    const image = fakeImage();
+    image.replace(2);
+    const changes: CanvasChange[] = [];
+    const engine = new CanvasEngine(host, {
+      surfaceId: "ink-content-lasso",
+      formatId: "canvas",
+      documentId: "lavagna.canvas",
+      onChange: (change) => changes.push(change),
+      onSelectionChange: () => {},
+      onPickFile: () => null,
+      cards: { registry: createCardRegistry([image.renderer]), snapshots: memorySnapshots(), watch: () => () => {} },
+    });
+    engine.setDoc(JSON.stringify({ nodes: [resized], edges: [] }));
+    expect(viewBox(host)).toBe("0 75 300 150");
+    engine.commands().find((command) => command.id === "canvas.tool.lasso")!.run();
+    const viewport = host.querySelector<HTMLElement>(".canvas-viewport")!;
+    const mouse = { pointerId: 1, pointerType: "mouse" } as const;
+    const drag = (world: readonly (readonly [number, number])[]) => {
+      const cam = camera(host);
+      const at = ([x, y]: readonly [number, number]) => ({ clientX: x * cam.zoom + cam.x, clientY: y * cam.zoom + cam.y });
+      viewport.dispatchEvent(pointerEvent("pointerdown", { ...mouse, ...at(world[0]!), button: 0, buttons: 1 }));
+      for (const point of world.slice(1)) viewport.dispatchEvent(pointerEvent("pointermove", { ...mouse, ...at(point), button: -1, buttons: 1 }));
+      viewport.dispatchEvent(pointerEvent("pointerup", { ...mouse, ...at(world[world.length - 1]!), button: 0, buttons: 0 }));
+    };
+    // Il giro attorno al tratto, da (300, 300) a (326,7, 300) sulla lavagna.
+    drag([[280, 280], [350, 280], [350, 320], [280, 320], [280, 282]]);
+    expect(host.querySelectorAll(".canvas-stage > .canvas-lasso .canvas-lasso-chosen path")).toHaveLength(1);
+    // Preso sul tratto e lasciato 30 più a destra e 20 più in basso.
+    drag([[313, 300], [330, 310], [343, 320]]);
+    const [moved] = strokesOf(lastText(changes), "img");
+    // (30, 20) della lavagna sono (22,5, 15) nell'ancora: il punto
+    // (172,5, 165) sta in (100 + 4/3 · 172,5, −100 + 4/3 · 165) = (330, 120)
+    // nella scheda, (330, 320) sulla lavagna, cioè (300 + 30, 300 + 20).
+    expect(moved).toMatchObject({ anchor: { kind: "card", width: 300, height: 300 }, ink: "1 s100 cxy 17250,16500 1000,0 1000,0" });
+
+    // Lo spessore dalla barra della selezione: 12 pixel dello schermo sono
+    // 12 / zoom unità della lavagna, e nell'ancora si dividono per s = 4/3.
+    host.querySelector<HTMLButtonElement>('.canvas-selection-bar [data-command="canvas.stroke_width"]')!.click();
+    const slider = document.querySelector<HTMLInputElement>(".canvas-stroke-popover .canvas-pen-width")!;
+    slider.value = "12";
+    slider.dispatchEvent(new Event("change", { bubbles: true }));
+    const [widened] = strokesOf(lastText(changes), "img");
+    expect(parseInkBrush(String(widened!.brush)).size).toBeCloseTo((12 / camera(host).zoom) * 0.75, 2);
+    engine.destroy();
+  });
 });
+
+const lastText = (changes: readonly CanvasChange[]) => changes[changes.length - 1]!.text;
 
 describe("l'inchiostro sulle celle di un foglio (T38)", () => {
   /// La scheda di foglio: 412 × 308 in (0, 300), con le intestazioni di
