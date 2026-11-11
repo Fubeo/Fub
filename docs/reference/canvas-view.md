@@ -144,9 +144,15 @@ quella col campo aperto restano come da vicino a ogni livello.
 
 Il titolo grande (`.canvas-node-far`, `farTitle`) è sempre nel nodo,
 nascosto finché il livello non lo mostra: il nome del file senza cartella
-(con la sezione, se la scheda ne mostra una), l'indirizzo senza schema, la
-prima riga scritta di un testo senza i segni davanti, il nome del gruppo.
-Si taglia coi puntini (tre righe al più in `far`, una nel blocco). La sua
+(con la sezione, se la scheda ne mostra una), l'indirizzo senza schema, il
+nome di un testo (`textCardName`, in `card-name.ts`), il nome del gruppo.
+Il nome di un testo è la sua prima riga non vuota senza i segni del
+Markdown: il titolo `#`, la citazione `>`, l'elenco e la casella davanti;
+in linea il grassetto, il corsivo, il barrato, l'evidenziato, il codice, i
+link e i wikilink (`[[nota|alias]]` dice `alias`). Le parole restano come
+sono: `snake_case`, `2*3*4` e un `*` da solo non cambiano. La stessa regola dà il nome
+nella testata del menu, nell'avviso del Lazo, nell'etichetta della penna e
+nell'ispettore. Si taglia coi puntini (tre righe al più in `far`, una nel blocco). La sua
 misura sullo schermo non cambia con lo zoom: la pelle divide per
 `--canvas-detail-zoom`, che la tela scrive sulla scena insieme agli
 attributi, quindi anche lei solo a fine gesto; durante un gesto il titolo
