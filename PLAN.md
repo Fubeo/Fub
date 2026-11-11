@@ -4103,7 +4103,8 @@ scrive e due spostano, e senza il dito sposta come oggi; il primo segno
 tolto quando arriva il secondo dito.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/canvas
-Stato: [~] in corso · coder Opus · base 0ceff2fa2
+Stato: [x] fatto · e666d3d07
+Differenze: `ink-layer.ts` ha l'opzione `fingerWrites`, letta a ogni appoggio, che sceglie la politica del tocco della sessione di N4 (`setTouchPolicy` c'era già; `ink/` non cambia); icona nuova `canvas-finger` dal prototipo; il suggerimento `canvas.finger.hint_cards` dice che «Il dito sposta le schede» non vale mentre il dito scrive. Senza una penna vicina N4 non riconosce il palmo: un palmo vale come secondo dito, toglie il segno e sposta. «Il dito scrive» fra i comandi di Ctrl+/ (come nel prototipo) non c'è ancora.
 
 ## T65 · Lo spazio Semplice
 
