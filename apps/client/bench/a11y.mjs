@@ -472,6 +472,8 @@ async function inspectKeyboard(page) {
     // resta il rilievo di prima.
     let previousProbe = null;
     let previousDescendant = null;
+    // L'applicazione che contiene il fuoco di prima (lei stessa o un figlio).
+    let previousApp = null;
     const readActual = () => page.evaluate(() => {
         const el = document.activeElement;
         if (!(el instanceof HTMLElement)) return null;
@@ -539,6 +541,9 @@ async function inspectKeyboard(page) {
           // disegno percorre gli oggetti con Tab, ed esce dopo l'ultimo, che
           // Fine raggiunge.
           application: el.getAttribute("role") === "application",
+          // L'applicazione che contiene il fuoco, lui compreso: la lavagna
+          // porta il Tab sulle sue schede, figlie della tela.
+          app: el.closest('[role="application"]')?.dataset.a11yProbe ?? null,
         };
       });
     let candidates = await refreshProbes();
@@ -547,7 +552,7 @@ async function inspectKeyboard(page) {
         failures.push({ source: "browser", rule: "tab-order", where: "document", reason: "Il percorso Tab non termina" });
         break;
       }
-      const expected = candidates[index];
+      let expected = candidates[index];
       await page.keyboard.press("Tab");
       let actual = await readActual();
       if (actual?.probe === null) {
@@ -570,6 +575,45 @@ async function inspectKeyboard(page) {
         await page.keyboard.press("Tab");
         await refreshProbes();
         actual = await readActual();
+      }
+      // Un'applicazione che porta il Tab sui suoi figli in un ordine suo (la
+      // lavagna: le schede in ordine di lettura, non del documento) si
+      // percorre fino all'uscita, guardando l'anello di ogni fermata; uscita,
+      // il Tab deve arrivare sul primo controllo dopo di lei. Un fuoco che
+      // non esce mai finisce nel limite delle visite, come una trappola.
+      if (actual && actual.probe !== expected.probe && previousApp !== null) {
+        while (actual?.app === previousApp && visited < 10_000) {
+          if (!actual.indicator) {
+            failures.push({
+              source: "browser",
+              rule: "focus-visible",
+              where: `[${actual.probe}]`,
+              reason: "il fuoco da tastiera non ha un indicatore visibile",
+            });
+          }
+          await page.keyboard.press("Tab");
+          visited += 1;
+          actual = await readActual();
+          if (actual?.probe === null) {
+            candidates = await refreshProbes();
+            actual = await readActual();
+          }
+        }
+        if (visited >= 10_000) {
+          failures.push({ source: "browser", rule: "tab-order", where: "document", reason: "Il percorso Tab non esce dall'applicazione" });
+          break;
+        }
+        const after = await page.evaluate((probe) => {
+          const app = document.querySelector(`[data-a11y-probe="${probe}"]`);
+          if (!app) return null;
+          let last = Number(probe);
+          for (const inner of app.querySelectorAll("[data-a11y-probe]")) last = Math.max(last, Number(inner.dataset.a11yProbe));
+          return String(last + 1);
+        }, previousApp);
+        const next = candidates.find((one) => one.probe === after);
+        // L'applicazione era l'ultima fermata: il percorso è finito.
+        if (!next) break;
+        expected = next;
       }
       if (!actual || actual.probe !== expected.probe) {
         failures.push({
@@ -635,6 +679,7 @@ async function inspectKeyboard(page) {
       }
       previousProbe = focused.probe;
       previousDescendant = focused.descendant;
+      previousApp = focused.app;
       index = Number(focused.probe) + 1;
     }
   } finally {
