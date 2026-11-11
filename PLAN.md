@@ -4384,7 +4384,8 @@ nome che c'è già, un solo annulla per ognuno, e che fili e inchiostro
 restano attaccati.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/canvas/engine.test.ts
-Stato: [~] in corso · coder Opus · base db070044d
+Stato: [x] fatto · fdee2ff45
+Differenze: la porta `CanvasNotesPort` (`freeName`/`create`/`read`) prende il posto di `onCreateCanvasNote`; il nome libero lo propone il client elencando la cartella (il kernel non dà `free_name` via IPC, e `note.create` rifiuta un nome occupato); «Converti in nota» nel corpo della scheda ora fa «Estrai in una nota…» (tolta la chiave `canvas.convert_note`); l'inchiostro non si attacca a una pagina: col file di un'altra specie il `fub:ink` resta e si disegna con la regola della specie nuova; i dettagli in `docs/reference/canvas-convert.md`. Restano fuori: «Sostituisci il file…» nell'ispettore (promesso da T59), «Copia il testo qui» che copia la sola sezione mostrata, un test di `canvasFreeName`.
 
 ## T71 · Le guide e la griglia
 
