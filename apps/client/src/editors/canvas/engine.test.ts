@@ -3089,6 +3089,16 @@ describe("il menu della scheda (T17)", () => {
     engine.destroy();
   });
 
+  it("la testata di una scheda di testo dice il nome senza i segni del Markdown: «# **Idee**» è «Idee»", () => {
+    const { engine, host } = mounted(JSON.stringify({
+      nodes: [{ id: "h", type: "text", x: 0, y: 0, width: 240, height: 140, text: "# **Idee**\nil resto" }],
+      edges: [],
+    }));
+    const menu = menuOn(engine, card(host, "h"));
+    expect(menu.target).toEqual({ kind: "node", ref: "h", label: "Scheda di testo", name: "Idee" });
+    engine.destroy();
+  });
+
   it("più schede: la testata dice quante, niente Apri; in sola lettura le voci che cambiano sono spente, non nascoste", () => {
     const { engine, host, viewport } = open();
     viewport.focus();

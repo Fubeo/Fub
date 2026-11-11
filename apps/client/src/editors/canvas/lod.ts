@@ -19,6 +19,7 @@
 // test usano senza montare niente. La pagina di riferimento è
 // `docs/reference/canvas-view.md` («Da lontano»).
 
+import { textCardName } from "./card-name";
 import { LIVE_ZOOM_MIN } from "./cards";
 import type { CanvasNode } from "./model";
 
@@ -55,10 +56,10 @@ export function cardDetail(level: DetailLevel, seen: boolean, keepLive = false):
 }
 
 /// Il titolo grande di una scheda: il nome del file senza cartella (con la
-/// sezione, se ne mostra una), l'indirizzo senza `https://`, la prima riga
-/// scritta di un testo senza i segni di titolo, il nome di un gruppo. Una
-/// scheda senza niente da dire ha il titolo vuoto: il CSS taglia quelli
-/// lunghi.
+/// sezione, se ne mostra una), l'indirizzo senza `https://`, il nome di un
+/// testo (`textCardName`: la prima riga senza i segni del Markdown), il nome di
+/// un gruppo. Una scheda senza niente da dire ha il titolo vuoto: il CSS taglia
+/// quelli lunghi.
 export function farTitle(node: CanvasNode): string {
   switch (node.type) {
     case "file": {
@@ -73,20 +74,10 @@ export function farTitle(node: CanvasNode): string {
       return url.replace(/^[a-z][a-z0-9+.-]*:\/\//i, "").replace(/\/$/, "") || node.id;
     }
     case "text":
-      return firstLine(typeof node.text === "string" ? node.text : "");
+      return textCardName(typeof node.text === "string" ? node.text : "");
     case "group":
       return typeof node.label === "string" ? node.label.trim() : "";
   }
-}
-
-/// La prima riga non vuota, senza `#` di titolo, `>` di citazione e segni di
-/// elenco davanti.
-function firstLine(text: string): string {
-  for (const raw of text.split("\n")) {
-    const line = raw.trim().replace(/^(?:#{1,6}\s+|>\s*|[-*+]\s+(?:\[[ xX]\]\s+)?)/, "").trim();
-    if (line !== "") return line;
-  }
-  return "";
 }
 
 /// Una scheda come la legge `applyCardDetails`: il suo nodo nel DOM e

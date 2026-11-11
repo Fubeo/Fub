@@ -1168,6 +1168,19 @@ describe("a chi appartiene il tratto (T69)", () => {
     expect(said(host)).toBe(t("canvas.ink.attach", { name: "foto.heic" }));
   });
 
+  it("una scheda di testo col titolo in grassetto: l'etichetta e l'annuncio dicono «Idee», non i segni", () => {
+    const { host, changes } = mounted(JSON.stringify({
+      nodes: [{ id: "t", type: "text", x: 0, y: 0, width: 200, height: 100, text: "# **Idee**" }],
+      edges: [],
+    }));
+    const stroke = penDown(host, card(host, "t"), [120, 40]);
+    stroke.move([150, 50]);
+    expect(label(host)?.textContent).toBe(t("canvas.ink.attach", { name: "Idee" }));
+    stroke.lift();
+    expect(changes).toHaveLength(1);
+    expect(said(host)).toBe(t("canvas.ink.attach", { name: "Idee" }));
+  });
+
   it("un tratto che passa da una scheda a due: l'etichetta segue la regola, e l'alzata scrive ciò che diceva", () => {
     const { host, changes } = mounted();
     const stroke = penDown(host, card(host, "t"), [120, 40]);

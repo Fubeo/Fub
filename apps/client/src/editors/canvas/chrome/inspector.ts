@@ -30,6 +30,7 @@ import { identifier } from "../../../ui/a11y";
 import { iconEl } from "../../../ui/icons";
 import { openLifetime, type Lifetime } from "../../../ui/lifetime";
 import { createColorPicker, numberField, openPopover, type NumberField, type PopoverHandle } from "../../../kit";
+import { textCardName } from "../card-name";
 import { cardKindOf } from "../cards";
 import { colorChoiceOf, colorLook, colorMenuLabel, colorName, colorValueOf, NOTE_COLORS, writeColor, type CanvasColorChoice } from "../colors";
 import { DROP_MIN_SIZE } from "../drop-layout";
@@ -233,16 +234,15 @@ function fileTitle(file: string): string {
 
 /**
  * Il nome di una scheda nell'elenco: l'etichetta di un gruppo, la prima riga
- * di un testo (senza i `#` di un titolo), il file senza le cartelle (una nota
- * anche senza `.md`), l'host di una pagina web. `""` se non ne ha.
+ * di un testo senza i segni del Markdown (`textCardName`), il file senza le
+ * cartelle (una nota anche senza `.md`), l'host di una pagina web. `""` se non
+ * ne ha.
  */
 export function cardName(node: CanvasNode): string {
   let name = "";
   if (node.type === "group") name = typeof node.label === "string" ? node.label : "";
-  else if (node.type === "text") {
-    const line = (typeof node.text === "string" ? node.text : "").split("\n").map((each) => each.trim()).find(Boolean) ?? "";
-    name = line.replace(/^#{1,6}\s+/, "");
-  } else if (node.type === "file") name = fileTitle(typeof node.file === "string" ? node.file : "");
+  else if (node.type === "text") name = textCardName(typeof node.text === "string" ? node.text : "");
+  else if (node.type === "file") name = fileTitle(typeof node.file === "string" ? node.file : "");
   else {
     const url = typeof node.url === "string" ? node.url : "";
     try {

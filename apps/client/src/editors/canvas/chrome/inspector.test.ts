@@ -89,6 +89,8 @@ describe("i nomi e il filtro", () => {
   it("chiama le schede come le legge chi guarda", () => {
     expect(BOARD.map(cardName)).toEqual(["Pendolo semplice", "Statistica", "Varianza", "Domande per giovedì", "Correzione di Bessel.pdf", "Esercizi sulla varianza"]);
     expect(cardName(node("w", 0, 0, { type: "link", url: "https://example.org/a" }))).toBe("example.org");
+    // Il nome di un testo è quello del menu e della penna: senza i segni del Markdown.
+    expect(cardName(node("x", 0, 0, { text: "# **Idee** *nuova*" }))).toBe("Idee nuova");
   });
 
   it("tiene ciò che il nome e la specie dicono, coi gruppi che lo contengono", () => {

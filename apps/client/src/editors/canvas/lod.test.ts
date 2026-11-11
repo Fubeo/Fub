@@ -78,13 +78,17 @@ describe("farTitle", () => {
     expect(farTitle(node({ type: "link" }))).toBe("n1");
   });
 
-  it("un testo mostra la sua prima riga scritta, senza i segni davanti", () => {
+  it("un testo mostra la sua prima riga scritta, senza i segni del Markdown", () => {
     expect(farTitle(node({ type: "text", text: "Domande per giovedì\naltro" }))).toBe("Domande per giovedì");
     expect(farTitle(node({ type: "text", text: "\n\n  ## Da rifare  \n- uno" }))).toBe("Da rifare");
     expect(farTitle(node({ type: "text", text: "- [ ] portare il libro" }))).toBe("portare il libro");
     expect(farTitle(node({ type: "text", text: "> una citazione" }))).toBe("una citazione");
     expect(farTitle(node({ type: "text", text: "#tag non è un titolo" }))).toBe("#tag non è un titolo");
     expect(farTitle(node({ type: "text", text: "   \n  " }))).toBe("");
+    // I segni in linea: il grassetto, il link, il codice (N6, il nome da lontano).
+    expect(farTitle(node({ type: "text", text: "Un **appunto** veloce" }))).toBe("Un appunto veloce");
+    expect(farTitle(node({ type: "text", text: "# Idee\n**altro**" }))).toBe("Idee");
+    expect(farTitle(node({ type: "text", text: "Vedi [la guida](https://x.it) e `npm ci`" }))).toBe("Vedi la guida e npm ci");
   });
 
   it("un titolo lunghissimo resta intero: lo taglia il CSS", () => {

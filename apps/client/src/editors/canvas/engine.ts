@@ -38,6 +38,7 @@ import {
   type CardWriting,
   type Rect,
 } from "./cards";
+import { textCardName } from "./card-name";
 import { applyCardDetails, cardDetail, detailLevel, farTitle, type CardDetail } from "./lod";
 import {
   cutInk,
@@ -9673,8 +9674,9 @@ const MENU_NAME_MAX = 40;
 
 /**
  * Il nome di una scheda nella testata del menu (T17): il file senza le
- * cartelle, l'host di una pagina web, la prima riga di un testo, l'etichetta
- * di un gruppo; accorciato con «…». `""` se non ne ha.
+ * cartelle, l'host di una pagina web, la prima riga di un testo senza i segni
+ * del Markdown (`textCardName`), l'etichetta di un gruppo; accorciato con «…».
+ * `""` se non ne ha.
  */
 function cardMenuName(node: CanvasNode): string {
   let name = "";
@@ -9682,7 +9684,7 @@ function cardMenuName(node: CanvasNode): string {
   else if (node.type === "link") {
     const address = externalUrl(node.url ?? "");
     name = address === null ? node.url ?? "" : new URL(address).host;
-  } else if (node.type === "text") name = (node.text ?? "").split("\n").map((line) => line.trim()).find(Boolean) ?? "";
+  } else if (node.type === "text") name = textCardName(typeof node.text === "string" ? node.text : "");
   else name = node.label ?? "";
   name = name.trim();
   return name.length > MENU_NAME_MAX ? `${name.slice(0, MENU_NAME_MAX - 1).trimEnd()}…` : name;
