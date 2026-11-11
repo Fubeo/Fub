@@ -5288,7 +5288,7 @@ Fatto quando: la prova e2e passa con otto scenari verdi; la pagina c'è,
 `check-doc-links` e `check-doc-orphans` passano.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/canvas-lazy.e2e.test.ts
-Stato: [ ] da fare
+Stato: [~] in corso · coder Opus · base 8092dde49
 
 ## T90 · La CI completa e la revisione prima del merge
 
