@@ -5460,7 +5460,7 @@ campo rotto e i limiti; `engine.test.ts` prova copia e incolla di schede
 e tratti liberi in un'altra lavagna, solo tratti, taglia e un solo annulla.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/canvas
-Stato: [ ] da fare
+Stato: [~] in corso · coder Opus · base 0d39e8e6a
 
 ## T95 · I punti della griglia più radi
 
@@ -5562,7 +5562,7 @@ Fatto quando:
 - nessuna lettura del DOM della barra della formula in `editors/grid/card.ts`
   e `compact.ts`; i test di T42 restano verdi.
 Prova: scripts/check.sh --rapido
-Stato: [ ] da fare
+Stato: [~] in corso · coder Haiku xhigh · base 0d39e8e6a
 
 ## Non verificato stanotte
 
