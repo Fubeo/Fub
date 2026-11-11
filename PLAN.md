@@ -3189,7 +3189,7 @@ Ctrl+Maiusc+Invio col filo, la scheda nuova vuota che sparisce senza
 annulla e quella vecchia che resta.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/canvas/engine.test.ts
-Stato: [ ] da fare
+Stato: [~] in corso · coder Opus · base 69dab4bf0
 
 ## T45 · «Apri a lato per questo»
 
