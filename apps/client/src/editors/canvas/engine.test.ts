@@ -5,6 +5,7 @@ import { renderMarkdown } from "../text/profiles/markdown/render";
 import { mountMarkdown } from "../text/profiles/markdown/mount";
 import { CANVAS_ZOOM_STEP, CARD_PAUSE_MS, CanvasEngine, EDGE_SCROLL_MAX, EDGE_SCROLL_ZONE, MAX_CANVAS_HISTORY, NEXT_CARD_GAP, edgeScrollSpeed, MEASURE_IMAGE_TIMEOUT_MS, proposedNoteName, type CanvasChange, type CanvasCorePort, type CanvasDepositCards, type CanvasEngineOptions } from "./engine";
 import type { CanvasDocument } from "./model";
+import { readCanvasClipboard } from "./clipboard";
 import { dropLayout } from "./drop-layout";
 import { ENTRIES_DRAG_TYPE } from "../../ui/drag-types";
 import { applyOperation, lineFeeds, operationFromText } from "../core/text-operation";
@@ -3509,6 +3510,183 @@ describe("CanvasEngine: copia e incolla le schede (T68)", () => {
     press({ key: "d", ctrlKey: true });
     expect(nodesOf(engine).slice(4).map((node) => [node.x, node.y])).toEqual([[72, 72], [120, 104], [168, 136], [216, 168]]);
     engine.destroy();
+  });
+
+  describe("i tratti liberi negli appunti (T94)", () => {
+    const BRUSH = "pf1 size=3 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=0 pen=ballpoint";
+    const free = (id: string, ink: string) => ({ id, tool: "pen", brush: BRUSH, color: "#0072b2", anchor: { kind: "free" }, ink });
+    /** Da (400, 300), sotto la scheda: il Lazo lo prende con lei. */
+    const F1 = free("f1", "1 s100 cxy 40000,30000 1200,400 950,-100");
+    /** Da (800, 300), lontano: resta fuori dal giro delle schede. */
+    const F2 = free("f2", "1 s100 cxy 80000,30000 1000,0");
+
+    function inked(): string {
+      return JSON.stringify({
+        nodes: [{ id: "a", type: "text", x: 40, y: 40, width: 240, height: 140, text: "Prima" }],
+        edges: [],
+        "fub:ink": { v: 1, strokes: [F1, F2] },
+      });
+    }
+
+    /** Un'altra lavagna, col suo tratto libero che ha già l'id `f1`. */
+    function elsewhere(): string {
+      return JSON.stringify({
+        nodes: [{ id: "q", type: "text", x: 0, y: 0, width: 200, height: 100, text: "qui" }],
+        edges: [],
+        "fub:ink": { v: 1, strokes: [{ ...F2, id: "f1" }] },
+      });
+    }
+
+    type Stroke = Record<string, unknown> & { id: string; ink: string };
+    const freeOf = (engine: CanvasEngine): Stroke[] =>
+      ((JSON.parse(engine.getDoc()) as { "fub:ink"?: { strokes: Stroke[] } })["fub:ink"]?.strokes ?? []);
+
+    function cameraOf(host: HTMLElement): { x: number; y: number; zoom: number } {
+      const transform = host.querySelector<HTMLElement>(".canvas-stage")!.style.transform;
+      const match = /translate\((-?[\d.e+-]+)px, (-?[\d.e+-]+)px\) scale\(([\d.e+-]+)\)/.exec(transform);
+      if (!match) throw new Error(`trasformazione inattesa: ${transform}`);
+      return { x: Number(match[1]), y: Number(match[2]), zoom: Number(match[3]) };
+    }
+
+    /** Il Lazo, poi un giro col mouse attorno al riquadro dato della lavagna; il fuoco resta sulla vista. */
+    function lassoAround(engine: CanvasEngine, host: HTMLElement, x0: number, y0: number, x1: number, y1: number): void {
+      engine.commands().find((command) => command.id === "canvas.tool.lasso")!.run();
+      const cam = cameraOf(host);
+      const viewport = viewportOf(host);
+      const points: [number, number][] = [[x0, y0], [x1, y0], [x1, y1], [x0, y1], [x0, y0 + 2]];
+      const send = (type: string, [x, y]: [number, number], buttons: number): void => {
+        viewport.dispatchEvent(new PointerEvent(type, {
+          bubbles: true, cancelable: true, isPrimary: true, pointerId: 1, pointerType: "mouse",
+          button: type === "pointermove" ? -1 : 0, buttons, clientX: x * cam.zoom + cam.x, clientY: y * cam.zoom + cam.y,
+        }));
+      };
+      send("pointerdown", points[0]!, 1);
+      for (const point of points.slice(1)) send("pointermove", point, 1);
+      send("pointerup", points[points.length - 1]!, 0);
+      viewport.focus();
+    }
+
+    /** Il primo campione di un `ink`, in unità quantizzate. */
+    const head = (ink: string): [number, number] => ink.split(" ")[3]!.split(",").map(Number) as [number, number];
+
+    it("copia schede e tratti liberi e li incolla in un'altra lavagna sotto il puntatore: ids nuovi, un commit, un annulla", async () => {
+      const from = mounted(inked());
+      lassoAround(from.engine, from.host, 20, 20, 460, 360);
+      const data = store();
+      expect(clipboardEvent("copy", viewportOf(from.host), data).defaultPrevented).toBe(true);
+      expect(from.changes).toHaveLength(0);
+      const json = JSON.parse(data.values[TYPE]!);
+      expect(json).toEqual({ version: 1, nodes: [readCanvas(inked()).nodes[0]], edges: [], "fub:ink": { v: 1, strokes: [F1] } });
+      // `text/plain` è quello delle schede: i tratti non hanno Markdown.
+      expect(data.values["text/plain"]).toBe("Prima");
+      from.engine.destroy();
+
+      const to = mounted(elsewhere(), { documentId: "altro/board.canvas" });
+      viewportOf(to.host).dispatchEvent(new PointerEvent("pointermove", { bubbles: true, clientX: 300, clientY: 200 }));
+      clipboardEvent("paste", viewportOf(to.host), data);
+      await vi.waitFor(() => expect(to.changes).toHaveLength(1));
+      expect(to.changes[0]!.operation.patches.map((patch) => patch.kind)).toEqual(["upsert-node", "ink"]);
+      const card = nodesOf(to.engine)[1]!;
+      expect(card).toMatchObject({ type: "text", text: "Prima" });
+      const strokes = freeOf(to.engine);
+      expect(strokes).toHaveLength(2);
+      // Il tratto di prima non cambia; quello incollato ha un id nuovo, anche se `f1` era libero da prendere qui.
+      expect(strokes[0]).toEqual({ ...F2, id: "f1" });
+      expect(strokes[1]!.id).not.toBe("f1");
+      expect(strokes[1]!.id).toMatch(/^s-/);
+      // Spostato quanto la scheda: stessa distanza fra loro, la forma uguale.
+      const [x, y] = head(strokes[1]!.ink);
+      expect([x / 100 - card.x, y / 100 - card.y]).toEqual([360, 260]);
+      expect(strokes[1]!.ink.split(" ").slice(4)).toEqual(["1200,400", "950,-100"]);
+      expect({ ...strokes[1], id: "f1", ink: F1.ink }).toEqual(F1);
+      expect(to.engine.undo()).toBe(true);
+      expect(to.engine.getDoc()).toBe(elsewhere());
+      to.engine.destroy();
+    });
+
+    it("solo tratti: si incollano senza schede, e una seconda volta sfalsati con ids nuovi", async () => {
+      const from = mounted(inked());
+      lassoAround(from.engine, from.host, 780, 280, 830, 320);
+      const data = store();
+      clipboardEvent("copy", viewportOf(from.host), data);
+      expect(JSON.parse(data.values[TYPE]!)).toEqual({ version: 1, nodes: [], edges: [], "fub:ink": { v: 1, strokes: [F2] } });
+      expect(data.values["text/plain"]).toBe("");
+      from.engine.destroy();
+
+      const to = mounted(elsewhere());
+      viewportOf(to.host).dispatchEvent(new PointerEvent("pointermove", { bubbles: true, clientX: 300, clientY: 200 }));
+      clipboardEvent("paste", viewportOf(to.host), data);
+      clipboardEvent("paste", viewportOf(to.host), data);
+      await vi.waitFor(() => expect(to.changes).toHaveLength(2));
+      expect(nodesOf(to.engine).map((node) => node.id)).toEqual(["q"]);
+      const [, first, second] = freeOf(to.engine);
+      expect(new Set(["f1", first!.id, second!.id]).size).toBe(3);
+      const [x1, y1] = head(first!.ink);
+      const [x2, y2] = head(second!.ink);
+      expect([x2 - x1, y2 - y1]).toEqual([3200, 3200]);
+      // Ognuno è un passo d'annulla suo.
+      expect(to.engine.undo()).toBe(true);
+      expect(freeOf(to.engine)).toHaveLength(2);
+      expect(to.engine.undo()).toBe(true);
+      expect(to.engine.getDoc()).toBe(elsewhere());
+      to.engine.destroy();
+    });
+
+    it("taglia: toglie schede e tratti liberi scelti in un commit, e un annulla li rimette", () => {
+      const { engine, host, changes } = mounted(inked());
+      lassoAround(engine, host, 20, 20, 460, 360);
+      const data = store();
+      clipboardEvent("cut", viewportOf(host), data);
+      expect(changes).toHaveLength(1);
+      expect(nodesOf(engine)).toHaveLength(0);
+      expect(freeOf(engine)).toEqual([F2]);
+      expect(JSON.parse(data.values[TYPE]!)["fub:ink"]).toEqual({ v: 1, strokes: [F1] });
+      expect(engine.undo()).toBe(true);
+      expect(engine.getDoc()).toBe(inked());
+      engine.destroy();
+    });
+
+    it("un fub:ink rotto, o un tratto che spostato esce dai numeri dell'inchiostro: l'avviso, e non entra niente", async () => {
+      const { engine, host, changes } = mounted(elsewhere());
+      viewportOf(host).focus();
+      const card = { id: "c", type: "text", x: 0, y: 0, width: 100, height: 60, text: "accanto" };
+      const broken = JSON.stringify({ version: 1, nodes: [card], edges: [], "fub:ink": { v: 2, strokes: [F1] } });
+      const event = clipboardEvent("paste", viewportOf(host), store({ [TYPE]: broken, "text/plain": "accanto" }));
+      expect(event.defaultPrevented).toBe(true);
+      await vi.waitFor(() => expect(host.querySelector(".canvas-intake-error")?.textContent).toBe(t("canvas.clipboard.refused")));
+      // Il primo tratto è all'estremo negativo: spostare il riquadro nel punto porta il secondo oltre il limite.
+      const far = JSON.stringify({ version: 1, nodes: [card], edges: [], "fub:ink": { v: 1, strokes: [
+        free("lo", "1 s100 cxy -9007199254740000,0 100,0"),
+        free("hi", "1 s100 cxy 9007199254740000,0 100,0"),
+      ] } });
+      // La forma è buona: il rifiuto viene dal nucleo, che sposta i tratti.
+      expect(readCanvasClipboard(far).kind).toBe("cards");
+      expect(changes).toHaveLength(0);
+      engine.destroy();
+
+      const other = mounted(elsewhere());
+      viewportOf(other.host).focus();
+      clipboardEvent("paste", viewportOf(other.host), store({ [TYPE]: far, "text/plain": "accanto" }));
+      await vi.waitFor(() => expect(other.host.querySelector(".canvas-intake-error")?.textContent).toBe(t("canvas.clipboard.refused")));
+      expect(other.changes).toHaveLength(0);
+      expect(other.engine.getDoc()).toBe(elsewhere());
+      other.engine.destroy();
+    });
+
+    it("in sola lettura il Lazo copia i tratti; tagliare e incollare no", async () => {
+      const { engine, host, changes } = mounted(inked());
+      engine.setReadOnly(true);
+      lassoAround(engine, host, 780, 280, 830, 320);
+      const data = store();
+      clipboardEvent("copy", viewportOf(host), data);
+      expect(JSON.parse(data.values[TYPE]!)["fub:ink"]).toEqual({ v: 1, strokes: [F2] });
+      expect(clipboardEvent("cut", viewportOf(host), store()).defaultPrevented).toBe(false);
+      clipboardEvent("paste", viewportOf(host), data);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(changes).toHaveLength(0);
+      expect(engine.getDoc()).toBe(inked());
+      engine.destroy();
+    });
   });
 });
 

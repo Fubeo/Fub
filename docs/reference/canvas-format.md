@@ -307,50 +307,73 @@ le schede scelte e col Testo (`chrome/options.ts`):
 
 ## Negli appunti
 
-Copiando delle schede (Ctrl+C, Ctrl+X, «Copia» e «Taglia» del tasto destro)
-la tela scrive negli appunti due tipi insieme. La forma, la lettura e il
-Markdown stanno in `apps/client/src/editors/canvas/clipboard.ts`.
+Copiando delle schede o dei tratti liberi scelti col Lazo (Ctrl+C, Ctrl+X,
+«Copia» e «Taglia» del tasto destro) la tela scrive negli appunti due tipi
+insieme. La forma, la lettura e il Markdown stanno in
+`apps/client/src/editors/canvas/clipboard.ts`.
 
-- **`application/x-fub-canvas+json`:** le schede, per un'altra lavagna di Fub.
+- **`application/x-fub-canvas+json`:** schede e tratti, per un'altra lavagna
+  di Fub.
 
   ```json
-  { "version": 1, "nodes": [ … ], "edges": [ … ] }
+  { "version": 1, "nodes": [ … ], "edges": [ … ], "fub:ink": { "v": 1, "strokes": [ … ] } }
   ```
 
   `nodes` sono le schede scelte, nell'ordine del file (la profondità);
   `edges` i soli fili che uniscono due schede copiate. Ogni scheda e ogni
   filo sono quelli del modello, campi sconosciuti compresi: l'inchiostro
-  attaccato viaggia nel campo `fub:ink` della sua scheda. Altri campi alla
-  radice non ci sono.
+  attaccato viaggia nel campo `fub:ink` della sua scheda. `fub:ink` alla
+  radice porta i tratti liberi scelti, nella forma del livello della radice
+  ([inchiostro](canvas-ink.md#il-livello)): i soli tratti scelti,
+  nell'ordine del livello, com'erano (ancora `free`, coordinate della
+  lavagna, campi sconosciuti compresi). C'è solo se ci sono tratti; senza
+  schede `nodes` ed `edges` sono vuoti. Altri campi alla radice non ci sono.
 - **`text/plain`:** il Markdown delle schede, per gli altri programmi: in
   ordine di lettura (dall'alto in basso, a pari altezza da sinistra), una
   scheda per paragrafo. Una scheda di testo dà il suo testo, una di file il
   link `[[…]]` (una nota senza `.md`, col suo `subpath`), una di link
-  l'indirizzo, un gruppo il nome.
+  l'indirizzo, un gruppo il nome. I tratti non hanno Markdown: dei soli
+  tratti il testo è vuoto.
 
 Dal menu, dove il browser non manda la copia, la tela scrive con gli appunti
 della shell: il tipo di Fub va come formato della pagina
 (`web application/x-fub-canvas+json`) solo dove la shell lo accetta, sennò
-resta il Markdown.
+resta il Markdown. Dei soli tratti, senza il tipo di Fub, non resterebbe
+niente: l'avviso dice che la copia non è riuscita, e il taglio non toglie.
 
 **La versione.** `version` è un intero. Fub legge la versione 1 e rifiuta
 una versione più alta per intero, con un avviso: niente si incolla a metà.
 Un testo che non è JSON, o non ha la forma (`version` mancante o non intero,
 `nodes` o `edges` che non sono array, una scheda senza `id`, con un tipo
 sconosciuto, una posizione o una misura non numeriche, un `id` ripetuto, un
-filo verso una scheda che negli appunti non c'è) non è la forma di Fub: si
-incolla come testo, il `text/plain` o, senza, il testo stesso.
+filo verso una scheda che negli appunti non c'è, né schede né tratti) non è
+la forma di Fub: si incolla come testo, il `text/plain` o, senza, il testo
+stesso.
+
+**Il `fub:ink` della radice** è un campo in più della versione 1: un Fub che
+non lo conosce lo ignora e incolla le schede, e appunti senza il campo si
+incollano come prima. Un campo rotto (non un livello con `v` uguale a 1 e
+`strokes` array, un tratto senza `id` stringa non vuota, un `id` ripetuto) o
+un tratto che non si incolla (un'ancora che non è `free`, uno strumento, un
+pennello o un `ink` che non valgono, oltre i limiti dell'inchiostro) rifiuta
+tutto, schede comprese, con l'avviso di una forma rifiutata: mai a metà.
 
 **Incollando** (Ctrl+V, «Incolla»), sempre in una lavagna che si può
 scrivere:
 
 - schede e fili prendono id nuovi, e i fili si riattaccano alle schede
-  nuove; i tratti dentro `fub:ink` tengono i loro id, unici nel livello;
-- le schede restano alle stesse distanze fra loro, con l'angolo in alto a
-  sinistra del loro riquadro nel punto dell'incolla (l'ultimo punto del
-  puntatore sulla vista, sennò il centro), agganciato a 8;
+  nuove; i tratti dentro il `fub:ink` di una scheda tengono i loro id,
+  unici nel livello; i tratti liberi entrano in fondo al livello della
+  radice con id nuovi (`newNodeId("s")`), con `add_strokes` e
+  `move_strokes` compilati dal nucleo e fusi in una toppa per tratto;
+- schede e tratti restano alle stesse distanze fra loro, con l'angolo in
+  alto a sinistra del loro riquadro (dei tratti contano i punti, all'intero
+  sotto) nel punto dell'incolla (l'ultimo punto del puntatore sulla vista,
+  sennò il centro), agganciato a 8;
 - un commit solo, cioè un annulla; il commit del nucleo controlla tutto
-  (colori, limiti, inchiostro), e se rifiuta non entra niente;
+  (colori, limiti, inchiostro), e se rifiuta non entra niente: anche un
+  tratto che spostato uscirebbe dai numeri dell'inchiostro;
+- le schede incollate restano scelte, e col Lazo anche i tratti;
 - gli stessi appunti incollati di nuovo nello stesso punto si sfalsano di
   32 per volta; copiare di nuovo riparte dal punto.
 
@@ -360,7 +383,8 @@ scheda «File mancante», come ogni scheda il cui file manca, e torna da sola
 se il file arriva.
 
 **Tagliare** copia e poi toglie le schede come «Togli dalla lavagna»: i file
-restano, e l'avviso lo dice con «Annulla». Ctrl+D (Duplica) fa una copia
+restano, e l'avviso lo dice con «Annulla». I tratti liberi copiati escono
+dal livello della radice nello stesso commit. Ctrl+D (Duplica) fa una copia
 sfalsata di 32; se le schede scelte sono le copie dell'ultimo Ctrl+D, la
 copia nuova ripete la distanza che c'è adesso fra quelle e le schede di
 partenza, anche dopo averle spostate.
