@@ -3688,7 +3688,7 @@ che l'attributo cambia solo a fine gesto e mai durante; le foto del banco
 a 0,25 e a 0,1, chiaro e scuro, somigliano al prototipo.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/canvas
-Stato: [ ] da fare
+Stato: [~] in corso · coder Opus · base 705c2fca1
 
 ## T55 · Il navigatore
 
