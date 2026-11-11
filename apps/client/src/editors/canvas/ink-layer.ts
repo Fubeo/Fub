@@ -31,6 +31,12 @@
 //   Alla fine del tratto la scia resta finché `settle(id)` non la toglie, nello
 //   stesso giro in cui la lavagna aggiunge l'asciutto: niente buchi fra i due.
 //   Un tratto annullato toglie subito la sua scia.
+// - **Il tratto guidato** (T87). Se la lavagna dà una guida per il tratto della
+//   punta che comincia (`guide`), la guida riceve i campioni e dice come si
+//   vede la scia: sul bordo del righello, dritta con Maiusc, o la forma della
+//   penna ferma. Lo strato la ridisegna anche senza campioni nuovi
+//   (`repaint`), quando il tempo o un tasto la cambiano. Ciò che si scrive lo
+//   decide la lavagna all'alzata: lo strato consegna i campioni presi.
 // - **Il silenzio della penna.** Ogni tratto chiama `quiet.enter()` quando
 //   comincia e `quiet.leave()` una volta sola quando finisce o si annulla.
 
@@ -43,7 +49,7 @@ import { penLook } from "../../ink/pens";
 import { outlinePath } from "../../ink/pf1";
 import type { PenQuiet } from "../../ink/quiet";
 import type { InkSample } from "../../ink/sample";
-import { StrokePreview } from "../../ink/tools/stroke";
+import { previewOutline, StrokePreview } from "../../ink/tools/stroke";
 import type { StrokeInput } from "../../ink/tools/tool";
 import { openLifetime, type Lifetime } from "../../ui/lifetime";
 
@@ -56,6 +62,32 @@ export interface InkLook {
   readonly color: string;
   /// L'id dello strumento (`pen`, `highlighter`…).
   readonly tool: string;
+}
+
+/// Il tratto della punta che comincia, per chi lo guida (T87).
+export interface InkGuideStart {
+  readonly id: number;
+  readonly pointerType: InkPointerType;
+  /// Il pezzo continua un tratto spezzato al limite dei campioni.
+  readonly continued: boolean;
+  readonly look: InkLook;
+}
+
+/// Come si vede il tratto guidato: i campioni da disegnare al posto di quelli
+/// presi. Con `whole` falso crescono in coda come quelli presi (l'anteprima li
+/// prende un pezzo alla volta); vero, cambiano tutti e la scia si rifà.
+export interface InkGuidedTrail {
+  readonly samples: readonly InkSample[];
+  readonly predicted: readonly InkSample[];
+  readonly whole: boolean;
+}
+
+/// La guida di un tratto della punta (T87).
+export interface InkGuide {
+  /// Campioni nuovi del tratto, in coordinate della lavagna, nell'ordine.
+  add(samples: readonly InkSample[]): void;
+  /// La scia coi campioni presi e predetti di adesso; `null` com'è.
+  trail(samples: readonly InkSample[], predicted: readonly InkSample[]): InkGuidedTrail | null;
 }
 
 /// Un tratto finito, in coordinate della lavagna, con il suo aspetto.
@@ -89,6 +121,9 @@ export interface InkLayerOptions {
   /// appoggio, prima della sessione; assente o falso, il dito sposta.
   readonly fingerWrites?: () => boolean;
   readonly quiet: PenQuiet;
+  /// La guida del tratto della punta che comincia (T87), dopo il suo aspetto;
+  /// `null` o assente, il tratto si vede com'è.
+  readonly guide?: (start: InkGuideStart) => InkGuide | null;
   /// Un tratto della punta è finito: la scia resta finché non si chiama
   /// `settle(id)`. Un tratto spezzato al limite dei campioni arriva a pezzi,
   /// uno per id (`split`, `continued`).
@@ -123,6 +158,8 @@ export interface InkLayer {
   /// Che cosa fa il tasto principale del mouse dal prossimo appoggio: `ink`
   /// scrive, `ignore` lo lascia alla lavagna. Un tratto già giù finisce com'è.
   setMouse(policy: MousePolicy): void;
+  /// Ridisegna la scia dei tratti aperti: la loro guida è cambiata (T87).
+  repaint(): void;
   /// Annulla il tratto in corso.
   cancel(): void;
   /// Annulla il tratto in corso, toglie la scia e ogni ascoltatore.
@@ -137,6 +174,8 @@ interface Trail {
   /// L'aspetto e l'anteprima, solo per la punta e finché il tratto è aperto.
   look: InkLook | null;
   preview: StrokePreview | null;
+  /// La guida della lavagna (T87), solo per la punta e finché il tratto è aperto.
+  guide: InkGuide | null;
   samples: InkSample[];
   predicted: readonly InkSample[];
   path: SVGPathElement | null;
@@ -183,7 +222,12 @@ export function mountInkLayer(options: InkLayerOptions, owner: Lifetime): InkLay
   function paint(id: number): void {
     const trail = trails.get(id);
     if (!trail || !trail.preview || !trail.look) return;
-    const outline = trail.preview.outline(trail.samples, trail.predicted, false);
+    const guided = trail.guide?.trail(trail.samples, trail.predicted) ?? null;
+    const outline = guided === null
+      ? trail.preview.outline(trail.samples, trail.predicted, false)
+      : guided.whole
+        ? previewOutline(guided.samples, guided.predicted, trail.look.brush, false)
+        : trail.preview.outline(guided.samples, guided.predicted, false);
     const d = outline.length > 2 ? outlinePath(outline) : "";
     if (!trail.path) {
       trail.path = document.createElementNS(SVG_NS, "path");
@@ -213,6 +257,7 @@ export function mountInkLayer(options: InkLayerOptions, owner: Lifetime): InkLay
         kind: aside ? "aside" : stroke.role === "ink" && !(options.tipErases?.() ?? false) ? "ink" : "erase",
         look: null,
         preview: null,
+        guide: null,
         samples: [],
         predicted: [],
         path: null,
@@ -228,13 +273,17 @@ export function mountInkLayer(options: InkLayerOptions, owner: Lifetime): InkLay
       } else if (trail.kind === "ink") {
         trail.look = options.look({ pressure: stroke.pressure, continued: stroke.continued });
         trail.preview = new StrokePreview(trail.look.brush);
+        trail.guide = options.guide?.({ id: stroke.id, pointerType: stroke.pointerType, continued: stroke.continued, look: trail.look }) ?? null;
       }
     },
     onSamples: (id, samples) => {
       const trail = trails.get(id);
       if (!trail) return;
       if (trail.kind === "erase") options.onErase?.(id, samples);
-      else if (trail.kind === "ink") trail.samples.push(...samples);
+      else if (trail.kind === "ink") {
+        trail.samples.push(...samples);
+        trail.guide?.add(samples);
+      }
     },
     onPredicted: (id, samples) => {
       const trail = trails.get(id);
@@ -249,6 +298,7 @@ export function mountInkLayer(options: InkLayerOptions, owner: Lifetime): InkLay
       trail.open = false;
       trail.look = null;
       trail.preview = null;
+      trail.guide = null;
       trail.samples = [];
       trail.predicted = [];
       try {
@@ -320,6 +370,10 @@ export function mountInkLayer(options: InkLayerOptions, owner: Lifetime): InkLay
     setCamera(x, y, nextZoom) {
       zoom = nextZoom;
       wet.style.transform = `translate(${x}px, ${y}px) scale(${nextZoom})`;
+    },
+    repaint() {
+      if (destroyed) return;
+      for (const [id, trail] of trails) if (trail.open && trail.kind === "ink") paint(id);
     },
     settle(id) {
       const trail = trails.get(id);

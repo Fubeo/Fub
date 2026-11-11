@@ -123,7 +123,9 @@ import { CanvasDepositError, type DropFolderChoice } from "../../state/canvas-in
 import { saveStateKey } from "../../state/saving";
 import { SHARED_RECENT_COMMANDS, openCommandSearch, type CommandSearchHandle, type RecentCommands } from "./chrome/command-search";
 import { inkFitMode } from "./ink-fit";
-import { mountInkLayer, type InkLayer, type InkLayerStroke } from "./ink-layer";
+import { mountInkLayer, type InkGuide, type InkGuideStart, type InkLayer, type InkLayerStroke } from "./ink-layer";
+import { createCanvasRuler, type CanvasRuler } from "./ink-ruler";
+import { HOLD_MS, shapeKind, StrokeGuide } from "./ink-shapes";
 import { cutInkStroke, fadeInkStroke, fadeInkStrokes, InkPathCache, paintBoard, paintCard, type DryStroke } from "./ink-paint";
 import { createPenMenu, pickerText as canvasPickerText, type PenMenu } from "./pen-menu";
 // I colori delle schede e dei fili (T47).
@@ -162,9 +164,11 @@ import {
   type DrawableStroke,
   type InkLayerRef,
   type InkLayerState,
+  type InkStrokeRecord,
 } from "./ink-record";
 import {
   addStrokePatch,
+  eraseStrokePatch,
   eraseStrokePatches,
   moveStrokesOp,
   newNodeId,
@@ -1729,6 +1733,15 @@ export class CanvasEngine {
   readonly #inkAt: InkPoint = { pointerId: -1, clientX: 0, clientY: 0 };
   /** Alt tenuto: il tratto resta libero sulla lavagna. */
   #altHeld = false;
+  // --- le forme dal tratto, Maiusc e il righello (T87) ---
+  /** Le guide dei tratti della punta aperti, per id del tratto. */
+  readonly #inkGuides = new Map<number, StrokeGuide>();
+  /** Il mezzo secondo della penna ferma: uno solo, perché il tratto della punta è uno. */
+  #shapeTimer: ReturnType<typeof setTimeout> | undefined = undefined;
+  /** Maiusc tenuto: il tratto in corso resta dritto, la forma regolare. */
+  #shiftHeld = false;
+  /** Il righello sulla lavagna; nasce col corpo della lavagna. */
+  #inkRuler: CanvasRuler | null = null;
   /** Per il lettore di schermo: l'ancora dell'ultimo tratto, detta all'alzata. */
   #inkSaid: HTMLElement | null = null;
   /** L'etichetta e il bordo, tenuti fra un tratto e l'altro. */
@@ -1936,6 +1949,8 @@ export class CanvasEngine {
       fingerWrites: () => this.#fingerWritesSetting,
       fingerMovesCard: () => this.#fingerMovesCard(),
       onFingerWrites: (on) => this.#setFingerWrites(on),
+      ruler: () => (this.#inkRuler?.ruler ?? null) !== null,
+      onRuler: (on) => this.#inkRuler?.set(on),
       lifetime: this.#life,
     });
     // La lavagna vuota (T62) è un fratello della vista, non un suo figlio: i
@@ -1983,6 +1998,20 @@ export class CanvasEngine {
     this.#area = area;
     area.className = "canvas-area";
     area.append(this.#viewport, this.#empty.element, this.#findBar.element, this.#navigator.element);
+    // Il righello (T87): un fratello della vista, sopra di lei, così il suo
+    // corpo non passa dallo strato della penna.
+    this.#inkRuler = createCanvasRuler({
+      host: area,
+      camera: () => this.#camera,
+      viewCenter: () => {
+        const rect = this.#viewport.getBoundingClientRect();
+        const { x, y } = this.#screenToWorld(rect.left + rect.width / 2, rect.top + rect.height / 2);
+        return [x, y];
+      },
+      announce: (text) => this.#sayGesture(text),
+      onToggle: () => this.#rail.sync(),
+      lifetime: this.#life,
+    });
     const body = document.createElement("div");
     body.className = "canvas-body";
     body.append(this.#rail.element, area);
@@ -2227,6 +2256,22 @@ export class CanvasEngine {
       if (event.key === "Alt") this.#setAltHeld(false);
     });
     this.#life.listen(window, "blur", () => this.#setAltHeld(false));
+    // Maiusc (T87): il tratto dritto e la forma regolare, letti ovunque; un
+    // movimento della penna lo rilegge, se la finestra non l'ha saputo.
+    this.#life.listen(window, "keydown", (event) => {
+      if (event.key === "Shift") this.#setShiftHeld(true);
+    });
+    this.#life.listen(window, "keyup", (event) => {
+      if (event.key === "Shift") this.#setShiftHeld(false);
+    });
+    this.#life.listen(window, "blur", () => this.#setShiftHeld(false));
+    this.#viewport.addEventListener("pointermove", (event) => {
+      if (this.#inkGuides.size > 0 && event.shiftKey !== this.#shiftHeld) this.#setShiftHeld(event.shiftKey);
+    }, { signal });
+    this.#life.add(() => {
+      clearTimeout(this.#shapeTimer);
+      this.#inkGuides.clear();
+    });
     this.#viewport.addEventListener("pointerleave", () => {
       this.#pointerSeen = null;
       // Il puntatore fuori dalla lavagna: nessun filo si scurisce (T67).
@@ -3038,6 +3083,8 @@ export class CanvasEngine {
     if (wanted === (this.#inkLayer !== null)) return;
     if (!wanted) {
       const life = this.#inkLife;
+      this.#inkGuides.clear();
+      clearTimeout(this.#shapeTimer);
       this.#inkLayer = null;
       this.#inkLife = null;
       this.#inkChain = null;
@@ -3065,8 +3112,11 @@ export class CanvasEngine {
       fingerWrites: () => this.#fingerWritesSetting,
       quiet: this.#quiet,
       mouse: this.#inkMouseOn ? "ink" : "ignore",
+      // Il righello, Maiusc e la penna ferma (T87).
+      guide: (start) => this.#inkGuideStart(start),
       onStroke: (stroke) => this.#inkStroke(stroke),
       onCancel: (id) => {
+        this.#inkGuideDrop(id);
         this.#inkTargetClose();
         this.#eraseCancel(id);
       },
@@ -3579,13 +3629,20 @@ export class CanvasEngine {
     this.#inkPaths.sweep();
   }
 
-  /** Un tratto della penna è finito: si scrive, e la sua scia va via nello stesso giro. */
+  /**
+   * Un tratto della penna è finito: si scrive, e la sua scia va via nello
+   * stesso giro. La sua guida (T87) dice che cosa: sul bordo del righello,
+   * dritto con Maiusc, o com'era e poi la forma della penna ferma.
+   */
   #inkStroke(stroke: InkLayerStroke): void {
     const layer = this.#inkLayer;
+    const guide = this.#inkGuides.get(stroke.id) ?? null;
+    this.#inkGuideDrop(stroke.id);
     // L'etichetta sparisce all'alzata; il tratto si attacca a ciò che diceva.
     this.#inkTargetClose();
     try {
-      this.#writeStroke(stroke);
+      const guided = guide?.finish(stroke.samples, stroke.split) ?? null;
+      this.#writeStroke(guided === null ? stroke : { ...stroke, samples: guided.samples }, guided?.shape ?? null);
     } finally {
       layer?.settle(stroke.id);
     }
@@ -3599,7 +3656,7 @@ export class CanvasEngine {
    * spezzato si fonde nel passo del pezzo di prima (A4). Ciò che non si
    * scrive lo dice l'avviso della barra.
    */
-  #writeStroke(stroke: InkLayerStroke): void {
+  #writeStroke(stroke: InkLayerStroke, shape: readonly InkSample[] | null = null): void {
     const chain = stroke.continued ? this.#inkChain : null;
     this.#inkChain = null;
     if (this.#destroyed || !this.#doc || this.#readOnly || this.#isSceneOversized()) return;
@@ -3645,6 +3702,90 @@ export class CanvasEngine {
     if (this.#intakeError) this.#showNotice("");
     // Il pezzo di un tratto spezzato non si annuncia: lo dice l'ultimo.
     if (!stroke.split) this.#sayInkHolder(holder);
+    if (shape !== null) this.#writeShape(stroke, shape, made.record, ref, holder, page ?? cell);
+  }
+
+  /**
+   * La forma della penna ferma prende il posto del tratto `written`, appena
+   * scritto, in un passo d'annulla suo (T87): un tratto `fub:ink` con lo
+   * stesso id, la stessa penna, lo stesso colore, lo stesso spessore, la
+   * stessa ancora e lo stesso posto nel livello. Annullare riporta il tratto
+   * com'era. Una forma che non si scrive lascia il tratto e lo dice.
+   */
+  #writeShape(
+    stroke: InkLayerStroke,
+    shape: readonly InkSample[],
+    written: InkStrokeRecord,
+    ref: InkLayerRef,
+    holder: CanvasNode | null,
+    content: Parameters<typeof strokeRecord>[4],
+  ): void {
+    const start = this.#inkEditStart();
+    if (!start) return;
+    const look = { brush: stroke.brush, color: stroke.color, tool: stroke.tool };
+    const made = strokeRecord({ samples: shape, pressure: stroke.pressure, split: false }, holder, look, Date.now(), content);
+    if (!made.ok) {
+      if (made.reason !== "empty") this.#showNotice(t(made.reason === "full" ? "canvas.ink.full" : "canvas.ink.refused"));
+      return;
+    }
+    const after: Record<string, unknown> = { ...made.record, id: written.id };
+    if (written.at === undefined) delete after.at;
+    else after.at = written.at;
+    const gone = eraseStrokePatch(start.doc, start.layers, ref, written.id);
+    if (!gone) return;
+    this.#commitInkEdit([{ ...gone, after: after as unknown as InkStrokeRecord }]);
+  }
+
+  /**
+   * Il tratto della punta `start` comincia: la sua guida (T87), col righello di
+   * adesso, lo zoom di adesso e Maiusc letto quando serve. Campioni nuovi che
+   * fanno uscire la punta dal punto fermo fanno ripartire il mezzo secondo;
+   * nessun riconoscimento a ogni campione.
+   */
+  #inkGuideStart(start: InkGuideStart): InkGuide {
+    const guide = new StrokeGuide({
+      pointer: start.pointerType,
+      tool: start.look.tool,
+      size: start.look.brush.size,
+      zoom: this.#camera.zoom,
+      ruler: this.#inkRuler?.ruler ?? null,
+      continued: start.continued,
+      shift: () => this.#shiftHeld,
+    });
+    this.#inkGuides.set(start.id, guide);
+    return {
+      add: (samples) => {
+        if (guide.add(samples)) this.#armShape(start.id);
+      },
+      trail: (samples, predicted) => guide.trail(samples, predicted),
+    };
+  }
+
+  /** Il mezzo secondo della penna ferma riparte per il tratto `id`. */
+  #armShape(id: number): void {
+    clearTimeout(this.#shapeTimer);
+    this.#shapeTimer = setTimeout(() => {
+      this.#shapeTimer = undefined;
+      const guide = this.#inkGuides.get(id);
+      if (this.#destroyed || !guide || !guide.hold()) return;
+      this.#inkLayer?.repaint();
+      const shape = guide.shapeNow();
+      if (shape) this.#sayGesture(t("canvas.ink.shape", { kind: t(`canvas.ink.shape.${shapeKind(shape)}`) }));
+    }, HOLD_MS);
+  }
+
+  /** Il tratto `id` è finito o annullato: la sua guida e il suo mezzo secondo se ne vanno. */
+  #inkGuideDrop(id: number): void {
+    if (!this.#inkGuides.delete(id)) return;
+    clearTimeout(this.#shapeTimer);
+    this.#shapeTimer = undefined;
+  }
+
+  /** Maiusc tenuto o lasciato: a penna giù la scia si raddrizza o torna com'era subito. */
+  #setShiftHeld(held: boolean): void {
+    if (held === this.#shiftHeld) return;
+    this.#shiftHeld = held;
+    if (this.#inkGuides.size > 0) this.#inkLayer?.repaint();
   }
 
   /**
@@ -4510,6 +4651,7 @@ export class CanvasEngine {
     // Il filo sta nello stage (T91): la sua camera è quella dello stage. Le prese no.
     this.#handleLayer.style.transform = `translate(${this.#camera.x}px, ${this.#camera.y}px) scale(${this.#camera.zoom})`;
     this.#inkLayer?.setCamera(this.#camera.x, this.#camera.y, this.#camera.zoom);
+    this.#inkRuler?.place();
     this.#paintGrid();
     // Le maniglie e i segni sopra le schede restano della stessa misura sullo
     // schermo a ogni zoom (T66): la pelle divide per `--canvas-zoom`.

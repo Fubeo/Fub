@@ -392,6 +392,9 @@ alla Selezione; Collega tira un filo da una scheda a un'altra. Penna,
 Evidenziatore e Gomma fanno scrivere il mouse con la penna del menu di N4: sono
 lo stesso stato dell'interruttore «Scrivi col mouse», e la scelta passa al menu
 della penna. `D` tenuto presta la penna a ogni strumento.
+In fondo alla colonna «Righello» mette o toglie il righello sulla lavagna
+([le forme e il righello](canvas-ink.md#le-forme-maiusc-e-il-righello)),
+sopra «Il dito scrive».
 
 `canvas.toolbar` sceglie quali strumenti stanno nella colonna e in che ordine
 (`canvasRailLayout`): vuota è quella di serie; un nome che la lavagna non

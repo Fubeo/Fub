@@ -1106,6 +1106,9 @@
     "canvas-lasso-path",
     "canvas-lasso-frame",
     "canvas-lasso-chosen",
+    "canvas-ruler-bar",
+    "canvas-ruler-grip",
+    "canvas-ruler-angle",
     "draw-header",
     "draw-toolbar",
     "draw-export",
@@ -2795,6 +2798,9 @@
     "canvas-lasso-path": "segno",
     "canvas-lasso-frame": "segno",
     "canvas-lasso-chosen": "segno",
+    "canvas-ruler-bar": "cornice",
+    "canvas-ruler-grip": "cornice",
+    "canvas-ruler-angle": "cornice",
     "draw-header": "cornice",
     "draw-toolbar": "cornice",
     "draw-export": "cornice",
@@ -6167,6 +6173,19 @@
       ]
     },
     {
+      "name": "canvas-ruler",
+      "part": "editors",
+      "hooks": [
+        "canvas-ruler-bar",
+        "canvas-ruler-grip",
+        "canvas-ruler-angle"
+      ],
+      "states": [
+        "rest",
+        "focused"
+      ]
+    },
+    {
       "name": "draw-editor",
       "part": "draw",
       "hooks": [
@@ -9201,10 +9220,10 @@
   "counts": {
     "required_roles": 154,
     "optional_roles": 63,
-    "hooks": 1687,
+    "hooks": 1690,
     "state_names": 7,
-    "assigned_states": 795,
-    "components": 236,
+    "assigned_states": 797,
+    "components": 237,
     "preference_tokens": 186
   }
 }
