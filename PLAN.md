@@ -2923,7 +2923,7 @@ Fatto quando: i vettori nuovi e quelli di N4 passano; `image.test.ts` e
 nodo; le foto del banco, chiaro e scuro, somigliano al prototipo.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/canvas src/theme/scrittoio/anatomia.test.ts
-Stato: [~] in corso · coder Opus · base 0fd6f841d
+Stato: [x] fatto · 7ff0ef97d (merge 678bd2093) · differenze: i vettori con `aspect` stanno in `__fixtures__/canvas-ink-fit-aspect/` (quelli di `canvas-ink-fit/` li prova anche `ink_fit` di Rust, che non conosce `aspect`); il corpo senza padding solo per immagine e PDF (le altre aspettano T22); niente `overflow:hidden` sul corpo (la scheda attiva scorre); il CSS della scheda PDF (pagina intera con `--page-ratio`, frecce, stato) in `structure.css`; toccati anche `ink-paint.ts` e `ink-erase.ts`; i tratti di N4 già scritti sulle immagini si spostano un poco (il titolo non è più dentro); il titolo (30 px) entra di ~6 px nella scheda sopra con 24 px di spazio, come nel prototipo; nel tema scuro «1 / 1» del PDF si legge poco (T22). Il nucleo non conosce `aspect`: T98
 
 ## T40 · La porta per scrivere dentro le schede
 
@@ -5563,6 +5563,39 @@ Fatto quando:
   e `compact.ts`; i test di T42 restano verdi.
 Prova: scripts/check.sh --rapido
 Stato: [ ] da fare · aspetta il porto di `grid/engine.ts` del piano griglia (`piano/griglia-celle`, non ancora in `main`)
+
+## T98 · Il nucleo e la proporzione del contenuto
+
+Perché: dopo T39 il client porta l'inchiostro di una scheda d'immagine o PDF
+sul riquadro del contenuto (`inkFit` con `aspect`), ma `move_strokes` e
+`restyle_strokes` del nucleo (`ink_fit` di `ops.rs`) usano la regola senza
+`aspect`: col Lazo, un tratto su una scheda ridimensionata con un'altra
+proporzione si sposta di un tanto sbagliato, e lo spessore cambia di un
+fattore sbagliato. Trovato dall'orchestratore nel report di T39.
+Tocca: `crates/fub-canvas-core/src/ops.rs` (l'operazione porta la
+proporzione del contenuto, quando il client la sa), i vettori
+`apps/client/src/__fixtures__/canvas-ink-fit-aspect/` provati anche in Rust,
+`apps/client/src/editors/canvas/operation.ts` e `engine.ts` (chi compila
+`move_strokes` e `restyle_strokes` passa `contentAspect()`),
+`crates/fub-canvas-wasm` se la forma dell'operazione lo chiede,
+`docs/reference/canvas-ink.md`.
+Non toccare: la regola senza `aspect` (resta identica: i vettori di N4
+passano); il formato su disco (`aspect` non si scrive nel file).
+Dipende da: T39
+Cosa fare:
+- `move_strokes` e `restyle_strokes` accettano una proporzione del
+  contenuto facoltativa; senza, la regola di oggi. Il campo è in più: chi
+  non lo manda ha il comportamento di prima.
+- Rust prova gli stessi vettori di `canvas-ink-fit-aspect/` del client.
+Casi limite: proporzione assente o non valida (la regola di oggi); un
+tratto di pagina (`page`: resta rifiutato come in T19); la scheda di misura
+zero.
+Fatto quando: un test del motore sposta col Lazo un tratto su una scheda
+d'immagine ridimensionata con un'altra proporzione e il tratto arriva dove
+dice il puntatore; i vettori con `aspect` passano in Rust e in Vitest.
+Prova: scripts/check.sh --rapido; cargo test -p fub-canvas-core; cd
+apps/client && npx vitest run src/editors/canvas
+Stato: [ ] da fare
 
 ## Non verificato stanotte
 
