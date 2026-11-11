@@ -4716,7 +4716,7 @@ camera, scelta e fuoco sono gli stessi; le foto del banco somigliano al
 prototipo.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/canvas
-Stato: [~] in corso · coder Opus · base eba292fa5
+Stato: [x] fatto · bdc6c9b58 (merge 4b6d319a5) · differenze: Spazio su un pulsante del lettore fa il clic (come Invio, per il banco a11y), fuori dai pulsanti chiude; la nota intera viene da `show(path, null)`, divisa in sezioni abbinando i titoli resi al sommario; il tocco accetta 3 px di tremolio (`READER_TAP_SLOP`) e mai con un tasto del mouse premuto; niente tocco su una scheda «File mancante»; la sezione aggiunta va al suo posto (commit con `#putParts` di T74); niente animazione (lo scorrimento è subito); in più del prototipo: profondità 3 rientrata, link, codice ed elenchi come `.canvas-markdown`; le regole in `canvas-parts.md` («Il lettore») e `canvas-view.md`. Rischi: le sezioni si dividono sui titoli figli diretti di uno stesso contenitore della resa di `renderEmbed`; il banco non risponde alla domanda outline (senza titoli a lato)
 
 ## T77 · Le fonti di questa lavagna
 
@@ -5218,7 +5218,7 @@ Fatto quando: `ink-shapes.test.ts` prova le sei forme e il tratto che non
 Maiusc a 15° e la penna lungo il righello; il file ha solo tratti `fub:ink`.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/canvas
-Stato: [ ] da fare
+Stato: [~] in corso · coder Opus · base 4b6d319a5
 
 ## T88 · La scheda CSV
 
