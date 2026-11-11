@@ -54,9 +54,9 @@ volta. Lo decide la tela (`engine.ts`); il renderer risponde con `enter`,
   file si apre come «Apri» del menu della scheda (T17), anche in sola lettura.
   Mentre carica («Apro…») il gesto non fa niente finché la resa non arriva. Il
   doppio clic su un pulsante della scheda («Ritrova…», «Apri») fa solo ciò che
-  fa il suo clic. La tela legge questo stato dal segnaposto di un file mancante e da
-  `data-card-state` della radice della vista (nota, immagine, foglio). Un PDF
-  non lo dice ancora: il suo campo si apre anche quando non si legge. Una
+  fa il suo clic. La tela legge lo stato dal segnaposto di un file mancante e da
+  `data-card-state` della radice della vista (vedi
+  [Che cosa mostra la scheda](canvas-cards.md#che-cosa-mostra-la-scheda)). Una
   scheda che si mostra apre il campo come prima.
 - **Dentro.** I clic arrivano al contenuto (i link si seguono con un clic),
   la rotella sopra il corpo lo scorre (Ctrl+rotella e il pizzico ingrandiscono

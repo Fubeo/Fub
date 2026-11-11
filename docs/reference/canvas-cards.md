@@ -194,6 +194,22 @@ breve:
 Ascolti, osservatori e timer di un renderer passano dalla `Lifetime` del
 contesto, come vuole `check-listeners.mjs`.
 
+### Che cosa mostra la scheda
+
+La radice della vista dice in `data-card-state` che cosa mostra, e la tela lo
+legge per Invio e il doppio clic su una scheda di file (T93). Lo scrivono nota,
+documento, foglio, immagine e PDF:
+
+- `loading`: carica («Apro…»). Il gesto non fa niente.
+- `content`: mostra il contenuto. Il gesto entra, o apre il campo se non entra.
+- `unreadable`, o `unavailable` per il foglio, o `too-large` per l'immagine: il
+  file c'è ma non si mostra. Il gesto apre il file, come «Apri».
+- `missing`: il file manca. La tela lo sa da `missing()`, e il gesto è «Ritrova…».
+- `placeholder`: niente da mostrare, per una scheda ferma senza immagine.
+
+Una vista che non scrive `data-card-state`, o un valore che non sta in questa
+lista, ricade sul campo del percorso, come prima.
+
 ### Un renderer non scrive mai il file
 
 Un renderer legge e basta. Nessun renderer scrive nel file della sua scheda,
