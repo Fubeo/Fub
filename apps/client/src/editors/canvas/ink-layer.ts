@@ -16,8 +16,10 @@
 //   in modifica, che resta com'è. Il `click` e il `dblclick` fatti col
 //   puntatore dopo un tratto, fino al `pointerdown` seguente, si fermano allo
 //   stesso modo: il doppio tocco della penna non crea una scheda. Il dito è
-//   `navigate` e il mouse `ignore`, finché la lavagna non lo fa scrivere
-//   (`setMouse("ink")`): i loro eventi arrivano alla lavagna.
+//   `navigate` finché la lavagna non lo fa scrivere (`fingerWrites`, letto a
+//   ogni appoggio: allora un dito scrive e il secondo dito annulla il tratto
+//   del primo e sposta), e il mouse `ignore` finché la lavagna non lo fa
+//   scrivere (`setMouse("ink")`): i loro eventi arrivano alla lavagna.
 // - **Il tasto laterale.** Cancella come il retro della penna, finché la
 //   lavagna non lo vuole per sé (`barrelErases` falso, T63): allora il suo
 //   tratto non scrive né cancella, tiene solo il silenzio della penna, e
@@ -82,6 +84,10 @@ export interface InkLayerOptions {
   /// La penna si è appoggiata col tasto laterale che non cancella: l'evento
   /// dell'appoggio, già fermato per la lavagna.
   readonly onBarrel?: (event: PointerEvent) => void;
+  /// Un dito scrive con la penna scelta (`canvas.finger_writes`, T64), finché
+  /// una penna non è vicina e un secondo dito non arriva. Si legge a ogni
+  /// appoggio, prima della sessione; assente o falso, il dito sposta.
+  readonly fingerWrites?: () => boolean;
   readonly quiet: PenQuiet;
   /// Un tratto della punta è finito: la scia resta finché non si chiama
   /// `settle(id)`. Un tratto spezzato al limite dei campioni arriva a pezzi,
@@ -193,6 +199,7 @@ export function mountInkLayer(options: InkLayerOptions, owner: Lifetime): InkLay
   // Prima dell'adattatore, che all'appoggio può già cominciare il tratto.
   life.listen(viewport, "pointerdown", () => {
     barrelErases = options.barrelErases?.() ?? true;
+    input.setTouchPolicy(options.fingerWrites?.() ? "ink" : "navigate");
   }, { capture: true });
 
   const input: InkInput = attachInkInput(viewport, {

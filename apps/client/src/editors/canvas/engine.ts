@@ -75,7 +75,7 @@ import {
   type CanvasTip,
   type CanvasToolId,
 } from "./chrome/commands";
-import { CANVAS_INK_TOOLS, CANVAS_WRITING_TOOLS, createCanvasRail, type CanvasRail } from "./chrome/rail";
+import { CANVAS_INK_TOOLS, CANVAS_WRITING_TOOLS, createCanvasRail, saveFingerWrites, type CanvasRail } from "./chrome/rail";
 import { openCanvasRadial, rememberRecent } from "./chrome/radial";
 import type { Radial, RadialPointer } from "../spatial/tools/radial";
 import { createCanvasEmpty, isEmptyBoard, transferOf, type CanvasEmpty } from "./chrome/empty";
@@ -1518,6 +1518,16 @@ export class CanvasEngine {
   #pinch: { a: number; b: number; a0: TouchPoint; b0: TouchPoint; start: TouchCamera } | null = null;
   /** «Il dito sposta le schede» dalle Impostazioni, quando non lo passano le opzioni. */
   #fingerMovesCardSetting = false;
+  /** «Il dito scrive» (`canvas.finger_writes`, T64): dalle Impostazioni, o dall'interruttore della colonna. */
+  #fingerWritesSetting = currentPreferences().fingerWrites;
+  /**
+   * Ogni dito giù sulla vista, visto prima dello strato della penna: dove e
+   * quando si è posato, dov'è adesso, e se lo strato l'ha preso per scrivere
+   * (`swallowed`: il suo `pointerdown` non è arrivato alla lavagna).
+   */
+  readonly #touches = new Map<number, { readonly startX: number; readonly startY: number; readonly at: number; x: number; y: number; swallowed: boolean }>();
+  /** Le dita che scrivevano, prese dal dito appena posato (`#touchDown`): `#gestureDown` le conta nel tocco. */
+  #adopted: number[] = [];
   // --- il menu radiale e i gesti (T63) ---
   /** «Il tasto della penna» dalle Impostazioni (`canvas.pen_button`): vale dall'appoggio dopo. */
   #penButtonSetting: PenButtonAction = DEFAULT_PREFERENCES.penButton;
@@ -1744,6 +1754,8 @@ export class CanvasEngine {
     if (!options.fingerMovesCard) {
       this.#life.add(watchPreferences((preferences) => {
         this.#fingerMovesCardSetting = preferences.fingerMovesCard;
+        // Il suggerimento di «Il dito scrive» dice se questa vale.
+        this.#rail.sync();
       }));
     }
     // La rotella segue «La rotella del mouse» a ogni cambio: vale dallo scatto
@@ -1755,8 +1767,10 @@ export class CanvasEngine {
       this.#partsPickerSetting = preferences.partsPicker;
       this.#gridSetting = preferences.grid;
       this.#snapSetting = preferences.snap;
+      this.#fingerWritesSetting = preferences.fingerWrites;
       this.#paintGrid();
       this.#rail.setToolbar(preferences.toolbar);
+      this.#rail.sync();
       // Lo spazio di lavoro (T65): `auto` sceglie col dispositivo.
       (this.#workspace as CanvasWorkspaceControl | undefined)?.setMode(preferences.workspace);
       this.#dropChoice = { dropFolder: preferences.dropFolder, dropFolderPath: preferences.dropFolderPath };
@@ -1835,6 +1849,9 @@ export class CanvasEngine {
       toolbar: currentPreferences().toolbar,
       workspace: this.#workspace.workspace,
       onFull: () => this.#workspace.chooseFull(),
+      fingerWrites: () => this.#fingerWritesSetting,
+      fingerMovesCard: () => this.#fingerMovesCard(),
+      onFingerWrites: (on) => this.#setFingerWrites(on),
       lifetime: this.#life,
     });
     // La lavagna vuota (T62) è un fratello della vista, non un suo figlio: i
@@ -1979,8 +1996,25 @@ export class CanvasEngine {
       this.#workspace.setBare(!this.#workspace.bare);
     });
     const signal = this.#abort.signal;
+    // Le dita giù, prima dello strato della penna (T64): in cattura e prima di
+    // lui, che si monta dopo. Un dito che lo strato prende per scrivere non
+    // arriva qui sotto, e resta `swallowed`.
+    this.#viewport.addEventListener("pointerdown", (event) => {
+      if (event.pointerType !== "touch") return;
+      const { clientX: x, clientY: y } = event;
+      this.#touches.set(event.pointerId, { startX: x, startY: y, at: event.timeStamp, x, y, swallowed: true });
+    }, { capture: true, signal });
+    this.#viewport.addEventListener("pointermove", (event) => {
+      const touch = event.pointerType === "touch" ? this.#touches.get(event.pointerId) : undefined;
+      if (touch) {
+        touch.x = event.clientX;
+        touch.y = event.clientY;
+      }
+    }, { capture: true, signal });
     // Un gesto che comincia toglie la barra della selezione: torna a fine gesto.
     this.#viewport.addEventListener("pointerdown", (event) => {
+      const touch = event.pointerType === "touch" ? this.#touches.get(event.pointerId) : undefined;
+      if (touch) touch.swallowed = false;
       this.#selectionBar.hide();
       this.#downByTouch = event.pointerType === "touch";
       this.#pointerDown(event);
@@ -2932,6 +2966,8 @@ export class CanvasEngine {
       },
       // Lo strumento Gomma: la punta e il mouse che scrive cancellano (A21).
       tipErases: () => this.#penChoice.tool === "eraser",
+      // «Il dito scrive» (T64): letto a ogni appoggio.
+      fingerWrites: () => this.#fingerWritesSetting,
       quiet: this.#quiet,
       mouse: this.#inkMouseOn ? "ink" : "ignore",
       onStroke: (stroke) => this.#inkStroke(stroke),
@@ -7438,9 +7474,14 @@ export class CanvasEngine {
    * mouse; in sola lettura le maniglie spostano la lavagna. Il secondo dito
    * comincia il pizzico, salvo durante un gesto su una scheda, che tiene il
    * dito suo. Con una penna giù il dito non fa niente, e il palmo nemmeno.
+   *
+   * Con «Il dito scrive» (T64) il primo dito scrive e qui non arriva: lo
+   * prende lo strato della penna. Il secondo dito annulla il suo tratto (lo
+   * fa la sessione della penna) e lo prende con sé: i due pizzicano.
    */
   #touchDown(event: PointerEvent): void {
     if (this.#penDown || this.#palm(event.pointerId) || this.#drag || this.#resize || this.#connect || this.#pinch) return;
+    this.#adopted = this.#adoptWritingFingers(event.pointerId);
     this.#fingers.set(event.pointerId, { x: event.clientX, y: event.clientY });
     if (this.#fingers.size >= 2) {
       this.#beginPinch();
@@ -7463,6 +7504,40 @@ export class CanvasEngine {
     }
     this.#tap = { pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, at: event.timeStamp, target, shift: event.shiftKey };
     this.#beginPan(event.pointerId, event.clientX, event.clientY);
+  }
+
+  /**
+   * Le dita che scrivevano (T64) e che la sessione della penna ha appena
+   * fatto diventare navigazione, perché si è posato il dito `except`: da qui
+   * la lavagna le segue come le sue, dal punto dove sono adesso. Un dito che
+   * la lavagna non ha preso per altre ragioni (posato durante uno
+   * spostamento, il palmo) non era dello strato e resta fuori.
+   */
+  #adoptWritingFingers(except: number): number[] {
+    const adopted: number[] = [];
+    for (const [id, touch] of this.#touches) {
+      if (id === except || !touch.swallowed || this.#fingers.has(id)) continue;
+      if (this.#inkLayer?.roleOf(id) !== "navigate") continue;
+      touch.swallowed = false;
+      this.#fingers.set(id, { x: touch.x, y: touch.y });
+      adopted.push(id);
+    }
+    return adopted;
+  }
+
+  /** «Il dito scrive» dall'interruttore della colonna: vale subito, e si scrive nelle Impostazioni di questo computer. */
+  #setFingerWrites(on: boolean): void {
+    if (this.#destroyed || on === this.#fingerWritesSetting) return;
+    const before = this.#fingerWritesSetting;
+    this.#fingerWritesSetting = on;
+    this.#rail.sync();
+    // Una scrittura che non riesce lascia il valore di prima, se nel frattempo
+    // nessuno l'ha cambiato.
+    saveFingerWrites(on, () => {
+      if (this.#destroyed || this.#fingerWritesSetting !== on) return;
+      this.#fingerWritesSetting = before;
+      this.#rail.sync();
+    });
   }
 
   /**
@@ -7644,6 +7719,7 @@ export class CanvasEngine {
    * chiude il suo tocco, che non è più un tocco.
    */
   #pointerEnded(event: PointerEvent): void {
+    if (event.pointerType === "touch") this.#touches.delete(event.pointerId);
     if (event.pointerId === this.#menuHeld) {
       this.#menuHeld = null;
       this.#menuEchoUntil = performance.now() + MENU_ECHO_MS;
@@ -7661,7 +7737,19 @@ export class CanvasEngine {
   #gestureDown(event: PointerEvent): void {
     const point = { x: event.clientX, y: event.clientY };
     const target = event.target instanceof Element ? event.target : null;
-    const taps = this.#fingerTap ??= { down: new Map(), first: point, most: 0, start: event.timeStamp, spoiled: false, target };
+    // Le dita che scrivevano, prese da questo (T64), sono nel tocco dal loro
+    // appoggio: un dito che ha già scritto più in là non fa un tocco.
+    const adopted = this.#adopted.flatMap((id) => {
+      const touch = this.#touches.get(id);
+      return touch ? [[id, touch] as const] : [];
+    });
+    this.#adopted = [];
+    const start = Math.min(event.timeStamp, ...adopted.map(([, touch]) => touch.at));
+    const taps = this.#fingerTap ??= { down: new Map(), first: point, most: 0, start, spoiled: false, target };
+    for (const [id, touch] of adopted) {
+      taps.down.set(id, { x: touch.startX, y: touch.startY });
+      if (Math.hypot(touch.x - touch.startX, touch.y - touch.startY) > TAP_SLOP_PX) taps.spoiled = true;
+    }
     taps.down.set(event.pointerId, point);
     taps.most = Math.max(taps.most, taps.down.size);
     if (this.#penDown || this.#palm(event.pointerId)) taps.spoiled = true;

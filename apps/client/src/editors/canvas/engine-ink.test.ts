@@ -3,6 +3,7 @@
 // passo d'annulla, segue la scheda, e il ridisegno aspetta la penna. La gomma
 // (T13, T22) toglie i tratti interi o ne taglia il pezzo, in un passo.
 // L'interruttore «Scrivi col mouse» (T16) si ricorda nello stato di vista.
+// Con «Il dito scrive» (T64) un dito scrive e due dita spostano.
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { t } from "../../i18n/strings";
 import { parseInkBrush, penOf } from "../../ink/brush";
@@ -22,14 +23,23 @@ vi.mock("../../ink/sample", async (importOriginal) => ({
 }));
 
 // Questo computer, finto: «Ricorda se scrivi col mouse» e gli stati di vista,
-// dietro le vere `readInkMouse` e `saveInkMouse` di `preferences.ts`.
-const machine = vi.hoisted(() => ({ remember: false, views: new Map<string, unknown>() }));
+// dietro le vere `readInkMouse` e `saveInkMouse` di `preferences.ts`. Anche
+// «Il dito scrive», «Il dito sposta le schede» e lo spazio di lavoro (T64),
+// con le scritture delle Impostazioni (`saved`; `refuse` le fa fallire).
+const machine = vi.hoisted(() => ({
+  remember: false,
+  views: new Map<string, unknown>(),
+  fingerWrites: false,
+  fingerMovesCard: false,
+  workspace: "auto",
+  saved: [] as [string, unknown][],
+  refuse: false,
+}));
 
-vi.mock("../../host/query", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("../../host/query")>()),
-  settings: async () => [{
+vi.mock("../../host/query", async (importOriginal) => {
+  const entry = (key: string, value: unknown) => ({
     spec: {
-      key: "canvas.ink_mouse_remember",
+      key,
       label: "",
       description: "",
       group: "Lavagna",
@@ -37,10 +47,19 @@ vi.mock("../../host/query", async (importOriginal) => ({
       kind: { kind: "toggle", default: false },
       program_writable: false,
     },
-    value: machine.remember,
+    value,
     source: "machine",
-  }],
-}));
+  });
+  return {
+    ...(await importOriginal<typeof import("../../host/query")>()),
+    settings: async () => [
+      entry("canvas.ink_mouse_remember", machine.remember),
+      entry("canvas.finger_writes", machine.fingerWrites),
+      entry("canvas.finger_moves_card", machine.fingerMovesCard),
+      entry("canvas.workspace", machine.workspace),
+    ],
+  };
+});
 
 vi.mock("../../host/ipc", async (importOriginal) => {
   const original = await importOriginal<typeof import("../../host/ipc")>();
@@ -51,6 +70,10 @@ vi.mock("../../host/ipc", async (importOriginal) => {
       viewState: async (key: string) => machine.views.get(key) ?? null,
       setViewState: async (key: string, value: unknown) => {
         machine.views.set(key, value);
+      },
+      setSetting: async (key: string, value: unknown) => {
+        if (machine.refuse) throw new Error("disco pieno");
+        machine.saved.push([key, value]);
       },
     },
   };
@@ -68,6 +91,11 @@ afterEach(() => {
   refuseCommits = false;
   machine.remember = false;
   machine.views.clear();
+  machine.fingerWrites = false;
+  machine.fingerMovesCard = false;
+  machine.workspace = "auto";
+  machine.saved = [];
+  machine.refuse = false;
 });
 
 type Init = PointerEventInit & { readonly timeStamp?: number };
@@ -1550,5 +1578,167 @@ describe("il lazo sceglie e sposta l'inchiostro (T86)", () => {
     expect(calls.filter((name) => name === "commit")).toHaveLength(1);
     expect(calls.filter((name) => name === "compile")).toHaveLength(1);
     expect(strokesOf(lastChange(changes).text, null)).toHaveLength(2000);
+  });
+});
+
+describe("il dito scrive (T64)", () => {
+  const TOUCH = { pointerType: "touch", isPrimary: false, width: 10, height: 10 } as const;
+  const fingerButton = (host: HTMLElement) => host.querySelector<HTMLButtonElement>(".canvas-rail > .canvas-rail-finger")!;
+  const wetPaths = (host: HTMLElement) => host.querySelectorAll(".canvas-ink-wet path").length;
+  /** Il suggerimento di `button`, come lo legge il lettore di schermo col fuoco. */
+  const hint = (button: HTMLElement): string | null => {
+    button.focus();
+    const id = button.getAttribute("aria-describedby");
+    return id === null ? null : document.getElementById(id)?.textContent ?? null;
+  };
+
+  /** Il punto del client sopra il punto `(x, y)` della lavagna, con la camera di adesso. */
+  function client(host: HTMLElement, [x, y]: readonly [number, number]): { clientX: number; clientY: number } {
+    const cam = camera(host);
+    return { clientX: x * cam.zoom + cam.x, clientY: y * cam.zoom + cam.y };
+  }
+
+  /** Un dito finto giù su `target` nel punto `world` della lavagna; si muove e si alza in punti del client. */
+  function finger(host: HTMLElement, pointerId: number, target: Element, world: readonly [number, number]) {
+    const base = { ...TOUCH, pointerId };
+    target.dispatchEvent(pointerEvent("pointerdown", { ...base, ...client(host, world), button: 0, buttons: 1, pressure: 0.5, timeStamp: clock }));
+    return {
+      move(at: { clientX: number; clientY: number }, ms = 8) {
+        clock += ms;
+        target.dispatchEvent(pointerEvent("pointermove", { ...base, ...at, button: -1, buttons: 1, pressure: 0.5, timeStamp: clock }));
+      },
+      up(at: { clientX: number; clientY: number }) {
+        clock += 8;
+        target.dispatchEvent(pointerEvent("pointerup", { ...base, ...at, button: 0, buttons: 0, pressure: 0, timeStamp: clock }));
+      },
+    };
+  }
+
+  /** Un tratto del dito per i punti `world`: giù, i movimenti e su. */
+  function fingerStroke(host: HTMLElement, target: Element, world: readonly (readonly [number, number])[]): void {
+    const points = world.map((point) => client(host, point));
+    const one = finger(host, 11, target, world[0]!);
+    for (const point of points.slice(1)) one.move(point);
+    one.up(points[points.length - 1]!);
+  }
+
+  async function mountedWith(settings: { fingerWrites?: boolean; fingerMovesCard?: boolean; workspace?: string } = {}) {
+    machine.fingerWrites = settings.fingerWrites ?? false;
+    machine.fingerMovesCard = settings.fingerMovesCard ?? false;
+    machine.workspace = settings.workspace ?? "auto";
+    const board = mounted();
+    await settle();
+    return board;
+  }
+
+  it("spento, il dito sposta la lavagna come oggi e non scrive", async () => {
+    const { host, changes } = await mountedWith();
+    const before = camera(host);
+    fingerStroke(host, viewportOf(host), [[100, 300], [140, 320], [180, 330]]);
+    expect(inkChanges(changes)).toEqual([]);
+    const after = camera(host);
+    expect(after.x).toBeCloseTo(before.x + 80 * before.zoom);
+    expect(after.y).toBeCloseTo(before.y + 30 * before.zoom);
+    expect(fingerButton(host).getAttribute("aria-pressed")).toBe("false");
+  });
+
+  it("acceso, un dito scrive con la penna scelta, e la lavagna resta ferma", async () => {
+    const { host, changes } = await mountedWith({ fingerWrites: true });
+    const before = camera(host);
+    fingerStroke(host, viewportOf(host), [[100, 300], [140, 320], [180, 330]]);
+    expect(changes).toHaveLength(1);
+    const [stroke] = strokesOf(changes[0]!.text, null);
+    expect(stroke).toMatchObject({ tool: "pen", color: "#0072b2" });
+    expect(camera(host)).toEqual(before);
+    expect(wetPaths(host)).toBe(0);
+    expect(fingerButton(host).getAttribute("aria-pressed")).toBe("true");
+  });
+
+  it("acceso, «Il dito sposta le schede» non vale: il dito sopra una scheda ci scrive, e il suggerimento lo dice", async () => {
+    const { host, changes, engine } = await mountedWith({ fingerWrites: true, fingerMovesCard: true });
+    fingerStroke(host, card(host, "t"), across(0, 0));
+    expect(changes).toHaveLength(1);
+    expect(strokesOf(changes[0]!.text, "t")).toHaveLength(1);
+    const doc = JSON.parse(engine.getDoc()) as { nodes: { id: string; x: number; y: number }[] };
+    expect(doc.nodes[0]).toMatchObject({ id: "t", x: 0, y: 0 });
+    expect(hint(fingerButton(host))).toBe(t("canvas.finger.hint_cards"));
+  });
+
+  it("due dita che arrivano a 30 ms una dall'altra pizzicano, e il primo segno si toglie", async () => {
+    const { host, changes } = await mountedWith({ fingerWrites: true });
+    const viewport = viewportOf(host);
+    const before = camera(host);
+    const one = finger(host, 11, viewport, [100, 300]);
+    const a = client(host, [110, 300]);
+    one.move(a, 15);
+    // La scia del primo dito c'è: il dito scrive.
+    expect(wetPaths(host)).toBe(1);
+    clock += 15;
+    const two = finger(host, 12, viewport, [200, 300]);
+    expect(wetPaths(host)).toBe(0);
+    // Le due dita si allontanano: la distanza raddoppia, e la vista con lei.
+    const b = client(host, [200, 300]);
+    const middle = (a.clientX + b.clientX) / 2;
+    const half = (b.clientX - a.clientX) / 2;
+    one.move({ clientX: middle - half * 2, clientY: a.clientY });
+    two.move({ clientX: middle + half * 2, clientY: b.clientY });
+    expect(camera(host).zoom).toBeCloseTo(Math.min(4, before.zoom * 2));
+    one.up({ clientX: middle - half * 2, clientY: a.clientY });
+    two.up({ clientX: middle + half * 2, clientY: b.clientY });
+    expect(inkChanges(changes)).toEqual([]);
+    expect(wetPaths(host)).toBe(0);
+  });
+
+  it("una penna vera mentre il dito scrive: scrive la penna, il tratto del dito si toglie", async () => {
+    const { host, changes } = await mountedWith({ fingerWrites: true });
+    const viewport = viewportOf(host);
+    const one = finger(host, 11, viewport, [100, 300]);
+    one.move(client(host, [140, 320]));
+    pen(host, viewport, [[300, 400], [340, 420], [380, 430]]);
+    one.move(client(host, [180, 330]));
+    one.up(client(host, [180, 330]));
+    expect(changes).toHaveLength(1);
+    expect(strokesOf(changes[0]!.text, null)).toHaveLength(1);
+    expect(wetPaths(host)).toBe(0);
+  });
+
+  it("l'interruttore in fondo alla colonna cambia l'impostazione di questo computer, e vale dal tocco dopo", async () => {
+    const { host, changes } = await mountedWith();
+    const button = fingerButton(host);
+    expect(button.getAttribute("aria-label")).toBe(t("canvas.finger"));
+    expect(hint(button)).toBe(t("canvas.finger.hint"));
+    button.click();
+    expect(button.getAttribute("aria-pressed")).toBe("true");
+    await settle();
+    expect(machine.saved).toEqual([["canvas.finger_writes", true]]);
+    fingerStroke(host, viewportOf(host), [[100, 300], [140, 320], [180, 330]]);
+    expect(inkChanges(changes)).toHaveLength(1);
+
+    button.click();
+    expect(button.getAttribute("aria-pressed")).toBe("false");
+    await settle();
+    expect(machine.saved).toEqual([["canvas.finger_writes", true], ["canvas.finger_writes", false]]);
+    fingerStroke(host, viewportOf(host), [[100, 400], [140, 420], [180, 430]]);
+    expect(inkChanges(changes)).toHaveLength(1);
+  });
+
+  it("una scrittura che non riesce rimette l'interruttore com'era", async () => {
+    const { host } = await mountedWith();
+    machine.refuse = true;
+    const button = fingerButton(host);
+    button.click();
+    expect(button.getAttribute("aria-pressed")).toBe("true");
+    await settle();
+    expect(button.getAttribute("aria-pressed")).toBe("false");
+    expect(machine.saved).toEqual([]);
+  });
+
+  it("nello spazio Semplice l'interruttore c'è, subito sopra «Completo»", async () => {
+    const { host } = await mountedWith({ workspace: "simple" });
+    const button = fingerButton(host);
+    const full = host.querySelector<HTMLElement>(".canvas-rail > .canvas-rail-full")!;
+    expect(full.hidden).toBe(false);
+    expect(button.hidden).toBe(false);
+    expect(button.nextElementSibling).toBe(full);
   });
 });

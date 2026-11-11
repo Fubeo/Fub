@@ -8,6 +8,7 @@
   "canvas-connect",
   "canvas-find-next",
   "canvas-find-previous",
+  "canvas-finger",
   "canvas-lasso",
   "canvas-text",
   "caret-down",

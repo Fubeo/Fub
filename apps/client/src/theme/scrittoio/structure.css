@@ -3126,9 +3126,18 @@ body {
   border-inline-end-width: 0;
   border-block-start-width: 1px;
 }
-/* «Completo» in fondo alla colonna, nello spazio Semplice (T65; come
-   .draw-rail-full). Stretta, in fondo alla riga: subito dopo le caselle va
-   al capo, dopo «Il dito scrive» gli sta accanto. */
+/* «Il dito scrive» in fondo alla colonna (T64), in tutti e due gli spazi;
+   «Completo», nello spazio Semplice (T65; come .draw-rail-full), gli sta
+   sotto. Stretta, tutti e due in fondo alla riga, uno accanto all'altro;
+   «Completo» subito dopo le caselle va al capo da solo. */
+.canvas-rail-finger {
+  flex: none;
+  margin-block-start: auto;
+}
+.canvas-surface[data-narrow] .canvas-rail-finger {
+  margin-block-start: 0;
+  margin-inline-start: auto;
+}
 .canvas-rail-full {
   flex: none;
   min-height: 44px;

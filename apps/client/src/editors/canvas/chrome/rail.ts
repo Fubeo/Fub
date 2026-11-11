@@ -13,14 +13,25 @@
 // con caselle da 44 px (`data-size="large"` del kit) e «Completo» in fondo.
 // La colonna scelta in `canvas.toolbar` vale solo nello spazio Completo.
 //
+// In fondo alla colonna, in tutti e due gli spazi, l'interruttore «Il dito
+// scrive» (T64): cambia `canvas.finger_writes`, che è di questo computer
+// (`saveFingerWrites`). Acceso, un dito scrive con la penna scelta e due dita
+// spostano; il suo suggerimento dice quando «Il dito sposta le schede» non vale
+// più.
+//
 // In sola lettura gli strumenti che scrivono (penna, evidenziatore, gomma,
 // testo, collega) si vedono spenti col perché nel nome e nel suggerimento;
 // Selezione, Lazo e Mano restano: il lazo sceglie anche lì, non sposta.
 
+import { errorText } from "../../../host/errors";
+import { api } from "../../../host/ipc";
 import { textButton } from "../../../kit";
 import { createToolRail, type RailGroup, type RailTool, type ToolRail } from "../../../kit/tool-rail";
 import { t } from "../../../i18n/strings";
+import { FINGER_WRITES_KEY } from "../../../rules/canvas-settings";
+import { iconEl } from "../../../ui/icons";
 import type { Lifetime } from "../../../ui/lifetime";
+import { notify } from "../../../ui/notify";
 import { setTooltip } from "../../../ui/tooltip";
 import { CANVAS_TOOL_IDS, CANVAS_TOOL_KEYS, displayCanvasKey, type CanvasToolId } from "./commands";
 import { ensureCanvasIcons } from "./icons";
@@ -109,14 +120,33 @@ export interface CanvasRailOptions {
   readonly workspace?: CanvasWorkspace;
   /// «Completo» in fondo alla colonna, nello spazio Semplice.
   readonly onFull?: () => void;
+  /// «Il dito scrive» adesso (T64); assente, spento.
+  readonly fingerWrites?: () => boolean;
+  /// «Il dito sposta le schede» adesso: con «Il dito scrive» il suggerimento
+  /// dice che non vale.
+  readonly fingerMovesCard?: () => boolean;
+  /// L'interruttore «Il dito scrive» premuto: il valore nuovo.
+  readonly onFingerWrites?: (on: boolean) => void;
   readonly lifetime: Lifetime;
+}
+
+/// Scrive `on` in `canvas.finger_writes`: lo leggono le altre lavagne e le
+/// altre finestre. Una scrittura che non riesce lo dice e chiama `failed`, che
+/// rimette il valore di prima.
+export function saveFingerWrites(on: boolean, failed: () => void): void {
+  void Promise.resolve()
+    .then(() => api.setSetting(FINGER_WRITES_KEY, on))
+    .catch((error: unknown) => {
+      failed();
+      notify(t("canvas.finger.save_failed", { reason: errorText(error) }), "guasto");
+    });
 }
 
 export interface CanvasRail {
   /// La colonna intera, `.canvas-rail`, con la colonna del kit dentro.
   readonly element: HTMLElement;
   readonly rail: ToolRail;
-  /// Mostra lo strumento scelto e la sola lettura di adesso.
+  /// Mostra lo strumento scelto, la sola lettura e «Il dito scrive» di adesso.
   sync(): void;
   /// Un'altra colonna scelta, dal vivo.
   setToolbar(toolbar: readonly string[]): void;
@@ -177,6 +207,24 @@ export function createCanvasRail(options: CanvasRailOptions): CanvasRail {
   const element = document.createElement("div");
   element.className = "canvas-rail";
   element.append(rail.element);
+  // «Il dito scrive» in fondo alla colonna, prima di «Completo» (T64).
+  const finger = document.createElement("button");
+  finger.type = "button";
+  finger.className = "canvas-button canvas-rail-finger";
+  const fingerIcon = iconEl("canvas-finger");
+  if (fingerIcon) {
+    fingerIcon.setAttribute("aria-hidden", "true");
+    finger.append(fingerIcon);
+  }
+  lifetime.listen(finger, "click", () => options.onFingerWrites?.(!(options.fingerWrites?.() ?? false)));
+  element.append(finger);
+  const paintFinger = (): void => {
+    const on = options.fingerWrites?.() ?? false;
+    finger.setAttribute("aria-pressed", String(on));
+    finger.setAttribute("aria-label", t("canvas.finger"));
+    const cards = on && (options.fingerMovesCard?.() ?? false);
+    setTooltip(finger, t(cards ? "canvas.finger.hint_cards" : "canvas.finger.hint"));
+  };
   // «Completo» in fondo alla colonna: si vede solo nello spazio Semplice.
   const full = textButton({ label: t("canvas.workspace.full"), onPress: () => options.onFull?.(), lifetime });
   full.classList.add("canvas-rail-full");
@@ -210,6 +258,7 @@ export function createCanvasRail(options: CanvasRailOptions): CanvasRail {
   const sync = (): void => {
     rail.setActive(options.tool());
     paintReadOnly();
+    paintFinger();
   };
   const rebuild = (): void => {
     rail.setGroups(groups());

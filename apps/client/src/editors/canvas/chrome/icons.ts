@@ -26,6 +26,12 @@ const CANVAS_ICONS: Readonly<Record<string, readonly string[]>> = {
     "M7.5 13.2c-.9 1-1.3 2-1 3 .4 1.6 2.4 2.1 3.7 1.2",
     "M10.2 17.4 9 20.5",
   ],
+  // Il dito scrive (T64): la mano con l'indice teso, la figura del prototipo.
+  "canvas-finger": [
+    "M9 11V5.5a1.5 1.5 0 0 1 3 0V11",
+    "M12 10.5V9a1.5 1.5 0 0 1 3 0v2",
+    "M15 10.5a1.5 1.5 0 0 1 3 0V14a6 6 0 0 1-6 6h-.6a5 5 0 0 1-3.9-1.9L5 15.2a1.5 1.5 0 0 1 2.3-1.9L9 15",
+  ],
   // Cerca nella lavagna (T60): il risultato precedente e il seguente, le
   // frecce del prototipo.
   "canvas-find-previous": ["M19 12H5", "M11 6l-6 6 6 6"],
