@@ -5460,7 +5460,7 @@ campo rotto e i limiti; `engine.test.ts` prova copia e incolla di schede
 e tratti liberi in un'altra lavagna, solo tratti, taglia e un solo annulla.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/canvas
-Stato: [~] in corso · coder Opus · base 180b7af03
+Stato: [x] fatto · a3b9dc839 (merge dec8c9dca) · differenze: `copiedCards`/`placedCards` diventano `copiedSelection`/`placedSelection`; esito nuovo `refused` della lettura (forma di Fub con `fub:ink` rotto: avviso `canvas.clipboard.refused`, non si incolla come testo), valida con `decodeStroke` e l'ancora `free`; lo spostamento lo compila il nucleo (`add_strokes` + `move_strokes`, che rifiuta da sé un tratto fuori dai numeri), `joinedInkPatches` fa una toppa per tratto; si copiano solo i tratti della radice (un tratto attaccato a una scheda non scelta resta fuori); dal menu, con la shell senza il tipo di Fub e soli tratti, avviso `editor_menu.copy_failed` e il taglio non toglie niente; dopo l'incolla i tratti restano scelti solo col Lazo; un taglio di soli tratti non mostra l'avviso con «Annulla» (come i soli fili), l'annulla funziona
 
 ## T95 · I punti della griglia più radi
 
