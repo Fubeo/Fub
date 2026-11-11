@@ -5596,7 +5596,7 @@ d'immagine ridimensionata con un'altra proporzione e il tratto arriva dove
 dice il puntatore; i vettori con `aspect` passano in Rust e in Vitest.
 Prova: scripts/check.sh --rapido; cargo test -p fub-canvas-core; cd
 apps/client && npx vitest run src/editors/canvas
-Stato: [ ] da fare
+Stato: [~] in corso · coder Opus · base 641eb1e27
 
 ## Non verificato stanotte
 
