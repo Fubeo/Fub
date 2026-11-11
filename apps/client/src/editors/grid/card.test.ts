@@ -4,7 +4,8 @@
 // celle in vista, lo scorrimento da attiva, la selezione e la copia a
 // tabulazioni, la sessione chiusa da ferma e a `destroy` (una volta sola,
 // anche con una finestra in volo), lo `Stale` dell'host, i fogli nascosti,
-// le unioni, le due schede dello stesso file. `applyGridBytes` non si chiama mai.
+// le unioni, le due schede dello stesso file, le celle per l'inchiostro
+// (`cellAt`, `cellRect`, `cellsShown`, T38). `applyGridBytes` non si chiama mai.
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import fixture from "../../__fixtures__/xlsx-grid.json";
 import type {
@@ -247,6 +248,9 @@ interface Bench {
   /// Ciò che la scheda ha detto alla tela della scrittura (T42).
   readonly writings: (CardWriting | null)[];
   readonly states: [CardEditorState | null, string | undefined][];
+  /// Quante volte la scheda ha detto che le celle si sono spostate (T38), e
+  /// che cosa fare ogni volta (per guardare la scheda in quel momento).
+  readonly cells: { count: number; seen: (() => void) | null };
   mount(mode: CardMode): CardView;
   root(): HTMLElement;
 }
@@ -292,6 +296,7 @@ function bench(options: FakeOptions & {
   const node = { id: "n1", type: "file", file: PATH, x: 0, y: 0, width: WIDTH, height: HEIGHT } as CanvasNode;
   const writings: Bench["writings"] = [];
   const states: Bench["states"] = [];
+  const cells: Bench["cells"] = { count: 0, seen: null };
   const made: Bench = {
     host: element,
     grid,
@@ -301,6 +306,7 @@ function bench(options: FakeOptions & {
     size,
     writings,
     states,
+    cells,
     mount(mode) {
       const context: CardContext = {
         path: PATH,
@@ -312,6 +318,10 @@ function bench(options: FakeOptions & {
         zoom: () => 1,
         missing: () => {
           missing.count += 1;
+        },
+        cellsShown: () => {
+          cells.count += 1;
+          cells.seen?.();
         },
         ...(options.editors ? {
           editors: options.editors,
@@ -956,6 +966,135 @@ async function writingOn(row: number, column: number, state: CardEditorState = "
   return { port, made, view };
 }
 
+describe("le celle per l'inchiostro (T38)", () => {
+  /// Dove la scheda disegna la cella (`row`, `column`): il suo stile.
+  const placed = (root: HTMLElement, row: number, column: number) => {
+    const style = cell(root, row, column).style;
+    return { x: parseFloat(style.left), y: parseFloat(style.top), width: parseFloat(style.width), height: parseFloat(style.height) };
+  };
+  const B3 = {
+    x: SHEET_CARD_ROW_HEADER + SHEET_CARD_COLUMN_WIDTH,
+    y: SHEET_CARD_COLUMN_HEADER + 2 * SHEET_CARD_ROW_HEIGHT,
+    width: SHEET_CARD_COLUMN_WIDTH,
+    height: SHEET_CARD_ROW_HEIGHT,
+  };
+
+  it("`cellAt` dà la cella sotto un punto, niente sulle intestazioni e fuori; `cellRect` dove sta", async () => {
+    const b = bench();
+    const view = b.mount("live");
+    // Prima delle celle non c'è niente.
+    expect(view.cellRect!("s1", "B3")).toBeNull();
+    expect(view.cellAt!({ x: B3.x + 5, y: B3.y + 5 })).toBeNull();
+    await settle();
+    const box = { sheet: "s1", cell: "B3", rect: B3, zoom: 1 };
+    expect(view.cellAt!({ x: B3.x + 5, y: B3.y + 5 })).toEqual(box);
+    expect(view.cellAt!({ x: B3.x + B3.width - 0.5, y: B3.y + B3.height - 0.5 })).toEqual(box);
+    expect(view.cellRect!("s1", "B3")).toEqual(box);
+    expect(placed(b.root(), 2, 1)).toEqual(B3);
+    // Le intestazioni, l'angolo, fuori dalla scheda: nessuna cella.
+    expect(view.cellAt!({ x: 10, y: B3.y + 5 })).toBeNull();
+    expect(view.cellAt!({ x: B3.x + 5, y: 10 })).toBeNull();
+    expect(view.cellAt!({ x: 10, y: 10 })).toBeNull();
+    expect(view.cellAt!({ x: WIDTH + 1, y: B3.y })).toBeNull();
+    expect(view.cellAt!({ x: B3.x, y: -1 })).toBeNull();
+    expect(view.cellAt!({ x: Number.NaN, y: B3.y })).toBeNull();
+    // Un altro foglio, una cella fuori vista, un indirizzo che non è A1.
+    expect(view.cellRect!("s2", "B3")).toBeNull();
+    expect(view.cellRect!("s1", "Z99")).toBeNull();
+    expect(view.cellRect!("s1", "b3")).toBeNull();
+  });
+
+  it("il foglio scorre: le celle cambiano posto, e la scheda lo dice dopo averle disegnate", async () => {
+    const b = bench();
+    const view = b.mount("live");
+    await settle();
+    const root = b.root();
+    expect(b.cells.count).toBe(1);
+    view.enter!();
+    // Ogni volta che lo dice, `cellRect` e le celle disegnate coincidono.
+    const seen: (ReturnType<typeof placed> | null)[] = [];
+    b.cells.seen = () => {
+      const box = view.cellRect!("s1", "B5");
+      seen.push(box?.rect ?? null);
+      if (box) expect(placed(root, 4, 1)).toEqual(box.rect);
+    };
+    // Tre righe giù, con la finestra nuova in volo: finché non arriva le
+    // celle restano al posto di prima, e così `cellRect`.
+    b.grid.holdWindow = deferred();
+    const held = b.grid.holdWindow;
+    wheel(root, 3 * SHEET_CARD_ROW_HEIGHT);
+    await settle();
+    expect(view.cellRect!("s1", "B3")).toEqual({ sheet: "s1", cell: "B3", rect: B3, zoom: 1 });
+    expect(b.cells.count).toBe(1);
+    held.resolve();
+    await settle();
+    expect(b.cells.count).toBe(2);
+    // B3 è scorsa via; B5 sta nella prima riga.
+    expect(view.cellRect!("s1", "B3")).toBeNull();
+    expect(seen).toEqual([{ x: B3.x, y: SHEET_CARD_COLUMN_HEADER + SHEET_CARD_ROW_HEIGHT, width: B3.width, height: B3.height }]);
+    // Indietro: B3 torna dov'era.
+    wheel(root, -3 * SHEET_CARD_ROW_HEIGHT);
+    await settle();
+    expect(view.cellRect!("s1", "B3")!.rect).toEqual(B3);
+    // Scegliere una cella ridisegna senza spostare niente: non si dice.
+    const count = b.cells.count;
+    pointer(cell(root, 0, 0), "pointerdown");
+    expect(b.cells.count).toBe(count);
+  });
+
+  it("sopra celle unite dà la cella in alto a sinistra, con tutta l'unione anche scorsa a metà", async () => {
+    const b = bench({ merges: [{ row: 0, column: 1, rows: 2, columns: 2 }] });
+    const view = b.mount("live");
+    await settle();
+    const merged = {
+      x: SHEET_CARD_ROW_HEADER + SHEET_CARD_COLUMN_WIDTH,
+      y: SHEET_CARD_COLUMN_HEADER,
+      width: 2 * SHEET_CARD_COLUMN_WIDTH,
+      height: 2 * SHEET_CARD_ROW_HEIGHT,
+    };
+    // Sopra C2, dentro l'unione B1:C2.
+    const inside = { x: merged.x + SHEET_CARD_COLUMN_WIDTH + 5, y: merged.y + SHEET_CARD_ROW_HEIGHT + 5 };
+    expect(view.cellAt!(inside)).toEqual({ sheet: "s1", cell: "B1", rect: merged, zoom: 1 });
+    // Una riga giù: l'unione si vede dalla riga 2, il suo angolo sta sotto
+    // le intestazioni, una riga più su.
+    view.enter!();
+    wheel(b.root(), SHEET_CARD_ROW_HEIGHT);
+    await settle();
+    expect(view.cellRect!("s1", "B1")!.rect).toEqual({ ...merged, y: merged.y - SHEET_CARD_ROW_HEIGHT });
+    // Due righe giù: l'unione non si vede più.
+    wheel(b.root(), SHEET_CARD_ROW_HEIGHT);
+    await settle();
+    expect(view.cellRect!("s1", "B1")).toBeNull();
+  });
+
+  it("una riga nascosta non si vede; una riga alta sposta quelle sotto", async () => {
+    const b = bench({ hiddenRows: new Set([2]), rowHeight: (index) => (index === 1 ? 40 : null) });
+    const view = b.mount("live");
+    await settle();
+    expect(view.cellRect!("s1", "B3")).toBeNull();
+    expect(view.cellRect!("s1", "B4")!.rect).toEqual({ ...B3, y: SHEET_CARD_COLUMN_HEADER + SHEET_CARD_ROW_HEIGHT + 40 * 1.4 });
+  });
+
+  it("da ferma restano le celle dell'ultima vista viva; senza celle non c'è niente", async () => {
+    const b = bench();
+    const view = b.mount("live");
+    await settle();
+    view.setMode("snapshot");
+    expect(view.cellRect!("s1", "B3")!.rect).toEqual(B3);
+    const count = b.cells.count;
+    // Il file non si apre più: la scheda dice che non si mostra, senza celle.
+    view.setMode("live");
+    b.grid.options.surfaces = [];
+    b.port.changed[0]!();
+    await settle();
+    expect(b.root().dataset.cardState).toBe("unavailable");
+    expect(view.cellRect!("s1", "B3")).toBeNull();
+    expect(b.cells.count).toBe(count + 1);
+    view.destroy();
+    expect(view.cellAt!({ x: B3.x + 5, y: B3.y + 5 })).toBeNull();
+  });
+});
+
 describe("la scheda di foglio che scrive (T42)", () => {
   it("il doppio clic su una cella monta il foglio compatto sulla stessa cella, senza nastro, tavolozza né struttura", async () => {
     const { port, made } = await writingOn(1, 1);
@@ -1025,11 +1164,16 @@ describe("la scheda di foglio che scrive (T42)", () => {
     const second = press(gridViewport(made), { key: "Escape" });
     expect(second.defaultPrevented).toBe(false);
     const opens = made.grid.opens.length;
+    // Mentre la griglia vera sta al posto della resa, l'inchiostro non trova
+    // celle (T38): la griglia scorre da sé.
+    expect(view.cellRect!("s1", "B3")).toBeNull();
     view.leave!();
     await until("la griglia si smonta", () => writer(made) === null);
     expect(port.left).toBe(1);
     expect(port.destroyed).toBe(1);
     expect(made.root().hidden).toBe(false);
+    await settle();
+    expect(view.cellRect!("s1", "B3")).not.toBeNull();
     // La resa si rilegge col file di adesso.
     expect(made.grid.opens.length).toBe(opens + 1);
   });

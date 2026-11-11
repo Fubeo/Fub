@@ -127,6 +127,20 @@ export interface CardPageBox {
   readonly rect: Rect;
 }
 
+/// Una cella che una scheda di foglio mostra (T37, T38): il nome del foglio
+/// com'è nel file, l'indirizzo in notazione A1, il rettangolo della cella in
+/// unità della lavagna dall'angolo in alto a sinistra della scheda (di
+/// un'unione, tutta l'unione dalla sua cella in alto a sinistra, anche la
+/// parte scorsa via) e quante unità della lavagna fa un pixel del foglio al
+/// 100% (`zoom`). L'inchiostro con l'ancora `cell` si disegna portando
+/// l'angolo della cella su `rect.x, rect.y` (`docs/reference/canvas-ink.md`).
+export interface CardCellBox {
+  readonly sheet: string;
+  readonly cell: string;
+  readonly rect: Rect;
+  readonly zoom: number;
+}
+
 /// Le immagini ferme di un file, per parte. La parte dice che cosa è e a che
 /// larghezza, arrotondata a 32 px, ed è sempre fatta da `snapshotPart`:
 /// `whole@640` per l'immagine intera, `page-3@640` per una pagina.
@@ -188,6 +202,11 @@ export interface CardContext {
   /// è cambiato, o non si vede più niente. La tela ridisegna l'inchiostro
   /// della scheda, che segue il contenuto (T39).
   contentShown?(): void;
+  /// Ciò che `cellAt()` e `cellRect()` danno è cambiato: il foglio è scorso,
+  /// ha cambiato misura o contenuto, o non si vede più. La tela ridisegna
+  /// l'inchiostro di cella della scheda subito, nello stesso fotogramma delle
+  /// celle (T38): la scheda lo chiama dopo averle disegnate.
+  cellsShown?(): void;
   /// Le parti dell'estratto (`fub:parts`, `docs/reference/canvas-parts.md`),
   /// già lette e provate col file e il `subpath` (`cardParts` di `parts.ts`);
   /// `null` o assente: la scheda mostra ciò che dice il `subpath`.
@@ -259,6 +278,16 @@ export interface CardView {
   /// `scale` lo segue (`inkFit` con `aspect`). `null` se non si sa, o se non
   /// si vede niente.
   contentAspect?(): number | null;
+  /// La cella sotto `point` (in unità della lavagna dall'angolo della
+  /// scheda), come si vede adesso (T38); sopra celle unite quella in alto a
+  /// sinistra dell'unione. `null` sopra le intestazioni, fuori dalla griglia
+  /// o se la scheda non mostra celle. Solo le schede di foglio.
+  cellAt?(point: { readonly x: number; readonly y: number }): CardCellBox | null;
+  /// Dove sta adesso la cella `cell` (A1) del foglio `sheet` (T38); `null`
+  /// se non si vede: un altro foglio, scorsa via, una riga o una colonna
+  /// nascosta, la scheda senza celle. Da viva e da ferma: ferma, l'ultima
+  /// vista della scheda viva.
+  cellRect?(sheet: string, cell: string): CardCellBox | null;
   /// Entra in scrittura (T41, T42): l'editor vero del file prende il corpo. Il
   /// montaggio arriva dopo, e la scheda lo dice con `context.writing`; `false`
   /// se qui non si scrive (un documento Word, nessuna porta, una scheda ferma).

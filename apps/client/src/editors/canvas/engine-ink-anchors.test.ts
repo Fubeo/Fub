@@ -4,10 +4,13 @@
 // fuori dalla pagina l'ancora `card` di N4. Il tratto di pagina si vede solo
 // quando la scheda mostra la sua pagina: voltata la pagina sparisce, tornati
 // ricompare. La scheda PDF è finta: dice la pagina e dove sta (`pageBox`), e
-// avvisa con `pageShown` come la vera (`cards/pdf.ts`).
+// avvisa con `pageShown` come la vera (`cards/pdf.ts`). Sopra la griglia di
+// una scheda di foglio (T38, D-6 b) il tratto è della cella e la segue quando
+// il foglio scorre; la scheda di foglio è finta allo stesso modo (`cellAt`,
+// `cellRect`, `cellsShown`, come `grid/card.ts`).
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
 import { CanvasEngine, type CanvasChange } from "./engine";
-import { createCardRegistry, type CardContext, type CardPageBox, type CardRenderer, type CardSnapshot, type CardSnapshots } from "./cards";
+import { createCardRegistry, type CardCellBox, type CardContext, type CardPageBox, type CardRenderer, type CardSnapshot, type CardSnapshots } from "./cards";
 import { canvasCoreReady } from "./wasm/core";
 
 beforeAll(async () => {
@@ -279,3 +282,190 @@ describe("l'inchiostro sul contenuto di un'immagine (T39)", () => {
     engine.destroy();
   });
 });
+
+describe("l'inchiostro sulle celle di un foglio (T38)", () => {
+  /// La scheda di foglio: 412 × 308 in (0, 300), con le intestazioni di
+  /// `grid/card.ts` (52 a sinistra, 28 in alto) e celle di 120 × 28: tre
+  /// colonne e dieci righe in vista.
+  const SHEET = { id: "fogli", type: "file", x: 0, y: 300, width: 412, height: 308, file: "Conti/2025.xlsx" };
+  const ROW_HEADER = 52;
+  const COLUMN_HEADER = 28;
+  const ROW = 28;
+  const COLUMN = 120;
+
+  /// Una scheda di foglio finta che scorre per righe intere, come la vera:
+  /// dice le celle disegnate (`cellAt`, `cellRect`) e avvisa con
+  /// `cellsShown` dopo averle spostate.
+  function fakeSheet() {
+    const state: { top: number; context: CardContext | null; sheet: string } = { top: 0, context: null, sheet: "Conti 2025" };
+    const box = (row: number, column: number): CardCellBox | null => {
+      if (row < state.top || row >= state.top + 10 || column < 0 || column >= 3) return null;
+      const cell = `${String.fromCharCode(65 + column)}${row + 1}`;
+      const rect = { x: ROW_HEADER + column * COLUMN, y: COLUMN_HEADER + (row - state.top) * ROW, width: COLUMN, height: ROW };
+      return { sheet: state.sheet, cell, rect, zoom: 1 };
+    };
+    const renderer: CardRenderer = {
+      kinds: ["sheet"],
+      mount(_node, host, _mode, context) {
+        state.context = context;
+        host.append(document.createElement("div"));
+        return {
+          setMode: () => {},
+          cellAt: ({ x, y }) =>
+            x < ROW_HEADER || y < COLUMN_HEADER
+              ? null
+              : box(Math.floor((y - COLUMN_HEADER) / ROW) + state.top, Math.floor((x - ROW_HEADER) / COLUMN)),
+          cellRect: (sheet, cell) => {
+            const match = /^([A-Z])(\d+)$/.exec(cell);
+            return sheet === state.sheet && match ? box(Number(match[2]) - 1, match[1]!.charCodeAt(0) - 65) : null;
+          },
+          destroy: () => {},
+        };
+      },
+    };
+    /// Il foglio scorre di `rows` righe dentro la scheda.
+    const scroll = (rows: number) => {
+      state.top = Math.max(0, state.top + rows);
+      state.context?.cellsShown?.();
+    };
+    /// Il foglio mostrato si chiama `name` (rinominato in un riquadro accanto).
+    const rename = (name: string) => {
+      state.sheet = name;
+      state.context?.cellsShown?.();
+    };
+    return { renderer, scroll, rename };
+  }
+
+  function sheetMounted(source = JSON.stringify({ nodes: [SHEET], edges: [] })) {
+    const host = document.createElement("div");
+    document.body.append(host);
+    const changes: CanvasChange[] = [];
+    const sheet = fakeSheet();
+    const engine = new CanvasEngine(host, {
+      surfaceId: "ink-cells",
+      formatId: "canvas",
+      documentId: "lavagna.canvas",
+      onChange: (change) => changes.push(change),
+      onSelectionChange: () => {},
+      onPickFile: () => null,
+      cards: { registry: createCardRegistry([sheet.renderer]), snapshots: memorySnapshots(), watch: () => () => {} },
+    });
+    engine.setDoc(source);
+    return { engine, host, changes, sheet };
+  }
+
+  /// B3 nella scheda con il foglio in cima: x 172, y 84.
+  const B3 = { x: ROW_HEADER + COLUMN, y: COLUMN_HEADER + 2 * ROW };
+  /// Un tratto sopra B3, in coordinate della lavagna.
+  const ON_B3: [number, number][] = [
+    [SHEET.x + B3.x + 8, SHEET.y + B3.y + 6],
+    [SHEET.x + B3.x + 40, SHEET.y + B3.y + 12],
+    [SHEET.x + B3.x + 80, SHEET.y + B3.y + 20],
+  ];
+  /// L'SVG della cella dei tratti nella scheda, se li disegna.
+  const cellSvg = (host: HTMLElement) => card(host, "fogli").querySelector<SVGElement>(".canvas-ink-card svg[data-ink-cell] > svg");
+  /// Dove la scheda mette l'angolo della cella dei tratti.
+  const at = (host: HTMLElement) => {
+    const inner = cellSvg(host);
+    return inner ? [Number(inner.getAttribute("x")), Number(inner.getAttribute("y"))] : null;
+  };
+
+  it("scrive sopra B3; il foglio scorre e il tratto segue B3, sparisce quando esce e ricompare quando torna", () => {
+    const { host, changes, sheet } = sheetMounted();
+    pen(host, card(host, "fogli"), ON_B3);
+    expect(changes).toHaveLength(1);
+    const [stroke] = strokesOf(changes[0]!.text, "fogli");
+    expect(stroke!.anchor).toEqual({ kind: "cell", sheet: "Conti 2025", cell: "B3" });
+    // In pixel del foglio dall'angolo di B3.
+    expect(String(stroke!.ink)).toMatch(/^1 s100 c[a-z]+ 800,600,/);
+    const id = String(stroke!.id);
+    expect(drawn(host, "fogli")).toEqual([id]);
+    expect(at(host)).toEqual([B3.x, B3.y]);
+    // Tagliato alla scheda; dentro, i pixel del foglio al 100%.
+    const clipped = card(host, "fogli").querySelector<SVGElement>(".canvas-ink-card svg[data-ink-cell]")!;
+    expect(clipped.style.overflow).toBe("hidden");
+    expect(cellSvg(host)!.getAttribute("viewBox")).toBe(`0 0 ${COLUMN} ${ROW}`);
+
+    // Tre righe giù, in due volte: due, e B3 è la prima riga, il tratto con
+    // lei, subito; la terza, B3 esce e il tratto non c'è.
+    sheet.scroll(2);
+    expect(at(host)).toEqual([B3.x, COLUMN_HEADER]);
+    sheet.scroll(1);
+    expect(drawn(host, "fogli")).toEqual([]);
+    // Tre righe su: B3 torna al suo posto, e il tratto con lei.
+    sheet.scroll(-3);
+    expect(drawn(host, "fogli")).toEqual([id]);
+    expect(at(host)).toEqual([B3.x, B3.y]);
+    // Lo zoom della lavagna col foglio scorso non cambia il posto nella scheda.
+    sheet.scroll(1);
+    const before = camera(host).zoom;
+    const tick = new WheelEvent("wheel", { bubbles: true, cancelable: true, deltaY: -100 });
+    Object.defineProperties(tick, { ctrlKey: { value: true }, clientX: { value: 100 }, clientY: { value: 100 } });
+    host.querySelector(".canvas-viewport")!.dispatchEvent(tick);
+    expect(camera(host).zoom).not.toBe(before);
+    expect(at(host)).toEqual([B3.x, B3.y - ROW]);
+    // Il foglio rinominato altrove: la cella non c'è più, il tratto resta nel file.
+    sheet.rename("Altro");
+    expect(drawn(host, "fogli")).toEqual([]);
+    sheet.rename("Conti 2025");
+    expect(drawn(host, "fogli")).toEqual([id]);
+    // Scorrere non scrive.
+    expect(changes).toHaveLength(1);
+  });
+
+  it("sopra le intestazioni il tratto è della scheda, come in N4", () => {
+    const { host, changes } = sheetMounted();
+    pen(host, card(host, "fogli"), [[SHEET.x + 100, SHEET.y + 6], [SHEET.x + 140, SHEET.y + 10], [SHEET.x + 180, SHEET.y + 14]]);
+    const [stroke] = strokesOf(changes[0]!.text, "fogli");
+    expect(stroke!.anchor).toEqual({ kind: "card", width: SHEET.width, height: SHEET.height });
+  });
+
+  it("la gomma prende il tratto di cella dove si vede dopo lo scorrimento, non dove era", () => {
+    const { host, changes, sheet } = sheetMounted();
+    pen(host, card(host, "fogli"), ON_B3);
+    const id = String(strokesOf(changes[0]!.text, "fogli")[0]!.id);
+    sheet.scroll(2);
+    const across = SHEET.x + B3.x + 40;
+    // Dove B3 era: niente.
+    eraser(host, card(host, "fogli"), [[across, SHEET.y + B3.y], [across, SHEET.y + B3.y + 30]]);
+    expect(changes).toHaveLength(1);
+    // Dove B3 è adesso: il tratto va via.
+    eraser(host, card(host, "fogli"), [[across, SHEET.y + COLUMN_HEADER - 5], [across, SHEET.y + COLUMN_HEADER + 30]]);
+    expect(changes).toHaveLength(2);
+    expect(strokesOf(changes[1]!.text, "fogli").map((each) => each.id)).not.toContain(id);
+  });
+
+  it("un file con l'ancora di cella si apre sulla sua cella; un'ancora che non vale resta nel file e non si vede", () => {
+    const brush = "pf1 size=3 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=0 pen=ballpoint";
+    const layer = {
+      v: 1,
+      strokes: [
+        { id: "b", tool: "pen", brush, color: "#0072b2", anchor: { kind: "cell", sheet: "Conti 2025", cell: "C4" }, ink: "1 s100 cxy 500,500 100,100" },
+        { id: "z", tool: "pen", brush, color: "#0072b2", anchor: { kind: "cell", sheet: "Conti 2025", cell: "b4" }, ink: "1 s100 cxy 500,500 100,100" },
+      ],
+    };
+    const source = JSON.stringify({ nodes: [{ ...SHEET, "fub:ink": layer }], edges: [] });
+    const { engine, host, sheet } = sheetMounted(source);
+    expect(drawn(host, "fogli")).toEqual(["b"]);
+    expect(at(host)).toEqual([ROW_HEADER + 2 * COLUMN, COLUMN_HEADER + 3 * ROW]);
+    sheet.scroll(4);
+    expect(drawn(host, "fogli")).toEqual([]);
+    expect(engine.getDoc()).toBe(source);
+  });
+});
+
+const ERASER_PEN = { pointerId: 9, pointerType: "pen" } as const;
+
+/// Una passata del retro della penna sui punti `world` della lavagna.
+function eraser(host: HTMLElement, target: Element, world: readonly (readonly [number, number])[]): void {
+  const cam = camera(host);
+  const at = ([x, y]: readonly [number, number]) => ({ clientX: x * cam.zoom + cam.x, clientY: y * cam.zoom + cam.y });
+  target.dispatchEvent(pointerEvent("pointerdown", { ...ERASER_PEN, ...at(world[0]!), button: 5, buttons: 32, pressure: 0.5, timeStamp: clock }));
+  for (const point of world.slice(1)) {
+    clock += 8;
+    target.dispatchEvent(pointerEvent("pointermove", { ...ERASER_PEN, ...at(point), button: -1, buttons: 32, pressure: 0.5, timeStamp: clock }));
+  }
+  const end = clock + 4;
+  clock += 100;
+  document.dispatchEvent(pointerEvent("pointerup", { ...ERASER_PEN, ...at(world[world.length - 1]!), button: 5, buttons: 0, pressure: 0, timeStamp: end }));
+}

@@ -298,6 +298,66 @@ describe("l'inchiostro sulla pagina di un PDF (T19)", () => {
   });
 });
 
+describe("l'inchiostro sulle celle di un foglio (T38)", () => {
+  const B3: DryStroke = { id: "b3", path: "M0 0L10 0L10 10Z", fill: "#0072b2", ref: null, cell: { sheet: "Conti", cell: "B3" } };
+  const B3BIS: DryStroke = { id: "b3bis", path: "M1 1L5 1L5 5Z", fill: "#0072b2", ref: null, cell: { sheet: "Conti", cell: "B3" } };
+  const C4: DryStroke = { id: "c4", path: "M5 5L50 5L50 50Z", fill: "#d55e00", ref: null, cell: { sheet: "Conti", cell: "C4" } };
+  const ids = (host: Element) => [...host.querySelectorAll("path[data-ink-stroke]")].map((path) => path.getAttribute("data-ink-stroke"));
+  /// La scheda mostra solo B3, a (172, 84), al 50%.
+  const onlyB3 = (sheet: string, cell: string) =>
+    sheet === "Conti" && cell === "B3" ? { sheet, cell, rect: { x: 172, y: 84, width: 60, height: 14 }, zoom: 0.5 } : null;
+
+  it("si disegna solo il tratto della cella che la scheda mostra, dall'angolo della cella, tagliato alla scheda", () => {
+    const host = cardElement();
+    const asked: string[] = [];
+    paintCard(host, [A, B3, B3BIS, C4], "fixed", null, null, (sheet, cell) => {
+      asked.push(`${sheet}!${cell}`);
+      return onlyB3(sheet, cell);
+    });
+    expect(ids(host)).toEqual(["s1", "b3", "b3bis"]);
+    // Una domanda per cella, anche con due tratti sulla stessa.
+    expect(asked).toEqual(["Conti!B3", "Conti!C4"]);
+    const outer = layerOf(host, "canvas-ink-card")!.children[1] as SVGSVGElement;
+    expect(outer.getAttribute("data-ink-cell")).toBe("Conti!B3");
+    expect(outer.style.getPropertyValue("overflow")).toBe("hidden");
+    const inner = outer.firstElementChild!;
+    expect(["x", "y", "width", "height", "viewBox", "preserveAspectRatio", "overflow"].map((name) => inner.getAttribute(name)))
+      .toEqual(["172", "84", "60", "14", "0 0 120 28", INK_PAGE_ASPECT, "visible"]);
+    expect([...inner.children].map((path) => path.getAttribute("data-ink-stroke"))).toEqual(["b3", "b3bis"]);
+  });
+
+  it("senza chi dice dove sta la cella, o con un rettangolo che non vale, il tratto di cella non c'è", () => {
+    const host = cardElement();
+    paintCard(host, [B3], "scale");
+    expect(layerOf(host, "canvas-ink-card")).toBeNull();
+    for (const bad of [
+      { sheet: "Conti", cell: "B3", rect: { x: Number.NaN, y: 0, width: 10, height: 10 }, zoom: 1 },
+      { sheet: "Conti", cell: "B3", rect: { x: 0, y: 0, width: 0, height: 10 }, zoom: 1 },
+      { sheet: "Conti", cell: "B3", rect: { x: 0, y: 0, width: 10, height: 10 }, zoom: 0 },
+    ]) {
+      paintCard(host, [B3], "scale", null, null, () => bad);
+      expect(layerOf(host, "canvas-ink-card"), JSON.stringify(bad)).toBeNull();
+    }
+  });
+
+  it("la cella che si sposta riusa i percorsi; ridisegnato come tratto di scheda non taglia più", () => {
+    const host = cardElement();
+    paintCard(host, [B3], "fixed", null, null, onlyB3);
+    const path = host.querySelector('path[data-ink-stroke="b3"]');
+    paintCard(host, [B3], "fixed", null, null, (sheet, cell) => {
+      const box = onlyB3(sheet, cell);
+      return box && { ...box, rect: { ...box.rect, y: 28 } };
+    });
+    expect(host.querySelector('path[data-ink-stroke="b3"]')).toBe(path);
+    expect(host.querySelector("svg[data-ink-cell] > svg")!.getAttribute("y")).toBe("28");
+    paintCard(host, [A], "fixed");
+    const again = layerOf(host, "canvas-ink-card")!.firstElementChild as SVGSVGElement;
+    expect(again.hasAttribute("data-ink-cell")).toBe(false);
+    expect(again.style.getPropertyValue("overflow")).toBe("");
+    expect([...again.children].map((child) => child.localName)).toEqual(["path"]);
+  });
+});
+
 describe("la cache dei percorsi", () => {
   it("un tratto uguale non si ricalcola; uno cambiato sì", () => {
     const cache = new InkPathCache();

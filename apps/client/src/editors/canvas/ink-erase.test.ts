@@ -92,11 +92,24 @@ describe("che cosa prende la gomma sulla lavagna", () => {
     expect(unit!.fit).toEqual({ s: 0.5, x: 100, y: 36 });
   });
 
-  it("un tratto di cella non si prende finché la scheda di foglio non dice dove sta la cella (T37, T38)", () => {
-    const sheet: CanvasNode = { id: "f", type: "file", x: 0, y: 0, width: 480, height: 320, file: "conti.xlsx" } as CanvasNode;
+  it("un tratto di cella si prende dove la scheda di foglio mostra la cella, e non se non la mostra (T37, T38)", () => {
+    const sheet: CanvasNode = { id: "f", type: "file", x: 10, y: 20, width: 480, height: 320, file: "conti.xlsx" } as CanvasNode;
     const onCell = { ...drawable("a", [[0, 0], [50, 0]], null), cell: { sheet: "Foglio1", cell: "B3" } } as DrawableStroke;
     const onCard = drawable("b", [[0, 0], [50, 0]], { width: 480, height: 320 });
-    expect(erasableInk([layer(sheet, [onCell, onCard])]).map((unit) => unit.id)).toEqual(["b"]);
+    const states = [layer(sheet, [onCell, onCard])];
+    // Senza chi dice dove sta la cella, o con la cella fuori vista: niente.
+    expect(erasableInk(states).map((unit) => unit.id)).toEqual(["b"]);
+    expect(erasableInk(states, undefined, undefined, () => null).map((unit) => unit.id)).toEqual(["b"]);
+    const asked: string[] = [];
+    const units = erasableInk(states, undefined, undefined, (node, name, cell) => {
+      asked.push(`${node} ${name}!${cell}`);
+      return { sheet: name, cell, rect: { x: 172, y: 84, width: 120, height: 28 }, zoom: 2 };
+    });
+    expect(asked).toEqual(["f Foglio1!B3"]);
+    expect(units.map((unit) => unit.id)).toEqual(["a", "b"]);
+    // Dall'angolo della cella, `zoom` unità della lavagna per pixel del foglio.
+    expect(units[0]!.fit).toEqual({ s: 2, x: 10 + 172, y: 20 + 84 });
+    expect(units[0]!.points).toEqual([182, 104, 282, 104]);
   });
 
   it("un livello estraneo e un tratto non disegnato non si prendono", () => {

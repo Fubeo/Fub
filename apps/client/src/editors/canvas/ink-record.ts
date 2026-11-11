@@ -539,14 +539,10 @@ function startOf(now: number, samples: readonly InkSample[]): string | null {
 
 /// Il `DryStroke` di un tratto che si disegna; `null` se il contorno non si
 /// calcola. Con `cache` il percorso già calcolato per lo stesso id, inchiostro
-/// e pennello si riusa.
-///
-/// Un tratto attaccato a una cella (T37) non ha ancora un posto: dove la
-/// cella sta nella scheda lo dirà la scheda di foglio (`cellRect`, T38).
-/// Fino ad allora non si disegna (`null`), invece di disegnarsi nell'angolo
-/// della scheda; resta nel file com'è.
+/// e pennello si riusa. Un tratto attaccato a una cella (T37) porta la sua
+/// cella: dove la cella sta lo dice la scheda di foglio quando si disegna
+/// (`paintCard`, T38).
 export function dryStroke(stroke: DrawableStroke, cache?: InkPathCache): DryStroke | null {
-  if (stroke.cell !== null) return null;
   const compute = (): string => inkPath(stroke.ink, stroke.brush);
   let path: string;
   try {
@@ -561,6 +557,7 @@ export function dryStroke(stroke: DrawableStroke, cache?: InkPathCache): DryStro
     fill: stroke.color,
     ref: stroke.ref,
     ...(stroke.page === null ? {} : { page: stroke.page }),
+    ...(stroke.cell === null ? {} : { cell: stroke.cell }),
     ...(opacity < 1 ? { opacity } : {}),
   };
 }
