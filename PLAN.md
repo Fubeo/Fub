@@ -5386,7 +5386,7 @@ provano i due controlli, il ritorno ai valori di serie che toglie il campo
 e un solo annulla; le foto del banco somigliano al prototipo.
 Prova: scripts/check.sh --rapido; cargo test -p fub-canvas-core; cd
 apps/client && npx vitest run src/editors/canvas
-Stato: [ ] da fare
+Stato: [~] in corso · coder Opus · base b7bbfe9c4
 
 ## T93 · Il doppio clic su una scheda mancante
 
