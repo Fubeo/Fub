@@ -25,7 +25,7 @@
 import { draggedEntries, ENTRIES_DRAG_TYPE, NOTE_DRAG_TYPE, type DraggedEntry } from "../ui/drag-types";
 import { depositAttachment, depositOrReuse, sanitizeFileName, type AttachmentDeposit } from "../editors/media/attachment-target";
 import type { CanvasDepositCards, CanvasRepoint } from "../editors/canvas/engine";
-import { DROP_FOLDER_KEY, type CanvasPreferences } from "../editors/canvas/preferences";
+import { DROP_FOLDER_KEY, type CanvasPreferences } from "../rules/canvas-settings";
 import { folderContains, nameFault, normalizedName } from "../rules/mirrored";
 import type { NoticeAction } from "../ui/notify";
 import { t } from "../i18n/strings";

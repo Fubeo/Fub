@@ -8,7 +8,7 @@ import { createFakeHost, type FakeHost } from "../host/fake";
 import { RESOURCE_WRITE_HEADER, ReuseSupport, writeResource, type TauriInvoke } from "../editors/media/transport";
 import type { CanvasDepositCards, CanvasRepoint } from "../editors/canvas/engine";
 import { ENTRIES_DRAG_TYPE, NOTE_DRAG_TYPE } from "../ui/drag-types";
-import { DROP_FOLDER_KEY, DROP_FOLDER_PATH_KEY, preferencesOf } from "../editors/canvas/preferences";
+import { DROP_FOLDER_KEY, DROP_FOLDER_PATH_KEY, preferencesOf } from "../rules/canvas-settings";
 import type { SettingEntry } from "../host/contract";
 import type { NoticeAction } from "../ui/notify";
 import {

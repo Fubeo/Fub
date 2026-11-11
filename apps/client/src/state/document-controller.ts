@@ -84,7 +84,7 @@ import { onEvent } from "./kernel";
 import { drawingFonts } from "./drawing-fonts";
 import { emit, on, readState, state, writeState } from "./store";
 import { depositCanvasFiles, resolveCanvasPaths } from "./canvas-intake";
-import { LAVAGNA_BUNDLE, preferencesOf } from "../editors/canvas/preferences";
+import { LAVAGNA_BUNDLE, preferencesOf } from "../rules/canvas-settings";
 import { revealSetting } from "../panels/settings";
 import { CASE_KEY, caseOf, toRecover } from "./drafts";
 import { addSheetNotice, clearAllRemovedNotices, clearSheetNotices, dismissSheetNotice, moveSheetNotices, setLimitedMode, setRemovedNotice } from "./sheet-notices";

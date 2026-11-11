@@ -43,7 +43,7 @@
 | `SettingSpec` e i livelli delle impostazioni | `crates/fub-abi/src/settings.rs` |
 | `perf.probe` (la sonda N0) | `crates/fub-host/src/settings.rs`, montata da `apps/client/src/perf/` |
 | `draw.workspace` (Semplice o Completo) | le impostazioni della feature `draw`, `crates/fub-features/src/draw.rs` |
-| le dodici impostazioni della lavagna, `canvas.*` (`ink_mouse_remember`, `finger_moves_card`, `finger_writes`, `pen_button`, `wheel`, `workspace`, `toolbar`, `grid`, `snap`, `parts_picker`, `drop_folder`, `drop_folder_path`) | le impostazioni della feature `lavagna`, `crates/fub-features/src/lavagna.rs`; le legge `apps/client/src/editors/canvas/preferences.ts` |
+| le dodici impostazioni della lavagna, `canvas.*` (`ink_mouse_remember`, `finger_moves_card`, `finger_writes`, `pen_button`, `wheel`, `workspace`, `toolbar`, `grid`, `snap`, `parts_picker`, `drop_folder`, `drop_folder_path`) | le impostazioni della feature `lavagna`, `crates/fub-features/src/lavagna.rs`; le chiavi, i valori di serie e la lettura in `apps/client/src/rules/canvas-settings.ts`, le legge e le segue `apps/client/src/editors/canvas/preferences.ts` |
 | dove vanno i file trascinati dal computer sulla lavagna (`canvas.drop_folder`) | `apps/client/src/state/canvas-intake.ts` (`dropFolderFor`, `depositCanvasFiles`); la cartella delle note è `files.attachment-folder`, letta in `apps/client/src/state/document-controller.ts` |
 | il registro dei comandi del vault | `crates/fub-features/src/commands.rs` e i suoi moduli in `commands/` (dogfood del `CommandProvider`) |
 | il catalogo dei comandi dei fogli | `crates/fub-abi/src/grid_bytes.rs`, servito in `crates/fub-format-xlsx` |
