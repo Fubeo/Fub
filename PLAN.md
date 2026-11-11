@@ -4139,7 +4139,7 @@ Fatto quando: il test prova `auto` coi due dispositivi finti, `full`,
 al prototipo.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/canvas
-Stato: [ ] da fare
+Stato: [~] in corso · coder Opus · base c07e5a6ea
 
 ## T66 · Ridimensionare
 
