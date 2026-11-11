@@ -8776,6 +8776,72 @@ kbd,
 .canvas-inspector-popover [data-canvas-color] {
   background: var(--canvas-color);
 }
+/* Le fonti (T77): una riga per file con un filo sotto, il nome, il numero
+   delle schede e la barra. I pezzi sulla lavagna in colore d'accento, gli
+   altri grigi; un file mancante grigio e barrato, come la sua scheda. */
+.canvas-sources-list {
+  gap: var(--space-5);
+}
+.canvas-sources-file {
+  gap: var(--space-2);
+  padding: var(--space-3) 0;
+  border-bottom: 1px solid var(--border);
+}
+.canvas-sources-name {
+  color: var(--text);
+  font-weight: var(--weight-medium);
+}
+.canvas-sources-count {
+  color: var(--muted);
+  font-size: var(--text-xs);
+}
+.canvas-sources-bar {
+  gap: 1px;
+  overflow: hidden;
+  border-radius: var(--radius-xs);
+}
+.canvas-sources-piece {
+  border: none;
+  background: var(--overlay-active);
+  cursor: pointer;
+}
+.canvas-sources-piece[data-used] {
+  background: var(--accent);
+}
+.canvas-sources-piece:hover {
+  background: var(--border-strong);
+}
+.canvas-sources-piece[data-used]:hover {
+  background: var(--accent-soft);
+}
+.canvas-sources-piece:focus-visible,
+.canvas-sources-file:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: 1px;
+}
+.canvas-sources-file[data-missing] .canvas-sources-name,
+.canvas-sources-file[data-missing] .canvas-sources-state {
+  color: var(--muted);
+}
+.canvas-sources-file[data-missing] .canvas-sources-name {
+  text-decoration: line-through;
+  text-decoration-color: var(--border-strong);
+}
+.canvas-sources-file[data-missing] .canvas-sources-piece {
+  background: var(--overlay-hover);
+  cursor: default;
+}
+.canvas-sources-loose,
+.canvas-sources-state {
+  color: var(--accent);
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+  font-weight: var(--weight-medium);
+}
+.canvas-sources-empty {
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
 
 /* Il selettore delle sezioni (T74): il fondo e l'ombra di .kit-popover, le
    righe di .kit-list-item. La casella dice la scelta; il colore d'accento

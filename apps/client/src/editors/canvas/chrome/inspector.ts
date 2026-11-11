@@ -8,7 +8,10 @@
 // porta la vista sulla scheda e la sceglie, ed è anche il percorso del lettore
 // di schermo. «Scheda» (i numeri, il colore, il file e «Avanzate», il nodo
 // grezzo) e «Fili» (l'etichetta, le punte, i lati, l'inversione) T59: nascono
-// solo con la porta `edit`, che la tela non dà ancora. «Fonti» arriva con T77.
+// solo con la porta `edit`, che la tela non dà ancora. «Fonti» (T77): i file
+// che le schede mostrano, uno per riga, con la barra delle pagine o delle
+// sezioni (`sources.ts`); quante pagine ha un PDF e il sommario di una nota li
+// chiede alla superficie (`CanvasSourcesPort`), una volta per file.
 //
 // Le modifiche non le fa l'ispettore: chiede alla tela (`CanvasEditPort`) la
 // scelta, il modello e un commit di toppe. Il commit è quello del nucleo di N3
@@ -37,7 +40,9 @@ import { DROP_MIN_SIZE } from "../drop-layout";
 import type { CanvasDocument, CanvasEdge, CanvasEdgeSide, CanvasNode } from "../model";
 import { upsertEdgePatch, upsertNodePatch, type CanvasPatch } from "../operation";
 import { pickerText } from "../pen-menu";
+import { partsSections, type PartsHeading } from "../parts-picker";
 import { readingOrder, type ReadingEntry } from "../reading-order";
+import { boardSources, sourceBar, sourceNeeds, type BoardSource, type SourceFacts, type SourcePiece } from "../sources";
 import { rawFields, setRawField, type RawProblem } from "./raw-node";
 import { ensureCanvasIcons } from "./icons";
 
@@ -48,8 +53,20 @@ export const CARD_PANEL_ID = "canvas.card";
 /** L'id della linguetta «Fili» (T59). */
 export const EDGE_PANEL_ID = "canvas.edge";
 
+/** L'id della linguetta «Fonti» (T77). */
+export const SOURCES_PANEL_ID = "canvas.sources";
+
 /** Oltre queste righe l'elenco disegna solo quelle che si vedono. */
 export const VIRTUAL_AFTER = 500;
+
+/** Oltre questi file «Fonti» disegna solo le righe che si vedono: ogni riga ha la sua barra. */
+export const SOURCES_VIRTUAL_AFTER = 40;
+
+/** Il passo di una riga di «Fonti» quando non si può misurare: la riga e lo spazio dopo. */
+const SOURCE_STEP_FALLBACK = 64;
+
+/** Le righe di «Fonti» che si disegnano quando l'elenco non ha ancora una misura. */
+const SOURCES_VISIBLE_FALLBACK = 20;
 
 /** Le righe disegnate oltre quelle che si vedono, sopra e sotto. */
 const OVERSCAN = 8;
@@ -368,6 +385,31 @@ export interface CanvasInspectorPort {
   readonly reveal: (byte: number) => boolean;
   /** La scelta e le modifiche per «Scheda» e «Fili» (T59); senza, solo «Schede». */
   readonly edit?: CanvasEditPort;
+  /** Ciò che «Fonti» chiede oltre il testo (T77); senza, le barre dicono solo ciò che la lavagna sa. */
+  readonly sources?: CanvasSourcesPort;
+}
+
+/**
+ * Ciò che «Fonti» (T77) chiede alla superficie: quante pagine ha un PDF e il
+ * sommario di una nota (le stesse porte di «Spargi le pagine» e del
+ * selettore delle sezioni), quali schede mostrano «File mancante», e il
+ * gesto che prende un altro pezzo di un file.
+ */
+export interface CanvasSourcesPort {
+  /** Quante pagine ha il PDF `path`; `null` se non si sa (manca, non si apre). */
+  readonly pageCount?: (path: string) => Promise<number | null>;
+  /** I titoli della nota `path` in ordine di sorgente; vuoto se l'indice non la conosce. */
+  readonly outline?: (path: string) => Promise<readonly PartsHeading[]>;
+  /** Le id delle schede che adesso mostrano «File mancante». */
+  readonly missing?: () => ReadonlySet<string>;
+  /** Avvisa quando il file `path` cambia, sparisce o torna; restituisce come smettere. */
+  readonly watch?: (path: string, changed: () => void) => () => void;
+  /**
+   * Prende un altro pezzo del file della scheda il cui oggetto comincia al
+   * byte `byte`: porta la vista sulla scheda e apre il selettore delle sue
+   * parti, se c'è. `false` se non ci arriva.
+   */
+  readonly take?: (byte: number) => boolean;
 }
 
 export interface CanvasInspector {
@@ -379,6 +421,8 @@ export interface CanvasInspector {
   changed(): void;
   /** La scelta della lavagna è cambiata. */
   selectionChanged(): void;
+  /** Una scheda ha cominciato o smesso di mostrare «File mancante»: «Fonti» si ridisegna. */
+  filesChanged(): void;
   /** La superficie se ne va: niente più linguette, niente più avvisi. */
   dispose(): void;
 }
@@ -391,9 +435,21 @@ interface Mounted {
 
 /** Le schede lette l'ultima volta. */
 interface Read {
+  readonly nodes: readonly CanvasNode[];
   readonly entries: readonly ReadingEntry[];
   /** Il byte di ogni scheda, per la sua posizione nell'array. */
   readonly starts: readonly number[];
+  /** Le fonti, lette alla prima richiesta. */
+  sources: readonly BoardSource[] | null;
+}
+
+/** Ciò che si sa di un file oltre la lavagna, chiesto una volta finché il file non cambia. */
+interface FileFacts {
+  /** Quello che la barra chiede: le pagine o le sezioni. */
+  readonly need: "pages" | "sections";
+  facts: SourceFacts;
+  /** Smette di guardare il file. */
+  readonly stop: () => void;
 }
 
 export function createCanvasInspector(port: CanvasInspectorPort): CanvasInspector {
@@ -415,7 +471,9 @@ export function createCanvasInspector(port: CanvasInspectorPort): CanvasInspecto
     stale = false;
     const source = port.source();
     const cards = source === null ? null : boardCards(source);
-    read = cards ? { entries: readingOrder(cards.nodes), starts: cards.starts } : { entries: [], starts: [] };
+    read = cards
+      ? { nodes: cards.nodes, entries: readingOrder(cards.nodes), starts: cards.starts, sources: null }
+      : { nodes: [], entries: [], starts: [], sources: null };
     return read;
   };
 
@@ -461,14 +519,133 @@ export function createCanvasInspector(port: CanvasInspectorPort): CanvasInspecto
   const card: SurfacePanel = { id: CARD_PANEL_ID, title: () => t("canvas.inspector.card"), icon: "properties", mount: editing(mountCard) };
   const edge: SurfacePanel = { id: EDGE_PANEL_ID, title: () => t("canvas.inspector.edges"), icon: "canvas-connect", mount: editing(mountEdge) };
 
+  // --- «Fonti» (T77) ---
+  /// Ciò che si sa di ogni file, per percorso: resta fra una linguetta e
+  /// l'altra, così un PDF non si riapre a ogni ritorno; si chiede di nuovo
+  /// quando il file cambia.
+  const facts = new Map<string, FileFacts>();
+  const sourceViews = new Set<Mounted>();
+  /// Un ridisegno di «Fonti» già chiesto: le risposte di molti file insieme
+  /// ne fanno uno solo.
+  let repaintAsked = false;
+  const repaintSources = (): void => {
+    if (repaintAsked || disposed) return;
+    repaintAsked = true;
+    queueMicrotask(() => {
+      repaintAsked = false;
+      if (disposed) return;
+      for (const view of sourceViews) view.refresh();
+    });
+  };
+  const forget = (path: string): void => {
+    const known = facts.get(path);
+    if (!known) return;
+    facts.delete(path);
+    known.stop();
+  };
+  /// Ciò che si sa di `source` adesso; la prima volta lo chiede, e la risposta
+  /// ridisegna. Una risposta arrivata dopo che il file è cambiato non conta.
+  const factsOf = (source: BoardSource, missing: boolean): SourceFacts => {
+    const need = sourceNeeds(source);
+    const ports = port.sources;
+    if (need === null || missing || disposed || !ports) return {};
+    const known = facts.get(source.path);
+    if (known && known.need === need) return known.facts;
+    if (known) forget(source.path);
+    const ask = need === "pages" ? ports.pageCount : ports.outline;
+    if (!ask) return {};
+    const path = source.path;
+    const entry: FileFacts = {
+      need,
+      facts: {},
+      stop: ports.watch?.(path, () => {
+        if (facts.get(path) !== entry) return;
+        forget(path);
+        repaintSources();
+      }) ?? (() => {}),
+    };
+    facts.set(path, entry);
+    const settle = (found: SourceFacts): void => {
+      if (facts.get(path) !== entry) return;
+      entry.facts = found;
+      repaintSources();
+    };
+    if (need === "pages") {
+      ports.pageCount!(path).then((pages) => settle({ pages }), () => settle({ pages: null }));
+    } else {
+      ports.outline!(path).then(
+        (headings) => settle({ sections: partsSections(headings).map((section) => ({ key: section.key, text: section.text })) }),
+        () => settle({ sections: null }),
+      );
+    }
+    return entry.facts;
+  };
+  const sourcesOf = (): { readonly read: Read; readonly sources: readonly BoardSource[] } => {
+    const now = current();
+    now.sources ??= boardSources(now.nodes);
+    return { read: now, sources: now.sources };
+  };
+  const goTo = (card: number): void => {
+    const start = current().starts[card];
+    if (start === undefined) return;
+    const node = current().nodes[card];
+    picking = true;
+    try {
+      if (port.reveal(start) && node) picked = node.id;
+    } finally {
+      picking = false;
+    }
+    for (const view of mounted) view.mark();
+  };
+  const take = (card: number): void => {
+    const start = current().starts[card];
+    if (start === undefined) return;
+    const ports = port.sources;
+    if (ports?.take) {
+      picking = true;
+      try {
+        ports.take(start);
+      } finally {
+        picking = false;
+      }
+      for (const view of mounted) view.mark();
+    } else goTo(card);
+  };
+  const sources: SurfacePanel = {
+    id: SOURCES_PANEL_ID,
+    title: () => t("canvas.inspector.sources"),
+    icon: "collection",
+    mount(host) {
+      if (disposed) return () => {};
+      const view = mountSources(host, {
+        sources: () => sourcesOf().sources,
+        nodes: () => current().nodes,
+        missing: () => port.sources?.missing?.() ?? new Set<string>(),
+        facts: factsOf,
+        goTo,
+        take,
+      });
+      mounted.add(view.handle);
+      sourceViews.add(view.handle);
+      return () => {
+        mounted.delete(view.handle);
+        sourceViews.delete(view.handle);
+        view.unmount();
+      };
+    },
+  };
+
   /// Le linguette che si offrono adesso: «Schede», poi «Scheda» se c'è una
-  /// scheda scelta, «Fili» se c'è un filo scelto.
+  /// scheda scelta, «Fili» se c'è un filo scelto, e in fondo «Fonti», come
+  /// nel prototipo (T28).
   const tabs = (): SurfacePanel[] => {
     const out = [tab];
-    if (!port.edit) return out;
-    const { nodes, edges } = chosenOf(port.edit);
-    if (nodes.length > 0) out.push(card);
-    if (edges.length > 0) out.push(edge);
+    if (port.edit) {
+      const { nodes, edges } = chosenOf(port.edit);
+      if (nodes.length > 0) out.push(card);
+      if (edges.length > 0) out.push(edge);
+    }
+    out.push(sources);
     return out;
   };
 
@@ -516,6 +693,9 @@ export function createCanvasInspector(port: CanvasInspectorPort): CanvasInspecto
       announce();
       for (const view of mounted) view.mark();
     },
+    filesChanged() {
+      if (sourceViews.size > 0) repaintSources();
+    },
     dispose() {
       if (disposed) return;
       disposed = true;
@@ -525,6 +705,7 @@ export function createCanvasInspector(port: CanvasInspectorPort): CanvasInspecto
       listeners.clear();
       reveals.clear();
       read = null;
+      for (const path of [...facts.keys()]) forget(path);
     },
   };
 }
@@ -780,6 +961,381 @@ function mountCards(host: HTMLElement, port: CardsPort): { readonly handle: Moun
     }
     event.preventDefault();
     focusAt(next);
+  });
+  // Un elenco lungo segue lo scorrimento di chi lo contiene, qualunque sia.
+  life.listen(doc, "scroll", () => {
+    if (virtual()) paint();
+  }, { capture: true, passive: true });
+  if (typeof ResizeObserver !== "undefined") {
+    const observer = new ResizeObserver(() => {
+      if (virtual()) paint();
+    });
+    observer.observe(host);
+    life.add(() => observer.disconnect());
+  }
+  life.add(onLanguage(() => {
+    label();
+    refresh();
+  }));
+  life.add(() => box.remove());
+
+  label();
+  refresh();
+  return {
+    handle: { refresh, mark },
+    unmount: () => life.close(),
+  };
+}
+
+// --- la parte «Fonti» (T77) -------------------------------------------------------
+
+interface SourcesViewPort {
+  readonly sources: () => readonly BoardSource[];
+  readonly nodes: () => readonly CanvasNode[];
+  /** Le id delle schede che mostrano «File mancante». */
+  readonly missing: () => ReadonlySet<string>;
+  readonly facts: (source: BoardSource, missing: boolean) => SourceFacts;
+  /** Porta alla scheda in posizione `card` e la sceglie. */
+  readonly goTo: (card: number) => void;
+  /** Prende un altro pezzo del file della scheda in posizione `card`. */
+  readonly take: (card: number) => void;
+}
+
+/** Una riga di «Fonti» come si disegna adesso. */
+interface SourceRow {
+  readonly source: BoardSource;
+  readonly missing: boolean;
+  readonly pieces: readonly SourcePiece[];
+  readonly loose: readonly number[];
+}
+
+/** Il nome di un pezzo per chi legge con la voce e per il suggerimento. */
+export function sourcePieceName(piece: SourcePiece): string {
+  const used = piece.card !== null;
+  switch (piece.kind) {
+    case "whole":
+      return t(used ? "canvas.inspector.sources.whole" : "canvas.inspector.sources.whole_free");
+    case "section":
+      return t(used ? "canvas.inspector.sources.section_used" : "canvas.inspector.sources.section", { name: piece.text });
+    case "pages":
+      if (piece.from === piece.to) return t(used ? "canvas.inspector.sources.page_used" : "canvas.inspector.sources.page", { n: piece.from });
+      return t(used ? "canvas.inspector.sources.pages_used" : "canvas.inspector.sources.pages", { from: piece.from, to: piece.to });
+  }
+}
+
+/**
+ * Disegna «Fonti» dentro `host`: il titoletto, la nota e una riga per file,
+ * col nome, il numero delle schede e la barra. Un pezzo d'accento porta alla
+ * sua scheda; uno grigio prende quel pezzo (il selettore delle parti). Una
+ * sola fermata del Tab per l'elenco: le frecce su e giù cambiano file, a
+ * destra e a sinistra cambiano pezzo.
+ */
+function mountSources(host: HTMLElement, port: SourcesViewPort): { readonly handle: Mounted; unmount(): void } {
+  const life = openLifetime();
+  const doc = host.ownerDocument;
+  const box = doc.createElement("div");
+  box.className = "canvas-inspector";
+  box.dataset.part = "sources";
+  const empty = doc.createElement("p");
+  empty.className = "canvas-sources-empty";
+  const heading = doc.createElement("h3");
+  heading.className = "canvas-inspector-heading";
+  heading.id = identifier("canvas-inspector-sources");
+  const note = doc.createElement("p");
+  note.className = "canvas-inspector-note";
+  const list = doc.createElement("div");
+  list.className = "canvas-sources-list";
+  list.setAttribute("role", "list");
+  list.setAttribute("aria-labelledby", heading.id);
+  box.append(empty, heading, note, list);
+  host.append(box);
+
+  let rows: SourceRow[] = [];
+  let drawn = new Map<number, HTMLElement>();
+  /// La fermata del Tab: il file (per percorso) e il pezzo.
+  let active: { readonly path: string; readonly piece: number } | null = null;
+  let step = SOURCE_STEP_FALLBACK;
+  /// Lo spazio fra due righe, dentro il passo.
+  let rowGap = 0;
+
+  const virtual = (): boolean => rows.length > SOURCES_VIRTUAL_AFTER;
+
+  const label = (): void => {
+    empty.textContent = t("canvas.inspector.sources.empty");
+    heading.textContent = t("canvas.inspector.sources.title");
+    note.textContent = t("canvas.inspector.sources.take");
+  };
+
+  /// La riga attiva e il suo pezzo: quella ricordata se c'è ancora, se no la prima.
+  const stopAt = (): { readonly row: number; readonly piece: number } | null => {
+    if (rows.length === 0) return null;
+    const wanted = active;
+    const at = wanted === null ? -1 : rows.findIndex((row) => row.source.path === wanted.path);
+    if (at < 0 || wanted === null) return { row: 0, piece: 0 };
+    const pieces = rows[at]!.pieces.length;
+    return { row: at, piece: pieces === 0 ? 0 : Math.min(wanted.piece, pieces - 1) };
+  };
+
+  /// Ciò che prende il fuoco in una riga: i pezzi, o la riga se non ha barra.
+  const targetsOf = (element: HTMLElement): HTMLElement[] => {
+    const pieces = [...element.querySelectorAll<HTMLElement>(".canvas-sources-piece")];
+    return pieces.length > 0 ? pieces : [element];
+  };
+
+  const mark = (): void => {
+    const stop = stopAt();
+    for (const [at, element] of drawn) {
+      targetsOf(element).forEach((target, index) => {
+        target.tabIndex = stop !== null && stop.row === at && stop.piece === index ? 0 : -1;
+      });
+    }
+  };
+
+  const rowOf = (row: SourceRow, at: number): HTMLElement => {
+    const element = doc.createElement("div");
+    element.className = "canvas-sources-file";
+    element.setAttribute("role", "listitem");
+    element.dataset.at = String(at);
+    element.dataset.path = row.source.path;
+    element.toggleAttribute("data-missing", row.missing);
+    const head = doc.createElement("div");
+    head.className = "canvas-sources-head";
+    const name = doc.createElement("span");
+    name.className = "canvas-sources-name";
+    name.textContent = row.source.name;
+    name.title = row.source.path;
+    head.append(name);
+    if (row.loose.length > 0) {
+      const loose = doc.createElement("span");
+      loose.className = "canvas-sources-loose";
+      loose.textContent = t(row.loose.length > 1 ? "canvas.inspector.sources.pages_loose" : "canvas.inspector.sources.page_loose", { list: row.loose.join(", ") });
+      head.append(loose);
+    }
+    if (row.missing) {
+      const state = doc.createElement("span");
+      state.className = "canvas-sources-state";
+      state.textContent = t("canvas.inspector.sources.missing");
+      head.append(state);
+    }
+    const count = doc.createElement("span");
+    count.className = "canvas-sources-count";
+    const cards = row.source.cards.length;
+    count.textContent = cards === 1 ? t("canvas.inspector.sources.count.one") : t("canvas.inspector.sources.count", { n: cards });
+    head.append(count);
+    element.append(head);
+    if (row.pieces.length > 0) {
+      const bar = doc.createElement("div");
+      bar.className = "canvas-sources-bar";
+      bar.setAttribute("role", "group");
+      bar.setAttribute("aria-label", row.source.name);
+      row.pieces.forEach((piece, index) => {
+        const button = doc.createElement("button");
+        button.type = "button";
+        button.className = "canvas-sources-piece";
+        button.dataset.piece = String(index);
+        if (piece.card !== null) button.dataset.used = "";
+        if (piece.kind === "whole") button.dataset.whole = "";
+        // Un file mancante si legge ma non si prende: il pezzo resta
+        // raggiungibile, per sentire che cosa c'era.
+        if (row.missing) button.setAttribute("aria-disabled", "true");
+        const text = sourcePieceName(piece);
+        button.setAttribute("aria-label", text);
+        button.title = text;
+        bar.append(button);
+      });
+      element.append(bar);
+    } else {
+      // Senza barra la riga stessa tiene il fuoco: Invio porta alla prima scheda.
+      element.setAttribute("aria-label", [...head.children].map((child) => child.textContent ?? "").join(", "));
+    }
+    if (virtual()) {
+      element.setAttribute("aria-setsize", String(rows.length));
+      element.setAttribute("aria-posinset", String(at + 1));
+    }
+    return element;
+  };
+
+  /// Le righe da disegnare: tutte, o quelle che si vedono più la fermata del Tab.
+  const windowOf = (): number[] => {
+    if (!virtual()) return rows.map((_, at) => at);
+    const rect = list.getBoundingClientRect();
+    const view = scrollerOf(list);
+    const top = view ? view.getBoundingClientRect().top : 0;
+    const bottom = view ? view.getBoundingClientRect().bottom : (doc.defaultView?.innerHeight ?? 0);
+    const seen = bottom - top;
+    const first = seen > 0 ? Math.max(0, Math.floor((top - rect.top) / step) - OVERSCAN) : 0;
+    const count = seen > 0 ? Math.ceil(seen / step) + 2 * OVERSCAN : SOURCES_VISIBLE_FALLBACK;
+    const last = Math.min(rows.length - 1, first + count);
+    const out: number[] = [];
+    for (let at = first; at <= last; at++) out.push(at);
+    const stop = stopAt();
+    if (stop !== null && (stop.row < first || stop.row > last)) out.push(stop.row);
+    return out;
+  };
+
+  const paint = (): void => {
+    const big = virtual();
+    list.toggleAttribute("data-virtual", big);
+    list.style.height = big ? `${rows.length * step}px` : "";
+    const next = new Map<number, HTMLElement>();
+    const elements = windowOf().map((at) => {
+      const element = drawn.get(at) ?? rowOf(rows[at]!, at);
+      element.style.top = big ? `${at * step}px` : "";
+      element.style.height = big ? `${step - rowGap}px` : "";
+      next.set(at, element);
+      return element;
+    });
+    for (const [at, element] of drawn) if (!next.has(at)) element.remove();
+    drawn = next;
+    elements.forEach((element, index) => {
+      if (list.children[index] !== element) list.insertBefore(element, list.children[index] ?? null);
+    });
+    mark();
+  };
+
+  const focusStop = (): void => {
+    const stop = stopAt();
+    const element = stop === null ? undefined : drawn.get(stop.row);
+    if (!stop || !element) return;
+    targetsOf(element)[stop.piece]?.focus({ preventScroll: virtual() });
+  };
+
+  /// Rilegge le fonti, ciò che se ne sa e i file mancanti, e rifà le righe.
+  const refresh = (): void => {
+    if (life.closed) return;
+    const missing = port.missing();
+    const nodes = port.nodes();
+    rows = port.sources().map((source): SourceRow => {
+      const gone = source.cards.some((card) => {
+        const id = nodes[card]?.id;
+        return id !== undefined && missing.has(id);
+      });
+      const bar = sourceBar(source, port.facts(source, gone));
+      return { source, missing: gone, pieces: bar.pieces, loose: bar.loose };
+    });
+    const hadFocus = list.contains(doc.activeElement);
+    for (const element of drawn.values()) element.remove();
+    drawn = new Map();
+    const none = rows.length === 0;
+    empty.hidden = !none;
+    heading.hidden = none;
+    note.hidden = none;
+    list.hidden = none;
+    // Il passo di una riga: la misura di una riga vera con la sua barra, quando c'è.
+    if (virtual()) {
+      const probe = rowOf(rows.find((row) => row.pieces.length > 0) ?? rows[0]!, 0);
+      list.append(probe);
+      const height = probe.getBoundingClientRect().height;
+      probe.remove();
+      // Lo spazio fra le righe della pelle, che le righe virtuali tengono nel passo.
+      rowGap = height > 0 ? Number.parseFloat(doc.defaultView?.getComputedStyle(list).rowGap ?? "") || 0 : 0;
+      step = height > 0 ? height + rowGap : SOURCE_STEP_FALLBACK;
+    }
+    paint();
+    if (hadFocus) focusStop();
+  };
+
+  /// Porta il fuoco sulla riga `at`, al pezzo `piece`, disegnandola se serve.
+  const focusAt = (at: number, piece: number): void => {
+    const row = rows[at];
+    if (!row) return;
+    active = { path: row.source.path, piece: Math.max(0, Math.min(piece, row.pieces.length - 1)) };
+    if (virtual()) {
+      const view = scrollerOf(list);
+      if (view) {
+        const rowTop = list.getBoundingClientRect().top + at * step;
+        const viewRect = view.getBoundingClientRect();
+        if (rowTop < viewRect.top) view.scrollTop -= viewRect.top - rowTop;
+        else if (rowTop + step > viewRect.bottom) view.scrollTop += rowTop + step - viewRect.bottom;
+      }
+      paint();
+    } else mark();
+    focusStop();
+    if (!virtual()) drawn.get(at)?.scrollIntoView?.({ block: "nearest" });
+  };
+
+  /// La riga e il pezzo sotto `target`; il pezzo è -1 fuori dalla barra.
+  const placeOf = (target: EventTarget | null): { readonly row: number; readonly piece: number } | null => {
+    if (!(target instanceof Element)) return null;
+    const element = target.closest<HTMLElement>(".canvas-sources-file");
+    if (!element || !list.contains(element)) return null;
+    const piece = target.closest<HTMLElement>(".canvas-sources-piece");
+    return { row: Number(element.dataset.at), piece: piece ? Number(piece.dataset.piece) : -1 };
+  };
+
+  /// Il gesto su un pezzo: alla scheda che lo mostra, o il selettore per
+  /// prenderlo. Su una riga senza barra, alla prima scheda del file.
+  const act = (row: number, piece: number): void => {
+    const shown = rows[row];
+    if (!shown) return;
+    if (piece < 0) {
+      const first = shown.source.cards[0];
+      if (first !== undefined) port.goTo(first);
+      return;
+    }
+    const chosen = shown.pieces[piece];
+    if (!chosen || shown.missing) return;
+    if (chosen.card !== null) {
+      port.goTo(chosen.card);
+      return;
+    }
+    // La scheda che riceve il pezzo: un estratto del file, se c'è, sennò la prima.
+    const holder = shown.source.sections[0]?.card ?? shown.source.pages[0]?.card ?? shown.source.cards[0];
+    if (holder !== undefined) port.take(holder);
+  };
+
+  life.listen(list, "click", (event) => {
+    const place = placeOf(event.target);
+    const shown = place === null ? undefined : rows[place.row];
+    if (!place || !shown) return;
+    // Il clic sulla testata di una riga con la barra non fa niente.
+    if (place.piece < 0 && shown.pieces.length > 0) return;
+    active = { path: shown.source.path, piece: Math.max(0, place.piece) };
+    mark();
+    act(place.row, place.piece);
+  });
+  life.listen(list, "focusin", (event) => {
+    const place = placeOf(event.target);
+    const shown = place === null ? undefined : rows[place.row];
+    if (!place || !shown) return;
+    active = { path: shown.source.path, piece: Math.max(0, place.piece) };
+    mark();
+  });
+  life.listen(list, "keydown", (event) => {
+    const place = placeOf(event.target);
+    if (place === null || event.ctrlKey || event.metaKey || event.altKey) return;
+    const at = place.row;
+    const piece = Math.max(0, place.piece);
+    const last = Math.max(0, (rows[at]?.pieces.length ?? 0) - 1);
+    switch (event.key) {
+      case "ArrowDown":
+        focusAt(Math.min(rows.length - 1, at + 1), piece);
+        break;
+      case "ArrowUp":
+        focusAt(Math.max(0, at - 1), piece);
+        break;
+      case "ArrowRight":
+        focusAt(at, Math.min(last, piece + 1));
+        break;
+      case "ArrowLeft":
+        focusAt(at, Math.max(0, piece - 1));
+        break;
+      case "Home":
+        focusAt(at, 0);
+        break;
+      case "End":
+        focusAt(at, last);
+        break;
+      case "Enter":
+      case " ":
+        // Un pulsante fa il suo clic da sé; la riga senza barra no.
+        if (place.piece >= 0) return;
+        act(at, -1);
+        break;
+      default:
+        return;
+    }
+    event.preventDefault();
   });
   // Un elenco lungo segue lo scorrimento di chi lo contiene, qualunque sia.
   life.listen(doc, "scroll", () => {

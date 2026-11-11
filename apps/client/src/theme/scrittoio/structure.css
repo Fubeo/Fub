@@ -4033,6 +4033,69 @@ body {
   height: var(--row-h, 28px);
 }
 
+/* Le fonti (T77): una riga per file, con la barra delle pagine o delle
+   sezioni. */
+.canvas-sources-list {
+  display: flex;
+  flex-direction: column;
+}
+.canvas-sources-file {
+  display: flex;
+  flex-direction: column;
+}
+.canvas-sources-head {
+  display: flex;
+  align-items: baseline;
+}
+.canvas-sources-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.canvas-sources-count {
+  flex: none;
+}
+.canvas-sources-bar {
+  display: flex;
+  height: 16px;
+}
+.canvas-sources-piece {
+  flex: 1 1 0;
+  min-width: 2px;
+  padding: 0;
+}
+/* Un file mancante, un PDF di cui non si sa ancora quante pagine ha, una
+   nota senza titoli. */
+.canvas-sources-loose,
+.canvas-sources-state {
+  flex: none;
+}
+.canvas-sources-head > .canvas-sources-loose,
+.canvas-sources-head > .canvas-sources-state,
+.canvas-sources-loose ~ .canvas-sources-count,
+.canvas-sources-state ~ .canvas-sources-count {
+  margin-inline-start: var(--space-3);
+}
+.canvas-sources-piece[data-whole] {
+  flex-basis: 100%;
+}
+.canvas-sources-empty {
+  margin: 0;
+}
+/* Oltre quaranta file se ne disegnano solo alcuni, al loro posto. */
+.canvas-sources-list[data-virtual] {
+  position: relative;
+  display: block;
+}
+.canvas-sources-list[data-virtual] > .canvas-sources-file {
+  position: absolute;
+  left: 0;
+  right: 0;
+  box-sizing: border-box;
+}
+
 /* Il selettore delle sezioni (T74, `parts-picker.ts`): un `kit-popover`
    attaccato alla scheda appena rilasciata. In alto il titolo e il campo; in
    mezzo la lista e l'anteprima; in fondo il piede che dice che cosa farà
