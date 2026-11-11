@@ -5990,17 +5990,24 @@ export class CanvasEngine {
     if (!node || cardKindOf(node) !== "note") return;
     const path = cardTarget(node).path;
     const epoch = this.#epoch;
-    const whole = await notes.read(path);
+    // Di un estratto serve anche il sommario del provider (i titoli col loro
+    // byte), chiesto insieme al testo; senza, si copia la nota intera.
+    const parts = this.#options.parts;
+    const outline: Promise<readonly PartsHeading[] | null> = noteExcerptOf(node) && parts
+      ? parts.outline(path).catch(() => null)
+      : Promise.resolve(null);
+    const [whole, headings] = await Promise.all([notes.read(path), outline]);
     if (this.#destroyed || this.#readOnly || !this.#doc || this.#epoch !== epoch) return;
     const source = this.#doc.nodes.find((one) => one.id === id);
     if (!source || cardKindOf(source) !== "note" || cardTarget(source).path !== path) return;
     // Una scheda-estratto (T75) copia solo le sezioni che mostra (T99), nel
     // suo ordine; una sezione sparita dalla nota non si copia. Se non ne resta
-    // nessuna non nasce niente, e la lavagna dice quali mancano.
+    // nessuna non nasce niente, e la lavagna dice quali mancano. Se il
+    // sommario non arriva, o non combacia col testo, la nota intera.
     let text = whole;
     const excerpt = noteExcerptOf(source);
-    if (excerpt) {
-      const shown = noteSectionsText(whole, excerpt.sections);
+    const shown = excerpt && headings ? noteSectionsText(whole, headings, excerpt.sections) : null;
+    if (excerpt && shown) {
       if (shown.missing.length === excerpt.sections.length) {
         const names = shown.missing.map((key) => sectionHeading(key) ?? key);
         this.#showNotice(names.length === 1

@@ -16,6 +16,7 @@ import { cardKindOf, type CardKind } from "./cards";
 import { sectionHeading } from "./excerpt";
 import type { CanvasNode } from "./model";
 import { cardParts } from "./parts";
+import { keyMatchesSection } from "./parts-picker";
 
 /// Una pagina di un PDF sulla lavagna: la prima scheda (in ordine di file)
 /// che la mostra.
@@ -266,8 +267,7 @@ function noteBar(source: BoardSource, sections: SourceFacts["sections"]): Source
   const cardOf = (section: { readonly key: string; readonly text: string }): number | null => {
     let card: number | null = null;
     for (const one of used) {
-      const heading = sectionHeading(one.key);
-      if (one.key === section.key || (byText.get(section.text) === 1 && heading === section.text)) {
+      if (keyMatchesSection(one.key, section, byText.get(section.text) ?? 0)) {
         matched.add(one.key);
         if (card === null) card = one.card;
       }

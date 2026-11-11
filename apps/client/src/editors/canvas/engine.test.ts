@@ -6442,16 +6442,30 @@ describe("convertire (T70)", () => {
       nodes: [{ id: "n", type: "file", x: 0, y: 400, width: 240, height: 140, file: "Note/gita.md", subpath: `#${sections[0]}`, "fub:parts": { kind: "sections", sections } }],
       edges: [],
     });
-    const { engine, host } = open({ notes: notesPort([], text) }, excerptBoard(["Ritorno", "Sparita", "Pranzo"]));
+    // Il sommario del provider: i titoli col byte dove comincia la loro riga.
+    const titles: [number, string][] = [[1, "Gita"], [2, "Pranzo"], [2, "Treno"], [2, "Ritorno"]];
+    const headings = titles.map(([level, title]) => ({ level, text: title, start: text.indexOf(`${"#".repeat(level)} ${title}\n`) }));
+    const outline = vi.fn(async (_path: string) => headings);
+    const { engine, host } = open({ notes: notesPort([], text), parts: { outline } }, excerptBoard(["Ritorno", "Sparita", "Pranzo"]));
     choose(engine, host, "n");
     command(engine, "canvas.copy_note_text").run();
     await vi.waitFor(() => expect(nodes(engine)).toHaveLength(2));
+    expect(outline).toHaveBeenCalledWith("Note/gita.md");
     // Nell'ordine della scheda, senza la sezione che la nota non ha più.
     expect(nodes(engine)[1]).toMatchObject({ type: "text", text: "## Ritorno\nsera\n\n## Pranzo\npanini" });
     expect(host.querySelector(".canvas-intake-error")).toBeNull();
     engine.destroy();
+    // Senza sommario (la porta manca, o la domanda fallisce) si copia la nota intera, come prima.
+    for (const parts of [undefined, { outline: async () => Promise.reject(new Error("indice fermo")) }]) {
+      const whole = open({ notes: notesPort([], text), ...(parts ? { parts } : {}) }, excerptBoard(["Ritorno"]));
+      choose(whole.engine, whole.host, "n");
+      command(whole.engine, "canvas.copy_note_text").run();
+      await vi.waitFor(() => expect(nodes(whole.engine)).toHaveLength(2));
+      expect(nodes(whole.engine)[1]).toMatchObject({ type: "text", text });
+      whole.engine.destroy();
+    }
     // Con tutte le sezioni sparite non nasce niente, e la lavagna dice quali mancano.
-    const gone = open({ notes: notesPort([], text) }, excerptBoard(["Sparita"]));
+    const gone = open({ notes: notesPort([], text), parts: { outline } }, excerptBoard(["Sparita"]));
     choose(gone.engine, gone.host, "n");
     command(gone.engine, "canvas.copy_note_text").run();
     await vi.waitFor(() => expect(gone.host.querySelector(".canvas-intake-error")?.textContent).toBe(t("canvas.excerpt.section_missing", { name: "Sparita" })));

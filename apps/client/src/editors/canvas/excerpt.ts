@@ -16,6 +16,7 @@ import { t } from "../../i18n/strings";
 import { cardKindOf } from "./cards";
 import type { CanvasNode } from "./model";
 import { nodeParts, type CanvasParts } from "./parts";
+import { partsSections, sectionOfKey, type PartsHeading } from "./parts-picker";
 
 /// Il segno di una sezione nella testata e nel corpo.
 export const SECTION_SIGN = "§";
@@ -78,89 +79,60 @@ function sourceName(file: string): string {
   return base.replace(/\.[^.]+$/, "") || base;
 }
 
-/// Un titolo `#` del testo di una nota: il livello, il testo e dove sta.
-interface NoteHeading {
-  readonly level: number;
-  /// Il testo senza `#` né spazi ai lati, in minuscolo: si confronta così.
-  readonly text: string;
-  /// Dove comincia la riga del titolo (unità UTF-16 del testo).
-  readonly start: number;
-}
-
-/// I titoli `#` di una nota, in ordine: fuori dai blocchi di codice e dalle
-/// proprietà in testa (`---`), come `headingOffset` dell'editor delle schede.
-/// Un `---` in testa che non si chiude non apre le proprietà: è una riga.
-function noteHeadings(text: string, properties = text.startsWith("---\n") || text.startsWith("---\r\n")): NoteHeading[] {
-  const headings: NoteHeading[] = [];
-  let at = 0;
-  let fence: string | null = null;
-  let front = properties;
-  let first = true;
-  for (const line of text.split(/(?<=\n)/)) {
-    const bare = line.replace(/\r?\n$/, "");
-    if (front) {
-      if (!first && /^(---|\.\.\.)\s*$/.test(bare)) front = false;
-    } else {
-      const opening = /^ {0,3}(`{3,}|~{3,})/.exec(bare);
-      if (fence !== null) {
-        if (opening && opening[1]!.startsWith(fence)) fence = null;
-      } else if (opening) {
-        fence = opening[1]!;
-      } else {
-        const match = /^ {0,3}(#{1,6})(?:[ \t]+(.*?))?(?:[ \t]+#+)?[ \t]*$/.exec(bare);
-        if (match) headings.push({ level: match[1]!.length, text: (match[2] ?? "").trim().toLowerCase(), start: at });
-      }
-    }
-    first = false;
-    at += line.length;
-  }
-  return front ? noteHeadings(text, false) : headings;
-}
-
-/// Il testo di una sezione: dalla riga del suo titolo al titolo dopo di
-/// livello uguale o più alto (o alla fine), senza le righe vuote in coda.
-/// `key` è come dopo il `#`: `Varianza`, o `Capitolo#Varianza` (il titolo
-/// cercato dentro la sezione del capitolo, come Obsidian). Senza maiuscole.
-/// `null` se la nota non ha quella sezione.
-export function noteSectionText(text: string, key: string): string | null {
-  const wanted = key.split("#").map((part) => part.trim().toLowerCase()).filter((part) => part !== "");
-  if (wanted.length === 0 || wanted[wanted.length - 1]!.startsWith("^")) return null;
-  const headings = noteHeadings(text);
-  // Lo spazio in cui si cerca: all'inizio la nota intera, poi la sezione trovata.
-  let from = 0;
-  let to = headings.length;
-  let found = -1;
-  for (const part of wanted) {
-    found = -1;
-    for (let index = from; index < to; index++) {
-      if (headings[index]!.text === part) {
-        found = index;
-        break;
-      }
-    }
-    if (found < 0) return null;
-    const level = headings[found]!.level;
-    let end = found + 1;
-    while (end < headings.length && headings[end]!.level > level) end++;
-    from = found + 1;
-    to = end;
-  }
-  const start = headings[found]!.start;
-  const stop = to < headings.length ? headings[to]!.start : text.length;
-  return text.slice(start, stop).replace(/\s+$/, "");
-}
-
-/// Il testo delle sezioni `keys` di una nota, nell'ordine dato, separate da
-/// una riga vuota; `missing` le chiavi che la nota non ha più (non si copiano).
-export function noteSectionsText(text: string, keys: readonly string[]): { readonly text: string; readonly missing: readonly string[] } {
+/// Il testo delle sezioni `keys` di una nota, per «Copia il testo qui» di un
+/// estratto (T99): nell'ordine dato, separate da una riga vuota. I titoli
+/// vengono dal sommario del provider Markdown (`outline`, col byte dove
+/// comincia ognuno: `PartsHeading.start`), non da una lettura del testo qui;
+/// una chiave trova il suo titolo con la regola del selettore
+/// (`partsSections`, `sectionOfKey`). Una sezione va dal byte del suo titolo
+/// al titolo dopo di livello uguale o più alto, o alla fine (come
+/// `section_end` di `fub-features/src/outline.rs`), senza le righe vuote in
+/// coda; si taglia in byte UTF-8. `missing` sono le chiavi che la nota non ha
+/// più: non si copiano.
+///
+/// `null` quando il sommario non basta per tagliare con certezza: un titolo
+/// senza byte, o un byte che nel testo non cade all'inizio della riga del suo
+/// titolo (il sommario è di un'altra versione del file). Allora chi copia
+/// prende la nota intera: mai testo perso in silenzio.
+export function noteSectionsText(
+  text: string,
+  headings: readonly PartsHeading[],
+  keys: readonly string[],
+): { readonly text: string; readonly missing: readonly string[] } | null {
+  if (headings.some((heading) => heading.start === undefined)) return null;
+  const bytes = new TextEncoder().encode(text);
+  const decoder = new TextDecoder();
+  const sections = partsSections(headings);
   const found: string[] = [];
   const missing: string[] = [];
   for (const key of keys) {
-    const section = noteSectionText(text, key);
-    if (section === null) missing.push(key);
-    else found.push(section);
+    const section = sectionOfKey(sections, key);
+    if (section === null) {
+      missing.push(key);
+      continue;
+    }
+    const heading = headings[section.index]!;
+    const start = heading.start!;
+    let next = section.index + 1;
+    while (next < headings.length && headings[next]!.level > heading.level) next++;
+    const end = next < headings.length ? headings[next]!.start! : bytes.length;
+    if (!headingAt(bytes, decoder, start, end, section.text)) return null;
+    found.push(decoder.decode(bytes.subarray(start, end)).replace(/\s+$/, ""));
   }
   return { text: found.join("\n\n"), missing };
+}
+
+/// Il byte `start` è davvero il titolo `title`: dentro il testo, prima di
+/// `end`, all'inizio di una riga (al più spazi prima) e su una riga che
+/// contiene il titolo.
+function headingAt(bytes: Uint8Array, decoder: TextDecoder, start: number, end: number, title: string): boolean {
+  if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end) || start < 0 || end > bytes.length || end <= start) return false;
+  let back = start;
+  while (back > 0 && (bytes[back - 1] === 0x20 || bytes[back - 1] === 0x09)) back--;
+  if (back > 0 && bytes[back - 1] !== 0x0a) return false;
+  const newline = bytes.indexOf(0x0a, start);
+  const line = decoder.decode(bytes.subarray(start, newline < 0 || newline > end ? end : newline));
+  return line.toLocaleLowerCase().includes(title.toLocaleLowerCase());
 }
 
 /// Mette la testata dell'estratto nella riga del titolo della scheda (T39),

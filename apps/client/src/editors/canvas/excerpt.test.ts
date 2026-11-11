@@ -4,8 +4,9 @@
 // titolo senza toccare il DOM quando niente cambia.
 import { afterEach, describe, expect, it } from "vitest";
 import { t } from "../../i18n/strings";
-import { excerptPartsLabel, excerptSections, excerptSourcePath, noteExcerptOf, noteSectionsText, noteSectionText, sectionHeading, sectionLabel, syncExcerptHead } from "./excerpt";
+import { excerptPartsLabel, excerptSections, excerptSourcePath, noteExcerptOf, noteSectionsText, sectionHeading, sectionLabel, syncExcerptHead } from "./excerpt";
 import type { CanvasNode } from "./model";
+import type { PartsHeading } from "./parts-picker";
 
 function card(extra: Partial<CanvasNode> = {}): CanvasNode {
   return { id: "e", type: "file", x: 0, y: 0, width: 280, height: 220, file: "Fisica/Relazione.md", ...extra };
@@ -101,23 +102,29 @@ describe("la testata dell'estratto", () => {
 });
 
 describe("il testo delle sezioni di una nota (T99)", () => {
+  /// I titoli finti come li dà il sommario del provider: il livello, il testo
+  /// e il byte (UTF-8) dove comincia la riga, cercato qui nel testo.
+  function outline(text: string, titles: readonly (readonly [level: number, title: string, line: string])[]): PartsHeading[] {
+    const bytes = new TextEncoder();
+    return titles.map(([level, title, line]) => {
+      const at = text.indexOf(line);
+      if (at < 0) throw new Error(`nessuna riga ${line}`);
+      return { level, text: title, start: bytes.encode(text.slice(0, at)).length };
+    });
+  }
+
+  // Lettere non ASCII prima delle sezioni: il byte non è l'unità UTF-16.
   const note = [
-    "---",
-    "# non un titolo: è YAML",
-    "tags: [stat]",
-    "---",
-    "# Statistica",
-    "intro",
+    "# Statistica è così",
+    "perché — città",
     "",
     "## Varianza",
     "La varianza misura.",
-    "```",
-    "# commento nel codice, non un titolo",
-    "```",
     "### Stimatore",
     "con n − 1",
     "",
-    "## Media",
+    "Media",
+    "-----",
     "La media.",
     "",
     "# Esercizi",
@@ -125,32 +132,41 @@ describe("il testo delle sezioni di una nota (T99)", () => {
     "esercizio",
     "",
   ].join("\n");
+  const headings = outline(note, [
+    [1, "Statistica è così", "# Statistica"],
+    [2, "Varianza", "## Varianza\nLa"],
+    [3, "Stimatore", "### Stimatore"],
+    // Un titolo col trattino sotto (setext): lo sa il provider, non una scansione dei `#`.
+    [2, "Media", "Media\n---"],
+    [1, "Esercizi", "# Esercizi"],
+    [2, "Varianza", "## Varianza\nesercizio"],
+  ]);
 
-  it("una sezione va dal suo titolo al titolo dopo di livello uguale o più alto, coi sottotitoli e senza righe vuote in coda", () => {
-    expect(noteSectionText(note, "Varianza")).toBe("## Varianza\nLa varianza misura.\n```\n# commento nel codice, non un titolo\n```\n### Stimatore\ncon n − 1");
-    expect(noteSectionText(note, "Media")).toBe("## Media\nLa media.");
-    expect(noteSectionText(note, "esercizi")).toBe("# Esercizi\n## Varianza\nesercizio");
+  it("una sezione va dal suo titolo al titolo dopo di livello uguale o più alto, coi sottotitoli, tagliata in byte", () => {
+    expect(noteSectionsText(note, headings, ["Statistica è così#Varianza"])).toEqual({
+      text: "## Varianza\nLa varianza misura.\n### Stimatore\ncon n − 1",
+      missing: [],
+    });
+    expect(noteSectionsText(note, headings, ["Media"])).toEqual({ text: "Media\n-----\nLa media.", missing: [] });
+    expect(noteSectionsText(note, headings, ["Esercizi"])).toEqual({ text: "# Esercizi\n## Varianza\nesercizio", missing: [] });
   });
 
-  it("`Capitolo#Titolo` cerca il titolo dentro il capitolo; una sezione che non c'è, o un blocco, è null", () => {
-    expect(noteSectionText(note, "Esercizi#Varianza")).toBe("## Varianza\nesercizio");
-    expect(noteSectionText(note, "Statistica#Esercizi")).toBeNull();
-    expect(noteSectionText(note, "Mediana")).toBeNull();
-    expect(noteSectionText(note, "non un titolo: è YAML")).toBeNull();
-    expect(noteSectionText(note, "commento nel codice, non un titolo")).toBeNull();
-    expect(noteSectionText(note, "^blocco")).toBeNull();
-    expect(noteSectionText(note, "")).toBeNull();
-  });
-
-  it("più sezioni nell'ordine dato, con una riga vuota fra loro; quelle sparite non si copiano e si dicono", () => {
-    expect(noteSectionsText(note, ["Media", "Sparita", "Esercizi#Varianza"])).toEqual({
-      text: "## Media\nLa media.\n\n## Varianza\nesercizio",
+  it("le chiavi con la regola del selettore: due «Varianza» vogliono il capitolo; più sezioni nell'ordine dato; le sparite non si copiano e si dicono", () => {
+    // `Varianza` da sola non è una chiave del selettore (il testo è doppio), e il titolo non è unico.
+    expect(noteSectionsText(note, headings, ["Varianza"])).toEqual({ text: "", missing: ["Varianza"] });
+    expect(noteSectionsText(note, headings, ["Media", "Sparita", "Esercizi#Varianza"])).toEqual({
+      text: "Media\n-----\nLa media.\n\n## Varianza\nesercizio",
       missing: ["Sparita"],
     });
-    expect(noteSectionsText(note, ["A", "B"])).toEqual({ text: "", missing: ["A", "B"] });
+    // Un titolo unico si trova anche col capitolo sbagliato, come in «Fonti».
+    expect(noteSectionsText(note, headings, ["Altro#Stimatore"])?.text).toBe("### Stimatore\ncon n − 1");
+    expect(noteSectionsText(note, headings, ["^blocco"])).toEqual({ text: "", missing: ["^blocco"] });
   });
 
-  it("un `---` in testa che non si chiude non nasconde i titoli", () => {
-    expect(noteSectionText("---\n# Uno\nuno\n# Due\ndue", "Uno")).toBe("# Uno\nuno");
+  it("senza il byte dei titoli, o con un sommario che non combacia col testo, null: chi copia prende la nota intera", () => {
+    expect(noteSectionsText(note, headings.map(({ level, text }) => ({ level, text })), ["Media"])).toBeNull();
+    // Il testo è cambiato dopo il sommario: il byte non cade più sul titolo.
+    expect(noteSectionsText(`riga nuova\n${note}`, headings, ["Media"])).toBeNull();
+    expect(noteSectionsText(note.slice(0, 20), headings, ["Esercizi"])).toBeNull();
   });
 });

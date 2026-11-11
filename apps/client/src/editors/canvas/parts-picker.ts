@@ -19,6 +19,10 @@ import { openLifetime, type Lifetime } from "../../ui/lifetime";
 export interface PartsHeading {
   readonly level: number;
   readonly text: string;
+  /// Il byte (UTF-8) dove comincia il titolo nel file, dallo `span` del
+  /// sommario: serve a «Copia il testo qui» di un estratto (T99). Chi non lo
+  /// sa non lo mette, e la copia prende la nota intera.
+  readonly start?: number;
 }
 
 /// Una riga del selettore: un titolo della nota.
@@ -102,6 +106,28 @@ export function partsSections(headings: readonly PartsHeading[]): PartsSection[]
 export function sectionHeading(key: string): string {
   const parts = key.split("#").filter((part) => part !== "");
   return parts[parts.length - 1] ?? key;
+}
+
+/// Una chiave scritta (`Varianza`, `Capitolo#Varianza`) è la sezione
+/// `section` del sommario se è la sua chiave, o se il suo titolo più interno
+/// è il testo della sezione e nella nota c'è un titolo solo con quel testo
+/// (`sameText`: quanti titoli hanno quel testo). Un blocco (`^id`) non è una
+/// sezione. È la regola di «Fonti» e della copia di un estratto.
+export function keyMatchesSection(key: string, section: { readonly key: string; readonly text: string }, sameText: number): boolean {
+  if (key === section.key) return true;
+  const heading = sectionHeading(key).trim();
+  return heading !== "" && !heading.startsWith("^") && sameText === 1 && heading === section.text;
+}
+
+/// La sezione del sommario che una chiave nomina: per chiave intera prima,
+/// poi per titolo più interno se è uno solo (`keyMatchesSection`); `null` se
+/// la nota non l'ha.
+export function sectionOfKey(sections: readonly PartsSection[], key: string): PartsSection | null {
+  const exact = sections.find((section) => section.key === key);
+  if (exact) return exact;
+  const byText = new Map<string, number>();
+  for (const section of sections) byText.set(section.text, (byText.get(section.text) ?? 0) + 1);
+  return sections.find((section) => keyMatchesSection(key, section, byText.get(section.text) ?? 0)) ?? null;
 }
 
 /// Che cosa farà Invio, con `chosen` sezioni spuntate: il testo del pulsante.
