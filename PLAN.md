@@ -4139,7 +4139,8 @@ Fatto quando: il test prova `auto` coi due dispositivi finti, `full`,
 al prototipo.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/canvas
-Stato: [~] in corso · coder Opus · base c07e5a6ea
+Stato: [x] fatto · eff25f8c1, docs 20a744281 583171a38
+Differenze: l'ispettore è della shell e la lavagna non ha un contratto per chiuderlo (non lo apre, in Semplice non lo chiude: a 700 px il pannello Collegamenti della shell resta aperto); `bare.ts` del disegno non si riusa senza toccarlo, il pezzo della lavagna sta in `chrome/workspace.ts`; Ctrl+. nasconde anche la barra di N4 (`.canvas-toolbar`); in Semplice «Mostra il navigatore» vale per questa apertura e `canvas.toolbar` non si applica; «Completo» scrive `canvas.workspace=full`. Classi e stati in `structure.css` (`data-workspace`, `data-bare`), non in `skin/editors.css`; `selection-bar.ts` non è cambiato.
 
 ## T66 · Ridimensionare
 
