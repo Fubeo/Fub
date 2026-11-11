@@ -5386,7 +5386,7 @@ provano i due controlli, il ritorno ai valori di serie che toglie il campo
 e un solo annulla; le foto del banco somigliano al prototipo.
 Prova: scripts/check.sh --rapido; cargo test -p fub-canvas-core; cd
 apps/client && npx vitest run src/editors/canvas
-Stato: [~] in corso · coder Opus · base b7bbfe9c4
+Stato: [x] fatto · da 3eb1fff98 a bc155ad1d (5 commit, merge e28ed31e9) · differenze: allineamento `center` (non `middle` del prototipo); `xl` aggiunta, una «A» da 26px che il prototipo non ha (scelta del coder); via l'aiuto della riga Testo (`text_hint`); gruppo di comandi nuovo «Testo» (`canvas.text_size.*`, `canvas.text_align.*`); con sole schede di file, link o gruppi i controlli si vedono spenti col perché; col Testo i valori valgono per le prossime schede finché la lavagna è aperta; scegliere il valore già mostrato non scrive; un campo di versione futura si riscrive a v1 solo quando lo si cambia; il dettaglio della riga sta in `canvas-format.md#nella-riga-delle-opzioni` (`canvas-input.md` è al limite); la pelle usa `.canvas-card-note`
 
 ## T93 · Il doppio clic su una scheda mancante
 
