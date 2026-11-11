@@ -93,7 +93,11 @@ delle righe prima che CodeMirror le riscriva e le anima dal posto vecchio con
   testata della pagina e i widget degli altri blocchi restano fermi. Al rilascio
   ognuno scivola al suo posto e il blocco atterra dall'immagine sollevata con un
   piccolo rimbalzo e un alone d'accento; Esc lo riporta indietro allo stesso modo.
-- **Scambiare.** Mod+Shift+↑/↓ fa scivolare le righe dal posto vecchio.
+  Trascinato sopra il frontmatter, il blocco si posa subito sotto di lui, che
+  non si trascina.
+- **Scambiare.** Mod+Shift+↑/↓ fa scivolare le righe dal posto vecchio. Il
+  frontmatter resta sempre il primo blocco: niente gli passa davanti, lui non
+  scende, e «Sposta su» non compare sul primo testo che lo segue.
 - **Trasformare.** Il testo cresce o cala sul posto con la scala dei
   caratteri, il segno nuovo entra con un rimbalzo e i blocchi sotto scivolano.
   Un gesto che ne interrompe uno ancora in corsa riparte da dov'era.

@@ -259,6 +259,18 @@ describe("il menu della maniglia", () => {
     expect(grip.getAttribute("aria-expanded")).toBe("false");
   });
 
+  it("il frontmatter resta il primo: il testo sotto non offre «Sposta su», lui non offre «Sposta giù»", () => {
+    const doc = "---\nicon: 🌿\n---\nUno\n\nDue";
+    const text = open(doc, 1);
+    const up = text.handles.mainItems(text.handles.shown!, (run) => run).map((item) => item.label);
+    expect(up, "il primo testo non sale sopra il frontmatter").not.toContain("Sposta su");
+    expect(up, "il testo può ancora scendere").toContain("Sposta giù");
+    const front = open(doc, 0);
+    const own = front.handles.mainItems(front.handles.shown!, (run) => run).map((item) => item.label);
+    expect(own, "il frontmatter non scende").not.toContain("Sposta giù");
+    expect(own).not.toContain("Sposta su");
+  });
+
   it("aperto da Invio ha già la prima voce", () => {
     const { view } = open("Uno\n\nDue");
     view.dom.querySelector<HTMLElement>(".cm-fub-block-grip")!.dispatchEvent(new MouseEvent("click", { bubbles: true, detail: 0 }));
@@ -358,5 +370,69 @@ describe("il trascinamento solleva soltanto il blocco", () => {
     expect(box.querySelector(".cm-fub-page")).toBeNull();
     expect(rows(box).join("|")).toContain("testo");
     expect(rows(box).join("|")).not.toContain("Dopo");
+  });
+});
+
+describe("il frontmatter resta il primo blocco", () => {
+  /// Trascina la maniglia del blocco `index` fino a `y`, e la lascia se
+  /// `release`. happy-dom non impagina: ogni riga è alta 20 px, come nel test
+  /// del moto, così il punto d'arrivo è deciso dalle righe vere.
+  function dragTo(view: EditorView, index: number, y: number, release = true): HTMLElement {
+    vi.spyOn(view, "lineBlockAt").mockImplementation((pos: number) => {
+      const top = (view.state.doc.lineAt(pos).number - 1) * 20;
+      return { from: 0, to: 0, top, bottom: top + 20, height: 20, type: 0, widget: null, widgetLineBreaks: 0 } as ReturnType<EditorView["lineBlockAt"]>;
+    });
+    const handles = view.plugin(handlesView)!;
+    const block = view.state.field(blockModel).blocks[index]!;
+    handles.shown = { from: block.from, depth: block.depth };
+    const grip = view.dom.querySelector<HTMLElement>(".cm-fub-block-grip")!;
+    grip.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, button: 0, pointerId: 1, clientX: 0, clientY: 100 }));
+    grip.dispatchEvent(new PointerEvent("pointermove", { bubbles: true, pointerId: 1, clientX: 0, clientY: y }));
+    const drop = handles.drop;
+    if (release) grip.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, pointerId: 1, clientX: 0, clientY: y }));
+    return drop;
+  }
+  const DOC = "---\nicon: 🌿\n---\nUno\n\nDue";
+
+  it("trascinando sopra il frontmatter, il punto più alto è subito dopo di lui", () => {
+    const view = mount(DOC, 0, undefined, propertiesDisplay.of("visible"));
+    // Due trascinato fin sopra il frontmatter: la linea d'arrivo sta sul bordo
+    // alto di «Uno», cioè subito sotto il frontmatter (che finisce a 60 px).
+    const drop = dragTo(view, 2, 10, false);
+    expect(drop.hidden, "la linea d'arrivo si vede").toBe(false);
+    expect(drop.style.top).toBe("59px");
+    view.plugin(handlesView)!.endDrag(false);
+    expect(view.state.doc.toString()).toBe(DOC);
+
+    // Rilasciato lì, Due va fra il frontmatter e Uno: il frontmatter resta primo.
+    dragTo(view, 2, 10);
+    const blocks = view.state.field(blockModel).blocks;
+    expect(blocks[0]!.kind).toBe("frontmatter");
+    expect(view.state.sliceDoc(blocks[1]!.from, blocks[1]!.to)).toBe("Due");
+    expect(view.state.doc.toString()).toBe("---\nicon: 🌿\n---\n\nDue\n\nUno");
+  });
+
+  it("trascinato giù, il frontmatter non si sposta e non lascia una linea d'arrivo", () => {
+    const view = mount(DOC, 0, undefined, propertiesDisplay.of("visible"));
+    const drop = dragTo(view, 0, 200, false);
+    expect(drop.hidden, "nessuna linea: non si sposta niente").toBe(true);
+    view.plugin(handlesView)!.endDrag(false);
+    expect(view.state.doc.toString()).toBe(DOC);
+    expect(view.state.field(blockModel).blocks[0]!.kind).toBe("frontmatter");
+  });
+
+  it("Mod-Shift-↑/↓ dalla tastiera: il primo testo non sale, il frontmatter non scende, Due va sotto di lui", () => {
+    const view = mount(DOC, DOC.indexOf("Uno"), undefined, propertiesDisplay.of("visible"));
+    press(view, "ArrowUp", { ctrlKey: true, shiftKey: true });
+    expect(view.state.doc.toString(), "il primo testo non sale").toBe(DOC);
+    view.dispatch({ selection: { anchor: 2 } });
+    press(view, "ArrowDown", { ctrlKey: true, shiftKey: true });
+    expect(view.state.doc.toString(), "il frontmatter non scende").toBe(DOC);
+    view.dispatch({ selection: { anchor: DOC.indexOf("Due") } });
+    press(view, "ArrowUp", { ctrlKey: true, shiftKey: true });
+    expect(view.state.doc.toString(), "Due sale fin sotto il frontmatter").toBe("---\nicon: 🌿\n---\n\nDue\n\nUno");
+    press(view, "ArrowUp", { ctrlKey: true, shiftKey: true });
+    expect(view.state.doc.toString(), "un altro passo non trova posto").toBe("---\nicon: 🌿\n---\n\nDue\n\nUno");
+    expect(view.state.field(blockModel).blocks[0]!.kind).toBe("frontmatter");
   });
 });
