@@ -3986,7 +3986,7 @@ Maiusc+Tab, Alt+frecce, F6 e Maiusc+F10; `npm run bench:a11y` passa con
 gli stati della lavagna.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/canvas && npm run bench:a11y
-Stato: [~] in corso · coder Opus · base 741960546
+Stato: [x] fatto · 26bbe8ed1…3bcb09bdc, 68cff561b · differenze in DECISIONS.md (2026-11-11, T61); mancano le 6 baseline delle scene `lavagna-vuota`, `lavagna`, `lavagna-attiva`, che arrivano dal runner
 
 ## T62 · La lavagna vuota
 
