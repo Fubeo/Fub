@@ -29,6 +29,7 @@
 import { pickFromList } from "../ui/dialogs";
 import { rebaseStaleChange, type EditorChange } from "../editors/core/text-operation";
 import { createDocumentSurfaceRegistry, setComponentEditors, type CanvasCardPorts } from "../editors/core/bootstrap";
+import type { CanvasNotesPort } from "../editors/canvas/engine";
 import { VECTOR_PROFILE, uisForFile } from "../editors/core/component-surfaces";
 import { componentsReady, mountComponents, onComponents, refreshComponents, type Components } from "./components";
 import {
@@ -391,16 +392,58 @@ export function paneOf(id: string): Pane | undefined {
 }
 
 // --- montaggio --------------------------------------------------------------
-async function createCanvasNote(text: string): Promise<string> {
+/// Le note della lavagna (T70): «Estrai in una nota» e «Copia il testo qui».
+/// Si crea con `note.create` e si legge come le altre note; gli errori
+/// arrivano alla tela come frasi.
+const canvasNotes: CanvasNotesPort = {
+  freeName: canvasFreeName,
+  create: async (folder, name, text) => {
+    try {
+      return await createCanvasNote(folder, name, text);
+    } catch (error) {
+      throw new Error(errorText(error));
+    }
+  },
+  read: async (path) => {
+    try {
+      return documentSessions.text(path) ?? (await api.readDocument(path)).text;
+    } catch (error) {
+      throw new Error(errorText(error));
+    }
+  },
+};
+
+async function createCanvasNote(folder: string, name: string, text: string): Promise<string> {
   // Creazione, lettura e scrittura sono un gesto solo: stanno tutte nel vault
   // in cui il gesto è partito, anche se `createNote` aspetta e ne viene aperto
-  // un altro (FUB-001).
+  // un altro (FUB-001). La cartella `""` è la radice: `createNote` non ci
+  // mette quella delle note nuove.
   const vault = openVaultRoot();
-  const doc = await createNote();
+  const doc = await createNote(name, folder);
   if (!doc) throw new Error("note.create did not return a created document");
+  if (text === "") return doc;
   const source = await api.readDocument(doc, vault);
   await api.writeDocument(doc, text, { kind: "descends_from", value: source.revision }, vault);
   return doc;
+}
+
+/// Il nome da proporre per una nota `name` in `folder` (T70): `name`, o il
+/// primo `name 1`, `name 2`… che nessun documento della cartella usa (senza
+/// guardare l'estensione né le maiuscole). Solo una proposta, come quella del
+/// kernel per «Senza titolo»: se il nome si occupa prima di crearla,
+/// `note.create` lo rifiuta invece di sovrascrivere.
+async function canvasFreeName(folder: string, name: string): Promise<string> {
+  const entries = await vaultEntries(WITHOUT_PAGE, "document", { path: folder, descendants: false });
+  const taken = new Set(entries.items.map((entry) => {
+    const base = entry.id.slice(entry.id.lastIndexOf("/") + 1);
+    const dot = base.lastIndexOf(".");
+    return (dot > 0 ? base.slice(0, dot) : base).toLocaleLowerCase();
+  }));
+  if (!taken.has(name.toLocaleLowerCase())) return name;
+  for (let n = 1; ; n += 1) {
+    const candidate = `${name} ${n}`;
+    if (!taken.has(candidate.toLocaleLowerCase())) return candidate;
+  }
 }
 
 /// Quanti file del vault propone la scelta di una card file: gli altri si
@@ -1090,7 +1133,7 @@ export function mountDocumentController(lifetime: Lifetime, d: DocumentDeps, pan
       return !(await existingDocuments([path])).has(path);
     },
     onImportRemoteImage: importRemoteImage,
-    onCreateCanvasNote: createCanvasNote,
+    canvasNotes,
     onPickCanvasFile: pickCanvasFile,
     onPickDrawingLink: pickDrawingLink,
     drawingImages: {

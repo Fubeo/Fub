@@ -163,6 +163,12 @@ export const CANVAS_COMMANDS: readonly CanvasCommandSpec[] = [
   // «Parti…» (T74): il selettore delle sezioni di una scheda di nota, da
   // riaprire quando si vuole; si apre da sé al rilascio.
   { id: "canvas.parts", label: "canvas.parts", group: "selection", keys: [], context: "selection" },
+  // Convertire (T70): il testo di una scheda in una nota nuova, il testo di
+  // una nota in una scheda accanto, un altro file al posto di quello di una
+  // scheda. La scheda convertita tiene id, posto, fili e inchiostro.
+  { id: "canvas.extract_note", label: "canvas.extract_note", group: "create", keys: [], context: "selection" },
+  { id: "canvas.copy_note_text", label: "canvas.copy_note_text", group: "create", keys: [], context: "selection" },
+  { id: "canvas.replace_file", label: "canvas.replace_file", group: "selection", keys: [], context: "selection" },
   ...CANVAS_NUDGE.map((way): CanvasCommandSpec => ({
     id: `canvas.nudge.${way}`, label: `canvas.commands.nudge.${way}`, group: "selection", keys: [ARROW[way]], context: "selection",
   })),
@@ -208,6 +214,9 @@ export const CANVAS_COMMANDS: readonly CanvasCommandSpec[] = [
   // Il menu radiale (T63): dal menu del tasto destro (Maiusc+F10) e dalla
   // ricerca; il tasto laterale della penna e il tocco lungo lo aprono dove sono.
   { id: "canvas.radial", label: "canvas.radial", group: "tools", keys: [], context: "always" },
+  // «Il dito scrive» (T64): l'interruttore in fondo alla colonna, anche da
+  // Ctrl+/. È di questo computer, e vale anche in sola lettura.
+  { id: "canvas.finger_writes", label: "canvas.finger", group: "tools", keys: [], context: "always" },
   // La riga delle opzioni (T50): i menu che apre e le punte di Collega.
   { id: "canvas.pen_menu", label: "canvas.options.pen_menu", group: "tools", keys: [], context: "always" },
   { id: "canvas.color_menu", label: "canvas.options.color_menu", group: "color", keys: [], context: "selection" },

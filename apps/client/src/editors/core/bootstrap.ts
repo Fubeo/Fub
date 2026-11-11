@@ -28,7 +28,7 @@ import { CRAFT_PREVIEW_COMMAND } from "../../host/craft";
 import { isRawPhoto } from "../../ui/format-kind";
 import { showPhotoData } from "../craft/photo-data";
 import { makePdfJsLoader, pdfIdWithoutFragment, type PdfEngineLoader, type PdfJsModule } from "../media/pdf-view";
-import type { CanvasAttachmentPort, CanvasCards, CanvasMediaPort, CardLinkRef } from "../canvas/engine";
+import type { CanvasAttachmentPort, CanvasCards, CanvasMediaPort, CanvasNotesPort, CardLinkRef } from "../canvas/engine";
 import type { DrawingImagePort } from "../canvas/surface";
 import type { CardEditorPort, CardMode, CardRenderer, CardSnapshots, CardView } from "../canvas/cards";
 import type { NoteCardPort } from "../canvas/cards/note";
@@ -138,7 +138,9 @@ export interface SurfaceBootstrapOptions extends SurfaceCallbacks {
   readonly media?: MediaSurfaceDeps;
   readonly canvasMedia?: CanvasMediaPort;
   readonly canvasAttachments?: CanvasAttachmentPort;
-  readonly onCreateCanvasNote?: (text: string) => Promise<string>;
+  /// Le note della lavagna (T70): il nome libero, la nota che nasce col testo,
+  /// il testo di una nota.
+  readonly canvasNotes?: CanvasNotesPort;
   /// Il file del vault per una scheda: scelto dall'utente. Con `name` (il nome
   /// di un file mancante, «Ritrova…») gli omonimi vengono per primi.
   readonly onPickCanvasFile?: (name?: string) => Promise<string | null>;
@@ -1018,7 +1020,7 @@ export const COMPONENT_EDITORS: Readonly<Record<string, readonly EditorPart[]>> 
               ...(options.onOpenWikilinkBeside ? { onOpenWikilinkBeside: options.onOpenWikilinkBeside } : {}),
               ...(options.resolveCardLink ? { resolveCardLink: options.resolveCardLink } : {}),
               ...(options.onTrashPath ? { onTrashPath: options.onTrashPath } : {}),
-              onCreateNote: options.onCreateCanvasNote,
+              ...(options.canvasNotes ? { notes: options.canvasNotes } : {}),
               onPickFile: options.onPickCanvasFile,
               ...(options.onOpenSettings ? { onOpenSettings: options.onOpenSettings } : {}),
               onPickDrawingLink: options.onPickDrawingLink,

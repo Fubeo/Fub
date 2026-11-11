@@ -11,6 +11,8 @@ import type { InkSample } from "../../ink/sample";
 import { ERASER } from "../../ink/tools/eraser";
 import { EraseSweep, type Spot } from "../../ink/tools/sweep";
 import { openLifetime, type Lifetime } from "../../ui/lifetime";
+import { notify } from "../../ui/notify";
+import { searchedName } from "../../rules/searched-name";
 import { focusableElements, focusZone } from "../../ui/a11y";
 import { mediaKindOfId } from "../media/media-types";
 import { anchorAt, strokeBounds, StrokeBox, type Bounds } from "./anchor";
@@ -639,7 +641,12 @@ export interface CanvasEngineOptions {
    * dell'host arriva come errore. Mai la conseguenza di un tasto.
    */
   readonly onTrashPath?: (path: string) => Promise<boolean>;
-  readonly onCreateNote?: (initialText: string) => string | void | Promise<string | void>;
+  /**
+   * Le note per «Estrai in una nota» e «Copia il testo qui» (T70): il nome
+   * libero da proporre, la nota che nasce col testo, il testo di una nota.
+   * Assente: i due comandi non ci sono.
+   */
+  readonly notes?: CanvasNotesPort;
   /**
    * Sceglie il file del vault a cui punta una nuova card file; `null` o niente
    * se l'utente rinuncia. Assente = niente bottone «aggiungi file»: una card
@@ -739,6 +746,27 @@ export interface CanvasEngineOptions {
    * test ne passano una che conta le chiamate.
    */
   readonly findNotes?: FindNotesPort;
+}
+
+/**
+ * Le note che la lavagna crea e legge (T70). La shell le fa coi suoi gesti
+ * (`note.create`, la lettura di un documento); la tela non conosce il vault.
+ */
+export interface CanvasNotesPort {
+  /**
+   * Il nome da proporre per una nota `name` nella cartella `folder` (`""` è la
+   * radice): `name` se è libero, se no `name 1`, `name 2`… È solo una
+   * proposta: se nel frattempo il nome si occupa, lo dice `create`.
+   */
+  freeName(folder: string, name: string): Promise<string>;
+  /**
+   * Crea la nota `name` nella cartella `folder` col testo `text` e torna il
+   * suo percorso nel vault. Un nome già preso è un errore, mai una nota
+   * sovrascritta.
+   */
+  create(folder: string, name: string, text: string): Promise<string>;
+  /** Il testo della nota `path` com'è adesso (anche non ancora salvato). */
+  read(path: string): Promise<string>;
 }
 
 /**
@@ -5512,20 +5540,153 @@ export class CanvasEngine {
     return out;
   }
 
-  async #convertTextToNote(node: CanvasNode): Promise<void> {
-    if (this.#readOnly || this.#destroyed || !this.#doc || node.type !== "text") return;
-    const create = this.#options.onCreateNote;
-    if (!create) return;
-    const source = this.#source;
-    const epoch = this.#epoch;
-    const path = await create(node.text ?? "");
-    const current = this.#doc?.nodes.find((entry) => entry.id === node.id);
-    if (!path || !current || this.#destroyed || this.#readOnly || source !== this.#source || this.#epoch !== epoch
-      || JSON.stringify(current) !== JSON.stringify(node)) return;
+  // --- convertire (T70) ---------------------------------------------------------
+
+  /** La cartella della lavagna nel vault, `""` alla radice: lì nascono le note estratte. */
+  #boardFolder(): string {
+    const id = (this.#options.documentId ?? "").replace(/^\/+/, "");
+    const cut = id.lastIndexOf("/");
+    return cut < 0 ? "" : id.slice(0, cut);
+  }
+
+  /**
+   * «Estrai in una nota» (T70): chiede il nome (proposto dalla prima riga,
+   * libero nella cartella della lavagna), fa nascere la nota col testo e
+   * mette al posto della scheda di testo una scheda di file su di lei, con lo
+   * stesso id: posto, misura, colore, fili e inchiostro restano. Un commit, un
+   * annulla; la nota resta nel vault anche annullando, e la notifica lo dice.
+   */
+  async #extractNote(id: string): Promise<void> {
+    const notes = this.#options.notes;
+    if (!notes || this.#readOnly || this.#destroyed || !this.#doc) return;
+    // Il testo che si sta scrivendo nella scheda va nella nota.
+    if (!this.#closeField(false)) return;
+    const node = this.#doc?.nodes.find((one) => one.id === id);
+    if (node?.type !== "text") return;
+    const text = node.text ?? "";
+    const folder = this.#boardFolder();
+    const proposed = await notes.freeName(folder, proposedNoteName(text));
+    if (this.#destroyed || this.#readOnly) return;
+    const name = await this.#askNoteName(proposed, folder);
+    if (name === null || this.#destroyed || this.#readOnly) return;
+    // La scheda è cambiata mentre si sceglieva il nome: nessuna nota nasce.
+    const before = this.#doc?.nodes.find((one) => one.id === id);
+    if (before?.type !== "text" || (before.text ?? "") !== text) return;
+    const path = await notes.create(folder, name, text);
+    const opened = (): void => {
+      void Promise.resolve(this.#options.onOpenPath?.(`/${path.replace(/^\/+/, "")}`, this.#options.documentId))
+        .catch((error: unknown) => this.#showIntakeError(error));
+    };
+    const shown = noteDisplayName(path);
+    const open = { label: t("canvas.extract.open"), hint: t("canvas.extract.open_hint", { name: shown }), run: opened };
+    const current = this.#doc?.nodes.find((one) => one.id === id);
+    if (this.#destroyed || this.#readOnly || !this.#doc || current?.type !== "text" || (current.text ?? "") !== text) {
+      // La nota c'è, la scheda no (o è cambiata): la scheda resta com'è, e la notifica lo dice.
+      if (!this.#destroyed) notify(t("canvas.extract.stale", { name: shown }), "info", open);
+      return;
+    }
     const next: CanvasNode = { ...current, type: "file", file: path };
     delete next.text;
-    const patch = upsertNodePatch(this.#doc!, next);
-    if (patch) this.#commit([patch], "input");
+    const patch = upsertNodePatch(this.#doc, next);
+    if (!patch || !this.#commit([patch], "input")) {
+      notify(t("canvas.extract.stale", { name: shown }), "info", open);
+      return;
+    }
+    this.#statusSettle();
+    notify(t("canvas.extract.done", { name: shown }), "info", open);
+  }
+
+  /**
+   * Il nome della nota da estrarre (T70), con `proposed` già scritto: `null`
+   * se si rinuncia. Il nome che si conferma è pulito come quello di una nota
+   * nuova (`searchedName`); un nome fatto solo di caratteri vietati non chiude
+   * il dialogo.
+   */
+  #askNoteName(proposed: string, folder: string): Promise<string | null> {
+    const own = openLifetime();
+    this.#life.add(() => own.close());
+    const field = textField({
+      label: t("canvas.extract.field"),
+      value: proposed,
+      lifetime: own,
+    });
+    const handle = openDialog<"extract" | "cancel">({
+      title: t("canvas.extract.title"),
+      description: folder === ""
+        ? t("canvas.extract.description_root")
+        : t("canvas.extract.description", { folder }),
+      body: field.element,
+      actions: [
+        { id: "cancel", label: t("app.cancel"), value: "cancel" },
+        { id: "extract", label: t("canvas.extract.action"), kind: "primary", value: "extract" },
+      ],
+      dismissValue: "cancel",
+      lifetime: own,
+      submit: "extract",
+      confirm: (value) => value === "cancel" || searchedName(field.value()) !== null,
+    });
+    return handle.result.then((value) => {
+      own.close();
+      return value === "extract" ? searchedName(field.value()) : null;
+    });
+  }
+
+  /**
+   * «Copia il testo qui» (T70): una scheda di testo col testo della nota,
+   * accanto alla sua scheda, al primo posto libero; la nota non cambia. Larga
+   * come la scheda della nota, alta come lei ma non più della vista: una
+   * nota lunga scorre dentro la scheda. Un commit, un annulla.
+   */
+  async #copyNoteText(id: string): Promise<void> {
+    const notes = this.#options.notes;
+    if (!notes || this.#readOnly || this.#destroyed || !this.#doc) return;
+    const node = this.#doc.nodes.find((one) => one.id === id);
+    if (!node || cardKindOf(node) !== "note") return;
+    const path = cardTarget(node).path;
+    const epoch = this.#epoch;
+    const text = await notes.read(path);
+    if (this.#destroyed || this.#readOnly || !this.#doc || this.#epoch !== epoch) return;
+    if (utf8.encode(text).length > MAX_CARD_TEXT_BYTES) {
+      this.#showNotice(t("canvas.card_too_long"));
+      return;
+    }
+    const source = this.#doc.nodes.find((one) => one.id === id);
+    if (!source) return;
+    const { view } = this.#viewRect();
+    const height = Math.max(TEXT_CARD_HEIGHT, Math.min(source.height, Math.floor(view.height)));
+    const spot = freeSpot(this.#doc.nodes, { x: source.x + source.width + NEXT_CARD_GAP, y: source.y, width: source.width, height });
+    const card: CanvasNode = { id: newNodeId("n"), type: "text", ...spot, text };
+    const patch = upsertNodePatch(this.#doc, card);
+    if (!patch || !this.#commit([patch], "input")) return;
+    this.#selection = [card.id];
+    this.#edgeSelection = [];
+    this.#options.onSelectionChange();
+    this.#displaySelection();
+    this.#statusSettle();
+  }
+
+  /**
+   * «Sostituisci il file…» (T70): il selettore dei file di sempre, e la
+   * scheda punta al file scelto. Tiene id, posto, misura, colore, fili e
+   * inchiostro; perde ciò che era del file di prima (la sezione o la pagina,
+   * le parti). Con un file di un'altra specie la scheda cambia specie;
+   * l'inchiostro (`fub:ink` della scheda) resta com'era e si disegna con la
+   * regola della specie nuova (`inkFitMode`). Un commit, un annulla.
+   */
+  async #replaceFile(id: string): Promise<void> {
+    const pick = this.#options.onPickFile;
+    if (!pick || this.#readOnly || this.#destroyed || !this.#doc) return;
+    const node = this.#doc.nodes.find((one) => one.id === id);
+    if (node?.type !== "file") return;
+    const chosen = await pick();
+    if (!isVaultPath(chosen) || this.#destroyed || this.#readOnly || !this.#doc) return;
+    const current = this.#doc.nodes.find((one) => one.id === id);
+    if (current?.type !== "file" || current.file === chosen) return;
+    const next: CanvasNode = { ...current, file: chosen };
+    delete next.subpath;
+    delete next[PARTS_KEY];
+    const patch = upsertNodePatch(this.#doc, next);
+    if (patch && this.#commit([patch], "input")) this.#statusSettle();
   }
 
   async #addFileNode(at?: { x: number; y: number }): Promise<void> {
@@ -6259,7 +6420,49 @@ export class CanvasEngine {
         },
       };
     }
+    if (id === "canvas.extract_note" || id === "canvas.copy_note_text") {
+      // Convertire (T70): senza la porta delle note i due comandi non ci sono.
+      if (!this.#options.notes) return null;
+      if (id === "canvas.extract_note") {
+        return {
+          disabled: () => writable() ?? (only()?.type === "text" ? null : t("canvas.commands.why.one_text")),
+          run: () => {
+            const one = only();
+            if (one?.type === "text") void this.#extractNote(one.id).catch((error: unknown) => this.#showIntakeError(error));
+          },
+        };
+      }
+      return {
+        disabled: () => {
+          const one = only();
+          return writable() ?? (one && cardKindOf(one) === "note" ? null : t("canvas.commands.why.one_note"));
+        },
+        run: () => {
+          const one = only();
+          if (one && cardKindOf(one) === "note") void this.#copyNoteText(one.id).catch((error: unknown) => this.#showIntakeError(error));
+        },
+      };
+    }
     switch (id) {
+      case "canvas.replace_file":
+        return {
+          disabled: () => {
+            const why = writable();
+            if (why !== null) return why;
+            if (!this.#options.onPickFile) return t("canvas.commands.why.no_file_picker");
+            return only()?.type === "file" ? null : t("canvas.commands.why.one_file");
+          },
+          run: () => {
+            const one = only();
+            if (one?.type === "file") void this.#replaceFile(one.id).catch((error: unknown) => this.#showIntakeError(error));
+          },
+        };
+      // «Il dito scrive» (T64): una scelta di questo computer, anche in sola lettura.
+      case "canvas.finger_writes":
+        return {
+          disabled: () => null,
+          run: () => this.#setFingerWrites(!this.#fingerWritesSetting),
+        };
       case "canvas.escape":
         return {
           disabled: () => (this.#selection.length || this.#edgeSelection.length || this.#strokeSelection.size || this.#tool !== "select"
@@ -7156,12 +7359,19 @@ export class CanvasEngine {
     }
     // «Parti…» per prima, come nel prototipo (T28): riapre il selettore.
     if (one && this.#options.parts && this.#partsNote(one)) context.push(entry("canvas.parts", undefined, false));
-    if (one?.type === "text") context.push(entry("canvas.edit", undefined, false));
+    if (one?.type === "text") {
+      context.push(entry("canvas.edit", undefined, false));
+      // Convertire (T70): il testo in una nota nuova; il dialogo prende il fuoco.
+      if (this.#options.notes) context.push(entry("canvas.extract_note", undefined, false));
+    }
     if (one?.type === "file" && one.file) {
       context.push(entry(cardKindOf(one) === "image" ? "canvas.open_viewer" : "canvas.open", undefined, false));
       if (this.#options.onOpenPathBeside) context.push(entry("canvas.open_beside", undefined, false));
       // «Spargi le pagine…» (T72): solo su un PDF; spenta, col perché, se non si apre.
       if (cardKindOf(one) === "pdf") context.push(entry("canvas.spread_pages", undefined, false));
+      // Convertire (T70): il testo della nota accanto; un altro file al posto di questo.
+      if (this.#options.notes && cardKindOf(one) === "note") context.push(entry("canvas.copy_note_text"));
+      if (this.#options.onPickFile) context.push(entry("canvas.replace_file", undefined, false));
     }
     if (one?.type === "link") {
       context.push(entry("canvas.open_url", undefined, false));
@@ -10074,15 +10284,16 @@ export class CanvasEngine {
             body.textContent = t("canvas.empty_text");
           }
         }
-        if (this.#options.onCreateNote && !this.#readOnly) {
+        if (this.#options.notes && !this.#readOnly) {
           const convert = document.createElement("button");
           convert.type = "button";
           convert.className = "canvas-convert-note";
-          convert.textContent = t("canvas.convert_note");
+          convert.textContent = t("canvas.extract_note");
           convert.addEventListener("click", (event) => {
             event.stopPropagation();
-            // La scheda di adesso: il corpo resta anche se la si sposta.
-            void this.#convertTextToNote(entry.node).catch((error: unknown) => this.#showIntakeError(error));
+            // Lo stesso gesto di «Estrai in una nota» del menu (T70), sulla
+            // scheda di adesso: il corpo resta anche se la si sposta.
+            void this.#extractNote(entry.id).catch((error: unknown) => this.#showIntakeError(error));
           });
           body.append(convert);
         }
@@ -10641,6 +10852,22 @@ function relinkedFile(node: CanvasNode, chosen: string): string {
   const file = typeof node.file === "string" ? node.file : "";
   const hash = file.indexOf("#");
   return hash < 0 ? chosen : `${chosen}${file.slice(hash)}`;
+}
+
+/**
+ * Il nome che «Estrai in una nota» propone per il testo `text` (T70): la
+ * prima riga senza i `#` di un titolo, pulita come il nome di una nota nuova
+ * (`searchedName`: niente caratteri vietati, al più 80 caratteri). Una prima
+ * riga vuota, o fatta solo di caratteri vietati, dà il nome di serie.
+ */
+export function proposedNoteName(text: string): string {
+  const first = (text.split(/\r?\n/, 1)[0] ?? "").replace(/^\s*#{1,6}(?=\s|$)/, "");
+  return searchedName(first) ?? t("canvas.extract.untitled");
+}
+
+/** Il nome di una nota come lo si legge: il file senza cartella e senza `.md`. */
+function noteDisplayName(path: string): string {
+  return fileName(path).replace(/\.(md|markdown)$/i, "");
 }
 
 /** Il nome di una scheda che scrive, per la banda (T41): il file senza cartella né `.md`. */

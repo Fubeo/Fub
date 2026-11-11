@@ -160,7 +160,8 @@ function mounted(source = BOARD) {
   const ports = {
     deposit: vi.fn(async () => [] as string[]),
     resolvePaths: vi.fn(async () => [] as string[]),
-    onCreateNote: vi.fn(),
+    createNote: vi.fn(async () => "nota.md"),
+    readNote: vi.fn(async () => ""),
     onPickFile: vi.fn(() => null),
     openExternal: vi.fn(),
     onOpenPath: vi.fn(),
@@ -172,7 +173,7 @@ function mounted(source = BOARD) {
     core: countingPort(calls),
     onChange: (change) => changes.push(change),
     onSelectionChange: () => {},
-    onCreateNote: ports.onCreateNote,
+    notes: { freeName: async (_folder: string, name: string) => name, create: ports.createNote, read: ports.readNote },
     onPickFile: ports.onPickFile,
     onOpenPath: ports.onOpenPath,
     media: { openExternal: ports.openExternal },

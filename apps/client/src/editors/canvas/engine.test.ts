@@ -3,7 +3,7 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vite
 import { MENU_RULE, type SurfaceMenuItem } from "../core/editor-menu";
 import { renderMarkdown } from "../text/profiles/markdown/render";
 import { mountMarkdown } from "../text/profiles/markdown/mount";
-import { CANVAS_ZOOM_STEP, CARD_PAUSE_MS, CanvasEngine, EDGE_SCROLL_MAX, EDGE_SCROLL_ZONE, MAX_CANVAS_HISTORY, edgeScrollSpeed, MEASURE_IMAGE_TIMEOUT_MS, type CanvasChange, type CanvasCorePort, type CanvasDepositCards, type CanvasEngineOptions } from "./engine";
+import { CANVAS_ZOOM_STEP, CARD_PAUSE_MS, CanvasEngine, EDGE_SCROLL_MAX, EDGE_SCROLL_ZONE, MAX_CANVAS_HISTORY, NEXT_CARD_GAP, edgeScrollSpeed, MEASURE_IMAGE_TIMEOUT_MS, proposedNoteName, type CanvasChange, type CanvasCorePort, type CanvasDepositCards, type CanvasEngineOptions } from "./engine";
 import type { CanvasDocument } from "./model";
 import { dropLayout } from "./drop-layout";
 import { ENTRIES_DRAG_TYPE } from "../../ui/drag-types";
@@ -50,6 +50,15 @@ vi.mock("./preferences", async (importOriginal) => ({
       watched.appliers = watched.appliers.filter((other) => other !== apply);
     };
   },
+}));
+
+// Le notifiche della shell (T70, «Estrai in una nota»): la prova legge che
+// cosa dicono e quale gesto offrono. Il resto del modulo è quello vero.
+const notices = vi.hoisted(() => ({ notify: vi.fn() }));
+
+vi.mock("../../ui/notify", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../ui/notify")>()),
+  notify: notices.notify,
 }));
 
 // Il nucleo si carica una volta: dopo, la tela si apre subito.
@@ -108,7 +117,7 @@ function mounted(source = canvasSource(), overrides: Partial<CanvasEngineOptions
   const host = document.createElement("div");
   document.body.append(host);
   const changes: CanvasChange[] = [];
-  const opened: Array<{ page?: string; path?: string; url?: string; note?: string }> = [];
+  const opened: Array<{ page?: string; path?: string; url?: string }> = [];
   const engine = new CanvasEngine(host, {
     surfaceId: "test",
     formatId: "canvas",
@@ -121,9 +130,6 @@ function mounted(source = canvasSource(), overrides: Partial<CanvasEngineOptions
     },
     onOpenPath: (path) => {
       opened.push({ path });
-    },
-    onCreateNote: (initialText) => {
-      opened.push({ note: initialText });
     },
     media: {
       openExternal: (url) => {
@@ -582,7 +588,8 @@ describe("CanvasEngine", () => {
     const deposit = vi.fn(async () => ["attachments/photo.png", "attachments/photo.png"]);
     const create = vi.fn(async () => "Notes/new.md");
     const { engine, host, changes } = mounted(canvasSource(), {
-      attachments: { deposit }, onCreateNote: create,
+      attachments: { deposit },
+      notes: { freeName: async (_folder, name) => name, create, read: async () => "" },
     });
     const clipboard = new Event("paste", { bubbles: true, cancelable: true });
     const file = new File(["image"], "photo.png", { type: "image/png" });
@@ -594,8 +601,11 @@ describe("CanvasEngine", () => {
     await vi.waitFor(() => expect(readCanvas(engine.getDoc()).nodes.filter((node) => node.file === "attachments/photo.png")).toHaveLength(1));
     expect(host.querySelector(".canvas-media-placeholder")?.textContent).toContain("IMAGE");
     expect(host.querySelector("img,audio,video,iframe")).toBeNull();
+    // Il pulsante della scheda di testo è «Estrai in una nota» (T70): chiede il nome.
     host.querySelector<HTMLButtonElement>(".canvas-convert-note")!.click();
-    await vi.waitFor(() => expect(create).toHaveBeenCalledWith("vedi [[Altra]] e #tag"));
+    await vi.waitFor(() => expect(document.querySelector('.kit-dialog [data-action="extract"]')).not.toBeNull());
+    document.querySelector<HTMLButtonElement>('.kit-dialog [data-action="extract"]')!.click();
+    await vi.waitFor(() => expect(create).toHaveBeenCalledWith("", "vedi [[Altra]] e #tag", "vedi [[Altra]] e #tag"));
     await vi.waitFor(() => expect(readCanvas(engine.getDoc()).nodes[0]).toMatchObject({ type: "file", file: "Notes/new.md" }));
     expect(changes[changes.length - 1]?.operation.patches[0]).toMatchObject({ kind: "upsert-node" });
     engine.destroy();
@@ -6066,6 +6076,210 @@ describe("«Apri a lato per questo» (T45)", () => {
     enter(host, "p");
     expect(command(engine).label).toBe("Apri a lato alla pagina 3");
     expect(command(engine).disabled()).toBe(t("canvas.commands.why.no_beside"));
+    engine.destroy();
+  });
+});
+
+describe("convertire (T70)", () => {
+  /** Un tratto attaccato a una scheda, come lo scrive la penna. */
+  const cardInk = (id: string) => ({ v: 1, strokes: [{ id, tool: "pen", brush: "pf1 size=3", color: "#0072b2", anchor: { kind: "card", width: 240, height: 140 }, ink: "1 s100 cxy 100,100 5,5" }] });
+
+  /** Un testo con un titolo e l'inchiostro (`t`), una nota (`n`), un PDF alla pagina 2 con l'inchiostro (`p`), due fili. */
+  const board = (noteHeight = 140) => JSON.stringify({
+    nodes: [
+      { id: "t", type: "text", x: 0, y: 0, width: 240, height: 140, color: "4", text: "# Idee per la gita\nportare il pranzo", "fub:ink": cardInk("s-t") },
+      { id: "n", type: "file", x: 0, y: 400, width: 240, height: noteHeight, file: "Note/gita.md" },
+      { id: "p", type: "file", x: 600, y: 0, width: 360, height: 480, file: "docs/manuale.pdf", subpath: "#page=2", "fub:ink": cardInk("s-p") },
+    ],
+    edges: [
+      { id: "e1", fromNode: "t", toNode: "n" },
+      { id: "e2", fromNode: "p", toNode: "t" },
+    ],
+  });
+
+  /** La porta delle note finta: `taken` sono i nomi già presi nella cartella. */
+  function notesPort(taken: readonly string[] = [], text = "testo della nota") {
+    return {
+      freeName: vi.fn(async (_folder: string, name: string) => {
+        let free = name;
+        for (let n = 1; taken.includes(free); n += 1) free = `${name} ${n}`;
+        return free;
+      }),
+      create: vi.fn(async (folder: string, name: string, _text: string) => (folder ? `${folder}/${name}.md` : `${name}.md`)),
+      read: vi.fn(async (_path: string) => text),
+    };
+  }
+
+  function open(overrides: Partial<CanvasEngineOptions> = {}, source = board()) {
+    const notes = notesPort();
+    const made = mounted(source, { documentId: "Lavagne/gita.canvas", notes, ...overrides });
+    return { ...made, notes: (overrides.notes ?? notes) as ReturnType<typeof notesPort> };
+  }
+
+  function choose(engine: CanvasEngine, host: HTMLElement, id: string) {
+    const pointing = vi.spyOn(document, "elementFromPoint").mockReturnValue(host.querySelector<HTMLElement>(`.canvas-node[data-node="${id}"]`));
+    try {
+      return engine.contextMenu({ x: 10, y: 10 });
+    } finally {
+      pointing.mockRestore();
+    }
+  }
+
+  function command(engine: CanvasEngine, id: string) {
+    return engine.commands().find((one) => one.id === id)!;
+  }
+
+  function dialog(): HTMLElement {
+    const all = document.querySelectorAll<HTMLElement>(".kit-dialog");
+    return all[all.length - 1]!;
+  }
+
+  const nodes = (engine: CanvasEngine) => readCanvas(engine.getDoc()).nodes;
+  const node = (engine: CanvasEngine, id: string) => nodes(engine).find((one) => one.id === id);
+  const edges = (engine: CanvasEngine) => readCanvas(engine.getDoc()).edges.map((edge) => `${edge.fromNode}>${edge.toNode}`);
+
+  beforeEach(() => {
+    notices.notify.mockClear();
+  });
+
+  it("il nome proposto: la prima riga senza #, pulita come una nota nuova; vuota o di soli divieti, il nome di serie; al più 80", () => {
+    expect(proposedNoteName("# Idee per la gita\naltro")).toBe("Idee per la gita");
+    expect(proposedNoteName("### Titolo: a/b?")).toBe("Titolo a b");
+    expect(proposedNoteName("#tag resta\n")).toBe("#tag resta");
+    expect(proposedNoteName("")).toBe(t("canvas.extract.untitled"));
+    expect(proposedNoteName("\nla seconda riga non conta")).toBe(t("canvas.extract.untitled"));
+    expect(proposedNoteName("# ///")).toBe(t("canvas.extract.untitled"));
+    expect(proposedNoteName("x".repeat(200))).toBe("x".repeat(80));
+  });
+
+  it("«Estrai in una nota»: chiede il nome (quello che c'è già diventa «nome 1»), la nota nasce col testo nella cartella della lavagna, la scheda la mostra allo stesso posto coi fili e l'inchiostro", async () => {
+    const notes = notesPort(["Idee per la gita"]);
+    const { engine, host, changes, opened } = open({ notes });
+    choose(engine, host, "t");
+    const before = node(engine, "t")!;
+    command(engine, "canvas.extract_note").run();
+    await vi.waitFor(() => expect(dialog().querySelector<HTMLInputElement>(".kit-field-input")?.value).toBe("Idee per la gita 1"));
+    expect(notes.freeName).toHaveBeenCalledWith("Lavagne", "Idee per la gita");
+    dialog().querySelector<HTMLButtonElement>('[data-action="extract"]')!.click();
+    await vi.waitFor(() => expect(node(engine, "t")?.type).toBe("file"));
+    expect(notes.create).toHaveBeenCalledWith("Lavagne", "Idee per la gita 1", "# Idee per la gita\nportare il pranzo");
+    const after = node(engine, "t")!;
+    expect(after).toMatchObject({ id: "t", type: "file", file: "Lavagne/Idee per la gita 1.md", x: before.x, y: before.y, width: before.width, height: before.height, color: "4" });
+    expect(after.text).toBeUndefined();
+    expect(after["fub:ink"]).toEqual(before["fub:ink"]);
+    expect(edges(engine)).toEqual(["t>n", "p>t"]);
+    expect(changes).toHaveLength(1);
+    // La notifica dice che la nota resta, con «Apri».
+    expect(notices.notify).toHaveBeenCalledTimes(1);
+    const [message, , action] = notices.notify.mock.calls[0]!;
+    expect(message).toBe(t("canvas.extract.done", { name: "Idee per la gita 1" }));
+    expect((action as { label: string }).label).toBe(t("canvas.extract.open"));
+    await (action as { run: () => Promise<void> | void }).run();
+    expect(opened).toContainEqual({ path: "/Lavagne/Idee per la gita 1.md" });
+    // Un annulla solo riporta la scheda di testo; la nota non si tocca.
+    expect(engine.undo()).toBe(true);
+    expect(node(engine, "t")).toEqual(before);
+    expect(edges(engine)).toEqual(["t>n", "p>t"]);
+    expect(notes.create).toHaveBeenCalledTimes(1);
+    engine.destroy();
+  });
+
+  it("alla radice del vault la nota nasce alla radice; il nome si può cambiare, e si pulisce", async () => {
+    const { engine, host, notes } = open({ documentId: "gita.canvas" });
+    choose(engine, host, "t");
+    command(engine, "canvas.extract_note").run();
+    await vi.waitFor(() => expect(dialog().querySelector(".kit-field-input")).not.toBeNull());
+    type(dialog().querySelector<HTMLInputElement>(".kit-field-input")!, "  Gita: il pranzo  ");
+    dialog().querySelector<HTMLButtonElement>('[data-action="extract"]')!.click();
+    await vi.waitFor(() => expect(notes.create).toHaveBeenCalledWith("", "Gita il pranzo", expect.any(String)));
+    await vi.waitFor(() => expect(node(engine, "t")?.file).toBe("Gita il pranzo.md"));
+    engine.destroy();
+  });
+
+  it("rinunciare al nome non crea niente e non cambia la lavagna", async () => {
+    const { engine, host, notes, changes } = open();
+    choose(engine, host, "t");
+    command(engine, "canvas.extract_note").run();
+    await vi.waitFor(() => expect(dialog().querySelector('[data-action="cancel"]')).not.toBeNull());
+    dialog().querySelector<HTMLButtonElement>('[data-action="cancel"]')!.click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(notes.create).not.toHaveBeenCalled();
+    expect(changes).toHaveLength(0);
+    expect(node(engine, "t")?.type).toBe("text");
+    engine.destroy();
+  });
+
+  it("«Copia il testo qui»: una scheda di testo col testo della nota accanto, scelta; la nota non cambia; un annulla", async () => {
+    const { engine, host, notes, changes } = open();
+    choose(engine, host, "n");
+    command(engine, "canvas.copy_note_text").run();
+    await vi.waitFor(() => expect(nodes(engine)).toHaveLength(4));
+    expect(notes.read).toHaveBeenCalledWith("Note/gita.md");
+    expect(notes.create).not.toHaveBeenCalled();
+    const copy = nodes(engine)[3]!;
+    expect(copy).toMatchObject({ type: "text", text: "testo della nota", x: 240 + NEXT_CARD_GAP, y: 400, width: 240, height: 160 });
+    expect(node(engine, "n")).toMatchObject({ type: "file", file: "Note/gita.md" });
+    expect(engine.selectedText()?.primary).toBe("testo della nota");
+    expect(changes).toHaveLength(1);
+    expect(engine.undo()).toBe(true);
+    expect(nodes(engine).map((one) => one.id)).toEqual(["t", "n", "p"]);
+    engine.destroy();
+  });
+
+  it("una nota lunga nasce alta al più come la vista", async () => {
+    const { engine, host } = open({}, board(5000));
+    // Al 100%, subito: la vista (600 px di riserva in happy-dom) è alta 600 sulla lavagna.
+    setReducedMotionPreference(true);
+    command(engine, "canvas.zoom_reset").run();
+    setReducedMotionPreference(false);
+    choose(engine, host, "n");
+    command(engine, "canvas.copy_note_text").run();
+    await vi.waitFor(() => expect(nodes(engine)).toHaveLength(4));
+    const copy = nodes(engine)[3]!;
+    expect(copy.height).toBe(600);
+    engine.destroy();
+  });
+
+  it("«Sostituisci il file…»: il selettore di sempre; la scheda tiene posto, misura, fili e inchiostro, e cambia specie; un annulla", async () => {
+    const onPickFile = vi.fn(async () => "foto/gita.png");
+    const { engine, host, changes } = open({ onPickFile });
+    choose(engine, host, "p");
+    const before = node(engine, "p")!;
+    command(engine, "canvas.replace_file").run();
+    await vi.waitFor(() => expect(node(engine, "p")?.file).toBe("foto/gita.png"));
+    expect(onPickFile).toHaveBeenCalledWith();
+    const after = node(engine, "p")!;
+    expect(after).toMatchObject({ id: "p", type: "file", x: 600, y: 0, width: 360, height: 480 });
+    // La pagina era del PDF; l'inchiostro attaccato resta nel file.
+    expect(after.subpath).toBeUndefined();
+    expect(after["fub:ink"]).toEqual(before["fub:ink"]);
+    expect(edges(engine)).toEqual(["t>n", "p>t"]);
+    expect(host.querySelector<HTMLElement>('.canvas-node[data-node="p"] .canvas-card-body')?.dataset.mediaKind).toBe("image");
+    expect(changes).toHaveLength(1);
+    expect(engine.undo()).toBe(true);
+    expect(node(engine, "p")).toEqual(before);
+    engine.destroy();
+  });
+
+  it("le voci stanno nel menu della scheda giusta, e in sola lettura sono spente col perché", () => {
+    const { engine, host } = open({ onPickFile: async () => null });
+    const ids = (id: string) => (choose(engine, host, id)!.context ?? []).flatMap((entry) => (typeof entry === "string" ? [] : [entry.id]));
+    expect(ids("t")).toContain("canvas.extract_note");
+    expect(ids("t")).not.toContain("canvas.copy_note_text");
+    expect(ids("n")).toEqual(expect.arrayContaining(["canvas.copy_note_text", "canvas.replace_file"]));
+    expect(ids("p")).toContain("canvas.replace_file");
+    expect(ids("p")).not.toContain("canvas.copy_note_text");
+    engine.setReadOnly(true);
+    choose(engine, host, "t");
+    for (const id of ["canvas.extract_note", "canvas.copy_note_text", "canvas.replace_file"]) {
+      expect(command(engine, id).disabled()).toBe(t("canvas.commands.why.read_only"));
+    }
+    engine.destroy();
+  });
+
+  it("senza la porta delle note i due comandi non ci sono", () => {
+    const { engine } = mounted(board());
+    expect(engine.commands().some((one) => one.id === "canvas.extract_note" || one.id === "canvas.copy_note_text")).toBe(false);
     engine.destroy();
   });
 });

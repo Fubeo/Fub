@@ -37,6 +37,7 @@ const STABLE_IDS = [
   "canvas.add.text", "canvas.add.file", "canvas.add.link", "canvas.add.group", "canvas.duplicate",
   "canvas.select_all", "canvas.enter", "canvas.edit", "canvas.open", "canvas.open_url",
   "canvas.open_beside", "canvas.open_beside_here", "canvas.open_viewer", "canvas.web_preview", "canvas.connect", "canvas.spread_pages", "canvas.parts",
+  "canvas.extract_note", "canvas.copy_note_text", "canvas.replace_file",
   "canvas.nudge.left", "canvas.nudge.right", "canvas.nudge.up", "canvas.nudge.down",
   "canvas.nudge.left.far", "canvas.nudge.right.far", "canvas.nudge.up.far", "canvas.nudge.down.far",
   "canvas.nudge.left.fine", "canvas.nudge.right.fine", "canvas.nudge.up.fine", "canvas.nudge.down.fine",
@@ -48,7 +49,7 @@ const STABLE_IDS = [
   "canvas.align.left", "canvas.align.center", "canvas.align.right", "canvas.align.top", "canvas.align.middle", "canvas.align.bottom",
   "canvas.distribute_x", "canvas.distribute_y",
   "canvas.fit", "canvas.fit_selection", "canvas.zoom_in", "canvas.zoom_out", "canvas.zoom_reset", "canvas.grid_toggle",
-  "canvas.navigator.hide", "canvas.navigator.show", "canvas.bare", "canvas.radial",
+  "canvas.navigator.hide", "canvas.navigator.show", "canvas.bare", "canvas.radial", "canvas.finger_writes",
   "canvas.pen_menu", "canvas.color_menu", "canvas.align_menu",
   "canvas.tips.none", "canvas.tips.start", "canvas.tips.end",
 ];
@@ -169,7 +170,6 @@ function mounted(overrides: Partial<CanvasEngineOptions> = {}) {
     onSelectionChange: () => {},
     onOpenWikilink: () => {},
     onOpenPath: () => {},
-    onCreateNote: () => {},
     media: { openExternal: () => {} },
     recentCommands: new RecentCommands(null),
     ...overrides,
@@ -327,6 +327,19 @@ describe("la tela legge il catalogo", () => {
     expect(duplicate.enabled).toBe(false);
     expect(duplicate.description).toBe("La lavagna è in sola lettura.");
     expect(duplicate.chord).toBe("Mod-d");
+    engine.destroy();
+  });
+
+  it("«Il dito scrive» è un comando, anche in sola lettura: cambia l'interruttore della colonna", () => {
+    const { engine, host } = mounted();
+    engine.setReadOnly(true);
+    const finger = engine.commands().find((command) => command.id === "canvas.finger_writes")!;
+    expect(finger.label).toBe(t("canvas.finger"));
+    expect(finger.disabled()).toBeNull();
+    const button = host.querySelector<HTMLElement>(".canvas-rail-finger")!;
+    const before = button.getAttribute("aria-pressed");
+    finger.run();
+    expect(button.getAttribute("aria-pressed")).toBe(before === "true" ? "false" : "true");
     engine.destroy();
   });
 });

@@ -62,7 +62,8 @@ export interface CanvasSurfaceCallbacks {
   readonly resolveCardLink?: CanvasEngineOptions["resolveCardLink"];
   /** «Sposta anche il file nel cestino» dal menu di una scheda (T17): il gesto dell'albero. */
   readonly onTrashPath?: CanvasEngineOptions["onTrashPath"];
-  readonly onCreateNote?: CanvasEngineOptions["onCreateNote"];
+  /** Le note che la lavagna crea e legge (T70): «Estrai in una nota», «Copia il testo qui». */
+  readonly notes?: CanvasEngineOptions["notes"];
   readonly onPickFile?: CanvasEngineOptions["onPickFile"];
   /** Apre le Impostazioni su una voce: la cartella dei file trascinati, dalla banda di stato. */
   readonly onOpenSettings?: (key: string) => void;
@@ -228,7 +229,7 @@ export function mountCanvasSurface(
     ...(callbacks.onOpenWikilinkBeside ? { onOpenWikilinkBeside: callbacks.onOpenWikilinkBeside } : {}),
     ...(callbacks.resolveCardLink ? { resolveCardLink: callbacks.resolveCardLink } : {}),
     ...(callbacks.onTrashPath ? { onTrashPath: callbacks.onTrashPath } : {}),
-    onCreateNote: callbacks.onCreateNote,
+    ...(callbacks.notes ? { notes: callbacks.notes } : {}),
     onPickFile: callbacks.onPickFile,
     media: callbacks.media,
     attachments: callbacks.attachments,
