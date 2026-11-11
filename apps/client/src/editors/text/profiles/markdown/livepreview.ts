@@ -19,7 +19,7 @@ import {
   type ViewUpdate,
   WidgetType,
 } from "@codemirror/view";
-import { syntaxTree } from "@codemirror/language";
+import { ensureSyntaxTree, syntaxTree } from "@codemirror/language";
 import type { SyntaxNode } from "@lezer/common";
 // La lettura binaria di una casella è una regola del contratto, non del
 // disegno: `[/]`, `[-]`, `[>]` sono stati che esistono e non sono "fatto".
@@ -43,6 +43,7 @@ import {
   linkReferences,
   paragraphMathBlock,
   renderMarkdownState,
+  renderMarkdownStatePrefix,
 } from "./render";
 import { decodeDestination, normalizeLabel } from "./link-syntax";
 import { FOOTNOTE_DEFINITION } from "./grammar";
@@ -1998,6 +1999,22 @@ function insideReplaced(replaced: readonly { from: number; to: number }[], posit
   return range !== undefined && range.from <= position && position < range.to;
 }
 
+/// Quanto lavora il parser in ogni pezzo del resto di un documento grande, in
+/// millisecondi: con la resa che ne segue sta dentro un fotogramma.
+const PARSE_SLICE_MS = 8;
+
+/// `run` quando la pagina è libera: `requestIdleCallback` dove c'è, e non
+/// oltre 100 ms; altrimenti il prossimo giro del ciclo degli eventi. Torna
+/// la funzione che lo annulla.
+function whenIdle(run: () => void): () => void {
+  if (typeof requestIdleCallback === "function") {
+    const handle = requestIdleCallback(run, { timeout: 100 });
+    return () => cancelIdleCallback(handle);
+  }
+  const handle = setTimeout(run, 0);
+  return () => clearTimeout(handle);
+}
+
 export function livePreview(
   callbacks: LivePreviewCallbacks,
   forms?: readonly SyntaxForm[],
@@ -2025,34 +2042,72 @@ export function livePreview(
     decisions: string;
     decorations: DecorationSet;
     replaced: readonly { from: number; to: number }[];
+    /// `false`: la resa di un documento grande appena aperto, fin dove il
+    /// parser è arrivato (`renderMarkdownStatePrefix`); `parseRest` la
+    /// completa senza fermare la pagina.
+    complete: boolean;
   }
   const touched = (state: EditorState, from: number, to: number) =>
     state.selection.ranges.some((range) => range.from <= to && range.to >= from);
   const anchorsOf = (state: EditorState): ReadonlyMap<string, number> => state.field(blocks).document.anchors;
   const blocks = StateField.define<RenderState>({
     create(state) {
-      const document = renderMarkdownState(state, forms);
-      return buildBlocks(state, document, candidatesOf(document, state.facet(liveReveal)));
+      const { document, complete } = renderMarkdownStatePrefix(state, forms);
+      return buildBlocks(state, document, candidatesOf(document, state.facet(liveReveal)), complete);
     },
     update(value, transaction) {
       const changed = transaction.docChanged;
       const readOnlyChanged = transaction.startState.readOnly !== transaction.state.readOnly;
       const policy = transaction.state.facet(liveReveal);
       if (policy !== transaction.startState.facet(liveReveal)) {
-        return buildBlocks(transaction.state, value.document, candidatesOf(value.document, policy));
+        return buildBlocks(transaction.state, value.document, candidatesOf(value.document, policy), value.complete);
       }
       if (transaction.effects.some((effect) => effect.is(linkCardsChanged)) && !changed) {
-        return buildBlocks(transaction.state, value.document, value.candidates);
+        return buildBlocks(transaction.state, value.document, value.candidates, value.complete);
+      }
+      // La resa a metà di un documento grande va avanti con l'albero: a ogni
+      // albero nuovo, e a ogni modifica, fin dove arriva.
+      if (!value.complete && (changed || syntaxTree(transaction.startState) !== syntaxTree(transaction.state))) {
+        const previous = { document: value.document, changes: transaction.changes };
+        const { document, complete } = renderMarkdownStatePrefix(transaction.state, forms, previous);
+        return buildBlocks(transaction.state, document, candidatesOf(document, policy), complete);
       }
       if (!changed && !transaction.selection && !readOnlyChanged) return value;
       if (!changed) {
-        const next = buildBlocks(transaction.state, value.document, value.candidates);
+        const next = buildBlocks(transaction.state, value.document, value.candidates, value.complete);
         return next.decisions === value.decisions && !readOnlyChanged ? value : next;
       }
       const document = renderMarkdownState(transaction.state, forms, { document: value.document, changes: transaction.changes });
-      return buildBlocks(transaction.state, document, candidatesOf(document, policy));
+      return buildBlocks(transaction.state, document, candidatesOf(document, policy), true);
     },
     provide: (field) => EditorView.decorations.from(field, (value) => value.decorations),
+  });
+  // Il resto di un documento grande: il parser di CodeMirror ci arriva a
+  // pezzi brevi, quando la pagina è libera, e quando è in fondo una
+  // transazione vuota porta l'albero nello stato e la resa si completa. Il
+  // lavoratore del parser, da solo, si ferma poco oltre la vista.
+  const parseRest = ViewPlugin.fromClass(class {
+    private cancel: (() => void) | null = null;
+    constructor(private readonly view: EditorView) {
+      this.schedule();
+    }
+    update(): void {
+      this.schedule();
+    }
+    private schedule(): void {
+      if (this.cancel || this.view.state.field(blocks).complete) return;
+      this.cancel = whenIdle(() => {
+        this.cancel = null;
+        const { state } = this.view;
+        if (state.field(blocks).complete) return;
+        if (ensureSyntaxTree(state, state.doc.length, PARSE_SLICE_MS)) this.view.dispatch({});
+        else this.schedule();
+      });
+    }
+    destroy(): void {
+      this.cancel?.();
+      this.cancel = null;
+    }
   });
   // Le tabelle sono griglie (`table-widget.ts`), anche col cursore dentro: si
   // scrivono cella per cella, e la sorgente con le pipe è della modalità
@@ -2152,7 +2207,12 @@ export function livePreview(
     widgets.set(origin, { offset, dependencies, readOnly, grid, decoration });
     return decoration;
   }
-  function buildBlocks(state: EditorState, document: MarkdownDocument, candidates: readonly Candidate[]): RenderState {
+  function buildBlocks(
+    state: EditorState,
+    document: MarkdownDocument,
+    candidates: readonly Candidate[],
+    complete: boolean,
+  ): RenderState {
     const ranges: Range<Decoration>[] = [];
     const replaced: { from: number; to: number }[] = [];
     let decisions = "";
@@ -2202,7 +2262,7 @@ export function livePreview(
         lineFrom = end + 1;
       }
     }
-    return { document, candidates, decisions, decorations: Decoration.set(ranges, true), replaced };
+    return { document, candidates, decisions, decorations: Decoration.set(ranges, true), replaced, complete };
   }
   const buildInline = (view: EditorView, held: readonly SelectionRange[] | null): [DecorationSet, DecorationSet, DecorationSet] => {
     const active = revealOf(view.state, view.state.facet(liveReveal), held ?? view.state.selection.ranges);
@@ -2395,7 +2455,7 @@ export function livePreview(
     }
   });
   return [
-    theme, footnoteLabelsField, blocks, plugin, blockPrefixes(), emptyPairsExtension(), pendingGuide(), edgeSpaces(), keepMarks(), signsOnFirstLetter(), codeBlocks(), calloutGestures(), detailsLive(), imageGestures(), hangingIndent(), mathPopovers((view, pos, side) => formulaIn(view.plugin(plugin)?.decorations, pos, side)), liveHints(() => callbacks.slashEnabled?.() ?? false), deleteKeys, realign, tableGrids(callbacks),
+    theme, footnoteLabelsField, blocks, parseRest, plugin, blockPrefixes(), emptyPairsExtension(), pendingGuide(), edgeSpaces(), keepMarks(), signsOnFirstLetter(), codeBlocks(), calloutGestures(), detailsLive(), imageGestures(), hangingIndent(), mathPopovers((view, pos, side) => formulaIn(view.plugin(plugin)?.decorations, pos, side)), liveHints(() => callbacks.slashEnabled?.() ?? false), deleteKeys, realign, tableGrids(callbacks),
     propertiesExtension(),
     callbacks.linkCard ? linkCardGestures(callbacks.linkCard) : [],
   ];

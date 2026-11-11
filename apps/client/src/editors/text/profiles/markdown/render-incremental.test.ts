@@ -2,7 +2,8 @@ import { describe, expect, it } from "vitest";
 import { EditorState, type ChangeSpec } from "@codemirror/state";
 import { markdown } from "@codemirror/lang-markdown";
 import { markdownGrammar } from "./grammar";
-import { freshBlocks, renderMarkdown, renderMarkdownState } from "./render";
+import { ensureSyntaxTree, syntaxTreeAvailable } from "@codemirror/language";
+import { freshBlocks, PREFIX_RENDER_FROM, renderMarkdown, renderMarkdownState, renderMarkdownStatePrefix } from "./render";
 import type { MarkdownDocument } from "./render-types";
 
 // La Live rende di nuovo soltanto i blocchi che una modifica tocca: gli altri
@@ -137,5 +138,56 @@ describe("la resa incrementale della Live", () => {
     const next = renderMarkdownState(state, undefined, { document, changes: transaction.changes });
     expect(freshBlocks(next)).toBe(next.blocks.length);
     expect(next.blocks[0]!.html).toContain('href="/due"');
+  });
+});
+
+// Un documento grande appena aperto si rende fin dove il parser arriva in
+// fretta: la prima schermata non aspetta la lettura di tutto il file.
+describe("resa dell'inizio di un documento grande", () => {
+  /// Una nota ben oltre `PREFIX_RENDER_FROM`, con una tabella in cima e una
+  /// definizione di link in fondo.
+  function largeNote(): string {
+    const paragraphs = Array.from({ length: 2_000 }, (_, i) => `Paragrafo ${i + 1}: una riga di prosa senza segni, lunga quanto basta.`);
+    return `Vedi [la guida][g].\n\n| a | b |\n| --- | --- |\n| 1 | 2 |\n\n${paragraphs.join("\n\n")}\n\n[g]: /guida\n`;
+  }
+
+  it("un documento piccolo si rende tutto, come renderMarkdownState", () => {
+    const state = stateOf(CORPUS);
+    const { document, complete } = renderMarkdownStatePrefix(state);
+    expect(complete).toBe(true);
+    expect(shape(document)).toEqual(shape(renderMarkdownState(stateOf(CORPUS))));
+  });
+
+  it("un documento grande si ferma a un blocco chiuso, senza leggere tutto il file", () => {
+    const text = largeNote();
+    expect(text.length).toBeGreaterThan(PREFIX_RENDER_FROM * 4);
+    const state = stateOf(text);
+    const { document, complete } = renderMarkdownStatePrefix(state);
+    expect(complete).toBe(false);
+    // L'albero dello stato non è stato portato in fondo.
+    expect(syntaxTreeAvailable(state, text.length)).toBe(false);
+    expect(document.source.length).toBeGreaterThanOrEqual(PREFIX_RENDER_FROM / 2);
+    expect(document.source.length).toBeLessThan(PREFIX_RENDER_FROM * 2);
+    expect(text.startsWith(document.source)).toBe(true);
+    // I blocchi resi sono quelli della resa completa, uno per uno; la
+    // definizione in fondo non c'è ancora.
+    const full = renderMarkdownState(stateOf(text));
+    const last = document.blocks.at(-1)!;
+    expect(last.to).toBeLessThanOrEqual(document.source.length);
+    expect(document.blocks.map((block) => [block.from, block.to, block.kind]))
+      .toEqual(full.blocks.slice(0, document.blocks.length).map((block) => [block.from, block.to, block.kind]));
+    expect(document.blocks[1]!.kind).toBe(full.blocks[1]!.kind);
+    expect(document.blocks[0]!.html).not.toContain('href="/guida"');
+    expect(full.blocks[0]!.html).toContain('href="/guida"');
+  });
+
+  it("con l'albero in fondo la resa è completa e uguale a quella da capo", () => {
+    const text = largeNote();
+    const state = stateOf(text);
+    const partial = renderMarkdownStatePrefix(state);
+    expect(ensureSyntaxTree(state, text.length, 10_000)).not.toBeNull();
+    const { document, complete } = renderMarkdownStatePrefix(state, undefined, { document: partial.document, changes: state.changes() });
+    expect(complete).toBe(true);
+    expect(shape(document)).toEqual(shape(renderMarkdownState(stateOf(text))));
   });
 });
