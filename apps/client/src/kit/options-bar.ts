@@ -8,7 +8,9 @@
 // - **La misura.** Un `ResizeObserver` con owner, sulla barra e su ogni
 //   controllo, rifà il conto al più una volta per fotogramma; anche
 //   `setItems` lo rifà. Un controllo che il suo owner nasconde va in un
-//   involucro: la barra mostra e nasconde l'involucro, non lui.
+//   involucro: la barra mostra e nasconde l'involucro, non lui. Un
+//   `MutationObserver` rifà il conto quando cambia ciò che sta dentro un
+//   involucro già nascosto, che il `ResizeObserver` vede largo zero.
 // - **La tastiera.** È una `toolbar` orizzontale: Tab entra e esce, i
 //   controlli tengono i loro tasti.
 //
@@ -163,6 +165,25 @@ export function createOptionsBar(options: OptionsBarOptions): OptionsBar {
   if (typeof ResizeObserver !== "undefined") observer = new ResizeObserver(schedule);
   observer?.observe(element);
   lifetime.add(() => observer?.disconnect());
+
+  // Un involucro che la barra ha nascosto misura zero qualunque cosa faccia
+  // il suo controllo: se intanto l'owner nasconde un pezzo, lo mostra o ne
+  // cambia il testo, il `ResizeObserver` non se ne accorge e la riga resta col
+  // conto vecchio (nel disegno i gruppi della selezione restavano in «…» con
+  // mezza barra vuota, quando il primo conto arrivava prima che il disegno
+  // nascondesse i gruppi che non servono). Ciò che cambia dentro un controllo
+  // rifà il conto; ciò che scrive la barra (la riga, `hidden` sugli
+  // involucri) no, se no ogni conto ne chiamerebbe un altro.
+  const written = (record: MutationRecord): boolean =>
+    record.target === row || (record.attributeName === "hidden" && items.some((item) => item.element === record.target));
+  let mutations: MutationObserver | null = null;
+  if (typeof MutationObserver !== "undefined") {
+    mutations = new MutationObserver((records) => {
+      if (hidden.size > 0 && records.some((record) => !written(record))) schedule();
+    });
+    mutations.observe(row, { subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: ["hidden"] });
+  }
+  lifetime.add(() => mutations?.disconnect());
 
   const setItems = (next: readonly OptionItem[]): void => {
     close();

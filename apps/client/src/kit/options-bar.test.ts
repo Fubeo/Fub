@@ -91,6 +91,51 @@ describe("createOptionsBar", () => {
     expect(bar.overflow()).toEqual([]);
   });
 
+  it("rifà il conto quando l'owner cambia un controllo che sta già in «…»", async () => {
+    const frame = () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    const bar = createOptionsBar({ label: "Opzioni", moreLabel: "Altre opzioni", lifetime: life });
+    document.body.append(bar.element);
+    sized(bar.element, 110);
+    bar.element.querySelector<HTMLElement>(".kit-options-more")!.getBoundingClientRect = () =>
+      ({ width: 20, height: 24, x: 0, y: 0, left: 0, top: 0, right: 20, bottom: 24, toJSON: () => ({}) });
+    // Un involucro col suo gruppo: largo finché l'owner lo mostra, zero quando
+    // lo nasconde; nascosto dalla barra, zero comunque.
+    const holder = document.createElement("div");
+    const group = document.createElement("div");
+    group.textContent = "selezione";
+    holder.append(group);
+    const box = (width: number) => ({ width, height: 24, x: 0, y: 0, left: 0, top: 0, right: width, bottom: 24, toJSON: () => ({}) });
+    holder.getBoundingClientRect = () => box(holder.hidden || group.hidden ? 0 : 300);
+    const after = control("dopo", 40);
+    bar.setItems([control("prima", 40, 1), { id: "selezione", element: holder }, after]);
+    // Al primo conto il gruppo è ancora visibile e non ci sta: escono lui e
+    // quello dopo.
+    expect(bar.overflow()).toEqual(["selezione", "dopo"]);
+
+    // I conti della barra non ne chiamano altri: solo i due fotogrammi
+    // chiesti qui.
+    let asked = 0;
+    const original = window.requestAnimationFrame;
+    window.requestAnimationFrame = (callback) => {
+      asked += 1;
+      return original(callback);
+    };
+    try {
+      bar.fit();
+      await frame();
+      await frame();
+      expect(asked).toBe(2);
+    } finally {
+      window.requestAnimationFrame = original;
+    }
+
+    group.hidden = true;
+    await frame();
+    await frame();
+    expect(bar.overflow()).toEqual([]);
+    expect(after.element.hidden).toBe(false);
+  });
+
   it("chiudere la vita non lascia ascolti", () => {
     const ledger = listenerLedger(document, window);
     const bar = createOptionsBar({ label: "Opzioni", moreLabel: "Altre opzioni", lifetime: life });
