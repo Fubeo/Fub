@@ -1230,7 +1230,7 @@ Fatto quando:
 - le guardie dei documenti passano;
 - il resoconto finale elenca le differenze rimaste fra le foto e il prototipo, e l'utente può dare l'OK alla fusione.
 Prova: scripts/check.sh --rapido, poi `scripts/check.sh`
-Stato: [ ] da fare
+Stato: [x] fatto, aspetta l'OK dell'utente alla fusione · 2026-11-11 su 9e33f37dd (main unito): CI completa della PR verde (run 43032148082, 23 job, Windows e macOS; il primo giro e il primo rilancio rossi solo per la rete del runner, «Temporary failure resolving 'azure.archive.ubuntu.com'», rilanciato a rete tornata); `scripts/check.sh` completo VERDE 51 passi (salta solo «kernel per Windows», target mancante qui: lo prova il job Windows); le guardie dei documenti sono nel completo; le baseline sono quelle del runner (T25) e il banco visivo sul runner è verde, quindi le foto sono le scene del prototipo già guardate a T25; i «resta» dei task rivisti: `.pane-format` tolte, le figure del documento le registra la barra (`useRichIcons` in `ribbon.ts`); restano come scritti: etichette in maiuscolo in `skin/document.css`, `editors.css`, `nodes.css` (T10), `bench:tree` che non c'è (PA T45), la briciola che tiene il vecchio nome del vault fino alla riapertura (T5), il contrasto alto fotografato solo emulando (T6). Non fatto: l'anteprima sulla 1432 (esiste solo sul server, non su questo PC); la rilettura riga per riga dei 507 file (ogni task è stato rivisto quando è stato integrato).
 
 ## T27 · L'ombra del foglio
 
