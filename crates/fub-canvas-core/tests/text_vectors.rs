@@ -71,8 +71,12 @@ fn as_vector(canvas: &Canvas, node: &str, state: &TextState) -> Value {
     let shown = text_style(card);
     assert_eq!(shown, state.style(), "{node}: text_style e lo stato");
     let mut out = match state {
-        TextState::Ok(text) => json!({ "node": node, "state": "ok", "text": encode(&text.to_value()) }),
-        TextState::Kept(reason) => json!({ "node": node, "state": "kept", "reason": reason.as_str() }),
+        TextState::Ok(text) => {
+            json!({ "node": node, "state": "ok", "text": encode(&text.to_value()) })
+        }
+        TextState::Kept(reason) => {
+            json!({ "node": node, "state": "kept", "reason": reason.as_str() })
+        }
     };
     out["size"] = json!(shown.size.as_str());
     out["align"] = json!(shown.align.as_str());

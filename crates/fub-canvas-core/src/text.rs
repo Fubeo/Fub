@@ -100,7 +100,9 @@ impl TextAlign {
 
     /// L'allineamento dal suo nome nel file.
     pub fn parse(name: &str) -> Option<TextAlign> {
-        TextAlign::ALL.into_iter().find(|align| align.as_str() == name)
+        TextAlign::ALL
+            .into_iter()
+            .find(|align| align.as_str() == name)
     }
 }
 

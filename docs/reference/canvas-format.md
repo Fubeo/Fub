@@ -285,6 +285,26 @@ Le regole stanno in `crates/fub-canvas-core/src/text.rs` e, uguali, in
   dà la pelle (`skin/editors.css`), sul testo letto e su quello che si
   scrive.
 
+### Nella riga delle opzioni
+
+La [riga delle opzioni](canvas-input.md#la-riga-delle-opzioni) li mostra con
+le schede scelte e col Testo (`chrome/options.ts`):
+
+- «Misura»: quattro «A» grandi come la misura (`canvas.text_size.s`, `.m`,
+  `.l`, `.xl`: Piccolo, Medio, Grande, Molto grande). «Allineamento»:
+  `canvas.text_align.start`, `.center`, `.end` (a sinistra, al centro, a
+  destra).
+- Segnano il valore delle schede di testo scelte, nessuno se sono diversi.
+  Un clic le cambia in un commit, un solo annulla anche su più schede;
+  ognuna tiene l'altro valore suo e quelle che si mostrano già così non si
+  toccano.
+- Col Testo e senza schede di testo scelte valgono per le prossime schede
+  del Testo: l'ultimo valore scelto nella riga, di serie Medio e a sinistra,
+  finché la lavagna resta aperta.
+- Con sole schede di file, di link o gruppi, e in sola lettura, si vedono
+  spenti col perché e senza un valore segnato. Quando la riga non ha posto
+  vanno in «…» dopo la Vista.
+
 ## Negli appunti
 
 Copiando delle schede (Ctrl+C, Ctrl+X, «Copia» e «Taglia» del tasto destro)
