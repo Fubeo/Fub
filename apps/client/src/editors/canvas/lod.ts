@@ -17,7 +17,7 @@
 //
 // Qui niente DOM vivo oltre agli attributi: funzioni pure che la tela e i
 // test usano senza montare niente. La pagina di riferimento è
-// `docs/reference/canvas-cards.md`.
+// `docs/reference/canvas-view.md` («Da lontano»).
 
 import { LIVE_ZOOM_MIN } from "./cards";
 import type { CanvasNode } from "./model";

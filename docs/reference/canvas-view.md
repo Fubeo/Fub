@@ -2,10 +2,11 @@
 
 > **Ambito:** come ci si muove sulla lavagna (lo zoom, i salti, Indietro e
 > Avanti, Spazio, il bordo, l'inerzia), la griglia e le guide, il navigatore
-> e la vista che torna quando la lavagna si riapre.
+> e la vista che torna quando la lavagna si riapre; come si vedono le schede
+> da lontano.
 > **Fonti autorevoli:** `apps/client/src/editors/canvas/engine.ts`
-> (`#jumpCamera`, `#paintGrid`), `jumps.ts`, `guides.ts`,
-> `chrome/navigator.ts` e `view-state.ts`, con le loro prove;
+> (`#jumpCamera`, `#paintGrid`, `#refreshDetail`), `jumps.ts`, `guides.ts`,
+> `chrome/navigator.ts`, `view-state.ts` e `lod.ts`, con le loro prove;
 > i conti della camera in `apps/client/src/editors/spatial/camera.ts`.
 
 Questa pagina viene da [I tasti e i gesti della lavagna](canvas-input.md),
@@ -118,6 +119,41 @@ lontanissima ci sta.
   sono cambiate. I colori sono variabili della pelle
   (`--canvas-navigator-card`, `-group`, `-view`, `-view-fill`), lette una
   volta per disegno.
+
+## Da lontano
+
+Da lontano la lavagna si legge ancora (`lod.ts`, N6 T54). `detailLevel(zoom)`
+dà il livello, con le soglie incluse nel livello di sopra:
+
+| Zoom | Livello | Che cosa si vede |
+| --- | --- | --- |
+| da `FAR_ZOOM_MAX` (= `LIVE_ZOOM_MIN`, 0,35) in su | `live` | la scheda com'è; le vive le sceglie `liveCardIds` |
+| da `BLOCK_ZOOM_MAX` (0,15) a 0,35 | `far` | una scheda vista da vicino in questa seduta mostra l'ultima immagine ferma (`still`); le altre, testi e gruppi compresi, il titolo grande |
+| sotto 0,15 | `block` | un blocco del colore della scheda (il grigio senza colore) col titolo su una riga |
+
+La tela scrive il risultato in `data-card-detail` sul nodo (`still`, `far`,
+`block`; niente da vicino) quando sceglie le schede vive
+([Quando la tela cambia il modo](canvas-cards.md#quando-la-tela-cambia-il-modo)):
+a fine gesto, dopo una resa, al cambio di misura, mai durante un gesto. Un
+solo giro sulle schede (`applyCardDetails`), che tocca il DOM solo dove
+l'attributo cambia; la tela tiene l'attributo di ogni scheda e non rilegge
+il DOM. «Vista da vicino» vuol dire che la sua vista è stata viva da quando
+la tela c'è; perdere la vista (la scheda tolta, il file cambiato) lo
+dimentica. La scheda attiva, quella in cui si entra, quella che scrive e
+quella col campo aperto restano come da vicino a ogni livello.
+
+Il titolo grande (`.canvas-node-far`, `farTitle`) è sempre nel nodo,
+nascosto finché il livello non lo mostra: il nome del file senza cartella
+(con la sezione, se la scheda ne mostra una), l'indirizzo senza schema, la
+prima riga scritta di un testo senza i segni davanti, il nome del gruppo.
+Si taglia coi puntini (tre righe al più in `far`, una nel blocco). La sua
+misura sullo schermo non cambia con lo zoom: la pelle divide per
+`--canvas-detail-zoom`, che la tela scrive sulla scena insieme agli
+attributi, quindi anche lei solo a fine gesto; durante un gesto il titolo
+scala con la lavagna e niente si rimpagina. Da lontano la testata, le
+maniglie e le prese non ci sono; l'inchiostro della scheda sta dopo il
+titolo nel nodo e resta disegnato a ogni livello. Con l'alto contrasto i
+blocchi hanno un bordo.
 
 ## Riaprire dove eri
 
