@@ -202,6 +202,12 @@ riquadro rimasto vuoto. Una linguetta nella vista sorgente lo dice nel testo,
 nel suggerimento e nel nome accessibile («vista sorgente»); aprire o chiudere
 la vista porta il focus sulla superficie montata al posto della precedente.
 
+Una scheda chiusa dell'ispettore non disegna la sua view: il provider risponde
+comunque a ogni invito, e l'albero più recente aspetta (`ui/views.ts`, `pending`).
+Aprendo la scheda si disegna subito, con quell'albero. Così le liste lunghe di
+una scheda che nessuno guarda (i collegamenti in uscita di una nota con migliaia
+di link) non pesano sul DOM né a ogni salvataggio.
+
 I divisori espongono ruolo, limiti e dimensione corrente. Tastiera e
 trascinamento modificano la stessa misura in pixel CSS; lo zoom della shell
 non altera il rapporto fra movimento del puntatore e larghezza risultante.
