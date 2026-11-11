@@ -1083,6 +1083,9 @@ export function pickIcon(
   pop.id = "icon-picker";
   pop.className = "icon-picker";
   pop.setAttribute("role", "dialog");
+  // Modale: la trappola qui sotto tiene il fuoco dentro, ed Esc lo chiude.
+  // Senza dirlo, chi ascolta crederebbe di poter uscire col Tab nella pagina.
+  pop.setAttribute("aria-modal", "true");
   pop.setAttribute("aria-label", t("icons.choose"));
   pop.tabIndex = -1;
   pop.style.left = `${Math.min(at.clientX, window.innerWidth - 256)}px`;

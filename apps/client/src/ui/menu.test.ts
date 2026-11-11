@@ -368,6 +368,15 @@ describe("il selettore di icona", () => {
     expect(tab().defaultPrevented).toBe(false);
   });
 
+  it("è un dialogo modale col suo nome: la trappola del fuoco lo dice", () => {
+    pickIcon(clickEvent(), () => {});
+    const pop = document.getElementById("icon-picker")!;
+    expect(pop.getAttribute("role")).toBe("dialog");
+    expect(pop.getAttribute("aria-modal")).toBe("true");
+    expect(pop.getAttribute("aria-label")).toBe("Scegli un'icona");
+    expect(pop.contains(document.activeElement)).toBe(true);
+  });
+
   it("le figure vengono prima delle emoji, ciascun gruppo col suo titolo", () => {
     pickIcon(clickEvent(), () => {});
     const pop = document.getElementById("icon-picker")!;
