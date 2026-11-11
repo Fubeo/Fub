@@ -4,7 +4,8 @@
 > (evidenza osservazionale e criteri provvisori), i
 > [disegni grandi](#i-disegni-grandi) applicati in CI e il
 > [budget d'interazione](#il-budget-dinterazione) dello Scrittoio, fuori
-> dalla CI, che include [la battuta](#la-battuta).
+> dalla CI, che include [la battuta](#la-battuta) e
+> [l'apertura di una nota grande](#lapertura-di-una-nota-grande).
 > **Snapshot applicativo della Graph View:** SHA `4383a7c9d54b1e6557d070501e5ad998224ff294`.
 
 Questa pagina documenta tre distribuzioni dello stesso codice (locale, CI push e
@@ -261,3 +262,50 @@ Siccome questo banco non sta nella CI, la guardia in CI è il test che conta le
 rese della Live (`render-incremental.test.ts`): una battuta in un paragrafo
 rende quel paragrafo e basta, e dopo ogni modifica la resa è uguale a una resa
 da capo.
+
+### L'apertura di una nota grande
+
+Quanto ferma la pagina il clic che apre una nota grande: dal clic nell'albero
+alla prima riga della nota nel documento, e il compito più lungo (Long Tasks
+API) finché la pagina non resta quieta per mezzo secondo. La nota è il caso
+`lunga-4000` di `live-fixture.ts`: 4.000 paragrafi di prosa, circa 765 KB,
+aperta in Live in una pagina nuova a ogni giro:
+
+```bash
+cd apps/client
+node bench/interaction.mjs --only=apertura           # la pagina com'è
+node bench/interaction.mjs --only=apertura --cpu=4   # quattro volte più lenta
+```
+
+Il budget vale per la mediana dei giri: **testo visibile entro 150 ms e
+nessun compito oltre 50 ms**.
+
+La Live non legge tutto il documento prima della prima schermata. Fino a
+`PREFIX_RENDER_FROM` caratteri (20.000) la resa è quella di sempre, tutta in
+un colpo; oltre, `renderMarkdownStatePrefix` porta il parser di CodeMirror fin
+lì e rende i blocchi di primo livello che l'albero ha chiuso. Il resto lo
+legge il parser a pezzi di 8 ms quando la pagina è libera
+(`requestIdleCallback`, o un `setTimeout` dove manca), e quando l'albero è in
+fondo la resa si completa in una volta. Fino ad allora i blocchi più in basso
+restano testo, e le definizioni di link e note scritte in fondo non sono
+ancora lette; una modifica nel frattempo rifà la resa dell'inizio.
+
+| Pagina | Prima | Dopo |
+|---|---:|---:|
+| com'è | 92 / 100 ms | 21 / 0 ms |
+| quattro volte più lenta | 540 / 550 ms | 93 / 102 ms |
+
+Le cifre sono testo visibile / compito più lungo, mediana di cinque giri, sul
+PC fisso del maintainer (Intel 13600KF, Chromium della revisione Playwright
+fissata). Zero vuol dire nessun compito oltre 50 ms. Con la pagina quattro
+volte più lenta il banco dà il blocco che il collaudo ha misurato nella
+WebView dell'app vera (WebKitGTK 2.54) prima della correzione: un fotogramma
+di 534–609 ms. Dopo, a quella velocità, resta il costo di aprire una nota
+qualsiasi: la nota piccola della Live (`panoramica`) ferma la pagina per
+130–140 ms, per la scheda, la vista dell'editor e il primo layout.
+
+Il banco non sta nella CI. La guardia in CI sono i test della resa
+dell'inizio (`render-incremental.test.ts`) e dell'apertura in Live
+(`livepreview.dom.test.ts`): l'apertura non porta il parser in fondo, la
+tabella in cima è resa subito e quella in fondo dopo, e la resa completa è
+uguale a una resa da capo.
