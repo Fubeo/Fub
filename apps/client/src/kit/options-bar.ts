@@ -95,9 +95,12 @@ export function createOptionsBar(options: OptionsBarOptions): OptionsBar {
 
   const close = (): void => popover?.close();
 
-  /// Rimette ogni controllo nella riga, al suo posto.
+  /// Rimette ogni controllo nella riga, al suo posto. Se ci sono già non li
+  /// tocca: staccarli e riattaccarli farebbe cadere il fuoco del controllo
+  /// appena premuto, e il conto si rifà anche mentre lo si usa.
   const restore = (): void => {
-    row.replaceChildren(...items.map((item) => item.element));
+    const placed = row.children.length === items.length && items.every((item, index) => row.children[index] === item.element);
+    if (!placed) row.replaceChildren(...items.map((item) => item.element));
     for (const item of items) item.element.hidden = false;
   };
 

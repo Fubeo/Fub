@@ -136,6 +136,25 @@ describe("createOptionsBar", () => {
     expect(after.element.hidden).toBe(false);
   });
 
+  it("rifare il conto non toglie il fuoco al controllo appena premuto", () => {
+    const bar = createOptionsBar({ label: "Opzioni", moreLabel: "Altre opzioni", lifetime: life });
+    document.body.append(bar.element);
+    sized(bar.element, 110);
+    bar.element.querySelector<HTMLElement>(".kit-options-more")!.getBoundingClientRect = () =>
+      ({ width: 20, height: 24, x: 0, y: 0, left: 0, top: 0, right: 20, bottom: 24, toJSON: () => ({}) });
+    const items = [control("colore", 40, 2), control("spessore", 40, 1), control("levigatura", 40)];
+    bar.setItems(items);
+    expect(bar.overflow()).toEqual(["levigatura"]);
+    items[0]!.element.focus();
+    expect(document.activeElement).toBe(items[0]!.element);
+    bar.fit();
+    expect(document.activeElement).toBe(items[0]!.element);
+    sized(bar.element, 400);
+    bar.fit();
+    expect(bar.overflow()).toEqual([]);
+    expect(document.activeElement).toBe(items[0]!.element);
+  });
+
   it("chiudere la vita non lascia ascolti", () => {
     const ledger = listenerLedger(document, window);
     const bar = createOptionsBar({ label: "Opzioni", moreLabel: "Altre opzioni", lifetime: life });
