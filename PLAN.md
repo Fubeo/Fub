@@ -2833,7 +2833,7 @@ in Vitest; i vettori di N4 e di T19 passano senza cambiare; la sezione di
 `canvas-ink.md` c'è.
 Prova: scripts/check.sh --rapido; cargo test -p fub-canvas-core; cd
 apps/client && npx vitest run src/editors/canvas
-Stato: [~] in corso · coder Opus · base 12c8b4558
+Stato: [x] fatto · 8073d5a22 (merge 7611fe6e1) · differenze: `InkAnchor` di Rust non è più `Copy`; `CellAddress` con la notazione A1 stretta (maiuscole, niente `$`, niente zeri davanti, da A1 a XFD1048576); `isCellAddress` in `anchor.ts`; `strokeRecord` prende come quinto argomento `CardPageBox` o `InkCellBox {{sheet, cell, rect, zoom}}`; `ops.rs`: `move_strokes` e lo spessore rifiutano un tratto di cella come uno di pagina; finché manca T38 un tratto di cella non si disegna (`dryStroke` null) e gomma e Lazo non lo vedono; `canvas-ink.md` a 547 righe su 550
 
 ## T38 · Il tratto segue la cella
 
@@ -2850,6 +2850,7 @@ la cella sotto il tratto; ridisegna i tratti della scheda quando scorre),
 Non toccare: il formato (T37); lo strato d'inchiostro di N4 oltre ciò che
 serve a tagliare i tratti alla scheda (lo dice il rapporto).
 Dipende da: T37, T14
+Nota dell'orchestratore (2026-11-11, dal report di T37): T38 tocca anche `ink-record.ts` (togliere il controllo su `stroke.cell` in `dryStroke`) e `ink-erase.ts` (togliere quello in `erasableInk`), e dà a `cellAnchorAt` una `cellAt` che sopra celle unite restituisce la cella in alto a sinistra dell'unione; `canvas-ink.md` è a 3 righe dalla soglia: se si aggiunge testo, la pagina si divide.
 Cosa fare:
 - `cellAt(point)`: la cella sotto un punto della scheda, o `null` sopra
   le intestazioni e fuori dalla griglia; `cellRect(sheet, cell)`: dove sta
@@ -4666,7 +4667,7 @@ Fatto quando: `excerpt.test.ts` prova la testata e le parti;
 prototipo.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/canvas
-Stato: [~] in corso · coder Opus · base 12c8b4558
+Stato: [x] fatto · f44ec8011 (merge 80ceaec97) · differenze: un estratto non si scrive in place (`edit()` false; doppio clic su `#Titolo` non apre più l'editor della nota intera come in T41: si scrive con «Apri a lato»); ↗ apre accanto col `reveal` di oggi, senza l'illuminazione di un secondo (andrebbe nell'editor, fuori da Tocca); con tutte le sezioni sparite la scheda rende la nota intera di nascosto per sapere se manca il file; più sezioni perse in un avviso solo («Sezioni non trovate: A, B»); niente icona della fonte nella testata (il prototipo non ce l'ha); il primo titolo del corpo di ogni sezione si nasconde col CSS (dipende dall'HTML di `renderEmbed`, visto al banco con HTML finto); fuori da Tocca: `cards.ts` (`CardContext.excerpt`), `chrome/commands.ts` (`canvas.whole_file`), `canvas-parts.md` («La scheda-estratto»), `canvas-cards.md`; «×2» di T22 non provato (non c'è nel codice)
 
 ## T76 · Leggere da vicino
 
