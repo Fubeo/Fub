@@ -64,7 +64,12 @@ export const EDITORS: PartAnatomy = {
     // attaccato alla scheda, con il campo, la lista a caselle, l'anteprima
     // (la resa della scheda di nota) e il piede.
     { name: "canvas-parts-picker", states: [S("rest"), S("hover"), S("focused"), S("selected")], hooks: ["canvas-parts-title", "canvas-parts-close", "canvas-parts-field-hint", "canvas-parts-row", "canvas-parts-check", "canvas-parts-preview", "canvas-parts-preview-title", "canvas-card-note-content", "canvas-parts-keys", "canvas-parts-count"] },
-    // Il ritaglio di un'immagine (T78): la zona col velo e le maniglie sopra
+    // La scheda-estratto (T75): nella testata sopra la scheda le parti e ↗,
+    // segni di Fub; nel corpo le sezioni della nota, ognuna col suo titolo in
+    // piccolo, e l'avviso della sezione che non c'è più. Il corpo di una
+    // sezione, la riga dei pulsanti e la frase dell'avviso sono solo impianto.
+    { name: "canvas-excerpt", layer: "contenuto", layers: { "canvas-excerpt-parts": "segno", "canvas-excerpt-open": "segno" }, states: [S("rest"), S("hover"), S("focused")], hooks: ["canvas-excerpt-parts", "canvas-excerpt-open", "canvas-excerpt-section", "canvas-excerpt-section-title", "canvas-excerpt-missing"] },
+    // Il ritaglio di un'immagine (T78):la zona col velo e le maniglie sopra
     // la scheda, la barra sotto e la riga dell'inchiostro; segni di Fub sulla
     // lavagna. L'immagine intera sotto la zona (`canvas-crop-picture`) e la
     // zona di un SVG nella scheda (`canvas-card-zone`) sono solo impianto.

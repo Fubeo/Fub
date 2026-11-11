@@ -3591,6 +3591,54 @@ body {
   isolation: isolate;
 }
 
+/* La scheda-estratto (T75, prototipo T28): la testata sopra la scheda
+   (D-21 (a), T39) porta il nome della fonte, le parti e ↗; il corpo mostra
+   solo le sezioni scelte, una sotto l'altra. Le parti non si accorciano
+   mai: si accorcia il nome del file. Il titolo grande di ogni sezione è già
+   nel titolo in piccolo sopra di lei: non si ripete. */
+.canvas-node-file > .canvas-node-handle > .canvas-excerpt-parts {
+  flex: none;
+  margin-inline-start: var(--space-3);
+  white-space: nowrap;
+}
+.canvas-node-file > .canvas-node-handle > .canvas-node-title {
+  min-width: 2em;
+}
+.canvas-excerpt-open {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+}
+.canvas-excerpt-section + .canvas-excerpt-section {
+  margin-top: var(--space-5);
+  padding-top: var(--space-4);
+}
+.canvas-excerpt-section-title {
+  display: block;
+  margin-bottom: var(--space-2);
+}
+.canvas-excerpt-section-body > :is(h1, h2, h3, h4, h5, h6):first-child {
+  display: none;
+}
+.canvas-excerpt-missing {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-5);
+}
+.canvas-excerpt-section + .canvas-excerpt-missing {
+  margin-top: var(--space-5);
+}
+.canvas-excerpt-missing-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+
 /* Entrare e uscire (N6 T14). Fuori da una scheda attiva il contenuto di una
    vista non prende il puntatore e non scorre: il clic sceglie la scheda e la
    rotella sposta la lavagna. Dentro sì, e il corpo scorre. I link e i

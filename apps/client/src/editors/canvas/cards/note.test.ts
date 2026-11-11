@@ -572,15 +572,15 @@ describe("scrivere nella scheda di nota (T41)", () => {
   it("edit() chiede l'editor alla porta e lo mette al posto della resa", async () => {
     const port = new FakePort();
     const editors = new FakeEditors();
-    const card = await shown(port, editors, "Corsi/nota.md", "#Titolo");
+    const card = await shown(port, editors, "Corsi/nota.md", "#^blocco");
 
     expect(card.view.edit?.()).toBe(true);
     expect(editors.calls).toHaveLength(1);
     const call = editors.last();
     expect(call.path).toBe("Corsi/nota.md");
     expect(call.options.readOnly).toBe(false);
-    // Con `Nota#Titolo` la nota intera, vista dal titolo.
-    expect(call.options.heading).toBe("Titolo");
+    // La nota intera, dall'inizio: un blocco nel `subpath` non è un estratto.
+    expect(call.options.heading).toBeNull();
     // Finché l'editor non c'è si vede la resa.
     expect(writers(card.host)[0]!.hidden).toBe(true);
     expect(root(card.host).hidden).toBe(false);
@@ -810,5 +810,129 @@ describe("scrivere nella scheda di nota (T41)", () => {
     card.view.destroy();
     expect(second.destroyed).toBe(1);
     expect(card.host.childNodes).toHaveLength(0);
+  });
+});
+
+// --- la scheda-estratto (T75) ------------------------------------------------
+
+describe("la scheda-estratto (T75)", () => {
+  const sections = (...keys: string[]): Partial<CardContext> => ({ parts: { kind: "sections", sections: keys, extra: {} } });
+  const titles = (host: HTMLElement): string[] =>
+    [...host.querySelectorAll(".canvas-excerpt-section-title")].map((one) => one.textContent ?? "");
+  const notice = (host: HTMLElement): HTMLElement | null => host.querySelector<HTMLElement>(".canvas-excerpt-missing");
+  /// Le risposte di `show` arrivano in giri diversi: si aspetta che passino tutte.
+  async function flush(): Promise<void> {
+    for (let i = 0; i < 12; i++) await Promise.resolve();
+  }
+  function actions() {
+    const done: string[] = [];
+    return { done, excerpt: { chooseAgain: () => done.push("again"), showWhole: () => done.push("whole") } };
+  }
+
+  it("due sezioni: una sotto l'altra, nell'ordine scelto, ognuna col suo titolo in piccolo", async () => {
+    const port = new FakePort();
+    const { view, host } = mount(port, "live", "Note/Relazione.md", "#Scopo", sections("Scopo", "Capitolo#Misure"));
+    expect(port.calls.map((call) => call.heading)).toEqual(["Scopo", "Misure"]);
+    port.calls[1]!.resolve("<h2>Misure</h2><p>dieci oscillazioni</p>");
+    port.calls[0]!.resolve("<h2>Scopo</h2><p>misurare g</p>");
+    await flush();
+    expect(state(host)).toBe("content");
+    expect(titles(host)).toEqual(["§ Scopo", "§ Misure"]);
+    const bodies = [...host.querySelectorAll(".canvas-excerpt-section > .canvas-excerpt-section-body")].map((one) => one.textContent);
+    expect(bodies).toEqual(["Scopomisurare g", "Misuredieci oscillazioni"]);
+    expect(notice(host)).toBeNull();
+    // Un estratto si legge (v1, S8): si entra per scorrere, non si scrive.
+    expect(view.enter?.()).toBe(true);
+    expect(view.edit?.()).toBe(false);
+  });
+
+  it("una sezione sola dal `subpath`, senza `fub:parts`, è un estratto anche lei", async () => {
+    const port = new FakePort();
+    const { host } = mount(port, "live", "Note/Relazione.md", "#Capitolo#Misure");
+    expect(port.calls.map((call) => call.heading)).toEqual(["Misure"]);
+    port.last().resolve();
+    await flush();
+    expect(titles(host)).toEqual(["§ Misure"]);
+  });
+
+  it("la sezione che non c'è più lascia le altre e dice quale manca, con «Scegli di nuovo…» e «Mostra tutta la nota»", async () => {
+    const port = new FakePort();
+    const gestures = actions();
+    const { host, context } = mount(port, "live", "Note/Relazione.md", "#Scopo", { ...sections("Scopo", "Media"), excerpt: gestures.excerpt });
+    port.calls[0]!.resolve("<p>misurare g</p>");
+    port.calls[1]!.reject(notFound());
+    await flush();
+    expect(state(host)).toBe("content");
+    expect(context.missed).toBe(0);
+    expect(titles(host)).toEqual(["§ Scopo"]);
+    expect(notice(host)!.getAttribute("role")).toBe("status");
+    expect(notice(host)!.querySelector(".canvas-excerpt-missing-text")!.textContent).toBe(t("canvas.excerpt.section_missing", { name: "Media" }));
+    const buttons = [...notice(host)!.querySelectorAll<HTMLButtonElement>("button")];
+    expect(buttons.map((one) => one.textContent)).toEqual([t("canvas.excerpt.choose_again"), t("canvas.excerpt.show_note")]);
+    buttons[0]!.click();
+    buttons[1]!.click();
+    expect(gestures.done).toEqual(["again", "whole"]);
+    // Le sezioni vengono dal file vero: la nota cambiata si rilegge.
+    port.change("Note/Relazione.md");
+    expect(port.calls.map((call) => call.heading).slice(2)).toEqual(["Scopo", "Media"]);
+  });
+
+  it("senza i gesti della tela (sola lettura) l'avviso non ha pulsanti", async () => {
+    const port = new FakePort();
+    const { host } = mount(port, "live", "Note/Relazione.md", "#Scopo", sections("Scopo", "Media"));
+    port.calls[0]!.resolve();
+    port.calls[1]!.reject(notFound());
+    await flush();
+    expect(notice(host)).not.toBeNull();
+    expect(notice(host)!.querySelectorAll("button")).toHaveLength(0);
+  });
+
+  it("sparite tutte le sezioni, la nota intera dice che il file c'è: resta l'avviso, con i nomi", async () => {
+    const port = new FakePort();
+    const { host, context } = mount(port, "live", "Note/Relazione.md", "#Media", sections("Media", "Varianza"));
+    port.calls[0]!.reject(notFound());
+    port.calls[1]!.reject(notFound());
+    await flush();
+    // La prova sulla nota intera, in un posto che non si vede.
+    expect(port.calls).toHaveLength(3);
+    expect(port.last().heading).toBeNull();
+    port.last().resolve();
+    await flush();
+    expect(port.calls[2]!.life.closed).toBe(true);
+    expect(state(host)).toBe("content");
+    expect(context.missed).toBe(0);
+    expect(titles(host)).toEqual([]);
+    expect(notice(host)!.textContent).toContain(t("canvas.excerpt.sections_missing", { names: "Media, Varianza" }));
+  });
+
+  it("sparite tutte le sezioni perché manca il file: la scheda del file mancante", async () => {
+    const port = new FakePort();
+    const { host, context } = mount(port, "live", "Note/Relazione.md", "#Media", sections("Media", "Varianza"));
+    port.calls[0]!.reject(notFound());
+    port.calls[1]!.reject(notFound());
+    await flush();
+    port.last().reject(notFound());
+    await flush();
+    expect(state(host)).toBe("missing");
+    expect(context.missed).toBe(1);
+  });
+
+  it("un altro errore di una sezione mostra la scheda di file, e una risposta tardiva non tocca niente", async () => {
+    const port = new FakePort();
+    const { view, host } = mount(port, "live", "Note/Relazione.md", "#Scopo", sections("Scopo", "Misure"));
+    port.calls[0]!.resolve();
+    port.calls[1]!.reject(new Error("guasto"));
+    await flush();
+    expect(state(host)).toBe("unreadable");
+    expect(port.calls[0]!.life.closed).toBe(true);
+
+    view.setMode("snapshot");
+    view.setMode("live");
+    const [first, second] = port.calls.slice(2);
+    view.destroy();
+    first!.resolve();
+    second!.resolve();
+    await flush();
+    expect(host.childNodes).toHaveLength(0);
   });
 });

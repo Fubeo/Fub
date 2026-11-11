@@ -30,6 +30,14 @@
 // contatore di generazione scarta le risposte tardive: una resa chiesta prima
 // di un cambio di modo, di un cambio del file o di `destroy` non tocca più il
 // DOM, e la sua `Lifetime` si chiude subito.
+//
+// La scheda-estratto (T75): una scheda con delle sezioni (`fub:parts`
+// `sections`, o il `subpath` `#Titolo`) le rende una sotto l'altra, ognuna
+// col suo titolo in piccolo, dal file vero: se la nota cambia, la scheda la
+// segue. Una sezione che non c'è più (rinominata, tolta) lascia le altre e
+// un avviso con «Scegli di nuovo…» e «Mostra tutta la nota» (i gesti sono
+// della tela, `CardContext.excerpt`). Un estratto in v1 si legge e basta:
+// per scriverci si apre la nota a lato (S8).
 
 import { isErrorKind } from "../../../host/errors";
 import { t } from "../../../i18n/strings";
@@ -37,6 +45,7 @@ import { formatKindOf, formatNameOf } from "../../../ui/format-kind";
 import { openLifetime, type Lifetime } from "../../../ui/lifetime";
 import { notify } from "../../../ui/notify";
 import type { CardContext, CardEditor, CardEditorState, CardMode, CardRenderer, CardView } from "../cards";
+import { excerptSections, sectionHeading, sectionLabel } from "../excerpt";
 import type { CanvasNode } from "../model";
 
 /// Ciò che la scheda di nota chiede alla shell.
@@ -60,11 +69,7 @@ export type NoteCardState = "placeholder" | "loading" | "content" | "unreadable"
 /// titolo più interno, come i link di Obsidian); `#^blocco`, `#` o niente →
 /// `null`, cioè la nota intera.
 export function noteHeadingOf(subpath: string | null): string | null {
-  if (subpath === null) return null;
-  const parts = subpath.split("#").map((part) => part.trim()).filter((part) => part !== "");
-  const last = parts[parts.length - 1];
-  if (last === undefined || last.startsWith("^")) return null;
-  return last;
+  return subpath === null ? null : sectionHeading(subpath);
 }
 
 /// Il renderer delle schede di nota e di documento.
@@ -156,8 +161,10 @@ class NoteCard implements CardView {
     if (this.#editLife !== null) return true;
     const editors = this.#context.editors;
     if (this.#destroyed || this.#leaving !== null || this.#mode !== "live" || !editors) return false;
-    // Un documento Word o ODT si legge e basta (D-14 (a)).
+    // Un documento Word o ODT si legge e basta (D-14 (a)); un estratto
+    // anche, in v1 (T75): si scrive aprendo la nota a lato.
     if (formatKindOf(this.#context.path) !== "note") return false;
+    if (this.#sections().length > 0) return false;
     if (this.#state !== "content" && this.#state !== "loading") return false;
     const life = openLifetime();
     this.#editLife = life;
@@ -175,7 +182,7 @@ class NoteCard implements CardView {
         compact: false,
         readOnly: false,
         lifetime: life,
-        heading: noteHeadingOf(this.#context.subpath),
+        heading: null,
       });
     } catch (error) {
       opened = Promise.reject(error);
@@ -316,6 +323,11 @@ class NoteCard implements CardView {
     if (this.#mode === "live") this.#render();
   }
 
+  /// Le sezioni che la scheda mostra; vuoto per la nota intera.
+  #sections(): string[] {
+    return excerptSections(this.#context.parts ?? null, this.#context.subpath);
+  }
+
   #render(): void {
     this.#cancelPending();
     const generation = ++this.#generation;
@@ -327,36 +339,131 @@ class NoteCard implements CardView {
     if (this.#content === null) this.#setState("loading", [this.#message(t("canvas.card.loading"), "canvas-card-loading")]);
     else this.#content.inert = true;
 
-    let shown: Promise<void>;
-    try {
-      shown = this.#port.show(this.#context.path, noteHeadingOf(this.#context.subpath), target, life);
-    } catch (error) {
-      shown = Promise.reject(error);
+    const sections = this.#sections();
+    if (sections.length > 0) {
+      this.#renderSections(sections, generation, life, target);
+      return;
     }
-    shown.then(
-      () => {
-        if (!this.#current(generation, life)) return;
-        this.#pendingLife = null;
-        this.#contentLife?.close();
-        this.#contentLife = life;
-        this.#content = target;
-        this.#setState("content", [target]);
-      },
-      (error: unknown) => {
-        if (!this.#current(generation, life)) return;
-        this.#pendingLife = null;
-        life.close();
-        this.#contentLife?.close();
-        this.#contentLife = null;
-        this.#content = null;
-        if (isErrorKind(error, "not_found")) {
-          this.#showFileCard("missing");
-          this.#context.missing();
-        } else {
-          this.#showFileCard("unreadable");
-        }
-      },
+    this.#show(null, target, life).then(
+      () => this.#shown(generation, life, target),
+      (error: unknown) => this.#failed(generation, life, error),
     );
+  }
+
+  /// `show` della porta, che non lancia mai fuori dalla promessa.
+  #show(heading: string | null, host: HTMLElement, life: Lifetime): Promise<void> {
+    try {
+      return this.#port.show(this.#context.path, heading, host, life);
+    } catch (error) {
+      return Promise.reject(error);
+    }
+  }
+
+  /// Le sezioni di un estratto, una sotto l'altra, ognuna col suo titolo in
+  /// piccolo. Quelle che la nota non ha più (`not_found` di una sezione)
+  /// vanno nell'avviso, in fondo; se mancano tutte, la nota intera dice se
+  /// manca il file o solo le sezioni. Un altro errore: la scheda di file.
+  #renderSections(keys: readonly string[], generation: number, life: Lifetime, target: HTMLElement): void {
+    const parts = keys.map((key) => {
+      const section = document.createElement("section");
+      section.className = "canvas-excerpt-section";
+      section.dataset.section = key;
+      const title = document.createElement("span");
+      title.className = "canvas-excerpt-section-title";
+      title.textContent = sectionLabel(key);
+      const body = document.createElement("div");
+      body.className = "canvas-excerpt-section-body";
+      section.append(title, body);
+      return { key, section, shown: this.#show(sectionHeading(key), body, life) };
+    });
+    void Promise.allSettled(parts.map((part) => part.shown)).then(async (results) => {
+      if (!this.#current(generation, life)) return;
+      const gone = (result: PromiseSettledResult<void>): boolean => result.status === "rejected" && isErrorKind(result.reason, "not_found");
+      const broken = results.find((result): result is PromiseRejectedResult => result.status === "rejected" && !gone(result));
+      if (broken) {
+        this.#failed(generation, life, broken.reason);
+        return;
+      }
+      const missing = parts.filter((_, index) => gone(results[index]!));
+      if (missing.length === parts.length) {
+        // Nessuna sezione: o manca il file, o le ha perse tutte. Lo dice la
+        // nota intera, resa in un posto che non si vede e subito chiusa.
+        const probe = openLifetime();
+        try {
+          await this.#show(null, document.createElement("div"), probe);
+        } catch (error) {
+          this.#failed(generation, life, error);
+          return;
+        } finally {
+          probe.close();
+        }
+        if (!this.#current(generation, life)) return;
+      }
+      for (const part of parts) {
+        if (!missing.includes(part)) target.append(part.section);
+      }
+      if (missing.length > 0) target.append(this.#missingNotice(missing.map((part) => part.key), life));
+      this.#shown(generation, life, target);
+    });
+  }
+
+  /// L'avviso delle sezioni che non ci sono più, coi gesti della tela.
+  #missingNotice(keys: readonly string[], life: Lifetime): HTMLElement {
+    const notice = document.createElement("div");
+    notice.className = "canvas-excerpt-missing";
+    notice.setAttribute("role", "status");
+    const names = keys.map((key) => sectionHeading(key) ?? key);
+    const text = names.length === 1
+      ? t("canvas.excerpt.section_missing", { name: names[0]! })
+      : t("canvas.excerpt.sections_missing", { names: names.join(", ") });
+    notice.append(this.#message(text, "canvas-excerpt-missing-text"));
+    const actions = this.#context.excerpt;
+    if (!actions) return notice;
+    const row = document.createElement("div");
+    row.className = "canvas-excerpt-missing-actions";
+    const button = (label: string, run: () => void): HTMLButtonElement => {
+      const one = document.createElement("button");
+      one.type = "button";
+      one.className = "kit-button";
+      one.dataset.kind = "normal";
+      one.textContent = label;
+      life.listen(one, "click", (event) => {
+        event.stopPropagation();
+        run();
+      });
+      return one;
+    };
+    const chooseAgain = actions.chooseAgain;
+    if (chooseAgain) row.append(button(t("canvas.excerpt.choose_again"), () => chooseAgain.call(actions)));
+    row.append(button(t("canvas.excerpt.show_note"), () => actions.showWhole()));
+    notice.append(row);
+    return notice;
+  }
+
+  /// La resa `target` è arrivata: se è ancora quella attesa, si vede.
+  #shown(generation: number, life: Lifetime, target: HTMLElement): void {
+    if (!this.#current(generation, life)) return;
+    this.#pendingLife = null;
+    this.#contentLife?.close();
+    this.#contentLife = life;
+    this.#content = target;
+    this.#setState("content", [target]);
+  }
+
+  /// La resa non è arrivata: il file manca, o non si mostra.
+  #failed(generation: number, life: Lifetime, error: unknown): void {
+    if (!this.#current(generation, life)) return;
+    this.#pendingLife = null;
+    life.close();
+    this.#contentLife?.close();
+    this.#contentLife = null;
+    this.#content = null;
+    if (isErrorKind(error, "not_found")) {
+      this.#showFileCard("missing");
+      this.#context.missing();
+    } else {
+      this.#showFileCard("unreadable");
+    }
   }
 
   /// Vera se la risposta è ancora quella attesa; sennò ne chiude la vita.

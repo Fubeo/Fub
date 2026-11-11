@@ -177,7 +177,9 @@ I tipi stanno in `cards.ts`, con i commenti sui loro campi. In breve:
   tela ridisegna l'inchiostro della scheda; `contentShown()` fa lo stesso
   quando cambia `contentAspect()`. `parts` porta le parti di un
   estratto già lette e provate, o `null` se la scheda mostra solo il suo
-  `subpath` ([Gli estratti della lavagna](canvas-parts.md)).
+  `subpath` ([Gli estratti della lavagna](canvas-parts.md)); `excerpt`, fuori
+  dalla sola lettura, i gesti dell'avviso di una sezione persa
+  ([La scheda-estratto](canvas-parts.md#la-scheda-estratto)).
 - `CardView` risponde a `setMode` e a `destroy`; può rispondere anche a
   `resize` (a fine gesto), `enter` e `leave` (entrare nella scheda e
   uscirne; `enter` restituisce `false` se non c'è niente in cui entrare),

@@ -173,6 +173,31 @@ prendono quello del capitolo che li contiene (`Capitolo#Titolo`); se anche
 così sono uguali, il piede avvisa che si vedrà il primo. Nel codice è
 `parts-picker.ts`.
 
+## La scheda-estratto
+
+Una scheda di nota con delle sezioni (la specie `sections` letta e provata,
+o un `subpath` `#Titolo`) è un estratto. La testata sopra la scheda porta,
+dopo il nome della fonte, le parti in colore d'accento («§ Varianza · §
+Media») e ↗. ↗ e il doppio clic sulla testata aprono la nota accanto, alla
+prima sezione (nella finestra stretta nello stesso riquadro); `Ctrl`+clic
+(`Cmd`+clic) su ↗ la apre nel riquadro. La scheda non cambia.
+
+Il corpo rende le sezioni dal file vero, una sotto l'altra e nell'ordine di
+`sections`, ognuna col suo titolo in piccolo: se la nota cambia, la scheda
+la segue. In v1 un estratto si legge e basta: si entra per scorrere e
+scegliere il testo, e per scrivere si apre la nota a lato. Una sezione che
+la nota non ha più (rinominata, tolta) lascia le altre e un avviso,
+«Sezione non trovata: Media», con «Scegli di nuovo…» (il selettore) e
+«Mostra tutta la nota»; se mancano tutte, la nota intera dice se manca il
+file (la scheda del file mancante) o solo le sezioni (l'avviso da solo).
+
+«Mostra tutto il file» (`canvas.whole_file`, nel menu della scheda sotto
+«Parti…» e in `Ctrl+/`) toglie `fub:parts` e il `subpath` in un commit, che
+`Ctrl+Z` annulla. In sola lettura la voce non c'è, il comando è spento col
+perché e l'avviso non ha pulsanti. Da lontano la scheda mostra il titolo
+grande, come le altre. Nel codice: `excerpt.ts` (le regole e la testata),
+`cards/note.ts` (il corpo), `engine.ts` (i gesti).
+
 ## Che cosa vede Obsidian
 
 Obsidian conosce il `subpath` e non `fub:parts`, che per lui è un campo

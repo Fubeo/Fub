@@ -204,6 +204,18 @@ export interface CardContext {
   /// stato del salvataggio della sessione, o la sola lettura (`reason` dice
   /// perché); `null`, niente da dire.
   editState?(state: CardEditorState | null, reason?: string): void;
+  /// I gesti di una scheda-estratto (T75) per l'avviso «Sezione non
+  /// trovata»; assente (in sola lettura), l'avviso non ha pulsanti.
+  readonly excerpt?: CardExcerptActions;
+}
+
+/// Che cosa fa la tela per una scheda-estratto che ha perso una sezione (T75).
+export interface CardExcerptActions {
+  /// «Scegli di nuovo…»: riapre il selettore delle sezioni (T74); assente
+  /// senza il selettore.
+  chooseAgain?(): void;
+  /// «Mostra tutta la nota»: toglie `fub:parts` e il `subpath`, in un commit.
+  showWhole(): void;
 }
 
 /// Una scheda che scrive (T41): la barra di formato dell'editor, se ne ha una,
