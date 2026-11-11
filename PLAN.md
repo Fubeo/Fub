@@ -5288,7 +5288,7 @@ Fatto quando: la prova e2e passa con otto scenari verdi; la pagina c'è,
 `check-doc-links` e `check-doc-orphans` passano.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/canvas-lazy.e2e.test.ts
-Stato: [~] in corso · coder Opus · base 8092dde49
+Stato: [x] fatto · b047147b0 (merge b5698803f) · differenze: scenario 3 col difetto del doppio clic trovato dalla prova (corretto in T100, la prova ora usa il doppio clic diretto); scenario 8: dopo il rilascio il gruppo «40 file» non è scelto da sé, la prova lo sceglie con un clic sulla testata; scenario 4: «Indietro» è Alt+← del riquadro (T56); happy-dom non dispone: la prova finge il rettangolo della pagina PDF nella scheda e la mappa del navigatore (168×120); dopo il cambio di pagina aspetta un giro prima del tratto. Tre giri di fila verdi. La prova a mano sulla app vera (Linux, Windows, macOS) è dell'utente, con `docs/development/canvas-smoke-test.md`
 
 ## T90 · La CI completa e la revisione prima del merge
 
@@ -5628,6 +5628,22 @@ comportamento cambia.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/canvas
 Stato: [x] fatto · 9ec41e5a3 (merge e68071f60) · differenze: `revealSource(byte, "frame"|"jump")`, salto in Indietro solo dall'ispettore («Schede», «Fonti»); «Sostituisci il file…» con la porta facoltativa `CanvasEditPort.replaceFile` (comando `canvas.replace_file`, solo con `onPickFile`), fuori dal DOM in sola lettura; `surface.setReadOnly` avvisa l'ispettore; la copia di un estratto taglia le sezioni coi titoli del provider (`PartsHeading.start` in byte, da `documentOutline` in `editors/core/bootstrap.ts`) e abbina le chiavi con `keyMatchesSection`/`sectionOfKey` di `parts-picker.ts`, la stessa regola che ora usa «Fonti»; senza sommario o se non combacia col testo copia la nota intera; tutte le sezioni sparite: nessuna scheda e l'avviso «Sezioni non trovate»; `canvasFreeName` esportata e provata in `document-controller.test.ts` (nuovo). Fuori dal `Tocca`: `surface.ts`, `excerpt.ts`, `parts-picker.ts`, `bootstrap.ts`, `canvas-convert.md`, `canvas-view.md`
+
+## T100 · Il doppio clic nel vuoto
+
+Perché: la prova del pigro (T89) l'ha trovato: `#dblclick` di
+`engine.ts` chiamava `#addNode("text")` senza il punto e senza la
+scrittura, così la scheda nasceva al centro della vista, solo scelta;
+`canvas-view.md` dice che il doppio tocco fa «come il doppio clic».
+Tocca: `apps/client/src/editors/canvas/engine.ts`, `engine.test.ts`,
+`apps/client/src/canvas-lazy.e2e.test.ts`,
+`docs/development/canvas-smoke-test.md`.
+Dipende da: T89
+Cosa fare: il doppio clic usa `#placeText(clientX, clientY)`, come il
+doppio tocco e lo strumento Testo.
+Fatto quando: `engine.test.ts` («il doppio clic nel vuoto fa come il
+doppio tocco») rosso prima e verde dopo; lo scenario 3 di T89 senza Invio.
+Stato: [x] fatto · 4ee8c904b · dall'orchestratore (una riga); ha fatto vedere un difetto del test `components.e2e.test.ts`: la spia di `getContext` messa a ogni `beforeEach` senza `restoreAllMocks` chiamava sé stessa dal secondo test in poi (ricorsione infinita appena un canvas non PDF chiede il contesto, come l'editor della scheda in scrittura): l'originale si prende una volta sola
 
 ## Non verificato stanotte
 
