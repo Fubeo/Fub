@@ -3986,7 +3986,7 @@ Maiusc+Tab, Alt+frecce, F6 e Maiusc+F10; `npm run bench:a11y` passa con
 gli stati della lavagna.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/canvas && npm run bench:a11y
-Stato: [ ] da fare
+Stato: [~] in corso · coder Opus · base 741960546
 
 ## T62 · La lavagna vuota
 
