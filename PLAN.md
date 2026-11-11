@@ -5533,7 +5533,7 @@ con la nota che si scrive e si salva; le foto del banco mostrano gli stati e
 l'avviso come nel riquadro.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/state/card-editors.test.ts src/editors/canvas src/canvas-edit.e2e.test.ts
-Stato: [ ] da fare
+Stato: [~] in corso · coder Opus · base a403c00e3
 
 ## T97 · La formula della cella attiva dal motore della griglia
 
