@@ -1917,3 +1917,10 @@ La più recente in cima: data · piano · decisione · perché.
 - 2026-10-31 · workflow · I coder non lanciano altri agenti, non pushano e non
   toccano la CI; pusha solo l'orchestratore, una volta per task unito · un solo
   punto che integra, e la CI di ogni push copre tutto ciò che c'è prima.
+- 2026-11-11 · banco · I due rossi della CI completa (79c3045a4) corretti fuori lista
+  prima di T25: col menu aperto la pila dei toast si fa da parte (`structure.css`; da
+  T3 il menu della modalità si apre in basso a destra, dove scendono i toast, e
+  `#app` isola i suoi piani); `menu-edge` clicca l'ultima riga visibile (la riga dei
+  dati di T12 spinge l'ultima del DOM sotto la banda); la pastiglia del titolo non
+  fa più crescere la riga del cursore (salto di 7–9 px, già su `main`) · le
+  baseline di T25 si prendono dopo, con questi cambi dentro.
