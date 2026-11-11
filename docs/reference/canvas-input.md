@@ -52,8 +52,9 @@ volta. Lo decide la tela (`engine.ts`); il renderer risponde con `enter`,
   avvisi, senza chiedere niente. Se il file c'è ma non si mostra («Non riesco a
   mostrare», «Il foglio non si può mostrare qui», la scheda troppo grande), il
   file si apre come «Apri» del menu della scheda (T17), anche in sola lettura.
-  Mentre carica («Apro…») il gesto non fa niente finché la resa non arriva. La
-  tela legge questo stato dal segnaposto di un file mancante e da
+  Mentre carica («Apro…») il gesto non fa niente finché la resa non arriva. Il
+  doppio clic su un pulsante della scheda («Ritrova…», «Apri») fa solo ciò che
+  fa il suo clic. La tela legge questo stato dal segnaposto di un file mancante e da
   `data-card-state` della radice della vista (nota, immagine, foglio). Un PDF
   non lo dice ancora: il suo campo si apre anche quando non si legge. Una
   scheda che si mostra apre il campo come prima.

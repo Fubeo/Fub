@@ -7412,7 +7412,7 @@ export class CanvasEngine {
    * che non si mostra non apre il campo: fa l'azione che serve (T93).
    */
   #enterOrEdit(node: CanvasNode, from?: EventTarget | null): void {
-    if (node.type === "file" && this.#fileGesture(node)) return;
+    if (node.type === "file" && this.#fileGesture(node, from)) return;
     if (node.type !== "text" && (this.#beginWriting(node.id, from) || this.#enterCard(node.id))) return;
     this.#beginCardEdit(node);
   }
@@ -7422,13 +7422,16 @@ export class CanvasEngine {
    * percorso (T93): «File mancante» chiede il file come «Ritrova…» (o lo dice, in
    * sola lettura o senza un selettore); «Non riesco a mostrare» apre il file come
    * «Apri» del menu (T17); mentre carica non fa niente. `false` se la scheda si
-   * mostra: il gesto va a entrare o al campo, come prima.
+   * mostra: il gesto va a entrare o al campo, come prima. Con `from` sul
+   * pulsante della scheda, il gesto è del pulsante: il suo clic ha già fatto l'azione.
    */
-  #fileGesture(node: CanvasNode): boolean {
+  #fileGesture(node: CanvasNode, from?: EventTarget | null): boolean {
     const entry = this.#cards.get(node.id);
     if (!entry) return false;
     const showing = this.#fileShowing(entry);
     if (showing === "shown") return false;
+    const button = from instanceof Element ? from.closest("button") : null;
+    if (button !== null && entry.body.contains(button)) return true;
     if (showing === "loading") return true;
     if (showing === "unreadable") {
       this.#openFileNode(node);

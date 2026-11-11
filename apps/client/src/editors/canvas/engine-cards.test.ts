@@ -2270,4 +2270,26 @@ describe("il gesto su una scheda di file che non si mostra (T93)", () => {
     expect(activeOf(host)).toEqual([]);
     engine.destroy();
   });
+
+  it("il doppio clic su «Ritrova…» non aggiunge un selettore: il pulsante fa la sua azione a ogni clic", () => {
+    const files = fakeFiles();
+    const { renderer, mounts } = fakeRenderer();
+    const asked: (string | undefined)[] = [];
+    const { engine, host } = mounted(boardSource(), {
+      cards: cardsWith(files, renderer),
+      onPickFile: (name) => {
+        asked.push(name);
+        return null;
+      },
+    });
+    mounts[1]!.context.missing();
+    // Due clic sul pulsante e poi il doppio clic, come il mouse: un selettore per clic, non di più.
+    const relink = actionOf(host, "i", "relink")!;
+    relink.click();
+    relink.click();
+    relink.dispatchEvent(new MouseEvent("dblclick", { bubbles: true }));
+    expect(asked).toEqual(["foto.png", "foto.png"]);
+    expect(host.querySelector(".canvas-field-editor")).toBeNull();
+    engine.destroy();
+  });
 });
