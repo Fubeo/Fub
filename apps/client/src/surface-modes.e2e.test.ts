@@ -681,6 +681,43 @@ describe("la modalità si sceglie dalla banda", () => {
     expect(paneMode()).toBe("draw");
   });
 
+  it("col cassetto aperto, Esc chiude solo il menu; il secondo Esc chiude il cassetto", async () => {
+    // La finestra minima: l'albero è un cassetto sopra il foglio.
+    const saved = Object.getOwnPropertyDescriptor(window, "innerWidth");
+    Object.defineProperty(window, "innerWidth", { configurable: true, value: 800 });
+    try {
+      await start();
+      await open("Benvenuto.md");
+      const layout = document.getElementById("layout")!;
+      await run("shell.sidebar.toggle");
+      expect(layout.classList.contains("drawer-sidebar-open")).toBe(true);
+      const escape = () => {
+        const event = new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true });
+        (document.activeElement ?? document.body).dispatchEvent(event);
+        return event;
+      };
+
+      button().focus();
+      button().click();
+      await settle();
+      expect(radios().map(labelOf)).toEqual(["Live", "Blocchi", "Sorgente", "Lettura"]);
+      // Chi chiude il menu dice di aver gestito il tasto.
+      expect(escape().defaultPrevented).toBe(true);
+      await settle();
+      expect(document.querySelector("#context-menu [role=menuitemradio]")).toBeNull();
+      expect(button().getAttribute("aria-expanded")).toBe("false");
+      expect(document.activeElement).toBe(button());
+      expect(layout.classList.contains("drawer-sidebar-open")).toBe(true);
+
+      escape();
+      await settle();
+      expect(layout.classList.contains("drawer-sidebar-open")).toBe(false);
+    } finally {
+      if (saved) Object.defineProperty(window, "innerWidth", saved);
+      else delete (window as { innerWidth?: number }).innerWidth;
+    }
+  });
+
   it("una superficie con una modalità sola non la dice", async () => {
     await start();
     await open("foto.png");

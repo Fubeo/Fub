@@ -547,7 +547,10 @@ function mountAdaptiveShell(hooks: VaultProfileHooks): void {
   };
   pageWindowLifetime.listen(globalThis.window, "resize", applyAdaptive);
   pageWindowLifetime.listen(document, "keydown", (e: KeyboardEvent) => {
-    if (e.key === "Escape") {
+    // Un Esc già gestito (il menu o il dialogo sopra il cassetto, che lo
+    // chiudono in cattura con `preventDefault`) chiude solo loro: il cassetto
+    // aspetta il prossimo.
+    if (e.key === "Escape" && !e.defaultPrevented) {
       if (
         layout.classList.contains("drawer-sidebar-open") ||
         layout.classList.contains("drawer-inspector-open")
