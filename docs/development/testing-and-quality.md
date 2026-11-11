@@ -219,7 +219,7 @@ Tutti i comandi girano da `apps/client/`; gli script sorgente sono in
 |---|---|
 | `npm run bench:verify` | le scene del banco visivo contro le baseline Linux |
 | `npm run bench:update` | rigenera le baseline (solo dal runner Linux) |
-| `npm run bench:a11y` | accessibilità della pagina resa |
+| `npm run bench:a11y` | accessibilità della pagina resa (`-- --scene=a,b` per alcune scene, `-- --light=dark` per una luce) |
 | `npm run bench:motion` | le coreografie del moto dello Scrittoio |
 | `npm run bench:lampo` | lo strato d'avvio prima di ogni modulo |
 | `npm run bench:interaction` | il budget d'interazione (menu, palette, nota) |
@@ -273,6 +273,14 @@ trattiene `openVault`, `avvio=guasto` fa cadere `initialVault`. Una scena che
 non arriva a `data-bench="ready"` dichiara la sua condizione d'arrivo
 (`ready`), e il palco ferma la scia (`.avvio-scia`) prima dello scatto.
 
+Gli stati di Scrittoio 2 hanno sei scene: `banda-modalita` (la nota col menu
+delle modalità aperto dalla banda), `nota-stretta` (la nota a 800×800, la
+finestra minima del computer), `barra-formato` e `barra-formato-stretta` (la
+barra di formato della nota a 1280 e a 800, con `?formatbar=1`, che dà alla
+finestra principale i comandi di formato del telefono senza cambiare le altre
+scene), `icone-figure` e `icone-emoji` (il selettore dell'icona aperto su una
+cartella, con le figure del vault del banco e con `?icone=emoji`).
+
 La guardia del lampo (`npm run bench:lampo`, `-- --port <n> --strictPort` per
 un'altra porta) trattiene il modulo d'ingresso di `index.html` e di
 `mobile.html` e guarda la pagina com'è prima di ogni modulo, in luce scura,
@@ -308,7 +316,10 @@ esito invece di un «da verificare».
 Il catalogo contiene i campioni posizionati dentro i rispettivi riquadri;
 le regioni che scorrono hanno nome accessibile e ingresso da tastiera.
 Il controllo del focus distingue i discendenti di un `details` chiuso
-dagli elementi realmente visibili e raggiungibili.
+dagli elementi realmente visibili e raggiungibili. In ogni scena con la
+modalità nella banda, Invio su `#status-mode` apre il menu (che prende il
+fuoco) ed Esc lo chiude riportando il fuoco sulla banda; la barra di formato e
+quella del PDF sono un solo punto di Tab ciascuna.
 
 Regole:
 

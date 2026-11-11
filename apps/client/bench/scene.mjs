@@ -80,6 +80,10 @@ const SHEET_700 = { width: 1016, height: 800 };
 /// La finestra in cui, senza l'albero e l'ispettore, il foglio è largo
 /// 1248 px: la misura «piena» del prototipo.
 const SHEET_FULL = { width: 1308, height: 800 };
+/// La nota nella finestra minima del computer (`minWidth` e un'altezza da
+/// prototipo): la misura «700 px» del prototipo di Scrittoio 2, che sul
+/// computer non si può avere.
+const NOTE_NARROW = { width: 800, height: 800 };
 /// Una finestra documento appena aperta.
 const DOCUMENT_WINDOW = { width: 900, height: 700 };
 
@@ -789,6 +793,70 @@ export const SCENE = onPage("shell", [
       await page.waitForSelector('.pane[data-mode="reading"] .pane-preview');
     },
   },
+  // **Scrittoio 2** (`PLAN-ui/scrittoio-2.html`): gli stati del prototipo che
+  // prima non avevano una foto. La nota è quella che il banco apre per prima;
+  // la finestra «stretta» è la minima della finestra vera (800 px, come
+  // `minWidth` di Tauri), lo stato a 700 px più vicino che il computer mostri.
+  {
+    id: "banda-modalita",
+    title: "La nota col menu delle modalità aperto dalla banda",
+    prepare: async (page) => {
+      await page.waitForSelector(".pane.focus .cm-content");
+      await page.click("#status-mode");
+      await page.waitForSelector('#context-menu [role="menuitemradio"][aria-checked="true"]');
+      await page.waitForSelector('#status-mode[aria-expanded="true"]');
+    },
+  },
+  {
+    id: "nota-stretta",
+    title: "La nota nella finestra minima, 800 px: i cassetti ritirati, la banda intera",
+    viewport: NOTE_NARROW,
+    prepare: async (page) => {
+      await page.waitForSelector("#layout.layout-compact");
+      await page.waitForSelector(".pane.focus .cm-content");
+    },
+  },
+  ...[
+    ["barra-formato", "La nota con la barra di formato, sul computer"],
+    ["barra-formato-stretta", "La barra di formato nella finestra minima, 800 px: ciò che non ci sta va in «…»", NOTE_NARROW],
+  ].map(([id, title, viewport]) => ({
+    id,
+    title,
+    // `?formatbar=1` dà alla finestra principale i comandi di formato che
+    // l'host finto dà solo al telefono: senza, le scene di oggi restano com'erano.
+    query: "formatbar=1",
+    ...(viewport ? { viewport } : {}),
+    prepare: async (page) => {
+      // Il cursore nella prima voce dell'elenco, come il prototipo: la barra
+      // dice premuto «Elenco puntato». La barra si monta coi comandi, che
+      // arrivano dopo la nota: la scena aspetta i suoi pulsanti e lo stato.
+      await page.click('.pane.focus .cm-content .cm-line:has-text("Un elenco corto")');
+      await page.keyboard.press("End");
+      await page.waitForSelector(".pane.focus .format-bar.kit-bar .kit-bar-button");
+      await page.waitForSelector('.pane.focus .format-bar .kit-bar-button[aria-pressed="true"]');
+      await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+    },
+  })),
+  ...[
+    ["icone-figure", "Il selettore dell'icona su una cartella: le figure del vault", ""],
+    ["icone-emoji", "Il selettore dell'icona su una cartella, col vault delle emoji", "icone=emoji"],
+  ].map(([id, title, query]) => ({
+    id,
+    title,
+    query,
+    prepare: async (page) => {
+      // Dalla strada vera: il tasto destro sulla cartella, poi «Organizza» e
+      // «Icona…», con un clic ciascuno (il passaggio del puntatore apre il
+      // sottomenu dopo una pausa, e l'orologio del banco è fermo). Il
+      // selettore nasce dove si è cliccato col tasto destro, come nel prototipo.
+      await page.click('#file-list li[data-path="Guida"] > .tree-row', { button: "right", position: { x: 40, y: 18 } });
+      await page.click('#context-menu [role="menuitem"]:has-text("Organizza")');
+      await page.click('.context-submenu [role="menuitem"]:has-text("Icona…")');
+      await page.waitForSelector('#icon-picker .icon-grid--figures [data-icon^="fub:"]');
+      await page.waitForSelector("#context-menu", { state: "detached" });
+      await page.waitForSelector("#icon-picker input:focus");
+    },
+  })),
   // **La Live** (`?live=<caso>`, vedi `live-fixture.ts`): le scene del piano
   // «Live e Blocchi», ognuna con il suo testo, il cursore nel punto che il caso
   // dice e, dove serve, i tasti che scrive. È il «prima» con cui ogni fase si
