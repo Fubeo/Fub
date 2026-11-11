@@ -2923,7 +2923,7 @@ Fatto quando: i vettori nuovi e quelli di N4 passano; `image.test.ts` e
 nodo; le foto del banco, chiaro e scuro, somigliano al prototipo.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/canvas src/theme/scrittoio/anatomia.test.ts
-Stato: [ ] da fare
+Stato: [~] in corso · coder Opus · base 0fd6f841d
 
 ## T40 · La porta per scrivere dentro le schede
 
