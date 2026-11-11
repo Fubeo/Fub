@@ -49,16 +49,26 @@ export interface BoardSource {
   readonly whole: number | null;
 }
 
-/// Il file e il `subpath` di una scheda di file: `Nota.md#Titolo` vale come
-/// `file: "Nota.md"` con `subpath: "#Titolo"`, come per la tela.
-function targetOf(node: CanvasNode): { readonly path: string; readonly subpath: string | null } | null {
-  if (node.type !== "file" || typeof node.file !== "string") return null;
-  const file = node.file;
+/// Il file di una scheda e il suo `subpath`, come li leggono la tela
+/// (`engine.ts`: il renderer e ogni comando) e «Fonti»: il percorso senza
+/// `#…`, e il `subpath` dal campo `subpath` o, se manca, dal `#` nel percorso
+/// (`Nota.md#Titolo` vale come `file: "Nota.md"` con `subpath: "#Titolo"`).
+/// Una scheda che non è di file, o senza un `file` di testo, ha il percorso
+/// vuoto (l'indirizzo di una scheda di link sta in `node.url`).
+export function cardTarget(node: CanvasNode): { readonly path: string; readonly subpath: string | null } {
+  if (node.type !== "file") return { path: "", subpath: null };
+  const file = typeof node.file === "string" ? node.file : "";
   const hash = file.indexOf("#");
   const path = hash < 0 ? file : file.slice(0, hash);
-  if (path.trim() === "") return null;
   const subpath = typeof node.subpath === "string" && node.subpath ? node.subpath : hash < 0 ? null : file.slice(hash);
   return { path, subpath };
+}
+
+/// La scheda come fonte: il suo file e il `subpath`, o `null` se non mostra un
+/// file (non è di file, o il percorso è vuoto).
+function targetOf(node: CanvasNode): { readonly path: string; readonly subpath: string | null } | null {
+  const target = cardTarget(node);
+  return target.path.trim() === "" ? null : target;
 }
 
 /// La pagina di `#page=3` (da 1), come la legge la scheda del PDF; `null` se
