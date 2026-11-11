@@ -1972,3 +1972,125 @@ describe("seguire un link (T57)", () => {
     expect(() => vi.advanceTimersByTime(2000)).not.toThrow();
   });
 });
+
+/**
+ * Un renderer di fogli che scrive (T42): `edit(from)` ricorda l'elemento sotto
+ * il gesto, e la prova risponde da sé come la scheda di foglio vera, con la
+ * cella attiva e la sua formula come contesto.
+ */
+function sheetWriterRenderer() {
+  const edits: (EventTarget | null | undefined)[] = [];
+  const contexts = new Map<string, CardContext>();
+  const renderer: CardRenderer = {
+    kinds: ["sheet"],
+    mount(node: CanvasNode, host: HTMLElement, _mode: CardMode, context: CardContext): CardView {
+      contexts.set(node.id, context);
+      const cell = document.createElement("div");
+      cell.className = "probe-cell";
+      cell.tabIndex = -1;
+      host.append(cell);
+      return {
+        setMode: () => {},
+        enter: () => true,
+        leave: () => {},
+        edit: (from) => {
+          edits.push(from);
+          return true;
+        },
+        destroy: () => {},
+      };
+    },
+  };
+  return { renderer, edits, contexts };
+}
+
+const SHEET_BOARD = [
+  { id: "s", type: "file", x: 0, y: 0, width: 400, height: 200, file: "Conti/voti.xlsx" },
+];
+
+function formulaItem(host: HTMLElement): HTMLElement | null {
+  return host.querySelector<HTMLElement>('.canvas-options [data-option="formula"]');
+}
+
+describe("scrivere nelle celle di una scheda di foglio (T42)", () => {
+  it("il doppio clic su una cella scrive da quella cella; la cella e la formula vanno nella riga delle opzioni e nella banda", () => {
+    const sheet = sheetWriterRenderer();
+    const { engine, host } = mounted(boardSource(SHEET_BOARD), { cards: cardsOf(sheet.renderer) });
+    const cell = card(host, "s").querySelector<HTMLElement>(".probe-cell")!;
+    cell.dispatchEvent(new MouseEvent("dblclick", { bubbles: true }));
+    // La scheda sa quale cella c'era sotto il gesto.
+    expect(sheet.edits).toEqual([cell]);
+    expect(formulaItem(host)).toBeNull();
+
+    const context = sheet.contexts.get("s")!;
+    context.writing?.({ toolbar: null, context: { cell: "B4", formula: "=SUM(B2:B3)" } });
+    expect(editingOf(host)).toEqual(["s"]);
+    const item = formulaItem(host)!;
+    expect(item.querySelector(".grid-cell-name")?.textContent).toBe("B4");
+    expect(item.querySelector(".canvas-formula-text")?.textContent).toBe("=SUM(B2:B3)");
+    expect(optionsBar(host)).toBeNull();
+    const writing = () => engine.statusItems().find((entry) => entry.id === "writing")?.text ?? null;
+    expect(writing()).toMatch(/voti\.xlsx · B4$/);
+
+    // Un'altra cella: lo stesso elemento, col testo nuovo.
+    context.writing?.({ toolbar: null, context: { cell: "C4", formula: "#DIV/0!" } });
+    expect(formulaItem(host)).toBe(item);
+    expect(item.querySelector(".grid-cell-name")?.textContent).toBe("C4");
+    expect(item.querySelector(".canvas-formula-text")?.textContent).toBe("#DIV/0!");
+    expect(writing()).toMatch(/voti\.xlsx · C4$/);
+
+    // Il secondo Esc (il primo l'ha preso la cella) esce dalla scrittura.
+    expect(press(cell, "Escape").defaultPrevented).toBe(true);
+    expect(editingOf(host)).toEqual([]);
+    expect(formulaItem(host)).toBeNull();
+    expect(writing()).toBeNull();
+    engine.destroy();
+  });
+
+  it("un Esc che la cella ha già usato non esce dalla scrittura", () => {
+    const sheet = sheetWriterRenderer();
+    const { engine, host } = mounted(boardSource(SHEET_BOARD), { cards: cardsOf(sheet.renderer) });
+    const cell = card(host, "s").querySelector<HTMLElement>(".probe-cell")!;
+    cell.dispatchEvent(new MouseEvent("dblclick", { bubbles: true }));
+    sheet.contexts.get("s")!.writing?.({ toolbar: null, context: { cell: "A1", formula: "" } });
+    cell.addEventListener("keydown", (event) => event.preventDefault(), { once: true });
+    press(cell, "Escape");
+    expect(editingOf(host)).toEqual(["s"]);
+    expect(activeOf(host)).toEqual(["s"]);
+    engine.destroy();
+  });
+
+  it("il doppio clic scesa sul corpo della scheda (il primo clic l'ha accesa) scrive dalla cella sotto il puntatore", () => {
+    const sheet = sheetWriterRenderer();
+    const { engine, host } = mounted(boardSource(SHEET_BOARD), { cards: cardsOf(sheet.renderer) });
+    const cell = card(host, "s").querySelector<HTMLElement>(".probe-cell")!;
+    const body = card(host, "s").querySelector<HTMLElement>(".canvas-card-body")!;
+    const pointing = vi.spyOn(document, "elementFromPoint").mockReturnValue(cell);
+    body.dispatchEvent(new MouseEvent("dblclick", { bubbles: true, clientX: 40, clientY: 60 }));
+    expect(pointing).toHaveBeenCalledWith(40, 60);
+    expect(sheet.edits).toEqual([cell]);
+    pointing.mockRestore();
+    engine.destroy();
+  });
+
+  it("Invio sulla scheda scelta scrive senza una cella sotto il gesto", () => {
+    const sheet = sheetWriterRenderer();
+    const { engine, host } = mounted(boardSource(SHEET_BOARD), { cards: cardsOf(sheet.renderer) });
+    enterWithKeys(host, "s");
+    expect(sheet.edits).toEqual([undefined]);
+    engine.destroy();
+  });
+
+  it("una scrittura senza contesto torna alla riga dello strumento", () => {
+    const sheet = sheetWriterRenderer();
+    const { engine, host } = mounted(boardSource(SHEET_BOARD), { cards: cardsOf(sheet.renderer) });
+    card(host, "s").querySelector<HTMLElement>(".probe-cell")!.dispatchEvent(new MouseEvent("dblclick", { bubbles: true }));
+    const context = sheet.contexts.get("s")!;
+    context.writing?.({ toolbar: null, context: { cell: "A1", formula: "Voce" } });
+    expect(formulaItem(host)).not.toBeNull();
+    context.writing?.({ toolbar: null, context: null });
+    expect(formulaItem(host)).toBeNull();
+    expect(engine.statusItems().find((entry) => entry.id === "writing")?.text).toMatch(/voti\.xlsx$/);
+    engine.destroy();
+  });
+});

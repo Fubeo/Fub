@@ -9,6 +9,7 @@ import type { CardEditorOptions, CardEditorState } from "../editors/canvas/cards
 import {
   DocumentSurfaceRegistry,
   type EditorSurface,
+  type SurfaceActiveCell,
   type SurfaceMode,
   type SurfaceMountContext,
 } from "../editors/core/registry";
@@ -38,6 +39,10 @@ class FakeEditor {
   readOnly = false;
   destroyed = false;
   focused = 0;
+  /// La cella attiva, come un foglio (T42): `undefined` se la superficie non
+  /// ne ha una.
+  cell: SurfaceActiveCell | null | undefined = undefined;
+  readonly cellListeners = new Set<() => void>();
   constructor(
     readonly context: SurfaceMountContext,
     readonly onChange: (paneId: string, change: EditorChange) => void,
@@ -77,10 +82,26 @@ class FakeEditor {
       setReadOnly: (readOnly) => {
         this.readOnly = readOnly;
       },
+      ...(this.cell === undefined ? {} : {
+        activeCell: {
+          read: () => this.cell ?? null,
+          subscribe: (listener: () => void) => {
+            this.cellListeners.add(listener);
+            return () => {
+              this.cellListeners.delete(listener);
+            };
+          },
+        },
+      }),
       destroy: () => {
         this.destroyed = true;
       },
     };
+  }
+  /// La griglia sceglie un'altra cella, o ne cambia il contenuto, e lo dice.
+  moveTo(cell: SurfaceActiveCell | null): void {
+    this.cell = cell;
+    for (const listener of [...this.cellListeners]) listener();
   }
 }
 
@@ -124,6 +145,8 @@ describe("la porta per scrivere dentro le schede", () => {
   let panes: Set<string>;
   let life: Lifetime;
   let error: ReturnType<typeof vi.spyOn>;
+  /// La cella attiva delle superfici che nascono (T42); `undefined`: nessuna.
+  let nextCell: SurfaceActiveCell | null | undefined;
 
   function setup(files: Record<string, string> = { "Nota.md": "ciao" }): void {
     host = createFakeHost({ root: VAULT, file: files });
@@ -141,6 +164,7 @@ describe("la porta per scrivere dentro le schede", () => {
           const editor = new FakeEditor(context, (paneId, change) => {
             if (!hub.written(paneId, change)) throw new Error(`modifica di un riquadro: ${paneId}`);
           });
+          editor.cell = nextCell;
           editors.push(editor);
           return editor.surface();
         },
@@ -192,6 +216,7 @@ describe("la porta per scrivere dentro le schede", () => {
   };
 
   beforeEach(() => {
+    nextCell = undefined;
     error = vi.spyOn(console, "error").mockImplementation(() => {});
   });
   afterEach(() => {
@@ -431,6 +456,55 @@ describe("la porta per scrivere dentro le schede", () => {
     editor!.destroy();
     await settled();
     expect(sessions.get("Altra.md")).toBeUndefined();
+  });
+
+  it("il modo compatto arriva alla superficie, e una superficie compatta lo sa dal contesto", async () => {
+    setup();
+    const compact = await hub.open("Nota.md", document.createElement("div"), options());
+    expect(editors[0]!.context.compact).toBe(true);
+    compact!.destroy();
+    const full = await hub.open("Nota.md", document.createElement("div"), options({ compact: false }));
+    expect(editors[1]!.context.compact).toBeUndefined();
+    full!.destroy();
+  });
+
+  it("la cella attiva della superficie arriva come contesto, e solo quando cambia davvero (T42)", async () => {
+    setup({ "Conti.md": "x" });
+    nextCell = { name: "B2", formula: "=A1*2" };
+    const editor = await hub.open("Conti.md", document.createElement("div"), options());
+    expect(editor!.context!()).toEqual({ cell: "B2", formula: "=A1*2" });
+
+    const seen: unknown[] = [];
+    const stop = editor!.onContext!((context) => seen.push(context));
+    // Un avviso senza cambi (il catalogo, la vista) non arriva alla tela.
+    editors[0]!.moveTo({ name: "B2", formula: "=A1*2" });
+    editors[0]!.moveTo({ name: "C3", formula: "" });
+    editors[0]!.moveTo({ name: "C3", formula: "12" });
+    editors[0]!.moveTo(null);
+    expect(seen).toEqual([{ cell: "C3", formula: "" }, { cell: "C3", formula: "12" }, null]);
+
+    stop();
+    editors[0]!.moveTo({ name: "D4", formula: "1" });
+    expect(seen).toHaveLength(3);
+
+    // Distrutto l'editor, la superficie non ha più chi ascolta.
+    editor!.onContext!((context) => seen.push(context));
+    expect(editors[0]!.cellListeners.size).toBe(1);
+    editor!.destroy();
+    expect(editors[0]!.cellListeners.size).toBe(0);
+    expect(editor!.context!()).toBeNull();
+    expect(editor!.onContext!(() => seen.push("tardi"))).toBeTypeOf("function");
+    expect(editors[0]!.cellListeners.size).toBe(0);
+  });
+
+  it("una superficie senza cella attiva non ha contesto", async () => {
+    setup();
+    const editor = await hub.open("Nota.md", document.createElement("div"), options());
+    expect(editor!.context!()).toBeNull();
+    const seen: unknown[] = [];
+    editor!.onContext!((context) => seen.push(context));
+    expect(seen).toEqual([]);
+    editor!.destroy();
   });
 
   it("le modifiche dei riquadri non sono della porta", () => {

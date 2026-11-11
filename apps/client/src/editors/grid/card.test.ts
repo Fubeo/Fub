@@ -20,7 +20,20 @@ import { t } from "../../i18n/strings";
 import { declareClipboard } from "../../platform/clipboard";
 import { openLifetime, type Lifetime } from "../../ui/lifetime";
 import { CardCache } from "../canvas/card-cache";
-import type { CardContext, CardMode, CardView } from "../canvas/cards";
+import type {
+  CardContext,
+  CardEditor,
+  CardEditorOptions,
+  CardEditorPort,
+  CardEditorState,
+  CardMode,
+  CardView,
+  CardWriting,
+} from "../canvas/cards";
+import { COMPONENT_EDITORS, type SurfaceBootstrapOptions } from "../core/bootstrap";
+import { GRID_PROFILE, UI_GRID } from "../core/component-surfaces";
+import type { EditorSurface, LazySurfaceFactory } from "../core/registry";
+import { findTextEditorOrThrow } from "../text/test-support";
 import type { CanvasNode } from "../canvas/model";
 import {
   SHEET_CARD_COLUMN_HEADER,
@@ -31,6 +44,7 @@ import {
   type SheetCardPort,
 } from "./card";
 import type { GridHost } from "./engine";
+import { workbookHost } from "./test-support";
 
 const PATH = "Statistica/voti.xlsx";
 const FORMAT = "xlsx";
@@ -230,6 +244,9 @@ interface Bench {
   readonly port: SheetCardPort & { sources: number; changed: (() => void)[]; unwatched: number; opened: string[] };
   readonly missing: { count: number };
   readonly size: { width: number; height: number };
+  /// Ciò che la scheda ha detto alla tela della scrittura (T42).
+  readonly writings: (CardWriting | null)[];
+  readonly states: [CardEditorState | null, string | undefined][];
   mount(mode: CardMode): CardView;
   root(): HTMLElement;
 }
@@ -239,6 +256,7 @@ let benches: Bench[] = [];
 function bench(options: FakeOptions & {
   source?: () => Promise<{ journal: string; base: string; format: string | null } | null>;
   withOpen?: boolean;
+  editors?: CardEditorPort;
 } = {}): Bench {
   const element = document.createElement("div");
   document.body.append(element);
@@ -272,6 +290,8 @@ function bench(options: FakeOptions & {
   };
   const renderer = sheetCardRenderer(port);
   const node = { id: "n1", type: "file", file: PATH, x: 0, y: 0, width: WIDTH, height: HEIGHT } as CanvasNode;
+  const writings: Bench["writings"] = [];
+  const states: Bench["states"] = [];
   const made: Bench = {
     host: element,
     grid,
@@ -279,6 +299,8 @@ function bench(options: FakeOptions & {
     port,
     missing,
     size,
+    writings,
+    states,
     mount(mode) {
       const context: CardContext = {
         path: PATH,
@@ -291,6 +313,15 @@ function bench(options: FakeOptions & {
         missing: () => {
           missing.count += 1;
         },
+        ...(options.editors ? {
+          editors: options.editors,
+          writing: (writing: CardWriting | null) => {
+            writings.push(writing);
+          },
+          editState: (state: CardEditorState | null, reason?: string) => {
+            states.push([state, reason]);
+          },
+        } : {}),
       };
       return renderer.mount(node, element, mode, context);
     },
@@ -795,5 +826,303 @@ describe("la scheda di foglio", () => {
     expect(b.grid.closes).toEqual(["i1", "i2"]);
     first.destroy();
     expect(b.grid.closes).toEqual(["i1", "i2"]);
+  });
+});
+
+// --- Scrivere nelle celle (T42) ----------------------------------------------
+
+/// La porta delle schede (T40) ridotta a ciò che la scheda usa, con la
+/// superficie vera del foglio: quella che `mountGrid` monta in un riquadro,
+/// in modo compatto, sulla cartella di Excel delle prove.
+interface WritingPort extends CardEditorPort {
+  readonly grid: ReturnType<typeof workbookHost>;
+  readonly opened: CardEditorOptions[];
+  readonly surfaces: EditorSurface[];
+  state: CardEditorState;
+  left: number;
+  destroyed: number;
+  /// Lo stato della sessione cambia (un conflitto col disco, la sola lettura).
+  turn(state: CardEditorState): void;
+}
+
+function writingPort(state: CardEditorState = "clean"): WritingPort {
+  const grid = workbookHost();
+  const listeners = new Set<(state: CardEditorState) => void>();
+  const port: WritingPort = {
+    grid,
+    opened: [],
+    surfaces: [],
+    state,
+    left: 0,
+    destroyed: 0,
+    turn(next) {
+      port.state = next;
+      for (const listener of [...listeners]) listener(next);
+    },
+    async open(path, host, options): Promise<CardEditor | null> {
+      port.opened.push(options);
+      const registration = COMPONENT_EDITORS[UI_GRID]![0]!.registration({
+        gridHost: grid.host,
+        onChange: () => {},
+        onSelectionChange: () => {},
+      } as unknown as SurfaceBootstrapOptions);
+      const factory = await (registration.factory as LazySurfaceFactory).load();
+      if (options.lifetime.closed) return null;
+      host.dataset.cardEditor = options.compact ? "compact" : "full";
+      const surface = factory.mount(GRID_PROFILE, {
+        paneId: "card-editor:1",
+        documentId: path,
+        parent: host,
+        formatId: FORMAT,
+        revision: fixture.document_revision,
+        compact: options.compact,
+      });
+      port.surfaces.push(surface);
+      // happy-dom non dispone: la griglia vede una finestra della scheda.
+      Object.defineProperties(host.querySelector(".grid-viewport")!, {
+        clientWidth: { configurable: true, value: 600 },
+        clientHeight: { configurable: true, value: 300 },
+      });
+      surface.buffer!.setDoc("");
+      const context = () => {
+        const cell = surface.activeCell?.read() ?? null;
+        return cell === null ? null : { cell: cell.name, formula: cell.formula };
+      };
+      let gone = false;
+      const destroy = (): void => {
+        if (gone) return;
+        gone = true;
+        port.destroyed += 1;
+        surface.destroy();
+        host.replaceChildren();
+      };
+      // Come la porta vera: chiusa la vita della scheda, l'editor si smonta.
+      options.lifetime.add(destroy);
+      return {
+        focus: () => surface.focus?.(),
+        leave: async () => {
+          port.left += 1;
+        },
+        state: () => port.state,
+        onState: (listener) => {
+          listeners.add(listener);
+          return () => listeners.delete(listener);
+        },
+        context,
+        onContext: (listener) => surface.activeCell!.subscribe(() => listener(context())),
+        destroy,
+      };
+    },
+  };
+  return port;
+}
+
+async function until(thing: string, cond: () => boolean): Promise<void> {
+  for (let i = 0; i < 200; i++) {
+    if (cond()) return;
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  }
+  throw new Error(`non è mai successo: ${thing}`);
+}
+
+const writer = (made: Bench) => made.host.querySelector<HTMLElement>('.canvas-card-sheet[data-card-state="editing"]');
+const cellEditor = (made: Bench) => writer(made)?.querySelector<HTMLElement>(".grid-cell-editor") ?? null;
+const opened = (made: Bench) => cellEditor(made)?.hidden === false;
+const lastContext = (made: Bench) => made.writings[made.writings.length - 1]?.context ?? null;
+
+function press(target: Element, init: KeyboardEventInit): KeyboardEvent {
+  const event = new KeyboardEvent("keydown", { bubbles: true, cancelable: true, ...init });
+  target.dispatchEvent(event);
+  return event;
+}
+
+/// Scrive `text` nella cella aperta, al posto di ciò che c'era.
+function typeInCell(made: Bench, text: string): void {
+  const editor = findTextEditorOrThrow(cellEditor(made)!);
+  editor.dispatch({ changes: { from: 0, to: editor.state.doc.length, insert: text }, userEvent: "input" });
+}
+
+const inCell = (made: Bench) => cellEditor(made)!.querySelector<HTMLElement>(".cm-content")!;
+const gridViewport = (made: Bench) => writer(made)!.querySelector<HTMLElement>(".grid-viewport")!;
+
+/// Una scheda viva con la porta, e la scrittura cominciata col doppio clic
+/// sulla cella (`row`, `column`) della resa.
+async function writingOn(row: number, column: number, state: CardEditorState = "clean") {
+  const port = writingPort(state);
+  const made = bench({ editors: port });
+  const view = made.mount("live");
+  await settle();
+  expect(view.edit!(cell(made.root(), row, column))).toBe(true);
+  return { port, made, view };
+}
+
+describe("la scheda di foglio che scrive (T42)", () => {
+  it("il doppio clic su una cella monta il foglio compatto sulla stessa cella, senza nastro, tavolozza né struttura", async () => {
+    const { port, made } = await writingOn(1, 1);
+    await until("la cella del doppio clic si apre", () => opened(made));
+
+    expect(port.opened).toHaveLength(1);
+    expect(port.opened[0]).toMatchObject({ compact: true, readOnly: false });
+    const root = writer(made)!;
+    expect(root.dataset.cardEditor).toBe("compact");
+    // La resa resta sotto, nascosta, finché si scrive.
+    expect(made.root().hidden).toBe(true);
+    // La cella aperta è quella sotto il doppio clic, e la tela ne ha nome e formula.
+    expect(lastContext(made)).toEqual({ cell: "B2", formula: "800" });
+    expect(made.writings.every((writing) => writing?.toolbar === null)).toBe(true);
+    // Niente nastro né tavolozza; un formato chiesto dalla tastiera non parte.
+    expect(root.querySelector(".grid-ribbon-host")!.childElementCount).toBe(0);
+    expect(port.surfaces[0]!.paletteCommands!()).toEqual([]);
+    press(inCell(made), { key: "Escape" });
+    press(gridViewport(made), { key: "b", ctrlKey: true });
+    await settle();
+    expect(port.grid.given).toEqual([]);
+    // Il tasto destro non apre un menu del foglio: resta alla lavagna.
+    const menu = new MouseEvent("contextmenu", { bubbles: true, cancelable: true });
+    cell(root, 1, 1).dispatchEvent(menu);
+    expect(menu.defaultPrevented).toBe(false);
+  });
+
+  it("Invio conferma e scende, Tab conferma e va a destra; Invio sulla cella scelta la apre", async () => {
+    const { port, made } = await writingOn(1, 1);
+    await until("la cella si apre", () => opened(made));
+
+    typeInCell(made, "900");
+    press(inCell(made), { key: "Enter" });
+    expect(opened(made)).toBe(false);
+    await until("la scrittura arriva al file", () => port.grid.applied.length === 1);
+    expect(port.grid.applied[0]!.patches).toEqual([{ cell: { sheet: "s1", row: "r1", column: "c1" }, before: "800", after: "900" }]);
+    await until("la tela sa che la cella è scesa", () => lastContext(made)?.cell === "B3");
+    expect(lastContext(made)).toEqual({ cell: "B3", formula: "-120" });
+
+    // Invio sulla cella scelta la apre (in un riquadro scenderebbe).
+    expect(press(gridViewport(made), { key: "Enter" }).defaultPrevented).toBe(true);
+    expect(opened(made)).toBe(true);
+    typeInCell(made, "-150");
+    press(inCell(made), { key: "Tab" });
+    expect(opened(made)).toBe(false);
+    await until("la seconda scrittura arriva al file", () => port.grid.applied.length === 2);
+    expect(port.grid.applied[1]!.patches[0]).toMatchObject({ cell: { sheet: "s1", row: "r2", column: "c1" }, after: "-150" });
+    await until("la tela sa che la cella è a destra", () => lastContext(made)?.cell === "C3");
+    expect(lastContext(made)).toEqual({ cell: "C3", formula: "=B3/B4" });
+  });
+
+  it("Esc annulla la cella e resta nella scrittura; il secondo Esc passa alla lavagna, che ne esce", async () => {
+    const { port, made, view } = await writingOn(3, 1);
+    await until("la cella si apre", () => opened(made));
+    expect(lastContext(made)).toEqual({ cell: "B4", formula: "=SUM(B2:B3)" });
+
+    typeInCell(made, "=1/0");
+    const first = press(inCell(made), { key: "Escape" });
+    expect(first.defaultPrevented).toBe(true);
+    expect(opened(made)).toBe(false);
+    expect(writer(made)).not.toBeNull();
+    await settle();
+    expect(port.grid.applied).toEqual([]);
+    expect(lastContext(made)).toEqual({ cell: "B4", formula: "=SUM(B2:B3)" });
+
+    // Il secondo Esc la griglia non lo usa: arriva alla tela, che lascia la scheda.
+    const second = press(gridViewport(made), { key: "Escape" });
+    expect(second.defaultPrevented).toBe(false);
+    const opens = made.grid.opens.length;
+    view.leave!();
+    await until("la griglia si smonta", () => writer(made) === null);
+    expect(port.left).toBe(1);
+    expect(port.destroyed).toBe(1);
+    expect(made.root().hidden).toBe(false);
+    // La resa si rilegge col file di adesso.
+    expect(made.grid.opens.length).toBe(opens + 1);
+  });
+
+  it("Ctrl+Z dentro la scheda annulla nel foglio, e la lavagna non lo riceve", async () => {
+    const { port, made } = await writingOn(1, 1);
+    await until("la cella si apre", () => opened(made));
+    typeInCell(made, "7");
+    press(inCell(made), { key: "Enter" });
+    await until("la scrittura arriva al file", () => port.grid.applied.length === 1);
+    await settle();
+    const undo = press(gridViewport(made), { key: "z", ctrlKey: true });
+    expect(undo.defaultPrevented).toBe(true);
+    await until("il foglio torna com'era", () => cell(writer(made)!, 1, 1).textContent === "800");
+  });
+
+  it("Invio sulla cella scelta della resa apre quella cella", async () => {
+    const port = writingPort();
+    const made = bench({ editors: port });
+    const view = made.mount("live");
+    await settle();
+    expect(view.enter!()).toBe(true);
+    pointer(cell(made.root(), 2, 2), "pointerdown");
+    pointer(cell(made.root(), 2, 2), "pointerup", 0);
+    expect(view.edit!()).toBe(true);
+    await until("la cella scelta si apre", () => opened(made));
+    expect(lastContext(made)).toEqual({ cell: "C3", formula: "=B3/B4" });
+  });
+
+  it("un foglio di sola lettura non si scrive: la scheda resta a leggere e lo dice", async () => {
+    const { port, made } = await writingOn(1, 1, "readonly");
+    await until("la griglia si smonta", () => port.destroyed === 1);
+    expect(writer(made)).toBeNull();
+    expect(made.root().hidden).toBe(false);
+    expect(made.writings[made.writings.length - 1]).toBeNull();
+    const [state, reason] = made.states[made.states.length - 1]!;
+    expect(state).toBe("readonly");
+    expect(reason).toBe(t("canvas.card.readonly_why", { name: "voti.xlsx" }));
+  });
+
+  it("`Stale`: il conflitto col disco si dice nella riga del titolo; la resa non si rilegge sotto e si ricarica uscendo", async () => {
+    const { port, made, view } = await writingOn(1, 1);
+    await until("la cella si apre", () => opened(made));
+    const opens = made.grid.opens.length;
+    const sources = made.port.sources;
+
+    port.turn("conflict");
+    expect(made.states[made.states.length - 1]).toEqual(["conflict", undefined]);
+    // Il file cambia mentre si scrive: la griglia segue la sessione da sé,
+    // e la resa non apre una sessione sua sotto.
+    for (const changed of made.port.changed) changed();
+    await settle();
+    expect(made.grid.opens.length).toBe(opens);
+
+    port.turn("clean");
+    expect(made.states[made.states.length - 1]).toEqual([null, undefined]);
+    view.leave!();
+    await until("la griglia si smonta", () => writer(made) === null);
+    // Uscendo la resa si ricarica, con la base di adesso.
+    expect(made.port.sources).toBe(sources + 1);
+    expect(made.grid.opens.length).toBe(opens + 1);
+    expect(made.grid.opens[made.grid.opens.length - 1]!.base).toBe(`base-${sources + 1}`);
+  });
+
+  it("senza porta, da ferma o prima della resa non si scrive; fermata mentre scrive, la griglia si smonta", async () => {
+    const plain = bench();
+    expect(plain.mount("live").edit!()).toBe(false);
+
+    const port = writingPort();
+    const made = bench({ editors: port });
+    expect(made.mount("snapshot").edit!()).toBe(false);
+    expect(port.opened).toEqual([]);
+
+    const { port: writing, made: live, view } = await writingOn(1, 1);
+    await until("la cella si apre", () => opened(live));
+    view.setMode("snapshot");
+    expect(writing.destroyed).toBe(1);
+    expect(writer(live)).toBeNull();
+    expect(live.root().hidden).toBe(false);
+  });
+
+  it("distrutta mentre la griglia arriva, la griglia arrivata si smonta subito", async () => {
+    const port = writingPort();
+    const made = bench({ editors: port });
+    const view = made.mount("live");
+    await settle();
+    expect(view.edit!(cell(made.root(), 1, 1))).toBe(true);
+    view.destroy();
+    for (let i = 0; i < 20; i++) await settle();
+    // La porta non monta niente per una vita chiusa, e nessuna griglia resta.
+    expect(port.opened).toHaveLength(1);
+    expect(port.destroyed).toBe(port.surfaces.length);
+    expect(writer(made)).toBeNull();
+    expect(made.host.querySelector(".grid-surface")).toBeNull();
   });
 });

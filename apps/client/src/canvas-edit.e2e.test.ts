@@ -5,11 +5,15 @@
 // sulla scheda monta l'editor Live vero sulla stessa `DocumentSession` del
 // riquadro: quello che si scrive da una parte si vede dall'altra senza
 // rileggere il disco, e Ctrl+Z nella scheda toglie solo quello che si è
-// scritto nella scheda. Il cablaggio è quello di `canvas-cards.e2e.test.ts` —
-// `main.ts` sulla scocca vera, contro l'host finto — senza cartelle vere.
+// scritto nella scheda. **E in una scheda di foglio** (T42): lo stesso
+// `.xlsx` in un riquadro e su una scheda; il doppio clic su una cella monta
+// il foglio vero in modo compatto, e il valore scritto arriva al riquadro e
+// al file. Il cablaggio è quello di `canvas-cards.e2e.test.ts` — `main.ts`
+// sulla scocca vera, contro l'host finto — senza cartelle vere.
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { FakeHost } from "./host/fake";
-import { mountedTextEditors, undoDepth } from "./editors/text/test-support";
+import type { FakeHost, GridBytesFake } from "./host/fake";
+import { findTextEditorOrThrow, mountedTextEditors, undoDepth } from "./editors/text/test-support";
+import XLSX from "./__fixtures__/xlsx-grid.json";
 
 vi.setConfig({ testTimeout: 30_000 });
 
@@ -75,9 +79,9 @@ function renderNotes(host: FakeHost): void {
   };
 }
 
-async function start(): Promise<FakeHost> {
+async function start(options: Parameters<typeof createFakeHost>[0] = { file: VAULT }): Promise<FakeHost> {
   vi.resetModules();
-  const host = createFakeHost({ file: VAULT });
+  const host = createFakeHost(options);
   renderNotes(host);
   box.host = host;
   const body = /<body[^>]*>([\s\S]*)<\/body>/.exec(rawHtml);
@@ -178,5 +182,123 @@ describe("scrivere in una scheda di nota (T41)", () => {
     await waitFor("la scheda torna alla resa", () => card()?.querySelector(".cm-editor") === null);
     await waitFor("il testo arriva al disco", () => host.files()[NOTE] === `Dal riquadro. ${TEXT}`, 10_000);
     expect(mountedTextEditors(), "resta l'editor del riquadro").toEqual([inPane]);
+  });
+});
+
+// --- Il foglio (T42) ---------------------------------------------------------
+
+const SHEET = "Conti.xlsx";
+const SHEET_BOARD = JSON.stringify({
+  nodes: [{ id: "foglio", type: "file", file: SHEET, x: 0, y: 0, width: 520, height: 260 }],
+  edges: [],
+});
+/// Il giornale che la cartella delle prove scrive per B2 da 800 a 900: quello
+/// del commit registrato dal provider vero (`xlsx-grid.json`).
+const JOURNAL_900 = XLSX.edit.commit.edit.inserted;
+
+/// L'host finto con la cartella delle prove e il commit registrato di B2.
+async function startWithSheet(): Promise<FakeHost> {
+  const host = await start({
+    file: { [SHEET]: "", "lavagna.canvas": SHEET_BOARD },
+    gridBytes: {
+      surface: XLSX.surface,
+      session: XLSX.session,
+      windows: [...XLSX.windows, XLSX.edit.window],
+      commits: [XLSX.edit.commit],
+    } as unknown as GridBytesFake,
+  });
+  return host;
+}
+
+/// Il finto è più semplice di un provider vero in due punti, che qui contano:
+/// - ogni sessione ha la stessa istanza della fixture, e chiuderne una (la
+///   resa della scheda, che si ferma mentre si scrive) chiuderebbe le altre:
+///   qui ogni sessione ha un'istanza sua, e il finto chiude quella condivisa
+///   soltanto quando le ha chiuse tutte;
+/// - apre ogni sessione sulla revisione della fixture, qualunque giornale
+///   riceva: sul giornale di B2 = 900 il provider vero darebbe la revisione
+///   del suo commit, e con lei la finestra dove B2 vale 900.
+function likeAProvider(host: FakeHost): void {
+  type Call = (...args: unknown[]) => Promise<unknown>;
+  const api = host.module.api as unknown as Record<string, Call>;
+  const real = (name: string): Call => api[name]!.bind(api);
+  const [open, window, apply, commands, command, close] =
+    ["openGridBytes", "gridBytesWindow", "applyGridBytes", "gridBytesCommands", "gridBytesCommand", "closeGridBytes"].map(real);
+  const aliases = new Map<string, string>();
+  let next = 0;
+  const fixtureOf = (instance: unknown): string => aliases.get(String(instance)) ?? String(instance);
+  api.openGridBytes = async (surface, doc, journal, base) => {
+    const session = await open!(surface, doc, journal, base) as { instance: string; revision: string };
+    const instance = `${session.instance}#${++next}`;
+    aliases.set(instance, session.instance);
+    return { ...session, instance, ...(journal === JOURNAL_900 ? { revision: XLSX.edit.commit.revision } : {}) };
+  };
+  api.gridBytesWindow = (surface, instance, request) => window!(surface, fixtureOf(instance), request);
+  api.applyGridBytes = (surface, instance, request) => apply!(surface, fixtureOf(instance), request);
+  api.gridBytesCommands = (surface, instance, selection) => commands!(surface, fixtureOf(instance), selection);
+  api.gridBytesCommand = (surface, instance, request) => command!(surface, fixtureOf(instance), request);
+  api.closeGridBytes = async (surface, instance) => {
+    const shared = fixtureOf(instance);
+    if (!aliases.delete(String(instance))) throw { kind: "not_found", message: "la sessione della griglia è chiusa" };
+    if (![...aliases.values()].includes(shared)) await close!(surface, shared);
+  };
+}
+
+const sheetCard = () => document.querySelector<HTMLElement>('.canvas-node[data-node="foglio"]');
+const paneGrid = () => [...document.querySelectorAll<HTMLElement>(".grid-surface")].find((grid) => !sheetCard()?.contains(grid)) ?? null;
+const cellIn = (root: Element | null | undefined, row: number, column: number) =>
+  root?.querySelector<HTMLElement>(`.grid-cell[data-row="${row}"][data-column="${column}"]`) ?? null;
+const cardWriter = () => sheetCard()?.querySelector<HTMLElement>('[data-card-editor="compact"]') ?? null;
+
+describe("scrivere nelle celle di una scheda di foglio (T42)", () => {
+  it("un valore scritto nella scheda arriva al riquadro dello stesso foglio e al file salvato", async () => {
+    const host = await startWithSheet();
+    likeAProvider(host);
+    const { openDocument } = await import("./panels/document");
+    await openDocument(SHEET);
+    await waitFor("il foglio si apre nel riquadro", () => cellIn(paneGrid(), 1, 1)?.textContent === "800", 15_000);
+    const { allCommands } = await import("./ui/commands");
+    await allCommands().find((entry) => entry.id === "shell.pane.split.right")!.run!();
+    await settle();
+    await openDocument("lavagna.canvas");
+    await waitFor("la scheda del foglio monta il suo renderer", () => sheetCard()?.dataset.cardKind === "sheet", 15_000);
+    document.querySelector<HTMLButtonElement>('[data-canvas-action="fit"]')!.click();
+    await waitFor("la tela accende la scheda", () => sheetCard()?.dataset.cardMode === "live");
+    await waitFor("la scheda mostra le celle", () => cellIn(sheetCard(), 1, 1) !== null, 15_000);
+
+    // Il doppio clic sulla cella B2 della scheda: il foglio vero, compatto, con B2 aperta.
+    cellIn(sheetCard(), 1, 1)!.dispatchEvent(new MouseEvent("dblclick", { bubbles: true, cancelable: true }));
+    await waitFor("la scheda scrive", () => sheetCard()?.hasAttribute("data-card-editing") === true, 15_000);
+    await waitFor("B2 si apre", () => cardWriter()?.querySelector<HTMLElement>(".grid-cell-editor")?.hidden === false, 15_000);
+    expect(cardWriter()!.querySelector(".grid-ribbon-host")!.childElementCount, "niente nastro nella scheda").toBe(0);
+    const formula = document.querySelector<HTMLElement>('.canvas-options [data-option="formula"]');
+    expect(formula?.querySelector(".grid-cell-name")?.textContent).toBe("B2");
+    expect(formula?.querySelector(".canvas-formula-text")?.textContent).toBe("800");
+
+    const before = host.atGate("openGridBytes").length;
+    const editor = findTextEditorOrThrow(cardWriter()!.querySelector<HTMLElement>(".grid-cell-editor")!);
+    editor.dispatch({ changes: { from: 0, to: editor.state.doc.length, insert: "900" }, userEvent: "input" });
+    editor.contentDOM.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, cancelable: true, key: "Enter" }));
+    await waitFor("la scrittura arriva al provider", () => host.atGate("applyGridBytes").length === 1);
+    expect((host.atGate("applyGridBytes")[0]!.args[1] as { patches: unknown[] }).patches)
+      .toEqual([{ cell: { sheet: "s1", row: "r1", column: "c1" }, before: "800", after: "900" }]);
+    await waitFor("la formula segue la cella scesa", () =>
+      document.querySelector('.canvas-options [data-option="formula"] .grid-cell-name')?.textContent === "B3");
+
+    // Il riquadro riceve il giornale dalla sessione e riapre la sua griglia
+    // su B2 = 900, senza rileggere il disco. (Che cosa mostra dopo dipende
+    // dal finto, che al salvataggio non innesta il giornale nei byte.)
+    await waitFor("il riquadro riapre col giornale nuovo", () =>
+      host.atGate("openGridBytes").slice(before).some((call) => call.args[2] === JOURNAL_900));
+    expect(host.atGate("openDocument").filter((call) => call.args[0] === SHEET), "nessuna rilettura dal disco").toHaveLength(1);
+    await waitFor("il riquadro mostra 900", () => cellIn(paneGrid(), 1, 1)?.textContent === "900");
+
+    // Il secondo Esc (non c'è una cella aperta) esce dalla scrittura, e il giornale va al file.
+    cardWriter()!.querySelector<HTMLElement>(".grid-viewport")!
+      .dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, cancelable: true, key: "Escape" }));
+    await waitFor("la scheda smette di scrivere", () => sheetCard()?.hasAttribute("data-card-editing") === false);
+    await waitFor("la griglia della scheda si smonta", () => cardWriter() === null);
+    await waitFor("il giornale arriva al file", () =>
+      host.atGate("writeDocument").some((call) => call.args[0] === SHEET && call.args[1] === JOURNAL_900), 10_000);
   });
 });
