@@ -6905,3 +6905,139 @@ describe("CanvasEngine: la misura e l'allineamento del testo (T92)", () => {
     engine.destroy();
   });
 });
+
+describe("la scheda-estratto (T75)", () => {
+  const BOARD = [
+    { id: "x", type: "file", x: 0, y: 0, width: 280, height: 220, file: "Note/Relazione.md", subpath: "#Scopo", "fub:parts": { kind: "sections", sections: ["Scopo", "Capitolo#Misure"] } },
+    { id: "w", type: "file", x: 400, y: 0, width: 280, height: 220, file: "Note/Tutta.md" },
+  ];
+
+  /** La lavagna con una scheda-estratto e una nota intera; i contesti delle viste restano. */
+  function board(overrides: Partial<CanvasEngineOptions> = {}) {
+    const contexts = new Map<string, CardContext>();
+    const renderer: CardRenderer = {
+      kinds: ["note"],
+      mount(node, _host, _mode, context): CardView {
+        contexts.set(node.id, context);
+        return { setMode: () => {}, destroy: () => {} };
+      },
+    };
+    const beside: string[] = [];
+    const made = mounted(JSON.stringify({ nodes: BOARD, edges: [] }), {
+      cards: { registry: createCardRegistry([renderer]), snapshots: new CardCache(), watch: () => () => {} },
+      onOpenPathBeside: (path) => {
+        beside.push(path);
+      },
+      ...overrides,
+    });
+    return { ...made, contexts, beside };
+  }
+
+  const cardEl = (host: HTMLElement, id: string) => host.querySelector<HTMLElement>(`.canvas-node[data-node="${id}"]`)!;
+  const head = (host: HTMLElement, id: string) => cardEl(host, id).querySelector<HTMLElement>(":scope > .canvas-node-handle")!;
+  const node = (engine: CanvasEngine, id: string) => readCanvas(engine.getDoc()).nodes.find((one) => one.id === id)!;
+  function menuOn(engine: CanvasEngine, element: Element) {
+    const pointing = vi.spyOn(document, "elementFromPoint").mockReturnValue(element);
+    try {
+      return engine.contextMenu({ x: 10, y: 10 })!;
+    } finally {
+      pointing.mockRestore();
+    }
+  }
+  const ids = (entries: readonly unknown[]): string[] =>
+    entries.flatMap((one) => (one && typeof one === "object" && "id" in one ? [(one as SurfaceMenuItem).id] : []));
+
+  it("la testata sopra la scheda dice le parti in colore d'accento e porta ↗; la nota intera no", () => {
+    const { engine, host } = board();
+    const parts = head(host, "x").querySelector(".canvas-excerpt-parts")!;
+    expect(parts.textContent).toBe("§ Scopo · § Misure");
+    expect(head(host, "x").querySelector(".canvas-excerpt-open")!.getAttribute("aria-label")).toBe(t("canvas.excerpt.open", { name: "Relazione" }));
+    expect(cardEl(host, "x").dataset.cardExcerpt).toBe("sections");
+    expect(head(host, "w").querySelector(".canvas-excerpt-parts, .canvas-excerpt-open")).toBeNull();
+    expect(cardEl(host, "w").hasAttribute("data-card-excerpt")).toBe(false);
+    engine.destroy();
+  });
+
+  it("↗ apre la fonte accanto alla prima sezione; Ctrl+clic (Cmd+clic) nel riquadro; la scheda non cambia", () => {
+    const { engine, host, beside, opened, changes } = board();
+    const open = head(host, "x").querySelector<HTMLButtonElement>(".canvas-excerpt-open")!;
+    // Il tasto giù su ↗ non trascina né apre un giro della lavagna.
+    open.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, cancelable: true, button: 0, pointerId: 1, ctrlKey: true }));
+    open.click();
+    expect(beside).toEqual(["/Note/Relazione.md#Scopo"]);
+    open.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, ctrlKey: true }));
+    open.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, metaKey: true }));
+    expect(opened).toEqual([{ path: "/Note/Relazione.md#Scopo" }, { path: "/Note/Relazione.md#Scopo" }]);
+    expect(beside).toHaveLength(1);
+    expect(changes).toHaveLength(0);
+    engine.destroy();
+  });
+
+  it("il doppio clic sulla testata apre la fonte accanto; quello sul corpo no", () => {
+    const { engine, host, beside, changes } = board();
+    head(host, "x").querySelector(".canvas-node-title")!.dispatchEvent(new MouseEvent("dblclick", { bubbles: true, cancelable: true }));
+    expect(beside).toEqual(["/Note/Relazione.md#Scopo"]);
+    // Il doppio clic su ↗ è già il suo clic: niente seconda apertura.
+    head(host, "x").querySelector(".canvas-excerpt-open")!.dispatchEvent(new MouseEvent("dblclick", { bubbles: true, cancelable: true }));
+    cardEl(host, "x").querySelector(".canvas-card-body")!.dispatchEvent(new MouseEvent("dblclick", { bubbles: true, cancelable: true }));
+    // La testata di una nota intera non apre niente.
+    head(host, "w").querySelector(".canvas-node-title")!.dispatchEvent(new MouseEvent("dblclick", { bubbles: true, cancelable: true }));
+    expect(beside).toEqual(["/Note/Relazione.md#Scopo"]);
+    expect(changes).toHaveLength(0);
+    engine.destroy();
+  });
+
+  it("«Mostra tutto il file», sotto «Parti…» e in Ctrl+/, toglie `fub:parts` e il `subpath` in un solo annulla", () => {
+    const { engine, host, changes } = board({ parts: { outline: async () => [] } });
+    const menu = menuOn(engine, cardEl(host, "x"));
+    const context = ids(menu.context ?? []);
+    expect(context.indexOf("canvas.whole_file")).toBe(context.indexOf("canvas.parts") + 1);
+    const command = engine.commands().find((one) => one.id === "canvas.whole_file")!;
+    expect(command.label).toBe(t("canvas.excerpt.whole"));
+    expect(command.disabled()).toBeNull();
+    command.run();
+    expect(changes).toHaveLength(1);
+    const whole = node(engine, "x");
+    expect(whole.subpath).toBeUndefined();
+    expect(Object.prototype.hasOwnProperty.call(whole, "fub:parts")).toBe(false);
+    expect(head(host, "x").querySelector(".canvas-excerpt-parts")).toBeNull();
+    // Ora è la nota intera: il comando è spento, col perché.
+    expect(command.disabled()).toBe(t("canvas.commands.why.one_excerpt"));
+    expect(engine.undo()).toBe(true);
+    const back = node(engine, "x");
+    expect(back.subpath).toBe("#Scopo");
+    expect(back["fub:parts"]).toEqual({ kind: "sections", sections: ["Scopo", "Capitolo#Misure"] });
+    expect(head(host, "x").querySelector(".canvas-excerpt-parts")!.textContent).toBe("§ Scopo · § Misure");
+    // Su una nota intera la voce non c'è.
+    expect(ids(menuOn(engine, cardEl(host, "w")).context ?? [])).not.toContain("canvas.whole_file");
+    engine.destroy();
+  });
+
+  it("l'avviso della sezione persa ha i gesti della tela: «Scegli di nuovo…» riapre il selettore, «Mostra tutta la nota» è un commit", async () => {
+    const outline = vi.fn(async () => [{ level: 1, text: "Scopo" }, { level: 1, text: "Calcoli" }]);
+    const { engine, contexts, changes } = board({ parts: { outline } });
+    const actions = contexts.get("x")!.excerpt!;
+    expect(contexts.get("w")!.excerpt).toBeUndefined();
+    actions.chooseAgain!();
+    await vi.waitFor(() => expect(document.querySelector(".canvas-parts-picker")).not.toBeNull());
+    expect(outline).toHaveBeenCalledWith("Note/Relazione.md");
+    actions.showWhole();
+    expect(changes).toHaveLength(1);
+    expect(node(engine, "x").subpath).toBeUndefined();
+    engine.destroy();
+  });
+
+  it("in sola lettura si legge: niente «Mostra tutto il file» nel menu, il comando spento, l'avviso senza gesti", () => {
+    const { engine, host, contexts, changes } = board({ parts: { outline: async () => [] } });
+    engine.setReadOnly(true);
+    expect(ids(menuOn(engine, cardEl(host, "x")).context ?? [])).not.toContain("canvas.whole_file");
+    const command = engine.commands().find((one) => one.id === "canvas.whole_file")!;
+    expect(command.disabled()).toBe(t("canvas.commands.why.read_only"));
+    command.run();
+    // La vista si rimonta senza i gesti dell'avviso; ↗ resta, per leggere la fonte.
+    expect(contexts.get("x")!.excerpt).toBeUndefined();
+    expect(head(host, "x").querySelector(".canvas-excerpt-open")).not.toBeNull();
+    expect(changes).toHaveLength(0);
+    engine.destroy();
+  });
+});

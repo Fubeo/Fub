@@ -902,6 +902,11 @@
     "canvas-card-note-content",
     "canvas-parts-keys",
     "canvas-parts-count",
+    "canvas-excerpt-parts",
+    "canvas-excerpt-open",
+    "canvas-excerpt-section",
+    "canvas-excerpt-section-title",
+    "canvas-excerpt-missing",
     "canvas-crop",
     "canvas-crop-box",
     "canvas-crop-handle",
@@ -2567,6 +2572,11 @@
     "canvas-card-note-content": "cornice",
     "canvas-parts-keys": "cornice",
     "canvas-parts-count": "cornice",
+    "canvas-excerpt-parts": "segno",
+    "canvas-excerpt-open": "segno",
+    "canvas-excerpt-section": "contenuto",
+    "canvas-excerpt-section-title": "contenuto",
+    "canvas-excerpt-missing": "contenuto",
     "canvas-crop": "cornice",
     "canvas-crop-box": "segno",
     "canvas-crop-handle": "segno",
@@ -5743,6 +5753,22 @@
         "hover",
         "focused",
         "selected"
+      ]
+    },
+    {
+      "name": "canvas-excerpt",
+      "part": "editors",
+      "hooks": [
+        "canvas-excerpt-parts",
+        "canvas-excerpt-open",
+        "canvas-excerpt-section",
+        "canvas-excerpt-section-title",
+        "canvas-excerpt-missing"
+      ],
+      "states": [
+        "rest",
+        "hover",
+        "focused"
       ]
     },
     {
@@ -9093,10 +9119,10 @@
   "counts": {
     "required_roles": 154,
     "optional_roles": 63,
-    "hooks": 1663,
+    "hooks": 1668,
     "state_names": 7,
-    "assigned_states": 783,
-    "components": 233,
+    "assigned_states": 786,
+    "components": 234,
     "preference_tokens": 186
   }
 }

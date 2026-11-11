@@ -2790,6 +2790,48 @@
   padding: 0;
   white-space: normal;
 }
+/* La scheda-estratto (T75, prototipo T28): le parti in colore d'accento
+   accanto al nome della fonte, ↗ per aprirla; nel corpo ogni sezione col
+   suo titolo in piccolo, d'accento, e un filo fra l'una e l'altra. La
+   sezione che non c'è più lo dice su un fondo d'avviso. */
+.canvas-excerpt-parts {
+  color: var(--accent);
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+  font-weight: var(--weight-bold);
+}
+.canvas-excerpt-open {
+  border-radius: var(--radius-xs);
+  color: var(--accent);
+  font-size: var(--text-sm);
+  line-height: 1;
+}
+.canvas-excerpt-open:hover {
+  background: var(--accent-wash);
+}
+.canvas-excerpt-open:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: 1px;
+}
+.canvas-excerpt-section-title {
+  color: var(--accent);
+  font-family: var(--font-ui);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-bold);
+  letter-spacing: var(--tracking-caps);
+  text-transform: uppercase;
+}
+.canvas-excerpt-section + .canvas-excerpt-section {
+  border-top: 1px solid var(--doc-rule-soft);
+}
+.canvas-excerpt-missing {
+  border-radius: var(--radius-control);
+  background: var(--warning-wash);
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: var(--text-sm);
+  line-height: var(--leading-normal);
+}
 /* Il testo di una scheda è una nota in piccolo: il carattere di lettura, un
    gradino sotto, e i titoli che non si prendono la scheda. */
 .canvas-markdown {

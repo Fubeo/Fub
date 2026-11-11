@@ -175,9 +175,9 @@ I tipi stanno in `cards.ts`, con i commenti sui loro campi. In breve:
   pagina ricordata, o `null`) e `pageChanged(pagina)` (vedi «Riaprire dove
   eri»), e `pageShown()`: è in vista l'immagine di un'altra pagina, e la
   tela ridisegna l'inchiostro della scheda; `contentShown()` fa lo stesso
-  quando cambia `contentAspect()`. `parts` porta le parti di un
-  estratto già lette e provate, o `null` se la scheda mostra solo il suo
-  `subpath` ([Gli estratti della lavagna](canvas-parts.md)).
+  quando cambia `contentAspect()`. `parts` porta le parti già provate di
+  un [estratto](canvas-parts.md), o `null` (vale il `subpath`); `excerpt`,
+  fuori dalla sola lettura, i gesti dell'avviso di una sezione persa.
 - `CardView` risponde a `setMode` e a `destroy`; può rispondere anche a
   `resize` (a fine gesto), `enter` e `leave` (entrare nella scheda e
   uscirne; `enter` restituisce `false` se non c'è niente in cui entrare),

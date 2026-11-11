@@ -165,6 +165,9 @@ export const CANVAS_COMMANDS: readonly CanvasCommandSpec[] = [
   // «Parti…» (T74): il selettore delle sezioni di una scheda di nota, da
   // riaprire quando si vuole; si apre da sé al rilascio.
   { id: "canvas.parts", label: "canvas.parts", group: "selection", keys: [], context: "selection" },
+  // «Mostra tutto il file» (T75): la scheda-estratto torna il file intero,
+  // in un commit; nel menu della scheda sotto «Parti…».
+  { id: "canvas.whole_file", label: "canvas.excerpt.whole", group: "selection", keys: [], context: "selection" },
   // «Ritaglia e ruota» (T78): la zona di una scheda d'immagine, scritta in
   // `fub:parts`; il file dell'immagine non si tocca.
   { id: "canvas.crop", label: "canvas.crop", group: "selection", keys: [], context: "selection" },

@@ -141,6 +141,7 @@ import { PARTS_KEY, cardParts, nodeParts, partsFit, writeParts, type CanvasParts
 import { WHOLE_ZONE, isWholeZone, openCropEditor, zoneOf, zoneParts, zoneRatio, type CropEditor, type CropPicture, type ImageZone } from "./crop";
 import { PARTS_PICKER_MIN_SECTIONS, openPartsPicker, partsSections, type PartsHeading, type PartsPickerHandle, type PartsPickerPlace, type PartsPickerPort } from "./parts-picker";
 import { noteHeadingOf } from "./cards/note";
+import { excerptSourcePath, noteExcerptOf, syncExcerptHead } from "./excerpt";
 import { DEFAULT_PREFERENCES, currentPreferences, readInkMouse, readPen, saveInkMouse, savePen, watchPreferences, type PenButtonAction, type WheelAction } from "./preferences";
 import { TAP_MAX_MS, TAP_SLOP_PX, isTap, pinchCamera, type TouchCamera, type TouchPoint, type ZoomLimits } from "./touch";
 import { fit, stepCamera, zoomAtPoint, type Camera, type MotionState, type ScaleLimits } from "../../spatial/camera";
@@ -6634,6 +6635,21 @@ export class CanvasEngine {
         },
       };
     }
+    if (id === "canvas.whole_file") {
+      // «Mostra tutto il file» (T75): la scheda-estratto torna la nota intera.
+      return {
+        disabled: () => {
+          const why = writable();
+          if (why !== null) return why;
+          const one = only();
+          return one && noteExcerptOf(one) ? null : t("canvas.commands.why.one_excerpt");
+        },
+        run: () => {
+          const one = only();
+          if (one) this.#showWholeFile(one.id);
+        },
+      };
+    }
     if (id === "canvas.crop") {
       // «Ritaglia e ruota» (T78): senza il renderer delle immagini non c'è
       // niente da tagliare, e il comando non c'è.
@@ -7427,6 +7443,37 @@ export class CanvasEngine {
     if (patch) this.#commit([patch], "input");
   }
 
+  /**
+   * «Mostra tutto il file» (T75): la scheda `id` toglie `fub:parts` e il
+   * `subpath` in un commit, e mostra la nota intera; un annulla riporta
+   * l'estratto. Una scheda che non è un estratto non cambia.
+   */
+  #showWholeFile(id: string): void {
+    const doc = this.#doc;
+    const node = doc?.nodes.find((one) => one.id === id);
+    if (!doc || !node || !noteExcerptOf(node) || this.#readOnly || this.#destroyed || this.#isSceneOversized()) return;
+    const next: CanvasNode = { ...node };
+    delete next.subpath;
+    delete next[PARTS_KEY];
+    const patch = upsertNodePatch(doc, next);
+    if (patch) this.#commit([patch], "input");
+  }
+
+  /**
+   * Apre la fonte di un estratto alla sua prima sezione (T75): accanto
+   * (`beside`, nella finestra stretta nello stesso riquadro, come «Apri a
+   * lato per questo») o nel riquadro (`pane`, Ctrl+clic). La scheda non
+   * cambia.
+   */
+  #openExcerptSource(node: CanvasNode, where: "beside" | "pane"): void {
+    const excerpt = noteExcerptOf(node);
+    if (!excerpt || node.type !== "file" || !node.file) return;
+    const path = excerptSourcePath(node.file, excerpt);
+    const open = where === "pane" ? this.#options.onOpenPath ?? null : this.#besideOpener() ?? this.#options.onOpenPath ?? null;
+    if (!open) return;
+    void Promise.resolve(open(path, this.#options.documentId)).catch((error: unknown) => this.#showIntakeError(error));
+  }
+
   /** Chiude il selettore se la sua scheda non c'è più, mostra un altro file o la lavagna non si scrive. */
   #syncPartsPicker(): void {
     const open = this.#partsPicker;
@@ -7471,7 +7518,9 @@ export class CanvasEngine {
    */
   #viewKeyOf(node: CanvasNode): string {
     const parts = this.#crop?.node === node.id ? null : (node[PARTS_KEY] ?? null);
-    return parts === null ? "view" : `view:${JSON.stringify(parts)}`;
+    // L'avviso di un estratto ha i suoi pulsanti solo fuori dalla sola lettura (T75).
+    const reading = this.#readOnly && noteExcerptOf(node) !== null ? ":read" : "";
+    return parts === null ? `view${reading}` : `view${reading}:${JSON.stringify(parts)}`;
   }
 
   /** L'altezza che la scheda mostra: la sua, o col ritaglio aperto quella dell'immagine intera. */
@@ -7845,6 +7894,8 @@ export class CanvasEngine {
     }
     // «Parti…» per prima, come nel prototipo (T28): riapre il selettore.
     if (one && this.#options.parts && this.#partsNote(one)) context.push(entry("canvas.parts", undefined, false));
+    // «Mostra tutto il file» sotto «Parti…» (T75, prototipo T28); in sola lettura no.
+    if (one && !this.#readOnly && noteExcerptOf(one)) context.push(entry("canvas.whole_file", undefined, false));
     if (one?.type === "text") {
       context.push(entry("canvas.edit", undefined, false));
       // Convertire (T70): il testo in una nota nuova; il dialogo prende il fuoco.
@@ -7962,6 +8013,8 @@ export class CanvasEngine {
     // Ctrl+clic (Cmd+clic) su un link di una scheda lo segue (D-18 (c)): il
     // `click` deve arrivare al link, non a uno spostamento della lavagna.
     if (event.button === 0 && modifier && this.#cardLinkAt(event.target) !== null) return;
+    // ↗ di un estratto (T75) prende il suo clic, anche con Ctrl (Cmd).
+    if (event.button === 0 && event.target instanceof Element && event.target.closest("[data-excerpt-open]")) return;
     // Spazio tenuto: il tasto principale sposta la vista, con qualsiasi
     // strumento e sopra ogni cosa (T53).
     if (event.button === 0 && this.#spaceHeld) {
@@ -10411,6 +10464,13 @@ export class CanvasEngine {
     connect.textContent = "→";
     connect.addEventListener("click", (e) => e.stopPropagation());
     header.append(title, connect);
+    // ↗ di un estratto (T75): la fonte accanto, alla prima sezione; con
+    // Ctrl (Cmd) nel riquadro. Il pulsante lo mette `syncExcerptHead`.
+    header.addEventListener("click", (e) => {
+      if (!(e.target instanceof Element) || !e.target.closest("[data-excerpt-open]")) return;
+      e.stopPropagation();
+      this.#openExcerptSource(entry.node, e.ctrlKey || e.metaKey ? "pane" : "beside");
+    });
     const body = document.createElement("div");
     body.className = "canvas-card-body";
     // Il titolo grande da lontano (T54), prima dell'inchiostro della scheda:
@@ -10441,6 +10501,12 @@ export class CanvasEngine {
       const tap = this.#takeHandleTap(e.target);
       if (tap) {
         this.#fitToContent(tap);
+        return;
+      }
+      // Il doppio clic sulla testata di un estratto apre la fonte accanto
+      // (T75), come ↗; quello su ↗ è già il suo clic.
+      if (e.target instanceof Element && e.target.closest(".canvas-node-handle") && noteExcerptOf(entry.node)) {
+        if (!e.target.closest("[data-excerpt-open]")) this.#openExcerptSource(entry.node, "beside");
         return;
       }
       // Dentro la scheda attiva il doppio clic è del contenuto (una parola);
@@ -10494,6 +10560,9 @@ export class CanvasEngine {
     const far = farTitle(node);
     if (entry.far.textContent !== far) entry.far.textContent = far;
     entry.connect.setAttribute("aria-label", t("canvas.connect", { id: node.id }));
+    // La testata dell'estratto (T75): le parti e ↗, prima di →.
+    const handle = entry.connect.parentElement;
+    if (handle) syncExcerptHead(el, handle, entry.connect, node.type === "file" ? node.file ?? null : null, noteExcerptOf(node));
     this.#syncPorts(el);
     // Le quattro maniglie (T66): in sola lettura nessuna.
     if (this.#readOnly) {
@@ -10556,6 +10625,13 @@ export class CanvasEngine {
       initialPage: this.#viewMemo?.page(node.id) ?? null,
       // Le parti dell'estratto (T73); col ritaglio aperto l'immagine intera (T78).
       parts: this.#crop?.node === node.id ? null : cardParts(node),
+      // I gesti dell'avviso «Sezione non trovata» (T75), non in sola lettura.
+      ...(!this.#readOnly && noteExcerptOf(node) !== null ? {
+        excerpt: {
+          ...(this.#options.parts ? { chooseAgain: () => void this.#openParts(entry.id, "command") } : {}),
+          showWhole: () => this.#showWholeFile(entry.id),
+        },
+      } : {}),
       pageChanged: (page) => {
         // Una vista già smontata non parla più per questa scheda.
         if (life.closed || entry.body !== body) return;
@@ -11426,11 +11502,7 @@ const SECTIONS_PROBE: CanvasParts = { kind: "sections", sections: ["_"], extra: 
  * blocco `#^id`.
  */
 function partsChosen(node: CanvasNode): string[] {
-  const read = nodeParts(node);
-  if (read?.state === "ok" && read.parts.kind === "sections") return [...read.parts.sections];
-  const subpath = typeof node.subpath === "string" ? node.subpath : null;
-  if (subpath === null || noteHeadingOf(subpath) === null) return [];
-  return [subpath.replace(/^#/, "")];
+  return [...(noteExcerptOf(node)?.sections ?? [])];
 }
 
 /**
