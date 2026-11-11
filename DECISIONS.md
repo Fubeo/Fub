@@ -99,6 +99,16 @@ ciò che non dipende dalla risposta.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-11 · N4 T23 · La seconda misura non chiude la voce del cancello:
+  174 ms a penna sul foglio vivo (meta 33), 47 fotogrammi lunghi su 215, di cui
+  11 col tratto in movimento, 10 al rilascio e 26 senza evento del puntatore;
+  con la GPU sullo schermo vero il numero non scende (168, 180 ms). Come dice
+  T23 serve un task prima di T25 che profili il disegno della scheda viva
+  sotto la scia e il commit del tratto; il limite degli agenti non prevede un
+  pianificatore per N4, quindi la forma del task si chiede all'utente.
+  Per N6: al fit della lavagna di S8 (zoom 0,33) la scheda del foglio resta un
+  segnaposto, perché `LIVE_ZOOM_MIN` è 0,35; S8 ingrandisce fuori dalla misura
+  · fonte: `docs/misure/lavagna-inchiostro-foglio-2026-11-11.md`.
 - 2026-11-09 · N4 T15 · Nessun task prima di T23 per i 205 ms a penna e
   gli 879 ms alla posa della scheda (S8, caso simile, Xvfb in software).
   Perché: la posa costa perché `#render` rifà tutte le schede, e N6 T11 la

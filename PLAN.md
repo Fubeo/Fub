@@ -1822,7 +1822,7 @@ Prova: cd apps/client && npm run build && cd ../.. && cargo build
 --release --locked -p fub-app --features tauri/custom-protocol && cd
 apps/client && xvfb-run -a npm run bench:webview -- --only=S8
 --budgets=targets --native-driver=/usr/bin/WebKitWebDriver
-Stato: [~] in corso · coder Haiku · misura sul ramo di N6 @ 23f4da190
+Stato: [x] fatto (2026-11-11: `docs/misure/lavagna-inchiostro-foglio-2026-11-11.md`, misura sul ramo di N6 @ 23f4da190; scheda `voti` viva con le celle a zoom 0,54 in tutti i giri, perché il fit dà 0,33, sotto `LIVE_ZOOM_MIN` 0,35; peggiore dei tre giri Xvfb 174 ms a penna e 141 ms allo spostamento, hash del `.xlsx` uguale; schermo vero 168 e 180 ms, il terzo giro non misurato; la voce **non** si chiude: serve un task prima di T25, lo dice DECISIONS.md)
 
 ## T24 · Il posto dell'inchiostro dopo la prova con Obsidian
 
