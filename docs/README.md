@@ -108,7 +108,8 @@ all'export, dalla sessione dal tablet ai disegni grandi.
 - [Le schede della lavagna](reference/canvas-cards.md): specie, schede vive e
   ferme, il contratto dei renderer
 - [I tasti e i gesti della lavagna](reference/canvas-input.md), i comandi e
-  i loro tasti, [la vista della lavagna](reference/canvas-view.md) e
+  i loro tasti, [la vista della lavagna](reference/canvas-view.md),
+  [l'ispettore](reference/canvas-inspector.md) e
   [convertire le schede](reference/canvas-convert.md)
 - [I formati dei file Craft](reference/craft-formats.md), gli
   [XMP accanto alle foto](reference/xmp-sidecars.md) e le

@@ -60,6 +60,10 @@ export const EDITORS: PartAnatomy = {
     // ordine di lettura, nel pannello della shell. T59: «Scheda» e «Fili», con
     // i numeri, il pozzo del colore, «Avanzate» e il popover dei colori.
     { name: "canvas-inspector", states: [S("rest"), S("hover"), S("focused"), S("selected")], hooks: ["canvas-inspector", "canvas-inspector-filter", "canvas-inspector-heading", "canvas-inspector-list", "canvas-inspector-row", "canvas-inspector-kind", "canvas-inspector-note", "canvas-inspector-numbers", "canvas-inspector-fields", "canvas-inspector-field", "canvas-inspector-path", "canvas-inspector-disclosure", "canvas-inspector-raw", "canvas-inspector-actions", "canvas-inspector-tips", "canvas-inspector-swatches", "canvas-inspector-swatch", "canvas-inspector-popover"] },
+    // Le fonti della lavagna (T77), la linguetta «Fonti» dell'ispettore: una
+    // riga per file col nome, il numero delle schede e la barra delle pagine o
+    // delle sezioni, i pezzi sulla lavagna in colore d'accento.
+    { name: "canvas-sources", states: [S("rest"), S("hover"), S("focused"), S("selected"), S("disabled")], hooks: ["canvas-sources-list", "canvas-sources-file", "canvas-sources-name", "canvas-sources-count", "canvas-sources-bar", "canvas-sources-piece", "canvas-sources-loose", "canvas-sources-state", "canvas-sources-empty"] },
     // Il selettore delle sezioni di una nota (T74): un popover del kit
     // attaccato alla scheda, con il campo, la lista a caselle, l'anteprima
     // (la resa della scheda di nota) e il piede.

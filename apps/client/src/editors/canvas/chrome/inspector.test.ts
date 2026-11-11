@@ -24,6 +24,8 @@ import {
   filterEntries,
   nodePatches,
   reversedEdge,
+  SOURCES_PANEL_ID,
+  SOURCES_VIRTUAL_AFTER,
   tipsOf,
   VIRTUAL_AFTER,
   withColor,
@@ -32,6 +34,7 @@ import {
   withTips,
   type CanvasEditPort,
   type CanvasInspector,
+  type CanvasSourcesPort,
 } from "./inspector";
 import { readingOrder } from "../reading-order";
 
@@ -241,7 +244,7 @@ describe("la parte «Schede»", () => {
     inspector.panels.subscribe(changed);
     expect(inspector.panels.list()).toEqual([]);
     inspector.offer(true);
-    expect(inspector.panels.list()).toHaveLength(1);
+    expect(inspector.panels.list().map((panel) => panel.id)).toEqual([CARDS_PANEL_ID, SOURCES_PANEL_ID]);
     inspector.offer(true);
     expect(changed).toHaveBeenCalledTimes(1);
     inspector.dispose();
@@ -262,10 +265,10 @@ describe("la superficie della lavagna con l'ispettore", () => {
     return { surface, parent };
   }
 
-  it("offre «Schede» con la tela, e un clic sceglie la scheda sulla lavagna", () => {
+  it("offre «Schede» e «Fonti» con la tela, e un clic sceglie la scheda sulla lavagna", () => {
     const { surface, parent } = mountBoard(source());
     const panels = surface.panels!;
-    expect(panels.list().map((panel) => panel.id)).toEqual([CARDS_PANEL_ID]);
+    expect(panels.list().map((panel) => panel.id)).toEqual([CARDS_PANEL_ID, SOURCES_PANEL_ID]);
     expect(panels.covers).toContain("outline");
     const { host } = mountPanel(panels.list()[0]!);
     const row = [...host.querySelectorAll<HTMLElement>(".canvas-inspector-row")].find((each) => each.dataset.node === "domande")!;
@@ -290,11 +293,24 @@ describe("la superficie della lavagna con l'ispettore", () => {
     surface.setMode("source");
     expect(panels.list()).toEqual([]);
     surface.setMode("canvas");
-    expect(panels.list()).toHaveLength(1);
+    expect(panels.list()).toHaveLength(2);
     // Aprire e chiudere l'elenco più volte non lascia righe né ascoltatori.
     unmount();
     for (let i = 0; i < 3; i++) mountPanel(panels.list()[0]!).unmount();
     expect(document.querySelectorAll(".canvas-inspector")).toHaveLength(0);
+    surface.destroy();
+  });
+
+  it("«Fonti» vede il file mancante dal segnaposto della scheda", async () => {
+    const { surface, parent } = mountBoard(source());
+    const panels = surface.panels!;
+    const { host } = mountPanel(panels.list().find((panel) => panel.id === SOURCES_PANEL_ID)!);
+    const row = (): HTMLElement => [...host.querySelectorAll<HTMLElement>(".canvas-sources-file")].find((each) => each.dataset.path === "Statistica/Varianza.md")!;
+    expect(row().hasAttribute("data-missing")).toBe(false);
+    // Il segno che la tela mette sulla scheda (`docs/reference/canvas-cards.md`).
+    parent.querySelector<HTMLElement>('.canvas-node[data-node="varianza"]')!.dataset.cardMissing = "true";
+    await new Promise((done) => setTimeout(done, 0));
+    expect(row().hasAttribute("data-missing")).toBe(true);
     surface.destroy();
   });
 });
@@ -384,14 +400,14 @@ describe("le parti «Scheda» e «Fili» (T59)", () => {
   it("le linguette: «Scheda» con una scheda scelta, «Fili» con un filo", () => {
     const { inspector, sel } = editing([card("a")], [{ id: "e", fromNode: "a", toNode: "a", toEnd: "arrow" }]);
     const ids = (): string[] => inspector.panels.list().map((panel) => panel.id);
-    expect(ids()).toEqual([CARDS_PANEL_ID]);
+    expect(ids()).toEqual([CARDS_PANEL_ID, SOURCES_PANEL_ID]);
     sel.nodes = ["a"];
     inspector.selectionChanged();
-    expect(ids()).toEqual([CARDS_PANEL_ID, CARD_PANEL_ID]);
+    expect(ids()).toEqual([CARDS_PANEL_ID, CARD_PANEL_ID, SOURCES_PANEL_ID]);
     sel.nodes = [];
     sel.edges = ["e"];
     inspector.selectionChanged();
-    expect(ids()).toEqual([CARDS_PANEL_ID, EDGE_PANEL_ID]);
+    expect(ids()).toEqual([CARDS_PANEL_ID, EDGE_PANEL_ID, SOURCES_PANEL_ID]);
   });
 
   it("i numeri: 120+15 si prende su Invio, e il valore va alla scheda scelta", () => {
@@ -513,5 +529,185 @@ describe("le parti «Scheda» e «Fili» (T59)", () => {
     from!.dispatchEvent(new Event("change"));
     expect(doc().edges[0]!.fromSide).toBe("top");
     expect(commits).toHaveLength(4);
+  });
+});
+
+describe("la parte «Fonti» (T77)", () => {
+  const file = (id: string, path: string, extra: Partial<CanvasNode> = {}): CanvasNode => node(id, 0, 0, { type: "file", file: path, text: undefined, ...extra });
+  /** La lavagna del prototipo, in piccolo. */
+  const SOURCES: CanvasNode[] = [
+    file("rel-a", "Fisica/Relazione.md", { subpath: "#Misure" }),
+    file("lez-3", "Corsi/Lezione 4.pdf", { subpath: "#page=3" }),
+    file("varianza", "Statistica/Varianza.md"),
+    node("testo", 0, 0, { text: "Domande" }),
+    file("form", "Formulario.pdf", { subpath: "#page=2" }),
+    file("lez-7", "Corsi/Lezione 4.pdf", { subpath: "#page=7" }),
+    file("libro", "Libro.pdf", { subpath: "#page=2" }),
+  ];
+
+  function sourcesOn(nodes: readonly CanvasNode[], ports: Partial<CanvasSourcesPort> = {}) {
+    const text = source(nodes);
+    const reveal = vi.fn((_byte: number) => true);
+    const take = vi.fn((_byte: number) => true);
+    const missing = new Set<string>();
+    const inspector = createCanvasInspector({ source: () => text, reveal, sources: { missing: () => missing, take, ...ports } });
+    inspector.offer(true);
+    const panel = inspector.panels.list().find((each) => each.id === SOURCES_PANEL_ID)!;
+    const { host, unmount } = mountPanel(panel);
+    return { text, inspector, reveal, take, missing, host, unmount };
+  }
+  const rows = (host: HTMLElement): HTMLElement[] => [...host.querySelectorAll<HTMLElement>(".canvas-sources-file")];
+  const rowOf = (host: HTMLElement, name: string): HTMLElement => rows(host).find((row) => row.querySelector(".canvas-sources-name")!.textContent === name)!;
+  const pieces = (row: HTMLElement): HTMLButtonElement[] => [...row.querySelectorAll<HTMLButtonElement>(".canvas-sources-piece")];
+  const flush = async (): Promise<void> => {
+    for (let i = 0; i < 4; i++) await Promise.resolve();
+  };
+
+  it("una riga per file in ordine di nome, col numero delle schede; le pagine a parole finché non si sa quante sono", () => {
+    const { host } = sourcesOn(SOURCES);
+    const box = host.querySelector<HTMLElement>(".canvas-inspector[data-part='sources']")!;
+    expect(box.querySelector(".canvas-inspector-heading")!.textContent).toBe("Fonti su questa lavagna");
+    expect(box.querySelector<HTMLElement>(".canvas-sources-empty")!.hidden).toBe(true);
+    expect(rows(host).map((row) => row.querySelector(".canvas-sources-name")!.textContent)).toEqual(["Formulario.pdf", "Lezione 4.pdf", "Libro.pdf", "Relazione.md", "Varianza.md"]);
+    const lesson = rowOf(host, "Lezione 4.pdf");
+    expect(lesson.querySelector(".canvas-sources-count")!.textContent).toBe("2 schede");
+    expect(lesson.querySelector(".canvas-sources-loose")!.textContent).toBe("pp. 3, 7");
+    expect(pieces(lesson)).toHaveLength(0);
+    expect(rowOf(host, "Formulario.pdf").querySelector(".canvas-sources-loose")!.textContent).toBe("p. 2");
+    // La nota intera: un pezzo solo, d'accento.
+    const whole = pieces(rowOf(host, "Varianza.md"));
+    expect(whole).toHaveLength(1);
+    expect(whole[0]!.hasAttribute("data-whole")).toBe(true);
+    expect(whole[0]!.hasAttribute("data-used")).toBe(true);
+    expect(whole[0]!.getAttribute("aria-label")).toBe("Il file intero, sulla lavagna");
+    expect(rowOf(host, "Varianza.md").querySelector(".canvas-sources-count")!.textContent).toBe("Una scheda");
+    expect(rowOf(host, "Varianza.md").querySelector(".canvas-sources-name")!.getAttribute("title")).toBe("Statistica/Varianza.md");
+  });
+
+  it("la barra arriva con le pagine del PDF e il sommario della nota, chiesti una volta per file", async () => {
+    const pageCount = vi.fn(async (path: string) => (path === "Corsi/Lezione 4.pdf" ? 8 : null));
+    const outline = vi.fn(async () => [
+      { level: 1, text: "Ipotesi" },
+      { level: 1, text: "Misure" },
+      { level: 1, text: "Conclusioni" },
+    ]);
+    const { host, inspector } = sourcesOn(SOURCES, { pageCount, outline });
+    await flush();
+    const lesson = rowOf(host, "Lezione 4.pdf");
+    expect(lesson.querySelector(".canvas-sources-loose")).toBeNull();
+    expect(pieces(lesson).map((piece) => piece.hasAttribute("data-used"))).toEqual([false, false, true, false, false, false, true, false]);
+    expect(pieces(lesson)[2]!.getAttribute("aria-label")).toBe("Pagina 3, sulla lavagna");
+    expect(pieces(lesson)[3]!.getAttribute("aria-label")).toBe("Pagina 4");
+    // Un PDF che non si apre resta a parole.
+    expect(rowOf(host, "Libro.pdf").querySelector(".canvas-sources-loose")!.textContent).toBe("p. 2");
+    const report = pieces(rowOf(host, "Relazione.md"));
+    expect(report.map((piece) => piece.getAttribute("aria-label"))).toEqual(["Sezione Ipotesi", "Sezione Misure, sulla lavagna", "Sezione Conclusioni"]);
+    // Ogni file una volta, anche dopo una modifica della lavagna; la nota intera non chiede niente.
+    inspector.changed();
+    await flush();
+    expect(pageCount.mock.calls.map(([path]) => path).sort()).toEqual(["Corsi/Lezione 4.pdf", "Formulario.pdf", "Libro.pdf"]);
+    expect(outline).toHaveBeenCalledTimes(1);
+  });
+
+  it("un file che cambia si chiede di nuovo, e chiuso l'ispettore non si guarda più", async () => {
+    const watchers = new Map<string, () => void>();
+    const stops: string[] = [];
+    let pages = 4;
+    const pageCount = vi.fn(async () => pages);
+    const watch = vi.fn((path: string, changed: () => void) => {
+      watchers.set(path, changed);
+      return () => {
+        stops.push(path);
+      };
+    });
+    const { host, inspector } = sourcesOn([file("a", "Libro.pdf", { subpath: "#page=2" })], { pageCount, watch });
+    await flush();
+    expect(pieces(rowOf(host, "Libro.pdf"))).toHaveLength(4);
+    pages = 6;
+    watchers.get("Libro.pdf")!();
+    expect(stops).toEqual(["Libro.pdf"]);
+    await flush();
+    expect(pieces(rowOf(host, "Libro.pdf"))).toHaveLength(6);
+    expect(pageCount).toHaveBeenCalledTimes(2);
+    inspector.dispose();
+    expect(stops).toEqual(["Libro.pdf", "Libro.pdf"]);
+  });
+
+  it("un clic su un pezzo d'accento porta alla scheda che lo mostra", async () => {
+    const { host, text, reveal, take } = sourcesOn(SOURCES, { pageCount: async () => 8 });
+    await flush();
+    pieces(rowOf(host, "Lezione 4.pdf"))[6]!.click();
+    expect(reveal).toHaveBeenCalledTimes(1);
+    expect(text.slice(reveal.mock.calls[0]![0])).toMatch(/^\{\s*"id": "lez-7"/);
+    expect(take).not.toHaveBeenCalled();
+  });
+
+  it("un clic su un pezzo grigio apre il selettore sulla scheda del file", async () => {
+    const outline = async () => [
+      { level: 1, text: "Ipotesi" },
+      { level: 1, text: "Misure" },
+    ];
+    const { host, text, reveal, take } = sourcesOn(SOURCES, { outline });
+    await flush();
+    pieces(rowOf(host, "Relazione.md"))[0]!.click();
+    expect(take).toHaveBeenCalledTimes(1);
+    expect(text.slice(take.mock.calls[0]![0])).toMatch(/^\{\s*"id": "rel-a"/);
+    expect(reveal).not.toHaveBeenCalled();
+  });
+
+  it("le frecce si muovono fra i pezzi e fra i file, con una sola fermata del Tab", async () => {
+    const { host, reveal, text } = sourcesOn(SOURCES, { pageCount: async (path) => (path === "Corsi/Lezione 4.pdf" ? 8 : null) });
+    await flush();
+    const stops = (): HTMLElement[] => [...host.querySelectorAll<HTMLElement>("[tabindex='0']")];
+    expect(stops()).toHaveLength(1);
+    const lesson = pieces(rowOf(host, "Lezione 4.pdf"));
+    lesson[0]!.focus();
+    lesson[0]!.dispatchEvent(new KeyboardEvent("keydown", { key: "End", bubbles: true }));
+    expect(document.activeElement).toBe(pieces(rowOf(host, "Lezione 4.pdf"))[7]);
+    (document.activeElement as HTMLElement).dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }));
+    // «Libro.pdf» non ha barra: il fuoco va sulla riga, e Invio porta alla sua scheda.
+    expect(document.activeElement).toBe(rowOf(host, "Libro.pdf"));
+    expect(stops()).toEqual([rowOf(host, "Libro.pdf")]);
+    rowOf(host, "Libro.pdf").dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+    expect(text.slice(reveal.mock.calls[0]![0])).toMatch(/^\{\s*"id": "libro"/);
+  });
+
+  it("un file mancante è grigio, dice che manca e non si prende", async () => {
+    const { host, inspector, missing, take, reveal } = sourcesOn(SOURCES, { outline: async () => [{ level: 1, text: "Misure" }, { level: 1, text: "Metodo" }] });
+    await flush();
+    expect(rowOf(host, "Relazione.md").hasAttribute("data-missing")).toBe(false);
+    missing.add("rel-a");
+    inspector.filesChanged();
+    await flush();
+    const row = rowOf(host, "Relazione.md");
+    expect(row.hasAttribute("data-missing")).toBe(true);
+    expect(row.querySelector(".canvas-sources-state")!.textContent).toBe("File mancante");
+    expect(pieces(row).every((piece) => piece.getAttribute("aria-disabled") === "true")).toBe(true);
+    pieces(row)[0]!.click();
+    expect(take).not.toHaveBeenCalled();
+    expect(reveal).not.toHaveBeenCalled();
+  });
+
+  it("una lavagna senza file lo dice, senza il titoletto", () => {
+    const { host } = sourcesOn([node("a", 0, 0)]);
+    const empty = host.querySelector<HTMLElement>(".canvas-sources-empty")!;
+    expect(empty.hidden).toBe(false);
+    expect(empty.textContent).toBe("Su questa lavagna non ci sono file.");
+    expect(host.querySelector<HTMLElement>(".canvas-inspector-heading")!.hidden).toBe(true);
+    expect(rows(host)).toHaveLength(0);
+  });
+
+  it("80 file: la lista è virtuale, e chi legge con la voce sente quanti sono", () => {
+    const many = Array.from({ length: 80 }, (_, at) => file(`f${at}`, `Cartella/File ${String(at).padStart(2, "0")}.md`));
+    expect(many.length).toBeGreaterThan(SOURCES_VIRTUAL_AFTER);
+    const { host, unmount } = sourcesOn(many);
+    const list = host.querySelector<HTMLElement>(".canvas-sources-list")!;
+    expect(list.hasAttribute("data-virtual")).toBe(true);
+    const drawn = rows(host);
+    expect(drawn.length).toBeLessThan(80);
+    expect(drawn[0]!.getAttribute("aria-setsize")).toBe("80");
+    expect(drawn[0]!.getAttribute("aria-posinset")).toBe("1");
+    unmount();
+    expect(host.childElementCount).toBe(0);
   });
 });

@@ -892,6 +892,15 @@
     "canvas-inspector-swatches",
     "canvas-inspector-swatch",
     "canvas-inspector-popover",
+    "canvas-sources-list",
+    "canvas-sources-file",
+    "canvas-sources-name",
+    "canvas-sources-count",
+    "canvas-sources-bar",
+    "canvas-sources-piece",
+    "canvas-sources-loose",
+    "canvas-sources-state",
+    "canvas-sources-empty",
     "canvas-parts-title",
     "canvas-parts-close",
     "canvas-parts-field-hint",
@@ -2562,6 +2571,15 @@
     "canvas-inspector-swatches": "cornice",
     "canvas-inspector-swatch": "cornice",
     "canvas-inspector-popover": "cornice",
+    "canvas-sources-list": "cornice",
+    "canvas-sources-file": "cornice",
+    "canvas-sources-name": "cornice",
+    "canvas-sources-count": "cornice",
+    "canvas-sources-bar": "cornice",
+    "canvas-sources-piece": "cornice",
+    "canvas-sources-loose": "cornice",
+    "canvas-sources-state": "cornice",
+    "canvas-sources-empty": "cornice",
     "canvas-parts-title": "cornice",
     "canvas-parts-close": "cornice",
     "canvas-parts-field-hint": "cornice",
@@ -5731,6 +5749,28 @@
         "hover",
         "focused",
         "selected"
+      ]
+    },
+    {
+      "name": "canvas-sources",
+      "part": "editors",
+      "hooks": [
+        "canvas-sources-list",
+        "canvas-sources-file",
+        "canvas-sources-name",
+        "canvas-sources-count",
+        "canvas-sources-bar",
+        "canvas-sources-piece",
+        "canvas-sources-loose",
+        "canvas-sources-state",
+        "canvas-sources-empty"
+      ],
+      "states": [
+        "rest",
+        "hover",
+        "focused",
+        "selected",
+        "disabled"
       ]
     },
     {
@@ -9119,10 +9159,10 @@
   "counts": {
     "required_roles": 154,
     "optional_roles": 63,
-    "hooks": 1668,
+    "hooks": 1677,
     "state_names": 7,
-    "assigned_states": 786,
-    "components": 234,
+    "assigned_states": 791,
+    "components": 235,
     "preference_tokens": 186
   }
 }

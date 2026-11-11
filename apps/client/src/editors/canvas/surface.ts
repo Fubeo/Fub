@@ -208,7 +208,31 @@ export function mountCanvasSurface(
       commit: (patches) => engine?.commitPatches(patches),
       readOnly: () => heldReadOnly,
     },
+    // «Fonti» (T77): le pagine di un PDF e il sommario di una nota con le
+    // porte di «Spargi le pagine» e del selettore delle sezioni; i file
+    // mancanti dal segnaposto che la tela mette sulla scheda
+    // (`data-card-missing`, `docs/reference/canvas-cards.md`); prendere un
+    // altro pezzo è portare la vista sulla scheda e chiederle «Parti…».
+    sources: {
+      ...(callbacks.cards?.pdfPages ? { pageCount: (path: string) => callbacks.cards!.pdfPages!.count(path) } : {}),
+      ...(callbacks.parts ? { outline: (path: string) => callbacks.parts!.outline(path) } : {}),
+      ...(callbacks.cards ? { watch: (path: string, changed: () => void) => callbacks.cards!.watch(path, changed) } : {}),
+      missing: () => {
+        const ids = new Set<string>();
+        for (const card of host.querySelectorAll<HTMLElement>("article[data-card-missing][data-node]")) ids.add(card.dataset.node!);
+        return ids;
+      },
+      take: (byte) => {
+        if (mode !== "canvas" || engine === null || !engine.revealSource(byte)) return false;
+        const parts = engine.commands().find((command) => command.id === "canvas.parts");
+        if (parts && parts.disabled() === null) parts.run();
+        return true;
+      },
+    },
   });
+  // Una scheda che comincia o smette di mostrare «File mancante» cambia «Fonti».
+  const missingWatch = new MutationObserver(() => inspector.filesChanged());
+  missingWatch.observe(host, { subtree: true, attributes: true, attributeFilter: ["data-card-missing"] });
   const offerInspector = (): void => inspector.offer(!destroyed && !failed && engine !== null && mode === "canvas");
   const createEngine = (): CanvasEngine => new CanvasEngine(host, {
     surfaceId: context.paneId,
@@ -429,6 +453,7 @@ export function mountCanvasSurface(
       engine = null;
       pendingWatchers.clear();
       statusWatchers.clear();
+      missingWatch.disconnect();
       inspector.dispose();
     },
   };
