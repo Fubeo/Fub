@@ -6,6 +6,7 @@ import {
   type Extension,
   type Line,
   type StateCommand,
+  type Text,
 } from "@codemirror/state";
 import { EditorView, keymap, type KeyBinding } from "@codemirror/view";
 import { isolateHistory } from "@codemirror/commands";
@@ -17,6 +18,7 @@ import { isStrictlyInsideCode } from "./parser";
 import { textKeymap } from "../../commands";
 import { smartLists } from "../../smart-lists";
 import { addProperty, moveProperty } from "./properties";
+import { frontmatterRange } from "./render";
 import { toggleFormat } from "./format-toggle";
 import { renumberLists } from "./renumber";
 
@@ -859,6 +861,43 @@ export function prose(command: StateCommand): StateCommand {
   return (target) => !isStrictlyInsideCode(target.state, target.state.selection.main.head) && command(target);
 }
 
+/// Le due righe `---` che aprono e chiudono la testata del frontmatter: sono il
+/// suo confine. Senza frontmatter, l'insieme è vuoto.
+function headerDelimiters(doc: Text): Set<number> {
+  const range = frontmatterRange(doc);
+  return new Set(range ? [1, doc.lineAt(range.to - 1).number] : []);
+}
+
+/// Alt-↑/↓ porterebbe una riga dentro la testata o fuori da essa, oppure
+/// sposterebbe una delle sue due righe `---`.
+function movesHeader(state: EditorState, dir: -1 | 1): boolean {
+  const delimiters = headerDelimiters(state.doc);
+  if (delimiters.size === 0) return false;
+  return selectedLines(state).some((line) => delimiters.has(line.number) || delimiters.has(line.number + dir));
+}
+
+/// Mod-d non copia una riga `---`: la copia farebbe una seconda testata. Le
+/// proprietà della testata si copiano come ogni altra riga.
+function copiesHeader(state: EditorState): boolean {
+  const delimiters = headerDelimiters(state.doc);
+  return selectedLines(state).some((line) => delimiters.has(line.number));
+}
+
+/// Un comando del testo che la testata non deve subire: se la mossa la
+/// toccherebbe non fa niente, e il tasto si ferma lì, come le voci di proprietà
+/// ai bordi del frontmatter.
+function keepingHeader(run: (view: EditorView) => boolean, touches: (state: EditorState) => boolean): (view: EditorView) => boolean {
+  return (view) => (!view.state.readOnly && touches(view.state) ? true : run(view));
+}
+
+/// Il comando che `textKeymap` dà a un accordo: la guardia lo avvolge senza
+/// copiarlo.
+function textCommand(key: string): (view: EditorView) => boolean {
+  const run = textKeymap.find((binding) => binding.key === key)?.run;
+  if (!run) throw new Error(`il testo non ha l'accordo ${key}`);
+  return run;
+}
+
 /// Gli accordi specifici del profilo Markdown, senza quelli della meccanica
 /// condivisa.
 const markdownKeymapPrefix: KeyBinding[] = [
@@ -902,10 +941,19 @@ const markdownKeymapSuffix: KeyBinding[] = [
 
 export const markdownKeymap: KeyBinding[] = [...markdownKeymapPrefix, ...markdownKeymapSuffix];
 
+/// Gli accordi del testo che la testata del frontmatter non subisce. Stanno
+/// prima di `textKeymap`, che li darebbe anche sulle sue righe.
+const headerKeymap: KeyBinding[] = [
+  { key: "Mod-d", run: keepingHeader(textCommand("Mod-d"), copiesHeader) },
+  { key: "Alt-ArrowUp", run: keepingHeader(textCommand("Alt-ArrowUp"), (state) => movesHeader(state, -1)) },
+  { key: "Alt-ArrowDown", run: keepingHeader(textCommand("Alt-ArrowDown"), (state) => movesHeader(state, 1)) },
+];
+
 /// Il keymap completo conservato dall'adapter storico: i comandi condivisi
 /// restano nella posizione precedente fra i gesti Markdown.
 export const obsidianKeymap: KeyBinding[] = [
   ...markdownKeymapPrefix,
+  ...headerKeymap,
   ...textKeymap,
   ...markdownKeymapSuffix,
 ];
