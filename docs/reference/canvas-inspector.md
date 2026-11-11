@@ -43,8 +43,9 @@ tiene le schede col nome che contiene ciò che si scrive (senza badare a
 maiuscole e accenti) e della specie scelta (note, testi, gruppi, PDF), coi
 gruppi che le contengono. Un clic, Invio o Spazio porta la vista sulla scheda
 e la sceglie (`revealSource` della tela, al byte dove comincia l'oggetto della
-scheda); la riga resta segnata finché la scelta della lavagna non cambia per
-un'altra strada. Le frecce, Inizio, Fine e PagSu/PagGiù muovono il fuoco fra
+scheda); la vista ci va come ogni salto (`#jumpCamera`): vola, e Indietro
+torna da dove si era ([canvas-view.md](canvas-view.md)). La riga resta
+segnata finché la scelta della lavagna non cambia per un'altra strada. Le frecce, Inizio, Fine e PagSu/PagGiù muovono il fuoco fra
 le righe, con una sola fermata del Tab.
 
 L'elenco si rilegge a fine gesto (ogni commit) e quando arriva un testo nuovo.
@@ -56,7 +57,10 @@ Oltre 500 righe disegna solo quelle che si vedono, più la fermata del Tab.
 numerici del kit, che accettano anche `120+15` o `*2`; con più schede scelte
 i numeri valgono per tutte e un valore diverso fra loro si legge «—». Poi il
 colore (i colori di T47, «Colori diversi» se non è uno solo) e il file, in
-sola lettura. «Avanzate», chiusa di serie, mostra il nodo grezzo come tabella
+sola lettura. Sotto il file di una scheda sola c'è «Sostituisci il file…»,
+la stessa azione del menu della scheda (`canvas.replace_file`,
+[convertire](canvas-convert.md)): c'è solo se la superficie ha il selettore
+dei file, e non in sola lettura. «Avanzate», chiusa di serie, mostra il nodo grezzo come tabella
 chiave-valore: ogni valore si scrive come JSON e si controlla prima del
 commit (un JSON non valido, un numero non finito, una misura sotto
 `DROP_MIN_SIZE` restano com'erano e la riga dice perché). L'id e il tipo non
@@ -104,7 +108,7 @@ risposte di molti file insieme fanno un solo ridisegno.
 
 I pezzi sulla lavagna sono in colore d'accento. Un clic su uno di loro porta
 la vista sulla scheda che lo mostra e la sceglie, come «Schede»
-(`revealSource`). Un clic su un pezzo grigio porta la vista su una scheda di
+(`revealSource`, un salto che Indietro ricorda). Un clic su un pezzo grigio porta la vista su una scheda di
 quel file (un estratto, se c'è) e le chiede «Parti…» (`canvas.parts`): per
 una nota si apre il selettore delle sezioni, con le sezioni di quella
 scheda già spuntate; per un PDF, finché non c'è il selettore delle pagine,

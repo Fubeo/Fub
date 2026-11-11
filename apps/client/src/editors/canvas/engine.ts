@@ -141,10 +141,11 @@ import {
 } from "./colors";
 import { createColorPicker, openDialog, openPopover, textField, type PopoverHandle } from "../../kit";
 import { PARTS_KEY, cardParts, nodeParts, partsFit, writeParts, type CanvasParts, type PartsExtra } from "./parts";
+import { cardTarget } from "./sources";
 import { WHOLE_ZONE, isWholeZone, openCropEditor, zoneOf, zoneParts, zoneRatio, type CropEditor, type CropPicture, type ImageZone } from "./crop";
 import { PARTS_PICKER_MIN_SECTIONS, openPartsPicker, partsSections, type PartsHeading, type PartsPickerHandle, type PartsPickerPlace, type PartsPickerPort } from "./parts-picker";
 import { noteHeadingOf } from "./cards/note";
-import { excerptSourcePath, noteExcerptOf, syncExcerptHead } from "./excerpt";
+import { excerptSourcePath, noteExcerptOf, noteSectionsText, sectionHeading, syncExcerptHead } from "./excerpt";
 import { READER_TAP_MS, READER_TAP_SLOP, openReader, type ReaderHandle } from "./reader";
 import { DEFAULT_PREFERENCES, currentPreferences, readInkMouse, readPen, saveInkMouse, savePen, watchPreferences, type PenButtonAction, type WheelAction } from "./preferences";
 import { TAP_MAX_MS, TAP_SLOP_PX, isTap, pinchCamera, type TouchCamera, type TouchPoint, type ZoomLimits } from "./touch";
@@ -2433,8 +2434,12 @@ export class CanvasEngine {
    * Brings into view the card whose source holds `byteOffset` (UTF-8 bytes,
    * the currency of the model's spans): selects it and frames it. `false`
    * when the offset is outside every card, or the scene is too large to draw.
+   *
+   * Con `"jump"` (l'ispettore, «Schede» e «Fonti», T99) la vista ci va come
+   * ogni salto (`#jumpCamera`): vola, e Indietro torna da dove si era. Con
+   * `"frame"` (la shell, l'apertura a un punto) la camera si mette lì e basta.
    */
-  revealSource(byteOffset: number): boolean {
+  revealSource(byteOffset: number, how: "frame" | "jump" = "frame"): boolean {
     if (this.#destroyed || !this.#doc || !this.#core || this.#isSceneOversized()) return false;
     let index: number | null;
     try {
@@ -2449,7 +2454,8 @@ export class CanvasEngine {
     this.#cancelGestures();
     this.#selection = [node.id];
     this.#edgeSelection = [];
-    this.#fitCamera(false, [node]);
+    if (how === "jump") this.#jumpCamera(this.#fitTarget([node]));
+    else this.#fitCamera(false, [node]);
     this.#render();
     this.#viewport.focus();
     this.#options.onSelectionChange();
@@ -5971,8 +5977,9 @@ export class CanvasEngine {
   }
 
   /**
-   * «Copia il testo qui» (T70): una scheda di testo col testo della nota,
-   * accanto alla sua scheda, al primo posto libero; la nota non cambia. Larga
+   * «Copia il testo qui» (T70): una scheda di testo col testo della nota (di
+   * un estratto, le sole sezioni mostrate: T99), accanto alla sua scheda, al
+   * primo posto libero; la nota non cambia. Larga
    * come la scheda della nota, alta come lei ma non più della vista: una
    * nota lunga scorre dentro la scheda. Un commit, un annulla.
    */
@@ -5983,14 +5990,30 @@ export class CanvasEngine {
     if (!node || cardKindOf(node) !== "note") return;
     const path = cardTarget(node).path;
     const epoch = this.#epoch;
-    const text = await notes.read(path);
+    const whole = await notes.read(path);
     if (this.#destroyed || this.#readOnly || !this.#doc || this.#epoch !== epoch) return;
+    const source = this.#doc.nodes.find((one) => one.id === id);
+    if (!source || cardKindOf(source) !== "note" || cardTarget(source).path !== path) return;
+    // Una scheda-estratto (T75) copia solo le sezioni che mostra (T99), nel
+    // suo ordine; una sezione sparita dalla nota non si copia. Se non ne resta
+    // nessuna non nasce niente, e la lavagna dice quali mancano.
+    let text = whole;
+    const excerpt = noteExcerptOf(source);
+    if (excerpt) {
+      const shown = noteSectionsText(whole, excerpt.sections);
+      if (shown.missing.length === excerpt.sections.length) {
+        const names = shown.missing.map((key) => sectionHeading(key) ?? key);
+        this.#showNotice(names.length === 1
+          ? t("canvas.excerpt.section_missing", { name: names[0]! })
+          : t("canvas.excerpt.sections_missing", { names: names.join(", ") }));
+        return;
+      }
+      text = shown.text;
+    }
     if (utf8.encode(text).length > MAX_CARD_TEXT_BYTES) {
       this.#showNotice(t("canvas.card_too_long"));
       return;
     }
-    const source = this.#doc.nodes.find((one) => one.id === id);
-    if (!source) return;
     const { view } = this.#viewRect();
     const height = Math.max(TEXT_CARD_HEIGHT, Math.min(source.height, Math.floor(view.height)));
     const spot = freeSpot(this.#doc.nodes, { x: source.x + source.width + NEXT_CARD_GAP, y: source.y, width: source.width, height });
@@ -11703,20 +11726,6 @@ function cardBodyKey(node: CanvasNode, extra: string): string {
     node.type, node.file ?? null, node.subpath ?? null, node.url ?? null,
     node.text ?? null, node.label ?? null, node.background ?? null, extra,
   ]);
-}
-
-/**
- * Il file di una scheda per il suo renderer: il percorso senza `#…` e il
- * `subpath`, da `subpath` o, se manca, dal `#` nel percorso. Una scheda di
- * link non ha file: il percorso è vuoto e l'indirizzo è in `node.url`.
- */
-function cardTarget(node: CanvasNode): { path: string; subpath: string | null } {
-  if (node.type !== "file") return { path: "", subpath: null };
-  const file = typeof node.file === "string" ? node.file : "";
-  const hash = file.indexOf("#");
-  const path = hash < 0 ? file : file.slice(0, hash);
-  const subpath = typeof node.subpath === "string" && node.subpath ? node.subpath : hash < 0 ? null : file.slice(hash);
-  return { path, subpath };
 }
 
 /** Che cosa dice l'etichetta della penna (T69): la scheda col suo nome, o il tratto libero. */

@@ -78,6 +78,91 @@ function sourceName(file: string): string {
   return base.replace(/\.[^.]+$/, "") || base;
 }
 
+/// Un titolo `#` del testo di una nota: il livello, il testo e dove sta.
+interface NoteHeading {
+  readonly level: number;
+  /// Il testo senza `#` né spazi ai lati, in minuscolo: si confronta così.
+  readonly text: string;
+  /// Dove comincia la riga del titolo (unità UTF-16 del testo).
+  readonly start: number;
+}
+
+/// I titoli `#` di una nota, in ordine: fuori dai blocchi di codice e dalle
+/// proprietà in testa (`---`), come `headingOffset` dell'editor delle schede.
+/// Un `---` in testa che non si chiude non apre le proprietà: è una riga.
+function noteHeadings(text: string, properties = text.startsWith("---\n") || text.startsWith("---\r\n")): NoteHeading[] {
+  const headings: NoteHeading[] = [];
+  let at = 0;
+  let fence: string | null = null;
+  let front = properties;
+  let first = true;
+  for (const line of text.split(/(?<=\n)/)) {
+    const bare = line.replace(/\r?\n$/, "");
+    if (front) {
+      if (!first && /^(---|\.\.\.)\s*$/.test(bare)) front = false;
+    } else {
+      const opening = /^ {0,3}(`{3,}|~{3,})/.exec(bare);
+      if (fence !== null) {
+        if (opening && opening[1]!.startsWith(fence)) fence = null;
+      } else if (opening) {
+        fence = opening[1]!;
+      } else {
+        const match = /^ {0,3}(#{1,6})(?:[ \t]+(.*?))?(?:[ \t]+#+)?[ \t]*$/.exec(bare);
+        if (match) headings.push({ level: match[1]!.length, text: (match[2] ?? "").trim().toLowerCase(), start: at });
+      }
+    }
+    first = false;
+    at += line.length;
+  }
+  return front ? noteHeadings(text, false) : headings;
+}
+
+/// Il testo di una sezione: dalla riga del suo titolo al titolo dopo di
+/// livello uguale o più alto (o alla fine), senza le righe vuote in coda.
+/// `key` è come dopo il `#`: `Varianza`, o `Capitolo#Varianza` (il titolo
+/// cercato dentro la sezione del capitolo, come Obsidian). Senza maiuscole.
+/// `null` se la nota non ha quella sezione.
+export function noteSectionText(text: string, key: string): string | null {
+  const wanted = key.split("#").map((part) => part.trim().toLowerCase()).filter((part) => part !== "");
+  if (wanted.length === 0 || wanted[wanted.length - 1]!.startsWith("^")) return null;
+  const headings = noteHeadings(text);
+  // Lo spazio in cui si cerca: all'inizio la nota intera, poi la sezione trovata.
+  let from = 0;
+  let to = headings.length;
+  let found = -1;
+  for (const part of wanted) {
+    found = -1;
+    for (let index = from; index < to; index++) {
+      if (headings[index]!.text === part) {
+        found = index;
+        break;
+      }
+    }
+    if (found < 0) return null;
+    const level = headings[found]!.level;
+    let end = found + 1;
+    while (end < headings.length && headings[end]!.level > level) end++;
+    from = found + 1;
+    to = end;
+  }
+  const start = headings[found]!.start;
+  const stop = to < headings.length ? headings[to]!.start : text.length;
+  return text.slice(start, stop).replace(/\s+$/, "");
+}
+
+/// Il testo delle sezioni `keys` di una nota, nell'ordine dato, separate da
+/// una riga vuota; `missing` le chiavi che la nota non ha più (non si copiano).
+export function noteSectionsText(text: string, keys: readonly string[]): { readonly text: string; readonly missing: readonly string[] } {
+  const found: string[] = [];
+  const missing: string[] = [];
+  for (const key of keys) {
+    const section = noteSectionText(text, key);
+    if (section === null) missing.push(key);
+    else found.push(section);
+  }
+  return { text: found.join("\n\n"), missing };
+}
+
 /// Mette la testata dell'estratto nella riga del titolo della scheda (T39),
 /// prima di →: le parti e ↗ (`data-excerpt-open`, il gesto lo prende la
 /// tela). Con `excerpt` `null` la toglie. Aggiorna sul posto: chiamata a ogni

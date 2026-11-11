@@ -4,7 +4,7 @@
 // titolo senza toccare il DOM quando niente cambia.
 import { afterEach, describe, expect, it } from "vitest";
 import { t } from "../../i18n/strings";
-import { excerptPartsLabel, excerptSections, excerptSourcePath, noteExcerptOf, sectionHeading, sectionLabel, syncExcerptHead } from "./excerpt";
+import { excerptPartsLabel, excerptSections, excerptSourcePath, noteExcerptOf, noteSectionsText, noteSectionText, sectionHeading, sectionLabel, syncExcerptHead } from "./excerpt";
 import type { CanvasNode } from "./model";
 
 function card(extra: Partial<CanvasNode> = {}): CanvasNode {
@@ -97,5 +97,60 @@ describe("la testata dell'estratto", () => {
     syncExcerptHead(article, head, connect, "Fisica/Relazione - il pendolo.md", null);
     expect([...head.children].map((one) => one.className)).toEqual(["canvas-node-title", "canvas-connect"]);
     expect(article.hasAttribute("data-card-excerpt")).toBe(false);
+  });
+});
+
+describe("il testo delle sezioni di una nota (T99)", () => {
+  const note = [
+    "---",
+    "# non un titolo: è YAML",
+    "tags: [stat]",
+    "---",
+    "# Statistica",
+    "intro",
+    "",
+    "## Varianza",
+    "La varianza misura.",
+    "```",
+    "# commento nel codice, non un titolo",
+    "```",
+    "### Stimatore",
+    "con n − 1",
+    "",
+    "## Media",
+    "La media.",
+    "",
+    "# Esercizi",
+    "## Varianza",
+    "esercizio",
+    "",
+  ].join("\n");
+
+  it("una sezione va dal suo titolo al titolo dopo di livello uguale o più alto, coi sottotitoli e senza righe vuote in coda", () => {
+    expect(noteSectionText(note, "Varianza")).toBe("## Varianza\nLa varianza misura.\n```\n# commento nel codice, non un titolo\n```\n### Stimatore\ncon n − 1");
+    expect(noteSectionText(note, "Media")).toBe("## Media\nLa media.");
+    expect(noteSectionText(note, "esercizi")).toBe("# Esercizi\n## Varianza\nesercizio");
+  });
+
+  it("`Capitolo#Titolo` cerca il titolo dentro il capitolo; una sezione che non c'è, o un blocco, è null", () => {
+    expect(noteSectionText(note, "Esercizi#Varianza")).toBe("## Varianza\nesercizio");
+    expect(noteSectionText(note, "Statistica#Esercizi")).toBeNull();
+    expect(noteSectionText(note, "Mediana")).toBeNull();
+    expect(noteSectionText(note, "non un titolo: è YAML")).toBeNull();
+    expect(noteSectionText(note, "commento nel codice, non un titolo")).toBeNull();
+    expect(noteSectionText(note, "^blocco")).toBeNull();
+    expect(noteSectionText(note, "")).toBeNull();
+  });
+
+  it("più sezioni nell'ordine dato, con una riga vuota fra loro; quelle sparite non si copiano e si dicono", () => {
+    expect(noteSectionsText(note, ["Media", "Sparita", "Esercizi#Varianza"])).toEqual({
+      text: "## Media\nLa media.\n\n## Varianza\nesercizio",
+      missing: ["Sparita"],
+    });
+    expect(noteSectionsText(note, ["A", "B"])).toEqual({ text: "", missing: ["A", "B"] });
+  });
+
+  it("un `---` in testa che non si chiude non nasconde i titoli", () => {
+    expect(noteSectionText("---\n# Uno\nuno\n# Due\ndue", "Uno")).toBe("# Uno\nuno");
   });
 });

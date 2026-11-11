@@ -4751,6 +4751,35 @@ describe("CanvasEngine: spostare e ingrandire (T53)", () => {
     engine.destroy();
   });
 
+  it("il salto dell'ispettore (`revealSource` «jump») entra in Indietro; quello della shell no; lo spostamento a mano non conta", () => {
+    const { engine, host } = mounted();
+    const viewport = viewportOf(host);
+    const doc = engine.getDoc();
+    const byteOf = (id: string) => new TextEncoder().encode(doc.slice(0, doc.indexOf(`{"id":"${id}"`))).length;
+    // Dalla shell (o all'apertura) la vista si mette sulla scheda, senza storia.
+    expect(engine.revealSource(byteOf("t"))).toBe(true);
+    expect(frames.size).toBe(0);
+    expect(engine.jumpBack()).toBe(false);
+    const framed = cameraOf(host);
+    // Dall'ispettore è un salto: vola, e Indietro torna da dove si era.
+    expect(engine.revealSource(byteOf("w"), "jump")).toBe(true);
+    expect(frames.size).toBe(1);
+    settle();
+    expect(engine.selection().nodes).toEqual(["w"]);
+    const jumped = cameraOf(host);
+    expect(jumped).not.toEqual(framed);
+    // Uno spostamento a mano dopo il salto non entra nella storia.
+    drag(host, viewport, { x: 300, y: 300 }, { x: 350, y: 330 }, { button: 1, buttons: 4 });
+    expect(cameraOf(host)).not.toEqual(jumped);
+    expect(engine.jumpBack()).toBe(true);
+    settle();
+    expect(cameraOf(host).zoom).toBeCloseTo(framed.zoom, 6);
+    expect(cameraOf(host).x).toBeCloseTo(framed.x, 3);
+    expect(cameraOf(host).y).toBeCloseTo(framed.y, 3);
+    expect(engine.jumpBack()).toBe(false);
+    engine.destroy();
+  });
+
   it("col movimento ridotto Indietro e Avanti arrivano subito, senza volo", () => {
     const { engine, host } = mounted();
     const viewport = viewportOf(host);
@@ -6404,6 +6433,30 @@ describe("convertire (T70)", () => {
     expect(engine.undo()).toBe(true);
     expect(nodes(engine).map((one) => one.id)).toEqual(["t", "n", "p"]);
     engine.destroy();
+  });
+
+  it("«Copia il testo qui» su una scheda-estratto copia solo le sezioni mostrate; una sezione sparita non si copia e non è un errore (T99)", async () => {
+    const text = "# Gita\nintro\n## Pranzo\npanini\n## Treno\nore 8\n## Ritorno\nsera\n";
+    const excerptBoard = (sections: readonly string[]) => JSON.stringify({
+      // Il `subpath` è la prima sezione, come la scrive la tela (T73).
+      nodes: [{ id: "n", type: "file", x: 0, y: 400, width: 240, height: 140, file: "Note/gita.md", subpath: `#${sections[0]}`, "fub:parts": { kind: "sections", sections } }],
+      edges: [],
+    });
+    const { engine, host } = open({ notes: notesPort([], text) }, excerptBoard(["Ritorno", "Sparita", "Pranzo"]));
+    choose(engine, host, "n");
+    command(engine, "canvas.copy_note_text").run();
+    await vi.waitFor(() => expect(nodes(engine)).toHaveLength(2));
+    // Nell'ordine della scheda, senza la sezione che la nota non ha più.
+    expect(nodes(engine)[1]).toMatchObject({ type: "text", text: "## Ritorno\nsera\n\n## Pranzo\npanini" });
+    expect(host.querySelector(".canvas-intake-error")).toBeNull();
+    engine.destroy();
+    // Con tutte le sezioni sparite non nasce niente, e la lavagna dice quali mancano.
+    const gone = open({ notes: notesPort([], text) }, excerptBoard(["Sparita"]));
+    choose(gone.engine, gone.host, "n");
+    command(gone.engine, "canvas.copy_note_text").run();
+    await vi.waitFor(() => expect(gone.host.querySelector(".canvas-intake-error")?.textContent).toBe(t("canvas.excerpt.section_missing", { name: "Sparita" })));
+    expect(nodes(gone.engine)).toHaveLength(1);
+    gone.engine.destroy();
   });
 
   it("una nota lunga nasce alta al più come la vista", async () => {

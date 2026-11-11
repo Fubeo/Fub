@@ -432,7 +432,7 @@ async function createCanvasNote(folder: string, name: string, text: string): Pro
 /// guardare l'estensione né le maiuscole). Solo una proposta, come quella del
 /// kernel per «Senza titolo»: se il nome si occupa prima di crearla,
 /// `note.create` lo rifiuta invece di sovrascrivere.
-async function canvasFreeName(folder: string, name: string): Promise<string> {
+export async function canvasFreeName(folder: string, name: string): Promise<string> {
   const entries = await vaultEntries(WITHOUT_PAGE, "document", { path: folder, descendants: false });
   const taken = new Set(entries.items.map((entry) => {
     const base = entry.id.slice(entry.id.lastIndexOf("/") + 1);
