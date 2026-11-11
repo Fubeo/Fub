@@ -109,6 +109,11 @@ export interface CardSnapshot {
   /// (con la sua rotazione): la scheda PDF la scrive, così da ferma ritrova
   /// l'ancora della pagina (`pageBox`, T19). Assente per le altre immagini.
   readonly pageSize?: CardSize;
+  /// La proporzione (larghezza su altezza) del contenuto che l'immagine
+  /// mostra, come la dà il file (l'immagine, la sua zona): la scheda
+  /// d'immagine la scrive, così da ferma `contentAspect` dà lo stesso numero
+  /// che da viva (T39). Assente, vale la proporzione dell'immagine ferma.
+  readonly aspect?: number;
 }
 
 /// La pagina che una scheda mostra (il PDF, T19): il suo numero (da 1), la sua
@@ -175,8 +180,14 @@ export interface CardContext {
   /// non si ricorda niente.
   pageChanged?(page: number): void;
   /// Ciò che `pageBox()` dà è cambiato: un'immagine di pagina è arrivata, o
-  /// è andata via. La tela ridisegna l'inchiostro di pagina della scheda (T19).
+  /// è andata via. La tela ridisegna l'inchiostro della scheda (T19): anche
+  /// quello che segue il contenuto, perché con la pagina cambia
+  /// `contentAspect()` (T39).
   pageShown?(): void;
+  /// Ciò che `contentAspect()` dà è cambiato: l'immagine è arrivata, il file
+  /// è cambiato, o non si vede più niente. La tela ridisegna l'inchiostro
+  /// della scheda, che segue il contenuto (T39).
+  contentShown?(): void;
   /// Le parti dell'estratto (`fub:parts`, `docs/reference/canvas-parts.md`),
   /// già lette e provate col file e il `subpath` (`cardParts` di `parts.ts`);
   /// `null` o assente: la scheda mostra ciò che dice il `subpath`.
@@ -230,6 +241,12 @@ export interface CardView {
   /// nessuna pagina si vede. Da viva e da ferma: l'immagine ferma è quella di
   /// una pagina. La tela lo chiede quando disegna l'inchiostro.
   pageBox?(): CardPageBox | null;
+  /// La proporzione (larghezza su altezza) del contenuto che la scheda mostra
+  /// adesso (T39): l'immagine, la sua zona se ne ha una (T78), la pagina del
+  /// PDF. Il contenuto sta intero nella scheda, al centro; l'inchiostro
+  /// `scale` lo segue (`inkFit` con `aspect`). `null` se non si sa, o se non
+  /// si vede niente.
+  contentAspect?(): number | null;
   /// Entra in scrittura (T41, T42): l'editor vero del file prende il corpo. Il
   /// montaggio arriva dopo, e la scheda lo dice con `context.writing`; `false`
   /// se qui non si scrive (un documento Word, nessuna porta, una scheda ferma).

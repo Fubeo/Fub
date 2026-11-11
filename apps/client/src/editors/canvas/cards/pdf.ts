@@ -1,5 +1,7 @@
-// La scheda PDF della lavagna (N6 T6): una pagina alla volta, adattata alla
-// larghezza della scheda, con «3 / 24» in basso e ‹ › ai lati.
+// La scheda PDF della lavagna (N6 T6): una pagina alla volta, intera nella
+// scheda e al centro, con le sue proporzioni (A-20, T39), con «3 / 24» in
+// basso e ‹ › ai lati. La proporzione della pagina va in `--page-ratio` del
+// canvas, e la geometria la fa `structure.css` (la più grande che entra).
 //
 // Viva, la scheda apre un `PdfEngine` (pdf.js) e disegna la pagina corrente
 // in un canvas fuori dal DOM; a resa finita la copia nel canvas che si vede e
@@ -22,7 +24,10 @@
 // sua misura in punti PDF (come la dà pdf.js, con la rotazione) e dove sta
 // nella scheda. Da ferma la misura viene dall'immagine in cache, che la
 // porta con sé (`CardSnapshot.pageSize`); ogni volta che l'immagine in vista
-// cambia pagina, o va via, la scheda lo dice con `pageShown`.
+// cambia pagina, o va via, la scheda lo dice con `pageShown`. La pagina
+// intera al centro fa sì che il rettangolo misurato sia il riquadro del
+// contenuto (`contentAspect`, la proporzione della pagina, T39): la stessa
+// regola che un altro programma rifà con i soli dati del file.
 
 import { t } from "../../../i18n/strings";
 import { pdfPageFromFragment, type PdfEngine, type PdfEngineLoader } from "../../media/pdf-view";
@@ -94,9 +99,8 @@ function mountPdfCard(
   const screen = document.createElement("canvas");
   screen.className = "canvas-card-pdf-page";
   screen.hidden = true;
-  // Adattata alla larghezza della scheda, qualunque sia la densità della resa.
-  screen.style.width = "100%";
-  screen.style.height = "auto";
+  // Intera nella scheda, qualunque sia la densità della resa: la misura la
+  // dà `structure.css` con la proporzione della pagina (`--page-ratio`).
   screen.setAttribute("role", "img");
   screen.setAttribute("aria-label", path.split("/").pop() || path);
   const message = document.createElement("p");
@@ -185,6 +189,10 @@ function mountPdfCard(
     screen.width = source.width;
     screen.height = source.height;
     screen.getContext("2d")?.drawImage(source, 0, 0);
+    // La proporzione della pagina in punti, se si sa; sennò quella della resa.
+    const ratio = size ? size.width / size.height : source.width / source.height;
+    if (Number.isFinite(ratio) && ratio > 0) screen.style.setProperty("--page-ratio", String(ratio));
+    else screen.style.removeProperty("--page-ratio");
     screen.hidden = false;
     shown = part;
     say(null);
@@ -226,6 +234,15 @@ function mountPdfCard(
     if (destroyed || screen.hidden || shownPage === null || shownSize === null) return null;
     const rect = pageRect(shownPage);
     return rect ? { page: shownPage, size: shownSize, rect } : null;
+  }
+
+  /// La proporzione della pagina che si vede (T39): la sua misura in punti, o
+  /// quella dell'immagine se la misura non si sa; `null` se non si vede una
+  /// pagina.
+  function contentAspect(): number | null {
+    if (destroyed || screen.hidden) return null;
+    const ratio = shownSize ? shownSize.width / shownSize.height : screen.width / screen.height;
+    return Number.isFinite(ratio) && ratio > 0 ? ratio : null;
   }
 
   /// Il rettangolo del canvas in vista, in unità della lavagna dall'angolo in
@@ -424,6 +441,7 @@ function mountPdfCard(
     key,
     page: () => page,
     pageBox,
+    contentAspect,
     destroy,
   };
 }

@@ -10,9 +10,9 @@
 // immagini.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { IMAGE_CARD_MAX_BYTES, imageCardRenderer, rasterSize, type ImageCardPort, type ImageCardRead } from "./image";
+import { IMAGE_CARD_MAX_BYTES, imageCardRenderer, rasterSize, shownAspect, type ImageCardPort, type ImageCardRead } from "./image";
 import { CardCache } from "../card-cache";
-import type { CardContext, CardMode, CardView } from "../cards";
+import type { CardContext, CardMode, CardSnapshot, CardView } from "../cards";
 import type { CanvasParts } from "../parts";
 import type { CanvasNode } from "../model";
 import type { ResourceDescriptor } from "../../media/media-types";
@@ -637,5 +637,80 @@ describe("la zona (T78)", () => {
     await settle();
     expect(card.root()!.hasAttribute("data-card-crop")).toBe(false);
     expect(card.cache.get("a.png", "whole@608")).toBeDefined();
+  });
+});
+
+describe("la proporzione del contenuto (T39)", () => {
+  /// Come `mount`, con un `contentShown` che conta.
+  function mountCounting(port: ImageCardPort, path: string, cache = new CardCache(), parts: CanvasParts | null = null) {
+    const host = document.createElement("div");
+    document.body.append(host);
+    const { ctx } = context(path, cache, 300, parts);
+    const shown = { count: 0 };
+    const view = imageCardRenderer(port).mount(node(path), host, "live", { ...ctx, contentShown: () => void (shown.count += 1) });
+    return { host, view, shown, cache };
+  }
+
+  it("un raster: la proporzione dell'immagine dipinta, e la tela lo sa quando arriva e quando cambia", async () => {
+    stubCreateImageBitmap([4000, 3000]);
+    const files: Record<string, ImageCardRead | null> = { "foto.png": { bytes: png(4000, 3000), descriptor: descriptor("f", "image/png") } };
+    const { port, change } = fakePort(files);
+    const card = mountCounting(port, "foto.png");
+    expect(card.view.contentAspect!()).toBeNull();
+    await settle();
+    expect(card.view.contentAspect!()).toBeCloseTo(4 / 3, 12);
+    expect(card.shown.count).toBe(1);
+    // Il file sostituito con un quadrato: i tratti si riadattano.
+    stubCreateImageBitmap([1000, 1000]);
+    files["foto.png"] = { bytes: png(1000, 1000), descriptor: descriptor("f", "image/png") };
+    change("foto.png");
+    await settle();
+    expect(card.view.contentAspect!()).toBe(1);
+    // L'immagine nuova si legge con «Carica…» davanti, che non mostra
+    // niente: due avvisi, il vuoto e il quadrato.
+    expect(card.shown.count).toBe(3);
+    // Il file che va via: non si vede niente.
+    files["foto.png"] = null;
+    change("foto.png");
+    await settle();
+    expect(card.view.contentAspect!()).toBeNull();
+    expect(card.shown.count).toBe(4);
+    card.view.destroy();
+    expect(card.view.contentAspect!()).toBeNull();
+  });
+
+  it("una zona (T78): la proporzione della zona mostrata, girata, non del file", async () => {
+    stubCreateImageBitmap([1000, 400]);
+    const { port } = fakePort({ "striscia.png": { bytes: png(1000, 400), descriptor: descriptor("s", "image/png") } });
+    // La metà sinistra, 500 × 400, girata di 90°: 400 × 500.
+    const card = mountCounting(port, "striscia.png", new CardCache(), { kind: "image", rect: [0, 0, 0.5, 1], rotate: 90, extra: {} });
+    await settle();
+    expect(card.view.contentAspect!()).toBeCloseTo(0.8, 2);
+    card.view.destroy();
+  });
+
+  it("un SVG: la proporzione del disegno, la stessa da ferma", async () => {
+    vi.spyOn(HTMLImageElement.prototype, "decode").mockResolvedValue(undefined);
+    const svg = utf8('<svg xmlns="http://www.w3.org/2000/svg" width="100" height="50"></svg>');
+    const { port } = fakePort({ "logo.svg": { bytes: svg, descriptor: descriptor("l", "image/svg+xml") } });
+    const card = mountCounting(port, "logo.svg");
+    await settle();
+    expect(card.view.contentAspect!()).toBe(2);
+    expect((card.cache.get("logo.svg", "whole@608") as CardSnapshot | undefined)?.aspect).toBe(2);
+    card.view.setMode("snapshot");
+    expect(card.view.contentAspect!()).toBe(2);
+    // Da viva a ferma la proporzione non cambia: niente da ridisegnare.
+    expect(card.shown.count).toBe(1);
+    card.view.destroy();
+  });
+
+  it("shownAspect: l'immagine intera, la zona, la zona girata; null senza misure", () => {
+    const whole = { rect: [0, 0, 1, 1], turn: 0 } as unknown as Parameters<typeof shownAspect>[2];
+    const half = (turn: number) => ({ rect: [0, 0, 0.5, 1], turn }) as unknown as Parameters<typeof shownAspect>[2];
+    expect(shownAspect(400, 300, whole)).toBeCloseTo(4 / 3, 12);
+    expect(shownAspect(1000, 400, half(0))).toBeCloseTo(1.25, 12);
+    expect(shownAspect(1000, 400, half(270))).toBeCloseTo(0.8, 12);
+    expect(shownAspect(0, 400, whole)).toBeNull();
+    expect(shownAspect(NaN, 400, whole)).toBeNull();
   });
 });

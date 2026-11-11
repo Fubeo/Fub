@@ -6,7 +6,11 @@
 // modo della scheda (`ink-fit.ts`) dice come segue la misura di adesso: con
 // `scale` (immagini e PDF) l'annidato è largo quanto la scheda, col `viewBox`
 // della misura di riferimento e `xMidYMid meet`, e il browser scala i percorsi
-// senza deformarli; con `fixed` è largo `W` e alto `H`, senza scala, e ciò che
+// senza deformarli. Se la scheda dice la proporzione del suo contenuto
+// (`contentAspect`, T39), il `viewBox` è il riquadro del contenuto nella
+// misura di riferimento (`contentBox`): `xMidYMid meet` lo porta sul
+// riquadro del contenuto della scheda di adesso, ed è `inkFit` con
+// `aspect`. Con `fixed` l'annidato è largo `W` e alto `H`, senza scala, e ciò che
 // esce dalla scheda si vede. I percorsi restano nelle unità in cui sono
 // scritti. Così, quando la lavagna sposta o ridimensiona una scheda cambiando
 // solo posizione e misura dell'elemento (`#renderLive`), l'inchiostro la segue
@@ -25,7 +29,7 @@
 // e a ogni giro lascia andare quelli che non si disegnano più.
 
 import type { CardPageBox } from "./cards";
-import type { InkFitMode } from "./ink-fit";
+import { contentBox, validAspect, type InkFitMode } from "./ink-fit";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 
@@ -83,7 +87,18 @@ export const INK_PAGE_ASPECT = "xMinYMin meet";
 /// rettangolo `page.rect` (`INK_PAGE_ASPECT`), dentro un SVG che taglia alla
 /// scheda, così un tratto che esce dalla pagina si vede fino al bordo della
 /// scheda e non oltre. Gli altri tratti di pagina non hanno un percorso.
-export function paintCard(host: HTMLElement, strokes: readonly DryStroke[], mode: InkFitMode, page: CardPageBox | null = null): void {
+///
+/// `aspect` è la proporzione del contenuto che la scheda mostra adesso
+/// (`contentAspect`, T39): con `scale` l'inchiostro segue il contenuto
+/// (`inkFit` con `aspect`); `null`, o una proporzione che non vale, segue
+/// tutta la scheda.
+export function paintCard(
+  host: HTMLElement,
+  strokes: readonly DryStroke[],
+  mode: InkFitMode,
+  page: CardPageBox | null = null,
+  aspect: number | null = null,
+): void {
   const shown = strokes.filter((stroke) => stroke.page === undefined || (page !== null && stroke.page === page.page));
   const svg = ownLayer(host, "canvas-ink-card", shown.length > 0);
   if (!svg) return;
@@ -113,7 +128,7 @@ export function paintCard(host: HTMLElement, strokes: readonly DryStroke[], mode
     const scaled = ref !== null && mode === "scale" ? ref : null;
     setAttr(nested, "width", fixed ? String(fixed.width) : "100%");
     setAttr(nested, "height", fixed ? String(fixed.height) : "100%");
-    setAttr(nested, "viewBox", scaled ? `0 0 ${scaled.width} ${scaled.height}` : null);
+    setAttr(nested, "viewBox", scaled ? scaleViewBox(scaled, aspect) : null);
     setAttr(nested, "preserveAspectRatio", scaled ? INK_SCALE_ASPECT : null);
     paintPaths(nested, run);
   }
@@ -141,6 +156,16 @@ function paintPageRun(nested: SVGElement, run: readonly DryStroke[], ref: InkRef
   setAttr(inner, "overflow", "visible");
   paintPaths(inner, run);
   trim(nested, 1);
+}
+
+/// Il `viewBox` di un SVG annidato `scale` con la misura scritta `ref`: tutta
+/// la misura, o col contenuto di proporzione `aspect` il suo riquadro
+/// (`contentBox`), che `xMidYMid meet` porta sul riquadro del contenuto
+/// della scheda di adesso.
+function scaleViewBox(ref: InkRef, aspect: number | null): string {
+  const box = validAspect(aspect) ? contentBox(ref, aspect) : null;
+  if (box === null || !(box.width > 0 && box.height > 0)) return `0 0 ${ref.width} ${ref.height}`;
+  return `${box.x} ${box.y} ${box.width} ${box.height}`;
 }
 
 /// Taglia (`true`) o lascia uscire ciò che l'SVG annidato `nested` disegna.

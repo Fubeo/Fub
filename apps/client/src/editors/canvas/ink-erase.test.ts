@@ -193,6 +193,25 @@ describe("la gomma che taglia: i pezzi", () => {
     expect(pieces).toHaveLength(2);
     expect(pieces[0]!.ink.samples[pieces[0]!.ink.samples.length - 1]!.x).toBeCloseTo(4500, -1);
   });
+
+  it("su un'immagine segue il contenuto come la resa (T39)", () => {
+    // Riferimento 200 × 100 con un'immagine 1:1 (100 × 100 a x = 50); nella
+    // scheda 200 × 200 l'immagine è 200 × 200: s = 2, x = −100. Senza la
+    // proporzione s = 1 e y = 50.
+    const image: CanvasNode = { id: "i", type: "file", x: 0, y: 0, width: 200, height: 200, file: "foto.png" } as CanvasNode;
+    const stroke = { ...record("a", 0, 100, 50), anchor: { kind: "card", width: 200, height: 100 } };
+    const drawable = decodeStroke(stroke)!;
+    const states = [{ layer: { node: "i" }, node: image, state: "ok", strokes: [{ id: "a", drawn: true, stroke: drawable }], drawable: [drawable] }] as const;
+    const asked: string[] = [];
+    const [unit] = erasableInk(states as unknown as Parameters<typeof erasableInk>[0], () => null, (id) => {
+      asked.push(id);
+      return 1;
+    });
+    expect(asked).toEqual(["i"]);
+    expect(unit!.fit).toEqual({ s: 2, x: -100, y: 0 });
+    const [plain] = erasableInk(states as unknown as Parameters<typeof erasableInk>[0]);
+    expect(plain!.fit).toEqual({ s: 1, x: 0, y: 50 });
+  });
 });
 
 const cores: CanvasCore[] = [];

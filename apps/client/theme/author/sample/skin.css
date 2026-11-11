@@ -9217,7 +9217,8 @@ kbd,
    con le tinte dei Blocchi. Un colore libero tinge la carta con un po' di
    sé: il filo marcato resta, e un colore molto chiaro non lo sbiadisce. Sulla
    carta colorata il grigio della testata non basta (4,4:1 sul 2 al buio): va
-   di un quarto verso il testo. */
+   di un quarto verso il testo. Il titolo delle schede di file e di pagina
+   web sta fuori, sul fondo della lavagna (T39), e resta grigio. */
 .canvas-node[data-canvas-color="1"] {
   background: color-mix(in srgb, var(--danger) 18%, var(--doc-bg));
 }
@@ -9264,7 +9265,7 @@ kbd,
 .canvas-node[data-canvas-color="custom"] {
   background: color-mix(in srgb, var(--canvas-color) 14%, var(--doc-bg));
 }
-.canvas-node[data-canvas-color] > .canvas-node-handle {
+.canvas-node[data-canvas-color]:not(.canvas-node-file):not(.canvas-node-link) > .canvas-node-handle {
   color: color-mix(in srgb, var(--text) 25%, var(--muted));
 }
 /* Da lontano (T54): il titolo grande, di misura fissa sullo schermo. La
@@ -9379,6 +9380,42 @@ kbd,
   padding: var(--space-3) var(--space-5) var(--space-5);
   line-height: var(--leading-normal);
   white-space: pre-wrap;
+}
+/* D-21 (a), il titolo sopra (T39): la riga sta sul fondo della lavagna, a
+   voce bassa; si scurisce quando la scheda è scelta o attiva. Il pulsante →
+   compare al passaggio, col fuoco o con la scheda scelta. */
+.canvas-node-file > .canvas-node-handle,
+.canvas-node-link > .canvas-node-handle {
+  padding: 0 var(--space-1) var(--space-3);
+}
+.canvas-node-file.selected > .canvas-node-handle,
+.canvas-node-link.selected > .canvas-node-handle,
+.canvas-node-file[data-card-active] > .canvas-node-handle {
+  color: var(--text);
+}
+.canvas-node-file > .canvas-node-handle > .canvas-connect,
+.canvas-node-link > .canvas-node-handle > .canvas-connect {
+  opacity: 0;
+}
+.canvas-node-file:hover > .canvas-node-handle > .canvas-connect,
+.canvas-node-link:hover > .canvas-node-handle > .canvas-connect,
+.canvas-node-file:focus-within > .canvas-node-handle > .canvas-connect,
+.canvas-node-link:focus-within > .canvas-node-handle > .canvas-connect,
+.canvas-node-file.selected > .canvas-node-handle > .canvas-connect,
+.canvas-node-link.selected > .canvas-node-handle > .canvas-connect {
+  opacity: 1;
+}
+/* Senza la testata dentro, il margine in cima è quello dei lati. L'immagine
+   e la pagina del PDF arrivano al bordo: il riquadro del contenuto, su cui
+   si attacca l'inchiostro, si misura sulla scheda intera. */
+.canvas-node-file > .canvas-card-body,
+.canvas-node-link > .canvas-card-body {
+  padding-top: var(--space-5);
+}
+.canvas-node-file[data-card-kind="image"]:not([data-card-missing]) > .canvas-card-body,
+.canvas-node-file[data-card-kind="pdf"]:not([data-card-missing]) > .canvas-card-body {
+  padding: 0;
+  white-space: normal;
 }
 /* Il testo di una scheda è una nota in piccolo: il carattere di lettura, un
    gradino sotto, e i titoli che non si prendono la scheda. */

@@ -10,6 +10,7 @@ import { makePdfJsLoader, PDFJS_VERSION, type PdfEngine, type PdfJsModule } from
 import { CardCache } from "../card-cache";
 import { snapshotPart, type CardContext, type CardMode, type CardView } from "../cards";
 import type { CanvasNode } from "../model";
+import { contentBox } from "../ink-fit";
 import { PDF_CARD_MAX_SCALE, pdfCardFirstPage, pdfCardRenderer, pdfCardStartPage, pdfPagesReader, type PdfCardPort } from "./pdf";
 
 const PATH = "Corsi/manuale.pdf";
@@ -587,6 +588,67 @@ describe("la pagina per l'inchiostro (T19)", () => {
     expect(view.pageBox!()).toEqual(box);
     b.size.width = WIDTH + 40;
     expect(view.pageBox!()).toBeNull();
+    view.destroy();
+  });
+});
+
+describe("la pagina intera e il contenuto (T39)", () => {
+  function place(element: Element, left: number, top: number, width: number, height: number): void {
+    element.getBoundingClientRect = () => ({ left, top, width, height, x: left, y: top, right: left + width, bottom: top + height, toJSON: () => ({}) }) as DOMRect;
+  }
+
+  it("la pagina non è più adattata alla larghezza: la sua proporzione va in --page-ratio", async () => {
+    const b = bench({ engine: async () => fakeEngine(3, [595, 842]) });
+    const view = b.mount("live");
+    await settle();
+    const canvas = screen(b.host);
+    expect(canvas.style.width).toBe("");
+    expect(canvas.style.height).toBe("");
+    expect(Number(canvas.style.getPropertyValue("--page-ratio"))).toBeCloseTo(595 / 842, 12);
+    view.destroy();
+  });
+
+  it("contentAspect è la proporzione della pagina in punti, da viva e da ferma; null senza pagina", async () => {
+    const cache = new CardCache();
+    const b = bench({ cache, engine: async () => fakeEngine(3, [842, 595]) });
+    const view = b.mount("live");
+    expect(view.contentAspect!()).toBeNull();
+    await settle();
+    expect(view.contentAspect!()).toBeCloseTo(842 / 595, 12);
+    view.setMode("snapshot");
+    expect(view.contentAspect!()).toBeCloseTo(842 / 595, 12);
+    view.destroy();
+    expect(view.contentAspect!()).toBeNull();
+
+    const empty = bench();
+    const blank = empty.mount("snapshot");
+    expect(blank.contentAspect!()).toBeNull();
+    blank.destroy();
+  });
+
+  it("senza la misura in punti vale la proporzione dell'immagine ferma", () => {
+    const cache = new CardCache();
+    const bitmap = document.createElement("canvas");
+    bitmap.width = WIDTH;
+    bitmap.height = 400;
+    cache.put(PATH, snapshotPart("page-1", WIDTH), { bitmap, bytes: WIDTH * 400 * 4 });
+    const b = bench({ cache });
+    const view = b.mount("snapshot");
+    expect(view.contentAspect!()).toBeCloseTo(WIDTH / 400, 12);
+    view.destroy();
+  });
+
+  it("pageBox è il riquadro della pagina intera, al centro della scheda", async () => {
+    // La scheda 320 × 400 a zoom 2; una pagina 600 × 800 (3:4) entra alta
+    // 400 e larga 300, a x = 10: la geometria di structure.css.
+    const b = bench({ engine: async () => fakeEngine(2, [600, 800]) });
+    const view = b.mount("live");
+    await settle();
+    place(b.host, 10, 20, WIDTH * 2, 800);
+    place(screen(b.host), 10 + 20, 20, 600, 800);
+    expect(view.pageBox!()).toEqual({ page: 1, size: { width: 600, height: 800 }, rect: { x: 10, y: 0, width: 300, height: 400 } });
+    // Lo stesso riquadro che dà la regola dell'inchiostro con la proporzione della pagina.
+    expect(contentBox(b.size, view.contentAspect!()!)).toEqual(view.pageBox!()!.rect);
     view.destroy();
   });
 });

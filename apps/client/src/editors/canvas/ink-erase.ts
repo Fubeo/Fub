@@ -72,9 +72,12 @@ const IDENTITY: InkFit = { s: 1, x: 0, y: 0 };
 /// della lavagna. Un tratto che la resa non mostra (scala zero) non c'è, e
 /// nemmeno un tratto di pagina (T19) se la sua scheda non mostra quella
 /// pagina: `pages` dà la pagina che una scheda mostra e dove (`pageBox`).
+/// `aspects` dà la proporzione del contenuto di una scheda (`contentAspect`,
+/// T39), che i tratti `scale` seguono come in `paintCard`.
 export function erasableInk(
   states: readonly InkLayerState[],
   pages: (node: string) => CardPageBox | null = () => null,
+  aspects: (node: string) => number | null = () => null,
 ): ErasableInk[] {
   const units: ErasableInk[] = [];
   for (const state of states) {
@@ -84,6 +87,7 @@ export function erasableInk(
     const oy = node ? node.y : 0;
     const mode = node ? inkFitMode(node) : "fixed";
     let shown: CardPageBox | null | undefined;
+    let aspect: number | null | undefined;
     for (const stroke of state.drawable) {
       let fit: InkFit;
       if (stroke.page !== null) {
@@ -94,7 +98,8 @@ export function erasableInk(
       } else {
         // Senza misura (un tratto libero dato a una scheda) le unità sono i
         // pixel della scheda, come in `paintCard`.
-        fit = node && stroke.ref ? inkFit(mode, stroke.ref, { width: node.width, height: node.height }) : IDENTITY;
+        if (node && mode === "scale" && aspect === undefined) aspect = aspects(node.id);
+        fit = node && stroke.ref ? inkFit(mode, stroke.ref, { width: node.width, height: node.height }, aspect) : IDENTITY;
       }
       if (!(fit.s > 0)) continue;
       const scale = stroke.ink.scale;
