@@ -3688,7 +3688,7 @@ che l'attributo cambia solo a fine gesto e mai durante; le foto del banco
 a 0,25 e a 0,1, chiaro e scuro, somigliano al prototipo.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/canvas
-Stato: [~] in corso · coder Opus · base 705c2fca1
+Stato: [x] fatto (2026-11-11: 99a9c9f2f…864d09513; `lod.ts` con la soglia «far» = `LIVE_ZOOM_MIN`, `data-card-detail` `still`/`far`/`block` a fine gesto, titolo grande con `--canvas-detail-zoom` scritto a fine gesto; docs in `canvas-view.md` «Da lontano» perché `canvas-cards.md` è a 550 righe; difetto di prima visto qui: una nota che passa da viva a ferma resta vuota, task a parte)
 
 ## T55 · Il navigatore
 
