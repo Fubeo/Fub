@@ -20,6 +20,8 @@ import {
   type CardView,
 } from "./cards";
 import type { CanvasNode } from "./model";
+import { pdfCardRenderer, type PdfCardPort } from "./cards/pdf";
+import type { PdfEngine } from "../media/pdf-view";
 import { canvasCoreReady, openCoreNow } from "./wasm/core";
 import { canvasViewKey, createCanvasViewMemory } from "./view-state";
 import { setReducedMotionPreference } from "../../theme/reduced-motion";
@@ -2150,6 +2152,36 @@ describe("il gesto su una scheda di file che non si mostra (T93)", () => {
     card(host, id).dispatchEvent(new MouseEvent("dblclick", { bubbles: true }));
   }
 
+  /** Lascia correre tutto ciò che è in attesa, anche le letture e i caricamenti a catena. */
+  async function flush(): Promise<void> {
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+  }
+
+  /** Le schede di file con il renderer vero del PDF: `load` dice se il file si legge. */
+  function pdfCards(load: PdfCardPort["load"]): CanvasCards {
+    return cardsOf(pdfCardRenderer({ read: async () => new Uint8Array([1]), load, watch: () => () => {} }));
+  }
+
+  /** Un PDF di una pagina che si legge, senza disegnare niente davvero. */
+  function readablePdf(): PdfEngine {
+    return {
+      pageCount: 1,
+      search: async () => [],
+      renderPage: async (_index, canvas) => {
+        canvas.width = 1;
+        canvas.height = 1;
+      },
+      pageSize: async () => [600, 800],
+      renderArea: async () => true,
+      destroy: () => {},
+    };
+  }
+
+  /** Lo stato che la vista del PDF «p» dice in `data-card-state`. */
+  function pdfStateOf(host: HTMLElement): string | undefined {
+    return bodyOf(host, "p").querySelector<HTMLElement>(":scope > [data-card-state]")?.dataset.cardState;
+  }
+
   it("doppio clic e Invio su una scheda mancante chiedono il file come «Ritrova…», senza aprire il campo", async () => {
     const files = fakeFiles();
     const { renderer, mounts } = fakeRenderer();
@@ -2290,6 +2322,51 @@ describe("il gesto su una scheda di file che non si mostra (T93)", () => {
     relink.dispatchEvent(new MouseEvent("dblclick", { bubbles: true }));
     expect(asked).toEqual(["foto.png", "foto.png"]);
     expect(host.querySelector(".canvas-field-editor")).toBeNull();
+    engine.destroy();
+  });
+
+  it("un PDF che non si legge apre il file col doppio clic e con Invio, senza il campo", async () => {
+    const opened: string[] = [];
+    const { engine, host } = mounted(boardSource(BOARD), {
+      cards: pdfCards(async () => {
+        throw new Error("PasswordException");
+      }),
+      onOpenPath: (path) => {
+        opened.push(path);
+      },
+    });
+    await flush();
+    expect(pdfStateOf(host)).toBe("unreadable");
+    dblclickOn(host, "p");
+    expect(opened).toEqual(["/doc/libro.pdf"]);
+    enterWithKeys(host, "p");
+    expect(opened).toEqual(["/doc/libro.pdf", "/doc/libro.pdf"]);
+    expect(host.querySelector(".canvas-field-editor")).toBeNull();
+    engine.destroy();
+  });
+
+  it("un PDF in caricamento non apre il campo, e il doppio clic e Invio non fanno niente", () => {
+    const opened: string[] = [];
+    const { engine, host } = mounted(boardSource(BOARD), {
+      cards: pdfCards(() => new Promise<PdfEngine>(() => {})),
+      onOpenPath: (path) => {
+        opened.push(path);
+      },
+    });
+    expect(pdfStateOf(host)).toBe("loading");
+    dblclickOn(host, "p");
+    enterWithKeys(host, "p");
+    expect(host.querySelector(".canvas-field-editor")).toBeNull();
+    expect(opened).toEqual([]);
+    engine.destroy();
+  });
+
+  it("un PDF che si legge apre il campo col doppio clic, come prima", async () => {
+    const { engine, host } = mounted(boardSource(BOARD), { cards: pdfCards(async () => readablePdf()) });
+    await flush();
+    expect(pdfStateOf(host)).toBe("content");
+    dblclickOn(host, "p");
+    expect(host.querySelector(".canvas-field-editor")).not.toBeNull();
     engine.destroy();
   });
 });

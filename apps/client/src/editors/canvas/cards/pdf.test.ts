@@ -638,6 +638,59 @@ describe("smontare una scheda PDF (T91)", () => {
   });
 });
 
+describe("lo stato per la tela (T93)", () => {
+  /** Lo stato che la radice della scheda dice in `data-card-state`. */
+  function stateOf(host: HTMLElement): string | undefined {
+    return host.querySelector<HTMLElement>(".canvas-card-pdf")?.dataset.cardState;
+  }
+
+  it("dice che cosa mostra: caricando, la pagina, e niente da ferma senza cache", async () => {
+    const reading = deferred<Uint8Array | null>();
+    const b = bench({ read: () => reading.promise });
+    const view = b.mount("live");
+    expect(stateOf(b.host)).toBe("loading");
+    reading.resolve(new Uint8Array([1]));
+    await settle();
+    expect(stateOf(b.host)).toBe("content");
+    view.destroy();
+    const frozen = bench();
+    const frozenView = frozen.mount("snapshot");
+    expect(stateOf(frozen.host)).toBe("placeholder");
+    frozenView.destroy();
+  });
+
+  it("un PDF che non si legge o una resa fallita dice illeggibile; il file che manca dice mancante", async () => {
+    const broken = bench({ engine: async () => { throw new Error("PasswordException"); } });
+    const brokenView = broken.mount("live");
+    await settle();
+    expect(stateOf(broken.host)).toBe("unreadable");
+    brokenView.destroy();
+    const failed = fakeEngine(2);
+    failed.renderPage = async () => { throw new Error("rotto"); };
+    const render = bench({ engine: async () => failed });
+    const renderView = render.mount("live");
+    await settle();
+    expect(stateOf(render.host)).toBe("unreadable");
+    renderView.destroy();
+    const missing = bench({ read: async () => null });
+    const missingView = missing.mount("live");
+    await settle();
+    expect(stateOf(missing.host)).toBe("missing");
+    missingView.destroy();
+  });
+
+  it("smettere di essere viva non lascia l'ultimo stato: un'illeggibile da ferma dice niente", async () => {
+    const b = bench({ engine: async () => { throw new Error("rotto"); } });
+    const view = b.mount("live");
+    await settle();
+    expect(stateOf(b.host)).toBe("unreadable");
+    view.setMode("snapshot");
+    expect(stateOf(b.host)).toBe("placeholder");
+    expect(message(b.host).hidden).toBe(true);
+    view.destroy();
+  });
+});
+
 describe("le pagine per «Spargi le pagine» (T72)", () => {
   /** Una porta che legge `bytes` (o niente) e apre il motore `engine`. */
   function pagesPort(options: {
