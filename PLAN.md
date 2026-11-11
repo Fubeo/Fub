@@ -4756,7 +4756,7 @@ su un pezzo che porta alla scheda e quello che apre il selettore; le foto
 del banco somigliano al prototipo.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/canvas
-Stato: [~] in corso · coder Opus · base 513959ba3
+Stato: [x] fatto · 6fe3da811 (merge 74001bf2d) · differenze: «Fonti» è una linguetta a sé, l'ultima, come nel prototipo (senza file dice «Su questa lavagna non ci sono file.»); i file mancanti si leggono dal segno `data-card-missing` della scheda (MutationObserver in `surface.ts`); «prendere» un pezzo = `revealSource` + `canvas.parts` (per un PDF, finché non c'è T80, la scheda resta solo scelta); oltre 200 pagine un pezzo della barra tiene più pagine, lista virtuale oltre 40 file; la sezione dell'ispettore in `docs/reference/canvas-inspector.md` (nuova); `cardTarget` ripreso in `sources.ts` (privato in `engine.ts`) e il salto non entra in Indietro (T56): T99; una scheda lontana non montata non sa ancora se il file manca (la riga diventa grigia quando monta)
 
 ## T78 · La zona di un'immagine
 
@@ -5597,6 +5597,37 @@ dice il puntatore; i vettori con `aspect` passano in Rust e in Vitest.
 Prova: scripts/check.sh --rapido; cargo test -p fub-canvas-core; cd
 apps/client && npx vitest run src/editors/canvas
 Stato: [~] in corso · coder Opus · base 641eb1e27
+
+## T99 · Le rifiniture della lavagna
+
+Perché: avanzi dei task fatti, scritti dall'orchestratore dai report e dalle
+righe di DECISIONS.md (T65, T70, T77).
+Tocca: `apps/client/src/editors/canvas/engine.ts`,
+`apps/client/src/editors/canvas/sources.ts` e il suo test,
+`apps/client/src/editors/canvas/chrome/inspector.ts` e il suo test,
+`apps/client/src/editors/canvas/convert.ts` o dove sta oggi
+`canvasFreeName` (T70) e il suo test, `apps/client/src/i18n/catalog.ts`,
+`docs/reference/canvas-inspector.md`, `docs/reference/canvas-input.md`.
+Non toccare: il formato; la shell (chiudere l'ispettore della shell nello
+spazio Semplice vuole un contratto della shell: resta fuori, da chiedere).
+Dipende da: T77, T98
+Cosa fare:
+- Un solo `cardTarget`: quello di `engine.ts` usa la funzione pura di
+  `sources.ts` (o il contrario), senza due copie.
+- Il salto dell'ispettore (`revealSource`, da «Schede» e da «Fonti») entra
+  nella storia di Indietro come `#jumpCamera` (T56).
+- «Sostituisci il file…» nell'ispettore, «Scheda» (T70).
+- «Copia il testo qui» di una scheda-estratto copia solo le sezioni
+  mostrate (T70, T75).
+- Il test di `canvasFreeName` (T70): nome libero, nome preso, caratteri
+  che il file system non vuole.
+Casi limite: Indietro dopo un salto e uno spostamento a mano; la sola
+lettura (niente «Sostituisci»); un estratto con una sezione sparita.
+Fatto quando: un test per ogni punto, rosso prima e verde dopo dove il
+comportamento cambia.
+Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
+src/editors/canvas
+Stato: [ ] da fare
 
 ## Non verificato stanotte
 
