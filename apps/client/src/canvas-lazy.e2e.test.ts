@@ -476,16 +476,14 @@ describe("il pigro alla prova (T89)", () => {
     const host = await start({ file: { [BOARD]: boardText([textCard("lontana", 0, 0, "Lontana")]) } });
     await openBoard(["lontana"]);
 
-    // Il doppio clic nel vuoto fa nascere una scheda di testo, scelta. Non
-    // si apre da sé in scrittura (il caso `it.fails` qui sotto): Invio la apre.
+    // Il doppio clic nel vuoto fa nascere lì una scheda di testo, già in
+    // scrittura (T100), nell'editor delle note in Live.
     let writes = boardWrites(host);
     viewport().dispatchEvent(new MouseEvent("dblclick", { bubbles: true, cancelable: true, ...at([600, 400]) }));
     await saved(host, writes, "la scheda del doppio clic");
     const born = boardOf(host).nodes.filter((node) => node.id !== "lontana");
     expect(born).toEqual([expect.objectContaining({ type: "text", text: "" })]);
     const idea = born[0]!.id;
-    // Invio con la scheda scelta: si scrive, nell'editor delle note in Live.
-    press(viewport(), { key: "Enter" });
     const first = await writing(idea);
     first.dispatch({ changes: { from: 0, insert: "Un'idea senza posto" }, userEvent: "input.type" });
 
@@ -513,20 +511,6 @@ describe("il pigro alla prova (T89)", () => {
       expect.objectContaining({ fromNode: below.id, toNode: right.id, fromSide: "right", toSide: "left" }),
     ]);
     await writing(right.id);
-  });
-
-  // Difetto: il doppio clic del mouse nel vuoto mette la scheda di testo al
-  // centro della vista e la lascia solo scelta (`#dblclick` in
-  // `editors/canvas/engine.ts` chiama `#addNode("text")` senza il punto e
-  // senza `#beginCardEdit`), mentre il doppio tocco del dito (T63), lo
-  // strumento Testo e «Scrivi una scheda» la mettono dove si indica, già in
-  // scrittura. Quando il doppio clic farà lo stesso, questo caso passa e
-  // `it.fails` va tolto.
-  it.fails("3 · l'idea senza posto: il doppio clic nel vuoto apre subito la scheda in scrittura", async () => {
-    await start({ file: { [BOARD]: boardText([textCard("lontana", 0, 0, "Lontana")]) } });
-    await openBoard(["lontana"]);
-    viewport().dispatchEvent(new MouseEvent("dblclick", { bubbles: true, cancelable: true, ...at([600, 400]) }));
-    await waitFor("la scheda nuova scrive", () => document.querySelector(".canvas-node .canvas-text-live .cm-editor, .canvas-node .canvas-text-editor") !== null, 2_000);
   });
 
   it("4 · non so dove sono: Maiusc+1 mostra tutto, il navigatore porta lì, «Indietro» torna da prima del salto", async () => {

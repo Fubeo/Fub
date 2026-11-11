@@ -9814,7 +9814,8 @@ export class CanvasEngine {
     // Il doppio tocco del dito mette la sua scheda da sé (T63): il `dblclick`
     // che il browser ne fa non ne mette un'altra.
     if (this.#downByTouch) return;
-    this.#addNode("text");
+    // Nel punto del clic, già in scrittura, come il doppio tocco (T63, T100).
+    this.#placeText(event.clientX, event.clientY);
   }
 
   #keydown(event: KeyboardEvent): void {

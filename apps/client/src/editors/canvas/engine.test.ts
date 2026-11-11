@@ -5847,6 +5847,21 @@ describe("CanvasEngine: il menu radiale e i gesti (T63)", () => {
       expect(nodeIds(other.engine)).toHaveLength(4);
       other.engine.destroy();
     });
+
+    it("il doppio clic nel vuoto fa come il doppio tocco: la scheda nasce lì, già in scrittura (T100)", () => {
+      const { engine, host } = mounted();
+      const cam = cameraOf(host);
+      viewportOf(host).dispatchEvent(new MouseEvent("dblclick", { bubbles: true, clientX: 900, clientY: 700 }));
+      const nodes = readCanvas(engine.getDoc()).nodes;
+      expect(nodes).toHaveLength(5);
+      const fresh = nodes[4]!;
+      expect(fresh.type).toBe("text");
+      expect(Math.abs(fresh.x - (900 - cam.x) / cam.zoom)).toBeLessThan(24);
+      expect(Math.abs(fresh.y - (700 - cam.y) / cam.zoom)).toBeLessThan(24);
+      expect(writingCard(host)).toBe(fresh.id);
+      expect(engine.tool).toBe("select");
+      engine.destroy();
+    });
   });
 
   it("Maiusc+F10 › «Menu radiale» lo apre dalla tastiera, al centro della vista, col fuoco sulla prima voce", () => {
