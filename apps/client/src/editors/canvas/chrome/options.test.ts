@@ -108,24 +108,28 @@ describe("che cosa mostra la riga", () => {
     // La Selezione senza schede: come si sceglie, e la Vista.
     expect(shown(host)).toEqual(["hint", "view"]);
     expect(row(host).querySelector(".canvas-options-hint")!.textContent).toBe(t("canvas.options.select_hint"));
-    // Con una scheda scelta: il colore e Disponi.
+    // Con una scheda scelta: il colore, la misura e l'allineamento del testo
+    // (T92) e Disponi.
     select(host, "a");
-    expect(shown(host)).toEqual(["color", "arrange", "view"]);
+    expect(shown(host)).toEqual(["color", "text-size", "text-align", "arrange", "view"]);
     const rows: Array<[CanvasToolId, string[], string | null]> = [
       ["hand", ["view"], null],
       ["pen", ["pen", "view"], null],
       ["highlighter", ["pen", "view"], null],
       ["eraser", ["pen", "view"], null],
-      ["text", ["hint", "view"], "canvas.options.text_hint"],
+      ["text", ["text-size", "text-align", "view"], null],
       ["connect", ["hint", "tips", "view"], "canvas.options.connect_hint"],
     ];
     for (const [tool, items, hint] of rows) {
       run(engine, `canvas.tool.${tool}`);
       expect(shown(host), tool).toEqual(items);
-      if (hint) expect(row(host).querySelector(".canvas-options-hint")!.textContent, tool).toBe(t(hint as "canvas.options.text_hint"));
+      if (hint) expect(row(host).querySelector(".canvas-options-hint")!.textContent, tool).toBe(t(hint as "canvas.options.connect_hint"));
     }
     // I gruppi hanno il loro nome per chi ascolta.
     expect(row(host).querySelector('[data-option="tips"] [role="radiogroup"]')!.getAttribute("aria-label")).toBe(t("canvas.options.tips"));
+    run(engine, "canvas.tool.text");
+    expect(row(host).querySelector('[data-option="text-size"] [role="radiogroup"]')!.getAttribute("aria-label")).toBe(t("canvas.options.text_size"));
+    expect(row(host).querySelector('[data-option="text-align"] [role="radiogroup"]')!.getAttribute("aria-label")).toBe(t("canvas.options.text_align"));
     expect(row(host).querySelector('[data-option="view"] [role="group"]')!.getAttribute("aria-label")).toBe(t("canvas.options.view"));
     engine.destroy();
   });
@@ -135,7 +139,7 @@ describe("che cosa mostra la riga", () => {
     const ids = new Set(CANVAS_COMMANDS.map((spec) => spec.id));
     const seen = new Set<string>();
     select(host, "a");
-    for (const tool of ["select", "connect"] as const) {
+    for (const tool of ["select", "connect", "text"] as const) {
       run(engine, `canvas.tool.${tool}`);
       if (tool === "select") select(host, "a");
       for (const button of row(host).querySelectorAll<HTMLElement>("[data-command]")) {
@@ -146,6 +150,8 @@ describe("che cosa mostra la riga", () => {
     }
     expect([...seen].sort()).toEqual([
       "canvas.align_menu", "canvas.bring_front", "canvas.color_menu", "canvas.fit", "canvas.send_back",
+      "canvas.text_align.center", "canvas.text_align.end", "canvas.text_align.start",
+      "canvas.text_size.l", "canvas.text_size.m", "canvas.text_size.s", "canvas.text_size.xl",
       "canvas.tips.end", "canvas.tips.none", "canvas.tips.start", "canvas.zoom_in", "canvas.zoom_out",
     ]);
     // Il nome è quello del comando, il tasto quello del catalogo.
@@ -281,12 +287,70 @@ describe("Collega e le punte", () => {
   });
 });
 
+describe("la misura e l'allineamento del testo (T92)", () => {
+  const checked = (host: HTMLElement, option: "text-size" | "text-align") =>
+    [...row(host).querySelectorAll<HTMLElement>(`[data-option="${option}"] [role="radio"]`)]
+      .filter((button) => button.getAttribute("aria-checked") === "true")
+      .map((button) => button.dataset.canvasAction);
+
+  it("col Testo: le «A» delle quattro misure e i tre allineamenti, coi nomi del catalogo; di serie medio e a sinistra", () => {
+    const { engine, host } = mounted();
+    run(engine, "canvas.tool.text");
+    const sizes = [...row(host).querySelectorAll<HTMLElement>('[data-option="text-size"] .canvas-text-size')];
+    expect(sizes.map((button) => button.dataset.size)).toEqual(["s", "m", "l", "xl"]);
+    expect(sizes.map((button) => button.textContent)).toEqual(["A", "A", "A", "A"]);
+    expect(sizes.map((button) => button.getAttribute("aria-label"))).toEqual(
+      ["s", "m", "l", "xl"].map((size) => t(`canvas.options.text_size.${size}` as "canvas.options.text_size.s")),
+    );
+    expect(control(host, "text-align-center")!.getAttribute("aria-label")).toBe(t("canvas.options.text_align.center"));
+    expect(control(host, "text-align-center")!.querySelector("svg")).not.toBeNull();
+    expect(checked(host, "text-size")).toEqual(["text-size-m"]);
+    expect(checked(host, "text-align")).toEqual(["text-align-start"]);
+    // Senza schede scelte la scelta vale per le prossime: si segna, il file non cambia.
+    control(host, "text-size-l")!.click();
+    expect(checked(host, "text-size")).toEqual(["text-size-l"]);
+    engine.destroy();
+  });
+
+  it("con le schede di testo scelte: il clic le cambia in un commit; misure diverse non ne segnano nessuna", () => {
+    const { engine, host, changes } = mounted();
+    select(host, "a");
+    control(host, "text-size-xl")!.click();
+    expect(changes).toHaveLength(1);
+    expect(readCanvas(engine.getDoc()).nodes.find((node) => node.id === "a")!["fub:text"]).toEqual({ v: 1, size: "xl" });
+    expect(checked(host, "text-size")).toEqual(["text-size-xl"]);
+    host.querySelector(".canvas-viewport")!.dispatchEvent(new KeyboardEvent("keydown", { key: "a", ctrlKey: true, bubbles: true }));
+    expect(checked(host, "text-size")).toEqual([]);
+    expect(checked(host, "text-align")).toEqual(["text-align-start"]);
+    control(host, "text-align-end")!.click();
+    expect(changes).toHaveLength(2);
+    expect(readCanvas(engine.getDoc()).nodes.map((node) => node["fub:text"])).toEqual([{ v: 1, size: "xl", align: "end" }, { v: 1, align: "end" }]);
+    // Tornate di serie, il campo se ne va.
+    control(host, "text-size-m")!.click();
+    control(host, "text-align-start")!.click();
+    expect(engine.getDoc()).not.toContain("fub:text");
+    engine.destroy();
+  });
+
+  it("con una scheda di file scelta i controlli ci sono, spenti col perché", () => {
+    const source = JSON.stringify({ nodes: [{ id: "f", type: "file", x: 0, y: 0, width: 200, height: 100, file: "Nota.md" }], edges: [] });
+    const { engine, host, changes } = mounted(source);
+    select(host, "f");
+    const large = control(host, "text-size-l")!;
+    expect(large.getAttribute("aria-disabled")).toBe("true");
+    expect(large.getAttribute("aria-label")).toBe(t("canvas.options.off", { name: t("canvas.options.text_size.l"), why: t("canvas.commands.why.no_text_card") }));
+    large.click();
+    expect(changes).toHaveLength(0);
+    engine.destroy();
+  });
+});
+
 describe("la sola lettura", () => {
   it("i controlli che cambiano la lavagna sono spenti col perché; la Vista resta", () => {
     const { engine, host } = mounted();
     select(host, "a");
     engine.setReadOnly(true);
-    for (const action of ["color-menu", "bring-front", "send-back", "align-menu"]) {
+    for (const action of ["color-menu", "text-size-l", "text-align-center", "bring-front", "send-back", "align-menu"]) {
       const button = control(host, action)!;
       expect(button.getAttribute("aria-disabled"), action).toBe("true");
       expect(button.getAttribute("aria-label"), action).toContain(t("canvas.commands.why.read_only"));
@@ -298,7 +362,7 @@ describe("la sola lettura", () => {
     expect(engine.getDoc()).toBe(before);
     // Penna e Collega non si scelgono: la riga resta quella della Selezione.
     run(engine, "canvas.tool.pen");
-    expect(shown(host)).toEqual(["color", "arrange", "view"]);
+    expect(shown(host)).toEqual(["color", "text-size", "text-align", "arrange", "view"]);
     engine.destroy();
   });
 });
@@ -381,12 +445,16 @@ describe("la riga da sola", () => {
       const width = this.classList.contains("canvas-options-item") ? 100 : this.classList.contains("kit-options-more") ? 32 : 0;
       return { width, height: 32, x: 0, y: 0, left: 0, top: 0, right: width, bottom: 32, toJSON: () => ({}) } as DOMRect;
     });
-    Object.defineProperty(options.element, "clientWidth", { configurable: true, value: 250 });
+    Object.defineProperty(options.element, "clientWidth", { configurable: true, value: 450 });
     options.bar.fit();
     expect(options.bar.overflow()).toEqual(["view"]);
+    // Poi la misura e l'allineamento del testo (T92), prima di Disponi.
+    Object.defineProperty(options.element, "clientWidth", { configurable: true, value: 250 });
+    options.bar.fit();
+    expect(options.bar.overflow()).toEqual(["text-size", "text-align", "view"]);
     Object.defineProperty(options.element, "clientWidth", { configurable: true, value: 160 });
     options.bar.fit();
-    expect(options.bar.overflow()).toEqual(["arrange", "view"]);
+    expect(options.bar.overflow()).toEqual(["text-size", "text-align", "arrange", "view"]);
     lifetime.close();
   });
 

@@ -39,6 +39,12 @@ lavagna, scritto una volta sola:
   scrivere. Il campo resta nei campi sconosciuti della scheda; le regole
   sono in [Gli estratti della lavagna](canvas-parts.md), i vettori li legge
   `tests/parts_vectors.rs`.
+- `text`: la misura e l'allineamento `fub:text` delle schede di testo.
+  `read_text(&canvas)` li dà nell'ordine di `nodes`, `node_text(&node)` uno
+  solo, `text_style(&node)` come si mostra la scheda e
+  `write_text(&node, style)` il campo da scrivere. Le regole sono [qui
+  sotto](#la-misura-e-lallineamento-del-testo), i vettori li legge
+  `tests/text_vectors.rs`.
 - `js`, `source`, `patch`, `ops`: la scrittura come la fa JavaScript, il
   ritocco del sorgente, le toppe con la loro inversa e le operazioni
   d'intento.
@@ -238,6 +244,46 @@ i nomi e le regole della tela stanno in
   filo e le punte di un arco il colore pieno; al buio i nove seguono i
   Blocchi (`--doc-color-*`). Il nome del colore arriva al lettore di schermo
   nel nome della scheda.
+
+## La misura e l'allineamento del testo
+
+Il testo di una scheda `text` resta Markdown puro nel campo `text` di JSON
+Canvas. La misura e l'allineamento con cui Fub lo mostra stanno a parte, nel
+campo `fub:text` della scheda, accanto a `fub:ink` e `fub:parts`:
+
+```json
+{ "id": "t1", "type": "text", "text": "# Idea", "x": 0, "y": 0,
+  "width": 300, "height": 120,
+  "fub:text": { "v": 1, "size": "l", "align": "center" } }
+```
+
+- `v`: la versione, 1 (anche scritta `1.0`).
+- `size`, facoltativo: `s`, `m` (quello di serie), `l` o `xl`.
+- `align`, facoltativo: `start` (quello di serie, a sinistra), `center` o
+  `end`.
+
+Le regole stanno in `crates/fub-canvas-core/src/text.rs` e, uguali, in
+`apps/client/src/editors/canvas/text-style.ts`; i vettori in comune sono in
+`apps/client/src/__fixtures__/canvas-text/`.
+
+- **Che cosa legge.** Un campo valido dice come si mostra la scheda: i campi
+  che mancano valgono di serie. Un campo che Fub non capisce (non è un
+  oggetto, `v` manca o non è 1, `size` o `align` non è un nome che conosce,
+  o la scheda non è di testo) si conserva così com'è e la scheda si mostra di
+  serie. Leggere non riscrive mai il campo; i campi sconosciuti dentro
+  `fub:text` restano nel loro ordine. Obsidian non conosce il campo, lo
+  conserva e mostra il testo di serie; una lavagna di Obsidian non l'ha.
+- **Che cosa scrive.** Solo quando la persona cambia la misura o
+  l'allineamento di una scheda di testo, e solo i valori che non sono di
+  serie, in quest'ordine: `v`, `size`, `align`, poi i campi sconosciuti di un
+  campo valido. Tornata a `m` e `start` senza altri campi, la chiave sparisce
+  dal file. Un campo che si conservava senza mostrarlo (una versione futura)
+  si riscrive alla versione 1, senza il suo contenuto; scegliere il valore
+  che la scheda mostra già non scrive niente.
+- **Come si disegna.** La tela mette sulla scheda `data-text-size` e
+  `data-text-align` quando non sono di serie; la misura e l'allineamento li
+  dà la pelle (`skin/editors.css`), sul testo letto e su quello che si
+  scrive.
 
 ## Negli appunti
 

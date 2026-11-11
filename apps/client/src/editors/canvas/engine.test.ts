@@ -20,6 +20,7 @@ import nestedDuplicate from "../../__fixtures__/canvas-patches/33-rejected-neste
 import { DocumentSessionCollection, type DocumentSessionApi } from "../../state/document-session";
 import { CanvasDepositError } from "../../state/canvas-intake";
 import { upsertNodePatch, type CanvasOperation, type CanvasPatch } from "./operation";
+import { TEXT_KEY as TEXT_FIELD } from "./text-style";
 import { CanvasCoreError, canvasCoreReady, openCore, openCoreNow, type CanvasCore, type CanvasIntentOp } from "./wasm/core";
 import { DEFAULT_PREFERENCES, type CanvasPreferences, type WheelAction } from "./preferences";
 import { CANVAS_TOOL_IDS, toolCommandId } from "./chrome/commands";
@@ -6601,5 +6602,128 @@ describe("il ritaglio di un'immagine (T78)", () => {
     board.barButton("done").click();
     expect(board.image()["fub:parts"]).toEqual({ kind: "image", rect: [0, 0, 1, 1], rotate: 90 });
     board.engine.destroy();
+  });
+});
+
+describe("CanvasEngine: la misura e l'allineamento del testo (T92)", () => {
+  /// Due schede di testo (la seconda al centro), una di file, un gruppo.
+  const SOURCE = JSON.stringify({
+    nodes: [
+      { id: "a", type: "text", x: 0, y: 0, width: 200, height: 100, text: "uno" },
+      { id: "b", type: "text", x: 300, y: 0, width: 200, height: 100, text: "due", "fub:text": { v: 1, align: "center" } },
+      { id: "f", type: "file", x: 600, y: 0, width: 200, height: 100, file: "Nota.md" },
+      { id: "g", type: "group", x: 0, y: 300, width: 400, height: 200, label: "Idee" },
+    ],
+    edges: [],
+  });
+  const command = (engine: CanvasEngine, id: string) => engine.commands().find((one) => one.id === id)!;
+  const nodeOf = (engine: CanvasEngine, id: string) => readCanvas(engine.getDoc()).nodes.find((node) => node.id === id)!;
+  const field = (engine: CanvasEngine, id: string): unknown => nodeOf(engine, id)[TEXT_FIELD];
+  const has = (engine: CanvasEngine, id: string): boolean => Object.prototype.hasOwnProperty.call(nodeOf(engine, id), TEXT_FIELD);
+  const card = (host: HTMLElement, id: string) => host.querySelector<HTMLElement>(`.canvas-node[data-node="${id}"]`)!;
+  function select(host: HTMLElement, id: string): void {
+    card(host, id).dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, button: 0, pointerId: 3, clientX: 0, clientY: 0 }));
+    host.querySelector(".canvas-viewport")!.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, pointerId: 3, clientX: 0, clientY: 0 }));
+  }
+
+  it("la scheda si mostra col suo campo; senza campo, o di serie, non si segna", () => {
+    const { engine, host } = mounted(SOURCE);
+    expect(card(host, "a").dataset.textSize).toBeUndefined();
+    expect(card(host, "a").dataset.textAlign).toBeUndefined();
+    expect(card(host, "b").dataset.textAlign).toBe("center");
+    expect(card(host, "b").dataset.textSize).toBeUndefined();
+    expect(card(host, "f").dataset.textAlign).toBeUndefined();
+    engine.destroy();
+  });
+
+  it("su più schede scelte: un commit e un annulla; ognuna tiene l'altro valore suo, il testo e le altre schede non cambiano", () => {
+    const { engine, host, changes } = mounted(SOURCE);
+    const before = engine.getDoc();
+    command(engine, "canvas.select_all").run();
+    expect(command(engine, "canvas.text_size.l").disabled()).toBeNull();
+    command(engine, "canvas.text_size.l").run();
+    expect(changes).toHaveLength(1);
+    expect(field(engine, "a")).toEqual({ v: 1, size: "l" });
+    expect(field(engine, "b")).toEqual({ v: 1, size: "l", align: "center" });
+    expect(has(engine, "f")).toBe(false);
+    expect(has(engine, "g")).toBe(false);
+    expect(readCanvas(engine.getDoc()).nodes.map((node) => node.text)).toEqual(["uno", "due", undefined, undefined]);
+    expect(card(host, "a").dataset.textSize).toBe("l");
+    expect(card(host, "b").dataset.textSize).toBe("l");
+    command(engine, "canvas.text_align.end").run();
+    expect(changes).toHaveLength(2);
+    expect(field(engine, "a")).toEqual({ v: 1, size: "l", align: "end" });
+    expect(field(engine, "b")).toEqual({ v: 1, size: "l", align: "end" });
+    // Un annulla per cambio, su tutte le schede insieme.
+    expect(engine.undo()).toBe(true);
+    expect(field(engine, "a")).toEqual({ v: 1, size: "l" });
+    expect(field(engine, "b")).toEqual({ v: 1, size: "l", align: "center" });
+    expect(engine.undo()).toBe(true);
+    expect(engine.getDoc()).toBe(before);
+    expect(card(host, "a").dataset.textSize).toBeUndefined();
+    engine.destroy();
+  });
+
+  it("tornati ai valori di serie il campo sparisce dal file; lo stesso valore non scrive niente", () => {
+    const { engine, host, changes } = mounted(SOURCE);
+    select(host, "b");
+    command(engine, "canvas.text_align.center").run();
+    expect(changes).toHaveLength(0);
+    command(engine, "canvas.text_align.start").run();
+    expect(changes).toHaveLength(1);
+    expect(has(engine, "b")).toBe(false);
+    expect(engine.getDoc()).not.toContain(TEXT_FIELD);
+    expect(card(host, "b").dataset.textAlign).toBeUndefined();
+    engine.destroy();
+  });
+
+  it("un campo di una versione futura si mostra di serie e resta finché non si cambia; allora si riscrive alla versione 1", () => {
+    const future = JSON.stringify({
+      nodes: [{ id: "a", type: "text", x: 0, y: 0, width: 200, height: 100, text: "uno", "fub:text": { v: 2, size: "huge", ink: true } }],
+      edges: [],
+    });
+    const { engine, host, changes } = mounted(future);
+    expect(card(host, "a").dataset.textSize).toBeUndefined();
+    select(host, "a");
+    command(engine, "canvas.text_size.m").run();
+    command(engine, "canvas.text_align.start").run();
+    expect(changes).toHaveLength(0);
+    expect(engine.getDoc()).toBe(future);
+    command(engine, "canvas.text_size.s").run();
+    expect(field(engine, "a")).toEqual({ v: 1, size: "s" });
+    engine.destroy();
+  });
+
+  it("una scheda di file o un gruppo: i controlli sono spenti col perché; e in sola lettura", () => {
+    const { engine, host } = mounted(SOURCE);
+    for (const id of ["f", "g"]) {
+      select(host, id);
+      expect(command(engine, "canvas.text_size.l").disabled(), id).toBe(t("canvas.commands.why.no_text_card"));
+      expect(command(engine, "canvas.text_align.center").disabled(), id).toBe(t("canvas.commands.why.no_text_card"));
+    }
+    select(host, "a");
+    engine.setReadOnly(true);
+    expect(command(engine, "canvas.text_size.l").disabled()).toBe(t("canvas.commands.why.read_only"));
+    const before = engine.getDoc();
+    command(engine, "canvas.text_size.l").run();
+    expect(engine.getDoc()).toBe(before);
+    engine.destroy();
+  });
+
+  it("lo strumento Testo: la misura e l'allineamento scelti vanno sulle schede che nascono", () => {
+    const { engine, host, changes } = mounted(SOURCE);
+    command(engine, "canvas.tool.text").run();
+    expect(command(engine, "canvas.text_size.xl").disabled()).toBeNull();
+    command(engine, "canvas.text_size.xl").run();
+    command(engine, "canvas.text_align.center").run();
+    // Senza schede scelte la scelta non scrive niente.
+    expect(changes).toHaveLength(0);
+    const viewport = host.querySelector<HTMLElement>(".canvas-viewport")!;
+    viewport.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, cancelable: true, button: 0, pointerId: 4, clientX: 900, clientY: 600 }));
+    expect(changes).toHaveLength(1);
+    const born = readCanvas(engine.getDoc()).nodes.find((node) => !["a", "b", "f", "g"].includes(node.id))!;
+    expect(born.type).toBe("text");
+    expect(born[TEXT_FIELD]).toEqual({ v: 1, size: "xl", align: "center" });
+    engine.destroy();
   });
 });

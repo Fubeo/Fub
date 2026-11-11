@@ -19,6 +19,7 @@
 import type { Key } from "../../../i18n/strings";
 import { keyName, keyboardPlatform, modifierName, parseChords, type KeyboardPlatform } from "../../../ui/commands";
 import { CANVAS_COLOR_CHOICES, colorCommandLabel, type CanvasColorChoice } from "../colors";
+import { TEXT_ALIGNS, TEXT_SIZES } from "../text-style";
 
 /// Quando un comando vale: sempre, con uno strumento, con una selezione.
 export type CanvasCommandContext = "always" | "tool" | "selection";
@@ -53,7 +54,7 @@ export interface CanvasCommand {
 }
 
 /// Il gruppo di un comando, come nella tabella «Tasti».
-type Group = "tools" | "create" | "selection" | "color" | "arrange" | "view" | "find" | "always";
+type Group = "tools" | "create" | "selection" | "color" | "text" | "arrange" | "view" | "find" | "always";
 
 /// I dati di un comando: tutto tranne lo stato.
 export interface CanvasCommandSpec {
@@ -72,6 +73,7 @@ export const CANVAS_COMMAND_GROUPS: Readonly<Record<Group, Key>> = {
   create: "canvas.commands.group.create",
   selection: "canvas.commands.group.selection",
   color: "canvas_menu.color",
+  text: "canvas.commands.group.text",
   arrange: "canvas.commands.group.arrange",
   view: "canvas.commands.group.view",
   find: "canvas.commands.group.find",
@@ -226,6 +228,14 @@ export const CANVAS_COMMANDS: readonly CanvasCommandSpec[] = [
   { id: "canvas.align_menu", label: "canvas.options.align_menu", group: "arrange", keys: [], context: "selection" },
   ...CANVAS_TIPS.map((tip): CanvasCommandSpec => ({
     id: `canvas.tips.${tip}`, label: `canvas.options.tips.${tip}`, group: "tools", keys: [], context: "tool",
+  })),
+  // La misura e l'allineamento del testo (T92, `fub:text`): sulle schede di
+  // testo scelte e sulle prossime dello strumento Testo.
+  ...TEXT_SIZES.map((size): CanvasCommandSpec => ({
+    id: `canvas.text_size.${size}`, label: `canvas.options.text_size.${size}`, group: "text", keys: [], context: "selection",
+  })),
+  ...TEXT_ALIGNS.map((align): CanvasCommandSpec => ({
+    id: `canvas.text_align.${align}`, label: `canvas.options.text_align.${align}`, group: "text", keys: [], context: "selection",
   })),
 ];
 

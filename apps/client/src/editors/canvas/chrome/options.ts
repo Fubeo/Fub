@@ -7,9 +7,11 @@
 //   Penna, Evidenziatore e Gomma il menu delle penne di N4 (`pen-menu.ts`,
 //   montato qui com'è); con la Selezione e delle schede scelte il colore e
 //   Disponi (davanti, dietro, «Allinea e distribuisci»), e così col Lazo
-//   (T86); con la Selezione o il Lazo senza schede, Collega e Testo una riga
-//   che spiega il gesto, e per
-//   Collega le punte del filo che tira. La Vista (riduci, ingrandisci,
+//   (T86), più la misura e l'allineamento del testo (T92), spenti col perché
+//   se fra le schede scelte non ce n'è una di testo; con la Selezione o il
+//   Lazo senza schede e con Collega una riga che spiega il gesto, e per
+//   Collega le punte del filo che tira; col Testo la misura e l'allineamento
+//   (delle schede di testo scelte e delle prossime). La Vista (riduci, ingrandisci,
 //   mostra tutto) chiude ogni riga ed è la prima ad andare in «…» quando non
 //   c'è posto.
 // - **Mentre si scrive in una scheda** la riga mostra la barra che chi scrive
@@ -58,6 +60,7 @@ import {
   type CanvasToolId,
 } from "./commands";
 import { ensureCanvasIcons } from "./icons";
+import { TEXT_ALIGNS, TEXT_SIZES, type TextAlign, type TextSize } from "../text-style";
 
 /// Che cosa mostra la riga.
 export type CanvasOptionsMode = "ink" | "select" | "lasso" | "cards" | "hand" | "text" | "connect" | "writing";
@@ -83,6 +86,13 @@ export function canvasOptionsMode(tool: CanvasToolId, chosen: number, writing: b
 /// diversi.
 export type CanvasChosenColor = string | null | undefined;
 
+/// La misura e l'allineamento che la riga segna (T92); `null`: le schede
+/// scelte ne hanno di diversi, e nessuno è segnato.
+export interface CanvasChosenText {
+  readonly size: TextSize | null;
+  readonly align: TextAlign | null;
+}
+
 export interface CanvasOptionsContext {
   readonly lifetime: Lifetime;
   /// Lo strumento della colonna.
@@ -93,6 +103,8 @@ export interface CanvasOptionsContext {
   readonly color: () => CanvasChosenColor;
   /// Le punte dei fili che Collega tira.
   readonly tips: () => CanvasTip;
+  /// La misura e l'allineamento del testo da segnare (T92). Senza, nessuno.
+  readonly text?: () => CanvasChosenText;
   /// I comandi della lavagna adesso (il catalogo con ciò che fanno).
   readonly commands: () => readonly CanvasCommand[];
   /// Esegue il comando `id`, se si può.
@@ -198,14 +210,14 @@ export function createCanvasOptions(ctx: CanvasOptionsContext): CanvasOptions {
 
   /// Un pulsante col suo comando; `action` resta il nome che la barra di N4
   /// gli dava (`data-canvas-action`).
-  const button = (command: string, icon: string, action: string, extra: { checked?: () => boolean; run?: () => void } = {}): HTMLButtonElement => {
+  const button = (command: string, icon: string | null, action: string, extra: { checked?: () => boolean; run?: () => void } = {}): HTMLButtonElement => {
     const control = document.createElement("button");
     control.type = "button";
     control.className = "canvas-button";
     control.tabIndex = -1;
     control.dataset.canvasAction = action;
     control.dataset.command = command;
-    const svg = SVG_ICON(icon);
+    const svg = icon === null ? null : SVG_ICON(icon);
     if (svg) control.append(svg);
     if (extra.checked) control.setAttribute("role", "radio");
     lifetime.listen(control, "click", (event) => {
@@ -275,6 +287,27 @@ export function createCanvasOptions(ctx: CanvasOptionsContext): CanvasOptions {
     ...CANVAS_TIPS.map((tip) => button(`canvas.tips.${tip}`, TIP_ICON[tip], `tips-${tip}`, { checked: () => ctx.tips() === tip })),
   ));
 
+  // La misura e l'allineamento del testo (T92), come nel prototipo T26: una
+  // «A» grande come la misura, e le righe allineate. Vanno in «…» dopo la
+  // Vista e «Apri a lato», prima di Disponi.
+  const chosenText = (): CanvasChosenText => ctx.text?.() ?? { size: null, align: null };
+  const sizeItem = item("text-size", 0.8, group("radiogroup", "canvas.options.text_size",
+    ...TEXT_SIZES.map((size) => {
+      const control = button(`canvas.text_size.${size}`, null, `text-size-${size}`, { checked: () => chosenText().size === size });
+      control.classList.add("canvas-text-size");
+      control.dataset.size = size;
+      const letter = document.createElement("span");
+      letter.setAttribute("aria-hidden", "true");
+      letter.textContent = "A";
+      control.append(letter);
+      return control;
+    }),
+  ));
+  const ALIGN_ICON: Readonly<Record<TextAlign, string>> = { start: "draw-anchor-start", center: "draw-anchor-middle", end: "draw-anchor-end" };
+  const alignItem = item("text-align", 0.8, group("radiogroup", "canvas.options.text_align",
+    ...TEXT_ALIGNS.map((align) => button(`canvas.text_align.${align}`, ALIGN_ICON[align], `text-align-${align}`, { checked: () => chosenText().align === align })),
+  ));
+
   // «Apri a lato per questo» (T45, come nel prototipo T27): un pulsante col
   // nome scritto, che dice il punto («Apri a lato su B3»), dopo la barra di
   // chi scrive e prima della Vista.
@@ -292,7 +325,6 @@ export function createCanvasOptions(ctx: CanvasOptionsContext): CanvasOptions {
   const HINT: Partial<Record<CanvasOptionsMode, Key>> = {
     select: "canvas.options.select_hint",
     lasso: "canvas.options.lasso_hint",
-    text: "canvas.options.text_hint",
     connect: "canvas.options.connect_hint",
   };
 
@@ -310,11 +342,12 @@ export function createCanvasOptions(ctx: CanvasOptionsContext): CanvasOptions {
       case "ink":
         return shownSimple ? [penItem] : [penItem, view];
       case "cards":
-        return [colorItem, arrangeItem, view];
+        return [colorItem, sizeItem, alignItem, arrangeItem, view];
       case "select":
       case "lasso":
-      case "text":
         return [hintItem, view];
+      case "text":
+        return [sizeItem, alignItem, view];
       case "connect":
         return [hintItem, tipsItem, view];
       case "hand":
