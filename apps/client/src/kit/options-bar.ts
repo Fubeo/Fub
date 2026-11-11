@@ -179,15 +179,20 @@ export function createOptionsBar(options: OptionsBarOptions): OptionsBar {
   // un involucro nascosto: ciò che cambia in un controllo visibile lo vede già
   // il `ResizeObserver`, `hidden` sugli involucri lo scrive la barra stessa, e
   // il testo che cambia a ogni passo (la percentuale dello zoom) non deve
-  // costare un conto e un layout per fotogramma.
+  // costare un conto e un layout per fotogramma. Conta solo `hidden` che
+  // cambia davvero: chi lo riscrive uguale a ogni movimento della vista (il
+  // pulsante della rotazione nel disegno) lascia comunque una mutazione, e
+  // ogni conto forza un layout di tutta la pagina.
   const insideHidden = (node: Node): boolean =>
     items.some((item, index) => hidden.has(index) && item.element !== node && item.element.contains(node));
+  const changed = (record: MutationRecord): boolean =>
+    record.target instanceof Element && record.oldValue !== record.target.getAttribute("hidden");
   let mutations: MutationObserver | null = null;
   if (typeof MutationObserver !== "undefined") {
     mutations = new MutationObserver((records) => {
-      if (hidden.size > 0 && records.some((record) => insideHidden(record.target))) schedule();
+      if (hidden.size > 0 && records.some((record) => changed(record) && insideHidden(record.target))) schedule();
     });
-    mutations.observe(row, { subtree: true, attributes: true, attributeFilter: ["hidden"] });
+    mutations.observe(row, { subtree: true, attributes: true, attributeOldValue: true, attributeFilter: ["hidden"] });
   }
   lifetime.add(() => mutations?.disconnect());
 
