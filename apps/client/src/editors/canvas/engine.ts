@@ -9413,7 +9413,10 @@ export class CanvasEngine {
     el.className = `canvas-node canvas-node-${node.type}`;
     el.dataset.node = id;
     el.tabIndex = 0;
-    el.setAttribute("role", "group");
+    // Il ruolo è quello di `article`, che accetta un nome, scritto per chi
+    // legge solo l'attributo: `role="group"` su un `article` non è ammesso
+    // (axe, `aria-allowed-role`).
+    el.setAttribute("role", "article");
     // Una scheda nuova non ha ancora il suo nome (T61).
     this.#labelled.stale = true;
     const header = document.createElement("div");
