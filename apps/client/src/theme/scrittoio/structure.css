@@ -730,7 +730,7 @@ body {
 /* La carta comincia `--tab-lap` sopra il fondo della striscia: lì la linguetta
    attiva la copre, e il giunto resta chiuso anche a uno zoom frazionario.
 
-   La carta ha uno strato suo (`translateZ(0)`): la sua ombra, sfumata e a più
+   La carta ha uno strato suo (`translateZ(0)`): la sua ombra, una pila di
    strati, si dipinge una volta e non a ogni battuta. Nello stesso strato del
    testo ogni carattere scritto ridipingeva anche l'ombra, e dove la WebView
    dipinge senza GPU (WebKitGTK sotto Xvfb, una macchina senza accelerazione)
