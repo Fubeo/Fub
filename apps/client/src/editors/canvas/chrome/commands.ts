@@ -193,6 +193,9 @@ export const CANVAS_COMMANDS: readonly CanvasCommandSpec[] = [
   // Il navigatore (T55): la tela dà solo la voce che serve adesso.
   { id: "canvas.navigator.hide", label: "canvas.navigator.hide", group: "view", keys: [], context: "always" },
   { id: "canvas.navigator.show", label: "canvas.navigator.show", group: "view", keys: [], context: "always" },
+  // Il menu radiale (T63): dal menu del tasto destro (Maiusc+F10) e dalla
+  // ricerca; il tasto laterale della penna e il tocco lungo lo aprono dove sono.
+  { id: "canvas.radial", label: "canvas.radial", group: "tools", keys: [], context: "always" },
   // La riga delle opzioni (T50): i menu che apre e le punte di Collega.
   { id: "canvas.pen_menu", label: "canvas.options.pen_menu", group: "tools", keys: [], context: "always" },
   { id: "canvas.color_menu", label: "canvas.options.color_menu", group: "color", keys: [], context: "selection" },

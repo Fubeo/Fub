@@ -74,6 +74,8 @@ import {
   type CanvasToolId,
 } from "./chrome/commands";
 import { CANVAS_INK_TOOLS, CANVAS_WRITING_TOOLS, createCanvasRail, type CanvasRail } from "./chrome/rail";
+import { openCanvasRadial, rememberRecent } from "./chrome/radial";
+import type { Radial, RadialPointer } from "../spatial/tools/radial";
 import { createCanvasEmpty, isEmptyBoard, transferOf, type CanvasEmpty } from "./chrome/empty";
 import { createCanvasNavigator, type CanvasNavigator } from "./chrome/navigator";
 import { CanvasJumps } from "./jumps";
@@ -130,14 +132,15 @@ import { createColorPicker, openDialog, openPopover, textField, type PopoverHand
 import { PARTS_KEY, nodeParts, partsFit, writeParts, type CanvasParts, type PartsExtra } from "./parts";
 import { PARTS_PICKER_MIN_SECTIONS, openPartsPicker, partsSections, type PartsHeading, type PartsPickerHandle, type PartsPickerPlace, type PartsPickerPort } from "./parts-picker";
 import { noteHeadingOf } from "./cards/note";
-import { DEFAULT_PREFERENCES, currentPreferences, readInkMouse, readPen, saveInkMouse, savePen, watchPreferences, type WheelAction } from "./preferences";
-import { isTap, pinchCamera, type TouchCamera, type TouchPoint, type ZoomLimits } from "./touch";
+import { DEFAULT_PREFERENCES, currentPreferences, readInkMouse, readPen, saveInkMouse, savePen, watchPreferences, type PenButtonAction, type WheelAction } from "./preferences";
+import { TAP_MAX_MS, TAP_SLOP_PX, isTap, pinchCamera, type TouchCamera, type TouchPoint, type ZoomLimits } from "./touch";
 import { fit, stepCamera, zoomAtPoint, type Camera, type MotionState, type ScaleLimits } from "../../spatial/camera";
 import { onReducedMotionChange, reducedMotion } from "../../theme/reduced-motion";
 import {
   DEFAULT_INK_CHOICE,
   dryStroke,
   inkLook,
+  inkStrokeTool,
   type InkPenChoice,
   foreignInkLayer,
   inkLayerStates,
@@ -826,6 +829,23 @@ interface ConnectGesture {
 
 const FINGER_HANDLES = ".canvas-node-handle, [data-resize], [data-resize-frame], [data-reconnect], [data-connect], .canvas-port";
 
+/**
+ * I gesti del dito (T63). Il tocco lungo apre il menu radiale (o, sopra una
+ * scheda, il suo menu) dopo tanti ms con il dito fermo entro `TAP_SLOP_PX`.
+ */
+export const LONG_PRESS_MS = 500;
+/** Due dita che toccano e si alzano entro tanti ms dal primo appoggio annullano, tre ripetono. */
+export const FINGERS_TAP_MS = 250;
+/** Il secondo tocco di un doppio tocco: entro tanti ms dal primo rilascio, e tanti px dal primo. */
+export const DOUBLE_TAP_MS = 300;
+export const DOUBLE_TAP_PX = 24;
+/**
+ * Il menu contestuale che il sistema manda dietro al tasto laterale della
+ * penna o al tocco lungo non apre il menu della lavagna: per tanti ms dopo il
+ * rilascio si ferma (come `ECHO_MS` del menu radiale).
+ */
+const MENU_ECHO_MS = 500;
+
 /** I limiti dello zoom, dal 5% al 400% (T53): la rotella, i tasti, i pulsanti e il pizzico. */
 const ZOOM_LIMITS: ZoomLimits = { min: 0.05, max: 4 };
 
@@ -1451,6 +1471,38 @@ export class CanvasEngine {
   #pinch: { a: number; b: number; a0: TouchPoint; b0: TouchPoint; start: TouchCamera } | null = null;
   /** «Il dito sposta le schede» dalle Impostazioni, quando non lo passano le opzioni. */
   #fingerMovesCardSetting = false;
+  // --- il menu radiale e i gesti (T63) ---
+  /** «Il tasto della penna» dalle Impostazioni (`canvas.pen_button`): vale dall'appoggio dopo. */
+  #penButtonSetting: PenButtonAction = DEFAULT_PREFERENCES.penButton;
+  /** Il menu radiale aperto da questa lavagna, se c'è. */
+  #radial: Radial | null = null;
+  /** Gli strumenti e i colori della penna usati in questa seduta, il più recente in testa. */
+  #recentTools: CanvasToolId[] = [];
+  #recentColors: string[] = [];
+  /** Il dito che può diventare un tocco lungo: dove si è posato, su che cosa, e il suo timer. */
+  #longPress: { readonly pointerId: number; readonly x: number; readonly y: number; readonly target: Element | null; readonly timer: ReturnType<typeof setTimeout> } | null = null;
+  /**
+   * Le dita di un tocco (T63): dove si è posata ciascuna, quante al massimo,
+   * da quando, su che cosa si è posata la prima, e se è ancora un tocco. Un
+   * dito che scorre, il tocco lungo, la penna o il palmo non lo sono più.
+   */
+  #fingerTap: { readonly down: Map<number, TouchPoint>; readonly first: TouchPoint; most: number; readonly start: number; spoiled: boolean; readonly target: Element | null } | null = null;
+  /** L'ultimo tocco breve di un dito nel vuoto: dove e quando si è alzato, per il doppio tocco. */
+  #lastTap: { readonly x: number; readonly y: number; readonly at: number } | null = null;
+  /** L'ultimo appoggio sulla vista era di un dito: il `dblclick` che ne nasce non è del mouse. */
+  #downByTouch = false;
+  /**
+   * Il puntatore che ha preso un gesto della lavagna, finché è giù: la penna
+   * col tasto laterale che non cancella, il dito del tocco lungo.
+   */
+  #menuHeld: number | null = null;
+  /** Fino a quando (`performance.now()`) il menu del sistema dietro a un gesto si ferma. */
+  #menuEchoUntil = -Infinity;
+  /** Il `contextmenu` che la lavagna manda da sé per il tocco lungo su una scheda. */
+  #ownMenu: Event | null = null;
+  /** La regione viva dei gesti, e il suo spazio alterno per ridire la stessa frase. */
+  #gestureSaid: HTMLElement | null = null;
+  #gestureEcho = false;
   /** «La rotella del mouse» dalle Impostazioni: `pan` di serie, come prima di T35. */
   #wheelSetting: WheelAction = DEFAULT_PREFERENCES.wheel;
   // --- il selettore delle sezioni (T74) ---
@@ -1633,6 +1685,7 @@ export class CanvasEngine {
     // (`canvas.toolbar`), dal vivo; la lettura arriva dopo il costruttore.
     this.#life.add(watchPreferences((preferences) => {
       this.#wheelSetting = preferences.wheel;
+      this.#penButtonSetting = preferences.penButton;
       this.#partsPickerSetting = preferences.partsPicker;
       this.#gridSetting = preferences.grid;
       this.#snapSetting = preferences.snap;
@@ -1825,13 +1878,22 @@ export class CanvasEngine {
     // Un gesto che comincia toglie la barra della selezione: torna a fine gesto.
     this.#viewport.addEventListener("pointerdown", (event) => {
       this.#selectionBar.hide();
+      this.#downByTouch = event.pointerType === "touch";
       this.#pointerDown(event);
+      // I gesti del dito (T63) guardano ciò che il dito ha appena cominciato.
+      if (event.pointerType === "touch") this.#gestureDown(event);
     }, { signal });
-    this.#viewport.addEventListener("pointermove", (event) => this.#pointerMove(event), { signal });
+    this.#viewport.addEventListener("pointermove", (event) => {
+      if (event.pointerType === "touch") this.#gestureMove(event);
+      this.#pointerMove(event);
+    }, { signal });
     // A fine gesto (e dopo ogni tasto) la banda di stato si rilegge: dentro un
     // gesto `#statusSettle` non dice niente.
     this.#viewport.addEventListener("pointerup", (event) => {
       this.#pointerUp(event);
+      // Dopo il tocco breve della lavagna: il doppio tocco mette la scheda
+      // dopo che il primo ha tolto la scelta (T63).
+      if (event.pointerType === "touch") this.#gestureUp(event, false);
       this.#statusSettle();
     }, { signal });
     // La vista che cambia misura, o che torna in vista da un'altra linguetta
@@ -1851,7 +1913,25 @@ export class CanvasEngine {
     this.#viewport.addEventListener("pointercancel", (event) => {
       if (event.pointerType === "touch") this.#fingers.delete(event.pointerId);
       this.#cancelGestures();
+      if (event.pointerType === "touch") this.#gestureUp(event, true);
     }, { signal });
+    // Il tasto laterale lasciato, o un dito alzato fuori dalla vista (T63):
+    // sul documento, perché il rilascio può cadere sul menu radiale.
+    this.#life.listen(document, "pointerup", (event) => this.#pointerEnded(event), { capture: true });
+    this.#life.listen(document, "pointercancel", (event) => this.#pointerEnded(event), { capture: true });
+    // Il menu del sistema dietro al tasto laterale o al tocco lungo non apre
+    // quello della lavagna (T63); quello che la lavagna manda da sé sì.
+    this.#viewport.addEventListener("contextmenu", (event) => {
+      if (event === this.#ownMenu) return;
+      if (this.#longPress !== null || this.#menuHeld !== null || this.#radial !== null || performance.now() < this.#menuEchoUntil) {
+        event.preventDefault();
+        event.stopPropagation();
+      }
+    }, { signal, capture: true });
+    this.#life.add(() => {
+      this.#cancelLongPress();
+      this.#radial?.close();
+    });
     this.#viewport.addEventListener("wheel", (event) => this.#wheel(event), { signal, passive: false });
     // La vista si muove solo con la camera: uno scorrimento del browser (un
     // editor in una scheda che porta il cursore in vista, T43) si annulla.
@@ -1973,6 +2053,9 @@ export class CanvasEngine {
     }
     this.#epoch++;
     this.#cancelGestures();
+    // Un documento nuovo: il menu radiale era dell'altro (T63).
+    this.#radial?.close();
+    this.#lastTap = null;
     // Un documento nuovo: il tratto in corso era dell'altro.
     this.#inkLayer?.cancel();
     this.#inkChain = null;
@@ -2750,6 +2833,9 @@ export class CanvasEngine {
       onEraseStart: (id, pointerType) => this.#eraseStart(id, pointerType),
       onErase: (id, points) => this.#eraseAlong(id, points),
       onEraseEnd: (id) => this.#eraseEnd(id),
+      // Il tasto laterale (T63): la gomma, o ciò che dicono le Impostazioni.
+      barrelErases: () => this.#penButtonSetting === "eraser",
+      onBarrel: (event) => this.#barrelDown(event),
     }, life);
     this.#inkLayer.setCamera(this.#camera.x, this.#camera.y, this.#camera.zoom);
     this.#applyInkMouse();
@@ -2828,6 +2914,8 @@ export class CanvasEngine {
       this.#paintLasso();
       this.#syncSelectionBar();
     }
+    // Lo strumento di prima va fra i recenti del menu radiale (T63).
+    if (tool !== this.#tool) this.#recentTools = rememberRecent(this.#recentTools, tool, this.#tool);
     this.#tool = tool;
     this.#inkMouseButton.setAttribute("aria-pressed", String(this.#inkMouse));
     this.#viewport.dataset.tool = tool;
@@ -2888,6 +2976,10 @@ export class CanvasEngine {
   #choosePen(next: InkPenChoice, settled: boolean): void {
     if (this.#destroyed) return;
     this.#penTurns += 1;
+    // Un colore nuovo va fra i recenti del menu radiale (T63), col colore di prima.
+    const before = this.#penColor;
+    const after = next.color[inkStrokeTool(next)];
+    if (after !== before) this.#recentColors = rememberRecent(this.#recentColors, after, before);
     this.#penChoice = next;
     this.#followPen();
     this.#penMenu.sync();
@@ -6054,6 +6146,9 @@ export class CanvasEngine {
         };
       case "canvas.zoom_reset":
         return { disabled: () => null, run: () => this.#zoomToActual() };
+      // Il menu radiale (T63): dove si è cliccato, o al centro della vista.
+      case "canvas.radial":
+        return { disabled: () => null, run: (args) => this.#openRadialFromMenu(args?.at ?? null) };
       // La griglia di questa lavagna (T71): la vista, anche in sola lettura.
       case "canvas.grid_toggle":
         return { disabled: () => null, run: () => this.#toggleGrid() };
@@ -6667,6 +6762,9 @@ export class CanvasEngine {
         ...(at ? [entry("canvas.zoom_in", here, false), entry("canvas.zoom_out", here, false)] : []),
         // Nascondi o Mostra il navigatore (T55), quella che c'è.
         ...["canvas.navigator.hide", "canvas.navigator.show"].filter((id) => catalog.has(id)).map((id) => entry(id, undefined, false)),
+        // Il menu radiale (T63), anche dalla tastiera (Maiusc+F10): il fuoco
+        // va al menu, non torna sulla lavagna.
+        entry("canvas.radial", here, false),
       ],
     };
   }
@@ -6770,6 +6868,13 @@ export class CanvasEngine {
   }
 
   #pointerDown(event: PointerEvent): void {
+    // Il tasto laterale della penna senza lo strato della penna (la sola
+    // lettura), che altrimenti lo prende prima (T63).
+    if (event.pointerType === "pen" && event.button === 2 && this.#inkLayer === null && this.#penButtonSetting !== "eraser") {
+      event.preventDefault();
+      this.#barrelDown(event);
+      return;
+    }
     // Un clic fuori dalle maniglie chiude il doppio clic che le adatta (T66).
     if (!(event.target instanceof Element && event.target.closest("[data-resize], [data-resize-frame]"))) this.#handleTap = null;
     // Prima di ogni gesto, il testo in sospeso (non i clic dentro il campo).
@@ -6901,15 +7006,17 @@ export class CanvasEngine {
    * La scheda di testo dello strumento Testo, nel punto `clientX`, `clientY` della
    * finestra; senza punto, al centro della vista («Scrivi una scheda», T62). Si
    * apre in scrittura. Con `link` (un filo lasciato nel vuoto, T67) nasce
-   * collegata alla scheda `link.from`, nello stesso commit.
+   * collegata alla scheda `link.from`, nello stesso commit. La colonna torna
+   * alla Selezione, salvo con `keepTool` (il doppio tocco, T63).
    */
-  #placeText(clientX?: number, clientY?: number, link?: CardLink): void {
+  #placeText(clientX?: number, clientY?: number, link?: CardLink, keepTool = false): void {
     const at = clientX === undefined || clientY === undefined ? undefined : this.#screenToWorld(clientX, clientY);
     const placed = this.#addNode("text", undefined, at, link);
     if (!placed) return;
     // Il passo che l'ha messa: lasciata vuota, se ne va con lui (T44).
     const born = this.#undo[this.#undo.length - 1] ?? null;
-    this.#pickTool("select");
+    // Il doppio tocco (T63) lascia lo strumento com'è.
+    if (!keepTool) this.#pickTool("select");
     this.#render();
     this.#beginCardEdit(placed, born);
   }
@@ -7120,6 +7227,262 @@ export class CanvasEngine {
     const edgeId = this.#edgeAt(target);
     if (edgeId) this.#selectEdge(edgeId);
     else if (!additive) this.#clearSelection();
+  }
+
+  // --- il menu radiale e i gesti (T63) ------------------------------------------
+
+  /** Il colore della penna di adesso: quello dell'evidenziatore con l'evidenziatore. */
+  get #penColor(): string {
+    return this.#penChoice.color[inkStrokeTool(this.#penChoice)];
+  }
+
+  /**
+   * Apre il menu radiale in `x`, `y` della finestra (`openRadial`, che a un
+   * bordo lo sposta dove si vede intero): Annulla e Ripeti, gli ultimi tre
+   * strumenti e gli ultimi tre colori della penna. `held` è il puntatore
+   * ancora giù che l'ha aperto, che il menu segue; `keyboard` lo apre dalla
+   * tastiera, col fuoco sulla prima voce.
+   */
+  #openRadial(x: number, y: number, held: RadialPointer | null, keyboard = false): void {
+    if (this.#destroyed || !this.#doc) return;
+    // Le voci sono comandi del catalogo, letti adesso: dopo una voce la banda
+    // di stato si rilegge, come dopo una voce del menu.
+    const catalog = new Map(this.commands().map((command) => [command.id, command]));
+    let radial: Radial | null = null;
+    radial = openCanvasRadial(x, y, {
+      command: (id) => {
+        const command = catalog.get(id);
+        return command === undefined ? null : {
+          ...command,
+          run: (args) => {
+            command.run(args);
+            this.#statusSettle();
+          },
+        };
+      },
+      tool: this.#tool,
+      recentTools: this.#recentTools,
+      color: this.#penColor,
+      recentColors: this.#recentColors,
+      readOnly: this.#readOnly || this.#isSceneOversized(),
+      pickTool: (tool) => {
+        this.#recordPending();
+        this.#pickTool(tool);
+      },
+      pickColor: (color) => {
+        const tool = inkStrokeTool(this.#penChoice);
+        this.#choosePen({ ...this.#penChoice, color: { ...this.#penChoice.color, [tool]: color } }, true);
+      },
+    }, {
+      held,
+      keyboard,
+      onClose: () => {
+        if (this.#radial === radial) this.#radial = null;
+      },
+    });
+    this.#radial = radial;
+  }
+
+  /** «Menu radiale» del menu del tasto destro: dove si è cliccato, o al centro della vista dalla tastiera. */
+  #openRadialFromMenu(at: { x: number; y: number } | null): void {
+    if (at) {
+      this.#openRadial(at.x, at.y, null);
+      return;
+    }
+    const rect = this.#viewport.getBoundingClientRect();
+    this.#openRadial(rect.left + rect.width / 2, rect.top + rect.height / 2, null, true);
+  }
+
+  /**
+   * La penna si appoggia col tasto laterale (`canvas.pen_button`): apre il
+   * menu radiale, che la segue finché il tasto è giù; o sposta la lavagna; o
+   * fa un giro di Lazo che sceglie come lo strumento Lazo, e lo strumento di
+   * prima resta. Con `eraser` cancella lo strato della penna, e qui non
+   * arriva. I movimenti e il rilascio sono quelli di ogni puntatore.
+   */
+  #barrelDown(event: PointerEvent): void {
+    const action = this.#penButtonSetting;
+    if (this.#destroyed || !this.#doc || action === "eraser") return;
+    this.#menuHeld = event.pointerId;
+    this.#recordPending();
+    if (action === "radial") {
+      this.#openRadial(event.clientX, event.clientY, { pointerType: "pen", pointerId: event.pointerId });
+    } else if (action === "pan") {
+      this.#beginPan(event.pointerId, event.clientX, event.clientY);
+    } else if (!this.#isSceneOversized()) {
+      this.#selectionBar.hide();
+      this.#beginLasso(event);
+    }
+  }
+
+  /**
+   * Un puntatore si alza o si perde, ovunque. Quello che aveva preso un gesto
+   * della lavagna (il tasto laterale, il tocco lungo) lascia dietro di sé, per
+   * poco, il silenzio del menu del sistema. Un dito alzato fuori dalla vista
+   * chiude il suo tocco, che non è più un tocco.
+   */
+  #pointerEnded(event: PointerEvent): void {
+    if (event.pointerId === this.#menuHeld) {
+      this.#menuHeld = null;
+      this.#menuEchoUntil = performance.now() + MENU_ECHO_MS;
+    }
+    if (event.pointerType === "touch" && !(event.target instanceof Node && this.#viewport.contains(event.target))) {
+      this.#gestureUp(event, true);
+    }
+  }
+
+  /**
+   * Un dito si posa, dopo ciò che il dito fa di suo (`#touchDown`): comincia
+   * o cresce un tocco di più dita e, se è il primo e si ferma lì, il tocco
+   * lungo. Con la penna giù o col palmo non è un tocco.
+   */
+  #gestureDown(event: PointerEvent): void {
+    const point = { x: event.clientX, y: event.clientY };
+    const target = event.target instanceof Element ? event.target : null;
+    const taps = this.#fingerTap ??= { down: new Map(), first: point, most: 0, start: event.timeStamp, spoiled: false, target };
+    taps.down.set(event.pointerId, point);
+    taps.most = Math.max(taps.most, taps.down.size);
+    if (this.#penDown || this.#palm(event.pointerId)) taps.spoiled = true;
+    // Il secondo dito: è un pizzico o un tocco di più dita, non un tocco lungo.
+    this.#cancelLongPress();
+    if (taps.down.size === 1 && !taps.spoiled && this.#fingers.has(event.pointerId) && this.#longPressHere(target)) {
+      const timer = setTimeout(() => this.#longPressFire(), LONG_PRESS_MS);
+      this.#longPress = { pointerId: event.pointerId, x: point.x, y: point.y, target, timer };
+    }
+  }
+
+  /** Dove il tocco lungo vale: sulla lavagna e sulle schede, non sui controlli né dentro la scheda in cui si scrive. */
+  #longPressHere(target: Element | null): boolean {
+    if (!target || !this.#viewport.contains(target) || target.closest(FINGER_CONTROLS)) return false;
+    if (this.#resize !== null || this.#connect !== null) return false;
+    return !(this.#activeId !== null && this.#insideActive(target, false));
+  }
+
+  /**
+   * Un dito si muove: oltre `TAP_SLOP_PX` dal suo appoggio non è più un tocco
+   * né un tocco lungo (due dita che si muovono sono un pizzico). Solo un
+   * confronto di distanza per evento.
+   */
+  #gestureMove(event: PointerEvent): void {
+    const taps = this.#fingerTap;
+    if (!taps || (taps.spoiled && this.#longPress === null)) return;
+    const from = taps.down.get(event.pointerId);
+    if (!from || Math.hypot(event.clientX - from.x, event.clientY - from.y) <= TAP_SLOP_PX) return;
+    taps.spoiled = true;
+    if (this.#longPress?.pointerId === event.pointerId) this.#cancelLongPress();
+  }
+
+  /** Il tocco lungo che aspetta si ferma, col suo timer. */
+  #cancelLongPress(): void {
+    const press = this.#longPress;
+    if (!press) return;
+    this.#longPress = null;
+    clearTimeout(press.timer);
+  }
+
+  /**
+   * Il dito è rimasto fermo `LONG_PRESS_MS`: sopra una scheda il suo menu
+   * (lo stesso del tasto destro, nel punto del dito), altrove il menu
+   * radiale, che segue il dito finché non si alza. Il gesto del dito si
+   * ferma dov'era. La penna giù, o il dito diventato palmo, vincono.
+   */
+  #longPressFire(): void {
+    const press = this.#longPress;
+    this.#longPress = null;
+    if (!press || this.#destroyed || !this.#doc) return;
+    if (this.#penDown || this.#palm(press.pointerId) || !this.#fingers.has(press.pointerId)) return;
+    this.#lastTap = null;
+    this.#cancelGestures();
+    this.#menuHeld = press.pointerId;
+    const target = press.target;
+    if (target?.isConnected && this.#nodeAt(target) !== null) {
+      const menu = new MouseEvent("contextmenu", {
+        bubbles: true, cancelable: true, composed: true, clientX: press.x, clientY: press.y, button: 2,
+      });
+      this.#ownMenu = menu;
+      try {
+        target.dispatchEvent(menu);
+      } finally {
+        this.#ownMenu = null;
+      }
+      return;
+    }
+    this.#openRadial(press.x, press.y, { pointerType: "touch", pointerId: press.pointerId });
+  }
+
+  /**
+   * Un dito si alza (o si perde: `cancelled`). Quando si è alzato l'ultimo:
+   * due dita che non si sono mosse, entro `FINGERS_TAP_MS` dal primo
+   * appoggio, annullano; tre ripetono. Un dito solo nel vuoto, due volte
+   * vicino e presto, mette lì una scheda di testo già in scrittura.
+   */
+  #gestureUp(event: PointerEvent, cancelled: boolean): void {
+    if (this.#longPress?.pointerId === event.pointerId) this.#cancelLongPress();
+    const taps = this.#fingerTap;
+    if (!taps || !taps.down.has(event.pointerId)) return;
+    if (cancelled || this.#penDown) taps.spoiled = true;
+    taps.down.delete(event.pointerId);
+    if (taps.down.size > 0) return;
+    this.#fingerTap = null;
+    const ms = event.timeStamp - taps.start;
+    if (taps.spoiled || taps.most > 3) {
+      this.#lastTap = null;
+      return;
+    }
+    if (taps.most >= 2) {
+      this.#lastTap = null;
+      if (ms <= FINGERS_TAP_MS) this.#fingersTapped(taps.most === 2 ? "undo" : "redo");
+      return;
+    }
+    if (ms > TAP_MAX_MS || !this.#emptyAt(taps.target)) {
+      this.#lastTap = null;
+      return;
+    }
+    const last = this.#lastTap;
+    if (last && taps.start - last.at <= DOUBLE_TAP_MS && Math.hypot(taps.first.x - last.x, taps.first.y - last.y) <= DOUBLE_TAP_PX) {
+      this.#lastTap = null;
+      this.#placeText(taps.first.x, taps.first.y, undefined, true);
+      return;
+    }
+    this.#lastTap = { x: taps.first.x, y: taps.first.y, at: event.timeStamp };
+  }
+
+  /** Il vuoto della lavagna sotto `target`: niente schede, fili, maniglie o controlli, e la lavagna si cambia. */
+  #emptyAt(target: Element | null): boolean {
+    if (!target?.isConnected || !this.#viewport.contains(target) || this.#readOnly || this.#isSceneOversized()) return false;
+    return this.#nodeAt(target) === null && this.#edgeAt(target) === null
+      && target.closest(FINGER_CONTROLS) === null && target.closest(FINGER_HANDLES) === null;
+  }
+
+  /** Il tocco di due dita annulla, quello di tre ripete; se non c'è niente, lo dice. */
+  #fingersTapped(command: "undo" | "redo"): void {
+    const can = !this.#readOnly && (command === "undo" ? this.#undo.length > 0 || this.#pending !== null : this.#redo.length > 0);
+    if (!can) {
+      this.#sayGesture(t(command === "undo" ? "canvas.gesture.no_undo" : "canvas.gesture.no_redo"));
+      return;
+    }
+    if (command === "undo") this.undo();
+    else this.redo();
+    this.#statusSettle();
+  }
+
+  /**
+   * Dice al lettore di schermo ciò che un gesto non ha fatto. La stessa frase
+   * si ridice: uno spazio fermo in coda, alterno, la fa annunciare di nuovo.
+   */
+  #sayGesture(text: string): void {
+    if (this.#destroyed) return;
+    let said = this.#gestureSaid;
+    if (!said) {
+      said = document.createElement("div");
+      said.className = "sr-only canvas-gesture-said";
+      said.setAttribute("role", "status");
+      said.setAttribute("aria-live", "polite");
+      this.#root.append(said);
+      this.#gestureSaid = said;
+    }
+    this.#gestureEcho = !this.#gestureEcho;
+    said.textContent = this.#gestureEcho ? text : `${text} `;
   }
 
   // --- ridimensionare (T66) ---------------------------------------------------
@@ -7825,6 +8188,9 @@ export class CanvasEngine {
     this.#fingers.clear();
     this.#tap = null;
     this.#pinch = null;
+    // Neanche il tocco lungo e il tocco di più dita (T63) sono più un gesto.
+    this.#cancelLongPress();
+    if (this.#fingerTap) this.#fingerTap.spoiled = true;
     // Il gesto aveva mosso il modello in mano: torna quello del nucleo.
     const model = active && this.#doc ? this.#coreModel() : null;
     if (model) {
@@ -7936,6 +8302,9 @@ export class CanvasEngine {
       this.#fitToContent(tap);
       return;
     }
+    // Il doppio tocco del dito mette la sua scheda da sé (T63): il `dblclick`
+    // che il browser ne fa non ne mette un'altra.
+    if (this.#downByTouch) return;
     this.#addNode("text");
   }
 

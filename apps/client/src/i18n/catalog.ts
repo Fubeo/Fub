@@ -2818,6 +2818,11 @@ export const IT = { // --- la scocca -------------------------------------------
   "canvas.commands.why.no_edge": "Scegli prima un collegamento.",
   "canvas.commands.why.no_undo": "Non c'è niente da annullare.",
   "canvas.commands.why.no_redo": "Non c'è niente da ripetere.",
+  // Il menu radiale e i gesti (T63).
+  "canvas.radial": "Menu radiale",
+  "canvas.radial.color": "Colore: {name}",
+  "canvas.gesture.no_undo": "Niente da annullare.",
+  "canvas.gesture.no_redo": "Niente da ripetere.",
   "canvas.commands.why.no_file_picker": "Da qui non si sceglie un file.",
   "canvas.commands.why.no_beside": "Da qui non si apre a lato.",
   "canvas.commands.why.one_image": "Scegli una sola scheda d'immagine.",
@@ -6212,6 +6217,11 @@ export const EN: Record<Key, string> = { "app.skip_to_editor": "Skip to the edit
   "canvas.commands.why.no_edge": "Select a connection first.",
   "canvas.commands.why.no_undo": "Nothing to undo.",
   "canvas.commands.why.no_redo": "Nothing to redo.",
+  // The radial menu and the gestures (T63).
+  "canvas.radial": "Radial menu",
+  "canvas.radial.color": "Color: {name}",
+  "canvas.gesture.no_undo": "Nothing to undo.",
+  "canvas.gesture.no_redo": "Nothing to redo.",
   "canvas.commands.why.no_file_picker": "Files cannot be picked from here.",
   "canvas.commands.why.no_beside": "Cannot open beside from here.",
   "canvas.commands.why.one_image": "Select a single image card.",

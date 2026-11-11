@@ -48,7 +48,8 @@ const FAMILY: Readonly<Record<CanvasToolId, number>> = {
 };
 const GROUP_IDS = ["pick", "ink", "make"] as const;
 
-const ICON: Readonly<Record<CanvasToolId, string>> = {
+/// L'icona di ogni strumento: la colonna e il menu radiale (T63).
+export const CANVAS_TOOL_ICONS: Readonly<Record<CanvasToolId, string>> = {
   select: "draw-select",
   lasso: "canvas-lasso",
   hand: "draw-hand",
@@ -121,7 +122,7 @@ function railTool(tool: CanvasToolId): RailTool {
   return {
     id: tool,
     label: t(`canvas.tool.${tool}`),
-    icon: ICON[tool],
+    icon: CANVAS_TOOL_ICONS[tool],
     keys,
     ariaKeys: aria,
     description: t(`canvas.tool.${tool}.hint`),

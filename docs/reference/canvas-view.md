@@ -2,11 +2,11 @@
 
 > **Ambito:** come ci si muove sulla lavagna (lo zoom, i salti, Indietro e
 > Avanti, Spazio, il bordo, l'inerzia), la griglia e le guide, il navigatore
-> e la vista che torna quando la lavagna si riapre; come si vedono le schede
-> da lontano; Cerca nella lavagna.
+> e la vista che torna quando la lavagna si riapre; il menu radiale e i gesti
+> delle dita; come si vedono le schede da lontano; Cerca nella lavagna.
 > **Fonti autorevoli:** `apps/client/src/editors/canvas/engine.ts`
 > (`#jumpCamera`, `#paintGrid`, `#refreshDetail`), `jumps.ts`, `guides.ts`,
-> `chrome/navigator.ts`, `view-state.ts`, `lod.ts`, `find.ts` e
+> `chrome/navigator.ts`, `chrome/radial.ts`, `view-state.ts`, `lod.ts`, `find.ts` e
 > `chrome/find-bar.ts`, con le loro prove;
 > i conti della camera in `apps/client/src/editors/spatial/camera.ts`.
 
@@ -57,6 +57,49 @@ sono quelli di `spatial/camera.ts` (`zoomAtPoint`, `fit`, `stepCamera`).
   dove il sistema la dà: la tela non ne aggiunge un'altra. Un appoggio, la rotella, un tasto
   di zoom e la finestra che perde il fuoco fermano l'inerzia e il volo; la
   lavagna chiusa li spegne.
+
+## Il menu radiale e i gesti
+
+Il menu radiale della lavagna è quello del disegno (`openRadial` di
+`editors/spatial/tools/radial.ts`, con l'aspetto, i tasti e il bordo della
+finestra di
+[Disegni, vista, gesti e menu radiale](../product/drawing-view.md#il-menu-radiale)),
+con le voci di `chrome/radial.ts`: Annulla in alto e Ripeti in basso; a
+destra gli ultimi tre strumenti, il più recente a est, poi nord-est e
+sud-est; a sinistra, allo stesso modo, gli ultimi tre colori della penna.
+Nel mezzo lo strumento di adesso col colore della penna, che non si ripete
+fra le voci. I recenti sono della seduta, in memoria finché la lavagna è
+aperta; con meno di tre il menu si riempie con Testo, Selezione,
+Evidenziatore… e con Vermiglio, Verde, Blu, Nero. Le voci sono i comandi del
+catalogo, col nome, il tasto e se si può; in sola lettura Annulla e Ripeti
+sono spenti.
+
+- **Il tasto laterale della penna** fa ciò che dice «Il tasto della penna»
+  (`canvas.pen_button`, letto a ogni appoggio): `radial` (di serie) apre il
+  menu dove si appoggia, e la penna che lascia il tasto sopra una voce la
+  sceglie; `eraser` cancella come il retro della penna; `pan` sposta la
+  lavagna; `lasso` fa un giro che sceglie come il Lazo, e lo strumento di
+  prima resta. Il tasto che non cancella non scrive e non cancella
+  (`barrelErases` dello strato della penna, `ink-layer.ts`); vale anche in
+  sola lettura.
+- **Il tocco lungo** di un dito fermo per 500 ms (`LONG_PRESS_MS`, entro
+  8 px) apre il menu radiale nel vuoto, e sopra una scheda il menu della
+  scheda nel punto del dito. Un secondo dito, la penna giù o la mano
+  appoggiata lo fermano.
+- **Due dita** che toccano senza muoversi, giù e su entro 250 ms
+  (`FINGERS_TAP_MS`), annullano; **tre** ripetono. Se non c'è niente, la
+  regione `status` nascosta `.canvas-gesture-said` lo dice («Niente da
+  annullare.»). Due dita che si muovono sono il pizzico e non annullano.
+- **Il doppio tocco** di un dito nel vuoto (entro 300 ms e 24 px) mette lì
+  una scheda di testo già in scrittura, come il doppio clic; sopra una
+  scheda, un filo o un controllo no.
+- **Dalla tastiera** «Menu radiale» (`canvas.radial`, in fondo al menu del
+  tasto destro nel vuoto: `Maiusc+F10`) lo apre al centro della vista, col
+  fuoco sulla prima voce; col mouse nel punto del clic.
+
+Il clic destro che il sistema manda dopo il tasto laterale o dopo il tocco
+lungo non apre un secondo menu. Un documento nuovo e la lavagna chiusa
+chiudono il menu.
 
 ## La griglia e le guide
 

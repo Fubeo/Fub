@@ -18,6 +18,11 @@
 //   stesso modo: il doppio tocco della penna non crea una scheda. Il dito è
 //   `navigate` e il mouse `ignore`, finché la lavagna non lo fa scrivere
 //   (`setMouse("ink")`): i loro eventi arrivano alla lavagna.
+// - **Il tasto laterale.** Cancella come il retro della penna, finché la
+//   lavagna non lo vuole per sé (`barrelErases` falso, T63): allora il suo
+//   tratto non scrive né cancella, tiene solo il silenzio della penna, e
+//   l'appoggio va a `onBarrel` (il menu radiale, lo spostamento, il Lazo). I
+//   movimenti e il rilascio arrivano alla lavagna come sempre.
 // - **La scia.** Un SVG `canvas-ink-wet` nel viewport, fuori dallo
 //   stage, con la trasformazione della camera (`setCamera`); un percorso per
 //   tratto, rifatto con `StrokePreview` una volta per evento (`onSettled`).
@@ -68,8 +73,15 @@ export interface InkLayerOptions {
   readonly look: (input: StrokeInput) => InkLook;
   /// La punta (e il mouse che scrive) cancella invece di scrivere: lo
   /// strumento Gomma del menu della penna. Si legge all'inizio di ogni
-  /// tratto; il retro della penna e il tasto laterale cancellano sempre.
+  /// tratto; il retro della penna cancella sempre.
   readonly tipErases?: () => boolean;
+  /// Il tasto laterale cancella come il retro della penna (di serie). Si
+  /// legge all'inizio di ogni suo tratto; falso, il tratto non fa niente e
+  /// l'appoggio va a `onBarrel`.
+  readonly barrelErases?: () => boolean;
+  /// La penna si è appoggiata col tasto laterale che non cancella: l'evento
+  /// dell'appoggio, già fermato per la lavagna.
+  readonly onBarrel?: (event: PointerEvent) => void;
   readonly quiet: PenQuiet;
   /// Un tratto della punta è finito: la scia resta finché non si chiama
   /// `settle(id)`. Un tratto spezzato al limite dei campioni arriva a pezzi,
@@ -114,7 +126,8 @@ export interface InkLayer {
 
 /// Un tratto aperto o finito che ha ancora la sua scia.
 interface Trail {
-  readonly kind: "ink" | "erase";
+  /// `aside`: il tasto laterale che la lavagna tiene per sé (`barrelErases`).
+  readonly kind: "ink" | "erase" | "aside";
   /// L'aspetto e l'anteprima, solo per la punta e finché il tratto è aperto.
   look: InkLook | null;
   preview: StrokePreview | null;
@@ -138,6 +151,10 @@ export function mountInkLayer(options: InkLayerOptions, owner: Lifetime): InkLay
   /// L'ultimo `pointerdown` era di un puntatore che scrive o cancella: i
   /// `click` e `dblclick` che seguono sono suoi.
   let swallow = false;
+  /// Il tasto laterale cancella, letto una volta a ogni appoggio, prima
+  /// dell'adattatore: il tratto (che comincia all'appoggio o, con la penna
+  /// sospesa, quando preme) e `onBarrel` leggono la stessa risposta.
+  let barrelErases = true;
 
   const wet = document.createElementNS(SVG_NS, "svg");
   wet.setAttribute("class", "canvas-ink-wet");
@@ -173,14 +190,20 @@ export function mountInkLayer(options: InkLayerOptions, owner: Lifetime): InkLay
     trail.path.setAttribute("d", d);
   }
 
+  // Prima dell'adattatore, che all'appoggio può già cominciare il tratto.
+  life.listen(viewport, "pointerdown", () => {
+    barrelErases = options.barrelErases?.() ?? true;
+  }, { capture: true });
+
   const input: InkInput = attachInkInput(viewport, {
     toScene: (clientX, clientY) => options.toWorld(clientX, clientY),
     touch: "navigate",
     mouse: options.mouse ?? "ignore",
     scale: () => zoom,
     onStart: (stroke) => {
+      const aside = stroke.role === "barrel" && !barrelErases;
       const trail: Trail = {
-        kind: stroke.role === "ink" && !(options.tipErases?.() ?? false) ? "ink" : "erase",
+        kind: aside ? "aside" : stroke.role === "ink" && !(options.tipErases?.() ?? false) ? "ink" : "erase",
         look: null,
         preview: null,
         samples: [],
@@ -195,7 +218,7 @@ export function mountInkLayer(options: InkLayerOptions, owner: Lifetime): InkLay
       quiet.enter();
       if (trail.kind === "erase") {
         options.onEraseStart?.(stroke.id, stroke.pointerType);
-      } else {
+      } else if (trail.kind === "ink") {
         trail.look = options.look({ pressure: stroke.pressure, continued: stroke.continued });
         trail.preview = new StrokePreview(trail.look.brush);
       }
@@ -204,7 +227,7 @@ export function mountInkLayer(options: InkLayerOptions, owner: Lifetime): InkLay
       const trail = trails.get(id);
       if (!trail) return;
       if (trail.kind === "erase") options.onErase?.(id, samples);
-      else trail.samples.push(...samples);
+      else if (trail.kind === "ink") trail.samples.push(...samples);
     },
     onPredicted: (id, samples) => {
       const trail = trails.get(id);
@@ -225,6 +248,8 @@ export function mountInkLayer(options: InkLayerOptions, owner: Lifetime): InkLay
         if (trail.kind === "erase") {
           drop(stroke.id);
           options.onEraseEnd?.(stroke.id);
+        } else if (trail.kind === "aside") {
+          drop(stroke.id);
         } else if (look) {
           options.onStroke({ ...stroke, brush: look.brush, color: look.color, tool: look.tool });
         } else {
@@ -263,6 +288,7 @@ export function mountInkLayer(options: InkLayerOptions, owner: Lifetime): InkLay
     // (un secondo tratto mentre uno è in corso, un tasto che non conosce).
     swallow = event.pointerType === "pen" || (role !== null && strokes(role));
     if (swallow) stop(event);
+    if (role === "barrel" && !barrelErases) options.onBarrel?.(event);
   }, { capture: true });
   // Un `click` della tastiera (`detail` 0) non è della penna e passa.
   const afterStroke = (event: MouseEvent): void => {

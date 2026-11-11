@@ -5270,3 +5270,360 @@ describe("CanvasEngine: la griglia e le guide (T71)", () => {
     expect(layer!.isConnected).toBe(false);
   });
 });
+
+describe("CanvasEngine: il menu radiale e i gesti (T63)", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
+  type Init = PointerEventInit & { readonly timeStamp?: number };
+  function pointer(type: string, init: Init): PointerEvent {
+    const { timeStamp, ...rest } = init;
+    const event = new PointerEvent(type, { bubbles: true, cancelable: true, composed: true, altitudeAngle: Math.PI / 2, azimuthAngle: 0, ...rest });
+    if (timeStamp !== undefined) Object.defineProperty(event, "timeStamp", { value: timeStamp });
+    return event;
+  }
+
+  const viewportOf = (host: HTMLElement): HTMLElement => host.querySelector<HTMLElement>(".canvas-viewport")!;
+  const cardOf = (host: HTMLElement, id: string): HTMLElement => host.querySelector<HTMLElement>(`.canvas-node[data-node="${id}"]`)!;
+  const radial = (): HTMLElement | null => document.querySelector<HTMLElement>(".draw-radial");
+  const radialLabels = (): (string | null)[] => [...document.querySelectorAll(".draw-radial-item")].map((item) => item.getAttribute("aria-label"));
+  const nodeIds = (engine: CanvasEngine): string[] => readCanvas(engine.getDoc()).nodes.map((node) => node.id);
+  const said = (host: HTMLElement): string => host.querySelector(".canvas-gesture-said")?.textContent?.trim() ?? "";
+  const run = (engine: CanvasEngine, id: string): void => engine.commands().find((command) => command.id === id)!.run();
+  const writingCard = (host: HTMLElement): string | undefined =>
+    host.querySelector<HTMLElement>(".canvas-text-editor, .canvas-text-live")?.closest<HTMLElement>(".canvas-node")?.dataset.node;
+
+  function cameraOf(host: HTMLElement): { x: number; y: number; zoom: number } {
+    const transform = host.querySelector<HTMLElement>(".canvas-stage")!.style.transform;
+    const match = /translate\((-?[\d.e+-]+)px, (-?[\d.e+-]+)px\) scale\(([\d.e+-]+)\)/.exec(transform);
+    if (!match) throw new Error(`trasformazione inattesa: ${transform}`);
+    return { x: Number(match[1]), y: Number(match[2]), zoom: Number(match[3]) };
+  }
+
+  /** «Il tasto della penna» cambiato a lavagna aperta, come la manda un cambio da Impostazioni. */
+  function setPenButton(penButton: CanvasPreferences["penButton"]): void {
+    for (const apply of [...watched.appliers]) apply({ ...DEFAULT_PREFERENCES, penButton });
+  }
+
+  let clock = 1000;
+  const PEN = { pointerId: 21, pointerType: "pen" } as const;
+
+  /** La penna col tasto laterale premuto sui punti `world`, sulla vista che la cattura. */
+  function barrel(host: HTMLElement, world: readonly (readonly [number, number])[], lift = true): () => void {
+    const cam = cameraOf(host);
+    const at = ([x, y]: readonly [number, number]) => ({ clientX: x * cam.zoom + cam.x, clientY: y * cam.zoom + cam.y });
+    const viewport = viewportOf(host);
+    viewport.dispatchEvent(pointer("pointerdown", { ...PEN, ...at(world[0]!), button: 2, buttons: 2, pressure: 0.5, timeStamp: clock }));
+    for (const point of world.slice(1)) {
+      clock += 8;
+      viewport.dispatchEvent(pointer("pointermove", { ...PEN, ...at(point), button: -1, buttons: 2, pressure: 0.5, timeStamp: clock }));
+    }
+    const last = world[world.length - 1]!;
+    const up = () => {
+      clock += 4;
+      viewport.dispatchEvent(pointer("pointerup", { ...PEN, ...at(last), button: 2, buttons: 0, pressure: 0, timeStamp: clock }));
+      clock += 100;
+    };
+    if (lift) up();
+    return up;
+  }
+
+  /** Un tratto della punta della penna sui punti `world`. */
+  function tip(host: HTMLElement, world: readonly (readonly [number, number])[]): void {
+    const cam = cameraOf(host);
+    const at = ([x, y]: readonly [number, number]) => ({ clientX: x * cam.zoom + cam.x, clientY: y * cam.zoom + cam.y });
+    const viewport = viewportOf(host);
+    viewport.dispatchEvent(pointer("pointerdown", { ...PEN, ...at(world[0]!), button: 0, buttons: 1, pressure: 0.5, timeStamp: clock }));
+    for (const point of world.slice(1)) {
+      clock += 8;
+      viewport.dispatchEvent(pointer("pointermove", { ...PEN, ...at(point), button: -1, buttons: 1, pressure: 0.5, timeStamp: clock }));
+    }
+    clock += 4;
+    viewport.dispatchEvent(pointer("pointerup", { ...PEN, ...at(world[world.length - 1]!), button: 0, buttons: 0, pressure: 0, timeStamp: clock }));
+    clock += 100;
+  }
+
+  /** I tratti liberi della lavagna. */
+  const boardStrokes = (engine: CanvasEngine): unknown[] =>
+    ((JSON.parse(engine.getDoc()) as { "fub:ink"?: { strokes?: unknown[] } })["fub:ink"]?.strokes ?? []);
+
+  /** Un dito finto: giù su `target` nel punto del client, poi si muove e si alza sulla vista. */
+  function finger(host: HTMLElement, pointerId: number, target: Element, x: number, y: number) {
+    const viewport = viewportOf(host);
+    const base = { pointerId, pointerType: "touch", isPrimary: false, width: 10, height: 10 } as const;
+    target.dispatchEvent(pointer("pointerdown", { ...base, clientX: x, clientY: y, button: 0, buttons: 1, pressure: 0.5, timeStamp: clock }));
+    return {
+      move(nx: number, ny: number) {
+        clock += 16;
+        viewport.dispatchEvent(pointer("pointermove", { ...base, clientX: nx, clientY: ny, button: -1, buttons: 1, pressure: 0.5, timeStamp: clock }));
+      },
+      up(nx = x, ny = y) {
+        clock += 16;
+        viewport.dispatchEvent(pointer("pointerup", { ...base, clientX: nx, clientY: ny, button: 0, buttons: 0, pressure: 0, timeStamp: clock }));
+      },
+    };
+  }
+
+  /** Un tocco breve di `count` dita vicine nel punto (x, y), giù e su entro pochi ms. */
+  function tapWith(host: HTMLElement, count: number, x: number, y: number): void {
+    const viewport = viewportOf(host);
+    const fingers = Array.from({ length: count }, (_, index) => finger(host, 50 + index, viewport, x + index * 40, y));
+    clock += 30;
+    fingers.forEach((one, index) => one.up(x + index * 40, y));
+    clock += 400;
+  }
+
+  describe("il tasto laterale della penna, con le quattro scelte di «Il tasto della penna»", () => {
+    it("«radial» (di serie): apre il menu radiale dove è la penna, che lo segue; il menu del sistema dietro non apre quello della lavagna", () => {
+      const { engine, host } = mounted();
+      const cam = cameraOf(host);
+      const lift = barrel(host, [[300, 300]], false);
+      expect(radial()).not.toBeNull();
+      expect(radialLabels()).toEqual([
+        t("canvas.commands.undo"), t("canvas.tool.highlighter"), t("canvas.tool.text"), t("canvas.tool.pen"), t("canvas.commands.redo"),
+        t("canvas.radial.color", { name: t("canvas.ink.color.black") }),
+        t("canvas.radial.color", { name: t("canvas.ink.color.vermilion") }),
+        t("canvas.radial.color", { name: t("canvas.ink.color.green") }),
+      ]);
+      // Niente si scrive né si cancella, la vista non si muove.
+      expect(cameraOf(host)).toEqual(cam);
+      lift();
+      // Alzata nel mezzo: il menu resta aperto.
+      expect(radial()).not.toBeNull();
+      const echo = new MouseEvent("contextmenu", { bubbles: true, cancelable: true, button: 2, clientX: 300, clientY: 300 });
+      viewportOf(host).dispatchEvent(echo);
+      expect(echo.defaultPrevented).toBe(true);
+      expect(boardStrokes(engine)).toEqual([]);
+      engine.destroy();
+      expect(radial()).toBeNull();
+    });
+
+    it("«radial»: la penna che lascia il tasto sopra una voce la sceglie, e lo strumento di prima va fra i recenti", () => {
+      const { engine, host } = mounted();
+      const viewport = viewportOf(host);
+      viewport.dispatchEvent(pointer("pointerdown", { ...PEN, clientX: 400, clientY: 300, button: 2, buttons: 2, pressure: 0, timeStamp: clock }));
+      const ring = document.querySelector<HTMLElement>(".draw-radial-ring")!;
+      const [cx, cy] = [parseFloat(ring.style.left), parseFloat(ring.style.top)];
+      // A est il Testo, il primo strumento di riserva con la Selezione di adesso.
+      viewport.dispatchEvent(pointer("pointerup", { ...PEN, clientX: cx + 80, clientY: cy, button: 2, buttons: 0, pressure: 0, timeStamp: clock + 10 }));
+      expect(radial()).toBeNull();
+      expect(engine.tool).toBe("text");
+      // Riaperto: la Selezione è fra i recenti, a est.
+      barrel(host, [[100, 100]]);
+      expect(radialLabels()[2]).toBe(t("canvas.tool.select"));
+      engine.destroy();
+    });
+
+    it("«eraser»: il tasto cancella come il retro della penna, e il menu non si apre", () => {
+      const { engine, host } = mounted();
+      tip(host, [[100, 700], [140, 715], [180, 730]]);
+      expect(boardStrokes(engine)).toHaveLength(1);
+      setPenButton("eraser");
+      barrel(host, [[140, 680], [140, 700], [140, 715], [140, 730], [140, 760]]);
+      expect(radial()).toBeNull();
+      expect(boardStrokes(engine)).toHaveLength(0);
+      engine.destroy();
+    });
+
+    it("«pan»: il tasto sposta la lavagna con la penna, e niente si cancella", () => {
+      const { engine, host } = mounted();
+      tip(host, [[100, 700], [140, 715], [180, 730]]);
+      setPenButton("pan");
+      const start = cameraOf(host);
+      barrel(host, [[140, 680], [150, 700], [190, 730]]);
+      const end = cameraOf(host);
+      expect(end.x - start.x).toBeCloseTo(50 * start.zoom, 5);
+      expect(end.y - start.y).toBeCloseTo(50 * start.zoom, 5);
+      expect(radial()).toBeNull();
+      expect(boardStrokes(engine)).toHaveLength(1);
+      engine.destroy();
+    });
+
+    it("«lasso»: un giro col tasto sceglie come il Lazo, e lo strumento di prima resta", () => {
+      const { engine, host } = mounted();
+      run(engine, "canvas.tool.pen");
+      setPenButton("lasso");
+      // Attorno alla scheda «t» (40, 40, 240 × 140).
+      barrel(host, [[20, 20], [300, 20], [300, 200], [20, 200], [20, 22]]);
+      expect(engine.selection().nodes).toEqual(["t"]);
+      expect(engine.tool).toBe("pen");
+      expect(radial()).toBeNull();
+      expect(boardStrokes(engine)).toEqual([]);
+      engine.destroy();
+    });
+
+    it("in sola lettura il tasto apre il menu lo stesso, con Annulla e Ripeti spenti", () => {
+      const { engine, host } = mounted();
+      run(engine, "canvas.select_all");
+      run(engine, "canvas.delete");
+      engine.setReadOnly(true);
+      const lift = barrel(host, [[300, 300]], false);
+      const items = [...document.querySelectorAll<HTMLElement>(".draw-radial-item")];
+      expect(items[0]!.getAttribute("aria-disabled")).toBe("true");
+      expect(items[4]!.getAttribute("aria-disabled")).toBe("true");
+      lift();
+      engine.destroy();
+    });
+  });
+
+  describe("il tocco lungo", () => {
+    it("fermo per 500 ms nel vuoto apre il menu radiale, che segue il dito; prima no", () => {
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+      const { engine, host } = mounted();
+      const touch = finger(host, 31, viewportOf(host), 700, 500);
+      vi.advanceTimersByTime(499);
+      expect(radial()).toBeNull();
+      touch.move(704, 503);
+      vi.advanceTimersByTime(1);
+      expect(radial()).not.toBeNull();
+      expect(radialLabels()[0]).toBe(t("canvas.commands.undo"));
+      // Il dito si alza nel mezzo: il menu resta, e il dito non ha scelto niente.
+      touch.up(704, 503);
+      expect(radial()).not.toBeNull();
+      expect(engine.selection().nodes).toEqual([]);
+      engine.destroy();
+      expect(radial()).toBeNull();
+    });
+
+    it("un dito che si muove oltre 8 px non è un tocco lungo", () => {
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+      const { engine, host } = mounted();
+      const touch = finger(host, 31, viewportOf(host), 700, 500);
+      touch.move(712, 500);
+      vi.advanceTimersByTime(600);
+      expect(radial()).toBeNull();
+      touch.up(712, 500);
+      engine.destroy();
+    });
+
+    it("sopra una scheda apre il menu della scheda, nel punto del dito, non il radiale", () => {
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+      const { engine, host } = mounted();
+      const menus: MouseEvent[] = [];
+      host.addEventListener("contextmenu", (event) => menus.push(event));
+      const touch = finger(host, 31, cardOf(host, "t"), 120, 90);
+      vi.advanceTimersByTime(500);
+      expect(radial()).toBeNull();
+      expect(menus).toHaveLength(1);
+      expect([menus[0]!.clientX, menus[0]!.clientY, menus[0]!.button, menus[0]!.defaultPrevented]).toEqual([120, 90, 2, false]);
+      expect(menus[0]!.target).toBe(cardOf(host, "t"));
+      // Il menu del sistema che il tocco lungo manda dietro non ne apre un altro.
+      const echo = new MouseEvent("contextmenu", { bubbles: true, cancelable: true, button: 2, clientX: 120, clientY: 90 });
+      cardOf(host, "t").dispatchEvent(echo);
+      expect(echo.defaultPrevented).toBe(true);
+      expect(menus).toHaveLength(1);
+      touch.up();
+      engine.destroy();
+    });
+
+    it("la penna giù mentre il dito aspetta vince: niente menu", () => {
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+      const { engine, host } = mounted();
+      const touch = finger(host, 31, viewportOf(host), 700, 500);
+      const viewport = viewportOf(host);
+      viewport.dispatchEvent(pointer("pointerdown", { ...PEN, clientX: 100, clientY: 100, button: 0, buttons: 1, pressure: 0.5, timeStamp: clock }));
+      touch.move(701, 500);
+      vi.advanceTimersByTime(600);
+      expect(radial()).toBeNull();
+      viewport.dispatchEvent(pointer("pointerup", { ...PEN, clientX: 100, clientY: 100, button: 0, buttons: 0, pressure: 0, timeStamp: clock + 10 }));
+      touch.up(701, 500);
+      engine.destroy();
+    });
+  });
+
+  describe("le dita che toccano", () => {
+    it("due dita annullano, tre ripetono; con niente da annullare lo si dice", () => {
+      const { engine, host } = mounted();
+      tapWith(host, 2, 700, 500);
+      expect(said(host)).toBe(t("canvas.gesture.no_undo"));
+      tapWith(host, 3, 700, 500);
+      expect(said(host)).toBe(t("canvas.gesture.no_redo"));
+      run(engine, "canvas.select_all");
+      run(engine, "canvas.delete");
+      expect(nodeIds(engine)).toEqual([]);
+      tapWith(host, 2, 700, 500);
+      expect(nodeIds(engine)).toEqual(["t", "f", "g", "w"]);
+      tapWith(host, 3, 700, 500);
+      expect(nodeIds(engine)).toEqual([]);
+      // La stessa frase si ridice.
+      tapWith(host, 3, 700, 500);
+      const first = host.querySelector(".canvas-gesture-said")!.textContent;
+      tapWith(host, 3, 700, 500);
+      expect(host.querySelector(".canvas-gesture-said")!.textContent).not.toBe(first);
+      expect(said(host)).toBe(t("canvas.gesture.no_redo"));
+      engine.destroy();
+    });
+
+    it("due dita che si muovono sono un pizzico, non un annulla; due dita lente nemmeno", () => {
+      const { engine, host } = mounted();
+      run(engine, "canvas.select_all");
+      run(engine, "canvas.delete");
+      const viewport = viewportOf(host);
+      const a = finger(host, 61, viewport, 600, 400);
+      const b = finger(host, 62, viewport, 700, 400);
+      a.move(560, 400);
+      b.move(760, 400);
+      a.up(560, 400);
+      b.up(760, 400);
+      expect(nodeIds(engine)).toEqual([]);
+      clock += 400;
+      const c = finger(host, 63, viewport, 600, 400);
+      const d = finger(host, 64, viewport, 700, 400);
+      clock += 300;
+      c.up();
+      d.up();
+      expect(nodeIds(engine)).toEqual([]);
+      expect(said(host)).toBe("");
+      engine.destroy();
+    });
+
+    it("il doppio tocco nel vuoto mette lì una scheda di testo, già in scrittura; sopra una scheda no", () => {
+      const { engine, host } = mounted();
+      const cam = cameraOf(host);
+      const viewport = viewportOf(host);
+      const tap = (target: Element, x: number, y: number, where = host) => {
+        const one = finger(where, 71, target, x, y);
+        clock += 40;
+        one.up(x, y);
+        clock += 120;
+      };
+      tap(viewport, 900, 700);
+      expect(nodeIds(engine)).toHaveLength(4);
+      tap(viewport, 904, 702);
+      const nodes = readCanvas(engine.getDoc()).nodes;
+      expect(nodes).toHaveLength(5);
+      const fresh = nodes[4]!;
+      expect(fresh.type).toBe("text");
+      // L'angolo in alto a sinistra sotto il dito, sulla griglia.
+      expect(Math.abs(fresh.x - (900 - cam.x) / cam.zoom)).toBeLessThan(24);
+      expect(Math.abs(fresh.y - (700 - cam.y) / cam.zoom)).toBeLessThan(24);
+      expect(writingCard(host)).toBe(fresh.id);
+      // Lo strumento resta com'era.
+      expect(engine.tool).toBe("select");
+      engine.destroy();
+
+      const other = mounted();
+      const card = cardOf(other.host, "t");
+      tap(card, 120, 90, other.host);
+      tap(card, 121, 91, other.host);
+      expect(nodeIds(other.engine)).toHaveLength(4);
+      other.engine.destroy();
+    });
+  });
+
+  it("Maiusc+F10 › «Menu radiale» lo apre dalla tastiera, al centro della vista, col fuoco sulla prima voce", () => {
+    const { engine } = mounted();
+    const menu = engine.contextMenu(null)!;
+    const entry = (menu.context ?? []).find((item): item is SurfaceMenuItem => typeof item !== "string" && item.id === "canvas.radial")!;
+    expect(entry.label).toBe(t("canvas.radial"));
+    entry.run!();
+    expect(radial()).not.toBeNull();
+    expect(document.activeElement?.classList.contains("draw-radial-item")).toBe(true);
+    // Un documento nuovo chiude il menu dell'altro.
+    engine.setDoc(canvasSource());
+    expect(radial()).toBeNull();
+    engine.destroy();
+  });
+});
