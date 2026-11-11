@@ -20,6 +20,15 @@ type Registration = {
 const registrations = new WeakMap<HTMLElement, Registration>();
 let current: { target: HTMLElement; registration: Registration; element: HTMLElement } | null = null;
 let serial = 0;
+/// Dove il puntatore ha premuto l'ultima volta un controllo con suggerimento.
+///
+/// Un clic chiude il suggerimento, e il suggerimento non torna finché il
+/// puntatore non si sposta. Un clic che ridisegna ciò che ha sotto (una
+/// cartella dell'albero che si apre) mette sotto il puntatore fermo un nodo
+/// nuovo, e il motore gli manda un `mouseenter` come se ci fosse appena
+/// arrivato: mezzo secondo dopo la didascalia copriva la prima riga aperta.
+/// Quel `mouseenter` arriva nel punto esatto del clic; uno vero no.
+let pressedAt: { x: number; y: number } | null = null;
 
 /** Collega un suggerimento a un elemento della shell e restituisce lo smontaggio. */
 export function attachTooltip(target: HTMLElement, text: string): () => void {
@@ -34,6 +43,17 @@ export function attachTooltip(target: HTMLElement, text: string): () => void {
   registration.timer = undefined;
   registration.disposed = false;
 
+  // Il puntatore che arriva: se è ancora fermo dove ha premuto, non è
+  // arrivato niente, è cambiato il DOM sotto di lui.
+  const hover = (event: MouseEvent) => {
+    if (pressedAt && event.clientX === pressedAt.x && event.clientY === pressedAt.y) return;
+    pressedAt = null;
+    schedule();
+  };
+  const press = (event: MouseEvent) => {
+    pressedAt = { x: event.clientX, y: event.clientY };
+    cancel();
+  };
   const schedule = () => {
     if (registration.disposed || registration.text.trim() === "" || expanded(target)) return;
     ownerWindow.clearTimeout(registration.timer);
@@ -104,7 +124,8 @@ export function attachTooltip(target: HTMLElement, text: string): () => void {
     registration.timer = undefined;
     registration.hide();
     target.removeEventListener("focus", focus);
-    target.removeEventListener("mouseenter", schedule);
+    target.removeEventListener("mouseenter", hover);
+    target.removeEventListener("pointerdown", press);
     target.removeEventListener("blur", cancel);
     target.removeEventListener("mouseleave", cancel);
     target.removeEventListener("keydown", escape);
@@ -115,7 +136,8 @@ export function attachTooltip(target: HTMLElement, text: string): () => void {
   }
 
   target.addEventListener("focus", focus);
-  target.addEventListener("mouseenter", schedule);
+  target.addEventListener("mouseenter", hover);
+  target.addEventListener("pointerdown", press);
   target.addEventListener("blur", cancel);
   target.addEventListener("mouseleave", cancel);
   target.addEventListener("keydown", escape);
@@ -195,5 +217,6 @@ export function resetTooltips(): void {
   current?.registration.hide();
   document.getElementById(TOOLTIP_ID)?.remove();
   current = null;
+  pressedAt = null;
   serial += 1;
 }

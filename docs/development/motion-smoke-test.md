@@ -46,7 +46,7 @@ provata**, non come passata.
 | 5 | Dividi un foglio, poi chiudine uno | la carta scorre da un posto all'altro; il testo è già al suo posto e non si deforma |
 | 6 | Apri e chiudi il cassetto durante un trascinamento della finestra | il cassetto arriva e il ridimensionamento non diventa un'animazione |
 | 7 | Cambia luce | il passaggio è uno solo, senza una cornice disegnata due volte |
-| 8 | Apri una cartella con molte voci nell'albero, poi richiudila | le voci entrano una dopo l'altra e le righe sotto scivolano; alla chiusura i figli sbiadiscono al loro rientro e non resta niente; lo scorrimento resta fluido |
+| 8 | Apri una cartella con molte voci nell'albero, poi richiudila, col puntatore fermo sulla cartella | le voci entrano una dopo l'altra e le righe sotto scivolano, senza un fotogramma fermo; alla chiusura i figli sbiadiscono, le righe sotto risalgono partendo piano, senza salto, e non resta niente; nessun suggerimento copre le righe aperte; lo scorrimento resta fluido |
 | 9 | Trascina una nota fra due sorelle e rilasciala | la riga d'origine si solleva di poco, il fantasma sotto il puntatore è quello del sistema e senza ombra tagliata; al rilascio le righe scivolano nel nuovo ordine |
 | 10 | Trascina una linguetta fuori dalla finestra | la linguetta si solleva e torna giù; si apre una finestra nuova |
 | 11 | Su un vault grande, cerca una parola comune e apri il lanciatore | se la risposta tarda, compaiono righe grigie ferme al posto dei risultati, e spariscono quando arrivano; una risposta rapida non le mostra |

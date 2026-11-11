@@ -90,6 +90,47 @@ describe("il suggerimento della shell", () => {
     expect(row.hasAttribute("aria-describedby")).toBe(false);
   });
 
+  it("un clic lo chiude, e la riga che il clic ridisegna sotto il puntatore fermo non lo riapre", () => {
+    const tooltip = () => document.querySelector<HTMLElement>('[role="tooltip"]');
+    const folder = document.createElement("div");
+    document.body.append(folder);
+    attachTooltip(folder, "docs");
+    folder.dispatchEvent(new MouseEvent("mouseenter", { clientX: 40, clientY: 100 }));
+    vi.advanceTimersByTime(TOOLTIP_DELAY_MS);
+    expect(tooltip()?.hidden).toBe(false);
+
+    // Il clic chiude subito.
+    folder.dispatchEvent(new MouseEvent("pointerdown", { clientX: 40, clientY: 100, bubbles: true }));
+    expect(tooltip()?.hidden).toBe(true);
+
+    // Il clic rifà la riga: quella nuova riceve un `mouseenter` nel punto del
+    // clic, col puntatore fermo. Non è un arrivo.
+    const redrawn = document.createElement("div");
+    folder.replaceWith(redrawn);
+    attachTooltip(redrawn, "docs");
+    redrawn.dispatchEvent(new MouseEvent("mouseenter", { clientX: 40, clientY: 100 }));
+    vi.advanceTimersByTime(TOOLTIP_DELAY_MS * 2);
+    expect(tooltip()?.hidden).toBe(true);
+
+    // Il puntatore che arriva davvero, da un altro punto, lo riapre come sempre.
+    redrawn.dispatchEvent(new MouseEvent("mouseleave"));
+    redrawn.dispatchEvent(new MouseEvent("mouseenter", { clientX: 42, clientY: 104 }));
+    vi.advanceTimersByTime(TOOLTIP_DELAY_MS);
+    expect(tooltip()?.hidden).toBe(false);
+    expect(tooltip()?.textContent).toBe("docs");
+  });
+
+  it("un clic durante il ritardo lo ferma", () => {
+    const button = document.createElement("button");
+    document.body.append(button);
+    attachTooltip(button, "Nuova nota");
+    button.dispatchEvent(new MouseEvent("mouseenter", { clientX: 5, clientY: 5 }));
+    vi.advanceTimersByTime(TOOLTIP_DELAY_MS - 100);
+    button.dispatchEvent(new MouseEvent("pointerdown", { clientX: 5, clientY: 5 }));
+    vi.advanceTimersByTime(TOOLTIP_DELAY_MS);
+    expect(document.querySelector<HTMLElement>('[role="tooltip"]')?.hidden ?? true).toBe(true);
+  });
+
   it("smonta un bersaglio staccato anche durante il teardown dell'ambiente", () => {
     const row = document.createElement("div");
     document.body.append(row);
