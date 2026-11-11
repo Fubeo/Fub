@@ -16,6 +16,7 @@ import {
   createCanvasSelectionBar,
   selectionBarActions,
   selectionBarPlace,
+  selectionBarPlaceBelow,
   selectionBarWanted,
 } from "./selection-bar";
 
@@ -133,6 +134,23 @@ describe("le regole della barra", () => {
     expect(selectionBarPlace({ left: 1200, top: 300, right: 1400, bottom: 400 }, size, view)).toBeNull();
     expect(selectionBarPlace({ left: 400, top: -300, right: 600, bottom: -10 }, size, view)).toBeNull();
     expect(selectionBarPlace({ left: 400, top: 700, right: 600, bottom: 800 }, size, view)).toBeNull();
+  });
+
+  it("la barra del ritaglio (T78) sta sotto la scheda; se la scheda esce dal fondo va sopra; resta sempre nella vista", () => {
+    const size = { width: 200, height: 40 };
+    const view = { width: 1000, height: 600 };
+    // Sotto, a 10 px dalla scheda come la barra della selezione quando va sotto.
+    expect(selectionBarPlaceBelow({ left: 400, top: 100, right: 600, bottom: 300 }, size, view)).toEqual({ left: 400, top: 310 });
+    // La scheda arriva al fondo: sopra, sopra anche il titolo.
+    expect(selectionBarPlaceBelow({ left: 400, top: 300, right: 600, bottom: 590 }, size, view)).toEqual({ left: 400, top: 300 - SELECTION_BAR_TITLE_ROOM - 8 - 40 });
+    // Una scheda ruotata, più alta della vista e uscita dal fondo: sotto non
+    // c'è posto, sopra nemmeno; la barra resta dentro, in alto.
+    expect(selectionBarPlaceBelow({ left: 400, top: 20, right: 600, bottom: 1400 }, size, view)).toEqual({ left: 400, top: 8 });
+    // Uscita del tutto, sotto o sopra o di lato: la barra resta nella vista.
+    expect(selectionBarPlaceBelow({ left: 400, top: 700, right: 600, bottom: 800 }, size, view)).toEqual({ left: 400, top: 552 });
+    expect(selectionBarPlaceBelow({ left: 400, top: -300, right: 600, bottom: -10 }, size, view)).toEqual({ left: 400, top: 8 });
+    expect(selectionBarPlaceBelow({ left: 1200, top: 100, right: 1400, bottom: 300 }, size, view)!.left).toBe(792);
+    expect(selectionBarPlaceBelow({ left: Number.NaN, top: 0, right: 1, bottom: 1 }, size, view)).toBeNull();
   });
 });
 

@@ -4193,10 +4193,13 @@ body {
   box-sizing: border-box;
   cursor: move;
 }
+/* L'area di presa di una maniglia: 24 px sullo schermo a ogni zoom, centrata
+   sull'angolo, come le maniglie della scheda (T66); il segno lo disegna la
+   pelle. */
 .canvas-crop-handle {
   position: absolute;
-  width: 14px;
-  height: 14px;
+  width: calc(24px / var(--canvas-zoom, 1));
+  height: calc(24px / var(--canvas-zoom, 1));
   box-sizing: border-box;
   translate: -50% -50%;
 }
@@ -4204,27 +4207,29 @@ body {
 .canvas-crop-handle[data-corner="ne"] { top: 0; left: 100%; cursor: nesw-resize; }
 .canvas-crop-handle[data-corner="sw"] { top: 100%; left: 0; cursor: nesw-resize; }
 .canvas-crop-handle[data-corner="se"] { top: 100%; left: 100%; cursor: nwse-resize; }
-.canvas-crop-bar {
+/* Il piede del ritaglio: fuori dalla lavagna che scala, nella zona della
+   vista come la barra della selezione; crop.ts lo posa in linea sotto la
+   scheda (o sopra) e dentro la vista. */
+.canvas-crop-foot {
   position: absolute;
-  top: calc(100% + 12px);
-  left: 50%;
-  z-index: 3;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2, 4px);
+  max-width: calc(100% - 16px);
+  pointer-events: auto;
+}
+.canvas-crop-bar {
   display: flex;
   align-items: center;
   gap: var(--space-2, 4px);
   padding: var(--space-2, 4px);
   white-space: nowrap;
-  transform: translateX(-50%);
-  pointer-events: auto;
 }
 .canvas-crop-note {
-  position: absolute;
-  top: calc(100% + 56px);
-  left: 50%;
-  width: max-content;
   max-width: 320px;
   margin: 0;
-  transform: translateX(-50%);
 }
 
 .base-surface {

@@ -114,6 +114,35 @@ export function selectionBarPlace(
   );
 }
 
+/// Dove va una barra larga e alta `size` **sotto** la scheda `box` (la barra
+/// del ritaglio, T78): sotto se c'è posto nella vista, se no sopra, e sempre
+/// dentro la vista, anche con la scheda uscita, perché «Fatto» resti a portata.
+/// È `selectionBarPlace` capovolta: la stessa `bubblePlace` sulla vista vista
+/// dal basso, con gli stessi spazi dalla scheda.
+export function selectionBarPlaceBelow(
+  box: SelectionBarBox,
+  size: { width: number; height: number },
+  view: { width: number; height: number },
+): { left: number; top: number } | null {
+  if (![box.left, box.top, box.right, box.bottom].every(Number.isFinite)) return null;
+  const flipped = bubblePlace(
+    {
+      left: box.left,
+      top: view.height - (box.bottom + BELOW_ROOM),
+      right: box.right,
+      bottom: view.height - (box.top - SELECTION_BAR_TITLE_ROOM),
+    },
+    size,
+    view,
+  );
+  const top = view.height - flipped.top - size.height;
+  const lowest = Math.max(GAP, view.height - size.height - GAP);
+  return { left: flipped.left, top: Math.round(Math.min(Math.max(GAP, top), lowest)) };
+}
+
+/// Lo spazio dal bordo della vista, quello di `bubblePlace`.
+const GAP = 8;
+
 /// I tratti scelti col lazo, come li mostra la barra.
 export interface SelectionBarStrokes {
   /// Quanti sono.

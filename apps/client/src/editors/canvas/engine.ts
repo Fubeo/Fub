@@ -1756,6 +1756,8 @@ export class CanvasEngine {
   readonly #canvasOptions: CanvasOptions;
   /** La barra della selezione (T51), sopra le schede scelte, a fine gesto. */
   readonly #selectionBar: CanvasSelectionBar;
+  /** La zona della vista con le barre che non scalano (la selezione, il ritaglio). */
+  readonly #area: HTMLElement;
   /** Le punte dei fili che lo strumento Collega tira (T50); di serie alla fine. */
   #tips: CanvasTip = "end";
   /** La vista ricordata su questo computer (T36); `null` senza memoria o senza lavagna. */
@@ -1943,6 +1945,7 @@ export class CanvasEngine {
       },
     });
     const area = document.createElement("div");
+    this.#area = area;
     area.className = "canvas-area";
     area.append(this.#viewport, this.#empty.element, this.#findBar.element, this.#navigator.element);
     const body = document.createElement("div");
@@ -4344,6 +4347,8 @@ export class CanvasEngine {
     this.#markAllHandles();
     // Il selettore delle sezioni resta attaccato alla sua scheda (T74).
     this.#partsPicker?.handle.reposition();
+    // E la barra del ritaglio alla sua (T78).
+    this.#placeCropBar();
     // Anche la resa passa di qui: la scelta cambiata si ricorda con la camera.
     this.#viewMemo?.changed();
     // Ogni cambio di zoom passa di qui (bottoni, tasti, menu, `fitCamera`): la
@@ -6813,6 +6818,8 @@ export class CanvasEngine {
     const pen = this.#penDown;
     // Col ritaglio aperto la sua barra prende il posto di quella della selezione.
     const writing = this.#editor !== null || this.#activeId !== null || this.#canvasOptions.mode === "writing" || this.#crop !== null;
+    // La vista ha cambiato misura, o la scheda: la barra del ritaglio si riposa.
+    this.#placeCropBar();
     if (!selectionBarWanted({ chosen, gesture: this.#gestureActive(), pen, writing })) {
       bar.hide();
       if (pen && chosen > 0 && this.#quiet.active) this.#quiet.defer("selection-bar", () => this.#syncSelectionBar());
@@ -7265,7 +7272,7 @@ export class CanvasEngine {
     const ink = (this.#inkCards.get(id)?.length ?? 0) > 0;
     crop.editor = openCropEditor({
       frame: entry.body,
-      card: entry.article,
+      chrome: this.#area,
       zone: zoneOf(cardParts(node)),
       ink,
       picture: () => entry.body.querySelector<CropPicture & HTMLElement>(".canvas-card-image .canvas-card-picture"),
@@ -7279,6 +7286,7 @@ export class CanvasEngine {
     this.#fitCropHeight();
     this.#refreshLive();
     this.#syncSelectionBar();
+    this.#placeCropBar();
     crop.editor.focus();
   }
 
@@ -7296,6 +7304,31 @@ export class CanvasEngine {
     crop.height = height;
     entry.article.style.height = `${height}px`;
     crop.editor.layout();
+    this.#placeCropBar();
+  }
+
+  /**
+   * Posa la barra del ritaglio sotto la sua scheda, nella vista, come la barra
+   * della selezione: la stessa misura a ogni zoom, sopra la scheda se sotto
+   * non c'è posto (`selectionBarPlaceBelow`). Passa di qui a ogni camera.
+   */
+  #placeCropBar(): void {
+    const crop = this.#crop;
+    const node = crop ? this.#doc?.nodes.find((one) => one.id === crop.node) : undefined;
+    if (!crop?.editor || crop.editor.closed || !node) return;
+    const zoom = this.#camera.zoom;
+    const height = crop.height ?? node.height;
+    const rect = this.#viewport.getBoundingClientRect();
+    crop.editor.place(
+      {
+        left: node.x * zoom + this.#camera.x,
+        top: node.y * zoom + this.#camera.y,
+        right: (node.x + node.width) * zoom + this.#camera.x,
+        bottom: (node.y + height) * zoom + this.#camera.y,
+      },
+      { width: rect.width || 800, height: rect.height || 600 },
+      { left: this.#viewport.offsetLeft, top: this.#viewport.offsetTop },
+    );
   }
 
   /**

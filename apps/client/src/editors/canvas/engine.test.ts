@@ -24,6 +24,7 @@ import { CanvasCoreError, canvasCoreReady, openCore, openCoreNow, type CanvasCor
 import { DEFAULT_PREFERENCES, type CanvasPreferences, type WheelAction } from "./preferences";
 import { CANVAS_TOOL_IDS, toolCommandId } from "./chrome/commands";
 import { CARD_PANEL_ID, createCanvasInspector } from "./chrome/inspector";
+import { selectionBarPlaceBelow } from "./chrome/selection-bar";
 import { INERTIA_MS } from "../../spatial/camera";
 import { setReducedMotionPreference } from "../../theme/reduced-motion";
 import {
@@ -6344,7 +6345,7 @@ describe("il ritaglio di un'immagine (T78)", () => {
     const key = (target: Element, key: string, init: KeyboardEventInit = {}) =>
       target.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true, ...init }));
     const box = () => card().querySelector<HTMLElement>(".canvas-crop-box")!;
-    const barButton = (name: string) => card().querySelector<HTMLButtonElement>(`.canvas-crop-bar [data-crop="${name}"]`)!;
+    const barButton = (name: string) => made.host.querySelector<HTMLButtonElement>(`.canvas-crop-foot .canvas-crop-bar [data-crop="${name}"]`)!;
     return { ...made, mounts, writes, pick, crop, card, image, key, box, barButton };
   }
 
@@ -6390,7 +6391,9 @@ describe("il ritaglio di un'immagine (T78)", () => {
     expect(lastMount(board).parts).toBeNull();
     expect(board.card().hasAttribute("data-card-cropping")).toBe(true);
     expect(board.card().querySelector(".canvas-card-body > .canvas-crop .canvas-crop-box")).not.toBeNull();
-    expect(board.card().querySelector(":scope > .canvas-crop-bar")).not.toBeNull();
+    // La barra sta nella zona della vista che non scala, come quella della selezione.
+    expect(board.host.querySelector(".canvas-area > .canvas-crop-foot > .canvas-crop-bar")).not.toBeNull();
+    expect(board.card().querySelector(".canvas-crop-bar")).toBeNull();
     expect(document.activeElement).toBe(board.box());
     expect(board.changes).toHaveLength(0);
     board.engine.destroy();
@@ -6414,7 +6417,7 @@ describe("il ritaglio di un'immagine (T78)", () => {
     // larghezza e prende 400 × 200 / 300.
     expect(after).toMatchObject({ x: 0, y: 0, width: 400, height: 267 });
     expect(board.card().hasAttribute("data-card-cropping")).toBe(false);
-    expect(board.card().querySelector(".canvas-crop, .canvas-crop-bar")).toBeNull();
+    expect(board.host.querySelector(".canvas-crop, .canvas-crop-foot")).toBeNull();
     // La scheda mostra la zona.
     expect(lastMount(board).parts).toEqual({ kind: "image", rect: [0, 0, 0.5, 1], rotate: 90, extra: {} });
     expect(board.engine.undo()).toBe(true);
@@ -6499,7 +6502,7 @@ describe("il ritaglio di un'immagine (T78)", () => {
     const board = cropBoard({ "fub:ink": { v: 1, strokes: [CROP_INK] } });
     board.pick();
     board.crop().run();
-    expect(board.card().querySelector(".canvas-crop-note")?.textContent).toBe(t("canvas.crop.ink"));
+    expect(board.host.querySelector(".canvas-crop-foot > .canvas-crop-note")?.textContent).toBe(t("canvas.crop.ink"));
     board.key(board.box(), "ArrowLeft", { altKey: true, shiftKey: true });
     board.barButton("done").click();
     expect(board.image()["fub:ink"]).toEqual({ v: 1, strokes: [CROP_INK] });
@@ -6518,7 +6521,7 @@ describe("il ritaglio di un'immagine (T78)", () => {
     board.crop().run();
     expect(board.host.querySelector(".canvas-crop")).not.toBeNull();
     board.engine.setDoc(JSON.stringify({ nodes: [{ id: "t", type: "text", x: 600, y: 0, width: 200, height: 100, text: "accanto" }], edges: [] }));
-    expect(board.host.querySelector(".canvas-crop, .canvas-crop-bar")).toBeNull();
+    expect(board.host.querySelector(".canvas-crop, .canvas-crop-foot")).toBeNull();
     board.engine.destroy();
   });
 
@@ -6527,6 +6530,76 @@ describe("il ritaglio di un'immagine (T78)", () => {
     board.card().querySelector<HTMLElement>(".canvas-card-image")!.dataset.cardState = "unreadable";
     board.pick();
     expect(board.crop().disabled()).toBe(t("canvas.crop.why.unreadable"));
+    board.engine.destroy();
+  });
+
+  /** La camera dello stage: `translate(x, y) scale(zoom)`. */
+  function cropCamera(host: HTMLElement): { x: number; y: number; zoom: number } {
+    const transform = host.querySelector<HTMLElement>(".canvas-stage")!.style.transform;
+    const match = /translate\((-?[\d.e+-]+)px, (-?[\d.e+-]+)px\) scale\(([\d.e+-]+)\)/.exec(transform)!;
+    return { x: Number(match[1]), y: Number(match[2]), zoom: Number(match[3]) };
+  }
+  /** Uno scatto della rotella (di serie sposta la lavagna). */
+  function cropScroll(host: HTMLElement, deltaY: number): void {
+    const event = new WheelEvent("wheel", { bubbles: true, cancelable: true, deltaY });
+    Object.defineProperties(event, { clientX: { value: 300 }, clientY: { value: 200 } });
+    host.querySelector(".canvas-viewport")!.dispatchEvent(event);
+  }
+  /** Dove la barra del ritaglio deve stare, con la camera di adesso (happy-dom: il piede misura 0, la vista 800 × 600). */
+  function cropFootAt(host: HTMLElement, height: number): { left: number; top: number } {
+    const camera = cropCamera(host);
+    return selectionBarPlaceBelow(
+      { left: camera.x, top: camera.y, right: camera.x + 400 * camera.zoom, bottom: camera.y + height * camera.zoom },
+      { width: 0, height: 0 },
+      { width: 800, height: 600 },
+    )!;
+  }
+
+  it("a zoom basso la barra non scala: sta nella zona della vista, posata sotto la scheda come la barra della selezione", () => {
+    const board = cropBoard();
+    board.pick();
+    board.crop().run();
+    const viewport = board.host.querySelector<HTMLElement>(".canvas-viewport")!;
+    for (let i = 0; i < 40 && cropCamera(board.host).zoom > 0.35; i += 1) {
+      viewport.dispatchEvent(new KeyboardEvent("keydown", { key: "-", ctrlKey: true, bubbles: true, cancelable: true }));
+    }
+    expect(cropCamera(board.host).zoom).toBeLessThanOrEqual(0.35);
+    const foot = board.host.querySelector<HTMLElement>(".canvas-crop-foot")!;
+    // Fuori dallo stage che scala: la sua misura sullo schermo è la stessa a ogni zoom.
+    expect(foot.closest(".canvas-stage")).toBeNull();
+    expect(foot.parentElement!.classList.contains("canvas-area")).toBe(true);
+    const at = cropFootAt(board.host, 300);
+    expect([parseFloat(foot.style.left), parseFloat(foot.style.top)]).toEqual([at.left, at.top]);
+    // Sotto la scheda, che sullo schermo è alta 300 × zoom.
+    const camera = cropCamera(board.host);
+    expect(parseFloat(foot.style.top)).toBeGreaterThan(camera.y + 300 * camera.zoom);
+    board.engine.destroy();
+  });
+
+  it("con la scheda che esce dal fondo della vista la barra va sopra; ruotata in verticale resta nella vista", () => {
+    const board = cropBoard();
+    board.pick();
+    board.crop().run();
+    // La scheda scende finché la sua testa sta a 400 px: il fondo esce dalla vista di 600.
+    cropScroll(board.host, cropCamera(board.host).y - 400);
+    const camera = cropCamera(board.host);
+    expect(camera.y).toBe(400);
+    expect(camera.y + 300 * camera.zoom).toBeGreaterThan(600);
+    const foot = board.host.querySelector<HTMLElement>(".canvas-crop-foot")!;
+    expect(parseFloat(foot.style.top)).toBeLessThan(400);
+    expect(parseFloat(foot.style.top)).toBe(cropFootAt(board.host, 300).top);
+    // Un quarto di giro: la scheda si allunga (400 × 533), la barra resta sopra, dentro la vista.
+    board.barButton("rotate-right").click();
+    expect(board.card().style.height).toBe("533px");
+    expect(parseFloat(foot.style.top)).toBe(cropFootAt(board.host, 533).top);
+    expect(parseFloat(foot.style.top)).toBeGreaterThanOrEqual(8);
+    expect(parseFloat(foot.style.top)).toBeLessThan(400);
+    // Tutta fuori, sotto: la barra resta al fondo della vista, e «Fatto» si preme.
+    cropScroll(board.host, -400);
+    expect(cropCamera(board.host).y).toBe(800);
+    expect(parseFloat(foot.style.top)).toBe(592);
+    board.barButton("done").click();
+    expect(board.image()["fub:parts"]).toEqual({ kind: "image", rect: [0, 0, 1, 1], rotate: 90 });
     board.engine.destroy();
   });
 });

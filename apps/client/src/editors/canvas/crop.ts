@@ -18,6 +18,9 @@
 //   velo attorno e le quattro maniglie `canvas-crop-handle` (`role="slider"`),
 //   e sotto la scheda la barra `canvas-crop-bar` (↺ ↻, «Togli il ritaglio»,
 //   «Fatto») e, se sulla scheda c'è inchiostro, la riga `canvas-crop-note`.
+//   Barra e riga stanno fuori dalla lavagna che scala, nel piede
+//   `canvas-crop-foot`: hanno la stessa misura a ogni zoom e si posano come
+//   la barra della selezione (`place`, con `selectionBarPlaceBelow`).
 //   Il ritaglio non scrive niente: dice a chi lo apre la zona scelta
 //   (`onDone`), che la scrive in un commit; Esc lascia com'era.
 //
@@ -27,6 +30,7 @@
 
 import { t } from "../../i18n/strings";
 import { openLifetime, type Lifetime } from "../../ui/lifetime";
+import { selectionBarPlaceBelow, type SelectionBarBox } from "./chrome/selection-bar";
 import type { CanvasParts, PartRect, PartsExtra } from "./parts";
 
 /// Il lato più corto di una zona, in frazioni del lato dell'immagine: 1/100.
@@ -196,8 +200,9 @@ export type CropPicture = HTMLCanvasElement | HTMLImageElement;
 export interface CropEditorOptions {
   /// Il corpo della scheda: il ritaglio ne copre il contenuto.
   readonly frame: HTMLElement;
-  /// La scheda: la barra e la riga dell'inchiostro le stanno sotto.
-  readonly card: HTMLElement;
+  /// Dove sta il piede con la barra e la riga dell'inchiostro: fuori dalla
+  /// lavagna che scala, come la barra della selezione. Lo posa `place`.
+  readonly chrome: HTMLElement;
   /// La zona di adesso.
   readonly zone: ImageZone;
   /// Sulla scheda c'è inchiostro: la riga lo dice.
@@ -228,6 +233,9 @@ export interface CropEditor {
   contains(target: EventTarget | null): boolean;
   /// Rifà la misura (la scheda ha cambiato misura, l'immagine è arrivata).
   layout(): void;
+  /// Posa il piede sotto la scheda `box` (in pixel della vista `view`, che
+  /// sta a `offset` nel suo contenitore), o sopra se sotto non c'è posto.
+  place(box: SelectionBarBox, view: { width: number; height: number }, offset?: { left: number; top: number }): void;
   focus(): void;
   close(): void;
   readonly closed: boolean;
@@ -307,16 +315,27 @@ export function openCropEditor(options: CropEditorOptions): CropEditor {
   const done = button("kit-button", t("canvas.crop.done"), null, () => options.onDone(zone), "primary");
   done.dataset.crop = "done";
   done.setAttribute("aria-keyshortcuts", "Enter");
-  const parts: HTMLElement[] = [bar];
+  const foot = document.createElement("div");
+  foot.className = "canvas-crop-foot";
+  foot.append(bar);
   if (options.ink) {
     const note = document.createElement("p");
     note.className = "canvas-crop-note";
     note.textContent = t("canvas.crop.ink");
-    parts.push(note);
+    foot.append(note);
   }
+  const parts: HTMLElement[] = [foot];
 
   options.frame.append(overlay);
-  options.card.append(...parts);
+  options.chrome.append(foot);
+
+  const place = (target: SelectionBarBox, view: { width: number; height: number }, offset = { left: 0, top: 0 }): void => {
+    if (closed) return;
+    const at = selectionBarPlaceBelow(target, { width: foot.offsetWidth, height: foot.offsetHeight }, view);
+    if (!at) return;
+    foot.style.left = `${at.left + offset.left}px`;
+    foot.style.top = `${at.top + offset.top}px`;
+  };
 
   /// Dove sta l'immagine intera ruotata nel ritaglio, in pixel del ritaglio:
   /// la più grande che ci entra, al centro. Senza l'immagine, tutto il
@@ -524,6 +543,7 @@ export function openCropEditor(options: CropEditorOptions): CropEditor {
     key,
     contains: (target) => target instanceof Node && (overlay.contains(target) || parts.some((part) => part.contains(target))),
     layout,
+    place,
     focus: () => box.focus({ preventScroll: true }),
     close: () => life.close(),
     get closed() {

@@ -142,6 +142,8 @@ describe("il gesto", () => {
 interface Open {
   readonly editor: ReturnType<typeof openCropEditor>;
   readonly card: HTMLElement;
+  /// La zona della vista che non scala: il piede ci sta.
+  readonly chrome: HTMLElement;
   readonly frame: HTMLElement;
   readonly life: Lifetime;
   readonly done: ReturnType<typeof vi.fn>;
@@ -182,7 +184,8 @@ function open(zone: ImageZone = { rect: [0.45, 0.1, 0.5, 0.8], turn: 0 }, extra:
   const card = document.createElement("article");
   const frame = document.createElement("div");
   card.append(frame);
-  document.body.append(card);
+  const chrome = document.createElement("div");
+  document.body.append(card, chrome);
   const life = openLifetime();
   const done = vi.fn();
   const cancel = vi.fn();
@@ -191,7 +194,7 @@ function open(zone: ImageZone = { rect: [0.45, 0.1, 0.5, 0.8], turn: 0 }, extra:
   const measured = vi.fn();
   const editor = openCropEditor({
     frame,
-    card,
+    chrome,
     zone,
     ink: false,
     picture: () => picture,
@@ -204,11 +207,11 @@ function open(zone: ImageZone = { rect: [0.45, 0.1, 0.5, 0.8], turn: 0 }, extra:
     ...extra,
   });
   return {
-    editor, card, frame, life, done, cancel, remove, turned, measured,
+    editor, card, chrome, frame, life, done, cancel, remove, turned, measured,
     overlay: () => frame.querySelector<HTMLElement>(".canvas-crop")!,
     box: () => frame.querySelector<HTMLElement>(".canvas-crop-box")!,
     handle: (corner) => frame.querySelector<HTMLElement>(`.canvas-crop-handle[data-corner="${corner}"]`)!,
-    button: (name) => card.querySelector<HTMLButtonElement>(`.canvas-crop-bar [data-crop="${name}"]`)!,
+    button: (name) => chrome.querySelector<HTMLButtonElement>(`.canvas-crop-bar [data-crop="${name}"]`)!,
   };
 }
 
@@ -243,7 +246,9 @@ describe("il ritaglio sopra la scheda", () => {
     expect(made.handle("nw").getAttribute("aria-label")).toBe(t("canvas.crop.handle", { corner: t("canvas.crop.corner.nw") }));
     expect(made.handle("nw").getAttribute("aria-valuenow")).toBe("45");
     expect(made.handle("se").getAttribute("aria-valuenow")).toBe("95");
-    const bar = made.card.querySelector<HTMLElement>(":scope > .canvas-crop-bar")!;
+    const bar = made.chrome.querySelector<HTMLElement>(":scope > .canvas-crop-foot > .canvas-crop-bar")!;
+    // Il piede sta fuori dalla scheda, nella zona che non scala.
+    expect(made.card.querySelector(".canvas-crop-bar, .canvas-crop-foot")).toBeNull();
     expect(bar.getAttribute("role")).toBe("toolbar");
     expect([...bar.querySelectorAll("button")].map((button) => button.getAttribute("aria-label") ?? button.textContent)).toEqual([
       t("canvas.crop.rotate_left"), t("canvas.crop.rotate_right"), t("canvas.crop.remove"), t("canvas.crop.done"),
@@ -251,15 +256,15 @@ describe("il ritaglio sopra la scheda", () => {
     expect(made.button("done").dataset.kind).toBe("primary");
     expect(made.button("done").getAttribute("aria-keyshortcuts")).toBe("Enter");
     // Senza inchiostro sulla scheda, niente riga.
-    expect(made.card.querySelector(".canvas-crop-note")).toBeNull();
+    expect(made.chrome.querySelector(".canvas-crop-note")).toBeNull();
     made.editor.close();
-    expect(made.card.querySelector(".canvas-crop, .canvas-crop-bar")).toBeNull();
+    expect(document.querySelector(".canvas-crop, .canvas-crop-foot, .canvas-crop-bar")).toBeNull();
     expect(made.editor.closed).toBe(true);
   });
 
   it("con l'inchiostro sulla scheda il piede dice che il tratto resta", () => {
     const made = open(undefined, { ink: true });
-    expect(made.card.querySelector(".canvas-crop-note")!.textContent).toBe(t("canvas.crop.ink"));
+    expect(made.chrome.querySelector(".canvas-crop-foot > .canvas-crop-note")!.textContent).toBe(t("canvas.crop.ink"));
   });
 
   it("↺ e ↻ girano la zona di un quarto, la dicono e la disegnano ruotata", () => {
@@ -382,7 +387,7 @@ describe("il ritaglio sopra la scheda", () => {
     const made = open();
     made.life.close();
     expect(made.editor.closed).toBe(true);
-    expect(made.card.querySelector(".canvas-crop, .canvas-crop-bar")).toBeNull();
+    expect(document.querySelector(".canvas-crop, .canvas-crop-foot, .canvas-crop-bar")).toBeNull();
     expect(made.editor.key(new KeyboardEvent("keydown", { key: "Escape" }))).toBe(false);
   });
 });
