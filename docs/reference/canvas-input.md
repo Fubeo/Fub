@@ -202,12 +202,12 @@ scrive, valgono quelli della sessione). `Esc` torna dov'eri, anche in un campo.
 
 I tasti sono quelli della tabella «Tasti» della lavagna dove fanno la stessa
 cosa (ADR 0223), e nessuno è di due comandi. Un tasto senza `Ctrl` né `Alt`
-non vale mentre si scrive; vale solo coi modificatori scritti (`Alt+←` resta
-dello Scrittoio); prima vince il segno scritto, poi il posto del tasto
+non vale mentre si scrive; vale solo coi modificatori scritti (`Alt+←` è
+dello Scrittoio, fuori da una scheda a fuoco); prima vince il segno scritto, poi il posto del tasto
 (`Maiusc+1`). Dello Scrittoio la tela prende solo lo zoom (`Ctrl+=`, `Ctrl+-`,
 `Ctrl+0`, `CANVAS_DECLARED_SHELL_KEYS`), com'era già. Restano com'erano e
 diversi dalla tabella: `Ctrl+0` mostra tutto, le frecce spostano di 8
-(`Maiusc` 32, `Alt+Maiusc` 1); Tab e `Alt+↑`/`Alt+↓` muovono il fuoco ([la vista](canvas-view.md#da-tastiera-e-col-lettore-di-schermo)). Come nel disegno, i tasti della lavagna non si cambiano ancora.
+(`Maiusc` 32, `Alt+Maiusc` 1); Tab e `Alt`+frecce muovono il fuoco ([la vista](canvas-view.md#da-tastiera-e-col-lettore-di-schermo)). Come nel disegno, i tasti della lavagna non si cambiano ancora.
 Sulla tastiera italiana le quadre non hanno un tasto loro: `Ctrl+[` si preme
 con `Ctrl+è`, dal posto del tasto; `Ctrl+]` non c'è, perché al suo posto sta
 `+` e `Ctrl++` resta lo zoom. Porta davanti si fa dal menu o da `Ctrl+/`.

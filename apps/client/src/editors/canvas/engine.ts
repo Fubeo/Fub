@@ -230,9 +230,18 @@ const CARD_KEYS: ReadonlySet<string> = new Set(["PageUp", "PageDown", "Home", "E
 
 /**
  * Le frecce che con Alt vanno alla scheda più vicina (T61, M1). Alt+← e Alt+→
- * non ci sono: sono Indietro e Avanti dello Scrittoio (DECISIONS.md, T56).
+ * solo col fuoco su una scheda: altrove sono Indietro e Avanti dello
+ * Scrittoio (`CARD_ONLY_NEAREST_KEYS`, DECISIONS.md, T56 e T61).
  */
-const NEAREST_CARD_KEYS: ReadonlyMap<string, CardDirection> = new Map([["ArrowUp", "up"], ["ArrowDown", "down"]]);
+const NEAREST_CARD_KEYS: ReadonlyMap<string, CardDirection> = new Map([
+  ["ArrowUp", "up"],
+  ["ArrowDown", "down"],
+  ["ArrowLeft", "left"],
+  ["ArrowRight", "right"],
+]);
+
+/** Le frecce di `NEAREST_CARD_KEYS` che la lavagna senza una scheda a fuoco lascia alla shell. */
+const CARD_ONLY_NEAREST_KEYS: ReadonlySet<string> = new Set(["ArrowLeft", "ArrowRight"]);
 
 /**
  * Quante schede nomina un passo del giro dei nomi (T61), fra un momento libero
@@ -4622,18 +4631,21 @@ export class CanvasEngine {
    * Alt+frecce col fuoco sulla lavagna o su una scheda (M1): la scheda più
    * vicina in quella direzione (`nearestCard`), da quella col fuoco o da
    * quella scelta; senza, la prima nell'ordine di lettura. Se da quella parte
-   * non c'è niente lo dice la regione viva. Solo le frecce di
-   * `NEAREST_CARD_KEYS`: Alt+← e Alt+→ restano Indietro e Avanti dello
-   * Scrittoio (`shell.pane.back`/`forward`, DECISIONS.md, T56). `true` se il
-   * tasto è suo.
+   * non c'è niente lo dice la regione viva. Alt+← e Alt+→ solo col fuoco su
+   * una scheda: sulla lavagna senza una scheda a fuoco, e fuori, restano
+   * Indietro e Avanti dello Scrittoio (`shell.pane.back`/`forward`,
+   * DECISIONS.md, T56). Il tasto preso non arriva al registro della shell.
+   * `true` se il tasto è suo.
    */
   #nearestKey(event: KeyboardEvent): boolean {
     if (!event.altKey || event.shiftKey || event.ctrlKey || event.metaKey) return false;
     const direction = NEAREST_CARD_KEYS.get(event.key);
     if (direction === undefined || !this.#onCardOrBoard(event.target)) return false;
+    if (CARD_ONLY_NEAREST_KEYS.has(event.key) && this.#nodeAt(event.target) === null) return false;
     const reading = this.#boardReading();
     if (!reading || reading.order.length === 0) return false;
     event.preventDefault();
+    event.stopPropagation();
     const fromId = this.#nodeAt(event.target) ?? (this.#selection.length === 1 ? this.#selection[0]! : null);
     const from = fromId === null ? undefined : reading.byId.get(fromId);
     const next = from ? nearestCard(from, reading, direction) : stepInOrder(reading, null, 1);

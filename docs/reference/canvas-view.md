@@ -32,7 +32,8 @@ sono quelli di `spatial/camera.ts` (`zoomAtPoint`, `fit`, `stepCamera`).
   (`#jumpCamera`), che ricorda il salto per Indietro e Avanti.
 - **Indietro e Avanti.** Alt+← e Alt+→ (i comandi della shell
   `shell.pane.back` e `shell.pane.forward`, come le frecce della barra del
-  titolo) chiedono prima alla lavagna col fuoco: ricordano i salti (anche il
+  titolo; col fuoco su una scheda Alt+← e Alt+→ vanno invece alla scheda
+  vicina, sotto) chiedono prima alla lavagna col fuoco: ricordano i salti (anche il
   link seguito a una scheda della lavagna, «Seguire un link» in
   [canvas-input.md](canvas-input.md)), non lo zoom a passi né lo spostamento
   a mano. La storia (`jumps.ts`) sta in memoria,
@@ -259,10 +260,13 @@ scrive i nomi sulle schede.
   prima scheda si torna alla lavagna, dopo l'ultima il fuoco esce dalla vista.
   Dentro una scheda attiva o in un campo il Tab è loro (Esc prima); senza
   schede va ai pulsanti della lavagna vuota.
-- **Alt+↑ e Alt+↓** vanno alla scheda più vicina da quella parte: il centro
+- **Alt+frecce** vanno alla scheda più vicina da quella parte: il centro
   più vicino dentro un cono di 90°, a pari distanza la prima in ordine di
-  lettura; se non c'è niente lo dice la regione viva. Alt+← e Alt+→ restano
-  Indietro e Avanti dello Scrittoio. Le frecce da sole spostano di 8,
+  lettura; se non c'è niente lo dice la regione viva. Alt+↑ e Alt+↓ valgono
+  anche dalla lavagna (senza scheda scelta, la prima in ordine di lettura);
+  Alt+← e Alt+→ solo col fuoco su una scheda, e il tasto non arriva alla
+  shell: sulla lavagna senza una scheda a fuoco, e fuori, restano Indietro e
+  Avanti dello Scrittoio. Le frecce da sole spostano di 8,
   con Maiusc di 32 e con Alt+Maiusc di 1 (`canvas.nudge.<lato>.fine`).
 - **F6 e Maiusc+F6** (`EditorSurface.zone`): la lavagna, il navigatore se si
   vede, la colonna degli strumenti, la riga delle opzioni; poi la shell passa

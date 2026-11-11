@@ -5723,7 +5723,7 @@ describe("CanvasEngine: tutto da tastiera e col lettore di schermo (T61)", () =>
     engine.destroy();
   });
 
-  it("Alt+↑ e Alt+↓ vanno alla scheda più vicina; Alt+← e Alt+→ restano dello Scrittoio", () => {
+  it("Alt+↑ e Alt+↓ vanno alla scheda più vicina, anche dalla lavagna senza una scheda a fuoco", () => {
     const { engine, host } = mounted();
     cardOf(host, "t").focus();
     expect(press(cardOf(host, "t"), "ArrowDown", { altKey: true }).defaultPrevented).toBe(true);
@@ -5736,16 +5736,51 @@ describe("CanvasEngine: tutto da tastiera e col lettore di schermo (T61)", () =>
     press(cardOf(host, "t"), "ArrowUp", { altKey: true });
     expect(focusedCard()).toBe("t");
     expect(said(host)).toBe(t("canvas.a11y.none_that_way"));
-    // Indietro e Avanti (T56): la lavagna non li prende.
-    expect(press(cardOf(host, "t"), "ArrowLeft", { altKey: true }).defaultPrevented).toBe(false);
-    expect(press(cardOf(host, "t"), "ArrowRight", { altKey: true }).defaultPrevented).toBe(false);
-    expect(focusedCard()).toBe("t");
     // Senza fuoco su una scheda né scelta, Alt+↓ prende la prima.
     run(engine, "canvas.escape");
     viewportOf(host).focus();
     press(viewportOf(host), "ArrowDown", { altKey: true });
     expect(focusedCard()).toBe("g");
     engine.destroy();
+  });
+
+  it("Alt+← e Alt+→ vanno alla scheda vicina col fuoco su una scheda; altrove restano Indietro e Avanti (T56)", () => {
+    const { engine, host } = mounted();
+    // Il registro della shell come `mountKeyboard` (`ui/keyboard.ts`): un solo
+    // ascoltatore sul documento, dopo le keymap locali, che non parte se
+    // l'evento gli arriva già preso.
+    const shell: string[] = [];
+    const registry = (event: KeyboardEvent): void => {
+      if (event.defaultPrevented || !event.altKey) return;
+      if (event.key === "ArrowLeft") shell.push("shell.pane.back");
+      if (event.key === "ArrowRight") shell.push("shell.pane.forward");
+    };
+    document.addEventListener("keydown", registry);
+    try {
+      // Col fuoco sul testo, Alt+→ porta alla foto, che gli sta a destra, e
+      // Indietro/Avanti non partono.
+      cardOf(host, "t").focus();
+      expect(press(cardOf(host, "t"), "ArrowRight", { altKey: true }).defaultPrevented).toBe(true);
+      expect(focusedCard()).toBe("f");
+      expect(press(cardOf(host, "f"), "ArrowLeft", { altKey: true }).defaultPrevented).toBe(true);
+      expect(focusedCard()).toBe("t");
+      // A sinistra del testo non c'è niente: lo dice la regione viva, e il
+      // tasto resta della lavagna (non diventa un Indietro a sorpresa).
+      press(cardOf(host, "t"), "ArrowLeft", { altKey: true });
+      expect(focusedCard()).toBe("t");
+      expect(said(host)).toBe(t("canvas.a11y.none_that_way"));
+      expect(shell).toEqual([]);
+      // Col fuoco sulla lavagna, senza una scheda a fuoco, Alt+← e Alt+→
+      // arrivano ancora a Indietro e Avanti.
+      viewportOf(host).focus();
+      expect(press(viewportOf(host), "ArrowLeft", { altKey: true }).defaultPrevented).toBe(false);
+      expect(press(viewportOf(host), "ArrowRight", { altKey: true }).defaultPrevented).toBe(false);
+      expect(document.activeElement).toBe(viewportOf(host));
+      expect(shell).toEqual(["shell.pane.back", "shell.pane.forward"]);
+    } finally {
+      document.removeEventListener("keydown", registry);
+      engine.destroy();
+    }
   });
 
   it("le frecce spostano di 8 e Alt+Maiusc+frecce di 1 (A-23); spostare e togliere si annunciano", () => {
