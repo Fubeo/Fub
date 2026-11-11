@@ -2,7 +2,7 @@
 
 Fonte generata: `npm run theme:generate`. Verifica: `npm run theme:verify`.
 
-Il contratto richiede **154 ruoli**, espone **1687 hook**, **7 stati** (795 assegnazioni su 236 componenti) e lascia ridichiarare alla persona **186 token**. Gli elenchi, le coppie di contrasto e il vocabolario CSS in più sono in `contract.json`, generato dalle sorgenti della shell.
+Il contratto richiede **154 ruoli**, espone **1690 hook**, **7 stati** (797 assegnazioni su 237 componenti) e lascia ridichiarare alla persona **186 token**. Gli elenchi, le coppie di contrasto e il vocabolario CSS in più sono in `contract.json`, generato dalle sorgenti della shell.
 
 Dichiara anche **63 ruoli facoltativi** (`optional_roles`): i segni di Fub sulla carta del tema (`--doc-ins`, `--doc-find`, …) e la carta chiara di un file (`--paper-*`). Un tema che non li dichiara ha i ripieghi della struttura; se li dichiara, le loro coppie (`optional_pairs`) si contano come le altre.
 
@@ -10,7 +10,7 @@ Dichiara anche **63 ruoli facoltativi** (`optional_roles`): i segni di Fub sulla
 
 Ogni hook appartiene a uno strato, e `contract.json` lo dice in `layers`:
 
-- **cornice** (1354 hook): barre, pannelli, menu, righelli, scrivania. È del tema, sempre.
+- **cornice** (1357 hook): barre, pannelli, menu, righelli, scrivania. È del tema, sempre.
 - **segno** (110 hook): ciò che Fub disegna sul contenuto, cioè selezione, cursore, fuoco, ricerca, revisioni, correttore, commenti e maniglie. È del tema, con i colori della carta su cui sta (`--doc-*`).
 - **contenuto** (223 hook): ciò che il file dice. Chi ne ha l'autorità lo dichiara la modalità della superficie, con uno di tre aspetti che la shell mette sulla radice del contenuto: `look-tema`, `look-file` o `look-adattato`.
 
@@ -63,15 +63,15 @@ Un tema `theme-2` può ridisegnare per nome le icone della shell. Il manifest no
 
 Il tema non aggiunge icone: ridisegna quelle che ci sono. Un alias ridisegnato vale per il nome a cui punta (`folder` è `vault`). Un nome che oggi nessuno disegna non rifiuta il tema (un modulo può registrarlo più tardi), ma non si vede. Cambiato tema, o annullata l'anteprima, le icone già sullo schermo tornano a quelle del tema scelto.
 
-I 446 nomi che un tema può ridisegnare (`theme/author/icon-names.json`, tenuto uguale a `iconNames()` da `src/ui/icon-names.test.ts`):
+I 447 nomi che un tema può ridisegnare (`theme/author/icon-names.json`, tenuto uguale a `iconNames()` da `src/ui/icon-names.test.ts`):
 
 ```text
 activity arrow-left arrow-right backlinks backup bell canvas-connect canvas-find-next
-canvas-find-previous canvas-finger canvas-lasso canvas-text caret-down check chevron close cloud
-collection command component copy cut dashboard draw-access draw-access-info draw-access-warning
-draw-align draw-align-bottom draw-align-center draw-align-left draw-align-middle draw-align-right
-draw-align-top draw-anchor-end draw-anchor-middle draw-anchor-start draw-arrow draw-back
-draw-color-more draw-commands draw-cover draw-design draw-distribute-x draw-distribute-y
+canvas-find-previous canvas-finger canvas-lasso canvas-ruler canvas-text caret-down check chevron
+close cloud collection command component copy cut dashboard draw-access draw-access-info
+draw-access-warning draw-align draw-align-bottom draw-align-center draw-align-left draw-align-middle
+draw-align-right draw-align-top draw-anchor-end draw-anchor-middle draw-anchor-start draw-arrow
+draw-back draw-color-more draw-commands draw-cover draw-design draw-distribute-x draw-distribute-y
 draw-duplicate draw-ellipse draw-eraser draw-export draw-fit draw-flip-h draw-flip-v draw-group
 draw-hand draw-here draw-hidden draw-hide-ui draw-highlighter draw-history draw-image
 draw-into-layer draw-keys draw-landscape draw-layers draw-line draw-link draw-lock draw-mark

@@ -325,6 +325,38 @@ delle opzioni spiega il gesto finché non c'è una scheda scelta.
   solo se ci sono schede scelte.
 - **In sola lettura** il Lazo sceglie ma non sposta e non cambia.
 
+## Le forme, Maiusc e il righello
+
+Una forma resta un tratto `fub:ink` (D-22): nessun campo e nessun formato
+nuovo. La guida del tratto in corso è `StrokeGuide` (`ink-shapes.ts`); il
+riconoscimento e il righello sono quelli del disegno (`recognize.ts`,
+`ruler.ts`), importati come funzioni pure.
+
+- **La penna ferma.** Un tratto a penna tenuto fermo mezzo secondo alla fine
+  diventa la forma a cui somiglia: linea, freccia, rettangolo, ellisse,
+  poligono o stella. Sotto 40 pixel sullo schermo resta inchiostro: è la
+  misura della scrittura. La scia mostra subito la forma e il lettore di
+  schermo la sente; finché la penna resta giù, muoverla la regola come nel
+  disegno e `Maiusc` la fa regolare. L'evidenziatore, un tratto sul righello
+  e un tratto spezzato al limite dei campioni non diventano forme.
+- **All'alzata, due passi.** Prima il tratto com'era, poi una toppa `ink` che
+  ne cambia l'`ink` al suo posto: stesso `id`, `tool`, `at`, `brush`,
+  `color` e `anchor`. Il primo annulla riporta il tratto, il secondo lo
+  toglie. I campioni corrono lungo il contorno a passi di 1,5 unità con la
+  pressione mediana del tratto; la freccia è l'asta e la punta in un tratto
+  solo, con la punta del disegno.
+- **Maiusc** durante il tratto lo scrive dritto dal primo punto all'ultimo, a
+  passi di 15°; premuto a metà tratto, la scia si raddrizza subito.
+- **Il righello** («Righello» nella colonna) sta sopra la lavagna e non entra
+  nel file. È largo 72 pixel dello schermo a ogni zoom; il corpo si sposta,
+  la rotella e le frecce lo girano a gradi, con `Maiusc` a passi di 15°, e
+  `Inizio` lo raddrizza. Un tratto che comincia entro 16 pixel da un bordo (12
+  col mouse, 24 col dito) lo segue: ogni campione va sul bordo, scostato di
+  mezza punta.
+- **La latenza.** A ogni campione la guida guarda solo se la punta è uscita
+  dal punto fermo; la forma si cerca una volta, quando il mezzo secondo è
+  passato.
+
 ## Toppa e operazioni
 
 Le toppe e le operazioni della lavagna sono nelle [operazioni sulla

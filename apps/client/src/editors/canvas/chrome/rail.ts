@@ -19,6 +19,10 @@
 // spostano; il suo suggerimento dice quando «Il dito sposta le schede» non vale
 // più.
 //
+// Sopra «Il dito scrive», in tutti e due gli spazi, «Righello» (T87): mette o
+// toglie il righello sulla lavagna (`ink-ruler.ts`); premuto finché c'è. Non è
+// uno strumento: lo strumento scelto resta quello.
+//
 // In sola lettura gli strumenti che scrivono (penna, evidenziatore, gomma,
 // testo, collega) si vedono spenti col perché nel nome e nel suggerimento;
 // Selezione, Lazo e Mano restano: il lazo sceglie anche lì, non sposta.
@@ -127,6 +131,10 @@ export interface CanvasRailOptions {
   readonly fingerMovesCard?: () => boolean;
   /// L'interruttore «Il dito scrive» premuto: il valore nuovo.
   readonly onFingerWrites?: (on: boolean) => void;
+  /// Il righello è sulla lavagna adesso (T87); assente, non c'è.
+  readonly ruler?: () => boolean;
+  /// «Righello» premuto: il valore nuovo.
+  readonly onRuler?: (on: boolean) => void;
   readonly lifetime: Lifetime;
 }
 
@@ -207,6 +215,22 @@ export function createCanvasRail(options: CanvasRailOptions): CanvasRail {
   const element = document.createElement("div");
   element.className = "canvas-rail";
   element.append(rail.element);
+  // «Righello» (T87), subito sopra «Il dito scrive».
+  const ruler = document.createElement("button");
+  ruler.type = "button";
+  ruler.className = "canvas-button canvas-rail-ruler";
+  const rulerIcon = iconEl("canvas-ruler");
+  if (rulerIcon) {
+    rulerIcon.setAttribute("aria-hidden", "true");
+    ruler.append(rulerIcon);
+  }
+  lifetime.listen(ruler, "click", () => options.onRuler?.(!(options.ruler?.() ?? false)));
+  element.append(ruler);
+  const paintRuler = (): void => {
+    ruler.setAttribute("aria-pressed", String(options.ruler?.() ?? false));
+    ruler.setAttribute("aria-label", t("canvas.ruler"));
+    setTooltip(ruler, t("canvas.ruler.hint"));
+  };
   // «Il dito scrive» in fondo alla colonna, prima di «Completo» (T64).
   const finger = document.createElement("button");
   finger.type = "button";
@@ -258,6 +282,7 @@ export function createCanvasRail(options: CanvasRailOptions): CanvasRail {
   const sync = (): void => {
     rail.setActive(options.tool());
     paintReadOnly();
+    paintRuler();
     paintFinger();
   };
   const rebuild = (): void => {

@@ -3126,17 +3126,27 @@ body {
   border-inline-end-width: 0;
   border-block-start-width: 1px;
 }
-/* «Il dito scrive» in fondo alla colonna (T64), in tutti e due gli spazi;
-   «Completo», nello spazio Semplice (T65; come .draw-rail-full), gli sta
-   sotto. Stretta, tutti e due in fondo alla riga, uno accanto all'altro;
-   «Completo» subito dopo le caselle va al capo da solo. */
+/* «Righello» (T87) e «Il dito scrive» (T64) in fondo alla colonna, in tutti e
+   due gli spazi; «Completo», nello spazio Semplice (T65; come
+   .draw-rail-full), gli sta sotto. Stretta, tutti in fondo alla riga, uno
+   accanto all'altro; «Completo» subito dopo le caselle va al capo da solo. */
+.canvas-rail-ruler,
 .canvas-rail-finger {
   flex: none;
+}
+.canvas-rail-ruler {
   margin-block-start: auto;
 }
-.canvas-surface[data-narrow] .canvas-rail-finger {
+.canvas-rail-ruler + .canvas-rail-finger {
+  margin-block-start: var(--space-2, 4px);
+}
+.canvas-surface[data-narrow] .canvas-rail-ruler {
   margin-block-start: 0;
   margin-inline-start: auto;
+}
+.canvas-surface[data-narrow] .canvas-rail-ruler + .canvas-rail-finger {
+  margin-block-start: 0;
+  margin-inline-start: var(--space-2, 4px);
 }
 .canvas-rail-full {
   flex: none;
@@ -3418,6 +3428,50 @@ body {
 .canvas-lasso-path,
 .canvas-lasso-frame {
   stroke-dasharray: 5 4;
+}
+
+/* Il righello (T87): un fratello della vista, sopra di lei, che non prende il
+   puntatore; la riga è larga quanto basta a passare da un bordo all'altro a
+   ogni angolo, con il centro e l'angolo dalla lavagna (`--canvas-ruler-x`,
+   `--canvas-ruler-y` in pixel della vista, `--canvas-ruler-angle`). Il corpo
+   (`.canvas-ruler-grip`) prende il puntatore; le due fasce lungo i bordi,
+   larghe quanto la portata della penna (16 px), lo lasciano alla vista, dove
+   il tratto comincia e segue il bordo. */
+.canvas-ruler {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+.canvas-ruler-bar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  box-sizing: border-box;
+  width: 400vmax;
+  height: var(--canvas-ruler-width, 72px);
+  border-block-width: 1px;
+  border-block-style: solid;
+  transform: translate(var(--canvas-ruler-x, 0px), var(--canvas-ruler-y, 0px)) rotate(var(--canvas-ruler-angle, 0deg)) translate(-50%, -50%);
+  transform-origin: 0 0;
+  pointer-events: none;
+}
+.canvas-ruler-grip {
+  position: absolute;
+  inset-block: 16px;
+  inset-inline: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: move;
+  touch-action: none;
+  pointer-events: auto;
+}
+.canvas-ruler-angle {
+  pointer-events: none;
+  user-select: none;
+  white-space: nowrap;
 }
 
 /* L'etichetta accanto alla penna, mentre si scrive (T69): sopra a destra

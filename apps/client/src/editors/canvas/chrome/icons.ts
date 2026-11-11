@@ -32,6 +32,14 @@ const CANVAS_ICONS: Readonly<Record<string, readonly string[]>> = {
     "M12 10.5V9a1.5 1.5 0 0 1 3 0v2",
     "M15 10.5a1.5 1.5 0 0 1 3 0V14a6 6 0 0 1-6 6h-.6a5 5 0 0 1-3.9-1.9L5 15.2a1.5 1.5 0 0 1 2.3-1.9L9 15",
   ],
+  // Il righello (T87): la riga di traverso con le tacche lungo un bordo.
+  "canvas-ruler": [
+    "M3.5 16.5 16.5 3.5l4 4-13 13z",
+    "M6 14l1.5 1.5",
+    "M9 11l2.5 2.5",
+    "M12 8l1.5 1.5",
+    "M15 5l2.5 2.5",
+  ],
   // Cerca nella lavagna (T60): il risultato precedente e il seguente, le
   // frecce del prototipo.
   "canvas-find-previous": ["M19 12H5", "M11 6l-6 6 6 6"],

@@ -8,7 +8,7 @@ import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { t } from "../../i18n/strings";
 import { parseInkBrush, penOf } from "../../ink/brush";
 import { quantizeInk, type InkSample } from "../../ink/sample";
-import { encodeInk, inkFromQuantized } from "../spatial/ink/codec";
+import { decodeInk, encodeInk, inkFromQuantized, inkLength, inkPoint } from "../spatial/ink/codec";
 import { CanvasEngine, type CanvasChange, type CanvasCorePort } from "./engine";
 import { INK_SCALE_ASPECT } from "./ink-paint";
 import type { CanvasPatch } from "./operation";
@@ -1741,5 +1741,183 @@ describe("il dito scrive (T64)", () => {
     expect(full.hidden).toBe(false);
     expect(button.hidden).toBe(false);
     expect(button.nextElementSibling).toBe(full);
+  });
+});
+
+// Le forme dal tratto, Maiusc e il righello (T87): una forma resta un tratto
+// `fub:ink` (D-22 (a)).
+describe("le forme dal tratto, Maiusc e il righello", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+    window.dispatchEvent(new KeyboardEvent("keyup", { key: "Shift" }));
+  });
+
+  /** I punti del tratto `stroke` di un livello, dal suo `ink`. */
+  function pointsOf(stroke: Json): (readonly [number, number])[] {
+    const ink = decodeInk(String(stroke.ink));
+    return Array.from({ length: inkLength(ink) }, (_, i) => inkPoint(ink, i));
+  }
+
+  /** Un rettangolo di 200 × 150 sulla lavagna libera, coi punti di mezzo dei lati: nove campioni. */
+  const RECT: [number, number][] = [
+    [100, 300], [200, 300], [300, 300], [300, 375], [300, 450], [200, 450], [100, 450], [100, 375], [100, 300],
+  ];
+
+  /** Le chiavi del documento e di ogni scheda: una forma non porta niente di nuovo nel file. */
+  function keysOf(text: string): string[] {
+    const doc = JSON.parse(text) as Json & { nodes: Json[] };
+    return [...Object.keys(doc), ...doc.nodes.flatMap((node) => Object.keys(node))].sort();
+  }
+
+  it("la penna ferma mezzo secondo fa la forma: due passi, il primo annulla riporta il tratto com'era, il secondo lo toglie", () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    const { engine, host, changes } = mounted();
+    const lift = pen(host, viewportOf(host), RECT, false);
+    vi.advanceTimersByTime(500);
+    // La forma si dice prima dell'alzata.
+    expect(host.querySelector(".canvas-gesture-said")?.textContent?.trim()).toBe(
+      t("canvas.ink.shape", { kind: t("canvas.ink.shape.rect") }),
+    );
+    lift();
+    expect(changes).toHaveLength(2);
+    const [drawn] = strokesOf(changes[0]!.text, null);
+    const [shaped] = strokesOf(changes[1]!.text, null);
+    expect(strokesOf(changes[1]!.text, null)).toHaveLength(1);
+    // Lo stesso tratto: id, penna, colore, spessore, ancora e ora; cambia l'inchiostro.
+    expect(shaped).toEqual({ ...drawn, ink: shaped!.ink });
+    expect(shaped!.ink).not.toBe(drawn!.ink);
+    const points = pointsOf(shaped!);
+    expect(points[0]).toEqual(points[points.length - 1]);
+    for (const [x, y] of points) {
+      const onSide = Math.abs(x - 100) < 0.5 || Math.abs(x - 300) < 0.5 || Math.abs(y - 300) < 0.5 || Math.abs(y - 450) < 0.5;
+      expect(onSide).toBe(true);
+    }
+    // Il file ha solo tratti `fub:ink`: niente di nuovo fuori dal livello.
+    expect(keysOf(changes[1]!.text)).toEqual(keysOf(changes[0]!.text));
+    expect(changes[1]!.operation.patches).toEqual([
+      expect.objectContaining({ kind: "ink", layer: "board", at: 0, before: drawn, after: shaped }),
+    ]);
+
+    expect(engine.undo()).toBe(true);
+    expect(lastChange(changes).text).toBe(changes[0]!.text);
+    expect(engine.undo()).toBe(true);
+    expect(lastChange(changes).text).toBe(BOARD);
+  });
+
+  it("un tratto che non è una forma, uno corto e l'evidenziatore restano inchiostro", () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    const { engine, host, changes } = mounted();
+    // Uno zigzag, tenuto fermo.
+    let lift = pen(host, viewportOf(host), [[100, 300], [130, 380], [160, 300], [190, 380], [220, 300], [250, 380]], false);
+    vi.advanceTimersByTime(500);
+    lift();
+    expect(changes).toHaveLength(1);
+    // Un quadratino di 20 pixel: la misura della scrittura.
+    lift = pen(host, viewportOf(host), [[400, 300], [420, 300], [420, 320], [400, 320], [400, 300]], false);
+    vi.advanceTimersByTime(500);
+    lift();
+    expect(changes).toHaveLength(2);
+    // L'evidenziatore, sul rettangolo.
+    openPen(engine);
+    pick("tool", "highlighter");
+    lift = pen(host, viewportOf(host), RECT, false);
+    vi.advanceTimersByTime(500);
+    lift();
+    expect(changes).toHaveLength(3);
+    expect(strokesOf(lastChange(changes).text, null).map((stroke) => stroke.tool)).toEqual(["pen", "pen", "highlighter"]);
+  });
+
+  it("la forma sopra una scheda resta della scheda, come il tratto", () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    const { host, changes } = mounted();
+    const box: [number, number][] = [[20, 20], [100, 20], [180, 20], [180, 50], [180, 80], [100, 80], [20, 80], [20, 50], [20, 20]];
+    const lift = pen(host, card(host, "t"), box, false);
+    vi.advanceTimersByTime(500);
+    lift();
+    expect(changes).toHaveLength(2);
+    const [drawn] = strokesOf(changes[0]!.text, "t");
+    const [shaped] = strokesOf(changes[1]!.text, "t");
+    expect(shaped).toMatchObject({ id: drawn!.id, anchor: drawn!.anchor });
+    expect(shaped!.ink).not.toBe(drawn!.ink);
+    expect(strokesOf(changes[1]!.text, null)).toEqual([]);
+  });
+
+  it("Maiusc durante il tratto lo tiene dritto a passi di 15°, anche premuto a metà", () => {
+    const { host, changes } = mounted();
+    // Da (100, 300) verso (180, 330): 20,6°, che va a 15°.
+    const lift = pen(host, viewportOf(host), [[100, 300], [130, 318], [150, 312]], false);
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "Shift", shiftKey: true }));
+    const cam = camera(host);
+    clock += 8;
+    viewportOf(host).dispatchEvent(pointerEvent("pointermove", {
+      ...PEN, clientX: 180 * cam.zoom + cam.x, clientY: 330 * cam.zoom + cam.y, button: -1, buttons: 1, pressure: 0.5, shiftKey: true, timeStamp: clock,
+    }));
+    lift();
+    expect(changes).toHaveLength(1);
+    expect(changes[0]!.operation.patches).toHaveLength(1);
+    const points = pointsOf(strokesOf(changes[0]!.text, null)[0]!);
+    const [x0, y0] = points[0]!;
+    expect([x0, y0]).toEqual([100, 300]);
+    for (const [x, y] of points.slice(1)) expect((Math.atan2(y - y0, x - x0) * 180) / Math.PI).toBeCloseTo(15, 1);
+  });
+
+  it("il righello: «Righello» nella colonna lo mette e lo toglie, non entra nel file; la penna lungo il bordo scrive dritto", () => {
+    const { host, changes } = mounted();
+    const button = host.querySelector<HTMLButtonElement>(".canvas-rail-ruler")!;
+    expect(button.getAttribute("aria-label")).toBe(t("canvas.ruler"));
+    expect(button.getAttribute("aria-pressed")).toBe("false");
+    const element = host.querySelector<HTMLElement>(".canvas-ruler")!;
+    expect(element.hidden).toBe(true);
+    button.click();
+    expect(button.getAttribute("aria-pressed")).toBe("true");
+    expect(element.hidden).toBe(false);
+    expect(changes).toHaveLength(0);
+    // La riga è un fratello della vista, non un suo figlio: lo strato della penna non la prende.
+    expect(viewportOf(host).contains(element)).toBe(false);
+
+    // Il righello nasce dritto in mezzo alla vista; il bordo in basso sta a
+    // mezza larghezza (36 pixel dello schermo) sotto il centro.
+    const cam = camera(host);
+    const center = { x: -cam.x / cam.zoom, y: -cam.y / cam.zoom };
+    const edge = center.y + 36 / cam.zoom;
+    const grip = host.querySelector<HTMLElement>(".canvas-ruler-grip")!;
+    expect(grip.getAttribute("aria-valuenow")).toBe("0");
+    pen(host, viewportOf(host), [[center.x, edge + 3 / cam.zoom], [center.x + 60, edge + 9 / cam.zoom], [center.x + 120, edge + 1 / cam.zoom]]);
+    expect(changes).toHaveLength(1);
+    const ys = pointsOf(strokesOf(changes[0]!.text, null)[0]!).map(([, y]) => y);
+    expect(new Set(ys).size).toBe(1);
+    expect(ys[0]!).toBeGreaterThan(edge);
+    expect(ys[0]! - edge).toBeLessThan(4 / cam.zoom);
+
+    // Lontano dal righello il tratto resta com'è.
+    pen(host, viewportOf(host), [[center.x, edge + 300], [center.x + 60, edge + 320], [center.x + 120, edge + 310]]);
+    expect(new Set(pointsOf(strokesOf(lastChange(changes).text, null)[1]!).map(([, y]) => y)).size).toBeGreaterThan(1);
+
+    button.click();
+    expect(element.hidden).toBe(true);
+    expect(button.getAttribute("aria-pressed")).toBe("false");
+    expect(changes).toHaveLength(2);
+  });
+
+  it("il righello si gira con le frecce, a passi di 15° con Maiusc, e con la rotella; si sposta col corpo", () => {
+    const { host } = mounted();
+    host.querySelector<HTMLButtonElement>(".canvas-rail-ruler")!.click();
+    const grip = host.querySelector<HTMLElement>(".canvas-ruler-grip")!;
+    const bar = host.querySelector<HTMLElement>(".canvas-ruler-bar")!;
+    grip.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true }));
+    expect(grip.getAttribute("aria-valuenow")).toBe("1");
+    grip.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", shiftKey: true, bubbles: true }));
+    expect(grip.getAttribute("aria-valuenow")).toBe("15");
+    // La rotella a gradi: 60 sono tre gradi.
+    grip.dispatchEvent(new WheelEvent("wheel", { deltaY: 60, bubbles: true, cancelable: true }));
+    expect(grip.getAttribute("aria-valuenow")).toBe("18");
+    expect(bar.style.getPropertyValue("--canvas-ruler-angle")).toBe("18deg");
+    grip.dispatchEvent(new KeyboardEvent("keydown", { key: "Home", bubbles: true }));
+    expect(grip.getAttribute("aria-valuenow")).toBe("0");
+    const x = parseFloat(bar.style.getPropertyValue("--canvas-ruler-x"));
+    grip.dispatchEvent(pointerEvent("pointerdown", { ...MOUSE, button: 0, buttons: 1, clientX: 10, clientY: 10 }));
+    grip.dispatchEvent(pointerEvent("pointermove", { ...MOUSE, button: -1, buttons: 1, clientX: 60, clientY: 10 }));
+    grip.dispatchEvent(pointerEvent("pointerup", { ...MOUSE, button: 0, buttons: 0, clientX: 60, clientY: 10 }));
+    expect(parseFloat(bar.style.getPropertyValue("--canvas-ruler-x"))).toBeCloseTo(x + 50, 6);
   });
 });
