@@ -3100,7 +3100,7 @@ l'assenza dei menu di struttura e `Stale`; la prova e2e passa; le foto del
 banco somigliano al prototipo.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/grid/card.test.ts src/canvas-edit.e2e.test.ts
-Stato: [ ] da fare
+Stato: [~] in corso · coder Opus · base 0f39b861f (dal ramo `wip/n6-t42`)
 
 ## T43 · La scheda di testo in Live
 
@@ -3792,7 +3792,7 @@ una nota che non c'è sulla lavagna, e che Indietro torna al punto di
 partenza.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/canvas/engine-cards.test.ts
-Stato: [ ] da fare
+Stato: [x] fatto (2026-11-11, integrato dall'orchestratore dal ramo `wip/n6-t57` con il check verde sulla punta di N6). Differenze: il lampo usa l'accento; la frase su Indietro e Avanti sta in `canvas-view.md`, dove il riordino ha portato «Muoversi»
 
 ## T58 · L'ispettore: le schede in ordine di lettura
 
