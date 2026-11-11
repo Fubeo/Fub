@@ -4801,7 +4801,7 @@ ritaglio» e che il file dell'immagine non riceve mai una scrittura; le
 foto del banco somigliano al prototipo.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/canvas
-Stato: [ ] da fare
+Stato: [~] in corso · coder Opus · base b949ddf80
 
 ## T79 · La scheda PDF sui tasselli di PdfCraft
 
