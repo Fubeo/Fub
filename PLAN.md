@@ -5533,7 +5533,7 @@ con la nota che si scrive e si salva; le foto del banco mostrano gli stati e
 l'avviso come nel riquadro.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/state/card-editors.test.ts src/editors/canvas src/canvas-edit.e2e.test.ts
-Stato: [~] in corso · coder Opus · base a403c00e3
+Stato: [x] fatto · 30e04efee, 33f716844 · differenze: lo stato della scheda è `SaveState | "readonly"`, con la stessa parola della testata (`saveStateKey`), anche «Salvato»; la bozza ritrovata è l’avviso del riquadro più il banner del conflitto già condiviso; corretto il testo di `canvas.card.readonly_why` (diceva «sola lettura sul disco»); l’avviso sta sopra il testo e lo spinge giù, come il conflitto di T41; toccati anche i chiamanti del contratto (`saving.ts`, `panels/document.ts`, `document-controller.ts`, `shell-layout.ts`, `document-bridge.ts`, `grid/card.ts`). Non coperto: rinominare la lavagna mentre una scheda scrive
 
 ## T97 · La formula della cella attiva dal motore della griglia
 
