@@ -709,3 +709,197 @@ describe("dove comincia un titolo (T41, `Nota#Titolo`)", () => {
     expect(headingOffset("~~~\n# Dentro\n", "Dentro")).toBeNull();
   });
 });
+
+// La scheda di testo in Live (T43): il testo sta nel `.canvas`, non in un
+// file. La porta monta l'editor delle note dal registro della finestra, in
+// Live, senza sessione; le battute vanno a `onText`.
+describe("l'editor delle note sopra il testo di una scheda di testo", () => {
+  /// Un editor delle note finto: tiene il testo come lo terrebbe l'editor vero
+  /// (`normalize` simula un testo che non torna uguale, i terminatori misti).
+  class TextEditor {
+    text = "";
+    mode: string | null = null;
+    readOnly = false;
+    destroyed = false;
+    focused = 0;
+    forms: unknown = null;
+    readonly reveals: number[] = [];
+    constructor(
+      readonly context: SurfaceMountContext,
+      readonly onChange: (paneId: string, change: EditorChange) => void,
+      readonly normalize: (text: string) => string,
+    ) {
+      context.parent.textContent = "editor";
+    }
+    type(next: string): void {
+      const before = this.text;
+      this.text = next;
+      this.onChange(this.context.paneId, { text: next, operation: operationFromText(before, next), origin: "input" });
+    }
+    surface(): EditorSurface {
+      return {
+        family: "text",
+        profile: "markdown",
+        surfaceId: this.context.paneId,
+        modes: MODES,
+        defaultMode: "source",
+        setMode: (mode) => {
+          this.mode = mode;
+        },
+        buffer: {
+          setDoc: (text) => {
+            this.text = this.normalize(text);
+          },
+          syncDoc: () => {
+            throw new Error("nessuna sessione scrive in una scheda di testo");
+          },
+          getDoc: () => this.text,
+        },
+        focus: () => {
+          this.focused++;
+        },
+        reveal: ({ span }) => {
+          this.reveals.push(span.start);
+          return true;
+        },
+        setReadOnly: (readOnly) => {
+          this.readOnly = readOnly;
+        },
+        setSyntaxForms: (forms) => {
+          this.forms = forms;
+        },
+        destroy: () => {
+          this.destroyed = true;
+        },
+      };
+    }
+  }
+
+  let made: TextEditor[];
+  let hub: CardEditorHub;
+  let life: Lifetime;
+  let normalize: (text: string) => string;
+
+  beforeEach(() => {
+    made = [];
+    normalize = (text) => text;
+    const registry = new DocumentSurfaceRegistry();
+    registry.register({
+      owner: "test.text",
+      family: "text",
+      defaultProfile: "markdown",
+      formats: { markdown: "markdown" },
+      factory: {
+        mount: (_profile, context) => {
+          const editor = new TextEditor(context, (paneId, change) => {
+            if (!hub.written(paneId, change)) throw new Error(`modifica di un riquadro: ${paneId}`);
+          }, normalize);
+          made.push(editor);
+          return editor.surface();
+        },
+      },
+    });
+    // Il testo non tocca mai le sessioni: una collezione che lancia lo prova.
+    const sessions = new Proxy({}, {
+      get: () => {
+        throw new Error("la scheda di testo non ha una sessione");
+      },
+    }) as Parameters<typeof createCardEditorPort>[0]["sessions"];
+    hub = createCardEditorPort({
+      sessions,
+      surfaces: () => registry,
+      held: () => false,
+      shownInPane: () => false,
+      theme: () => "dark",
+    });
+    life = openLifetime();
+  });
+  afterEach(() => {
+    life.close();
+  });
+
+  const textOptions = (onText: (text: string) => void = () => {}) => ({
+    onText,
+    readOnly: false,
+    lifetime: life,
+    documentId: "cartella/board.canvas",
+    forms: [],
+  });
+
+  it("monta l'editor delle note in Live sul testo, e ogni battuta va a onText", async () => {
+    const host = document.createElement("div");
+    const texts: string[] = [];
+    const editor = await hub.openText(host, "vedi [[Altra]]", textOptions((text) => texts.push(text)));
+    expect(editor).not.toBeNull();
+    expect(made).toHaveLength(1);
+    const surface = made[0]!;
+    expect(surface.mode).toBe("live_preview");
+    expect(surface.text).toBe("vedi [[Altra]]");
+    expect(surface.forms).toEqual([]);
+    // Il nome è nella cartella della lavagna, ma nessuna sessione lo porta.
+    expect(surface.context.documentId).toBe(`cartella/board.canvas#${surface.context.paneId}`);
+    expect(surface.context.compact).toBe(true);
+    expect(host.dataset.cardEditor).toBe("compact");
+
+    surface.type("vedi [[Altra]] e altro");
+    expect(texts).toEqual(["vedi [[Altra]] e altro"]);
+    expect(editor!.text()).toBe("vedi [[Altra]] e altro");
+
+    // Il cursore a `at`, contato in UTF-16, arriva alla superficie in byte.
+    surface.text = "è qui";
+    editor!.focus(1);
+    expect(surface.reveals).toEqual([2]);
+    editor!.focus();
+    expect(surface.reveals).toEqual([2, 6]);
+    expect(surface.focused).toBe(2);
+
+    editor!.destroy();
+    editor!.destroy();
+    expect(surface.destroyed).toBe(true);
+    expect(host.childNodes).toHaveLength(0);
+    expect(host.dataset.cardEditor).toBeUndefined();
+    expect(editor!.text()).toBe("è qui");
+    // Una battuta arrivata dopo lo smontaggio è ancora di una scheda, e non va da nessuna parte.
+    surface.type("tardi");
+    expect(texts).toEqual(["vedi [[Altra]] e altro"]);
+  });
+
+  it("si smonta da sé quando si chiude la vita del campo, e destroyAll lo smonta", async () => {
+    const first = await hub.openText(document.createElement("div"), "uno", textOptions());
+    expect(first).not.toBeNull();
+    life.close();
+    expect(made[0]!.destroyed).toBe(true);
+    life = openLifetime();
+    await hub.openText(document.createElement("div"), "due", textOptions());
+    hub.destroyAll();
+    expect(made[1]!.destroyed).toBe(true);
+  });
+
+  it("un testo che l'editor non terrebbe byte per byte resta al campo semplice", async () => {
+    normalize = (text) => text.replace(/\r\n?/g, "\n");
+    const host = document.createElement("div");
+    const editor = await hub.openText(host, "uno\r\ndue\ntre", textOptions());
+    expect(editor).toBeNull();
+    expect(made[0]!.destroyed).toBe(true);
+    expect(host.childNodes).toHaveLength(0);
+    expect(host.dataset.cardEditor).toBeUndefined();
+  });
+
+  it("con la vita già chiusa non monta niente", async () => {
+    life.close();
+    expect(await hub.openText(document.createElement("div"), "uno", textOptions())).toBeNull();
+    expect(made).toHaveLength(0);
+  });
+
+  it("una superficie che cede si ferma in sola lettura, e niente più arriva a onText", async () => {
+    const texts: string[] = [];
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    await hub.openText(document.createElement("div"), "uno", textOptions((text) => texts.push(text)));
+    const surface = made[0]!;
+    expect(hub.failed(surface.context.paneId, new Error("guasto"))).toBe(true);
+    expect(surface.readOnly).toBe(true);
+    surface.type("dopo");
+    expect(texts).toEqual([]);
+    error.mockRestore();
+  });
+});

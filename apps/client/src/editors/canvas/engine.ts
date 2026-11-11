@@ -33,6 +33,7 @@ import {
   type CardRenderer,
   type CardSize,
   type CardSnapshots,
+  type CardTextEditor,
   type CardView,
   type CardWriting,
   type Rect,
@@ -307,7 +308,15 @@ type CardField = "text" | "label" | "url" | "file";
 interface CardEditor {
   readonly id: string;
   readonly field: CardField;
+  /**
+   * Il campo semplice: c'è sempre, ed è dove si scrive finché l'editor delle
+   * note non lo sostituisce (la scheda di testo, T43), o se non si monta.
+   */
   readonly input: HTMLInputElement | HTMLTextAreaElement;
+  /** Dove si scrive adesso: il campo semplice, o il contenitore dell'editor delle note. */
+  place: HTMLElement;
+  /** L'editor delle note in Live sopra il testo della scheda (T43), quando c'è. */
+  live: CardTextEditor | null;
   readonly article: HTMLElement;
   readonly lifetime: AbortController;
   /** Una composizione dell'IME o un tasto morto in corso: la pausa aspetta la sua fine. */
@@ -2261,6 +2270,10 @@ export class CanvasEngine {
     this.#editor = null;
     editor.lifetime.abort();
     editor.input.disabled = true;
+    // L'editor delle note si smonta con la vita del campo; qui anche se la
+    // porta non l'avesse legato a quella vita.
+    editor.live?.destroy();
+    editor.live = null;
     return true;
   }
 
@@ -5507,7 +5520,7 @@ export class CanvasEngine {
         }
         // Esc riporta il fuoco nel campo; un gesto fuori lo lascia, come
         // l'avrebbe lasciato senza la ricerca.
-        if (editor && reason !== "escape" && document.activeElement !== editor.input) this.#leaveField(false);
+        if (editor && reason !== "escape" && !editor.place.contains(document.activeElement)) this.#leaveField(false);
       },
     });
     this.#commandSearch = search;
@@ -5874,7 +5887,7 @@ export class CanvasEngine {
     // Un clic fuori dalle maniglie chiude il doppio clic che le adatta (T66).
     if (!(event.target instanceof Element && event.target.closest("[data-resize], [data-resize-frame]"))) this.#handleTap = null;
     // Prima di ogni gesto, il testo in sospeso (non i clic dentro il campo).
-    if (!(event.target instanceof Node && this.#editor?.input.contains(event.target))) this.#recordPending();
+    if (!(event.target instanceof Node && this.#editor?.place.contains(event.target))) this.#recordPending();
     const pressed = this.#nodeAt(event.target);
     this.#pressedSelected = pressed !== null && this.#selection.length === 1 && this.#selection[0] === pressed
       ? pressed
@@ -8324,37 +8337,20 @@ export class CanvasEngine {
     input.value = node[field] ?? "";
     input.setAttribute("aria-label", t("canvas.edit_text", { id: node.id }));
     const lifetime = new AbortController();
-    const editor: CardEditor = { id: node.id, field, input, article, lifetime, composing: false, recordOnInput: false };
+    const editor: CardEditor = { id: node.id, field, input, place: input, live: null, article, lifetime, composing: false, recordOnInput: false };
     this.#editor = editor;
     // Mentre si scrive nella scheda la barra della selezione non c'è (T51).
     this.#syncSelectionBar();
-    const signal = lifetime.signal;
-    const hold = (): void => {
-      const card = this.#doc?.nodes.find((candidate) => candidate.id === node.id) ?? this.#pending?.card ?? node;
-      this.#setPending({ card, field, text: input.value });
-    };
+    // Il campo semplice ha i suoi ascolti: smettono quando l'editor delle note
+    // lo sostituisce (T43), o quando il campo si chiude.
+    const simple = new AbortController();
+    lifetime.signal.addEventListener("abort", () => simple.abort(), { once: true });
+    const signal = simple.signal;
     // Il testo resta qui finché non c'è una pausa: niente commit per tasto.
-    input.addEventListener("input", () => {
-      hold();
-      if (editor.composing) return;
-      if (editor.recordOnInput) {
-        editor.recordOnInput = false;
-        this.#recordPending();
-        return;
-      }
-      this.#schedulePause();
-    }, { signal });
+    input.addEventListener("input", () => this.#fieldText(editor, node, input.value), { signal });
     // Durante la composizione (IME) la pausa non corre: conta dalla fine.
-    input.addEventListener("compositionstart", () => {
-      editor.composing = true;
-      clearTimeout(this.#pauseTimer);
-      this.#pauseTimer = undefined;
-    }, { signal });
-    input.addEventListener("compositionend", () => {
-      editor.composing = false;
-      hold();
-      this.#schedulePause();
-    }, { signal });
+    input.addEventListener("compositionstart", () => this.#fieldComposing(editor), { signal });
+    input.addEventListener("compositionend", () => this.#fieldComposed(editor, node, input.value), { signal });
     input.addEventListener("keydown", (event) => {
       if (!(event instanceof KeyboardEvent)) return;
       // Col campo aperto i tasti, Ctrl+Z compreso, sono del campo.
@@ -8386,6 +8382,157 @@ export class CanvasEngine {
     input.focus();
     if (node.type === "text") input.setSelectionRange(input.value.length, input.value.length);
     else input.select();
+    // La scheda di testo si scrive come una nota (T43): l'editor delle note
+    // prende il posto del campo appena si monta; se non si monta, il campo resta.
+    if (node.type === "text") this.#openLiveText(editor, node, body, simple, false);
+  }
+
+  /**
+   * Il testo del campo è cambiato: va nel testo in attesa (la bozza lo vede
+   * subito), e il commit arriva dopo la pausa, o subito dopo un a capo.
+   */
+  #fieldText(editor: CardEditor, node: CanvasNode, text: string): void {
+    if (this.#editor !== editor) return;
+    const card = this.#doc?.nodes.find((candidate) => candidate.id === node.id) ?? this.#pending?.card ?? node;
+    this.#setPending({ card, field: editor.field, text });
+    if (editor.composing) return;
+    if (editor.recordOnInput) {
+      editor.recordOnInput = false;
+      this.#recordPending();
+      return;
+    }
+    this.#schedulePause();
+  }
+
+  #fieldComposing(editor: CardEditor): void {
+    if (this.#editor !== editor) return;
+    editor.composing = true;
+    clearTimeout(this.#pauseTimer);
+    this.#pauseTimer = undefined;
+  }
+
+  #fieldComposed(editor: CardEditor, node: CanvasNode, text: string): void {
+    if (this.#editor !== editor) return;
+    editor.composing = false;
+    editor.recordOnInput = false;
+    this.#fieldText(editor, node, text);
+  }
+
+  /**
+   * Monta l'editor delle note in Live sopra il testo della scheda (T43), dalla
+   * porta delle schede: la tela non importa nessun editor. Finché non c'è si
+   * scrive nel campo semplice; se nel frattempo lì è cambiato qualcosa, si
+   * riapre una volta sul testo di adesso. Se la porta dice no, il campo resta.
+   */
+  #openLiveText(editor: CardEditor, node: CanvasNode, body: HTMLElement, simple: AbortController, again: boolean): void {
+    const port = this.#options.cards?.editors;
+    if (!port?.openText || this.#editor !== editor) return;
+    const host = document.createElement("div");
+    // L'aspetto della nota che si scrive in una scheda (T41).
+    host.className = "canvas-card-note canvas-text-live";
+    host.hidden = true;
+    body.append(host);
+    const life = openLifetime();
+    editor.lifetime.signal.addEventListener("abort", () => life.close(), { once: true });
+    const giveUp = (): void => {
+      life.close();
+      host.remove();
+    };
+    const start = editor.input.value;
+    let opened: Promise<CardTextEditor | null>;
+    try {
+      opened = port.openText(host, start, {
+        // Solo ciò che si scrive nell'editor che si vede.
+        onText: (text) => {
+          if (editor.place === host) this.#fieldText(editor, node, text);
+        },
+        readOnly: this.#readOnly,
+        lifetime: life,
+        documentId: this.#options.documentId ?? "",
+        ...(this.#forms ? { forms: this.#forms } : {}),
+      });
+    } catch (error) {
+      console.warn(`canvas: l'editor delle note non si monta nella scheda ${node.id}`, error);
+      giveUp();
+      return;
+    }
+    void opened.then((live) => {
+      if (!live) {
+        giveUp();
+        return;
+      }
+      if (this.#editor !== editor || life.closed) {
+        live.destroy();
+        giveUp();
+        return;
+      }
+      if (editor.input.value !== start) {
+        live.destroy();
+        giveUp();
+        if (!again) this.#openLiveText(editor, node, body, simple, true);
+        return;
+      }
+      this.#showLiveText(editor, node, live, host, simple);
+    }, (error: unknown) => {
+      console.warn(`canvas: l'editor delle note non si monta nella scheda ${node.id}`, error);
+      giveUp();
+    });
+  }
+
+  /**
+   * L'editor delle note prende il posto del campo semplice, col cursore dove
+   * era. I tasti restano dell'editor (Ctrl+Z annulla lì); Esc, se l'editor non
+   * lo usa, e Ctrl+Invio registrano e chiudono (A14, A15); Invio va a capo e
+   * registra; il fuoco che esce dall'editor chiude, come per il campo.
+   */
+  #showLiveText(editor: CardEditor, node: CanvasNode, live: CardTextEditor, host: HTMLElement, simple: AbortController): void {
+    const input = editor.input;
+    const focused = document.activeElement === input;
+    const caret = input.selectionEnd ?? input.value.length;
+    // Gli ascolti del campo smettono prima che esca: toglierlo col fuoco non lo chiude.
+    simple.abort();
+    editor.live = live;
+    editor.place = host;
+    const signal = editor.lifetime.signal;
+    host.addEventListener("keydown", (event) => {
+      if (!(event instanceof KeyboardEvent)) return;
+      editor.recordOnInput = false;
+      if (event.isComposing || editor.composing) return;
+      if (isCommandSearchKey(event)) {
+        event.preventDefault();
+        event.stopPropagation();
+        this.#openCommandSearch();
+      } else if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
+        // Prima dell'editor, che non deve farne un a capo.
+        event.preventDefault();
+        event.stopPropagation();
+        this.#leaveField(true);
+      } else if (event.key === "Enter") {
+        // L'a capo che l'editor scrive si registra subito, come nel campo.
+        editor.recordOnInput = true;
+      }
+    }, { signal, capture: true });
+    host.addEventListener("keydown", (event) => {
+      // I tasti sono dell'editor, Ctrl+Z compreso: la tela non li vede.
+      event.stopPropagation();
+      if (!(event instanceof KeyboardEvent) || event.isComposing || editor.composing) return;
+      // Un Esc che l'editor ha usato (chiudere un suggerimento) non esce.
+      if (event.key === "Escape" && !event.defaultPrevented) {
+        event.preventDefault();
+        this.#leaveField(true);
+      }
+    }, { signal });
+    host.addEventListener("compositionstart", () => this.#fieldComposing(editor), { signal });
+    host.addEventListener("compositionend", () => this.#fieldComposed(editor, node, live.text()), { signal });
+    // Il fuoco che va nella ricerca dei comandi non chiude il campo: ci torna.
+    host.addEventListener("focusout", (event) => {
+      const next = event.relatedTarget;
+      if (next instanceof Node && host.contains(next)) return;
+      if (!this.#searching) this.#leaveField(false);
+    }, { signal });
+    input.remove();
+    host.hidden = false;
+    if (focused) live.focus(caret);
   }
 }
 

@@ -18,6 +18,8 @@ import type {
   CardEditorOptions,
   CardEditorPort,
   CardEditorState,
+  CardTextEditor,
+  CardTextOptions,
 } from "../editors/canvas/cards";
 import type { EditorSurface, SurfaceActiveCell, SurfaceRequest } from "../editors/core/registry";
 import { rebaseStaleChange, type EditorChange } from "../editors/core/text-operation";
@@ -94,6 +96,9 @@ export interface CardNotices {
 
 /// La porta, più ciò che la shell le chiede per tenerla al passo.
 export interface CardEditorHub extends CardEditorPort {
+  /// La shell la dà sempre: l'editor delle note sopra il testo di una scheda
+  /// di testo (T43).
+  openText(host: HTMLElement, text: string, options: CardTextOptions): Promise<CardTextEditor | null>;
   /// Una modifica arrivata da una superficie: `true` se è di una scheda (e
   /// allora la porta l'ha già portata alla sessione).
   written(surfaceId: string, change: EditorChange): boolean;
@@ -166,9 +171,32 @@ interface OpenCardEditor {
   last: CardEditorState;
 }
 
+/// Il formato e la modalità dell'editor sopra il testo di una scheda di testo
+/// (T43): l'editor delle note, in Live.
+const TEXT_CARD_FORMAT = "markdown";
+const TEXT_CARD_MODE = "live_preview";
+const UTF8 = new TextEncoder();
+
+/// L'editor delle note montato sopra il testo di una scheda di testo (T43).
+interface OpenTextEditor {
+  readonly surfaceId: string;
+  readonly host: HTMLElement;
+  readonly surface: EditorSurface;
+  /// Il testo dell'editor quando si è smontato (prima: quello di partenza).
+  last: string;
+  readonly options: CardTextOptions;
+  /// La superficie ha ceduto: resta ferma in sola lettura, e niente più arriva
+  /// a `onText`.
+  stopped: boolean;
+  destroyed: boolean;
+}
+
 export function createCardEditorPort(deps: CardEditorDeps): CardEditorHub {
   const sessions = deps.sessions;
   const open = new Map<string, OpenCardEditor>();
+  /// Gli editor sopra il testo delle schede di testo, per identità della
+  /// superficie: le loro battute vanno a `onText`, non a una sessione.
+  const texts = new Map<string, OpenTextEditor>();
   let next = 0;
 
   /// Il documento dell'editor adesso: la sessione segue le rinomine.
@@ -563,9 +591,124 @@ export function createCardEditorPort(deps: CardEditorDeps): CardEditorHub {
     }
   }
 
+  function destroyText(editor: OpenTextEditor): void {
+    if (editor.destroyed) return;
+    try {
+      editor.last = editor.surface.buffer?.getDoc() ?? editor.last;
+    } catch (error) {
+      console.error(error);
+    }
+    editor.destroyed = true;
+    texts.delete(editor.surfaceId);
+    try {
+      editor.surface.destroy();
+    } catch (error) {
+      console.error(error);
+    } finally {
+      editor.host.replaceChildren();
+      delete editor.host.dataset.cardEditor;
+    }
+  }
+
+  /// Il testo di una scheda di testo nell'editor delle note in Live (T43). Il
+  /// testo sta nel `.canvas`, non in un file: nessuna sessione, nessuna
+  /// prenotazione, nessuna bozza qui. Ogni battuta va a `onText` col testo
+  /// intero, e chi apre la registra dove il testo vive. L'annulla è della
+  /// superficie, come per una nota.
+  async function openTextEditor(host: HTMLElement, text: string, options: CardTextOptions): Promise<CardTextEditor | null> {
+    const life = options.lifetime;
+    if (life.closed) return null;
+    const surfaces = deps.surfaces();
+    if (!surfaces) return null;
+    const request: SurfaceRequest = { formatId: TEXT_CARD_FORMAT, sourceKind: "text" };
+    let mounted: EditorSurface | null = null;
+    const giveUp = (): null => {
+      if (mounted) {
+        try {
+          mounted.destroy();
+        } catch (error) {
+          console.error(error);
+        }
+        host.replaceChildren();
+      }
+      delete host.dataset.cardEditor;
+      return null;
+    };
+    try {
+      const resolved = surfaces.resolve(request);
+      if (!resolved || resolved.family === "error") return null;
+      if (!surfaces.isLoaded(request)) {
+        await surfaces.load(request);
+        if (life.closed) return null;
+      }
+      const surfaceId = `${CARD_SURFACE_PREFIX}${++next}`;
+      host.dataset.cardEditor = "compact";
+      const surface = surfaces.mount(request, {
+        paneId: surfaceId,
+        // Un nome nella cartella della lavagna che nessuna sessione porta: i
+        // link relativi partono da lì, e l'editor non si lega alla sessione
+        // della lavagna (le sue risorse leggerebbero il JSON del `.canvas`).
+        documentId: `${options.documentId}#${surfaceId}`,
+        parent: host,
+        compact: true,
+        formatId: TEXT_CARD_FORMAT,
+      });
+      mounted = surface;
+      const buffer = surface.buffer;
+      const live = surface.modes.find((mode) => mode.id === TEXT_CARD_MODE);
+      // Un editor che non tiene il testo, o senza Live, non è quello delle note.
+      if (!buffer || !live) return giveUp();
+      surface.setMode(live.id);
+      const theme = deps.theme?.();
+      if (theme) surface.setTheme?.(theme);
+      surface.setSyntaxForms?.(options.forms ?? []);
+      buffer.setDoc(text);
+      // Ciò che l'editor non terrebbe byte per byte (i terminatori misti, un
+      // CR da solo) resta al campo semplice: un testo che non si tocca non
+      // deve cambiare, e uno che si tocca non deve cambiare altrove.
+      if (buffer.getDoc() !== text) return giveUp();
+      surface.setReadOnly?.(options.readOnly);
+      const editor: OpenTextEditor = { surfaceId, host, surface, options, last: text, stopped: false, destroyed: false };
+      texts.set(surfaceId, editor);
+      const destroy = (): void => destroyText(editor);
+      life.add(destroy);
+      return {
+        focus: (at) => {
+          if (editor.destroyed) return;
+          const current = buffer.getDoc();
+          const end = at === undefined ? current.length : Math.max(0, Math.min(at, current.length));
+          const offset = UTF8.encode(current.slice(0, end)).length;
+          try {
+            surface.reveal?.({ span: { start: offset, end: offset } });
+          } catch (error) {
+            console.error(error);
+          }
+          surface.focus?.();
+        },
+        text: () => (editor.destroyed ? editor.last : buffer.getDoc()),
+        destroy,
+      };
+    } catch (error) {
+      console.error(error);
+      return giveUp();
+    }
+  }
+
   return {
     open: openEditor,
+    openText: openTextEditor,
     written(surfaceId, change) {
+      const text = texts.get(surfaceId);
+      if (text) {
+        if (!text.stopped && !text.destroyed) {
+          try {
+            text.options.onText(change.text);
+          } catch (error) {
+            console.error(error);
+          }
+        }
+        return true;
+      }
       const editor = open.get(surfaceId);
       if (!editor) return surfaceId.startsWith(CARD_SURFACE_PREFIX);
       if (editor.stopped) return true;
@@ -590,6 +733,18 @@ export function createCardEditorPort(deps: CardEditorDeps): CardEditorHub {
       return true;
     },
     failed(surfaceId, error) {
+      const text = texts.get(surfaceId);
+      if (text) {
+        // Ciò che è già arrivato a `onText` resta; la superficie si ferma.
+        console.error(error);
+        text.stopped = true;
+        try {
+          text.surface.setReadOnly?.(true);
+        } catch (failure) {
+          console.error(failure);
+        }
+        return true;
+      }
       const editor = open.get(surfaceId);
       if (!editor) return surfaceId.startsWith(CARD_SURFACE_PREFIX);
       console.error(error);
@@ -604,7 +759,7 @@ export function createCardEditorPort(deps: CardEditorDeps): CardEditorHub {
       for (const editor of [...open.values()]) applyReadOnly(editor);
     },
     setTheme(theme) {
-      for (const editor of open.values()) {
+      for (const editor of [...open.values(), ...texts.values()]) {
         try {
           editor.surface.setTheme?.(theme);
         } catch (error) {
@@ -614,6 +769,7 @@ export function createCardEditorPort(deps: CardEditorDeps): CardEditorHub {
     },
     destroyAll() {
       for (const editor of [...open.values()]) destroy(editor);
+      for (const editor of [...texts.values()]) destroyText(editor);
     },
   };
 }

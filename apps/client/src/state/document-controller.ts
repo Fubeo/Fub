@@ -542,6 +542,7 @@ function cardToolbar(surface: EditorSurface, life: Lifetime): HTMLElement {
 }
 const cardEditors: CardEditorHub = {
   open: (path, host, options) => cardEditorsHub().open(path, host, options),
+  openText: (host, text, options) => cardEditorsHub().openText(host, text, options),
   written: (surfaceId, change) => cardEditorHub?.written(surfaceId, change) ?? false,
   failed: (surfaceId, error) => cardEditorHub?.failed(surfaceId, error) ?? false,
   holds: (path) => cardEditorHub?.holds(path) ?? false,

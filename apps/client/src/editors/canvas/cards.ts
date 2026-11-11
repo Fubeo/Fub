@@ -16,6 +16,7 @@
 // `docs/reference/canvas-cards.md`.
 
 import { formatKindOf } from "../../ui/format-kind";
+import type { SyntaxForm } from "../../host/contract";
 import type { SaveState } from "../../state/saving";
 import type { Lifetime } from "../../ui/lifetime";
 import { mediaKindOfId } from "../media/media-types";
@@ -270,12 +271,48 @@ export interface CardEditor {
   destroy(): void;
 }
 
+/// Come si apre l'editor delle note sopra il testo di una scheda di testo
+/// (T43): un testo che sta nel `.canvas`, non in un file.
+export interface CardTextOptions {
+  /// Ogni cambio fatto nell'editor, col testo intero di dopo. Chi apre ne fa
+  /// ciò che vuole (la tela: il testo in attesa e il commit dopo la pausa).
+  onText(text: string): void;
+  /// L'editor si monta in sola lettura.
+  readonly readOnly: boolean;
+  /// La vita del campo: chiusa lei, l'editor si smonta da sé, anche se
+  /// `openText` sta ancora aspettando.
+  readonly lifetime: Lifetime;
+  /// Il documento che tiene il testo (la lavagna): i link relativi partono
+  /// dalla sua cartella. Non è la sessione dell'editor: il testo non ne ha una.
+  readonly documentId: string;
+  /// Le sintassi del Markdown con cui la tela rende le schede di testo.
+  readonly forms?: readonly SyntaxForm[];
+}
+
+/// L'editor delle note montato sopra il testo di una scheda di testo (T43):
+/// in Live, col suo annulla, senza sessione né file.
+export interface CardTextEditor {
+  /// Il fuoco nell'editor, col cursore a `at` (in unità UTF-16 del testo;
+  /// assente: alla fine).
+  focus(at?: number): void;
+  /// Il testo che l'editor tiene adesso.
+  text(): string;
+  /// Smonta l'editor, una volta sola. Ciò che c'era di scritto è già arrivato
+  /// a `onText`.
+  destroy(): void;
+}
+
 /// La porta con cui una scheda scrive nel suo file. La tela non conosce gli
 /// editor: la porta, data dalla shell, li sceglie e li monta.
 export interface CardEditorPort {
   /// L'editor del file `path` montato in `host`; `null` se il file non ha un
   /// editor o la sua sessione non si apre: la scheda resta in lettura.
   open(path: string, host: HTMLElement, options: CardEditorOptions): Promise<CardEditor | null>;
+  /// L'editor delle note in Live montato in `host` sopra `text`, un testo che
+  /// non è un file (la scheda di testo, T43). `null` se l'editor non si monta,
+  /// o non terrebbe il testo così com'è byte per byte: allora la tela resta al
+  /// suo campo di testo semplice. Assente: sempre il campo semplice.
+  openText?(host: HTMLElement, text: string, options: CardTextOptions): Promise<CardTextEditor | null>;
 }
 
 /// Le schede di una tela con la porta per scriverci dentro, accanto al

@@ -26,7 +26,7 @@ import { CANVAS_TOOL_IDS, toolCommandId } from "./chrome/commands";
 import { CARD_PANEL_ID, createCanvasInspector } from "./chrome/inspector";
 import { INERTIA_MS } from "../../spatial/camera";
 import { setReducedMotionPreference } from "../../theme/reduced-motion";
-import { createCardRegistry } from "./cards";
+import { createCardRegistry, type CardEditorPort, type CardTextEditor, type CardTextOptions } from "./cards";
 import { CardCache } from "./card-cache";
 
 // Le impostazioni della lavagna (T35): il motore monta `watchPreferences`, e la
@@ -1194,6 +1194,353 @@ describe("CanvasEngine: il testo di una scheda", () => {
     } finally {
       warn.mockRestore();
     }
+  });
+});
+
+/** L'editor delle note finto che la porta monta sopra il testo di una scheda (T43). */
+interface FakeLiveText {
+  readonly host: HTMLElement;
+  readonly text: string;
+  readonly options: CardTextOptions;
+  /** Il contenitore che si scrive, come il `contenteditable` dell'editor vero. */
+  readonly area: HTMLElement;
+  readonly focusAt: Array<number | undefined>;
+  destroyed: boolean;
+  /** Una battuta: il testo nuovo va a `onText`, come fa la porta. */
+  typed(next: string): void;
+}
+
+/**
+ * La porta delle schede con `openText` finto: `answer` dice se l'editor si
+ * monta; `gate`, se c'è, tiene la risposta finché non si apre.
+ */
+function textPort(answer: "live" | "none" = "live", gate?: Promise<void>) {
+  const opened: FakeLiveText[] = [];
+  const calls: string[] = [];
+  const port: CardEditorPort = {
+    open: async () => null,
+    openText: async (host, text, options) => {
+      calls.push(text);
+      if (gate) await gate;
+      if (answer === "none") return null;
+      const area = document.createElement("div");
+      area.contentEditable = "true";
+      area.tabIndex = 0;
+      area.className = "fake-live";
+      host.append(area);
+      let current = text;
+      const live: FakeLiveText = {
+        host,
+        text,
+        options,
+        area,
+        focusAt: [],
+        destroyed: false,
+        typed: (next) => {
+          current = next;
+          options.onText(next);
+        },
+      };
+      const handle: CardTextEditor = {
+        focus: (at) => {
+          live.focusAt.push(at);
+          area.focus();
+        },
+        text: () => current,
+        destroy: () => {
+          if (live.destroyed) return;
+          live.destroyed = true;
+          host.replaceChildren();
+        },
+      };
+      options.lifetime.add(() => handle.destroy());
+      opened.push(live);
+      return handle;
+    },
+  };
+  return { port, opened, calls };
+}
+
+function withTextPort(port: CardEditorPort): Partial<CanvasEngineOptions> {
+  return { cards: { registry: createCardRegistry([]), snapshots: new CardCache(), watch: () => () => {}, editors: port } };
+}
+
+/** Le attese della porta arrivate in fondo. */
+async function settle(): Promise<void> {
+  for (let i = 0; i < 10; i++) await Promise.resolve();
+}
+
+async function openLive(host: HTMLElement, id = "t"): Promise<void> {
+  host.querySelector<HTMLElement>(`.canvas-node[data-node="${id}"]`)!
+    .dispatchEvent(new MouseEvent("dblclick", { bubbles: true }));
+  await settle();
+}
+
+describe("CanvasEngine: la scheda di testo in Live (T43)", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("il doppio clic monta l'editor delle note al posto del campo, col cursore in fondo", async () => {
+    const { port, opened } = textPort();
+    const { engine, host } = mounted(canvasSource(), withTextPort(port));
+    await openLive(host);
+    expect(opened).toHaveLength(1);
+    const live = opened[0]!;
+    expect(live.text).toBe("vedi [[Altra]] e #tag");
+    expect(live.options.documentId).toBe("board.canvas");
+    expect(live.options.readOnly).toBe(false);
+    expect(host.querySelector(".canvas-text-editor")).toBeNull();
+    const place = host.querySelector<HTMLElement>('.canvas-node[data-node="t"] .canvas-text-live')!;
+    expect(place).not.toBeNull();
+    expect(place.hidden).toBe(false);
+    expect(place.contains(live.area)).toBe(true);
+    expect(document.activeElement).toBe(live.area);
+    expect(live.focusAt).toEqual(["vedi [[Altra]] e #tag".length]);
+    engine.destroy();
+    expect(live.destroyed).toBe(true);
+  });
+
+  it("il testo arriva al .canvas dopo la pausa, con un commit solo; prima è nella bozza", async () => {
+    const { port, opened } = textPort();
+    const { engine, host, changes } = mounted(canvasSource(), withTextPort(port));
+    await openLive(host);
+    vi.useFakeTimers();
+    const live = opened[0]!;
+    live.typed("vedi [[Altra]] e #tag, poi");
+    vi.advanceTimersByTime(100);
+    live.typed("vedi [[Altra]] e #tag, poi altro");
+    expect(changes).toHaveLength(0);
+    expect(engine.hasPending).toBe(true);
+    expect(readCanvas(engine.pendingText()!).nodes[0]!.text).toBe("vedi [[Altra]] e #tag, poi altro");
+    vi.advanceTimersByTime(CARD_PAUSE_MS);
+    expect(changes).toHaveLength(1);
+    expect(cardText(engine)).toBe("vedi [[Altra]] e #tag, poi altro");
+    expect(live.destroyed).toBe(false);
+    // La stessa lavagna in un altro riquadro: il testo le arriva col commit.
+    const other = mounted();
+    other.engine.syncDoc({ text: changes[0]!.text, operation: changes[0]!.operation });
+    expect(cardText(other.engine)).toBe("vedi [[Altra]] e #tag, poi altro");
+    other.engine.destroy();
+    engine.destroy();
+  });
+
+  it("Esc e Ctrl+Invio registrano e chiudono (A14, A15); un Esc usato dall'editor resta suo", async () => {
+    const { port, opened } = textPort();
+    const { engine, host, changes } = mounted(canvasSource(), withTextPort(port));
+    await openLive(host);
+    vi.useFakeTimers();
+    let live = opened[0]!;
+    live.typed("Con Esc");
+    press(live.area, "Escape");
+    expect(changes).toHaveLength(1);
+    expect(cardText(engine)).toBe("Con Esc");
+    expect(live.destroyed).toBe(true);
+    expect(host.querySelector(".canvas-text-live")).toBeNull();
+    expect(document.activeElement).toBe(host.querySelector(".canvas-viewport"));
+    vi.advanceTimersByTime(CARD_PAUSE_MS);
+    expect(changes).toHaveLength(1);
+
+    vi.useRealTimers();
+    await openLive(host);
+    vi.useFakeTimers();
+    live = opened[1]!;
+    const seen: string[] = [];
+    live.area.addEventListener("keydown", (event) => {
+      seen.push(event.key);
+      // L'editor chiude un suggerimento con Esc: lo usa.
+      if (event.key === "Escape") event.preventDefault();
+    });
+    live.typed("Con Ctrl+Invio");
+    press(live.area, "Escape");
+    expect(live.destroyed).toBe(false);
+    expect(changes).toHaveLength(1);
+    const enter = press(live.area, "Enter", { ctrlKey: true });
+    expect(enter.defaultPrevented).toBe(true);
+    // Il Ctrl+Invio non arriva all'editor: non diventa un a capo.
+    expect(seen).toEqual(["Escape"]);
+    expect(changes).toHaveLength(2);
+    expect(cardText(engine)).toBe("Con Ctrl+Invio");
+    expect(live.destroyed).toBe(true);
+
+    vi.useRealTimers();
+    await openLive(host);
+    live = opened[2]!;
+    live.typed("Con Cmd+Invio");
+    press(live.area, "Enter", { metaKey: true });
+    expect(changes).toHaveLength(3);
+    expect(cardText(engine)).toBe("Con Cmd+Invio");
+    engine.destroy();
+  });
+
+  it("Invio va a capo nell'editor e registra subito", async () => {
+    const { port, opened } = textPort();
+    const { engine, host, changes } = mounted(canvasSource(), withTextPort(port));
+    await openLive(host);
+    vi.useFakeTimers();
+    const live = opened[0]!;
+    live.typed("Riga");
+    expect(press(live.area, "Enter").defaultPrevented).toBe(false);
+    live.typed("Riga\n");
+    expect(changes).toHaveLength(1);
+    expect(cardText(engine)).toBe("Riga\n");
+    expect(live.destroyed).toBe(false);
+    engine.destroy();
+  });
+
+  it("il fuoco che esce dall'editor registra e chiude; dentro l'editor no", async () => {
+    const { port, opened } = textPort();
+    const { engine, host, changes } = mounted(canvasSource(), withTextPort(port));
+    await openLive(host);
+    vi.useFakeTimers();
+    const live = opened[0]!;
+    const inner = document.createElement("span");
+    live.area.append(inner);
+    live.typed("Uscendo");
+    live.area.dispatchEvent(new FocusEvent("focusout", { bubbles: true, relatedTarget: inner }));
+    expect(live.destroyed).toBe(false);
+    live.area.dispatchEvent(new FocusEvent("focusout", { bubbles: true, relatedTarget: null }));
+    expect(changes).toHaveLength(1);
+    expect(cardText(engine)).toBe("Uscendo");
+    expect(live.destroyed).toBe(true);
+    engine.destroy();
+  });
+
+  it("un testo non toccato non cambia un byte, anche se non è Markdown valido e va a capo con CRLF", async () => {
+    const odd = "**non chiuso\r\n<div>\r\n[[\r\n `";
+    const source = `{\r\n  "nodes": [\r\n    {"id":"t","type":"text","x":0,"y":0,"width":240,"height":140,"text":${JSON.stringify(odd)}}\r\n  ],\r\n  "edges": []\r\n}\r\n`;
+    const { port, opened } = textPort();
+    const { engine, host, changes } = mounted(source, withTextPort(port));
+    await openLive(host);
+    expect(opened[0]!.text).toBe(odd);
+    press(opened[0]!.area, "Escape");
+    await openLive(host);
+    opened[1]!.area.dispatchEvent(new FocusEvent("focusout", { bubbles: true, relatedTarget: null }));
+    expect(changes).toHaveLength(0);
+    expect(engine.getDoc()).toBe(source);
+    // Toccato, il testo resta col suo CRLF.
+    await openLive(host);
+    opened[2]!.typed(`${odd}\r\naltro`);
+    press(opened[2]!.area, "Escape");
+    expect(changes).toHaveLength(1);
+    expect(cardText(engine)).toBe(`${odd}\r\naltro`);
+    expect(engine.getDoc()).toContain("\r\n  \"edges\"");
+    engine.destroy();
+  });
+
+  it("una scheda di 2000 righe si apre intera e si registra", async () => {
+    const long = Array.from({ length: 2000 }, (_, line) => `riga ${line + 1}`).join("\n");
+    const source = JSON.stringify({ nodes: [{ id: "t", type: "text", x: 0, y: 0, width: 240, height: 140, text: long }], edges: [] });
+    const { port, opened } = textPort();
+    const { engine, host, changes } = mounted(source, withTextPort(port));
+    await openLive(host);
+    vi.useFakeTimers();
+    expect(opened[0]!.text).toBe(long);
+    opened[0]!.typed(`${long}\nriga 2001`);
+    vi.advanceTimersByTime(CARD_PAUSE_MS);
+    expect(changes).toHaveLength(1);
+    expect(cardText(engine)!.split("\n")).toHaveLength(2001);
+    engine.destroy();
+  });
+
+  it("Ctrl+Z nell'editor è suo: la tela non lo vede", async () => {
+    const { port, opened } = textPort();
+    const { engine, host, changes } = mounted(canvasSource(), withTextPort(port));
+    await openLive(host);
+    vi.useFakeTimers();
+    const live = opened[0]!;
+    live.typed("Scritto");
+    vi.advanceTimersByTime(CARD_PAUSE_MS);
+    const reached: string[] = [];
+    host.addEventListener("keydown", (event) => reached.push(event.key));
+    const undo = press(live.area, "z", { ctrlKey: true });
+    expect(undo.defaultPrevented).toBe(false);
+    expect(reached).toEqual([]);
+    expect(changes).toHaveLength(1);
+    expect(cardText(engine)).toBe("Scritto");
+    expect(live.destroyed).toBe(false);
+    engine.destroy();
+  });
+
+  it("un annulla della lavagna mentre si scrive prima esce dalla scrittura", async () => {
+    const { port, opened } = textPort();
+    const { engine, host } = mounted(canvasSource(), withTextPort(port));
+    await openLive(host);
+    vi.useFakeTimers();
+    const live = opened[0]!;
+    live.typed("Da annullare");
+    expect(engine.undo()).toBe(true);
+    expect(live.destroyed).toBe(true);
+    expect(host.querySelector(".canvas-text-live")).toBeNull();
+    expect(cardText(engine)).toBe("vedi [[Altra]] e #tag");
+    engine.destroy();
+  });
+
+  it("la lavagna chiusa a metà pausa registra il testo e smonta l'editor", async () => {
+    const { port, opened } = textPort();
+    const { engine, host, changes } = mounted(canvasSource(), withTextPort(port));
+    await openLive(host);
+    vi.useFakeTimers();
+    const live = opened[0]!;
+    live.typed("Prima di chiudere");
+    engine.destroy();
+    expect(changes).toHaveLength(1);
+    expect(readCanvas(changes[0]!.text).nodes[0]!.text).toBe("Prima di chiudere");
+    expect(live.destroyed).toBe(true);
+    vi.advanceTimersByTime(CARD_PAUSE_MS);
+    expect(changes).toHaveLength(1);
+  });
+
+  it("in sola lettura non si entra", async () => {
+    const { port, calls } = textPort();
+    const { engine, host } = mounted(canvasSource(), withTextPort(port));
+    engine.setReadOnly(true);
+    await openLive(host);
+    expect(calls).toEqual([]);
+    expect(host.querySelector(".canvas-text-editor, .canvas-text-live")).toBeNull();
+    engine.destroy();
+  });
+
+  it("se l'editor non si monta resta il campo di oggi, e si scrive lì", async () => {
+    const { port, calls } = textPort("none");
+    const { engine, host, changes } = mounted(canvasSource(), withTextPort(port));
+    await openLive(host);
+    vi.useFakeTimers();
+    expect(calls).toHaveLength(1);
+    expect(host.querySelector(".canvas-text-live")).toBeNull();
+    const input = host.querySelector<HTMLTextAreaElement>(".canvas-text-editor")!;
+    expect(input).not.toBeNull();
+    type(input, "Nel campo");
+    vi.advanceTimersByTime(CARD_PAUSE_MS);
+    expect(changes).toHaveLength(1);
+    expect(cardText(engine)).toBe("Nel campo");
+    engine.destroy();
+  });
+
+  it("ciò che si scrive nel campo mentre l'editor arriva non si perde: l'editor si riapre su quel testo", async () => {
+    let open = (): void => {};
+    const gate = new Promise<void>((resolve) => {
+      open = resolve;
+    });
+    const { port, opened, calls } = textPort("live", gate);
+    const { engine, host, changes } = mounted(canvasSource(), withTextPort(port));
+    await openLive(host);
+    const input = host.querySelector<HTMLTextAreaElement>(".canvas-text-editor")!;
+    type(input, "Veloce");
+    input.setSelectionRange(3, 3);
+    open();
+    await settle();
+    expect(calls).toEqual(["vedi [[Altra]] e #tag", "Veloce"]);
+    expect(opened).toHaveLength(2);
+    expect(opened[0]!.destroyed).toBe(true);
+    expect(opened[1]!.destroyed).toBe(false);
+    expect(host.querySelector(".canvas-text-editor")).toBeNull();
+    expect(opened[1]!.focusAt).toEqual([3]);
+    // Il testo del campo è già in attesa: nessuna battuta si perde.
+    expect(engine.hasPending).toBe(true);
+    engine.destroy();
+    expect(changes).toHaveLength(1);
+    expect(readCanvas(changes[0]!.text).nodes[0]!.text).toBe("Veloce");
   });
 });
 
