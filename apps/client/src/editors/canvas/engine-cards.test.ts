@@ -2115,3 +2115,159 @@ describe("scrivere nelle celle di una scheda di foglio (T42)", () => {
     engine.destroy();
   });
 });
+
+describe("il gesto su una scheda di file che non si mostra (T93)", () => {
+  /**
+   * Un renderer finto che dice in `data-card-state` che cosa mostra la scheda,
+   * come la nota, l'immagine e il foglio (la radice della vista). `enter()`
+   * c'è solo con la resa, come la nota.
+   */
+  function stateRenderer(states: Record<string, string>) {
+    const mounts: Mounted[] = [];
+    const renderer: CardRenderer = {
+      kinds: ["note", "image", "pdf", "web"],
+      mount(node: CanvasNode, host: HTMLElement, mode: CardMode, context: CardContext): CardView {
+        const record: Mounted = { node: node.id, file: node.file, url: node.url, host, mode, context, destroyed: 0 };
+        mounts.push(record);
+        const root = document.createElement("div");
+        root.className = "state-card";
+        root.dataset.cardState = states[node.id] ?? "content";
+        host.append(root);
+        return {
+          setMode: () => {},
+          enter: () => root.dataset.cardState === "content",
+          destroy: () => {
+            record.destroyed++;
+          },
+        };
+      },
+    };
+    return { renderer, mounts };
+  }
+
+  /** Il doppio clic col mouse sulla scheda `id`. */
+  function dblclickOn(host: HTMLElement, id: string): void {
+    card(host, id).dispatchEvent(new MouseEvent("dblclick", { bubbles: true }));
+  }
+
+  it("doppio clic e Invio su una scheda mancante chiedono il file come «Ritrova…», senza aprire il campo", async () => {
+    const files = fakeFiles();
+    const { renderer, mounts } = fakeRenderer();
+    const asked: (string | undefined)[] = [];
+    let answer: string | null = null;
+    const { engine, host, changes } = mounted(boardSource(), {
+      cards: cardsWith(files, renderer),
+      onPickFile: (name) => {
+        asked.push(name);
+        return answer;
+      },
+    });
+    mounts[1]!.context.missing();
+    // Un selettore annullato non cambia la scheda: resta mancante.
+    dblclickOn(host, "i");
+    await settle();
+    expect(asked).toEqual(["foto.png"]);
+    expect(host.querySelector(".canvas-field-editor")).toBeNull();
+    expect(changes).toHaveLength(0);
+    expect(card(host, "i").dataset.cardMissing).toBe("true");
+    // Invio fa lo stesso; la scelta è un commit solo, che un annulla riporta.
+    answer = "Archivio/foto.png";
+    enterWithKeys(host, "i");
+    await settle();
+    expect(asked).toEqual(["foto.png", "foto.png"]);
+    expect(host.querySelector(".canvas-field-editor")).toBeNull();
+    expect(readNodes(engine.getDoc()).find((node) => node.id === "i")!.file).toBe("Archivio/foto.png");
+    expect(changes).toHaveLength(1);
+    expect(engine.undo()).toBe(true);
+    expect(readNodes(engine.getDoc()).find((node) => node.id === "i")!.file).toBe("img/foto.png");
+    engine.destroy();
+  });
+
+  it.each(["unreadable", "unavailable", "too-large"])("doppio clic e Invio su una scheda il cui file c'è ma non si mostra (%s) aprono il file, senza il campo", (state) => {
+    const { renderer } = stateRenderer({ n: state });
+    const opened: string[] = [];
+    const { engine, host } = mounted(boardSource(), {
+      cards: cardsOf(renderer),
+      onOpenPath: (path) => {
+        opened.push(path);
+      },
+    });
+    dblclickOn(host, "n");
+    expect(opened).toEqual(["/Note/idea.md"]);
+    enterWithKeys(host, "n");
+    expect(opened).toEqual(["/Note/idea.md", "/Note/idea.md"]);
+    expect(host.querySelector(".canvas-field-editor")).toBeNull();
+    expect(activeOf(host)).toEqual([]);
+    engine.destroy();
+  });
+
+  it("in sola lettura la scheda mancante dice «File mancante» senza chiedere il file; la illeggibile si apre lo stesso, senza scrivere", () => {
+    const files = fakeFiles();
+    const { renderer, mounts } = stateRenderer({ n: "unreadable" });
+    const asked: (string | undefined)[] = [];
+    const opened: string[] = [];
+    const { engine, host, changes } = mounted(boardSource(), {
+      cards: cardsWith(files, renderer),
+      onPickFile: (name) => {
+        asked.push(name);
+        return "Archivio/foto.png";
+      },
+      onOpenPath: (path) => {
+        opened.push(path);
+      },
+    });
+    mounts.find((entry) => entry.node === "i")!.context.missing();
+    engine.setReadOnly(true);
+    dblclickOn(host, "i");
+    expect(asked).toEqual([]);
+    expect(host.querySelector(".canvas-intake-error")?.textContent).toBe("File mancante: img/foto.png");
+    dblclickOn(host, "n");
+    expect(opened).toEqual(["/Note/idea.md"]);
+    expect(activeOf(host)).toEqual([]);
+    expect(changes).toHaveLength(0);
+    engine.destroy();
+  });
+
+  it("senza un selettore di file la scheda mancante dice «File mancante», come in sola lettura", () => {
+    const files = fakeFiles();
+    const { renderer, mounts } = fakeRenderer();
+    const { engine, host, changes } = mounted(boardSource(), { cards: cardsWith(files, renderer), onPickFile: undefined });
+    mounts[1]!.context.missing();
+    dblclickOn(host, "i");
+    expect(host.querySelector(".canvas-field-editor")).toBeNull();
+    expect(host.querySelector(".canvas-intake-error")?.textContent).toBe("File mancante: img/foto.png");
+    expect(card(host, "i").dataset.cardMissing).toBe("true");
+    expect(changes).toHaveLength(0);
+    engine.destroy();
+  });
+
+  it("una scheda in caricamento non apre il campo, e il gesto non fa niente finché la resa non arriva", () => {
+    const { renderer } = stateRenderer({ n: "loading" });
+    const opened: string[] = [];
+    const { engine, host } = mounted(boardSource(), {
+      cards: cardsOf(renderer),
+      onOpenPath: (path) => {
+        opened.push(path);
+      },
+    });
+    dblclickOn(host, "n");
+    enterWithKeys(host, "n");
+    expect(host.querySelector(".canvas-field-editor")).toBeNull();
+    expect(opened).toEqual([]);
+    expect(activeOf(host)).toEqual([]);
+    // La resa arriva: il doppio clic entra, come su una nota viva.
+    bodyOf(host, "n").querySelector<HTMLElement>("[data-card-state]")!.dataset.cardState = "content";
+    dblclickOn(host, "n");
+    expect(activeOf(host)).toEqual(["n"]);
+    engine.destroy();
+  });
+
+  it("il doppio clic su una scheda di file viva che non entra apre il campo, come prima", () => {
+    const { renderer } = probeRenderer();
+    const { engine, host } = mounted(boardSource(BOARD), { cards: cardsOf(renderer) });
+    dblclickOn(host, "p");
+    expect(host.querySelector(".canvas-field-editor")).not.toBeNull();
+    expect(activeOf(host)).toEqual([]);
+    engine.destroy();
+  });
+});
