@@ -202,12 +202,6 @@ riquadro rimasto vuoto. Una linguetta nella vista sorgente lo dice nel testo,
 nel suggerimento e nel nome accessibile («vista sorgente»); aprire o chiudere
 la vista porta il focus sulla superficie montata al posto della precedente.
 
-Il suggerimento di un controllo (`ui/tooltip.ts`) compare dopo mezzo secondo
-di puntatore fermo, o col fuoco della tastiera. Un clic lo chiude, e non
-torna finché il puntatore non si sposta: un `mouseenter` che arriva nel punto
-esatto del clic viene da un ridisegno sotto il puntatore fermo, non da un
-arrivo.
-
 I divisori espongono ruolo, limiti e dimensione corrente. Tastiera e
 trascinamento modificano la stessa misura in pixel CSS; lo zoom della shell
 non altera il rapporto fra movimento del puntatore e larghezza risultante.
@@ -331,14 +325,8 @@ Ciò che la shell fa sopra le porte generiche, senza contratti propri:
   «Sposta nel cestino» e «Deseleziona»; il tasto destro su una nota scelta
   apre lo stesso menu, con «Copia» e «In una cartella nuova». La scelta è solo
   su ciò che l'albero mostra, e ciò che esce dal DOM esce dalla scelta.
-  Aprire o chiudere una cartella rifà soltanto il suo sottoalbero se fuori
-  non è cambiato niente (`panels/explorer-view.ts`); altrimenti si ridisegna
-  tutto. Del moto (`panels/explorer-motion.ts`) si muove solo ciò che si
-  vede: entrano sfalsate le righe nuove visibili, scivolano quelle che si
-  vedevano prima o si vedono dopo, e chi arriva da fuori parte appena oltre
-  il bordo. Alla chiusura le righe sotto risalgono in 140 ms con
-  `ease-in-out`, partendo da ferme, e l'immagine dei figli arriva al bordo
-  di ciò che si vede.
+  Aprire o chiudere una cartella rifà solo il suo sottoalbero, e si muove
+  solo ciò che si vede (`panels/explorer-view.ts`, `explorer-motion.ts`).
 - **Binario.** Riordino e nascondimento sono `chrome.rail.order` e
   `chrome.rail.hidden`; la voce «Ripristina ordine e icone predefiniti» li
   riporta a `[]`.
