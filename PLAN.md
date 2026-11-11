@@ -3943,7 +3943,7 @@ e la risposta vecchia scartata; `engine-cards.test.ts` prova il velo e il
 salto; le foto del banco somigliano al prototipo.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/canvas
-Stato: [~] in corso · coder Opus · base d63433a5f
+Stato: [x] fatto (2026-11-11: 45e8d7930, 3045eb270; `find.ts` e `chrome/find-bar.ts`, velo `data-card-veiled`, ogni risultato un salto, le note con una richiesta `documents` 200 ms dopo l'ultimo tasto; cerca anche negli indirizzi dei link; senza indice la riga «Solo la lavagna, non le note»; docs in `canvas-view.md` «Cercare»; maiuscole e accenti con `resolutionKey`, mentre la ricerca del vault non ignora gli accenti)
 
 ## T61 · Tutto da tastiera e col lettore di schermo
 
