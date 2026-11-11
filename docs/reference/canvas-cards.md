@@ -190,25 +190,12 @@ breve:
   diversi per la stessa specie sono un errore, lanciato quando il registro
   si costruisce: `card kind <specie> has two renderers`. Lo stesso renderer
   che nomina due volte una specie non è un doppione.
+- `data-card-state` sulla radice della vista dice che cosa mostra (nota, documento,
+  foglio, immagine, PDF): `loading`, `content`, `unreadable`, `unavailable`,
+  `too-large`, `missing`, `placeholder`. Chi non lo scrive ricade sul campo.
 
 Ascolti, osservatori e timer di un renderer passano dalla `Lifetime` del
 contesto, come vuole `check-listeners.mjs`.
-
-### Che cosa mostra la scheda
-
-La radice della vista dice in `data-card-state` che cosa mostra, e la tela lo
-legge per Invio e il doppio clic su una scheda di file (T93). Lo scrivono nota,
-documento, foglio, immagine e PDF:
-
-- `loading`: carica («Apro…»). Il gesto non fa niente.
-- `content`: mostra il contenuto. Il gesto entra, o apre il campo se non entra.
-- `unreadable`, o `unavailable` per il foglio, o `too-large` per l'immagine: il
-  file c'è ma non si mostra. Il gesto apre il file, come «Apri».
-- `missing`: il file manca. La tela lo sa da `missing()`, e il gesto è «Ritrova…».
-- `placeholder`: niente da mostrare, per una scheda ferma senza immagine.
-
-Una vista che non scrive `data-card-state`, o un valore che non sta in questa
-lista, ricade sul campo del percorso, come prima.
 
 ### Un renderer non scrive mai il file
 
@@ -371,9 +358,6 @@ Le regole:
 - In sola lettura il segnaposto c'è, senza gesti. Senza un selettore
   (`onPickFile` assente) manca «Ritrova…», e «Togli» resta.
 - Una scheda di link non manca mai: il suo `missing()` non fa niente.
-- Doppio clic e Invio su una scheda mancante chiedono il file come «Ritrova…»
-  e non aprono il campo del percorso (T93). In sola lettura, o senza
-  selettore, dicono «File mancante» nel posto degli avvisi.
 
 ## Quando la tela cambia il modo
 

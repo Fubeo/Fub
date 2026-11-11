@@ -55,9 +55,8 @@ volta. Lo decide la tela (`engine.ts`); il renderer risponde con `enter`,
   Mentre carica («Apro…») il gesto non fa niente finché la resa non arriva. Il
   doppio clic su un pulsante della scheda («Ritrova…», «Apri») fa solo ciò che
   fa il suo clic. La tela legge lo stato dal segnaposto di un file mancante e da
-  `data-card-state` della radice della vista (vedi
-  [Che cosa mostra la scheda](canvas-cards.md#che-cosa-mostra-la-scheda)). Una
-  scheda che si mostra apre il campo come prima.
+  `data-card-state` della radice della vista ([il contratto](canvas-cards.md#il-contratto)).
+  Una scheda che si mostra, o che non scrive lo stato, apre il campo come prima.
 - **Dentro.** I clic arrivano al contenuto (i link si seguono con un clic),
   la rotella sopra il corpo lo scorre (Ctrl+rotella e il pizzico ingrandiscono
   sempre la lavagna, A-11), i tasti sono del contenuto e la tela non li usa,
