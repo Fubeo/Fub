@@ -3150,7 +3150,7 @@ che Esc e Ctrl+Invio registrano, che i byte di un testo non toccato non
 cambiano, e che i test di N3 su `#pending` passano senza cambiare.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/canvas
-Stato: [~] in corso · coder Opus · base 598163c9e
+Stato: [x] fatto · 7472b1eaa, 0e1a9eac3 (prima del cherry-pick) · differenze: `bootstrap.ts` non toccato (bastano registro e hub); `openText` facoltativo sulla porta, obbligatorio sullo hub; `documentId` sintetico `<canvas>#card-editor:N`, senza sessione; prima si apre la textarea e il Live le subentra quando è montato; con terminatori misti resta la textarea; Esc non chiude con un menu a tendina aperto (come T41); il contenitore non scorre, scorre l'editor; fuori da Tocca una riga di `state/document-controller.ts` (il delegato `openText`) e un caso in `canvas-edit.e2e.test.ts`. Resta: il `.pane-preview` di 72 px che la superficie aggiunge è nascosto dall'`overflow: hidden` del contenitore; una regola `.canvas-card-note > .pane-preview { display: none }` in `theme/scrittoio/structure.css` va in un task successivo (serve anche a T41)
 
 ## T44 · La scheda di testo cresce, e i suoi tasti
 
