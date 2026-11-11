@@ -4074,7 +4074,7 @@ lungo, due e tre dita, il doppio tocco nel vuoto e il pizzico che non
 annulla.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/canvas
-Stato: [~] in corso · coder Opus · base HEAD
+Stato: [x] fatto (2026-11-11: 63a46d78d, 7f2025fb2; `chrome/radial.ts` con `openRadial`, comando `canvas.radial`; il tasto laterale segue `canvas.pen_button` coi quattro valori, `lasso` compreso (`ink-layer.ts`: `barrelErases`, `onBarrel`); tocco lungo, due e tre dita coi `timeStamp`, doppio tocco nel vuoto; docs in `canvas-view.md`; provato solo in happy-dom, non su una tavoletta)
 
 ## T64 · Il dito scrive
 
