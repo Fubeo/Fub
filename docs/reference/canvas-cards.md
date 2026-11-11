@@ -420,11 +420,9 @@ misura nuova; durante un ridimensionamento non lo chiama.
 ## Le porte della shell
 
 Nella shell le schede arrivano alla tela dalla registrazione della lavagna
-(`editors/core/bootstrap.ts`), dentro il suo montaggio pigro: i renderer si
-caricano col codice della lavagna, non all'avvio di Fub. La scheda di foglio
-arriva con un suo `import()` alla prima scheda di foglio; finché non c'è, la
-vista tiene il modo chiesto dalla tela e lo passa alla scheda vera appena
-montata.
+(`editors/core/bootstrap.ts`), nel suo montaggio pigro: non all'avvio di Fub.
+La scheda di foglio arriva con un suo `import()`; finché non c'è, la vista
+tiene il modo chiesto dalla tela e lo passa alla scheda vera.
 
 Le porte vengono dall'opzione `canvasCards?: CanvasCardPorts`, che la shell
 costruisce in `state/document-controller.ts`, e da due opzioni che c'erano
@@ -440,14 +438,12 @@ già, `media` e `gridHost`:
 Senza `media` le immagini e i PDF, senza `gridHost` i fogli, hanno il corpo
 di sempre; senza `canvasCards` tutte le schede.
 
-`watch(path)` ascolta gli eventi del kernel per quel percorso:
-`document_changed`, `document_removed` e `document_renamed` per i file che un
-formato serve (note, fogli), le loro varianti `entry_*` per gli altri
-(immagini, PDF). Ogni ascolto ha il suo smontaggio. Prima di avvisare la
-scheda, la cache delle immagini ferme dimentica il file (`forget`): nessuna
-scheda, nemmeno su un'altra lavagna, ritrova l'immagine di prima. La tela
-ascolta il file con questo stesso `watch` quando la scheda è mancante (vedi
-«Il file che manca»).
+`watch(path)` ascolta `document_changed`, `document_removed` e
+`document_renamed` per i file che un formato serve (note, fogli), le varianti
+`entry_*` per gli altri (immagini, PDF); ogni ascolto ha il suo smontaggio.
+Prima di avvisare la scheda la cache delle immagini ferme dimentica il file
+(`forget`): nessuna scheda, nemmeno su un'altra lavagna, ritrova l'immagine di
+prima. Lo stesso `watch` ascolta una scheda mancante («Il file che manca»).
 
 La cache delle immagini ferme è una sola per finestra, per tutte le lavagne
 che vi si aprono. Si svuota quando una lavagna si monta in un vault diverso
@@ -456,14 +452,12 @@ da quello in cui la cache si è riempita: lo stesso percorso è un altro file.
 ## Scrivere dentro una scheda
 
 Chi scrive dentro una scheda usa l'editor vero del file, sulla stessa
-`DocumentSession` di un riquadro: le stesse bozze, gli stessi conflitti, lo
-stesso salvataggio. La tela non importa nessun editor (il confine di
-CodeMirror): riceve una porta, `CardEditorPort` in `editors/canvas/cards.ts`,
-che la shell costruisce in `state/card-editors.ts` con la collezione delle
-sessioni e il registro delle superfici della finestra. Arriva alla tela
-dall'opzione `canvasCards.editors`, passando da `surface.ts` accanto al
-registro dei renderer (`CardEditing`). Senza porta le schede restano in
-lettura.
+`DocumentSession` di un riquadro: stesse bozze, conflitti e salvataggio. La
+tela non importa nessun editor (il confine di CodeMirror): riceve
+`CardEditorPort` (`editors/canvas/cards.ts`), che la shell costruisce in
+`state/card-editors.ts` con le sessioni e il registro delle superfici della
+finestra e passa con `canvasCards.editors` e `surface.ts` (`CardEditing`).
+Senza porta le schede restano in lettura.
 
 `open(path, host, { compact, readOnly, lifetime, heading })`, con `heading` che
 porta la vista al titolo (`headingOffset`); l'editor dà la sua barra di formato
@@ -483,10 +477,9 @@ porta la vista al titolo (`headingOffset`); l'editor dà la sua barra di formato
   superficie non tiene il testo), se la sessione non si apre, o se la vita
   della scheda si chiude mentre `open` aspetta.
 
-L'annulla è della superficie: un cambio arrivato da un riquadro, o da
-un'altra scheda sullo stesso file, entra con `syncDoc` e non si annulla qui.
-Una battuta rimasta indietro si ribasa sul testo autorevole come in un
-riquadro. Due `open` sullo stesso file sono due superfici e una sessione.
+L'annulla è della superficie: un cambio da un riquadro o da un'altra scheda
+entra con `syncDoc` e non si annulla qui; una battuta rimasta indietro si
+ribasa come in un riquadro. Due `open` sullo stesso file: due superfici, una sessione.
 
 `state()` è lo stato del salvataggio della sessione (`SaveState`, quello
 della testata di un riquadro) o `readonly`: chiesto dalla scheda, la
@@ -495,16 +488,23 @@ chiusura della finestra, una cancellazione in sospeso, il prestito a un'app
 sotto l'editor (il file tolto, `closed()`). Allora la superficie resta
 ferma in sola lettura, e nessuna battuta finisce dove non si salva. In cima
 all'editor la porta disegna il banner del conflitto e gli avvisi della nota
-di un riquadro (`notices`), ridisegnati a ogni evento della sessione. La
-sessione segue le rinomine, e la scheda con lei. `leave()` registra il testo
-tenuto dall'editor e salva adesso; `destroy()` lo registra, stacca, smonta e
-lascia la prenotazione, una volta sola.
+di un riquadro (`notices`), ridisegnati a ogni evento della sessione.
+`leave()` registra il testo tenuto dall'editor e salva adesso; `destroy()` lo
+registra, stacca, smonta e lascia la prenotazione, una volta sola.
 
-Chiusa la lavagna (o la scheda), se nessun riquadro e nessun'altra scheda
-tiene il file, la sessione decide come alla chiusura di un riquadro: salva e
-si chiude. Se non può salvare, un conflitto o un disco che rifiuta, la bozza
-è già scritta e la sessione resta aperta con il testo: il lavoro non si
-perde.
+Chiusa la lavagna (o la scheda), se nessun riquadro né altra scheda tiene il
+file, la sessione salva e si chiude come alla chiusura di un riquadro; se non
+può salvare (un conflitto, un disco che rifiuta) resta aperta con la bozza già
+scritta: il lavoro non si perde.
+
+### La scheda di testo
+
+Il testo sta nel `.canvas`: `openText(host, testo, { onText, readOnly,
+lifetime, documentId, forms })` monta l'editor delle note in Live, senza
+sessione, con un nome nella cartella della lavagna per i link relativi. Ogni
+battuta va a `onText`, poi nel testo in sospeso della tela (commit dopo 250 ms,
+bozza intanto); Esc (se non chiude suggerimenti) e Ctrl+Invio registrano e
+chiudono. Un testo che l'editor non terrebbe byte per byte, o `null`, lasciano il campo semplice.
 
 ### Scrivere in una scheda di foglio
 

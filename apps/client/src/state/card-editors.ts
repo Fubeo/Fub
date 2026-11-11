@@ -7,7 +7,9 @@
 // `attachSurface`. Bozze, conflitti e salvataggio restano della sessione;
 // cursore, scorrimento e annulla della superficie (A-21). La tela non vede
 // niente di tutto questo: riceve la porta (`CardEditorPort`, in
-// `editors/canvas/cards.ts`) e non importa nessun editor.
+// `editors/canvas/cards.ts`) e non importa nessun editor. Il testo di una
+// scheda di testo, che sta nel `.canvas` e non in un file, si scrive con
+// l'editor delle note in Live senza sessione (`openText`, T43).
 //
 // La pagina di riferimento è `docs/reference/canvas-cards.md`, sezione
 // «Scrivere dentro una scheda».

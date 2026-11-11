@@ -382,3 +382,40 @@ describe("scrivere nelle celle di una scheda di foglio (T42)", () => {
       host.atGate("writeDocument").some((call) => call.args[0] === SHEET && call.args[1] === JOURNAL_900), 10_000);
   });
 });
+
+describe("la scheda di testo in Live (T43)", () => {
+  it("il doppio clic monta l'editor delle note vero, in Live, e il testo arriva al .canvas", async () => {
+    const card = "Un **testo** con [[Nota]]\r\nsu due righe";
+    const board = JSON.stringify({ nodes: [{ id: "t", type: "text", text: card, x: 0, y: 0, width: 320, height: 200 }], edges: [] });
+    const host = await start({ file: { [NOTE]: TEXT, "lavagna.canvas": board } });
+    const { openDocument } = await import("./panels/document");
+    await openDocument("lavagna.canvas");
+    const textCard = () => document.querySelector<HTMLElement>('.canvas-node[data-node="t"]');
+    await waitFor("la scheda di testo c'è", () => textCard() !== null, 15_000);
+    textCard()!.dispatchEvent(new MouseEvent("dblclick", { bubbles: true, cancelable: true }));
+    await waitFor("l'editor delle note prende il posto del campo", () =>
+      textCard()?.querySelector(".canvas-text-live .cm-editor") != null);
+    const place = textCard()!.querySelector<HTMLElement>(".canvas-text-live")!;
+    expect(place.dataset.markdownMode, "in Live").toBe("live_preview");
+    expect(textCard()!.querySelector(".canvas-text-editor"), "il campo semplice se n'è andato").toBeNull();
+    const editor = findTextEditorOrThrow(place);
+    expect(editor.state.doc.toString()).toBe(card.replace(/\r\n/g, "\n"));
+
+    // Una battuta, poi Ctrl+Z nell'editor: si annulla lì, e la lavagna non cambia.
+    editor.dispatch({ changes: { from: editor.state.doc.length, insert: "!" }, userEvent: "input.type" });
+    editor.contentDOM.dispatchEvent(ctrlZ());
+    await settle();
+    expect(editor.state.doc.toString()).toBe(card.replace(/\r\n/g, "\n"));
+    expect(textCard()).not.toBeNull();
+
+    // Scritto e chiuso con Esc: il testo, col suo CRLF, va nel `.canvas` e al disco.
+    editor.dispatch({ changes: { from: editor.state.doc.length, insert: " e una frase" }, userEvent: "input.type" });
+    editor.contentDOM.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, cancelable: true, key: "Escape" }));
+    await waitFor("la scheda torna alla resa", () => textCard()?.querySelector(".canvas-text-live") == null);
+    await waitFor("il testo arriva al disco", () => {
+      const saved = host.files()["lavagna.canvas"] ?? "";
+      return (JSON.parse(saved) as { nodes: Array<{ text?: string }> }).nodes[0]?.text === `${card} e una frase`;
+    }, 10_000);
+    expect(mountedTextEditors(), "nessun editor resta montato").toEqual([]);
+  });
+});

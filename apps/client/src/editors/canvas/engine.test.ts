@@ -1297,6 +1297,18 @@ describe("CanvasEngine: la scheda di testo in Live (T43)", () => {
     expect(place.contains(live.area)).toBe(true);
     expect(document.activeElement).toBe(live.area);
     expect(live.focusAt).toEqual(["vedi [[Altra]] e #tag".length]);
+    // L'editor che porta il cursore in vista non sposta la lavagna: la vista
+    // si muove solo con la camera.
+    const viewport = host.querySelector<HTMLElement>(".canvas-viewport")!;
+    viewport.scrollTop = 280;
+    viewport.dispatchEvent(new Event("scroll"));
+    expect(viewport.scrollTop).toBe(0);
+    // Né sposta il contenitore della scheda: scorre l'editor, e ciò che
+    // l'editor tiene sotto di sé resta fuori dalla vista.
+    expect(place.style.overflow).toBe("hidden");
+    place.scrollTop = 72;
+    place.dispatchEvent(new Event("scroll"));
+    expect(place.scrollTop).toBe(0);
     engine.destroy();
     expect(live.destroyed).toBe(true);
   });
@@ -1325,12 +1337,14 @@ describe("CanvasEngine: la scheda di testo in Live (T43)", () => {
     engine.destroy();
   });
 
-  it("Esc e Ctrl+Invio registrano e chiudono (A14, A15); un Esc usato dall'editor resta suo", async () => {
+  it("Esc e Ctrl+Invio registrano e chiudono (A14, A15); un Esc che chiude i suggerimenti resta dell'editor", async () => {
     const { port, opened } = textPort();
     const { engine, host, changes } = mounted(canvasSource(), withTextPort(port));
     await openLive(host);
     vi.useFakeTimers();
     let live = opened[0]!;
+    // L'editor delle note segna Esc come usato anche senza suggerimenti: esce lo stesso.
+    live.area.addEventListener("keydown", (event) => event.preventDefault());
     live.typed("Con Esc");
     press(live.area, "Escape");
     expect(changes).toHaveLength(1);
@@ -1346,10 +1360,13 @@ describe("CanvasEngine: la scheda di testo in Live (T43)", () => {
     vi.useFakeTimers();
     live = opened[1]!;
     const seen: string[] = [];
+    // L'elenco dei suggerimenti aperto: Esc lo chiude, e la scrittura resta.
+    const suggestions = document.createElement("ul");
+    suggestions.setAttribute("role", "listbox");
+    live.area.append(suggestions);
     live.area.addEventListener("keydown", (event) => {
       seen.push(event.key);
-      // L'editor chiude un suggerimento con Esc: lo usa.
-      if (event.key === "Escape") event.preventDefault();
+      if (event.key === "Escape") suggestions.remove();
     });
     live.typed("Con Ctrl+Invio");
     press(live.area, "Escape");
@@ -1436,6 +1453,10 @@ describe("CanvasEngine: la scheda di testo in Live (T43)", () => {
     await openLive(host);
     vi.useFakeTimers();
     expect(opened[0]!.text).toBe(long);
+    // La rotella sopra il testo lo scorre: la lavagna non la prende.
+    const wheel = new WheelEvent("wheel", { bubbles: true, cancelable: true, deltaY: 120 });
+    opened[0]!.area.dispatchEvent(wheel);
+    expect(wheel.defaultPrevented).toBe(false);
     opened[0]!.typed(`${long}\nriga 2001`);
     vi.advanceTimersByTime(CARD_PAUSE_MS);
     expect(changes).toHaveLength(1);

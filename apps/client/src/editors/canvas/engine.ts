@@ -1597,6 +1597,12 @@ export class CanvasEngine {
       this.#cancelGestures();
     }, { signal });
     this.#viewport.addEventListener("wheel", (event) => this.#wheel(event), { signal, passive: false });
+    // La vista si muove solo con la camera: uno scorrimento del browser (un
+    // editor in una scheda che porta il cursore in vista, T43) si annulla.
+    this.#viewport.addEventListener("scroll", () => {
+      if (this.#viewport.scrollTop !== 0) this.#viewport.scrollTop = 0;
+      if (this.#viewport.scrollLeft !== 0) this.#viewport.scrollLeft = 0;
+    }, { signal });
     this.#viewport.addEventListener("keydown", (event) => {
       this.#keydown(event);
       this.#statusSettle();
@@ -6955,6 +6961,9 @@ export class CanvasEngine {
     // Sopra la scheda attiva la rotella scorre lei (A-11); Ctrl+rotella e il
     // pizzico ingrandiscono sempre la lavagna.
     if (!event.ctrlKey && !event.metaKey && this.#insideActive(event.target, true)) return;
+    // Sopra il testo che si scrive in una scheda la rotella scorre il testo
+    // (una scheda di testo lunga, T43).
+    if (!event.ctrlKey && !event.metaKey && event.target instanceof Node && this.#editor?.place.contains(event.target)) return;
     event.preventDefault();
     // La rotella prende la vista: un volo o un'inerzia si fermano (T53).
     this.#stopMotion(false);
@@ -8428,8 +8437,12 @@ export class CanvasEngine {
     const port = this.#options.cards?.editors;
     if (!port?.openText || this.#editor !== editor) return;
     const host = document.createElement("div");
-    // L'aspetto della nota che si scrive in una scheda (T41).
+    // L'aspetto della nota che si scrive in una scheda (T41). Il contenitore è
+    // alto quanto il corpo e non trabocca: il testo scorre nell'editor, e ciò
+    // che l'editor tiene sotto di sé per la Lettura resta fuori dalla vista.
     host.className = "canvas-card-note canvas-text-live";
+    host.style.height = "100%";
+    host.style.overflow = "hidden";
     host.hidden = true;
     body.append(host);
     const life = openLifetime();
@@ -8481,8 +8494,8 @@ export class CanvasEngine {
 
   /**
    * L'editor delle note prende il posto del campo semplice, col cursore dove
-   * era. I tasti restano dell'editor (Ctrl+Z annulla lì); Esc, se l'editor non
-   * lo usa, e Ctrl+Invio registrano e chiudono (A14, A15); Invio va a capo e
+   * era. I tasti restano dell'editor (Ctrl+Z annulla lì); Esc, se non chiude
+   * dei suggerimenti, e Ctrl+Invio registrano e chiudono (A14, A15); Invio va a capo e
    * registra; il fuoco che esce dall'editor chiude, come per il campo.
    */
   #showLiveText(editor: CardEditor, node: CanvasNode, live: CardTextEditor, host: HTMLElement, simple: AbortController): void {
@@ -8494,11 +8507,18 @@ export class CanvasEngine {
     editor.live = live;
     editor.place = host;
     const signal = editor.lifetime.signal;
+    // Esc chiude prima un elenco di suggerimenti aperto nell'editor; se no esce.
+    // L'editor delle note usa Esc anche per altro (lo segna come usato): non
+    // conta, come nella scheda di nota (T41).
+    let escapeForEditor = false;
     host.addEventListener("keydown", (event) => {
       if (!(event instanceof KeyboardEvent)) return;
       editor.recordOnInput = false;
+      escapeForEditor = false;
       if (event.isComposing || editor.composing) return;
-      if (isCommandSearchKey(event)) {
+      if (event.key === "Escape") {
+        escapeForEditor = host.querySelector('[role="listbox"]') !== null;
+      } else if (isCommandSearchKey(event)) {
         event.preventDefault();
         event.stopPropagation();
         this.#openCommandSearch();
@@ -8516,8 +8536,7 @@ export class CanvasEngine {
       // I tasti sono dell'editor, Ctrl+Z compreso: la tela non li vede.
       event.stopPropagation();
       if (!(event instanceof KeyboardEvent) || event.isComposing || editor.composing) return;
-      // Un Esc che l'editor ha usato (chiudere un suggerimento) non esce.
-      if (event.key === "Escape" && !event.defaultPrevented) {
+      if (event.key === "Escape" && !escapeForEditor) {
         event.preventDefault();
         this.#leaveField(true);
       }
@@ -8529,6 +8548,11 @@ export class CanvasEngine {
       const next = event.relatedTarget;
       if (next instanceof Node && host.contains(next)) return;
       if (!this.#searching) this.#leaveField(false);
+    }, { signal });
+    // Portare il cursore in vista non sposta il contenitore: scorre l'editor.
+    host.addEventListener("scroll", () => {
+      if (host.scrollTop !== 0) host.scrollTop = 0;
+      if (host.scrollLeft !== 0) host.scrollLeft = 0;
     }, { signal });
     input.remove();
     host.hidden = false;
