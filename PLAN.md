@@ -5605,8 +5605,8 @@ righe di DECISIONS.md (T65, T70, T77).
 Tocca: `apps/client/src/editors/canvas/engine.ts`,
 `apps/client/src/editors/canvas/sources.ts` e il suo test,
 `apps/client/src/editors/canvas/chrome/inspector.ts` e il suo test,
-`apps/client/src/editors/canvas/convert.ts` o dove sta oggi
-`canvasFreeName` (T70) e il suo test, `apps/client/src/i18n/catalog.ts`,
+`apps/client/src/state/document-controller.ts` (dove sta
+`canvasFreeName`, T70) e il suo test, `apps/client/src/i18n/catalog.ts`,
 `docs/reference/canvas-inspector.md`, `docs/reference/canvas-input.md`.
 Non toccare: il formato; la shell (chiudere l'ispettore della shell nello
 spazio Semplice vuole un contratto della shell: resta fuori, da chiedere).
@@ -5627,7 +5627,7 @@ Fatto quando: un test per ogni punto, rosso prima e verde dopo dove il
 comportamento cambia.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/canvas
-Stato: [ ] da fare
+Stato: [~] in corso · coder Opus · base 083d3056c
 
 ## Non verificato stanotte
 
