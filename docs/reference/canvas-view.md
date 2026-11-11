@@ -157,6 +157,8 @@ lontanissima ci sta.
   lavagna, ricordato nella vista (`"navigator": false`, [Riaprire dove
   eri](#riaprire-dove-eri)); «Mostra il navigatore»
   (`canvas.navigator.show`) lo riaccende. C'è sempre una sola delle due.
+  Nello spazio Semplice è chiuso di serie, e con `Ctrl+.` sparisce con il
+  resto dell'interfaccia ([lo spazio di lavoro](canvas-input.md#lo-spazio-di-lavoro)).
 - **La tastiera.** F6 dalla lavagna ci arriva (`EditorSurface.zone`: la
   vista, poi il navigatore se si vede, poi la colonna e la riga); le frecce spostano il riquadro di un
   decimo della vista, con Maiusc di metà.

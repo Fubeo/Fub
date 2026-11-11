@@ -8,16 +8,23 @@
 // scelta in `canvas.toolbar` (vuota, quella di serie) ai gruppi. Uno strumento
 // tolto dalla colonna resta nei tasti e in Ctrl+/.
 //
+// Nello spazio Semplice (T65) la colonna è quella ridotta di
+// `CANVAS_SIMPLE_TOOLS`, ogni strumento nella sua casella e senza tendine,
+// con caselle da 44 px (`data-size="large"` del kit) e «Completo» in fondo.
+// La colonna scelta in `canvas.toolbar` vale solo nello spazio Completo.
+//
 // In sola lettura gli strumenti che scrivono (penna, evidenziatore, gomma,
 // testo, collega) si vedono spenti col perché nel nome e nel suggerimento;
 // Selezione, Lazo e Mano restano: il lazo sceglie anche lì, non sposta.
 
+import { textButton } from "../../../kit";
 import { createToolRail, type RailGroup, type RailTool, type ToolRail } from "../../../kit/tool-rail";
 import { t } from "../../../i18n/strings";
 import type { Lifetime } from "../../../ui/lifetime";
 import { setTooltip } from "../../../ui/tooltip";
 import { CANVAS_TOOL_IDS, CANVAS_TOOL_KEYS, displayCanvasKey, type CanvasToolId } from "./commands";
 import { ensureCanvasIcons } from "./icons";
+import { CANVAS_SIMPLE_TOOLS, type CanvasWorkspace } from "./workspace";
 
 export type { CanvasToolId } from "./commands";
 
@@ -69,10 +76,16 @@ export function isCanvasTool(name: string): name is CanvasToolId {
 /// strumenti scelti nel loro ordine, ognuno nella sua casella, un filo dove
 /// cambia la famiglia; un nome che non c'è si salta, un doppio conta una volta,
 /// e la Selezione sta in cima se manca: senza, non si sceglierebbe più niente.
-export function canvasRailLayout(toolbar: readonly string[] = []): CanvasToolId[][][] {
+export function canvasRailLayout(toolbar: readonly string[] = [], workspace: CanvasWorkspace = "full"): CanvasToolId[][][] {
+  if (workspace === "simple") return groupedByFamily(CANVAS_SIMPLE_TOOLS);
   const chosen = [...new Set(toolbar)].filter(isCanvasTool);
   if (chosen.length === 0) return DEFAULT_LAYOUT.map((group) => group.map((slot) => [...slot]));
-  const tools = chosen.includes("select") ? chosen : ["select" as const, ...chosen];
+  return groupedByFamily(chosen.includes("select") ? chosen : ["select" as const, ...chosen]);
+}
+
+/// Gli strumenti `tools` nel loro ordine, ognuno nella sua casella, un gruppo
+/// per ogni tratto della stessa famiglia.
+function groupedByFamily(tools: readonly CanvasToolId[]): CanvasToolId[][][] {
   const groups: CanvasToolId[][][] = [];
   let last = -1;
   for (const tool of tools) {
@@ -92,6 +105,10 @@ export interface CanvasRailOptions {
   readonly editable: () => boolean;
   /// La colonna scelta (`canvas.toolbar`); vuota, quella di serie.
   readonly toolbar: readonly string[];
+  /// Lo spazio di lavoro all'apertura (T65); di serie Completo.
+  readonly workspace?: CanvasWorkspace;
+  /// «Completo» in fondo alla colonna, nello spazio Semplice.
+  readonly onFull?: () => void;
   readonly lifetime: Lifetime;
 }
 
@@ -103,6 +120,8 @@ export interface CanvasRail {
   sync(): void;
   /// Un'altra colonna scelta, dal vivo.
   setToolbar(toolbar: readonly string[]): void;
+  /// Un altro spazio di lavoro (T65): la colonna ridotta e grande, o quella intera.
+  setWorkspace(workspace: CanvasWorkspace): void;
   /// Stretta: la colonna va sotto la lavagna, in riga.
   setNarrow(narrow: boolean): void;
   /// Rifà nomi e suggerimenti nella lingua di adesso.
@@ -134,8 +153,9 @@ export function createCanvasRail(options: CanvasRailOptions): CanvasRail {
   ensureCanvasIcons();
   const { lifetime } = options;
   let toolbar = options.toolbar;
+  let workspace: CanvasWorkspace = options.workspace ?? "full";
   const groups = (): RailGroup[] =>
-    canvasRailLayout(toolbar).map((slots, at) => ({
+    canvasRailLayout(toolbar, workspace).map((slots, at) => ({
       id: GROUP_IDS[FAMILY[slots[0]![0]!]] ?? `group-${at}`,
       slots: slots.map((tools) => ({ id: tools[0]!, tools: tools.map(railTool) })),
     }));
@@ -157,6 +177,17 @@ export function createCanvasRail(options: CanvasRailOptions): CanvasRail {
   const element = document.createElement("div");
   element.className = "canvas-rail";
   element.append(rail.element);
+  // «Completo» in fondo alla colonna: si vede solo nello spazio Semplice.
+  const full = textButton({ label: t("canvas.workspace.full"), onPress: () => options.onFull?.(), lifetime });
+  full.classList.add("canvas-rail-full");
+  setTooltip(full, t("canvas.workspace.full_hint"));
+  element.append(full);
+  const paintWorkspace = (): void => {
+    // Nel Semplice le caselle sono bersagli da 44 px, anche col mouse.
+    rail.element.dataset.size = workspace === "simple" ? "large" : "normal";
+    full.hidden = workspace !== "simple";
+  };
+  paintWorkspace();
 
   // Il kit ridipinge nome e suggerimento a ogni `setActive`: la sola lettura
   // si rimette sopra, sulla casella dello strumento che mostra.
@@ -193,6 +224,13 @@ export function createCanvasRail(options: CanvasRailOptions): CanvasRail {
     setToolbar(next) {
       if (next.length === toolbar.length && next.every((tool, at) => tool === toolbar[at])) return;
       toolbar = next;
+      // Nel Semplice la colonna non cambia: la scelta vale al ritorno.
+      if (workspace === "full") rebuild();
+    },
+    setWorkspace(next) {
+      if (next === workspace) return;
+      workspace = next;
+      paintWorkspace();
       rebuild();
     },
     setNarrow(narrow) {
@@ -200,6 +238,8 @@ export function createCanvasRail(options: CanvasRailOptions): CanvasRail {
     },
     relabel() {
       rail.element.setAttribute("aria-label", t("menu.tools"));
+      full.textContent = t("canvas.workspace.full");
+      setTooltip(full, t("canvas.workspace.full_hint"));
       rebuild();
     },
   };
