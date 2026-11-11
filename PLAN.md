@@ -3189,7 +3189,7 @@ Ctrl+Maiusc+Invio col filo, la scheda nuova vuota che sparisce senza
 annulla e quella vecchia che resta.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/canvas/engine.test.ts
-Stato: [~] in corso · coder Opus · base 69dab4bf0
+Stato: [x] fatto (2026-11-11) · abd78c643 (prima del cherry-pick) · differenze: la crescita e i tasti stanno in `docs/reference/canvas-input.md`, perché `canvas-cards.md` è a 549/550 righe; la misura nel campo semplice legge `scrollWidth` senza a capo, nel Live allarga la scheda a `max-content` (senza toccare il DOM di CodeMirror), e l'altezza conta da `[contenteditable]` in su, senza il `.pane-preview`; «ridimensionata a mano» vale da quando la lavagna è aperta, perché il `.canvas` non ha un campo per dirlo (aggiungerlo cambierebbe il formato su disco), e il doppio clic di adatta-al-contenuto toglie il segno; Ctrl+Invio in una scheda nuova ancora vuota non fa niente; la scheda nuova vuota se ne va annullando la nascita e i passi che hanno toccato solo lei, altrimenti come «Togli dalla lavagna» col suo passo; Esc con la scelta vale anche per i campi di gruppo e di link; contano come nuove le schede del Testo, di «Scrivi una scheda», del filo nel vuoto (T67) e di Ctrl+Invio. Guardata nel banco con Chromium (sonda temporanea, giorno e notte): la scheda in Live cresce da 320 a 480 px parola per parola, la parola di 80 lettere va a capo a 480, sei a capo la portano a 280 px di altezza, ed Esc la lascia scelta
 
 ## T45 · «Apri a lato per questo»
 
