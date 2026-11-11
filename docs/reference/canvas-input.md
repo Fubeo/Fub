@@ -196,7 +196,7 @@ scrive, valgono quelli della sessione). `Esc` torna dov'eri, anche in un campo.
 | `canvas.fit`, `canvas.fit_selection` | `Maiusc+1`, `Ctrl+0`; `Maiusc+2` |
 | `canvas.zoom_in`, `canvas.zoom_out`, `canvas.zoom_reset` | `+`, `Ctrl+=`; `-`, `Ctrl+-`; `0` |
 | `canvas.grid_toggle` (mostra o nasconde la griglia di questa lavagna) | `Ctrl+'` |
-| `canvas.bare` (nasconde e riporta l'interfaccia, [lo spazio di lavoro](#lo-spazio-di-lavoro)) | `Ctrl+.` |
+| `canvas.bare` (nasconde e riporta l'interfaccia, [lo spazio di lavoro](canvas-view.md#lo-spazio-di-lavoro)) | `Ctrl+.` |
 | `canvas.add.*`, `canvas.edit`, `canvas.open`, `canvas.open_url`, `canvas.edge.reverse`, `canvas.color.*`, `canvas.align.*`, `canvas.distribute_*` | nessuno |
 | `canvas.open_beside`, `canvas.open_viewer`, `canvas.web_preview`, `canvas.spread_pages` (solo su un PDF), `canvas.connect`, `canvas.trash_file` (il menu della scheda); `canvas.open_beside_here` ([la vista](canvas-view.md#apri-a-lato-per-questo)) | nessuno (`canvas.connect` anche con `C`, vedi sotto) |
 | `canvas.pen_menu`, `canvas.color_menu`, `canvas.align_menu`, `canvas.tips.none`, `.start`, `.end` (la riga delle opzioni) | nessuno |
@@ -401,36 +401,6 @@ conosce si salta, la Selezione sta sempre in cima, uno strumento tolto resta
 nei tasti e in `Ctrl+/`. In sola lettura gli strumenti che scrivono si vedono
 spenti col perché nel nome; Selezione e Mano restano. Con la finestra fino a
 700 px, o un riquadro fino a 480, la colonna va sotto la lavagna, in riga.
-
-## Lo spazio di lavoro
-
-`canvas.workspace` (`chrome/workspace.ts`) sceglie fra due spazi, scritti
-sulla superficie come `data-workspace`:
-
-- **`auto`** (di serie) è Semplice solo su un dispositivo che ha soltanto il
-  tocco (le media query `any-pointer`: nessun puntatore fine), Completo
-  altrimenti: un portatile col tocco e il mouse resta Completo. Un mouse che
-  si attacca o si stacca cambia lo spazio dal vivo; la larghezza della
-  finestra non conta (una finestra stretta resta Completa). **`full`** e
-  **`simple`** lo fissano. Un cambio dell'impostazione, anche da un'altra
-  finestra, vale subito nelle lavagne aperte.
-- **Semplice:** la colonna ha sei strumenti (Selezione, Mano, Penna,
-  Evidenziatore, Gomma, Testo), ognuno nella sua casella senza tendine, da
-  44 px (`data-size="large"` del kit); il Lazo e Collega restano nei tasti, in
-  `Ctrl+/` e nel menu radiale, e `canvas.toolbar` vale solo nel Completo. Con
-  Penna, Evidenziatore e Gomma la riga delle opzioni ha solo il menu della
-  penna, senza la Vista; i pulsanti della riga e della barra della selezione
-  sono da 44 px. Il navigatore è chiuso: «Mostra il navigatore» lo apre per
-  questa apertura, senza toccare la scelta ricordata nella vista. In fondo
-  alla colonna «Completo» porta allo spazio Completo e scrive `full`.
-- **Senza interfaccia:** `Ctrl+.` (`canvas.bare`, lo stesso tasto del disegno)
-  toglie la testata, la barra di N4, la colonna, la barra della selezione e
-  il navigatore (`data-bare`), e li riporta, in tutti e due gli spazi. Vale da ogni punto
-  della lavagna; mentre si scrive in una scheda il tasto va prima
-  all'editor, e alla lavagna solo se l'editor non lo usa. Il fuoco dentro ciò
-  che sparisce torna alla lavagna, e F6 salta ciò che non si vede.
-
-L'ispettore è della shell: la lavagna non lo apre mai da sé, in nessuno spazio.
 
 ## La riga delle opzioni
 
