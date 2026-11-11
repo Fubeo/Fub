@@ -4801,7 +4801,8 @@ ritaglio» e che il file dell'immagine non riceve mai una scrittura; le
 foto del banco somigliano al prototipo.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/canvas
-Stato: [~] in corso · coder Opus · base b949ddf80
+Stato: [x] fatto · 333dd27d2, barra 5ec47dfe0
+Differenze: in sola lettura la voce del menu non c'è, in Ctrl+/ resta spenta col perché; durante il taglio la scheda mostra l'immagine intera ruotata; un clic fuori vale «Fatto», come nel disegno; «Togli il ritaglio» scrive subito in un commit; un raster tagliato è un'immagine ferma ridecodificata alla larghezza della scheda, l'SVG resta vivo. La barra del taglio sta nel piede `canvas-crop-foot` dentro `.canvas-area`, a misura fissa a ogni zoom, posata con `selectionBarPlaceBelow` (la `bubblePlace` di T51 capovolta) e sempre nella vista; maniglie con presa di 24 px sullo schermo. Resta: il telaio della scheda d'immagine (titolo dentro, margine) è ancora quello di T39/T22, quindi l'immagine non riempie il bordo come nel prototipo; una scheda più alta della vista e uscita dal fondo ha la barra in cima, sopra la sua testa.
 
 ## T79 · La scheda PDF sui tasselli di PdfCraft
 
