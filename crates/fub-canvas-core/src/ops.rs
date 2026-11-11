@@ -1442,7 +1442,10 @@ mod tests {
             json!({ "op": "restyle_strokes", "layer": { "node": "p" }, "ids": ["s1"], "size": 4 }),
         ] {
             let error = compile(&canvas, &[op(refused.clone())], 1).unwrap_err();
-            assert!(matches!(error, OpError::Invalid { .. }), "{refused}: {error:?}");
+            assert!(
+                matches!(error, OpError::Invalid { .. }),
+                "{refused}: {error:?}"
+            );
         }
         let recolor = CanvasOp::RestyleStrokes {
             layer: layer.clone(),
