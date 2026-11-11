@@ -1947,7 +1947,7 @@ e in Vitest; `engine-ink-anchors.test.ts` scrive sulla pagina 2, va alla 3
 senza pagina; i tratti con le ancore di N4 restano identici byte per byte.
 Prova: scripts/check.sh --rapido; cargo test -p fub-canvas-core; cd
 apps/client && npx vitest run src/editors/canvas
-Stato: [ ] da fare
+Stato: [~] in corso · coder Opus · base ca7c9c733
 
 ## T20 · La misura S9
 
