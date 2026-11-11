@@ -236,6 +236,13 @@ export function slashOpensAt(lineBefore: string): boolean {
 /// La finestra in cui la lettura raccoglie le modifiche arrivate da un altro
 /// riquadro prima di ridisegnarsi.
 const READING_SYNC_MS = 120;
+
+/// Il modulo del correttore, dopo che il primo editor lo ha caricato. Da lì in
+/// poi ogni superficie nuova (ogni cambio di nota) lo monta insieme alle
+/// altre estensioni, prima di creare la vista: aggiungerlo dopo era una
+/// seconda configurazione di CodeMirror, con un ricalcolo dello stile, sopra
+/// l'editor appena disegnato.
+let proofModule: typeof import("./proof") | null = null;
 /// Quanto un riquadro che ha seguito lo scorrimento di un altro tace: copre
 /// lo scorrimento in due tempi del motore (il blocco, poi il pixel).
 const FOLLOW_QUIET_MS = 150;
@@ -460,6 +467,18 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
       anchor,
     );
   }, { capture: true });
+
+  // Il correttore si carica dopo la superficie: la scrittura non lo aspetta,
+  // e un guasto nel caricarlo lascia l'editor com'era. Già caricato, si monta
+  // qui, con le altre estensioni.
+  const proof = opts.proof;
+  const installProof = (module: typeof import("./proof")): void => {
+    if (!proof) return;
+    const mounted = module.mountMarkdownProof(proof.ports, { notify: proof.notify, forms: () => forms });
+    life.add(() => mounted.dispose());
+    profile.setProof(mounted.extension);
+  };
+  if (proofModule) installProof(proofModule);
 
   const engine = createTextEngine(parent, {
     onChange: (change) => {
@@ -826,16 +845,12 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
   /// Le azioni dell'editor: il catalogo del profilo più annulla e ripeti, che
   /// sono del motore. Si scrive soltanto in una modalità di scrittura e fuori
   /// dalla sola lettura; negli altri casi ogni azione è spenta, non assente.
-  // Il correttore si carica dopo la superficie: la scrittura non lo aspetta,
-  // e un guasto nel caricarlo lascia l'editor com'era.
-  const proof = opts.proof;
-  if (proof) {
+  if (proof && !proofModule) {
     void import("./proof").then(
-      ({ mountMarkdownProof }) => {
+      (module) => {
+        proofModule = module;
         if (life.closed) return;
-        const mounted = mountMarkdownProof(proof.ports, { notify: proof.notify, forms: () => forms });
-        life.add(() => mounted.dispose());
-        profile.setProof(mounted.extension);
+        installProof(module);
         engine.reconfigure();
       },
       () => {},

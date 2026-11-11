@@ -1056,7 +1056,7 @@ export function mountDocumentController(lifetime: Lifetime, d: DocumentDeps, pan
   heldEditors.clear();
   mountComponents(lifetime);
   lifetime.add(onComponents((next) => {
-    void drawQueue.enqueue(async () => {
+    void enqueueDraw(async () => {
       await componentsChanged(next);
       await render();
     }).catch((error: unknown) => {
@@ -1785,6 +1785,8 @@ async function keepOrDiscardUnsaved(doc: string, paneId: string): Promise<void> 
 /// di saltare il secondo giro: chi aspetta deve aspettare il disegno che
 /// comprende la sua mutazione, non uno qualunque.
 const drawQueue = new Queue();
+/// Il giro di `synchronize` accodato e non ancora partito, se c'è.
+let waitingRender: Promise<void> | null = null;
 
 /// Le aperture, in fila (difetto 0033).
 ///
@@ -1806,8 +1808,31 @@ const openQueue = new Queue();
 /// È l'unico punto che disegna, ed è il motivo per cui tutto il resto di questo
 /// file può limitarsi a mutare il layout e non pensarci più — la stessa forma
 /// con cui `ui/panel-host.ts` ha tolto ai pannelli il «quando ridisegnarsi».
+///
+/// Un giro accodato e **non ancora partito** comprende ogni mutazione arrivata
+/// prima che parta: chi chiede di sincronizzare in quel tempo aspetta quello,
+/// invece di accodarne un secondo identico. È il caso di ogni apertura: la
+/// mutazione del layout fa scattare il segnale, e `openDocument` chiede subito
+/// il proprio giro; due giri di fila rifacevano linguette, barra e
+/// scorrimento della striscia sopra l'editor appena montato, con un layout
+/// forzato in più a ogni cambio di nota. Un giro già partito non si fonde:
+/// potrebbe aver già letto lo stato che la mutazione nuova cambia.
 export function synchronize(): Promise<void> {
-  return drawQueue.enqueue(render);
+  if (waitingRender) return waitingRender;
+  const mine: Promise<void> = drawQueue.enqueue(() => {
+    if (waitingRender === mine) waitingRender = null;
+    return render();
+  });
+  waitingRender = mine;
+  return mine;
+}
+
+/// Accoda un lavoro di disegno che non è un giro di `synchronize`. Un giro che
+/// aspettava resta davanti a lui, quindi da qui in poi non comprende più ciò
+/// che arriva: chi sincronizza dopo ne accoda uno nuovo, dietro questo lavoro.
+function enqueueDraw<T>(job: () => Promise<T>): Promise<T> {
+  waitingRender = null;
+  return drawQueue.enqueue(job);
 }
 
 /// Smonta ogni riquadro e chiude ogni sessione prima di un vault nuovo.
@@ -1817,7 +1842,7 @@ export function synchronize(): Promise<void> {
 /// superficie e coda di salvataggio del vecchio. Chi chiama ha già svuotato
 /// la coda di salvataggio; ciò che resta sporco viene restituito.
 export function resetDocumentsForVault(): Promise<string[]> {
-  return drawQueue.enqueue(async () => {
+  return enqueueDraw(async () => {
     clearAllRemovedNotices();
     for (const [id, r] of panes) {
       if (r.shown?.k === "view") unmountViewFromPane(r.shown.view, id);

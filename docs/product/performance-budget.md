@@ -4,8 +4,9 @@
 > (evidenza osservazionale e criteri provvisori), i
 > [disegni grandi](#i-disegni-grandi) applicati in CI e il
 > [budget d'interazione](#il-budget-dinterazione) dello Scrittoio, fuori
-> dalla CI, che include [la battuta](#la-battuta) e
-> [l'apertura di una nota grande](#lapertura-di-una-nota-grande).
+> dalla CI, che include [la battuta](#la-battuta),
+> [l'apertura di una nota grande](#lapertura-di-una-nota-grande) e
+> [il cambio di nota](#il-cambio-di-nota).
 > **Snapshot applicativo della Graph View:** SHA `4383a7c9d54b1e6557d070501e5ad998224ff294`.
 
 Questa pagina documenta tre distribuzioni dello stesso codice (locale, CI push e
@@ -309,3 +310,62 @@ dell'inizio (`render-incremental.test.ts`) e dell'apertura in Live
 (`livepreview.dom.test.ts`): l'apertura non porta il parser in fondo, la
 tabella in cima è resa subito e quella in fondo dopo, e la resa completa è
 uguale a una resa da capo.
+
+### Il cambio di nota
+
+Quanto costa passare da una nota piccola a un'altra già aperta: il gesto più
+frequente, e un costo fisso che una nota piccola non giustifica. Tre note in
+schede (`Benvenuto.md`, la `panoramica` della Live, `Sintassi di Fub.md`), un
+clic nell'albero sulla prossima a ogni giro, in una pagina sola: dal clic alla
+scheda nuova scelta col suo testo nel documento, e il compito più lungo fino a
+due fotogrammi dopo, che comprendono la misura dell'editor:
+
+```bash
+cd apps/client
+node bench/interaction.mjs --only=cambio           # la pagina com'è
+node bench/interaction.mjs --only=cambio --cpu=4   # quattro volte più lenta
+```
+
+Il budget vale per la mediana dei giri: **scheda col testo entro 100 ms e
+nessun compito oltre 50 ms**, alla velocità della pagina.
+
+Un cambio di nota fa il suo lavoro una volta:
+
+- **un giro di disegno solo.** L'apertura muta il layout, il segnale chiede
+  un giro, e `openDocument` chiede il proprio: `synchronize` fonde le
+  richieste che arrivano mentre un giro aspetta di partire. Un giro già
+  partito non si fonde, e un altro lavoro della coda dei disegni (il cambio
+  dei componenti, il cambio di vault) chiude la fusione;
+- **niente layout forzati a metà.** La linguetta scelta si porta in vista
+  (`scrollIntoView`) e la striscia delle schede guarda posti e scorrimento al
+  fotogramma dopo, non fra la superficie vecchia smontata e quella nuova:
+  nel fotogramma il layout è uno, ed è quello che l'editor appena montato
+  misura;
+- **il correttore con le altre estensioni.** Dal secondo editor in poi il suo
+  modulo è già caricato, e la superficie lo monta prima di creare la vista,
+  invece di riconfigurare CodeMirror sopra l'editor appena disegnato.
+
+| Misura | Prima | Dopo |
+|---|---:|---:|
+| Banco, pagina com'è: scheda col testo / compito più lungo | 24 / 0 ms | 13–22 / 0 ms |
+| Banco, quattro volte più lenta | 63–69 / 70–72 ms | 53 / 58 ms |
+| WebView vera, S2 `noteSwitch` mediana / p95 | 176–179 / 188–216 ms | 140–142 / 152–165 ms |
+
+Le cifre sono del PC fisso del maintainer (Intel 13600KF): il banco con
+Chromium della revisione Playwright fissata, mediana di diciotto cambi; la
+WebView è WebKitGTK 2.54 con la GPU, sullo schermo vero, quattro corse per
+parte. Zero vuol dire nessun compito oltre 50 ms. La pagina com'è sta sotto
+un fotogramma o due, quindi la cifra va a scatti di 16 ms.
+
+Ciò che resta, a pagina quattro volte più lenta, è soprattutto la vista
+dell'editor: ogni cambio di scheda smonta la superficie e ne monta una nuova
+(circa 17 ms), le dà il testo (`setDoc`, circa 11 ms) e la dispone la prima
+volta (circa 17 ms di stile e layout, al fuoco), più la misura di CodeMirror
+nel fotogramma dopo (circa 9 ms). Toglierla vuol dire tenere vive le
+superfici delle schede recenti, o riusare la vista del riquadro: una scelta
+sul ciclo di vita della superficie, non ancora fatta.
+
+Il banco non sta nella CI. La guardia in CI è il test del cambio in
+`panels/document.test.ts` (un'apertura dipinge ogni linguetta una volta e
+non chiama `scrollIntoView` prima del fotogramma) e quello della striscia in
+`tab-strip.test.ts` (più cambi nello stesso fotogramma, un'occhiata sola).
