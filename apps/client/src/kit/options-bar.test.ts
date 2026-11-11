@@ -136,6 +136,35 @@ describe("createOptionsBar", () => {
     expect(after.element.hidden).toBe(false);
   });
 
+  it("il testo che cambia dentro un controllo non rifà il conto", async () => {
+    const frame = () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    const bar = createOptionsBar({ label: "Opzioni", moreLabel: "Altre opzioni", lifetime: life });
+    document.body.append(bar.element);
+    sized(bar.element, 110);
+    bar.element.querySelector<HTMLElement>(".kit-options-more")!.getBoundingClientRect = () =>
+      ({ width: 20, height: 24, x: 0, y: 0, left: 0, top: 0, right: 20, bottom: 24, toJSON: () => ({}) });
+    // La percentuale dello zoom, in un controllo finito in «…» e in uno che
+    // si vede: cambia a ogni passo della rotella.
+    const items = [control("colore", 40, 2), control("zoom", 40, 1), control("vista", 40)];
+    bar.setItems(items);
+    expect(bar.overflow()).toEqual(["vista"]);
+    let asked = 0;
+    const original = window.requestAnimationFrame;
+    window.requestAnimationFrame = (callback) => {
+      asked += 1;
+      return original(callback);
+    };
+    try {
+      items[1]!.element.textContent = "58%";
+      items[2]!.element.textContent = "61%";
+      await Promise.resolve();
+      await frame();
+      expect(asked).toBe(1);
+    } finally {
+      window.requestAnimationFrame = original;
+    }
+  });
+
   it("rifare il conto non toglie il fuoco al controllo appena premuto", () => {
     const bar = createOptionsBar({ label: "Opzioni", moreLabel: "Altre opzioni", lifetime: life });
     document.body.append(bar.element);
