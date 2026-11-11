@@ -26,6 +26,9 @@
 //   ancorato, il fuoco non si perde e ogni ascoltatore sta nella vita della
 //   lavagna. Cambiando riga si chiudono il rialzo della penna e i menu che la
 //   riga ha aperto.
+// - **Nello spazio Semplice** (T65, `simple`) la riga è ridotta: con Penna,
+//   Evidenziatore e Gomma resta solo il menu delle penne, senza la Vista,
+//   come nel prototipo; i pulsanti diventano da 44 px (`structure.css`).
 // - **La tastiera.** Un solo punto di tabulazione nella riga, le frecce si
 //   muovono fra i controlli (Inizio e Fine ai capi), come una `toolbar`.
 
@@ -102,6 +105,8 @@ export interface CanvasOptionsContext {
   /// C'è una scheda attiva (T45): la riga offre «Apri a lato» sul punto in
   /// cui si è (`canvas.open_beside_here`), col nome che lo dice. Senza, mai.
   readonly activeCard?: () => boolean;
+  /// Lo spazio Semplice (T65): la riga ridotta. Senza, mai.
+  readonly simple?: () => boolean;
 }
 
 export interface CanvasOptions {
@@ -295,13 +300,15 @@ export function createCanvasOptions(ctx: CanvasOptionsContext): CanvasOptions {
   let shown: CanvasOptionsMode | null = null;
   /// La riga mostra «Apri a lato per questo» (c'è una scheda attiva).
   let shownBeside = false;
+  /// La riga è quella ridotta dello spazio Semplice.
+  let shownSimple = false;
 
   const itemsOf = (mode: CanvasOptionsMode): readonly OptionItem[] => {
     switch (mode) {
       case "writing":
         return writing ?? [];
       case "ink":
-        return [penItem, view];
+        return shownSimple ? [penItem] : [penItem, view];
       case "cards":
         return [colorItem, arrangeItem, view];
       case "select":
@@ -480,20 +487,24 @@ export function createCanvasOptions(ctx: CanvasOptionsContext): CanvasOptions {
     if (lifetime.closed) return;
     const mode = canvasOptionsMode(ctx.tool(), ctx.chosen(), writing !== null);
     const withBeside = ctx.activeCard?.() === true;
+    const simple = ctx.simple?.() === true;
     if (mode !== shown) {
       // Un'altra riga: il rialzo della penna e i menu della riga di prima si
       // chiudono (passando fra Penna, Evidenziatore e Gomma la riga resta).
       closeMenus();
       shown = mode;
       shownBeside = withBeside;
+      shownSimple = simple;
       paint();
       bar.setItems(itemsFor(mode, withBeside));
       rove();
       return;
     }
-    if (withBeside !== shownBeside) {
-      // La stessa riga, con o senza «Apri a lato per questo»: i menu restano.
+    if (withBeside !== shownBeside || simple !== shownSimple) {
+      // La stessa riga, con o senza «Apri a lato per questo», intera o
+      // ridotta: i menu restano.
       shownBeside = withBeside;
+      shownSimple = simple;
       paint();
       bar.setItems(itemsFor(mode, withBeside));
       rove();

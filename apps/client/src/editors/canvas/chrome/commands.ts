@@ -202,6 +202,9 @@ export const CANVAS_COMMANDS: readonly CanvasCommandSpec[] = [
   // Il navigatore (T55): la tela dà solo la voce che serve adesso.
   { id: "canvas.navigator.hide", label: "canvas.navigator.hide", group: "view", keys: [], context: "always" },
   { id: "canvas.navigator.show", label: "canvas.navigator.show", group: "view", keys: [], context: "always" },
+  // Senza interfaccia (T65): Ctrl+. nasconde la testata, la colonna, la barra
+  // della selezione e il navigatore, e li riporta; come nel disegno.
+  { id: "canvas.bare", label: "canvas.bare", group: "view", keys: ["Mod-."], context: "always" },
   // Il menu radiale (T63): dal menu del tasto destro (Maiusc+F10) e dalla
   // ricerca; il tasto laterale della penna e il tocco lungo lo aprono dove sono.
   { id: "canvas.radial", label: "canvas.radial", group: "tools", keys: [], context: "always" },

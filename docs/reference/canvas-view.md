@@ -4,11 +4,12 @@
 > Avanti, Spazio, il bordo, l'inerzia), la griglia e le guide, il navigatore
 > e la vista che torna quando la lavagna si riapre; il menu radiale e i gesti
 > delle dita; come si vedono le schede da lontano; Cerca nella lavagna; la
-> lavagna da tastiera e col lettore di schermo; «Apri a lato per questo».
+> lavagna da tastiera e col lettore di schermo; «Apri a lato per questo»;
+> lo spazio di lavoro (Completo e Semplice) e l'interfaccia nascosta.
 > **Fonti autorevoli:** `apps/client/src/editors/canvas/engine.ts`
 > (`#jumpCamera`, `#paintGrid`, `#refreshDetail`, `#keydown`), `jumps.ts`, `guides.ts`,
 > `chrome/navigator.ts`, `chrome/radial.ts`, `view-state.ts`, `lod.ts`, `find.ts`,
-> `chrome/find-bar.ts` e `a11y.ts`, con le loro prove;
+> `chrome/find-bar.ts`, `chrome/workspace.ts` e `a11y.ts`, con le loro prove;
 > i conti della camera in `apps/client/src/editors/spatial/camera.ts`.
 
 Questa pagina viene da [I tasti e i gesti della lavagna](canvas-input.md),
@@ -157,6 +158,8 @@ lontanissima ci sta.
   lavagna, ricordato nella vista (`"navigator": false`, [Riaprire dove
   eri](#riaprire-dove-eri)); «Mostra il navigatore»
   (`canvas.navigator.show`) lo riaccende. C'è sempre una sola delle due.
+  Nello spazio Semplice è chiuso di serie, e con `Ctrl+.` sparisce con il
+  resto dell'interfaccia ([lo spazio di lavoro](#lo-spazio-di-lavoro)).
 - **La tastiera.** F6 dalla lavagna ci arriva (`EditorSurface.zone`: la
   vista, poi il navigatore se si vede, poi la colonna e la riga); le frecce spostano il riquadro di un
   decimo della vista, con Maiusc di metà.
@@ -165,6 +168,37 @@ lontanissima ci sta.
   sono cambiate. I colori sono variabili della pelle
   (`--canvas-navigator-card`, `-group`, `-view`, `-view-fill`), lette una
   volta per disegno.
+
+## Lo spazio di lavoro
+
+`canvas.workspace` (`chrome/workspace.ts`) sceglie fra due spazi, scritti
+sulla superficie come `data-workspace`:
+
+- **`auto`** (di serie) è Semplice solo su un dispositivo che ha soltanto il
+  tocco (le media query `any-pointer`: nessun puntatore fine), Completo
+  altrimenti: un portatile col tocco e il mouse resta Completo. Un mouse che
+  si attacca o si stacca cambia lo spazio dal vivo; la larghezza della
+  finestra non conta (una finestra stretta resta Completa). **`full`** e
+  **`simple`** lo fissano. Un cambio dell'impostazione, anche da un'altra
+  finestra, vale subito nelle lavagne aperte.
+- **Semplice:** la colonna ha sei strumenti (Selezione, Mano, Penna,
+  Evidenziatore, Gomma, Testo), ognuno nella sua casella senza tendine, da
+  44 px (`data-size="large"` del kit); il Lazo e Collega restano nei tasti, in
+  `Ctrl+/` e nel menu radiale, e `canvas.toolbar`
+  ([la colonna](canvas-input.md#la-colonna-degli-strumenti)) vale solo nel
+  Completo. Con Penna, Evidenziatore e Gomma la riga delle opzioni ha solo il
+  menu della penna, senza la Vista; i pulsanti della riga e della barra della selezione
+  sono da 44 px. Il navigatore è chiuso: «Mostra il navigatore» lo apre per
+  questa apertura, senza toccare la scelta ricordata nella vista. In fondo
+  alla colonna «Completo» porta allo spazio Completo e scrive `full`.
+- **Senza interfaccia:** `Ctrl+.` (`canvas.bare`, lo stesso tasto del disegno)
+  toglie la testata, la barra di N4, la colonna, la barra della selezione e
+  il navigatore (`data-bare`), e li riporta, in tutti e due gli spazi. Vale
+  da ogni punto della lavagna; mentre si scrive in una scheda il tasto va
+  prima all'editor, e alla lavagna solo se l'editor non lo usa. Il fuoco dentro ciò
+  che sparisce torna alla lavagna, e F6 salta ciò che non si vede.
+
+L'ispettore è della shell: la lavagna non lo apre mai da sé, in nessuno spazio.
 
 ## Da lontano
 

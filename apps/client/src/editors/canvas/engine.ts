@@ -94,6 +94,7 @@ import {
   type CanvasClipboard,
 } from "./clipboard";
 import { createCanvasOptions, type CanvasOptions } from "./chrome/options";
+import { createCanvasWorkspace, isBareKey, type CanvasWorkspaceControl } from "./chrome/workspace";
 import {
   createCanvasSelectionBar,
   selectionBarWanted,
@@ -1668,6 +1669,14 @@ export class CanvasEngine {
   #tool: CanvasToolId = "select";
   /** La colonna degli strumenti, a sinistra della lavagna o sotto (stretta). */
   readonly #rail: CanvasRail;
+  /** Lo spazio di lavoro (T65) e l'interfaccia nascosta con Ctrl+.. */
+  readonly #workspace: CanvasWorkspaceControl;
+  /**
+   * Il navigatore mostrato nello spazio Semplice, dove è chiuso di serie: vale
+   * finché la lavagna resta aperta in quello spazio, e non si ricorda nella
+   * vista, che tiene la scelta dello spazio Completo.
+   */
+  #simpleNavigator = false;
   /** La lavagna vuota (T62): al centro, quando non c'è niente. */
   readonly #empty: CanvasEmpty;
   /** Quante volte l'interruttore è cambiato: lo stato ricordato arriva solo se nessuno l'ha toccato prima. */
@@ -1748,6 +1757,8 @@ export class CanvasEngine {
       this.#snapSetting = preferences.snap;
       this.#paintGrid();
       this.#rail.setToolbar(preferences.toolbar);
+      // Lo spazio di lavoro (T65): `auto` sceglie col dispositivo.
+      (this.#workspace as CanvasWorkspaceControl | undefined)?.setMode(preferences.workspace);
       this.#dropChoice = { dropFolder: preferences.dropFolder, dropFolderPath: preferences.dropFolderPath };
       this.#statusSettle();
     }));
@@ -1790,6 +1801,28 @@ export class CanvasEngine {
     this.#grid.setAttribute("aria-hidden", "true");
     this.#viewport.append(this.#grid, this.#stage, this.#handleLayer);
     this.#paintGrid();
+    // Lo spazio di lavoro (T65): Semplice o Completo, e Ctrl+. che nasconde
+    // l'interfaccia. Gli attributi stanno sulla superficie; la colonna, la
+    // riga e il navigatore si rifanno qui.
+    this.#workspace = createCanvasWorkspace({
+      root: this.#root,
+      lifetime: this.#life,
+      mode: currentPreferences().workspace,
+      parts: () => [...this.#root.querySelectorAll<HTMLElement>(".canvas-header, .canvas-toolbar, .canvas-rail, .canvas-selection-bar, .canvas-navigator")],
+      focusBoard: () => this.#viewport.focus({ preventScroll: true }),
+      onWorkspace: (workspace) => {
+        // Si entra nel Semplice col navigatore chiuso.
+        if (workspace === "simple") this.#simpleNavigator = false;
+        this.#rail.setWorkspace(workspace);
+        this.#canvasOptions.sync();
+        this.#statusSettle();
+      },
+      onBare: (bare) => {
+        // I menu aperti dalla riga non restano senza la riga.
+        if (bare) this.#canvasOptions.closeMenus();
+        this.#statusSettle();
+      },
+    });
     // Il corpo: la colonna degli strumenti (T49) e l'area della lavagna, come
     // il corpo del disegno. Stretta, la colonna va sotto, in riga.
     this.#rail = createCanvasRail({
@@ -1800,6 +1833,8 @@ export class CanvasEngine {
       },
       editable: () => !this.#readOnly && !this.#isSceneOversized(),
       toolbar: currentPreferences().toolbar,
+      workspace: this.#workspace.workspace,
+      onFull: () => this.#workspace.chooseFull(),
       lifetime: this.#life,
     });
     // La lavagna vuota (T62) è un fratello della vista, non un suo figlio: i
@@ -1819,7 +1854,7 @@ export class CanvasEngine {
         const rect = this.#viewport.getBoundingClientRect();
         return { camera: { ...this.#camera }, width: rect.width || 800, height: rect.height || 600 };
       },
-      enabled: () => !this.#navigatorHidden,
+      enabled: () => !this.#workspace.bare && !this.#navigatorClosed(),
       jump: (camera) => this.#jumpCamera(camera),
       pan: (camera) => {
         this.#stopMotion(false);
@@ -1881,6 +1916,7 @@ export class CanvasEngine {
       penMenu: this.#penMenu,
       swatches: () => this.#colorSwatches(),
       activeCard: () => this.#besideHere() !== null,
+      simple: () => this.#workspace.workspace === "simple",
     });
     // La barra della selezione (T51): una sorella della vista, come il
     // navigatore, così i suoi clic non passano dal puntatore della lavagna.
@@ -1933,6 +1969,15 @@ export class CanvasEngine {
     // I tasti degli strumenti valgono anche col fuoco sulla colonna (dopo un
     // clic su una casella); gli altri tasti lì sono della colonna.
     this.#life.listen(this.#rail.element, "keydown", (event) => this.#railKeydown(event));
+    // Ctrl+. nasconde e riporta l'interfaccia (T65) da ogni punto della
+    // lavagna: la vista, la colonna, la riga, la barra, il navigatore. Dentro
+    // una scheda che scrive il tasto è prima dell'editor: arriva qui solo se
+    // l'editor non lo usa. Sulla vista il comando `canvas.bare` lo prende già.
+    this.#life.listen(this.#root, "keydown", (event) => {
+      if (event.defaultPrevented || !isBareKey(event)) return;
+      event.preventDefault();
+      this.#workspace.setBare(!this.#workspace.bare);
+    });
     const signal = this.#abort.signal;
     // Un gesto che comincia toglie la barra della selezione: torna a fine gesto.
     this.#viewport.addEventListener("pointerdown", (event) => {
@@ -4483,12 +4528,27 @@ export class CanvasEngine {
    * torna alla lavagna.
    */
   #setNavigatorHidden(hidden: boolean): void {
-    if (this.#navigatorHidden === hidden) return;
-    this.#navigatorHidden = hidden;
+    if (this.#navigatorClosed() === hidden) return;
     const focused = this.#navigator.element.contains(document.activeElement);
+    if (this.#workspace.workspace === "simple") {
+      // Nello spazio Semplice la scelta vale per questa apertura (T65).
+      this.#simpleNavigator = !hidden;
+      this.#statusSettle();
+      if (focused && this.#navigator.element.hidden) this.#viewport.focus();
+      return;
+    }
+    this.#navigatorHidden = hidden;
     this.#viewMemo?.changed();
     this.#statusSettle();
     if (focused && this.#navigator.element.hidden) this.#viewport.focus();
+  }
+
+  /**
+   * Il navigatore è chiuso per scelta: nello spazio Semplice finché non lo si
+   * mostra (T65), nello Completo come dice la vista (T55).
+   */
+  #navigatorClosed(): boolean {
+    return this.#workspace.workspace === "simple" ? !this.#simpleNavigator : this.#navigatorHidden;
   }
 
   /**
@@ -4501,7 +4561,9 @@ export class CanvasEngine {
   zone(step: 1 | -1): boolean {
     if (this.#destroyed) return false;
     const own = new Set<HTMLElement>([this.#viewport, this.#navigator.element]);
-    const zones = [this.#viewport, this.#navigator.element, this.#rail.element, this.#canvasOptions.element]
+    // Senza interfaccia (T65) restano la vista e il navigatore, se si vede.
+    const chrome = this.#workspace.bare ? [] : [this.#rail.element, this.#canvasOptions.element];
+    const zones = [this.#viewport, this.#navigator.element, ...chrome]
       .filter((zone) => zone.closest("[hidden]") === null);
     const at = zones.findIndex((zone) => zone.contains(document.activeElement));
     const target = zones[at < 0 ? (step > 0 ? 0 : zones.length - 1) : at + step];
@@ -6400,11 +6462,14 @@ export class CanvasEngine {
       // La griglia di questa lavagna (T71): la vista, anche in sola lettura.
       case "canvas.grid_toggle":
         return { disabled: () => null, run: () => this.#toggleGrid() };
+      // Senza interfaccia (T65): la vista, anche in sola lettura.
+      case "canvas.bare":
+        return { disabled: () => null, run: () => this.#workspace.setBare(!this.#workspace.bare) };
       // Il navigatore (T55): c'è la voce che serve adesso, Nascondi o Mostra.
       case "canvas.navigator.hide":
       case "canvas.navigator.show": {
         const hide = id === "canvas.navigator.hide";
-        if (hide === this.#navigatorHidden) return null;
+        if (hide === this.#navigatorClosed()) return null;
         return { disabled: () => null, run: () => this.#setNavigatorHidden(hide) };
       }
       case "canvas.zoom_in":
@@ -10054,6 +10119,10 @@ export class CanvasEngine {
         // Ctrl+/ si apre anche mentre si scrive; Esc torna nel campo.
         event.preventDefault();
         this.#openCommandSearch();
+      } else if (isBareKey(event)) {
+        // Il campo non usa Ctrl+.: nasconde l'interfaccia, e si resta a scrivere (T65).
+        event.preventDefault();
+        this.#workspace.setBare(!this.#workspace.bare);
       } else if (event.key === "Escape") {
         event.preventDefault();
         this.#leaveField(true, true);
@@ -10309,6 +10378,10 @@ export class CanvasEngine {
       if (event.key === "Escape" && !escapeForEditor) {
         event.preventDefault();
         this.#leaveField(true, true);
+      } else if (!event.defaultPrevented && isBareKey(event)) {
+        // Ctrl+. che l'editor non usa nasconde l'interfaccia (T65).
+        event.preventDefault();
+        this.#workspace.setBare(!this.#workspace.bare);
       }
     }, { signal });
     host.addEventListener("compositionstart", () => this.#fieldComposing(editor), { signal });

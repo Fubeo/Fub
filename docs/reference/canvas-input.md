@@ -195,7 +195,7 @@ scrive, valgono quelli della sessione). `Esc` torna dov'eri, anche in un campo.
 | `canvas.group` (Raggruppa), `canvas.bring_front`, `canvas.send_back` | `Ctrl+G`; `Ctrl+]`, `Ctrl+[` |
 | `canvas.fit`, `canvas.fit_selection` | `Maiusc+1`, `Ctrl+0`; `Maiusc+2` |
 | `canvas.zoom_in`, `canvas.zoom_out`, `canvas.zoom_reset` | `+`, `Ctrl+=`; `-`, `Ctrl+-`; `0` |
-| `canvas.grid_toggle` (mostra o nasconde la griglia di questa lavagna) | `Ctrl+'` |
+| `canvas.grid_toggle` (la griglia di questa lavagna), `canvas.bare` (l'interfaccia, [lo spazio di lavoro](canvas-view.md#lo-spazio-di-lavoro)): le mostrano e le nascondono | `Ctrl+'`; `Ctrl+.` |
 | `canvas.add.*`, `canvas.edit`, `canvas.open`, `canvas.open_url`, `canvas.edge.reverse`, `canvas.color.*`, `canvas.align.*`, `canvas.distribute_*` | nessuno |
 | `canvas.open_beside`, `canvas.open_viewer`, `canvas.web_preview`, `canvas.spread_pages` (solo su un PDF), `canvas.connect`, `canvas.trash_file` (il menu della scheda); `canvas.open_beside_here` ([la vista](canvas-view.md#apri-a-lato-per-questo)) | nessuno (`canvas.connect` anche con `C`, vedi sotto) |
 | `canvas.pen_menu`, `canvas.color_menu`, `canvas.align_menu`, `canvas.tips.none`, `.start`, `.end` (la riga delle opzioni) | nessuno |

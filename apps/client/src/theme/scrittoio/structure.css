@@ -3126,6 +3126,45 @@ body {
   border-inline-end-width: 0;
   border-block-start-width: 1px;
 }
+/* «Completo» in fondo alla colonna, nello spazio Semplice (T65; come
+   .draw-rail-full). Stretta, in fondo alla riga: subito dopo le caselle va
+   al capo, dopo «Il dito scrive» gli sta accanto. */
+.canvas-rail-full {
+  flex: none;
+  min-height: 44px;
+  white-space: nowrap;
+}
+.canvas-rail-finger + .canvas-rail-full {
+  margin-block-start: var(--space-2, 4px);
+}
+.canvas-rail-full:first-child,
+.canvas-rail > .kit-rail + .canvas-rail-full {
+  margin-block-start: auto;
+}
+.canvas-surface[data-narrow] .canvas-rail-full {
+  margin-block-start: 0;
+  margin-inline-start: var(--space-2, 4px);
+}
+.canvas-surface[data-narrow] .canvas-rail > .kit-rail + .canvas-rail-full {
+  margin-block-start: 0;
+  margin-inline-start: auto;
+}
+/* Senza interfaccia (Ctrl+., T65): restano la lavagna e le schede; va via
+   anche la barra di N4 (`.canvas-toolbar`), finché c'è. */
+.canvas-surface[data-bare] .canvas-header,
+.canvas-surface[data-bare] .canvas-toolbar,
+.canvas-surface[data-bare] .canvas-rail,
+.canvas-surface[data-bare] .canvas-selection-bar,
+.canvas-surface[data-bare] .canvas-navigator {
+  display: none;
+}
+/* Lo spazio Semplice (T65): i pulsanti della riga e della barra della
+   selezione sono bersagli da 44 px; le caselle della colonna le dà il kit
+   con data-size. */
+.canvas-surface[data-workspace="simple"] .canvas-button {
+  min-width: 44px;
+  min-height: 44px;
+}
 
 .canvas-viewport {
   position: relative;
