@@ -15,7 +15,7 @@ import { notify } from "../../ui/notify";
 import { searchedName } from "../../rules/searched-name";
 import { focusableElements, focusZone } from "../../ui/a11y";
 import { mediaKindOfId } from "../media/media-types";
-import { anchorAt, strokeBounds, StrokeBox, type Bounds } from "./anchor";
+import { anchorAt, pageAnchorAt, strokeBounds, StrokeBox, type Bounds } from "./anchor";
 import { parseTsv } from "../core/tsv";
 import { bornSize, dropLayout, markdownTable, spreadLayout, type DropItem } from "./drop-layout";
 import { parsePageRanges } from "./page-ranges";
@@ -31,6 +31,7 @@ import {
   type CardEditorState,
   type CardKind,
   type CardMode,
+  type CardPageBox,
   type CardQuiet,
   type CardRegistry,
   type CardRenderer,
@@ -3252,7 +3253,7 @@ export class CanvasEngine {
     this.#erase = {
       id,
       sweep: new EraseSweep(ERASER, pointerType),
-      source: new InkEraseSource(erasableInk(this.#inkStateList())),
+      source: new InkEraseSource(erasableInk(this.#inkStateList(), this.#pagesShown)),
       mode: this.#penChoice.eraser,
       path: [],
       cuts: new Map(),
@@ -3547,7 +3548,7 @@ export class CanvasEngine {
     for (const element of this.#stage.children) {
       if (!(element instanceof HTMLElement) || !element.classList.contains("canvas-node")) continue;
       const node = nodes.get(element.dataset.node ?? "");
-      if (node) paintCard(element, cards.get(node.id) ?? [], inkFitMode(node));
+      if (node) paintCard(element, cards.get(node.id) ?? [], inkFitMode(node), this.#pageBoxOf(node.id));
     }
     paintBoard(this.#stage, board);
     this.#inkCards = cards;
@@ -3593,7 +3594,9 @@ export class CanvasEngine {
       this.#showNotice(t("canvas.ink.foreign"));
       return;
     }
-    const made = strokeRecord(stroke, holder, { brush: stroke.brush, color: stroke.color, tool: stroke.tool }, Date.now());
+    // Sulla pagina di un PDF il tratto è della pagina se comincia lì (T19).
+    const page = holder ? pageAnchorAt(holder, this.#pageBoxOf(holder.id), stroke.samples[0]) : null;
+    const made = strokeRecord(stroke, holder, { brush: stroke.brush, color: stroke.color, tool: stroke.tool }, Date.now(), page);
     if (!made.ok) {
       // Un tocco che non fa contorno non è niente da dire.
       if (made.reason !== "empty") this.#showNotice(t(made.reason === "full" ? "canvas.ink.full" : "canvas.ink.refused"));
@@ -3620,6 +3623,36 @@ export class CanvasEngine {
     if (!stroke.split) this.#sayInkHolder(holder);
   }
 
+  /**
+   * La pagina che la scheda `id` mostra e dove (T19): la chiede alla sua
+   * vista; `null` se la scheda non ha una vista o non mostra una pagina.
+   */
+  #pageBoxOf(id: string): CardPageBox | null {
+    const view = this.#cards.get(id)?.view;
+    if (!view?.pageBox) return null;
+    try {
+      return view.pageBox();
+    } catch (error) {
+      // Una vista che lancia non ferma l'inchiostro: la pagina non si vede.
+      console.warn(`canvas: la pagina della scheda ${id} non si misura`, error);
+      return null;
+    }
+  }
+
+  /** `#pageBoxOf` come funzione, per la gomma e il Lazo (`erasableInk`). */
+  readonly #pagesShown = (id: string): CardPageBox | null => this.#pageBoxOf(id);
+
+  /**
+   * La scheda `entry` mostra un'altra pagina, o nessuna (T19): si ridisegna
+   * il suo solo inchiostro, coi tratti già calcolati, per la pagina di adesso.
+   */
+  #pageShown(entry: CardEntry): void {
+    if (this.#destroyed || !this.#doc || this.#isSceneOversized()) return;
+    const drys = this.#inkCards.get(entry.id);
+    if (!drys || !drys.some((dry) => dry.page !== undefined)) return;
+    paintCard(entry.article, drys, inkFitMode(entry.node), this.#pageBoxOf(entry.id));
+  }
+
   /** Aggiunge l'asciutto di un tratto appena scritto al solo livello che lo tiene. */
   #paintStroke(holder: CanvasNode | null, dry: DryStroke): void {
     if (!holder) {
@@ -3632,7 +3665,7 @@ export class CanvasEngine {
     const element = this.#stage.querySelector<HTMLElement>(`.canvas-node[data-node="${CSS.escape(holder.id)}"]`);
     // Una scheda arrivata da fuori a penna giù non è ancora sulla scena: la
     // disegna il ridisegno rimandato.
-    if (element) paintCard(element, drys, inkFitMode(holder));
+    if (element) paintCard(element, drys, inkFitMode(holder), this.#pageBoxOf(holder.id));
   }
 
   /**
@@ -3896,7 +3929,7 @@ export class CanvasEngine {
   #chosenStrokes(): ErasableInk[] {
     if (this.#strokeSelection.size === 0 || !this.#doc || this.#isSceneOversized()) return [];
     const cards = new Set(this.#selection);
-    return erasableInk(this.#inkStateList())
+    return erasableInk(this.#inkStateList(), this.#pagesShown)
       .filter((unit) => this.#strokeSelection.has(unit.key) && (unit.node === null || !cards.has(unit.node)));
   }
 
@@ -4061,8 +4094,11 @@ export class CanvasEngine {
     const selection = lasso.additive ? [...this.#selection, ...cards.filter((id) => !this.#selection.includes(id))] : cards;
     const held = new Set(selection);
     const strokes: string[] = [];
-    for (const unit of erasableInk(this.#inkStateList())) {
+    for (const unit of erasableInk(this.#inkStateList(), this.#pagesShown)) {
       if (unit.node !== null && held.has(unit.node)) continue;
+      // Un tratto di pagina (T19) il Lazo non lo prende: il nucleo non sa
+      // dove la pagina sta nella scheda, e non lo sposta né lo ridimensiona.
+      if (unit.stroke.page !== null) continue;
       // Il riquadro prima dei punti: i tratti lontani si lasciano subito.
       if (unit.maxX < loop.minX || unit.minX > loop.maxX || unit.maxY < loop.minY || unit.minY > loop.maxY) continue;
       if (loop.containsPoints(unit.points)) strokes.push(unit.key);
@@ -10494,6 +10530,12 @@ export class CanvasEngine {
         this.#viewMemo?.pageChanged(entry.id, page);
         // «Apri a lato alla pagina 3» segue la pagina della scheda attiva (T45).
         if (this.#activeId === entry.id) this.#canvasOptions.sync();
+      },
+      // L'inchiostro di pagina segue la pagina che si vede (T19). Durante il
+      // montaggio non c'è ancora la vista: lo disegna il giro della resa.
+      pageShown: () => {
+        if (life.closed || entry.body !== body || mounting) return;
+        this.#pageShown(entry);
       },
       ...(this.#options.cards?.editors ? { editors: this.#options.cards.editors } : {}),
       writing: (writing) => {

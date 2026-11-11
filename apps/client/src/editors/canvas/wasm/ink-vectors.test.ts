@@ -23,8 +23,8 @@ interface Vector {
   readonly expect: { readonly layers: readonly unknown[] };
 }
 
-/** I 28 vettori scritti a mano da T5. */
-const INK_VECTORS = 28;
+/** I 30 vettori scritti a mano: 28 da T5 (N4), 2 dell'ancora di pagina (N6 T19). */
+const INK_VECTORS = 30;
 /** Le toppe `ink` di `canvas-patches/` (87–103). */
 const INK_PATCH_VECTORS = 17;
 /** Le operazioni che portano l'inchiostro con la scheda, in `canvas-ops/`. */

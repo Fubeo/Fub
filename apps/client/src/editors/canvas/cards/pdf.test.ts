@@ -76,6 +76,8 @@ interface Bench {
   readonly zoom: { value: number };
   /// Le pagine dette con `pageChanged`, in ordine.
   readonly changes: number[];
+  /// Quante volte la scheda ha detto che la pagina in vista è cambiata (T19).
+  readonly shown: { count: number };
   mount(mode: CardMode, subpath?: string | null, initialPage?: number | null): CardView;
 }
 
@@ -92,6 +94,7 @@ function bench(options: {
   const size = { width: WIDTH, height: 400 };
   const zoom = { value: 1 };
   const changes: number[] = [];
+  const shown = { count: 0 };
   const port: Bench["port"] = {
     reads: 0,
     loads: 0,
@@ -123,11 +126,15 @@ function bench(options: {
     size,
     zoom,
     changes,
+    shown,
     mount(mode, subpath = null, initialPage) {
       const context: CardContext = {
         ...(initialPage === undefined ? {} : { initialPage }),
         pageChanged: (page) => {
           changes.push(page);
+        },
+        pageShown: () => {
+          shown.count += 1;
         },
         path: PATH,
         subpath,
@@ -480,6 +487,107 @@ describe("la cache e la scheda ferma", () => {
     expect(engine.renders.length).toBe(2);
     view.destroy();
     expect(b.port.unwatched).toBe(1);
+  });
+});
+
+describe("la pagina per l'inchiostro (T19)", () => {
+  /// Mette `element` sullo schermo nel rettangolo dato, in pixel del client.
+  function place(element: Element, left: number, top: number, width: number, height: number): void {
+    element.getBoundingClientRect = () => ({ left, top, width, height, x: left, y: top, right: left + width, bottom: top + height, toJSON: () => ({}) }) as DOMRect;
+  }
+
+  /// La scheda a zoom 2 in (10, 20), la pagina larga quanto lei sotto una
+  /// testata alta 36 unità: 72 pixel sullo schermo.
+  function onScreen(b: Bench): void {
+    place(b.host, 10, 20, WIDTH * 2, 800);
+    const canvas = screen(b.host);
+    place(canvas, 10, 20 + 72, WIDTH * 2, canvas.height * 2);
+  }
+
+  it("da viva dà la pagina in vista, la sua misura in punti e dove sta nella scheda", async () => {
+    const engine = fakeEngine(5, [595, 842]);
+    const b = bench({ engine: async () => engine });
+    const view = b.mount("live", "#page=2");
+    expect(view.pageBox!()).toBeNull();
+    await settle();
+    onScreen(b);
+    const height = screen(b.host).height;
+    expect(view.pageBox!()).toEqual({ page: 2, size: { width: 595, height: 842 }, rect: { x: 0, y: 36, width: WIDTH, height } });
+    expect(b.shown.count).toBe(1);
+    // Voltata la pagina, la 3 quando la sua immagine è in vista.
+    expect(press(view, "PageDown")).toBe(true);
+    await settle();
+    onScreen(b);
+    expect(view.pageBox!()!.page).toBe(3);
+    expect(b.shown.count).toBe(2);
+    view.destroy();
+    expect(view.pageBox!()).toBeNull();
+  });
+
+  it("da ferma dà la pagina dell'immagine ferma, anche montata senza essere mai stata viva", async () => {
+    const cache = new CardCache();
+    const first = bench({ cache, engine: async () => fakeEngine(9, [842, 595]) });
+    const live = first.mount("live", "#page=5");
+    await settle();
+    // Diventata ferma con la pagina 5: l'immagine ferma ha l'inchiostro della 5.
+    live.setMode("snapshot");
+    onScreen(first);
+    expect(live.pageBox!()).toMatchObject({ page: 5, size: { width: 842, height: 595 } });
+    live.destroy();
+
+    const second = bench({ cache });
+    const view = second.mount("snapshot", "#page=5");
+    expect(second.port.reads).toBe(0);
+    onScreen(second);
+    expect(view.pageBox!()).toMatchObject({ page: 5, size: { width: 842, height: 595 }, rect: { x: 0, y: 36, width: WIDTH } });
+    view.destroy();
+  });
+
+  it("senza una pagina in vista dà null: mai stata viva e senza immagine, o il file cambiato", async () => {
+    const b = bench();
+    const view = b.mount("snapshot");
+    onScreen(b);
+    expect(view.pageBox!()).toBeNull();
+    expect(b.shown.count).toBe(0);
+    view.destroy();
+
+    const changed = bench({ engine: async () => fakeEngine(3) });
+    const snap = changed.mount("live");
+    await settle();
+    changed.port.changed!();
+    snap.setMode("snapshot");
+    expect(snap.pageBox!()).toBeNull();
+    // La pagina è comparsa e poi è andata via: due avvisi.
+    expect(changed.shown.count).toBe(2);
+    snap.destroy();
+  });
+
+  it("un'immagine ferma senza la misura della pagina non dà una pagina", () => {
+    const cache = new CardCache();
+    const bitmap = document.createElement("canvas");
+    bitmap.width = WIDTH;
+    bitmap.height = 400;
+    cache.put(PATH, snapshotPart("page-1", WIDTH), { bitmap, bytes: WIDTH * 400 * 4 });
+    const b = bench({ cache });
+    const view = b.mount("snapshot");
+    onScreen(b);
+    expect(screen(b.host).hidden).toBe(false);
+    expect(view.pageBox!()).toBeNull();
+    view.destroy();
+  });
+
+  it("col corpo che non si misura vale l'ultima misura della stessa pagina, finché la scheda non cambia misura", async () => {
+    const b = bench({ engine: async () => fakeEngine(2, [595, 842]) });
+    const view = b.mount("live");
+    await settle();
+    onScreen(b);
+    const box = view.pageBox!();
+    expect(box).not.toBeNull();
+    place(screen(b.host), 0, 0, 0, 0);
+    expect(view.pageBox!()).toEqual(box);
+    b.size.width = WIDTH + 40;
+    expect(view.pageBox!()).toBeNull();
+    view.destroy();
   });
 });
 

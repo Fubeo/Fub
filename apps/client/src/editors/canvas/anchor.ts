@@ -1,10 +1,11 @@
 import type { CanvasNode } from "./model";
 
 /**
- * A quale scheda appartiene un tratto. Solo geometria sulle coordinate della
- * lavagna: niente DOM, niente formato dell'inchiostro. Lo strato d'inchiostro
- * (N4 T12) lo chiede quando la penna si alza, e l'etichetta della penna (N6
- * T69) mentre è giù, con la stessa regola.
+ * A quale scheda appartiene un tratto, e su una scheda PDF a quale pagina
+ * (T19). Solo geometria sulle coordinate della lavagna: niente DOM, niente
+ * formato dell'inchiostro. Lo strato d'inchiostro (N4 T12) lo chiede quando
+ * la penna si alza, e l'etichetta della penna (N6 T69) mentre è giù, con la
+ * stessa regola.
  */
 
 /** Un riquadro allineato agli assi, in unità della lavagna; `width` e `height` non sono mai negativi. */
@@ -115,6 +116,50 @@ export function anchorAt(
     return owns ? node : null;
   }
   return null;
+}
+
+/**
+ * La pagina a cui si attacca un tratto che `anchorAt` ha dato alla scheda
+ * `holder` (T19, D-4 a): `box` se il tratto comincia (`start`, in coordinate
+ * della lavagna) dentro la pagina che la scheda mostra, i bordi compresi;
+ * `null` se comincia sulla scheda ma fuori dalla pagina, o se la scheda non
+ * mostra una pagina, e allora il tratto prende l'ancora `card`.
+ *
+ * Conta il punto d'inizio, non il riquadro: un tratto che parte sulla pagina
+ * e ne esce resta della pagina, e la resa lo taglia alla scheda. Una pagina
+ * con un numero che non è un intero da 1, una misura non positiva o un
+ * rettangolo non finito non prende niente.
+ */
+export function pageAnchorAt<B extends PageBounds>(
+  holder: CanvasNode,
+  box: B | null | undefined,
+  start: { readonly x: number; readonly y: number } | undefined,
+): B | null {
+  if (!box || !start || !validCard(holder) || !validPage(box)) return null;
+  const x = start.x - holder.x;
+  const y = start.y - holder.y;
+  return within(x, box.rect.x, box.rect.width) && within(y, box.rect.y, box.rect.height) ? box : null;
+}
+
+/**
+ * La pagina che una scheda mostra, come la vede questo modulo: la forma di
+ * `CardPageBox` di `cards.ts` (il numero da 1, la misura in punti PDF, il
+ * rettangolo in unità della lavagna dall'angolo della scheda), scritta per
+ * struttura così il confine resta il solo modello.
+ */
+export interface PageBounds {
+  readonly page: number;
+  readonly size: { readonly width: number; readonly height: number };
+  readonly rect: Bounds;
+}
+
+function validPage(box: PageBounds): boolean {
+  const { page, size, rect } = box;
+  return (
+    Number.isSafeInteger(page) && page >= 1 &&
+    Number.isFinite(size.width) && Number.isFinite(size.height) && size.width > 0 && size.height > 0 &&
+    validBox(rect) && rect.width > 0 && rect.height > 0
+  );
 }
 
 function validBox(b: Bounds): boolean {

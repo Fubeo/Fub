@@ -1014,12 +1014,15 @@ impl Frame {
 
     /// Come la resa porta un tratto con l'ancora `anchor` sulla lavagna:
     /// sulla radice com'è; su una scheda come dice «La misura della scheda»
-    /// di `docs/reference/canvas-ink.md`.
+    /// di `docs/reference/canvas-ink.md`. Un tratto con l'ancora di pagina
+    /// non ha una misura qui: dove la pagina sta nella scheda lo sa solo la
+    /// resa, e il nucleo non sposta né ridimensiona quel tratto (`hidden`).
     fn fit(&self, anchor: &InkAnchor) -> Fit {
         match (self, anchor) {
             (Frame::Card(node), InkAnchor::Card { width, height }) => {
                 ink_fit(node, *width, *height)
             }
+            (_, InkAnchor::Page { .. }) => Fit::HIDDEN,
             _ => Fit::IDENTITY,
         }
     }
@@ -1188,7 +1191,9 @@ fn resized_brush(brush: &str, size: f64) -> Result<String, String> {
 fn hidden(index: usize, id: &str) -> OpError {
     OpError::Invalid {
         index,
-        reason: format!("stroke {id:?} is not visible in its card (the card has no size)"),
+        reason: format!(
+            "stroke {id:?} has no place the core can compute in its card (the card has no size, or the stroke is anchored to a PDF page)"
+        ),
     }
 }
 
@@ -1417,5 +1422,36 @@ mod tests {
             "nib1 size=4 tip=1"
         );
         assert!(resized_brush(pf1, 0.0).is_err());
+    }
+
+    /// Un tratto con l'ancora di pagina: il nucleo non sa dove la pagina sta
+    /// nella scheda, e non lo sposta né lo ridimensiona; il colore sì, e la
+    /// gomma lo toglie.
+    #[test]
+    fn a_page_stroke_is_not_moved_or_resized_by_the_core() {
+        let source = r##"{"nodes":[{"id":"p","type":"file","file":"carta.pdf","x":0,"y":0,"width":300,"height":400,
+            "fub:ink":{"v":1,"strokes":[{"id":"s1","tool":"pen","brush":"pf1 size=3","color":"#0072b2",
+            "anchor":{"kind":"page","page":2,"width":595,"height":842},"ink":"1 s100 cxy 100,100 10,0"}]}}]}"##;
+        let canvas = crate::read::parse(source).unwrap();
+        let layer = LayerRef::Node("p".to_owned());
+        let ids = vec!["s1".to_owned()];
+        let op = |value: Value| -> CanvasOp { serde_json::from_value(value).unwrap() };
+        for refused in [
+            json!({ "op": "move_strokes", "layer": { "node": "p" }, "ids": ["s1"], "dx": 5, "dy": 5 }),
+            json!({ "op": "move_strokes", "layer": { "node": "p" }, "ids": ["s1"], "dx": 0, "dy": 0, "to": "board" }),
+            json!({ "op": "restyle_strokes", "layer": { "node": "p" }, "ids": ["s1"], "size": 4 }),
+        ] {
+            let error = compile(&canvas, &[op(refused.clone())], 1).unwrap_err();
+            assert!(matches!(error, OpError::Invalid { .. }), "{refused}: {error:?}");
+        }
+        let recolor = CanvasOp::RestyleStrokes {
+            layer: layer.clone(),
+            ids: ids.clone(),
+            color: Some("#d55e00".to_owned()),
+            size: None,
+        };
+        assert!(compile(&canvas, &[recolor], 1).is_ok());
+        let erase = op(json!({ "op": "erase_strokes", "layer": { "node": "p" }, "ids": ids }));
+        assert!(compile(&canvas, &[erase], 1).is_ok());
     }
 }

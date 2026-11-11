@@ -10,7 +10,10 @@
 // esce dalla scheda si vede. I percorsi restano nelle unità in cui sono
 // scritti. Così, quando la lavagna sposta o ridimensiona una scheda cambiando
 // solo posizione e misura dell'elemento (`#renderLive`), l'inchiostro la segue
-// senza ridisegnare niente. L'inchiostro libero si disegna sullo stage (`paintBoard`), dopo le
+// senza ridisegnare niente. L'inchiostro di una pagina di PDF (T19) si
+// disegna solo quando la scheda mostra quella pagina, sul rettangolo dove la
+// mostra, e la tela lo ridisegna quando la pagina cambia o la scheda cambia
+// misura. L'inchiostro libero si disegna sullo stage (`paintBoard`), dopo le
 // schede, in coordinate della lavagna, come gli archi.
 //
 // Il colore è un valore del file e va come attributo `fill` (mai una
@@ -21,6 +24,7 @@
 // `InkPathCache` tiene i percorsi già calcolati per id, inchiostro e pennello,
 // e a ogni giro lascia andare quelli che non si disegnano più.
 
+import type { CardPageBox } from "./cards";
 import type { InkFitMode } from "./ink-fit";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
@@ -51,9 +55,12 @@ export interface DryStroke {
   /// Quanto copre la penna, sotto 1 (l'evidenziatore 0,5): va in
   /// `fill-opacity`, senza `multiply` (A22); manca se copre tutto.
   readonly opacity?: number;
-  /// La misura della scheda quando il tratto è stato scritto; `null` per
-  /// l'inchiostro libero.
+  /// La misura della scheda quando il tratto è stato scritto (della pagina,
+  /// in punti PDF, con `page`); `null` per l'inchiostro libero.
   readonly ref: InkRef | null;
+  /// La pagina dell'ancora `page` (T19): il tratto si disegna solo quando la
+  /// scheda mostra quella pagina. Manca con le altre ancore.
+  readonly page?: number;
   /// Preso dalla gomma e non ancora cancellato: si vede attenuato.
   readonly faded?: boolean;
   /// Tagliato dalla gomma «Solo il pezzo» e non ancora scritto: il contorno
@@ -62,26 +69,44 @@ export interface DryStroke {
   readonly cut?: string;
 }
 
+/// Il `preserveAspectRatio` dell'inchiostro di pagina (T19): lo stesso
+/// fattore nei due sensi, il minore, dall'angolo in alto a sinistra della
+/// pagina. È `pageFit` di `ink-record.ts` detto al browser.
+export const INK_PAGE_ASPECT = "xMinYMin meet";
+
 /// Disegna i tratti `strokes` dentro l'elemento della scheda `host`, nell'ordine
 /// (il primo sotto), nel modo `mode` della scheda (`inkFitMode`). Una lista
 /// vuota toglie l'inchiostro della scheda.
-export function paintCard(host: HTMLElement, strokes: readonly DryStroke[], mode: InkFitMode): void {
-  const svg = ownLayer(host, "canvas-ink-card", strokes.length > 0);
+///
+/// Un tratto con l'ancora di pagina (`page`, T19) si disegna solo se `page`
+/// dice che la scheda mostra quella pagina: la pagina scritta va sul
+/// rettangolo `page.rect` (`INK_PAGE_ASPECT`), dentro un SVG che taglia alla
+/// scheda, così un tratto che esce dalla pagina si vede fino al bordo della
+/// scheda e non oltre. Gli altri tratti di pagina non hanno un percorso.
+export function paintCard(host: HTMLElement, strokes: readonly DryStroke[], mode: InkFitMode, page: CardPageBox | null = null): void {
+  const shown = strokes.filter((stroke) => stroke.page === undefined || (page !== null && stroke.page === page.page));
+  const svg = ownLayer(host, "canvas-ink-card", shown.length > 0);
   if (!svg) return;
   setAttr(svg, "width", "100%");
   setAttr(svg, "height", "100%");
   // I tratti consecutivi con la stessa misura vanno nello stesso SVG annidato: con
   // un tratto solo per misura l'ordine dei tratti è quello della lista.
   const runs: DryStroke[][] = [];
-  for (const stroke of strokes) {
+  for (const stroke of shown) {
     const last = runs[runs.length - 1];
-    if (last && sameRef(last[0]!.ref, stroke.ref)) last.push(stroke);
+    if (last && sameRef(last[0]!.ref, stroke.ref) && last[0]!.page === stroke.page) last.push(stroke);
     else runs.push([stroke]);
   }
   for (let i = 0; i < runs.length; i++) {
     const run = runs[i]!;
     const nested = childAt(svg, i, "svg");
     const ref = run[0]!.ref;
+    if (run[0]!.page !== undefined && page !== null && ref !== null) {
+      paintPageRun(nested, run, ref, page);
+      continue;
+    }
+    setAttr(nested, "data-ink-page", null);
+    clip(nested, false);
     // Senza misura (un tratto libero dato a una scheda) le unità sono i pixel
     // della scheda, in tutti e due i modi.
     const fixed = ref !== null && mode === "fixed" ? ref : null;
@@ -93,6 +118,38 @@ export function paintCard(host: HTMLElement, strokes: readonly DryStroke[], mode
     paintPaths(nested, run);
   }
   trim(svg, runs.length);
+}
+
+/// I tratti `run` della pagina `page`: `nested` è largo e alto quanto la
+/// scheda e la taglia (lo stile della pelle lascia uscire gli SVG annidati,
+/// qui si chiude dallo stile in linea); dentro, un SVG sul rettangolo della
+/// pagina, con la misura scritta `ref` come `viewBox`, che non taglia.
+function paintPageRun(nested: SVGElement, run: readonly DryStroke[], ref: InkRef, page: CardPageBox): void {
+  setAttr(nested, "data-ink-page", String(page.page));
+  setAttr(nested, "width", "100%");
+  setAttr(nested, "height", "100%");
+  setAttr(nested, "viewBox", null);
+  setAttr(nested, "preserveAspectRatio", null);
+  clip(nested, true);
+  const inner = childAt(nested, 0, "svg");
+  setAttr(inner, "x", String(page.rect.x));
+  setAttr(inner, "y", String(page.rect.y));
+  setAttr(inner, "width", String(page.rect.width));
+  setAttr(inner, "height", String(page.rect.height));
+  setAttr(inner, "viewBox", `0 0 ${ref.width} ${ref.height}`);
+  setAttr(inner, "preserveAspectRatio", INK_PAGE_ASPECT);
+  setAttr(inner, "overflow", "visible");
+  paintPaths(inner, run);
+  trim(nested, 1);
+}
+
+/// Taglia (`true`) o lascia uscire ciò che l'SVG annidato `nested` disegna.
+function clip(nested: SVGElement, on: boolean): void {
+  if (on) {
+    if (nested.style.getPropertyValue("overflow") !== "hidden") nested.style.setProperty("overflow", "hidden");
+  } else if (nested.style.getPropertyValue("overflow") !== "") {
+    nested.style.removeProperty("overflow");
+  }
 }
 
 /// Disegna l'inchiostro libero sullo stage, dopo le schede, in coordinate della
