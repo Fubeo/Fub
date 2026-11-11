@@ -1185,7 +1185,7 @@ Fatto quando:
 - in locale `npm run bench:a11y` passa sulle scene nuove;
 - ogni scena nuova si apre nel banco e la sua foto locale sta accanto al suo stato del prototipo.
 Prova: scripts/check.sh --rapido
-Stato: [~] in corso · coder Opus · base f3e43e870
+Stato: [x] fatto · dd7ef3ba1, 1e5ecb7b1, 9ae9f9e53 · differenze: le scene strette sono 800×800 (non 700×800, sotto gli 800 px la shell passa al telefono); `a11y.mjs --scene=<nome>` per provarne una; corretti `aria-modal` su `#icon-picker` ed Esc che ignorava `defaultPrevented` in `desktop-shell.ts`; `conflitto-lettura` di `bench:a11y` è rosso in locale anche sulla base, si guarda sul runner a T25
 
 ## T25 · Le baseline dal runner
 
