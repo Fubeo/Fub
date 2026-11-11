@@ -167,25 +167,26 @@ in `editors/media/transport.ts`, uno per finestra in `host/ipc.ts`).
 
 ## Il contratto
 
-I tipi stanno in `cards.ts`, con i commenti che ne spiegano i campi. In
-breve:
+I tipi stanno in `cards.ts`, con i commenti sui loro campi. In breve:
 
 - `CardRenderer` dichiara le specie che sa mostrare (`kinds`) e monta una
-  scheda con `mount(node, host, mode, context)`, che restituisce una
-  `CardView`.
+  scheda con `mount(node, host, mode, context)`, che dà una `CardView`.
 - `CardContext` dà al renderer il percorso del file senza `subpath`, il
   `subpath` a parte, l'id della lavagna, una `Lifetime` che si chiude con
   `destroy`, la cache delle immagini ferme, la misura e lo zoom correnti,
   `missing()` per dire che il file non c'è, e per il PDF `initialPage` (la
   pagina ricordata, o `null`) e `pageChanged(pagina)` (vedi «Riaprire dove
-  eri»). `parts` porta le parti di un estratto già lette e provate, o
-  `null` se la scheda mostra solo il suo `subpath` ([Gli estratti della
-  lavagna](canvas-parts.md)).
+  eri»), e `pageShown()`: è in vista l'immagine di un'altra pagina, e la
+  tela ridisegna l'inchiostro di pagina. `parts` porta le parti di un
+  estratto già lette e provate, o `null` se la scheda mostra solo il suo
+  `subpath` ([Gli estratti della lavagna](canvas-parts.md)).
 - `CardView` risponde a `setMode` e a `destroy`; può rispondere anche a
   `resize` (a fine gesto), `enter` e `leave` (entrare nella scheda e
   uscirne; `enter` restituisce `false` se non c'è niente in cui entrare),
-  `key` (`true` se il tasto è della scheda) e `page` (la pagina mostrata, da
-  1).
+  `key` (`true` se il tasto è della scheda), `page` (la pagina mostrata, da
+  1) e `pageBox` (la pagina in vista, la sua misura in punti PDF e il suo
+  rettangolo nella scheda, o `null`; da ferma la misura viene da
+  `CardSnapshot.pageSize`: [L'ancora di pagina](canvas-ink.md#lancora-di-pagina)).
 - `createCardRegistry` costruisce il registro per specie. Due renderer
   diversi per la stessa specie sono un errore, lanciato quando il registro
   si costruisce: `card kind <specie> has two renderers`. Lo stesso renderer
@@ -224,8 +225,7 @@ cambia, si sposta o esce dalla lavagna.
 
 ## Quali schede sono vive
 
-`liveCardIds(nodes, view, zoom, limit)` restituisce gli id delle schede che
-devono essere vive. Le regole:
+`liveCardIds(nodes, view, zoom, limit)` dà gli id delle schede vive. Le regole:
 
 1. sotto `LIVE_ZOOM_MIN` nessuna; allo zoom esatto sì;
 2. una vista vuota (larghezza o altezza zero) non ha schede vive;

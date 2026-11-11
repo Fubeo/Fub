@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { anchorAt, StrokeBox, strokeBounds, type Bounds } from "./anchor";
+import { anchorAt, pageAnchorAt, StrokeBox, strokeBounds, type Bounds } from "./anchor";
 import type { CanvasNode } from "./model";
 import anchorSource from "./anchor.ts?raw";
 
@@ -255,6 +255,40 @@ describe("anchorAt", () => {
       2,
     );
     expect(anchorAt([card("tutto", -Number.MAX_VALUE, -10, Number.MAX_VALUE, 20)], wide, always)).toBeNull();
+  });
+});
+
+describe("pageAnchorAt (T19)", () => {
+  const pdf = card("p", 100, 50, 300, 460, "file");
+  const page = { page: 3, size: { width: 595, height: 842 }, rect: box(0, 36, 300, 424) };
+
+  it("un tratto che comincia sulla pagina prende la pagina, i bordi compresi", () => {
+    expect(pageAnchorAt(pdf, page, { x: 250, y: 200 })).toBe(page);
+    expect(pageAnchorAt(pdf, page, { x: 100, y: 86 })).toBe(page);
+    expect(pageAnchorAt(pdf, page, { x: 400, y: 510 })).toBe(page);
+  });
+
+  it("sulla scheda ma fuori dalla pagina, o senza pagina, niente: l'ancora resta card", () => {
+    // Sulla testata, sopra la pagina.
+    expect(pageAnchorAt(pdf, page, { x: 250, y: 60 })).toBeNull();
+    expect(pageAnchorAt(pdf, null, { x: 250, y: 200 })).toBeNull();
+    expect(pageAnchorAt(pdf, undefined, { x: 250, y: 200 })).toBeNull();
+    expect(pageAnchorAt(pdf, page, undefined)).toBeNull();
+  });
+
+  it("conta dove comincia, non dove finisce", () => {
+    const start = { x: 250, y: 500 };
+    expect(pageAnchorAt(pdf, page, start)).toBe(page);
+  });
+
+  it("una pagina che non vale non prende niente", () => {
+    const start = { x: 250, y: 200 };
+    expect(pageAnchorAt(pdf, { ...page, page: 0 }, start)).toBeNull();
+    expect(pageAnchorAt(pdf, { ...page, page: 1.5 }, start)).toBeNull();
+    expect(pageAnchorAt(pdf, { ...page, size: { width: 0, height: 842 } }, start)).toBeNull();
+    expect(pageAnchorAt(pdf, { ...page, rect: box(0, 36, 300, 0) }, start)).toBeNull();
+    expect(pageAnchorAt(pdf, { ...page, rect: box(Number.NaN, 36, 300, 424) }, start)).toBeNull();
+    expect(pageAnchorAt(card("zero", 100, 50, 0, 460, "file"), page, start)).toBeNull();
   });
 });
 

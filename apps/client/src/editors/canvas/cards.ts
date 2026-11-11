@@ -105,6 +105,21 @@ export interface Rect {
 export interface CardSnapshot {
   readonly bitmap: ImageBitmap | HTMLCanvasElement;
   readonly bytes: number;
+  /// La misura in punti PDF della pagina che l'immagine mostra, come si vede
+  /// (con la sua rotazione): la scheda PDF la scrive, così da ferma ritrova
+  /// l'ancora della pagina (`pageBox`, T19). Assente per le altre immagini.
+  readonly pageSize?: CardSize;
+}
+
+/// La pagina che una scheda mostra (il PDF, T19): il suo numero (da 1), la sua
+/// misura in punti PDF come si vede (`size`) e il rettangolo dove la scheda la
+/// disegna (`rect`), in unità della lavagna dall'angolo in alto a sinistra
+/// della scheda. L'inchiostro con l'ancora `page` si disegna mappando la
+/// pagina su `rect` (`docs/reference/canvas-ink.md`).
+export interface CardPageBox {
+  readonly page: number;
+  readonly size: CardSize;
+  readonly rect: Rect;
 }
 
 /// Le immagini ferme di un file, per parte. La parte dice che cosa è e a che
@@ -159,6 +174,9 @@ export interface CardContext {
   /// La scheda mostra un'altra pagina (da 1): la tela la ricorda. Assente,
   /// non si ricorda niente.
   pageChanged?(page: number): void;
+  /// Ciò che `pageBox()` dà è cambiato: un'immagine di pagina è arrivata, o
+  /// è andata via. La tela ridisegna l'inchiostro di pagina della scheda (T19).
+  pageShown?(): void;
   /// Le parti dell'estratto (`fub:parts`, `docs/reference/canvas-parts.md`),
   /// già lette e provate col file e il `subpath` (`cardParts` di `parts.ts`);
   /// `null` o assente: la scheda mostra ciò che dice il `subpath`.
@@ -208,6 +226,10 @@ export interface CardView {
   key?(event: KeyboardEvent): boolean;
   /// La pagina mostrata, da 1 (il PDF).
   page?(): number;
+  /// La pagina che si vede adesso e dove sta nella scheda (T19); `null` se
+  /// nessuna pagina si vede. Da viva e da ferma: l'immagine ferma è quella di
+  /// una pagina. La tela lo chiede quando disegna l'inchiostro.
+  pageBox?(): CardPageBox | null;
   /// Entra in scrittura (T41, T42): l'editor vero del file prende il corpo. Il
   /// montaggio arriva dopo, e la scheda lo dice con `context.writing`; `false`
   /// se qui non si scrive (un documento Word, nessuna porta, una scheda ferma).

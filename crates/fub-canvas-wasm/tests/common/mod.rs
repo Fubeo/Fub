@@ -255,10 +255,10 @@ pub fn every_vector(via: &mut impl Via) {
     }
 }
 
-/// Quanti vettori dell'inchiostro: gli stessi 28 di
+/// Quanti vettori dell'inchiostro: gli stessi 30 di
 /// `crates/fub-canvas-core/tests/ink_vectors.rs` e di
 /// `apps/client/src/editors/canvas/wasm/ink-vectors.test.ts`.
-pub const INK_VECTORS: usize = 28;
+pub const INK_VECTORS: usize = 30;
 
 /// Ogni vettore di `canvas-ink/`: `ink_layers` dà i livelli attesi (quelli
 /// che legge il nucleo nativo), la stessa risposta finché il testo non

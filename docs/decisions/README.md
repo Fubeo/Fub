@@ -72,3 +72,4 @@ Nuove decisioni usano il [template](template.md).
 | [0240 — La pelle che eredita](0240-la-pelle-che-eredita.md) | accolta | frontend | — |
 | [0241 — L'inchiostro della lavagna sta nel `.canvas`, con la stringa dei disegni e la misura della scheda](0241-inchiostro-sulla-lavagna.md) | proposta | contratto | — |
 | [0242 — Gli estratti sono finestre: un campo `fub:parts` accanto al `subpath`](0242-gli-estratti-sono-finestre.md) | proposta | contratto | — |
+| [0243 — Le ancore di contenuto](0243-le-ancore-di-contenuto.md) | proposta | contratto | — |

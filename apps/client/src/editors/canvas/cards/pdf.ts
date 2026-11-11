@@ -17,11 +17,26 @@
 // (D-5 del piano N6). La pagina mostrata la ricorda la tela su questo
 // computer (T36): la scheda parte da `initialPage`, e dice ogni cambio con
 // `pageChanged`.
+//
+// L'inchiostro sulla pagina (T19): `pageBox()` dice quale pagina si vede, la
+// sua misura in punti PDF (come la dà pdf.js, con la rotazione) e dove sta
+// nella scheda. Da ferma la misura viene dall'immagine in cache, che la
+// porta con sé (`CardSnapshot.pageSize`); ogni volta che l'immagine in vista
+// cambia pagina, o va via, la scheda lo dice con `pageShown`.
 
 import { t } from "../../../i18n/strings";
 import { pdfPageFromFragment, type PdfEngine, type PdfEngineLoader } from "../../media/pdf-view";
 import type { CanvasNode } from "../model";
-import { snapshotPart, type CardContext, type CardMode, type CardRenderer, type CardView } from "../cards";
+import {
+  snapshotPart,
+  type CardContext,
+  type CardMode,
+  type CardPageBox,
+  type CardRenderer,
+  type CardSize,
+  type CardView,
+  type Rect,
+} from "../cards";
 
 /// Ciò che la scheda PDF chiede a chi la monta.
 export interface PdfCardPort {
@@ -107,6 +122,14 @@ function mountPdfCard(
   let page = pdfCardFirstPage(context);
   /// La parte della cache che il canvas in vista mostra, o `null`.
   let shown: string | null = null;
+  /// La pagina che il canvas in vista mostra e la sua misura in punti PDF;
+  /// `null` se non si vede una pagina, o se la sua misura non si sa.
+  let shownPage: number | null = null;
+  let shownSize: CardSize | null = null;
+  /// L'ultimo rettangolo della pagina misurato, con la pagina e la misura
+  /// della scheda di allora: vale finché non cambiano, anche quando il
+  /// corpo non si può misurare (nascosto da lontano).
+  let measured: { readonly rect: Rect; readonly page: number; readonly width: number; readonly height: number } | null = null;
 
   previous.hidden = true;
   next.hidden = true;
@@ -156,8 +179,9 @@ function mountPdfCard(
     root.dataset.cardState = state;
   }
 
-  /// Copia un'immagine nel canvas in vista.
-  function present(source: ImageBitmap | HTMLCanvasElement, part: string): void {
+  /// Copia un'immagine della pagina `n`, di misura `size` in punti, nel
+  /// canvas in vista.
+  function present(source: ImageBitmap | HTMLCanvasElement, part: string, n: number, size: CardSize | null): void {
     screen.width = source.width;
     screen.height = source.height;
     screen.getContext("2d")?.drawImage(source, 0, 0);
@@ -165,6 +189,7 @@ function mountPdfCard(
     shown = part;
     say(null);
     showing("content");
+    seePage(n, size);
   }
 
   function blank(): void {
@@ -173,6 +198,16 @@ function mountPdfCard(
     screen.hidden = true;
     shown = null;
     showing("placeholder");
+    seePage(null, null);
+  }
+
+  /// Tiene la pagina in vista; se è cambiata, la tela ridisegna l'inchiostro
+  /// di pagina della scheda.
+  function seePage(n: number | null, size: CardSize | null): void {
+    const same = n === shownPage && sameSize(size, shownSize);
+    shownPage = n;
+    shownSize = size;
+    if (!same && !destroyed) context.pageShown?.();
   }
 
   /// Mostra la pagina dalla cache, se c'è a questa larghezza.
@@ -181,8 +216,42 @@ function mountPdfCard(
     if (shown === part) return true;
     const cached = snapshots.get(path, part);
     if (!cached) return false;
-    present(cached.bitmap, part);
+    present(cached.bitmap, part, n, pointSize(cached.pageSize?.width, cached.pageSize?.height));
     return true;
+  }
+
+  /// La pagina che si vede e dove sta nella scheda (T19); `null` se non se
+  /// ne vede una, o se la sua misura in punti non si sa.
+  function pageBox(): CardPageBox | null {
+    if (destroyed || screen.hidden || shownPage === null || shownSize === null) return null;
+    const rect = pageRect(shownPage);
+    return rect ? { page: shownPage, size: shownSize, rect } : null;
+  }
+
+  /// Il rettangolo del canvas in vista, in unità della lavagna dall'angolo in
+  /// alto a sinistra della scheda: misurato sullo schermo e diviso per la
+  /// scala della scheda, così vale a ogni zoom e segue il corpo che scorre.
+  /// Se adesso non si misura (il corpo nascosto da lontano), l'ultima misura
+  /// della stessa pagina alla stessa misura della scheda; sennò `null`.
+  function pageRect(n: number): Rect | null {
+    const { width, height } = context.size();
+    const card = host.closest<HTMLElement>(".canvas-node") ?? host;
+    const outer = card.getBoundingClientRect();
+    const inner = screen.getBoundingClientRect();
+    if (outer.width > 0 && inner.width > 0 && inner.height > 0 && width > 0) {
+      const k = width / outer.width;
+      const rect: Rect = {
+        // L'inchiostro sta dentro il bordo della scheda (`inset: 0`).
+        x: (inner.left - outer.left) * k - card.clientLeft,
+        y: (inner.top - outer.top) * k - card.clientTop,
+        width: inner.width * k,
+        height: inner.height * k,
+      };
+      measured = { rect, page: n, width, height };
+      return rect;
+    }
+    if (measured && measured.page === n && measured.width === width && measured.height === height) return measured.rect;
+    return null;
   }
 
   async function open(): Promise<void> {
@@ -242,16 +311,17 @@ function mountPdfCard(
     if (fromCache(n)) return;
     const part = partOf(n);
     try {
-      const [width] = await loaded.pageSize(n - 1);
+      const [width, height] = await loaded.pageSize(n - 1);
       if (ticket !== drawing || engine !== loaded) return;
+      const size = pointSize(width, height);
       const frame = document.createElement("canvas");
       const scale = width > 0 ? pixelWidth() / width : 1;
       await loaded.renderPage(n - 1, frame, scale);
       if (ticket !== drawing || engine !== loaded) return;
       // Prima in vista, poi in cache: un'immagine troppo grande per la
       // cache vi entra chiusa, e non deve sparire dalla scheda.
-      present(frame, part);
-      snapshots.put(path, part, { bitmap: frame, bytes: frame.width * frame.height * 4 });
+      present(frame, part, n, size);
+      snapshots.put(path, part, { bitmap: frame, bytes: frame.width * frame.height * 4, ...(size ? { pageSize: size } : {}) });
     } catch {
       if (ticket === drawing && engine === loaded) unreadable();
     }
@@ -353,8 +423,19 @@ function mountPdfCard(
     resize,
     key,
     page: () => page,
+    pageBox,
     destroy,
   };
+}
+
+/// Una misura in punti: due numeri finiti maggiori di zero; `null` altrimenti.
+function pointSize(width: number | undefined, height: number | undefined): CardSize | null {
+  if (typeof width !== "number" || typeof height !== "number") return null;
+  return Number.isFinite(width) && Number.isFinite(height) && width > 0 && height > 0 ? { width, height } : null;
+}
+
+function sameSize(a: CardSize | null, b: CardSize | null): boolean {
+  return a === b || (a !== null && b !== null && a.width === b.width && a.height === b.height);
 }
 
 /// Le pagine di un PDF per «Spargi le pagine» (T72), con la stessa porta della

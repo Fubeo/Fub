@@ -18,6 +18,7 @@ function drawable(id: string, points: readonly (readonly [number, number])[], re
     ref,
     brush: { size: 4 },
     ink: { scale: 100, samples: points.map(([x, y], t) => ({ x: x * 100, y: y * 100, t })) },
+    page: null,
   } as unknown as DrawableStroke;
 }
 
@@ -65,6 +66,29 @@ describe("che cosa prende la gomma sulla lavagna", () => {
     expect(swept(states, [50, 9], [60, 9])).toEqual([inkKey("board", "a")]);
     expect(swept(states, [50, 11], [60, 11])).toEqual([]);
     expect(swept(states, [40, 40], [60, 40])).toEqual([inkKey("board", "b")]);
+  });
+
+  it("un tratto di pagina si prende dove la pagina si vede, e solo se la scheda mostra la sua pagina (T19)", () => {
+    const pdf: CanvasNode = { id: "p", type: "file", x: 100, y: 0, width: 300, height: 460, file: "carta.pdf" } as CanvasNode;
+    // Scritto su una pagina 600 × 800 punti, mostrata 300 × 400 sotto una testata di 36: s = 0,5.
+    const onPage = { ...drawable("a", [[100, 100], [200, 100]], { width: 600, height: 800 }), page: 2 } as DrawableStroke;
+    const states = [layer(pdf, [onPage])];
+    const box = (page: number) => ({ page, size: { width: 600, height: 800 }, rect: { x: 0, y: 36, width: 300, height: 400 } });
+    const sweptWith = (pages: (id: string) => ReturnType<typeof box> | null, from: [number, number], to: [number, number]) => {
+      const source = new InkEraseSource(erasableInk(states, pages));
+      const sweep = new EraseSweep(ERASER, "pen");
+      sweep.along(source, from, 1);
+      sweep.along(source, to, 1);
+      return sweep.marked().map((unit) => unit.key);
+    };
+    // Sulla lavagna: (100 + 0,5·150, 0 + 36 + 0,5·100) = (175, 86).
+    expect(sweptWith(() => box(2), [175, 60], [175, 110])).toEqual([inkKey({ node: "p" }, "a")]);
+    expect(sweptWith(() => box(3), [175, 60], [175, 110])).toEqual([]);
+    expect(sweptWith(() => null, [175, 60], [175, 110])).toEqual([]);
+    // Senza chi dice la pagina, nessun tratto di pagina.
+    expect(erasableInk(states)).toEqual([]);
+    const [unit] = erasableInk(states, () => box(2));
+    expect(unit!.fit).toEqual({ s: 0.5, x: 100, y: 36 });
   });
 
   it("un livello estraneo e un tratto non disegnato non si prendono", () => {

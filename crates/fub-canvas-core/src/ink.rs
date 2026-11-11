@@ -383,6 +383,12 @@ pub enum InkAnchor {
     Card { width: f64, height: f64 },
     /// Coordinate della lavagna. Solo nel livello della radice.
     Free,
+    /// Punti PDF (1/72 di pollice) dall'angolo in alto a sinistra della
+    /// pagina `page` (da 1) di una scheda PDF, come si vede, con la sua
+    /// rotazione; `width × height` è la misura della pagina, in punti, quando
+    /// il tratto si è scritto. Solo nel livello di una scheda: dove la pagina
+    /// sta dentro la scheda lo sa la resa, non il nucleo.
+    Page { page: u64, width: f64, height: f64 },
 }
 
 impl InkAnchor {
@@ -395,8 +401,8 @@ impl InkAnchor {
         InkAnchor::Card { width, height }
     }
 
-    /// L'ancora come si scrive: `kind`, poi `width` e `height` (interi
-    /// quando lo sono).
+    /// L'ancora come si scrive: `kind`, poi `page` per l'ancora di pagina,
+    /// poi `width` e `height` (interi quando lo sono).
     pub fn to_value(&self) -> Value {
         let mut map = Map::new();
         match *self {
@@ -407,6 +413,16 @@ impl InkAnchor {
             }
             InkAnchor::Free => {
                 map.insert("kind".to_owned(), Value::from("free"));
+            }
+            InkAnchor::Page {
+                page,
+                width,
+                height,
+            } => {
+                map.insert("kind".to_owned(), Value::from("page"));
+                map.insert("page".to_owned(), Value::from(page));
+                map.insert("width".to_owned(), measure_value(width));
+                map.insert("height".to_owned(), measure_value(height));
             }
         }
         Value::Object(map)
@@ -435,7 +451,8 @@ pub enum SkipReason {
     /// `tool` manca o non è `"pen"` né `"highlighter"`.
     Tool,
     /// `anchor` manca, non è un oggetto, ha un `kind` sconosciuto o fuori
-    /// posto, o una misura che manca o non è un numero maggiore di zero.
+    /// posto, una misura che manca o non è un numero maggiore di zero, o
+    /// (l'ancora `page`) una pagina che non è un intero da 1 in su.
     Anchor,
     /// `color` manca o non è `#rrggbb`.
     Color,
@@ -566,8 +583,8 @@ fn read_tool(value: Option<&Value>) -> Option<InkTool> {
     }
 }
 
-/// L'ancora nel livello `layer`: `card` solo su una scheda, `free` solo sulla
-/// radice. I campi sconosciuti dell'ancora non contano.
+/// L'ancora nel livello `layer`: `card` e `page` solo su una scheda, `free`
+/// solo sulla radice. I campi sconosciuti dell'ancora non contano.
 fn read_anchor(value: Option<&Value>, layer: &LayerRef) -> Option<InkAnchor> {
     let anchor = value?.as_object()?;
     match (anchor.get("kind")?.as_str()?, layer) {
@@ -576,8 +593,27 @@ fn read_anchor(value: Option<&Value>, layer: &LayerRef) -> Option<InkAnchor> {
             height: positive(anchor.get("height"))?,
         }),
         ("free", LayerRef::Board) => Some(InkAnchor::Free),
+        ("page", LayerRef::Node(_)) => Some(InkAnchor::Page {
+            page: page_number(anchor.get("page"))?,
+            width: positive(anchor.get("width"))?,
+            height: positive(anchor.get("height"))?,
+        }),
         _ => None,
     }
+}
+
+/// Un numero di pagina: un intero da 1 a 2^53−1, per valore (`3`, `3.0`,
+/// `3e0`), come lo legge JavaScript.
+fn page_number(value: Option<&Value>) -> Option<u64> {
+    let number = value?.as_f64()?;
+    #[allow(clippy::cast_precision_loss)]
+    let bound = crate::model::MAX_SAFE_INTEGER as f64;
+    if !(number.fract() == 0.0 && (1.0..=bound).contains(&number)) {
+        return None;
+    }
+    // Un intero fra 1 e 2^53−1: il cast è esatto.
+    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+    Some(number as u64)
 }
 
 /// Un numero finito maggiore di zero, per valore: `640`, `640.0`, `6.4e2`.
@@ -913,5 +949,84 @@ mod tests {
             InkLayer::default().to_value(),
             json!({ "v": 1, "strokes": [] })
         );
+    }
+
+    fn page_stroke(anchor: Value) -> Value {
+        let mut stroke = card_stroke();
+        stroke["anchor"] = anchor;
+        stroke
+    }
+
+    #[test]
+    fn a_page_anchor_is_drawn_on_a_card_and_compares_by_value() {
+        for page in [json!(3), json!(3.0), json!(3e0)] {
+            let stroke = page_stroke(
+                json!({ "kind": "page", "page": page, "width": 595.276, "height": 842 }),
+            );
+            let StrokeState::Drawn(drawn) = state_on_card(stroke) else {
+                panic!("il tratto si disegna");
+            };
+            assert_eq!(
+                drawn.anchor,
+                InkAnchor::Page {
+                    page: 3,
+                    width: 595.276,
+                    height: 842.0
+                }
+            );
+        }
+        // Sulla radice un'ancora di pagina è fuori posto.
+        let stroke = InkStroke::from_value(&page_stroke(
+            json!({ "kind": "page", "page": 1, "width": 595, "height": 842 }),
+        ))
+        .unwrap();
+        assert_eq!(
+            stroke.state(&LayerRef::Board),
+            StrokeState::Kept(SkipReason::Anchor)
+        );
+    }
+
+    #[test]
+    fn a_page_anchor_that_does_not_hold_is_an_anchor_reason() {
+        let cases = [
+            json!({ "kind": "page", "page": 0, "width": 595, "height": 842 }),
+            json!({ "kind": "page", "page": -2, "width": 595, "height": 842 }),
+            json!({ "kind": "page", "page": 2.5, "width": 595, "height": 842 }),
+            json!({ "kind": "page", "page": "3", "width": 595, "height": 842 }),
+            json!({ "kind": "page", "page": 9_007_199_254_740_992_u64, "width": 595, "height": 842 }),
+            json!({ "kind": "page", "width": 595, "height": 842 }),
+            json!({ "kind": "page", "page": 3, "width": 0, "height": 842 }),
+            json!({ "kind": "page", "page": 3, "width": 595, "height": -1 }),
+            json!({ "kind": "page", "page": 3, "width": 595 }),
+        ];
+        for anchor in cases {
+            assert_eq!(
+                state_on_card(page_stroke(anchor.clone())),
+                StrokeState::Kept(SkipReason::Anchor),
+                "{anchor}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_page_anchor_keeps_its_unknown_fields_and_is_written_in_order() {
+        let value = page_stroke(
+            json!({ "kind": "page", "page": 2, "width": 612.0, "height": 792, "box": "crop" }),
+        );
+        let stroke = InkStroke::from_value(&value).unwrap();
+        assert!(stroke.state(&card()).is_drawn());
+        assert_eq!(stroke.to_value(), value);
+        let anchor = InkAnchor::Page {
+            page: 2,
+            width: 595.0,
+            height: 841.89,
+        };
+        let written = anchor.to_value();
+        assert_eq!(
+            written,
+            json!({ "kind": "page", "page": 2, "width": 595, "height": 841.89 })
+        );
+        let keys: Vec<&String> = written.as_object().unwrap().keys().collect();
+        assert_eq!(keys, ["kind", "page", "width", "height"]);
     }
 }

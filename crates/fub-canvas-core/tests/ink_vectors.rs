@@ -18,9 +18,9 @@ use fub_canvas_core::parse;
 use fub_canvas_core::source::patch_source;
 use serde_json::{json, Value};
 
-/// Quanti vettori: gli stessi 28 che conta il test TypeScript. Uno che
+/// Quanti vettori: gli stessi 30 che conta il test TypeScript. Uno che
 /// sparisce si vede qui.
-const VECTORS: usize = 28;
+const VECTORS: usize = 30;
 
 fn folder() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../apps/client/src/__fixtures__/canvas-ink")
