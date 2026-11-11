@@ -2833,7 +2833,7 @@ in Vitest; i vettori di N4 e di T19 passano senza cambiare; la sezione di
 `canvas-ink.md` c'è.
 Prova: scripts/check.sh --rapido; cargo test -p fub-canvas-core; cd
 apps/client && npx vitest run src/editors/canvas
-Stato: [ ] da fare
+Stato: [~] in corso · coder Opus · base 12c8b4558
 
 ## T38 · Il tratto segue la cella
 
@@ -4666,7 +4666,7 @@ Fatto quando: `excerpt.test.ts` prova la testata e le parti;
 prototipo.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/canvas
-Stato: [ ] da fare
+Stato: [~] in corso · coder Opus · base 12c8b4558
 
 ## T76 · Leggere da vicino
 
