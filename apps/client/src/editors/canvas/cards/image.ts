@@ -14,6 +14,18 @@
 // (niente script, niente disegno vivo). L'URL si revoca appena non serve più,
 // e comunque con la `Lifetime` della scheda.
 //
+// La zona di un'immagine (T78): con le parti `image` (`CardContext.parts`,
+// `fub:parts` di T73) la scheda mostra solo quella zona, ruotata, e prende
+// `data-card-crop`. La zona si taglia dall'immagine vera, decodificata alla
+// risoluzione che serve perché la zona sia larga quanto l'immagine ferma (il
+// doppio della scheda): un pezzo dell'originale, non un ingrandimento di
+// un'immagine ridotta. L'immagine ferma ha la zona nel nome della parte
+// (`zone-0.45,0.1,0.5,0.8-r90@640`, `zoneKey` di `crop.ts`): due tagli dello
+// stesso file non si confondono. Un SVG resta vivo e vettoriale anche
+// tagliato: l'`<img>` si mostra a pezzi col CSS (`canvas-card-zone`), nitido
+// a ogni zoom. Una GIF animata si taglia nel primo fotogramma, come la
+// scheda ferma. Il file non si scrive mai.
+//
 // Ferma, la scheda non tiene niente di aperto: mostra l'immagine in cache se
 // c'è, sennò titolo e specie come il segnaposto di oggi. Il doppio clic apre
 // il visore (`port.open`). Ogni lettura ha una generazione: una risposta che
@@ -23,6 +35,7 @@
 import { t } from "../../../i18n/strings";
 import type { ResourceDescriptor } from "../../media/media-types";
 import { decodeImage, type DecodedImage } from "../../media/image-view";
+import { isWholeZone, zoneKey, zoneOf, type ImageZone } from "../crop";
 import {
   snapshotPart,
   type CardContext,
@@ -81,6 +94,14 @@ function mountImageCard(
   const root = document.createElement("div");
   root.className = "canvas-card-image";
   root.dataset.cardKind = "image";
+  /// La zona che la scheda mostra (T78): l'immagine intera se non ha parti.
+  const zone = zoneOf(context.parts);
+  const cropped = !isWholeZone(zone);
+  if (cropped) root.dataset.cardCrop = "";
+  /// Il nome per il lettore di schermo: il file, e se è una zona lo dice.
+  const label = cropped
+    ? t(zone.turn === 0 ? "canvas.crop.picture_zone" : "canvas.crop.picture_turned", { name })
+    : name;
   host.append(root);
 
   let mode: CardMode = initial;
@@ -129,7 +150,7 @@ function mountImageCard(
     show(state, line, open);
   };
 
-  const part = (): string => snapshotPart(IMAGE_SNAPSHOT_PREFIX, context.size().width * DENSITY);
+  const part = (): string => snapshotPart(cropped ? zoneKey(zone) : IMAGE_SNAPSHOT_PREFIX, context.size().width * DENSITY);
 
   const paint = (key: string, snapshot: CardSnapshot): boolean => {
     const canvas = document.createElement("canvas");
@@ -140,7 +161,7 @@ function mountImageCard(
     if (!drawing) return false;
     drawing.drawImage(snapshot.bitmap, 0, 0);
     canvas.setAttribute("role", "img");
-    canvas.setAttribute("aria-label", name);
+    canvas.setAttribute("aria-label", label);
     show("picture", canvas);
     painted = key;
     return true;
@@ -201,7 +222,9 @@ function mountImageCard(
 
     let snapshot: CardSnapshot;
     try {
-      snapshot = await rasterize(image, naturalWidth(image, read.bytes), widthOf(key));
+      snapshot = cropped
+        ? await rasterizeZone(image, naturalSize(image, read.bytes), widthOf(key), zone)
+        : await rasterize(image, naturalWidth(image, read.bytes), widthOf(key));
     } catch {
       if (current()) message("unreadable", t("canvas.card.unreadable", { name }));
       return;
@@ -225,11 +248,14 @@ function mountImageCard(
   const showVector = (image: DecodedImage, key: string, current: () => boolean): void => {
     const picture = document.createElement("img");
     picture.className = "canvas-card-picture";
-    picture.alt = name;
+    picture.alt = label;
     picture.draggable = false;
     picture.decoding = "async";
     picture.src = image.url;
-    show("vector", picture);
+    // Tagliato, l'SVG resta vivo: si mostra a pezzi, senza farne un raster.
+    const piece = cropped ? zonePiece(picture, zone) : null;
+    piece?.measured(image.width ?? 0, image.height ?? 0);
+    show("vector", piece?.element ?? picture);
     vectorUrl = image.url;
     // L'immagine ferma dell'SVG, per quando la scheda sarà ferma: se il motore
     // non sa dipingerlo, la scheda ferma mostra titolo e specie.
@@ -237,7 +263,8 @@ function mountImageCard(
       .decode()
       .then(() => {
         if (!current() || vectorUrl !== image.url) return;
-        const snapshot = rasterizeVector(picture, image, widthOf(key));
+        piece?.measured(picture.naturalWidth || image.width || 0, picture.naturalHeight || image.height || 0);
+        const snapshot = rasterizeVector(picture, image, widthOf(key), zone);
         if (snapshot !== null) context.snapshots.put(path, key, snapshot);
       })
       .catch(() => {
@@ -347,8 +374,8 @@ async function rasterize(image: DecodedImage, natural: number | null, target: nu
 }
 
 /// Senza `createImageBitmap`: l'immagine si decodifica in un `<img>` mai
-/// messo nel DOM, poi si dipinge ridotta in un canvas.
-async function rasterizeByElement(url: string, target: number): Promise<CardSnapshot> {
+/// messo nel DOM, poi si dipinge ridotta in un canvas (la zona, se c'è).
+async function rasterizeByElement(url: string, target: number, zone?: ImageZone): Promise<CardSnapshot> {
   const picture = document.createElement("img");
   picture.decoding = "async";
   picture.src = url;
@@ -356,17 +383,130 @@ async function rasterizeByElement(url: string, target: number): Promise<CardSnap
   const width = picture.naturalWidth;
   const height = picture.naturalHeight;
   if (!(width > 0) || !(height > 0)) throw new Error(`image ${url} decoded without a size`);
-  return canvasSnapshot(picture, width, height, target);
+  return zone ? zoneSnapshot(picture, width, height, zone, target) : canvasSnapshot(picture, width, height, target);
+}
+
+/// Le misure vere del raster, dai byte, quando si sanno. Di un JPEG si sa
+/// solo il lato più lungo (l'orientamento EXIF può girarlo): l'altezza resta
+/// ignota.
+function naturalSize(image: DecodedImage, bytes: Uint8Array): { width: number | null; height: number | null } {
+  if (image.width !== null) return { width: image.width, height: image.height };
+  const size = rasterSize(image.format, bytes);
+  if (size === null) return { width: null, height: null };
+  return image.format === "JPEG" ? { width: Math.max(size[0], size[1]), height: null } : { width: size[0], height: size[1] };
+}
+
+/// L'immagine ferma della zona di un raster, larga al più `target`. Si
+/// decodifica l'originale alla larghezza che dà alla zona `target` pixel
+/// (mai più dell'originale): una sola decodifica quando le proporzioni si
+/// sanno dai byte, una seconda solo se la prima, a proporzioni stimate, è
+/// venuta troppo piccola.
+async function rasterizeZone(
+  image: DecodedImage,
+  natural: { width: number | null; height: number | null },
+  target: number,
+  zone: ImageZone,
+): Promise<CardSnapshot> {
+  const create = (globalThis as { createImageBitmap?: typeof createImageBitmap }).createImageBitmap;
+  if (typeof create !== "function") return rasterizeByElement(image.url, target, zone);
+  const turned = zone.turn % 180 !== 0;
+  // La larghezza decodificata che dà alla zona, vista ruotata, `target`
+  // pixel di larghezza, per un'immagine alta `aspect` volte la larghezza.
+  const wanted = (aspect: number): number => Math.ceil(turned ? target / (zone.rect[3] * aspect) : target / zone.rect[2]);
+  const decode = async (width: number | null): Promise<ImageBitmap> => {
+    if (width === null || natural.width === null || width >= natural.width) return create(image.blob);
+    return create(image.blob, { resizeWidth: Math.max(1, width), resizeQuality: "high" });
+  };
+  const guess = natural.width !== null && natural.height !== null ? natural.height / natural.width : 1;
+  let bitmap = await decode(natural.width === null ? null : wanted(guess));
+  try {
+    if (natural.width !== null && bitmap.width < natural.width && bitmap.width > 0) {
+      const need = wanted(bitmap.height / bitmap.width);
+      if (need > bitmap.width + 1) {
+        const again = await decode(need);
+        bitmap.close();
+        bitmap = again;
+      }
+    }
+    return zoneSnapshot(bitmap, bitmap.width, bitmap.height, zone, target);
+  } finally {
+    bitmap.close();
+  }
+}
+
+/// La zona `zone` di `source` (largo `width`, alto `height`), ruotata, in un
+/// canvas largo al più `target` (o proprio `target` se `fit`, per un SVG).
+function zoneSnapshot(
+  source: CanvasImageSource,
+  width: number,
+  height: number,
+  zone: ImageZone,
+  target: number,
+  fit = false,
+): CardSnapshot {
+  const [x, y, w, h] = zone.rect;
+  const sx = x * width;
+  const sy = y * height;
+  const sw = Math.max(Number.MIN_VALUE, w * width);
+  const sh = Math.max(Number.MIN_VALUE, h * height);
+  const turned = zone.turn % 180 !== 0;
+  const shownWidth = turned ? sh : sw;
+  const shownHeight = turned ? sw : sh;
+  const scale = fit ? target / shownWidth : Math.min(1, target / shownWidth);
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.max(1, Math.round(shownWidth * scale));
+  canvas.height = Math.max(1, Math.round(shownHeight * scale));
+  const drawing = canvas.getContext("2d");
+  if (!drawing) throw new Error("image card canvas has no 2d context");
+  const dw = turned ? canvas.height : canvas.width;
+  const dh = turned ? canvas.width : canvas.height;
+  if (zone.turn === 0) {
+    drawing.drawImage(source, sx, sy, sw, sh, 0, 0, dw, dh);
+  } else {
+    drawing.translate(canvas.width / 2, canvas.height / 2);
+    drawing.rotate((zone.turn * Math.PI) / 180);
+    drawing.drawImage(source, sx, sy, sw, sh, -dw / 2, -dh / 2, dw, dh);
+  }
+  return { bitmap: canvas, bytes: canvas.width * canvas.height * 4 };
+}
+
+/// L'`<img>` di un SVG mostrato a pezzi (T78): un riquadro con le
+/// proporzioni della zona ruotata (`canvas-card-zone`), che dentro ruota una
+/// cornice grande quanto la zona dritta (`canvas-card-zone-frame`) e ci
+/// sposta l'immagine intera. Le misure stanno in variabili CSS; le
+/// proporzioni arrivano con `measured`, quando l'SVG le dice.
+function zonePiece(picture: HTMLImageElement, zone: ImageZone): { element: HTMLElement; measured(width: number, height: number): void } {
+  const [x, y, w, h] = zone.rect;
+  const element = document.createElement("div");
+  element.className = "canvas-card-zone";
+  element.dataset.turn = String(zone.turn);
+  const frame = document.createElement("div");
+  frame.className = "canvas-card-zone-frame";
+  element.style.setProperty("--zone-x", String(x));
+  element.style.setProperty("--zone-y", String(y));
+  element.style.setProperty("--zone-w", String(w));
+  element.style.setProperty("--zone-h", String(h));
+  frame.append(picture);
+  element.append(frame);
+  return {
+    element,
+    measured: (width, height) => {
+      if (!(width > 0) || !(height > 0)) return;
+      const ratio = zone.turn % 180 === 0 ? (w * width) / (h * height) : (h * height) / (w * width);
+      element.style.setProperty("--zone-ratio", String(ratio));
+      element.dataset.ratio = "";
+    },
+  };
 }
 
 /// L'SVG dipinto in un canvas largo `target`, o `null` se non ha misure o il
 /// motore non lo sa dipingere.
-function rasterizeVector(picture: HTMLImageElement, image: DecodedImage, target: number): CardSnapshot | null {
+function rasterizeVector(picture: HTMLImageElement, image: DecodedImage, target: number, zone: ImageZone): CardSnapshot | null {
   const width = picture.naturalWidth || image.width || 0;
   const height = picture.naturalHeight || image.height || 0;
   if (!(width > 0) || !(height > 0)) return null;
   try {
-    return canvasSnapshot(picture, width, height, target, true);
+    return isWholeZone(zone) ? canvasSnapshot(picture, width, height, target, true) : zoneSnapshot(picture, width, height, zone, target, true);
   } catch {
     return null;
   }

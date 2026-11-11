@@ -3,13 +3,17 @@
 // sola decodifica e va in cache (la seconda accensione non rilegge), un SVG è
 // un `<img>` col blob e mai SVG nel DOM, il tetto di 64 MiB, il file mancante,
 // i formati che il motore non decodifica, la revoca degli URL e le risposte
-// tardive che non toccano il DOM. `createImageBitmap` e il contesto 2D sono
-// finti: happy-dom non decodifica immagini.
+// tardive che non toccano il DOM. La zona di un'immagine (T78): tagliata
+// dall'originale alla risoluzione che serve, ruotata nel canvas, con la zona
+// nel nome della parte in cache; un SVG tagliato resta un `<img>` vivo.
+// `createImageBitmap` e il contesto 2D sono finti: happy-dom non decodifica
+// immagini.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { IMAGE_CARD_MAX_BYTES, imageCardRenderer, rasterSize, type ImageCardPort, type ImageCardRead } from "./image";
 import { CardCache } from "../card-cache";
 import type { CardContext, CardMode, CardView } from "../cards";
+import type { CanvasParts } from "../parts";
 import type { CanvasNode } from "../model";
 import type { ResourceDescriptor } from "../../media/media-types";
 import { openLifetime } from "../../../ui/lifetime";
@@ -119,7 +123,7 @@ function node(path: string): CanvasNode {
   return { id: "n1", type: "file", file: path, x: 0, y: 0, width: 300, height: 200 } as CanvasNode;
 }
 
-function context(path: string, cache: CardCache, width = 300) {
+function context(path: string, cache: CardCache, width = 300, parts: CanvasParts | null = null) {
   const missing = vi.fn();
   const lifetime = openLifetime();
   const ctx: CardContext = {
@@ -131,14 +135,15 @@ function context(path: string, cache: CardCache, width = 300) {
     size: () => ({ width, height: 200 }),
     zoom: () => 1,
     missing,
+    parts,
   };
   return { ctx, missing, lifetime };
 }
 
-function mount(port: ImageCardPort, path: string, cache = new CardCache(), mode: CardMode = "live", width = 300) {
+function mount(port: ImageCardPort, path: string, cache = new CardCache(), mode: CardMode = "live", width = 300, parts: CanvasParts | null = null) {
   const host = document.createElement("div");
   document.body.append(host);
-  const { ctx, missing, lifetime } = context(path, cache, width);
+  const { ctx, missing, lifetime } = context(path, cache, width, parts);
   const view: CardView = imageCardRenderer(port).mount(node(path), host, mode, ctx);
   const root = () => host.querySelector<HTMLElement>(".canvas-card-image");
   return { host, view, missing, lifetime, cache, root, state: () => root()?.dataset.cardState };
@@ -147,11 +152,14 @@ function mount(port: ImageCardPort, path: string, cache = new CardCache(), mode:
 const settle = () => new Promise<void>((done) => setTimeout(done, 0));
 
 let drawn: unknown[];
+/// Ogni chiamata al contesto 2D finto, con i suoi argomenti.
+let calls: [string, ...unknown[]][];
 let urls: string[];
 let revoked: string[];
 
 beforeEach(() => {
   drawn = [];
+  calls = [];
   urls = [];
   revoked = [];
   let next = 0;
@@ -162,7 +170,14 @@ beforeEach(() => {
   });
   vi.spyOn(URL, "revokeObjectURL").mockImplementation((url: string) => void revoked.push(url));
   vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockImplementation(
-    () => ({ drawImage: (source: unknown) => void drawn.push(source) }) as unknown as CanvasRenderingContext2D,
+    () => ({
+      drawImage: (source: unknown, ...rest: unknown[]) => {
+        drawn.push(source);
+        calls.push(["drawImage", source, ...rest]);
+      },
+      translate: (...args: unknown[]) => void calls.push(["translate", ...args]),
+      rotate: (...args: unknown[]) => void calls.push(["rotate", ...args]),
+    }) as unknown as CanvasRenderingContext2D,
   );
 });
 
@@ -507,5 +522,120 @@ describe("il ciclo di vita", () => {
     card.view.setMode("live");
     await settle();
     expect(port.read).not.toHaveBeenCalled();
+  });
+});
+
+describe("la zona (T78)", () => {
+  const zone = (rect: [number, number, number, number], rotate: number | null = null): CanvasParts =>
+    ({ kind: "image", rect, rotate, extra: {} });
+
+  it("taglia la zona dall'originale alla risoluzione che serve, la dipinge e la mette in cache col suo nome", async () => {
+    const raster = stubCreateImageBitmap([20_000, 10_000]);
+    const { port } = fakePort({ "Foto/grafico.png": { bytes: png(20_000, 10_000), descriptor: descriptor("g", "image/png") } });
+    const card = mount(port, "Foto/grafico.png", new CardCache(), "live", 300, zone([0.5, 0, 0.5, 1]));
+    await settle();
+
+    // La zona è metà della larghezza: per 608 px di zona l'originale si
+    // decodifica largo 1216, una volta sola.
+    expect(raster.create).toHaveBeenCalledTimes(1);
+    expect(raster.create.mock.calls[0]![1]).toMatchObject({ resizeWidth: 1216 });
+    const bitmap = raster.made[0]!;
+    // Il taglio, poi l'immagine ferma dipinta nella scheda.
+    expect(calls.slice(0, -1)).toEqual([["drawImage", bitmap, 608, 0, 608, 608, 0, 0, 608, 608]]);
+    expect(calls[calls.length - 1]).toEqual(["drawImage", card.cache.get("Foto/grafico.png", "zone-0.5,0,0.5,1-r0@608")!.bitmap, 0, 0]);
+    const canvas = card.host.querySelector("canvas")!;
+    expect([canvas.width, canvas.height]).toEqual([608, 608]);
+    expect(canvas.getAttribute("aria-label")).toBe(t("canvas.crop.picture_zone", { name: "grafico.png" }));
+    expect(card.root()!.hasAttribute("data-card-crop")).toBe(true);
+    // La parte dice la zona; l'immagine intera non c'è. Il bitmap
+    // decodificato serviva solo a tagliare: chiuso.
+    const cached = card.cache.get("Foto/grafico.png", "zone-0.5,0,0.5,1-r0@608")!;
+    expect([cached.bitmap.width, cached.bitmap.height]).toEqual([608, 608]);
+    expect(card.cache.get("Foto/grafico.png", "whole@608")).toBeUndefined();
+    expect(bitmap.closed).toBe(1);
+  });
+
+  it("ruota la zona nel canvas: le misure si scambiano e l'originale non si ingrandisce", async () => {
+    const raster = stubCreateImageBitmap([1000, 400]);
+    const { port } = fakePort({ "striscia.png": { bytes: png(1000, 400), descriptor: descriptor("s", "image/png") } });
+    const card = mount(port, "striscia.png", new CardCache(), "live", 300, zone([0, 0, 1, 0.5], 90));
+    await settle();
+
+    // Ruotata, la zona è larga quanto è alta nell'originale (200 px): per
+    // averne 608 servirebbe un originale più grande, che non c'è.
+    expect(raster.create).toHaveBeenCalledTimes(1);
+    expect(raster.create.mock.calls[0]![1]).toBeUndefined();
+    const canvas = card.host.querySelector("canvas")!;
+    expect([canvas.width, canvas.height]).toEqual([200, 1000]);
+    expect(calls.slice(0, -1)).toEqual([
+      ["translate", 100, 500],
+      ["rotate", Math.PI / 2],
+      ["drawImage", raster.made[0], 0, 0, 1000, 200, -500, -100, 1000, 200],
+    ]);
+    expect(canvas.getAttribute("aria-label")).toBe(t("canvas.crop.picture_turned", { name: "striscia.png" }));
+    expect(card.cache.get("striscia.png", "zone-0,0,1,0.5-r90@608")).toBeDefined();
+  });
+
+  it("due tagli dello stesso file hanno due parti in cache, e la scheda intera la sua", async () => {
+    stubCreateImageBitmap([800, 600]);
+    const { port } = fakePort({ "a.png": { bytes: png(800, 600), descriptor: descriptor("a", "image/png") } });
+    const cache = new CardCache();
+    mount(port, "a.png", cache, "live", 300, zone([0, 0, 0.5, 0.5]));
+    mount(port, "a.png", cache, "live", 300, zone([0, 0, 0.5, 0.5], 180));
+    mount(port, "a.png", cache, "live", 300);
+    await settle();
+    for (const part of ["zone-0,0,0.5,0.5-r0@608", "zone-0,0,0.5,0.5-r180@608", "whole@608"]) {
+      expect(cache.get("a.png", part), part).toBeDefined();
+    }
+  });
+
+  it("di un JPEG non si sa l'altezza: se la prima decodifica è troppo piccola, una seconda alla misura giusta", async () => {
+    const raster = stubCreateImageBitmap([4000, 3000]);
+    const { port } = fakePort({ "foto.jpg": { bytes: jpeg([4000, 3000]), descriptor: descriptor("j", "image/jpeg") } });
+    mount(port, "foto.jpg", new CardCache(), "live", 300, zone([0, 0, 0.25, 1], 90));
+    await settle();
+    // Prima a proporzioni quadrate (608), poi con le vere (3/4): 811.
+    expect(raster.create.mock.calls.map((call) => (call[1] as ImageBitmapOptions | undefined)?.resizeWidth)).toEqual([608, 811]);
+    expect(raster.made[0]!.closed).toBe(1);
+    expect(raster.made[1]!.closed).toBe(1);
+  });
+
+  it("una GIF si taglia come le altre: dal fotogramma che createImageBitmap decodifica, mai un <img> animato", async () => {
+    const raster = stubCreateImageBitmap([100, 100]);
+    const gif = new Uint8Array([0x47, 0x49, 0x46, 0x38, 0x39, 0x61, 100, 0, 100, 0, 0, 0, 0]);
+    const { port } = fakePort({ "gira.gif": { bytes: gif, descriptor: descriptor("g", "image/gif") } });
+    const card = mount(port, "gira.gif", new CardCache(), "live", 300, zone([0.25, 0.25, 0.5, 0.5]));
+    await settle();
+    expect(raster.create).toHaveBeenCalledTimes(1);
+    expect(card.state()).toBe("picture");
+    expect(card.host.querySelector("img")).toBeNull();
+  });
+
+  it("un SVG tagliato resta un <img> vivo, mostrato a pezzi; la scheda ferma ha la zona in cache", async () => {
+    vi.spyOn(HTMLImageElement.prototype, "decode").mockResolvedValue(undefined);
+    const svg = utf8('<svg xmlns="http://www.w3.org/2000/svg" width="100" height="50"></svg>');
+    const { port } = fakePort({ "logo.svg": { bytes: svg, descriptor: descriptor("l", "image/svg+xml") } });
+    const card = mount(port, "logo.svg", new CardCache(), "live", 300, zone([0.5, 0, 0.5, 1], 270));
+    await settle();
+    expect(card.state()).toBe("vector");
+    const piece = card.host.querySelector<HTMLElement>(".canvas-card-zone")!;
+    expect(piece.dataset.turn).toBe("270");
+    expect(piece.querySelector(".canvas-card-zone-frame > img.canvas-card-picture")).not.toBeNull();
+    expect(["--zone-x", "--zone-y", "--zone-w", "--zone-h"].map((name) => piece.style.getPropertyValue(name))).toEqual(["0.5", "0", "0.5", "1"]);
+    // La zona è 50 × 50 px: ruotata resta quadrata.
+    expect(piece.style.getPropertyValue("--zone-ratio")).toBe("1");
+    expect(piece.hasAttribute("data-ratio")).toBe(true);
+    const cached = card.cache.get("logo.svg", "zone-0.5,0,0.5,1-r270@608")!;
+    expect([cached.bitmap.width, cached.bitmap.height]).toEqual([608, 608]);
+    expect(calls.some((call) => call[0] === "rotate" && call[1] === (270 * Math.PI) / 180)).toBe(true);
+  });
+
+  it("le parti di un'immagine intera e dritta non fanno una zona", async () => {
+    stubCreateImageBitmap([10, 10]);
+    const { port } = fakePort({ "a.png": { bytes: png(10, 10), descriptor: descriptor("a", "image/png") } });
+    const card = mount(port, "a.png", new CardCache(), "live", 300, zone([0, 0, 1, 1], 360));
+    await settle();
+    expect(card.root()!.hasAttribute("data-card-crop")).toBe(false);
+    expect(card.cache.get("a.png", "whole@608")).toBeDefined();
   });
 });

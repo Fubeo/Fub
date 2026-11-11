@@ -14,7 +14,8 @@
 //   schede tutte fuori dalla vista la barra non c'è.
 // - **Le azioni** le dice `selectionBarActions`: Colore (il menu di T47),
 //   Collega, Raggruppa, «Allinea e distribuisci» con più schede, Apri con una
-//   (se si apre), Togli dalla lavagna. Ognuna è un comando del catalogo
+//   (se si apre), «Ritaglia e ruota» con una sola immagine che si può
+//   ritagliare (T78), Togli dalla lavagna. Ognuna è un comando del catalogo
 //   (`commands.ts`): il nome, il tasto nel suggerimento, spenta col perché
 //   (`aria-disabled`, così il lettore di schermo ci arriva e lo sente); in sola
 //   lettura il catalogo spegne quelle che cambiano il file.
@@ -68,13 +69,15 @@ export const STROKE_WIDTH = "canvas.stroke_width";
 /// comando che apre la sola scheda scelta (`canvas.open`, `canvas.open_url`),
 /// `null` se non si apre. Con `strokes` tratti scelti col lazo (T86) ci sono
 /// anche il loro colore e il loro spessore, prima di «Togli dalla lavagna»
-/// (che toglie le schede).
-export function selectionBarActions(chosen: number, open: string | null, strokes = 0): string[] {
+/// (che toglie le schede). Con `crop` (una sola immagine, la lavagna che si
+/// scrive) c'è «Ritaglia e ruota» (T78), dopo Apri.
+export function selectionBarActions(chosen: number, open: string | null, strokes = 0, crop = false): string[] {
   const actions: string[] = [];
   if (chosen > 0) {
     actions.push("canvas.color_menu", "canvas.connect", "canvas.group");
     if (chosen > 1) actions.push("canvas.align_menu");
     if (chosen === 1 && open !== null) actions.push(open);
+    if (chosen === 1 && crop) actions.push("canvas.crop");
   }
   if (strokes > 0) actions.push(STROKE_COLOR, STROKE_WIDTH);
   if (chosen > 0) actions.push("canvas.delete");
@@ -134,6 +137,8 @@ export interface SelectionBarShow {
   readonly chosen: number;
   /// Il comando che apre la sola scheda scelta, o `null`.
   readonly open: string | null;
+  /// La sola scheda scelta è un'immagine che si ritaglia (T78).
+  readonly crop?: boolean;
   /// I tratti scelti col lazo (T86), se ce ne sono.
   readonly strokes?: SelectionBarStrokes | null;
   /// Il riquadro delle schede e dei tratti scelti, in pixel della vista.
@@ -180,6 +185,7 @@ const ICON: Readonly<Record<string, string>> = {
   "canvas.align_menu": "draw-align",
   "canvas.open": "draw-open-link",
   "canvas.open_url": "draw-open-link",
+  "canvas.crop": "draw-image",
   "canvas.delete": "trash",
 };
 
@@ -256,7 +262,7 @@ export function createCanvasSelectionBar(ctx: CanvasSelectionBarContext): Canvas
       control.append(svg);
     }
   };
-  for (const command of ["canvas.connect", "canvas.group", "canvas.align_menu", "canvas.open", "canvas.open_url"]) iconButton(command);
+  for (const command of ["canvas.connect", "canvas.group", "canvas.align_menu", "canvas.open", "canvas.open_url", "canvas.crop"]) iconButton(command);
 
   // I tratti scelti col lazo (T86): il colore e lo spessore, ognuno col suo
   // rialzo. La barra non tiene la scelta: la legge da `show`.
@@ -518,7 +524,7 @@ export function createCanvasSelectionBar(ctx: CanvasSelectionBarContext): Canvas
   const show = (what: SelectionBarShow): void => {
     if (lifetime.closed) return;
     strokes = what.strokes && what.strokes.count > 0 ? what.strokes : null;
-    const next = selectionBarActions(what.chosen, what.open, strokes?.count ?? 0);
+    const next = selectionBarActions(what.chosen, what.open, strokes?.count ?? 0, what.crop === true);
     if (next.length === 0) {
       hide();
       return;

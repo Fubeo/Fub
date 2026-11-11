@@ -901,6 +901,11 @@
     "canvas-card-note-content",
     "canvas-parts-keys",
     "canvas-parts-count",
+    "canvas-crop",
+    "canvas-crop-box",
+    "canvas-crop-handle",
+    "canvas-crop-bar",
+    "canvas-crop-note",
     "canvas-node",
     "canvas-node-group",
     "canvas-node-handle",
@@ -2558,6 +2563,11 @@
     "canvas-card-note-content": "cornice",
     "canvas-parts-keys": "cornice",
     "canvas-parts-count": "cornice",
+    "canvas-crop": "cornice",
+    "canvas-crop-box": "segno",
+    "canvas-crop-handle": "segno",
+    "canvas-crop-bar": "cornice",
+    "canvas-crop-note": "cornice",
     "canvas-node": "contenuto",
     "canvas-node-group": "contenuto",
     "canvas-node-handle": "segno",
@@ -5726,6 +5736,22 @@
         "hover",
         "focused",
         "selected"
+      ]
+    },
+    {
+      "name": "canvas-crop",
+      "part": "editors",
+      "hooks": [
+        "canvas-crop",
+        "canvas-crop-box",
+        "canvas-crop-handle",
+        "canvas-crop-bar",
+        "canvas-crop-note"
+      ],
+      "states": [
+        "rest",
+        "hover",
+        "focused"
       ]
     },
     {
@@ -9058,10 +9084,10 @@
   "counts": {
     "required_roles": 154,
     "optional_roles": 63,
-    "hooks": 1655,
+    "hooks": 1660,
     "state_names": 7,
-    "assigned_states": 780,
-    "components": 232,
+    "assigned_states": 783,
+    "components": 233,
     "preference_tokens": 186
   }
 }

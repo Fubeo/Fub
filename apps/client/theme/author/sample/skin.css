@@ -8846,6 +8846,37 @@ kbd,
   font-size: var(--text-sm);
   font-variant-numeric: tabular-nums;
 }
+/* Il ritaglio di un'immagine (T78): la zona col filo d'accento e i terzi,
+   il velo attorno, le maniglie, la barra a pillola. */
+.canvas-crop {
+  border-radius: inherit;
+}
+.canvas-crop-box {
+  border: 1.5px solid var(--accent);
+  background-image:
+    linear-gradient(to right, transparent calc(33.33% - 0.5px), color-mix(in srgb, var(--paper-bg) 70%, transparent) calc(33.33% - 0.5px), color-mix(in srgb, var(--paper-bg) 70%, transparent) calc(33.33% + 0.5px), transparent calc(33.33% + 0.5px), transparent calc(66.66% - 0.5px), color-mix(in srgb, var(--paper-bg) 70%, transparent) calc(66.66% - 0.5px), color-mix(in srgb, var(--paper-bg) 70%, transparent) calc(66.66% + 0.5px), transparent calc(66.66% + 0.5px)),
+    linear-gradient(to bottom, transparent calc(33.33% - 0.5px), color-mix(in srgb, var(--paper-bg) 70%, transparent) calc(33.33% - 0.5px), color-mix(in srgb, var(--paper-bg) 70%, transparent) calc(33.33% + 0.5px), transparent calc(33.33% + 0.5px), transparent calc(66.66% - 0.5px), color-mix(in srgb, var(--paper-bg) 70%, transparent) calc(66.66% - 0.5px), color-mix(in srgb, var(--paper-bg) 70%, transparent) calc(66.66% + 0.5px), transparent calc(66.66% + 0.5px));
+  box-shadow: 0 0 0 9999px color-mix(in srgb, var(--scrim) 70%, transparent);
+}
+.canvas-crop-handle {
+  border: 1.5px solid var(--accent);
+  border-radius: 3px;
+  background: var(--bg-elev);
+}
+.canvas-crop-handle:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: 2px;
+}
+.canvas-crop-bar {
+  border-radius: var(--radius-pill);
+  background: var(--bg-elev);
+  box-shadow: var(--shadow-2);
+}
+.canvas-crop-note {
+  color: var(--muted);
+  font-size: var(--text-xs);
+  text-align: center;
+}
 .canvas-toolbar > select,
 .canvas-toolbar > input {
   flex: none;

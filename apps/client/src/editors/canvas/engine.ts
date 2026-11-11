@@ -133,7 +133,8 @@ import {
   type CanvasColorChoice,
 } from "./colors";
 import { createColorPicker, openDialog, openPopover, textField, type PopoverHandle } from "../../kit";
-import { PARTS_KEY, nodeParts, partsFit, writeParts, type CanvasParts, type PartsExtra } from "./parts";
+import { PARTS_KEY, cardParts, nodeParts, partsFit, writeParts, type CanvasParts, type PartsExtra } from "./parts";
+import { WHOLE_ZONE, isWholeZone, openCropEditor, zoneOf, zoneParts, zoneRatio, type CropEditor, type CropPicture, type ImageZone } from "./crop";
 import { PARTS_PICKER_MIN_SECTIONS, openPartsPicker, partsSections, type PartsHeading, type PartsPickerHandle, type PartsPickerPlace, type PartsPickerPort } from "./parts-picker";
 import { noteHeadingOf } from "./cards/note";
 import { DEFAULT_PREFERENCES, currentPreferences, readInkMouse, readPen, saveInkMouse, savePen, watchPreferences, type PenButtonAction, type WheelAction } from "./preferences";
@@ -595,6 +596,16 @@ interface PendingText {
  * Una voce del menu del tasto destro dal comando `id` del catalogo: `args`
  * dice su che cosa, `refocus` rimette il fuoco sulla tela dopo il gesto.
  */
+/** Il ritaglio aperto su una scheda d'immagine (T78). */
+interface CropSession {
+  readonly node: string;
+  /** Il file della scheda quando si è aperto: se cambia, il ritaglio si chiude. */
+  readonly path: string;
+  editor: CropEditor | null;
+  /** L'altezza che la scheda mostra intanto; `null` finché l'immagine non ha misure. */
+  height: number | null;
+}
+
 type MenuEntryMaker = (id: string, args?: CanvasCommandArgs, refocus?: boolean, extra?: Partial<SurfaceMenuItem>) => SurfaceMenuItem;
 
 /**
@@ -1609,6 +1620,14 @@ export class CanvasEngine {
   #partsRound = 0;
   /** Quante sezioni ha una nota, dall'ultimo sommario letto: spegne «Parti…» se meno di due. */
   readonly #partsCounts = new Map<string, number>();
+  // --- il ritaglio di un'immagine (T78) ---
+  /**
+   * Il ritaglio aperto: la scheda, il suo file, la zona di quando si è aperto
+   * e l'altezza che la scheda mostra intanto (l'immagine intera, ruotata),
+   * `null` finché l'immagine non ha misure. Niente si scrive finché non si
+   * chiude con «Fatto» o «Togli il ritaglio».
+   */
+  #crop: CropSession | null = null;
   // --- muoversi (T53) ---
   /** Spazio tenuto sulla lavagna: il tasto principale sposta la vista, con qualsiasi strumento. */
   #spaceHeld = false;
@@ -6420,6 +6439,24 @@ export class CanvasEngine {
         },
       };
     }
+    if (id === "canvas.crop") {
+      // «Ritaglia e ruota» (T78): senza il renderer delle immagini non c'è
+      // niente da tagliare, e il comando non c'è.
+      if (!this.#cropRenderer()) return null;
+      return {
+        disabled: () => {
+          const why = writable() ?? (this.#isSceneOversized() ? t("canvas.too_large") : null);
+          if (why !== null) return why;
+          const one = only();
+          if (!one || !this.#cropImage(one)) return t("canvas.commands.why.one_image");
+          return this.#cropUnreadable(one.id) ? t("canvas.crop.why.unreadable") : null;
+        },
+        run: () => {
+          const one = only();
+          if (one) this.#beginCrop(one.id);
+        },
+      };
+    }
     if (id === "canvas.extract_note" || id === "canvas.copy_note_text") {
       // Convertire (T70): senza la porta delle note i due comandi non ci sono.
       if (!this.#options.notes) return null;
@@ -6774,7 +6811,8 @@ export class CanvasEngine {
     const units = shown ? this.#chosenStrokes() : [];
     const chosen = nodes.length + units.length;
     const pen = this.#penDown;
-    const writing = this.#editor !== null || this.#activeId !== null || this.#canvasOptions.mode === "writing";
+    // Col ritaglio aperto la sua barra prende il posto di quella della selezione.
+    const writing = this.#editor !== null || this.#activeId !== null || this.#canvasOptions.mode === "writing" || this.#crop !== null;
     if (!selectionBarWanted({ chosen, gesture: this.#gestureActive(), pen, writing })) {
       bar.hide();
       if (pen && chosen > 0 && this.#quiet.active) this.#quiet.defer("selection-bar", () => this.#syncSelectionBar());
@@ -6809,6 +6847,7 @@ export class CanvasEngine {
     bar.show({
       chosen: nodes.length,
       open,
+      crop: one !== null && !this.#readOnly && this.#cropImage(one) && this.#cropRenderer(),
       strokes: this.#strokesShown(units),
       box,
       view: { width: rect.width || 800, height: rect.height || 600 },
@@ -7162,6 +7201,185 @@ export class CanvasEngine {
     open?.handle.close();
   }
 
+  // --- il ritaglio di un'immagine (T78) ------------------------------------------
+
+  /** C'è chi mostra le immagini nelle schede: senza, niente da ritagliare. */
+  #cropRenderer(): boolean {
+    return this.#options.cards?.registry.rendererFor("image") != null;
+  }
+
+  /** La scheda è un'immagine del vault, che si può ritagliare. */
+  #cropImage(node: CanvasNode): node is CanvasNode & { file: string } {
+    return node.type === "file" && cardKindOf(node) === "image" && isVaultPath(cardTarget(node).path);
+  }
+
+  /** La scheda `id` dice che il suo file manca o non si legge. */
+  #cropUnreadable(id: string): boolean {
+    const entry = this.#cards.get(id);
+    if (!entry) return false;
+    if (entry.missingFor !== null) return true;
+    const state = entry.body.querySelector<HTMLElement>(".canvas-card-image")?.dataset.cardState;
+    return state === "unreadable" || state === "too-large" || state === "missing";
+  }
+
+  /**
+   * La parte della chiave del corpo che dice la vista: le parti che la scheda
+   * mostra, così una zona nuova (o tolta) rimonta la vista. Col ritaglio
+   * aperto la scheda mostra l'immagine intera.
+   */
+  #viewKeyOf(node: CanvasNode): string {
+    const parts = this.#crop?.node === node.id ? null : (node[PARTS_KEY] ?? null);
+    return parts === null ? "view" : `view:${JSON.stringify(parts)}`;
+  }
+
+  /** L'altezza che la scheda mostra: la sua, o col ritaglio aperto quella dell'immagine intera. */
+  #shownHeight(node: CanvasNode): number {
+    const crop = this.#crop;
+    return crop?.node === node.id && crop.height !== null ? crop.height : node.height;
+  }
+
+  /**
+   * Apre «Ritaglia e ruota» sulla scheda `id`: la scheda mostra l'immagine
+   * intera, viva, con sopra la zona e le maniglie e sotto la barra
+   * (`crop.ts`). Non scrive niente: lo fa `#finishCrop`.
+   */
+  #beginCrop(id: string): void {
+    const node = this.#doc?.nodes.find((one) => one.id === id);
+    if (!node || !this.#cropImage(node) || this.#readOnly || this.#destroyed || this.#isSceneOversized()) return;
+    if (!this.#cropRenderer() || this.#cropUnreadable(id)) return;
+    if (this.#crop) this.#finishCrop(null);
+    if (this.#activeId !== null) this.#leaveCard(true, false);
+    const entry = this.#cards.get(id);
+    if (!entry) return;
+    if (this.#selection.length !== 1 || this.#selection[0] !== id || this.#edgeSelection.length > 0) {
+      this.#selection = [id];
+      this.#edgeSelection = [];
+      this.#options.onSelectionChange();
+      this.#displaySelection();
+    }
+    const crop: CropSession = { node: id, path: cardTarget(node).path, editor: null, height: null };
+    this.#crop = crop;
+    // Con una zona la vista si rimonta sull'immagine intera.
+    this.#refreshCard(entry, node, true);
+    entry.article.dataset.cardCropping = "";
+    const ink = (this.#inkCards.get(id)?.length ?? 0) > 0;
+    crop.editor = openCropEditor({
+      frame: entry.body,
+      card: entry.article,
+      zone: zoneOf(cardParts(node)),
+      ink,
+      picture: () => entry.body.querySelector<CropPicture & HTMLElement>(".canvas-card-image .canvas-card-picture"),
+      lifetime: this.#life,
+      onTurn: () => this.#fitCropHeight(),
+      onMeasured: () => this.#fitCropHeight(),
+      onDone: (zone) => this.#finishCrop("done", zone),
+      onCancel: () => this.#finishCrop(null),
+      onRemove: () => this.#finishCrop("remove"),
+    });
+    this.#fitCropHeight();
+    this.#refreshLive();
+    this.#syncSelectionBar();
+    crop.editor.focus();
+  }
+
+  /**
+   * Col ritaglio aperto la scheda tiene la larghezza e prende le proporzioni
+   * dell'immagine intera ruotata, per mostrarla tutta; solo sullo schermo.
+   */
+  #fitCropHeight(): void {
+    const crop = this.#crop;
+    const entry = crop ? this.#cards.get(crop.node) : undefined;
+    const natural = crop?.editor?.natural() ?? null;
+    if (!crop?.editor || !entry || !natural) return;
+    const height = this.#cropHeightFor(entry, zoneRatio({ rect: WHOLE_ZONE.rect, turn: crop.editor.zone().turn }, natural));
+    if (height === crop.height) return;
+    crop.height = height;
+    entry.article.style.height = `${height}px`;
+    crop.editor.layout();
+  }
+
+  /**
+   * L'altezza della scheda `entry` che dà al suo contenuto le proporzioni
+   * `ratio` (larghezza su altezza) alla larghezza di adesso: il corpo senza
+   * il suo margine interno, e la testata com'è (come `#contentSize`).
+   */
+  #cropHeightFor(entry: CardEntry, ratio: number): number {
+    const node = entry.node;
+    const shown = this.#shownHeight(node);
+    const style = getComputedStyle(entry.body);
+    const padX = (parseFloat(style.paddingLeft) || 0) + (parseFloat(style.paddingRight) || 0);
+    const padY = (parseFloat(style.paddingTop) || 0) + (parseFloat(style.paddingBottom) || 0);
+    const innerWidth = entry.body.clientWidth - padX;
+    const innerHeight = entry.body.clientHeight - padY;
+    const known = innerWidth > 0 && innerHeight > 0;
+    const width = known ? innerWidth : node.width;
+    const rest = known ? shown - innerHeight : 0;
+    return Math.max(CANVAS_MIN_SIZE, Math.round(rest + width / ratio));
+  }
+
+  /**
+   * Chiude il ritaglio. `done`: la zona diventa `fub:parts` `image` (T73) e
+   * la scheda, tenendo la larghezza, prende le proporzioni della zona
+   * ruotata, in un commit solo; `remove`: il campo si toglie e la scheda
+   * prende le proporzioni dell'immagine intera; `null` (Esc): tutto com'era.
+   * Il file dell'immagine non si scrive mai: cambia solo la lavagna.
+   */
+  #finishCrop(how: "done" | "remove" | null, zone?: ImageZone): void {
+    const crop = this.#crop;
+    if (!crop) return;
+    const editor = crop.editor;
+    const entry = this.#cards.get(crop.node);
+    const doc = this.#doc;
+    const node = doc?.nodes.find((one) => one.id === crop.node);
+    let patch: CanvasPatch | null = null;
+    if (how !== null && doc && node && entry && node.type === "file" && cardTarget(node).path === crop.path && !this.#readOnly) {
+      const chosen = how === "remove" ? WHOLE_ZONE : zone ?? editor?.zone() ?? WHOLE_ZONE;
+      const next: CanvasNode = { ...node };
+      delete next[PARTS_KEY];
+      let ok = true;
+      if (!isWholeZone(chosen)) {
+        // I campi sconosciuti di una zona valida restano.
+        const read = nodeParts(node);
+        const extra: PartsExtra = read?.state === "ok" && read.parts.kind === "image" ? read.parts.extra : {};
+        const written = writeParts(crop.path, zoneParts(chosen, extra));
+        if (written.outcome === "written") {
+          delete next.subpath;
+          if (written.subpath !== null) next.subpath = written.subpath;
+          if (written.parts !== null) next[PARTS_KEY] = written.parts;
+        } else {
+          ok = false;
+        }
+      }
+      const natural = editor?.natural() ?? null;
+      if (ok && natural) next.height = this.#cropHeightFor(entry, zoneRatio(chosen, natural));
+      patch = ok ? upsertNodePatch(doc, next) : null;
+    }
+    const focused = editor !== null && entry !== undefined && entry.article.contains(document.activeElement);
+    this.#crop = null;
+    editor?.close();
+    if (entry) delete entry.article.dataset.cardCropping;
+    if (patch) this.#commit([patch], "input");
+    // Senza commit (Esc, niente di cambiato) la scheda torna com'era: la sua
+    // altezza e, se aveva una zona, la sua vista.
+    const now = this.#doc?.nodes.find((one) => one.id === crop.node);
+    if (entry && now && this.#cards.get(crop.node) === entry) this.#refreshCard(entry, now, true);
+    this.#refreshLive();
+    this.#syncSelectionBar();
+    if (focused && entry.article.isConnected) entry.article.focus({ preventScroll: true });
+  }
+
+  /** Chiude il ritaglio (com'era) se la sua scheda non c'è più, mostra un altro file o la lavagna non si scrive. */
+  #syncCrop(): void {
+    const crop = this.#crop;
+    if (!crop) return;
+    const node = this.#doc?.nodes.find((one) => one.id === crop.node);
+    const entry = this.#cards.get(crop.node);
+    const alive = node !== undefined && this.#cropImage(node) && cardTarget(node).path === crop.path
+      && entry !== undefined && entry.missingFor === null && entry.body.querySelector(".canvas-crop") !== null;
+    if (alive && !this.#readOnly && !this.#destroyed && !this.#isSceneOversized()) return;
+    this.#finishCrop(null);
+  }
+
   /** Dove sono la scheda `id` (con la testata sopra, T39) e la lavagna, nella finestra. */
   #partsPlace(id: string): PartsPickerPlace {
     const rect = this.#viewport.getBoundingClientRect();
@@ -7366,6 +7584,11 @@ export class CanvasEngine {
     }
     if (one?.type === "file" && one.file) {
       context.push(entry(cardKindOf(one) === "image" ? "canvas.open_viewer" : "canvas.open", undefined, false));
+      // «Ritaglia e ruota» (T78), come nel prototipo T28 dopo Apri; in sola
+      // lettura la voce non c'è.
+      if (!this.#readOnly && this.#cropImage(one) && this.#cropRenderer()) {
+        context.push(entry("canvas.crop", undefined, false, { icon: "draw-image" }));
+      }
       if (this.#options.onOpenPathBeside) context.push(entry("canvas.open_beside", undefined, false));
       // «Spargi le pagine…» (T72): solo su un PDF; spenta, col perché, se non si apre.
       if (cardKindOf(one) === "pdf") context.push(entry("canvas.spread_pages", undefined, false));
@@ -7436,6 +7659,10 @@ export class CanvasEngine {
   }
 
   #pointerDown(event: PointerEvent): void {
+    // Un clic fuori dal ritaglio lo applica, come «Fatto» (il ritaglio del
+    // disegno fa lo stesso, A-27). I gesti dentro il ritaglio non arrivano qui.
+    const crop = this.#crop;
+    if (crop?.editor && !crop.editor.contains(event.target)) this.#finishCrop("done", crop.editor.zone());
     // Il tasto laterale della penna senza lo strato della penna (la sola
     // lettura), che altrimenti lo prende prima (T63).
     if (event.pointerType === "pen" && event.button === 2 && this.#inkLayer === null && this.#penButtonSetting !== "eraser") {
@@ -8932,6 +9159,11 @@ export class CanvasEngine {
 
   #keydown(event: KeyboardEvent): void {
     if (!this.#doc || event.defaultPrevented) return;
+    // Col ritaglio aperto Invio lo scrive ed Esc lo chiude, da ogni punto della lavagna (T78).
+    if (this.#crop?.editor?.key(event)) {
+      event.preventDefault();
+      return;
+    }
     // Spazio tenuto sulla lavagna sposta la vista, anche in una lavagna troppo
     // grande (T53); in un campo o dentro la scheda attiva resta uno spazio.
     if (!(this.#activeId !== null && this.#insideActive(event.target, false)) && this.#holdSpace(event)) return;
@@ -9050,7 +9282,7 @@ export class CanvasEngine {
       if (node && el) {
         el.style.transform = `translate(${node.x}px, ${node.y}px)`;
         el.style.width = `${node.width}px`;
-        el.style.height = `${node.height}px`;
+        el.style.height = `${this.#shownHeight(node)}px`;
         markHandles(el, node, this.#camera.zoom);
       }
     }
@@ -9061,6 +9293,7 @@ export class CanvasEngine {
   #render(): void {
     this.#syncEmpty();
     this.#syncPartsPicker();
+    this.#syncCrop();
     // Dopo `destroy` niente rinasce: una vista montata qui non avrebbe padrone.
     if (!this.#doc || this.#destroyed) return;
     this.#syncInkLayer();
@@ -9154,7 +9387,8 @@ export class CanvasEngine {
     // La scheda attiva, e quella in cui si sta entrando, restano vive anche
     // se la regola le spegnerebbe (lo zoom, il limite).
     const wanted = liveCardIds(nodes, view, zoom);
-    for (const id of [this.#activeId, this.#enteringId]) {
+    // E quella col ritaglio aperto (T78): l'immagine intera si legge viva.
+    for (const id of [this.#activeId, this.#enteringId, this.#crop?.node ?? null]) {
       if (id !== null && this.#views.has(id)) wanted.add(id);
     }
     // Prima che le vive si spengano: chi è vivo adesso conta come visto.
@@ -9255,6 +9489,7 @@ export class CanvasEngine {
     const id = this.#nodeAt(target);
     const entry = id === null ? undefined : this.#cards.get(id);
     if (!id || !entry || !this.#hasLiveContent(entry) || !entry.body.contains(target)) return;
+    if (this.#crop?.editor?.contains(target)) return;
     const modifier = event.ctrlKey || event.metaKey;
     if ((modifier || this.#activeId === id) && this.#followCardLink(event, entry)) return;
     if (this.#activeId === id) return;
@@ -9976,7 +10211,7 @@ export class CanvasEngine {
     }
     el.style.transform = `translate(${node.x}px, ${node.y}px)`;
     el.style.width = `${node.width}px`;
-    el.style.height = `${node.height}px`;
+    el.style.height = `${this.#shownHeight(node)}px`;
     // La carta e il colore li dà la pelle (T47); il nome del colore arriva a
     // chi ascolta.
     paintColor(el, node.color);
@@ -10009,7 +10244,7 @@ export class CanvasEngine {
     // Una vista dipende solo dalla scheda; il corpo di sempre anche dalla
     // lingua, e quello di testo dalle sintassi e dalla sola lettura (il
     // pulsante che ne fa una nota).
-    const viewKey = cardBodyKey(node, renderer ? "view"
+    const viewKey = cardBodyKey(node, renderer ? this.#viewKeyOf(node)
       : node.type === "text" ? `${this.#languageRound}:${this.#formsRound}:${this.#readOnly}`
       : `${this.#languageRound}`);
     // Il file cambiato (o la scheda) non è più quello che mancava: si riprova.
@@ -10050,6 +10285,8 @@ export class CanvasEngine {
       size: () => ({ width: entry.node.width, height: entry.node.height }),
       zoom: () => this.#camera.zoom,
       initialPage: this.#viewMemo?.page(node.id) ?? null,
+      // Le parti dell'estratto (T73); col ritaglio aperto l'immagine intera (T78).
+      parts: this.#crop?.node === node.id ? null : cardParts(node),
       pageChanged: (page) => {
         // Una vista già smontata non parla più per questa scheda.
         if (life.closed || entry.body !== body) return;
@@ -10115,7 +10352,7 @@ export class CanvasEngine {
    * il file non torna (o cambia): allora la sua vista si rimonta.
    */
   #markMissing(entry: CardEntry): void {
-    entry.missingFor = cardBodyKey(entry.node, "view");
+    entry.missingFor = cardBodyKey(entry.node, this.#viewKeyOf(entry.node));
     this.#refreshCard(entry, entry.node, true);
   }
 

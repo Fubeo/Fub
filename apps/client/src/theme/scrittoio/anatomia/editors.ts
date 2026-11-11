@@ -63,6 +63,11 @@ export const EDITORS: PartAnatomy = {
     // attaccato alla scheda, con il campo, la lista a caselle, l'anteprima
     // (la resa della scheda di nota) e il piede.
     { name: "canvas-parts-picker", states: [S("rest"), S("hover"), S("focused"), S("selected")], hooks: ["canvas-parts-title", "canvas-parts-close", "canvas-parts-field-hint", "canvas-parts-row", "canvas-parts-check", "canvas-parts-preview", "canvas-parts-preview-title", "canvas-card-note-content", "canvas-parts-keys", "canvas-parts-count"] },
+    // Il ritaglio di un'immagine (T78): la zona col velo e le maniglie sopra
+    // la scheda, la barra sotto e la riga dell'inchiostro; segni di Fub sulla
+    // lavagna. L'immagine intera sotto la zona (`canvas-crop-picture`) e la
+    // zona di un SVG nella scheda (`canvas-card-zone`) sono solo impianto.
+    { name: "canvas-crop", layers: { "canvas-crop-box": "segno", "canvas-crop-handle": "segno" }, states: [S("rest"), S("hover"), S("focused")], hooks: ["canvas-crop", "canvas-crop-box", "canvas-crop-handle", "canvas-crop-bar", "canvas-crop-note"] },
     { name: "canvas-node", layer: "contenuto", layers: { "canvas-node-handle": "segno", "canvas-connect": "segno", "canvas-resize": "segno", "canvas-port": "segno", "canvas-selection-frame": "segno", "canvas-convert-note": "cornice", "canvas-open-url": "cornice" }, states: DRAGGABLE, hooks: ["canvas-node", "canvas-node-group", "canvas-node-handle", "canvas-node-far", "canvas-connect", "canvas-resize", "canvas-port", "canvas-selection-frame", "canvas-card-body", "canvas-markdown", "canvas-empty", "canvas-group-label", "canvas-group-bg", "canvas-url-text", "canvas-media-placeholder", "canvas-convert-note", "canvas-open-url", "canvas-file-link", "canvas-text-editor", "canvas-field-editor"] },
     // La barra multifunzione del documento: quella del kit, come la barra del
     // foglio, con l'accesso rapido e la galleria degli stili.

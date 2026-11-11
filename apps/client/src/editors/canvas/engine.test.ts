@@ -6283,3 +6283,250 @@ describe("convertire (T70)", () => {
     engine.destroy();
   });
 });
+
+// «Ritaglia e ruota» (T78): la zona di un'immagine è `fub:parts` `image` sulla
+// scheda, scritto in un commit; Esc lascia com'era; il file dell'immagine non
+// riceve mai una scrittura (la tela non ha una porta per scrivere nel file di
+// una scheda d'immagine: le porte che toccano file restano ferme, e cambia
+// solo il testo della lavagna).
+describe("il ritaglio di un'immagine (T78)", () => {
+  const lastMount = (board: { mounts: Array<{ id: string; parts: CardContext["parts"] }> }) => board.mounts[board.mounts.length - 1]!;
+  const CROP_INK = {
+    id: "s-1", tool: "pen",
+    brush: "pf1 size=3 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=0 pen=ballpoint",
+    color: "#0072b2", anchor: { kind: "card", width: 400, height: 300 },
+    ink: "1 s100 cxy 4000,2500 120,40 95,-10",
+  };
+
+  function cropBoard(extra: Record<string, unknown> = {}, overrides: Partial<CanvasEngineOptions> = {}) {
+    const mounts: Array<{ id: string; parts: CardContext["parts"] }> = [];
+    const renderer: CardRenderer = {
+      kinds: ["image"],
+      mount(node, host, _mode, context): CardView {
+        mounts.push({ id: node.id, parts: context.parts ?? null });
+        const root = document.createElement("div");
+        root.className = "canvas-card-image";
+        root.dataset.cardState = "picture";
+        // L'immagine intera è 400 × 300; una zona la scheda la dipinge tagliata.
+        const canvas = document.createElement("canvas");
+        canvas.className = "canvas-card-picture";
+        canvas.width = context.parts ? 120 : 400;
+        canvas.height = context.parts ? 90 : 300;
+        root.append(canvas);
+        host.append(root);
+        return { setMode: () => {}, destroy: () => root.remove() };
+      },
+    };
+    const writes = { trash: vi.fn(), replace: vi.fn(async () => null), attach: vi.fn() };
+    const made = mounted(JSON.stringify({
+      nodes: [
+        { id: "f", type: "file", file: "allegati/foto.png", x: 0, y: 0, width: 400, height: 300, ...extra },
+        { id: "t", type: "text", x: 600, y: 0, width: 200, height: 100, text: "accanto" },
+      ],
+      edges: [],
+    }), {
+      cards: { registry: createCardRegistry([renderer]), snapshots: new CardCache(), watch: () => () => {} },
+      onTrashPath: writes.trash,
+      onPickFile: writes.replace,
+      ...overrides,
+    });
+    const pick = (id = "f") => {
+      const pointing = vi.spyOn(document, "elementFromPoint").mockReturnValue(made.host.querySelector<HTMLElement>(`.canvas-node[data-node="${id}"]`));
+      try {
+        return made.engine.contextMenu({ x: 10, y: 10 })!;
+      } finally {
+        pointing.mockRestore();
+      }
+    };
+    const crop = () => made.engine.commands().find((one) => one.id === "canvas.crop")!;
+    const card = () => made.host.querySelector<HTMLElement>('.canvas-node[data-node="f"]')!;
+    const image = () => readCanvas(made.engine.getDoc()).nodes.find((one) => one.id === "f")!;
+    const key = (target: Element, key: string, init: KeyboardEventInit = {}) =>
+      target.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true, ...init }));
+    const box = () => card().querySelector<HTMLElement>(".canvas-crop-box")!;
+    const barButton = (name: string) => card().querySelector<HTMLButtonElement>(`.canvas-crop-bar [data-crop="${name}"]`)!;
+    return { ...made, mounts, writes, pick, crop, card, image, key, box, barButton };
+  }
+
+  it("la voce sta nel menu della scheda d'immagine dopo «Apri nel visore», in Ctrl+/ e nella barra della selezione", () => {
+    const board = cropBoard();
+    const items = (board.pick().context ?? []).filter((entry): entry is SurfaceMenuItem => typeof entry !== "string");
+    const ids = items.map((item) => item.id);
+    expect(ids.indexOf("canvas.crop")).toBe(ids.indexOf("canvas.open_viewer") + 1);
+    const entry = items.find((item) => item.id === "canvas.crop")!;
+    expect(entry.label).toBe(t("canvas.crop"));
+    expect(entry.icon).toBe("draw-image");
+    expect(board.crop().disabled()).toBeNull();
+    expect(board.crop().label).toBe(t("canvas.crop"));
+    expect(board.host.querySelector('.canvas-selection-bar [data-command="canvas.crop"]')).not.toBeNull();
+    // Su una scheda di testo la voce non c'è e il comando è spento col perché.
+    const other = board.pick("t");
+    expect((other.context ?? []).some((item) => typeof item !== "string" && item.id === "canvas.crop")).toBe(false);
+    expect(board.crop().disabled()).toBe(t("canvas.commands.why.one_image"));
+    board.engine.destroy();
+  });
+
+  it("in sola lettura la voce non c'è e il comando è spento; senza chi mostra le immagini il comando non c'è", () => {
+    const board = cropBoard();
+    board.engine.setReadOnly(true);
+    const items = (board.pick().context ?? []).filter((entry): entry is SurfaceMenuItem => typeof entry !== "string");
+    expect(items.some((item) => item.id === "canvas.crop")).toBe(false);
+    expect(board.crop().disabled()).toBe(t("canvas.commands.why.read_only"));
+    board.crop().run();
+    expect(board.host.querySelector(".canvas-crop")).toBeNull();
+    board.engine.destroy();
+
+    const bare = mounted();
+    expect(bare.engine.commands().some((one) => one.id === "canvas.crop")).toBe(false);
+    bare.engine.destroy();
+  });
+
+  it("apre il ritaglio sopra la scheda: l'immagine intera, la zona, la barra; niente si scrive", () => {
+    const board = cropBoard({ "fub:parts": { kind: "image", rect: [0.25, 0, 0.5, 1] } });
+    board.pick();
+    expect(lastMount(board).parts).toEqual({ kind: "image", rect: [0.25, 0, 0.5, 1], rotate: null, extra: {} });
+    board.crop().run();
+    // La vista si rimonta sull'immagine intera.
+    expect(lastMount(board).parts).toBeNull();
+    expect(board.card().hasAttribute("data-card-cropping")).toBe(true);
+    expect(board.card().querySelector(".canvas-card-body > .canvas-crop .canvas-crop-box")).not.toBeNull();
+    expect(board.card().querySelector(":scope > .canvas-crop-bar")).not.toBeNull();
+    expect(document.activeElement).toBe(board.box());
+    expect(board.changes).toHaveLength(0);
+    board.engine.destroy();
+  });
+
+  it("«Fatto» scrive la zona e le proporzioni in un commit solo, che un annulla toglie; il file non si tocca", () => {
+    const board = cropBoard();
+    const before = board.image();
+    board.pick();
+    board.crop().run();
+    // La zona di serie è tutta l'immagine: la si stringe dall'angolo in basso a destra, poi si ruota.
+    for (let i = 0; i < 5; i += 1) board.key(board.box(), "ArrowLeft", { altKey: true, shiftKey: true });
+    board.barButton("rotate-right").click();
+    board.barButton("done").click();
+    expect(board.changes).toHaveLength(1);
+    const after = board.image();
+    expect(after["fub:parts"]).toEqual({ kind: "image", rect: [0, 0, 0.5, 1], rotate: 90 });
+    expect(after.subpath).toBeUndefined();
+    expect(after.file).toBe("allegati/foto.png");
+    // La zona è 200 × 300 px; ruotata 300 × 200: la scheda tiene i 400 di
+    // larghezza e prende 400 × 200 / 300.
+    expect(after).toMatchObject({ x: 0, y: 0, width: 400, height: 267 });
+    expect(board.card().hasAttribute("data-card-cropping")).toBe(false);
+    expect(board.card().querySelector(".canvas-crop, .canvas-crop-bar")).toBeNull();
+    // La scheda mostra la zona.
+    expect(lastMount(board).parts).toEqual({ kind: "image", rect: [0, 0, 0.5, 1], rotate: 90, extra: {} });
+    expect(board.engine.undo()).toBe(true);
+    expect(board.image()).toEqual(before);
+    // Ciò che cambia è solo la lavagna: nessuna porta che tocca file si è mossa.
+    expect(board.writes.trash).not.toHaveBeenCalled();
+    expect(board.writes.replace).not.toHaveBeenCalled();
+    expect(board.changes.every((change) => readCanvas(change.text).nodes.some((one) => one.id === "f"))).toBe(true);
+    board.engine.destroy();
+  });
+
+  it("Invio scrive come «Fatto»; un clic fuori dal ritaglio lo applica", () => {
+    const board = cropBoard();
+    board.pick();
+    board.crop().run();
+    board.key(board.box(), "ArrowUp", { altKey: true, shiftKey: true });
+    board.key(board.box(), "Enter");
+    expect(board.image()["fub:parts"]).toEqual({ kind: "image", rect: [0, 0, 1, 0.9] });
+    expect(board.changes).toHaveLength(1);
+
+    board.pick();
+    board.crop().run();
+    // Riaperto, la zona è quella scritta.
+    board.key(board.box(), "ArrowUp", { altKey: true, shiftKey: true });
+    board.host.querySelector(".canvas-viewport")!.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, button: 0, pointerId: 4, clientX: 900, clientY: 900 }));
+    expect(board.image()["fub:parts"]).toEqual({ kind: "image", rect: [0, 0, 1, 0.8] });
+    expect(board.changes).toHaveLength(2);
+    expect(board.host.querySelector(".canvas-crop")).toBeNull();
+    board.engine.destroy();
+  });
+
+  it("Esc lascia com'era: niente commit, la scheda torna alla sua zona e alla sua altezza", () => {
+    const board = cropBoard({ "fub:parts": { kind: "image", rect: [0.25, 0, 0.5, 1] }, height: 600 });
+    const before = board.image();
+    board.pick();
+    board.crop().run();
+    // Intanto la scheda mostra l'immagine intera (400 × 300) alla sua larghezza.
+    expect(board.card().style.height).toBe("300px");
+    board.barButton("rotate-left").click();
+    expect(board.card().style.height).toBe("533px");
+    board.key(board.box(), "ArrowRight");
+    board.key(board.box(), "Escape");
+    expect(board.changes).toHaveLength(0);
+    expect(board.image()).toEqual(before);
+    expect(board.card().style.height).toBe("600px");
+    expect(board.card().querySelector(".canvas-crop")).toBeNull();
+    expect(lastMount(board).parts).toEqual({ kind: "image", rect: [0.25, 0, 0.5, 1], rotate: null, extra: {} });
+    // Esc sulla lavagna, col fuoco fuori dal ritaglio, fa lo stesso.
+    board.crop().run();
+    board.key(board.host.querySelector(".canvas-viewport")!, "Escape");
+    expect(board.host.querySelector(".canvas-crop")).toBeNull();
+    expect(board.changes).toHaveLength(0);
+    board.engine.destroy();
+  });
+
+  it("«Togli il ritaglio» torna all'immagine intera in un commit, e la scheda tiene il resto", () => {
+    const board = cropBoard({ "fub:parts": { kind: "image", rect: [0.25, 0, 0.5, 1], rotate: 90, "x-mio": 1 }, height: 600, color: "4" });
+    board.pick();
+    board.crop().run();
+    board.barButton("remove").click();
+    expect(board.changes).toHaveLength(1);
+    const after = board.image();
+    expect(after["fub:parts"]).toBeUndefined();
+    expect(after).toMatchObject({ width: 400, height: 300, color: "4" });
+    expect(lastMount(board).parts).toBeNull();
+    expect(board.engine.undo()).toBe(true);
+    expect(board.image()["fub:parts"]).toEqual({ kind: "image", rect: [0.25, 0, 0.5, 1], rotate: 90, "x-mio": 1 });
+    board.engine.destroy();
+  });
+
+  it("i campi sconosciuti di una zona valida restano quando la si cambia", () => {
+    const board = cropBoard({ "fub:parts": { kind: "image", rect: [0, 0, 0.5, 1], "x-mio": { a: 1 } } });
+    board.pick();
+    board.crop().run();
+    board.key(board.box(), "ArrowRight", { shiftKey: true });
+    board.key(board.box(), "Enter");
+    expect(board.image()["fub:parts"]).toEqual({ kind: "image", rect: [0.1, 0, 0.5, 1], "x-mio": { a: 1 } });
+    board.engine.destroy();
+  });
+
+  it("con l'inchiostro sulla scheda il piede dice che il tratto resta attaccato, e il tratto non si tocca", () => {
+    const board = cropBoard({ "fub:ink": { v: 1, strokes: [CROP_INK] } });
+    board.pick();
+    board.crop().run();
+    expect(board.card().querySelector(".canvas-crop-note")?.textContent).toBe(t("canvas.crop.ink"));
+    board.key(board.box(), "ArrowLeft", { altKey: true, shiftKey: true });
+    board.barButton("done").click();
+    expect(board.image()["fub:ink"]).toEqual({ v: 1, strokes: [CROP_INK] });
+    board.engine.destroy();
+  });
+
+  it("si chiude da sé, senza scrivere, se la lavagna diventa di sola lettura o la scheda sparisce", () => {
+    const board = cropBoard();
+    board.pick();
+    board.crop().run();
+    board.engine.setReadOnly(true);
+    expect(board.host.querySelector(".canvas-crop")).toBeNull();
+    expect(board.changes).toHaveLength(0);
+    board.engine.setReadOnly(false);
+    board.pick();
+    board.crop().run();
+    expect(board.host.querySelector(".canvas-crop")).not.toBeNull();
+    board.engine.setDoc(JSON.stringify({ nodes: [{ id: "t", type: "text", x: 600, y: 0, width: 200, height: 100, text: "accanto" }], edges: [] }));
+    expect(board.host.querySelector(".canvas-crop, .canvas-crop-bar")).toBeNull();
+    board.engine.destroy();
+  });
+
+  it("un'immagine che non si legge non si ritaglia", () => {
+    const board = cropBoard();
+    board.card().querySelector<HTMLElement>(".canvas-card-image")!.dataset.cardState = "unreadable";
+    board.pick();
+    expect(board.crop().disabled()).toBe(t("canvas.crop.why.unreadable"));
+    board.engine.destroy();
+  });
+});

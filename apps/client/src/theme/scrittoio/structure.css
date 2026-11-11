@@ -4104,6 +4104,129 @@ body {
   display: none;
 }
 
+/* La scheda d'immagine (T5, l'impianto del prototipo T26): l'immagine intera
+   nella scheda, con le sue proporzioni. */
+.canvas-card-image {
+  position: relative;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+.canvas-card-picture {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+/* La zona di un'immagine (T78). Un raster la mostra già tagliata nel suo
+   <canvas>; un SVG resta un <img> vivo, mostrato a pezzi: il riquadro ha le
+   proporzioni della zona ruotata (la più grande che entra nella scheda),
+   la cornice dentro è la zona dritta, ruotata al centro, e l'immagine intera
+   vi si sposta. Le misure arrivano in linea come variabili. */
+.canvas-card-image[data-card-crop] {
+  container-type: size;
+}
+.canvas-card-zone {
+  position: relative;
+  flex: none;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  container-type: size;
+}
+.canvas-card-zone[data-ratio] {
+  width: min(100cqw, 100cqh * var(--zone-ratio, 1));
+  height: min(100cqh, 100cqw / var(--zone-ratio, 1));
+}
+.canvas-card-zone-frame {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 100cqw;
+  height: 100cqh;
+  transform: translate(-50%, -50%);
+}
+.canvas-card-zone[data-turn="90"] > .canvas-card-zone-frame { width: 100cqh; height: 100cqw; transform: translate(-50%, -50%) rotate(90deg); }
+.canvas-card-zone[data-turn="180"] > .canvas-card-zone-frame { transform: translate(-50%, -50%) rotate(180deg); }
+.canvas-card-zone[data-turn="270"] > .canvas-card-zone-frame { width: 100cqh; height: 100cqw; transform: translate(-50%, -50%) rotate(270deg); }
+.canvas-card-zone-frame > .canvas-card-picture {
+  position: absolute;
+  top: calc(-100% * var(--zone-y, 0) / var(--zone-h, 1));
+  left: calc(-100% * var(--zone-x, 0) / var(--zone-w, 1));
+  width: calc(100% / var(--zone-w, 1));
+  max-width: none;
+  height: calc(100% / var(--zone-h, 1));
+  object-fit: fill;
+}
+
+/* Il ritaglio di un'immagine (T78): sopra il contenuto della scheda
+   l'immagine intera, ruotata, la zona con le maniglie e, sotto la scheda,
+   la barra. Il corpo della scheda tiene il ritaglio; la sua immagine resta
+   sotto, nascosta. Dove sta il ritaglio dentro il corpo (il margine) e dove
+   stanno immagine e zona lo scrive crop.ts in linea. */
+.canvas-node[data-card-cropping] > .canvas-card-body {
+  position: relative;
+  overflow: visible;
+}
+.canvas-node[data-card-cropping] .canvas-card-image {
+  visibility: hidden;
+}
+.canvas-crop {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  overflow: hidden;
+  touch-action: none;
+  pointer-events: auto;
+}
+.canvas-crop-picture {
+  position: absolute;
+  display: block;
+}
+.canvas-crop-box {
+  position: absolute;
+  box-sizing: border-box;
+  cursor: move;
+}
+.canvas-crop-handle {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  box-sizing: border-box;
+  translate: -50% -50%;
+}
+.canvas-crop-handle[data-corner="nw"] { top: 0; left: 0; cursor: nwse-resize; }
+.canvas-crop-handle[data-corner="ne"] { top: 0; left: 100%; cursor: nesw-resize; }
+.canvas-crop-handle[data-corner="sw"] { top: 100%; left: 0; cursor: nesw-resize; }
+.canvas-crop-handle[data-corner="se"] { top: 100%; left: 100%; cursor: nwse-resize; }
+.canvas-crop-bar {
+  position: absolute;
+  top: calc(100% + 12px);
+  left: 50%;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2, 4px);
+  padding: var(--space-2, 4px);
+  white-space: nowrap;
+  transform: translateX(-50%);
+  pointer-events: auto;
+}
+.canvas-crop-note {
+  position: absolute;
+  top: calc(100% + 56px);
+  left: 50%;
+  width: max-content;
+  max-width: 320px;
+  margin: 0;
+  transform: translateX(-50%);
+}
+
 .base-surface {
   display: flex;
   flex-direction: column;

@@ -163,6 +163,9 @@ export const CANVAS_COMMANDS: readonly CanvasCommandSpec[] = [
   // «Parti…» (T74): il selettore delle sezioni di una scheda di nota, da
   // riaprire quando si vuole; si apre da sé al rilascio.
   { id: "canvas.parts", label: "canvas.parts", group: "selection", keys: [], context: "selection" },
+  // «Ritaglia e ruota» (T78): la zona di una scheda d'immagine, scritta in
+  // `fub:parts`; il file dell'immagine non si tocca.
+  { id: "canvas.crop", label: "canvas.crop", group: "selection", keys: [], context: "selection" },
   // Convertire (T70): il testo di una scheda in una nota nuova, il testo di
   // una nota in una scheda accanto, un altro file al posto di quello di una
   // scheda. La scheda convertita tiene id, posto, fili e inchiostro.
