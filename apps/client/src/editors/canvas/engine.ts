@@ -323,6 +323,14 @@ interface CardEditor {
   composing: boolean;
   /** Invio in una scheda di testo: l'a capo che arriva si registra subito. */
   recordOnInput: boolean;
+  /**
+   * La scheda è nata adesso per essere scritta (lo strumento Testo,
+   * Ctrl+Invio): il passo d'annulla che l'ha messa. Lasciata vuota se ne va
+   * con lui (T44). `null` per una scheda che c'era già.
+   */
+  readonly born: CanvasStep | null;
+  /** La misura a cui la scheda di testo è cresciuta mentre ci si scrive (T44); `null` finché non cresce. */
+  grown: { readonly width: number; readonly height: number } | null;
 }
 
 /**
@@ -458,6 +466,8 @@ interface PendingText {
   card: CanvasNode;
   readonly field: CardField;
   text: string;
+  /** La misura a cui la scheda di testo è cresciuta col testo (T44): va nello stesso commit. */
+  size?: { readonly width: number; readonly height: number };
 }
 
 /**
@@ -818,8 +828,21 @@ export const RESIZE_ONE_HANDLE_PX = 24;
  */
 export const RESIZE_FINGER_GRIP_PX = 22;
 
-/** La larghezza più grande che il doppio clic su una maniglia dà a una scheda di testo (T44). */
+/**
+ * La larghezza più grande che una scheda di testo prende da sé: col doppio
+ * clic su una maniglia (T66) e mentre ci si scrive (T44). Oltre, il testo va a
+ * capo e la scheda cresce in altezza.
+ */
 export const CANVAS_TEXT_FIT_MAX_WIDTH = 480;
+
+/** L'altezza di nascita di una scheda di testo, come la mette lo strumento Testo. */
+const TEXT_CARD_HEIGHT = 160;
+
+/** Lo spazio fra una scheda e quella che Ctrl+Invio (sotto) o Ctrl+Maiusc+Invio (a destra) le apre accanto (T44). */
+export const NEXT_CARD_GAP = 24;
+
+/** Quante volte la scheda di Ctrl+Invio scende cercando un posto libero, prima di cadere sopra un'altra (T44). */
+export const NEXT_CARD_TRIES = 20;
 
 /** Un rettangolo nella lavagna. */
 export interface ResizeBox {
@@ -978,6 +1001,93 @@ function measureText(article: HTMLElement, body: HTMLElement): { width: number; 
     article.style.width = width;
     article.style.height = height;
   }
+}
+
+/**
+ * La misura che vuole la scheda di testo `article` mentre ci si scrive in
+ * `place` (il campo semplice, o il contenitore dell'editor delle note, T44):
+ * la larghezza del testo senza andare a capo, fino a
+ * `CANVAS_TEXT_FIT_MAX_WIDTH` (se `keepWidth`, quella di adesso), e l'altezza
+ * che allora gli serve. Mai più piccola della misura di adesso; agganciata per
+ * eccesso a `CANVAS_SNAP` solo dove cresce. Misura sullo stile della scheda e
+ * lo rimette com'era. `null` senza impaginazione.
+ */
+function measureWriting(article: HTMLElement, place: HTMLElement, keepWidth: boolean): { width: number; height: number } | null {
+  const current = { width: article.offsetWidth, height: article.offsetHeight };
+  if (current.width <= 0 || current.height <= 0) return null;
+  const { width, height } = article.style;
+  try {
+    let wanted = current.width;
+    if (!keepWidth && current.width < CANVAS_TEXT_FIT_MAX_WIDTH) {
+      const natural = naturalWritingWidth(article, place);
+      if (natural > current.width) wanted = Math.min(CANVAS_TEXT_FIT_MAX_WIDTH, snapUp(natural));
+      article.style.width = `${wanted}px`;
+    }
+    // L'altezza alla larghezza nuova: quanto il testo esce da ciò che scorre.
+    const overflow = writingOverflow(place);
+    return { width: wanted, height: overflow > 0 ? snapUp(current.height + overflow) : current.height };
+  } finally {
+    article.style.width = width;
+    article.style.height = height;
+  }
+}
+
+/**
+ * La larghezza che la scheda vorrebbe perché il testo che si scrive in
+ * `place` stia senza andare a capo. Il campo semplice non ha una misura sua:
+ * lo si mette per un attimo su righe che non vanno a capo, e conta quanto
+ * esce. L'editor delle note sì: la scheda larga quanto il suo contenuto
+ * (`max-content`), come il doppio clic su una maniglia.
+ */
+function naturalWritingWidth(article: HTMLElement, place: HTMLElement): number {
+  if (place instanceof HTMLTextAreaElement || place instanceof HTMLInputElement) {
+    const wrap = place.style.whiteSpace;
+    place.style.whiteSpace = "pre";
+    try {
+      const out = place.scrollWidth - place.clientWidth;
+      // Un pixel in più: `scrollWidth` è arrotondato all'intero.
+      return out > 0 ? article.offsetWidth + out + 1 : 0;
+    } finally {
+      place.style.whiteSpace = wrap;
+    }
+  }
+  article.style.width = "max-content";
+  // Coi decimali: `offsetWidth` arrotonda, e un testo largo 320,3 px a 320 andrebbe a capo.
+  return Math.max(article.offsetWidth, parseFloat(getComputedStyle(article).width) || 0);
+}
+
+/**
+ * Quanto il testo che si scrive in `place` esce in basso da ciò che lo fa
+ * scorrere: il campo semplice stesso, o gli elementi dell'editor delle note
+ * dal contenuto modificabile fino al contenitore escluso (il contenitore
+ * tiene sotto l'editor anche ciò che non si vede, e non conta).
+ */
+function writingOverflow(place: HTMLElement): number {
+  const start = place.querySelector<HTMLElement>('[contenteditable="true"]') ?? place;
+  let overflow = start === place ? place.scrollHeight - place.clientHeight : 0;
+  for (let el: HTMLElement | null = start; el && el !== place; el = el.parentElement) {
+    overflow = Math.max(overflow, el.scrollHeight - el.clientHeight);
+  }
+  return overflow;
+}
+
+/**
+ * Il primo posto libero per una scheda `box` nuova: se cadrebbe sopra
+ * un'altra scheda (i gruppi no: ci stanno sotto), scende sotto di lei, a
+ * `NEXT_CARD_GAP`, al più `NEXT_CARD_TRIES` volte; poi resta dove doveva
+ * nascere, sopra l'altra (T44).
+ */
+function freeSpot(nodes: readonly CanvasNode[], box: ResizeBox): ResizeBox {
+  let y = box.y;
+  for (let tries = 0; tries < NEXT_CARD_TRIES; tries++) {
+    const at = { ...box, y };
+    const blocker = nodes.find((node) => node.type !== "group"
+      && node.x < at.x + at.width && at.x < node.x + node.width
+      && node.y < at.y + at.height && at.y < node.y + node.height);
+    if (!blocker) return at;
+    y = blocker.y + blocker.height + NEXT_CARD_GAP;
+  }
+  return box;
 }
 
 /** La misura del contenuto disegnato nel corpo: l'immagine, o la pagina del PDF. `null` se non c'è ancora. */
@@ -1264,6 +1374,12 @@ export class CanvasEngine {
   /** Le trappole di fila senza un commit riuscito in mezzo. */
   #traps = 0;
   #editor: CardEditor | null = null;
+  /**
+   * Le schede ridimensionate a mano da quando la lavagna è aperta: scrivendoci
+   * non crescono più in larghezza, perché la misura l'ha scelta chi usa (T44).
+   * Il `.canvas` non lo dice: riaprendo la lavagna si ricomincia.
+   */
+  readonly #sizedByHand = new Set<string>();
   /** La ricerca dei comandi aperta (Ctrl+/, T48): finché c'è, il campo di una scheda non si chiude perdendo il fuoco. */
   #commandSearch: CommandSearchHandle | null = null;
   /** Vero dall'apertura della ricerca alla sua chiusura, anche mentre si apre e prende il fuoco. */
@@ -1920,8 +2036,11 @@ export class CanvasEngine {
     // Con una penna giù annulla e ripeti non fanno niente (A5).
     if (this.#penDown) return false;
     const editing = this.#editor !== null;
+    const born = this.#editor?.born ? this.#editor.id : null;
     if (!this.#closeField(false)) return false;
     if (editing) this.#render();
+    // La scheda nuova lasciata vuota se n'è andata chiudendo: era lei da annullare (T44).
+    if (born !== null && !this.#doc?.nodes.some((node) => node.id === born)) return true;
     const step = this.#undo.pop();
     if (!step || !this.#doc) return false;
     if (this.#replay(step, "undo", (again) => this.#redo.push(again)) !== true) {
@@ -2228,14 +2347,16 @@ export class CanvasEngine {
     const pending = this.#pending;
     if (!pending) return true;
     if (!this.#doc || this.#readOnly || this.#destroyed) return false;
+    // La misura del testo com'è adesso: l'ultimo tasto può non averla ancora data (T44).
+    const editor = this.#editor;
+    if (editor && editor.id === pending.card.id && !editor.composing) this.#growWriting(editor);
     let code = "rejected" as true | CanvasCoreErrorCode;
     for (let attempt = 0; attempt < 2 && code !== true; attempt++) {
       const doc: CanvasDocument = this.#doc;
       // La scheda com'è adesso; se non c'è più, com'era, col testo del campo.
       const current = doc.nodes.find((node) => node.id === pending.card.id);
       if (current) pending.card = current;
-      const next = { ...pending.card };
-      next[pending.field] = pending.text;
+      const next = withPending(pending.card, pending);
       const patch = upsertNodePatch(doc, next);
       if (!patch) {
         this.#setPending(null);
@@ -2280,14 +2401,54 @@ export class CanvasEngine {
     // porta non l'avesse legato a quella vita.
     editor.live?.destroy();
     editor.live = null;
+    // La scheda nuova lasciata vuota se ne va (T44).
+    if (editor.born && recorded) this.#dropBlankBorn(editor.id, editor.born);
     return true;
   }
 
-  /** Esc, Invio, l'uscita dal campo: registra e chiude. */
-  #leaveField(focus: boolean): void {
+  /**
+   * Esc, Invio, l'uscita dal campo: registra e chiude. Con `choose` (Esc) la
+   * scheda resta scelta: un secondo Esc toglie la scelta (T44).
+   */
+  #leaveField(focus: boolean, choose = false): void {
+    const id = this.#editor?.id;
     if (!this.#closeField(false)) return;
+    if (choose && id !== undefined && this.#doc?.nodes.some((node) => node.id === id)
+      && (this.#selection.length !== 1 || this.#selection[0] !== id || this.#edgeSelection.length > 0)) {
+      this.#selection = [id];
+      this.#edgeSelection = [];
+      this.#options.onSelectionChange();
+    }
     this.#render();
     if (focus) this.#viewport.focus();
+  }
+
+  /**
+   * La scheda `id`, nata adesso col passo `born`, se è rimasta senza testo se
+   * ne va senza lasciare un passo d'annulla («Ho creato schede vuote per
+   * sbaglio», T44): si disfano la nascita e ciò che dopo ha toccato solo lei
+   * (il testo scritto e poi cancellato), e il testo torna ai byte di prima. Se
+   * nel frattempo un altro passo ha cambiato altro, la si toglie come
+   * «Togli dalla lavagna», col suo passo. Una scheda che c'era già non passa
+   * di qui: resta anche vuota.
+   */
+  #dropBlankBorn(id: string, born: CanvasStep): void {
+    const node = this.#doc?.nodes.find((one) => one.id === id);
+    if (!node || node.type !== "text" || (node.text ?? "").trim() !== "") return;
+    const at = this.#undo.lastIndexOf(born);
+    const after = at < 0 ? [] : this.#undo.slice(at + 1);
+    if (at < 0 || !after.every((step) => step.back.every((patch) => patch.kind === "upsert-node" && patch.after.id === id))) {
+      this.#removeNodes([id], []);
+      return;
+    }
+    while (this.#undo.length > at) {
+      const step = this.#undo.pop()!;
+      if (this.#replay(step, "undo", () => {}) !== true) {
+        // Il nucleo non lo prende (sola lettura, una trappola): la scheda resta.
+        this.#undo.push(step);
+        return;
+      }
+    }
   }
 
   #setPending(next: PendingText | null): void {
@@ -2311,8 +2472,7 @@ export class CanvasEngine {
     let doc: CanvasDocument = this.#doc;
     for (let attempt = 0; attempt < 2; attempt++) {
       const current = doc.nodes.find((node) => node.id === pending.card.id);
-      const next = { ...(current ?? pending.card) };
-      next[pending.field] = pending.text;
+      const next = withPending(current ?? pending.card, pending);
       const patch = upsertNodePatch(doc, next);
       // Il campo dice ciò che la lavagna ha già.
       if (!patch) return this.#source;
@@ -6019,9 +6179,11 @@ export class CanvasEngine {
     const at = clientX === undefined || clientY === undefined ? undefined : this.#screenToWorld(clientX, clientY);
     const placed = this.#addNode("text", undefined, at, link);
     if (!placed) return;
+    // Il passo che l'ha messa: lasciata vuota, se ne va con lui (T44).
+    const born = this.#undo[this.#undo.length - 1] ?? null;
     this.#pickTool("select");
     this.#render();
-    this.#beginCardEdit(placed);
+    this.#beginCardEdit(placed, born);
   }
 
   /** La lavagna vuota (T62): le righe e i pulsanti, se la lavagna è vuota e si può scrivere. */
@@ -6447,6 +6609,8 @@ export class CanvasEngine {
       const entry = this.#cards.get(id);
       if (!node || !entry) continue;
       const size = this.#contentSize(entry, node);
+      // La misura del contenuto è di nuovo quella che la scheda prende da sé (T44).
+      if (size) this.#sizedByHand.delete(id);
       if (!size || (size.width === node.width && size.height === node.height)) continue;
       node.width = size.width;
       node.height = size.height;
@@ -6621,6 +6785,8 @@ export class CanvasEngine {
       this.#resize = null;
       this.#hideGuides();
       this.#handleTap = resize.moved ? null : [...resize.origin.keys()];
+      // La misura l'ha scelta chi usa: scrivendo la scheda non si allarga più (T44).
+      if (resize.moved) for (const id of resize.origin.keys()) this.#sizedByHand.add(id);
       this.#commitFromSource("input");
       return;
     }
@@ -7859,6 +8025,13 @@ export class CanvasEngine {
       }
       index++;
       this.#refreshCard(entry, node, entry !== kept);
+      // La scheda che si scrive tiene la misura a cui è cresciuta, anche
+      // prima che il suo commit arrivi (T44).
+      const grown = entry === kept ? editor?.grown : null;
+      if (grown) {
+        entry.article.style.width = `${Math.max(node.width, grown.width)}px`;
+        entry.article.style.height = `${Math.max(node.height, grown.height)}px`;
+      }
       this.#resizeView(entry);
     }
   }
@@ -8322,7 +8495,12 @@ export class CanvasEngine {
     }
   }
 
-  #beginCardEdit(target: CanvasNode): void {
+  /**
+   * Apre il campo della scheda `target`. `born` è il passo che l'ha appena
+   * messa per scriverci (lo strumento Testo, Ctrl+Invio): lasciata vuota, se
+   * ne va con lui (T44).
+   */
+  #beginCardEdit(target: CanvasNode, born: CanvasStep | null = null): void {
     if (this.#readOnly || !this.#doc) return;
     const node = this.#doc.nodes.find((candidate) => candidate.id === target.id);
     if (!node) return;
@@ -8346,7 +8524,10 @@ export class CanvasEngine {
     input.value = node[field] ?? "";
     input.setAttribute("aria-label", t("canvas.edit_text", { id: node.id }));
     const lifetime = new AbortController();
-    const editor: CardEditor = { id: node.id, field, input, place: input, live: null, article, lifetime, composing: false, recordOnInput: false };
+    const editor: CardEditor = {
+      id: node.id, field, input, place: input, live: null, article, lifetime, composing: false, recordOnInput: false,
+      born, grown: null,
+    };
     this.#editor = editor;
     // Mentre si scrive nella scheda la barra della selezione non c'è (T51).
     this.#syncSelectionBar();
@@ -8372,7 +8553,7 @@ export class CanvasEngine {
         this.#openCommandSearch();
       } else if (event.key === "Escape") {
         event.preventDefault();
-        this.#leaveField(true);
+        this.#leaveField(true, true);
       } else if (event.key === "Enter") {
         if (field === "text" && !event.ctrlKey && !event.metaKey) {
           // L'a capo entra nel campo, e con lui il testo si registra.
@@ -8380,7 +8561,9 @@ export class CanvasEngine {
           return;
         }
         event.preventDefault();
-        this.#leaveField(true);
+        // Ctrl+Invio in una scheda di testo apre la scheda dopo (T44); negli altri campi chiude (A15).
+        if (field === "text") this.#writeNext(event.shiftKey);
+        else this.#leaveField(true);
       }
     }, { signal });
     // Il fuoco che va nella ricerca dei comandi non chiude il campo: ci torna.
@@ -8403,7 +8586,10 @@ export class CanvasEngine {
   #fieldText(editor: CardEditor, node: CanvasNode, text: string): void {
     if (this.#editor !== editor) return;
     const card = this.#doc?.nodes.find((candidate) => candidate.id === node.id) ?? this.#pending?.card ?? node;
-    this.#setPending({ card, field: editor.field, text });
+    // La scheda di testo cresce col testo (T44); durante una composizione no:
+    // la misura arriva con la sua fine.
+    if (!editor.composing) this.#growWriting(editor, card);
+    this.#setPending({ card, field: editor.field, text, ...(editor.grown ? { size: editor.grown } : {}) });
     if (editor.composing) return;
     if (editor.recordOnInput) {
       editor.recordOnInput = false;
@@ -8411,6 +8597,87 @@ export class CanvasEngine {
       return;
     }
     this.#schedulePause();
+  }
+
+  /**
+   * La scheda di testo che si scrive cresce col testo (T44): in larghezza
+   * fino a `CANVAS_TEXT_FIT_MAX_WIDTH`, se nessuno l'ha ridimensionata a mano,
+   * poi va a capo e cresce in altezza; da sola non si restringe mai. La misura
+   * si vede subito, sta in `editor.grown` e nel testo in sospeso, e arriva al
+   * `.canvas` col commit del testo.
+   */
+  #growWriting(editor: CardEditor, card?: CanvasNode): void {
+    if (editor.field !== "text") return;
+    const node = card ?? this.#doc?.nodes.find((candidate) => candidate.id === editor.id) ?? this.#pending?.card;
+    if (!node || node.type !== "text") return;
+    const measured = measureWriting(editor.article, editor.place, this.#sizedByHand.has(node.id));
+    if (!measured) return;
+    const before = editor.grown ?? node;
+    const width = Math.max(before.width, node.width, measured.width);
+    const height = Math.max(before.height, node.height, measured.height);
+    if (editor.grown?.width === width && editor.grown.height === height) return;
+    if (!editor.grown && width === node.width && height === node.height) return;
+    editor.grown = { width, height };
+    editor.article.style.width = `${width}px`;
+    editor.article.style.height = `${height}px`;
+    const pending = this.#pending;
+    if (pending && pending.card.id === editor.id) pending.size = editor.grown;
+  }
+
+  /**
+   * Ctrl+Invio in una scheda di testo (T44, allarga A15): registra, chiude e
+   * apre una scheda di testo nuova, già in scrittura, larga come questa, a
+   * `NEXT_CARD_GAP` sotto; con `beside` (Ctrl+Maiusc+Invio) a destra,
+   * collegata con un filo. In una scheda nuova ancora vuota non fa niente:
+   * è già la scheda nuova.
+   */
+  #writeNext(beside: boolean): void {
+    const editor = this.#editor;
+    if (!editor || this.#readOnly || !this.#doc) return;
+    const id = editor.id;
+    if (editor.born) {
+      const text = this.#pending?.card.id === id ? this.#pending.text : this.#doc.nodes.find((node) => node.id === id)?.text;
+      if ((text ?? "").trim() === "") return;
+    }
+    if (!this.#closeField(false)) return;
+    this.#render();
+    const source = this.#doc?.nodes.find((node) => node.id === id);
+    const placed = source ? this.#addTextNext(source, beside) : null;
+    if (!placed) {
+      this.#viewport.focus();
+      return;
+    }
+    this.#render();
+    this.#beginCardEdit(placed, this.#undo[this.#undo.length - 1] ?? null);
+  }
+
+  /**
+   * La scheda di testo vuota accanto a `source` (sotto, o a destra con
+   * `beside` e un filo da lei), al primo posto libero; un commit e un passo
+   * d'annulla. Torna la scheda messa, scelta, o `null`.
+   */
+  #addTextNext(source: CanvasNode, beside: boolean): CanvasNode | null {
+    const doc = this.#doc;
+    if (!doc || this.#readOnly) return null;
+    const spot = freeSpot(doc.nodes, beside
+      ? { x: source.x + source.width + NEXT_CARD_GAP, y: source.y, width: source.width, height: TEXT_CARD_HEIGHT }
+      : { x: source.x, y: source.y + source.height + NEXT_CARD_GAP, width: source.width, height: TEXT_CARD_HEIGHT });
+    const node: CanvasNode = { id: newNodeId("n"), type: "text", ...spot, text: "" };
+    const patches: CanvasPatch[] = [];
+    const patch = upsertNodePatch(doc, node);
+    if (!patch) return null;
+    patches.push(patch);
+    if (beside) {
+      const edge = upsertEdgePatch(doc, {
+        id: newNodeId("e"), fromNode: source.id, toNode: node.id, fromSide: "right", toSide: "left", ...this.#tipEnds(),
+      });
+      if (edge) patches.push(edge);
+    }
+    if (!this.#commit(patches, "input")) return null;
+    this.#selection = [node.id];
+    this.#edgeSelection = [];
+    this.#options.onSelectionChange();
+    return node;
   }
 
   #fieldComposing(editor: CardEditor): void {
@@ -8523,10 +8790,10 @@ export class CanvasEngine {
         event.stopPropagation();
         this.#openCommandSearch();
       } else if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
-        // Prima dell'editor, che non deve farne un a capo.
+        // Prima dell'editor, che non deve farne un a capo: la scheda dopo (T44).
         event.preventDefault();
         event.stopPropagation();
-        this.#leaveField(true);
+        this.#writeNext(event.shiftKey);
       } else if (event.key === "Enter") {
         // L'a capo che l'editor scrive si registra subito, come nel campo.
         editor.recordOnInput = true;
@@ -8538,7 +8805,7 @@ export class CanvasEngine {
       if (!(event instanceof KeyboardEvent) || event.isComposing || editor.composing) return;
       if (event.key === "Escape" && !escapeForEditor) {
         event.preventDefault();
-        this.#leaveField(true);
+        this.#leaveField(true, true);
       }
     }, { signal });
     host.addEventListener("compositionstart", () => this.#fieldComposing(editor), { signal });
@@ -8558,6 +8825,20 @@ export class CanvasEngine {
     host.hidden = false;
     if (focused) live.focus(caret);
   }
+}
+
+/**
+ * La scheda `card` col testo in sospeso dentro, e la misura a cui è cresciuta
+ * scrivendo (T44): mai più piccola di com'è adesso.
+ */
+function withPending(card: CanvasNode, pending: PendingText): CanvasNode {
+  const next = { ...card };
+  next[pending.field] = pending.text;
+  if (pending.size) {
+    next.width = Math.max(next.width, pending.size.width);
+    next.height = Math.max(next.height, pending.size.height);
+  }
+  return next;
 }
 
 /** Una copia delle toppe, che chi le ha date può ancora cambiare. */

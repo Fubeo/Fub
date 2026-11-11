@@ -503,8 +503,8 @@ Il testo sta nel `.canvas`: `openText(host, testo, { onText, readOnly,
 lifetime, documentId, forms })` monta l'editor delle note in Live, senza
 sessione, con un nome nella cartella della lavagna per i link relativi. Ogni
 battuta va a `onText`, poi nel testo in sospeso della tela (commit dopo 250 ms,
-bozza intanto); Esc (se non chiude suggerimenti) e Ctrl+Invio registrano e
-chiudono. Un testo che l'editor non terrebbe byte per byte, o `null`, lasciano il campo semplice.
+bozza intanto), con la misura della scheda cresciuta scrivendo ([crescita e tasti](canvas-input.md#scrivere-in-una-scheda-di-testo)).
+Un testo che l'editor non terrebbe byte per byte, o `null`, lasciano il campo semplice.
 
 ### Scrivere in una scheda di foglio
 

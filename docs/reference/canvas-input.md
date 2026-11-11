@@ -136,6 +136,19 @@ tela chiede alla vista `edit()` prima di `enter()`; la nota
   il testo e salva (`leave()`), poi si smonta e la nota rifà la resa col
   testo nuovo. Con Esc la scheda resta scelta, col fuoco.
 
+## Scrivere in una scheda di testo
+
+- **Cresce**, nel Live e nel campo semplice: si allarga col testo fino a 480
+  px, poi va a capo e cresce in altezza (griglia di 8 px); non si restringe da
+  sola. Ridimensionata a mano da quando la lavagna è aperta, solo in altezza.
+- **Esc** (se non chiude dei suggerimenti) registra e chiude, e la scheda resta
+  scelta; un secondo Esc toglie la scelta.
+- **Ctrl+Invio** registra, chiude e apre in scrittura una scheda di testo larga
+  uguale 24 px sotto (**Ctrl+Maiusc+Invio**: a destra, con un filo); su un'altra
+  scheda, gruppi esclusi, scende sotto di lei al più 20 volte, poi resta sopra.
+- **Una scheda nuova lasciata vuota** (dal Testo, da Ctrl+Invio) se ne va
+  uscendo, coi suoi passi d'annulla; una che c'era già resta.
+
 ## La rotella
 
 Fuori da una scheda attiva la rotella fa ciò che dice «La rotella del mouse»
