@@ -1,0 +1,869 @@
+<title>Vista differenze di Fub</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&display=swap">
+
+<style>
+/* Prototipo della vista differenze (piano «Rete e sincronizzazione»).
+   Disposizione: una finestra di Fub finta, un riquadro documento; sopra, fuori
+   dalla finestra, la barra del prototipo che cambia stato, luce e larghezza.
+
+   I token sono quelli veri della serie Scrittoio, con i loro nomi: i valori
+   chiari vengono da `theme/scrittoio/sheet-light.css`, gli scuri da
+   `sheet-dark.css`. Nessun colore inventato. */
+
+/* da sheet-light.css */
+:root {
+  --space-1: 2px; --space-2: 4px; --space-3: 6px; --space-4: 8px; --space-5: 12px;
+  --space-6: 16px; --space-7: 20px; --space-8: 24px; --space-9: 32px;
+  --control-h: 32px;
+  --radius-chip: 6px; --radius-control: 8px; --radius-menu: 10px; --radius-sheet: 12px;
+  --radius-pill: 999px;
+  --font-ui: "Hanken Grotesk", "Hanken Grotesk Variable", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-reading: "Newsreader", "Newsreader Variable", Georgia, "Times New Roman", serif;
+  --text-xs: 11px; --text-sm: 12px; --text-base: 13px; --text-md: 14px; --text-lg: 15px;
+  --text-xl: 16px; --text-2xl: 19px; --text-reading: 17px;
+  --weight-regular: 400; --weight-medium: 500; --weight-bold: 600;
+  --leading-tight: 1.3; --leading-normal: 1.45; --leading-relaxed: 1.65;
+  --content-width: 68ch;
+  --tracking-caps: 0.06em;
+  --duration-state: 90ms; --duration-fast: 140ms;
+  --ease: cubic-bezier(0.25, 0.1, 0.25, 1);
+  --focus-ring-width: 2px; --focus-ring-offset: 2px;
+
+  --bg: #e7efe9;
+  --bg-chrome: #e7efe9;
+  --bg-hover: #dce6dd;
+  --bg-active: #d0ddd2;
+  --sheet: #fcfefd;
+  --sheet-2: #f3f7f4;
+  --bg-elev: #ffffff;
+  --overlay-hover: rgb(23 34 27 / 5%);
+  --overlay-active: rgb(23 34 27 / 9%);
+  --text: #17221b;
+  --muted: #57625b;
+  --border: #d1dad4;
+  --border-strong: #b0bbb3;
+  --outline: #7e8a82;
+  --accent: #006e46;
+  --accent-soft: #00603c;
+  --accent-contrast: #f9fdfb;
+  --accent-wash: #cceeda;
+  --accent-veil: rgb(0 110 70 / 12%);
+  --focus-ring: #006e46;
+  --danger: #ca131b;
+  --danger-wash: rgb(202 19 27 / 12%);
+  --warning: #905900;
+  --warning-wash: rgb(144 89 0 / 14%);
+  --success-wash: rgb(73 112 10 / 14%);
+  --shadow-2: 0 1px 2px rgb(24 28 44 / 6%), 0 10px 28px rgb(24 28 44 / 10%);
+  --doc-bg: #fcfefd;
+  --doc-fg: #1f2923;
+  --doc-heading: #1f2923;
+  --doc-rule-soft: rgb(23 34 27 / 16%);
+  --doc-gutter-fg: #5b665f;
+  --doc-ins: #007249;
+  --doc-del: #c80c19;
+  --doc-tint-green: #d2f2d7;
+  --doc-tint-red: #ffdfdb;
+  --doc-author-1: #0061c0;
+  --doc-author-2: #b02a2d;
+  --doc-author-3: #00741a;
+  --draw-desk: #edeef1;
+  --paper-ink: #131715;
+}
+/* da sheet-dark.css */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #08110b; --bg-chrome: #08110b; --bg-hover: #0f1a13; --bg-active: #17221b;
+    --sheet: #131c16; --sheet-2: #1b241e; --bg-elev: #1e2923;
+    --overlay-hover: rgb(228 233 230 / 7%); --overlay-active: rgb(228 233 230 / 12%);
+    --text: #e4e9e6; --muted: #9ea7a1; --border: #29332d; --border-strong: #3f4b43; --outline: #6f7a73;
+    --accent: #53c48e; --accent-soft: #75d9a6; --accent-contrast: #021109; --accent-wash: #033d26;
+    --accent-veil: rgb(83 196 142 / 20%); --focus-ring: #53c48e;
+    --danger: #f66d67; --danger-wash: rgb(246 109 103 / 18%);
+    --warning: #eeb154; --warning-wash: rgb(238 177 84 / 20%);
+    --success-wash: rgb(143 187 95 / 20%);
+    --shadow-2: 0 1px 2px rgb(0 0 0 / 28%), 0 10px 28px rgb(0 0 0 / 28%);
+    --doc-bg: #131c16; --doc-fg: #dae0dc; --doc-heading: #dae0dc;
+    --doc-rule-soft: rgb(228 233 230 / 20%); --doc-gutter-fg: #9ea7a1;
+    --doc-ins: #53c48e; --doc-del: #ff7b74; --doc-tint-green: #1c3b23; --doc-tint-red: #53211d;
+    --doc-author-1: #7cb4fc; --doc-author-2: #f4928a; --doc-author-3: #7fc581;
+    --draw-desk: #0d1510; --paper-ink: #e4e9e6;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #08110b; --bg-chrome: #08110b; --bg-hover: #0f1a13; --bg-active: #17221b;
+  --sheet: #131c16; --sheet-2: #1b241e; --bg-elev: #1e2923;
+  --overlay-hover: rgb(228 233 230 / 7%); --overlay-active: rgb(228 233 230 / 12%);
+  --text: #e4e9e6; --muted: #9ea7a1; --border: #29332d; --border-strong: #3f4b43; --outline: #6f7a73;
+  --accent: #53c48e; --accent-soft: #75d9a6; --accent-contrast: #021109; --accent-wash: #033d26;
+  --accent-veil: rgb(83 196 142 / 20%); --focus-ring: #53c48e;
+  --danger: #f66d67; --danger-wash: rgb(246 109 103 / 18%);
+  --warning: #eeb154; --warning-wash: rgb(238 177 84 / 20%);
+  --success-wash: rgb(143 187 95 / 20%);
+  --shadow-2: 0 1px 2px rgb(0 0 0 / 28%), 0 10px 28px rgb(0 0 0 / 28%);
+  --doc-bg: #131c16; --doc-fg: #dae0dc; --doc-heading: #dae0dc;
+  --doc-rule-soft: rgb(228 233 230 / 20%); --doc-gutter-fg: #9ea7a1;
+  --doc-ins: #53c48e; --doc-del: #ff7b74; --doc-tint-green: #1c3b23; --doc-tint-red: #53211d;
+  --doc-author-1: #7cb4fc; --doc-author-2: #f4928a; --doc-author-3: #7fc581;
+  --draw-desk: #0d1510; --paper-ink: #e4e9e6;
+  color-scheme: dark;
+}
+
+/* ── solo prototipo: pagina e barra degli stati (non va in Fub) ─────────── */
+[hidden] { display: none !important; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: var(--text-base);
+}
+.proto-page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+  max-width: 1120px;
+  margin: 0 auto;
+  padding-block: var(--space-6) var(--space-9);
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.proto-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4) var(--space-7);
+  align-items: center;
+  padding: var(--space-4) var(--space-5);
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-control);
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+.proto-bar fieldset {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  border: none;
+  min-width: 0;
+}
+.proto-bar legend {
+  float: left;
+  margin-right: var(--space-3);
+  font-weight: var(--weight-bold);
+  letter-spacing: var(--tracking-caps);
+  text-transform: uppercase;
+  font-size: var(--text-xs);
+}
+.proto-bar .segmented { flex-wrap: wrap; }
+.proto-note {
+  margin: 0;
+  max-width: 72ch;
+  color: var(--muted);
+  font-size: var(--text-sm);
+  line-height: var(--leading-normal);
+}
+.proto-stage { display: flex; justify-content: center; min-width: 0; }
+.proto-stage[data-width="narrow"] .window { max-width: 700px; }
+
+/* La finestra finta: soltanto il minimo di cornice che fa capire dove siamo. */
+.window {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sheet);
+  background: var(--bg-chrome);
+  box-shadow: var(--shadow-2);
+}
+.window-tabs {
+  display: flex;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-5) 0;
+  font-size: var(--text-sm);
+}
+.window-tab {
+  padding: var(--space-3) var(--space-5);
+  border-radius: var(--radius-control) var(--radius-control) 0 0;
+  color: var(--muted);
+}
+.window-tab[aria-selected="true"] { background: var(--sheet); color: var(--text); font-weight: var(--weight-medium); }
+.pane-editor {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  background: var(--sheet);
+  padding-block: var(--space-5) var(--space-8);
+}
+
+/* ── controlli veri di Fub, copiati per il prototipo ───────────────────────
+   (skin/foundation.css, skin/controls.css, skin/drawers.css, skin/sheets.css:
+   non si spostano, esistono già) */
+:where(button) {
+  padding: var(--space-3) var(--space-5);
+  border: none;
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: var(--text-base);
+  cursor: pointer;
+}
+:where(button:hover) { background: var(--overlay-hover); }
+:where(button:active) { background: var(--overlay-active); }
+:where(button:focus-visible), :where(input:focus-visible) {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: var(--focus-ring-offset);
+}
+button.primary { background: var(--accent); color: var(--accent-contrast); font-weight: var(--weight-bold); }
+button.primary:hover { background: var(--accent-soft); color: var(--bg); }
+.segmented {
+  display: inline-flex; align-items: stretch; gap: var(--space-1); padding: var(--space-1);
+  border: none; border-radius: var(--radius-control); background: var(--overlay-hover);
+}
+.segmented-option {
+  display: inline-flex; align-items: center; justify-content: center; min-height: 24px;
+  padding: 0 var(--space-4); border: none; border-radius: var(--radius-chip); background: transparent;
+  color: var(--muted); font: inherit; font-size: var(--text-sm); font-weight: var(--weight-medium);
+  line-height: var(--leading-tight); white-space: nowrap; cursor: pointer;
+}
+.segmented-option:hover { background: var(--overlay-hover); color: var(--text); }
+.segmented-option[aria-checked="true"], .segmented-option[aria-pressed="true"] {
+  background: var(--accent-wash); color: var(--accent); font-weight: var(--weight-bold);
+}
+.link-button {
+  display: inline-flex; align-items: center; flex: none; min-height: var(--space-8);
+  padding: 0 var(--space-3); border: none; border-radius: var(--radius-chip); background: transparent;
+  color: var(--accent); font-size: var(--text-sm); font-weight: var(--weight-bold);
+  line-height: var(--leading-tight); white-space: nowrap; cursor: pointer;
+}
+.link-button:hover { background: var(--accent-wash); color: var(--accent); }
+.sheet-notices { display: flex; flex-direction: column; gap: var(--space-2); margin: 0 var(--space-5) var(--space-3); }
+.sheet-notice {
+  display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-4);
+  padding: var(--space-2) var(--space-4); border-radius: var(--radius-control);
+  background: var(--accent-wash); color: var(--text); font-family: var(--font-ui); font-size: var(--text-sm);
+}
+.sheet-notice[data-tone="warning"] { background: var(--warning-wash); }
+.sheet-notice[data-tone="danger"] { background: var(--danger-wash); }
+.sheet-notice-text { flex: 1 1 16rem; min-width: 0; }
+.markdown-rendered {
+  color: var(--doc-fg); font-family: var(--font-reading); font-size: var(--text-reading);
+  font-optical-sizing: auto; line-height: var(--leading-relaxed); overflow-wrap: break-word;
+}
+.markdown-rendered h1, .markdown-rendered h2 { color: var(--doc-heading); font-weight: var(--weight-medium); line-height: var(--leading-tight); text-wrap: balance; }
+.markdown-rendered h1 { margin: 0 0 0.5em; font-size: 2em; letter-spacing: -0.018em; }
+.markdown-rendered h2 { margin: 1.2em 0 0.4em; font-size: 1.35em; }
+.markdown-rendered p, .markdown-rendered ul { margin: 0 0 1em; }
+.markdown-rendered ul { padding-left: 1.3em; }
+
+/* → skin/differenze.css (nuovo) ─────────────────────────────────────────────
+   La vista differenze: il documento com'è, con i punti cambiati segnati sul
+   testo. Verde ciò che è arrivato, rosso barrato ciò che è andato via; il
+   colore di chi l'ha fatto è un pallino, mai il colore del testo, così il
+   verde e il rosso restano la sola lingua del «cosa». */
+.diff-view {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  min-width: 0;
+}
+.diff-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-4) var(--space-5);
+  margin: 0 var(--space-5);
+  padding: var(--space-4) var(--space-5);
+  border-radius: var(--radius-control);
+  background: var(--sheet-2);
+  font-family: var(--font-ui);
+  font-size: var(--text-sm);
+}
+.diff-bar-title {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  flex: 1 1 18rem;
+  min-width: 0;
+}
+.diff-bar-title strong { font-size: var(--text-md); font-weight: var(--weight-bold); }
+.diff-bar-meta { color: var(--muted); }
+.diff-sources {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.diff-source {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: 24px;
+  padding: 0 var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: var(--sheet);
+  color: var(--text);
+  font-size: var(--text-sm);
+}
+.diff-source[aria-pressed="false"] { color: var(--muted); border-style: dashed; }
+.diff-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: var(--radius-pill);
+  background: var(--muted);
+}
+.diff-dot[data-author="1"] { background: var(--doc-author-1); }
+.diff-dot[data-author="2"] { background: var(--doc-author-2); }
+.diff-dot[data-author="3"] { background: var(--doc-author-3); }
+.diff-count {
+  display: inline-flex;
+  gap: var(--space-3);
+  font-variant-numeric: tabular-nums;
+  font-weight: var(--weight-bold);
+}
+.diff-count-ins { color: var(--doc-ins); }
+.diff-count-del { color: var(--doc-del); }
+.diff-nav { display: inline-flex; align-items: center; gap: var(--space-2); }
+.diff-nav-pos { color: var(--muted); font-variant-numeric: tabular-nums; min-width: 4.5em; text-align: center; }
+
+/* Il corpo: la stessa carta e lo stesso carattere della Lettura. */
+.diff-body {
+  min-width: 0;
+  max-width: var(--content-width);
+  width: 100%;
+  margin: 0 auto;
+  padding: 0 var(--space-8);
+}
+/* Dentro una riga: un velo pieno, perché il segno deve vedersi a colpo
+   d'occhio anche su una pagina lunga; la sottolineatura resta per chi non
+   distingue i colori. */
+.diff-ins {
+  border-radius: 3px;
+  background: var(--doc-tint-green);
+  color: var(--doc-fg);
+  text-decoration-line: underline;
+  text-decoration-color: var(--doc-ins);
+  text-underline-offset: 3px;
+}
+.diff-del {
+  border-radius: 3px;
+  background: var(--doc-tint-red);
+  color: var(--doc-del);
+  text-decoration-line: line-through;
+  text-decoration-color: var(--doc-del);
+}
+/* Un blocco intero arrivato o andato via: il velo prende la larghezza del
+   blocco, e un filo sul margine lo fa trovare scorrendo. */
+.diff-block {
+  position: relative;
+  margin-left: calc(-1 * var(--space-5));
+  padding-left: var(--space-5);
+  border-left: 3px solid transparent;
+  border-radius: 0 var(--radius-chip) var(--radius-chip) 0;
+}
+.diff-block[data-kind="ins"] { border-left-color: var(--doc-ins); background: var(--doc-tint-green); }
+.diff-block[data-kind="del"] { border-left-color: var(--doc-del); background: var(--doc-tint-red); color: var(--doc-del); text-decoration-line: line-through; }
+.diff-block[data-current] { outline: var(--focus-ring-width) solid var(--focus-ring); outline-offset: 2px; }
+.diff-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-left: var(--space-3);
+  padding: 0 var(--space-3);
+  border-radius: var(--radius-pill);
+  background: var(--sheet);
+  color: var(--muted);
+  font-family: var(--font-ui);
+  font-size: var(--text-xs);
+  font-style: normal;
+  line-height: 18px;
+  text-decoration-line: none;
+  vertical-align: 2px;
+  white-space: nowrap;
+}
+.diff-change-actions {
+  display: inline-flex;
+  gap: var(--space-1);
+  margin-left: var(--space-2);
+  vertical-align: 1px;
+}
+.diff-change-actions .link-button { min-height: 20px; font-family: var(--font-ui); }
+
+/* «Da rivedere»: due scritture della stessa frase fatte lontane. Il testo
+   è già fuso e niente è perso: la scheda dice cosa è successo e offre di
+   tenere una delle due, o tutte e due. */
+.diff-review {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  margin: 0 0 1em;
+  padding: var(--space-5);
+  border-radius: var(--radius-control);
+  background: var(--warning-wash);
+  font-family: var(--font-ui);
+  font-size: var(--text-sm);
+}
+.diff-review-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-2) var(--space-4); }
+.diff-review-head strong { font-size: var(--text-md); }
+.diff-review-head span { color: var(--muted); }
+.diff-review-options { display: grid; grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr)); gap: var(--space-4); }
+.diff-review-option {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-width: 0;
+  padding: var(--space-4) var(--space-5);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  background: var(--sheet);
+}
+.diff-review-who { display: inline-flex; align-items: center; gap: var(--space-3); color: var(--muted); }
+.diff-review-text { margin: 0; color: var(--doc-fg); font-family: var(--font-reading); font-size: var(--text-lg); line-height: var(--leading-normal); }
+.diff-review-actions { display: flex; flex-wrap: wrap; gap: var(--space-3); }
+
+/* Affiancata: prima e adesso, blocco accanto a blocco. */
+.diff-split {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: var(--space-6);
+  padding: 0 var(--space-6);
+}
+.diff-side { display: flex; flex-direction: column; gap: var(--space-4); min-width: 0; }
+.diff-side-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding-bottom: var(--space-3);
+  border-bottom: 1px solid var(--border);
+  color: var(--muted);
+  font-family: var(--font-ui);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-bold);
+  letter-spacing: var(--tracking-caps);
+  text-transform: uppercase;
+}
+.diff-split .markdown-rendered { font-size: var(--text-lg); }
+
+/* Disegno: il foglio com'è adesso, con un alone verde sui tratti arrivati e
+   l'ombra rossa di quelli andati via. */
+.diff-canvas-wrap { display: flex; flex-direction: column; gap: var(--space-4); padding: 0 var(--space-6); }
+.diff-canvas {
+  width: 100%;
+  max-width: 100%;
+  height: auto;
+  aspect-ratio: 16 / 9;
+  border-radius: var(--radius-control);
+  background: var(--draw-desk);
+}
+.diff-canvas .diff-paper { fill: var(--doc-bg); }
+.diff-stroke-same { fill: none; stroke: var(--paper-ink); stroke-width: 3; }
+.diff-stroke-ins-halo { fill: none; stroke: var(--doc-tint-green); stroke-width: 14; }
+.diff-stroke-ins { fill: none; stroke: var(--doc-ins); stroke-width: 3.5; }
+.diff-stroke-del { fill: none; stroke: var(--doc-del); stroke-width: 3; opacity: 0.55; }
+.diff-canvas[data-moment="before"] .diff-stroke-ins,
+.diff-canvas[data-moment="before"] .diff-stroke-ins-halo { opacity: 0; }
+.diff-canvas[data-moment="before"] .diff-stroke-del { opacity: 1; stroke: var(--paper-ink); }
+.diff-canvas[data-moment="after"] .diff-stroke-del { opacity: 0; }
+.diff-legend { display: flex; flex-wrap: wrap; gap: var(--space-3) var(--space-6); margin: 0; padding: 0; list-style: none; color: var(--muted); font-size: var(--text-sm); }
+.diff-legend li { display: inline-flex; align-items: center; gap: var(--space-3); }
+.diff-swatch { display: inline-block; width: 18px; height: 4px; border-radius: var(--radius-pill); }
+.diff-swatch[data-kind="ins"] { background: var(--doc-ins); }
+.diff-swatch[data-kind="del"] { background: var(--doc-del); opacity: 0.55; }
+.diff-swatch[data-kind="same"] { background: var(--paper-ink); }
+
+/* Foglio: le celle cambiate velate, il valore di prima sotto quello nuovo. */
+.diff-grid-wrap { overflow-x: auto; padding: 0 var(--space-6); }
+.diff-grid {
+  border-collapse: collapse;
+  min-width: 100%;
+  font-family: var(--font-ui);
+  font-size: var(--text-base);
+  font-variant-numeric: tabular-nums;
+}
+.diff-grid th, .diff-grid td {
+  padding: var(--space-3) var(--space-5);
+  border: 1px solid var(--border);
+  text-align: right;
+  vertical-align: top;
+  white-space: nowrap;
+}
+.diff-grid th { background: var(--sheet-2); color: var(--muted); font-weight: var(--weight-medium); text-align: center; }
+.diff-grid td:first-of-type { text-align: left; }
+.diff-cell-mod, .diff-cell-ins { background: var(--doc-tint-green); }
+.diff-cell-del { background: var(--doc-tint-red); color: var(--doc-del); text-decoration-line: line-through; }
+.diff-cell-was {
+  display: block;
+  color: var(--doc-del);
+  font-size: var(--text-xs);
+  text-decoration-line: line-through;
+}
+
+.diff-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-9) var(--space-6);
+  color: var(--muted);
+  font-family: var(--font-ui);
+  text-align: center;
+}
+.diff-empty strong { color: var(--text); font-size: var(--text-lg); }
+
+@media (max-width: 640px) {
+  .diff-split { grid-template-columns: minmax(0, 1fr); }
+  .diff-body { padding: 0 var(--space-5); }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .diff-block, .diff-ins, .diff-del { transition: background var(--duration-fast) var(--ease); }
+}
+</style>
+
+<div class="proto-page">
+  <div class="proto-bar" role="group" aria-label="Controlli del prototipo">
+    <fieldset>
+      <legend>Stato</legend>
+      <div class="segmented" role="radiogroup" aria-label="Stato" id="proto-state">
+        <button class="segmented-option" role="radio" aria-checked="false" data-value="avviso" id="st-avviso">Avviso</button>
+        <button class="segmented-option" role="radio" aria-checked="true" data-value="unificata" id="st-unificata">Unificata</button>
+        <button class="segmented-option" role="radio" aria-checked="false" data-value="rivedere" id="st-rivedere">Da rivedere</button>
+        <button class="segmented-option" role="radio" aria-checked="false" data-value="affiancata" id="st-affiancata">Affiancata</button>
+        <button class="segmented-option" role="radio" aria-checked="false" data-value="disegno" id="st-disegno">Disegno</button>
+        <button class="segmented-option" role="radio" aria-checked="false" data-value="foglio" id="st-foglio">Foglio</button>
+        <button class="segmented-option" role="radio" aria-checked="false" data-value="vuoto" id="st-vuoto">Nessuna differenza</button>
+        <button class="segmented-option" role="radio" aria-checked="false" data-value="errore" id="st-errore">Errore</button>
+      </div>
+    </fieldset>
+    <fieldset>
+      <legend>Luce</legend>
+      <div class="segmented" role="radiogroup" aria-label="Luce" id="proto-theme">
+        <button class="segmented-option" role="radio" aria-checked="true" data-value="system" id="th-system">Sistema</button>
+        <button class="segmented-option" role="radio" aria-checked="false" data-value="light" id="th-light">Giorno</button>
+        <button class="segmented-option" role="radio" aria-checked="false" data-value="dark" id="th-dark">Notte</button>
+      </div>
+    </fieldset>
+    <fieldset>
+      <legend>Larghezza</legend>
+      <div class="segmented" role="radiogroup" aria-label="Larghezza" id="proto-width">
+        <button class="segmented-option" role="radio" aria-checked="true" data-value="full" id="wd-full">Piena</button>
+        <button class="segmented-option" role="radio" aria-checked="false" data-value="narrow" id="wd-narrow">700 px</button>
+      </div>
+    </fieldset>
+  </div>
+  <p class="proto-note">Prototipo: dati di esempio. «Unificata» è la vista di partenza quando si apre un confronto; «Avviso» è ciò che si vede quando le modifiche di un altro dispositivo arrivano senza bisogno di niente.</p>
+
+  <div class="proto-stage" id="proto-stage" data-width="full">
+    <div class="window">
+      <div class="window-tabs" role="tablist" aria-label="Schede">
+        <span class="window-tab" role="tab" aria-selected="true" id="tab-doc">Viaggio a Lisbona</span>
+        <span class="window-tab" role="tab" aria-selected="false">Spese condivise</span>
+      </div>
+
+      <div class="pane-editor" id="screen" data-state="unificata">
+
+        <!-- ── Avviso: le modifiche sono arrivate, niente da decidere ── -->
+        <section data-show="avviso" hidden>
+          <div class="sheet-notices">
+            <div class="sheet-notice" role="status">
+              <span class="diff-dot" data-author="2" aria-hidden="true"></span>
+              <span class="sheet-notice-text" data-i18n="differenze.avviso.arrivate">Dal <strong>Tablet</strong> sono arrivati 2 paragrafi e 1 frase cambiata, scritti mentre era scollegato. Li ho uniti al testo.</span>
+              <button class="link-button" id="avviso-vedi" data-i18n="differenze.avviso.vedi">Vedi le differenze</button>
+              <button class="link-button" id="avviso-ok" data-i18n="differenze.avviso.ok">Va bene</button>
+            </div>
+            <div class="sheet-notice" data-tone="warning" role="status">
+              <span class="sheet-notice-text" data-i18n="differenze.avviso.rivedere">Una frase è stata riscritta sia qui sia sul Tablet. Le ho tenute tutte e due: scegli quale resta.</span>
+              <button class="link-button" id="avviso-rivedi" data-i18n="differenze.avviso.rivedi">Rivedi</button>
+            </div>
+          </div>
+          <div class="diff-body markdown-rendered">
+            <h1>Viaggio a Lisbona</h1>
+            <p>La partenza è giovedì alle 10venerdì mattina, dal terminal 1.</p>
+            <h2>Cose da vedere</h2>
+            <ul>
+              <li>Torre di Belém, meglio la mattina presto</li>
+              <li>Tram 28 fino all'Alfama</li>
+              <li>LX Factory, il sabato c'è il mercato</li>
+            </ul>
+            <p>Per le cene teniamo libero il venerdì sera.</p>
+          </div>
+        </section>
+
+        <!-- ── Confronto unificato ── -->
+        <section class="diff-view" data-show="unificata rivedere" data-layout="unified">
+          <div class="diff-bar">
+            <div class="diff-bar-title">
+              <strong data-i18n="differenze.titolo">Cosa è cambiato</strong>
+              <span class="diff-bar-meta" data-i18n="differenze.meta">Dalla versione di lunedì 9, 18:40 a adesso</span>
+            </div>
+            <ul class="diff-sources" aria-label="Mostra le modifiche di">
+              <li><button class="diff-source" aria-pressed="true" id="src-pc"><span class="diff-dot" data-author="1" aria-hidden="true"></span>PC dello studio</button></li>
+              <li><button class="diff-source" aria-pressed="true" id="src-tablet"><span class="diff-dot" data-author="2" aria-hidden="true"></span>Tablet</button></li>
+            </ul>
+            <span class="diff-count" aria-label="3 aggiunte, 1 rimozione"><span class="diff-count-ins">+3</span><span class="diff-count-del">−1</span></span>
+            <div class="segmented" role="radiogroup" aria-label="Disposizione">
+              <button class="segmented-option" role="radio" aria-checked="true" id="lay-unified" data-i18n="differenze.unificata">Nel testo</button>
+              <button class="segmented-option" role="radio" aria-checked="false" id="lay-split" data-i18n="differenze.affiancata">Affiancate</button>
+            </div>
+            <div class="diff-nav">
+              <button id="nav-prev" aria-label="Modifica precedente" data-i18n="differenze.precedente">‹ Prec.</button>
+              <span class="diff-nav-pos" aria-live="polite" id="nav-pos">2 di 4</span>
+              <button id="nav-next" aria-label="Modifica successiva" data-i18n="differenze.successiva">Succ. ›</button>
+            </div>
+            <button class="primary" id="diff-done" data-i18n="differenze.fine">Fine</button>
+          </div>
+
+          <div class="diff-body markdown-rendered">
+            <h1>Viaggio a Lisbona</h1>
+
+            <div data-show="unificata" hidden>
+              <p>La partenza è <del class="diff-del">martedì</del> <ins class="diff-ins">giovedì alle 10</ins>, dal terminal 1.<span class="diff-tag"><span class="diff-dot" data-author="1" aria-hidden="true"></span>PC dello studio · lun 18:52</span></p>
+            </div>
+
+            <div class="diff-review" data-show="rivedere" hidden role="group" aria-labelledby="review-title">
+              <div class="diff-review-head">
+                <strong id="review-title" data-i18n="differenze.rivedere.titolo">Questa frase è stata riscritta in due posti</strong>
+                <span data-i18n="differenze.rivedere.spiega">Nessuna delle due è andata persa. Scegli quale resta, o tienile entrambe.</span>
+              </div>
+              <div class="diff-review-options">
+                <div class="diff-review-option">
+                  <span class="diff-review-who"><span class="diff-dot" data-author="1" aria-hidden="true"></span>PC dello studio · lun 18:52</span>
+                  <p class="diff-review-text">La partenza è <ins class="diff-ins">giovedì alle 10</ins>, dal terminal 1.</p>
+                  <div class="diff-review-actions"><button class="link-button" id="keep-pc" data-i18n="differenze.rivedere.tieni">Tieni questa</button></div>
+                </div>
+                <div class="diff-review-option">
+                  <span class="diff-review-who"><span class="diff-dot" data-author="2" aria-hidden="true"></span>Tablet · mar 8:15, scollegato</span>
+                  <p class="diff-review-text">La partenza è <ins class="diff-ins">venerdì mattina</ins>, dal terminal 1.</p>
+                  <div class="diff-review-actions"><button class="link-button" id="keep-tablet" data-i18n="differenze.rivedere.tieni">Tieni questa</button></div>
+                </div>
+              </div>
+              <div class="diff-review-actions">
+                <button id="keep-both" data-i18n="differenze.rivedere.entrambe">Tienile entrambe, una sotto l'altra</button>
+                <button id="review-later" data-i18n="differenze.rivedere.dopo">Decido dopo</button>
+              </div>
+            </div>
+
+            <h2>Cose da vedere</h2>
+            <ul>
+              <li>Torre di Belém<ins class="diff-ins">, meglio la mattina presto</ins></li>
+              <li>Tram 28 fino all'Alfama</li>
+              <li class="diff-block" data-kind="ins" data-current>LX Factory, il sabato c'è il mercato<span class="diff-tag"><span class="diff-dot" data-author="2" aria-hidden="true"></span>Tablet · mar 8:20</span><span class="diff-change-actions"><button class="link-button" data-i18n="differenze.annulla">Togli</button></span></li>
+            </ul>
+            <p class="diff-block" data-kind="del">Prenotare il ristorante a Bairro Alto per giovedì.<span class="diff-tag"><span class="diff-dot" data-author="2" aria-hidden="true"></span>Tablet · mar 8:22</span><span class="diff-change-actions"><button class="link-button" data-i18n="differenze.ripristina">Rimetti</button></span></p>
+            <p>Per le cene teniamo libero il venerdì sera.</p>
+          </div>
+        </section>
+
+        <!-- ── Confronto affiancato ── -->
+        <section class="diff-view" data-show="affiancata" data-layout="split" hidden>
+          <div class="diff-bar">
+            <div class="diff-bar-title">
+              <strong data-i18n="differenze.titolo">Cosa è cambiato</strong>
+              <span class="diff-bar-meta">Dalla versione di lunedì 9, 18:40 a adesso</span>
+            </div>
+            <span class="diff-count" aria-label="3 aggiunte, 1 rimozione"><span class="diff-count-ins">+3</span><span class="diff-count-del">−1</span></span>
+            <div class="segmented" role="radiogroup" aria-label="Disposizione">
+              <button class="segmented-option" role="radio" aria-checked="false" id="lay2-unified">Nel testo</button>
+              <button class="segmented-option" role="radio" aria-checked="true" id="lay2-split">Affiancate</button>
+            </div>
+            <button class="primary" id="diff-done-2">Fine</button>
+          </div>
+          <div class="diff-split">
+            <div class="diff-side">
+              <div class="diff-side-head" data-i18n="differenze.prima">Prima · lun 18:40</div>
+              <div class="markdown-rendered">
+                <p>La partenza è <del class="diff-del">martedì</del>, dal terminal 1.</p>
+                <ul>
+                  <li>Torre di Belém</li>
+                  <li>Tram 28 fino all'Alfama</li>
+                </ul>
+                <p class="diff-block" data-kind="del">Prenotare il ristorante a Bairro Alto per giovedì.</p>
+                <p>Per le cene teniamo libero il venerdì sera.</p>
+              </div>
+            </div>
+            <div class="diff-side">
+              <div class="diff-side-head" data-i18n="differenze.adesso">Adesso</div>
+              <div class="markdown-rendered">
+                <p>La partenza è <ins class="diff-ins">giovedì alle 10</ins>, dal terminal 1.</p>
+                <ul>
+                  <li>Torre di Belém<ins class="diff-ins">, meglio la mattina presto</ins></li>
+                  <li>Tram 28 fino all'Alfama</li>
+                  <li class="diff-block" data-kind="ins">LX Factory, il sabato c'è il mercato</li>
+                </ul>
+                <p>Per le cene teniamo libero il venerdì sera.</p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ── Disegno ── -->
+        <section class="diff-view" data-show="disegno" hidden>
+          <div class="diff-bar">
+            <div class="diff-bar-title">
+              <strong>Cosa è cambiato nel disegno</strong>
+              <span class="diff-bar-meta">Schizzo del soggiorno · dal Tablet, 3 tratti nuovi e 1 tolto</span>
+            </div>
+            <div class="segmented" role="radiogroup" aria-label="Momento">
+              <button class="segmented-option" role="radio" aria-checked="false" data-moment="before" id="mo-before" data-i18n="differenze.disegno.prima">Prima</button>
+              <button class="segmented-option" role="radio" aria-checked="true" data-moment="both" id="mo-both" data-i18n="differenze.disegno.insieme">Insieme</button>
+              <button class="segmented-option" role="radio" aria-checked="false" data-moment="after" id="mo-after" data-i18n="differenze.disegno.dopo">Dopo</button>
+            </div>
+            <button class="primary" id="diff-done-3">Fine</button>
+          </div>
+          <div class="diff-canvas-wrap">
+            <svg class="diff-canvas" id="canvas" data-moment="both" viewBox="0 0 640 360" role="img" aria-label="Disegno con tre tratti aggiunti in verde e uno tolto in rosso">
+              <rect class="diff-paper" x="20" y="16" width="600" height="328" rx="6"></rect>
+              <!-- tratti uguali -->
+              <path class="diff-stroke-same" d="M70 300 L70 90 L330 90 L330 300 Z"></path>
+              <path class="diff-stroke-same" d="M330 160 L560 160 L560 300 L330 300"></path>
+              <path class="diff-stroke-same" d="M120 300 C 125 250, 175 250, 180 300"></path>
+              <!-- tolto -->
+              <path class="diff-stroke-del" stroke-dasharray="7 6" d="M400 200 L500 200 L500 260 L400 260 Z"></path>
+              <!-- aggiunti -->
+              <path class="diff-stroke-ins-halo" d="M380 215 C 420 190, 480 190, 520 215 L520 270 L380 270 Z"></path>
+              <path class="diff-stroke-ins" d="M380 215 C 420 190, 480 190, 520 215 L520 270 L380 270 Z"></path>
+              <path class="diff-stroke-ins-halo" d="M110 140 L170 140 L170 190 L110 190 Z"></path>
+              <path class="diff-stroke-ins" d="M110 140 L170 140 L170 190 L110 190 Z"></path>
+              <path class="diff-stroke-ins-halo" d="M230 230 q 20 -40 40 0 t 40 0"></path>
+              <path class="diff-stroke-ins" d="M230 230 q 20 -40 40 0 t 40 0"></path>
+            </svg>
+            <ul class="diff-legend">
+              <li><span class="diff-swatch" data-kind="ins" aria-hidden="true"></span>Arrivati dal Tablet</li>
+              <li><span class="diff-swatch" data-kind="del" aria-hidden="true"></span>Tolti</li>
+              <li><span class="diff-swatch" data-kind="same" aria-hidden="true"></span>Uguali</li>
+            </ul>
+          </div>
+        </section>
+
+        <!-- ── Foglio ── -->
+        <section class="diff-view" data-show="foglio" hidden>
+          <div class="diff-bar">
+            <div class="diff-bar-title">
+              <strong>Cosa è cambiato nel foglio</strong>
+              <span class="diff-bar-meta">Spese condivise · foglio «Ottobre» · 3 celle cambiate, 1 riga nuova</span>
+            </div>
+            <button class="primary" id="diff-done-4">Fine</button>
+          </div>
+          <div class="diff-grid-wrap">
+            <table class="diff-grid">
+              <thead><tr><th scope="col"></th><th scope="col">A</th><th scope="col">B</th><th scope="col">C</th></tr></thead>
+              <tbody>
+                <tr><th scope="row">1</th><td>Voce</td><td>Importo (€)</td><td>Chi</td></tr>
+                <tr><th scope="row">2</th><td>Volo</td><td class="diff-cell-mod">312,40<span class="diff-cell-was">298,00</span></td><td>Anna</td></tr>
+                <tr><th scope="row">3</th><td>Alloggio</td><td>540,00</td><td class="diff-cell-mod">Marco<span class="diff-cell-was">Anna</span></td></tr>
+                <tr><th scope="row">4</th><td class="diff-cell-ins">Tram e metro</td><td class="diff-cell-ins">24,00</td><td class="diff-cell-ins">Marco</td></tr>
+                <tr><th scope="row">5</th><td>Totale</td><td class="diff-cell-mod">876,40<span class="diff-cell-was">838,00</span></td><td></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <!-- ── Nessuna differenza ── -->
+        <section class="diff-view" data-show="vuoto" hidden>
+          <div class="diff-bar">
+            <div class="diff-bar-title">
+              <strong>Cosa è cambiato</strong>
+              <span class="diff-bar-meta">Fra la versione del Tablet e quella di adesso</span>
+            </div>
+            <button class="primary" id="diff-done-5">Fine</button>
+          </div>
+          <div class="diff-empty">
+            <strong data-i18n="differenze.vuoto.titolo">Le due versioni sono uguali</strong>
+            <span data-i18n="differenze.vuoto.spiega">Non c'è niente da confrontare.</span>
+          </div>
+        </section>
+
+        <!-- ── Errore ── -->
+        <section class="diff-view" data-show="errore" hidden>
+          <div class="sheet-notices">
+            <div class="sheet-notice" data-tone="danger" role="alert">
+              <span class="sheet-notice-text" data-i18n="differenze.errore.versione">Non riesco a leggere la versione del Tablet: il file della storia è danneggiato. Il documento di adesso non è stato toccato.</span>
+              <button class="link-button" id="err-retry" data-i18n="differenze.errore.riprova">Riprova</button>
+              <button class="link-button" id="err-history" data-i18n="differenze.errore.storia">Apri la cronologia</button>
+            </div>
+          </div>
+        </section>
+
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+  const screen = document.getElementById("screen");
+  const stage = document.getElementById("proto-stage");
+  const root = document.documentElement;
+
+  function showState(state) {
+    screen.dataset.state = state;
+    for (const el of screen.querySelectorAll("[data-show]")) {
+      el.hidden = !el.dataset.show.split(" ").includes(state);
+    }
+    const group = document.getElementById("proto-state");
+    for (const b of group.querySelectorAll("[role=radio]")) b.setAttribute("aria-checked", String(b.dataset.value === state));
+  }
+
+  function radio(groupId, onPick) {
+    const group = document.getElementById(groupId);
+    group.addEventListener("click", (event) => {
+      const b = event.target.closest("[role=radio]");
+      if (!b) return;
+      for (const o of group.querySelectorAll("[role=radio]")) o.setAttribute("aria-checked", String(o === b));
+      onPick(b.dataset.value);
+    });
+  }
+
+  radio("proto-state", showState);
+  radio("proto-theme", (v) => { if (v === "system") root.removeAttribute("data-theme"); else root.dataset.theme = v; });
+  radio("proto-width", (v) => { stage.dataset.width = v; });
+
+  // Collegamenti dentro lo schermo, perché il giro si possa fare cliccando.
+  const go = (id, state) => document.getElementById(id)?.addEventListener("click", () => showState(state));
+  go("avviso-vedi", "unificata");
+  go("avviso-rivedi", "rivedere");
+  go("lay-split", "affiancata");
+  go("lay2-unified", "unificata");
+  for (const id of ["diff-done", "diff-done-2", "diff-done-3", "diff-done-4", "diff-done-5", "avviso-ok", "keep-pc", "keep-tablet", "keep-both", "review-later"]) go(id, "avviso");
+
+  for (const b of document.querySelectorAll(".diff-source")) {
+    b.addEventListener("click", () => b.setAttribute("aria-pressed", String(b.getAttribute("aria-pressed") !== "true")));
+  }
+
+  const canvas = document.getElementById("canvas");
+  for (const b of document.querySelectorAll("[data-moment][role=radio]")) {
+    b.addEventListener("click", () => {
+      for (const o of document.querySelectorAll("[data-moment][role=radio]")) o.setAttribute("aria-checked", String(o === b));
+      canvas.dataset.moment = b.dataset.moment;
+    });
+  }
+
+  // Precedente / successiva: sposta l'anello sulla modifica corrente.
+  const blocks = () => [...screen.querySelectorAll("section:not([hidden]) .diff-body .diff-block, section:not([hidden]) .diff-body .diff-ins")];
+  let at = 1;
+  function move(step) {
+    const list = blocks();
+    if (!list.length) return;
+    at = (at + step + list.length) % list.length;
+    for (const el of list) el.removeAttribute("data-current");
+    list[at].setAttribute("data-current", "");
+    list[at].scrollIntoView({ block: "nearest" });
+    document.getElementById("nav-pos").textContent = `${at + 1} di ${list.length}`;
+  }
+  document.getElementById("nav-prev").addEventListener("click", () => move(-1));
+  document.getElementById("nav-next").addEventListener("click", () => move(1));
+
+  showState("unificata");
+})();
+</script>
