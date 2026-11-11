@@ -73,7 +73,8 @@ function select(strip: HTMLElement, index: number): void {
 }
 
 /// Gli osservatori consegnano a fine giro.
-const settled = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0));
+/// La striscia si guarda al fotogramma dopo il cambio: si aspetta quello.
+const settled = (): Promise<void> => new Promise((resolve) => requestAnimationFrame(() => setTimeout(resolve, 0)));
 
 function xOf(frame: Keyframe): number {
   const match = /translate\((-?[\d.]+)px/.exec(String(frame.transform));
@@ -226,6 +227,22 @@ describe("il raccordo che scorre", () => {
     expect(start).toBeLessThan(WIDTH);
     expect(start).toBeGreaterThan(-WIDTH);
     expect(start).not.toBe(WIDTH);
+  });
+
+  it("guarda la striscia al fotogramma dopo, una volta sola per più cambi", async () => {
+    const { strip } = pane("p1", ["a", "b", "c"], 0);
+    mountTabStrips(lifetime);
+    select(strip, 1);
+    select(strip, 2);
+    // L'osservatore ha già scattato, ma posti e scorrimento non si leggono a
+    // metà di un cambio di scheda: niente si muove prima del fotogramma.
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(driver.plays).toHaveLength(0);
+    await settled();
+    const shapes = driver.plays.filter((play) => play.timing.pseudo === "::before");
+    expect(shapes).toHaveLength(1);
+    expect(xOf(shapes[0].keyframes[0])).toBe(-2 * WIDTH);
   });
 
   it("un riquadro nato dopo viene seguito anche lui", async () => {

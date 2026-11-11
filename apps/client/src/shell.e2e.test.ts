@@ -1256,6 +1256,47 @@ describe("apri un vault", () => {
     ]);
   });
 
+  it("aprire e chiudere una cartella rifà solo il suo sottoalbero: le righe di fuori restano gli stessi nodi", async () => {
+    const host = await start({ ...VAULT, "zeta/Uno.md": "uno\n", "note/sotto/Tre.md": "tre\n" });
+    const entryOf = (path: string) => document.querySelector<HTMLElement>(`#file-list li[data-path="${path}"]`);
+    const outside = () => ["Benvenuto.md", "note", "zeta"].map((path) => entryOf(path));
+    const before = outside();
+    expect(before.every((li) => li !== null)).toBe(true);
+    const folderRow = entryOf("note")!.querySelector<HTMLElement>(":scope > .tree-row")!;
+    const chevron = folderRow.querySelector<HTMLButtonElement>(":scope > .chevron")!;
+
+    chevron.click();
+    await waitFor("la cartella si apre", () => entryOf("note/Spesa.md") !== null);
+    expect(outside()).toEqual(before);
+    expect(entryOf("note")!.querySelector(":scope > .tree-row")).toBe(folderRow);
+    expect(entryOf("note")!.getAttribute("aria-expanded")).toBe("true");
+    expect(chevron.getAttribute("aria-expanded")).toBe("true");
+    expect(chevron.textContent).toBe("\u25be");
+    // Il sottoalbero è quello di sempre: le sottocartelle, poi le note.
+    const group = entryOf("note")!.querySelector(":scope > .tree-children")!;
+    expect([...group.querySelectorAll<HTMLElement>(':scope > li[role="treeitem"]')].map((li) => li.dataset.path)).toEqual([
+      "note/sotto",
+      "note/Riunione.md",
+      "note/Spesa.md",
+    ]);
+    expect(group.previousElementSibling).toBe(folderRow);
+
+    chevron.click();
+    await waitFor("la cartella si chiude", () => entryOf("note/Spesa.md") === null);
+    expect(outside()).toEqual(before);
+    expect(entryOf("note")!.getAttribute("aria-expanded")).toBe("false");
+    expect(chevron.textContent).toBe("\u25b8");
+    expect(entryOf("note")!.querySelector(":scope > .tree-children:not([inert])")).toBeNull();
+
+    // Se fuori è cambiato qualcosa nel frattempo, si ridisegna tutto: niente
+    // resta indietro.
+    host.writeFromOutside("Altro.md", "altro\n");
+    chevron.click();
+    await waitFor("la cartella si apre col resto aggiornato", () =>
+      entryOf("note/Spesa.md") !== null && entryOf("Altro.md") !== null,
+    );
+  });
+
   it("gli allegati stanno nell'albero: un media si apre nel visualizzatore, un file ignoto no", async () => {
     const host = await start({ ...VAULT, "note/foto.png": "png", "note/dati.zip": "zip" });
     const fileRows = () => [...document.querySelectorAll<HTMLElement>("#file-list .tree-row.file")];

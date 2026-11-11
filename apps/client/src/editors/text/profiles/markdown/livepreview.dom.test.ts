@@ -4,6 +4,7 @@ import { EditorState, Prec } from "@codemirror/state";
 import { EditorView, runScopeHandlers } from "@codemirror/view";
 import { cursorCharLeft, cursorCharRight, undo } from "@codemirror/commands";
 import { markdown } from "@codemirror/lang-markdown";
+import { syntaxTreeAvailable } from "@codemirror/language";
 import { markdownGrammar } from "./grammar";
 import { createTextEngine } from "../../engine";
 import { livePreview, pageIconsChanged } from "./livepreview";
@@ -624,5 +625,76 @@ describe("la rivelazione e la composizione", () => {
       engine.destroy();
       parent.remove();
     }
+  });
+});
+
+// Aprire una nota grande non legge tutto il file prima della prima schermata:
+// la Live rende l'inizio, e il resto arriva a pezzi quando la pagina è libera.
+describe("Live: apertura di una nota grande", () => {
+  const TABLE = "| a | b |\n| --- | --- |\n| 1 | 2 |";
+  const note = () => {
+    const paragraphs = Array.from({ length: 2_000 }, (_, i) => `Paragrafo ${i + 1}: una riga di prosa senza segni, lunga quanto basta.`);
+    return `Inizio.\n\n${TABLE}\n\n${paragraphs.join("\n\n")}\n\n${TABLE}\n`;
+  };
+
+  /// Dove cominciano i blocchi che la Live sostituisce con un widget.
+  function widgets(view: EditorView): number[] {
+    const found: number[] = [];
+    for (const source of view.state.facet(EditorView.decorations)) {
+      const set = typeof source === "function" ? source(view) : source;
+      set.between(0, view.state.doc.length, (from, to, value) => {
+        if (value.spec.block && value.spec.widget && to > from) found.push(from);
+      });
+    }
+    return found.sort((a, b) => a - b);
+  }
+
+  function open(doc: string) {
+    const parent = document.createElement("div");
+    document.body.append(parent);
+    const view = new EditorView({
+      parent,
+      state: EditorState.create({
+        doc,
+        extensions: [markdown({ base: markdownGrammar }), livePreview({ openWikilink() {}, searchTag() {} })],
+      }),
+    });
+    return { view, cleanup: () => { view.destroy(); parent.remove(); } };
+  }
+
+  it("rende subito la tabella in cima, quella in fondo dopo, senza bloccare la pagina", async () => {
+    const doc = note();
+    const top = doc.indexOf(TABLE);
+    const bottom = doc.lastIndexOf(TABLE);
+    const { view, cleanup } = open(doc);
+    try {
+      expect(widgets(view)).toEqual([top]);
+      // L'apertura non ha portato il parser in fondo al documento.
+      expect(syntaxTreeAvailable(view.state, doc.length)).toBe(false);
+      await vi.waitFor(() => expect(widgets(view)).toEqual([top, bottom]));
+      expect(syntaxTreeAvailable(view.state, doc.length)).toBe(true);
+    } finally {
+      cleanup();
+    }
+  });
+
+  it("una battuta mentre il resto arriva non perde niente", async () => {
+    const doc = note();
+    const { view, cleanup } = open(doc);
+    try {
+      view.dispatch({ changes: { from: 0, insert: "Nuovo " } });
+      const text = view.state.doc.toString();
+      await vi.waitFor(() => expect(widgets(view)).toEqual([text.indexOf(TABLE), text.lastIndexOf(TABLE)]));
+    } finally {
+      cleanup();
+    }
+  });
+
+  it("chiusa prima della fine, la vista non lavora più", async () => {
+    const { view, cleanup } = open(note());
+    const dispatch = vi.spyOn(view, "dispatch");
+    cleanup();
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(dispatch).not.toHaveBeenCalled();
   });
 });

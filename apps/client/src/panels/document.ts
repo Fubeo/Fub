@@ -169,6 +169,10 @@ interface PaneFrame {
   /// Firma dell'ultima striscia disegnata: un cambio di riquadro non deve
   /// ricreare tab identiche e togliere il fuoco al loro nodo DOM.
   tabsSignature: string | null;
+  /// La linguetta da portare in vista al prossimo fotogramma
+  /// (`drawTabOverflow`), e la richiesta di quel fotogramma, se c'è.
+  tabRevealIndex: number;
+  tabRevealFrame: number | null;
 }
 const frames = new Map<string, PaneFrame>();
 let panesEl: HTMLElement;
@@ -221,6 +225,9 @@ const view: PaneView = {
   },
   createPane,
   releaseFrame: (pane) => {
+    const r = frameOf(pane);
+    if (r.tabRevealFrame !== null) cancelAnimationFrame(r.tabRevealFrame);
+    r.tabRevealFrame = null;
     frameOf(pane).formatBar.destroy();
     frameOf(pane).selectionBubble.destroy();
     frameOf(pane).standing.destroy();
@@ -563,6 +570,8 @@ function createPane(id: string): PaneElements {
     emptyEl,
     standing: createStandingChip(),
     tabsSignature: null,
+    tabRevealIndex: -1,
+    tabRevealFrame: null,
   };
   frames.set(id, r);
   return { root, editorEl, viewEl };
@@ -618,7 +627,10 @@ function drawTab(r: PaneFrame, tabs: Tab[], active: number): void {
   const roving = retained >= 0
     ? retained
     : focusedIndex >= 0 ? Math.min(focusedIndex, tabs.length - 1) : active;
-  tabs.forEach((tab, index) => paintTab(buttons[index]!, tab, index === active, index === roving));
+  // Gli accordi sono gli stessi per ogni linguetta: si leggono una volta per
+  // giro, non una per scheda (`allCommands` interroga ogni comando).
+  const shortcuts = tabShortcuts();
+  tabs.forEach((tab, index) => paintTab(buttons[index]!, tab, index === active, index === roving, shortcuts));
   r.tabsShell.hidden = tabs.length === 0;
   r.contentEl.hidden = tabs.length === 0;
   drawEmptyPane(r, tabs.length === 0);
@@ -975,7 +987,7 @@ function wireTabDrag(r: PaneFrame, item: HTMLElement, index: number, target: Tab
 
 /// Ridipinge etichette e selezione senza ricreare i controlli. Il nome
 /// accessibile porta anche lo stato non salvato, non soltanto il colore.
-function paintTab(tab: HTMLElement, target: Tab, selected: boolean, tabStop: boolean): void {
+function paintTab(tab: HTMLElement, target: Tab, selected: boolean, tabStop: boolean, shortcuts: string): void {
   const described = describeTab(target);
   tab.classList.toggle("dirty", described.dirty);
   tab.classList.toggle("tab-view", described.kind === "view");
@@ -1011,7 +1023,7 @@ function paintTab(tab: HTMLElement, target: Tab, selected: boolean, tabStop: boo
   }
   setTooltip(tab, (target.k === "doc" ? target.doc : described.label) + (source ? ` · ${source}` : ""));
   // Si ridipinge a ogni giro: segue gli accordi riconfigurati.
-  tab.setAttribute("aria-keyshortcuts", tabShortcuts());
+  tab.setAttribute("aria-keyshortcuts", shortcuts);
   tab.setAttribute(
     "aria-label",
     (target.pinned ? `${t("tabmenu.pinned")} · ` : "") + (described.dirty ? `${described.label} · ${t("save.unsaved")}` : described.label) + (format && kind ? ` · ${formatNameOf(kind)}` : "") + (source ? ` · ${source}` : "") + (target.stack ? ` · ${t("tabmenu.stack", { stack: target.stack })}` : ""),
@@ -1032,14 +1044,32 @@ function tabShortcuts(): string {
 }
 
 /// L'elenco resta fuori dalla tablist e non viene ricreato a ogni ridisegno.
+///
+/// La linguetta scelta si porta in vista al fotogramma dopo, non qui:
+/// `scrollIntoView` chiede al motore stile e layout aggiornati, e qui si è a
+/// metà di un cambio di scheda, con la superficie vecchia smontata e la nuova
+/// ancora da montare. Nel fotogramma il layout si fa una volta, ed è lo stesso
+/// che l'editor appena montato misura; più disegni nello stesso fotogramma
+/// fanno uno scorrimento solo, verso l'ultima scheda scelta.
 function drawTabOverflow(r: PaneFrame, tabs: Tab[], active: number): void {
   r.tabMenuEl.hidden = tabs.length <= 1;
   r.tabMenuEl.setAttribute("aria-label", t("document.tab.list"));
   setTooltip(r.tabMenuEl, t("document.tab.list"));
+  r.tabRevealIndex = active;
+  if (r.tabRevealFrame !== null) return;
+  r.tabRevealFrame = requestAnimationFrame(() => {
+    r.tabRevealFrame = null;
+    revealSelectedTab(r);
+  });
+}
+
+/// Porta in vista la linguetta col fuoco, o se il fuoco è altrove quella attiva.
+function revealSelectedTab(r: PaneFrame): void {
+  if (!r.tabsShell.isConnected || r.tabsShell.hidden) return;
   const focused = document.activeElement;
   const selected = focused instanceof HTMLElement && r.tabsShell.contains(focused)
     ? focused
-    : r.tabsShell.querySelectorAll<HTMLElement>(".tab")[active];
+    : r.tabsShell.querySelectorAll<HTMLElement>(".tab")[r.tabRevealIndex];
   selected?.scrollIntoView?.({ block: "nearest", inline: "nearest" });
 }
 

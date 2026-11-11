@@ -3,11 +3,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { markdown } from "@codemirror/lang-markdown";
 import { ensureSyntaxTree } from "@codemirror/language";
 import { history } from "@codemirror/commands";
-import { EditorState, Prec } from "@codemirror/state";
+import { EditorState, type Extension, Prec } from "@codemirror/state";
 import { EditorView, runScopeHandlers } from "@codemirror/view";
 import { markdownGrammar } from "../grammar";
 import { livePreview } from "../livepreview";
 import { liveReveal } from "../../../live-reveal";
+import { propertiesDisplay } from "../../../properties-display";
 import { blockGesture } from "../block-gesture";
 import { liveStrings } from "../strings";
 import { blocksMode } from "./index";
@@ -48,7 +49,7 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-function mount(doc: string, anchor = 0): EditorView {
+function mount(doc: string, anchor = 0, extra: Extension = []): EditorView {
   const view = new EditorView({
     parent: document.body,
     state: EditorState.create({
@@ -60,6 +61,7 @@ function mount(doc: string, anchor = 0): EditorView {
         livePreview({ openWikilink() {}, searchTag() {} }),
         Prec.highest(liveReveal.of("mai")),
         blocksMode({ page: () => "Nota" }),
+        extra,
       ],
     }),
   });
@@ -76,8 +78,8 @@ const press = (view: EditorView, key: string, extra: KeyboardEventInit = {}) =>
 const frame = () => new Promise((done) => requestAnimationFrame(() => setTimeout(done, 0)));
 
 /// Montata la vista, la pagina è arrivata: da qui contano soltanto i gesti.
-async function mounted(doc: string, anchor = 0): Promise<EditorView> {
-  const view = mount(doc, anchor);
+async function mounted(doc: string, anchor = 0, extra: Extension = []): Promise<EditorView> {
+  const view = mount(doc, anchor, extra);
   await frame();
   moto.runs = [];
   return view;
@@ -235,5 +237,16 @@ describe("che cosa si muove", () => {
     const view = await mounted("Uno\n\nDue", 1);
     view.dispatch({ annotations: blockGesture.of({ kind: "fold", say: "Aperto" }) });
     expect(live(view)).toBe("Aperto");
+  });
+
+  it("con il frontmatter la testata non si muove quando un blocco scende", async () => {
+    const doc = "---\nicon: 🌿\n---\nUno\n\nDue";
+    const view = await mounted(doc, doc.indexOf("Uno"), [propertiesDisplay.of("visible")]);
+    press(view, "ArrowDown", { ctrlKey: true, shiftKey: true });
+    await frame();
+    expect(view.state.doc.toString()).toMatch(/Due\n\nUno$/);
+    expect(moto.runs.some((run) => run.el.classList.contains("cm-line"))).toBe(true);
+    expect(moto.runs.filter((run) => run.el.classList.contains("cm-fub-page"))).toEqual([]);
+    expect(moto.runs.filter((run) => run.el.classList.contains("cm-fub-properties"))).toEqual([]);
   });
 });
