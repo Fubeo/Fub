@@ -4076,7 +4076,7 @@ body {
 .canvas-sources-head > .canvas-sources-state,
 .canvas-sources-loose ~ .canvas-sources-count,
 .canvas-sources-state ~ .canvas-sources-count {
-  margin-inline-start: var(--space-3);
+  margin-inline-start: var(--space-3, 6px);
 }
 .canvas-sources-piece[data-whole] {
   flex-basis: 100%;
