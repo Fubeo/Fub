@@ -4074,7 +4074,7 @@ lungo, due e tre dita, il doppio tocco nel vuoto e il pizzico che non
 annulla.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/canvas
-Stato: [ ] da fare
+Stato: [~] in corso · coder Opus · base HEAD
 
 ## T64 · Il dito scrive
 
