@@ -1431,8 +1431,14 @@ mod tests {
     #[test]
     fn a_page_or_cell_stroke_is_not_moved_or_resized_by_the_core() {
         for (file, anchor) in [
-            ("carta.pdf", r#"{"kind":"page","page":2,"width":595,"height":842}"#),
-            ("conti.xlsx", r#"{"kind":"cell","sheet":"Foglio1","cell":"B3"}"#),
+            (
+                "carta.pdf",
+                r#"{"kind":"page","page":2,"width":595,"height":842}"#,
+            ),
+            (
+                "conti.xlsx",
+                r#"{"kind":"cell","sheet":"Foglio1","cell":"B3"}"#,
+            ),
         ] {
             let source = format!(
                 r##"{{"nodes":[{{"id":"p","type":"file","file":"{file}","x":0,"y":0,"width":300,"height":400,

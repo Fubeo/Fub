@@ -432,8 +432,7 @@ impl CellAddress {
             .bytes()
             .fold(0_u32, |acc, b| acc * 26 + u32::from(b - b'A') + 1);
         let row: u32 = digits.parse().ok()?;
-        (column <= Self::MAX_COLUMN && row <= Self::MAX_ROW)
-            .then_some(CellAddress { column, row })
+        (column <= Self::MAX_COLUMN && row <= Self::MAX_ROW).then_some(CellAddress { column, row })
     }
 }
 
@@ -1136,8 +1135,23 @@ mod tests {
             assert_eq!(address.to_string(), text);
         }
         for text in [
-            "", "A0", "B", "3", "b3", "B3 ", " B3", "$B$3", "B03", "XFE1", "AAAA1", "A1048577",
-            "A10485760", "B-3", "B3.0", "ÀB3", "B٣",
+            "",
+            "A0",
+            "B",
+            "3",
+            "b3",
+            "B3 ",
+            " B3",
+            "$B$3",
+            "B03",
+            "XFE1",
+            "AAAA1",
+            "A1048577",
+            "A10485760",
+            "B-3",
+            "B3.0",
+            "ÀB3",
+            "B٣",
         ] {
             assert_eq!(CellAddress::parse(text), None, "{text:?}");
         }
@@ -1150,8 +1164,7 @@ mod tests {
             ("Conti 'Q1' \"bis\"", "A1"),
             (" ", "XFD1048576"),
         ] {
-            let stroke =
-                page_stroke(json!({ "kind": "cell", "sheet": sheet, "cell": address }));
+            let stroke = page_stroke(json!({ "kind": "cell", "sheet": sheet, "cell": address }));
             let StrokeState::Drawn(drawn) = state_on_card(stroke) else {
                 panic!("il tratto si disegna");
             };
