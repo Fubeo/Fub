@@ -1537,7 +1537,5 @@ describe("il lazo sceglie e sposta l'inchiostro (T86)", () => {
     expect(calls.filter((name) => name === "commit")).toHaveLength(1);
     expect(calls.filter((name) => name === "compile")).toHaveLength(1);
     expect(strokesOf(lastChange(changes).text, null)).toHaveLength(2000);
-    // Ogni toppa `ink` del nucleo rilegge e riscrive tutto il livello: con
-    // duemila tratti ci vogliono secondi, più dei cinque di serie.
-  }, 60_000);
+  });
 });
