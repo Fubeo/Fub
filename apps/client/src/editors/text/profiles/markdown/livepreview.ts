@@ -2003,6 +2003,10 @@ function insideReplaced(replaced: readonly { from: number; to: number }[], posit
 /// millisecondi: con la resa che ne segue sta dentro un fotogramma.
 const PARSE_SLICE_MS = 8;
 
+/// Il parser è arrivato in fondo al documento: la resa a metà si completa
+/// anche se l'albero dello stato era già quello.
+const restParsed = StateEffect.define<null>();
+
 /// `run` quando la pagina è libera: `requestIdleCallback` dove c'è, e non
 /// oltre 100 ms; altrimenti il prossimo giro del ciclo degli eventi. Torna
 /// la funzione che lo annulla.
@@ -2068,8 +2072,9 @@ export function livePreview(
       // La resa a metà di un documento grande si rifà a ogni modifica, fin
       // dove l'albero arriva, e quando l'albero arriva in fondo: gli alberi
       // intermedi del lavoratore del parser la rifarebbero tutta ogni volta.
-      const treeDone = !changed && syntaxTree(transaction.startState) !== syntaxTree(transaction.state)
-        && syntaxTreeAvailable(transaction.state);
+      const treeDone = !changed && syntaxTreeAvailable(transaction.state) && (
+        syntaxTree(transaction.startState) !== syntaxTree(transaction.state)
+        || transaction.effects.some((effect) => effect.is(restParsed)));
       if (!value.complete && (changed || treeDone)) {
         const previous = { document: value.document, changes: transaction.changes };
         const { document, complete } = renderMarkdownStatePrefix(transaction.state, forms, previous);
@@ -2087,7 +2092,7 @@ export function livePreview(
   });
   // Il resto di un documento grande: il parser di CodeMirror ci arriva a
   // pezzi brevi, quando la pagina è libera, e quando è in fondo una
-  // transazione vuota porta l'albero nello stato e la resa si completa. Il
+  // transazione (`restParsed`) porta l'albero nello stato e la resa si completa. Il
   // lavoratore del parser, da solo, si ferma poco oltre la vista.
   const parseRest = ViewPlugin.fromClass(class {
     private cancel: (() => void) | null = null;
@@ -2103,7 +2108,7 @@ export function livePreview(
         this.cancel = null;
         const { state } = this.view;
         if (state.field(blocks).complete) return;
-        if (ensureSyntaxTree(state, state.doc.length, PARSE_SLICE_MS)) this.view.dispatch({});
+        if (ensureSyntaxTree(state, state.doc.length, PARSE_SLICE_MS)) this.view.dispatch({ effects: restParsed.of(null) });
         else this.schedule();
       });
     }
