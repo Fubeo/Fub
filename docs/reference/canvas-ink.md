@@ -255,6 +255,36 @@ Obsidian apre la stessa lavagna e non conosce i campi `fub:ink`.
   programmi sanno mostrare (fra le alternative dell'ADR 0241), scritto da Fub
   in più; i campi `fub:ink` restano la fonte.
 
+## Il Lazo
+
+Il Lazo (`canvas.tool.lasso`, tasto `Q`, in tendina sotto la Selezione nella
+[colonna degli strumenti](canvas-input.md#la-colonna-degli-strumenti))
+sceglie schede e tratti con un giro a mano libera (`lasso.ts`, pura). La riga
+delle opzioni spiega il gesto finché non c'è una scheda scelta.
+
+- **Il giro** si chiude da solo e segue la regola pari-dispari. Una scheda è
+  dentro se lo è tutto il suo rettangolo, un tratto se lo sono tutti i suoi
+  punti. Un tratto di una scheda scelta non si sceglie: va con lei. Un
+  livello estraneo e un tratto che non si disegna non si scelgono. Con
+  `Maiusc` il giro aggiunge alla scelta; un clic senza giro sceglie la
+  scheda sotto, o toglie la scelta. `Esc` e un altro strumento la tolgono.
+- **I tratti scelti** hanno il contorno d'accento e una cornice tratteggiata
+  attorno (`.canvas-lasso`, sullo stage sopra l'inchiostro).
+- **Trascinare** dentro la scelta sposta schede e tratti insieme; gli
+  originali restano attenuati sotto finché la mano non si alza. Come
+  [mentre la penna scrive](canvas-input.md#mentre-la-penna-scrive), la cornice
+  e l'etichetta dicono a quale scheda i tratti passeranno, con la stessa
+  regola dell'ancora; con `Alt` restano liberi.
+- **All'alzata** un commit solo (`move` per le schede, `move_strokes` per
+  livello) che «Annulla» riporta uguale. Se i tratti passano a un'altra
+  scheda, un avviso dice «Ora fa parte di {nome}» con «Annulla» e «Rendilo
+  libero» (li riporta sulla radice, dove sono).
+- **La barra della selezione** con dei tratti scelti ha il colore (la tavolozza
+  della penna) e lo spessore (il cursore della penna) dei tratti: ogni scelta
+  è un `restyle_strokes`, un passo d'annulla. I pulsanti delle schede restano
+  solo se ci sono schede scelte.
+- **In sola lettura** il Lazo sceglie ma non sposta e non cambia.
+
 ## Toppa e operazioni
 
 Le toppe e le operazioni della lavagna sono nelle [operazioni sulla
@@ -320,6 +350,50 @@ che Fub non sa disegnare si conserva e non si cancella: `Invalid`.
 
 ```json
 { "op": "erase_strokes", "layer": { "node": "f1" }, "ids": ["s1", "s3"] }
+```
+
+### `move_strokes`
+
+Sposta i tratti `ids` del livello `layer` di `dx`, `dy`, in unità della
+lavagna (numeri finiti, altrimenti `Invalid`). È l'operazione del Lazo.
+
+- **Nello stesso livello** (`to` assente o uguale a `layer`) cambia solo
+  `ink`, una toppa `ink` per tratto al suo posto. Lo spostamento si porta
+  nelle unità dell'ancora e si arrotonda all'intero, e tutti i punti si
+  spostano di quello: la forma resta identica e cambia solo il primo
+  campione.
+- **In un altro livello** (`to`) i tratti escono da `layer` come con
+  `erase_strokes` ed entrano in fondo a `to`, nell'ordine dato, con
+  l'ancora nuova: `card` alla misura di adesso della scheda, o `free` sulla
+  radice. I punti si riportano nelle unità della nuova ancora con
+  [«La misura della scheda»](#la-misura-della-scheda) (un tratto del PDF
+  che passa a una nota cambia scala), arrotondati all'intero; lo spessore
+  del pennello segue la stessa scala. Un id che `to` ha già ne prende uno
+  nuovo dal seme, e `created` lo dice.
+- **Gli errori:** un id che non c'è è `UnknownStroke`, uno ripetuto
+  `DuplicateId`; un tratto che Fub non sa disegnare si conserva (`Invalid`),
+  e così uno che nel livello nuovo non si disegnerebbe; un livello estraneo,
+  da una parte o dall'altra, è `ForeignLayer`.
+
+```json
+{ "op": "move_strokes", "layer": { "node": "pdf1" }, "ids": ["s1"],
+  "dx": 40, "dy": -12, "to": { "node": "nota1" } }
+```
+
+### `restyle_strokes`
+
+Cambia il colore (`color`, `#rrggbb`) e lo spessore del pennello (`size`,
+in unità della lavagna) dei tratti `ids` del livello `layer`: almeno uno dei
+due, altrimenti `Invalid`, e `size` è un numero finito maggiore di zero.
+Una toppa `ink` per tratto al suo posto; un tratto che resta uguale non ne
+ha. Lo spessore cambia la voce `size=` del pennello dove sta scritta, le
+altre voci restano come sono. Sul tratto di una scheda che scala, `size` si
+divide per il fattore della scheda, così il tratto si vede come è chiesto.
+Gli errori sugli id sono quelli di `move_strokes`.
+
+```json
+{ "op": "restyle_strokes", "layer": "board", "ids": ["s1", "s3"],
+  "color": "#d55e00", "size": 6 }
 ```
 
 `move` e `resize` non toccano l'inchiostro: i punti di una scheda sono in

@@ -314,8 +314,8 @@ Ogni errore (`OpError`) dice quale operazione della lista non si compila
 | `DuplicateId` | un id dato che è già preso; un id ripetuto nella lista di `move`, `remove` o `reorder` |
 | `TooMany` | la lavagna avrebbe più di 100 000 schede o 200 000 archi |
 | `Invalid` | una scheda o un arco che il formato non accetta; `set` di `id` o `type`; un id che è sia una scheda sia un arco; un tratto che non si disegnerebbe |
-| `UnknownStroke` | `erase_strokes` di un id che non è un tratto del livello |
-| `ForeignLayer` | `add_strokes` o `erase_strokes` su un livello estraneo |
+| `UnknownStroke` | `erase_strokes`, `move_strokes` o `restyle_strokes` di un id che non è un tratto del livello |
+| `ForeignLayer` | un'operazione dell'inchiostro su un livello estraneo |
 
 I vettori stanno in `apps/client/src/__fixtures__/canvas-ops/`, uno per file,
 scritti a mano: `before`, `seed` facoltativo (0 se manca), `ops` e `expect`
@@ -325,9 +325,9 @@ fa girare e controlla anche che l'inversa delle toppe ridia `before`.
 
 ## Inchiostro
 
-La toppa `ink` e le operazioni `add_strokes` ed `erase_strokes`, con i loro
-esempi e i loro errori, stanno nell'[inchiostro della
-lavagna](canvas-ink.md#toppa-e-operazioni). `move` e `resize` non toccano
+La toppa `ink` e le operazioni `add_strokes`, `erase_strokes`, `move_strokes` e
+`restyle_strokes`, con i loro esempi e i loro errori, stanno nell'[inchiostro
+della lavagna](canvas-ink.md#toppa-e-operazioni). `move` e `resize` non toccano
 l'inchiostro; `remove` lo porta via con la scheda, e l'annulla lo rimette.
 
 ## Comandi

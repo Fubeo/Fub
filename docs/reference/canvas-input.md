@@ -186,7 +186,7 @@ scrive, valgono quelli della sessione). `Esc` torna dov'eri, anche in un campo.
 
 | Comandi | Tasti |
 |---|---|
-| `canvas.tool.select`, `.hand`, `.pen`, `.highlighter`, `.eraser`, `.text`, `.connect` | `V`, `H`, `P`, `Maiusc+P`, `E`, `T`, `C` |
+| `canvas.tool.select`, `.lasso`, `.hand`, `.pen`, `.highlighter`, `.eraser`, `.text`, `.connect` | `V`, `Q`, `H`, `P`, `Maiusc+P`, `E`, `T`, `C` |
 | `canvas.escape` (toglie la scelta; senza scelta torna alla Selezione) | `Esc` |
 | `canvas.undo`, `canvas.redo` | `Ctrl+Z`; `Ctrl+Maiusc+Z`, `Ctrl+Y` |
 | `canvas.commands`, `canvas.select_all`, `canvas.duplicate` | `Ctrl+/`, `Ctrl+A`, `Ctrl+D` |
@@ -383,16 +383,16 @@ niente da incollare: non è un errore. Un selettore annullato non fa nulla.
 
 ## La colonna degli strumenti
 
-A sinistra della lavagna sta la colonna degli strumenti
-(`chrome/rail.ts`, sulla colonna del kit come quella del disegno): Selezione,
-Mano, Penna (con l'Evidenziatore in tendina), Gomma, Testo e Collega. Ogni
-casella è il comando `canvas.tool.<id>`; i tasti valgono sulla lavagna e col
-fuoco sulla colonna, mai mentre si scrive. La Mano sposta la lavagna anche
-sopra le schede; il Testo mette una scheda di testo dove si fa clic, col campo
-aperto, e torna alla Selezione; Collega tira un filo da una scheda a un'altra.
-Penna, Evidenziatore e Gomma fanno scrivere il mouse con la penna del menu di
-N4: sono lo stesso stato dell'interruttore «Scrivi col mouse», e la scelta
-passa al menu della penna. `D` tenuto presta la penna a ogni strumento.
+A sinistra della lavagna sta la colonna degli strumenti (`chrome/rail.ts`, sulla
+colonna del kit come quella del disegno): Selezione (col Lazo in tendina), Mano,
+Penna (con l'Evidenziatore in tendina), Gomma, Testo e Collega. Ogni casella è
+il comando `canvas.tool.<id>`; i tasti valgono sulla lavagna e col fuoco sulla
+colonna, mai mentre si scrive. La Mano sposta la lavagna anche sopra le schede;
+il Testo mette una scheda di testo dove si fa clic, col campo aperto, e torna
+alla Selezione; Collega tira un filo da una scheda a un'altra. Penna,
+Evidenziatore e Gomma fanno scrivere il mouse con la penna del menu di N4: sono
+lo stesso stato dell'interruttore «Scrivi col mouse», e la scelta passa al menu
+della penna. `D` tenuto presta la penna a ogni strumento.
 
 `canvas.toolbar` sceglie quali strumenti stanno nella colonna e in che ordine
 (`canvasRailLayout`): vuota è quella di serie; un nome che la lavagna non
@@ -412,11 +412,11 @@ schede scelte:
   (`pen-menu.ts`, il contenuto com'è); passare fra i tre dal menu non lo
   chiude. `canvas.pen_menu` lo apre anche da `Ctrl+/`: con un altro
   strumento prima sceglie quello della penna.
-- **Selezione con delle schede scelte:** il colore (un pozzo col colore e il
+- **Selezione o Lazo con schede scelte:** il colore (un pozzo col colore e il
   nome, «Colori diversi» se non sono uguali, che apre i colori
   `canvas.color.*`) e Disponi: davanti, dietro, «Allinea e distribuisci»
   (`canvas.align_menu`, spento con meno di due schede).
-- **Selezione senza schede, Testo, Collega:** una riga che spiega il gesto;
+- **Selezione o Lazo senza schede, Testo, Collega:** una riga sul gesto;
   Collega ha le punte del filo che tira (`canvas.tips.*`: nessuna, all'inizio,
   alla fine, quella di serie, che scrive `toEnd: "arrow"` come prima). La
   punta scelta vale finché la lavagna resta aperta.
