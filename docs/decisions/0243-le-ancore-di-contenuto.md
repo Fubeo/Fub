@@ -47,6 +47,34 @@ i file. Le prossime schede vorranno lo stesso per altre parti di un file
 5. **Come cresce.** Una parte nuova di un file è un `kind` nuovo
    dell'ancora, con i suoi campi e i suoi vettori, mai un campo nuovo
    dentro `card`: `card` e `free` restano identici byte per byte.
+6. **La cella di un foglio, `cell` (T37).** `{"kind": "cell", "sheet":
+   "Foglio1", "cell": "B3"}`: il nome del foglio com'è nel file e la cella
+   in notazione A1; i punti sono in pixel del foglio al 100% dall'angolo in
+   alto a sinistra della cella. Il tratto è della cella sotto il centro del
+   suo riquadro; sopra le intestazioni o fuori dalla griglia prende `card`.
+   Un foglio vuoto o un indirizzo che non è A1 (in maiuscolo, da `A1` a
+   `XFD1048576`) è un'ancora che non vale, come al punto 4.
+
+### Perché la cella
+
+Una scheda di foglio scorre dentro di sé (D-6 del piano N6, risposta del
+2026-11-02: il segno segue la cella). Con le coordinate della scheda un
+cerchio intorno a un valore resta fermo mentre il foglio sotto scorre, e
+finisce intorno a un altro valore: il segno perde ciò che indicava. La cella
+è la parte del foglio che un altro programma sa ritrovare senza sapere come
+Fub disegna la scheda (lo scorrimento, lo zoom, le intestazioni), come la
+pagina per il PDF. I pixel al 100% dall'angolo della cella, senza una misura
+scritta, lasciano il segno della sua forma anche se la colonna si allarga.
+
+L'ancora segue **l'indirizzo**, non il contenuto: se un altro programma
+inserisce una riga sopra la 3, il tratto su `B3` sta sopra ciò che ora è in
+`B3`. Seguire il valore vorrebbe un'identità stabile delle celle, che i
+formati dei fogli (`.xlsx`, `.ods`, `.csv`) non hanno: Fub dovrebbe
+indovinarla confrontando le versioni, e un'altra app non saprebbe rifarlo.
+L'indirizzo invece si rilegge uguale da tutti. Se il foglio cambia nome o
+sparisce, il tratto resta nel file e non si vede, finché un foglio con quel
+nome torna; sopra celle unite il tratto è della cella in alto a sinistra
+dell'unione, l'indirizzo che il foglio dà all'unione.
 
 ## Conseguenze
 
@@ -67,7 +95,9 @@ i file. Le prossime schede vorranno lo stesso per altre parti di un file
 - un PDF sostituito con uno più corto lascia tratti che non si vedono (la
   pagina non c'è più), finché il file non torna o qualcuno li toglie;
 - il Lazo non sposta un tratto di pagina: il nucleo non conosce il
-  rettangolo della pagina.
+  rettangolo della pagina, né quello della cella;
+- un tratto di cella segue l'indirizzo: dopo una riga inserita da un altro
+  programma sta sopra il valore nuovo, non su quello che indicava.
 
 ## Alternative scartate
 
@@ -82,6 +112,11 @@ lo sa leggere, e il tratto si conserva senza disegnarsi.
 
 Più semplice, ma il segno della pagina 3 resta sopra la pagina 4: è ciò che
 la scelta dell'utente esclude.
+
+### L'inchiostro di un foglio attaccato alla scheda (D-6 a)
+
+Il segno resterebbe fermo mentre il foglio scorre e indicherebbe un altro
+valore: è ciò che la scelta dell'utente esclude.
 
 ### L'inchiostro nel `.fubann` del PDF
 
@@ -109,8 +144,10 @@ quando riscrive il file lo dice la prova dell'ADR 0241.
   (`crates/fub-canvas-core/tests/ink_vectors.rs`), nella facciata `.wasm`
   (`crates/fub-canvas-wasm/tests/`) e nel client
   (`apps/client/src/editors/canvas/wasm/ink-vectors.test.ts`); i vettori di
-  N4 passano senza cambiare un file.
+  N4 passano senza cambiare un file. Così i vettori `cell-anchor` e
+  `reason-cell` (T37), con quelli di N4 e della pagina invariati.
 - `apps/client/src/editors/canvas/engine-ink-anchors.test.ts`: un tratto
   sulla pagina 2 sparisce sulla 3 e torna sulla 2; un tratto fuori dalla
   pagina ha l'ancora `card`.
-- Il formato: [L'inchiostro della lavagna](../reference/canvas-ink.md#lancora-di-pagina).
+- Il formato: [L'inchiostro della lavagna](../reference/canvas-ink.md#lancora-di-pagina)
+  e [l'ancora di cella](../reference/canvas-ink.md#lancora-di-cella).
