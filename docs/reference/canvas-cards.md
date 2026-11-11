@@ -174,21 +174,21 @@ I tipi stanno in `cards.ts`, con i commenti sui loro campi. In breve:
   `missing()` per dire che il file non c'è, e per il PDF `initialPage` (la
   pagina ricordata, o `null`) e `pageChanged(pagina)` (vedi «Riaprire dove
   eri»), e `pageShown()`: è in vista l'immagine di un'altra pagina, e la
-  tela ridisegna l'inchiostro della scheda; `contentShown()` fa lo stesso
-  quando cambia `contentAspect()`. `parts` porta le parti già provate di
+  tela ridisegna l'inchiostro della scheda; `contentShown()` e `cellsShown()`
+  fanno lo stesso quando cambiano `contentAspect()` o le celle in vista. `parts` porta le parti già provate di
   un [estratto](canvas-parts.md), o `null` (vale il `subpath`); `excerpt`,
   fuori dalla sola lettura, i gesti dell'avviso di una sezione persa.
 - `CardView` risponde a `setMode` e a `destroy`; può rispondere anche a
   `resize` (a fine gesto), `enter` e `leave` (entrare nella scheda e
   uscirne; `enter` restituisce `false` se non c'è niente in cui entrare),
   `key` (`true` se il tasto è della scheda), `page` (la pagina mostrata, da
-  1) e `pageBox` (la pagina in vista, la sua misura in punti PDF e il suo
+  1), `pageBox` (la pagina in vista, la sua misura in punti PDF e il suo
   rettangolo nella scheda, o `null`; da ferma la misura viene da
-  `CardSnapshot.pageSize`: [L'ancora di pagina](canvas-ink.md#lancora-di-pagina))
-  e `contentAspect` (la proporzione del contenuto in vista, intero e al
-  centro: l'immagine, la sua zona, la pagina del PDF; da ferma
-  `CardSnapshot.aspect`), che l'inchiostro `scale` segue
-  ([La misura della scheda](canvas-ink.md#la-misura-della-scheda)).
+  `CardSnapshot.pageSize`: [L'ancora di pagina](canvas-ink-anchors.md#lancora-di-pagina)),
+  `contentAspect` (la proporzione del contenuto in vista, intero e al centro;
+  da ferma `CardSnapshot.aspect`: [La misura della scheda](canvas-ink.md#la-misura-della-scheda))
+  e, per il foglio, `cellAt` e `cellRect` (la cella sotto un punto, dove sta
+  una cella: [L'ancora di cella](canvas-ink-anchors.md#lancora-di-cella)).
 - `createCardRegistry` costruisce il registro per specie. Due renderer
   diversi per la stessa specie sono un errore, lanciato quando il registro
   si costruisce: `card kind <specie> has two renderers`. Lo stesso renderer
