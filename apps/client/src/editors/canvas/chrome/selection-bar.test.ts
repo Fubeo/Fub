@@ -113,6 +113,14 @@ describe("le regole della barra", () => {
     expect(selectionBarActions(20, "canvas.open")).toEqual(many);
   });
 
+  it("coi tratti scelti col lazo, il loro colore e il loro spessore; Togli resta in fondo, solo per le schede (T86)", () => {
+    expect(selectionBarActions(0, null, 3)).toEqual(["canvas.stroke_color", "canvas.stroke_width"]);
+    expect(selectionBarActions(1, null, 2)).toEqual([
+      "canvas.color_menu", "canvas.connect", "canvas.group", "canvas.stroke_color", "canvas.stroke_width", "canvas.delete",
+    ]);
+    expect(selectionBarActions(0, null, 0)).toEqual([]);
+  });
+
   it("sta sopra le schede, sopra anche il loro titolo; al bordo alto va sotto; fuori dalla vista non c'è", () => {
     const size = { width: 200, height: 40 };
     const view = { width: 1000, height: 600 };

@@ -1295,3 +1295,249 @@ describe("a chi appartiene il tratto (T69)", () => {
     lift();
   });
 });
+
+describe("il lazo sceglie e sposta l'inchiostro (T86)", () => {
+  /** Il mouse sui punti `world` della lavagna: giù, i movimenti e su, tutti sulla vista. */
+  function drag(host: HTMLElement, world: readonly (readonly [number, number])[], init: PointerEventInit = {}): void {
+    const cam = camera(host);
+    const at = ([x, y]: readonly [number, number]) => ({ clientX: x * cam.zoom + cam.x, clientY: y * cam.zoom + cam.y });
+    const viewport = viewportOf(host);
+    viewport.dispatchEvent(pointerEvent("pointerdown", { ...MOUSE, ...init, ...at(world[0]!), button: 0, buttons: 1 }));
+    for (const point of world.slice(1)) {
+      viewport.dispatchEvent(pointerEvent("pointermove", { ...MOUSE, ...init, ...at(point), button: -1, buttons: 1 }));
+    }
+    viewport.dispatchEvent(pointerEvent("pointerup", { ...MOUSE, ...init, ...at(world[world.length - 1]!), button: 0, buttons: 0 }));
+  }
+
+  /** Un giro rettangolare attorno al riquadro dato, in coordinate della lavagna. */
+  function loop(x0: number, y0: number, x1: number, y1: number): [number, number][] {
+    return [[x0, y0], [x1, y0], [x1, y1], [x0, y1], [x0, y0 + 2]];
+  }
+
+  const lasso = (engine: CanvasEngine) => engine.commands().find((command) => command.id === "canvas.tool.lasso")!.run();
+  const chosen = (host: HTMLElement) => host.querySelectorAll(".canvas-stage > .canvas-lasso .canvas-lasso-chosen path").length;
+  const notice = (host: HTMLElement) => host.querySelector<HTMLElement>(".canvas-removal")?.textContent ?? null;
+  const action = (host: HTMLElement, name: string) => host.querySelector<HTMLButtonElement>(`[data-canvas-action="${name}"]`);
+
+  /** Due tratti liberi sotto le schede: il primo da x 100, il secondo da x 400. */
+  function twoFree() {
+    const mount = mounted();
+    pen(mount.host, viewportOf(mount.host), [[100, 300], [140, 320], [180, 330]]);
+    pen(mount.host, viewportOf(mount.host), [[400, 300], [440, 320], [480, 330]]);
+    expect(strokesOf(lastChange(mount.changes).text, null)).toHaveLength(2);
+    lasso(mount.engine);
+    return mount;
+  }
+
+  it("il giro sceglie i tratti tutti dentro e lascia quelli fuori; Maiusc aggiunge, un clic nel vuoto toglie", () => {
+    const { host, engine } = twoFree();
+    expect(engine.tool).toBe("lasso");
+    drag(host, loop(80, 280, 200, 350));
+    expect(chosen(host)).toBe(1);
+    // Il secondo tratto è solo per metà nel giro: non si sceglie.
+    drag(host, loop(380, 280, 450, 350), { shiftKey: true });
+    expect(chosen(host)).toBe(1);
+    drag(host, loop(380, 280, 500, 350), { shiftKey: true });
+    expect(chosen(host)).toBe(2);
+    drag(host, [[700, 600], [700, 600]]);
+    expect(chosen(host)).toBe(0);
+  });
+
+  it("i tratti lasciati su un'altra scheda passano a lei in un passo, con «Ora fa parte di» e i suoi due pulsanti", () => {
+    const { host, changes, engine } = twoFree();
+    const before = lastChange(changes).text;
+    const other = strokesOf(before, null)[1]!;
+    drag(host, loop(80, 280, 200, 350));
+    const count = changes.length;
+    // Sopra la nota mentre si trascina: si accende come per la penna.
+    const cam = camera(host);
+    const at = ([x, y]: readonly [number, number]) => ({ clientX: x * cam.zoom + cam.x, clientY: y * cam.zoom + cam.y });
+    const viewport = viewportOf(host);
+    viewport.dispatchEvent(pointerEvent("pointerdown", { ...MOUSE, ...at([140, 320]), button: 0, buttons: 1 }));
+    viewport.dispatchEvent(pointerEvent("pointermove", { ...MOUSE, ...at([110, 180]), button: -1, buttons: 1 }));
+    viewport.dispatchEvent(pointerEvent("pointermove", { ...MOUSE, ...at([80, 50]), button: -1, buttons: 1 }));
+    expect([...host.querySelectorAll<HTMLElement>(".canvas-stage > .canvas-ink-frames:not([hidden])")].map((el) => el.dataset.node)).toEqual(["t"]);
+    expect(host.querySelector(".canvas-ink-label:not([data-idle])")?.textContent).toBe(t("canvas.ink.attach", { name: "nota" }));
+    viewport.dispatchEvent(pointerEvent("pointerup", { ...MOUSE, ...at([80, 50]), button: 0, buttons: 0 }));
+
+    expect(changes).toHaveLength(count + 1);
+    const moved = lastChange(changes).text;
+    expect(lastChange(changes).operation.patches.map((patch) => patch.kind)).toEqual(["ink", "ink"]);
+    const [kept] = strokesOf(moved, null);
+    // Il tratto non toccato resta identico.
+    expect(kept).toEqual(other);
+    const [passed] = strokesOf(moved, "t");
+    expect(passed).toMatchObject({ anchor: { kind: "card", width: 200, height: 100 } });
+    expect(inkPaths(card(host, "t"))).toHaveLength(1);
+    expect(host.querySelectorAll(".canvas-ink-board path")).toHaveLength(1);
+    // I tratti restano scelti dove sono andati.
+    expect(chosen(host)).toBe(1);
+    expect(notice(host)).toBe(t("canvas.ink.moved_to", { name: "nota" }));
+    expect(action(host, "undo-removal")?.textContent).toBe(t("app.undo"));
+    expect(action(host, "free-ink")?.textContent).toBe(t("canvas.ink.make_free"));
+    expect(host.querySelectorAll(".canvas-stage > .canvas-ink-frames:not([hidden])")).toHaveLength(0);
+
+    // «Annulla» riporta il testo di prima, byte per byte.
+    action(host, "undo-removal")!.click();
+    expect(lastChange(changes).text).toBe(before);
+    expect(notice(host)).toBeNull();
+    expect(engine.redo()).toBe(true);
+    expect(lastChange(changes).text).toBe(moved);
+  });
+
+  it("«Rendilo libero» riporta i tratti sulla radice dove si vedono, in un passo suo", () => {
+    const { host, changes, engine } = twoFree();
+    drag(host, loop(80, 280, 200, 350));
+    drag(host, [[140, 320], [110, 180], [80, 50]]);
+    const moved = lastChange(changes).text;
+    expect(strokesOf(moved, "t")).toHaveLength(1);
+    action(host, "free-ink")!.click();
+    const freed = lastChange(changes).text;
+    expect(strokesOf(freed, "t")).toEqual([]);
+    const free = strokesOf(freed, null);
+    expect(free).toHaveLength(2);
+    const freeAnchor: Json = (free[1]!.anchor as Json | undefined) ?? { kind: "free" };
+    expect(freeAnchor).toEqual({ kind: "free" });
+    expect(notice(host)).toBeNull();
+    expect(chosen(host)).toBe(1);
+    // Il tratto è dove era sulla nota: spostato di (-60, -270) dal suo posto
+    // di partenza; cambia solo il primo campione, la forma resta quella.
+    const start = strokesOf(lastChange(changes.slice(0, 2)).text, null)[0]!;
+    const samples = (ink: unknown) => String(ink).split(" ").slice(3);
+    const [first, ...rest] = samples(start.ink);
+    const [x, y, ...tail] = first!.split(",").map(Number);
+    expect(samples(free[1]!.ink)).toEqual([[x! - 6000, y! - 27000, ...tail].join(","), ...rest]);
+    expect(free[1]).toMatchObject({ color: start.color, tool: start.tool, brush: start.brush });
+    expect(engine.undo()).toBe(true);
+    expect(lastChange(changes).text).toBe(moved);
+  });
+
+  it("colore e spessore dalla barra della selezione: un annulla ciascuno, gli altri tratti identici", () => {
+    const { host, changes, engine } = twoFree();
+    const before = lastChange(changes).text;
+    const [, other] = strokesOf(before, null);
+    drag(host, loop(80, 280, 200, 350));
+    const bar = host.querySelector<HTMLElement>(".canvas-selection-bar")!;
+    expect(bar.hidden).toBe(false);
+    const colorButton = bar.querySelector<HTMLButtonElement>('[data-command="canvas.stroke_color"]')!;
+    const widthButton = bar.querySelector<HTMLButtonElement>('[data-command="canvas.stroke_width"]')!;
+    expect(colorButton.hidden).toBe(false);
+    expect(widthButton.hidden).toBe(false);
+    // Solo tratti: niente comandi delle schede.
+    expect(bar.querySelector<HTMLButtonElement>('[data-command="canvas.delete"]')!.hidden).toBe(true);
+
+    colorButton.click();
+    document.querySelector<HTMLButtonElement>('.canvas-stroke-popover .canvas-pen-swatch[data-value="#d55e00"]')!.click();
+    const colored = lastChange(changes).text;
+    expect(changes.length).toBe(3);
+    expect(strokesOf(colored, null)[0]).toMatchObject({ color: "#d55e00" });
+    expect(strokesOf(colored, null)[1]).toEqual(other);
+
+    host.querySelector<HTMLButtonElement>('.canvas-selection-bar [data-command="canvas.stroke_width"]')!.click();
+    const slider = document.querySelector<HTMLInputElement>(".canvas-stroke-popover .canvas-pen-width")!;
+    slider.value = "12";
+    slider.dispatchEvent(new Event("input", { bubbles: true }));
+    expect(changes.length).toBe(3);
+    slider.dispatchEvent(new Event("change", { bubbles: true }));
+    expect(changes.length).toBe(4);
+    const widened = lastChange(changes).text;
+    const brush = parseInkBrush(strokesOf(widened, null)[0]!.brush as string);
+    expect(brush.size).toBeCloseTo(12 / camera(host).zoom, 2);
+    expect(strokesOf(widened, null)[1]).toEqual(other);
+
+    expect(engine.undo()).toBe(true);
+    expect(lastChange(changes).text).toBe(colored);
+    expect(engine.undo()).toBe(true);
+    expect(lastChange(changes).text).toBe(before);
+  });
+
+  it("schede e tratti presi insieme si spostano insieme, in un annulla; i tratti della scheda scelta vanno con lei", () => {
+    const { host, changes, engine } = mounted();
+    pen(host, card(host, "t"), across(0, 0));
+    pen(host, viewportOf(host), [[60, 160], [90, 170], [120, 180]]);
+    const before = lastChange(changes).text;
+    const onCard = strokesOf(before, "t");
+    lasso(engine);
+    drag(host, loop(-20, -20, 220, 220));
+    // La nota è scelta; il suo tratto va con lei, quello libero è scelto da sé.
+    expect(engine.selection().nodes).toEqual(["t"]);
+    expect(chosen(host)).toBe(1);
+    drag(host, [[100, 50], [140, 70], [140, 90]]);
+    const moved = lastChange(changes).text;
+    const kinds = lastChange(changes).operation.patches.map((patch) => patch.kind);
+    expect(kinds.filter((kind) => kind === "upsert-node")).toHaveLength(1);
+    expect(kinds.filter((kind) => kind === "ink")).toHaveLength(1);
+    const doc = JSON.parse(moved) as { nodes: Json[] };
+    expect(doc.nodes[0]).toMatchObject({ x: 40, y: 40 });
+    // Il tratto della nota non cambia: si sposta con la scheda.
+    expect(strokesOf(moved, "t")).toEqual(onCard);
+    expect(strokesOf(moved, null)).toHaveLength(1);
+    expect(engine.undo()).toBe(true);
+    expect(lastChange(changes).text).toBe(before);
+  });
+
+  it("un tratto di un PDF portato su una nota diventa della nota, con le misure della nota", () => {
+    const { host, changes, engine } = mounted();
+    pen(host, card(host, "doc"), across(600, 0));
+    expect(strokesOf(lastChange(changes).text, "doc")).toHaveLength(1);
+    lasso(engine);
+    drag(host, loop(610, 10, 790, 90));
+    expect(engine.selection().nodes).toEqual([]);
+    expect(chosen(host)).toBe(1);
+    drag(host, [[660, 50], [400, 50], [60, 50]]);
+    const moved = lastChange(changes).text;
+    expect(strokesOf(moved, "doc")).toEqual([]);
+    expect(strokesOf(moved, "t")[0]).toMatchObject({ anchor: { kind: "card", width: 200, height: 100 } });
+    expect(notice(host)).toBe(t("canvas.ink.moved_to", { name: "nota" }));
+  });
+
+  it("in sola lettura il lazo sceglie, niente si sposta", () => {
+    const { host, changes, engine } = twoFree();
+    engine.setReadOnly(true);
+    const count = changes.length;
+    drag(host, loop(80, 280, 200, 350));
+    expect(chosen(host)).toBe(1);
+    drag(host, [[140, 320], [110, 180], [80, 50]]);
+    expect(changes).toHaveLength(count);
+    const bar = host.querySelector<HTMLElement>(".canvas-selection-bar")!;
+    expect(bar.querySelector('[data-command="canvas.stroke_color"]')!.getAttribute("aria-disabled")).toBe("true");
+  });
+
+  it("Esc toglie i tratti scelti, e cambiare strumento pure", () => {
+    const { host, engine } = twoFree();
+    drag(host, loop(80, 280, 200, 350));
+    expect(chosen(host)).toBe(1);
+    viewportOf(host).dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
+    expect(chosen(host)).toBe(0);
+    drag(host, loop(80, 280, 200, 350));
+    expect(chosen(host)).toBe(1);
+    engine.commands().find((command) => command.id === "canvas.tool.select")!.run();
+    expect(chosen(host)).toBe(0);
+  });
+
+  it("duemila tratti nel giro si spostano con una scrittura sola", () => {
+    const brush = "pf1 size=2 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=0 pen=ballpoint";
+    const strokes = Array.from({ length: 2000 }, (_, i) => ({
+      id: `s${i}`,
+      tool: "pen",
+      brush,
+      color: "#000000",
+      anchor: { kind: "free" },
+      // Un trattino di 4 unità, cinquanta per riga, dieci unità fra l'uno e l'altro.
+      ink: `1 s100 cxy ${(1000 + (i % 50) * 10) * 100},${(1000 + Math.floor(i / 50) * 10) * 100} 400,400`,
+    }));
+    const source = JSON.stringify({ ...JSON.parse(BOARD), "fub:ink": { v: 1, strokes } });
+    const { host, changes, calls, engine } = mounted(source);
+    lasso(engine);
+    drag(host, loop(990, 990, 1520, 1420));
+    expect(chosen(host)).toBe(2000);
+    calls.length = 0;
+    drag(host, [[1200, 1200], [1260, 1230], [1300, 1250]]);
+    expect(changes).toHaveLength(1);
+    expect(calls.filter((name) => name === "commit")).toHaveLength(1);
+    expect(calls.filter((name) => name === "compile")).toHaveLength(1);
+    expect(strokesOf(lastChange(changes).text, null)).toHaveLength(2000);
+    // Ogni toppa `ink` del nucleo rilegge e riscrive tutto il livello: con
+    // duemila tratti ci vogliono secondi, più dei cinque di serie.
+  }, 60_000);
+});

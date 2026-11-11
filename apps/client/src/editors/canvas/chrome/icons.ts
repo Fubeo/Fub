@@ -20,6 +20,12 @@ const CANVAS_ICONS: Readonly<Record<string, readonly string[]>> = {
     "M15.5 14h4a1.5 1.5 0 0 1 1.5 1.5v3a1.5 1.5 0 0 1-1.5 1.5h-4a1.5 1.5 0 0 1-1.5-1.5v-3a1.5 1.5 0 0 1 1.5-1.5z",
     "M10 7h2.5a2 2 0 0 1 2 2v5",
   ],
+  // Lazo (T86): il giro della corda, il nodo e il capo che pende.
+  "canvas-lasso": [
+    "M12 4c4.4 0 8 2.2 8 5s-3.6 5-8 5-8-2.2-8-5 3.6-5 8-5z",
+    "M7.5 13.2c-.9 1-1.3 2-1 3 .4 1.6 2.4 2.1 3.7 1.2",
+    "M10.2 17.4 9 20.5",
+  ],
 };
 
 /// Registra le icone della lavagna e quelle del disegno che la colonna usa.

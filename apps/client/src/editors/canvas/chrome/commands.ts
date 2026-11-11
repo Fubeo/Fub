@@ -96,15 +96,16 @@ export type CanvasNudge = (typeof CANVAS_NUDGE)[number];
 export const CANVAS_TIPS = ["none", "start", "end"] as const;
 export type CanvasTip = (typeof CANVAS_TIPS)[number];
 
-/// Gli strumenti della colonna (T49), nell'ordine della colonna di serie. Il
-/// lazo (Q) arriva con T86.
-export const CANVAS_TOOL_IDS = ["select", "hand", "pen", "highlighter", "eraser", "text", "connect"] as const;
+/// Gli strumenti della colonna (T49), nell'ordine della colonna di serie; il
+/// lazo (Q, T86) sta nella tendina della Selezione.
+export const CANVAS_TOOL_IDS = ["select", "lasso", "hand", "pen", "highlighter", "eraser", "text", "connect"] as const;
 export type CanvasToolId = (typeof CANVAS_TOOL_IDS)[number];
 
 /// Il tasto di ogni strumento, come nella tabella «Tasti» (gli stessi del
 /// disegno). D tenuto non è uno strumento: presta la penna (N4).
 export const CANVAS_TOOL_KEYS: Readonly<Record<CanvasToolId, string>> = {
   select: "v",
+  lasso: "q",
   hand: "h",
   pen: "p",
   highlighter: "Shift-p",

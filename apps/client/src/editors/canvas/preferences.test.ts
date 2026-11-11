@@ -258,6 +258,8 @@ describe("le impostazioni della lavagna", () => {
       [FINGER, true, { fingerMovesCard: true }],
       [FINGER_WRITES, true, { fingerWrites: true }],
       [PEN_BUTTON, "eraser", { penButton: "eraser" }],
+      // Il lazo (T86): il tasto della penna sceglie.
+      [PEN_BUTTON, "lasso", { penButton: "lasso" }],
       [WHEEL, "zoom", { wheel: "zoom" }],
       [WORKSPACE, "simple", { workspace: "simple" }],
       [TOOLBAR, ["pen"], { toolbar: ["pen"] }],

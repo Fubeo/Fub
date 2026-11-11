@@ -37,6 +37,7 @@ describe("il campo della colonna della lavagna", () => {
     const root = canvasToolbarField(entry(["pen"]), "x", vi.fn());
     expect(boxes(root).map((box) => box.id)).toEqual([
       "x-select",
+      "x-lasso",
       "x-hand",
       "x-pen",
       "x-highlighter",

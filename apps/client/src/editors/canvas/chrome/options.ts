@@ -6,8 +6,9 @@
 // - **Che cosa mostra.** Lo dice una regola pura, `canvasOptionsMode`: con
 //   Penna, Evidenziatore e Gomma il menu delle penne di N4 (`pen-menu.ts`,
 //   montato qui com'è); con la Selezione e delle schede scelte il colore e
-//   Disponi (davanti, dietro, «Allinea e distribuisci»); con la Selezione
-//   senza schede, Collega e Testo una riga che spiega il gesto, e per
+//   Disponi (davanti, dietro, «Allinea e distribuisci»), e così col Lazo
+//   (T86); con la Selezione o il Lazo senza schede, Collega e Testo una riga
+//   che spiega il gesto, e per
 //   Collega le punte del filo che tira. La Vista (riduci, ingrandisci,
 //   mostra tutto) chiude ogni riga ed è la prima ad andare in «…» quando non
 //   c'è posto.
@@ -53,7 +54,7 @@ import {
 import { ensureCanvasIcons } from "./icons";
 
 /// Che cosa mostra la riga.
-export type CanvasOptionsMode = "ink" | "select" | "cards" | "hand" | "text" | "connect" | "writing";
+export type CanvasOptionsMode = "ink" | "select" | "lasso" | "cards" | "hand" | "text" | "connect" | "writing";
 
 /// La riga per lo strumento `tool` con `chosen` schede scelte; `writing`
 /// quando una scheda in scrittura ha dato la sua barra.
@@ -65,7 +66,8 @@ export function canvasOptionsMode(tool: CanvasToolId, chosen: number, writing: b
     case "eraser":
       return "ink";
     case "select":
-      return chosen > 0 ? "cards" : "select";
+    case "lasso":
+      return chosen > 0 ? "cards" : tool;
     default:
       return tool;
   }
@@ -268,6 +270,7 @@ export function createCanvasOptions(ctx: CanvasOptionsContext): CanvasOptions {
   const hintItem = item("hint", 1, hint);
   const HINT: Partial<Record<CanvasOptionsMode, Key>> = {
     select: "canvas.options.select_hint",
+    lasso: "canvas.options.lasso_hint",
     text: "canvas.options.text_hint",
     connect: "canvas.options.connect_hint",
   };
@@ -284,6 +287,7 @@ export function createCanvasOptions(ctx: CanvasOptionsContext): CanvasOptions {
       case "cards":
         return [colorItem, arrangeItem, view];
       case "select":
+      case "lasso":
       case "text":
         return [hintItem, view];
       case "connect":

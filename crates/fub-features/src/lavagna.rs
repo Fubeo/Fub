@@ -68,7 +68,7 @@ pub const CANVAS_FINGER_WRITES_KEY: &str = "canvas.finger_writes";
 /// penna. Il primo valore è quello di serie.
 pub const CANVAS_PEN_BUTTON_KEY: &str = "canvas.pen_button";
 /// I valori di [`CANVAS_PEN_BUTTON_KEY`], nell'ordine dei pulsanti.
-pub const CANVAS_PEN_BUTTON_VALUES: [&str; 3] = ["radial", "eraser", "pan"];
+pub const CANVAS_PEN_BUTTON_VALUES: [&str; 4] = ["radial", "eraser", "pan", "lasso"];
 
 /// L'impostazione «La rotella del mouse»: che cosa fa fuori da una scheda attiva.
 pub const CANVAS_WHEEL_KEY: &str = "canvas.wheel";
@@ -174,6 +174,7 @@ const S_PEN_BUTTON_DESC: &str = "s_pen_button_desc";
 const S_PEN_BUTTON_RADIAL: &str = "s_pen_button_radial";
 const S_PEN_BUTTON_ERASER: &str = "s_pen_button_eraser";
 const S_PEN_BUTTON_PAN: &str = "s_pen_button_pan";
+const S_PEN_BUTTON_LASSO: &str = "s_pen_button_lasso";
 const S_WHEEL: &str = "s_wheel";
 const S_WHEEL_DESC: &str = "s_wheel_desc";
 const S_WHEEL_PAN: &str = "s_wheel_pan";
@@ -240,7 +241,12 @@ pub fn settings() -> Vec<SettingSpec> {
             S_PEN_BUTTON_DESC,
             choice(
                 &CANVAS_PEN_BUTTON_VALUES,
-                &[S_PEN_BUTTON_RADIAL, S_PEN_BUTTON_ERASER, S_PEN_BUTTON_PAN],
+                &[
+                    S_PEN_BUTTON_RADIAL,
+                    S_PEN_BUTTON_ERASER,
+                    S_PEN_BUTTON_PAN,
+                    S_PEN_BUTTON_LASSO,
+                ],
             ),
         )
         .for_machine(),
@@ -650,12 +656,13 @@ const STRINGS: &[(&str, &str, &str)] = &[
     (S_PEN_BUTTON, "Il tasto della penna", "The pen button"),
     (
         S_PEN_BUTTON_DESC,
-        "Che cosa fa il tasto sul fianco della penna: apre il menu radiale, cancella come il retro della penna, o sposta la lavagna. Su un computer senza penna non fa niente.",
-        "What the button on the side of the pen does: it opens the radial menu, erases like the back of the pen, or moves the whiteboard. On a computer without a pen it does nothing.",
+        "Che cosa fa il tasto sul fianco della penna: apre il menu radiale, cancella come il retro della penna, sposta la lavagna o sceglie col lazo. Su un computer senza penna non fa niente.",
+        "What the button on the side of the pen does: it opens the radial menu, erases like the back of the pen, moves the whiteboard or selects with the lasso. On a computer without a pen it does nothing.",
     ),
     (S_PEN_BUTTON_RADIAL, "Apre il menu", "Opens the menu"),
     (S_PEN_BUTTON_ERASER, "Cancella", "Erases"),
     (S_PEN_BUTTON_PAN, "Sposta la lavagna", "Moves the whiteboard"),
+    (S_PEN_BUTTON_LASSO, "Sceglie col lazo", "Selects with the lasso"),
     (S_WHEEL, "La rotella del mouse", "The mouse wheel"),
     (
         S_WHEEL_DESC,
@@ -787,6 +794,7 @@ mod tests {
             S_PEN_BUTTON_RADIAL,
             S_PEN_BUTTON_ERASER,
             S_PEN_BUTTON_PAN,
+            S_PEN_BUTTON_LASSO,
             S_WHEEL,
             S_WHEEL_DESC,
             S_WHEEL_PAN,

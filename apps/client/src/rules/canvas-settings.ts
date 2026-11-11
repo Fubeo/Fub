@@ -53,7 +53,7 @@ export const DROP_FOLDER_KEY = "canvas.drop_folder";
 export const DROP_FOLDER_PATH_KEY = "canvas.drop_folder_path";
 
 /// Le scelte, come le scrive la macchina nel Rust; la prima è quella di serie.
-export const PEN_BUTTON_VALUES = ["radial", "eraser", "pan"] as const;
+export const PEN_BUTTON_VALUES = ["radial", "eraser", "pan", "lasso"] as const;
 export const WHEEL_VALUES = ["pan", "zoom"] as const;
 export const WORKSPACE_VALUES = ["auto", "full", "simple"] as const;
 export const DROP_FOLDER_VALUES = ["notes", "board", "folder"] as const;

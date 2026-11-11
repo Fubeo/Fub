@@ -1,5 +1,5 @@
-// La colonna degli strumenti della lavagna (T49): Selezione, Mano, Penna,
-// Evidenziatore, Gomma, Testo e Collega, sulla colonna del kit
+// La colonna degli strumenti della lavagna (T49): Selezione (col Lazo in
+// tendina, T86), Mano, Penna, Evidenziatore, Gomma, Testo e Collega, sulla colonna del kit
 // (`kit/tool-rail.ts`) come quella del disegno, con le tendine. Ogni
 // strumento è un comando del catalogo (`canvas.tool.<id>`, `commands.ts`) col
 // suo tasto; la colonna lo mostra e lo sceglie, la tela sa che cosa fa.
@@ -10,7 +10,7 @@
 //
 // In sola lettura gli strumenti che scrivono (penna, evidenziatore, gomma,
 // testo, collega) si vedono spenti col perché nel nome e nel suggerimento;
-// Selezione e Mano restano.
+// Selezione, Lazo e Mano restano: il lazo sceglie anche lì, non sposta.
 
 import { createToolRail, type RailGroup, type RailTool, type ToolRail } from "../../../kit/tool-rail";
 import { t } from "../../../i18n/strings";
@@ -37,19 +37,20 @@ export const CANVAS_WRITING_TOOLS: ReadonlySet<CanvasToolId> = new Set<CanvasToo
 type Layout = readonly (readonly (readonly CanvasToolId[])[])[];
 
 const DEFAULT_LAYOUT: Layout = [
-  [["select"], ["hand"]],
+  [["select", "lasso"], ["hand"]],
   [["pen", "highlighter"], ["eraser"]],
   [["text"], ["connect"]],
 ];
 
 /// La famiglia di uno strumento: scegliere, scrivere a mano, creare.
 const FAMILY: Readonly<Record<CanvasToolId, number>> = {
-  select: 0, hand: 0, pen: 1, highlighter: 1, eraser: 1, text: 2, connect: 2,
+  select: 0, lasso: 0, hand: 0, pen: 1, highlighter: 1, eraser: 1, text: 2, connect: 2,
 };
 const GROUP_IDS = ["pick", "ink", "make"] as const;
 
 const ICON: Readonly<Record<CanvasToolId, string>> = {
   select: "draw-select",
+  lasso: "canvas-lasso",
   hand: "draw-hand",
   pen: "draw-pen",
   highlighter: "draw-highlighter",

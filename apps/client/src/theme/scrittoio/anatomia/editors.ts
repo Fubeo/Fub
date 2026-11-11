@@ -86,5 +86,8 @@ export const EDITORS: PartAnatomy = {
     // cosa si attaccherà il tratto, e il bordo tratteggiato attorno alla
     // scheda, che è un segno di Fub sulla lavagna.
     { name: "canvas-ink-target", layers: { "canvas-ink-frame": "segno" }, states: REST, hooks: ["canvas-ink-label", "canvas-ink-frame"] },
+    // Il Lazo (T86): il giro, la cornice dei tratti scelti e il loro
+    // contorno, segni di Fub sulla lavagna.
+    { name: "canvas-lasso", layers: { "canvas-lasso-path": "segno", "canvas-lasso-frame": "segno", "canvas-lasso-chosen": "segno" }, states: REST, hooks: ["canvas-lasso-path", "canvas-lasso-frame", "canvas-lasso-chosen"] },
   ],
 };

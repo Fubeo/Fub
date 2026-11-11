@@ -88,6 +88,9 @@ describe("che cosa mostra la riga", () => {
     expect(canvasOptionsMode("eraser", 0, false)).toBe("ink");
     expect(canvasOptionsMode("select", 0, false)).toBe("select");
     expect(canvasOptionsMode("select", 2, false)).toBe("cards");
+    // Il lazo (T86): la sua riga che spiega il gesto, o le schede che ha scelto.
+    expect(canvasOptionsMode("lasso", 0, false)).toBe("lasso");
+    expect(canvasOptionsMode("lasso", 3, false)).toBe("cards");
     expect(canvasOptionsMode("hand", 2, false)).toBe("hand");
     expect(canvasOptionsMode("text", 0, false)).toBe("text");
     expect(canvasOptionsMode("connect", 1, false)).toBe("connect");

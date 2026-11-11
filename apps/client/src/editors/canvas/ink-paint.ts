@@ -116,6 +116,24 @@ export function fadeInkStroke(owner: HTMLElement, where: "card" | "board", id: s
   return true;
 }
 
+/// Come `fadeInkStroke` per tutti i tratti `ids` di un livello, in una
+/// passata sola sui suoi percorsi: i tratti scelti col lazo (T86) possono
+/// essere migliaia. Dà quanti percorsi ha toccato.
+export function fadeInkStrokes(owner: HTMLElement, where: "card" | "board", ids: ReadonlySet<string>, faded: boolean): number {
+  const layer = where === "card" ? "canvas-ink-card" : "canvas-ink-board";
+  let touched = 0;
+  for (const child of owner.children) {
+    if (child.localName !== "svg" || !child.classList.contains(layer)) continue;
+    for (const path of child.querySelectorAll("path[data-ink-stroke]")) {
+      if (!ids.has(path.getAttribute("data-ink-stroke") ?? "")) continue;
+      setAttr(path, "opacity", faded ? INK_FADED_OPACITY : null);
+      touched += 1;
+    }
+    break;
+  }
+  return touched;
+}
+
 /// Mostra il taglio della gomma «Solo il pezzo» sul percorso già disegnato
 /// del tratto `id` (dove `fadeInkStroke`): il tratto attenuato e, subito dopo,
 /// un `<path data-ink-cut>` pieno col contorno `cut` dei pezzi che restano;

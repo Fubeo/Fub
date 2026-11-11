@@ -86,7 +86,14 @@ import {
   type CanvasClipboard,
 } from "./clipboard";
 import { createCanvasOptions, type CanvasOptions } from "./chrome/options";
-import { createCanvasSelectionBar, selectionBarWanted, type CanvasSelectionBar } from "./chrome/selection-bar";
+import {
+  createCanvasSelectionBar,
+  selectionBarWanted,
+  type CanvasSelectionBar,
+  type SelectionBarRestyle,
+  type SelectionBarStrokes,
+} from "./chrome/selection-bar";
+import { Lasso, LASSO_MIN_STEP, extendLasso, lassoPath, type LassoPoint } from "./lasso";
 import type { OptionItem } from "../../kit/options-bar";
 import {
   canvasStatusItems,
@@ -101,7 +108,7 @@ import { saveStateKey } from "../../state/saving";
 import { SHARED_RECENT_COMMANDS, openCommandSearch, type CommandSearchHandle, type RecentCommands } from "./chrome/command-search";
 import { inkFitMode } from "./ink-fit";
 import { mountInkLayer, type InkLayer, type InkLayerStroke } from "./ink-layer";
-import { cutInkStroke, fadeInkStroke, InkPathCache, paintBoard, paintCard, type DryStroke } from "./ink-paint";
+import { cutInkStroke, fadeInkStroke, fadeInkStrokes, InkPathCache, paintBoard, paintCard, type DryStroke } from "./ink-paint";
 import { createPenMenu, pickerText as canvasPickerText, type PenMenu } from "./pen-menu";
 // I colori delle schede e dei fili (T47).
 import {
@@ -139,8 +146,11 @@ import {
 import {
   addStrokePatch,
   eraseStrokePatches,
+  moveStrokesOp,
   newNodeId,
   removeEdgePatch,
+  restyleStrokesOp,
+  sameLayer,
   removeNodePatch,
   upsertEdgePatch,
   upsertNodePatch,
@@ -170,10 +180,13 @@ import {
   type CanvasCore,
   type CanvasCoreErrorCode,
   type CanvasInkLayer,
+  type CanvasIntentOp,
   type CanvasSourceEdit,
 } from "./wasm/core";
 
 export const CANVAS_SNAP = 8;
+/** I pixel dello schermo fra i tratti scelti col Lazo e la loro cornice (T86). */
+const LASSO_FRAME_PAD = 6;
 /**
  * I punti della griglia si vedono ogni tanti passi di `CANVAS_SNAP` (T95: ogni
  * 32 unità): l'aggancio resta di 8, lo sfondo non si riempie di punti.
@@ -397,6 +410,79 @@ interface InkErasing {
  * il bordo tratteggiato e il testo dell'etichetta cambiano solo quando cambia
  * l'ancora.
  */
+/**
+ * Lo spostamento col Lazo (T86): le schede scelte e i tratti scelti insieme,
+ * di `dx`, `dy` unità della lavagna. Le schede si muovono nel modello in mano
+ * come in `#drag`; i tratti si vedono spostati sullo strato del lazo, sopra
+ * gli originali attenuati, e al rilascio vanno nel file in un commit solo.
+ */
+interface StrokeDrag {
+  readonly pointerId: number;
+  readonly startX: number;
+  readonly startY: number;
+  /** Le schede che si spostano, con la posizione di partenza. */
+  readonly origin: Map<string, { x: number; y: number }>;
+  /** I tratti scelti, come erano alla partenza. */
+  readonly units: readonly ErasableInk[];
+  /** Dove sta la vista sullo schermo, letto alla partenza. */
+  readonly view: DOMRect;
+  moved: boolean;
+  dx: number;
+  dy: number;
+  /** L'ultimo punto del puntatore, per rifare la scheda quando cambia Alt. */
+  clientX: number;
+  clientY: number;
+  /** La scheda che prenderà i tratti, `null` se restano liberi; `undefined` prima del primo giro. */
+  holder: string | null | undefined;
+}
+
+/** Lo strato del lazo sullo stage (T86): i tratti scelti, la loro cornice, il giro in corso. */
+interface LassoLayer {
+  readonly svg: SVGSVGElement;
+  readonly chosen: SVGGElement;
+  readonly frame: SVGRectElement;
+  readonly path: SVGPathElement;
+}
+
+/** I tratti di `units` per livello, nell'ordine in cui arrivano. */
+function strokesByLayer(units: readonly ErasableInk[]): { readonly layer: InkLayerRef; readonly ids: string[] }[] {
+  const groups = new Map<string, { readonly layer: InkLayerRef; readonly ids: string[] }>();
+  for (const unit of units) {
+    const key = unit.node === null ? "board" : `node\u0000${unit.node}`;
+    let group = groups.get(key);
+    if (!group) {
+      group = { layer: unit.layer, ids: [] };
+      groups.set(key, group);
+    }
+    group.ids.push(unit.id);
+  }
+  return [...groups.values()];
+}
+
+/**
+ * Le chiavi dei tratti scelti dopo le toppe `patches`: un tratto tolto da un
+ * livello e aggiunto a un altro (`move_strokes` con `to`) resta scelto dove è
+ * andato, col suo id nuovo se l'ha cambiato.
+ */
+function keysAfter(chosen: ReadonlySet<string>, patches: readonly CanvasPatch[]): Set<string> {
+  const keys = new Set(chosen);
+  let carried = 0;
+  for (const patch of patches) {
+    if (patch.kind !== "ink") continue;
+    if (patch.before && !patch.after && keys.delete(inkKey(patch.layer, patch.before.id))) carried += 1;
+    else if (!patch.before && patch.after && carried > 0) {
+      keys.add(inkKey(patch.layer, patch.after.id));
+      carried -= 1;
+    }
+  }
+  return keys;
+}
+
+/** Un seme per gli id nuovi del nucleo: un intero sicuro a caso. */
+function compileSeed(): number {
+  return Math.floor(Math.random() * Number.MAX_SAFE_INTEGER);
+}
+
 interface InkTarget {
   readonly pointerId: number;
   readonly box: StrokeBox;
@@ -1322,7 +1408,13 @@ export class CanvasEngine {
    * passo d'annulla del togliere. Vale finché quel passo è l'ultimo: la
    * modifica dopo lo spegne, così «Annulla» annulla sempre il togliere.
    */
-  #removal: { readonly text: string; readonly step: CanvasStep | undefined; readonly undo: boolean } | null = null;
+  #removal: {
+    readonly text: string;
+    readonly step: CanvasStep | undefined;
+    readonly undo: boolean;
+    /** I tratti appena passati a una scheda col Lazo (T86): «Rendilo libero» li riporta sulla radice. */
+    readonly free?: { readonly layer: InkLayerRef; readonly ids: readonly string[] };
+  } | null = null;
   /**
    * I PDF che non si sono aperti con «Spargi le pagine» (T72), per percorso, con
    * ciò che smette di guardarne il file: il comando resta spento finché il file
@@ -1423,6 +1515,14 @@ export class CanvasEngine {
   #inkSaid: HTMLElement | null = null;
   /** L'etichetta e il bordo, tenuti fra un tratto e l'altro. */
   #inkMarks: InkMarks | null = null;
+  /** I tratti scelti col Lazo (T86), per chiave (`inkKey`). */
+  #strokeSelection: ReadonlySet<string> = new Set();
+  /** Il giro del Lazo in corso (T86), in coordinate della lavagna, e la scheda sotto l'appoggio. */
+  #lasso: { readonly pointerId: number; readonly points: LassoPoint[]; readonly additive: boolean; readonly pressed: string | null } | null = null;
+  /** Lo spostamento di ciò che il Lazo ha scelto (T86). */
+  #strokeDrag: StrokeDrag | null = null;
+  /** Lo strato del lazo sullo stage, creato la prima volta che serve. */
+  #lassoLayer: LassoLayer | null = null;
   // --- copia e incolla (T68) ---
   /** «Copia» o «Taglia» del menu mentre manda la copia del browser: l'evento è nostro anche col fuoco nel menu. */
   #clipboardCommand: "copy" | "cut" | null = null;
@@ -1650,6 +1750,7 @@ export class CanvasEngine {
       },
       color: () => this.#chosenColor(),
       back: () => this.#viewport.focus({ preventScroll: true }),
+      restyle: (change) => this.#restyleChosen(change),
     });
     area.append(this.#selectionBar.element);
     const header = document.createElement("div");
@@ -2682,6 +2783,12 @@ export class CanvasEngine {
   #setTool(tool: CanvasToolId): void {
     // Uno strumento scelto rinuncia al filo cominciato da «Collega…».
     this.#connectFrom = null;
+    // Lasciando il Lazo i tratti scelti non lo sono più: solo lui li sposta (T86).
+    if (tool !== "lasso" && this.#strokeSelection.size > 0) {
+      this.#strokeSelection = new Set();
+      this.#paintLasso();
+      this.#syncSelectionBar();
+    }
     this.#tool = tool;
     this.#inkMouseButton.setAttribute("aria-pressed", String(this.#inkMouse));
     this.#viewport.dataset.tool = tool;
@@ -2915,6 +3022,14 @@ export class CanvasEngine {
     if (element) fadeInkStroke(element, "card", unit.id, faded);
   }
 
+  /** Attenua o rimette i tratti `units`, una passata per livello: col Lazo possono essere migliaia (T86). */
+  #fadeUnits(units: readonly ErasableInk[], faded: boolean): void {
+    for (const { layer, ids } of strokesByLayer(units)) {
+      const owner = layer === "board" ? this.#stage : this.#inkOwner(layer.node);
+      if (owner) fadeInkStrokes(owner, layer === "board" ? "board" : "card", new Set(ids), faded);
+    }
+  }
+
   /** Mostra il taglio `preview` di un tratto (o lo toglie con `null`), senza ridisegnare. */
   #showCut(unit: ErasableInk, preview: string | null): void {
     if (unit.node === null) {
@@ -3088,6 +3203,8 @@ export class CanvasEngine {
     paintBoard(this.#stage, board);
     this.#inkCards = cards;
     this.#inkBoard = board;
+    // I tratti scelti col Lazo, sopra l'inchiostro libero (T86).
+    this.#paintLasso();
     this.#inkPaths.sweep();
   }
 
@@ -3283,7 +3400,7 @@ export class CanvasEngine {
       const id = holder?.id ?? null;
       if (id !== target.holder) {
         target.holder = id;
-        this.#placeInkFrame(target, holder);
+        this.#placeInkFrame(target.frames, holder);
         const text = inkHolderText(holder);
         // Lo stesso testo del tratto prima non si riscrive: niente misura nuova.
         if (target.label.textContent !== text) target.label.textContent = text;
@@ -3295,16 +3412,21 @@ export class CanvasEngine {
 
   /** L'etichetta accanto alla punta, con la misura che ha già: nessuna lettura del layout. */
   #placeInkLabel(target: InkTarget): void {
+    this.#placeInkLabelAt(target.view, this.#inkAt.clientX, this.#inkAt.clientY);
+  }
+
+  /** L'etichetta accanto al punto `clientX`, `clientY` della vista `view`: per la penna e per il Lazo (T86). */
+  #placeInkLabelAt(view: DOMRect, clientX: number, clientY: number): void {
     const marks = this.#inkMarks;
     if (!marks) return;
-    const { left, top, width } = target.view;
-    const px = this.#inkAt.clientX - left;
-    const py = this.#inkAt.clientY - top;
+    const { left, top, width } = view;
+    const px = clientX - left;
+    const py = clientY - top;
     // Sopra a destra della punta; a sinistra o sotto se lì non c'è posto.
-    target.label.toggleAttribute("data-flip-x", px + marks.gap + marks.width > width);
-    target.label.toggleAttribute("data-flip-y", py - marks.gap - marks.height < 0);
-    target.label.style.setProperty("--canvas-ink-x", `${px}px`);
-    target.label.style.setProperty("--canvas-ink-y", `${py}px`);
+    marks.label.toggleAttribute("data-flip-x", px + marks.gap + marks.width > width);
+    marks.label.toggleAttribute("data-flip-y", py - marks.gap - marks.height < 0);
+    marks.label.style.setProperty("--canvas-ink-x", `${px}px`);
+    marks.label.style.setProperty("--canvas-ink-y", `${py}px`);
   }
 
   /**
@@ -3312,8 +3434,7 @@ export class CanvasEngine {
    * lavagna (lo stage lo porta con la camera), o lo toglie se il tratto è
    * libero. Lo stacco e lo spessore sono in `structure.css`, il colore nella pelle.
    */
-  #placeInkFrame(target: InkTarget, holder: CanvasNode | null): void {
-    const frames = target.frames;
+  #placeInkFrame(frames: HTMLElement, holder: CanvasNode | null): void {
     if (!holder) {
       frames.hidden = true;
       return;
@@ -3364,6 +3485,8 @@ export class CanvasEngine {
         marks.height = label.offsetHeight;
         if (marks.gap === 0) marks.gap = parseFloat(getComputedStyle(label).getPropertyValue("--canvas-ink-label-gap")) || 0;
         if (this.#inkTarget) this.#placeInkLabel(this.#inkTarget);
+        const drag = this.#strokeDrag;
+        if (drag?.moved) this.#placeInkLabelAt(drag.view, drag.clientX, drag.clientY);
       });
       observer.observe(label);
       this.#life.add(() => observer.disconnect());
@@ -3390,6 +3513,9 @@ export class CanvasEngine {
       target.holder = undefined;
       this.#inkTargetShow(target, false);
     }
+    // Spostando i tratti col Lazo, Alt li lascia liberi anche a puntatore fermo (T86).
+    const drag = this.#strokeDrag;
+    if (drag?.moved && drag.units.length > 0) this.#showStrokeHolder(drag);
   }
 
   /**
@@ -3411,6 +3537,474 @@ export class CanvasEngine {
     const text = inkHolderText(holder);
     if (said.textContent !== text) said.textContent = text;
   }
+
+  // --- il Lazo (T86) ------------------------------------------------------------
+
+  /**
+   * I tratti scelti col Lazo che ci sono ancora e si vedono, in coordinate
+   * della lavagna; non quelli delle schede scelte, che vanno con loro.
+   */
+  #chosenStrokes(): ErasableInk[] {
+    if (this.#strokeSelection.size === 0 || !this.#doc || this.#isSceneOversized()) return [];
+    const cards = new Set(this.#selection);
+    return erasableInk(this.#inkStateList())
+      .filter((unit) => this.#strokeSelection.has(unit.key) && (unit.node === null || !cards.has(unit.node)));
+  }
+
+  /** I tratti scelti come li mostra la barra della selezione: colore, spessore sullo schermo, sola lettura. */
+  #strokesShown(units: readonly ErasableInk[]): SelectionBarStrokes | null {
+    if (units.length === 0) return null;
+    const zoom = this.#camera.zoom;
+    const colors = new Set(units.map((unit) => unit.stroke.color.toLowerCase()));
+    // Lo spessore come si vede, al mezzo pixel: il passo del cursore.
+    const widths = new Set(units.map((unit) => Math.round(unit.stroke.brush.size * unit.fit.s * zoom * 2) / 2));
+    const [color] = colors;
+    const [width] = widths;
+    return {
+      count: units.length,
+      color: colors.size === 1 ? color! : null,
+      width: widths.size === 1 ? width! : null,
+      tool: units.every((unit) => unit.stroke.tool === "highlighter") ? "highlighter" : "pen",
+      off: this.#readOnly ? t("canvas.commands.why.read_only") : null,
+    };
+  }
+
+  /** Lo strato del lazo, creato la prima volta e poi lo stesso, in cima allo stage. */
+  #lassoLayerNow(): LassoLayer {
+    let layer = this.#lassoLayer;
+    if (!layer) {
+      const ns = "http://www.w3.org/2000/svg";
+      const svg = document.createElementNS(ns, "svg");
+      svg.setAttribute("class", "canvas-lasso");
+      svg.setAttribute("aria-hidden", "true");
+      const chosen = document.createElementNS(ns, "g");
+      chosen.setAttribute("class", "canvas-lasso-chosen");
+      const frame = document.createElementNS(ns, "rect");
+      frame.setAttribute("class", "canvas-lasso-frame");
+      const path = document.createElementNS(ns, "path");
+      path.setAttribute("class", "canvas-lasso-path");
+      svg.append(chosen, frame, path);
+      layer = { svg, chosen, frame, path };
+      this.#lassoLayer = layer;
+    }
+    if (this.#stage.lastElementChild !== layer.svg) this.#stage.append(layer.svg);
+    return layer;
+  }
+
+  /**
+   * Disegna lo strato del lazo: il giro in corso, i tratti scelti col loro
+   * contorno d'accento e la cornice tratteggiata attorno. Spostandosi, i
+   * tratti portano il loro colore sopra gli originali attenuati. Senza giro
+   * e senza tratti scelti lo strato esce dallo stage.
+   */
+  #paintLasso(): void {
+    if (this.#destroyed) return;
+    const lasso = this.#lasso;
+    const drag = this.#strokeDrag;
+    const units = drag ? drag.units : this.#chosenStrokes();
+    if (!lasso && units.length === 0) {
+      this.#lassoLayer?.svg.remove();
+      return;
+    }
+    const layer = this.#lassoLayerNow();
+    layer.path.setAttribute("d", lasso ? lassoPath(lasso.points) : "");
+    const moving = drag !== null && drag.moved;
+    const paths = layer.chosen.children;
+    let count = 0;
+    let minX = Infinity;
+    let minY = Infinity;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
+    for (const unit of units) {
+      const dry = dryStroke(unit.stroke, this.#inkPaths);
+      if (!dry) continue;
+      let path = paths[count] as SVGPathElement | undefined;
+      if (!path) {
+        path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+        layer.chosen.append(path);
+      }
+      count += 1;
+      path.setAttribute("d", dry.path);
+      path.setAttribute("transform", `matrix(${unit.fit.s} 0 0 ${unit.fit.s} ${unit.fit.x} ${unit.fit.y})`);
+      path.setAttribute("fill", moving ? dry.fill : "none");
+      if (moving && dry.opacity !== undefined) path.setAttribute("fill-opacity", String(dry.opacity));
+      else path.removeAttribute("fill-opacity");
+      minX = Math.min(minX, unit.minX);
+      minY = Math.min(minY, unit.minY);
+      maxX = Math.max(maxX, unit.maxX);
+      maxY = Math.max(maxY, unit.maxY);
+    }
+    while (paths.length > count) paths[paths.length - 1]!.remove();
+    if (count > 0) {
+      // Qualche pixel dello schermo attorno ai tratti, a ogni zoom.
+      const pad = LASSO_FRAME_PAD / this.#camera.zoom;
+      layer.frame.setAttribute("x", String(minX - pad));
+      layer.frame.setAttribute("y", String(minY - pad));
+      layer.frame.setAttribute("width", String(maxX - minX + 2 * pad));
+      layer.frame.setAttribute("height", String(maxY - minY + 2 * pad));
+      layer.frame.removeAttribute("display");
+    } else {
+      layer.frame.setAttribute("display", "none");
+    }
+    this.#shiftLasso(moving ? drag.dx : 0, moving ? drag.dy : 0);
+  }
+
+  /** Porta i tratti scelti e la loro cornice di `dx`, `dy`, senza ridisegnarli. */
+  #shiftLasso(dx: number, dy: number): void {
+    const layer = this.#lassoLayer;
+    if (!layer) return;
+    const shift = dx === 0 && dy === 0 ? null : `translate(${dx} ${dy})`;
+    for (const element of [layer.chosen, layer.frame]) {
+      if (shift === null) element.removeAttribute("transform");
+      else element.setAttribute("transform", shift);
+    }
+  }
+
+  /** Comincia un giro del Lazo dal punto dell'appoggio; con Maiusc aggiungerà alla scelta. */
+  #beginLasso(event: PointerEvent): void {
+    this.#lasso = {
+      pointerId: event.pointerId,
+      points: [this.#screenToWorld(event.clientX, event.clientY)],
+      additive: event.shiftKey,
+      pressed: this.#nodeAt(event.target),
+    };
+    this.#viewport.setPointerCapture?.(event.pointerId);
+    this.#paintLasso();
+  }
+
+  /** Il giro cresce coi punti dell'evento che si allontanano dall'ultimo (un passo per pixel dello schermo). */
+  #moveLasso(event: PointerEvent): void {
+    const lasso = this.#lasso;
+    if (!lasso) return;
+    const rect = this.#viewport.getBoundingClientRect();
+    const { x, y, zoom } = this.#camera;
+    const coalesced = typeof event.getCoalescedEvents === "function" ? event.getCoalescedEvents() : [];
+    let grew = false;
+    for (const one of coalesced.length > 0 ? coalesced : [event]) {
+      const point = { x: (one.clientX - rect.left - x) / zoom, y: (one.clientY - rect.top - y) / zoom };
+      if (extendLasso(lasso.points, point, LASSO_MIN_STEP / zoom)) grew = true;
+    }
+    if (grew) this.#lassoLayer?.path.setAttribute("d", lassoPath(lasso.points));
+  }
+
+  /**
+   * Il giro chiuso sceglie le schede tutte dentro e i tratti coi punti tutti
+   * dentro (`lasso.ts`); i tratti delle schede scelte vanno con loro e non si
+   * scelgono a parte. Con Maiusc si aggiunge alla scelta. Un giro senza area è
+   * un clic: sceglie la scheda sotto, o toglie la scelta.
+   */
+  #endLasso(): void {
+    const lasso = this.#lasso;
+    this.#lasso = null;
+    const doc = this.#doc;
+    if (!lasso || !doc) {
+      this.#paintLasso();
+      return;
+    }
+    const loop = new Lasso(lasso.points);
+    if (!loop.closed) {
+      if (lasso.pressed !== null) this.#selectNode(lasso.pressed, lasso.additive);
+      else if (!lasso.additive) this.#clearSelection();
+      this.#paintLasso();
+      return;
+    }
+    const cards = doc.nodes.filter((node) => loop.containsBox(node)).map((node) => node.id);
+    const selection = lasso.additive ? [...this.#selection, ...cards.filter((id) => !this.#selection.includes(id))] : cards;
+    const held = new Set(selection);
+    const strokes: string[] = [];
+    for (const unit of erasableInk(this.#inkStateList())) {
+      if (unit.node !== null && held.has(unit.node)) continue;
+      // Il riquadro prima dei punti: i tratti lontani si lasciano subito.
+      if (unit.maxX < loop.minX || unit.minX > loop.maxX || unit.maxY < loop.minY || unit.minY > loop.maxY) continue;
+      if (loop.containsPoints(unit.points)) strokes.push(unit.key);
+    }
+    this.#selection = selection;
+    this.#edgeSelection = [];
+    this.#strokeSelection = new Set(lasso.additive ? [...this.#strokeSelection, ...strokes] : strokes);
+    this.#options.onSelectionChange();
+    this.#displaySelection();
+  }
+
+  /** L'appoggio cade dentro ciò che il Lazo ha scelto: la cornice dei tratti, o una scheda scelta. */
+  #insideChosen(event: PointerEvent): boolean {
+    const { x, y } = this.#screenToWorld(event.clientX, event.clientY);
+    for (const node of this.#selectedNodes()) {
+      if (x >= node.x && x <= node.x + node.width && y >= node.y && y <= node.y + node.height) return true;
+    }
+    const units = this.#chosenStrokes();
+    if (units.length === 0) return false;
+    const pad = LASSO_FRAME_PAD / this.#camera.zoom;
+    let minX = Infinity;
+    let minY = Infinity;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
+    for (const unit of units) {
+      minX = Math.min(minX, unit.minX);
+      minY = Math.min(minY, unit.minY);
+      maxX = Math.max(maxX, unit.maxX);
+      maxY = Math.max(maxY, unit.maxY);
+    }
+    return x >= minX - pad && x <= maxX + pad && y >= minY - pad && y <= maxY + pad;
+  }
+
+  /** Comincia a spostare le schede scelte (coi gruppi, ciò che contengono) e i tratti scelti. */
+  #beginStrokeDrag(event: PointerEvent): void {
+    const doc = this.#doc;
+    if (!doc) return;
+    const origin = new Map<string, { x: number; y: number }>();
+    for (const id of this.#selection) {
+      const node = doc.nodes.find((n) => n.id === id);
+      if (node) origin.set(id, { x: node.x, y: node.y });
+    }
+    for (const group of doc.nodes.filter((node) => origin.has(node.id) && node.type === "group")) {
+      for (const child of doc.nodes) {
+        if (child.id !== group.id && child.x >= group.x && child.y >= group.y
+          && child.x + child.width <= group.x + group.width
+          && child.y + child.height <= group.y + group.height) {
+          origin.set(child.id, { x: child.x, y: child.y });
+        }
+      }
+    }
+    // I tratti delle schede che si spostano vanno con loro.
+    const units = this.#chosenStrokes().filter((unit) => unit.node === null || !origin.has(unit.node));
+    this.#strokeDrag = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      origin,
+      units,
+      view: this.#viewport.getBoundingClientRect(),
+      moved: false,
+      dx: 0,
+      dy: 0,
+      clientX: event.clientX,
+      clientY: event.clientY,
+      holder: undefined,
+    };
+    this.#viewport.setPointerCapture?.(event.pointerId);
+  }
+
+  /**
+   * Le schede e i tratti scelti seguono il puntatore, in unità intere della
+   * lavagna. Sopra un'altra scheda i tratti la accendono come la penna
+   * (T69): bordo tratteggiato ed etichetta; Alt li lascia liberi.
+   */
+  #moveStrokeDrag(event: PointerEvent): void {
+    const drag = this.#strokeDrag;
+    const doc = this.#doc;
+    if (!drag || !doc) return;
+    drag.clientX = event.clientX;
+    drag.clientY = event.clientY;
+    if (!drag.moved && Math.abs(event.clientX - drag.startX) + Math.abs(event.clientY - drag.startY) <= 3) return;
+    const first = !drag.moved;
+    drag.moved = true;
+    const zoom = this.#camera.zoom;
+    drag.dx = Math.round((event.clientX - drag.startX) / zoom);
+    drag.dy = Math.round((event.clientY - drag.startY) / zoom);
+    if (drag.origin.size > 0) {
+      const byId = new Map(doc.nodes.map((node) => [node.id, node] as const));
+      for (const [id, start] of drag.origin) {
+        const node = byId.get(id);
+        if (!node) continue;
+        node.x = start.x + drag.dx;
+        node.y = start.y + drag.dy;
+      }
+      this.#renderLive();
+    }
+    if (first) {
+      this.#fadeUnits(drag.units, true);
+      this.#syncSelectionBar();
+      this.#paintLasso();
+    } else {
+      this.#shiftLasso(drag.dx, drag.dy);
+    }
+    if (event.altKey !== this.#altHeld) this.#altHeld = event.altKey;
+    if (drag.units.length > 0) this.#showStrokeHolder(drag);
+  }
+
+  /**
+   * La scheda che prenderebbe i tratti spostati adesso: la regola della penna
+   * (`anchorAt`) sul loro riquadro spostato, fra le schede che non si
+   * spostano con loro e non hanno il livello d'un altro programma; con Alt,
+   * nessuna.
+   */
+  #strokeHolder(drag: StrokeDrag): CanvasNode | null {
+    const doc = this.#doc;
+    const layers = this.#inkLayersNow();
+    if (this.#altHeld || !doc || !layers || drag.units.length === 0) return null;
+    let minX = Infinity;
+    let minY = Infinity;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
+    for (const unit of drag.units) {
+      minX = Math.min(minX, unit.minX);
+      minY = Math.min(minY, unit.minY);
+      maxX = Math.max(maxX, unit.maxX);
+      maxY = Math.max(maxY, unit.maxY);
+    }
+    const bounds = { x: minX + drag.dx, y: minY + drag.dy, width: maxX - minX, height: maxY - minY };
+    return anchorAt(doc.nodes, bounds, (node) => !drag.origin.has(node.id) && !foreignInkLayer(layers, { node: node.id }));
+  }
+
+  /** Mostra a chi andranno i tratti spostati: il bordo attorno alla scheda e l'etichetta accanto al puntatore. */
+  #showStrokeHolder(drag: StrokeDrag): void {
+    const holder = this.#strokeHolder(drag);
+    const marks = this.#inkMarksNow();
+    const id = holder?.id ?? null;
+    if (id !== drag.holder || !marks.frames.isConnected) {
+      drag.holder = id;
+      this.#placeInkFrame(marks.frames, holder);
+      const text = inkHolderText(holder);
+      if (marks.label.textContent !== text) marks.label.textContent = text;
+      marks.label.toggleAttribute("data-free", holder === null);
+    }
+    marks.label.removeAttribute("data-idle");
+    this.#placeInkLabelAt(drag.view, drag.clientX, drag.clientY);
+  }
+
+  /** Via il bordo e l'etichetta dello spostamento. */
+  #hideStrokeHolder(): void {
+    const marks = this.#inkMarks;
+    if (!marks || this.#inkTarget) return;
+    marks.frames.hidden = true;
+    marks.label.setAttribute("data-idle", "");
+  }
+
+  /** Il rilascio: il modello in mano torna quello del nucleo, poi lo spostamento va nel file. */
+  #endStrokeDrag(): void {
+    const drag = this.#strokeDrag;
+    this.#strokeDrag = null;
+    if (!drag) return;
+    this.#hideStrokeHolder();
+    this.#fadeUnits(drag.units, false);
+    if (!drag.moved) {
+      this.#paintLasso();
+      return;
+    }
+    this.#doc = this.#coreModel() ?? this.#doc;
+    this.#moveChosen([...drag.origin.keys()], drag.units, drag.dx, drag.dy, drag.holder ?? null);
+  }
+
+  /**
+   * Sposta in un commit solo, un passo d'annulla, le schede `cards` e i
+   * tratti `units` di `dx`, `dy`: le schede con `move`, i tratti con
+   * `move_strokes` livello per livello. Se i tratti finiscono su un'altra
+   * scheda (`holder`) passano a lei, e l'avviso lo dice con «Annulla» e
+   * «Rendilo libero». Ciò che il nucleo rifiuta lo dice l'avviso, e la
+   * lavagna resta com'era.
+   */
+  #moveChosen(cards: readonly string[], units: readonly ErasableInk[], dx: number, dy: number, holder: string | null): void {
+    const to: InkLayerRef = holder === null ? "board" : { node: holder };
+    const ops: CanvasIntentOp[] = [];
+    if (cards.length > 0 && (dx !== 0 || dy !== 0)) ops.push({ op: "move", ids: [...cards], dx, dy });
+    const groups = strokesByLayer(units);
+    let passed = false;
+    for (const { layer, ids } of groups) {
+      const same = sameLayer(layer, to);
+      if (same && dx === 0 && dy === 0) continue;
+      if (!same) passed = true;
+      ops.push(moveStrokesOp(layer, ids, dx, dy, to));
+    }
+    const patches = ops.length > 0 ? this.#compileOps(ops) : null;
+    if (!patches || patches.length === 0) {
+      this.#render();
+      return;
+    }
+    if (!this.#commitChosen(patches)) {
+      this.#render();
+      return;
+    }
+    const node = holder === null ? null : this.#doc?.nodes.find((one) => one.id === holder) ?? null;
+    if (passed && node) {
+      const ids = patches.flatMap((patch) => patch.kind === "ink" && !patch.before && patch.after && sameLayer(patch.layer, to) ? [patch.after.id] : []);
+      const name = cardMenuName(node);
+      this.#showRemoval(name ? t("canvas.ink.moved_to", { name }) : t("canvas.ink.moved_card"), true, { layer: to, ids });
+    }
+    this.#statusSettle();
+  }
+
+  /**
+   * Il commit delle toppe compilate dal Lazo, un passo d'annulla; i tratti
+   * scelti restano scelti dove sono andati. `false` se il nucleo l'ha
+   * rifiutato (l'avviso dice perché).
+   */
+  #commitChosen(patches: readonly CanvasPatch[]): boolean {
+    const inkOnly = patches.every((patch) => patch.kind === "ink");
+    const chosen = keysAfter(this.#strokeSelection, patches);
+    const code = this.#commitLocal(patches, "input", (step) => this.#pushUndo(step, true), !inkOnly);
+    if (code !== true) {
+      // Una trappola la dice il nucleo che si riapre.
+      if (code !== "trap") this.#showNotice(t(code === "limit" ? "canvas.ink.full" : "canvas.ink.refused"));
+      return false;
+    }
+    this.#inkChain = null;
+    this.#strokeSelection = chosen;
+    if (inkOnly) this.#paintInk();
+    else this.#paintLasso();
+    if (this.#intakeError) this.#showNotice("");
+    return true;
+  }
+
+  /** Le toppe delle operazioni d'intento `ops` sul modello di adesso; `null` se il nucleo le rifiuta (lo dice l'avviso). */
+  #compileOps(ops: readonly CanvasIntentOp[]): CanvasPatch[] | null {
+    const core = this.#core;
+    if (!core || this.#destroyed || this.#readOnly || this.#isSceneOversized()) return null;
+    this.#recordPending();
+    try {
+      return core.compile(ops, compileSeed()).patches;
+    } catch (error) {
+      if (lostCore(error)) {
+        this.#lose();
+        return null;
+      }
+      if (error instanceof CanvasCoreError) {
+        this.#showNotice(t("canvas.ink.refused"));
+        return null;
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * «Rendilo libero» dell'avviso: i tratti appena passati a una scheda
+   * tornano liberi sulla lavagna, dove si vedono, in un passo d'annulla suo.
+   * Vale finché lo spostamento è l'ultimo passo.
+   */
+  #freeMovedInk(): void {
+    const removal = this.#removal;
+    const free = removal?.free;
+    if (!removal || !free || removal.step === undefined || this.#undo[this.#undo.length - 1] !== removal.step) {
+      this.#dropRemoval();
+      return;
+    }
+    const patches = this.#compileOps([moveStrokesOp(free.layer, free.ids, 0, 0, "board")]);
+    if (patches && patches.length > 0 && this.#commitChosen(patches)) this.#dropRemoval();
+    this.#statusSettle();
+    this.#viewport.focus({ preventScroll: true });
+  }
+
+  /**
+   * Cambia colore o spessore dei tratti scelti dalla barra della selezione,
+   * livello per livello in un commit solo: un annulla per gesto. Lo spessore
+   * arriva in pixel dello schermo e va nel file in unità della lavagna.
+   */
+  #restyleChosen(change: SelectionBarRestyle): void {
+    if (this.#destroyed || this.#readOnly || this.#isSceneOversized()) return;
+    const units = this.#chosenStrokes();
+    if (units.length === 0) return;
+    let style: { readonly color?: string; readonly size?: number };
+    if ("color" in change) style = { color: change.color };
+    else {
+      const size = Math.round((change.width / this.#camera.zoom) * 1000) / 1000;
+      if (!(size > 0)) return;
+      style = { size };
+    }
+    const ops = strokesByLayer(units).map(({ layer, ids }) => restyleStrokesOp(layer, ids, style));
+    const patches = this.#compileOps(ops);
+    if (patches && patches.length > 0) this.#commitChosen(patches);
+    this.#statusSettle();
+  }
+
 
   // --- camera ---------------------------------------------------------------
 
@@ -3949,10 +4543,20 @@ export class CanvasEngine {
         undo.type = "button";
         undo.dataset.canvasAction = "undo-removal";
         undo.textContent = t("app.undo");
-        undo.title = t("canvas.card.removed_undo");
+        undo.title = t(removal.free ? "canvas.ink.moved_undo" : "canvas.card.removed_undo");
         // Il pulsante si rifà con la barra: l'ascolto se ne va con lui.
         undo.addEventListener("click", () => this.#undoRemoval());
         bar.insertBefore(undo, said.nextSibling);
+        // I tratti passati a una scheda col Lazo (T86): «Rendilo libero».
+        if (removal.free) {
+          const free = document.createElement("button");
+          free.type = "button";
+          free.dataset.canvasAction = "free-ink";
+          free.textContent = t("canvas.ink.make_free");
+          free.title = t("canvas.ink.make_free_hint");
+          free.addEventListener("click", () => this.#freeMovedInk());
+          bar.insertBefore(free, undo.nextSibling);
+        }
       }
     }
   }
@@ -4717,9 +5321,11 @@ export class CanvasEngine {
    * L'avviso di un togliere appena fatto, legato al suo passo d'annulla; con
    * `undo` porta «Annulla». Va nel posto degli avvisi della tela.
    */
-  #showRemoval(text: string, undo: boolean): void {
+  #showRemoval(text: string, undo: boolean, free?: { readonly layer: InkLayerRef; readonly ids: readonly string[] }): void {
     if (this.#destroyed) return;
-    this.#removal = { text, step: this.#undo[this.#undo.length - 1], undo };
+    this.#removal = free
+      ? { text, step: this.#undo[this.#undo.length - 1], undo, free }
+      : { text, step: this.#undo[this.#undo.length - 1], undo };
     this.#drawToolbar();
   }
 
@@ -5143,11 +5749,13 @@ export class CanvasEngine {
     switch (id) {
       case "canvas.escape":
         return {
-          disabled: () => (this.#selection.length || this.#edgeSelection.length || this.#tool !== "select" ? null : t("canvas.commands.why.no_selection")),
+          disabled: () => (this.#selection.length || this.#edgeSelection.length || this.#strokeSelection.size || this.#tool !== "select"
+            ? null
+            : t("canvas.commands.why.no_selection")),
           run: () => {
             // Un filo cominciato da «Collega…» si lascia prima di tutto.
             if (this.#connectFrom !== null) this.#pickTool("select");
-            else if (this.#selection.length || this.#edgeSelection.length) this.#clearSelection();
+            else if (this.#selection.length || this.#edgeSelection.length || this.#strokeSelection.size) this.#clearSelection();
             else this.#pickTool("select");
           },
         };
@@ -5423,20 +6031,40 @@ export class CanvasEngine {
     const bar = this.#selectionBar as CanvasSelectionBar | undefined;
     // Le preferenze arrivano anche durante il costruttore, prima della barra.
     if (!bar) return;
-    const nodes = this.#doc && !this.#destroyed && !this.#isSceneOversized() && this.#isShown() ? this.#selectedNodes() : [];
+    const shown = this.#doc && !this.#destroyed && !this.#isSceneOversized() && this.#isShown();
+    const nodes = shown ? this.#selectedNodes() : [];
+    // I tratti scelti col Lazo (T86) contano come le schede.
+    const units = shown ? this.#chosenStrokes() : [];
+    const chosen = nodes.length + units.length;
     const pen = this.#penDown;
     const writing = this.#editor !== null || this.#activeId !== null || this.#canvasOptions.mode === "writing";
-    if (!selectionBarWanted({ chosen: nodes.length, gesture: this.#gestureActive(), pen, writing })) {
+    if (!selectionBarWanted({ chosen, gesture: this.#gestureActive(), pen, writing })) {
       bar.hide();
-      if (pen && nodes.length > 0 && this.#quiet.active) this.#quiet.defer("selection-bar", () => this.#syncSelectionBar());
+      if (pen && chosen > 0 && this.#quiet.active) this.#quiet.defer("selection-bar", () => this.#syncSelectionBar());
       return;
     }
     const zoom = this.#camera.zoom;
+    let left = Infinity;
+    let top = Infinity;
+    let right = -Infinity;
+    let bottom = -Infinity;
+    for (const node of nodes) {
+      left = Math.min(left, node.x);
+      top = Math.min(top, node.y);
+      right = Math.max(right, node.x + node.width);
+      bottom = Math.max(bottom, node.y + node.height);
+    }
+    for (const unit of units) {
+      left = Math.min(left, unit.minX);
+      top = Math.min(top, unit.minY);
+      right = Math.max(right, unit.maxX);
+      bottom = Math.max(bottom, unit.maxY);
+    }
     const box = {
-      left: Math.min(...nodes.map((node) => node.x)) * zoom + this.#camera.x,
-      top: Math.min(...nodes.map((node) => node.y)) * zoom + this.#camera.y,
-      right: Math.max(...nodes.map((node) => node.x + node.width)) * zoom + this.#camera.x,
-      bottom: Math.max(...nodes.map((node) => node.y + node.height)) * zoom + this.#camera.y,
+      left: left * zoom + this.#camera.x,
+      top: top * zoom + this.#camera.y,
+      right: right * zoom + this.#camera.x,
+      bottom: bottom * zoom + this.#camera.y,
     };
     const rect = this.#viewport.getBoundingClientRect();
     const one = nodes.length === 1 ? nodes[0]! : null;
@@ -5444,6 +6072,7 @@ export class CanvasEngine {
     bar.show({
       chosen: nodes.length,
       open,
+      strokes: this.#strokesShown(units),
       box,
       view: { width: rect.width || 800, height: rect.height || 600 },
       offset: { left: this.#viewport.offsetLeft, top: this.#viewport.offsetTop },
@@ -6046,6 +6675,7 @@ export class CanvasEngine {
     }
     if (this.#doc && !this.#isSceneOversized()) this.#drawEdges();
     this.#syncSelectionFrame();
+    this.#paintLasso();
     this.#drawToolbar();
   }
 
@@ -6105,6 +6735,14 @@ export class CanvasEngine {
     if (this.#tool === "hand") {
       this.#beginPan(event.pointerId, event.clientX, event.clientY);
       event.preventDefault();
+      return;
+    }
+    // Il Lazo (T86): dentro ciò che ha scelto lo sposta; altrove, o con
+    // Maiusc che aggiunge, fa un giro nuovo. In sola lettura sceglie e basta.
+    if (this.#tool === "lasso" && this.#doc && !this.#isSceneOversized()) {
+      event.preventDefault();
+      if (!this.#readOnly && !event.shiftKey && this.#insideChosen(event)) this.#beginStrokeDrag(event);
+      else this.#beginLasso(event);
       return;
     }
     const target = event.target;
@@ -6212,6 +6850,7 @@ export class CanvasEngine {
         : [...this.#selection, nodeId];
     } else if (!this.#selection.includes(nodeId)) {
       this.#selection = [nodeId];
+      this.#strokeSelection = new Set();
     } else {
       return;
     }
@@ -6223,6 +6862,7 @@ export class CanvasEngine {
   #selectEdge(edgeId: string): void {
     this.#edgeSelection = [edgeId];
     this.#selection = [];
+    this.#strokeSelection = new Set();
     this.#options.onSelectionChange();
     this.#displaySelection();
   }
@@ -6230,6 +6870,7 @@ export class CanvasEngine {
   #clearSelection(): void {
     this.#selection = [];
     this.#edgeSelection = [];
+    this.#strokeSelection = new Set();
     this.#options.onSelectionChange();
     this.#displaySelection();
   }
@@ -6648,6 +7289,14 @@ export class CanvasEngine {
 
   #pointerMove(event: PointerEvent): void {
     if (event.pointerType === "touch" && this.#touchMove(event)) return;
+    if (this.#lasso && event.pointerId === this.#lasso.pointerId) {
+      this.#moveLasso(event);
+      return;
+    }
+    if (this.#strokeDrag && event.pointerId === this.#strokeDrag.pointerId) {
+      this.#moveStrokeDrag(event);
+      return;
+    }
     if (this.#connect && event.pointerId === this.#connect.pointerId) {
       this.#moveConnect(event.clientX, event.clientY);
       // Vicino al bordo la vista scorre da sola (T53).
@@ -6778,6 +7427,14 @@ export class CanvasEngine {
         this.#applyCamera();
         this.#selectNode(pan.toggle, true);
       }
+      return;
+    }
+    if (this.#lasso && event.pointerId === this.#lasso.pointerId) {
+      this.#endLasso();
+      return;
+    }
+    if (this.#strokeDrag && event.pointerId === this.#strokeDrag.pointerId) {
+      this.#endStrokeDrag();
       return;
     }
     if (this.#resize && event.pointerId === this.#resize.pointerId && this.#doc) {
@@ -7056,10 +7713,21 @@ export class CanvasEngine {
   }
 
   #cancelGestures(): void {
-    const active = this.#drag !== null || this.#resize !== null;
+    const active = this.#drag !== null || this.#resize !== null || this.#strokeDrag !== null;
     const moving = this.#gestureMoving();
     this.#drag = null;
     this.#resize = null;
+    // Il lazo fermato non sceglie; lo spostamento fermato rimette i tratti.
+    const strokeDrag = this.#strokeDrag;
+    this.#strokeDrag = null;
+    if (strokeDrag) {
+      this.#hideStrokeHolder();
+      this.#fadeUnits(strokeDrag.units, false);
+    }
+    if (this.#lasso || strokeDrag) {
+      this.#lasso = null;
+      this.#paintLasso();
+    }
     this.#hideGuides();
     this.#pan = null;
     this.#endConnect();
@@ -7289,7 +7957,7 @@ export class CanvasEngine {
 
   #renderLive(): void {
     // Drag/resize updates moved nodes and connected edges without replacing cards.
-    const moved = this.#drag?.origin.keys() ?? this.#resize?.origin.keys() ?? this.#selection.values();
+    const moved = this.#drag?.origin.keys() ?? this.#strokeDrag?.origin.keys() ?? this.#resize?.origin.keys() ?? this.#selection.values();
     for (const id of moved) {
       const node = this.#doc?.nodes.find((n) => n.id === id);
       const el = this.#stage.querySelector<HTMLElement>(`[data-node="${CSS.escape(id)}"]`);
@@ -7344,7 +8012,8 @@ export class CanvasEngine {
 
   /** Un gesto che muove la vista o le schede: il puntatore è ancora giù. */
   #gestureMoving(): boolean {
-    return this.#drag !== null || this.#resize !== null || this.#pan !== null || this.#pinch !== null;
+    return this.#drag !== null || this.#resize !== null || this.#pan !== null || this.#pinch !== null
+      || this.#lasso !== null || this.#strokeDrag !== null;
   }
 
   /** Un gesto in corso, rotella, volo e inerzia compresi (T53): nessuna scheda cambia modo. */
@@ -8006,7 +8675,7 @@ export class CanvasEngine {
       // Lo strato dei fili (T91, primo figlio della scena: le schede gli
       // vanno dopo), il bordo del tratto in corso (T69) e la
       // cornice della scelta restano: non sono della scena.
-      if (child !== this.#edgeLayer && !ours.has(child) && !child.classList.contains("canvas-ink-board") && !child.classList.contains("canvas-ink-frames") && child !== this.#selectionFrame) child.remove();
+      if (child !== this.#edgeLayer && !ours.has(child) && !child.classList.contains("canvas-ink-board") && !child.classList.contains("canvas-ink-frames") && child !== this.#selectionFrame && child !== this.#lassoLayer?.svg) child.remove();
     }
     const children = this.#stage.children;
     let index = children[0] === this.#edgeLayer ? 1 : 0;

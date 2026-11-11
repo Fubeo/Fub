@@ -2934,6 +2934,19 @@
 .canvas-ink-frame {
   border-color: var(--accent);
 }
+/* Il Lazo (T86): il giro tratteggiato d'accento su un velo, la cornice dei
+   tratti scelti tratteggiata, i tratti scelti col contorno d'accento. */
+.canvas-lasso-path {
+  fill: var(--accent-wash);
+  stroke: var(--accent);
+}
+.canvas-lasso-frame {
+  fill: none;
+  stroke: var(--accent);
+}
+.canvas-lasso-chosen > path {
+  stroke: var(--accent);
+}
 .canvas-ink-label {
   padding: var(--space-2) var(--space-4);
   border-radius: var(--radius-pill);

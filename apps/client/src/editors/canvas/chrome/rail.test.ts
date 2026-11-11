@@ -80,13 +80,13 @@ function mouse(target: EventTarget, type: string, clientX: number, clientY: numb
 }
 
 describe("la forma della colonna", () => {
-  it("vuota è quella di serie: la penna con l'evidenziatore in tendina, tre gruppi", () => {
+  it("vuota è quella di serie: il lazo e l'evidenziatore in tendina, tre gruppi", () => {
     expect(canvasRailLayout([])).toEqual([
-      [["select"], ["hand"]],
+      [["select", "lasso"], ["hand"]],
       [["pen", "highlighter"], ["eraser"]],
       [["text"], ["connect"]],
     ]);
-    expect(CANVAS_RAIL_TOOLS).toEqual(["select", "hand", "pen", "highlighter", "eraser", "text", "connect"]);
+    expect(CANVAS_RAIL_TOOLS).toEqual(["select", "lasso", "hand", "pen", "highlighter", "eraser", "text", "connect"]);
   });
 
   it("personalizzata: l'ordine scelto, un filo dove cambia la famiglia, un nome che non c'è si salta, la Selezione in cima", () => {
@@ -97,8 +97,10 @@ describe("la forma della colonna", () => {
       [["hand"]],
     ]);
     expect(canvasRailLayout(["hand", "select", "eraser"])).toEqual([[["hand"], ["select"]], [["eraser"]]]);
+    // Il lazo (T86) è della famiglia della Selezione.
+    expect(canvasRailLayout(["lasso", "pen"])).toEqual([[["select"], ["lasso"]], [["pen"]]]);
     // Solo nomi sconosciuti: quella di serie.
-    expect(canvasRailLayout(["lasso", "domani"])).toEqual(canvasRailLayout([]));
+    expect(canvasRailLayout(["righello", "domani"])).toEqual(canvasRailLayout([]));
   });
 });
 
@@ -127,7 +129,7 @@ describe("la colonna della lavagna", () => {
       const spec = CANVAS_COMMANDS.find((each) => each.id === toolCommandId(tool));
       expect(spec?.keys, tool).toEqual([CANVAS_TOOL_KEYS[tool]]);
     }
-    expect(Object.values(CANVAS_TOOL_KEYS)).toEqual(["v", "h", "p", "Shift-p", "e", "t", "c"]);
+    expect(Object.values(CANVAS_TOOL_KEYS)).toEqual(["v", "q", "h", "p", "Shift-p", "e", "t", "c"]);
   });
 
   it("i tasti scelgono lo strumento, sulla lavagna e sulla colonna; Maiusc+P è l'evidenziatore", () => {
