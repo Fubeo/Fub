@@ -90,8 +90,10 @@ import {
   CANVAS_PASTE_STEP,
   cardsMarkdown,
   clipboardJson,
-  copiedCards,
-  placedCards,
+  copiedSelection,
+  joinedInkPatches,
+  pastedInkOps,
+  placedSelection,
   readCanvasClipboard,
   type CanvasClipboard,
 } from "./clipboard";
@@ -149,6 +151,7 @@ import {
   inkStrokeTool,
   type InkPenChoice,
   foreignInkLayer,
+  INK_KEY,
   inkLayerStates,
   strokeRecord,
   toDry,
@@ -5857,28 +5860,47 @@ export class CanvasEngine {
     return !(selection && !selection.isCollapsed && this.#viewport.contains(selection.anchorNode));
   }
 
-  /** Ctrl+C e Ctrl+X, e «Copia» e «Taglia» del menu: le schede scelte negli appunti; tagliando, poi tolte. */
+  /**
+   * Ctrl+C e Ctrl+X, e «Copia» e «Taglia» del menu: le schede scelte e i
+   * tratti liberi scelti col Lazo negli appunti; tagliando, poi tolti.
+   */
   #copyEvent(event: ClipboardEvent, cut: boolean): void {
     if (event.defaultPrevented || !event.clipboardData || !this.#doc || this.#destroyed) return;
     if (!this.#ownsClipboard()) return;
     const cutting = cut || this.#clipboardCommand === "cut";
     if (cutting && this.#readOnly) return;
-    const clipboard = copiedCards(this.#doc, this.#selection);
+    const clipboard = copiedSelection(this.#doc, this.#selection, this.#chosenFreeStrokes());
     if (!clipboard) return;
     event.preventDefault();
     event.clipboardData.setData(CANVAS_CLIPBOARD_TYPE, clipboardJson(clipboard));
     event.clipboardData.setData("text/plain", cardsMarkdown(clipboard.nodes));
     // Appunti nuovi: il prossimo incolla parte di nuovo sotto il puntatore.
     this.#lastPaste = null;
-    if (cutting) this.#cutCards(clipboard.nodes.map((node) => node.id));
+    if (cutting) this.#cutSelection(clipboard);
   }
 
-  /** Toglie le schede tagliate come «Togli dalla lavagna»: i file restano, e l'avviso lo dice col suo «Annulla». */
-  #cutCards(ids: readonly string[]): void {
-    if (this.#readOnly || !this.#removeCards(ids, [])) return;
+  /** Gli id dei tratti liberi scelti col Lazo, quelli che vanno negli appunti (T94). */
+  #chosenFreeStrokes(): string[] {
+    return this.#chosenStrokes().filter((unit) => unit.node === null).map((unit) => unit.id);
+  }
+
+  /**
+   * Toglie ciò che `clipboard` ha appena copiato, in un commit solo: le
+   * schede come «Togli dalla lavagna» (i file restano, e l'avviso lo dice col
+   * suo «Annulla») e i tratti liberi dal livello della radice.
+   */
+  #cutSelection(clipboard: CanvasClipboard): void {
+    const ids = clipboard.nodes.map((node) => node.id);
+    const strokes = (clipboard[INK_KEY]?.strokes ?? []).map((stroke) => stroke.id);
+    if (this.#readOnly || !this.#removeCards(ids, [], strokes)) return;
     this.#selection = this.#selection.filter((id) => !ids.includes(id));
     this.#edgeSelection = [];
+    if (strokes.length > 0) {
+      const gone = new Set(strokes.map((id) => inkKey("board", id)));
+      this.#strokeSelection = new Set([...this.#strokeSelection].filter((key) => !gone.has(key)));
+    }
     this.#options.onSelectionChange();
+    this.#displaySelection();
   }
 
   /**
@@ -5893,11 +5915,13 @@ export class CanvasEngine {
   }
 
   /**
-   * Incolla le schede di Fub dal testo `raw` degli appunti, nel punto
-   * dell'incolla (T15): un commit, un annulla, le schede incollate scelte. Lo
-   * stesso testo incollato di nuovo nello stesso punto si sfalsa. Una versione
-   * futura non incolla niente e lo dice. `false` se `raw` non è la forma di
-   * Fub: allora si incolla come testo.
+   * Incolla le schede e i tratti liberi di Fub dal testo `raw` degli
+   * appunti, nel punto dell'incolla (T15): un commit, un annulla, le schede
+   * incollate scelte. Lo stesso testo incollato di nuovo nello stesso punto si
+   * sfalsa. Una versione futura non incolla niente e lo dice; un `fub:ink`
+   * rotto o fuori dai limiti non incolla niente e lo dice come una forma che
+   * il nucleo rifiuta. `false` se `raw` non è la forma di Fub: allora si
+   * incolla come testo.
    */
   #pasteCards(event: ClipboardEvent | DragEvent, raw: string): boolean {
     const read = readCanvasClipboard(raw);
@@ -5906,6 +5930,10 @@ export class CanvasEngine {
     this.#recordPending();
     if (read.kind === "future") {
       this.#showNotice(t("canvas.clipboard.future"));
+      return true;
+    }
+    if (read.kind === "refused") {
+      this.#showNotice(t("canvas.clipboard.refused"));
       return true;
     }
     const point = this.#intakePoint(event, false);
@@ -5923,11 +5951,18 @@ export class CanvasEngine {
     return true;
   }
 
-  /** Le schede di `clipboard` con l'angolo del loro riquadro in `at`, in un commit solo, poi scelte. `false` se il nucleo le rifiuta. */
+  /**
+   * Le schede e i tratti liberi di `clipboard` con l'angolo del loro
+   * riquadro in `at`, in un commit solo, poi scelti (i tratti solo col Lazo,
+   * l'unico che li tiene scelti). I tratti entrano nel livello della radice
+   * con id nuovi e lo spostamento delle schede, compilati dal nucleo
+   * (`add_strokes`, `move_strokes`). `false` se il nucleo rifiuta qualcosa:
+   * allora non entra niente.
+   */
   #commitPasted(clipboard: CanvasClipboard, at: { readonly x: number; readonly y: number }): boolean {
     const doc = this.#doc;
     if (!doc || this.#readOnly) return false;
-    const placed = placedCards(clipboard, at, newNodeId);
+    const placed = placedSelection(clipboard, at, newNodeId);
     const patches: CanvasPatch[] = [];
     for (const node of placed.nodes) {
       const patch = upsertNodePatch(doc, node);
@@ -5937,11 +5972,43 @@ export class CanvasEngine {
       const patch = upsertEdgePatch(doc, edge);
       if (patch) patches.push(patch);
     }
+    const ops = pastedInkOps(placed);
+    if (ops.length > 0) {
+      const ink = this.#compilePasted(ops);
+      if (!ink) return false;
+      patches.push(...ink);
+    }
     if (!this.#commit(patches, "input")) return false;
     this.#selection = placed.nodes.map((node) => node.id);
     this.#edgeSelection = [];
+    this.#strokeSelection = this.#tool === "lasso"
+      ? new Set(placed.strokes.map((stroke) => inkKey("board", stroke.id)))
+      : new Set();
     this.#options.onSelectionChange();
+    this.#displaySelection();
     return true;
+  }
+
+  /**
+   * Le toppe dei tratti incollati, compilate dal nucleo sul modello di
+   * adesso, una per tratto (`joinedInkPatches`). `null` se il nucleo le
+   * rifiuta (un tratto che non vale, uno spostamento fuori dai numeri
+   * dell'inchiostro, il livello della radice estraneo): l'avviso lo dice chi
+   * chiama.
+   */
+  #compilePasted(ops: readonly CanvasIntentOp[]): CanvasPatch[] | null {
+    const core = this.#core;
+    if (!core || this.#destroyed || this.#readOnly || this.#isSceneOversized()) return null;
+    try {
+      return joinedInkPatches(core.compile(ops, compileSeed()).patches);
+    } catch (error) {
+      if (lostCore(error)) {
+        this.#lose();
+        return null;
+      }
+      if (error instanceof CanvasCoreError) return null;
+      throw error;
+    }
   }
 
   /**
@@ -5969,25 +6036,34 @@ export class CanvasEngine {
     if (!sent) this.#writeCards(op === "cut");
   }
 
-  /** Scrive le schede scelte con gli appunti della shell; con `cut` le toglie, solo dopo averle scritte. */
+  /**
+   * Scrive le schede e i tratti liberi scelti con gli appunti della shell;
+   * con `cut` li toglie, solo dopo averli scritti. Dei soli tratti, dove la
+   * shell non accetta il tipo di Fub, non resterebbe niente negli appunti:
+   * l'avviso dice che la copia non è riuscita, e niente si toglie.
+   */
   #writeCards(cut: boolean): void {
     if (!this.#doc || (cut && this.#readOnly)) return;
-    const clipboard = copiedCards(this.#doc, this.#selection);
+    const clipboard = copiedSelection(this.#doc, this.#selection, this.#chosenFreeStrokes());
     if (!clipboard) return;
     const markdown = cardsMarkdown(clipboard.nodes);
     const web = `web ${CANVAS_CLIPBOARD_TYPE}`;
-    const write = clipboardSupports(web)
+    const typed = clipboardSupports(web);
+    if (!typed && clipboard.nodes.length === 0) {
+      this.#showNotice(t("editor_menu.copy_failed"));
+      return;
+    }
+    const write = typed
       ? writeClipboardData({
           "text/plain": new Blob([markdown], { type: "text/plain" }),
           [web]: new Blob([clipboardJson(clipboard)], { type: CANVAS_CLIPBOARD_TYPE }),
         })
       : writeClipboardText(markdown);
-    const ids = clipboard.nodes.map((node) => node.id);
     const source = this.#source;
     this.#lastPaste = null;
     void write.then(
       () => {
-        if (cut && !this.#destroyed && this.#source === source) this.#cutCards(ids);
+        if (cut && !this.#destroyed && this.#source === source) this.#cutSelection(clipboard);
       },
       () => {
         if (!this.#destroyed) this.#showNotice(t("editor_menu.copy_failed"));
@@ -6021,12 +6097,13 @@ export class CanvasEngine {
    * «Togli dalla lavagna» (Canc, Backspace, il menu, la scheda mancante):
    * toglie le schede `nodes` e le linee `edges`, mai i file, e lo dice con
    * «Annulla». «I file restano» solo se fra le tolte c'è una scheda di file;
-   * togliere solo dei fili non dice niente.
+   * togliere solo dei fili, o dei tratti liberi `strokes` (il taglia del
+   * Lazo), non dice niente.
    */
-  #removeCards(nodes: readonly string[], edges: readonly string[]): boolean {
+  #removeCards(nodes: readonly string[], edges: readonly string[], strokes: readonly string[] = []): boolean {
     if (!this.#doc) return false;
     const gone = this.#doc.nodes.filter((node) => nodes.includes(node.id));
-    if (!this.#removeNodes(nodes, edges)) return false;
+    if (!this.#removeNodes(nodes, edges, strokes)) return false;
     if (gone.length > 0) {
       const files = gone.some((node) => node.type === "file");
       const many = gone.length > 1;
@@ -6260,12 +6337,20 @@ export class CanvasEngine {
   }
 
   /**
-   * Toglie le schede `nodes` e le linee `edges`, con le linee che le tengono:
-   * un commit solo, che un annulla riporta. `false` se non c'era niente da togliere.
+   * Toglie le schede `nodes` e le linee `edges`, con le linee che le tengono,
+   * e i tratti `strokes` del livello della radice: un commit solo, che un
+   * annulla riporta. `false` se non c'era niente da togliere, o se un tratto
+   * non si toglie (allora non si toglie niente).
    */
-  #removeNodes(nodes: readonly string[], edges: readonly string[]): boolean {
+  #removeNodes(nodes: readonly string[], edges: readonly string[], strokes: readonly string[] = []): boolean {
     if (!this.#doc) return false;
     const patches: CanvasPatch[] = [];
+    if (strokes.length > 0) {
+      const layers = this.#inkLayersNow();
+      const erased = layers ? eraseStrokePatches(this.#doc, layers, "board", strokes) : null;
+      if (!erased) return false;
+      patches.push(...erased);
+    }
     const selected = new Set(nodes);
     const removed = new Set(edges);
     for (const edge of this.#doc.edges) {
