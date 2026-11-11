@@ -77,6 +77,7 @@ import { contextMenuItems, hasContextMenuViews, type ContextTarget } from "../ui
 import { trashManyWithConfirm, trashWithConfirm } from "./trash";
 import { mountTreeSelection, type TreeSelection } from "./explorer-selection";
 import { beginTreeMotion, type TreeMotion } from "./explorer-motion";
+import { changedOnlyInside, signatureOf, type View } from "./explorer-view";
 import { errorText } from "../host/errors";
 import { FOLDER_PAGE_STEM, folderForNote, isFolderPage, nameFault, normalizedName } from "../rules/mirrored";
 import { onLanguage, plural, t } from "../i18n/strings";
@@ -138,28 +139,11 @@ function scheduleHoverOpen(path: string): void {
   }, HOVER_OPEN_MS);
 }
 
-/// Ciò che serve a disegnare l'albero, come il kernel l'ha risposto (§14.3,
-/// §14.4).
-///
-/// **Solo le cartelle visibili**: la radice (o lo spazio attivo) e ognuna di
-/// quelle aperte. Prima qui c'era l'elenco di tutte le note del vault e
-/// l'albero se lo costruiva la shell; adesso un vault da diecimila note ne
-/// trasferisce quante ne sono a schermo.
-interface View {
-  /// Il contenuto di ogni cartella visibile, non ordinato: l'ordine dipende
-  /// dall'organizzazione, che cambia senza che il kernel c'entri.
-  folders: Map<string, FolderContent>;
-  /// I documenti «attesi» che esistono davvero: le folder note possibili delle
-  /// cartelle disegnate, e le note appuntate. Una domanda sola per entrambe —
-  /// sono la stessa domanda, «quali di questi path ci sono».
-  existing: Set<string>;
-  /// Quante voci ha ciò che si vede (il vault o lo spazio attivo), a ogni
-  /// profondità: il numero accanto a «Tutte le note». `null` se la domanda è
-  /// fallita: allora il numero non si scrive, e l'albero si disegna lo stesso.
-  total: number | null;
-}
-
 let view: View = { folders: new Map(), existing: new Set(), total: null };
+/// La cartella che `toggleFolder` ha appena aperto o chiuso, finché un giro
+/// non ridisegna: se fuori da lei non è cambiato niente, quel giro tocca solo
+/// il suo sottoalbero.
+let toggled: string | null = null;
 /// Chi scalda i motori dei formati al passaggio del puntatore e all'apertura
 /// di una cartella: vive finché il pannello è montato (`mountExplorer`).
 let warmup: EngineWarmup | null = null;
@@ -479,6 +463,7 @@ export function mountExplorer(lifetime: Lifetime): void {
     drag = null;
     levelWindows.clear();
     lastSignature = "";
+    toggled = null;
     view = { folders: new Map(), existing: new Set(), total: null };
     fileListEl.replaceChildren();
   });
@@ -518,11 +503,17 @@ async function refreshFromKernel(force = false): Promise<void> {
       ...state.meta.pinned,
     ];
     const newItem: View = { folders, existing: await expected(existingDocuments(expectedItems)), total };
-    const signature = signatureOf(newItem);
+    const signature = signatureOf(newItem, state.explorerSort);
     if (!force && signature === lastSignature) return;
     lastSignature = signature;
+    const before = view;
     view = newItem;
-    renderFileList();
+    // Il DOM disegna `before`: se da lì è cambiata soltanto la cartella
+    // aperta o chiusa, si rifà solo lei.
+    const only = toggled;
+    toggled = null;
+    const outside = only === null ? null : { folder: only, pinned: state.meta.pinned };
+    renderFileList(outside !== null && changedOnlyInside(before, newItem, state.explorerSort, outside) ? only : null);
   });
 }
 
@@ -569,28 +560,16 @@ async function visibleTotal(): Promise<number | null> {
   }
 }
 
-/// Cosa il kernel ha risposto, in una stringa: due viste con la stessa impronta
-/// disegnano lo stesso albero.
-function signatureOf(v: View): string {
-  const folders = [...v.folders.entries()].map(
-    ([path, c]) =>
-      `${path}[${c.folders.map((f) => `${f.path}:${f.folders}:${f.entries}`).join(",")}][${c.notes.join(",")}][${c.files.join(",")}]`,
-  );
-  // La data entra nell'impronta solo se è lei a decidere l'ordine: altrimenti
-  // ogni salvataggio ridisegnerebbe l'albero per niente.
-  const dated = state.explorerSort.startsWith("modified")
-    ? [...v.folders.values()].map((c) => JSON.stringify(c.mtimes ?? {})).join(";")
-    : "";
-  return `${folders.join(";")}|${[...v.existing].sort().join(",")}|${state.explorerSort}|${dated}|${v.total}`;
-}
-
 /// Il contenuto di una cartella nell'ordine in cui si vede, se è caricata.
 function children(path: string): FolderContent | null {
   const content = view.folders.get(path);
   return content ? sortContent(content, state.meta, state.explorerSort) : null;
 }
 
-function renderFileList(): void {
+/// Ridisegna l'albero. Con `only`, la cartella aperta o chiusa da
+/// `toggleFolder` quando fuori da lei non è cambiato niente: si rifà soltanto
+/// il suo sottoalbero, e le altre righe restano gli stessi nodi.
+function renderFileList(only: string | null = null): void {
   // Uno spazio rimosso (o la cui cartella non esiste più) non può restare
   // selezionato: si torna a casa senza dire niente.
   if (state.activeSpace !== null && !state.meta.spaces.includes(state.activeSpace)) {
@@ -601,8 +580,8 @@ function renderFileList(): void {
   renderSpaceTitle();
   renderPinned();
   renderAllTitle();
-  // Chi stava navigando da tastiera non deve perdere il posto: aprire una
-  // cartella ridisegna **tutto** l'albero, e senza questa riga il fuoco
+  // Chi stava navigando da tastiera non deve perdere il posto: un ridisegno
+  // intero rifà **tutto** l'albero, e senza questa riga il fuoco
   // tornerebbe in cima al documento a ogni freccia destra — cioè la
   // navigazione da tastiera si romperebbe proprio nel momento in cui la si sta
   // usando.
@@ -612,6 +591,24 @@ function renderFileList(): void {
   const toRestore = focused?.closest<HTMLElement>('li[role="treeitem"]')?.dataset.path;
   const onChevron = focused?.matches("button.chevron");
 
+  if (only === null || !patchFolder(only)) rebuildTree();
+
+  roving(toRestore);
+  selection?.repaint();
+  treeMotion?.settle();
+  treeMotion = null;
+  paintThumbnails();
+  if (toRestore !== undefined) {
+    const row = entry(toRestore);
+    const control = onChevron
+      ? row?.querySelector<HTMLElement>(":scope > .tree-row > .chevron:not(:disabled)")
+      : null;
+    (control ?? row)?.focus();
+  }
+}
+
+/// Rifà l'albero intero, dal contenuto caricato.
+function rebuildTree(): void {
   // Durante un trascinamento la riga trascinata **non si ricrea**: un nodo
   // staccato non riceve più `dragend`, e il gesto resterebbe appeso a un
   // `drag` che nessuno azzera. Si tiene il nodo e, rifatto l'albero, lo si
@@ -653,19 +650,38 @@ function renderFileList(): void {
     }
     fileListEl.append(li);
   }
+}
 
-  roving(toRestore);
-  selection?.repaint();
-  treeMotion?.settle();
-  treeMotion = null;
-  paintThumbnails();
-  if (toRestore !== undefined) {
-    const row = entry(toRestore);
-    const control = onChevron
-      ? row?.querySelector<HTMLElement>(":scope > .tree-row > .chevron:not(:disabled)")
-      : null;
-    (control ?? row)?.focus();
+/// Rifà il sottoalbero della cartella `path` appena aperta o chiusa, e la sua
+/// freccia; il resto dell'albero non si tocca. `false` se la cartella non è
+/// disegnata come ci si aspetta: allora si rifà tutto.
+///
+/// Aprire una cartella di duecento voci ricreava anche le righe di fuori, e
+/// in un albero già lungo era quello a far saltare il fotogramma del moto. Le
+/// righe di fuori restano gli stessi nodi: la riga trascinata non si stacca,
+/// il puntatore che resta sulla cartella non trova una riga nuova.
+function patchFolder(path: string): boolean {
+  const li = fileListEl.querySelector<HTMLElement>(`li[role="treeitem"][data-path="${CSS.escape(path)}"]`);
+  const row = li?.querySelector<HTMLElement>(":scope > .tree-row.folder");
+  const chevron = row?.querySelector<HTMLElement>(":scope > .chevron:not(:disabled)");
+  if (!li || !row || !chevron) return false;
+  const open = state.expanded.has(path);
+  // L'immagine di una chiusura ancora in corsa è `inert`: non è il gruppo.
+  const group = li.querySelector<HTMLElement>(":scope > .tree-children:not([inert])");
+  if (open === (group !== null)) return false;
+  if (open) {
+    const nested = document.createElement("ul");
+    nested.className = "tree-children";
+    nested.setAttribute("role", "group");
+    renderChildren(path, nested);
+    row.after(nested);
+  } else {
+    group?.remove();
   }
+  li.setAttribute("aria-expanded", String(open));
+  chevron.textContent = open ? "▾" : "▸";
+  chevron.setAttribute("aria-expanded", String(open));
+  return true;
 }
 
 /// Le voci dell'albero, nell'ordine in cui si vedono.
@@ -1502,10 +1518,13 @@ function namedFolder(path: string, name = childName(path)): string {
 /// (§14.4): non c'era in memoria, perché in memoria c'è ciò che si vede.
 ///
 /// Il moto si misura qui, prima del giro, e si compie al ridisegno che segue:
-/// se il giro è superato da un altro, lo compie quello.
+/// se il giro è superato da un altro, lo compie quello. Il ridisegno tocca
+/// solo il sottoalbero della cartella, se fuori da lei non è cambiato niente
+/// (`patchFolder`).
 function toggleFolder(path: string): void {
   if (!state.expanded.delete(path)) state.expanded.add(path);
   saveExpanded();
+  toggled = path;
   const motion = drag === null ? beginTreeMotion(fileListEl, path, treeLife ?? undefined) : null;
   treeMotion = motion;
   void refreshFromKernel(true).finally(() => {

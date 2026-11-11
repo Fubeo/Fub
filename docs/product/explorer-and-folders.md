@@ -22,6 +22,12 @@ SVG, anche con prologo XML, commenti o `<!DOCTYPE>` prima di `<svg>`, si mostra
 come immagine inerte. HEIC e TIFF, che la webview non decodifica, mostrano un
 messaggio al posto dell'immagine e lasciano il file intatto.
 La finestra di duecento voci per livello vale per note e file insieme.
+Aprire una cartella rifà soltanto le sue righe, e si muove solo ciò che si
+vede: le voci visibili entrano una dopo l'altra e le righe sotto scivolano.
+Alla chiusura i figli sbiadiscono e le righe sotto risalgono in 140 ms,
+partendo piano (`ease-in-out`), dal bordo se prima non si vedevano. Un clic
+chiude il suggerimento della riga, come quello di ogni controllo, e non torna
+finché il puntatore resta fermo: non copre le voci appena aperte.
 Dal menu contestuale un allegato si rinomina, conservando l'estensione, e si
 cestina come una nota: il kernel lo toglie dall'anagrafe con `EntryRemoved` e
 il ripristino lo rimette dov'era, byte per byte.

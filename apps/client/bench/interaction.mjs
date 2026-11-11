@@ -5,6 +5,7 @@
 //     node bench/interaction.mjs --only=palette  # solo quelle
 //     node bench/interaction.mjs --rounds=9
 //     node bench/interaction.mjs --only=battuta  # la battuta nelle note grandi
+//     node bench/interaction.mjs --only=apertura --cpu=4  # aprire una nota grande, pagina più lenta
 //
 // Per ogni interazione due numeri, dal momento del gesto (`timeStamp`
 // dell'evento che lo fa partire):
@@ -20,6 +21,13 @@
 // sintetiche (`live-fixture.ts`, 901 e 7.201 righe) in ogni modalità di
 // scrittura; trenta battute e venti spostamenti del cursore di 200 caratteri.
 // Il budget è la mediana della battuta.
+//
+// **L'apertura** di una nota grande (`--only=apertura`, `live-fixture.ts`:
+// 4.000 paragrafi, circa 765 KB) misura dal clic nell'albero quando la prima
+// riga è nel documento e il compito più lungo della pagina finché resta
+// quieta, in una pagina nuova a ogni giro. `--cpu=N` rallenta la pagina N
+// volte: quattro danno, prima della resa progressiva della Live, il blocco
+// misurato nella WebView dell'app vera.
 //
 // Si tiene la mediana dei giri: il primo giro paga la compilazione dei moduli,
 // e un giro solo non dice niente su una macchina che fa anche altro. I budget
@@ -96,12 +104,23 @@ const TYPING = {
   budget: 4,
 };
 
+/// L'apertura di una nota grande: il caso della Live `lunga-4000`, 4.000
+/// paragrafi e circa 765 KB. Il budget vale per la mediana dei giri, in
+/// millisecondi: il testo in cima visibile e il compito più lungo.
+const OPENING = {
+  id: "apertura",
+  title: "Aprire una nota grande (4.000 paragrafi, 765 KB)",
+  note: "lunga-4000",
+  budget: { visible: 150, longest: 50 },
+};
+
 const only = process.argv
   .find((arg) => arg.startsWith("--only="))
   ?.slice("--only=".length)
   .split(",")
   .filter(Boolean);
 const rounds = Number(process.argv.find((arg) => arg.startsWith("--rounds="))?.slice("--rounds=".length) ?? 5);
+const cpu = Number(process.argv.find((arg) => arg.startsWith("--cpu="))?.slice("--cpu=".length) ?? 1);
 
 async function click(page, selector) {
   await page.locator(selector).first().waitFor({ state: "visible", timeout: SETTLE_LIMIT_MS });
@@ -262,8 +281,78 @@ async function measureTyping(stage, sections, mode) {
   }
 }
 
+/// Apre la nota grande dall'albero, in una pagina nuova a ogni giro, e misura
+/// dal clic: quando la prima riga della nota è nel documento, e il compito più
+/// lungo (Long Tasks API: ogni compito oltre i 50 ms) finché la pagina non
+/// resta quieta. `--cpu=N` rallenta la pagina N volte, come una WebView più
+/// lenta di Chromium.
+async function measureOpening(stage) {
+  const scene = { id: OPENING.note, query: `live=${OPENING.note}`, prepare: async () => {} };
+  const samples = [];
+  for (let round = 0; round < rounds; round += 1) {
+    const page = await openPage(stage.browser, "dark", { clock: false });
+    try {
+      await prepareScene(page, scene, "dark", stage.base, sceneUrl);
+      await click(page, '#sidebar li[role="treeitem"][data-path="Guida"] .chevron');
+      await page.locator('#sidebar .tree-row[data-path="Guida/Live.md"]').first().waitFor({ state: "visible" });
+      if (cpu > 1) await (await page.context().newCDPSession(page)).send("Emulation.setCPUThrottlingRate", { rate: cpu });
+      await page.evaluate(() => {
+        const result = { start: null, visible: null, tasks: [] };
+        new PerformanceObserver((list) => {
+          for (const entry of list.getEntries()) result.tasks.push({ start: entry.startTime, duration: entry.duration });
+        }).observe({ type: "longtask" });
+        window.__apertura = new Promise((resolve) => {
+          document.addEventListener("pointerdown", (event) => {
+            result.start = event.timeStamp;
+            let quietSince = performance.now();
+            let last = performance.now();
+            const tick = (now) => {
+              if (result.visible === null && [...document.querySelectorAll(".pane.focus .cm-line")]
+                .some((line) => line.textContent.startsWith("Paragrafo 1:"))) result.visible = now;
+              // Quieta: mezzo secondo di fotogrammi brevi, dopo il testo.
+              if (now - last > 50) quietSince = now;
+              last = now;
+              if ((result.visible !== null && now - quietSince > 500) || now - result.start > 10_000) resolve(result);
+              else requestAnimationFrame(tick);
+            };
+            requestAnimationFrame(tick);
+          }, { capture: true, once: true });
+        });
+      });
+      await click(page, '#sidebar .tree-row[data-path="Guida/Live.md"]');
+      const result = await page.evaluate(() => window.__apertura);
+      if (result.visible === null) throw new Error(`giro ${round + 1}: la nota non si vede in 10 s`);
+      const tasks = result.tasks.filter((task) => task.start + task.duration >= result.start);
+      samples.push({
+        visible: result.visible - result.start,
+        longest: Math.max(0, ...tasks.map((task) => task.duration)),
+        tasks: tasks.length,
+      });
+    } finally {
+      await page.context().close();
+    }
+  }
+  const median = (key) => {
+    const sorted = samples.map((s) => s[key]).sort((a, b) => a - b);
+    return Math.round(sorted[Math.floor(sorted.length / 2)]);
+  };
+  const visible = median("visible");
+  const longest = median("longest");
+  return {
+    id: OPENING.id,
+    title: OPENING.title,
+    budget: OPENING.budget,
+    cpu,
+    visible,
+    longest,
+    samples: samples.map((s) => ({ visible: Math.round(s.visible), longest: Math.round(s.longest), tasks: s.tasks })),
+    pass: visible <= OPENING.budget.visible && longest <= OPENING.budget.longest,
+  };
+}
+
 const chosen = only ? INTERACTIONS.filter((i) => only.includes(i.id)) : INTERACTIONS;
 const typing = !only || only.includes(TYPING.id);
+const opening = !only || only.includes(OPENING.id);
 await mkdir(REPORT, { recursive: true });
 const stage = await openStage();
 const report = [];
@@ -314,6 +403,22 @@ try {
             `    battuta ${ms(row.type)} (mediana ≤ ${TYPING.budget}) · cursore ${ms(row.move)}`,
         );
       }
+    }
+  }
+  if (opening) {
+    let row;
+    try {
+      row = await measureOpening(stage);
+    } catch (error) {
+      row = { id: OPENING.id, title: OPENING.title, pass: false, error: String(error?.message ?? error).split("\n")[0] };
+    }
+    report.push(row);
+    if (row.error) console.log(`✗ ${row.id} — ${row.title}\n    non misurata: ${row.error}`);
+    else {
+      console.log(
+        `${row.pass ? "·" : "✗"} ${row.id} — ${row.title}${row.cpu > 1 ? ` (pagina ${row.cpu} volte più lenta)` : ""}\n` +
+          `    testo visibile ${row.visible} ms (≤ ${row.budget.visible}) · compito più lungo ${row.longest} ms (≤ ${row.budget.longest})`,
+      );
     }
   }
 } finally {
