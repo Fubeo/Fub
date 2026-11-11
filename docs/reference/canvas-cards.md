@@ -500,3 +500,45 @@ tiene il file, la sessione decide come alla chiusura di un riquadro: salva e
 si chiude. Se non può salvare, un conflitto o un disco che rifiuta, la bozza
 è già scritta e la sessione resta aperta con il testo: il lavoro non si
 perde.
+
+### Scrivere in una scheda di foglio
+
+Un doppio clic su una cella della scheda di foglio viva, o Invio sulla scheda
+scelta, chiede di scrivere (`CardView.edit(from)`, con `from` l'elemento
+sotto il gesto). La scheda (`editors/grid/card.ts`) apre la porta con
+`compact: true`: la shell lo passa al montaggio come
+`SurfaceMountContext.compact`, e `mountGrid` (`editors/core/bootstrap.ts`)
+monta la griglia vera senza nastro, linguette, finestre né tavolozza, con
+l'host ridotto di `editors/grid/compact.ts`:
+
+- il catalogo dei comandi tiene solo quelli che scrivono valori e formule
+  (le battute, l'incolla, il riempimento, annulla e ripeti) e quelli che
+  leggono soltanto (`COMPACT_COMMANDS`): righe, colonne, unioni e formati
+  restano dell'editor intero, e Ctrl+G o il bordo di una colonna non fanno
+  niente; un comando fuori dall'elenco l'host non lo manda al file;
+- Invio sulla cella scelta la apre (come F2), Invio e Tab nella cella aperta
+  confermano e passano alla cella dopo, come in un riquadro; Ctrl+PagSu e
+  Ctrl+PagGiù non cambiano foglio: si scrive solo il foglio attivo;
+- il primo Esc chiude la cella aperta, il secondo esce dalla scrittura; il
+  tasto destro resta quello della griglia.
+
+Mentre si scrive la sessione di lettura della resa è chiusa e la griglia è
+l'unica sul file; la sessione del documento è la stessa di un riquadro
+aperto sullo stesso foglio, che riceve il giornale nuovo e riapre la sua
+griglia senza rileggere il disco. Uscendo, il giornale va alla sessione e si
+salva come alla chiusura di un riquadro, e la resa si rilegge.
+
+La cella attiva e il suo contenuto com'è scritto arrivano alla tela come dati:
+la superficie dà `EditorSurface.activeCell` (`SurfaceActiveCellSource` in
+`editors/core/registry.ts`, letto quando il motore della griglia dice che la
+selezione, la cartella o la modalità sono cambiate), la porta li passa come
+`CardEditor.context()`/`onContext`, la scheda come `CardWriting.context`, e
+la tela li mostra nella riga delle opzioni (`[data-option="formula"]`) e
+nella banda (`voti.xlsx · B4`). Nella scheda la barra della formula della
+griglia non si vede.
+
+Un foglio di sola lettura non si scrive: la scheda resta attiva per scorrere
+e copiare, e la riga del titolo e una notifica dicono perché. Una scrittura
+che arriva su una revisione vecchia la gestisce la griglia, come in un
+riquadro; una scheda ferma o distrutta mentre la griglia arriva la smonta
+senza lasciare niente aperto.

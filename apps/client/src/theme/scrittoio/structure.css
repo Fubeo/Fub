@@ -3528,6 +3528,50 @@ body {
   white-space: nowrap;
 }
 
+/* Scrivere nelle celle di un foglio (N6 T42, prototipo T27). La griglia del
+   foglio prende il corpo della scheda in modo compatto: niente nastro, né
+   linguette, né la sua barra della formula, che la tela mostra nella riga
+   delle opzioni (il contesto della scheda). */
+[data-card-editor="compact"] > .grid-surface > .grid-ribbon-host,
+[data-card-editor="compact"] > .grid-surface > .grid-sheets,
+[data-card-editor="compact"] > .grid-surface > .grid-formula-bar {
+  display: none;
+}
+.canvas-options-item[data-option="formula"] {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.canvas-options > .kit-options-row:has(> .canvas-options-item[data-option="formula"]) {
+  flex: 1 1 auto;
+}
+.canvas-options .grid-formula-bar {
+  flex: 1 1 auto;
+  align-items: stretch;
+  height: 32px;
+}
+.canvas-options .grid-formula-editor {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+.canvas-formula-text {
+  overflow: hidden;
+  min-width: 0;
+  text-overflow: ellipsis;
+  white-space: pre;
+}
+/* La cella in scrittura: l'editor della cella sta sopra la cella e sopra i
+   contorni dei riferimenti. */
+.canvas-card-sheet .grid-cell-editor {
+  z-index: 5;
+  min-width: 0;
+  overflow: hidden;
+}
+.canvas-card-sheet .grid-cell-editor .cm-scroller {
+  overflow: hidden;
+}
+
 .canvas-text-editor,
 .canvas-field-editor {
   width: 100%;

@@ -2793,6 +2793,34 @@
   font-weight: var(--weight-bold);
   line-height: 20px;
 }
+/* Scrivere nelle celle di un foglio (N6 T42, prototipo T27). La cella e la
+   sua formula nella riga delle opzioni: una casella, come un campo, con la
+   formula nel carattere a spaziatura fissa. */
+.canvas-options .grid-formula-bar {
+  border: none;
+  border-radius: var(--radius-sm);
+  background: var(--doc-bg);
+  box-shadow: inset 0 0 0 1px var(--border-strong);
+}
+.canvas-options .grid-formula-editor .canvas-formula-text {
+  padding: var(--space-3) var(--space-4);
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+}
+/* La cella in scrittura: il bordo d'accento di .grid-cell-editor, e il testo
+   nel carattere della griglia. */
+.canvas-card-sheet .cm-editor.cm-focused {
+  outline: none;
+}
+.canvas-card-sheet .grid-cell-editor .cm-content {
+  padding: 0.3rem 0.45rem;
+  font-family: var(--font-ui);
+  font-size: var(--text-base);
+  line-height: 1.3;
+}
+.canvas-card-sheet .grid-cell-editor .cm-line {
+  padding: 0;
+}
 /* Le quattro maniglie (T66): un quadratino col filo d'accento, di 10 px
    sullo schermo a ogni zoom, solo sulla scheda scelta e sulla cornice della
    scelta. */

@@ -14,11 +14,12 @@
 
 import type {
   CardEditor,
+  CardEditorContext,
   CardEditorOptions,
   CardEditorPort,
   CardEditorState,
 } from "../editors/canvas/cards";
-import type { EditorSurface, SurfaceRequest } from "../editors/core/registry";
+import type { EditorSurface, SurfaceActiveCell, SurfaceRequest } from "../editors/core/registry";
 import { rebaseStaleChange, type EditorChange } from "../editors/core/text-operation";
 import type { SyntaxForm } from "../host/contract";
 import type { Theme } from "../theme/theme";
@@ -279,6 +280,23 @@ export function createCardEditorPort(deps: CardEditorDeps): CardEditorHub {
         }
         return editor.toolbar.element;
       },
+      context: () => (editor.destroyed ? null : contextOf(editor.surface)),
+      onContext: (listener) => {
+        const source = editor.surface.activeCell;
+        if (editor.destroyed || !source) return () => {};
+        // La superficie avvisa a ogni cambio possibile: qui arriva soltanto
+        // quando la cella o il suo contenuto sono davvero diversi.
+        let last = contextOf(editor.surface);
+        const stop = source.subscribe(() => {
+          if (editor.destroyed) return;
+          const next = contextOf(editor.surface);
+          if (next?.cell === last?.cell && next?.formula === last?.formula) return;
+          last = next;
+          listener(next);
+        });
+        editor.teardowns.push(stop);
+        return stop;
+      },
       destroy: () => destroy(editor),
     };
   }
@@ -334,6 +352,7 @@ export function createCardEditorPort(deps: CardEditorDeps): CardEditorHub {
         paneId: surfaceId,
         documentId: path,
         parent: host,
+        ...(options.compact ? { compact: true } : {}),
         formatId: source.formatId,
         ...(source.revision !== undefined ? { revision: source.revision } : {}),
       });
@@ -499,4 +518,17 @@ export function headingOffset(text: string, heading: string): number | null {
     bytes += encoder.encode(line).length;
   }
   return null;
+}
+
+/// Il contesto di ciò che si scrive in una scheda (T42): la cella attiva della
+/// superficie e il suo contenuto com'è scritto, se la superficie ne ha una
+/// (un foglio, `EditorSurface.activeCell`).
+function contextOf(surface: EditorSurface): CardEditorContext | null {
+  let cell: SurfaceActiveCell | null = null;
+  try {
+    cell = surface.activeCell?.read() ?? null;
+  } catch (error) {
+    console.error(error);
+  }
+  return cell === null ? null : { cell: cell.name, formula: cell.formula };
 }

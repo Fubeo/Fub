@@ -1062,6 +1062,8 @@
     "canvas-exit-hint",
     "canvas-card-lock",
     "save-state",
+    "canvas-card-sheet",
+    "canvas-formula-text",
     "canvas-ink-label",
     "canvas-ink-frame",
     "draw-header",
@@ -2709,6 +2711,8 @@
     "canvas-exit-hint": "cornice",
     "canvas-card-lock": "cornice",
     "save-state": "cornice",
+    "canvas-card-sheet": "cornice",
+    "canvas-formula-text": "cornice",
     "canvas-ink-label": "cornice",
     "canvas-ink-frame": "segno",
     "draw-header": "cornice",
@@ -5954,7 +5958,9 @@
         "format-bar",
         "conflict-banner",
         "conflict-actions",
-        "cm-fub-heading-line"
+        "cm-fub-heading-line",
+        "canvas-card-sheet",
+        "canvas-formula-text"
       ],
       "states": [
         "rest",
@@ -9007,7 +9013,7 @@
   "counts": {
     "required_roles": 154,
     "optional_roles": 63,
-    "hooks": 1645,
+    "hooks": 1647,
     "state_names": 7,
     "assigned_states": 775,
     "components": 230,
