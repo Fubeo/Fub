@@ -281,4 +281,13 @@ describe("le operazioni d'intento dei tratti (T86)", () => {
     expect(restyleStrokesOp("board", ["s1"], { color: "#d55e00" })).toEqual({ op: "restyle_strokes", layer: "board", ids: ["s1"], color: "#d55e00" });
     expect(restyleStrokesOp({ node: "a" }, ["s1"], { size: 6 })).toEqual({ op: "restyle_strokes", layer: { node: "a" }, ids: ["s1"], size: 6 });
   });
+
+  it("la proporzione del contenuto va nell'operazione solo se vale (T98)", () => {
+    expect(moveStrokesOp({ node: "a" }, ["s1"], 5, 0, undefined, 2)).toEqual({ op: "move_strokes", layer: { node: "a" }, ids: ["s1"], dx: 5, dy: 0, aspect: 2 });
+    expect(restyleStrokesOp({ node: "a" }, ["s1"], { size: 6 }, 0.75)).toMatchObject({ size: 6, aspect: 0.75 });
+    for (const aspect of [null, undefined, 0, -1, Number.NaN, Number.POSITIVE_INFINITY]) {
+      expect(moveStrokesOp({ node: "a" }, ["s1"], 5, 0, "board", aspect)).not.toHaveProperty("aspect");
+      expect(restyleStrokesOp({ node: "a" }, ["s1"], { size: 6 }, aspect)).not.toHaveProperty("aspect");
+    }
+  });
 });

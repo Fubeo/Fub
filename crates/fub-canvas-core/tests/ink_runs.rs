@@ -542,6 +542,7 @@ fn two_thousand_strokes_move_erase_and_undo_without_stopping_the_board() {
             dx: 3.0,
             dy: 2.0,
             to: None,
+            aspect: None,
         },
         CanvasOp::EraseStrokes {
             layer: LayerRef::Board,

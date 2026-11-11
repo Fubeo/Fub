@@ -30,8 +30,9 @@ const VECTORS = Object.entries(FILES)
   .sort(([a], [b]) => a.localeCompare(b));
 
 /// I vettori con la proporzione del contenuto (T39), in una cartella loro:
-/// `canvas-ink-fit/` la legge anche il nucleo (`fub-canvas-core`, `ops.rs`),
-/// che rifà la regola senza `aspect` (il contenuto lo sa solo la resa).
+/// li legge anche il nucleo (`fub-canvas-core`, `ops.rs`, T98), che rifà la
+/// regola con l'`aspect` che il client gli dà in `move_strokes` e
+/// `restyle_strokes`.
 interface AspectVector extends Vector {
   readonly aspect: number;
 }

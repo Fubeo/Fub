@@ -180,7 +180,9 @@ tratti:
   `s = 1,414`, `dx = −82,8`, `dy = 117,2`. Una proporzione assente, zero,
   negativa o non finita torna alla regola di sopra; con `a = W / H` le due
   regole danno lo stesso. Il file non scrive `a`: la sa solo chi ha il
-  contenuto, e il nucleo (`move_strokes`) usa la regola senza proporzione.
+  contenuto, e il client la dà al nucleo nelle operazioni che portano un
+  tratto (`aspect` di `move_strokes` e `restyle_strokes`); senza, il nucleo
+  usa la regola senza proporzione.
 - **Con `fixed`** l'inchiostro resta alla misura in cui è stato scritto,
   nell'angolo in alto a sinistra, qualunque sia la misura di adesso.
 - **Immagine e PDF** si riconoscono dall'estensione del campo `file`, senza
@@ -203,8 +205,8 @@ per file, scritti a mano: `name`, `description`, la scheda (`card`, con
 `type` e `file`), `ref` (`W`, `H`), `size` (`w`, `h`) e in `expect` il modo,
 `s`, `x` (`dx`), `y` (`dy`) e qualche punto `from` → `to`. Il nucleo Rust
 li fa girare con `ink_fit`. Quelli con la proporzione stanno accanto, in
-`canvas-ink-fit-aspect/`, con il campo in più `aspect`: li prova solo il
-client (`ink-fit.test.ts`), perché il nucleo non la conosce.
+`canvas-ink-fit-aspect/`, con il campo in più `aspect`: li provano il
+client (`ink-fit.test.ts`) e il nucleo, con `ink_fit` e la proporzione.
 
 ## Il livello estraneo
 
@@ -408,6 +410,13 @@ lavagna (numeri finiti, altrimenti `Invalid`). È l'operazione del Lazo.
   che passa a una nota cambia scala), arrotondati all'intero; lo spessore
   del pennello segue la stessa scala. Un id che `to` ha già ne prende uno
   nuovo dal seme, e `created` lo dice.
+- **La proporzione del contenuto** (`aspect`, facoltativo): quella che la
+  scheda di `layer` mostra, se il client la sa. Il nucleo porta il tratto
+  come la resa, con [il contenuto](#la-misura-della-scheda), così col Lazo
+  il tratto va dove dice il puntatore anche su una scheda ridimensionata con
+  un'altra proporzione. Assente, zero o negativa: la regola senza
+  proporzione, come prima. Non conta sulla radice né sulle schede `fixed`,
+  e non si scrive nel file.
 - **Gli errori:** un id che non c'è è `UnknownStroke`, uno ripetuto
   `DuplicateId`; un tratto che Fub non sa disegnare si conserva (`Invalid`),
   e così uno che nel livello nuovo non si disegnerebbe; un livello estraneo,
@@ -415,7 +424,7 @@ lavagna (numeri finiti, altrimenti `Invalid`). È l'operazione del Lazo.
 
 ```json
 { "op": "move_strokes", "layer": { "node": "pdf1" }, "ids": ["s1"],
-  "dx": 40, "dy": -12, "to": { "node": "nota1" } }
+  "dx": 40, "dy": -12, "to": { "node": "nota1" }, "aspect": 0.7071 }
 ```
 
 ### `restyle_strokes`
@@ -426,8 +435,9 @@ due, altrimenti `Invalid`, e `size` è un numero finito maggiore di zero.
 Una toppa `ink` per tratto al suo posto; un tratto che resta uguale non ne
 ha. Lo spessore cambia la voce `size=` del pennello dove sta scritta, le
 altre voci restano come sono. Sul tratto di una scheda che scala, `size` si
-divide per il fattore della scheda, così il tratto si vede come è chiesto.
-Gli errori sugli id sono quelli di `move_strokes`.
+divide per il fattore della scheda (con `aspect`, facoltativo, come in
+`move_strokes`), così il tratto si vede come è chiesto. Gli errori sugli id
+sono quelli di `move_strokes`.
 
 ```json
 { "op": "restyle_strokes", "layer": "board", "ids": ["s1", "s3"],
