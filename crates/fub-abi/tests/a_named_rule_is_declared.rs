@@ -1808,6 +1808,17 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
                  nella shell, che i vettori di `canvas-parts/` tengono uguale.",
             ),
         ),
+        (
+            "crates/fub-canvas-core/src/ops.rs::scales",
+            (
+                Family::AsciiCase,
+                "abbassa l'estensione del file di una scheda per dire se il suo inchiostro \
+                 scala con lei (le immagini e il PDF, `.png`, `.pdf`, …) quando `move_strokes` \
+                 porta i tratti da un livello all'altro: sono token di formato, ASCII per \
+                 definizione. Diverge da `parts.rs::of` perché la lista è un'altra, quella di \
+                 `inkFitMode` nella shell, che i vettori di `canvas-ink-fit/` tengono uguale.",
+            ),
+        ),
         // -- CasoAscii: importatori (estensioni e nomi di formato) -------------
         (
             "crates/fub-importers/src/archive.rs::route_entry",
