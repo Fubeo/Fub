@@ -5418,7 +5418,7 @@ campo; che su una scheda illeggibile aprono il file; la sola lettura; una
 scheda in caricamento.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/canvas
-Stato: [~] in corso · coder Haiku · base 8f0b9120e
+Stato: [x] fatto · da 3be03f3bd a 28e4c01b1 (8 commit, cherry-pick) · differenze: lo stato della scheda si legge da `data-card-state` della radice della vista, ora convenzione dei renderer in `canvas-cards.md`; anche il PDF lo scrive (`cards/pdf.ts` aggiunto a Tocca); «indisponibile» (foglio) e «troppo grande» (immagine) aprono il file come «Non riesco a mostrare»; senza selettore il gesto annuncia «File mancante»; il doppio clic su un pulsante della scheda fa solo il suo clic; il doppio clic sull'immagine resta del visore (T5) anche durante «Apro…». `canvas-cards.md` è a 550 righe: la prossima modifica la divide
 
 ## T94 · Il tratto libero negli appunti
 
