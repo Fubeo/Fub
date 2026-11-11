@@ -1,8 +1,8 @@
 import type { CanvasNode } from "./model";
 
 /**
- * A quale scheda appartiene un tratto, e su una scheda PDF a quale pagina
- * (T19). Solo geometria sulle coordinate della lavagna: niente DOM, niente
+ * A quale scheda appartiene un tratto, su una scheda PDF a quale pagina
+ * (T19) e su una scheda di foglio a quale cella (T37). Solo geometria sulle coordinate della lavagna: niente DOM, niente
  * formato dell'inchiostro. Lo strato d'inchiostro (N4 T12) lo chiede quando
  * la penna si alza, e l'etichetta della penna (N6 T69) mentre è giù, con la
  * stessa regola.
@@ -159,6 +159,78 @@ function validPage(box: PageBounds): boolean {
     Number.isSafeInteger(page) && page >= 1 &&
     Number.isFinite(size.width) && Number.isFinite(size.height) && size.width > 0 && size.height > 0 &&
     validBox(rect) && rect.width > 0 && rect.height > 0
+  );
+}
+
+/**
+ * La cella a cui si attacca un tratto di riquadro `b` (in coordinate della
+ * lavagna) che `anchorAt` ha dato alla scheda di foglio `holder` (T37, D-6
+ * b): quella che `cellAt` dice sotto il centro di `b`, dato in unità della
+ * lavagna dall'angolo della scheda. `null` se sotto il centro non c'è una
+ * cella (le intestazioni, fuori dalla griglia: `cellAt` dà `null`), se la
+ * scheda non è un foglio (`cellAt` assente) o se la cella non vale; allora il
+ * tratto prende l'ancora `card`.
+ *
+ * Conta il centro del riquadro, non il punto d'inizio come per la pagina: un
+ * segno sopra una cella si fa spesso cominciando nella cella accanto. Sopra
+ * celle unite `cellAt` dà la cella in alto a sinistra dell'unione. Una cella
+ * con un foglio vuoto, un indirizzo che non è A1 (`isCellAddress`), un
+ * rettangolo non finito o vuoto o uno zoom non positivo non prende niente.
+ */
+export function cellAnchorAt<B extends CellBounds>(
+  holder: CanvasNode,
+  b: Bounds,
+  cellAt: ((point: { readonly x: number; readonly y: number }) => B | null) | null | undefined,
+): B | null {
+  if (!cellAt || !validCard(holder) || !validBox(b)) return null;
+  const x = b.x + b.width / 2 - holder.x;
+  const y = b.y + b.height / 2 - holder.y;
+  if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+  const cell = cellAt({ x, y });
+  return cell && validCell(cell) ? cell : null;
+}
+
+/**
+ * Una cella che una scheda di foglio mostra, come la vede questo modulo: il
+ * nome del foglio com'è nel file, l'indirizzo in notazione A1, il
+ * rettangolo della cella in unità della lavagna dall'angolo della scheda e
+ * quante unità della lavagna fa un pixel del foglio al 100% (`zoom`). È la
+ * forma di `InkCellBox` di `ink-record.ts`, scritta per struttura così il
+ * confine resta il solo modello.
+ */
+export interface CellBounds {
+  readonly sheet: string;
+  readonly cell: string;
+  readonly rect: Bounds;
+  readonly zoom: number;
+}
+
+/** L'ultima colonna (`XFD`) e l'ultima riga di un indirizzo A1. */
+const MAX_COLUMN = 16_384;
+const MAX_ROW = 1_048_576;
+const A1 = /^([A-Z]{1,3})([1-9][0-9]{0,6})$/;
+
+/**
+ * Se `text` è un indirizzo di cella in notazione A1 come lo scrive l'ancora
+ * `cell` (`docs/reference/canvas-ink.md`): la colonna da `A` a `XFD`, la riga
+ * da 1 a 1048576, solo maiuscole, senza `$` e senza zeri davanti. La stessa
+ * regola di `CellAddress::parse` del nucleo.
+ */
+export function isCellAddress(text: unknown): text is string {
+  if (typeof text !== "string") return false;
+  const match = A1.exec(text);
+  if (!match) return false;
+  let column = 0;
+  for (const letter of match[1]!) column = column * 26 + (letter.charCodeAt(0) - 64);
+  return column <= MAX_COLUMN && Number(match[2]) <= MAX_ROW;
+}
+
+function validCell(box: CellBounds): boolean {
+  const { sheet, cell, rect, zoom } = box;
+  return (
+    typeof sheet === "string" && sheet !== "" && isCellAddress(cell) &&
+    validBox(rect) && rect.width > 0 && rect.height > 0 &&
+    Number.isFinite(zoom) && zoom > 0
   );
 }
 

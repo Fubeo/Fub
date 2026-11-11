@@ -376,7 +376,7 @@ impl InkTool {
 }
 
 /// L'ancora di un tratto che si disegna: in quali unità sono i punti.
-#[derive(Copy, Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum InkAnchor {
     /// Unità della scheda alla misura `width × height` di quando il tratto si
     /// è scritto, origine in alto a sinistra. Solo nel livello di una scheda.
@@ -389,6 +389,68 @@ pub enum InkAnchor {
     /// il tratto si è scritto. Solo nel livello di una scheda: dove la pagina
     /// sta dentro la scheda lo sa la resa, non il nucleo.
     Page { page: u64, width: f64, height: f64 },
+    /// Pixel del foglio al 100% dall'angolo in alto a sinistra della cella
+    /// `cell` del foglio `sheet` (il nome com'è nel file) di una scheda di
+    /// foglio. L'ancora segue l'indirizzo, non il contenuto: se un altro
+    /// programma inserisce una riga sopra, il tratto va sulla cella che ora
+    /// ha quel nome. Solo nel livello di una scheda: dove la cella sta dentro
+    /// la scheda lo sa la resa, non il nucleo.
+    Cell { sheet: String, cell: CellAddress },
+}
+
+/// L'indirizzo di una cella in notazione A1, come lo scrive l'ancora `cell`:
+/// la colonna da `A` a `XFD` (da 1 a 16384), poi la riga da 1 a 1048576.
+/// Solo maiuscole, senza `$` e senza zeri davanti, così un indirizzo si
+/// scrive in un modo solo e il giro non cambia il file.
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
+pub struct CellAddress {
+    /// La colonna, da 1 (`A`) a [`CellAddress::MAX_COLUMN`] (`XFD`).
+    pub column: u32,
+    /// La riga, da 1 a [`CellAddress::MAX_ROW`].
+    pub row: u32,
+}
+
+impl CellAddress {
+    /// L'ultima colonna, `XFD`.
+    pub const MAX_COLUMN: u32 = 16_384;
+    /// L'ultima riga.
+    pub const MAX_ROW: u32 = 1_048_576;
+
+    /// L'indirizzo `text` in notazione A1; `None` se non lo è (`A0`, `B`,
+    /// `b3`, `$B$3`, `B03`, `XFE1`, `A1048577`).
+    pub fn parse(text: &str) -> Option<CellAddress> {
+        let letters = text.bytes().take_while(u8::is_ascii_uppercase).count();
+        let (columns, digits) = text.split_at(letters);
+        if !(1..=3).contains(&letters)
+            || !(1..=7).contains(&digits.len())
+            || digits.starts_with('0')
+            || !digits.bytes().all(|b| b.is_ascii_digit())
+        {
+            return None;
+        }
+        let column = columns
+            .bytes()
+            .fold(0_u32, |acc, b| acc * 26 + u32::from(b - b'A') + 1);
+        let row: u32 = digits.parse().ok()?;
+        (column <= Self::MAX_COLUMN && row <= Self::MAX_ROW).then_some(CellAddress { column, row })
+    }
+}
+
+/// L'indirizzo come si scrive: `B3`, `XFD1048576`.
+impl fmt::Display for CellAddress {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut letters = Vec::with_capacity(3);
+        let mut column = self.column;
+        while column > 0 {
+            column -= 1;
+            // `column % 26` sta fra 0 e 25: il cast è esatto.
+            #[allow(clippy::cast_possible_truncation)]
+            letters.push(char::from(b'A' + (column % 26) as u8));
+            column /= 26;
+        }
+        let name: String = letters.iter().rev().collect();
+        write!(f, "{name}{}", self.row)
+    }
 }
 
 impl InkAnchor {
@@ -402,7 +464,8 @@ impl InkAnchor {
     }
 
     /// L'ancora come si scrive: `kind`, poi `page` per l'ancora di pagina,
-    /// poi `width` e `height` (interi quando lo sono).
+    /// poi `width` e `height` (interi quando lo sono); per l'ancora di cella
+    /// `kind`, `sheet` e `cell`.
     pub fn to_value(&self) -> Value {
         let mut map = Map::new();
         match *self {
@@ -423,6 +486,14 @@ impl InkAnchor {
                 map.insert("page".to_owned(), Value::from(page));
                 map.insert("width".to_owned(), measure_value(width));
                 map.insert("height".to_owned(), measure_value(height));
+            }
+            InkAnchor::Cell {
+                ref sheet,
+                ref cell,
+            } => {
+                map.insert("kind".to_owned(), Value::from("cell"));
+                map.insert("sheet".to_owned(), Value::from(sheet.as_str()));
+                map.insert("cell".to_owned(), Value::from(cell.to_string()));
             }
         }
         Value::Object(map)
@@ -451,8 +522,10 @@ pub enum SkipReason {
     /// `tool` manca o non è `"pen"` né `"highlighter"`.
     Tool,
     /// `anchor` manca, non è un oggetto, ha un `kind` sconosciuto o fuori
-    /// posto, una misura che manca o non è un numero maggiore di zero, o
-    /// (l'ancora `page`) una pagina che non è un intero da 1 in su.
+    /// posto, una misura che manca o non è un numero maggiore di zero,
+    /// (l'ancora `page`) una pagina che non è un intero da 1 in su, o
+    /// (l'ancora `cell`) un foglio che non è un testo non vuoto o una cella
+    /// che non è un indirizzo A1 valido.
     Anchor,
     /// `color` manca o non è `#rrggbb`.
     Color,
@@ -583,8 +656,8 @@ fn read_tool(value: Option<&Value>) -> Option<InkTool> {
     }
 }
 
-/// L'ancora nel livello `layer`: `card` e `page` solo su una scheda, `free`
-/// solo sulla radice. I campi sconosciuti dell'ancora non contano.
+/// L'ancora nel livello `layer`: `card`, `page` e `cell` solo su una scheda,
+/// `free` solo sulla radice. I campi sconosciuti dell'ancora non contano.
 fn read_anchor(value: Option<&Value>, layer: &LayerRef) -> Option<InkAnchor> {
     let anchor = value?.as_object()?;
     match (anchor.get("kind")?.as_str()?, layer) {
@@ -598,8 +671,18 @@ fn read_anchor(value: Option<&Value>, layer: &LayerRef) -> Option<InkAnchor> {
             width: positive(anchor.get("width"))?,
             height: positive(anchor.get("height"))?,
         }),
+        ("cell", LayerRef::Node(_)) => Some(InkAnchor::Cell {
+            sheet: sheet_name(anchor.get("sheet"))?.to_owned(),
+            cell: CellAddress::parse(anchor.get("cell")?.as_str()?)?,
+        }),
         _ => None,
     }
+}
+
+/// Il nome di un foglio: un testo non vuoto, preso com'è (spazi e virgolette
+/// compresi, senza gli apici che lo racchiudono nelle formule).
+fn sheet_name(value: Option<&Value>) -> Option<&str> {
+    value?.as_str().filter(|name| !name.is_empty())
 }
 
 /// Un numero di pagina: un intero da 1 a 2^53−1, per valore (`3`, `3.0`,
@@ -1028,5 +1111,124 @@ mod tests {
         );
         let keys: Vec<&String> = written.as_object().unwrap().keys().collect();
         assert_eq!(keys, ["kind", "page", "width", "height"]);
+    }
+
+    fn cell(text: &str) -> CellAddress {
+        CellAddress::parse(text).unwrap_or_else(|| panic!("{text} è un indirizzo"))
+    }
+
+    #[test]
+    fn a_cell_address_reads_and_writes_in_a1() {
+        for (text, column, row) in [
+            ("A1", 1, 1),
+            ("B3", 2, 3),
+            ("Z9", 26, 9),
+            ("AA10", 27, 10),
+            ("AZ1", 52, 1),
+            ("BA1", 53, 1),
+            ("ZZ1", 702, 1),
+            ("AAA1", 703, 1),
+            ("XFD1048576", 16_384, 1_048_576),
+        ] {
+            let address = cell(text);
+            assert_eq!(address, CellAddress { column, row }, "{text}");
+            assert_eq!(address.to_string(), text);
+        }
+        for text in [
+            "",
+            "A0",
+            "B",
+            "3",
+            "b3",
+            "B3 ",
+            " B3",
+            "$B$3",
+            "B03",
+            "XFE1",
+            "AAAA1",
+            "A1048577",
+            "A10485760",
+            "B-3",
+            "B3.0",
+            "ÀB3",
+            "B٣",
+        ] {
+            assert_eq!(CellAddress::parse(text), None, "{text:?}");
+        }
+    }
+
+    #[test]
+    fn a_cell_anchor_is_drawn_on_a_card_with_the_sheet_as_written() {
+        for (sheet, address) in [
+            ("Foglio1", "B3"),
+            ("Conti 'Q1' \"bis\"", "A1"),
+            (" ", "XFD1048576"),
+        ] {
+            let stroke = page_stroke(json!({ "kind": "cell", "sheet": sheet, "cell": address }));
+            let StrokeState::Drawn(drawn) = state_on_card(stroke) else {
+                panic!("il tratto si disegna");
+            };
+            assert_eq!(
+                drawn.anchor,
+                InkAnchor::Cell {
+                    sheet: sheet.to_owned(),
+                    cell: cell(address)
+                }
+            );
+        }
+        // Sulla radice un'ancora di cella è fuori posto.
+        let stroke = InkStroke::from_value(&page_stroke(
+            json!({ "kind": "cell", "sheet": "Foglio1", "cell": "B3" }),
+        ))
+        .unwrap();
+        assert_eq!(
+            stroke.state(&LayerRef::Board),
+            StrokeState::Kept(SkipReason::Anchor)
+        );
+    }
+
+    #[test]
+    fn a_cell_anchor_that_does_not_hold_is_an_anchor_reason() {
+        let cases = [
+            json!({ "kind": "cell", "sheet": "Foglio1", "cell": "A0" }),
+            json!({ "kind": "cell", "sheet": "Foglio1", "cell": "B" }),
+            json!({ "kind": "cell", "sheet": "Foglio1", "cell": "b3" }),
+            json!({ "kind": "cell", "sheet": "Foglio1", "cell": "$B$3" }),
+            json!({ "kind": "cell", "sheet": "Foglio1", "cell": "XFE1" }),
+            json!({ "kind": "cell", "sheet": "Foglio1", "cell": "A1048577" }),
+            json!({ "kind": "cell", "sheet": "Foglio1", "cell": 3 }),
+            json!({ "kind": "cell", "sheet": "Foglio1" }),
+            json!({ "kind": "cell", "sheet": "", "cell": "B3" }),
+            json!({ "kind": "cell", "sheet": 1, "cell": "B3" }),
+            json!({ "kind": "cell", "cell": "B3" }),
+        ];
+        for anchor in cases {
+            assert_eq!(
+                state_on_card(page_stroke(anchor.clone())),
+                StrokeState::Kept(SkipReason::Anchor),
+                "{anchor}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_cell_anchor_keeps_its_unknown_fields_and_is_written_in_order() {
+        let value = page_stroke(
+            json!({ "kind": "cell", "merge": "B3:C4", "sheet": "Foglio 2", "cell": "B3" }),
+        );
+        let stroke = InkStroke::from_value(&value).unwrap();
+        assert!(stroke.state(&card()).is_drawn());
+        assert_eq!(stroke.to_value(), value);
+        let anchor = InkAnchor::Cell {
+            sheet: "Foglio 2".to_owned(),
+            cell: cell("AB12"),
+        };
+        let written = anchor.to_value();
+        assert_eq!(
+            written,
+            json!({ "kind": "cell", "sheet": "Foglio 2", "cell": "AB12" })
+        );
+        let keys: Vec<&String> = written.as_object().unwrap().keys().collect();
+        assert_eq!(keys, ["kind", "sheet", "cell"]);
     }
 }

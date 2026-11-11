@@ -112,12 +112,13 @@ L'ancora dice in quali unità sono i punti del tratto.
 | `{"kind": "card", "width": W, "height": H}` | solo nel livello di una scheda | unità della scheda alla misura `W × H`, origine nell'angolo in alto a sinistra |
 | `{"kind": "free"}` | solo nel livello della radice | coordinate della lavagna |
 | `{"kind": "page", "page": N, "width": W, "height": H}` | solo nel livello di una scheda | punti PDF dall'angolo in alto a sinistra della pagina `N` (sotto, «L'ancora di pagina») |
+| `{"kind": "cell", "sheet": F, "cell": C}` | solo nel livello di una scheda | pixel del foglio al 100% dall'angolo in alto a sinistra della cella `C` del foglio `F` (sotto, «L'ancora di cella») |
 
 - **`W`, `H`:** la misura della scheda quando il tratto si è scritto, numeri
   finiti maggiori di zero. Dicono in che unità sono i punti; come seguono la
   misura di adesso lo dice «La misura della scheda». Si confrontano per valore: `640.0` e `6.4e2` sono
   640.
-- **Fuori posto:** un'ancora `card` o `page` alla radice, o `free` su una
+- **Fuori posto:** un'ancora `card`, `page` o `cell` alla radice, o `free` su una
   scheda, non è valida, e il tratto non si disegna.
 - **Altri campi dell'ancora:** si conservano dopo quelli noti e non cambiano
   il significato.
@@ -166,6 +167,40 @@ scheda: si vede solo quando la scheda mostra quella pagina.
 - **Il nucleo** non sa dove la pagina sta nella scheda: `move_strokes` e lo
   spessore di `restyle_strokes` su un tratto di pagina sono `Invalid`, e il
   Lazo non lo sceglie. La gomma lo prende dove si vede; il colore si cambia.
+
+### L'ancora di cella
+
+Un tratto scritto sopra la griglia di una scheda di foglio è della cella sotto
+il centro del suo riquadro: segue la cella quando il foglio scorre.
+
+```json
+{ "anchor": { "kind": "cell", "sheet": "Conti 2025", "cell": "B3" } }
+```
+
+- **`sheet`:** il nome del foglio com'è nel file, un testo non vuoto, spazi e
+  virgolette compresi, senza gli apici delle formule (`Conti 'Q1'`, non
+  `'Conti ''Q1'''`). Vuoto o non testo: l'ancora non vale.
+- **`cell`:** l'indirizzo in notazione A1, colonna da `A` a `XFD`, riga da 1
+  a 1048576, solo maiuscole, senza `$` né zeri davanti: `B3`, `XFD1048576`.
+  `A0`, `B`, `b3`, `$B$3`, `B03` o `XFE1`: l'ancora non vale.
+- **I punti** (e lo spessore) sono in pixel del foglio al 100% dall'angolo in
+  alto a sinistra della cella. Non c'è una misura: il tratto non si stira con
+  la cella.
+- **Quando nasce:** un tratto che `anchorAt` dà a una scheda di foglio, con
+  il centro del suo riquadro su una cella della griglia (`cellAnchorAt`).
+  Sopra le intestazioni o fuori dalla griglia prende l'ancora `card`. Sopra
+  celle unite prende la cella in alto a sinistra dell'unione.
+- **L'indirizzo, non il contenuto.** Il tratto segue il nome della cella. Un
+  esempio: un tratto su `B3`; un altro programma inserisce una riga sopra la
+  3, e il valore che era in `B3` ora sta in `B4`; il tratto resta su `B3`,
+  sopra il valore nuovo. Un foglio rinominato o tolto, o una scheda che non
+  è più un foglio: il tratto resta nel file e non si vede, finché un foglio
+  con quel nome torna.
+- **Il nucleo** non sa dove la cella sta nella scheda: come per la pagina,
+  `move_strokes` e lo spessore di `restyle_strokes` sono `Invalid`; il colore
+  si cambia e la gomma lo toglie. Il client lo decodifica, ma finché la
+  scheda di foglio non dice dove sta la cella non lo disegna né lo prende con
+  la gomma o col Lazo.
 
 ## Come si disegna
 
@@ -260,7 +295,7 @@ fissa, la prima che vale in quest'ordine:
 | Ragione | Quando |
 |---|---|
 | `tool` | `tool` manca o non è `"pen"` né `"highlighter"` |
-| `anchor` | `anchor` manca, non è un oggetto, ha un `kind` sconosciuto o fuori posto, una misura che manca o non è un numero maggiore di zero, o (`page`) una pagina che non è un intero da 1 in su |
+| `anchor` | `anchor` manca, non è un oggetto, ha un `kind` sconosciuto o fuori posto, una misura che manca o non è un numero maggiore di zero, (`page`) una pagina che non è un intero da 1 in su, o (`cell`) un foglio vuoto o una cella che non è A1 |
 | `color` | `color` manca o non è `#rrggbb` |
 | `brush` | `brush` manca o non è un pennello valido della §5 |
 | `ink` | `ink` manca, non rispetta la grammatica o i limiti della §5, o ha un canale sconosciuto |
@@ -280,7 +315,8 @@ fissa, la prima che vale in quest'ordine:
 - **Ordine dei campi del tratto:** `id`, `tool`, `at`, `brush`, `color`,
   `anchor`, `ink`, poi gli sconosciuti nell'ordine in cui erano.
 - **Ordine dei campi dell'ancora:** `kind`, `page` (solo l'ancora di
-  pagina), `width`, `height`, poi gli sconosciuti.
+  pagina), `width`, `height`, poi gli sconosciuti; per l'ancora di cella
+  `kind`, `sheet`, `cell`, poi gli sconosciuti.
 - **Il primo tratto** di una scheda o della radice crea il livello
   `{"v": 1, "strokes": [...]}` in fondo ai campi di chi lo tiene.
 - **L'ultimo tratto tolto:** se il livello resta esattamente

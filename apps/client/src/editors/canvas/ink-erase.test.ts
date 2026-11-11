@@ -19,6 +19,7 @@ function drawable(id: string, points: readonly (readonly [number, number])[], re
     brush: { size: 4 },
     ink: { scale: 100, samples: points.map(([x, y], t) => ({ x: x * 100, y: y * 100, t })) },
     page: null,
+    cell: null,
   } as unknown as DrawableStroke;
 }
 
@@ -89,6 +90,13 @@ describe("che cosa prende la gomma sulla lavagna", () => {
     expect(erasableInk(states)).toEqual([]);
     const [unit] = erasableInk(states, () => box(2));
     expect(unit!.fit).toEqual({ s: 0.5, x: 100, y: 36 });
+  });
+
+  it("un tratto di cella non si prende finché la scheda di foglio non dice dove sta la cella (T37, T38)", () => {
+    const sheet: CanvasNode = { id: "f", type: "file", x: 0, y: 0, width: 480, height: 320, file: "conti.xlsx" } as CanvasNode;
+    const onCell = { ...drawable("a", [[0, 0], [50, 0]], null), cell: { sheet: "Foglio1", cell: "B3" } } as DrawableStroke;
+    const onCard = drawable("b", [[0, 0], [50, 0]], { width: 480, height: 320 });
+    expect(erasableInk([layer(sheet, [onCell, onCard])]).map((unit) => unit.id)).toEqual(["b"]);
   });
 
   it("un livello estraneo e un tratto non disegnato non si prendono", () => {

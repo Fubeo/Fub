@@ -89,6 +89,9 @@ export function erasableInk(
     let shown: CardPageBox | null | undefined;
     let aspect: number | null | undefined;
     for (const stroke of state.drawable) {
+      // Un tratto di cella (T37) non si disegna finché la scheda di foglio
+      // non dice dove sta la cella (T38, `dryStroke`): la gomma non lo vede.
+      if (stroke.cell !== null) continue;
       let fit: InkFit;
       if (stroke.page !== null) {
         // Sulla pagina che la scheda mostra, come in `paintCard`.

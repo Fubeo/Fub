@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { anchorAt, pageAnchorAt, StrokeBox, strokeBounds, type Bounds } from "./anchor";
+import { anchorAt, cellAnchorAt, isCellAddress, pageAnchorAt, StrokeBox, strokeBounds, type Bounds } from "./anchor";
 import type { CanvasNode } from "./model";
 import anchorSource from "./anchor.ts?raw";
 
@@ -289,6 +289,52 @@ describe("pageAnchorAt (T19)", () => {
     expect(pageAnchorAt(pdf, { ...page, rect: box(0, 36, 300, 0) }, start)).toBeNull();
     expect(pageAnchorAt(pdf, { ...page, rect: box(Number.NaN, 36, 300, 424) }, start)).toBeNull();
     expect(pageAnchorAt(card("zero", 100, 50, 0, 460, "file"), page, start)).toBeNull();
+  });
+});
+
+describe("cellAnchorAt (T37)", () => {
+  const sheet = card("f", 100, 50, 480, 320, "file");
+  const b3 = { sheet: "Foglio1", cell: "B3", rect: box(60, 70, 40, 12), zoom: 1 };
+  /// La griglia di prova: B3 fra (60, 70) e (100, 82) dall'angolo della
+  /// scheda; sopra y = 20 le intestazioni.
+  const grid = (point: { x: number; y: number }) =>
+    point.y < 20 ? null : point.x >= 60 && point.x <= 100 && point.y >= 70 && point.y <= 82 ? b3 : { ...b3, cell: "A1", rect: box(0, 20, 60, 12) };
+
+  it("un tratto prende la cella sotto il centro del suo riquadro, in unità dall'angolo della scheda", () => {
+    const seen: { x: number; y: number }[] = [];
+    const spy = (point: { x: number; y: number }) => {
+      seen.push(point);
+      return grid(point);
+    };
+    // Comincia in A1 (x 140 → 40) ma il centro sta in B3.
+    expect(cellAnchorAt(sheet, box(140, 120, 70, 10), spy)).toBe(b3);
+    expect(seen).toEqual([{ x: 75, y: 75 }]);
+  });
+
+  it("sopra le intestazioni, su una scheda che non è un foglio o con una cella che non vale, niente: l'ancora resta card", () => {
+    expect(cellAnchorAt(sheet, box(170, 55, 10, 4), grid)).toBeNull();
+    expect(cellAnchorAt(sheet, box(170, 120, 10, 4), null)).toBeNull();
+    expect(cellAnchorAt(sheet, box(170, 120, 10, 4), undefined)).toBeNull();
+    for (const bad of [
+      { ...b3, sheet: "" },
+      { ...b3, cell: "A0" },
+      { ...b3, cell: "b3" },
+      { ...b3, rect: box(60, 70, 0, 12) },
+      { ...b3, rect: box(Number.NaN, 70, 40, 12) },
+      { ...b3, zoom: 0 },
+      { ...b3, zoom: Number.NaN },
+    ]) {
+      expect(cellAnchorAt(sheet, box(170, 120, 10, 4), () => bad), JSON.stringify(bad)).toBeNull();
+    }
+    expect(cellAnchorAt(card("zero", 100, 50, 0, 320, "file"), box(170, 120, 10, 4), grid)).toBeNull();
+    expect(cellAnchorAt(sheet, box(Number.NaN, 120, 10, 4), grid)).toBeNull();
+  });
+
+  it("isCellAddress: A1 in maiuscolo, da A1 a XFD1048576", () => {
+    for (const ok of ["A1", "B3", "Z26", "AA1", "XFD1048576", "XFC1"]) expect(isCellAddress(ok), ok).toBe(true);
+    for (const no of ["", "A0", "B", "3", "b3", "$B$3", "B03", "XFE1", "AAAA1", "A1048577", " B3", "B3 ", 3, null]) {
+      expect(isCellAddress(no), String(no)).toBe(false);
+    }
   });
 });
 
