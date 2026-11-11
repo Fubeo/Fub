@@ -25,6 +25,7 @@ import type { PdfEngine } from "../media/pdf-view";
 import { canvasCoreReady, openCoreNow } from "./wasm/core";
 import { canvasViewKey, createCanvasViewMemory } from "./view-state";
 import { setReducedMotionPreference } from "../../theme/reduced-motion";
+import structure from "../../theme/scrittoio/structure.css?raw";
 
 beforeAll(async () => {
   await canvasCoreReady();
@@ -1064,6 +1065,49 @@ function enterWithKeys(host: HTMLElement, id: string): void {
   card(host, id).focus();
   press(card(host, id), "Enter");
 }
+
+describe("il titolo sopra la scheda (T39, D-21 a)", () => {
+  /// Le dichiarazioni della regola di `structure.css` col selettore `selector`.
+  function ruleOf(selector: string): string | null {
+    const at = structure.indexOf(`${selector} {`);
+    if (at < 0) return null;
+    const open = structure.indexOf("{", at);
+    return structure.slice(open + 1, structure.indexOf("}", open));
+  }
+
+  it("le schede di file e di link portano il titolo fuori, sopra: il nodo non cambia e il nome resta", () => {
+    const { renderer } = fakeRenderer();
+    const source = boardSource();
+    const { engine, host } = mounted(source, { cards: cardsOf(renderer) });
+    for (const [id, name, spoken] of [["i", "foto.png", "foto.png"], ["n", "idea.md", "idea"], ["w", "example.com", "example.com"]] as const) {
+      const article = card(host, id);
+      // Il rettangolo è il nodo: la misura del file, niente in più per la testata.
+      expect([article.style.width, article.style.height]).toEqual(["240px", id === "w" ? "120px" : "160px"]);
+      const handle = article.querySelector<HTMLElement>(":scope > .canvas-node-handle")!;
+      expect(handle.querySelector(".canvas-node-title")!.textContent).toContain(name);
+      // Il titolo è un figlio della scheda, prima del corpo: la lettura a schermo resta quella.
+      expect(article.firstElementChild).toBe(handle);
+      article.focus();
+      expect(article.getAttribute("aria-label")).toContain(spoken);
+    }
+    // Disegnare la tela non scrive niente nel file.
+    expect(engine.getDoc()).toBe(source);
+    engine.destroy();
+  });
+
+  it("la struttura mette la testata fuori, sopra il bordo, solo per le schede di file e di link", () => {
+    const outside = ruleOf(".canvas-node-file > .canvas-node-handle,\n.canvas-node-link > .canvas-node-handle");
+    expect(outside).not.toBeNull();
+    expect(outside).toMatch(/position:\s*absolute;/);
+    expect(outside).toMatch(/bottom:\s*100%;/);
+    expect(outside).toMatch(/left:\s*0;/);
+    expect(outside).toMatch(/right:\s*0;/);
+    // Le schede di testo e i gruppi non cambiano.
+    expect(structure).not.toMatch(/\.canvas-node-(text|group) > \.canvas-node-handle\s*[,{][^}]*position:\s*absolute/);
+    // Il contenuto è un mondo a sé, sotto l'inchiostro e le maniglie.
+    expect(ruleOf(".canvas-node-file > .canvas-card-body,\n.canvas-node-link > .canvas-card-body")).toMatch(/isolation:\s*isolate;/);
+  });
+});
 
 describe("entrare e uscire da una scheda", () => {
   it("un clic sceglie la scheda, anche sul link, e non lo segue; il clic dopo entra senza seguirlo", () => {

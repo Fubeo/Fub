@@ -212,3 +212,70 @@ describe("l'inchiostro sulla pagina di un PDF", () => {
     expect(engine.getDoc()).toBe(source);
   });
 });
+
+describe("l'inchiostro sul contenuto di un'immagine (T39)", () => {
+  const brush = "pf1 size=3 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=0 pen=ballpoint";
+  /// Una scheda d'immagine 400 × 200 con un tratto scritto a 400 × 200.
+  const IMAGE = {
+    id: "img",
+    type: "file",
+    x: 0,
+    y: 200,
+    width: 400,
+    height: 200,
+    file: "Foto/lavagna.png",
+    "fub:ink": {
+      v: 1,
+      strokes: [{ id: "s", tool: "pen", brush, color: "#0072b2", anchor: { kind: "card", width: 400, height: 200 }, ink: "1 s100 cxy 1000,1000 100,100" }],
+    },
+  };
+
+  /// Una scheda d'immagine finta che dice la proporzione `shown.aspect`.
+  function fakeImage() {
+    const shown: { aspect: number | null; context: CardContext | null } = { aspect: 1, context: null };
+    const renderer: CardRenderer = {
+      kinds: ["image"],
+      mount(_node, host, _mode, context) {
+        shown.context = context;
+        host.append(document.createElement("canvas"));
+        return { setMode: () => {}, contentAspect: () => shown.aspect, destroy: () => {} };
+      },
+    };
+    /// L'immagine cambia (il file sostituito): la scheda lo dice alla tela.
+    const replace = (aspect: number | null) => {
+      shown.aspect = aspect;
+      shown.context?.contentShown?.();
+    };
+    return { renderer, replace };
+  }
+
+  const viewBox = (host: HTMLElement) => card(host, "img").querySelector(".canvas-ink-card > svg")?.getAttribute("viewBox") ?? null;
+
+  it("il viewBox è il riquadro del contenuto nella misura scritta, e segue l'immagine che cambia", () => {
+    const host = document.createElement("div");
+    document.body.append(host);
+    const image = fakeImage();
+    const source = JSON.stringify({ nodes: [IMAGE], edges: [] });
+    const engine = new CanvasEngine(host, {
+      surfaceId: "ink-content",
+      formatId: "canvas",
+      documentId: "lavagna.canvas",
+      onChange: () => {},
+      onSelectionChange: () => {},
+      onPickFile: () => null,
+      cards: { registry: createCardRegistry([image.renderer]), snapshots: memorySnapshots(), watch: () => () => {} },
+    });
+    engine.setDoc(source);
+    // Un'immagine quadrata in 400 × 200: 200 × 200 a x = 100.
+    expect(viewBox(host)).toBe("100 0 200 200");
+    // Il file sostituito con un'immagine 4:1: 400 × 100 a y = 50.
+    image.replace(4);
+    expect(viewBox(host)).toBe("0 50 400 100");
+    // Non si vede niente: l'inchiostro segue tutta la scheda, come in N4.
+    image.replace(null);
+    expect(viewBox(host)).toBe("0 0 400 200");
+    // Solo resa: il file non cambia.
+    expect(engine.getDoc()).toBe(source);
+    engine.destroy();
+  });
+});

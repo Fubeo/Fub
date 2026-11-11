@@ -48,6 +48,26 @@ describe("l'inchiostro asciutto", () => {
     expect(nested[1]!.querySelector("path")!.getAttribute("fill")).toBe("#000000");
   });
 
+  it("con scale e la proporzione del contenuto il viewBox è il riquadro del contenuto (T39)", () => {
+    const host = cardElement();
+    // A: 200 × 100 con un contenuto 1:1 → 100 × 100 a x = 50; C: 320 × 240 → 240 × 240 a x = 40.
+    paintCard(host, [A, C], "scale", null, 1);
+    const nested = [...layerOf(host, "canvas-ink-card")!.children];
+    expect(nested.map((each) => each.getAttribute("viewBox"))).toEqual(["50 0 100 100", "40 0 240 240"]);
+    for (const each of nested) expect(each.getAttribute("preserveAspectRatio")).toBe(INK_SCALE_ASPECT);
+    // Con la proporzione della misura scritta il viewBox è la misura intera.
+    paintCard(host, [A], "scale", null, 2);
+    expect(layerOf(host, "canvas-ink-card")!.firstElementChild!.getAttribute("viewBox")).toBe("0 0 200 100");
+    // Senza proporzione, o una che non vale, come N4.
+    for (const aspect of [null, 0, NaN]) {
+      paintCard(host, [A], "scale", null, aspect);
+      expect(layerOf(host, "canvas-ink-card")!.firstElementChild!.getAttribute("viewBox")).toBe("0 0 200 100");
+    }
+    // fixed non guarda la proporzione.
+    paintCard(host, [A], "fixed", null, 1);
+    expect(layerOf(host, "canvas-ink-card")!.firstElementChild!.getAttribute("viewBox")).toBeNull();
+  });
+
   it("con fixed ogni misura di riferimento ha il suo SVG largo W e alto H, senza scala", () => {
     const host = cardElement();
     paintCard(host, [A, B, C], "fixed");

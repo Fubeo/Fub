@@ -3253,7 +3253,7 @@ export class CanvasEngine {
     this.#erase = {
       id,
       sweep: new EraseSweep(ERASER, pointerType),
-      source: new InkEraseSource(erasableInk(this.#inkStateList(), this.#pagesShown)),
+      source: new InkEraseSource(erasableInk(this.#inkStateList(), this.#pagesShown, this.#aspectsShown)),
       mode: this.#penChoice.eraser,
       path: [],
       cuts: new Map(),
@@ -3548,7 +3548,7 @@ export class CanvasEngine {
     for (const element of this.#stage.children) {
       if (!(element instanceof HTMLElement) || !element.classList.contains("canvas-node")) continue;
       const node = nodes.get(element.dataset.node ?? "");
-      if (node) paintCard(element, cards.get(node.id) ?? [], inkFitMode(node), this.#pageBoxOf(node.id));
+      if (node) this.#paintCardInk(element, node, cards.get(node.id) ?? []);
     }
     paintBoard(this.#stage, board);
     this.#inkCards = cards;
@@ -3643,14 +3643,46 @@ export class CanvasEngine {
   readonly #pagesShown = (id: string): CardPageBox | null => this.#pageBoxOf(id);
 
   /**
-   * La scheda `entry` mostra un'altra pagina, o nessuna (T19): si ridisegna
-   * il suo solo inchiostro, coi tratti già calcolati, per la pagina di adesso.
+   * La proporzione del contenuto che la scheda `id` mostra (T39): la chiede
+   * alla sua vista; `null` se la scheda non ha una vista o non la sa.
+   */
+  #contentAspectOf(id: string): number | null {
+    const view = this.#cards.get(id)?.view;
+    if (!view?.contentAspect) return null;
+    try {
+      const aspect = view.contentAspect();
+      return typeof aspect === "number" && Number.isFinite(aspect) && aspect > 0 ? aspect : null;
+    } catch (error) {
+      // Una vista che lancia non ferma l'inchiostro: segue tutta la scheda.
+      console.warn(`canvas: il contenuto della scheda ${id} non si misura`, error);
+      return null;
+    }
+  }
+
+  /** `#contentAspectOf` come funzione, per la gomma e il Lazo (`erasableInk`). */
+  readonly #aspectsShown = (id: string): number | null => this.#contentAspectOf(id);
+
+  /**
+   * Disegna i tratti `drys` dentro l'elemento della scheda `node`: col modo
+   * della scheda, la pagina che mostra (T19) e la proporzione del suo
+   * contenuto (T39), che chiede solo alle schede `scale`.
+   */
+  #paintCardInk(element: HTMLElement, node: CanvasNode, drys: readonly DryStroke[]): void {
+    const mode = inkFitMode(node);
+    const aspect = mode === "scale" && drys.length > 0 ? this.#contentAspectOf(node.id) : null;
+    paintCard(element, drys, mode, drys.length > 0 ? this.#pageBoxOf(node.id) : null, aspect);
+  }
+
+  /**
+   * La scheda `entry` mostra un'altra pagina, o nessuna (T19), o il suo
+   * contenuto ha cambiato proporzione (T39): si ridisegna il suo solo
+   * inchiostro, coi tratti già calcolati.
    */
   #pageShown(entry: CardEntry): void {
     if (this.#destroyed || !this.#doc || this.#isSceneOversized()) return;
     const drys = this.#inkCards.get(entry.id);
-    if (!drys || !drys.some((dry) => dry.page !== undefined)) return;
-    paintCard(entry.article, drys, inkFitMode(entry.node), this.#pageBoxOf(entry.id));
+    if (!drys || drys.length === 0) return;
+    this.#paintCardInk(entry.article, entry.node, drys);
   }
 
   /** Aggiunge l'asciutto di un tratto appena scritto al solo livello che lo tiene. */
@@ -3665,7 +3697,7 @@ export class CanvasEngine {
     const element = this.#stage.querySelector<HTMLElement>(`.canvas-node[data-node="${CSS.escape(holder.id)}"]`);
     // Una scheda arrivata da fuori a penna giù non è ancora sulla scena: la
     // disegna il ridisegno rimandato.
-    if (element) paintCard(element, drys, inkFitMode(holder), this.#pageBoxOf(holder.id));
+    if (element) this.#paintCardInk(element, holder, drys);
   }
 
   /**
@@ -3929,7 +3961,7 @@ export class CanvasEngine {
   #chosenStrokes(): ErasableInk[] {
     if (this.#strokeSelection.size === 0 || !this.#doc || this.#isSceneOversized()) return [];
     const cards = new Set(this.#selection);
-    return erasableInk(this.#inkStateList(), this.#pagesShown)
+    return erasableInk(this.#inkStateList(), this.#pagesShown, this.#aspectsShown)
       .filter((unit) => this.#strokeSelection.has(unit.key) && (unit.node === null || !cards.has(unit.node)));
   }
 
@@ -4094,7 +4126,7 @@ export class CanvasEngine {
     const selection = lasso.additive ? [...this.#selection, ...cards.filter((id) => !this.#selection.includes(id))] : cards;
     const held = new Set(selection);
     const strokes: string[] = [];
-    for (const unit of erasableInk(this.#inkStateList(), this.#pagesShown)) {
+    for (const unit of erasableInk(this.#inkStateList(), this.#pagesShown, this.#aspectsShown)) {
       if (unit.node !== null && held.has(unit.node)) continue;
       // Un tratto di pagina (T19) il Lazo non lo prende: il nucleo non sa
       // dove la pagina sta nella scheda, e non lo sposta né lo ridimensiona.
@@ -10534,6 +10566,11 @@ export class CanvasEngine {
       // L'inchiostro di pagina segue la pagina che si vede (T19). Durante il
       // montaggio non c'è ancora la vista: lo disegna il giro della resa.
       pageShown: () => {
+        if (life.closed || entry.body !== body || mounting) return;
+        this.#pageShown(entry);
+      },
+      // L'inchiostro `scale` segue il contenuto che si vede (T39), come sopra.
+      contentShown: () => {
         if (life.closed || entry.body !== body || mounting) return;
         this.#pageShown(entry);
       },

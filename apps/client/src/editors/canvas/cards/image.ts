@@ -26,6 +26,12 @@
 // a ogni zoom. Una GIF animata si taglia nel primo fotogramma, come la
 // scheda ferma. Il file non si scrive mai.
 //
+// L'inchiostro sul contenuto (T39): l'immagine sta intera nella scheda, al
+// centro, e `contentAspect()` dice la sua proporzione (della zona, se c'è),
+// così i tratti seguono l'immagine e non la scheda. Ogni volta che cambia
+// (l'immagine arriva, il file cambia, non si vede più) la scheda lo dice con
+// `contentShown`.
+//
 // Ferma, la scheda non tiene niente di aperto: mostra l'immagine in cache se
 // c'è, sennò titolo e specie come il segnaposto di oggi. Il doppio clic apre
 // il visore (`port.open`). Ogni lettura ha una generazione: una risposta che
@@ -114,6 +120,18 @@ function mountImageCard(
   const urls = new Set<string>();
   /// L'URL dell'SVG mostrato, se la scheda mostra un SVG.
   let vectorUrl: string | null = null;
+  /// La proporzione del contenuto mostrato (T39): dell'immagine ferma dipinta,
+  /// o dell'SVG (la zona, se c'è); `null` se non si vede un'immagine.
+  let aspect: number | null = null;
+
+  /// Tiene la proporzione del contenuto; se è cambiata, la tela ridisegna
+  /// l'inchiostro della scheda.
+  const seeAspect = (next: number | null): void => {
+    const value = next !== null && Number.isFinite(next) && next > 0 ? next : null;
+    if (value === aspect) return;
+    aspect = value;
+    if (!lifetime.closed) context.contentShown?.();
+  };
 
   const revoke = (url: string): void => {
     if (!urls.delete(url)) return;
@@ -126,6 +144,7 @@ function mountImageCard(
       vectorUrl = null;
     }
     if (state !== "picture") painted = null;
+    if (state !== "picture" && state !== "vector") seeAspect(null);
     root.dataset.cardState = state;
     root.replaceChildren(...children);
   };
@@ -164,6 +183,9 @@ function mountImageCard(
     canvas.setAttribute("aria-label", label);
     show("picture", canvas);
     painted = key;
+    // La proporzione che si vede: quella dell'immagine ferma (il canvas sta
+    // intero nella scheda, `object-fit: contain`), o quella scritta con lei.
+    seeAspect(snapshot.aspect ?? snapshot.bitmap.width / snapshot.bitmap.height);
     return true;
   };
 
@@ -257,15 +279,22 @@ function mountImageCard(
     piece?.measured(image.width ?? 0, image.height ?? 0);
     show("vector", piece?.element ?? picture);
     vectorUrl = image.url;
+    seeAspect(shownAspect(image.width ?? 0, image.height ?? 0, zone));
     // L'immagine ferma dell'SVG, per quando la scheda sarà ferma: se il motore
     // non sa dipingerlo, la scheda ferma mostra titolo e specie.
     void picture
       .decode()
       .then(() => {
         if (!current() || vectorUrl !== image.url) return;
-        piece?.measured(picture.naturalWidth || image.width || 0, picture.naturalHeight || image.height || 0);
+        const width = picture.naturalWidth || image.width || 0;
+        const height = picture.naturalHeight || image.height || 0;
+        piece?.measured(width, height);
+        const shown = shownAspect(width, height, zone);
+        seeAspect(shown);
         const snapshot = rasterizeVector(picture, image, widthOf(key), zone);
-        if (snapshot !== null) context.snapshots.put(path, key, snapshot);
+        // L'immagine ferma porta la proporzione dell'SVG: da ferma la scheda
+        // dà lo stesso `contentAspect` che da viva.
+        if (snapshot !== null) context.snapshots.put(path, key, shown === null ? snapshot : { ...snapshot, aspect: shown });
       })
       .catch(() => {
         // Un SVG che non si dipinge resta l'`<img>` che è.
@@ -323,8 +352,20 @@ function mountImageCard(
         fromCache();
       }
     },
+    contentAspect: () => (lifetime.closed ? null : aspect),
     destroy: () => lifetime.close(),
   };
+}
+
+/// La proporzione (larghezza su altezza) di ciò che la scheda mostra di
+/// un'immagine larga `width` e alta `height`: l'immagine intera, o la zona
+/// `zone` com'è ruotata (T78). `null` senza misure.
+export function shownAspect(width: number, height: number, zone: ImageZone): number | null {
+  if (!(width > 0) || !(height > 0) || !Number.isFinite(width) || !Number.isFinite(height)) return null;
+  const [, , w, h] = zone.rect;
+  const straight = (w * width) / (h * height);
+  const ratio = zone.turn % 180 === 0 ? straight : 1 / straight;
+  return Number.isFinite(ratio) && ratio > 0 ? ratio : null;
 }
 
 /// Il nome dice SVG: anche con l'immagine in cache si rilegge, perché viva la
