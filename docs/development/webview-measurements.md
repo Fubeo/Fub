@@ -172,6 +172,22 @@ esce con 1 se un valore supera la soglia scelta.
 Il job `webview` della CI fa lo stesso con S1–S3, S7, R1, T1, I1, L1 e C1, sotto Xvfb e
 senza scheda grafica, e carica il referto come artifact `webview-<sha>`.
 
+Una macchina con la scheda grafica non vede ciò che costa alla CI dipingere:
+WebKitGTK usa la GPU anche sotto `xvfb-run`, e un'ombra o una sfumatura che
+il runner ridipinge a ogni tasto lì non pesa. Per misurare come la CI, la
+WebView va obbligata a Mesa in software:
+
+```bash
+__EGL_VENDOR_LIBRARY_FILENAMES=/usr/share/glvnd/egl_vendor.d/50_mesa.json \
+LIBGL_ALWAYS_SOFTWARE=1 GALLIUM_DRIVER=llvmpipe \
+xvfb-run -a npm run bench:webview -- --only=S1 --native-driver=/usr/bin/WebKitWebDriver
+```
+
+Così S1 scende a una ventina di campioni, come in CI: la sonda misura un
+tasto alla volta, e quando un fotogramma è lento i tasti di WebDriver vi si
+accodano. Pochi campioni insieme a un p95 alto vogliono dire fotogrammi lenti
+da dipingere. Un confronto fra due versioni si fa alternando le corse.
+
 ## macOS
 
 WKWebView non ha un driver WebDriver. Si misura a mano:
