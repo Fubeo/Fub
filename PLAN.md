@@ -5171,7 +5171,7 @@ colore e lo spessore in un solo annulla ciascuno; i tratti non toccati
 restano identici byte per byte.
 Prova: scripts/check.sh --rapido; cargo test -p fub-canvas-core; cd
 apps/client && npx vitest run src/editors/canvas
-Stato: [~] in corso · coder Opus · base a0b0b2427
+Stato: [x] fatto (2026-11-11: 54d22696b…6e6a3e562; `move_strokes` e `restyle_strokes` nel nucleo coi vettori, `lasso.ts`, Q nella colonna, colore e spessore nella barra della selezione, «Ora fa parte di…» con «Annulla» e «Rendilo libero» nel posto degli avvisi; `canvas.pen_button` ha `lasso` ma il tasto laterale non è ancora collegato a nessun valore (il menu radiale lo collega); spostare 2000 tratti costa ~7,7 s perché ogni toppa `ink` di `patch.rs` rilegge il livello: lo dice DECISIONS.md)
 
 ## T87 · Forme dal tratto e linea dritta
 
