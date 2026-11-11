@@ -3639,6 +3639,91 @@ body {
   gap: var(--space-3, 6px);
 }
 
+/* Il lettore (T76, prototipo T28): copre l'area della lavagna (non la
+   finestra), con i titoli a lato e la nota grande; a 700 px solo la nota.
+   «+ Aggiungi all'estratto» sta nell'angolo della sezione dove si legge. */
+.canvas-reader {
+  position: absolute;
+  inset: 0;
+  z-index: 6;
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr) auto;
+}
+.canvas-reader-head {
+  display: flex;
+  grid-column: 1 / -1;
+  align-items: center;
+  gap: var(--space-4, 8px);
+  padding: var(--space-4, 8px) var(--space-6, 16px);
+}
+.canvas-reader-title {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: baseline;
+  gap: var(--space-4, 8px);
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  white-space: nowrap;
+}
+.canvas-reader-title > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.canvas-reader-hint {
+  flex: none;
+  white-space: nowrap;
+}
+.canvas-reader-outline {
+  min-height: 0;
+  overflow: auto;
+  padding: var(--space-4, 8px) var(--space-3, 6px);
+}
+.canvas-reader-outline-row {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  padding: var(--space-2, 4px) var(--space-4, 8px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.canvas-reader-outline-row[data-depth="2"] {
+  padding-left: calc(var(--space-4, 8px) + 14px);
+}
+.canvas-reader-outline-row[data-depth="3"] {
+  padding-left: calc(var(--space-4, 8px) + 28px);
+}
+.canvas-reader-doc {
+  min-height: 0;
+  overflow: auto;
+  padding: var(--space-6, 16px);
+}
+.canvas-reader-outline[hidden] + .canvas-reader-doc {
+  grid-column: 1 / -1;
+}
+.canvas-reader-page {
+  max-width: 640px;
+  margin: 0 auto;
+}
+.canvas-reader-section {
+  position: relative;
+  padding: var(--space-3, 6px) var(--space-6, 16px);
+}
+.canvas-reader-add {
+  position: absolute;
+  top: var(--space-3, 6px);
+  right: var(--space-4, 8px);
+}
+.canvas-surface[data-narrow] .canvas-reader {
+  grid-template-columns: minmax(0, 1fr);
+}
+.canvas-surface[data-narrow] .canvas-reader-outline,
+.canvas-surface[data-narrow] .canvas-reader-hint {
+  display: none;
+}
+
 /* Entrare e uscire (N6 T14). Fuori da una scheda attiva il contenuto di una
    vista non prende il puntatore e non scorre: il clic sceglie la scheda e la
    rotella sposta la lavagna. Dentro sì, e il corpo scorre. I link e i

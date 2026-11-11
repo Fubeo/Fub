@@ -198,6 +198,30 @@ perché e l'avviso non ha pulsanti. Da lontano la scheda mostra il titolo
 grande, come le altre. Nel codice: `excerpt.ts` (le regole e la testata),
 `cards/note.ts` (il corpo), `engine.ts` (i gesti).
 
+## Il lettore
+
+Spazio toccato con una sola scheda di nota scelta, intera o un estratto
+([Spazio toccato](canvas-view.md)), apre il lettore: un dialogo che copre
+l'area della lavagna, non la finestra. Mostra la nota intera, grande, con
+la resa della scheda di nota divisa in una sezione per titolo; le sezioni
+dell'estratto (con i loro sottotitoli) sono segnate e la prima è già in
+vista. A lato i titoli della nota, quelli dell'estratto segnati; un clic
+porta alla sezione. A 700 px restano solo la nota e la crocetta.
+
+Le frecce, `PgSu`, `PgGiù`, `Home` e `Fine` scorrono la nota da ogni punto
+del lettore. La sezione dove si legge è quella in cima alla nota, o quella
+sotto il puntatore; fuori dall'estratto porta «+ Aggiungi all'estratto», che
+come `Invio` la mette al suo posto nella nota in un commit su `fub:parts`
+(lo stesso del selettore, un annulla la toglie). Su una nota intera e in
+sola lettura si legge e basta. `Esc`, `Spazio` e la crocetta chiudono: la
+vista e la scelta sono quelle di prima e il fuoco torna sulla scheda. Su un
+pulsante del lettore `Spazio` è il suo clic, come `Invio`.
+
+Il lettore segue la nota cambiata da un riquadro; la nota tolta dal vault lo
+chiude e la scheda diventa «File mancante». La scheda tolta dalla lavagna
+lo chiude. Nel codice: `reader.ts` (le regole e il dialogo), `engine.ts` (il
+tocco e il commit).
+
 ## Che cosa vede Obsidian
 
 Obsidian conosce il `subpath` e non `fub:parts`, che per lui è un campo

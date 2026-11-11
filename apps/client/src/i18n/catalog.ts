@@ -2943,6 +2943,12 @@ export const IT = { // --- la scocca -------------------------------------------
   "canvas.excerpt.show_note": "Mostra tutta la nota",
   "canvas.excerpt.whole": "Mostra tutto il file",
   "canvas.commands.why.one_excerpt": "Scegli una sola scheda che mostra alcune sezioni.",
+  // Il lettore (T76).
+  "canvas.reader": "Lettore",
+  "canvas.reader.back": "Esc o Spazio: torni alla lavagna",
+  "canvas.reader.close": "Torna alla lavagna",
+  "canvas.reader.outline": "Titoli della nota",
+  "canvas.reader.add": "+ Aggiungi all'estratto",
   // Il ritaglio di un'immagine (T78).
   "canvas.crop": "Ritaglia e ruota",
   "canvas.crop.box": "Zona da tenere",
@@ -6447,6 +6453,12 @@ export const EN: Record<Key, string> = { "app.skip_to_editor": "Skip to the edit
   "canvas.excerpt.show_note": "Show the whole note",
   "canvas.excerpt.whole": "Show the whole file",
   "canvas.commands.why.one_excerpt": "Choose a single card that shows some sections.",
+  // The reader (T76).
+  "canvas.reader": "Reader",
+  "canvas.reader.back": "Esc or Space: back to the board",
+  "canvas.reader.close": "Back to the board",
+  "canvas.reader.outline": "Headings of the note",
+  "canvas.reader.add": "+ Add to the excerpt",
   // Cropping an image (T78).
   "canvas.crop": "Crop and rotate",
   "canvas.crop.box": "Area to keep",
