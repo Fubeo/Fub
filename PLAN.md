@@ -4384,7 +4384,7 @@ nome che c'è già, un solo annulla per ognuno, e che fili e inchiostro
 restano attaccati.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/canvas/engine.test.ts
-Stato: [ ] da fare
+Stato: [~] in corso · coder Opus · base db070044d
 
 ## T71 · Le guide e la griglia
 
