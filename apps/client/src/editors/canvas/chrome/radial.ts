@@ -19,6 +19,7 @@ import { INK_PALETTE } from "../../../ink/palette";
 import { openRadial, type Radial, type RadialItem, type RadialPointer } from "../../spatial/tools/radial";
 import { inkColorName } from "../pen-menu";
 import { commandHint, toolCommandId, type CanvasCommand, type CanvasToolId } from "./commands";
+import { ensureCanvasIcons } from "./icons";
 import { CANVAS_TOOL_ICONS } from "./rail";
 
 /// Quanti strumenti e colori recenti la tela ricorda: i tre del menu più
@@ -132,6 +133,8 @@ export interface CanvasRadialOptions {
 /// Apre il menu radiale della lavagna in `x`, `y` sullo schermo; a un bordo
 /// della finestra il menu si sposta dove si vede intero (`radialCenter`).
 export function openCanvasRadial(x: number, y: number, source: CanvasRadialSource, options: CanvasRadialOptions = {}): Radial {
+  // Le icone del disegno e della lavagna, anche prima che la colonna le registri.
+  ensureCanvasIcons();
   return openRadial(x, y, canvasRadialItems(source), {
     label: t("canvas.radial"),
     center: { icon: CANVAS_TOOL_ICONS[source.tool], color: source.color },
