@@ -916,6 +916,16 @@
     "canvas-excerpt-section",
     "canvas-excerpt-section-title",
     "canvas-excerpt-missing",
+    "canvas-reader",
+    "canvas-reader-head",
+    "canvas-reader-title",
+    "canvas-reader-hint",
+    "canvas-reader-outline",
+    "canvas-reader-outline-row",
+    "canvas-reader-doc",
+    "canvas-reader-page",
+    "canvas-reader-section",
+    "canvas-reader-unreadable",
     "canvas-crop",
     "canvas-crop-box",
     "canvas-crop-handle",
@@ -2595,6 +2605,16 @@
     "canvas-excerpt-section": "contenuto",
     "canvas-excerpt-section-title": "contenuto",
     "canvas-excerpt-missing": "contenuto",
+    "canvas-reader": "cornice",
+    "canvas-reader-head": "cornice",
+    "canvas-reader-title": "cornice",
+    "canvas-reader-hint": "cornice",
+    "canvas-reader-outline": "cornice",
+    "canvas-reader-outline-row": "cornice",
+    "canvas-reader-doc": "cornice",
+    "canvas-reader-page": "cornice",
+    "canvas-reader-section": "cornice",
+    "canvas-reader-unreadable": "cornice",
     "canvas-crop": "cornice",
     "canvas-crop-box": "segno",
     "canvas-crop-handle": "segno",
@@ -5809,6 +5829,28 @@
         "rest",
         "hover",
         "focused"
+      ]
+    },
+    {
+      "name": "canvas-reader",
+      "part": "editors",
+      "hooks": [
+        "canvas-reader",
+        "canvas-reader-head",
+        "canvas-reader-title",
+        "canvas-reader-hint",
+        "canvas-reader-outline",
+        "canvas-reader-outline-row",
+        "canvas-reader-doc",
+        "canvas-reader-page",
+        "canvas-reader-section",
+        "canvas-reader-unreadable"
+      ],
+      "states": [
+        "rest",
+        "hover",
+        "focused",
+        "selected"
       ]
     },
     {
@@ -9159,10 +9201,10 @@
   "counts": {
     "required_roles": 154,
     "optional_roles": 63,
-    "hooks": 1677,
+    "hooks": 1687,
     "state_names": 7,
-    "assigned_states": 791,
-    "components": 235,
+    "assigned_states": 795,
+    "components": 236,
     "preference_tokens": 186
   }
 }

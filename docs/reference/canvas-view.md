@@ -46,6 +46,11 @@ sono quelli di `spatial/camera.ts` (`zoomAtPoint`, `fit`, `stepCamera`).
   sopra una scheda e col mouse che scrive; la mano viene dal tema
   (`data-space-pan`). Mentre si scrive in una scheda, o dentro la scheda
   attiva, Spazio è uno spazio; con la penna giù non vale (la penna vince).
+- **Spazio toccato** (giù e su entro 0,3 s, `READER_TAP_MS`, dal primo tasto
+  giù e non dalla ripetizione del sistema, col puntatore fermo entro 3 px e
+  senza premere) con una sola scheda di nota scelta apre il lettore
+  ([Il lettore](canvas-parts.md#il-lettore)). Lo spostamento non aspetta il
+  tocco: la vista si muove subito, e un tocco si riconosce solo al rilascio.
 - **Il tasto centrale** trascina e sposta, senza scegliere. Ctrl, Cmd e Alt
   con un trascinamento nel vuoto spostano come prima; Alt dal corpo di una
   scheda tira un filo ([I fili](canvas-input.md#i-fili)).

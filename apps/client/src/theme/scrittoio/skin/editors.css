@@ -2898,6 +2898,114 @@
   font-size: var(--text-sm);
   line-height: var(--leading-normal);
 }
+/* Il lettore (T76, prototipo T28): la nota grande nel carattere di
+   lettura sul foglio, le sezioni dell'estratto su un velo d'accento col filo
+   a sinistra, e lo stesso segno sui loro titoli a lato; la sezione dove si
+   legge, fuori dall'estratto, su un velo leggero. */
+.canvas-reader {
+  background: var(--sheet);
+  color: var(--text);
+}
+.canvas-reader-head {
+  border-bottom: 1px solid var(--border);
+}
+.canvas-reader-title {
+  font-size: var(--text-md);
+  font-weight: var(--weight-bold);
+}
+.canvas-reader-title > .canvas-excerpt-parts {
+  font-size: var(--text-sm);
+}
+.canvas-reader-hint {
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+.canvas-reader-outline {
+  border-right: 1px solid var(--border);
+  background: var(--sheet-2);
+}
+.canvas-reader-outline-row {
+  border-radius: var(--radius-chip);
+  color: var(--muted);
+  font-size: var(--text-sm);
+  text-align: left;
+}
+.canvas-reader-outline-row:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+.canvas-reader-outline-row[data-in-excerpt] {
+  box-shadow: inset 3px 0 0 var(--accent);
+  color: var(--accent);
+  font-weight: var(--weight-medium);
+}
+.canvas-reader-outline-row[aria-current="true"] {
+  background: var(--bg-active);
+  color: var(--text);
+}
+.canvas-reader-outline-row:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: -2px;
+}
+.canvas-reader-doc:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: -2px;
+}
+.canvas-reader-page {
+  color: var(--doc-fg);
+  font-family: var(--font-reading);
+  font-size: var(--text-reading);
+  line-height: var(--leading-relaxed);
+}
+.canvas-reader-page h1,
+.canvas-reader-page h2,
+.canvas-reader-page h3,
+.canvas-reader-page h4,
+.canvas-reader-page h5,
+.canvas-reader-page h6 {
+  margin: 0 0 var(--space-3);
+  color: var(--doc-heading);
+  line-height: var(--leading-tight);
+}
+.canvas-reader-page p,
+.canvas-reader-page ul,
+.canvas-reader-page ol,
+.canvas-reader-page blockquote,
+.canvas-reader-page pre {
+  margin: 0 0 var(--space-4);
+}
+.canvas-reader-page ul,
+.canvas-reader-page ol {
+  padding-left: 1.3em;
+}
+.canvas-reader-page a {
+  color: var(--doc-link);
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.2em;
+}
+.canvas-reader-page code {
+  padding: 0.08em 0.32em;
+  border-radius: var(--radius-xs);
+  background: var(--doc-fill-soft);
+  font-family: var(--font-mono);
+  font-size: 0.88em;
+}
+.canvas-reader-section {
+  border-radius: var(--radius-control);
+}
+.canvas-reader-section[data-in-excerpt] {
+  background: var(--accent-wash);
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+.canvas-reader-section[data-current]:not([data-in-excerpt]) {
+  background: var(--bg-hover);
+}
+.canvas-reader-unreadable {
+  color: var(--muted);
+  font-family: var(--font-ui);
+  font-size: var(--text-sm);
+}
 /* Il testo di una scheda è una nota in piccolo: il carattere di lettura, un
    gradino sotto, e i titoli che non si prendono la scheda. */
 .canvas-markdown {

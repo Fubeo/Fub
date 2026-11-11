@@ -73,6 +73,10 @@ export const EDITORS: PartAnatomy = {
     // piccolo, e l'avviso della sezione che non c'è più. Il corpo di una
     // sezione, la riga dei pulsanti e la frase dell'avviso sono solo impianto.
     { name: "canvas-excerpt", layer: "contenuto", layers: { "canvas-excerpt-parts": "segno", "canvas-excerpt-open": "segno" }, states: [S("rest"), S("hover"), S("focused")], hooks: ["canvas-excerpt-parts", "canvas-excerpt-open", "canvas-excerpt-section", "canvas-excerpt-section-title", "canvas-excerpt-missing"] },
+    // Il lettore (T76): copre l'area della lavagna; la testata col nome, le
+    // parti e la crocetta, i titoli a lato, la nota grande con le sezioni
+    // dell'estratto segnate e «+ Aggiungi all'estratto» su quella dove si legge.
+    { name: "canvas-reader", states: [S("rest"), S("hover"), S("focused"), S("selected")], hooks: ["canvas-reader", "canvas-reader-head", "canvas-reader-title", "canvas-reader-hint", "canvas-reader-outline", "canvas-reader-outline-row", "canvas-reader-doc", "canvas-reader-page", "canvas-reader-section", "canvas-reader-unreadable"] },
     // Il ritaglio di un'immagine (T78):la zona col velo e le maniglie sopra
     // la scheda, la barra sotto e la riga dell'inchiostro; segni di Fub sulla
     // lavagna. L'immagine intera sotto la zona (`canvas-crop-picture`) e la

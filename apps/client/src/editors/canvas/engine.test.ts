@@ -7041,3 +7041,219 @@ describe("la scheda-estratto (T75)", () => {
     engine.destroy();
   });
 });
+
+describe("il lettore: Spazio toccato su una nota (T76)", () => {
+  const BOARD = [
+    { id: "x", type: "file", x: 0, y: 0, width: 280, height: 220, file: "Note/Relazione.md", subpath: "#Misure" },
+    { id: "w", type: "file", x: 400, y: 0, width: 280, height: 220, file: "Note/Tutta.md" },
+    { id: "t", type: "text", x: 0, y: 400, width: 200, height: 80, text: "Un testo" },
+  ];
+  const HEADINGS = [
+    { level: 1, text: "Relazione" },
+    { level: 2, text: "Scopo" },
+    { level: 2, text: "Misure" },
+    { level: 2, text: "Errori" },
+  ];
+
+  function board(overrides: Partial<CanvasEngineOptions> = {}) {
+    const renderer: CardRenderer = {
+      kinds: ["note"],
+      mount: (): CardView => ({ setMode: () => {}, destroy: () => {} }),
+    };
+    const watchers = new Map<string, () => void>();
+    const outline = vi.fn(async (_path: string) => HEADINGS);
+    const show = vi.fn(async (_path: string, _heading: string | null, host: HTMLElement) => {
+      for (const heading of HEADINGS) {
+        const h = document.createElement(`h${heading.level}`);
+        h.textContent = heading.text;
+        const p = document.createElement("p");
+        p.textContent = `Testo di ${heading.text}.`;
+        host.append(h, p);
+      }
+    });
+    const made = mounted(JSON.stringify({ nodes: BOARD, edges: [] }), {
+      cards: {
+        registry: createCardRegistry([renderer]),
+        snapshots: new CardCache(),
+        watch: (path, changed) => {
+          watchers.set(path, changed);
+          return () => watchers.delete(path);
+        },
+      },
+      parts: { outline, show },
+      ...overrides,
+    });
+    return { ...made, outline, show, watchers };
+  }
+
+  const viewportOf = (host: HTMLElement) => host.querySelector<HTMLElement>(".canvas-viewport")!;
+  const card = (host: HTMLElement, id: string) => host.querySelector<HTMLElement>(`.canvas-node[data-node="${id}"]`)!;
+  const reader = (host: HTMLElement) => host.querySelector<HTMLElement>(".canvas-area > .canvas-reader");
+  const cameraOf = (host: HTMLElement) => host.querySelector<HTMLElement>(".canvas-stage")!.style.transform;
+  const node = (engine: CanvasEngine, id: string) => readCanvas(engine.getDoc()).nodes.find((one) => one.id === id)!;
+
+  function select(host: HTMLElement, ...ids: string[]): void {
+    ids.forEach((id, at) => {
+      card(host, id).dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, button: 0, pointerId: 3, clientX: 0, clientY: 0, shiftKey: at > 0 }));
+      viewportOf(host).dispatchEvent(new PointerEvent("pointerup", { bubbles: true, pointerId: 3, clientX: 0, clientY: 0, shiftKey: at > 0 }));
+    });
+  }
+
+  function space(target: EventTarget, type: "keydown" | "keyup", timeStamp: number, init: KeyboardEventInit = {}): KeyboardEvent {
+    const event = new KeyboardEvent(type, { key: " ", code: "Space", bubbles: true, cancelable: true, ...init });
+    Object.defineProperty(event, "timeStamp", { value: timeStamp });
+    target.dispatchEvent(event);
+    return event;
+  }
+
+  /** Spazio giù e su sulla scheda `id`, a `ms` di distanza. */
+  function tap(host: HTMLElement, id: string, ms: number): void {
+    space(card(host, id), "keydown", 1000);
+    space(card(host, id), "keyup", 1000 + ms);
+  }
+
+  it("Spazio toccato entro 0,3 s con una nota scelta apre il lettore sopra l'area; oltre 0,3 s no", async () => {
+    const { engine, host, show } = board();
+    select(host, "x");
+    tap(host, "x", 400);
+    expect(reader(host)).toBeNull();
+    tap(host, "x", 299);
+    const open = reader(host)!;
+    expect(open).not.toBeNull();
+    expect(open.getAttribute("role")).toBe("dialog");
+    expect(open.contains(document.activeElement)).toBe(true);
+    await vi.waitFor(() => expect(open.querySelector(".canvas-reader-section[data-in-excerpt]")?.getAttribute("data-section")).toBe("Misure"));
+    expect(show).toHaveBeenCalledWith("Note/Relazione.md", null, expect.any(HTMLElement), expect.anything());
+    // Una ripetizione del sistema non è un tocco nuovo: il lettore aperto resta uno.
+    expect(host.querySelectorAll(".canvas-reader")).toHaveLength(1);
+    engine.destroy();
+    expect(reader(host)).toBeNull();
+  });
+
+  it("niente lettore senza una sola nota scelta, col puntatore che si muove, o da un tasto ripetuto", () => {
+    const { engine, host } = board();
+    // Niente scelto.
+    space(viewportOf(host), "keydown", 1000);
+    space(viewportOf(host), "keyup", 1100);
+    expect(reader(host)).toBeNull();
+    // Due schede.
+    select(host, "x", "w");
+    expect(engine.selection().nodes).toEqual(["x", "w"]);
+    tap(host, "x", 100);
+    expect(reader(host)).toBeNull();
+    // Una scheda di testo.
+    select(host, "t");
+    tap(host, "t", 100);
+    expect(reader(host)).toBeNull();
+    // Il puntatore si muove mentre Spazio è giù.
+    select(host, "x");
+    space(card(host, "x"), "keydown", 1000);
+    viewportOf(host).dispatchEvent(new PointerEvent("pointermove", { bubbles: true, clientX: 100, clientY: 100 }));
+    viewportOf(host).dispatchEvent(new PointerEvent("pointermove", { bubbles: true, clientX: 120, clientY: 100 }));
+    space(card(host, "x"), "keyup", 1100);
+    expect(reader(host)).toBeNull();
+    // Il primo tasto giù è un'eco del sistema (`repeat`): niente tocco.
+    space(card(host, "x"), "keydown", 1000, { repeat: true });
+    space(card(host, "x"), "keyup", 1100);
+    expect(reader(host)).toBeNull();
+    // Il puntatore che trema di un pixel è ancora fermo.
+    space(card(host, "x"), "keydown", 1000);
+    viewportOf(host).dispatchEvent(new PointerEvent("pointermove", { bubbles: true, clientX: 121, clientY: 101 }));
+    viewportOf(host).dispatchEvent(new PointerEvent("pointermove", { bubbles: true, clientX: 122, clientY: 100 }));
+    space(card(host, "x"), "keyup", 1100);
+    expect(reader(host)).not.toBeNull();
+    engine.destroy();
+  });
+
+  it("Spazio tenuto sposta la vista subito, come prima: niente lettore anche se lasciato presto", () => {
+    const { engine, host } = board();
+    select(host, "x");
+    const viewport = viewportOf(host);
+    const start = cameraOf(host);
+    space(card(host, "x"), "keydown", 1000);
+    expect(viewport.hasAttribute("data-space-pan")).toBe(true);
+    viewport.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, cancelable: true, button: 0, pointerId: 7, clientX: 100, clientY: 100 }));
+    viewport.dispatchEvent(new PointerEvent("pointermove", { bubbles: true, cancelable: true, button: 0, pointerId: 7, clientX: 160, clientY: 130 }));
+    // La vista si è già mossa, prima che Spazio torni su.
+    expect(cameraOf(host)).not.toBe(start);
+    viewport.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, cancelable: true, button: 0, pointerId: 7, clientX: 160, clientY: 130 }));
+    space(card(host, "x"), "keyup", 1200);
+    expect(viewport.hasAttribute("data-space-pan")).toBe(false);
+    expect(reader(host)).toBeNull();
+    expect(engine.selection().nodes).toEqual(["x"]);
+    engine.destroy();
+  });
+
+  it("Esc o Spazio chiudono il lettore: la vista, la scelta e il fuoco sulla scheda sono quelli di prima", async () => {
+    const { engine, host, changes } = board();
+    select(host, "x");
+    card(host, "x").focus();
+    const camera = cameraOf(host);
+    tap(host, "x", 100);
+    const open = reader(host)!;
+    await vi.waitFor(() => expect(open.querySelector(".canvas-reader-section")).not.toBeNull());
+    expect(document.activeElement).not.toBe(card(host, "x"));
+    document.activeElement!.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
+    expect(reader(host)).toBeNull();
+    expect(cameraOf(host)).toBe(camera);
+    expect(engine.selection().nodes).toEqual(["x"]);
+    expect(document.activeElement).toBe(card(host, "x"));
+    // Di nuovo, e Spazio lo chiude.
+    tap(host, "x", 100);
+    const again = reader(host)!;
+    const doc = again.querySelector<HTMLElement>(".canvas-reader-doc")!;
+    space(doc, "keydown", 5000);
+    space(doc, "keyup", 5050);
+    expect(reader(host)).toBeNull();
+    expect(cameraOf(host)).toBe(camera);
+    expect(engine.selection().nodes).toEqual(["x"]);
+    expect(document.activeElement).toBe(card(host, "x"));
+    expect(changes).toHaveLength(0);
+    engine.destroy();
+  });
+
+  it("«+ Aggiungi all'estratto» scrive le sezioni su `fub:parts` in un commit; il lettore si aggiorna", async () => {
+    const { engine, host, changes } = board();
+    select(host, "x");
+    tap(host, "x", 100);
+    const open = reader(host)!;
+    await vi.waitFor(() => expect(open.querySelector('.canvas-reader-section[data-section="Errori"]')).not.toBeNull());
+    open.querySelector<HTMLElement>('.canvas-reader-outline-row[data-index="3"]')!.click();
+    const add = open.querySelector<HTMLButtonElement>('.canvas-reader-section[data-section="Errori"] > .canvas-reader-add')!;
+    add.click();
+    expect(changes).toHaveLength(1);
+    expect(node(engine, "x").subpath).toBe("#Misure");
+    expect(node(engine, "x")["fub:parts"]).toEqual({ kind: "sections", sections: ["Misure", "Errori"] });
+    expect(open.querySelector('.canvas-reader-section[data-section="Errori"]')!.hasAttribute("data-in-excerpt")).toBe(true);
+    expect(open.querySelector(".canvas-reader-add")).toBeNull();
+    // Un annulla riporta la sezione sola, e il lettore lo segue.
+    engine.undo();
+    expect(node(engine, "x")["fub:parts"]).toBeUndefined();
+    expect(open.querySelector('.canvas-reader-section[data-section="Errori"]')!.hasAttribute("data-in-excerpt")).toBe(false);
+    engine.destroy();
+  });
+
+  it("su una nota intera e in sola lettura si legge e basta; la scheda tolta chiude il lettore", async () => {
+    const { engine, host, changes } = board();
+    select(host, "w");
+    tap(host, "w", 100);
+    const whole = reader(host)!;
+    await vi.waitFor(() => expect(whole.querySelector(".canvas-reader-section")).not.toBeNull());
+    whole.querySelector<HTMLElement>('.canvas-reader-outline-row[data-index="3"]')!.click();
+    expect(whole.querySelector(".canvas-reader-add")).toBeNull();
+    whole.querySelector<HTMLElement>(".canvas-parts-close")!.click();
+    select(host, "x");
+    engine.setReadOnly(true);
+    tap(host, "x", 100);
+    const readOnly = reader(host)!;
+    await vi.waitFor(() => expect(readOnly.querySelector(".canvas-reader-section")).not.toBeNull());
+    readOnly.querySelector<HTMLElement>('.canvas-reader-outline-row[data-index="3"]')!.click();
+    expect(readOnly.querySelector(".canvas-reader-add")).toBeNull();
+    // La scheda che se ne va (un riquadro, un annulla) chiude il lettore.
+    engine.setReadOnly(false);
+    engine.setDoc(JSON.stringify({ nodes: BOARD.filter((one) => one.id !== "x"), edges: [] }));
+    expect(reader(host)).toBeNull();
+    expect(changes).toHaveLength(0);
+    engine.destroy();
+  });
+});

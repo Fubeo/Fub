@@ -143,6 +143,7 @@ import { WHOLE_ZONE, isWholeZone, openCropEditor, zoneOf, zoneParts, zoneRatio, 
 import { PARTS_PICKER_MIN_SECTIONS, openPartsPicker, partsSections, type PartsHeading, type PartsPickerHandle, type PartsPickerPlace, type PartsPickerPort } from "./parts-picker";
 import { noteHeadingOf } from "./cards/note";
 import { excerptSourcePath, noteExcerptOf, syncExcerptHead } from "./excerpt";
+import { READER_TAP_MS, READER_TAP_SLOP, openReader, type ReaderHandle } from "./reader";
 import { DEFAULT_PREFERENCES, currentPreferences, readInkMouse, readPen, saveInkMouse, savePen, watchPreferences, type PenButtonAction, type WheelAction } from "./preferences";
 import { TAP_MAX_MS, TAP_SLOP_PX, isTap, pinchCamera, type TouchCamera, type TouchPoint, type ZoomLimits } from "./touch";
 import { fit, stepCamera, zoomAtPoint, type Camera, type MotionState, type ScaleLimits } from "../../spatial/camera";
@@ -1652,6 +1653,15 @@ export class CanvasEngine {
   /** Spazio tenuto sulla lavagna: il tasto principale sposta la vista, con qualsiasi strumento. */
   #spaceHeld = false;
   /**
+   * Il tocco di Spazio in corso (T76): quando è sceso il primo tasto
+   * (`timeStamp` dell'evento), dov'era il puntatore, e se si è già mosso o
+   * ha premuto. Lasciato entro `READER_TAP_MS`, intatto, apre il lettore.
+   */
+  #spaceTap: { readonly at: number; from: { x: number; y: number } | null; spoiled: boolean } | null = null;
+  // --- il lettore (T76) ---
+  /** Il lettore aperto, la scheda che legge e il suo file. */
+  #reader: { readonly handle: ReaderHandle; readonly node: string; readonly path: string } | null = null;
+  /**
    * Il volo di un salto o l'inerzia del dito: lo stato che `stepCamera`
    * insegue, e il tempo dell'ultimo fotogramma. `null` a vista ferma.
    */
@@ -2091,6 +2101,8 @@ export class CanvasEngine {
     this.#viewport.addEventListener("pointerdown", (event) => {
       const touch = event.pointerType === "touch" ? this.#touches.get(event.pointerId) : undefined;
       if (touch) touch.swallowed = false;
+      // Un tasto premuto con Spazio giù è uno spostamento, non un tocco (T76).
+      if (this.#spaceTap) this.#spaceTap.spoiled = true;
       this.#selectionBar.hide();
       this.#downByTouch = event.pointerType === "touch";
       this.#pointerDown(event);
@@ -2168,8 +2180,14 @@ export class CanvasEngine {
     // fuoco: il tasto principale torna allo strumento. Con la finestra che
     // perde il fuoco l'inerzia e lo scorrimento al bordo si fermano, e un
     // volo arriva dove andava.
+    // Spazio lasciato dopo un tocco breve, col puntatore fermo e una nota
+    // scelta: il lettore (T76). Lo spostamento non aspetta il tocco.
     this.#life.listen(window, "keyup", (event) => {
-      if (event.key === " ") this.#releaseSpace();
+      if (event.key !== " ") return;
+      const tap = this.#spaceTap;
+      const tapped = tap !== null && !tap.spoiled && event.timeStamp - tap.at >= 0 && event.timeStamp - tap.at < READER_TAP_MS;
+      this.#releaseSpace();
+      if (tapped) this.#openReaderOnChoice();
     });
     this.#life.listen(window, "blur", () => this.#stillCamera());
     this.#life.listen(document, "visibilitychange", () => {
@@ -2195,6 +2213,7 @@ export class CanvasEngine {
     // non ne esce.
     this.#viewport.addEventListener("pointermove", (event) => {
       this.#pointerSeen = { x: event.clientX, y: event.clientY };
+      this.#spaceTapMoved(event.clientX, event.clientY);
     }, { signal });
     // A chi appartiene il tratto (T69). L'appoggio si legge in cattura, prima
     // dello strato della penna che lo ferma: è solo un punto. I movimenti si
@@ -5065,6 +5084,8 @@ export class CanvasEngine {
     event.preventDefault();
     if (this.#spaceHeld || this.#penDown) return true;
     this.#spaceHeld = true;
+    // Il tocco conta dal primo tasto giù, non dalla ripetizione del sistema.
+    this.#spaceTap = event.repeat ? null : { at: event.timeStamp, from: this.#pointerSeen, spoiled: false };
     this.#viewport.toggleAttribute("data-space-pan", true);
     // Il mouse che scrive torna alla lavagna finché Spazio è giù.
     this.#applyInkMouse();
@@ -5072,6 +5093,7 @@ export class CanvasEngine {
   }
 
   #releaseSpace(): void {
+    this.#spaceTap = null;
     if (!this.#spaceHeld) return;
     this.#spaceHeld = false;
     this.#viewport.removeAttribute("data-space-pan");
@@ -7549,6 +7571,92 @@ export class CanvasEngine {
     open?.handle.close();
   }
 
+  // --- il lettore (T76) ---------------------------------------------------------
+
+  /** Il puntatore si è mosso con Spazio giù: oltre `READER_TAP_SLOP` non è più un tocco. */
+  #spaceTapMoved(x: number, y: number): void {
+    const tap = this.#spaceTap;
+    if (!tap || tap.spoiled) return;
+    if (tap.from === null) {
+      tap.from = { x, y };
+      return;
+    }
+    if (Math.hypot(x - tap.from.x, y - tap.from.y) > READER_TAP_SLOP) tap.spoiled = true;
+  }
+
+  /**
+   * Il tocco di Spazio: con una sola scheda di nota scelta (intera o un
+   * estratto) apre il lettore sopra l'area della lavagna. Senza niente
+   * scelto, con più schede, con una scheda d'altro o un file mancante non fa
+   * niente. La vista e la scelta non cambiano; il fuoco va sulla scheda, e
+   * ci torna quando il lettore si chiude.
+   */
+  #openReaderOnChoice(): void {
+    const port = this.#options.parts;
+    if (!port?.show || this.#reader || this.#destroyed || !this.#doc || this.#isSceneOversized()) return;
+    if (this.#selection.length !== 1 || this.#edgeSelection.length > 0) return;
+    const node = this.#doc.nodes.find((one) => one.id === this.#selection[0]);
+    if (!node || !this.#partsNote(node)) return;
+    const entry = this.#cards.get(node.id);
+    if (!entry || entry.article.hasAttribute("data-card-missing")) return;
+    const path = node.file;
+    this.#closePartsPicker();
+    // Il fuoco parte dalla scheda: chiuso il lettore, ci torna.
+    entry.article.focus({ preventScroll: true });
+    const show = port.show;
+    const watch = this.#options.cards?.watch;
+    let opened: ReaderHandle | null = null;
+    opened = openReader({
+      host: this.#area,
+      path,
+      excerpt: partsChosen(node),
+      writable: this.#readerWritable(node),
+      port: {
+        outline: (file) => port.outline(file),
+        show: (file, heading, host, life) => show.call(port, file, heading, host, life),
+        ...(watch ? { watch: (file: string, changed: () => void) => watch(file, changed) } : {}),
+      },
+      onAdd: (keys) => {
+        if (this.#reader?.handle !== opened) return;
+        const now = this.#doc?.nodes.find((one) => one.id === node.id);
+        if (!now || !this.#readerWritable(now)) return;
+        this.#putParts(node.id, path, keys);
+      },
+      onClose: (reason) => {
+        if (opened === null || this.#reader?.handle !== opened) return;
+        this.#reader = null;
+        if (reason === "closed" || this.#destroyed) return;
+        const back = this.#cards.get(node.id);
+        if (back?.article.isConnected) back.article.focus({ preventScroll: true });
+        else this.#viewport.focus({ preventScroll: true });
+      },
+      lifetime: this.#life,
+    });
+    if (!opened.closed) this.#reader = { handle: opened, node: node.id, path };
+  }
+
+  /** «+ Aggiungi all'estratto» c'è: un estratto, su una lavagna che si scrive. */
+  #readerWritable(node: CanvasNode): boolean {
+    return !this.#readOnly && !this.#isSceneOversized() && noteExcerptOf(node) !== null;
+  }
+
+  /**
+   * La lavagna è cambiata col lettore aperto: la scheda tolta, o su un altro
+   * file, lo chiude; un'altra scelta di sezioni o la sola lettura lo
+   * aggiornano.
+   */
+  #syncReader(): void {
+    const open = this.#reader;
+    if (!open) return;
+    const node = this.#doc?.nodes.find((one) => one.id === open.node);
+    if (!node || node.type !== "file" || node.file !== open.path || this.#destroyed || this.#isSceneOversized()) {
+      this.#reader = null;
+      open.handle.close();
+      return;
+    }
+    open.handle.update({ excerpt: partsChosen(node), writable: this.#readerWritable(node) });
+  }
+
   // --- il ritaglio di un'immagine (T78) ------------------------------------------
 
   /** C'è chi mostra le immagini nelle schede: senza, niente da ritagliare. */
@@ -9673,6 +9781,7 @@ export class CanvasEngine {
   #render(): void {
     this.#syncEmpty();
     this.#syncPartsPicker();
+    this.#syncReader();
     this.#syncCrop();
     // Dopo `destroy` niente rinasce: una vista montata qui non avrebbe padrone.
     if (!this.#doc || this.#destroyed) return;
