@@ -194,7 +194,7 @@ codice, nei rami e nelle issue il 2026-11-05.
 | K6 · il disegno completo | Ramo: 0 di 30 | fuori | Scelta dell'utente (D24 B) | #313 |
 | Griglia · le celle | Ramo: 2 di 9 (T1 il piano a strati, T2 la carta e le righe che restano); il prototipo approvato dall'utente il 2026-11-07 (D2 A) | dentro | Il foglio che risponde subito | `piano/griglia-celle`, senza PR |
 | L'editor di Fub | Senza `PLAN.md`: c'è l'[artifact](https://claude.ai/artifact/EYe7e9baTxYujXXnPirXjw) con 83 task in quattro onde, prototipo e scelte | dentro (dal 2026-11-10) | Le note all'altezza di Notion e Obsidian | `piano/editor-completo`, da scrivere con `/pianifica` |
-| Scrittoio 2 | Ramo: 25 di 29 (T1–T9, T11–T23, T27–T29; main unito, 54348679) | dentro | La cornice | `piano/scrittoio-2`, #309 |
+| Scrittoio 2 | Ramo: 26 di 29 (T1–T23, T27–T29; main unito, 80bdb5d57; T24 in corso) | dentro | La cornice | `piano/scrittoio-2`, #309 |
 | La lavagna in codice | Ramo: 0 di 26 | dentro | L'AI che disegna e dispone | `piano/lavagna-in-codice`, #311 |
 | A1 · la base per l'AI | Ramo: 5 di 13 | dentro (F1) | Le ricette | `piano/a1-base-per-ai`, #305 |
 | #304 · `/orchestra-auto` | PR pronta | fuori dal prodotto | È un attrezzo di lavoro | #304, la decide l'utente |
@@ -373,7 +373,7 @@ Se una di queste cade, la stima si allunga.
 
 | Passo | Fonte | Stato | Dipende da | Rischio | Taglia | Prova di chiusura |
 |---|---|---|---|---|---|---|
-| Scrittoio 2 T3–T29 | S2 | 25 di 29 (T1–T9, T11–T23, T27–T29; T29 le annotazioni nel visore del PDF); T10 sbloccato (K2 in `main`) | K3 in `main` per T20 e T21, che rifanno la barra a schede dalle regole di K3 T18; T22 costruisce la forma A (D5 A); T23 aggiunge solo l'icona (N6 vince sulla lavagna) | medio: tocca quasi ogni pelle; le baseline vengono dal runner (T25) | L | S2 T26 e la CI completa |
+| Scrittoio 2 T3–T29 | S2 | 26 di 29 (T1–T23, T27–T29); T24 in corso, poi T25 e T26 | K3 in `main` per T20 e T21, che rifanno la barra a schede dalle regole di K3 T18; T22 costruisce la forma A (D5 A); T23 aggiunge solo l'icona (N6 vince sulla lavagna) | medio: tocca quasi ogni pelle; le baseline vengono dal runner (T25) | L | S2 T26 e la CI completa |
 | PA T2 · N4 e K5 allineati a `main` | PA | fatto | #295 in `main` | basso | S | `tsc --noEmit` pulito sui due rami |
 | PA T11 · il vassoio delle barre | PA | da fare (D6 C: chiaro di serie, «marcate» in Aspetto) | S2 T20 | basso | S | Vitest delle preferenze, foto del banco |
 | Il piano del telefono | telefono | da pianificare (D1 B) | S2 in `main`; un pianificatore alla volta | medio: rifà la cornice del telefono prima dell'APK | L | il piano approvato e i suoi task in `main` |
