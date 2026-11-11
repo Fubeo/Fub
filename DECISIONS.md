@@ -88,6 +88,37 @@ La più recente in cima: data · piano · decisione · perché.
   touchpad; + e − e lo zoom della banda non volano, volano i salti (0, Maiusc+1, Maiusc+2).
   · Perché: il touchpad arriva come rotella e la tela non lo distingue dal mouse; un'inerzia
   nostra raddoppierebbe quella del sistema. I passi piccoli col volo sembrano lenti.
+- 2026-11-11 · N4 T23 · La seconda misura non chiude la voce del cancello:
+  174 ms a penna sul foglio vivo (meta 33), 47 fotogrammi lunghi su 215, di cui
+  11 col tratto in movimento, 10 al rilascio e 26 senza evento del puntatore;
+  con la GPU sullo schermo vero il numero non scende (168, 180 ms). Come dice
+  T23 serve un task prima di T25 che profili il disegno della scheda viva
+  sotto la scia e il commit del tratto; il limite degli agenti non prevede un
+  pianificatore per N4, quindi la forma del task si chiede all'utente.
+  Per N6: al fit della lavagna di S8 (zoom 0,33) la scheda del foglio resta un
+  segnaposto, perché `LIVE_ZOOM_MIN` è 0,35; S8 ingrandisce fuori dalla misura
+  · fonte: `docs/misure/lavagna-inchiostro-foglio-2026-11-11.md`.
+- 2026-11-09 · N4 T15 · Nessun task prima di T23 per i 205 ms a penna e
+  gli 879 ms alla posa della scheda (S8, caso simile, Xvfb in software).
+  Perché: la posa costa perché `#render` rifà tutte le schede, e N6 T11 la
+  rende a chiavi prima di tutto il resto; una correzione qui andrebbe
+  buttata. Il ridisegno sotto la scia pesa per la tabella di testo, che T23
+  sostituisce col foglio vivo. T23 rimisura dopo N6 T11 e, se resta oltre
+  33 ms, si chiede al pianificatore un task prima di T25, come dice T23.
+- 2026-11-09 · N4 (PA T2, fusione di `main`) · `operation.ts` è quello di
+  `main` (le toppe le applica il nucleo in WebAssembly) con i tipi della
+  toppa `ink` e i costruttori `addStrokePatch`, `eraseStrokePatch`,
+  `eraseStrokePatches`; `inkStep` e la copia TS se ne vanno, come diceva
+  T17. Le prove dei costruttori, di `ink-record` e dei 28 vettori
+  dell'inchiostro leggono e scrivono col nucleo (`openCore`,
+  `openCoreNow`); una toppa illeggibile il nucleo la rifiuta come
+  `request`, non `invalid` come la copia TS. L'ADR dell'inchiostro diventa
+  la 0241 (la 0238 è di `main`, la 0239 di K5, la 0240 di `main`); i
+  vettori `ink-*` delle toppe vanno da 87 a 103, dopo gli 86 di `main`, e i
+  test dei vettori li ordinano per numero; `fub-canvas-wasm` dà `kind` ai
+  due errori nuovi (`UnknownStroke` con `id`, `ForeignLayer`) · è la
+  fusione più piccola che lascia verdi i due lati; `ink_layers` nel
+  `.wasm` e la fine di `readInkLayers` restano a T17.
 
 - 2026-11-10 · n6 · T66: la cornice di più schede scelte (non disegnata nel prototipo
   T25) è tratteggiata d'accento come il fantasma del rilascio, e i gruppi tengono le

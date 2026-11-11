@@ -123,7 +123,15 @@ Markdown), la scheda `voti` (il file `S8/voti.xlsx`) e i 2.000 tratti
 `fub:ink`, metà sulla tabella, un quarto sul foglio e un quarto liberi,
 scritti dal codificatore della §5 di [scene-format](../reference/scene-format.md#5-tratti-a-mano-libera)
 dentro `fixtures.mjs`. Aspetta che i tratti asciutti siano disegnati (al più
-30 s), poi manda dieci tratti di penna sopra la tabella. Se la penna non
+30 s) e che la scheda `voti` sia viva con le celle
+(`[data-card-kind=sheet][data-card-mode=live] [data-card-state=content]`, al
+più 60 s), poi manda dieci tratti di penna sopra la scheda del foglio: la
+penna scrive sulle celle del foglio vero (D-7 (c) del piano N4), non sulla
+tabella di testo, che resta sulla lavagna con i suoi tratti. Il fit della
+lavagna può stare sotto la soglia della scheda viva (zoom 0,35): in quel caso
+lo scenario la ingrandisce con cinque scatti di Ctrl+rotella mandati dalla
+pagina sulla scheda, fuori dalla misura, perché il Ctrl+rotella del driver non
+ingrandisce. Se la penna non
 scrive (la sonda non vede eventi `pen`, o i path asciutti non crescono),
 rifà i dieci tratti col mouse e D tenuto, e il referto lo dice (`input`).
 WebKitWebDriver sotto Xvfb manda il `pointerdown` della penna e poi niente:
@@ -132,16 +140,14 @@ prima del mouse lo scenario manda alla finestra un `blur`, che lo annulla,
 fuori dalla misura. Per ogni tratto il referto dà i path asciutti
 (`written`) e, per i fotogrammi oltre 33 ms, l'ultimo evento del puntatore
 prima di ognuno (`phases`): il movimento, il rilascio o nessuno. Lo
-spostamento parte dalla testata della scheda, va avanti e indietro e la
+spostamento parte dalla testata della scheda del foglio, va avanti e indietro e la
 posa 60 px più in basso. Il referto dà `S8.penFrameGap.max` (l'obiettivo
 di N4, 33 ms, solo fra i `targets`), `S8.moveFrameGap.max` senza tetto, i
 path asciutti prima e dopo (`S8.dryPaths.*`) e lo sha256 di `voti.xlsx`
 letto dal disco prima della penna e 3 s dopo lo spostamento: il foglio non
-deve cambiare. Dice anche se la scheda del foglio è viva
-(`[data-card-kind=sheet][data-card-mode=live]`) o un segnaposto: finché è un
-segnaposto la misura è sul caso simile, la tabella di testo (D-7 (c) del
-piano N4); quando la scheda sarà viva, lo stesso scenario sugli stessi dati
-misura il foglio vero.
+deve cambiare. Il referto dà `sheetLive` e `sheetState`: se la scheda del
+foglio non è viva con le celle entro 60 s, il referto lo dice e la misura
+non vale per D-7 (c); la misura di un segnaposto non chiude la voce.
 
 L1 vive in `canvas.mjs` e segue il patto del
 [modulo](../reference/canvas-operations.md#webassembly) come il caricatore
