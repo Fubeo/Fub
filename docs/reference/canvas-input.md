@@ -89,8 +89,10 @@ tela chiede alla vista `edit()` prima di `enter()`; la nota
   fuoco va nel testo, e la tela mette `data-card-editing` sulla scheda:
   l'anello pieno e «Esc per uscire» pieno d'accento (prototipo T27). Con
   `Nota#Titolo` si scrive la nota intera, vista dal titolo. Un documento
-  Word o ODT resta in lettura (D-14 (a)); la lavagna in sola lettura entra
-  per leggere e non scrive.
+  Word o ODT resta in lettura (D-14 (a)). La sola lettura è della nota, non
+  della lavagna (T96): una lavagna che non si riscrive (il pannello, la
+  chiave doppia, il prestito) non toglie la scrittura di una nota che si
+  scrive, che è un altro file con la sua sessione.
 - **Dentro.** I tasti sono dell'editor: le lettere della lavagna (`C`, `T`,
   `H`, Canc…) e Spazio scrivono, e Ctrl+Z annulla solo ciò che si è scritto
   in quella scheda, non la lavagna né un riquadro sulla stessa nota. Quello
@@ -101,12 +103,20 @@ tela chiede alla vista `edit()` prima di `enter()`; la nota
 - **La barra di formato** della nota, quella dei riquadri senza annulla e
   ripeti, va nella riga delle opzioni (`setCardOptions`, voce `format`). La
   banda dice «In scrittura: Nota» al posto delle schede scelte.
-- **Lo stato** sta nella riga del titolo della scheda: «Non salvato» mentre
-  c'è testo da salvare, «Cambiato su disco» col conflitto, e dentro la
-  scheda il banner del conflitto dei riquadri con le sue scelte. Una nota
-  di sola lettura (chiusura in corso, cancellazione in sospeso, prestito a
-  un'app) non entra in scrittura: resta attiva per leggere, con «Sola
-  lettura» nella riga del titolo e un avviso che dice perché.
+- **Lo stato** sta nella riga del titolo della scheda, con la parola della
+  testata di un riquadro sulla stessa nota (`saveStateKey`): «Salvato»,
+  «Salvataggio…», «Non salvato», «Salvataggio fallito», «Cambiato su
+  disco». In cima al corpo, sopra il testo, il banner del conflitto e gli
+  avvisi della nota di un riquadro, con le stesse azioni: la bozza
+  ritrovata, il salvataggio fallito con «Riprova», la cancellazione in
+  sospeso, il prestito con «Riprendi qui». Una scelta o un avviso chiuso in
+  un posto vale in tutti: riquadri e schede. Una nota di sola lettura
+  (chiusura in corso, cancellazione in sospeso, prestito a un'app) non entra
+  in scrittura: resta attiva per leggere, con «Sola lettura» nella riga del
+  titolo e un avviso che dice perché con le parole del riquadro; se lo
+  diventa mentre si scrive, l'editor resta fermo col lucchetto. Il file
+  tolto mentre si scrive riporta la scheda alla resa, che dice «File
+  mancante»; il testo resta nella bozza della sessione.
 - **Uscire.** Esc, un clic fuori o la scheda che si spegne: l'editor registra
   il testo e salva (`leave()`), poi si smonta e la nota rifà la resa col
   testo nuovo. Con Esc la scheda resta scelta, col fuoco.

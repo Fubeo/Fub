@@ -470,8 +470,11 @@ porta la vista al titolo (`headingOffset`); l'editor dà la sua barra di formato
 (`toolbar()`) e il banner del conflitto, come un riquadro. Come la nota la usa:
 [Scrivere in una scheda di nota](canvas-input.md#scrivere-in-una-scheda-di-nota).
 
-- prenota la sessione (`retain`) e la tiene finché l'editor vive: un
-  riquadro che si chiude non la chiude sotto la scheda;
+- prenota la sessione (`retain`) e la tiene finché l'editor vive, anche
+  dopo una rinomina (`renamed()` la riprende sul nome nuovo); fuori dal
+  controllore una sessione si lascia solo con `releaseSession`
+  (`shell-layout.ts`, `document-bridge.ts`), che la lascia aperta se una
+  scheda ci scrive: un riquadro chiuso non la chiude sotto la scheda;
 - legge il file con `readForSurface` e chiede la superficie al registro per
   `format_id` e `source_kind`, come un riquadro, nella sua modalità
   predefinita; la monta in `host` e la attacca (`attachSurface`);
@@ -485,12 +488,14 @@ un'altra scheda sullo stesso file, entra con `syncDoc` e non si annulla qui.
 Una battuta rimasta indietro si ribasa sul testo autorevole come in un
 riquadro. Due `open` sullo stesso file sono due superfici e una sessione.
 
-`state()` dice `clean`, `pending` (da salvare, o testo tenuto dall'editor),
-`conflict` (lo stato `conflitto` della sessione) o `readonly`: chiesto dalla
-scheda, la chiusura della finestra, una cancellazione in sospeso, il
-prestito a un'app (la stessa regola dei riquadri, `heldReadOnly`), oppure la
-sessione chiusa sotto l'editor (il file tolto). Allora la superficie resta
-ferma in sola lettura, e nessuna battuta finisce dove non si salva. La
+`state()` è lo stato del salvataggio della sessione (`SaveState`, quello
+della testata di un riquadro) o `readonly`: chiesto dalla scheda, la
+chiusura della finestra, una cancellazione in sospeso, il prestito a un'app
+(`heldReadOnly`, col perché in `readOnlyWhy()`), oppure la sessione chiusa
+sotto l'editor (il file tolto, `closed()`). Allora la superficie resta
+ferma in sola lettura, e nessuna battuta finisce dove non si salva. In cima
+all'editor la porta disegna il banner del conflitto e gli avvisi della nota
+di un riquadro (`notices`), ridisegnati a ogni evento della sessione. La
 sessione segue le rinomine, e la scheda con lei. `leave()` registra il testo
 tenuto dall'editor e salva adesso; `destroy()` lo registra, stacca, smonta e
 lascia la prenotazione, una volta sola.
