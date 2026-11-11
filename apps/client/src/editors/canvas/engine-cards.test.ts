@@ -2553,3 +2553,139 @@ describe("i livelli di dettaglio (T54)", () => {
     }
   });
 });
+
+describe("cerca nella lavagna (T60)", () => {
+  afterEach(() => {
+    setReducedMotionPreference(false);
+  });
+
+  /** Tre schede di testo in riga, molto distanti, e una nota: la tela le inquadra tutte, piccole. */
+  const FIND_BOARD = [
+    { id: "a", type: "text", x: 0, y: 0, width: 200, height: 100, text: "La deviazione standard" },
+    { id: "b", type: "text", x: 1600, y: 0, width: 200, height: 100, text: "La media" },
+    { id: "c", type: "text", x: 3200, y: 0, width: 200, height: 100, text: "Deviazione e varianza" },
+    { id: "n", type: "file", x: 1600, y: 800, width: 200, height: 100, file: "Note/esercizi.md" },
+  ];
+
+  /** Il segno della ricerca di ogni scheda: `veiled`, il valore di `data-card-found`, o `-`. */
+  function marksOf(host: HTMLElement): Record<string, string> {
+    const out: Record<string, string> = {};
+    for (const el of host.querySelectorAll<HTMLElement>(".canvas-node")) {
+      out[el.dataset.node!] = el.hasAttribute("data-card-veiled") ? "veiled" : el.dataset.cardFound ?? "-";
+    }
+    return out;
+  }
+
+  function searchFor(host: HTMLElement, text: string): HTMLInputElement {
+    const input = host.querySelector<HTMLInputElement>(".canvas-find-input")!;
+    input.value = text;
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    return input;
+  }
+
+  function press(input: HTMLInputElement, key: string, init: KeyboardEventInit = {}): void {
+    input.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true, ...init }));
+  }
+
+  /** Il centro della vista di prova (800 × 600) in coordinate della lavagna. */
+  function viewCenter(host: HTMLElement): { x: number; y: number } {
+    const view = cameraValues(host);
+    return { x: (400 - view.x) / view.zoom, y: (300 - view.y) / view.zoom };
+  }
+
+  it("`find()` apre la barra col fuoco nel campo; le schede senza risultati si velano, la ricerca vuota e Esc tolgono il velo", () => {
+    const { engine, host } = mounted(boardSource(FIND_BOARD), { findNotes: async () => new Set() });
+    const bar = host.querySelector<HTMLElement>(".canvas-find")!;
+    expect(bar.hidden).toBe(true);
+    expect(engine.find()).toBe(true);
+    expect(bar.hidden).toBe(false);
+    expect(document.activeElement).toBe(host.querySelector(".canvas-find-input"));
+    const input = searchFor(host, "deviazione");
+    expect(marksOf(host)).toEqual({ a: "current", b: "veiled", c: "match", n: "veiled" });
+    searchFor(host, "");
+    expect(marksOf(host)).toEqual({ a: "-", b: "-", c: "-", n: "-" });
+    searchFor(host, "covarianza");
+    expect(marksOf(host)).toEqual({ a: "veiled", b: "veiled", c: "veiled", n: "veiled" });
+    searchFor(host, "media");
+    press(input, "Escape");
+    expect(bar.hidden).toBe(true);
+    expect(marksOf(host)).toEqual({ a: "-", b: "-", c: "-", n: "-" });
+    // Il fuoco torna alla lavagna.
+    expect(document.activeElement).toBe(host.querySelector(".canvas-viewport"));
+    engine.destroy();
+  });
+
+  it("una scheda che nasce o cambia con la barra aperta prende il suo segno", () => {
+    const { engine, host } = mounted(boardSource(FIND_BOARD), { findNotes: async () => new Set() });
+    engine.find();
+    searchFor(host, "deviazione");
+    syncNode(engine, "b", { text: "Ancora la deviazione" });
+    expect(marksOf(host)).toEqual({ a: "current", b: "match", c: "match", n: "veiled" });
+    engine.syncDoc(boardSource([...FIND_BOARD, { id: "d", type: "text", x: 0, y: 800, width: 200, height: 100, text: "altro" }]));
+    expect(marksOf(host).d).toBe("veiled");
+    engine.destroy();
+  });
+
+  it("il velo e i livelli di dettaglio (T54) convivono: la scheda lontana tiene tutti e due gli attributi", () => {
+    const { engine, host, viewport } = mounted(boardSource(FIND_BOARD), { findNotes: async () => new Set() });
+    engine.find();
+    searchFor(host, "deviazione");
+    for (let step = 0; step < 50 && zoomOf(host) >= 0.15; step++) {
+      viewport.dispatchEvent(new KeyboardEvent("keydown", { key: "-", ctrlKey: true, bubbles: true, cancelable: true }));
+    }
+    expect(zoomOf(host)).toBeLessThan(0.15);
+    expect(card(host, "a").dataset.cardDetail).toBe("block");
+    expect(card(host, "a").dataset.cardFound).toBe("current");
+    expect(card(host, "b").dataset.cardDetail).toBe("block");
+    expect(card(host, "b").hasAttribute("data-card-veiled")).toBe(true);
+    engine.destroy();
+  });
+
+  it("Invio salta al risultato e lo mette al centro, Maiusc+Invio torna; Esc lascia la vista dov'è e Indietro torna al punto di partenza", () => {
+    setReducedMotionPreference(true);
+    const { engine, host } = mounted(boardSource(FIND_BOARD), { findNotes: async () => new Set() });
+    const start = cameraOf(host);
+    engine.find();
+    const input = searchFor(host, "deviazione");
+    // Scrivere non muove la vista.
+    expect(cameraOf(host)).toBe(start);
+    press(input, "Enter");
+    expect(viewCenter(host).x).toBeCloseTo(100, 3);
+    expect(viewCenter(host).y).toBeCloseTo(50, 3);
+    press(input, "Enter");
+    expect(viewCenter(host).x).toBeCloseTo(3300, 3);
+    expect(marksOf(host)).toEqual({ a: "match", b: "veiled", c: "current", n: "veiled" });
+    press(input, "Enter", { shiftKey: true });
+    expect(viewCenter(host).x).toBeCloseTo(100, 3);
+    const arrived = cameraOf(host);
+    press(input, "Escape");
+    expect(cameraOf(host)).toBe(arrived);
+    // Ogni risultato è un salto (T56): Indietro li disfa fino al punto di partenza.
+    expect(engine.jumpBack()).toBe(true);
+    expect(engine.jumpBack()).toBe(true);
+    expect(engine.jumpBack()).toBe(true);
+    expect(cameraOf(host)).toBe(start);
+    expect(engine.jumpBack()).toBe(false);
+    engine.destroy();
+  });
+
+  it("il contenuto delle note: una richiesta all'indice con le note della lavagna, e la scheda della nota trovata è un risultato", async () => {
+    vi.useFakeTimers();
+    try {
+      const findNotes = vi.fn(async (_query: string, notes: readonly string[]) => new Set(notes));
+      const { engine, host } = mounted(boardSource(FIND_BOARD), { findNotes });
+      engine.find();
+      searchFor(host, "esercizio");
+      expect(marksOf(host).n).toBe("veiled");
+      vi.advanceTimersByTime(200);
+      expect(findNotes).toHaveBeenCalledTimes(1);
+      expect(findNotes).toHaveBeenCalledWith("esercizio", ["Note/esercizi.md"]);
+      await settle();
+      expect(marksOf(host)).toEqual({ a: "veiled", b: "veiled", c: "veiled", n: "current" });
+      expect(host.querySelector(".canvas-find-count")!.textContent).toBe("1 di 1");
+      engine.destroy();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});

@@ -26,6 +26,10 @@ const CANVAS_ICONS: Readonly<Record<string, readonly string[]>> = {
     "M7.5 13.2c-.9 1-1.3 2-1 3 .4 1.6 2.4 2.1 3.7 1.2",
     "M10.2 17.4 9 20.5",
   ],
+  // Cerca nella lavagna (T60): il risultato precedente e il seguente, le
+  // frecce del prototipo.
+  "canvas-find-previous": ["M19 12H5", "M11 6l-6 6 6 6"],
+  "canvas-find-next": ["M5 12h14", "M13 6l6 6-6 6"],
 };
 
 /// Registra le icone della lavagna e quelle del disegno che la colonna usa.

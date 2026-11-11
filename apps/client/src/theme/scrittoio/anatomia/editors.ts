@@ -42,6 +42,10 @@ export const EDITORS: PartAnatomy = {
     // Il navigatore della lavagna (T55): la mappa è una sola <canvas> dipinta
     // coi colori della pelle (le variabili di `.canvas-navigator`).
     { name: "canvas-navigator", states: [S("rest"), S("focused")], hooks: ["canvas-navigator"] },
+    // Cerca nella lavagna (T60): la barra in alto a destra della vista, col
+    // campo, il contatore e la riga che dice «senza indice»; i pulsanti sono
+    // quelli della riga (`canvas-button`).
+    { name: "canvas-find", states: [S("rest"), S("hover"), S("focused"), S("disabled")], hooks: ["canvas-find", "canvas-find-input", "canvas-find-count", "canvas-find-scope"] },
     // La riga delle opzioni della lavagna (T50): la testata, i gruppi e i
     // pulsanti della riga del kit, il pozzo del colore delle schede scelte.
     { name: "canvas-options", states: [S("rest"), S("hover"), S("pressed"), S("focused"), S("selected"), S("disabled")], hooks: ["canvas-header", "canvas-options", "canvas-options-hint", "canvas-group", "canvas-button", "canvas-color-well"] },

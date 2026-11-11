@@ -385,6 +385,9 @@ export function mountCanvasSurface(
     // F6 dentro la lavagna: la vista, poi il navigatore se si vede (T55). Il
     // resto del giro (l'ispettore, la banda) è della shell.
     zone: (step): boolean => (mode === "canvas" && engine ? engine.zone(step) : false),
+    // Ctrl+F (T60): la barra «Cerca nella lavagna». Nel sorgente grezzo, e
+    // finché il nucleo si carica, cerca la shell.
+    find: (): boolean => (mode === "canvas" && engine ? engine.find() : false),
     // Indietro e Avanti (T56): i salti della vista, prima della cronologia del riquadro.
     jumps: {
       back: (): boolean => (mode === "canvas" && engine ? engine.jumpBack() : false),

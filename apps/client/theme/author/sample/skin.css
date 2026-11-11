@@ -8906,6 +8906,43 @@ kbd,
 .canvas-selection-chip[data-canvas-color] {
   background: var(--canvas-color);
 }
+/* Cerca nella lavagna (T60): una barra in alto a destra della vista, col
+   campo, il contatore, ‹ › e la ×. «Nessun risultato» è testo pieno. */
+.canvas-find {
+  gap: var(--space-1);
+  padding: var(--space-1);
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+}
+.canvas-find-input {
+  height: var(--control-h);
+  padding: 0 var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  font-size: var(--text-sm);
+}
+.canvas-find-input:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: 0;
+}
+.canvas-find-count {
+  padding: 0 var(--space-3);
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+.canvas-find-count[data-none] {
+  color: var(--text);
+}
+.canvas-find-scope {
+  padding-inline-end: var(--space-3);
+  color: var(--muted);
+  font-size: var(--text-xs);
+}
 /* Il navigatore (T55, come .draw-navigator). La mappa è una <canvas>: la tela
    la dipinge leggendo queste variabili, una volta per disegno. Le schede
    senza colore e i gruppi col filo marcato, quelle colorate col loro
@@ -9223,6 +9260,34 @@ kbd,
 @media (forced-colors: active) {
   .canvas-node[data-card-detail="block"] {
     border: 1px solid CanvasText;
+  }
+}
+/* Cerca nella lavagna (T60): le schede che non c'entrano si velano, quelle
+   trovate hanno un anello d'accento, più marcato per il risultato di adesso.
+   Da lontano (T54) l'anello resta della stessa misura sullo schermo, come il
+   filo delle schede. */
+.canvas-node[data-card-veiled] {
+  opacity: 0.32;
+}
+.canvas-node[data-card-found] {
+  box-shadow: 0 0 0 2px var(--accent-wash), 0 0 0 1px var(--accent);
+}
+.canvas-node[data-card-found="current"] {
+  box-shadow: 0 0 0 4px var(--accent-wash), 0 0 0 2px var(--accent);
+}
+.canvas-node[data-card-detail][data-card-found] {
+  box-shadow:
+    0 0 0 calc(2px / var(--canvas-detail-zoom, 1)) var(--accent-wash),
+    0 0 0 calc(1px / var(--canvas-detail-zoom, 1)) var(--accent);
+}
+.canvas-node[data-card-detail][data-card-found="current"] {
+  box-shadow:
+    0 0 0 calc(4px / var(--canvas-detail-zoom, 1)) var(--accent-wash),
+    0 0 0 calc(2px / var(--canvas-detail-zoom, 1)) var(--accent);
+}
+@media (forced-colors: active) {
+  .canvas-node[data-card-found] {
+    outline: 2px solid Highlight;
   }
 }
 .canvas-node-handle {

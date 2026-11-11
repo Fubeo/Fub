@@ -77,6 +77,8 @@ import { CANVAS_INK_TOOLS, CANVAS_WRITING_TOOLS, createCanvasRail, type CanvasRa
 import { createCanvasEmpty, isEmptyBoard, transferOf, type CanvasEmpty } from "./chrome/empty";
 import { createCanvasNavigator, type CanvasNavigator } from "./chrome/navigator";
 import { CanvasJumps } from "./jumps";
+import { applyFindMarks, boardFindIndex, findMarks, type FindMark, type FindNotesPort, type FindTarget } from "./find";
+import { createCanvasFindBar, type CanvasFindBar } from "./chrome/find-bar";
 import {
   CANVAS_CLIPBOARD_TYPE,
   CANVAS_PASTE_STEP,
@@ -702,6 +704,12 @@ export interface CanvasEngineOptions {
    * delle sezioni (T74). Assente: niente selettore e niente «Parti…».
    */
   readonly parts?: PartsPickerPort;
+  /**
+   * Chi chiede all'indice del vault quali note della lavagna contengono una
+   * ricerca (T60); senza, la richiesta `documents` di `searchBoardNotes`. I
+   * test ne passano una che conta le chiamate.
+   */
+  readonly findNotes?: FindNotesPort;
 }
 
 /**
@@ -757,6 +765,8 @@ interface CardEntry {
   readonly far: HTMLElement;
   /** Il `data-card-detail` che la scheda ha adesso (`applyCardDetails`); `null` da vicino. */
   detail: CardDetail | null;
+  /** Il segno della ricerca che la scheda ha adesso (`applyFindMarks`, T60); `null` senza ricerca. */
+  find: FindMark;
   /**
    * Il file della scheda non c'è: la chiave della vista (`cardBodyKey`) con cui
    * il renderer l'ha detto. `null` se il file c'è, o non si sa.
@@ -1599,6 +1609,10 @@ export class CanvasEngine {
   #navigatorHidden = false;
   /** I salti della vista per Indietro e Avanti (T56): solo in memoria, per questa lavagna aperta. */
   readonly #jumps = new CanvasJumps();
+  /** La barra «Cerca nella lavagna» (T60), in alto a destra della vista. */
+  readonly #findBar: CanvasFindBar;
+  /** Il segno della ricerca di ogni scheda (T60): lo legge anche la scheda che nasce dopo. */
+  #findMarkOf: (id: string) => FindMark = () => null;
   /** `canvas.drop_folder` e il suo percorso (T34), dal vivo; `null` finché non arriva. */
   #dropChoice: DropFolderChoice | null = null;
 
@@ -1707,9 +1721,21 @@ export class CanvasEngine {
         this.#statusSettle();
       },
     });
+    // Cerca nella lavagna (T60): un fratello della vista, come il navigatore.
+    // Ogni risultato è un salto (`#jumpCamera`); il velo lo scrive la tela.
+    this.#findBar = createCanvasFindBar({
+      lifetime: this.#life,
+      index: () => (this.#doc ? boardFindIndex(this.#doc) : null),
+      ...(options.findNotes ? { notes: options.findNotes } : {}),
+      show: (matches, current) => this.#showFound(matches, current),
+      go: (target) => this.#jumpToFound(target),
+      closed: (hadFocus) => {
+        if (hadFocus && !this.#destroyed) this.#viewport.focus({ preventScroll: true });
+      },
+    });
     const area = document.createElement("div");
     area.className = "canvas-area";
-    area.append(this.#viewport, this.#empty.element, this.#navigator.element);
+    area.append(this.#viewport, this.#empty.element, this.#findBar.element, this.#navigator.element);
     const body = document.createElement("div");
     body.className = "canvas-body";
     body.append(this.#rail.element, area);
@@ -1788,6 +1814,7 @@ export class CanvasEngine {
       this.#rail.relabel();
       this.#empty.relabel();
       this.#navigator.relabel();
+      this.#findBar.relabel();
       this.#canvasOptions.sync();
       this.#selectionBar.relabel();
     });
@@ -4217,6 +4244,57 @@ export class CanvasEngine {
       scale: from.zoom, tx: from.x, ty: from.y,
       targetScale: goal.zoom, targetTx: goal.x, targetTy: goal.y,
       vx: 0, vy: 0,
+    });
+  }
+
+  // --- cerca nella lavagna (T60) ---------------------------------------------
+
+  /**
+   * Apre la barra «Cerca nella lavagna» e le dà il fuoco: è `find()` della
+   * superficie, la strada di Ctrl+F dello Scrittoio. `false` senza documento:
+   * allora la shell cerca da sé.
+   */
+  find(): boolean {
+    if (this.#destroyed || !this.#doc) return false;
+    this.#findBar.open();
+    return true;
+  }
+
+  /**
+   * Il velo dei risultati `matches` (`null` lo toglie), con quello di adesso
+   * segnato: un giro sulle schede che scrive solo dove il segno cambia.
+   */
+  #showFound(matches: readonly FindTarget[] | null, current: number): void {
+    this.#findMarkOf = findMarks(matches, current);
+    applyFindMarks(this.#cards, this.#findMarkOf);
+  }
+
+  /**
+   * Il salto a un risultato (T60): le sue schede al centro della vista, con lo
+   * zoom di adesso, o più lontano se non ci stanno. È un salto come gli altri
+   * (`#jumpCamera`): Indietro torna da dove si era partiti; col movimento
+   * ridotto arriva senza volo.
+   */
+  #jumpToFound(target: FindTarget): void {
+    const ids = new Set(target.nodes);
+    const nodes = (this.#doc?.nodes ?? []).filter((node) => ids.has(node.id));
+    if (nodes.length === 0) return;
+    let minX = Infinity;
+    let minY = Infinity;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
+    for (const node of nodes) {
+      minX = Math.min(minX, node.x);
+      minY = Math.min(minY, node.y);
+      maxX = Math.max(maxX, node.x + node.width);
+      maxY = Math.max(maxY, node.y + node.height);
+    }
+    const rect = this.#viewport.getBoundingClientRect();
+    const zoom = Math.min(this.#camera.zoom, this.#fitTarget(nodes).zoom);
+    this.#jumpCamera({
+      x: (rect.width || 800) / 2 - ((minX + maxX) / 2) * zoom,
+      y: (rect.height || 600) / 2 - ((minY + maxY) / 2) * zoom,
+      zoom,
     });
   }
 
@@ -8014,6 +8092,10 @@ export class CanvasEngine {
     }
     this.#drawEdges();
     this.#placeCards(this.#doc.nodes);
+    // La ricerca aperta si rifà col documento di adesso; una scheda nata ora
+    // prende il suo segno (T60).
+    this.#findBar.refresh();
+    applyFindMarks(this.#cards, this.#findMarkOf);
     this.#paintInk();
     this.#syncSelectionFrame();
     this.#viewport.dataset.canvasProtocol = "source";
@@ -8779,7 +8861,7 @@ export class CanvasEngine {
     const entry: CardEntry = {
       id, article: el, title, connect, node, type: node.type, body,
       bodyKey: null, resize: null, teardown: null, view: null, viewLife: null, viewSize: null, missingFor: null,
-      far, detail: null,
+      far, detail: null, find: null,
     };
     el.addEventListener("focus", () => {
       if (!this.#selection.includes(id)) {

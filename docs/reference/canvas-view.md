@@ -3,10 +3,11 @@
 > **Ambito:** come ci si muove sulla lavagna (lo zoom, i salti, Indietro e
 > Avanti, Spazio, il bordo, l'inerzia), la griglia e le guide, il navigatore
 > e la vista che torna quando la lavagna si riapre; come si vedono le schede
-> da lontano.
+> da lontano; Cerca nella lavagna.
 > **Fonti autorevoli:** `apps/client/src/editors/canvas/engine.ts`
 > (`#jumpCamera`, `#paintGrid`, `#refreshDetail`), `jumps.ts`, `guides.ts`,
-> `chrome/navigator.ts`, `view-state.ts` e `lod.ts`, con le loro prove;
+> `chrome/navigator.ts`, `view-state.ts`, `lod.ts`, `find.ts` e
+> `chrome/find-bar.ts`, con le loro prove;
 > i conti della camera in `apps/client/src/editors/spatial/camera.ts`.
 
 Questa pagina viene da [I tasti e i gesti della lavagna](canvas-input.md),
@@ -160,6 +161,45 @@ scala con la lavagna e niente si rimpagina. Da lontano la testata, le
 maniglie e le prese non ci sono; l'inchiostro della scheda sta dopo il
 titolo nel nodo e resta disegnato a ogni livello. Con l'alto contrasto i
 blocchi hanno un bordo.
+
+## Cercare
+
+Ctrl+F (il comando `shell.doc.search`, che chiede prima `find()` alla
+superficie col fuoco) apre la barra «Cerca nella lavagna» in alto a destra
+della vista (`chrome/find-bar.ts`, N6 T60): il campo, il contatore
+(«3 di 12», «Nessun risultato»), ‹ ›, la ×. Nel Sorgente cerca la shell.
+
+- **Dove cerca.** Nel file della lavagna (`find.ts`): il testo intero delle
+  schede di testo, l'etichetta dei gruppi e dei fili, il nome dei file (non la
+  cartella), l'indirizzo delle schede di link. Nel contenuto delle note: una
+  richiesta `documents` all'indice con `searchExpression` (la sintassi della
+  ricerca del vault) e il predicato `docs` delle sole note della lavagna, una
+  per ricerca, 200 ms dopo l'ultimo tasto (`FIND_NOTES_DELAY_MS`), senza
+  estratti; una risposta di una ricerca vecchia, o arrivata a barra chiusa, si
+  scarta. Una lavagna senza note non chiede niente. Se la richiesta fallisce
+  (il vault senza indice) i risultati sono quelli del file, e la barra dice
+  «Solo la lavagna, non le note».
+- **Maiuscole e accenti** come la ricerca del vault: le maiuscole non contano,
+  gli accenti sì, NFC e NFD sono uguali (`resolutionKey`).
+- **I risultati** sono schede e fili, ognuno una volta, in ordine di lettura
+  (`readingOrder`); un filo viene dopo la scheda da cui parte. Il file si
+  legge una volta per documento (`boardFindIndex`): un tasto è un `includes`
+  per scheda. Le note trovate restano finché non si cerca di nuovo (anche se
+  la nota cambia); le schede del file si rileggono a ogni modifica.
+- **Il velo.** Con una ricerca scritta, le schede che non c'entrano hanno
+  `data-card-veiled` (velate, senza puntatore), quelle trovate
+  `data-card-found` (`current` per il risultato del contatore, `match` le
+  altre); i due capi di un filo trovato restano liberi. Un solo giro sulle
+  schede che scrive solo dove il segno cambia (`applyFindMarks`), come
+  `applyCardDetails`; convive con `data-card-detail`, e da lontano l'anello
+  resta della stessa misura sullo schermo. La ricerca vuota non vela niente.
+- **Invio** porta la vista al risultato del contatore, poi al seguente (e
+  gira); **Maiusc+Invio** al precedente; ‹ e › lo stesso. Scrivere non muove
+  la vista. Ogni risultato è un salto (`#jumpCamera`): le sue schede al
+  centro con lo zoom di adesso, o più lontano se non ci stanno; col movimento
+  ridotto senza volo; Indietro torna da dove si era partiti.
+- **Esc** e la × chiudono: il velo se ne va, la vista resta dov'è arrivata e
+  il fuoco torna alla lavagna. Riaperta, la barra rifà la ricerca di prima.
 
 ## Riaprire dove eri
 

@@ -3063,6 +3063,49 @@ body {
   width: 100%;
   height: 100%;
 }
+/* Cerca nella lavagna (T60): in alto a destra, sopra la vista. Il campo si
+   stringe per primo quando la vista è stretta. */
+.canvas-find {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  box-sizing: border-box;
+  max-width: calc(100% - 16px);
+}
+.canvas-find[hidden],
+.canvas-find-scope[hidden] {
+  display: none;
+}
+.canvas-find-input {
+  box-sizing: border-box;
+  width: 16rem;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+.canvas-find-count {
+  flex: none;
+  min-width: 7ch;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.canvas-find-scope {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.canvas-find .canvas-button {
+  flex: none;
+}
+/* Una scheda velata dalla ricerca non prende il puntatore. */
+.canvas-node[data-card-veiled] {
+  pointer-events: none;
+}
 /* Stretta (finestra fino a 700 px o riquadro fino a 480): la colonna va
    sotto la lavagna e si stende in riga (come .draw-editor[data-narrow]). */
 .canvas-surface[data-narrow] .canvas-body {
