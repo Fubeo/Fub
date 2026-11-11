@@ -3660,6 +3660,67 @@ body {
   display: none;
 }
 
+/* Da lontano (T54, A-22). Fra 0,15 e 0,35 una scheda vista da vicino in
+   questa seduta mostra l'ultima immagine ferma che ha avuto (`still`);
+   una mai vista, il titolo grande (`far`). Sotto 0,15 tutte sono un blocco
+   col titolo (`block`). Il titolo grande c'è sempre nel nodo e si mostra
+   solo col livello: a fine gesto la tela cambia un attributo per scheda e
+   basta. La misura del carattere sullo schermo non cambia con
+   l'ingrandimento (`--canvas-detail-zoom`, scritto anche lui a fine gesto).
+   L'inchiostro della scheda viene dopo nel nodo e resta sopra. */
+.canvas-node-far {
+  position: absolute;
+  inset: 0;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  overflow: hidden;
+  text-align: center;
+  overflow-wrap: anywhere;
+  pointer-events: none;
+}
+.canvas-node[data-card-detail="far"] > .canvas-node-far,
+.canvas-node[data-card-detail="block"] > .canvas-node-far {
+  display: flex;
+}
+.canvas-node[data-card-detail] > .canvas-node-handle,
+.canvas-node[data-card-detail] > .canvas-resize,
+.canvas-node[data-card-detail] > .canvas-port,
+.canvas-node[data-card-detail="far"] > .canvas-card-body,
+.canvas-node[data-card-detail="block"] > .canvas-card-body,
+.canvas-node[data-card-detail="still"] .canvas-card-pdf-status {
+  display: none;
+}
+/* Da lontano il titolo sta al centro, su tre righe al più, e si taglia coi
+   puntini: in una scheda piccola sullo schermo non esce mai a pezzi. */
+.canvas-node[data-card-detail="far"]:not(.canvas-node-group) > .canvas-node-far {
+  top: 50%;
+  bottom: auto;
+  display: -webkit-box;
+  max-height: 100%;
+  transform: translateY(-50%);
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+/* Il blocco (sotto 0,15): il titolo su una riga sola, al centro, e si taglia
+   coi puntini; il colore è la carta del nodo. */
+.canvas-node[data-card-detail="block"]:not(.canvas-node-group) > .canvas-node-far {
+  top: 50%;
+  bottom: auto;
+  display: block;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  transform: translateY(-50%);
+}
+/* I gruppi, da lontano, mostrano il nome grande in alto a sinistra a tutti e
+   due i livelli. */
+.canvas-node-group > .canvas-node-far {
+  align-items: flex-start;
+  justify-content: flex-start;
+  text-align: left;
+}
+
 .canvas-selection-frame {
   position: absolute;
   top: 0;

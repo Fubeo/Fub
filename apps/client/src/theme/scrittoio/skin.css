@@ -9168,6 +9168,63 @@ kbd,
 .canvas-node[data-canvas-color] > .canvas-node-handle {
   color: color-mix(in srgb, var(--text) 25%, var(--muted));
 }
+/* Da lontano (T54): il titolo grande, di misura fissa sullo schermo. La
+   tela scrive `--canvas-detail-zoom` a fine gesto: durante il gesto niente
+   si rimpagina. Il titolo è trasparente: la carta è quella del nodo, e
+   l'inchiostro della scheda gli resta sopra. */
+.canvas-node-far {
+  padding: calc(6px / var(--canvas-detail-zoom, 1));
+  border-radius: inherit;
+  color: var(--text);
+  font-size: calc(var(--text-md) / var(--canvas-detail-zoom, 1));
+  font-weight: var(--weight-bold);
+  line-height: var(--leading-tight);
+}
+.canvas-node[data-card-detail="far"]:not(.canvas-node-group) > .canvas-node-far {
+  padding: 0 calc(6px / var(--canvas-detail-zoom, 1));
+}
+.canvas-node-group > .canvas-node-far {
+  padding: calc(8px / var(--canvas-detail-zoom, 1)) calc(12px / var(--canvas-detail-zoom, 1));
+  color: var(--muted);
+  font-size: calc(var(--text-lg) / var(--canvas-detail-zoom, 1));
+  letter-spacing: var(--tracking-caps);
+  text-transform: uppercase;
+}
+/* Nel blocco il titolo è più piccolo, e il fondo è quello del nodo. Il nome
+   del gruppo sta nel margine sopra le schede. */
+.canvas-node[data-card-detail="block"]:not(.canvas-node-group) > .canvas-node-far {
+  padding: 0 calc(4px / var(--canvas-detail-zoom, 1));
+  font-size: calc(var(--text-xs) / var(--canvas-detail-zoom, 1));
+  font-weight: var(--weight-medium);
+}
+.canvas-node-group[data-card-detail="block"] > .canvas-node-far {
+  padding: calc(3px / var(--canvas-detail-zoom, 1)) calc(8px / var(--canvas-detail-zoom, 1));
+  font-size: calc(var(--text-sm) / var(--canvas-detail-zoom, 1));
+}
+/* Il filo attorno a ogni scheda resta di un pixel sullo schermo, del suo
+   colore se ne ha uno; il recinto dei gruppi pure. */
+.canvas-node[data-card-detail] {
+  box-shadow: 0 0 0 calc(1px / var(--canvas-detail-zoom, 1)) var(--border-strong);
+}
+.canvas-node[data-card-detail][data-canvas-color] {
+  box-shadow: 0 0 0 calc(2px / var(--canvas-detail-zoom, 1)) var(--canvas-color);
+}
+.canvas-node-group[data-card-detail] {
+  border-width: calc(1px / var(--canvas-detail-zoom, 1));
+  box-shadow: none;
+}
+/* Il blocco: la carta piena del suo colore, il grigio se non ne ha. */
+.canvas-node[data-card-detail="block"]:not(.canvas-node-group) {
+  background: var(--sheet-2);
+}
+.canvas-node[data-card-detail="block"][data-canvas-color]:not(.canvas-node-group) {
+  background: color-mix(in srgb, var(--canvas-color) 34%, var(--doc-bg));
+}
+@media (forced-colors: active) {
+  .canvas-node[data-card-detail="block"] {
+    border: 1px solid CanvasText;
+  }
+}
 .canvas-node-handle {
   gap: var(--space-2);
   padding: var(--space-2) var(--space-2) 0 var(--space-5);

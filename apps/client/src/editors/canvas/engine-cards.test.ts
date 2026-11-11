@@ -2370,3 +2370,186 @@ describe("il gesto su una scheda di file che non si mostra (T93)", () => {
     engine.destroy();
   });
 });
+
+describe("i livelli di dettaglio (T54)", () => {
+  /** Il `data-card-detail` di ogni scheda, per id; `-` se non c'è. */
+  function detailsOf(host: HTMLElement): Record<string, string> {
+    const out: Record<string, string> = {};
+    for (const el of host.querySelectorAll<HTMLElement>(".canvas-node")) out[el.dataset.node!] = el.dataset.cardDetail ?? "-";
+    return out;
+  }
+
+  /** Conta i cambi di `data-card-detail` per scheda, da adesso. */
+  function watchDetails(host: HTMLElement): { readonly writes: Map<string, number>; readonly stop: () => void } {
+    const writes = new Map<string, number>();
+    const observer = new MutationObserver((records) => {
+      for (const record of records) {
+        const id = (record.target as HTMLElement).dataset.node!;
+        writes.set(id, (writes.get(id) ?? 0) + 1);
+      }
+    });
+    for (const el of host.querySelectorAll(".canvas-node")) observer.observe(el, { attributes: true, attributeFilter: ["data-card-detail"] });
+    return { writes, stop: () => observer.disconnect() };
+  }
+
+  function detailZoomOf(host: HTMLElement): string {
+    return host.querySelector<HTMLElement>(".canvas-stage")!.style.getPropertyValue("--canvas-detail-zoom");
+  }
+
+  /** Scatti di Ctrl+rotella indietro, senza fermarsi, finché lo zoom scende sotto `below`. */
+  function zoomOutUntil(host: HTMLElement, viewport: HTMLElement, below: number, check: () => void = () => {}): void {
+    for (let tick = 0; tick < 200 && zoomOf(host) >= below; tick++) {
+      wheelTick(viewport, false);
+      vi.advanceTimersByTime(WHEEL_SETTLE_MS - 50);
+      check();
+    }
+    expect(zoomOf(host)).toBeLessThan(below);
+  }
+
+  function zoomInWithKeys(host: HTMLElement, viewport: HTMLElement, atLeast: number): void {
+    for (let step = 0; step < 50 && zoomOf(host) < atLeast; step++) {
+      viewport.dispatchEvent(new KeyboardEvent("keydown", { key: "+", ctrlKey: true, bubbles: true, cancelable: true }));
+    }
+    expect(zoomOf(host)).toBeGreaterThanOrEqual(atLeast);
+  }
+
+  const MIXED = [
+    image("a", 0, 0),
+    image("b", 400, 0),
+    { id: "t", type: "text", x: 0, y: 200, width: 200, height: 100, text: "## Domande per giovedì\naltro" },
+    { id: "g", type: "group", x: -40, y: -40, width: 700, height: 400, label: "Statistica" },
+    { id: "f", type: "file", x: 400, y: 200, width: 200, height: 100, file: "dati/misure.csv" },
+  ];
+  const NEAR = { a: "-", b: "-", t: "-", g: "-", f: "-" };
+
+  it("ogni scheda ha il titolo grande, nascosto, prima dell'inchiostro; da vicino nessun attributo", () => {
+    const { renderer } = modeRenderer();
+    const { engine, host } = mounted(boardSource(MIXED), { cards: cardsOf(renderer) });
+    expect(zoomOf(host)).toBeGreaterThanOrEqual(LIVE_ZOOM_MIN);
+    expect(detailsOf(host)).toEqual(NEAR);
+    const far = (id: string) => card(host, id).querySelector<HTMLElement>(":scope > .canvas-node-far")!;
+    expect(far("a").textContent).toBe("a.png");
+    expect(far("t").textContent).toBe("Domande per giovedì");
+    expect(far("g").textContent).toBe("Statistica");
+    expect(far("f").textContent).toBe("misure.csv");
+    expect(far("a").getAttribute("aria-hidden")).toBe("true");
+    // Dopo il corpo: l'inchiostro della scheda, che arriva dopo, gli resta sopra.
+    const children = [...card(host, "a").children];
+    expect(children.indexOf(far("a"))).toBeGreaterThan(children.indexOf(bodyOf(host, "a")));
+    // Il titolo segue la scheda che cambia.
+    syncNode(engine, "t", { text: "Altro titolo" });
+    expect(far("t").textContent).toBe("Altro titolo");
+    engine.destroy();
+  });
+
+  it("l'attributo cambia solo a fine gesto, mai durante, e una volta sola per scheda", async () => {
+    vi.useFakeTimers();
+    try {
+      const { renderer } = modeRenderer();
+      const { engine, host, viewport } = mounted(boardSource(MIXED), { cards: cardsOf(renderer) });
+      vi.spyOn(viewport, "getBoundingClientRect").mockReturnValue(new DOMRect(0, 0, 800, 600));
+      // Inquadrate: «a» e «b» sono vive, quindi viste da vicino.
+      expect(liveOf(host)).toEqual(["a", "b"]);
+      const before = detailZoomOf(host);
+      const watch = watchDetails(host);
+      // Un gesto solo, che attraversa 0,35 e 0,15: niente cambia durante.
+      zoomOutUntil(host, viewport, 0.15, () => {
+        expect(detailsOf(host)).toEqual(NEAR);
+        expect(detailZoomOf(host)).toBe(before);
+      });
+      await settle();
+      expect(watch.writes.size).toBe(0);
+      vi.advanceTimersByTime(WHEEL_SETTLE_MS);
+      // A gesto finito: tutte blocchi, un cambio per scheda, e la misura del titolo.
+      expect(detailsOf(host)).toEqual({ a: "block", b: "block", t: "block", g: "block", f: "block" });
+      expect(Number(detailZoomOf(host))).toBeCloseTo(zoomOf(host));
+      await settle();
+      expect([...watch.writes.entries()].sort()).toEqual([["a", 1], ["b", 1], ["f", 1], ["g", 1], ["t", 1]]);
+      // Dai tasti lo zoom è un gesto finito: risale fra 0,15 e 0,35, le due
+      // viste da vicino restano ferme, le altre mostrano il titolo.
+      zoomInWithKeys(host, viewport, 0.15);
+      expect(zoomOf(host)).toBeLessThan(LIVE_ZOOM_MIN);
+      expect(detailsOf(host)).toEqual({ a: "still", b: "still", t: "far", g: "far", f: "far" });
+      // Di nuovo da vicino: l'attributo va via.
+      zoomInWithKeys(host, viewport, LIVE_ZOOM_MIN);
+      expect(detailsOf(host)).toEqual(NEAR);
+      watch.stop();
+      engine.destroy();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("una scheda mai vista da vicino mostra il titolo; lo spostamento non riscrive niente", async () => {
+    vi.useFakeTimers();
+    try {
+      const { renderer } = modeRenderer();
+      const { engine, host, viewport } = mounted(boardSource(TWO), { cards: cardsOf(renderer) });
+      vi.spyOn(viewport, "getBoundingClientRect").mockReturnValue(new DOMRect(0, 0, 800, 600));
+      // «c» arriva lontana: nasce ferma e non è mai viva.
+      engine.syncDoc(boardSource([...TWO, image("c", 50_000, 0)]));
+      zoomOutUntil(host, viewport, LIVE_ZOOM_MIN);
+      vi.advanceTimersByTime(WHEEL_SETTLE_MS);
+      expect(zoomOf(host)).toBeGreaterThanOrEqual(0.15);
+      const seen = detailsOf(host);
+      expect(seen).toEqual({ a: "still", b: "still", c: "far" });
+      const watch = watchDetails(host);
+      const up = panStart(viewport, -300, 0);
+      expect(detailsOf(host)).toEqual(seen);
+      up();
+      expect(detailsOf(host)).toEqual(seen);
+      await settle();
+      expect(watch.writes.size).toBe(0);
+      watch.stop();
+      engine.destroy();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("la scheda attiva resta come da vicino, e uscendo diventa ferma", () => {
+    vi.useFakeTimers();
+    try {
+      const { renderer } = probeRenderer();
+      const { engine, host, viewport } = mounted(boardSource(BOARD), { cards: cardsOf(renderer) });
+      enterWithKeys(host, "n");
+      for (let tick = 0; tick < 12; tick++) wheelOn(viewport, true);
+      vi.advanceTimersByTime(WHEEL_SETTLE_MS);
+      expect(zoomOf(host)).toBeLessThan(LIVE_ZOOM_MIN);
+      expect(zoomOf(host)).toBeGreaterThanOrEqual(0.15);
+      expect(activeOf(host)).toEqual(["n"]);
+      expect(detailsOf(host)).toEqual({ n: "-", p: "still", i: "still", t: "far" });
+      press(focused(), "Escape");
+      expect(activeOf(host)).toEqual([]);
+      expect(detailsOf(host).n).toBe("still");
+      engine.destroy();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("2000 schede al 5%: un solo cambio di attributo per scheda, a fine gesto", async () => {
+    vi.useFakeTimers();
+    try {
+      const { renderer } = modeRenderer();
+      // 50 × 40 schede di 40 × 40 ogni 50.
+      const many = Array.from({ length: 2000 }, (_, index) => image(`c${index}`, (index % 50) * 50, Math.floor(index / 50) * 50, 40, 40));
+      const { engine, host, viewport } = mounted(boardSource(many), { cards: cardsOf(renderer) });
+      vi.spyOn(viewport, "getBoundingClientRect").mockReturnValue(new DOMRect(0, 0, 800, 600));
+      const watch = watchDetails(host);
+      zoomOutUntil(host, viewport, 0.06);
+      await settle();
+      expect(watch.writes.size).toBe(0);
+      vi.advanceTimersByTime(WHEEL_SETTLE_MS);
+      await settle();
+      expect(zoomOf(host)).toBeLessThan(0.06);
+      expect(watch.writes.size).toBe(2000);
+      expect([...watch.writes.values()].every((count) => count === 1)).toBe(true);
+      expect(Object.values(detailsOf(host)).every((detail) => detail === "block")).toBe(true);
+      watch.stop();
+      engine.destroy();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});

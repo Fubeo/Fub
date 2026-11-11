@@ -38,6 +38,7 @@ import {
   type CardWriting,
   type Rect,
 } from "./cards";
+import { applyCardDetails, cardDetail, detailLevel, farTitle, type CardDetail } from "./lod";
 import {
   cutInk,
   cutPath,
@@ -751,6 +752,10 @@ interface CardEntry {
   viewLife: Lifetime | null;
   /** La misura che la vista conosce: quella del montaggio o dell'ultimo `resize()`. */
   viewSize: CardSize | null;
+  /** Il titolo grande da lontano (T54): sempre nel nodo, lo mostra il CSS. */
+  readonly far: HTMLElement;
+  /** Il `data-card-detail` che la scheda ha adesso (`applyCardDetails`); `null` da vicino. */
+  detail: CardDetail | null;
   /**
    * Il file della scheda non c'è: la chiave della vista (`cardBodyKey`) con cui
    * il renderer l'ha detto. `null` se il file c'è, o non si sa.
@@ -1286,6 +1291,12 @@ export class CanvasEngine {
   readonly #views = new Map<string, CardView>();
   /** Il modo che ogni vista montata ha davvero (il `current` di `updateLiveCards`). */
   readonly #liveModes = new Map<string, CardMode>();
+  /**
+   * Le schede la cui vista è stata viva in questa seduta (T54): da lontano
+   * mostrano l'ultima immagine ferma (`still`) e non il titolo grande. Esce
+   * chi perde la vista (tolta, un file cambiato).
+   */
+  readonly #seenLive = new Set<string>();
   /**
    * La scheda attiva (T14): `enter()` ha detto sì, e il suo contenuto prende
    * puntatore, tastiera e rotella finché non si esce. Una sola alla volta.
@@ -8043,9 +8054,13 @@ export class CanvasEngine {
    */
   #refreshLive(): void {
     const doc = this.#doc;
-    if (this.#destroyed || !doc || this.#views.size === 0) return;
+    if (this.#destroyed || !doc) return;
     if (this.#gestureActive() || !this.#isShown()) return;
     const { view, zoom } = this.#viewRect();
+    if (this.#views.size === 0) {
+      this.#refreshDetail(zoom);
+      return;
+    }
     // Contano solo le schede con una vista: una specie senza renderer non
     // toglie posto a quelle che si accendono.
     const nodes = doc.nodes.filter((node) => this.#views.has(node.id));
@@ -8062,7 +8077,34 @@ export class CanvasEngine {
     for (const id of [this.#activeId, this.#enteringId]) {
       if (id !== null && this.#views.has(id)) wanted.add(id);
     }
+    // Prima che le vive si spengano: chi è vivo adesso conta come visto.
+    this.#refreshDetail(zoom);
     updateLiveCards(this.#views, wanted, this.#liveModes, this.#cardQuiet);
+  }
+
+  /**
+   * Il livello di dettaglio di ogni scheda allo zoom `zoom` (T54, A-22), a
+   * gesto finito: lo chiama solo `#refreshLive`. Un solo giro sulle schede,
+   * che scrive `data-card-detail` solo dove cambia, e la misura del titolo
+   * grande (`--canvas-detail-zoom`) una volta sulla scena. La scheda attiva,
+   * quella in cui si entra, quella che scrive e quella col campo aperto
+   * restano come da vicino.
+   */
+  #refreshDetail(zoom: number): void {
+    for (const [id, mode] of this.#liveModes) {
+      if (mode === "live") this.#seenLive.add(id);
+    }
+    const level = detailLevel(zoom);
+    const kept = new Set<string>();
+    for (const id of [this.#activeId, this.#enteringId, this.#writingId, this.#editor?.id ?? null]) {
+      if (id !== null) kept.add(id);
+    }
+    const seen = this.#seenLive;
+    applyCardDetails(this.#cards, (id) => cardDetail(level, seen.has(id), kept.has(id)));
+    const scale = String(zoom);
+    if (this.#stage.style.getPropertyValue("--canvas-detail-zoom") !== scale) {
+      this.#stage.style.setProperty("--canvas-detail-zoom", scale);
+    }
   }
 
   /**
@@ -8727,10 +8769,16 @@ export class CanvasEngine {
     header.append(title, connect);
     const body = document.createElement("div");
     body.className = "canvas-card-body";
-    el.append(header, body);
+    // Il titolo grande da lontano (T54), prima dell'inchiostro della scheda:
+    // è trasparente e l'inchiostro gli resta sopra.
+    const far = document.createElement("div");
+    far.className = "canvas-node-far";
+    far.setAttribute("aria-hidden", "true");
+    el.append(header, body, far);
     const entry: CardEntry = {
       id, article: el, title, connect, node, type: node.type, body,
       bodyKey: null, resize: null, teardown: null, view: null, viewLife: null, viewSize: null, missingFor: null,
+      far, detail: null,
     };
     el.addEventListener("focus", () => {
       if (!this.#selection.includes(id)) {
@@ -8796,6 +8844,8 @@ export class CanvasEngine {
     el.classList.toggle("selected", this.#selection.includes(node.id));
     const title = nodeTitle(node);
     if (entry.title.textContent !== title) entry.title.textContent = title;
+    const far = farTitle(node);
+    if (entry.far.textContent !== far) entry.far.textContent = far;
     entry.connect.setAttribute("aria-label", t("canvas.connect", { id: node.id }));
     this.#syncPorts(el);
     // Le quattro maniglie (T66): in sola lettura nessuna.
@@ -9023,6 +9073,7 @@ export class CanvasEngine {
     if (view) {
       this.#views.delete(entry.id);
       this.#liveModes.delete(entry.id);
+      this.#seenLive.delete(entry.id);
     }
     // La scheda attiva che perde il corpo (tolta, un annulla, un file
     // cambiato, il campo che prende il posto della vista) ne esce prima.
