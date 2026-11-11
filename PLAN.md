@@ -4716,7 +4716,7 @@ camera, scelta e fuoco sono gli stessi; le foto del banco somigliano al
 prototipo.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/canvas
-Stato: [ ] da fare
+Stato: [~] in corso · coder Opus · base eba292fa5
 
 ## T77 · Le fonti di questa lavagna
 
@@ -5596,7 +5596,7 @@ d'immagine ridimensionata con un'altra proporzione e il tratto arriva dove
 dice il puntatore; i vettori con `aspect` passano in Rust e in Vitest.
 Prova: scripts/check.sh --rapido; cargo test -p fub-canvas-core; cd
 apps/client && npx vitest run src/editors/canvas
-Stato: [~] in corso · coder Opus · base 641eb1e27
+Stato: [x] fatto · 052265c0a (merge eba292fa5) · differenze: `aspect` facoltativo in `move_strokes` e `restyle_strokes` (non va nel file); conta solo la scheda di partenza, perché l'ancora nuova è alla misura di adesso; una proporzione che non vale dà la regola di N4, non un errore; il client la manda solo per le schede `scale` (`#layerAspect`); `fub-canvas-wasm` non cambia; anche il test dei vettori senza proporzione controlla ora i punti
 
 ## T99 · Le rifiniture della lavagna
 
