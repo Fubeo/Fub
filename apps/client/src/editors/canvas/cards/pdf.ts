@@ -37,6 +37,12 @@ export interface PdfCardPort {
 /// pixel del dispositivo: oltre, ingrandire la lavagna non aggiunge dettaglio.
 export const PDF_CARD_MAX_SCALE = 2;
 
+/// Che cosa mostra la scheda PDF, in `data-card-state` della radice (T93): la
+/// tela lo legge per il gesto di Invio e del doppio clic. Come la nota, l'immagine
+/// e il foglio: «placeholder» niente, «loading» carica, «content» la pagina,
+/// «unreadable» non si mostra, «missing» il file manca.
+type PdfCardState = "placeholder" | "loading" | "content" | "unreadable" | "missing";
+
 export function pdfCardRenderer(port: PdfCardPort): CardRenderer {
   return {
     kinds: ["pdf"],
@@ -69,6 +75,7 @@ function mountPdfCard(
   const root = document.createElement("div");
   root.className = "canvas-card-pdf";
   root.dataset.cardKind = "pdf";
+  root.dataset.cardState = "placeholder";
   const screen = document.createElement("canvas");
   screen.className = "canvas-card-pdf-page";
   screen.hidden = true;
@@ -144,6 +151,11 @@ function mountPdfCard(
     message.textContent = text ?? "";
   }
 
+  /// Dice alla tela che cosa mostra la scheda (T93).
+  function showing(state: PdfCardState): void {
+    root.dataset.cardState = state;
+  }
+
   /// Copia un'immagine nel canvas in vista.
   function present(source: ImageBitmap | HTMLCanvasElement, part: string): void {
     screen.width = source.width;
@@ -152,6 +164,7 @@ function mountPdfCard(
     screen.hidden = false;
     shown = part;
     say(null);
+    showing("content");
   }
 
   function blank(): void {
@@ -159,6 +172,7 @@ function mountPdfCard(
     screen.height = 0;
     screen.hidden = true;
     shown = null;
+    showing("placeholder");
   }
 
   /// Mostra la pagina dalla cache, se c'è a questa larghezza.
@@ -173,7 +187,10 @@ function mountPdfCard(
 
   async function open(): Promise<void> {
     const ticket = ++opening;
-    if (!fromCache(page)) say(t("canvas.card.loading"));
+    if (!fromCache(page)) {
+      say(t("canvas.card.loading"));
+      showing("loading");
+    }
     let bytes: Uint8Array | null;
     try {
       bytes = await port.read(path);
@@ -184,6 +201,7 @@ function mountPdfCard(
     if (ticket !== opening) return;
     if (bytes === null) {
       say(null);
+      showing("missing");
       context.missing();
       return;
     }
@@ -242,6 +260,7 @@ function mountPdfCard(
   function unreadable(): void {
     blank();
     say(t("canvas.card.unreadable", { name: path.split("/").pop() || path }));
+    showing("unreadable");
   }
 
   async function go(n: number): Promise<void> {
