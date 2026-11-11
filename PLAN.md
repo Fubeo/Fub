@@ -3222,7 +3222,8 @@ sezione e una pagina, la voce nel tasto destro di una cella, e il
 riquadro già aperto.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/canvas/engine.test.ts
-Stato: [~] in corso · coder Opus · base 22514344d
+Stato: [x] fatto · T45 ea3e7dcf1, T45b a5da164fe, docs d500eb67b
+Differenze: la cella del link è `#B3` senza `Foglio1!` e oggi apre il foglio in cima con l'avviso `document.reveal_unavailable` (la griglia non riceve ancora un punto: T97); la sezione arriva dal `subpath` della risoluzione; il riquadro vicino si riusa solo con `BesideOptions.reuse`, che passa solo `openPathBeside`; nella finestra stretta il nome dice «Apri qui». Il punto letto dal cursore della scheda e il menu dell'editor dentro la scheda vanno dopo T97.
 
 ## T46 · Le misure dopo la modifica
 
