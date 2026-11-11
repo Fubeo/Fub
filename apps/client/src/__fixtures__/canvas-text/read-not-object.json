@@ -1,0 +1,23 @@
+{
+  "name": "read-not-object",
+  "description": "Un campo che non è un oggetto.",
+  "source": "{\n  \"nodes\": [\n    { \"id\": \"t1\", \"type\": \"text\", \"text\": \"nota\", \"x\": 0, \"y\": 0, \"width\": 300, \"height\": 120,\n      \"fub:text\": \"l\" },\n    { \"id\": \"t2\", \"type\": \"text\", \"text\": \"nota\", \"x\": 0, \"y\": 0, \"width\": 300, \"height\": 120,\n      \"fub:text\": null }\n  ],\n  \"edges\": []\n}\n",
+  "expect": {
+    "cards": [
+      {
+        "node": "t1",
+        "state": "kept",
+        "reason": "object",
+        "size": "m",
+        "align": "start"
+      },
+      {
+        "node": "t2",
+        "state": "kept",
+        "reason": "object",
+        "size": "m",
+        "align": "start"
+      }
+    ]
+  }
+}

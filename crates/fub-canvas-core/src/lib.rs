@@ -13,7 +13,8 @@
 //! `scripts/check.sh` lo compila per quel bersaglio.
 //!
 //! Gli estratti di una scheda di file, il campo `fub:parts`, li legge e li
-//! scrive [`parts`].
+//! scrive [`parts`]; la misura e l'allineamento del testo di una scheda, il
+//! campo `fub:text`, [`text`].
 //!
 //! Regola d'oro: **i byte che non si interpretano non si toccano**. Ogni
 //! livello del modello conserva i campi sconosciuti (`extra`).
@@ -31,6 +32,7 @@ pub mod parts;
 pub mod patch;
 pub mod read;
 pub mod source;
+pub mod text;
 
 pub use model::{
     Canvas, CanvasColor, CanvasEdge, CanvasEdgeEnd, CanvasEdgeSide, CanvasError, CanvasNode,
