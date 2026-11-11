@@ -1208,7 +1208,7 @@ Casi limite:
 - `gh run download` rifiuta l'artefatto: si usa `gh api`.
 Fatto quando: `npx vitest run bench` passa con tutte le baseline, e nella CI il job visivo e quello dell'accessibilità sono verdi sul commit delle baseline.
 Prova: scripts/check.sh --rapido
-Stato: [ ] da fare
+Stato: [x] fatto · 344 PNG (172 scene × giorno e notte) dall'artefatto banco-visivo-42c6fe0a1 della run 42949391275; guardate le sei scene del piano in giorno e notte
 
 ## T26 · La chiusura
 
