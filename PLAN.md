@@ -1947,7 +1947,7 @@ e in Vitest; `engine-ink-anchors.test.ts` scrive sulla pagina 2, va alla 3
 senza pagina; i tratti con le ancore di N4 restano identici byte per byte.
 Prova: scripts/check.sh --rapido; cargo test -p fub-canvas-core; cd
 apps/client && npx vitest run src/editors/canvas
-Stato: [~] in corso · coder Opus · base ca7c9c733
+Stato: [x] fatto · da 6baf17037 a 731dcc98f (merge daf8a8a8e) · ADR 0243 · differenze: il nucleo rifiuta di spostare o cambiare lo spessore di un tratto di pagina (`Frame::fit` → HIDDEN: non sa dove sta la pagina nella scheda), colore e gomma vanno, il Lazo non prende i tratti di pagina; in più `CardContext.pageShown()`, `CardSnapshot.pageSize` (l'immagine ferma sa la misura della pagina); una pagina di misura diversa da quella scritta scala il tratto con un fattore solo dall'angolo in alto a sinistra (`xMinYMin meet`); `PageBounds` strutturale in `anchor.ts`; toccati anche `ops.rs`, `ink-paint.ts`, `ink-erase.ts`. Guardato al banco Chromium dall'orchestratore (scheda PDF viva, chiaro e scuro): i tratti cadono sui punti PDF giusti, quello di una pagina che non c'è non si vede. Restano: durante un ridimensionamento l'inchiostro di pagina si ridisegna a fine gesto; il bordo della scheda è approssimato con `clientLeft/Top`
 
 ## T20 · La misura S9
 
