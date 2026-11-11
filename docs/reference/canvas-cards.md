@@ -25,9 +25,8 @@ Una scheda di file ha due modi.
   sessione di foglio, un documento PDF, il DOM di una nota con i suoi
   ascolti.
 - **Ferma** (`snapshot`): nessuna risorsa aperta. Mostra l'ultima immagine
-  ferma che ha avuto, oppure, per le specie fatte di DOM (nota, foglio), il
-  loro contenuto reso inerte. Una scheda mai stata viva mostra titolo e
-  specie.
+  ferma, o per le specie fatte di DOM (nota, foglio) il contenuto reso
+  inerte; mai stata viva, mostra titolo e specie.
 
 Il passaggio fra i due modi avviene solo a fine gesto, mai durante.
 
@@ -130,22 +129,20 @@ trascinati dal computer o dall'albero, o incollati:
   un commit solo, che un annulla toglie tutto insieme;
 - lasciato su una scheda di file, il primo file ne prende il posto e gli
   altri nascono in griglia;
-- le celle copiate diventano una scheda di testo con una tabella Markdown.
-  Per l'HTML con una tabella c'è la porta `clipboardMarkdown`, la stessa
-  conversione dell'incolla dell'editor Markdown. Il testo a tabulazioni su
-  più righe passa da `parseTsv` e `markdownTable`. Una riga sola resta
-  testo;
+- le celle copiate diventano una scheda di testo con una tabella Markdown:
+  l'HTML con una tabella passa dalla porta `clipboardMarkdown` (la
+  conversione dell'incolla dell'editor Markdown), il testo a tabulazioni su
+  più righe da `parseTsv` e `markdownTable`; una riga sola resta testo;
 - mentre si trascinano file o voci dell'albero, rettangoli tratteggiati
-  (`canvas-drop-ghost`) mostrano dove nasceranno le schede. Il loro numero
-  è quello dei file in `dataTransfer.items`. Se non si sa, cioè per le voci
-  dell'albero e quando il browser (WebKit) non dice i tipi, ce n'è uno.
-  Spariscono all'uscita e al rilascio.
+  (`canvas-drop-ghost`) mostrano dove nasceranno le schede, uno per file in
+  `dataTransfer.items`, o uno solo se non si sa (le voci dell'albero, WebKit
+  che non dice i tipi). Spariscono all'uscita e al rilascio.
 
 Il deposito dei file del computer (`depositCanvasFiles`) si ferma al primo
-file che l'host rifiuta. Il rifiuto è un `CanvasDepositError`, che porta i
-percorsi già depositati: le loro schede nascono in un commit solo, e l'errore
-compare nella barra (`canvas-intake-error`) dopo di loro. Se nessun file è
-andato, c'è solo l'errore, e gli appunti non diventano testo.
+file che l'host rifiuta, con un `CanvasDepositError` che porta i percorsi
+già depositati: le loro schede nascono in un commit solo, poi l'errore nella
+barra (`canvas-intake-error`). Se nessun file è andato, c'è solo l'errore, e
+gli appunti non diventano testo.
 
 Dove finiscono lo dice `canvas.drop_folder` (`dropFolderFor`, in
 `state/canvas-intake.ts`): le note con `files.attachment-folder`, una
@@ -177,7 +174,8 @@ I tipi stanno in `cards.ts`, con i commenti sui loro campi. In breve:
   `missing()` per dire che il file non c'è, e per il PDF `initialPage` (la
   pagina ricordata, o `null`) e `pageChanged(pagina)` (vedi «Riaprire dove
   eri»), e `pageShown()`: è in vista l'immagine di un'altra pagina, e la
-  tela ridisegna l'inchiostro di pagina. `parts` porta le parti di un
+  tela ridisegna l'inchiostro della scheda; `contentShown()` fa lo stesso
+  quando cambia `contentAspect()`. `parts` porta le parti di un
   estratto già lette e provate, o `null` se la scheda mostra solo il suo
   `subpath` ([Gli estratti della lavagna](canvas-parts.md)).
 - `CardView` risponde a `setMode` e a `destroy`; può rispondere anche a
@@ -186,7 +184,11 @@ I tipi stanno in `cards.ts`, con i commenti sui loro campi. In breve:
   `key` (`true` se il tasto è della scheda), `page` (la pagina mostrata, da
   1) e `pageBox` (la pagina in vista, la sua misura in punti PDF e il suo
   rettangolo nella scheda, o `null`; da ferma la misura viene da
-  `CardSnapshot.pageSize`: [L'ancora di pagina](canvas-ink.md#lancora-di-pagina)).
+  `CardSnapshot.pageSize`: [L'ancora di pagina](canvas-ink.md#lancora-di-pagina))
+  e `contentAspect` (la proporzione del contenuto in vista, intero e al
+  centro: l'immagine, la sua zona, la pagina del PDF; da ferma
+  `CardSnapshot.aspect`), che l'inchiostro `scale` segue
+  ([La misura della scheda](canvas-ink.md#la-misura-della-scheda)).
 - `createCardRegistry` costruisce il registro per specie. Due renderer
   diversi per la stessa specie sono un errore, lanciato quando il registro
   si costruisce: `card kind <specie> has two renderers`. Lo stesso renderer
@@ -195,18 +197,15 @@ I tipi stanno in `cards.ts`, con i commenti sui loro campi. In breve:
   foglio, immagine, PDF): `loading`, `content`, `unreadable`, `unavailable`,
   `too-large`, `missing`, `placeholder`. Chi non lo scrive ricade sul campo.
 
-Ascolti, osservatori e timer di un renderer passano dalla `Lifetime` del
-contesto, come vuole `check-listeners.mjs`.
+Ascolti, osservatori e timer passano dalla `Lifetime` (`check-listeners.mjs`).
 
 ### Un renderer non scrive mai il file
 
-Un renderer legge e basta. Nessun renderer scrive nel file della sua scheda,
-né quando è vivo né quando si chiude: sfogliare un PDF, scorrere un foglio o
-scegliere delle celle non cambia il file. Le sole scritture che partono
-dalla lavagna sono il file `.canvas`, i file che vi si depositano dal
-computer o si incollano, e ciò che si scrive dentro una scheda con l'editor
-vero del file (vedi «Scrivere dentro una scheda»), che passa dalla sessione
-del documento e non dal renderer.
+Un renderer legge e basta, da vivo e quando si chiude: sfogliare un PDF,
+scorrere un foglio o scegliere delle celle non cambia il file. Dalla lavagna
+si scrivono solo il `.canvas`, i file depositati o incollati, e ciò che si
+scrive dentro una scheda con l'editor vero del file (vedi «Scrivere dentro
+una scheda»), che passa dalla sessione del documento e non dal renderer.
 
 ## Le immagini ferme
 
@@ -285,7 +284,9 @@ l'elemento `.canvas-node`, il corpo e ciò che lo tiene vivo. A ogni resa:
 
 - chi c'è già si aggiorna sul posto: posizione, misura, colore, titolo,
   scelta, le quattro maniglie per ridimensionare (non in sola lettura; i
-  gesti sono in [I tasti e i gesti](canvas-input.md#le-maniglie));
+  gesti sono in [I tasti e i gesti](canvas-input.md#le-maniglie)); il
+  titolo di una scheda di file o di link sta sopra il suo rettangolo, fuori
+  (`bottom: 100%`, come Obsidian), e la scheda resta della sua misura;
 - chi è nuovo nasce, chi non c'è più si distrugge;
 - l'ordine sulla scena segue il file (la prima sotto, l'ultima sopra), e una
   scheda si sposta nel DOM solo se è fuori posto;
@@ -296,7 +297,7 @@ l'elemento `.canvas-node`, il corpo e ciò che lo tiene vivo. A ogni resa:
 
 Spostare, ridimensionare, colorare o scrivere in un'altra scheda non tocca
 le viste; cambiare il file della scheda, toglierla o cambiarle l'id le
-smonta. Una scheda che torna con l'annulla ha una vista nuova. Il campo di
+smonta (con l'annulla torna una vista nuova). Il campo di
 modifica di una scheda prende il posto del corpo: la vista si smonta quando
 il campo si apre, e il corpo si rifà alla prima resa dopo che si chiude.
 
@@ -324,9 +325,8 @@ nessuna resa ne monta altre.
 
 Oltre `MAX_INTERACTIVE_NODES` (2000 schede) la scena mostra il messaggio
 della lavagna troppo grande e nessuna vista; tornati sotto, le schede
-rinascono. L'inchiostro sulle schede si ridisegna dopo ogni resa sullo
-stesso elemento, e un tratto scritto aggiorna solo il suo livello, senza
-resa.
+rinascono. L'inchiostro si ridisegna dopo ogni resa; un tratto scritto
+aggiorna solo il suo livello.
 
 ## Il file che manca
 

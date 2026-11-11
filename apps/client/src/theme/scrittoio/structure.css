@@ -3562,6 +3562,35 @@ body {
   overscroll-behavior: contain;
 }
 
+/* D-21 (a), il titolo sopra (T39). Le schede di file e di pagina web portano
+   il titolo fuori dal bordo, sopra: la scheda è tutta contenuto, e il nodo
+   non cambia misura né posto. La riga è larga quanto la scheda; il titolo si
+   taglia per primo, i numeri e i pulsanti restano. Le schede di testo e i
+   gruppi non cambiano. */
+.canvas-node-file > .canvas-node-handle,
+.canvas-node-link > .canvas-node-handle {
+  position: absolute;
+  right: 0;
+  bottom: 100%;
+  left: 0;
+}
+.canvas-node-file > .canvas-node-handle > .canvas-node-title,
+.canvas-node-link > .canvas-node-handle > .canvas-node-title {
+  flex: 0 1 auto;
+}
+.canvas-node-file > .canvas-node-handle > .canvas-connect,
+.canvas-node-link > .canvas-node-handle > .canvas-connect {
+  margin-left: auto;
+}
+/* Il contenuto è un mondo a sé: i suoi livelli (le testate ferme del foglio,
+   quelli dell'editor) restano sotto l'inchiostro della scheda, le maniglie
+   e i punti. */
+.canvas-node-file > .canvas-card-body,
+.canvas-node-link > .canvas-card-body {
+  border-radius: inherit;
+  isolation: isolate;
+}
+
 /* Entrare e uscire (N6 T14). Fuori da una scheda attiva il contenuto di una
    vista non prende il puntatore e non scorre: il clic sceglie la scheda e la
    rotella sposta la lavagna. Dentro sì, e il corpo scorre. I link e i
@@ -4102,6 +4131,49 @@ body {
 }
 .canvas-parts-picker[data-narrow] .canvas-parts-preview {
   display: none;
+}
+
+/* La scheda PDF (A-20, T39): la pagina intera, al centro, la più grande che
+   entra con le sue proporzioni (`--page-ratio`, scritta dalla scheda); le
+   frecce ai lati e il numero della pagina in basso, sopra la pagina. Il
+   rettangolo della pagina è quello su cui si attacca l'inchiostro. */
+.canvas-card-pdf {
+  position: relative;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  container-type: size;
+}
+.canvas-card-pdf-page {
+  display: block;
+  flex: none;
+  width: min(100cqw, 100cqh * var(--page-ratio, 0.7071));
+  height: min(100cqh, 100cqw / var(--page-ratio, 0.7071));
+}
+.canvas-card-pdf-previous,
+.canvas-card-pdf-next {
+  position: absolute;
+  top: 50%;
+  width: 28px;
+  height: 28px;
+  transform: translateY(-50%);
+}
+.canvas-card-pdf-previous {
+  left: var(--space-4, 8px);
+}
+.canvas-card-pdf-next {
+  right: var(--space-4, 8px);
+}
+.canvas-card-pdf-status {
+  position: absolute;
+  bottom: var(--space-4, 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  white-space: nowrap;
 }
 
 /* La scheda d'immagine (T5, l'impianto del prototipo T26): l'immagine intera

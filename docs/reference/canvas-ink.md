@@ -195,6 +195,19 @@ tratti:
   scheda: `s = min(w / W, h / H)`, `dx = (w − W · s) / 2`,
   `dy = (h − H · s) / 2`. È ciò che fa SVG con `viewBox="0 0 W H"` e
   `preserveAspectRatio="xMidYMid meet"` su un riquadro `w × h`.
+- **Il contenuto (`scale` con la proporzione):** quando la resa sa la
+  proporzione `a` (larghezza / altezza) del contenuto che la scheda mostra
+  (l'immagine, o la zona che ne mostra; la pagina intera del PDF), il
+  tratto segue il contenuto e non la scheda. Il contenuto sta centrato e
+  intero: in `W × H` è `C = (W − c) / 2, (H − c / a) / 2, c × c / a` con
+  `c = min(W, H · a)`, in `w × h` è `D` allo stesso modo. Allora
+  `s = D.w / C.w`, `dx = D.x − s · C.x`, `dy = D.y − s · C.y`. Esempio:
+  un PDF A4 (`a = 0,7071`) scritto su `400 × 400` e visto su `400 × 800`
+  ha `C = 58,6, 0, 282,8 × 400` e `D = 0, 117,2, 400 × 565,7`, quindi
+  `s = 1,414`, `dx = −82,8`, `dy = 117,2`. Una proporzione assente, zero,
+  negativa o non finita torna alla regola di sopra; con `a = W / H` le due
+  regole danno lo stesso. Il file non scrive `a`: la sa solo chi ha il
+  contenuto, e il nucleo (`move_strokes`) usa la regola senza proporzione.
 - **Con `fixed`** l'inchiostro resta alla misura in cui è stato scritto,
   nell'angolo in alto a sinistra, qualunque sia la misura di adesso.
 - **Immagine e PDF** si riconoscono dall'estensione del campo `file`, senza
@@ -215,7 +228,10 @@ tratti:
 I vettori stanno in `apps/client/src/__fixtures__/canvas-ink-fit/`, un caso
 per file, scritti a mano: `name`, `description`, la scheda (`card`, con
 `type` e `file`), `ref` (`W`, `H`), `size` (`w`, `h`) e in `expect` il modo,
-`s`, `x` (`dx`), `y` (`dy`) e qualche punto `from` → `to`.
+`s`, `x` (`dx`), `y` (`dy`) e qualche punto `from` → `to`. Il nucleo Rust
+li fa girare con `ink_fit`. Quelli con la proporzione stanno accanto, in
+`canvas-ink-fit-aspect/`, con il campo in più `aspect`: li prova solo il
+client (`ink-fit.test.ts`), perché il nucleo non la conosce.
 
 ## Il livello estraneo
 
