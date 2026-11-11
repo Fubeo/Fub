@@ -398,6 +398,75 @@ describe("l'inchiostro sulla pagina di un PDF (T19)", () => {
   });
 });
 
+describe("l'inchiostro attaccato alla cella di un foglio (T37)", () => {
+  /// Una scheda di foglio 480 × 320 che mostra il foglio al 50%: B3 sta a
+  /// (60, 70), larga 40 e alta 12 unità della lavagna (80 × 24 pixel del
+  /// foglio al 100%).
+  const sheet: CanvasNode = { id: "f", type: "file", file: "conti.xlsx", x: 100, y: 50, width: 480, height: 320 };
+  const box = { sheet: "Conti 'Q1' \"bis\"", cell: "B3", rect: { x: 60, y: 70, width: 40, height: 12 }, zoom: 0.5 };
+
+  it("scrive l'ancora di cella, coi punti e lo spessore in pixel del foglio al 100% dall'angolo della cella", () => {
+    const stroke = penStroke(165, 125);
+    const record = written(strokeRecord(stroke, sheet, defaultInkLook(1, true), NOW, box));
+    expect(record.anchor).toEqual({ kind: "cell", sheet: "Conti 'Q1' \"bis\"", cell: "B3" });
+    expect(Object.keys(record.anchor)).toEqual(["kind", "sheet", "cell"]);
+    expect(parseInkBrush(record.brush).size).toBeCloseTo(4 / box.zoom, 9);
+    const drawable = reread(record, sheet);
+    expect(drawable.cell).toEqual({ sheet: "Conti 'Q1' \"bis\"", cell: "B3" });
+    expect(drawable.ref).toBeNull();
+    expect(drawable.page).toBeNull();
+    const points = drawable.ink.samples.map((s) => [s.x / drawable.ink.scale, s.y / drawable.ink.scale]);
+    stroke.samples.forEach((sample, i) => {
+      expect(points[i]![0]).toBeCloseTo((sample.x - sheet.x - box.rect.x) / box.zoom, 1);
+      expect(points[i]![1]).toBeCloseTo((sample.y - sheet.y - box.rect.y) / box.zoom, 1);
+    });
+  });
+
+  it("decodeStroke porta la cella, conserva i campi sconosciuti e scarta l'ancora che non vale", () => {
+    const stroke = written(strokeRecord(penStroke(10, 10), card(0, 0), defaultInkLook(1, true), NOW));
+    const anchor = { kind: "cell", merge: "XFD1048576:XFD1048576", sheet: " ", cell: "XFD1048576" };
+    const decoded = decodeStroke({ ...stroke, anchor })!;
+    expect(decoded.cell).toEqual({ sheet: " ", cell: "XFD1048576" });
+    expect(decoded.record.anchor).toBe(anchor);
+    expect(decodeStroke(stroke)!.cell).toBeNull();
+    for (const bad of [
+      { kind: "cell", sheet: "Foglio1", cell: "A0" },
+      { kind: "cell", sheet: "Foglio1", cell: "B" },
+      { kind: "cell", sheet: "Foglio1", cell: "b3" },
+      { kind: "cell", sheet: "Foglio1", cell: "$B$3" },
+      { kind: "cell", sheet: "Foglio1", cell: "B03" },
+      { kind: "cell", sheet: "Foglio1", cell: "XFE1" },
+      { kind: "cell", sheet: "Foglio1", cell: "A1048577" },
+      { kind: "cell", sheet: "Foglio1", cell: 23 },
+      { kind: "cell", sheet: "Foglio1" },
+      { kind: "cell", sheet: "", cell: "B3" },
+      { kind: "cell", sheet: 1, cell: "B3" },
+      { kind: "cell", cell: "B3" },
+    ]) {
+      expect(decodeStroke({ ...stroke, anchor: bad }), JSON.stringify(bad)).toBeNull();
+    }
+  });
+
+  it("un tratto di cella non si disegna finché la scheda non dice dove sta la cella (T38)", () => {
+    const record = written(strokeRecord(penStroke(165, 125), sheet, defaultInkLook(1, true), NOW, box));
+    expect(toDry(record)).toBeNull();
+  });
+
+  it("una cella che non vale, o senza la scheda, è un errore di chi chiama", () => {
+    const look = defaultInkLook(1, true);
+    for (const bad of [
+      { ...box, sheet: "" },
+      { ...box, cell: "B0" },
+      { ...box, zoom: 0 },
+      { ...box, zoom: Number.POSITIVE_INFINITY },
+      { ...box, rect: { ...box.rect, x: Number.NaN } },
+    ]) {
+      expect(() => strokeRecord(penStroke(165, 125), sheet, look, NOW, bad), JSON.stringify(bad)).toThrow(RangeError);
+    }
+    expect(() => strokeRecord(penStroke(165, 125), null, look, NOW, box)).toThrow(RangeError);
+  });
+});
+
 describe("la penna scelta nel menu", () => {
   it("inkWidthOf porta lo spessore al bordo e al passo del cursore; un non numero non vale", () => {
     expect([0, 0.5, 3.3, 3.74, 20, 99].map((px) => inkWidthOf("pen", px))).toEqual([0.5, 0.5, 3.5, 3.5, 20, 20]);

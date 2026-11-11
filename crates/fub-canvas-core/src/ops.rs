@@ -1014,15 +1014,16 @@ impl Frame {
 
     /// Come la resa porta un tratto con l'ancora `anchor` sulla lavagna:
     /// sulla radice com'è; su una scheda come dice «La misura della scheda»
-    /// di `docs/reference/canvas-ink.md`. Un tratto con l'ancora di pagina
-    /// non ha una misura qui: dove la pagina sta nella scheda lo sa solo la
-    /// resa, e il nucleo non sposta né ridimensiona quel tratto (`hidden`).
+    /// di `docs/reference/canvas-ink.md`. Un tratto con l'ancora di pagina o
+    /// di cella non ha una misura qui: dove la pagina o la cella sta nella
+    /// scheda lo sa solo la resa, e il nucleo non sposta né ridimensiona quel
+    /// tratto (`hidden`).
     fn fit(&self, anchor: &InkAnchor) -> Fit {
         match (self, anchor) {
             (Frame::Card(node), InkAnchor::Card { width, height }) => {
                 ink_fit(node, *width, *height)
             }
-            (_, InkAnchor::Page { .. }) => Fit::HIDDEN,
+            (_, InkAnchor::Page { .. } | InkAnchor::Cell { .. }) => Fit::HIDDEN,
             _ => Fit::IDENTITY,
         }
     }
@@ -1192,7 +1193,7 @@ fn hidden(index: usize, id: &str) -> OpError {
     OpError::Invalid {
         index,
         reason: format!(
-            "stroke {id:?} has no place the core can compute in its card (the card has no size, or the stroke is anchored to a PDF page)"
+            "stroke {id:?} has no place the core can compute in its card (the card has no size, or the stroke is anchored to a PDF page or a sheet cell)"
         ),
     }
 }
@@ -1424,14 +1425,25 @@ mod tests {
         assert!(resized_brush(pf1, 0.0).is_err());
     }
 
-    /// Un tratto con l'ancora di pagina: il nucleo non sa dove la pagina sta
-    /// nella scheda, e non lo sposta né lo ridimensiona; il colore sì, e la
-    /// gomma lo toglie.
+    /// Un tratto con l'ancora di pagina o di cella: il nucleo non sa dove la
+    /// pagina o la cella sta nella scheda, e non lo sposta né lo
+    /// ridimensiona; il colore sì, e la gomma lo toglie.
     #[test]
-    fn a_page_stroke_is_not_moved_or_resized_by_the_core() {
-        let source = r##"{"nodes":[{"id":"p","type":"file","file":"carta.pdf","x":0,"y":0,"width":300,"height":400,
-            "fub:ink":{"v":1,"strokes":[{"id":"s1","tool":"pen","brush":"pf1 size=3","color":"#0072b2",
-            "anchor":{"kind":"page","page":2,"width":595,"height":842},"ink":"1 s100 cxy 100,100 10,0"}]}}]}"##;
+    fn a_page_or_cell_stroke_is_not_moved_or_resized_by_the_core() {
+        for (file, anchor) in [
+            ("carta.pdf", r#"{"kind":"page","page":2,"width":595,"height":842}"#),
+            ("conti.xlsx", r#"{"kind":"cell","sheet":"Foglio1","cell":"B3"}"#),
+        ] {
+            let source = format!(
+                r##"{{"nodes":[{{"id":"p","type":"file","file":"{file}","x":0,"y":0,"width":300,"height":400,
+                "fub:ink":{{"v":1,"strokes":[{{"id":"s1","tool":"pen","brush":"pf1 size=3","color":"#0072b2",
+                "anchor":{anchor},"ink":"1 s100 cxy 100,100 10,0"}}]}}}}]}}"##
+            );
+            content_anchored_stroke_stays(&source);
+        }
+    }
+
+    fn content_anchored_stroke_stays(source: &str) {
         let canvas = crate::read::parse(source).unwrap();
         let layer = LayerRef::Node("p".to_owned());
         let ids = vec!["s1".to_owned()];
