@@ -71,6 +71,10 @@ sono selezionati.
 - Mod+Shift+↑/↓ sposta il blocco del cursore, o la selezione di blocchi, fra i
   fratelli; le voci numerate si rinumerano; un annulla torna indietro in un
   passo.
+- Alt+↑/↓ sulle righe del testo (fuori dalle proprietà) non portano una riga
+  del corpo dentro il frontmatter, né le sue righe `---` fuori. Mod+D non copia
+  le righe `---` della testata, che farebbero una seconda testata; le proprietà
+  si copiano come le altre righe.
 - Backspace all'inizio di un paragrafo lo unisce al testo del blocco sopra.
 - Dentro un blocco di codice Tab e Shift+Tab rientrano il codice e Mod+A
   seleziona prima il codice, poi tutta la nota.

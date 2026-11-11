@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { smartLists } from "../../smart-lists";
 import { undo, history } from "@codemirror/commands";
 import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
+import type { EditorView } from "@codemirror/view";
 import { EditorSelection, EditorState, type StateCommand, type Transaction } from "@codemirror/state";
 import {
   autoPairDecision,
@@ -16,6 +17,7 @@ import {
   sortTableColumns,
   indentListItem,
   markdownKeymap,
+  obsidianKeymap,
   smartListEnter,
   toggleBold,
   toggleBulletList,
@@ -586,5 +588,60 @@ describe("operazioni tabella", () => {
       expect(result.doc).toBe(source);
       expect(result.transactions).toBe(0);
     }
+  });
+});
+
+describe("la testata del frontmatter sotto Alt-↑/↓ e Mod-d", () => {
+  /// Il tasto come lo dà il profilo Markdown: il primo accordo di
+  /// `obsidianKeymap` con quel nome che risponde `true` ferma la catena, come in
+  /// CodeMirror. Restituisce lo stato dopo il tasto.
+  function pressOn(spec: string, key: string): EditorState {
+    const state = mk(spec);
+    let next = state;
+    const view = { state, dispatch: (tr: Transaction) => { next = tr.state; } } as unknown as EditorView;
+    for (const binding of obsidianKeymap) {
+      if (binding.key === key && binding.run?.(view)) break;
+    }
+    return next;
+  }
+
+  it("Alt-↑ sulla prima riga del corpo non la porta dentro la testata", () => {
+    expect(show(pressOn("---\nicon: 🌿\n---\n|Uno\n\nDue", "Alt-ArrowUp"))).toBe("---\nicon: 🌿\n---\n|Uno\n\nDue");
+  });
+
+  it("Alt-↓ sulla riga di chiusura non la porta nel corpo", () => {
+    expect(show(pressOn("---\nicon: 🌿\n|---\nUno", "Alt-ArrowDown"))).toBe("---\nicon: 🌿\n|---\nUno");
+  });
+
+  it("Alt-↓ sulla riga di apertura non la sposta sotto la prima proprietà", () => {
+    expect(show(pressOn("|---\nicon: 🌿\n---\nUno", "Alt-ArrowDown"))).toBe("|---\nicon: 🌿\n---\nUno");
+  });
+
+  it("Alt-↓ sull'ultima riga della testata non la fa uscire nel corpo", () => {
+    expect(show(pressOn("---\ntags:\n  - x\n  |- y\n---\nTesto", "Alt-ArrowDown"))).toBe("---\ntags:\n  - x\n  |- y\n---\nTesto");
+  });
+
+  it("dentro la testata una riga che non è una chiave si sposta fra le sue righe", () => {
+    expect(show(pressOn("---\ntags:\n  - x\n  |- y\n---\nTesto", "Alt-ArrowUp"))).toBe("---\ntags:\n  |- y\n  - x\n---\nTesto");
+  });
+
+  it("su una riga di proprietà il tasto resta com'era: ai bordi non fa niente", () => {
+    expect(show(pressOn("---\nicon: |🌿\n---\nUno", "Alt-ArrowUp"))).toBe("---\nicon: |🌿\n---\nUno");
+  });
+
+  it("senza una chiusura il `---` non è una testata: le righe si spostano come prima", () => {
+    expect(show(pressOn("---\nUno|\nDue", "Alt-ArrowUp"))).toBe("Uno|\n---\nDue");
+    expect(show(pressOn("Uno\nDue|", "Alt-ArrowUp"))).toBe("Due|\nUno");
+  });
+
+  it("Mod-d sulla testata non copia le sue righe `---`", () => {
+    expect(pressOn("|---\nicon: 🌿\n---\nUno", "Mod-d").doc.toString()).toBe("---\nicon: 🌿\n---\nUno");
+    expect(pressOn("---\nicon: 🌿\n|---\nUno", "Mod-d").doc.toString()).toBe("---\nicon: 🌿\n---\nUno");
+    expect(pressOn("---\nicon: 🌿\n‹---\nUno›\n\nDue", "Mod-d").doc.toString()).toBe("---\nicon: 🌿\n---\nUno\n\nDue");
+  });
+
+  it("Mod-d su una proprietà o sul corpo copia la riga come sempre", () => {
+    expect(pressOn("---\nicon: |🌿\n---\nUno", "Mod-d").doc.toString()).toBe("---\nicon: 🌿\nicon: 🌿\n---\nUno");
+    expect(pressOn("---\nicon: 🌿\n---\n|Uno\n\nDue", "Mod-d").doc.toString()).toBe("---\nicon: 🌿\n---\nUno\nUno\n\nDue");
   });
 });
