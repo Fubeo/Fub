@@ -167,9 +167,10 @@ interface PaneFrame {
   /// Firma dell'ultima striscia disegnata: un cambio di riquadro non deve
   /// ricreare tab identiche e togliere il fuoco al loro nodo DOM.
   tabsSignature: string | null;
-  /// La linguetta da portare in vista al prossimo fotogramma, e la richiesta
-  /// del fotogramma (`drawTabOverflow`).
-  tabReveal: { active: number; frame: number | null };
+  /// La linguetta da portare in vista al prossimo fotogramma
+  /// (`drawTabOverflow`), e la richiesta di quel fotogramma, se c'è.
+  tabRevealIndex: number;
+  tabRevealFrame: number | null;
 }
 const frames = new Map<string, PaneFrame>();
 let panesEl: HTMLElement;
@@ -222,9 +223,9 @@ const view: PaneView = {
   },
   createPane,
   releaseFrame: (pane) => {
-    const reveal = frameOf(pane).tabReveal;
-    if (reveal.frame !== null) cancelAnimationFrame(reveal.frame);
-    reveal.frame = null;
+    const r = frameOf(pane);
+    if (r.tabRevealFrame !== null) cancelAnimationFrame(r.tabRevealFrame);
+    r.tabRevealFrame = null;
     frameOf(pane).formatBar.destroy();
     frameOf(pane).selectionBubble.destroy();
     frameOf(pane).standing.destroy();
@@ -565,7 +566,8 @@ function createPane(id: string): PaneElements {
     emptyEl,
     standing: createStandingChip(),
     tabsSignature: null,
-    tabReveal: { active: -1, frame: null },
+    tabRevealIndex: -1,
+    tabRevealFrame: null,
   };
   frames.set(id, r);
   return { root, editorEl, viewEl };
@@ -1049,10 +1051,10 @@ function drawTabOverflow(r: PaneFrame, tabs: Tab[], active: number): void {
   r.tabMenuEl.hidden = tabs.length <= 1;
   r.tabMenuEl.setAttribute("aria-label", t("document.tab.list"));
   setTooltip(r.tabMenuEl, t("document.tab.list"));
-  r.tabReveal.active = active;
-  if (r.tabReveal.frame !== null) return;
-  r.tabReveal.frame = requestAnimationFrame(() => {
-    r.tabReveal.frame = null;
+  r.tabRevealIndex = active;
+  if (r.tabRevealFrame !== null) return;
+  r.tabRevealFrame = requestAnimationFrame(() => {
+    r.tabRevealFrame = null;
     revealSelectedTab(r);
   });
 }
@@ -1063,7 +1065,7 @@ function revealSelectedTab(r: PaneFrame): void {
   const focused = document.activeElement;
   const selected = focused instanceof HTMLElement && r.tabsShell.contains(focused)
     ? focused
-    : r.tabsShell.querySelectorAll<HTMLElement>(".tab")[r.tabReveal.active];
+    : r.tabsShell.querySelectorAll<HTMLElement>(".tab")[r.tabRevealIndex];
   selected?.scrollIntoView?.({ block: "nearest", inline: "nearest" });
 }
 
