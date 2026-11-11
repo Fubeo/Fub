@@ -172,7 +172,7 @@ describe("resa dell'inizio di un documento grande", () => {
     // I blocchi resi sono quelli della resa completa, uno per uno; la
     // definizione in fondo non c'è ancora.
     const full = renderMarkdownState(stateOf(text));
-    const last = document.blocks.at(-1)!;
+    const last = document.blocks[document.blocks.length - 1]!;
     expect(last.to).toBeLessThanOrEqual(document.source.length);
     expect(document.blocks.map((block) => [block.from, block.to, block.kind]))
       .toEqual(full.blocks.slice(0, document.blocks.length).map((block) => [block.from, block.to, block.kind]));

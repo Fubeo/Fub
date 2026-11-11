@@ -19,7 +19,7 @@ import {
   type ViewUpdate,
   WidgetType,
 } from "@codemirror/view";
-import { ensureSyntaxTree, syntaxTree } from "@codemirror/language";
+import { ensureSyntaxTree, syntaxTree, syntaxTreeAvailable } from "@codemirror/language";
 import type { SyntaxNode } from "@lezer/common";
 // La lettura binaria di una casella è una regola del contratto, non del
 // disegno: `[/]`, `[-]`, `[>]` sono stati che esistono e non sono "fatto".
@@ -2065,9 +2065,12 @@ export function livePreview(
       if (transaction.effects.some((effect) => effect.is(linkCardsChanged)) && !changed) {
         return buildBlocks(transaction.state, value.document, value.candidates, value.complete);
       }
-      // La resa a metà di un documento grande va avanti con l'albero: a ogni
-      // albero nuovo, e a ogni modifica, fin dove arriva.
-      if (!value.complete && (changed || syntaxTree(transaction.startState) !== syntaxTree(transaction.state))) {
+      // La resa a metà di un documento grande si rifà a ogni modifica, fin
+      // dove l'albero arriva, e quando l'albero arriva in fondo: gli alberi
+      // intermedi del lavoratore del parser la rifarebbero tutta ogni volta.
+      const treeDone = !changed && syntaxTree(transaction.startState) !== syntaxTree(transaction.state)
+        && syntaxTreeAvailable(transaction.state);
+      if (!value.complete && (changed || treeDone)) {
         const previous = { document: value.document, changes: transaction.changes };
         const { document, complete } = renderMarkdownStatePrefix(transaction.state, forms, previous);
         return buildBlocks(transaction.state, document, candidatesOf(document, policy), complete);
