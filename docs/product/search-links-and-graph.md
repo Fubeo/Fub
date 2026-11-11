@@ -407,8 +407,8 @@ Mod+; apre una riga vuota per una proprietà nuova prima della chiusura, o crea
 il frontmatter in cima se non c'è. Alt+↑ e Alt+↓ sulla riga di una chiave
 spostano la proprietà intera, con le righe rientrate della sua lista; ai bordi
 del frontmatter il tasto resta fermo, e fuori da una riga di chiave sposta le
-righe come altrove. I tre gesti sono anche comandi della palette e voci del
-menu dei blocchi nella barra di formattazione. Il pannello Proprietà
+righe come altrove, salvo la testata. I tre gesti sono anche comandi della palette
+e voci del menu dei blocchi nella barra di formattazione. Il pannello Proprietà
 dell'ispettore resta il modo strutturato di scrivere valori tipizzati.
 La banda di stato dice quante proprietà ha la nota attiva (vista
 `properties.status`); tace su una nota senza proprietà e su un documento che

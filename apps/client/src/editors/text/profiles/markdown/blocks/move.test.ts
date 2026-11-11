@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { history, undo } from "@codemirror/commands";
+import { history, redo, undo } from "@codemirror/commands";
 import { markdown } from "@codemirror/lang-markdown";
 import { ensureSyntaxTree } from "@codemirror/language";
-import { EditorSelection, EditorState } from "@codemirror/state";
+import { EditorSelection, EditorState, type StateCommand } from "@codemirror/state";
 import { markdownGrammar } from "../grammar";
 import { blockModel } from "./model";
-import { moveBlockBy, moveSiblings } from "./move";
+import { moveBlockBy, moveRun, moveSiblings } from "./move";
 import { blockAnchor } from "./anchor";
 import { mergeUpChange } from "./keys";
 import { deleteRun, duplicateRun } from "./selection";
@@ -41,6 +41,19 @@ describe("spostare", () => {
   it("il primo non sale e l'ultimo non scende", () => {
     expect(moveBy("Uno\n\nDue", "Uno", -1)).toBe("Uno\n\nDue");
     expect(moveBy("Uno\n\nDue", "Due", 1)).toBe("Uno\n\nDue");
+  });
+
+  it("il frontmatter resta il primo: niente gli passa davanti e lui non scende", () => {
+    const doc = "---\nicon: 🌿\n---\nUno\n\nDue";
+    // Il primo testo non sale sopra il frontmatter, né con la tastiera né con la tratta.
+    expect(moveBy(doc, "Uno", -1)).toBe(doc);
+    const state = stateOf(doc);
+    const blocks = blocksOf(state);
+    expect(blocks[0]!.kind).toBe("frontmatter");
+    expect(moveSiblings(state, blocks, indexAt(state, "Due"), indexAt(state, "Due"), 0)).toBeNull();
+    // Il frontmatter non scende, nemmeno col cursore dentro di lui.
+    expect(moveBy(doc, "icon", 1)).toBe(doc);
+    expect(moveSiblings(state, blocks, 0, 0, indexAt(state, "Uno"))).toBeNull();
   });
 
   it("un file senza a capo finale resta senza", () => {
@@ -110,6 +123,68 @@ describe("spostare", () => {
 
   it("un `^id` su una riga sua si sposta col suo blocco", () => {
     expect(moveBy("```\nx\n```\n\n^cod\n\nDopo", "Dopo", -1)).toBe("Dopo\n\n```\nx\n```\n\n^cod");
+  });
+});
+
+describe("il frontmatter resta il primo", () => {
+  const step = (state: EditorState, cmd: StateCommand): EditorState => {
+    let next = state;
+    cmd({ state, dispatch: (tr) => { next = tr.state; } });
+    return next;
+  };
+
+  it("senza frontmatter il primo blocco si sposta come sempre", () => {
+    expect(moveBy("Uno\n\nDue", "Due", -1)).toBe("Due\n\nUno");
+    // Un `---` senza chiusura non è un frontmatter: è una riga orizzontale, e non blocca niente.
+    expect(moveBy("---\n\nUno\n\nDue", "Uno", -1)).toBe("Uno\n\n---\n\nDue");
+  });
+
+  it("un frontmatter vuoto (`---` e `---`) è il primo blocco come gli altri", () => {
+    const doc = "---\n---\nUno\n\nDue";
+    const state = stateOf(doc);
+    expect(blocksOf(state)[0]!.kind).toBe("frontmatter");
+    expect(moveBy(doc, "Uno", -1)).toBe(doc);
+    expect(moveBy(doc, "---", 1)).toBe(doc);
+    // Un blocco che sale fin lì finisce subito dopo di lui.
+    expect(moveBy(doc, "Due", -1)).toBe("---\n---\n\nDue\n\nUno");
+  });
+
+  it("un blocco portato sopra il frontmatter finisce subito dopo di lui", () => {
+    const doc = "---\nicon: 🌿\n---\nUno\n\nDue";
+    const state = stateOf(doc);
+    const blocks = blocksOf(state);
+    const due = indexAt(state, "Due");
+    const uno = indexAt(state, "Uno");
+    expect(moveSiblings(state, blocks, due, due, 0)).toBeNull();
+    expect(moveSiblings(state, blocks, uno, due, 0)).toBeNull();
+    const spec = moveSiblings(state, blocks, due, due, uno)!;
+    expect(state.update(spec).state.doc.toString()).toBe("---\nicon: 🌿\n---\n\nDue\n\nUno");
+  });
+
+  it("il frontmatter non si sposta, né in su né in giù, né da solo né in una tratta", () => {
+    const state = stateOf("---\nicon: 🌿\n---\nUno\n\nDue");
+    const blocks = blocksOf(state);
+    expect(moveRun(state, blocks, { first: 0, last: 0 }, 1)).toBeNull();
+    expect(moveRun(state, blocks, { first: 0, last: 0 }, -1)).toBeNull();
+    expect(moveRun(state, blocks, { first: 0, last: 1 }, 1)).toBeNull();
+    expect(moveRun(state, blocks, { first: 0, last: 1 }, -1)).toBeNull();
+    expect(moveRun(state, blocks, { first: 1, last: 1 }, -1)).toBeNull();
+  });
+
+  it("annulla e ripeti: il frontmatter resta primo a ogni passo", () => {
+    const doc = "---\nicon: 🌿\n---\nUno\n\nDue";
+    const start = stateOf(doc, doc.indexOf("Due"));
+    const moved = step(start, moveBlockBy(-1));
+    expect(moved.doc.toString()).toBe("---\nicon: 🌿\n---\n\nDue\n\nUno");
+    expect(blocksOf(moved)[0]!.kind).toBe("frontmatter");
+    // Un altro passo verso l'alto non trova più posto: non cambia niente.
+    expect(step(moved, moveBlockBy(-1))).toBe(moved);
+    const back = step(moved, undo);
+    expect(back.doc.toString()).toBe(doc);
+    expect(blocksOf(back)[0]!.kind).toBe("frontmatter");
+    const again = step(back, redo);
+    expect(again.doc.toString()).toBe(moved.doc.toString());
+    expect(blocksOf(again)[0]!.kind).toBe("frontmatter");
   });
 });
 
