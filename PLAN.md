@@ -2872,7 +2872,7 @@ foglio di tre righe (il tratto si sposta con B3), lo scorre finché B3 esce
 `cellRect`.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/canvas src/editors/grid/card.test.ts
-Stato: [~] in corso · coder Opus · base 513959ba3
+Stato: [x] fatto · dab3deec2 (merge e3f5f4c72) · differenze: toccati anche `ink-paint.ts` (il taglio alla scheda) e `core/bootstrap.ts` (`lazySheetRenderer` non passava `cellAt`/`cellRect`); `CardContext.cellsShown()`, `CardCellBox`; le regole delle ancore di pagina e di cella in `docs/reference/canvas-ink-anchors.md` (nuova; `canvas-ink.md` e `canvas-cards.md` erano al limite, le intestazioni restano con un rimando); mentre si scrive nella scheda i tratti di cella non si vedono (la griglia vera scorre per conto suo); il Lazo salta i tratti di cella come quelli di pagina; il tratto si taglia al bordo della scheda come dice il piano, quindi con la cella in prima riga può coprire l'intestazione delle colonne: tagliarlo all'area delle celle è un ritocco di gusto, da chiedere all'utente
 
 ## T39 · Il titolo sopra la scheda e l'inchiostro sul contenuto
 
