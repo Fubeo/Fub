@@ -1822,7 +1822,7 @@ Prova: cd apps/client && npm run build && cd ../.. && cargo build
 --release --locked -p fub-app --features tauri/custom-protocol && cd
 apps/client && xvfb-run -a npm run bench:webview -- --only=S8
 --budgets=targets --native-driver=/usr/bin/WebKitWebDriver
-Stato: [ ] da fare
+Stato: [~] in corso · coder Haiku · misura sul ramo di N6 @ 23f4da190
 
 ## T24 · Il posto dell'inchiostro dopo la prova con Obsidian
 
