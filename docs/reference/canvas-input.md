@@ -41,8 +41,22 @@ volta. Lo decide la tela (`engine.ts`); il renderer risponde con `enter`,
   scheda, «Esc per uscire» (`canvas.card.exit_hint`, `.canvas-exit-hint`)
   nella testata, il fuoco nel corpo. Se dice `false`, o la vista non ha
   `enter`, Invio e il doppio clic fanno ciò che facevano (il campo della
-  scheda). Si entra anche in sola lettura; non si entra in una scheda fuori
-  dalla vista né con la penna giù.
+  scheda), salvo per una scheda di file che non si mostra (la voce qui sotto).
+  Si entra anche in sola lettura; non si entra in una scheda fuori dalla vista
+  né con la penna giù.
+- **Una scheda di file che non si mostra (T93).** Invio e il doppio clic su
+  una scheda di file non aprono il campo del percorso quando la scheda mostra
+  altro. Se il file manca («File mancante»), chiedono il file come «Ritrova…»
+  (`canvas.card.relink`), con lo stesso selettore e lo stesso commit di T16; in
+  sola lettura, o senza un selettore, dicono «File mancante» nel posto degli
+  avvisi, senza chiedere niente. Se il file c'è ma non si mostra («Non riesco a
+  mostrare», «Il foglio non si può mostrare qui», la scheda troppo grande), il
+  file si apre come «Apri» del menu della scheda (T17), anche in sola lettura.
+  Mentre carica («Apro…») il gesto non fa niente finché la resa non arriva. La
+  tela legge questo stato dal segnaposto di un file mancante e da
+  `data-card-state` della radice della vista (nota, immagine, foglio). Un PDF
+  non lo dice ancora: il suo campo si apre anche quando non si legge. Una
+  scheda che si mostra apre il campo come prima.
 - **Dentro.** I clic arrivano al contenuto (i link si seguono con un clic),
   la rotella sopra il corpo lo scorre (Ctrl+rotella e il pizzico ingrandiscono
   sempre la lavagna, A-11), i tasti sono del contenuto e la tela non li usa,
@@ -84,7 +98,8 @@ tela chiede alla vista `edit()` prima di `enter()`; la nota
 
 - **Entrare.** Invio con la nota scelta, o il doppio clic sulla nota (scelta,
   attiva per leggere o no). La scheda prima diventa attiva, poi la nota
-  chiede l'editor alla porta; finché non arriva si vede la resa. Arrivato,
+  chiede l'editor alla porta; finché non arriva si vede la resa. Mentre la
+  resa carica («Apro…») il gesto non fa niente (T93). Arrivato,
   l'editor prende il posto della resa con la tipografia della scheda, il
   fuoco va nel testo, e la tela mette `data-card-editing` sulla scheda:
   l'anello pieno e «Esc per uscire» pieno d'accento (prototipo T27). Con

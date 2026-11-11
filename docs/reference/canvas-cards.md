@@ -355,9 +355,9 @@ Le regole:
 - In sola lettura il segnaposto c'è, senza gesti. Senza un selettore
   (`onPickFile` assente) manca «Ritrova…», e «Togli» resta.
 - Una scheda di link non manca mai: il suo `missing()` non fa niente.
-- Il doppio clic su una scheda mancante apre il campo del file, come per ogni
-  scheda senza vista. Il campo fa dimenticare il file mancante: alla sua
-  chiusura la scheda si rimonta e il file si chiede di nuovo.
+- Doppio clic e Invio su una scheda mancante chiedono il file come «Ritrova…»
+  e non aprono il campo del percorso (T93). In sola lettura, o senza
+  selettore, dicono «File mancante» nel posto degli avvisi.
 
 ## Quando la tela cambia il modo
 

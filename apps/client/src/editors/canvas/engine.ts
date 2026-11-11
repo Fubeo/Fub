@@ -208,6 +208,8 @@ const CARD_KEYS: ReadonlySet<string> = new Set(["PageUp", "PageDown", "Home", "E
 
 /** Le specie in cui il doppio clic entra, come Invio (T14). */
 const DOUBLE_CLICK_ENTERS: ReadonlySet<CardKind> = new Set(["note", "document", "sheet"]);
+/** Che cosa mostra una scheda di file, per il gesto di Invio e del doppio clic (T93). */
+type FileShowing = "missing" | "loading" | "unreadable" | "shown";
 /** Il testo più lungo di una scheda, in byte UTF-8: oltre, il nucleo rifiuta la lavagna (`invalid`). */
 const MAX_CARD_TEXT_BYTES = 1_048_576;
 /** Quanto si aspetta la misura di un'immagine portata dentro, prima di usare quella di serie. */
@@ -5015,9 +5017,7 @@ export class CanvasEngine {
           },
           run: () => {
             const one = only();
-            if (one?.type !== "file" || !one.file) return;
-            const path = `/${one.file.replace(/^\/+/, "")}${one.subpath ?? ""}`;
-            void this.#options.onOpenPath?.(path, this.#options.documentId);
+            if (one) this.#openFileNode(one);
           },
         };
       case "canvas.open_url":
@@ -7407,12 +7407,59 @@ export class CanvasEngine {
   }
 
   /**
-   * Invio, o il doppio clic su una nota: scrive dentro se si può (T41),
-   * altrimenti entra, altrimenti ciò che faceva (il campo).
+   * Invio, o il doppio clic su una scheda: scrive dentro se si può (T41),
+   * altrimenti entra, altrimenti ciò che faceva (il campo). Una scheda di file
+   * che non si mostra non apre il campo: fa l'azione che serve (T93).
    */
   #enterOrEdit(node: CanvasNode, from?: EventTarget | null): void {
+    if (node.type === "file" && this.#fileGesture(node)) return;
     if (node.type !== "text" && (this.#beginWriting(node.id, from) || this.#enterCard(node.id))) return;
     this.#beginCardEdit(node);
+  }
+
+  /**
+   * Il gesto su una scheda di file che non si mostra, al posto del campo del
+   * percorso (T93): «File mancante» chiede il file come «Ritrova…» (o lo dice, in
+   * sola lettura o senza un selettore); «Non riesco a mostrare» apre il file come
+   * «Apri» del menu (T17); mentre carica non fa niente. `false` se la scheda si
+   * mostra: il gesto va a entrare o al campo, come prima.
+   */
+  #fileGesture(node: CanvasNode): boolean {
+    const entry = this.#cards.get(node.id);
+    if (!entry) return false;
+    const showing = this.#fileShowing(entry);
+    if (showing === "shown") return false;
+    if (showing === "loading") return true;
+    if (showing === "unreadable") {
+      this.#openFileNode(node);
+      return true;
+    }
+    if (this.#readOnly || !this.#options.onPickFile) {
+      this.#showNotice(t("canvas.card.missing", { path: cardTarget(node).path }));
+    } else {
+      this.#relink(node.id);
+    }
+    return true;
+  }
+
+  /**
+   * Che cosa mostra una scheda di file (T93): il segnaposto di un file mancante
+   * lo dice la tela (`cardMissing`); carica o non si mostra lo dice la radice
+   * della vista in `data-card-state`, come fanno la nota, l'immagine e il foglio.
+   */
+  #fileShowing(entry: CardEntry): FileShowing {
+    if (entry.article.dataset.cardMissing !== undefined) return "missing";
+    const state = entry.body.querySelector<HTMLElement>(":scope > [data-card-state]")?.dataset.cardState;
+    if (state === "loading") return "loading";
+    if (state === "unreadable" || state === "unavailable" || state === "too-large") return "unreadable";
+    return "shown";
+  }
+
+  /** «Apri» del menu di una scheda di file (T17): il file si apre nel riquadro. */
+  #openFileNode(node: CanvasNode): void {
+    if (node.type !== "file" || !node.file) return;
+    const path = `/${node.file.replace(/^\/+/, "")}${node.subpath ?? ""}`;
+    void this.#options.onOpenPath?.(path, this.#options.documentId);
   }
 
   /**
@@ -7845,10 +7892,12 @@ export class CanvasEngine {
         if (this.#writingId !== id) this.#beginWriting(id, from);
         return;
       }
-      const kind = this.#hasLiveContent(entry) ? cardKindOf(entry.node) : null;
+      const kind = cardKindOf(entry.node);
       // Il visore lo apre la vista dell'immagine, che ascolta il suo doppio clic (T5).
-      if (kind === "image") return;
-      if (kind !== null && DOUBLE_CLICK_ENTERS.has(kind)) this.#enterOrEdit(entry.node, from);
+      if (kind === "image" && this.#hasLiveContent(entry)) return;
+      // Una scheda di file prende il gesto anche senza vista, se manca o non si mostra (T93).
+      const takesGesture = entry.node.type === "file" || (kind !== null && DOUBLE_CLICK_ENTERS.has(kind));
+      if (takesGesture) this.#enterOrEdit(entry.node, from);
       else this.#beginCardEdit(entry.node);
     });
     return entry;
@@ -8046,7 +8095,7 @@ export class CanvasEngine {
       relink.textContent = t("canvas.card.relink");
       life.listen(relink, "click", (event) => {
         event.stopPropagation();
-        this.#relinkCard(id, pick).catch((error: unknown) => this.#showIntakeError(error));
+        this.#relink(id);
       });
       body.append(relink);
     }
@@ -8060,6 +8109,13 @@ export class CanvasEngine {
       this.#removeCard(id);
     });
     body.append(remove);
+  }
+
+  /** «Ritrova…» di una scheda mancante, dal pulsante o dal gesto: lo stesso selettore e lo stesso commit (T16, T93). */
+  #relink(id: string): void {
+    const pick = this.#options.onPickFile;
+    if (!pick) return;
+    this.#relinkCard(id, pick).catch((error: unknown) => this.#showIntakeError(error));
   }
 
   /**
