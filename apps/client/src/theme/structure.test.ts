@@ -386,7 +386,7 @@ describe("la carta ha uno strato suo", () => {
   }
 
   it("la struttura mette la carta del foglio (`.pane::before`) in uno strato a parte", () => {
-    // L'ombra del foglio è sfumata e a più strati. Nello stesso strato del
+    // L'ombra del foglio è una pila di strati. Nello stesso strato del
     // testo ogni battuta la ridipingeva, e la WebView che dipinge senza GPU
     // (WebKitGTK sotto Xvfb, S1 del banco WebView) ci metteva quasi il doppio
     // dal tasto al fotogramma. Uno strato suo la dipinge una volta. Non

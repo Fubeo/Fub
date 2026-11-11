@@ -173,12 +173,74 @@ function shadow(light: Light, near: readonly [number, number, number], far: read
 /// notte il nero, più fondo perché la scrivania è già quasi nera; col
 /// contrasto alto gli stessi valori. Niente filo di luce: sotto il 10 % non si
 /// vede, sopra è un bordo che si interrompe alla linguetta.
+///
+/// **Senza sfocatura.** Ogni strato sfumato è scritto come una pila di ombre
+/// nette (`sharpLayers`): la stessa sfumatura, a gradini di tre pixel al più.
+/// La WebView che dipinge senza GPU (WebKitGTK sotto Xvfb, S3 del banco
+/// WebView) ridipinge la carta con tutto ciò che le sta sopra, e un'ombra con
+/// `blur` le costava una ventina di ms a fotogramma mentre la lavagna si
+/// sposta, che lo strato suo della carta non risparmia; le ombre nette non
+/// costano niente.
 function sheetShadow(light: Light, focus: boolean): string {
   const ink = light === "light" ? "24 28 44" : "0 0 0";
   const [contact, short, long] = focus ? (light === "light" ? [9, 10, 18] : [45, 50, 66]) : light === "light" ? [8, 8, 14] : [40, 45, 60];
-  return focus
-    ? `0 1px 3px rgb(${ink} / ${contact}%), 0 3px 10px -1px rgb(${ink} / ${short}%), 0 10px 20px -6px rgb(${ink} / ${long}%)`
-    : `0 1px 2px rgb(${ink} / ${contact}%), 0 2px 8px -1px rgb(${ink} / ${short}%), 0 8px 16px -6px rgb(${ink} / ${long}%)`;
+  const layers: readonly SoftLayer[] = focus
+    ? [[1, 3, 0, contact], [3, 10, -1, short], [10, 20, -6, long]]
+    : [[1, 2, 0, contact], [2, 8, -1, short], [8, 16, -6, long]];
+  return layers.flatMap((layer) => sharpLayers(layer, ink)).join(", ");
+}
+
+/// Uno strato d'ombra sfumato: scostamento verticale, sfocatura, spread (px)
+/// e opacità (%).
+type SoftLayer = readonly [y: number, blur: number, spread: number, alpha: number];
+
+/// La funzione d'errore (Abramowitz e Stegun 7.1.26: errore sotto 1,5·10⁻⁷).
+function erf(x: number): number {
+  const t = 1 / (1 + 0.3275911 * Math.abs(x));
+  const y = 1 - ((((1.061405429 * t - 1.453152027) * t + 1.421413741) * t - 0.284496736) * t + 0.254829592) * t * Math.exp(-x * x);
+  return x >= 0 ? y : -y;
+}
+
+/// Uno strato sfumato come pila di ombre nette, dalla più larga alla più
+/// stretta. La sfocatura CSS `b` è una gaussiana di deviazione `b / 2`: a
+/// distanza `d` fuori dal bordo (spread compreso) copre `Φ(-d / σ)` del colore.
+/// L'intervallo `[-b, b]` si divide in fasce di tre pixel al più (le
+/// sfocature piccole in quattro fasce), e lo strato `k` copre tutte le fasce
+/// fino al suo bordo: le opacità si risolvono dalla fascia più esterna verso
+/// dentro, perché la copertura composta di ogni fascia (`1 - Π(1 - αᵢ)`) sia
+/// la media della gaussiana su di lei. Le opacità vanno a 1/255: è il passo
+/// con cui il colore si dipinge, e il resto dell'arrotondamento lo corregge
+/// la fascia dopo.
+function sharpLayers([y, blur, spread, alpha]: SoftLayer, ink: string): string[] {
+  if (blur === 0) return [`0 ${y}px 0 ${spread}px rgb(${ink} / ${alpha}%)`];
+  const sigma = blur / 2;
+  const cover = (d: number) => 0.5 * (1 - erf(d / (sigma * Math.SQRT2)));
+  const mean = (lo: number, hi: number) => {
+    let sum = 0;
+    for (let i = 0; i < 8; i++) sum += cover(lo + ((i + 0.5) * (hi - lo)) / 8);
+    return (alpha / 100) * (sum / 8);
+  };
+  const bands = Math.max(4, Math.round((2 * blur) / Math.min(3, blur / 2)));
+  const edges = Array.from({ length: bands }, (_, k) => -blur + ((k + 1) * 2 * blur) / bands);
+  const steps: number[] = new Array<number>(bands);
+  let inner = 0;
+  for (let k = bands - 1; k >= 0; k--) {
+    const lo = k === 0 ? -blur * 1.5 : edges[k - 1]!;
+    const need = 1 - (1 - mean(lo, edges[k]!)) / (1 - inner);
+    steps[k] = Math.round(Math.max(0, need) * 255);
+    inner = 1 - (1 - inner) * (1 - steps[k]! / 255);
+  }
+  const out: string[] = [];
+  for (let k = bands - 1; k >= 0; k--) {
+    const step = steps[k]!;
+    if (step === 0) continue;
+    // Un terzo di passo in più: il motore che tronca invece di arrotondare
+    // trova lo stesso passo.
+    const percent = Math.round(((step + 0.3) / 255) * 100_000) / 1000;
+    const reach = Math.round((spread + edges[k]!) * 10) / 10;
+    out.push(`0 ${y}px 0 ${reach}px rgb(${ink} / ${percent}%)`);
+  }
+  return out;
 }
 
 /// I sette livelli del rilievo: due strati morbidi, vicino e lontano.
