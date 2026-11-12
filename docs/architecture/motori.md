@@ -171,12 +171,11 @@ separati, con il numero di thread e il tetto che la prova sceglie
 ## I caratteri
 
 Un motore non legge i caratteri del sistema: lo stesso documento esce uguale
-ovunque. L'host dà i suoi, una volta sola, con
-`fornisci_caratteri(Caratteri::nuovi(facce, generiche))`; la seconda chiamata
-restituisce in `Err` ciò che ha ricevuto. Le facce sono byte `'static`, senza
-copie; `Generiche` nomina le famiglie di `serif`, `sans-serif` e `monospace`.
-`caratteri()` dà a tutti la stessa `Arc`, o `None` prima (il motore non è
-pronto). Zero facce vanno bene (i testi usano il ripiego del motore).
+ovunque. L'host dà i suoi, una volta sola, con `fornisci_caratteri(Caratteri::nuovi(facce, generiche))`;
+la seconda chiamata restituisce in `Err` ciò che ha ricevuto. Le facce sono
+byte `'static`, senza copie; `Generiche` nomina le famiglie di `serif`,
+`sans-serif` e `monospace`. `caratteri()` dà a tutti la stessa `Arc`, o
+`None` prima (il motore non è pronto). Zero facce vanno bene (i testi usano il ripiego del motore).
 
 ## Come un adattatore iscrive il suo motore
 
