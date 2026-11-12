@@ -1380,7 +1380,7 @@ operazioni); ridimensionare sotto `MIN_SIZE`; ruotare un elemento con una
 Fatto quando: `cargo test -p fub-disegno --test gesti_selezione` passa su
 tutti i vettori di selezione di T3, con `selezione.tsv` motivato.
 Prova: scripts/check.sh --rapido; cargo test -p fub-disegno --test gesti_selezione
-Stato: [~] in corso · coder · base TBD
+Stato: [~] in corso · coder · base 5cdea9301
 
 ## T16 · Ciò che il motore non sa modificare, e il corpus
 
