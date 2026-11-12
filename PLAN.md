@@ -1450,7 +1450,7 @@ a (100, 80) con `text: "Testo"` dà un `<text>` con `x="100" y="80"` e una
 `tspan` «Testo», l'id nuovo selezionato, e il testo del file dopo
 l'applicazione è quello di `testo.json`; senza `text` dà `Empty`.
 Prova: scripts/check.sh --rapido; cargo test -p fub-disegno --test gesti_testo
-Stato: [~] in corso (2026-11-12, coder su base 001141e9f)
+Stato: [x] fatto (2026-11-12) · differenze: fuori dal `Tocca` la riga `vectorcraft-text` nel `Cargo.toml` della radice (`default-features = false`, come il motore), `vectorcraft-text` in `VECTORCRAFT_OWNERS` di `dependency_invariant.rs`, `docs/architecture/disegno.md` e un paragrafo in `docs/reference/scene-gestures.md`; il motore crea un testo vuoto con lo strumento `type` e la riga (in `tspan` come `textLines`) e il colore entrano nell'`add` in `rifinisci`; `font-size` sempre 32 (`DrawingStyle` non ha un corpo, `TEXT_SIZE` del client è 32); un clic su un testo che c'è passa tutto il gesto alla Selezione di Fub (tolleranza 4 px, un trascinamento lo sposta); livello, rifiuti e preferenze magnetiche dal `prepara` delle forme; le facce di Fub entrano in `FontDb::global()`, che continua a catalogare i caratteri del sistema quando una famiglia manca (spegnerlo vuole una patch in `vendor/vectorcraft`, nota in T20)
 
 ## T18 · I comandi del disegno
 
@@ -1598,6 +1598,7 @@ tetti di A8 rispettati o, se no, il numero vero e un task nuovo nel piano.
 Prova: scripts/check.sh --rapido; node tools/disegno-cancello/cancello.mjs
 Nota dell'orchestratore (2026-11-12, da T14): i vettori delle forme passano tutti, ma quattro cose del client oggi non le fa il motore: l'operazione `page` quando la forma esce dalla pagina; il punto del rilascio se è diverso dall'ultimo trascinamento (il motore lo ignora); lo spessore 0 sulle linee (il motore lo porta a 0,1); su un livello ruotato rettangolo ed ellisse escono come `path`. Il cancello le prova o le scrive come differenze ammesse col perché.
 Nota dell'orchestratore (2026-11-12, da T16): la classificazione delle perdite legge solo gli attributi dell'elemento: un filtro dato da un foglio `<style>` (i file mermaid) e le gradazioni con `spreadMethod` non risultano `Approximated`. La differenza scrive solo gli attributi cambiati, quindi il file non perde il filtro; il cancello guarda se l'immagine dopo un gesto su quegli elementi resta quella dell'export.
+Nota dell'orchestratore (2026-11-12, da T17): le facce di Fub entrano in `FontDb::global()` del motore, che quando una famiglia manca cataloga anche i caratteri del sistema: i colpi sui testi possono cambiare da una macchina all'altra. Il cancello prova i testi del corpus con una famiglia che Fub non ha e scrive se il risultato dipende dalla macchina; se sì, si apre un task (una patch numerata in `vendor/vectorcraft`).
 Stato: [ ] da fare
 
 ## T21 · Che cosa resta com'è, detto
