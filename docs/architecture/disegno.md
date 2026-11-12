@@ -211,6 +211,19 @@ Le frasi esatte del chip si scelgono sul prototipo del piano (T25). Mano,
 Lente, Penna, Evidenziatore e Gomma non passano mai dal motore e funzionano
 sempre. I vettori dei gesti sono l'oracolo delle due strade.
 
+### Quando il motore manca
+
+`motoreDa` (`motore/gesti.ts`) sa perché il motore manca: **spento** (la riga
+spenta, che la superficie sente da `onComponents` e chiude subito la
+sessione, o un `unserved` a metà sessione, quando l'host chiude le istanze:
+arriva con T29) o **fermo** (ogni altro errore, o 10 s senza risposta).
+**Riacceso**, o con «Riprova» (arriva con T23), `riapri()` apre un'istanza
+nuova col testo di quel momento, senza rimontare l'editor e una alla volta.
+Un gesto a metà quando il motore manca si annulla senza scrivere e lo si
+annuncia; il gesto dopo usa gli strumenti semplici. La sessione finisce col
+riquadro e con la `DocumentSession` (file cancellato, vault chiuso o
+cambiato); col file rinominato resta.
+
 ## I comandi IPC
 
 Sei comandi tipati, nella forma di quelli dei fogli, con le forme in
