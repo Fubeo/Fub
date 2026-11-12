@@ -119,7 +119,10 @@ motore sono livelli e non gruppi. Un elemento (tutti quelli della scena
 tranne `title` e `desc`) è mappato quando nel documento del motore c'è
 esattamente un oggetto con il suo nome; uno dentro `<defs>`, un'istanza
 (`<use>`) o uno che il motore non fa oggetto suo resta fuori, ed è una
-parte `Unmapped`. Un documento che `fub_scene` dice non modificabile si apre
+parte `Unmapped`. Il lettore SVG del motore toglie i gruppi vuoti: un
+livello di Fub sotto la radice che l'import non porta (un livello vuoto, come
+quello di un disegno nuovo) diventa un livello vuoto del motore con il suo
+nome, nascosto se lo è, così ci si può disegnare. Un documento che `fub_scene` dice non modificabile si apre
 lo stesso, con una parte `Unsupported` di nome `svg`, e ogni gesto è
 `Unsupported`; un import che il motore rifiuta apre una copia vuota.
 
@@ -143,9 +146,23 @@ Dopo ogni gesto la sessione del motore torna alla copia: lo stato vero è il
 file. Un panico del motore lo prende `vectorcraft_engine::guard::catch_panic`:
 il gesto è `Unsupported`, la sessione si ricarica dalla copia e l'istanza
 resta viva. Gli strumenti stanno in `crates/fub-disegno/src/gesti/`, uno per
-strumento di Fub; quelli non ancora fatti rispondono `Unsupported` (le forme
-arrivano con T14, la selezione con T15, il testo con T17, i comandi con
-T18).
+strumento di Fub; quelli non ancora fatti rispondono `Unsupported` (la
+selezione arriva con T15, il testo con T17, i comandi con T18). Ogni evento
+passa prima dallo strumento di Fub (`Strumento::evento`), che applica le
+regole di Fub che il motore farebbe a modo suo.
+
+Le forme (`gesti/forme.rs`) usano lo strumento forma del motore: `rectangle`,
+`ellipse` e `lineSegment`, che fa anche la freccia. Prima del motore la
+griglia aggancia la pressione e ogni punto dopo (Ctrl/⌘ la scioglie), Maiusc
+fa il quadrato, il cerchio o i passi di 15° nello spazio del livello, e
+Maiusc, Alt e Ctrl/⌘ si tolgono: nel motore varrebbero passi di 45°, il
+disegno dal centro e la selezione prestata. Il livello è quello del gesto, o
+il più alto né nascosto né bloccato (`hidden`, `locked`); il motore riceve lo
+stile del gesto e niente guide magnetiche sue. L'elemento nuovo è quello di
+`shapeElem` del client (la freccia è un `path` con `fub:shape="arrow"`);
+sotto i 4 pixel sullo schermo, o con un lato nullo, non c'è forma (`Empty`), e
+disegnare non cambia la selezione. L'anteprima è l'`Elem` della forma
+provvisoria nello spazio del livello.
 
 ## Il motore come componente
 
@@ -237,7 +254,7 @@ superficie. L'elenco per ogni file del corpus sta in
 | Percorso | Contiene |
 |---|---|
 | `vendor/vectorcraft/` | la copia di VectorCraft, con le patch numerate e `UPSTREAM.md` (arriva con T6) |
-| `crates/fub-disegno/` | l'adattatore: apertura, mappa, sincronia, differenza, gesti, comandi, perdite (gli strumenti e i comandi arrivano con T14–T18) |
+| `crates/fub-disegno/` | l'adattatore: apertura, mappa, sincronia, differenza, gesti, comandi, perdite (le forme ci sono; gli altri strumenti e i comandi arrivano con T15–T18) |
 | `crates/fub-host/src/drawing.rs` | le istanze per vault e i sei comandi lato host (arriva con T19) |
 | `crates/fub-abi/src/drawing.rs` | le forme condivise e i limiti (arriva con T4) |
 | `apps/client/src/editors/spatial/motore/` | la sessione, i gesti, i colori e il chip delle perdite (arriva con T8, T10, T12 e T21) |

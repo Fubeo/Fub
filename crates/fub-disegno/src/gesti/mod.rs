@@ -62,6 +62,19 @@ pub(crate) trait Strumento: Sync {
         Ok(())
     }
 
+    /// Un evento di Fub prima che lo veda lo strumento del motore: le regole
+    /// di Fub che il motore farebbe a modo suo (la griglia, Maiusc, i
+    /// modificatori che il motore leggerebbe in un altro modo). `inizio` è
+    /// la pressione del gesto, già passata di qui; `None` prima di lei.
+    fn evento(
+        &self,
+        e: DrawingPointer,
+        _inizio: Option<&DrawingPointer>,
+        _cx: &Contesto<'_>,
+    ) -> DrawingPointer {
+        e
+    }
+
     /// Ciò che la superficie disegna mentre il gesto continua.
     fn anteprima(&self, _sessione: &mut Session, _cx: &Contesto<'_>) -> Option<DrawingPreview> {
         None
@@ -83,12 +96,10 @@ pub(crate) trait Strumento: Sync {
 /// [`selezione`], il testo in [`testo`].
 pub(crate) fn strumento(tool: DrawingTool) -> Option<&'static dyn Strumento> {
     match tool {
-        DrawingTool::Select
-        | DrawingTool::Rect
-        | DrawingTool::Ellipse
-        | DrawingTool::Line
-        | DrawingTool::Arrow
-        | DrawingTool::Text => None,
+        DrawingTool::Rect | DrawingTool::Ellipse | DrawingTool::Line | DrawingTool::Arrow => {
+            Some(forme::strumento(tool))
+        }
+        DrawingTool::Select | DrawingTool::Text => None,
     }
 }
 
@@ -103,6 +114,9 @@ pub(crate) struct InCorso {
 pub(crate) struct Banco {
     pub sessione: Session,
     pub in_corso: Option<InCorso>,
+    /// La pressione del gesto in corso, come l'ha passata
+    /// [`Strumento::evento`].
+    pub inizio: Option<DrawingPointer>,
 }
 
 impl Banco {
@@ -122,6 +136,7 @@ impl Banco {
             Ok(Banco {
                 sessione,
                 in_corso: None,
+                inizio: None,
             })
         })
     }
@@ -130,6 +145,7 @@ impl Banco {
     /// sessione lo tiene.
     pub fn installa(&mut self, copia: &mut Copia) -> Result<(), String> {
         self.in_corso = None;
+        self.inizio = None;
         let doc = (*copia.documento).clone();
         let sessione = &mut self.sessione;
         vectorcraft_engine::guard::catch_panic(|| sessione.replace_document(0, doc))?;
@@ -140,6 +156,7 @@ impl Banco {
     /// La sessione torna alla copia.
     pub fn ripristina(&mut self, copia: &Copia) {
         self.in_corso = None;
+        self.inizio = None;
         let doc = (*copia.documento).clone();
         let sessione = &mut self.sessione;
         if vectorcraft_engine::guard::catch_panic(|| sessione.replace_document(0, doc)).is_err() {
@@ -245,10 +262,14 @@ impl Banco {
             return rifiuta(self, esito, DrawingRefusal::Unsupported);
         }
         self.in_corso = Some(qui);
-        let sessione = &mut self.sessione;
+        let (sessione, inizio) = (&mut self.sessione, &mut self.inizio);
         let eventi = vectorcraft_engine::guard::catch_panic(|| {
             for e in &gesto.events {
-                sessione.pointer(&evento(e, copia.radice), cx.vista)?;
+                let e = strumento.evento(*e, inizio.as_ref(), &cx);
+                if e.kind == DrawingPointerKind::Down {
+                    *inizio = Some(e);
+                }
+                sessione.pointer(&evento(&e, copia.radice), cx.vista)?;
             }
             Ok::<(), vectorcraft_engine::EngineError>(())
         });
