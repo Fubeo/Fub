@@ -1726,7 +1726,7 @@ gesti_testo` passa anche sul vettore `testo-clic`; `icons.test.ts` e
 `strings.test.ts` verdi; le foto del banco mostrano lo strumento nella
 colonna, come nel prototipo.
 Prova: scripts/check.sh --rapido --client; npm --prefix apps/client test -- src/editors/spatial/motore/gesti.test.ts src/editors/spatial/tools/gesti-vettori.test.ts src/editors/spatial/icons.test.ts src/editors/spatial/strings.test.ts; cargo test -p fub-disegno --test gesti_testo
-Stato: [ ] da fare
+Stato: [~] in corso (2026-11-13, coder su base 71a3362a7)
 
 ## T23 · Senza motore, detto
 
