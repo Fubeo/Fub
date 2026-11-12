@@ -1599,7 +1599,7 @@ Prova: scripts/check.sh --rapido; node tools/disegno-cancello/cancello.mjs
 Nota dell'orchestratore (2026-11-12, da T14): i vettori delle forme passano tutti, ma quattro cose del client oggi non le fa il motore: l'operazione `page` quando la forma esce dalla pagina; il punto del rilascio se è diverso dall'ultimo trascinamento (il motore lo ignora); lo spessore 0 sulle linee (il motore lo porta a 0,1); su un livello ruotato rettangolo ed ellisse escono come `path`. Il cancello le prova o le scrive come differenze ammesse col perché.
 Nota dell'orchestratore (2026-11-12, da T16): la classificazione delle perdite legge solo gli attributi dell'elemento: un filtro dato da un foglio `<style>` (i file mermaid) e le gradazioni con `spreadMethod` non risultano `Approximated`. La differenza scrive solo gli attributi cambiati, quindi il file non perde il filtro; il cancello guarda se l'immagine dopo un gesto su quegli elementi resta quella dell'export.
 Nota dell'orchestratore (2026-11-12, da T17): le facce di Fub entrano in `FontDb::global()` del motore, che quando una famiglia manca cataloga anche i caratteri del sistema: i colpi sui testi possono cambiare da una macchina all'altra. Il cancello prova i testi del corpus con una famiglia che Fub non ha e scrive se il risultato dipende dalla macchina; se sì, si apre un task (una patch numerata in `vendor/vectorcraft`).
-Stato: [ ] da fare
+Stato: [~] in corso (2026-11-12, coder su base 11eaaaf5e; file di misura per la macchina vera, 13600KF: decisione dell'orchestratore)
 
 ## T21 · Che cosa resta com'è, detto
 
