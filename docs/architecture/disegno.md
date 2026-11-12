@@ -61,7 +61,7 @@ I passi, uno per uno:
    (`showShape`).
 3. **Il commit.** Al rilascio la fase è `commit`. Il motore confronta la copia
    prima e dopo e scrive le operazioni più piccole sugli elementi toccati
-   (`crates/fub-disegno/src/differenza.rs`, arriva con T11): `set` degli
+   (`crates/fub-disegno/src/differenza.rs`): `set` degli
    attributi cambiati, `add` per i nuovi, `remove`, `move` per l'ordine, e
    `ident` prima di tutto per gli elementi senza id.
 4. **L'applicazione.** Ogni operazione passa da `parseWireOp`
@@ -76,11 +76,18 @@ I passi, uno per uno:
    `DocumentSession` che non origina mai modifiche: a ogni aggiornamento manda
    `drawing_sync` con le modifiche del testo, o il testo intero, e avanza la
    revisione. Il motore reimporta il testo in sottofondo
-   (`crates/fub-disegno/src/sincronia.rs`, arriva con T11).
+   (`crates/fub-disegno/src/sincronia.rs`).
 
-Un gesto a una revisione diversa da quella della copia è rifiutato come
-`Stale`: la sessione rimanda il testo intero e riprova una volta. Un gesto
-che arriva prima del reimport aspetta la revisione giusta. Le richieste della
+Un gesto a una revisione diversa da quella del testo tenuto dal motore è
+rifiutato come `Stale`: la sessione rimanda il testo intero e riprova una
+volta. Un gesto che arriva prima del reimport aspetta la revisione giusta
+(al più 30 secondi, poi `NotReady`). Le modifiche valgono solo su una
+revisione più nuova e solo se la lunghezza di prima e il testo cancellato
+tornano, altrimenti il `sync` è `BadArgs` e la sessione manda il testo
+intero, che vale a qualunque revisione. Un reimport che fallisce (XML rotto)
+lascia la copia alla revisione vecchia, e i gesti sono `Stale` finché non
+arriva un testo buono; il risultato di un reimport superato da un testo più
+nuovo si butta. Le richieste della
 sessione vanno in fila, una alla volta, con un tempo limite per ciascuna.
 
 ## Chi possiede che cosa
@@ -89,7 +96,7 @@ sessione vanno in fila, una alla volta, con un tempo limite per ciascuna.
 |---|---|---|
 | il file `.svg` | il client, con `ctx.commit` e la `DocumentSession` | ciò che il gesto non tocca resta byte per byte com'era |
 | la copia del motore | `fub-disegno`, nell'host | gli strumenti del motore lavorano sui loro oggetti; la copia si rifà dal testo |
-| la mappa degli id | `fub-disegno`, `src/mappa.rs` (arriva con T11) | lega ogni oggetto del motore a un id di Fub o a un percorso |
+| la mappa degli id | `fub-disegno`, `src/mappa.rs` | lega ogni oggetto del motore a un id di Fub o a un percorso |
 | la cronologia | il client, un passo per gesto | annulla e ripeti sono quelli della superficie; il motore non usa la sua |
 | l'inchiostro | il client, `apps/client/src/ink/` e `crates/fub-ink` | penna, evidenziatore e gomma scrivono `fub:ink` e non chiamano mai il motore |
 | i campi dell'ispettore e i menu | il client | scrivono operazioni di scena campo per campo, senza motore |
@@ -98,8 +105,47 @@ La mappa usa id sintetici `fubtmp-<n>` per gli elementi senza id, solo nella
 copia d'import: non arrivano mai nel file. Un elemento senza id che un gesto
 modifica riceve un id vero con `ident` nello stesso lotto. Gli id nuovi
 hanno il formato di `apps/client/src/editors/spatial/scene/ids.ts`, e non
-sono mai uguali a uno della scena (`crates/fub-disegno/src/id.rs`, arriva con
-T11).
+sono mai uguali a uno della scena (`crates/fub-disegno/src/id.rs`): il caso
+viene da un UUID v4, dei cui byte si usano i 14 interamente casuali.
+
+## La copia e la differenza
+
+L'apertura (`crates/fub-disegno/src/apertura.rs`) legge la scena con
+`fub_scene::read` e importa nel motore una **copia del testo** in cui ogni
+elemento senza id ha `id="fubtmp-<n>"`, le etichette che il motore
+preferirebbe all'id come nome (`data-name`, `aria-label`, `inkscape:label`,
+`serif:id`) sono tolte e i livelli di Fub hanno `data-vc-layer`, così nel
+motore sono livelli e non gruppi. Un elemento (tutti quelli della scena
+tranne `title` e `desc`) è mappato quando nel documento del motore c'è
+esattamente un oggetto con il suo nome; uno dentro `<defs>`, un'istanza
+(`<use>`) o uno che il motore non fa oggetto suo resta fuori, ed è una
+parte `Unmapped`. Un documento che `fub_scene` dice non modificabile si apre
+lo stesso, con una parte `Unsupported` di nome `svg`, e ogni gesto è
+`Unsupported`; un import che il motore rifiuta apre una copia vuota.
+
+L'import cuoce tutte le `transform` nella geometria del motore. La
+differenza (`crates/fub-disegno/src/differenza.rs`) le rimette: per ogni
+elemento conosce la sua `transform` T e la matrice G dal suo genitore al
+documento del motore (le `transform` degli antenati, il `viewBox` della
+radice e la scala delle unità, 0,75 per un file in unità fisiche). Un cambio
+di posto, misura o rotazione è una matrice M che si trova dai punti
+dell'oggetto e si **verifica**, muovendo l'oggetto di prima con M; l'elemento
+riceve `transform = G⁻¹·M·G·T`. Un gruppo mosso tutto insieme la riceve lui
+quando ha più di un figlio o un figlio che non viene da Fub; un livello mai.
+I colori pieni e lo spessore diventano `fill`, `stroke` e `stroke-width`, un
+tracciato cambiato punto per punto `d`; i nuovi sono `add` (`rect`,
+`ellipse`, `line` o `path`, geometria con due decimali), i tolti `remove` e
+l'ordine `move`, uno per ogni oggetto fuori dalla sottosequenza crescente più
+lunga dei fratelli. Ciò che non si scrive così è `Unsupported`; un oggetto
+fuori dalla mappa toccato è `Unmapped`.
+
+Dopo ogni gesto la sessione del motore torna alla copia: lo stato vero è il
+file. Un panico del motore lo prende `vectorcraft_engine::guard::catch_panic`:
+il gesto è `Unsupported`, la sessione si ricarica dalla copia e l'istanza
+resta viva. Gli strumenti stanno in `crates/fub-disegno/src/gesti/`, uno per
+strumento di Fub; quelli non ancora fatti rispondono `Unsupported` (le forme
+arrivano con T14, la selezione con T15, il testo con T17, i comandi con
+T18).
 
 ## Il motore come componente
 
@@ -109,8 +155,9 @@ il suo interruttore (`crates/fub-features/src/componenti.rs`, la riga arriva
 con T13). `fub.draw` lo usa senza richiederlo: spento il motore, i disegni
 restano accesi. Senza la feature `draw` l'host non compila il motore, e i
 comandi del disegno rispondono `Unserved`. Il motore si costruisce al primo
-disegno aperto, con i caratteri di Fub e non quelli del sistema (arriva con T7
-e T11).
+disegno aperto e chiede i caratteri di Fub (`Servizi::caratteri`, dati
+dall'host): senza, non si costruisce. Passare quei caratteri alla `FontDb` del
+motore non è ancora fatto: chiede una dipendenza diretta da `vectorcraft-text`.
 
 Il disegno usa il motore nei due spazi di lavoro, Semplice e Completo, perché
 gli strumenti sono gli stessi e cambia solo l'aspetto. Il profilo `pdf` tiene
@@ -190,7 +237,7 @@ superficie. L'elenco per ogni file del corpus sta in
 | Percorso | Contiene |
 |---|---|
 | `vendor/vectorcraft/` | la copia di VectorCraft, con le patch numerate e `UPSTREAM.md` (arriva con T6) |
-| `crates/fub-disegno/` | l'adattatore: apertura, mappa, sincronia, differenza, gesti, comandi, perdite (i moduli si riempiono da T11) |
+| `crates/fub-disegno/` | l'adattatore: apertura, mappa, sincronia, differenza, gesti, comandi, perdite (gli strumenti e i comandi arrivano con T14–T18) |
 | `crates/fub-host/src/drawing.rs` | le istanze per vault e i sei comandi lato host (arriva con T19) |
 | `crates/fub-abi/src/drawing.rs` | le forme condivise e i limiti (arriva con T4) |
 | `apps/client/src/editors/spatial/motore/` | la sessione, i gesti, i colori e il chip delle perdite (arriva con T8, T10, T12 e T21) |
