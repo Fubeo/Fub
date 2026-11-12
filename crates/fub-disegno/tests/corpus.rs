@@ -169,9 +169,7 @@ fn un_filtro_e_approssimato_e_si_puo_solo_spostare() {
     // Spostarlo: un `set` della sola `transform`, che passa.
     let esito = disegno
         .a_mano(|doc, trova| {
-            let n = doc
-                .node_mut(trova(&[1, 0]).expect("mappato"))
-                .expect("c'è");
+            let n = doc.node_mut(trova(&[1, 0]).expect("mappato")).expect("c'è");
             n.transform(Affine::translate((10.0, 0.0)), Scaling::from(true));
         })
         .expect("valido");
@@ -183,9 +181,7 @@ fn un_filtro_e_approssimato_e_si_puo_solo_spostare() {
     // Cambiargli il colore, toglierlo: rifiutati come `unmapped`.
     let esito = disegno
         .a_mano(|doc, trova| {
-            let n = doc
-                .node_mut(trova(&[1, 0]).expect("mappato"))
-                .expect("c'è");
+            let n = doc.node_mut(trova(&[1, 0]).expect("mappato")).expect("c'è");
             let pieno = n.appearance.fill_mut().expect("ha un riempimento");
             pieno.paint = Paint::solid(Color::from_hex("#0072b2").expect("colore"));
         })
@@ -193,8 +189,7 @@ fn un_filtro_e_approssimato_e_si_puo_solo_spostare() {
     assert_eq!(esito.refused, Some(DrawingRefusal::Unmapped));
     let esito = disegno
         .a_mano(|doc, trova| {
-            doc.remove(trova(&[1, 1]).expect("mappato"))
-                .expect("tolto");
+            doc.remove(trova(&[1, 1]).expect("mappato")).expect("tolto");
         })
         .expect("valido");
     assert_eq!(esito.refused, Some(DrawingRefusal::Unmapped));
@@ -202,9 +197,7 @@ fn un_filtro_e_approssimato_e_si_puo_solo_spostare() {
     // L'elemento accanto si cambia come sempre.
     let esito = disegno
         .a_mano(|doc, trova| {
-            let n = doc
-                .node_mut(trova(&[1, 2]).expect("mappato"))
-                .expect("c'è");
+            let n = doc.node_mut(trova(&[1, 2]).expect("mappato")).expect("c'è");
             let pieno = n.appearance.fill_mut().expect("ha un riempimento");
             pieno.paint = Paint::solid(Color::from_hex("#0072b2").expect("colore"));
         })

@@ -153,8 +153,7 @@ pub(crate) fn classifica(perdite: &mut Perdite, testo: &str, items: &[Item], map
 /// `None` se lo riscrive.
 fn approssimazione(tag: &str, attr: &[Attributo], corpo: &str) -> Option<&'static str> {
     let stile = valore(attr, "style").unwrap_or_default();
-    let usa =
-        |nome: &str| valore(attr, nome).is_some_and(|v| !nessuno(v)) || dichiara(stile, nome);
+    let usa = |nome: &str| valore(attr, nome).is_some_and(|v| !nessuno(v)) || dichiara(stile, nome);
     if usa("filter") {
         return Some(
             "un filtro: il motore lo rende con un suo effetto, non uguale; si può solo spostare",
@@ -169,19 +168,20 @@ fn approssimazione(tag: &str, attr: &[Attributo], corpo: &str) -> Option<&'stati
     None
 }
 
-/// Vero per un valore che spegne la proprietà (`none`, vuoto).
+/// Vero per un valore che spegne la proprietà (`none`, vuoto). Il confronto
+/// è esatto: un `NONE` in maiuscolo conta come un valore e la parte diventa
+/// approssimata, che è il lato sicuro.
 fn nessuno(v: &str) -> bool {
     let v = v.trim();
-    v.is_empty() || v.eq_ignore_ascii_case("none")
+    v.is_empty() || v == "none"
 }
 
 /// Vero se lo `style` dichiara la proprietà `nome` con un valore che non è
-/// `none`.
+/// `none`. Il nome si confronta esatto, come lo scrivono gli editor.
 fn dichiara(stile: &str, nome: &str) -> bool {
     stile.split(';').any(|d| {
         d.split_once(':').is_some_and(|(p, v)| {
-            p.trim().eq_ignore_ascii_case(nome)
-                && !nessuno(v.trim().trim_end_matches("!important"))
+            p.trim() == nome && !nessuno(v.trim().trim_end_matches("!important"))
         })
     })
 }
@@ -255,11 +255,7 @@ enum Tocco {
 }
 
 /// Gli elementi che `ops` tocca, per nome di parte, e come.
-fn raccogli(
-    ops: &[Value],
-    ident: &mut HashMap<String, String>,
-    tocchi: &mut Vec<(String, Tocco)>,
-) {
+fn raccogli(ops: &[Value], ident: &mut HashMap<String, String>, tocchi: &mut Vec<(String, Tocco)>) {
     // Gli `ident` prima, perché gli id nuovi valgano in tutto il gesto.
     for op in ops {
         if op["op"] == "ident" {
@@ -362,10 +358,15 @@ mod tests {
         assert!(approssima("<rect filter=\"url(#f)\"/>").is_some_and(|m| m.contains("filtro")));
         assert!(approssima("<rect style=\"fill:red; filter : blur(2px)\"/>").is_some());
         assert!(approssima("<g mask=\"url(#m)\">").is_some_and(|m| m.contains("maschera")));
-        assert!(approssima("<text x=\"1\"><textPath href=\"#p\">a</textPath></text>")
-            .is_some_and(|m| m.contains("tracciato")));
+        assert!(
+            approssima("<text x=\"1\"><textPath href=\"#p\">a</textPath></text>")
+                .is_some_and(|m| m.contains("tracciato"))
+        );
         assert_eq!(approssima("<rect filter=\"none\" mask=\" \"/>"), None);
-        assert_eq!(approssima("<rect style=\"filter: none !important\"/>"), None);
+        assert_eq!(
+            approssima("<rect style=\"filter: none !important\"/>"),
+            None
+        );
         assert_eq!(approssima("<rect style=\"fill:url(#filter)\"/>"), None);
         assert_eq!(approssima("<text>filter</text>"), None);
     }
@@ -390,7 +391,9 @@ mod tests {
         let ok = |ops: Value| controlla(&parti, ops.as_array().expect("lista"));
         // La sola `transform`: passa, anche con un id dato da `ident`.
         assert_eq!(
-            ok(json!([{ "op": "set", "id": "filtrato", "attrs": { "transform": "matrix(1 0 0 1 5 0)" } }])),
+            ok(
+                json!([{ "op": "set", "id": "filtrato", "attrs": { "transform": "matrix(1 0 0 1 5 0)" } }])
+            ),
             Ok(())
         );
         assert_eq!(
@@ -410,7 +413,9 @@ mod tests {
             { "op": "set", "id": "onuovo01", "attrs": { "fill": "#000000" } }
         ]}]))
         .is_err());
-        assert!(ok(json!([{ "op": "remove", "target": { "path": [2, 0], "tag": "rect" } }])).is_err());
+        assert!(
+            ok(json!([{ "op": "remove", "target": { "path": [2, 0], "tag": "rect" } }])).is_err()
+        );
         assert!(ok(json!([{ "op": "remove", "target": "risorsa" }])).is_err());
         assert!(ok(json!([{ "op": "move", "target": "filtrato", "parent": "#root", "pos": { "first": true } }])).is_err());
         assert!(ok(json!([{ "op": "move", "target": "altro", "parent": "filtrato", "pos": { "first": true } }])).is_err());
@@ -424,6 +429,9 @@ mod tests {
             ])),
             Ok(())
         );
-        assert_eq!(controlla(&[], &[json!({ "op": "remove", "target": "x" })]), Ok(()));
+        assert_eq!(
+            controlla(&[], &[json!({ "op": "remove", "target": "x" })]),
+            Ok(())
+        );
     }
 }
