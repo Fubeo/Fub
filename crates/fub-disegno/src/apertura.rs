@@ -24,7 +24,7 @@ use std::sync::Arc;
 
 use fub_abi::{DrawingLoss, DrawingLossKind};
 use fub_scene::{Item, ReadOnly, Role};
-use vectorcraft_doc::Document;
+use vectorcraft_doc::{Document, LayerColor, Node};
 use vectorcraft_geom::Affine;
 
 use crate::mappa::{Elemento, Mappa};
@@ -145,6 +145,7 @@ pub(crate) fn importa(testo: &str, revisione: u64) -> Result<Copia, ErroreApertu
         }
     };
     let mut documento = documento;
+    livelli_vuoti(&elementi, &mut documento);
     let mappa = Mappa::nuova(elementi, &mut documento);
     for e in mappa.elementi().iter().filter(|e| e.nodo.is_none()) {
         perdite.non_mappato(
@@ -160,6 +161,45 @@ pub(crate) fn importa(testo: &str, revisione: u64) -> Result<Copia, ErroreApertu
         perdite: perdite.in_elenco(),
         radice: base,
     })
+}
+
+/// I livelli di Fub che l'import non porta nel motore diventano livelli
+/// vuoti del motore con il loro nome, perché ci si possa disegnare: il
+/// lettore SVG del motore toglie i gruppi senza figli, e un disegno nuovo
+/// comincia proprio con un livello vuoto. Solo i livelli sotto la radice;
+/// ognuno va sotto il livello del motore del primo livello di Fub che lo
+/// segue, se c'è, altrimenti in cima. Uno nascosto resta nascosto; quelli
+/// bloccati li blocca [`Mappa::nuova`].
+fn livelli_vuoti(elementi: &[Elemento], doc: &mut Document) {
+    let mut livelli: Vec<&Elemento> = elementi
+        .iter()
+        .filter(|e| e.ruolo == Role::Layer && e.genitore.is_none() && e.motivo.is_none())
+        .collect();
+    livelli.sort_by(|a, b| a.percorso.cmp(&b.percorso));
+    let mut nomi: HashSet<String> = HashSet::new();
+    doc.walk(|n| {
+        if let Some(nome) = &n.name {
+            nomi.insert(nome.clone());
+        }
+    });
+    for (i, e) in livelli.iter().enumerate() {
+        if nomi.contains(&e.nome) {
+            continue;
+        }
+        let sopra = livelli[i + 1..].iter().find_map(|s| {
+            doc.layers
+                .iter()
+                .position(|l| l.name.as_deref() == Some(s.nome.as_str()))
+        });
+        let mut livello = Node::layer(doc.alloc_id(), &e.nome, LayerColor::Preset(0));
+        livello.visible = !e.nascosto;
+        let livello = Arc::new(livello);
+        match sopra {
+            Some(j) => doc.layers.insert(j, livello),
+            None => doc.layers.push(livello),
+        }
+        nomi.insert(e.nome.clone());
+    }
 }
 
 fn motivo_sola_lettura(r: ReadOnly) -> &'static str {
