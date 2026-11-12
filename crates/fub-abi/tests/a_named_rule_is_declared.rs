@@ -2017,17 +2017,6 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
             ),
         ),
         (
-            "crates/fub-disegno/src/profilo/curve.rs::leggi_d",
-            (
-                Family::AsciiCase,
-                "porta in maiuscolo la lettera di un comando della linea centrale di una linea a \
-                 spessore variabile dopo averne letto il caso, come `geometry.rs::parse_path`, \
-                 di cui è la stessa grammatica. Diverge perché ne escono i segmenti del contorno \
-                 del motore, con gli archi tenuti come archi, per rifare i numeri di `offset.ts` \
-                 del client; quella di `fub-scene` resta dentro il suo crate.",
-            ),
-        ),
-        (
             "crates/fub-scene/src/annotation.rs::digest",
             (
                 Family::AsciiCase,

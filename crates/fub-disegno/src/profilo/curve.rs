@@ -5,8 +5,8 @@
 //! per regola: il contorno pieno che se ne calcola deve essere quello del
 //! client.
 //!
-//! La lettura del `d` è quella di `fub_scene` (`geometry.rs`, che il crate
-//! tiene per sé), con la grammatica di SVG 2.
+//! La lettura del `d` è quella di `fub_scene` (`parse_path`, la grammatica
+//! di SVG 2), con i segmenti portati nei tipi di qui.
 
 use std::f64::consts::{PI, TAU};
 
@@ -173,245 +173,36 @@ pub(crate) fn uguali(a: P, b: P) -> bool {
 // La lettura e la scrittura del `d`.
 // ---------------------------------------------------------------------------
 
-fn spazio(b: u8) -> bool {
-    matches!(b, b' ' | b'\t' | b'\n' | b'\r' | b'\x0c')
-}
-
-/// Un numero SVG al byte `i` di `text`, come `scan_number` di `fub_scene`.
-fn numero_svg(text: &str, mut i: usize) -> Option<(f64, usize)> {
-    let bytes = text.as_bytes();
-    let start = i;
-    if matches!(bytes.get(i), Some(b'+' | b'-')) {
-        i += 1;
-    }
-    let cifre = |i: &mut usize| {
-        let da = *i;
-        while bytes.get(*i).is_some_and(u8::is_ascii_digit) {
-            *i += 1;
-        }
-        *i > da
-    };
-    let intero = cifre(&mut i);
-    if bytes.get(i) == Some(&b'.') {
-        let mut j = i + 1;
-        if !cifre(&mut j) {
-            return None;
-        }
-        i = j;
-    } else if !intero {
-        return None;
-    }
-    if matches!(bytes.get(i), Some(b'e' | b'E')) {
-        let mut j = i + 1;
-        if matches!(bytes.get(j), Some(b'+' | b'-')) {
-            j += 1;
-        }
-        if cifre(&mut j) {
-            i = j;
-        }
-    }
-    let v: f64 = text[start..i].parse().ok()?;
-    (v.abs() <= f64::from(f32::MAX)).then_some((v, i))
-}
-
-struct Lettore<'a> {
-    text: &'a str,
-    bytes: &'a [u8],
-    i: usize,
-}
-
-impl Lettore<'_> {
-    fn spazi(&mut self) {
-        while self.i < self.bytes.len() && spazio(self.bytes[self.i]) {
-            self.i += 1;
-        }
-    }
-
-    fn separatore(&mut self) -> bool {
-        self.spazi();
-        let virgola = self.bytes.get(self.i) == Some(&b',');
-        if virgola {
-            self.i += 1;
-            self.spazi();
-        }
-        virgola
-    }
-
-    fn separatore_obbligato(&mut self) -> Option<()> {
-        let da = self.i;
-        self.separatore();
-        (self.i > da).then_some(())
-    }
-
-    fn numero(&mut self) -> Option<f64> {
-        let (n, dopo) = numero_svg(self.text, self.i)?;
-        self.i = dopo;
-        Some(n)
-    }
-
-    fn senza_segno(&mut self) -> Option<f64> {
-        if matches!(self.bytes.get(self.i), Some(b'+' | b'-')) {
-            return None;
-        }
-        self.numero()
-    }
-
-    fn bandiera(&mut self) -> Option<bool> {
-        let b = match self.bytes.get(self.i)? {
-            b'0' => false,
-            b'1' => true,
-            _ => return None,
-        };
-        self.i += 1;
-        Some(b)
-    }
-
-    fn coppia(&mut self) -> Option<P> {
-        let x = self.numero()?;
-        self.separatore();
-        let y = self.numero()?;
-        Some([x, y])
-    }
-
-    fn comincia_numero(&self) -> bool {
-        self.bytes
-            .get(self.i)
-            .is_some_and(|b| b.is_ascii_digit() || matches!(b, b'+' | b'-' | b'.'))
-    }
-}
-
-fn rifletti(controllo: Option<P>, corrente: P) -> P {
-    match controllo {
-        Some(c) => [2.0 * corrente[0] - c[0], 2.0 * corrente[1] - c[1]],
-        None => corrente,
-    }
-}
-
-/// I segmenti di un `d`, con la grammatica completa di SVG 2; `None` se è
-/// malformato.
+/// I segmenti di un `d`, letti da `fub_scene::parse_path` (la grammatica
+/// completa di SVG 2); `None` se è malformato.
 pub(crate) fn leggi_d(d: &str) -> Option<Vec<Segmento>> {
-    let mut p = Lettore {
-        text: d,
-        bytes: d.as_bytes(),
-        i: 0,
-    };
-    let mut out = Vec::new();
-    let mut corrente = [0.0, 0.0];
-    let mut inizio = [0.0, 0.0];
-    let mut ultima_cubica: Option<P> = None;
-    let mut ultima_quad: Option<P> = None;
-    let mut prima: Option<u8> = None;
-    p.spazi();
-    if p.i == p.bytes.len() {
-        return Some(out);
-    }
-    if !matches!(p.bytes[p.i], b'M' | b'm') {
-        return None;
-    }
-    while p.i < p.bytes.len() {
-        let comando = if p.bytes[p.i].is_ascii_alphabetic() {
-            let c = p.bytes[p.i];
-            p.i += 1;
-            p.spazi();
-            c
-        } else if p.comincia_numero() {
-            match prima {
-                Some(b'M') => b'L',
-                Some(b'm') => b'l',
-                Some(b'Z' | b'z') | None => return None,
-                Some(c) => c,
-            }
-        } else {
-            return None;
-        };
-        let relativo = comando.is_ascii_lowercase();
-        let base = if relativo { corrente } else { [0.0, 0.0] };
-        let at = |q: P| [base[0] + q[0], base[1] + q[1]];
-        let (mut cubica, mut quad) = (None, None);
-        match comando.to_ascii_uppercase() {
-            b'M' => {
-                corrente = at(p.coppia()?);
-                inizio = corrente;
-                out.push(Segmento::Muovi(corrente));
-            }
-            b'L' => {
-                corrente = at(p.coppia()?);
-                out.push(Segmento::Curva(Curva::Linea(corrente)));
-            }
-            b'H' => {
-                corrente = [base[0] + p.numero()?, corrente[1]];
-                out.push(Segmento::Curva(Curva::Linea(corrente)));
-            }
-            b'V' => {
-                corrente = [corrente[0], base[1] + p.numero()?];
-                out.push(Segmento::Curva(Curva::Linea(corrente)));
-            }
-            b'C' => {
-                let c1 = at(p.coppia()?);
-                p.separatore();
-                let c2 = at(p.coppia()?);
-                p.separatore();
-                corrente = at(p.coppia()?);
-                out.push(Segmento::Curva(Curva::Cubica(c1, c2, corrente)));
-                cubica = Some(c2);
-            }
-            b'S' => {
-                let c1 = rifletti(ultima_cubica, corrente);
-                let c2 = at(p.coppia()?);
-                p.separatore();
-                corrente = at(p.coppia()?);
-                out.push(Segmento::Curva(Curva::Cubica(c1, c2, corrente)));
-                cubica = Some(c2);
-            }
-            b'Q' => {
-                let c = at(p.coppia()?);
-                p.separatore();
-                corrente = at(p.coppia()?);
-                out.push(Segmento::Curva(Curva::Quad(c, corrente)));
-                quad = Some(c);
-            }
-            b'T' => {
-                let c = rifletti(ultima_quad, corrente);
-                corrente = at(p.coppia()?);
-                out.push(Segmento::Curva(Curva::Quad(c, corrente)));
-                quad = Some(c);
-            }
-            b'A' => {
-                let rx = p.senza_segno()?;
-                p.separatore();
-                let ry = p.senza_segno()?;
-                p.separatore();
-                let rotazione = p.numero()?;
-                p.separatore_obbligato()?;
-                let grande = p.bandiera()?;
-                p.separatore();
-                let verso = p.bandiera()?;
-                p.separatore();
-                corrente = at(p.coppia()?);
-                out.push(Segmento::Curva(Curva::Arco {
-                    raggi: [rx, ry],
-                    rotazione,
-                    grande,
-                    verso,
-                    a: corrente,
-                }));
-            }
-            b'Z' => {
-                corrente = inizio;
-                out.push(Segmento::Chiudi);
-            }
-            _ => return None,
-        }
-        ultima_cubica = cubica;
-        ultima_quad = quad;
-        prima = Some(comando);
-        if comando.eq_ignore_ascii_case(&b'Z') {
-            p.spazi();
-        } else if p.separatore() && !p.comincia_numero() {
-            return None;
-        }
-    }
-    Some(out)
+    use fub_scene::PathSegment as S;
+    let segmenti = fub_scene::parse_path(d)?;
+    Some(
+        segmenti
+            .into_iter()
+            .map(|s| match s {
+                S::Move(p) => Segmento::Muovi(p),
+                S::Line(a) => Segmento::Curva(Curva::Linea(a)),
+                S::Quad(c, a) => Segmento::Curva(Curva::Quad(c, a)),
+                S::Cubic(c1, c2, a) => Segmento::Curva(Curva::Cubica(c1, c2, a)),
+                S::Arc {
+                    radii,
+                    rotation,
+                    large,
+                    sweep,
+                    to,
+                } => Segmento::Curva(Curva::Arco {
+                    raggi: radii,
+                    rotazione: rotation,
+                    grande: large,
+                    verso: sweep,
+                    a: to,
+                }),
+                S::Close => Segmento::Chiudi,
+            })
+            .collect(),
+    )
 }
 
 fn coordinata(v: f64) -> String {
