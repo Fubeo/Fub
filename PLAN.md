@@ -2130,7 +2130,7 @@ Fatto quando: un test gira due rettangoli di 30°, poi li ridimensiona con un
 secondo gesto, e la `transform` scritta è quella che dà `panel.ts` (letta o
 registrata dal client); `npm run typecheck` e `mirror.test.ts` passano.
 Prova: scripts/check.sh --rapido; cargo test -p fub-disegno --test gesti_selezione
-Stato: [ ] da fare
+Stato: [x] fatto (2026-11-12) · differenze: il campo è un `DrawingFrame { matrix, bounds, geometry }` (riquadri `[x0,y0,x1,y1]`) in `DrawingGesture.frame` e in `DrawingOutcome.frame`, additivo e opzionale: con la sola matrice il riquadro rifatto dalle `transform` a quattro decimali sbagliava di circa 3e-4; il client mette la cornice in `ctx.kept` prima di `ctx.select`; le transform attese del test sono state registrate da `createDrawEditor` con un vitest temporaneo, poi tolto
 
 ## T30 · La CI completa e la revisione prima del merge
 
