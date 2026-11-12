@@ -49,6 +49,9 @@ pub(crate) struct Contesto<'a> {
     pub gesto: &'a DrawingGesture,
     pub copia: &'a Copia,
     pub vista: ViewInfo,
+    /// La pressione del gesto come l'ha mandata Fub, prima di
+    /// [`Strumento::evento`]; `None` prima di lei.
+    pub pressione: Option<DrawingPointer>,
 }
 
 /// Uno strumento di Fub fatto con uno strumento del motore.
@@ -99,7 +102,8 @@ pub(crate) fn strumento(tool: DrawingTool) -> Option<&'static dyn Strumento> {
         DrawingTool::Rect | DrawingTool::Ellipse | DrawingTool::Line | DrawingTool::Arrow => {
             Some(forme::strumento(tool))
         }
-        DrawingTool::Select | DrawingTool::Text => None,
+        DrawingTool::Select => Some(selezione::strumento()),
+        DrawingTool::Text => None,
     }
 }
 
@@ -117,6 +121,8 @@ pub(crate) struct Banco {
     /// La pressione del gesto in corso, come l'ha passata
     /// [`Strumento::evento`].
     pub inizio: Option<DrawingPointer>,
+    /// La stessa pressione come l'ha mandata Fub ([`Contesto::pressione`]).
+    pub pressione: Option<DrawingPointer>,
 }
 
 impl Banco {
@@ -137,6 +143,7 @@ impl Banco {
                 sessione,
                 in_corso: None,
                 inizio: None,
+                pressione: None,
             })
         })
     }
@@ -146,6 +153,7 @@ impl Banco {
     pub fn installa(&mut self, copia: &mut Copia) -> Result<(), String> {
         self.in_corso = None;
         self.inizio = None;
+        self.pressione = None;
         let doc = (*copia.documento).clone();
         let sessione = &mut self.sessione;
         vectorcraft_engine::guard::catch_panic(|| sessione.replace_document(0, doc))?;
@@ -157,6 +165,7 @@ impl Banco {
     pub fn ripristina(&mut self, copia: &Copia) {
         self.in_corso = None;
         self.inizio = None;
+        self.pressione = None;
         let doc = (*copia.documento).clone();
         let sessione = &mut self.sessione;
         if vectorcraft_engine::guard::catch_panic(|| sessione.replace_document(0, doc)).is_err() {
@@ -215,9 +224,25 @@ impl Banco {
         let Some(strumento) = strumento(gesto.tool) else {
             return rifiuta(self, esito, DrawingRefusal::Unsupported);
         };
+        let qui = InCorso {
+            tool: gesto.tool,
+            revisione: gesto.revision,
+        };
+        let ricomincia = self.in_corso != Some(qui)
+            || gesto
+                .events
+                .first()
+                .is_some_and(|e| e.kind == DrawingPointerKind::Down);
+        let pressione = gesto
+            .events
+            .iter()
+            .find(|e| e.kind == DrawingPointerKind::Down)
+            .copied()
+            .or(if ricomincia { None } else { self.pressione });
         let cx = Contesto {
             gesto,
             copia,
+            pressione,
             vista: ViewInfo {
                 zoom: gesto.zoom
                     * copia
@@ -230,15 +255,6 @@ impl Banco {
                 ..ViewInfo::default()
             },
         };
-        let qui = InCorso {
-            tool: gesto.tool,
-            revisione: gesto.revision,
-        };
-        let ricomincia = self.in_corso != Some(qui)
-            || gesto
-                .events
-                .first()
-                .is_some_and(|e| e.kind == DrawingPointerKind::Down);
         let sessione_pronta = if ricomincia {
             if self.in_corso.is_some() {
                 self.ripristina(copia);
@@ -262,6 +278,7 @@ impl Banco {
             return rifiuta(self, esito, DrawingRefusal::Unsupported);
         }
         self.in_corso = Some(qui);
+        self.pressione = pressione;
         let (sessione, inizio) = (&mut self.sessione, &mut self.inizio);
         let eventi = vectorcraft_engine::guard::catch_panic(|| {
             for e in &gesto.events {

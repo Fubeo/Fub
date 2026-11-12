@@ -242,10 +242,10 @@ fn un_reimport_che_fallisce_lascia_la_copia_vecchia_e_i_gesti_stale() {
     let esito = disegno
         .gesto(gesto(2, DrawingTool::Select))
         .expect("valido");
-    assert_eq!(
+    assert_ne!(
         esito.refused,
-        Some(DrawingRefusal::Unsupported),
-        "lo strumento non c'è ancora, ma la copia sì"
+        Some(DrawingRefusal::Stale),
+        "la copia è di nuovo in pari"
     );
     assert_eq!(disegno.revisione_importata(), 2);
 }
