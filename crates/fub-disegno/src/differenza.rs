@@ -399,7 +399,7 @@ impl Lavoro<'_> {
         a: &Arc<Node>,
         prima: &Posti<'_>,
     ) -> Result<(), Rifiuto> {
-        if Arc::ptr_eq(b, a) || **b == **a {
+        if uguali(b, a) {
             return Ok(());
         }
         let radice = self.copia.mappa.e_radice(a.id);
@@ -805,10 +805,43 @@ fn geometrie_vicine(a: &Node, b: &Node) -> bool {
     json_vicini(&senza(a), &senza(b))
 }
 
-/// Le proprietà di un contenitore, i figli a parte.
+/// Due oggetti uguali, con i sottoalberi condivisi presi per uguali senza
+/// guardarli: dopo un gesto il documento del motore condivide con la copia
+/// tutti i rami che il gesto non ha toccato, e confrontarli uno per uno
+/// costerebbe quanto il disegno.
+fn uguali(b: &Arc<Node>, a: &Arc<Node>) -> bool {
+    if Arc::ptr_eq(b, a) {
+        return true;
+    }
+    match (b.children(), a.children()) {
+        (Some(fb), Some(fa)) => {
+            fb.len() == fa.len()
+                && senza_figli(b) == senza_figli(a)
+                && fb.iter().zip(fa).all(|(x, y)| uguali(x, y))
+        }
+        _ => **b == **a,
+    }
+}
+
+/// Il nodo con la lista dei figli vuota: le sue proprietà, senza copiare né
+/// scrivere il sottoalbero.
+fn senza_figli(n: &Node) -> Node {
+    let mut solo = n.clone();
+    if let Some(figli) = solo.children_mut() {
+        figli.clear();
+    }
+    solo
+}
+
+/// Le proprietà di un contenitore, i figli a parte. Il JSON si scrive dal
+/// nodo senza figli ([`senza_figli`]): su un livello, scriverli vorrebbe
+/// dire scrivere tutto il disegno per poi buttarlo.
 fn proprieta_uguali(a: &Node, b: &Node) -> bool {
     let senza = |n: &Node| {
-        let mut v = in_json(n);
+        let mut v = match n.children() {
+            Some(_) => in_json(&senza_figli(n)),
+            None => in_json(n),
+        };
         if let Some(o) = v.as_object_mut() {
             if let Some(k) = o.get_mut("kind").and_then(Value::as_object_mut) {
                 k.remove("children");
@@ -1168,6 +1201,48 @@ mod tests {
             scrivi_matrice(Affine::translate((20.0, 5.0))),
             "matrix(1 0 0 1 20 5)"
         );
+    }
+
+    /// Un gruppo di due foglie vuote.
+    fn gruppo(id: u64, figli: Vec<Arc<Node>>) -> Arc<Node> {
+        Arc::new(Node::group(NodeId(id), figli))
+    }
+
+    fn foglia(id: u64) -> Arc<Node> {
+        Arc::new(Node::group(NodeId(id), Vec::new()))
+    }
+
+    #[test]
+    fn uguali_come_il_confronto_intero() {
+        let (x, y) = (foglia(2), foglia(3));
+        let b = gruppo(1, vec![x.clone(), y.clone()]);
+        // Gli stessi figli condivisi, il gruppo rifatto: uguali.
+        let a = gruppo(1, vec![x.clone(), y.clone()]);
+        assert!(uguali(&b, &a) && *b == *a);
+        // Un figlio uguale ma non condiviso: uguali lo stesso.
+        let a = gruppo(1, vec![x.clone(), foglia(3)]);
+        assert!(uguali(&b, &a) && *b == *a);
+        // Un figlio diverso, uno in più, una proprietà del gruppo diversa.
+        let a = gruppo(1, vec![x.clone(), foglia(4)]);
+        assert!(!uguali(&b, &a) && *b != *a);
+        let a = gruppo(1, vec![x.clone(), y.clone(), foglia(4)]);
+        assert!(!uguali(&b, &a) && *b != *a);
+        let mut n = Node::group(NodeId(1), vec![x.clone(), y.clone()]);
+        n.opacity = 0.5;
+        let a = Arc::new(n);
+        assert!(!uguali(&b, &a) && *b != *a);
+    }
+
+    #[test]
+    fn proprieta_senza_i_figli() {
+        let b = gruppo(1, vec![foglia(2)]);
+        // Figli diversi, stesse proprietà.
+        assert!(proprieta_uguali(&b, &gruppo(1, vec![foglia(3), foglia(4)])));
+        let mut n = Node::group(NodeId(1), vec![foglia(2)]);
+        n.opacity = 0.5;
+        assert!(!proprieta_uguali(&b, &n));
+        // Il nodo di partenza resta com'era.
+        assert_eq!(b.children().map(Vec::len), Some(1));
     }
 
     #[test]
