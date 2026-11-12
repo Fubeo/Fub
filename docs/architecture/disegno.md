@@ -276,10 +276,9 @@ parte per elemento della mappa, con una frase breve in italiano. I tre tipi:
 Ciò che non si scrive come attributi dell'elemento originale non si fa: il
 motore non riscrive mai un elemento intero. Fub salva da sé, quindi la perdita
 evitata si dice all'apertura e al gesto: il chip «N parti restano come sono»
-(`motore/standing.ts`; parti dell'apertura e degli esiti, `perdite()` di `motoreDa`)
-apre «Che cosa manca?», un posto per parte col suo «Vai», e manca col motore
-spento o fermo, in Lettura e in sola lettura. `Unmapped` e `NotReady` hanno il
-loro messaggio, gli altri rifiuti quello solito. Gli elementi estranei della scena (`<style>`, `<foreignObject>`,
+(`motore/standing.ts`, dalle parti di `perdite()` di `motoreDa`) apre «Che cosa
+manca?», un posto per parte col suo «Vai»; manca col motore spento o fermo, in
+Lettura e in sola lettura. Gli elementi estranei della scena (`<style>`, `<foreignObject>`,
 gli elementi di altre app) non sono nella mappa e non sono parti: nessuno
 strumento li modifica, e un gesto sul loro oggetto del motore è rifiutato
 `Unmapped`. L'elenco per ogni file del corpus e dei modelli sta in
