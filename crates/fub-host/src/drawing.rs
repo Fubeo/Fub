@@ -21,6 +21,15 @@
 //!   ([`fub_features::draw::facce`]). Un motore che non si costruisce è
 //!   `Internal` con il motivo nel log, e un nuovo tentativo lo ricostruisce:
 //!   il `Pigro` non ricorda il fallimento.
+//! - **Il motore si spegne nel vault** (D-14 (a)): la riga
+//!   `fub.motore-vettoriale` della pagina Componenti, o i disegni spenti
+//!   ([`crate::componenti::motore_disegno_spento`]). Spento, `drawing_open`
+//!   risponde `Unserved` prima di costruire qualunque cosa; spento mentre il
+//!   vault ha disegni aperti (`apply_components`), le istanze del vault si
+//!   chiudono come alla chiusura del vault, e una loro richiesta dopo
+//!   risponde `Unserved`. Se non resta nessuna istanza in nessun vault, il
+//!   motore si libera e la memoria torna al sistema. Riacceso, l'host non
+//!   riapre niente: riapre il client.
 //! - **Senza la feature `engine-drawing`** le porte ci sono e rispondono
 //!   `Unserved`: il motore non c'è in questa build, e il client ricade sugli
 //!   strumenti semplici.
@@ -44,7 +53,7 @@ mod engine {
     use camino::{Utf8Path, Utf8PathBuf};
     use fub_abi::{Arg, PluginError, Text, MAX_DRAWING_OPS};
     use fub_disegno::motore::{Disegni, Disegno};
-    use fub_motori::{Caratteri, Generiche, Servizi};
+    use fub_motori::{Caratteri, Generiche, Servizi, Voce};
 
     /// Un'istanza aperta: il suo lucchetto è suo, non della mappa.
     pub(super) type Instance = Arc<Mutex<Disegno>>;
@@ -141,6 +150,37 @@ mod engine {
             }
         }
 
+        /// Il motore si è spento nel vault `root`: le sue istanze si chiudono
+        /// come alla chiusura del vault. Se non resta nessuna istanza in
+        /// nessun vault, il motore costruito si libera e la memoria torna al
+        /// sistema; un gesto in corso tiene il suo motore finché non finisce.
+        /// Dà quante istanze si sono chiuse.
+        pub(crate) fn switch_off(&self, root: &Utf8Path) -> usize {
+            let (gone, idle) = {
+                let mut map = match self.open.lock() {
+                    Ok(map) => map,
+                    Err(poisoned) => poisoned.into_inner(),
+                };
+                let gone = map.remove(root);
+                (gone, map.is_empty())
+            };
+            let closed = gone.as_ref().map_or(0, HashMap::len);
+            drop(gone);
+            tracing::debug!(vault = %root, instances = closed, "fub.disegno: il motore si spegne nel vault");
+            if idle {
+                // Solo un motore già nato: spegnere non lo costruisce.
+                if let Some(engine) = self.engine.get() {
+                    let was_on = engine.libera();
+                    engine.svuota();
+                    tracing::debug!(
+                        was_on,
+                        "fub.disegno: nessun disegno aperto, il motore si libera"
+                    );
+                }
+            }
+            closed
+        }
+
         /// Ogni vault si chiude.
         pub(crate) fn forget_all(&self) {
             let gone = match self.open.lock() {
@@ -186,6 +226,12 @@ mod engine {
             "host.drawing.instance",
             vec![Arg::text("instance", instance)],
         ))
+    }
+
+    /// Il motore è spento nel vault: il client ricade sugli strumenti
+    /// semplici, come in una build senza il motore.
+    pub(super) fn switched_off() -> PluginError {
+        PluginError::Unserved(Text::key("host.drawing.engine_off"))
     }
 
     /// Un'istanza il cui lucchetto è avvelenato: una chiamata al motore si è
@@ -252,9 +298,37 @@ impl Host {
         f: impl FnOnce(&mut fub_disegno::motore::Disegno) -> Result<R, PluginError>,
     ) -> Result<R, PluginError> {
         let root = self.root(vault)?;
-        let drawing = self.drawings.find(&root, instance)?;
+        let drawing = self
+            .drawings
+            .find(&root, instance)
+            .map_err(|missing| self.missing(&root, missing))?;
         let mut drawing = drawing.lock().map_err(|_| engine::stopped(instance))?;
         f(&mut drawing)
+    }
+
+    /// Un'istanza che il vault non ha: se il motore è spento nel vault,
+    /// `Unserved` (le sue istanze si sono chiuse con lui); altrimenti
+    /// l'errore della ricerca. Le chiavi si leggono soltanto qui, non a ogni
+    /// gesto.
+    fn missing(&self, root: &camino::Utf8Path, missing: PluginError) -> PluginError {
+        match self.drawing_engine_off(Some(root.as_str())) {
+            Ok(true) => engine::switched_off(),
+            _ => missing,
+        }
+    }
+
+    /// `apply_components` ha cambiato la riga del motore o dei disegni nel
+    /// vault `root`: spento, le istanze del vault si chiudono. Acceso, niente.
+    pub(crate) fn drawing_engine_switched(&self, root: &camino::Utf8Path) {
+        match self.drawing_engine_off(Some(root.as_str())) {
+            Ok(true) => {
+                self.drawings.switch_off(root);
+            }
+            Ok(false) => {}
+            Err(error) => {
+                tracing::debug!(vault = %root, %error, "fub.disegno: lo stato del motore non si legge");
+            }
+        }
     }
 }
 
@@ -271,6 +345,10 @@ impl Host {
         #[cfg(feature = "engine-drawing")]
         {
             let root = self.root(vault)?;
+            // Spento nel vault: niente si costruisce.
+            if self.drawing_engine_off(Some(root.as_str()))? {
+                return Err(engine::switched_off());
+            }
             let engine = self.drawings.engine();
             let (drawing, opened) = fub_disegno::motore::Disegno::apri_con(&engine, text)
                 .inspect_err(|error| {
@@ -286,6 +364,16 @@ impl Host {
             if let Err(closed) = self.root(Some(root.as_str())) {
                 drop(self.drawings.remove(&root, &opened.instance));
                 return Err(closed);
+            }
+            // Lo stesso per il motore spento mentre apriva: `apply_components`
+            // scrive le chiavi e poi chiude le istanze, quindi o l'ha già
+            // tolta, o questa lettura vede le chiavi nuove.
+            if self
+                .drawing_engine_off(Some(root.as_str()))
+                .unwrap_or(false)
+            {
+                drop(self.drawings.remove(&root, &opened.instance));
+                return Err(engine::switched_off());
             }
             tracing::debug!(doc = %doc.as_str(), instance = %opened.instance, "fub.disegno: aperto");
             Ok(opened)
@@ -382,7 +470,7 @@ impl Host {
             let closed = self
                 .drawings
                 .remove(&root, instance)
-                .ok_or_else(|| engine::unknown(instance))?;
+                .ok_or_else(|| self.missing(&root, engine::unknown(instance)))?;
             drop(closed);
             Ok(())
         }

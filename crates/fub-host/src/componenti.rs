@@ -47,6 +47,11 @@ pub const LAVAGNA: &str = "fub.lavagna";
 /// Il visore dei PDF: tutto nel client, l'host lo dice soltanto.
 pub const PDF: &str = "fub.pdf";
 
+/// Il Motore del disegno (`fub-disegno`): una riga senza bundle, spenta a
+/// mano in `components.off`. Spento, `crate::drawing` non lo costruisce e
+/// chiude le sue istanze nel vault.
+pub const MOTORE_DISEGNO: &str = "fub.motore-vettoriale";
+
 /// Le chiavi dello stato, nell'ordine in cui [`Chiavi`] le legge.
 const CHIAVI: [&str; 5] = [
     PLUGINS_DISABLED,
@@ -576,7 +581,42 @@ pub(crate) fn lavagna_spenta(settings: &fub_kernel::SettingsStore) -> bool {
         .unwrap_or(false)
 }
 
+/// Se il Motore del disegno è spento in un vault, dato come legge le sue
+/// chiavi (`setting`): spento a mano (`components.off`), o spenti i disegni
+/// che richiede (`fub.draw` in `plugins.disabled`). Il secondo caso conta
+/// anche quando la riga del motore si legge accesa, come in un vault che
+/// aveva spento i disegni prima che il motore fosse una riga: senza i
+/// disegni montati il motore non serve a nessuno.
+#[cfg(feature = "engine-drawing")]
+pub(crate) fn motore_disegno_spento(setting: impl Fn(&str) -> Option<SettingValue>) -> bool {
+    let nomina = |chiave: &str, id: &str| {
+        setting(chiave)
+            .as_ref()
+            .and_then(SettingValue::as_list)
+            .is_some_and(|ids| ids.iter().any(|nome| nome == id))
+    };
+    nomina(COMPONENTS_OFF, MOTORE_DISEGNO) || nomina(PLUGINS_DISABLED, fub_features::draw::DRAW_ID)
+}
+
 impl Host {
+    /// Se il Motore del disegno è spento nel vault nominato
+    /// ([`motore_disegno_spento`]).
+    #[cfg(feature = "engine-drawing")]
+    pub(crate) fn drawing_engine_off(&self, vault: Option<&str>) -> Result<bool, PluginError> {
+        const CHIAVI_DEL_MOTORE: [&str; 2] = [COMPONENTS_OFF, PLUGINS_DISABLED];
+        let valori: Vec<(&str, SettingValue)> = CHIAVI_DEL_MOTORE
+            .into_iter()
+            .zip(self.settings_with_source(vault, &CHIAVI_DEL_MOTORE)?)
+            .map(|(chiave, (value, _))| (chiave, value))
+            .collect();
+        Ok(motore_disegno_spento(|chiave| {
+            valori
+                .iter()
+                .find(|(nota, _)| *nota == chiave)
+                .map(|(_, value)| value.clone())
+        }))
+    }
+
     fn chiavi_dei_componenti(&self, vault: Option<&str>) -> Result<Chiavi, PluginError> {
         let valori = self.settings_with_source(vault, &CHIAVI)?;
         let mut chiavi = Chiavi::default();
@@ -649,6 +689,17 @@ impl Host {
         }
         if esito.scritture.iter().any(|s| s.id == LAVAGNA) {
             esito.avvisi.extend(self.remount(&root)?);
+        }
+        // Il motore del disegno spento (a mano, o con i disegni): le sue
+        // istanze nel vault si chiudono. Riacceso, l'host non riapre niente:
+        // riapre il client.
+        #[cfg(feature = "engine-drawing")]
+        if esito
+            .scritture
+            .iter()
+            .any(|s| s.id == MOTORE_DISEGNO || s.id == fub_features::draw::DRAW_ID)
+        {
+            self.drawing_engine_switched(&root);
         }
         esito.applicato = true;
         Ok(Ok(esito))

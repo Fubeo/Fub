@@ -23,10 +23,24 @@ struct Vault {
 
 impl Vault {
     fn on(host: Host) -> Self {
+        Self::with_settings(host, None)
+    }
+
+    /// Un vault con queste impostazioni nel suo file, scritte prima di
+    /// aprirlo.
+    fn with_settings(host: Host, values: Option<serde_json::Value>) -> Self {
         let dir = tempfile::tempdir().expect("tempdir");
         let root = Utf8PathBuf::from_path_buf(dir.path().canonicalize().unwrap()).expect("utf8");
         std::fs::write(root.join("Disegno.svg"), DISEGNO).unwrap();
         std::fs::write(root.join("Nota.md"), "# Nota\n").unwrap();
+        if let Some(values) = values {
+            std::fs::create_dir_all(root.join(".fub")).unwrap();
+            std::fs::write(
+                root.join(".fub").join("settings.json"),
+                serde_json::json!({"version": 1, "values": values}).to_string(),
+            )
+            .unwrap();
+        }
         let config = tempfile::tempdir().expect("config");
         let host =
             host.with_config_dir(&Utf8PathBuf::from_path_buf(config.path().to_path_buf()).unwrap());
@@ -46,6 +60,25 @@ impl Vault {
     fn vault(&self) -> Option<&str> {
         Some(self.root.as_str())
     }
+}
+
+/// Il Motore del disegno, l'id della riga dei Componenti.
+const MOTORE: &str = "fub.motore-vettoriale";
+
+/// Un vault che ha spento il motore si apre anche in una build che il motore
+/// non ce l'ha, senza errori; il disegno risponde `unserved` in tutte e due.
+#[test]
+fn un_vault_con_il_motore_spento_si_apre_in_ogni_build() {
+    let vault = Vault::with_settings(
+        Host::without_watcher(),
+        Some(serde_json::json!({"components.off": [MOTORE]})),
+    );
+    let doc = doc_id("Disegno.svg").unwrap();
+    let aperto = vault.host.drawing_open(vault.vault(), &doc, DISEGNO);
+    assert!(
+        matches!(aperto, Err(PluginError::Unserved(_))),
+        "{aperto:?}"
+    );
 }
 
 #[cfg(not(feature = "engine-drawing"))]
@@ -89,7 +122,8 @@ mod con_il_motore {
         DRAWING_COMMANDS, DRAWING_COMMAND_WIDTH,
     };
     use fub_disegno::motore::Disegni;
-    use fub_motori::{Caratteri, Config, Generiche, Servizi, Tetto};
+    use fub_host::componenti::{Azione, Orfani};
+    use fub_motori::{Caratteri, Config, Generiche, Servizi, Tetto, Voce};
     use serde_json::Value;
 
     use super::*;
@@ -401,5 +435,194 @@ mod con_il_motore {
         }
         host.close_vault(&vault.root).unwrap();
         assert!(host.drawing_instances(vault.vault()).is_err());
+    }
+
+    // -----------------------------------------------------------------------
+    // Il motore spento nel vault (D-14 (a)): la riga dei Componenti.
+
+    /// Un motore suo, con i caratteri: nasce alla prima apertura.
+    fn motore() -> Arc<Disegni> {
+        let servizi = Servizi::nuovi(Config {
+            fili: Some(1),
+            tetto: Tetto::fisso(64 * 1024 * 1024),
+        });
+        let generiche = Generiche {
+            serif: "Serif".into(),
+            sans: "Sans".into(),
+            mono: "Mono".into(),
+        };
+        servizi
+            .fornisci_caratteri(Caratteri::nuovi([], generiche))
+            .unwrap_or_else(|_| panic!("i caratteri si danno una volta"));
+        Disegni::nuovi(servizi)
+    }
+
+    fn acceso(motore: &Disegni) -> bool {
+        Voce::acceso(motore)
+    }
+
+    fn applica(host: &Host, vault: Option<&str>, azione: Azione) {
+        let esito = host
+            .apply_components(vault, azione, true)
+            .expect("l'host risponde")
+            .expect("la scelta si applica");
+        assert!(esito.applicato, "{esito:?}");
+    }
+
+    fn spegni(host: &Host, vault: Option<&str>) {
+        applica(
+            host,
+            vault,
+            Azione::Spegni {
+                id: MOTORE.into(),
+                anche_questi: false,
+                orfani: Orfani::Chiedi,
+            },
+        );
+    }
+
+    fn accendi(host: &Host, vault: Option<&str>) {
+        applica(host, vault, Azione::Accendi { id: MOTORE.into() });
+    }
+
+    fn unserved<T: std::fmt::Debug>(result: Result<T, PluginError>) {
+        assert!(
+            matches!(result, Err(PluginError::Unserved(_))),
+            "{result:?}"
+        );
+    }
+
+    /// Spento il motore nel vault, l'apertura è `unserved` e niente si
+    /// costruisce: la voce del motore resta spenta.
+    #[test]
+    fn spento_nel_vault_l_apertura_e_unserved_e_niente_si_costruisce() {
+        let disegni = motore();
+        let vault = Vault::with_settings(
+            Host::without_watcher().with_drawing_engine(Arc::clone(&disegni)),
+            Some(serde_json::json!({"components.off": [MOTORE]})),
+        );
+        let doc = doc_id("Disegno.svg").unwrap();
+        unserved(vault.host.drawing_open(vault.vault(), &doc, DISEGNO));
+        assert_eq!(vault.host.drawing_instances(vault.vault()).unwrap(), 0);
+        assert!(!acceso(&disegni), "spento, il motore non nasce");
+    }
+
+    /// Un vault che aveva spento i disegni prima che il motore fosse una riga
+    /// (`fub.draw` in `plugins.disabled`): la riga del motore non è in
+    /// `components.off`, ma il motore conta spento.
+    #[test]
+    fn spenti_i_disegni_il_motore_conta_spento() {
+        let disegni = motore();
+        let vault = Vault::with_settings(
+            Host::without_watcher().with_drawing_engine(Arc::clone(&disegni)),
+            Some(serde_json::json!({"plugins.disabled": ["fub.draw"]})),
+        );
+        let doc = doc_id("Disegno.svg").unwrap();
+        unserved(vault.host.drawing_open(vault.vault(), &doc, DISEGNO));
+        assert_eq!(vault.host.drawing_instances(vault.vault()).unwrap(), 0);
+        assert!(!acceso(&disegni), "spenti i disegni, il motore non nasce");
+    }
+
+    /// Aperto, spento: le istanze si chiudono, le loro richieste dopo sono
+    /// `unserved` e il motore, senza più istanze, si libera. Riacceso,
+    /// nessuna istanza si riapre da sé, e una nuova apertura funziona.
+    #[test]
+    fn spento_a_meta_sessione_il_gesto_dopo_e_unserved_e_riacceso_si_riapre() {
+        let disegni = motore();
+        let vault = Vault::on(Host::without_watcher().with_drawing_engine(Arc::clone(&disegni)));
+        let host = &vault.host;
+        let doc = doc_id("Disegno.svg").unwrap();
+        let aperto = host.drawing_open(vault.vault(), &doc, DISEGNO).unwrap();
+        host.drawing_gesture(vault.vault(), &aperto.instance, gesto(&vettore(), 0))
+            .expect("acceso, il gesto risponde");
+        assert!(acceso(&disegni));
+
+        spegni(host, vault.vault());
+        assert_eq!(host.drawing_instances(vault.vault()).unwrap(), 0);
+        unserved(host.drawing_gesture(vault.vault(), &aperto.instance, gesto(&vettore(), 0)));
+        unserved(host.drawing_commands(vault.vault(), &aperto.instance, &[]));
+        unserved(host.drawing_close(vault.vault(), &aperto.instance));
+        unserved(host.drawing_open(vault.vault(), &doc, DISEGNO));
+        assert!(!acceso(&disegni), "nessuna istanza: il motore si libera");
+
+        // Riacceso subito: l'istanza di prima non torna.
+        accendi(host, vault.vault());
+        assert_eq!(host.drawing_instances(vault.vault()).unwrap(), 0);
+        let vecchia = host.drawing_gesture(vault.vault(), &aperto.instance, gesto(&vettore(), 0));
+        assert!(
+            matches!(vecchia, Err(PluginError::NotFound(_))),
+            "{vecchia:?}"
+        );
+        assert!(!acceso(&disegni), "riacceso, nasce alla prima apertura");
+        let nuovo = host
+            .drawing_open(vault.vault(), &doc, DISEGNO)
+            .expect("si riapre");
+        assert_ne!(nuovo.instance, aperto.instance);
+        let esito = host
+            .drawing_gesture(vault.vault(), &nuovo.instance, gesto(&vettore(), 0))
+            .expect("il gesto");
+        assert!(esito.ops.is_some(), "{esito:?}");
+        assert!(acceso(&disegni));
+    }
+
+    /// Due vault, il motore spento in uno solo: le istanze dell'altro restano,
+    /// e il motore resta costruito.
+    #[test]
+    fn spento_in_un_vault_l_altro_tiene_i_suoi_disegni() {
+        let disegni = motore();
+        let uno = Vault::on(Host::without_watcher().with_drawing_engine(Arc::clone(&disegni)));
+        let host = &uno.host;
+        let altro_dir = tempfile::tempdir().unwrap();
+        let altro = Utf8PathBuf::from_path_buf(altro_dir.path().canonicalize().unwrap()).unwrap();
+        std::fs::write(altro.join("Disegno.svg"), DISEGNO).unwrap();
+        host.open(&altro).unwrap();
+        let altro = Some(altro.as_str());
+        let doc = doc_id("Disegno.svg").unwrap();
+        let qui = host.drawing_open(uno.vault(), &doc, DISEGNO).unwrap();
+        let li = host.drawing_open(altro, &doc, DISEGNO).unwrap();
+
+        spegni(host, uno.vault());
+        assert_eq!(host.drawing_instances(uno.vault()).unwrap(), 0);
+        assert_eq!(host.drawing_instances(altro).unwrap(), 1);
+        unserved(host.drawing_gesture(uno.vault(), &qui.instance, gesto(&vettore(), 0)));
+        let esito = host
+            .drawing_gesture(altro, &li.instance, gesto(&vettore(), 0))
+            .expect("l'altro vault disegna ancora");
+        assert!(esito.ops.is_some(), "{esito:?}");
+        assert!(acceso(&disegni), "l'altro vault lo usa: il motore resta");
+        assert!(host.drawing_open(altro, &doc, DISEGNO).is_ok());
+    }
+
+    /// Un gesto in corso quando il motore si spegne: finisce, con un esito o
+    /// con `unserved`, mai a metà; l'istanza si chiude dopo.
+    #[test]
+    fn spegnere_aspetta_il_gesto_in_corso() {
+        let vault = Arc::new(Vault::on(
+            Host::without_watcher().with_drawing_engine(motore()),
+        ));
+        let doc = doc_id("Disegno.svg").unwrap();
+        let aperto = vault
+            .host
+            .drawing_open(vault.vault(), &doc, DISEGNO)
+            .unwrap();
+        let mut lungo = gesto(&vettore(), 0);
+        let mezzo = lungo.events[1];
+        let fine = lungo.events.pop().unwrap();
+        lungo.events.truncate(1);
+        lungo.events.extend(std::iter::repeat_n(mezzo, 50_000));
+        lungo.events.push(fine);
+        let gesto = {
+            let vault = Arc::clone(&vault);
+            let instance = aperto.instance.clone();
+            std::thread::spawn(move || vault.host.drawing_gesture(vault.vault(), &instance, lungo))
+        };
+        std::thread::sleep(Duration::from_millis(5));
+        spegni(&vault.host, vault.vault());
+        match gesto.join().expect("il gesto non panica") {
+            Ok(esito) => assert!(esito.ops.is_some(), "{esito:?}"),
+            Err(PluginError::Unserved(_)) => {}
+            Err(other) => panic!("{other:?}"),
+        }
+        assert_eq!(vault.host.drawing_instances(vault.vault()).unwrap(), 0);
     }
 }

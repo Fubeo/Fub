@@ -67,13 +67,27 @@ Dal lato del client le sei porte sono `openDrawing`, `drawingSync`,
 `host/ipc.ts`, con il vault in coda; le usa soltanto la sessione del motore
 (`editors/spatial/motore/sessione.ts`), che tiene la copia allineata alla
 `DocumentSession`, manda le richieste in fila con un tempo limite di 10 s e,
-a un `stale`, rimanda il testo intero e riprova una volta. `unserved` vuol
-dire che il motore non c'è in questa build (l'host senza la feature
-`engine-drawing`): la sessione dà il motore spento e gli strumenti del disegno
-fanno da sé. Un motore che non si costruisce è `internal`, col motivo nel log,
-e un nuovo tentativo lo ricostruisce. Le istanze sono per vault: la chiusura
-del vault chiude le sue, e un'istanza che il vault non ha è `not_found`, come
-un'istanza della griglia.
+a un `stale`, rimanda il testo intero e riprova una volta.
+
+Gli errori che il client legge come «il motore manca»:
+
+- `unserved` **all'apertura**: il motore è spento in questo vault (la riga
+  `fub.motore-vettoriale` della pagina Componenti, o i disegni spenti con
+  `fub.draw` in `plugins.disabled`) e l'host non costruisce niente; oppure il
+  motore non c'è in questa build (l'host senza la feature `engine-drawing`).
+  La sessione dà il motore spento e gli strumenti del disegno fanno da sé.
+- `unserved` **a metà sessione**: il motore si è spento nel vault
+  (`apply_components`, dall'app, dalla CLI o dall'MCP) e l'host ha chiuso le
+  istanze del vault, dopo il gesto in corso. Se non resta nessuna istanza in
+  nessun vault, il motore si libera e la memoria torna al sistema. Riacceso,
+  l'host non riapre niente: riapre il client, con un'istanza nuova.
+- `internal`: il motore non si costruisce o si è fermato a metà di una
+  chiamata, col motivo nel log; si può riprovare, e un nuovo tentativo lo
+  ricostruisce.
+
+Le istanze sono per vault: la chiusura del vault chiude le sue, e un'istanza
+che il vault non ha (chiusa, o mai aperta) è `not_found`, come un'istanza
+della griglia; con il motore spento nel vault è `unserved`.
 
 Ogni richiesta passa da `validate()` prima di arrivare al motore, e un
 rifiuto è `BadArgs` col nome del campo. Il testo è al massimo di 20 MiB,
