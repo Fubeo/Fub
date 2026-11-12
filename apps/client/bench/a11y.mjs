@@ -3,6 +3,7 @@
 //
 //     node bench/a11y.mjs
 //     node bench/a11y.mjs --light=dark    # una luce sola, come la CI in due job
+//     node bench/a11y.mjs --scene=a,b     # solo le scene nominate, per provarle
 //
 // Una scansione strutturale non basta: il nome può esserci ma il fuoco non
 // arrivare mai, un controllo può avere un ruolo valido ma non reagire a Invio,
@@ -37,8 +38,18 @@ if (ONLY !== undefined && !LIGHTS.includes(ONLY)) {
 }
 const RUN_LIGHTS = ONLY === undefined ? LIGHTS : [ONLY];
 
+/// Le scene da esaminare: tutte, o quelle che `--scene=` nomina (separate da
+/// virgole). Un nome che non è una scena è un errore, non un elenco più corto:
+/// altrimenti un refuso darebbe un verde su niente.
+const NAMED = process.argv.find((arg) => arg.startsWith("--scene="))?.slice("--scene=".length).split(",");
+const unknown = NAMED?.filter((id) => !SCENE.some((s) => s.id === id)) ?? [];
+if (unknown.length > 0) throw new Error(`--scene=: ${unknown.join(", ")} non sono scene`);
+
 /// Che cosa si esamina, e dove va il referto.
-const SET = { scenes: SCENE, report: join(OUTPUT, "accessibilita") };
+const SET = {
+  scenes: NAMED === undefined ? SCENE : SCENE.filter((s) => NAMED.includes(s.id)),
+  report: join(OUTPUT, "accessibilita"),
+};
 
 const REPORT = SET.report;
 const require = createRequire(import.meta.url);
@@ -647,6 +658,118 @@ async function inspectKeyboard(page) {
       document.querySelectorAll("[data-a11y-probe]").forEach((el) => delete el.dataset.a11yProbe);
     });
   }
+  // Dopo il percorso, perché questa prova tocca la scena (apre e chiude un
+  // menu) e il percorso deve vederla com'era.
+  failures.push(...await inspectToolbarStops(page), ...await inspectModeMenu(page));
+  return failures;
+}
+
+/// Le barre in una fila del documento (la barra di formato del riquadro, la
+/// barra del PDF) sono **un** punto di Tab ciascuna: dentro si va con le
+/// frecce (`kit/toolbar-keys.ts`). Si contano i candidati del Tab con la
+/// stessa regola del percorso — visibile, acceso, `tabIndex >= 0` — perché
+/// una barra con un pulsante in più nell'ordine passerebbe il percorso
+/// (l'ordine resta giusto) e costerebbe un Tab in più a ogni passaggio.
+async function inspectToolbarStops(page) {
+  return page.evaluate(() => {
+    const BARS = [
+      [".pane .format-bar.kit-bar", "la barra di formato"],
+      [".media-pdf-toolbar", "la barra del PDF"],
+    ];
+    const hidden = (el) => {
+      if (!el.checkVisibility()) return true;
+      for (let n = el; n; n = n.parentElement) {
+        if (n.hidden || n.inert || n.getAttribute("aria-hidden") === "true") return true;
+        const style = getComputedStyle(n);
+        if (style.display === "none" || style.visibility === "hidden") return true;
+      }
+      const rect = el.getBoundingClientRect();
+      return rect.width === 0 || rect.height === 0;
+    };
+    const issues = [];
+    for (const [selector, name] of BARS) {
+      for (const bar of document.querySelectorAll(selector)) {
+        if (hidden(bar)) continue;
+        const buttons = [...bar.querySelectorAll("button, [role=button]")].filter((el) => !hidden(el));
+        if (buttons.length === 0) continue;
+        const stops = [bar, ...bar.querySelectorAll("*")].filter(
+          (el) => !hidden(el) && !el.matches(":disabled") && el.tabIndex >= 0,
+        );
+        if (stops.length !== 1) {
+          issues.push({
+            source: "browser",
+            rule: "toolbar-tab-stop",
+            where: selector,
+            reason: `${name} ha ${stops.length} punti di Tab invece di uno: dentro la barra si va con le frecce`,
+          });
+        }
+      }
+    }
+    return issues;
+  });
+}
+
+/// La modalità nella banda (`#status-mode`) è un bottone che apre un menu: con
+/// Invio il menu si apre, con Esc si chiude e il fuoco torna sul bottone, non
+/// sul documento né sul corpo della pagina. Dove la banda non ha la modalità
+/// (una superficie con un modo solo, il telefono) la prova non ha niente da
+/// guardare. Se la scena ha già il menu aperto (`banda-modalita`) si prova
+/// prima l'Esc, poi di nuovo l'Invio; se ha aperto un'altra superficie (un
+/// menu, un dialogo) la prova la lascia stare: Invio andrebbe a lei.
+async function inspectModeMenu(page) {
+  const read = () => page.evaluate(() => {
+    const button = document.getElementById("status-mode");
+    const shown = (el) => el !== null && el.checkVisibility() && !el.closest("[hidden], [inert], [aria-hidden=\"true\"]");
+    const menu = document.getElementById("context-menu");
+    const other = [...document.querySelectorAll("[role=\"menu\"], [role=\"dialog\"], [aria-modal=\"true\"]")]
+      .some((el) => shown(el) && !(menu?.contains(el)));
+    return {
+      present: shown(button) && button.getAttribute("aria-disabled") !== "true",
+      expanded: button?.getAttribute("aria-expanded") === "true",
+      menu: shown(menu),
+      other,
+      focused: document.activeElement === button,
+      inside: menu !== null && menu.contains(document.activeElement),
+    };
+  });
+  const issue = (reason) => ({ source: "browser", rule: "mode-menu", where: "button#status-mode", reason });
+  const settled = (want) => page.waitForFunction(
+    (open) => {
+      const button = document.getElementById("status-mode");
+      const menu = document.getElementById("context-menu");
+      const shown = menu !== null && menu.checkVisibility();
+      return (button?.getAttribute("aria-expanded") === "true") === open && shown === open;
+    },
+    want,
+    { timeout: 2_000 },
+  ).then(() => true, () => false);
+
+  let now = await read();
+  if (!now.present) return [];
+  const failures = [];
+  const escape = async () => {
+    await page.keyboard.press("Escape");
+    if (!(await settled(false))) return issue("Esc non chiude il menu delle modalità");
+    now = await read();
+    if (!now.focused) return issue("chiuso il menu delle modalità con Esc, il fuoco non torna sulla banda");
+    return null;
+  };
+
+  if (now.expanded || now.menu) {
+    if (!now.expanded) return [];
+    const failed = await escape();
+    if (failed) return [failed];
+  } else if (now.other) {
+    return [];
+  } else {
+    await page.focus("#status-mode");
+  }
+  await page.keyboard.press("Enter");
+  if (!(await settled(true))) return [issue("Invio sulla modalità della banda non apre il menu")];
+  now = await read();
+  if (!now.inside) failures.push(issue("aperto con Invio, il menu delle modalità non prende il fuoco"));
+  const failed = await escape();
+  if (failed) failures.push(failed);
   return failures;
 }
 
@@ -683,8 +806,9 @@ function summary(report) {
     }
   }
 
-  // Una voce del debito di una luce che non si è esaminata non è riparata.
-  const fixed = DEBT.filter((d) => RUN_LIGHTS.includes(d.light) && !d.seen);
+  // Una voce del debito di una luce che non si è esaminata non è riparata, e
+  // nemmeno una che le scene scelte con `--scene=` non mostrano.
+  const fixed = NAMED === undefined ? DEBT.filter((d) => RUN_LIGHTS.includes(d.light) && !d.seen) : [];
   if (fixed.length > 0) {
     console.error(`\n${fixed.length} voci del debito non si vedono più:`);
     for (const d of fixed) {

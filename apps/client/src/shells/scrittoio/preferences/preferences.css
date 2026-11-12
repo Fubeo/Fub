@@ -371,7 +371,7 @@
   overflow: hidden;
 }
 .prefs-preview-text {
-  max-width: var(--content-width, 68ch);
+  max-width: var(--content-width, 58ch);
 }
 
 /* ── La finestra stretta ─────────────────────────────────────────────────── */

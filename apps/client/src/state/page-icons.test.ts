@@ -53,6 +53,19 @@ describe("che cosa è un'icona", () => {
     expect(iconValue(["🌱"])).toBeNull();
   });
 
+  it("una figura del set (`fub:<nome>`) sì, un indirizzo no", () => {
+    expect(iconValue("fub:book")).toBe("fub:book");
+    // Un nome che questa versione non conosce passa: la riga non lo disegna.
+    expect(iconValue("fub:astronave")).toBe("fub:astronave");
+    expect(iconValue("fub://book")).toBeNull();
+    expect(iconValue("file:///icona.png")).toBeNull();
+    expect(iconValue("mailto:a@b.it")).toBeNull();
+    const { byDoc, byName } = iconsFrom([withIcon("Libri/_index.md", "fub:book"), withIcon("Altro.md", "https://x.it/i.png")]);
+    expect(byDoc.get("Libri/_index.md")).toBe("fub:book");
+    expect(byName.get("libri")).toBe("fub:book");
+    expect(byDoc.has("Altro.md")).toBe(false);
+  });
+
   it("due omonime con icone diverse non danno l'icona al nome", () => {
     const { byDoc, byName } = iconsFrom([
       withIcon("Viaggio/_index.md", "🧳"),

@@ -4,6 +4,15 @@
 > **Risultato:** capire la sessione documento, il buffer condiviso, il
 > salvataggio e le responsabilità locali.
 
+## La testata del foglio
+
+Dice dove sei e se è salvato: la cartella disegnata, il vault (il nome scelto o la cartella) e le
+cartelle, che si aprono nell'esplora, il nome, che si rinomina col doppio clic o F2, poi «Salvato» con la
+spunta e «…». Il formato lo dice la figura della linguetta, col nome per il lettore di schermo. Uno stato
+da notare («Sola lettura») è un chip accanto al percorso; «Si scrive», lo stato normale, lo dice la
+banda, sul telefono «…». Sul telefono resta il nome; in piedi il foglio è largo quanto lo schermo e
+«Salvato» è la spunta (il punto se in sospeso; errore e conflitto restano parole rosse). Sotto il titolo di una nota c'è la [riga dei dati](editor-note-facts.md): modifica, collegamenti, etichette.
+
 ## Modalità
 
 Ogni superficie dichiara le modalità che supporta. Il documento Markdown offre:
@@ -16,27 +25,26 @@ Ogni superficie dichiara le modalità che supporta. Il documento Markdown offre:
 La superficie plain text offre soltanto **sorgente**. Un file `.svg` si apre
 come testo in **Sorgente**, **Diviso** (predefinita, con l'anteprima accanto
 o sotto) e **Anteprima**, o come [disegno](drawing.md) con la feature `draw`
-dell'host. L'anteprima si ridisegna
-dopo una pausa di scrittura, come immagine inerte; una versione rotta lascia
+dell'host. L'anteprima si ridisegna dopo una pausa di scrittura, come immagine inerte; una versione rotta lascia
 l'ultima buona, attenuata, sotto il motivo con riga e colonna. I documenti
-`.xlsx` usano invece la famiglia Grid. Il commutatore nella barra di
-ciascun riquadro legge la dichiarazione della propria superficie; con una sola
-modalità non mostra un selettore né offre i comandi di modalità, che trovano la
+`.xlsx` usano invece la famiglia Grid. Il commutatore è la voce in fondo alla
+banda di stato, [sul telefono un tondo](../architecture/shell-behaviours.md);
+con una sola modalità non c'è, né i comandi di modalità, che trovano la
 modalità per ruolo (Live, sulla tela, riporta alle carte). Il riquadro ricorda
 la modalità scelta per ogni famiglia di superfici: una nota in Sorgente non fa
 aprire la tela seguente come JSON, e la tela non cambia la modalità in cui si
 riapre la nota. Le scorciatoie seguono il riquadro attivo. In un campo in cui
 si scrive, un accordo senza Ctrl e senza ⌘ resta del campo: Alt+← muove il
-cursore lì e torna indietro fuori. Una scorciatoia scrive `Mod` per ⌘ sul Mac
-e Ctrl altrove, e `Ctrl` per Control anche sul Mac: il giro delle schede in
-ordine d'uso è `Ctrl-Tab`, perché ⌘-Tab è del sistema. Fuori dal Mac `Ctrl-k`
-e `Mod-k` sono lo stesso tasto, e le impostazioni li segnalano come
-conflitto. Le impostazioni dicono anche quando un accordo lo prende il sistema
-(⌘-Tab sul Mac, Alt-F4 altrove): si salva lo stesso, ma lì non arriva. Sul Mac
-PgDn e PgUp si leggono `Fn↓` e `Fn↑`, come si premono. La modalità delle
-note in una finestra nuova viene da `editor.default-mode`; un riquadro diviso
-eredita quelle del riquadro da cui nasce. I divisori fra riquadri si trascinano,
-si spostano con le frecce e tornano a parti uguali con un doppio clic; le
+cursore lì e torna indietro fuori. Una scorciatoia scrive `Mod` per ⌘ sul Mac e
+Ctrl altrove, e `Ctrl` per Control anche sul Mac: il giro delle schede in
+ordine d'uso è `Ctrl-Tab`, perché ⌘-Tab è del sistema. Fuori dal Mac `Ctrl-k` e
+`Mod-k` sono lo stesso tasto, e le impostazioni li segnalano come conflitto. Le
+impostazioni dicono anche quando un accordo lo prende il sistema (⌘-Tab sul
+Mac, Alt-F4 altrove): si salva lo stesso, ma lì non arriva. Sul Mac PgDn e PgUp
+si leggono `Fn↓` e `Fn↑`, come si premono. La modalità delle note in una
+finestra nuova viene da `editor.default-mode`; un riquadro diviso eredita
+quelle del riquadro da cui nasce. I divisori fra riquadri si trascinano, si
+spostano con le frecce e tornano a parti uguali con un doppio clic; le
 proporzioni restano nel layout finché la fila non cambia. **Affianca la
 Lettura** apre la Lettura in un riquadro collegato che scorre con la sorgente.
 
@@ -224,14 +232,6 @@ buffer e, allo stesso tempo, evita che il cursore di un riquadro muova quello
 dell'altro. Il pannello collega e scollega le superfici visibili, ma non
 coordina il buffer, il salvataggio o il fan-out delle modifiche.
 
-## Offset e terminatori
-
-Il contratto Rust usa span in byte UTF-8. CodeMirror usa offset JavaScript. Il
-ponte di conversione è una responsabilità esplicita e coperta da test.
-
-La sorgente conserva i terminatori di riga. Caricare o sincronizzare un
-documento non deve normalizzare CRLF involontariamente.
-
 ## Undo, redo e selezione
 
 L'editor offre due piani distinti:
@@ -361,11 +361,11 @@ grassetto, lo stile dice «Titolo 2» su un titolo di secondo livello, la tabell
 è spenta fuori da una tabella e il formato in riga dentro il codice; in sola
 lettura tutto è spento. Il tasto destro toglie una nota e i suoi richiami.
 
-La barra sta su una riga: i gruppi che non entrano scendono nel menu «altri
-strumenti». La tastiera la raggiunge con un solo arresto di tabulazione:
-dall'editor, dove Tab rientra, Escape e poi Maiusc+Tab risalgono fino a lei. Le frecce,
-Home ed End si muovono fra i pulsanti ed Escape torna al testo; il
-suggerimento di ogni pulsante dice la scorciatoia dell'editor quando c'è.
+La barra è la fila di serie, in un vassoio un tono sotto la carta coi gruppi
+come foglietti (al telefono una fila piatta); ciò che non entra va in «…». Un
+solo arresto di tabulazione: dall'editor, dove Tab rientra, Escape e poi
+Maiusc+Tab risalgono. Le frecce girano ai capi, Home ed End vanno al primo e
+all'ultimo pulsante acceso, Escape torna al testo; il suggerimento dice il tasto.
 
 La barra è il plugin ufficiale `fub.formatting` («Formatting bar»): si spegne e
 si riaccende dal pannello dei componenti, e ogni suo pulsante è anche un
@@ -439,7 +439,7 @@ WIT](../reference/abi-and-wit.md).
 - `apps/client/src/editors/text/profiles/svg.ts` e `apps/client/src/editors/media/`
 - `apps/client/src/ui/mermaid.ts`, `mermaid-styles.ts`, `lightbox.ts` e `theme/diagram-style.ts`
 - `apps/client/src/panels/document.ts`
-- `apps/client/src/panels/format-bar.ts`
+- `apps/client/src/panels/format-bar.ts` e `apps/client/src/kit/toolbar-keys.ts`
 - `apps/client/src/state/`
 - `crates/fub-features/src/formatting.rs`
 - `crates/fub-abi/src/edit.rs`

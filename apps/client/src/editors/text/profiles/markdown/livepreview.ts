@@ -26,6 +26,7 @@ import type { SyntaxNode } from "@lezer/common";
 import { taskChecked } from "../../../../rules/mirrored";
 import { t } from "../../../../i18n/strings";
 import { isAllowedLink } from "../../../../ui/sanitize";
+import { figureMask, PAGE_FIGURES, readPageMark } from "../../../../ui/page-mark";
 import type { SyntaxForm } from "../../../../host/contract";
 import {
   inlineDelimiters,
@@ -1445,14 +1446,17 @@ function inDecoration(d: LiveDeco, callbacks: LivePreviewCallbacks): Decoration 
       // puntatore, come l'anteprima al passaggio, non conosce la grammatica
       // di questo profilo.
       const target = parseWikilinkInner(d.data ?? "");
-      const icon = target.page ? callbacks.pageIcon?.(target.page) ?? null : null;
+      // Un'emoji si scrive col `::before`; una figura del set ha la sua
+      // maschera (`data-page-figure`); un `fub:` sconosciuto non si mostra.
+      const mark = readPageMark(target.page ? callbacks.pageIcon?.(target.page) ?? null : null);
       const person = target.page !== "" && callbacks.isPerson?.(target.page) === true;
       return Decoration.mark({
         class: person ? "cm-fub-wikilink cm-fub-person" : "cm-fub-wikilink",
         attributes: {
           [ATTR_WIKILINK]: d.data ?? "",
           "data-wikilink-page": target.page,
-          ...(icon ? { "data-page-icon": icon } : {}),
+          ...(mark?.kind === "text" ? { "data-page-icon": mark.text } : {}),
+          ...(mark?.kind === "figure" ? { "data-page-figure": mark.name } : {}),
           ...(target.heading ? { "data-wikilink-heading": target.heading } : {}),
           ...(target.block ? { "data-wikilink-block": target.block } : {}),
         },
@@ -1999,6 +2003,41 @@ function insideReplaced(replaced: readonly { from: number; to: number }[], posit
   return range !== undefined && range.from <= position && position < range.to;
 }
 
+/// Le figure del set accanto ai wikilink: una regola per figura, con la sua
+/// maschera. Si fanno quando si monta un editor e non al caricamento del
+/// modulo, perché una figura può essere registrata da un modulo che si monta
+/// dopo (la stella della cornice); si rifanno solo se le figure disegnate sono
+/// cambiate. Una figura che nessuno disegna non ha regola, e non mostra niente.
+let figureMarks: { key: string; theme: Extension } | null = null;
+
+function figureTheme(): Extension {
+  const masks = PAGE_FIGURES.map((name) => [name, figureMask(name)] as const).filter(([, mask]) => mask !== "");
+  const key = masks.map(([name, mask]) => `${name}=${mask}`).join(" ");
+  if (figureMarks?.key === key) return figureMarks.theme;
+  const theme = EditorView.baseTheme(Object.fromEntries(masks.map(([name, mask]) => [
+    // La forma dalla maschera, il colore dal testo del link, grande quanto
+    // una lettera.
+    `.cm-fub-wikilink[data-page-figure="${name}"]::before`,
+    {
+      content: "\"\"",
+      width: "1em",
+      height: "1em",
+      marginInlineEnd: "0.2em",
+      display: "inline-block",
+      verticalAlign: "-0.15em",
+      backgroundColor: "currentColor",
+      maskImage: mask,
+      maskRepeat: "no-repeat",
+      maskSize: "100% 100%",
+      WebkitMaskImage: mask,
+      WebkitMaskRepeat: "no-repeat",
+      WebkitMaskSize: "100% 100%",
+    },
+  ])));
+  figureMarks = { key, theme };
+  return theme;
+}
+
 /// Quanto lavora il parser in ogni pezzo del resto di un documento grande, in
 /// millisecondi: con la resa che ne segue sta dentro un fotogramma.
 const PARSE_SLICE_MS = 8;
@@ -2463,7 +2502,7 @@ export function livePreview(
     }
   });
   return [
-    theme, footnoteLabelsField, blocks, parseRest, plugin, blockPrefixes(), emptyPairsExtension(), pendingGuide(), edgeSpaces(), keepMarks(), signsOnFirstLetter(), codeBlocks(), calloutGestures(), detailsLive(), imageGestures(), hangingIndent(), mathPopovers((view, pos, side) => formulaIn(view.plugin(plugin)?.decorations, pos, side)), liveHints(() => callbacks.slashEnabled?.() ?? false), deleteKeys, realign, tableGrids(callbacks),
+    theme, figureTheme(), footnoteLabelsField, blocks, parseRest, plugin, blockPrefixes(), emptyPairsExtension(), pendingGuide(), edgeSpaces(), keepMarks(), signsOnFirstLetter(), codeBlocks(), calloutGestures(), detailsLive(), imageGestures(), hangingIndent(), mathPopovers((view, pos, side) => formulaIn(view.plugin(plugin)?.decorations, pos, side)), liveHints(() => callbacks.slashEnabled?.() ?? false), deleteKeys, realign, tableGrids(callbacks),
     propertiesExtension(),
     callbacks.linkCard ? linkCardGestures(callbacks.linkCard) : [],
   ];

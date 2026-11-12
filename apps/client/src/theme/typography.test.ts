@@ -6,17 +6,17 @@ import light from "./scrittoio/sheet-light.css?raw";
 import skin from "./scrittoio/skin.css?raw";
 import editorTheme from "../editors/text/theme.ts?raw";
 
-/// Il ritmo del documento dello Scrittoio: Newsreader, corpo 17, interlinea
-/// 1,65, giustezza 68 caratteri.
+/// Il ritmo del documento dello Scrittoio: Newsreader, corpo 18, interlinea
+/// 1,65, giustezza 58 caratteri.
 const TYPOGRAPHY = {
   "font-reading": '"Newsreader Variable", Georgia, "Times New Roman", serif',
   "text-2xl": "19px",
   "text-3xl": "23px",
-  "text-reading": "17px",
+  "text-reading": "18px",
   "leading-tight": "1.3",
   "leading-normal": "1.45",
   "leading-relaxed": "1.65",
-  "content-width": "68ch",
+  "content-width": "58ch",
 } as const;
 
 function withoutComments(css: string): string {

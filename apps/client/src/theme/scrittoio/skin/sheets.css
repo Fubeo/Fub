@@ -6,14 +6,18 @@
 /* ── La carta ────────────────────────────────────────────────────────────── */
 
 /* Il foglio è l'unico oggetto rialzato della finestra. Quello col fuoco sale
-   di un gradino: con due fogli affiancati è così che si legge dove si scrive. */
+   di un gradino: con due fogli affiancati è così che si legge dove si scrive.
+   L'ombra è di un foglio appoggiato sulla scrivania: un contatto stretto, una
+   penombra corta ai fianchi e una lunga sotto. I due strati larghi hanno lo
+   spread negativo, così l'ombra scende e non sale sopra la carta. I valori
+   sono ruoli della ricetta; un tema che non li ha tiene le ombre di sempre. */
 .pane::before {
   border-radius: var(--radius-sheet);
   background: var(--sheet);
-  box-shadow: var(--shadow-1);
+  box-shadow: var(--shadow-sheet, var(--shadow-1));
 }
 .pane.focus::before {
-  box-shadow: var(--shadow-2);
+  box-shadow: var(--shadow-sheet-focus, var(--shadow-2));
 }
 /* Sotto la prima linguetta, quando è lei l'attiva, l'angolo del foglio è vivo:
    il fianco della linguetta scende dritto in quello del foglio. La toppa che
@@ -90,6 +94,16 @@
 .tab-entry::before {
   background: var(--sheet);
 }
+/* L'attiva e il foglio fanno un'ombra sola: la stessa del foglio, ai fianchi e
+   sopra la linguetta. Dove la linguetta entra nel foglio la struttura la
+   taglia (`clip-path`), e lì non resta nessun segno. */
+.tab-entry:has(> .tab[aria-selected="true"]):not([data-lifted]) {
+  border-radius: var(--tab-radius, 8px) var(--tab-radius, 8px) 0 0;
+  box-shadow: var(--shadow-sheet, none);
+}
+.pane.focus .tab-entry:has(> .tab[aria-selected="true"]):not([data-lifted]) {
+  box-shadow: var(--shadow-sheet-focus, none);
+}
 .tab-entry::after {
   border-radius: var(--radius-chip);
   background: var(--bg-hover);
@@ -116,6 +130,7 @@
 .tab {
   display: inline-flex;
   align-items: center;
+  gap: var(--space-3);
   padding: 0 var(--space-2) 0 var(--space-5);
   border: none;
   border-radius: var(--radius-chip);
@@ -132,7 +147,7 @@
 }
 .tab[aria-selected="true"] {
   color: var(--text);
-  font-weight: var(--weight-bold);
+  font-weight: var(--weight-medium);
 }
 .tab:focus-visible {
   outline: var(--focus-ring-width) solid var(--focus-ring);
@@ -144,13 +159,18 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
+/* Ogni linguetta porta la figura del suo formato, anche la nota: tenue a
+   riposo, piena sull'attiva. */
 .tab-pin,
 .tab-format {
-  width: 12px;
-  height: 12px;
-  margin-right: var(--space-2);
+  width: 14px;
+  height: 14px;
+  margin-right: var(--space-4);
   color: var(--muted);
-  vertical-align: -1px;
+  vertical-align: -2px;
+}
+.tab[aria-selected="true"] .tab-format {
+  color: var(--text);
 }
 /* L'icona della pagina (`icon:`), un'emoji: grande quanto il nome, staccata
    come le figure. */
@@ -303,16 +323,16 @@
   box-shadow: calc(-1 * var(--space-4)) 0 var(--space-4) var(--bg), var(--space-2) 0 0 var(--bg);
 }
 
-/* ── La testata ──────────────────────────────────────────────────────────── */
+/* ── La testata: solo il percorso, «Salvato» e «…» ──────────────────────── */
 
-/* Sta sulla carta e senza filetto: percorso a sinistra, modalità, stato e
-   menu a destra. */
+/* Sta sulla carta e senza filetto: il percorso a sinistra, lo stato e il menu
+   a destra. Il formato non c'è: lo dice la linguetta. */
 .pane-toolbar {
-  gap: var(--space-4);
-  padding: 0 var(--space-4) 0 var(--space-6);
+  gap: var(--space-5);
+  padding: 0 var(--space-4) 0 var(--space-7);
   color: var(--muted);
   font-family: var(--font-ui);
-  font-size: var(--text-sm);
+  font-size: var(--text-base);
 }
 .pane-toolbar > .muted {
   overflow: hidden;
@@ -320,16 +340,47 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-/* «WORD», «ODT» accanto al percorso: un'etichetta, non un bottone. */
-.pane-toolbar > .pane-format {
-  padding: 1px var(--space-2);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-chip);
+/* Il percorso a briciole: la cartella disegnata, il vault e le cartelle in
+   grafite, il nome in inchiostro. */
+.sheet-title {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-width: 0;
   color: var(--muted);
-  font-size: var(--text-xs);
+  font-size: var(--text-base);
+}
+.sheet-title > svg {
+  flex: none;
+  width: 15px;
+  height: 15px;
+  color: var(--muted);
+}
+/* La barra fra le cartelle è un segno, non un testo: la grafite dei bordi dei
+   campi, che resta sopra 3:1 in tutte e due le luci senza farsi leggere. */
+.crumb-sep {
+  flex: none;
+  color: var(--outline);
+}
+/* Il nome resta intero finché può: parte dalla sua misura, e il vault e le
+   cartelle prendono soltanto lo spazio che avanza (partono da zero e crescono
+   fino al loro testo). In un percorso lunghissimo cedono quindi le cartelle,
+   ciascuna con la sua ellissi; un nome lunghissimo cede per ultimo, e intero
+   sta nel suggerimento. */
+.crumb-name {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text);
   font-weight: var(--weight-medium);
-  letter-spacing: 0.04em;
-  line-height: 1.4;
+  text-overflow: ellipsis;
+}
+.sheet-title [data-folder] {
+  flex: 1 1 0;
+  min-width: 0;
+  max-width: max-content;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 /* Lo stato del documento accanto al percorso: si scrive tutto, in parte o per
    niente. Un chip che si preme e apre il riquadro col perché. */
@@ -479,6 +530,16 @@
   line-height: 1;
   cursor: pointer;
 }
+/* «…» è una figura, non tre caratteri. */
+.pane-toolbar > [data-pane-menu] {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.pane-toolbar > [data-pane-menu] > svg {
+  width: 16px;
+  height: 16px;
+}
 .pane-toolbar > [data-pane-menu]:hover,
 .pane-toolbar > [data-pane-menu][aria-expanded="true"] {
   background: var(--overlay-hover);
@@ -488,37 +549,16 @@
   outline: var(--focus-ring-width) solid var(--focus-ring);
   outline-offset: -2px;
 }
-/* Le modalità in un bottone solo, in una testata stretta: dice quella accesa
-   con la matita blu dei segmenti, e apre la scelta. */
-.pane-toolbar > .pane-mode-current {
-  align-items: center;
-  gap: var(--space-2);
-  min-height: 28px;
-  padding: 0 var(--space-4);
-  border: none;
-  border-radius: var(--radius-chip);
-  background: var(--accent-wash);
-  color: var(--accent);
-  font: inherit;
-  font-size: var(--text-sm);
-  font-weight: var(--weight-bold);
-  white-space: nowrap;
-  cursor: pointer;
-}
-.pane-toolbar > .pane-mode-current::after {
-  content: "▾";
-  font-weight: var(--weight-regular);
-}
-.pane-toolbar > .pane-mode-current:focus-visible {
+/* Il bottone della modalità sta nel foglio, dopo la barra di formato: un tondo
+   in basso a destra, o la casella piatta all'angolo della fila al telefono.
+   L'anello del fuoco è rientrato: su un bordo dello schermo uno sporgente
+   uscirebbe. */
+.pane > .pane-mode-current:focus-visible {
   outline: var(--focus-ring-width) solid var(--focus-ring);
   outline-offset: -2px;
 }
-/* Un foglio stretto (tre affiancati, la finestra piccola): i passi del
-   selettore e il menu cedono respiro prima che il selettore ceda una voce. */
+/* Un foglio stretto (tre affiancati, la finestra piccola): «…» cede respiro. */
 @container sheet-head (max-width: 320px) {
-  .pane-toolbar > .segmented .segmented-option {
-    padding: 0 var(--space-2);
-  }
   .pane-toolbar > [data-pane-menu] {
     width: 24px;
   }
@@ -623,61 +663,24 @@
 
 /* ── La barra di formattazione ───────────────────────────────────────────── */
 
-/* Sulla carta come la testata, con un filo sotto che la separa dal testo. I
-   gruppi si dividono con un filo corto, non con una riga a tutta altezza. */
-.format-bar {
+/* La barra di un riquadro veste la barra in una fila del kit (`kit-bar`, in
+   `skin/kit.css`): il vassoio, i gruppi come foglietti, i pulsanti di serie.
+   La bolla della selezione e la mini-barra sono la stessa barra fuori dal
+   vassoio, con gli stessi pulsanti: qui prendono la voce della fila e il filo
+   corto che divide i gruppi. */
+.format-bar:not(.kit-bar) {
   gap: var(--space-2);
-  padding: 0 var(--space-5);
   color: var(--muted);
   font-family: var(--font-ui);
   font-size: var(--text-sm);
-  box-shadow: inset 0 -1px 0 var(--border);
 }
-.format-bar-group {
+.format-bar:not(.kit-bar) > .format-bar-group {
   gap: var(--space-1);
   padding-right: var(--space-3);
   background: linear-gradient(var(--border-strong), var(--border-strong)) right center / 1px 16px no-repeat;
 }
-.format-bar-group:last-of-type {
+.format-bar:not(.kit-bar) > .format-bar-group:last-of-type {
   background-image: none;
-}
-.format-bar-button,
-.format-bar-menu {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: var(--space-2);
-  min-width: 28px;
-  height: 28px;
-  padding: 0 var(--space-3);
-  border: none;
-  border-radius: var(--radius-chip);
-  background: transparent;
-  color: var(--muted);
-  font: inherit;
-  line-height: 1;
-  cursor: pointer;
-}
-.format-bar-button:hover:not(:disabled),
-.format-bar-menu:hover:not(:disabled),
-.format-bar-menu[aria-expanded="true"] {
-  background: var(--overlay-hover);
-  color: var(--text);
-}
-/* «Acceso» è lo stesso ovunque nella shell: velo d'accento e inchiostro blu. */
-.format-bar-button[aria-pressed="true"] {
-  background: var(--accent-wash);
-  color: var(--accent);
-}
-.format-bar-button:focus-visible,
-.format-bar-menu:focus-visible {
-  outline: var(--focus-ring-width) solid var(--focus-ring);
-  outline-offset: -2px;
-}
-.format-bar-button:disabled,
-.format-bar-menu:disabled {
-  opacity: 0.4;
-  cursor: default;
 }
 /* Il selettore dello stile dice lo stile a parole, come in un elaboratore di
    testi: largo abbastanza da non ballare fra «Titolo 1» e «Testo normale». */
@@ -757,13 +760,14 @@
   font-size: var(--text-base);
   text-align: left;
 }
+/* L'etichetta parla a voce bassa: in tondo, non in maiuscoletto. */
 .sheet-desk-label {
   padding: 0 var(--space-4);
   color: var(--muted);
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
   font-weight: var(--weight-medium);
-  letter-spacing: var(--tracking-caps);
-  text-transform: uppercase;
+  letter-spacing: 0;
+  text-transform: none;
 }
 .sheet-desk-row {
   padding: var(--space-3) var(--space-4);

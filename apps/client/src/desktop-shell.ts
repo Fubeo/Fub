@@ -18,7 +18,7 @@ import { api, window as nativeWindow } from "./host/ipc";
 import { resolvedReference, settings } from "./host/query";
 import { forwardNotice, onEvent, startKernelRouter } from "./state/kernel";
 import { mountLocale } from "./state/locale";
-import { emit, on, state } from "./state/store";
+import { emit, on, setVaultName, state } from "./state/store";
 import { loadLayout, layout as paneLayout, split as splitPane, closePane } from "./state/layout";
 import { loadCommandSpecs } from "./state/vault";
 import { $ } from "./ui/dom";
@@ -547,7 +547,10 @@ function mountAdaptiveShell(hooks: VaultProfileHooks): void {
   };
   pageWindowLifetime.listen(globalThis.window, "resize", applyAdaptive);
   pageWindowLifetime.listen(document, "keydown", (e: KeyboardEvent) => {
-    if (e.key === "Escape") {
+    // Un Esc già gestito (il menu o il dialogo sopra il cassetto, che lo
+    // chiudono in cattura con `preventDefault`) chiude solo loro: il cassetto
+    // aspetta il prossimo.
+    if (e.key === "Escape" && !e.defaultPrevented) {
       if (
         layout.classList.contains("drawer-sidebar-open") ||
         layout.classList.contains("drawer-inspector-open")
@@ -698,10 +701,6 @@ const MODE_COMMANDS: Partial<Record<string, PaneMode>> = {
   "shell.mode.reading": "reading",
 };
 
-/// Il nome con cui si riconosce il vault aperto: quello scelto nel registro dei
-/// vault, altrimenti la cartella. Il percorso intero resta nel suggerimento.
-let vaultName = "";
-
 function folderName(root: string): string {
   return root.split(/[\\/]/).filter(Boolean).pop() ?? root;
 }
@@ -715,9 +714,14 @@ function showVaultIcon(icon: string): void {
 
 /// La barra del titolo mostrava il percorso assoluto, che in una finestra
 /// stretta si taglia proprio dove sta il nome.
+///
+/// Il nome con cui si riconosce il vault aperto — quello scelto nel registro
+/// dei vault, altrimenti la cartella — va nello store (`state.vaultName`), che
+/// lo annuncia: la testata dei fogli lo porta in testa al percorso. Il percorso
+/// intero resta nel suggerimento.
 function showVaultName(root: string): void {
-  vaultName = root ? folderName(root) : "";
-  vaultPathEl.textContent = vaultName;
+  setVaultName(root ? folderName(root) : "");
+  vaultPathEl.textContent = state.vaultName;
   showVaultIcon("");
   setTooltip(vaultPathEl, root);
   drawWindowTitle();
@@ -725,8 +729,8 @@ function showVaultName(root: string): void {
   void api.knownVaults().then((known) => {
     if (state.vaultRoot !== root) return;
     const entry = known.find((vault) => vault.root === root);
-    if (entry?.name) vaultName = entry.name;
-    vaultPathEl.textContent = vaultName;
+    if (entry?.name) setVaultName(entry.name);
+    vaultPathEl.textContent = state.vaultName;
     showVaultIcon(entry?.icon ?? "");
     drawWindowTitle();
   }).catch(() => {});
@@ -737,7 +741,7 @@ function showVaultName(root: string): void {
 function drawWindowTitle(): void {
   const doc = state.currentDoc;
   const note = doc ? pageName(doc) : null;
-  const title = [note, vaultName || null, "Fub"].filter((part): part is string => !!part).join(" — ");
+  const title = [note, state.vaultName || null, "Fub"].filter((part): part is string => !!part).join(" — ");
   if (document.title === title) return;
   document.title = title;
   // Dentro una promessa: il titolo nativo non deve poter interrompere chi
