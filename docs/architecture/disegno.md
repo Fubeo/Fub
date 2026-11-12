@@ -226,6 +226,14 @@ Sei comandi tipati, nella forma di quelli dei fogli, con le forme in
 | `drawing_command` | esegue colore del tratto, colore del riempimento o spessore |
 | `close_drawing` | chiude l'istanza |
 
+I tre comandi (`crates/fub-disegno/src/comandi.rs`) sono `paint.setStroke`,
+`paint.setFill` e `stroke.set` del motore sugli oggetti che il pannello del
+client colora oggi (un gruppo passa ai figli non bloccati, il tratto di una
+penna è il suo riempimento); l'esito è la differenza. Lo spessore di una
+freccia, di una linea a spessore variabile o di un tratteggio è `Unsupported`,
+come un colore dato a un oggetto senza quel tratto o riempimento
+(`fill="none"`): la differenza non sa ancora scrivere un aspetto nuovo.
+
 Ogni richiesta passa da `validate()` prima di arrivare al motore. Le istanze
 stanno nell'host per vault, sotto un lucchetto che si prende per trovare
 l'istanza e si lascia prima di chiamare il motore. La chiusura del vault
@@ -275,7 +283,7 @@ strumento li modifica, e un gesto sul loro oggetto del motore è rifiutato
 | Percorso | Contiene |
 |---|---|
 | `vendor/vectorcraft/` | la copia di VectorCraft, con le patch numerate e `UPSTREAM.md` (arriva con T6) |
-| `crates/fub-disegno/` | l'adattatore: apertura, mappa, sincronia, differenza, gesti, comandi, perdite (le forme e la selezione ci sono; il testo e i comandi arrivano con T17–T18) |
+| `crates/fub-disegno/` | l'adattatore: apertura, mappa, sincronia, differenza, gesti, comandi, perdite (le forme, la selezione e i comandi ci sono; il testo arriva con T17) |
 | `crates/fub-host/src/drawing.rs` | le istanze per vault e i sei comandi lato host |
 | `crates/fub-abi/src/drawing.rs` | le forme condivise e i limiti (arriva con T4) |
 | `apps/client/src/editors/spatial/motore/` | la sessione, i gesti, i colori e il chip delle perdite (arriva con T8, T10, T12 e T21) |

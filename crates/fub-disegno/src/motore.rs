@@ -23,8 +23,7 @@ use std::sync::{Arc, OnceLock};
 
 use fub_abi::{
     DrawingCommandInfo, DrawingCommandRequest, DrawingGesture, DrawingOpen, DrawingOutcome,
-    DrawingRefusal, DrawingSync, DrawingSynced, PluginError, DRAWING_COMMANDS,
-    MAX_DRAWING_TEXT_BYTES,
+    DrawingRefusal, DrawingSync, DrawingSynced, PluginError, MAX_DRAWING_TEXT_BYTES,
 };
 use fub_motori::{rilascia_al_sistema, Caratteri, ErroreMotore, Motori, Pigro, Servizi, Voce};
 use vectorcraft_doc::{Document, NodeId};
@@ -348,28 +347,29 @@ impl Disegno {
         Ok(esito)
     }
 
-    /// I comandi del disegno sulla selezione: oggi tutti spenti, finché il
-    /// task dei comandi non li accende.
-    pub fn comandi(&self, _selezione: &[String]) -> Vec<DrawingCommandInfo> {
-        DRAWING_COMMANDS
-            .iter()
-            .map(|id| DrawingCommandInfo {
-                id: (*id).to_string(),
-                enabled: false,
-            })
-            .collect()
+    /// I comandi del disegno sulla selezione, accesi o spenti sulla copia di
+    /// adesso ([`crate::comandi`]).
+    pub fn comandi(&self, selezione: &[String]) -> Vec<DrawingCommandInfo> {
+        crate::comandi::elenco(&self.copia, selezione)
     }
 
-    /// Un comando sulla selezione: oggi `unsupported`.
+    /// Un comando sulla selezione ([`crate::comandi`]): un valore che non
+    /// vale è `BadArgs`, un id che il motore non serve `unsupported`.
     pub fn comando(
         &mut self,
         richiesta: DrawingCommandRequest,
     ) -> Result<DrawingOutcome, PluginError> {
         richiesta.validate()?;
+        let azione = crate::comandi::Azione::di(&richiesta)?;
         if let Err(rifiuto) = self.pronta(richiesta.revision, ATTESA_MASSIMA) {
             return Ok(rifiutato(richiesta.revision, rifiuto));
         }
-        Ok(rifiutato(richiesta.revision, DrawingRefusal::Unsupported))
+        let Some(azione) = azione else {
+            return Ok(rifiutato(richiesta.revision, DrawingRefusal::Unsupported));
+        };
+        let esito = crate::comandi::esegui(&mut self.banco, &self.copia, &richiesta, &azione);
+        esito.validate()?;
+        Ok(esito)
     }
 
     /// La differenza fra la copia e il documento del motore cambiato a mano
