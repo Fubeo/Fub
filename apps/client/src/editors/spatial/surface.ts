@@ -100,6 +100,7 @@ import { fontSheets, picture, type FontSheets } from "./picture";
 import { noteSceneChange, offerStage } from "./live/registry";
 import { motoreDa, type MotoreAperto } from "./motore/gesti";
 import { apriSessione } from "./motore/sessione";
+import { drawStanding } from "./motore/standing";
 import { onComponents } from "../../state/components";
 
 /// La riga del motore del disegno nella pagina Componenti (T13, D-14).
@@ -449,6 +450,10 @@ export function mountVectorSurface(context: SurfaceMountContext, options: Vector
     const vault = documentSessions.vaultFor(context.documentId) ?? null;
     const opened = motoreDa(() => apriSessione(api, session.id, session.text(), session, { vault }));
     motore = opened;
+    // Le parti che restano come sono si sanno col motore aperto: il chip lo
+    // segue.
+    life.add(opened.quandoCambia(() => standing.changed()));
+    standing.changed();
     life.add(onComponents((next) => {
       // La mappa di un altro vault non dice niente di questo disegno.
       if (vault !== null && next.root !== vault) return;
@@ -461,6 +466,22 @@ export function mountVectorSurface(context: SurfaceMountContext, options: Vector
     void motore?.chiudi();
     motore = null;
   });
+
+  /// Il chip «N parti restano come sono» (T21): le parti del motore sulla
+  /// scena che si modifica adesso. Il foglio nascosto (in Lettura, un SVG
+  /// estraneo o in sola lettura) e la scrittura tolta non ne hanno: lì parla
+  /// l'avviso della superficie. Si aggiorna a ogni `paint()` e a ogni cambio
+  /// del motore.
+  const standing = drawStanding({
+    motore: () => motore,
+    scene: () => (drawHost.hidden || readOnly || editor === null ? null : editor.engine.scene()),
+    reveal: (offset) => {
+      if (drawHost.hidden || editor === null || !editor.reveal(offset)) return false;
+      editor.focus();
+      return true;
+    },
+  });
+  life.add(() => standing.dispose());
 
   const mountEditor = (engine: SceneEngine): DrawEditor => {
     const editorLifetime = openLifetime();
@@ -813,6 +834,7 @@ export function mountVectorSurface(context: SurfaceMountContext, options: Vector
       panelsChanged();
       statusChanged();
     }
+    standing.changed();
   };
 
   life.listen(adoptButton, "click", () => {
@@ -1005,6 +1027,7 @@ export function mountVectorSurface(context: SurfaceMountContext, options: Vector
         return () => statusListeners.delete(listener);
       },
     },
+    standing,
     reveal: ({ span }) => !drawHost.hidden && editor !== null && editor.reveal(span.start),
     selections: (): EditorSelections | undefined => {
       const [first, ...rest] = selectedRanges();

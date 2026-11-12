@@ -211,3 +211,61 @@ describe("la sessione finisce con il disegno", () => {
     expect(istanze().filter((each) => host.drawingCopy(each) !== undefined)).toEqual([]);
   });
 });
+
+describe("il chip delle parti che restano come sono (T21)", () => {
+  /// L'host col motore che dice una parte sul rettangolo.
+  function conUnaParte(): void {
+    let aperti = 0;
+    host = createFakeHost({
+      file: { [DOC]: SOURCE },
+      draw: true,
+      drawing: {
+        spento: () => spento,
+        open: () => ({
+          instance: `disegno-${++aperti}`,
+          revision: "0",
+          mapped: 1,
+          unmapped: 0,
+          losses: [{ element: "o1a2b3c4d", kind: "approximated", detail: "il filtro «ombra» resta com’è" }],
+        }),
+      },
+    });
+    box.host = host;
+  }
+
+  it("col motore aperto il chip conta le parti; in Lettura, in sola lettura e col motore spento non c'è", async () => {
+    conUnaParte();
+    const surface = mount();
+    const said: (string | null)[] = [];
+    surface.standing!.subscribe(() => said.push(surface.standing!.current()?.text ?? null));
+    await settle();
+    expect(surface.standing!.current()).toMatchObject({ kind: "closed", text: "1 parte resta com’è", placesAsk: "Che cosa manca?" });
+    expect(said).toContain("1 parte resta com’è");
+    surface.setMode("read");
+    expect(surface.standing!.current()).toBeNull();
+    surface.setMode("draw");
+    expect(surface.standing!.current()?.text).toBe("1 parte resta com’è");
+    surface.setReadOnly!(true);
+    expect(surface.standing!.current()).toBeNull();
+    surface.setReadOnly!(false);
+    // Spento: le parti non si sanno, e chi ascolta lo sa subito.
+    spento = true;
+    riga(false);
+    expect(surface.standing!.current()).toBeNull();
+    expect(said[said.length - 1]).toBeNull();
+  });
+
+  it("«Vai» sceglie l'elemento", async () => {
+    conUnaParte();
+    const surface = mount();
+    await settle();
+    surface.standing!.current()!.places![0]!.run!();
+    expect(surface.selections?.()?.primary.text).toContain('id="o1a2b3c4d"');
+  });
+
+  it("senza parti, niente chip", async () => {
+    const surface = mount();
+    await settle();
+    expect(surface.standing!.current()).toBeNull();
+  });
+});

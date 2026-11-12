@@ -382,6 +382,47 @@ describe("i gesti sul motore", () => {
     expect(error).toHaveBeenCalled();
   });
 
+  it("i rifiuti del motore coi loro motivi: la parte che resta com'è, il disegno che si sta aprendo", async () => {
+    const refusals: [DrawingOutcome["refused"], string][] = [
+      ["unmapped", t("draw.reason.unmapped")],
+      ["not_ready", t("draw.reason.not_ready")],
+      ["unsupported", t("draw.reason.foreign")],
+      ["closed", t("draw.reason.invalid")],
+    ];
+    let refused: DrawingOutcome["refused"] = null;
+    const fake = createFakeHost({
+      drawing: {
+        gesto: (gesture) => ({ revision: gesture.revision, preview: null, ops: null, selection: [], losses: [], refused: gesture.phase === "commit" ? refused : null, frame: null }),
+      },
+    });
+    const editor = await mount(EMPTY, fake);
+    editor.setTool("rect");
+    expect(t("draw.rejected", { reason: t("draw.reason.unmapped") })).toBe("Modifica non applicata: Questa parte resta com’è: il disegno non la sa ancora modificare.");
+    for (const [reason, said] of refusals) {
+      refused = reason;
+      await drag(editor, [[220, 40], [300, 90]]);
+      expect(spoken(), reason!).toContain(t("draw.rejected", { reason: said }));
+    }
+    expect(editor.engine.text).toBe(EMPTY);
+  });
+
+  it("le parti che un esito trova si aggiungono a quelle del motore, e chi ascolta lo sa", async () => {
+    const found = { element: "oa1a1a1a1", kind: "approximated" as const, detail: "il filtro «ombra» resta com’è" };
+    const fake = createFakeHost({
+      drawing: {
+        gesto: (gesture) => ({ revision: gesture.revision, preview: null, ops: null, selection: [], losses: gesture.phase === "commit" ? [found] : [], refused: null, frame: null }),
+      },
+    });
+    const editor = await mount(EMPTY, fake);
+    expect(motore!.perdite()).toEqual([]);
+    let changes = 0;
+    motore!.quandoCambia(() => changes++);
+    editor.setTool("rect");
+    await drag(editor, [[220, 40], [300, 90]]);
+    expect(motore!.perdite()).toEqual([found]);
+    expect(changes).toBe(1);
+  });
+
   it("l'anteprima del motore si disegna con i segni di oggi, e il rilascio la toglie", async () => {
     const shape = { tag: "rect", attrs: { x: "220", y: "40", width: "40", height: "30", fill: "none", stroke: "#000000" } };
     const fake = createFakeHost({

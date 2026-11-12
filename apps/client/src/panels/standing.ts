@@ -18,7 +18,7 @@ import { openPopover, type PopoverHandle } from "../kit/popover";
 import { animate, DURATION, prepareExit } from "../moto";
 import { focusableElements } from "../ui/a11y";
 import { openLifetime, type Lifetime } from "../ui/lifetime";
-import { setTooltip } from "../ui/tooltip";
+import { attachTooltip, setTooltip } from "../ui/tooltip";
 
 /// Di quanto sale la parola nuova del chip (px).
 const RISE_PX = 4;
@@ -114,7 +114,10 @@ export function createStandingChip(): StandingChip {
       for (const place of shown.places) {
         const item = document.createElement("li");
         const label = document.createElement("span");
+        // Un nome lunghissimo si taglia (la skin); intero nel suggerimento.
+        label.className = "pane-standing-place-name";
         label.textContent = place.label;
+        fresh.add(attachTooltip(label, place.label));
         item.append(label);
         if (place.run) {
           const go = { label: place.label, run: () => place.run?.() };

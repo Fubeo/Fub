@@ -37,7 +37,7 @@
 // La penna, l'evidenziatore, la gomma e la nota non passano mai di qua: sono
 // di Fub, e non chiamano il motore.
 
-import { MAX_GESTURE_EVENTS, type DrawingFrame, type DrawingOutcome, type DrawingPointer, type DrawingRefusal, type DrawingTool } from "../../../host/contract";
+import { MAX_GESTURE_EVENTS, type DrawingFrame, type DrawingLoss, type DrawingOutcome, type DrawingPointer, type DrawingRefusal, type DrawingTool } from "../../../host/contract";
 import type { InkSample } from "../../../ink/sample";
 import type { Teardown } from "../../../ui/lifetime";
 import type { PaintNode } from "../painter/paint";
@@ -82,7 +82,18 @@ export interface MotoreDelDisegno {
   /// Apre una sessione nuova se il motore manca: «Riprova», o il motore
   /// riacceso. Niente se è aperto, se si sta aprendo, o dopo `chiudi()`.
   riapri(): void;
-  /// Avvisa a ogni cambio di `adesso()` o di `assente()`. Il ritorno smette.
+  /// Le parti che il motore non sa modificare nella sessione aperta: quelle
+  /// dell'apertura e quelle che gli esiti hanno trovato dopo, una per
+  /// elemento, nell'ordine in cui sono arrivate. `null` se non c'è una
+  /// sessione aperta (si apre, spento, fermo, finito): allora non si sanno.
+  /// Lo stesso array finché non cambia.
+  perdite(): readonly DrawingLoss[] | null;
+  /// Le parti che un esito ha trovato: si aggiungono a `perdite()` della
+  /// sessione aperta, e chi ascolta `quandoCambia` lo sa se ce n'è una
+  /// nuova. Senza sessione aperta non fa niente.
+  trovate(losses: readonly DrawingLoss[]): void;
+  /// Avvisa a ogni cambio di `adesso()`, di `assente()` o di `perdite()`. Il
+  /// ritorno smette.
   quandoCambia(listener: () => void): Teardown;
 }
 
@@ -117,12 +128,13 @@ export function motoreDa(apri: () => Promise<SessioneMotore | MotoreAssente>): M
   let lasciaSessione: Teardown = () => {};
   const attese = new Set<() => void>();
   const ascolti = new Set<() => void>();
+  /// Le parti che gli esiti hanno trovato, con la sessione che le ha date:
+  /// una sessione nuova riparte dalle sue.
+  let trovate: Trovate = { sessione: null, voci: [] };
+  /// L'ultimo elenco dato da `perdite()`, finché sessione e trovate restano.
+  let elenco: { readonly sessione: SessioneMotore; readonly trovate: Trovate; readonly voci: readonly DrawingLoss[] } | null = null;
 
-  const cambia = (next: StatoMotore): void => {
-    stato = next;
-    const pronti = [...attese];
-    attese.clear();
-    for (const each of pronti) each();
+  const avvisaAscolti = (): void => {
     for (const listener of [...ascolti]) {
       try {
         listener();
@@ -130,6 +142,14 @@ export function motoreDa(apri: () => Promise<SessioneMotore | MotoreAssente>): M
         console.error(error);
       }
     }
+  };
+
+  const cambia = (next: StatoMotore): void => {
+    stato = next;
+    const pronti = [...attese];
+    attese.clear();
+    for (const each of pronti) each();
+    avvisaAscolti();
   };
 
   /// Segue la sessione aperta: quando si ferma o si chiude da sé.
@@ -203,9 +223,30 @@ export function motoreDa(apri: () => Promise<SessioneMotore | MotoreAssente>): M
     return stato.stato() === "aperta" ? stato : null;
   };
 
+  const perdite = (): readonly DrawingLoss[] | null => {
+    const sessione = intera(adesso());
+    if (sessione === null) return null;
+    // Le trovate di un'altra sessione si lasciano qui, una volta.
+    if (trovate.sessione !== sessione) trovate = { sessione, voci: [] };
+    if (elenco === null || elenco.sessione !== sessione || elenco.trovate !== trovate) {
+      elenco = { sessione, trovate, voci: unaPerElemento([...sessione.losses, ...trovate.voci]) };
+    }
+    return elenco.voci;
+  };
+
   apriOra();
   return {
     adesso,
+    perdite,
+    trovate(losses) {
+      const prima = perdite();
+      if (prima === null || losses.length === 0) return;
+      const note = new Set(prima.map((loss) => loss.element));
+      const nuove = unaPerElemento(losses.filter((loss) => !note.has(loss.element)));
+      if (nuove.length === 0) return;
+      trovate = { sessione: trovate.sessione, voci: [...trovate.voci, ...nuove] };
+      avvisaAscolti();
+    },
     assente() {
       if (stato === "apertura" || stato === "finito") return null;
       if (stato.kind === "assente") return stato;
@@ -265,6 +306,22 @@ export function motoreDa(apri: () => Promise<SessioneMotore | MotoreAssente>): M
       if (prima !== "apertura" && prima.kind === "sessione") await prima.chiudi();
     },
   };
+}
+
+/// Le parti trovate dagli esiti di `sessione`.
+interface Trovate {
+  readonly sessione: SessioneMotore | null;
+  readonly voci: readonly DrawingLoss[];
+}
+
+/// `losses` con una parte sola per elemento: la prima.
+function unaPerElemento(losses: readonly DrawingLoss[]): DrawingLoss[] {
+  const visti = new Set<string>();
+  return losses.filter((loss) => {
+    if (visti.has(loss.element)) return false;
+    visti.add(loss.element);
+    return true;
+  });
 }
 
 /// La sessione, se è aperta.
@@ -494,7 +551,12 @@ export function installGestiMotore(ctx: EditorContext): void {
     const request = inner.catena.then(() => inner.avvio).then(async (started) => {
       if (started === null || inner.perso) return null;
       const outcome = await started.sessione.gesto({ ...started.base, phase, events });
-      if (outcome !== null && !("kind" in outcome)) return outcome;
+      if (outcome !== null && !("kind" in outcome)) {
+        // Le parti che il gesto ha trovato vanno nel chip «N parti restano
+        // come sono» (`standing.ts`).
+        if (outcome.losses.length > 0) porta!.trovate(outcome.losses);
+        return outcome;
+      }
       // Il motore è mancato a metà: fermo (`outcome` dice perché), o la
       // sessione chiusa mentre la richiesta era in volo (spento, o il
       // disegno finito).
@@ -732,8 +794,9 @@ export function installGestiMotore(ctx: EditorContext): void {
     return t(turn > 0 ? "draw.rotated.clockwise" : "draw.rotated.counter", { angle: ctx.degreesText(Math.abs(turn)) });
   };
 
-  /// Un gesto che il motore non ha fatto, detto come lo dicono gli
-  /// strumenti di oggi (i testi del motore arrivano con T21).
+  /// Un gesto che il motore non ha fatto: una parte che resta com'è e il
+  /// disegno che si sta aprendo coi testi del motore, il resto come lo
+  /// dicono gli strumenti di oggi.
   const refuse = (g: MotoreGesture, refused: DrawingRefusal): void => {
     ctx.showHandles();
     switch (refused) {
@@ -749,15 +812,19 @@ export function installGestiMotore(ctx: EditorContext): void {
         return;
       }
       case "unmapped":
+        ctx.announce(t("draw.rejected", { reason: t("draw.reason.unmapped") }));
+        return;
       case "unsupported":
         ctx.announce(t("draw.rejected", { reason: t("draw.reason.foreign") }));
         return;
       case "too_large":
         ctx.announce(t("draw.rejected", { reason: t("draw.reason.limit") }));
         return;
+      case "not_ready":
+        ctx.announce(t("draw.rejected", { reason: t("draw.reason.not_ready") }));
+        return;
       case "stale":
       case "closed":
-      case "not_ready":
         ctx.announce(t("draw.rejected", { reason: t("draw.reason.invalid") }));
         return;
     }
