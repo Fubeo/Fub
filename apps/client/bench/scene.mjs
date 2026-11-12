@@ -793,7 +793,8 @@ export const SCENE = onPage("shell", [
       await page.waitForSelector('.pane[data-mode="reading"] .pane-preview');
     },
   },
-  // **Scrittoio 2** (`PLAN-ui/scrittoio-2.html`): gli stati del prototipo che
+  // **Scrittoio 2** (il prototipo `PLAN-ui/scrittoio-2.html` resta nella storia
+  // del ramo `piano/scrittoio-2`, fino a 480a538d9): gli stati del prototipo che
   // prima non avevano una foto. La nota è quella che il banco apre per prima;
   // la finestra «stretta» è la minima della finestra vera (800 px, come
   // `minWidth` di Tauri), lo stato a 700 px più vicino che il computer mostri.
