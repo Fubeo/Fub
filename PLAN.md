@@ -1553,7 +1553,7 @@ fallisce) dà `Internal`; `cargo test -p fub-app --test lean_ipc --test
 ipc_permissions` passa; `grep -n drawingNotInApp apps/client/src/host/ipc.ts`
 non trova niente; `node .github/scripts/check-doc-links.mjs` esce con 0.
 Prova: scripts/check.sh --rapido; cargo test -p fub-host --test drawing; cargo test -p fub-app --test lean_ipc --test ipc_permissions
-Stato: [ ] da fare
+Stato: [~] in corso · coder · base dc50bcbb0
 
 ## T20 · Il cancello
 
