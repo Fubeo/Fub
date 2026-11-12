@@ -1599,7 +1599,7 @@ Prova: scripts/check.sh --rapido; node tools/disegno-cancello/cancello.mjs
 Nota dell'orchestratore (2026-11-12, da T14): i vettori delle forme passano tutti, ma quattro cose del client oggi non le fa il motore: l'operazione `page` quando la forma esce dalla pagina; il punto del rilascio se è diverso dall'ultimo trascinamento (il motore lo ignora); lo spessore 0 sulle linee (il motore lo porta a 0,1); su un livello ruotato rettangolo ed ellisse escono come `path`. Il cancello le prova o le scrive come differenze ammesse col perché.
 Nota dell'orchestratore (2026-11-12, da T16): la classificazione delle perdite legge solo gli attributi dell'elemento: un filtro dato da un foglio `<style>` (i file mermaid) e le gradazioni con `spreadMethod` non risultano `Approximated`. La differenza scrive solo gli attributi cambiati, quindi il file non perde il filtro; il cancello guarda se l'immagine dopo un gesto su quegli elementi resta quella dell'export.
 Nota dell'orchestratore (2026-11-12, da T17): le facce di Fub entrano in `FontDb::global()` del motore, che quando una famiglia manca cataloga anche i caratteri del sistema: i colpi sui testi possono cambiare da una macchina all'altra. Il cancello prova i testi del corpus con una famiglia che Fub non ha e scrive se il risultato dipende dalla macchina; se sì, si apre un task (una patch numerata in `vendor/vectorcraft`).
-Stato: [~] in corso (2026-11-12, coder su base 11eaaaf5e; file di misura per la macchina vera, 13600KF: decisione dell'orchestratore)
+Stato: [x] fatto (2026-11-12) · differenze: il giro è un ciclo di tre round motore/client (solo il client scrive il file); lo spostamento passa da `a_mano`, di (+7, +5) nelle unità del documento del motore; il colore va sul primo elemento con un id che il comando colora; `sposta2` in più sulla gradazione `spreadMethod` di `resources` (nota di T16); file di misura `docs/misure/2026-11-12-disegno-linux-13600kf.md` (decisione dell'orchestratore); una riga in `docs/misure/README.md` e in `tools/README.md`. Esito: 32 file su 32, `bench:ink` dentro il rumore, anteprima, commit su `concept-map` e reimport sotto i tetti di A8; il commit su 1 MiB (p95 99 ms) passa a T34; i livelli di Inkscape figli della radice che il motore non sposta passano a T33; `symbols` ha la copia del motore vuota (simboli in cerchio e `<use>` rotti, voluti dal file); i caratteri che le facce di Fub non hanno vengono dal sistema (vedi DECISIONS)
 
 ## T21 · Che cosa resta com'è, detto
 
@@ -2166,6 +2166,79 @@ spento sulle linee variabili col motore acceso.
 Prova: scripts/check.sh --rapido; cargo test -p fub-disegno --test comandi
 Stato: [x] fatto (2026-11-12) · differenze: il modulo nuovo è la cartella `src/profilo/` (`mod`, `curve`, `contorno`, `unione`), la traduzione regola per regola della parte di `offset.ts` e `boolean.ts` che serve, con gli stessi numeri (hypot di V8, `Math.max`/`min`, ordine delle Map); 15 vettori registrati dal client con `lookOps({width})` in `tests/corpus/spessore-variabile.json`, 13 con un contorno; il `d` si legge con `fub_scene::parse_path`, reso pubblico in `fub-scene` (`pub use geometry::{parse_path, Segment as PathSegment}`) dopo la revisione dell'orchestratore, invece di un lettore copiato; come nel client i tratti a penna non ricevono lo spessore (si saltano); un profilo di un punto non esiste (`MIN_POINTS` di fub-scene è 2); cap e join dal `fub:geom`; `differenza.rs` non toccato; resta il rischio di un ulp di trigonometria e `pow` rispetto a V8, dentro la tolleranza sui 15 vettori
 
+## T33 · Un livello di Inkscape si sposta come oggi
+
+Perché: il cancello (T20) ha trovato che un gruppo
+`inkscape:groupmode="layer"` figlio della radice è un livello nel motore, e il
+motore rifiuta di dargli una `transform`; per `fub_scene` e per il client è
+un gruppo come un altro, e oggi la Selezione lo sposta, lo ridimensiona e lo
+ruota. Col motore acceso quel gesto si perde (il client, su un rifiuto, non
+ricade sugli strumenti semplici). Nato da T20 (decisione dell'orchestratore
+del 2026-11-12).
+Tocca: `crates/fub-disegno/src/gesti/selezione.rs`,
+`crates/fub-disegno/src/apertura.rs` (solo se la strada giusta è nella
+mappa), `crates/fub-disegno/tests/gesti_selezione.rs`,
+`crates/fub-disegno/tests/cancello.rs` (togliere le due righe ammesse di
+`foreign` e `inkscape`), `docs/architecture/disegno.md` (una frase, la pagina
+resta sotto le 450 righe)
+Non toccare: `vendor/vectorcraft` (niente patch per questo); il client; le
+regole di `fub_scene` su che cosa è un livello.
+Dipende da: T20
+Cosa fare:
+- Spostare, ridimensionare e ruotare un gruppo di Inkscape che il motore
+  tiene come livello scrive la `transform` che scrive oggi il client, come
+  `selezione.rs` fa già per i casi che il motore non sa fare (la matrice di
+  Fub, scritta da `differenza`), oppure lo si mappa nel motore come un
+  gruppo: scegli la strada che non cambia che cosa il motore disegna e dillo.
+- La selezione, il riquadro e le maniglie restano quelli di Fub.
+Casi limite: un livello di Inkscape bloccato (`sodipodi:insensitive`) o
+nascosto; un livello dentro un altro livello; un livello con già una
+`transform`; più livelli scelti insieme; un livello vuoto.
+Fatto quando: `cargo test -p fub-disegno --test gesti_selezione` passa con
+uno spostamento e una rotazione di `layer1` del file `inkscape` del corpus
+uguali a ciò che scrive il client (registrato dal client o letto da
+`panel.ts`); `node tools/disegno-cancello/cancello.mjs` esce con 0 senza le
+righe ammesse di `foreign` e `inkscape`.
+Prova: scripts/check.sh --rapido; cargo test -p fub-disegno --test gesti_selezione; node tools/disegno-cancello/cancello.mjs
+Stato: [ ] da fare
+
+## T34 · Il commit su un disegno grande
+
+Perché: la misura di T20
+(`docs/misure/2026-11-12-disegno-linux-13600kf.md`) dà il commit di uno
+spostamento su un disegno di 1 MiB a 82 ms di mediana e 99 ms al 95°
+percentile, contro il tetto di 50 ms di A8; l'utente vuole il disegno
+«estremamente fluido». Nato da T20 (decisione dell'orchestratore del
+2026-11-12).
+Tocca: `crates/fub-disegno/src/` (dove il profilo mostra il tempo: il ritorno
+della sessione alla copia, la differenza o la sincronia),
+`crates/fub-disegno/tests/cancello.rs` (la prova `latenze`), il file di
+misura di T20 (una sezione nuova, col giorno)
+Non toccare: `vendor/vectorcraft` senza dirlo prima nel report (una patch è
+una scelta dell'orchestratore); il client; il contratto IPC.
+Dipende da: T20, T33 (tutti e due toccano `crates/fub-disegno`)
+Cosa fare:
+- Profilare il commit sul disegno di 1 MiB di `latenze` (per esempio
+  `perf` o `cargo flamegraph`, se ci sono; altrimenti tempi a mano per fase)
+  e scrivere dove vanno i millisecondi.
+- Misurare per confronto il commit dello stesso spostamento nel client senza
+  motore (`main`), sullo stesso file, perché il numero dica quanto aggiunge
+  il motore.
+- Togliere il costo che cresce col documento quando il gesto ne tocca una
+  parte (per esempio non riportare tutta la sessione alla copia dopo ogni
+  gesto, ma solo ciò che il gesto ha cambiato), senza cambiare le operazioni
+  scritte: i vettori dei gesti e il cancello restano verdi.
+Casi limite: un gesto rifiutato o annullato a metà (la sessione torna lo
+stesso come prima); un panico del motore durante il gesto (la sessione si
+ricarica intera, come oggi); un gesto dopo una sincronia col testo intero.
+Fatto quando: la prova `latenze` dà il commit di uno spostamento sul disegno
+di 1 MiB ≤ 50 ms al 95° percentile su questa macchina, scritto nel file di
+misura con il confronto con `main`; oppure, se non si può senza toccare
+VectorCraft, il numero vero, dove va il tempo e la proposta, nel report;
+`node tools/disegno-cancello/cancello.mjs` esce con 0.
+Prova: scripts/check.sh --rapido; FUB_DISEGNO_CANCELLO=<cartella> cargo test --release -p fub-disegno --test cancello -- --ignored --exact latenze
+Stato: [ ] da fare
+
 ## T30 · La CI completa e la revisione prima del merge
 
 Perché: l'utente fonde K5 in `main` soltanto dopo la CI completa (Windows,
@@ -2178,7 +2251,7 @@ lascia all'orchestratore.
 Non toccare: i limiti dei banchi (nessuno si alza); i task fatti (un difetto
 in un task fatto si corregge con un task nuovo); la proposta a monte (si
 scrive, non si manda).
-Dipende da: T6, T7, T9, T11, T13–T24, T26–T29, T31, T32
+Dipende da: T6, T7, T9, T11, T13–T24, T26–T29, T31, T32, T33, T34
 Cosa fare (lo fa l'orchestratore, non un coder):
 - Prima: main unito in `piano/k5-disegno` (K2 e K3 fusi), la base della PR
   #300 è `main`.
