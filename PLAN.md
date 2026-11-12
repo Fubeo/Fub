@@ -1848,7 +1848,7 @@ scheda Componenti con quella riga a fuoco; `commands.test.ts` dice che senza
 registrazione `showComponent` dà `false`; la foto del banco della riga
 segnata è come il prototipo.
 Prova: scripts/check.sh --rapido --client; npm --prefix apps/client test -- src/panels/components-page.test.ts src/ui/commands.test.ts src/panels/settings.components.test.ts
-Stato: [ ] da fare
+Stato: [~] in corso (2026-11-12, coder su base 402e96f69)
 
 ## T25 · Il prototipo del disegno, con il motore e senza
 
