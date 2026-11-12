@@ -182,15 +182,14 @@ della selezione nella scena, o il riquadro.
 
 ## Il motore come componente
 
-Il motore è il componente `fub.motore-vettoriale`, «Motore del disegno», una
-riga sua nel gruppo «Disegnare» della pagina Componenti, accesa di serie e con
-il suo interruttore (`crates/fub-features/src/componenti.rs`, la riga arriva
-con T13). `fub.draw` lo usa senza richiederlo: spento il motore, i disegni
-restano accesi. Senza la feature `draw` l'host non compila il motore, e i
-comandi del disegno rispondono `Unserved`. Il motore si costruisce al primo
-disegno aperto e chiede i caratteri di Fub (`Servizi::caratteri`, dati
-dall'host): senza, non si costruisce. Passare quei caratteri alla `FontDb` del
-motore non è ancora fatto: chiede una dipendenza diretta da `vectorcraft-text`.
+Il motore è il componente `fub.motore-vettoriale`, «Motore del disegno»: una
+riga sua nel gruppo «Disegnare» della pagina Componenti, accesa di serie
+(`crates/fub-features/src/componenti.rs`). `fub.draw` lo usa senza
+richiederlo: spento il motore, i disegni restano accesi. Senza la feature
+`draw` l'host non compila il motore e i comandi del disegno rispondono
+`Unserved`. Il motore si costruisce al primo disegno aperto coi caratteri di
+Fub (`Servizi::caratteri`, dati dall'host), che la sua `FontDb` non riceve
+ancora (arriva con T17).
 
 Il disegno usa il motore nei due spazi di lavoro, Semplice e Completo, perché
 gli strumenti sono gli stessi e cambia solo l'aspetto. Il profilo `pdf` tiene
@@ -199,13 +198,11 @@ i suoi strumenti TypeScript ([ADR 0231](../decisions/0231-la-chiusura-di-fubdraw
 
 Senza motore la sessione è `MotoreAssente`, e il disegno usa gli strumenti
 semplici, quelli TypeScript del client: Selezione, forme e Testo funzionano
-lo stesso. Un chip della superficie dice perché (arriva con T23, T28 e T29):
-
-- **motore spento** (la riga del componente spenta): «Accendi…» apre la
-  pagina Componenti sulla riga del motore;
-- **motore fermo** (un errore all'apertura o durante il lavoro): «Riprova»
-  lo riapre;
-- **build senza motore**: il chip c'è, senza azione.
+lo stesso. Un chip della superficie dice perché (arriva con T23 e T29): col
+motore **spento** (la riga del componente spenta) «Accendi…» apre la pagina
+Componenti sulla riga del motore; col motore **fermo** (un errore all'apertura
+o durante il lavoro) «Riprova» lo riapre; in una **build senza motore** il
+chip non ha azione.
 
 Le frasi esatte del chip si scelgono sul prototipo del piano (T25). Mano,
 Lente, Penna, Evidenziatore e Gomma non passano mai dal motore e funzionano
@@ -240,15 +237,11 @@ Sei comandi tipati, nella forma di quelli dei fogli, con le forme in
 | `close_drawing` | chiude l'istanza |
 
 I tre comandi (`crates/fub-disegno/src/comandi.rs`) sono `paint.setStroke`,
-`paint.setFill` e `stroke.set` del motore sugli oggetti che il pannello del
-client colora (un gruppo passa ai figli non bloccati, il tratto di una
-penna è il suo riempimento); l'esito è la differenza, scritta come la scrive
-il client: un colore dato a chi non aveva quel tratto o riempimento è il solo
-`stroke` o `fill`, il riempimento di un testo è il `fill` del `<text>`, lo
-spessore di una freccia riscrive anche la punta e quello di un tratteggio del
-menu rimisura lo `stroke-dasharray`. Lo spessore di una linea a spessore
-variabile è `Unsupported` e il comando è spento: il client ne ricalcola il
-contorno pieno, un calcolo che in Rust non c'è.
+`paint.setFill` e `stroke.set` del motore, sugli oggetti che colora il
+pannello del client; l'esito è la differenza scritta come la scrive il client,
+punta delle frecce e `stroke-dasharray` dei tratteggi compresi. Lo spessore di
+una linea a spessore variabile è `Unsupported`, col comando spento (arriva con
+T32).
 
 Ogni richiesta passa da `validate()` prima di arrivare al motore. Le istanze
 stanno nell'host per vault, sotto un lucchetto che si prende per trovare

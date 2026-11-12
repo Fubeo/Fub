@@ -1450,7 +1450,7 @@ a (100, 80) con `text: "Testo"` dà un `<text>` con `x="100" y="80"` e una
 `tspan` «Testo», l'id nuovo selezionato, e il testo del file dopo
 l'applicazione è quello di `testo.json`; senza `text` dà `Empty`.
 Prova: scripts/check.sh --rapido; cargo test -p fub-disegno --test gesti_testo
-Stato: [ ] da fare
+Stato: [~] in corso (2026-11-12, coder su base 001141e9f)
 
 ## T18 · I comandi del disegno
 
@@ -2097,7 +2097,7 @@ nuova apertura funziona; il caso dei due vault; `cargo test -p fub-host
 falso; `node .github/scripts/check-doc-links.mjs` esce con 0.
 Prova: scripts/check.sh --rapido; cargo test -p fub-host --test drawing --test engines_warm
 Nota dell'orchestratore (2026-11-12, da T13): un vault che ha già `fub.draw` in `plugins.disabled` vede oggi la riga del motore accesa di serie mentre il bundle dei disegni non è montato; `motore_disegno_spento` deve contarlo spento anche lì, con un test.
-Stato: [ ] da fare
+Stato: [~] in corso (2026-11-12, coder su base 001141e9f)
 
 ## T31 · La cornice girata fra un gesto e l'altro
 
