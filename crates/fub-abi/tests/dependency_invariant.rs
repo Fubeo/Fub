@@ -1287,6 +1287,7 @@ const VECTORCRAFT_OWNERS: &[(&str, &str, Option<&str>)] = &[
     ("fub-disegno", "vectorcraft-engine", None),
     ("fub-disegno", "vectorcraft-geom", None),
     ("fub-disegno", "vectorcraft-svg", None),
+    ("fub-disegno", "vectorcraft-text", None),
     ("fub-disegno", "vectorcraft-tools", None),
 ];
 

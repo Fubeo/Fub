@@ -22,6 +22,8 @@ vectorcraft-tools = { workspace = true }
 vectorcraft-svg = { workspace = true }
 vectorcraft-doc = { workspace = true }
 vectorcraft-geom = { workspace = true }
+# La `FontDb` del motore, riempita con i caratteri di Fub (`src/motore.rs`).
+vectorcraft-text = { workspace = true, default-features = false }
 fub-motori = { workspace = true }
 fub-abi = { workspace = true }
 fub-scene = { workspace = true }

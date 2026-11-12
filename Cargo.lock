@@ -2112,6 +2112,7 @@ dependencies = [
  "vectorcraft-engine",
  "vectorcraft-geom",
  "vectorcraft-svg",
+ "vectorcraft-text",
  "vectorcraft-tools",
 ]
 

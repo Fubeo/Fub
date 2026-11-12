@@ -57,6 +57,7 @@ impl MotoreDisegno {
                 ErroreMotore::creazione(format!("il catalogo dei comandi del disegno: {panico}"))
             },
         )?;
+        dai_caratteri(&caratteri);
         Ok(MotoreDisegno { caratteri })
     }
 
@@ -73,6 +74,20 @@ impl MotoreDisegno {
     /// Svuota le cache e dice quanti byte se ne sono andati.
     pub fn svuota(&self) -> u64 {
         0
+    }
+}
+
+/// Dà al motore le facce di Fub: la `FontDb` del motore è quella del
+/// processo (`FontDb::global`, che usano la disposizione del testo, i colpi
+/// sui testi e l'import), e le facce entrano lì prima di quelle che il motore
+/// troverebbe da sé. Una faccia già data (la stessa famiglia, lo stile e la
+/// versione) non si aggiunge due volte, quindi un motore che rinasce non le
+/// ripete; zero facce lasciano il ripiego del motore.
+fn dai_caratteri(caratteri: &Caratteri) {
+    let db = vectorcraft_text::FontDb::global();
+    for faccia in caratteri.facce() {
+        // Una faccia che non si legge resta fuori: il testo usa il ripiego.
+        let _ = vectorcraft_engine::guard::catch_panic(|| db.add_font(faccia.to_vec()));
     }
 }
 

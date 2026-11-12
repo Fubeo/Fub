@@ -234,6 +234,9 @@ vectorcraft-tools = { path = "vendor/vectorcraft/crates/tools", version = "0.20.
 vectorcraft-svg = { path = "vendor/vectorcraft/crates/svg", version = "0.20.0" }
 vectorcraft-doc = { path = "vendor/vectorcraft/crates/doc", version = "0.20.0" }
 vectorcraft-geom = { path = "vendor/vectorcraft/crates/geom", version = "0.20.0" }
+# La `FontDb` del motore, che `fub-disegno` riempie con i caratteri di Fub:
+# senza `bundled-fonts`, come il motore.
+vectorcraft-text = { path = "vendor/vectorcraft/crates/text", default-features = false, version = "0.20.0" }
 # Le dipendenze che Fub ha in comune con la copia di WordCraft: le versioni
 # sono le stesse di vendor/wordcraft/Cargo.toml (`vendor.mjs check`). `image`
 # non accende niente qui: ogni crate dice quali decodificatori vuole.
