@@ -27,6 +27,7 @@ pub mod selezione;
 /// Scrivere e modificare il testo.
 pub mod testo;
 
+use std::cell::Cell;
 use std::sync::Arc;
 
 use fub_abi::{
@@ -52,6 +53,9 @@ pub(crate) struct Contesto<'a> {
     /// La pressione del gesto come l'ha mandata Fub, prima di
     /// [`Strumento::evento`]; `None` prima di lei.
     pub pressione: Option<DrawingPointer>,
+    /// Il gesto ha passato la soglia del trascinamento: lo strumento lo
+    /// segna, la sessione lo ricorda fra un pezzo e l'altro del gesto.
+    pub trascinato: Cell<bool>,
 }
 
 /// Uno strumento di Fub fatto con uno strumento del motore.
@@ -123,6 +127,8 @@ pub(crate) struct Banco {
     pub inizio: Option<DrawingPointer>,
     /// La stessa pressione come l'ha mandata Fub ([`Contesto::pressione`]).
     pub pressione: Option<DrawingPointer>,
+    /// [`Contesto::trascinato`] del gesto in corso.
+    pub trascinato: bool,
 }
 
 impl Banco {
@@ -144,6 +150,7 @@ impl Banco {
                 in_corso: None,
                 inizio: None,
                 pressione: None,
+                trascinato: false,
             })
         })
     }
@@ -154,6 +161,7 @@ impl Banco {
         self.in_corso = None;
         self.inizio = None;
         self.pressione = None;
+        self.trascinato = false;
         let doc = (*copia.documento).clone();
         let sessione = &mut self.sessione;
         vectorcraft_engine::guard::catch_panic(|| sessione.replace_document(0, doc))?;
@@ -166,6 +174,7 @@ impl Banco {
         self.in_corso = None;
         self.inizio = None;
         self.pressione = None;
+        self.trascinato = false;
         let doc = (*copia.documento).clone();
         let sessione = &mut self.sessione;
         if vectorcraft_engine::guard::catch_panic(|| sessione.replace_document(0, doc)).is_err() {
@@ -243,6 +252,7 @@ impl Banco {
             gesto,
             copia,
             pressione,
+            trascinato: Cell::new(!ricomincia && self.trascinato),
             vista: ViewInfo {
                 zoom: gesto.zoom
                     * copia
@@ -294,6 +304,7 @@ impl Banco {
             Ok(Ok(())) => {}
             Ok(Err(_)) | Err(_) => return rifiuta(self, esito, DrawingRefusal::Unsupported),
         }
+        self.trascinato = cx.trascinato.get();
         if gesto.phase == DrawingPhase::Preview {
             let sessione = &mut self.sessione;
             match vectorcraft_engine::guard::catch_panic(|| strumento.anteprima(sessione, &cx)) {

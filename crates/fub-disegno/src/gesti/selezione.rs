@@ -14,8 +14,9 @@
 //!   in alto; il puntatore si conta come il mouse, che il contratto non dice)
 //!   ridimensiona o ruota;
 //! - un **oggetto** sotto il puntatore (l'oggetto più esterno del livello:
-//!   un gruppo per un oggetto che sta dentro di lui; un oggetto scelto
-//!   dentro un gruppo prende il gesto lui) si sceglie, con Maiusc si
+//!   un gruppo per un oggetto che sta dentro di lui, con Ctrl/⌘ il più dentro
+//!   fra i gruppi; un oggetto scelto dentro un gruppo prende il gesto lui)
+//!   si sceglie, con Maiusc si
 //!   aggiunge o, già scelto, si toglie al rilascio senza trascinare, e
 //!   trascinato si sposta con tutta la selezione;
 //! - il **vuoto** comincia un riquadro: sceglie gli oggetti che contiene per
@@ -53,7 +54,7 @@
 //! con il contorno (il motore scala lungo i suoi assi e dal bordo della
 //! geometria), una pressione dove il motore ha una maniglia sua (le maniglie
 //! e la zona di rotazione della sua cornice, i cursori della torta di
-//! un'ellisse), un oggetto scelto dentro un gruppo, la carta. La matrice di
+//! un'ellisse), un oggetto dentro un gruppo, la carta. La matrice di
 //! Fub va sugli oggetti del documento del motore, e la differenza scrive la
 //! `transform` nuova come per il motore ([`crate::differenza`]).
 //!
@@ -63,10 +64,14 @@
 //! **L'anteprima** ([`Strumento::anteprima`]) è la matrice di Fub della
 //! selezione, nelle coordinate della scena, o il riquadro di selezione.
 //!
-//! **Fuori dalla regola di oggi**: la soglia di trascinamento si guarda sul
-//! punto di adesso (Fub ricorda che l'ha passata); più oggetti ruotati non
-//! tengono la cornice girata fra un gesto e l'altro; Ctrl/⌘ non sceglie
-//! dentro i gruppi.
+//! La soglia di trascinamento, passata una volta, resta passata per tutto il
+//! gesto ([`Contesto::trascinato`], che la sessione ricorda fra un pezzo e
+//! l'altro).
+//!
+//! **Fuori dalla regola di oggi**: più oggetti ruotati non tengono la
+//! cornice girata fra un gesto e l'altro. Il client la tiene in `ctx.kept`
+//! solo sulla sua strada; il gesto del motore non sa che cornice il client
+//! mostra.
 
 use fub_abi::{DrawingOutcome, DrawingPointer, DrawingPointerKind, DrawingPreview, DrawingRefusal};
 use fub_scene::Role;
@@ -710,19 +715,56 @@ fn analizza(cx: &Contesto<'_>) -> Option<(Gesto, DrawingPointer)> {
         let motore = colpo.is_none() && !maniglia_del_motore(cx, &sel_nodi, pe);
         return Some((Gesto::Riquadro { base, motore }, press));
     };
-    // Sopra un oggetto scelto dentro un gruppo il gesto prende lui.
-    let mut dentro = false;
+    let cima = i;
+    // L'oggetto più dentro sotto il puntatore (`deepAt`): dall'oggetto in
+    // cima si scende nei gruppi e nei collegamenti, per i figli che il colpo
+    // attraversa, finché si possono scegliere.
+    let profondo = {
+        let sotto = h
+            .ancestry
+            .iter()
+            .position(|n| *n == top)
+            .map_or(&[][..], |k| &h.ancestry[k + 1..]);
+        let mut qui = i;
+        for n in sotto.iter().chain(std::iter::once(&h.leaf)) {
+            let contenitore =
+                elemento(cx, qui).is_some_and(|e| matches!(e.ruolo, Role::Group | Role::Link));
+            if !contenitore {
+                break;
+            }
+            let Some(j) = mappa.del_nodo(*n) else {
+                continue;
+            };
+            match elemento(cx, j) {
+                Some(e) if !e.bloccato && !e.nascosto && e.nodo.is_some() => qui = j,
+                _ => break,
+            }
+        }
+        qui
+    };
+    // Con Ctrl o ⌘ si sceglie dentro i gruppi.
+    if libero(cx, &press) {
+        i = profondo;
+    }
+    // Sopra un oggetto scelto dentro un gruppo il gesto prende lui: si
+    // trascina senza il gruppo, e Maiusc lo toglie.
     if !sel.contains(&i) {
+        let percorso = |u: usize| {
+            elemento(cx, u)
+                .map(|e| e.percorso.as_slice())
+                .unwrap_or(&[])
+        };
         let dentro_di = |u: &usize| {
-            elemento(cx, *u)
-                .and_then(|e| e.nodo)
-                .is_some_and(|n| n != top && (n == h.leaf || h.ancestry.contains(&n)))
+            contiene(percorso(i), percorso(*u))
+                && (*u == profondo || contiene(percorso(*u), percorso(profondo)))
         };
         if let Some(u) = sel.iter().find(|u| dentro_di(u)) {
             i = *u;
-            dentro = true;
         }
     }
+    // Il motore sceglie l'oggetto in cima: per uno più dentro il gesto lo fa
+    // Fub.
+    let dentro = i != cima;
     let scelto = sel.contains(&i);
     let mut lascia = None;
     let dopo = if press.shift {
@@ -794,9 +836,14 @@ fn analizza(cx: &Contesto<'_>) -> Option<(Gesto, DrawingPointer)> {
     ))
 }
 
-/// Vero se il puntatore è andato oltre la soglia del trascinamento.
+/// Vero se il gesto, arrivato a `e`, ha passato la soglia del trascinamento:
+/// passata una volta resta passata, anche se il puntatore torna vicino alla
+/// pressione (il modo `pending` di `updateSelect` non torna più).
 fn trascinato(cx: &Contesto<'_>, press: &DrawingPointer, e: &DrawingPointer) -> bool {
-    (e.x - press.x).hypot(e.y - press.y) * cx.gesto.zoom > DRAG_PX
+    if (e.x - press.x).hypot(e.y - press.y) * cx.gesto.zoom > DRAG_PX {
+        cx.trascinato.set(true);
+    }
+    cx.trascinato.get()
 }
 
 /// Ctrl/⌘ scioglie la griglia e la calamita.

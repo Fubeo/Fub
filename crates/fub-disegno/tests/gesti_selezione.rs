@@ -434,3 +434,140 @@ fn maiusc_e_il_riquadro_aggiungono_alla_selezione() {
         .expect("commit");
     assert_eq!(esito.selection, ["oa1a1a1a1", "ob2b2b2b2"]);
 }
+
+fn con_ctrl(mut e: Value) -> Value {
+    e["cmd"] = json!(true);
+    e
+}
+
+#[test]
+fn ctrl_sceglie_e_sposta_dentro_i_gruppi() {
+    let b = "<rect id=\"ob2b2b2b2\" x=\"250\" y=\"100\" width=\"50\" height=\"50\"/>";
+    let testo = disegno(&format!(
+        "<g id=\"og1g1g1g1\"><g id=\"og2g2g2g2\">{A}</g>{b}</g>"
+    ));
+    // Un clic: l'oggetto più dentro, attraverso i due gruppi.
+    let (mut d, _) = apri(&testo);
+    let esito = d
+        .gesto(richiesta(
+            "commit",
+            &[],
+            vec![
+                con_ctrl(evento("down", 150.0, 125.0)),
+                con_ctrl(evento("up", 150.0, 125.0)),
+            ],
+        ))
+        .expect("commit");
+    assert_eq!(esito.ops, None);
+    assert_eq!(esito.selection, ["oa1a1a1a1"]);
+    // Trascinato: si sposta lui solo, senza la griglia (Ctrl/⌘ la scioglie).
+    let (mut d, _) = apri(&testo);
+    let mut con_griglia = richiesta(
+        "commit",
+        &[],
+        vec![
+            con_ctrl(evento("down", 150.0, 125.0)),
+            con_ctrl(evento("drag", 163.0, 131.0)),
+            con_ctrl(evento("up", 163.0, 131.0)),
+        ],
+    );
+    con_griglia.snap.grid = Some(20.0);
+    let esito = d.gesto(con_griglia).expect("commit");
+    assert_eq!(esito.refused, None);
+    assert_eq!(
+        trasformazione(&esito, "oa1a1a1a1").as_deref(),
+        Some("matrix(1 0 0 1 13 6)")
+    );
+    assert_eq!(trasformazione(&esito, "og1g1g1g1"), None);
+    assert_eq!(trasformazione(&esito, "og2g2g2g2"), None);
+    assert_eq!(esito.selection, ["oa1a1a1a1"]);
+    // Senza Ctrl lo stesso clic sceglie il gruppo in cima.
+    let esito = clic(&testo, &[], (150.0, 125.0));
+    assert_eq!(esito.selection, ["og1g1g1g1"]);
+}
+
+#[test]
+fn la_soglia_passata_resta_passata() {
+    let testo = disegno(A);
+    // Oltre la soglia e di nuovo a un passo dalla pressione: lo spostamento
+    // è quel passo.
+    let esito = tira(&testo, &[], (150.0, 125.0), (151.0, 125.0));
+    assert_eq!(esito.ops, None, "senza passare la soglia non si sposta");
+    let (mut d, _) = apri(&testo);
+    let esito = d
+        .gesto(richiesta(
+            "commit",
+            &[],
+            vec![
+                evento("down", 150.0, 125.0),
+                evento("drag", 170.0, 125.0),
+                evento("drag", 151.0, 125.0),
+                evento("up", 151.0, 125.0),
+            ],
+        ))
+        .expect("commit");
+    assert_eq!(
+        trasformazione(&esito, "oa1a1a1a1").as_deref(),
+        Some("matrix(1 0 0 1 1 0)")
+    );
+    // Lo stesso a pezzi: la sessione ricorda la soglia fra un pezzo e
+    // l'altro, e l'anteprima la segue.
+    let (mut d, _) = apri(&testo);
+    d.gesto(richiesta(
+        "preview",
+        &[],
+        vec![evento("down", 150.0, 125.0), evento("drag", 170.0, 125.0)],
+    ))
+    .expect("anteprima");
+    let indietro = d
+        .gesto(richiesta(
+            "preview",
+            &[],
+            vec![evento("drag", 151.0, 125.0)],
+        ))
+        .expect("anteprima");
+    assert_eq!(
+        indietro.preview.and_then(|p| p.matrix),
+        Some([1.0, 0.0, 0.0, 1.0, 1.0, 0.0])
+    );
+    let esito = d
+        .gesto(richiesta("commit", &[], vec![evento("up", 151.0, 125.0)]))
+        .expect("commit");
+    assert_eq!(
+        trasformazione(&esito, "oa1a1a1a1").as_deref(),
+        Some("matrix(1 0 0 1 1 0)")
+    );
+    // Un gesto nuovo ricomincia sotto la soglia.
+    let esito = d
+        .gesto(richiesta(
+            "commit",
+            &[],
+            vec![evento("down", 150.0, 125.0), evento("up", 151.0, 125.0)],
+        ))
+        .expect("commit");
+    assert_eq!(esito.ops, None);
+}
+
+#[test]
+fn maiusc_su_un_oggetto_scelto_trascinato_e_tornato_non_lo_lascia() {
+    let b = "<rect id=\"ob2b2b2b2\" x=\"250\" y=\"200\" width=\"50\" height=\"50\"/>";
+    let testo = disegno(&format!("{A}\n    {b}"));
+    let (mut d, _) = apri(&testo);
+    let mut giu = evento("down", 150.0, 125.0);
+    giu["shift"] = json!(true);
+    let esito = d
+        .gesto(richiesta(
+            "commit",
+            &["oa1a1a1a1", "ob2b2b2b2"],
+            vec![
+                giu,
+                evento("drag", 170.0, 125.0),
+                evento("drag", 150.0, 125.0),
+                evento("up", 150.0, 125.0),
+            ],
+        ))
+        .expect("commit");
+    assert_eq!(esito.ops, None);
+    assert_eq!(esito.selection, ["oa1a1a1a1", "ob2b2b2b2"]);
+    assert_eq!(esito.refused, Some(DrawingRefusal::Empty));
+}

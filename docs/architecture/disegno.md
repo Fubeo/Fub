@@ -167,8 +167,9 @@ provvisoria nello spazio del livello.
 La selezione (`gesti/selezione.rs`) decide il gesto con le regole di Fub,
 dalla pressione come l'ha mandata Fub e dalla selezione di prima: una
 maniglia della cornice ridimensiona o ruota, un oggetto (il più esterno del
-livello, o quello scelto dentro un gruppo) si sceglie e si sposta, il vuoto
-comincia un riquadro, che sceglie ciò che contiene per intero. Spostare usa la
+livello, con Ctrl/⌘ il più dentro, o quello scelto dentro un gruppo) si
+sceglie e si sposta (la soglia di trascinamento, passata, resta passata), il
+vuoto comincia un riquadro, che sceglie ciò che contiene per intero. Spostare usa la
 Selezione del motore (`selection`), ruotare il suo `rotate`, ridimensionare una
 cornice dritta senza contorno la sua maniglia: gli eventi arrivano già con la
 griglia, le proporzioni, la misura minima e la calamita degli angoli di Fub,
