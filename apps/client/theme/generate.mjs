@@ -1,7 +1,7 @@
 // **La generazione dei derivati del tema**: le sorgenti entrano, i file escono.
 //
-//     node tema/genera.mjs             riscrive i derivati
-//     node tema/genera.mjs --verifica  dice se sono quelli che le sorgenti producono
+//     node apps/client/theme/generate.mjs             riscrive i derivati
+//     node apps/client/theme/generate.mjs --verifica  dice se sono quelli che le sorgenti producono
 //
 // Sono due, e hanno la stessa forma. I **fogli** (§31.2) vengono dalla
 // ricetta in OKLCH: si dichiara luminosità, croma e tinta, ed esce

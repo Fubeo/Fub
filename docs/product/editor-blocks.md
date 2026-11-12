@@ -71,6 +71,10 @@ sono selezionati.
 - Mod+Shift+↑/↓ sposta il blocco del cursore, o la selezione di blocchi, fra i
   fratelli; le voci numerate si rinumerano; un annulla torna indietro in un
   passo.
+- Alt+↑/↓ sulle righe del testo (fuori dalle proprietà) non portano una riga
+  del corpo dentro il frontmatter, né le sue righe `---` fuori. Mod+D non copia
+  le righe `---` della testata, che farebbero una seconda testata; le proprietà
+  si copiano come le altre righe.
 - Backspace all'inizio di un paragrafo lo unisce al testo del blocco sopra.
 - Dentro un blocco di codice Tab e Shift+Tab rientrano il codice e Mod+A
   seleziona prima il codice, poi tutta la nota.
@@ -89,10 +93,15 @@ delle righe prima che CodeMirror le riscriva e le anima dal posto vecchio con
 `moto`, soltanto con `transform` e `opacity`.
 
 - **Sollevare e posare.** Trascinato, il blocco sale (scala 1,015 e ombra) e i
-  fratelli fra il suo posto e la linea si scostano. Al rilascio ognuno scivola
-  al suo posto e il blocco atterra dall'immagine sollevata con un piccolo
-  rimbalzo e un alone d'accento; Esc lo riporta indietro allo stesso modo.
-- **Scambiare.** Mod+Shift+↑/↓ fa scivolare le righe dal posto vecchio.
+  fratelli fra il suo posto e la linea si scostano. Sale soltanto il blocco: la
+  testata della pagina e i widget degli altri blocchi restano fermi. Al rilascio
+  ognuno scivola al suo posto e il blocco atterra dall'immagine sollevata con un
+  piccolo rimbalzo e un alone d'accento; Esc lo riporta indietro allo stesso modo.
+  Trascinato sopra il frontmatter, il blocco si posa subito sotto di lui, che
+  non si trascina.
+- **Scambiare.** Mod+Shift+↑/↓ fa scivolare le righe dal posto vecchio. Il
+  frontmatter resta sempre il primo blocco: niente gli passa davanti, lui non
+  scende, e «Sposta su» non compare sul primo testo che lo segue.
 - **Trasformare.** Il testo cresce o cala sul posto con la scala dei
   caratteri, il segno nuovo entra con un rimbalzo e i blocchi sotto scivolano.
   Un gesto che ne interrompe uno ancora in corsa riparte da dov'era.

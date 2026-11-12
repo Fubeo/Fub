@@ -384,7 +384,7 @@ Un editor non scrive un ruolo del tema sull'elemento: sull'elemento vanno i
 valori del file. `.github/scripts/check-inline-theme.mjs` lo controlla in
 `apps/client/src/editors/`, con l'elenco delle righe che lo fanno ancora.
 
-La finestra documento a parte (`apps/client/src/shells/document/`) non ha IPC:
+La finestra documento a parte (`apps/client/src/shells/scrittoio/document/`) non ha IPC:
 riceve dalla finestra principale il profilo di testo che il registro ha risolto
 per il documento (`DocumentWindowRequest.profile`) e lo monta su un
 `TextEngine` nudo, senza completamenti dal vault né slash palette. Un documento

@@ -317,7 +317,7 @@ viene cancellato: dati e componente eseguibile hanno lifecycle distinti.
 | Una chiamata si blocca o rientra | lavoro lungo in una chiamata breve o reentrancy sulla stessa istanza | usa un job per il lavoro lungo e non rientrare nel provider |
 
 Il ciclo esercitato e i limiti correnti sono descritti anche in
-[`../project/m5-wasm-runtime.md`](../project/m5-wasm-runtime.md) e nel
+[runtime dei plugin](../architecture/plugin-runtime.md) e nel
 [layout su disco](../reference/on-disk-layout.md).
 
 ## Pubblicazione

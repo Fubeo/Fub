@@ -72,7 +72,14 @@ for (const file of files) {
     if (/<[A-Za-z][^>]*>/.test(visible)) {
       const allowedComment =
         relative === "CONTRIBUTING.md" && /^\s*<!-- ci-required:(start|end) -->\s*$/.test(line);
-      if (!allowedComment) errors.push(`${relative}:${lineNo}: HTML inline non consentito`);
+      // Il logo in testa al README: il Markdown non sa centrare un'immagine né
+      // darle una misura, e un SVG senza misura riempirebbe tutta la colonna.
+      // Solo queste due forme, e solo con un file di assets/logo/.
+      const allowedLogo =
+        relative === "README.md" &&
+        (/^<p align="center">$/.test(line) ||
+          /^ {2}<img src="assets\/logo\/[a-z0-9-]+\.svg" alt="[^"<>]+" width="\d+">$/.test(line));
+      if (!allowedComment && !allowedLogo) errors.push(`${relative}:${lineNo}: HTML inline non consentito`);
     }
   });
 

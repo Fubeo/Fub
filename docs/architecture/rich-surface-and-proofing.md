@@ -143,7 +143,7 @@ l'IPC.
   nome; commenti, note e permessi per identità; numeri unici nuovi). Si
   rilegge e si controlla contro il file come i byte del codec, e ciò che non
   sa trattare ripiega sulla scrittura intera. Le normalizzazioni
-  dichiarate (`NORMALIZATIONS` in `inventory.rs`, ciascuna con la sua
+  dichiarate (`NORMALIZATIONS` in `inventory/normalize.rs`, ciascuna con la sua
   ragione) non si contano: gli `w:rsid*`, `w:proofErr`,
   `w:lastRenderedPageBreak`, gli `w14:paraId`/`w14:textId` e i loro rimandi
   nei commenti, le statistiche di `app.xml`, il numero (non la presenza) di

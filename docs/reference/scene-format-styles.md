@@ -6,7 +6,7 @@
 > **Fonti autorevoli:** `apps/client/src/editors/spatial/scene/classify.ts`
 > e `crates/fub-scene/src/classify.rs`, che leggono allo stesso modo;
 > l'interlinea in `scene/values.ts` e `crates/fub-scene/src/values.rs`; le
-> operazioni in `scene/engine.ts`, coi vettori di prova da 81 a 83
+> operazioni in `scene/engine/`, coi vettori di prova da 81 a 83
 > ([operazioni sulla scena](scene-operations.md), §9); l'SVG pulito in
 > `crates/fub-scene/src/export/clean.rs`; ciò che l'editor ne fa in
 > `tools/styles.ts`.

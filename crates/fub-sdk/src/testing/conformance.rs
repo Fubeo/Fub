@@ -10,8 +10,9 @@
 //! [decisione 0054]: https://github.com/Fubeo/Fub/blob/main/../../../../docs/decisions/0196-test-e-artefatti-generati.md
 //!
 //! Ogni funzione qui corrisponde a una frase del doc-comment di un trait in
-//! `fub-abi/src/traits.rs`, ed è scritta per essere chiamata da un test
-//! dell'*autore della feature* — non da un test del kernel.
+//! `fub-abi/src/traits.rs` (e nei suoi moduli `traits/*.rs`), ed è scritta per
+//! essere chiamata da un test dell'*autore della feature* — non da un test del
+//! kernel.
 //!
 //! ```no_run
 //! # use fub_sdk::testing::conformance;

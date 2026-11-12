@@ -79,20 +79,8 @@ come sul foglio ([Disegni, esportare](drawing-export.md)).
 
 ## Nel file
 
-Una campitura è un motivo di SVG privato con `fub:pattern`, che dice in
-sei parole il genere, l'angolo, il passo, lo spessore, il colore delle
-righe e il fondo, e il contenuto ne discende; un motivo del documento ha il
-suo nome in `fub:name`, come un campione.
-
-```xml
-<pattern id="r3h8k2m5q" fub:role="private" width="8" height="8" patternUnits="userSpaceOnUse" patternTransform="rotate(-45)" fub:pattern="lines -45 8 1.5 #000000 #56b4e9">
-  <rect width="8" height="8" fill="#56b4e9"/>
-  <rect y="3.25" width="8" height="1.5" fill="#000000"/>
-</pattern>
-…
-<rect id="o1" x="10" y="10" width="60" height="40" fill="url(#r3h8k2m5q) #4692bd"/>
-```
-
-Un motivo scritto da un altro programma si vede e si conserva. La grammatica, il ripiego e quando un motivo è una
-campitura di Fub sono in [Formato della scena,
+Una campitura è un `pattern` privato con `fub:pattern`; un motivo del
+documento ha il suo nome in `fub:name`. La grammatica e il ripiego sono in
+[Formato della scena,
 risorse](../reference/scene-format-resources.md#le-campiture-e-i-motivi).
+

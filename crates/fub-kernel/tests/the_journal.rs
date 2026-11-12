@@ -823,7 +823,7 @@ fn opening_the_journal_does_not_write_into_it() {
 /// mano in `FsStorage::append`, la seconda rimettendo il commento di prima.
 #[test]
 fn pruning_does_not_promise_a_lock_that_append_does_not_take() {
-    const STORAGE: &str = include_str!("../src/storage.rs");
+    const STORAGE: &str = include_str!("../src/storage/fs_trait.rs");
     const JOURNAL: &str = include_str!("../src/journal.rs");
 
     let appending = body(

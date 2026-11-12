@@ -392,6 +392,50 @@ describe("gli strumenti", () => {
     expect(spoken()).toBe("1 oggetto cancellato. Il disegno ha 0 oggetti.");
   });
 
+  it("la gomma su un oggetto di un gruppo estraneo toglie lui solo, non il gruppo coi suoi vicini", () => {
+    // Come un livello di Inkscape: un `<g>` della radice senza `fub:layer`,
+    // con dentro tutto il disegno, un collegamento e un figlio bloccato.
+    const source = doc(
+      '<g id="strade"><rect id="a" x="60" y="60" width="20" height="20" fill="none" stroke="#000000" stroke-width="2"/>'
+        + '<rect id="b" x="200" y="200" width="20" height="20"/>'
+        + '<a href="parco.md" id="link"><rect id="c" x="300" y="60" width="20" height="20"/></a>'
+        + '<rect id="fermo" x="60" y="60" width="20" height="20" fub:locked="true"/></g>',
+    );
+    mount(source);
+    const before = editor.engine.text;
+    editor.setTool("eraser");
+    drag([[50, 70], [56, 70], [64, 70]]);
+    const after = editor.engine.text;
+    expect(after).not.toContain('id="a"');
+    for (const kept of ['id="strade"', 'id="b"', 'id="link"', 'id="c"', 'id="fermo"']) expect(after).toContain(kept);
+    expect(spoken()).toBe("1 oggetto cancellato. Il disegno ha 1 oggetto.");
+    editor.undo();
+    expect(editor.engine.text).toBe(before);
+  });
+
+  it("la gomma che passa su tutti i figli di un gruppo toglie il gruppo, senza lasciarne il guscio", () => {
+    mount(doc('<g id="coppia"><rect id="su" x="60" y="60" width="20" height="20"/><rect id="giu" x="60" y="90" width="20" height="20"/></g>'));
+    editor.setTool("eraser");
+    drag([[70, 50], [70, 120]]);
+    expect(editor.engine.text).not.toContain('id="coppia"');
+    expect(editor.engine.text).not.toContain('id="su"');
+    expect(editor.engine.text).not.toContain('id="giu"');
+  });
+
+  it("la gomma su un collegamento dentro un gruppo lo toglie intero, e il gruppo resta", () => {
+    mount(doc(
+      '<g id="altro"><a href="parco.md" id="link"><rect id="c" x="60" y="60" width="20" height="20"/></a>'
+        + '<rect id="d" x="10" y="10" width="20" height="10"/></g>',
+    ));
+    editor.setTool("eraser");
+    drag([[50, 70], [56, 70], [64, 70]]);
+    // Niente `<a>` vuoto: se ne va col suo unico figlio.
+    expect(editor.engine.text).not.toContain('id="link"');
+    expect(editor.engine.text).not.toContain("<a ");
+    expect(editor.engine.text).toContain('id="altro"');
+    expect(editor.engine.text).toContain('id="d"');
+  });
+
   it("la gomma ferma mentre la rotella sposta la vista non cancella ciò che non ha toccato", () => {
     mount();
     editor.setTool("eraser");

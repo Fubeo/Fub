@@ -238,7 +238,7 @@ impl std::fmt::Debug for Budget {
 ///
 /// Su Linux con la glibc chiama `malloc_trim(0)`: la glibc trattiene le pagine
 /// liberate, e senza questa chiamata chiudere un motore non abbassa la memoria
-/// del processo (`docs/misure/motori-2026-10-31-linux-ryzen.md`). Vero se ha
+/// del processo (`docs/misure/2026-10-31-motori-linux-ryzen.md`). Vero se ha
 /// reso qualcosa. Altrove non fa niente e dà falso.
 pub fn rilascia_al_sistema() -> bool {
     #[cfg(all(target_os = "linux", target_env = "gnu"))]

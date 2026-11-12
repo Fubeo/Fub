@@ -1,5 +1,4 @@
 import type {
-  GridApplyRequest,
   GridCommand,
   GridBytesCell,
   GridBytesSession,
@@ -7,21 +6,16 @@ import type {
   GridCellPatch as GridRequestPatch,
   GridCellStyle as GridBytesStyle,
   GridCommandOutcome,
-  GridCommandRequest,
   GridCommandState,
-  GridCommit,
-  GridDialog,
   GridBook,
   GridMerge,
   GridObject,
   GridSelection as GridCommandSelection,
   GridSheetView,
   GridTable,
-  GridSurfaceSpec,
   GridWindowRequest,
 } from "../../host/contract";
 import { GRID_BYTES_PROTOCOL_VERSION } from "../../host/contract";
-import { GRID_OVERSCAN } from "../core/row-window";
 import { errorText, isErrorKind } from "../../host/errors";
 import { operationFromText, type EditorChangeOrigin, type TextOperation } from "../core/text-operation";
 import {
@@ -41,7 +35,7 @@ import { createTextEngine, type TextEngine } from "../text/engine";
 import { createFormulaProfile, formulaReferences, operandSlot, type FormulaMove } from "../text/profiles/formula";
 import { isMultiCell, nextCell, nextInRange, type Move, type Shape } from "../../tabella/navigation";
 import { clipboardData, clipboardRows, pasteTargets, type ClipboardCell } from "../../tabella/clipboard";
-import { fillRange, touches, withRange } from "../../tabella/selection";
+import { touches, withRange } from "../../tabella/selection";
 import {
   columnLabel,
   coordinateAt,
@@ -88,6 +82,46 @@ import {
   type WorkbookCell,
   type WorkbookView,
 } from "./workbook";
+import {
+  axisLayout,
+  boundedWindow,
+  clamp,
+  DRAG_SCROLL_MAX,
+  DRAG_SCROLL_MS,
+  fillTarget,
+  gestureRect,
+  indexAt,
+  mergeCovers,
+  MOVE_SLOP,
+  pixelsToChars,
+  RESIZE_SLOP,
+  samePosition,
+  sameRange,
+  tableRange,
+  viewportRange,
+  type AxisLayout,
+  type CellDrag,
+  type ObjectGesture,
+  type ObjectRect,
+  type Pointing,
+  type ResizeDrag,
+  type ResizeEdge,
+} from "./engine-geometry";
+import {
+  applySourceEdit,
+  emptyEdit,
+  insertedObject,
+  keptWindows,
+  sameObjectPlace,
+  type BytesState,
+  type CellWrite,
+  type GridCommandEffect,
+  type GridEngineOptions,
+  type GridRun,
+} from "./engine-host";
+
+export { fillTarget, gestureRect, pixelsToChars } from "./engine-geometry";
+export type { GridChange, GridCommandEffect, GridEngineOptions, GridHost, GridRun } from "./engine-host";
 
 /// Oltre queste celle un intervallo non viaggia nel contesto: rifarne il
 /// testo a ogni movimento della selezione costerebbe quanto copiarlo.
@@ -153,9 +187,6 @@ const LOCK_KEYS: Readonly<Record<string, Key>> = {
   protected: "grid.workbook.lock.protected",
   "sheet-shape": "grid.workbook.lock.sheet_shape",
 };
-/// Le finestre lette che la griglia tiene, per non rileggerle a ogni
-/// scorrimento: poco più di quelle di uno schermo.
-const MAX_KEPT_WINDOWS = 16;
 const PLAIN_STYLE: GridBytesStyle = {
   bold: false,
   italic: false,
@@ -203,241 +234,6 @@ const DRAG_SLOP = 3;
 /// Gli oggetti che l'elenco per chi non vede nomina, al più.
 const SUMMARY_OBJECTS = 50;
 
-/// Un rettangolo sullo schermo, nelle coordinate del canvas.
-interface ObjectRect {
-  readonly left: number;
-  readonly top: number;
-  readonly width: number;
-  readonly height: number;
-}
-
-/// Lo spostamento, o la misura, di un oggetto con il puntatore.
-interface ObjectGesture {
-  readonly key: string;
-  /// La maniglia presa, o `null` per spostare l'oggetto intero.
-  readonly handle: string | null;
-  readonly pointer: number;
-  readonly x: number;
-  readonly y: number;
-  readonly from: ObjectRect;
-  to: ObjectRect;
-  moved: boolean;
-}
-
-/// Il rettangolo `from` con la maniglia `handle` tirata di `dx`×`dy`, o
-/// spostato intero se non c'è maniglia. Un lato non passa l'altro, e con
-/// `keepRatio` un angolo tiene le proporzioni.
-export function gestureRect(from: ObjectRect, handle: string | null, dx: number, dy: number, keepRatio: boolean): ObjectRect {
-  if (handle === null) return { ...from, left: from.left + dx, top: from.top + dy };
-  let left = from.left;
-  let top = from.top;
-  let right = from.left + from.width;
-  let bottom = from.top + from.height;
-  if (handle.includes("w")) left = Math.min(left + dx, right - 1);
-  if (handle.includes("e")) right = Math.max(right + dx, left + 1);
-  if (handle.includes("n")) top = Math.min(top + dy, bottom - 1);
-  if (handle.includes("s")) bottom = Math.max(bottom + dy, top + 1);
-  if (keepRatio && handle.length === 2 && from.width > 0 && from.height > 0) {
-    const ratio = from.width / from.height;
-    let width = right - left;
-    let height = bottom - top;
-    if (width / height > ratio) width = height * ratio;
-    else height = width / ratio;
-    if (handle.includes("w")) left = right - width;
-    else right = left + width;
-    if (handle.includes("n")) top = bottom - height;
-    else bottom = top + height;
-  }
-  return { left, top, width: right - left, height: bottom - top };
-}
-
-/// La chiave dell'oggetto che un comando di inserimento dice di aver fatto
-/// (`{"chart": 3}`), o `null`.
-function insertedObject(result: string | null): string | null {
-  if (result === null) return null;
-  let value: unknown;
-  try {
-    value = JSON.parse(result);
-  } catch {
-    return null;
-  }
-  if (!value || typeof value !== "object") return null;
-  for (const kind of ["chart", "image", "shape"] as const) {
-    const id = (value as Record<string, unknown>)[kind];
-    if (typeof id === "number" && Number.isInteger(id) && id >= 0) return `${kind}:${id}`;
-  }
-  return null;
-}
-
-/// L'oggetto sta dove stava: la stessa cella, lo stesso scarto e la stessa
-/// misura.
-function sameObjectPlace(left: GridObject, right: GridObject): boolean {
-  return left.row === right.row && left.column === right.column && left.dx === right.dx
-    && left.dy === right.dy && left.width === right.width && left.height === right.height;
-}
-
-/// La sessione della versione 2 aperta su una cartella.
-interface BytesState {
-  readonly surface: string;
-  readonly instance: string;
-  session: GridBytesSession;
-}
-
-/// Una cella da scrivere: dove, e l'input che il file deve avere.
-interface CellWrite {
-  readonly position: GridPosition;
-  readonly after: string;
-}
-
-function sameWindow(left: GridBytesWindow, right: GridBytesWindow): boolean {
-  return left.sheet === right.sheet && left.row_start === right.row_start && left.column_start === right.column_start;
-}
-
-/// Le finestre da tenere dopo una lettura: quelle nuove, e le vecchie ancora
-/// della revisione `revision` che le nuove non sostituiscono.
-function keptWindows(kept: readonly GridBytesWindow[], fresh: readonly GridBytesWindow[], revision: string): GridBytesWindow[] {
-  const old = kept.filter((window) => window.revision === revision && !fresh.some((candidate) => sameWindow(candidate, window)));
-  return [...old, ...fresh].slice(-MAX_KEPT_WINDOWS);
-}
-
-export interface GridHost {
-  readonly listGridSurfaces: () => Promise<readonly GridSurfaceSpec[]>;
-  readonly openGridBytes: (surface: string, doc: string, journal: string, base: string) => Promise<GridBytesSession>;
-  readonly gridBytesWindow: (surface: string, instance: string, request: GridWindowRequest) => Promise<GridBytesWindow>;
-  readonly applyGridBytes: (surface: string, instance: string, request: GridApplyRequest) => Promise<GridCommit>;
-  readonly gridBytesCommands: (surface: string, instance: string, selection: GridCommandSelection) => Promise<readonly GridCommandState[]>;
-  readonly gridBytesCommand: (surface: string, instance: string, request: GridCommandRequest) => Promise<GridCommandOutcome>;
-  readonly closeGridBytes: (surface: string, instance: string) => Promise<void>;
-}
-
-export interface GridChange {
-  readonly text: string;
-  /**
-   * Una conferma del provider che riscrive i byte di un commit già pubblicato
-   * non ha patch di celle da dare: porta un'operazione di solo testo, e chi la
-   * riceve rilegge il sorgente.
-   */
-  readonly operation: TextOperation;
-  readonly origin: EditorChangeOrigin;
-}
-
-/// Come è andato un comando dato con `GridEngine.run`: il risultato come
-/// testo JSON, o la ragione del rifiuto (`null`: non è arrivato).
-export type GridRun =
-  | { readonly ok: true; readonly result: string | null }
-  | { readonly ok: false; readonly error: string | null };
-
-/// Che cosa fa un comando del catalogo (`effetto` di `catalogo.generated.json`):
-/// cambia la cartella, la legge, o cambia soltanto ciò che si vede.
-export type GridCommandEffect = "cambia" | "legge" | "mostra";
-
-/**
- * La griglia di una cartella di Excel: il testo della sessione è il giornale
- * delle sue celle cambiate, e la griglia si apre sui byte con la versione 2
- * del protocollo (`editors/grid/workbook.ts`).
- */
-export interface GridEngineOptions {
-  readonly surfaceId: string;
-  readonly formatId?: string | null;
-  readonly revision?: string;
-  /// Il documento, per aprire la versione 2 sui suoi byte.
-  readonly documentId?: string;
-  /// La revisione dei byte da cui il giornale discende adesso: cambia a ogni
-  /// salvataggio. Senza, si usa `revision`.
-  readonly base?: () => string | null;
-  readonly onChange: (change: GridChange) => void;
-  readonly onSelectionChange: () => void;
-  /// Il catalogo dei comandi è cambiato (`GridEngine.commands`).
-  readonly onCommands?: () => void;
-  /// Un comando chiede una finestra di dialogo alla shell.
-  readonly onDialog?: (dialog: GridDialog) => void;
-  /// La cartella mostrata è cambiata: vista del foglio, tabelle o libro.
-  readonly onView?: () => void;
-  /// Il modo della cella è cambiato (`GridEngine.editMode`).
-  readonly onEditMode?: () => void;
-  readonly grid?: GridHost;
-  readonly theme?: Theme;
-  /// Il lettore dei PDF della shell: l'anteprima di stampa ci disegna le
-  /// pagine.
-  readonly pdf?: PdfEngineLoader;
-  /// L'esportazione in PDF della cartella, con l'export dell'host: se si può
-  /// adesso, e come si chiede.
-  readonly exportPdf?: { readonly available: () => boolean; readonly run: () => void };
-}
-interface AxisLayout {
-  readonly offsets: number[];
-  readonly sizes: number[];
-  readonly total: number;
-}
-
-/// Un gesto del puntatore sulle celle. `x` e `y` sono l'ultimo punto, per
-/// rifare il gesto quando la griglia scorre sotto un puntatore fermo.
-type CellDrag =
-  | { readonly kind: "cells" | "rows" | "columns"; readonly anchor: GridPosition; x: number; y: number }
-  | { readonly kind: "fill"; readonly source: GridRange; target: GridRange; x: number; y: number }
-  | { readonly kind: "move"; readonly source: GridRange; readonly grab: GridPosition; target: GridRange; x: number; y: number }
-  | { readonly kind: "point"; readonly anchor: GridPosition; x: number; y: number };
-
-/// Il riferimento puntato in una formula aperta: dove sta nel testo, che
-/// testo c'era dopo averlo scritto, e le celle che dice. Vale finché il testo
-/// e il cursore sono quelli.
-interface Pointing {
-  readonly from: number;
-  readonly to: number;
-  readonly text: string;
-  readonly anchor: GridPosition;
-  readonly focus: GridPosition;
-}
-
-/// Un bordo fra due intestazioni preso col puntatore: la colonna (o la riga)
-/// `index` che finisce lì, e le linee che si misurano insieme.
-interface ResizeEdge {
-  readonly axis: "column" | "row";
-  readonly index: number;
-}
-
-/// La misura che si tira: `size` all'inizio, `now` adesso, in pixel dello
-/// schermo; `from` è dove il puntatore è partito.
-interface ResizeDrag extends ResizeEdge {
-  readonly from: number;
-  readonly size: number;
-  now: number;
-}
-
-/// Quanto vicino al bordo fra due intestazioni il puntatore lo prende.
-const RESIZE_SLOP = 4;
-/// Quanto vicino al bordo della selezione il puntatore la prende per
-/// spostarla.
-const MOVE_SLOP = 3;
-
-/// I pixel del file in caratteri di Excel, come la sua finestra Larghezza
-/// colonne: è l'inverso di `chars_to_points` di GridCraft.
-export function pixelsToChars(pixels: number): number {
-  if (pixels <= 0) return 0;
-  return pixels < 12 ? pixels / 12 : (pixels - 5) / 7;
-}
-
-/// Ogni quanto la griglia scorre mentre un gesto esce dal bordo, e di quanto
-/// al più per passo.
-const DRAG_SCROLL_MS = 30;
-const DRAG_SCROLL_MAX = 60;
-
-/// Il riempimento che il quadratino porta da `source` verso `position`: la
-/// regola della Tabella (`fillRange`); dentro la sorgente resta la sorgente.
-export function fillTarget(source: GridRange, position: GridPosition): GridRange {
-  const range = fillRange(tableRange(source), position);
-  return range ? { rowStart: range.r0, columnStart: range.c0, rowEnd: range.r1, columnEnd: range.c1 } : source;
-}
-
-/// Un intervallo della griglia in quello della Tabella.
-function tableRange(range: GridRange): { r0: number; c0: number; r1: number; c1: number } {
-  return { r0: range.rowStart, c0: range.columnStart, r1: range.rowEnd, c1: range.columnEnd };
-}
-
-function sameRange(a: GridRange, b: GridRange): boolean {
-  return a.rowStart === b.rowStart && a.rowEnd === b.rowEnd && a.columnStart === b.columnStart && a.columnEnd === b.columnEnd;
-}
-
 interface EditingState {
   readonly position: GridPosition;
   /// L'input della cella quando si è aperta: confermare scrive soltanto se
@@ -471,70 +267,6 @@ export function typingOpens(event: KeyboardEvent): "browser" | "seed" | null {
   return !composing && event.key.length === 1 ? "seed" : null;
 }
 
-function axisLayout(
-  entries: readonly { hidden: boolean; height?: number; width?: number }[],
-  fallback: number,
-  dimension: "height" | "width",
-  zoom = 1,
-): AxisLayout {
-  const offsets = new Array<number>(entries.length + 1);
-  const sizes = new Array<number>(entries.length);
-  offsets[0] = 0;
-  for (let index = 0; index < entries.length; index += 1) {
-    const declared = entries[index][dimension];
-    const size = entries[index].hidden
-      ? 0
-      : Math.round((typeof declared === "number" && Number.isFinite(declared) && declared > 0 ? declared : fallback) * zoom);
-    sizes[index] = size;
-    offsets[index + 1] = offsets[index] + size;
-  }
-  return { offsets, sizes, total: offsets[offsets.length - 1] ?? 0 };
-}
-
-function indexAt(layout: AxisLayout, offset: number): number {
-  let low = 0;
-  let high = layout.sizes.length;
-  while (low < high) {
-    const middle = Math.floor((low + high) / 2);
-    if (layout.offsets[middle + 1] <= offset) low = middle + 1;
-    else high = middle;
-  }
-  return Math.min(layout.sizes.length - 1, low);
-}
-
-function boundedWindow(layout: AxisLayout, start: number, length: number) {
-  if (!layout.sizes.length) return { start: 0, end: -1 };
-  const first = indexAt(layout, Math.max(0, start));
-  const last = indexAt(layout, Math.max(0, start + length));
-  return {
-    start: Math.max(0, first - GRID_OVERSCAN),
-    end: Math.min(layout.sizes.length - 1, last + GRID_OVERSCAN),
-  };
-}
-function viewportRange(
-  total: number,
-  layout: AxisLayout,
-  offset: number,
-  extent: number,
-  header: number,
-  fallback: number,
-): { start: number; end: number } | null {
-  if (total <= 0) return null;
-  const visibleOffset = Math.max(0, offset - header);
-  const visibleExtent = Math.max(1, extent);
-  const usesLayout = layout.sizes.length === total;
-  const first = usesLayout ? indexAt(layout, visibleOffset) : Math.floor(visibleOffset / fallback);
-  const last = usesLayout
-    ? indexAt(layout, visibleOffset + visibleExtent)
-    : Math.floor((visibleOffset + visibleExtent) / fallback);
-  return {
-    start: Math.max(0, Math.min(total - 1, first - GRID_OVERSCAN)),
-    end: Math.max(0, Math.min(total - 1, last + GRID_OVERSCAN)),
-  };
-}
-function clamp(value: number, maximum: number): number {
-  return Math.max(0, Math.min(maximum, value));
-}
 /// Gli elementi che `#render` disegna direttamente nella griglia.
 const DRAWN = ".grid-row, .grid-freeze, .grid-object, .grid-selection, .grid-fill-handle, .grid-fill-preview, .grid-cut-mark, .grid-resize-guide, .grid-resize-label, .grid-move-preview, .grid-formula-ref";
 
@@ -545,67 +277,6 @@ function syncAttributes(target: Element, source: Element): void {
   }
   for (const attribute of source.attributes) {
     if (target.getAttribute(attribute.name) !== attribute.value) target.setAttribute(attribute.name, attribute.value);
-  }
-}
-
-/// Se `range` è esattamente un'unione: una cella sola, per Invio e Tab.
-function mergeCovers(merges: readonly GridMerge[], range: GridRange): boolean {
-  const merge = mergeAt(merges, { row: range.rowStart, column: range.columnStart });
-  return Boolean(merge)
-    && merge!.row === range.rowStart && merge!.column === range.columnStart
-    && merge!.row + merge!.rows - 1 === range.rowEnd && merge!.column + merge!.columns - 1 === range.columnEnd;
-}
-
-function samePosition(left: GridPosition, right: GridPosition): boolean {
-  return left.row === right.row && left.column === right.column;
-}
-
-function byteOffset(value: number): number {
-  if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 0) {
-    throw new Error("grid source diff offset is not a safe integer");
-  }
-  return value;
-}
-
-function safeSourceBoundary(bytes: Uint8Array, at: number): boolean {
-  return at >= 0
-    && at <= bytes.length
-    && !(at > 0 && at < bytes.length && bytes[at - 1] === 0x0d && bytes[at] === 0x0a);
-}
-
-/// Se l'esito di un comando non porta modifiche al giornale.
-function emptyEdit(edit: GridCommit["edit"]): boolean {
-  return edit.from === edit.to && !edit.inserted;
-}
-
-function applySourceEdit(source: string, edit: GridCommit["edit"]): string {
-  if (typeof edit.deleted !== "string" || typeof edit.inserted !== "string") {
-    throw new Error("grid source diff has invalid text");
-  }
-  const bytes = new TextEncoder().encode(source);
-  const from = byteOffset(edit.from);
-  const to = byteOffset(edit.to);
-  if (from > to || to > bytes.length || !safeSourceBoundary(bytes, from) || !safeSourceBoundary(bytes, to)) {
-    throw new Error("grid source diff splits UTF-8 or CRLF");
-  }
-  let deleted: string;
-  try {
-    deleted = new TextDecoder("utf-8", { fatal: true }).decode(bytes.slice(from, to));
-  } catch {
-    throw new Error("grid source diff splits UTF-8 or CRLF");
-  }
-  if (deleted !== edit.deleted) throw new Error("grid source diff preimage mismatch");
-  const inserted = new TextEncoder().encode(edit.inserted);
-  const resultLength = from + inserted.length + bytes.length - to;
-  if (!Number.isSafeInteger(resultLength)) throw new Error("grid source diff result is too large");
-  const result = new Uint8Array(resultLength);
-  result.set(bytes.slice(0, from), 0);
-  result.set(inserted, from);
-  result.set(bytes.slice(to), from + inserted.length);
-  try {
-    return new TextDecoder("utf-8", { fatal: true }).decode(result);
-  } catch {
-    throw new Error("grid source diff has invalid UTF-8");
   }
 }
 
@@ -1526,7 +1197,6 @@ export class GridEngine {
     this.#commandsLoad = load;
     return load;
   }
-
 
   destroy(): void {
     if (this.#destroyed) return;

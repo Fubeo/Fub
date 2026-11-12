@@ -175,6 +175,57 @@ async function centerOf(session, css) {
   return session.execute("const r = document.querySelector(arguments[0])?.getBoundingClientRect(); return r ? { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) } : null;", [css]);
 }
 
+/// S3: quando la lavagna è «ferma». Dalla prima `.canvas-node` un anello di
+/// `requestAnimationFrame` conta i fotogrammi; la lavagna è ferma al primo
+/// fotogramma che chiude `OPENING_STILL_FRAMES` intervalli di fila sotto
+/// `OPENING_GAP_MS`. Oltre `OPENING_LIMIT_MS` dalla prima scheda senza
+/// esserlo, lo scenario fallisce col buco più lungo visto: un'attesa che non
+/// finisce è un difetto da leggere nel referto, non un tempo da tacere.
+const OPENING_STILL_FRAMES = 5;
+const OPENING_GAP_MS = 100;
+const OPENING_LIMIT_MS = 15_000;
+
+/// La cronologia dell'apertura nella pagina, messa prima di aprire la
+/// lavagna: `window.__fubOpening.settled(done)` chiama `done` con
+/// `{ still, ms, longestGap }`, i ms dalla prima scheda alla lavagna ferma e
+/// il buco più lungo fra due fotogrammi dentro l'apertura. Niente timer o
+/// anelli di messaggi: affamerebbero i richiami a riposo con cui la lavagna
+/// finisce di montare.
+const OPENING_SCRIPT = `
+  const [stillFrames, gapMs, limitMs] = arguments;
+  const state = { card: null, last: null, run: 0, longestGap: 0, result: null, waiting: [] };
+  const finish = (result) => {
+    state.result = result;
+    for (const done of state.waiting.splice(0)) done(result);
+  };
+  const tick = () => {
+    const now = performance.now();
+    if (state.last !== null) {
+      const gap = now - state.last;
+      state.longestGap = Math.max(state.longestGap, gap);
+      state.run = gap < gapMs ? state.run + 1 : 0;
+    }
+    state.last = now;
+    const longestGap = Math.round(state.longestGap);
+    if (state.run >= stillFrames) finish({ still: true, ms: Math.round(now - state.card), longestGap });
+    else if (now - state.card > limitMs) finish({ still: false, ms: null, longestGap });
+    else requestAnimationFrame(tick);
+  };
+  const seen = () => {
+    if (state.card !== null || !document.querySelector(".canvas-node")) return;
+    state.card = performance.now();
+    observer.disconnect();
+    requestAnimationFrame(tick);
+  };
+  const observer = new MutationObserver(seen);
+  observer.observe(document.body, { subtree: true, childList: true });
+  seen();
+  window.__fubOpening = {
+    settled: (done) => (state.result ? done(state.result) : state.waiting.push(done)),
+  };
+  return true;
+`;
+
 const stop = (session) => session.execute("return window.__fubProbe.stop();");
 const start = (session) => session.execute("window.__fubProbe.start(); return true;");
 
@@ -276,8 +327,16 @@ const SCENARIOS = {
   },
   /// Spostare e ingrandire una lavagna di 300 schede, 20 note vive.
   async S3(session) {
+    // La lavagna si misura ferma: il primo disegno di 300 schede dura secondi
+    // sul runner, e partire alla prima scheda metteva la sua coda nel massimo
+    // dello spostamento, a seconda di quando arrivava `start`.
+    await session.execute(OPENING_SCRIPT, [OPENING_STILL_FRAMES, OPENING_GAP_MS, OPENING_LIMIT_MS]);
     await openByName(session, "Lavagna", "Scheda 20");
     await session.waitFor("return document.querySelectorAll('.canvas-node').length > 0");
+    const opening = await session.executeAsync("window.__fubOpening.settled(arguments[arguments.length - 1]);");
+    if (!opening.still) {
+      throw new Error(`la lavagna non si ferma: dopo ${OPENING_LIMIT_MS / 1000} s dalla prima scheda non ha ${OPENING_STILL_FRAMES} fotogrammi di fila sotto ${OPENING_GAP_MS} ms (buco più lungo ${opening.longestGap} ms)`);
+    }
     const at = await centerOf(session, ".pane.focus .canvas-viewport");
     await start(session);
     // Il pulsante di mezzo sposta la lavagna, come il trackpad e la rotella.
@@ -295,7 +354,18 @@ const SCENARIOS = {
     }
     await session.releaseActions();
     const report = await stop(session);
-    return { report, zoomed, values: { "S3.frameGap.p95": report.frames.p95, "S3.frameGap.max": report.frames.max }, samples: report.frames.count };
+    return {
+      report,
+      zoomed,
+      opening,
+      values: {
+        "S3.frameGap.p95": report.frames.p95,
+        "S3.frameGap.max": report.frames.max,
+        "S3.apertura": opening.ms,
+        "S3.apertura.buco": opening.longestGap,
+      },
+      samples: report.frames.count,
+    };
   },
   /// Il grafo di 10.000 nodi, trascinato per tre secondi.
   async S4(session) {

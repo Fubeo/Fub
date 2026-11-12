@@ -51,11 +51,9 @@ Il mirror non è una seconda implementazione della logica. Contiene soltanto:
 
 ## Interi
 
-JSON non preserva tutti gli interi `u64`. Identità, revisioni e hash che possono
-superare `2^53 - 1` attraversano IPC come stringhe.
-
-Un valore temporale in millisecondi può restare `number` quando il proprio
-dominio è dimostrabilmente sicuro e viene usato per aritmetica.
+Le identità, revisioni e hash `u64` attraversano IPC come stringhe; la regola
+canonica (e quando un valore può restare `number`) è in
+[`ipc-contract.md`](../reference/ipc-contract.md#u64).
 
 ## Porte generiche
 
@@ -327,6 +325,8 @@ Ciò che la shell fa sopra le porte generiche, senza contratti propri:
   «Sposta nel cestino» e «Deseleziona»; il tasto destro su una nota scelta
   apre lo stesso menu, con «Copia» e «In una cartella nuova». La scelta è solo
   su ciò che l'albero mostra, e ciò che esce dal DOM esce dalla scelta.
+  Aprire o chiudere una cartella rifà solo il suo sottoalbero, e si muove
+  solo ciò che si vede (`panels/explorer-view.ts`, `explorer-motion.ts`).
 - **Binario.** Riordino e nascondimento sono `chrome.rail.order` e
   `chrome.rail.hidden`; la voce «Ripristina ordine e icone predefiniti» li
   riporta a `[]`.
