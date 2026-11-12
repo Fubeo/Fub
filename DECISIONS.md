@@ -99,6 +99,7 @@ ciò che non dipende dalla risposta.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-12 · K5 T27 · `hayro` passa da 0.5 a 0.6 in `fub-features` (rasterizzatore del PDF redatto e annotato): legge JPEG 2000 e fax e disegna con le stesse versioni del motore, e toglie quattro doppie; il motivo della 0.5 (un compilatore più nuovo) non vale con Rust 1.95; feature come prima (`embed-fonts` sì, `embed-cmaps` no). Provato uguale byte per byte su un PDF redatto semplice; su PDF complessi (JPEG 2000, JBIG2) i pixel possono cambiare. Il tetto `librerie_doppie` scende a 55 · Perché: D-3 (a), «allineo dove posso», e un rasterizzatore in comune col motore costa meno da tenere.
 - 2026-11-09 · K5 T9 · `cargo fmt --all` segue le dipendenze a percorso e
   con `fub-disegno` nel workspace controlla anche le copie di VectorCraft e
   craft-libs: il `rustfmt.toml` dell'upstream entra fra i file gestiti

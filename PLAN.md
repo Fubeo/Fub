@@ -1319,7 +1319,7 @@ e `cargo test -p fub-host --test componenti` passano, compresi i casi con e
 senza `engine-drawing` e il motore spento con i disegni accesi; `cargo
 check -p fub-host --no-default-features --features draw` passa.
 Prova: scripts/check.sh --rapido; cargo test -p fub-host --test componenti; cargo test -p fub-host --no-default-features --features draw --test componenti
-Stato: [ ] da fare
+Stato: [~] in corso · coder · base PLACEHOLDER
 
 ## T14 · Le forme
 
@@ -1977,7 +1977,7 @@ sono verdi con il tetto abbassato (o uguale, con il perché); i test dei
 crate toccati passano, compreso `cargo test -p fub-features --features
 draw`; il file di misura ha una riga per ogni libreria ancora doppia.
 Prova: scripts/check.sh --rapido; node .github/scripts/check-motori.mjs; cargo deny check
-Stato: [~] in corso · coder · base 2031c92f4
+Stato: [x] fatto · c602f6c6e..0be821c14 · doppie su fub-app+fub-disegno 61→55 (tetto 55), fub-app 42; `hayro` 0.5→0.6 (toglie 4 doppie; il PDF redatto della prova esce uguale byte per byte); le `icu_*` tornano a 2.3 (la 2.4 l'aveva portata la risoluzione del lock nell'unione con main, 2031c92f4); `hayro-jbig2` resta 0.3.0; svg2pdf senza versioni nuove (crates.io, 2026-11-12); doppia solo nei test: wit-parser
 
 ## T28 · Il motore che manca, e che torna
 
