@@ -1410,7 +1410,7 @@ Fatto quando: `cargo test -p fub-disegno --test corpus` passa; il `.tsv` ha
 una riga per ogni file del corpus; un elemento `<filter>` aggiunto a un file
 di prova compare come `Approximated`.
 Prova: scripts/check.sh --rapido; cargo test -p fub-disegno --test corpus
-Stato: [~] in corso · coder · base 9091bc6ac
+Stato: [x] fatto (2026-11-12) · differenze: il `<filter>` dentro `<defs>` resta `Unmapped`, è `Approximated` l'elemento che lo usa (filtro o maschera, come attributo o in `style`, e il testo su tracciato); `<use>` resta `Unmapped` (il motore lo scioglie); `<foreignObject>` e `<style>` sono estranei della scena e non entrano nell'elenco; agganci di una riga in `src/apertura.rs` (`perdite::classifica`) e `src/differenza.rs` (`perdite::controlla`), decisi dall'orchestratore; scoperti (nota in T20) i filtri dati da un foglio `<style>` e le gradazioni con `spreadMethod`
 
 ## T17 · Il testo nel motore
 
@@ -1597,6 +1597,7 @@ di misura ha `bench:ink` prima e dopo dentro il rumore e le tre latenze con i
 tetti di A8 rispettati o, se no, il numero vero e un task nuovo nel piano.
 Prova: scripts/check.sh --rapido; node tools/disegno-cancello/cancello.mjs
 Nota dell'orchestratore (2026-11-12, da T14): i vettori delle forme passano tutti, ma quattro cose del client oggi non le fa il motore: l'operazione `page` quando la forma esce dalla pagina; il punto del rilascio se è diverso dall'ultimo trascinamento (il motore lo ignora); lo spessore 0 sulle linee (il motore lo porta a 0,1); su un livello ruotato rettangolo ed ellisse escono come `path`. Il cancello le prova o le scrive come differenze ammesse col perché.
+Nota dell'orchestratore (2026-11-12, da T16): la classificazione delle perdite legge solo gli attributi dell'elemento: un filtro dato da un foglio `<style>` (i file mermaid) e le gradazioni con `spreadMethod` non risultano `Approximated`. La differenza scrive solo gli attributi cambiati, quindi il file non perde il filtro; il cancello guarda se l'immagine dopo un gesto su quegli elementi resta quella dell'export.
 Stato: [ ] da fare
 
 ## T21 · Che cosa resta com'è, detto
