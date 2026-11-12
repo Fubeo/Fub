@@ -105,7 +105,7 @@ fn il_colore_none_toglie_il_tratto_e_il_riempimento() {
             &mut d,
             DRAWING_COMMAND_FILL_COLOR,
             &["oa1a1a1a1"],
-            json!("None")
+            json!(" none ")
         ),
         set("oa1a1a1a1", json!({ "fill": "none" }))
     );

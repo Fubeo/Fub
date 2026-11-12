@@ -122,12 +122,12 @@ impl Azione {
     }
 }
 
-/// `none` (in qualunque maiuscola) è nessun colore; poi `#rgb` o `#rrggbb`,
+/// `none`, la parola chiave di SVG, è nessun colore; poi `#rgb` o `#rrggbb`,
 /// scritto `#rrggbb`. Il resto (un nome CSS, `rgb(…)`, l'alfa) è `BadArgs`:
 /// il motore lo leggerebbe a modo suo, o perderebbe l'alfa.
 fn colore(s: &str) -> Result<Option<String>, PluginError> {
     let t = s.trim();
-    if t.eq_ignore_ascii_case("none") {
+    if t == "none" {
         return Ok(None);
     }
     let cifre = t.strip_prefix('#').unwrap_or("");

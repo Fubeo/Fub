@@ -232,7 +232,7 @@ client colora oggi (un gruppo passa ai figli non bloccati, il tratto di una
 penna è il suo riempimento); l'esito è la differenza. Lo spessore di una
 freccia, di una linea a spessore variabile o di un tratteggio è `Unsupported`,
 come un colore dato a un oggetto senza quel tratto o riempimento
-(`fill="none"`): la differenza non sa ancora scrivere un aspetto nuovo.
+(`fill="none"`): la differenza non sa scrivere un aspetto nuovo.
 
 Ogni richiesta passa da `validate()` prima di arrivare al motore. Le istanze
 stanno nell'host per vault, sotto un lucchetto che si prende per trovare

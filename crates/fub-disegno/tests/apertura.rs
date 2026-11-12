@@ -348,12 +348,18 @@ fn la_presa_conta_le_istanze() {
     assert_eq!(disegni.byte(), 0);
 }
 
+/// I comandi stanno in `tests/comandi.rs`; qui solo la carta, che nessun
+/// comando cambia: spenti, e `empty`.
 #[test]
-fn comandi_spenti_e_comando_non_supportato() {
+fn comandi_spenti_sulla_carta() {
     let (mut disegno, _) = common::apri(PICCOLO);
     let comandi = disegno.comandi(&[]);
     assert_eq!(comandi.len(), fub_abi::DRAWING_COMMANDS.len());
     assert!(comandi.iter().all(|c| !c.enabled));
+    assert!(disegno
+        .comandi(&["fub-paper".into()])
+        .iter()
+        .all(|c| !c.enabled));
     let esito = disegno
         .comando(fub_abi::DrawingCommandRequest {
             revision: 0,
@@ -362,7 +368,7 @@ fn comandi_spenti_e_comando_non_supportato() {
             value: serde_json::json!(2.0),
         })
         .expect("valido");
-    assert_eq!(esito.refused, Some(DrawingRefusal::Unsupported));
+    assert_eq!(esito.refused, Some(DrawingRefusal::Empty));
 }
 
 /// Un file di 20 MiB e 50 000 elementi si apre; la misura si guarda con
