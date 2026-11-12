@@ -2269,7 +2269,7 @@ lo spostamento di un gruppo di un solo figlio uguale a ciò che scrive il
 client (registrato dal client), e il caso Ctrl/⌘ sul figlio; il cancello
 esce con 0.
 Prova: scripts/check.sh --rapido; cargo test -p fub-disegno --test gesti_selezione; node tools/disegno-cancello/cancello.mjs
-Stato: [ ] da fare
+Stato: [~] in corso (2026-11-13, coder su base 62f75b3ec)
 
 ## T30 · La CI completa e la revisione prima del merge
 
