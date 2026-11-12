@@ -2237,7 +2237,7 @@ misura con il confronto con `main`; oppure, se non si può senza toccare
 VectorCraft, il numero vero, dove va il tempo e la proposta, nel report;
 `node tools/disegno-cancello/cancello.mjs` esce con 0.
 Prova: scripts/check.sh --rapido; FUB_DISEGNO_CANCELLO=<cartella> cargo test --release -p fub-disegno --test cancello -- --ignored --exact latenze
-Stato: [~] in corso (2026-11-13, coder su base 026b902ec)
+Stato: [x] fatto (2026-11-13) · differenze: il tempo andava in `proprieta_uguali` (scriveva in JSON tutto il livello, cioè tutto il disegno) e nel confronto dei rami non toccati; tempi a mano per fase (perf e flamegraph non ci sono). Commit su 1 MiB: p95 da 99 a 9,3–9,9 ms; su concept-map da 0,44 a 0,11 ms. Il ritorno della sessione alla copia (0,2 ms) e la prova `latenze` restano come sono; il confronto con main (origin/main 44940db8c: p95 17,7 ms, quasi tutto l'indice) è nel file di misura
 
 ## T35 · La transform dove la scrive il client
 
