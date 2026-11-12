@@ -1319,7 +1319,7 @@ e `cargo test -p fub-host --test componenti` passano, compresi i casi con e
 senza `engine-drawing` e il motore spento con i disegni accesi; `cargo
 check -p fub-host --no-default-features --features draw` passa.
 Prova: scripts/check.sh --rapido; cargo test -p fub-host --test componenti; cargo test -p fub-host --no-default-features --features draw --test componenti
-Stato: [~] in corso · coder · base PLACEHOLDER
+Stato: [~] in corso · coder · base 76eeaf660
 
 ## T14 · Le forme
 
