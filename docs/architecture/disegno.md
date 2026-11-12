@@ -232,13 +232,13 @@ gli eventi nuovi.
 ## Ciò che il motore non sa modificare
 
 All'apertura il motore elenca ciò che non riesce a tenere nella mappa
-(`DrawingLoss`, classificate in `crates/fub-disegno/src/perdite.rs`, arriva
-con T16). I tre tipi:
+(`DrawingLoss`, classificate in `crates/fub-disegno/src/perdite.rs`): una
+parte per elemento della mappa, con una frase breve in italiano. I tre tipi:
 
 | Tipo | Vuol dire | Che cosa succede |
 |---|---|---|
-| non mappato (`Unmapped`) | il motore non ha un oggetto per l'elemento | l'elemento si vede e si salva com'è; un gesto che lo cambierebbe in altro che una `transform` è rifiutato |
-| approssimato (`Approximated`) | l'oggetto c'è, ma un attributo non tornerebbe uguale: filtri, maschere, `<use>`, `<foreignObject>`, testi su tracciato | si sposta con una `transform`; ogni altro cambio è rifiutato |
+| non mappato (`Unmapped`) | il motore non ha un oggetto per l'elemento: le risorse dentro `<defs>`, le istanze `<use>` che il motore scioglie | l'elemento si vede e si salva com'è; un gesto che lo cambierebbe in altro che una `transform` è rifiutato |
+| approssimato (`Approximated`) | l'oggetto c'è, ma un attributo non tornerebbe uguale: un filtro o una maschera (attributo o `style`), un testo su tracciato | si sposta con una `transform`; ogni altro cambio è rifiutato `Unmapped` |
 | non supportato (`Unsupported`) | il documento non è modificabile, per esempio troppo grande o con id ripetuti | la copia si apre, ma ogni gesto è rifiutato |
 
 Ciò che non si scrive come attributi dell'elemento originale non si fa: il
@@ -246,8 +246,13 @@ motore non riscrive mai un elemento intero. Fub salva da sé, quindi la perdita
 evitata si dice all'apertura e al gesto: accanto al percorso del file il chip
 «N parti restano come sono» apre «Che cosa manca?» con l'elenco delle parti
 (arriva con T21), e un gesto rifiutato usa il messaggio solito della
-superficie. L'elenco per ogni file del corpus sta in
-`crates/fub-disegno/tests/corpus/perdite.tsv` (arriva con T16).
+superficie. Gli elementi estranei della scena (`<style>`, `<foreignObject>`,
+gli elementi di altre app) non sono nella mappa e non sono parti: nessuno
+strumento li modifica, e un gesto sul loro oggetto del motore è rifiutato
+`Unmapped`. L'elenco per ogni file del corpus e dei modelli sta in
+`crates/fub-disegno/tests/corpus/perdite.tsv`: la prova
+`cargo test -p fub-disegno --test corpus` lo confronta, e
+`UPDATE_PERDITE=1` lo riscrive.
 
 ## Dove sta il codice
 

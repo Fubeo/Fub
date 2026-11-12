@@ -147,12 +147,7 @@ pub(crate) fn importa(testo: &str, revisione: u64) -> Result<Copia, ErroreApertu
     let mut documento = documento;
     livelli_vuoti(&elementi, &mut documento);
     let mappa = Mappa::nuova(elementi, &mut documento);
-    for e in mappa.elementi().iter().filter(|e| e.nodo.is_none()) {
-        perdite.non_mappato(
-            perdite::nome(e.id.as_deref(), e.tag, &e.percorso),
-            e.motivo.unwrap_or("il motore non ne fa un oggetto suo"),
-        );
-    }
+    perdite::classifica(&mut perdite, testo, &scena.items, &mappa);
     Ok(Copia {
         revisione,
         modificabile,

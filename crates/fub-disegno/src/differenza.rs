@@ -160,6 +160,7 @@ pub(crate) fn differenza(
     if ops.len() > MAX_DRAWING_OPS {
         return Err(Rifiuto::TroppoGrande);
     }
+    crate::perdite::controlla(&copia.perdite, &ops).map_err(Rifiuto::NonMappato)?;
     Ok(Differenza { ops, ids })
 }
 
