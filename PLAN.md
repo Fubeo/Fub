@@ -1553,7 +1553,7 @@ fallisce) dà `Internal`; `cargo test -p fub-app --test lean_ipc --test
 ipc_permissions` passa; `grep -n drawingNotInApp apps/client/src/host/ipc.ts`
 non trova niente; `node .github/scripts/check-doc-links.mjs` esce con 0.
 Prova: scripts/check.sh --rapido; cargo test -p fub-host --test drawing; cargo test -p fub-app --test lean_ipc --test ipc_permissions
-Stato: [~] in corso · coder · base dc50bcbb0
+Stato: [x] fatto (2026-11-12) · differenze: i sei comandi Tauri sono `async` su `off_main` (un gesto può aspettare il reimport); la sezione «Disegno» di `ipc-contract.md` rimanda a `docs/reference/drawing-ipc.md`, dove si è fatto il lavoro di doc; `unserved` = motore assente dalla build, `internal` = motore che non si costruisce; un'istanza sconosciuta o di un vault chiuso è `NotFound`, come Grid; in `draw.rs` anche `FAMIGLIA_SERIF/SANS/MONO`; la selezione di `drawing_commands` si controlla in `drawing.rs`; `Host::with_drawing_engine` e `drawing_instances` nascosti per le prove; `fub-app` prende `engine-drawing` dal default di `fub-host`; il passo «i disegni senza il motore» di `ci.yml` e `check.sh` ora prova anche `--test drawing`
 
 ## T20 · Il cancello
 
