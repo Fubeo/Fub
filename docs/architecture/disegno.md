@@ -198,7 +198,7 @@ i suoi strumenti TypeScript ([ADR 0231](../decisions/0231-la-chiusura-di-fubdraw
 
 Senza motore la sessione è `MotoreAssente`, e il disegno usa gli strumenti
 semplici, quelli TypeScript del client: Selezione, forme e Testo funzionano
-lo stesso. Un chip della superficie dice perché (arriva con T23 e T29): col
+lo stesso. Un chip della superficie dice perché (arriva con T23): col
 motore **spento** (la riga del componente spenta) «Accendi…» apre la pagina
 Componenti sulla riga del motore; col motore **fermo** (un errore all'apertura
 o durante il lavoro) «Riprova» lo riapre; in una **build senza motore** il
@@ -212,8 +212,9 @@ sempre. I vettori dei gesti sono l'oracolo delle due strade.
 
 `motoreDa` (`motore/gesti.ts`) sa perché il motore manca: **spento** (la riga
 spenta, che la superficie sente da `onComponents` e chiude subito la
-sessione, o un `unserved` a metà sessione, quando l'host chiude le istanze:
-arriva con T29) o **fermo** (ogni altro errore, o 10 s senza risposta).
+sessione, o un `unserved` a metà sessione: spento in un vault, l'host chiude
+le sue istanze e libera il motore se non ne resta nessuna) o **fermo** (ogni
+altro errore, o 10 s senza risposta).
 **Riacceso**, o con «Riprova» (arriva con T23), `riapri()` apre un'istanza
 nuova col testo di quel momento, senza rimontare l'editor e una alla volta.
 Un gesto a metà quando il motore manca si annulla senza scrivere e lo si

@@ -2097,7 +2097,7 @@ nuova apertura funziona; il caso dei due vault; `cargo test -p fub-host
 falso; `node .github/scripts/check-doc-links.mjs` esce con 0.
 Prova: scripts/check.sh --rapido; cargo test -p fub-host --test drawing --test engines_warm
 Nota dell'orchestratore (2026-11-12, da T13): un vault che ha già `fub.draw` in `plugins.disabled` vede oggi la riga del motore accesa di serie mentre il bundle dei disegni non è montato; `motore_disegno_spento` deve contarlo spento anche lì, con un test.
-Stato: [~] in corso (2026-11-12, coder su base 001141e9f)
+Stato: [x] fatto (2026-11-12) · differenze: tocca anche `docs/reference/drawing-ipc.md` (la pagina delle porte); `motore_disegno_spento` riceve una funzione che legge una chiave invece di un `SettingsStore`, per servire sia `serves` sia `Host::drawing_engine_off`; le impostazioni si leggono solo quando un'istanza manca (`Unserved` invece di `NotFound`), non a ogni gesto; dopo la riaccensione un'istanza vecchia è `NotFound`; `apply_components` controlla quando cambia la riga del motore o quella di `fub.draw`; l'orchestratore ha aggiunto i testi IT/EN delle chiavi `host.drawing.*` nel catalogo di `settings.rs` (mancavano già da T19); restano aperte le istanze se le impostazioni cambiano fuori da `apply_components` (profilo, file a mano): le aperture nuove rispondono `Unserved`
 
 ## T31 · La cornice girata fra un gesto e l'altro
 
