@@ -1319,7 +1319,7 @@ e `cargo test -p fub-host --test componenti` passano, compresi i casi con e
 senza `engine-drawing` e il motore spento con i disegni accesi; `cargo
 check -p fub-host --no-default-features --features draw` passa.
 Prova: scripts/check.sh --rapido; cargo test -p fub-host --test componenti; cargo test -p fub-host --no-default-features --features draw --test componenti
-Stato: [~] in corso · coder · base 76eeaf660
+Stato: [x] fatto (2026-11-12) · differenze: `fub-disegno` entra in `fub-host` per percorso (la radice non era nel `Tocca`); cinque test della lavagna in `fub-host/tests/componenti.rs` sotto `#[cfg(feature = "lavagna")]` (il passo solo-`draw` era rosso già alla base); riaccesi i disegni, il motore resta spento (il risolutore di K2 non ricorda: DECISIONS); `engine-drawing` in FUORI_DAL_DEFAULT di `fub-features`, con i due passi in `ci.yml` e `check.sh` aggiunti dall'orchestratore; icona `format-drawing` nella pagina Componenti
 
 ## T14 · Le forme
 
@@ -2094,6 +2094,7 @@ nuova apertura funziona; il caso dei due vault; `cargo test -p fub-host
 --test engines_warm` dice che con il motore spento `warm_engine("svg")` dà
 falso; `node .github/scripts/check-doc-links.mjs` esce con 0.
 Prova: scripts/check.sh --rapido; cargo test -p fub-host --test drawing --test engines_warm
+Nota dell'orchestratore (2026-11-12, da T13): un vault che ha già `fub.draw` in `plugins.disabled` vede oggi la riga del motore accesa di serie mentre il bundle dei disegni non è montato; `motore_disegno_spento` deve contarlo spento anche lì, con un test.
 Stato: [ ] da fare
 
 ## T30 · La CI completa e la revisione prima del merge

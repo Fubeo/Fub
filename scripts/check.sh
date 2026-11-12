@@ -321,6 +321,7 @@ else
   run "host senza draw (test)" tests -p fub-host --no-default-features --features notify-watcher,http-client,official-features,rich
   run "i disegni senza il motore (componenti)" tests -p fub-host --no-default-features --features draw --test componenti
   run "fub-features con draw (test)" tests -p fub-features --features draw
+  run "fub-features con engine-drawing (test)" tests -p fub-features --features engine-drawing
   run "fub-testkit con pixel (test)" tests -p fub-testkit --features pixel
   run "motori di WordCraft (workspace loro)" env CARGO_TARGET_DIR=target/wordcraft cargo test --manifest-path vendor/wordcraft/Cargo.toml --workspace --locked --no-fail-fast
   run "motori di GridCraft (workspace loro)" env CARGO_TARGET_DIR=target/gridcraft cargo test --manifest-path vendor/gridcraft/Cargo.toml --workspace --locked --no-fail-fast
