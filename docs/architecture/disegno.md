@@ -259,6 +259,7 @@ seconda versione, e perché, sono in
 [le versioni del disegno](../misure/disegno-versioni-2026-11.md).
 
 I due blocchi qui sotto sono il seguito del [grafo dei crate](overview.md): l'adattatore,
+l'host che lo prende (dietro la feature `engine-drawing`, nel suo `default`),
 i crate di Fub da cui dipende e i crate di VectorCraft che porta. Li confronta
 con `cargo metadata` lo stesso test della panoramica
 (`the_diagram_declares_the_real_dependencies`): gli archi pieni sono le
@@ -267,9 +268,11 @@ dipendenze normali, quelli tratteggiati le sole dipendenze di prova.
 ```mermaid
 flowchart LR
     %% @grafo-dipendenze
-    %% Il seguito del grafo: fub-disegno, i crate di Fub da cui dipende e
-    %% quelli di VectorCraft che nomina.
+    %% Il seguito del grafo: fub-disegno, chi lo prende (l'host, con la
+    %% feature `engine-drawing`), i crate di Fub da cui dipende e quelli di
+    %% VectorCraft che nomina.
 
+    host["fub-host"]
     disegno["fub-disegno"]
     abi["fub-abi"]
     motori["fub-motori"]
@@ -281,6 +284,7 @@ flowchart LR
     vsvg["vectorcraft-svg"]
     vtools["vectorcraft-tools"]
 
+    host --> disegno
     disegno --> abi
     disegno --> motori
     disegno --> scene

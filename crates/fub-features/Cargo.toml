@@ -9,7 +9,8 @@ description = "Official features as native trait implementations: backlink, sear
 # Una cargo feature per bundle, e i nomi sono gli stessi dell'inventario
 # (`src/inventory.rs`): una riga che sparisce dietro un `#[cfg]` sparisce da lì,
 # quindi non è mai il documento a dire cosa esiste. Il default è **tutto**, cioè
-# l'app che spediamo, con una sola eccezione dichiarata (`draw`, più sotto):
+# l'app che spediamo, con le eccezioni dichiarate (`draw` e `engine-drawing`,
+# che lo accende, più sotto):
 # spegnere è una scelta di chi compila, non un difetto da ricordarsi di
 # correggere.
 #
@@ -81,7 +82,8 @@ base = ["dep:fub-format-base", "properties"]
 # dipendenza, di compilazione o di funzionamento.
 formatting = []
 # I disegni: il comando che ne fa nascere uno e l'export in PNG, JPEG, SVG,
-# PDF, Excalidraw e draw.io. È l'unica feature **fuori** dal default, ed è una scelta e non una
+# PDF, Excalidraw e draw.io. È fuori dal default (con `engine-drawing`, che
+# la accende), ed è una scelta e non una
 # dimenticanza: porta un rasterizzatore, un convertitore PDF e i caratteri di
 # Fub incorporati nel binario, e li porta solo con il formato dei disegni, che
 # sta dietro la feature `draw` di `fub-host`. Chi compila senza disegni non
@@ -107,6 +109,12 @@ draw = [
     "dep:kurbo",
     "dep:wuff",
 ]
+# Il Motore del disegno: solo la sua riga della mappa (`src/componenti.rs`); il
+# motore sta in `fub-disegno`, che porta `fub-host` con la sua feature omonima.
+# Il motore porta i disegni, i disegni non portano il motore: spento lui, si
+# disegna con gli strumenti semplici. Fuori dal default come `draw`, che
+# accende.
+engine-drawing = ["draw"]
 # La lavagna: il comando `canvas.apply`, che porta in un `.canvas` le
 # operazioni del suo nucleo. Il nucleo è puro (`serde`, `serde_json`,
 # `thiserror`) e nessun'altra feature lo tira dentro.

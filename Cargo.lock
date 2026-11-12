@@ -2282,6 +2282,7 @@ dependencies = [
  "cap-std",
  "fub-abi",
  "fub-componenti",
+ "fub-disegno",
  "fub-features",
  "fub-format-base",
  "fub-format-canvas",

@@ -63,6 +63,14 @@ const FUORI_DAL_DEFAULT = new Map([
     "job test, passo «l'export dei disegni, con la feature `draw` delle feature»; " +
       "clippy nel job fmt",
   ],
+  // La riga del Motore del disegno nella mappa dei componenti: accende
+  // `draw`, quindi sta fuori dal default per la stessa ragione. Il motore lo
+  // porta `fub-host/engine-drawing`, nel default dell'host.
+  [
+    "crates/fub-features/Cargo.toml#engine-drawing",
+    "job test, passo «la riga del Motore del disegno, con la feature `engine-drawing` delle feature»; " +
+      "job invariants, «ogni feature ufficiale compila da sola»",
+  ],
   // L'oracolo a pixel dei disegni (il cancello di K5): porta un
   // rasterizzatore, e il banco del kernel lo prenderebbe in ogni crate che
   // ne fa un test senza usarlo.

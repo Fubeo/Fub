@@ -413,7 +413,7 @@ describe("il riquadro «Fub con questi componenti»", () => {
       ".vectorcraft .pcraft .figcraft .xmp": "in «File delle app Craft»",
     });
     expect(weight()).toEqual([
-      "36componenti attivi, 4 di supporto",
+      "37componenti attivi, 4 di supporto",
       "0spenti: Fub non li avvia e non ne carica il codice",
     ]);
     // I comandi arrivano anche dopo la mappa: il riquadro segue.
@@ -434,7 +434,7 @@ describe("il riquadro «Fub con questi componenti»", () => {
       ".vectorcraft .pcraft .figcraft .xmp": "in «File delle app Craft»",
     });
     expect(weight()).toEqual([
-      "26componenti attivi, 0 di supporto",
+      "27componenti attivi, 0 di supporto",
       "10spenti: Fub non li avvia e non ne carica il codice",
     ]);
   });
@@ -446,7 +446,7 @@ describe("il riquadro «Fub con questi componenti»", () => {
     expect(profile("tutto").getAttribute("aria-pressed")).toBe("true");
     expect(Object.values(opens()).every((where) => where.startsWith("in «"))).toBe(true);
     expect(weight()).toEqual([
-      "36componenti attivi, 4 di supporto",
+      "37componenti attivi, 4 di supporto",
       "0spenti: Fub non li avvia e non ne carica il codice",
     ]);
   });
@@ -460,7 +460,7 @@ describe("il riquadro «Fub con questi componenti»", () => {
     expect(opens()[".canvas"]).toBe("solo come file");
     // Il PDF porta con sé la penna, che è di supporto.
     expect(weight()).toEqual([
-      "28componenti attivi, 1 di supporto",
+      "29componenti attivi, 1 di supporto",
       "8spenti: Fub non li avvia e non ne carica il codice",
     ]);
   });
