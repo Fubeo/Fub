@@ -34,7 +34,7 @@ ascolta niente e non chiede fotogrammi.
 |---|---|---|
 | S1 | 200 caratteri in fondo a una nota di 5.000 righe | p95 tasto → fotogramma |
 | S2 | venti passaggi fra note di un vault di 10.000 | p95 gesto → nota visibile |
-| S3 | spostamento e zoom di una lavagna di 300 schede, 20 note vive | p95 e massimo fra fotogrammi |
+| S3 | spostamento e zoom di una lavagna di 300 schede, 20 note vive, partiti quando la lavagna è ferma | p95 e massimo fra fotogrammi; l'apertura in ms, solo referto |
 | S4 | trascinamento del grafo di 10.000 nodi | p95 e massimo fra fotogrammi |
 | S5 | tratto di penna di 3 s su un disegno di 2.000 tracciati | massimo fra fotogrammi |
 | S6 | avvio a freddo fino alla prima nota | ms |
@@ -81,6 +81,17 @@ che torna o si riusa; una pendenza positiva è memoria che ogni giro lascia.
 La tolleranza, fissata in K0, sta in `budgets.json`: come obiettivo (il
 cancello di K3) residuo entro 50 MiB e pendenza entro 1 MiB per giro, sul
 runner una volta e mezza il peggiore visto.
+
+S3 misura lo spostamento, non l'apertura. Il primo disegno delle 300 schede
+dura secondi sul runner, e la sua coda, se cade dopo `start`, diventa il
+massimo fra fotogrammi a seconda di quando lo scenario parte. Per questo S3
+aspetta la lavagna ferma: dalla prima `.canvas-node` conta i fotogrammi, e
+la lavagna è ferma al primo che chiude cinque intervalli di fila sotto
+100 ms. Solo dopo parte la misura. Il tempo dalla prima scheda alla lavagna
+ferma va nel referto come `S3.apertura`, col buco più lungo fra due
+fotogrammi dentro l'apertura (`S3.apertura.buco`); non hanno soglia. Una
+lavagna che non si ferma entro 15 s dalla prima scheda fa fallire lo
+scenario, col buco più lungo visto.
 
 T1 è la prima delle tre vie del piano dei componenti per la tela dei motori
 (tessere verso la WebView, superficie wgpu nativa, egui): misura il trasporto
