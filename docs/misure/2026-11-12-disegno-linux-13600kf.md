@@ -119,3 +119,57 @@ I tetti di anteprima e reimport sono rispettati con margine. Il commit è
 sotto il millisecondo su `concept-map` e intorno ai 100 ms al 95° percentile
 sul disegno di 1 MiB: se il tetto di 50 ms vale anche lì, non è rispettato,
 e il numero vero è questo.
+
+## 2026-11-13, il commit sul disegno di 1 MiB (T34)
+
+Stessa macchina, ramo `piano/k5-disegno` da `026b902ec`; tre giri della prova
+`latenze` per lato, 10 commit per giro sul disegno di 1 MiB, `nice -n 19`,
+carico a un minuto fra 1,55 e 1,71 prima e dopo ogni giro (un altro coder
+aveva appena finito di compilare). «Prima» è `differenza.rs` di `026b902ec`
+nello stesso albero, «dopo» il commit di T34.
+
+Dove andavano i millisecondi (tempi a mano per fase con `Instant`, poi tolti;
+`perf` non c'è): su 82 ms, 73 erano `proprieta_uguali` sul livello, che
+scriveva in JSON tutto il sottoalbero (tutto il disegno) per poi togliere i
+figli. Il resto: 3,6 ms gli eventi nella sessione del motore (il rilascio e
+il commit di VectorCraft), 4 ms la Selezione che rilegge il colpo
+(`hit_test` di VectorCraft, che guarda gli oggetti dall'alto: il primo
+oggetto del disegno è il caso peggiore), 1,9 ms il resto della differenza
+(i due indici dei posti, l'ordine dei fratelli), 0,2 ms il ritorno della
+sessione alla copia. Ora `proprieta_uguali` scrive il nodo senza figli, e
+il confronto di due oggetti prende per uguali i rami che il documento dopo
+il gesto condivide con la copia (`Arc::ptr_eq`) invece di confrontarli
+campo per campo. Le operazioni scritte non cambiano.
+
+| Misura | p50 (ms), tre giri | p95 (ms), tre giri | Tetto di A8 |
+|---|---|---|---|
+| 1 MiB, commit di uno spostamento, prima | 81,4 / 81,2 / 81,7 | 99,1 / 99,3 / 99,2 | ≤ 50: **no** |
+| 1 MiB, commit di uno spostamento, dopo | 9,1 / 9,2 / 9,2 | 9,3 / 9,9 / 9,4 | ≤ 50: **sì** |
+| `concept-map`, commit di uno spostamento, prima | 0,44 / 0,45 / 0,44 | 0,45 / 0,68 / 0,45 | ≤ 50: sì |
+| `concept-map`, commit di uno spostamento, dopo | 0,11 / 0,11 / 0,11 | 0,12 / 0,20 / 0,12 | ≤ 50: sì |
+
+Anteprima (p95 12,3–12,5 ms) e reimport (p95 94,6–96,3 ms) restano quelli
+della sezione sopra.
+
+### Il confronto con `main`
+
+Il client senza motore (`main` a `44940db8c`, in un worktree a parte, poi
+tolto) fa lo stesso spostamento di (25, 25) del primo gruppo, sullo stesso
+file generato allo stesso modo (1 048 598 byte), in un test Vitest
+temporaneo: `moveOps` scrive le operazioni, `SceneEngine.apply` le applica al
+testo e alla scena, l'indice degli oggetti si rifà (`PaintBuilder` e
+`SceneIndexer`, come dopo ogni passo). Tre giri, 10 commit misurati per giro
+dopo 3 di riscaldamento; senza il disegno nel DOM.
+
+| Fase nel client di `main` | p50 (ms), tre giri | p95 (ms), tre giri |
+|---|---|---|
+| le operazioni (`moveOps`) | 0,04 / 0,04 / 0,04 | 0,08 / 0,08 / 0,08 |
+| applicarle (`SceneEngine.apply`) | 1,9 / 1,9 / 1,8 | 2,7 / 2,3 / 2,0 |
+| rifare l'indice | 15,6 / 16,4 / 15,7 | 17,0 / 17,7 / 16,1 |
+
+Sul ramo il client applica le stesse operazioni e rifà lo stesso indice:
+il motore prende il posto di `moveOps` e aggiunge circa 9 ms (più l'IPC) a un
+commit che nel client costa circa 18 ms. Il tempo che cresce ancora col
+disegno sta per due terzi in VectorCraft (gli eventi del commit e
+`hit_test`, circa 7,5 ms), e per il resto negli indici dei posti della
+differenza (circa 1,7 ms).
