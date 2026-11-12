@@ -2164,7 +2164,7 @@ linee variabili del corpus o dei vettori, e il `d` scritto coincide con
 quello del client entro la tolleranza; il campo dello spessore non è più
 spento sulle linee variabili col motore acceso.
 Prova: scripts/check.sh --rapido; cargo test -p fub-disegno --test comandi
-Stato: [~] in corso (2026-11-12, coder su base 878d2b0c8)
+Stato: [x] fatto (2026-11-12) · differenze: il modulo nuovo è la cartella `src/profilo/` (`mod`, `curve`, `contorno`, `unione`), la traduzione regola per regola della parte di `offset.ts` e `boolean.ts` che serve, con gli stessi numeri (hypot di V8, `Math.max`/`min`, ordine delle Map); 15 vettori registrati dal client con `lookOps({width})` in `tests/corpus/spessore-variabile.json`, 13 con un contorno; il `d` si legge con `fub_scene::parse_path`, reso pubblico in `fub-scene` (`pub use geometry::{parse_path, Segment as PathSegment}`) dopo la revisione dell'orchestratore, invece di un lettore copiato; come nel client i tratti a penna non ricevono lo spessore (si saltano); un profilo di un punto non esiste (`MIN_POINTS` di fub-scene è 2); cap e join dal `fub:geom`; `differenza.rs` non toccato; resta il rischio di un ulp di trigonometria e `pow` rispetto a V8, dentro la tolleranza sui 15 vettori
 
 ## T30 · La CI completa e la revisione prima del merge
 
