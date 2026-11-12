@@ -196,7 +196,10 @@ fn gruppi_di_fub(elementi: &[Elemento], doc: &mut Document) {
     for l in doc.layers.iter_mut() {
         if in_cima {
             regole.applica(l, true);
-        } else if l.children().is_some_and(|f| f.iter().any(|c| regole.serve(c, false))) {
+        } else if l
+            .children()
+            .is_some_and(|f| f.iter().any(|c| regole.serve(c, false)))
+        {
             // Un livello in cima resta livello: fuori da un livello il
             // motore non tiene niente.
             if let Some(figli) = Arc::make_mut(l).children_mut() {
@@ -919,7 +922,9 @@ mod tests {
             .layers
             .iter()
             .map(|l| {
-                let figli = l.children().map_or_else(Vec::new, |f| f.iter().map(|c| tipo(c)).collect());
+                let figli = l
+                    .children()
+                    .map_or_else(Vec::new, |f| f.iter().map(|c| tipo(c)).collect());
                 (tipo(l), figli)
             })
             .collect()
@@ -941,10 +946,16 @@ mod tests {
         let copia = importa(&testo, 0).expect("la copia");
         let radice = copia.documento.layers[0].id;
         assert!(copia.mappa.e_radice(radice));
-        let b = copia.mappa.dell_id("b").and_then(|i| copia.mappa.elemento(i));
+        let b = copia
+            .mappa
+            .dell_id("b")
+            .and_then(|i| copia.mappa.elemento(i));
         let b = b.and_then(|e| e.nodo).and_then(|n| copia.documento.node(n));
         assert!(b.is_some_and(|b| !b.visible));
-        let s = copia.mappa.dell_id("s").and_then(|i| copia.mappa.elemento(i));
+        let s = copia
+            .mappa
+            .dell_id("s")
+            .and_then(|i| copia.mappa.elemento(i));
         let s = s.and_then(|e| e.nodo).and_then(|n| copia.documento.node(n));
         assert!(s.is_some_and(|s| matches!(s.kind, NodeKind::Group { .. })));
     }
@@ -965,7 +976,10 @@ mod tests {
         // Un disegno di Fub con la carta: niente cambia.
         let testo = "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:fub=\"https://fubeo.github.io/ns/scene/1\" fub:version=\"1\" viewBox=\"0 0 10 10\">\n<rect id=\"fub-paper\" fub:role=\"paper\" width=\"10\" height=\"10\"/>\n<g id=\"l1\" fub:layer=\"L\"><g id=\"g\"><rect id=\"r\" width=\"2\" height=\"2\"/></g></g>\n</svg>\n";
         let prima = struttura(testo);
-        assert!(prima.iter().all(|(t, _)| t.starts_with("Layer")), "{prima:?}");
+        assert!(
+            prima.iter().all(|(t, _)| t.starts_with("Layer")),
+            "{prima:?}"
+        );
     }
 
     #[test]

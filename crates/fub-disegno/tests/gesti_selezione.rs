@@ -797,9 +797,10 @@ fn spostare_porta_con_se_la_cornice_tenuta() {
 /// Il file `inkscape` del corpus dopo «Modifica», come il client lo adotta
 /// (`fub:version` sulla radice).
 fn inkscape() -> String {
-    let testo =
-        std::fs::read_to_string(common::radice().join("crates/fub-scene/tests/corpus/inkscape.svg"))
-            .expect("il file inkscape del corpus");
+    let testo = std::fs::read_to_string(
+        common::radice().join("crates/fub-scene/tests/corpus/inkscape.svg"),
+    )
+    .expect("il file inkscape del corpus");
     let adottato = testo.replacen(
         "xmlns:dc=\"http://purl.org/dc/elements/1.1/\">",
         "xmlns:dc=\"http://purl.org/dc/elements/1.1/\" xmlns:fub=\"https://fubeo.github.io/ns/scene/1\" fub:version=\"1\">",
