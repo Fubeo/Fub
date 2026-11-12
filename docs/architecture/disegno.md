@@ -239,9 +239,9 @@ Sei comandi tipati, nella forma di quelli dei fogli, con le forme in
 I tre comandi (`crates/fub-disegno/src/comandi.rs`) sono `paint.setStroke`,
 `paint.setFill` e `stroke.set` del motore, sugli oggetti che colora il
 pannello del client; l'esito è la differenza scritta come la scrive il client,
-punta delle frecce e `stroke-dasharray` dei tratteggi compresi. Lo spessore di
-una linea a spessore variabile è `Unsupported`, col comando spento (arriva con
-T32).
+punta delle frecce e `stroke-dasharray` dei tratteggi compresi. Su una linea a
+spessore variabile lo spessore riscala il profilo e ricalcola il contorno pieno
+(`src/profilo/`, come `widthTo` del client).
 
 Ogni richiesta passa da `validate()` prima del motore. Le istanze stanno
 nell'host per vault, sotto un lucchetto preso per trovare l'istanza e lasciato

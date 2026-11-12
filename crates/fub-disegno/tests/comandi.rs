@@ -4,7 +4,7 @@
 
 mod common;
 
-use common::{apri, ops_di};
+use common::{apri, confronta_ops, ops_di, Confronto};
 use fub_abi::{
     DrawingCommandRequest, DrawingRefusal, PluginError, DRAWING_COMMANDS,
     DRAWING_COMMAND_FILL_COLOR, DRAWING_COMMAND_STROKE_COLOR, DRAWING_COMMAND_WIDTH,
@@ -502,20 +502,121 @@ fn lo_spessore_rimisura_il_tratteggio_del_menu() {
     );
 }
 
+/// Un caso di `tests/corpus/spessore-variabile.json`: lo spessore delle
+/// linee a spessore variabile come lo scrive il client (`widthTo`).
+struct Variabile {
+    nome: String,
+    input: String,
+    selezione: Vec<String>,
+    spessore: Value,
+    ops: Value,
+}
+
+fn variabili() -> Vec<Variabile> {
+    let percorso = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/corpus/spessore-variabile.json");
+    let testo = std::fs::read_to_string(&percorso).expect("i vettori ci sono");
+    let tutto: Value = serde_json::from_str(&testo).expect("i vettori in JSON");
+    tutto["vettori"]
+        .as_array()
+        .expect("un elenco")
+        .iter()
+        .map(|v| Variabile {
+            nome: v["name"].as_str().expect("un nome").to_string(),
+            input: v["input"].as_str().expect("un disegno").to_string(),
+            selezione: v["selection"]
+                .as_array()
+                .expect("una selezione")
+                .iter()
+                .map(|s| s.as_str().expect("un id").to_string())
+                .collect(),
+            spessore: v["width"].clone(),
+            ops: in_un_batch(&v["ops"]),
+        })
+        .collect()
+}
+
+/// Le operazioni del client come le manda il motore: più di una sta in un
+/// `batch` (`Differenza` in `src/differenza.rs`).
+fn in_un_batch(ops: &Value) -> Value {
+    match ops.as_array() {
+        Some(o) if o.len() > 1 => json!([{ "op": "batch", "ops": o }]),
+        _ => ops.clone(),
+    }
+}
+
 /// Lo spessore di una linea a spessore variabile riscala il profilo e ne
-/// ricalcola il contorno pieno (`widthTo` e `offset.ts` del client), che in
-/// Rust non c'è: il comando è spento e `unsupported`.
+/// ricalcola il contorno pieno: il `fub:geom` e il `d` sono quelli del client
+/// (al centesimo, nella tolleranza dei confronti); lo stesso spessore e lo
+/// spessore zero non cambiano niente.
 #[test]
-fn lo_spessore_di_una_linea_a_spessore_variabile_non_c_e() {
-    let (mut d, _) = apri(&disegno(
-        "    <path id=\"ovariab01\" fub:shape=\"width\" fub:geom=\"round round 0 2 2 1 2 2 M0 0 L100 0\" d=\"M0 -2 L100 -2 L100 2 L0 2 Z\" fill=\"#000000\"/>\n",
-    ));
-    assert_eq!(
-        rifiuto(&mut d, DRAWING_COMMAND_WIDTH, &["ovariab01"], json!(6)),
-        DrawingRefusal::Unsupported
-    );
+fn lo_spessore_di_una_linea_a_spessore_variabile_e_quello_del_client() {
+    let vettori = variabili();
+    let scritti = vettori
+        .iter()
+        .filter(|v| v.ops.as_array().is_some_and(|o| !o.is_empty()))
+        .count();
+    assert!(scritti >= 3, "pochi vettori con un contorno: {scritti}");
+    let mut diverse = Vec::new();
+    for v in &vettori {
+        let (mut d, _) = apri(&v.input);
+        let selezione: Vec<&str> = v.selezione.iter().map(String::as_str).collect();
+        let esito = d
+            .comando(richiesta(
+                DRAWING_COMMAND_WIDTH,
+                &selezione,
+                v.spessore.clone(),
+            ))
+            .expect("la richiesta vale");
+        if v.ops.as_array().is_some_and(Vec::is_empty) {
+            if esito.refused != Some(DrawingRefusal::Empty) {
+                diverse.push(format!("{}: atteso empty, avuto {esito:?}", v.nome));
+            }
+            continue;
+        }
+        if esito.refused.is_some() {
+            diverse.push(format!("{}: rifiutato {:?}", v.nome, esito.refused));
+            continue;
+        }
+        if let Confronto::Diverse(perche) = confronta_ops(&v.ops, &ops_di(&esito), None) {
+            diverse.push(format!("{}: {perche}", v.nome));
+        }
+    }
+    assert!(diverse.is_empty(), "{}", diverse.join("\n"));
+}
+
+const VARIABILE: &str = "    <path id=\"ovariab01\" fub:shape=\"width\" fub:geom=\"round round 0 2 2 1 2 2 M0 0 L100 0\" d=\"M0 2 A2 2 0 0 1 -2 0 A2 2 0 0 1 0 -2 L100 -2 A2 2 0 0 1 102 0 A2 2 0 0 1 100 2 Z\" fill=\"#000000\"/>\n";
+
+#[test]
+fn lo_spessore_e_acceso_su_una_linea_a_spessore_variabile() {
+    let (d, _) = apri(&disegno(VARIABILE));
     assert!(d
         .comandi(&["ovariab01".into()])
         .iter()
-        .any(|c| c.id == DRAWING_COMMAND_WIDTH && !c.enabled));
+        .any(|c| c.id == DRAWING_COMMAND_WIDTH && c.enabled));
+}
+
+/// Una selezione con una linea variabile e un rettangolo: il rettangolo
+/// cambia `stroke-width`, la linea il profilo e il contorno.
+#[test]
+fn lo_spessore_di_una_linea_variabile_insieme_a_una_forma() {
+    let (mut d, _) = apri(&disegno(&format!("{RETTANGOLO}{VARIABILE}")));
+    let ottenute = ops(
+        &mut d,
+        DRAWING_COMMAND_WIDTH,
+        &["oa1a1a1a1", "ovariab01"],
+        json!(6),
+    );
+    let attese = in_un_batch(&json!([
+        { "op": "set", "id": "oa1a1a1a1", "attrs": { "stroke-width": "6" } },
+        { "op": "set", "id": "ovariab01", "attrs": {
+            "fub:geom": "round round 0 3 3 1 3 3 M0 0 L100 0",
+            "d": "M0 3 A3 3 0 0 1 -3 0 A3 3 0 0 1 0 -3 L100 -3 A3 3 0 0 1 103 0 A3 3 0 0 1 100 3 Z"
+        } }
+    ]));
+    assert_eq!(
+        confronta_ops(&attese, &ottenute, None),
+        Confronto::Uguali,
+        "{ottenute}"
+    );
 }

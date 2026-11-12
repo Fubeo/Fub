@@ -15,19 +15,17 @@
 //! delle forme che hanno un contorno e nel `fill` dei tratti a penna e delle
 //! linee a spessore variabile, che sono tutti riempimento; il riempimento va
 //! alle forme che ne hanno uno e ai testi; lo spessore ai contorni che si
-//! vedono. Gli altri elementi (un'immagine, la carta, un livello) restano
-//! come sono. Il motore riceve sempre gli oggetti uno per uno (`ids`), mai la
-//! sua selezione.
+//! vedono e alle linee a spessore variabile (`parts.widths`). Gli altri
+//! elementi (un'immagine, la carta, un livello, un tratto a penna per lo
+//! spessore) restano come sono. Il motore riceve sempre gli oggetti uno per
+//! uno (`ids`), mai la sua selezione.
 //!
 //! **Che cosa si rifiuta.** Un id della selezione che non è nella mappa, o
 //! che il motore non sa modificare, è `unmapped`, e niente cambia; lo è
 //! anche un discendente da colorare che il motore non ha. Un elemento scelto
-//! bloccato (lui o un antenato) è `locked`. Lo spessore di una linea a
-//! spessore variabile è `unsupported`, e il comando è spento: il client
-//! riscala il profilo e ne ricalcola il contorno pieno (`widthTo`,
-//! `offset.ts`), un calcolo che in Rust non c'è. Una selezione in cui niente
-//! si colora, o un comando che non cambia niente, è `empty`. Un valore che
-//! non è un colore o uno spessore è `BadArgs`.
+//! bloccato (lui o un antenato) è `locked`. Una selezione in cui niente si
+//! colora, o un comando che non cambia niente, è `empty`. Un valore che non
+//! è un colore o uno spessore è `BadArgs`.
 //!
 //! **Come lo scrive il client.** Un colore dato a chi non aveva quel tratto
 //! o quel riempimento (`fill="none"`, nessun `stroke`) è il solo `stroke` o
@@ -37,7 +35,10 @@
 //! tratteggio del menu del client (a tratti, a punti, tratto e punto)
 //! rimisura lo `stroke-dasharray` sul nuovo spessore, come `dashValue`; un
 //! tratteggio che il menu non conosce resta com'è. Il riempimento di un
-//! testo è il `fill` del `<text>`.
+//! testo è il `fill` del `<text>`. Lo spessore di una linea a spessore
+//! variabile non passa dal motore: tutto il profilo si riscala e il contorno
+//! pieno si ricalcola, come `widthTo` del client ([`crate::profilo`]), e si
+//! scrivono `fub:geom` e `d`; uno spessore 0 la lascia com'è.
 //!
 //! **L'esito** è la differenza fra la copia e il documento del motore dopo i
 //! comandi ([`crate::differenza`]); la sessione torna poi alla copia. Lo
@@ -163,6 +164,9 @@ struct Bersaglio {
     nodo: NodeId,
     /// Il colore del tratto va nel riempimento (un tratto a penna).
     nel_riempimento: bool,
+    /// Una linea a spessore variabile per lo spessore: la scrive Fub, non il
+    /// motore.
+    variabile: bool,
 }
 
 /// I ruoli che passano tutto ai figli (`CONTAINERS` del client).
@@ -277,20 +281,19 @@ fn bersagli(
             }
             continue;
         }
+        let variabile = specie == Specie::Spessore && e.ruolo == Role::Width;
         let nel_riempimento = match specie {
             Specie::Tratto if inchiostro(e.ruolo) => true,
             Specie::Tratto if contornato(e.ruolo) => false,
             Specie::Riempimento if riempito(e.ruolo) => true,
-            Specie::Spessore if inchiostro(e.ruolo) => {
-                // Il client riscala il profilo e ne ricalcola il contorno
-                // (`widthTo`, `offset.ts`): Fub non ha quel calcolo in Rust.
-                return Err(DrawingRefusal::Unsupported);
-            }
+            // Il profilo riscalato (`widthTo` del client).
+            Specie::Spessore if variabile => false,
             Specie::Spessore if contornato(e.ruolo) => false,
+            // Un tratto a penna non ha uno spessore da pannello.
             _ => continue,
         };
         let nodo = e.nodo.ok_or(DrawingRefusal::Unmapped)?;
-        if specie == Specie::Spessore {
+        if specie == Specie::Spessore && !variabile {
             // Solo i contorni che si vedono.
             let visibile = copia
                 .documento
@@ -306,6 +309,7 @@ fn bersagli(
                 elemento: i,
                 nodo,
                 nel_riempimento,
+                variabile,
             });
         }
     }
@@ -385,7 +389,7 @@ fn chiamate(
             // per la sua scala, come la differenza lo riscrive. Una chiamata
             // per scala.
             let mut per_scala: Vec<(f64, Vec<u64>)> = Vec::new();
-            for b in bersagli {
+            for b in bersagli.iter().filter(|b| !b.variabile) {
                 let scala = copia
                     .mappa
                     .elemento(b.elemento)
@@ -426,44 +430,21 @@ pub(crate) fn esegui(
         Ok(x) => x,
         Err(r) => return rifiuta(esito, r),
     };
-    // Un gesto lasciato a metà non entra nel comando.
-    if banco.in_corso.is_some() {
-        banco.ripristina(copia);
-    }
-    let sessione = &mut banco.sessione;
-    let fatto = vectorcraft_engine::guard::catch_panic(|| {
-        // I comandi del motore cambiano anche lo stile delle forme nuove:
-        // quello della sessione resta com'era.
-        let stile = sessione.paint.clone();
-        let mut fatto = Ok(());
-        for (id, parametri) in &lista {
-            if let Err(e) = sessione.execute(id, parametri) {
-                fatto = Err(e);
-                break;
-            }
+    let mut differenza = if lista.is_empty() {
+        // Solo linee a spessore variabile: il motore non serve.
+        differenza::Differenza::default()
+    } else {
+        match col_motore(banco, copia, &lista) {
+            Ok(d) => d,
+            Err(r) => return rifiuta(esito, r),
         }
-        sessione.paint = stile;
-        fatto
-    });
-    if !matches!(fatto, Ok(Ok(()))) {
-        banco.ripristina(copia);
-        return rifiuta(esito, DrawingRefusal::Unsupported);
-    }
-    let Some(dopo) = banco.documento() else {
-        banco.ripristina(copia);
-        return rifiuta(esito, DrawingRefusal::Unsupported);
     };
-    let differenza =
-        vectorcraft_engine::guard::catch_panic(|| differenza::differenza(copia, &dopo, None));
-    banco.ripristina(copia);
-    let mut differenza = match differenza {
-        Ok(Ok(d)) => d,
-        Ok(Err(r)) => return rifiuta(esito, r.rifiuto()),
-        Err(_) => return rifiuta(esito, DrawingRefusal::Unsupported),
-    };
-    if matches!(azione, Azione::Spessore(_)) {
+    if let Azione::Spessore(w) = azione {
         let ids = &differenza.ids;
         if let Err(r) = punte_e_tratteggi(&mut differenza.ops, ids, copia, &presi, testo) {
+            return rifiuta(esito, r);
+        }
+        if let Err(r) = linee_variabili(&mut differenza, copia, &presi, testo, *w) {
             return rifiuta(esito, r);
         }
     } else {
@@ -477,6 +458,50 @@ pub(crate) fn esegui(
     // Un comando non cambia la selezione.
     esito.selection = richiesta.selection.clone();
     esito
+}
+
+/// Fa le chiamate `lista` sul motore, dalla copia: la differenza, o il
+/// rifiuto. La sessione torna alla copia.
+fn col_motore(
+    banco: &mut Banco,
+    copia: &Copia,
+    lista: &[(&'static str, Value)],
+) -> Result<differenza::Differenza, DrawingRefusal> {
+    // Un gesto lasciato a metà non entra nel comando.
+    if banco.in_corso.is_some() {
+        banco.ripristina(copia);
+    }
+    let sessione = &mut banco.sessione;
+    let fatto = vectorcraft_engine::guard::catch_panic(|| {
+        // I comandi del motore cambiano anche lo stile delle forme nuove:
+        // quello della sessione resta com'era.
+        let stile = sessione.paint.clone();
+        let mut fatto = Ok(());
+        for (id, parametri) in lista {
+            if let Err(e) = sessione.execute(id, parametri) {
+                fatto = Err(e);
+                break;
+            }
+        }
+        sessione.paint = stile;
+        fatto
+    });
+    if !matches!(fatto, Ok(Ok(()))) {
+        banco.ripristina(copia);
+        return Err(DrawingRefusal::Unsupported);
+    }
+    let Some(dopo) = banco.documento() else {
+        banco.ripristina(copia);
+        return Err(DrawingRefusal::Unsupported);
+    };
+    let differenza =
+        vectorcraft_engine::guard::catch_panic(|| differenza::differenza(copia, &dopo, None));
+    banco.ripristina(copia);
+    match differenza {
+        Ok(Ok(d)) => Ok(d),
+        Ok(Err(r)) => Err(r.rifiuto()),
+        Err(_) => Err(DrawingRefusal::Unsupported),
+    }
 }
 
 /// I tratteggi del menu del client, in spessori, come si vedono (`PATTERNS`
@@ -591,6 +616,168 @@ fn punte_e_tratteggi(
         }
     }
     Ok(())
+}
+
+/// Lo spessore `spessore` sulle linee a spessore variabile fra i `presi`
+/// (`widthTo` di `tools/look/write.ts`): il profilo riscalato perché il
+/// punto più largo sia spesso `spessore`, nelle unità della linea, e il
+/// contorno pieno ricalcolato ([`crate::profilo`]); si scrivono `fub:geom` e
+/// `d` se `fub:geom` cambia. Uno spessore 0, o un contorno che non riesce,
+/// la lascia com'è, come nel client. Una linea senza id ne riceve uno con
+/// `ident`.
+fn linee_variabili(
+    differenza: &mut differenza::Differenza,
+    copia: &Copia,
+    presi: &[Bersaglio],
+    testo: &str,
+    spessore: f64,
+) -> Result<(), DrawingRefusal> {
+    if !presi.iter().any(|b| b.variabile) {
+        return Ok(());
+    }
+    let scena = fub_scene::read(testo).map_err(|_| DrawingRefusal::Unsupported)?;
+    let mut nuovi: Vec<Value> = Vec::new();
+    let mut ident: Vec<Value> = Vec::new();
+    for b in presi.iter().filter(|b| b.variabile) {
+        let Some(e) = copia.mappa.elemento(b.elemento) else {
+            continue;
+        };
+        let Some(item) = scena.items.iter().find_map(|i| match i {
+            fub_scene::Item::Element(x) if x.path == e.percorso => Some(x),
+            _ => None,
+        }) else {
+            continue;
+        };
+        let Some(v) = item.varwidth.as_ref() else {
+            continue;
+        };
+        let Some(scritto) = crate::profilo::con_spessore(v, spessore) else {
+            continue;
+        };
+        let grezzo = attributo_grezzo(testo, item.span.bytes[0], "fub:geom");
+        if grezzo.as_deref() == Some(scritto.geom.as_str()) {
+            continue;
+        }
+        let gia = differenza.ids.get(&b.nodo).map(String::as_str);
+        let id = match (e.id_del_file(), gia) {
+            (Some(id), _) | (None, Some(id)) => id.to_string(),
+            (None, None) => {
+                let dati = &differenza.ids;
+                let id = crate::id::nuovo(crate::id::Specie::Oggetto, &|id| {
+                    copia.mappa.id_preso(id) || dati.values().any(|d| d == id)
+                })
+                .ok_or(DrawingRefusal::Unsupported)?;
+                ident.push(json!({ "op": "ident", "path": e.percorso, "tag": e.tag, "id": id }));
+                differenza.ids.insert(b.nodo, id.clone());
+                id
+            }
+        };
+        nuovi.push(json!({
+            "op": "set",
+            "id": id,
+            "attrs": { "fub:geom": scritto.geom, "d": scritto.d },
+        }));
+    }
+    if nuovi.is_empty() {
+        return Ok(());
+    }
+    // Gli `ident` vanno prima di tutto, dopo quelli della differenza.
+    let dopo_gli_ident = differenza
+        .ops
+        .iter()
+        .take_while(|op| op["op"] == "ident")
+        .count();
+    differenza.ops.splice(dopo_gli_ident..dopo_gli_ident, ident);
+    differenza.ops.extend(nuovi);
+    crate::perdite::controlla(&copia.perdite, &differenza.ops).map_err(|_| DrawingRefusal::Unmapped)
+}
+
+/// Il valore dell'attributo `nome` del tag che comincia al byte `inizio` di
+/// `testo`, com'è dopo la lettura XML: i riferimenti risolti e le fini di
+/// riga e le tabulazioni come spazi. `None` se il tag non lo scrive con quel
+/// nome: allora `fub:geom` si riscrive comunque.
+fn attributo_grezzo(testo: &str, inizio: usize, nome: &str) -> Option<String> {
+    let b = testo.as_bytes();
+    let spazi = |mut i: usize| {
+        while i < b.len() && b[i].is_ascii_whitespace() {
+            i += 1;
+        }
+        i
+    };
+    if b.get(inizio) != Some(&b'<') {
+        return None;
+    }
+    let mut i = inizio + 1;
+    // Il nome del tag.
+    while i < b.len() && !b[i].is_ascii_whitespace() && !matches!(b[i], b'>' | b'/') {
+        i += 1;
+    }
+    loop {
+        i = spazi(i);
+        if i >= b.len() || matches!(b[i], b'>' | b'/') {
+            return None;
+        }
+        let da = i;
+        while i < b.len() && b[i] != b'=' && !b[i].is_ascii_whitespace() {
+            i += 1;
+        }
+        let questo = &testo[da..i];
+        i = spazi(i);
+        if b.get(i) != Some(&b'=') {
+            return None;
+        }
+        i = spazi(i + 1);
+        let virgolette = *b.get(i)?;
+        if !matches!(virgolette, b'"' | b'\'') {
+            return None;
+        }
+        let da = i + 1;
+        let fine = da + testo.get(da..)?.find(char::from(virgolette))?;
+        if questo == nome {
+            return valore_xml(&testo[da..fine]);
+        }
+        i = fine + 1;
+    }
+}
+
+/// Un valore d'attributo XML com'è dopo la lettura: le fini di riga e le
+/// tabulazioni diventano spazi, i riferimenti si risolvono.
+fn valore_xml(grezzo: &str) -> Option<String> {
+    let mut out = String::with_capacity(grezzo.len());
+    let mut resto = grezzo;
+    while let Some(c) = resto.chars().next() {
+        match c {
+            '&' => {
+                let fine = resto.find(';')?;
+                let entita = &resto[1..fine];
+                out.push(match entita {
+                    "amp" => '&',
+                    "lt" => '<',
+                    "gt" => '>',
+                    "quot" => '"',
+                    "apos" => '\'',
+                    _ => {
+                        let codice = match entita.strip_prefix("#x") {
+                            Some(x) => u32::from_str_radix(x, 16).ok()?,
+                            None => entita.strip_prefix('#')?.parse().ok()?,
+                        };
+                        char::from_u32(codice)?
+                    }
+                });
+                resto = &resto[fine + 1..];
+                continue;
+            }
+            '\r' if resto[1..].starts_with('\n') => {
+                out.push(' ');
+                resto = &resto[2..];
+                continue;
+            }
+            '\r' | '\n' | '\t' => out.push(' '),
+            _ => out.push(c),
+        }
+        resto = &resto[c.len_utf8()..];
+    }
+    Some(out)
 }
 
 /// Toglie `stroke-width` dai `set` di un comando di colore. Il motore, che
