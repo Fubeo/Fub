@@ -227,7 +227,7 @@ pub(crate) use engine::Drawings;
 /// Senza il motore il registro è vuoto.
 #[cfg(not(feature = "engine-drawing"))]
 #[derive(Default)]
-pub(crate) struct Drawings;
+pub(crate) struct Drawings {}
 
 #[cfg(not(feature = "engine-drawing"))]
 impl Drawings {
