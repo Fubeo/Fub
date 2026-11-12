@@ -1224,7 +1224,7 @@ id spostato a mano sulla copia dà `ident` + `set` sullo stesso id; un sync
 con un `edit` porta la revisione a 1 e il reimport alla stessa; un gesto a
 revisione vecchia dà `Stale`.
 Prova: scripts/check.sh --rapido; cargo test -p fub-disegno
-Stato: [ ] da fare
+Stato: [~] in corso · coder · base 2031c92f4
 
 ## T12 · Colori e spessore dal motore, nel client
 
@@ -1977,7 +1977,7 @@ sono verdi con il tetto abbassato (o uguale, con il perché); i test dei
 crate toccati passano, compreso `cargo test -p fub-features --features
 draw`; il file di misura ha una riga per ogni libreria ancora doppia.
 Prova: scripts/check.sh --rapido; node .github/scripts/check-motori.mjs; cargo deny check
-Stato: [ ] da fare
+Stato: [~] in corso · coder · base 2031c92f4
 
 ## T28 · Il motore che manca, e che torna
 
