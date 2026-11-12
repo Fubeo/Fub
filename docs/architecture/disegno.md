@@ -303,7 +303,7 @@ strumento li modifica, e un gesto sul loro oggetto del motore è rifiutato
 che il motore fa ciò che facevano gli strumenti TypeScript sono i vettori di
 `apps/client/src/__fixtures__/disegno-gesti/` (arrivano con T3); quella
 senza perdite è il cancello, `node tools/disegno-cancello/cancello.mjs`
-(arriva con T20).
+([come funziona](../../tools/disegno-cancello/README.md), [le misure di K5](../misure/2026-11-12-disegno-linux-13600kf.md)).
 
 Il motore entra senza le feature di serie di `vectorcraft-engine`: niente
 caratteri di VectorCraft (`bundled-fonts`: i caratteri li dà `fub-motori`),
