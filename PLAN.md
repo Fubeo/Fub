@@ -1480,7 +1480,7 @@ rettangolo `disegno.colore-tratto` con `#ff0000` dà un solo `set` di
 `stroke`; un id cambiato a mano nel test fa fallire il controllo del
 registro.
 Prova: scripts/check.sh --rapido; cargo test -p fub-disegno --test comandi
-Stato: [ ] da fare
+Stato: [x] fatto (2026-11-12) · differenze: tocca anche `src/differenza.rs` (un tratto o un riempimento nuovi su chi non li aveva, il `fill` del `<text>`, la punta delle frecce riscritta da `fub:geom` con lo spessore, i tratteggi del menu rimisurati) e `src/motore.rs` (i corpi di `comandi` e `comando`), e `tests/apertura.rs`; restano `unsupported` lo spessore delle linee a spessore variabile (passa a T32) e il riempimento di un testo a più colori; un tratto nuovo scrive solo `stroke` e `stroke-width`
 
 ## T19 · L'host e i comandi IPC
 
@@ -1567,7 +1567,7 @@ della misura), `docs/architecture/disegno.md` (di T1)
 Non toccare: il codice del motore e del client (se il cancello trova un
 errore, si apre un task nuovo, non si corregge qui); le soglie del banco di
 fedeltà.
-Dipende da: T14, T15, T16, T17, T18, T19
+Dipende da: T14, T15, T16, T17, T18, T19, T32
 Cosa fare:
 - `cancello.rs`, `#[ignore]`, con `FUB_DISEGNO_CANCELLO=<cartella>`: per
   ogni file del corpus (`crates/fub-scene/tests/corpus/`,
@@ -2046,7 +2046,7 @@ manca si annulla e non scrive niente; chiudere il riquadro chiude l'istanza
 volte non lascia ascolti vivi; `node .github/scripts/check-listeners.mjs` è
 verde; `tools/editor.test.ts` resta verde.
 Prova: scripts/check.sh --rapido --client; npm --prefix apps/client test -- src/editors/spatial/motore/sessione.test.ts src/editors/spatial/motore/gesti.test.ts src/editors/spatial/tools/editor.test.ts
-Stato: [ ] da fare
+Stato: [x] fatto (2026-11-12) · differenze: tocca anche `strings/tools.ts` (le chiavi `draw.reason.engine_off` e `draw.reason.engine_stopped`, IT e EN) e `colori.test.ts` (`motoreDa` ora prende una funzione che apre); `MotoreAperto` ha `spento()`, chiamato dalla superficie quando la riga si spegne; riaccesa, riapre solo se il motore manca perché spento (dopo un errore resta «Riprova»); `SessioneMotore.quandoChiusa()`: chiusa la `DocumentSession` (file cancellato, vault chiuso o cambiato) il motore non si riapre; `apriSessione` riceve `session.id`, quindi dopo un rinomina riapre col nome nuovo; le mappe `onComponents` di un altro vault si ignorano; non verificato se K2 manda `onComponents` alle altre finestre (lì resta «Riprova», la pagina lo dice)
 
 ## T29 · Il motore spento, nell'host
 
@@ -2132,6 +2132,39 @@ registrata dal client); `npm run typecheck` e `mirror.test.ts` passano.
 Prova: scripts/check.sh --rapido; cargo test -p fub-disegno --test gesti_selezione
 Stato: [x] fatto (2026-11-12) · differenze: il campo è un `DrawingFrame { matrix, bounds, geometry }` (riquadri `[x0,y0,x1,y1]`) in `DrawingGesture.frame` e in `DrawingOutcome.frame`, additivo e opzionale: con la sola matrice il riquadro rifatto dalle `transform` a quattro decimali sbagliava di circa 3e-4; il client mette la cornice in `ctx.kept` prima di `ctx.select`; le transform attese del test sono state registrate da `createDrawEditor` con un vitest temporaneo, poi tolto
 
+## T32 · Lo spessore delle linee a spessore variabile, nel motore
+
+Perché: con T18 lo spessore di una linea a spessore variabile è
+`unsupported` e, col motore acceso, il campo del pannello è spento; senza
+motore il client lo cambia (`widthTo` in
+`apps/client/src/editors/spatial/tools/look/write.ts`, che riscala il
+profilo e ne ricalcola il contorno pieno). Il motore non deve togliere ciò
+che il client sa già fare. Nato da T18 (decisione dell'orchestratore del
+2026-11-12).
+Tocca: `crates/fub-disegno/src/comandi.rs`, un modulo nuovo in
+`crates/fub-disegno/src/` per il profilo e il contorno (porta in Rust il
+calcolo che `widthTo` usa, letto da `look/write.ts` e dai file che chiama),
+`crates/fub-disegno/tests/comandi.rs`, `docs/architecture/disegno.md`
+Non toccare: il client (il calcolo TypeScript resta il riferimento); i gesti.
+Dipende da: T18
+Cosa fare:
+- `disegno.spessore` su una linea a spessore variabile scrive ciò che scrive
+  `widthTo` del client per lo stesso spessore (il `d` del contorno pieno e i
+  dati del profilo), e il comando torna `enabled`.
+- I numeri si confrontano con il client: vettori registrati da
+  `look/write.ts` (con un vitest temporaneo, poi tolto, o un file di
+  vettori sotto `crates/fub-disegno/tests/`), con la tolleranza dei
+  decimali che il client scrive.
+Casi limite: profilo con un solo punto; spessore 0 (si ammette come nel
+client); punte e giunzioni (`cap`, `join`) date dallo stile; una selezione
+con linee variabili e forme insieme.
+Fatto quando: `cargo test -p fub-disegno --test comandi` passa con almeno tre
+linee variabili del corpus o dei vettori, e il `d` scritto coincide con
+quello del client entro la tolleranza; il campo dello spessore non è più
+spento sulle linee variabili col motore acceso.
+Prova: scripts/check.sh --rapido; cargo test -p fub-disegno --test comandi
+Stato: [ ] da fare
+
 ## T30 · La CI completa e la revisione prima del merge
 
 Perché: l'utente fonde K5 in `main` soltanto dopo la CI completa (Windows,
@@ -2144,7 +2177,7 @@ lascia all'orchestratore.
 Non toccare: i limiti dei banchi (nessuno si alza); i task fatti (un difetto
 in un task fatto si corregge con un task nuovo); la proposta a monte (si
 scrive, non si manda).
-Dipende da: T6, T7, T9, T11, T13–T24, T26–T29, T31
+Dipende da: T6, T7, T9, T11, T13–T24, T26–T29, T31, T32
 Cosa fare (lo fa l'orchestratore, non un coder):
 - Prima: main unito in `piano/k5-disegno` (K2 e K3 fusi), la base della PR
   #300 è `main`.
