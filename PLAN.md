@@ -2200,7 +2200,7 @@ uguali a ciò che scrive il client (registrato dal client o letto da
 `panel.ts`); `node tools/disegno-cancello/cancello.mjs` esce con 0 senza le
 righe ammesse di `foreign` e `inkscape`.
 Prova: scripts/check.sh --rapido; cargo test -p fub-disegno --test gesti_selezione; node tools/disegno-cancello/cancello.mjs
-Stato: [~] in corso (2026-11-12, coder su base ff9bce379)
+Stato: [x] fatto (2026-11-13) · differenze: la strada è la mappa, in `apertura.rs` (non `selezione.rs`, che non basta: lo spostamento del cancello passa da `a_mano` senza la Selezione): un livello del motore che per Fub è un gruppo (nome di un elemento di Fub, nessuna opzione da livello) diventa `Group` con gli stessi figli, maschera, visibilità e blocco; se in cima ci sono solo gruppi così, vanno in un livello nuovo senza nome che sta per la radice; con un livello di Fub in cima la cima resta com'è; in un file senza livelli di Fub il rettangolo nuovo va nella radice come fa `destination` del client; tocca anche `tools/disegno-cancello/README.md`; il cancello ha ora un solo rifiuto ammesso (`symbols`); la `transform` su un gruppo di un figlio solo passa a T35
 
 ## T34 · Il commit su un disegno grande
 
@@ -2239,6 +2239,38 @@ VectorCraft, il numero vero, dove va il tempo e la proposta, nel report;
 Prova: scripts/check.sh --rapido; FUB_DISEGNO_CANCELLO=<cartella> cargo test --release -p fub-disegno --test cancello -- --ignored --exact latenze
 Stato: [ ] da fare
 
+## T35 · La transform dove la scrive il client
+
+Perché: T33 ha visto che un gruppo di Fub con un solo figlio di Fub, scelto e
+spostato col motore acceso, riceve la `transform` sul figlio, mentre il
+client la scrive sul gruppo. Si vede uguale, ma il testo del file è diverso
+da quello di oggi. Viene dalla regola «un figlio solo» di
+`crates/fub-disegno/src/differenza.rs`, che non sa che cosa l'utente ha
+scelto. Nato da T33 (decisione dell'orchestratore del 2026-11-13).
+Tocca: `crates/fub-disegno/src/differenza.rs`,
+`crates/fub-disegno/src/gesti/selezione.rs` (passare le unità scelte alla
+differenza), `crates/fub-disegno/src/gesti/mod.rs` (solo se il `Contesto`
+deve portarle), `crates/fub-disegno/tests/gesti_selezione.rs`
+Non toccare: il client; il contratto IPC; i vettori di T3.
+Dipende da: T33, T34 (tutti e due toccano `crates/fub-disegno`)
+Cosa fare:
+- La differenza riceve quali nodi sono le unità scelte del gesto (gli
+  elementi della selezione, come li sceglie la Selezione di Fub) e scrive la
+  `transform` su quelle, come il client (`panel.ts`), anche quando un gruppo
+  ha un solo figlio.
+- Senza unità date (un comando, una sincronia, `a_mano`) la regola resta
+  quella di oggi.
+Casi limite: un gruppo con un figlio che è a sua volta un gruppo con un
+figlio; il figlio scelto con Ctrl/⌘ dentro il gruppo (riceve lui la
+`transform`); un livello di Inkscape con un figlio solo (T33); più unità
+scelte, una dentro l'altra.
+Fatto quando: `cargo test -p fub-disegno --test gesti_selezione` passa con
+lo spostamento di un gruppo di un solo figlio uguale a ciò che scrive il
+client (registrato dal client), e il caso Ctrl/⌘ sul figlio; il cancello
+esce con 0.
+Prova: scripts/check.sh --rapido; cargo test -p fub-disegno --test gesti_selezione; node tools/disegno-cancello/cancello.mjs
+Stato: [ ] da fare
+
 ## T30 · La CI completa e la revisione prima del merge
 
 Perché: l'utente fonde K5 in `main` soltanto dopo la CI completa (Windows,
@@ -2251,7 +2283,7 @@ lascia all'orchestratore.
 Non toccare: i limiti dei banchi (nessuno si alza); i task fatti (un difetto
 in un task fatto si corregge con un task nuovo); la proposta a monte (si
 scrive, non si manda).
-Dipende da: T6, T7, T9, T11, T13–T24, T26–T29, T31, T32, T33, T34
+Dipende da: T6, T7, T9, T11, T13–T24, T26–T29, T31, T32, T33, T34, T35
 Cosa fare (lo fa l'orchestratore, non un coder):
 - Prima: main unito in `piano/k5-disegno` (K2 e K3 fusi), la base della PR
   #300 è `main`.
