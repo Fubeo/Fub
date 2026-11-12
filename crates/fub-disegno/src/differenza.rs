@@ -407,6 +407,33 @@ impl Lavoro<'_> {
             || self
                 .elemento(a.id)
                 .is_some_and(|e| e.ruolo == fub_scene::Role::Layer);
+        // Un `<path>` con più sottotracciati (la freccia) è un tracciato
+        // composto del motore, i cui figli non sono elementi di Fub: se i
+        // figli restano gli stessi, il cambio è suo e si scrive come quello
+        // di una foglia.
+        if let (NodeKind::Compound { children: fb, .. }, NodeKind::Compound { children: fa, .. }) =
+            (&b.kind, &a.kind)
+        {
+            let stessi = fb.len() == fa.len()
+                && fb
+                    .iter()
+                    .zip(fa)
+                    .all(|(x, y)| Arc::ptr_eq(x, y) || **x == **y)
+                && fa.iter().all(|c| self.copia.mappa.del_nodo(c.id).is_none());
+            if let Some(e) = self
+                .elemento(a.id)
+                .filter(|e| e.tag == "path" && stessi)
+                .cloned()
+            {
+                let attrs = self.foglia(&e, b, a)?;
+                if !attrs.is_empty() {
+                    let id = self.bersaglio(a.id)?;
+                    self.set
+                        .push(json!({ "op": "set", "id": id, "attrs": attrs }));
+                }
+                return Ok(());
+            }
+        }
         if let Some(figli) = a.children() {
             // La `transform` va al gruppo quando lo spostamento è di tutto il
             // gruppo e scriverla sui figli non basta o costa di più: un figlio
@@ -477,6 +504,17 @@ impl Lavoro<'_> {
         let t = e
             .propria
             .ok_or_else(|| no("la transform dell'elemento non si legge"))?;
+        // Il riempimento di un testo cambiato nei pezzi del motore è il
+        // `fill` del `<text>`: il confronto va avanti col testo di prima già
+        // ricolorato.
+        let ricolorato = riempimento_dei_pezzi(b, a)?;
+        let b = match &ricolorato {
+            Some((testo, colore)) => {
+                attrs.insert("fill".into(), json!(scrivi_colore(Some(colore))?));
+                testo
+            }
+            None => b,
+        };
         let m = adatta(b, a).unwrap_or(Affine::IDENTITY);
         let con_tratti =
             mosso_da(b, m, true).ok_or_else(|| no("l'oggetto non si muove con una matrice"))?;
@@ -519,10 +557,8 @@ impl Lavoro<'_> {
             return Ok(attrs);
         }
         // Lo spessore che non segue la scala, i colori pieni.
-        if !aspetti_vicini(
-            &senza_colori(&candidato.appearance),
-            &senza_colori(&a.appearance),
-        ) {
+        let (prima, dopo) = senza_colori_nuovi(&candidato.appearance, &a.appearance);
+        if !aspetti_vicini(&prima, &dopo) {
             return Err(no(
                 "cambia l'aspetto in un modo che fill, stroke e stroke-width non dicono",
             ));
@@ -788,6 +824,68 @@ fn proprieta_uguali(a: &Node, b: &Node) -> bool {
 
 fn aspetti_vicini(a: &Appearance, b: &Appearance) -> bool {
     json_vicini(&aspetto_in_json(a), &aspetto_in_json(b))
+}
+
+/// [`senza_colori`] di due aspetti, prima e dopo, senza il riempimento o il
+/// tratto in cima che c'è da una parte sola: un riempimento o un tratto dato
+/// a chi non l'aveva si scrive con `fill`, `stroke` e `stroke-width`, come lo
+/// scrive il pannello del client (il resto del tratto nuovo, estremi e
+/// angoli, il file lo prende da SVG).
+fn senza_colori_nuovi(prima: &Appearance, dopo: &Appearance) -> (Appearance, Appearance) {
+    let (mut p, mut d) = (senza_colori(prima), senza_colori(dopo));
+    let in_cima = |a: &Appearance, riempimento: bool| {
+        a.items.iter().rposition(|i| i.is_fill() == riempimento)
+    };
+    for riempimento in [true, false] {
+        match (in_cima(&p, riempimento), in_cima(&d, riempimento)) {
+            (Some(i), None) => {
+                p.items.remove(i);
+            }
+            (None, Some(i)) => {
+                d.items.remove(i);
+            }
+            _ => {}
+        }
+    }
+    (p, d)
+}
+
+/// Il testo `b` ricolorato come `a` e il colore, se `a` è `b` coi pezzi
+/// (`TextRun`) di un riempimento nuovo: il comando del riempimento del
+/// motore colora i pezzi, il client scrive il `fill` del `<text>`. Si
+/// scrive così solo se prima e dopo tutti i pezzi hanno lo stesso colore;
+/// pezzi di colori diversi (un `tspan` col suo `fill`) non si dicono con un
+/// attributo solo.
+fn riempimento_dei_pezzi(b: &Node, a: &Node) -> Result<Option<(Node, Paint)>, Rifiuto> {
+    let (NodeKind::Text(tb), NodeKind::Text(ta)) = (&b.kind, &a.kind) else {
+        return Ok(None);
+    };
+    if tb.runs.len() != ta.runs.len()
+        || tb
+            .runs
+            .iter()
+            .zip(&ta.runs)
+            .all(|(x, y)| x.style.fill == y.style.fill)
+    {
+        return Ok(None);
+    }
+    let unico = |pezzi: &[vectorcraft_doc::TextRun]| {
+        let primo = &pezzi.first()?.style.fill;
+        pezzi
+            .iter()
+            .all(|r| r.style.fill == *primo)
+            .then(|| primo.clone())
+    };
+    let (Some(_), Some(colore)) = (unico(&tb.runs), unico(&ta.runs)) else {
+        return Err(no("i pezzi del testo hanno colori diversi"));
+    };
+    let mut ricolorato = b.clone();
+    if let NodeKind::Text(t) = &mut ricolorato.kind {
+        for r in &mut t.runs {
+            r.style.fill = colore.clone();
+        }
+    }
+    Ok(Some((ricolorato, colore)))
 }
 
 /// L'aspetto senza il colore del riempimento, quello del tratto e lo
