@@ -1650,7 +1650,7 @@ src/editors/spatial/motore/standing.test.ts` passa; le foto del banco
 mostrano il chip e il riquadro in chiaro e scuro, come nel prototipo;
 `strings.test.ts` è verde.
 Prova: scripts/check.sh --rapido --client; npm --prefix apps/client test -- src/editors/spatial/motore/standing.test.ts src/editors/spatial/strings.test.ts
-Stato: [ ] da fare
+Stato: [~] in corso (2026-11-12, coder su base ff9bce379)
 
 ## T22 · Lo strumento Testo
 
@@ -2200,7 +2200,7 @@ uguali a ciò che scrive il client (registrato dal client o letto da
 `panel.ts`); `node tools/disegno-cancello/cancello.mjs` esce con 0 senza le
 righe ammesse di `foreign` e `inkscape`.
 Prova: scripts/check.sh --rapido; cargo test -p fub-disegno --test gesti_selezione; node tools/disegno-cancello/cancello.mjs
-Stato: [ ] da fare
+Stato: [~] in corso (2026-11-12, coder su base ff9bce379)
 
 ## T34 · Il commit su un disegno grande
 
