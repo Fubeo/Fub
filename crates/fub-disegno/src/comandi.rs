@@ -22,15 +22,22 @@
 //! **Che cosa si rifiuta.** Un id della selezione che non è nella mappa, o
 //! che il motore non sa modificare, è `unmapped`, e niente cambia; lo è
 //! anche un discendente da colorare che il motore non ha. Un elemento scelto
-//! bloccato (lui o un antenato) è `locked`. Lo spessore di una freccia, di
-//! una linea a spessore variabile o di un contorno tratteggiato è
-//! `unsupported`: il client riscrive anche la punta, il profilo o il
-//! tratteggio, che `stroke.set` lascia com'erano. Il colore del tratto o del
-//! riempimento di un oggetto che nel motore non ha quel tratto o quel
-//! riempimento (`fill="none"`, nessun `stroke`) è `unsupported`: la
-//! differenza non sa scrivere un aspetto nuovo. Una selezione in cui
-//! niente si colora, o un comando che non cambia niente, è `empty`. Un
-//! valore che non è un colore o uno spessore è `BadArgs`.
+//! bloccato (lui o un antenato) è `locked`. Lo spessore di una linea a
+//! spessore variabile è `unsupported`, e il comando è spento: il client
+//! riscala il profilo e ne ricalcola il contorno pieno (`widthTo`,
+//! `offset.ts`), un calcolo che in Rust non c'è. Una selezione in cui niente
+//! si colora, o un comando che non cambia niente, è `empty`. Un valore che
+//! non è un colore o uno spessore è `BadArgs`.
+//!
+//! **Come lo scrive il client.** Un colore dato a chi non aveva quel tratto
+//! o quel riempimento (`fill="none"`, nessun `stroke`) è il solo `stroke` o
+//! `fill`, senza lo spessore che il motore gli dà. Lo spessore di una freccia
+//! riscrive anche il `d`, con la punta lunga 3 × lo spessore + 6 sul
+//! `fub:geom` ([`d_della_freccia`]); quello di un contorno con un
+//! tratteggio del menu del client (a tratti, a punti, tratto e punto)
+//! rimisura lo `stroke-dasharray` sul nuovo spessore, come `dashValue`; un
+//! tratteggio che il menu non conosce resta com'è. Il riempimento di un
+//! testo è il `fill` del `<text>`.
 //!
 //! **L'esito** è la differenza fra la copia e il documento del motore dopo i
 //! comandi ([`crate::differenza`]); la sessione torna poi alla copia. Lo
@@ -50,10 +57,11 @@ use fub_abi::{
 use fub_scene::Role;
 use serde_json::{json, Value};
 use vectorcraft_doc::color::Color;
-use vectorcraft_doc::NodeId;
+use vectorcraft_doc::{LineCap, NodeId};
 
 use crate::apertura::Copia;
-use crate::differenza;
+use crate::differenza::{self, numero};
+use crate::gesti::forme::d_della_freccia;
 use crate::gesti::{esito_vuoto, Banco};
 
 /// Il comando del motore che colora il tratto.
@@ -273,38 +281,25 @@ fn bersagli(
             Specie::Tratto if inchiostro(e.ruolo) => true,
             Specie::Tratto if contornato(e.ruolo) => false,
             Specie::Riempimento if riempito(e.ruolo) => true,
-            Specie::Spessore if inchiostro(e.ruolo) || e.ruolo == Role::Arrow => {
-                // Il client riscrive il profilo o la punta con lo spessore.
+            Specie::Spessore if inchiostro(e.ruolo) => {
+                // Il client riscala il profilo e ne ricalcola il contorno
+                // (`widthTo`, `offset.ts`): Fub non ha quel calcolo in Rust.
                 return Err(DrawingRefusal::Unsupported);
             }
             Specie::Spessore if contornato(e.ruolo) => false,
             _ => continue,
         };
         let nodo = e.nodo.ok_or(DrawingRefusal::Unmapped)?;
-        let aspetto = &copia
-            .documento
-            .node(nodo)
-            .ok_or(DrawingRefusal::Unmapped)?
-            .appearance;
         if specie == Specie::Spessore {
-            // Solo i contorni che si vedono; il client riscrive anche il
-            // tratteggio, che `stroke.set` lascerebbe com'era.
-            let Some(tratto) = aspetto.stroke() else {
-                continue;
-            };
-            if tratto.paint.is_none() {
+            // Solo i contorni che si vedono.
+            let visibile = copia
+                .documento
+                .node(nodo)
+                .and_then(|n| n.appearance.stroke())
+                .is_some_and(|t| !t.paint.is_none());
+            if !visibile {
                 continue;
             }
-            if tratto.dash.is_some() {
-                return Err(DrawingRefusal::Unsupported);
-            }
-        } else if (nel_riempimento && aspetto.fill().is_none())
-            || (!nel_riempimento && aspetto.stroke().is_none())
-        {
-            // Il motore aggiungerebbe un riempimento o un tratto che
-            // l'oggetto non ha, e la differenza non sa scrivere un aspetto
-            // nuovo: `unsupported`, invece di colorare solo una parte.
-            return Err(DrawingRefusal::Unsupported);
         }
         if visti.insert(i) {
             fuori.push(Bersaglio {
@@ -416,6 +411,7 @@ fn chiamate(
 pub(crate) fn esegui(
     banco: &mut Banco,
     copia: &Copia,
+    testo: &str,
     richiesta: &DrawingCommandRequest,
     azione: &Azione,
 ) -> DrawingOutcome {
@@ -424,10 +420,10 @@ pub(crate) fn esegui(
         esito.refused = Some(r);
         esito
     };
-    let lista = match bersagli(copia, &richiesta.selection, azione.specie())
-        .and_then(|b| chiamate(copia, azione, &b))
+    let (presi, lista) = match bersagli(copia, &richiesta.selection, azione.specie())
+        .and_then(|b| chiamate(copia, azione, &b).map(|l| (b, l)))
     {
-        Ok(l) => l,
+        Ok(x) => x,
         Err(r) => return rifiuta(esito, r),
     };
     // Un gesto lasciato a metà non entra nel comando.
@@ -465,7 +461,12 @@ pub(crate) fn esegui(
         Ok(Err(r)) => return rifiuta(esito, r.rifiuto()),
         Err(_) => return rifiuta(esito, DrawingRefusal::Unsupported),
     };
-    if !matches!(azione, Azione::Spessore(_)) {
+    if matches!(azione, Azione::Spessore(_)) {
+        let ids = &differenza.ids;
+        if let Err(r) = punte_e_tratteggi(&mut differenza.ops, ids, copia, &presi, testo) {
+            return rifiuta(esito, r);
+        }
+    } else {
         senza_spessore(&mut differenza.ops);
     }
     match differenza.testo() {
@@ -476,6 +477,120 @@ pub(crate) fn esegui(
     // Un comando non cambia la selezione.
     esito.selection = richiesta.selection.clone();
     esito
+}
+
+/// I tratteggi del menu del client, in spessori, come si vedono (`PATTERNS`
+/// di `apps/client/src/editors/spatial/tools/outline.ts`).
+const TRATTEGGI: [&[f64]; 3] = [&[4.0, 3.0], &[1.0, 2.0], &[4.0, 2.0, 1.0, 2.0]];
+
+/// `stroke-dasharray` del tratteggio `motivo` su un contorno spesso
+/// `spessore` con gli estremi `estremi` (`dashValue` del client): un
+/// estremo arrotondato o quadrato toglie mezzo spessore per parte al
+/// trattino e lo dà allo spazio.
+fn valore_del_tratteggio(motivo: &[f64], spessore: f64, estremi: LineCap) -> String {
+    let fine = if estremi == LineCap::Butt {
+        0.0
+    } else {
+        spessore
+    };
+    motivo
+        .iter()
+        .enumerate()
+        .map(|(i, parte)| {
+            let v = if i % 2 == 0 {
+                (parte * spessore - fine).max(0.0)
+            } else {
+                parte * spessore + fine
+            };
+            numero(v, 2)
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+/// Ciò che il pannello del client riscrive con lo spessore oltre a
+/// `stroke-width` (`lookOps` in `tools/look/write.ts`): il `d` di una
+/// freccia, la cui punta è lunga 3 × lo spessore + 6 (`arrowPath`, dal suo
+/// `fub:geom`), e il tratteggio del menu che il contorno aveva, rimisurato
+/// sul nuovo spessore (`dashOf`, `dashValue`). Un tratteggio che non è del
+/// menu resta com'è, come nel client. Tocca solo i `set` che scrivono
+/// `stroke-width`: uno spessore che non cambia non riscrive niente.
+fn punte_e_tratteggi(
+    ops: &mut [Value],
+    ids: &HashMap<NodeId, String>,
+    copia: &Copia,
+    presi: &[Bersaglio],
+    testo: &str,
+) -> Result<(), DrawingRefusal> {
+    let mut scena: Option<fub_scene::Scene> = None;
+    for b in presi {
+        let Some(e) = copia.mappa.elemento(b.elemento) else {
+            continue;
+        };
+        let Some(id) = e.id.clone().or_else(|| ids.get(&b.nodo).cloned()) else {
+            continue;
+        };
+        let Some(attrs) = ops
+            .iter_mut()
+            .find(|op| op["op"] == "set" && op["id"] == id.as_str())
+            .and_then(|op| op.get_mut("attrs"))
+            .and_then(Value::as_object_mut)
+        else {
+            continue;
+        };
+        let Some(spessore) = attrs
+            .get("stroke-width")
+            .and_then(Value::as_str)
+            .and_then(|s| s.parse::<f64>().ok())
+        else {
+            continue;
+        };
+        if e.ruolo == Role::Arrow {
+            if scena.is_none() {
+                scena = Some(fub_scene::read(testo).map_err(|_| DrawingRefusal::Unsupported)?);
+            }
+            let geom = scena.as_ref().and_then(|s| {
+                s.items.iter().find_map(|i| match i {
+                    fub_scene::Item::Element(x) if x.path == e.percorso => x.arrow,
+                    _ => None,
+                })
+            });
+            if let Some([x1, y1, x2, y2]) = geom {
+                attrs.insert("d".into(), json!(d_della_freccia(x1, y1, x2, y2, spessore)));
+            }
+        }
+        let tratto = copia
+            .documento
+            .node(b.nodo)
+            .and_then(|n| n.appearance.stroke());
+        let (Some(tratto), Some(m)) = (tratto, e.ctm()) else {
+            continue;
+        };
+        let Some(trattini) = tratto.dash.as_ref() else {
+            continue;
+        };
+        let scala = m.determinant().abs().sqrt();
+        if !(scala.is_finite() && scala > 0.0) {
+            continue;
+        }
+        let scritto = trattini
+            .pattern
+            .iter()
+            .map(|v| numero(v / scala, 2))
+            .collect::<Vec<_>>()
+            .join(" ");
+        let prima = tratto.width / scala;
+        if let Some(motivo) = TRATTEGGI
+            .iter()
+            .find(|m| valore_del_tratteggio(m, prima, tratto.cap) == scritto)
+        {
+            let nuovo = valore_del_tratteggio(motivo, spessore, tratto.cap);
+            if nuovo != scritto {
+                attrs.insert("stroke-dasharray".into(), json!(nuovo));
+            }
+        }
+    }
+    Ok(())
 }
 
 /// Toglie `stroke-width` dai `set` di un comando di colore. Il motore, che

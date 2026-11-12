@@ -229,10 +229,13 @@ Sei comandi tipati, nella forma di quelli dei fogli, con le forme in
 I tre comandi (`crates/fub-disegno/src/comandi.rs`) sono `paint.setStroke`,
 `paint.setFill` e `stroke.set` del motore sugli oggetti che il pannello del
 client colora (un gruppo passa ai figli non bloccati, il tratto di una
-penna è il suo riempimento); l'esito è la differenza. Lo spessore di una
-freccia, di una linea a spessore variabile o di un tratteggio è `Unsupported`,
-come un colore dato a un oggetto senza quel tratto o riempimento
-(`fill="none"`): la differenza non sa scrivere un aspetto nuovo.
+penna è il suo riempimento); l'esito è la differenza, scritta come la scrive
+il client: un colore dato a chi non aveva quel tratto o riempimento è il solo
+`stroke` o `fill`, il riempimento di un testo è il `fill` del `<text>`, lo
+spessore di una freccia riscrive anche la punta e quello di un tratteggio del
+menu rimisura lo `stroke-dasharray`. Lo spessore di una linea a spessore
+variabile è `Unsupported` e il comando è spento: il client ne ricalcola il
+contorno pieno, un calcolo che in Rust non c'è.
 
 Ogni richiesta passa da `validate()` prima di arrivare al motore. Le istanze
 stanno nell'host per vault, sotto un lucchetto che si prende per trovare

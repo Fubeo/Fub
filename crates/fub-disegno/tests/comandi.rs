@@ -300,64 +300,6 @@ fn un_gruppo_colora_i_suoi_figli_tranne_i_bloccati() {
     );
 }
 
-/// La differenza non sa scrivere un tratto o un riempimento che l'oggetto
-/// non aveva: il comando è `unsupported` e spento, mai a metà.
-#[test]
-fn un_tratto_o_un_riempimento_che_non_c_e_e_unsupported() {
-    let testo = disegno(
-        "    <rect id=\"oa1a1a1a1\" x=\"100\" y=\"100\" width=\"100\" height=\"50\" fill=\"#000000\"/>\n    <rect id=\"ob2b2b2b2\" x=\"10\" y=\"10\" width=\"10\" height=\"10\" fill=\"#000000\" stroke=\"#000000\"/>\n",
-    );
-    let (mut d, _) = apri(&testo);
-    assert_eq!(
-        rifiuto(
-            &mut d,
-            DRAWING_COMMAND_STROKE_COLOR,
-            &["ob2b2b2b2", "oa1a1a1a1"],
-            json!("#ff0000")
-        ),
-        DrawingRefusal::Unsupported
-    );
-    let accesi: Vec<(String, bool)> = d
-        .comandi(&["oa1a1a1a1".into()])
-        .into_iter()
-        .map(|c| (c.id, c.enabled))
-        .collect();
-    assert_eq!(
-        accesi,
-        vec![
-            (DRAWING_COMMAND_STROKE_COLOR.to_string(), false),
-            (DRAWING_COMMAND_FILL_COLOR.to_string(), true),
-            // Un rettangolo senza contorno non ha uno spessore da cambiare.
-            (DRAWING_COMMAND_WIDTH.to_string(), false),
-        ]
-    );
-    assert_eq!(d.testo(), testo);
-}
-
-/// Un rettangolo con `fill="none"` non ha un riempimento nel motore: oggi
-/// il comando è spento e `unsupported` (vedi sopra).
-#[test]
-fn il_riempimento_di_un_rettangolo_vuoto_e_spento() {
-    let (mut d, _) = apri(&disegno(
-        "    <rect id=\"oa1a1a1a1\" x=\"100\" y=\"100\" width=\"100\" height=\"50\" fill=\"none\" stroke=\"#000000\"/>\n",
-    ));
-    assert_eq!(
-        rifiuto(
-            &mut d,
-            DRAWING_COMMAND_FILL_COLOR,
-            &["oa1a1a1a1"],
-            json!("#ff0000")
-        ),
-        DrawingRefusal::Unsupported
-    );
-    let riempimento = d
-        .comandi(&["oa1a1a1a1".into()])
-        .into_iter()
-        .find(|c| c.id == DRAWING_COMMAND_FILL_COLOR)
-        .expect("c'è");
-    assert!(!riempimento.enabled);
-}
-
 #[test]
 fn un_elemento_scelto_bloccato_e_locked() {
     let (mut d, _) = apri(&disegno(
@@ -398,23 +340,6 @@ fn il_tratto_di_una_penna_e_il_suo_riempimento() {
 }
 
 #[test]
-fn lo_spessore_di_una_freccia_o_di_un_tratteggio_non_lo_fa_il_motore() {
-    let (mut d, _) = apri(&disegno(
-        "    <rect id=\"oa1a1a1a1\" x=\"100\" y=\"100\" width=\"100\" height=\"50\" fill=\"none\" stroke=\"#000000\" stroke-width=\"2\" stroke-dasharray=\"4 2\"/>\n",
-    ));
-    assert_eq!(
-        rifiuto(&mut d, DRAWING_COMMAND_WIDTH, &["oa1a1a1a1"], json!(4)),
-        DrawingRefusal::Unsupported
-    );
-    let spessore = d
-        .comandi(&["oa1a1a1a1".into()])
-        .into_iter()
-        .find(|c| c.id == DRAWING_COMMAND_WIDTH)
-        .expect("c'è");
-    assert!(!spessore.enabled);
-}
-
-#[test]
 fn i_comandi_sono_accesi_su_una_selezione_mappata() {
     let (d, _) = apri(&disegno(RETTANGOLO));
     let accesi = d.comandi(&["oa1a1a1a1".into()]);
@@ -450,4 +375,147 @@ fn il_registro_del_motore_ha_i_comandi_che_si_usano() {
     assert!(errore.contains("paint.setStrokeColour"), "{errore}");
     // Un parametro che il motore non nomina.
     assert!(controlla_registro("stroke.set", &json!({ "peso": 2 })).is_err());
+}
+
+/// Un colore dato a chi non ha quel tratto o riempimento si scrive come lo
+/// scrive il pannello del client: l'attributo, e basta.
+#[test]
+fn un_tratto_o_un_riempimento_che_non_c_era() {
+    let (mut d, _) = apri(&disegno(
+        "    <rect id=\"oa1a1a1a1\" x=\"100\" y=\"100\" width=\"100\" height=\"50\" fill=\"#000000\"/>\n    <rect id=\"ob2b2b2b2\" x=\"10\" y=\"10\" width=\"10\" height=\"10\" fill=\"none\" stroke=\"#000000\"/>\n",
+    ));
+    assert!(d
+        .comandi(&["oa1a1a1a1".into()])
+        .iter()
+        .any(|c| c.id == DRAWING_COMMAND_STROKE_COLOR && c.enabled));
+    assert_eq!(
+        ops(
+            &mut d,
+            DRAWING_COMMAND_STROKE_COLOR,
+            &["oa1a1a1a1"],
+            json!("#ff0000")
+        ),
+        set("oa1a1a1a1", json!({ "stroke": "#ff0000" }))
+    );
+    assert!(d
+        .comandi(&["ob2b2b2b2".into()])
+        .iter()
+        .any(|c| c.id == DRAWING_COMMAND_FILL_COLOR && c.enabled));
+    assert_eq!(
+        ops(
+            &mut d,
+            DRAWING_COMMAND_FILL_COLOR,
+            &["ob2b2b2b2"],
+            json!("#00ff00")
+        ),
+        set("ob2b2b2b2", json!({ "fill": "#00ff00" }))
+    );
+    // Insieme, nello stesso passo.
+    let entrambi = ops(
+        &mut d,
+        DRAWING_COMMAND_FILL_COLOR,
+        &["oa1a1a1a1", "ob2b2b2b2"],
+        json!("#0000ff"),
+    );
+    assert_eq!(
+        entrambi,
+        json!([{ "op": "batch", "ops": [
+            { "op": "set", "id": "oa1a1a1a1", "attrs": { "fill": "#0000ff" } },
+            { "op": "set", "id": "ob2b2b2b2", "attrs": { "fill": "#0000ff" } }
+        ]}])
+    );
+}
+
+/// Il riempimento di un testo è il `fill` del `<text>`, come nel client; il
+/// colore del tratto non lo tocca.
+#[test]
+fn il_riempimento_di_un_testo() {
+    let (mut d, _) = apri(&disegno(
+        "    <text id=\"oc0ffee01\" x=\"10\" y=\"40\" font-size=\"20\" fill=\"#000000\"><tspan x=\"10\" dy=\"0\">Ciao</tspan></text>\n",
+    ));
+    assert_eq!(
+        ops(
+            &mut d,
+            DRAWING_COMMAND_FILL_COLOR,
+            &["oc0ffee01"],
+            json!("#ff0000")
+        ),
+        set("oc0ffee01", json!({ "fill": "#ff0000" }))
+    );
+    assert_eq!(
+        rifiuto(
+            &mut d,
+            DRAWING_COMMAND_STROKE_COLOR,
+            &["oc0ffee01"],
+            json!("#ff0000")
+        ),
+        DrawingRefusal::Empty
+    );
+}
+
+/// Lo spessore di una freccia riscrive anche la sua punta, lunga 3 × lo
+/// spessore + 6 (`arrowPath` del client, dal `fub:geom`).
+#[test]
+fn lo_spessore_di_una_freccia_riscrive_la_punta() {
+    let (mut d, _) = apri(&disegno(
+        "    <path id=\"ofreccia1\" fub:shape=\"arrow\" fub:geom=\"10 20 110 20\" d=\"M10 20 L110 20 M95.28 25.5 L110 20 L95.28 14.5\" fill=\"none\" stroke=\"#000000\" stroke-width=\"2\"/>\n",
+    ));
+    // Punta 3 × 4 + 6 = 18, lati a 30°: 110 − 18·cos 30° = 94.41, 20 ± 9.
+    assert_eq!(
+        ops(&mut d, DRAWING_COMMAND_WIDTH, &["ofreccia1"], json!(4)),
+        set(
+            "ofreccia1",
+            json!({
+                "stroke-width": "4",
+                "d": "M10 20 L110 20 M94.41 29 L110 20 L94.41 11"
+            })
+        )
+    );
+}
+
+/// Un tratteggio del menu si rimisura sul nuovo spessore (`dashValue` del
+/// client); uno che il menu non conosce resta com'è.
+#[test]
+fn lo_spessore_rimisura_il_tratteggio_del_menu() {
+    let (mut d, _) = apri(&disegno(
+        "    <rect id=\"oa1a1a1a1\" x=\"10\" y=\"10\" width=\"50\" height=\"50\" fill=\"none\" stroke=\"#000000\" stroke-width=\"2\" stroke-dasharray=\"8 6\"/>\n    <rect id=\"ob2b2b2b2\" x=\"100\" y=\"10\" width=\"50\" height=\"50\" fill=\"none\" stroke=\"#000000\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-dasharray=\"6 8\"/>\n    <rect id=\"oc3c3c3c3\" x=\"200\" y=\"10\" width=\"50\" height=\"50\" fill=\"none\" stroke=\"#000000\" stroke-width=\"2\" stroke-dasharray=\"5 5\"/>\n",
+    ));
+    // A tratti (4, 3 spessori), estremi piatti.
+    assert_eq!(
+        ops(&mut d, DRAWING_COMMAND_WIDTH, &["oa1a1a1a1"], json!(3)),
+        set(
+            "oa1a1a1a1",
+            json!({ "stroke-width": "3", "stroke-dasharray": "12 9" })
+        )
+    );
+    // Estremi tondi: mezzo spessore per parte passa dal trattino allo spazio.
+    assert_eq!(
+        ops(&mut d, DRAWING_COMMAND_WIDTH, &["ob2b2b2b2"], json!(3)),
+        set(
+            "ob2b2b2b2",
+            json!({ "stroke-width": "3", "stroke-dasharray": "9 12" })
+        )
+    );
+    assert_eq!(
+        ops(&mut d, DRAWING_COMMAND_WIDTH, &["oc3c3c3c3"], json!(3)),
+        set("oc3c3c3c3", json!({ "stroke-width": "3" }))
+    );
+}
+
+/// Lo spessore di una linea a spessore variabile riscala il profilo e ne
+/// ricalcola il contorno pieno (`widthTo` e `offset.ts` del client), che in
+/// Rust non c'è: il comando è spento e `unsupported`.
+#[test]
+fn lo_spessore_di_una_linea_a_spessore_variabile_non_c_e() {
+    let (mut d, _) = apri(&disegno(
+        "    <path id=\"ovariab01\" fub:shape=\"width\" fub:geom=\"round round 0 2 2 1 2 2 M0 0 L100 0\" d=\"M0 -2 L100 -2 L100 2 L0 2 Z\" fill=\"#000000\"/>\n",
+    ));
+    assert_eq!(
+        rifiuto(&mut d, DRAWING_COMMAND_WIDTH, &["ovariab01"], json!(6)),
+        DrawingRefusal::Unsupported
+    );
+    assert!(d
+        .comandi(&["ovariab01".into()])
+        .iter()
+        .any(|c| c.id == DRAWING_COMMAND_WIDTH && !c.enabled));
 }

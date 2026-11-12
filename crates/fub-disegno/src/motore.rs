@@ -367,7 +367,13 @@ impl Disegno {
         let Some(azione) = azione else {
             return Ok(rifiutato(richiesta.revision, DrawingRefusal::Unsupported));
         };
-        let esito = crate::comandi::esegui(&mut self.banco, &self.copia, &richiesta, &azione);
+        let esito = crate::comandi::esegui(
+            &mut self.banco,
+            &self.copia,
+            self.sincronia.testo(),
+            &richiesta,
+            &azione,
+        );
         esito.validate()?;
         Ok(esito)
     }
