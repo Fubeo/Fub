@@ -3,7 +3,7 @@
 > **Domanda:** come un gesto in un disegno passa dal motore vettoriale e
 > torna nel file, e chi possiede che cosa fra client, motore, penna e file?
 > **Fonti autorevoli:** `crates/fub-disegno/` (arriva con T9),
-> `crates/fub-host/src/drawing.rs` (arriva con T19),
+> `crates/fub-host/src/drawing.rs`,
 > `apps/client/src/editors/spatial/motore/` (arriva con T8 e T10),
 > `crates/fub-abi/src/drawing.rs` (arriva con T4).
 > **Decisioni:** [ADR 0239](../decisions/0239-il-disegno-sul-motore-vettoriale.md),
@@ -199,7 +199,7 @@ sempre. I vettori dei gesti sono l'oracolo delle due strade.
 
 Sei comandi tipati, nella forma di quelli dei fogli, con le forme in
 `crates/fub-abi/src/drawing.rs` (arriva con T4) e i comandi in
-`crates/fub-app/src/lib.rs` (arrivano con T19):
+`crates/fub-app/src/lib.rs`:
 
 | Comando | Fa |
 |---|---|
@@ -255,7 +255,7 @@ superficie. L'elenco per ogni file del corpus sta in
 |---|---|
 | `vendor/vectorcraft/` | la copia di VectorCraft, con le patch numerate e `UPSTREAM.md` (arriva con T6) |
 | `crates/fub-disegno/` | l'adattatore: apertura, mappa, sincronia, differenza, gesti, comandi, perdite (le forme ci sono; gli altri strumenti e i comandi arrivano con T15–T18) |
-| `crates/fub-host/src/drawing.rs` | le istanze per vault e i sei comandi lato host (arriva con T19) |
+| `crates/fub-host/src/drawing.rs` | le istanze per vault e i sei comandi lato host |
 | `crates/fub-abi/src/drawing.rs` | le forme condivise e i limiti (arriva con T4) |
 | `apps/client/src/editors/spatial/motore/` | la sessione, i gesti, i colori e il chip delle perdite (arriva con T8, T10, T12 e T21) |
 | `apps/client/src/editors/spatial/tools/` | gli strumenti TypeScript, riferimento dei gesti e strumenti del profilo `pdf` |

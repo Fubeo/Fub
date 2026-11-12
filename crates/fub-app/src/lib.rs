@@ -41,8 +41,9 @@ use fub_abi::theme::ThemeLight;
 use fub_abi::traits::{IndexQuery, IndexResult, JobId, ViewInstance, ViewSpec};
 use fub_abi::ui::{ActionId, FieldValue, UiAction, UiNode, ViewUpdate};
 use fub_abi::{
-    GridBytesSession, GridBytesWindow, GridCommandOutcome, GridCommandRequest, GridCommandState,
-    GridSelection, Notice, PluginError,
+    DrawingCommandInfo, DrawingCommandRequest, DrawingGesture, DrawingOpen, DrawingOutcome,
+    DrawingSync, DrawingSynced, GridBytesSession, GridBytesWindow, GridCommandOutcome,
+    GridCommandRequest, GridCommandState, GridSelection, Notice, PluginError,
 };
 use fub_host::{
     componenti, doc_id, document_text, Delivery, DocumentText, EventSink, Host, OpenKey,
@@ -810,6 +811,97 @@ fn close_grid_bytes(
     vault: Option<String>,
 ) -> Result<(), PluginError> {
     host.grid_bytes_close(vault.as_deref(), &surface, &instance)
+}
+
+// Il disegno sul motore (K5, `docs/reference/drawing-ipc.md`): sei porte
+// tipate come quelle della griglia. Il motore lavora fuori dal thread
+// principale: un'apertura importa il disegno, un gesto aspetta il reimport
+// della copia. L'ordine delle richieste di un'istanza lo tiene la sessione del
+// motore nel client, che le manda una alla volta. Senza il motore in questa
+// build ogni porta risponde `unserved` (`fub_host::drawing`).
+
+/// Apre un'istanza del motore sul testo del disegno `doc` (a capo LF).
+#[tauri::command]
+async fn open_drawing(
+    app: AppHandle,
+    doc: String,
+    text: String,
+    vault: Option<String>,
+) -> Result<DrawingOpen, PluginError> {
+    let doc = doc_id(&doc)?;
+    off_main(app, move |host| {
+        host.drawing_open(vault.as_deref(), &doc, &text)
+    })
+    .await
+}
+
+/// Porta all'istanza un cambio del testo del disegno.
+#[tauri::command]
+async fn drawing_sync(
+    app: AppHandle,
+    instance: String,
+    sync: DrawingSync,
+    vault: Option<String>,
+) -> Result<DrawingSynced, PluginError> {
+    off_main(app, move |host| {
+        host.drawing_sync(vault.as_deref(), &instance, sync)
+    })
+    .await
+}
+
+/// Un pezzo di gesto: risponde l'anteprima o le operazioni di scena.
+#[tauri::command]
+async fn drawing_gesture(
+    app: AppHandle,
+    instance: String,
+    gesture: DrawingGesture,
+    vault: Option<String>,
+) -> Result<DrawingOutcome, PluginError> {
+    off_main(app, move |host| {
+        host.drawing_gesture(vault.as_deref(), &instance, gesture)
+    })
+    .await
+}
+
+/// I comandi del disegno, accesi o spenti sulla selezione.
+#[tauri::command]
+async fn drawing_commands(
+    app: AppHandle,
+    instance: String,
+    selection: Vec<String>,
+    vault: Option<String>,
+) -> Result<Vec<DrawingCommandInfo>, PluginError> {
+    off_main(app, move |host| {
+        host.drawing_commands(vault.as_deref(), &instance, &selection)
+    })
+    .await
+}
+
+/// Un comando del disegno sulla selezione.
+#[tauri::command]
+async fn drawing_command(
+    app: AppHandle,
+    instance: String,
+    request: DrawingCommandRequest,
+    vault: Option<String>,
+) -> Result<DrawingOutcome, PluginError> {
+    off_main(app, move |host| {
+        host.drawing_command(vault.as_deref(), &instance, request)
+    })
+    .await
+}
+
+/// Chiude l'istanza del motore.
+#[tauri::command]
+async fn close_drawing(
+    app: AppHandle,
+    instance: String,
+    vault: Option<String>,
+) -> Result<(), PluginError> {
+    off_main(app, move |host| {
+        host.drawing_close(vault.as_deref(), &instance)
+    })
+    .await
 }
 
 /// **Scrive un documento intero** dichiarando da cosa parte (§18.1, §23.11).
@@ -3032,6 +3124,12 @@ pub fn run() {
             grid_bytes_commands,
             grid_bytes_command,
             close_grid_bytes,
+            open_drawing,
+            drawing_sync,
+            drawing_gesture,
+            drawing_commands,
+            drawing_command,
+            close_drawing,
             write_document,
             save_draft,
             list_bundles,

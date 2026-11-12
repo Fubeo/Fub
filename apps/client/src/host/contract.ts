@@ -1663,7 +1663,7 @@ export interface GridBytesWindow {
 // suoi strumenti con i campioni della penna (`DrawingGesture`) e risponde con
 // le operazioni di scena da applicare in un passo di annullamento
 // (`DrawingOutcome.ops`). Le revisioni sono `u64` e viaggiano come stringhe.
-// I comandi IPC che le portano arrivano con T19 (`docs/reference/ipc-contract.md`).
+// Le portano i sei comandi del disegno (`docs/reference/drawing-ipc.md`).
 
 /** Il testo di un disegno, al più (`fub_scene::MAX_EDIT_BYTES`). */
 export const MAX_DRAWING_TEXT_BYTES = 20 * 1024 * 1024;
