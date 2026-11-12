@@ -2163,7 +2163,7 @@ linee variabili del corpus o dei vettori, e il `d` scritto coincide con
 quello del client entro la tolleranza; il campo dello spessore non è più
 spento sulle linee variabili col motore acceso.
 Prova: scripts/check.sh --rapido; cargo test -p fub-disegno --test comandi
-Stato: [ ] da fare
+Stato: [~] in corso (2026-11-12, coder su base 878d2b0c8)
 
 ## T30 · La CI completa e la revisione prima del merge
 
