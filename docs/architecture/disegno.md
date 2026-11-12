@@ -146,8 +146,8 @@ Dopo ogni gesto la sessione del motore torna alla copia: lo stato vero è il
 file. Un panico del motore lo prende `vectorcraft_engine::guard::catch_panic`:
 il gesto è `Unsupported`, la sessione si ricarica dalla copia e l'istanza
 resta viva. Gli strumenti stanno in `crates/fub-disegno/src/gesti/`, uno per
-strumento di Fub; quelli non ancora fatti rispondono `Unsupported` (la
-selezione arriva con T15, il testo con T17, i comandi con T18). Ogni evento
+strumento di Fub; quelli non ancora fatti rispondono `Unsupported` (il
+testo arriva con T17, i comandi con T18). Ogni evento
 passa prima dallo strumento di Fub (`Strumento::evento`), che applica le
 regole di Fub che il motore farebbe a modo suo.
 
@@ -163,6 +163,21 @@ stile del gesto e niente guide magnetiche sue. L'elemento nuovo è quello di
 sotto i 4 pixel sullo schermo, o con un lato nullo, non c'è forma (`Empty`), e
 disegnare non cambia la selezione. L'anteprima è l'`Elem` della forma
 provvisoria nello spazio del livello.
+
+La selezione (`gesti/selezione.rs`) decide il gesto con le regole di Fub,
+dalla pressione come l'ha mandata Fub e dalla selezione di prima: una
+maniglia della cornice ridimensiona o ruota, un oggetto (il più esterno del
+livello, o quello scelto dentro un gruppo) si sceglie e si sposta, il vuoto
+comincia un riquadro, che sceglie ciò che contiene per intero. Spostare usa la
+Selezione del motore (`selection`), ruotare il suo `rotate`, ridimensionare una
+cornice dritta senza contorno la sua maniglia: gli eventi arrivano già con la
+griglia, le proporzioni, la misura minima e la calamita degli angoli di Fub,
+senza i modificatori che il motore leggerebbe a modo suo. Dove il motore
+farebbe altro (una cornice girata, inclinata o col contorno, una sua maniglia
+sotto la pressione, la carta) la matrice la calcola Fub, va sugli oggetti del
+documento del motore e la differenza la scrive come sempre. La selezione
+finale e il riquadro seguono sempre la regola di Fub; l'anteprima è la matrice
+della selezione nella scena, o il riquadro.
 
 ## Il motore come componente
 
@@ -259,7 +274,7 @@ strumento li modifica, e un gesto sul loro oggetto del motore è rifiutato
 | Percorso | Contiene |
 |---|---|
 | `vendor/vectorcraft/` | la copia di VectorCraft, con le patch numerate e `UPSTREAM.md` (arriva con T6) |
-| `crates/fub-disegno/` | l'adattatore: apertura, mappa, sincronia, differenza, gesti, comandi, perdite (le forme ci sono; gli altri strumenti e i comandi arrivano con T15–T18) |
+| `crates/fub-disegno/` | l'adattatore: apertura, mappa, sincronia, differenza, gesti, comandi, perdite (le forme e la selezione ci sono; il testo e i comandi arrivano con T17–T18) |
 | `crates/fub-host/src/drawing.rs` | le istanze per vault e i sei comandi lato host |
 | `crates/fub-abi/src/drawing.rs` | le forme condivise e i limiti (arriva con T4) |
 | `apps/client/src/editors/spatial/motore/` | la sessione, i gesti, i colori e il chip delle perdite (arriva con T8, T10, T12 e T21) |
