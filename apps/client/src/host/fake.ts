@@ -263,6 +263,11 @@ export interface DrawingFake {
   comandi?: (selection: string[], copia: DrawingFakeCopy) => DrawingCommandInfo[];
   /// L'esito di un comando. Senza, un comando lancia.
   comando?: (request: DrawingCommandRequest, copia: DrawingFakeCopy) => DrawingOutcome;
+  /// Il motore spento a metà sessione, letto a ogni chiamata: finché dice
+  /// `true` ogni porta del disegno rifiuta con `unserved` e le istanze aperte
+  /// se ne vanno, come l'host col motore spento nel vault (T29); riacceso,
+  /// un'apertura dà un'istanza nuova.
+  spento?: () => boolean;
 }
 
 /// La copia di un disegno aperto nel motore finto, com'è adesso.
@@ -573,9 +578,17 @@ export function createFakeHost(options: Options = {}): FakeHost {
   let drawingInstances = 0;
   /// Il motore spento, come l'host senza il componente.
   const drawingUnserved = (): PluginError => ({ kind: "unserved", message: "host fake: il motore del disegno non c'è" });
+  /// Il motore c'è adesso; spento, lancia `unserved` e chiude le istanze.
+  const drawingServed = (): void => {
+    if (!drawing) throw drawingUnserved();
+    if (drawing.spento?.() === true) {
+      drawingCopies.clear();
+      throw drawingUnserved();
+    }
+  };
   /// La copia di un'istanza aperta, o il rifiuto dell'host per una chiusa.
   const drawingCopyOf = (instance: string): DrawingFakeCopy => {
-    if (!drawing) throw drawingUnserved();
+    drawingServed();
     const copy = drawingCopies.get(instance);
     if (!copy) throw { kind: "not_found", message: `host fake: il disegno «${instance}» non è aperto` } satisfies PluginError;
     return copy;
@@ -1804,8 +1817,8 @@ export function createFakeHost(options: Options = {}): FakeHost {
         }
       })),
       openDrawing: (doc, text, vault) => gate("openDrawing", named([doc, text], vault), Promise.resolve().then(() => {
-        if (!drawing) throw drawingUnserved();
-        const opened = drawing.open?.(doc, text) ?? {
+        drawingServed();
+        const opened = drawing!.open?.(doc, text) ?? {
           instance: `disegno-${++drawingInstances}`,
           revision: "0",
           mapped: 0,

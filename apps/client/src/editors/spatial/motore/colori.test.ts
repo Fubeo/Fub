@@ -76,7 +76,7 @@ async function mount(input: string, fake: FakeHost): Promise<DrawEditor> {
   sessions = new DocumentSessionCollection(api, () => "/vault");
   await sessions.read(DOC);
   const session = sessions.get(DOC)!;
-  motore = motoreDa(apriSessione(fake.module.api, DOC, input, session, { vault: "/vault" }));
+  motore = motoreDa(() => apriSessione(fake.module.api, DOC, input, session, { vault: "/vault" }));
   await settle(0, 2);
   return createDrawEditor(host, SceneEngine.open(input), owner, {
     motore,

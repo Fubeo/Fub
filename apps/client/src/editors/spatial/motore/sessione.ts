@@ -21,6 +21,11 @@
 //   non ferma la fila per sempre. Scaduto il tempo, o al primo errore, la
 //   sessione si ferma come `MotoreAssente { perche: "errore" }`: la copia del
 //   motore non è più certa, e gli strumenti tornano a chi li sa fare senza.
+// - **Spento a metà.** Un `unserved` a una richiesta della sessione aperta
+//   vuol dire che il motore si è spento nel vault e l'host ne ha chiuso le
+//   istanze (T29): la sessione si ferma come `MotoreAssente { perche:
+//   "spento" }`. Una sessione ferma non riparte: chi la vuole di nuovo ne apre
+//   un'altra (`motoreDa` di `gesti.ts`).
 // - **Chiusa è chiusa.** Dopo `chiudi()` non parte più niente, e l'esito di
 //   una richiesta già in volo si scarta (`null`).
 
@@ -53,10 +58,11 @@ export type HostDisegno = Pick<
 >;
 
 /// Ciò che della `DocumentSession` serve: il testo e la porta delle superfici.
-export type DocumentoDisegno = Pick<DocumentSession, "attachSurface" | "text">;
+export type DocumentoDisegno = Pick<DocumentSession, "attachSurface" | "text" | "snapshot">;
 
-/// Il motore non c'è: spento (l'host non ha il componente) o in errore
-/// (all'apertura, a una richiesta, o perché non risponde).
+/// Il motore non c'è: spento (l'host non ha il componente, o lo ha spento a
+/// metà sessione) o in errore (all'apertura, a una richiesta, o perché non
+/// risponde).
 export interface MotoreAssente {
   readonly kind: "assente";
   readonly perche: "spento" | "errore";
@@ -81,8 +87,13 @@ export interface SessioneMotore {
   /// La revisione dell'ultimo testo mandato alla copia.
   revision(): string;
   stato(): StatoSessione;
-  /// Avvisa una volta, quando il motore smette di rispondere. Il ritorno smette.
+  /// Avvisa una volta, quando il motore smette di rispondere, col perché. Il
+  /// ritorno smette.
   quandoAssente(listener: (assente: MotoreAssente) => void): Teardown;
+  /// Avvisa una volta, quando la sessione aperta si chiude: con `chiudi()`, o
+  /// perché la `DocumentSession` è finita (il file cancellato, il vault
+  /// chiuso o cambiato). Il ritorno smette.
+  quandoChiusa(listener: () => void): Teardown;
   /// L'esito del gesto; il motore assente; `null` se la sessione è stata
   /// chiusa prima che l'esito arrivasse.
   gesto(gesture: GestoMotore): Promise<DrawingOutcome | MotoreAssente | null>;
@@ -184,6 +195,7 @@ class Sessione implements SessioneMotore {
   readonly #fila = new Queue();
   readonly #life = openLifetime();
   readonly #assenti = new Set<(assente: MotoreAssente) => void>();
+  readonly #chiuse = new Set<() => void>();
   #stato: StatoSessione = "aperta";
   /// La revisione e il testo (LF) dell'ultimo sync partito: ciò che la copia
   /// ha, o avrà appena il motore lo legge.
@@ -211,6 +223,13 @@ class Sessione implements SessioneMotore {
       sync: (update) => this.#sync(update),
       closed: () => void this.chiudi(),
     }));
+    // La `DocumentSession` è finita mentre il motore apriva (o prima che
+    // qualcuno chiedesse di riaprire): non c'è niente da seguire, e
+    // l'istanza si chiude subito.
+    if (documento.snapshot().lifecycle !== "open") {
+      void this.chiudi();
+      return;
+    }
     // Il documento è cambiato mentre il motore apriva: la copia riparte dal
     // testo di adesso.
     const adesso = lineFeeds(documento.text());
@@ -233,6 +252,14 @@ class Sessione implements SessioneMotore {
     };
   }
 
+  quandoChiusa(listener: () => void): Teardown {
+    if (this.#stato !== "aperta") return () => {};
+    this.#chiuse.add(listener);
+    return () => {
+      this.#chiuse.delete(listener);
+    };
+  }
+
   gesto(gesture: GestoMotore): Promise<DrawingOutcome | MotoreAssente | null> {
     return this.#conRiprova((revision) =>
       this.#host.drawingGesture(this.instance, { ...gesture, revision }, this.#vault));
@@ -252,7 +279,9 @@ class Sessione implements SessioneMotore {
     this.#stato = "chiusa";
     this.#assenti.clear();
     this.#life.close();
-    await this.#chiudiNelMotore();
+    const chiusura = this.#chiudiNelMotore();
+    avvisa(this.#chiuse, undefined);
+    await chiusura;
   }
 
   // --- La copia segue il documento ------------------------------------------
@@ -304,9 +333,9 @@ class Sessione implements SessioneMotore {
       try {
         const result = await job();
         return this.#stato === "aperta" ? result : this.#fermo();
-      } catch {
+      } catch (error) {
         if (this.#stato !== "aperta") return this.#fermo();
-        return this.#guasto();
+        return this.#guasto(isErrorKind(error, "unserved") ? "spento" : "errore");
       }
     });
   }
@@ -316,21 +345,16 @@ class Sessione implements SessioneMotore {
     return this.#stato === "chiusa" || this.#stato === "aperta" ? null : this.#stato;
   }
 
-  /// Il motore ha sbagliato o non risponde: la copia non è più certa.
-  #guasto(): MotoreAssente {
-    const assente: MotoreAssente = { kind: "assente", perche: "errore" };
+  /// Il motore si è spento, ha sbagliato o non risponde: la copia non è più
+  /// certa.
+  #guasto(perche: MotoreAssente["perche"]): MotoreAssente {
+    const assente: MotoreAssente = { kind: "assente", perche };
     this.#stato = assente;
     this.#life.close();
-    const listeners = [...this.#assenti];
-    this.#assenti.clear();
-    for (const listener of listeners) {
-      try {
-        listener(assente);
-      } catch (error) {
-        console.error(error);
-      }
-    }
-    // L'istanza, se l'host c'è ancora, non serve più a nessuno.
+    this.#chiuse.clear();
+    avvisa(this.#assenti, assente);
+    // L'istanza, se l'host c'è ancora, non serve più a nessuno. Spento, l'host
+    // l'ha già chiusa (T29), e la chiusura gli costa solo un altro rifiuto.
     void this.#chiudiNelMotore();
     return assente;
   }
@@ -339,5 +363,19 @@ class Sessione implements SessioneMotore {
   /// se non riesce non c'è niente da fare di qua.
   #chiudiNelMotore(): Promise<void> {
     return this.#fila.enqueue(() => entro(this.#host.closeDrawing(this.instance, this.#vault)).catch(() => {}));
+  }
+}
+
+/// Avvisa una volta chi ascolta in `listeners`, e li dimentica: l'errore di
+/// uno non ferma gli altri.
+function avvisa<T>(listeners: Set<(value: T) => void>, value: T): void {
+  const tutti = [...listeners];
+  listeners.clear();
+  for (const listener of tutti) {
+    try {
+      listener(value);
+    } catch (error) {
+      console.error(error);
+    }
   }
 }

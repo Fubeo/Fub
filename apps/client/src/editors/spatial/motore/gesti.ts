@@ -26,14 +26,20 @@
 //   partenza è quella di dopo.
 // - **Il motore che si apre.** Se al primo gesto la sessione si sta ancora
 //   aprendo, il gesto aspetta al più `ATTESA_APERTURA_MS`; poi non fa
-//   niente. Un motore che smette di rispondere ferma il gesto, e i gesti
-//   dopo tornano agli strumenti di oggi.
+//   niente.
+// - **Il motore che manca, e che torna.** Un gesto cominciato col motore
+//   finisce col motore: se il motore si spegne o si ferma a metà, il gesto
+//   si annulla (via l'anteprima, niente si scrive) e lo si dice col motivo;
+//   i gesti dopo tornano agli strumenti di oggi. `motoreDa` sa perché il
+//   motore manca e riapre una sessione nuova quando lo si chiede (il motore
+//   riacceso, «Riprova»).
 //
 // La penna, l'evidenziatore, la gomma e la nota non passano mai di qua: sono
 // di Fub, e non chiamano il motore.
 
 import { MAX_GESTURE_EVENTS, type DrawingFrame, type DrawingOutcome, type DrawingPointer, type DrawingRefusal, type DrawingTool } from "../../../host/contract";
 import type { InkSample } from "../../../ink/sample";
+import type { Teardown } from "../../../ui/lifetime";
 import type { PaintNode } from "../painter/paint";
 import { angleOf, frameSize, gripAt, type Frame } from "../tools/frame";
 import { IDENTITY, type Matrix, type Point } from "../scene/matrix";
@@ -62,7 +68,7 @@ export const STRUMENTI_DEL_MOTORE: ReadonlyMap<ToolId, DrawingTool> = new Map<To
 ]);
 
 /// Il motore del disegno come lo vede l'editor: la sessione, che può essere
-/// ancora in apertura.
+/// ancora in apertura, mancare, o tornare.
 export interface MotoreDelDisegno {
   /// La sessione aperta; `"apertura"` finché si apre; `null` se il motore
   /// non c'è (spento, in errore, chiuso).
@@ -70,40 +76,169 @@ export interface MotoreDelDisegno {
   /// La sessione appena è aperta, aspettando al più `ms`; `null` se il
   /// motore non c'è o non si è aperto in tempo.
   pronta(ms: number): Promise<SessioneMotore | null>;
+  /// Perché il motore manca (spento o fermo); `null` se c'è, si sta
+  /// aprendo, o il disegno è finito.
+  assente(): MotoreAssente | null;
+  /// Apre una sessione nuova se il motore manca: «Riprova», o il motore
+  /// riacceso. Niente se è aperto, se si sta aprendo, o dopo `chiudi()`.
+  riapri(): void;
+  /// Avvisa a ogni cambio di `adesso()` o di `assente()`. Il ritorno smette.
+  quandoCambia(listener: () => void): Teardown;
 }
 
-/// Il motore di un disegno aperto, per chi l'ha aperto: lo chiude.
+/// Il motore di un disegno aperto, per chi l'ha aperto: sa che il motore si è
+/// spento, e lo chiude.
 export interface MotoreAperto extends MotoreDelDisegno {
+  /// Il motore si è spento nel vault: chiude la sessione (o scarta quella che
+  /// si sta aprendo) e dà «spento» subito, senza aspettare la richiesta dopo.
+  spento(): void;
   chiudi(): Promise<void>;
 }
 
-/// Il motore che `apertura` apre: `apriSessione` di `sessione.ts`.
-export function motoreDa(apertura: Promise<SessioneMotore | MotoreAssente>): MotoreAperto {
-  let stato: SessioneMotore | "apertura" | null = "apertura";
-  let chiuso = false;
+/// Ciò che `motoreDa` tiene: la sessione, l'apertura in corso, il perché
+/// manca, o il disegno finito (chiuso da chi l'ha aperto, o dalla
+/// `DocumentSession` che non c'è più).
+type StatoMotore = SessioneMotore | "apertura" | MotoreAssente | "finito";
+
+/// Il motore che `apri` apre (`apriSessione` di `sessione.ts`), riaperto con
+/// `riapri()`. Ogni apertura è una sessione nuova: un'istanza nuova del
+/// motore, col testo che `apri` legge in quel momento. Un'apertura alla
+/// volta; l'esito di un'apertura che un `spento()` o un `chiudi()` ha reso
+/// vecchia si scarta, e la sua sessione si chiude.
+export function motoreDa(apri: () => Promise<SessioneMotore | MotoreAssente>): MotoreAperto {
+  let stato: StatoMotore = "apertura";
+  /// Il numero dell'apertura che vale: una più vecchia arriva e si scarta.
+  let giro = 0;
+  /// Un'apertura è in volo, anche scartata: la nuova aspetta che torni.
+  let inVolo = false;
+  /// Un `riapri()` arrivato mentre un'apertura scartata era in volo.
+  let ancora = false;
+  /// Smette di ascoltare la sessione aperta.
+  let lasciaSessione: Teardown = () => {};
   const attese = new Set<() => void>();
-  const sveglia = (): void => {
+  const ascolti = new Set<() => void>();
+
+  const cambia = (next: StatoMotore): void => {
+    stato = next;
     const pronti = [...attese];
     attese.clear();
     for (const each of pronti) each();
+    for (const listener of [...ascolti]) {
+      try {
+        listener();
+      } catch (error) {
+        console.error(error);
+      }
+    }
   };
-  void apertura.then(
-    (aperta) => {
-      if (aperta.kind === "sessione" && chiuso) void aperta.chiudi();
-      stato = aperta.kind === "sessione" && !chiuso ? aperta : null;
-      sveglia();
-    },
-    () => {
-      stato = null;
-      sveglia();
-    },
-  );
+
+  /// Segue la sessione aperta: quando si ferma o si chiude da sé.
+  const segui = (sessione: SessioneMotore): void => {
+    const smettiAssente = sessione.quandoAssente((assente) => {
+      if (stato !== sessione) return;
+      lascia();
+      cambia(assente);
+    });
+    const smettiChiusa = sessione.quandoChiusa(() => {
+      if (stato !== sessione) return;
+      lascia();
+      cambia("finito");
+    });
+    lasciaSessione = () => {
+      smettiAssente();
+      smettiChiusa();
+    };
+  };
+  const lascia = (): void => {
+    lasciaSessione();
+    lasciaSessione = () => {};
+  };
+
+  const arrivata = (mio: number, aperta: SessioneMotore | MotoreAssente): void => {
+    inVolo = false;
+    if (mio !== giro || stato === "finito") {
+      if (aperta.kind === "sessione") void aperta.chiudi();
+      if (ancora && stato !== "finito") {
+        ancora = false;
+        apriOra();
+      }
+      return;
+    }
+    if (aperta.kind === "assente") {
+      cambia(aperta);
+      return;
+    }
+    const sua = aperta.stato();
+    if (sua === "aperta") {
+      segui(aperta);
+      cambia(aperta);
+    } else {
+      // Chiusa appena aperta: la `DocumentSession` era già finita.
+      cambia(sua === "chiusa" ? "finito" : sua);
+    }
+  };
+
+  const apriOra = (): void => {
+    const mio = ++giro;
+    inVolo = true;
+    cambia("apertura");
+    let apertura: Promise<SessioneMotore | MotoreAssente>;
+    try {
+      apertura = apri();
+    } catch (error) {
+      apertura = Promise.reject(error);
+    }
+    void apertura.then(
+      (aperta) => arrivata(mio, aperta),
+      (error: unknown) => {
+        console.error(error);
+        arrivata(mio, { kind: "assente", perche: "errore" });
+      },
+    );
+  };
+
   const adesso = (): SessioneMotore | "apertura" | null => {
-    if (stato !== null && stato !== "apertura" && stato.stato() !== "aperta") stato = null;
-    return stato;
+    if (stato === "apertura") return stato;
+    if (stato === "finito" || stato.kind === "assente") return null;
+    return stato.stato() === "aperta" ? stato : null;
   };
+
+  apriOra();
   return {
     adesso,
+    assente() {
+      if (stato === "apertura" || stato === "finito") return null;
+      if (stato.kind === "assente") return stato;
+      const sua = stato.stato();
+      return sua === "aperta" || sua === "chiusa" ? null : sua;
+    },
+    riapri() {
+      if (stato === "finito" || adesso() !== null) return;
+      if (inVolo) {
+        ancora = true;
+        return;
+      }
+      lascia();
+      apriOra();
+    },
+    quandoCambia(listener) {
+      if (stato === "finito") return () => {};
+      ascolti.add(listener);
+      return () => {
+        ascolti.delete(listener);
+      };
+    },
+    spento() {
+      if (stato === "finito") return;
+      ancora = false;
+      const prima = stato;
+      if (prima !== "apertura" && prima.kind === "assente" && prima.perche === "spento") return;
+      // L'apertura in volo, se c'è, è vecchia: il suo esito si chiude.
+      giro++;
+      lascia();
+      cambia({ kind: "assente", perche: "spento" });
+      if (prima !== "apertura" && prima.kind === "sessione") void prima.chiudi();
+    },
     pronta(ms) {
       if (adesso() !== "apertura") return Promise.resolve(intera(adesso()));
       return new Promise((resolve) => {
@@ -120,12 +255,14 @@ export function motoreDa(apertura: Promise<SessioneMotore | MotoreAssente>): Mot
       });
     },
     async chiudi() {
-      if (chiuso) return;
-      chiuso = true;
-      const aperta = adesso();
-      stato = null;
-      sveglia();
-      if (aperta !== null && aperta !== "apertura") await aperta.chiudi();
+      if (stato === "finito") return;
+      const prima = stato;
+      giro++;
+      ancora = false;
+      lascia();
+      cambia("finito");
+      ascolti.clear();
+      if (prima !== "apertura" && prima.kind === "sessione") await prima.chiudi();
     },
   };
 }
@@ -250,6 +387,11 @@ interface Interno {
   from: Point | null;
   hit: string | null;
   frame: Frame | null;
+  /// Il motore è mancato a metà gesto: il gesto è già stato annullato, e
+  /// le richieste dopo non partono.
+  perso: boolean;
+  /// Il gesto è stato annullato da chi disegna (`motoreCancel`).
+  annullato: boolean;
 }
 
 /// Monta i gesti sul motore.
@@ -338,7 +480,7 @@ export function installGestiMotore(ctx: EditorContext): void {
         },
       };
     });
-    interni.set(g, { avvio, catena: avvio, from: null, hit: null, frame: null });
+    interni.set(g, { avvio, catena: avvio, from: null, hit: null, frame: null, perso: false, annullato: false });
     return g;
   };
   ctx.motoreBegin = motoreBegin;
@@ -350,15 +492,39 @@ export function installGestiMotore(ctx: EditorContext): void {
     const inner = interni.get(g)!;
     g.sent += events.length;
     const request = inner.catena.then(() => inner.avvio).then(async (started) => {
-      if (started === null) return null;
+      if (started === null || inner.perso) return null;
       const outcome = await started.sessione.gesto({ ...started.base, phase, events });
-      return outcome === null || "kind" in outcome ? null : outcome;
+      if (outcome !== null && !("kind" in outcome)) return outcome;
+      // Il motore è mancato a metà: fermo (`outcome` dice perché), o la
+      // sessione chiusa mentre la richiesta era in volo (spento, o il
+      // disegno finito).
+      perso(g, outcome ?? porta!.assente());
+      return null;
     }).catch((error: unknown): null => {
       console.error(error);
       return null;
     });
     inner.catena = request;
     return request;
+  };
+
+  /// Il motore è mancato mentre il gesto era in corso: il gesto non cambia
+  /// strada, si annulla. Via l'anteprima, la selezione di prima, niente si
+  /// scrive, e lo si dice col motivo; il gesto dopo fa da sé (`motoreBegin`
+  /// trova il motore che manca). Una volta per gesto.
+  const perso = (g: MotoreGesture, assente: MotoreAssente | null): void => {
+    const inner = interni.get(g)!;
+    if (inner.perso) return;
+    inner.perso = true;
+    g.pending.length = 0;
+    if (ctx.disposed || inner.annullato) return;
+    clearPreview(g);
+    if (g.before.join("\n") !== ctx.selection.join("\n")) ctx.select(g.before);
+    ctx.showHandles();
+    // Senza un perché, è il disegno che finisce: non c'è niente da dire.
+    if (assente === null) return;
+    const reason = assente.perche === "spento" ? "draw.reason.engine_off" : "draw.reason.engine_stopped";
+    ctx.announce(t("draw.rejected", { reason: t(reason) }));
   };
 
   /// Chiede il fotogramma che manderà gli eventi nuovi.
@@ -407,7 +573,7 @@ export function installGestiMotore(ctx: EditorContext): void {
   };
 
   const motoreSamples = (g: MotoreGesture, samples: readonly InkSample[]): void => {
-    if (g.ended) return;
+    if (g.ended || interni.get(g)!.perso) return;
     for (const sample of samples) {
       const kind = g.last === null ? "down" : "drag";
       if (g.last === null) firstPoint(g, [sample.x, sample.y]);
@@ -600,6 +766,7 @@ export function installGestiMotore(ctx: EditorContext): void {
   const motoreCancel = (g: MotoreGesture): void => {
     if (g.ended) return;
     g.ended = true;
+    interni.get(g)!.annullato = true;
     if (g.frame !== null) cancelAnimationFrame(g.frame);
     g.frame = null;
     g.pending.length = 0;

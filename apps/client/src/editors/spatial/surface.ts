@@ -100,6 +100,10 @@ import { fontSheets, picture, type FontSheets } from "./picture";
 import { noteSceneChange, offerStage } from "./live/registry";
 import { motoreDa, type MotoreAperto } from "./motore/gesti";
 import { apriSessione } from "./motore/sessione";
+import { onComponents } from "../../state/components";
+
+/// La riga del motore del disegno nella pagina Componenti (T13, D-14).
+const MOTORE_VETTORIALE = "fub.motore-vettoriale";
 
 type VectorMode = "draw" | "read";
 
@@ -429,14 +433,29 @@ export function mountVectorSurface(context: SurfaceMountContext, options: Vector
   /// superficie. In tutti e due gli spazi di lavoro: gli strumenti del
   /// disegno sono gli stessi. Senza sessione del documento, il motore non
   /// si apre e gli strumenti fanno da sé.
+  ///
+  /// Una sessione nuova a ogni riapertura (il motore riacceso, «Riprova»):
+  /// col nome e il testo che il documento ha in quel momento. La pagina
+  /// Componenti la segue: la riga del motore spenta chiude la sessione e lo
+  /// dice subito; riaccesa, il disegno torna al motore senza riaprire il
+  /// file. La sessione finisce con la superficie, o con la
+  /// `DocumentSession` (il file cancellato, il vault chiuso o cambiato); con
+  /// il file rinominato resta.
   let motore: MotoreAperto | null = null;
   const openMotore = (): MotoreAperto | null => {
     if (motore !== null) return motore;
     const session = documentSessions.get(context.documentId);
     if (session === undefined) return null;
     const vault = documentSessions.vaultFor(context.documentId) ?? null;
-    motore = motoreDa(apriSessione(api, context.documentId, session.text(), session, { vault }));
-    return motore;
+    const opened = motoreDa(() => apriSessione(api, session.id, session.text(), session, { vault }));
+    motore = opened;
+    life.add(onComponents((next) => {
+      // La mappa di un altro vault non dice niente di questo disegno.
+      if (vault !== null && next.root !== vault) return;
+      if (!next.on(MOTORE_VETTORIALE)) opened.spento();
+      else if (opened.assente()?.perche === "spento") opened.riapri();
+    }));
+    return opened;
   };
   life.add(() => {
     void motore?.chiudi();

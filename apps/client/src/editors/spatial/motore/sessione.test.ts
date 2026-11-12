@@ -329,6 +329,17 @@ describe("il motore che non risponde", () => {
     expect(host.atGate("closeDrawing")).toHaveLength(1);
   });
 
+  it("`internal` a un gesto dà il motore fermo («errore»), col perché a chi ascolta", async () => {
+    const host = createFakeHost({ drawing: { gesto: (gesture) => esito(gesture.revision) } });
+    const session = await apri(host);
+    const avvisi: MotoreAssente[] = [];
+    session.quandoAssente((assente) => avvisi.push(assente));
+    host.fault("drawingGesture", { kind: "internal", message: "il motore si è fermato" });
+    expect(await session.gesto(GESTO)).toEqual({ kind: "assente", perche: "errore" });
+    expect(avvisi).toEqual([{ kind: "assente", perche: "errore" }]);
+    expect(session.stato()).toEqual({ kind: "assente", perche: "errore" });
+  });
+
   it("un errore di un sync ferma la sessione", async () => {
     const host = createFakeHost({ drawing: { gesto: (gesture) => esito(gesture.revision) } });
     const session = await apri(host);
@@ -337,5 +348,87 @@ describe("il motore che non risponde", () => {
     await vi.waitFor(() => expect(session.stato()).toEqual({ kind: "assente", perche: "errore" }));
     expect(await session.gesto(GESTO)).toEqual({ kind: "assente", perche: "errore" });
     expect(gesti(host)).toHaveLength(0);
+  });
+});
+
+describe("il motore spento a metà sessione", () => {
+  it("`unserved` a un gesto dà «spento», e il perché arriva a chi ascolta", async () => {
+    let spento = false;
+    const host = createFakeHost({ drawing: { gesto: (gesture) => esito(gesture.revision), spento: () => spento } });
+    const session = await apri(host);
+    const avvisi: MotoreAssente[] = [];
+    const chiuse: string[] = [];
+    session.quandoAssente((assente) => avvisi.push(assente));
+    session.quandoChiusa(() => chiuse.push("chiusa"));
+    expect(await session.gesto(GESTO)).toEqual(esito("0"));
+    spento = true;
+    expect(await session.gesto(GESTO)).toEqual({ kind: "assente", perche: "spento" } satisfies MotoreAssente);
+    expect(avvisi).toEqual([{ kind: "assente", perche: "spento" }]);
+    expect(session.stato()).toEqual({ kind: "assente", perche: "spento" });
+    // Fermata, non è chiusa da chi l'ha aperta: chi aspetta la chiusura non
+    // sente niente, e le richieste dopo dicono «spento» senza partire.
+    expect(chiuse).toEqual([]);
+    const prima = host.atGate("drawingGesture").length;
+    expect(await session.comando({ id: "disegno.spessore", selection: [], value: 1 })).toEqual({ kind: "assente", perche: "spento" });
+    expect(host.atGate("drawingGesture").length + host.atGate("drawingCommand").length).toBe(prima);
+  });
+
+  it("anche a un sync o a un comando", async () => {
+    let spento = false;
+    const host = createFakeHost({ drawing: { comando: (request) => esito(request.revision), spento: () => spento } });
+    const viaSync = await apri(host);
+    spento = true;
+    modifica('width="10"', 'width="11"');
+    await vi.waitFor(() => expect(viaSync.stato()).toEqual({ kind: "assente", perche: "spento" }));
+
+    spento = false;
+    const doc = sessions!.get(DOC)!;
+    const viaComando = (await apriSessione(host.module.api, DOC, doc.text(), doc)) as SessioneMotore;
+    expect(viaComando.kind).toBe("sessione");
+    spento = true;
+    expect(await viaComando.comando({ id: "disegno.spessore", selection: [], value: 1 })).toEqual({ kind: "assente", perche: "spento" });
+  });
+
+  it("`not_found` (un'istanza che l'host non conosce più) resta un errore", async () => {
+    const host = createFakeHost({ drawing: { gesto: (gesture) => esito(gesture.revision) } });
+    const session = await apri(host);
+    host.fault("drawingGesture", { kind: "not_found", message: "istanza sconosciuta" });
+    expect(await session.gesto(GESTO)).toEqual({ kind: "assente", perche: "errore" });
+  });
+});
+
+describe("`quandoChiusa`", () => {
+  it("avvisa una volta quando la sessione si chiude, da `chiudi()` o dalla `DocumentSession`", async () => {
+    const host = createFakeHost({ drawing: {} });
+    const prima = await apri(host);
+    const chiuse: string[] = [];
+    prima.quandoChiusa(() => chiuse.push("prima"));
+    const smetti = prima.quandoChiusa(() => chiuse.push("tolto"));
+    smetti();
+    await prima.chiudi();
+    await prima.chiudi();
+    expect(chiuse).toEqual(["prima"]);
+    // Su una sessione già chiusa non si ascolta niente.
+    prima.quandoChiusa(() => chiuse.push("tardi"));
+
+    const doc = sessions!.get(DOC)!;
+    const seconda = (await apriSessione(host.module.api, DOC, doc.text(), doc)) as SessioneMotore;
+    seconda.quandoChiusa(() => chiuse.push("seconda"));
+    sessions!.close(DOC);
+    expect(chiuse).toEqual(["prima", "seconda"]);
+    await vi.waitFor(() => expect(host.atGate("closeDrawing")).toHaveLength(2));
+  });
+
+  it("un'apertura che arriva quando la `DocumentSession` è già finita si chiude subito", async () => {
+    const host = createFakeHost({ drawing: {} });
+    const doc = await documento(SVG);
+    const release = host.throttle("openDrawing");
+    const pending = apriSessione(host.module.api, DOC, SVG, doc);
+    sessions!.close(DOC);
+    release();
+    const session = (await pending) as SessioneMotore;
+    expect(session.stato()).toBe("chiusa");
+    await vi.waitFor(() => expect(host.atGate("closeDrawing")).toHaveLength(1));
+    expect(host.drawingCopy(session.instance)).toBeUndefined();
   });
 });

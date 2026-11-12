@@ -19,7 +19,7 @@ import { toScreen } from "../view";
 import { createDrawEditor, type DrawEditor } from "../tools/editor";
 import { DEFAULT_GRID } from "../tools/grid";
 import { aPezzi, ATTESA_APERTURA_MS, elemDi, motoreDa, opsDellEsito, type MotoreAperto, type MotoreDelDisegno } from "./gesti";
-import { apriSessione } from "./sessione";
+import { apriSessione, type GestoMotore, type MotoreAssente, type SessioneMotore } from "./sessione";
 
 // --- I vettori ----------------------------------------------------------------
 
@@ -92,7 +92,7 @@ async function documentOn(text: string) {
 async function mount(input: string, fake: FakeHost, grid: number | null = null, porta?: MotoreDelDisegno): Promise<DrawEditor> {
   const session = await documentOn(input);
   if (porta === undefined) {
-    motore = motoreDa(apriSessione(fake.module.api, DOC, input, session, { vault: "/vault" }));
+    motore = motoreDa(() => apriSessione(fake.module.api, DOC, input, session, { vault: "/vault" }));
     await settle(0, 2);
   }
   return createDrawEditor(host, SceneEngine.open(input), owner, {
@@ -335,7 +335,7 @@ describe("i gesti sul motore", () => {
 
   it("un motore che non si apre in 2 s: il gesto non fa niente", async () => {
     const fake = createFakeHost();
-    const editor = await mount(EMPTY, fake, null, motoreDa(new Promise(() => {})));
+    const editor = await mount(EMPTY, fake, null, motoreDa(() => new Promise(() => {})));
     editor.setTool("rect");
     await drag(editor, [[220, 40], [300, 90]]);
     await vi.advanceTimersByTimeAsync(ATTESA_APERTURA_MS + 100);
@@ -352,7 +352,7 @@ describe("i gesti sul motore", () => {
     const late = new Promise<void>((resolve) => {
       open = resolve;
     }).then(() => apriSessione(fake.module.api, DOC, EMPTY, session));
-    motore = motoreDa(late);
+    motore = motoreDa(() => late);
     const editor = createDrawEditor(host, SceneEngine.open(EMPTY), owner, {
       motore,
       onChange: (change) => void sessions!.acceptSurfaceChange(DOC, "editor", { text: change.text, operation: change.operation }),
@@ -475,6 +475,242 @@ describe("i gesti sul motore", () => {
     await drag(editor, [[150, 125], [160, 130]]);
     await settle(16, 8);
     expect(gestures(fake).slice(dopo).every((each) => each.frame === null)).toBe(true);
+  });
+});
+
+// --- Il motore che manca, e che torna -------------------------------------------
+
+/// Un gesto qualunque, per chiamare la sessione da sé.
+const GESTO: GestoMotore = {
+  phase: "commit",
+  tool: "rect",
+  layer: null,
+  selection: [],
+  zoom: 1,
+  snap: { grid: null, free: false },
+  style: { stroke: "#000", width: 1, fill: null },
+  text: null,
+  frame: null,
+  events: [point("down", 0, 0)],
+};
+
+/// Il motore di `fake` sul documento di `input`, che legge il testo della
+/// `DocumentSession` a ogni apertura (come `surface.ts`).
+async function motoreSu(input: string, fake: FakeHost): Promise<MotoreAperto> {
+  const session = await documentOn(input);
+  motore = motoreDa(() => apriSessione(fake.module.api, DOC, session.text(), session, { vault: "/vault" }));
+  await settle(0, 2);
+  return motore;
+}
+
+const aperte = (fake: FakeHost): string[] => fake.atGate("openDrawing").map((call) => call.args[1] as string);
+const chiuse = (fake: FakeHost): string[] => fake.atGate("closeDrawing").map((call) => call.args[0] as string);
+
+describe("il motore che manca, e che torna", () => {
+  it("`riapri()` dopo un errore apre un'istanza nuova, col testo di quel momento", async () => {
+    const fake = createFakeHost({ drawing: { gesto: (gesture) => ({ revision: gesture.revision, preview: null, ops: null, selection: [], losses: [], refused: null, frame: null }) } });
+    const porta = await motoreSu(EMPTY, fake);
+    const prima = porta.adesso() as SessioneMotore;
+    expect(prima.kind).toBe("sessione");
+    const cambi: string[] = [];
+    porta.quandoCambia(() => cambi.push(JSON.stringify(porta.assente())));
+    const guarisci = fake.fault("drawingGesture", { kind: "internal", message: "il motore si è fermato" });
+    expect(await prima.gesto(GESTO)).toEqual({ kind: "assente", perche: "errore" });
+    guarisci();
+    expect(porta.adesso()).toBeNull();
+    expect(porta.assente()).toEqual({ kind: "assente", perche: "errore" } satisfies MotoreAssente);
+    // Il testo cambia mentre il motore è fermo.
+    const nuovo = EMPTY.replace("</svg>", '<rect id="nuovo" width="5" height="5"/></svg>');
+    sessions!.restore(DOC, nuovo, { kind: "descends_from", value: "rev-1" });
+    porta.riapri();
+    expect(porta.adesso()).toBe("apertura");
+    porta.riapri();
+    await settle(0, 2);
+    const seconda = porta.adesso() as SessioneMotore;
+    expect(seconda.kind).toBe("sessione");
+    expect(seconda.instance).not.toBe(prima.instance);
+    expect(aperte(fake)).toEqual([EMPTY, nuovo]);
+    expect(fake.drawingCopy(seconda.instance)!.text).toBe(nuovo);
+    expect(porta.assente()).toBeNull();
+    // Riaperto, `riapri()` non fa niente.
+    porta.riapri();
+    await settle(0, 2);
+    expect(aperte(fake)).toHaveLength(2);
+    expect(cambi).toEqual([JSON.stringify({ kind: "assente", perche: "errore" }), "null", "null"]);
+  });
+
+  it("`spento()` chiude la sessione e dice «spento» subito; riacceso, `riapri()` torna al motore", async () => {
+    const fake = createFakeHost({ drawing: {} });
+    const porta = await motoreSu(EMPTY, fake);
+    const prima = porta.adesso() as SessioneMotore;
+    let cambi = 0;
+    porta.quandoCambia(() => cambi++);
+    porta.spento();
+    expect(porta.adesso()).toBeNull();
+    expect(porta.assente()).toEqual({ kind: "assente", perche: "spento" });
+    expect(cambi).toBe(1);
+    await settle(0, 2);
+    expect(chiuse(fake)).toEqual([prima.instance]);
+    porta.spento();
+    expect(cambi).toBe(1);
+    porta.riapri();
+    await settle(0, 2);
+    expect((porta.adesso() as SessioneMotore).instance).not.toBe(prima.instance);
+    expect(aperte(fake)).toHaveLength(2);
+  });
+
+  it("tanti spento e riacceso di fila: un'apertura alla volta, e vince l'ultimo stato", async () => {
+    const fake = createFakeHost({ drawing: {} });
+    const porta = await motoreSu(EMPTY, fake);
+    porta.spento();
+    const release = fake.throttle("openDrawing");
+    porta.riapri();
+    porta.riapri();
+    porta.spento();
+    porta.riapri();
+    porta.spento();
+    porta.riapri();
+    await settle(0, 2);
+    // Una sola apertura in volo, e lo stato dice ancora «spento» finché non
+    // torna.
+    expect(aperte(fake)).toHaveLength(2);
+    expect(porta.assente()).toEqual({ kind: "assente", perche: "spento" });
+    release();
+    await settle(0, 4);
+    // L'apertura vecchia si chiude appena arriva, poi parte quella buona.
+    expect(aperte(fake)).toHaveLength(3);
+    const ultima = porta.adesso() as SessioneMotore;
+    expect(ultima.kind).toBe("sessione");
+    expect(fake.drawingCopy(ultima.instance)).toBeDefined();
+    expect(chiuse(fake)).toHaveLength(2);
+    expect(chiuse(fake)).not.toContain(ultima.instance);
+
+    // Spento mentre si apre, e non riacceso: l'apertura si chiude e resta spento.
+    porta.spento();
+    const ancora = fake.throttle("openDrawing");
+    porta.riapri();
+    porta.spento();
+    ancora();
+    await settle(0, 4);
+    expect(porta.adesso()).toBeNull();
+    expect(porta.assente()).toEqual({ kind: "assente", perche: "spento" });
+    expect(aperte(fake)).toHaveLength(4);
+    expect(chiuse(fake)).toHaveLength(4);
+  });
+
+  it("dopo `chiudi()` niente riapre, e l'apertura in volo si chiude appena arriva", async () => {
+    const fake = createFakeHost({ drawing: {} });
+    const session = await documentOn(EMPTY);
+    const release = fake.throttle("openDrawing");
+    motore = motoreDa(() => apriSessione(fake.module.api, DOC, session.text(), session, { vault: "/vault" }));
+    const porta = motore;
+    expect(porta.adesso()).toBe("apertura");
+    await porta.chiudi();
+    release();
+    await settle(0, 4);
+    expect(chiuse(fake)).toHaveLength(1);
+    porta.riapri();
+    porta.spento();
+    await settle(0, 2);
+    expect(aperte(fake)).toHaveLength(1);
+    expect(porta.adesso()).toBeNull();
+    expect(porta.assente()).toBeNull();
+  });
+
+  it("la `DocumentSession` che finisce chiude il motore per sempre: niente riapre", async () => {
+    const fake = createFakeHost({ drawing: {} });
+    const porta = await motoreSu(EMPTY, fake);
+    let cambi = 0;
+    porta.quandoCambia(() => cambi++);
+    sessions!.close(DOC);
+    expect(cambi).toBe(1);
+    expect(porta.adesso()).toBeNull();
+    expect(porta.assente()).toBeNull();
+    porta.riapri();
+    await settle(0, 2);
+    expect(aperte(fake)).toHaveLength(1);
+  });
+
+  /// Il motore finto: alle anteprime la forma, al rilascio il rettangolo.
+  const conAnteprima = (spento: () => boolean): DrawingFake => {
+    const shape = { tag: "rect", attrs: { x: "220", y: "40", width: "40", height: "30", fill: "none", stroke: "#000000" } };
+    const vector = VECTORS.find((each) => each.name === "rettangolo")!;
+    const commit = replaying(vector, new Map()).gesto!;
+    return {
+      spento,
+      gesto: (gesture, copia) =>
+        gesture.phase === "preview"
+          ? { revision: gesture.revision, preview: { shape, matrix: null, marquee: null }, ops: null, selection: [], losses: [], refused: null, frame: null }
+          : commit(gesture, copia),
+    };
+  };
+  const anteprima = (): Element | null => host.querySelector('.draw-surface rect[width="40"][height="30"]');
+
+  it("il motore che si spegne a metà gesto: il gesto si annulla, non scrive niente, e il gesto dopo fa da sé", async () => {
+    let spento = false;
+    const fake = createFakeHost({ drawing: conAnteprima(() => spento) });
+    const editor = await mount(EMPTY, fake);
+    editor.setTool("rect");
+    dispatch(editor, point("down", 220, 40));
+    await settle();
+    dispatch(editor, point("drag", 260, 70));
+    await settle();
+    expect(anteprima()).not.toBeNull();
+    spento = true;
+    dispatch(editor, point("drag", 280, 80));
+    await settle();
+    expect(anteprima()).toBeNull();
+    expect(spoken()).toContain(t("draw.rejected", { reason: t("draw.reason.engine_off") }));
+    dispatch(editor, point("drag", 290, 85));
+    await settle();
+    dispatch(editor, { ...point("up", 290, 85), pressure: 0 });
+    await settle();
+    expect(editor.engine.text).toBe(EMPTY);
+    expect(editor.canUndo).toBe(false);
+    expect(gestures(fake).some((each) => each.phase === "commit")).toBe(false);
+    expect(motore!.assente()).toEqual({ kind: "assente", perche: "spento" });
+    // Il gesto dopo prende la strada semplice.
+    const prima = fake.atGate("drawingGesture").length;
+    await drag(editor, [[220, 40], [300, 90]]);
+    expect(editor.engine.text).toContain('x="220" y="40" width="80" height="50"');
+    expect(fake.atGate("drawingGesture")).toHaveLength(prima);
+  });
+
+  it("spento dalla pagina Componenti (`spento()`) mentre un'anteprima è in volo: il gesto si annulla col motivo", async () => {
+    const fake = createFakeHost({ drawing: conAnteprima(() => false) });
+    const editor = await mount(EMPTY, fake);
+    editor.setTool("rect");
+    dispatch(editor, point("down", 220, 40));
+    await settle();
+    const release = fake.throttle("drawingGesture");
+    dispatch(editor, point("drag", 260, 70));
+    await settle();
+    motore!.spento();
+    release();
+    await settle();
+    dispatch(editor, { ...point("up", 260, 70), pressure: 0 });
+    await settle();
+    expect(anteprima()).toBeNull();
+    expect(editor.engine.text).toBe(EMPTY);
+    expect(editor.canUndo).toBe(false);
+    expect(spoken()).toContain(t("draw.rejected", { reason: t("draw.reason.engine_off") }));
+  });
+
+  it("il motore che si ferma al rilascio: niente si scrive, e lo si dice «fermo»", async () => {
+    const fake = createFakeHost({ drawing: conAnteprima(() => false) });
+    const editor = await mount(EMPTY, fake);
+    editor.setTool("rect");
+    dispatch(editor, point("down", 220, 40));
+    await settle();
+    dispatch(editor, point("drag", 260, 70));
+    await settle();
+    fake.fault("drawingGesture", { kind: "internal", message: "il motore si è fermato" });
+    dispatch(editor, { ...point("up", 260, 70), pressure: 0 });
+    await settle();
+    expect(anteprima()).toBeNull();
+    expect(editor.engine.text).toBe(EMPTY);
+    expect(spoken()).toContain(t("draw.rejected", { reason: t("draw.reason.engine_stopped") }));
+    expect(motore!.assente()).toEqual({ kind: "assente", perche: "errore" });
   });
 });
 
