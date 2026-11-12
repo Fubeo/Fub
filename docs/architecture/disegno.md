@@ -114,8 +114,8 @@ L'apertura (`crates/fub-disegno/src/apertura.rs`) legge la scena con
 `fub_scene::read` e importa nel motore una **copia del testo** in cui ogni
 elemento senza id ha `id="fubtmp-<n>"`, le etichette che il motore
 preferirebbe all'id come nome (`data-name`, `aria-label`, `inkscape:label`,
-`serif:id`) sono tolte e i livelli di Fub hanno `data-vc-layer`, così nel
-motore sono livelli e non gruppi. Un elemento (tutti quelli della scena
+`serif:id`) sono tolte e i livelli di Fub hanno `data-vc-layer`: nel motore
+sono livelli, e i gruppi (anche i livelli di Inkscape) gruppi. Un elemento (tutti quelli della scena
 tranne `title` e `desc`) è mappato quando nel documento del motore c'è
 esattamente un oggetto con il suo nome; uno dentro `<defs>`, un'istanza
 (`<use>`) o uno che il motore non fa oggetto suo resta fuori, ed è una

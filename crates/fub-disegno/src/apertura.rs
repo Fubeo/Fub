@@ -24,7 +24,7 @@ use std::sync::Arc;
 
 use fub_abi::{DrawingLoss, DrawingLossKind};
 use fub_scene::{Item, ReadOnly, Role};
-use vectorcraft_doc::{Document, LayerColor, Node};
+use vectorcraft_doc::{Document, LayerColor, Node, NodeKind};
 use vectorcraft_geom::Affine;
 
 use crate::mappa::{Elemento, Mappa};
@@ -145,6 +145,7 @@ pub(crate) fn importa(testo: &str, revisione: u64) -> Result<Copia, ErroreApertu
         }
     };
     let mut documento = documento;
+    gruppi_di_fub(&elementi, &mut documento);
     livelli_vuoti(&elementi, &mut documento);
     let mappa = Mappa::nuova(elementi, &mut documento);
     perdite::classifica(&mut perdite, testo, &scena.items, &mappa);
@@ -156,6 +157,120 @@ pub(crate) fn importa(testo: &str, revisione: u64) -> Result<Copia, ErroreApertu
         perdite: perdite.in_elenco(),
         radice: base,
     })
+}
+
+/// I livelli del motore che per Fub sono gruppi tornano gruppi. Il lettore
+/// SVG del motore fa livelli i `<g id>` quando sono tutto ciò che la radice
+/// contiene, e sottolivelli i `<g>` dentro un livello marcati
+/// `inkscape:groupmode="layer"`; per `fub_scene` (e per il client) sono
+/// gruppi come gli altri, che la Selezione sceglie, sposta e gira e che
+/// ricevono la loro `transform`, mentre un livello del motore no.
+///
+/// Diventa gruppo un livello del motore che non ha opzioni da livello
+/// (modello, stampa, anteprima, immagini sbiadite) e non è un livello di
+/// Fub, quando ha il nome di un elemento di Fub o sta dentro uno che
+/// diventa gruppo: stessi figli, stessa maschera, stessa visibilità e
+/// blocco, quindi il motore lo disegna uguale. In cima serve un livello che
+/// li tenga: se un livello in cima diventa gruppo e tutti gli altri possono,
+/// vanno tutti, in ordine, in un livello nuovo senza nome, che sta per la
+/// radice come quello che l'import crea quando la radice non ha solo
+/// livelli. Con un livello di Fub in cima la cima resta com'è.
+fn gruppi_di_fub(elementi: &[Elemento], doc: &mut Document) {
+    let regole = Sciogli {
+        gruppi: elementi
+            .iter()
+            .filter(|e| e.ruolo != Role::Layer && e.motivo.is_none() && !e.nome.is_empty())
+            .map(|e| e.nome.as_str())
+            .collect(),
+        livelli: elementi
+            .iter()
+            .filter(|e| e.ruolo == Role::Layer && !e.nome.is_empty())
+            .map(|e| e.nome.as_str())
+            .collect(),
+    };
+    if regole.gruppi.is_empty() {
+        return;
+    }
+    let in_cima = doc.layers.iter().any(|l| regole.diventa(l, false))
+        && doc.layers.iter().all(|l| regole.diventa(l, true));
+    for l in doc.layers.iter_mut() {
+        if in_cima {
+            regole.applica(l, true);
+        } else if l.children().is_some_and(|f| f.iter().any(|c| regole.serve(c, false))) {
+            // Un livello in cima resta livello: fuori da un livello il
+            // motore non tiene niente.
+            if let Some(figli) = Arc::make_mut(l).children_mut() {
+                for c in figli.iter_mut() {
+                    regole.applica(c, false);
+                }
+            }
+        }
+    }
+    if in_cima {
+        let figli = std::mem::take(&mut doc.layers);
+        let mut radice = Node::layer(doc.alloc_id(), "", LayerColor::Preset(0));
+        if let Some(dove) = radice.children_mut() {
+            *dove = figli;
+        }
+        doc.layers.push(Arc::new(radice));
+    }
+}
+
+/// Le regole di [`gruppi_di_fub`]: i nomi degli elementi di Fub che non
+/// sono livelli e di quelli che lo sono.
+struct Sciogli<'a> {
+    gruppi: HashSet<&'a str>,
+    livelli: HashSet<&'a str>,
+}
+
+impl Sciogli<'_> {
+    /// Vero se il livello `n` diventa gruppo; `dentro`: sta in un gruppo,
+    /// dove un livello non può stare.
+    fn diventa(&self, n: &Node, dentro: bool) -> bool {
+        let nome = n.name.as_deref().unwrap_or("");
+        matches!(
+            n.kind,
+            NodeKind::Layer {
+                template: false,
+                printable: true,
+                preview: true,
+                dim_images: None,
+                ..
+            }
+        ) && !self.livelli.contains(nome)
+            && (dentro || self.gruppi.contains(nome))
+    }
+
+    /// Vero se `n` o qualcosa sotto di lui diventa gruppo.
+    fn serve(&self, n: &Node, dentro: bool) -> bool {
+        let diventa = self.diventa(n, dentro);
+        let gruppo = diventa || matches!(n.kind, NodeKind::Group { .. });
+        diventa
+            || n.children()
+                .is_some_and(|figli| figli.iter().any(|c| self.serve(c, gruppo)))
+    }
+
+    /// Fa gruppi i livelli di `n` e sotto di lui; tocca (e copia) solo i
+    /// rami che cambiano.
+    fn applica(&self, n: &mut Arc<Node>, dentro: bool) {
+        if !self.serve(n, dentro) {
+            return;
+        }
+        let diventa = self.diventa(n, dentro);
+        let n = Arc::make_mut(n);
+        if diventa {
+            if let NodeKind::Layer { children, clip, .. } = &mut n.kind {
+                let (children, clip) = (std::mem::take(children), *clip);
+                n.kind = NodeKind::Group { children, clip };
+            }
+        }
+        let gruppo = matches!(n.kind, NodeKind::Group { .. });
+        if let Some(figli) = n.children_mut() {
+            for c in figli.iter_mut() {
+                self.applica(c, gruppo);
+            }
+        }
+    }
 }
 
 /// I livelli di Fub che l'import non porta nel motore diventano livelli
@@ -785,6 +900,72 @@ mod tests {
         );
         assert!(copia.contains("<rect id=\"fubtmp-1\" x=\"1\""), "{copia}");
         assert!(!testo.contains("fubtmp"));
+    }
+
+    /// I tipi degli oggetti in cima al documento della copia e, per ognuno,
+    /// quelli dei figli: `Layer` o `Group` con il nome.
+    fn struttura(testo: &str) -> Vec<(String, Vec<String>)> {
+        let copia = importa(testo, 0).expect("la copia");
+        let tipo = |n: &Node| {
+            let t = match n.kind {
+                NodeKind::Layer { .. } => "Layer",
+                NodeKind::Group { .. } => "Group",
+                _ => "altro",
+            };
+            format!("{t} {}", n.name.as_deref().unwrap_or(""))
+        };
+        copia
+            .documento
+            .layers
+            .iter()
+            .map(|l| {
+                let figli = l.children().map_or_else(Vec::new, |f| f.iter().map(|c| tipo(c)).collect());
+                (tipo(l), figli)
+            })
+            .collect()
+    }
+
+    const SVG_INKSCAPE: &str = "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:inkscape=\"http://www.inkscape.org/namespaces/inkscape\" xmlns:fub=\"https://fubeo.github.io/ns/scene/1\" fub:version=\"1\" viewBox=\"0 0 100 100\">";
+
+    #[test]
+    fn i_livelli_di_inkscape_tornano_gruppi() {
+        // Solo gruppi in cima: vanno in un livello nuovo, che sta per la
+        // radice; quello nascosto resta nascosto, il sottolivello è un gruppo.
+        let testo = format!(
+            "{SVG_INKSCAPE}\n<g id=\"a\" inkscape:groupmode=\"layer\"><rect id=\"r1\" width=\"5\" height=\"5\"/><g id=\"s\" inkscape:groupmode=\"layer\"><rect id=\"r2\" width=\"5\" height=\"5\"/></g></g>\n<g id=\"b\" display=\"none\"><rect id=\"r3\" width=\"5\" height=\"5\"/></g>\n</svg>\n"
+        );
+        assert_eq!(
+            struttura(&testo),
+            vec![("Layer ".into(), vec!["Group a".into(), "Group b".into()])]
+        );
+        let copia = importa(&testo, 0).expect("la copia");
+        let radice = copia.documento.layers[0].id;
+        assert!(copia.mappa.e_radice(radice));
+        let b = copia.mappa.dell_id("b").and_then(|i| copia.mappa.elemento(i));
+        let b = b.and_then(|e| e.nodo).and_then(|n| copia.documento.node(n));
+        assert!(b.is_some_and(|b| !b.visible));
+        let s = copia.mappa.dell_id("s").and_then(|i| copia.mappa.elemento(i));
+        let s = s.and_then(|e| e.nodo).and_then(|n| copia.documento.node(n));
+        assert!(s.is_some_and(|s| matches!(s.kind, NodeKind::Group { .. })));
+    }
+
+    #[test]
+    fn con_un_livello_di_fub_in_cima_la_cima_resta() {
+        // Un livello di Fub e un gruppo in cima: tutti e due restano livelli
+        // del motore (un gruppo non sta fuori da un livello), ma il
+        // sottolivello di Inkscape dentro il livello di Fub diventa gruppo.
+        let testo = format!(
+            "{SVG_INKSCAPE}\n<g id=\"l1\" fub:layer=\"L\"><rect id=\"r1\" width=\"5\" height=\"5\"/><g id=\"s\" inkscape:groupmode=\"layer\"><rect id=\"r2\" width=\"5\" height=\"5\"/></g></g>\n<g id=\"g\"><rect id=\"r3\" width=\"5\" height=\"5\"/></g>\n</svg>\n"
+        );
+        let s = struttura(&testo);
+        assert_eq!(s.len(), 2, "{s:?}");
+        assert_eq!(s[0].0, "Layer l1");
+        assert_eq!(s[0].1, vec!["altro r1".to_string(), "Group s".into()]);
+        assert_eq!(s[1].0, "Layer g");
+        // Un disegno di Fub con la carta: niente cambia.
+        let testo = "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:fub=\"https://fubeo.github.io/ns/scene/1\" fub:version=\"1\" viewBox=\"0 0 10 10\">\n<rect id=\"fub-paper\" fub:role=\"paper\" width=\"10\" height=\"10\"/>\n<g id=\"l1\" fub:layer=\"L\"><g id=\"g\"><rect id=\"r\" width=\"2\" height=\"2\"/></g></g>\n</svg>\n";
+        let prima = struttura(testo);
+        assert!(prima.iter().all(|(t, _)| t.starts_with("Layer")), "{prima:?}");
     }
 
     #[test]

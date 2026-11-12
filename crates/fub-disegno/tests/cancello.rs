@@ -222,28 +222,11 @@ fn candidati(scene: &Scene) -> Vec<&ElementItem> {
 /// perché)`, dove `chi` è l'id di un elemento che l'andata non sposta o il
 /// nome di un gesto rifiutato intero. Un rifiuto che non sta qui fa fallire
 /// il cancello; uno ammesso non prova niente, e la tabella lo dice `salta`.
-const RIFIUTI_AMMESSI: [(&str, &str, &str); 4] = [
-    (
-        "foreign",
-        "strade",
-        "un gruppo `inkscape:groupmode=\"layer\"` figlio della radice è un livello nel motore, e un livello non riceve una `transform`",
-    ),
-    (
-        "inkscape",
-        "layer1",
-        "un gruppo `inkscape:groupmode=\"layer\"` figlio della radice è un livello nel motore, e un livello non riceve una `transform`",
-    ),
-    (
-        "symbols",
-        "rettangolo",
-        "la copia del motore è vuota (0 elementi mappati su 19: il file prova apposta simboli che si richiamano in cerchio e `<use>` rotti), quindi il rettangolo non ha un livello dove andare",
-    ),
-    (
-        "inkscape",
-        "layer2",
-        "un gruppo `inkscape:groupmode=\"layer\"` figlio della radice è un livello nel motore, e un livello non riceve una `transform`",
-    ),
-];
+const RIFIUTI_AMMESSI: [(&str, &str, &str); 1] = [(
+    "symbols",
+    "rettangolo",
+    "la copia del motore è vuota (0 elementi mappati su 19: il file prova apposta simboli che si richiamano in cerchio e `<use>` rotti), quindi il rettangolo non ha un livello dove andare",
+)];
 
 fn percorso_testo(p: &[usize]) -> String {
     format!(

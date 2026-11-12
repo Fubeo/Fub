@@ -793,3 +793,117 @@ fn spostare_porta_con_se_la_cornice_tenuta() {
     assert_eq!(esito.refused, None);
     assert_eq!(esito.frame, None);
 }
+
+/// Il file `inkscape` del corpus dopo «Modifica», come il client lo adotta
+/// (`fub:version` sulla radice).
+fn inkscape() -> String {
+    let testo =
+        std::fs::read_to_string(common::radice().join("crates/fub-scene/tests/corpus/inkscape.svg"))
+            .expect("il file inkscape del corpus");
+    let adottato = testo.replacen(
+        "xmlns:dc=\"http://purl.org/dc/elements/1.1/\">",
+        "xmlns:dc=\"http://purl.org/dc/elements/1.1/\" xmlns:fub=\"https://fubeo.github.io/ns/scene/1\" fub:version=\"1\">",
+        1,
+    );
+    assert_ne!(adottato, testo, "la radice del file inkscape è cambiata");
+    adottato
+}
+
+/// Le operazioni dell'esito devono essere `attese`, quelle che il client
+/// scrive per lo stesso gesto.
+fn come_il_client(esito: &DrawingOutcome, attese: Value) {
+    assert_eq!(esito.refused, None);
+    if let Confronto::Diverse(perche) = confronta_ops(&attese, &ops_di(esito), None) {
+        panic!("non come il client: {perche}");
+    }
+}
+
+// Un gruppo `inkscape:groupmode="layer"` è un livello per il lettore SVG del
+// motore e un gruppo per Fub: la copia del motore lo tiene come un gruppo,
+// e la Selezione lo sceglie, lo sposta e lo gira come il client. Le
+// operazioni attese sono registrate dal client (`createDrawEditor`, gli
+// stessi gesti).
+
+#[test]
+fn un_livello_di_inkscape_si_sposta_e_gira_come_nel_client() {
+    let testo = inkscape();
+    // `layer1` (bloccato per Inkscape, `sodipodi:insensitive`, non per Fub)
+    // si sceglie col clic sul suo rettangolo, e si sposta.
+    let esito = tira(&testo, &[], (40.0, 40.0), (50.0, 45.0));
+    come_il_client(
+        &esito,
+        json!([{ "op": "set", "id": "layer1", "attrs": { "transform": "matrix(1 0 0 1 10 5)" } }]),
+    );
+    assert_eq!(esito.selection, ["layer1"]);
+    // Dieci gradi con la maniglia tonda: 24 px sopra la cornice (y = 16),
+    // attorno al centro (105, 70).
+    let (perno, braccio) = ((105.0, 70.0), 78.0);
+    let gradi = 10f64.to_radians();
+    let fine = (
+        perno.0 + braccio * gradi.sin(),
+        perno.1 - braccio * gradi.cos(),
+    );
+    let esito = tira(&testo, &["layer1"], (105.0, -8.0), fine);
+    come_il_client(
+        &esito,
+        json!([{ "op": "set", "id": "layer1", "attrs": { "transform": "matrix(0.9848 0.1736 -0.1736 0.9848 13.7506 -17.1696)" } }]),
+    );
+    assert_eq!(esito.selection, ["layer1"]);
+    // Un quarto di giro: la stessa matrice del client, che in più allarga la
+    // pagina (`page`), perché il rettangolo ne esce in alto.
+    let esito = tira(&testo, &["layer1"], (105.0, -8.0), (183.0, 70.0));
+    assert_eq!(esito.refused, None);
+    assert_eq!(
+        trasformazione(&esito, "layer1").as_deref(),
+        Some("matrix(0 1 -1 0 175 -35)")
+    );
+}
+
+#[test]
+fn piu_livelli_di_inkscape_insieme() {
+    let testo = inkscape();
+    // `layer2` scelto: il clic sul cerchio dentro di lui sposta lui.
+    let esito = tira(&testo, &["layer2"], (150.0, 60.0), (160.0, 70.0));
+    come_il_client(
+        &esito,
+        json!([{ "op": "set", "id": "layer2", "attrs": { "transform": "matrix(1 0 0 1 10 10)" } }]),
+    );
+    assert_eq!(esito.selection, ["layer2"]);
+    let esito = tira(&testo, &["layer1", "layer2"], (40.0, 40.0), (50.0, 45.0));
+    come_il_client(
+        &esito,
+        json!([{ "op": "batch", "ops": [
+            { "op": "set", "id": "layer1", "attrs": { "transform": "matrix(1 0 0 1 10 5)" } },
+            { "op": "set", "id": "layer2", "attrs": { "transform": "matrix(1 0 0 1 10 5)" } },
+        ] }]),
+    );
+    assert_eq!(esito.selection, ["layer1", "layer2"]);
+}
+
+/// Livelli di Inkscape uno dentro l'altro (con due figli: con uno solo la
+/// differenza scrive la `transform` sul figlio), uno con la sua
+/// `transform`, uno vuoto e uno nascosto.
+const LIVELLI_INKSCAPE: &str = "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:inkscape=\"http://www.inkscape.org/namespaces/inkscape\" xmlns:fub=\"https://fubeo.github.io/ns/scene/1\" fub:version=\"1\" viewBox=\"0 0 400 300\" width=\"400\" height=\"300\">\n  <g id=\"la\" inkscape:groupmode=\"layer\" transform=\"translate(10 0)\">\n    <rect id=\"ra\" x=\"40\" y=\"40\" width=\"60\" height=\"40\" fill=\"#000000\"/>\n    <g id=\"lb\" inkscape:groupmode=\"layer\"><rect id=\"rb\" x=\"200\" y=\"40\" width=\"60\" height=\"40\" fill=\"#ff0000\"/><rect id=\"rc\" x=\"280\" y=\"40\" width=\"40\" height=\"40\" fill=\"#00ff00\"/></g>\n  </g>\n  <g id=\"lv\" inkscape:groupmode=\"layer\"/>\n  <g id=\"ln\" inkscape:groupmode=\"layer\" display=\"none\"><rect id=\"rn\" x=\"40\" y=\"200\" width=\"60\" height=\"40\"/></g>\n</svg>\n";
+
+#[test]
+fn livelli_di_inkscape_dentro_vuoti_nascosti() {
+    // Un livello con già una `transform`: la nuova la compone.
+    let esito = tira(LIVELLI_INKSCAPE, &[], (60.0, 50.0), (80.0, 60.0));
+    come_il_client(
+        &esito,
+        json!([{ "op": "set", "id": "la", "attrs": { "transform": "matrix(1 0 0 1 30 10)" } }]),
+    );
+    assert_eq!(esito.selection, ["la"]);
+    // Il livello dentro un livello: scelto, si sposta da solo, nello spazio
+    // del livello che lo contiene.
+    let esito = tira(LIVELLI_INKSCAPE, &["lb"], (220.0, 50.0), (240.0, 60.0));
+    come_il_client(
+        &esito,
+        json!([{ "op": "set", "id": "lb", "attrs": { "transform": "matrix(1 0 0 1 20 10)" } }]),
+    );
+    assert_eq!(esito.selection, ["lb"]);
+    // Il livello nascosto non si sceglie: il clic va nel vuoto.
+    let esito = clic(LIVELLI_INKSCAPE, &[], (60.0, 210.0));
+    assert_eq!(esito.ops, None);
+    assert!(esito.selection.is_empty(), "{:?}", esito.selection);
+}

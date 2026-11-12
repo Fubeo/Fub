@@ -71,14 +71,9 @@ esce con 1 solo per una riga `NO`.
 ## Le differenze ammesse
 
 I rifiuti del motore che il cancello accetta stanno in `RIFIUTI_AMMESSI`, in
-`cancello.rs`, col perché:
-
-- un gruppo `inkscape:groupmode="layer"` figlio della radice (`foreign`,
-  `inkscape`) è un livello nel motore, e un livello non riceve una
-  `transform`: il motore rifiuta di spostarlo (`unmapped`);
-- in `symbols` la copia del motore è vuota (0 elementi mappati su 19: il file
-  prova apposta simboli che si richiamano in cerchio), quindi il rettangolo
-  non ha un livello dove andare.
+`cancello.rs`, col perché: in `symbols` la copia del motore è vuota (0
+elementi mappati su 19: il file prova apposta simboli che si richiamano in
+cerchio), quindi il rettangolo non ha un livello dove andare.
 
 Ciò che il cancello non prova, e perché:
 
