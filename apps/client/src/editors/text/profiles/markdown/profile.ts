@@ -23,6 +23,7 @@ import { frontmatterRange } from "./render";
 import { liveReveal } from "../../live-reveal";
 import { blockIdMarks } from "./block-id";
 import { transformKeymap } from "./blocks/transform";
+import type { NoteFactsExtensions } from "./note-facts";
 
 const typography = Prec.high(EditorView.theme({
   ".cm-content": {
@@ -146,6 +147,9 @@ const frontmatter: Extension = [
 export interface MarkdownProfileOptions {
   readonly callbacks: LivePreviewCallbacks;
   readonly completions: CompletionSources;
+  /// La riga dei dati sotto il titolo: in Live e nei Blocchi (dove la mette
+  /// la testata), mai in Sorgente. Senza, la riga non c'è.
+  readonly noteFacts?: NoteFactsExtensions;
 }
 
 export interface MarkdownProfile {
@@ -190,6 +194,7 @@ export function createMarkdownProfile(options: MarkdownProfileOptions): Markdown
         // «Trasforma in» da tastiera (Mod-Alt-0…8) vale in Live e in Blocchi.
         previewOn ? [livePreview(options.callbacks, syntaxForms), linkDialog(options.completions.searchNotes), blockIdMarks, Prec.high(keymap.of(transformKeymap))] : [],
         previewOn && blocks !== null ? [Prec.highest(liveReveal.of("mai")), blocks] : [],
+        previewOn && options.noteFacts ? [options.noteFacts.field, blocks === null ? options.noteFacts.live : []] : [],
         markdownCompletions(options.completions),
         proof,
       ];

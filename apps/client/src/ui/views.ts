@@ -93,6 +93,12 @@ interface Mounted {
   /// manderebbe al vault **corrente**, che cambia aprendone un altro mentre
   /// la view è ancora sullo schermo.
   vault: string | undefined;
+  /// L'albero più recente chiesto mentre la scheda dell'ispettore che lo ospita
+  /// era chiusa: lo disegna `drawOpenedTab` quando la scheda si apre. Una
+  /// scheda chiusa non ha DOM da aggiornare a ogni salvataggio, e una lista di
+  /// centinaia di righe (le uscite di una nota lunga) non ne occupa finché
+  /// nessuno la guarda.
+  pending: UiNode | null;
 }
 
 /// Le istanze montate, per **id di pannello**: il registro dei pannelli sa
@@ -170,6 +176,7 @@ export async function mountViewInPane(
       epoch: ++mountedEpoch,
       race: new Race(),
       vault: openVaultRoot(),
+      pending: null,
     });
     registerPanel({
       id,
@@ -537,6 +544,7 @@ function mountSpec(spec: ViewSpec, host: HTMLElement): void {
     epoch: ++mountedEpoch,
     race: new Race(),
     vault: openVaultRoot(),
+    pending: null,
   });
 
   registerPanel({
@@ -604,10 +612,43 @@ async function renderDeclaredView(id: string): Promise<void> {
   });
 }
 
+/// Vero se la scheda che ospita `mountedView` è quella accesa. Fuori
+/// dall'ispettore è sempre vero: le altre superfici non hanno schede, e la loro
+/// visibilità la decide chi le apre. Dentro l'ispettore, una scheda chiusa è un
+/// pannello con `hidden` (vedi `activateTab`).
+function inspectorTabOpen(mountedView: Mounted): boolean {
+  const panel = mountedView.container.parentElement;
+  if (panel === null || panel.parentElement !== viewsRightEl) return true;
+  return !panel.hidden;
+}
+
+/// Disegna nella scheda che si apre l'albero che la view ha chiesto mentre era
+/// chiusa. Chiamata da `activateTab`, dopo che il pannello è diventato visibile.
+function drawOpenedTab(panel: HTMLElement): void {
+  const id = panel.dataset.viewId;
+  if (id === undefined) return;
+  const mountedView = mounted.get(id);
+  if (!mountedView || mountedView.pending === null) return;
+  if (mountedView.container.parentElement !== panel) return;
+  draw(id, mountedView, mountedView.pending);
+}
+
 /// Disegna un albero nel contenitore della sua istanza e chiude il giro
 /// azione→`ViewUpdate`: un click torna al provider via `view_action` con le sue
 /// due metà, e la risposta si interpreta qui.
+///
+/// Una scheda chiusa dell'ispettore non si disegna: il suo albero resta in
+/// `pending` e si disegna quando la scheda si apre. Il provider continua a
+/// rispondere a ogni invito: si risparmia il disegno, non la richiesta. Un'azione
+/// parte da una scheda aperta, ma la risposta può arrivare a scheda chiusa: un
+/// `patch` allora chiede l'albero di nuovo (vedi sotto), un `replace` va in
+/// attesa come gli altri.
 function draw(id: string, mountedView: Mounted, tree: UiNode): void {
+  if (!inspectorTabOpen(mountedView)) {
+    mountedView.pending = tree;
+    return;
+  }
+  mountedView.pending = null;
   mountTree(mountedView.container, tree, async (action: ActionRef, fields: FieldValue[]) => {
     const actionContainer = mountedView.container;
     const actionEpoch = mountedView.epoch;
@@ -651,8 +692,10 @@ function draw(id: string, mountedView: Mounted, tree: UiNode): void {
     }
     if (update.kind === "patch") {
       // Una chiave che non c'è più non è un errore: è una view cambiata sotto,
-      // e la si ridisegna intera invece di lasciarla stantia.
-      if (!patchTree(actionContainer, update.key, update.node)) {
+      // e la si ridisegna intera invece di lasciarla stantia. Una scheda chiusa
+      // non ha un DOM da ritoccare, e il suo albero in attesa sarebbe rimasto
+      // indietro: si chiede di nuovo, come per una chiave perduta.
+      if (!inspectorTabOpen(mountedView) || !patchTree(actionContainer, update.key, update.node)) {
         if (!isAuthoritative()) return;
         await renderDeclaredView(id);
       }
@@ -859,6 +902,8 @@ function buildInspector(): void {
       tab.setAttribute("aria-selected", String(selected));
     }
     const current = panels[safe];
+    // La scheda che si apre disegna ciò che ha ricevuto mentre era chiusa.
+    if (current) drawOpenedTab(current);
     const titleEl = current?.querySelector<HTMLElement>(".panel-title");
     // Il titolo testuale è quello dichiarato dalla view: il registro, non un
     // elenco scritto qui. Sparito il pannello, resta l'id onesto — brutto e
@@ -877,7 +922,10 @@ function buildInspector(): void {
     follows.hidden = !onDocument;
     if (!onDocument) return;
     const doc = activeDoc();
-    follows.textContent = doc ? t("inspector.follows", { doc: pageName(doc) }) : t("inspector.follows_none");
+    // «Segue la nota», a voce bassa: quale nota lo dice il suggerimento, così
+    // un nome lungo non spinge via il titolo della vista.
+    follows.textContent = doc ? t("inspector.follows_doc") : t("inspector.follows_none");
+    setTooltip(follows, doc ? t("inspector.follows", { doc: pageName(doc) }) : "");
     follows.dataset.state = doc ? "doc" : "none";
   }
   const offLayout = on("layout", drawFollows);

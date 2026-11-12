@@ -108,8 +108,11 @@
   gap: var(--space-1);
 }
 
-/* La scheda corrente è la sola cosa azzurra piena dell'indice: lo stato si
- * legge da `aria-selected`, che è ciò che il lettore di schermo annuncia. */
+/* Il posto dove si è, nell'indice, è un foglietto sollevato come la nota
+ * aperta nel cassetto: carta, un'ombra breve, l'icona in blu. Una scelta fra
+ * alternative (i segmenti) resta il velo d'accento, come le sezioni della
+ * barra. Lo stato si legge da `aria-selected`, che è ciò che il lettore di
+ * schermo annuncia. */
 .settings-tab {
   display: flex;
   align-items: center;
@@ -132,9 +135,14 @@
 }
 
 .settings-tab[aria-selected="true"] {
-  background: var(--accent-wash);
-  color: var(--accent);
-  font-weight: var(--weight-bold);
+  background: var(--bg-elev);
+  box-shadow: var(--shadow-1);
+  color: var(--text);
+  font-weight: var(--weight-medium);
+}
+
+.settings-tab[aria-selected="true"]:hover {
+  background: var(--bg-elev);
 }
 
 .settings-tab-icon {
@@ -170,10 +178,8 @@
   margin: 0 0 var(--space-3);
   padding: 0 var(--space-5);
   color: var(--muted);
-  font-size: var(--text-xs);
-  font-weight: var(--weight-bold);
-  letter-spacing: var(--tracking-caps);
-  text-transform: uppercase;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
 }
 
 .settings-toc-list {
@@ -1717,10 +1723,8 @@
 .components-group-title {
   margin: 0;
   color: var(--muted);
-  font-size: var(--text-xs);
-  font-weight: var(--weight-bold);
-  letter-spacing: var(--tracking-caps);
-  text-transform: uppercase;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
 }
 
 .components-group-sub {
@@ -1912,10 +1916,8 @@
 .components-preview-head {
   margin: 0;
   color: var(--muted);
-  font-size: var(--text-xs);
-  font-weight: var(--weight-bold);
-  letter-spacing: var(--tracking-caps);
-  text-transform: uppercase;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
 }
 
 .components-preview-section {

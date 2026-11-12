@@ -122,11 +122,11 @@ richiederebbe un contratto dichiarativo di superficie che non esiste.
   argomenti; `null` lascia il menu del sistema. Lo dichiarano il Markdown
   (scrittura e Lettura), i documenti di Word, i fogli, la tela, le basi e il
   visualizzatore dei media;
-- `miniBar()` monta la mini-barra di chi ha controlli suoi (i documenti di
-  Word, i fogli) sopra il menu; il Markdown usa i gruppi della barra di
-  formattazione;
-- `standing`: fin dove si scrive, perché, i posti («Vai» se hanno `run`,
-  dietro `placesAsk`) e le azioni, per il chip di `panels/standing.ts` (rich);
+- `miniBar()` monta la mini-barra di chi ha controlli suoi (i documenti di Word,
+  i fogli) sopra il menu; il Markdown usa i gruppi della barra di formattazione;
+- `standing`: fin dove si scrive, perché, i posti («Vai» se hanno `run`, dietro
+  `placesAsk`) e le azioni, per il chip di `panels/standing.ts` (rich). `writes`
+  («Si scrive») lo dice la banda (`standing-open`, `StandingChip.openFrom`);
 - `ownBar` dice che la superficie disegna la sua barra dei comandi (i
   documenti di Word, con la barra multifunzione del kit): la barra di
   formattazione della shell allora non si mostra, mentre la bolla della
@@ -161,7 +161,7 @@ richiederebbe un contratto dichiarativo di superficie che non esiste.
   (`profiles/markdown/actions.ts`), che la sua keymap condivide; esegue come
   una battuta, con `TextEngine.runCommand`, quindi nella cronologia locale e
   nella sessione. In Lettura o in sola lettura ogni azione è spenta. Ne sono
-  clienti la barra di formattazione (`panels/format-bar.ts`) e `fub.editor.action`;
+  clienti `fub.editor.action` e la barra di formato (`panels/format-bar.ts`, in `kit-bar`);
 - `setSyntaxForms(forms)` riceve le sintassi effettive del documento, cioè
   quelle del provider più gli innesti delle `SyntaxRule` del vault. La tela le
   usa per le card di testo: il canvas dichiara con `fub:embedded-grammar`

@@ -21,6 +21,10 @@ export interface View {
   /// cartelle disegnate, e le note appuntate. Una domanda sola per entrambe —
   /// sono la stessa domanda, «quali di questi path ci sono».
   existing: Set<string>;
+  /// Quante voci ha ciò che si vede (il vault o lo spazio attivo), a ogni
+  /// profondità: il numero accanto a «Tutte le note». `null` se la domanda è
+  /// fallita: allora il numero non si scrive, e l'albero si disegna lo stesso.
+  total: number | null;
 }
 
 /// Il sottoalbero da lasciare fuori dall'impronta.
@@ -61,7 +65,7 @@ export function signatureOf(v: View, sort: ExplorerSort, outside?: Outside): str
   // ogni salvataggio ridisegnerebbe l'albero per niente.
   const dated = sort.startsWith("modified") ? shown.map(([, c]) => JSON.stringify(c.mtimes ?? {})).join(";") : "";
   const existing = [...v.existing].filter((id) => outside === undefined || !insideOnly(id, outside));
-  return `${folders.join(";")}|${existing.sort().join(",")}|${sort}|${dated}`;
+  return `${folders.join(";")}|${existing.sort().join(",")}|${sort}|${dated}|${v.total}`;
 }
 
 /// Vero se da `before` a `after` è cambiato soltanto il contenuto di

@@ -24,7 +24,7 @@ function view(open: boolean, existing: string[] = []): View {
   if (open) {
     folders.set("docs", content("docs", { folders: [{ path: "docs/sotto", folders: 0, entries: 1 }], notes: ["docs/a.md", "docs/b.md"] }));
   }
-  return { folders, existing: new Set(existing) };
+  return { folders, existing: new Set(existing), total: null };
 }
 
 const outside = { folder: "docs", pinned: [] as string[] };

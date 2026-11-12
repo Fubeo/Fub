@@ -72,8 +72,8 @@ Un risultato del pannello si trascina come una nota dell'albero: in una nota
 diventa un collegamento, sulla striscia delle schede si apre, nei segnalibri
 resta, e fuori dall'app arriva il file. Lo stesso vale per un risultato del
 cambio rapido: la modale lascia passare il rilascio e si chiude a gesto finito.
-Anche le righe del pannello dei collegamenti (entranti, uscenti e menzioni non
-collegate) si trascinano come la nota che nominano, ma fuori dall'app non
+Anche le righe dei collegamenti (in entrata, in uscita, menzioni non collegate)
+portano l'icona della nota e si trascinano come lei, ma fuori dall'app non
 portano il file. Così anche un wikilink in Lettura, quando la nota esiste; in
 Live il collegamento è testo e trascinarlo sposta il testo.
 
@@ -145,10 +145,10 @@ propongono gli id dei blocchi della nota, ciascuno con l'inizio del suo testo,
 letti dalla sessione aperta se c'è, altrimenti dal file. La ricerca dei blocchi
 di tutto il vault (`[[^^`) non c'è.
 
-Il pannello Struttura mostra i titoli della nota aperta come un albero. Il
-campo in cima lo filtra: restano i titoli che contengono il testo, con i
-titoli sopra di loro. «Comprimi tutto» chiude l'albero; un filtro lo riapre
-su quello che trova.
+Il pannello Struttura mostra i titoli della nota aperta come un albero. Il campo
+in cima lo filtra: restano i titoli che contengono il testo, con i titoli sopra
+di loro. «Comprimi tutto» chiude l'albero; un filtro lo riapre su quello che
+trova. Sotto, «In entrata · N» elenca chi la cita, cinque righe e «e altri N».
 
 `heading.rename`, dalla palette, rinomina un titolo della nota aperta e
 aggiorna i `[[nota#titolo]]` che lo nominano, nella nota stessa
@@ -223,7 +223,7 @@ quindi si risolve al momento della domanda. I backlink di un allegato elencano
 le note che lo nominano. Il pannello Collegamenti elenca fra gli uscenti solo i
 documenti.
 
-Il pannello Collegamenti mostra una sezione per parte (entranti, uscenti,
+Il pannello Collegamenti mostra una sezione per parte (in entrata, in uscita,
 menzioni non collegate nei due versi) con il numero nel titolo; una parte vuota
 resta chiusa su una riga. Il contesto si legge come testo: un wikilink compare
 col suo alias o col nome della nota, non con la sua sintassi. Il filtro delle

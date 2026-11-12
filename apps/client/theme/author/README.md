@@ -2,17 +2,17 @@
 
 Fonte generata: `npm run theme:generate`. Verifica: `npm run theme:verify`.
 
-Il contratto richiede **154 ruoli**, espone **1576 hook**, **7 stati** (738 assegnazioni su 220 componenti) e lascia ridichiarare alla persona **186 token**. Gli elenchi, le coppie di contrasto e il vocabolario CSS in più sono in `contract.json`, generato dalle sorgenti della shell.
+Il contratto richiede **154 ruoli**, espone **1584 hook**, **7 stati** (759 assegnazioni su 225 componenti) e lascia ridichiarare alla persona **189 token**. Gli elenchi, le coppie di contrasto e il vocabolario CSS in più sono in `contract.json`, generato dalle sorgenti della shell.
 
-Dichiara anche **63 ruoli facoltativi** (`optional_roles`): i segni di Fub sulla carta del tema (`--doc-ins`, `--doc-find`, …) e la carta chiara di un file (`--paper-*`). Un tema che non li dichiara ha i ripieghi della struttura; se li dichiara, le loro coppie (`optional_pairs`) si contano come le altre.
+Dichiara anche **66 ruoli facoltativi** (`optional_roles`): i segni di Fub sulla carta del tema (`--doc-ins`, `--doc-find`, …) e la carta chiara di un file (`--paper-*`). Un tema che non li dichiara ha i ripieghi della struttura; se li dichiara, le loro coppie (`optional_pairs`) si contano come le altre.
 
 ## Strati
 
 Ogni hook appartiene a uno strato, e `contract.json` lo dice in `layers`:
 
-- **cornice** (1263 hook): barre, pannelli, menu, righelli, scrivania. È del tema, sempre.
+- **cornice** (1264 hook): barre, pannelli, menu, righelli, scrivania. È del tema, sempre.
 - **segno** (97 hook): ciò che Fub disegna sul contenuto, cioè selezione, cursore, fuoco, ricerca, revisioni, correttore, commenti e maniglie. È del tema, con i colori della carta su cui sta (`--doc-*`).
-- **contenuto** (216 hook): ciò che il file dice. Chi ne ha l'autorità lo dichiara la modalità della superficie, con uno di tre aspetti che la shell mette sulla radice del contenuto: `look-tema`, `look-file` o `look-adattato`.
+- **contenuto** (223 hook): ciò che il file dice. Chi ne ha l'autorità lo dichiara la modalità della superficie, con uno di tre aspetti che la shell mette sulla radice del contenuto: `look-tema`, `look-file` o `look-adattato`.
 
 Una regola sul contenuto vale quando il tema lo veste: si scrive sotto `.look-tema`, come `.look-tema .rich-heading`.
 
@@ -63,26 +63,27 @@ Un tema `theme-2` può ridisegnare per nome le icone della shell. Il manifest no
 
 Il tema non aggiunge icone: ridisegna quelle che ci sono. Un alias ridisegnato vale per il nome a cui punta (`folder` è `vault`). Un nome che oggi nessuno disegna non rifiuta il tema (un modulo può registrarlo più tardi), ma non si vede. Cambiato tema, o annullata l'anteprima, le icone già sullo schermo tornano a quelle del tema scelto.
 
-I 440 nomi che un tema può ridisegnare (`theme/author/icon-names.json`, tenuto uguale a `iconNames()` da `src/ui/icon-names.test.ts`):
+I 466 nomi che un tema può ridisegnare (`theme/author/icon-names.json`, tenuto uguale a `iconNames()` da `src/ui/icon-names.test.ts`):
 
 ```text
-activity arrow-left arrow-right backlinks backup bell caret-down check chevron close cloud
-collection command component copy cut dashboard draw-access draw-access-info draw-access-warning
-draw-align draw-align-bottom draw-align-center draw-align-left draw-align-middle draw-align-right
-draw-align-top draw-anchor-end draw-anchor-middle draw-anchor-start draw-arrow draw-back
-draw-color-more draw-commands draw-cover draw-design draw-distribute-x draw-distribute-y
-draw-duplicate draw-ellipse draw-eraser draw-export draw-fit draw-flip-h draw-flip-v draw-group
-draw-hand draw-here draw-hidden draw-hide-ui draw-highlighter draw-history draw-image
-draw-into-layer draw-keys draw-landscape draw-layers draw-line draw-link draw-lock draw-mark
-draw-menu draw-more draw-navigator draw-none draw-note draw-open-link draw-order draw-order-back
-draw-order-backward draw-order-forward draw-order-front draw-page-grid draw-pen draw-portrait
-draw-ratio draw-rect draw-redo draw-rotate draw-section draw-select draw-selection draw-simple
-draw-snap draw-suggestion draw-swap draw-symbols draw-text-bold draw-text-italic draw-text-strike
-draw-text-underline draw-tip-bar-end draw-tip-bar-start draw-tip-circle-end draw-tip-circle-start
-draw-tip-diamond-end draw-tip-diamond-start draw-tip-none draw-tip-other-end draw-tip-other-start
-draw-tip-square-end draw-tip-square-start draw-tip-triangle-end draw-tip-triangle-start
-draw-tip-vee-end draw-tip-vee-start draw-tips-swap draw-to-shape draw-undo draw-ungroup draw-unlink
-draw-unmark draw-zoom draw-zoom-in draw-zoom-out fmt-bold fmt-bullets fmt-callout fmt-chevron-down
+activity archive arrow-left arrow-right backlinks backup bell blocks book briefcase bulb calendar
+caret-down check chevron chevron-up clock close cloud code collection command component compose copy
+cut dashboard draw-access draw-access-info draw-access-warning draw-align draw-align-bottom
+draw-align-center draw-align-left draw-align-middle draw-align-right draw-align-top draw-anchor-end
+draw-anchor-middle draw-anchor-start draw-arrow draw-back draw-color-more draw-commands draw-cover
+draw-design draw-distribute-x draw-distribute-y draw-duplicate draw-ellipse draw-eraser draw-export
+draw-fit draw-flip-h draw-flip-v draw-group draw-hand draw-here draw-hidden draw-hide-ui
+draw-highlighter draw-history draw-image draw-into-layer draw-keys draw-landscape draw-layers
+draw-line draw-link draw-lock draw-mark draw-menu draw-more draw-navigator draw-none draw-note
+draw-open-link draw-order draw-order-back draw-order-backward draw-order-forward draw-order-front
+draw-page-grid draw-pen draw-portrait draw-ratio draw-rect draw-redo draw-rotate draw-section
+draw-select draw-selection draw-simple draw-snap draw-suggestion draw-swap draw-symbols
+draw-text-bold draw-text-italic draw-text-strike draw-text-underline draw-tip-bar-end
+draw-tip-bar-start draw-tip-circle-end draw-tip-circle-start draw-tip-diamond-end
+draw-tip-diamond-start draw-tip-none draw-tip-other-end draw-tip-other-start draw-tip-square-end
+draw-tip-square-start draw-tip-triangle-end draw-tip-triangle-start draw-tip-vee-end
+draw-tip-vee-start draw-tips-swap draw-to-shape draw-undo draw-ungroup draw-unlink draw-unmark
+draw-zoom draw-zoom-in draw-zoom-out eye flag fmt-bold fmt-bullets fmt-callout fmt-chevron-down
 fmt-clear fmt-code fmt-codeblock fmt-color fmt-columns fmt-comment fmt-cover fmt-date fmt-details
 fmt-diagram fmt-embed fmt-footnote fmt-h1 fmt-h2 fmt-h3 fmt-h4 fmt-h5 fmt-h6 fmt-hide fmt-highlight
 fmt-icon fmt-image fmt-indent fmt-italic fmt-link fmt-math fmt-mathblock fmt-more fmt-numbers
@@ -109,20 +110,22 @@ gr-send-backward gr-shape-ellipse gr-shape-line gr-shape-outline gr-shape-rectan
 gr-shape-triangle gr-shapes gr-sheet gr-show-formulas gr-sort gr-sort-asc gr-sort-desc
 gr-sort-filter gr-styles gr-subtotal gr-sum gr-symbol gr-table gr-table-style gr-text gr-text-box
 gr-text-columns gr-theme gr-ungroup gr-unlock gr-unmerge gr-validation gr-view-normal gr-what-if
-gr-wrap gr-zoom gr-zoom-100 gr-zoom-selection graph hash heading help history home info keyboard
-kit-eyedropper line-number minus monitor moon more notes outline palette panel-left panel-right pin
-plus properties publish query rc-align-center rc-align-justify rc-align-left rc-align-right
-rc-break-column rc-break-page rc-bullets rc-chevron-down rc-chevron-up rc-clear rc-column-after
-rc-column-before rc-column-delete rc-column-left rc-column-right rc-columns rc-comment-new
-rc-comments rc-count rc-drawing rc-drawing-edit rc-find rc-footer rc-header rc-image rc-indent-less
-rc-indent-more rc-ink-eraser rc-ink-highlighter rc-ink-lasso rc-ink-medium rc-ink-pen
-rc-ink-pen-only rc-ink-select rc-ink-stroke rc-ink-thick rc-ink-thin rc-link rc-look-adapted
-rc-margins rc-merge rc-mode-page rc-mode-reading rc-mode-writing rc-note rc-numbers rc-orientation
-rc-page rc-painter rc-paper-size rc-quote rc-redo rc-replace rc-rev-accept rc-rev-accept-all
-rc-rev-next rc-rev-previous rc-rev-reject rc-rev-reject-all rc-row-after rc-row-before rc-row-delete
-rc-row-down rc-row-up rc-spacing rc-split rc-styles rc-table rc-toc rc-track rc-undo rc-wrap
-rc-wrap-behind rc-wrap-front rc-wrap-inline rc-wrap-square rc-zoom-in rc-zoom-out rc-zoom-reset
-restore ring search settings split square star stats sun sync tag template trash vault view warning
+gr-wrap gr-zoom gr-zoom-100 gr-zoom-selection graph hash heading heart help history home image inbox
+info keyboard kit-eyedropper line-number media-dark-pages media-fit-width media-page-next
+media-page-previous media-show-annotations media-thumbnails media-two-pages minus monitor moon more
+music notes outline palette panel-left panel-right pen people pin plus properties publish query
+rc-align-center rc-align-justify rc-align-left rc-align-right rc-break-column rc-break-page
+rc-bullets rc-chevron-down rc-chevron-up rc-clear rc-column-after rc-column-before rc-column-delete
+rc-column-left rc-column-right rc-columns rc-comment-new rc-comments rc-count rc-drawing
+rc-drawing-edit rc-find rc-footer rc-header rc-image rc-indent-less rc-indent-more rc-ink-eraser
+rc-ink-highlighter rc-ink-lasso rc-ink-medium rc-ink-pen rc-ink-pen-only rc-ink-select rc-ink-stroke
+rc-ink-thick rc-ink-thin rc-link rc-look-adapted rc-margins rc-merge rc-mode-page rc-mode-reading
+rc-mode-writing rc-note rc-numbers rc-orientation rc-page rc-painter rc-paper-size rc-quote rc-redo
+rc-replace rc-rev-accept rc-rev-accept-all rc-rev-next rc-rev-previous rc-rev-reject
+rc-rev-reject-all rc-row-after rc-row-before rc-row-delete rc-row-down rc-row-up rc-spacing rc-split
+rc-styles rc-table rc-toc rc-track rc-undo rc-wrap rc-wrap-behind rc-wrap-front rc-wrap-inline
+rc-wrap-square rc-zoom-in rc-zoom-out rc-zoom-reset restore ring search settings sort split square
+star stats sun sync tag template trash vault view warning
 ```
 
 ## Limiti e pubblicazione

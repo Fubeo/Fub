@@ -178,7 +178,11 @@ export function liveHints(slash: () => boolean = () => false): Extension {
 const theme = EditorView.baseTheme({
   // I colori sono della pelle (`document.css`).
   ".cm-fub-placeholder": { pointerEvents: "none", userSelect: "none", fontStyle: "normal", fontWeight: "400" },
-  ".cm-fub-heading-pill": { display: "inline-block", position: "relative", width: "0", height: "1em", verticalAlign: "baseline" },
+  // La pastiglia compare solo sulla riga del cursore: non deve prendere
+  // altezza, o il titolo cresce entrando e cala uscendo e tutto sotto salta.
+  // Il supporto è un punto sulla linea di base (largo e alto zero); il
+  // pulsante ci appoggia il fondo.
+  ".cm-fub-heading-pill": { display: "inline-block", position: "relative", width: "0", height: "0", verticalAlign: "baseline" },
   ".cm-fub-heading-pill-button": {
     position: "absolute",
     right: "0.6rem",

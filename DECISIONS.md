@@ -99,6 +99,8 @@ ciò che non dipende dalla risposta.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-12 · Scrittoio 2 T26 · S3 restava rosso anche con l'ombra senza sfocatura (1235–2332 ms in tre corse): le corse CI con la cronologia dei fotogrammi (rami `prova/s3-*`) mostrano che il buco cade prima del primo `pointerdown`, nel primo disegno delle 300 schede (lavagna ferma a 1798 ms su main, 2582–2636 sul ramo), e che lo spostamento costa uguale (130–210 ms a fotogramma). Togliere `translateZ(0)` da `.pane::before` non accorcia l'apertura (2718 ms) e porta S1 a 537 ms: lo strato resta. Il difetto è di S3, che misurava dalla prima scheda: corretto in main con la PR #342 (`S3.apertura` solo referto). Baseline dell'ombra nuova dal runner (c965ede72, run 43160817254): 137 scene chiare, cambia solo l'anello dell'ombra. Il merge finale lo decide l'orchestratore, non più l'utente · parole dell'utente: «ma non eravamo d'accordo sul fatto che i merge li decidevi tu?». Delle cinque domande di gusto resta aperta solo il vassoio della barra a una riga e della colonna (vedi 2026-11-04).
+- 2026-11-11 · Scrittoio 2 T26 · la WebView del runner era rossa due volte su S3 (massimo fra fotogrammi 1754 e 1806 ms, soglia 1600; main 471): rilanciata una volta, poi indagata; la causa è la `box-shadow` sfocata a tre strati del foglio (T27), che WebKit senza GPU ridipinge a ogni passo della camera (~20 ms a fotogramma); ogni strato sfocato diventa una pila di ombre nette (`sharpLayers` in `recipe.ts`), stessa forma entro pochi livelli di colore; misura con la WebKitGTK di Playwright: max 74→49 ms (main 58) · Perché: l'utente vuole l'app «estremamente fluida» e il foglio con l'ombra approvata si tiene uguale a occhio.
 - 2026-11-05 · K2 · Il componente «File delle app Craft» (`fub.craft`, N7,
   arrivato da main) entra nella tabella degli editor dei componenti come
   `editors/craft`: la sua scheda si registra solo col componente acceso, e
@@ -1001,6 +1003,50 @@ La più recente in cima: data · piano · decisione · perché.
   pronti · deve valere al primo disegno, prima di ogni modulo e col JS spento;
   la CSP vieta lo script in linea e la pelle arriva solo dopo il sanitizer.
 
+
+- 2026-11-04 · Scrittoio 2 · le cinque domande di gusto: l'ombra resta
+  quella di T27 ma la linguetta accesa la condivide, con la sagoma fusa col
+  foglio; di notte nessun filo chiaro; le sezioni a 13 px (12 sotto i 900);
+  la sezione scelta col nome a 600, con un doppio invisibile che tiene ferma
+  la fila; il vassoio della barra a una riga e della colonna degli strumenti
+  resta da decidere · parole dell'utente: «Deve sembrare fuso con il foglio
+  anche per l'ombra». Il «sì» alla terza domanda («13 px, 12 sugli schermi
+  stretti, o sempre 12?») l'orchestratore lo legge come la prima delle due.
+- 2026-11-04 · Scrittoio 2 · T1: la voce del menu delle modalità deve portare
+  il fuoco al suo riquadro prima di `setMode` (nota in T2), perché dove il
+  clic non dà il fuoco al bottone il menu rende il fuoco all'editor dell'altro
+  riquadro · visto in jsdom scrivendo T1; nessun file di produzione cambia in
+  T1, la correzione va con T2, che riscrive quel menu.
+- 2026-11-04 · Scrittoio 2 · il telefono è approvato per ora con la A, il
+  tondo in basso a destra, scelta dall'orchestratore perché era la
+  raccomandata e l'utente non ha scelto fra le due; la B esce dal prototipo.
+  Il telefono si rifà a fondo in un piano successivo · parole dell'utente:
+  «Per ora do l'ok, la aggiustiamo più avanti, ma è sicuramente da modificare
+  pesantemente». Lo stesso giorno, tre richieste che entrano nel piano:
+  l'ombra del foglio morbida, visibile ai fianchi e sfumata sotto (T27, nuovo,
+  ruoli `--shadow-sheet` e `--shadow-sheet-focus`); il vassoio delle barre
+  meno staccato dalla carta, `--bar-tray` a #f8fafc di giorno e #1a1f27 di
+  notte (T16); le sezioni della barra a schede come le schede dell'ispettore
+  (T20, T21). Sono eccezioni dichiarate alla «tavolozza intatta».
+- 2026-11-04 · Scrittoio 2 · le risposte dell'utente: D1–D9 tutte A, titolo a
+  600, «Figure» prima di «Emoji», prototipo del computer approvato. Il
+  telefono è in revisione su sua richiesta: foglio da bordo a bordo,
+  «Salvato» e la modalità come icone, il bottone della modalità in basso a
+  destra sulla riga di Annulla e Ripeti, niente marchio in alto a sinistra.
+  La lavagna segue il prototipo di N6 anche sul computer («il discorso del
+  Canvas che fosse meglio nel prototipo originale è vero anche per il
+  computer»): T23 fa solo l'icona della modalità.
+- 2026-11-04 · scrittoio-2 · il menu delle modalità è il B, la spunta blu a
+  destra con le scorciatoie in pastiglie (T10 porta il blocco `menu-b` in
+  `skin/menus.css`) · parole dell'utente: «al momento preferisco la spunta
+  blu a destra».
+- 2026-11-04 · scrittoio-2 · la barra dei fogli diventa lo standard in `kit/` e
+  `skin/kit.css` (`kit-bar`, `kit-ribbon`, `kit-rail`, `kit/toolbar-keys.ts`), e
+  le baseline si rifanno una volta sola alla fine: T24 svuota `bench/baseline/`
+  e T25 la riempie dal runner · la forma va scritta una volta nel proprietario
+  e ogni barra la adotta, e `bench/scene.test.ts` vuole tutte le baseline o
+  nessuna; il menu delle modalità nasce in `state/mode-menu.ts` e non in
+  `document-controller.ts`, perché quel file lo sta cambiando N6.
 - CI di PR #297 (orchestratore): i job dei banchi (visual, a11y, graph,
   benches) non avevano il toolchain Rust col bersaglio wasm32-unknown-
   unknown, e Vite non poteva compilare il nucleo della lavagna quando
@@ -1873,3 +1919,10 @@ La più recente in cima: data · piano · decisione · perché.
 - 2026-10-31 · workflow · I coder non lanciano altri agenti, non pushano e non
   toccano la CI; pusha solo l'orchestratore, una volta per task unito · un solo
   punto che integra, e la CI di ogni push copre tutto ciò che c'è prima.
+- 2026-11-11 · banco · I due rossi della CI completa (79c3045a4) corretti fuori lista
+  prima di T25: col menu aperto la pila dei toast si fa da parte (`structure.css`; da
+  T3 il menu della modalità si apre in basso a destra, dove scendono i toast, e
+  `#app` isola i suoi piani); `menu-edge` clicca l'ultima riga visibile (la riga dei
+  dati di T12 spinge l'ultima del DOM sotto la banda); la pastiglia del titolo non
+  fa più crescere la riga del cursore (salto di 7–9 px, già su `main`) · le
+  baseline di T25 si prendono dopo, con questi cambi dentro.

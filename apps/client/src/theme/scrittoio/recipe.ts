@@ -165,6 +165,84 @@ function shadow(light: Light, near: readonly [number, number, number], far: read
   return `${layer(near)}, ${layer(far)}`;
 }
 
+/// L'ombra del foglio appoggiato sulla scrivania (`--shadow-sheet`, e
+/// `--shadow-sheet-focus` per quello col fuoco, un passo più fondo): un
+/// contatto stretto, una penombra corta e una lunga. I due strati larghi hanno
+/// lo spread negativo, così l'ombra scende sotto il foglio e si vede ai fianchi
+/// senza salire sopra la linguetta. Di giorno l'inchiostro di `shadow()`, di
+/// notte il nero, più fondo perché la scrivania è già quasi nera; col
+/// contrasto alto gli stessi valori. Niente filo di luce: sotto il 10 % non si
+/// vede, sopra è un bordo che si interrompe alla linguetta.
+///
+/// **Senza sfocatura.** Ogni strato sfumato è scritto come una pila di ombre
+/// nette (`sharpLayers`): la stessa sfumatura, a gradini di tre pixel al più.
+/// La WebView che dipinge senza GPU (WebKitGTK sotto Xvfb, S3 del banco
+/// WebView) ridipinge la carta con tutto ciò che le sta sopra, e un'ombra con
+/// `blur` le costava una ventina di ms a fotogramma mentre la lavagna si
+/// sposta, che lo strato suo della carta non risparmia; le ombre nette non
+/// costano niente.
+function sheetShadow(light: Light, focus: boolean): string {
+  const ink = light === "light" ? "24 28 44" : "0 0 0";
+  const [contact, short, long] = focus ? (light === "light" ? [9, 10, 18] : [45, 50, 66]) : light === "light" ? [8, 8, 14] : [40, 45, 60];
+  const layers: readonly SoftLayer[] = focus
+    ? [[1, 3, 0, contact], [3, 10, -1, short], [10, 20, -6, long]]
+    : [[1, 2, 0, contact], [2, 8, -1, short], [8, 16, -6, long]];
+  return layers.flatMap((layer) => sharpLayers(layer, ink)).join(", ");
+}
+
+/// Uno strato d'ombra sfumato: scostamento verticale, sfocatura, spread (px)
+/// e opacità (%).
+type SoftLayer = readonly [y: number, blur: number, spread: number, alpha: number];
+
+/// La funzione d'errore (Abramowitz e Stegun 7.1.26: errore sotto 1,5·10⁻⁷).
+function erf(x: number): number {
+  const t = 1 / (1 + 0.3275911 * Math.abs(x));
+  const y = 1 - ((((1.061405429 * t - 1.453152027) * t + 1.421413741) * t - 0.284496736) * t + 0.254829592) * t * Math.exp(-x * x);
+  return x >= 0 ? y : -y;
+}
+
+/// Uno strato sfumato come pila di ombre nette, dalla più larga alla più
+/// stretta. La sfocatura CSS `b` è una gaussiana di deviazione `b / 2`: a
+/// distanza `d` fuori dal bordo (spread compreso) copre `Φ(-d / σ)` del colore.
+/// L'intervallo `[-b, b]` si divide in fasce di tre pixel al più (le
+/// sfocature piccole in quattro fasce), e lo strato `k` copre tutte le fasce
+/// fino al suo bordo: le opacità si risolvono dalla fascia più esterna verso
+/// dentro, perché la copertura composta di ogni fascia (`1 - Π(1 - αᵢ)`) sia
+/// la media della gaussiana su di lei. Le opacità vanno a 1/255: è il passo
+/// con cui il colore si dipinge, e il resto dell'arrotondamento lo corregge
+/// la fascia dopo.
+function sharpLayers([y, blur, spread, alpha]: SoftLayer, ink: string): string[] {
+  if (blur === 0) return [`0 ${y}px 0 ${spread}px rgb(${ink} / ${alpha}%)`];
+  const sigma = blur / 2;
+  const cover = (d: number) => 0.5 * (1 - erf(d / (sigma * Math.SQRT2)));
+  const mean = (lo: number, hi: number) => {
+    let sum = 0;
+    for (let i = 0; i < 8; i++) sum += cover(lo + ((i + 0.5) * (hi - lo)) / 8);
+    return (alpha / 100) * (sum / 8);
+  };
+  const bands = Math.max(4, Math.round((2 * blur) / Math.min(3, blur / 2)));
+  const edges = Array.from({ length: bands }, (_, k) => -blur + ((k + 1) * 2 * blur) / bands);
+  const steps: number[] = new Array<number>(bands);
+  let inner = 0;
+  for (let k = bands - 1; k >= 0; k--) {
+    const lo = k === 0 ? -blur * 1.5 : edges[k - 1]!;
+    const need = 1 - (1 - mean(lo, edges[k]!)) / (1 - inner);
+    steps[k] = Math.round(Math.max(0, need) * 255);
+    inner = 1 - (1 - inner) * (1 - steps[k]! / 255);
+  }
+  const out: string[] = [];
+  for (let k = bands - 1; k >= 0; k--) {
+    const step = steps[k]!;
+    if (step === 0) continue;
+    // Un terzo di passo in più: il motore che tronca invece di arrotondare
+    // trova lo stesso passo.
+    const percent = Math.round(((step + 0.3) / 255) * 100_000) / 1000;
+    const reach = Math.round((spread + edges[k]!) * 10) / 10;
+    out.push(`0 ${y}px 0 ${reach}px rgb(${ink} / ${percent}%)`);
+  }
+  return out;
+}
+
 /// I sette livelli del rilievo: due strati morbidi, vicino e lontano.
 const SHADOWS: Readonly<Record<Light, readonly (readonly [readonly [number, number, number], readonly [number, number, number]])[]>> = {
   light: [
@@ -401,6 +479,10 @@ export function palette(
     "shadow-2": levels[1]!,
     "shadow-3": levels[2]!,
     "shadow-4": levels[3]!,
+    // Il foglio sulla scrivania: ruoli facoltativi (`OPTIONAL_ROLES`), che la
+    // pelle legge col ripiego di `shadow-1` e `shadow-2`.
+    "shadow-sheet": sheetShadow(light, false),
+    "shadow-sheet-focus": sheetShadow(light, true),
     "shadow-5": levels[4]!,
     "shadow-6": levels[5]!,
     "shadow-7": levels[6]!,
@@ -426,6 +508,12 @@ export function palette(
     // La scrivania del disegno, attorno alla carta bianca: chiara di giorno,
     // e di notte abbastanza chiara da non far abbagliare la carta.
     "draw-desk": toHex(day ? lch(0.95, 0.004, 260) : lch(0.3, 0.008, 260)),
+
+    // Il vassoio della barra in una fila e della colonna del disegno: appena
+    // più chiaro della carta di un campo, perché i suoi bottoni si leggano
+    // come strumenti e non come campi. Ad alto contrasto resta la carta del
+    // campo, che ha già le sue coppie.
+    "bar-tray": high ? sheet2 : toHex(day ? lch(0.984, 0.004, paper) : lch(0.238, 0.017, paper)),
 
     // Il grafo.
     "graph-node": graphNode,
@@ -548,7 +636,7 @@ const CONSTANTS: readonly (readonly [string, string])[] = [
   ["text-xl", "16px"],
   ["text-2xl", "19px"],
   ["text-3xl", "23px"],
-  ["text-reading", "17px"],
+  ["text-reading", "18px"],
   ["text-source", "14px"],
   ["weight-regular", "400"],
   ["weight-medium", "500"],
@@ -556,7 +644,7 @@ const CONSTANTS: readonly (readonly [string, string])[] = [
   ["leading-tight", "1.3"],
   ["leading-normal", "1.45"],
   ["leading-relaxed", "1.65"],
-  ["content-width", "68ch"],
+  ["content-width", "58ch"],
   ["tracking-caps", "0.06em"],
 
   // I tempi: stato, scambio, breve, ampio; la scena è dei momenti rari.
@@ -593,14 +681,14 @@ export const COLOR_TOKENS: readonly string[] = Object.keys(palette("light", "nor
 /**
  * I ruoli che la serie dichiara e che un tema può non dichiarare: i segni
  * sulla carta del tema (`--doc-ins`, `--doc-find`, …) e la carta chiara di un
- * file (`--paper-*`), e la scrivania del disegno (`--draw-desk`). Facoltativi perché un ruolo obbligatorio nuovo farebbe
+ * file (`--paper-*`), la scrivania del disegno (`--draw-desk`), il vassoio della barra in una fila (`--bar-tray`) e l'ombra del foglio (`--shadow-sheet`, `--shadow-sheet-focus`). Facoltativi perché un ruolo obbligatorio nuovo farebbe
  * rifiutare ogni tema `theme-2` di oggi; chi non li dichiara ha il ripiego di
  * `structure.css`, e le loro coppie si contano solo quando ci sono
  * (`THEME_2_OPTIONAL_PAIRS`).
  */
 export const OPTIONAL_ROLES: readonly string[] = COLOR_TOKENS.filter(
   (name) => name.startsWith("paper-") || name.startsWith("doc-author-") || name.startsWith("doc-color-") || name.startsWith("doc-tint-") ||
-    ["doc-ins", "doc-del", "doc-proof-spell", "doc-proof-gram", "doc-find", "doc-find-now", "doc-comment", "draw-desk",
+    ["doc-ins", "doc-del", "doc-proof-spell", "doc-proof-gram", "doc-find", "doc-find-now", "doc-comment", "draw-desk", "bar-tray", "shadow-sheet", "shadow-sheet-focus",
       "doc-syntax-near", "doc-ghost", "doc-wavy", "doc-block-hover", "doc-block-selected", "doc-drop-line"].includes(name),
 );
 
