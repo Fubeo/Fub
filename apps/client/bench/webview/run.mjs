@@ -6,6 +6,7 @@
 //   node bench/webview/run.mjs --app=../../target/release/fub [--only=S1,S2,S3,C1]
 //        [--driver=tauri-driver] [--native-driver=/usr/bin/WebKitWebDriver]
 //        [--budgets=ci|targets] [--out=bench/.output/webview] [--dist=dist]
+//        [--port=4444] [--native-port=4445]
 //
 // Avvia `tauri-driver` con un vault e una configurazione scritti in una
 // cartella temporanea (`fixtures.mjs`): la sonda è accesa dalle impostazioni
@@ -25,7 +26,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { openSession, waitForDriver } from "./driver.mjs";
 import { noteName, writeFixtures } from "./fixtures.mjs";
-import { settled } from "./memory.mjs";
+import { settled, threadCpu, threadCpuSpent } from "./memory.mjs";
 import { CANVAS_SCRIPT, COMMITS, OPENS, SIZES, builtModule } from "./canvas.mjs";
 import { INDEXING_SCRIPT } from "./indexing.mjs";
 import { TILES_SCRIPT } from "./tiles.mjs";
@@ -175,6 +176,51 @@ async function centerOf(session, css) {
   return session.execute("const r = document.querySelector(arguments[0])?.getBoundingClientRect(); return r ? { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) } : null;", [css]);
 }
 
+/// La cronologia di S3 nella pagina: quando compare la prima scheda (da lì un
+/// anello di `requestAnimationFrame`, per al più 20 s), i primi eventi del
+/// puntatore, della rotella e della tastiera dopo di lei, e ogni buco fra due fotogrammi
+/// oltre 100 ms, coi tempi in ms dalla prima scheda e dal primo `pointerdown`.
+/// Niente anelli di messaggi o di timer: affamerebbero i richiami a riposo
+/// con cui la lavagna finisce di montare.
+const S3_TIMELINE_SCRIPT = `
+  const now = () => performance.now();
+  const s = { card: null, events: {}, gaps: [] };
+  let last = null;
+  const tick = () => {
+    const t = now();
+    if (last !== null && t - last > 100) s.gaps.push([last, t - last]);
+    last = t;
+    if (t - s.card < 20000 && !s.done) requestAnimationFrame(tick);
+  };
+  const seen = () => {
+    if (s.card !== null || !document.querySelector('.canvas-node')) return;
+    s.card = now();
+    observer.disconnect();
+    requestAnimationFrame(tick);
+  };
+  const observer = new MutationObserver(seen);
+  observer.observe(document.body, { subtree: true, childList: true });
+  seen();
+  for (const type of ['pointermove', 'pointerdown', 'pointerup', 'wheel', 'keydown']) {
+    window.addEventListener(type, () => { if (s.card !== null) s.events[type] ??= now(); }, { capture: true, passive: true });
+  }
+  window.__fubS3 = {
+    mark: (name) => { s.events[name] = now(); },
+    read: () => {
+      s.done = true;
+      const base = s.card ?? 0;
+      const down = s.events.pointerdown ?? null;
+      const rel = (t, from) => (t === null || from === null ? null : Math.round(t - from));
+      return {
+        firstCard: s.card === null ? null : 0,
+        events: Object.fromEntries(Object.entries(s.events).map(([k, t]) => [k, rel(t, base)])),
+        gaps: s.gaps.map(([at, ms]) => ({ ms: Math.round(ms), fromCard: rel(at, base), fromPointerdown: rel(at, down) })),
+      };
+    },
+  };
+  return true;
+`;
+
 const stop = (session) => session.execute("return window.__fubProbe.stop();");
 const start = (session) => session.execute("window.__fubProbe.start(); return true;");
 
@@ -276,9 +322,16 @@ const SCENARIOS = {
   },
   /// Spostare e ingrandire una lavagna di 300 schede, 20 note vive.
   async S3(session) {
+    // Strumenti dello scatto di S3 (diagnosi, non soglie): la cronologia dei
+    // fotogrammi parte quando compare la prima scheda, la CPU per filo si
+    // legge prima dell'apertura, alla prima scheda e alla fine.
+    await session.execute(S3_TIMELINE_SCRIPT);
+    const cpuBefore = threadCpu(driverPid);
     await openByName(session, "Lavagna", "Scheda 20");
     await session.waitFor("return document.querySelectorAll('.canvas-node').length > 0");
+    const cpuOpened = threadCpu(driverPid);
     const at = await centerOf(session, ".pane.focus .canvas-viewport");
+    await session.execute("window.__fubS3?.mark('start'); return true;");
     await start(session);
     // Il pulsante di mezzo sposta la lavagna, come il trackpad e la rotella.
     await session.actions(drag({ ...at, dx: 400, dy: 0, ms: 3_000, button: 1 }));
@@ -295,7 +348,14 @@ const SCENARIOS = {
     }
     await session.releaseActions();
     const report = await stop(session);
-    return { report, zoomed, values: { "S3.frameGap.p95": report.frames.p95, "S3.frameGap.max": report.frames.max }, samples: report.frames.count };
+    const cpuAfter = threadCpu(driverPid);
+    const timeline = await session.execute("return window.__fubS3?.read() ?? null;");
+    const tools = {
+      timeline,
+      cpu: { open: threadCpuSpent(cpuBefore, cpuOpened), measured: threadCpuSpent(cpuOpened, cpuAfter) },
+    };
+    writeFileSync(join(out, "S3-strumenti.json"), JSON.stringify(tools, null, 2) + "\n");
+    return { report, zoomed, tools, values: { "S3.frameGap.p95": report.frames.p95, "S3.frameGap.max": report.frames.max }, samples: report.frames.count };
   },
   /// Il grafo di 10.000 nodi, trascinato per tre secondi.
   async S4(session) {
@@ -643,6 +703,48 @@ function git(...command) {
   }
 }
 
+/// Avvia `tauri-driver` sul vault e sulla configurazione del banco; `env`
+/// aggiunge variabili all'app che il driver lancerà.
+function startDriver(vault, config, env = {}) {
+  return spawn(args.driver ?? "tauri-driver", [
+    "--port", String(port),
+    ...(args["native-driver"] ? ["--native-driver", args["native-driver"]] : []),
+    ...(args["native-port"] ? ["--native-port", args["native-port"]] : []),
+  ], {
+    env: { ...process.env, ...env, FUB_VAULT: vault, FUB_CONFIG_DIR: config },
+    stdio: ["ignore", "inherit", "inherit"],
+    // Un gruppo di processi suo: alla fine si ferma il driver con l'app e
+    // WebKitWebDriver che ha avviato, non soltanto `tauri-driver`.
+    detached: process.platform !== "win32",
+  });
+}
+
+/// La foto degli strati composti della lavagna di S3 (diagnosi dello scatto):
+/// un'app nuova, dopo tutte le misure, con i bordi e i contatori di
+/// ridisegno di WebKitGTK accesi (`WEBKIT_SHOW_COMPOSITING_DEBUG_VISUALS`).
+/// Solo Linux; un errore lo dice il referto, non ferma il banco.
+async function compositingPhoto(vault, config) {
+  const driver = startDriver(vault, config, { WEBKIT_SHOW_COMPOSITING_DEBUG_VISUALS: "1" });
+  driverPid = driver.pid;
+  let session = null;
+  try {
+    await waitForDriver(base);
+    session = await openSession(base, app);
+    await ready(session);
+    await indexed(session);
+    await openByName(session, "Lavagna", "Scheda 20");
+    await session.waitFor("return document.querySelectorAll('.canvas-node').length > 0");
+    await pause(MEMORY_QUIET_MS);
+    writeFileSync(join(out, "S3-strati.png"), await session.screenshot());
+    console.log(`· S3: la foto degli strati in ${join(out, "S3-strati.png")}`);
+  } catch (error) {
+    console.log(`· S3: la foto degli strati non c'è: ${String(error?.message ?? error)}`);
+  } finally {
+    await session?.close().catch(() => {});
+    await stopDriver(driver);
+  }
+}
+
 async function main() {
   const budgets = JSON.parse(readFileSync(join(here, "budgets.json"), "utf8"));
   const limits = budgets[budgetsKind];
@@ -650,16 +752,7 @@ async function main() {
   mkdirSync(out, { recursive: true });
   const root = mkdtempSync(join(tmpdir(), "fub-webview-"));
   const { vault, config } = writeFixtures(root);
-  const driver = spawn(args.driver ?? "tauri-driver", [
-    "--port", String(port),
-    ...(args["native-driver"] ? ["--native-driver", args["native-driver"]] : []),
-  ], {
-    env: { ...process.env, FUB_VAULT: vault, FUB_CONFIG_DIR: config },
-    stdio: ["ignore", "inherit", "inherit"],
-    // Un gruppo di processi suo: alla fine si ferma il driver con l'app e
-    // WebKitWebDriver che ha avviato, non soltanto `tauri-driver`.
-    detached: process.platform !== "win32",
-  });
+  const driver = startDriver(vault, config);
   driverPid = driver.pid;
   const results = {};
   let failed = 0;
@@ -733,6 +826,7 @@ async function main() {
     }
   } finally {
     await stopDriver(driver);
+    if (only.has("S3") && process.platform === "linux") await compositingPhoto(vault, config);
     // L'app che si chiude può scrivere nel vault ancora un attimo: la
     // rimozione riprova, e una cartella temporanea che resta non cancella le
     // misure già prese.
