@@ -1664,14 +1664,18 @@ Tocca: `apps/client/src/editors/spatial/tools/registry.ts`,
 `apps/client/src/editors/spatial/motore/gesti.test.ts` (di T10),
 `apps/client/src/editors/spatial/tools/editor/gesture-begin.ts`,
 `apps/client/src/editors/spatial/tools/editor/chrome/rail.ts`,
+`apps/client/src/editors/spatial/tools/fields.ts`,
+`apps/client/src/editors/spatial/tools/properties.ts` (il campo «Testo»,
+allargamento dell'orchestratore del 2026-11-13),
+`apps/client/src/editors/spatial/tools/editor/panel.ts` (la scrittura del
+campo), i loro test,
 `apps/client/src/editors/spatial/tools/gesti-vettori.test.ts` (di T3),
 `apps/client/src/__fixtures__/disegno-gesti/testo-clic.json` (nuovo),
 `crates/fub-disegno/tests/gesti_testo.rs` (di T17),
 `crates/fub-disegno/tests/gesti/testo.tsv` (nuovo, se serve),
 `docs/decisions/0239-il-disegno-sul-motore-vettoriale.md` (solo se il
 tasto cambia)
-Non toccare: il profilo PDF (non prende lo strumento); `tools/properties.ts`
-(si mette a fuoco il campo che c'è); `tools/labels.ts` (l'etichetta dentro
+Non toccare: il profilo PDF (non prende lo strumento); `tools/labels.ts` (l'etichetta dentro
 una forma resta com'è); i comandi e i campi dello spazio Completo;
 `crates/fub-disegno/src/` (se il motore non dà ciò che dà la strada
 semplice, si scrive la differenza nel `.tsv` o si apre un task nuovo).
@@ -1695,9 +1699,18 @@ Cosa fare:
   `TEXT_FAMILY`, `TEXT_SIZE` se lo stile non ne dà un altro), con un id nuovo
   e lo stile del gesto, nel livello attivo. Se `textElem` non esporta ciò
   che serve, una funzione nuova in `tools/text.ts` lo fa.
+- Il campo «Testo» dell'ispettore (allargamento del 2026-11-13: il coder ha
+  visto che oggi non c'è; la `textarea` del `case "text"` di
+  `tools/properties.ts` è la Descrizione del documento): con un solo
+  `<text>` libero scelto, nella sezione «text» prima del preset, una
+  `textarea` con le righe del testo (`textLines`), che scrive `op: "text"`
+  come le altre modifiche della sezione «text» con il motore acceso e
+  spento; svuotarla toglie l'elemento (come un testo senza niente da
+  leggere). Niente campo per un testo che `op: "text"` non riscrive senza
+  perdite (`<textPath>`, `<tspan>` con stili diversi fra loro): lì il campo
+  non c'è. Le etichette dei connettori e delle note restano come sono.
 - Dopo il commit, per tutte e due le strade: il testo nuovo selezionato e il
-  campo del testo dell'ispettore a fuoco (il `case "text"` di
-  `tools/properties.ts`, la `textarea` con `draw-properties-field`);
+  campo «Testo» dell'ispettore a fuoco (quello del punto sopra);
   l'ispettore chiuso si apre.
 - In `gesti-vettori.test.ts` lo strumento `text` nel registratore, e il
   vettore `testo-clic` (clic a (100, 80), la parola «Testo») registrato
