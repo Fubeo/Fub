@@ -1848,7 +1848,7 @@ scheda Componenti con quella riga a fuoco; `commands.test.ts` dice che senza
 registrazione `showComponent` dà `false`; la foto del banco della riga
 segnata è come il prototipo.
 Prova: scripts/check.sh --rapido --client; npm --prefix apps/client test -- src/panels/components-page.test.ts src/ui/commands.test.ts src/panels/settings.components.test.ts
-Stato: [~] in corso (2026-11-12, coder su base 402e96f69)
+Stato: [x] fatto (2026-11-12) · differenze: tocca anche la skin (`skin/settings.css`, `anatomia/settings.ts`, i derivati rigenerati: decisione dell'orchestratore), `docs/architecture/component-editors.md` (la porta) e i finti di `ui/commands` in `settings.form.test.ts`, `settings.list.test.ts` e `preferences.test.ts`; `selectTab` rende la promessa del disegno; il segno va via al primo `pointerdown` o `keydown` o quando il fuoco lascia l'interruttore; una riga del nucleo senza interruttore prende il segno e il fuoco va al titolo della pagina; con `scrollIntoView({block: "nearest"})` come nel prototipo l'alone di 3 px può restare appena tagliato in fondo (`scroll-margin` non è nel vocabolario dei temi); foto nelle due luci a 1280 e 700 come lo stato 8c
 
 ## T25 · Il prototipo del disegno, con il motore e senza
 
