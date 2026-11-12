@@ -319,7 +319,7 @@ else
 
   # varianti
   run "host senza draw (test)" tests -p fub-host --no-default-features --features notify-watcher,http-client,official-features,rich
-  run "i disegni senza il motore (componenti)" tests -p fub-host --no-default-features --features draw --test componenti
+  run "i disegni senza il motore (componenti, porte)" tests -p fub-host --no-default-features --features draw --test componenti --test drawing
   run "fub-features con draw (test)" tests -p fub-features --features draw
   run "fub-features con engine-drawing (test)" tests -p fub-features --features engine-drawing
   run "fub-testkit con pixel (test)" tests -p fub-testkit --features pixel

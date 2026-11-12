@@ -379,6 +379,20 @@ pub fn exports() -> Vec<Box<dyn ExportProvider>> {
     ]
 }
 
+/// I caratteri di Fub incorporati nel binario, gli stessi dell'export: l'host
+/// li dà al motore del disegno (`Servizi::fornisci_caratteri`) prima della sua
+/// prima apertura, così un disegno esce uguale nell'editor e nell'export.
+pub fn facce() -> &'static [&'static [u8]] {
+    &embed::FACES
+}
+
+/// La famiglia di `serif` fra quelle di [`facce`].
+pub const FAMIGLIA_SERIF: &str = SERIF;
+/// La famiglia di `sans-serif` fra quelle di [`facce`].
+pub const FAMIGLIA_SANS: &str = SANS;
+/// La famiglia di `monospace` fra quelle di [`facce`].
+pub const FAMIGLIA_MONO: &str = MONO;
+
 mod embed;
 mod export;
 mod pdf;
