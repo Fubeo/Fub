@@ -2237,7 +2237,7 @@ misura con il confronto con `main`; oppure, se non si può senza toccare
 VectorCraft, il numero vero, dove va il tempo e la proposta, nel report;
 `node tools/disegno-cancello/cancello.mjs` esce con 0.
 Prova: scripts/check.sh --rapido; FUB_DISEGNO_CANCELLO=<cartella> cargo test --release -p fub-disegno --test cancello -- --ignored --exact latenze
-Stato: [ ] da fare
+Stato: [~] in corso (2026-11-13, coder su base 026b902ec)
 
 ## T35 · La transform dove la scrive il client
 
