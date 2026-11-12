@@ -1348,7 +1348,7 @@ oggi); zoom 0,01 e 64; pressione 0.
 Fatto quando: `cargo test -p fub-disegno --test gesti_forme` passa su tutti
 i vettori di forme di T3, con `forme.tsv` che ha al più le righe motivate.
 Prova: scripts/check.sh --rapido; cargo test -p fub-disegno --test gesti_forme
-Stato: [~] in corso · coder · base f10aba5c2
+Stato: [x] fatto (2026-11-12) · differenze: tocca anche `src/gesti/mod.rs` (il braccio delle forme in `strumento()` e l'aggancio `Strumento::evento` con `Banco.inizio`, per griglia, Maiusc e modificatori) e `src/apertura.rs` (un livello vuoto di Fub diventa un livello vuoto del motore): decisione dell'orchestratore; livello bloccato o nascosto è `locked`/`hidden` come i vettori, un `layer` che non c'è è `locked`; disegnare non cambia la selezione; `forme.tsv` senza righe; restano scoperti (note in T20) l'operazione `page`, il punto del rilascio, lo spessore 0 e le forme su un livello ruotato
 
 ## T15 · Selezione, spostare, ridimensionare, ruotare
 
@@ -1380,7 +1380,7 @@ operazioni); ridimensionare sotto `MIN_SIZE`; ruotare un elemento con una
 Fatto quando: `cargo test -p fub-disegno --test gesti_selezione` passa su
 tutti i vettori di selezione di T3, con `selezione.tsv` motivato.
 Prova: scripts/check.sh --rapido; cargo test -p fub-disegno --test gesti_selezione
-Stato: [ ] da fare
+Stato: [~] in corso · coder · base TBD
 
 ## T16 · Ciò che il motore non sa modificare, e il corpus
 
@@ -1596,6 +1596,7 @@ Fatto quando: `node tools/disegno-cancello/cancello.mjs` esce con 0; il file
 di misura ha `bench:ink` prima e dopo dentro il rumore e le tre latenze con i
 tetti di A8 rispettati o, se no, il numero vero e un task nuovo nel piano.
 Prova: scripts/check.sh --rapido; node tools/disegno-cancello/cancello.mjs
+Nota dell'orchestratore (2026-11-12, da T14): i vettori delle forme passano tutti, ma quattro cose del client oggi non le fa il motore: l'operazione `page` quando la forma esce dalla pagina; il punto del rilascio se è diverso dall'ultimo trascinamento (il motore lo ignora); lo spessore 0 sulle linee (il motore lo porta a 0,1); su un livello ruotato rettangolo ed ellisse escono come `path`. Il cancello le prova o le scrive come differenze ammesse col perché.
 Stato: [ ] da fare
 
 ## T21 · Che cosa resta com'è, detto
