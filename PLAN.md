@@ -1224,7 +1224,7 @@ id spostato a mano sulla copia dà `ident` + `set` sullo stesso id; un sync
 con un `edit` porta la revisione a 1 e il reimport alla stessa; un gesto a
 revisione vecchia dà `Stale`.
 Prova: scripts/check.sh --rapido; cargo test -p fub-disegno
-Stato: [~] in corso · coder · base 2031c92f4
+Stato: [x] fatto (2026-11-12) · differenze: `sincronizza`/`gesto`/`comando` rendono `Result<…, PluginError>`; l'import toglie le etichette e segna i livelli `data-vc-layer`; un import rifiutato apre una copia vuota in sola lettura; i `.tsv` li scrivono T14–T17; la `FontDb` dai `Caratteri` passa a T17 (DECISIONS); un panico del motore non ha ancora un test proprio
 
 ## T12 · Colori e spessore dal motore, nel client
 
@@ -1348,7 +1348,7 @@ oggi); zoom 0,01 e 64; pressione 0.
 Fatto quando: `cargo test -p fub-disegno --test gesti_forme` passa su tutti
 i vettori di forme di T3, con `forme.tsv` che ha al più le righe motivate.
 Prova: scripts/check.sh --rapido; cargo test -p fub-disegno --test gesti_forme
-Stato: [ ] da fare
+Stato: [~] in corso · coder · base TBD
 
 ## T15 · Selezione, spostare, ridimensionare, ruotare
 
@@ -1418,7 +1418,10 @@ Perché: il disegno ha di nuovo lo strumento Testo (D-7): un clic crea un
 testo, e un testo si sposta e si ridimensiona come le forme.
 Tocca: `crates/fub-disegno/src/gesti/testo.rs` (di T9),
 `crates/fub-disegno/tests/gesti_testo.rs` (nuovo),
-`crates/fub-disegno/tests/gesti/testo.json` (nuovo)
+`crates/fub-disegno/tests/gesti/testo.json` (nuovo),
+`crates/fub-disegno/Cargo.toml` e `Cargo.lock` (`vectorcraft-text` diretta),
+`crates/fub-disegno/src/motore.rs` (solo la `FontDb` dai `Caratteri`: decisione
+dell'orchestratore del 2026-11-12, vedi DECISIONS)
 Non toccare: `crates/fub-disegno/src/gesti/forme.rs`, `selezione.rs`,
 `differenza.rs`; i caratteri (T7); il client (T22).
 Dipende da: T14, T15
