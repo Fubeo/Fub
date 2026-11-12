@@ -228,7 +228,7 @@ Sei comandi tipati, nella forma di quelli dei fogli, con le forme in
 
 I tre comandi (`crates/fub-disegno/src/comandi.rs`) sono `paint.setStroke`,
 `paint.setFill` e `stroke.set` del motore sugli oggetti che il pannello del
-client colora oggi (un gruppo passa ai figli non bloccati, il tratto di una
+client colora (un gruppo passa ai figli non bloccati, il tratto di una
 penna è il suo riempimento); l'esito è la differenza. Lo spessore di una
 freccia, di una linea a spessore variabile o di un tratteggio è `Unsupported`,
 come un colore dato a un oggetto senza quel tratto o riempimento
