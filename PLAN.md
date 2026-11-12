@@ -1650,7 +1650,7 @@ src/editors/spatial/motore/standing.test.ts` passa; le foto del banco
 mostrano il chip e il riquadro in chiaro e scuro, come nel prototipo;
 `strings.test.ts` è verde.
 Prova: scripts/check.sh --rapido --client; npm --prefix apps/client test -- src/editors/spatial/motore/standing.test.ts src/editors/spatial/strings.test.ts
-Stato: [~] in corso (2026-11-12, coder su base ff9bce379)
+Stato: [x] fatto (2026-11-13) · differenze: foto del banco su `storyboard.it.svg` (le 6 perdite vere di `perdite.tsv`) e su una lavagna di 500 forme, con le perdite messe per un momento in `fake-ipc.ts` (poi tornato byte per byte); `MotoreDelDisegno` ha `perdite()` e `trovate()` (le perdite che arrivano negli esiti dei gesti); chiavi `draw.standing.*`, `draw.reason.unmapped` e `draw.reason.not_ready` in `strings/tools.ts`; il chip c'è solo col foglio in vista (non in Lettura né in sola lettura). Fuori da Tocca, necessari: `lazy.ts` (l'involucro non passava `standing`), `panels/standing.ts` (nome tagliato col suggerimento intero, vale anche per il rich), la skin `sheets.css` (elenco che scorre, max 232 px) con anatomia e file rigenerati, `editor-surfaces.md`. Le perdite degli esiti dei comandi non entrano nel chip (il motore oggi non ne manda); il `detail` del motore resta in italiano anche con l'interfaccia in inglese
 
 ## T22 · Lo strumento Testo
 
