@@ -95,3 +95,55 @@ export async function settled(root, pause) {
   reads.sort((a, b) => a.pss - b.pss);
   return reads[1];
 }
+
+/// La CPU per filo dei processi di Fub discendenti di `root` (l'app e la
+/// WebView), sommata per gruppo e nome del filo, in ms: `{ "webview:llvmpipe-#":
+/// 1200 }`. Le cifre in coda al nome si tolgono (`llvmpipe-3` → `llvmpipe-#`),
+/// così i fili di un pool fanno una voce sola. Soltanto Linux.
+export function threadCpu(root) {
+  if (process.platform !== "linux") return null;
+  const all = readdirSync("/proc").filter((name) => /^\d+$/.test(name)).map(Number).map(stat).filter(Boolean);
+  const byPid = new Map(all.map((proc) => [proc.pid, proc]));
+  const descends = (proc) => {
+    for (let at = proc, hops = 0; at && hops < 32; at = byPid.get(at.ppid), hops++) {
+      if (at.ppid === root) return true;
+    }
+    return false;
+  };
+  // CLK_TCK è 100 sui Linux della CI e di casa.
+  const tickMs = 10;
+  const out = {};
+  for (const proc of all) {
+    const kind = group(proc.comm);
+    if ((kind !== "webview" && kind !== "app") || !descends(proc)) continue;
+    let tasks = [];
+    try {
+      tasks = readdirSync(`/proc/${proc.pid}/task`);
+    } catch {
+      continue;
+    }
+    for (const tid of tasks) {
+      try {
+        const raw = readFileSync(`/proc/${proc.pid}/task/${tid}/stat`, "utf8");
+        const close = raw.lastIndexOf(")");
+        const name = raw.slice(raw.indexOf("(") + 1, close).replace(/\d+$/, "#");
+        const fields = raw.slice(close + 2).split(" ");
+        const key = `${kind}:${name}`;
+        out[key] = (out[key] ?? 0) + (Number(fields[11]) + Number(fields[12])) * tickMs;
+      } catch {
+        // Un filo uscito fra l'elenco e la lettura.
+      }
+    }
+  }
+  return out;
+}
+
+/// La CPU spesa fra due letture di `threadCpu`, per filo, dalla più alta.
+export function threadCpuSpent(before, after) {
+  if (!before || !after) return null;
+  const spent = Object.entries(after)
+    .map(([key, ms]) => [key, ms - (before[key] ?? 0)])
+    .filter(([, ms]) => ms > 0)
+    .sort((a, b) => b[1] - a[1]);
+  return Object.fromEntries(spent);
+}
