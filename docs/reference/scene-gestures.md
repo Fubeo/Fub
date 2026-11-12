@@ -83,3 +83,9 @@ vettori ha accanto un file `.tsv` (per esempio
 nel file deve dare le stesse `expect.ops`, con gli id nuovi canonici, i numeri
 con tolleranza 1e-3 e le `transform` confrontate come matrici (1e-6). Il
 vettore resta com'è: la differenza si scrive nel `.tsv`, non nel JSON.
+
+Un vettore solo è scritto a mano, nella stessa forma:
+`crates/fub-disegno/tests/gesti/testo.json`, il clic dello strumento Testo,
+che il client non ha da registrare. Il suo atteso è ciò che dà `textElem` di
+`apps/client/src/editors/spatial/tools/text.ts`, e lo rigioca
+`crates/fub-disegno/tests/gesti_testo.rs`.

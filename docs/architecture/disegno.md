@@ -146,8 +146,7 @@ Dopo ogni gesto la sessione del motore torna alla copia: lo stato vero è il
 file. Un panico del motore lo prende `vectorcraft_engine::guard::catch_panic`:
 il gesto è `Unsupported`, la sessione si ricarica dalla copia e l'istanza
 resta viva. Gli strumenti stanno in `crates/fub-disegno/src/gesti/`, uno per
-strumento di Fub; quelli non ancora fatti rispondono `Unsupported` (il
-testo arriva con T17, i comandi con T18). Ogni evento
+strumento di Fub (il Testo crea al clic il `<text>` di `textElem`). Ogni evento
 passa prima dallo strumento di Fub (`Strumento::evento`), che applica le
 regole di Fub che il motore farebbe a modo suo.
 
@@ -188,8 +187,8 @@ riga sua nel gruppo «Disegnare» della pagina Componenti, accesa di serie
 richiederlo: spento il motore, i disegni restano accesi. Senza la feature
 `draw` l'host non compila il motore e i comandi del disegno rispondono
 `Unserved`. Il motore si costruisce al primo disegno aperto coi caratteri di
-Fub (`Servizi::caratteri`, dati dall'host), che la sua `FontDb` non riceve
-ancora (arriva con T17).
+Fub (`Servizi::caratteri`, dati dall'host): le facce entrano nella sua
+`FontDb` (`FontDb::global`), che dispone i testi e ne fa i colpi.
 
 Il disegno usa il motore nei due spazi di lavoro, Semplice e Completo, perché
 gli strumenti sono gli stessi e cambia solo l'aspetto. Il profilo `pdf` tiene
@@ -244,10 +243,9 @@ punta delle frecce e `stroke-dasharray` dei tratteggi compresi. Lo spessore di
 una linea a spessore variabile è `Unsupported`, col comando spento (arriva con
 T32).
 
-Ogni richiesta passa da `validate()` prima di arrivare al motore. Le istanze
-stanno nell'host per vault, sotto un lucchetto che si prende per trovare
-l'istanza e si lascia prima di chiamare il motore. La chiusura del vault
-chiude i suoi disegni.
+Ogni richiesta passa da `validate()` prima del motore. Le istanze stanno
+nell'host per vault, sotto un lucchetto preso per trovare l'istanza e lasciato
+prima di chiamare il motore; la chiusura del vault chiude i suoi disegni.
 
 ## I limiti
 
@@ -293,7 +291,7 @@ strumento li modifica, e un gesto sul loro oggetto del motore è rifiutato
 | Percorso | Contiene |
 |---|---|
 | `vendor/vectorcraft/` | la copia di VectorCraft, con le patch numerate e `UPSTREAM.md` (arriva con T6) |
-| `crates/fub-disegno/` | l'adattatore: apertura, mappa, sincronia, differenza, gesti, comandi, perdite (le forme, la selezione e i comandi ci sono; il testo arriva con T17) |
+| `crates/fub-disegno/` | l'adattatore: apertura, mappa, sincronia, differenza, gesti, comandi, perdite |
 | `crates/fub-host/src/drawing.rs` | le istanze per vault e i sei comandi lato host |
 | `crates/fub-abi/src/drawing.rs` | le forme condivise e i limiti (arriva con T4) |
 | `apps/client/src/editors/spatial/motore/` | la sessione, i gesti, i colori e il chip delle perdite (arriva con T8, T10, T12 e T21) |
@@ -338,6 +336,7 @@ flowchart LR
     vengine["vectorcraft-engine"]
     vgeom["vectorcraft-geom"]
     vsvg["vectorcraft-svg"]
+    vtext["vectorcraft-text"]
     vtools["vectorcraft-tools"]
 
     host --> disegno
@@ -348,6 +347,7 @@ flowchart LR
     disegno --> vengine
     disegno --> vgeom
     disegno --> vsvg
+    disegno --> vtext
     disegno --> vtools
     disegno -.-> testkit
 ```

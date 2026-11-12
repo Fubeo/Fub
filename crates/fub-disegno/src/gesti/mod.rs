@@ -111,7 +111,7 @@ pub(crate) fn strumento(tool: DrawingTool) -> Option<&'static dyn Strumento> {
             Some(forme::strumento(tool))
         }
         DrawingTool::Select => Some(selezione::strumento()),
-        DrawingTool::Text => None,
+        DrawingTool::Text => Some(testo::strumento()),
     }
 }
 
