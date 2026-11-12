@@ -1380,7 +1380,7 @@ operazioni); ridimensionare sotto `MIN_SIZE`; ruotare un elemento con una
 Fatto quando: `cargo test -p fub-disegno --test gesti_selezione` passa su
 tutti i vettori di selezione di T3, con `selezione.tsv` motivato.
 Prova: scripts/check.sh --rapido; cargo test -p fub-disegno --test gesti_selezione
-Stato: [~] in corso · coder · base 5cdea9301
+Stato: [~] in corso · coder · base dc50bcbb0
 
 ## T16 · Ciò che il motore non sa modificare, e il corpus
 
@@ -1410,7 +1410,7 @@ Fatto quando: `cargo test -p fub-disegno --test corpus` passa; il `.tsv` ha
 una riga per ogni file del corpus; un elemento `<filter>` aggiunto a un file
 di prova compare come `Approximated`.
 Prova: scripts/check.sh --rapido; cargo test -p fub-disegno --test corpus
-Stato: [ ] da fare
+Stato: [~] in corso · coder · base 9091bc6ac
 
 ## T17 · Il testo nel motore
 
