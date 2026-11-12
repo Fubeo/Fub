@@ -68,12 +68,20 @@
 //! gesto ([`Contesto::trascinato`], che la sessione ricorda fra un pezzo e
 //! l'altro).
 //!
-//! **Fuori dalla regola di oggi**: più oggetti ruotati non tengono la
-//! cornice girata fra un gesto e l'altro. Il client la tiene in `ctx.kept`
-//! solo sulla sua strada; il gesto del motore non sa che cornice il client
-//! mostra.
+//! **La cornice tenuta.** Più oggetti girati o ridimensionati tengono la
+//! loro cornice fra un gesto e l'altro, come `ctx.kept` del client: la
+//! richiesta la porta ([`fub_abi::DrawingGesture::frame`], in
+//! [`Contesto::cornice`]) e, se la selezione è ancora quella, è la cornice
+//! delle maniglie, della misura e dell'angolo di partenza; il suo riquadro è
+//! quello degli oggetti visti da lei. L'esito rimanda la cornice com'è
+//! diventata ([`fub_abi::DrawingOutcome::frame`]) perché il client la tenga:
+//! trasformata dal gesto per più oggetti girati o ridimensionati, spostata
+//! con loro se era tenuta; nessuna per un oggetto solo, che ha la sua.
 
-use fub_abi::{DrawingOutcome, DrawingPointer, DrawingPointerKind, DrawingPreview, DrawingRefusal};
+use fub_abi::{
+    DrawingFrame, DrawingOutcome, DrawingPointer, DrawingPointerKind, DrawingPreview,
+    DrawingRefusal,
+};
 use fub_scene::Role;
 use serde_json::Value;
 use vectorcraft_doc::hit::{hit_test, marquee, HitOptions};
@@ -390,8 +398,49 @@ fn alla_scena(cx: &Contesto<'_>, p: Point) -> Point {
     cx.copia.radice.inverse() * p
 }
 
-/// La cornice di `indici` (`frameOf`): quella dell'oggetto, se è uno solo,
-/// se no il riquadro comune nella scena.
+/// La cornice che il client tiene ([`Contesto::cornice`]), se è quella di
+/// `indici` (`ctx.kept` di `frameOf`): più oggetti, gli stessi della
+/// selezione del gesto, che è ancora intera (un id che non c'è più, o che
+/// sta dentro un altro scelto, la cambia, e la cornice si lascia). I suoi
+/// riquadri sono quelli che il client tiene, non rifatti dagli oggetti: le
+/// `transform` scritte a quattro decimali darebbero una misura appena
+/// diversa.
+fn tenuta(cx: &Contesto<'_>, indici: &[usize]) -> Option<Cornice> {
+    let data = cx.cornice?;
+    if indici.len() < 2 {
+        return None;
+    }
+    let mut prima = scelti(cx);
+    if prima.len() != cx.gesto.selection.len() {
+        return None;
+    }
+    let mut questi = indici.to_vec();
+    prima.sort_unstable();
+    questi.sort_unstable();
+    if prima != questi {
+        return None;
+    }
+    let rett = |[x0, y0, x1, y1]: [f64; 4]| Rect::new(x0, y0, x1, y1);
+    Some(Cornice {
+        m: Affine::new(data.matrix),
+        scatola: rett(data.bounds),
+        geometria: rett(data.geometry),
+    })
+}
+
+/// La cornice nella forma del contratto.
+fn al_client(c: &Cornice) -> DrawingFrame {
+    let rett = |r: Rect| [r.x0, r.y0, r.x1, r.y1];
+    DrawingFrame {
+        matrix: c.m.as_coeffs(),
+        bounds: rett(c.scatola),
+        geometry: rett(c.geometria),
+    }
+}
+
+/// La cornice di `indici` (`frameOf`): quella dell'oggetto, se è uno solo;
+/// per più oggetti quella che il client tiene ([`tenuta`]), se no il
+/// riquadro comune nella scena.
 fn cornice(cx: &Contesto<'_>, indici: &[usize]) -> Option<Cornice> {
     let doc = &cx.copia.documento;
     let simboli = doc.symbol_boxes();
@@ -410,6 +459,9 @@ fn cornice(cx: &Contesto<'_>, indici: &[usize]) -> Option<Cornice> {
             scatola,
             geometria,
         });
+    }
+    if let Some(c) = tenuta(cx, indici) {
+        return Some(c);
     }
     let indietro = cx.copia.radice.inverse();
     let mut scatola = None;
@@ -1169,6 +1221,35 @@ fn applica(
     .map_err(|r| r.rifiuto())
 }
 
+/// La cornice che il client tiene dopo il gesto (`applyFrame` e
+/// `moveSelection`): per più oggetti girati o ridimensionati, la loro
+/// cornice trasformata dalla matrice `m` del gesto; per più oggetti
+/// spostati, la cornice tenuta spostata con loro. `None` se il gesto non ha
+/// scritto niente, se l'oggetto è uno solo (la cornice è la sua) o se la
+/// cornice spostata è il riquadro comune, che il client non tiene.
+fn cornice_dopo(
+    cx: &Contesto<'_>,
+    gesto: &Gesto,
+    indici: &[usize],
+    m: Option<Affine>,
+    scritto: bool,
+) -> Option<DrawingFrame> {
+    let m = m.filter(|_| scritto && indici.len() > 1)?;
+    let prima = match gesto {
+        Gesto::Ridimensiona { cornice: c, .. } | Gesto::Ruota { cornice: c, .. } => *c,
+        Gesto::Sposta { dopo, .. } => tenuta(cx, dopo)?,
+        Gesto::Riquadro { .. } => return None,
+    };
+    // `movedFrame`: la matrice cambia, i riquadri restano.
+    let dopo = Cornice {
+        m: m * prima.m,
+        ..prima
+    };
+    let fuori = al_client(&dopo);
+    // Come la vuole il contratto, o nessuna.
+    fuori.validate("frame").is_ok().then_some(fuori)
+}
+
 impl Strumento for Selezione {
     fn id_motore(&self) -> &'static str {
         "selection"
@@ -1368,6 +1449,7 @@ impl Strumento for Selezione {
                     indici.retain(|i| i != l);
                 }
                 esito.selection = ids_di(cx, &indici, esito.ops.as_deref());
+                esito.frame = cornice_dopo(cx, &gesto, &indici, m, esito.ops.is_some());
             }
         }
         // Niente scritto e niente scelto di diverso: un gesto a vuoto.

@@ -46,6 +46,7 @@ fn gesto(revision: u64, tool: DrawingTool) -> DrawingGesture {
         },
         style: None,
         text: None,
+        frame: None,
         events: vec![
             punto(DrawingPointerKind::Down, 150.0, 125.0),
             punto(DrawingPointerKind::Drag, 170.0, 135.0),

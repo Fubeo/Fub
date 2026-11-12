@@ -33,13 +33,27 @@ Sei porte tipate, come quelle della griglia, registrate dall'app
   risponde `DrawingSynced`;
 - `drawing_gesture` riceve un `DrawingGesture` (revisione, fase `preview`,
   `commit` o `cancel`, strumento, livello, selezione, zoom, griglia, stile, la
-  riga del testo nuovo per lo strumento `text`, gli eventi nuovi in
-  coordinate di scena) e risponde un `DrawingOutcome`: l'anteprima
+  riga del testo nuovo per lo strumento `text`, la cornice tenuta, gli eventi
+  nuovi in coordinate di scena) e risponde un `DrawingOutcome`: l'anteprima
   (`DrawingPreview`: la forma nuova come `Elem`, la matrice della selezione,
   il riquadro `[x, y, larghezza, altezza]`), il JSON delle operazioni, la
-  selezione dopo, le parti toccate che restano come sono, e il rifiuto
+  selezione dopo, le parti toccate che restano come sono, il rifiuto
   (`stale`, `unmapped`, `empty`, `unsupported`, `too_large`, `closed`,
-  `not_ready`, `locked`, `hidden`);
+  `not_ready`, `locked`, `hidden`) e la cornice da tenere;
+- la **cornice tenuta** (`frame`, un `DrawingFrame` o `null`, in
+  `DrawingGesture` e in `DrawingOutcome`) è la cornice di trasformazione che
+  il client tiene per più oggetti scelti dopo averli girati o ridimensionati
+  (`ctx.kept`): la matrice dalle sue coordinate alla scena `[a, b, c, d, e,
+  f]`, il riquadro col contorno `bounds` e quello della geometria `geometry`,
+  `[x0, y0, x1, y1]` nelle sue coordinate. I riquadri viaggiano con la
+  matrice perché sono quelli di quando la cornice è nata: rifatti dagli
+  oggetti, con le `transform` scritte a quattro decimali, darebbero una
+  misura appena diversa da quella del client. La Selezione la manda se la
+  tiene per la selezione di adesso; il motore la usa se la selezione è
+  ancora quella (con un oggetto solo vale la sua cornice) e rimanda quella
+  di dopo: trasformata dal gesto per più oggetti girati o ridimensionati,
+  spostata con loro se era tenuta, `null` altrimenti, e il client tiene ciò
+  che arriva. Il campo può mancare (vale `null`);
 - `drawing_commands` riceve la selezione e risponde i `DrawingCommandInfo`
   (id, acceso);
 - `drawing_command` riceve un `DrawingCommandRequest` (revisione, id,
@@ -68,5 +82,6 @@ operazioni in 8 MiB di JSON (lo controlla chi lo scrive) e 50.000 parti che
 restano come sono; una selezione ha al più 10.000 id, nessuno vuoto o
 ripetuto; un colore è al più di 64 byte. I numeri sono finiti, `zoom` e il
 passo della griglia sono sopra zero, la pressione sta fra 0 e 1, lo spessore
-è zero o più. Un gesto senza `revision` o `phase` (come i
+è zero o più. La matrice di una cornice ha un'inversa finita e i suoi
+riquadri non finiscono prima di cominciare. Un gesto senza `revision` o `phase` (come i
 [vettori dei gesti](scene-gestures.md)) vale revisione 0 e `commit`.

@@ -9,7 +9,7 @@
 // gesto annullato non scrivono niente.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { DrawingGesture, DrawingOutcome, DrawingPointer } from "../../../host/contract";
+import type { DrawingFrame, DrawingGesture, DrawingOutcome, DrawingPointer } from "../../../host/contract";
 import { createFakeHost, type DrawingFake, type FakeHost } from "../../../host/fake";
 import { DocumentSessionCollection, type DocumentSessionApi } from "../../../state/document-session";
 import { openLifetime, type Lifetime } from "../../../ui/lifetime";
@@ -178,7 +178,7 @@ function replaying(vector: Vector, names: Map<string, string>): DrawingFake {
     });
   return {
     gesto: (gesture) => {
-      const outcome: DrawingOutcome = { revision: gesture.revision, preview: null, ops: null, selection: gesture.selection, losses: [], refused: null };
+      const outcome: DrawingOutcome = { revision: gesture.revision, preview: null, ops: null, selection: gesture.selection, losses: [], refused: null, frame: null };
       if (gesture.phase !== "commit") return outcome;
       return {
         ...outcome,
@@ -370,7 +370,7 @@ describe("i gesti sul motore", () => {
     const error = vi.spyOn(console, "error").mockImplementation(() => {});
     const fake = createFakeHost({
       drawing: {
-        gesto: (gesture) => ({ revision: gesture.revision, preview: null, ops: gesture.phase === "commit" ? '[{"op":"inventata"}]' : null, selection: [], losses: [], refused: null }),
+        gesto: (gesture) => ({ revision: gesture.revision, preview: null, ops: gesture.phase === "commit" ? '[{"op":"inventata"}]' : null, selection: [], losses: [], refused: null, frame: null }),
       },
     });
     const editor = await mount(EMPTY, fake);
@@ -393,6 +393,7 @@ describe("i gesti sul motore", () => {
           selection: [],
           losses: [],
           refused: gesture.phase === "commit" ? "empty" : null,
+          frame: null,
         }),
       },
     });
@@ -424,6 +425,56 @@ describe("i gesti sul motore", () => {
     expect(gestures(fake).some((each) => each.phase === "commit")).toBe(false);
     expect(editor.engine.text).toBe(vector.input);
     expect(editor.selection).toEqual([]);
+  });
+
+  it("più oggetti girati: la cornice dell'esito si tiene e va al gesto dopo, finché un esito non la lascia", async () => {
+    // I due rettangoli di `sposta-due-forme`, girati di 30° attorno al
+    // centro del riquadro comune (210, 160), come in `gesti_selezione.rs`.
+    const vector = VECTORS.find((each) => each.name === "sposta-due-forme")!;
+    const [a, b] = vector.gesture.selection as [string, string];
+    const s = Math.sin(Math.PI / 6);
+    const c = Math.cos(Math.PI / 6);
+    const girata: DrawingFrame = {
+      matrix: [c, s, -s, c, 210 - c * 210 + s * 160, 160 - s * 210 - c * 160],
+      bounds: [100, 100, 320, 220],
+      geometry: [100, 100, 320, 220],
+    };
+    const scritte = ["matrix(0.866 0.5 -0.5 0.866 108.1347 -83.5641)", "matrix(1.0235 0.5909 -0.5 0.866 92.3891 -92.6548)"];
+    let commit = 0;
+    const fake = createFakeHost({
+      drawing: {
+        gesto: (gesture) => {
+          const outcome: DrawingOutcome = { revision: gesture.revision, preview: null, ops: null, selection: gesture.selection, losses: [], refused: null, frame: null };
+          if (gesture.phase !== "commit") return outcome;
+          const transform = scritte[commit++];
+          if (transform === undefined) return { ...outcome, refused: "empty" };
+          const ops = [{ op: "batch", ops: [a, b].map((id) => ({ op: "set", id, attrs: { transform } })) }];
+          return { ...outcome, ops: JSON.stringify(ops), frame: commit === 1 ? girata : null };
+        },
+      },
+    });
+    const editor = await mount(vector.input, fake);
+    editor.setTool("select");
+    editor.select([a, b]);
+    await drag(editor, [[210, 72], [254, 83.79]]);
+    await settle(16, 8);
+    expect(gestures(fake).every((each) => each.frame === null)).toBe(true);
+    expect(editor.engine.text).toContain(scritte[0]);
+
+    // Il secondo gesto porta la cornice girata, in ogni sua richiesta.
+    const prima = gestures(fake).length;
+    await drag(editor, [[308.727, 217], [343.368, 237]]);
+    await settle(16, 8);
+    const seconde = gestures(fake).slice(prima);
+    expect(seconde.length).toBeGreaterThan(0);
+    for (const each of seconde) expect(each.frame).toEqual(girata);
+    expect(editor.engine.text).toContain(scritte[1]);
+
+    // L'esito del secondo non ne rimanda: il terzo parte senza.
+    const dopo = gestures(fake).length;
+    await drag(editor, [[150, 125], [160, 130]]);
+    await settle(16, 8);
+    expect(gestures(fake).slice(dopo).every((each) => each.frame === null)).toBe(true);
   });
 });
 

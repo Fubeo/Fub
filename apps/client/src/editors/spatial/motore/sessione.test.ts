@@ -23,6 +23,7 @@ const GESTO: GestoMotore = {
   snap: { grid: null, free: false },
   style: { stroke: "#000", width: 1, fill: null },
   text: null,
+  frame: null,
   events: [{ kind: "down", x: 0, y: 0, pressure: 0.5, shift: false, alt: false, cmd: false }],
 };
 
@@ -33,6 +34,7 @@ const esito = (revision: string, refused: DrawingOutcome["refused"] = null): Dra
   selection: [],
   losses: [],
   refused,
+  frame: null,
 });
 
 let sessions: DocumentSessionCollection | null = null;

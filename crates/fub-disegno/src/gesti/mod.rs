@@ -31,7 +31,7 @@ use std::cell::Cell;
 use std::sync::Arc;
 
 use fub_abi::{
-    DrawingGesture, DrawingOutcome, DrawingPhase, DrawingPointer, DrawingPointerKind,
+    DrawingFrame, DrawingGesture, DrawingOutcome, DrawingPhase, DrawingPointer, DrawingPointerKind,
     DrawingPreview, DrawingRefusal, DrawingTool,
 };
 use serde_json::{Map, Value};
@@ -56,6 +56,10 @@ pub(crate) struct Contesto<'a> {
     /// Il gesto ha passato la soglia del trascinamento: lo strumento lo
     /// segna, la sessione lo ricorda fra un pezzo e l'altro del gesto.
     pub trascinato: Cell<bool>,
+    /// La cornice che il client tiene per la selezione di prima
+    /// ([`DrawingGesture::frame`], già controllata da `validate`); `None` se
+    /// non ne tiene una.
+    pub cornice: Option<DrawingFrame>,
 }
 
 /// Uno strumento di Fub fatto con uno strumento del motore.
@@ -253,6 +257,7 @@ impl Banco {
             copia,
             pressione,
             trascinato: Cell::new(!ricomincia && self.trascinato),
+            cornice: gesto.frame,
             vista: ViewInfo {
                 zoom: gesto.zoom
                     * copia
@@ -351,6 +356,7 @@ pub(crate) fn esito_vuoto(revisione: u64) -> DrawingOutcome {
         selection: Vec::new(),
         losses: Vec::new(),
         refused: None,
+        frame: None,
     }
 }
 

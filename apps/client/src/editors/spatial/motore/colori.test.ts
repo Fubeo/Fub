@@ -128,7 +128,7 @@ function painting(enabled: readonly string[] = Object.values(COMANDI_DEI_CAMPI))
       const attr = ATTRS[request.id]!;
       const value = request.value === null ? "none" : String(request.value);
       const ops = request.selection.map((id) => ({ op: "set", id, attrs: { [attr]: value } }));
-      return { revision: request.revision, preview: null, ops: JSON.stringify(ops), selection: request.selection, losses: [], refused: null } satisfies DrawingOutcome;
+      return { revision: request.revision, preview: null, ops: JSON.stringify(ops), selection: request.selection, losses: [], refused: null, frame: null } satisfies DrawingOutcome;
     },
   };
 }
@@ -191,7 +191,7 @@ describe("i colori e lo spessore, col motore acceso", () => {
     const fake = createFakeHost({
       drawing: {
         ...painting(),
-        comando: (request) => ({ revision: request.revision, preview: null, ops: null, selection: request.selection, losses: [], refused: "unmapped" }),
+        comando: (request) => ({ revision: request.revision, preview: null, ops: null, selection: request.selection, losses: [], refused: "unmapped", frame: null }),
       },
     });
     const editor = await mount(TWO, fake);

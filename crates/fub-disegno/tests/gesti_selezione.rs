@@ -9,7 +9,7 @@ mod common;
 use std::path::Path;
 
 use common::{ammesse, apri, confronta_ops, ops_di, vettori, Confronto};
-use fub_abi::{DrawingGesture, DrawingOutcome, DrawingRefusal};
+use fub_abi::{DrawingFrame, DrawingGesture, DrawingOutcome, DrawingRefusal};
 use serde_json::{json, Value};
 
 fn percorso_tsv() -> std::path::PathBuf {
@@ -570,4 +570,226 @@ fn maiusc_su_un_oggetto_scelto_trascinato_e_tornato_non_lo_lascia() {
     assert_eq!(esito.ops, None);
     assert_eq!(esito.selection, ["oa1a1a1a1", "ob2b2b2b2"]);
     assert_eq!(esito.refused, Some(DrawingRefusal::Empty));
+}
+
+// --- La cornice tenuta fra un gesto e l'altro ---------------------------------
+
+/// Il secondo rettangolo: il riquadro comune con A va da (100, 100) a
+/// (320, 220), il centro è (210, 160), la maniglia tonda (210, 72).
+const B_LONTANO: &str =
+    "<rect id=\"ob2b2b2b2\" x=\"260\" y=\"180\" width=\"60\" height=\"40\" fill=\"#e69f00\"/>";
+
+/// A e il secondo rettangolo, con la `transform` data.
+fn due(trasformazione: Option<&str>) -> String {
+    let con = |rect: &str| match trasformazione {
+        Some(t) => rect.replace("/>", &format!(" transform=\"{t}\"/>")),
+        None => rect.to_string(),
+    };
+    disegno(&format!("{}\n    {}", con(A), con(B_LONTANO)))
+}
+
+/// Un trascinamento da `da` ad `a` sul disegno `testo`, con la selezione
+/// `selezione` e la cornice tenuta `frame`.
+fn tira_nella_cornice(
+    testo: &str,
+    selezione: &[&str],
+    frame: Option<DrawingFrame>,
+    da: (f64, f64),
+    a: (f64, f64),
+) -> Result<DrawingOutcome, fub_abi::PluginError> {
+    let (mut d, _) = apri(testo);
+    let mut g = richiesta(
+        "commit",
+        selezione,
+        vec![
+            evento("down", da.0, da.1),
+            evento("drag", (da.0 + a.0) / 2.0, (da.1 + a.1) / 2.0),
+            evento("drag", a.0, a.1),
+            evento("up", a.0, a.1),
+        ],
+    );
+    g.frame = frame;
+    d.gesto(g)
+}
+
+const AB: [&str; 2] = ["oa1a1a1a1", "ob2b2b2b2"];
+/// Il trascinamento della maniglia tonda di 30° in senso orario.
+const GIRA: ((f64, f64), (f64, f64)) = ((210.0, 72.0), (254.0, 83.79));
+/// Il trascinamento della maniglia di destra della cornice girata di 30°, 40
+/// unità lungo il suo asse: da (324, 160) a (364, 160) nella cornice.
+const ALLUNGA: ((f64, f64), (f64, f64)) = ((308.727, 217.0), (343.368, 237.0));
+/// Ciò che il client scrive per i due gesti di fila, registrato da
+/// `createDrawEditor` con gli stessi eventi (`selection-gestures.ts`,
+/// `applyFrame`, che tiene la cornice in `ctx.kept`): la stessa
+/// trasformazione per i due oggetti.
+const GIRATI: &str = "matrix(0.866 0.5 -0.5 0.866 108.1347 -83.5641)";
+const ALLUNGATI: &str = "matrix(1.0235 0.5909 -0.5 0.866 92.3891 -92.6548)";
+
+fn vicine(a: [f64; 6], b: [f64; 6]) -> bool {
+    a.iter().zip(b).all(|(x, y)| (x - y).abs() < 1e-6)
+}
+
+/// Il riquadro comune dei due rettangoli, senza contorno.
+const RIQUADRO: [f64; 4] = [100.0, 100.0, 320.0, 220.0];
+
+/// La cornice dei due rettangoli girata di 30° attorno a (210, 160).
+fn girata() -> DrawingFrame {
+    let (s, c) = 30f64.to_radians().sin_cos();
+    DrawingFrame {
+        matrix: [
+            c,
+            s,
+            -s,
+            c,
+            210.0 - c * 210.0 + s * 160.0,
+            160.0 - s * 210.0 - c * 160.0,
+        ],
+        bounds: RIQUADRO,
+        geometry: RIQUADRO,
+    }
+}
+
+#[test]
+fn piu_oggetti_girati_tengono_la_cornice_al_gesto_dopo() {
+    // Il primo gesto gira la selezione di 30°, e l'esito rimanda la cornice.
+    let primo = tira_nella_cornice(&due(None), &AB, None, GIRA.0, GIRA.1).expect("il gesto");
+    assert_eq!(primo.refused, None);
+    for id in AB {
+        assert_eq!(trasformazione(&primo, id).as_deref(), Some(GIRATI), "{id}");
+    }
+    assert_eq!(primo.selection, AB);
+    let frame = primo.frame.expect("la cornice girata");
+    assert!(
+        vicine(frame.matrix, girata().matrix),
+        "{frame:?} ≠ {:?}",
+        girata()
+    );
+    assert_eq!((frame.bounds, frame.geometry), (RIQUADRO, RIQUADRO));
+
+    // Il secondo, con quella cornice, allunga lungo il suo asse come il
+    // client.
+    let girati = due(Some(GIRATI));
+    let secondo =
+        tira_nella_cornice(&girati, &AB, Some(frame), ALLUNGA.0, ALLUNGA.1).expect("il gesto");
+    assert_eq!(secondo.refused, None);
+    for id in AB {
+        assert_eq!(
+            trasformazione(&secondo, id).as_deref(),
+            Some(ALLUNGATI),
+            "{id}"
+        );
+    }
+    assert_eq!(secondo.selection, AB);
+    // La cornice dopo: girata di 30° e lunga 260/220 lungo il suo asse, coi
+    // riquadri di prima (`movedFrame`).
+    let dopo = secondo.frame.expect("la cornice allungata");
+    assert_eq!((dopo.bounds, dopo.geometry), (RIQUADRO, RIQUADRO));
+    let dopo = dopo.matrix;
+    let (s, c) = 30f64.to_radians().sin_cos();
+    let k = 260.0 / 220.0;
+    assert!(
+        (dopo[0] - k * c).abs() < 1e-3 && (dopo[1] - k * s).abs() < 1e-3,
+        "{dopo:?}"
+    );
+    assert!(
+        (dopo[2] + s).abs() < 1e-6 && (dopo[3] - c).abs() < 1e-6,
+        "{dopo:?}"
+    );
+
+    // Senza la cornice lo stesso gesto non tira la maniglia girata.
+    let senza = tira_nella_cornice(&girati, &AB, None, ALLUNGA.0, ALLUNGA.1).expect("il gesto");
+    assert_ne!(
+        trasformazione(&senza, "oa1a1a1a1").as_deref(),
+        Some(ALLUNGATI)
+    );
+}
+
+#[test]
+fn la_cornice_si_lascia_se_la_selezione_e_cambiata() {
+    let girati = due(Some(GIRATI));
+    // Un id che non c'è più cambia la selezione: il gesto è quello senza
+    // cornice.
+    let con = ["oa1a1a1a1", "ob2b2b2b2", "osparito1"];
+    let lasciata =
+        tira_nella_cornice(&girati, &con, Some(girata()), ALLUNGA.0, ALLUNGA.1).expect("il gesto");
+    let senza = tira_nella_cornice(&girati, &con, None, ALLUNGA.0, ALLUNGA.1).expect("il gesto");
+    assert_eq!(lasciata, senza);
+    // Un clic che sceglie un oggetto solo: la cornice non torna.
+    let (s, c) = 30f64.to_radians().sin_cos();
+    let centro_a = (210.0 - c * 60.0 + s * 35.0, 160.0 - s * 60.0 - c * 35.0);
+    let (mut d, _) = apri(&girati);
+    let mut g = richiesta(
+        "commit",
+        &AB,
+        vec![
+            evento("down", centro_a.0, centro_a.1),
+            evento("up", centro_a.0, centro_a.1),
+        ],
+    );
+    g.frame = Some(girata());
+    let esito = d.gesto(g).expect("il gesto");
+    assert_eq!(esito.frame, None);
+}
+
+#[test]
+fn un_oggetto_solo_ha_la_sua_cornice() {
+    // Una cornice data per un oggetto solo non conta, e l'esito non ne
+    // rimanda nessuna: il lato destro di A è a 204.
+    let storta = Some(DrawingFrame {
+        matrix: [2.0, 0.0, 0.0, 0.5, -30.0, 7.0],
+        ..girata()
+    });
+    let tira = |frame| {
+        tira_nella_cornice(
+            &disegno(A),
+            &["oa1a1a1a1"],
+            frame,
+            (204.0, 125.0),
+            (254.0, 125.0),
+        )
+        .expect("il gesto")
+    };
+    let con = tira(storta);
+    assert_eq!(con, tira(None));
+    assert_eq!(
+        trasformazione(&con, "oa1a1a1a1").as_deref(),
+        Some("matrix(1.5 0 0 1 -50 0)")
+    );
+    assert_eq!(con.frame, None);
+}
+
+#[test]
+fn una_cornice_senza_inversa_e_bad_args() {
+    for matrix in [
+        [0.0, 0.0, 0.0, 1.0, 0.0, 0.0],
+        [1.0, 2.0, 2.0, 4.0, 5.0, 5.0],
+    ] {
+        let frame = DrawingFrame { matrix, ..girata() };
+        let esito = tira_nella_cornice(&due(None), &AB, Some(frame), GIRA.0, GIRA.1);
+        assert!(
+            matches!(esito, Err(fub_abi::PluginError::BadArgs(_))),
+            "{frame:?}: {esito:?}"
+        );
+    }
+}
+
+#[test]
+fn spostare_porta_con_se_la_cornice_tenuta() {
+    let girati = due(Some(GIRATI));
+    // Il centro di A girato: (150, 125) attorno a (210, 160).
+    let (s, c) = 30f64.to_radians().sin_cos();
+    let a = (210.0 - c * 60.0 + s * 35.0, 160.0 - s * 60.0 - c * 35.0);
+    let fine = (a.0 + 20.0, a.1 + 10.0);
+    let esito = tira_nella_cornice(&girati, &AB, Some(girata()), a, fine).expect("il gesto");
+    assert_eq!(esito.refused, None);
+    let mut attesa = girata().matrix;
+    attesa[4] += 20.0;
+    attesa[5] += 10.0;
+    let spostata = esito.frame.expect("la cornice spostata");
+    assert!(vicine(spostata.matrix, attesa), "{spostata:?} ≠ {attesa:?}");
+    assert_eq!(spostata.bounds, RIQUADRO);
+    // Senza una cornice tenuta, il riquadro comune non si tiene.
+    let esito = tira_nella_cornice(&girati, &AB, None, a, fine).expect("il gesto");
+    assert_eq!(esito.refused, None);
+    assert_eq!(esito.frame, None);
 }

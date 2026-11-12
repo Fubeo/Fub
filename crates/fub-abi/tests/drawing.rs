@@ -5,7 +5,7 @@
 use std::path::PathBuf;
 
 use fub_abi::{
-    DrawingChange, DrawingCommandRequest, DrawingEdit, DrawingGesture, DrawingLoss,
+    DrawingChange, DrawingCommandRequest, DrawingEdit, DrawingFrame, DrawingGesture, DrawingLoss,
     DrawingLossKind, DrawingOpen, DrawingOutcome, DrawingPhase, DrawingPointer, DrawingPointerKind,
     DrawingPreview, DrawingRefusal, DrawingSnap, DrawingStyle, DrawingSync, DrawingTool,
     PluginError, DRAWING_COMMAND_FILL_COLOR, DRAWING_COMMAND_STROKE_COLOR, DRAWING_COMMAND_WIDTH,
@@ -65,6 +65,7 @@ fn gesture() -> DrawingGesture {
             fill: None,
         }),
         text: None,
+        frame: None,
         events: vec![
             pointer(DrawingPointerKind::Down, 10.0, 10.0),
             pointer(DrawingPointerKind::Drag, 40.0, 30.0),
@@ -84,6 +85,7 @@ fn outcome() -> DrawingOutcome {
         selection: vec!["oa1a1a1a1".into()],
         losses: Vec::new(),
         refused: None,
+        frame: None,
     }
 }
 
@@ -326,6 +328,79 @@ fn numbers_outside_their_range_are_refused() {
     let mut o = outcome();
     o.preview.as_mut().unwrap().marquee = Some([0.0, 0.0, -1.0, 1.0]);
     refused(o.validate(), "preview.marquee");
+}
+
+#[test]
+fn the_kept_frame_is_optional_and_invertible() {
+    // Chi non la manda (i vettori, un client di prima) la lascia `None`.
+    let mut value = serde_json::to_value(gesture()).unwrap();
+    value.as_object_mut().unwrap().remove("frame");
+    let read: DrawingGesture = serde_json::from_value(value).unwrap();
+    assert_eq!(read.frame, None);
+    let mut value = serde_json::to_value(outcome()).unwrap();
+    value.as_object_mut().unwrap().remove("frame");
+    let read: DrawingOutcome = serde_json::from_value(value).unwrap();
+    assert_eq!(read.frame, None);
+
+    // Una cornice girata di 30° e allungata passa, e torna uguale.
+    let (s, c) = 30f64.to_radians().sin_cos();
+    let girata = DrawingFrame {
+        matrix: [1.5 * c, 1.5 * s, -s, c, 12.0, -4.0],
+        bounds: [95.0, 95.0, 205.0, 155.0],
+        geometry: [100.0, 100.0, 200.0, 150.0],
+    };
+    let mut g = gesture();
+    g.frame = Some(girata);
+    g.validate().unwrap();
+    let value = serde_json::to_value(&g).unwrap();
+    assert_eq!(value["frame"]["bounds"], json!([95.0, 95.0, 205.0, 155.0]));
+    let back: DrawingGesture = serde_json::from_value(value).unwrap();
+    assert_eq!(back.frame, Some(girata));
+    let mut o = outcome();
+    o.frame = Some(girata);
+    o.validate().unwrap();
+    // Una linea: la geometria può non avere altezza.
+    let mut o = outcome();
+    o.frame = Some(DrawingFrame {
+        geometry: [0.0, 5.0, 10.0, 5.0],
+        ..girata
+    });
+    o.validate().unwrap();
+
+    // Una matrice non finita o senza inversa: `BadArgs`.
+    for bad in [
+        [1.0, 0.0, 0.0, 1.0, f64::NAN, 0.0],
+        [f64::INFINITY, 0.0, 0.0, 1.0, 0.0, 0.0],
+        [0.0, 0.0, 0.0, 1.0, 0.0, 0.0],
+        [1.0, 2.0, 2.0, 4.0, 0.0, 0.0],
+        [1e-200, 0.0, 0.0, 1e-200, 0.0, 0.0],
+    ] {
+        let frame = DrawingFrame {
+            matrix: bad,
+            ..girata
+        };
+        let mut g = gesture();
+        g.frame = Some(frame);
+        refused(g.validate(), "frame.matrix");
+        let mut o = outcome();
+        o.frame = Some(frame);
+        refused(o.validate(), "frame.matrix");
+    }
+    // Un riquadro non finito o rovesciato: `BadArgs`.
+    for bad in [[0.0, 0.0, f64::NAN, 1.0], [10.0, 0.0, 5.0, 1.0]] {
+        let mut g = gesture();
+        g.frame = Some(DrawingFrame {
+            bounds: bad,
+            ..girata
+        });
+        refused(g.validate(), "frame.bounds");
+        let mut g = gesture();
+        g.frame = Some(DrawingFrame {
+            geometry: bad,
+            ..girata
+        });
+        refused(g.validate(), "frame.geometry");
+    }
 }
 
 #[test]

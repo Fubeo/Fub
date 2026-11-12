@@ -33,6 +33,7 @@ import type {
   DrawingCommandInfo,
   DrawingCommandRequest,
   DrawingEdit,
+  DrawingFrame,
   DrawingGesture,
   DrawingLoss,
   DrawingLossKind,
@@ -776,6 +777,7 @@ const RECORD_KEYS: Record<string, string[]> = {
   DrawingPointer: keysOf<DrawingPointer>({ kind: true, x: true, y: true, pressure: true, shift: true, alt: true, cmd: true }),
   DrawingSnap: keysOf<DrawingSnap>({ grid: true, free: true }),
   DrawingStyle: keysOf<DrawingStyle>({ stroke: true, width: true, fill: true }),
+  DrawingFrame: keysOf<DrawingFrame>({ matrix: true, bounds: true, geometry: true }),
   DrawingGesture: keysOf<DrawingGesture>({
     revision: true,
     phase: true,
@@ -786,6 +788,7 @@ const RECORD_KEYS: Record<string, string[]> = {
     snap: true,
     style: true,
     text: true,
+    frame: true,
     events: true,
   }),
   DrawingPreview: keysOf<DrawingPreview>({ shape: true, matrix: true, marquee: true }),
@@ -796,6 +799,7 @@ const RECORD_KEYS: Record<string, string[]> = {
     selection: true,
     losses: true,
     refused: true,
+    frame: true,
   }),
   DrawingCommandInfo: keysOf<DrawingCommandInfo>({ id: true, enabled: true }),
   DrawingCommandRequest: keysOf<DrawingCommandRequest>({ revision: true, id: true, selection: true, value: true }),
@@ -1324,6 +1328,7 @@ describe("mirror TS↔Rust", () => {
       "DrawingPointer",
       "DrawingSnap",
       "DrawingStyle",
+      "DrawingFrame",
       "DrawingGesture",
       "DrawingPreview",
       "DrawingOutcome",
@@ -1632,7 +1637,9 @@ describe("mirror TS↔Rust", () => {
       expect(Object.keys(g.snap).sort()).toEqual(RECORD_KEYS.DrawingSnap);
       if (g.style !== null) expect(Object.keys(g.style).sort()).toEqual(RECORD_KEYS.DrawingStyle);
       for (const e of g.events) expect(Object.keys(e).sort()).toEqual(RECORD_KEYS.DrawingPointer);
+      if (g.frame !== null) expect(Object.keys(g.frame).sort()).toEqual(RECORD_KEYS.DrawingFrame);
     }
+    expect(gestures.some((g) => g.frame !== null)).toBe(true);
     const opened = fixture["DrawingOpen"] as DrawingOpen[];
     expect(new Set(opened.flatMap((o) => o.losses.map((l) => loss(l.kind))))).toEqual(
       new Set(["unmapped", "approximated", "unsupported"]),
@@ -1649,6 +1656,12 @@ describe("mirror TS↔Rust", () => {
       expect(p.marquee?.length).toBe(4);
     }
     expect(outcomes.some((o) => typeof o.ops === "string")).toBe(true);
+    const frames = outcomes.flatMap((o) => (o.frame === null ? [] : [o.frame]));
+    expect(frames.length).toBeGreaterThan(0);
+    for (const f of frames) {
+      expect(Object.keys(f).sort()).toEqual(RECORD_KEYS.DrawingFrame);
+      expect([f.matrix.length, f.bounds.length, f.geometry.length]).toEqual([6, 4, 4]);
+    }
     const syncs = fixture["DrawingSync"] as DrawingSync[];
     expect(new Set(syncs.map((s) => change(s.change)))).toEqual(new Set(["edits", "text"]));
   });

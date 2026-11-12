@@ -91,10 +91,10 @@ pub use custom::{
     SyntaxProduct, SyntaxRule, SyntaxRuleSpec, SyntaxTrigger,
 };
 pub use drawing::{
-    DrawingChange, DrawingCommandInfo, DrawingCommandRequest, DrawingEdit, DrawingGesture,
-    DrawingLoss, DrawingLossKind, DrawingOpen, DrawingOutcome, DrawingPhase, DrawingPointer,
-    DrawingPointerKind, DrawingPreview, DrawingRefusal, DrawingSnap, DrawingStyle, DrawingSync,
-    DrawingSynced, DrawingTool, DRAWING_COMMANDS, DRAWING_COMMAND_FILL_COLOR,
+    DrawingChange, DrawingCommandInfo, DrawingCommandRequest, DrawingEdit, DrawingFrame,
+    DrawingGesture, DrawingLoss, DrawingLossKind, DrawingOpen, DrawingOutcome, DrawingPhase,
+    DrawingPointer, DrawingPointerKind, DrawingPreview, DrawingRefusal, DrawingSnap, DrawingStyle,
+    DrawingSync, DrawingSynced, DrawingTool, DRAWING_COMMANDS, DRAWING_COMMAND_FILL_COLOR,
     DRAWING_COMMAND_STROKE_COLOR, DRAWING_COMMAND_WIDTH, MAX_DRAWING_COLOR_BYTES,
     MAX_DRAWING_LOSSES, MAX_DRAWING_OPS, MAX_DRAWING_OPS_BYTES, MAX_DRAWING_TEXT_BYTES,
     MAX_GESTURE_EVENTS,

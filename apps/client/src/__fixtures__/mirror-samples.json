@@ -2926,6 +2926,30 @@
       "fill": "#ffffff"
     }
   ],
+  "DrawingFrame": [
+    {
+      "matrix": [
+        0.5,
+        0.25,
+        -0.25,
+        0.5,
+        10.0,
+        20.0
+      ],
+      "bounds": [
+        95.0,
+        95.0,
+        205.0,
+        155.0
+      ],
+      "geometry": [
+        100.0,
+        100.0,
+        200.0,
+        150.0
+      ]
+    }
+  ],
   "DrawingGesture": [
     {
       "revision": "18446744073709551614",
@@ -2942,6 +2966,28 @@
       },
       "style": null,
       "text": null,
+      "frame": {
+        "matrix": [
+          0.5,
+          0.25,
+          -0.25,
+          0.5,
+          10.0,
+          20.0
+        ],
+        "bounds": [
+          95.0,
+          95.0,
+          205.0,
+          155.0
+        ],
+        "geometry": [
+          100.0,
+          100.0,
+          200.0,
+          150.0
+        ]
+      },
       "events": [
         {
           "kind": "down",
@@ -3007,6 +3053,7 @@
         "fill": "#ffffff"
       },
       "text": null,
+      "frame": null,
       "events": [
         {
           "kind": "down",
@@ -3072,6 +3119,7 @@
         "fill": "#ffffff"
       },
       "text": null,
+      "frame": null,
       "events": [
         {
           "kind": "down",
@@ -3137,6 +3185,7 @@
         "fill": "#ffffff"
       },
       "text": null,
+      "frame": null,
       "events": [
         {
           "kind": "down",
@@ -3202,6 +3251,7 @@
         "fill": "#ffffff"
       },
       "text": null,
+      "frame": null,
       "events": [
         {
           "kind": "down",
@@ -3267,6 +3317,7 @@
         "fill": "#ffffff"
       },
       "text": "Testo",
+      "frame": null,
       "events": [
         {
           "kind": "down",
@@ -3377,14 +3428,16 @@
         "oa1a1a1a1"
       ],
       "losses": [],
-      "refused": null
+      "refused": null,
+      "frame": null
     },
     {
       "revision": "18446744073709551614",
       "preview": null,
       "ops": "[{\"op\":\"set\",\"id\":\"oa1a1a1a1\",\"attrs\":{\"x\":\"7\"}}]",
       "selection": [
-        "oa1a1a1a1"
+        "oa1a1a1a1",
+        "ob2b2b2b2"
       ],
       "losses": [
         {
@@ -3393,7 +3446,29 @@
           "detail": "foreignObject"
         }
       ],
-      "refused": null
+      "refused": null,
+      "frame": {
+        "matrix": [
+          0.5,
+          0.25,
+          -0.25,
+          0.5,
+          10.0,
+          20.0
+        ],
+        "bounds": [
+          95.0,
+          95.0,
+          205.0,
+          155.0
+        ],
+        "geometry": [
+          100.0,
+          100.0,
+          200.0,
+          150.0
+        ]
+      }
     },
     {
       "revision": "18446744073709551614",
@@ -3401,7 +3476,8 @@
       "ops": null,
       "selection": [],
       "losses": [],
-      "refused": "stale"
+      "refused": "stale",
+      "frame": null
     },
     {
       "revision": "18446744073709551614",
@@ -3409,7 +3485,8 @@
       "ops": null,
       "selection": [],
       "losses": [],
-      "refused": "unmapped"
+      "refused": "unmapped",
+      "frame": null
     },
     {
       "revision": "18446744073709551614",
@@ -3417,7 +3494,8 @@
       "ops": null,
       "selection": [],
       "losses": [],
-      "refused": "empty"
+      "refused": "empty",
+      "frame": null
     },
     {
       "revision": "18446744073709551614",
@@ -3425,7 +3503,8 @@
       "ops": null,
       "selection": [],
       "losses": [],
-      "refused": "unsupported"
+      "refused": "unsupported",
+      "frame": null
     },
     {
       "revision": "18446744073709551614",
@@ -3433,7 +3512,8 @@
       "ops": null,
       "selection": [],
       "losses": [],
-      "refused": "too_large"
+      "refused": "too_large",
+      "frame": null
     },
     {
       "revision": "18446744073709551614",
@@ -3441,7 +3521,8 @@
       "ops": null,
       "selection": [],
       "losses": [],
-      "refused": "closed"
+      "refused": "closed",
+      "frame": null
     },
     {
       "revision": "18446744073709551614",
@@ -3449,7 +3530,8 @@
       "ops": null,
       "selection": [],
       "losses": [],
-      "refused": "not_ready"
+      "refused": "not_ready",
+      "frame": null
     },
     {
       "revision": "18446744073709551614",
@@ -3457,7 +3539,8 @@
       "ops": null,
       "selection": [],
       "losses": [],
-      "refused": "locked"
+      "refused": "locked",
+      "frame": null
     },
     {
       "revision": "18446744073709551614",
@@ -3465,7 +3548,8 @@
       "ops": null,
       "selection": [],
       "losses": [],
-      "refused": "hidden"
+      "refused": "hidden",
+      "frame": null
     }
   ],
   "DrawingCommandInfo": [

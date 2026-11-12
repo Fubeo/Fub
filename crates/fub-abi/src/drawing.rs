@@ -102,6 +102,36 @@ fn losses(field: &str, list: &[DrawingLoss]) -> Result<(), PluginError> {
     Ok(())
 }
 
+/// Una matrice `[a, b, c, d, e, f]` come `matrix(…)` di SVG: sei numeri
+/// finiti e un'inversa finita (una cornice che si può rifare all'indietro).
+fn invertible(field: &str, m: &[f64; 6]) -> Result<(), PluginError> {
+    m.iter().try_for_each(|value| finite(field, *value))?;
+    let [a, b, c, d, e, f] = *m;
+    let det = a * d - b * c;
+    let inverse = [
+        d / det,
+        -b / det,
+        -c / det,
+        a / det,
+        (c * f - d * e) / det,
+        (b * e - a * f) / det,
+    ];
+    if det == 0.0 || !det.is_finite() || !inverse.iter().all(|v| v.is_finite()) {
+        return Err(bad(format!("`{field}` is not an invertible matrix")));
+    }
+    Ok(())
+}
+
+/// Un riquadro `[x0, y0, x1, y1]`: quattro numeri finiti, l'angolo in basso
+/// a destra non prima di quello in alto a sinistra.
+fn bounds(field: &str, r: &[f64; 4]) -> Result<(), PluginError> {
+    r.iter().try_for_each(|value| finite(field, *value))?;
+    if r[2] < r[0] || r[3] < r[1] {
+        return Err(bad(format!("`{field}` ends before it starts")));
+    }
+    Ok(())
+}
+
 fn color(field: &str, value: &str) -> Result<(), PluginError> {
     if value.is_empty() || value.len() > MAX_DRAWING_COLOR_BYTES {
         return Err(bad(format!(
@@ -385,6 +415,34 @@ impl DrawingStyle {
     }
 }
 
+/// La cornice di trasformazione che il client tiene per più oggetti scelti
+/// dopo averli girati o ridimensionati (`Frame` di `tools/frame.ts`, in
+/// `ctx.kept`): la matrice e i due riquadri nelle sue coordinate. I
+/// riquadri viaggiano con lei perché sono quelli di quando la cornice è
+/// nata: rifatti dagli oggetti, con le `transform` scritte a quattro
+/// decimali, darebbero una misura appena diversa da quella del client.
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+pub struct DrawingFrame {
+    /// Dalle coordinate della cornice alla scena, `[a, b, c, d, e, f]` come
+    /// `matrix(…)` di SVG.
+    pub matrix: [f64; 6],
+    /// Il riquadro col contorno, `[x0, y0, x1, y1]` nelle coordinate della
+    /// cornice.
+    pub bounds: [f64; 4],
+    /// Il riquadro della geometria, senza contorno, nella stessa forma.
+    pub geometry: [f64; 4],
+}
+
+impl DrawingFrame {
+    /// Il controllo della cornice nel campo `field`: la matrice ha
+    /// un'inversa finita, i riquadri sono finiti e dritti.
+    pub fn validate(&self, field: &str) -> Result<(), PluginError> {
+        invertible(&format!("{field}.matrix"), &self.matrix)?;
+        bounds(&format!("{field}.bounds"), &self.bounds)?;
+        bounds(&format!("{field}.geometry"), &self.geometry)
+    }
+}
+
 /// Una richiesta di gesto: gli eventi nuovi dall'ultima richiesta dello
 /// stesso gesto, con ciò che serve a rifarlo.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -411,6 +469,12 @@ pub struct DrawingGesture {
     /// client nella lingua dell'interfaccia.
     #[serde(default)]
     pub text: Option<String>,
+    /// La cornice che il client tiene per più oggetti scelti, girata o
+    /// ridimensionata da un gesto di prima. `None` se il client non ne
+    /// tiene una: la cornice è il riquadro comune nella scena. Il motore la
+    /// usa solo se la selezione è ancora quella.
+    #[serde(default)]
+    pub frame: Option<DrawingFrame>,
     pub events: Vec<DrawingPointer>,
 }
 
@@ -440,6 +504,9 @@ impl DrawingGesture {
             if text.contains(['\n', '\r']) {
                 return Err(bad("`text` must be a single line".into()));
             }
+        }
+        if let Some(frame) = &self.frame {
+            frame.validate("frame")?;
         }
         if self.events.len() > MAX_GESTURE_EVENTS {
             return Err(bad(format!(
@@ -507,6 +574,12 @@ pub struct DrawingOutcome {
     pub losses: Vec<DrawingLoss>,
     /// Perché il gesto non ha fatto niente; `None` se ha fatto ciò che doveva.
     pub refused: Option<DrawingRefusal>,
+    /// La cornice che il client tiene per la selezione dopo, com'è
+    /// diventata (la forma di [`DrawingGesture::frame`]): solo per più
+    /// oggetti che il gesto ha girato, ridimensionato o spostato nella loro
+    /// cornice. `None`: il client non ne tiene nessuna.
+    #[serde(default)]
+    pub frame: Option<DrawingFrame>,
 }
 
 impl DrawingOutcome {
@@ -525,6 +598,9 @@ impl DrawingOutcome {
             if self.refused.is_some() {
                 return Err(bad("`ops` and `refused` are both set".into()));
             }
+        }
+        if let Some(frame) = &self.frame {
+            frame.validate("frame")?;
         }
         ids("selection", &self.selection)?;
         losses("losses", &self.losses)

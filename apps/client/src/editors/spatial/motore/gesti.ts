@@ -18,6 +18,9 @@
 //   con `ctx.commit`, col nome dello strumento di oggi; i connettori che
 //   seguono li aggiunge il seguito del motore della scena nello stesso passo
 //   (`following` di `state.ts`). La selezione diventa quella dell'esito.
+// - **La cornice tenuta.** Una Selezione manda la cornice che il client
+//   tiene per più oggetti girati o ridimensionati (`ctx.kept`, se è ancora
+//   quella della selezione), e tiene quella che l'esito rimanda, o nessuna.
 // - **Uno alla volta.** Un gesto parte dopo che l'esito del precedente è
 //   stato applicato: la copia del motore lo ha già avuto, e la selezione di
 //   partenza è quella di dopo.
@@ -29,7 +32,7 @@
 // La penna, l'evidenziatore, la gomma e la nota non passano mai di qua: sono
 // di Fub, e non chiamano il motore.
 
-import { MAX_GESTURE_EVENTS, type DrawingOutcome, type DrawingPointer, type DrawingRefusal, type DrawingTool } from "../../../host/contract";
+import { MAX_GESTURE_EVENTS, type DrawingFrame, type DrawingOutcome, type DrawingPointer, type DrawingRefusal, type DrawingTool } from "../../../host/contract";
 import type { InkSample } from "../../../ink/sample";
 import type { PaintNode } from "../painter/paint";
 import { angleOf, frameSize, gripAt, type Frame } from "../tools/frame";
@@ -189,6 +192,32 @@ function matriceDi(value: unknown): Matrix | null {
   return value as unknown as Matrix;
 }
 
+/// La cornice `frame` del client nella forma del contratto.
+export function frameAlMotore(frame: Frame): DrawingFrame {
+  const { box, geometry } = frame;
+  return {
+    matrix: [...frame.matrix],
+    bounds: [box.min[0], box.min[1], box.max[0], box.max[1]],
+    geometry: [geometry.min[0], geometry.min[1], geometry.max[0], geometry.max[1]],
+  };
+}
+
+/// La cornice di un esito come la tiene il client, se ha la forma che il
+/// contratto promette; `null` altrimenti.
+export function frameDalMotore(value: unknown): Frame | null {
+  if (value === null || typeof value !== "object") return null;
+  const record = value as Record<string, unknown>;
+  const matrix = matriceDi(record.matrix);
+  const box = riquadroDi(record.bounds);
+  const geometry = riquadroDi(record.geometry);
+  if (matrix === null || box === null || geometry === null) return null;
+  return {
+    matrix,
+    box: { min: [box[0], box[1]], max: [box[2], box[3]] },
+    geometry: { min: [geometry[0], geometry[1]], max: [geometry[2], geometry[3]] },
+  };
+}
+
 /// Quattro numeri finiti, o `null`.
 function riquadroDi(value: unknown): readonly [number, number, number, number] | null {
   if (!Array.isArray(value) || value.length !== 4 || !value.every((each) => typeof each === "number" && Number.isFinite(each))) return null;
@@ -247,6 +276,22 @@ export function installGestiMotore(ctx: EditorContext): void {
     return found?.matrix ?? ctx.destinationNow()?.matrix ?? IDENTITY;
   };
 
+  /// La cornice che il client tiene per la selezione di adesso (`ctx.kept`,
+  /// come la legge `frameOf`), nella forma del contratto; `null` se non ne
+  /// tiene una.
+  const cornicePerIlMotore = (): DrawingFrame | null => {
+    const kept = ctx.kept;
+    if (kept === null || kept.index !== ctx.currentIndex() || kept.keys !== ctx.selection.join("\n")) return null;
+    return frameAlMotore(kept.frame);
+  };
+
+  /// Tiene la cornice `frame` che l'esito rimanda per la selezione `keys`
+  /// (`ctx.kept`, come `applyFrame`), o nessuna.
+  const tieniCornice = (frame: DrawingFrame | null, keys: readonly string[]): void => {
+    const lette = frame === null ? null : frameDalMotore(frame);
+    ctx.kept = lette === null ? null : { index: ctx.currentIndex(), keys: ctx.inOrder(keys).join("\n"), frame: lette };
+  };
+
   const motoreBegin = (base: GestureBase): MotoreGesture | null => {
     if (porta === undefined || ctx.folio !== undefined || ctx.isolatedNode() !== null) return null;
     const tool = STRUMENTI_DEL_MOTORE.get(ctx.tool);
@@ -289,6 +334,7 @@ export function installGestiMotore(ctx: EditorContext): void {
           snap: { grid: ctx.gridOn() ? ctx.stepNow() : null, free: ctx.free },
           style: shape ? { stroke: color, width, fill: null } : null,
           text: null,
+          frame: shape ? null : cornicePerIlMotore(),
         },
       };
     });
@@ -474,6 +520,9 @@ export function installGestiMotore(ctx: EditorContext): void {
         return;
       }
       ctx.lastTap = null;
+      // Più oggetti tengono la cornice com'è diventata: prima di sceglierli,
+      // perché le cornici e il pannello la mostrino già.
+      if (g.tool === "select") tieniCornice(outcome.frame, outcome.selection);
       ctx.select(outcome.selection);
       ctx.announce(said(g, inner));
       return;

@@ -1772,7 +1772,20 @@ export interface DrawingGesture {
   style: DrawingStyle | null;
   /** La riga del testo nuovo, solo per `text`. */
   text: string | null;
+  /** La cornice che il client tiene per più oggetti scelti; `null` se non ne
+   *  tiene una. Il Rust la legge anche assente (`#[serde(default)]`). */
+  frame: DrawingFrame | null;
   events: DrawingPointer[];
+}
+
+/** La cornice di trasformazione che il client tiene (`Frame` di
+ *  `tools/frame.ts`): la matrice dalle sue coordinate alla scena
+ *  `[a, b, c, d, e, f]`, il riquadro col contorno e quello della geometria
+ *  `[x0, y0, x1, y1]` nelle sue coordinate. */
+export interface DrawingFrame {
+  matrix: [number, number, number, number, number, number];
+  bounds: [number, number, number, number];
+  geometry: [number, number, number, number];
 }
 
 /** L'anteprima del gesto: la forma nuova (un `Elem` della scena), la matrice
@@ -1791,6 +1804,9 @@ export interface DrawingOutcome {
   selection: string[];
   losses: DrawingLoss[];
   refused: DrawingRefusal | null;
+  /** La cornice che il client tiene per la selezione dopo, com'è diventata
+   *  (la forma di `DrawingGesture.frame`); `null`: nessuna. */
+  frame: DrawingFrame | null;
 }
 
 export interface DrawingCommandInfo {

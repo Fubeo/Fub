@@ -66,11 +66,11 @@ use fub_abi::ui::{
     UiNode, UiOption, UiValue, ViewUpdate,
 };
 use fub_abi::{
-    DrawingChange, DrawingCommandInfo, DrawingCommandRequest, DrawingEdit, DrawingGesture,
-    DrawingLoss, DrawingLossKind, DrawingOpen, DrawingOutcome, DrawingPhase, DrawingPointer,
-    DrawingPointerKind, DrawingPreview, DrawingRefusal, DrawingSnap, DrawingStyle, DrawingSync,
-    DrawingSynced, DrawingTool, DRAWING_COMMAND_FILL_COLOR, DRAWING_COMMAND_STROKE_COLOR,
-    DRAWING_COMMAND_WIDTH,
+    DrawingChange, DrawingCommandInfo, DrawingCommandRequest, DrawingEdit, DrawingFrame,
+    DrawingGesture, DrawingLoss, DrawingLossKind, DrawingOpen, DrawingOutcome, DrawingPhase,
+    DrawingPointer, DrawingPointerKind, DrawingPreview, DrawingRefusal, DrawingSnap, DrawingStyle,
+    DrawingSync, DrawingSynced, DrawingTool, DRAWING_COMMAND_FILL_COLOR,
+    DRAWING_COMMAND_STROKE_COLOR, DRAWING_COMMAND_WIDTH,
 };
 use fub_abi::{
     GridBook, GridBytesCell, GridBytesSession, GridBytesWindow, GridCalculation, GridCommand,
@@ -1717,6 +1717,11 @@ fn drawing_samples() -> Value {
         width: 4.0,
         fill: Some("#ffffff".into()),
     };
+    let frame = DrawingFrame {
+        matrix: [0.5, 0.25, -0.25, 0.5, 10.0, 20.0],
+        bounds: [95.0, 95.0, 205.0, 155.0],
+        geometry: [100.0, 100.0, 200.0, 150.0],
+    };
     let tools = [
         DrawingTool::Select,
         DrawingTool::Rect,
@@ -1748,6 +1753,7 @@ fn drawing_samples() -> Value {
                 snap,
                 style: (tool != DrawingTool::Select).then(|| style.clone()),
                 text: (tool == DrawingTool::Text).then(|| "Testo".into()),
+                frame: (tool == DrawingTool::Select).then_some(frame),
                 events: pointers.clone(),
             })
         })
@@ -1782,14 +1788,16 @@ fn drawing_samples() -> Value {
             selection: vec!["oa1a1a1a1".into()],
             losses: Vec::new(),
             refused: None,
+            frame: None,
         }),
         to_value(DrawingOutcome {
             revision,
             preview: None,
             ops: Some(r#"[{"op":"set","id":"oa1a1a1a1","attrs":{"x":"7"}}]"#.into()),
-            selection: vec!["oa1a1a1a1".into()],
+            selection: vec!["oa1a1a1a1".into(), "ob2b2b2b2".into()],
             losses: vec![loss(DrawingLossKind::Approximated)],
             refused: None,
+            frame: Some(frame),
         }),
     ];
     outcomes.extend(refusals.into_iter().map(|refused| {
@@ -1800,6 +1808,7 @@ fn drawing_samples() -> Value {
             selection: Vec::new(),
             losses: Vec::new(),
             refused: Some(refused),
+            frame: None,
         })
     }));
     json!({
@@ -1834,6 +1843,7 @@ fn drawing_samples() -> Value {
         "DrawingPointer": pointers.into_iter().map(to_value).collect::<Vec<_>>(),
         "DrawingSnap": [to_value(snap), to_value(DrawingSnap::default())],
         "DrawingStyle": [to_value(style)],
+        "DrawingFrame": [to_value(frame)],
         "DrawingGesture": gestures,
         "DrawingPreview": [to_value(preview), to_value(DrawingPreview::default())],
         "DrawingOutcome": outcomes,
