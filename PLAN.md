@@ -1348,7 +1348,7 @@ oggi); zoom 0,01 e 64; pressione 0.
 Fatto quando: `cargo test -p fub-disegno --test gesti_forme` passa su tutti
 i vettori di forme di T3, con `forme.tsv` che ha al più le righe motivate.
 Prova: scripts/check.sh --rapido; cargo test -p fub-disegno --test gesti_forme
-Stato: [~] in corso · coder · base TBD
+Stato: [~] in corso · coder · base f10aba5c2
 
 ## T15 · Selezione, spostare, ridimensionare, ruotare
 
