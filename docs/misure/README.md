@@ -51,6 +51,7 @@ sul suo cancello.
 | Data | Piano | Macchina | Pagina |
 |---|---|---|---|
 | 2026-11-02 | K3, lo strato dei motori | `server-di-fub`, AMD Ryzen 7 7730U, WebKitGTK 2.54 sotto Xvfb | [Il cancello di K3](2026-11-02-k3-motori-server-di-fub.md) |
+| 2026-11-12 | K5, il disegno sul motore | `pc-debian-di-fub`, Intel Core i5-13600KF | [Il cancello di K5](2026-11-12-disegno-linux-13600kf.md) |
 
 ## Gli inventari
 
