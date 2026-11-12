@@ -1380,7 +1380,7 @@ operazioni); ridimensionare sotto `MIN_SIZE`; ruotare un elemento con una
 Fatto quando: `cargo test -p fub-disegno --test gesti_selezione` passa su
 tutti i vettori di selezione di T3, con `selezione.tsv` motivato.
 Prova: scripts/check.sh --rapido; cargo test -p fub-disegno --test gesti_selezione
-Stato: [~] in corso · coder · base dc50bcbb0
+Stato: [x] fatto (2026-11-12) · differenze: il motore fa il gesto solo quando il suo strumento dà il risultato di Fub (spostare con `selection`, ruotare con `rotate`, ridimensionare una cornice dritta senza contorno con la sua maniglia); negli altri casi (cornice girata, inclinata o col contorno, oggetto dentro un gruppo, la carta) la matrice la calcola Fub e la scrive `differenza`, quindi nessun gesto è `unsupported`; la selezione e il riquadro seguono sempre la regola di Fub; `gesti/mod.rs` ha `Contesto::pressione` e `Contesto::trascinato` (decisione dell'orchestratore); `apertura.rs` dei test controlla «non `stale`» invece di `unsupported` per Select; `connettore-segue` nel `.tsv` (lo fa il client, T10); il puntatore conta come un mouse (il contratto non dice il tipo); la cornice girata tenuta fra due gesti su più oggetti passa a T31
 
 ## T16 · Ciò che il motore non sa modificare, e il corpus
 
@@ -2099,6 +2099,39 @@ Prova: scripts/check.sh --rapido; cargo test -p fub-host --test drawing --test e
 Nota dell'orchestratore (2026-11-12, da T13): un vault che ha già `fub.draw` in `plugins.disabled` vede oggi la riga del motore accesa di serie mentre il bundle dei disegni non è montato; `motore_disegno_spento` deve contarlo spento anche lì, con un test.
 Stato: [ ] da fare
 
+## T31 · La cornice girata fra un gesto e l'altro
+
+Perché: oggi, dopo aver girato più oggetti insieme, la cornice della
+selezione resta girata al gesto dopo (`keepFrame` e `ctx.kept` in
+`apps/client/src/editors/spatial/tools/editor/panel.ts`); il motore non sa
+quale cornice il client mostra, e con T15 la riparte dritta. Nato da T15
+(decisione dell'orchestratore del 2026-11-12).
+Tocca: `crates/fub-abi/src/drawing.rs` (un campo opzionale nuovo in
+`DrawingGesture`, additivo, con `#[serde(default)]` e il suo `validate()`),
+lo specchio TS e il suo fixture (rigenerati con `UPDATE_MIRROR=1`),
+`apps/client/src/editors/spatial/motore/gesti.ts` (manda la cornice tenuta),
+`crates/fub-disegno/src/gesti/selezione.rs` (la usa),
+`crates/fub-disegno/tests/gesti_selezione.rs`,
+`docs/reference/drawing-ipc.md`
+Non toccare: `gesti/mod.rs` oltre a passare il campo nel `Contesto`; la
+logica di `panel.ts`; i vettori di T3.
+Dipende da: T15
+Cosa fare:
+- Il campo porta la matrice della cornice tenuta (sei numeri, come la
+  `matrix` dell'anteprima), solo quando il client ne tiene una; senza, come
+  oggi.
+- La selezione del motore, con più oggetti e la cornice data, ruota,
+  ridimensiona e sposta in quella cornice come `panel.ts`, e l'esito
+  rimanda la cornice nuova perché il client la tenga.
+Casi limite: la cornice data e una selezione cambiata (la cornice si lascia);
+un oggetto solo (la cornice è la sua); una matrice non invertibile
+(`BadArgs`).
+Fatto quando: un test gira due rettangoli di 30°, poi li ridimensiona con un
+secondo gesto, e la `transform` scritta è quella che dà `panel.ts` (letta o
+registrata dal client); `npm run typecheck` e `mirror.test.ts` passano.
+Prova: scripts/check.sh --rapido; cargo test -p fub-disegno --test gesti_selezione
+Stato: [ ] da fare
+
 ## T30 · La CI completa e la revisione prima del merge
 
 Perché: l'utente fonde K5 in `main` soltanto dopo la CI completa (Windows,
@@ -2111,7 +2144,7 @@ lascia all'orchestratore.
 Non toccare: i limiti dei banchi (nessuno si alza); i task fatti (un difetto
 in un task fatto si corregge con un task nuovo); la proposta a monte (si
 scrive, non si manda).
-Dipende da: T6, T7, T9, T11, T13–T24, T26–T29
+Dipende da: T6, T7, T9, T11, T13–T24, T26–T29, T31
 Cosa fare (lo fa l'orchestratore, non un coder):
 - Prima: main unito in `piano/k5-disegno` (K2 e K3 fusi), la base della PR
   #300 è `main`.
