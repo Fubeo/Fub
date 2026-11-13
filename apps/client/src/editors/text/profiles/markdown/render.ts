@@ -398,6 +398,21 @@ const MATH_INFOS: Record<string, true> = { math: true, latex: true, tex: true };
 
 /// L'apertura di un recinto ```toc``` (K4).
 const TOC_FENCE = /^ {0,3}(?:`{3,}|~{3,})[ \t]*toc(?:[ \t]|\r?\n|$)/i;
+/// Un'apertura ```toc``` in qualunque punto di un testo: il filtro prima di
+/// cercarla nell'albero di una citazione o di una lista.
+const TOC_ANYWHERE = /(?:`{3,}|~{3,})[ \t]*toc/i;
+
+/// Se un nodo di primo livello tiene un recinto ```toc```: è il nodo, o sta
+/// dentro (una citazione, una lista), dove si rende lo stesso indice.
+function holdsToc(source: string, name: string, from: number, to: number, node: () => SyntaxNode): boolean {
+  if (name === "FencedCode") return TOC_FENCE.test(source.slice(from, Math.min(to, from + 16)));
+  if (name === "Paragraph" || name === "HTMLBlock" || !TOC_ANYWHERE.test(source.slice(from, to))) return false;
+  const cursor = node().cursor();
+  while (cursor.next() && cursor.from < to) {
+    if (cursor.name === "FencedCode" && TOC_FENCE.test(source.slice(cursor.from, Math.min(cursor.to, cursor.from + 16)))) return true;
+  }
+  return false;
+}
 
 /// Un recinto con questa info, se il vault lo dichiara, è una formula.
 export function isMathInfo(info: string): boolean {
@@ -1444,7 +1459,7 @@ function wholeDocument(source: string, tree: Tree, forms?: readonly SyntaxForm[]
       // Un albero che va oltre la sorgente è quello di un documento più lungo,
       // reso soltanto fino a un blocco (`renderMarkdownStatePrefix`).
       if (to > source.length) break;
-      const toc = name === "FencedCode" && TOC_FENCE.test(source.slice(from, Math.min(to, from + 16)));
+      const toc = holdsToc(source, name, from, to, () => cursor.node);
       if (name === "HTMLBlock") htmlTops.push({ from, to, html: source.slice(from, to) });
       else if (toc) hasToc = true;
       const candidate = untouched.get(from);
@@ -1712,7 +1727,7 @@ function patchDocument(source: string, tree: Tree, forms: readonly SyntaxForm[] 
     visited++;
     if (fresh.length >= PATCH_LIMIT) return null;
     const node = cursor.node;
-    const toc = name === "FencedCode" && TOC_FENCE.test(source.slice(from, Math.min(to, from + 16)));
+    const toc = holdsToc(source, name, from, to, () => node);
     if (name === "Paragraph" && loneAnchorId(source.slice(from, to)) !== null) return null;
     const entry = { from, to, name, toc, found: findDefinitions(source, node, footnoteOpeners(source, from, to)), block: null as LazyBlock | null };
     if (!inert(entry)) return null;

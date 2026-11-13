@@ -267,6 +267,19 @@ describe("la resa incrementale della Live", () => {
     expect(shape(document)).toEqual(shape(renderMarkdownState(state)));
   });
 
+  it("un indice dentro una citazione o una lista segue i titoli", () => {
+    for (const toc of ["> ```toc\n> ```\n", "- voce\n\n  ```toc\n  ```\n"]) {
+      const text = `${toc}\n# Uno\n\n## Due\n\nTesto.\n`;
+      let state = stateOf(text);
+      const document = renderMarkdownState(state);
+      // Il livello cambia, l'id del titolo no: l'indice va rifatto lo stesso.
+      const transaction = state.update({ changes: { from: text.indexOf("# Uno"), insert: "#" } });
+      state = transaction.state;
+      const next = renderMarkdownState(state, undefined, { document, changes: transaction.changes });
+      expect(shape(next), toc).toEqual(shape(renderMarkdownState(state)));
+    }
+  });
+
   it("una definizione che cambia rifà tutti i blocchi, che potrebbero leggerla", () => {
     const text = "Vedi [la guida][g].\n\nAltro.\n\n[g]: /uno\n";
     let state = stateOf(text);
