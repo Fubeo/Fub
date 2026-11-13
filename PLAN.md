@@ -5347,7 +5347,7 @@ Fatto quando: `npm run bench:tree` stampa le misure con le soglie; il test
 di `fub-host` passa; il resoconto dice i numeri e, se serve, il numero
 della issue.
 Prova: scripts/check.sh --rapido; cd apps/client && npm run bench:tree
-Stato: [ ] da fare
+Stato: [x] fatto · 59b03b873 sul ramo del coder · a CPU ×4 primo disegno 500–892 ms e apertura 177–350 ms, oltre le soglie: issue pronta in `~/.cache/fub-prealpha/issue-albero-cinquemila.md`, da aprire; virtualizzazione = piano a parte. `draw.level` non esiste più (ADR 0231), misura alle impostazioni di partenza
 
 ## T46 · Le parole della scheda di un componente installato
 
