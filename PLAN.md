@@ -1882,6 +1882,37 @@ Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/canvas/cards
 Stato: [x] fatto (2026-11-13) · 79bc972fa, 9e78ed35b (prima del cherry-pick) · differenze: niente «Accendi…», perché K5 T24 non è nella base: col componente spento la scheda dice la ragione e offre «Apri con…»; «Accendi…» si aggiunge dopo il merge di K5 (#300); l'XMP resta una scheda di file; col consenso acceso «Crea l'anteprima» parte solo al clic; `offersRender` e `limitText` copiati da `editors/craft/surface.ts` per non caricare quel modulo pigro con la lavagna; pagina nuova `docs/reference/canvas-craft.md` · rischi: il file mancante col componente spento non si scopre; `not_found` di `craft.preview` sul file rotto è supposto, non visto sull'host vero
 
+## T18a · «Accendi…» sulla scheda Craft
+
+Perché: T18 ha lasciato fuori «Accendi…» perché K5 T24 non era nella base;
+K5 è in `main` dal 2026-11-13 (#300) e il ramo lo contiene. Col componente
+spento la scheda dice la ragione e offre solo «Apri con…»: chi vuole Fub
+deve trovare da sé la pagina Componenti. Task scritto dall'orchestratore.
+Tocca: `apps/client/src/editors/canvas/cards/craft.ts` e `craft.test.ts`,
+`apps/client/src/state/document-controller.ts` (la porta `craft`),
+`apps/client/src/i18n/catalog.ts` se serve una frase nuova,
+`docs/reference/canvas-craft.md`.
+Non toccare: `editors/craft/`, `state/craft-previews.ts`, `panels/open-with.ts`;
+`ui/commands.ts` e `panels/settings.ts` (si usano).
+Dipende da: T18; K5 T24 nel ramo (c'è dal merge di `main` del 2026-11-13)
+Cosa fare:
+- Col componente spento la scheda offre «Accendi…» accanto ad «Apri con…»,
+  come lo stato del disegno (`editors/spatial/motore/standing.ts`): apre la
+  pagina Componenti sulla riga del componente che serve
+  (`showComponent(id)` di `ui/commands.ts`, l'`id` dalla riga spenta che
+  dà `components()?.offRowFor(UI_CRAFT)`). Senza chi apre la riga
+  (`showComponent` torna falso) «Accendi…» non si offre.
+- Acceso il componente, la scheda passa da sola ad «Apri» come oggi.
+Casi limite: la riga spenta senza `id`; il componente che non c'è in questa
+build (niente «Accendi…», la ragione resta); la scheda tolta mentre la pagina
+si apre; il tema scuro.
+Fatto quando: `craft.test.ts` prova «Accendi…» col componente spento, la sua
+assenza senza chi apre la riga e il passaggio ad «Apri» dopo l'accensione;
+`scripts/check.sh --rapido` verde.
+Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
+src/editors/canvas/cards/craft.test.ts
+Stato: [ ] da fare
+
 ## T19 · L'inchiostro sulla pagina del PDF
 
 Perché: C4 e D-4 (a): i segni della pagina 3 non devono restare sopra la
