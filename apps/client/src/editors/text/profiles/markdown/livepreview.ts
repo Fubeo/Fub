@@ -22,7 +22,7 @@ import {
   WidgetType,
 } from "@codemirror/view";
 import { ensureSyntaxTree, syntaxTree, syntaxTreeAvailable } from "@codemirror/language";
-import type { SyntaxNode } from "@lezer/common";
+import type { SyntaxNode, Tree } from "@lezer/common";
 // La lettura binaria di una casella è una regola del contratto, non del
 // disegno: `[/]`, `[-]`, `[>]` sono stati che esistono e non sono "fatto".
 import { taskChecked } from "../../../../rules/mirrored";
@@ -96,6 +96,7 @@ import { CodeHeaderWidget, codeBlocks, codeWrapChanged, codeWraps } from "./code
 import { blockPrefixes } from "./block-prefix";
 import { linkDialogOpener } from "./link-dialog";
 import { liveStrings } from "./strings";
+import { topChanges } from "./top-changes";
 import { bareUrl, linkCardGestures, linkCardsChanged, LinkCardWidget, type LinkCardSource } from "./link-card";
 
 /// I varchi verso il resto dell'app: il modulo non importa `api.ts` né tocca
@@ -2114,6 +2115,95 @@ function whenIdle(run: () => void): () => void {
   return () => clearTimeout(handle);
 }
 
+/// Le decorazioni in riga raccolte da `collectInline`.
+interface InlineRanges {
+  readonly decorations: Range<Decoration>[];
+  readonly atomic: Range<Decoration>[];
+  readonly hidden: Range<Decoration>[];
+  readonly seen: Set<string>;
+  /// Quante righe `computeDecorations` ha letto.
+  lines: number;
+}
+
+/// Da che cosa vengono le decorazioni in riga della Live.
+interface InlineBasis {
+  readonly visible: readonly { from: number; to: number }[];
+  readonly ranges: readonly SelectionRange[];
+  readonly replaced: readonly { from: number; to: number }[];
+}
+
+/// Quante righe l'ultimo aggiornamento delle decorazioni in riga ha letto, per
+/// vista. Per i test, che contano il lavoro di una battuta.
+const inlineVisited = new WeakMap<EditorView, number>();
+
+/// Quante righe l'ultimo aggiornamento delle decorazioni in riga della Live ha
+/// letto con `computeDecorations`.
+export function liveInlineVisited(view: EditorView): number | null {
+  return inlineVisited.get(view) ?? null;
+}
+
+/// I nodi di primo livello che toccano le righe da `from` a `to`, interi:
+/// dall'inizio del primo a quello del nodo dopo l'ultimo (o alla fine del
+/// testo). Le decorazioni in riga di un nodo dipendono soltanto da lui e
+/// dalle sue righe attive.
+function topCover(tree: Tree, doc: Text, from: number, to: number): { from: number; to: number } {
+  const start = doc.lineAt(from).from;
+  const end = doc.lineAt(to).to;
+  const first = tree.topNode.childBefore(start);
+  let next = tree.topNode.childAfter(end);
+  while (next && next.from <= end) next = next.nextSibling;
+  return { from: first ? Math.min(first.from, start) : 0, to: next ? next.from : tree.length };
+}
+
+/// I tratti coperti da uno dei due elenchi e non dall'altro.
+function symmetricDifference(
+  a: readonly { from: number; to: number }[],
+  b: readonly { from: number; to: number }[],
+): { from: number; to: number }[] {
+  const out: { from: number; to: number }[] = [];
+  const key = (range: { from: number; to: number }) => `${range.from}:${range.to}`;
+  const inB = new Set(b.map(key));
+  const inA = new Set(a.map(key));
+  for (const range of a) if (!inB.has(key(range))) out.push(range);
+  for (const range of b) if (!inA.has(key(range))) out.push(range);
+  return out;
+}
+
+/// I tratti dove uno dei due elenchi copre il testo e l'altro no, coi punti
+/// dove la copertura cambia in uno solo dei due: anche un bordo che si sposta
+/// conta.
+function uncovered(
+  a: readonly { from: number; to: number }[],
+  b: readonly { from: number; to: number }[],
+): { from: number; to: number }[] {
+  const edges = (list: readonly { from: number; to: number }[]) => new Set(list.flatMap((range) => [range.from, range.to]));
+  const inA = edges(a);
+  const inB = edges(b);
+  const covers = (list: readonly { from: number; to: number }[], pos: number) => list.some((range) => range.from <= pos && pos < range.to);
+  const points = [...new Set([...inA, ...inB])].sort((x, y) => x - y);
+  const out: { from: number; to: number }[] = [];
+  for (let index = 0; index < points.length; index++) {
+    const at = points[index]!;
+    // Un bordo di uno soltanto: il nodo che lo tiene cambia taglio.
+    if (inA.has(at) !== inB.has(at)) out.push({ from: at, to: at });
+    const next = points[index + 1];
+    if (next !== undefined && covers(a, at) !== covers(b, at)) out.push({ from: at, to: next });
+  }
+  return out;
+}
+
+/// I tratti in ordine, uniti quando si toccano.
+function mergeRanges(ranges: { from: number; to: number }[]): { from: number; to: number }[] {
+  ranges.sort((x, y) => x.from - y.from);
+  const out: { from: number; to: number }[] = [];
+  for (const range of ranges) {
+    const last = out[out.length - 1];
+    if (last && range.from <= last.to) last.to = Math.max(last.to, range.to);
+    else out.push({ from: range.from, to: range.to });
+  }
+  return out;
+}
+
 export function livePreview(
   callbacks: LivePreviewCallbacks,
   forms?: readonly SyntaxForm[],
@@ -2428,66 +2518,173 @@ export function livePreview(
     decorations = decorations.update({ add: ranges, sort: true });
     return { document, candidates, decorations, complete: value.complete, visited };
   }
-  const buildInline = (view: EditorView, held: readonly SelectionRange[] | null): [DecorationSet, DecorationSet, DecorationSet] => {
-    const active = revealOf(view.state, view.state.facet(liveReveal), held ?? view.state.selection.ranges);
-    const replaced = replacedIn(view.state.field(blocks).decorations, view.visibleRanges);
+  /// Le decorazioni in riga dei tratti `ranges` (i visibili, o i loro pezzi
+  /// da rifare): quelle che `computeDecorations` vi trova, fuori dai blocchi
+  /// resi e dal frontmatter, e con `keep` soltanto quelle che vi cominciano.
+  const collectInline = (
+    state: EditorState,
+    active: Reveal,
+    replaced: readonly { from: number; to: number }[],
+    ranges: readonly { from: number; to: number }[],
+    keep: { from: number; to: number } | null,
+    out: InlineRanges,
+  ): void => {
     // Dentro il frontmatter non c'è Markdown: né riga orizzontale né titolo.
-    const yaml = frontmatterRange(view.state.doc);
-    const decorations: Range<Decoration>[] = [];
-    const atomic: Range<Decoration>[] = [];
-    const hidden: Range<Decoration>[] = [];
-    const seen = new Set<string>();
-    for (const visible of view.visibleRanges) {
-      for (const item of computeDecorations(view.state, active, visible.from, visible.to, forms)) {
+    const yaml = frontmatterRange(state.doc);
+    for (const visible of ranges) {
+      out.lines += state.doc.lineAt(visible.to).number - state.doc.lineAt(visible.from).number + 1;
+      for (const item of computeDecorations(state, active, visible.from, visible.to, forms)) {
+        if (keep && (item.from < keep.from || item.from >= keep.to)) continue;
         if (insideReplaced(replaced, item.from)) continue;
         if (yaml && item.from < yaml.to) continue;
         const key = `${item.from}:${item.to}:${item.kind}`;
-        if (seen.has(key)) continue;
-        seen.add(key);
+        if (out.seen.has(key)) continue;
+        out.seen.add(key);
         // «A capo» è della superficie: la testata lo legge dallo stato.
-        const decoration = item.kind === "code-header" && !codeWraps(view.state, item.from)
+        const decoration = item.kind === "code-header" && !codeWraps(state, item.from)
           ? Decoration.replace({ widget: new CodeHeaderWidget(item.data ?? "", false) })
           : inDecoration(item, callbacks);
         // Un titolo porta anche la sua riga: lo stesso respiro verticale della
         // Lettura, così cambiare modalità non fa saltare la pagina.
         const level = HEADING_LINES[item.kind];
         if (level) {
-          const lineStart = view.state.doc.lineAt(item.from).from;
+          const lineStart = state.doc.lineAt(item.from).from;
           const lineKey = `line:${lineStart}`;
-          if (!seen.has(lineKey)) {
-            seen.add(lineKey);
-            decorations.push(level.range(lineStart));
+          if (!out.seen.has(lineKey)) {
+            out.seen.add(lineKey);
+            out.decorations.push(level.range(lineStart));
           }
         }
         if (item.kind === "quote-line" || item.kind === "codeblock-line" || item.kind === "callout-line") {
-          decorations.push(decoration.range(item.from));
+          out.decorations.push(decoration.range(item.from));
         } else {
           const range = decoration.range(item.from, item.to);
-          decorations.push(range);
+          out.decorations.push(range);
           if (item.kind === "hide" || item.kind === "hr" || item.kind === "checkbox" || item.kind === "math"
             || item.kind === "image" || item.kind === "link-pill" || item.kind === "footnote-back"
-            || item.kind === "code-header" || item.kind === "fence-close" || item.kind === "callout-type" || item.kind === "column-label") atomic.push(range);
+            || item.kind === "code-header" || item.kind === "fence-close" || item.kind === "callout-type" || item.kind === "column-label") out.atomic.push(range);
           // Le righe dei recinti nascosti: la testata, e la chiusura raccolta.
-          if (item.kind === "code-header") decorations.push(codeHeaderLine.range(view.state.doc.lineAt(item.from).from));
-          if (item.kind === "fence-close") decorations.push(fenceCloseLine.range(item.from));
-          if (item.kind === "hide") hidden.push(range);
+          if (item.kind === "code-header") out.decorations.push(codeHeaderLine.range(state.doc.lineAt(item.from).from));
+          if (item.kind === "fence-close") out.decorations.push(fenceCloseLine.range(item.from));
+          if (item.kind === "hide") out.hidden.push(range);
         }
       }
     }
-    return [Decoration.set(decorations, true), Decoration.set(atomic, true), Decoration.set(hidden, true)];
   };
   const plugin = ViewPlugin.fromClass(class {
-    decorations: DecorationSet;
-    atomicRanges: DecorationSet;
+    decorations: DecorationSet = Decoration.none;
+    atomicRanges: DecorationSet = Decoration.none;
     /// I segni nascosti, che Backspace e Canc saltano.
-    hidden: DecorationSet;
+    hidden: DecorationSet = Decoration.none;
     /// Le selezioni da cui si decide la rivelazione durante una composizione:
     /// quelle di quando è cominciata, portate avanti dalle modifiche. Fino a
     /// `compositionend` niente si rivela né si nasconde sotto le dita.
     held: readonly SelectionRange[] | null = null;
     endDrag: (() => void) | undefined;
+    /// Da che cosa vengono le decorazioni: i tratti visibili, le selezioni
+    /// che decidevano la rivelazione e i blocchi resi che coprivano il testo.
+    /// Un aggiornamento rifà soltanto i nodi di primo livello dove uno di
+    /// questi, o il testo, cambia.
+    built: InlineBasis;
     constructor(view: EditorView) {
-      [this.decorations, this.atomicRanges, this.hidden] = buildInline(view, null);
+      this.built = this.rebuild(view);
+    }
+    private basis(view: EditorView, ranges: readonly SelectionRange[]): InlineBasis {
+      return {
+        visible: view.visibleRanges.map(({ from, to }) => ({ from, to })),
+        ranges,
+        replaced: replacedIn(view.state.field(blocks).decorations, view.visibleRanges),
+      };
+    }
+    private rebuild(view: EditorView): InlineBasis {
+      const ranges = this.held ?? view.state.selection.ranges;
+      const basis = this.basis(view, ranges);
+      const out: InlineRanges = { decorations: [], atomic: [], hidden: [], seen: new Set(), lines: 0 };
+      collectInline(view.state, revealOf(view.state, view.state.facet(liveReveal), ranges), basis.replaced, basis.visible, null, out);
+      this.decorations = Decoration.set(out.decorations, true);
+      this.atomicRanges = Decoration.set(out.atomic, true);
+      this.hidden = Decoration.set(out.hidden, true);
+      inlineVisited.set(view, out.lines);
+      return basis;
+    }
+    /// Le decorazioni rifatte soltanto nei nodi di primo livello che la
+    /// modifica cambia (`topChanges`), in quelli che la selezione di prima o
+    /// di adesso tocca, dove un blocco reso compare o sparisce e dove il
+    /// tratto visibile si sposta; le altre restano, spostate. `false` quando
+    /// qualcosa che vale per tutto il testo cambia: allora si rifà tutto.
+    private patch(update: ViewUpdate): boolean {
+      const { state, startState, changes, view } = update;
+      const tree = syntaxTree(state);
+      if (tree.length !== state.doc.length) return false;
+      const before = startState.field(blocks);
+      const after = state.field(blocks);
+      if (before.document.dependencies !== after.document.dependencies || before.complete !== after.complete) return false;
+      if (startState.readOnly !== state.readOnly) return false;
+      const dirty: { from: number; to: number }[] = [];
+      if (update.docChanged) {
+        if (update.transactions.length !== 1) return false;
+        const transaction = update.transactions[0]!;
+        if (touchesFootnoteLine(transaction)) return false;
+        const yamlBefore = frontmatterRange(startState.doc);
+        const yamlAfter = frontmatterRange(state.doc);
+        if ((yamlBefore || yamlAfter) && (!yamlBefore || !yamlAfter || changes.mapPos(yamlBefore.to) !== yamlAfter.to
+          || changes.touchesRange(0, yamlBefore.to))) return false;
+        const changed = topChanges(transaction, syntaxTree(startState));
+        if (!changed) return false;
+        dirty.push({ from: changed.start, to: changed.resync === null ? state.doc.length : changed.resync + changed.delta });
+        // E il testo cambiato, anche fra due nodi: le decorazioni di prima vi
+        // finiscono spostate.
+        changes.iterChangedRanges((_fromA, _toA, fromB, toB) => dirty.push(topCover(tree, state.doc, fromB, toB)));
+      } else if (syntaxTree(startState) !== tree) {
+        return false;
+      }
+      const ranges = this.held ?? state.selection.ranges;
+      const basis = this.basis(view, ranges);
+      const old = this.built;
+      // Le selezioni di prima e di adesso, e quelle che decidevano.
+      const spans = [
+        ...startState.selection.ranges, ...old.ranges,
+      ].map((range) => ({ from: changes.mapPos(range.from, -1), to: changes.mapPos(range.to, 1) }));
+      spans.push(...state.selection.ranges, ...ranges);
+      for (const span of spans) dirty.push(topCover(tree, state.doc, span.from, span.to));
+      // I blocchi resi che compaiono o spariscono.
+      const mappedReplaced = old.replaced.map((range) => ({ from: changes.mapPos(range.from, 1), to: changes.mapPos(range.to, -1) }));
+      for (const range of symmetricDifference(mappedReplaced, basis.replaced)) dirty.push(topCover(tree, state.doc, range.from, range.to));
+      // Il tratto visibile che si sposta: i nodi ai suoi bordi, di prima e di
+      // adesso, e quelli che entrano o escono.
+      const mappedVisible = old.visible.map((range) => ({ from: changes.mapPos(range.from, -1), to: changes.mapPos(range.to, 1) }));
+      for (const range of uncovered(mappedVisible, basis.visible)) dirty.push(topCover(tree, state.doc, range.from, range.to));
+      // Da inizio riga: un nodo rientrato comincia dopo il rientro, e le
+      // decorazioni di riga del suo inizio stanno prima.
+      const doc = state.doc;
+      const merged = mergeRanges(dirty.map(({ from, to }) => ({
+        from: doc.lineAt(from).from,
+        to: to >= doc.length ? doc.length : doc.lineAt(to).from,
+      })));
+      const active = revealOf(state, state.facet(liveReveal), ranges);
+      const out: InlineRanges = { decorations: [], atomic: [], hidden: [], seen: new Set(), lines: 0 };
+      let decorations = this.decorations.map(changes);
+      let atomic = this.atomicRanges.map(changes);
+      let hidden = this.hidden.map(changes);
+      for (const span of merged) {
+        const drop = (from: number) => from < span.from || from >= span.to;
+        decorations = decorations.update({ filterFrom: span.from, filterTo: span.to, filter: drop });
+        atomic = atomic.update({ filterFrom: span.from, filterTo: span.to, filter: drop });
+        hidden = hidden.update({ filterFrom: span.from, filterTo: span.to, filter: drop });
+        const pieces: { from: number; to: number }[] = [];
+        for (const visible of basis.visible) {
+          const from = Math.max(visible.from, span.from);
+          const to = Math.min(visible.to, span.to);
+          if (from <= to) pieces.push({ from, to });
+        }
+        collectInline(state, active, basis.replaced, pieces, span, out);
+      }
+      this.decorations = decorations.update({ add: out.decorations, sort: true });
+      this.atomicRanges = atomic.update({ add: out.atomic, sort: true });
+      this.hidden = hidden.update({ add: out.hidden, sort: true });
+      this.built = basis;
+      inlineVisited.set(view, out.lines);
+      return true;
     }
     update(update: ViewUpdate) {
       const composing = update.view.compositionStarted;
@@ -2497,13 +2694,14 @@ export function livePreview(
       } else {
         this.held = null;
       }
-      if (released || update.docChanged || update.selectionSet || update.viewportChanged
+      const whole = released
         || update.startState.facet(liveReveal) !== update.state.facet(liveReveal)
-        || syntaxTree(update.startState) !== syntaxTree(update.state)
-        || update.startState.field(blocks) !== update.state.field(blocks)
         || codeWrapChanged(update)
-        || update.transactions.some((tr) => tr.effects.some((effect) => effect.is(pageIconsChanged)))) {
-        [this.decorations, this.atomicRanges, this.hidden] = buildInline(update.view, this.held);
+        || update.transactions.some((tr) => tr.effects.some((effect) => effect.is(pageIconsChanged)));
+      if (whole || update.docChanged || update.selectionSet || update.viewportChanged
+        || syntaxTree(update.startState) !== syntaxTree(update.state)
+        || update.startState.field(blocks) !== update.state.field(blocks)) {
+        if (whole || !this.patch(update)) this.built = this.rebuild(update.view);
       }
     }
     destroy() { this.endDrag?.(); }
