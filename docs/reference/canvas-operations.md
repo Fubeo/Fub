@@ -420,7 +420,7 @@ sotto. `src/api.rs` è il livello sicuro (una tabella di lavagne per handle),
 | `fub_free(ptr, len)` | | | |
 | `canvas_open(ptr, len) -> u32` | i byte del file | l'handle, 0 se fallisce | `{"handle", "canvas"}` |
 | `canvas_reset(h, ptr, len) -> i32` | i byte del file | 0 o -1 | `{"canvas"}` |
-| `canvas_commit(h, ptr, len) -> i32` | un array JSON di toppe | 0 o -1 | `{"edit", "inverse"}` |
+| `canvas_commit(h, ptr, len) -> i32` | un array JSON di toppe | 0 o -1 | `{"edit", "inverse"}`, più `changed` per un commit di soli tratti |
 | `canvas_preview(h, ptr, len) -> i32` | un array JSON di toppe | 0 o -1 | il sorgente intero, come testo |
 | `canvas_compile(h, ptr, len) -> i32` | `{"ops", "seed"}` | 0 o -1 | `{"patches", "created"}` |
 | `canvas_model(h) -> i32` | | 0 o -1 | `{"canvas"}` |
@@ -441,6 +441,15 @@ sotto. `src/api.rs` è il livello sicuro (una tabella di lavagne per handle),
   coppia di surrogati. Non porta il sorgente intero, che con un file grande
   costerebbe a ogni gesto. `inverse` sono le toppe dell'annulla, da dare a un
   altro `canvas_commit`.
+  Un commit che cambia soltanto livelli d'inchiostro (di schede che restano
+  al loro posto, o quello della radice che c'era e c'è ancora) porta anche
+  `changed`: `{"nodes": [{"at", "node"}], "root": {chiave: valore}}`, le
+  schede riscritte con la loro posizione in `nodes` e le chiavi della radice
+  riscritte, come le darebbe `canvas_model`; messe sul modello di prima danno
+  quello di dopo. Senza `changed` il modello si rilegge intero. Il nucleo fa
+  un commit così senza rileggere la lavagna: ritocca e rilegge solo il testo
+  delle parti cambiate (`fub-canvas-core/src/commit.rs`), e scrive gli
+  stessi byte del ritocco di tutto il testo.
 - `canvas_preview` dà il sorgente che darebbe `canvas_commit` con le stesse
   toppe, o lo stesso errore, e non cambia la lavagna: serve alle bozze, che
   vogliono il testo intero.
@@ -455,6 +464,9 @@ sotto. `src/api.rs` è il livello sicuro (una tabella di lavagne per handle),
   (`read_layers`), nella forma di `expect` dei
   [vettori dell'inchiostro](canvas-ink.md#i-vettori). Come `canvas_model`
   non ha ingresso da liberare; la risposta è nel risultato, del modulo.
+  La facciata tiene i livelli letti di ogni lavagna: dopo un commit con
+  `changed` rilegge solo quelli delle parti cambiate, dopo ogni altro cambio
+  li rilegge tutti alla prossima domanda.
 - Gli handle partono da 1, crescono e non si riusano: 0 e `u32::MAX` non sono
   mai handle, e un handle chiuso risponde `handle` per sempre.
 

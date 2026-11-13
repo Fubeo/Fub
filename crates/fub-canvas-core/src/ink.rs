@@ -621,16 +621,26 @@ impl LayerRead {
 /// `nodes`, poi quello della radice. Una scheda o una radice senza la chiave
 /// non compare; gli archi non hanno livelli.
 pub fn read_layers(canvas: &Canvas) -> Vec<LayerRead> {
-    let cards = canvas.nodes.iter().filter_map(|node| {
-        node.extra
-            .get(INK_KEY)
-            .map(|value| LayerRead::new(LayerRef::Node(node.id.clone()), value))
-    });
-    let board = canvas
+    let cards = canvas.nodes.iter().filter_map(node_layer);
+    cards.chain(board_layer(canvas)).collect()
+}
+
+/// Il livello della scheda `node`, come in [`read_layers`]; `None` senza la
+/// chiave. Chi tiene i livelli letti rilegge solo le schede che un commit ha
+/// cambiato.
+pub fn node_layer(node: &CanvasNode) -> Option<LayerRead> {
+    node.extra
+        .get(INK_KEY)
+        .map(|value| LayerRead::new(LayerRef::Node(node.id.clone()), value))
+}
+
+/// Il livello della radice di `canvas`, come in [`read_layers`]; `None`
+/// senza la chiave.
+pub fn board_layer(canvas: &Canvas) -> Option<LayerRead> {
+    canvas
         .extra
         .get(INK_KEY)
-        .map(|value| LayerRead::new(LayerRef::Board, value));
-    cards.chain(board).collect()
+        .map(|value| LayerRead::new(LayerRef::Board, value))
 }
 
 /// Il livello `at` di `canvas`; `None` se chi lo tiene non c'è o non ha la
