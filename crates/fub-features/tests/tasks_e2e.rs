@@ -231,7 +231,6 @@ const UNREADABLE_DATE: &str = "Data non leggibile";
 const EMPTY: &str = "Nessun compito aperto nel vault.";
 const CHANGED: &str = "Il compito è cambiato nel frattempo: l'ho riletto, controlla e riprova.";
 const READ_ONLY: &str = "Non posso spuntarlo: la nota è in sola lettura.";
-const TOGGLE_FAILED: &str = "Non ho spuntato il compito.";
 const NO_INDEX: &str = "Il vault non ha un indice di ricerca attivo: i compiti non si leggono.";
 const SHOWN_MANY: &str =
     "Mostro 300 compiti: il vault ne ha più di 10000. Restringi con la ricerca.";
@@ -504,10 +503,11 @@ fn a_read_only_note_is_not_written() {
     let ViewUpdate::Replace { root } = update else {
         panic!("il rifiuto si dice nella vista");
     };
+    // Una nota in sola lettura è un rifiuto di permesso, e la vista lo dice come tale.
     let shown = messages(&root);
     assert!(
-        shown.iter().any(|m| m == READ_ONLY || m == TOGGLE_FAILED),
-        "la vista dice che non ha spuntato: {shown:?}"
+        shown.iter().any(|m| m == READ_ONLY),
+        "la vista dice che la nota è in sola lettura: {shown:?}"
     );
 }
 
