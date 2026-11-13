@@ -3959,7 +3959,7 @@ riscritture di fila; un foglio in sola lettura.
 Fatto quando: i due test falliscono prima e passano dopo; i test della
 griglia restano verdi.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run src/editors/grid
-Stato: [ ] da fare
+Stato: [x] fatto · 133c36178..13207b074 · la cella aperta tiene la bozza e segue la sua riga per id; riga o colonna cancellata: la cella si chiude e la bozza va negli appunti (se rifiutati, resta nell'avviso); l'annulla si svuota solo se una sua cella è cambiata da fuori, con l'avviso; 7 test rossi sulla base, 299/299 della griglia verdi; deviazioni in DECISIONS
 
 ## T13 · Il corpus senza perdite
 
