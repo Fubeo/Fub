@@ -937,7 +937,7 @@ Fatto quando: `cargo test -p fub-canvas-core --test spec` passa; togliendo
 una voce da `OPS`, il test fallisce; R6 passa leggendo `OPS`.
 Prova: scripts/check.sh --rapido; cargo test -p fub-canvas-core --test spec
 --test parity
-Stato: [ ] da fare
+Stato: [x] fatto · `spec.rs` con `OPS`, lo schema della lista e `validate`; R6 di parità legge `OPS`; 37 test di spec, corpus e parità verdi insieme a T3; `Points` (lista di liste di numeri) da confermare in T16; ogni operazione nuova (T9–T19) aggiunge la sua voce in `OPS` nello stesso task
 
 ## T7 · Il controllo e il riassunto
 
