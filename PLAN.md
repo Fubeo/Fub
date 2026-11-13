@@ -1811,7 +1811,7 @@ acceso, il chip e l'azione giusti, che «Accendi…» chiama la porta con
 resta verde; le foto delle tre scene, in chiaro e scuro, piena e 700 px,
 sono come il prototipo; `bench:a11y` verde.
 Prova: scripts/check.sh --rapido --client; npm --prefix apps/client test -- src/editors/spatial/motore/standing.test.ts src/editors/spatial/motore/due-strade.test.ts src/editors/spatial/tools/editor.test.ts; npm --prefix apps/client run bench:a11y
-Stato: [~] in corso (2026-11-13, coder su base 11b45e96b)
+Stato: [x] fatto (2026-11-13) · differenze: i `kind` sono quelli del prototipo, `reduced` (spento, build senza motore) e `stopped` (fermo), nuovi in `SurfaceStandingKind` (`editors/core/registry.ts`) con due regole in `sheets.css` e i rigenerati; la sorgente del chip ha `inBuild(id)` e `showComponent` (importato da `ui/commands.ts`, che non cambia): nella build senza motore il chip è «Senza motore» (scena 5), senza la porta resta «spento» senza «Accendi…», senza la mappa il motore vale come presente; mentre una sessione nuova si apre resta il chip di prima; il motore acceso del banco risponde solo ai gesti dei vettori, le due perdite sono su `fub-defs` e sulla prima forma dei connettori; `due-strade.test.ts` 105 test su 52 vettori. Le 6 baseline delle scene `draw-engine-{on,off,error}` vengono dal runner in T30: fino ad allora `bench/scene.test.ts` è rosso; `disegno.md` aggiornato
 
 ## T24 · La riga di un componente da aprire
 
