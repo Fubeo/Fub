@@ -504,26 +504,9 @@ finestre è di `crates/fub-format-xlsx/src/grid.rs`; la fixture
 
 ## Depositare un file
 
-`resource_write` deposita byte grezzi: il corpo sono i byte (`Uint8Array`, mai
-JSON o base64), i parametri stanno nella testata `x-fub-resource-write` (JSON
-in `encodeURIComponent`, al più 16 KiB): `id`, `vault` (`null` = il corrente),
-`expected` obbligatorio (`null` crea soltanto, una stringa è il CAS sulla
-revisione) e `reuse`, facoltativo. Un campo in più, un tipo sbagliato o un
-`reuse` diverso da `"same-content"` è `bad_args` prima del disco; `reuse` con
-`expected` dato pure. Senza `reuse` il deposito è quello di sempre.
-
-Con `reuse: "same-content"` l'host cerca un file del vault con esattamente
-questi byte ([Lo stesso contenuto](../architecture/storage-and-identity.md)) e
-ricontrolla che ci sia ancora: allora non scrive niente. Se non c'è, o se non
-sa rispondere, scrive: nel dubbio si deposita. La ricevuta
-(`ResourceWriteReceipt`) porta `id` e `revision` del file scritto, o di quello
-che c'era, e `reused` (vero solo se non si è scritto; assente in una ricevuta
-di prima = `false`). Gli errori sono quelli di una scrittura (`already_exists`,
-`conflict`, `permission_denied`, `host.xlsx.readonly`); oltre 64 MiB è `io`,
-prima di leggere la testata, e 64 MiB esatti passano. Un host di prima
-rifiuta `reuse` con `bad_args`: `writeResource` lo prende come «non so» e
-deposita senza. Lo scenario `__fixtures__/resource-write-scenario.json`,
-registrato sull'host vero, lega l'host finto alle stesse risposte.
+`resource_write` deposita byte grezzi, coi parametri nella testata
+`x-fub-resource-write`; il contratto intero (campi, `reuse: "same-content"`,
+ricevuta, errori e limiti) sta in [Depositare un file](resource-write.md).
 
 ## Percorsi
 
