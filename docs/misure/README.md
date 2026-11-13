@@ -36,12 +36,12 @@ resta **non provato**.
 
 Le misure di K0 dei motori Craft, collegati a Fub da soli
 ([`tools/motori-prova`](../../tools/motori-prova/README.md)): una pagina
-`motori-AAAA-MM-GG-sistema-macchina.md` per misura, con peso, memoria, tempi
+`AAAA-MM-GG-motori-sistema-macchina.md` per misura, con peso, memoria, tempi
 e librerie.
 
 | Data | Sistema | Macchina | Pagina |
 |---|---|---|---|
-| 2026-10-31 | Debian 13, kernel 6.12 | AMD Ryzen 7 7730U, senza scheda grafica | [I sei motori da soli](motori-2026-10-31-linux-ryzen.md) |
+| 2026-10-31 | Debian 13, kernel 6.12 | AMD Ryzen 7 7730U, senza scheda grafica | [I sei motori da soli](2026-10-31-motori-linux-ryzen.md) |
 
 ## I cancelli
 
@@ -50,7 +50,7 @@ sul suo cancello.
 
 | Data | Piano | Macchina | Pagina |
 |---|---|---|---|
-| 2026-11-02 | K3, lo strato dei motori | `server-di-fub`, AMD Ryzen 7 7730U, WebKitGTK 2.54 sotto Xvfb | [Il cancello di K3](k3-motori-2026-11-02-server-di-fub.md) |
+| 2026-11-02 | K3, lo strato dei motori | `server-di-fub`, AMD Ryzen 7 7730U, WebKitGTK 2.54 sotto Xvfb | [Il cancello di K3](2026-11-02-k3-motori-server-di-fub.md) |
 
 ## Gli inventari
 
@@ -59,7 +59,7 @@ contate e revisione.
 
 | Data | Motore | Pagina |
 |---|---|---|
-| 2026-10-31 | PhotoCraft `b1cfff9` | [Gli strumenti dentro l'interfaccia](photocraft-strumenti-2026-10-31.md) |
+| 2026-10-31 | PhotoCraft `b1cfff9` | [Gli strumenti dentro l'interfaccia](2026-10-31-photocraft-strumenti.md) |
 
 ## L'inchiostro in WebAssembly
 
@@ -70,7 +70,7 @@ in quella Rust compilata in WebAssembly
 
 | Data | Sistema | Macchina | Pagina |
 |---|---|---|---|
-| 2026-11-02 | Debian 13, kernel 6.12 | AMD Ryzen 7 7730U, scarica | [TypeScript contro WebAssembly](inchiostro-wasm-2026-11-02.md) |
+| 2026-11-02 | Debian 13, kernel 6.12 | AMD Ryzen 7 7730U, scarica | [TypeScript contro WebAssembly](2026-11-02-inchiostro-wasm.md) |
 
 ## Il nucleo della lavagna
 
@@ -81,7 +81,7 @@ scenario L1).
 
 | Data | Sistema | Macchina | Pagina |
 |---|---|---|---|
-| 2026-11-03 | Debian 13, kernel 6.12, WebKitGTK 2.54 sotto Xvfb | AMD Ryzen 7 7730U, condivisa | [Il nucleo della lavagna in WebAssembly](lavagna-wasm-2026-11-03.md) |
+| 2026-11-03 | Debian 13, kernel 6.12, WebKitGTK 2.54 sotto Xvfb | AMD Ryzen 7 7730U, condivisa | [Il nucleo della lavagna in WebAssembly](2026-11-03-lavagna-wasm.md) |
 
 ## Le librerie a runtime
 
@@ -91,4 +91,14 @@ tre sistemi della CI.
 
 | Data | Sistemi | Pagina |
 |---|---|---|
-| 2026-10-31 | Linux, macOS, Windows (runner) | [Le librerie a runtime](librerie-runtime-2026-10-31.md) |
+| 2026-10-31 | Linux, macOS, Windows (runner) | [Le librerie a runtime](2026-10-31-librerie-runtime.md) |
+
+## Gli spike
+
+La misura del varco WASM di M5, presa prima del runtime
+([`tools/varco-wasm`](../../tools/varco-wasm/)), sui gradini che si potevano
+provare senza un host.
+
+| Data | Oggetto | Pagina |
+|---|---|---|
+| 2026-08-13 | il mondo dei plugin compilato a `wasm32-unknown-unknown` | [Spike WASM — rapporto](2026-08-13-spike-wasm-host.md) |

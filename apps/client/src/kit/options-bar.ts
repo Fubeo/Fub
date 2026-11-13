@@ -8,7 +8,10 @@
 // - **La misura.** Un `ResizeObserver` con owner, sulla barra e su ogni
 //   controllo, rifà il conto al più una volta per fotogramma; anche
 //   `setItems` lo rifà. Un controllo che il suo owner nasconde va in un
-//   involucro: la barra mostra e nasconde l'involucro, non lui.
+//   involucro: la barra mostra e nasconde l'involucro, non lui. Un
+//   `MutationObserver` rifà il conto quando l'owner nasconde o mostra un
+//   pezzo dentro un involucro già nascosto, che il `ResizeObserver` vede
+//   largo zero.
 // - **La tastiera.** È una `toolbar` orizzontale: Tab entra e esce, i
 //   controlli tengono i loro tasti.
 //
@@ -93,9 +96,12 @@ export function createOptionsBar(options: OptionsBarOptions): OptionsBar {
 
   const close = (): void => popover?.close();
 
-  /// Rimette ogni controllo nella riga, al suo posto.
+  /// Rimette ogni controllo nella riga, al suo posto. Se ci sono già non li
+  /// tocca: staccarli e riattaccarli farebbe cadere il fuoco del controllo
+  /// appena premuto, e il conto si rifà anche mentre lo si usa.
   const restore = (): void => {
-    row.replaceChildren(...items.map((item) => item.element));
+    const placed = row.children.length === items.length && items.every((item, index) => row.children[index] === item.element);
+    if (!placed) row.replaceChildren(...items.map((item) => item.element));
     for (const item of items) item.element.hidden = false;
   };
 
@@ -163,6 +169,32 @@ export function createOptionsBar(options: OptionsBarOptions): OptionsBar {
   if (typeof ResizeObserver !== "undefined") observer = new ResizeObserver(schedule);
   observer?.observe(element);
   lifetime.add(() => observer?.disconnect());
+
+  // Un involucro che la barra ha nascosto misura zero qualunque cosa faccia
+  // il suo controllo: se intanto l'owner ne nasconde o mostra un pezzo, il
+  // `ResizeObserver` non se ne accorge e la riga resta col conto vecchio (nel
+  // disegno i gruppi della selezione restavano in «…» con mezza barra vuota,
+  // quando il primo conto arrivava prima che il disegno nascondesse i gruppi
+  // che non servono). Rifà il conto solo `hidden` scritto dall'owner dentro
+  // un involucro nascosto: ciò che cambia in un controllo visibile lo vede già
+  // il `ResizeObserver`, `hidden` sugli involucri lo scrive la barra stessa, e
+  // il testo che cambia a ogni passo (la percentuale dello zoom) non deve
+  // costare un conto e un layout per fotogramma. Conta solo `hidden` che
+  // cambia davvero: chi lo riscrive uguale a ogni movimento della vista (il
+  // pulsante della rotazione nel disegno) lascia comunque una mutazione, e
+  // ogni conto forza un layout di tutta la pagina.
+  const insideHidden = (node: Node): boolean =>
+    items.some((item, index) => hidden.has(index) && item.element !== node && item.element.contains(node));
+  const changed = (record: MutationRecord): boolean =>
+    record.target instanceof Element && record.oldValue !== record.target.getAttribute("hidden");
+  let mutations: MutationObserver | null = null;
+  if (typeof MutationObserver !== "undefined") {
+    mutations = new MutationObserver((records) => {
+      if (hidden.size > 0 && records.some((record) => changed(record) && insideHidden(record.target))) schedule();
+    });
+    mutations.observe(row, { subtree: true, attributes: true, attributeOldValue: true, attributeFilter: ["hidden"] });
+  }
+  lifetime.add(() => mutations?.disconnect());
 
   const setItems = (next: readonly OptionItem[]): void => {
     close();

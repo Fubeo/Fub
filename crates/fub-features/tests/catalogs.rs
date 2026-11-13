@@ -360,16 +360,80 @@ fn every_component_has_its_name_in_every_language() {
     }
     let mut missing = Vec::new();
     for riga in fub_features::componenti::righe() {
-        for catalog in &catalogs {
-            if !catalog.entries.contains_key(riga.nome) {
-                missing.push(format!(
-                    "{}: «{}» manca in «{}»",
-                    riga.id, riga.nome, catalog.locale
-                ));
+        for key in [riga.nome.to_string(), riga.descrizione()] {
+            for catalog in &catalogs {
+                if catalog
+                    .entries
+                    .get(&key)
+                    .is_none_or(|text| text.trim().is_empty())
+                {
+                    missing.push(format!(
+                        "{}: «{key}» manca in «{}»",
+                        riga.id, catalog.locale
+                    ));
+                }
             }
         }
     }
+    // Anche le righe che questa build non compila: ogni nome ha la sua
+    // descrizione, e nessuna descrizione è di un componente che non c'è.
+    let names: std::collections::BTreeSet<&str> = reference
+        .iter()
+        .filter_map(|key| key.strip_prefix("component."))
+        .filter_map(|key| key.strip_suffix(".name"))
+        .filter(|name| !name.starts_with("group."))
+        .collect();
+    let described: std::collections::BTreeSet<&str> = reference
+        .iter()
+        .filter_map(|key| key.strip_prefix("component."))
+        .filter_map(|key| key.strip_suffix(".description"))
+        .collect();
+    assert_eq!(
+        names, described,
+        "un nome senza descrizione, o il contrario"
+    );
     assert!(missing.is_empty(), "{}", missing.join("\n  "));
+}
+
+/// I gruppi della pagina hanno un nome in ogni lingua, quelli del piano.
+#[test]
+fn the_component_groups_have_the_names_of_the_plan() {
+    let catalogs = fub_features::componenti::catalog();
+    let lingua = |locale: &str| {
+        catalogs
+            .iter()
+            .find(|c| c.locale == locale)
+            .unwrap_or_else(|| panic!("il catalogo «{locale}»"))
+    };
+    let (it, en) = (lingua("it"), lingua("en"));
+    let piano = [
+        ("scrivere", "Scrivere", "Write"),
+        ("leggere", "Leggere", "Read"),
+        ("pensare", "Pensare", "Think"),
+        ("disegnare", "Disegnare", "Draw"),
+        ("ufficio", "Ufficio", "Office"),
+        ("foto", "Foto", "Photos"),
+        ("altro", "Altro", "Other"),
+        ("supporto", "Di supporto", "Support"),
+    ];
+    assert_eq!(
+        fub_features::componenti::GRUPPI.to_vec(),
+        piano.iter().map(|(id, _, _)| *id).collect::<Vec<_>>(),
+        "i gruppi, nell'ordine della pagina"
+    );
+    for (id, it_nome, en_nome) in piano {
+        let key = fub_features::componenti::nome_del_gruppo(id);
+        assert_eq!(
+            it.entries.get(&key).map(String::as_str),
+            Some(it_nome),
+            "«{key}»"
+        );
+        assert_eq!(
+            en.entries.get(&key).map(String::as_str),
+            Some(en_nome),
+            "«{key}»"
+        );
+    }
 }
 
 /// I nomi italiani che il piano dei componenti dà: sono le parole della pagina.

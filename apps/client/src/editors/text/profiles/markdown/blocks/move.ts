@@ -21,6 +21,12 @@ export function siblingsOf(blocks: readonly Block[], index: number): number[] {
   return out;
 }
 
+/// Il frontmatter resta sempre il primo blocco della nota: se il primo fratello
+/// è lui, nessun blocco gli passa davanti e lui non si sposta.
+export function pinnedFirst(blocks: readonly Block[], sibs: readonly number[]): boolean {
+  return sibs.length > 0 && blocks[sibs[0]!]!.kind === "frontmatter";
+}
+
 const LISTISH: ReadonlySet<BlockKind> = new Set(["bullet", "ordered", "task"]);
 
 /// Le righe vuote fra due blocchi che diventano vicini. Due voci tengono il
@@ -58,6 +64,8 @@ export function moveSiblings(
   const b = sibs.indexOf(last);
   const p = before === -1 ? sibs.length : sibs.indexOf(before);
   if (a < 0 || b < a || p < 0 || (p >= a && p <= b + 1)) return null;
+  // Il frontmatter non si muove, e niente gli passa davanti: `p === 0` è il posto prima di lui.
+  if (pinnedFirst(blocks, sibs) && (a === 0 || p === 0)) return null;
   const doc = state.doc;
   const chunk = (k: number) => doc.sliceString(blocks[sibs[k]!]!.from, blocks[sibs[k]!]!.to);
   const gapAfter = (k: number) => (k + 1 < sibs.length ? doc.sliceString(blocks[sibs[k]!]!.to, blocks[sibs[k + 1]!]!.from) : null);

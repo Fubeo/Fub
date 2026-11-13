@@ -1,8 +1,9 @@
 // Gli scenari di N0, S7 di N13, la memoria (R1), le tessere (T1) e
-// l'indicizzazione (I1) di K0, e il nucleo della lavagna (L1) di N3, nella
-// WebView vera, guidati da WebDriver.
+// l'indicizzazione (I1) di K0, il nucleo della lavagna (L1) di N3 e i chunk
+// di ciascun profilo dei componenti (C1) di K2, nella WebView vera, guidati da
+// WebDriver.
 //
-//   node bench/webview/run.mjs --app=../../target/release/fub [--only=S1,S2,S3]
+//   node bench/webview/run.mjs --app=../../target/release/fub [--only=S1,S2,S3,C1]
 //        [--driver=tauri-driver] [--native-driver=/usr/bin/WebKitWebDriver]
 //        [--budgets=ci|targets] [--out=bench/.output/webview] [--dist=dist]
 //
@@ -24,7 +25,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { openSession, waitForDriver } from "./driver.mjs";
 import { noteName, writeFixtures } from "./fixtures.mjs";
-import { settled } from "./memory.mjs";
+import { pendenza, settled } from "./memory.mjs";
 import { CANVAS_SCRIPT, COMMITS, OPENS, SIZES, builtModule } from "./canvas.mjs";
 import { INDEXING_SCRIPT } from "./indexing.mjs";
 import { TILES_SCRIPT } from "./tiles.mjs";
@@ -35,7 +36,7 @@ const args = Object.fromEntries(process.argv.slice(2).map((arg) => {
   return [key, value];
 }));
 const app = resolve(args.app ?? join(here, "../../../../target/release/fub"));
-const only = new Set((args.only ?? "S1,S2,S3,S4,S5,S6,S7,R1,T1,I1,L1").split(","));
+const only = new Set((args.only ?? "S1,S2,S3,S4,S5,S6,S7,R1,T1,I1,L1,C1").split(","));
 const out = resolve(args.out ?? join(here, "../.output/webview"));
 const budgetsKind = args.budgets ?? "ci";
 const port = Number(args.port ?? 4444);
@@ -60,8 +61,10 @@ const MEMORY_QUIET_MS = 3_000;
 /// quando si rilegge per vedere se la memoria torna col tempo.
 const R1_SETTLE_MS = 10_000;
 const R1_LATE_MS = 60_000;
-/// I giri di apri tutto e chiudi tutto dopo la prima chiusura.
-const R1_ROUNDS = 10;
+/// I giri di apri tutto e chiudi tutto dopo la prima chiusura. Trenta e non
+/// dieci: sul runner la pendenza di dieci giri andava da -25 a 70 MiB per giro
+/// sullo stesso albero (#284), con un errore di circa ±16 MiB; con trenta circa ±3.
+const R1_ROUNDS = 30;
 
 /// Un file per modalità, nell'ordine in cui R1 li apre: il nome che si cerca
 /// col selettore rapido e la modalità che il referto nomina.
@@ -174,6 +177,57 @@ async function centerOf(session, css) {
   return session.execute("const r = document.querySelector(arguments[0])?.getBoundingClientRect(); return r ? { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) } : null;", [css]);
 }
 
+/// S3: quando la lavagna è «ferma». Dalla prima `.canvas-node` un anello di
+/// `requestAnimationFrame` conta i fotogrammi; la lavagna è ferma al primo
+/// fotogramma che chiude `OPENING_STILL_FRAMES` intervalli di fila sotto
+/// `OPENING_GAP_MS`. Oltre `OPENING_LIMIT_MS` dalla prima scheda senza
+/// esserlo, lo scenario fallisce col buco più lungo visto: un'attesa che non
+/// finisce è un difetto da leggere nel referto, non un tempo da tacere.
+const OPENING_STILL_FRAMES = 5;
+const OPENING_GAP_MS = 100;
+const OPENING_LIMIT_MS = 15_000;
+
+/// La cronologia dell'apertura nella pagina, messa prima di aprire la
+/// lavagna: `window.__fubOpening.settled(done)` chiama `done` con
+/// `{ still, ms, longestGap }`, i ms dalla prima scheda alla lavagna ferma e
+/// il buco più lungo fra due fotogrammi dentro l'apertura. Niente timer o
+/// anelli di messaggi: affamerebbero i richiami a riposo con cui la lavagna
+/// finisce di montare.
+const OPENING_SCRIPT = `
+  const [stillFrames, gapMs, limitMs] = arguments;
+  const state = { card: null, last: null, run: 0, longestGap: 0, result: null, waiting: [] };
+  const finish = (result) => {
+    state.result = result;
+    for (const done of state.waiting.splice(0)) done(result);
+  };
+  const tick = () => {
+    const now = performance.now();
+    if (state.last !== null) {
+      const gap = now - state.last;
+      state.longestGap = Math.max(state.longestGap, gap);
+      state.run = gap < gapMs ? state.run + 1 : 0;
+    }
+    state.last = now;
+    const longestGap = Math.round(state.longestGap);
+    if (state.run >= stillFrames) finish({ still: true, ms: Math.round(now - state.card), longestGap });
+    else if (now - state.card > limitMs) finish({ still: false, ms: null, longestGap });
+    else requestAnimationFrame(tick);
+  };
+  const seen = () => {
+    if (state.card !== null || !document.querySelector(".canvas-node")) return;
+    state.card = performance.now();
+    observer.disconnect();
+    requestAnimationFrame(tick);
+  };
+  const observer = new MutationObserver(seen);
+  observer.observe(document.body, { subtree: true, childList: true });
+  seen();
+  window.__fubOpening = {
+    settled: (done) => (state.result ? done(state.result) : state.waiting.push(done)),
+  };
+  return true;
+`;
+
 const stop = (session) => session.execute("return window.__fubProbe.stop();");
 const start = (session) => session.execute("window.__fubProbe.start(); return true;");
 
@@ -186,6 +240,68 @@ async function closeAll(session) {
     await pause(200);
   }
   return left;
+}
+
+/// I profili dei componenti che C1 misura, nell'ordine: il vault del banco
+/// resta all'ultimo, «Tutto», come chi non ha scelto niente.
+const C1_PROFILES = [["solo-note", "Solo note"], ["tutto", "Tutto"]];
+
+/// I file JavaScript che la pagina ha scaricato fin qui, con l'impronta
+/// (`editors-canvas-Bx3kQ9aZ.js`), in ordine.
+const CHUNKS_SCRIPT = `
+  // La WebView non mette sempre fra le risorse ciò che arriva dal protocollo
+  // dell'app: contano anche gli script della pagina e i modulepreload, che
+  // Vite scrive per gli import statici e per quelli di ogni import().
+  const urls = [
+    ...performance.getEntriesByType("resource").map((entry) => entry.name),
+    ...[...document.querySelectorAll("script[src]")].map((node) => node.src),
+    ...[...document.querySelectorAll("link[rel=modulepreload][href]")].map((node) => node.href),
+  ];
+  const names = urls
+    .map((url) => url.split("?")[0].split("/").pop() ?? "")
+    .filter((name) => name.endsWith(".js"));
+  return [...new Set(names)].sort();
+`;
+
+/// Il nome di un chunk senza l'impronta, per il referto
+/// (`editors-canvas-Bx3kQ9aZ.js` → `editors-canvas`).
+const chunkName = (file) => file.replace(/\.js$/, "").replace(/-[A-Za-z0-9_-]{8}$/, "");
+
+/// I chunk del build che contengono un pezzo di un componente spegnibile (il
+/// PDF, la lavagna, i disegni, i documenti, i fogli), con i moduli che ce lo
+/// portano: li scrive il plugin di `vite.config.ts` accanto a ciò che
+/// descrive. Nessuno deve arrivare nella WebView all'avvio o aprendo una
+/// nota, in nessun profilo (D-1, A8): arrivano quando si apre un loro file.
+function switchableChunks() {
+  const file = join(here, "../../dist/switchable-chunks.json");
+  let parsed;
+  try {
+    parsed = JSON.parse(readFileSync(file, "utf8"));
+  } catch (error) {
+    throw new Error(`manca l'elenco dei chunk spegnibili del build (${file}): serve \`npm run build\` prima dell'app (${error?.code ?? error})`);
+  }
+  const chunks = new Map();
+  for (const [what, files] of Object.entries(parsed)) {
+    for (const [name, modules] of Object.entries(files)) {
+      const shown = modules.length > 3 ? [...modules.slice(0, 3), `altri ${modules.length - 3}`] : modules;
+      const key = name.split("/").pop();
+      chunks.set(key, [...(chunks.get(key) ?? []), shown.length ? `${what}: ${shown.join(", ")}` : what]);
+    }
+  }
+  if (chunks.size === 0) throw new Error(`${file} non nomina nessun chunk: il build non separa più i componenti spegnibili`);
+  return chunks;
+}
+
+/// Applica un profilo dei componenti col comando vero dell'host, come la
+/// pagina Componenti: le chiavi del vault le scrive l'host, non il banco.
+async function applyProfile(session, nome) {
+  const answer = await session.executeAsync(`
+    const done = arguments[arguments.length - 1];
+    window.__TAURI_INTERNALS__.invoke("components_apply", { vault: null, azione: { azione: "profilo", nome: arguments[0] }, apply: true })
+      .then((result) => done(JSON.stringify(result)), (error) => done(JSON.stringify({ errore: String(error) })));
+  `, [nome]);
+  const parsed = JSON.parse(answer);
+  if (parsed.risposta !== "esito") throw new Error(`il profilo «${nome}» non si applica: ${answer.slice(0, 300)}`);
 }
 
 const SCENARIOS = {
@@ -213,8 +329,16 @@ const SCENARIOS = {
   },
   /// Spostare e ingrandire una lavagna di 300 schede, 20 note vive.
   async S3(session) {
+    // La lavagna si misura ferma: il primo disegno di 300 schede dura secondi
+    // sul runner, e partire alla prima scheda metteva la sua coda nel massimo
+    // dello spostamento, a seconda di quando arrivava `start`.
+    await session.execute(OPENING_SCRIPT, [OPENING_STILL_FRAMES, OPENING_GAP_MS, OPENING_LIMIT_MS]);
     await openByName(session, "Lavagna", "Scheda 20");
     await session.waitFor("return document.querySelectorAll('.canvas-node').length > 0");
+    const opening = await session.executeAsync("window.__fubOpening.settled(arguments[arguments.length - 1]);");
+    if (!opening.still) {
+      throw new Error(`la lavagna non si ferma: dopo ${OPENING_LIMIT_MS / 1000} s dalla prima scheda non ha ${OPENING_STILL_FRAMES} fotogrammi di fila sotto ${OPENING_GAP_MS} ms (buco più lungo ${opening.longestGap} ms)`);
+    }
     const at = await centerOf(session, ".pane.focus .canvas-viewport");
     await start(session);
     // Il pulsante di mezzo sposta la lavagna, come il trackpad e la rotella.
@@ -232,7 +356,18 @@ const SCENARIOS = {
     }
     await session.releaseActions();
     const report = await stop(session);
-    return { report, zoomed, values: { "S3.frameGap.p95": report.frames.p95, "S3.frameGap.max": report.frames.max }, samples: report.frames.count };
+    return {
+      report,
+      zoomed,
+      opening,
+      values: {
+        "S3.frameGap.p95": report.frames.p95,
+        "S3.frameGap.max": report.frames.max,
+        "S3.apertura": opening.ms,
+        "S3.apertura.buco": opening.longestGap,
+      },
+      samples: report.frames.count,
+    };
   },
   /// Il grafo di 10.000 nodi, trascinato per tre secondi.
   async S4(session) {
@@ -335,9 +470,9 @@ const SCENARIOS = {
   /// finestra), i processi della WebView, la rete, la GPU se c'è.
   /// Il **residuo** è quanto le schede chiuse tengono ancora: «chiuse», dopo
   /// l'attesa lunga, meno «vuota», per processo e in tutto.
-  /// La **pendenza** dei giri è la retta dei minimi quadrati sui residui dei
-  /// giri, in MiB per giro: vicina a zero se la memoria torna, positiva se
-  /// ogni giro ne lascia un po'.
+  /// La **pendenza** dei giri è la mediana delle pendenze fra ogni coppia di
+  /// giri (`pendenza` in `memory.mjs`), in MiB per giro: vicina a zero se la
+  /// memoria torna, positiva se ogni giro ne lascia un po'.
   async R1(session) {
     if (process.platform !== "linux") return { skipped: "la memoria si legge da /proc: soltanto Linux" };
     await pause(MEMORY_QUIET_MS);
@@ -395,15 +530,6 @@ const SCENARIOS = {
     values["R1.residuo.MiB"] = residue(late);
     for (const group of groups) values[`R1.residuo.${group}.MiB`] = residue(late, group);
     // I residui dei giri, e la loro pendenza in MiB per giro.
-    const slope = (ys) => {
-      const points = ys.map((y, x) => [x + 1, y]).filter(([, y]) => y !== null);
-      if (points.length < 2) return null;
-      const mx = points.reduce((a, [x]) => a + x, 0) / points.length;
-      const my = points.reduce((a, [, y]) => a + y, 0) / points.length;
-      const num = points.reduce((a, [x, y]) => a + (x - mx) * (y - my), 0);
-      const den = points.reduce((a, [x]) => a + (x - mx) ** 2, 0);
-      return Math.round((num / den) * 100) / 100;
-    };
     const trend = {};
     for (const group of [null, ...groups]) {
       const ys = rounds.map((r) => residue(r.closed, group));
@@ -411,7 +537,7 @@ const SCENARIOS = {
       trend[key] = ys;
       values[`${key}.primo.MiB`] = ys[0] ?? null;
       values[`${key}.ultimo.MiB`] = ys.at(-1) ?? null;
-      values[`${key}.pendenza.MiB`] = slope(ys);
+      values[`${key}.pendenza.MiB`] = pendenza(ys);
       values[`${key}.tardi.MiB`] = residue(roundsLate, group);
     }
     return {
@@ -472,6 +598,45 @@ const SCENARIOS = {
       },
       samples: report.open?.count ?? 0,
     };
+  },
+  /// I chunk di ciascun profilo dei componenti (K2): per «Solo note» e per
+  /// «Tutto» il profilo si applica, si lascia aperta la nota lunga, e l'app
+  /// riparte da capo. L'avvio a freddo (S6, la nota riaperta), i chunk
+  /// scaricati fin lì, e quelli in più dopo aver aperto un'altra nota. Con
+  /// «Solo note» all'avvio non arriva niente della lavagna, del PDF, dei
+  /// documenti o dei fogli: lo vieta già il build (D-1), qui si vede nella
+  /// WebView vera.
+  async C1(session) {
+    const switchable = switchableChunks();
+    const profiles = {};
+    const values = {};
+    let current = session;
+    try {
+      for (const [nome, label] of C1_PROFILES) {
+        await applyProfile(current, nome);
+        await openByName(current, "Lunga", "Una nota lunga");
+        await current.close();
+        current = null;
+        current = await openSession(base, app);
+        await current.waitFor("return !!window.__fubProbe && window.__fubProbe.stop().coldStart !== null", [], 120_000);
+        const report = await stop(current);
+        const startup = await current.execute(CHUNKS_SCRIPT);
+        await ready(current);
+        await indexed(current);
+        await openByName(current, noteName(1), noteName(1));
+        await pause(MEMORY_QUIET_MS);
+        const after = await current.execute(CHUNKS_SCRIPT);
+        const afterNote = after.filter((name) => !startup.includes(name));
+        const switchableSeen = after.filter((name) => switchable.has(name)).map((name) => `${chunkName(name)} (${switchable.get(name).join("; ")})`);
+        profiles[nome] = { label, coldStart: report.coldStart, startup: startup.map(chunkName), afterNote: afterNote.map(chunkName), switchable: switchableSeen };
+        values[`C1.${nome}.coldStart`] = report.coldStart;
+        values[`C1.${nome}.chunks`] = startup.length;
+        values[`C1.${nome}.spegnibili`] = switchableSeen.length;
+      }
+    } finally {
+      await current?.close();
+    }
+    return { profiles, values, samples: C1_PROFILES.length };
   },
   /// Il nucleo della lavagna in WebAssembly (N3): il modulo che la build ha
   /// messo fra gli asset, compilato con la CSP dell'app, poi istanza, `open`
@@ -581,8 +746,9 @@ async function main() {
     // R1 subito dopo il riscaldamento: l'avvio riapre soltanto la nota del
     // riscaldamento, non le schede degli altri scenari. I1 subito dopo, con
     // poche schede da riaprire. S6 dopo S1: l'avvio da misurare riapre la
-    // nota che S1 ha lasciato. L1 in fondo: non apre niente nel vault.
-    const order = ["R1", "I1", "S1", "S6", "S2", "S3", "S4", "S5", "S7", "T1", "L1"].filter((id) => only.has(id));
+    // nota che S1 ha lasciato. L1 dopo: non apre niente nel vault. C1 in
+    // fondo: cambia il profilo del vault, e lo lascia a «Tutto».
+    const order = ["R1", "I1", "S1", "S6", "S2", "S3", "S4", "S5", "S7", "T1", "L1", "C1"].filter((id) => only.has(id));
     for (const id of order) {
       // Un'app che non parte è un risultato dello scenario, non la fine del
       // banco: gli altri scenari e il referto vanno avanti.
@@ -610,7 +776,13 @@ async function main() {
           const limit = limits[key];
           const over = limit !== undefined && (value === null || value > limit);
           if (over) failed++;
-          console.log(`${over ? "✗" : "✓"} ${key} = ${value ?? "—"} ${key.endsWith("MiB") ? "MiB" : "ms"}${limit !== undefined ? ` (soglia ${limit})` : ""} · ${result.samples} campioni`);
+          const unit = key.endsWith("MiB") ? "MiB" : key.endsWith(".chunks") || key.endsWith(".spegnibili") ? "chunk" : "ms";
+          console.log(`${over ? "✗" : "✓"} ${key} = ${value ?? "—"} ${unit}${limit !== undefined ? ` (soglia ${limit})` : ""} · ${result.samples} campioni`);
+        }
+        for (const [nome, seen] of Object.entries(result.profiles ?? {})) {
+          console.log(`· ${seen.label}: all'avvio ${seen.startup.join(", ")}`);
+          console.log(`· ${seen.label}: dopo una nota ${seen.afterNote.join(", ") || "niente in più"}`);
+          console.log(`· ${seen.label}: dei componenti spegnibili ${seen.switchable.join(", ") || "niente"}`);
         }
       } catch (error) {
         failed++;
@@ -618,7 +790,8 @@ async function main() {
         results[id] = { error: String(error?.message ?? error) };
         console.log(`✗ ${id}: ${results[id].error}`);
       } finally {
-        await session.close();
+        // C1 chiude da sé le sessioni che apre, anche la prima.
+        if (id !== "C1") await session.close();
       }
     }
   } finally {

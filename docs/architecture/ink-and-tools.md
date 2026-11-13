@@ -259,13 +259,19 @@ FubDraw è il primo consumatore e non il proprietario.
 - `tools/editor/ink-gestures.ts` (`writeInk`, `eraseAlong`) costruisce il
   tratto con `buildStroke`, lo scrive in un'unica operazione nello storico e fa
   correre la gomma con `EraseSweep` sull'indice della scena.
-- `tools/hit.ts` (`SceneIndex.along`) è la fonte della gomma e non riprova ciò
+- `tools/hit/scene-index.ts` (`SceneIndex.along`) è la fonte della gomma e non riprova ciò
   che `marked` ha già segnato. Da 256 oggetti in su (`TREE_FROM`) prova
   soltanto quelli che l'albero dei riquadri (`tools/box-tree.ts`) dà
   vicini al segmento. L'albero è un R-tree impacchettato una volta per indice,
   alla prima domanda, e dà gli oggetti che il confronto dei riquadri darebbe:
   il risultato è quello della scansione.
 - `tools/edit.ts` (`strokeElem`) scrive nel file l'opacità dello strumento.
+- `tools/editor/toolbar.ts` monta la testa del disegno, dove si sceglie
+  l'inchiostro (colore, spessore, penna, modo della gomma): veste la barra in
+  una fila del kit (`kit-bar`, `kit-bar-group`, `kit-bar-button`), e
+  `tools/editor/input.ts` le dà le frecce di `kit/toolbar-keys.ts`, con un
+  solo punto di Tab dal menu a «Esporta». La colonna degli strumenti veste
+  `kit-rail`.
 
 Restano del prodotto il livello di destinazione, gli id, gli annunci per lo screen reader, il passo di annulla e il formato della scena.
 

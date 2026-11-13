@@ -53,6 +53,18 @@ Nella banda di stato dello Scrittoio il disegno dice lo zoom (un clic torna al
 contorni (un clic torna al disegno pieno), dove sta il puntatore, la misura
 della selezione e quanti oggetti ci sono o sono scelti.
 
+## La testa
+
+In cima al foglio la testa del disegno è una barra in una fila, come la barra
+di formato delle note e la barra del PDF: un vassoio un tono sotto la carta,
+coi foglietti del menu «Disegno» con Annulla e Ripeti, del colore, degli
+spessori e degli altri gruppi dello strumento, ed «Esporta» in fondo. Ciò che
+non ci sta va in «…». Da tastiera la testa ha un solo punto di Tab: le frecce
+sinistra e destra passano da un comando all'altro, dal menu a «Esporta», e
+girano ai capi; `Inizio` e `Fine` vanno al primo e all'ultimo. Le annotazioni
+di un PDF hanno la stessa testa, con le pagine in un foglietto. `Ctrl+.` la
+nasconde insieme al resto.
+
 ## Cercare un comando
 
 `?` elenca i tasti dello spazio di adesso, e «Mostra tutto» quelli che il

@@ -44,7 +44,9 @@ use fub_abi::{
     GridBytesSession, GridBytesWindow, GridCommandOutcome, GridCommandRequest, GridCommandState,
     GridSelection, Notice, PluginError,
 };
-use fub_host::{doc_id, document_text, Delivery, DocumentText, EventSink, Host, OpenKey};
+use fub_host::{
+    componenti, doc_id, document_text, Delivery, DocumentText, EventSink, Host, OpenKey,
+};
 use fub_wasm_host::catalog::{CatalogEntry, CatalogError, CatalogTrust, SignedFeed};
 use fub_wasm_host::installed::Consent;
 use fub_wasm_host::managed::{InstalledOperation, InstalledPluginManager, InstalledShutdown};
@@ -60,6 +62,7 @@ pub use fub_host::{
 pub use fub_wasm_host::managed::InstalledPluginInfo;
 mod avvio;
 mod document_windows;
+mod domande;
 mod frame_rate;
 mod live;
 mod mobile;
@@ -1084,13 +1087,26 @@ fn invoke_command(
 /// proprio, e la dieta dell'IPC (§16.6) diventa praticabile — un'allowlist che
 /// vieta i comandi bespoke non deve più dire di no a feature che non hanno altra
 /// strada.
+///
+/// Gira fuori dal thread principale, in fila (`domande`): una domanda può
+/// durare centinaia di millisecondi — il correttore che controlla una nota
+/// lunga (`fub.proof`), una ricerca su un vault grande — e sul thread
+/// principale ferma la finestra, che per tutto quel tempo non presenta
+/// fotogrammi. Le domande di una stessa corsia rispondono nell'ordine in cui
+/// sono entrate, come prima.
 #[tauri::command]
-fn query_index(
-    host: State<Host>,
+async fn query_index(
+    app: AppHandle,
+    corsie: State<'_, domande::Corsie>,
     query: IndexQuery,
     vault: Option<String>,
 ) -> Result<IndexResult, PluginError> {
-    host.query_index(vault.as_deref(), query)
+    let corsia = domande::corsia(&query);
+    corsie
+        .chiedi(corsia, move || {
+            app.state::<Host>().query_index(vault.as_deref(), query)
+        })
+        .await
 }
 
 /// **Ferma un lavoro lungo** (§10.3): l'altro capo di `Host::cancel_job`, che
@@ -1745,6 +1761,185 @@ async fn set_plugin_enabled(
     .map_err(|error| {
         PluginError::Internal(format!("plugin toggle did not complete: {error}").into())
     })?
+}
+
+/// Una riga della pagina «Componenti»: la riga del vault
+/// ([`componenti::RigaNelVault`], appiattita) con ciò che la mappa dice di lei.
+///
+/// Sul filo `nome` è **già nella lingua di chi guarda** (la lingua del vault,
+/// con quella del sistema come ripiego), non la chiave del catalogo che la
+/// riga del vault porta: la shell quel catalogo non ce l'ha. Una chiave che
+/// manca dà l'id. `gruppo` è sempre uno di [`ComponentsMap::gruppi`]: le righe
+/// che non ne dicono uno stanno in `altro`.
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct ComponentRow {
+    #[serde(flatten)]
+    pub riga: componenti::RigaNelVault,
+    /// Che cosa fa per chi usa Fub, in una frase, risolta come il nome; vuota
+    /// se il catalogo non l'ha.
+    pub descrizione: String,
+    /// Modo, motore, servizio o dati.
+    pub tipo: fub_abi::ComponentKind,
+    /// I pezzi del client che la riga carica, cartelle sotto
+    /// `apps/client/src/` (`editors/media`): gli stessi di `manifest.ui`.
+    pub ui: Vec<String>,
+    /// I requisiti diretti, già risolti in id di righe (`provides` compresi).
+    pub richiede: Vec<String>,
+    /// Gli «usa se c'è» che in questa build sono righe: non accendono niente.
+    pub usa: Vec<String>,
+}
+
+/// Un profilo di [`componenti::profili`], come lo mostra la pagina.
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct ComponentProfile {
+    pub nome: String,
+    /// Il nome da mostrare, nella lingua di chi guarda; il nome interno se il
+    /// catalogo non l'ha.
+    pub etichetta: String,
+    pub componenti: Vec<String>,
+    /// I componenti che il profilo aspetta e che non esistono ancora.
+    pub arriva_con: Vec<String>,
+    /// Se aspetta qualcosa: allora non si applica («più avanti»).
+    pub piu_avanti: bool,
+}
+
+/// Un gruppo della pagina «Componenti», come la pagina lo intitola.
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct ComponentGroup {
+    pub id: String,
+    /// Il nome nella lingua di chi guarda; l'id se il catalogo non l'ha.
+    pub nome: String,
+}
+
+/// Ciò che `components_map` risponde: i gruppi, le righe, lo stato, il
+/// profilo attivo (`None` = personalizzato), i profili e gli id che le chiavi
+/// nominano a vuoto.
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct ComponentsMap {
+    /// I gruppi che la pagina disegna, nel suo ordine: solo quelli che in
+    /// questa build hanno righe.
+    pub gruppi: Vec<ComponentGroup>,
+    pub righe: Vec<ComponentRow>,
+    pub stato: componenti::Stato,
+    pub profilo: Option<String>,
+    pub profili: Vec<ComponentProfile>,
+    pub mancanti: Vec<componenti::Mancante>,
+}
+
+/// Ciò che `components_apply` risponde: l'esito della scelta, o il rifiuto
+/// tipato. Il rifiuto **non** è un errore dell'IPC: è una risposta, e la
+/// shell la dice con le sue parole; l'errore resta per ciò che non è una
+/// scelta (il vault non aperto, l'host che non risponde).
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(tag = "risposta", rename_all = "snake_case")]
+pub enum ComponentsApplied {
+    Esito(componenti::Esito),
+    Rifiuto(componenti::Rifiuto),
+}
+
+/// La mappa dei componenti di `vault` per la shell: ciò che serve
+/// `components_map`, con gli errori nella lingua di chi guarda.
+pub fn components_map_for(host: &Host, vault: Option<&str>) -> Result<ComponentsMap, PluginError> {
+    let result = host.components(vault).map(|nel_vault| {
+        let testi = host.component_texts(vault);
+        let definizioni = componenti::righe();
+        let mappa = componenti::mappa();
+        let righe = nel_vault
+            .righe
+            .into_iter()
+            // Le righe del vault nascono dalla mappa: una senza definizione
+            // non esiste, e se esistesse la pagina non saprebbe disegnarla.
+            .filter_map(|mut riga| {
+                let definizione = definizioni
+                    .iter()
+                    .find(|definizione| definizione.id == riga.id)?;
+                riga.nome = testi.nome(definizione);
+                Some(ComponentRow {
+                    descrizione: testi.descrizione(definizione),
+                    tipo: definizione.kind,
+                    ui: definizione.ui.iter().map(|ui| ui.to_string()).collect(),
+                    richiede: mappa.richiesti(&riga.id).to_vec(),
+                    usa: definizione
+                        .uses
+                        .iter()
+                        .filter(|id| mappa.componente(id).is_some())
+                        .map(|id| id.to_string())
+                        .collect(),
+                    riga,
+                })
+            })
+            .collect();
+        let profili = componenti::profili()
+            .into_iter()
+            .map(|profilo| ComponentProfile {
+                piu_avanti: profilo.piu_avanti(),
+                nome: profilo.nome.to_string(),
+                etichetta: testi.profilo(&profilo),
+                componenti: profilo.componenti.iter().map(|id| id.to_string()).collect(),
+                arriva_con: profilo.arriva_con.iter().map(|id| id.to_string()).collect(),
+            })
+            .collect();
+        let gruppi = componenti::gruppi()
+            .into_iter()
+            .map(|gruppo| ComponentGroup {
+                id: gruppo.to_string(),
+                nome: testi.gruppo(gruppo),
+            })
+            .collect();
+        ComponentsMap {
+            gruppi,
+            righe,
+            stato: nel_vault.stato,
+            profilo: nel_vault.profilo,
+            profili,
+            mancanti: nel_vault.mancanti,
+        }
+    });
+    for_the_shell(host, vault, result)
+}
+
+/// Applica una scelta sui componenti, o con `apply` falso dice che cosa
+/// cambierebbe: ciò che serve `components_apply`. La regola è quella della
+/// CLI e di MCP ([`Host::apply_components`]).
+pub fn components_apply_for(
+    host: &Host,
+    vault: Option<&str>,
+    azione: componenti::Azione,
+    apply: bool,
+) -> Result<ComponentsApplied, PluginError> {
+    let result = host
+        .apply_components(vault, azione, apply)
+        .map(|risposta| match risposta {
+            Ok(esito) => ComponentsApplied::Esito(esito),
+            Err(rifiuto) => ComponentsApplied::Rifiuto(rifiuto),
+        });
+    for_the_shell(host, vault, result)
+}
+
+/// La mappa dei componenti di un vault, con lo stato e i profili (A7).
+#[tauri::command]
+fn components_map(host: State<Host>, vault: Option<String>) -> Result<ComponentsMap, PluginError> {
+    components_map_for(&host, vault.as_deref())
+}
+
+/// Applica una scelta sui componenti (A7). Senza `apply` è una prova: dice
+/// che cosa cambierebbe e non scrive niente, come la CLI. Come
+/// `set_plugin_enabled` gira fuori dal thread dei comandi: spegnere o
+/// riaccendere la lavagna rimonta il vault, e la riapertura riscandisce.
+/// Non è `program_writable`: lo stato dei componenti lo cambia solo la shell.
+#[tauri::command]
+async fn components_apply(
+    app: AppHandle,
+    vault: Option<String>,
+    azione: componenti::Azione,
+    apply: Option<bool>,
+) -> Result<ComponentsApplied, PluginError> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let host = app.state::<Host>();
+        components_apply_for(&host, vault.as_deref(), azione, apply.unwrap_or(false))
+    })
+    .await
+    .map_err(|error| unfinished("component choice", error))?
 }
 
 /// I vault che questa macchina conosce: preferiti, poi recenti.
@@ -2704,6 +2899,7 @@ pub fn run() {
         .manage(CatalogConfig(config_dir.clone()))
         .manage(limited)
         .manage(document_windows::DocumentWindows::default())
+        .manage(domande::Corsie::default())
         .manage(live::LiveSessions::new())
         .on_window_event(|window, event| {
             document_windows::on_window_event(window, event);
@@ -2897,6 +3093,8 @@ pub fn run() {
             set_installed_plugin_consent,
             remove_installed_plugin,
             set_plugin_enabled,
+            components_map,
+            components_apply,
             known_vaults,
             set_vault_favorite,
             set_vault_look,

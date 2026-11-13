@@ -48,6 +48,11 @@ dist/
 # Test vault (throwaway notes + tantivy indices)
 /TestVault
 
+# Artefatti che la CI rigenera a ogni corsa e che a volte finiscono in
+# cartella: la SBOM in formato SPDX e l'evidenza del banco del grafo.
+/sbom-spdx/
+/evidenza-grafo-*/
+
 # What a visual bench run produces: current photos, diffs, and the
 # contact sheet. The baseline — `apps/client/bench/baseline/` — is versioned
 # on purpose and is NOT here: a diff without a baseline is not a diff,

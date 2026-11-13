@@ -22,6 +22,12 @@ SVG, anche con prologo XML, commenti o `<!DOCTYPE>` prima di `<svg>`, si mostra
 come immagine inerte. HEIC e TIFF, che la webview non decodifica, mostrano un
 messaggio al posto dell'immagine e lasciano il file intatto.
 La finestra di duecento voci per livello vale per note e file insieme.
+Aprire una cartella rifà soltanto le sue righe, e si muove solo ciò che si
+vede: le voci visibili entrano una dopo l'altra e le righe sotto scivolano.
+Alla chiusura i figli sbiadiscono e le righe sotto risalgono in 140 ms,
+partendo piano (`ease-in-out`), dal bordo se prima non si vedevano. Un clic
+chiude il suggerimento della riga, come quello di ogni controllo, e non torna
+finché il puntatore resta fermo: non copre le voci appena aperte.
 Dal menu contestuale un allegato si rinomina, conservando l'estensione, e si
 cestina come una nota: il kernel lo toglie dall'anagrafe con `EntryRemoved` e
 il ripristino lo rimette dov'era, byte per byte.
@@ -36,9 +42,34 @@ con `./` una nota nuova nasce accanto a quella aperta, e vince sullo spazio
 attivo; una cartella scelta da chi crea (il menu di una cartella) vince su
 tutto, e senza una nota aperta si parte dalla radice. La regola è
 `fub_abi::rules::folders::for_note`, con la gemella `folderForNote` nella shell.
-«Filtra l'esplora per percorso» (`shell.explorer.filter`, dalla palette) apre
-un campo sopra l'albero. Con del testo l'albero cede il posto a un elenco
-piatto delle voci e cartelle dello spazio il cui percorso intero contiene ogni
+Il titolo del cassetto dice «Note», o il nome dello spazio attivo, e porta due
+azioni a icona: «Ordina» apre un menu con gli stessi ordini a scelta singola
+del sottomenu «Ordina» del contestuale della radice (a mano, per nome, per
+data), e «Crea una nota nuova» crea una nota nello spazio attivo; senza un
+vault aperto è spenta. Gli spazi stanno in un pozzetto: quello acceso mostra
+figura e nome, gli altri solo la figura, col nome per chi usa un lettore di
+schermo. Sopra l'albero, «Tutte le note» porta il numero delle voci di ciò che
+si vede, il vault o lo spazio attivo, a ogni profondità e di ogni specie; con
+zero voci il numero non si scrive. Ogni cartella dice a destra quante voci
+dirette contiene, file compresi e sottocartelle escluse, anche quando è chiusa;
+una cartella vuota non ha numero, e il numero non entra nel nome della riga
+letto da un lettore di schermo. I numeri vengono dall'anagrafe del kernel, non
+da ciò che l'albero disegna o dal filtro.
+«Icona…», dal menu di una nota, di una cartella o di uno spazio, apre un
+selettore con due gruppi col loro titolo: «Figure», quindici figure monocrome
+(cartella, nota, libro, calendario, casa, stella, bandiera, idea, in arrivo,
+archivio, immagine, cuore, lavoro, persone, musica) che prendono il colore del
+testo come le figure dell'albero, ed «Emoji». Sotto, un campo accetta un'emoji qualsiasi e «Senza
+icona» la toglie; l'icona scelta ha il velo d'accento, Esc chiude e il fuoco
+torna dov'era. Una figura si salva come `fub:<nome>` nella stessa stringa
+dell'emoji (`.fub/workspace.json`, vedi [Disposizione su
+disco](../reference/on-disk-layout.md)); un `fub:` con un nome che questa
+versione non conosce non si disegna, e la riga torna alla figura di serie. Nei
+menu e nei titoli il nome di una cartella porta davanti la sua emoji, mai la
+figura. La regola che legge il valore è `apps/client/src/ui/page-mark.ts`.
+«Filtra l'esplora per percorso» (`shell.explorer.filter`, dalla palette) dà il
+fuoco al campo con la lente sopra l'albero. Con del testo l'albero, con le
+appuntate e «Tutte le note», cede il posto a un elenco piatto delle voci e cartelle dello spazio il cui percorso intero contiene ogni
 parola, senza badare alle maiuscole. `-parola` toglie ogni voce con un pezzo di
 percorso che la contiene, quindi una cartella sparisce con tutto il contenuto;
 fra virgolette una frase vale una parola. Invio apre la prima voce, una

@@ -11,7 +11,8 @@
 // È un cricchetto: un crate sopra la soglia fallisce, e anche uno sotto, perché
 // la soglia va abbassata nello stesso cambio che converte. Si contano i
 // sorgenti di produzione: niente `tests/`, `legacy_tests/`, né il modulo
-// `#[cfg(test)]` in coda a un file.
+// `#[cfg(test)]` in coda a un file. Un `#[cfg(test)] mod tests;` che porta i
+// test in un file a parte non taglia niente: la produzione può seguirlo.
 
 import fs from "node:fs";
 import path from "node:path";
@@ -32,7 +33,7 @@ const LITERAL =
 
 function production(file) {
   const text = fs.readFileSync(file, "utf8");
-  const tests = text.search(/^#\[cfg\(test\)\]\s*\n\s*mod /m);
+  const tests = text.search(/^#\[cfg\(test\)\]\s*\n\s*mod \w+\s*\{/m);
   return tests >= 0 ? text.slice(0, tests) : text;
 }
 

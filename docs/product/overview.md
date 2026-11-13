@@ -127,21 +127,9 @@ Rust.
   remove;
 - capability applicate nel kernel.
 
-## Stato delle grandi aree
-
-| Area | Stato |
-|---|---|
-| Markdown local-first | disponibile nel codice |
-| editor, preview e shell | disponibili nel codice |
-| ricerca, backlink e grafo | disponibili nel codice |
-| plugin nativi | disponibili nel codice |
-| runtime WASM e provider M5 | consegnati in `main` |
-| installazione di plugin di terzi | percorso file singolo disponibile in `main` |
-| database, sincronizzazione distribuita, collaborazione, publishing, AI e marketplace | non sono capacità consegnate |
-
 Una descrizione dettagliata di un'idea non la rende parte del prodotto. Lo
-stato autorevole è in [`../project/status.md`](../project/status.md).
-
+stato autorevole delle grandi aree è in
+[`../project/status.md`](../project/status.md).
 
 ## Approfondimenti
 

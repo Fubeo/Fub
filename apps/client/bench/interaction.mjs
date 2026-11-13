@@ -5,6 +5,8 @@
 //     node bench/interaction.mjs --only=palette  # solo quelle
 //     node bench/interaction.mjs --rounds=9
 //     node bench/interaction.mjs --only=battuta  # la battuta nelle note grandi
+//     node bench/interaction.mjs --only=apertura --cpu=4  # aprire una nota grande, pagina più lenta
+//     node bench/interaction.mjs --only=cambio --cpu=4    # passare da una nota piccola all'altra
 //
 // Per ogni interazione due numeri, dal momento del gesto (`timeStamp`
 // dell'evento che lo fa partire):
@@ -21,6 +23,20 @@
 // scrittura; trenta battute e venti spostamenti del cursore di 200 caratteri.
 // Il budget è la mediana della battuta.
 //
+// **L'apertura** di una nota grande (`--only=apertura`, `live-fixture.ts`:
+// 4.000 paragrafi, circa 765 KB) misura dal clic nell'albero quando la prima
+// riga è nel documento e il compito più lungo della pagina finché resta
+// quieta, in una pagina nuova a ogni giro. `--cpu=N` rallenta la pagina N
+// volte: quattro danno, prima della resa progressiva della Live, il blocco
+// misurato nella WebView dell'app vera.
+//
+// **Il cambio di nota** (`--only=cambio`) è il gesto più frequente: tre note
+// piccole già aperte in schede (`Benvenuto.md`, la `panoramica` della Live e
+// `Sintassi di Fub.md`), e a ogni giro un clic nell'albero sulla prossima. Si
+// misura dal clic quando la scheda nuova è scelta col suo testo nel documento,
+// e il compito più lungo fino a due fotogrammi dopo. Una pagina sola: è il
+// costo fisso del cambio, non quello della prima apertura.
+//
 // Si tiene la mediana dei giri: il primo giro paga la compilazione dei moduli,
 // e un giro solo non dice niente su una macchina che fa anche altro. I budget
 // sono in `docs/product/performance-budget.md`; il banco esce diverso da zero
@@ -28,7 +44,7 @@
 // sono quelli di una macchina di chi scrive.
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { SCENE, sceneUrl } from "./scene.mjs";
+import { SCENE, chooseMode, sceneUrl } from "./scene.mjs";
 import { openStage, openPage, prepareScene, OUTPUT } from "./stage.mjs";
 
 const REPORT = join(OUTPUT, "interazione");
@@ -96,12 +112,32 @@ const TYPING = {
   budget: 4,
 };
 
+/// L'apertura di una nota grande: il caso della Live `lunga-4000`, 4.000
+/// paragrafi e circa 765 KB. Il budget vale per la mediana dei giri, in
+/// millisecondi: il testo in cima visibile e il compito più lungo.
+const OPENING = {
+  id: "apertura",
+  title: "Aprire una nota grande (4.000 paragrafi, 765 KB)",
+  note: "lunga-4000",
+  budget: { visible: 150, longest: 50 },
+};
+
+/// Il cambio fra note piccole già aperte. Il budget vale per la mediana dei
+/// giri, in millisecondi: la scheda nuova col suo testo, e il compito più lungo.
+const SWITCH = {
+  id: "cambio",
+  title: "Passare da una nota piccola all'altra",
+  notes: ["Benvenuto.md", "Guida/Live.md", "Guida/Sintassi di Fub.md"],
+  budget: { visible: 100, longest: 50 },
+};
+
 const only = process.argv
   .find((arg) => arg.startsWith("--only="))
   ?.slice("--only=".length)
   .split(",")
   .filter(Boolean);
 const rounds = Number(process.argv.find((arg) => arg.startsWith("--rounds="))?.slice("--rounds=".length) ?? 5);
+const cpu = Number(process.argv.find((arg) => arg.startsWith("--cpu="))?.slice("--cpu=".length) ?? 1);
 
 async function click(page, selector) {
   await page.locator(selector).first().waitFor({ state: "visible", timeout: SETTLE_LIMIT_MS });
@@ -214,7 +250,7 @@ async function measureTyping(stage, sections, mode) {
     await click(page, '#sidebar li[role="treeitem"][data-path="Guida"] .chevron');
     await click(page, '#sidebar .tree-row[data-path="Guida/Live.md"]');
     await page.waitForSelector(tabOf("Guida/Live.md"));
-    await click(page, `.pane.focus .pane-toolbar button[data-mode="${mode}"]`);
+    await chooseMode(page, mode);
     await page.waitForSelector(`.pane.focus[data-mode="${mode}"] .cm-content`);
     // I Blocchi arrivano in un pezzo a parte: si misura quando ci sono.
     if (mode === "blocks") await page.waitForSelector(".pane.focus .cm-fub-block-handles", { state: "attached" });
@@ -262,8 +298,157 @@ async function measureTyping(stage, sections, mode) {
   }
 }
 
+/// Apre la nota grande dall'albero, in una pagina nuova a ogni giro, e misura
+/// dal clic: quando la prima riga della nota è nel documento, e il compito più
+/// lungo (Long Tasks API: ogni compito oltre i 50 ms) finché la pagina non
+/// resta quieta. `--cpu=N` rallenta la pagina N volte, come una WebView più
+/// lenta di Chromium.
+async function measureOpening(stage) {
+  const scene = { id: OPENING.note, query: `live=${OPENING.note}`, prepare: async () => {} };
+  const samples = [];
+  for (let round = 0; round < rounds; round += 1) {
+    const page = await openPage(stage.browser, "dark", { clock: false });
+    try {
+      await prepareScene(page, scene, "dark", stage.base, sceneUrl);
+      await click(page, '#sidebar li[role="treeitem"][data-path="Guida"] .chevron');
+      await page.locator('#sidebar .tree-row[data-path="Guida/Live.md"]').first().waitFor({ state: "visible" });
+      if (cpu > 1) await (await page.context().newCDPSession(page)).send("Emulation.setCPUThrottlingRate", { rate: cpu });
+      await page.evaluate(() => {
+        const result = { start: null, visible: null, tasks: [] };
+        new PerformanceObserver((list) => {
+          for (const entry of list.getEntries()) result.tasks.push({ start: entry.startTime, duration: entry.duration });
+        }).observe({ type: "longtask" });
+        window.__apertura = new Promise((resolve) => {
+          document.addEventListener("pointerdown", (event) => {
+            result.start = event.timeStamp;
+            let quietSince = performance.now();
+            let last = performance.now();
+            const tick = (now) => {
+              if (result.visible === null && [...document.querySelectorAll(".pane.focus .cm-line")]
+                .some((line) => line.textContent.startsWith("Paragrafo 1:"))) result.visible = now;
+              // Quieta: mezzo secondo di fotogrammi brevi, dopo il testo.
+              if (now - last > 50) quietSince = now;
+              last = now;
+              if ((result.visible !== null && now - quietSince > 500) || now - result.start > 10_000) resolve(result);
+              else requestAnimationFrame(tick);
+            };
+            requestAnimationFrame(tick);
+          }, { capture: true, once: true });
+        });
+      });
+      await click(page, '#sidebar .tree-row[data-path="Guida/Live.md"]');
+      const result = await page.evaluate(() => window.__apertura);
+      if (result.visible === null) throw new Error(`giro ${round + 1}: la nota non si vede in 10 s`);
+      const tasks = result.tasks.filter((task) => task.start + task.duration >= result.start);
+      samples.push({
+        visible: result.visible - result.start,
+        longest: Math.max(0, ...tasks.map((task) => task.duration)),
+        tasks: tasks.length,
+      });
+    } finally {
+      await page.context().close();
+    }
+  }
+  const median = (key) => {
+    const sorted = samples.map((s) => s[key]).sort((a, b) => a - b);
+    return Math.round(sorted[Math.floor(sorted.length / 2)]);
+  };
+  const visible = median("visible");
+  const longest = median("longest");
+  return {
+    id: OPENING.id,
+    title: OPENING.title,
+    budget: OPENING.budget,
+    cpu,
+    visible,
+    longest,
+    samples: samples.map((s) => ({ visible: Math.round(s.visible), longest: Math.round(s.longest), tasks: s.tasks })),
+    pass: visible <= OPENING.budget.visible && longest <= OPENING.budget.longest,
+  };
+}
+
+/// Passa fra le note piccole di `SWITCH`, già aperte, con un clic nell'albero
+/// a giro, e misura dal clic: quando la scheda nuova è quella scelta e il suo
+/// editor ha il testo nel documento, e il compito più lungo (Long Tasks API)
+/// fino a due fotogrammi dopo, che comprendono la misura dell'editor.
+/// `--cpu=N` come per l'apertura.
+async function measureSwitch(stage) {
+  const scene = { id: "cambio", query: "live=panoramica", prepare: async () => {} };
+  const page = await openPage(stage.browser, "dark", { clock: false });
+  const samples = [];
+  try {
+    await prepareScene(page, scene, "dark", stage.base, sceneUrl);
+    await click(page, '#sidebar li[role="treeitem"][data-path="Guida"] .chevron');
+    // La prima apertura di ciascuna paga i moduli e la sessione: non si misura.
+    for (const note of SWITCH.notes) {
+      await click(page, `#sidebar .tree-row[data-path="${note}"]`);
+      await page.waitForSelector(tabOf(note));
+      await page.waitForSelector(".pane.focus .cm-content");
+      await page.waitForTimeout(300);
+    }
+    if (cpu > 1) await (await page.context().newCDPSession(page)).send("Emulation.setCPUThrottlingRate", { rate: cpu });
+    await page.evaluate(() => {
+      window.__compiti = [];
+      new PerformanceObserver((list) => {
+        for (const entry of list.getEntries()) window.__compiti.push({ start: entry.startTime, duration: entry.duration });
+      }).observe({ type: "longtask" });
+    });
+    for (let round = 0; round < rounds * 2; round += 1) {
+      const note = SWITCH.notes[round % SWITCH.notes.length];
+      await page.evaluate((note) => {
+        window.__compiti = [];
+        window.__cambio = new Promise((resolve) => {
+          const result = { start: null, visible: null };
+          document.addEventListener("pointerdown", (event) => {
+            result.start = event.timeStamp;
+            const tick = (now) => {
+              const tab = document.querySelector('.pane.focus .tab[aria-selected="true"]');
+              const content = document.querySelector(".pane.focus .cm-content");
+              if (result.visible === null && tab?.dataset.key?.includes(JSON.stringify(note)) && (content?.textContent ?? "") !== "") {
+                result.visible = now;
+                requestAnimationFrame(() => requestAnimationFrame(() => resolve(result)));
+                return;
+              }
+              if (now - result.start > 10_000) resolve(result);
+              else requestAnimationFrame(tick);
+            };
+            requestAnimationFrame(tick);
+          }, { capture: true, once: true });
+        });
+      }, note);
+      await click(page, `#sidebar .tree-row[data-path="${note}"]`);
+      const result = await page.evaluate(() => window.__cambio);
+      if (result.visible === null) throw new Error(`giro ${round + 1}: «${note}» non si vede in 10 s`);
+      const tasks = await page.evaluate((start) => window.__compiti.filter((task) => task.start + task.duration >= start), result.start);
+      samples.push({ visible: result.visible - result.start, longest: Math.max(0, ...tasks.map((task) => task.duration)) });
+      await page.mouse.move(0, 0);
+      await page.waitForTimeout(150);
+    }
+  } finally {
+    await page.context().close();
+  }
+  const median = (key) => {
+    const sorted = samples.map((s) => s[key]).sort((a, b) => a - b);
+    return Math.round(sorted[Math.floor(sorted.length / 2)]);
+  };
+  const visible = median("visible");
+  const longest = median("longest");
+  return {
+    id: SWITCH.id,
+    title: SWITCH.title,
+    budget: SWITCH.budget,
+    cpu,
+    visible,
+    longest,
+    samples: samples.map((s) => ({ visible: Math.round(s.visible), longest: Math.round(s.longest) })),
+    pass: visible <= SWITCH.budget.visible && longest <= SWITCH.budget.longest,
+  };
+}
+
 const chosen = only ? INTERACTIONS.filter((i) => only.includes(i.id)) : INTERACTIONS;
 const typing = !only || only.includes(TYPING.id);
+const opening = !only || only.includes(OPENING.id);
+const switching = !only || only.includes(SWITCH.id);
 await mkdir(REPORT, { recursive: true });
 const stage = await openStage();
 const report = [];
@@ -314,6 +499,38 @@ try {
             `    battuta ${ms(row.type)} (mediana ≤ ${TYPING.budget}) · cursore ${ms(row.move)}`,
         );
       }
+    }
+  }
+  if (opening) {
+    let row;
+    try {
+      row = await measureOpening(stage);
+    } catch (error) {
+      row = { id: OPENING.id, title: OPENING.title, pass: false, error: String(error?.message ?? error).split("\n")[0] };
+    }
+    report.push(row);
+    if (row.error) console.log(`✗ ${row.id} — ${row.title}\n    non misurata: ${row.error}`);
+    else {
+      console.log(
+        `${row.pass ? "·" : "✗"} ${row.id} — ${row.title}${row.cpu > 1 ? ` (pagina ${row.cpu} volte più lenta)` : ""}\n` +
+          `    testo visibile ${row.visible} ms (≤ ${row.budget.visible}) · compito più lungo ${row.longest} ms (≤ ${row.budget.longest})`,
+      );
+    }
+  }
+  if (switching) {
+    let row;
+    try {
+      row = await measureSwitch(stage);
+    } catch (error) {
+      row = { id: SWITCH.id, title: SWITCH.title, pass: false, error: String(error?.message ?? error).split("\n")[0] };
+    }
+    report.push(row);
+    if (row.error) console.log(`✗ ${row.id} — ${row.title}\n    non misurata: ${row.error}`);
+    else {
+      console.log(
+        `${row.pass ? "·" : "✗"} ${row.id} — ${row.title}${row.cpu > 1 ? ` (pagina ${row.cpu} volte più lenta)` : ""}\n` +
+          `    scheda col testo ${row.visible} ms (≤ ${row.budget.visible}) · compito più lungo ${row.longest} ms (≤ ${row.budget.longest})`,
+      );
     }
   }
 } finally {

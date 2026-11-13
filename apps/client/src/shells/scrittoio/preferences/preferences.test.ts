@@ -10,7 +10,9 @@ const fake = vi.hoisted(() => {
     entries: [] as SettingEntry[],
     setSetting: vi.fn(),
     resetSetting: vi.fn(),
-    listeners: new Map<string, (event: { key?: string }) => void>(),
+    // Come il kernel vero: più ascoltatori per lo stesso evento (il pannello e
+    // la sua pagina «Componenti» ascoltano entrambi `setting_changed`).
+    listeners: new Map<string, Set<(event: { key?: string }) => void>>(),
   };
   return box;
 });
@@ -30,8 +32,12 @@ vi.mock("../../../platform/confirm", () => ({ confirm: vi.fn(async () => true) }
 vi.mock("../../../host/query", () => ({ settings: async () => fake.entries }));
 vi.mock("../../../state/kernel", () => ({
   onEvent: (type: string, listener: (event: { key?: string }) => void) => {
-    fake.listeners.set(type, listener);
-    return () => fake.listeners.delete(type);
+    const set = fake.listeners.get(type) ?? new Set();
+    set.add(listener);
+    fake.listeners.set(type, set);
+    return () => {
+      set.delete(listener);
+    };
   },
 }));
 vi.mock("../../../ui/commands", () => ({ allCommands: () => [], keybindingKey: (id: string) => id }));
@@ -153,7 +159,7 @@ async function changedOutside(key: string, value: SettingEntry["value"]): Promis
   const found = fake.entries.find((candidate) => candidate.spec.key === key)!;
   found.value = value;
   found.source = "machine";
-  fake.listeners.get("setting_changed")?.({ key });
+  for (const listener of fake.listeners.get("setting_changed") ?? []) listener({ key });
   await settled();
 }
 

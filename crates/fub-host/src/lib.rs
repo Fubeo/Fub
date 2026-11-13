@@ -86,6 +86,10 @@ mod bridge;
 /// La cattura rapida: il comando dell'host `capture.apply`, uno per ogni
 /// trasporto (clipper, condivisione mobile, CLI).
 pub mod capture;
+/// I componenti di un vault: la mappa (le righe stanno in `fub-features`, il
+/// risolutore in `fub-componenti`), lo stato nelle chiavi del vault, e come
+/// si accendono e si spengono.
+pub mod componenti;
 pub mod config;
 /// **La porta unica dei lucchetti** e la politica del veleno (decisione 0120).
 mod connector_tokens;
@@ -150,9 +154,6 @@ mod workbook;
 extern crate self as fub_host;
 pub use custody::Custody;
 pub use engines::OpenKey;
-/// La mappa dei componenti (K1): le righe e il risolutore stanno in
-/// `fub-features`, da cui `mount` costruisce i manifest.
-pub use fub_features::componenti;
 #[cfg(feature = "notify-watcher")]
 pub use watcher::NotifyWatcher;
 #[cfg(test)]

@@ -15,6 +15,7 @@
 import { onLanguage, t } from "../../i18n/strings";
 import { on, state } from "../../state/store";
 import { canCreateDrawing, newDrawing } from "../../ui/commands";
+import { onComponents } from "../../state/components";
 import type { Lifetime } from "../../ui/lifetime";
 import { attachTooltip, setTooltip } from "../../ui/tooltip";
 
@@ -40,6 +41,7 @@ export function mountMobileCreations(lifetime: Lifetime): void {
   // Lo spazio attivo come `#new-note`: il disegno nasce dove si guarda.
   lifetime.listen(button, "click", () => void newDrawing(state.activeSpace ?? ""));
   lifetime.add(on("commands", draw));
+  lifetime.add(onComponents(draw));
   lifetime.add(onLanguage(draw));
   lifetime.add(() => button.remove());
   draw();

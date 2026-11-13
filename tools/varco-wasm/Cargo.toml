@@ -11,7 +11,7 @@
 #
 # Chi lo compila è la CI, per nome, nel lavoro degli invarianti del contratto.
 # Un crate che nessuno compila è la forma su disco di una suite che si svuota
-# in silenzio (`.github/scripts/membri-del-workspace.mjs` lo dice per i crate
+# in silenzio (`.github/scripts/workspace-members.mjs` lo dice per i crate
 # del workspace); qui la riga di `ci.yml` nomina questo manifest, quindi se la
 # cartella sparisce la CI diventa rossa.
 [package]

@@ -38,8 +38,9 @@ lettura.
 
 Quando il file cambia sul disco la scheda lo rilegge da sola. Il nome di
 un'app che Fub non conosce si mostra come il file lo scrive. Con il
-componente `fub.craft` spento la scheda dice «Nessuna superficie
-disponibile», come per ogni file che Fub non sa mostrare.
+componente `fub.craft` spento il file si apre «solo come file», come quello
+di ogni componente spento: nome, dimensione, «Accendi …» e «Apri con
+un'altra app».
 
 Un XMP di LightCraft mostra invece i dati della foto: il voto in stelle
 («Scartata» per una foto scartata), l'etichetta col suo colore, la scelta, le

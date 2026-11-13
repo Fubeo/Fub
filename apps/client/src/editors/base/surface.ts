@@ -11,7 +11,7 @@ import { onEvent } from "../../state/kernel";
 import { openVaultRoot, vaultArg } from "../../state/vault";
 import type { BufferedSurface, SurfaceMountContext } from "../core/registry";
 import type { SurfaceMenu, SurfaceMenuItem } from "../core/editor-menu";
-import { uniformRowRange } from "../grid/engine";
+import { uniformRowRange } from "../core/row-window";
 import {
   BASE_FORMAT, BASE_MAP_ATTRIBUTION_FALLBACK, BASE_RENDERER_NS,
   allowedBaseTileUrl, baseRowsToCsv, baseSurfaceModes, cellText, deriveBaseRows, expectedProperty, groupBaseRows,

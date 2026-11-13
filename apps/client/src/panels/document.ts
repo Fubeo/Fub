@@ -13,7 +13,10 @@
 import { promptText } from "../ui/dialogs";
 import { openCompare } from "../ui/compare";
 import { pageIcon } from "../state/page-icons";
-import { FORMAT_ICON, formatKindOf, formatNameOf, formatTagOf } from "../ui/format-kind";
+import { readPageMark } from "../ui/page-mark";
+import { modeIcon, openModeMenu } from "../state/mode-menu";
+import type { SurfaceMode } from "../editors/core/registry";
+import { FORMAT_ICON, formatKindOf, formatNameOf } from "../ui/format-kind";
 import { iconEl } from "../ui/icons";
 import { api } from "../host/ipc";
 import { emit, on, state } from "../state/store";
@@ -46,13 +49,14 @@ import {
   type Tab,
 } from "../state/layout";
 import { $ } from "../ui/dom";
-import { showContextMenu, type MenuItem } from "../ui/menu";
+import { closeContextMenu, showContextMenu, type MenuItem } from "../ui/menu";
 import { confirm } from "../platform/confirm";
 import { allCommands, ariaBinding, canCreateDrawing, displayBinding, newDrawing, type CommandEntry } from "../ui/commands";
 import { notify } from "../ui/notify";
 import { errorText } from "../host/errors";
 import { t, type Key } from "../i18n/strings";
-import type { Lifetime } from "../ui/lifetime";
+import { openLifetime, type Lifetime } from "../ui/lifetime";
+import { textButton } from "../kit/button";
 import { setTooltip } from "../ui/tooltip";
 import { tabIndexForKey } from "../ui/tab-keys";
 import { createFormatBar, registerFormatIcons, type FormatBar } from "./format-bar";
@@ -60,7 +64,7 @@ import { createSelectionBubble, type SelectionBubble } from "./selection-bubble"
 import { bubbleWanted, miniBarMode, mountMiniBar } from "./mini-bar";
 import { openEditorMenu, type EditorMenuHost } from "./editor-menu";
 import { createStandingChip, type StandingChip } from "./standing";
-import { platformSupports } from "../platform/capabilities";
+import { activeShell, platformSupports } from "../platform/capabilities";
 import { writeClipboardText } from "../platform/clipboard";
 import {
   chooseExport,
@@ -96,6 +100,7 @@ import {
   type Pane,
   type PaneElements,
   type PaneView,
+  type FileOnly,
   runSlashCommand,
 } from "../state/document-controller";
 
@@ -151,6 +156,10 @@ interface PaneFrame {
   /// La barra di formattazione, sotto la toolbar: i pulsanti che i plugin
   /// offrono in `CommandSurface::Toolbar`. Vuota e nascosta senza nessuno.
   formatBar: FormatBar;
+  /// Il bottone della modalità accesa, figlio del foglio dopo la barra di
+  /// formato: sul computer la modalità la cambia la banda, e il bottone si
+  /// vede solo sul telefono, nel tondo in basso a destra (`mobile.css`).
+  modeCurrent: HTMLButtonElement;
   /// La bolla di selezione: la barra ristretta, accanto al testo scelto,
   /// quando la barra del foglio è spenta.
   selectionBubble: SelectionBubble;
@@ -165,6 +174,10 @@ interface PaneFrame {
   /// Firma dell'ultima striscia disegnata: un cambio di riquadro non deve
   /// ricreare tab identiche e togliere il fuoco al loro nodo DOM.
   tabsSignature: string | null;
+  /// La linguetta da portare in vista al prossimo fotogramma
+  /// (`drawTabOverflow`), e la richiesta di quel fotogramma, se c'è.
+  tabRevealIndex: number;
+  tabRevealFrame: number | null;
 }
 const frames = new Map<string, PaneFrame>();
 let panesEl: HTMLElement;
@@ -198,6 +211,20 @@ export function mountDocument(lifetime: Lifetime, d: DocumentDeps): void {
       if (frame && current) drawEmptyPane(frame, current.tabs.length === 0);
     }
   }));
+  // «Si scrive» della banda: la spiegazione è quella del chip del riquadro a
+  // fuoco, accanto al bottone della banda.
+  lifetime.add(on("standing-open", (anchor) => {
+    const pane = paneOf(layout.focus);
+    if (pane && activeTab(pane.id)?.k === "doc") frameOf(pane).standing.openFrom(anchor);
+  }));
+  // Il nome del vault apre il percorso di ogni testata: arriva dopo
+  // l'apertura (il nome scelto dalla persona lo dice il registro dei vault).
+  lifetime.add(on("vault-name", () => {
+    for (const id of frames.keys()) {
+      const pane = paneOf(id);
+      if (pane) drawToolbar(pane);
+    }
+  }));
   // La domanda sulle anteprime fatte dalle app (T31) segue le risposte dello
   // store: un'anteprima arrivata, il consenso cambiato (allora `""`, tutti).
   watchCraftPreviews(lifetime, (doc) => {
@@ -217,6 +244,12 @@ const view: PaneView = {
   },
   createPane,
   releaseFrame: (pane) => {
+    const r = frameOf(pane);
+    // Il riquadro si chiude col menu delle modalità aperto: il menu si chiude
+    // con lui, perché non sceglierebbe più niente.
+    if (r.modeCurrent.getAttribute("aria-expanded") === "true") closeContextMenu();
+    if (r.tabRevealFrame !== null) cancelAnimationFrame(r.tabRevealFrame);
+    r.tabRevealFrame = null;
     frameOf(pane).formatBar.destroy();
     frameOf(pane).selectionBubble.destroy();
     frameOf(pane).standing.destroy();
@@ -239,7 +272,70 @@ const view: PaneView = {
   focusTab: (pane, index) => focusPaneTab(frameOf(pane), index),
   focusedTab,
   recorderHost: (pane) => frameOf(pane).toolbarEl,
+  drawFileOnly: (_pane, host, file) => drawFileOnly(host, file),
 };
+
+/// La vita dei pulsanti dell'ultimo disegno di ciascun riquadro «solo come
+/// file»: il disegno dopo la chiude.
+const fileOnlyDrawn = new WeakMap<HTMLElement, Lifetime>();
+
+/// Il riquadro «solo come file» (K2): il file c'è, il suo editor è di un
+/// componente spento. Nome e dimensione, una frase che dice cosa manca, e i
+/// due gesti: accendere il componente qui, o aprire il file con un'altra app.
+/// I file non si toccano.
+function drawFileOnly(host: HTMLElement, file: FileOnly): void {
+  fileOnlyDrawn.get(host)?.close();
+  const drawn = openLifetime();
+  fileOnlyDrawn.set(host, drawn);
+  const focused = host.contains(document.activeElement) ? (document.activeElement as HTMLElement).dataset.action : undefined;
+
+  const title = document.createElement("p");
+  title.className = "file-only-title";
+  title.textContent = t("file_only.title");
+  const name = document.createElement("p");
+  name.className = "file-only-name";
+  name.textContent = file.name;
+  const size = document.createElement("p");
+  size.className = "file-only-size";
+  size.textContent = file.size ?? "";
+  size.hidden = file.size === null;
+  const note = document.createElement("p");
+  note.className = "file-only-note";
+  note.textContent = file.component ? t("file_only.note", { name: file.component }) : t("file_only.note_unnamed");
+
+  const actions = document.createElement("div");
+  actions.className = "file-only-actions";
+  if (file.component) {
+    const on = textButton({
+      label: file.busy ? t("file_only.switching_on", { name: file.component }) : t("file_only.switch_on", { name: file.component }),
+      kind: "primary",
+      lifetime: drawn,
+      onPress: () => file.switchOn(),
+    });
+    on.dataset.action = "switch-on";
+    // Mentre si accende resta al suo posto col fuoco, e non risponde.
+    if (file.busy) on.setAttribute("aria-disabled", "true");
+    actions.append(on);
+  }
+  const outside = textButton({
+    label: t("explorer.open_system"),
+    lifetime: drawn,
+    onPress: () => file.openOutside(),
+  });
+  outside.dataset.action = "open-outside";
+  actions.append(outside);
+
+  const problem = document.createElement("p");
+  problem.className = "file-only-problem";
+  problem.setAttribute("role", "alert");
+  problem.textContent = file.problem ?? "";
+  problem.hidden = file.problem === null;
+
+  host.setAttribute("aria-label", `${t("file_only.title")}: ${file.name}`);
+  host.replaceChildren(title, name, size, note, actions, problem);
+  // Il fuoco resta dov'era: ridisegnare il riquadro non lo butta via.
+  if (focused) (host.querySelector<HTMLElement>(`[data-action="${focused}"]`) ?? host).focus();
+}
 
 /// La linguetta col fuoco della tastiera, se il fuoco è su una linguetta — le
 /// frecce della striscia la raggiungono senza attivarla.
@@ -438,7 +534,8 @@ function createPane(id: string): PaneElements {
     wanted: () => bubbleWanted(miniBarMode(), document.getElementById("app")?.hasAttribute("data-formatbar-off") === true),
     active: () => root.contains(document.activeElement) || selectionBubble.element.contains(document.activeElement),
   });
-  root.append(tabsShell, toolbarEl, formatBar.element, conflictEl, noticeEl, contentEl);
+  const modeCurrent = createModeCurrent(id);
+  root.append(tabsShell, toolbarEl, formatBar.element, modeCurrent, conflictEl, noticeEl, contentEl);
   // Il tasto destro nell'editor: il menu che la superficie offre, composto
   // nelle sezioni di tutti i menu dell'editor (`editor-menu.ts`). Un menu già
   // aperto da un pezzo dell'editor (la griglia di una tabella, il disegno) ha
@@ -488,12 +585,15 @@ function createPane(id: string): PaneElements {
     tabMenuEl,
     toolbarEl,
     formatBar,
+    modeCurrent,
     selectionBubble,
     conflictEl,
     noticeEl,
     emptyEl,
     standing: createStandingChip(),
     tabsSignature: null,
+    tabRevealIndex: -1,
+    tabRevealFrame: null,
   };
   frames.set(id, r);
   return { root, editorEl, viewEl };
@@ -549,7 +649,10 @@ function drawTab(r: PaneFrame, tabs: Tab[], active: number): void {
   const roving = retained >= 0
     ? retained
     : focusedIndex >= 0 ? Math.min(focusedIndex, tabs.length - 1) : active;
-  tabs.forEach((tab, index) => paintTab(buttons[index]!, tab, index === active, index === roving));
+  // Gli accordi sono gli stessi per ogni linguetta: si leggono una volta per
+  // giro, non una per scheda (`allCommands` interroga ogni comando).
+  const shortcuts = tabShortcuts();
+  tabs.forEach((tab, index) => paintTab(buttons[index]!, tab, index === active, index === roving, shortcuts));
   r.tabsShell.hidden = tabs.length === 0;
   r.contentEl.hidden = tabs.length === 0;
   drawEmptyPane(r, tabs.length === 0);
@@ -575,7 +678,7 @@ function drawTab(r: PaneFrame, tabs: Tab[], active: number): void {
     const control = onClose
       ? replacement?.parentElement?.querySelector<HTMLElement>(".tab-close")
       : replacement;
-    (control ?? r.toolbarEl.querySelector<HTMLElement>('button[aria-haspopup="menu"]'))
+    (control ?? r.toolbarEl.querySelector<HTMLElement>(":scope > [data-pane-menu]"))
       ?.focus({ preventScroll: true });
   }
   drawTabOverflow(r, tabs, active);
@@ -906,7 +1009,7 @@ function wireTabDrag(r: PaneFrame, item: HTMLElement, index: number, target: Tab
 
 /// Ridipinge etichette e selezione senza ricreare i controlli. Il nome
 /// accessibile porta anche lo stato non salvato, non soltanto il colore.
-function paintTab(tab: HTMLElement, target: Tab, selected: boolean, tabStop: boolean): void {
+function paintTab(tab: HTMLElement, target: Tab, selected: boolean, tabStop: boolean, shortcuts: string): void {
   const described = describeTab(target);
   tab.classList.toggle("dirty", described.dirty);
   tab.classList.toggle("tab-view", described.kind === "view");
@@ -919,20 +1022,25 @@ function paintTab(tab: HTMLElement, target: Tab, selected: boolean, tabStop: boo
   const source = tabOverride(target) ? t("document.tab.source_view") : null;
   const name = tab.querySelector<HTMLElement>(".tab-name")!;
   name.textContent = described.label + (target.stack ? ` [${target.stack}]` : "") + (source ? ` · ${source}` : "");
-  // Un documento che non è una nota porta l'icona del suo formato.
+  // Il formato lo dice la linguetta, non la testata: ogni documento porta in
+  // testa la figura del suo formato, anche la nota. Una nota con `icon:` nel
+  // frontmatter porta invece la sua icona (K9), che dice di più.
   const kind = target.k === "doc" ? formatKindOf(target.doc) : null;
-  const format = kind && kind !== "note" ? iconEl(FORMAT_ICON[kind]) : null;
+  // Un'emoji, o una figura del set (`page-mark.ts`) che sta dove sta la figura
+  // del formato e ne prende la misura e il colore; un `fub:` che questa
+  // versione non conosce vale come nessuna icona, e torna la figura del formato.
+  const written = target.k === "doc" && (kind === "note" || kind === null) ? pageIcon(target.doc) : null;
+  const pageMark = readPageMark(written);
+  const format = pageMark?.kind === "figure" ? iconEl(pageMark.name) : kind && !pageMark ? iconEl(FORMAT_ICON[kind]) : null;
   if (format) {
     format.classList.add("tab-format");
     name.prepend(format);
   }
-  // Una nota con `icon:` nel frontmatter la porta anche nella scheda (K9).
-  const pageMark = target.k === "doc" && !format ? pageIcon(target.doc) : null;
-  if (pageMark) {
+  if (pageMark?.kind === "text") {
     const mark = document.createElement("span");
     mark.className = "tab-page-icon";
     mark.setAttribute("aria-hidden", "true");
-    mark.textContent = pageMark;
+    mark.textContent = pageMark.text;
     name.prepend(mark);
   }
   const pin = target.pinned ? iconEl("pin") : null;
@@ -942,10 +1050,10 @@ function paintTab(tab: HTMLElement, target: Tab, selected: boolean, tabStop: boo
   }
   setTooltip(tab, (target.k === "doc" ? target.doc : described.label) + (source ? ` · ${source}` : ""));
   // Si ridipinge a ogni giro: segue gli accordi riconfigurati.
-  tab.setAttribute("aria-keyshortcuts", tabShortcuts());
+  tab.setAttribute("aria-keyshortcuts", shortcuts);
   tab.setAttribute(
     "aria-label",
-    (target.pinned ? `${t("tabmenu.pinned")} · ` : "") + (described.dirty ? `${described.label} · ${t("save.unsaved")}` : described.label) + (format && kind ? ` · ${formatNameOf(kind)}` : "") + (source ? ` · ${source}` : "") + (target.stack ? ` · ${t("tabmenu.stack", { stack: target.stack })}` : ""),
+    (target.pinned ? `${t("tabmenu.pinned")} · ` : "") + (described.dirty ? `${described.label} · ${t("save.unsaved")}` : described.label) + (kind && kind !== "note" ? ` · ${formatNameOf(kind)}` : "") + (source ? ` · ${source}` : "") + (target.stack ? ` · ${t("tabmenu.stack", { stack: target.stack })}` : ""),
   );
   const close = tab.parentElement!.querySelector<HTMLElement>(".tab-close")!;
   close.tabIndex = tab.tabIndex;
@@ -963,14 +1071,32 @@ function tabShortcuts(): string {
 }
 
 /// L'elenco resta fuori dalla tablist e non viene ricreato a ogni ridisegno.
+///
+/// La linguetta scelta si porta in vista al fotogramma dopo, non qui:
+/// `scrollIntoView` chiede al motore stile e layout aggiornati, e qui si è a
+/// metà di un cambio di scheda, con la superficie vecchia smontata e la nuova
+/// ancora da montare. Nel fotogramma il layout si fa una volta, ed è lo stesso
+/// che l'editor appena montato misura; più disegni nello stesso fotogramma
+/// fanno uno scorrimento solo, verso l'ultima scheda scelta.
 function drawTabOverflow(r: PaneFrame, tabs: Tab[], active: number): void {
   r.tabMenuEl.hidden = tabs.length <= 1;
   r.tabMenuEl.setAttribute("aria-label", t("document.tab.list"));
   setTooltip(r.tabMenuEl, t("document.tab.list"));
+  r.tabRevealIndex = active;
+  if (r.tabRevealFrame !== null) return;
+  r.tabRevealFrame = requestAnimationFrame(() => {
+    r.tabRevealFrame = null;
+    revealSelectedTab(r);
+  });
+}
+
+/// Porta in vista la linguetta col fuoco, o se il fuoco è altrove quella attiva.
+function revealSelectedTab(r: PaneFrame): void {
+  if (!r.tabsShell.isConnected || r.tabsShell.hidden) return;
   const focused = document.activeElement;
   const selected = focused instanceof HTMLElement && r.tabsShell.contains(focused)
     ? focused
-    : r.tabsShell.querySelectorAll<HTMLElement>(".tab")[active];
+    : r.tabsShell.querySelectorAll<HTMLElement>(".tab")[r.tabRevealIndex];
   selected?.scrollIntoView?.({ block: "nearest", inline: "nearest" });
 }
 
@@ -979,31 +1105,70 @@ function drawTabOverflow(r: PaneFrame, tabs: Tab[], active: number): void {
 /// esistente, mai seconda verità; una sola modalità = nessun segmentato (U24);
 /// mai ricreare EditorView (solo chrome, superficie intatta).
 
-/// Il percorso nella testata. Per un documento ogni cartella è un pezzo a sé
-/// (`data-folder` col suo percorso intero), così si può premere; il testo resta
-/// quello di sempre. Si riscrive soltanto quando il percorso cambia.
+/// Il percorso nella testata, a briciole. Per un documento: la figura della
+/// cartella e il nome del vault, poi le cartelle, poi il nome in
+/// `span.crumb-name`. Il vault e ogni cartella sono pezzi a sé (`data-folder`
+/// col percorso intero, `""` per il vault), così si possono premere; fra un
+/// pezzo e l'altro c'è un segno (`span.crumb-sep`, nascosto al lettore di
+/// schermo), non una «/» scritta. Una vista resta il suo nome, in testo.
+///
+/// Si riscrive soltanto quando il percorso o il nome del vault cambiano.
 function drawCrumbs(crumbs: HTMLElement, path: string, doc: boolean): void {
-  const drawn = doc ? path : "";
-  if (crumbs.dataset.path === drawn && crumbs.textContent === path) return;
+  const vault = state.vaultName;
   if (!doc) {
+    if (crumbs.dataset.path === undefined && crumbs.textContent === path) return;
     delete crumbs.dataset.path;
+    delete crumbs.dataset.vault;
     crumbs.textContent = path;
     return;
   }
+  if (crumbs.dataset.path === path && crumbs.dataset.vault === vault && crumbs.querySelector(":scope > .crumb-name")) return;
   crumbs.dataset.path = path;
+  crumbs.dataset.vault = vault;
+  const separator = (): HTMLElement => {
+    const sep = document.createElement("span");
+    sep.className = "crumb-sep";
+    sep.setAttribute("aria-hidden", "true");
+    sep.textContent = "/";
+    return sep;
+  };
+  const pieces: Node[] = [];
+  const figure = iconEl("folder");
+  if (figure) pieces.push(figure);
+  // Un vault senza nome (nessuno aperto, il banco senza radice) non ha la sua
+  // briciola: il percorso parte dalle cartelle.
+  if (vault) {
+    const root = document.createElement("span");
+    root.dataset.folder = "";
+    root.textContent = vault;
+    pieces.push(root, separator());
+  }
   const parts = path.split("/");
-  const pieces: (Node | string)[] = [];
   parts.forEach((part, i) => {
     if (i === parts.length - 1) {
-      pieces.push(part);
+      const name = document.createElement("span");
+      name.className = "crumb-name";
+      // La nota è la casa e si chiama senza «.md», come nella sua linguetta;
+      // ogni altro file tiene l'estensione, che dice il formato.
+      name.textContent = formatKindOf(path) === "note" ? docTitle(part) : part;
+      pieces.push(name);
       return;
     }
     const folder = document.createElement("span");
     folder.dataset.folder = parts.slice(0, i + 1).join("/");
     folder.textContent = part;
-    pieces.push(folder, "/");
+    pieces.push(folder, separator());
   });
   crumbs.replaceChildren(...pieces);
+}
+
+/// «…» è una figura, non tre caratteri: `more` del set di serie. Se un set
+/// ridotto non l'avesse, restano i tre punti scritti.
+function drawPaneMenuGlyph(menu: HTMLElement): void {
+  if (menu.querySelector(":scope > svg")) return;
+  const glyph = iconEl("more");
+  if (glyph) menu.replaceChildren(glyph);
+  else if (menu.textContent !== "…") menu.textContent = "…";
 }
 function drawToolbar(r: Pane): void {
   const bar = frameOf(r).toolbarEl;
@@ -1037,45 +1202,25 @@ function drawToolbar(r: Pane): void {
     // occupa soltanto il riquadro col fuoco, vedi `hostPaneStatus`.
     const status = document.createElement("span");
     status.className = "pane-status-slot";
+    // I segmenti delle modalità restano nel DOM, ma la cornice non li mostra:
+    // la modalità si sceglie dalla banda, o dal tondo del telefono
+    // (`modeCurrent`, fuori dalla testata).
     const group = document.createElement("span");
     group.className = "segmented";
     group.setAttribute("role", "group");
-    // Le stesse modalità in un bottone solo, che dice quella accesa e apre la
-    // scelta: la cornice decide quale delle due forme mostrare (sul telefono
-    // i segmenti tagliano il nome della nota).
-    const current = document.createElement("button");
-    current.type = "button";
-    current.className = "pane-mode-current";
-    current.setAttribute("aria-haspopup", "menu");
-    current.setAttribute("aria-expanded", "false");
-    current.addEventListener("click", () => {
-      focusPane(r.id);
-      const active = selectedMode(r);
-      current.setAttribute("aria-expanded", "true");
-      showContextMenu(current, (r.surface?.modes ?? []).map((mode) => ({
-        label: mode.label(),
-        choice: "radio" as const,
-        checked: active?.id === mode.id,
-        run: () => void setMode(mode.id),
-      })), { onClose: () => current.setAttribute("aria-expanded", "false") });
-    });
     const menu = document.createElement("button");
     menu.type = "button";
     menu.dataset.paneMenu = "";
-    menu.textContent = "…";
     menu.setAttribute("aria-haspopup", "menu");
     menu.addEventListener("click", (event) => openPaneMenu(r, event));
-    // «WORD», «ODT»: il formato accanto al percorso.
-    const tag = document.createElement("span");
-    tag.className = "pane-format";
-    tag.hidden = true;
-    bar.append(nav, crumbs, tag, frameOf(r).standing.element, status, group, current, menu);
+    // Il formato non sta qui: lo dice la linguetta, con la sua figura.
+    bar.append(nav, crumbs, frameOf(r).standing.element, status, group, menu);
   }
   const nav = bar.querySelector<HTMLElement>(":scope > .pane-nav")!;
   const crumbs = bar.querySelector<HTMLElement>(":scope > .muted")!;
   const status = bar.querySelector<HTMLElement>(":scope > .pane-status-slot")!;
   const group = bar.querySelector<HTMLElement>(":scope > .segmented")!;
-  const current = bar.querySelector<HTMLButtonElement>(":scope > .pane-mode-current")!;
+  const current = frameOf(r).modeCurrent;
   const menu = bar.querySelector<HTMLElement>(":scope > [data-pane-menu]")!;
   const history = paneState(r.id)?.history;
   for (const button of nav.querySelectorAll<HTMLButtonElement>("button")) {
@@ -1094,23 +1239,17 @@ function drawToolbar(r: Pane): void {
   const path = tab?.k === "doc" ? tab.doc : tab?.k === "view" ? nameTab(tab) : "";
   drawCrumbs(crumbs, path, tab?.k === "doc");
   setTooltip(crumbs, path);
-  const tag = bar.querySelector<HTMLElement>(":scope > .pane-format")!;
-  const said = tab?.k === "doc" ? formatTagOf(tab.doc) : null;
-  const kind = tab?.k === "doc" ? formatKindOf(tab.doc) : null;
-  tag.hidden = said === null;
-  tag.textContent = said ?? "";
-  if (said && kind) setTooltip(tag, formatNameOf(kind));
   // Si scrive tutto, in parte o per niente: lo dice il documento.
   frameOf(r).standing.follow(tab?.k === "doc" ? r.surface?.standing ?? null : null);
   group.setAttribute("aria-label", t("document.toolbar.modes"));
+  drawPaneMenuGlyph(menu);
   menu.setAttribute("aria-label", t("document.pane.menu"));
   setTooltip(menu, t("document.pane.menu"));
   const modes = r.surface && r.surface.modes.length > 1 ? r.surface.modes : [];
   const active = selectedMode(r);
   group.hidden = modes.length <= 1;
   current.hidden = group.hidden;
-  current.textContent = active?.label() ?? "";
-  current.setAttribute("aria-label", t("document.toolbar.mode_current", { mode: active?.label() ?? "" }));
+  drawModeCurrent(current, active);
   while (group.children.length > modes.length) group.lastElementChild!.remove();
   modes.forEach((mode, index) => {
     let button = group.children[index] as HTMLButtonElement | undefined;
@@ -1133,6 +1272,40 @@ function drawToolbar(r: Pane): void {
   // entrambe sono appena state decise.
   frameOf(r).formatBar.update(state.commandSpecs);
   frameOf(r).selectionBubble.update(state.commandSpecs);
+}
+
+/// Il bottone della modalità accesa, che apre la scelta. Il menu è quello di
+/// tutti (`state/mode-menu.ts`): stesso ordine, stesse icone, le scorciatoie
+/// della persona. Sta nel foglio, subito dopo la barra di formato, e non nella
+/// testata, che taglia ciò che sporge: sul telefono è il tondo all'angolo
+/// basso della carta.
+function createModeCurrent(id: string): HTMLButtonElement {
+  const current = document.createElement("button");
+  current.type = "button";
+  current.className = "pane-mode-current";
+  current.setAttribute("aria-haspopup", "menu");
+  current.setAttribute("aria-expanded", "false");
+  current.hidden = true;
+  current.addEventListener("click", () => openModeMenu(current, id));
+  return current;
+}
+
+/// Il bottone della modalità accesa: la sua figura e il suo nome. La figura
+/// si riscrive solo quando cambia, il nome a ogni giro (la lingua può essere
+/// cambiata nel frattempo).
+function drawModeCurrent(current: HTMLButtonElement, active: SurfaceMode | undefined): void {
+  const figure = active ? modeIcon(active) : "";
+  if (current.dataset.icon !== figure || !current.querySelector(":scope > .pane-mode-name")) {
+    const name = document.createElement("span");
+    name.className = "pane-mode-name";
+    const glyph = figure ? iconEl(figure) : null;
+    current.replaceChildren(...(glyph ? [glyph] : []), name);
+    current.dataset.icon = figure;
+  }
+  const label = active?.label() ?? "";
+  current.querySelector(":scope > .pane-mode-name")!.textContent = label;
+  current.setAttribute("aria-label", t("document.toolbar.mode_current", { mode: label }));
+  setTooltip(current, label);
 }
 
 /// Porta lo stato del documento a fuoco — `#pane-status`: il salvataggio e
@@ -1161,6 +1334,15 @@ function openPaneMenu(r: Pane, event: MouseEvent): void {
     command(id) ? [{ label, hint: chord(id), run: () => runCommand(id) }] : [];
   const doc = activeDoc(r.id);
   const surface = r.surface;
+  // Sul telefono la testata non mostra «Si scrive» (`mobile.css`) e la banda
+  // non c'è: lo dice la prima voce di «…», che apre la stessa spiegazione del
+  // chip, accanto a «…». Gli altri stati restano nel chip, dove si vedono. La
+  // condizione è la stessa della regola, la shell del telefono.
+  const standing = doc ? surface?.standing?.current() ?? null : null;
+  const menuButton = event.currentTarget instanceof HTMLElement ? event.currentTarget : null;
+  const writes: MenuItem[] = standing?.kind === "writes" && menuButton && activeShell().id === "mobile"
+    ? [{ label: standing.text, run: () => frameOf(r).standing.openFrom(menuButton) }]
+    : [];
   // La vista sorgente si chiede a **questo** riquadro, non a quello col fuoco
   // come farebbe `available`: il menu si apre anche su un riquadro accanto.
   const sourceView = offeredSourceView(r);
@@ -1181,7 +1363,7 @@ function openPaneMenu(r: Pane, event: MouseEvent): void {
       },
     }] : []),
   ];
-  showContextMenu(event, [
+  const items: MenuItem[] = [
     ...offered("shell.pane.split.right", t("pane.menu.split_right")),
     ...offered("shell.pane.split.down", t("pane.menu.split_down")),
     ...(sourceView ? [{
@@ -1200,7 +1382,10 @@ function openPaneMenu(r: Pane, event: MouseEvent): void {
     }] : []),
     ...offered("shell.tab.close", t("pane.menu.close_tab")).map((item) => ({ ...item, separator: true })),
     ...offered("shell.pane.close", t("pane.menu.close_pane")),
-  ], {
+  ];
+  // «Si scrive» sta da sé, in cima: una riga lo separa dai gesti del riquadro.
+  if (writes.length > 0 && items[0]) items[0] = { ...items[0], separator: true };
+  showContextMenu(event, [...writes, ...items], {
     header: { icon: "layout-dashboard", kind: t("pane.menu.head") },
     search: true,
     searchable: sourceView || sourceShown ? [{

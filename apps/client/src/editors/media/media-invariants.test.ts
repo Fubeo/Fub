@@ -10,6 +10,7 @@
 
 import { describe, expect, it, vi } from "vitest";
 import {
+  formatBytes,
   MEDIA_IPC_CHUNK,
   MEDIA_MAX_INLINE_BYTES,
   mediaKindOfId,
@@ -294,5 +295,23 @@ describe("recorder crash staging", () => {
     values.set(key, { schema: 2, chunks: ["AQ=="] });
     await expect(after.append(key, new Uint8Array([4]))).rejects.toThrow(/schema/);
     expect(values.get(key)).toEqual({ schema: 2, chunks: ["AQ=="] });
+  });
+});
+
+describe("le dimensioni parlano la lingua della pagina", () => {
+  it("usa la virgola in italiano e il punto in inglese", () => {
+    const before = document.documentElement.lang;
+    try {
+      document.documentElement.lang = "it";
+      expect(formatBytes(48230)).toBe("47,1 KiB");
+      expect(formatBytes(5 * 1024 * 1024)).toBe("5,0 MiB");
+      document.documentElement.lang = "en";
+      expect(formatBytes(48230)).toBe("47.1 KiB");
+      document.documentElement.lang = "";
+      expect(formatBytes(48230)).toBe("47.1 KiB");
+      expect(formatBytes(900)).toBe("900 B");
+    } finally {
+      document.documentElement.lang = before;
+    }
   });
 });

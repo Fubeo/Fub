@@ -22,19 +22,9 @@ salvato senza modifiche resta uguale byte per byte.
 
 ## Nel file
 
-Il poligono e la stella sono un `path`: un altro programma vede un tracciato
-e lo disegna uguale. Accanto, `fub:shape` e `fub:geom` portano il centro, il
-raggio, i lati o le punte, il raggio interno, la rotazione e il raggio degli
-angoli:
-
-```xml
-<path id="o00000023" fub:shape="star" fub:geom="1100 820 70 5 0.382 0 0" d="M1100 750 L1115.72 798.37 L1166.57 798.37 L1125.43 828.26 L1141.14 876.63 L1100 846.74 L1058.86 876.63 L1074.57 828.26 L1033.43 798.37 L1084.28 798.37 Z" fill="none" stroke="#0072b2" stroke-width="4"/>
-```
-
-Spostare, scalare e ruotare cambiano soltanto `transform`, come per gli altri
-oggetti, e `fub:shape`, `fub:geom` e `d` restano come sono. Un rettangolo ha
-gli angoli tondi in `rx` e `ry`.
-La grammatica è in [Formato della scena, poligoni e stelle](../reference/scene-format-shapes.md).
+Poligono e stella sono un `path` con `fub:shape` e `fub:geom`; un rettangolo ha
+gli angoli tondi in `rx` e `ry`. La grammatica è in [Formato della scena,
+poligoni e stelle](../reference/scene-format-shapes.md).
 
 ## Chi legge la forma
 

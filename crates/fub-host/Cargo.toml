@@ -16,6 +16,8 @@ fub-features = { workspace = true }
 # Lo strato dei motori: la chiusura dell'ultimo vault svuota le cache e
 # restituisce la memoria al sistema (`rich::empty_engine_caches`).
 fub-motori = { workspace = true }
+# Il risolutore dei componenti (`crate::componenti`): solo `serde`.
+fub-componenti = { workspace = true }
 fub-format-markdown = { workspace = true }
 fub-format-canvas = { workspace = true }
 fub-format-base = { workspace = true }

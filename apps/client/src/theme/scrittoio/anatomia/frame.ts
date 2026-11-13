@@ -49,7 +49,16 @@ export const FRAME: PartAnatomy = {
     {
       name: "status-band",
       states: INTERACTIVE,
-      hooks: ["status-band", "status-side", "status-item", "status-item--button"],
+      hooks: [
+        "status-band",
+        "status-side",
+        "status-item",
+        "status-item--button",
+        "status-mode",
+        "status-mode-arrow",
+        "status-standing",
+        "status-standing-mark",
+      ],
     },
   ],
 };

@@ -24,7 +24,6 @@ path = "src/native_host.rs"
 [dependencies]
 camino = { workspace = true }
 fub-abi = { workspace = true }
-fub-componenti = { workspace = true }
 fub-host = { workspace = true, features = ["official-features", "http-client"] }
 serde = { workspace = true }
 serde_json = { workspace = true }

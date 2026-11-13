@@ -142,7 +142,10 @@ fn l_elenco_dice_chi_e_acceso_perche_e_chi_lo_richiede() {
     assert_eq!(item(&list, "fub.markdown")["reason"], "core");
     let penna = item(&list, "fub.penna");
     assert_eq!(penna["reason"], "required");
-    assert_eq!(penna["required_by"], serde_json::json!(["fub.lavagna"]));
+    assert_eq!(
+        penna["required_by"],
+        serde_json::json!(["fub.lavagna", "fub.pdf"])
+    );
 
     // A pagine, con offset e limit.
     let page = json(&v, &["--limit", "2", "--offset", "1", "componenti"]);
@@ -191,7 +194,7 @@ fn perche_dice_scelto_richiesto_nucleo_e_spento() {
     );
     assert_eq!(
         text(&v, &["componenti", "perche", "fub.penna"]).trim(),
-        "fub.penna è attivo perché lo richiede: fub.lavagna."
+        "fub.penna è attivo perché lo richiedono: fub.lavagna, fub.pdf."
     );
     assert_eq!(
         text(&v, &["componenti", "perche", "fub.markdown"]).trim(),

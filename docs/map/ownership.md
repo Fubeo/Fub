@@ -9,53 +9,53 @@
 
 ## L'indice delle regole
 
-| Regola | Il file che la possiede | Il presidio |
-|---|---|---|
-| il contratto è uno e sta in un posto | `crates/fub-abi/src/` | `crates/fub-abi/tests/superficie_della_radice.rs` |
-| ogni tipo che attraversa una firma ha una controparte WIT | `crates/fub-abi/wit/fub/abi.wit` | `crates/fub-abi/tests/wit_conformance.rs` |
-| il contratto cresce solo per aggiunta | `crates/fub-abi/wit/frozen/` | `crates/fub-abi/tests/wit_additivity.rs` |
-| le regole di identità si dichiarano | `crates/fub-abi/src/rules/` | `crates/fub-abi/tests/a_named_rule_is_declared.rs` |
-| un nome è lo stesso nome in ogni codifica | `crates/fub-abi/src/rules/composition.rs` | `crates/fub-abi/tests/one_normalized_form.rs` |
-| le entità HTML si scrivono in un posto solo | `crates/fub-abi/src/html.rs` | `crates/fub-abi/tests/one_escape_table.rs` |
-| l'impronta FNV-1a si calcola in un posto solo | `crates/fub-abi/src/edit.rs` | `crates/fub-abi/tests/one_fingerprint.rs` |
-| il bersaglio di un clic non entra nel contesto di sessione | `crates/fub-abi/src/session.rs` | `crates/fub-abi/tests/context_has_four_fields.rs` |
-| `serialize` non riscrive un documento esistente | i provider, `crates/fub-abi/src/format.rs` | `crates/fub-abi/tests/serialize_non_riscrive.rs` |
-| la scrittura è atomica rispetto al parse | `crates/fub-kernel/src/workspace.rs` | `crates/fub-kernel/tests/write_atomicity.rs` |
-| la storage accede dai soli handle, la radice non si ripete | `crates/fub-kernel/src/storage/` | `crates/fub-kernel/tests/rooted_cas.rs` |
-| cancellare è spostare nel cestino, mai distruggere | `crates/fub-kernel/src/os_trash.rs` e `rules/trash.rs` | `crates/fub-kernel/tests/trash.rs` |
-| un provider che pania costa la chiamata, non il vault | `crates/fub-kernel/src/safety.rs` | `crates/fub-kernel/tests/the_panic.rs` |
-| i lucchetti dell'host passano da una porta sola, senza callback sotto guardia | `crates/fub-host/src/custody.rs` | `crates/fub-host/src/legacy_tests/` |
-| le capacità si rifiutano da un solo `Guard` per famiglie | `crates/fub-kernel/src/host/guard.rs` | `crates/fub-kernel/tests/effective_capabilities.rs` |
-| la tabella di montaggio dei bundle è una, per app, CLI e headless | `crates/fub-host/src/mount.rs` | `crates/fub-host/tests/before_write_bundles.rs` |
-| in quale vault arriva una scrittura è detto, non implicito | `crates/fub-host/src/session.rs` | `crates/fub-host/tests/the_vault_of_a_write.rs` |
-| la superficie IPC è un elenco chiuso | `crates/fub-app/src/lib.rs` | `crates/fub-app/tests/lean_ipc.rs` |
-| ogni finestra ha solo i permessi che le spettano | `crates/fub-app/permissions/` | `crates/fub-app/tests/ipc_permissions.rs` |
-| nessun modulo della shell importa Tauri fuori dalla cucitura | `apps/client/src/host/ipc.ts` | `apps/client/src/host/no-tauri-outside-host.test.ts` |
-| CodeMirror resta nel package del testo | `apps/client/src/editors/text/` | `.github/scripts/check-codemirror-boundary.mjs` |
-| ProseMirror resta in Scrittura | `apps/client/src/scrittura/` | `.github/scripts/check-prosemirror-boundary.mjs` |
-| la Tabella non sa in quale editor vive | `apps/client/src/tabella/` | `.github/scripts/check-tabella-boundary.mjs` |
-| ogni listener globale ha un owner e un disposer | `apps/client/src/ui/lifetime.ts` | `.github/scripts/check-listeners.mjs` |
-| niente attese nascoste dentro un giro della coda | `apps/client/src/state/kernel.ts` | `.github/scripts/check-races.mjs` |
-| un editor non scrive un ruolo del tema sull'elemento | `apps/client/src/theme/` | `.github/scripts/check-inline-theme.mjs` |
-| il tema di serie si rigenera byte per byte | `apps/client/theme/author/` | `npm run theme:generate && npm run theme:verify` |
-| una pelle rifiutata rende la pagina senza stile, e si vede | `apps/client/src/ui/sanitize-css.ts` | `apps/client/src/theme/gate.test.ts` |
-| l'HTML entra nella webview da un punto solo | `apps/client/src/ui/sanitize.ts` | `apps/client/src/ui/sanitize.test.ts` |
-| il mirror TypeScript non diverge dal Rust | i test `ts_*` dei crate | `UPDATE_MIRROR=1 cargo test …` e i banchi `mirror` |
-| le regole lato shell sono le stesse del contratto | `apps/client/src/rules/` | `crates/fub-abi/tests/rules_mirror.rs` |
-| l'inchiostro TypeScript è la copia calda di quello Rust | `apps/client/src/ink/` | `crates/fub-ink/tests/ts_mirror.rs` e la fixture `ink-samples.json` |
-| la lavagna si legge e si scrive con un codice solo, in nativo e nel `.wasm` a 32 bit della tela | `crates/fub-canvas-core/` (le regole), `crates/fub-canvas-wasm/` (la build della tela) | `read_vectors.rs`, `patch_vectors.rs` e `ts_mirror.rs` di `crates/fub-canvas-core/tests/`, e di là `editors/canvas/wasm/vectors.test.ts` e `wasm/mirror.test.ts` |
-| i disegni grandi si aprono e si muovono nei tempi | `apps/client/src/editors/spatial/painter/` | `npm run bench:large`, gate della CI |
-| la battuta sta nel budget di 4 ms di mediana | `apps/client/src/editors/text/profiles/markdown/` | `node bench/interaction.mjs --only=battuta` e `render-incremental.test.ts` |
-| una feature Cargo è accesa solo da chi la usa | `crates/fub-features/src/inventory.rs` | `crates/fub-features/tests/cargo_features.rs` e `check-cargo-feature-default.mjs` |
-| una feature spenta non rompe il build | `crates/fub-features/` | la CI compila `--no-default-features` |
-| i motori di terzi si nominano dai soli adattatori | `crates/fub-format-rich/`, `crates/fub-format-xlsx/` | `.github/scripts/check-engine-boundary.mjs` |
-| nessuna interfaccia delle app Craft in `fub-app`, librerie doppie sotto il tetto | `docs/reference/budgets.json` | `.github/scripts/check-motori.mjs` |
-| un motore si costruisce alla prima richiesta e una volta sola, senza lucchetto tenuto | `crates/fub-motori/src/pigro.rs` | `crates/fub-motori/tests/pigro.rs` |
-| le cache dei motori stanno sotto un tetto comune, dalla meno usata | `crates/fub-motori/src/memoria.rs` | `crates/fub-motori/tests/memoria.rs` |
-| la copia di un motore è derivata e verificata | `tools/vendor-craft/vendor.mjs` | `vendor.mjs check`, `verify-upstream`, `gate` |
-| i componenti WASM rispettano tempi e memoria | `crates/fub-wasm-host/src/limits.rs` | `crates/fub-wasm-host/tests/` |
-| i plugin installati si accendono e spengono per vault | `crates/fub-host/src/session.rs` | `crates/fub-kernel/tests/deactivation.rs` e `crates/fub-host/tests/draw_feature.rs` |
-| il testo del vault passa dal kernel, mai dal formato sbagliato | `crates/fub-kernel/src/documents.rs` | `crates/fub-kernel/tests/text_fidelity.rs` |
+| Regola | Il file che la possiede | Il presidio | Pagina canonica |
+|---|---|---|---|
+| il contratto è uno e sta in un posto | `crates/fub-abi/src/` | `crates/fub-abi/tests/superficie_della_radice.rs` | [reference/abi-and-wit.md](../reference/abi-and-wit.md) |
+| ogni tipo che attraversa una firma ha una controparte WIT | `crates/fub-abi/wit/fub/abi.wit` | `crates/fub-abi/tests/wit_conformance.rs` | [reference/abi-and-wit.md](../reference/abi-and-wit.md) |
+| il contratto cresce solo per aggiunta | `crates/fub-abi/wit/frozen/` | `crates/fub-abi/tests/wit_additivity.rs` | [reference/abi-and-wit.md](../reference/abi-and-wit.md) |
+| le regole di identità si dichiarano | `crates/fub-abi/src/rules/` | `crates/fub-abi/tests/a_named_rule_is_declared.rs` | [reference/abi-and-wit.md](../reference/abi-and-wit.md) |
+| un nome è lo stesso nome in ogni codifica | `crates/fub-abi/src/rules/composition.rs` | `crates/fub-abi/tests/one_normalized_form.rs` | [reference/abi-and-wit.md](../reference/abi-and-wit.md) |
+| le entità HTML si scrivono in un posto solo | `crates/fub-abi/src/html.rs` | `crates/fub-abi/tests/one_escape_table.rs` | [reference/abi-and-wit.md](../reference/abi-and-wit.md) |
+| l'impronta FNV-1a si calcola in un posto solo | `crates/fub-abi/src/edit.rs` | `crates/fub-abi/tests/one_fingerprint.rs` | [reference/abi-and-wit.md](../reference/abi-and-wit.md) |
+| il bersaglio di un clic non entra nel contesto di sessione | `crates/fub-abi/src/session.rs` | `crates/fub-abi/tests/context_has_four_fields.rs` | [reference/ipc-contract.md](../reference/ipc-contract.md) |
+| `serialize` non riscrive un documento esistente | i provider, `crates/fub-abi/src/format.rs` | `crates/fub-abi/tests/serialize_non_riscrive.rs` | [reference/abi-and-wit.md](../reference/abi-and-wit.md) |
+| la scrittura è atomica rispetto al parse | `crates/fub-kernel/src/workspace.rs` | `crates/fub-kernel/tests/write_atomicity.rs` | [architecture/storage-and-identity.md](../architecture/storage-and-identity.md) |
+| la storage accede dai soli handle, la radice non si ripete | `crates/fub-kernel/src/storage/` | `crates/fub-kernel/tests/rooted_cas.rs` | [architecture/storage-and-identity.md](../architecture/storage-and-identity.md) |
+| cancellare è spostare nel cestino, mai distruggere | `crates/fub-kernel/src/os_trash.rs` e `rules/trash.rs` | `crates/fub-kernel/tests/trash.rs` | [product/vault-recupero-e-versioni.md](../product/vault-recupero-e-versioni.md) |
+| un provider che pania costa la chiamata, non il vault | `crates/fub-kernel/src/safety.rs` | `crates/fub-kernel/tests/the_panic.rs` | [architecture/runtime-events-and-jobs.md](../architecture/runtime-events-and-jobs.md) |
+| i lucchetti dell'host passano da una porta sola, senza callback sotto guardia | `crates/fub-host/src/custody.rs` | `crates/fub-host/src/legacy_tests/` | [architecture/runtime-events-and-jobs.md](../architecture/runtime-events-and-jobs.md) |
+| le capacità si rifiutano da un solo `Guard` per famiglie | `crates/fub-kernel/src/host/guard.rs` | `crates/fub-kernel/tests/effective_capabilities.rs` | [reference/permissions-and-security.md](../reference/permissions-and-security.md) |
+| la tabella di montaggio dei bundle è una, per app, CLI e headless | `crates/fub-host/src/mount.rs` | `crates/fub-host/tests/before_write_bundles.rs` | [architecture/components-and-boundaries.md](../architecture/components-and-boundaries.md) |
+| in quale vault arriva una scrittura è detto, non implicito | `crates/fub-host/src/session.rs` | `crates/fub-host/tests/the_vault_of_a_write.rs` | [architecture/storage-and-identity.md](../architecture/storage-and-identity.md) |
+| la superficie IPC è un elenco chiuso | `crates/fub-app/src/lib.rs` | `crates/fub-app/tests/lean_ipc.rs` | [reference/ipc-contract.md](../reference/ipc-contract.md) |
+| ogni finestra ha solo i permessi che le spettano | `crates/fub-app/permissions/` | `crates/fub-app/tests/ipc_permissions.rs` | [reference/permissions-and-security.md](../reference/permissions-and-security.md) |
+| nessun modulo della shell importa Tauri fuori dalla cucitura | `apps/client/src/host/ipc.ts` | `apps/client/src/host/no-tauri-outside-host.test.ts` | [architecture/frontend-and-ipc.md](../architecture/frontend-and-ipc.md) |
+| CodeMirror resta nel package del testo | `apps/client/src/editors/text/` | `.github/scripts/check-codemirror-boundary.mjs` | [architecture/editor-surfaces.md](../architecture/editor-surfaces.md) |
+| ProseMirror resta in Scrittura | `apps/client/src/scrittura/` | `.github/scripts/check-prosemirror-boundary.mjs` | [architecture/rich-surface-and-proofing.md](../architecture/rich-surface-and-proofing.md) |
+| la Tabella non sa in quale editor vive | `apps/client/src/tabella/` | `.github/scripts/check-tabella-boundary.mjs` | [architecture/editor-surfaces.md](../architecture/editor-surfaces.md) |
+| ogni listener globale ha un owner e un disposer | `apps/client/src/ui/lifetime.ts` | `.github/scripts/check-listeners.mjs` | [architecture/runtime-events-and-jobs.md](../architecture/runtime-events-and-jobs.md) |
+| niente attese nascoste dentro un giro della coda | `apps/client/src/state/kernel.ts` | `.github/scripts/check-races.mjs` | [architecture/runtime-events-and-jobs.md](../architecture/runtime-events-and-jobs.md) |
+| un editor non scrive un ruolo del tema sull'elemento | `apps/client/src/theme/` | `.github/scripts/check-inline-theme.mjs` | [reference/permissions-and-security.md](../reference/permissions-and-security.md) |
+| il tema di serie si rigenera byte per byte | `apps/client/theme/author/` | `npm run theme:generate && npm run theme:verify` | [development/testing-and-quality.md](../development/testing-and-quality.md) |
+| una pelle rifiutata rende la pagina senza stile, e si vede | `apps/client/src/ui/sanitize-css.ts` | `apps/client/src/theme/gate.test.ts` | [reference/permissions-and-security.md](../reference/permissions-and-security.md) |
+| l'HTML entra nella webview da un punto solo | `apps/client/src/ui/sanitize.ts` | `apps/client/src/ui/sanitize.test.ts` | [reference/permissions-and-security.md](../reference/permissions-and-security.md) |
+| il mirror TypeScript non diverge dal Rust | i test `ts_*` dei crate | `UPDATE_MIRROR=1 cargo test …` e i banchi `mirror` | [reference/abi-and-wit.md](../reference/abi-and-wit.md) |
+| le regole lato shell sono le stesse del contratto | `apps/client/src/rules/` | `crates/fub-abi/tests/rules_mirror.rs` | [reference/abi-and-wit.md](../reference/abi-and-wit.md) |
+| l'inchiostro TypeScript è la copia calda di quello Rust | `apps/client/src/ink/` | `crates/fub-ink/tests/ts_mirror.rs` e la fixture `ink-samples.json` | [architecture/ink-and-tools.md](../architecture/ink-and-tools.md) |
+| la lavagna si legge e si scrive con un codice solo, in nativo e nel `.wasm` a 32 bit della tela | `crates/fub-canvas-core/` (le regole), `crates/fub-canvas-wasm/` (la build della tela) | `read_vectors.rs`, `patch_vectors.rs` e `ts_mirror.rs` di `crates/fub-canvas-core/tests/`, e di là `editors/canvas/wasm/vectors.test.ts` e `wasm/mirror.test.ts` | [reference/canvas-format.md](../reference/canvas-format.md) |
+| i disegni grandi si aprono e si muovono nei tempi | `apps/client/src/editors/spatial/painter/` | `npm run bench:large`, gate della CI | [product/drawing-large.md](../product/drawing-large.md) |
+| la battuta sta nel budget di 4 ms di mediana | `apps/client/src/editors/text/profiles/markdown/` | `node bench/interaction.mjs --only=battuta` e `render-incremental.test.ts` | [product/performance-budget.md](../product/performance-budget.md) |
+| una feature Cargo è accesa solo da chi la usa | `crates/fub-features/src/inventory.rs` | `crates/fub-features/tests/cargo_features.rs` e `check-cargo-feature-default.mjs` | [architecture/components-and-boundaries.md](../architecture/components-and-boundaries.md) |
+| una feature spenta non rompe il build | `crates/fub-features/` | la CI compila `--no-default-features` | [development/testing-and-quality.md](../development/testing-and-quality.md) |
+| i motori di terzi si nominano dai soli adattatori | `crates/fub-format-rich/`, `crates/fub-format-xlsx/` | `.github/scripts/check-engine-boundary.mjs` | [architecture/motori.md](../architecture/motori.md) |
+| nessuna interfaccia delle app Craft in `fub-app`, librerie doppie sotto il tetto | `docs/reference/budgets.json` | `.github/scripts/check-motori.mjs` | [architecture/motori.md](../architecture/motori.md) |
+| un motore si costruisce alla prima richiesta e una volta sola, senza lucchetto tenuto | `crates/fub-motori/src/pigro.rs` | `crates/fub-motori/tests/pigro.rs` | [architecture/motori.md](../architecture/motori.md) |
+| le cache dei motori stanno sotto un tetto comune, dalla meno usata | `crates/fub-motori/src/memoria.rs` | `crates/fub-motori/tests/memoria.rs` | [architecture/motori.md](../architecture/motori.md) |
+| la copia di un motore è derivata e verificata | `tools/vendor-craft/vendor.mjs` | `vendor.mjs check`, `verify-upstream`, `gate` | [architecture/motori.md](../architecture/motori.md) |
+| i componenti WASM rispettano tempi e memoria | `crates/fub-wasm-host/src/limits.rs` | `crates/fub-wasm-host/tests/` | [reference/permissions-and-security.md](../reference/permissions-and-security.md) |
+| i plugin installati si accendono e spengono per vault | `crates/fub-host/src/session.rs` | `crates/fub-kernel/tests/deactivation.rs` e `crates/fub-host/tests/draw_feature.rs` | [product/plugins-and-extensions.md](../product/plugins-and-extensions.md) |
+| il testo del vault passa dal kernel, mai dal formato sbagliato | `crates/fub-kernel/src/documents.rs` | `crates/fub-kernel/tests/text_fidelity.rs` | [architecture/document-model.md](../architecture/document-model.md) |
 
 ## I cinque proprietari del kernel
 

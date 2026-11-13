@@ -18,7 +18,7 @@ import { api, window as nativeWindow } from "./host/ipc";
 import { resolvedReference, settings } from "./host/query";
 import { forwardNotice, onEvent, startKernelRouter } from "./state/kernel";
 import { mountLocale } from "./state/locale";
-import { emit, on, state } from "./state/store";
+import { emit, on, setVaultName, state } from "./state/store";
 import { loadLayout, layout as paneLayout, split as splitPane, closePane } from "./state/layout";
 import { loadCommandSpecs } from "./state/vault";
 import { $ } from "./ui/dom";
@@ -61,7 +61,7 @@ import { platformSupports } from "./platform/capabilities";
 import { mountAppMenu } from "./ui/app-menu";
 import { mountWebviewFocusMonitor } from "./ui/node";
 import { registerMermaidRenderer } from "./ui/mermaid";
-import { mountOnboarding } from "./ui/onboarding";
+import { askVaultProfile, isNewVault, mountOnboarding, type VaultProfileHooks } from "./ui/onboarding";
 import { mountIncomingLinks, URI_ALLOWED } from "./ui/incoming-links";
 import { mountWebViewer } from "./ui/web-viewer";
 import { confirm } from "./platform/confirm";
@@ -196,7 +196,7 @@ async function mountMachineChrome(lifetime: Lifetime): Promise<void> {
 /// Schermata senza vault e layout adattivo: la shell possiede l'apertura,
 /// l'onboarding possiede demo, supporto e recupero. Le due vite si chiudono
 /// insieme; il picker di cartella resta registrato soltanto qui.
-function mountAdaptiveShell(): void {
+function mountAdaptiveShell(hooks: VaultProfileHooks): void {
   const life = pageWindowLifetime;
   const layout = document.getElementById("layout");
   const sidebar = document.getElementById("sidebar");
@@ -405,8 +405,11 @@ function mountAdaptiveShell(): void {
     errorBox.hidden = false;
     errorTextEl.textContent = reason;
   };
+  // Il vault nuovo aperto da «Crea un vault nuovo…» resta dietro il benvenuto
+  // finché non ha un profilo (A6): mentre si apre, e mentre si sceglie.
+  let holdWelcome = false;
   const syncOnboarding = (): void => {
-    const empty = !hasVault();
+    const empty = !hasVault() || holdWelcome;
     onboarding.hidden = !empty;
     document.getElementById("panes")?.classList.toggle("onboarding-visible", empty);
     void refreshRecents();
@@ -498,37 +501,56 @@ function mountAdaptiveShell(): void {
       syncOnboarding();
     }
   };
-  const openVaultFlow = async (dir: string): Promise<void> => {
+  /// `fresh`: la cartella viene da «Crea un vault nuovo…». Se il vault che si
+  /// apre è nuovo davvero (vuoto, senza `components.*`), prima di mostrarlo si
+  /// chiede il profilo (`askVaultProfile`); altrimenti si apre come sempre.
+  const openVaultFlow = async (dir: string, fresh = false): Promise<void> => {
     if (opening || life.closed) return;
     opening = true;
     lastDir = dir;
     setError(null);
     setOpening(dir);
+    holdWelcome = fresh;
     try {
       await openVaultPath(dir, () => !life.closed);
       if (life.closed) return;
       setOpening(null);
+      const root = state.vaultRoot;
+      if (fresh && root && await isNewVault() && !life.closed && state.vaultRoot === root) {
+        await askVaultProfile(root, hooks, life);
+        if (life.closed) return;
+      }
+      holdWelcome = false;
+      const welcomed = onboarding.contains(document.activeElement);
       syncOnboarding();
       applyAdaptive();
+      // Il fuoco era sul benvenuto, che adesso non c'è più: passa al vault.
+      if (fresh && welcomed && hasVault()) document.getElementById("panes")?.focus({ preventScroll: true });
     } catch (e) {
+      holdWelcome = false;
       if (life.closed) return;
       setOpening(null);
+      syncOnboarding();
       setError(errorText(e));
     } finally {
+      holdWelcome = false;
       opening = false;
     }
   };
-  const onPick = async (title?: string): Promise<void> => {
+  const onPick = async (title?: string, fresh = false): Promise<void> => {
     if (opening || life.closed) return;
     // Picker annullato = stato invariato (U04): un selettore che torna null
     // non tocca nulla.
     const dir = await pickVaultLocation(title);
     if (!dir || life.closed) return;
-    await openVaultFlow(dir);
+    await openVaultFlow(dir, fresh);
   };
   pageWindowLifetime.listen(globalThis.window, "resize", applyAdaptive);
   pageWindowLifetime.listen(document, "keydown", (e: KeyboardEvent) => {
-    if (e.key === "Escape") {
+    // Un Esc già gestito (il menu o il dialogo sopra il cassetto, che lo
+    // chiudono in cattura con `preventDefault`) chiude solo loro: il cassetto
+    // aspetta il prossimo.
+    if (e.key === "Escape" && !e.defaultPrevented) {
       if (
         layout.classList.contains("drawer-sidebar-open") ||
         layout.classList.contains("drawer-inspector-open")
@@ -548,7 +570,7 @@ function mountAdaptiveShell(): void {
   if (openBtn) pageWindowLifetime.listen(openBtn, "click", () => void onPick());
   // Un vault nuovo è una cartella vuota aperta come vault: il selettore di
   // sistema sa già crearne una, qui gli si dice che è quello che si vuole.
-  if (createBtn) pageWindowLifetime.listen(createBtn, "click", () => void onPick(t("onboarding.create.title")));
+  if (createBtn) pageWindowLifetime.listen(createBtn, "click", () => void onPick(t("onboarding.create.title"), true));
   if (chooseBtn) pageWindowLifetime.listen(chooseBtn, "click", () => void onPick());
   if (retryBtn)
     pageWindowLifetime.listen(retryBtn, "click", () => {
@@ -679,10 +701,6 @@ const MODE_COMMANDS: Partial<Record<string, PaneMode>> = {
   "shell.mode.reading": "reading",
 };
 
-/// Il nome con cui si riconosce il vault aperto: quello scelto nel registro dei
-/// vault, altrimenti la cartella. Il percorso intero resta nel suggerimento.
-let vaultName = "";
-
 function folderName(root: string): string {
   return root.split(/[\\/]/).filter(Boolean).pop() ?? root;
 }
@@ -696,9 +714,14 @@ function showVaultIcon(icon: string): void {
 
 /// La barra del titolo mostrava il percorso assoluto, che in una finestra
 /// stretta si taglia proprio dove sta il nome.
+///
+/// Il nome con cui si riconosce il vault aperto — quello scelto nel registro
+/// dei vault, altrimenti la cartella — va nello store (`state.vaultName`), che
+/// lo annuncia: la testata dei fogli lo porta in testa al percorso. Il percorso
+/// intero resta nel suggerimento.
 function showVaultName(root: string): void {
-  vaultName = root ? folderName(root) : "";
-  vaultPathEl.textContent = vaultName;
+  setVaultName(root ? folderName(root) : "");
+  vaultPathEl.textContent = state.vaultName;
   showVaultIcon("");
   setTooltip(vaultPathEl, root);
   drawWindowTitle();
@@ -706,8 +729,8 @@ function showVaultName(root: string): void {
   void api.knownVaults().then((known) => {
     if (state.vaultRoot !== root) return;
     const entry = known.find((vault) => vault.root === root);
-    if (entry?.name) vaultName = entry.name;
-    vaultPathEl.textContent = vaultName;
+    if (entry?.name) setVaultName(entry.name);
+    vaultPathEl.textContent = state.vaultName;
     showVaultIcon(entry?.icon ?? "");
     drawWindowTitle();
   }).catch(() => {});
@@ -718,7 +741,7 @@ function showVaultName(root: string): void {
 function drawWindowTitle(): void {
   const doc = state.currentDoc;
   const note = doc ? pageName(doc) : null;
-  const title = [note, vaultName || null, "Fub"].filter((part): part is string => !!part).join(" — ");
+  const title = [note, state.vaultName || null, "Fub"].filter((part): part is string => !!part).join(" — ");
   if (document.title === title) return;
   document.title = title;
   // Dentro una promessa: il titolo nativo non deve poter interrompere chi
@@ -917,17 +940,15 @@ async function init(): Promise<Teardown> {
   // non sa fare da sé: aprire un vault (che è una dozzina di passi in ordine, e
   // stanno scritti in un punto solo) e riscoprire i provider dopo che un
   // componente si è acceso o spento.
-  mountSettings({
-    openVault: openVaultPath,
-    reloadProvider: async () => {
-      // Le stesse due domande dell'apertura, e per la stessa ragione insieme:
-      // non si leggono a vicenda, e chi accende un componente le aspetta
-      // entrambe.
-      await Promise.all([mountDeclaredViews(pageWindowLifetime), loadCommandSpecs()]);
-      if (!alive()) return;
-      syncRail();
-    },
-  }, pageWindowLifetime);
+  const reloadProvider = async (): Promise<void> => {
+    // Le stesse due domande dell'apertura, e per la stessa ragione insieme:
+    // non si leggono a vicenda, e chi accende un componente le aspetta
+    // entrambe.
+    await Promise.all([mountDeclaredViews(pageWindowLifetime), loadCommandSpecs()]);
+    if (!alive()) return;
+    syncRail();
+  };
+  mountSettings({ openVault: openVaultPath, reloadProvider }, pageWindowLifetime);
 
   pageWindowLifetime.listen($("#open-vault"), "click", () => void pickVault());
 
@@ -1183,7 +1204,9 @@ async function init(): Promise<Teardown> {
   // La shell adattiva (P2) si monta prima di sapere se un vault c'è: mostra
   // l'onboarding a vault vuoto e applica i breakpoint, senza toccare l'ordine
   // di apertura qui sotto.
-  mountAdaptiveShell();
+  // La schermata del profilo di un vault nuovo riscopre i provider come la
+  // pagina «Componenti».
+  mountAdaptiveShell({ reloadProvider });
   if (initial) {
     // Il nome che la barra mostrerà per primo: la cartella.
     fase("vault", folderName(initial));

@@ -35,22 +35,8 @@ nascosto del tutto si sceglie dall'albero degli oggetti.
 
 ## Nel file
 
-Un ritaglio è un `clipPath` fra le [risorse](drawing-resources.md) del
-disegno, suo e di nessun altro, con un rettangolo nelle coordinate
-dell'immagine.
-
-```xml
-<clipPath id="c1" fub:role="private">
-  <rect x="20" y="20" width="40" height="36"/>
-</clipPath>
-<image id="o1" x="12" y="12" width="64" height="64"
-  clip-path="url(#c1)" href="data:image/png;base64,…"/>
-```
-
-Una maschera di ritaglio è un `clipPath` con la forma, una d'opacità una
-`mask`, e il gruppo li usa con `clip-path` o `mask`. «Separa» su un gruppo
-mascherato non lo separa, e dice perché. Come li scrive il file è
-in [Formato della scena,
+Un ritaglio è un `clipPath` privato fra le risorse del disegno; maschera di
+opacità è un `mask`. Come li scrive il file è in [Formato della scena,
 risorse](../reference/scene-format-resources.md#i-ritagli-e-le-maschere).
 
 ## Spazi e parti

@@ -210,6 +210,38 @@ Le eccezioni per i motori privati di Mermaid e gli strumenti Node sono
 limitate alle versioni verificate: una versione diversa o una copia
 aggiuntiva richiede una nuova valutazione, non un override fra major.
 
+## Banchi
+
+Tutti i comandi girano da `apps/client/`; gli script sorgente sono in
+`apps/client/package.json` e in `bench/`:
+
+| Comando | Che cosa misura |
+|---|---|
+| `npm run bench:verify` | le scene del banco visivo contro le baseline Linux |
+| `npm run bench:update` | rigenera le baseline (solo dal runner Linux) |
+| `npm run bench:a11y` | accessibilità della pagina resa (`-- --scene=a,b` per alcune scene, `-- --light=dark` per una luce) |
+| `npm run bench:motion` | le coreografie del moto dello Scrittoio |
+| `npm run bench:lampo` | lo strato d'avvio prima di ogni modulo |
+| `npm run bench:interaction` | il budget d'interazione (menu, palette, nota) |
+| `npm run bench:ink` | l'inchiostro in TypeScript e in WebAssembly, fianco a fianco |
+| `npm run bench:fidelity` | la fedeltà pixel dei disegni (foglio, PNG, Lettura) |
+| `npm run bench:grid` | i gesti della griglia con mouse e tastiera veri |
+| `npm run bench:graph-scale` | il grafo a 2k/10k nodi: tempi, heap, soak |
+| `npm run bench:large` | i disegni grandi (da 200 a 49 900 elementi) nell'app vera |
+| `npm run bench:webview` | le misure nella WebView vera (vedi [webview-measurements.md](webview-measurements.md)) |
+
+Varianti usate dalle prove di accettazione della Graph View e dei disegni
+grandi:
+
+```bash
+cd apps/client
+npm run bench:graph-scale -- --nodes 2000 --seed 6 --cycles 3
+npm run bench:graph-scale -- --nodes 10000 --seed 6 --cycles 1 --soak-windows 8
+npm run bench:graph-scale -- --nodes 10000 --seed 6 --cycles 1 --soak-windows 16
+npm run bench:large -- --elements 30000   # da 200 a 49 900 elementi, senza soglie
+npm run bench:large -- --cpu 4            # la pagina quattro volte più lenta
+```
+
 ## Visuale e accessibilità
 
 Il banco visuale usa scene deterministiche e baseline del runner Linux. In caso
@@ -240,6 +272,14 @@ su `mobile.html`). Il fake del banco ferma l'avvio dalla query: `avvio=attesa`
 trattiene `openVault`, `avvio=guasto` fa cadere `initialVault`. Una scena che
 non arriva a `data-bench="ready"` dichiara la sua condizione d'arrivo
 (`ready`), e il palco ferma la scia (`.avvio-scia`) prima dello scatto.
+
+Gli stati di Scrittoio 2 hanno sei scene: `banda-modalita` (la nota col menu
+delle modalità aperto dalla banda), `nota-stretta` (la nota a 800×800, la
+finestra minima del computer), `barra-formato` e `barra-formato-stretta` (la
+barra di formato della nota a 1280 e a 800, con `?formatbar=1`, che dà alla
+finestra principale i comandi di formato del telefono senza cambiare le altre
+scene), `icone-figure` e `icone-emoji` (il selettore dell'icona aperto su una
+cartella, con le figure del vault del banco e con `?icone=emoji`).
 
 La guardia del lampo (`npm run bench:lampo`, `-- --port <n> --strictPort` per
 un'altra porta) trattiene il modulo d'ingresso di `index.html` e di
@@ -276,7 +316,10 @@ esito invece di un «da verificare».
 Il catalogo contiene i campioni posizionati dentro i rispettivi riquadri;
 le regioni che scorrono hanno nome accessibile e ingresso da tastiera.
 Il controllo del focus distingue i discendenti di un `details` chiuso
-dagli elementi realmente visibili e raggiungibili.
+dagli elementi realmente visibili e raggiungibili. In ogni scena con la
+modalità nella banda, Invio su `#status-mode` apre il menu (che prende il
+fuoco) ed Esc lo chiude riportando il fuoco sulla banda; la barra di formato e
+quella del PDF sono un solo punto di Tab ciascuna.
 
 Regole:
 
@@ -321,19 +364,43 @@ attributi sopra il doc, niente intestazioni di sezione spezzate. Gli attributi
 stanno fra il doc e l'item: uno sopra il doc passa all'item di un altro doc
 appena qualcuno inserisce un item nel mezzo.
 
+## La CI in breve
+
+- Una PR **bozza** riceve la CI corta: solo Linux, senza banchi. Pronta per
+  la revisione gira la CI completa, Windows e macOS compresi; su `main` gira
+  sempre tutto.
+- I test del workspace girano con `cargo nextest run --workspace --profile ci`
+  più `cargo test --workspace --doc`; i fuzzer del Markdown girano a 2000 casi
+  (20000 nella corsa settimanale e con `fuzz_completo`).
+- La cache Rust salva solo da `main` (budget di 10 GB); i job che possono
+  riutilizzarla leggono la test cache di Linux con `shared-key: test` e non la
+  risalvano.
+- Il gate di release è `.github/scripts/check-release-gate.mjs`: aggiungere o
+  rinominare un job richiede di aggiornarlo.
+- Un push fa girare la CI solo su `main`; una PR la fa girare a ogni push, e un
+  push più recente annulla la corsa precedente.
+- Un test noto come instabile ha un'issue aperta: rilancia una volta i job
+  falliti; se un job resta rosso, indaga prima di dirlo instabile.
+- Per leggere una corsa: `gh run view <corsa> --json jobs`; il log di un job:
+  `gh api repos/Fubeo/Fub/actions/jobs/<job>/logs`; un artefatto:
+  `gh api repos/Fubeo/Fub/actions/artifacts/<id>/zip`, perché `gh run
+  download` ne rifiuta alcuni.
+
 ## Matrice per modifica
 
 | Modifica | Test necessari |
 |---|---|
 | helper puro | unit test |
 | provider | unit test e `MemoryHost` |
-| mount o sessione | integrazione `fub-testkit` |
+| kernel, mount o sessione | test del crate e integrazione `fub-testkit` |
 | storage | integrazione, corruzione e interruzione |
 | IPC | mirror, fixture e test shell |
 | UI | Vitest, type-check, build, accessibilità |
 | resa | banco visuale |
 | WIT | conformità, additività e componente reale |
+| runtime WASM | componente reale, casi positivi e negativi di limiti e ciclo di vita |
 | docs | tutti i guard documentali |
+| trasversale | il ciclo Rust e frontend pertinente e i guard di `CONTRIBUTING.md` |
 
 ## Qualità della prova
 

@@ -135,8 +135,10 @@ apre.
 
 ## Dove sta il codice
 
-La scelta delle facce sta in `crates/fub-features/src/draw/fonts.rs`, che le
-descrive, le sceglie e le fissa, e il client la ripete in
+La scelta delle facce sta in `crates/fub-features/src/draw/fonts.rs` e nei suoi
+moduli in `fonts/`, che le descrivono (`describe.rs`), le scelgono
+(`choose.rs`) e le fissano (`instance.rs`, con `settle.rs` per GPOS e GSUB), e
+il client la ripete in
 `apps/client/src/editors/spatial/fonts/faces.ts`: i vettori di
 `apps/client/src/__fixtures__/scene-fonts/choose.json` provano tutti e due.
 Il catalogo del vault e le facce registrate nel browser stanno in

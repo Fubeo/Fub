@@ -307,6 +307,25 @@ fn mount_error_with_resource_disposal(
     })
 }
 
+/// Se la lavagna è spenta nel file delle impostazioni di `root`.
+fn lavagna_spenta(
+    root: &Utf8Path,
+    storage: &Arc<dyn VaultStorage>,
+    machine: &Arc<MachineSettings>,
+) -> bool {
+    let mut settings =
+        fub_kernel::SettingsStore::open(root, Arc::clone(storage), Arc::clone(machine));
+    // Basta la chiave dei bundle spenti: la lavagna è un bundle.
+    let specs: Vec<_> = crate::settings::core_settings()
+        .into_iter()
+        .filter(|spec| spec.key == crate::settings::PLUGINS_DISABLED)
+        .collect();
+    if settings.declare(crate::settings::CORE_ID, &specs).is_err() {
+        return false;
+    }
+    crate::componenti::lavagna_spenta(&settings)
+}
+
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn mount_with_formats(
     root: &Utf8Path,
@@ -326,9 +345,16 @@ pub(crate) fn mount_with_formats(
     #[cfg_attr(not(any(feature = "draw", feature = "craft")), allow(unused_mut))]
     let mut builtin = vec![
         MarkdownProvider::boxed(),
-        fub_format_canvas::CanvasProvider::boxed(),
         fub_format_base::BaseProvider::boxed(),
     ];
+    // La lavagna spenta (`fub.lavagna` in `plugins.disabled`) non registra
+    // nemmeno il formato `.canvas`: un `.canvas` resta un file di specie
+    // sconosciuta. Si legge dal file prima che il workspace esista, perché i
+    // formati si registrano prima di lui; riaccenderla dalla pagina
+    // «Componenti» rimonta il vault (`crate::componenti`).
+    if !lavagna_spenta(root, &storage, &machine) {
+        builtin.insert(1, fub_format_canvas::CanvasProvider::boxed());
+    }
     // Le scene di FubDraw (ADR 0203). Senza la feature un `.svg` resta un
     // allegato, e la shell lo apre come testo col profilo `svg`.
     #[cfg(feature = "draw")]

@@ -3,7 +3,7 @@
 - **Stato:** proposta
 - **Data:** 2026-10-17
 - **Ambito:** frontend
-- **Sostituisce:** —
+- **Sostituisce:** 0203
 - **Sostituita da:** —
 
 ## Contesto

@@ -238,7 +238,10 @@ describe("la barra e il foglio", () => {
     mount();
     const toolbar = host.querySelector('[role="toolbar"]')!;
     expect(toolbar.getAttribute("aria-label")).toBe("Strumenti di disegno");
-    const groups = [...toolbar.querySelectorAll(".draw-group:not([hidden])")].map((group) => [group.getAttribute("role"), group.getAttribute("aria-label")]);
+    // La barra è la testa intera; la riga delle opzioni è una fila dentro.
+    expect(toolbar.classList.contains("draw-header")).toBe(true);
+    expect(toolbar.querySelector(".draw-toolbar")!.hasAttribute("role")).toBe(false);
+    const groups = [...toolbar.querySelectorAll(".draw-toolbar .draw-group:not([hidden])")].map((group) => [group.getAttribute("role"), group.getAttribute("aria-label")]);
     expect(groups).toEqual([
       ["group", "Colore"],
       ["radiogroup", "Spessore"],
@@ -270,15 +273,44 @@ describe("la barra e il foglio", () => {
     expect(surface().getAttribute("aria-label")).toBe("Foglio del disegno");
   });
 
-  it("danno alla barra un solo punto di tabulazione, e le frecce la percorrono", () => {
-    mount();
-    const buttons = [...host.querySelectorAll<HTMLButtonElement>('.draw-toolbar[role="toolbar"] button:not([hidden])')];
-    expect(buttons.filter((control) => control.tabIndex === 0)).toHaveLength(1);
-    buttons[0]!.focus();
-    key("ArrowRight", {}, buttons[0]!);
-    expect(document.activeElement).toBe(buttons[1]);
-    expect(buttons[1]!.tabIndex).toBe(0);
-    expect(buttons[0]!.tabIndex).toBe(-1);
+  it("danno alla testa un solo punto di tabulazione, e le frecce la percorrono dal menu a «Esporta»", () => {
+    mount(SOURCE, { onExport: () => {} });
+    const header = host.querySelector<HTMLElement>('.draw-header[role="toolbar"]')!;
+    const controls = (): HTMLElement[] => [...header.querySelectorAll<HTMLElement>("button, input, select")];
+    const reachable = (): HTMLElement[] =>
+      controls().filter((control) => !(control as HTMLButtonElement).disabled && control.closest("[hidden]") === null && !(control instanceof HTMLInputElement && control.type === "range"));
+    // Un solo controllo della testa sta nel Tab: il menu del disegno, il primo.
+    const stops = controls().filter((control) => control.tabIndex === 0);
+    expect(stops.map((control) => control.getAttribute("aria-label"))).toEqual(["Disegno"]);
+    const menu = stops[0]!;
+    menu.focus();
+    key("ArrowRight", {}, menu);
+    const second = reachable()[1]!;
+    expect(document.activeElement).toBe(second);
+    expect(second.tabIndex).toBe(0);
+    expect(menu.tabIndex).toBe(-1);
+    // Ai capi la fila gira: «Esporta» è l'ultimo, e da lì si torna al menu.
+    key("End", {}, second);
+    const last = document.activeElement as HTMLElement;
+    expect(last.getAttribute("aria-label")).toBe("Esporta");
+    key("ArrowRight", {}, last);
+    expect(document.activeElement).toBe(menu);
+    key("ArrowLeft", {}, menu);
+    expect(document.activeElement).toBe(last);
+    key("Home", {}, last);
+    expect(document.activeElement).toBe(menu);
+    expect(controls().filter((control) => control.tabIndex === 0)).toEqual([menu]);
+  });
+
+  it("vestono la testa del kit: il vassoio, i foglietti e i pulsanti", () => {
+    mount(SOURCE, { onExport: () => {} });
+    const header = host.querySelector<HTMLElement>(".draw-header")!;
+    expect(header.classList.contains("kit-bar")).toBe(true);
+    for (const group of header.querySelectorAll(".draw-group")) expect(group.classList.contains("kit-bar-group"), group.getAttribute("aria-label") ?? group.className).toBe(true);
+    for (const control of header.querySelectorAll(".draw-button")) expect(control.classList.contains("kit-bar-button"), control.getAttribute("aria-label") ?? "").toBe(true);
+    // La colonna e la barra della selezione hanno la loro pelle.
+    for (const control of host.querySelectorAll(".draw-rail .draw-button, .draw-arrange .draw-button")) expect(control.classList.contains("kit-bar-button")).toBe(false);
+    expect(host.querySelector(".draw-rail .draw-group")!.classList.contains("kit-bar-group")).toBe(false);
   });
 
   it("hanno in alto il menu del disegno, Annulla e Ripeti", () => {
@@ -390,6 +422,50 @@ describe("gli strumenti", () => {
     drag([[50, 70], [56, 70], [64, 70]]);
     expect(editor.engine.text).not.toContain("o1a2b3c4d");
     expect(spoken()).toBe("1 oggetto cancellato. Il disegno ha 0 oggetti.");
+  });
+
+  it("la gomma su un oggetto di un gruppo estraneo toglie lui solo, non il gruppo coi suoi vicini", () => {
+    // Come un livello di Inkscape: un `<g>` della radice senza `fub:layer`,
+    // con dentro tutto il disegno, un collegamento e un figlio bloccato.
+    const source = doc(
+      '<g id="strade"><rect id="a" x="60" y="60" width="20" height="20" fill="none" stroke="#000000" stroke-width="2"/>'
+        + '<rect id="b" x="200" y="200" width="20" height="20"/>'
+        + '<a href="parco.md" id="link"><rect id="c" x="300" y="60" width="20" height="20"/></a>'
+        + '<rect id="fermo" x="60" y="60" width="20" height="20" fub:locked="true"/></g>',
+    );
+    mount(source);
+    const before = editor.engine.text;
+    editor.setTool("eraser");
+    drag([[50, 70], [56, 70], [64, 70]]);
+    const after = editor.engine.text;
+    expect(after).not.toContain('id="a"');
+    for (const kept of ['id="strade"', 'id="b"', 'id="link"', 'id="c"', 'id="fermo"']) expect(after).toContain(kept);
+    expect(spoken()).toBe("1 oggetto cancellato. Il disegno ha 1 oggetto.");
+    editor.undo();
+    expect(editor.engine.text).toBe(before);
+  });
+
+  it("la gomma che passa su tutti i figli di un gruppo toglie il gruppo, senza lasciarne il guscio", () => {
+    mount(doc('<g id="coppia"><rect id="su" x="60" y="60" width="20" height="20"/><rect id="giu" x="60" y="90" width="20" height="20"/></g>'));
+    editor.setTool("eraser");
+    drag([[70, 50], [70, 120]]);
+    expect(editor.engine.text).not.toContain('id="coppia"');
+    expect(editor.engine.text).not.toContain('id="su"');
+    expect(editor.engine.text).not.toContain('id="giu"');
+  });
+
+  it("la gomma su un collegamento dentro un gruppo lo toglie intero, e il gruppo resta", () => {
+    mount(doc(
+      '<g id="altro"><a href="parco.md" id="link"><rect id="c" x="60" y="60" width="20" height="20"/></a>'
+        + '<rect id="d" x="10" y="10" width="20" height="10"/></g>',
+    ));
+    editor.setTool("eraser");
+    drag([[50, 70], [56, 70], [64, 70]]);
+    // Niente `<a>` vuoto: se ne va col suo unico figlio.
+    expect(editor.engine.text).not.toContain('id="link"');
+    expect(editor.engine.text).not.toContain("<a ");
+    expect(editor.engine.text).toContain('id="altro"');
+    expect(editor.engine.text).toContain('id="d"');
   });
 
   it("la gomma ferma mentre la rotella sposta la vista non cancella ciò che non ha toccato", () => {

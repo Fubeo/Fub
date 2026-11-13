@@ -4,8 +4,11 @@
 
 import { t } from "../../i18n/strings";
 import type { SurfaceExport, SurfaceMode } from "../core/registry";
+import { PDF_PROFILE, VECTOR_PROFILE } from "../core/component-surfaces";
 
-export const VECTOR_PROFILE = "vector";
+// I nomi dei profili stanno nel modulo leggero dei descrittori, che la shell
+// legge all'avvio senza caricare i disegni.
+export { PDF_PROFILE, VECTOR_PROFILE };
 
 /// Disegno, dove si scrive sulla resa, e Lettura, il documento intero come
 /// immagine.
@@ -22,7 +25,6 @@ export const VECTOR_EXPORTS: readonly SurfaceExport[] = [
   { target: "draw.pdf", label: () => t("draw.export.pdf"), detail: () => t("draw.export.pdf.desc") },
 ];
 
-export const PDF_PROFILE = "pdf";
 
 /// Annota, dove si scrive sulle pagine del PDF, e Lettura, dove le pagine si
 /// sfogliano e accanto c'è l'elenco delle annotazioni. Gli id sono quelli del

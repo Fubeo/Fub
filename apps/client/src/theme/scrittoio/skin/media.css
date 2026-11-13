@@ -367,93 +367,62 @@
 /* ── Il PDF ──────────────────────────────────────────────────────────────── */
 
 /*
-   Le pagine sono fogli posati su un piano un tono sotto la carta; sopra, la
-   pillola dei comandi e la riga «pagina N di M». La superficie e la vista
-   portano la stessa classe: la vista è quella dentro.
+   La barra di serie in cima, il piano sotto. Non più una pillola sospesa che
+   va a capo: la barra in una fila sta sulla carta, sotto la testata, come
+   quella del documento; le pagine sono fogli posati sul piano un tono sotto.
+   «Pagina N di M» passa nella banda. La superficie e la vista portano la
+   stessa classe: la vista è quella dentro.
 */
 .media-surface > .media-pdf {
   display: flex;
   flex-direction: column;
   flex: 1;
   min-height: 0;
-  background: var(--sheet-2);
+  background: var(--sheet);
 }
 .media-surface > .media-pdf:focus-visible {
   outline-offset: calc(var(--focus-ring-width) * -2);
 }
+/* La barra del PDF è la barra di serie (`kit-bar`): qui solo ciò che è suo.
+   Non va mai a capo: in una finestra stretta, col sommario e «Annota», la
+   fila scorre di lato. Il sommario è un elenco a tendina largo quanto un
+   titolo corto. */
 .media-pdf-toolbar {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  align-self: center;
-  justify-content: center;
-  gap: var(--space-1);
-  box-sizing: border-box;
-  max-width: calc(100% - 2 * var(--space-5));
-  margin: var(--space-5) var(--space-5) 0;
-  padding: var(--space-2);
-  border-radius: var(--radius-pill);
-  background: var(--bg-elev);
-  box-shadow: var(--shadow-3);
-  font-family: var(--font-ui);
-  font-size: var(--text-sm);
-  line-height: var(--leading-normal);
+  overflow-x: auto;
+  scrollbar-width: thin;
 }
-.media-pdf-toolbar > button {
+.media-pdf-toolbar > select.kit-bar-field {
+  flex: 0 1 12rem;
+  min-width: 6rem;
+}
+/* La ricerca: il campo dei campi, con la lente dentro. */
+.media-pdf-search {
+  position: relative;
   display: inline-flex;
+  flex: 0 1 14rem;
   align-items: center;
-  justify-content: center;
-  flex: none;
-  min-width: 28px;
-  height: 28px;
-  padding: 0 var(--space-4);
-  border: 0;
-  border-radius: var(--radius-pill);
-  background: transparent;
+  min-width: 8rem;
+}
+.media-pdf-search > svg {
+  position: absolute;
+  left: var(--space-4);
+  width: 14px;
+  height: 14px;
   color: var(--muted);
-  font: inherit;
-  font-weight: var(--weight-medium);
-  cursor: pointer;
+  pointer-events: none;
 }
-.media-pdf-toolbar > button:hover,
-.media-pdf-toolbar > button:focus-visible {
-  background: var(--overlay-hover);
-  color: var(--text);
+.media-pdf-search > .kit-bar-field {
+  flex: 1 1 auto;
+  width: 100%;
+  min-width: 0;
+  padding-left: calc(var(--space-4) + 14px + var(--space-3));
 }
-.media-pdf-toolbar > button:active {
-  background: var(--overlay-active);
-  color: var(--text);
+.media-pdf-toolbar > .kit-options-more {
+  margin-inline-start: auto;
 }
-.media-pdf-toolbar > button:disabled {
-  background: transparent;
-  color: var(--muted);
-  opacity: 0.4;
-  cursor: default;
-}
-/* Il campo è quello di tutti, in misura di pillola. */
-.media-pdf-toolbar > input {
-  flex: 0 1 12rem;
-  min-width: 6rem;
-  height: 28px;
-  margin: 0 var(--space-2);
-  padding: 0 var(--space-5);
-  border-radius: var(--radius-pill);
-  font-size: var(--text-sm);
-}
-/* Il sommario è un elenco a tendina, in misura di pillola come il campo. */
-.media-pdf-toolbar > select {
-  flex: 0 1 12rem;
-  min-width: 6rem;
-  height: 28px;
-  margin: 0 var(--space-2);
-  padding: 0 var(--space-4);
-  border-radius: var(--radius-pill);
-  font-size: var(--text-sm);
-}
-.media-pdf-toolbar > button[aria-pressed="true"] {
-  background: var(--overlay-active);
-  color: var(--text);
-}
+/* La riga di stato si vede col caricamento, gli errori e la ricerca; la
+   pagina la dice la banda, e qui resta per il lettore di schermo
+   (`.sr-only`, della struttura, che la toglie dalla vista). */
 .media-pdf > [role="status"] {
   margin: var(--space-4) var(--space-5) 0;
   color: var(--muted);
@@ -467,6 +436,7 @@
   display: flex;
   flex: 1;
   min-height: 0;
+  background: var(--sheet-2);
 }
 .media-pdf-thumbs {
   display: flex;
@@ -549,6 +519,12 @@
 }
 .media-pdf-page.media-pdf-spread canvas {
   margin: 0;
+}
+/* Le annotazioni sopra la pagina hanno gli angoli del foglio. La loro riga
+   (il PDF cambiato, un file che non si legge) veste come la riga di stato
+   qui sopra, `.media-pdf > [role="status"]`. */
+.media-pdf-annotations {
+  border-radius: var(--radius-xs);
 }
 .media-pdf-page > p {
   max-width: 34rem;
@@ -662,17 +638,20 @@
   cursor: default;
 }
 
-/* ── I file delle app Craft ──────────────────────────────────────────────── */
+/* ── I file delle app Craft: un foglietto sollevato ───────────────────────── */
 
 /* La scheda di un disegno, di un'immagine o di un progetto: l'anteprima con
-   lo zoom delle foto e, sotto, la riga dei dati in grafite. Senza anteprima,
-   un riquadro sobrio come ciò che non si apre, senza il segno d'allarme: il
-   nome, i dati, ciò che succede e un'azione sola nel colore d'accento. */
+   lo zoom delle foto e, sotto, la riga dei dati in grafite. Senza anteprima la
+   scheda non è un riquadro tratteggiato: è un foglietto di carta posato sul
+   piano, come la nota aperta nel cassetto, col nome in inchiostro e i dati in
+   grafite. Le risposte sono quelle dei pulsanti del kit (`kit-button`): un
+   fondo anche a riposo, uguali fra loro, perché è una scelta e non un invito. */
 .craft-card {
   display: flex;
   flex-direction: column;
   flex: 1;
   min-height: 0;
+  background: var(--sheet-2);
 }
 .craft-info {
   flex: none;
@@ -687,18 +666,25 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: var(--space-3);
+  gap: var(--space-2);
   box-sizing: border-box;
-  max-width: 36rem;
+  max-width: 30rem;
   margin: auto;
-  padding: var(--space-9);
-  border: 1px dashed var(--border);
-  border-radius: var(--radius-control);
+  padding: var(--space-9) var(--space-9) var(--space-8);
+  border: 0;
+  border-radius: var(--radius-sheet);
+  background: var(--bg-elev);
+  box-shadow: 0 0 0 1px var(--overlay-hover), var(--shadow-1);
   color: var(--muted);
-  font-size: var(--text-md);
+  font-size: var(--text-base);
   line-height: var(--leading-normal);
   overflow-wrap: anywhere;
   text-align: center;
+}
+/* Nel contrasto alto il filo attorno al foglietto è quello dei bordi; nei
+   colori forzati l'ombra sparisce e il bordo torna. */
+:root[data-contrast="high"] .craft-empty {
+  box-shadow: 0 0 0 1px var(--border);
 }
 .craft-empty > .craft-info {
   padding: 0;
@@ -706,51 +692,73 @@
 .craft-empty-name {
   margin: 0;
   color: var(--text);
+  font-size: var(--text-lg);
   font-weight: var(--weight-medium);
 }
 .craft-empty-state {
   margin: 0;
 }
+.craft-ask-answer,
 .craft-render {
-  margin-top: var(--space-3);
-  padding: var(--space-3) var(--space-5);
+  min-height: var(--control-h);
+  padding: 0 var(--space-6);
   border: 0;
   border-radius: var(--radius-control);
-  background: transparent;
-  color: var(--accent);
+  background: var(--overlay-hover);
+  color: var(--text);
   font: inherit;
   font-family: var(--font-ui);
   font-size: var(--text-base);
   font-weight: var(--weight-medium);
   cursor: pointer;
 }
+.craft-render {
+  margin-top: var(--space-3);
+}
+.craft-ask-answer:hover,
 .craft-render:hover,
-.craft-render:focus-visible {
-  background: var(--accent-wash);
-  color: var(--accent-soft);
-}
+.craft-ask-answer:active,
 .craft-render:active {
-  background: var(--accent-veil);
-  color: var(--accent-soft);
+  background: var(--overlay-active);
+  color: var(--text);
 }
-.craft-render:disabled {
-  background: transparent;
-  color: var(--muted);
+.craft-ask-answer:focus-visible,
+.craft-render:focus-visible {
+  background: var(--overlay-hover);
+  color: var(--text);
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: 2px;
+}
+/* Spente come quelle del kit: lo stesso fondo, a un terzo dell'inchiostro. */
+.craft-ask-answer:disabled,
+.craft-ask-answer:disabled:hover,
+.craft-render:disabled,
+.craft-render:disabled:hover {
+  background: var(--overlay-hover);
+  color: var(--text);
   opacity: 0.4;
   cursor: default;
 }
+@media (forced-colors: active) {
+  .craft-empty {
+    border: 1px solid CanvasText;
+  }
+  .craft-ask-answer,
+  .craft-render {
+    border: 1px solid ButtonText;
+  }
+}
 
-/* La domanda sulle anteprime fatte dalle app (T23), nel riquadro al posto del
-   pulsante: un filo la stacca da ciò che dice il file. Le due risposte pesano
-   uguale, perché è una scelta e non un invito. */
+/* La domanda sulle anteprime fatte dalle app (T23), nel foglietto al posto del
+   pulsante: un filo la stacca da ciò che dice il file. */
 .craft-ask {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: var(--space-4);
-  margin-top: var(--space-3);
+  gap: var(--space-5);
+  margin-top: var(--space-4);
   padding-top: var(--space-6);
-  border-top: 1px solid var(--border);
+  border-top: 1px solid var(--overlay-active);
 }
 .craft-ask-text {
   max-width: 30rem;
@@ -763,33 +771,6 @@
   flex-wrap: wrap;
   justify-content: center;
   gap: var(--space-3) var(--space-4);
-}
-.craft-ask-answer {
-  padding: var(--space-3) var(--space-6);
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius-control);
-  background: transparent;
-  color: var(--accent);
-  font: inherit;
-  font-family: var(--font-ui);
-  font-size: var(--text-base);
-  font-weight: var(--weight-medium);
-  cursor: pointer;
-}
-.craft-ask-answer:hover,
-.craft-ask-answer:focus-visible {
-  background: var(--accent-wash);
-  color: var(--accent-soft);
-}
-.craft-ask-answer:active {
-  background: var(--accent-veil);
-  color: var(--accent-soft);
-}
-.craft-ask-answer:disabled {
-  background: transparent;
-  color: var(--muted);
-  opacity: 0.4;
-  cursor: default;
 }
 .craft-ask-hint {
   margin: 0;
@@ -1078,6 +1059,7 @@
   gap: var(--space-5);
   font-family: var(--font-reading);
 }
+/* Le diapositive: «3 / 12» in tondo, come la banda. */
 .slide-status {
   margin: 0;
   color: var(--muted);
@@ -1085,9 +1067,9 @@
   font-size: var(--text-sm);
   font-variant-numeric: tabular-nums;
   font-weight: var(--weight-medium);
-  letter-spacing: var(--tracking-caps);
+  letter-spacing: 0;
   text-align: center;
-  text-transform: uppercase;
+  text-transform: none;
 }
 /* Il margine automatico centra la slide finché ci sta e la lascia scorrere
    dall'inizio quando è più alta del palco. */

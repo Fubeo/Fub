@@ -6,6 +6,14 @@
 import { describe, expect, it } from "vitest";
 import { catalogFor as shellCatalogFor } from "../../i18n/strings";
 import { drawStrings, plural, t } from "./strings";
+import { ARRANGE_IT } from "./strings/arrange";
+import { CHROME_IT } from "./strings/chrome";
+import { DESCRIBE_IT } from "./strings/describe";
+import { EXPORT_IT } from "./strings/export";
+import { LAYERS_IT } from "./strings/layers";
+import { PROPERTIES_IT } from "./strings/properties";
+import { SELECTION_IT } from "./strings/selection";
+import { TOOLS_IT } from "./strings/tools";
 
 const IT = drawStrings.catalogFor("it");
 const EN = drawStrings.catalogFor("en");
@@ -44,6 +52,14 @@ describe("il catalogo del disegno", () => {
       expect(key.startsWith("draw."), `«${key}» non comincia con draw.`).toBe(true);
       expect(shell[key], `«${key}» sta anche nel catalogo della shell`).toBeUndefined();
     }
+  });
+
+  it("non ripete una chiave in due aree di `strings/`", () => {
+    // Nel letterale unico il compilatore rifiutava una chiave doppia; con le
+    // aree ricomposte per spread l'ultima vincerebbe in silenzio.
+    const areas = [TOOLS_IT, DESCRIBE_IT, PROPERTIES_IT, EXPORT_IT, ARRANGE_IT, LAYERS_IT, SELECTION_IT, CHROME_IT];
+    const count = areas.reduce((sum, area) => sum + Object.keys(area).length, 0);
+    expect(count).toBe(Object.keys(IT).length);
   });
 
   it("risponde con `t` e `plural`", () => {

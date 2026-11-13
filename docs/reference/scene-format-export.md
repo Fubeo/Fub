@@ -10,8 +10,8 @@
 > `apps/client/src/editors/spatial/scene/export.ts` e `scene/print.ts`, che
 > derivano, misurano e impaginano allo stesso modo per l'anteprima, con i
 > vettori di prova in `apps/client/src/__fixtures__/scene-export/`; le
-> opzioni, i formati e i nomi in `crates/fub-features/src/draw.rs` e
-> `draw/choice.rs`; Excalidraw e draw.io in `draw/interop.rs`.
+> opzioni, i formati e i nomi in `crates/fub-features/src/draw.rs`,
+> `draw/export.rs` e `draw/choice.rs`; Excalidraw e draw.io in `draw/interop.rs`.
 
 Una parte del [formato della scena](scene-format.md), §9. L'export legge il
 file del vault e ne fa il file da scrivere in tre passi: sceglie che cosa,

@@ -8,13 +8,16 @@
 import { EditorSelection, type EditorState, type Extension, Prec, StateEffect, StateField } from "@codemirror/state";
 import { Decoration, type DecorationSet, EditorView, keymap, WidgetType } from "@codemirror/view";
 import { createList, openPopover, textField, type PopoverHandle } from "../../../../../kit";
-import { catalogLanguage, resolvedLanguage } from "../../../../../i18n/strings";
+import { catalogLanguage, resolvedLanguage, t } from "../../../../../i18n/strings";
 import { openLifetime, type Lifetime } from "../../../../../ui/lifetime";
+import { iconEl } from "../../../../../ui/icons";
+import { drawPageMark, figureLabel, figureValue, PAGE_FIGURES, pageMarkLabel, pageMarkValue } from "../../../../../ui/page-mark";
 import { matchEmoji } from "../completions";
 import { propertyBlock, propertyList, propertyValue, setProperty } from "../properties";
 import { imageHtml } from "../render-inline";
 import { liveStrings } from "../strings";
 import { blocksOptions, type BlocksOptions } from "./handles";
+import { noteFactsElement, noteFactsOf, sameLabels, type NoteFactsLabels } from "../note-facts";
 
 /// Le classi della pagina che il menu «…» scrive in `cssclasses`; il tema le
 /// applica al riquadro (`fub-note--*`). Le altre classi della nota restano.
@@ -31,10 +34,14 @@ export interface PageData {
   readonly readOnly: boolean;
   readonly renamable: boolean;
   readonly subpages: boolean;
+  /// La riga dei dati sotto il titolo (`../note-facts.ts`), o `null`.
+  readonly facts: NoteFactsLabels | null;
 }
 
 export function pageData(state: EditorState, options: BlocksOptions = state.facet(blocksOptions)): PageData {
-  const icon = propertyValue(state, "icon")?.trim() || null;
+  // Un'emoji o una figura (`icon: fub:book`); un path o un indirizzo scritto
+  // da un'altra app non è un'icona (`page-mark.ts`).
+  const icon = pageMarkValue(propertyValue(state, "icon"));
   const cover = propertyValue(state, "cover")?.trim() || null;
   return {
     title: options.page?.() ?? "",
@@ -45,10 +52,17 @@ export function pageData(state: EditorState, options: BlocksOptions = state.face
     readOnly: state.readOnly,
     renamable: options.rename !== undefined,
     subpages: options.subpage !== undefined,
+    facts: noteFactsOf(state),
   };
 }
 
 function sameData(a: PageData, b: PageData): boolean {
+  return sameHeader(a, b) && sameLabels(a.facts, b.facts);
+}
+
+/// La testata senza la riga dei dati: se cambia solo la riga, la testata
+/// resta quella (col titolo che si sta scrivendo) e si rifà soltanto la riga.
+function sameHeader(a: PageData, b: PageData): boolean {
   return a.title === b.title && a.folder === b.folder && a.icon === b.icon && a.cover === b.cover
     && a.readOnly === b.readOnly && a.renamable === b.renamable && a.subpages === b.subpages
     && a.classes.length === b.classes.length && a.classes.every((name, i) => name === b.classes[i]);
@@ -85,6 +99,16 @@ function writeProperty(view: EditorView, key: string, value: string | readonly s
 const refreshPage = StateEffect.define<null>();
 
 const lives = new WeakMap<HTMLElement, Lifetime>();
+/// Ciò che una testata disegnata mostra, e la vita della sua riga dei dati.
+const drawn = new WeakMap<HTMLElement, { data: PageData; facts: Lifetime }>();
+
+/// Mette sotto il titolo di `root` la riga dei dati dello stato, al posto di
+/// quella che c'era; la sua vita è `facts`, chiusa a ogni rifacimento.
+function placeFacts(root: HTMLElement, view: EditorView, facts: Lifetime): void {
+  root.querySelector(":scope > .note-facts")?.remove();
+  const row = noteFactsElement(view.state, facts);
+  if (row) root.querySelector(":scope > .cm-fub-page-title")?.after(row);
+}
 
 class PageHeaderWidget extends WidgetType {
   constructor(readonly data: PageData) { super(); }
@@ -148,18 +172,21 @@ class PageHeaderWidget extends WidgetType {
       popover = openPageMenu(view, anchor, data, life, () => { popover = null; });
     };
 
-    if (data.icon) {
+    // Un `fub:` che questa versione non sa disegnare non si mostra, e torna
+    // «Aggiungi un'icona» per sceglierne un'altra.
+    const label = pageMarkLabel(data.icon);
+    if (data.icon && label !== null) {
       const icon = document.createElement("button");
       icon.type = "button";
       icon.className = "cm-fub-page-icon";
-      icon.textContent = data.icon;
-      icon.setAttribute("aria-label", liveStrings.t("page.icon.change", { icon: data.icon }));
+      drawPageMark(icon, data.icon);
+      icon.setAttribute("aria-label", liveStrings.t("page.icon.change", { icon: label }));
       icon.disabled = data.readOnly;
       life.listen(icon, "click", () => iconButton(icon));
       root.append(icon);
     }
     if (!data.readOnly) {
-      if (!data.icon) tools.append(tool(liveStrings.t("page.icon.add"), iconButton));
+      if (label === null) tools.append(tool(liveStrings.t("page.icon.add"), iconButton));
       tools.append(tool(liveStrings.t(data.cover ? "page.cover.change" : "page.cover.add"), coverButton));
       if (data.subpages) tools.append(tool(liveStrings.t("page.subpage.add"), subpageButton));
       const more = tool("⋯", moreButton);
@@ -226,12 +253,28 @@ class PageHeaderWidget extends WidgetType {
       }
     });
     life.listen(title, "blur", () => void commit());
+    const facts = openLifetime();
+    life.add(() => drawn.get(root)?.facts.close());
+    drawn.set(root, { data, facts });
+    placeFacts(root, view, facts);
     return root;
+  }
+
+  /// Cambiata solo la riga dei dati: si rifà la riga e la testata resta.
+  override updateDOM(dom: HTMLElement, view: EditorView): boolean {
+    const before = drawn.get(dom);
+    if (!before || !sameHeader(before.data, this.data)) return false;
+    before.facts.close();
+    const facts = openLifetime();
+    drawn.set(dom, { data: this.data, facts });
+    placeFacts(dom, view, facts);
+    return true;
   }
 
   override destroy(dom: HTMLElement): void {
     lives.get(dom)?.close();
     lives.delete(dom);
+    drawn.delete(dom);
   }
 
   /// La testata è un modulo, non testo: tasti e puntatore restano suoi.
@@ -250,6 +293,29 @@ function openIconPicker(view: EditorView, anchor: HTMLElement, data: PageData, l
   grid.className = "cm-fub-page-emoji";
   grid.setAttribute("role", "group");
   grid.setAttribute("aria-label", liveStrings.t("page.icon.picker"));
+  // Le figure del set, prima delle emoji come nel selettore dell'esplora:
+  // scritte nel frontmatter come `icon: fub:<nome>`. La ricerca le filtra per
+  // nome, come le emoji.
+  const figures = document.createElement("div");
+  figures.className = "cm-fub-page-emoji cm-fub-page-figures";
+  figures.setAttribute("role", "group");
+  figures.setAttribute("aria-label", t("icons.figures"));
+  // Una figura che nessuno disegna adesso (la stella senza la cornice) non
+  // si offre.
+  const figureButtons = PAGE_FIGURES.flatMap((name) => {
+    const drawn = iconEl(name);
+    if (!drawn) return [];
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "cm-fub-page-emoji-choice";
+    button.dataset.icon = figureValue(name);
+    button.append(drawn);
+    button.setAttribute("aria-label", figureLabel(name));
+    button.title = figureLabel(name);
+    own.listen(button, "click", () => choose(figureValue(name)));
+    figures.append(button);
+    return [{ name, button }];
+  });
   const language = catalogLanguage(resolvedLanguage()) === "it" ? "it" : "en";
   let first: string | null = null;
   const choose = (char: string | null) => {
@@ -260,6 +326,13 @@ function openIconPicker(view: EditorView, anchor: HTMLElement, data: PageData, l
   let asked = 0;
   const show = (query: string) => {
     const question = ++asked;
+    const wanted = query.trim().toLocaleLowerCase();
+    let shown = 0;
+    for (const { name, button } of figureButtons) {
+      button.hidden = wanted !== "" && !figureLabel(name).toLocaleLowerCase().includes(wanted) && !name.includes(wanted);
+      if (!button.hidden) shown++;
+    }
+    figures.hidden = shown === 0;
     void import("../emoji-data").then(({ EMOJI }) => {
       if (question !== asked || own.closed) return;
       const found = query.trim() ? matchEmoji(EMOJI, query.trim(), language) : EMOJI.slice(0, 40).map((entry) => ({ char: entry.char, name: (language === "it" ? entry.it : entry.en)[0] ?? "" }));
@@ -290,7 +363,7 @@ function openIconPicker(view: EditorView, anchor: HTMLElement, data: PageData, l
     onInput: (value) => show(value),
     onSubmit: () => { if (first) choose(first); },
   });
-  body.append(search.element, grid);
+  body.append(search.element, figures, grid);
   if (data.icon) {
     const remove = document.createElement("button");
     remove.type = "button";
@@ -573,8 +646,11 @@ const theme = EditorView.baseTheme({
     background: "none",
     fontSize: "2.6em",
     lineHeight: "1.2",
+    // Una figura del set prende il colore del testo, come nell'esplora.
+    color: "inherit",
     cursor: "pointer",
   },
+  ".cm-fub-page-icon > svg": { display: "block", width: "1em", height: "1em" },
   ".cm-fub-page-tools": { display: "flex", flexWrap: "wrap", gap: "0.25em", minHeight: "1.8em", opacity: "0" },
   ".cm-fub-page:hover .cm-fub-page-tools, .cm-fub-page:focus-within .cm-fub-page-tools": { opacity: "1" },
   ".cm-fub-page-tool": {
@@ -603,6 +679,7 @@ const theme = EditorView.baseTheme({
   },
   ".cm-fub-page-picker": { display: "grid", gap: "0.5em", padding: "0.5em", width: "17em" },
   ".cm-fub-page-emoji": { display: "flex", flexWrap: "wrap", gap: "2px", maxHeight: "12em", overflowY: "auto" },
+  ".cm-fub-page-emoji-choice > svg": { width: "1em", height: "1em", verticalAlign: "-0.1em" },
   ".cm-fub-page-emoji-choice": { width: "2em", height: "2em", padding: "0", border: "none", background: "none", fontSize: "1.2em", cursor: "pointer" },
   ".cm-fub-page-actions": { display: "flex", gap: "0.5em", justifyContent: "flex-end" },
 });

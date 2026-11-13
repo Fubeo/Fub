@@ -6,86 +6,13 @@
 
 ## Grafo delle dipendenze
 
-```mermaid
-flowchart LR
-    ABI["fub-abi"]
-    KERNEL["fub-kernel"] --> ABI
-    SDK["fub-sdk"] --> ABI
-    TESTKIT["fub-testkit"] --> KERNEL
-    TESTKIT --> ABI
-    MARKDOWN["fub-format-markdown"] --> ABI
-    MARKDOWN --> SDK
-    CANVAS["fub-format-canvas"] --> ABI
-    CANVAS --> MARKDOWN
-    CANVAS --> CANVASCORE["fub-canvas-core"]
-    BASE["fub-format-base"] --> ABI
-    INK["fub-ink"]
-    SCENE["fub-scene"] --> INK
-    SVG["fub-format-svg"] --> ABI
-    SVG --> SCENE
-    IMPORTERS["fub-importers"] --> ABI
-    FEATURES["fub-features"] --> ABI
-    FEATURES -. "feature base" .-> BASE
-    FEATURES -. "feature draw" .-> SVG
-    HOST["fub-host"] --> KERNEL
-    HOST --> ABI
-    HOST --> FEATURES
-    HOST --> MARKDOWN
-    HOST --> CANVAS
-    HOST --> BASE
-    HOST -. "feature draw" .-> SVG
-    HOST --> IMPORTERS
-    WASM["fub-wasm-host"] --> ABI
-    WASM --> HOST
-    APP["fub-app"] --> HOST
-    APP --> WASM
-    APP --> LIVE["fub-live"]
-    CLI["fub-cli"] --> HOST
-    SERVICES["fub-services"] --> ABI
-    FRONTEND["frontend"] --> APP
-```
-
-La figura mostra il verso concettuale. I manifest sono la fonte esatta e i guard
-del repository verificano le eccezioni.
-
-Il codice copiato da WordCraft (`vendor/wordcraft/`) non dipende da Fub, e lo
-raggiungono soltanto due crate, ciascuno dietro la propria feature. La copia è
-l'upstream più le patch, in un workspace suo; la provenienza e i proprietari
-sono decisi nell'[ADR 0213](../decisions/0213-provenienza-dei-motori-esterni.md):
-
-```mermaid
-flowchart LR
-    HOST["fub-host"] -. "feature rich" .-> RICH["fub-format-rich"]
-    RICH --> ABI["fub-abi"]
-    RICH --> MARKDOWN["fub-format-markdown"]
-    RICH --> WDOCX["wordcraft-docx e formats"]
-    WDOCX --> WDOC["wordcraft-doc"]
-    HOST --> FEATURES["fub-features"]
-    FEATURES -. "feature proof" .-> PROOF["wordcraft-proof"]
-```
-
-Il codice copiato da GridCraft (`vendor/gridcraft/`) ha lo stesso statuto e un
-solo proprietario, `fub-format-xlsx`, che l'host accende con la feature
-`xlsx`; il ruolo del motore è deciso nell'[ADR
-0214](../decisions/0214-gridcraft-motore-del-foglio-di-calcolo.md):
-
-```mermaid
-flowchart LR
-    HOST["fub-host"] -. "feature xlsx" .-> XLSX["fub-format-xlsx"]
-    XLSX --> ABI["fub-abi"]
-    XLSX --> GXLSX["gridcraft-xlsx"]
-    GXLSX --> GMODEL["gridcraft-model"]
-```
-
-Anche i file delle app Craft stanno dietro una feature dell'host, `craft`, ma
-senza codice copiato: `fub-format-craft` legge i formati da sé e dipende solo da
-`fub-abi`:
-
-```mermaid
-flowchart LR
-    HOST["fub-host"] -. "feature craft" .-> CRAFT["fub-format-craft"]
-    CRAFT --> ABI["fub-abi"]
-```
+Il grafo completo delle dipendenze del workspace Rust, confrontato con
+`cargo metadata` dal test `dependency_invariant`, è in
+[overview.md](overview.md#dipendenze-del-workspace-rust). I confini verso il
+codice copiato (`vendor/wordcraft/`, `vendor/gridcraft/`) sono decisi negli
+ADR [0213](../decisions/0213-provenienza-dei-motori-esterni.md) e
+[0214](../decisions/0214-gridcraft-motore-del-foglio-di-calcolo.md) e riassunti
+in [map/repo.md](../map/repo.md#i-motori-di-terzi).
 
 ## Tabella dei componenti
 

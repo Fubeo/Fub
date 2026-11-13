@@ -9,7 +9,7 @@
 > `style` in `scene/values.ts` e `crates/fub-scene/src/values.rs`, letto da
 > `scene/classify.ts` e `crates/fub-scene/src/classify.rs`; il disegno della
 > fusione in `painter/svg-dom.ts`; la risoluzione del PDF in
-> `crates/fub-features/src/draw.rs`.
+> `crates/fub-features/src/draw/pdf.rs`.
 
 Effetti e fusione non si scelgono più: se ne sono andati col livello
 Esperto ([decisione 0231](../decisions/0231-la-chiusura-di-fubdraw.md)).
