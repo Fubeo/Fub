@@ -735,6 +735,20 @@ export const SCENE = onPage("shell", [
     query: "connectors=6",
     prepare: openDrawing,
   },
+  // Il chip del motore del disegno (K5 T23, `?drawing=`, vedi `fake-ipc.ts`):
+  // acceso con due parti che restano come sono, spento con «Accendi…», fermo
+  // con «Riprova»; il chip premuto, col suo riquadro aperto (scene «2a», «3»
+  // e «4» del prototipo `PLAN-ui/disegno-motore.html`).
+  ...[
+    ["draw-engine-on", "acceso", "Il disegno col motore acceso: due parti restano come sono, e «Che cosa manca?» aperto"],
+    ["draw-engine-off", "spento", "Il disegno col motore spento: gli strumenti semplici, e «Accendi…»"],
+    ["draw-engine-error", "errore", "Il disegno col motore fermo: gli strumenti semplici, e «Riprova»"],
+  ].map(([id, drawing, title]) => ({
+    id,
+    title,
+    query: `connectors=6&drawing=${drawing}`,
+    prepare: (page) => openDrawingStanding(page, drawing === "acceso"),
+  })),
   {
     id: "draw-selection",
     title: "Il disegno con un oggetto scelto da tastiera",
@@ -1806,6 +1820,21 @@ async function openDrawing(page) {
   );
   await page.evaluate(() => document.fonts.ready);
   await page.focus(".draw-editor .draw-surface");
+}
+
+/// Apre il disegno dei connettori e preme il chip del disegno, che arriva
+/// quando il motore ha risposto; con `ask` apre anche «Che cosa manca?». Il
+/// fuoco resta nel riquadro, sull'ultimo pulsante premuto.
+async function openDrawingStanding(page, ask) {
+  await openDrawing(page);
+  const chip = ".pane.focus .pane-toolbar .pane-standing:not([hidden]) .pane-standing-chip";
+  await page.waitForSelector(chip);
+  await page.click(chip);
+  await page.waitForSelector(".pane-standing-panel .pane-standing-title");
+  if (ask) {
+    await page.click(".pane-standing-panel .pane-standing-ask");
+    await page.waitForSelector(".pane-standing-panel .pane-standing-places");
+  }
 }
 
 /// Apre la foto delle scene `photo-*` e aspetta che sia disegnata, e con
