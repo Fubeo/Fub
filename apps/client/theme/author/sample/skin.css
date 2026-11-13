@@ -4868,6 +4868,16 @@ kbd,
 .pane-standing[data-standing="readonly"] .pane-standing-mark {
   display: none;
 }
+/* Il motore spento, o la versione senza motore: il segno vuoto, come la sola
+   lettura stretta. Si disegna lo stesso. */
+.pane-standing[data-standing="reduced"] .pane-standing-mark {
+  border: 1px solid var(--muted);
+  background: transparent;
+}
+/* Il motore fermo: il segno del colore d'errore, e la parola lo dice. */
+.pane-standing[data-standing="stopped"] .pane-standing-mark {
+  background: var(--danger);
+}
 .pane-standing-text {
   display: inline-block;
 }

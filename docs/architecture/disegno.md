@@ -197,15 +197,15 @@ i suoi strumenti TypeScript ([ADR 0231](../decisions/0231-la-chiusura-di-fubdraw
 
 Senza motore la sessione è `MotoreAssente`, e il disegno usa gli strumenti
 semplici, quelli TypeScript del client: Selezione, forme e Testo funzionano
-lo stesso. Un chip della superficie dice perché (arriva con T23): col
-motore **spento** (la riga del componente spenta) «Accendi…» apre la pagina
-Componenti sulla riga del motore; col motore **fermo** (un errore all'apertura
-o durante il lavoro) «Riprova» lo riapre; in una **build senza motore** il
-chip non ha azione.
-
-Le frasi esatte del chip si scelgono sul prototipo del piano (T25). Mano,
-Lente, Penna, Evidenziatore e Gomma non passano mai dal motore e funzionano
-sempre. I vettori dei gesti sono l'oracolo delle due strade.
+lo stesso, nello stesso ordine. Il chip (`motore/standing.ts`) lo dice:
+**spento** (riga spenta o `unserved`), segno vuoto, con «Accendi…» che apre
+la riga del motore nella pagina Componenti (`showComponent`); **fermo** (un
+errore), segno rosso, con «Riprova» che chiama `riapri()`, mai da sé; nella
+**build senza motore** (riga assente dalla mappa) senza azioni. Mentre una
+sessione nuova si apre resta il chip di prima; in Lettura e in sola lettura
+parla l'avviso. Mano, Lente, Penna, Evidenziatore e Gomma non passano mai dal
+motore. I vettori dei gesti sono l'oracolo delle due strade
+(`motore/due-strade.test.ts`: stesso file, annulla e selezione).
 
 ### Quando il motore manca
 
@@ -214,7 +214,7 @@ spenta, che la superficie sente da `onComponents` e chiude subito la
 sessione, o un `unserved` a metà sessione: spento in un vault, l'host chiude
 le sue istanze e libera il motore se non ne resta nessuna) o **fermo** (ogni
 altro errore, o 10 s senza risposta).
-**Riacceso**, o con «Riprova» (arriva con T23), `riapri()` apre un'istanza
+**Riacceso**, o con «Riprova» del chip, `riapri()` apre un'istanza
 nuova col testo di quel momento, senza rimontare l'editor e una alla volta.
 Un gesto a metà quando il motore manca si annulla senza scrivere e lo si
 annuncia; il gesto dopo usa gli strumenti semplici. La sessione finisce col
@@ -294,7 +294,7 @@ strumento li modifica, e un gesto sul loro oggetto del motore è rifiutato
 | `crates/fub-disegno/` | l'adattatore: apertura, mappa, sincronia, differenza, gesti, comandi, perdite |
 | `crates/fub-host/src/drawing.rs` | le istanze per vault e i sei comandi lato host |
 | `crates/fub-abi/src/drawing.rs` | le forme condivise e i limiti (arriva con T4) |
-| `apps/client/src/editors/spatial/motore/` | la sessione, i gesti, i colori e il chip delle perdite (`standing.ts`) |
+| `apps/client/src/editors/spatial/motore/` | la sessione, i gesti, i colori e il chip delle perdite e del motore che manca (`standing.ts`) |
 | `apps/client/src/editors/spatial/tools/` | gli strumenti TypeScript, riferimento dei gesti e strumenti del profilo `pdf` |
 
 `crates/fub-disegno` è l'unico crate che nomina `vectorcraft-*`, nei

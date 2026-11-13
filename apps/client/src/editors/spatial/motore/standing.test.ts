@@ -1,7 +1,8 @@
-// Il chip «N parti restano come sono» del disegno (`standing.ts`, K5 T21) e
-// le parti che il motore tiene per la sessione aperta (`perdite()` e
-// `trovate()` di `motoreDa`). Le parti dei modelli sono quelle che il motore
-// vero dà (`crates/fub-disegno/tests/corpus/perdite.tsv`).
+// Il chip del disegno (`standing.ts`): «N parti restano come sono» (K5 T21)
+// e le parti che il motore tiene per la sessione aperta (`perdite()` e
+// `trovate()` di `motoreDa`), e il motore spento, fermo o assente da questa
+// versione (T23), con «Accendi…» e «Riprova». Le parti dei modelli sono
+// quelle che il motore vero dà (`crates/fub-disegno/tests/corpus/perdite.tsv`).
 
 import { describe, expect, it, vi } from "vitest";
 import type { DrawingLoss } from "../../../host/contract";
@@ -10,7 +11,7 @@ import { SceneEngine } from "../scene/engine";
 import { t } from "../strings";
 import { motoreDa, type MotoreDelDisegno } from "./gesti";
 import type { MotoreAssente, SessioneMotore } from "./sessione";
-import { drawStanding, drawStandingState, lossName } from "./standing";
+import { drawEngineState, drawStanding, drawStandingState, lossName, MOTORE_VETTORIALE, type DrawStandingSource } from "./standing";
 
 const TEMPLATES = import.meta.glob("../../../../../../crates/fub-features/templates/*.it.svg", { query: "?raw", import: "default", eager: true }) as Record<string, string>;
 const CORPUS = import.meta.glob("../../../../../../crates/fub-scene/tests/corpus/illustrator.svg", { query: "?raw", import: "default", eager: true }) as Record<string, string>;
@@ -137,26 +138,52 @@ describe("lo stato del chip", () => {
   });
 });
 
-/// Un motore finto: le parti di adesso, e chi lo ascolta.
-function fakeMotore(initial: readonly DrawingLoss[] | null): MotoreDelDisegno & { set(next: readonly DrawingLoss[] | null): void } {
-  let losses = initial;
+/// Ciò che il motore finto è adesso: aperto con le sue parti, che si apre,
+/// o che manca.
+type FakeState = { readonly kind: "aperto"; readonly losses: readonly DrawingLoss[] } | { readonly kind: "apertura" } | MotoreAssente;
+
+/// Un motore finto: le parti di adesso, perché manca, e chi lo ascolta.
+/// `riapri` lo porta ad aprirsi e lo conta.
+function fakeMotore(initial: readonly DrawingLoss[] | null): MotoreDelDisegno & {
+  set(next: readonly DrawingLoss[] | null): void;
+  to(next: FakeState): void;
+  readonly riaperture: number;
+} {
+  let state: FakeState = initial === null ? { kind: "apertura" } : { kind: "aperto", losses: initial };
+  let riaperture = 0;
   const listeners = new Set<() => void>();
+  const to = (next: FakeState): void => {
+    state = next;
+    for (const listener of [...listeners]) listener();
+  };
   return {
-    adesso: () => null,
+    adesso: () => (state.kind === "apertura" ? "apertura" : null),
     pronta: async () => null,
-    assente: () => null,
-    riapri: () => {},
-    perdite: () => losses,
+    assente: () => (state.kind === "assente" ? state : null),
+    riapri() {
+      if (state.kind !== "assente") return;
+      riaperture++;
+      to({ kind: "apertura" });
+    },
+    perdite: () => (state.kind === "aperto" ? state.losses : null),
     trovate: () => {},
     quandoCambia(listener) {
       listeners.add(listener);
       return () => listeners.delete(listener);
     },
     set(next) {
-      losses = next;
-      for (const listener of [...listeners]) listener();
+      to(next === null ? { kind: "apertura" } : { kind: "aperto", losses: next });
+    },
+    to,
+    get riaperture() {
+      return riaperture;
     },
   };
+}
+
+/// Il chip su `motore`, con la scena di `text`; `extra` cambia la sorgente.
+function standingOn(motore: MotoreDelDisegno | null, text: string, extra: Partial<DrawStandingSource> = {}) {
+  return drawStanding({ motore: () => motore, scene: () => sceneOf(text), reveal: () => true, inBuild: () => true, ...extra });
 }
 
 describe("il chip della superficie", () => {
@@ -165,7 +192,7 @@ describe("il chip della superficie", () => {
   it("segue il motore: le parti si sanno solo col motore aperto", () => {
     const motore = fakeMotore(null);
     let scene: readonly Item[] | null = sceneOf(text);
-    const standing = drawStanding({ motore: () => motore, scene: () => scene, reveal: () => true });
+    const standing = drawStanding({ motore: () => motore, scene: () => scene, reveal: () => true, inBuild: () => true });
     // Si apre, o è spento, o fermo: non si sanno (il chip è un altro).
     expect(standing.current()).toBeNull();
     motore.set([filter("o00000002")]);
@@ -182,7 +209,7 @@ describe("il chip della superficie", () => {
   });
 
   it("senza motore, niente chip", () => {
-    const standing = drawStanding({ motore: () => null, scene: () => sceneOf(text), reveal: () => true });
+    const standing = drawStanding({ motore: () => null, scene: () => sceneOf(text), reveal: () => true, inBuild: () => true });
     expect(standing.current()).toBeNull();
   });
 
@@ -190,7 +217,7 @@ describe("il chip della superficie", () => {
     const motore = fakeMotore([filter("o00000003")]);
     let scene = sceneOf(text);
     const reveal = vi.fn((_offset: number) => true);
-    const standing = drawStanding({ motore: () => motore, scene: () => scene, reveal });
+    const standing = drawStanding({ motore: () => motore, scene: () => scene, reveal, inBuild: () => true });
     const place = standing.current()!.places![0]!;
     // La scena cambia dopo che il riquadro si è disegnato: l'elemento ha
     // un altro posto nel file.
@@ -205,7 +232,7 @@ describe("il chip della superficie", () => {
   });
 
   it("`changed()` avvisa chi ascolta; dopo `dispose()` niente", () => {
-    const standing = drawStanding({ motore: () => fakeMotore([filter("o00000002")]), scene: () => sceneOf(text), reveal: () => true });
+    const standing = drawStanding({ motore: () => fakeMotore([filter("o00000002")]), scene: () => sceneOf(text), reveal: () => true, inBuild: () => true });
     const listener = vi.fn();
     const stop = standing.subscribe(listener);
     standing.changed();
@@ -217,6 +244,166 @@ describe("il chip della superficie", () => {
     standing.dispose();
     standing.changed();
     expect(listener).toHaveBeenCalledTimes(1);
+    expect(standing.current()).toBeNull();
+  });
+});
+
+const SPENTO: MotoreAssente = { kind: "assente", perche: "spento" };
+const FERMO: MotoreAssente = { kind: "assente", perche: "errore" };
+
+describe("il chip del motore che manca", () => {
+  const text = drawingOf(3);
+
+  it("spento: «Motore spento», il segno vuoto, e «Accendi…» che porta alla riga del motore", () => {
+    const motore = fakeMotore(null);
+    motore.to(SPENTO);
+    const show = vi.fn((_id: string) => true);
+    const standing = standingOn(motore, text, { showComponent: show });
+    const state = standing.current()!;
+    expect(state).toMatchObject({
+      kind: "reduced",
+      text: "Motore spento: strumenti semplici",
+      title: "Motore del disegno spento",
+      body: "Disegni con gli strumenti semplici: fanno le stesse cose, senza il motore del disegno.",
+      source: "Impostazioni · Componenti · Motore del disegno",
+      recording: false,
+    });
+    expect(state.places).toBeUndefined();
+    expect(state.actions!.map((action) => action.label)).toEqual(["Accendi…"]);
+    state.actions![0]!.run();
+    expect(show).toHaveBeenCalledTimes(1);
+    expect(show).toHaveBeenCalledWith("fub.motore-vettoriale");
+    expect(MOTORE_VETTORIALE).toBe("fub.motore-vettoriale");
+    // «Accendi…» non accende niente da sé: il motore resta spento.
+    expect(motore.riaperture).toBe(0);
+    expect(standing.current()).toBe(state);
+  });
+
+  it("spento senza la porta delle Impostazioni: lo stesso chip, senza «Accendi…»", () => {
+    const motore = fakeMotore(null);
+    motore.to(SPENTO);
+    const state = standingOn(motore, text).current()!;
+    expect(state.text).toBe("Motore spento: strumenti semplici");
+    expect(state.actions).toEqual([]);
+  });
+
+  it("la versione senza il motore (la riga non è nella mappa): «Senza motore», e nessuna azione", () => {
+    const motore = fakeMotore(null);
+    motore.to(SPENTO);
+    const show = vi.fn((_id: string) => true);
+    const inBuild = vi.fn((_id: string) => false);
+    const state = standingOn(motore, text, { showComponent: show, inBuild }).current()!;
+    expect(inBuild).toHaveBeenCalledWith("fub.motore-vettoriale");
+    expect(state).toMatchObject({
+      kind: "reduced",
+      text: "Senza motore: strumenti semplici",
+      title: "Questa versione di Fub non ha il motore del disegno",
+      body: "Disegni con gli strumenti semplici. Il motore non si può accendere: questa versione è stata costruita senza.",
+      source: "Componenti · non incluso",
+      actions: [],
+    });
+    expect(show).not.toHaveBeenCalled();
+  });
+
+  it("fermo: «Motore fermo», il segno d'errore, e «Riprova» che chiama `riapri()`", () => {
+    const motore = fakeMotore(null);
+    motore.to(FERMO);
+    const show = vi.fn((_id: string) => true);
+    const standing = standingOn(motore, text, { showComponent: show });
+    const state = standing.current()!;
+    expect(state).toMatchObject({
+      kind: "stopped",
+      text: "Motore fermo: strumenti semplici",
+      title: "Il motore del disegno si è fermato",
+      body: "Disegni con gli strumenti semplici finché non riparte. Il file non ha perso niente.",
+      source: "Motore del disegno · fermo",
+    });
+    expect(state.actions!.map((action) => action.label)).toEqual(["Riprova"]);
+    const riapri = vi.spyOn(motore, "riapri");
+    state.actions![0]!.run();
+    expect(riapri).toHaveBeenCalledTimes(1);
+    expect(motore.riaperture).toBe(1);
+    expect(show).not.toHaveBeenCalled();
+  });
+
+  it("«Riprova» che fallisce di nuovo: il chip resta «fermo» mentre riapre e dopo, senza altri tentativi da sé", () => {
+    const motore = fakeMotore(null);
+    motore.to(FERMO);
+    const standing = standingOn(motore, text);
+    const listener = vi.fn();
+    standing.subscribe(listener);
+    motore.quandoCambia(() => standing.changed());
+    standing.current()!.actions![0]!.run();
+    // Si riapre: il chip resta quello del motore fermo.
+    expect(motore.adesso()).toBe("apertura");
+    expect(standing.current()?.text).toBe("Motore fermo: strumenti semplici");
+    // L'apertura risponde con un altro errore.
+    motore.to(FERMO);
+    expect(standing.current()?.kind).toBe("stopped");
+    expect(motore.riaperture).toBe(1);
+    expect(listener).toHaveBeenCalledTimes(2);
+  });
+
+  it("acceso: il chip delle parti, o nessuno", () => {
+    const motore = fakeMotore([]);
+    const standing = standingOn(motore, text, { showComponent: () => true });
+    expect(standing.current()).toBeNull();
+    motore.set([filter("o00000002")]);
+    expect(standing.current()).toMatchObject({ kind: "closed", text: "1 parte resta com’è", actions: [] });
+  });
+
+  it("il motore che si apre la prima volta: niente chip", () => {
+    expect(standingOn(fakeMotore(null), text).current()).toBeNull();
+  });
+
+  it("il motore che si spegne a metà sessione cambia il chip senza riaprire il file; riacceso torna quello delle parti", () => {
+    const motore = fakeMotore([filter("o00000002")]);
+    const standing = standingOn(motore, text, { showComponent: () => true });
+    const listener = vi.fn();
+    standing.subscribe(listener);
+    motore.quandoCambia(() => standing.changed());
+    expect(standing.current()?.kind).toBe("closed");
+    motore.to(SPENTO);
+    expect(listener).toHaveBeenCalledTimes(1);
+    expect(standing.current()?.text).toBe("Motore spento: strumenti semplici");
+    // Riacceso: mentre si apre resta «spento», poi le parti della sessione nuova.
+    motore.riapri();
+    expect(standing.current()?.text).toBe("Motore spento: strumenti semplici");
+    motore.set([]);
+    expect(standing.current()).toBeNull();
+    motore.to(FERMO);
+    motore.set([filter("o00000003")]);
+    expect(standing.current()?.text).toBe("1 parte resta com’è");
+    // Dopo una sessione aperta, il motore che si riapre non ripesca lo stato
+    // di prima.
+    motore.set(null);
+    expect(standing.current()).toBeNull();
+  });
+
+  it("in sola lettura, in Lettura o su un SVG estraneo (nessuna scena): niente chip del motore, parla l'avviso", () => {
+    for (const assente of [SPENTO, FERMO]) {
+      const motore = fakeMotore(null);
+      motore.to(assente);
+      const standing = drawStanding({ motore: () => motore, scene: () => null, reveal: () => true, inBuild: () => true, showComponent: () => true });
+      expect(standing.current()).toBeNull();
+    }
+  });
+
+  it("senza motore (nessuna `DocumentSession`): niente chip", () => {
+    expect(standingOn(null, text, { showComponent: () => true }).current()).toBeNull();
+  });
+
+  it("`drawEngineState` da solo: le parole del catalogo, e il fermo resta fermo anche senza il motore nella versione", () => {
+    const state = drawEngineState(SPENTO, { inBuild: true, accendi: () => {}, riprova: () => {} });
+    expect(state.text).toBe(t("draw.standing.off"));
+    expect(drawEngineState(FERMO, { inBuild: false, accendi: null, riprova: () => {} }).kind).toBe("stopped");
+  });
+
+  it("dopo `dispose()` niente", () => {
+    const motore = fakeMotore(null);
+    motore.to(FERMO);
+    const standing = standingOn(motore, text);
+    standing.dispose();
     expect(standing.current()).toBeNull();
   });
 });

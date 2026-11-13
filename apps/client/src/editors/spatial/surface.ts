@@ -100,11 +100,9 @@ import { fontSheets, picture, type FontSheets } from "./picture";
 import { noteSceneChange, offerStage } from "./live/registry";
 import { motoreDa, type MotoreAperto } from "./motore/gesti";
 import { apriSessione } from "./motore/sessione";
-import { drawStanding } from "./motore/standing";
-import { onComponents } from "../../state/components";
-
-/// La riga del motore del disegno nella pagina Componenti (T13, D-14).
-const MOTORE_VETTORIALE = "fub.motore-vettoriale";
+import { drawStanding, MOTORE_VETTORIALE } from "./motore/standing";
+import { components, onComponents } from "../../state/components";
+import { showComponent } from "../../ui/commands";
 
 type VectorMode = "draw" | "read";
 
@@ -459,6 +457,9 @@ export function mountVectorSurface(context: SurfaceMountContext, options: Vector
       if (vault !== null && next.root !== vault) return;
       if (!next.on(MOTORE_VETTORIALE)) opened.spento();
       else if (opened.assente()?.perche === "spento") opened.riapri();
+      // La mappa dice anche se questa versione ha il motore: il chip la
+      // rilegge.
+      standing.changed();
     }));
     return opened;
   };
@@ -467,11 +468,13 @@ export function mountVectorSurface(context: SurfaceMountContext, options: Vector
     motore = null;
   });
 
-  /// Il chip «N parti restano come sono» (T21): le parti del motore sulla
-  /// scena che si modifica adesso. Il foglio nascosto (in Lettura, un SVG
-  /// estraneo o in sola lettura) e la scrittura tolta non ne hanno: lì parla
-  /// l'avviso della superficie. Si aggiorna a ogni `paint()` e a ogni cambio
-  /// del motore.
+  /// Il chip del disegno (T21, T23): le parti del motore sulla scena che si
+  /// modifica adesso, o il motore spento o fermo, con «Accendi…» (la riga del
+  /// motore nella pagina Componenti, se questa versione lo ha) e «Riprova».
+  /// Il foglio nascosto (in Lettura, un SVG estraneo o in sola lettura) e la
+  /// scrittura tolta non ne hanno: lì parla l'avviso della superficie. Si
+  /// aggiorna a ogni `paint()`, a ogni cambio del motore e della mappa dei
+  /// componenti.
   const standing = drawStanding({
     motore: () => motore,
     scene: () => (drawHost.hidden || readOnly || editor === null ? null : editor.engine.scene()),
@@ -480,6 +483,14 @@ export function mountVectorSurface(context: SurfaceMountContext, options: Vector
       editor.focus();
       return true;
     },
+    inBuild: (id) => {
+      const known = components();
+      // La mappa di un altro vault, o nessuna: non si sa, e il motore c'è.
+      const vault = documentSessions.vaultFor(context.documentId) ?? null;
+      if (known === null || known.map === null || (vault !== null && known.root !== vault)) return true;
+      return known.row(id) !== undefined;
+    },
+    showComponent,
   });
   life.add(() => standing.dispose());
 

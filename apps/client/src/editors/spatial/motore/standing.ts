@@ -1,10 +1,10 @@
-// Che cosa resta com'è nel disegno, detto prima di toccarlo (K5): il chip
-// «N parti restano come sono» accanto al percorso e il suo riquadro, con
-// «Che cosa manca?» e un «Vai» per parte. La shell li disegna
-// (`panels/standing.ts`); qui si decide che cosa dicono, come fa
-// `editors/rich/standing.ts` per i documenti.
+// Che cosa resta com'è nel disegno, e con quali strumenti si disegna, detto
+// prima di toccarlo (K5): il chip accanto al percorso e il suo riquadro. La
+// shell li disegna (`panels/standing.ts`); qui si decide che cosa dicono,
+// come fa `editors/rich/standing.ts` per i documenti.
 //
-// - **Le parti sono del motore.** Quelle che `DrawingOpen` ha detto
+// - **Le parti sono del motore.** «N parti restano come sono», con «Che cosa
+//   manca?» e un «Vai» per parte: quelle che `DrawingOpen` ha detto
 //   all'apertura e quelle che gli esiti hanno trovato dopo
 //   (`MotoreDelDisegno.perdite()`), una per elemento: l'id, o il tag col
 //   percorso (`rect[2/0]`) per un elemento senza id.
@@ -13,13 +13,20 @@
 //   porta in vista. Una parte dentro `<defs>` o un titolo non si vedono sul
 //   foglio: il posto c'è, senza «Vai». Un elemento che non è più nella scena
 //   (cancellato) perde il suo posto, e il numero lo segue.
-// - **Senza motore non si sa.** Col motore spento, fermo o che si sta
-//   aprendo le parti non si conoscono: niente chip da qui (quello del motore
-//   spento o fermo è un altro). Niente chip nemmeno senza parti, né su un
-//   disegno che il motore non modifica affatto (una parte `unsupported`: la
-//   sola lettura, un SVG di un altro programma), né quando il disegno non si
-//   modifica qui (in Lettura, in sola lettura): lì parla l'avviso della
-//   superficie.
+// - **Senza motore, detto.** Col motore spento o fermo si disegna lo stesso,
+//   con gli strumenti semplici, e il chip lo dice invece di farlo in
+//   silenzio (D-8): «Motore spento», con «Accendi…» che porta alla riga del
+//   motore nella pagina Componenti (`showComponent`); «Motore fermo», con
+//   «Riprova» che lo riapre (`riapri()`), una volta per clic e mai da sé;
+//   «Senza motore», senza azioni, nella versione di Fub costruita senza (la
+//   riga non è nella mappa dei componenti). Mentre una sessione nuova si apre
+//   dopo uno di questi, il chip resta quello di prima: si sa solo quando
+//   l'apertura risponde.
+// - **Senza parti, niente.** Col motore aperto e senza parti, o che si apre
+//   la prima volta, niente chip. Niente nemmeno su un disegno che il motore
+//   non modifica affatto (una parte `unsupported`: la sola lettura, un SVG di
+//   un altro programma), né quando il disegno non si modifica qui (in
+//   Lettura, in sola lettura): lì parla l'avviso della superficie.
 
 import type { DrawingLoss } from "../../../host/contract";
 import type { Teardown } from "../../../ui/lifetime";
@@ -27,6 +34,10 @@ import type { SurfaceStanding, SurfaceStandingPlace, SurfaceStandingState } from
 import type { ElementItem, Item } from "../scene/classify";
 import { plural, t } from "../strings";
 import type { MotoreDelDisegno } from "./gesti";
+import type { MotoreAssente } from "./sessione";
+
+/// La riga del motore del disegno nella pagina Componenti (T13, D-14).
+export const MOTORE_VETTORIALE = "fub.motore-vettoriale";
 
 /// Ciò che il chip legge dalla superficie del disegno.
 export interface DrawStandingSource {
@@ -39,6 +50,13 @@ export interface DrawStandingSource {
   /// Sceglie l'oggetto che contiene il byte `offset` del file e lo porta in
   /// vista (`DrawEditor.reveal`).
   reveal(offset: number): boolean;
+  /// Il componente `id` c'è in questa versione di Fub: falso solo se la
+  /// mappa dei componenti è arrivata e non ha la sua riga. Senza mappa non
+  /// si sa, e vale vero.
+  inBuild(id: string): boolean;
+  /// La porta che apre la riga del componente `id` nella pagina Componenti
+  /// (`showComponent` di `ui/commands.ts`); senza, «Accendi…» non si offre.
+  showComponent?(id: string): boolean;
 }
 
 /// Il chip del disegno: chi lo crea avvisa con `changed()` quando la scena,
@@ -107,6 +125,46 @@ export function drawStandingState(losses: readonly DrawingLoss[], scene: readonl
   };
 }
 
+/// Lo stato del chip col motore che manca per `assente`: spento (con
+/// «Accendi…» se `accendi` c'è, o «Senza motore» se questa versione di Fub
+/// non lo ha) o fermo, con «Riprova» che chiama `riprova`.
+export function drawEngineState(
+  assente: MotoreAssente,
+  ways: { readonly inBuild: boolean; readonly accendi: (() => void) | null; readonly riprova: () => void },
+): SurfaceStandingState {
+  if (assente.perche === "errore") {
+    return {
+      kind: "stopped",
+      text: t("draw.standing.stopped"),
+      title: t("draw.standing.stopped.title"),
+      body: t("draw.standing.stopped.body"),
+      source: t("draw.standing.stopped.source"),
+      actions: [{ label: t("draw.standing.stopped.action"), run: ways.riprova }],
+      recording: false,
+    };
+  }
+  if (!ways.inBuild) {
+    return {
+      kind: "reduced",
+      text: t("draw.standing.absent"),
+      title: t("draw.standing.absent.title"),
+      body: t("draw.standing.absent.body"),
+      source: t("draw.standing.absent.source"),
+      actions: [],
+      recording: false,
+    };
+  }
+  return {
+    kind: "reduced",
+    text: t("draw.standing.off"),
+    title: t("draw.standing.off.title"),
+    body: t("draw.standing.off.body"),
+    source: t("draw.standing.off.source"),
+    actions: ways.accendi === null ? [] : [{ label: t("draw.standing.off.action"), run: ways.accendi }],
+    recording: false,
+  };
+}
+
 /// Il chip del disegno di `source`.
 export function drawStanding(source: DrawStandingSource): DrawStanding {
   const listeners = new Set<() => void>();
@@ -123,11 +181,60 @@ export function drawStanding(source: DrawStandingSource): DrawStanding {
     if (item !== undefined) source.reveal(item.bytes[0]);
   };
 
+  /// «Accendi…» e «Riprova» guardano il motore di adesso, che dal disegno
+  /// del riquadro può essere cambiato.
+  const accendi = (): void => {
+    source.showComponent?.(MOTORE_VETTORIALE);
+  };
+  const riprova = (): void => {
+    source.motore()?.riapri();
+  };
+
+  /// Perché il motore mancava l'ultima volta che lo si è guardato: mentre
+  /// una sessione nuova si apre (dopo «Riprova», o col motore riacceso) il
+  /// chip resta il suo, finché l'apertura non risponde.
+  let lastAbsent: MotoreAssente | null = null;
+  /// L'ultimo stato del motore che manca, finché perché, versione, porta e
+  /// lingua sono gli stessi: la shell ridisegna il riquadro solo se cambia.
+  let absentMemo: {
+    readonly perche: MotoreAssente["perche"];
+    readonly inBuild: boolean;
+    readonly accendi: boolean;
+    readonly said: string;
+    readonly state: SurfaceStandingState;
+  } | null = null;
+
+  const absentState = (assente: MotoreAssente): SurfaceStandingState => {
+    const inBuild = source.inBuild(MOTORE_VETTORIALE);
+    const canAccendi = source.showComponent !== undefined;
+    const said = t("draw.standing.off");
+    if (absentMemo === null || absentMemo.perche !== assente.perche || absentMemo.inBuild !== inBuild || absentMemo.accendi !== canAccendi || absentMemo.said !== said) {
+      const state = drawEngineState(assente, { inBuild, accendi: canAccendi ? accendi : null, riprova });
+      absentMemo = { perche: assente.perche, inBuild, accendi: canAccendi, said, state };
+    }
+    return absentMemo.state;
+  };
+
   const current = (): SurfaceStandingState | null => {
     if (disposed) return null;
-    const losses = source.motore()?.perdite() ?? null;
-    const scene = losses === null ? null : source.scene();
-    if (losses === null || scene === null) return null;
+    const motore = source.motore();
+    // In Lettura e in sola lettura, la superficie non dà la scena: lì parla
+    // il suo avviso, e del motore non si dice niente.
+    const scene = motore === null ? null : source.scene();
+    if (motore === null || scene === null) return null;
+    const assente = motore.assente();
+    if (assente !== null) {
+      lastAbsent = assente;
+      return absentState(assente);
+    }
+    const losses = motore.perdite();
+    if (losses === null) {
+      // Si apre: la prima volta non si sa niente; dopo un motore che
+      // mancava, il chip resta quello finché l'apertura non risponde.
+      if (lastAbsent !== null && motore.adesso() === "apertura") return absentState(lastAbsent);
+      return null;
+    }
+    lastAbsent = null;
     // La lingua cambia le parole, non le parti.
     const said = t("draw.standing.missing");
     if (memo === null || memo.losses !== losses || memo.scene !== scene || memo.said !== said) {
@@ -159,6 +266,8 @@ export function drawStanding(source: DrawStandingSource): DrawStanding {
       disposed = true;
       listeners.clear();
       memo = null;
+      absentMemo = null;
+      lastAbsent = null;
     },
   };
 }

@@ -4,7 +4,9 @@
 // riga del motore nella pagina Componenti (spenta, si chiude e lo dice;
 // riaccesa, si riapre senza rimontare l'editor) e finisce in ogni modo in cui
 // finisce il disegno: il riquadro chiuso, il file cancellato, il vault chiuso
-// o cambiato. Con il file rinominato resta.
+// o cambiato. Con il file rinominato resta. Il chip della superficie dice le
+// parti che restano come sono (T21) e il motore spento, fermo o assente da
+// questa versione (T23), con «Accendi…» e «Riprova».
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { FakeHost } from "../../host/fake";
@@ -17,6 +19,8 @@ const box = vi.hoisted(() => ({
   host: null as FakeHost | null,
   /// Chi ascolta `onComponents`: la superficie, finché vive.
   componenti: new Set<(next: Components, previous: Components | null) => void>(),
+  /// Ciò che `components()` risponde: la mappa del vault aperto, o niente.
+  mappa: null as Components | null,
 }));
 
 vi.mock("../../host/ipc", () => {
@@ -40,6 +44,7 @@ vi.mock("../../host/ipc", () => {
 // con gli ascolti contati.
 vi.mock("../../state/components", async (original) => ({
   ...(await original<typeof import("../../state/components")>()),
+  components: () => box.mappa,
   onComponents: (listener: (next: Components, previous: Components | null) => void) => {
     box.componenti.add(listener);
     return () => box.componenti.delete(listener);
@@ -50,6 +55,8 @@ const { createFakeHost } = await import("../../host/fake");
 const { documentSessions } = await import("../../state/document-session");
 const { state: shell } = await import("../../state/store");
 const { mountVectorSurface } = await import("./surface");
+const { registerComponentRow } = await import("../../ui/commands");
+const { Components: RealComponents } = await import("../../state/components");
 
 const DOC = "disegni/casa.svg";
 const SOURCE = doc(
@@ -95,6 +102,7 @@ beforeEach(async () => {
   host = createFakeHost({ file: { [DOC]: SOURCE }, draw: true, drawing: { spento: () => spento } });
   box.host = host;
   box.componenti.clear();
+  box.mappa = null;
   shell.vaultRoot = "/vault";
   parent = document.createElement("div");
   document.body.append(parent);
@@ -248,11 +256,18 @@ describe("il chip delle parti che restano come sono (T21)", () => {
     surface.setReadOnly!(true);
     expect(surface.standing!.current()).toBeNull();
     surface.setReadOnly!(false);
-    // Spento: le parti non si sanno, e chi ascolta lo sa subito.
+    // Spento: le parti non si sanno, il chip dice il motore spento, e chi
+    // ascolta lo sa subito, senza riaprire il file.
     spento = true;
     riga(false);
-    expect(surface.standing!.current()).toBeNull();
-    expect(said[said.length - 1]).toBeNull();
+    expect(surface.standing!.current()).toMatchObject({ kind: "reduced", text: "Motore spento: strumenti semplici" });
+    expect(said[said.length - 1]).toBe("Motore spento: strumenti semplici");
+    // Riacceso: torna il chip delle parti della sessione nuova.
+    spento = false;
+    riga(true);
+    await settle();
+    expect(aperte()).toBe(2);
+    expect(surface.standing!.current()?.text).toBe("1 parte resta com’è");
   });
 
   it("«Vai» sceglie l'elemento", async () => {
@@ -266,6 +281,102 @@ describe("il chip delle parti che restano come sono (T21)", () => {
   it("senza parti, niente chip", async () => {
     const surface = mount();
     await settle();
+    expect(surface.standing!.current()).toBeNull();
+  });
+});
+
+/// Una mappa dei componenti del vault di prova, con le righe `ids`, accese.
+function mappaCon(ids: readonly string[]): Components {
+  const righe = ids.map((id) => ({ id, acceso: true, ui: [], nome: id }));
+  return new RealComponents("/vault", { righe } as unknown as ConstructorParameters<typeof RealComponents>[1]);
+}
+
+describe("il chip del motore che manca (T23)", () => {
+  it("spento (`unserved`): «Motore spento», e «Accendi…» apre la riga del motore nelle Impostazioni", async () => {
+    host = createFakeHost({ file: { [DOC]: SOURCE }, draw: true });
+    box.host = host;
+    const opened = vi.fn((_id: string) => {});
+    const stop = registerComponentRow(opened);
+    try {
+      const surface = mount();
+      await settle();
+      const state = surface.standing!.current()!;
+      expect(state).toMatchObject({ kind: "reduced", text: "Motore spento: strumenti semplici", title: "Motore del disegno spento" });
+      expect(state.actions!.map((action) => action.label)).toEqual(["Accendi…"]);
+      state.actions![0]!.run();
+      expect(opened).toHaveBeenCalledWith("fub.motore-vettoriale");
+      // Non accende niente: nessuna apertura in più.
+      await settle();
+      expect(aperte()).toBe(1);
+      // Tutti gli strumenti restano, nello stesso ordine di col motore.
+      const tools = [...parent.querySelectorAll<HTMLElement>(".draw-tool")].map((tool) => tool.dataset.tool);
+      expect(tools).toContain("rect");
+      expect(tools).toContain("text");
+      expect(parent.textContent).not.toContain("Serve il Motore del disegno");
+    } finally {
+      stop();
+    }
+  });
+
+  it("la versione senza il motore (la mappa senza la sua riga): «Senza motore», senza «Accendi…»", async () => {
+    host = createFakeHost({ file: { [DOC]: SOURCE }, draw: true });
+    box.host = host;
+    box.mappa = mappaCon(["fub.draw"]);
+    const surface = mount();
+    await settle();
+    expect(surface.standing!.current()).toMatchObject({ kind: "reduced", text: "Senza motore: strumenti semplici", actions: [] });
+    // La mappa con la riga: il motore c'è, ed è spento.
+    box.mappa = mappaCon(["fub.draw", "fub.motore-vettoriale"]);
+    riga(false);
+    expect(surface.standing!.current()?.text).toBe("Motore spento: strumenti semplici");
+  });
+
+  it("fermo: «Motore fermo», e «Riprova» riapre; se fallisce ancora il chip resta «fermo», senza tentativi da sé", async () => {
+    let guasto = true;
+    let aperti = 0;
+    host = createFakeHost({
+      file: { [DOC]: SOURCE },
+      draw: true,
+      drawing: {
+        open: () => {
+          if (guasto) throw { kind: "internal", message: "il motore si è fermato" };
+          return { instance: `disegno-${++aperti}`, revision: "0", mapped: 1, unmapped: 0, losses: [] };
+        },
+      },
+    });
+    box.host = host;
+    const surface = mount();
+    await settle();
+    const fermo = surface.standing!.current()!;
+    expect(fermo).toMatchObject({ kind: "stopped", text: "Motore fermo: strumenti semplici", title: "Il motore del disegno si è fermato" });
+    expect(fermo.actions!.map((action) => action.label)).toEqual(["Riprova"]);
+    fermo.actions![0]!.run();
+    // Mentre riapre, il chip resta «fermo».
+    expect(surface.standing!.current()?.kind).toBe("stopped");
+    await settle();
+    expect(aperte()).toBe(2);
+    expect(surface.standing!.current()?.kind).toBe("stopped");
+    // Nessun giro di tentativi da sé.
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(aperte()).toBe(2);
+    // Riprova che riesce: il motore c'è, senza parti, e il chip se ne va.
+    guasto = false;
+    surface.standing!.current()!.actions![0]!.run();
+    await settle();
+    expect(aperte()).toBe(3);
+    expect(surface.standing!.current()).toBeNull();
+  });
+
+  it("in sola lettura e in Lettura: nessun chip del motore, parla l'avviso", async () => {
+    host = createFakeHost({ file: { [DOC]: SOURCE }, draw: true });
+    box.host = host;
+    const surface = mount();
+    await settle();
+    expect(surface.standing!.current()?.kind).toBe("reduced");
+    surface.setReadOnly!(true);
+    expect(surface.standing!.current()).toBeNull();
+    surface.setReadOnly!(false);
+    surface.setMode("read");
     expect(surface.standing!.current()).toBeNull();
   });
 });
