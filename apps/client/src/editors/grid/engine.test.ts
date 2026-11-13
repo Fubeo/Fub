@@ -1,15 +1,53 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { findTextEditorOrThrow } from "../text/test-support";
-import { GRID_BYTES_PROTOCOL_VERSION } from "../../host/contract";
+import { GRID_BYTES_PROTOCOL_VERSION, type GridBytesCell, type GridBytesWindow } from "../../host/contract";
+import { writeClipboardText } from "../../platform/clipboard";
 import { t } from "../../i18n/strings";
 import { gridJournalText, parseGridJournal, recordGridJournal } from "../../state/grid-journal";
 import { fillTarget, typingOpens, type GridHost } from "./engine";
 import { bytesHost, cellAt, mounted, settle, SURFACE, typeInActiveCell, written } from "./test-support";
 
+vi.mock("../../platform/clipboard", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../platform/clipboard")>()),
+  writeClipboardText: vi.fn(async () => {}),
+}));
+
 afterEach(() => {
   document.body.replaceChildren();
 });
+
+/// Il provider con il foglio che cambia sotto la griglia: ogni finestra letta
+/// passa da `read`, che la riscrive come farebbe un file cambiato altrove.
+function reshaped(grid: ReturnType<typeof bytesHost>, read: (window: GridBytesWindow) => GridBytesWindow): GridHost {
+  return {
+    ...grid.host,
+    gridBytesWindow: async (surface, instance, request) => read(await grid.host.gridBytesWindow(surface, instance, request)),
+  };
+}
+
+/// Le righe di una finestra hanno l'id che `rowId` dà a ciascun indice; le
+/// celle restano sul loro id, e quelle di una riga che non c'è più spariscono.
+function withRows(rowId: (index: number) => string) {
+  return (window: GridBytesWindow): GridBytesWindow => {
+    const rows = window.rows.map((row, offset) => ({ ...row, id: rowId(window.row_start + offset) }));
+    const ids = new Set(rows.map((row) => row.id));
+    return { ...window, rows, cells: window.cells.filter((cell) => ids.has(cell.key.row)) };
+  };
+}
+
+/// Il giornale di una riscrittura da fuori: ogni cella `"riga,colonna"` passa
+/// da `[prima, dopo]` (l'input sul disco e quello nuovo) sopra `base`.
+function outsideJournal(base: string, cells: Record<string, readonly [before: string, after: string]>): string {
+  let journal = parseGridJournal(base);
+  for (const [at, [before, after]] of Object.entries(cells)) {
+    const [row, column] = at.split(",");
+    journal = recordGridJournal(journal, { sheet: "main", row: `r${row}`, column: `c${column}` }, before, after);
+  }
+  return gridJournalText(journal);
+}
+
+const ctrlZ = () => new KeyboardEvent("keydown", { key: "z", ctrlKey: true, bubbles: true });
 
 describe("GridEngine", () => {
   it("virtualizza entro una finestra limitata e pubblica la semantica grid", async () => {
@@ -312,6 +350,166 @@ describe("GridEngine", () => {
     host.querySelector<HTMLElement>(".grid-cell-editor .cm-content")!
       .dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
     expect(written(engine.getDoc())["0,0"]).toBe("Y");
+    engine.destroy();
+  });
+
+  it("con una cella aperta, la riscrittura da fuori tiene la bozza, aggiorna il resto del foglio e lo dice", async () => {
+    const { engine, host, viewport, changes } = await mounted();
+    const editorHost = host.querySelector<HTMLElement>(".grid-cell-editor")!;
+    const notice = host.querySelector<HTMLElement>(".grid-notice")!;
+    const draft = () => findTextEditorOrThrow(editorHost).state.doc.toString();
+    viewport.dispatchEvent(new KeyboardEvent("keydown", { key: "X", bubbles: true }));
+
+    engine.syncDoc(outsideJournal("", { "0,1": ["", "fuori"] }));
+    await settle();
+    expect(editorHost.hidden).toBe(false);
+    expect(draft()).toBe("X");
+    expect(cellAt(host, 0, 1)?.textContent).toBe("fuori");
+    expect(notice.textContent).toContain(t("grid.external.writing"));
+    expect(changes).toHaveLength(0);
+
+    // Invio scrive la bozza sulla sua cella, sopra il valore che il resto del foglio ha.
+    host.querySelector<HTMLElement>(".grid-cell-editor .cm-content")!
+      .dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
+    expect(written(engine.getDoc())).toEqual({ "0,0": "X", "0,1": "fuori" });
+    engine.destroy();
+  });
+
+  it("un annulla dopo una riscrittura che ha cambiato una sua cella non riporta i dati di prima", async () => {
+    const grid = bytesHost();
+    const { engine, host, viewport, changes } = await mounted(grid);
+    typeInActiveCell(host, viewport, "X");
+    await settle();
+    expect(changes).toHaveLength(1);
+
+    engine.syncDoc(outsideJournal("", { "0,0": ["1", "P"] }));
+    await settle();
+    expect(cellAt(host, 0, 0)?.textContent).toBe("P");
+
+    viewport.dispatchEvent(ctrlZ());
+    await settle();
+    expect(cellAt(host, 0, 0)?.textContent).toBe("P");
+    expect(changes).toHaveLength(1);
+    expect(host.querySelector<HTMLElement>(".grid-notice")!.textContent).toContain(t("grid.external.undo"));
+    engine.destroy();
+  });
+
+  /// Apre la cella di sotto ad A1 con la bozza «Z», e poi fa sparire la sua riga.
+  async function openThenLoseRow(clipboard: "ok" | "refused" = "ok") {
+    if (clipboard === "refused") vi.mocked(writeClipboardText).mockRejectedValueOnce(new Error("negato"));
+    let gone = false;
+    const mount = await mounted(reshaped(bytesHost(), withRows((index) => (gone && index === 1 ? "rperduta" : `r${index}`))));
+    mount.viewport.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }));
+    mount.viewport.dispatchEvent(new KeyboardEvent("keydown", { key: "Z", bubbles: true }));
+    expect(mount.host.querySelector<HTMLElement>(".grid-cell-editor")!.hidden).toBe(false);
+    gone = true;
+    mount.engine.syncDoc(outsideJournal("", { "0,1": ["", "altro"] }));
+    await settle();
+    return mount;
+  }
+
+  it("se la riga della cella aperta non c'è più, la cella si chiude e il testo battuto va negli appunti", async () => {
+    vi.mocked(writeClipboardText).mockClear();
+    const { engine, host, changes } = await openThenLoseRow();
+    expect(host.querySelector<HTMLElement>(".grid-cell-editor")!.hidden).toBe(true);
+    expect(writeClipboardText).toHaveBeenCalledWith("Z");
+    expect(host.querySelector<HTMLElement>(".grid-notice")!.textContent).toContain(t("grid.draft.row_gone", { draft: "Z" }));
+    expect(changes).toHaveLength(0);
+    engine.destroy();
+  });
+
+  it("se gli appunti rifiutano, il testo che la riga porta via resta scritto nell'avviso", async () => {
+    vi.mocked(writeClipboardText).mockClear();
+    const { engine, host } = await openThenLoseRow("refused");
+    expect(host.querySelector<HTMLElement>(".grid-cell-editor")!.hidden).toBe(true);
+    expect(host.querySelector<HTMLElement>(".grid-notice")!.textContent).toContain(t("grid.draft.row_gone_lost", { draft: "Z" }));
+    engine.destroy();
+  });
+
+  it("due riscritture di fila: la bozza resta, e Invio scrive sopra il valore nuovo di quella sola cella", async () => {
+    const { engine, host, viewport } = await mounted();
+    const editorHost = host.querySelector<HTMLElement>(".grid-cell-editor")!;
+    const notice = host.querySelector<HTMLElement>(".grid-notice")!;
+    const draft = () => findTextEditorOrThrow(editorHost).state.doc.toString();
+    viewport.dispatchEvent(new KeyboardEvent("keydown", { key: "X", bubbles: true }));
+
+    const first = outsideJournal("", { "0,1": ["", "uno"] });
+    engine.syncDoc(first);
+    await settle();
+    const second = outsideJournal(first, { "0,2": ["", "due"] });
+    engine.syncDoc(second);
+    await settle();
+    expect(editorHost.hidden).toBe(false);
+    expect(draft()).toBe("X");
+    expect(cellAt(host, 0, 1)?.textContent).toBe("uno");
+    expect(cellAt(host, 0, 2)?.textContent).toBe("due");
+    expect(notice.textContent).toContain(t("grid.external.writing"));
+
+    host.querySelector<HTMLElement>(".grid-cell-editor .cm-content")!
+      .dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
+    expect(written(engine.getDoc())).toEqual({ "0,0": "X", "0,1": "uno", "0,2": "due" });
+    engine.destroy();
+  });
+
+  it("in sola lettura una riscrittura non apre una cella, e l'annulla non riporta i dati di prima", async () => {
+    const { engine, host, viewport, changes } = await mounted(bytesHost());
+    typeInActiveCell(host, viewport, "X");
+    await settle();
+    engine.setReadOnly(true);
+
+    engine.syncDoc(outsideJournal("", { "0,0": ["1", "P"] }));
+    await settle();
+    viewport.dispatchEvent(new KeyboardEvent("keydown", { key: "Q", bubbles: true }));
+    expect(host.querySelector<HTMLElement>(".grid-cell-editor")!.hidden).toBe(true);
+
+    viewport.dispatchEvent(ctrlZ());
+    await settle();
+    expect(cellAt(host, 0, 0)?.textContent).toBe("P");
+    expect(changes).toHaveLength(1);
+    expect(host.querySelector<HTMLElement>(".grid-notice")!.textContent).toContain(t("grid.external.undo"));
+    engine.destroy();
+  });
+
+  it("una riga inserita sopra la cella aperta porta la bozza con la sua riga", async () => {
+    let inserted = false;
+    const rowId = (index: number) => (inserted && index > 0 ? (index === 1 ? "rnuova" : `r${index - 1}`) : `r${index}`);
+    const { engine, host, viewport, changes } = await mounted(reshaped(bytesHost(), withRows(rowId)));
+    viewport.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }));
+    viewport.dispatchEvent(new KeyboardEvent("keydown", { key: "X", bubbles: true }));
+
+    inserted = true;
+    engine.syncDoc(outsideJournal("", { "0,1": ["", "altro"] }));
+    await settle();
+    expect(host.querySelector<HTMLElement>(".grid-cell-editor")!.hidden).toBe(false);
+
+    host.querySelector<HTMLElement>(".grid-cell-editor .cm-content")!
+      .dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
+    expect(changes).toHaveLength(1);
+    expect(written(engine.getDoc())).toEqual({ "0,1": "altro", "1,0": "X" });
+    engine.destroy();
+  });
+
+  it("l'eco di un salvataggio non svuota la storia dell'annulla, e non dice che il file è cambiato fuori", async () => {
+    let saved = false;
+    const onDisk = (cell: GridBytesCell): GridBytesCell => cell.key.row === "r0" && cell.key.column === "c0"
+      ? { ...cell, input: "X", display: "X", value: { kind: "text", value: "X" } }
+      : cell;
+    const { engine, host, viewport, changes } = await mounted(reshaped(bytesHost(), (window) => (
+      saved ? { ...window, cells: window.cells.map(onDisk) } : window
+    )));
+    typeInActiveCell(host, viewport, "X");
+    await settle();
+
+    // Il salvataggio ha messo «X» nel file, e il giornale torna vuoto.
+    saved = true;
+    engine.syncDoc("");
+    await settle();
+    expect(host.querySelector<HTMLElement>(".grid-notice")!.textContent).not.toContain(t("grid.external.undo"));
+    expect(host.querySelector<HTMLElement>(".grid-notice")!.textContent).not.toContain(t("grid.external.writing"));
+
+    viewport.dispatchEvent(ctrlZ());
+    await settle();
+    expect(changes.map((change) => change.origin)).toContain("undo");
     engine.destroy();
   });
 
