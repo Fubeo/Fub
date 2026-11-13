@@ -194,7 +194,7 @@ sola**: un passo d'anteprima, un passo d'annulla. Scrive un documento solo
 | Parametro | Tipo | |
 |---|---|---|
 | `doc` | documento, obbligatorio | il file `.canvas`; un documento di un altro formato è `BadArgs` |
-| `ops` | testo, obbligatorio | un array JSON di operazioni, come sopra; testo che non è un array di operazioni, o un array vuoto, è `BadArgs` |
+| `ops` | testo, obbligatorio | un array JSON di operazioni, come sopra; testo che non è un array di operazioni, o un array vuoto, è `BadArgs`. Un array che la forma non accetta dà, nella frase, il primo problema: codice, percorso e suggerimento |
 | `base` | testo | la revisione su cui valgono le operazioni; se il documento ne ha già un'altra è `Conflict` |
 | `seed` | testo | il seme degli id nuovi, un intero decimale da 0 a 2⁶⁴ − 1 (in stringa, perché un `u64` non sta in un numero JSON) |
 
@@ -240,6 +240,91 @@ file e non scrive; l'applicazione lo crea con `create_document` (che rifiuta
 un path preso nel frattempo) e risponde con `Navigate`. L'annulla è
 `note.trash` sul file: lo porta nel cestino anche se nel frattempo è cambiato,
 e dal cestino si ripristina com'era quando la creazione è stata annullata.
+
+`canvas.read` («Leggi la lavagna», «Read the whiteboard») legge una lavagna e
+non scrive niente (`CommandScope::read_only()`). Le tre forme vengono dal
+nucleo, come descritte in [La lavagna come codice](canvas-code.md#leggere).
+
+| Parametro | Tipo | |
+|---|---|---|
+| `doc` | documento, obbligatorio | il file `.canvas` |
+| `form` | scelta, di serie `outline` | `outline`: una riga per scheda e per arco; `code`: la lista di operazioni che ricrea la lavagna; `json`: il modello, come nel file |
+| `ids` | testo | una lista JSON di id: legge solo quelle schede e gli archi fra loro. Un id che non è una scheda si ignora, e i conti lo dicono; `[]` non legge nessuna scheda |
+| `max_chars` | numero | il limite dell'outline in caratteri, da zero in su; di serie 20 000. Con `code` o `json` è `BadArgs`: una lista tagliata non si ricompila |
+
+L'esito è l'effetto `Custom` con namespace `fub.lavagna` e payload
+`{"version": 1, "kind": "read", "doc", "revision", "form", "counts", "bounds",
+"text"}`, dove `text` c'è per `outline` e `code`, e per `json` c'è `model` al
+suo posto. `revision` è la revisione del file che si è letta: è la `base` di
+`canvas.check` e di `canvas.apply`. `counts` dà `cards`, `edges` e `groups` di
+ciò che si legge; `bounds` è il riquadro (`x`, `y`, `width`, `height`), o `null`
+se non c'è nessuna scheda. L'outline taglia a una riga intera, e l'ultima dice
+quante ne restano, come `…+N`. Un esempio, con la lavagna di tre schede e un
+arco del test di `tests/lavagna.rs` (il gruppo `g` contiene `a` e `b`, la
+revisione è abbreviata):
+
+```json
+{"version": 1, "kind": "read", "doc": "Idee.canvas", "revision": "…", "form": "outline", "counts": {"cards": 3, "edges": 1, "groups": 1}, "bounds": {"x": -20, "y": -40, "width": 560, "height": 160}, "text": "cards 3 edges 1 groups 1 bounds -20 -40 560×160\n1 a text \"Ciao\" 0 0 200×80 in=g\n2 b text \"Poi\" 300 0 200×80 color=4 in=g\n3 g group \"Gruppo\" -20 -40 560×160\ne1 a -> b \"porta a\""}
+```
+
+Un documento che non è una lavagna, o un `.canvas` che non si apre, è
+`BadArgs` con le stesse frasi di `canvas.apply`. Una `form` fuori dalle tre, un
+`ids` che non è una lista JSON di testi, un `max_chars` che non è un intero da
+zero in su e un `max_chars` con `code` o `json` sono `BadArgs`.
+
+`canvas.check` («Controlla le operazioni», «Check the operations») dice che cosa
+cambierebbe una lista di operazioni, prima di scriverla, e non scrive niente.
+Ha i parametri di `canvas.apply`: `doc` e `ops` obbligatori, `base` e `seed`
+facoltativi, con la stessa regola per il seme (di serie la revisione). Un
+documento che non è una lavagna, un `.canvas` che non si apre e un `ops` che
+non è JSON sono `BadArgs`, come in `canvas.apply`; ogni altro difetto della
+lista è un problema nel rapporto, e il comando riesce.
+
+L'esito è l'effetto `Custom` con payload `{"version": 1, "kind": "check",
+"ok", "problems", "warnings", "warnings_omitted", "summary",
+"outline_after"}`. La forma del rapporto è quella di
+[Il controllo](canvas-code.md#il-controllo), con due aggiunte. `warnings_omitted`
+dice quanti avvisi non entrano nei primi cento. Ogni problema porta `text`, la
+chiave del catalogo della sua frase (`canvas.check.p_<codice>`, in italiano e in
+inglese): la frase la rende chi mostra il rapporto, e il payload resta
+strutturato. Quando `base` non è la revisione del file, il rapporto ha in più il
+problema `stale_base`, con indice `null` e percorso `""`: non è un errore, e il
+rapporto non ha riassunto né lettura di dopo. La notifica è un riassunto per
+chi legge: `canvas.check.n_summary` con i conti, o `canvas.check.n_refused` con
+il numero dei problemi.
+
+Con una lista che si scrive, un esempio è la lavagna di `a` alta 160 e della
+scheda `b` nuova a fianco, con `a` spostata di 40 (il test
+`controllare_dice_il_riassunto_e_non_scrive` lo fissa intero):
+
+```json
+{"version": 1, "kind": "check", "ok": true, "problems": [], "warnings": [{"code": "overlap", "ids": ["a", "b"]}], "warnings_omitted": 0, "summary": {"cards_added": [{"id": "b", "text": "Poi"}], "cards_removed": [], "cards_changed": [{"id": "a", "text": "Ciao", "moved": {"from": {"x": 0, "y": 0}, "to": {"x": 40, "y": 0}}}], "edges_added": [], "edges_removed": [], "edges_changed": [], "order_changed": false}, "outline_after": "cards 2 edges 0 groups 0 bounds 40 0 260×160\n1 a text \"Ciao\" 40 0 200×160\n2 b text \"Poi\" 100 0 200×160"}
+```
+
+Con una lista che non si scrive, `ok` è `false`, `summary` e `outline_after` sono
+`null`, e ogni problema ha il suo codice, la posizione (`index`, da zero),
+`path` e `text`, per esempio `{"code": "unknown_op", "index": 0, "path":
+"/0/op", "message": "no operation has this name", "text": {"key":
+"canvas.check.p_unknown_op"}}`. I codici sono quelli di «Il controllo» e di
+«Lo schema».
+
+`canvas.guide` («Guida alla lavagna», «Whiteboard guide») dà la guida per scrivere
+una lavagna con le operazioni, e non legge nessun documento. Il payload ha
+`kind: "guide"` e questi campi:
+
+| Campo | Contenuto |
+|---|---|
+| `text` | la guida, il testo di `crates/fub-features/src/lavagna/guida.md` (al più 150 righe), sempre |
+| `ops` | una voce per operazione: `name`, `summary` (la frase del nucleo), `fields` con `name`, `kind`, `required`, `doc` e, dove c'è, `default` e `values` |
+| `schema` | lo schema JSON della lista di operazioni, quello di `spec::json_schema` |
+| `examples` | gli esempi di ciascuna operazione, come oggetti JSON |
+
+Il parametro `topic` (il nome di un'operazione) limita `ops`, il ramo di
+`schema` e `examples` a quella sola operazione. Un `topic` vuoto è come non
+averlo. Un `topic` che non è un'operazione è `BadArgs`, e la frase dà i nomi
+vicini, con la distanza di «Lo schema»; senza vicini dà tutti i nomi. Per
+esempio `canvas.guide` con `topic` `move` dà `ops` con una sola voce, `name`
+`move`, uno schema con un solo ramo e solo gli esempi di `move`.
 
 ## WebAssembly
 
