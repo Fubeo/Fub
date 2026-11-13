@@ -33,6 +33,7 @@ export type ToolId =
   | "ellipse"
   | "line"
   | "arrow"
+  | "text"
   | "cover";
 
 /// I profili della famiglia `canvas` che hanno strumenti: il disegno e le
@@ -78,6 +79,9 @@ export const TOOLS: readonly ToolSpec[] = [
   { id: "ellipse", spaces: SHAPE, group: "shape", icon: "draw-ellipse", label: "draw.tool.ellipse", description: "draw.tool.ellipse.hint", shortcut: "o" },
   { id: "line", spaces: SHAPE, group: "shape", icon: "draw-line", label: "draw.tool.line", description: "draw.tool.line.hint", shortcut: "l" },
   { id: "arrow", spaces: SHAPE, group: "shape", icon: "draw-arrow", label: "draw.tool.arrow", description: "draw.tool.arrow.hint", shortcut: "Shift-l" },
+  // Il testo è soltanto del disegno: un clic lo crea, e si scrive
+  // nell'ispettore.
+  { id: "text", spaces: { vector: "simple" }, group: "text", icon: "draw-text", label: "draw.tool.text", description: "draw.tool.text.hint", shortcut: "t" },
   { id: "cover", spaces: { pdf: "full" }, group: "shape", icon: "draw-cover", label: "draw.tool.cover", description: "draw.tool.cover.hint", shortcut: "c" },
 ];
 

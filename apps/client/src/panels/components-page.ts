@@ -97,6 +97,7 @@ export const COMPONENT_ICONS: Readonly<Record<string, string>> = {
   "fub.dizionari": "footnote",
   "fub.motore-documenti": "format-odt",
   "fub.motore-fogli": "format-sheet",
+  "fub.motore-vettoriale": "format-drawing",
   "fub.importers": "folder",
   "fub.linkcard": "backlink",
   "fub.updates": "sync",
@@ -138,6 +139,12 @@ export interface ComponentsPage {
   /// Le impostazioni si sono chiuse: si dimenticano ricerca, avviso e gruppo
   /// aperto.
   reset(): void;
+  /// Apre la riga `id`, come fa «Accendi…» di una superficie: aspetta la mappa
+  /// come `show`, toglie la ricerca che la nasconderebbe, apre il suo gruppo, la
+  /// porta in vista, mette il fuoco sul suo interruttore e la segna finché
+  /// l'utente non fa altro. Non accende niente: accende l'utente. Falso se la
+  /// riga non c'è, o se le impostazioni si sono chiuse nel frattempo.
+  focusRow(id: string): Promise<boolean>;
 }
 
 /// Un avviso di passaggio: dice l'esito di un gesto, finché non se ne fa un
@@ -159,6 +166,11 @@ export function mountComponentsPage(lifetime: Lifetime, hooks: ComponentsPageHoo
   let busy: Set<string> | null = null;
   /// Il controllo che aveva il fuoco, per ritrovarlo dopo un ridisegno.
   let focusKey: string | null = null;
+  /// La riga aperta da `focusRow`, segnata finché l'utente non fa altro.
+  let found: string | null = null;
+  /// Cresce a ogni `reset`: una `focusRow` che aspettava la mappa e si
+  /// ritrova con le impostazioni chiuse non apre più niente.
+  let epoch = 0;
 
   const root = document.createElement("section");
   root.className = "components-page";
@@ -213,6 +225,17 @@ export function mountComponentsPage(lifetime: Lifetime, hooks: ComponentsPageHoo
   lifetime.listen(root, "focusin", (event) => {
     const key = (event.target as HTMLElement | null)?.closest<HTMLElement>("[data-focus-key]")?.dataset.focusKey;
     if (key) focusKey = key;
+  });
+  // La riga segnata da `focusRow` smette di esserlo al primo gesto
+  // dell'utente: un tasto, un clic, o il fuoco che lascia il suo interruttore.
+  // Il gesto che ha chiesto la riga è già finito quando la riga si segna.
+  lifetime.listen(document, "pointerdown", () => unmark(), { capture: true });
+  lifetime.listen(document, "keydown", () => unmark(), { capture: true });
+  lifetime.listen(root, "focusout", (event) => {
+    if (found === null) return;
+    const target = event.target as HTMLElement | null;
+    // Un ridisegno che rifà l'interruttore non è un gesto dell'utente.
+    if (target?.isConnected && target.dataset.focusKey === `switch:${found}`) unmark();
   });
 
   lifetime.add(onComponentsRead((next) => {
@@ -394,7 +417,7 @@ export function mountComponentsPage(lifetime: Lifetime, hooks: ComponentsPageHoo
     const li = document.createElement("li");
     const orphan = item.perche === "InAttesa";
     const required = typeof item.perche === "object" ? item.perche.RichiestoDa : [];
-    li.className = `components-row ${item.acceso ? "components-row--on" : "components-row--off"}${orphan ? " components-row--orphan" : ""}`;
+    li.className = `components-row ${item.acceso ? "components-row--on" : "components-row--off"}${orphan ? " components-row--orphan" : ""}${found === item.id ? " components-row--found" : ""}`;
     li.dataset.component = item.id;
     const figure = document.createElement("span");
     figure.className = "components-icon";
@@ -616,6 +639,26 @@ export function mountComponentsPage(lifetime: Lifetime, hooks: ComponentsPageHoo
     empty.hidden = !(filtering && map !== null && shown === 0);
   }
 
+  /// Toglie il segno della riga trovata, senza ridisegnare: il fuoco e i nodi
+  /// restano dove sono.
+  function unmark(): void {
+    if (found === null) return;
+    found = null;
+    for (const item of list.querySelectorAll(".components-row--found")) item.classList.remove("components-row--found");
+  }
+
+  /// La mappa di tutta l'app, aspettandola se non è ancora arrivata.
+  async function ready(): Promise<Components | null> {
+    const next = components();
+    if (next) return next;
+    try {
+      return await componentsReady();
+    } catch (error) {
+      console.error(error);
+      return null;
+    }
+  }
+
   // --- i gesti ----------------------------------------------------------------
 
   /// Un gesto: i controlli si fermano finché non finisce, l'esito si dice, e la
@@ -743,14 +786,7 @@ export function mountComponentsPage(lifetime: Lifetime, hooks: ComponentsPageHoo
   return {
     element: root,
     async show() {
-      let next = components();
-      if (!next) {
-        try {
-          next = await componentsReady();
-        } catch (error) {
-          console.error(error);
-        }
-      }
+      const next = await ready();
       if (lifetime.closed) return;
       take(next);
       draw();
@@ -760,6 +796,33 @@ export function mountComponentsPage(lifetime: Lifetime, hooks: ComponentsPageHoo
       supportOpen = false;
       find.value = "";
       focusKey = null;
+      found = null;
+      epoch++;
+    },
+    async focusRow(id) {
+      const start = epoch;
+      const next = await ready();
+      if (lifetime.closed || epoch !== start) return false;
+      take(next);
+      const item = map?.righe.find((candidate) => candidate.id === id);
+      if (!item) {
+        draw();
+        return false;
+      }
+      const terms = searchTerms(find.value);
+      if (terms.length > 0 && !matchesTerms(normalizeSearch(`${item.nome} ${item.descrizione}`), terms)) find.value = "";
+      if (item.gruppo === SUPPORT) supportOpen = true;
+      found = id;
+      focusKey = `switch:${id}`;
+      draw();
+      const li = list.querySelector<HTMLElement>(`[data-component="${CSS.escape(id)}"]`);
+      if (!li) return false;
+      li.scrollIntoView({ block: "nearest" });
+      // Il nucleo non ha interruttore: la riga si vede e si segna, il fuoco va
+      // al titolo della pagina.
+      const target = li.querySelector<HTMLElement>(`[data-focus-key="${CSS.escape(focusKey)}"]`) ?? title;
+      target.focus({ preventScroll: true });
+      return true;
     },
   };
 }

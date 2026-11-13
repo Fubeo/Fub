@@ -1,6 +1,6 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { IndexQuery, IndexResult, SettingEntry, SettingValue } from "../../host/contract";
-import { ProofClient, primaryLanguage, utf8ToUtf16, type ProofPorts } from "./proof";
+import { ProofCache, ProofClient, primaryLanguage, sharedProofCache, utf8ToUtf16, type ProofPorts } from "./proof";
 
 function entry(key: string, value: SettingValue): SettingEntry {
   return {
@@ -80,6 +80,9 @@ describe("primaryLanguage", () => {
 });
 
 describe("ProofClient", () => {
+  // La cache dei segmenti è dell'app: ogni prova parte da vuota.
+  beforeEach(() => sharedProofCache.clear());
+
   it("chiede con le impostazioni del vault e risponde in unità UTF-16", async () => {
     const { ports, checks } = host();
     const client = new ProofClient(ports);
@@ -204,5 +207,182 @@ describe("ProofClient", () => {
     change();
     expect(listener).not.toHaveBeenCalled();
     expect(await client.check(["uno"])).toBeNull();
+  });
+});
+
+describe("la cache condivisa", () => {
+  beforeEach(() => sharedProofCache.clear());
+
+  it("un secondo client non richiede i segmenti che un altro ha già controllato", async () => {
+    const { ports, checks } = host();
+    const first = new ProofClient(ports);
+    await first.check(["uno speling", "due"]);
+    first.dispose();
+    const second = new ProofClient(ports);
+    const result = await second.check(["uno speling", "due", "tre"]);
+    expect(checks.map((check) => check.segments)).toEqual([["uno speling", "due"], ["tre"]]);
+    expect(result!.segments[0]).toHaveLength(1);
+    expect(result!.language).toMatchObject({ code: "it", spelling: true });
+    const third = new ProofClient(ports);
+    expect((await third.check(["uno speling", "due", "tre"]))!.language.spelling).toBe(true);
+    expect(checks).toHaveLength(2);
+    second.dispose();
+    third.dispose();
+  });
+
+  it("non ricorda una risposta senza il dizionario della lingua", async () => {
+    let missing: string | null = "it_IT";
+    const base = host();
+    const { ports } = host({
+      queryIndex: async (query) => {
+        const response = await base.ports.queryIndex(query);
+        const value = (response as { value: unknown }).value as { language: { missing_dictionary: string | null } };
+        value.language.missing_dictionary = missing;
+        return response;
+      },
+    });
+    const first = new ProofClient(ports);
+    expect((await first.check(["uno speling"]))!.language.missingDictionary).toBe("it_IT");
+    first.dispose();
+    // Il dizionario arriva senza avvisi: la superficie rimontata richiede.
+    missing = null;
+    const second = new ProofClient(ports);
+    expect((await second.check(["uno speling"]))!.language.missingDictionary).toBeNull();
+    second.dispose();
+    expect(base.checks).toHaveLength(2);
+    // Con il dizionario presente la terza montatura non richiede più.
+    const third = new ProofClient(ports);
+    const result = await third.check(["uno speling"]);
+    expect(result!.language.missingDictionary).toBeNull();
+    expect(result!.segments[0]).toHaveLength(1);
+    expect(base.checks).toHaveLength(2);
+    third.dispose();
+  });
+
+  it("chiudere un client non svuota la cache degli altri", async () => {
+    const { ports, checks } = host();
+    const first = new ProofClient(ports);
+    const second = new ProofClient(ports);
+    await first.check(["uno"]);
+    first.dispose();
+    await second.check(["uno"]);
+    expect(checks).toHaveLength(1);
+    second.dispose();
+  });
+
+  it("richiede con un'altra configurazione o un'altra lingua", async () => {
+    const cache = new ProofCache();
+    const a = host();
+    const b = host({ settings: async () => [...SETTINGS.slice(0, 4), entry("proof.words", ["altra"])] });
+    const c = host({ settings: async () => [entry("proof.grammar", false), ...SETTINGS.slice(2)] });
+    const first = new ProofClient(a.ports, cache);
+    await first.check(["uno"]);
+    await first.check(["uno"], "en");
+    expect(a.checks.map((check) => check.language)).toEqual(["it", "en"]);
+    const second = new ProofClient(b.ports, cache);
+    await second.check(["uno"]);
+    expect(b.checks).toHaveLength(1);
+    const third = new ProofClient(c.ports, cache);
+    await third.check(["uno"]);
+    expect(c.checks).toHaveLength(1);
+    for (const client of [first, second, third]) client.dispose();
+  });
+
+  it("un avviso di configurazione la svuota per tutti", async () => {
+    const cache = new ProofCache();
+    const a = host();
+    const b = host();
+    const first = new ProofClient(a.ports, cache);
+    const second = new ProofClient(b.ports, cache);
+    await first.check(["uno"]);
+    a.change();
+    expect(cache.size).toBe(0);
+    await second.check(["uno"]);
+    expect(b.checks).toHaveLength(1);
+    first.dispose();
+    second.dispose();
+  });
+
+  it("non ricorda un risultato partito prima di un cambio di configurazione", async () => {
+    const cache = new ProofCache();
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const base = host();
+    let asked = false;
+    const slow = host({
+      queryIndex: async (query) => {
+        asked = true;
+        await gate;
+        return base.ports.queryIndex(query);
+      },
+    });
+    const first = new ProofClient(slow.ports, cache);
+    const pending = first.check(["uno speling"]);
+    // La richiesta è in volo quando arriva l'avviso.
+    await vi.waitFor(() => expect(asked).toBe(true));
+    // L'avviso arriva a un altro client: la cache cambia epoca per tutti.
+    const other = host();
+    const second = new ProofClient(other.ports, cache);
+    other.change();
+    release();
+    expect(await pending).toBeNull();
+    expect(cache.size).toBe(0);
+    await second.check(["uno speling"]);
+    expect(other.checks).toHaveLength(1);
+    first.dispose();
+    second.dispose();
+  });
+
+  it("rispetta il tetto dei segmenti dimenticando i meno usati", async () => {
+    const cache = new ProofCache(3);
+    const { ports, checks } = host();
+    const client = new ProofClient(ports, cache);
+    await client.check(["a", "b", "c"]);
+    await client.check(["a"]);
+    const result = await client.check(["d speling", "e"]);
+    expect(cache.size).toBe(3);
+    expect(result!.segments[0]).toHaveLength(1);
+    await client.check(["a", "e"]);
+    expect(checks.map((check) => check.segments)).toEqual([["a", "b", "c"], ["d speling", "e"]]);
+    await client.check(["b"]);
+    expect(checks).toHaveLength(3);
+    client.dispose();
+  });
+
+  it("risponde intero anche quando i segmenti superano il tetto", async () => {
+    const cache = new ProofCache(2);
+    const { ports } = host();
+    const client = new ProofClient(ports, cache);
+    const result = await client.check(["uno speling", "due", "tre speling", "quattro"]);
+    expect(result!.segments.map((issues) => issues.length)).toEqual([1, 0, 1, 0]);
+    expect(cache.size).toBe(2);
+    client.dispose();
+  });
+
+  it("rispetta il tetto del testo", async () => {
+    const cache = new ProofCache(100, 10);
+    const { ports, checks } = host();
+    const client = new ProofClient(ports, cache);
+    await client.check(["abcd", "efgh", "ijkl", "troppo lungo per il tetto"]);
+    await client.check(["efgh", "ijkl"]);
+    expect(checks).toHaveLength(1);
+    expect(cache.size).toBe(2);
+    client.dispose();
+  });
+
+  it("dimentica i segmenti della configurazione più vecchia oltre il tetto", async () => {
+    const cache = new ProofCache(100, 1000, 2);
+    const { ports, checks } = host();
+    const client = new ProofClient(ports, cache);
+    await client.check(["uno"], "it");
+    await client.check(["uno"], "en");
+    await client.check(["uno"], "pt");
+    expect(cache.size).toBe(2);
+    await client.check(["uno"], "en");
+    await client.check(["uno"], "it");
+    expect(checks.map((check) => check.language)).toEqual(["it", "en", "pt", "it"]);
+    client.dispose();
   });
 });

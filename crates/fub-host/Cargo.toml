@@ -32,6 +32,10 @@ fub-format-xlsx = { workspace = true, optional = true }
 # I file delle app Craft (`.vectorcraft`, `.pcraft`, `.figcraft` e gli XMP di
 # LightCraft) in sola lettura, dietro la feature `craft` qui sotto.
 fub-format-craft = { workspace = true, optional = true }
+# Il motore del disegno, dietro la feature `engine-drawing` qui sotto: è
+# l'adattatore, l'unico crate che nomina VectorCraft, e l'host lo prende solo
+# da lì. Per percorso e non dalla radice perché lo prende soltanto l'host.
+fub-disegno = { path = "../fub-disegno", version = "0.1.0", optional = true }
 fub-importers = { workspace = true }
 fub-kernel = { workspace = true }
 serde = { workspace = true }
@@ -161,7 +165,7 @@ windows-sys = { workspace = true, features = [
 ] }
 
 [features]
-default = ["notify-watcher", "http-client", "official-features", "rich", "xlsx", "draw", "craft"]
+default = ["notify-watcher", "http-client", "official-features", "rich", "xlsx", "draw", "engine-drawing", "craft"]
 notify-watcher = ["dep:notify", "dep:notify-debouncer-full"]
 
 # I documenti di videoscrittura (`fub-format-rich`: Word, OpenDocument, RTF,
@@ -236,6 +240,13 @@ lavagna = ["fub-features/lavagna"]
 # disegni senza disegni nel vault non avrebbe niente da esportare. Nel
 # `default`; la CI prova anche l'host senza, in un passo suo.
 draw = ["dep:fub-format-svg", "fub-features/draw"]
+
+# Il Motore del disegno (`fub-disegno`, l'unico crate che nomina VectorCraft):
+# porta i disegni, mentre i disegni senza di lui restano, con gli strumenti
+# semplici. Inoltra la riga «Motore del disegno» della mappa dei componenti,
+# che si spegne a mano in `components.off` come il PDF. Nel `default`; la CI
+# prova anche i disegni senza il motore, in un passo suo.
+engine-drawing = ["draw", "dep:fub-disegno", "fub-features/engine-drawing"]
 
 # I file delle app Craft (`fub-format-craft`): i quattro formati a byte in sola
 # lettura (metadati, testo per la ricerca, file collegati) e il bundle

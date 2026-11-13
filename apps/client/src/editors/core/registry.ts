@@ -295,8 +295,13 @@ export interface SurfaceActiveCellSource {
   subscribe(listener: () => void): () => void;
 }
 
-/** How far the document can be written, as the chip by its path says it. */
-export type SurfaceStandingKind = "writes" | "closed" | "body" | "readonly";
+/**
+ * How far the document can be written, as the chip by its path says it.
+ * `reduced` and `stopped` say that it is written with fewer means than usual:
+ * a drawing without its engine, switched off (or not in this build) or
+ * stopped by an error, draws with the simple tools.
+ */
+export type SurfaceStandingKind = "writes" | "closed" | "body" | "readonly" | "reduced" | "stopped";
 
 /** A gesture the standing offers: going to a place, finding, recording. */
 export interface SurfaceStandingAction {

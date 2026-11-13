@@ -33,6 +33,8 @@ import {
   canCreateDrawing,
   newKinds,
   newDrawing,
+  registerComponentRow,
+  showComponent,
   loadKeyOverrides,
   validateKeybinding,
   keyboardPlatform,
@@ -438,6 +440,26 @@ describe("le porte di «Nuovo disegno…»", () => {
       { id: "drawing.create", prefill: { folder: "Scienze" } },
       { id: "drawing.create", prefill: {} },
     ]);
+  });
+});
+
+describe("la porta della riga di un componente", () => {
+  it("senza registrazione non apre niente e lo dice", () => {
+    expect(showComponent("fub.motore-vettoriale")).toBe(false);
+  });
+
+  it("apre con l'ultima registrata, e togliere una vecchia non toglie la nuova", () => {
+    const first: string[] = [];
+    const second: string[] = [];
+    const stopFirst = registerComponentRow((id) => first.push(id));
+    const stopSecond = registerComponentRow((id) => second.push(id));
+    expect(showComponent("fub.motore-vettoriale")).toBe(true);
+    stopFirst();
+    expect(showComponent("fub.search")).toBe(true);
+    expect(first).toEqual([]);
+    expect(second).toEqual(["fub.motore-vettoriale", "fub.search"]);
+    stopSecond();
+    expect(showComponent("fub.search")).toBe(false);
   });
 });
 

@@ -1170,6 +1170,9 @@ pub struct Host {
     /// della stessa radice in questo host condividono lo stesso lease invece
     /// di escludersi a vicenda.
     writers: Mutex<BTreeMap<Utf8PathBuf, std::sync::Weak<VaultWriterLock>>>,
+    /// **I disegni aperti nel motore del disegno**, per vault
+    /// ([`crate::drawing`]): la chiusura di un vault chiude i suoi.
+    pub(crate) drawings: crate::drawing::Drawings,
 }
 
 impl Default for Host {
@@ -1275,6 +1278,7 @@ impl Host {
             system_locale: Arc::new(SystemLocale::default()),
             levels: Arc::new(fub_kernel::log::Levels::default()),
             writers: Mutex::new(BTreeMap::new()),
+            drawings: crate::drawing::Drawings::default(),
         }
     }
 
@@ -3240,6 +3244,9 @@ impl Host {
                 SessionSlot::Applying(_) => return Err(applying_conflict(&root)),
             }
         };
+        // I disegni del vault cadono con lui, fuori dal lock delle sessioni;
+        // un gesto in corso tiene il suo finché non finisce.
+        self.drawings.forget_vault(&session.root);
         // Il claim conserva il marker, ma non la guardia della mappa: watcher,
         // runner e provider terminano tutti fuori dal lock delle sessioni.
         Ok(CloseClaim {
@@ -3297,6 +3304,7 @@ impl Host {
                 session: Some(session),
             })
             .collect();
+        self.drawings.forget_all();
         // Costruire prima tutti i claim è parte della garanzia di unwind: se
         // una chiusura panica, gli elementi non ancora visitati vengono
         // comunque lasciati cadere e ritirano ciascuno il proprio marker.

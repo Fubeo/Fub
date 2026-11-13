@@ -22,6 +22,13 @@ import type {
   DocumentWindowEvent,
   DocumentWindowRequest,
   FieldValue,
+  DrawingCommandInfo,
+  DrawingCommandRequest,
+  DrawingGesture,
+  DrawingOpen,
+  DrawingOutcome,
+  DrawingSync,
+  DrawingSynced,
   GridApplyRequest,
   GridBytesSession,
   GridBytesWindow,
@@ -304,6 +311,23 @@ export const api = {
     invoke<GridCommandOutcome>("grid_bytes_command", { surface, instance, request }),
   closeGridBytes: (surface: string, instance: string) =>
     invoke<void>("close_grid_bytes", { surface, instance }),
+  // Il disegno sul motore (K5): il motore tiene una copia del disegno che
+  // segue il testo della `DocumentSession` e risponde ai gesti con operazioni
+  // di scena che il client applica (`editors/spatial/motore/sessione.ts`).
+  // Sei porte tipate con il vault in coda; senza il motore in questa build
+  // l'host rifiuta con `unserved` e la sessione dà il motore spento.
+  openDrawing: (doc: string, text: string, vault?: string | null) =>
+    invoke<DrawingOpen>("open_drawing", toVault({ doc, text }, vault)),
+  drawingSync: (instance: string, sync: DrawingSync, vault?: string | null) =>
+    invoke<DrawingSynced>("drawing_sync", toVault({ instance, sync }, vault)),
+  drawingGesture: (instance: string, gesture: DrawingGesture, vault?: string | null) =>
+    invoke<DrawingOutcome>("drawing_gesture", toVault({ instance, gesture }, vault)),
+  drawingCommands: (instance: string, selection: string[], vault?: string | null) =>
+    invoke<DrawingCommandInfo[]>("drawing_commands", toVault({ instance, selection }, vault)),
+  drawingCommand: (instance: string, request: DrawingCommandRequest, vault?: string | null) =>
+    invoke<DrawingOutcome>("drawing_command", toVault({ instance, request }, vault)),
+  closeDrawing: (instance: string, vault?: string | null) =>
+    invoke<void>("close_drawing", toVault({ instance }, vault)),
   // `base` dice **da cosa si parte**, e non ha un default (§23.11, decisione
   // 0092): `descends_from` = «scrivi solo se il file è ancora quello», e un
   // `PluginError` di specie `conflict` vuol dire che non lo era e che **non è

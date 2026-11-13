@@ -548,6 +548,40 @@ La più recente in cima: data · piano · decisione · perché.
   PLAN.md resta quello di N4 e DECISIONS.md tiene le righe di tutti e due:
   senza il merge la PR #298 era in conflitto con la sua base e la CI non
   partiva.
+- 2026-11-13 · K5 T30 · il piano si chiude col sì dell'utente; restano fuori, come issue o limiti noti: il tetto alle istanze dei motori per vault (`issue-istanze-motore.md`), i `detail` delle parti solo in italiano, il campo «Testo» per un `<text>` senza `tspan`, `ripristina` fuori da `catch_panic`, le proposte a monte per VectorCraft (bozza non inviata) e il test instabile `close_a_vault_and_latest_round_in_which_and_again_open` visto una volta sotto carico · non cambiano il comportamento che K5 promette, e ognuno è più piccolo o più largo del piano.
+- 2026-11-13 · K5 T30 · la prova sull'app vera ha trovato gli errori delle sei porte del disegno consegnati con la chiave del catalogo (un oggetto sul filo): il client leggeva ogni `unserved` come un guasto, e un disegno riaperto a motore spento restava «fermo» anche dopo la riaccensione. Corretto nel proprietario, `fub-app` (`drawing_port` passa da `for_the_shell`, come Componenti), non rilassando `asPluginError` nel client; il `BadArgs` di un sync resta un fermo della sessione (con «Riprova») e si sono corretti commento e docs che dicevano il contrario · il contratto vuole messaggi già tradotti, e cambiare il comportamento della sessione in T30 non serviva: un `BadArgs` del sync è solo un difetto, e il fermo è la strada sicura.
+- 2026-11-13 · K5 T23 · accettati i due `kind` nuovi del chip (`reduced`, `stopped`) in `editors/core/registry.ts` al posto di `body`, e il ramo resta con `bench/scene.test.ts` rosso finché le 6 baseline delle scene nuove non arrivano dal runner (primo passo di T30) · Perché: il prototipo approvato usa quei due segni (vuoto e rosso), e le baseline si fanno solo sul runner Linux.
+- 2026-11-13 · K5 T35 · accettati `gesti/mod.rs` (`Strumento::unita`, `Contesto::memo`) e la chiamata in `comandi.rs` fuori dal Tocca stretto, e il caso nuovo dei due figli scelti insieme (la `transform` a ciascuno, registrato dal client) · Perché: il caso visto da T33 nasce da gesti fatti dal motore, e le unità si sanno solo al commit; il memo toglie il costo in più (circa 3 ms su 1 MiB) di rifare l'analisi.
+- 2026-11-13 · K5 T22 · il coder si è fermato: il prototipo approvato (scena 7a, «poi scrivilo nell'ispettore») conta su un campo che cambia le parole di un testo, e nel client non c'è (la `textarea` di `properties.ts` è la Descrizione del documento; nessuno scrive `op: "text"` su un testo libero). T22 si allarga a quel campo (`fields.ts`, `properties.ts`, `panel.ts`), che non c'è per un testo che `op: "text"` non riscrive senza perdite · Perché: è ciò che l'utente ha approvato nel prototipo, e senza il campo lo strumento scriverebbe sempre «Testo»; un editor sul foglio sarebbe un disegno nuovo da far vedere.
+- 2026-11-13 · K5 T21 · accettati i file toccati fuori da Tocca (`lazy.ts`, `panels/standing.ts`, la skin `sheets.css` con i rigenerati): senza `lazy.ts` il chip non arrivava alla shell, e il taglio dei nomi lunghi con l'elenco che scorre serve anche al chip del rich. Il `detail` delle perdite resta in italiano anche con l'interfaccia in inglese: si nota in T30 come limite noto, non si traduce ora · Perché: il motore scrive il `detail` come testo; tradurlo vuol dire un codice per ogni motivo nel contratto, una scelta più grande del chip.
+- 2026-11-13 · K5 T34 · il commit sul disegno di 1 MiB scende da p95 99 ms a 9,3–9,9 ms senza toccare VectorCraft: la differenza non scrive più in JSON il sottoalbero di un livello e prende per uguali i rami condivisi (`Arc::ptr_eq`); il ritorno della sessione alla copia (0,2 ms) resta com'è. Dei 9 ms rimasti, ~7,5 crescono col disegno dentro VectorCraft (eventi del commit 3,6 ms, `hit_test` della Selezione 4 ms): non si toccano ora · Perché: il tetto di A8 (50 ms) è passato con margine; una patch a `vendor/vectorcraft` per pochi millisecondi non vale il costo.
+- 2026-11-13 · K5 T33 · accettata la strada della mappa: i livelli che il lettore SVG del motore crea da gruppi di Fub tornano gruppi in `apertura.rs`, e il motore li disegna uguale. Il caso visto dal coder (un gruppo di un figlio solo riceve la `transform` sul figlio, il client sul gruppo) diventa T35, dopo T34; T30 ne dipende · Perché: il motore deve scrivere il testo che scrive oggi il client, non solo disegnare lo stesso, e la regola «un figlio solo» non sa che cosa l'utente ha scelto.
+- 2026-11-12 · K5 T20 · il cancello passa (32 file su 32) e ne nascono due task: T33 (un gruppo-livello di Inkscape figlio della radice è un livello nel motore e non si sposta, mentre oggi il client lo sposta) e T34 (il commit su un disegno di 1 MiB costa 82 ms di mediana e 99 ms al 95° percentile, contro i 50 di A8); T30 dipende da tutti e due. Il motore continua a prendere dal sistema i caratteri che le facce di Fub non hanno (greco, cirillico, CJK, emoji), anche se `FontDb::set_system_fallback(false)` lo spegnerebbe senza patch: la WebView disegna quei caratteri con le facce del sistema, e il motore deve colpire il testo che l'utente vede; la misura scrive che il risultato su quei testi dipende dalla macchina · Perché: chi usa Fub non deve perdere un gesto di oggi né sentire un disegno grande più lento, e un colpo su un testo deve seguire ciò che si vede.
+- 2026-11-12 · K5 T32 · il contorno delle linee a spessore variabile è una traduzione in Rust del calcolo del client (`src/profilo/`, ~3 700 righe), non le operazioni sui tracciati di VectorCraft: il risultato deve essere lo stesso `d` che scrive il client, e un algoritmo diverso darebbe un contorno diverso. Rimandato il coder una volta perché togliesse un lettore del `d` copiato da `fub-scene`: ora `fub-scene` rende pubblici `parse_path` e il suo segmento (`PathSegment`), fuori dal `Tocca` di T32 per decisione dell'orchestratore · Perché: due lettori dello stesso `d` possono divergere in silenzio, e uno basta.
+- 2026-11-12 · K5 T24 · il `Tocca` di T24 si allarga alla skin della casa (`theme/scrittoio/skin/settings.css`, i ganci in `anatomia/` e i derivati rigenerati): il prototipo approvato mette lì la classe `.components-row--found` della riga segnata · Perché: il codice del client non scrive stili, e la riga segnata del prototipo si vede solo con la sua regola nella skin.
+- 2026-11-12 · K5 T17 · accettati i tre file fuori dal `Tocca` di T17: la riga `vectorcraft-text` del workspace (`default-features = false`, già nel grafo: nessuna libreria nuova), `VECTORCRAFT_OWNERS` del test delle dipendenze e il paragrafo di `scene-gestures.md`; le facce di Fub entrano nella `FontDb::global()` del motore invece che in una nuova, perché è quella che il motore usa in tutto il suo codice. Che la `FontDb` catalogi anche i caratteri del sistema quando una famiglia manca resta una nota in T20 · Perché: una seconda `FontDb` non la vedrebbe nessuno, e spegnere il catalogo del sistema chiede una patch nella copia di VectorCraft, da provare prima col cancello.
+- 2026-11-12 · K5 T29 · accettati `motore_disegno_spento` con una funzione che legge le chiavi (serve al `Workspace` di `serves` e alle impostazioni del vault dell'host) e la lettura delle impostazioni solo quando un'istanza manca; l'orchestratore aggiunge i testi IT/EN delle cinque chiavi `host.drawing.*` nel catalogo di `settings.rs`, che T19 aveva lasciato senza. Le istanze restano aperte se le impostazioni cambiano fuori da `apply_components` (un profilo, il file cambiato a mano): non si sorvegliano le impostazioni per il disegno, e la pagina Componenti, la CLI e l'MCP passano tutti da `apply_components` · Perché: un errore deve arrivare con una frase, non con la sua chiave, e leggere le impostazioni a ogni gesto costerebbe su ogni tratto.
+- 2026-11-12 · K5 T28 · tenuti i due file fuori dal `Tocca` di T28: le chiavi `draw.reason.engine_off` e `draw.reason.engine_stopped` in `strings/tools.ts` (servono a dire perché il motore manca) e `colori.test.ts` (`motoreDa` prende ora una funzione che apre, per poter riaprire un'istanza nuova). Accettati anche `spento()`, `quandoChiusa()` e la riapertura col `session.id`: il motore spento lo dice subito, una `DocumentSession` chiusa non si riapre, un file rinominato riapre col nome nuovo · Perché: senza, il motore riacceso riaprirebbe col nome vecchio o su un documento già chiuso.
+- 2026-11-12 · K5 T18 · lo spessore delle linee a spessore variabile resta `unsupported` in T18 (il client riscala il profilo e ricalcola il contorno pieno con `widthTo`, un calcolo che in Rust non c'è) e diventa il task nuovo T32, da cui dipendono T20 e T30; accettati i cambi di T18 in `src/differenza.rs` e `src/motore.rs` (un tratto o un riempimento nuovi, il `fill` dei testi, la punta delle frecce, i tratteggi rimisurati) · Perché: col motore acceso il campo dello spessore oggi si spegne su quelle linee, e chi usa Fub non deve perdere un comando che senza motore funziona.
+- 2026-11-12 · K5 T15 · chiuso con la selezione che usa lo strumento del motore solo dove dà il risultato di Fub, e la matrice di Fub negli altri casi (nessun gesto `unsupported`); rimandato al coder una volta perché rifacesse Ctrl/⌘ dentro i gruppi e la soglia di trascinamento ricordata, che oggi Fub ha. La cornice girata tenuta fra due gesti su più oggetti la sa solo il client (`ctx.kept`): diventa il task nuovo T31 (un campo additivo in `DrawingGesture`, il client che lo manda, la selezione che lo usa), e T30 ne dipende · Perché: chi usa Fub non deve perdere un gesto che oggi funziona, e il contratto cambia solo con un campo opzionale.
+- 2026-11-12 · K5 T15 · `gesti/mod.rs` si allarga ancora di poco: il `Banco` tiene anche la pressione di Fub (il Down prima di `Strumento::evento`) e la passa a due metodi nuovi del tratto, con un'implementazione di base che le forme non riscrivono. Serve alla selezione per il riquadro (Fub sceglie solo ciò che sta dentro per intero, il motore ciò che il riquadro tocca) e per le maniglie (quella di Fub sta 4 px fuori dalla cornice e si prende entro 8 px, quella del motore sulla cornice entro 5 px). Una cornice inclinata da ridimensionare non si rifiuta con `unsupported`: il client, su `unsupported`, dice solo «rifiutato» senza ricadere sugli strumenti semplici, quindi si fa con la regola di Fub in `selezione.rs` · Perché: chi usa Fub non deve vedere la selezione cambiare regole né perdere un gesto che oggi funziona.
+- 2026-11-12 · K5 T14 · tenuti i due cambi di T14 fuori dal suo `Tocca`: in `src/gesti/mod.rs` il braccio delle forme in `strumento()` e l'aggancio `Strumento::evento(e, inizio, cx)` (le regole di Fub su griglia, Maiusc, Alt e Ctrl/⌘ prima dello strumento del motore, che le leggerebbe a modo suo); in `src/apertura.rs` un livello vuoto di Fub diventa un livello vuoto del motore (il lettore SVG del motore toglie i gruppi vuoti, e un disegno nuovo comincia con uno). T15 e T17 aggiungono il loro braccio in `strumento()` e impostano le loro tolleranze magnetiche (le forme le mettono a zero nelle prefs della sessione, che è condivisa) · Perché: senza, quattro vettori delle forme fallivano e in un disegno nuovo nessuna forma si scriveva; T15 ha bisogno dello stesso aggancio per la griglia di `snappedDelta`.
+- 2026-11-12 · K5 T13 · riaccesi i disegni, il Motore del disegno resta spento se il risolutore di K2 lo aveva spento con loro: il risolutore non ricorda lo stato di prima, e cambiarne le regole è fuori da K5. Il piano diceva «torna com'era prima»; vale il codice, scritto nel test di `fub-host/tests/componenti.rs`. Accettati anche `fub-disegno` per percorso in `fub-host` e i test della lavagna sotto la feature `lavagna`. Il caso di `fub.draw` in `plugins.disabled` va a T29 (nota nel piano) · Perché: una regola sola per le righe che ne richiedono un'altra, e il motore si riaccende con un clic nella pagina Componenti.
+- 2026-11-12 · K5 T11 · i caratteri non arrivano ancora alla `FontDb` del motore: costruirla dai `Caratteri` di T7 vuole `vectorcraft-text` come dipendenza diretta di `fub-disegno` (`Cargo.toml` e `Cargo.lock`, fuori dal `Tocca` di T11). Lo fa T17, a cui si aggiungono `crates/fub-disegno/Cargo.toml`, `Cargo.lock` e la sola `FontDb` in `src/motore.rs`; fino ad allora il motore usa i suoi caratteri di ripiego. Altre differenze di T11 accettate: `sincronizza`, `gesto` e `comando` rendono `Result<…, PluginError>`; l'import toglie le etichette e segna i livelli con `data-vc-layer`; un import rifiutato apre una copia vuota in sola lettura; nessun `.tsv` di differenze ammesse ancora (il lettore c'è, i file li scrivono T14–T17) · Perché: i caratteri servono solo al testo, che è T17, e la crate è già nel grafo (nessuna libreria nuova).
+- 2026-11-12 · K5 T27 · `hayro` passa da 0.5 a 0.6 in `fub-features` (rasterizzatore del PDF redatto e annotato): legge JPEG 2000 e fax e disegna con le stesse versioni del motore, e toglie quattro doppie; il motivo della 0.5 (un compilatore più nuovo) non vale con Rust 1.95; feature come prima (`embed-fonts` sì, `embed-cmaps` no). Provato uguale byte per byte su un PDF redatto semplice; su PDF complessi (JPEG 2000, JBIG2) i pixel possono cambiare. Il tetto `librerie_doppie` scende a 55 · Perché: D-3 (a), «allineo dove posso», e un rasterizzatore in comune col motore costa meno da tenere.
+- 2026-11-09 · K5 T9 · `cargo fmt --all` segue le dipendenze a percorso e
+  con `fub-disegno` nel workspace controlla anche le copie di VectorCraft e
+  craft-libs: il `rustfmt.toml` dell'upstream entra fra i file gestiti
+  (come per WordCraft e GridCraft) e le patch si riformattano senza
+  cambiare effetto · scelta dell'orchestratore fra questo e togliere
+  `vendor/` dal controllo di fmt, che sarebbe diverso per motore.
+- 2026-11-09 · K5 T9 · la licenza IJG di `jpeg-encoder` entra con
+  un'eccezione stretta in `deny.toml` (solo quel crate) e la frase di
+  ringraziamento in `THIRD_PARTY_NOTICES.md`; l'IJG non entra nell'elenco
+  generale · l'utente, fra A (eccezione stretta), B (IJG sempre ammessa) e
+  C (l'encoder di `image`): «A». L'utente vuole che le immagini restino di
+  chi le crea e nessuna responsabilità per i file rovinati: l'IJG non tocca
+  né l'una né l'altra (esclude anche lei ogni garanzia).
 - 2026-11-12 · Scrittoio 2 T26 · S3 restava rosso anche con l'ombra senza sfocatura (1235–2332 ms in tre corse): le corse CI con la cronologia dei fotogrammi (rami `prova/s3-*`) mostrano che il buco cade prima del primo `pointerdown`, nel primo disegno delle 300 schede (lavagna ferma a 1798 ms su main, 2582–2636 sul ramo), e che lo spostamento costa uguale (130–210 ms a fotogramma). Togliere `translateZ(0)` da `.pane::before` non accorcia l'apertura (2718 ms) e porta S1 a 537 ms: lo strato resta. Il difetto è di S3, che misurava dalla prima scheda: corretto in main con la PR #342 (`S3.apertura` solo referto). Baseline dell'ombra nuova dal runner (c965ede72, run 43160817254): 137 scene chiare, cambia solo l'anello dell'ombra. Il merge finale lo decide l'orchestratore, non più l'utente · parole dell'utente: «ma non eravamo d'accordo sul fatto che i merge li decidevi tu?». Delle cinque domande di gusto resta aperta solo il vassoio della barra a una riga e della colonna (vedi 2026-11-04).
 - 2026-11-11 · Scrittoio 2 T26 · la WebView del runner era rossa due volte su S3 (massimo fra fotogrammi 1754 e 1806 ms, soglia 1600; main 471): rilanciata una volta, poi indagata; la causa è la `box-shadow` sfocata a tre strati del foglio (T27), che WebKit senza GPU ridipinge a ogni passo della camera (~20 ms a fotogramma); ogni strato sfocato diventa una pila di ombre nette (`sharpLayers` in `recipe.ts`), stessa forma entro pochi livelli di colore; misura con la WebKitGTK di Playwright: max 74→49 ms (main 58) · Perché: l'utente vuole l'app «estremamente fluida» e il foglio con l'ombra approvata si tiene uguale a occhio.
 - 2026-11-05 · K2 · Il componente «File delle app Craft» (`fub.craft`, N7,
@@ -1839,6 +1873,613 @@ La più recente in cima: data · piano · decisione · perché.
   limite suo (resta quello di 16 MiB del file), come in Rust; `-0` si legge
   `0`, come un intero Rust.
 
+- T33 integrata (fino a 1e104305). Differenze accettate: un RAW con più di
+  64 intervalli distinti è TooLarge; le chiavi JSON doppie contano una per
+  una; Contents.json sostituito dai link; la pulizia delle cartelle private
+  lasciate (prefisso fub-craft-render-, di questo utente, 0700, ferme da più
+  di 1 h, mai un link) gira al montaggio e solo su unix, perché senza
+  permessi unix non si può dire di chi è una cartella; la CLI delle
+  anteprime muore con Fub solo su Linux (PR_SET_PDEATHSIG, legato al thread
+  che l'avvia: lo stesso thread la aspetta fino alla fine, le app staccate
+  non lo hanno); waitid NOWAIT esclude OpenBSD, che Fub non costruisce.
+- CI completa su 1ba7a3c6 (run 41779586263), le cause rosse: (1) Windows,
+  craft::channel a_closed_port_is_unreachable_at_once dava TimedOut perché
+  Windows ritenta circa 2 s una porta chiusa invece di rifiutare; deciso che
+  sul loopback una connessione che non riesce è sempre Unreachable (TimedOut
+  solo per un'app che ha accettato e tace), il test su Windows ammette
+  2×CONNECT_TIME+1 s, Linux e macOS restano «subito»; pagina permissions-
+  and-security aggiornata. (2) Windows, session::snapshot_command_tests con
+  os error 32 (file in uso) sullo spostamento della radice: codice che N7
+  non tocca, trattato come instabile di Windows, da riguardare se torna. (3)
+  banchi del movimento, rich-review-list 1 prova su 5 (37 px): verde nella
+  run precedente, instabile. (4) scene.test, banco visivo e a11y: attesi, li
+  chiudono T34 e le baseline di T32.
+- N7 T32, la revisione riga per riga del client (un revisore in sola lettura
+  sul diff di apps/client/src): otto difetti, verificati da me i due più
+  seri leggendo il codice. (1) Il clic su una figura passa da
+  `openWikilink`, che per un bersaglio che non risolve crea una nota: un
+  clic poteva scrivere nel vault. (2) Fra `reserveLend` e `commit` del
+  prestito la scheda resta scrivibile. Gli altri: il fuoco perso nella
+  domanda sulle anteprime, un `job_done` vecchio preso per attuale, il
+  biglietto condiviso fra render e load in `surface.ts`, `asking` non pulito
+  nelle miniature, i `row.close()` che si accumulano in `photo-data.ts`.
+  Diventano T34 con i tre difetti del visore PDF; la causa del percorso Tab
+  interrotto è la pagina PDF che scorre e che Chromium rende raggiungibile
+  con `tabIndex` -1. Il visore PDF è codice di main: si corregge qui perché
+  la scena nuova di N7 lo prova e il banco lo vuole verde, non per allargare
+  il piano. Lasciati fuori, perché minori e senza un caso che fallisca:
+  `figure.ts` che ignora un annuncio vuoto, e l'errore tradotto di `open-
+  with.ts` (`new Error(t("lend.save_failed"))`) che nessuno distingue per
+  tipo. Le lingue diverse da IT/EN del catalogo non le ha guardate il
+  revisore: il test del catalogo le conta.
+- N7 T32, la CI completa su ceee30de (run 41776318335): rossi quattro
+  lavori, ognuno con la sua causa. (1) Windows: `crates/fub-
+  cli/tests/mcp.rs` (T-MCP, 85bbb4d1) usava
+  `std::os::unix::fs::PermissionsExt` senza cfg; corretto dall'orchestratore
+  come parte di T32 (solo un test, nessun comportamento): la sezione Craft
+  del file sta in un modulo `#[cfg(unix)]`, come i test Craft di `fub-host`
+  (`craft_cli.rs`, `craft_open_with.rs` hanno `#![cfg(all(unix, feature =
+  "craft"))]`), perché le app finte sono script `/bin/sh`. (2) contrasto e
+  tastiera, in tutte e due le luci: la scena nuova `pdf-domanda` è la prima
+  che apre il visore PDF (`editors/media/pdf-view.ts`, già in main e non
+  toccato da N7) e ne trova tre difetti: `.media-pdf-page` scorre ma non si
+  raggiunge con Tab, la casella di ricerca non ha nome accessibile, e il
+  percorso Tab finisce su nessun elemento. Diventano un task (T34) e non si
+  tolgono dalla scena: nascondere la scena sarebbe indebolire un test. (3)
+  banco visivo: 36 foto senza baseline (le scene nuove di T14–T31), nessuna
+  differenza sulle 240 che c'erano; le baseline si prendono dal runner
+  sull'ultimo giro, dopo T33 e T34, guardate una per una contro il
+  prototipo. (4) client: solo `bench/scene.test` «ci sono tutte», che segue
+  il (3). macOS e Ubuntu verdi.
+- 2026-11-04 · N7 · La revisione Rust di T32 (un revisore in sola lettura)
+  ha trovato difetti medi e bassi, nessuno alto: il RAW ostile senza budget
+  di lavoro, il JSON intero in `Value`, la coda ZIP, l'XMP letto fino a 64
+  MiB e poi scartato, l'errore non tipizzato di `craft_render`, «Apri con»
+  su una cartella, `stop_group` dopo la raccolta, la CLI orfana se Fub esce
+  di colpo, e `craft.preview` che calcola la revisione di un file grande col
+  turno dello scrittore preso. Li correggo tutti in un task nuovo, T33,
+  senza cambiare né ciò che si vede né il contratto. Resta fuori il turno
+  dei comandi in sola lettura in `session.rs`: è di tutto l'host (vale anche
+  su `main` per ogni comando di un provider), va in un'issue e nel
+  resoconto. Il Job Object di Windows resta fuori perché vuole `windows-
+  sys`.
+- 2026-11-04 · N7 · T26 è entrato con questi scarti presi da me: una nota
+  con un'icona scelta da chi scrive tiene l'icona e non prende la miniatura
+  (`data-own-icon`); le miniature compaiono solo se `craftServed()`, cioè
+  col componente acceso; la miniatura resta in memoria finché la riga è
+  nell'albero (niente richiesta di nuovo a ogni ridisegno); l'osservatore
+  guarda 64 px oltre la vista; il decoder base64 è locale in `state/tree-
+  thumbnails.ts` perché quello di `figure.ts` è privato; tocca anche
+  `bench/fake-ipc.ts` (`?albero=`), `bench/raw-fixture.ts` (un `export`) e i
+  derivati del tema con l'hook `tree-thumb`. Un vault con soli XMP nascosti
+  non mostra il richiamo del vault vuoto.
+- 2026-11-04 · N7 · T31 è entrato con quattro scarti dal piano, presi da me:
+  tocca anche `ui/link-preview.ts` e `markdown/mount.ts`
+  (`hydrateVaultMedia` riceve un sesto parametro `open`), perché la figura
+  di un PDF o di un documento nella nota passa da lì; `craftServed()` in
+  `state/craft-previews.ts` chiede `craft.preview` solo se il componente lo
+  serve, altrimenti l'apertura di un PDF senza componente rompeva le
+  annotazioni (annotations.e2e); la scena del prestito del banco usa un
+  `.docx` invece del PDF; `craft-subjects.test.ts` gira in node, non nel
+  DOM. `noticeLinesOf` passa da `action` ad `actions` (lista di uno per la
+  riga del prestito di T17). T26 parte sulla base 977dc88b con le miniature
+  da 16 px del prototipo approvato, quindi senza `--tree-thumb` né la regola
+  da 24 px.
+- N7 T28 (1d0f8949, 6660e5f4): un RAW va al profilo `media-raw` della
+  famiglia `viewer` (il registro ha un solo legame per i byte), che monta la
+  superficie di `editors/craft` col profilo `raw`; `selectSourceProfile` lo
+  sceglie solo se `craft.preview` è nell'elenco dei comandi, altrimenti il
+  RAW resta senza vista. Alla revisione l'orchestratore ha trovato che
+  l'elenco arriva dopo l'apertura del vault, quindi una scheda RAW
+  ripristinata all'avvio restava sulla via del testo: la correzione
+  (6660e5f4) aggiunge `Pane.bytes` e `commandsChanged` in `state/document-
+  controller.ts`, che su `on("commands")` rimonta senza gesto solo i
+  riquadri il cui legame coi byte è cambiato (e riprova quelli rimasti senza
+  tab mostrata), con `craft-raw.e2e.test.ts` che fallisce senza.
+  `state/craft-photos.ts` e `editors/craft/index.ts` toccati fuori dai Tocca
+  (identità della superficie, riga «Foto RAW · CR3 · peso»). Con il JPEG la
+  scheda non chiama mai `craftRender`. Da guardare in T32: in `crates/fub-
+  host/src/craft/preview.rs`, senza prestito, `hosted_preview` → `raw::read`
+  dà absent e `offer()` propone LightCraft anche per un RAW col JPEG (il job
+  ricontrolla e la CLI non parte); la linguetta mostra il nome senza la
+  sigla CR3, che sta nell'intestazione.
+- N7 T23 (6a50629f): il gesto vive in `gestureBirths` per riquadro, solo per
+  la durata dell'apertura che fa nascere la scheda; passano il gesto
+  l'albero (clic, Invio, «Apri»), la ricerca, il passaggio veloce, i link e
+  le figure nelle note (anche nella finestra staccata). Restano senza gesto,
+  per scelta, le riaperture all'avvio, il ripristino della sessione, le
+  aperture «accanto», le viste, il grafo, le note create o duplicate e il
+  tocco su mobile (il piano non lo elenca: al telefono una scheda Craft
+  mostra il pulsante e non fa partire l'app da sola; da riprendere se
+  l'utente lo vuole). «No» chiama forgetConsent; l'errore di salvataggio del
+  consenso usa la classe esistente `.setting-error`; i link alle
+  impostazioni compaiono solo se la shell passa onOpenSettings
+  (`openSettingsAt` in panels/settings.ts). Le 12 scene craft-* aspettano le
+  baseline dal runner (T32).
+- N7 T29 integrata (e31e9b9b). Decisioni dell'orchestratore, senza contratti
+  toccati: la copia si chiama in.<estensione così come è scritta> solo se
+  PreviewSubject::of_extension la riconosce come del soggetto (input_name al
+  posto di input_extension), senza regole nuove; read_png diventa read_image
+  (PNG o JPEG dalla firma), MAX_PNG_BYTES diventa MAX_IMAGE_BYTES,
+  Failure::BadPng diventa BadImage, la chiave render.bad_png resta con il
+  testo «PNG o JPEG» nel catalogo del bundle; il file d'uscita resta out.png
+  anche per un JPEG. Non verificati su app vere: gli argomenti delle tre CLI
+  (dal passo 12c e dalle misure large) e l'orientamento di un JPEG scritto
+  dalla CLI (preso come 1). La via senza lease di preview.rs offrirebbe
+  LightCraft anche per un RAW col JPEG, ma il job ricontrolla con la lease e
+  la CLI non parte: da guardare in T28 o T32.
+- N7 T17 integrata (cecb7d85..f9853a5d). Decisioni dell'orchestratore, senza
+  contratti toccati: lend.ts esporta anche la prenotazione (reserveLend, che
+  segue la rinomina e muore con il vault, così una risposta vecchia di
+  openWith non presta), la porta LendGate che il controller registra e
+  mountLends; open-with.ts avvolge l'host in lendingHost senza toccare
+  external-editors.ts. Si presta solo un documento con una scheda aperta che
+  non mostra soli byte (immagini, PDF, media no: lì c'è il solo openWith).
+  Il visore media ora riceve openExternal = handToSystem(id, true), così la
+  voce «Apri con» di T16 compare anche lì. Toccati in più panels/open-
+  with.test.ts e docs/product/editor-menus.md. Resta, fuori da N7: durante
+  il prestito (come già con una cancellazione in sospeso) il bollino della
+  barra dei documenti dice «Si scrive» e la barra Home sembra attiva, perché
+  lo stato del bollino guarda il formato e non il sola lettura della
+  sessione (editors/rich/standing.ts); da segnalare all'utente.
+- T16 integrata (b8a20bf1). Scostamenti dal piano, decisi dall'orchestratore
+  perché non toccano contratti: le voci del sottomenu usano
+  `description`/`disabled` già esistenti in SurfaceMenuItem invece di
+  `hint`/`enabled:false`; SurfaceMenuItem ha un campo additivo `load?` per
+  caricare le scelte quando il sottomenu si apre (solo TypeScript, nessun
+  IPC). Nel visore dei media la voce «Apri con» c'è ma in produzione non
+  compare perché document-controller non passa `openExternal`: il
+  collegamento passa a T17, che tocca lo stesso controller.
+- 2026-11-03 · n7-file-craft · L'aiuto di «fub help mcp» elenca fub_preview,
+  fub_external_editors e fub_open_with già dopo T13 (non in T16, come diceva
+  la voce sotto) · T16 non tocca fub-cli; aiuto e strumenti devono dire la
+  stessa cosa.
+- 2026-11-03 · n7-file-craft · T13: sopra gli 8 MiB fub_preview risponde
+  missing:"absent" invece di troncare, e l'aiuto di cli.rs non elenca ancora
+  gli strumenti nuovi · un'anteprima tagliata sembrerebbe vera; l'aiuto lo
+  aggiorna T16 insieme alla pagina degli strumenti.
+- 2026-11-03 · n7-file-craft · T12: fub-app prende CraftPreview e
+  PreviewSize da fub_host::craft_render (riesportate sotto la feature craft)
+  e non dipende da fub-format-craft · la colla IPC non deve conoscere i
+  crate dei formati (strati di dependency_invariant);
+  docs/architecture/overview.md torna com'era.
+- N7 T30 (b8131b11, dal coder 22ae7bf3): un `.docx` o un `.odt` dà la
+  miniatura che porta dentro, letta a pezzi (la coda dello ZIP,
+  `_rels/.rels` fino a 64 KiB, la voce della miniatura fino a 8 MiB), senza
+  revisione e senza cache; un PDF, un `.rtf` o un `.doc` restano `absent`.
+  Differenze dal piano: errori `OfficeError { NotZip, TooLarge,
+  BadRelationships }`; conta solo la prima relazione miniatura; rifiutati
+  `TargetMode=External` e i bersagli con segmenti vuoti, `.`, `..` o `\\`;
+  una miniatura oltre 8 MiB o in EMF/WMF è `absent`, relazioni rotte o
+  troppo grandi `unreadable`, come un docx cifrato; il tipo di pacchetto lo
+  dicono le voci e non l'estensione; l'apertura dello ZIP ripete la sequenza
+  di `zip_preview` perché `container.rs` è cambiato solo nella visibilità
+  (anche `zip_tail.rs` e `craft_files.rs`, fuori dal Tocca); nuova regola di
+  case-fold ASCII `office.rs::is_package_extension` in
+  `a_named_rule_is_declared.rs`; sulla via dell'host senza lease i documenti
+  restano `absent`, come i RAW. Rischi:
+  `mounting_external_path_does_not_take_workspace_lock` (3 s) e
+  `crossed_moves_take_the_locks_in_one_order` (30 s) sono caduti sotto
+  carico e possono cadere in CI; nessuna prova con un docx salvato da Word
+  vero, solo pacchetti fatti nei test.
+- N7 T11 (9790d2ef): le anteprime con la CLI dopo un gesto, col biglietto.
+  Differenze dal piano: `Host::craft_render` accoda con `Host::spawn_job`
+  (l'esito arriva con `JobDone`) ed è dietro `#[cfg(feature = "craft")]`,
+  perché `CraftPreview` e `PreviewSize` vivono in `fub-format-craft`, che è
+  facoltativo: senza la feature il metodo non c'è (il piano lo voleva sempre
+  compilato con `host.craft_render.off`); T12 e T23 lo chiamano sotto la
+  stessa feature. I biglietti usati, scaduti, di un altro doc o misura, di
+  un vault chiuso e il consenso ritirato si provano negli unit test di
+  `craft/render.rs` (il biglietto non esce mai); i biglietti di un vault
+  chiuso cadono alla riapertura e quando il lettore risulta chiuso; un
+  errore di copia o I/O non segna «già provato»; l'offerta `render` vuole la
+  CLI trovata e la revisione non già fallita. L'annullamento passa dal
+  `JobHost` che smette di servire (il consenso letto dal job non risulta più
+  `on`). Rischi: i test di tempo scaduto e annullamento allungano
+  `craft_cli` di circa 25 s; `craft::open_with::tests::channel::a_single_ins
+  tance_app_is_forwarded_on_its_systems` è caduto sotto carico nel check del
+  coder (non toccato, verde da solo); `craft::launch::tests` cade in
+  parallelo e passa con un thread solo, dalla base. Niente prova con una CLI
+  vera.
+- N7 T25 (a7b9223c): i dati dell'XMP di LightCraft sotto la foto. Differenze
+  dal piano: acceso o spento si legge dal kernel (`craft.photo` fra i
+  comandi), bootstrap passa sempre `photoData`; tre file fuori da «Tocca»
+  (desktop-shell.ts per mountCraftPhotos, bench/fake-ipc.ts con
+  `?photo=xmp|senza`, bench/photo-fixture.ts); `LABEL_COLORS` e
+  `COLOR_NAMES` esportati da xmp-view.ts; la domanda parte dopo che la foto
+  è disegnata (o dopo la frase d'errore di TIFF/HEIC); craft-photos ascolta
+  anche gli eventi `entry_*` (una foto è una risorsa); il fake host elenca
+  `craft.preview` e `craft.photo` col componente acceso; il voto -1 mostra
+  «Scartata». Rischi: i RAW non contano come foto (`isPhotoDoc`), T28 deve
+  allargarlo; il fake host copia la regola dei candidati XMP; le baseline
+  delle 2 scene nuove vengono dal runner; niente prova sull'host vero. Nel
+  check, block-id.test (seme fisso) è caduto sotto carico: il campo si
+  calcola con l'albero a metà e `ensureSyntaxTree` dopo non lo ricalcola;
+  verde da solo, non è di T25.
+- 2026-11-03 · N7 · T22 (fd595ce4, cb2bd25e): l'orchestratore ha permesso al
+  coder di toccare `craft/preview.rs` (`limit_of`, `over_limit(limit)`,
+  `fill(limit)`), perché il tetto per formato vive lì e nessun altro task lo
+  possiede ora. `embedded_preview_from` restituisce `Embedded`; il nuovo
+  `zip_tail.rs` legge la coda dello ZIP con un budget (`Budgeted`). La
+  versione di FigCraft si legge da `document.json` con un tetto di 1 MiB;
+  uno ZIP sulla via dell'host senza lease ha un tetto di 64 MiB. Toccata una
+  riga di `product/craft-files.md`. La prova da 1 GiB dura circa 33 s;
+  `Stale` è provato solo da un test unitario. L'orchestratore ha rimesso a
+  misura un commento troppo lungo (cb2bd25e). Check d'integrazione
+  `--rapido` verde (21 passi).
+- T27 (0284ab88, d8562abf): il coder si è fermato sul filo in
+  `craft/preview.rs` (in «Non toccare» per non scontrarsi con T19 e T24, e
+  nessun task lo possedeva). L'orchestratore l'ha applicato (una decina di
+  righe in `ranged_preview`: un RAW passa da `raw::read_from`, `Stale`
+  riprova, ogni altro errore torna alla via dell'host), perché nessun task
+  in corso tocca quel file. Il test vecchio
+  `a_raw_photo_is_a_subject_from_its_extension` aspettava `absent` per un
+  `.CR3` di 9 byte che non è un RAW: ora è `unreadable`, come vuole il piano
+  (un `.CR3` che non è un RAW). Differenze dal piano: `JpegRange` ha anche
+  `width` e `height`; costanti in più `MAX_BOXES` (10 000) e
+  `MAX_CANDIDATES` (64); un JPEG senza perdita (SOF C3, C7, CB, CF) si
+  scarta perché sono dati del sensore, un JPEG progressivo si tiene;
+  l'orientamento di un RAF viene dall'EXIF del suo JPEG; un ORF dà `absent`
+  (le sue anteprime stanno nella MakerNote, che non si legge); il test delle
+  «70 000 voci» usa 65 535 e 1001 perché il conteggio è un u16; il cammino
+  dei segmenti JPEG ricalca `jpeg::size` perché `jpeg.rs` non si tocca.
+  Rischio: provato solo su file costruiti nei test, non su RAW di fotocamere
+  vere (resta per T32 e per le prove a mano).
+- T24 (a62ce774): craft.photo ha un suo elenco paginato della cartella,
+  perché `Folder` sta in preview.rs, che è di T27 (quando T27 lo tocca, le
+  due letture si possono unire). Una foto senza XMP dà `photo.missing`
+  (NotFound); le chiavi del catalogo sono `cmd.photo` e `cmd.photo.doc`. Un
+  XMP troppo grande conta come rotto e una lettura fallita passa al
+  candidato dopo; un documento `.xmp` si riconosce da `CraftApp::Xmp` e ha
+  modifiche vuote. Rischio accettato e provato da un test: `a.b.jpg` prende
+  `a.b.xmp` come secondo candidato, mentre l'anteprima di quell'XMP punta ad
+  «a.b» (asimmetria scritta in `docs/reference/xmp-sidecars.md`).
+- 2026-11-03 · N7 · T19 integrato (3bda61f1). `craft.cli-previews` è una
+  scelta ask/on/off di macchina e non `program_writable` (un bundle riceve
+  `PermissionDenied`, un vault importato non la cambia); i valori vecchi
+  (true, false, "forse") valgono `ask` per la regola di risoluzione del
+  kernel, senza migrazione, e il valore salvato resta com'è.
+  `consent::current` e `consent::max_bytes` per T11 e T22. Allargato a `fub-
+  cli/src/login.rs`: `config --set` prende la specie dallo schema (prima
+  `on` diventava un interruttore e la scelta veniva rifiutata), con un test
+  unitario e uno e2e. Restano: le 2 baseline della scena `settings-external-
+  apps` (chiara e scura) vanno prese dal runner in T32, e fino ad allora
+  `bench/scene.test.ts` resta rosso in locale e in CI; `cargo test -p fub-
+  host --no-default-features` non compila già alla base (import di
+  fub_features), da guardare in T32; `fub-wasm-
+  host::the_instance_and_the_turn::an_index_feed_and_a_job…` è caduto dopo
+  353 s sotto il carico di tre build ed è verde da solo.
+- 2026-11-03 · N7 · T21 integrato (921de8db il lettore nel kernel, 30038ed9
+  le anteprime a pezzi, 14a0947d lo scrittore di fuori). Il kernel ha
+  `ResourceReader` (`Workspace::resource_reader()`): apre e legge le lease
+  fuori dal lucchetto del workspace, con un `AtomicBool` che `prepare_close`
+  spegne; fub-host lo passa ai comandi Craft con `Registrar::craft_reader()`
+  (pub(crate), solo con la feature `craft`). Differenze dal piano:
+  `mount.rs` non toccato; i percorsi delle lease rispondono `revision: null`
+  per RAW, PDF, documenti e file oltre il limite; senza lettore si ricade
+  sul percorso dell'host; il caso /etc/passwd tolto (la / iniziale si
+  toglie). Rischi: il lettore non passa dal Guard di `HostApi` (A14, come
+  `fub-asset:`): va ricordato nella revisione di T32; la ricaduta è provata
+  solo con MemoryHost; `ranged::revision` resta inutilizzato fino a T11.
+- 2026-11-03 · N7 · T10 integrato (279c1859): Started.channel è
+  Option<Arc<Channel>> e si usa fuori dal lucchetto del registro; gli errori
+  sono off=Unserved, unknown_editor e wrong_kind=BadArgs, not_installed e
+  missing=NotFound, launch_failed=Io; su macOS la pagina va dopo --args di
+  open; senza il programma flatpak l'errore è launch_failed; sul canale page
+  si ignora · InRunning non scatta con nessuna delle sette app (nessuna ha
+  un canale col token, D-2) ed è provato solo con un editor di prova nei
+  test unitari.
+- 2026-11-03 · N7 · T20 integrato (ecf05750 lo spostamento, 1c3ed3df la
+  forma 2): il parametro render resta dichiarato e invoke lo ignora, perché
+  senza la dichiarazione l'host rifiuterebbe una domanda della versione 1;
+  craft.preview non avvia mai l'app, quindi la shell non chiede più
+  l'anteprima da sola e il pulsante richiede soltanto; unreadable e failed
+  mostrano craft.no_preview finché le frasi non arrivano in catalog.ts; un
+  file che comincia col punto (.pdf) non ha soggetto · le foto T14/T15 sono
+  15 su 16 uguali, xmp-dark-1280 cambia 10 pixel dell'angolo arrotondato di
+  1–2 livelli, contenuto identico.
+- 2026-11-03 · N7 · T9 integrato (d331e67f): Framing è lo stesso tipo di
+  Protocol di T7, Channel::new restituisce io::Result perché il token può
+  mancare, Channel::for_control decide con un match esaustivo su Auth,
+  l'autenticazione è {method: auth, params: {token}} scritta solo in
+  auth_request · il formato non è documentato dalle app, così si cambia in
+  un punto solo; T10 prende il token da Channel::token.
+- 2026-11-03 · N7 · T8: l'avvio sta in `craft/launch.rs`; il gruppo di una
+  CLI si ferma con `rustix::process::kill_process_group` (la feature
+  `process` di rustix, che cap-primitives accendeva già: nessun crate nuovo
+  e Cargo.lock uguale), anche dopo un'uscita normale; il registro delle
+  uscite è `on_exit(pid, callback)` più `running(pid)`; un programma con un
+  percorso non assoluto è `NotFound`, mai una ricerca nel PATH; un'uscita da
+  segnale è `Failed(-segnale)`; il filtro `FUB_` su Windows non distingue il
+  maiuscolo (la sua voce in `a_named_rule_is_declared`). Restano scritti
+  nella pagina: su Windows il tempo ferma solo la CLI e non i suoi figli
+  (servirebbe un job object, cioè windows-sys, una dipendenza nuova), e una
+  CLI lasciata da Fub che esce arriva in fondo da sola · un programma
+  esterno non passa mai da una shell e non lascia processi dietro di sé.
+- 2026-11-03 · N7 · il prototipo delle anteprime (T18) è approvato così
+  com'è, con le sei scelte da decidere guardando come le propone (le due
+  risposte con lo stesso peso, le miniature da 16 px, la tendina, le parole
+  chiave su tre righe che poi scorrono, la riga dei dati senza etichette
+  scritte, il PDF con filo e ombra); D-10 (a), le cinque cose restano fuori
+  · parole dell'utente («si, mi piace» e «si»); T19, T23, T25, T26, T28 e
+  T31 possono partire quando tocca a loro.
+- 2026-11-02 · N7 · Le risposte dell'utente a D-1…D-9: D-1 (b), le anteprime
+  fatte dalle app spente finché chi usa Fub non le accende, con la domanda
+  la prima volta («Chiedi la prima volta», non un permesso dei plugin), e
+  un'app parte solo dal core, per la shell principale, dopo un gesto, col
+  biglietto del job (T11, T12, T19, T23); D-5 (d), i dati dell'XMP anche
+  sulla foto e un'impostazione per nascondere gli `.xmp` dall'albero
+  (T24–T26); D-7 (d), le miniature nell'albero dietro un'impostazione
+  spenta, che non avviano mai un'app (T26); D-8 (c), per l'anteprima Fub
+  legge solo il pezzo che serve con le lease del kernel, senza porte nuove
+  nell'ABI, e i 64 MiB restano per ciò che va letto intero come impostazione
+  (T21, T22); D-9 (c), N7 comprende i RAW, PdfCraft e WordCraft (T27–T31) e
+  si chiude con la CI completa e la revisione (T32); il contratto
+  `CraftPreview` passa alla versione 2 in un task solo (T20), con `revision`
+  vuota per ciò che si legge a pezzi; il prototipo
+  `PLAN-ui/craft-anteprime.html` va approvato prima dei task che si vedono
+  (T18); D-10 nuova, il piano segue la (a) · avviare un programma è
+  un'azione e la decide chi usa Fub, non un plugin, un agente o un file
+  riaperto; un file grande non deve costare la sua lettura intera, e una
+  forma che cambia una volta sola non lascia la shell e l'host a parlare due
+  lingue.
+- 2026-11-02 · N7 · T15: la figura di un file Craft in una nota e nella
+  finestrella al passaggio (`editors/craft/figure.ts`) chiede sempre
+  `render: false`: un test in ognuno dei tre file lo controlla. Un embed da
+  solo nel paragrafo ha già la didascalia K10, come i disegni, quindi la
+  figura non ne aggiunge una seconda e il riquadro senza anteprima non
+  ripete il nome; la didascalia propria compare solo nella finestrella e in
+  un embed dentro una riga. Il clic nella nota apre il file con
+  `openWikilink` (se non riesce, `preview.open_failed`); nella finestrella
+  la figura non ha clic, come il resto. Niente CSS nuovo: il riquadro usa
+  `.image-missing`, l'immagine le regole delle immagini della nota. Perché:
+  un'anteprima in una nota non deve mai avviare un'app.
+- 2026-11-02 · N7 · T14: la scheda dei file Craft e degli XMP è in sola
+  lettura (`editors/craft/`). Con l'anteprima si vede nella vista delle
+  immagini con la riga dei dati sotto; senza, la riga dei dati sta dentro il
+  riquadro (niente riga doppia), con lo stato e il pulsante «Crea
+  l'anteprima con …». L'anteprima con `render: true` si chiede da sola una
+  volta per montaggio della scheda (D-1, prima opzione). Lo store
+  `state/craft-previews.ts` si monta da `desktop-shell.ts` come
+  `mountLinkCards` (un file fuori dal «Tocca», una riga). Il componente
+  spento si riconosce dall'errore `unknown_command` e mostra «Nessuna
+  superficie disponibile». Le etichette XMP sono tradotte (Red → «Rossa»);
+  il tetto di 64 MiB e la regola dei tag sono quelli di `xmp.rs`. Restano
+  fuori: la Struttura mostra lo schema della nota precedente su un file
+  Craft, e il toast generico dei job scrive l'id grezzo `craft.render`.
+  Perché: un file Craft si guarda in Fub e si cambia nella sua app.
+- 2026-11-02 · N7 · T7: il registro delle sette app Craft sta in
+  `craft/editors.rs` e trova i programmi senza mai avviarne uno (un test lo
+  controlla). `Env` ha in più `root` (`/` fuori dai test), per provare
+  `/usr/bin` e `/Applications` su una cartella finta. `detect` dà una riga
+  per ognuna delle 7 app, con `How::Missing` per quelle che non trova. Una
+  riga di `craft.editor-paths` che punta a un file sparito non ferma la
+  ricerca: si passa ai posti standard. Per gli AppImage il nome va seguito
+  da `-`, `_` o `.` e deve finire in `.AppImage`; i `-cli` sono esclusi, e
+  fra più file vince il nome più grande in ordine di byte. La cache di 30 s
+  (`FindCache`) si rifà da sola quando cambiano l'ambiente o le righe. I
+  nomi dei campi di installed.json vanno confermati con un file vero.
+  Perché: «Apri con» deve sapere quali app ci sono senza lanciare niente.
+- 2026-11-02 · N7 · T6: il bundle fub.craft sta in fub-host dietro la
+  feature `craft`, nel default, sul modello di LinkCardBundle; il comando
+  craft.preview è in sola lettura e il job craft.render per ora risponde
+  «niente CLI» (lo riempie T11). I test dell'inventario e delle estensioni
+  conoscono fub.craft. Il check è rosso solo per i due test a tempo di fub-
+  services (stalled publish/vault), che rilanciati da soli passano. Perché:
+  il formato si monta come gli altri componenti e si spegne con la sua
+  feature.
+- 2026-11-02 · N7 · T5: un file a byte che non sa riscriversi (provider
+  assente o `Ok(None)`) non ferma più la rinomina;
+  `invoke_prepared_link_rewrites` restituisce `PreparedLinkRewriteOutcome {
+  edits, unwritable_bytes }`, le righe «un file a byte non si riscrive, il
+  link punta ancora a …» passano per Parsed/Pending/Completed in
+  `stale_byte_links` e si aggiungono ai `rewrite_failures` solo in
+  `finish_*`, così l'intent di recupero si chiude; l'unione di note
+  (`PreparedLinkRetarget::edits`) invece si ferma ancora con l'errore di
+  prima · D-3 (a): la rinomina si fa e Fub avvisa; nell'unione non c'è una
+  rinomina già fatta a cui appendere l'avviso, e si cestinerebbe un file a
+  cui il link punta ancora.
+- 2026-11-02 · N7 T4 · `linked.rs` prende come file collegati i valori
+  stringa dei campi `href`, `src`, `path`, `file`, `uri` e `link` a ogni
+  profondità fino a 64 livelli, al massimo 1000 senza doppioni, ripuliti
+  come un URL e senza la parte da `#` o `?`; in un file Craft un percorso
+  che comincia con `/` è del disco e si scarta come `C:` e gli schemi, a
+  differenza dei disegni SVG dove `/` è la radice del vault; il `%20` resta
+  scritto e lo decodifica il kernel; Fub non riscrive mai il file Craft
+  quando il file collegato si sposta; integrato dopo T2, perché i suoi test
+  vogliono il documento vero di `read_meta`.
+- 2026-11-02 · N7 T2 · `container.rs` legge i tre contenitori con un tetto a
+  ogni lettura: prima di aprire uno ZIP conta le voci che dichiara la fine
+  della directory centrale (anche ZIP64), poi ricontrolla quelle aperte,
+  così un file ostile di 64 MiB non fa leggere un milione di voci; una voce
+  che si dichiara piccola e si scompatta grande la ferma il crate zip (CRC,
+  NotZip) e dopo il `take`; fra le due anteprime di un `.pcraft` si passa
+  alla riserva anche quando la voce c'è ma non è un PNG o è troppo grande;
+  il base64 di `/preview/data` accetta il riempimento mancante e gli a capo
+  e ha il tetto sulla stringa e sul decodificato; titolo e versione vuoti
+  contano come assenti; il testo si raccoglie con una pila, non per
+  ricorsione; il documento di FigCraft e VectorCraft sta in `Contents.json`,
+  che serve ai file collegati di T4; il modello del documento non ha un
+  posto per la versione, che si legge da `read_meta`.
+- 2026-11-02 · N7 T3 · `xmp.rs` legge `xmp:Rating`, `lc:label`, `lc:flag`
+  (pick, reject, none) e `dc:subject` dalle forme attributo ed elemento, con
+  un lettore XML ristretto: le entità non predefinite non si espandono mai e
+  il DOCTYPE si ignora, così un XMP ostile non gonfia la memoria; un voto
+  scritto "5.0" vale 5; l'URI dello spazio `lc:` e i valori di `lc:flag`
+  vengono dal piano e vanno confermati con un XMP vero di LightCraft, perché
+  nel repo non ce n'è uno.
+- 2026-11-02 · N7 T1 · il crate `fub-format-craft` con i quattro provider a
+  byte in sola lettura, `CraftApp` (con `id()` ed `editor_name()` in più del
+  piano) e il contratto `CraftPreview` v1 con la gemella TS `host/craft.ts`
+  legata dalla fixture `craft-preview.json` (UPDATE_MIRROR=1); `revision` è
+  `fub_abi::Revision`, in JSON una stringa; il lettore TS accetta solo
+  `image/png`; le costanti dei limiti stanno in container, xmp e linked per
+  T2–T4; nel grafo di `overview.md` il crate ha un blocco suo, perché il
+  primo superava 20 nodi · i provider non sono ancora registrati: chi usa
+  Fub non vede niente finché non arriva il task che li monta.
+- 2026-11-05 · K5 · il prototipo di T25 è approvato così com'è: il chip
+  del disegno ha due `kind` nuovi, `"reduced"` (motore spento, e la build
+  senza motore: segno vuoto) e `"stopped"` (motore fermo: segno
+  `--danger`), al posto del solo `"body"` che T23 proponeva; lo strumento
+  Testo resta anche senza motore (A17); le parole restano quelle del
+  prototipo «per ora» · perché: l'utente («2a: ridotto e fermo, 2b: resta,
+  2c: lascia così per ora»); due segni distinguono lo spento voluto dal
+  guasto, e il rosso compare solo per un errore.
+- 2026-11-03 · K5 · D-14 (a): il Motore del disegno ha un interruttore suo
+  in «Disegnare», acceso di serie; il repository Fubeo/vectorcraft si crea
+  come fork di storytold/vectorcraft, come WordCraft e GridCraft (l'utente
+  ha detto sì; il comando lo lancia lui, perché all'orchestratore è negato)
+  · le consigliate, accettate dall'utente («ci sto»).
+- 2026-11-02 · K5 · Le risposte dell'utente a D-1…D-13: tutte come le
+  consigliate tranne D-8, (c): senza motore il disegno usa gli strumenti
+  semplici di prima e il chip lo dice. Ne nascono D-14 (il motore come riga
+  sua, che si spegne: consigliata e seguita), Testo anche senza motore
+  (A17), i task T25–T30 (il prototipo prima dei task grafici, l'ultimo con
+  la CI completa e la revisione prima del merge) e il tetto
+  `librerie_doppie` alzato una volta sola, con `usvg` doppio · disegnare
+  deve restare possibile con un componente spento, e un motore di supporto
+  che `fub.draw` richiede non si potrebbe spegnere mai.
+- 2026-11-02 · K5 · Dopo T8: la CI era rossa su `fub-
+  app/tests/ipc_permissions.rs` perché `host/ipc.ts` chiamava i sei comandi
+  del disegno, che l'app registra solo con T19 (D-4). Le porte ora
+  rispondono `unserved` senza chiamare l'app, lo stesso rifiuto dell'host
+  senza il motore (prima l'app avrebbe dato un errore «comando sconosciuto»,
+  cioè motore «errore» e non «spento»); con T19 tornano `invoke`. Il test
+  non si tocca. Il ciclo rapido non l'aveva visto: `check-scope.mjs` ora
+  aggiunge i crate i cui test nominano un file del client cambiato.
+- 2026-11-02 · K5 · T5: chiuso con la fermata del piano. Nessun `svg2pdf`
+  pubblicato usa `usvg` 0.48 (l'ultimo, 0.13.0, chiede ^0.45; anche `krilla-
+  svg` 0.8.1 chiede ^0.47; letto da crates.io il 2026-11-02), quindi
+  `Cargo.lock` e i `Cargo.toml` non cambiano e l'export resta com'è. Il file
+  di misura `docs/misure/disegno-versioni-2026-11.md` conta le librerie
+  doppie per nome (45 nomi, 109 versioni, prima e dopo uguali) e dice quali
+  resteranno doppie col motore (`usvg`, `svgtypes`, `roxmltree`, `tiny-skia-
+  path`, `imagesize`, `kurbo`; `skrifa` a tre versioni, `peniko` a due). D-3
+  resta aperta: l'opzione consigliata è tenere due `usvg`, 0.45 per l'export
+  e 0.48 per il motore. Perché: non si cambia l'export per una libreria che
+  non c'è.
+- 2026-11-02 · K5 · T12: i comandi di colore e spessore partono dai campi
+  Contorno, Riempimento e Spessore del pannello delle proprietà
+  (`changeField`), perché il pozzo colore della barra non tocca la selezione
+  e cambia solo lo stile dei gesti dopo, che arriva già al motore con
+  `DrawingGesture.style`. L'esito passa da `changeFromPanel` (la stessa
+  strada del pannello: sola lettura, lucchetto, rifiuto) e non da
+  `ctx.commit` diretto. Al motore vanno solo `#rrggbb`, il riempimento
+  «nessuno» come `null` e gli spessori ≥ 0 in unità della scena; il resto lo
+  scrive il pannello come prima. Un comando che `drawingCommands` non elenca
+  vale spento (`ctx.campiDelMotore` in `panel.ts`, una riga fuori dal
+  «Tocca»). Se il motore manca o smette di rispondere, il pannello scrive da
+  sé solo se disegno e selezione sono ancora quelli di partenza. Fra comandi
+  e gesti non c'è una fila comune: un comando lanciato mentre l'esito di un
+  gesto è in volo si calcola sulla copia senza quel gesto, e un rifiuto si
+  annuncia. Perché: senza motore la barra scrive come prima.
+- 2026-11-02 · K5 · T10: i gesti di select, rect, ellipse, line e arrow
+  passano dal motore (`editors/spatial/motore/gesti.ts`) e ogni esito è un
+  passo di annulla. L'opzione dell'editor è una porta `MotoreDelDisegno` che
+  può essere ancora «in apertura» (non la `SessioneMotore` del piano): la
+  superficie la passa subito, un gesto aspetta l'apertura fino a 2 s e poi
+  non scrive niente; con il motore assente, o se l'apertura fallisce, fanno
+  gli strumenti TypeScript come prima, in silenzio. Il motore non si usa sui
+  fogli PDF né dentro un gruppo isolato; il doppio clic resta del client; il
+  movimento senza tasto premuto non si manda. I connettori seguono con
+  l'hook `follow` del motore della scena dentro il commit, quindi
+  `followConnectors` non si chiama a mano. Toccati anche `marks.ts` e
+  `stroke-shapes.ts` (maniglie e lazo dall'anteprima del motore). I motivi
+  dei rifiuti usano le chiavi che ci sono, fino a T21. Perché: senza motore
+  niente deve cambiare, e con il motore un gesto è un solo passo.
+- 2026-11-02 · K5 · T8: la sessione del motore nel client
+  (`editors/spatial/motore/sessione.ts`) segue la `DocumentSession` come
+  superficie `motore-disegno:<n>` (un id per sessione, come `live:<n>`, così
+  due sessioni sullo stesso documento non si rimpiazzano) e non origina mai
+  modifiche. Le sei porte di `host/ipc.ts` usano i nomi della D-4
+  (`open_drawing`…`close_drawing`), ancora da confermare: l'host le avrà con
+  T19. Le richieste vanno in fila con un tempo limite di 10 s; a uno `stale`
+  si rimanda il testo intero (in LF) e si riprova una volta, anche per
+  `drawing_command`; qualunque errore o tempo scaduto ferma la sessione come
+  `{ perche: "errore" }`, la stacca dal documento e chiude l'istanza come
+  può. Il finto `DrawingFake` tiene la sua copia e controlla che ogni
+  differenza si applichi. Perché: il client deve essere pronto prima del
+  motore, e un motore che non risponde non deve bloccare il disegno.
+- 2026-11-02 · K5 · T4: il contratto del disegno in fub-abi ha limiti
+  espliciti (20 MiB di testo, 100 000 eventi per gesto, 10 000 operazioni, 8
+  MiB di operazioni, 50 000 perdite) e un validate() per ogni messaggio; gli
+  specchi TS sono controllati da ts_mirror e mirror.test.ts. Perché: un
+  messaggio fuori misura si rifiuta al confine, prima del motore.
+- 2026-11-02 · K5 · T2: l'oracolo a pixel sta in fub-testkit dietro la
+  feature `pixel`, fuori dal default e in FUORI_DAL_DEFAULT; resvg diventa
+  dipendenza di workspace e il banco lo prende con il solo `text` (niente
+  raster, niente caratteri di sistema); l'altezza viene da width/height
+  dell'SVG, con tetto di 8192 px, sfondo bianco opaco e famiglie generiche
+  sulla prima faccia. Ho aggiunto io in ci.yml clippy e nextest con
+  `--features pixel`. Perché: il confronto è identico su ogni macchina e chi
+  usa il banco per il kernel non compila un rasterizzatore.
+- 2026-11-02 · K5 · T3: i vettori dei gesti (49) sono registrati dagli
+  strumenti TypeScript così come sono; la loro forma sta in una pagina
+  nuova, docs/reference/scene-gestures.md, e il §10 di scene-operations.md è
+  un rimando, perché quella pagina era al tetto delle righe. `refused` ha
+  due valori in più del piano, `locked` e `hidden`, perché gli strumenti
+  rifiutano già quei due casi; il vettore ridimensiona-estraneo registra che
+  un elemento estraneo si ridimensiona già, non solo si sposta: il motore
+  lo rifà o lo scrive nel .tsv.
+- 2026-11-02 · K5 · T1: l'ADR 0239 «Il disegno passa dal motore vettoriale,
+  e il file lo scrive il client» (stato proposta, ambito contratto) e la
+  pagina docs/architecture/disegno.md; le domande D-1…D-13 stanno nell'ADR
+  come «Da decidere»; ciò che non esiste ancora è nominato come percorso in
+  codice con «(arriva con T…)» · il numero 0239 segue 0236–0238 di K3, N3 e
+  N4, e si rinumera alla fusione se serve.
+- 2026-11-02 · K2 · I comandi della sessione live dei disegni arrivano col
+  codice dei disegni, la prima volta che un disegno si apre, e non più
+  all'avvio quando `editors/spatial` è acceso: la prima misura di C1 li ha
+  trovati con «Solo note», perché per A4 nessun profilo tranne «Tutto» tocca
+  `fub.draw`, che quindi resta acceso, mentre la riga di «Fatto quando» vuole
+  «Solo note» senza `editors/spatial`. Servono solo con un disegno a
+  fuoco o una sessione aperta, quindi chi usa Fub non vede differenze; il
+  disegno si monta quando sono arrivati (`withDrawings` delle opzioni del
+  registro). C1 vale per «Solo note» e per «Tutto» · fonte: l'orchestratore,
+  dalla misura di C1 (D-1, A4).
+- 2026-11-01 · K2 · C1 entra nel job `webview` con un controllo vero, non
+  solo con l'elenco: il build scrive `dist/switchable-chunks.json` (i chunk di
+  ogni pezzo di `NOT_AT_STARTUP`) e C1 fallisce se con «Solo note» uno di
+  questi arriva nella WebView (`C1.solo-note.spegnibili`, soglia 0). L'avvio
+  a freddo e il numero dei chunk di C1 restano senza soglia `ci` finché non
+  c'è una misura del runner; il nome del job resta quello del cancello di
+  rilascio · fonte: l'orchestratore, sezione «Fine» del piano (D-1, A8).
+- 2026-11-01 · K2 · T3b: la riga «0 motori avviati» dell'anteprima non era
+  vera (l'host monta i provider dei bundle accesi) ed è diventata una frase
+  vera; `VAULT_REMOUNT_GRACE_MS` resta, perché serve alla chiusura del
+  pannello a un rimontaggio; icone `fub.proof` = `footnote` e `fub.rich` =
+  `format-word`; una sola lettura della mappa in `state/components.ts`
+  (`onComponentsRead`, al più una lettura in volo e un giro `again`,
+  `queueMicrotask` solo come risparmio); le voci di «Nuovo» in `newKinds()` di
+  `ui/commands.ts`, chiamata da esploratore e riquadro; `editorFiles` in
+  `component-surfaces.ts`; A12 verificato senza correzioni · fonte: report e
+  revisione di T3b.
+- 2026-11-01 · K2 · T5: «Non toccare i fake» allargato in modo additivo
+  (`initialVault` nel fake, `?vault=nuovo` nel banco, la partenza `nuovo` e
+  il rifiuto di «Grafica» nello scenario registrato); la riga dei profili
+  spostata in `panels/component-profiles.ts`, condivisa da pagina e
+  schermata; `reloadProvider` estratto in `init` di `desktop-shell.ts`; la
+  schermata è un `role=dialog`; dopo «Solo note» la shell aspetta il
+  rimontaggio al più `PROFILE_REMOUNT_WAIT_MS` = 2000 ms. Chiudere l'app con
+  la schermata aperta lascia il vault senza `components.*`, cioè come prima
+  di K2 · fonte: report e revisione di T5.
+- 2026-11-01 · K2 · Spegnere il componente di un file aperto salva il file
+  prima di mostrarlo «solo come file», senza chiedere; la conferma del
+  profilo compare solo quando spegne qualcosa · fonte: l'orchestratore su T3
+  e T4, da sottoporre all'utente con la prova delle persone (D-2).
+- 2026-11-01 · K2 · L'alias di profilo «note» è tolto e l'host manda i
+  profili nell'ordine dell'anteprima (Solo note, Solo PDF, Studio, Grafica,
+  Fotografia, Tutto); `fub.draw` dichiara la ui `editors/spatial` · fonte:
+  revisione dell'orchestratore su T1 e T2.
+- 2026-11-01 · K2 · Fuori dal Tocca, per far passare i controlli: la guardia
+  della griglia (7c1793ff) e `check-scope` (9617077d); la parte del client
+  sui componenti documentata in `docs/architecture/frontend-and-ipc.md` ·
+  fonte: l'orchestratore durante l'integrazione.
+- 2026-11-01 · K2 · T2b e T3b aggiunti dall'orchestratore: T2 mandava alla
+  shell le chiavi del catalogo invece di nomi e descrizioni tradotti, con uno
+  scenario del fake di pochi gesti (T2b); T3 aveva consegnato la pagina senza
+  il riquadro laterale dell'anteprima, con una lettura della mappa sua accanto
+  a quella di T4 (T3b) · fonte: revisione dell'orchestratore.
 - 2026-11-01 · regole · L'orchestratore e i coder decidono da soli il come
   tecnico, i formati interni, le dipendenze fra crate del workspace e i file
   legati al task; «Chiede sempre» resta per ciò che si vede, il contratto

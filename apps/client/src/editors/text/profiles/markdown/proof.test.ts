@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { undo } from "@codemirror/commands";
 import { markdown } from "@codemirror/lang-markdown";
 import { ensureSyntaxTree, syntaxTree, syntaxTreeAvailable } from "@codemirror/language";
@@ -7,7 +7,7 @@ import { forEachDiagnostic, type Diagnostic } from "@codemirror/lint";
 import { EditorState } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 import { createTextEngine } from "../../engine";
-import { PLACEHOLDER, ProofClient, type ProofPorts } from "../../../core/proof";
+import { PLACEHOLDER, ProofClient, sharedProofCache, type ProofPorts } from "../../../core/proof";
 import { createMarkdownProfile } from "./profile";
 import { markdownGrammar } from "./grammar";
 import { extractProse, frontmatterLanguage, locate, markdownProof, proofTheme } from "./proof";
@@ -211,6 +211,9 @@ function diagnostics(view: EditorView): Diagnostic[] {
 }
 
 describe("markdownProof", () => {
+  // La cache dei segmenti è dell'app: ogni prova parte da vuota.
+  beforeEach(() => sharedProofCache.clear());
+
   it("segna una parola e la corregge come una battuta annullabile", async () => {
     const client = new ProofClient(ports());
     const { engine, view, changes } = mount("Un **testo** con 😀 speling qui.", client);
@@ -312,6 +315,28 @@ describe("markdownProof", () => {
     await settle();
     expect(queryIndex).not.toHaveBeenCalled();
     client.dispose();
+    vi.useRealTimers();
+  });
+
+  it("rimontata sulla stessa nota segna senza richiedere niente", async () => {
+    const text = "Primo paragrafo con speling.\n\nSecondo paragrafo pulito.";
+    const queryIndex = vi.fn(ports().queryIndex);
+    const first = new ProofClient(ports({ queryIndex }));
+    const a = mount(text, first);
+    await settle();
+    expect(diagnostics(a.view)).toHaveLength(1);
+    expect(queryIndex).toHaveBeenCalledTimes(1);
+    a.engine.destroy();
+    first.dispose();
+    vi.useRealTimers();
+
+    const second = new ProofClient(ports({ queryIndex }));
+    const b = mount(text, second);
+    await settle();
+    expect(diagnostics(b.view)).toHaveLength(1);
+    expect(queryIndex).toHaveBeenCalledTimes(1);
+    b.engine.destroy();
+    second.dispose();
     vi.useRealTimers();
   });
 });

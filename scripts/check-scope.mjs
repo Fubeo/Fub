@@ -76,8 +76,10 @@ while (queue.length) {
 }
 
 // Un file fuori dai crate (il client, le doc) che il codice Rust di un crate
-// nomina per percorso: quel crate lo legge nei suoi test, che vanno rifatti.
-// Chi lo usa no: il file non cambia la sua API.
+// nomina per percorso, intero o relativo (`"../../apps/client/src/…"`): quel
+// crate lo legge nei suoi test, che vanno rifatti. Chi lo usa no: il file non
+// cambia la sua API. Chi legge una cartella intera senza nominare il file non
+// si vede: lo copre il ciclo completo.
 const outside = files.filter((f) => !owner(f));
 if (outside.length) {
   const rsFiles = (dir) => {
@@ -98,7 +100,7 @@ if (outside.length) {
     const dir = path.join(root, p.dir);
     if (rsFiles(dir).some((f) => {
       const source = fs.readFileSync(f, "utf8");
-      return outside.some((changed) => source.includes(`"${changed}"`));
+      return outside.some((changed) => source.includes(`"${changed}"`) || source.includes(`/${changed}"`));
     })) affected.add(p.name);
   }
 }

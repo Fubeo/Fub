@@ -103,6 +103,7 @@
   "draw-suggestion",
   "draw-swap",
   "draw-symbols",
+  "draw-text",
   "draw-text-bold",
   "draw-text-italic",
   "draw-text-strike",

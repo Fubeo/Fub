@@ -132,13 +132,22 @@ fn every_row_of_the_inventory_has_the_its_cargo_feature() {
 /// È l'unico elenco del genere, e il perché è obbligatorio: senza, una
 /// feature fuori dal default è una dimenticanza che non si distingue da una
 /// scelta.
-const OUT_OF_DEFAULT: &[(&str, bool, &str)] = &[(
-    "draw",
-    cfg!(feature = "draw"),
-    "l'export dei disegni va con il formato dei disegni, che in `fub-host` sta \
-     dietro la feature `draw`, fuori dal default fino a che FubDraw non entra \
-     nell'app",
-)];
+const OUT_OF_DEFAULT: &[(&str, bool, &str)] = &[
+    (
+        "draw",
+        cfg!(feature = "draw"),
+        "l'export dei disegni va con il formato dei disegni, che in `fub-host` sta \
+         dietro la feature `draw`, fuori dal default fino a che FubDraw non entra \
+         nell'app",
+    ),
+    (
+        "engine-drawing",
+        cfg!(feature = "engine-drawing"),
+        "la riga del Motore del disegno accende `draw`, e sta fuori per la stessa \
+         ragione: il motore lo porta `fub-host/engine-drawing`, nel default \
+         dell'host",
+    ),
+];
 
 /// Ogni cargo feature è accesa di default, tranne quelle dichiarate qui sopra.
 ///

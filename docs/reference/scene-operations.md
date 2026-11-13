@@ -65,11 +65,10 @@ in un gruppo, subito dopo i loro `title` e `desc`.
 
 ### Bersaglio (`target`)
 
-Un bersaglio è un id. Per un elemento senza id è
-`{ "path": [i0, i1, …], "tag": "…" }`, cioè gli indici dei figli elemento a
-partire dalla radice. Il percorso vale solo se l'elemento in quella posizione
-non ha id e ha quel tag; altrimenti l'operazione è rifiutata con
-`missing-target`.
+Un bersaglio è un id. Per un elemento senza id è `{ "path": [i0, i1, …],
+"tag": "…" }`, cioè gli indici dei figli elemento a partire dalla radice. Il
+percorso vale solo se l'elemento in quella posizione non ha id e ha quel tag;
+altrimenti l'operazione è rifiutata con `missing-target`.
 
 - Un elemento **modificabile** senza id riceve un id con `ident`, nello stesso
   `batch` dell'operazione che lo modifica.
@@ -275,11 +274,10 @@ lo decide la superficie, come per le guide bloccate.
   ricevuto, un `set` è rifiutato con `invalid-elem`.
 - Il gruppo di una pagina di annotazioni PDF è un `g` figlio della radice con
   un `fub:page` valido, aggiunto con `add` o che riceve l'id con `ident`. Il
-  suo id è `p` seguito dal numero su almeno quattro cifre (`p0003`,
-  `p12345`); un altro id è `invalid-elem`. Non è casuale perché una pagina ha
-  un gruppo solo: se due mani annotano la stessa pagina per la prima volta,
-  scrivono lo stesso id, e la sessione live vede un `duplicate-id` invece di
-  due gruppi.
+  suo id è `p` seguito dal numero su almeno quattro cifre (`p0003`, `p12345`);
+  un altro id è `invalid-elem`. Non è casuale perché una pagina ha un gruppo
+  solo: se due mani annotano la stessa pagina per la prima volta, scrivono lo
+  stesso id, e la sessione live vede un `duplicate-id` invece di due gruppi.
 - I valori nuovi si scrivono come arrivano, senza normalizzarli: li giudica la
   classificazione del formato della scena (§4), sull'elemento già scritto.
 
@@ -545,3 +543,7 @@ Un test Rust, `crates/fub-scene/tests/ops_vectors.rs`, legge gli stessi file e
 verifica che ogni testo si analizzi senza perdere un byte, senza errori S003 o
 S004 e senza ragioni di sola lettura. Così il motore TypeScript e il lettore
 Rust restano d'accordo sul formato che le operazioni scrivono.
+
+## 10. Vettori dei gesti
+
+Quali operazioni nascono da un gesto degli strumenti di disegno, e come le rifà il motore: [vettori dei gesti](scene-gestures.md).

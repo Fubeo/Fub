@@ -48,7 +48,7 @@
 | la battuta sta nel budget di 4 ms di mediana | `apps/client/src/editors/text/profiles/markdown/` | `node bench/interaction.mjs --only=battuta` e `render-incremental.test.ts` | [product/performance-budget.md](../product/performance-budget.md) |
 | una feature Cargo è accesa solo da chi la usa | `crates/fub-features/src/inventory.rs` | `crates/fub-features/tests/cargo_features.rs` e `check-cargo-feature-default.mjs` | [architecture/components-and-boundaries.md](../architecture/components-and-boundaries.md) |
 | una feature spenta non rompe il build | `crates/fub-features/` | la CI compila `--no-default-features` | [development/testing-and-quality.md](../development/testing-and-quality.md) |
-| i motori di terzi si nominano dai soli adattatori | `crates/fub-format-rich/`, `crates/fub-format-xlsx/` | `.github/scripts/check-engine-boundary.mjs` | [architecture/motori.md](../architecture/motori.md) |
+| i motori di terzi si nominano dai soli adattatori | `crates/fub-format-rich/`, `crates/fub-format-xlsx/`, `crates/fub-disegno/` | `.github/scripts/check-engine-boundary.mjs` | [architecture/motori.md](../architecture/motori.md) |
 | nessuna interfaccia delle app Craft in `fub-app`, librerie doppie sotto il tetto | `docs/reference/budgets.json` | `.github/scripts/check-motori.mjs` | [architecture/motori.md](../architecture/motori.md) |
 | un motore si costruisce alla prima richiesta e una volta sola, senza lucchetto tenuto | `crates/fub-motori/src/pigro.rs` | `crates/fub-motori/tests/pigro.rs` | [architecture/motori.md](../architecture/motori.md) |
 | le cache dei motori stanno sotto un tetto comune, dalla meno usata | `crates/fub-motori/src/memoria.rs` | `crates/fub-motori/tests/memoria.rs` | [architecture/motori.md](../architecture/motori.md) |

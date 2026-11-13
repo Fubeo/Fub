@@ -31,6 +31,26 @@ export type DateOrder = "dmy" | "mdy" | "ymd";
 
 export type DocChange = "body" | "frontmatter" | "tags" | "links" | "outline" | "anchors";
 
+export type DrawingLossKind = "unmapped" | "approximated" | "unsupported";
+
+export type DrawingPhase = "preview" | "commit" | "cancel";
+
+export type DrawingPointerKind = "down" | "drag" | "up" | "move" | "double_click";
+
+export type DrawingRefusal =
+  | "stale"
+  | "unmapped"
+  | "empty"
+  | "unsupported"
+  | "too_large"
+  | "closed"
+  | "not_ready"
+  | "locked"
+  | "hidden"
+;
+
+export type DrawingTool = "select" | "rect" | "ellipse" | "line" | "arrow" | "text";
+
 export type EntryKind = "document" | "asset" | "unknown";
 
 export type EventKind =

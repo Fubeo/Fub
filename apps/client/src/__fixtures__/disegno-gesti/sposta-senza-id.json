@@ -1,0 +1,84 @@
+{
+  "name": "sposta-senza-id",
+  "description": "una forma senza id che si sposta riceve un id con `ident` nello stesso passo",
+  "input": "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:fub=\"https://fubeo.github.io/ns/scene/1\" fub:version=\"1\" viewBox=\"0 0 400 300\" width=\"400\" height=\"300\">\n  <title>Prova</title>\n  <rect id=\"fub-paper\" fub:role=\"paper\" x=\"0\" y=\"0\" width=\"400\" height=\"300\" fill=\"#ffffff\"/>\n  <g id=\"l1a2b3c4d\" fub:layer=\"Livello 1\">\n    <rect x=\"100\" y=\"100\" width=\"100\" height=\"50\" fill=\"#000000\"/>\n  </g>\n</svg>\n",
+  "gesture": {
+    "tool": "select",
+    "layer": null,
+    "selection": [],
+    "zoom": 1,
+    "snap": {
+      "grid": null,
+      "free": false
+    },
+    "style": null,
+    "events": [
+      {
+        "kind": "down",
+        "x": 150,
+        "y": 125,
+        "pressure": 0.5,
+        "shift": false,
+        "alt": false,
+        "cmd": false
+      },
+      {
+        "kind": "drag",
+        "x": 160,
+        "y": 130,
+        "pressure": 0.5,
+        "shift": false,
+        "alt": false,
+        "cmd": false
+      },
+      {
+        "kind": "drag",
+        "x": 170,
+        "y": 135,
+        "pressure": 0.5,
+        "shift": false,
+        "alt": false,
+        "cmd": false
+      },
+      {
+        "kind": "up",
+        "x": 170,
+        "y": 135,
+        "pressure": 0,
+        "shift": false,
+        "alt": false,
+        "cmd": false
+      }
+    ]
+  },
+  "expect": {
+    "ops": [
+      {
+        "op": "batch",
+        "ops": [
+          {
+            "op": "ident",
+            "path": [
+              2,
+              0
+            ],
+            "tag": "rect",
+            "id": "@1"
+          },
+          {
+            "op": "set",
+            "id": "@1",
+            "attrs": {
+              "transform": "matrix(1 0 0 1 20 10)"
+            }
+          }
+        ]
+      }
+    ],
+    "selection": [
+      "@1"
+    ],
+    "refused": null,
+    "text": "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:fub=\"https://fubeo.github.io/ns/scene/1\" fub:version=\"1\" viewBox=\"0 0 400 300\" width=\"400\" height=\"300\">\n  <title>Prova</title>\n  <rect id=\"fub-paper\" fub:role=\"paper\" x=\"0\" y=\"0\" width=\"400\" height=\"300\" fill=\"#ffffff\"/>\n  <g id=\"l1a2b3c4d\" fub:layer=\"Livello 1\">\n    <rect id=\"@1\" x=\"100\" y=\"100\" width=\"100\" height=\"50\" fill=\"#000000\" transform=\"matrix(1 0 0 1 20 10)\"/>\n  </g>\n</svg>\n"
+  }
+}
