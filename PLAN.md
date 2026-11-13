@@ -848,7 +848,7 @@ il giro su tutti i vettori; la pagina è collegata e passa i controlli.
 Prova: scripts/check.sh --rapido; cargo test -p fub-canvas-core --test
 describe; node .github/scripts/check-doc-links.mjs; node
 .github/scripts/check-doc-orphans.mjs
-Stato: [ ] da fare
+Stato: [x] fatto · outline, code e json in `describe.rs`, 18 test; `json` usa la forma del file (`nodes` ed `edges` sempre); una lavagna con lo stesso id su scheda e arco non si ricrea (`compile` dà `DuplicateId`, eccezione nel test); la radice sconosciuta (`meta`) esce solo da `json`: incollare codice la perde, da ricordare in T25
 
 ## T5 · Disporre: allineare, distribuire, griglia, albero
 
