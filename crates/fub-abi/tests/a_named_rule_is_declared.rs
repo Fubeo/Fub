@@ -1844,6 +1844,20 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
                  `sanitize_component` perché qui la regola decide la citazione, non la pulizia.",
             ),
         ),
+        // -- CasoAscii: la specie di una scheda della lavagna -------------------
+        (
+            "crates/fub-canvas-core/src/layout.rs::kind_of_path",
+            (
+                Family::AsciiCase,
+                "abbassa l'estensione di un file per dire la specie della sua scheda sulla lavagna \
+                 (`Foto.PNG` è un'immagine come `foto.png`), in minuscolo come `cardKindOf` della \
+                 GUI: la specie deve coincidere con la sua. Non riusa `mime_for_ext` di \
+                 `rules/media.rs`: `fub-canvas-core` dipende solo da serde, serde_json e thiserror \
+                 (`dependency_invariant`), e non può chiamare fub-abi. Diverge da `route_entry` e \
+                 `import_entry` perché l'estensione qui non sceglie un importatore: decide la misura \
+                 e la specie di una scheda, e non identifica né un nome né un path.",
+            ),
+        ),
         // -- CasoAscii: miscellanea (canali con la loro ragione) ---------------
         (
             "crates/fub-app/src/mobile.rs::classify",
