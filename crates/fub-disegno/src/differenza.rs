@@ -10,7 +10,9 @@
 //!   suo genitore al documento del motore (la radice compresa). M si trova
 //!   dai punti dell'oggetto e si **verifica**: l'oggetto di prima mosso da M
 //!   deve essere quello di dopo. Un gruppo mosso tutto insieme riceve la
-//!   `transform` lui, non i figli; un livello mai. I colori pieni e lo
+//!   `transform` lui, non i figli; un livello mai. Quando il gesto dice
+//!   quali oggetti ha scelto (le unità della Selezione), la `transform` va a
+//!   quelli, come la scrive il client. I colori pieni e lo
 //!   spessore diventano `fill`, `stroke`, `stroke-width`; un tracciato
 //!   cambiato in un modo che nessuna matrice spiega diventa `d`.
 //! - **`add`** per gli oggetti nuovi, con l'`Elem` come lo scrive il client
@@ -113,16 +115,26 @@ impl Differenza {
 }
 
 /// La differenza fra la copia e `dopo`.
+///
+/// `unita` sono gli oggetti che il gesto ha scelto e trasformato (le unità
+/// della Selezione, `unitsOf` nel client): un gruppo fra loro mosso tutto da
+/// una matrice riceve la `transform` lui, anche con un figlio solo, e un
+/// gruppo fuori da loro non la riceve mai, la ricevono i suoi figli. `None`
+/// (un comando, una prova a mano) lascia la regola senza scelta: la
+/// `transform` va al gruppo se ha più figli o figli che non vengono da Fub,
+/// se no al figlio.
 pub(crate) fn differenza(
     copia: &Copia,
     dopo: &Document,
     scrittore: Option<Scrittore<'_>>,
+    unita: Option<&HashSet<NodeId>>,
 ) -> Result<Differenza, Rifiuto> {
     let prima = Posti::di(&copia.documento);
     let poi = Posti::di(dopo);
     let mut lavoro = Lavoro {
         copia,
         scrittore,
+        unita,
         ident: Vec::new(),
         remove: Vec::new(),
         moves: Vec::new(),
@@ -167,6 +179,8 @@ pub(crate) fn differenza(
 struct Lavoro<'a> {
     copia: &'a Copia,
     scrittore: Option<Scrittore<'a>>,
+    /// Gli oggetti scelti dal gesto, se il gesto li dice.
+    unita: Option<&'a HashSet<NodeId>>,
     ident: Vec<Value>,
     /// Con il percorso dell'elemento tolto, per ordinarli.
     remove: Vec<(Vec<usize>, Value)>,
@@ -436,11 +450,15 @@ impl Lavoro<'_> {
         }
         if let Some(figli) = a.children() {
             // La `transform` va al gruppo quando lo spostamento è di tutto il
-            // gruppo e scriverla sui figli non basta o costa di più: un figlio
-            // che non viene da Fub, o più d'un figlio. Con un figlio solo di
-            // Fub la riceve il figlio, l'oggetto toccato.
+            // gruppo e il gruppo è un oggetto scelto dal gesto, come la
+            // scrive il client. Senza la scelta, quando scriverla sui figli
+            // non basta o costa di più: un figlio che non viene da Fub, o più
+            // d'un figlio; con un figlio solo di Fub la riceve il figlio.
             let gruppo = !radice && !livello && self.elemento(a.id).is_some();
-            let per_il_gruppo = figli.len() > 1 || figli.iter().any(|c| self.ha_estranei(c));
+            let per_il_gruppo = match self.unita {
+                Some(unita) => unita.contains(&a.id),
+                None => figli.len() > 1 || figli.iter().any(|c| self.ha_estranei(c)),
+            };
             if gruppo && per_il_gruppo {
                 if let Some(m) = adatta(b, a) {
                     if !vicina_all_identita(m)

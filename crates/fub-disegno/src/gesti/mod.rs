@@ -27,7 +27,9 @@ pub mod selezione;
 /// Scrivere e modificare il testo.
 pub mod testo;
 
-use std::cell::Cell;
+use std::any::Any;
+use std::cell::{Cell, OnceCell};
+use std::collections::HashSet;
 use std::sync::Arc;
 
 use fub_abi::{
@@ -60,6 +62,10 @@ pub(crate) struct Contesto<'a> {
     /// ([`DrawingGesture::frame`], già controllata da `validate`); `None` se
     /// non ne tiene una.
     pub cornice: Option<DrawingFrame>,
+    /// Ciò che lo strumento ricava una volta dal pezzo del gesto e rilegge
+    /// in ogni fase (la Selezione: il gesto che la pressione comincia, che
+    /// dipende solo dal gesto, dalla copia e dalla vista).
+    pub memo: OnceCell<Box<dyn Any>>,
 }
 
 /// Uno strumento di Fub fatto con uno strumento del motore.
@@ -94,6 +100,13 @@ pub(crate) trait Strumento: Sync {
     /// L'`Elem` di un oggetto nuovo, se lo strumento lo scrive a modo suo
     /// (vedi [`differenza::Scrittore`]).
     fn elemento(&self, _nodo: &Node, _locale: Affine) -> Option<(String, Map<String, Value>)> {
+        None
+    }
+
+    /// Al `commit`, prima della differenza: gli oggetti che il gesto ha
+    /// scelto e trasformato, che ricevono la `transform` come nel client
+    /// (vedi [`differenza::differenza`]); `None` se lo strumento non sceglie.
+    fn unita(&self, _cx: &Contesto<'_>) -> Option<HashSet<NodeId>> {
         None
     }
 
@@ -210,7 +223,7 @@ impl Banco {
         };
         let mut dopo = (*doc).clone();
         f(&mut dopo);
-        let esito = differenza::differenza(copia, &dopo, None);
+        let esito = differenza::differenza(copia, &dopo, None, None);
         self.ripristina(copia);
         esito
     }
@@ -258,6 +271,7 @@ impl Banco {
             pressione,
             trascinato: Cell::new(!ricomincia && self.trascinato),
             cornice: gesto.frame,
+            memo: OnceCell::new(),
             vista: ViewInfo {
                 zoom: gesto.zoom
                     * copia
@@ -329,7 +343,8 @@ impl Banco {
             .unwrap_or_default();
         let scrittore = |n: &Node, m: Affine| strumento.elemento(n, m);
         let differenza = vectorcraft_engine::guard::catch_panic(|| {
-            differenza::differenza(copia, &dopo, Some(&scrittore))
+            let unita = strumento.unita(&cx);
+            differenza::differenza(copia, &dopo, Some(&scrittore), unita.as_ref())
         });
         self.ripristina(copia);
         let differenza = match differenza {

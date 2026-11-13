@@ -881,8 +881,7 @@ fn piu_livelli_di_inkscape_insieme() {
     assert_eq!(esito.selection, ["layer1", "layer2"]);
 }
 
-/// Livelli di Inkscape uno dentro l'altro (con due figli: con uno solo la
-/// differenza scrive la `transform` sul figlio), uno con la sua
+/// Livelli di Inkscape uno dentro l'altro (con due figli), uno con la sua
 /// `transform`, uno vuoto e uno nascosto.
 const LIVELLI_INKSCAPE: &str = "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:inkscape=\"http://www.inkscape.org/namespaces/inkscape\" xmlns:fub=\"https://fubeo.github.io/ns/scene/1\" fub:version=\"1\" viewBox=\"0 0 400 300\" width=\"400\" height=\"300\">\n  <g id=\"la\" inkscape:groupmode=\"layer\" transform=\"translate(10 0)\">\n    <rect id=\"ra\" x=\"40\" y=\"40\" width=\"60\" height=\"40\" fill=\"#000000\"/>\n    <g id=\"lb\" inkscape:groupmode=\"layer\"><rect id=\"rb\" x=\"200\" y=\"40\" width=\"60\" height=\"40\" fill=\"#ff0000\"/><rect id=\"rc\" x=\"280\" y=\"40\" width=\"40\" height=\"40\" fill=\"#00ff00\"/></g>\n  </g>\n  <g id=\"lv\" inkscape:groupmode=\"layer\"/>\n  <g id=\"ln\" inkscape:groupmode=\"layer\" display=\"none\"><rect id=\"rn\" x=\"40\" y=\"200\" width=\"60\" height=\"40\"/></g>\n</svg>\n";
 
@@ -907,4 +906,116 @@ fn livelli_di_inkscape_dentro_vuoti_nascosti() {
     let esito = clic(LIVELLI_INKSCAPE, &[], (60.0, 210.0));
     assert_eq!(esito.ops, None);
     assert!(esito.selection.is_empty(), "{:?}", esito.selection);
+}
+
+// La `transform` va agli oggetti che la Selezione sceglie (`unitsOf`), come
+// la scrive il client, anche quando un gruppo ha un figlio solo. Le
+// operazioni attese sono registrate dal client (`createDrawEditor`, gli
+// stessi file e gli stessi gesti).
+
+/// Il trascinamento da (150, 125) a (170, 135) passando per (160, 130),
+/// con Ctrl/⌘ se `ctrl`.
+fn tira_di_venti(testo: &str, selezione: &[&str], ctrl: bool) -> DrawingOutcome {
+    let e = |kind, x, y| {
+        let e = evento(kind, x, y);
+        if ctrl {
+            con_ctrl(e)
+        } else {
+            e
+        }
+    };
+    let (mut d, _) = apri(testo);
+    d.gesto(richiesta(
+        "commit",
+        selezione,
+        vec![
+            e("down", 150.0, 125.0),
+            e("drag", 160.0, 130.0),
+            e("drag", 170.0, 135.0),
+            e("up", 170.0, 135.0),
+        ],
+    ))
+    .expect("il gesto")
+}
+
+fn spostato_di_venti(id: &str) -> Value {
+    json!([{ "op": "set", "id": id, "attrs": { "transform": "matrix(1 0 0 1 20 10)" } }])
+}
+
+#[test]
+fn un_gruppo_con_un_figlio_solo_riceve_lui_la_transform() {
+    let testo = disegno(&format!("<g id=\"og1g1g1g1\">{A}</g>"));
+    let esito = tira_di_venti(&testo, &[], false);
+    come_il_client(&esito, spostato_di_venti("og1g1g1g1"));
+    assert_eq!(esito.selection, ["og1g1g1g1"]);
+    // Già scelto, girato con la maniglia tonda e ridimensionato dall'angolo.
+    let esito = tira(&testo, &["og1g1g1g1"], (150.0, 72.0), (200.0, 100.0));
+    come_il_client(
+        &esito,
+        json!([{ "op": "set", "id": "og1g1g1g1", "attrs": { "transform": "matrix(0.4478 0.8942 -0.8942 0.4478 194.6054 -65.093)" } }]),
+    );
+    let esito = tira(&testo, &["og1g1g1g1"], (204.0, 154.0), (244.0, 174.0));
+    come_il_client(
+        &esito,
+        json!([{ "op": "set", "id": "og1g1g1g1", "attrs": { "transform": "matrix(1.4 0 0 1.4 -40 -40)" } }]),
+    );
+    assert_eq!(esito.selection, ["og1g1g1g1"]);
+}
+
+#[test]
+fn un_gruppo_con_un_gruppo_con_un_figlio() {
+    let testo = disegno(&format!(
+        "<g id=\"og1g1g1g1\"><g id=\"og2g2g2g2\">{A}</g></g>"
+    ));
+    let esito = tira_di_venti(&testo, &[], false);
+    come_il_client(&esito, spostato_di_venti("og1g1g1g1"));
+    assert_eq!(esito.selection, ["og1g1g1g1"]);
+    // Con Ctrl/⌘ l'oggetto più dentro, attraverso i due gruppi.
+    let esito = tira_di_venti(&testo, &[], true);
+    come_il_client(&esito, spostato_di_venti("oa1a1a1a1"));
+    assert_eq!(esito.selection, ["oa1a1a1a1"]);
+}
+
+#[test]
+fn il_figlio_scelto_con_ctrl_riceve_lui_la_transform() {
+    let testo = disegno(&format!("<g id=\"og1g1g1g1\">{A}</g>"));
+    let esito = tira_di_venti(&testo, &[], true);
+    come_il_client(&esito, spostato_di_venti("oa1a1a1a1"));
+    assert_eq!(esito.selection, ["oa1a1a1a1"]);
+}
+
+#[test]
+fn piu_unita_scelte() {
+    // Il gruppo e il suo figlio scelti insieme: il figlio esce dalla
+    // selezione (il client tiene solo il gruppo) e il gruppo si sposta.
+    let testo = disegno(&format!("<g id=\"og1g1g1g1\">{A}</g>"));
+    let esito = tira_di_venti(&testo, &["og1g1g1g1", "oa1a1a1a1"], false);
+    come_il_client(&esito, spostato_di_venti("og1g1g1g1"));
+    assert_eq!(esito.selection, ["og1g1g1g1"]);
+    // I due figli di un gruppo scelti: ognuno riceve la sua, il gruppo no.
+    let b = "<rect id=\"ob2b2b2b2\" x=\"250\" y=\"100\" width=\"50\" height=\"50\"/>";
+    let testo = disegno(&format!("<g id=\"og1g1g1g1\">{A}{b}</g>"));
+    let esito = tira_di_venti(&testo, &["oa1a1a1a1", "ob2b2b2b2"], false);
+    come_il_client(
+        &esito,
+        json!([{ "op": "batch", "ops": [
+            { "op": "set", "id": "oa1a1a1a1", "attrs": { "transform": "matrix(1 0 0 1 20 10)" } },
+            { "op": "set", "id": "ob2b2b2b2", "attrs": { "transform": "matrix(1 0 0 1 20 10)" } },
+        ] }]),
+    );
+    assert_eq!(esito.selection, ["oa1a1a1a1", "ob2b2b2b2"]);
+}
+
+/// Livelli di Inkscape con un figlio solo: un rettangolo, e un livello col
+/// suo rettangolo.
+const LIVELLI_CON_UN_FIGLIO: &str = "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:inkscape=\"http://www.inkscape.org/namespaces/inkscape\" xmlns:fub=\"https://fubeo.github.io/ns/scene/1\" fub:version=\"1\" viewBox=\"0 0 400 300\" width=\"400\" height=\"300\">\n  <g id=\"lc\" inkscape:groupmode=\"layer\"><rect id=\"rd\" x=\"40\" y=\"40\" width=\"60\" height=\"40\" fill=\"#000000\"/></g>\n  <g id=\"le\" inkscape:groupmode=\"layer\"><g id=\"lf\" inkscape:groupmode=\"layer\"><rect id=\"rg\" x=\"200\" y=\"40\" width=\"60\" height=\"40\" fill=\"#ff0000\"/></g></g>\n</svg>\n";
+
+#[test]
+fn un_livello_di_inkscape_con_un_figlio_solo() {
+    let esito = tira(LIVELLI_CON_UN_FIGLIO, &[], (60.0, 50.0), (80.0, 60.0));
+    come_il_client(&esito, spostato_di_venti("lc"));
+    assert_eq!(esito.selection, ["lc"]);
+    let esito = tira(LIVELLI_CON_UN_FIGLIO, &[], (220.0, 50.0), (240.0, 60.0));
+    come_il_client(&esito, spostato_di_venti("le"));
+    assert_eq!(esito.selection, ["le"]);
 }

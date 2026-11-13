@@ -495,7 +495,7 @@ fn col_motore(
         return Err(DrawingRefusal::Unsupported);
     };
     let differenza =
-        vectorcraft_engine::guard::catch_panic(|| differenza::differenza(copia, &dopo, None));
+        vectorcraft_engine::guard::catch_panic(|| differenza::differenza(copia, &dopo, None, None));
     banco.ripristina(copia);
     match differenza {
         Ok(Ok(d)) => Ok(d),

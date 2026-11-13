@@ -78,6 +78,8 @@
 //! trasformata dal gesto per più oggetti girati o ridimensionati, spostata
 //! con loro se era tenuta; nessuna per un oggetto solo, che ha la sua.
 
+use std::collections::HashSet;
+
 use fub_abi::{
     DrawingFrame, DrawingOutcome, DrawingPointer, DrawingPointerKind, DrawingPreview,
     DrawingRefusal,
@@ -641,6 +643,18 @@ fn presa_del_motore(cx: &Contesto<'_>, sel: &[NodeId], pe: Point) -> Point {
 
 /// Il gesto che comincia la pressione del contesto, e la pressione.
 fn analizza(cx: &Contesto<'_>) -> Option<(Gesto, DrawingPointer)> {
+    // Lo stesso per tutto il pezzo del gesto (la pressione, la copia e la
+    // vista non cambiano): si calcola una volta, ogni fase lo rilegge.
+    type Analisi = Option<(Gesto, DrawingPointer)>;
+    cx.memo
+        .get_or_init(|| Box::new(analizza_davvero(cx)))
+        .downcast_ref::<Analisi>()
+        .cloned()
+        .unwrap_or_else(|| analizza_davvero(cx))
+}
+
+/// [`analizza`] senza il memo.
+fn analizza_davvero(cx: &Contesto<'_>) -> Option<(Gesto, DrawingPointer)> {
     let press = cx.pressione?;
     let p = punto(&press);
     let pe = al_motore(cx, p);
@@ -1215,7 +1229,8 @@ fn applica(
                 nodo.transform(me, Scaling::from(true));
             }
         }
-        differenza::differenza(copia, &dopo, None).and_then(|d| d.testo())
+        let unita: HashSet<NodeId> = lista.iter().copied().collect();
+        differenza::differenza(copia, &dopo, None, Some(&unita)).and_then(|d| d.testo())
     })
     .map_err(|_| DrawingRefusal::Unsupported)?
     .map_err(|r| r.rifiuto())
@@ -1389,6 +1404,16 @@ impl Strumento for Selezione {
             matrix: Some(m.as_coeffs()),
             ..DrawingPreview::default()
         })
+    }
+
+    fn unita(&self, cx: &Contesto<'_>) -> Option<HashSet<NodeId>> {
+        // Gli oggetti che il gesto trasforma, come li sceglie la Selezione di
+        // Fub (`unitsOf`): il motore li ha mossi, la `transform` va a loro.
+        let (gesto, _) = analizza(cx)?;
+        if let Gesto::Riquadro { .. } = gesto {
+            return None;
+        }
+        Some(nodi(cx, &trasformati(cx, &gesto)).into_iter().collect())
     }
 
     fn rifinisci(&self, esito: &mut DrawingOutcome, cx: &Contesto<'_>) {

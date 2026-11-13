@@ -133,14 +133,14 @@ documento del motore (le `transform` degli antenati, il `viewBox` della
 radice e la scala delle unità, 0,75 per un file in unità fisiche). Un cambio
 di posto, misura o rotazione è una matrice M che si trova dai punti
 dell'oggetto e si **verifica**, muovendo l'oggetto di prima con M; l'elemento
-riceve `transform = G⁻¹·M·G·T`. Un gruppo mosso tutto insieme la riceve lui
-quando ha più di un figlio o un figlio che non viene da Fub; un livello mai.
-I colori pieni e lo spessore diventano `fill`, `stroke` e `stroke-width`, un
-tracciato cambiato punto per punto `d`; i nuovi sono `add` (`rect`,
-`ellipse`, `line` o `path`, geometria con due decimali), i tolti `remove` e
-l'ordine `move`, uno per ogni oggetto fuori dalla sottosequenza crescente più
-lunga dei fratelli. Ciò che non si scrive così è `Unsupported`; un oggetto
-fuori dalla mappa toccato è `Unmapped`.
+riceve `transform = G⁻¹·M·G·T`. Nella Selezione la ricevono gli oggetti scelti,
+come nel client; altrimenti un gruppo mosso tutto se ha più figli o uno
+estraneo, se no il figlio; un livello mai. I colori pieni e lo spessore
+diventano `fill`, `stroke` e `stroke-width`, un tracciato cambiato punto per
+punto `d`; i nuovi sono `add` (`rect`, `ellipse`, `line` o `path`, geometria
+con due decimali), i tolti `remove` e l'ordine `move`, uno per ogni oggetto
+fuori dalla sottosequenza crescente più lunga dei fratelli. Ciò che non si
+scrive così è `Unsupported`; un oggetto fuori dalla mappa toccato è `Unmapped`.
 
 Dopo ogni gesto la sessione del motore torna alla copia: lo stato vero è il
 file. Un panico del motore lo prende `vectorcraft_engine::guard::catch_panic`:
