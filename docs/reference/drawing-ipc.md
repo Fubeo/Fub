@@ -69,7 +69,12 @@ Dal lato del client le sei porte sono `openDrawing`, `drawingSync`,
 `DocumentSession`, manda le richieste in fila con un tempo limite di 10 s e,
 a un `stale`, rimanda il testo intero e riprova una volta.
 
-Gli errori che il client legge come «il motore manca»:
+Gli errori escono dalle sei porte nella lingua della shell, `{kind,
+message}` con `message` già una frase (`drawing_port` di
+`crates/fub-app/src/lib.rs`, che li passa da `for_the_shell`): l'host dice il
+motore spento con una chiave del suo catalogo, e il client riconosce un
+errore del contratto solo da un messaggio stringa (`asPluginError` di
+`host/errors.ts`). Gli errori che il client legge come «il motore manca»:
 
 - `unserved` **all'apertura**: il motore è spento in questo vault (la riga
   `fub.motore-vettoriale` della pagina Componenti, o i disegni spenti con

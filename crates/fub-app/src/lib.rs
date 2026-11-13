@@ -820,6 +820,36 @@ fn close_grid_bytes(
 // motore nel client, che le manda una alla volta. Senza il motore in questa
 // build ogni porta risponde `unserved` (`fub_host::drawing`).
 
+/// Il lavoro di una porta del disegno, fuori dal thread principale, con
+/// l'errore nella lingua della shell ([`drawing_for_the_shell`]).
+async fn drawing_port<T, F>(
+    app: AppHandle,
+    vault: Option<String>,
+    work: F,
+) -> Result<T, PluginError>
+where
+    T: Send + 'static,
+    F: FnOnce(&Host, Option<&str>) -> Result<T, PluginError> + Send + 'static,
+{
+    off_main(app, move |host| {
+        drawing_for_the_shell(host, vault.as_deref(), work)
+    })
+    .await
+}
+
+/// L'esito di `work` con l'errore passato da [`for_the_shell`]: l'host dice
+/// il motore spento con una chiave del suo catalogo, che sul filo sarebbe un
+/// oggetto, e il client riconosce un `unserved` solo da un messaggio che è
+/// una frase (`asPluginError` di `host/errors.ts`). Senza, il motore spento
+/// si leggerebbe come un guasto, e il disegno riaperto resterebbe «fermo».
+fn drawing_for_the_shell<T>(
+    host: &Host,
+    vault: Option<&str>,
+    work: impl FnOnce(&Host, Option<&str>) -> Result<T, PluginError>,
+) -> Result<T, PluginError> {
+    for_the_shell(host, vault, work(host, vault))
+}
+
 /// Apre un'istanza del motore sul testo del disegno `doc` (a capo LF).
 #[tauri::command]
 async fn open_drawing(
@@ -829,8 +859,8 @@ async fn open_drawing(
     vault: Option<String>,
 ) -> Result<DrawingOpen, PluginError> {
     let doc = doc_id(&doc)?;
-    off_main(app, move |host| {
-        host.drawing_open(vault.as_deref(), &doc, &text)
+    drawing_port(app, vault, move |host, vault| {
+        host.drawing_open(vault, &doc, &text)
     })
     .await
 }
@@ -843,8 +873,8 @@ async fn drawing_sync(
     sync: DrawingSync,
     vault: Option<String>,
 ) -> Result<DrawingSynced, PluginError> {
-    off_main(app, move |host| {
-        host.drawing_sync(vault.as_deref(), &instance, sync)
+    drawing_port(app, vault, move |host, vault| {
+        host.drawing_sync(vault, &instance, sync)
     })
     .await
 }
@@ -857,8 +887,8 @@ async fn drawing_gesture(
     gesture: DrawingGesture,
     vault: Option<String>,
 ) -> Result<DrawingOutcome, PluginError> {
-    off_main(app, move |host| {
-        host.drawing_gesture(vault.as_deref(), &instance, gesture)
+    drawing_port(app, vault, move |host, vault| {
+        host.drawing_gesture(vault, &instance, gesture)
     })
     .await
 }
@@ -871,8 +901,8 @@ async fn drawing_commands(
     selection: Vec<String>,
     vault: Option<String>,
 ) -> Result<Vec<DrawingCommandInfo>, PluginError> {
-    off_main(app, move |host| {
-        host.drawing_commands(vault.as_deref(), &instance, &selection)
+    drawing_port(app, vault, move |host, vault| {
+        host.drawing_commands(vault, &instance, &selection)
     })
     .await
 }
@@ -885,8 +915,8 @@ async fn drawing_command(
     request: DrawingCommandRequest,
     vault: Option<String>,
 ) -> Result<DrawingOutcome, PluginError> {
-    off_main(app, move |host| {
-        host.drawing_command(vault.as_deref(), &instance, request)
+    drawing_port(app, vault, move |host, vault| {
+        host.drawing_command(vault, &instance, request)
     })
     .await
 }
@@ -898,8 +928,8 @@ async fn close_drawing(
     instance: String,
     vault: Option<String>,
 ) -> Result<(), PluginError> {
-    off_main(app, move |host| {
-        host.drawing_close(vault.as_deref(), &instance)
+    drawing_port(app, vault, move |host, vault| {
+        host.drawing_close(vault, &instance)
     })
     .await
 }
@@ -3288,6 +3318,52 @@ pub fn run() {
                 }
             }
         });
+}
+
+#[cfg(test)]
+mod drawing_ipc_tests {
+    use super::*;
+
+    /// Il motore spento nel vault arriva alla shell come `unserved` con una
+    /// frase: il client lo legge come «spento» e non come un guasto, e il
+    /// disegno riaperto offre «Accendi…» invece di restare «fermo».
+    #[test]
+    fn the_engine_off_reaches_the_shell_as_unserved_with_a_sentence() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let root = Utf8PathBuf::from_path_buf(dir.path().canonicalize().unwrap()).unwrap();
+        std::fs::create_dir_all(root.join(".fub")).unwrap();
+        std::fs::write(
+            root.join(".fub").join("settings.json"),
+            serde_json::json!({"version": 1, "values": {"components.off": ["fub.motore-vettoriale"]}})
+                .to_string(),
+        )
+        .unwrap();
+        let config = tempfile::tempdir().expect("config");
+        let host = Host::without_watcher()
+            .with_config_dir(&Utf8PathBuf::from_path_buf(config.path().to_path_buf()).unwrap());
+        host.open(&root).expect("il vault si apre");
+        let doc = doc_id("Disegno.svg").unwrap();
+        let text = "<svg xmlns=\"http://www.w3.org/2000/svg\"/>";
+        let vault = Some(root.as_str());
+
+        // Dall'host, la chiave del catalogo: sul filo un oggetto.
+        let raw = host.drawing_open(vault, &doc, text).unwrap_err();
+        assert!(matches!(raw, PluginError::Unserved(_)), "{raw:?}");
+        assert!(serde_json::to_value(&raw).unwrap()["message"].is_object());
+
+        let shown = drawing_for_the_shell(&host, vault, |host, vault| {
+            host.drawing_open(vault, &doc, text)
+        })
+        .unwrap_err();
+        let wire = serde_json::to_value(&shown).unwrap();
+        assert_eq!(wire["kind"], "unserved", "{wire}");
+        assert!(
+            wire["message"]
+                .as_str()
+                .is_some_and(|text| !text.is_empty()),
+            "{wire}"
+        );
+    }
 }
 
 #[cfg(test)]
