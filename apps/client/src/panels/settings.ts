@@ -62,6 +62,7 @@ import {
   keybindingIssues,
   keybindingKey,
   keyboardPlatform,
+  registerComponentRow,
   reservedChord,
   validateKeybinding,
   type CommandEntry,
@@ -304,7 +305,10 @@ function settleRadioGroup(group: HTMLElement): void {
   for (const button of buttons) button.tabIndex = button === tabbable ? 0 : -1;
 }
 
-function selectTab(next: SettingsTab, focus: boolean): void {
+/// Sceglie la scheda `next` come il clic sulla sua linguetta: lasciare
+/// «Impostazioni» annulla l'anteprima del tema e degli snippet. La promessa
+/// finisce col disegno della scheda.
+function selectTab(next: SettingsTab, focus: boolean): Promise<void> {
   if (tab === "settings" && next !== "settings") {
     void cancelThemePreview();
     cancelCssSnippetsPreview();
@@ -314,10 +318,33 @@ function selectTab(next: SettingsTab, focus: boolean): void {
   componentsGeneration++;
   syncToolbar();
   const owner = settingsLifetime;
-  void render().then(() => {
+  return render().then(() => {
     if (!focus || owner?.closed || owner !== settingsLifetime) return;
     tabButtons().find((button) => button.dataset.tab === next)?.focus();
   });
+}
+
+/// Apre le impostazioni sulla riga del componente `id` nella scheda
+/// «Componenti» (la porta `showComponent`, per «Accendi…» del disegno). Il
+/// pannello già aperto cambia scheda come col clic; chiuso si apre su quella
+/// scheda. Un `id` che la mappa non ha apre la scheda e basta; un pannello
+/// chiuso prima che la riga arrivi non si riapre.
+async function openComponentRow(id: string): Promise<void> {
+  const owner = settingsLifetime;
+  if (!owner || owner.closed) return;
+  if (release) {
+    if (tab !== "components") await selectTab("components", false);
+  } else {
+    if (tab !== "components") {
+      tab = "components";
+      pinnedRow = null;
+      componentsGeneration++;
+      syncToolbar();
+    }
+    await open();
+  }
+  if (owner.closed || owner !== settingsLifetime || !release || tab !== "components") return;
+  await componentsPage.focusRow(id);
 }
 
 export function mountSettings(nextHooks: Hooks, parent?: Lifetime): Teardown {
@@ -374,7 +401,7 @@ export function mountSettings(nextHooks: Hooks, parent?: Lifetime): Teardown {
       figure.innerHTML = icon(TAB_ICONS[value]);
       button.prepend(figure);
     }
-    lifetime.listen(button, "click", () => selectTab(value, true));
+    lifetime.listen(button, "click", () => void selectTab(value, true));
     lifetime.listen(button, "keydown", (event) => {
       const buttons = tabButtons();
       const index = buttons.indexOf(button);
@@ -382,7 +409,7 @@ export function mountSettings(nextHooks: Hooks, parent?: Lifetime): Teardown {
       if (next === null) return;
       event.preventDefault();
       const nextTab = buttons[next]?.dataset.tab as SettingsTab | undefined;
-      if (nextTab) selectTab(nextTab, true);
+      if (nextTab) void selectTab(nextTab, true);
     });
   }
   const selectedTab = tabButtons().find((button) => button.dataset.tab === tab);
@@ -476,6 +503,7 @@ export function mountSettings(nextHooks: Hooks, parent?: Lifetime): Teardown {
     visible: () => !lifetime.closed && !panelEl.hidden && tab === "components",
     reloadProvider: () => settingsHooks.reloadProvider(),
   });
+  lifetime.add(registerComponentRow((id) => void openComponentRow(id)));
   lifetime.add(() => {
     cancelCssSnippetsPreview();
     race.cancel();

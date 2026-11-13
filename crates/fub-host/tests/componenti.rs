@@ -143,6 +143,10 @@ fn the_manifest_says_what_the_row_says() {
     )
     .expect("mount succeeds");
 
+    #[cfg_attr(
+        not(any(feature = "rich", feature = "xlsx", feature = "craft")),
+        allow(unused_mut)
+    )]
     let mut ids: Vec<&str> = fub_features::every_official_feature()
         .iter()
         .map(|feature| feature.id)
@@ -220,6 +224,7 @@ fn host(root: &Utf8PathBuf) -> fub_host::Host {
     host
 }
 
+#[cfg_attr(not(feature = "lavagna"), allow(dead_code))]
 fn extensions(host: &fub_host::Host, root: &Utf8PathBuf) -> BTreeSet<String> {
     // Riaprire dà il `VaultInfo` del vault montato adesso.
     host.open(root)
@@ -259,6 +264,10 @@ fn keys(root: &Utf8PathBuf) -> Vec<(String, Value)> {
     keys
 }
 
+#[cfg_attr(
+    not(any(feature = "lavagna", feature = "engine-drawing")),
+    allow(dead_code)
+)]
 fn apply(host: &fub_host::Host, azione: Azione) {
     let esito = host
         .apply_components(None, azione.clone(), true)
@@ -267,6 +276,10 @@ fn apply(host: &fub_host::Host, azione: Azione) {
     assert!(esito.applicato);
 }
 
+#[cfg_attr(
+    not(any(feature = "lavagna", feature = "engine-drawing")),
+    allow(dead_code)
+)]
 fn spegni(host: &fub_host::Host, id: &str, orfani: Orfani) {
     apply(
         host,
@@ -278,10 +291,15 @@ fn spegni(host: &fub_host::Host, id: &str, orfani: Orfani) {
     );
 }
 
+#[cfg_attr(
+    not(any(feature = "lavagna", feature = "engine-drawing")),
+    allow(dead_code)
+)]
 fn accendi(host: &fub_host::Host, id: &str) {
     apply(host, Azione::Accendi { id: id.into() });
 }
 
+#[cfg_attr(not(any(feature = "lavagna", feature = "draw")), allow(dead_code))]
 fn perche(host: &fub_host::Host, id: &str) -> Perche {
     host.components(None)
         .expect("components")
@@ -292,6 +310,7 @@ fn perche(host: &fub_host::Host, id: &str) -> Perche {
         .perche
 }
 
+#[cfg(feature = "lavagna")]
 #[test]
 fn the_canvas_goes_away_with_the_lavagna_and_comes_back() {
     let (_dir, root) = vault();
@@ -311,6 +330,7 @@ fn the_canvas_goes_away_with_the_lavagna_and_comes_back() {
     assert_eq!(extensions(&host, &root), before);
 }
 
+#[cfg(feature = "lavagna")]
 #[test]
 fn kept_and_waiting_survive_a_reopen() {
     let (_dir, root) = vault();
@@ -338,6 +358,7 @@ fn kept_and_waiting_survive_a_reopen() {
     assert_eq!(perche(&host, "fub.penna"), Perche::Scelto, "kept");
 }
 
+#[cfg(feature = "lavagna")]
 #[test]
 fn keep_while_turning_off_survives_a_reopen() {
     let (_dir, root) = vault();
@@ -367,6 +388,7 @@ fn a_vault_without_the_keys_mounts_the_same_bundles() {
 /// penna tenuta resta una scelta (`components.kept`). La lavagna è un bundle:
 /// riaccesa, `plugins.disabled` resta scritto vuoto, come per ogni bundle
 /// riacceso (`Host::set_plugin_enabled`), e vuoto vale come assente.
+#[cfg(feature = "lavagna")]
 #[test]
 fn turning_lavagna_and_pdf_off_and_on_leaves_everything_as_it_was() {
     for orfani in [Orfani::Chiedi, Orfani::Togli] {
@@ -397,8 +419,10 @@ fn turning_lavagna_and_pdf_off_and_on_leaves_everything_as_it_was() {
 }
 
 /// Gli eventi che escono dal ponte, come li vede la WebView.
+#[cfg(feature = "lavagna")]
 struct Uscita(std::sync::Mutex<Vec<fub_abi::Event>>);
 
+#[cfg(feature = "lavagna")]
 impl fub_host::EventSink for Uscita {
     fn emit(&self, notice: &fub_abi::Notice) -> fub_host::Delivery {
         self.0.lock().unwrap().push(notice.event.clone());
@@ -406,6 +430,7 @@ impl fub_host::EventSink for Uscita {
     }
 }
 
+#[cfg(feature = "lavagna")]
 impl Uscita {
     /// Aspetta che dopo un `VaultClosed` di `root` esca un `VaultOpened` dello
     /// stesso vault. Il ponte consegna da un suo thread: l'attesa è parte di
@@ -437,6 +462,7 @@ impl Uscita {
 /// scelta: dalla porta dell'app (`Host::apply_components`, ciò che chiama
 /// `components_apply`) e dal canale di controllo (CLI, MCP con l'app aperta).
 /// La chiusura esce come `VaultClosed`; dopo, esce un `VaultOpened`.
+#[cfg(feature = "lavagna")]
 #[test]
 fn a_remount_tells_the_shell_the_vault_is_open_again() {
     let (_dir, root) = vault();
@@ -473,4 +499,238 @@ fn a_remount_tells_the_shell_the_vault_is_open_again() {
         "control: no VaultOpened after the remount: {:?}",
         uscita.0.lock().unwrap()
     );
+}
+
+// ---------------------------------------------------------------------------
+// Il Motore del disegno (K5, D-14 (a)): una riga senza bundle in «Disegnare»,
+// accesa di serie, che si spegne a mano in `components.off` come il PDF e
+// richiede i disegni. I disegni lo usano se c'è: spento lui, restano.
+
+/// Il motore del disegno, l'id della mappa.
+const MOTORE: &str = "fub.motore-vettoriale";
+/// I disegni, il bundle che il motore richiede.
+const DISEGNI: &str = "fub.draw";
+
+/// Il file delle impostazioni del vault con questi valori, scritto prima di
+/// aprirlo.
+fn settings(root: &Utf8PathBuf, values: Value) {
+    std::fs::create_dir_all(root.join(".fub")).unwrap();
+    std::fs::write(
+        root.join(".fub").join("settings.json"),
+        serde_json::json!({"version": 1, "values": values}).to_string(),
+    )
+    .unwrap();
+}
+
+/// La riga `id` come la vede la pagina, se questa build ce l'ha.
+#[cfg_attr(not(feature = "engine-drawing"), allow(dead_code))]
+fn row(host: &fub_host::Host, id: &str) -> Option<componenti::RigaNelVault> {
+    host.components(None)
+        .expect("components")
+        .righe
+        .into_iter()
+        .find(|riga| riga.id == id)
+}
+
+/// La riga del motore c'è con `engine-drawing` e non senza; i disegni ci sono
+/// con `draw`, che `engine-drawing` accende.
+#[test]
+fn the_drawing_engine_row_follows_its_cargo_feature() {
+    let ids: BTreeSet<&str> = componenti::righe().iter().map(|row| row.id).collect();
+    assert_eq!(ids.contains(MOTORE), cfg!(feature = "engine-drawing"));
+    assert_eq!(ids.contains(DISEGNI), cfg!(feature = "draw"));
+    if cfg!(feature = "engine-drawing") {
+        assert!(ids.contains(DISEGNI), "the engine brings the drawings");
+    }
+}
+
+/// Un vault senza chiavi: il motore è acceso di serie, perché scelto e non
+/// perché richiesto, e non manca niente.
+#[test]
+#[cfg(feature = "engine-drawing")]
+fn the_drawing_engine_is_on_by_default() {
+    let (_dir, root) = vault();
+    let host = host(&root);
+    let motore = row(&host, MOTORE).expect("the engine row");
+    assert!(motore.acceso);
+    assert!(!motore.bundle);
+    assert_eq!(motore.gruppo, "disegnare");
+    assert_eq!(motore.perche, Perche::Scelto);
+    // I disegni sono scelti anche loro, non accesi soltanto perché il motore
+    // li richiede.
+    assert_eq!(perche(&host, DISEGNI), Perche::Scelto);
+    assert!(host.components(None).unwrap().mancanti.is_empty());
+}
+
+/// Un profilo dei componenti che non nomina il motore (nessuno lo nomina:
+/// «Disegnare» sta fuori dai profili) lo lascia acceso di serie.
+#[test]
+#[cfg(feature = "engine-drawing")]
+fn a_profile_that_does_not_name_the_engine_leaves_it_on() {
+    for profilo in ["studio", "solo-note"] {
+        let (_dir, root) = vault();
+        settings(&root, serde_json::json!({"components.profile": profilo}));
+        let host = host(&root);
+        assert_eq!(perche(&host, MOTORE), Perche::Scelto, "{profilo}");
+        assert!(row(&host, MOTORE).unwrap().acceso, "{profilo}");
+    }
+}
+
+/// Spento a mano, il motore va in `components.off` e i disegni restano
+/// accesi e montati; anche da un host nuovo. Riacceso, il file torna com'era.
+#[test]
+#[cfg(feature = "engine-drawing")]
+fn turning_the_engine_off_leaves_the_drawings_on() {
+    let (_dir, root) = vault();
+    let host = host(&root);
+    let keys_before = keys(&root);
+    let bundles_before = bundles(&host);
+
+    spegni(&host, MOTORE, Orfani::Chiedi);
+    assert_eq!(
+        keys(&root),
+        vec![("components.off".to_string(), serde_json::json!([MOTORE]))]
+    );
+    assert_eq!(perche(&host, MOTORE), Perche::Spento);
+    assert_eq!(perche(&host, DISEGNI), Perche::Scelto);
+    assert!(bundles(&host).contains(DISEGNI));
+    assert_eq!(bundles(&host), bundles_before, "no bundle moves");
+    host.close();
+
+    let host = self::host(&root);
+    assert_eq!(perche(&host, MOTORE), Perche::Spento, "after a reopen");
+    assert!(bundles(&host).contains(DISEGNI));
+
+    accendi(&host, MOTORE);
+    assert_eq!(keys(&root), keys_before);
+    assert_eq!(perche(&host, MOTORE), Perche::Scelto);
+}
+
+/// Le chiavi senza un `plugins.disabled` scritto vuoto, che vale come
+/// assente (un bundle riacceso lo lascia così, `Host::set_plugin_enabled`).
+#[cfg_attr(not(feature = "engine-drawing"), allow(dead_code))]
+fn keys_without_empty_disabled(root: &Utf8PathBuf) -> Vec<(String, Value)> {
+    keys(root)
+        .into_iter()
+        .filter(|(k, v)| !(k == "plugins.disabled" && v == &Value::Array(Vec::new())))
+        .collect()
+}
+
+/// Spegnere i disegni fa ciò che il risolutore fa per ogni riga che ne
+/// richiede un'altra (come la Lavagna con la Penna): con il motore acceso è
+/// rifiutato, perché il motore li richiede; con «spegni anche questi» si
+/// spengono tutti e due, i disegni in `plugins.disabled` e il motore in
+/// `components.off`.
+///
+/// Riaccesi i disegni, il motore resta spento: il risolutore non ricorda
+/// perché era acceso, e lo spegnimento è stato chiesto. Riacceso il motore,
+/// che riaccende i disegni che richiede, il vault torna com'era prima.
+#[test]
+#[cfg(feature = "engine-drawing")]
+fn turning_the_drawings_off_follows_the_resolver() {
+    let (_dir, root) = vault();
+    let host = host(&root);
+    let keys_before = keys(&root);
+    let bundles_before = bundles(&host);
+
+    let rifiuto = host
+        .apply_components(
+            None,
+            Azione::Spegni {
+                id: DISEGNI.into(),
+                anche_questi: false,
+                orfani: Orfani::Chiedi,
+            },
+            true,
+        )
+        .expect("the host answers")
+        .expect_err("the engine requires the drawings");
+    assert_eq!(
+        rifiuto,
+        componenti::Rifiuto::Richiesto {
+            id: DISEGNI.into(),
+            da: vec![MOTORE.into()],
+        }
+    );
+    assert_eq!(keys(&root), keys_before, "a refusal writes nothing");
+
+    apply(
+        &host,
+        Azione::Spegni {
+            id: DISEGNI.into(),
+            anche_questi: true,
+            orfani: Orfani::Chiedi,
+        },
+    );
+    assert_eq!(perche(&host, DISEGNI), Perche::Spento);
+    assert_eq!(perche(&host, MOTORE), Perche::Spento);
+    assert!(!bundles(&host).contains(DISEGNI));
+    assert_eq!(
+        keys(&root),
+        vec![
+            ("components.off".to_string(), serde_json::json!([MOTORE])),
+            ("plugins.disabled".to_string(), serde_json::json!([DISEGNI])),
+        ]
+    );
+
+    // Riaccesi i disegni: il motore resta com'è stato lasciato, spento.
+    accendi(&host, DISEGNI);
+    assert_eq!(perche(&host, DISEGNI), Perche::Scelto);
+    assert_eq!(
+        perche(&host, MOTORE),
+        Perche::Spento,
+        "the engine stays off"
+    );
+    assert!(bundles(&host).contains(DISEGNI));
+
+    accendi(&host, MOTORE);
+    assert_eq!(keys_without_empty_disabled(&root), keys_before);
+    assert_eq!(bundles(&host), bundles_before);
+    assert_eq!(perche(&host, MOTORE), Perche::Scelto);
+}
+
+/// Con il motore già spento a mano, spegnere e riaccendere i disegni non lo
+/// tocca: torna com'era prima, spento.
+#[test]
+#[cfg(feature = "engine-drawing")]
+fn the_drawings_off_and_on_leave_an_engine_off_as_it_was() {
+    let (_dir, root) = vault();
+    let host = host(&root);
+    spegni(&host, MOTORE, Orfani::Chiedi);
+    let keys_before = keys(&root);
+
+    spegni(&host, DISEGNI, Orfani::Chiedi);
+    assert_eq!(perche(&host, MOTORE), Perche::Spento);
+    accendi(&host, DISEGNI);
+    assert_eq!(perche(&host, MOTORE), Perche::Spento);
+    assert_eq!(keys_without_empty_disabled(&root), keys_before);
+}
+
+/// Un vault che ha spento il motore, aperto da una build senza il motore:
+/// l'id non conta e si dice in `mancanti`, e resta nel file per la build che
+/// ce l'ha.
+#[test]
+#[cfg(not(feature = "engine-drawing"))]
+fn an_engine_off_in_a_build_without_it_is_missing_and_kept() {
+    let (_dir, root) = vault();
+    settings(&root, serde_json::json!({"components.off": [MOTORE]}));
+    let host = host(&root);
+    let components = host.components(None).expect("components");
+    assert!(components.righe.iter().all(|riga| riga.id != MOTORE));
+    assert_eq!(
+        components.mancanti,
+        vec![componenti::Mancante {
+            chiave: "components.off".into(),
+            id: MOTORE.into(),
+        }]
+    );
+    assert_eq!(
+        keys(&root),
+        vec![("components.off".to_string(), serde_json::json!([MOTORE]))]
+    );
+    #[cfg(feature = "draw")]
+    {
+        assert_eq!(perche(&host, DISEGNI), Perche::Scelto);
+        assert!(bundles(&host).contains(DISEGNI));
+    }
 }

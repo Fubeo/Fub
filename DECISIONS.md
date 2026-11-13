@@ -99,6 +99,40 @@ ciò che non dipende dalla risposta.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-13 · K5 T30 · il piano si chiude col sì dell'utente; restano fuori, come issue o limiti noti: il tetto alle istanze dei motori per vault (`issue-istanze-motore.md`), i `detail` delle parti solo in italiano, il campo «Testo» per un `<text>` senza `tspan`, `ripristina` fuori da `catch_panic`, le proposte a monte per VectorCraft (bozza non inviata) e il test instabile `close_a_vault_and_latest_round_in_which_and_again_open` visto una volta sotto carico · non cambiano il comportamento che K5 promette, e ognuno è più piccolo o più largo del piano.
+- 2026-11-13 · K5 T30 · la prova sull'app vera ha trovato gli errori delle sei porte del disegno consegnati con la chiave del catalogo (un oggetto sul filo): il client leggeva ogni `unserved` come un guasto, e un disegno riaperto a motore spento restava «fermo» anche dopo la riaccensione. Corretto nel proprietario, `fub-app` (`drawing_port` passa da `for_the_shell`, come Componenti), non rilassando `asPluginError` nel client; il `BadArgs` di un sync resta un fermo della sessione (con «Riprova») e si sono corretti commento e docs che dicevano il contrario · il contratto vuole messaggi già tradotti, e cambiare il comportamento della sessione in T30 non serviva: un `BadArgs` del sync è solo un difetto, e il fermo è la strada sicura.
+- 2026-11-13 · K5 T23 · accettati i due `kind` nuovi del chip (`reduced`, `stopped`) in `editors/core/registry.ts` al posto di `body`, e il ramo resta con `bench/scene.test.ts` rosso finché le 6 baseline delle scene nuove non arrivano dal runner (primo passo di T30) · Perché: il prototipo approvato usa quei due segni (vuoto e rosso), e le baseline si fanno solo sul runner Linux.
+- 2026-11-13 · K5 T35 · accettati `gesti/mod.rs` (`Strumento::unita`, `Contesto::memo`) e la chiamata in `comandi.rs` fuori dal Tocca stretto, e il caso nuovo dei due figli scelti insieme (la `transform` a ciascuno, registrato dal client) · Perché: il caso visto da T33 nasce da gesti fatti dal motore, e le unità si sanno solo al commit; il memo toglie il costo in più (circa 3 ms su 1 MiB) di rifare l'analisi.
+- 2026-11-13 · K5 T22 · il coder si è fermato: il prototipo approvato (scena 7a, «poi scrivilo nell'ispettore») conta su un campo che cambia le parole di un testo, e nel client non c'è (la `textarea` di `properties.ts` è la Descrizione del documento; nessuno scrive `op: "text"` su un testo libero). T22 si allarga a quel campo (`fields.ts`, `properties.ts`, `panel.ts`), che non c'è per un testo che `op: "text"` non riscrive senza perdite · Perché: è ciò che l'utente ha approvato nel prototipo, e senza il campo lo strumento scriverebbe sempre «Testo»; un editor sul foglio sarebbe un disegno nuovo da far vedere.
+- 2026-11-13 · K5 T21 · accettati i file toccati fuori da Tocca (`lazy.ts`, `panels/standing.ts`, la skin `sheets.css` con i rigenerati): senza `lazy.ts` il chip non arrivava alla shell, e il taglio dei nomi lunghi con l'elenco che scorre serve anche al chip del rich. Il `detail` delle perdite resta in italiano anche con l'interfaccia in inglese: si nota in T30 come limite noto, non si traduce ora · Perché: il motore scrive il `detail` come testo; tradurlo vuol dire un codice per ogni motivo nel contratto, una scelta più grande del chip.
+- 2026-11-13 · K5 T34 · il commit sul disegno di 1 MiB scende da p95 99 ms a 9,3–9,9 ms senza toccare VectorCraft: la differenza non scrive più in JSON il sottoalbero di un livello e prende per uguali i rami condivisi (`Arc::ptr_eq`); il ritorno della sessione alla copia (0,2 ms) resta com'è. Dei 9 ms rimasti, ~7,5 crescono col disegno dentro VectorCraft (eventi del commit 3,6 ms, `hit_test` della Selezione 4 ms): non si toccano ora · Perché: il tetto di A8 (50 ms) è passato con margine; una patch a `vendor/vectorcraft` per pochi millisecondi non vale il costo.
+- 2026-11-13 · K5 T33 · accettata la strada della mappa: i livelli che il lettore SVG del motore crea da gruppi di Fub tornano gruppi in `apertura.rs`, e il motore li disegna uguale. Il caso visto dal coder (un gruppo di un figlio solo riceve la `transform` sul figlio, il client sul gruppo) diventa T35, dopo T34; T30 ne dipende · Perché: il motore deve scrivere il testo che scrive oggi il client, non solo disegnare lo stesso, e la regola «un figlio solo» non sa che cosa l'utente ha scelto.
+- 2026-11-12 · K5 T20 · il cancello passa (32 file su 32) e ne nascono due task: T33 (un gruppo-livello di Inkscape figlio della radice è un livello nel motore e non si sposta, mentre oggi il client lo sposta) e T34 (il commit su un disegno di 1 MiB costa 82 ms di mediana e 99 ms al 95° percentile, contro i 50 di A8); T30 dipende da tutti e due. Il motore continua a prendere dal sistema i caratteri che le facce di Fub non hanno (greco, cirillico, CJK, emoji), anche se `FontDb::set_system_fallback(false)` lo spegnerebbe senza patch: la WebView disegna quei caratteri con le facce del sistema, e il motore deve colpire il testo che l'utente vede; la misura scrive che il risultato su quei testi dipende dalla macchina · Perché: chi usa Fub non deve perdere un gesto di oggi né sentire un disegno grande più lento, e un colpo su un testo deve seguire ciò che si vede.
+- 2026-11-12 · K5 T32 · il contorno delle linee a spessore variabile è una traduzione in Rust del calcolo del client (`src/profilo/`, ~3 700 righe), non le operazioni sui tracciati di VectorCraft: il risultato deve essere lo stesso `d` che scrive il client, e un algoritmo diverso darebbe un contorno diverso. Rimandato il coder una volta perché togliesse un lettore del `d` copiato da `fub-scene`: ora `fub-scene` rende pubblici `parse_path` e il suo segmento (`PathSegment`), fuori dal `Tocca` di T32 per decisione dell'orchestratore · Perché: due lettori dello stesso `d` possono divergere in silenzio, e uno basta.
+- 2026-11-12 · K5 T24 · il `Tocca` di T24 si allarga alla skin della casa (`theme/scrittoio/skin/settings.css`, i ganci in `anatomia/` e i derivati rigenerati): il prototipo approvato mette lì la classe `.components-row--found` della riga segnata · Perché: il codice del client non scrive stili, e la riga segnata del prototipo si vede solo con la sua regola nella skin.
+- 2026-11-12 · K5 T17 · accettati i tre file fuori dal `Tocca` di T17: la riga `vectorcraft-text` del workspace (`default-features = false`, già nel grafo: nessuna libreria nuova), `VECTORCRAFT_OWNERS` del test delle dipendenze e il paragrafo di `scene-gestures.md`; le facce di Fub entrano nella `FontDb::global()` del motore invece che in una nuova, perché è quella che il motore usa in tutto il suo codice. Che la `FontDb` catalogi anche i caratteri del sistema quando una famiglia manca resta una nota in T20 · Perché: una seconda `FontDb` non la vedrebbe nessuno, e spegnere il catalogo del sistema chiede una patch nella copia di VectorCraft, da provare prima col cancello.
+- 2026-11-12 · K5 T29 · accettati `motore_disegno_spento` con una funzione che legge le chiavi (serve al `Workspace` di `serves` e alle impostazioni del vault dell'host) e la lettura delle impostazioni solo quando un'istanza manca; l'orchestratore aggiunge i testi IT/EN delle cinque chiavi `host.drawing.*` nel catalogo di `settings.rs`, che T19 aveva lasciato senza. Le istanze restano aperte se le impostazioni cambiano fuori da `apply_components` (un profilo, il file cambiato a mano): non si sorvegliano le impostazioni per il disegno, e la pagina Componenti, la CLI e l'MCP passano tutti da `apply_components` · Perché: un errore deve arrivare con una frase, non con la sua chiave, e leggere le impostazioni a ogni gesto costerebbe su ogni tratto.
+- 2026-11-12 · K5 T28 · tenuti i due file fuori dal `Tocca` di T28: le chiavi `draw.reason.engine_off` e `draw.reason.engine_stopped` in `strings/tools.ts` (servono a dire perché il motore manca) e `colori.test.ts` (`motoreDa` prende ora una funzione che apre, per poter riaprire un'istanza nuova). Accettati anche `spento()`, `quandoChiusa()` e la riapertura col `session.id`: il motore spento lo dice subito, una `DocumentSession` chiusa non si riapre, un file rinominato riapre col nome nuovo · Perché: senza, il motore riacceso riaprirebbe col nome vecchio o su un documento già chiuso.
+- 2026-11-12 · K5 T18 · lo spessore delle linee a spessore variabile resta `unsupported` in T18 (il client riscala il profilo e ricalcola il contorno pieno con `widthTo`, un calcolo che in Rust non c'è) e diventa il task nuovo T32, da cui dipendono T20 e T30; accettati i cambi di T18 in `src/differenza.rs` e `src/motore.rs` (un tratto o un riempimento nuovi, il `fill` dei testi, la punta delle frecce, i tratteggi rimisurati) · Perché: col motore acceso il campo dello spessore oggi si spegne su quelle linee, e chi usa Fub non deve perdere un comando che senza motore funziona.
+- 2026-11-12 · K5 T15 · chiuso con la selezione che usa lo strumento del motore solo dove dà il risultato di Fub, e la matrice di Fub negli altri casi (nessun gesto `unsupported`); rimandato al coder una volta perché rifacesse Ctrl/⌘ dentro i gruppi e la soglia di trascinamento ricordata, che oggi Fub ha. La cornice girata tenuta fra due gesti su più oggetti la sa solo il client (`ctx.kept`): diventa il task nuovo T31 (un campo additivo in `DrawingGesture`, il client che lo manda, la selezione che lo usa), e T30 ne dipende · Perché: chi usa Fub non deve perdere un gesto che oggi funziona, e il contratto cambia solo con un campo opzionale.
+- 2026-11-12 · K5 T15 · `gesti/mod.rs` si allarga ancora di poco: il `Banco` tiene anche la pressione di Fub (il Down prima di `Strumento::evento`) e la passa a due metodi nuovi del tratto, con un'implementazione di base che le forme non riscrivono. Serve alla selezione per il riquadro (Fub sceglie solo ciò che sta dentro per intero, il motore ciò che il riquadro tocca) e per le maniglie (quella di Fub sta 4 px fuori dalla cornice e si prende entro 8 px, quella del motore sulla cornice entro 5 px). Una cornice inclinata da ridimensionare non si rifiuta con `unsupported`: il client, su `unsupported`, dice solo «rifiutato» senza ricadere sugli strumenti semplici, quindi si fa con la regola di Fub in `selezione.rs` · Perché: chi usa Fub non deve vedere la selezione cambiare regole né perdere un gesto che oggi funziona.
+- 2026-11-12 · K5 T14 · tenuti i due cambi di T14 fuori dal suo `Tocca`: in `src/gesti/mod.rs` il braccio delle forme in `strumento()` e l'aggancio `Strumento::evento(e, inizio, cx)` (le regole di Fub su griglia, Maiusc, Alt e Ctrl/⌘ prima dello strumento del motore, che le leggerebbe a modo suo); in `src/apertura.rs` un livello vuoto di Fub diventa un livello vuoto del motore (il lettore SVG del motore toglie i gruppi vuoti, e un disegno nuovo comincia con uno). T15 e T17 aggiungono il loro braccio in `strumento()` e impostano le loro tolleranze magnetiche (le forme le mettono a zero nelle prefs della sessione, che è condivisa) · Perché: senza, quattro vettori delle forme fallivano e in un disegno nuovo nessuna forma si scriveva; T15 ha bisogno dello stesso aggancio per la griglia di `snappedDelta`.
+- 2026-11-12 · K5 T13 · riaccesi i disegni, il Motore del disegno resta spento se il risolutore di K2 lo aveva spento con loro: il risolutore non ricorda lo stato di prima, e cambiarne le regole è fuori da K5. Il piano diceva «torna com'era prima»; vale il codice, scritto nel test di `fub-host/tests/componenti.rs`. Accettati anche `fub-disegno` per percorso in `fub-host` e i test della lavagna sotto la feature `lavagna`. Il caso di `fub.draw` in `plugins.disabled` va a T29 (nota nel piano) · Perché: una regola sola per le righe che ne richiedono un'altra, e il motore si riaccende con un clic nella pagina Componenti.
+- 2026-11-12 · K5 T11 · i caratteri non arrivano ancora alla `FontDb` del motore: costruirla dai `Caratteri` di T7 vuole `vectorcraft-text` come dipendenza diretta di `fub-disegno` (`Cargo.toml` e `Cargo.lock`, fuori dal `Tocca` di T11). Lo fa T17, a cui si aggiungono `crates/fub-disegno/Cargo.toml`, `Cargo.lock` e la sola `FontDb` in `src/motore.rs`; fino ad allora il motore usa i suoi caratteri di ripiego. Altre differenze di T11 accettate: `sincronizza`, `gesto` e `comando` rendono `Result<…, PluginError>`; l'import toglie le etichette e segna i livelli con `data-vc-layer`; un import rifiutato apre una copia vuota in sola lettura; nessun `.tsv` di differenze ammesse ancora (il lettore c'è, i file li scrivono T14–T17) · Perché: i caratteri servono solo al testo, che è T17, e la crate è già nel grafo (nessuna libreria nuova).
+- 2026-11-12 · K5 T27 · `hayro` passa da 0.5 a 0.6 in `fub-features` (rasterizzatore del PDF redatto e annotato): legge JPEG 2000 e fax e disegna con le stesse versioni del motore, e toglie quattro doppie; il motivo della 0.5 (un compilatore più nuovo) non vale con Rust 1.95; feature come prima (`embed-fonts` sì, `embed-cmaps` no). Provato uguale byte per byte su un PDF redatto semplice; su PDF complessi (JPEG 2000, JBIG2) i pixel possono cambiare. Il tetto `librerie_doppie` scende a 55 · Perché: D-3 (a), «allineo dove posso», e un rasterizzatore in comune col motore costa meno da tenere.
+- 2026-11-09 · K5 T9 · `cargo fmt --all` segue le dipendenze a percorso e
+  con `fub-disegno` nel workspace controlla anche le copie di VectorCraft e
+  craft-libs: il `rustfmt.toml` dell'upstream entra fra i file gestiti
+  (come per WordCraft e GridCraft) e le patch si riformattano senza
+  cambiare effetto · scelta dell'orchestratore fra questo e togliere
+  `vendor/` dal controllo di fmt, che sarebbe diverso per motore.
+- 2026-11-09 · K5 T9 · la licenza IJG di `jpeg-encoder` entra con
+  un'eccezione stretta in `deny.toml` (solo quel crate) e la frase di
+  ringraziamento in `THIRD_PARTY_NOTICES.md`; l'IJG non entra nell'elenco
+  generale · l'utente, fra A (eccezione stretta), B (IJG sempre ammessa) e
+  C (l'encoder di `image`): «A». L'utente vuole che le immagini restino di
+  chi le crea e nessuna responsabilità per i file rovinati: l'IJG non tocca
+  né l'una né l'altra (esclude anche lei ogni garanzia).
 - 2026-11-12 · Scrittoio 2 T26 · S3 restava rosso anche con l'ombra senza sfocatura (1235–2332 ms in tre corse): le corse CI con la cronologia dei fotogrammi (rami `prova/s3-*`) mostrano che il buco cade prima del primo `pointerdown`, nel primo disegno delle 300 schede (lavagna ferma a 1798 ms su main, 2582–2636 sul ramo), e che lo spostamento costa uguale (130–210 ms a fotogramma). Togliere `translateZ(0)` da `.pane::before` non accorcia l'apertura (2718 ms) e porta S1 a 537 ms: lo strato resta. Il difetto è di S3, che misurava dalla prima scheda: corretto in main con la PR #342 (`S3.apertura` solo referto). Baseline dell'ombra nuova dal runner (c965ede72, run 43160817254): 137 scene chiare, cambia solo l'anello dell'ombra. Il merge finale lo decide l'orchestratore, non più l'utente · parole dell'utente: «ma non eravamo d'accordo sul fatto che i merge li decidevi tu?». Delle cinque domande di gusto resta aperta solo il vassoio della barra a una riga e della colonna (vedi 2026-11-04).
 - 2026-11-11 · Scrittoio 2 T26 · la WebView del runner era rossa due volte su S3 (massimo fra fotogrammi 1754 e 1806 ms, soglia 1600; main 471): rilanciata una volta, poi indagata; la causa è la `box-shadow` sfocata a tre strati del foglio (T27), che WebKit senza GPU ridipinge a ogni passo della camera (~20 ms a fotogramma); ogni strato sfocato diventa una pila di ombre nette (`sharpLayers` in `recipe.ts`), stessa forma entro pochi livelli di colore; misura con la WebKitGTK di Playwright: max 74→49 ms (main 58) · Perché: l'utente vuole l'app «estremamente fluida» e il foglio con l'ombra approvata si tiene uguale a occhio.
 - 2026-11-05 · K2 · Il componente «File delle app Craft» (`fub.craft`, N7,
@@ -1773,6 +1807,116 @@ La più recente in cima: data · piano · decisione · perché.
   T2–T4; nel grafo di `overview.md` il crate ha un blocco suo, perché il
   primo superava 20 nodi · i provider non sono ancora registrati: chi usa
   Fub non vede niente finché non arriva il task che li monta.
+- 2026-11-05 · K5 · il prototipo di T25 è approvato così com'è: il chip
+  del disegno ha due `kind` nuovi, `"reduced"` (motore spento, e la build
+  senza motore: segno vuoto) e `"stopped"` (motore fermo: segno
+  `--danger`), al posto del solo `"body"` che T23 proponeva; lo strumento
+  Testo resta anche senza motore (A17); le parole restano quelle del
+  prototipo «per ora» · perché: l'utente («2a: ridotto e fermo, 2b: resta,
+  2c: lascia così per ora»); due segni distinguono lo spento voluto dal
+  guasto, e il rosso compare solo per un errore.
+- 2026-11-03 · K5 · D-14 (a): il Motore del disegno ha un interruttore suo
+  in «Disegnare», acceso di serie; il repository Fubeo/vectorcraft si crea
+  come fork di storytold/vectorcraft, come WordCraft e GridCraft (l'utente
+  ha detto sì; il comando lo lancia lui, perché all'orchestratore è negato)
+  · le consigliate, accettate dall'utente («ci sto»).
+- 2026-11-02 · K5 · Le risposte dell'utente a D-1…D-13: tutte come le
+  consigliate tranne D-8, (c): senza motore il disegno usa gli strumenti
+  semplici di prima e il chip lo dice. Ne nascono D-14 (il motore come riga
+  sua, che si spegne: consigliata e seguita), Testo anche senza motore
+  (A17), i task T25–T30 (il prototipo prima dei task grafici, l'ultimo con
+  la CI completa e la revisione prima del merge) e il tetto
+  `librerie_doppie` alzato una volta sola, con `usvg` doppio · disegnare
+  deve restare possibile con un componente spento, e un motore di supporto
+  che `fub.draw` richiede non si potrebbe spegnere mai.
+- 2026-11-02 · K5 · Dopo T8: la CI era rossa su `fub-
+  app/tests/ipc_permissions.rs` perché `host/ipc.ts` chiamava i sei comandi
+  del disegno, che l'app registra solo con T19 (D-4). Le porte ora
+  rispondono `unserved` senza chiamare l'app, lo stesso rifiuto dell'host
+  senza il motore (prima l'app avrebbe dato un errore «comando sconosciuto»,
+  cioè motore «errore» e non «spento»); con T19 tornano `invoke`. Il test
+  non si tocca. Il ciclo rapido non l'aveva visto: `check-scope.mjs` ora
+  aggiunge i crate i cui test nominano un file del client cambiato.
+- 2026-11-02 · K5 · T5: chiuso con la fermata del piano. Nessun `svg2pdf`
+  pubblicato usa `usvg` 0.48 (l'ultimo, 0.13.0, chiede ^0.45; anche `krilla-
+  svg` 0.8.1 chiede ^0.47; letto da crates.io il 2026-11-02), quindi
+  `Cargo.lock` e i `Cargo.toml` non cambiano e l'export resta com'è. Il file
+  di misura `docs/misure/disegno-versioni-2026-11.md` conta le librerie
+  doppie per nome (45 nomi, 109 versioni, prima e dopo uguali) e dice quali
+  resteranno doppie col motore (`usvg`, `svgtypes`, `roxmltree`, `tiny-skia-
+  path`, `imagesize`, `kurbo`; `skrifa` a tre versioni, `peniko` a due). D-3
+  resta aperta: l'opzione consigliata è tenere due `usvg`, 0.45 per l'export
+  e 0.48 per il motore. Perché: non si cambia l'export per una libreria che
+  non c'è.
+- 2026-11-02 · K5 · T12: i comandi di colore e spessore partono dai campi
+  Contorno, Riempimento e Spessore del pannello delle proprietà
+  (`changeField`), perché il pozzo colore della barra non tocca la selezione
+  e cambia solo lo stile dei gesti dopo, che arriva già al motore con
+  `DrawingGesture.style`. L'esito passa da `changeFromPanel` (la stessa
+  strada del pannello: sola lettura, lucchetto, rifiuto) e non da
+  `ctx.commit` diretto. Al motore vanno solo `#rrggbb`, il riempimento
+  «nessuno» come `null` e gli spessori ≥ 0 in unità della scena; il resto lo
+  scrive il pannello come prima. Un comando che `drawingCommands` non elenca
+  vale spento (`ctx.campiDelMotore` in `panel.ts`, una riga fuori dal
+  «Tocca»). Se il motore manca o smette di rispondere, il pannello scrive da
+  sé solo se disegno e selezione sono ancora quelli di partenza. Fra comandi
+  e gesti non c'è una fila comune: un comando lanciato mentre l'esito di un
+  gesto è in volo si calcola sulla copia senza quel gesto, e un rifiuto si
+  annuncia. Perché: senza motore la barra scrive come prima.
+- 2026-11-02 · K5 · T10: i gesti di select, rect, ellipse, line e arrow
+  passano dal motore (`editors/spatial/motore/gesti.ts`) e ogni esito è un
+  passo di annulla. L'opzione dell'editor è una porta `MotoreDelDisegno` che
+  può essere ancora «in apertura» (non la `SessioneMotore` del piano): la
+  superficie la passa subito, un gesto aspetta l'apertura fino a 2 s e poi
+  non scrive niente; con il motore assente, o se l'apertura fallisce, fanno
+  gli strumenti TypeScript come prima, in silenzio. Il motore non si usa sui
+  fogli PDF né dentro un gruppo isolato; il doppio clic resta del client; il
+  movimento senza tasto premuto non si manda. I connettori seguono con
+  l'hook `follow` del motore della scena dentro il commit, quindi
+  `followConnectors` non si chiama a mano. Toccati anche `marks.ts` e
+  `stroke-shapes.ts` (maniglie e lazo dall'anteprima del motore). I motivi
+  dei rifiuti usano le chiavi che ci sono, fino a T21. Perché: senza motore
+  niente deve cambiare, e con il motore un gesto è un solo passo.
+- 2026-11-02 · K5 · T8: la sessione del motore nel client
+  (`editors/spatial/motore/sessione.ts`) segue la `DocumentSession` come
+  superficie `motore-disegno:<n>` (un id per sessione, come `live:<n>`, così
+  due sessioni sullo stesso documento non si rimpiazzano) e non origina mai
+  modifiche. Le sei porte di `host/ipc.ts` usano i nomi della D-4
+  (`open_drawing`…`close_drawing`), ancora da confermare: l'host le avrà con
+  T19. Le richieste vanno in fila con un tempo limite di 10 s; a uno `stale`
+  si rimanda il testo intero (in LF) e si riprova una volta, anche per
+  `drawing_command`; qualunque errore o tempo scaduto ferma la sessione come
+  `{ perche: "errore" }`, la stacca dal documento e chiude l'istanza come
+  può. Il finto `DrawingFake` tiene la sua copia e controlla che ogni
+  differenza si applichi. Perché: il client deve essere pronto prima del
+  motore, e un motore che non risponde non deve bloccare il disegno.
+- 2026-11-02 · K5 · T4: il contratto del disegno in fub-abi ha limiti
+  espliciti (20 MiB di testo, 100 000 eventi per gesto, 10 000 operazioni, 8
+  MiB di operazioni, 50 000 perdite) e un validate() per ogni messaggio; gli
+  specchi TS sono controllati da ts_mirror e mirror.test.ts. Perché: un
+  messaggio fuori misura si rifiuta al confine, prima del motore.
+- 2026-11-02 · K5 · T2: l'oracolo a pixel sta in fub-testkit dietro la
+  feature `pixel`, fuori dal default e in FUORI_DAL_DEFAULT; resvg diventa
+  dipendenza di workspace e il banco lo prende con il solo `text` (niente
+  raster, niente caratteri di sistema); l'altezza viene da width/height
+  dell'SVG, con tetto di 8192 px, sfondo bianco opaco e famiglie generiche
+  sulla prima faccia. Ho aggiunto io in ci.yml clippy e nextest con
+  `--features pixel`. Perché: il confronto è identico su ogni macchina e chi
+  usa il banco per il kernel non compila un rasterizzatore.
+- 2026-11-02 · K5 · T3: i vettori dei gesti (49) sono registrati dagli
+  strumenti TypeScript così come sono; la loro forma sta in una pagina
+  nuova, docs/reference/scene-gestures.md, e il §10 di scene-operations.md è
+  un rimando, perché quella pagina era al tetto delle righe. `refused` ha
+  due valori in più del piano, `locked` e `hidden`, perché gli strumenti
+  rifiutano già quei due casi; il vettore ridimensiona-estraneo registra che
+  un elemento estraneo si ridimensiona già, non solo si sposta: il motore
+  lo rifà o lo scrive nel .tsv.
+- 2026-11-02 · K5 · T1: l'ADR 0239 «Il disegno passa dal motore vettoriale,
+  e il file lo scrive il client» (stato proposta, ambito contratto) e la
+  pagina docs/architecture/disegno.md; le domande D-1…D-13 stanno nell'ADR
+  come «Da decidere»; ciò che non esiste ancora è nominato come percorso in
+  codice con «(arriva con T…)» · il numero 0239 segue 0236–0238 di K3, N3 e
+  N4, e si rinumera alla fusione se serve.
 - 2026-11-02 · K2 · I comandi della sessione live dei disegni arrivano col
   codice dei disegni, la prima volta che un disegno si apre, e non più
   all'avvio quando `editors/spatial` è acceso: la prima misura di C1 li ha

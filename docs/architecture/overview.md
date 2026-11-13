@@ -357,6 +357,10 @@ facoltativo, come `features --> base` per le basi. Con la stessa feature
 selezione da esportare, e per leggere le annotazioni dei PDF, da esportare nel
 PDF annotato e nel PDF redatto: anche `features --> scene` è facoltativo.
 
+L'ultimo pezzo del grafo, l'adattatore del motore del disegno `fub-disegno` con
+i crate di VectorCraft, sta nella pagina [Il disegno sul motore](disegno.md):
+il test legge i blocchi marcati di tutte e due le pagine come un grafo solo.
+
 ## Flusso di un comando
 
 ```mermaid

@@ -194,6 +194,7 @@ export const SETTINGS: PartAnatomy = {
         "components-row--on",
         "components-row--off",
         "components-row--orphan",
+        "components-row--found",
         "components-icon",
         "components-text",
         "components-name",

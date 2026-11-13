@@ -36,7 +36,7 @@
 // poi rilegge l'impostazione dal canale dati, quindi il banco scrive tutte e
 // due — la cache qui sotto, prima che `main.ts` giri, e il valore di
 // `appearance.theme` fra le impostazioni che serve.
-import { COMPONENT_SCENARIO, createFakeHost, type GridBytesFake, type Options } from "../src/host/fake";
+import { COMPONENT_SCENARIO, createFakeHost, type DrawingFake, type GridBytesFake, type Options } from "../src/host/fake";
 import { MARKDOWN_SYNTAX } from "../src/rules/syntax.generated";
 import XLSX_GRID from "../src/__fixtures__/xlsx-grid.json";
 import RICH_PROJECTION from "../src/__fixtures__/rich-projection.json";
@@ -46,6 +46,9 @@ import type {
   BundleInfo,
   CommandSpec,
   DocumentMatch,
+  DrawingGesture,
+  DrawingLoss,
+  DrawingOutcome,
   IndexQuery,
   IndexResult,
   JobStatus,
@@ -60,6 +63,7 @@ import type {
 import { inShellLanguage } from "./fake-english";
 import { SPECS as SLASH_SPECS } from "../src/panels/slash/fixture.test-data";
 import { CONNECTORS_DOC, connectorsFixture, type ConnectorsFixture } from "./connectors-fixture";
+import { DEFS_ID } from "../src/editors/spatial/scene/ids";
 import { LARGE_DOC, largeFixture, type LargeFixture } from "./large-fixture";
 import { LIVE_DOC, liveCase } from "./live-fixture";
 import { PHOTO_CRAFT, photoCase, photoResources } from "./photo-fixture";
@@ -423,6 +427,87 @@ const DRAWING = CONNECTORS !== null
   : LARGE !== null
     ? { doc: LARGE_DOC, text: LARGE.text }
     : null;
+
+// `?drawing=acceso|spento|errore` dà al banco il motore del disegno (K5 T23),
+// per le scene del chip del motore (`draw-engine-*` in `scene.mjs`). Senza,
+// come l'host senza il componente, le porte del disegno rispondono
+// `unserved` e il disegno resta sugli strumenti semplici, come lo conoscono
+// le foto di prima.
+//
+// - `acceso`: l'apertura dice due parti che restano come sono, due righe
+//   delle parti del corpus (`crates/fub-disegno/tests/corpus/perdite.tsv`)
+//   sugli elementi del disegno dei connettori: le risorse in `<defs>` e la
+//   prima forma. I gesti rispondono le operazioni dei vettori dei gesti
+//   (`__fixtures__/disegno-gesti/`) quando il disegno e lo strumento sono
+//   quelli di un vettore; ogni altro gesto non scrive niente (`empty`): il
+//   motore del banco sa soltanto i vettori.
+// - `spento`: il motore spento nel vault, ogni porta del disegno `unserved`.
+// - `errore`: l'apertura fallisce con `internal`, il motore è fermo.
+const DRAWING_ENGINE_PARAM = params.get("drawing");
+if (DRAWING_ENGINE_PARAM !== null && !["acceso", "spento", "errore"].includes(DRAWING_ENGINE_PARAM)) {
+  throw new RangeError("drawing must be acceso, spento or errore");
+}
+
+/// Un vettore dei gesti, per quel che il motore del banco ne legge.
+interface BenchGestureVector {
+  readonly input: string;
+  readonly gesture: { readonly tool: string };
+  readonly expect: { readonly ops: readonly unknown[] | null; readonly selection: readonly string[]; readonly refused: DrawingOutcome["refused"] };
+}
+
+const GESTURE_VECTORS = Object.values(
+  import.meta.glob("../src/__fixtures__/disegno-gesti/*.json", { import: "default", eager: true }),
+) as BenchGestureVector[];
+
+/// Gli id nuovi che il motore del banco ha dato: uno nuovo per ogni `@n` di
+/// ogni rilascio.
+let benchDrawingIds = 0;
+
+/// L'esito di un gesto del motore del banco sulla copia di testo `text`.
+function benchDrawingOutcome(gesture: DrawingGesture, text: string): DrawingOutcome {
+  const outcome: DrawingOutcome = { revision: gesture.revision, preview: null, ops: null, selection: gesture.selection, losses: [], refused: null, frame: null };
+  if (gesture.phase !== "commit") return outcome;
+  const vector = GESTURE_VECTORS.find((each) => each.gesture.tool === gesture.tool && each.input === text);
+  if (vector === undefined) return { ...outcome, refused: "empty" };
+  const names = new Map<string, string>();
+  const real = (value: string): string =>
+    value.replace(/@(\d+)/g, (found) => {
+      if (!names.has(found)) names.set(found, `oz${String(++benchDrawingIds).padStart(7, "0")}`);
+      return names.get(found)!;
+    });
+  return {
+    ...outcome,
+    ops: vector.expect.ops === null ? null : real(JSON.stringify(vector.expect.ops)),
+    selection: vector.expect.selection.map(real),
+    refused: vector.expect.refused,
+  };
+}
+
+/// Il motore del disegno del banco, se la query ne chiede uno.
+function benchDrawingEngine(): DrawingFake | undefined {
+  if (DRAWING_ENGINE_PARAM === "spento") return { spento: () => true };
+  if (DRAWING_ENGINE_PARAM === "errore") {
+    return {
+      open: () => {
+        throw { kind: "internal", message: "banco: il motore del disegno si è fermato" };
+      },
+    };
+  }
+  if (DRAWING_ENGINE_PARAM !== "acceso") return undefined;
+  const first = CONNECTORS?.shapes[0]?.id ?? null;
+  const losses: DrawingLoss[] = [
+    { element: DEFS_ID, kind: "unmapped", detail: "dentro <defs>: una risorsa, non un oggetto del disegno" },
+    ...(first === null ? [] : [{ element: first, kind: "unmapped" as const, detail: "il motore non ne fa un oggetto suo" }]),
+  ];
+  let instances = 0;
+  return {
+    open: () => ({ instance: `banco-${++instances}`, revision: "0", mapped: 0, unmapped: losses.length, losses }),
+    gesto: (gesture, copia) => benchDrawingOutcome(gesture, copia.text),
+  };
+}
+
+/// Il motore del disegno del banco: `undefined` senza `?drawing=`.
+const DRAWING_ENGINE = benchDrawingEngine();
 
 // Il ramo Darwin deve nascere prima che `mountTitlebar` legga la piattaforma:
 // la query prepara il browser del banco, mai la shell di produzione.
@@ -1545,6 +1630,10 @@ const options: Options = {
     } as GridBytesFake,
   }),
   ...(DRAWING === null && PDF_SCENE !== "annotato" ? {} : { draw: true }),
+  // Il motore del disegno (`drawing`) c'è solo con `?drawing=`: senza, le
+  // porte del disegno rispondono `unserved` come l'host senza il componente,
+  // e gli strumenti del disegno restano quelli del client.
+  ...(DRAWING_ENGINE === undefined ? {} : { drawing: DRAWING_ENGINE }),
   ...(PHOTO === null ? {} : { craft: PHOTO_CRAFT }),
   ...(CRAFT_SCENE === null ? {} : {
     craft: craftSceneCraft(CRAFT_SCENE),

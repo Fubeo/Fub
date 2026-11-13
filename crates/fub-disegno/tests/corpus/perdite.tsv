@@ -1,0 +1,62 @@
+# Ciò che il motore del disegno non sa modificare, file per file.
+# Generato: UPDATE_PERDITE=1 cargo test -p fub-disegno --test corpus
+# file	elemento	tipo	dettaglio
+crates/fub-features/templates/a4-landscape.en.svg	-	-	-
+crates/fub-features/templates/a4-landscape.it.svg	-	-	-
+crates/fub-features/templates/a4-portrait.en.svg	-	-	-
+crates/fub-features/templates/a4-portrait.it.svg	-	-	-
+crates/fub-features/templates/concept-map.en.svg	fub-defs	unmapped	dentro <defs>: una risorsa, non un oggetto del disegno
+crates/fub-features/templates/concept-map.en.svg	rlink1001	unmapped	dentro <defs>: una risorsa, non un oggetto del disegno
+crates/fub-features/templates/concept-map.it.svg	fub-defs	unmapped	dentro <defs>: una risorsa, non un oggetto del disegno
+crates/fub-features/templates/concept-map.it.svg	rlink1001	unmapped	dentro <defs>: una risorsa, non un oggetto del disegno
+crates/fub-features/templates/diagram.en.svg	fub-defs	unmapped	dentro <defs>: una risorsa, non un oggetto del disegno
+crates/fub-features/templates/diagram.en.svg	rlink1001	unmapped	dentro <defs>: una risorsa, non un oggetto del disegno
+crates/fub-features/templates/diagram.it.svg	fub-defs	unmapped	dentro <defs>: una risorsa, non un oggetto del disegno
+crates/fub-features/templates/diagram.it.svg	rlink1001	unmapped	dentro <defs>: una risorsa, non un oggetto del disegno
+crates/fub-features/templates/lesson.en.svg	-	-	-
+crates/fub-features/templates/lesson.it.svg	-	-	-
+crates/fub-features/templates/slide.en.svg	bslide001	unmapped	il motore non ne fa un oggetto suo
+crates/fub-features/templates/slide.it.svg	bslide001	unmapped	il motore non ne fa un oggetto suo
+crates/fub-features/templates/storyboard.en.svg	bscena001	unmapped	il motore non ne fa un oggetto suo
+crates/fub-features/templates/storyboard.en.svg	bscena002	unmapped	il motore non ne fa un oggetto suo
+crates/fub-features/templates/storyboard.en.svg	bscena003	unmapped	il motore non ne fa un oggetto suo
+crates/fub-features/templates/storyboard.en.svg	bscena004	unmapped	il motore non ne fa un oggetto suo
+crates/fub-features/templates/storyboard.en.svg	bscena005	unmapped	il motore non ne fa un oggetto suo
+crates/fub-features/templates/storyboard.en.svg	bscena006	unmapped	il motore non ne fa un oggetto suo
+crates/fub-features/templates/storyboard.it.svg	bscena001	unmapped	il motore non ne fa un oggetto suo
+crates/fub-features/templates/storyboard.it.svg	bscena002	unmapped	il motore non ne fa un oggetto suo
+crates/fub-features/templates/storyboard.it.svg	bscena003	unmapped	il motore non ne fa un oggetto suo
+crates/fub-features/templates/storyboard.it.svg	bscena004	unmapped	il motore non ne fa un oggetto suo
+crates/fub-features/templates/storyboard.it.svg	bscena005	unmapped	il motore non ne fa un oggetto suo
+crates/fub-features/templates/storyboard.it.svg	bscena006	unmapped	il motore non ne fa un oggetto suo
+crates/fub-scene/tests/corpus/chromium.svg	svg	unsupported	non è un disegno di Fub: si guarda soltanto
+crates/fub-scene/tests/corpus/chromium.svg	defs[2]	unmapped	dentro <defs>: una risorsa, non un oggetto del disegno
+crates/fub-scene/tests/corpus/chromium.svg	prato	unmapped	dentro <defs>: una risorsa, non un oggetto del disegno
+crates/fub-scene/tests/corpus/illustrator.svg	svg	unsupported	sola lettura: c'è un DOCTYPE
+crates/fub-scene/tests/corpus/inkscape.svg	svg	unsupported	non è un disegno di Fub: si guarda soltanto
+crates/fub-scene/tests/corpus/inkscape.svg	defs1	unmapped	dentro <defs>: una risorsa, non un oggetto del disegno
+crates/fub-scene/tests/corpus/mermaid-flowchart.svg	svg	unsupported	non è un disegno di Fub: si guarda soltanto
+crates/fub-scene/tests/corpus/mermaid-flowchart.svg	defs[2]	unmapped	dentro <defs>: una risorsa, non un oggetto del disegno
+crates/fub-scene/tests/corpus/mermaid-flowchart.svg	my-svg-drop-shadow	unmapped	dentro <defs>: una risorsa, non un oggetto del disegno
+crates/fub-scene/tests/corpus/mermaid-flowchart.svg	defs[3]	unmapped	dentro <defs>: una risorsa, non un oggetto del disegno
+crates/fub-scene/tests/corpus/mermaid-flowchart.svg	my-svg-drop-shadow-small	unmapped	dentro <defs>: una risorsa, non un oggetto del disegno
+crates/fub-scene/tests/corpus/mermaid-sequence.svg	svg	unsupported	non è un disegno di Fub: si guarda soltanto
+crates/fub-scene/tests/corpus/mermaid-sequence.svg	g[11]	unmapped	il motore non ne fa un oggetto suo
+crates/fub-scene/tests/corpus/mermaid-sequence.svg	defs[12]	unmapped	dentro <defs>: una risorsa, non un oggetto del disegno
+crates/fub-scene/tests/corpus/mermaid-sequence.svg	defs[13]	unmapped	dentro <defs>: una risorsa, non un oggetto del disegno
+crates/fub-scene/tests/corpus/mermaid-sequence.svg	defs[14]	unmapped	dentro <defs>: una risorsa, non un oggetto del disegno
+crates/fub-scene/tests/corpus/mermaid-sequence.svg	defs[15]	unmapped	dentro <defs>: una risorsa, non un oggetto del disegno
+crates/fub-scene/tests/corpus/mermaid-sequence.svg	my-svg-arrowhead	unmapped	dentro <defs>: una risorsa, non un oggetto del disegno
+crates/fub-scene/tests/corpus/mermaid-sequence.svg	defs[16]	unmapped	dentro <defs>: una risorsa, non un oggetto del disegno
+crates/fub-scene/tests/corpus/mermaid-sequence.svg	defs[17]	unmapped	dentro <defs>: una risorsa, non un oggetto del disegno
+crates/fub-scene/tests/corpus/mermaid-sequence.svg	my-svg-filled-head	unmapped	dentro <defs>: una risorsa, non un oggetto del disegno
+crates/fub-scene/tests/corpus/mermaid-sequence.svg	defs[18]	unmapped	dentro <defs>: una risorsa, non un oggetto del disegno
+crates/fub-scene/tests/corpus/mermaid-sequence.svg	my-svg-sequencenumber	unmapped	dentro <defs>: una risorsa, non un oggetto del disegno
+crates/fub-scene/tests/corpus/mermaid-sequence.svg	defs[19]	unmapped	dentro <defs>: una risorsa, non un oggetto del disegno
+crates/fub-scene/tests/corpus/mermaid-sequence.svg	my-svg-solidTopArrowHead	unmapped	dentro <defs>: una risorsa, non un oggetto del disegno
+crates/fub-scene/tests/corpus/mermaid-sequence.svg	defs[20]	unmapped	dentro <defs>: una risorsa, non un oggetto del disegno
+crates/fub-scene/tests/corpus/mermaid-sequence.svg	my-svg-solidBottomArrowHead	unmapped	dentro <defs>: una risorsa, non un oggetto del disegno
+crates/fub-scene/tests/corpus/mermaid-sequence.svg	defs[21]	unmapped	dentro <defs>: una risorsa, non un oggetto del disegno
+crates/fub-scene/tests/corpus/mermaid-sequence.svg	my-svg-stickTopArrowHead	unmapped	dentro <defs>: una risorsa, non un oggetto del disegno
+crates/fub-scene/tests/corpus/mermaid-sequence.svg	defs[22]	unmapped	dentro <defs>: una risorsa, non un oggetto del disegno
+crates/fub-scene/tests/corpus/mermaid-sequence.svg	my-svg-stickBottomArrowHead	unmapped	dentro <defs>: una risorsa, non un oggetto del disegno

@@ -75,7 +75,8 @@ all'export, dalla sessione dal tablet ai disegni grandi.
   [superficie ricca e il correttore](architecture/rich-surface-and-proofing.md)
   e la [superficie dei fogli](architecture/grid-surface.md), con gli
   [editor dei componenti](architecture/component-editors.md)
-- [Inchiostro e strumenti](architecture/ink-and-tools.md)
+- [Inchiostro e strumenti](architecture/ink-and-tools.md) e
+  [il disegno sul motore](architecture/disegno.md)
 - [Runtime dei plugin](architecture/plugin-runtime.md), i [provider WASM](architecture/wasm-providers.md) e [capability e sandbox](architecture/plugin-security.md)
 - [Lo strato dei motori](architecture/motori.md)
 
@@ -100,6 +101,10 @@ all'export, dalla sessione dal tablet ai disegni grandi.
 - [Le annotazioni PDF](reference/annotation-format.md), la
   [proiezione dei documenti di videoscrittura](reference/rich-projection.md)
   e la [sessione live](reference/live-session.md)
+- [Le porte del disegno](reference/drawing-ipc.md): l'IPC del motore del
+  disegno
+- [Le porte della griglia](reference/grid-ipc.md): l'IPC dei fogli di
+  calcolo
 - [Il formato della lavagna](reference/canvas-format.md): il nucleo
   `fub-canvas-core` e le regole di lettura e scrittura delle `.canvas`, e
   le [operazioni sulla lavagna](reference/canvas-operations.md): le toppe e
