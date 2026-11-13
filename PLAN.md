@@ -1811,7 +1811,7 @@ acceso, il chip e l'azione giusti, che «Accendi…» chiama la porta con
 resta verde; le foto delle tre scene, in chiaro e scuro, piena e 700 px,
 sono come il prototipo; `bench:a11y` verde.
 Prova: scripts/check.sh --rapido --client; npm --prefix apps/client test -- src/editors/spatial/motore/standing.test.ts src/editors/spatial/motore/due-strade.test.ts src/editors/spatial/tools/editor.test.ts; npm --prefix apps/client run bench:a11y
-Stato: [ ] da fare
+Stato: [~] in corso (2026-11-13, coder su base 11b45e96b)
 
 ## T24 · La riga di un componente da aprire
 
