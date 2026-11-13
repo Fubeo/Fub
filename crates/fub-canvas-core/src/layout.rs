@@ -13,6 +13,8 @@
 //! ha senso si torna alla misura di serie; altrove il risultato non è finito,
 //! e chi chiama lo rifiuta prima di scriverlo.
 
+pub mod arrange;
+
 use crate::model::{Canvas, CanvasEdgeSide, CanvasNode, CanvasNodeType, MAX_SAFE_INTEGER};
 
 /// Il passo dell'aggancio alla griglia: `CANVAS_SNAP` di `engine.ts`.
