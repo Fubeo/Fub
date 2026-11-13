@@ -89,11 +89,14 @@ Le due misure del cancello di N4 (S8 di
 [`bench/webview/run.mjs`](../../apps/client/bench/webview/run.mjs)): la
 prima sul caso simile, una tabella di testo sotto la penna; la seconda sul
 foglio vero dentro la lavagna: è lei a chiudere la voce, se la meta è raggiunta.
+La terza pagina è il profilo della seconda: di chi è il tempo dei
+fotogrammi lunghi.
 
 | Data | Sistema | Macchina | Pagina |
 |---|---|---|---|
 | 2026-11-09 | Debian 13, kernel 6.12, WebKitGTK 2.54 sotto Xvfb | AMD Ryzen 7 7730U, condivisa | [La penna sulla lavagna, la prima misura](lavagna-inchiostro-2026-11-09.md) |
 | 2026-11-11 | Debian 13, kernel 6.12, WebKitGTK 2.54 sotto Xvfb e sullo schermo | Intel Core i5-13600KF, GPU RTX 4070 sullo schermo | [Il foglio vivo sulla lavagna, la seconda misura](lavagna-inchiostro-foglio-2026-11-11.md) |
+| 2026-11-13 | Debian 13, kernel 6.12, WebKitGTK 2.54 sotto Xvfb | Intel Core i5-13600KF, condivisa e carica | [Dove va il tempo della penna sul foglio vivo, il profilo](lavagna-inchiostro-profilo-2026-11-13.md) |
 
 ## Le librerie a runtime
 
