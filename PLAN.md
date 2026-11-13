@@ -2338,4 +2338,4 @@ Fatto quando: la PR #300 è pronta e ogni job è verde; la revisione e la
 prova nell'app vera sono scritte nella PR; nessun task resta aperto;
 l'utente ha detto sì al merge.
 Prova: gh pr checks 300
-Stato: [~] in corso (2026-11-13, orchestratore)
+Stato: [x] fatto (2026-11-13) · CI completa verde su 01d7264f5 (23/23; Windows rilanciato una volta per l'MCP instabile noto, prima R1 #284); revisione in 4 commenti della PR; prova sull'app vera con WebDriver su un vault temporaneo; differenze: trovato e corretto l'errore non tradotto delle sei porte (dc8adfe0c), `disegno.md` riscritta al presente, 14 baseline dal runner; sì dell'utente al merge
