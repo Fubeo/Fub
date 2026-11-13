@@ -60,7 +60,7 @@ La procedura è fissa:
    3 s dopo ognuno;
 3. **chiuse**: chiuse tutte le schede, una lettura dopo 10 s e una dopo 60 s
    (**chiuse.tardi**);
-4. **giri**: dieci volte tutti i file aperti e poi tutto chiuso, una lettura
+4. **giri**: trenta volte tutti i file aperti e poi tutto chiuso, una lettura
    10 s dopo ogni chiusura, e alla fine una dopo 60 s.
 
 Ogni momento si legge in tutto e per gruppo di processi
@@ -73,11 +73,18 @@ memoria che le schede chiuse tengono ancora un minuto dopo. Lo fanno le cache
 (caratteri, immagini decodificate, tessere), la memoria di JavaScript che la
 WebView non ha ancora raccolto e le pagine che l'allocatore ha liberato ma non
 ha restituito al sistema. I giri dicono se cresce: `R1.giri.primo.MiB` e
-`R1.giri.ultimo.MiB` sono il residuo dopo il primo e dopo il decimo giro,
-`R1.giri.pendenza.MiB` la retta dei minimi quadrati sui dieci residui, in MiB
-per giro, e `R1.giri.tardi.MiB` il residuo un minuto dopo l'ultimo giro; gli
+`R1.giri.ultimo.MiB` sono il residuo dopo il primo e dopo il trentesimo giro,
+`R1.giri.pendenza.MiB` la mediana delle pendenze fra ogni coppia di giri (lo
+stimatore di Theil e Sen), in MiB per giro, e `R1.giri.tardi.MiB` il residuo un minuto dopo l'ultimo giro; gli
 stessi valori ci sono per ogni gruppo. Una pendenza vicina a zero è memoria
 che torna o si riusa; una pendenza positiva è memoria che ogni giro lascia.
+
+La memoria della WebView sale e scende a dente di sega, di circa 150 MiB, col
+ritmo del suo GC. Con dieci giri e la retta dei minimi quadrati, una lettura
+alta in cima o bassa in fondo spostava la pendenza di decine di MiB: sul
+runner andava da -25 a 70 MiB per giro sullo stesso albero (#284). Trenta
+giri e la mediana la tengono entro pochi MiB, e il job WebView dura una
+dozzina di minuti in più.
 La tolleranza, fissata in K0, sta in `budgets.json`: come obiettivo (il
 cancello di K3) residuo entro 50 MiB e pendenza entro 1 MiB per giro, sul
 runner una volta e mezza il peggiore visto.

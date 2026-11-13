@@ -25,7 +25,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { openSession, waitForDriver } from "./driver.mjs";
 import { noteName, writeFixtures } from "./fixtures.mjs";
-import { settled } from "./memory.mjs";
+import { pendenza, settled } from "./memory.mjs";
 import { CANVAS_SCRIPT, COMMITS, OPENS, SIZES, builtModule } from "./canvas.mjs";
 import { INDEXING_SCRIPT } from "./indexing.mjs";
 import { TILES_SCRIPT } from "./tiles.mjs";
@@ -61,8 +61,10 @@ const MEMORY_QUIET_MS = 3_000;
 /// quando si rilegge per vedere se la memoria torna col tempo.
 const R1_SETTLE_MS = 10_000;
 const R1_LATE_MS = 60_000;
-/// I giri di apri tutto e chiudi tutto dopo la prima chiusura.
-const R1_ROUNDS = 10;
+/// I giri di apri tutto e chiudi tutto dopo la prima chiusura. Trenta e non
+/// dieci: sul runner la pendenza di dieci giri andava da -25 a 70 MiB per giro
+/// sullo stesso albero (#284), con un errore di circa ±16 MiB; con trenta circa ±3.
+const R1_ROUNDS = 30;
 
 /// Un file per modalità, nell'ordine in cui R1 li apre: il nome che si cerca
 /// col selettore rapido e la modalità che il referto nomina.
@@ -468,9 +470,9 @@ const SCENARIOS = {
   /// finestra), i processi della WebView, la rete, la GPU se c'è.
   /// Il **residuo** è quanto le schede chiuse tengono ancora: «chiuse», dopo
   /// l'attesa lunga, meno «vuota», per processo e in tutto.
-  /// La **pendenza** dei giri è la retta dei minimi quadrati sui residui dei
-  /// giri, in MiB per giro: vicina a zero se la memoria torna, positiva se
-  /// ogni giro ne lascia un po'.
+  /// La **pendenza** dei giri è la mediana delle pendenze fra ogni coppia di
+  /// giri (`pendenza` in `memory.mjs`), in MiB per giro: vicina a zero se la
+  /// memoria torna, positiva se ogni giro ne lascia un po'.
   async R1(session) {
     if (process.platform !== "linux") return { skipped: "la memoria si legge da /proc: soltanto Linux" };
     await pause(MEMORY_QUIET_MS);
@@ -528,15 +530,6 @@ const SCENARIOS = {
     values["R1.residuo.MiB"] = residue(late);
     for (const group of groups) values[`R1.residuo.${group}.MiB`] = residue(late, group);
     // I residui dei giri, e la loro pendenza in MiB per giro.
-    const slope = (ys) => {
-      const points = ys.map((y, x) => [x + 1, y]).filter(([, y]) => y !== null);
-      if (points.length < 2) return null;
-      const mx = points.reduce((a, [x]) => a + x, 0) / points.length;
-      const my = points.reduce((a, [, y]) => a + y, 0) / points.length;
-      const num = points.reduce((a, [x, y]) => a + (x - mx) * (y - my), 0);
-      const den = points.reduce((a, [x]) => a + (x - mx) ** 2, 0);
-      return Math.round((num / den) * 100) / 100;
-    };
     const trend = {};
     for (const group of [null, ...groups]) {
       const ys = rounds.map((r) => residue(r.closed, group));
@@ -544,7 +537,7 @@ const SCENARIOS = {
       trend[key] = ys;
       values[`${key}.primo.MiB`] = ys[0] ?? null;
       values[`${key}.ultimo.MiB`] = ys.at(-1) ?? null;
-      values[`${key}.pendenza.MiB`] = slope(ys);
+      values[`${key}.pendenza.MiB`] = pendenza(ys);
       values[`${key}.tardi.MiB`] = residue(roundsLate, group);
     }
     return {
