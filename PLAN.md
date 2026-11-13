@@ -1032,7 +1032,7 @@ l'errore di `canvas.apply` con il problema; `check-error-literals.mjs`
 passa.
 Prova: scripts/check.sh --rapido; cargo test -p fub-features --features
 lavagna --test lavagna; node .github/scripts/check-error-literals.mjs
-Stato: [ ] da fare
+Stato: [x] fatto · 604e6467a..075704bfb · tre comandi di sola lettura in `read.rs`, `check.rs`, `guide.rs` con `guida.md` (108 righe); 29 test d'integrazione e i test unitari delle chiavi (il kernel rende gli errori come Literal, quindi le chiavi si provano in `--lib`). Scarti: (1) ogni problema porta `text` = `canvas.check.p_<codice>` accanto al `message` inglese del nucleo, e il rapporto ha `warnings_omitted` come in T7; (2) `max_chars` con `code` o `json` è BadArgs (una lista tagliata non si ricompila); (3) conti e riquadro di `read` si calcolano dal Canvas con le regole di `describe`, perché la sua View è privata: un test fissa la riga dei conti; (4) `check` con `ops` non JSON è BadArgs come `apply`, con un JSON non lista dà problemi, con `base` vecchia `stale_base` viene per primo e senza `ok` non c'è riassunto né lettura; (5) `about`, `seed`, `opening`, `canvas_doc`, `ops_json` stanno in `lavagna.rs`, condivisi. Restano: `bad_value` non si provoca oggi (nessun campo enum, da provare con T10); `outline_after` di `check` non ha tetto (lo dà intero il nucleo: con 100 000 schede pesa MB, serve un limite nel nucleo); la stima minima di T2 (160) dà `text_overflow` su una scheda di testo più bassa; `canvas-code.md` «Il controllo» dice «cinque campi» e la tabella ne ha sei
 
 ## T9 · Le forme brevi di `add_card` e `connect`
 
