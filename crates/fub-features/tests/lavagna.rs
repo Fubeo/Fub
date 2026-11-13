@@ -1,19 +1,24 @@
 // Senza la cargo feature `lavagna` il modulo non è compilato, e un test che lo
 // nomina non avrebbe un soggetto.
 #![cfg(feature = "lavagna")]
-//! **`canvas.apply` e `canvas.create` end-to-end**, attraverso il kernel vero
-//! e il formato vero delle lavagne: le operazioni arrivano nel file come una
-//! modifica sola, il piano non scrive niente, e l'annulla riporta i byte di
-//! prima; una lavagna nuova prende il nome libero, è la lavagna vuota del
-//! nucleo, e l'annulla la manda nel cestino.
+//! **`canvas.apply`, `canvas.create`, `canvas.read`, `canvas.check` e
+//! `canvas.guide` end-to-end**, attraverso il kernel vero e il formato vero
+//! delle lavagne: le operazioni arrivano nel file come una modifica sola, il
+//! piano non scrive niente, e l'annulla riporta i byte di prima; una lavagna
+//! nuova prende il nome libero, è la lavagna vuota del nucleo, e l'annulla la
+//! manda nel cestino. Leggere e controllare non scrivono mai: il controllo dà
+//! un problema per codice, la lettura le tre forme, e la guida il testo, i
+//! nomi, lo schema e gli esempi.
 
 use camino::Utf8PathBuf;
 use fub_abi::command::{CommandEffect, CommandOutcome, InvokeMode, UndoStep};
 use fub_abi::edit::WriteBase;
 use fub_abi::event::Actor;
 use fub_abi::model::DocId;
+use fub_abi::traits::CommandProvider;
 use fub_abi::PluginError;
-use fub_features::lavagna::CANVAS_CREATE;
+use fub_canvas_core::ops::{compile, CanvasOp};
+use fub_features::lavagna::{CANVAS_CHECK, CANVAS_CREATE, CANVAS_GUIDE, CANVAS_READ};
 use fub_features::{LavagnaCommands, CANVAS_APPLY, LAVAGNA_ID, LAVAGNA_NS};
 use fub_format_canvas::CanvasProvider;
 use fub_format_markdown::MarkdownProvider;
@@ -404,4 +409,643 @@ fn una_lavagna_non_prende_il_posto_di_un_file() {
     let error = create(&mut ws, json!({ "name": "Idee: due" }), InvokeMode::Apply)
         .expect_err("un nome vietato");
     assert!(matches!(error, PluginError::BadArgs(_)), "{error:?}");
+}
+
+// ---- canvas.read, canvas.check, canvas.guide ----
+
+/// Tre schede, un arco e un gruppo che le contiene: le letture di tutte le forme.
+const READ_BOARD: &str = r#"{"nodes": [
+  {"id": "a", "type": "text", "x": 0, "y": 0, "width": 200, "height": 80, "text": "Ciao"},
+  {"id": "b", "type": "text", "x": 300, "y": 0, "width": 200, "height": 80, "text": "Poi", "color": "4"},
+  {"id": "g", "type": "group", "x": -20, "y": -40, "width": 560, "height": 160, "label": "Gruppo"}
+], "edges": [{"id": "e1", "fromNode": "a", "toNode": "b", "label": "porta a"}]}"#;
+
+const EMPTY_BOARD: &str = r#"{"nodes": [], "edges": []}"#;
+
+fn read_cmd(
+    ws: &mut Workspace,
+    args: Value,
+    mode: InvokeMode,
+) -> Result<CommandOutcome, PluginError> {
+    ws.invoke_command(CANVAS_READ, args, mode, Actor::User)
+}
+
+fn check_cmd(
+    ws: &mut Workspace,
+    args: Value,
+    mode: InvokeMode,
+) -> Result<CommandOutcome, PluginError> {
+    ws.invoke_command(CANVAS_CHECK, args, mode, Actor::User)
+}
+
+fn guide_cmd(ws: &mut Workspace, args: Value) -> Result<CommandOutcome, PluginError> {
+    ws.invoke_command(CANVAS_GUIDE, args, InvokeMode::Apply, Actor::User)
+}
+
+/// Una lavagna di `count` schede di testo in griglia: il caso delle 100 000 schede.
+fn many_cards(count: usize) -> String {
+    let cards: Vec<String> = (0..count)
+        .map(|i| {
+            format!(
+                r#"{{"id": "n{i}", "type": "text", "x": {}, "y": {}, "width": 200, "height": 80, "text": "Scheda {i}"}}"#,
+                (i % 100) * 240,
+                (i / 100) * 120
+            )
+        })
+        .collect();
+    format!(r#"{{"nodes": [{}], "edges": []}}"#, cards.join(", "))
+}
+
+#[test]
+fn leggere_di_serie_da_una_riga_per_scheda_con_i_conti() {
+    let (_vault, mut ws) = with_board(READ_BOARD);
+    let doc = DocId::new(BOARD);
+    let revision = ws.document_revision(&doc).expect("revisione").0;
+
+    let outcome = read_cmd(&mut ws, json!({ "doc": BOARD }), InvokeMode::Apply).expect("si legge");
+    let payload = custom(&outcome);
+    assert_eq!(payload["version"], 1);
+    assert_eq!(payload["kind"], "read");
+    assert_eq!(payload["doc"], BOARD);
+    assert_eq!(payload["revision"], json!(revision), "la revisione letta");
+    assert_eq!(payload["form"], "outline");
+    assert_eq!(
+        payload["counts"],
+        json!({ "cards": 3, "edges": 1, "groups": 1 })
+    );
+    assert_eq!(
+        payload["bounds"],
+        json!({ "x": -20, "y": -40, "width": 560, "height": 160 })
+    );
+    let text = payload["text"].as_str().expect("il testo");
+    assert_eq!(
+        text.lines().next(),
+        Some("cards 3 edges 1 groups 1 bounds -20 -40 560×160")
+    );
+    assert_eq!(
+        text,
+        "cards 3 edges 1 groups 1 bounds -20 -40 560×160\n1 a text \"Ciao\" 0 0 200×80 in=g\n2 b text \"Poi\" 300 0 200×80 color=4 in=g\n3 g group \"Gruppo\" -20 -40 560×160\ne1 a -> b \"porta a\"",
+        "la lettura di serie"
+    );
+    assert!(
+        payload.get("model").is_none(),
+        "il modello si dà solo se chiesto"
+    );
+
+    let dry = read_cmd(&mut ws, json!({ "doc": BOARD }), InvokeMode::DryRun)
+        .expect("anche il piano legge");
+    assert_eq!(custom(&dry), payload);
+    assert_eq!(source(&ws, BOARD), READ_BOARD, "leggere non scrive");
+}
+
+#[test]
+fn la_forma_code_ricrea_la_lavagna_su_una_vuota() {
+    let (_vault, mut ws) = with_board(READ_BOARD);
+    let outcome = read_cmd(
+        &mut ws,
+        json!({ "doc": BOARD, "form": "code" }),
+        InvokeMode::Apply,
+    )
+    .expect("si legge");
+    let payload = custom(&outcome);
+    assert_eq!(payload["form"], "code");
+    assert!(payload.get("model").is_none());
+    let ops: Vec<CanvasOp> = serde_json::from_str(payload["text"].as_str().expect("il testo"))
+        .expect("una lista di operazioni");
+    assert_eq!(ops.len(), 4, "tre schede e un arco");
+
+    let mut core = fub_canvas_core::commit::Core::open(EMPTY_BOARD).expect("la vuota si apre");
+    let compiled = compile(core.canvas(), &ops, 1).expect("la lista si compila");
+    core.commit(&compiled.patches).expect("si scrive");
+    let canvas = core.canvas();
+    let nodes: Vec<&str> = canvas.nodes.iter().map(|node| node.id.as_str()).collect();
+    let edges: Vec<&str> = canvas.edges.iter().map(|edge| edge.id.as_str()).collect();
+    assert_eq!(nodes, ["a", "b", "g"]);
+    assert_eq!(edges, ["e1"]);
+}
+
+#[test]
+fn la_forma_json_e_il_modello_e_si_da_solo_se_chiesta() {
+    let (_vault, mut ws) = with_board(READ_BOARD);
+    let outcome = read_cmd(
+        &mut ws,
+        json!({ "doc": BOARD, "form": "json" }),
+        InvokeMode::Apply,
+    )
+    .expect("si legge");
+    let payload = custom(&outcome);
+    assert_eq!(payload["form"], "json");
+    assert!(payload.get("text").is_none(), "la forma json non ha testo");
+    assert_eq!(payload["model"]["nodes"].as_array().map(Vec::len), Some(3));
+    assert_eq!(payload["model"]["edges"].as_array().map(Vec::len), Some(1));
+}
+
+#[test]
+fn ids_legge_solo_quelle_schede_e_gli_archi_fra_loro() {
+    let (_vault, mut ws) = with_board(READ_BOARD);
+    let two = read_cmd(
+        &mut ws,
+        json!({ "doc": BOARD, "ids": "[\"a\", \"zz\", \"b\"]" }),
+        InvokeMode::Apply,
+    )
+    .expect("si legge");
+    let payload = custom(&two);
+    assert_eq!(
+        payload["counts"],
+        json!({ "cards": 2, "edges": 1, "groups": 0 }),
+        "lo zz non è una scheda: i conti lo dicono"
+    );
+    assert_eq!(
+        payload["text"]
+            .as_str()
+            .and_then(|text| text.lines().next()),
+        Some("cards 2 edges 1 groups 0 bounds 0 0 500×80")
+    );
+
+    let alone = read_cmd(
+        &mut ws,
+        json!({ "doc": BOARD, "ids": "[\"a\"]" }),
+        InvokeMode::Apply,
+    )
+    .expect("si legge");
+    assert_eq!(
+        custom(&alone)["counts"],
+        json!({ "cards": 1, "edges": 0, "groups": 0 }),
+        "un arco vuole tutte e due le schede"
+    );
+
+    let none = read_cmd(
+        &mut ws,
+        json!({ "doc": BOARD, "ids": "[]" }),
+        InvokeMode::Apply,
+    )
+    .expect("si legge");
+    assert_eq!(custom(&none)["bounds"], Value::Null);
+    assert_eq!(
+        custom(&none)["text"]
+            .as_str()
+            .and_then(|text| text.lines().next()),
+        Some("cards 0 edges 0 groups 0 bounds -")
+    );
+
+    for raw in ["non è JSON", "{\"a\": 1}", "[\"a\", 3]", "\"a\""] {
+        let error = read_cmd(
+            &mut ws,
+            json!({ "doc": BOARD, "ids": raw }),
+            InvokeMode::Apply,
+        )
+        .expect_err("gli id non sono una lista di testi");
+        assert!(matches!(error, PluginError::BadArgs(_)), "{raw}: {error:?}");
+    }
+}
+
+#[test]
+fn max_chars_taglia_l_outline_a_una_riga_intera_e_dice_quante_ne_restano() {
+    let (_vault, mut ws) = with_board(READ_BOARD);
+    let full = read_cmd(&mut ws, json!({ "doc": BOARD }), InvokeMode::Apply).expect("si legge");
+    let full = custom(&full)["text"].as_str().expect("il testo").to_owned();
+    assert_eq!(full.lines().count(), 5, "conti, tre schede e un arco");
+    let first = full.lines().next().expect("la riga dei conti");
+
+    // `max_chars` 0: esce la prima riga, sempre, con il conto di quelle che restano.
+    let zero = read_cmd(
+        &mut ws,
+        json!({ "doc": BOARD, "max_chars": 0 }),
+        InvokeMode::Apply,
+    )
+    .expect("zero è un limite valido");
+    assert_eq!(custom(&zero)["text"], json!(format!("{first}\n…+4")));
+
+    // Un limite che non entra la seconda riga: la stessa cosa, ma di sessanta caratteri.
+    let sixty = read_cmd(
+        &mut ws,
+        json!({ "doc": BOARD, "max_chars": 60 }),
+        InvokeMode::Apply,
+    )
+    .expect("si legge");
+    let sixty = custom(&sixty)["text"].as_str().expect("il testo");
+    assert!(sixty.chars().count() <= 60, "{sixty}");
+    assert_eq!(sixty, format!("{first}\n…+4"));
+
+    let whole = read_cmd(
+        &mut ws,
+        json!({ "doc": BOARD, "max_chars": 10_000 }),
+        InvokeMode::Apply,
+    )
+    .expect("si legge");
+    assert_eq!(
+        custom(&whole)["text"],
+        json!(full),
+        "dentro il limite non si taglia"
+    );
+
+    for (form, raw) in [("code", json!(10)), ("json", json!(10))] {
+        let error = read_cmd(
+            &mut ws,
+            json!({ "doc": BOARD, "form": form, "max_chars": raw }),
+            InvokeMode::Apply,
+        )
+        .expect_err("max_chars vale solo per l'outline");
+        assert!(
+            matches!(error, PluginError::BadArgs(_)),
+            "{form}: {error:?}"
+        );
+    }
+    for raw in [json!(-1), json!(1.5)] {
+        let error = read_cmd(
+            &mut ws,
+            json!({ "doc": BOARD, "max_chars": raw }),
+            InvokeMode::Apply,
+        )
+        .expect_err("non è un intero da zero in su");
+        assert!(matches!(error, PluginError::BadArgs(_)), "{raw}: {error:?}");
+    }
+}
+
+#[test]
+fn una_lavagna_di_100_000_schede_si_legge_con_il_limite_di_serie() {
+    let (_vault, mut ws) = with_board(&many_cards(100_000));
+
+    let outline = read_cmd(&mut ws, json!({ "doc": BOARD }), InvokeMode::Apply).expect("si legge");
+    let payload = custom(&outline);
+    assert_eq!(payload["counts"]["cards"], 100_000);
+    let text = payload["text"].as_str().expect("il testo");
+    assert!(
+        text.chars().count() <= 20_000,
+        "l'outline di serie sta in 20 000 caratteri: {}",
+        text.chars().count()
+    );
+    // La riga dei conti, le schede lette e la riga che dice quante ne restano
+    // sono tutte le 100 001 righe della lavagna.
+    let lines: Vec<&str> = text.lines().collect();
+    let rest: usize = lines
+        .last()
+        .and_then(|last| last.strip_prefix("…+"))
+        .and_then(|rest| rest.parse().ok())
+        .expect("l'ultima riga dice quante restano");
+    let shown = lines.len() - 2;
+    assert_eq!(
+        shown + rest,
+        100_000,
+        "le schede lette e quelle che restano"
+    );
+
+    // Il modello intero solo se chiesto.
+    let model = read_cmd(
+        &mut ws,
+        json!({ "doc": BOARD, "form": "json" }),
+        InvokeMode::Apply,
+    )
+    .expect("si legge");
+    assert_eq!(
+        custom(&model)["model"]["nodes"].as_array().map(Vec::len),
+        Some(100_000)
+    );
+}
+
+#[test]
+fn leggere_e_controllare_rifiutano_come_apply_un_documento_che_non_e_una_lavagna() {
+    let (_vault, mut ws) = with_board(READ_BOARD);
+    ws.write_document(&DocId::new("Nota.md"), "# Nota\n", WriteBase::Dictated)
+        .expect("la nota si scrive");
+    let args = json!({ "doc": "Nota.md", "ops": ops() });
+    for name in [CANVAS_READ, CANVAS_CHECK, CANVAS_APPLY] {
+        let error = ws
+            .invoke_command(name, args.clone(), InvokeMode::Apply, Actor::User)
+            .expect_err("una nota non è una lavagna");
+        assert!(
+            matches!(error, PluginError::BadArgs(_)),
+            "{name}: {error:?}"
+        );
+    }
+    assert_eq!(source(&ws, "Nota.md"), "# Nota\n", "la nota non cambia");
+}
+
+#[test]
+fn una_lavagna_che_non_si_apre_e_un_errore_di_argomenti_per_tutti_e_tre() {
+    let (_vault, mut ws) = with_board("{\"nodes\": [");
+    let args = json!({ "doc": BOARD, "ops": ops() });
+    for name in [CANVAS_READ, CANVAS_CHECK, CANVAS_APPLY] {
+        let error = ws
+            .invoke_command(name, args.clone(), InvokeMode::Apply, Actor::User)
+            .expect_err("non si apre");
+        assert!(
+            matches!(error, PluginError::BadArgs(_)),
+            "{name}: {error:?}"
+        );
+    }
+    assert_eq!(source(&ws, BOARD), "{\"nodes\": [", "il file non cambia");
+}
+
+#[test]
+fn controllare_dice_il_riassunto_e_non_scrive() {
+    // Schede alte 160, il minimo della stima del testo: una più bassa darebbe
+    // anche `text_overflow`, e questo caso vuole solo la sovrapposizione.
+    const TALL: &str = r#"{"nodes": [{"id": "a", "type": "text", "x": 0, "y": 0, "width": 200, "height": 160, "text": "Ciao"}], "edges": []}"#;
+    let (_vault, mut ws) = with_board(TALL);
+    let ops = json!([
+        { "op": "move", "ids": ["a"], "dx": 40, "dy": 0 },
+        { "op": "add_card", "node": { "id": "b", "type": "text", "x": 100, "y": 0, "width": 200, "height": 160, "text": "Poi" } }
+    ])
+    .to_string();
+    let args = json!({ "doc": BOARD, "ops": ops });
+    let outcome = check_cmd(&mut ws, args.clone(), InvokeMode::Apply).expect("il rapporto");
+    let payload = custom(&outcome);
+    assert_eq!(payload["kind"], "check");
+    assert_eq!(payload["ok"], true);
+    assert_eq!(payload["problems"], json!([]));
+    // La scheda `a` si sposta e `b` nasce sopra: si coprono, e l'avviso lo dice.
+    assert_eq!(
+        payload["warnings"],
+        json!([{ "code": "overlap", "ids": ["a", "b"] }])
+    );
+    assert_eq!(payload["warnings_omitted"], 0);
+    assert_eq!(payload["summary"]["cards_added"][0]["id"], "b");
+    assert_eq!(payload["summary"]["cards_changed"][0]["id"], "a");
+    assert_eq!(
+        payload["outline_after"]
+            .as_str()
+            .and_then(|text| text.lines().next()),
+        Some("cards 2 edges 0 groups 0 bounds 40 0 260×160")
+    );
+    // L'esempio di `canvas-operations.md`, «Comandi»: il payload intero.
+    assert_eq!(
+        *payload,
+        json!({
+            "version": 1,
+            "kind": "check",
+            "ok": true,
+            "problems": [],
+            "warnings": [{ "code": "overlap", "ids": ["a", "b"] }],
+            "warnings_omitted": 0,
+            "summary": {
+                "cards_added": [{ "id": "b", "text": "Poi" }],
+                "cards_removed": [],
+                "cards_changed": [{
+                    "id": "a",
+                    "text": "Ciao",
+                    "moved": { "from": { "x": 0, "y": 0 }, "to": { "x": 40, "y": 0 } }
+                }],
+                "edges_added": [],
+                "edges_removed": [],
+                "edges_changed": [],
+                "order_changed": false
+            },
+            "outline_after": "cards 2 edges 0 groups 0 bounds 40 0 260×160\n1 a text \"Ciao\" 40 0 200×160\n2 b text \"Poi\" 100 0 200×160"
+        }),
+        "il payload del controllo"
+    );
+    assert!(outcome.notify.is_some(), "il riassunto per chi legge");
+    assert_eq!(source(&ws, BOARD), TALL, "controllare non scrive");
+
+    let dry = check_cmd(&mut ws, args, InvokeMode::DryRun).expect("anche il piano controlla");
+    assert_eq!(custom(&dry), payload);
+}
+
+#[test]
+fn ogni_codice_di_problema_ha_il_suo_problema() {
+    let (_vault, mut ws) = with_board(BEFORE);
+    let cases = [
+        (json!([{ "op": "fly" }]), "unknown_op"),
+        (
+            json!([{ "op": "move", "ids": ["a"], "dx": 1, "dy": 1, "zz": 2 }]),
+            "unknown_field",
+        ),
+        (
+            json!([{ "op": "move", "ids": ["a"], "dx": 1 }]),
+            "missing_field",
+        ),
+        (
+            json!([{ "op": "move", "ids": "a", "dx": 1, "dy": 1 }]),
+            "wrong_type",
+        ),
+        (
+            json!([{ "op": "move", "ids": ["zz"], "dx": 1, "dy": 1 }]),
+            "unknown_node",
+        ),
+        (json!([{ "op": "remove", "ids": ["zz"] }]), "unknown_edge"),
+        (
+            json!([{ "op": "add_card", "node": { "id": "a", "type": "text", "x": 0, "y": 0, "width": 10, "height": 10, "text": "" } }]),
+            "duplicate_id",
+        ),
+        (
+            json!([{ "op": "resize", "id": "a", "width": 0, "height": 10 }]),
+            "invalid",
+        ),
+        (json!([]), "invalid"),
+        (json!({ "op": "move" }), "wrong_type"),
+    ];
+    for (ops, code) in cases {
+        let outcome = check_cmd(
+            &mut ws,
+            json!({ "doc": BOARD, "ops": ops.to_string() }),
+            InvokeMode::Apply,
+        )
+        .expect("un rapporto, non un errore");
+        let payload = custom(&outcome);
+        assert_eq!(payload["ok"], false, "{ops}");
+        let problems = payload["problems"].as_array().expect("i problemi");
+        assert_eq!(problems.len(), 1, "{ops}: {problems:?}");
+        assert_eq!(problems[0]["code"], code, "{ops}");
+        assert_eq!(
+            problems[0]["text"],
+            json!({ "key": format!("canvas.check.p_{code}") }),
+            "{ops}: la frase la rende il catalogo"
+        );
+        assert_eq!(payload["summary"], Value::Null, "{ops}");
+        assert_eq!(payload["outline_after"], Value::Null, "{ops}");
+    }
+}
+
+#[test]
+fn troppe_schede_sono_il_problema_too_many() {
+    let (_vault, mut ws) = with_board(&many_cards(100_000));
+    let ops = json!([{ "op": "add_card", "node": { "id": "nuova", "type": "text", "x": 0, "y": 0, "width": 10, "height": 10, "text": "" } }]);
+    let outcome = check_cmd(
+        &mut ws,
+        json!({ "doc": BOARD, "ops": ops.to_string() }),
+        InvokeMode::Apply,
+    )
+    .expect("un rapporto");
+    let problems = custom(&outcome)["problems"].clone();
+    assert_eq!(problems[0]["code"], "too_many", "{problems}");
+    assert_eq!(problems[0]["index"], 0);
+}
+
+#[test]
+fn una_base_vecchia_e_il_problema_stale_base_e_non_un_errore() {
+    let (_vault, mut ws) = with_board(BEFORE);
+    let current = ws
+        .document_revision(&DocId::new(BOARD))
+        .expect("revisione")
+        .0;
+    let ops = json!([{ "op": "move", "ids": ["a"], "dx": 40, "dy": 0 }]).to_string();
+
+    let stale = check_cmd(
+        &mut ws,
+        json!({ "doc": BOARD, "ops": ops, "base": "sha256:0" }),
+        InvokeMode::Apply,
+    )
+    .expect("un rapporto");
+    let payload = custom(&stale);
+    assert_eq!(payload["ok"], false);
+    assert_eq!(payload["problems"][0]["code"], "stale_base");
+    assert_eq!(
+        payload["problems"][0]["text"]["key"],
+        "canvas.check.p_stale_base"
+    );
+    assert_eq!(payload["problems"].as_array().map(Vec::len), Some(1));
+    assert_eq!(payload["summary"], Value::Null);
+    assert_eq!(payload["outline_after"], Value::Null);
+
+    // Con la revisione giusta il controllo passa, e la base vecchia con una
+    // lista sbagliata dà i due problemi, la base prima.
+    let fresh = check_cmd(
+        &mut ws,
+        json!({ "doc": BOARD, "ops": ops, "base": current }),
+        InvokeMode::Apply,
+    )
+    .expect("un rapporto");
+    assert_eq!(custom(&fresh)["ok"], true);
+    let both = check_cmd(
+        &mut ws,
+        json!({ "doc": BOARD, "ops": "[{\"op\":\"fly\"}]", "base": "sha256:0" }),
+        InvokeMode::Apply,
+    )
+    .expect("un rapporto");
+    let codes: Vec<&Value> = custom(&both)["problems"]
+        .as_array()
+        .expect("i problemi")
+        .iter()
+        .map(|problem| &problem["code"])
+        .collect();
+    assert_eq!(codes, [&json!("stale_base"), &json!("unknown_op")]);
+    assert_eq!(source(&ws, BOARD), BEFORE, "il controllo non scrive");
+}
+
+#[test]
+fn gli_id_del_controllo_sono_quelli_della_scrittura() {
+    let (_vault, mut ws) = with_board(BEFORE);
+    let ops = json!([{ "op": "add_card", "node": { "type": "text", "x": 400, "y": 0, "width": 200, "height": 80, "text": "Nuova" } }])
+        .to_string();
+    let checked = check_cmd(
+        &mut ws,
+        json!({ "doc": BOARD, "ops": ops }),
+        InvokeMode::Apply,
+    )
+    .expect("il rapporto");
+    let predicted = custom(&checked)["summary"]["cards_added"][0]["id"].clone();
+    let applied = apply(
+        &mut ws,
+        json!({ "doc": BOARD, "ops": ops }),
+        InvokeMode::Apply,
+    )
+    .expect("si applica");
+    assert_eq!(
+        custom(&applied)["created"][0],
+        predicted,
+        "stesso seme, stessi id"
+    );
+}
+
+#[test]
+fn una_lista_che_non_si_legge_non_cambia_il_file() {
+    // Il primo problema della forma e la chiave dell'errore si provano nei test
+    // unitari di `lavagna.rs`: qui il kernel rende già il testo nella lingua.
+    let (_vault, mut ws) = with_board(BEFORE);
+    for ops in ["[{\"op\":\"fly\"}]", "non è JSON", "{}"] {
+        let error = apply(
+            &mut ws,
+            json!({ "doc": BOARD, "ops": ops }),
+            InvokeMode::Apply,
+        )
+        .expect_err("una lista che non si legge");
+        assert!(matches!(error, PluginError::BadArgs(_)), "{ops}: {error:?}");
+    }
+    assert_eq!(source(&ws, BOARD), BEFORE, "il file non cambia");
+}
+
+#[test]
+fn i_tre_comandi_che_leggono_non_scrivono() {
+    let specs = LavagnaCommands.commands();
+    for id in [CANVAS_READ, CANVAS_CHECK, CANVAS_GUIDE] {
+        let spec = specs
+            .iter()
+            .find(|spec| spec.id == id)
+            .unwrap_or_else(|| panic!("manca «{id}»"));
+        assert!(!spec.scope.writes, "«{id}» non scrive");
+    }
+}
+
+#[test]
+fn la_guida_senza_topic_da_il_testo_e_tutte_le_operazioni() {
+    let vault = Vault::new();
+    let mut ws = vault.open();
+    ws.reindex().expect("reindex");
+    let outcome = guide_cmd(&mut ws, json!({})).expect("la guida");
+    let payload = custom(&outcome);
+    assert_eq!(payload["kind"], "guide");
+    let text = payload["text"].as_str().expect("il testo");
+    assert!(!text.trim().is_empty());
+    assert!(text.lines().count() <= 150, "la guida sta in 150 righe");
+    let names: Vec<&str> = payload["ops"]
+        .as_array()
+        .expect("le operazioni")
+        .iter()
+        .filter_map(|op| op["name"].as_str())
+        .collect();
+    assert_eq!(
+        names,
+        ["add_card", "move", "resize", "connect", "remove", "set", "reorder"]
+    );
+    assert_eq!(
+        payload["schema"]["items"]["oneOf"].as_array().map(Vec::len),
+        Some(7)
+    );
+    let examples = payload["examples"].as_array().expect("gli esempi");
+    assert!(examples.len() >= 7, "almeno un esempio per operazione");
+    assert!(examples.iter().all(|example| example["op"].is_string()));
+}
+
+#[test]
+fn la_guida_con_un_topic_da_solo_la_sua_voce() {
+    let vault = Vault::new();
+    let mut ws = vault.open();
+    ws.reindex().expect("reindex");
+    let outcome = guide_cmd(&mut ws, json!({ "topic": "move" })).expect("la guida");
+    let payload = custom(&outcome);
+    let ops = payload["ops"].as_array().expect("le operazioni");
+    assert_eq!(ops.len(), 1);
+    assert_eq!(ops[0]["name"], "move");
+    assert_eq!(
+        payload["schema"]["items"]["oneOf"][0]["properties"]["op"]["const"],
+        "move"
+    );
+    assert_eq!(
+        payload["schema"]["items"]["oneOf"].as_array().map(Vec::len),
+        Some(1)
+    );
+    let examples = payload["examples"].as_array().expect("gli esempi");
+    assert!(!examples.is_empty());
+    assert!(examples.iter().all(|example| example["op"] == "move"));
+    assert!(payload["text"].as_str().is_some_and(|t| !t.is_empty()));
+
+    // Un topic vuoto è come non averlo.
+    let blank = guide_cmd(&mut ws, json!({ "topic": "  " })).expect("la guida");
+    assert_eq!(custom(&blank)["ops"].as_array().map(Vec::len), Some(7));
+}
+
+#[test]
+fn un_topic_sconosciuto_e_un_errore_di_argomenti() {
+    // I nomi vicini sono nel messaggio: si provano nei test unitari di `lavagna.rs`.
+    let vault = Vault::new();
+    let mut ws = vault.open();
+    ws.reindex().expect("reindex");
+    for topic in ["mvoe", "xyzzy"] {
+        let error = guide_cmd(&mut ws, json!({ "topic": topic })).expect_err("non c'è");
+        assert!(
+            matches!(error, PluginError::BadArgs(_)),
+            "{topic}: {error:?}"
+        );
+    }
 }
