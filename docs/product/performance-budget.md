@@ -230,39 +230,70 @@ cd apps/client
 node bench/interaction.mjs --only=battuta
 ```
 
-Il budget è una **mediana di 4 ms** per battuta, in ogni modalità di
-scrittura, anche su 7.201 righe. Le cifre sono mediana · novantesimo
-percentile · massimo, su server-di-fub (AMD Ryzen 7 7730U, Chromium della
-revisione Playwright fissata).
+Il budget è una **mediana di 4 ms** e un **novantesimo percentile di 8 ms**
+per battuta, in ogni modalità di scrittura, anche su 7.201 righe: il banco
+esce con errore se uno dei due è superato. Le cifre sono mediana · novantesimo
+percentile · massimo, su pc-debian-di-fub (Intel Core i5-13600KF, Debian 13,
+Chromium della revisione Playwright fissata), mediana di tre giri del banco
+alternati con quelli del codice di prima, il 13 novembre 2026 con un carico
+medio da 3 a 13 (la macchina faceva anche altri lavori).
 
 | Nota | Modalità | Battuta | Cursore |
 |---|---|---:|---:|
-| 901 righe | Sorgente | 1,9 · 2,6 · 7,5 ms | 1,9 · 2,4 · 2,5 ms |
-| 901 righe | Live | 2,9 · 4,0 · 9,6 ms | 3,2 · 3,7 · 3,9 ms |
-| 901 righe | Blocchi | 2,9 · 4,1 · 9,4 ms | 2,8 · 3,1 · 3,2 ms |
-| 7.201 righe | Sorgente | 3,8 · 4,7 · 12,0 ms | 2,1 · 2,3 · 2,4 ms |
-| 7.201 righe | Live | 6,4 · 8,8 · 17,6 ms | 3,7 · 4,3 · 4,3 ms |
-| 7.201 righe | Blocchi | 6,4 · 8,9 · 17,2 ms | 3,0 · 3,5 · 3,5 ms |
+| 901 righe | Sorgente | 3,9 · 4,3 · 9,2 ms | 3,5 · 3,7 · 3,9 ms |
+| 901 righe | Live | 2,9 · 5,2 · 23,8 ms | 2,6 · 4,3 · 4,7 ms |
+| 901 righe | Blocchi | 5,1 · 5,7 · 13,0 ms | 4,7 · 5,0 · 5,1 ms |
+| 7.201 righe | Sorgente | 6,0 · 7,2 · 17,3 ms | 3,6 · 3,9 · 5,4 ms |
+| 7.201 righe | Live | 4,7 · 7,2 · 33,9 ms | 5,3 · 5,7 · 5,8 ms |
+| 7.201 righe | Blocchi | 4,6 · 7,6 · 30,0 ms | 4,8 · 5,6 · 5,6 ms |
 
-La Live rende di nuovo soltanto i blocchi che una modifica tocca
-(`renderMarkdownState` con la resa di prima e le modifiche della transazione).
-Un blocco di primo livello che l'albero nuovo ha nello stesso punto, con lo
-stesso nome e lo stesso testo, torna dalla resa di prima con le sue
-definizioni, spostato; se cambiano le definizioni del documento (riferimenti,
-note, ancore dei titoli, sintassi) si rende tutto. Il widget di un blocco
-tornato resta quello di prima: il suo `eq` non guarda la posizione, e dopo
-l'aggiornamento della vista le coordinate `data-md-*` del DOM tornano al posto
-nuovo.
-Prima di questa resa incrementale la battuta sulla nota grande costava
-13,8 · 17,3 · 26,6 ms. Sulla nota grande la Live, e con lei Blocchi, supera ancora il budget: a
-ogni battuta scorre tutti i blocchi di primo livello (2.800 su 7.201 righe),
-e la Sorgente da sola sta già a 3,8 ms. Le cifre della tabella sono soltanto
-di server-di-fub: su una macchina più lenta la battuta non è stata misurata.
+Negli stessi giri il codice di prima dava sulla nota grande 16,6 · 37,9 ·
+83,9 ms in Live e 7,6 · 12,7 · 38,1 ms in Blocchi; su server-di-fub, prima,
+6,4 · 8,8 · 17,6 ms. Sulla macchina carica la Live e i Blocchi stanno nel
+novantesimo ma non ancora nella mediana di 4 ms, e la Sorgente, che non fa
+nient'altro, varia da 2,8 a 6 ms da un giro all'altro: il numero da guardare
+è la distanza dalla Sorgente, non la cifra di un giro solo.
 
-Siccome questo banco non sta nella CI, la guardia in CI è il test che conta le
-rese della Live (`render-incremental.test.ts`): una battuta in un paragrafo
-rende quel paragrafo e basta, e dopo ogni modifica la resa è uguale a una resa
-da capo.
+Una battuta lavora soltanto vicino alle posizioni del cambio, mai con un giro
+sui blocchi di primo livello:
+
+- **la resa** (`renderMarkdownState` con la resa di prima e le modifiche della
+  transazione) tiene i nodi di primo livello in un elenco a pezzi, e rilegge
+  soltanto quelli dal blocco prima della modifica al primo nodo dopo che
+  l'albero nuovo ha uguale a prima; i nodi dopo restano quelli di prima,
+  spostati senza toccarli. Le definizioni dei blocchi non riletti tornano dalla
+  resa di prima, e le loro posizioni si calcolano soltanto se servono. Si
+  rende tutto da capo quando la modifica tocca il frontmatter, un `^id` su una
+  riga sua, una definizione, un titolo, un blocco HTML o un indice, o quando
+  il tratto da rileggere supera i 256 nodi;
+- **i blocchi resi della Live** sono un insieme di intervalli che una modifica
+  sposta tutto in una volta; se ne rifanno soltanto quelli del tratto riletto
+  e quelli che la selezione di prima o di adesso tocca. Un cursore che si
+  muove rifà i blocchi da cui esce e in cui entra;
+- **il modello dei Blocchi** cerca il punto da rifare e i gruppi che tornano
+  uguali per posizione, con una ricerca binaria, e scorre l'albero soltanto
+  dal punto della modifica al primo gruppo uguale.
+
+Un blocco tornato tiene il suo widget: il suo `eq` non guarda la posizione, e
+dopo l'aggiornamento della vista le coordinate `data-md-*` del DOM tornano al
+posto nuovo. Se cambiano le definizioni del documento (riferimenti, note,
+ancore dei titoli, sintassi) i blocchi si rendono tutti, perché potrebbero
+leggerle.
+
+Resta proporzionale alla nota il lavoro di CodeMirror: dopo una modifica il
+parser incrementale rilegge l'albero fino in fondo, riusando i nodi di prima
+uno a uno, e su 7.201 righe costa da solo 1–2 ms. La Sorgente, che non fa
+altro, è il pavimento della battuta. Anche i ripiegabili della Live
+(`details-live.ts`) scorrono i nodi di primo livello a ogni aggiornamento.
+
+Siccome questo banco non sta nella CI, la guardia in CI è
+`render-incremental.test.ts`: conta i nodi che la resa guarda e i blocchi che
+la Live rifà, e una battuta in un paragrafo, in un recinto di duemila righe,
+in una tabella o in un riquadro ne guarda al più sei (prima di questa resa
+tutti: 801 su una nota di 200 sezioni). Dopo ogni modifica a caso la resa è
+uguale a una resa da capo dello stesso albero, e i blocchi della Live a quelli
+di una Live appena aperta; `blocks/model.test.ts` prova lo stesso per il
+modello dei Blocchi.
 
 ### L'apertura di una nota grande
 
