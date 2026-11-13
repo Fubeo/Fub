@@ -581,7 +581,6 @@ mod tests {
             let program = waiting_app(dir.path());
             let file = dir.path().join("una.prova");
             std::fs::write(&file, "x").unwrap();
-            std::fs::write(dir.path().join("una.prova.stop"), "").unwrap();
             let single = Editor {
                 single_instance: &[Os::Linux, Os::Windows],
                 ..PROVA
@@ -612,6 +611,9 @@ mod tests {
             .unwrap();
             assert_eq!(how, OpenHow::NewProcess);
             let second = registry.apps().get("prova").unwrap().pid;
+            // Lo stop arriva solo dopo aver letto le voci: un'app già uscita
+            // toglie la sua voce dal registro, e il test leggerebbe il vuoto.
+            std::fs::write(dir.path().join("una.prova.stop"), "").unwrap();
             wait_until("the apps exit", || {
                 !launch::running(first) && !launch::running(second)
             });
