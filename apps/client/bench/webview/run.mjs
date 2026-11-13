@@ -1,4 +1,5 @@
-// Gli scenari di N0, S7 di N13, S8 di N4 (la penna sulla lavagna), la
+// Gli scenari di N0, S7 di N13, S8 di N4 (la penna sulla lavagna), S9 di N6
+// (la lavagna coi fogli vivi), la
 // memoria (R1), le tessere (T1) e l'indicizzazione (I1) di K0, il nucleo
 // della lavagna (L1) di N3 e i chunk di ciascun profilo dei componenti (C1)
 // di K2, nella WebView vera, guidati da WebDriver.
@@ -25,7 +26,7 @@ import { cpus, hostname, release, tmpdir, totalmem, type as osType } from "node:
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { openSession, waitForDriver } from "./driver.mjs";
-import { INK_BOARD, INK_STROKES, noteName, writeFixtures } from "./fixtures.mjs";
+import { INK_BOARD, INK_STROKES, SHEET_BOARD, SHEET_CARDS, noteName, writeFixtures } from "./fixtures.mjs";
 import { pendenza, settled } from "./memory.mjs";
 import { CANVAS_SCRIPT, COMMITS, OPENS, SIZES, builtModule } from "./canvas.mjs";
 import { INDEXING_SCRIPT } from "./indexing.mjs";
@@ -37,7 +38,7 @@ const args = Object.fromEntries(process.argv.slice(2).map((arg) => {
   return [key, value];
 }));
 const app = resolve(args.app ?? join(here, "../../../../target/release/fub"));
-const only = new Set((args.only ?? "S1,S2,S3,S4,S5,S6,S7,S8,R1,T1,I1,L1,C1").split(","));
+const only = new Set((args.only ?? "S1,S2,S3,S4,S5,S6,S7,S8,S9,R1,T1,I1,L1,C1").split(","));
 const out = resolve(args.out ?? join(here, "../.output/webview"));
 const budgetsKind = args.budgets ?? "ci";
 const port = Number(args.port ?? 4444);
@@ -232,6 +233,80 @@ const OPENING_SCRIPT = `
   return true;
 `;
 
+/// I gesti misurati di S3, che S9 ripete uguali sulla sua lavagna: tre
+/// secondi di spostamento col pulsante di mezzo, avanti e indietro, e dieci
+/// scatti di rotella col Ctrl tenuto sul punto `at`, cinque avanti e cinque
+/// indietro. Torna `false` se il driver non ha la rotella: resta lo
+/// spostamento, e il referto lo dice.
+async function moveAndZoom(session, at) {
+  // Il pulsante di mezzo sposta la lavagna, come il trackpad e la rotella.
+  await session.actions(drag({ ...at, dx: 400, dy: 0, ms: 3_000, button: 1 }));
+  await session.releaseActions();
+  let zoomed = true;
+  try {
+    await session.actions([
+      { type: "key", id: "tastiera", actions: [{ type: "keyDown", value: CTRL }, { type: "pause", duration: 0 }, ...Array(10).fill({ type: "pause", duration: 0 }), { type: "keyUp", value: CTRL }] },
+      { type: "wheel", id: "rotella", actions: [{ type: "pause", duration: 0 }, ...Array.from({ length: 10 }, (_, i) => ({ type: "scroll", x: at.x, y: at.y, deltaX: 0, deltaY: i < 5 ? -120 : 120, duration: 100, origin: "viewport" })), { type: "pause", duration: 0 }] },
+    ]);
+  } catch {
+    // Il driver senza rotella: resta lo spostamento, e il referto lo dice.
+    zoomed = false;
+  }
+  await session.releaseActions();
+  return zoomed;
+}
+
+/// S9: lo zoom in cui si misura, fra 0,4 e 0,6 come chiede il cancello di N6
+/// e sopra `LIVE_ZOOM_MIN` (0,35), sotto cui le schede restano segnaposto.
+const SHEET_ZOOM = { target: 0.5, min: 0.4, max: 0.6 };
+/// Quanto si aspetta che i fogli diventino vivi, e poi che mostrino le celle.
+const SHEET_LIVE_WAIT_MS = 60_000;
+const LIVE_SHEETS = ".pane.focus .canvas-node[data-card-kind=sheet][data-card-mode=live]";
+const SHEET_NODES = '.pane.focus .canvas-node[data-node^="conti-"]';
+
+/// S9: la lavagna ferma, con la regola dell'apertura di S3: `stillFrames`
+/// intervalli di fila sotto `gapMs`, al più `limitMs`. Torna
+/// `{ still, ms, longestGap }`.
+const STILL_SCRIPT = `
+  const [stillFrames, gapMs, limitMs] = arguments;
+  const done = arguments[arguments.length - 1];
+  const begin = performance.now();
+  let last = null, run = 0, longestGap = 0;
+  const tick = () => {
+    const now = performance.now();
+    if (last !== null) {
+      const gap = now - last;
+      longestGap = Math.max(longestGap, gap);
+      run = gap < gapMs ? run + 1 : 0;
+    }
+    last = now;
+    if (run >= stillFrames) done({ still: true, ms: Math.round(now - begin), longestGap: Math.round(longestGap) });
+    else if (now - begin > limitMs) done({ still: false, ms: null, longestGap: Math.round(longestGap) });
+    else requestAnimationFrame(tick);
+  };
+  requestAnimationFrame(tick);
+`;
+
+/// S9: dove sono i fogli sullo schermo. Il centro del blocco delle schede
+/// `conti-*`, lo zoom letto dalla larghezza della prima (240 unità nella
+/// lavagna) e il centro della vista della lavagna.
+const SHEET_GEOMETRY = `
+  const cards = [...document.querySelectorAll(arguments[0])];
+  const view = document.querySelector('.pane.focus .canvas-viewport')?.getBoundingClientRect();
+  if (cards.length === 0 || !view) return null;
+  const boxes = cards.map((card) => card.getBoundingClientRect());
+  const left = Math.min(...boxes.map((b) => b.left)), right = Math.max(...boxes.map((b) => b.right));
+  const top = Math.min(...boxes.map((b) => b.top)), bottom = Math.max(...boxes.map((b) => b.bottom));
+  return {
+    cards: cards.length,
+    zoom: boxes[0].width / arguments[1],
+    block: { x: Math.round((left + right) / 2), y: Math.round((top + bottom) / 2) },
+    view: { x: Math.round(view.left + view.width / 2), y: Math.round(view.top + view.height / 2) },
+  };
+`;
+const sheetGeometry = (session) => session.execute(SHEET_GEOMETRY, [SHEET_NODES, 240]);
+const count = (session, css) => session.execute("return document.querySelectorAll(arguments[0]).length;", [css]);
+
 const stop = (session) => session.execute("return window.__fubProbe.stop();");
 const start = (session) => session.execute("window.__fubProbe.start(); return true;");
 
@@ -381,20 +456,7 @@ const SCENARIOS = {
     }
     const at = await centerOf(session, ".pane.focus .canvas-viewport");
     await start(session);
-    // Il pulsante di mezzo sposta la lavagna, come il trackpad e la rotella.
-    await session.actions(drag({ ...at, dx: 400, dy: 0, ms: 3_000, button: 1 }));
-    await session.releaseActions();
-    let zoomed = true;
-    try {
-      await session.actions([
-        { type: "key", id: "tastiera", actions: [{ type: "keyDown", value: CTRL }, { type: "pause", duration: 0 }, ...Array(10).fill({ type: "pause", duration: 0 }), { type: "keyUp", value: CTRL }] },
-        { type: "wheel", id: "rotella", actions: [{ type: "pause", duration: 0 }, ...Array.from({ length: 10 }, (_, i) => ({ type: "scroll", x: at.x, y: at.y, deltaX: 0, deltaY: i < 5 ? -120 : 120, duration: 100, origin: "viewport" })), { type: "pause", duration: 0 }] },
-      ]);
-    } catch {
-      // Il driver senza rotella: resta lo spostamento, e il referto lo dice.
-      zoomed = false;
-    }
-    await session.releaseActions();
+    const zoomed = await moveAndZoom(session, at);
     const report = await stop(session);
     return {
       report,
@@ -405,6 +467,91 @@ const SCENARIOS = {
         "S3.frameGap.max": report.frames.max,
         "S3.apertura": opening.ms,
         "S3.apertura.buco": opening.longestGap,
+      },
+      samples: report.frames.count,
+    };
+  },
+  /// La lavagna di S3 con venti fogli `.xlsx` vivi (il cancello di N6): la
+  /// vista va sul blocco dei fogli a zoom 0,5, si aspettano almeno venti fogli
+  /// vivi, e poi si misurano i gesti di S3.
+  async S9(session) {
+    const notes = [];
+    await openByName(session, SHEET_BOARD.name, "Scheda 20");
+    await session.waitFor("return document.querySelectorAll(arguments[0]).length >= arguments[1]", [SHEET_NODES, SHEET_CARDS], 60_000);
+    const opening = await session.executeAsync(STILL_SCRIPT, [OPENING_STILL_FRAMES, OPENING_GAP_MS, OPENING_LIMIT_MS]);
+    if (!opening.still) {
+      throw new Error(`la lavagna non si ferma: dopo ${OPENING_LIMIT_MS / 1000} s non ha ${OPENING_STILL_FRAMES} fotogrammi di fila sotto ${OPENING_GAP_MS} ms (buco più lungo ${opening.longestGap} ms)`);
+    }
+    // La vista sul blocco, con un gesto della tela e prima della sonda: gli
+    // scatti di Ctrl+rotella (1,1 ciascuno) che dalla vista intera arrivano a
+    // zoom 0,5, tutti sullo stesso punto. Lo scatto ingrandisce tenendo fermo
+    // il punto sotto il puntatore, quindi il punto è quello che manda il
+    // centro del blocco al centro della vista: P = (V − f·B) / (1 − f), con
+    // f lo zoom di tutti gli scatti, B il centro del blocco e V quello della
+    // vista. Come in S8 lo scatto è un evento `wheel` con `ctrlKey` mandato
+    // dalla pagina alla vista della lavagna, perché il Ctrl+rotella del driver
+    // non ingrandisce (il tasto non arriva alla rotella). Niente spostamento
+    // col pulsante di mezzo: il driver non consegna il suo rilascio, e la
+    // lavagna, che crede il gesto ancora in corso, non accende le schede.
+    const fitted = await sheetGeometry(session);
+    if (!fitted) throw new Error("la lavagna non mostra i fogli di S9");
+    const from = Math.round(fitted.zoom * 100) / 100;
+    const steps = Math.round(Math.log(SHEET_ZOOM.target / fitted.zoom) / Math.log(1.1));
+    if (steps <= 0) throw new Error(`la vista intera è già a zoom ${from}: non c'è niente da ingrandire`);
+    const factor = 1.1 ** steps;
+    const point = {
+      x: (fitted.view.x - factor * fitted.block.x) / (1 - factor),
+      y: (fitted.view.y - factor * fitted.block.y) / (1 - factor),
+    };
+    await session.execute(`
+      const view = document.querySelector('.pane.focus .canvas-viewport');
+      if (!view) return false;
+      const [x, y, steps] = arguments;
+      for (let i = 0; i < steps; i++) {
+        view.dispatchEvent(new WheelEvent("wheel", { deltaY: -120, deltaMode: 0, ctrlKey: true, clientX: x, clientY: y, bubbles: true, cancelable: true }));
+      }
+      return true;
+    `, [point.x, point.y, steps]);
+    const placed = await sheetGeometry(session);
+    const zoom = Math.round(placed.zoom * 100) / 100;
+    if (!(zoom >= SHEET_ZOOM.min && zoom <= SHEET_ZOOM.max)) {
+      throw new Error(`lo zoom sul blocco dei fogli è ${zoom}, fuori da ${SHEET_ZOOM.min}–${SHEET_ZOOM.max} (dalla vista intera ${from}, ${steps} scatti)`);
+    }
+    notes.push(`la vista è sul blocco dei fogli a zoom ${zoom}: dalla vista intera (${from}) ${steps} scatti di Ctrl+rotella su ${Math.round(point.x)}, ${Math.round(point.y)}; centro del blocco a ${placed.block.x - placed.view.x}, ${placed.block.y - placed.view.y} px dal centro della vista`);
+    // Meno di venti fogli vivi: lo scenario fallisce e non misura altro.
+    try {
+      await session.waitFor("return document.querySelectorAll(arguments[0]).length >= arguments[1]", [LIVE_SHEETS, SHEET_CARDS], SHEET_LIVE_WAIT_MS);
+    } catch {
+      throw new Error(`dopo ${SHEET_LIVE_WAIT_MS / 1000} s i fogli vivi sono ${await count(session, LIVE_SHEETS)}, non ${SHEET_CARDS} (zoom ${zoom})`);
+    }
+    // I fogli vivi con le celle: se non arrivano tutti il referto dice
+    // quanti ne ha visti, e si misura lo stesso.
+    const withCells = `${LIVE_SHEETS} [data-card-state=content]`;
+    try {
+      await session.waitFor("return document.querySelectorAll(arguments[0]).length >= arguments[1]", [withCells, SHEET_CARDS], SHEET_LIVE_WAIT_MS);
+    } catch {
+      notes.push(`dopo ${SHEET_LIVE_WAIT_MS / 1000} s i fogli vivi con le celle sono ${await count(session, withCells)} su ${SHEET_CARDS}`);
+    }
+    // Si misura a lavagna ferma, come S3: il primo disegno dei fogli non entra
+    // nel massimo dello spostamento.
+    const settled = await session.executeAsync(STILL_SCRIPT, [OPENING_STILL_FRAMES, OPENING_GAP_MS, OPENING_LIMIT_MS]);
+    if (!settled.still) notes.push(`coi fogli vivi la lavagna non si ferma entro ${OPENING_LIMIT_MS / 1000} s (buco più lungo ${settled.longestGap} ms): si misura lo stesso`);
+    const liveCards = await count(session, LIVE_SHEETS);
+    const at = await centerOf(session, ".pane.focus .canvas-viewport");
+    await start(session);
+    const zoomed = await moveAndZoom(session, at);
+    const report = await stop(session);
+    notes.push(`fogli vivi dopo i gesti: ${await count(session, LIVE_SHEETS)}`);
+    return {
+      report,
+      zoomed,
+      zoom,
+      opening,
+      notes,
+      values: {
+        "S9.liveCards": liveCards,
+        "S9.frameGap.p95": report.frames.p95,
+        "S9.frameGap.max": report.frames.max,
       },
       samples: report.frames.count,
     };
@@ -982,7 +1129,7 @@ async function main() {
     // poche schede da riaprire. S6 dopo S1: l'avvio da misurare riapre la
     // nota che S1 ha lasciato. L1 dopo: non apre niente nel vault. C1 in
     // fondo: cambia il profilo del vault, e lo lascia a «Tutto».
-    const order = ["R1", "I1", "S1", "S6", "S2", "S3", "S4", "S5", "S7", "S8", "T1", "L1", "C1"].filter((id) => only.has(id));
+    const order = ["R1", "I1", "S1", "S6", "S2", "S3", "S9", "S4", "S5", "S7", "S8", "T1", "L1", "C1"].filter((id) => only.has(id));
     for (const id of order) {
       // Un'app che non parte è un risultato dello scenario, non la fine del
       // banco: gli altri scenari e il referto vanno avanti.
@@ -1010,7 +1157,7 @@ async function main() {
           const limit = limits[key];
           const over = limit !== undefined && (value === null || value > limit);
           if (over) failed++;
-          const unit = key.endsWith("MiB") ? "MiB" : key.endsWith(".chunks") || key.endsWith(".spegnibili") ? "chunk" : key.includes(".dryPaths") ? "path" : "ms";
+          const unit = key.endsWith("MiB") ? "MiB" : key.endsWith(".chunks") || key.endsWith(".spegnibili") ? "chunk" : key.includes(".dryPaths") ? "path" : key.endsWith(".liveCards") ? "schede" : "ms";
           console.log(`${over ? "✗" : "✓"} ${key} = ${value ?? "—"} ${unit}${limit !== undefined ? ` (soglia ${limit})` : ""} · ${result.samples} campioni`);
         }
         for (const note of result.notes ?? []) console.log(`· ${id}: ${note}`);
