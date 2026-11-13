@@ -1919,7 +1919,7 @@ Prova: (nella cartella di lavoro) cd apps/client && npm run build && cd
 tauri/custom-protocol && cd apps/client && dbus-run-session -- xvfb-run -a
 npm run bench:webview -- --only=S8 --budgets=targets --port=4481
 --native-driver=/usr/bin/WebKitWebDriver
-Stato: [ ] da fare
+Stato: [x] fatto · profilo in `docs/misure/lavagna-inchiostro-profilo-2026-11-13.md`: l'inchiostro di N4 spende ≤ 2 ms per fotogramma e ~5 ms al rilascio; i fotogrammi lunghi vengono da codice di N6, tracciati come N6 T20c (riquadri dei bersagli), T20d (croce della penna) e T20e (rilascio), prima del cancello di N6. Nessuna correzione in N4
 
 ## T25 · La CI completa e la revisione prima del merge
 
