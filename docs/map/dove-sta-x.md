@@ -27,6 +27,7 @@
 | la proiezione dei documenti ricchi | `docs/reference/rich-projection.md` |
 | il protocollo della sessione live | `docs/reference/live-session.md` |
 | le porte IPC del motore del disegno | `docs/reference/drawing-ipc.md` |
+| le porte IPC dei fogli di calcolo | `docs/reference/grid-ipc.md` |
 | gli strumenti del server MCP | `docs/reference/mcp-server.md` |
 | la cattura del clipper | `apps/clipper/capture-v1.schema.json` |
 | il layout su disco di `.fub/` | `docs/reference/on-disk-layout.md` |
