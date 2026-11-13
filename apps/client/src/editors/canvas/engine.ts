@@ -1725,6 +1725,16 @@ export class CanvasEngine {
   #erase: InkErase | null = null;
   /** D tenuto giù sul viewport: il mouse scrive finché non si alza. */
   #inkKeyDown = false;
+  /**
+   * Il velo della croce (T20d): sopra le schede, porta lui il cursore del
+   * mouse che scrive. Mostrarlo cambia un elemento solo; `cursor` messo sul
+   * viewport si ereditava e ricalcolava lo stile di tutta la lavagna.
+   */
+  readonly #penVeil: HTMLElement;
+  /** Sopra la vista c'è un mouse, o una penna sospesa: il velo serve solo a loro. */
+  #veilPointer = false;
+  /** Ciò che c'è sotto il velo per un evento che l'ha preso, cercato una volta. */
+  readonly #underVeil = new WeakMap<Event, EventTarget>();
   // --- a chi appartiene il tratto (T69) ---
   /** Un tratto della punta è appena cominciato: lo spessore e la vista, finché il primo movimento non apre l'etichetta. */
   #inkStarting: { readonly size: number; readonly view: DOMRect } | null = null;
@@ -1911,7 +1921,14 @@ export class CanvasEngine {
     this.#grid = document.createElement("div");
     this.#grid.className = "canvas-grid";
     this.#grid.setAttribute("aria-hidden", "true");
-    this.#viewport.append(this.#grid, this.#stage, this.#handleLayer);
+    // Il velo della croce (T20d) sopra tutto ciò che il puntatore prende: si
+    // mostra con `data-idle` tolto, mai con `hidden`, che le regole `:has()`
+    // della shell leggono (vedi i riquadri dei bersagli, T20c).
+    this.#penVeil = document.createElement("div");
+    this.#penVeil.className = "canvas-pen-veil";
+    this.#penVeil.setAttribute("aria-hidden", "true");
+    this.#penVeil.setAttribute("data-idle", "");
+    this.#viewport.append(this.#grid, this.#stage, this.#handleLayer, this.#penVeil);
     this.#paintGrid();
     // Lo spazio di lavoro (T65): Semplice o Completo, e Ctrl+. che nasconde
     // l'interfaccia. Gli attributi stanno sulla superficie; la colonna, la
@@ -2250,6 +2267,22 @@ export class CanvasEngine {
     // leggono dopo, quando la scia è già disegnata; Alt si legge ovunque.
     this.#viewport.addEventListener("pointerdown", (event) => this.#inkSeen(event), { signal, capture: true });
     this.#viewport.addEventListener("pointermove", (event) => this.#inkTargetMove(event), { signal });
+    // Il velo della croce (T20d): c'è col mouse e con la penna sospesa sopra
+    // la vista; un dito che si appoggia, o la penna che esce dal raggio, lo
+    // toglie. Il mouse che esce no: fuori dalla vista il velo non conta, e
+    // ogni volta che compare sotto il puntatore la scheda sotto perde il suo
+    // `:hover` e si ridipinge.
+    const veilOver = (event: PointerEvent): void => {
+      if (event.pointerType !== "touch") this.#setVeilPointer(true);
+    };
+    this.#viewport.addEventListener("pointerover", veilOver, { signal, capture: true });
+    this.#viewport.addEventListener("pointermove", veilOver, { signal, capture: true });
+    this.#viewport.addEventListener("pointerdown", (event) => {
+      if (event.pointerType === "touch") this.#setVeilPointer(false);
+    }, { signal, capture: true });
+    this.#viewport.addEventListener("pointerleave", (event) => {
+      if (event.pointerType === "pen") this.#setVeilPointer(false);
+    }, { signal });
     this.#life.listen(window, "keydown", (event) => {
       if (event.key === "Alt") this.#setAltHeld(true);
     });
@@ -3248,17 +3281,69 @@ export class CanvasEngine {
   }
 
   /**
-   * Dice allo strato che cosa fa il mouse, e lo mostra sul viewport solo
-   * quando scrive davvero (lo strato c'è): `data-ink="pen"`, o `"eraser"` con
-   * lo strumento Gomma del menu.
+   * Dice allo strato che cosa fa il mouse, e lo mostra solo quando scrive
+   * davvero (lo strato c'è): `data-ink="pen"`, o `"eraser"` con lo strumento
+   * Gomma del menu, sul viewport; la croce (o la cella) la porta il velo
+   * (T20d), mostrato solo con un mouse o una penna sospesa sopra la vista.
+   * Ogni attributo si scrive solo se cambia.
    */
   #applyInkMouse(): void {
     // Con Spazio tenuto il mouse sposta la vista (T53).
     const on = this.#inkMouseOn && !this.#spaceHeld;
     const layer = this.#inkLayer;
     layer?.setMouse(on ? "ink" : "ignore");
-    if (on && layer) this.#viewport.dataset.ink = this.#penChoice.tool === "eraser" ? "eraser" : "pen";
-    else delete this.#viewport.dataset.ink;
+    const ink = on && layer ? (this.#penChoice.tool === "eraser" ? "eraser" : "pen") : null;
+    if (ink === null) {
+      if (this.#viewport.dataset.ink !== undefined) delete this.#viewport.dataset.ink;
+    } else if (this.#viewport.dataset.ink !== ink) {
+      this.#viewport.dataset.ink = ink;
+    }
+    const veil = this.#penVeil;
+    const shown = ink !== null && this.#veilPointer;
+    if (shown && veil.dataset.tool !== ink) veil.dataset.tool = ink;
+    if (shown === veil.hasAttribute("data-idle")) veil.toggleAttribute("data-idle", !shown);
+  }
+
+  /**
+   * Un mouse o una penna sospesa entra nella vista o ci si muove (`true`), la
+   * penna esce dal raggio o un dito si appoggia (`false`): il velo della croce c'è solo per i
+   * primi. Il dito non ha cursore, e sotto il velo non toccherebbe il
+   * contenuto delle schede.
+   */
+  #setVeilPointer(over: boolean): void {
+    if (this.#veilPointer === over) return;
+    this.#veilPointer = over;
+    this.#applyInkMouse();
+  }
+
+  /**
+   * L'elemento in cima nel punto `clientX`, `clientY` della finestra come se
+   * il velo della croce non ci fosse: le ricerche per punto della lavagna
+   * (il menu, il filo, il deposito) guardano le schede, non il velo.
+   */
+  #elementAt(clientX: number, clientY: number): Element | null {
+    const top = document.elementFromPoint?.(clientX, clientY) ?? null;
+    if (top !== this.#penVeil) return top;
+    const stack = document.elementsFromPoint?.(clientX, clientY) ?? [];
+    const at = stack.indexOf(this.#penVeil);
+    return at < 0 ? null : stack[at + 1] ?? null;
+  }
+
+  /**
+   * Il bersaglio di un evento del puntatore come se il velo della croce non
+   * ci fosse: ciò che c'è sotto il punto, cercato una volta per evento (la
+   * vista se sotto non c'è niente). Un evento che non ha preso il velo dà il
+   * suo bersaglio, senza ricerche.
+   */
+  #targetOf(event: MouseEvent): EventTarget | null {
+    if (event.target !== this.#penVeil) return event.target;
+    let under = this.#underVeil.get(event);
+    if (under === undefined) {
+      const found = this.#elementAt(event.clientX, event.clientY);
+      under = found !== null && this.#viewport.contains(found) ? found : this.#viewport;
+      this.#underVeil.set(event, under);
+    }
+    return under;
   }
 
   // --- il menu della penna (T21) -------------------------------------------
@@ -4307,7 +4392,7 @@ export class CanvasEngine {
       pointerId: event.pointerId,
       points: [this.#screenToWorld(event.clientX, event.clientY)],
       additive: event.shiftKey,
-      pressed: this.#nodeAt(event.target),
+      pressed: this.#nodeAt(this.#targetOf(event)),
     };
     this.#viewport.setPointerCapture?.(event.pointerId);
     this.#paintLasso();
@@ -5581,7 +5666,7 @@ export class CanvasEngine {
     // Il punto e la scheda sotto si prendono subito: durante il deposito il
     // puntatore si muove.
     const point = this.#intakePoint(event, drop);
-    const existing = drop ? this.#nodeAt(document.elementFromPoint?.(event.clientX, event.clientY) ?? null) : null;
+    const existing = drop ? this.#nodeAt(this.#elementAt(event.clientX, event.clientY) ?? null) : null;
     const files = [...new Set(port?.expandFiles ? await port.expandFiles(data) : [...data.files])];
     if (files.length && (!port || !documentId)) return;
     // Le schede che questo gesto fa nascere, per percorso: «Fanne una copia»
@@ -8064,7 +8149,7 @@ export class CanvasEngine {
    *  selezione diventano la selezione; sul vuoto si aggiunge lì. */
   contextMenu(at: { x: number; y: number } | null): SurfaceMenu | null {
     if (this.#destroyed || !this.#doc || this.#isSceneOversized()) return null;
-    const element = at ? document.elementFromPoint(at.x, at.y) : null;
+    const element = at ? this.#elementAt(at.x, at.y) : null;
     if (at && (!element || !this.#viewport.contains(element))) return null;
     const node = element ? this.#nodeAt(element) : this.#selection[0] ?? null;
     const edge = node ? null : element ? this.#edgeAt(element) : this.#edgeSelection[0] ?? null;
@@ -8321,10 +8406,12 @@ export class CanvasEngine {
   }
 
   #pointerDown(event: PointerEvent): void {
+    // Sotto il velo della croce (T20d) vale ciò che c'è sotto.
+    const target = this.#targetOf(event);
     // Un clic fuori dal ritaglio lo applica, come «Fatto» (il ritaglio del
     // disegno fa lo stesso, A-27). I gesti dentro il ritaglio non arrivano qui.
     const crop = this.#crop;
-    if (crop?.editor && !crop.editor.contains(event.target)) this.#finishCrop("done", crop.editor.zone());
+    if (crop?.editor && !crop.editor.contains(target)) this.#finishCrop("done", crop.editor.zone());
     // Il tasto laterale della penna senza lo strato della penna (la sola
     // lettura), che altrimenti lo prende prima (T63).
     if (event.pointerType === "pen" && event.button === 2 && this.#inkLayer === null && this.#penButtonSetting !== "eraser") {
@@ -8333,10 +8420,10 @@ export class CanvasEngine {
       return;
     }
     // Un clic fuori dalle maniglie chiude il doppio clic che le adatta (T66).
-    if (!(event.target instanceof Element && event.target.closest("[data-resize], [data-resize-frame]"))) this.#handleTap = null;
+    if (!(target instanceof Element && target.closest("[data-resize], [data-resize-frame]"))) this.#handleTap = null;
     // Prima di ogni gesto, il testo in sospeso (non i clic dentro il campo).
-    if (!(event.target instanceof Node && this.#editor?.place.contains(event.target))) this.#recordPending();
-    const pressed = this.#nodeAt(event.target);
+    if (!(target instanceof Node && this.#editor?.place.contains(target))) this.#recordPending();
+    const pressed = this.#nodeAt(target);
     this.#pressedSelected = pressed !== null && this.#selection.length === 1 && this.#selection[0] === pressed
       ? pressed
       : null;
@@ -8344,7 +8431,7 @@ export class CanvasEngine {
     // anche una scheda attiva (N4); e il tasto centrale, che sposta la vista,
     // non toglie la scrittura (T41).
     const panning = event.button === 1 && this.#writingId !== null;
-    if (this.#activeId !== null && event.pointerType !== "pen" && !panning && !this.#insideActive(event.target, false)) {
+    if (this.#activeId !== null && event.pointerType !== "pen" && !panning && !this.#insideActive(target, false)) {
       this.#leaveCard(false);
     }
     if (event.pointerType === "touch") this.#touchDown(event);
@@ -8353,11 +8440,12 @@ export class CanvasEngine {
 
   #mouseDown(event: PointerEvent): void {
     const modifier = event.ctrlKey || event.metaKey;
+    const target = this.#targetOf(event);
     // Ctrl+clic (Cmd+clic) su un link di una scheda lo segue (D-18 (c)): il
     // `click` deve arrivare al link, non a uno spostamento della lavagna.
-    if (event.button === 0 && modifier && this.#cardLinkAt(event.target) !== null) return;
+    if (event.button === 0 && modifier && this.#cardLinkAt(target) !== null) return;
     // ↗ di un estratto (T75) prende il suo clic, anche con Ctrl (Cmd).
-    if (event.button === 0 && event.target instanceof Element && event.target.closest("[data-excerpt-open]")) return;
+    if (event.button === 0 && target instanceof Element && target.closest("[data-excerpt-open]")) return;
     // Spazio tenuto: il tasto principale sposta la vista, con qualsiasi
     // strumento e sopra ogni cosa (T53).
     if (event.button === 0 && this.#spaceHeld) {
@@ -8373,12 +8461,12 @@ export class CanvasEngine {
     // Alt+trascina dal corpo di una scheda tira un filo (T67); nel vuoto Alt
     // sposta ancora la vista.
     if (event.button === 0 && event.altKey && !modifier && this.#tool !== "hand"
-      && !this.#insideActive(event.target, false)) {
-      const from = this.#nodeAt(event.target);
+      && !this.#insideActive(target, false)) {
+      const from = this.#nodeAt(target);
       if (from && this.#beginConnect(event, { from })) return;
     }
     if (event.button === 1 || modifier || event.altKey) {
-      const toggle = event.button === 0 && modifier && !event.altKey ? this.#nodeAt(event.target) ?? undefined : undefined;
+      const toggle = event.button === 0 && modifier && !event.altKey ? this.#nodeAt(target) ?? undefined : undefined;
       this.#pan = { pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, camX: this.#camera.x, camY: this.#camera.y, toggle };
       this.#viewport.setPointerCapture?.(event.pointerId);
       event.preventDefault();
@@ -8399,7 +8487,6 @@ export class CanvasEngine {
       else this.#beginLasso(event);
       return;
     }
-    const target = event.target;
     const endpoint = target instanceof Element ? target.closest<SVGElement>("[data-reconnect]") : null;
     if (endpoint && !this.#readOnly) {
       const edge = this.#doc?.edges.find((entry) => entry.id === endpoint.dataset.reconnect);
@@ -8589,7 +8676,8 @@ export class CanvasEngine {
       event.preventDefault();
       return;
     }
-    const target = event.target instanceof Element ? event.target : null;
+    const hit = this.#targetOf(event);
+    const target = hit instanceof Element ? hit : null;
     // Vicino a un angolo della scelta il dito prende la maniglia (T66); un
     // controllo sotto il dito (il pulsante del filo) resta suo.
     if (!target?.closest(FINGER_CONTROLS) && this.#resizeFromFinger(event)) return;
@@ -8837,7 +8925,8 @@ export class CanvasEngine {
    */
   #gestureDown(event: PointerEvent): void {
     const point = { x: event.clientX, y: event.clientY };
-    const target = event.target instanceof Element ? event.target : null;
+    const hit = this.#targetOf(event);
+    const target = hit instanceof Element ? hit : null;
     // Le dita che scrivevano, prese da questo (T64), sono nel tocco dal loro
     // appoggio: un dito che ha già scritto più in là non fa un tocco.
     const adopted = this.#adopted.flatMap((id) => {
@@ -9007,7 +9096,8 @@ export class CanvasEngine {
    */
   #resizeFromHandle(event: PointerEvent): boolean {
     if (this.#readOnly || !this.#doc) return false;
-    const target = event.target instanceof Element ? event.target : null;
+    const hit = this.#targetOf(event);
+    const target = hit instanceof Element ? hit : null;
     const handle = target?.closest<HTMLElement>("[data-resize], [data-resize-frame]");
     if (!handle) return false;
     const corner = cornerOf(handle.dataset.corner);
@@ -9270,7 +9360,10 @@ export class CanvasEngine {
       return;
     }
     if (!this.#pan && !this.#resize && !this.#drag && event.pointerType === "mouse") {
-      this.#hoverEdge(event.clientX, event.clientY, event.target);
+      // Sotto il velo della croce (T20d) il mouse scrive: nessun filo si
+      // scurisce, e nessuna ricerca a ogni movimento del tratto.
+      if (event.target === this.#penVeil) this.#setEdgeHover(null);
+      else this.#hoverEdge(event.clientX, event.clientY, event.target);
     }
     if (this.#pan && event.pointerId === this.#pan.pointerId) {
       this.#camera.x = this.#pan.camX + (event.clientX - this.#pan.startX);
@@ -9478,7 +9571,7 @@ export class CanvasEngine {
    * sulla scheda da cui parte.
    */
   #connectTargetAt(connect: ConnectGesture, clientX: number, clientY: number): CanvasNode | null {
-    const id = this.#nodeAt(document.elementFromPoint(clientX, clientY));
+    const id = this.#nodeAt(this.#elementAt(clientX, clientY));
     if (id === null || (!connect.edgeId && id === connect.from)) return null;
     return this.#doc?.nodes.find((node) => node.id === id) ?? null;
   }
@@ -9553,7 +9646,7 @@ export class CanvasEngine {
   #finishConnect(connect: ConnectGesture, clientX: number, clientY: number): boolean {
     const doc = this.#doc;
     if (!doc || this.#readOnly) return false;
-    const hit = document.elementFromPoint(clientX, clientY);
+    const hit = this.#elementAt(clientX, clientY);
     const target = this.#connectTargetAt(connect, clientX, clientY);
     if (connect.edgeId) {
       const existing = doc.edges.find((edge) => edge.id === connect.edgeId);
@@ -9761,12 +9854,19 @@ export class CanvasEngine {
   }
 
   #wheel(event: WheelEvent): void {
+    const target = this.#targetOf(event);
     // Sopra la scheda attiva la rotella scorre lei (A-11); Ctrl+rotella e il
     // pizzico ingrandiscono sempre la lavagna.
-    if (!event.ctrlKey && !event.metaKey && this.#insideActive(event.target, true)) return;
+    if (!event.ctrlKey && !event.metaKey && this.#insideActive(target, true)) {
+      this.#wheelUnderVeil(event, target);
+      return;
+    }
     // Sopra il testo che si scrive in una scheda la rotella scorre il testo
     // (una scheda di testo lunga, T43).
-    if (!event.ctrlKey && !event.metaKey && event.target instanceof Node && this.#editor?.place.contains(event.target)) return;
+    if (!event.ctrlKey && !event.metaKey && target instanceof Node && this.#editor?.place.contains(target)) {
+      this.#wheelUnderVeil(event, target);
+      return;
+    }
     event.preventDefault();
     // La rotella prende la vista: un volo o un'inerzia si fermano (T53).
     this.#stopMotion(false);
@@ -9805,12 +9905,35 @@ export class CanvasEngine {
     this.#applyCamera();
   }
 
+  /**
+   * La rotella sopra la scheda attiva, presa dal velo della croce (T20d): il
+   * browser scorrerebbe gli antenati del velo, cioè niente. La scorre la
+   * lavagna: il primo antenato di `under` che può scorrere in quella
+   * direzione, dentro la vista. Senza velo scorre il browser, come sempre.
+   */
+  #wheelUnderVeil(event: WheelEvent, under: EventTarget | null): void {
+    if (event.target !== this.#penVeil || !(under instanceof Element)) return;
+    for (let element: Element | null = under; element && element !== this.#viewport; element = element.parentElement) {
+      const dx = wheelPixels(event.deltaX, event.deltaMode, element.clientWidth);
+      const dy = wheelPixels(event.deltaY, event.deltaMode, element.clientHeight);
+      const style = getComputedStyle(element);
+      const free = (overflow: string): boolean => overflow === "auto" || overflow === "scroll";
+      const vertical = dy !== 0 && free(style.overflowY) && element.scrollHeight > element.clientHeight;
+      const horizontal = dx !== 0 && free(style.overflowX) && element.scrollWidth > element.clientWidth;
+      if (!vertical && !horizontal) continue;
+      event.preventDefault();
+      element.scrollBy({ left: horizontal ? dx : 0, top: vertical ? dy : 0 });
+      return;
+    }
+  }
+
   #dblclick(event: MouseEvent): void {
-    if (this.#readOnly || this.#nodeAt(event.target)) return;
+    const target = this.#targetOf(event);
+    if (this.#readOnly || this.#nodeAt(target)) return;
     // Su una maniglia della cornice della scelta: tutte le schede scelte
     // prendono la misura del loro contenuto (T66). Con la cattura del
     // puntatore il doppio clic su una maniglia arriva qui.
-    const tap = this.#takeHandleTap(event.target);
+    const tap = this.#takeHandleTap(target);
     if (tap) {
       this.#fitToContent(tap);
       return;
@@ -10150,8 +10273,8 @@ export class CanvasEngine {
   #cardClick(event: MouseEvent): void {
     const pressed = this.#pressedSelected;
     this.#pressedSelected = null;
-    if (event.button !== 0 || !(event.target instanceof Element)) return;
-    const target = event.target;
+    const target = this.#targetOf(event);
+    if (event.button !== 0 || !(target instanceof Element)) return;
     const id = this.#nodeAt(target);
     const entry = id === null ? undefined : this.#cards.get(id);
     if (!id || !entry || !this.#hasLiveContent(entry) || !entry.body.contains(target)) return;
@@ -10176,8 +10299,9 @@ export class CanvasEngine {
    * link senza `resolveCardLink`): allora vale la montatura di sempre.
    */
   #followCardLink(event: MouseEvent, entry: CardEntry): boolean {
-    if (!this.#options.resolveCardLink || !(event.target instanceof Element)) return false;
-    const anchor = this.#cardLinkAt(event.target);
+    const target = this.#targetOf(event);
+    if (!this.#options.resolveCardLink || !(target instanceof Element)) return false;
+    const anchor = this.#cardLinkAt(target);
     const link = anchor === null ? null : cardLinkOf(anchor);
     if (link === null) return false;
     event.preventDefault();
@@ -10276,7 +10400,7 @@ export class CanvasEngine {
    * vista resta suo.
    */
   #keepContentFocus(event: PointerEvent, id: string): void {
-    const target = event.target;
+    const target = this.#targetOf(event);
     const entry = this.#cards.get(id);
     if (!(target instanceof Element) || !entry || this.#activeId === id || !this.#hasLiveContent(entry)) return;
     if (!entry.body.contains(target)) return;

@@ -3276,12 +3276,21 @@ body:has(#context-menu:not([hidden])) > .toast-stack {
   cursor: grabbing;
 }
 /* Il mouse che scrive (D tenuto o «Scrivi col mouse»): la croce, come
-   l'inchiostro delle note. */
-.canvas-viewport[data-ink="pen"] {
+   l'inchiostro delle note, su un velo sopra le schede (T20d). Non sul
+   viewport: `cursor` si eredita, e cambiarlo lì ricalcolava lo stile di ogni
+   elemento della lavagna (62–80 ms con un foglio vivo). Il velo si mostra
+   togliendo `data-idle`; nascosto non prende il puntatore. */
+.canvas-pen-veil {
+  position: absolute;
+  inset: 0;
   cursor: crosshair;
+  touch-action: none;
+}
+.canvas-pen-veil[data-idle] {
+  visibility: hidden;
 }
 /* Con lo strumento Gomma del menu della penna: la cella. */
-.canvas-viewport[data-ink="eraser"] {
+.canvas-pen-veil[data-tool="eraser"] {
   cursor: cell;
 }
 

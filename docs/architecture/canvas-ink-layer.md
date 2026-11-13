@@ -119,6 +119,17 @@ schede.
   o si nasconde; un tratto già giù finisce. «Scrivi col mouse»
   (`setInkMouse`, `saveInkMouse`, `readInkMouse` all'apertura) è lo stato
   di Penna, Evidenziatore e Gomma della [colonna](../reference/canvas-input.md).
+- **La croce.** Il mouse che scrive mostra la croce (la cella con la Gomma)
+  su un velo, `.canvas-pen-veil`, sopra le schede e le prese dei fili, non
+  con `cursor` sul viewport: `cursor` si eredita, e cambiarlo lì ricalcolava
+  lo stile di tutta la lavagna a ogni D (62–80 ms col foglio vivo). Il velo
+  si mostra togliendo `data-idle`, solo col mouse o la penna sospesa sopra
+  la vista; un dito che si appoggia o la penna che esce dal raggio lo
+  tolgono (il mouse che esce no: ogni volta che il velo compare, la scheda
+  sotto il puntatore perde `:hover` e si ridipinge). Il
+  bersaglio del tratto si cerca per coordinate e non cambia; il menu, il
+  dito, il doppio clic e la rotella vedono ciò che c'è sotto il velo
+  (`#targetOf`, `#elementAt`), e sotto il velo nessun filo si scurisce.
 - **Il dito.** Un dito sposta la vista, anche sopra le schede; testata,
   maniglie, `[data-connect]` e controlli fanno come col mouse (in sola
   lettura la testata sposta la vista). Due dita pizzicano (`pinchCamera` di

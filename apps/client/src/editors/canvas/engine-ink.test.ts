@@ -6,6 +6,7 @@
 // Con «Il dito scrive» (T64) un dito scrive e due dita spostano.
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { t } from "../../i18n/strings";
+import structure from "../../theme/scrittoio/structure.css?raw";
 import { parseInkBrush, penOf } from "../../ink/brush";
 import { quantizeInk, type InkSample } from "../../ink/sample";
 import { decodeInk, encodeInk, inkFromQuantized, inkLength, inkPoint } from "../spatial/ink/codec";
@@ -698,6 +699,175 @@ describe("la gomma «Il tratto intero» e il tasto D", () => {
     const { host } = mounted();
     keyD(viewportOf(host), "keydown", { ctrlKey: true });
     expect(viewportOf(host).dataset.ink).toBeUndefined();
+  });
+});
+
+describe("la croce sul velo (T20d)", () => {
+  const veilOf = (host: HTMLElement) => host.querySelector<HTMLElement>(".canvas-viewport > .canvas-pen-veil")!;
+  const shown = (host: HTMLElement) => !veilOf(host).hasAttribute("data-idle");
+  /** Il mouse che passa sopra la vista, senza tasti. */
+  const hover = (host: HTMLElement, x = 50, y = 50) =>
+    viewportOf(host).dispatchEvent(pointerEvent("pointermove", { ...MOUSE, clientX: x, clientY: y, button: -1, buttons: 0 }));
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("la croce sta su un velo sopra le schede e i fili, e solo col mouse che scrive", () => {
+    const { engine, host } = mounted();
+    const viewport = viewportOf(host);
+    const veil = veilOf(host);
+    // Sopra lo stage (le schede, i fili) e sopra le prese dei fili: ciò che
+    // il puntatore prende per primo. Nessun lettore di schermo lo sente.
+    const children = [...viewport.children];
+    expect(children.indexOf(veil)).toBeGreaterThan(children.indexOf(host.querySelector(".canvas-stage")!));
+    expect(children.indexOf(veil)).toBeGreaterThan(children.indexOf(host.querySelector(".canvas-edge-handles")!));
+    expect(veil.getAttribute("aria-hidden")).toBe("true");
+    expect(shown(host)).toBe(false);
+
+    // D col mouse sopra la vista: la croce sul velo; D lasciato la toglie.
+    hover(host);
+    expect(shown(host)).toBe(false);
+    keyD(viewport, "keydown");
+    expect(shown(host)).toBe(true);
+    expect(veil.dataset.tool).toBe("pen");
+    expect(viewport.dataset.ink).toBe("pen");
+    keyD(window, "keyup");
+    expect(shown(host)).toBe(false);
+    expect(veil.hidden).toBe(false);
+
+    // La penna del menu, senza D; la Gomma del menu: la cella.
+    engine.setInkMouse(true);
+    expect(shown(host)).toBe(true);
+    openPen(engine);
+    pick("tool", "eraser");
+    expect(veil.dataset.tool).toBe("eraser");
+    expect(viewport.dataset.ink).toBe("eraser");
+    openPen(engine);
+    pick("tool", "pen");
+    expect(veil.dataset.tool).toBe("pen");
+
+    // Un dito che si appoggia toglie il velo: il dito non ha cursore e tocca
+    // il contenuto delle schede. Il mouse che torna lo rimette.
+    viewport.dispatchEvent(pointerEvent("pointerdown", { pointerId: 40, pointerType: "touch", clientX: 900, clientY: 700, button: 0, buttons: 1 }));
+    viewport.dispatchEvent(pointerEvent("pointerup", { pointerId: 40, pointerType: "touch", clientX: 900, clientY: 700, button: 0, buttons: 0 }));
+    expect(shown(host)).toBe(false);
+    viewport.dispatchEvent(pointerEvent("pointerover", { ...MOUSE, clientX: 50, clientY: 50, buttons: 0 }));
+    expect(shown(host)).toBe(true);
+
+    // La penna sospesa che esce dal raggio lo toglie; il mouse che esce no
+    // (fuori dalla vista non conta, e ricomparire ridipinge la scheda sotto).
+    viewport.dispatchEvent(pointerEvent("pointerleave", { ...MOUSE, bubbles: false, clientX: -5, clientY: 50, buttons: 0 }));
+    expect(shown(host)).toBe(true);
+    viewport.dispatchEvent(pointerEvent("pointerleave", { ...PEN, bubbles: false, clientX: 50, clientY: 50, buttons: 0 }));
+    expect(shown(host)).toBe(false);
+    viewport.dispatchEvent(pointerEvent("pointermove", { ...PEN, clientX: 50, clientY: 50, button: -1, buttons: 0 }));
+    expect(shown(host)).toBe(true);
+    // Spazio tenuto lo toglie (la mano).
+    viewport.dispatchEvent(new KeyboardEvent("keydown", { key: " ", bubbles: true, cancelable: true }));
+    expect(shown(host)).toBe(false);
+    window.dispatchEvent(new KeyboardEvent("keyup", { key: " ", bubbles: true }));
+    expect(shown(host)).toBe(true);
+
+    // L'interruttore spento: il velo se ne va, e la lavagna torna com'era.
+    engine.setInkMouse(false);
+    expect(shown(host)).toBe(false);
+    expect(viewport.dataset.ink).toBeUndefined();
+  });
+
+  it("la croce è del velo: nessuna regola mette un cursore sul viewport che scrive", () => {
+    // `cursor` si eredita: sul viewport ricalcolava lo stile di tutta la lavagna.
+    expect(structure).not.toMatch(/\.canvas-viewport\[data-ink[^{]*\{[^}]*cursor/);
+    expect(structure).toMatch(/\.canvas-pen-veil \{[^}]*cursor: crosshair;/);
+    expect(structure).toMatch(/\.canvas-pen-veil\[data-idle\] \{[^}]*visibility: hidden;/);
+    expect(structure).toMatch(/\.canvas-pen-veil\[data-tool="eraser"\] \{[^}]*cursor: cell;/);
+  });
+
+  it("in sola lettura il velo non c'è mai", () => {
+    const { engine, host } = mounted();
+    engine.setReadOnly(true);
+    hover(host);
+    keyD(viewportOf(host), "keydown");
+    expect(shown(host)).toBe(false);
+  });
+
+  it("col velo il tratto del mouse va alla stessa scheda di prima, e dal vuoto resta libero", () => {
+    const { host, changes } = mounted();
+    const viewport = viewportOf(host);
+    hover(host);
+    keyD(viewport, "keydown");
+    // Senza velo (il tratto sceso sulla scheda) e col velo: lo stesso livello.
+    mouse(host, card(host, "img"), across(300, 0));
+    expect(strokesOf(lastChange(changes).text, "img")).toHaveLength(1);
+    mouse(host, veilOf(host), across(300, 0));
+    expect(strokesOf(lastChange(changes).text, "img")).toHaveLength(2);
+    // Sopra il vuoto il tratto è libero, sulla radice.
+    mouse(host, veilOf(host), [[100, 400], [140, 420], [180, 430]]);
+    expect(strokesOf(lastChange(changes).text, null)).toHaveLength(1);
+    expect(inkChanges(changes)).toHaveLength(3);
+  });
+
+  it("sotto il velo il tasto destro, il dito e il doppio clic vedono la scheda", () => {
+    const { engine, host } = mounted();
+    const viewport = viewportOf(host);
+    hover(host);
+    engine.setInkMouse(true);
+    const veil = veilOf(host);
+    const under = card(host, "img").querySelector(".canvas-card-body") ?? card(host, "img");
+    vi.spyOn(document, "elementFromPoint").mockReturnValue(veil);
+    Object.defineProperty(document, "elementsFromPoint", { configurable: true, value: () => [veil, under, viewport] });
+    try {
+      // Il menu della scheda, non quello del vuoto.
+      const menu = engine.contextMenu({ x: 400, y: 50 })!;
+      expect(menu.target).toMatchObject({ kind: "node", ref: "img" });
+      // Il dito che tocca il velo sceglie la scheda sotto (il primo tocco
+      // dopo il mouse: il velo c'era ancora).
+      expect(shown(host)).toBe(true);
+      const base = { pointerId: 41, pointerType: "touch", isPrimary: false, width: 10, height: 10 } as const;
+      clock += 1000;
+      veil.dispatchEvent(pointerEvent("pointerdown", { ...base, clientX: 400, clientY: 50, button: 0, buttons: 1, pressure: 0.5, timeStamp: clock }));
+      clock += 16;
+      veil.dispatchEvent(pointerEvent("pointerup", { ...base, clientX: 401, clientY: 50, button: 0, buttons: 0, pressure: 0, timeStamp: clock }));
+      expect([...host.querySelectorAll<HTMLElement>(".canvas-node.selected")].map((el) => el.dataset.node)).toEqual(["img"]);
+      // Il doppio clic sul velo sopra una scheda non mette una scheda nuova.
+      const before = engine.getDoc();
+      veil.dispatchEvent(new MouseEvent("dblclick", { bubbles: true, clientX: 400, clientY: 50, detail: 2 }));
+      expect(engine.getDoc()).toBe(before);
+    } finally {
+      delete (document as { elementsFromPoint?: unknown }).elementsFromPoint;
+    }
+  });
+
+  it("una scheda in scrittura sotto il velo: il clic ci entra a penna spenta, la rotella la scorre a penna accesa", () => {
+    const { engine, host } = mounted();
+    const viewport = viewportOf(host);
+    hover(host);
+    card(host, "t").dispatchEvent(new MouseEvent("dblclick", { bubbles: true }));
+    const field = host.querySelector<HTMLTextAreaElement>("textarea")!;
+    expect(field).not.toBeNull();
+    // A penna spenta il velo non c'è: il clic arriva al campo.
+    expect(shown(host)).toBe(false);
+    engine.setInkMouse(true);
+    expect(shown(host)).toBe(true);
+    // La rotella presa dal velo scorre il campo sotto, non la lavagna.
+    const veil = veilOf(host);
+    vi.spyOn(document, "elementFromPoint").mockReturnValue(veil);
+    Object.defineProperty(document, "elementsFromPoint", { configurable: true, value: () => [veil, field, viewport] });
+    Object.defineProperty(field, "scrollHeight", { configurable: true, value: 500 });
+    Object.defineProperty(field, "clientHeight", { configurable: true, value: 100 });
+    field.style.overflowY = "auto";
+    const scrolled = vi.fn();
+    field.scrollBy = scrolled as typeof field.scrollBy;
+    const cam = camera(host);
+    try {
+      const wheel = new WheelEvent("wheel", { bubbles: true, cancelable: true, deltaY: 40, clientX: 50, clientY: 30 });
+      veil.dispatchEvent(wheel);
+      expect(wheel.defaultPrevented).toBe(true);
+      expect(scrolled).toHaveBeenCalledWith({ left: 0, top: 40 });
+      expect(camera(host)).toEqual(cam);
+    } finally {
+      delete (document as { elementsFromPoint?: unknown }).elementsFromPoint;
+    }
   });
 });
 
