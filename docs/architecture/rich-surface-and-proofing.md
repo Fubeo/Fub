@@ -408,8 +408,8 @@ adattatore per formato.
 - Il client, `apps/client/src/editors/core/proof.ts`, non conosce CodeMirror
   né formati. Legge le impostazioni, spezza le richieste entro i limiti della
   route, converte gli offset in code unit UTF-16 e scarta le risposte tardive;
-  i segmenti controllati stanno in una LRU dell'app (`ProofCache`) che una
-  superficie rimontata riusa. Senza la feature (`unserved`) risponde `null`.
+  i segmenti controllati col dizionario presente stanno in una LRU dell'app
+  (`ProofCache`) per le superfici rimontate. Senza feature risponde `null`.
 - L'adattatore del formato estrae la prosa e tiene la mappa a pezzi verso il
   buffer. Quello Markdown
   (`apps/client/src/editors/text/profiles/markdown/proof.ts`) mette `U+FFFC`

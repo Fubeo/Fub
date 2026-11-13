@@ -230,6 +230,35 @@ describe("la cache condivisa", () => {
     third.dispose();
   });
 
+  it("non ricorda una risposta senza il dizionario della lingua", async () => {
+    let missing: string | null = "it_IT";
+    const base = host();
+    const { ports } = host({
+      queryIndex: async (query) => {
+        const response = await base.ports.queryIndex(query);
+        const value = (response as { value: unknown }).value as { language: { missing_dictionary: string | null } };
+        value.language.missing_dictionary = missing;
+        return response;
+      },
+    });
+    const first = new ProofClient(ports);
+    expect((await first.check(["uno speling"]))!.language.missingDictionary).toBe("it_IT");
+    first.dispose();
+    // Il dizionario arriva senza avvisi: la superficie rimontata richiede.
+    missing = null;
+    const second = new ProofClient(ports);
+    expect((await second.check(["uno speling"]))!.language.missingDictionary).toBeNull();
+    second.dispose();
+    expect(base.checks).toHaveLength(2);
+    // Con il dizionario presente la terza montatura non richiede più.
+    const third = new ProofClient(ports);
+    const result = await third.check(["uno speling"]);
+    expect(result!.language.missingDictionary).toBeNull();
+    expect(result!.segments[0]).toHaveLength(1);
+    expect(base.checks).toHaveLength(2);
+    third.dispose();
+  });
+
   it("chiudere un client non svuota la cache degli altri", async () => {
     const { ports, checks } = host();
     const first = new ProofClient(ports);

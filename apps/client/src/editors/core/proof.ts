@@ -230,7 +230,13 @@ interface CachedSegment {
 /// un vault aperto) svuota comunque tutto e cambia `epoch`: un risultato
 /// partito prima non entra più.
 ///
-/// È una LRU con due tetti, segmenti e testo, perché vive quanto l'app.
+/// I dizionari della macchina non danno avvisi: una risposta che dice che il
+/// dizionario della lingua manca (`missingDictionary`) non entra nella cache,
+/// né i suoi rilievi né la sua lingua. Chi installa il dizionario con Fub
+/// aperto lo vede appena la superficie si rimonta.
+///
+/// È una LRU con tre tetti, segmenti, testo e configurazioni, perché vive
+/// quanto l'app.
 export class ProofCache {
   private epochValue = 0;
   private units = 0;
@@ -361,6 +367,8 @@ export class ProofClient {
     // può dimenticare un segmento prima che la chiamata finisca.
     const results = new Array<readonly ProofIssue[] | undefined>(segments.length);
     const pending: number[] = [];
+    // Cosa sa fare il motore, secondo l'ultima risposta di questa chiamata.
+    let answered: ProofLanguage | null = null;
     for (let i = 0; i < segments.length; i += 1) {
       results[i] = this.cache.get(scope, segments[i]);
       if (results[i]) continue;
@@ -385,18 +393,22 @@ export class ProofClient {
         if (generation !== this.generation || epoch !== this.cache.epoch || this.disposed) return null;
         if (response.kind !== "custom") throw new Error("proof: risposta fuori tema");
         const wire = wireResult(response.value);
-        // Dopo un `clear` lo scope è staccato dalla cache: scriverci non tocca
-        // le configurazioni nuove.
-        scope.language = {
+        answered = {
           code: wire.language.code,
           spelling: wire.language.spelling,
           grammar: wire.language.grammar,
           missingDictionary: wire.language.missing_dictionary ?? null,
         };
+        // Senza il dizionario della lingua la risposta vale solo per questa
+        // chiamata: il dizionario può arrivare senza avvisi.
+        const lasting = answered.missingDictionary === null;
+        // Dopo un `clear` lo scope è staccato dalla cache: scriverci non tocca
+        // le configurazioni nuove.
+        if (lasting) scope.language = answered;
         batch.forEach((index, at) => {
           const issues = this.convert(segments[index], wire.segments[at] ?? []);
           results[index] = issues;
-          this.cache.set(epoch, scope, segments[index], issues);
+          if (lasting) this.cache.set(epoch, scope, segments[index], issues);
         });
       }
     } catch (error) {
@@ -407,7 +419,8 @@ export class ProofClient {
       throw error;
     }
     return {
-      language: scope.language ?? { code: language, spelling: false, grammar: false, missingDictionary: null },
+      language: answered ??
+        scope.language ?? { code: language, spelling: false, grammar: false, missingDictionary: null },
       segments: results.map((issues) => issues ?? []),
     };
   }
