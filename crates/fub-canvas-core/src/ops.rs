@@ -75,6 +75,23 @@ pub enum CanvasOp {
     Reorder { ids: Vec<String> },
 }
 
+impl CanvasOp {
+    /// Il nome dell'operazione nella forma JSON, cioè il campo `op`. È la
+    /// stessa stringa di [`crate::spec::OPS`]. Il `match` non ha `_`: una
+    /// variante nuova senza nome non compila.
+    pub fn name(&self) -> &'static str {
+        match self {
+            Self::AddCard { .. } => "add_card",
+            Self::Move { .. } => "move",
+            Self::Resize { .. } => "resize",
+            Self::Connect { .. } => "connect",
+            Self::Remove { .. } => "remove",
+            Self::Set { .. } => "set",
+            Self::Reorder { .. } => "reorder",
+        }
+    }
+}
+
 /// Il risultato di [`compile`]: le toppe e gli id creati.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct Compiled {

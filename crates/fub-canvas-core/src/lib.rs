@@ -27,6 +27,7 @@ pub mod ops;
 pub mod patch;
 pub mod read;
 pub mod source;
+pub mod spec;
 
 pub use model::{
     Canvas, CanvasColor, CanvasEdge, CanvasEdgeEnd, CanvasEdgeSide, CanvasError, CanvasNode,

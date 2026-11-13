@@ -1844,6 +1844,18 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
                  `sanitize_component` perché qui la regola decide la citazione, non la pulizia.",
             ),
         ),
+        // -- CasoAscii: il nome più vicino di un'operazione o di un campo -------
+        (
+            "crates/fub-canvas-core/src/spec.rs::distance",
+            (
+                Family::AsciiCase,
+                "abbassa il nome che il modello ha scritto per dire quale nome gli somiglia \
+                 (`Add-Card` è vicino a `add_card`, `dX` a `dx`): i nomi delle operazioni e dei \
+                 campi sono ASCII. Non decide se un nome esiste: `validate` riconosce un nome solo \
+                 se è esatto, come serde, e la distanza serve al suggerimento e alla correzione. \
+                 Diverge da `kind_of_path` perché qui la piegatura non dice la specie di niente.",
+            ),
+        ),
         // -- CasoAscii: la specie di una scheda della lavagna -------------------
         (
             "crates/fub-canvas-core/src/layout.rs::kind_of_path",
