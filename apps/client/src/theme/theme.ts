@@ -42,6 +42,7 @@ export interface ThemePreviewSelection {
 export const THEME_KEY = "appearance.theme";
 export const CONTRAST_KEY = "appearance.contrast";
 export const DENSITY_KEY = "appearance.density";
+export const BARS_KEY = "appearance.bars";
 export const BODY_KEY = "appearance.body";
 export const LINE_HEIGHT_KEY = "appearance.line-height";
 export const MEASURE_KEY = "appearance.measure";
@@ -61,6 +62,17 @@ export const SERIES_THEME_ID = "fub.serie";
 const PREFERENCES_CACHE = "fub.appearance.preferences";
 const DARK_QUERY = "(prefers-color-scheme: dark)";
 const CONTRAST_QUERY = "(prefers-contrast: more)";
+/** Il vassoio delle barre (`appearance.bars`): `light` è quello di serie, il
+ *  tono della ricetta; `marked` lo riporta su `--sheet-2`, più staccato dalla
+ *  carta (D6 C). */
+export type Bars = "light" | "marked";
+
+/** Il vassoio di un valore dell'impostazione: uno sconosciuto è il predefinito,
+ *  e non spegne niente. */
+export function barsOf(value: unknown): Bars {
+  return value === "marked" ? "marked" : "light";
+}
+
 export interface AppearancePreferences {
   density: Density;
   body: number;
@@ -138,6 +150,8 @@ export function declareThemeSeries(next: ThemeSeries): () => void {
 
 let themeChoice: Theme | "" = "";
 let contrastChoice = "";
+/// `appearance.bars`, come l'ha letto l'ultimo giro (o la cache del primo fotogramma).
+let barsChoice: Bars = "light";
 /// `appearance.content-look`, come l'ha letto l'ultimo giro: lo risolve
 /// `content-look.ts` con il contrasto in vigore.
 let contentLookChoice: unknown = undefined;
@@ -333,8 +347,17 @@ function persistSelection(): void {
   }
 }
 
+/// `data-bars` sulla radice, solo per `marked`: con `light` l'attributo non c'è
+/// e vale il ruolo della ricetta. Si scrive prima di ogni `await`, così il primo
+/// fotogramma ha già il vassoio scelto, anche se il tema si monta dopo.
+function applyBars(): void {
+  if (barsChoice === "marked") document.documentElement.dataset.bars = "marked";
+  else delete document.documentElement.dataset.bars;
+}
+
 async function apply(): Promise<void> {
   const generation = ++applyGeneration;
+  applyBars();
   const light = effectiveTheme(
     previewSelection?.light ?? themeChoice,
     mediaMatches(DARK_QUERY, true),
@@ -444,6 +467,7 @@ async function reread(): Promise<void> {
   setFrameRatePreference(valueOf(entries, FRAME_RATE_KEY));
   setDiagramStylePreference(valueOf(entries, DIAGRAM_STYLE_KEY));
   contentLookChoice = valueOf(entries, CONTENT_LOOK_KEY);
+  barsChoice = barsOf(valueOf(entries, BARS_KEY));
   preferences = normalizedPreferences({
     density: valueOf(entries, DENSITY_KEY) as Density,
     body: valueOf(entries, BODY_KEY) as number,
@@ -484,7 +508,7 @@ async function reread(): Promise<void> {
     persistSelection();
     localStorage.setItem(
       PREFERENCES_CACHE,
-      JSON.stringify({ contrast: contrastChoice, preferences }),
+      JSON.stringify({ contrast: contrastChoice, preferences, bars: barsChoice }),
     );
   } catch {
     // Il valore vivo è già in memoria; la cache serve solo al primo fotogramma.
@@ -643,6 +667,7 @@ function loadCache(): void {
   selectedThemeId = SERIES_THEME_ID;
   previewSelection = null;
   contrastChoice = "";
+  barsChoice = "light";
   preferences = { ...series.defaults };
   try {
     const cachedTheme = localStorage.getItem(THEME_CACHE) ?? "";
@@ -663,14 +688,17 @@ function loadCache(): void {
       const parsed = JSON.parse(cached) as {
         contrast?: unknown;
         preferences?: Partial<AppearancePreferences>;
+        bars?: unknown;
       };
       contrastChoice = typeof parsed.contrast === "string" ? parsed.contrast : "";
       preferences = normalizedPreferences(parsed.preferences ?? {});
+      barsChoice = barsOf(parsed.bars);
     }
   } catch {
     themeChoice = "";
     selectedThemeId = SERIES_THEME_ID;
     contrastChoice = "";
+    barsChoice = "light";
     preferences = { ...series.defaults };
   }
 }

@@ -1538,6 +1538,13 @@ kbd,
   background: var(--overlay-hover);
   color: var(--text);
 }
+/* «Le barre: marcate» (`appearance.bars`): il vassoio di tutte e tre le barre
+   torna sul tono di `--sheet-2`, più staccato dalla carta. Con «chiare»
+   l'attributo non c'è e vale il ruolo della ricetta. Lo stesso valore del
+   contrasto alto, che la ricetta già dà a `--bar-tray`. */
+:root[data-bars="marked"] {
+  --bar-tray: var(--sheet-2);
+}
 /* Il vassoio dei comandi: lo stesso raggio di un foglio; i foglietti dentro
    col raggio di un controllo, così gli angoli corrono paralleli. Il suo tono
    è un ruolo suo (`--bar-tray`), lo stesso della barra in una fila e della
