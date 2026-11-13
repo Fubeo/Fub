@@ -3533,8 +3533,11 @@ mod tests {
     fn an_unknown_bars_value_falls_back_to_the_light_tray() {
         let dir = tempfile::tempdir().expect("una cartella di prova");
         let path = bars_file(&dir);
-        std::fs::write(&path, r#"{"version":2,"values":{"appearance.bars":"neon"}}"#)
-            .expect("il file di prova");
+        std::fs::write(
+            &path,
+            r#"{"version":2,"values":{"appearance.bars":"neon"}}"#,
+        )
+        .expect("il file di prova");
         let (machine, _) = MachineSettings::open(&path);
         machine
             .declare(&core_machine_settings())
