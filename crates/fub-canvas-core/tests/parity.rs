@@ -12,7 +12,7 @@ use std::collections::HashSet;
 use std::path::PathBuf;
 
 use fub_canvas_core::ops::{compile, CanvasOp};
-use fub_canvas_core::{parse, Canvas};
+use fub_canvas_core::{parse, spec, Canvas};
 use serde::de::DeserializeOwned;
 use serde::Deserialize;
 use serde_json::Value;
@@ -64,8 +64,8 @@ const PIANO_OPS: [&str; 19] = [
     "move_strokes",
     "restyle_strokes",
 ];
-/// Quante operazioni almeno deve dare l'errore di serde: meno vuol dire che il
-/// messaggio è cambiato e i nomi non si leggono più.
+/// Quante operazioni almeno deve avere `spec::OPS`: meno vuol dire che la lista
+/// si è svuotata o accorciata per errore.
 const MIN_CORE_OPS: usize = 7;
 /// Il seme con cui R2 e R4 compilano le operazioni su `board`.
 const SEED: u64 = 1;
@@ -194,21 +194,10 @@ fn voices(inv: &Inventory) -> impl Iterator<Item = (&Part, &Entry)> + '_ {
         .flat_map(|part| part.entries.iter().map(move |entry| (part, entry)))
 }
 
-/// I nomi delle operazioni del nucleo, come li dà serde per un'operazione che
-/// non esiste: il messaggio dice «expected one of …».
+/// I nomi delle operazioni del nucleo: una voce di `spec::OPS` per variante.
+/// Che `OPS` coincida con serde lo dice `tests/spec.rs`.
 fn core_names() -> Vec<String> {
-    let error = serde_json::from_str::<CanvasOp>(r#"{"op":"__nessuna__"}"#)
-        .expect_err("un'operazione che non esiste non si legge");
-    let text = error.to_string();
-    let list = text
-        .split_once("expected one of ")
-        .map(|(_, rest)| rest)
-        .unwrap_or_default();
-    let list = list.split(" at line ").next().unwrap_or_default();
-    list.split(", ")
-        .map(|name| name.trim().trim_matches('`').to_owned())
-        .filter(|name| !name.is_empty())
-        .collect()
+    spec::OPS.iter().map(|op| op.name.to_owned()).collect()
 }
 
 /// Una voce di `gui`: un oggetto con un solo campo, il tipo, che dà il testo.

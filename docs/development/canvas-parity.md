@@ -60,9 +60,9 @@ o `plan`.
 - **R5, il conto.** `max_missing` di ogni file è uguale alle sue voci `by_hand`
   e `missing`. Il conto scende soltanto.
 - **R6, ogni operazione ha una voce.** Ogni operazione del nucleo compare in
-  `ops` o `target_ops` di una voce, o in `ops_without_gui`. I nomi si leggono
-  dall'errore di serde per un'operazione che non esiste: se il messaggio
-  cambia, il test fallisce subito.
+  `ops` o `target_ops` di una voce, o in `ops_without_gui`. I nomi vengono da
+  `spec::OPS`; che `OPS` coincida con le varianti di serde lo controlla
+  `tests/spec.rs`.
 - **R7, la GUI.** `parity.test.ts` monta la tela in più stati: il vuoto, le
   schede `t1`, `f1` e `l1` da sole, due o tre schede insieme, un arco e un
   gruppo. Raccoglie gli id di menu (anche nei sottomenu), barra, campi e
