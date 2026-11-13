@@ -133,15 +133,12 @@ const isDetailsOpen = (node: SyntaxNode, doc: Text) =>
 const isDetailsClose = (node: SyntaxNode, doc: Text) =>
   node.name === "HTMLBlock" && isDetailsCloseText(doc.sliceString(node.from, node.to));
 
-/// I nodi di primo livello che toccano `[from, to)`, a partire dal primo che
-/// finisce dopo `from`.
-function topNodes(tree: Tree, from: number): SyntaxNode[] {
-  const out: SyntaxNode[] = [];
-  for (let node = tree.topNode.firstChild; node; node = node.nextSibling) {
-    if (node.to < from) continue;
-    out.push(node);
-  }
-  return out;
+/// I nodi di primo livello, a partire dal primo che finisce a `from` o dopo.
+/// Uno alla volta: chi si ferma presto non legge il resto dell'albero, e il
+/// primo nodo si trova scendendo, non contando dall'inizio.
+function* topNodes(tree: Tree, from: number): Generator<SyntaxNode> {
+  let node = from > 0 ? tree.topNode.childAfter(from - 1) : tree.topNode.firstChild;
+  for (; node; node = node.nextSibling) yield node;
 }
 
 /// I blocchi dei nodi di primo livello dati, coi `<details>` accoppiati. Un
@@ -216,7 +213,7 @@ export function buildBlocks(state: EditorState): BlockModel {
   const front = frontmatterRange(doc);
   if (front) out.push({ from: 0, to: lastLineEnd(doc, 0, front.to), kind: "frontmatter", depth: 0, parent: -1, level: 0 });
   const skipTo = front ? front.to : 0;
-  for (const draft of fixParents(draftsOf(topNodes(tree, 0), doc, skipTo), out.length)) out.push(draft);
+  for (const draft of fixParents(draftsOf([...topNodes(tree, 0)], doc, skipTo), out.length)) out.push(draft);
   return { blocks: attachAnchors(out, doc), parsed: tree.length };
 }
 
@@ -230,12 +227,36 @@ function sameBlock(a: Block, b: Block): boolean {
   return a.from === b.from && a.to === b.to && a.kind === b.kind && a.depth === b.depth && a.level === b.level;
 }
 
-/// I gruppi di primo livello: ogni blocco di profondità 0 coi suoi figli,
-/// come intervalli di indici `[start, end)`.
-function groupsOf(blocks: readonly Block[]): { start: number; end: number }[] {
-  const out: { start: number; end: number }[] = [];
-  for (let i = 0; i < blocks.length; i = subtreeEnd(blocks, i)) out.push({ start: i, end: subtreeEnd(blocks, i) });
-  return out;
+/// L'indice del primo blocco che comincia a `pos` o dopo: i blocchi sono in
+/// ordine di inizio, i figli dopo il genitore.
+function firstFrom(blocks: readonly Block[], pos: number): number {
+  let low = 0;
+  let high = blocks.length;
+  while (low < high) {
+    const mid = (low + high) >> 1;
+    if (blocks[mid]!.from < pos) low = mid + 1;
+    else high = mid;
+  }
+  return low;
+}
+
+/// Il blocco di primo livello che contiene il blocco `index`.
+function topOf(blocks: readonly Block[], index: number): number {
+  let top = index;
+  while (blocks[top]!.parent !== -1) top = blocks[top]!.parent;
+  return top;
+}
+
+/// Dove comincia il primo gruppo di primo livello da rifare per una modifica
+/// che parte da `fromA`: restano i gruppi che finiscono prima della modifica,
+/// tranne l'ultimo, perché un testo che gli si attacca sotto, o una riga
+/// rientrata dopo una vuota, lo allunga.
+function restartGroup(blocks: readonly Block[], fromA: number): number {
+  const last = firstFrom(blocks, fromA) - 1;
+  if (last < 0) return 0;
+  const top = topOf(blocks, last);
+  if (blocks[top]!.to + 1 < fromA || top === 0) return top;
+  return topOf(blocks, top - 1);
 }
 
 /// Il modello dopo `tr`, rifacendo soltanto la parte toccata.
@@ -256,24 +277,23 @@ export function updateBlocks(model: BlockModel, tr: Transaction): BlockModel {
     toB = Math.max(toB, tb);
   });
   const old = model.blocks;
-  const groups = groupsOf(old);
-  // Restano i gruppi che finiscono prima della modifica, tranne l'ultimo: un
-  // testo che gli si attacca sotto, o una riga rientrata dopo una vuota, lo
-  // allunga.
-  let kept = 0;
-  while (kept < groups.length && old[groups[kept]!.start]!.to + 1 < fromA) kept++;
-  kept = Math.max(0, kept - 1);
-  const headEnd = kept < groups.length ? groups[kept]!.start : old.length;
+  const headEnd = restartGroup(old, fromA);
   const head = old.slice(0, headEnd);
-  const startB = kept < groups.length ? tr.changes.mapPos(old[headEnd]!.from, -1) : doc.length;
+  const startB = headEnd < old.length ? tr.changes.mapPos(old[headEnd]!.from, -1) : doc.length;
   const restart = Math.min(startB, tr.changes.mapPos(fromA, -1));
-  // I gruppi vecchi dopo la modifica, spostati: candidati a tornare uguali.
-  const tail = new Map<number, number>();
-  for (let g = kept; g < groups.length; g++) {
-    const first = old[groups[g]!.start]!;
-    if (first.from <= fromA) continue;
-    tail.set(tr.changes.mapPos(first.from, 1), g);
-  }
+  // I gruppi vecchi dopo la modifica, spostati, sono candidati a tornare
+  // uguali: dopo l'ultima modifica le posizioni scalano tutte di `delta`, e
+  // il gruppo si cerca per inizio, senza scorrere l'elenco.
+  const delta = tr.changes.newLength - tr.changes.length;
+  const tailGroup = (fromB: number): number | undefined => {
+    const fromOld = fromB - delta;
+    if (fromOld <= fromA) return undefined;
+    const index = firstFrom(old, fromOld);
+    if (index < headEnd || index >= old.length) return undefined;
+    const block = old[index]!;
+    if (block.from !== fromOld || block.depth !== 0) return undefined;
+    return tr.changes.mapPos(fromOld, 1) === fromB ? index : undefined;
+  };
   const fresh: Block[] = [];
   for (const node of topNodes(after, restart)) {
     if (node.name === "HTMLBlock") return buildBlocks(tr.state);
@@ -290,12 +310,12 @@ export function updateBlocks(model: BlockModel, tr: Transaction): BlockModel {
         skipped += end - i;
         continue;
       }
-      const g = top.from > toB ? tail.get(top.from) : undefined;
-      if (g !== undefined) {
-        const was = old[groups[g]!.start]!;
+      const start = top.from > toB ? tailGroup(top.from) : undefined;
+      if (start !== undefined) {
+        const was = old[start]!;
         if (sameBlock({ ...was, from: top.from, to: tr.changes.mapPos(was.to, -1) }, top)) {
-          const shift = head.length + fresh.length - groups[g]!.start;
-          const rest = old.slice(groups[g]!.start).map((block) => ({
+          const shift = head.length + fresh.length - start;
+          const rest = old.slice(start).map((block) => ({
             ...block,
             from: tr.changes.mapPos(block.from, 1),
             to: tr.changes.mapPos(block.to, -1),
@@ -321,14 +341,23 @@ export const blockModel = StateField.define<BlockModel>({
 /// Il blocco più interno che contiene `pos`, o -1. Le righe vuote fra due
 /// blocchi non sono di nessuno.
 export function blockAt(state: EditorState, pos: number): number {
-  const { blocks } = state.field(blockModel);
-  let found = -1;
-  for (let i = 0; i < blocks.length; i++) {
-    const block = blocks[i]!;
-    if (block.from > pos) break;
-    if (pos <= block.to) found = i;
+  return innermostAt(state.field(blockModel).blocks, pos);
+}
+
+/// Come `blockAt`, su un elenco dato. I blocchi che contengono `pos` sono gli
+/// antenati dell'ultimo che comincia prima: si trova lui cercando, e si sale.
+export function innermostAt(blocks: readonly Block[], pos: number): number {
+  let index = firstFrom(blocks, pos + 1) - 1;
+  while (index >= 0 && pos > blocks[index]!.to) index = blocks[index]!.parent;
+  return index;
+}
+
+/// Il blocco che comincia in `from` alla profondità `depth`, o -1.
+export function blockStartingAt(blocks: readonly Block[], from: number, depth: number): number {
+  for (let i = firstFrom(blocks, from); i < blocks.length && blocks[i]!.from === from; i++) {
+    if (blocks[i]!.depth === depth) return i;
   }
-  return found;
+  return -1;
 }
 
 /// Il blocco e i suoi discendenti: gli indici `[index, end)`.
