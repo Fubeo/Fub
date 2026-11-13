@@ -1911,7 +1911,7 @@ assenza senza chi apre la riga e il passaggio ad «Apri» dopo l'accensione;
 `scripts/check.sh --rapido` verde.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/canvas/cards/craft.test.ts
-Stato: [ ] da fare
+Stato: [x] fatto · «Accendi…» apre la riga con `showComponent`; se nessuno la apre si ritira al clic e il fuoco va su «Apri con…» (nell'app le impostazioni sono montate all'avvio, nessun controllo nuovo in `ui/commands.ts`); in più la scheda Craft si entra con Invio, così Tab arriva ai pulsanti
 
 ## T19 · L'inchiostro sulla pagina del PDF
 
