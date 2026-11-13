@@ -230,7 +230,8 @@ Il quarto blocco è il nucleo della lavagna, `fub-canvas-core`, con chi lo usa.
 Il quinto blocco è `fub-format-craft`, che legge in sola lettura i
 [file delle app Craft](../reference/craft-formats.md): dipende soltanto dal
 contratto, e lo usa soltanto `fub-host`, che ne monta i formati e il bundle
-`fub.craft` (feature `craft`).
+`fub.craft` (feature `craft`). Il sesto è il codec dei tratti,
+`fub-ink-codec`, fra i disegni e il nucleo dell'inchiostro.
 
 ```mermaid
 flowchart LR
@@ -260,9 +261,6 @@ flowchart LR
     craft --> abi
     craft -.-> sdk
 ```
-
-Il sesto blocco è il codec dei tratti, `fub-ink-codec`, fra i disegni e il
-nucleo dell'inchiostro.
 
 ```mermaid
 flowchart LR
@@ -363,22 +361,22 @@ flowchart LR
 ```
 
 `fub-scene`, il lettore delle scene di FubDraw, ha come sola freccia in uscita
-`fub-ink-codec`, di cui riespone i tipi: non dipende da `fub-abi`, dal kernel, da Tauri o da Wasmtime, perché
-deve poterlo usare anche un componente `wasm32-wasip2`. Lo verificano
-`dependency_invariant.rs` e la compilazione per quel bersaglio nella CI. Lo usa
-`fub-format-svg`, il provider del [formato della
-scena](../reference/scene-format.md), che `fub-host` monta solo con la feature
-`draw`: l'arco `host --> svg` è una dipendenza facoltativa, accesa dal
+`fub-ink-codec`, di cui riespone i tipi: non dipende da `fub-abi`, dal kernel,
+da Tauri o da Wasmtime, perché deve poterlo usare anche un componente
+`wasm32-wasip2`. Lo verificano `dependency_invariant.rs` e la compilazione per
+quel bersaglio nella CI. Lo usa `fub-format-svg`, il provider del [formato
+della scena](../reference/scene-format.md), che `fub-host` monta solo con la
+feature `draw`: l'arco `host --> svg` è una dipendenza facoltativa, accesa dal
 `default` dell'host. La stessa feature accende in `fub-features` l'export dei
-disegni in PNG, JPEG, SVG, PDF, Excalidraw e draw.io, con `resvg`, `svg2pdf`,
-i caratteri di Fub incorporati e quelli del vault, e il comando «Nuovo
-disegno», che scrive il disegno vuoto con `serialize` del
-provider, o parte da un modello o da un disegno del vault e ne cambia il solo
-titolo con `retitle`: per questo anche `features --> svg` è un arco
-facoltativo, come `features --> base` per le basi. Con la stessa feature
-`fub-features` usa `fub-scene` per derivare dal disegno le tavole o la
-selezione da esportare, e per leggere le annotazioni dei PDF, da esportare nel
-PDF annotato e nel PDF redatto: anche `features --> scene` è facoltativo.
+disegni in PNG, JPEG, SVG, PDF, Excalidraw e draw.io, con `resvg`, `svg2pdf`, i
+caratteri di Fub incorporati e quelli del vault, e il comando «Nuovo disegno»,
+che scrive il disegno vuoto con `serialize` del provider, o parte da un modello
+o da un disegno del vault e ne cambia il solo titolo con `retitle`: per questo
+anche `features --> svg` è un arco facoltativo, come `features --> base` per le
+basi. Con la stessa feature `fub-features` usa `fub-scene` per derivare dal
+disegno le tavole o la selezione da esportare, e per leggere le annotazioni dei
+PDF, da esportare nel PDF annotato e nel PDF redatto: anche `features -->
+scene` è facoltativo.
 
 L'ultimo pezzo del grafo, l'adattatore del motore del disegno `fub-disegno` con
 i crate di VectorCraft, sta nella pagina [Il disegno sul motore](disegno.md):
