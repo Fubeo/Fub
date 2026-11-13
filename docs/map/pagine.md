@@ -140,6 +140,7 @@
 - Qual è il formato delle annotazioni di FubDraw su un PDF del vault? → [reference/annotation-format.md](../reference/annotation-format.md)
 - Qual è il nucleo della lavagna (`fub-canvas-core`) e le regole delle `.canvas`? → [reference/canvas-format.md](../reference/canvas-format.md)
 - Quali toppe cambiano il modello di una lavagna, e quali errori possono fallire? → [reference/canvas-operations.md](../reference/canvas-operations.md)
+- Come si legge una lavagna come codice, con le sue misure e i suoi posti, e come si scrive con operazioni d'intento? → [reference/canvas-code.md](../reference/canvas-code.md)
 - Quali operazioni modificano un disegno di FubDraw (versione 1)? → [reference/scene-operations.md](../reference/scene-operations.md)
 
 ### Famiglia formato della scena (16 pagine `scene-format-*` + l'indice)
