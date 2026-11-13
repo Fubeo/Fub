@@ -63,7 +63,7 @@ Un tema `theme-2` può ridisegnare per nome le icone della shell. Il manifest no
 
 Il tema non aggiunge icone: ridisegna quelle che ci sono. Un alias ridisegnato vale per il nome a cui punta (`folder` è `vault`). Un nome che oggi nessuno disegna non rifiuta il tema (un modulo può registrarlo più tardi), ma non si vede. Cambiato tema, o annullata l'anteprima, le icone già sullo schermo tornano a quelle del tema scelto.
 
-I 466 nomi che un tema può ridisegnare (`theme/author/icon-names.json`, tenuto uguale a `iconNames()` da `src/ui/icon-names.test.ts`):
+I 467 nomi che un tema può ridisegnare (`theme/author/icon-names.json`, tenuto uguale a `iconNames()` da `src/ui/icon-names.test.ts`):
 
 ```text
 activity archive arrow-left arrow-right backlinks backup bell blocks book briefcase bulb calendar
@@ -77,7 +77,7 @@ draw-highlighter draw-history draw-image draw-into-layer draw-keys draw-landscap
 draw-line draw-link draw-lock draw-mark draw-menu draw-more draw-navigator draw-none draw-note
 draw-open-link draw-order draw-order-back draw-order-backward draw-order-forward draw-order-front
 draw-page-grid draw-pen draw-portrait draw-ratio draw-rect draw-redo draw-rotate draw-section
-draw-select draw-selection draw-simple draw-snap draw-suggestion draw-swap draw-symbols
+draw-select draw-selection draw-simple draw-snap draw-suggestion draw-swap draw-symbols draw-text
 draw-text-bold draw-text-italic draw-text-strike draw-text-underline draw-tip-bar-end
 draw-tip-bar-start draw-tip-circle-end draw-tip-circle-start draw-tip-diamond-end
 draw-tip-diamond-start draw-tip-none draw-tip-other-end draw-tip-other-start draw-tip-square-end

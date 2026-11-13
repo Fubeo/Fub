@@ -1,7 +1,8 @@
 //! Il Testo del motore del disegno: il vettore scritto a mano
-//! `tests/gesti/testo.json` (non c'è uno strumento Testo del client da
-//! registrare: l'atteso è ciò che dà `textElem` di
-//! `apps/client/src/editors/spatial/tools/text.ts`) rigiocato sul motore, e i
+//! `tests/gesti/testo.json` (l'atteso è ciò che dà `textElem` di
+//! `apps/client/src/editors/spatial/tools/text.ts`) e i vettori del Testo
+//! registrati dalla strada semplice del client (`testo-clic` e gli altri di
+//! `apps/client/src/__fixtures__/disegno-gesti/`) rigiocati sul motore, e i
 //! casi limite: senza testo, un clic su un testo che c'è, fuori dal foglio,
 //! caratteri che le facce non hanno, una riga lunghissima, un testo
 //! `xml:space="preserve"` spostato, la griglia, il trascinamento, il livello
@@ -11,7 +12,7 @@ mod common;
 
 use std::path::Path;
 
-use common::{confronta_ops, ops_di, Confronto};
+use common::{ammesse, confronta_ops, ops_di, radice, vettori, Confronto};
 use fub_abi::{DrawingGesture, DrawingOutcome, DrawingRefusal};
 use fub_disegno::motore::{Disegni, Disegno};
 use fub_motori::{Caratteri, Config, Generiche, Servizi, Tetto};
@@ -190,7 +191,97 @@ fn il_vettore_del_testo() {
     );
 }
 
-const DISEGNO: &str = "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:fub=\"https://fubeo.github.io/ns/scene/1\" fub:version=\"1\" viewBox=\"0 0 400 300\" width=\"400\" height=\"300\">\n  <rect id=\"fub-paper\" fub:role=\"paper\" x=\"0\" y=\"0\" width=\"400\" height=\"300\" fill=\"#ffffff\"/>\n  <g id=\"l1a2b3c4d\" fub:layer=\"Livello 1\">\n    <rect id=\"oa1a1a1a1\" x=\"100\" y=\"100\" width=\"100\" height=\"50\" fill=\"#000000\"/>\n    <text id=\"ot1t1t1t1\" x=\"40\" y=\"240\" font-family=\"Inter, sans-serif\" font-size=\"32\" fill=\"#000000\" xml:space=\"preserve\"><tspan x=\"40\" dy=\"0\">Ciao   a  tutti</tspan></text>\n    <g id=\"og1g1g1g1\">\n      <text id=\"ot2t2t2t2\" x=\"240\" y=\"60\" font-family=\"Inter, sans-serif\" font-size=\"32\" fill=\"#000000\"><tspan x=\"240\" dy=\"0\">Dentro</tspan></text>\n    </g>\n  </g>\n</svg>\n";
+/// Le differenze ammesse fra il Testo del motore e i vettori registrati dalla
+/// strada semplice del client.
+fn percorso_tsv() -> std::path::PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/gesti/testo.tsv")
+}
+
+fn rifiuto(r: Option<DrawingRefusal>) -> Option<String> {
+    r.map(|r| {
+        serde_json::to_value(r)
+            .ok()
+            .and_then(|v| v.as_str().map(str::to_string))
+            .unwrap_or_default()
+    })
+}
+
+/// Ogni vettore del Testo registrato dal client (`apps/client/src/__fixtures__/
+/// disegno-gesti/`, la strada semplice senza motore) rigiocato sul motore:
+/// le stesse operazioni, lo stesso rifiuto, la stessa selezione e lo stesso
+/// testo dopo; una differenza è ammessa solo se `tests/gesti/testo.tsv` la
+/// nomina col perché.
+#[test]
+fn rigioca_i_vettori_del_testo() {
+    let ammesse = ammesse(&percorso_tsv());
+    let dir = radice().join("apps/client/src/__fixtures__/disegno-gesti");
+    let mut diverse = Vec::new();
+    let mut nomi = Vec::new();
+    for v in vettori() {
+        if v.gesto["tool"] != "text" {
+            continue;
+        }
+        nomi.push(v.nome.clone());
+        let file: Value = serde_json::from_str(
+            &std::fs::read_to_string(dir.join(format!("{}.json", v.nome))).expect("il vettore"),
+        )
+        .expect("JSON");
+        let atteso = file["expect"]["text"].as_str().expect("expect.text");
+        let input = v.input.replace("\r\n", "\n");
+        let (mut d, _) = apri(&input);
+        let esito = d.gesto(gesto(v.gesto.clone())).expect("il gesto");
+        let ammessa = ammesse.get(&v.nome).map(String::as_str);
+        let ops = ops_di(&esito);
+        match confronta_ops(&v.ops, &ops, ammessa) {
+            Confronto::Uguali | Confronto::Ammessa(_) => {}
+            Confronto::Diverse(perche) => diverse.push(format!("{}: {perche}", v.nome)),
+        }
+        if ammessa.is_some() {
+            continue;
+        }
+        if rifiuto(esito.refused) != v.rifiuto {
+            diverse.push(format!(
+                "{}: rifiuto {:?} ≠ {:?}",
+                v.nome,
+                rifiuto(esito.refused),
+                v.rifiuto
+            ));
+        }
+        let selezione: Vec<String> = esito
+            .selection
+            .iter()
+            .map(|s| canonico(&esito, s))
+            .collect();
+        if selezione != v.selezione {
+            diverse.push(format!(
+                "{}: selezione {selezione:?} ≠ {:?}",
+                v.nome, v.selezione
+            ));
+        }
+        let dopo = if ops.is_null() {
+            input.clone()
+        } else {
+            canonico(&esito, &applica(&input, &ops))
+        };
+        if dopo != atteso {
+            diverse.push(format!("{}: il testo dopo\n{dopo}\n≠\n{atteso}", v.nome));
+        }
+    }
+    assert!(
+        nomi.iter().any(|n| n == "testo-clic"),
+        "manca il vettore testo-clic: {nomi:?}"
+    );
+    for (nome, perche) in &ammesse {
+        assert!(
+            nomi.contains(nome),
+            "testo.tsv nomina {nome}, che non è un vettore del Testo"
+        );
+        assert!(!perche.is_empty(), "testo.tsv: {nome} non dice perché");
+    }
+    assert!(diverse.is_empty(), "{}", diverse.join("\n"));
+}
+
+const DISEGNO: &str ="<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:fub=\"https://fubeo.github.io/ns/scene/1\" fub:version=\"1\" viewBox=\"0 0 400 300\" width=\"400\" height=\"300\">\n  <rect id=\"fub-paper\" fub:role=\"paper\" x=\"0\" y=\"0\" width=\"400\" height=\"300\" fill=\"#ffffff\"/>\n  <g id=\"l1a2b3c4d\" fub:layer=\"Livello 1\">\n    <rect id=\"oa1a1a1a1\" x=\"100\" y=\"100\" width=\"100\" height=\"50\" fill=\"#000000\"/>\n    <text id=\"ot1t1t1t1\" x=\"40\" y=\"240\" font-family=\"Inter, sans-serif\" font-size=\"32\" fill=\"#000000\" xml:space=\"preserve\"><tspan x=\"40\" dy=\"0\">Ciao   a  tutti</tspan></text>\n    <g id=\"og1g1g1g1\">\n      <text id=\"ot2t2t2t2\" x=\"240\" y=\"60\" font-family=\"Inter, sans-serif\" font-size=\"32\" fill=\"#000000\"><tspan x=\"240\" dy=\"0\">Dentro</tspan></text>\n    </g>\n  </g>\n</svg>\n";
 
 fn evento(kind: &str, x: f64, y: f64) -> Value {
     json!({ "kind": kind, "x": x, "y": y, "pressure": 0.5, "shift": false, "alt": false, "cmd": false })

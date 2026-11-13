@@ -256,9 +256,10 @@ describe("la barra e il foglio", () => {
     expect(rail.getAttribute("aria-label")).toBe("Strumenti");
     expect(rail.getAttribute("aria-orientation")).toBe("vertical");
     const tools = railSlots();
-    expect(tools.map((control) => control.getAttribute("aria-label"))).toEqual(["Selezione", "Mano", "Penna", "Gomma", "Rettangolo"]);
-    expect(tools.map((control) => control.getAttribute("aria-pressed"))).toEqual(["false", "false", "true", "false", "false"]);
-    expect(railNames()).toEqual(["Selezione", "Mano", "Zoom", "Penna", "Evidenziatore", "Gomma", "Rettangolo", "Ellisse", "Linea", "Freccia"]);
+    expect(tools.map((control) => control.getAttribute("aria-label"))).toEqual(["Selezione", "Mano", "Penna", "Gomma", "Rettangolo", "Testo"]);
+    expect(tools.map((control) => control.getAttribute("aria-pressed"))).toEqual(["false", "false", "true", "false", "false", "false"]);
+    expect(tools[5]!.getAttribute("aria-keyshortcuts")).toBe("T");
+    expect(railNames()).toEqual(["Selezione", "Mano", "Zoom", "Penna", "Evidenziatore", "Gomma", "Rettangolo", "Ellisse", "Linea", "Freccia", "Testo"]);
     expect(tools[4]!.getAttribute("aria-keyshortcuts")).toBe("R");
     tools[4]!.focus();
     expect(document.getElementById(tools[4]!.getAttribute("aria-describedby")!)?.textContent).toMatch(/^Rettangolo \(R\) — .*Maiusc/);
@@ -584,7 +585,7 @@ describe("l'evidenziatore e il colore", () => {
     editor.select(["o1a2b3c4d"]);
     editor.setWorkspace("full");
     expect(editor.workspace).toBe("full");
-    expect(railNames()).toEqual(["Selezione", "Mano", "Zoom", "Penna", "Evidenziatore", "Gomma", "Rettangolo", "Ellisse", "Linea", "Freccia"]);
+    expect(railNames()).toEqual(["Selezione", "Mano", "Zoom", "Penna", "Evidenziatore", "Gomma", "Rettangolo", "Ellisse", "Linea", "Freccia", "Testo"]);
     expect(free()).toBe(true);
     expect(railTool("Evidenziatore").title).toBe("Evidenziatore (Shift+P)");
     // Lo strumento, il documento, la selezione e la cronologia restano.
@@ -6747,7 +6748,7 @@ describe("lo spazio di lavoro e la colonna personalizzata", () => {
     mount(SOURCE, { workspace: "simple", onWorkspace });
     expect(host.querySelector<HTMLElement>(".draw-editor")!.dataset.workspace).toBe("simple");
     expect(rail().dataset.size).toBe("large");
-    expect(railNames()).toEqual(["Selezione", "Mano", "Zoom", "Penna", "Evidenziatore", "Gomma", "Rettangolo", "Ellisse", "Linea", "Freccia"]);
+    expect(railNames()).toEqual(["Selezione", "Mano", "Zoom", "Penna", "Evidenziatore", "Gomma", "Rettangolo", "Ellisse", "Linea", "Freccia", "Testo"]);
     expect(fullButton().hidden).toBe(false);
 
     fullButton().click();

@@ -26,7 +26,8 @@ import { apriSessione, type GestoMotore, type MotoreAssente, type SessioneMotore
 interface Vector {
   readonly name: string;
   readonly input: string;
-  readonly gesture: Omit<DrawingGesture, "revision" | "phase" | "text">;
+  /// Il Testo porta la parola del testo nuovo; gli altri strumenti niente.
+  readonly gesture: Omit<DrawingGesture, "revision" | "phase" | "text"> & { readonly text?: string };
   readonly expect: {
     readonly ops: readonly unknown[] | null;
     readonly selection: readonly string[];
@@ -211,7 +212,7 @@ describe("i vettori dei gesti, sul motore finto", () => {
       const { gesture } = vector;
       const editor = await mount(vector.input, fake, gesture.snap.grid);
       editor.stage.setCamera({ scale: gesture.zoom, tx: 0, ty: 0 });
-      editor.setTool(gesture.tool as "select" | "rect" | "ellipse" | "line" | "arrow");
+      editor.setTool(gesture.tool as "select" | "rect" | "ellipse" | "line" | "arrow" | "text");
       if (gesture.style !== null) {
         editor.setColor(gesture.style.stroke);
         editor.setWidth(gesture.style.width);
@@ -238,7 +239,7 @@ describe("i vettori dei gesti, sul motore finto", () => {
           zoom: gesture.zoom,
           snap: gesture.snap,
           style: gesture.style,
-          text: null,
+          text: gesture.text ?? null,
         });
         if (gesture.layer !== null) expect(each.layer).toBe(gesture.layer);
       }
@@ -752,6 +753,83 @@ describe("il motore che manca, e che torna", () => {
     expect(editor.engine.text).toBe(EMPTY);
     expect(spoken()).toContain(t("draw.rejected", { reason: t("draw.reason.engine_stopped") }));
     expect(motore!.assente()).toEqual({ kind: "assente", perche: "errore" });
+  });
+});
+
+// --- Il Testo -------------------------------------------------------------------
+
+describe("il Testo sul motore", () => {
+  const CLIC = VECTORS.find((vector) => vector.name === "testo-clic")!;
+
+  /// L'editor sul motore finto con il pannello delle proprietà chiuso.
+  async function mountClosed(input: string, fake: FakeHost): Promise<DrawEditor> {
+    const session = await documentOn(input);
+    motore = motoreDa(() => apriSessione(fake.module.api, DOC, input, session, { vault: "/vault" }));
+    await settle(0, 2);
+    return createDrawEditor(host, SceneEngine.open(input), owner, {
+      motore,
+      grid: { ...DEFAULT_GRID, panel: false },
+      onChange: (change) => {
+        expect(sessions!.acceptSurfaceChange(DOC, "editor", { text: change.text, operation: change.operation })).toEqual({ kind: "accepted" });
+      },
+    });
+  }
+
+  const panelOf = (): HTMLElement => host.querySelector<HTMLElement>(".draw-properties")!;
+  const wordsField = (): HTMLTextAreaElement | null => host.querySelector<HTMLTextAreaElement>('.draw-properties-field[data-field="content"] textarea');
+
+  async function click(editor: DrawEditor, x: number, y: number): Promise<void> {
+    dispatch(editor, { kind: "down", x, y, pressure: 0.5, shift: false, alt: false, cmd: false });
+    await settle();
+    dispatch(editor, { kind: "up", x, y, pressure: 0, shift: false, alt: false, cmd: false });
+    await settle(16, 8);
+  }
+
+  it("un clic dà un <text> con la parola del testo nuovo, scelto, e il campo «Testo» dell'ispettore a fuoco", async () => {
+    const names = new Map<string, string>();
+    const fake = createFakeHost({ drawing: replaying(CLIC, names) });
+    const editor = await mountClosed(CLIC.input, fake);
+    expect(panelOf().hidden).toBe(true);
+    editor.setTool("text");
+    await click(editor, 100, 80);
+    // Il motore ha avuto la parola del testo nuovo.
+    const sent = gestures(fake);
+    expect(sent.map((each) => [each.tool, each.text])).toEqual(sent.map(() => ["text", t("draw.text.new")]));
+    const id = names.get("@1")!;
+    expect(editor.engine.text).toContain(`<text id="${id}" x="100" y="80"`);
+    expect(editor.engine.text).toContain(`<tspan x="100" dy="0">${t("draw.text.new")}</tspan>`);
+    expect(editor.selection).toEqual([id]);
+    // L'ispettore chiuso si apre, col fuoco nel campo e la parola scelta.
+    expect(panelOf().hidden).toBe(false);
+    const field = wordsField()!;
+    expect(document.activeElement).toBe(field);
+    expect(field.value).toBe(t("draw.text.new"));
+    expect([field.selectionStart, field.selectionEnd]).toEqual([0, field.value.length]);
+    expect(spoken()).toContain(t("draw.added.text"));
+  });
+
+  it("il motore che si spegne fra il clic e l'esito: l'esito si scarta, niente si crea, e il clic dopo crea un testo solo", async () => {
+    const names = new Map<string, string>();
+    const fake = createFakeHost({ drawing: replaying(CLIC, names) });
+    const editor = await mountClosed(CLIC.input, fake);
+    editor.setTool("text");
+    const release = fake.throttle("drawingGesture");
+    dispatch(editor, { kind: "down", x: 100, y: 80, pressure: 0.5, shift: false, alt: false, cmd: false });
+    await settle();
+    dispatch(editor, { kind: "up", x: 100, y: 80, pressure: 0, shift: false, alt: false, cmd: false });
+    await settle();
+    motore!.spento();
+    release();
+    await settle(16, 8);
+    expect(editor.engine.text).toBe(CLIC.input);
+    expect(editor.canUndo).toBe(false);
+    expect(spoken()).toContain(t("draw.rejected", { reason: t("draw.reason.engine_off") }));
+    // Il clic dopo prende la strada semplice, e crea un testo solo.
+    const prima = fake.atGate("drawingGesture").length;
+    await click(editor, 100, 80);
+    expect(fake.atGate("drawingGesture")).toHaveLength(prima);
+    expect(editor.engine.text.match(/<text /g)).toHaveLength(1);
+    expect(document.activeElement).toBe(wordsField());
   });
 });
 

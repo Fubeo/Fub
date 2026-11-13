@@ -323,6 +323,7 @@ export function installCurvatureTool(ctx: EditorContext): void {
           ctx.rulerUpdate(g, toPoint(samples[samples.length - 1]!));
           break;
         case "note":
+        case "text":
           g.at ??= toPoint(samples[0]!);
           break;
         case "motore":
@@ -387,6 +388,10 @@ export function installCurvatureTool(ctx: EditorContext): void {
         case "note":
           ctx.current = null;
           noteAt(g.at, g.pointer);
+          return;
+        case "text":
+          ctx.current = null;
+          ctx.textAt(g.at, g.pointer);
           return;
         case "motore":
           ctx.current = null;

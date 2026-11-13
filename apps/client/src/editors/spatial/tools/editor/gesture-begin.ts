@@ -2,14 +2,18 @@
 // createDrawEditor (`../editor.ts`): lavora sul contesto che i pezzi
 // condividono.
 
+import type { InkPointerType } from "../../../../ink/input/pointer";
 import type { StrokeStart } from "../../../../ink/input/session";
 import { penLook } from "../../../../ink/pens";
 import { INK_TOOLS } from "../../../../ink/tools/registry";
 import { StrokePreview } from "../../../../ink/tools/stroke";
 import { EraseSweep } from "../../../../ink/tools/sweep";
-import { compose } from "../../scene/matrix";
+import { apply, compose, type Point } from "../../scene/matrix";
+import { t } from "../../strings";
+import { addOp, gesture as asGesture } from "../edit";
+import { newTextElem } from "../text";
 import { touchDialog } from "../touch-dialog";
-import { INK_KEY, inkCopyKey } from "./constants";
+import { HIT_PX, INK_KEY, inkCopyKey } from "./constants";
 import type { EditorContext } from "./context";
 import type { Gesture, GestureBase, InkGesture } from "./types";
 
@@ -19,6 +23,10 @@ export interface GestureBeginContext {
   begin: (start: StrokeStart) => Gesture;
   straightened: (g: InkGesture) => boolean;
   drawInk: (g: InkGesture) => void;
+  /// Il rilascio di un clic del Testo senza il motore (la strada semplice):
+  /// su un testo che c'è lo sceglie, altrove ne scrive uno nuovo; poi il
+  /// campo «Testo» dell'ispettore ha il fuoco.
+  textAt: (at: Point | null, pointer: InkPointerType) => void;
 }
 
 /// Monta l'inizio del gesto.
@@ -127,6 +135,15 @@ export function installGestureBegin(ctx: EditorContext): void {
         const { color, width } = style();
         return { ...base, kind: "shape", tool: ctx.tool, color, width, to, ids, from: null, end: null };
       }
+      case "text": {
+        // Con il motore del disegno, il testo lo scrive lui; senza, la
+        // strada semplice: il testo nasce al rilascio (`textAt`).
+        const motore = ctx.motoreBegin(base);
+        if (motore !== null) return motore;
+        // Un livello che non lo riceve rifiuta il clic subito, come le forme.
+        if (target(newIds()) === null) return { ...base, kind: "refused" };
+        return { ...base, kind: "text", at: null };
+      }
       case "eraser":
         return eraseGesture(base);
       case "note":
@@ -154,6 +171,29 @@ export function installGestureBegin(ctx: EditorContext): void {
     }
   };
   ctx.begin = begin;
+
+  const textAt = (at: Point | null, pointer: InkPointerType): void => {
+    if (at === null || !editable() || ctx.disposed) return;
+    // Su un testo che c'è, come col motore: lo sceglie, non ne fa un altro.
+    // Su una forma il testo nasce sopra (l'etichetta è di `labels.ts`).
+    const tolerance = HIT_PX[pointer] / ctx.camera.scale;
+    const hit = ctx.currentIndex().at(at, tolerance);
+    if (hit !== null && hit.shapeAt(at, tolerance)?.details?.role === "text") {
+      ctx.select([hit.key]);
+      ctx.showHandles();
+      ctx.focusWords();
+      return;
+    }
+    const ids = newIds();
+    const to = target(ids);
+    if (to === null) return;
+    const elem = newTextElem(ids.next("object"), apply(to.inverse, ctx.snapped(at)), t("draw.text.new"), style().color);
+    if (ctx.commit(ctx.toolLabel("text"), asGesture([...to.prelude, addOp(to, elem)])) === null) return;
+    ctx.select([elem.attrs.id!]);
+    ctx.announce(`${t("draw.added.text")} ${ctx.objects()}`);
+    ctx.focusWords();
+  };
+  ctx.textAt = textAt;
 
   /// Con lo strumento che lo prevede (penna, evidenziatore) e Maiusc, il
   /// tratto va dritto dal primo punto all'ultimo, a passi di 15°; lasciato

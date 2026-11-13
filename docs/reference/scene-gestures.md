@@ -29,7 +29,10 @@ client li usa come risposte.
 
 - `input` è il testo SVG prima del gesto, a righe LF tranne nei vettori che
   provano proprio i CRLF (`rettangolo-crlf`, `sposta-crlf`).
-- `gesture.tool` è `select`, `rect`, `ellipse`, `line` o `arrow`; `layer` è
+- `gesture.tool` è `select`, `rect`, `ellipse`, `line`, `arrow` o `text`;
+  solo il Testo ha `gesture.text`, la parola del testo nuovo (`draw.text.new`,
+  «Testo» nella lingua delle prove), e i suoi vettori li registra la strada
+  semplice, lo strumento senza motore; `layer` è
   il livello scelto nel menu dei livelli (`null`: quello che l'editor sceglie
   da sé); `selection` gli oggetti selezionati prima del gesto; `zoom` la scala
   della vista (spostamento zero).
@@ -86,6 +89,9 @@ vettore resta com'è: la differenza si scrive nel `.tsv`, non nel JSON.
 
 Un vettore solo è scritto a mano, nella stessa forma:
 `crates/fub-disegno/tests/gesti/testo.json`, il clic dello strumento Testo,
-che il client non ha da registrare. Il suo atteso è ciò che dà `textElem` di
-`apps/client/src/editors/spatial/tools/text.ts`, e lo rigioca
-`crates/fub-disegno/tests/gesti_testo.rs`.
+che il motore prova da sé senza il client. Il suo atteso è ciò che dà
+`textElem` di `apps/client/src/editors/spatial/tools/text.ts`, uguale al
+vettore registrato `testo-clic`. `crates/fub-disegno/tests/gesti_testo.rs`
+rigioca lui e ogni vettore del Testo registrato dal client, col testo di
+dopo; le differenze ammesse andrebbero in `tests/gesti/testo.tsv`, che non
+c'è perché non ce ne sono.

@@ -54,6 +54,7 @@ export type Gesture =
   | SelectGesture
   | EraseGesture
   | NoteGesture
+  | TextGesture
   | RulerGesture
   | MotoreGesture
   | RefusedGesture;
@@ -218,6 +219,13 @@ export interface MotoreGesture extends GestureBase {
 /// Un tocco con lo strumento Nota: dove, nella scena.
 interface NoteGesture extends GestureBase {
   readonly kind: "note";
+  at: Point | null;
+}
+
+/// Un clic con lo strumento Testo senza il motore (la strada semplice): dove
+/// si è premuto, nella scena. Il testo nasce al rilascio.
+interface TextGesture extends GestureBase {
+  readonly kind: "text";
   at: Point | null;
 }
 

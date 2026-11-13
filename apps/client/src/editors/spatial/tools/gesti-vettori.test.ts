@@ -35,7 +35,7 @@ import { DEFAULT_GRID } from "./grid";
 
 /// Gli strumenti che i vettori registrano: quelli del disegno che passano
 /// dal motore.
-type GestureTool = "select" | "rect" | "ellipse" | "line" | "arrow";
+type GestureTool = "select" | "rect" | "ellipse" | "line" | "arrow" | "text";
 
 interface GestureEvent {
   readonly kind: "down" | "drag" | "up" | "move" | "double_click";
@@ -74,8 +74,12 @@ interface Gesture {
     /// eventi lo ripetono in `cmd`.
     readonly free: boolean;
   };
-  /// Lo stile dello strumento di forma; `null` per la selezione.
+  /// Lo stile dello strumento di forma o del testo; `null` per la
+  /// selezione.
   readonly style: Style | null;
+  /// Solo per il Testo: la parola del testo nuovo (`draw.text.new`). Gli
+  /// altri strumenti non la scrivono.
+  readonly text?: string;
   readonly events: readonly GestureEvent[];
 }
 
@@ -162,6 +166,9 @@ const FOREIGN = drawing([{ open: L1, body: ['<g id="w"><rect class="logo" x="100
 const NAMELESS = drawing([{ open: L1, body: ['<rect x="100" y="100" width="100" height="50" fill="#000000"/>'] }]);
 
 // --- Le definizioni ----------------------------------------------------------
+
+/// La parola di un testo nuovo, nella lingua delle prove.
+const NEW_TEXT = t("draw.text.new");
 
 interface Modifiers {
   readonly shift?: boolean;
@@ -375,6 +382,30 @@ const DEFINITIONS: readonly Definition[] = [
     input: drawing([{ open: L1, body: [RECT_A] }], "\r\n"),
     tool: "rect",
     events: dragging([[220, 40], [300, 90]]),
+  },
+
+  // Il Testo, dalla strada semplice (senza il motore).
+  {
+    name: "testo-clic",
+    description: "un clic col Testo a (100, 80): un testo nuovo con la parola «Testo», sulla linea di base, scelto",
+    input: ONE,
+    tool: "text",
+    events: click(100, 80),
+  },
+  {
+    name: "testo-su-forma",
+    description: "un clic col Testo su una forma: il testo nasce sopra, non diventa l'etichetta della forma",
+    input: ONE,
+    tool: "text",
+    events: click(150, 125),
+  },
+  {
+    name: "testo-livello-bloccato",
+    description: "il Testo su un livello bloccato non scrive niente, come le forme",
+    input: layered(' fub:locked="true"'),
+    tool: "text",
+    layer: "l2b3c4d5e",
+    events: click(20, 200),
   },
 
   // La selezione.
@@ -630,6 +661,7 @@ function gestureOf(definition: Definition): Gesture {
     zoom: definition.zoom ?? 1,
     snap: { grid: definition.grid ?? null, free: definition.free ?? false },
     style,
+    ...(definition.tool === "text" ? { text: NEW_TEXT } : {}),
     events: definition.events,
   };
 }
@@ -772,6 +804,8 @@ function record(input: string, gesture: Gesture): Expect {
   try {
     editor.stage.setCamera({ scale: gesture.zoom, tx: 0, ty: 0 });
     editor.setTool(gesture.tool);
+    // Il Testo scrive la parola che l'editor dà a un testo nuovo.
+    expect(gesture.text).toBe(gesture.tool === "text" ? NEW_TEXT : undefined);
     if (gesture.style !== null) {
       if (gesture.style.fill !== null) throw new Error("gli strumenti di oggi non riempiono: `style.fill` è sempre null");
       editor.setColor(gesture.style.stroke);
@@ -800,7 +834,8 @@ function record(input: string, gesture: Gesture): Expect {
       const said = spoken();
       const reason = said === before.said ? null : refusalIn(said);
       const chose = selection.join(" ") !== before.selection.join(" ");
-      refused = reason ?? (gesture.tool === "select" && chose ? null : "empty");
+      // Un clic della Selezione, o del Testo su un testo, che sceglie.
+      refused = reason ?? ((gesture.tool === "select" || gesture.tool === "text") && chose ? null : "empty");
     }
     return canonical(input, { ops: ops.length === 0 ? null : ops, selection, refused, text });
   } finally {
@@ -824,6 +859,7 @@ function serialize(vector: Vector): string {
       zoom: gesture.zoom,
       snap: { grid: gesture.snap.grid, free: gesture.snap.free },
       style: gesture.style === null ? null : { stroke: gesture.style.stroke, width: gesture.style.width, fill: gesture.style.fill },
+      ...(gesture.text === undefined ? {} : { text: gesture.text }),
       events: gesture.events.map((event) => ({
         kind: event.kind,
         x: event.x,
@@ -938,4 +974,58 @@ describe("i vettori dei gesti", () => {
       expect(saved, `${definition.name}: il file non è quello che la definizione scrive; rigeneralo con UPDATE_GESTI=1`).toBe(written);
     });
   }
+});
+
+// --- Il Testo senza il motore -------------------------------------------------
+
+describe("il Testo, dalla strada semplice", () => {
+  const panelOf = (): HTMLElement => host.querySelector<HTMLElement>(".draw-properties")!;
+  const wordsField = (): HTMLTextAreaElement | null => host.querySelector<HTMLTextAreaElement>('.draw-properties-field[data-field="content"] textarea');
+
+  /// L'editor senza motore, col pannello delle proprietà chiuso.
+  const mountClosed = (source: string, changes: DrawChange[] = []): DrawEditor =>
+    createDrawEditor(host, SceneEngine.open(source), owner, {
+      onChange: (change) => changes.push(change),
+      grid: { ...DEFAULT_GRID, panel: false },
+    });
+
+  it("un clic dà un <text> con la parola del testo nuovo, scelto, e il campo «Testo» dell'ispettore a fuoco", () => {
+    const changes: DrawChange[] = [];
+    const editor = mountClosed(ONE, changes);
+    try {
+      expect(panelOf().hidden).toBe(true);
+      editor.setTool("text");
+      for (const event of click(100, 80)) dispatch(editor, event);
+      expect(changes).toHaveLength(1);
+      const id = /<text id="([^"]+)" x="100" y="80"/.exec(editor.engine.text)?.[1];
+      expect(id).toBeDefined();
+      expect(editor.engine.text).toContain(`<tspan x="100" dy="0">${NEW_TEXT}</tspan>`);
+      expect(editor.selection).toEqual([id]);
+      expect(panelOf().hidden).toBe(false);
+      const field = wordsField()!;
+      expect(document.activeElement).toBe(field);
+      expect(field.value).toBe(NEW_TEXT);
+      expect([field.selectionStart, field.selectionEnd]).toEqual([0, NEW_TEXT.length]);
+      expect(spoken()).toContain(t("draw.added.text"));
+    } finally {
+      editor.dispose();
+    }
+  });
+
+  it("un clic su un testo che c'è lo sceglie, come il motore: non ne crea un altro", () => {
+    const input = drawing([{ open: L1, body: [`<text id="${A}" x="40" y="80" fill="#000000" font-family="Inter, sans-serif" font-size="32"><tspan x="40" dy="0">Ciao</tspan></text>`] }]);
+    const changes: DrawChange[] = [];
+    const editor = mountClosed(input, changes);
+    try {
+      editor.setTool("text");
+      for (const event of click(50, 70)) dispatch(editor, event);
+      expect(changes).toHaveLength(0);
+      expect(editor.engine.text).toBe(input);
+      expect(editor.selection).toEqual([A]);
+      expect(document.activeElement).toBe(wordsField());
+      expect(wordsField()!.value).toBe("Ciao");
+    } finally {
+      editor.dispose();
+    }
+  });
 });

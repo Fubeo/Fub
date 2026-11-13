@@ -1,6 +1,8 @@
 // I gesti del disegno sul motore (K5): gli strumenti Selezione, Rettangolo,
-// Ellisse, Linea e Freccia del profilo «vector» chiedono al motore del
-// disegno che cosa fare, invece di farlo da sé.
+// Ellisse, Linea, Freccia e Testo del profilo «vector» chiedono al motore del
+// disegno che cosa fare, invece di farlo da sé. Il Testo manda la parola del
+// testo nuovo; dopo l'esito, il testo scelto ha il campo «Testo»
+// dell'ispettore a fuoco.
 //
 // - **La penna di Fub guida.** I campioni arrivano dalla stessa pipeline di
 //   ogni strumento (`ink/dom/pointer-adapter`, stabilizzati e senza il
@@ -65,6 +67,7 @@ export const STRUMENTI_DEL_MOTORE: ReadonlyMap<ToolId, DrawingTool> = new Map<To
   ["ellipse", "ellipse"],
   ["line", "line"],
   ["arrow", "arrow"],
+  ["text", "text"],
 ]);
 
 /// Il motore del disegno come lo vede l'editor: la sessione, che può essere
@@ -532,7 +535,9 @@ export function installGestiMotore(ctx: EditorContext): void {
           zoom: ctx.camera.scale,
           snap: { grid: ctx.gridOn() ? ctx.stepNow() : null, free: ctx.free },
           style: shape ? { stroke: color, width, fill: null } : null,
-          text: null,
+          // Il Testo scrive la parola del testo nuovo, che poi si cambia
+          // nel campo «Testo» dell'ispettore.
+          text: tool === "text" ? t("draw.text.new") : null,
           frame: shape ? null : cornicePerIlMotore(),
         },
       };
@@ -753,11 +758,15 @@ export function installGestiMotore(ctx: EditorContext): void {
       if (g.tool === "select") tieniCornice(outcome.frame, outcome.selection);
       ctx.select(outcome.selection);
       ctx.announce(said(g, inner));
+      // Il testo nuovo si scrive subito, nel campo «Testo» dell'ispettore.
+      if (g.tool === "text") ctx.focusWords();
       return;
     }
     ctx.select(outcome.selection);
     if (g.tool !== "select") {
       ctx.showHandles();
+      // Un clic del Testo su un testo che c'è lo sceglie, per cambiarlo.
+      if (g.tool === "text" && outcome.selection.length > 0) ctx.focusWords();
       return;
     }
     if (doubleTap(g, tap)) return;
@@ -779,7 +788,7 @@ export function installGestiMotore(ctx: EditorContext): void {
 
   /// Che cosa si dice di un gesto che ha scritto.
   const said = (g: MotoreGesture, inner: Interno): string => {
-    if (g.intent === "shape") return `${t(ADDED[g.tool as "rect" | "ellipse" | "line" | "arrow"])} ${ctx.objects()}`;
+    if (g.intent === "shape") return `${t(g.tool === "text" ? "draw.added.text" : ADDED[g.tool as "rect" | "ellipse" | "line" | "arrow"])} ${ctx.objects()}`;
     const units = ctx.selectedUnits();
     const moved = plural(units.length, "draw.moved.one", "draw.moved.other");
     const after = g.intent === "resize" || g.intent === "rotate" ? ctx.frameOf(units) : null;
