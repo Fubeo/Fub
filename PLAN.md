@@ -1993,6 +1993,42 @@ tauri/custom-protocol && cd apps/client && xvfb-run -a npm run bench:webview
 -- --only=S3,S9 --budgets=targets --native-driver=/usr/bin/WebKitWebDriver
 Stato: [x] fatto (2026-11-13) · 1a17ac2d8, 490d0ce13 (prima del cherry-pick) · `docs/misure/2026-11-13-lavagna-fogli-vivi-s9.md`: 20 fogli vivi a zoom 0,51 in tre giri sotto Xvfb; S9 p95 91–100 ms, max 128–346 ms; S3 sul ramo p95 44–47 ms, uguale alla base (45 ms) · differenze: la lavagna è `S9/Fogli vivi.canvas` (con «Lavagna» S3 avrebbe aperto un file a caso); il blocco 5×4 sta a x negative, così il JSON di S3 resta identico; la vista arriva al blocco con 18 scatti di Ctrl+rotella mandati dalla pagina, niente pulsante di mezzo; i gesti di S3 stanno in `moveAndZoom`, uguali; la nota su `env -u WAYLAND_DISPLAY GDK_BACKEND=x11` in una sessione Wayland · rischi: WebKitWebDriver non consegna il rilascio del pulsante di mezzo, quindi S3 misura lo zoom con uno spostamento ancora aperto; nessuna soglia della CI per S9 finché non c'è una misura del runner
 
+## T20a · Il gesto che perde il rilascio
+
+Perché: T20 ha visto che, se il rilascio del pulsante di mezzo non arriva
+(WebKitWebDriver non lo consegna), la lavagna crede lo spostamento ancora in
+corso e non accende nessuna scheda (0 vive dopo 60 s). Nella vita vera il
+rilascio si perde con un Alt+Tab o un'altra finestra a metà gesto, o con il
+puntatore che esce dalla finestra in certi compositori: la lavagna resta
+bloccata in un gesto finché non si clicca di nuovo. Task scritto
+dall'orchestratore (2026-11-13), vedi DECISIONS.md.
+Tocca: `apps/client/src/editors/canvas/engine.ts` (la fine dei gesti:
+`#pointerEnded` e i suoi chiamanti), `engine-touch.test.ts` o un test
+nuovo accanto; `apps/client/bench/webview/run.mjs` solo per togliere da S3
+il gesto lasciato aperto, se la correzione lo chiude.
+Non toccare: i gesti della penna di N4 oltre la loro fine comune; le soglie
+del banco; `budgets.json`.
+Dipende da: T20
+Cosa fare:
+- Un gesto in corso si chiude quando il puntatore perde la cattura
+  (`lostpointercapture`), quando arriva un `pointermove` dello stesso
+  puntatore con `buttons === 0`, e quando la finestra perde il fuoco
+  (`blur`): come un rilascio, senza perdere ciò che il gesto ha già fatto
+  (lo spostamento resta, un trascinamento di scheda si posa dove è, un
+  tratto si chiude e si salva).
+- Dopo la chiusura le schede vive tornano a vivere come dopo un rilascio.
+Casi limite: la penna e il dito insieme (il gesto di un puntatore non chiude
+quello dell'altro); il tasto destro; un trascinamento di scheda fuori dalla
+finestra; il rilascio che arriva tardi, dopo la chiusura (non fa niente due
+volte).
+Fatto quando: un test prova, per lo spostamento, il trascinamento di una
+scheda e il tratto, che `lostpointercapture`, `buttons === 0` e `blur`
+chiudono il gesto una volta sola e le schede tornano vive; S3 non cambia
+numeri; `scripts/check.sh --rapido` verde.
+Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
+src/editors/canvas/engine-touch.test.ts
+Stato: [ ] da fare
+
 ## T21 · La prova del cancello
 
 Perché: il secondo punto del cancello: trascini un `.xlsx` dal sistema, ci

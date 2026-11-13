@@ -59,6 +59,11 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-13 · N6 T20a · L'orchestratore aggiunge il task del gesto che perde
+  il rilascio. Perché: T20 ha visto la lavagna ferma in uno spostamento mai
+  chiuso (nessuna scheda viva) quando il rilascio non arriva, e nella vita
+  vera il rilascio si perde con un cambio di finestra a metà gesto; la regola
+  di autonomia del 2026-11-13 lascia all'orchestratore le scelte tecniche.
 - 2026-11-13 · N6 (merge di `main` fino a 05437b3db) · Dopo il merge `docs/reference/ipc-contract.md` era a 565 righe (tetto 550) e `docs/architecture/ink-and-tools.md` a 455 (tetto 450). Invece di comprimere, le parti di N6 hanno una pagina loro: «Depositare un file» (T3) va in `docs/reference/resource-write.md`, con un rimando nella sezione omonima del contratto (il commento di `host/ipc.ts` resta vero); «Lo strato della lavagna» e «Come lo usa la lavagna» vanno in `docs/architecture/canvas-ink-layer.md`, con un rimando in `ink-and-tools.md`. Entrambe in `docs/map/pagine.md` · Perché: il codice batte il piano sui tetti delle pagine, e una pagina per argomento resta leggibile anche quando N6 aggiunge altro.
 - 2026-11-11 · N6 T89/T100 · la prova del pigro ha trovato che il doppio clic nel vuoto metteva la scheda al centro e solo scelta: l'orchestratore l'ha corretto da sé (T100, 4ee8c904b, una riga: `#placeText` come il doppio tocco) invece di passarlo al pianificatore; corretto anche `components.e2e.test.ts` (la spia di `getContext` che chiamava sé stessa) · Perché: `canvas-view.md` diceva già il comportamento giusto, la correzione è una riga con un test rosso prima e verde dopo; aprire un task per il pianificatore costava più del lavoro.
 - 2026-11-11 · N6 T99 · in revisione l'orchestratore ha chiesto al coder di togliere il lettore dei titoli Markdown scritto in `excerpt.ts` (il terzo nel client, con `headingOffset`): la copia delle sezioni usa il sommario del provider (`documentOutline`, byte dei titoli) e l'abbinamento delle chiavi del selettore delle parti · Perché: i titoli sono del provider Markdown; con due regole la scheda poteva mostrare una sezione (anche un titolo col trattino sotto) che la copia diceva sparita. `headingOffset` di `state/card-editors.ts` resta: fuori da N6, da segnalare.
