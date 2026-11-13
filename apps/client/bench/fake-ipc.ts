@@ -819,6 +819,26 @@ const SETTINGS: SettingEntry[] = [
     value: "comfortable",
     source: "default",
   },
+  {
+    spec: {
+      key: "appearance.bars",
+      label: "Le barre",
+      description: "Il vassoio sotto le schede, le barre dei comandi e la colonna degli strumenti: chiaro, vicino alla carta, o marcato, che si stacca di più.",
+      group: "Aspetto",
+      scope: "machine",
+      kind: {
+        kind: "choice",
+        default: "light",
+        options: [
+          { value: "light", label: "Chiare" },
+          { value: "marked", label: "Marcate" },
+        ],
+      },
+      program_writable: false,
+    },
+    value: "light",
+    source: "default",
+  },
   ...(ON_SHELL ? [CHROME_COMPACTNESS] : []),
   {
     spec: {
