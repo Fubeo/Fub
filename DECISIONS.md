@@ -103,6 +103,15 @@ ciò che non dipende dalla risposta.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-13 · fub-pre-alpha · `main` (d69f4da8c, con #343–#346) entra nel
+  ramo con un merge. R1 tiene le due correzioni di #284: dal ramo la raccolta
+  forzata (PA T62) e la lettura più bassa del minuto, da `main` (#344) trenta
+  giri e la pendenza di Theil e Sen. Perché: si coprono a vicenda (la raccolta
+  toglie il dente di sega, la mediana resiste alle letture fuori ritmo) e
+  nessuna delle due ha ancora una misura del runner che dica che l'altra
+  basta. Il prezzo è il job WebView più lungo (circa un minuto per giro):
+  quando c'è la prima misura del runner con tutte e due, si ritarano giri e
+  attesa, e si scrive qui.
 - 2026-11-11 · editor (EC T1) · Alt+↑/↓ nel profilo Markdown non attraversa il confine fra frontmatter e corpo, e Mod+D sulla testata del frontmatter non ne crea una seconda; il `Tocca` di EC T1 si allarga al comando del profilo e al suo test · Perché: il coder ha trovato che Alt+↑ sulla prima riga del corpo la porta dentro il frontmatter (il corpo perde la riga); la scelta che non perde dati vince, e i blocchi restano coerenti con la tastiera.
 - 2026-11-11 · anteprima · nel merge di `main` (riordino) dentro `anteprima/tutto`, che è solo locale, il motore della griglia resta quello del ramo della griglia (`grid/engine.ts` e `engine.test.ts` com'erano), e i moduli nuovi di `main` (`engine-geometry.ts`, `engine-host.ts`, `test-support.ts`, `engine.{objects,pointer,workbook}.test.ts`) escono dall'anteprima; i documenti in conflitto prendono la forma di `main` · Perché: portare il lavoro della griglia sui moduli nuovi è un task da coder Opus, da fare sul ramo della griglia quando riprende; l'anteprima serve a provare l'app, e il motore della griglia non cambia comportamento.
 - 2026-11-11 · fub-pre-alpha · `main` (6249d976b, riordino #323 e moduli #327–#333) entra con un merge in pre-alpha, N6, N4 e Scrittoio 2; nei conflitti di `docs/map/repo.md` e `dove-sta-x.md` resta la struttura nuova più le righe dei piani (il grafo dei crate ora sta solo in `docs/architecture/overview.md`) · Perché: meno resta fuori da `main`, meno costano i prossimi riordini.
