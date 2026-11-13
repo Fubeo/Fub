@@ -1797,7 +1797,7 @@ export function renderMarkdownState(
   forms?: readonly SyntaxForm[],
   previous?: PreviousRender,
 ): MarkdownDocument {
-  const { source, tree } = stateTree(state);
+  const { source, tree } = stateTree(state, previous);
   return buildDocument(source, tree, forms, previous);
 }
 
@@ -1837,7 +1837,7 @@ export function renderMarkdownStatePrefix(
   const tree = ensureSyntaxTree(state, PREFIX_RENDER_FROM, TREE_BUDGET) ?? syntaxTree(state);
   if (tree.topNode.name !== "Document") return { document: renderMarkdownState(state, forms, previous), complete: true };
   if (tree.length >= length) {
-    return { document: buildDocument(state.doc.toString(), tree, forms, previous), complete: true };
+    return { document: buildDocument(sourceOf(state, previous), tree, forms, previous), complete: true };
   }
   const last = tree.topNode.lastChild;
   const cut = last ? last.from : 0;
@@ -1855,10 +1855,28 @@ export function linkReferences(state: EditorState): ReadonlyMap<string, Markdown
 /// millisecondi, prima di rifare l'albero da capo.
 const TREE_BUDGET = 200;
 
+/// Il testo di uno stato come stringa. Con la resa di prima di tutto il testo
+/// è quella sorgente con le modifiche: pochi pezzi da incollare invece di
+/// tutte le righe del documento, che su una nota grande sono la parte più
+/// cara di una battuta.
+function sourceOf(state: EditorState, previous?: PreviousRender): string {
+  const before = previous?.document.source;
+  if (before === undefined || before.length !== previous!.changes.length || previous!.changes.newLength !== state.doc.length) {
+    return state.doc.toString();
+  }
+  let source = "";
+  let at = 0;
+  previous!.changes.iterChangedRanges((fromA, toA, fromB, toB) => {
+    source += before.slice(at, fromA) + state.doc.sliceString(fromB, toB);
+    at = toA;
+  });
+  return source + before.slice(at);
+}
+
 /// L'albero di CodeMirror, portato in fondo al documento; uno nuovo soltanto se
 /// l'editor non ha un parser Markdown o non ci arriva in tempo.
-function stateTree(state: EditorState): { source: string; tree: Tree } {
-  const source = state.doc.toString();
+function stateTree(state: EditorState, previous?: PreviousRender): { source: string; tree: Tree } {
+  const source = sourceOf(state, previous);
   let tree = ensureSyntaxTree(state, state.doc.length, TREE_BUDGET);
   if (!tree || tree.length !== source.length || tree.topNode.name !== "Document") {
     tree = markdownGrammar.parser.parse(source);

@@ -42,6 +42,7 @@ function shape(document: MarkdownDocument) {
     anchors: [...document.anchors].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)),
     dependencies: document.dependencies,
     html: document.html,
+    source: document.source,
   };
 }
 
