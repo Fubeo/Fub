@@ -1739,7 +1739,7 @@ gesti_testo` passa anche sul vettore `testo-clic`; `icons.test.ts` e
 `strings.test.ts` verdi; le foto del banco mostrano lo strumento nella
 colonna, come nel prototipo.
 Prova: scripts/check.sh --rapido --client; npm --prefix apps/client test -- src/editors/spatial/motore/gesti.test.ts src/editors/spatial/tools/gesti-vettori.test.ts src/editors/spatial/icons.test.ts src/editors/spatial/strings.test.ts; cargo test -p fub-disegno --test gesti_testo
-Stato: [~] in corso (2026-11-13, coder su base 71a3362a7)
+Stato: [x] fatto (2026-11-13) · differenze: il campo ha id `content` e chiave `draw.properties.content`; `focusField` sceglie tutto il testo; il pannello che il Testo apre non si ricorda; il campo c'è solo per un testo libero con id e righe `tspan` dello stesso stile (non su tracciato, in area, coi pezzi, né per le etichette; nemmeno per un `<text>` col testo scritto direttamente, senza `tspan`); svuotato toglie il testo; sulla strada semplice un clic su un testo che c'è lo sceglie, come il motore, quindi `testo.tsv` non serve; vettori in più `testo-su-forma` e `testo-livello-bloccato`. Fuori da Tocca, necessari: `editor/types.ts` e `curvature-tool.ts` (il gesto `text`), `icon-names.json` e il README rigenerato, i test toccati dalla casella nuova, `drawing-custom.md`, `drawing-properties.md`, `scene-gestures.md`. Le baseline del banco visivo delle scene del disegno cambiano: si prendono dal runner in T30
 
 ## T23 · Senza motore, detto
 
