@@ -30,8 +30,8 @@ import { pickFromList } from "../ui/dialogs";
 import { rebaseStaleChange, type EditorChange } from "../editors/core/text-operation";
 import { createDocumentSurfaceRegistry, setComponentEditors, type CanvasCardPorts } from "../editors/core/bootstrap";
 import type { CanvasNotesPort } from "../editors/canvas/engine";
-import { VECTOR_PROFILE, uisForFile } from "../editors/core/component-surfaces";
-import { componentsReady, mountComponents, onComponents, refreshComponents, type Components } from "./components";
+import { UI_CRAFT, VECTOR_PROFILE, uisForFile } from "../editors/core/component-surfaces";
+import { components, componentsReady, mountComponents, onComponents, refreshComponents, type Components } from "./components";
 import {
   selectionSetOf,
   type DocumentSurfaceRegistry,
@@ -161,7 +161,9 @@ import { noteTargets } from "../editors/text/profiles/markdown/kinds";
 import type { SelectionBox } from "../editors/core/editor-actions";
 import { mountViewInPane, unmountViewFromPane, primaryView } from "../ui/views";
 import { errorText, isErrorKind } from "../host/errors";
-import { renderOnOpen } from "./craft-previews";
+import { craftServed, previewOf, renderOnOpen, renderPreview, watchCraftPreviews } from "./craft-previews";
+import { openWithEntry } from "../panels/open-with";
+import { showContextMenu } from "../ui/menu";
 import { writeChrome } from "./machine-chrome";
 import { onLanguage, t } from "../i18n/strings";
 import { openLifetime, type Lifetime } from "../ui/lifetime";
@@ -637,6 +639,18 @@ const canvasCards: CanvasCardPorts = {
       await openWebPage(url);
     },
   },
+  craft: {
+    served: craftServed,
+    // Il nome della riga spenta che servirebbe, come nel riquadro «solo come
+    // file».
+    offComponent: () => components()?.offRowFor(UI_CRAFT)?.nome || null,
+    // Il componente acceso o spento cambia i comandi che il kernel elenca.
+    onServed: (changed) => on("commands", changed),
+    preview: (path) => previewOf(path, "large"),
+    watchPreviews: watchCraftPreviews,
+    render: (path) => renderPreview(path, "large"),
+    openWith: (path, anchor) => void openCardWith(path, anchor),
+  },
   open: (path, subpath) => {
     const page = linkedPdfPage(path, subpath?.replace(/^#/, ""));
     void openDocument(path, page === null ? { gesture: true } : { gesture: true, page }).catch((error: unknown) => {
@@ -645,6 +659,25 @@ const canvasCards: CanvasCardPorts = {
   },
   watch: watchCardFile,
 };
+
+/// «Apri con…» da una scheda della lavagna (T18): il menu delle app di N7
+/// sotto il pulsante, come il sottomenu dell'albero. Senza app Craft
+/// installate non c'è niente da scegliere, e il file va all'app del sistema.
+async function openCardWith(path: string, anchor: HTMLElement): Promise<void> {
+  const entry = openWithEntry(path, { system: () => void handToSystem(path, true) });
+  const items = entry.items;
+  if (items === undefined) {
+    entry.run?.();
+    return;
+  }
+  try {
+    const choices = typeof items === "function" ? await items() : items;
+    if (!anchor.isConnected) return;
+    showContextMenu(anchor, choices, { label: entry.label });
+  } catch (error) {
+    notify(errorText(error), "guasto");
+  }
+}
 
 /// Un'immagine del vault che un disegno mostra per nome. Gli SVG non si
 /// propongono: nel vault sono disegni, e a un disegno si porta un

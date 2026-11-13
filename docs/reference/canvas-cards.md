@@ -58,7 +58,7 @@ provider di un file senza chiederlo al backend.
 | `sheet` | ciò che `formatKindOf` dice `sheet` (`xlsx`, `xlsm`, `xltx`, `xltm`) |
 | `pdf` | ciò che `mediaKindOfId` dice `pdf` |
 | `image` | ciò che `mediaKindOfId` dice `image`, SVG compreso |
-| `craft` | nessuna estensione ci porta ancora (arriva con T18) |
+| `craft` | `vectorcraft`, `figcraft`, `pcraft` ([la scheda dei file Craft](canvas-craft.md)) |
 | `file` | tutto il resto: CSV, `.canvas`, audio, video, ZIP, nomi senza estensione |
 
 Regole dell'estensione:
@@ -434,6 +434,7 @@ già, `media` e `gridHost`:
 | immagine, PDF | la `transport` di `media`, nel vault di adesso; un file che non c'è (`not_found`) è un file mancante, un'immagine oltre 64 MiB non si legge |
 | foglio | `gridHost`; il giornale e la base della sessione aperta del documento se c'è, sennò il giornale vuoto e la revisione di `readDocument` |
 | web | la cache delle schede di link (`linkCardView`, `requestLinkCard`, l'evento `link-cards`) e il visore della finestra |
+| Craft | `canvasCards.craft`: le anteprime di `state/craft-previews.ts` e il menu «Apri con…» ([la scheda dei file Craft](canvas-craft.md)) |
 
 Senza `media` le immagini e i PDF, senza `gridHost` i fogli, hanno il corpo
 di sempre; senza `canvasCards` tutte le schede.

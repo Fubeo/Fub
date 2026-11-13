@@ -41,6 +41,7 @@ import type { PartsPickerPort } from "../canvas/parts-picker";
 import { documentOutline } from "../../host/query";
 import type { WebCardPort } from "../canvas/cards/web";
 import type { PdfCardPort } from "../canvas/cards/pdf";
+import type { CraftCardPort } from "../canvas/cards/craft";
 import type { SheetCardPort } from "../grid/card";
 import { openResourcePort, type ResourcePort, type ResourceTransport } from "../media/resource-port";
 import {
@@ -186,6 +187,9 @@ export interface CanvasCardPorts {
   readonly sheet: Pick<SheetCardPort, "source">;
   /// Le schede delle pagine web: la cache delle schede di link e il visore.
   readonly web: WebCardPort;
+  /// Le schede dei file Craft (T18): le anteprime di N7, il componente che le
+  /// serve e «Apri con…». Senza, un file Craft è una scheda di file.
+  readonly craft?: Omit<CraftCardPort, "open" | "watch">;
   /// Apre il file di una scheda («Apri», il doppio clic).
   open(path: string, subpath: string | null): void;
   /// Avvisa quando il file `path` cambia, sparisce o cambia nome; restituisce
@@ -342,13 +346,14 @@ type CanvasCardsFor = (context: SurfaceMountContext) => CanvasCards;
 /// pesano sull'avvio di Fub. La scheda di foglio arriva con un suo `import()`
 /// al primo foglio.
 async function loadCanvasCards(options: SurfaceBootstrapOptions, ports: CanvasCardPorts): Promise<CanvasCardsFor> {
-  const [cards, { CardCache }, note, image, pdf, web] = await Promise.all([
+  const [cards, { CardCache }, note, image, pdf, web, craft] = await Promise.all([
     import("../canvas/cards"),
     import("../canvas/card-cache"),
     import("../canvas/cards/note"),
     import("../canvas/cards/image"),
     import("../canvas/cards/pdf"),
     import("../canvas/cards/web"),
+    import("../canvas/cards/craft"),
   ]);
   windowSnapshots ??= { cache: new CardCache(), vault: openVaultRoot() };
   const snapshots = windowSnapshots.cache;
@@ -364,6 +369,8 @@ async function loadCanvasCards(options: SurfaceBootstrapOptions, ports: CanvasCa
     note.noteCardRenderer({ show: ports.note.show, watch, open }),
     web.webCardRenderer(ports.web),
   ];
+  // «Apri» apre il file nella modalità di Fub, come il doppio clic.
+  if (ports.craft) fixed.push(craft.craftCardRenderer({ ...ports.craft, open: (path) => open(path, null), watch }));
   const media = options.media;
   // La porta dei PDF: la scheda la legge, e «Spargi le pagine» ne conta le pagine (T72).
   const pdfPort: PdfCardPort | null = media ? {

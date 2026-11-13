@@ -3841,8 +3841,9 @@ body:has(#context-menu:not([hidden])) > .toast-stack {
    vista non prende il puntatore e non scorre: il clic sceglie la scheda e la
    rotella sposta la lavagna. Dentro sì, e il corpo scorre. I link e i
    pulsanti lo prendono sempre (Ctrl+clic segue un link, «Apri»), e così
-   l'immagine, il cui doppio clic apre il visore. Il segnaposto di un file
-   mancante resta com'è. */
+   l'immagine, il cui doppio clic apre il visore, e la scheda Craft, il cui
+   doppio clic apre il file (T18). Il segnaposto di un file mancante resta
+   com'è. */
 .canvas-node[data-card-kind]:not([data-card-active]):not([data-card-missing]) > .canvas-card-body {
   overflow: hidden;
 }
@@ -3852,7 +3853,8 @@ body:has(#context-menu:not([hidden])) > .toast-stack {
 }
 
 .canvas-node[data-card-kind]:not([data-card-active]):not([data-card-missing]) > .canvas-card-body :is(a, button),
-.canvas-node[data-card-kind="image"]:not([data-card-active]):not([data-card-missing]) > .canvas-card-body > * {
+.canvas-node[data-card-kind="image"]:not([data-card-active]):not([data-card-missing]) > .canvas-card-body > *,
+.canvas-node[data-card-kind="craft"]:not([data-card-active]):not([data-card-missing]) > .canvas-card-body > * {
   pointer-events: auto;
 }
 
@@ -4482,6 +4484,49 @@ body:has(#context-menu:not([hidden])) > .toast-stack {
   bottom: var(--space-4, 8px);
   left: 50%;
   transform: translateX(-50%);
+  white-space: nowrap;
+}
+
+/* La scheda dei file Craft (T18, l'impianto del prototipo T26): l'anteprima
+   intera nella scheda, «Apri» e «Apri con…» in una barra che galleggia in
+   basso. Senza anteprima è una scheda di file: il nome, i dati, il perché, e
+   i pulsanti sotto, nel flusso. */
+.canvas-card-craft {
+  position: relative;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+.canvas-card-craft-actions {
+  position: absolute;
+  bottom: var(--space-4, 8px);
+  left: 50%;
+  display: flex;
+  gap: var(--space-1, 2px);
+  transform: translateX(-50%);
+  white-space: nowrap;
+}
+.canvas-card-craft:not([data-card-state="picture"]) {
+  flex-direction: column;
+  align-items: stretch;
+}
+.canvas-card-craft:not([data-card-state="picture"]) > .canvas-card-craft-actions {
+  position: static;
+  align-self: flex-start;
+  flex: none;
+  transform: none;
+}
+.canvas-card-craft-file {
+  min-height: 0;
+  overflow: hidden;
+}
+.canvas-card-craft-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 

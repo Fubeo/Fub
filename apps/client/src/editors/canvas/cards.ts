@@ -34,8 +34,9 @@ export type CardKind = "note" | "document" | "sheet" | "pdf" | "image" | "web" |
 ///
 /// Per un file conta l'estensione del percorso, in minuscolo, senza
 /// `subpath`: un punto nel nome di una cartella o dopo il `#` non conta.
-/// L'SVG è un'immagine ferma, anche se `formatKindOf` lo dice disegno.
-/// `craft` non ha ancora un'estensione che ci porti (arriva con T18).
+/// L'SVG è un'immagine ferma, anche se `formatKindOf` lo dice disegno. Un
+/// file di VectorCraft, PhotoCraft o FigCraft è `craft` (T18): le estensioni
+/// sono quelle che `ui/format-kind.ts` dà alle tre app (`CRAFT_EXTENSIONS`).
 export function cardKindOf(node: CanvasNode): CardKind | null {
   switch (node.type) {
     case "text":
@@ -53,6 +54,7 @@ function fileKindOf(file: string): CardKind {
   const extension = extensionOf(path);
   if (extension === null) return "file";
   if (extension === "md" || extension === "markdown") return "note";
+  if (CRAFT_EXTENSIONS.includes(extension)) return "craft";
   switch (formatKindOf(path)) {
     case "word":
     case "odt":
@@ -71,6 +73,13 @@ function fileKindOf(file: string): CardKind {
       return "file";
   }
 }
+
+/// Le estensioni dei file delle tre app Craft che hanno un'anteprima da
+/// mostrare: un disegno di VectorCraft, un progetto di FigCraft, un'immagine
+/// di PhotoCraft. Sono quelle che `ui/format-kind.ts` dà alle loro specie (un
+/// test le tiene allineate). L'XMP di LightCraft no: sono i dati di una foto,
+/// senza un'immagine sua, e resta una scheda di file.
+export const CRAFT_EXTENSIONS: readonly string[] = ["vectorcraft", "figcraft", "pcraft"];
 
 /// Il percorso senza `#…`: `Nota.md#1.2 Titolo` → `Nota.md`.
 function withoutSubpath(file: string): string {

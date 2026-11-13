@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   CARD_QUIET_KEY,
+  CRAFT_EXTENSIONS,
   LIVE_MARGIN,
   LIVE_ZOOM_MIN,
   MAX_LIVE_CARDS,
@@ -16,6 +17,7 @@ import {
   type Rect,
 } from "./cards";
 import type { CanvasNode } from "./model";
+import { formatKindOf, formatTagOf } from "../../ui/format-kind";
 
 function fileNode(file: string, extra: Partial<CanvasNode> = {}): CanvasNode {
   return { id: file, type: "file", x: 0, y: 0, width: 100, height: 100, file, ...extra };
@@ -79,9 +81,26 @@ describe("cardKindOf", () => {
     expect(cardKindOf({ id: "f", type: "file", x: 0, y: 0, width: 1, height: 1 })).toBe("file");
   });
 
-  it("nessuna estensione porta a craft", () => {
-    for (const file of ["a.fubdraw", "a.craft", "a.vcraft", "a.pcraft"]) {
-      expect(cardKindOf(fileNode(file))).toBe("file");
+  it.each([
+    ["Fisica/schema-pendolo.vectorcraft", "craft"],
+    ["Progetti/sito.figcraft", "craft"],
+    ["Foto/ritocco.pcraft", "craft"],
+    ["LOGO.VECTORCRAFT", "craft"],
+    ["Foto/ritocco.pcraft#livello", "craft"],
+    ["Foto/IMG_0001.xmp", "file"],
+    ["a.fubdraw", "file"],
+    ["a.craft", "file"],
+    ["a.vcraft", "file"],
+  ] as const)("i file Craft: %s → %s", (file, kind) => {
+    expect(cardKindOf(fileNode(file))).toBe(kind);
+  });
+
+  it("le estensioni Craft sono quelle che format-kind dà alle tre app", () => {
+    const tags: Record<string, string> = { vectorcraft: "VECTORCRAFT", figcraft: "FIGCRAFT", pcraft: "PHOTOCRAFT" };
+    expect([...CRAFT_EXTENSIONS].sort()).toEqual(Object.keys(tags).sort());
+    for (const extension of CRAFT_EXTENSIONS) {
+      expect(formatTagOf(`a.${extension}`)).toBe(tags[extension]);
+      expect(formatKindOf(`a.${extension}`)).toMatch(/^(drawing|photo)$/);
     }
   });
 });

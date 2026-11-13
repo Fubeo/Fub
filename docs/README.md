@@ -108,7 +108,7 @@ all'export, dalla sessione dal tablet ai disegni grandi.
   e [gli estratti](reference/canvas-parts.md), `fub:parts`
 - [Il server MCP](reference/mcp-server.md)
 - [Le schede della lavagna](reference/canvas-cards.md): specie, schede vive e
-  ferme, il contratto dei renderer
+  ferme, il contratto dei renderer; [la scheda dei file Craft](reference/canvas-craft.md)
 - [I tasti e i gesti della lavagna](reference/canvas-input.md), i comandi e
   i loro tasti, [la vista della lavagna](reference/canvas-view.md),
   [l'ispettore](reference/canvas-inspector.md) e

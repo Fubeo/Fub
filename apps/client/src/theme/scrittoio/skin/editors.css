@@ -2373,9 +2373,75 @@
   padding-top: var(--space-5);
 }
 .canvas-node-file[data-card-kind="image"]:not([data-card-missing]) > .canvas-card-body,
-.canvas-node-file[data-card-kind="pdf"]:not([data-card-missing]) > .canvas-card-body {
+.canvas-node-file[data-card-kind="pdf"]:not([data-card-missing]) > .canvas-card-body,
+.canvas-node-file[data-card-kind="craft"]:not([data-card-missing]) > .canvas-card-body {
   padding: 0;
   white-space: normal;
+}
+/* La scheda Craft (T18, prototipo T26): il disegno sul foglio bianco su cui è
+   nato; i pulsanti in una piccola barra che galleggia in basso, al passaggio,
+   col fuoco o con la scheda scelta. Senza anteprima la scheda di file: il
+   nome, i dati e il perché a voce bassa, i pulsanti sempre in vista. */
+.canvas-card-craft[data-card-state="picture"] {
+  background: var(--paper-bg);
+}
+.canvas-card-craft:not([data-card-state="picture"]) {
+  gap: var(--space-3);
+  padding: var(--space-5) var(--space-6);
+}
+.canvas-card-craft-file > p {
+  margin: 0;
+}
+.canvas-card-craft-name {
+  color: var(--text);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+}
+.canvas-card-craft-info,
+.canvas-card-craft-state,
+.canvas-card-craft-consent {
+  margin-top: var(--space-1);
+  color: var(--muted);
+  font-size: var(--text-xs);
+}
+.canvas-card-craft-render {
+  display: block;
+  margin-top: var(--space-2);
+}
+.canvas-card-craft-actions {
+  padding: var(--space-1);
+  border-radius: var(--radius-pill);
+  background: var(--bg-elev);
+  box-shadow: var(--shadow-2);
+  opacity: 0;
+}
+.canvas-node[data-card-mode="live"]:hover .canvas-card-craft-actions,
+.canvas-node[data-card-mode="live"]:focus-within .canvas-card-craft-actions,
+.canvas-node[data-card-mode="live"].selected .canvas-card-craft-actions,
+.canvas-card-craft:not([data-card-state="picture"]) > .canvas-card-craft-actions {
+  opacity: 1;
+}
+.canvas-card-craft:not([data-card-state="picture"]) > .canvas-card-craft-actions {
+  margin-left: calc(-1 * var(--space-3));
+  padding: 0;
+  background: none;
+  box-shadow: none;
+}
+.canvas-card-craft-actions > button {
+  padding: var(--space-2) var(--space-5);
+  border-radius: var(--radius-pill);
+  color: var(--text);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+}
+.canvas-card-craft:not([data-card-state="picture"]) > .canvas-card-craft-actions > button {
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-chip);
+  color: var(--accent);
+}
+.canvas-card-craft-actions > button:hover,
+.canvas-card-craft-actions > button:focus-visible {
+  background: var(--overlay-hover);
 }
 /* La scheda-estratto (T75, prototipo T28): le parti in colore d'accento
    accanto al nome della fonte, ↗ per aprirla; nel corpo ogni sezione col
