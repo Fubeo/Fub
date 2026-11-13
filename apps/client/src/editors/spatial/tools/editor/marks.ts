@@ -126,6 +126,14 @@ export function installMarks(ctx: EditorContext): void {
     if (ctx.tool !== "select" || !editable() || ctx.selection.length === 0) return null;
     const g = ctx.current?.kind === "select" ? ctx.current : null;
     if (g !== null && (g.mode === "move" || g.mode === "marquee")) return null;
+    // Un gesto sul motore: la cornice come la sua anteprima la trasforma,
+    // nessuna mentre si sposta o si sceglie col riquadro.
+    const motore = ctx.current?.kind === "motore" ? ctx.current : null;
+    if (motore !== null && (motore.intent === "move" || motore.marquee !== null)) return null;
+    if (motore !== null && motore.matrix !== null) {
+      const frame = frameOf(selectedUnits());
+      return frame === null ? null : frameView(movedFrame(frame, motore.matrix), ctx.camera.scale);
+    }
     if (g !== null && g.grip !== null) return frameView(g.matrix === null ? g.grip.frame : movedFrame(g.grip.frame, g.matrix), ctx.camera.scale);
     const frame = frameOf(selectedUnits());
     return frame === null ? null : frameView(frame, ctx.camera.scale);
@@ -178,6 +186,10 @@ export function installMarks(ctx: EditorContext): void {
 
   /// Le cornici della selezione e il riquadro di un trascinamento sul
   /// vuoto. Le misure della banda di stato seguono.
+  /// La trasformazione della selezione nell'anteprima di un gesto sul
+  /// motore, se ce n'è una.
+  const motoreMatrix = (): Matrix | null => (ctx.current?.kind === "motore" ? ctx.current.matrix : null);
+
   const showHandles = (): void => {
     readFirst(placeHandles);
     ctx.statusChanged();
@@ -188,7 +200,7 @@ export function installMarks(ctx: EditorContext): void {
     const handles: OverlayHandle[] = [];
     const move = ctx.current?.kind === "select" && ctx.current.mode === "move" ? ctx.current : null;
     const delta = move === null ? null : ctx.moveDelta(move);
-    const shaping = ctx.current?.kind === "select" && (ctx.current.mode === "resize" || ctx.current.mode === "rotate") ? ctx.current.matrix : null;
+    const shaping = ctx.current?.kind === "select" && (ctx.current.mode === "resize" || ctx.current.mode === "rotate") ? ctx.current.matrix : motoreMatrix();
     let band: Bounds | null = null;
     for (const unit of selectedUnits()) {
       const frame = unit.frame();
@@ -230,6 +242,12 @@ export function installMarks(ctx: EditorContext): void {
       const [x2, y2] = lasso.end;
       const slanted = ctx.slantedMarquee(lasso.from, lasso.end);
       handles.push({ kind: "lasso", points: slanted === null ? [[x1, y1], [x2, y1], [x2, y2], [x1, y2]] : [...slanted.corners] });
+    }
+    // Il riquadro di selezione che l'anteprima del motore disegna.
+    const marquee = ctx.current?.kind === "motore" ? ctx.current.marquee : null;
+    if (marquee !== null) {
+      const [x, y, w, h] = marquee;
+      handles.push({ kind: "lasso", points: [[x, y], [x + w, y], [x + w, y + h], [x, y + h]] });
     }
     overlay.setHandles(handles);
     ctx.selectionBand = band;
@@ -288,7 +306,7 @@ export function installMarks(ctx: EditorContext): void {
       linkLayer.replaceChildren(...list.map((mark) => mark.element));
       labelMarks();
     }
-    const shaping = ctx.current?.kind === "select" && (ctx.current.mode === "resize" || ctx.current.mode === "rotate") ? ctx.current.matrix : null;
+    const shaping = ctx.current?.kind === "select" && (ctx.current.mode === "resize" || ctx.current.mode === "rotate") ? ctx.current.matrix : motoreMatrix();
     // Anche mentre si sposta, quando la cornice non si vede: il segno non salta.
     const framed = ctx.tool === "select" && editable();
     const chosen = delta !== null || shaping !== null || framed ? selectedUnits().map((unit) => unit.path) : [];

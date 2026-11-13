@@ -1,0 +1,85 @@
+{
+  "name": "rettangolo-con-griglia",
+  "description": "con la griglia di 20 i due angoli vanno sugli incroci",
+  "input": "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:fub=\"https://fubeo.github.io/ns/scene/1\" fub:version=\"1\" viewBox=\"0 0 400 300\" width=\"400\" height=\"300\">\n  <title>Prova</title>\n  <rect id=\"fub-paper\" fub:role=\"paper\" x=\"0\" y=\"0\" width=\"400\" height=\"300\" fill=\"#ffffff\"/>\n  <g id=\"l1a2b3c4d\" fub:layer=\"Livello 1\">\n  </g>\n</svg>\n",
+  "gesture": {
+    "tool": "rect",
+    "layer": null,
+    "selection": [],
+    "zoom": 1,
+    "snap": {
+      "grid": 20,
+      "free": false
+    },
+    "style": {
+      "stroke": "#000000",
+      "width": 4,
+      "fill": null
+    },
+    "events": [
+      {
+        "kind": "down",
+        "x": 43,
+        "y": 37,
+        "pressure": 0.5,
+        "shift": false,
+        "alt": false,
+        "cmd": false
+      },
+      {
+        "kind": "drag",
+        "x": 90,
+        "y": 70,
+        "pressure": 0.5,
+        "shift": false,
+        "alt": false,
+        "cmd": false
+      },
+      {
+        "kind": "drag",
+        "x": 127,
+        "y": 96,
+        "pressure": 0.5,
+        "shift": false,
+        "alt": false,
+        "cmd": false
+      },
+      {
+        "kind": "up",
+        "x": 127,
+        "y": 96,
+        "pressure": 0,
+        "shift": false,
+        "alt": false,
+        "cmd": false
+      }
+    ]
+  },
+  "expect": {
+    "ops": [
+      {
+        "op": "add",
+        "parent": "l1a2b3c4d",
+        "pos": {
+          "last": true
+        },
+        "elem": {
+          "tag": "rect",
+          "attrs": {
+            "id": "@1",
+            "x": "40",
+            "y": "40",
+            "width": "80",
+            "height": "60",
+            "fill": "none",
+            "stroke": "#000000",
+            "stroke-width": "4"
+          }
+        }
+      }
+    ],
+    "selection": [],
+    "refused": null,
+    "text": "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:fub=\"https://fubeo.github.io/ns/scene/1\" fub:version=\"1\" viewBox=\"0 0 400 300\" width=\"400\" height=\"300\">\n  <title>Prova</title>\n  <rect id=\"fub-paper\" fub:role=\"paper\" x=\"0\" y=\"0\" width=\"400\" height=\"300\" fill=\"#ffffff\"/>\n  <g id=\"l1a2b3c4d\" fub:layer=\"Livello 1\">\n    <rect id=\"@1\" x=\"40\" y=\"40\" width=\"80\" height=\"60\" fill=\"none\" stroke=\"#000000\" stroke-width=\"4\"/>\n  </g>\n</svg>\n"
+  }
+}

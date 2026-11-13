@@ -225,7 +225,7 @@ function drawWorkspace(value: string, source: "default" | "vault" = "vault"): Se
 
 /// Gli strumenti della colonna, coi primi delle tendine: il Completo e il
 /// Semplice hanno la stessa colonna, e cambiano i comandi.
-const COLUMN_TOOLS = ["select", "hand", "pen", "eraser", "rect"];
+const COLUMN_TOOLS = ["select", "hand", "pen", "eraser", "rect", "text"];
 
 /// Lo spazio di lavoro del disegno nel riquadro attivo.
 const workspace = (): string | undefined => focusedPane().querySelector<HTMLElement>(".draw-editor")?.dataset.workspace;

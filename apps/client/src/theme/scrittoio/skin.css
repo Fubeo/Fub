@@ -4903,6 +4903,16 @@ kbd,
 .pane-standing[data-standing="readonly"] .pane-standing-mark {
   display: none;
 }
+/* Il motore spento, o la versione senza motore: il segno vuoto, come la sola
+   lettura stretta. Si disegna lo stesso. */
+.pane-standing[data-standing="reduced"] .pane-standing-mark {
+  border: 1px solid var(--muted);
+  background: transparent;
+}
+/* Il motore fermo: il segno del colore d'errore, e la parola lo dice. */
+.pane-standing[data-standing="stopped"] .pane-standing-mark {
+  background: var(--danger);
+}
 .pane-standing-text {
   display: inline-block;
 }
@@ -4964,11 +4974,15 @@ kbd,
   margin: 0 0 var(--space-4);
   color: var(--muted);
 }
+/* Tante parti: l'elenco scorre dentro il riquadro, il resto sta fermo. */
 .pane-standing-places {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--space-2);
+  max-height: 232px;
   margin: 0 0 var(--space-4);
   padding: 0;
+  overflow-y: auto;
   list-style: none;
 }
 .pane-standing-places > li {
@@ -4979,6 +4993,13 @@ kbd,
   padding: var(--space-2) var(--space-3);
   border-radius: var(--radius-sm);
   background: var(--bg-hover);
+}
+/* Un nome lunghissimo si taglia; «Vai» resta sempre in vista. */
+.pane-standing-place-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .pane-standing-ask {
   margin: 0 0 var(--space-3);
@@ -18991,6 +19012,12 @@ h6.ui-heading {
 .components-row--orphan {
   border-style: dashed;
   border-color: var(--warning);
+}
+
+/* La riga aperta da «Accendi…»: segnata finché l'utente non fa altro. */
+.components-row--found {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-wash);
 }
 
 .components-row[aria-busy="true"] {

@@ -1789,6 +1789,12 @@
   border-color: var(--warning);
 }
 
+/* La riga aperta da «Accendi…»: segnata finché l'utente non fa altro. */
+.components-row--found {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-wash);
+}
+
 .components-row[aria-busy="true"] {
   opacity: 0.7;
 }

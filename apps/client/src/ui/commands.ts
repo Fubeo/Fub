@@ -337,6 +337,36 @@ export function pickDrawingImport(folder = ""): boolean {
   return true;
 }
 
+// # La porta della riga di un componente
+//
+// Una superficie che dice «questo si fa con un componente spento» porta
+// l'utente sulla riga del componente nella pagina «Componenti», col fuoco sul
+// suo interruttore: «Accendi…» del disegno. Non accende niente: accende
+// l'utente. Chi apre la riga sono le impostazioni, che registrano la porta
+// quando si montano e la tolgono quando si smontano.
+
+/// Chi apre la riga di un componente.
+export type ComponentRowOpener = (id: string) => void;
+
+let componentRowOpener: ComponentRowOpener | null = null;
+
+/// Registra chi apre la riga di un componente; restituisce chi la toglie.
+/// Vince l'ultima registrazione.
+export function registerComponentRow(open: ComponentRowOpener): () => void {
+  componentRowOpener = open;
+  return () => {
+    if (componentRowOpener === open) componentRowOpener = null;
+  };
+}
+
+/// Apre la pagina «Componenti» sulla riga `id`; falso se nessuno sa aprirla.
+/// Un `id` che la mappa non ha apre la pagina e basta.
+export function showComponent(id: string): boolean {
+  if (componentRowOpener === null) return false;
+  componentRowOpener(id);
+  return true;
+}
+
 /// Gli accordi riconfigurati, letti dalle impostazioni.
 ///
 /// La mappa è chiave d'impostazione → valore, e non id di comando → accordo:

@@ -69,6 +69,22 @@ const FUORI_DAL_DEFAULT = new Map([
     "crates/fub-app/Cargo.toml#bench-gc",
     "job webview, passo «l'app di release con la shell dentro e il gancio della raccolta (bench-gc)»",
   ],
+  // La riga del Motore del disegno nella mappa dei componenti: accende
+  // `draw`, quindi sta fuori dal default per la stessa ragione. Il motore lo
+  // porta `fub-host/engine-drawing`, nel default dell'host.
+  [
+    "crates/fub-features/Cargo.toml#engine-drawing",
+    "job test, passo «la riga del Motore del disegno, con la feature `engine-drawing` delle feature»; " +
+      "job invariants, «ogni feature ufficiale compila da sola»",
+  ],
+  // L'oracolo a pixel dei disegni (il cancello di K5): porta un
+  // rasterizzatore, e il banco del kernel lo prenderebbe in ogni crate che
+  // ne fa un test senza usarlo.
+  [
+    "crates/fub-testkit/Cargo.toml#pixel",
+    "job test, passo «l'oracolo a pixel, con la feature `pixel` del banco»; " +
+      "clippy nel job fmt",
+  ],
 ]);
 
 /**
