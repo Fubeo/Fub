@@ -10,19 +10,30 @@
 //! che è cambiato. Che cosa fa ogni operazione, e perché un errore la
 //! rifiuta tutta, lo dice `docs/reference/canvas-operations.md`.
 //!
+//! Tre comandi leggono soltanto: `canvas.read` (la lavagna come testo, come
+//! operazioni o come modello), `canvas.check` (che cosa cambierebbe, prima di
+//! scrivere) e `canvas.guide` (la guida e lo schema). Stanno qui, con le stesse
+//! regole di `canvas.apply`, per chi la guarda senza vederla.
+//!
 //! L'editor della lavagna sta nel client (`editors/canvas`): questo modulo è
 //! la strada per chi la cambia senza vederla, cioè la palette, la riga di
 //! comando e un agente.
 
 mod apply;
+mod check;
 mod create;
+mod guide;
+mod read;
 
 use fub_abi::command::{
-    CommandOutcome, CommandReach, CommandScope, CommandSpec, InvokeMode, ParamKind, ParamSpec,
+    Args, Choice, CommandOutcome, CommandReach, CommandScope, CommandSpec, InvokeMode, ParamKind,
+    ParamSpec,
 };
 use fub_abi::error::PluginError;
-use fub_abi::text::{StringCatalog, Text};
+use fub_abi::model::DocId;
+use fub_abi::text::{Arg, StringCatalog, Text};
 use fub_abi::traits::{CommandProvider, HostApi};
+use fub_canvas_core::CanvasError;
 
 /// L'id del componente, lo stesso della sua riga nella mappa.
 pub const LAVAGNA_ID: &str = "fub.lavagna";
@@ -33,8 +44,24 @@ pub const CANVAS_APPLY: &str = "canvas.apply";
 /// Crea una lavagna vuota e la apre.
 pub const CANVAS_CREATE: &str = "canvas.create";
 
+/// Legge una lavagna: come testo (una riga per scheda), come lista di operazioni
+/// che la ricrea, o come modello. Non scrive.
+pub const CANVAS_READ: &str = "canvas.read";
+
+/// Dice che cosa cambierebbe una lista di operazioni, con i problemi e gli avvisi.
+/// Non scrive.
+pub const CANVAS_CHECK: &str = "canvas.check";
+
+/// La guida per scrivere una lavagna: il testo, i nomi delle operazioni, lo
+/// schema e gli esempi. Non legge nessun documento.
+pub const CANVAS_GUIDE: &str = "canvas.guide";
+
 /// Il namespace dell'effetto che dice che cosa ha fatto `canvas.apply`.
 pub const LAVAGNA_NS: &str = LAVAGNA_ID;
+
+/// L'id del formato delle lavagne (`fub_format_canvas::model::FORMAT_ID`):
+/// la feature non dipende dal formato, ne nomina soltanto l'id del contratto.
+const CANVAS_FORMAT: &str = "canvas";
 
 const DOC: &str = "doc";
 const OPS: &str = "ops";
@@ -42,6 +69,10 @@ const BASE: &str = "base";
 const SEED: &str = "seed";
 const NAME: &str = "name";
 const FOLDER: &str = "folder";
+const FORM: &str = "form";
+const IDS: &str = "ids";
+const MAX_CHARS: &str = "max_chars";
+const TOPIC: &str = "topic";
 
 const P_APPLY: &str = "canvas.apply.p_apply";
 const N_APPLIED: &str = "canvas.apply.n_applied";
@@ -86,6 +117,15 @@ const E_NAME_TRAILING_DOT: &str = "canvas.create.e_name_trailing_dot";
 const E_NAME_HIDDEN: &str = "canvas.create.e_name_hidden";
 const E_NAME_TOO_LONG: &str = "canvas.create.e_name_too_long";
 
+const N_CHECK_SUMMARY: &str = "canvas.check.n_summary";
+const N_CHECK_REFUSED: &str = "canvas.check.n_refused";
+const E_READ_FORM: &str = "canvas.read.e_form";
+const E_READ_IDS: &str = "canvas.read.e_ids";
+const E_READ_MAX_CHARS: &str = "canvas.read.e_max_chars";
+const E_READ_MAX_CHARS_FORM: &str = "canvas.read.e_max_chars_form";
+const E_READ_WRITE: &str = "canvas.read.e_write";
+const E_GUIDE_TOPIC: &str = "canvas.guide.e_topic";
+
 /// I comandi della lavagna.
 pub struct LavagnaCommands;
 
@@ -106,6 +146,32 @@ impl CommandProvider for LavagnaCommands {
                 // Un documento solo, e il cestino lo rende reversibile: lo
                 // stesso raggio di `note.create` e di `drawing.create`.
                 .with_scope(CommandScope::writing(CommandReach::Document)),
+            CommandSpec::new(CANVAS_READ, Text::key(format!("{CANVAS_READ}.title")))
+                .describing(Text::key(format!("{CANVAS_READ}.desc")))
+                .with_param(parameter(CANVAS_READ, DOC, ParamKind::Document).required())
+                .with_param(parameter(
+                    CANVAS_READ,
+                    FORM,
+                    ParamKind::Choice(vec![
+                        Choice::new("outline", Text::key("canvas.read.form.outline")),
+                        Choice::new("code", Text::key("canvas.read.form.code")),
+                        Choice::new("json", Text::key("canvas.read.form.json")),
+                    ]),
+                ))
+                .with_param(parameter(CANVAS_READ, IDS, ParamKind::Text))
+                .with_param(parameter(CANVAS_READ, MAX_CHARS, ParamKind::Number))
+                .with_scope(CommandScope::read_only()),
+            CommandSpec::new(CANVAS_CHECK, Text::key(format!("{CANVAS_CHECK}.title")))
+                .describing(Text::key(format!("{CANVAS_CHECK}.desc")))
+                .with_param(parameter(CANVAS_CHECK, DOC, ParamKind::Document).required())
+                .with_param(parameter(CANVAS_CHECK, OPS, ParamKind::Text).required())
+                .with_param(parameter(CANVAS_CHECK, BASE, ParamKind::Text))
+                .with_param(parameter(CANVAS_CHECK, SEED, ParamKind::Text))
+                .with_scope(CommandScope::read_only()),
+            CommandSpec::new(CANVAS_GUIDE, Text::key(format!("{CANVAS_GUIDE}.title")))
+                .describing(Text::key(format!("{CANVAS_GUIDE}.desc")))
+                .with_param(parameter(CANVAS_GUIDE, TOPIC, ParamKind::Text))
+                .with_scope(CommandScope::read_only()),
         ]
     }
 
@@ -117,8 +183,11 @@ impl CommandProvider for LavagnaCommands {
         host: &mut dyn HostApi,
     ) -> Result<CommandOutcome, PluginError> {
         match command {
-            CANVAS_APPLY => apply::canvas_apply(fub_abi::command::Args::new(&args), mode, host),
-            CANVAS_CREATE => create::canvas_create(fub_abi::command::Args::new(&args), mode, host),
+            CANVAS_APPLY => apply::canvas_apply(Args::new(&args), mode, host),
+            CANVAS_CREATE => create::canvas_create(Args::new(&args), mode, host),
+            CANVAS_READ => read::canvas_read(Args::new(&args), host),
+            CANVAS_CHECK => check::canvas_check(Args::new(&args), host),
+            CANVAS_GUIDE => guide::canvas_guide(Args::new(&args)),
             other => Err(PluginError::UnknownCommand(other.to_string().into())),
         }
     }
@@ -127,6 +196,58 @@ impl CommandProvider for LavagnaCommands {
 fn parameter(command: &str, name: &str, kind: ParamKind) -> ParamSpec {
     ParamSpec::new(name, Text::key(format!("{command}.{name}.title")), kind)
         .describing(Text::key(format!("{command}.{name}.desc")))
+}
+
+/// Il documento di un comando della lavagna: un argomento di tipo documento che
+/// è una lavagna. Un altro formato, o nessun formato, è `BadArgs`.
+fn canvas_doc(args: &Args<'_>, host: &dyn HostApi) -> Result<DocId, PluginError> {
+    let doc = args
+        .document(DOC)
+        .ok_or_else(|| PluginError::BadArgs(Text::key(E_NO_DOC)))?;
+    let is_canvas = host
+        .format_of(&doc)
+        .is_some_and(|format| format.descriptor.id == CANVAS_FORMAT);
+    if !is_canvas {
+        return Err(PluginError::BadArgs(about(E_NOT_CANVAS, &doc, Vec::new())));
+    }
+    Ok(doc)
+}
+
+/// Una frase che nomina il documento, più altri argomenti.
+fn about(key: &str, doc: &DocId, mut args: Vec<Arg>) -> Text {
+    args.insert(0, Arg::text("doc", doc.as_str()));
+    Text::message(key, args)
+}
+
+/// Una lista di operazioni che non è JSON: `reason` è il motivo di serde, e
+/// `problem` il primo problema della forma (o «-» se non c'è).
+fn ops_json(reason: String, problem: String) -> PluginError {
+    PluginError::BadArgs(Text::message(
+        E_OPS_JSON,
+        vec![Arg::text("reason", reason), Arg::text("problem", problem)],
+    ))
+}
+
+/// Il seme dato: un intero decimale a 64 bit senza segno, come lo porta il
+/// JSON (in stringa, perché un `u64` non ci sta in un numero JSON).
+fn seed(raw: &str) -> Result<u64, PluginError> {
+    raw.trim()
+        .parse::<u64>()
+        .map_err(|_| PluginError::BadArgs(Text::message(E_SEED, vec![Arg::text("seed", raw)])))
+}
+
+/// Una lavagna che il nucleo non sa leggere (R1–R10 di `canvas-format.md`).
+fn opening(doc: &DocId, error: &CanvasError) -> PluginError {
+    let key = match error {
+        CanvasError::Limit { .. } => E_OPEN_LIMIT,
+        CanvasError::Json(_) => E_OPEN_JSON,
+        CanvasError::Invalid(_) => E_OPEN_INVALID,
+    };
+    PluginError::BadArgs(about(
+        key,
+        doc,
+        vec![Arg::text("reason", error.to_string())],
+    ))
 }
 
 /// Le frasi del componente, in italiano e in inglese: chiave, italiano,
@@ -190,8 +311,8 @@ const STRINGS: &[(&str, &str, &str)] = &[
     ),
     (
         E_OPS_JSON,
-        "Le operazioni non sono una lista JSON valida: {reason}",
-        "The operations are not a valid JSON list: {reason}",
+        "Le operazioni non sono una lista JSON valida: {reason}. Primo problema (codice · percorso · suggerimento): {problem}.",
+        "The operations are not a valid JSON list: {reason}. First problem (code · path · suggestion): {problem}.",
     ),
     (
         E_OPS_EMPTY,
@@ -364,6 +485,208 @@ const STRINGS: &[(&str, &str, &str)] = &[
         "La lavagna non può chiamarsi «{doc}»: «{segment}» è troppo lungo (il massimo è {max} byte).",
         "The whiteboard cannot be called «{doc}»: «{segment}» is too long (at most {max} bytes).",
     ),
+    (
+        "canvas.read.title",
+        "Leggi la lavagna",
+        "Read the whiteboard",
+    ),
+    (
+        "canvas.read.desc",
+        "Legge una lavagna come testo, una riga per scheda; come la lista di operazioni che la ricrea; o come modello. Non scrive niente.",
+        "Reads a whiteboard as text, one line per card; as the list of operations that recreates it; or as its model. Writes nothing.",
+    ),
+    ("canvas.read.doc.title", "Lavagna", "Whiteboard"),
+    (
+        "canvas.read.doc.desc",
+        "Il file .canvas da leggere.",
+        "The .canvas file to read.",
+    ),
+    ("canvas.read.form.title", "Forma", "Form"),
+    (
+        "canvas.read.form.desc",
+        "outline (di serie): una riga per scheda e per arco. code: le operazioni che la ricreano. json: il modello.",
+        "outline (default): one line per card and edge. code: the operations that recreate it. json: the model.",
+    ),
+    (
+        "canvas.read.form.outline",
+        "Una riga per scheda",
+        "One line per card",
+    ),
+    (
+        "canvas.read.form.code",
+        "Le operazioni che la ricreano",
+        "The operations that recreate it",
+    ),
+    (
+        "canvas.read.form.json",
+        "Il modello, come nel file",
+        "The model, as in the file",
+    ),
+    ("canvas.read.ids.title", "Schede", "Cards"),
+    (
+        "canvas.read.ids.desc",
+        "Una lista JSON di id: legge solo quelle schede e gli archi fra loro.",
+        "A JSON list of ids: reads only those cards and the edges between them.",
+    ),
+    (
+        "canvas.read.max_chars.title",
+        "Caratteri al massimo",
+        "Maximum characters",
+    ),
+    (
+        "canvas.read.max_chars.desc",
+        "Solo per la forma outline: taglia a una riga intera e dice quante ne restano. Assente = 20 000.",
+        "Only for the outline form: cuts at a whole line and says how many remain. Absent = 20 000.",
+    ),
+    (
+        E_READ_FORM,
+        "La forma «{form}» non c'è: si legge come outline, code o json.",
+        "The form \"{form}\" does not exist: read it as outline, code or json.",
+    ),
+    (
+        E_READ_IDS,
+        "Gli id non sono una lista JSON di testi, come [\"t1\", \"t2\"].",
+        "The ids are not a JSON list of strings, like [\"t1\", \"t2\"].",
+    ),
+    (
+        E_READ_MAX_CHARS,
+        "max_chars vuole un intero da zero in su.",
+        "max_chars wants a whole number from zero up.",
+    ),
+    (
+        E_READ_MAX_CHARS_FORM,
+        "max_chars vale solo per la forma outline: {form} si legge intera.",
+        "max_chars applies only to the outline form: {form} is read whole.",
+    ),
+    (
+        E_READ_WRITE,
+        "La lettura di {doc} non si scrive come JSON.",
+        "The reading of {doc} cannot be written as JSON.",
+    ),
+    (
+        "canvas.check.title",
+        "Controlla le operazioni",
+        "Check the operations",
+    ),
+    (
+        "canvas.check.desc",
+        "Dice che cosa cambierebbe una lista di operazioni, con gli avvisi e i problemi. Non scrive niente.",
+        "Says what a list of operations would change, with warnings and problems. Writes nothing.",
+    ),
+    ("canvas.check.doc.title", "Lavagna", "Whiteboard"),
+    (
+        "canvas.check.doc.desc",
+        "Il file .canvas da controllare.",
+        "The .canvas file to check.",
+    ),
+    ("canvas.check.ops.title", "Operazioni", "Operations"),
+    (
+        "canvas.check.ops.desc",
+        "Una lista JSON di operazioni, come in canvas.apply.",
+        "A JSON list of operations, as in canvas.apply.",
+    ),
+    ("canvas.check.base.title", "Revisione di partenza", "Base revision"),
+    (
+        "canvas.check.base.desc",
+        "Se la lavagna è cambiata da questa revisione, c'è il problema «stale_base».",
+        "If the whiteboard changed since this revision, there is the problem \"stale_base\".",
+    ),
+    ("canvas.check.seed.title", "Seme", "Seed"),
+    (
+        "canvas.check.seed.desc",
+        "Lo stesso seme di canvas.apply: così gli id del controllo sono quelli della scrittura.",
+        "The same seed as canvas.apply: so the ids of the check are those of the write.",
+    ),
+    (
+        N_CHECK_SUMMARY,
+        "Si può scrivere: schede nuove {added}, cambiate {changed}, tolte {removed}; archi toccati {edges}; avvisi {warnings}.",
+        "It can be written: new cards {added}, changed {changed}, removed {removed}; edges touched {edges}; warnings {warnings}.",
+    ),
+    (
+        N_CHECK_REFUSED,
+        "Non si scrive: problemi {problems}.",
+        "Not written: problems {problems}.",
+    ),
+    (
+        "canvas.check.p_invalid",
+        "La lista o un'operazione non si può scrivere così com'è.",
+        "The list or an operation cannot be written as it is.",
+    ),
+    (
+        "canvas.check.p_unknown_op",
+        "Il nome dell'operazione non c'è: i nomi sono in canvas.guide.",
+        "The operation name does not exist: the names are in canvas.guide.",
+    ),
+    (
+        "canvas.check.p_unknown_field",
+        "L'operazione non ha questo campo.",
+        "The operation has no such field.",
+    ),
+    (
+        "canvas.check.p_missing_field",
+        "Manca un campo obbligatorio.",
+        "A required field is missing.",
+    ),
+    (
+        "canvas.check.p_wrong_type",
+        "Un valore ha il tipo sbagliato.",
+        "A value has the wrong type.",
+    ),
+    (
+        "canvas.check.p_bad_value",
+        "Un valore non è fra quelli ammessi.",
+        "A value is not one of the allowed ones.",
+    ),
+    (
+        "canvas.check.p_unknown_node",
+        "Non c'è una scheda con questo id.",
+        "There is no card with this id.",
+    ),
+    (
+        "canvas.check.p_unknown_edge",
+        "Non c'è né una scheda né un arco con questo id.",
+        "There is neither a card nor an edge with this id.",
+    ),
+    (
+        "canvas.check.p_duplicate_id",
+        "L'id è già preso, o è ripetuto.",
+        "The id is already taken, or repeated.",
+    ),
+    (
+        "canvas.check.p_too_many",
+        "La lavagna avrebbe troppe schede o troppi archi.",
+        "The whiteboard would have too many cards or edges.",
+    ),
+    (
+        "canvas.check.p_stale_base",
+        "La lavagna è cambiata dalla revisione indicata: rileggila.",
+        "The whiteboard changed since the given revision: read it again.",
+    ),
+    (
+        "canvas.guide.title",
+        "Guida alla lavagna",
+        "Whiteboard guide",
+    ),
+    (
+        "canvas.guide.desc",
+        "La guida per scrivere una lavagna con le operazioni: il testo, i nomi, lo schema e gli esempi.",
+        "The guide to writing a whiteboard with operations: the text, the names, the schema and the examples.",
+    ),
+    (
+        "canvas.guide.topic.title",
+        "Operazione",
+        "Operation",
+    ),
+    (
+        "canvas.guide.topic.desc",
+        "Il nome di un'operazione: solo la sua voce, il suo schema e i suoi esempi. Assente = tutte.",
+        "The name of an operation: only its entry, its schema and its examples. Absent = all.",
+    ),
+    (
+        E_GUIDE_TOPIC,
+        "Non c'è un'operazione «{topic}»: prova con {near}.",
+        "There is no operation \"{topic}\": try {near}.",
+    ),
 ];
 
 /// Le stringhe del componente.
@@ -425,6 +748,14 @@ mod tests {
             E_NAME_TRAILING_DOT,
             E_NAME_HIDDEN,
             E_NAME_TOO_LONG,
+            N_CHECK_SUMMARY,
+            N_CHECK_REFUSED,
+            E_READ_FORM,
+            E_READ_IDS,
+            E_READ_MAX_CHARS,
+            E_READ_MAX_CHARS_FORM,
+            E_READ_WRITE,
+            E_GUIDE_TOPIC,
         ];
         for catalog in &catalogs {
             for key in keys {
@@ -437,5 +768,195 @@ mod tests {
         }
         assert_eq!(catalogs.len(), 2);
         assert_eq!(catalogs[0].entries.len(), STRINGS.len());
+    }
+
+    /// Ogni codice che il payload di `canvas.check` può dare ha la sua frase,
+    /// in tutte e due le lingue: la rende il catalogo, non il payload.
+    #[test]
+    fn ogni_codice_di_problema_ha_la_sua_frase() {
+        let catalogs = catalog();
+        for code in check::CODES {
+            let key = format!("canvas.check.p_{code}");
+            for catalog in &catalogs {
+                assert!(
+                    catalog.entries.contains_key(key.as_str()),
+                    "«{key}» manca in «{}»",
+                    catalog.locale
+                );
+            }
+        }
+    }
+
+    use fub_abi::format::{DocumentFormat, FormatCapabilities, FormatDescriptor};
+    use fub_abi::text::{ArgValue, Message, Text};
+    use fub_sdk::testing::MemoryHost;
+    use serde_json::{json, Value};
+
+    /// Un host con una lavagna, una nota e una lavagna che non si apre. Gli errori
+    /// si provano sul provider: il kernel li rende nella lingua di sistema, e lì
+    /// la chiave del catalogo non si vede più.
+    fn host() -> MemoryHost {
+        MemoryHost::new()
+            .with_format(
+                "canvas",
+                DocumentFormat {
+                    descriptor: FormatDescriptor::text(CANVAS_FORMAT, "Canvas", &["canvas"]),
+                    capabilities: FormatCapabilities::default(),
+                },
+            )
+            .with_document("Idee.canvas", r#"{"nodes": [], "edges": []}"#)
+            .with_document("Nota.md", "# Nota\n")
+            .with_document("Rotta.canvas", "{\"nodes\": [")
+    }
+
+    /// Il rifiuto di un comando, com'è uscito dal provider.
+    fn refusal(command: &str, args: Value) -> PluginError {
+        let mut host = host();
+        LavagnaCommands
+            .invoke(command, args, InvokeMode::Apply, &mut host)
+            .expect_err("il comando rifiuta")
+    }
+
+    /// Il messaggio di un errore di argomenti: la chiave, e i suoi argomenti.
+    fn message(error: &PluginError) -> &Message {
+        let PluginError::BadArgs(text) = error else {
+            panic!("un errore di argomenti, non {error:?}");
+        };
+        text.as_message().expect("un messaggio del catalogo")
+    }
+
+    fn arg(error: &PluginError, name: &str) -> String {
+        match message(error).arg(name) {
+            Some(ArgValue::Text(value)) => value.clone(),
+            other => panic!("l'argomento «{name}» non è un testo: {other:?}"),
+        }
+    }
+
+    /// La notifica del controllo: il riassunto con i conti se si scrive, il
+    /// conto dei problemi se no. Le chiavi si vedono solo qui: il kernel le rende.
+    #[test]
+    fn la_notifica_del_controllo_porta_i_conti() {
+        let mut host = host();
+        let add = json!([{ "op": "add_card", "node": { "id": "n", "type": "text", "x": 0, "y": 0, "width": 200, "height": 160, "text": "x" } }]);
+        let summary = LavagnaCommands
+            .invoke(
+                CANVAS_CHECK,
+                json!({ "doc": "Idee.canvas", "ops": add.to_string() }),
+                InvokeMode::Apply,
+                &mut host,
+            )
+            .expect("il rapporto");
+        let text = summary
+            .notify
+            .as_ref()
+            .and_then(Text::as_message)
+            .expect("un riassunto");
+        assert_eq!(text.key, "canvas.check.n_summary");
+        assert_eq!(text.arg("added"), Some(&ArgValue::Int(1)));
+        assert_eq!(text.arg("edges"), Some(&ArgValue::Int(0)));
+
+        let refused = LavagnaCommands
+            .invoke(
+                CANVAS_CHECK,
+                json!({ "doc": "Idee.canvas", "ops": "[{\"op\":\"fly\"}]" }),
+                InvokeMode::Apply,
+                &mut host,
+            )
+            .expect("il rapporto");
+        let text = refused
+            .notify
+            .as_ref()
+            .and_then(Text::as_message)
+            .expect("un conto");
+        assert_eq!(text.key, "canvas.check.n_refused");
+        assert_eq!(text.arg("problems"), Some(&ArgValue::Int(1)));
+    }
+
+    #[test]
+    fn leggere_rifiuta_con_le_sue_chiavi() {
+        let form = refusal(CANVAS_READ, json!({ "doc": "Idee.canvas", "form": "xml" }));
+        assert_eq!(message(&form).key, "canvas.read.e_form");
+        assert_eq!(arg(&form, "form"), "xml");
+
+        let ids = refusal(
+            CANVAS_READ,
+            json!({ "doc": "Idee.canvas", "ids": "non è JSON" }),
+        );
+        assert_eq!(message(&ids).key, "canvas.read.e_ids");
+
+        let negative = refusal(
+            CANVAS_READ,
+            json!({ "doc": "Idee.canvas", "max_chars": -1 }),
+        );
+        assert_eq!(message(&negative).key, "canvas.read.e_max_chars");
+
+        let code = refusal(
+            CANVAS_READ,
+            json!({ "doc": "Idee.canvas", "form": "code", "max_chars": 10 }),
+        );
+        assert_eq!(message(&code).key, "canvas.read.e_max_chars_form");
+        assert_eq!(arg(&code, "form"), "code");
+    }
+
+    #[test]
+    fn un_documento_che_non_e_una_lavagna_o_non_si_apre_ha_le_chiavi_di_apply() {
+        let nota = json!({ "doc": "Nota.md", "ops": "[{\"op\":\"remove\",\"ids\":[\"a\"]}]" });
+        for name in [CANVAS_READ, CANVAS_CHECK, CANVAS_APPLY] {
+            let error = refusal(name, nota.clone());
+            assert_eq!(message(&error).key, "canvas.apply.e_not_canvas", "{name}");
+        }
+
+        let rotta =
+            json!({ "doc": "Rotta.canvas", "ops": "[{\"op\":\"remove\",\"ids\":[\"a\"]}]" });
+        let apply = refusal(CANVAS_APPLY, rotta.clone());
+        let expected = message(&apply).key.clone();
+        assert!(expected.starts_with("canvas.apply.e_open_"), "{expected}");
+        for name in [CANVAS_READ, CANVAS_CHECK] {
+            let error = refusal(name, rotta.clone());
+            assert_eq!(message(&error).key, expected, "{name}");
+        }
+    }
+
+    #[test]
+    fn controllare_rifiuta_il_testo_che_non_e_json_senza_problema_della_forma() {
+        let error = refusal(
+            CANVAS_CHECK,
+            json!({ "doc": "Idee.canvas", "ops": "non è JSON" }),
+        );
+        assert_eq!(message(&error).key, "canvas.apply.e_ops_json");
+        assert_eq!(arg(&error, "problem"), "-");
+    }
+
+    #[test]
+    fn apply_con_una_lista_che_non_si_legge_nomina_il_primo_problema() {
+        let error = refusal(
+            CANVAS_APPLY,
+            json!({ "doc": "Idee.canvas", "ops": "[{\"op\":\"fly\"}]" }),
+        );
+        assert_eq!(message(&error).key, "canvas.apply.e_ops_json");
+        assert_eq!(arg(&error, "problem"), "unknown_op · /0/op");
+
+        // Con un nome vicino, il vicino fa parte del problema.
+        let near = refusal(
+            CANVAS_APPLY,
+            json!({ "doc": "Idee.canvas", "ops": "[{\"op\":\"moev\",\"ids\":[\"a\"],\"dx\":1,\"dy\":1}]" }),
+        );
+        assert_eq!(arg(&near, "problem"), "unknown_op · /0/op · move");
+    }
+
+    #[test]
+    fn la_guida_rifiuta_un_topic_sconosciuto_con_i_nomi_vicini() {
+        let near = refusal(CANVAS_GUIDE, json!({ "topic": "mvoe" }));
+        assert_eq!(message(&near).key, "canvas.guide.e_topic");
+        assert_eq!(arg(&near, "topic"), "mvoe");
+        assert_eq!(arg(&near, "near"), "move");
+
+        // Senza vicini, la frase elenca tutti i nomi.
+        let far = refusal(CANVAS_GUIDE, json!({ "topic": "xyzzy" }));
+        let names = arg(&far, "near");
+        assert!(
+            names.contains("add_card") && names.contains("reorder"),
+            "{names}"
+        );
     }
 }
