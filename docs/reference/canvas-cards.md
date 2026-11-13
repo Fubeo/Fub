@@ -71,10 +71,8 @@ Regole dell'estensione:
 - un nome nascosto senza altro punto (`.md`) non ha estensione.
 
 L'SVG è un'immagine ferma anche se `formatKindOf` lo chiama disegno: nella
-scheda non diventa mai il disegno vivo.
-
-Una specie senza renderer registrato, per esempio perché il suo componente è
-spento, si mostra come scheda di file con «Apri».
+scheda non diventa mai il disegno vivo. Una specie senza renderer registrato
+(senza la sua porta) si mostra come scheda di file con «Apri».
 
 ## Le misure di nascita
 
