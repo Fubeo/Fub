@@ -2589,3 +2589,5 @@ La più recente in cima: data · piano · decisione · perché.
   dati di T12 spinge l'ultima del DOM sotto la banda); la pastiglia del titolo non
   fa più crescere la riga del cursore (salto di 7–9 px, già su `main`) · le
   baseline di T25 si prendono dopo, con questi cambi dentro.
+- 2026-11-13 · lavagna · Il trascinamento nel vuoto col mouse sceglie con un rettangolo, come in Obsidian, e la vista si sposta con Spazio, tasto di mezzo, rotella, Mano e dito (T20b); un'impostazione tiene il comportamento di prima («sposta la vista») · il suggerimento della Selezione prometteva già il rettangolo, e chi viene da Obsidian se lo aspetta; l'impostazione non toglie niente a chi si è abituato.
+- 2026-11-13 · fluidità · Il profilo di N4 T23a mette i fotogrammi lunghi della penna sopra il foglio vivo in codice di N6, non dell'inchiostro: i riquadri dei bersagli (T20c), la croce della penna ereditata su tutta la lavagna (T20d), il commit e l'`onChange` al rilascio (T20e). Sono task di N6, prima del cancello (T21) · l'utente vuole l'app «estremamente fluida», e la meta di 33 ms vale sopra il foglio vivo come altrove.

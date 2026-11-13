@@ -2060,6 +2060,139 @@ Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/canvas/engine-touch.test.ts
 Stato: [ ] da fare
 
+## T20b · Il rettangolo che sceglie
+
+Perché: il suggerimento della Selezione (`canvas.options.select_hint`) dice
+«trascina nel vuoto per sceglierne più d'una», ma col mouse il trascinamento
+nel vuoto sposta la vista (`#beginPan` in fondo al `pointerdown`). Il testo
+promette un gesto che non c'è. Chi viene da Obsidian se lo aspetta: lì il
+rettangolo sceglie e la vista si sposta con Spazio, col tasto di mezzo o con
+la rotella. Task scritto dall'orchestratore (2026-11-13), vedi DECISIONS.md.
+Tocca: `apps/client/src/editors/canvas/engine.ts` (il ramo del vuoto nel
+`pointerdown` e il disegno del rettangolo), `structure.css` della lavagna o
+il pezzo della pelle che ne disegna il rettangolo (`src/theme/scrittoio/`,
+con l'anatomia), un test accanto a `engine-cards.test.ts`, il catalogo
+i18n, l'impostazione e la sua riga, `docs/product/` della lavagna.
+Non toccare: il Lazo dell'inchiostro (T86, sceglie i tratti a mano libera);
+il dito (un dito nel vuoto sposta sempre la vista); la Mano.
+Dipende da: T20
+Cosa fare:
+- Col mouse e con la Selezione, il trascinamento sinistro nel vuoto disegna
+  un rettangolo e sceglie le schede che tocca (e gli archi fra due schede
+  scelte); Maiusc aggiunge alla scelta che c'è; Esc lo annulla. Un clic
+  senza movimento (sotto la soglia del trascinamento) toglie la scelta come
+  oggi.
+- La vista si sposta con Spazio tenuto, col tasto di mezzo, con la rotella,
+  con la Mano e col dito, come oggi.
+- Un'impostazione della lavagna, «Trascinare nel vuoto»: «sceglie» (di
+  serie) o «sposta la vista» (il comportamento di oggi), e il suggerimento
+  dice il gesto dell'impostazione scelta.
+- Il rettangolo si disegna in un solo strato, senza ricalcolare lo stile
+  delle schede a ogni movimento (lezione di N4 T23a); scelte le schede, si
+  aggiorna la scelta una volta per fotogramma.
+Casi limite: 2.000 schede (un fotogramma ≤ 16 ms mentre il rettangolo
+cresce); il rettangolo che esce dalla finestra (la vista non scorre da
+sola in questo task); una scheda viva sotto il punto di partenza (vince la
+scheda); sola lettura (sceglie, non sposta niente).
+Fatto quando: test del rettangolo (sceglie, Maiusc, Esc, clic, dito che
+sposta, impostazione «sposta la vista»), il suggerimento vero nei due modi,
+foto in tutte e due le luci; `scripts/check.sh --rapido` verde.
+Prova: scripts/check.sh --rapido
+Stato: [ ] da fare
+
+## T20c · I riquadri dei bersagli senza ricalcolo della shell
+
+Perché: N4 T23a (`docs/misure/lavagna-inchiostro-profilo-2026-11-13.md`, sul
+ramo `piano/n4-inchiostro`) ha visto che all'inizio di un tratto i riquadri
+delle schede bersaglio (`canvas-ink-frames`, `hidden` cambiato in
+`#placeInkFrame`) fanno ricalcolare le regole `:has()` di `#layout`,
+`#panes`, `.pane` e `#workspace`: 80–140 ms di fotogramma fermo sopra il
+foglio vivo. Task scritto dall'orchestratore (2026-11-13).
+Tocca: `apps/client/src/editors/canvas/engine.ts` (`#placeInkFrame` e
+l'etichetta), il CSS dei riquadri; un test o una sonda accanto.
+Non toccare: le regole `:has()` della shell se non per restringerle a ciò
+che leggono davvero (e allora con il loro test); il codice dell'inchiostro
+di N4.
+Dipende da: T20
+Cosa fare:
+- I riquadri e l'etichetta restano nel DOM e si mostrano con un attributo o
+  una proprietà che nessuna regola `:has()` della shell legge (per esempio
+  `visibility` o una classe locale allo strato), o in uno strato che la
+  shell non osserva.
+- Misura prima e dopo con S8 (`bench/webview/run.mjs`) e con la sonda del
+  ricalcolo di stile di T23a; i numeri nella pagina di misura di T24.
+Casi limite: il tratto che comincia fuori da ogni scheda; due schede
+bersaglio; il tema chiaro e scuro (il riquadro si vede uguale).
+Fatto quando: all'inizio del tratto il ricalcolo di stile è ≤ 5 ms con la
+sonda; S8 non ha più il fotogramma di 80–140 ms all'inizio del tratto; foto
+uguali a prima; `scripts/check.sh --rapido` verde.
+Prova: scripts/check.sh --rapido
+Stato: [ ] da fare
+
+## T20d · La croce della penna senza ricalcolo della lavagna
+
+Perché: N4 T23a ha visto che a ogni pressione e rilascio di D
+`#applyInkMouse` mette o toglie `data-ink="pen"` sul viewport, e
+`cursor: crosshair` si eredita: si ricalcola lo stile di tutti gli elementi
+della lavagna, 62–80 ms con una tabella da 10.000 celle e un foglio vivo
+(latenza dei tasti p50 72 ms). Task scritto dall'orchestratore (2026-11-13).
+Tocca: `apps/client/src/editors/canvas/engine.ts` (`#applyInkMouse`, la
+ricerca del bersaglio sotto il puntatore), `structure.css` della lavagna, un
+test; `apps/client/bench/webview/run.mjs` solo per la prova della
+ripetizione del tasto.
+Non toccare: i gesti della penna di N4 oltre il cursore; le soglie del
+banco.
+Dipende da: T20c
+Cosa fare:
+- La croce si mostra senza cambiare una proprietà ereditata su tutta la
+  lavagna: per esempio un velo sopra le schede con la croce, che il motore
+  attraversa quando cerca che cosa c'è sotto (una ricerca per coordinate al
+  posto di `document.elementFromPoint`, o il velo con `pointer-events`
+  spento nel punto della ricerca). Un test prova che la croce resta sopra
+  le schede, sopra il foglio vivo e sopra il vuoto, e che il bersaglio del
+  tratto è lo stesso di oggi.
+- Il banco prova o esclude la ripetizione automatica di D sotto Xvfb (il
+  punto 5 di T23a): se D si ripete, il banco non conta quei fotogrammi
+  contro la meta, e lo scrive.
+Casi limite: la penna scelta dal menu (la croce senza D); il dito; la
+gomma; una scheda in scrittura sotto il velo (il clic ci entra quando la
+penna non è attiva).
+Fatto quando: il ricalcolo a ogni D è ≤ 2 ms con la sonda di T23a; la
+latenza dei tasti di S8 scende sotto 16 ms al p50; la croce si vede uguale
+(foto); `scripts/check.sh --rapido` verde.
+Prova: scripts/check.sh --rapido
+Stato: [ ] da fare
+
+## T20e · Il rilascio del tratto senza rilettura e senza lavoro di troppo
+
+Perché: N4 T23a ha visto che al rilascio di un tratto sopra il foglio vivo
+il thread principale lavora 45–60 ms: `Core::commit` 11–27 ms (rilegge il
+sorgente intero per un tratto aggiunto), `onChange` della shell e
+dell'ispettore 17–18 ms, `#inkTargetClose` 6–7 ms. L'inchiostro ne spende 5.
+Task scritto dall'orchestratore (2026-11-13).
+Tocca: `crates/fub-canvas-core/` (il commit di un'operazione di
+inchiostro), `crates/fub-canvas-wasm/` se la facciata cambia, il chiamante in
+`apps/client/src/editors/canvas/`, l'ispettore della lavagna; i loro test.
+Non toccare: il formato su disco (`docs/reference/canvas-format.md` non
+cambia); la forma dell'operazione nei vettori (`op_vectors.rs`) se non
+additiva.
+Dipende da: T20
+Cosa fare:
+- Il commit di un tratto aggiunto non rilegge la lavagna intera: aggiorna il
+  modello e il testo di serializzazione dove serve, e il test di andata e
+  ritorno prova che il file scritto è identico byte per byte a quello di
+  oggi.
+- La shell e l'ispettore non rifanno il loro lavoro a ogni tratto se ciò che
+  mostrano non è cambiato (un tratto non cambia il titolo, le schede o la
+  scelta).
+Casi limite: un tratto su una lavagna da 2.000 schede; il tratto annullato e
+rifatto; il file cambiato da fuori fra due tratti (si rilegge, come oggi).
+Fatto quando: al rilascio il thread principale lavora ≤ 16 ms sopra il
+foglio vivo (sonda), i file scritti sono identici a quelli di prima nei
+vettori, `scripts/check.sh --rapido` verde.
+Prova: scripts/check.sh --rapido; cargo test -p fub-canvas-core
+Stato: [ ] da fare
+
 ## T21 · La prova del cancello
 
 Perché: il secondo punto del cancello: trascini un `.xlsx` dal sistema, ci
@@ -2068,7 +2201,7 @@ Tocca: `apps/client/src/canvas-cards.e2e.test.ts` (da T12),
 `docs/development/ink-input-smoke-test.md` (una sezione «Le schede vive»).
 Non toccare: il codice di prodotto (se la prova trova un difetto, il coder
 lo scrive nel rapporto e il pianificatore apre un task).
-Dipende da: T15, T17, T32 e T32b (lo stesso contenuto), T34 (la cartella); N4 T12
+Dipende da: T15, T17, T20a–T20e, T32 e T32b (lo stesso contenuto), T34 (la cartella); N4 T12
 (nella base)
 Cosa fare:
 - Nella prova e2e: un `File` `.xlsx` (byte noti) rilasciato sulla lavagna;
