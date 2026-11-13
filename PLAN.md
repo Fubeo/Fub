@@ -2136,7 +2136,7 @@ Prova: (nella cartella di lavoro) cd apps/client && npm run build && cd
 ../.. && cargo build --release --locked -p fub-app --features
 tauri/custom-protocol && cd apps/client && xvfb-run -a npm run bench:webview
 -- --only=S8 --budgets=targets --native-driver=/usr/bin/WebKitWebDriver
-Stato: [ ] da fare
+Stato: [x] fatto (2026-11-11, dall'orchestratore: la misura di N4 T23 è sul ramo di N4 in `docs/misure/lavagna-inchiostro-foglio-2026-11-11.md`, col commit di N6 23f4da190; tre giri, hash del `.xlsx` uguale; peggiore 174 ms a penna, quindi la voce del cancello di N4 resta aperta e il task di profilo sta nel piano di N4)
 
 ## T25 · Il prototipo delle schede
 
