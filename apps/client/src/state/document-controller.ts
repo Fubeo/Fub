@@ -145,7 +145,7 @@ import {
 import { createNote, handToSystem, loadCommandSpecs, openVaultRoot, vaultArg } from "./vault";
 import { lendHeld, lentDocuments, lentTo, mountLends, onLendChanged, provideLendGate, renameLend, unlend } from "./lend";
 import { confirm } from "../platform/confirm";
-import { registerShellCommand, type CommandEntry } from "../ui/commands";
+import { registerShellCommand, showComponent, type CommandEntry } from "../ui/commands";
 import type { LiveCommandTargets } from "../editors/spatial/live/commands";
 import { EXPORT_COMMAND } from "../ui/shell-ids.generated";
 import { trashWithConfirm } from "../panels/trash";
@@ -641,9 +641,15 @@ const canvasCards: CanvasCardPorts = {
   },
   craft: {
     served: craftServed,
-    // Il nome della riga spenta che servirebbe, come nel riquadro «solo come
-    // file».
-    offComponent: () => components()?.offRowFor(UI_CRAFT)?.nome || null,
+    // La riga spenta che serve il file: l'id per «Accendi…» e il nome per la
+    // ragione, come nel riquadro «solo come file».
+    offComponent: () => {
+      const row = components()?.offRowFor(UI_CRAFT);
+      return row ? { id: row.id, name: row.nome } : null;
+    },
+    // «Accendi…» apre la riga nella pagina Componenti (K5 T24); senza
+    // impostazioni montate dà falso.
+    showComponent,
     // Il componente acceso o spento cambia i comandi che il kernel elenca.
     onServed: (changed) => on("commands", changed),
     preview: (path) => previewOf(path, "large"),

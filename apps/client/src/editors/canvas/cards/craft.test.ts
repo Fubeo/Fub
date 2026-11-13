@@ -1,11 +1,12 @@
 // @vitest-environment happy-dom
-// La scheda dei file Craft (T18): l'anteprima di N7 ridotta al doppio della
-// scheda e messa in cache (la seconda accensione non richiede), «Apri» e
-// «Apri con…», il componente spento (niente domande, la ragione e «Apri con…»)
-// e acceso mentre la scheda è viva, il consenso alle anteprime delle app
-// (spento o da chiedere: niente comando), il file senza anteprima, il file
-// rotto, il file mancante e le risposte tardive. `createImageBitmap` e il
-// contesto 2D sono finti: happy-dom non decodifica immagini.
+// La scheda dei file Craft (T18, T18a): l'anteprima di N7 ridotta al doppio
+// della scheda e messa in cache (la seconda accensione non richiede), «Apri» e
+// «Apri con…», il componente spento (niente domande, la ragione, «Accendi…»
+// che apre la riga o si ritira, e «Apri con…») e acceso mentre la scheda è
+// viva, il consenso alle anteprime delle app (spento o da chiedere: niente
+// comando), il file senza anteprima, il file rotto, il file mancante e le
+// risposte tardive. `createImageBitmap` e il contesto 2D sono finti: happy-dom
+// non decodifica immagini.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { craftCardRenderer, type CraftCardPort } from "./craft";
@@ -16,8 +17,12 @@ import type { CraftPreview, CraftRenderConsent } from "../../../host/craft";
 import type { CraftPreviewAnswer } from "../../../state/craft-previews";
 import { openLifetime, type Lifetime } from "../../../ui/lifetime";
 import { t } from "../../../i18n/strings";
+import type { CraftOffComponent } from "./craft";
 
 const PATH = "Fisica/schema-pendolo.vectorcraft";
+
+/// La riga spenta che il file richiede, come la dà `offRowFor(UI_CRAFT)`.
+const CRAFT_ROW: CraftOffComponent = { id: "fub.craft", name: "File delle app Craft" };
 
 /// Un'anteprima di `PATH`: con un'immagine 1200×800, o senza.
 function preview(extra: Partial<CraftPreview> = {}): CraftPreview {
@@ -56,14 +61,20 @@ function deferred<T>(): Deferred<T> {
   return { promise, resolve };
 }
 
-function fakePort(answer: () => Promise<CraftPreviewAnswer | null>, options: { served?: boolean; component?: string | null } = {}) {
+function fakePort(
+  answer: () => Promise<CraftPreviewAnswer | null>,
+  options: { served?: boolean; component?: CraftOffComponent | null; opens?: boolean } = {},
+) {
   let served = options.served ?? true;
   const servedListeners = new Set<() => void>();
   const previewWatchers = new Set<(doc: string) => void>();
   const fileWatchers = new Map<string, () => void>();
   const port = {
     served: vi.fn(() => served),
-    offComponent: vi.fn(() => (options.component === undefined ? "File delle app Craft" : options.component)),
+    offComponent: vi.fn(() => (options.component === undefined ? CRAFT_ROW : options.component)),
+    // Senza `opens` la pagina Componenti è montata; con `opens: false` nessuno
+    // apre la riga, come senza impostazioni.
+    showComponent: vi.fn((_id: string) => options.opens ?? true),
     onServed: vi.fn((changed: () => void) => {
       servedListeners.add(changed);
       return () => servedListeners.delete(changed);
@@ -252,7 +263,7 @@ describe("Apri e Apri con", () => {
 });
 
 describe("il componente spento", () => {
-  it("non chiede anteprime: dice quale componente serve e offre solo «Apri con…»", async () => {
+  it("non chiede anteprime: dice quale componente serve e offre «Accendi…» e «Apri con…»", async () => {
     const { port } = fakePort(answered(preview()), { served: false });
     const card = mount(port);
     await settle();
@@ -263,14 +274,90 @@ describe("il componente spento", () => {
     expect(card.root().querySelector(".canvas-card-craft-info")!.textContent).toBe(t("craft.kind.vectorcraft", { app: "VectorCraft" }));
     expect(card.root().querySelector(".canvas-card-craft-state")!.textContent).toBe(t("file_only.note", { name: "File delle app Craft" }));
     expect(card.button("open")).toBeNull();
+    // «Accendi…» viene prima di «Apri con…», al posto che avrebbe «Apri».
+    const bar = card.root().querySelector(".canvas-card-craft-actions")!;
+    expect([...bar.querySelectorAll("button")].map((button) => button.className)).toEqual([
+      "canvas-card-craft-turn-on",
+      "canvas-card-craft-open-with",
+    ]);
+    expect(card.button("turn-on")!.textContent).toBe(t("canvas.card.craft_turn_on"));
     card.button("open-with")!.click();
     expect(port.openWith).toHaveBeenCalledWith(PATH, card.button("open-with"));
+  });
+
+  it("«Accendi…» apre la riga del componente nella pagina Componenti, e la scheda aspetta l'accensione", async () => {
+    const fake = fakePort(answered(preview()), { served: false });
+    const card = mount(fake.port);
+    await settle();
+
+    card.button("turn-on")!.click();
+    expect(fake.port.showComponent).toHaveBeenCalledTimes(1);
+    expect(fake.port.showComponent).toHaveBeenCalledWith("fub.craft");
+    expect(fake.port.open).not.toHaveBeenCalled();
+    expect(fake.port.openWith).not.toHaveBeenCalled();
+    // Non accende niente: la scheda resta spenta finché il componente non cambia.
+    expect(card.state()).toBe("off");
+    expect(card.button("turn-on")).not.toBeNull();
+    expect(fake.port.preview).not.toHaveBeenCalled();
+  });
+
+  it("senza chi apre la riga «Accendi…» si ritira e il fuoco va su «Apri con…»", async () => {
+    const fake = fakePort(answered(preview()), { served: false, opens: false });
+    const card = mount(fake.port);
+    await settle();
+
+    card.button("turn-on")!.click();
+    expect(fake.port.showComponent).toHaveBeenCalledWith("fub.craft");
+    expect(card.button("turn-on")).toBeNull();
+    expect(card.state()).toBe("off");
+    expect(card.root().querySelector(".canvas-card-craft-state")!.textContent).toBe(t("file_only.note", { name: "File delle app Craft" }));
+    expect(card.button("open-with")).not.toBeNull();
+    expect(document.activeElement).toBe(card.button("open-with"));
+    // Ritirato, non si offre più né si richiama la porta.
+    expect(fake.port.showComponent).toHaveBeenCalledTimes(1);
+  });
+
+  it("senza una riga con id, o senza riga in questa build, «Accendi…» non si offre", async () => {
+    const withoutId = mount(fakePort(answered(preview()), { served: false, component: { id: "", name: "File delle app Craft" } }).port);
+    await settle();
+    expect(withoutId.button("turn-on")).toBeNull();
+    expect(withoutId.button("open-with")).not.toBeNull();
+
+    const absent = fakePort(answered(preview()), { served: false, component: null });
+    const notInBuild = mount(absent.port);
+    await settle();
+    expect(notInBuild.button("turn-on")).toBeNull();
+    expect(notInBuild.button("open-with")).not.toBeNull();
+    expect(absent.port.showComponent).not.toHaveBeenCalled();
+  });
+
+  it("la scheda tolta mentre la pagina si apre non tocca più il DOM", async () => {
+    const fake = fakePort(answered(preview()), { served: false });
+    const card = mount(fake.port);
+    await settle();
+    fake.port.showComponent.mockImplementationOnce(() => {
+      card.view.destroy();
+      return true;
+    });
+
+    card.button("turn-on")!.click();
+    expect(card.host.querySelector(".canvas-card-craft")).toBeNull();
+    expect(fake.listeners()).toBe(0);
+    expect(fake.port.openWith).not.toHaveBeenCalled();
   });
 
   it("senza il nome del componente lo dice lo stesso", async () => {
     const card = mount(fakePort(answered(preview()), { served: false, component: null }).port);
     await settle();
     expect(card.root().querySelector(".canvas-card-craft-state")!.textContent).toBe(t("file_only.note_unnamed"));
+    expect(card.button("turn-on")).toBeNull();
+  });
+
+  it("con il nome vuoto lo dice senza nome, e «Accendi…» c'è lo stesso", async () => {
+    const card = mount(fakePort(answered(preview()), { served: false, component: { id: "fub.craft", name: "" } }).port);
+    await settle();
+    expect(card.root().querySelector(".canvas-card-craft-state")!.textContent).toBe(t("file_only.note_unnamed"));
+    expect(card.button("turn-on")).not.toBeNull();
   });
 
   it("acceso mentre la scheda è viva, la scheda chiede l'anteprima e la mostra", async () => {
@@ -288,6 +375,31 @@ describe("il componente spento", () => {
     fake.setServed(false);
     await settle();
     expect(card.state()).toBe("off");
+  });
+
+  it("dopo «Accendi…» e l'accensione la scheda ha «Apri» e non più «Accendi…»", async () => {
+    const fake = fakePort(answered(preview()), { served: false });
+    const card = mount(fake.port);
+    await settle();
+    card.button("turn-on")!.click();
+    expect(fake.port.showComponent).toHaveBeenCalledWith("fub.craft");
+
+    // La pagina Componenti accende il componente: la scheda si rifà da sola.
+    fake.setServed(true);
+    await settle();
+    expect(card.state()).toBe("picture");
+    expect(card.button("turn-on")).toBeNull();
+    expect(card.button("open")).not.toBeNull();
+    expect(card.button("open-with")).not.toBeNull();
+  });
+
+  it("col componente acceso «Accendi…» non c'è, né con la scheda ferma", async () => {
+    const card = mount(fakePort(answered(preview())).port);
+    await settle();
+    expect(card.state()).toBe("picture");
+    expect(card.button("turn-on")).toBeNull();
+    card.view.setMode("snapshot");
+    expect(card.button("turn-on")).toBeNull();
   });
 
   it("ferma col componente spento non mostra l'immagine in cache", async () => {

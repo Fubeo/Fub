@@ -17,9 +17,13 @@
 // lo dice, e «Apri» resta.
 //
 // Col componente «File delle app Craft» spento (`served()` falso) la scheda
-// non chiede anteprime: dice che il componente è spento e offre «Apri con…».
-// Quando il componente si accende o si spegne con la scheda viva, la scheda si
-// rifà (`onServed`). «Accendi…» dalla scheda arriva con K5 T24.
+// non chiede anteprime: dice che il componente è spento e offre «Accendi…» e
+// «Apri con…». «Accendi…» apre la riga del componente nella pagina Componenti
+// (`showComponent`, col fuoco sul suo interruttore): non accende niente, lo
+// accende l'utente. Se nessuno apre la riga (`showComponent` dà falso, le
+// impostazioni non sono montate), il clic lo ritira e il fuoco va su «Apri
+// con…». Quando il componente si accende o si spegne con la scheda viva, la
+// scheda si rifà (`onServed`).
 //
 // «Apri» apre il file nella modalità di Fub (il riquadro di N7); «Apri con…»
 // apre il menu delle app di N7 (`panels/open-with.ts`, dalla shell); il doppio
@@ -36,6 +40,14 @@ import { formatTagOf } from "../../../ui/format-kind";
 import { craftInfoText, fileName } from "../../craft/index";
 import { snapshotPart, type CardContext, type CardMode, type CardRenderer, type CardSnapshot, type CardView } from "../cards";
 
+/// La riga del componente spento che il file richiede (`offRowFor` della
+/// mappa): l'id per aprirla in «Accendi…», il nome nella lingua del vault
+/// (può essere vuoto, e allora la scheda lo dice senza nome).
+export interface CraftOffComponent {
+  readonly id: string;
+  readonly name: string;
+}
+
 /// Le porte della scheda Craft. In T12 le dà la shell
 /// (`state/document-controller.ts`): le anteprime di N7, il componente, i due
 /// modi di aprire.
@@ -43,9 +55,12 @@ export interface CraftCardPort {
   /// Il componente «File delle app Craft» serve il vault (il kernel elenca
   /// `craft.preview`): solo allora si chiedono anteprime.
   served(): boolean;
-  /// Il nome del componente spento che servirebbe, nella lingua del vault;
-  /// `null` se la mappa non ne nomina uno.
-  offComponent(): string | null;
+  /// La riga del componente spento che servirebbe; `null` se la mappa non ne
+  /// nomina una (un componente che non c'è in questa build).
+  offComponent(): CraftOffComponent | null;
+  /// Apre la riga `id` nella pagina Componenti (`showComponent` di
+  /// `ui/commands.ts`); falso se nessuno la sa aprire.
+  showComponent(id: string): boolean;
   /// Avvisa quando ciò che è acceso può essere cambiato; restituisce come
   /// smettere.
   onServed(changed: () => void): () => void;
@@ -193,9 +208,23 @@ function mountCraftCard(port: CraftCardPort, host: HTMLElement, initial: CardMod
     return node;
   };
 
-  /// «Apri» (solo col componente acceso) e «Apri con…».
-  const actions = (withOpen: boolean): HTMLElement => {
+  /// «Accendi…» (solo col componente spento, con la riga `turnOn`), «Apri»
+  /// (solo col componente acceso) e «Apri con…».
+  const actions = (withOpen: boolean, turnOn: string | null): HTMLElement => {
     const bar = element("div", "canvas-card-craft-actions");
+    if (turnOn !== null) {
+      const turn = element("button", "canvas-card-craft-turn-on", t("canvas.card.craft_turn_on"));
+      turn.type = "button";
+      listen(turn, (event) => {
+        event.stopPropagation();
+        if (port.showComponent(turnOn)) return;
+        // Nessuno apre la riga: «Accendi…» non si offre più, e il fuoco va su
+        // «Apri con…», che resta.
+        off(false);
+        root.querySelector<HTMLButtonElement>(".canvas-card-craft-open-with")?.focus({ preventScroll: true });
+      });
+      bar.append(turn);
+    }
     if (withOpen) {
       const open = element("button", "canvas-card-craft-open", t("canvas.card.open"));
       open.type = "button";
@@ -223,20 +252,30 @@ function mountCraftCard(port: CraftCardPort, host: HTMLElement, initial: CardMod
   };
 
   /// La scheda di file: il nome, la riga dei dati, perché l'anteprima non c'è
-  /// e, sotto, i pulsanti.
-  const fileCard = (state: "card" | "off" | "unreadable", info: string, reason: string, extra: () => Node[] = () => []): void => {
+  /// e, sotto, i pulsanti. `turnOn` è la riga che «Accendi…» apre, se se ne
+  /// offre.
+  const fileCard = (
+    state: "card" | "off" | "unreadable",
+    info: string,
+    reason: string,
+    extra: () => Node[] = () => [],
+    turnOn: string | null = null,
+  ): void => {
     show(state, () => {
       const text = element("div", "canvas-card-craft-file");
       const status = element("p", "canvas-card-craft-state", reason);
       status.setAttribute("role", "status");
       text.append(element("p", "canvas-card-craft-name", name), element("p", "canvas-card-craft-info", info), status, ...extra());
-      return [text, actions(state !== "off")];
+      return [text, actions(state !== "off", turnOn)];
     });
   };
 
-  const off = (): void => {
+  /// Col componente spento: la ragione col nome della riga, e «Accendi…» se la
+  /// riga ha un id. `offer` è falso dopo un clic che nessuno ha ascoltato.
+  const off = (offer = true): void => {
     const component = port.offComponent();
-    fileCard("off", kindText(path), component ? t("file_only.note", { name: component }) : t("file_only.note_unnamed"));
+    const reason = component?.name ? t("file_only.note", { name: component.name }) : t("file_only.note_unnamed");
+    fileCard("off", kindText(path), reason, undefined, offer && component?.id ? component.id : null);
   };
 
   /// Ciò che il consenso dice quando un'app saprebbe fare l'anteprima.
@@ -286,7 +325,7 @@ function mountCraftCard(port: CraftCardPort, host: HTMLElement, initial: CardMod
     drawing.drawImage(snapshot.bitmap, 0, 0);
     canvas.setAttribute("role", "img");
     canvas.setAttribute("aria-label", t("craft.figure.alt", { name }));
-    show("picture", () => [canvas, actions(true)]);
+    show("picture", () => [canvas, actions(true, null)]);
     painted = key;
     seeAspect(snapshot.aspect ?? snapshot.bitmap.width / snapshot.bitmap.height);
     return true;
