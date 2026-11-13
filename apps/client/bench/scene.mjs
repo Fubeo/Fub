@@ -738,7 +738,8 @@ export const SCENE = onPage("shell", [
   // Il chip del motore del disegno (K5 T23, `?drawing=`, vedi `fake-ipc.ts`):
   // acceso con due parti che restano come sono, spento con «Accendi…», fermo
   // con «Riprova»; il chip premuto, col suo riquadro aperto (scene «2a», «3»
-  // e «4» del prototipo `PLAN-ui/disegno-motore.html`).
+  // e «4» del prototipo `PLAN-ui/disegno-motore.html`, che resta nella storia
+  // del ramo `piano/k5-disegno`, fino a 3d13d26e6).
   ...[
     ["draw-engine-on", "acceso", "Il disegno col motore acceso: due parti restano come sono, e «Che cosa manca?» aperto"],
     ["draw-engine-off", "spento", "Il disegno col motore spento: gli strumenti semplici, e «Accendi…»"],
