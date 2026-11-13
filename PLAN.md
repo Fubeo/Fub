@@ -175,9 +175,9 @@ codice, nei rami e nelle issue il 2026-11-05.
 | N1 · FubDraw | In `main` (ADR 0231, tag `fubdraw-completo`). I 42 file `.rs` che nominano FubDraw sono codice vivo: FubDraw è il nome del formato (ADR 0203). La prova byte per byte c'è già: `editors/spatial/corpus-open.test.ts`, `crates/fub-scene/tests/corpus.rs` e i test del provider svg (ADR 0231, «Verifica») | fatto; dentro: il nome dove le persone lo vedono (D14 A) | Cancello passato; resta l'archivio | PA T33; #282, fuori |
 | N2 · MCP | In `main` (`crates/fub-cli/src/mcp.rs`, ADR 0232): 17 strumenti, vedi «Contratti» qui sotto | fatto; dentro: due flussi veri nel giro a mano | L'AI della definizione passa di qui | PA T23 |
 | N3 · la lavagna in Rust | In `main` (#297, #306, #307) | fatto | Base di N4, N6 e della lavagna in codice | — |
-| N4 · l'inchiostro | Ramo: 22 di 25 (T15 la prima misura, 205 ms sotto Xvfb) | dentro | La penna della definizione | `piano/n4-inchiostro`, #298 |
+| N4 · l'inchiostro | Ramo: 23 di 26 (T23 la seconda misura, 174 ms sul foglio vivo; T23a il profilo e la correzione, in corso; T24 aspetta la prova con Obsidian dell'utente) | dentro | La penna della definizione | `piano/n4-inchiostro`, #298 |
 | N5 · strati nativi | Senza piano | fuori | Vedi la tabella sopra | «Prossime fasi» |
-| N6 · la lavagna v1 | Ramo: 58 di 99 (T57 seguire un link) | dentro, senza T79–T85 e T88 | Le lavagne della definizione | `piano/n6-lavagna`, #302 |
+| N6 · la lavagna v1 | Ramo: 90 di 104 (T18 la scheda Craft, T20 la misura S9, T24 dalla misura di N4; T20a nuovo; T22 e T23 aspettano il prototipo visto dall'utente) | dentro, senza T79–T85 e T88 | Le lavagne della definizione | `piano/n6-lavagna`, #302 |
 | N7 · file Craft | In `main` (#299) | fatto | Le anteprime ci sono | — |
 | N8 · DOCX e XLSX | Sostituita da K6–K9 | — | Vedi K3 e K9 | — |
 | N9 · egui o Tauri | Senza piano | fuori | Vedi sopra | «Prossime fasi» |
@@ -190,12 +190,12 @@ codice, nei rami e nelle issue il 2026-11-05.
 | K2 · la pagina «Componenti» | In `main` (#290, cd080044, 2026-11-09); la prova D-2 fatta dall'utente il 2026-11-09 | dentro | I componenti accesi e spenti | `piano/k2-pagina-componenti`, #290; la prova dell'utente prima del merge (D13 A) |
 | K3 · lo strato dei motori | Fatto: in `main` con #295 (fb722164, 2026-11-08, unita dall'utente) | dentro | Word ed Excel | `piano/k3-motori`, #295 |
 | K4, K7–K10 | Senza piano | fuori | Vedi sopra | «Piani di Fub» |
-| K5 · il disegno | Ramo: 13 di 30; T9 fatto (il crate `fub-disegno`, la licenza IJG con eccezione stretta) | dentro | Il disegno SVG | `piano/k5-disegno`, #300 |
+| K5 · il disegno | In `main` il 2026-11-13 (#300, 22559fe3a), CI completa verde | dentro | Il disegno SVG | `main` |
 | K6 · il disegno completo | Ramo: 0 di 30 | fuori | Scelta dell'utente (D24 B) | #313 |
 | Griglia · le celle | Ramo: 2 di 9 (T1 il piano a strati, T2 la carta e le righe che restano); il prototipo approvato dall'utente il 2026-11-07 (D2 A) | dentro | Il foglio che risponde subito | `piano/griglia-celle`, senza PR |
 | L'editor di Fub | `PLAN.md` scritto il 2026-11-11 (100 task in quattro onde, prototipo in `PLAN-ui/editor.html`), PR bozza #335; T1 è la PR #334 | dentro (dal 2026-11-10) | Le note all'altezza di Notion e Obsidian | `piano/editor-completo` |
-| Scrittoio 2 | Ramo: 26 di 29 (T1–T23, T27–T29; main unito, 80bdb5d57; T24 in corso) | dentro | La cornice | `piano/scrittoio-2`, #309 |
-| La lavagna in codice | Ramo: 0 di 26 | dentro | L'AI che disegna e dispone | `piano/lavagna-in-codice`, #311 |
+| Scrittoio 2 | In `main` il 2026-11-12 (#309) | dentro | La cornice | `main` |
+| La lavagna in codice | Ramo: 0 di 26 (main unito il 2026-11-13, f95cc08b5; T1 e T2 in corso) | dentro | L'AI che disegna e dispone | `piano/lavagna-in-codice`, #311 |
 | A1 · la base per l'AI | Ramo: 5 di 13 | dentro (F1) | Le ricette | `piano/a1-base-per-ai`, #305 |
 | #304 · `/orchestra-auto` | PR pronta | fuori dal prodotto | È un attrezzo di lavoro | #304, la decide l'utente |
 | Punto sciolto: il blocco di scrittura in sola lettura | Trovato: `FubSession::invoke_command` prende `write_turn()` anche per i comandi in sola lettura (`crates/fub-host/src/session.rs`); è scritto in DECISIONS (N7, 2026-11-04) ma l'issue non è mai stata aperta | dentro | L'AI legge (MCP, `canvas.read`) mentre la persona scrive | PA T3 |
