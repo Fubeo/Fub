@@ -17,7 +17,7 @@
 //!
 //! Gli id nuovi vengono da un seme del chiamante ([`IdSource`]): stesso
 //! seme, stessi id. Le regole e un esempio per operazione sono nella sezione
-//! «Operazioni» di `docs/reference/canvas-operations.md`.
+//! «Le operazioni» di `docs/reference/canvas-code.md`.
 
 use std::collections::{HashMap, HashSet};
 use std::fmt;
