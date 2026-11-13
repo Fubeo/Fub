@@ -19,6 +19,7 @@
 //! `docs/reference/canvas-format.md`.
 
 pub mod commit;
+pub mod describe;
 pub mod js;
 pub mod layout;
 pub mod model;
