@@ -130,10 +130,11 @@ pub fn snap(value: f64) -> f64 {
 /// La specie di una scheda del modello.
 ///
 /// Un testo è `Text`, un link è `Web`, un gruppo è `Group`. Una scheda `file`
-/// prende la specie dall'estensione del suo percorso, in minuscolo, senza il
-/// `subpath` (che è un campo a parte): `md` e `markdown` sono `Note`, le
-/// estensioni di documento `Document`, quelle di foglio `Sheet`, `pdf` è `Pdf`,
-/// le immagini `Image`. Ogni altra estensione, o nessuna, è `File`.
+/// prende la specie dall'estensione del suo percorso, in minuscolo: la parte
+/// dal primo `#` in poi non conta (il sottopercorso), come nella GUI. `md` e
+/// `markdown` sono `Note`, le estensioni di documento `Document`, quelle di
+/// foglio `Sheet`, `pdf` è `Pdf`, le immagini `Image`. Ogni altra estensione, o
+/// nessuna, è `File`.
 pub fn card_kind(node: &CanvasNode) -> CardKind {
     match node.node_type {
         CanvasNodeType::Text => CardKind::Text,
@@ -144,12 +145,15 @@ pub fn card_kind(node: &CanvasNode) -> CardKind {
 }
 
 /// La specie di un percorso, dall'estensione dell'ultimo componente. Un punto
-/// nelle cartelle non conta: `cartella.v2/nota` non ha estensione.
+/// nelle cartelle non conta: `cartella.v2/nota` non ha estensione. Un punto in
+/// testa al nome non apre un'estensione: `.md` è un nome nascosto, e `File`.
 fn kind_of_path(path: &str) -> CardKind {
+    let path = path.split('#').next().unwrap_or(path);
     let name = path.rsplit('/').next().unwrap_or(path);
-    let Some((_, extension)) = name.rsplit_once('.') else {
+    let Some(point) = name.rfind('.').filter(|&point| point > 0) else {
         return CardKind::File;
     };
+    let extension = &name[point + 1..];
     match extension.to_ascii_lowercase().as_str() {
         "md" | "markdown" => CardKind::Note,
         "docx" | "doc" | "dot" | "rtf" | "odt" => CardKind::Document,

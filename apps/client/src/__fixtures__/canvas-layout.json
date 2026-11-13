@@ -30,6 +30,11 @@
   {"about": "il subpath con un punto non conta: a.md con #b.c è note", "fn": "card_kind", "args": [{"id": "f", "type": "file", "x": 0, "y": 0, "width": 10, "height": 10, "file": "a.md", "subpath": "#b.c"}], "expect": "note"},
   {"about": "un nome che finisce con il punto non ha estensione: dati. è file", "fn": "card_kind", "args": [{"id": "f", "type": "file", "x": 0, "y": 0, "width": 10, "height": 10, "file": "dati."}], "expect": "file"},
   {"about": "il tipo nel percorso (sottocartelle e maiuscole) conta: Relazione.Docx è document", "fn": "card_kind", "args": [{"id": "f", "type": "file", "x": 0, "y": 0, "width": 10, "height": 10, "file": "cartella/sub/Relazione.Docx"}], "expect": "document"},
+  {"about": "un sottopercorso scritto nel campo file non conta: a.md#b.c è note, come nella GUI", "fn": "card_kind", "args": [{"id": "f", "type": "file", "x": 0, "y": 0, "width": 10, "height": 10, "file": "a.md#b.c"}], "expect": "note"},
+  {"about": "un titolo con un punto dopo il # non conta: Nota.md#1.2 Titolo è note", "fn": "card_kind", "args": [{"id": "f", "type": "file", "x": 0, "y": 0, "width": 10, "height": 10, "file": "Nota.md#1.2 Titolo"}], "expect": "note"},
+  {"about": "un punto dopo il # non apre un'estensione: relazione#2.pdf è file", "fn": "card_kind", "args": [{"id": "f", "type": "file", "x": 0, "y": 0, "width": 10, "height": 10, "file": "relazione#2.pdf"}], "expect": "file"},
+  {"about": "un nome nascosto come .md non ha estensione: è file", "fn": "card_kind", "args": [{"id": "f", "type": "file", "x": 0, "y": 0, "width": 10, "height": 10, "file": ".md"}], "expect": "file"},
+  {"about": "un nome nascosto come .pdf non ha estensione: è file", "fn": "card_kind", "args": [{"id": "f", "type": "file", "x": 0, "y": 0, "width": 10, "height": 10, "file": "cartella/.pdf"}], "expect": "file"},
 
   {"about": "testo vuoto: 320 di larghezza e 160 di altezza", "fn": "born_size", "args": ["text", "", null], "expect": [320, 160]},
   {"about": "nessun testo vale come testo vuoto", "fn": "born_size", "args": ["text", null, null], "expect": [320, 160]},
