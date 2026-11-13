@@ -20,6 +20,7 @@
 
 pub mod commit;
 pub mod js;
+pub mod layout;
 pub mod model;
 pub mod ops;
 pub mod patch;
