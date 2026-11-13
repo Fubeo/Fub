@@ -16,7 +16,7 @@
 
 use std::collections::BTreeMap;
 
-use fub_canvas_core::commit::{Changed, CommitError, Core};
+use fub_canvas_core::commit::{Changed, CommitError, Core, LayerChange};
 use fub_canvas_core::ink::{board_layer, node_layer, LayerRead, LayerState, StrokeState, INK_KEY};
 use fub_canvas_core::model::{Canvas, CanvasError, CanvasNode, MAX_SOURCE_BYTES};
 use fub_canvas_core::ops::{compile, CanvasOp, OpError};
@@ -304,10 +304,16 @@ impl Cores {
     ///
     /// Se il commit ha cambiato soltanto livelli d'inchiostro (di schede che
     /// restano al loro posto, o quello della radice che c'era e c'è ancora)
-    /// c'è anche `"changed": {"nodes": [{"at", "node"}], "root": {...}}`:
-    /// le schede riscritte con la loro posizione in `nodes`, e le chiavi
-    /// della radice riscritte, come le darebbe il modello. Senza `changed`
-    /// il modello si rilegge intero.
+    /// c'è anche `changed`: `{"nodes": [...], "root": {...}, "board"?}`.
+    /// Ogni voce di `nodes` è una scheda riscritta, con la sua posizione:
+    /// `{"at", "node"}` la dà intera, `{"at", "id", "strokes"}` dice che
+    /// è cambiata solo la lista dei tratti del suo livello. `root` ha le
+    /// chiavi della radice riscritte intere, `board` il cambio della sola
+    /// lista dei tratti della radice. Un cambio della lista è
+    /// `{"start", "remove", "insert"}`: i tratti da `start` a
+    /// `start + remove` sono diventati `insert`. Messo sul modello di prima,
+    /// `changed` dà quello che darebbe il modello; senza, il modello si
+    /// rilegge intero.
     pub fn commit(&mut self, handle: Handle, request: &[u8]) -> Result<String, Failure> {
         let patches = patches(request)?;
         let open = self.open_mut(handle)?;
@@ -336,14 +342,15 @@ impl Cores {
         let canvas = open.core.canvas();
         match &committed.changed {
             Changed::Ink { nodes, board } => {
+                let positions: Vec<usize> = nodes.iter().map(|(at, _)| *at).collect();
                 let followed = open
                     .ink
                     .as_mut()
-                    .is_some_and(|ink| ink.follow(canvas, nodes, *board));
+                    .is_some_and(|ink| ink.follow(canvas, &positions, board.is_some()));
                 if !followed {
                     open.ink = None;
                 }
-                answer["changed"] = changed(canvas, nodes, *board)?;
+                answer["changed"] = changed(canvas, nodes, board.as_ref())?;
             }
             Changed::Whole => open.ink = None,
         }
@@ -453,27 +460,51 @@ fn layer_json(read: &LayerRead) -> Value {
 
 /// Quello che un commit di un tratto ha cambiato, nella forma di
 /// `changed` di [`Cores::commit`].
-fn changed(canvas: &Canvas, nodes: &[usize], board: bool) -> Result<Value, Failure> {
+fn changed(
+    canvas: &Canvas,
+    nodes: &[(usize, LayerChange)],
+    board: Option<&LayerChange>,
+) -> Result<Value, Failure> {
     let nodes = nodes
         .iter()
-        .map(|&at| {
+        .map(|(at, change)| {
             let node = canvas
                 .nodes
-                .get(at)
+                .get(*at)
                 .ok_or_else(|| Failure::internal(format!("the changed card {at} is missing")))?;
-            let node = node_value(node).map_err(Failure::internal)?;
-            Ok(json!({ "at": at, "node": node }))
+            Ok(match strokes_json(change) {
+                Some(strokes) => json!({ "at": at, "id": node.id, "strokes": strokes }),
+                None => json!({ "at": at, "node": node_value(node).map_err(Failure::internal)? }),
+            })
         })
         .collect::<Result<Vec<_>, Failure>>()?;
-    let mut root = Map::new();
-    if board {
-        let value = canvas
-            .extra
-            .get(INK_KEY)
-            .ok_or_else(|| Failure::internal("the changed board layer is missing"))?;
-        root.insert(INK_KEY.to_owned(), value.clone());
+    let mut answer = json!({ "nodes": nodes, "root": {} });
+    if let Some(change) = board {
+        match strokes_json(change) {
+            Some(strokes) => answer["board"] = strokes,
+            None => {
+                let value = canvas
+                    .extra
+                    .get(INK_KEY)
+                    .ok_or_else(|| Failure::internal("the changed board layer is missing"))?;
+                answer["root"][INK_KEY] = value.clone();
+            }
+        }
     }
-    Ok(json!({ "nodes": nodes, "root": root }))
+    Ok(answer)
+}
+
+/// Un cambio della sola lista dei tratti come `{"start", "remove", "insert"}`;
+/// `None` per un livello da prendere intero.
+fn strokes_json(change: &LayerChange) -> Option<Value> {
+    match change {
+        LayerChange::Whole => None,
+        LayerChange::Strokes {
+            start,
+            remove,
+            insert,
+        } => Some(json!({ "start": start, "remove": remove, "insert": insert })),
+    }
 }
 
 /// Le unità UTF-16 di `text`, senza codificarlo: una per carattere, due
@@ -513,6 +544,15 @@ mod tests {
         ];
         for text in texts {
             assert_eq!(utf16_units(text), text.encode_utf16().count(), "{text:?}");
+            // Ogni posizione rispetto alle parole di otto byte.
+            for shift in 0..8 {
+                let moved = format!("{}{text}", "x".repeat(shift));
+                assert_eq!(
+                    utf16_units(&moved),
+                    moved.encode_utf16().count(),
+                    "{text:?} da {shift}"
+                );
+            }
             let long = text.repeat(37);
             assert_eq!(
                 utf16_units(&long),

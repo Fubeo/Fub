@@ -443,11 +443,18 @@ sotto. `src/api.rs` è il livello sicuro (una tabella di lavagne per handle),
   altro `canvas_commit`.
   Un commit che cambia soltanto livelli d'inchiostro (di schede che restano
   al loro posto, o quello della radice che c'era e c'è ancora) porta anche
-  `changed`: `{"nodes": [{"at", "node"}], "root": {chiave: valore}}`, le
-  schede riscritte con la loro posizione in `nodes` e le chiavi della radice
-  riscritte, come le darebbe `canvas_model`; messe sul modello di prima danno
-  quello di dopo. Senza `changed` il modello si rilegge intero. Il nucleo fa
-  un commit così senza rileggere la lavagna: ritocca e rilegge solo il testo
+  `changed`: `{"nodes": [...], "root": {...}}`, più `board` se serve.
+  Ogni voce di `nodes` è una scheda riscritta con la sua posizione:
+  `{"at", "node"}` la dà intera (il suo livello è nato o sparito, o è
+  cambiato oltre i tratti), `{"at", "id", "strokes"}` dice che è cambiata
+  solo la lista `strokes` del suo livello. `root` ha le chiavi della radice
+  riscritte intere, `board` il cambio della sola lista dei tratti della
+  radice. Un cambio della lista è `{"start", "remove", "insert"}`: i tratti
+  da `start` a `start + remove` sono diventati `insert`, e gli altri campi
+  del livello restano quelli, nel loro ordine. Messo sul modello di prima,
+  `changed` dà quello che darebbe `canvas_model` (`changedModel` di
+  `core.ts`); senza `changed` il modello si rilegge intero. Il nucleo fa un
+  commit così senza rileggere la lavagna: ritocca e rilegge solo il testo
   delle parti cambiate (`fub-canvas-core/src/commit.rs`), e scrive gli
   stessi byte del ritocco di tutto il testo.
 - `canvas_preview` dà il sorgente che darebbe `canvas_commit` con le stesse
@@ -547,7 +554,8 @@ wasm32-unknown-unknown`).
 `compile`, `nodeAt`, `inkLayers` e `close`. `inkLayers` chiede i livelli al
 nucleo una volta per testo (apertura, `reset`, `commit`) e fino al cambio
 ridà lo stesso array congelato; lo usano i costruttori dei tratti di
-`operation.ts` e `inkLayerStates` di `ink-record.ts`. Rilegge le viste della memoria dopo ogni
+`operation.ts` e `inkLayerStates` di `ink-record.ts`. Dopo un commit con `changed` la tela fa il
+suo modello da quello di prima con `changedModel`, senza `model()`. Rilegge le viste della memoria dopo ogni
 chiamata e libera ogni ingresso con `fub_free`, anche quando la chiamata
 fallisce. Un testo con un surrogato spaiato è un errore `utf8` prima di
 arrivare al modulo, mai un U+FFFD. Gli errori sono `CanvasCoreError` con i

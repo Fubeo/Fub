@@ -261,6 +261,43 @@ describe("la penna scrive sulla lavagna", () => {
     expect(engine.undo()).toBe(false);
   });
 
+  it("il rilascio di un tratto non rilegge il modello della lavagna: lo fa da quello che il commit ha cambiato (T20e)", () => {
+    const { engine, host, changes, calls } = mounted();
+    /** Il modello di una lavagna aperta da capo sul testo, con le chiavi nel loro ordine. */
+    const fresh = (text: string) => {
+      const core = openCoreNow(text)!;
+      try {
+        return JSON.stringify(core.model());
+      } finally {
+        core.close();
+      }
+    };
+    const strokes: [Element, [number, number][], boolean][] = [
+      // Il primo tratto della nota: il suo livello nasce dentro la scheda.
+      [card(host, "t"), across(0, 0), false],
+      [card(host, "t"), across(0, 10), false],
+      // Il primo tratto libero fa nascere la chiave della radice: si rilegge tutto.
+      [viewportOf(host), [[100, 300], [140, 320], [180, 330]], true],
+      [viewportOf(host), [[100, 400], [140, 420], [180, 430]], false],
+      [card(host, "doc"), across(600, 0), false],
+    ];
+    for (const [target, world, whole] of strokes) {
+      calls.length = 0;
+      pen(host, target, world);
+      expect(calls.filter((name) => name === "commit")).toHaveLength(1);
+      expect(calls.includes("model")).toBe(whole);
+      expect(JSON.stringify(engine.doc())).toBe(fresh(lastChange(changes).text));
+    }
+    expect(strokesOf(lastChange(changes).text, "t")).toHaveLength(2);
+    expect(strokesOf(lastChange(changes).text, null)).toHaveLength(2);
+    // L'annulla di un tratto passa per lo stesso commit, e il modello resta quello del testo.
+    for (let k = 0; k < strokes.length; k += 1) {
+      expect(engine.undo()).toBe(true);
+      expect(JSON.stringify(engine.doc())).toBe(fresh(lastChange(changes).text));
+    }
+    expect(lastChange(changes).text).toBe(BOARD);
+  });
+
   it("annulla e ripeti vanno per tratto e ridanno il testo di prima byte per byte, senza rifare le schede", () => {
     const { engine, host, changes } = mounted();
     pen(host, card(host, "t"), across(0, 0));

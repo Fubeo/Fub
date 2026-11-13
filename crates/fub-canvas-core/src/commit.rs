@@ -91,10 +91,70 @@ pub enum Changed {
     #[default]
     Whole,
     /// Solo il livello `fub:ink` delle schede in queste posizioni di `nodes`
-    /// (crescenti, senza doppioni) e, se `board`, quello della radice, che
-    /// c'era e c'è ancora. Le schede non cambiano posto né numero, e le altre
-    /// chiavi della radice restano com'erano.
-    Ink { nodes: Vec<usize>, board: bool },
+    /// (crescenti, senza doppioni), ognuno col suo cambio, e, se c'è,
+    /// quello della radice, che c'era e c'è ancora. Le schede non cambiano
+    /// posto né numero, gli altri campi delle schede e le altre chiavi della
+    /// radice restano com'erano.
+    Ink {
+        nodes: Vec<(usize, LayerChange)>,
+        board: Option<LayerChange>,
+    },
+}
+
+/// Com'è cambiato un livello d'inchiostro, nella forma del modello
+/// ([`crate::source::canvas_value`]).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum LayerChange {
+    /// Il livello è nato, è sparito o è cambiato oltre la lista dei tratti:
+    /// chi tiene il modello prende la parte intera.
+    Whole,
+    /// Solo la lista `strokes`: i tratti da `start` a `start + remove` sono
+    /// diventati `insert`. Gli altri tratti e gli altri campi del livello,
+    /// col loro ordine, sono quelli di prima.
+    Strokes {
+        start: usize,
+        remove: usize,
+        insert: Vec<Value>,
+    },
+}
+
+impl LayerChange {
+    /// Il cambio dal livello `before` al livello `after` (i valori di
+    /// `fub:ink`, o `None` senza la chiave): il prefisso e il suffisso
+    /// comuni più lunghi della lista dei tratti che non si sovrappongono.
+    pub fn between(before: Option<&Value>, after: Option<&Value>) -> Self {
+        let (Some(Value::Object(before)), Some(Value::Object(after))) = (before, after) else {
+            return Self::Whole;
+        };
+        let (Some(Value::Array(old)), Some(Value::Array(new))) =
+            (before.get("strokes"), after.get("strokes"))
+        else {
+            return Self::Whole;
+        };
+        // Gli altri campi uguali e nello stesso ordine, e `strokes` allo stesso posto.
+        let same_fields = before.len() == after.len()
+            && before
+                .iter()
+                .zip(after)
+                .all(|((key, one), (other, two))| key == other && (key == "strokes" || one == two));
+        if !same_fields {
+            return Self::Whole;
+        }
+        let prefix = old.iter().zip(new).take_while(|(a, b)| a == b).count();
+        let room = old.len().min(new.len()) - prefix;
+        let suffix = old
+            .iter()
+            .rev()
+            .zip(new.iter().rev())
+            .take(room)
+            .take_while(|(a, b)| a == b)
+            .count();
+        Self::Strokes {
+            start: prefix,
+            remove: old.len() - prefix - suffix,
+            insert: new[prefix..new.len() - suffix].to_vec(),
+        }
+    }
 }
 
 /// Una parte della lavagna che un commit di sole toppe `ink` riscrive.
@@ -313,25 +373,27 @@ impl Core {
                 self.index = None;
             }
         }
-        let positions = nodes.iter().map(|(at, _)| *at).collect();
+        let mut changed = Vec::with_capacity(nodes.len());
         for (at, node) in nodes {
             if let Some(slot) = self.canvas.nodes.get_mut(at) {
+                let change = LayerChange::between(slot.extra.get(INK_KEY), node.extra.get(INK_KEY));
                 *slot = node;
+                changed.push((at, change));
             }
         }
-        let board_changed = board.is_some();
-        if let Some(value) = board {
+        let board = board.map(|value| {
             // La chiave c'era: `insert` la lascia al suo posto.
-            self.canvas.extra.insert(INK_KEY.to_owned(), value);
-        }
+            let before = self.canvas.extra.insert(INK_KEY.to_owned(), value);
+            LayerChange::between(before.as_ref(), self.canvas.extra.get(INK_KEY))
+        });
         self.source.clone_from(&source);
         Committed {
             source,
             inverse: patch::inverse(patches),
             edit,
             changed: Changed::Ink {
-                nodes: positions,
-                board: board_changed,
+                nodes: changed,
+                board,
             },
         }
     }

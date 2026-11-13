@@ -67,6 +67,43 @@ fn strokes(core: &Core, layer: &LayerRef) -> Vec<InkStroke> {
         .unwrap_or_default()
 }
 
+/// Il modello `before` col cambio `changed` (come lo mette la tela): le
+/// schede di un cambio intero si prendono da `canvas`, le altre si
+/// ritoccano nella lista dei tratti. `None` per `Changed::Whole`.
+fn applied(before: &Value, changed: &Changed, canvas: &Canvas) -> Option<Value> {
+    let Changed::Ink { nodes, board } = changed else {
+        return None;
+    };
+    let splice = |layer: &mut Value, change: &LayerChange, whole: Value| match change {
+        LayerChange::Whole => *layer = whole,
+        LayerChange::Strokes {
+            start,
+            remove,
+            insert,
+        } => {
+            let strokes = layer["strokes"].as_array_mut().expect("strokes");
+            strokes.splice(*start..start + remove, insert.iter().cloned());
+        }
+    };
+    let mut model = before.clone();
+    for (at, change) in nodes {
+        let node = crate::source::node_value(&canvas.nodes[*at]).expect("si scrive");
+        match change {
+            LayerChange::Whole => model["nodes"][*at] = node,
+            change => splice(&mut model["nodes"][*at][INK_KEY], change, Value::Null),
+        }
+    }
+    if let Some(change) = board {
+        let whole = canvas.extra[INK_KEY].clone();
+        assert!(
+            model.get(INK_KEY).is_some(),
+            "il livello della radice c'era"
+        );
+        splice(&mut model[INK_KEY], change, whole);
+    }
+    Some(model)
+}
+
 /// Fa il commit con `core` e lo confronta con quello di tutto il testo su
 /// una copia: stesso esito, stesso sorgente, stesso tratto, stesso modello
 /// (anche nell'ordine delle chiavi), stessa anteprima; dopo, il modello è
@@ -95,6 +132,17 @@ fn check(core: &mut Core, patches: &[CanvasPatch]) -> bool {
                     Some(index),
                     SourceIndex::new(core.source()).as_ref(),
                     "l'indice al passo"
+                );
+            }
+            // Il cambio detto, messo sul modello di prima, dà quello di dopo.
+            let before = crate::source::canvas_value(oracle.canvas()).expect("si scrive");
+            let after = crate::source::canvas_value(core.canvas()).expect("si scrive");
+            if let Some(changed) = applied(&before, &committed.changed, core.canvas()) {
+                assert_eq!(changed, after, "il cambio detto");
+                assert_eq!(
+                    changed.to_string(),
+                    after.to_string(),
+                    "l'ordine delle chiavi"
                 );
             }
             matches!(committed.changed, Changed::Ink { .. })
@@ -429,8 +477,15 @@ fn a_stroke_does_not_read_the_whole_board() {
     assert_eq!(
         committed.changed,
         Changed::Ink {
-            nodes: vec![1000],
-            board: false
+            nodes: vec![(
+                1000,
+                LayerChange::Strokes {
+                    start: 500,
+                    remove: 0,
+                    insert: vec![core.canvas().nodes[1000].extra[INK_KEY]["strokes"][500].clone()],
+                }
+            )],
+            board: None
         }
     );
 
@@ -492,4 +547,61 @@ fn the_edit_of_one_splice_is_the_minimal_edit() {
             "{before:?} → {after:?}"
         );
     }
+}
+
+#[test]
+fn a_layer_change_is_the_splice_of_the_strokes_or_the_whole_layer() {
+    let layer = |strokes: &[&str]| json!({"v": 1, "strokes": strokes.iter().map(|id| json!({"id": id})).collect::<Vec<_>>()});
+    let splice = |start, remove, insert: &[&str]| LayerChange::Strokes {
+        start,
+        remove,
+        insert: insert.iter().map(|id| json!({"id": id})).collect(),
+    };
+    let between = |before: &Value, after: &Value| LayerChange::between(Some(before), Some(after));
+    assert_eq!(
+        between(&layer(&["a", "c"]), &layer(&["a", "b", "c"])),
+        splice(1, 0, &["b"])
+    );
+    assert_eq!(
+        between(&layer(&["a", "b"]), &layer(&["a", "b", "c"])),
+        splice(2, 0, &["c"])
+    );
+    assert_eq!(
+        between(&layer(&["a", "b", "c"]), &layer(&["a", "c"])),
+        splice(1, 1, &[])
+    );
+    assert_eq!(
+        between(&layer(&["a", "b", "c"]), &layer(&["a", "x", "y", "c"])),
+        splice(1, 1, &["x", "y"])
+    );
+    // Prefisso e suffisso non si sovrappongono: due uguali, uno via.
+    assert_eq!(
+        between(&layer(&["a", "a"]), &layer(&["a"])),
+        splice(1, 1, &[])
+    );
+    assert_eq!(
+        between(&layer(&["a"]), &layer(&["a", "a"])),
+        splice(1, 0, &["a"])
+    );
+    assert_eq!(between(&layer(&["a"]), &layer(&["a"])), splice(1, 0, &[]));
+    // Il livello che nasce o sparisce, un altro campo, un altro ordine: intero.
+    assert_eq!(
+        LayerChange::between(None, Some(&layer(&["a"]))),
+        LayerChange::Whole
+    );
+    assert_eq!(
+        LayerChange::between(Some(&layer(&["a"])), None),
+        LayerChange::Whole
+    );
+    let mut other = layer(&["a", "b"]);
+    other["v"] = json!(2);
+    assert_eq!(between(&layer(&["a"]), &other), LayerChange::Whole);
+    let turned = json!({"strokes": [{"id": "a"}, {"id": "b"}], "v": 1});
+    assert_eq!(between(&layer(&["a"]), &turned), LayerChange::Whole);
+    let extra = json!({"v": 1, "strokes": [{"id": "a"}], "x": 0});
+    assert_eq!(between(&layer(&["a"]), &extra), LayerChange::Whole);
+    assert_eq!(
+        between(&json!({"v": 1, "strokes": 3}), &layer(&["a"])),
+        LayerChange::Whole
+    );
 }

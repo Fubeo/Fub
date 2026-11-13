@@ -340,11 +340,34 @@ pub fn card_stroke(id: &str) -> Value {
 
 /// Il modello di prima più il `changed` di un commit: le schede riscritte al
 /// loro posto, le chiavi della radice riscritte dove stavano.
-pub fn apply_changed(model: &Value, changed: &Value) -> Value {
+pub fn apply_changed(model: &Value, changed: &Value) -> (Value, usize) {
     let mut model = model.clone();
+    let mut spliced = 0;
+    let splice = |layer: &mut Value, change: &Value| {
+        let start = change["start"].as_u64().expect("start") as usize;
+        let remove = change["remove"].as_u64().expect("remove") as usize;
+        let insert = change["insert"].as_array().expect("insert").clone();
+        let strokes = layer["strokes"]
+            .as_array_mut()
+            .expect("il livello ha strokes");
+        assert!(
+            start + remove <= strokes.len(),
+            "{change} fuori dalla lista"
+        );
+        strokes.splice(start..start + remove, insert);
+    };
     for entry in changed["nodes"].as_array().expect("changed.nodes") {
         let at = entry["at"].as_u64().expect("at") as usize;
-        model["nodes"][at] = entry["node"].clone();
+        if let Some(node) = entry.get("node") {
+            model["nodes"][at] = node.clone();
+        } else {
+            assert_eq!(
+                model["nodes"][at]["id"], entry["id"],
+                "la scheda al suo posto"
+            );
+            splice(&mut model["nodes"][at]["fub:ink"], &entry["strokes"]);
+            spliced += 1;
+        }
     }
     for (key, value) in changed["root"].as_object().expect("changed.root") {
         assert!(
@@ -353,7 +376,11 @@ pub fn apply_changed(model: &Value, changed: &Value) -> Value {
         );
         model[key] = value.clone();
     }
-    model
+    if let Some(board) = changed.get("board") {
+        splice(&mut model["fub:ink"], board);
+        spliced += 1;
+    }
+    (model, spliced)
 }
 
 /// I commit di un tratto, uno dopo l'altro: il loro `changed` sul modello di
@@ -403,6 +430,7 @@ pub fn stroke_commits_follow_the_model(via: &mut impl Via) {
     ];
     let mut inverses = Vec::new();
     let mut ink_commits = 0;
+    let mut spliced = 0;
     let mut step = 0;
     while step < requests.len() {
         let request = requests[step].clone();
@@ -417,7 +445,8 @@ pub fn stroke_commits_follow_the_model(via: &mut impl Via) {
                     only_ink,
                     "{changed}: changed per un commit che non è di tratti"
                 );
-                let patched = apply_changed(&model, changed);
+                let (patched, splices) = apply_changed(&model, changed);
+                spliced += splices;
                 assert_eq!(patched, now, "il changed del passo {step}");
                 assert_eq!(
                     serde_json::to_string(&patched).expect("si scrive"),
@@ -447,6 +476,9 @@ pub fn stroke_commits_follow_the_model(via: &mut impl Via) {
         ink_commits >= 10,
         "solo {ink_commits} commit hanno seguito il modello"
     );
+    // I più dicono solo la lista dei tratti; il livello che nasce o sparisce
+    // in una scheda la dà intera.
+    assert!(spliced >= 8, "solo {spliced} cambi della lista dei tratti");
     assert_eq!(model, opened["canvas"], "l'annulla di tutto");
     via.close(handle).expect("close");
 }

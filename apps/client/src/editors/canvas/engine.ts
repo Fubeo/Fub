@@ -201,7 +201,9 @@ import { GUIDE_SCREEN_PX, snapGuides, type GuideRect, type GuideResult, type Gui
 import {
   CanvasCoreError,
   canvasCoreReady,
+  changedModel,
   openCoreNow,
+  type CanvasCommitted,
   type CanvasCore,
   type CanvasCoreErrorCode,
   type CanvasInkLayer,
@@ -2758,7 +2760,7 @@ export class CanvasEngine {
     const core = this.#core;
     if (!core) return "trap";
     const before = this.#source;
-    let committed: { readonly edit: CanvasSourceEdit; readonly inverse: CanvasPatch[] };
+    let committed: CanvasCommitted;
     try {
       committed = core.commit(patches);
     } catch (error) {
@@ -2775,7 +2777,10 @@ export class CanvasEngine {
     const restores = this.#version;
     this.#source = after;
     this.#version = ++this.#versions;
-    this.#doc = this.#coreModel() ?? this.#doc;
+    // Un commit di soli tratti dice che cosa ha cambiato: il modello nuovo
+    // si fa da quello di prima, senza rileggere la lavagna intera (T20e).
+    const changed = committed.changed && this.#doc ? changedModel(this.#doc, committed.changed) : null;
+    this.#doc = changed ?? this.#coreModel() ?? this.#doc;
     // Una modifica nuova: l'avviso di un togliere di prima se ne va (T17).
     this.#dropRemoval();
     const operation: CanvasOperation = {
