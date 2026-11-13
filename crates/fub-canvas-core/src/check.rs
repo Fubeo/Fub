@@ -106,9 +106,10 @@ pub enum Code {
     WrongType,
     /// Un valore fuori dall'elenco ammesso.
     BadValue,
-    /// Un id di scheda (o di arco, per `remove` e `set`) che non c'è.
+    /// Un id di scheda che non c'è: `move`, `resize`, `reorder`, o un estremo di
+    /// `connect`.
     UnknownNode,
-    /// Un id che non è né una scheda né un arco.
+    /// Un id che non è né una scheda né un arco: `remove` o `set`.
     UnknownEdge,
     /// Un id che è già preso, o ripetuto nella stessa operazione.
     DuplicateId,
@@ -201,8 +202,8 @@ impl Problem {
     }
 }
 
-/// Un avviso su una scheda che la lista tocca. Non dice niente che la lettura
-/// di dopo non dica: dice dove guardare.
+/// Un avviso su una scheda che la lista tocca, con le schede coinvolte: dove
+/// guardare nella lettura di dopo.
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct Warning {
     pub code: WarningCode,
@@ -375,9 +376,9 @@ fn warnings(after: &Canvas, touched: &HashSet<&str>) -> Vec<Warning> {
     warnings
 }
 
-/// Se la scheda di testo è più alta del testo che ha: l'altezza stimata da
-/// [`estimate_text_height`], se è più di quella data. Le altre specie non si
-/// misurano così.
+/// L'altezza che [`estimate_text_height`] vuole per il testo di una scheda di
+/// testo, se è più di quella che la scheda ha. Le altre schede non hanno un
+/// testo da misurare.
 fn text_overflow(node: &CanvasNode) -> Option<i64> {
     if node.node_type != CanvasNodeType::Text {
         return None;
@@ -387,8 +388,8 @@ fn text_overflow(node: &CanvasNode) -> Option<i64> {
     (needed > node.height as f64).then_some(needed as i64)
 }
 
-/// Se le due schede si coprono. È la regola di posto di [`layout`]: un bordo che
-/// combacia non conta.
+/// Se le due schede si coprono, con la regola di [`crate::layout`]: un bordo
+/// che combacia non conta.
 fn covers(first: &CanvasNode, second: &CanvasNode) -> bool {
     overlaps(&Rect::of_node(first), &Rect::of_node(second))
 }
