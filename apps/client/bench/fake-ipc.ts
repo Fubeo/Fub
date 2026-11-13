@@ -62,6 +62,7 @@ import { SPECS as SLASH_SPECS } from "../src/panels/slash/fixture.test-data";
 import { CONNECTORS_DOC, connectorsFixture, type ConnectorsFixture } from "./connectors-fixture";
 import { LARGE_DOC, largeFixture, type LargeFixture } from "./large-fixture";
 import { LIVE_DOC, liveCase } from "./live-fixture";
+import { treeFixture, type TreeFixture } from "./vault-fixture";
 import { PHOTO_CRAFT, photoCase, photoResources } from "./photo-fixture";
 import {
   craftSceneCase,
@@ -110,6 +111,34 @@ type ConnectorsBenchMetadata = Readonly<{
     digest: string;
   }> | null;
 }>;
+
+/// Ciò che il banco dell'albero (`tree.mjs`) legge del vault che apre: le
+/// cartelle, la catena, il nome lungo e la nota da cercare, e quando ogni
+/// elenco dell'albero è arrivato al client.
+type TreeBenchMetadata = Readonly<{
+  fixture: Readonly<{
+    total: number;
+    folders: TreeFixture["folders"];
+    big: string;
+    chain: TreeFixture["chain"];
+    deepest: string;
+    longName: string;
+    target: string;
+    digest: string;
+  }> | null;
+  arrivals: TreeArrival[];
+}>;
+
+/// Un elenco che l'albero chiede all'indice: le cartelle o le voci, di una
+/// cartella (`scope`, `null` per tutto il vault), con l'ora della domanda e
+/// quella della risposta, in millisecondi dall'avvio della pagina.
+type TreeArrival = {
+  kind: "folders" | "entries";
+  scope: string | null;
+  descendants: boolean | null;
+  requestedAt: number;
+  answeredAt: number;
+};
 
 /// Ciò che il banco delle scene grandi (`large.mjs`) legge del disegno che
 /// apre: dove sta, quanto è grande, il rettangolo da scegliere.
@@ -240,6 +269,29 @@ globalThis.__fubLargeBench = Object.freeze({
         digest: LARGE.digest,
       })
     : null,
+});
+
+// `?vault=5000` mette nel vault i cinquemila file del banco dell'albero
+// (`vault-fixture.ts`), e basta: né il corpus né la scenografia, perché
+// l'albero conta i file del vault e non deve contarne altri. `TREE_ARRIVALS`
+// dice quando ogni elenco arriva al client: il primo disegno si misura da lì.
+const TREE: TreeFixture | null = params.get("vault") === "5000" ? treeFixture() : null;
+const TREE_ARRIVALS: TreeArrival[] = [];
+
+globalThis.__fubTreeBench = Object.freeze({
+  fixture: TREE
+    ? Object.freeze({
+        total: TREE.total,
+        folders: TREE.folders,
+        big: TREE.big,
+        chain: TREE.chain,
+        deepest: TREE.deepest,
+        longName: TREE.longName,
+        target: TREE.target,
+        digest: TREE.digest,
+      })
+    : null,
+  arrivals: TREE_ARRIVALS,
 });
 
 // `?live=<caso>` mette nel vault la nota delle scene della Live
@@ -1505,7 +1557,7 @@ const TREES: Record<string, UiNode> = {
 // ---------------------------------------------------------------------------
 
 const options: Options = {
-  file: NEW_VAULT ? {} : {
+  file: TREE !== null ? TREE.files : NEW_VAULT ? {} : {
     ...CORPUS,
     ...(DRAWING === null ? {} : { [DRAWING.doc]: DRAWING.text }),
     // Il testo di una cartella è il suo giornale, vuoto sul disco.
@@ -1517,7 +1569,7 @@ const options: Options = {
     ...(PDF_SCENE === null ? {} : pdfSceneFiles(PDF_SCENE)),
     ...(TREE_SCENE === null ? {} : treeSceneFiles()),
   },
-  resources: NEW_VAULT ? {} : {
+  resources: TREE !== null || NEW_VAULT ? {} : {
     ...RESOURCES,
     ...(PHOTO === null ? {} : photoResources(PHOTO)),
     ...(CRAFT_SCENE === null ? {} : craftSceneResources()),
@@ -1597,6 +1649,7 @@ declare global {
   var __fubGraphBench: GraphBenchMetadata;
   var __fubConnectorsBench: ConnectorsBenchMetadata;
   var __fubLargeBench: LargeBenchMetadata;
+  var __fubTreeBench: TreeBenchMetadata;
   var __fubLiveBench: Readonly<{ doc: string | null; cursor: number | null; head: number | null }>;
   interface Window {
     bench: {
@@ -1771,6 +1824,24 @@ function snippetOf(doc: string, text: string): Pick<DocumentMatch, "snippet" | "
   return { snippet, highlights };
 }
 
+/// Quando l'indice risponde un elenco dell'albero, per `tree.mjs`: la domanda
+/// e la risposta, con l'ora di ciascuna. Senza il banco dell'albero la risposta
+/// passa com'è, e non si registra niente.
+async function timedQuery(q: IndexQuery, answer: () => Promise<IndexResult>): Promise<IndexResult> {
+  if (TREE === null || (q.kind !== "folders" && q.kind !== "entries")) return answer();
+  const requestedAt = performance.now();
+  const result = await answer();
+  const scope = q.kind === "folders" ? q.under : q.within;
+  TREE_ARRIVALS.push({
+    kind: q.kind,
+    scope: scope?.path ?? null,
+    descendants: scope?.descendants ?? null,
+    requestedAt,
+    answeredAt: performance.now(),
+  });
+  return result;
+}
+
 export const api: typeof host.module.api = {
   ...behind,
   invokeCommand: async (id, args, ...rest) => {
@@ -1794,7 +1865,7 @@ export const api: typeof host.module.api = {
     }
     return behind.invokeCommand(id, args, ...rest);
   },
-  queryIndex: async (q) => {
+  queryIndex: (q) => timedQuery(q, async () => {
     // Le note con un'icona (`icon:` nel frontmatter), come le legge l'indice:
     // il finto non sa leggere le proprietà, e del banco ce l'ha solo la nota
     // della Live delle scene della pagina.
@@ -1836,7 +1907,7 @@ export const api: typeof host.module.api = {
       }
     }
     return HOST_TEXT.has(q.kind) ? inShellLanguage(result) : result;
-  },
+  }),
   listViews: async (vault) => inShellLanguage(await behind.listViews(vault)),
   listCommands: async (vault) => inShellLanguage(await behind.listCommands(vault)),
   renderView: (view, instance, params) => {
