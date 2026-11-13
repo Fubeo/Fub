@@ -95,6 +95,16 @@ foglio vero dentro la lavagna: è lei a chiudere la voce, se la meta è raggiunt
 | 2026-11-09 | Debian 13, kernel 6.12, WebKitGTK 2.54 sotto Xvfb | AMD Ryzen 7 7730U, condivisa | [La penna sulla lavagna, la prima misura](lavagna-inchiostro-2026-11-09.md) |
 | 2026-11-11 | Debian 13, kernel 6.12, WebKitGTK 2.54 sotto Xvfb e sullo schermo | Intel Core i5-13600KF, GPU RTX 4070 sullo schermo | [Il foglio vivo sulla lavagna, la seconda misura](lavagna-inchiostro-foglio-2026-11-11.md) |
 
+## I fogli vivi sulla lavagna
+
+La misura del cancello di N6 (S9 di
+[`bench/webview/run.mjs`](../../apps/client/bench/webview/run.mjs)): la
+lavagna di S3 con venti fogli `.xlsx` vivi, spostata e ingrandita come S3.
+
+| Data | Sistema | Macchina | Pagina |
+|---|---|---|---|
+| 2026-11-13 | Debian 13, kernel 6.12, WebKitGTK 2.54 sotto Xvfb | Intel Core i5-13600KF, condivisa, senza GPU sotto Xvfb | [La lavagna con venti fogli vivi](2026-11-13-lavagna-fogli-vivi-s9.md) |
+
 ## Le librerie a runtime
 
 La prova del livello 3 del piano dei componenti
