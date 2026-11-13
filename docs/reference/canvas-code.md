@@ -449,7 +449,8 @@ cinque campi:
 |---|---|
 | `ok` | la lista si scrive: non ci sono problemi |
 | `problems` | i problemi, con la forma di quelli di `validate`; la compilazione si ferma al primo |
-| `warnings` | gli avvisi sulle schede che la lista tocca, `{code, ids, estimated_height?}` |
+| `warnings` | gli avvisi sulle schede che la lista tocca, `{code, ids, estimated_height?}`: al più 100 |
+| `warnings_omitted` | quanti avvisi non entrano in `warnings`: sempre presente, di solito `0`. Il conto è esatto |
 | `summary` | che cosa cambia, come si legge sotto; `null` se `ok` è falso |
 | `outline_after` | la lettura di dopo, come `outline`; `null` se `ok` è falso |
 
@@ -465,7 +466,7 @@ nessuna.
 | `unknown_edge` | `remove` o `set` con un id che non è né una scheda né un arco | le schede e gli archi col nome vicino |
 | `duplicate_id` | un id dato che c'è già, o ripetuto nella stessa operazione | — |
 | `too_many` | la lavagna avrebbe più di 100 000 schede o 200 000 archi | — |
-| `invalid` | una scheda o un arco che il formato non accetta; `message` dice il motivo | — |
+| `invalid` | una scheda o un arco che il formato non accetta, col motivo in `message`; un'operazione che la forma accetta e serde no, con la frase fissa `the operation does not match its schema` | — |
 
 I nomi vicini sono quelli di «Lo schema»: distanza al più 2, maiuscole ASCII
 ignorate (`T1` ha il vicino `t1`). Sono al più tre, alla distanza minima, nell'ordine
@@ -488,6 +489,11 @@ più operazioni cambiano compare una volta, con il saldo.
 
 **Gli avvisi.** Solo sulle schede che il giro tocca, nate o cambiate: una coppia
 che nessuno tocca non compare, anche se si copre o il suo testo non ci sta.
+Il rapporto ne porta al più 100 (`MAX_WARNINGS`), nell'ordine del testo, poi
+delle coperture, poi dei gruppi. Gli altri si contano in `warnings_omitted`:
+ogni coppia si conta una volta, e il conto è esatto. Con 2000 schede nello
+stesso punto ci sono 1 999 000 coperture: il rapporto ne porta 100 e omette
+1 998 900.
 
 | Codice | Quando | `ids` |
 |---|---|---|
@@ -499,14 +505,14 @@ Un esempio, con la lavagna d'esempio di `spec.rs` (`t1`, `t2`, `f1` e l'arco
 `e1`) e il giro `[{"op": "move", "ids": ["f1"], "dx": 0, "dy": -200}]`:
 
 ```json
-{"ok": true, "problems": [], "warnings": [{"code": "overlap", "ids": ["t1", "f1"]}], "summary": {"cards_added": [], "cards_removed": [], "cards_changed": [{"id": "f1", "text": "schemi/acqua.png", "moved": {"from": {"x": 0, "y": 240}, "to": {"x": 0, "y": 40}}}], "edges_added": [], "edges_removed": [], "edges_changed": [], "order_changed": false}, "outline_after": "cards 3 edges 1 groups 0 bounds 0 0 720×240\n1 t1 text \"Ciclo dell'acqua\" 0 0 320×160\n2 t2 text \"Evaporazione\" 400 0 320×160\n3 f1 image \"schemi/acqua.png\" 0 40 320×200\ne1 t1 -> t2 \"porta a\""}
+{"ok": true, "problems": [], "warnings": [{"code": "overlap", "ids": ["t1", "f1"]}], "warnings_omitted": 0, "summary": {"cards_added": [], "cards_removed": [], "cards_changed": [{"id": "f1", "text": "schemi/acqua.png", "moved": {"from": {"x": 0, "y": 240}, "to": {"x": 0, "y": 40}}}], "edges_added": [], "edges_removed": [], "edges_changed": [], "order_changed": false}, "outline_after": "cards 3 edges 1 groups 0 bounds 0 0 720×240\n1 t1 text \"Ciclo dell'acqua\" 0 0 320×160\n2 t2 text \"Evaporazione\" 400 0 320×160\n3 f1 image \"schemi/acqua.png\" 0 40 320×200\ne1 t1 -> t2 \"porta a\""}
 ```
 
 Con `[{"op": "move", "ids": ["t9"], "dx": 40, "dy": 0}]` non si scrive, e il
 rapporto dice perché:
 
 ```json
-{"ok": false, "problems": [{"code": "unknown_node", "index": 0, "path": "/0/ids/0", "message": "there is no node with this id", "suggestion": "t1, t2"}], "warnings": [], "summary": null, "outline_after": null}
+{"ok": false, "problems": [{"code": "unknown_node", "index": 0, "path": "/0/ids/0", "message": "there is no node with this id", "suggestion": "t1, t2"}], "warnings": [], "warnings_omitted": 0, "summary": null, "outline_after": null}
 ```
 
 I test di `tests/check.rs` controllano un caso per codice e per avviso, i due
