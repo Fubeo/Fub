@@ -49,6 +49,9 @@ sé: montarsi sulla lavagna non è un gesto.
   [«Apri con un'altra app»](external-editors.md) (`openWithEntry`): l'app del
   sistema e le app Craft che aprono il file, col prestito della sessione.
   Senza app Craft installate il file va all'app del sistema.
+- Invio sulla scheda la fa entrare, con la barra dei pulsanti in vista: da
+  lì Tab arriva a «Accendi…», «Apri» e «Apri con…», ed Esc esce. Senza barra
+  (caricamento, segnaposto, file mancante) non c'è in cui entrare.
 
 Il componente acceso o spento con la scheda viva la rifà (l'evento
 `commands` dello store).
