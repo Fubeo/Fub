@@ -126,6 +126,18 @@ Provider nativo e proxy WASM devono osservare la stessa famiglia/versione,
 limiti, fallback ed errori.
 
 
+## Disegno
+
+Nei disegni (`.svg`, profilo «vector») il client guida il motore del disegno
+con sei porte tipate (`open_drawing`, `drawing_sync`, `drawing_gesture`,
+`drawing_commands`, `drawing_command`, `close_drawing`) e resta lo scrittore
+del file. Forme, limiti e chi le usa: [le porte del disegno](drawing-ipc.md).
+`unserved` vuol dire che il motore è spento nel vault (la riga dei Componenti)
+o non c'è in questa build, all'apertura come a metà sessione; `internal` che
+il motore si è fermato o non si costruisce, e si può riprovare. I dettagli
+stanno [nella stessa pagina](drawing-ipc.md).
+
+
 ## Sessione live
 
 Un tablet scrive su un disegno aperto in una finestra. Il protocollo e la

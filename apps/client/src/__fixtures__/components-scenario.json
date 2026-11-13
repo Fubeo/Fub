@@ -406,13 +406,33 @@
           "bundle": true,
           "acceso": true,
           "perche": "Scelto",
-          "richiesto_da": [],
+          "richiesto_da": [
+            "fub.motore-vettoriale"
+          ],
           "descrizione": "I file SVG: penna, forme, frecce, testo.",
           "tipo": "service",
           "ui": [
             "editors/spatial"
           ],
           "richiede": [],
+          "usa": [
+            "fub.motore-vettoriale"
+          ]
+        },
+        {
+          "id": "fub.motore-vettoriale",
+          "nome": "Motore del disegno",
+          "gruppo": "disegnare",
+          "bundle": false,
+          "acceso": true,
+          "perche": "Scelto",
+          "richiesto_da": [],
+          "descrizione": "Disegna, sposta e cambia le forme dei disegni. Spento, i disegni usano gli strumenti semplici.",
+          "tipo": "engine",
+          "ui": [],
+          "richiede": [
+            "fub.draw"
+          ],
           "usa": []
         },
         {
@@ -679,6 +699,7 @@
           "fub.importers",
           "fub.lavagna",
           "fub.linkcard",
+          "fub.motore-vettoriale",
           "fub.outline",
           "fub.pdf",
           "fub.proof",
@@ -858,6 +879,7 @@
             "fub.formatting",
             "fub.proof",
             "fub.draw",
+            "fub.motore-vettoriale",
             "fub.craft",
             "fub.rich",
             "fub.xlsx",
@@ -1268,13 +1290,33 @@
           "bundle": true,
           "acceso": true,
           "perche": "Scelto",
-          "richiesto_da": [],
+          "richiesto_da": [
+            "fub.motore-vettoriale"
+          ],
           "descrizione": "I file SVG: penna, forme, frecce, testo.",
           "tipo": "service",
           "ui": [
             "editors/spatial"
           ],
           "richiede": [],
+          "usa": [
+            "fub.motore-vettoriale"
+          ]
+        },
+        {
+          "id": "fub.motore-vettoriale",
+          "nome": "Motore del disegno",
+          "gruppo": "disegnare",
+          "bundle": false,
+          "acceso": true,
+          "perche": "Scelto",
+          "richiesto_da": [],
+          "descrizione": "Disegna, sposta e cambia le forme dei disegni. Spento, i disegni usano gli strumenti semplici.",
+          "tipo": "engine",
+          "ui": [],
+          "richiede": [
+            "fub.draw"
+          ],
           "usa": []
         },
         {
@@ -1540,6 +1582,7 @@
           "fub.importers",
           "fub.lavagna",
           "fub.linkcard",
+          "fub.motore-vettoriale",
           "fub.outline",
           "fub.pdf",
           "fub.proof",
@@ -1717,6 +1760,7 @@
             "fub.formatting",
             "fub.proof",
             "fub.draw",
+            "fub.motore-vettoriale",
             "fub.craft",
             "fub.rich",
             "fub.xlsx",
@@ -2131,13 +2175,33 @@
           "bundle": true,
           "acceso": true,
           "perche": "Scelto",
-          "richiesto_da": [],
+          "richiesto_da": [
+            "fub.motore-vettoriale"
+          ],
           "descrizione": "I file SVG: penna, forme, frecce, testo.",
           "tipo": "service",
           "ui": [
             "editors/spatial"
           ],
           "richiede": [],
+          "usa": [
+            "fub.motore-vettoriale"
+          ]
+        },
+        {
+          "id": "fub.motore-vettoriale",
+          "nome": "Motore del disegno",
+          "gruppo": "disegnare",
+          "bundle": false,
+          "acceso": true,
+          "perche": "Scelto",
+          "richiesto_da": [],
+          "descrizione": "Disegna, sposta e cambia le forme dei disegni. Spento, i disegni usano gli strumenti semplici.",
+          "tipo": "engine",
+          "ui": [],
+          "richiede": [
+            "fub.draw"
+          ],
           "usa": []
         },
         {
@@ -2403,6 +2467,7 @@
           "fub.importers",
           "fub.lavagna",
           "fub.linkcard",
+          "fub.motore-vettoriale",
           "fub.outline",
           "fub.pdf",
           "fub.proof",
@@ -2582,6 +2647,7 @@
             "fub.formatting",
             "fub.proof",
             "fub.draw",
+            "fub.motore-vettoriale",
             "fub.craft",
             "fub.rich",
             "fub.xlsx",
@@ -2998,13 +3064,33 @@
           "bundle": true,
           "acceso": true,
           "perche": "Scelto",
-          "richiesto_da": [],
+          "richiesto_da": [
+            "fub.motore-vettoriale"
+          ],
           "descrizione": "I file SVG: penna, forme, frecce, testo.",
           "tipo": "service",
           "ui": [
             "editors/spatial"
           ],
           "richiede": [],
+          "usa": [
+            "fub.motore-vettoriale"
+          ]
+        },
+        {
+          "id": "fub.motore-vettoriale",
+          "nome": "Motore del disegno",
+          "gruppo": "disegnare",
+          "bundle": false,
+          "acceso": true,
+          "perche": "Scelto",
+          "richiesto_da": [],
+          "descrizione": "Disegna, sposta e cambia le forme dei disegni. Spento, i disegni usano gli strumenti semplici.",
+          "tipo": "engine",
+          "ui": [],
+          "richiede": [
+            "fub.draw"
+          ],
           "usa": []
         },
         {
@@ -3262,6 +3348,7 @@
           "fub.graph",
           "fub.importers",
           "fub.linkcard",
+          "fub.motore-vettoriale",
           "fub.outline",
           "fub.proof",
           "fub.properties",
@@ -3440,6 +3527,7 @@
             "fub.formatting",
             "fub.proof",
             "fub.draw",
+            "fub.motore-vettoriale",
             "fub.craft",
             "fub.rich",
             "fub.xlsx",
@@ -3855,880 +3943,33 @@
           "bundle": true,
           "acceso": true,
           "perche": "Scelto",
-          "richiesto_da": [],
+          "richiesto_da": [
+            "fub.motore-vettoriale"
+          ],
           "descrizione": "I file SVG: penna, forme, frecce, testo.",
           "tipo": "service",
           "ui": [
             "editors/spatial"
           ],
           "richiede": [],
-          "usa": []
+          "usa": [
+            "fub.motore-vettoriale"
+          ]
         },
         {
-          "id": "fub.craft",
-          "nome": "File delle app Craft",
+          "id": "fub.motore-vettoriale",
+          "nome": "Motore del disegno",
           "gruppo": "disegnare",
-          "bundle": true,
-          "acceso": true,
-          "perche": "Scelto",
-          "richiesto_da": [],
-          "descrizione": "I file di VectorCraft, PhotoCraft, FigCraft e LightCraft, da guardare.",
-          "tipo": "service",
-          "ui": [
-            "editors/craft"
-          ],
-          "richiede": [],
-          "usa": []
-        },
-        {
-          "id": "fub.rich",
-          "nome": "Documenti",
-          "gruppo": "ufficio",
-          "bundle": true,
-          "acceso": true,
-          "perche": "Scelto",
-          "richiesto_da": [],
-          "descrizione": "I file Word e OpenDocument, semplici o completi.",
-          "tipo": "mode",
-          "ui": [
-            "editors/rich"
-          ],
-          "richiede": [
-            "fub.motore-documenti"
-          ],
-          "usa": [
-            "fub.penna",
-            "fub.dizionari"
-          ]
-        },
-        {
-          "id": "fub.xlsx",
-          "nome": "Fogli",
-          "gruppo": "ufficio",
-          "bundle": true,
-          "acceso": true,
-          "perche": "Scelto",
-          "richiesto_da": [],
-          "descrizione": "I file Excel e OpenDocument, semplici o completi.",
-          "tipo": "mode",
-          "ui": [
-            "editors/grid"
-          ],
-          "richiede": [
-            "fub.motore-fogli"
-          ],
-          "usa": [
-            "fub.penna"
-          ]
-        },
-        {
-          "id": "fub.lavagna",
-          "nome": "Lavagna",
-          "gruppo": "pensare",
-          "bundle": true,
-          "acceso": true,
-          "perche": "Scelto",
-          "richiesto_da": [],
-          "descrizione": "Schede, fili e inchiostro sopra qualsiasi cosa.",
-          "tipo": "mode",
-          "ui": [
-            "editors/canvas"
-          ],
-          "richiede": [
-            "fub.penna"
-          ],
-          "usa": [
-            "fub.rich",
-            "fub.xlsx"
-          ]
-        },
-        {
-          "id": "fub.pdf",
-          "nome": "PDF",
-          "gruppo": "leggere",
           "bundle": false,
           "acceso": true,
           "perche": "Scelto",
           "richiesto_da": [],
-          "descrizione": "Leggere, cercare, evidenziare, annotare a penna.",
-          "tipo": "mode",
-          "ui": [
-            "editors/media"
-          ],
-          "richiede": [
-            "fub.penna"
-          ],
-          "usa": []
-        },
-        {
-          "id": "fub.penna",
-          "nome": "Penna",
-          "gruppo": "supporto",
-          "bundle": false,
-          "acceso": true,
-          "perche": {
-            "RichiestoDa": [
-              "fub.lavagna",
-              "fub.pdf"
-            ]
-          },
-          "richiesto_da": [
-            "fub.lavagna",
-            "fub.pdf"
-          ],
-          "descrizione": "Pressione, palmo, scia a bassa latenza, tratti.",
+          "descrizione": "Disegna, sposta e cambia le forme dei disegni. Spento, i disegni usano gli strumenti semplici.",
           "tipo": "engine",
           "ui": [],
-          "richiede": [],
-          "usa": []
-        },
-        {
-          "id": "fub.dizionari",
-          "nome": "Dizionari",
-          "gruppo": "supporto",
-          "bundle": false,
-          "acceso": true,
-          "perche": {
-            "RichiestoDa": [
-              "fub.proof"
-            ]
-          },
-          "richiesto_da": [
-            "fub.proof"
-          ],
-          "descrizione": "Le lingue del correttore.",
-          "tipo": "service",
-          "ui": [],
-          "richiede": [],
-          "usa": []
-        },
-        {
-          "id": "fub.motore-documenti",
-          "nome": "Motore dei documenti",
-          "gruppo": "supporto",
-          "bundle": false,
-          "acceso": true,
-          "perche": {
-            "RichiestoDa": [
-              "fub.rich"
-            ]
-          },
-          "richiesto_da": [
-            "fub.rich"
-          ],
-          "descrizione": "Impaginazione e comandi dei documenti.",
-          "tipo": "engine",
-          "ui": [],
-          "richiede": [],
-          "usa": []
-        },
-        {
-          "id": "fub.motore-fogli",
-          "nome": "Motore dei fogli",
-          "gruppo": "supporto",
-          "bundle": false,
-          "acceso": true,
-          "perche": {
-            "RichiestoDa": [
-              "fub.xlsx"
-            ]
-          },
-          "richiesto_da": [
-            "fub.xlsx"
-          ],
-          "descrizione": "Formule, calcolo e comandi dei fogli.",
-          "tipo": "engine",
-          "ui": [],
-          "richiede": [],
-          "usa": []
-        },
-        {
-          "id": "fub.importers",
-          "nome": "Importazione",
-          "gruppo": "scrivere",
-          "bundle": true,
-          "acceso": true,
-          "perche": "Scelto",
-          "richiesto_da": [],
-          "descrizione": "Portare in Fub le note di Evernote, OneNote, Tomboy e altri.",
-          "tipo": "service",
-          "ui": [],
-          "richiede": [],
-          "usa": []
-        },
-        {
-          "id": "fub.linkcard",
-          "nome": "Anteprime dei link",
-          "gruppo": "scrivere",
-          "bundle": true,
-          "acceso": true,
-          "perche": "Scelto",
-          "richiesto_da": [],
-          "descrizione": "Un link da solo diventa una scheda con titolo e icona, quando lo chiedi.",
-          "tipo": "service",
-          "ui": [],
-          "richiede": [],
-          "usa": []
-        },
-        {
-          "id": "fub.updates",
-          "nome": "Aggiornamenti",
-          "gruppo": "altro",
-          "bundle": true,
-          "acceso": true,
-          "perche": "Scelto",
-          "richiesto_da": [],
-          "descrizione": "Sapere se c'è una versione nuova di Fub, solo quando lo chiedi.",
-          "tipo": "service",
-          "ui": [],
-          "richiede": [],
-          "usa": []
-        },
-        {
-          "id": "fub.publish",
-          "nome": "Pubblicazione",
-          "gruppo": "altro",
-          "bundle": true,
-          "acceso": true,
-          "perche": "Scelto",
-          "richiesto_da": [],
-          "descrizione": "Mettere le note su un sito.",
-          "tipo": "service",
-          "ui": [],
-          "richiede": [],
-          "usa": []
-        },
-        {
-          "id": "fub.sync",
-          "nome": "Sincronizzazione",
-          "gruppo": "altro",
-          "bundle": true,
-          "acceso": true,
-          "perche": "Scelto",
-          "richiesto_da": [],
-          "descrizione": "Le stesse note su più dispositivi, cifrate.",
-          "tipo": "service",
-          "ui": [],
-          "richiede": [],
-          "usa": []
-        }
-      ],
-      "stato": {
-        "scelti": [
-          "fub.backlinks",
-          "fub.backup",
-          "fub.base",
-          "fub.blocks",
-          "fub.commands",
-          "fub.craft",
-          "fub.dashboard",
-          "fub.draw",
-          "fub.formatting",
-          "fub.importers",
-          "fub.lavagna",
-          "fub.linkcard",
-          "fub.outline",
-          "fub.pdf",
-          "fub.proof",
-          "fub.properties",
-          "fub.publish",
-          "fub.queries",
-          "fub.rich",
-          "fub.search",
-          "fub.stats",
-          "fub.sync",
-          "fub.tags",
-          "fub.template",
-          "fub.trash",
-          "fub.updates",
-          "fub.versioning",
-          "fub.xlsx"
-        ],
-        "in_attesa": []
-      },
-      "profilo": null,
-      "profili": [
-        {
-          "nome": "solo-note",
-          "etichetta": "Solo note",
-          "componenti": [
-            "fub.markdown",
-            "fub.search",
-            "fub.versioning",
-            "fub.backlinks",
-            "fub.outline",
-            "fub.tags",
-            "fub.properties",
-            "fub.template",
-            "fub.queries",
-            "fub.dashboard",
-            "fub.backup",
-            "fub.trash",
-            "fub.stats",
-            "fub.commands",
-            "fub.blocks",
-            "fub.base",
-            "fub.formatting",
-            "fub.importers",
-            "fub.linkcard"
-          ],
-          "arriva_con": [],
-          "piu_avanti": false
-        },
-        {
-          "nome": "solo-pdf",
-          "etichetta": "Solo PDF",
-          "componenti": [
-            "fub.pdf"
-          ],
-          "arriva_con": [
-            "fub.pdf-completo"
-          ],
-          "piu_avanti": true
-        },
-        {
-          "nome": "studio",
-          "etichetta": "Studio",
-          "componenti": [
-            "fub.markdown",
-            "fub.search",
-            "fub.versioning",
-            "fub.backlinks",
-            "fub.outline",
-            "fub.tags",
-            "fub.properties",
-            "fub.template",
-            "fub.queries",
-            "fub.dashboard",
-            "fub.backup",
-            "fub.trash",
-            "fub.stats",
-            "fub.commands",
-            "fub.blocks",
-            "fub.base",
-            "fub.formatting",
-            "fub.importers",
-            "fub.linkcard",
-            "fub.graph",
-            "fub.proof",
-            "fub.pdf",
-            "fub.lavagna",
-            "fub.rich",
-            "fub.xlsx"
-          ],
-          "arriva_con": [],
-          "piu_avanti": false
-        },
-        {
-          "nome": "grafica",
-          "etichetta": "Grafica",
-          "componenti": [
-            "fub.markdown",
-            "fub.search",
-            "fub.versioning",
-            "fub.backlinks",
-            "fub.outline",
-            "fub.tags",
-            "fub.properties",
-            "fub.template",
-            "fub.queries",
-            "fub.dashboard",
-            "fub.backup",
-            "fub.trash",
-            "fub.stats",
-            "fub.commands",
-            "fub.blocks",
-            "fub.base",
-            "fub.formatting",
-            "fub.importers",
-            "fub.linkcard",
-            "fub.lavagna"
-          ],
-          "arriva_con": [
-            "fub.disegno-completo",
-            "fub.foto"
-          ],
-          "piu_avanti": true
-        },
-        {
-          "nome": "fotografia",
-          "etichetta": "Fotografia",
-          "componenti": [
-            "fub.markdown",
-            "fub.search",
-            "fub.versioning",
-            "fub.backlinks",
-            "fub.outline",
-            "fub.tags",
-            "fub.properties",
-            "fub.template",
-            "fub.queries",
-            "fub.dashboard",
-            "fub.backup",
-            "fub.trash",
-            "fub.stats",
-            "fub.commands",
-            "fub.blocks",
-            "fub.base",
-            "fub.formatting",
-            "fub.importers",
-            "fub.linkcard"
-          ],
-          "arriva_con": [
-            "fub.libreria-foto",
-            "fub.foto"
-          ],
-          "piu_avanti": true
-        },
-        {
-          "nome": "tutto",
-          "etichetta": "Tutto",
-          "componenti": [
-            "fub.core",
-            "fub.maintenance",
-            "fub.markdown",
-            "fub.search",
-            "fub.versioning",
-            "fub.backlinks",
-            "fub.outline",
-            "fub.tags",
-            "fub.properties",
-            "fub.template",
-            "fub.queries",
-            "fub.dashboard",
-            "fub.backup",
-            "fub.trash",
-            "fub.stats",
-            "fub.graph",
-            "fub.commands",
-            "fub.blocks",
-            "fub.base",
-            "fub.formatting",
-            "fub.proof",
-            "fub.draw",
-            "fub.craft",
-            "fub.rich",
-            "fub.xlsx",
-            "fub.lavagna",
-            "fub.pdf",
-            "fub.importers",
-            "fub.linkcard",
-            "fub.updates",
-            "fub.publish",
-            "fub.sync"
-          ],
-          "arriva_con": [],
-          "piu_avanti": false
-        }
-      ],
-      "mancanti": []
-    },
-    {
-      "gruppi": [
-        {
-          "id": "scrivere",
-          "nome": "Scrivere"
-        },
-        {
-          "id": "leggere",
-          "nome": "Leggere"
-        },
-        {
-          "id": "pensare",
-          "nome": "Pensare"
-        },
-        {
-          "id": "disegnare",
-          "nome": "Disegnare"
-        },
-        {
-          "id": "ufficio",
-          "nome": "Ufficio"
-        },
-        {
-          "id": "altro",
-          "nome": "Altro"
-        },
-        {
-          "id": "supporto",
-          "nome": "Di supporto"
-        }
-      ],
-      "righe": [
-        {
-          "id": "fub.core",
-          "nome": "Fub",
-          "gruppo": "altro",
-          "bundle": true,
-          "acceso": true,
-          "perche": "Nucleo",
-          "richiesto_da": [],
-          "descrizione": "Il vault, i suoi file e le impostazioni.",
-          "tipo": "service",
-          "ui": [],
-          "richiede": [],
-          "usa": []
-        },
-        {
-          "id": "fub.maintenance",
-          "nome": "Manutenzione",
-          "gruppo": "altro",
-          "bundle": true,
-          "acceso": true,
-          "perche": "Nucleo",
-          "richiesto_da": [],
-          "descrizione": "Rifare l'indice e raccogliere ciò che serve per chiedere aiuto.",
-          "tipo": "service",
-          "ui": [],
-          "richiede": [],
-          "usa": []
-        },
-        {
-          "id": "fub.markdown",
-          "nome": "Note",
-          "gruppo": "scrivere",
-          "bundle": true,
-          "acceso": true,
-          "perche": "Nucleo",
-          "richiesto_da": [
-            "fub.backlinks",
-            "fub.backup",
-            "fub.base",
-            "fub.blocks",
-            "fub.commands",
-            "fub.dashboard",
-            "fub.formatting",
-            "fub.graph",
-            "fub.outline",
-            "fub.proof",
-            "fub.properties",
-            "fub.queries",
-            "fub.search",
-            "fub.stats",
-            "fub.tags",
-            "fub.template",
-            "fub.trash",
-            "fub.versioning"
-          ],
-          "descrizione": "L'editor Markdown: Live, Blocchi e il menu «/».",
-          "tipo": "mode",
-          "ui": [
-            "editors/text"
-          ],
-          "richiede": [],
-          "usa": []
-        },
-        {
-          "id": "fub.search",
-          "nome": "Ricerca",
-          "gruppo": "scrivere",
-          "bundle": true,
-          "acceso": true,
-          "perche": "Scelto",
-          "richiesto_da": [],
-          "descrizione": "Trovare una parola in tutte le note.",
-          "tipo": "service",
-          "ui": [],
           "richiede": [
-            "fub.markdown"
+            "fub.draw"
           ],
-          "usa": []
-        },
-        {
-          "id": "fub.versioning",
-          "nome": "Versioni",
-          "gruppo": "scrivere",
-          "bundle": true,
-          "acceso": true,
-          "perche": "Scelto",
-          "richiesto_da": [],
-          "descrizione": "Le versioni passate di ogni file, da riprendere quando serve.",
-          "tipo": "service",
-          "ui": [],
-          "richiede": [
-            "fub.markdown"
-          ],
-          "usa": []
-        },
-        {
-          "id": "fub.backlinks",
-          "nome": "Collegamenti",
-          "gruppo": "scrivere",
-          "bundle": true,
-          "acceso": true,
-          "perche": "Scelto",
-          "richiesto_da": [],
-          "descrizione": "Le note che portano a quella che stai leggendo.",
-          "tipo": "mode",
-          "ui": [],
-          "richiede": [
-            "fub.markdown"
-          ],
-          "usa": []
-        },
-        {
-          "id": "fub.outline",
-          "nome": "Struttura",
-          "gruppo": "scrivere",
-          "bundle": true,
-          "acceso": true,
-          "perche": "Scelto",
-          "richiesto_da": [],
-          "descrizione": "I titoli della nota, per saltare da una parte all'altra.",
-          "tipo": "mode",
-          "ui": [],
-          "richiede": [
-            "fub.markdown"
-          ],
-          "usa": []
-        },
-        {
-          "id": "fub.tags",
-          "nome": "Tag",
-          "gruppo": "scrivere",
-          "bundle": true,
-          "acceso": true,
-          "perche": "Scelto",
-          "richiesto_da": [],
-          "descrizione": "Tutti i tag del vault, e le note che li portano.",
-          "tipo": "mode",
-          "ui": [],
-          "richiede": [
-            "fub.markdown"
-          ],
-          "usa": []
-        },
-        {
-          "id": "fub.properties",
-          "nome": "Proprietà",
-          "gruppo": "scrivere",
-          "bundle": true,
-          "acceso": true,
-          "perche": "Scelto",
-          "richiesto_da": [
-            "fub.base",
-            "fub.template"
-          ],
-          "descrizione": "Le proprietà in testa alla nota, da leggere e cambiare.",
-          "tipo": "service",
-          "ui": [],
-          "richiede": [
-            "fub.markdown"
-          ],
-          "usa": []
-        },
-        {
-          "id": "fub.template",
-          "nome": "Template",
-          "gruppo": "scrivere",
-          "bundle": true,
-          "acceso": true,
-          "perche": "Scelto",
-          "richiesto_da": [],
-          "descrizione": "Modelli di nota, la nota del giorno, la data e l'ora.",
-          "tipo": "mode",
-          "ui": [],
-          "richiede": [
-            "fub.markdown",
-            "fub.properties"
-          ],
-          "usa": []
-        },
-        {
-          "id": "fub.queries",
-          "nome": "Query",
-          "gruppo": "scrivere",
-          "bundle": true,
-          "acceso": true,
-          "perche": "Scelto",
-          "richiesto_da": [],
-          "descrizione": "Le ricerche salvate, da rifare con un clic.",
-          "tipo": "mode",
-          "ui": [],
-          "richiede": [
-            "fub.markdown"
-          ],
-          "usa": []
-        },
-        {
-          "id": "fub.dashboard",
-          "nome": "Dashboard",
-          "gruppo": "scrivere",
-          "bundle": true,
-          "acceso": true,
-          "perche": "Scelto",
-          "richiesto_da": [],
-          "descrizione": "Il vault in numeri: note, tag, file e collegamenti rotti.",
-          "tipo": "mode",
-          "ui": [],
-          "richiede": [
-            "fub.markdown"
-          ],
-          "usa": []
-        },
-        {
-          "id": "fub.backup",
-          "nome": "Backup",
-          "gruppo": "scrivere",
-          "bundle": true,
-          "acceso": true,
-          "perche": "Scelto",
-          "richiesto_da": [],
-          "descrizione": "Copie delle note da cui ripartire.",
-          "tipo": "mode",
-          "ui": [],
-          "richiede": [
-            "fub.markdown"
-          ],
-          "usa": []
-        },
-        {
-          "id": "fub.trash",
-          "nome": "Cestino",
-          "gruppo": "scrivere",
-          "bundle": true,
-          "acceso": true,
-          "perche": "Scelto",
-          "richiesto_da": [],
-          "descrizione": "Le note eliminate, da recuperare o togliere per sempre.",
-          "tipo": "mode",
-          "ui": [],
-          "richiede": [
-            "fub.commands",
-            "fub.markdown"
-          ],
-          "usa": []
-        },
-        {
-          "id": "fub.stats",
-          "nome": "Statistiche",
-          "gruppo": "scrivere",
-          "bundle": true,
-          "acceso": true,
-          "perche": "Scelto",
-          "richiesto_da": [],
-          "descrizione": "Parole, caratteri e tempo di lettura della nota.",
-          "tipo": "mode",
-          "ui": [],
-          "richiede": [
-            "fub.markdown"
-          ],
-          "usa": []
-        },
-        {
-          "id": "fub.graph",
-          "nome": "Grafo",
-          "gruppo": "scrivere",
-          "bundle": true,
-          "acceso": true,
-          "perche": "Scelto",
-          "richiesto_da": [],
-          "descrizione": "I collegamenti fra le note, in una mappa.",
-          "tipo": "mode",
-          "ui": [],
-          "richiede": [
-            "fub.markdown"
-          ],
-          "usa": []
-        },
-        {
-          "id": "fub.commands",
-          "nome": "Comandi",
-          "gruppo": "scrivere",
-          "bundle": true,
-          "acceso": true,
-          "perche": "Scelto",
-          "richiesto_da": [
-            "fub.trash"
-          ],
-          "descrizione": "Le azioni che trovi nella palette dei comandi.",
-          "tipo": "service",
-          "ui": [],
-          "richiede": [
-            "fub.markdown"
-          ],
-          "usa": []
-        },
-        {
-          "id": "fub.blocks",
-          "nome": "Blocchi",
-          "gruppo": "scrivere",
-          "bundle": true,
-          "acceso": true,
-          "perche": "Scelto",
-          "richiesto_da": [],
-          "descrizione": "Diagrammi, formule ed evidenziato dentro le note.",
-          "tipo": "mode",
-          "ui": [],
-          "richiede": [
-            "fub.markdown"
-          ],
-          "usa": []
-        },
-        {
-          "id": "fub.base",
-          "nome": "Base",
-          "gruppo": "scrivere",
-          "bundle": true,
-          "acceso": true,
-          "perche": "Scelto",
-          "richiesto_da": [],
-          "descrizione": "Tabelle che raccolgono le note per proprietà.",
-          "tipo": "mode",
-          "ui": [],
-          "richiede": [
-            "fub.markdown",
-            "fub.properties"
-          ],
-          "usa": []
-        },
-        {
-          "id": "fub.formatting",
-          "nome": "Barra di formattazione",
-          "gruppo": "scrivere",
-          "bundle": true,
-          "acceso": true,
-          "perche": "Scelto",
-          "richiesto_da": [],
-          "descrizione": "I pulsanti per grassetto, elenchi e titoli, senza ricordare i simboli.",
-          "tipo": "mode",
-          "ui": [],
-          "richiede": [
-            "fub.markdown"
-          ],
-          "usa": []
-        },
-        {
-          "id": "fub.proof",
-          "nome": "Correttore",
-          "gruppo": "scrivere",
-          "bundle": true,
-          "acceso": true,
-          "perche": "Scelto",
-          "richiesto_da": [],
-          "descrizione": "L'ortografia mentre scrivi.",
-          "tipo": "mode",
-          "ui": [],
-          "richiede": [
-            "fub.dizionari",
-            "fub.markdown"
-          ],
-          "usa": []
-        },
-        {
-          "id": "fub.draw",
-          "nome": "Disegni",
-          "gruppo": "disegnare",
-          "bundle": true,
-          "acceso": true,
-          "perche": "Scelto",
-          "richiesto_da": [],
-          "descrizione": "I file SVG: penna, forme, frecce, testo.",
-          "tipo": "service",
-          "ui": [
-            "editors/spatial"
-          ],
-          "richiede": [],
           "usa": []
         },
         {
@@ -4991,10 +4232,900 @@
           "fub.dashboard",
           "fub.draw",
           "fub.formatting",
+          "fub.importers",
+          "fub.lavagna",
+          "fub.linkcard",
+          "fub.motore-vettoriale",
+          "fub.outline",
+          "fub.pdf",
+          "fub.proof",
+          "fub.properties",
+          "fub.publish",
+          "fub.queries",
+          "fub.rich",
+          "fub.search",
+          "fub.stats",
+          "fub.sync",
+          "fub.tags",
+          "fub.template",
+          "fub.trash",
+          "fub.updates",
+          "fub.versioning",
+          "fub.xlsx"
+        ],
+        "in_attesa": []
+      },
+      "profilo": null,
+      "profili": [
+        {
+          "nome": "solo-note",
+          "etichetta": "Solo note",
+          "componenti": [
+            "fub.markdown",
+            "fub.search",
+            "fub.versioning",
+            "fub.backlinks",
+            "fub.outline",
+            "fub.tags",
+            "fub.properties",
+            "fub.template",
+            "fub.queries",
+            "fub.dashboard",
+            "fub.backup",
+            "fub.trash",
+            "fub.stats",
+            "fub.commands",
+            "fub.blocks",
+            "fub.base",
+            "fub.formatting",
+            "fub.importers",
+            "fub.linkcard"
+          ],
+          "arriva_con": [],
+          "piu_avanti": false
+        },
+        {
+          "nome": "solo-pdf",
+          "etichetta": "Solo PDF",
+          "componenti": [
+            "fub.pdf"
+          ],
+          "arriva_con": [
+            "fub.pdf-completo"
+          ],
+          "piu_avanti": true
+        },
+        {
+          "nome": "studio",
+          "etichetta": "Studio",
+          "componenti": [
+            "fub.markdown",
+            "fub.search",
+            "fub.versioning",
+            "fub.backlinks",
+            "fub.outline",
+            "fub.tags",
+            "fub.properties",
+            "fub.template",
+            "fub.queries",
+            "fub.dashboard",
+            "fub.backup",
+            "fub.trash",
+            "fub.stats",
+            "fub.commands",
+            "fub.blocks",
+            "fub.base",
+            "fub.formatting",
+            "fub.importers",
+            "fub.linkcard",
+            "fub.graph",
+            "fub.proof",
+            "fub.pdf",
+            "fub.lavagna",
+            "fub.rich",
+            "fub.xlsx"
+          ],
+          "arriva_con": [],
+          "piu_avanti": false
+        },
+        {
+          "nome": "grafica",
+          "etichetta": "Grafica",
+          "componenti": [
+            "fub.markdown",
+            "fub.search",
+            "fub.versioning",
+            "fub.backlinks",
+            "fub.outline",
+            "fub.tags",
+            "fub.properties",
+            "fub.template",
+            "fub.queries",
+            "fub.dashboard",
+            "fub.backup",
+            "fub.trash",
+            "fub.stats",
+            "fub.commands",
+            "fub.blocks",
+            "fub.base",
+            "fub.formatting",
+            "fub.importers",
+            "fub.linkcard",
+            "fub.lavagna"
+          ],
+          "arriva_con": [
+            "fub.disegno-completo",
+            "fub.foto"
+          ],
+          "piu_avanti": true
+        },
+        {
+          "nome": "fotografia",
+          "etichetta": "Fotografia",
+          "componenti": [
+            "fub.markdown",
+            "fub.search",
+            "fub.versioning",
+            "fub.backlinks",
+            "fub.outline",
+            "fub.tags",
+            "fub.properties",
+            "fub.template",
+            "fub.queries",
+            "fub.dashboard",
+            "fub.backup",
+            "fub.trash",
+            "fub.stats",
+            "fub.commands",
+            "fub.blocks",
+            "fub.base",
+            "fub.formatting",
+            "fub.importers",
+            "fub.linkcard"
+          ],
+          "arriva_con": [
+            "fub.libreria-foto",
+            "fub.foto"
+          ],
+          "piu_avanti": true
+        },
+        {
+          "nome": "tutto",
+          "etichetta": "Tutto",
+          "componenti": [
+            "fub.core",
+            "fub.maintenance",
+            "fub.markdown",
+            "fub.search",
+            "fub.versioning",
+            "fub.backlinks",
+            "fub.outline",
+            "fub.tags",
+            "fub.properties",
+            "fub.template",
+            "fub.queries",
+            "fub.dashboard",
+            "fub.backup",
+            "fub.trash",
+            "fub.stats",
+            "fub.graph",
+            "fub.commands",
+            "fub.blocks",
+            "fub.base",
+            "fub.formatting",
+            "fub.proof",
+            "fub.draw",
+            "fub.motore-vettoriale",
+            "fub.craft",
+            "fub.rich",
+            "fub.xlsx",
+            "fub.lavagna",
+            "fub.pdf",
+            "fub.importers",
+            "fub.linkcard",
+            "fub.updates",
+            "fub.publish",
+            "fub.sync"
+          ],
+          "arriva_con": [],
+          "piu_avanti": false
+        }
+      ],
+      "mancanti": []
+    },
+    {
+      "gruppi": [
+        {
+          "id": "scrivere",
+          "nome": "Scrivere"
+        },
+        {
+          "id": "leggere",
+          "nome": "Leggere"
+        },
+        {
+          "id": "pensare",
+          "nome": "Pensare"
+        },
+        {
+          "id": "disegnare",
+          "nome": "Disegnare"
+        },
+        {
+          "id": "ufficio",
+          "nome": "Ufficio"
+        },
+        {
+          "id": "altro",
+          "nome": "Altro"
+        },
+        {
+          "id": "supporto",
+          "nome": "Di supporto"
+        }
+      ],
+      "righe": [
+        {
+          "id": "fub.core",
+          "nome": "Fub",
+          "gruppo": "altro",
+          "bundle": true,
+          "acceso": true,
+          "perche": "Nucleo",
+          "richiesto_da": [],
+          "descrizione": "Il vault, i suoi file e le impostazioni.",
+          "tipo": "service",
+          "ui": [],
+          "richiede": [],
+          "usa": []
+        },
+        {
+          "id": "fub.maintenance",
+          "nome": "Manutenzione",
+          "gruppo": "altro",
+          "bundle": true,
+          "acceso": true,
+          "perche": "Nucleo",
+          "richiesto_da": [],
+          "descrizione": "Rifare l'indice e raccogliere ciò che serve per chiedere aiuto.",
+          "tipo": "service",
+          "ui": [],
+          "richiede": [],
+          "usa": []
+        },
+        {
+          "id": "fub.markdown",
+          "nome": "Note",
+          "gruppo": "scrivere",
+          "bundle": true,
+          "acceso": true,
+          "perche": "Nucleo",
+          "richiesto_da": [
+            "fub.backlinks",
+            "fub.backup",
+            "fub.base",
+            "fub.blocks",
+            "fub.commands",
+            "fub.dashboard",
+            "fub.formatting",
+            "fub.graph",
+            "fub.outline",
+            "fub.proof",
+            "fub.properties",
+            "fub.queries",
+            "fub.search",
+            "fub.stats",
+            "fub.tags",
+            "fub.template",
+            "fub.trash",
+            "fub.versioning"
+          ],
+          "descrizione": "L'editor Markdown: Live, Blocchi e il menu «/».",
+          "tipo": "mode",
+          "ui": [
+            "editors/text"
+          ],
+          "richiede": [],
+          "usa": []
+        },
+        {
+          "id": "fub.search",
+          "nome": "Ricerca",
+          "gruppo": "scrivere",
+          "bundle": true,
+          "acceso": true,
+          "perche": "Scelto",
+          "richiesto_da": [],
+          "descrizione": "Trovare una parola in tutte le note.",
+          "tipo": "service",
+          "ui": [],
+          "richiede": [
+            "fub.markdown"
+          ],
+          "usa": []
+        },
+        {
+          "id": "fub.versioning",
+          "nome": "Versioni",
+          "gruppo": "scrivere",
+          "bundle": true,
+          "acceso": true,
+          "perche": "Scelto",
+          "richiesto_da": [],
+          "descrizione": "Le versioni passate di ogni file, da riprendere quando serve.",
+          "tipo": "service",
+          "ui": [],
+          "richiede": [
+            "fub.markdown"
+          ],
+          "usa": []
+        },
+        {
+          "id": "fub.backlinks",
+          "nome": "Collegamenti",
+          "gruppo": "scrivere",
+          "bundle": true,
+          "acceso": true,
+          "perche": "Scelto",
+          "richiesto_da": [],
+          "descrizione": "Le note che portano a quella che stai leggendo.",
+          "tipo": "mode",
+          "ui": [],
+          "richiede": [
+            "fub.markdown"
+          ],
+          "usa": []
+        },
+        {
+          "id": "fub.outline",
+          "nome": "Struttura",
+          "gruppo": "scrivere",
+          "bundle": true,
+          "acceso": true,
+          "perche": "Scelto",
+          "richiesto_da": [],
+          "descrizione": "I titoli della nota, per saltare da una parte all'altra.",
+          "tipo": "mode",
+          "ui": [],
+          "richiede": [
+            "fub.markdown"
+          ],
+          "usa": []
+        },
+        {
+          "id": "fub.tags",
+          "nome": "Tag",
+          "gruppo": "scrivere",
+          "bundle": true,
+          "acceso": true,
+          "perche": "Scelto",
+          "richiesto_da": [],
+          "descrizione": "Tutti i tag del vault, e le note che li portano.",
+          "tipo": "mode",
+          "ui": [],
+          "richiede": [
+            "fub.markdown"
+          ],
+          "usa": []
+        },
+        {
+          "id": "fub.properties",
+          "nome": "Proprietà",
+          "gruppo": "scrivere",
+          "bundle": true,
+          "acceso": true,
+          "perche": "Scelto",
+          "richiesto_da": [
+            "fub.base",
+            "fub.template"
+          ],
+          "descrizione": "Le proprietà in testa alla nota, da leggere e cambiare.",
+          "tipo": "service",
+          "ui": [],
+          "richiede": [
+            "fub.markdown"
+          ],
+          "usa": []
+        },
+        {
+          "id": "fub.template",
+          "nome": "Template",
+          "gruppo": "scrivere",
+          "bundle": true,
+          "acceso": true,
+          "perche": "Scelto",
+          "richiesto_da": [],
+          "descrizione": "Modelli di nota, la nota del giorno, la data e l'ora.",
+          "tipo": "mode",
+          "ui": [],
+          "richiede": [
+            "fub.markdown",
+            "fub.properties"
+          ],
+          "usa": []
+        },
+        {
+          "id": "fub.queries",
+          "nome": "Query",
+          "gruppo": "scrivere",
+          "bundle": true,
+          "acceso": true,
+          "perche": "Scelto",
+          "richiesto_da": [],
+          "descrizione": "Le ricerche salvate, da rifare con un clic.",
+          "tipo": "mode",
+          "ui": [],
+          "richiede": [
+            "fub.markdown"
+          ],
+          "usa": []
+        },
+        {
+          "id": "fub.dashboard",
+          "nome": "Dashboard",
+          "gruppo": "scrivere",
+          "bundle": true,
+          "acceso": true,
+          "perche": "Scelto",
+          "richiesto_da": [],
+          "descrizione": "Il vault in numeri: note, tag, file e collegamenti rotti.",
+          "tipo": "mode",
+          "ui": [],
+          "richiede": [
+            "fub.markdown"
+          ],
+          "usa": []
+        },
+        {
+          "id": "fub.backup",
+          "nome": "Backup",
+          "gruppo": "scrivere",
+          "bundle": true,
+          "acceso": true,
+          "perche": "Scelto",
+          "richiesto_da": [],
+          "descrizione": "Copie delle note da cui ripartire.",
+          "tipo": "mode",
+          "ui": [],
+          "richiede": [
+            "fub.markdown"
+          ],
+          "usa": []
+        },
+        {
+          "id": "fub.trash",
+          "nome": "Cestino",
+          "gruppo": "scrivere",
+          "bundle": true,
+          "acceso": true,
+          "perche": "Scelto",
+          "richiesto_da": [],
+          "descrizione": "Le note eliminate, da recuperare o togliere per sempre.",
+          "tipo": "mode",
+          "ui": [],
+          "richiede": [
+            "fub.commands",
+            "fub.markdown"
+          ],
+          "usa": []
+        },
+        {
+          "id": "fub.stats",
+          "nome": "Statistiche",
+          "gruppo": "scrivere",
+          "bundle": true,
+          "acceso": true,
+          "perche": "Scelto",
+          "richiesto_da": [],
+          "descrizione": "Parole, caratteri e tempo di lettura della nota.",
+          "tipo": "mode",
+          "ui": [],
+          "richiede": [
+            "fub.markdown"
+          ],
+          "usa": []
+        },
+        {
+          "id": "fub.graph",
+          "nome": "Grafo",
+          "gruppo": "scrivere",
+          "bundle": true,
+          "acceso": true,
+          "perche": "Scelto",
+          "richiesto_da": [],
+          "descrizione": "I collegamenti fra le note, in una mappa.",
+          "tipo": "mode",
+          "ui": [],
+          "richiede": [
+            "fub.markdown"
+          ],
+          "usa": []
+        },
+        {
+          "id": "fub.commands",
+          "nome": "Comandi",
+          "gruppo": "scrivere",
+          "bundle": true,
+          "acceso": true,
+          "perche": "Scelto",
+          "richiesto_da": [
+            "fub.trash"
+          ],
+          "descrizione": "Le azioni che trovi nella palette dei comandi.",
+          "tipo": "service",
+          "ui": [],
+          "richiede": [
+            "fub.markdown"
+          ],
+          "usa": []
+        },
+        {
+          "id": "fub.blocks",
+          "nome": "Blocchi",
+          "gruppo": "scrivere",
+          "bundle": true,
+          "acceso": true,
+          "perche": "Scelto",
+          "richiesto_da": [],
+          "descrizione": "Diagrammi, formule ed evidenziato dentro le note.",
+          "tipo": "mode",
+          "ui": [],
+          "richiede": [
+            "fub.markdown"
+          ],
+          "usa": []
+        },
+        {
+          "id": "fub.base",
+          "nome": "Base",
+          "gruppo": "scrivere",
+          "bundle": true,
+          "acceso": true,
+          "perche": "Scelto",
+          "richiesto_da": [],
+          "descrizione": "Tabelle che raccolgono le note per proprietà.",
+          "tipo": "mode",
+          "ui": [],
+          "richiede": [
+            "fub.markdown",
+            "fub.properties"
+          ],
+          "usa": []
+        },
+        {
+          "id": "fub.formatting",
+          "nome": "Barra di formattazione",
+          "gruppo": "scrivere",
+          "bundle": true,
+          "acceso": true,
+          "perche": "Scelto",
+          "richiesto_da": [],
+          "descrizione": "I pulsanti per grassetto, elenchi e titoli, senza ricordare i simboli.",
+          "tipo": "mode",
+          "ui": [],
+          "richiede": [
+            "fub.markdown"
+          ],
+          "usa": []
+        },
+        {
+          "id": "fub.proof",
+          "nome": "Correttore",
+          "gruppo": "scrivere",
+          "bundle": true,
+          "acceso": true,
+          "perche": "Scelto",
+          "richiesto_da": [],
+          "descrizione": "L'ortografia mentre scrivi.",
+          "tipo": "mode",
+          "ui": [],
+          "richiede": [
+            "fub.dizionari",
+            "fub.markdown"
+          ],
+          "usa": []
+        },
+        {
+          "id": "fub.draw",
+          "nome": "Disegni",
+          "gruppo": "disegnare",
+          "bundle": true,
+          "acceso": true,
+          "perche": "Scelto",
+          "richiesto_da": [
+            "fub.motore-vettoriale"
+          ],
+          "descrizione": "I file SVG: penna, forme, frecce, testo.",
+          "tipo": "service",
+          "ui": [
+            "editors/spatial"
+          ],
+          "richiede": [],
+          "usa": [
+            "fub.motore-vettoriale"
+          ]
+        },
+        {
+          "id": "fub.motore-vettoriale",
+          "nome": "Motore del disegno",
+          "gruppo": "disegnare",
+          "bundle": false,
+          "acceso": true,
+          "perche": "Scelto",
+          "richiesto_da": [],
+          "descrizione": "Disegna, sposta e cambia le forme dei disegni. Spento, i disegni usano gli strumenti semplici.",
+          "tipo": "engine",
+          "ui": [],
+          "richiede": [
+            "fub.draw"
+          ],
+          "usa": []
+        },
+        {
+          "id": "fub.craft",
+          "nome": "File delle app Craft",
+          "gruppo": "disegnare",
+          "bundle": true,
+          "acceso": true,
+          "perche": "Scelto",
+          "richiesto_da": [],
+          "descrizione": "I file di VectorCraft, PhotoCraft, FigCraft e LightCraft, da guardare.",
+          "tipo": "service",
+          "ui": [
+            "editors/craft"
+          ],
+          "richiede": [],
+          "usa": []
+        },
+        {
+          "id": "fub.rich",
+          "nome": "Documenti",
+          "gruppo": "ufficio",
+          "bundle": true,
+          "acceso": true,
+          "perche": "Scelto",
+          "richiesto_da": [],
+          "descrizione": "I file Word e OpenDocument, semplici o completi.",
+          "tipo": "mode",
+          "ui": [
+            "editors/rich"
+          ],
+          "richiede": [
+            "fub.motore-documenti"
+          ],
+          "usa": [
+            "fub.penna",
+            "fub.dizionari"
+          ]
+        },
+        {
+          "id": "fub.xlsx",
+          "nome": "Fogli",
+          "gruppo": "ufficio",
+          "bundle": true,
+          "acceso": true,
+          "perche": "Scelto",
+          "richiesto_da": [],
+          "descrizione": "I file Excel e OpenDocument, semplici o completi.",
+          "tipo": "mode",
+          "ui": [
+            "editors/grid"
+          ],
+          "richiede": [
+            "fub.motore-fogli"
+          ],
+          "usa": [
+            "fub.penna"
+          ]
+        },
+        {
+          "id": "fub.lavagna",
+          "nome": "Lavagna",
+          "gruppo": "pensare",
+          "bundle": true,
+          "acceso": true,
+          "perche": "Scelto",
+          "richiesto_da": [],
+          "descrizione": "Schede, fili e inchiostro sopra qualsiasi cosa.",
+          "tipo": "mode",
+          "ui": [
+            "editors/canvas"
+          ],
+          "richiede": [
+            "fub.penna"
+          ],
+          "usa": [
+            "fub.rich",
+            "fub.xlsx"
+          ]
+        },
+        {
+          "id": "fub.pdf",
+          "nome": "PDF",
+          "gruppo": "leggere",
+          "bundle": false,
+          "acceso": true,
+          "perche": "Scelto",
+          "richiesto_da": [],
+          "descrizione": "Leggere, cercare, evidenziare, annotare a penna.",
+          "tipo": "mode",
+          "ui": [
+            "editors/media"
+          ],
+          "richiede": [
+            "fub.penna"
+          ],
+          "usa": []
+        },
+        {
+          "id": "fub.penna",
+          "nome": "Penna",
+          "gruppo": "supporto",
+          "bundle": false,
+          "acceso": true,
+          "perche": {
+            "RichiestoDa": [
+              "fub.lavagna",
+              "fub.pdf"
+            ]
+          },
+          "richiesto_da": [
+            "fub.lavagna",
+            "fub.pdf"
+          ],
+          "descrizione": "Pressione, palmo, scia a bassa latenza, tratti.",
+          "tipo": "engine",
+          "ui": [],
+          "richiede": [],
+          "usa": []
+        },
+        {
+          "id": "fub.dizionari",
+          "nome": "Dizionari",
+          "gruppo": "supporto",
+          "bundle": false,
+          "acceso": true,
+          "perche": {
+            "RichiestoDa": [
+              "fub.proof"
+            ]
+          },
+          "richiesto_da": [
+            "fub.proof"
+          ],
+          "descrizione": "Le lingue del correttore.",
+          "tipo": "service",
+          "ui": [],
+          "richiede": [],
+          "usa": []
+        },
+        {
+          "id": "fub.motore-documenti",
+          "nome": "Motore dei documenti",
+          "gruppo": "supporto",
+          "bundle": false,
+          "acceso": true,
+          "perche": {
+            "RichiestoDa": [
+              "fub.rich"
+            ]
+          },
+          "richiesto_da": [
+            "fub.rich"
+          ],
+          "descrizione": "Impaginazione e comandi dei documenti.",
+          "tipo": "engine",
+          "ui": [],
+          "richiede": [],
+          "usa": []
+        },
+        {
+          "id": "fub.motore-fogli",
+          "nome": "Motore dei fogli",
+          "gruppo": "supporto",
+          "bundle": false,
+          "acceso": true,
+          "perche": {
+            "RichiestoDa": [
+              "fub.xlsx"
+            ]
+          },
+          "richiesto_da": [
+            "fub.xlsx"
+          ],
+          "descrizione": "Formule, calcolo e comandi dei fogli.",
+          "tipo": "engine",
+          "ui": [],
+          "richiede": [],
+          "usa": []
+        },
+        {
+          "id": "fub.importers",
+          "nome": "Importazione",
+          "gruppo": "scrivere",
+          "bundle": true,
+          "acceso": true,
+          "perche": "Scelto",
+          "richiesto_da": [],
+          "descrizione": "Portare in Fub le note di Evernote, OneNote, Tomboy e altri.",
+          "tipo": "service",
+          "ui": [],
+          "richiede": [],
+          "usa": []
+        },
+        {
+          "id": "fub.linkcard",
+          "nome": "Anteprime dei link",
+          "gruppo": "scrivere",
+          "bundle": true,
+          "acceso": true,
+          "perche": "Scelto",
+          "richiesto_da": [],
+          "descrizione": "Un link da solo diventa una scheda con titolo e icona, quando lo chiedi.",
+          "tipo": "service",
+          "ui": [],
+          "richiede": [],
+          "usa": []
+        },
+        {
+          "id": "fub.updates",
+          "nome": "Aggiornamenti",
+          "gruppo": "altro",
+          "bundle": true,
+          "acceso": true,
+          "perche": "Scelto",
+          "richiesto_da": [],
+          "descrizione": "Sapere se c'è una versione nuova di Fub, solo quando lo chiedi.",
+          "tipo": "service",
+          "ui": [],
+          "richiede": [],
+          "usa": []
+        },
+        {
+          "id": "fub.publish",
+          "nome": "Pubblicazione",
+          "gruppo": "altro",
+          "bundle": true,
+          "acceso": true,
+          "perche": "Scelto",
+          "richiesto_da": [],
+          "descrizione": "Mettere le note su un sito.",
+          "tipo": "service",
+          "ui": [],
+          "richiede": [],
+          "usa": []
+        },
+        {
+          "id": "fub.sync",
+          "nome": "Sincronizzazione",
+          "gruppo": "altro",
+          "bundle": true,
+          "acceso": true,
+          "perche": "Scelto",
+          "richiesto_da": [],
+          "descrizione": "Le stesse note su più dispositivi, cifrate.",
+          "tipo": "service",
+          "ui": [],
+          "richiede": [],
+          "usa": []
+        }
+      ],
+      "stato": {
+        "scelti": [
+          "fub.backlinks",
+          "fub.backup",
+          "fub.base",
+          "fub.blocks",
+          "fub.commands",
+          "fub.craft",
+          "fub.dashboard",
+          "fub.draw",
+          "fub.formatting",
           "fub.graph",
           "fub.importers",
           "fub.lavagna",
           "fub.linkcard",
+          "fub.motore-vettoriale",
           "fub.outline",
           "fub.pdf",
           "fub.proof",
@@ -5174,6 +5305,7 @@
             "fub.formatting",
             "fub.proof",
             "fub.draw",
+            "fub.motore-vettoriale",
             "fub.craft",
             "fub.rich",
             "fub.xlsx",
@@ -5588,13 +5720,33 @@
           "bundle": true,
           "acceso": true,
           "perche": "Scelto",
-          "richiesto_da": [],
+          "richiesto_da": [
+            "fub.motore-vettoriale"
+          ],
           "descrizione": "I file SVG: penna, forme, frecce, testo.",
           "tipo": "service",
           "ui": [
             "editors/spatial"
           ],
           "richiede": [],
+          "usa": [
+            "fub.motore-vettoriale"
+          ]
+        },
+        {
+          "id": "fub.motore-vettoriale",
+          "nome": "Motore del disegno",
+          "gruppo": "disegnare",
+          "bundle": false,
+          "acceso": true,
+          "perche": "Scelto",
+          "richiesto_da": [],
+          "descrizione": "Disegna, sposta e cambia le forme dei disegni. Spento, i disegni usano gli strumenti semplici.",
+          "tipo": "engine",
+          "ui": [],
+          "richiede": [
+            "fub.draw"
+          ],
           "usa": []
         },
         {
@@ -5833,6 +5985,7 @@
           "fub.formatting",
           "fub.importers",
           "fub.linkcard",
+          "fub.motore-vettoriale",
           "fub.outline",
           "fub.properties",
           "fub.publish",
@@ -6008,6 +6161,7 @@
             "fub.formatting",
             "fub.proof",
             "fub.draw",
+            "fub.motore-vettoriale",
             "fub.craft",
             "fub.rich",
             "fub.xlsx",
@@ -6422,13 +6576,33 @@
           "bundle": true,
           "acceso": true,
           "perche": "Scelto",
-          "richiesto_da": [],
+          "richiesto_da": [
+            "fub.motore-vettoriale"
+          ],
           "descrizione": "I file SVG: penna, forme, frecce, testo.",
           "tipo": "service",
           "ui": [
             "editors/spatial"
           ],
           "richiede": [],
+          "usa": [
+            "fub.motore-vettoriale"
+          ]
+        },
+        {
+          "id": "fub.motore-vettoriale",
+          "nome": "Motore del disegno",
+          "gruppo": "disegnare",
+          "bundle": false,
+          "acceso": true,
+          "perche": "Scelto",
+          "richiesto_da": [],
+          "descrizione": "Disegna, sposta e cambia le forme dei disegni. Spento, i disegni usano gli strumenti semplici.",
+          "tipo": "engine",
+          "ui": [],
+          "richiede": [
+            "fub.draw"
+          ],
           "usa": []
         },
         {
@@ -6673,6 +6847,7 @@
           "fub.formatting",
           "fub.importers",
           "fub.linkcard",
+          "fub.motore-vettoriale",
           "fub.outline",
           "fub.pdf",
           "fub.properties",
@@ -6849,6 +7024,7 @@
             "fub.formatting",
             "fub.proof",
             "fub.draw",
+            "fub.motore-vettoriale",
             "fub.craft",
             "fub.rich",
             "fub.xlsx",
@@ -7263,13 +7439,33 @@
           "bundle": true,
           "acceso": true,
           "perche": "Scelto",
-          "richiesto_da": [],
+          "richiesto_da": [
+            "fub.motore-vettoriale"
+          ],
           "descrizione": "I file SVG: penna, forme, frecce, testo.",
           "tipo": "service",
           "ui": [
             "editors/spatial"
           ],
           "richiede": [],
+          "usa": [
+            "fub.motore-vettoriale"
+          ]
+        },
+        {
+          "id": "fub.motore-vettoriale",
+          "nome": "Motore del disegno",
+          "gruppo": "disegnare",
+          "bundle": false,
+          "acceso": true,
+          "perche": "Scelto",
+          "richiesto_da": [],
+          "descrizione": "Disegna, sposta e cambia le forme dei disegni. Spento, i disegni usano gli strumenti semplici.",
+          "tipo": "engine",
+          "ui": [],
+          "richiede": [
+            "fub.draw"
+          ],
           "usa": []
         },
         {
@@ -7517,6 +7713,7 @@
           "fub.importers",
           "fub.lavagna",
           "fub.linkcard",
+          "fub.motore-vettoriale",
           "fub.outline",
           "fub.pdf",
           "fub.properties",
@@ -7693,6 +7890,7 @@
             "fub.formatting",
             "fub.proof",
             "fub.draw",
+            "fub.motore-vettoriale",
             "fub.craft",
             "fub.rich",
             "fub.xlsx",
@@ -8107,13 +8305,33 @@
           "bundle": true,
           "acceso": true,
           "perche": "Scelto",
-          "richiesto_da": [],
+          "richiesto_da": [
+            "fub.motore-vettoriale"
+          ],
           "descrizione": "I file SVG: penna, forme, frecce, testo.",
           "tipo": "service",
           "ui": [
             "editors/spatial"
           ],
           "richiede": [],
+          "usa": [
+            "fub.motore-vettoriale"
+          ]
+        },
+        {
+          "id": "fub.motore-vettoriale",
+          "nome": "Motore del disegno",
+          "gruppo": "disegnare",
+          "bundle": false,
+          "acceso": true,
+          "perche": "Scelto",
+          "richiesto_da": [],
+          "descrizione": "Disegna, sposta e cambia le forme dei disegni. Spento, i disegni usano gli strumenti semplici.",
+          "tipo": "engine",
+          "ui": [],
+          "richiede": [
+            "fub.draw"
+          ],
           "usa": []
         },
         {
@@ -8359,6 +8577,7 @@
           "fub.importers",
           "fub.lavagna",
           "fub.linkcard",
+          "fub.motore-vettoriale",
           "fub.outline",
           "fub.properties",
           "fub.publish",
@@ -8534,6 +8753,7 @@
             "fub.formatting",
             "fub.proof",
             "fub.draw",
+            "fub.motore-vettoriale",
             "fub.craft",
             "fub.rich",
             "fub.xlsx",
@@ -8948,13 +9168,33 @@
           "bundle": true,
           "acceso": true,
           "perche": "Scelto",
-          "richiesto_da": [],
+          "richiesto_da": [
+            "fub.motore-vettoriale"
+          ],
           "descrizione": "I file SVG: penna, forme, frecce, testo.",
           "tipo": "service",
           "ui": [
             "editors/spatial"
           ],
           "richiede": [],
+          "usa": [
+            "fub.motore-vettoriale"
+          ]
+        },
+        {
+          "id": "fub.motore-vettoriale",
+          "nome": "Motore del disegno",
+          "gruppo": "disegnare",
+          "bundle": false,
+          "acceso": true,
+          "perche": "Scelto",
+          "richiesto_da": [],
+          "descrizione": "Disegna, sposta e cambia le forme dei disegni. Spento, i disegni usano gli strumenti semplici.",
+          "tipo": "engine",
+          "ui": [],
+          "richiede": [
+            "fub.draw"
+          ],
           "usa": []
         },
         {
@@ -9193,6 +9433,7 @@
           "fub.formatting",
           "fub.importers",
           "fub.linkcard",
+          "fub.motore-vettoriale",
           "fub.outline",
           "fub.properties",
           "fub.publish",
@@ -9370,6 +9611,7 @@
             "fub.formatting",
             "fub.proof",
             "fub.draw",
+            "fub.motore-vettoriale",
             "fub.craft",
             "fub.rich",
             "fub.xlsx",
@@ -9784,13 +10026,33 @@
           "bundle": true,
           "acceso": true,
           "perche": "Scelto",
-          "richiesto_da": [],
+          "richiesto_da": [
+            "fub.motore-vettoriale"
+          ],
           "descrizione": "I file SVG: penna, forme, frecce, testo.",
           "tipo": "service",
           "ui": [
             "editors/spatial"
           ],
           "richiede": [],
+          "usa": [
+            "fub.motore-vettoriale"
+          ]
+        },
+        {
+          "id": "fub.motore-vettoriale",
+          "nome": "Motore del disegno",
+          "gruppo": "disegnare",
+          "bundle": false,
+          "acceso": true,
+          "perche": "Scelto",
+          "richiesto_da": [],
+          "descrizione": "Disegna, sposta e cambia le forme dei disegni. Spento, i disegni usano gli strumenti semplici.",
+          "tipo": "engine",
+          "ui": [],
+          "richiede": [
+            "fub.draw"
+          ],
           "usa": []
         },
         {
@@ -10029,6 +10291,7 @@
           "fub.formatting",
           "fub.importers",
           "fub.linkcard",
+          "fub.motore-vettoriale",
           "fub.outline",
           "fub.properties",
           "fub.publish",
@@ -10204,6 +10467,7 @@
             "fub.formatting",
             "fub.proof",
             "fub.draw",
+            "fub.motore-vettoriale",
             "fub.craft",
             "fub.rich",
             "fub.xlsx",
@@ -10618,13 +10882,33 @@
           "bundle": true,
           "acceso": true,
           "perche": "Scelto",
-          "richiesto_da": [],
+          "richiesto_da": [
+            "fub.motore-vettoriale"
+          ],
           "descrizione": "I file SVG: penna, forme, frecce, testo.",
           "tipo": "service",
           "ui": [
             "editors/spatial"
           ],
           "richiede": [],
+          "usa": [
+            "fub.motore-vettoriale"
+          ]
+        },
+        {
+          "id": "fub.motore-vettoriale",
+          "nome": "Motore del disegno",
+          "gruppo": "disegnare",
+          "bundle": false,
+          "acceso": true,
+          "perche": "Scelto",
+          "richiesto_da": [],
+          "descrizione": "Disegna, sposta e cambia le forme dei disegni. Spento, i disegni usano gli strumenti semplici.",
+          "tipo": "engine",
+          "ui": [],
+          "richiede": [
+            "fub.draw"
+          ],
           "usa": []
         },
         {
@@ -10863,6 +11147,7 @@
           "fub.formatting",
           "fub.importers",
           "fub.linkcard",
+          "fub.motore-vettoriale",
           "fub.outline",
           "fub.penna",
           "fub.properties",
@@ -11039,6 +11324,7 @@
             "fub.formatting",
             "fub.proof",
             "fub.draw",
+            "fub.motore-vettoriale",
             "fub.craft",
             "fub.rich",
             "fub.xlsx",
@@ -11455,13 +11741,33 @@
           "bundle": true,
           "acceso": true,
           "perche": "Scelto",
-          "richiesto_da": [],
+          "richiesto_da": [
+            "fub.motore-vettoriale"
+          ],
           "descrizione": "I file SVG: penna, forme, frecce, testo.",
           "tipo": "service",
           "ui": [
             "editors/spatial"
           ],
           "richiede": [],
+          "usa": [
+            "fub.motore-vettoriale"
+          ]
+        },
+        {
+          "id": "fub.motore-vettoriale",
+          "nome": "Motore del disegno",
+          "gruppo": "disegnare",
+          "bundle": false,
+          "acceso": true,
+          "perche": "Scelto",
+          "richiesto_da": [],
+          "descrizione": "Disegna, sposta e cambia le forme dei disegni. Spento, i disegni usano gli strumenti semplici.",
+          "tipo": "engine",
+          "ui": [],
+          "richiede": [
+            "fub.draw"
+          ],
           "usa": []
         },
         {
@@ -11728,6 +12034,7 @@
           "fub.importers",
           "fub.lavagna",
           "fub.linkcard",
+          "fub.motore-vettoriale",
           "fub.outline",
           "fub.pdf",
           "fub.proof",
@@ -11907,6 +12214,7 @@
             "fub.formatting",
             "fub.proof",
             "fub.draw",
+            "fub.motore-vettoriale",
             "fub.craft",
             "fub.rich",
             "fub.xlsx",
@@ -12128,6 +12436,7 @@
             "fub.importers",
             "fub.lavagna",
             "fub.linkcard",
+            "fub.motore-vettoriale",
             "fub.outline",
             "fub.pdf",
             "fub.proof",
@@ -12211,6 +12520,7 @@
             "fub.importers",
             "fub.lavagna",
             "fub.linkcard",
+            "fub.motore-vettoriale",
             "fub.outline",
             "fub.pdf",
             "fub.proof",
@@ -12324,6 +12634,7 @@
             "fub.importers",
             "fub.lavagna",
             "fub.linkcard",
+            "fub.motore-vettoriale",
             "fub.outline",
             "fub.pdf",
             "fub.proof",
@@ -12396,6 +12707,7 @@
             "fub.importers",
             "fub.lavagna",
             "fub.linkcard",
+            "fub.motore-vettoriale",
             "fub.outline",
             "fub.pdf",
             "fub.proof",
@@ -12476,6 +12788,7 @@
             "fub.lavagna",
             "fub.linkcard",
             "fub.markdown",
+            "fub.motore-vettoriale",
             "fub.outline",
             "fub.pdf",
             "fub.proof",
@@ -12546,6 +12859,7 @@
             "fub.lavagna",
             "fub.linkcard",
             "fub.markdown",
+            "fub.motore-vettoriale",
             "fub.outline",
             "fub.pdf",
             "fub.proof",
@@ -12638,6 +12952,7 @@
             "fub.graph",
             "fub.importers",
             "fub.linkcard",
+            "fub.motore-vettoriale",
             "fub.outline",
             "fub.proof",
             "fub.properties",
@@ -12718,6 +13033,7 @@
             "fub.graph",
             "fub.importers",
             "fub.linkcard",
+            "fub.motore-vettoriale",
             "fub.outline",
             "fub.proof",
             "fub.properties",
@@ -12819,6 +13135,7 @@
             "fub.lavagna",
             "fub.linkcard",
             "fub.markdown",
+            "fub.motore-vettoriale",
             "fub.outline",
             "fub.pdf",
             "fub.proof",
@@ -12897,6 +13214,7 @@
             "fub.lavagna",
             "fub.linkcard",
             "fub.markdown",
+            "fub.motore-vettoriale",
             "fub.outline",
             "fub.pdf",
             "fub.proof",
@@ -12993,6 +13311,7 @@
             "fub.importers",
             "fub.lavagna",
             "fub.linkcard",
+            "fub.motore-vettoriale",
             "fub.outline",
             "fub.pdf",
             "fub.proof",
@@ -13065,6 +13384,7 @@
             "fub.importers",
             "fub.lavagna",
             "fub.linkcard",
+            "fub.motore-vettoriale",
             "fub.outline",
             "fub.pdf",
             "fub.proof",
@@ -13146,6 +13466,7 @@
             "fub.lavagna",
             "fub.linkcard",
             "fub.markdown",
+            "fub.motore-vettoriale",
             "fub.outline",
             "fub.pdf",
             "fub.proof",
@@ -13216,6 +13537,7 @@
             "fub.lavagna",
             "fub.linkcard",
             "fub.markdown",
+            "fub.motore-vettoriale",
             "fub.outline",
             "fub.pdf",
             "fub.proof",
@@ -13293,6 +13615,7 @@
             "fub.linkcard",
             "fub.maintenance",
             "fub.markdown",
+            "fub.motore-vettoriale",
             "fub.outline",
             "fub.pdf",
             "fub.proof",
@@ -13359,6 +13682,7 @@
             "fub.linkcard",
             "fub.maintenance",
             "fub.markdown",
+            "fub.motore-vettoriale",
             "fub.outline",
             "fub.pdf",
             "fub.proof",
@@ -13429,6 +13753,7 @@
             "fub.lavagna",
             "fub.linkcard",
             "fub.markdown",
+            "fub.motore-vettoriale",
             "fub.outline",
             "fub.pdf",
             "fub.proof",
@@ -13493,6 +13818,7 @@
             "fub.lavagna",
             "fub.linkcard",
             "fub.markdown",
+            "fub.motore-vettoriale",
             "fub.outline",
             "fub.pdf",
             "fub.proof",
@@ -13604,6 +13930,7 @@
             "fub.importers",
             "fub.linkcard",
             "fub.markdown",
+            "fub.motore-vettoriale",
             "fub.outline",
             "fub.properties",
             "fub.publish",
@@ -13705,6 +14032,7 @@
             "fub.importers",
             "fub.linkcard",
             "fub.markdown",
+            "fub.motore-vettoriale",
             "fub.outline",
             "fub.properties",
             "fub.publish",
@@ -13815,6 +14143,7 @@
             "fub.formatting",
             "fub.importers",
             "fub.linkcard",
+            "fub.motore-vettoriale",
             "fub.outline",
             "fub.pdf",
             "fub.properties",
@@ -13882,6 +14211,7 @@
             "fub.formatting",
             "fub.importers",
             "fub.linkcard",
+            "fub.motore-vettoriale",
             "fub.outline",
             "fub.pdf",
             "fub.properties",
@@ -13956,6 +14286,7 @@
             "fub.importers",
             "fub.lavagna",
             "fub.linkcard",
+            "fub.motore-vettoriale",
             "fub.outline",
             "fub.pdf",
             "fub.properties",
@@ -14019,6 +14350,7 @@
             "fub.importers",
             "fub.lavagna",
             "fub.linkcard",
+            "fub.motore-vettoriale",
             "fub.outline",
             "fub.pdf",
             "fub.properties",
@@ -14102,6 +14434,7 @@
             "fub.importers",
             "fub.lavagna",
             "fub.linkcard",
+            "fub.motore-vettoriale",
             "fub.outline",
             "fub.properties",
             "fub.publish",
@@ -14170,6 +14503,7 @@
             "fub.importers",
             "fub.lavagna",
             "fub.linkcard",
+            "fub.motore-vettoriale",
             "fub.outline",
             "fub.properties",
             "fub.publish",
@@ -14245,6 +14579,7 @@
             "fub.formatting",
             "fub.importers",
             "fub.linkcard",
+            "fub.motore-vettoriale",
             "fub.outline",
             "fub.properties",
             "fub.publish",
@@ -14316,6 +14651,7 @@
             "fub.formatting",
             "fub.importers",
             "fub.linkcard",
+            "fub.motore-vettoriale",
             "fub.outline",
             "fub.properties",
             "fub.publish",
@@ -14396,6 +14732,7 @@
             "fub.formatting",
             "fub.importers",
             "fub.linkcard",
+            "fub.motore-vettoriale",
             "fub.outline",
             "fub.properties",
             "fub.publish",
@@ -14455,6 +14792,7 @@
             "fub.formatting",
             "fub.importers",
             "fub.linkcard",
+            "fub.motore-vettoriale",
             "fub.outline",
             "fub.properties",
             "fub.publish",
@@ -14526,6 +14864,7 @@
             "fub.formatting",
             "fub.importers",
             "fub.linkcard",
+            "fub.motore-vettoriale",
             "fub.outline",
             "fub.pdf",
             "fub.properties",
@@ -14592,6 +14931,7 @@
             "fub.formatting",
             "fub.importers",
             "fub.linkcard",
+            "fub.motore-vettoriale",
             "fub.outline",
             "fub.pdf",
             "fub.properties",
@@ -14669,6 +15009,7 @@
             "fub.formatting",
             "fub.importers",
             "fub.linkcard",
+            "fub.motore-vettoriale",
             "fub.outline",
             "fub.properties",
             "fub.publish",
@@ -14741,6 +15082,7 @@
             "fub.formatting",
             "fub.importers",
             "fub.linkcard",
+            "fub.motore-vettoriale",
             "fub.outline",
             "fub.properties",
             "fub.publish",
@@ -14814,6 +15156,7 @@
             "fub.formatting",
             "fub.importers",
             "fub.linkcard",
+            "fub.motore-vettoriale",
             "fub.outline",
             "fub.penna",
             "fub.properties",
@@ -14875,6 +15218,7 @@
             "fub.formatting",
             "fub.importers",
             "fub.linkcard",
+            "fub.motore-vettoriale",
             "fub.outline",
             "fub.penna",
             "fub.properties",
@@ -14947,6 +15291,7 @@
             "fub.lavagna",
             "fub.linkcard",
             "fub.markdown",
+            "fub.motore-vettoriale",
             "fub.outline",
             "fub.pdf",
             "fub.proof",
@@ -15011,6 +15356,7 @@
             "fub.lavagna",
             "fub.linkcard",
             "fub.markdown",
+            "fub.motore-vettoriale",
             "fub.outline",
             "fub.pdf",
             "fub.proof",
@@ -15122,6 +15468,7 @@
             "fub.importers",
             "fub.linkcard",
             "fub.markdown",
+            "fub.motore-vettoriale",
             "fub.outline",
             "fub.properties",
             "fub.publish",
@@ -15223,6 +15570,7 @@
             "fub.importers",
             "fub.linkcard",
             "fub.markdown",
+            "fub.motore-vettoriale",
             "fub.outline",
             "fub.properties",
             "fub.publish",
@@ -15329,6 +15677,7 @@
             "fub.linkcard",
             "fub.maintenance",
             "fub.markdown",
+            "fub.motore-vettoriale",
             "fub.outline",
             "fub.pdf",
             "fub.proof",
@@ -15395,6 +15744,7 @@
             "fub.linkcard",
             "fub.maintenance",
             "fub.markdown",
+            "fub.motore-vettoriale",
             "fub.outline",
             "fub.pdf",
             "fub.proof",

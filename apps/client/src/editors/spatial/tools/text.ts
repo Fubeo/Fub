@@ -97,6 +97,39 @@ export function textElem(id: string, at: Point, lines: readonly TextLine[], styl
   };
 }
 
+/// L'elemento del testo nuovo dello strumento Testo: la parola `word`, una
+/// riga, ancorata in `at` con il colore `color` e il corpo di serie.
+export function newTextElem(id: string, at: Point, word: string, color: string): Elem {
+  return textElem(id, at, textLines(word), { color, size: TEXT_SIZE });
+}
+
+/// Gli attributi di un testo che ne fanno qualcosa che l'operazione `text`
+/// non riscrive senza perdite: un testo in area, l'etichetta di una forma o
+/// di un connettore, gli spazi tenuti come sono.
+const NOT_FREE: readonly string[] = ["fub:wrap", "fub:inside", "fub:along", "xml:space"];
+
+/// Le parole di `elem` come si modificano nel campo «Testo» (le righe con
+/// `\n`), se è un testo libero che l'operazione `text` riscrive senza
+/// perdere niente: righe tutte `tspan` di testo semplice, con gli stessi
+/// attributi tranne `dy`, senza `fub:join`. `null` altrimenti: un testo su
+/// tracciato, in area, coi pezzi, con righe di stili diversi, un'etichetta.
+export function wordsOf(elem: Elem): string | null {
+  if (elem.tag !== "text" || NOT_FREE.some((name) => elem.attrs[name] !== undefined)) return null;
+  const lines: string[] = [];
+  let shared: string | null = null;
+  for (const child of elem.children ?? []) {
+    if (child.tag === "title" || child.tag === "desc") continue;
+    if (child.tag !== "tspan" || child.runs !== undefined || (child.children?.length ?? 0) > 0) return null;
+    const rest = Object.entries(child.attrs).filter(([name]) => name !== "dy");
+    if (rest.some(([name]) => NOT_FREE.includes(name) || name === "fub:join")) return null;
+    const look = JSON.stringify(rest.sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)));
+    if (shared !== null && look !== shared) return null;
+    shared = look;
+    lines.push(child.text ?? "");
+  }
+  return lines.length === 0 ? null : editableText(lines);
+}
+
 /// I file dei caratteri che l'app porta, coi nomi che il file del disegno
 /// scrive, i pesi e lo stile che coprono: quelli di `theme/serie/fonts.css`,
 /// e il corsivo vero di ciascuno, che un testo del disegno può chiedere.

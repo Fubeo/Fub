@@ -22,16 +22,18 @@ import {
 import * as registry from "./registry";
 
 describe("il registro degli strumenti", () => {
-  it("dà al disegno, nel Completo come nel Semplice, i dieci strumenti nell'ordine della barra", () => {
-    const ids = ["select", "hand", "zoom", "pen", "highlighter", "eraser", "rect", "ellipse", "line", "arrow"];
+  it("dà al disegno, nel Completo come nel Semplice, gli undici strumenti nell'ordine della barra", () => {
+    const ids = ["select", "hand", "zoom", "pen", "highlighter", "eraser", "rect", "ellipse", "line", "arrow", "text"];
     expect(toolsFor("full").map((tool) => tool.id)).toEqual(ids);
     expect(toolsFor("simple").map((tool) => tool.id)).toEqual(ids);
     expect(toolsFor().map((tool) => tool.id), "il Completo è quello di serie").toEqual(ids);
     expect(DEFAULT_TOOL).toBe("pen");
     expect(toolSpec("highlighter").shortcut).toBe("Shift-p");
+    // La «T» è del Testo, che c'è anche senza il motore (K5 T22).
+    expect(toolForKey(toolsFor("simple"), "t")?.id).toBe("text");
     // Le lettere degli strumenti che se ne sono andati non sono di nessuno
     // (ADR 0231).
-    for (const key of ["q", "f", "i", "g", "x", "y", "t", "a", "n", "b", "m", "c", "w"]) expect(toolForKey(toolsFor("full"), key), key).toBeNull();
+    for (const key of ["q", "f", "i", "g", "x", "y", "a", "n", "b", "m", "c", "w"]) expect(toolForKey(toolsFor("full"), key), key).toBeNull();
   });
 
   it("dà alle annotazioni di un PDF penna, evidenziatore e gomma nel Semplice, e note, forme e copertura nel Completo", () => {
@@ -43,6 +45,9 @@ describe("il registro degli strumenti", () => {
     expect([...featuresFor("full", "pdf")].every((feature) => TOOLS.some((tool) => tool.id === feature))).toBe(true);
     // Note e copertura non sono del disegno, né sue parti.
     expect(toolsFor("full", "vector").some((tool) => tool.id === "note" || tool.id === "cover")).toBe(false);
+    // Il Testo è soltanto del disegno.
+    expect(toolsFor("full", "pdf").some((tool) => tool.id === "text")).toBe(false);
+    expect(toolForKey(toolsFor("full", "pdf"), "t")).toBeNull();
     expect(FEATURES.some((feature) => feature.id === "note" || feature.id === "cover")).toBe(false);
     expect(defaultTool("vector")).toBe("pen");
     expect(defaultTool("pdf")).toBe("highlighter");
@@ -66,7 +71,7 @@ describe("il registro degli strumenti", () => {
 
   it("elenca le parti, prima gli strumenti nell'ordine della barra, poi i comandi, ciascuna una volta", () => {
     expect(FEATURES.map((feature) => feature.id)).toEqual([
-      "pen", "highlighter", "eraser", "rect", "ellipse", "line", "arrow",
+      "pen", "highlighter", "eraser", "rect", "ellipse", "line", "arrow", "text",
       "colors", "tips", "selection", "arrange", "layers", "grid", "recognize", "gestures", "links", "images", "properties", "style", "history", "accessibility", "export",
     ]);
     expect(new Set(FEATURES.map((feature) => feature.label)).size).toBe(FEATURES.length);
@@ -80,7 +85,7 @@ describe("il registro degli strumenti", () => {
     for (const each of WORKSPACES) expect(isWorkspace(each)).toBe(true);
     for (const other of ["Full", "", "essential", 1, null]) expect(isWorkspace(other)).toBe(false);
     expect(featuresFor("full").size, "Completo non nasconde niente").toBe(FEATURES.length);
-    expect([...featuresFor("simple")]).toEqual(["pen", "highlighter", "eraser", "rect", "ellipse", "line", "arrow", "colors", "gestures", "images", "properties", "export"]);
+    expect([...featuresFor("simple")]).toEqual(["pen", "highlighter", "eraser", "rect", "ellipse", "line", "arrow", "text", "colors", "gestures", "images", "properties", "export"]);
   });
 
   it("dà sempre la Selezione, la Mano e la Lente, e comincia dalla penna o dal primo strumento che disegna", () => {

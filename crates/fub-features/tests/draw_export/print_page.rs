@@ -336,6 +336,7 @@ fn two_pdf_readers_find_paper_trim_bleed_and_marks_to_a_tenth_of_a_millimetre() 
     );
     let pixmap = hayro::render(
         page,
+        &hayro::RenderCache::new(),
         &hayro::hayro_interpret::InterpreterSettings::default(),
         &render,
     );

@@ -21,6 +21,11 @@
 // - **Un colore dice il suo contrasto con la carta**: per il riempimento di
 //   una selezione con testi le soglie del testo, altrimenti quella di una
 //   forma; con l'opacità degli oggetti, se è una sola.
+// - **Le parole di un testo libero** (campo «Testo», in testa alla sezione
+//   del testo): solo per un testo scelto da solo che l'operazione `text`
+//   riscrive senza perdere niente (`wordsOf` di `text.ts`). Un testo su
+//   tracciato, in area, con righe di stili diversi o coi pezzi, e le
+//   etichette delle forme e dei connettori non lo hanno.
 // - **Senza selezione, il disegno**: la pagina, l'unità, la descrizione, e
 //   come si vede il foglio. Il titolo resta nella barra.
 // - **Le punte delle linee** (livello Standard): «Punta d'inizio» e «Punta
@@ -221,6 +226,9 @@ export interface SelectionFacts {
   readonly orders: ReadonlySet<Order>;
   /// Le punte delle linee scelte; senza, o `null`, non ce n'è da mostrare.
   readonly tips?: TipsLook | null;
+  /// Le parole di un solo testo libero scelto, come si modificano
+  /// (`wordsOf` di `text.ts`); senza, o `null`, il campo «Testo» non c'è.
+  readonly words?: string | null;
 }
 
 /// Il disegno, quando non c'è niente di scelto.
@@ -517,6 +525,9 @@ export function propertiesView(input: FieldsInput): PropertiesView {
     }
 
     // --- Testo ---
+    // Le parole, per un testo libero solo che le riscrive senza perdere
+    // niente.
+    if (selection.words != null) fields.content = { kind: "text", label: t("draw.properties.content"), value: selection.words };
     if (look.size.count > 0) {
       const { size, weight } = look;
       const preset = size.value === null || weight.value === null ? undefined : TEXT_PRESETS.find((each) => Math.abs(each.size - size.value!) < 1e-6 && each.weight === weight.value);

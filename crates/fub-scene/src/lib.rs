@@ -62,6 +62,11 @@ pub use classify::{
     Stroke, StyleFacts, StyleKind, Swatch, Tags, Tool, STYLE_GRAPHIC_POINTS,
 };
 pub use diagnostics::{Code, Diagnostic, Severity};
+/// La lettura di un attributo `d` con la grammatica di SVG 2, per chi ne
+/// rifà la geometria fuori da qui (il contorno delle linee a spessore
+/// variabile di `fub-disegno`): un lettore solo, perché due lettori dello
+/// stesso `d` possono divergere.
+pub use geometry::{parse_path, Segment as PathSegment};
 pub use ink::{Ink, InkError, Sample, Scale};
 pub use text::{LineEnding, Span};
 pub use xml::XmlErrorKind;

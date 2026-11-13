@@ -70,3 +70,22 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
+
+## Avvisi richiesti dalle dipendenze
+
+Le dipendenze dichiarate nei manifest non stanno in questo file, salvo quelle
+la cui licenza chiede un avviso nella documentazione di chi distribuisce
+l'eseguibile. Ognuna ha la sua eccezione in `deny.toml`, con il perché.
+
+### jpeg-encoder
+
+`jpeg-encoder` 0.6 (`(MIT OR Apache-2.0) AND IJG`) scrive i JPEG del motore
+del disegno; lo porta `vectorcraft-render`. La trasformata discreta del coseno
+deriva dal codice dell'Independent JPEG Group, passato da mozjpeg e
+libjpeg-turbo: i file `src/fdct.rs` e `src/avx2/fdct.rs` del crate. La
+licenza IJG chiede, a chi la usa in un programma, di riconoscerlo nella
+documentazione:
+
+```text
+This software is based in part on the work of the Independent JPEG Group.
+```

@@ -9,7 +9,8 @@ description = "Official features as native trait implementations: backlink, sear
 # Una cargo feature per bundle, e i nomi sono gli stessi dell'inventario
 # (`src/inventory.rs`): una riga che sparisce dietro un `#[cfg]` sparisce da lì,
 # quindi non è mai il documento a dire cosa esiste. Il default è **tutto**, cioè
-# l'app che spediamo, con una sola eccezione dichiarata (`draw`, più sotto):
+# l'app che spediamo, con le eccezioni dichiarate (`draw` e `engine-drawing`,
+# che lo accende, più sotto):
 # spegnere è una scelta di chi compila, non un difetto da ricordarsi di
 # correggere.
 #
@@ -81,7 +82,8 @@ base = ["dep:fub-format-base", "properties"]
 # dipendenza, di compilazione o di funzionamento.
 formatting = []
 # I disegni: il comando che ne fa nascere uno e l'export in PNG, JPEG, SVG,
-# PDF, Excalidraw e draw.io. È l'unica feature **fuori** dal default, ed è una scelta e non una
+# PDF, Excalidraw e draw.io. È fuori dal default (con `engine-drawing`, che
+# la accende), ed è una scelta e non una
 # dimenticanza: porta un rasterizzatore, un convertitore PDF e i caratteri di
 # Fub incorporati nel binario, e li porta solo con il formato dei disegni, che
 # sta dietro la feature `draw` di `fub-host`. Chi compila senza disegni non
@@ -107,6 +109,12 @@ draw = [
     "dep:kurbo",
     "dep:wuff",
 ]
+# Il Motore del disegno: solo la sua riga della mappa (`src/componenti.rs`); il
+# motore sta in `fub-disegno`, che porta `fub-host` con la sua feature omonima.
+# Il motore porta i disegni, i disegni non portano il motore: spento lui, si
+# disegna con gli strumenti semplici. Fuori dal default come `draw`, che
+# accende.
+engine-drawing = ["draw"]
 # La lavagna: il comando `canvas.apply`, che porta in un `.canvas` le
 # operazioni del suo nucleo. Il nucleo è puro (`serde`, `serde_json`,
 # `thiserror`) e nessun'altra feature lo tira dentro.
@@ -162,14 +170,14 @@ tantivy = { version = "0.26", optional = true, default-features = false, feature
     "stemmer",
 ] }
 regex = { workspace = true, optional = true }
-# Dietro `draw`, e solo lì. `resvg` senza i default, che sono `system-fonts` e
+# Dietro `draw`, e solo lì. `resvg` senza i default (lo dice la radice), che sono `system-fonts` e
 # `memmap-fonts`: i caratteri sono quelli di Fub, incorporati, e nient'altro.
 # Restano il testo e la decodifica delle immagini raster, incorporate come
 # `data:` o lette dal vault. `fontdb` sa comunque leggere dal disco, perché `svg2pdf` lo prende
 # con le sue feature di serie e le feature si sommano: che non lo faccia lo
 # garantisce il codice, che costruisce il database dai soli byte incorporati, e
 # lo prova un test.
-resvg = { version = "0.45.1", default-features = false, features = ["text", "raster-images"], optional = true }
+resvg = { workspace = true, features = ["text", "raster-images"], optional = true }
 svg2pdf = { version = "0.13.0", optional = true }
 # L'encoder del PNG: quello di `tiny-skia` non scrive né la risoluzione
 # (`pHYs`) né il titolo (`iTXt`). È la stessa 0.18 che `image` porta già.
@@ -200,12 +208,16 @@ fub-scene = { workspace = true, optional = true }
 # parallelismo di `rayon`: le date non si scrivono, e un PDF si legge in un
 # thread solo.
 lopdf = { version = "0.45.0", default-features = false, optional = true }
-# Il rasterizzatore delle pagine del PDF redatto. La 0.5 perché le successive
-# chiedono un compilatore più nuovo di quello del workspace. I caratteri
-# standard del PDF (`embed-fonts`, di serie) sono sostituti con licenza
-# permissiva incorporati nel binario: una pagina che li usa senza incorporarli
-# esce col testo.
-hayro = { version = "0.5.0", optional = true }
+# Il rasterizzatore delle pagine del PDF redatto. La 0.6 perché legge i JPEG
+# 2000 e i fax con le stesse `hayro-jpeg2000` 0.3.5 e `hayro-ccitt` 0.3 del
+# motore del disegno, e disegna con `peniko` 0.6 e `fearless_simd` 0.4 come
+# lui: dalla 0.8 queste salgono di nuovo, e tornerebbero doppie
+# (docs/misure/disegno-versioni-2026-11.md). I caratteri standard del PDF
+# (`embed-fonts`) sono sostituti con licenza permissiva incorporati nel
+# binario: una pagina che li usa senza incorporarli esce col testo. Le CMap
+# incorporate (`embed-cmaps`, di serie dalla 0.6) restano spente, come nella
+# 0.5.
+hayro = { version = "0.6.0", default-features = false, features = ["embed-fonts"], optional = true }
 # L'immagine di una pagina redatta, compressa come un PNG dentro il PDF.
 flate2 = { workspace = true, optional = true }
 # L'impronta del PDF, per dire se è cambiato da quando è stato annotato.

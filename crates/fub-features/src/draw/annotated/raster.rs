@@ -272,7 +272,7 @@ fn draw_page(
         height: Some(u16::try_from(height).map_err(|_| "the page is too large".to_string())?),
         bg_color: hayro::vello_cpu::color::palette::css::WHITE,
     };
-    let pixmap = hayro::render(page, &settings, &render);
+    let pixmap = hayro::render(page, &hayro::RenderCache::new(), &settings, &render);
     Ok(pixmap.data_as_u8_slice().to_vec())
 }
 
