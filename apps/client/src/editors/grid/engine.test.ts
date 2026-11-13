@@ -489,6 +489,23 @@ describe("GridEngine", () => {
     engine.destroy();
   });
 
+  it("due modifiche alla stessa cella si annullano una dopo l'altra, senza avviso se nessuno l'ha toccata", async () => {
+    const { engine, host, viewport } = await mounted(bytesHost());
+    typeInActiveCell(host, viewport, "X");
+    await settle();
+    typeInActiveCell(host, viewport, "Y");
+    await settle();
+
+    viewport.dispatchEvent(ctrlZ());
+    await settle();
+    expect(cellAt(host, 0, 0)?.textContent).toBe("X");
+    viewport.dispatchEvent(ctrlZ());
+    await settle();
+    expect(cellAt(host, 0, 0)?.textContent).toBe("1");
+    expect(host.querySelector<HTMLElement>(".grid-notice")!.textContent).not.toContain(t("grid.external.undo"));
+    engine.destroy();
+  });
+
   it("l'eco di un salvataggio non svuota la storia dell'annulla, e non dice che il file è cambiato fuori", async () => {
     let saved = false;
     const onDisk = (cell: GridBytesCell): GridBytesCell => cell.key.row === "r0" && cell.key.column === "c0"
