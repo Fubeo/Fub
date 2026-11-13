@@ -81,9 +81,10 @@ impl Sincronia {
     ///
     /// Le modifiche valgono solo su una revisione più nuova di quella tenuta
     /// e solo se le lunghezze e il testo cancellato tornano (`bad_args`
-    /// altrimenti: il client manda allora il testo intero). Il testo intero
-    /// vale sempre, a qualunque revisione: è il modo in cui il client
-    /// rimette in pari una copia rimasta indietro.
+    /// altrimenti: il client ferma la sessione, e «Riprova» ne apre una
+    /// nuova col testo di quel momento). Il testo intero vale sempre, a
+    /// qualunque revisione: è il modo in cui il client rimette in pari una
+    /// copia rimasta indietro dopo uno `stale`.
     pub fn applica(
         &mut self,
         sync: &DrawingSync,

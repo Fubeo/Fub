@@ -36,7 +36,7 @@ prova sono nella tabella qui sotto.
 | la lavagna nella WebView | `crates/fub-canvas-wasm/` | la facciata WebAssembly del nucleo: un'interfaccia C scritta a mano, testo e JSON dentro e fuori | `cargo test -p fub-canvas-wasm` |
 | l'inchiostro | `crates/fub-ink/` | campioni, pressione, stabilizzatore, InkML; il gemello caldo sta in `apps/client/src/ink/` | `cargo test -p fub-ink` |
 | i disegni | `crates/fub-scene/` | lettura del formato scena e delle annotazioni PDF | `cargo test -p fub-scene` |
-| il motore del disegno | `crates/fub-disegno/` | l'adattatore di VectorCraft, l'unico crate che lo nomina; i moduli si riempiono col piano K5 | `cargo check -p fub-disegno` |
+| il motore del disegno | `crates/fub-disegno/` | l'adattatore di VectorCraft, l'unico crate che lo nomina: apertura, mappa, sincronia, differenza, gesti, comandi, perdite | `cargo check -p fub-disegno` |
 | lo strato dei motori | `crates/fub-motori/` | motori costruiti alla prima richiesta, il loro gruppo di thread, il budget delle cache, il registro | `cargo test -p fub-motori` |
 | il runtime dei plugin | `crates/fub-wasm-host/` | l'unico crate che nomina Wasmtime | `cargo test -p fub-wasm-host` |
 | la riga di comando | `crates/fub-cli/` | automazione senza Tauri, il server MCP e l'host di messaggistica nativa del clipper | `cargo test -p fub-cli` |

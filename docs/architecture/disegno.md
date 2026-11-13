@@ -2,17 +2,13 @@
 
 > **Domanda:** come un gesto in un disegno passa dal motore vettoriale e
 > torna nel file, e chi possiede che cosa fra client, motore, penna e file?
-> **Fonti autorevoli:** `crates/fub-disegno/` (arriva con T9),
+> **Fonti autorevoli:** `crates/fub-disegno/`,
 > `crates/fub-host/src/drawing.rs`,
-> `apps/client/src/editors/spatial/motore/` (arriva con T8 e T10),
-> `crates/fub-abi/src/drawing.rs` (arriva con T4).
+> `apps/client/src/editors/spatial/motore/`,
+> `crates/fub-abi/src/drawing.rs`.
 > **Decisioni:** [ADR 0239](../decisions/0239-il-disegno-sul-motore-vettoriale.md),
 > [ADR 0231](../decisions/0231-la-chiusura-di-fubdraw.md),
 > [ADR 0204](../decisions/0204-nucleo-inchiostro.md).
-
-Questa pagina descrive l'architettura che il piano K5 costruisce. Ciò che non
-è ancora nel codice porta accanto il task che lo porta, «(arriva con T…)»;
-quando il task si fonde, il segno si toglie.
 
 ## Il percorso di un gesto
 
@@ -51,10 +47,10 @@ I passi, uno per uno:
    (`apps/client/src/ink/dom/pointer-adapter.ts`) dà campioni stabilizzati e
    senza il palmo. Per Selezione, Rettangolo, Ellisse, Linea, Freccia e Testo
    `tools/editor/gesture-begin.ts` apre un gesto `motore` invece di quello
-   TypeScript (arriva con T10). Le coordinate sono quelle di scena, le stesse
+   TypeScript. Le coordinate sono quelle di scena, le stesse
    di `toPoint` in `tools/editor/curvature-tool.ts`, e lo zoom viaggia con il
    gesto per le tolleranze.
-2. **L'anteprima.** `motore/gesti.ts` (arriva con T10) accumula gli eventi e,
+2. **L'anteprima.** `motore/gesti.ts` accumula gli eventi e,
    a ogni fotogramma senza una richiesta in volo, manda `drawing_gesture` con
    la fase `preview` e gli eventi nuovi. L'esito (`DrawingPreview`: una forma,
    una matrice o un riquadro) si disegna con gli stessi segni della superficie
@@ -71,11 +67,10 @@ I passi, uno per uno:
    strumento.
 5. **Il file.** La `DocumentSession` porta il testo nuovo al file come per
    ogni altra modifica: bozze, conflitti e salvataggio non cambiano.
-6. **La sincronia.** La sessione del motore
-   (`motore/sessione.ts`, arriva con T8) è una superficie della
-   `DocumentSession` che non origina mai modifiche: a ogni aggiornamento manda
-   `drawing_sync` con le modifiche del testo, o il testo intero, e avanza la
-   revisione. Il motore reimporta il testo in sottofondo
+6. **La sincronia.** La sessione del motore (`motore/sessione.ts`) è una
+   superficie della `DocumentSession` che non origina mai modifiche: a ogni
+   aggiornamento manda `drawing_sync` con le modifiche del testo, o il testo
+   intero, e avanza la revisione. Il motore reimporta il testo in sottofondo
    (`crates/fub-disegno/src/sincronia.rs`).
 
 Un gesto a una revisione diversa da quella del testo tenuto dal motore è
@@ -83,8 +78,10 @@ rifiutato come `Stale`: la sessione rimanda il testo intero e riprova una
 volta. Un gesto che arriva prima del reimport aspetta la revisione giusta
 (al più 30 secondi, poi `NotReady`). Le modifiche valgono solo su una
 revisione più nuova e solo se la lunghezza di prima e il testo cancellato
-tornano, altrimenti il `sync` è `BadArgs` e la sessione manda il testo
-intero, che vale a qualunque revisione. Un reimport che fallisce (XML rotto)
+tornano, altrimenti il `sync` è `BadArgs`: la copia non è più certa, e la
+sessione si ferma come ogni altro errore (il chip offre «Riprova», che apre
+un'istanza nuova col testo di quel momento). Il testo intero vale a
+qualunque revisione. Un reimport che fallisce (XML rotto)
 lascia la copia alla revisione vecchia, e i gesti sono `Stale` finché non
 arriva un testo buono; il risultato di un reimport superato da un testo più
 nuovo si butta. Le richieste della
@@ -224,7 +221,7 @@ cambiato); col file rinominato resta.
 ## I comandi IPC
 
 Sei comandi tipati, nella forma di quelli dei fogli, con le forme in
-`crates/fub-abi/src/drawing.rs` (arriva con T4) e i comandi in
+`crates/fub-abi/src/drawing.rs` e i comandi in
 `crates/fub-app/src/lib.rs`:
 
 | Comando | Fa |
@@ -251,13 +248,16 @@ prima di chiamare il motore; la chiusura del vault chiude i suoi disegni.
 
 | Limite | Valore | Da dove viene |
 |---|---|---|
-| testo del disegno | 20 MiB | `MAX_EDIT_BYTES` di `crates/fub-scene/src/lib.rs` |
+| testo del disegno | 20 MiB | `MAX_DRAWING_TEXT_BYTES` di `crates/fub-abi/src/drawing.rs`, uguale a `MAX_EDIT_BYTES` di `crates/fub-scene/src/lib.rs` |
 | elementi di un disegno modificabile | 50 000 | `MAX_ELEMENTS` di `crates/fub-scene/src/lib.rs` |
-| operazioni di un esito | 10 000 | `MAX_BATCH` di `apps/client/src/editors/spatial/scene/ops.ts` |
-| byte delle operazioni di un esito | 8 MiB | `MAX_OP_BYTES` dello stesso file |
-| eventi di una richiesta di gesto | 100 000 | `MAX_GESTURE_EVENTS` (arriva con T4) |
+| operazioni di un esito, id di una selezione | 10 000 | `MAX_DRAWING_OPS`, uguale a `MAX_BATCH` di `apps/client/src/editors/spatial/scene/ops.ts` |
+| byte delle operazioni di un esito | 8 MiB | `MAX_DRAWING_OPS_BYTES`, uguale a `MAX_OP_BYTES` dello stesso file |
+| eventi di una richiesta di gesto | 100 000 | `MAX_GESTURE_EVENTS` |
+| parti elencate all'apertura | 50 000 | `MAX_DRAWING_LOSSES` |
+| un colore dello stile | 64 byte | `MAX_DRAWING_COLOR_BYTES` |
 
-Un esito oltre i limiti delle operazioni è rifiutato come `TooLarge`. Un
+I limiti senza file accanto sono in `crates/fub-abi/src/drawing.rs`. Un
+esito oltre i limiti delle operazioni è rifiutato come `TooLarge`. Un
 gesto lungo spezza i suoi eventi in più richieste, perché ognuna porta solo
 gli eventi nuovi.
 
@@ -290,10 +290,10 @@ strumento li modifica, e un gesto sul loro oggetto del motore è rifiutato
 
 | Percorso | Contiene |
 |---|---|
-| `vendor/vectorcraft/` | la copia di VectorCraft, con le patch numerate e `UPSTREAM.md` (arriva con T6) |
+| `vendor/vectorcraft/` | la copia di VectorCraft, con le patch numerate e `UPSTREAM.md` |
 | `crates/fub-disegno/` | l'adattatore: apertura, mappa, sincronia, differenza, gesti, comandi, perdite |
 | `crates/fub-host/src/drawing.rs` | le istanze per vault e i sei comandi lato host |
-| `crates/fub-abi/src/drawing.rs` | le forme condivise e i limiti (arriva con T4) |
+| `crates/fub-abi/src/drawing.rs` | le forme condivise e i limiti |
 | `apps/client/src/editors/spatial/motore/` | la sessione, i gesti, i colori e il chip delle perdite e del motore che manca (`standing.ts`) |
 | `apps/client/src/editors/spatial/tools/` | gli strumenti TypeScript, riferimento dei gesti e strumenti del profilo `pdf` |
 
@@ -301,7 +301,7 @@ strumento li modifica, e un gesto sul loro oggetto del motore è rifiutato
 `Cargo.toml` e nei sorgenti (`.github/scripts/check-engine-boundary.mjs` e
 `VECTORCRAFT_OWNERS` in `crates/fub-abi/tests/dependency_invariant.rs`). La prova
 che il motore fa ciò che facevano gli strumenti TypeScript sono i vettori di
-`apps/client/src/__fixtures__/disegno-gesti/` (arrivano con T3); quella
+`apps/client/src/__fixtures__/disegno-gesti/`; quella
 senza perdite è il cancello, `node tools/disegno-cancello/cancello.mjs`
 ([come funziona](../../tools/disegno-cancello/README.md), [le misure di K5](../misure/2026-11-12-disegno-linux-13600kf.md)).
 
