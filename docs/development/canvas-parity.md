@@ -77,6 +77,7 @@ o `plan`.
 |---|---|---|
 | `crates/fub-canvas-core/tests/parity.rs` | R1–R6 | `cargo test -p fub-canvas-core --test parity` |
 | `apps/client/src/editors/canvas/parity.test.ts` | R7 | `npx vitest run src/editors/canvas/parity.test.ts`, da `apps/client/` |
+| `crates/fub-canvas-core/tests/task_corpus.rs` | il corpus: forma, `needs` e controlli | `cargo test -p fub-canvas-core --test task_corpus -- --nocapture` |
 
 `apps/client/src/editors/canvas/test-mount.ts` monta la tela come
 `engine.test.ts`. È una copia: chi cambia il montaggio lì lo cambia anche qui.
@@ -109,6 +110,68 @@ lo stesso commit:
 
 R2 fallisce se una fonte in `merged` ha ancora un `plan`; R7 se una voce non
 trova il suo id. Fuori da `merged` una voce è letta da R1, R3 e R5 soltanto.
+
+## Il corpus
+
+Il corpus misura quanto costa un compito con le operazioni di `main` e con
+quelle del piano. Sono venti file in `apps/client/src/__fixtures__/canvas-tasks/`,
+un compito ciascuno, letti da `task_corpus.rs`.
+
+Un compito è un oggetto con questi campi:
+
+| Campo | Vuol dire |
+|---|---|
+| `about` | che cosa prova, in una riga |
+| `prompt` | la richiesta come la scriverebbe una persona, in italiano |
+| `before` | la lavagna di partenza |
+| `ops_today` | la soluzione con le operazioni di `main`, o `null` se con `main` non si può |
+| `ops` | la soluzione con le operazioni del piano |
+| `needs` | facoltativo: le operazioni e i campi che `ops` usa e il nucleo non ha ancora |
+| `checks` | i controlli sul modello di dopo |
+
+Le regole del runner:
+
+- `ops_today`, se c'è, compila su `before` e passa i `checks`.
+- Con `needs` vuoto, anche `ops` compila e passa.
+- `needs` è esatto. Un nome che le `ops` usa e il nucleo non ha manca: fallisce.
+  Un nome che il nucleo ha già fallisce e dice di toglierlo (il cricchetto). Un
+  nome che le `ops` non usano fallisce. Un nome è un'operazione (`align`) o un
+  campo (`add_card.near`); un'operazione sconosciuta conta col suo solo nome.
+- `ops_today` a `null` richiede un `needs` non vuoto: serve dire che cosa manca.
+- Le `ops` del piano sono proposte. La forma di ogni operazione la decide il task
+  che la porta, e il cricchetto obbliga a riallinearle quando arriva.
+
+Una scheda si nomina per testo, per file con il sottopercorso (`Dispensa.pdf#page=1`),
+o per indirizzo; un gruppo per `label`. Un nome deve identificare una scheda
+sola: due schede con lo stesso testo fanno fallire il controllo. Per questo i
+testi del corpus sono unici.
+
+| Controllo | Regge se |
+|---|---|
+| `has_card` | `{text}` o `{file}`: c'è una scheda con quel nome |
+| `has_edge` | `{from_text, to_text, label?}`: c'è un arco dal primo nome al secondo |
+| `no_overlap` | `{texts?}`: nessuna coppia di schede si sovrappone (senza `texts`, tutte le schede tranne i gruppi) |
+| `aligned` | `{texts, axis}`: il bordo o il centro scelto è uguale; `axis` è `left`, `right`, `top`, `bottom`, `center_x` o `center_y` |
+| `spaced` | `{texts, axis}`: lo spazio fra i bordi è uguale fra le schede in ordine, lungo `x` o `y` (almeno tre) |
+| `count` | `{kind, n}`: `kind` è `edge`, `card` (le schede tranne i gruppi), `group` o una specie di `card_kind` (`text`, `note`, `document`, `sheet`, `pdf`, `image`, `web`, `craft`, `file`) |
+| `in_group` | `{label, texts}`: il gruppo con quell'etichetta contiene le schede |
+| `color` | `{texts, color}`: il colore è `red`…`purple`, `"1"`…`"6"` o `#rrggbb` |
+| `strokes` | `{on_text?, n}`: quanti tratti ha la scheda, o senza `on_text` tutta la lavagna |
+
+`strokes` conta l'array `strokes` del livello `fub:ink`, nella forma che N4
+documenta, senza leggerne i campioni. Quando il lettore di N4 entra nel nucleo,
+il controllo va verificato contro di lui.
+
+Il runner stampa la tabella dei caratteri (`ops_today`, `ops` in JSON compatto)
+e quanti nomi mancano al nucleo: `cargo test -p fub-canvas-core --test task_corpus
+-- --nocapture`.
+
+Le risposte di un modello si provano così, fuori dalla CI:
+`FUB_CANVAS_ESITI=<cartella> cargo test -p fub-canvas-core --test task_corpus
+esiti_di_un_modello_se_richiesti -- --nocapture`. La cartella ha un file
+`<compito>.json` per compito: la lista delle operazioni, come `ops`. Il test
+le applica a `before` e dice quali passano; un compito senza file salta, e lo
+dice. Senza la variabile non fa nulla, e in CI non gira nessun modello.
 
 ## Che cosa non misura
 
