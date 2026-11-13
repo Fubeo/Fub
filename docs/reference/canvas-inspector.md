@@ -49,6 +49,11 @@ segnata finché la scelta della lavagna non cambia per un'altra strada. Le frecc
 le righe, con una sola fermata del Tab.
 
 L'elenco si rilegge a fine gesto (ogni commit) e quando arriva un testo nuovo.
+Un commit di soli tratti (la penna, la gomma: toppe `ink`) non cambia le
+schede, il loro ordine né le fonti: «Schede» e «Fonti» non si rileggono
+(`inkChanged`), e le posizioni delle schede nel testo si rileggono al primo
+salto; «Scheda» e «Fili» si rinfrescano, perché il livello di una scheda
+scelta è fra i suoi campi.
 Oltre 500 righe disegna solo quelle che si vedono, più la fermata del Tab.
 
 ## «Scheda» e «Fili»

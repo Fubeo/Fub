@@ -425,6 +425,13 @@ export interface CanvasInspector {
   offer(on: boolean): void;
   /** La lavagna è cambiata (fine di un gesto, un testo nuovo): l'elenco si rilegge. */
   changed(): void;
+  /**
+   * È cambiato soltanto l'inchiostro (un tratto, la gomma): le schede, il loro
+   * ordine e le fonti restano quelli, e «Schede» e «Fonti» non si rileggono
+   * (le posizioni nel testo si rileggono quando servono). «Scheda» e «Fili»
+   * si rinfrescano: il livello di una scheda scelta è nei suoi campi.
+   */
+  inkChanged(): void;
   /** La scelta della lavagna è cambiata. */
   selectionChanged(): void;
   /** Una scheda ha cominciato o smesso di mostrare «File mancante»: «Fonti» si ridisegna. */
@@ -462,6 +469,8 @@ export function createCanvasInspector(port: CanvasInspectorPort): CanvasInspecto
   const listeners = new Set<() => void>();
   const reveals = new Set<(id: string) => void>();
   const mounted = new Set<Mounted>();
+  /// Gli elenchi di «Schede» montati: leggono tutte le schede del testo.
+  const cardViews = new Set<Mounted>();
   let offered = false;
   let disposed = false;
   let read: Read | null = null;
@@ -503,8 +512,10 @@ export function createCanvasInspector(port: CanvasInspectorPort): CanvasInspecto
       if (disposed) return () => {};
       const view = mountCards(host, { entries: () => current().entries, picked: () => picked, jump });
       mounted.add(view.handle);
+      cardViews.add(view.handle);
       return () => {
         mounted.delete(view.handle);
+        cardViews.delete(view.handle);
         view.unmount();
       };
     },
@@ -693,6 +704,11 @@ export function createCanvasInspector(port: CanvasInspectorPort): CanvasInspecto
       announce();
       if (mounted.size === 0) return;
       for (const view of mounted) view.refresh();
+    },
+    inkChanged() {
+      stale = true;
+      announce();
+      for (const view of mounted) if (!cardViews.has(view) && !sourceViews.has(view)) view.refresh();
     },
     selectionChanged() {
       if (!picking && picked !== null) picked = null;

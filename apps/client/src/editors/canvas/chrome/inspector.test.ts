@@ -384,6 +384,48 @@ const enter = (input: HTMLInputElement): void => {
   input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter" }));
 };
 
+describe("un tratto non rilegge le schede (T20e)", () => {
+  it("inkChanged non rilegge «Schede» e «Fonti», rinfresca «Scheda», e il salto dopo usa le posizioni del testo nuovo", () => {
+    let text = source();
+    const reads = vi.fn(() => text);
+    const reveal = vi.fn((_byte: number) => true);
+    const edit = fakeEdit(BOARD, [], { nodes: ["pendolo"], edges: [] });
+    const inspector = createCanvasInspector({ source: reads, reveal, edit: edit.port });
+    inspector.offer(true);
+    const cards = partOf(inspector, CARDS_PANEL_ID);
+    const sources = partOf(inspector, SOURCES_PANEL_ID);
+    const card = partOf(inspector, CARD_PANEL_ID);
+    const listed = names(cards);
+    const shownSources = sources.textContent;
+    expect(card.textContent).not.toContain("fub:ink");
+
+    // Il primo tratto sul PDF: il suo livello nasce nella scheda, e il testo
+    // delle schede dopo di lui si sposta.
+    const inked = BOARD.map((each, k) => (k === 0 ? { ...each, "fub:ink": { v: 1, strokes: [{ id: "s", ink: "1 s100 cxy 0,0" }] } } : each));
+    text = source(inked);
+    edit.port.commit([{ kind: "upsert-node", before: BOARD[0]!, after: inked[0]! }]);
+    reads.mockClear();
+    inspector.inkChanged();
+    expect(reads).not.toHaveBeenCalled();
+    expect(names(cards)).toEqual(listed);
+    expect(sources.textContent).toBe(shownSources);
+    expect(card.textContent).toContain("fub:ink");
+
+    // Il salto chiede il testo una volta, e va al byte nuovo della scheda.
+    const row = [...cards.querySelectorAll<HTMLElement>(".canvas-inspector-row")].find((each) => each.dataset.node === "esercizi")!;
+    row.click();
+    expect(reads).toHaveBeenCalledTimes(1);
+    const start = reveal.mock.calls[0]![0];
+    expect(start).toBe(boardCards(text)!.starts[5]);
+    expect(start).not.toBe(boardCards(source())!.starts[5]);
+
+    // Ogni altro cambio rilegge gli elenchi.
+    reads.mockClear();
+    inspector.changed();
+    expect(reads).toHaveBeenCalled();
+  });
+});
+
 describe("le parti «Scheda» e «Fili» (T59)", () => {
   const card = (id: string, extra: Partial<CanvasNode> = {}): CanvasNode => node(id, 40, 60, { width: 240, height: 120, text: id, ...extra });
 

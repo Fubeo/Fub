@@ -262,7 +262,10 @@ export function mountCanvasSurface(
     revision: context.revision,
     documentId: context.documentId,
     onChange: (change) => {
-      inspector.changed();
+      // Un tratto o la gomma cambiano solo l'inchiostro: «Schede» e «Fonti» restano (T20e).
+      const { patches } = change.operation;
+      if (patches.length > 0 && patches.every((patch) => patch.kind === "ink")) inspector.inkChanged();
+      else inspector.changed();
       callbacks.onChange(context.paneId, change);
     },
     onSelectionChange: () => {
