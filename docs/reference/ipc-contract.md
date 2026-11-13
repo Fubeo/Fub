@@ -32,6 +32,17 @@ test usano un fake.
 Le operazioni offerte da provider passano da porte generiche. Una feature non
 aggiunge una porta soltanto per evitare di usare il proprio registro.
 
+`query_index` gira fuori dal thread principale dell'app: una domanda può
+durare centinaia di millisecondi (il correttore su una nota lunga, una
+ricerca su un vault grande), e sul thread principale la finestra smetterebbe
+di presentare fotogrammi finché non risponde. Le domande non girano in
+parallelo ma in **corsie** (`crates/fub-app/src/domande.rs`): una per l'indice
+e una per ogni spazio dei nomi di `IndexQuery::Custom`, al più 16. In una
+corsia le risposte escono nell'ordine in cui le domande sono entrate, come
+quando giravano sul thread principale; due corsie non si aspettano, così il
+controllo lungo del correttore non ferma la ricerca. Due domande mandate nello
+stesso istante possono entrare in un ordine qualsiasi.
+
 ## La griglia
 
 La famiglia Grid usa porte strettamente tipate, con i record `Grid*` del
@@ -290,6 +301,12 @@ Il protocollo di view usa:
 
 La shell non interpreta il payload di un'azione. Lo rimanda al provider
 proprietario.
+
+Una view può rispondere a un'azione con `ViewUpdate::Custom` di `ns`
+`fub.inspector.tab` (`fub_abi::ui::INSPECTOR_TAB_NS`) e payload
+`{ "view": "<id>" }`: la shell apre l'ispettore su quella scheda, o dice che
+non c'è. Non è privilegiato, perché cambia solo quale scheda si guarda; lo usa
+«e altri N» sotto la Struttura per portare ai Collegamenti.
 
 ## Barra di formattazione e azioni dell'editor
 

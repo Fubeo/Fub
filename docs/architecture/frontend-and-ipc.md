@@ -202,6 +202,12 @@ riquadro rimasto vuoto. Una linguetta nella vista sorgente lo dice nel testo,
 nel suggerimento e nel nome accessibile («vista sorgente»); aprire o chiudere
 la vista porta il focus sulla superficie montata al posto della precedente.
 
+Una scheda chiusa dell'ispettore non disegna la sua view: il provider risponde
+comunque a ogni invito, e l'albero più recente aspetta (`ui/views.ts`, `pending`).
+Aprendo la scheda si disegna subito, con quell'albero. Così le liste lunghe di
+una scheda che nessuno guarda (i collegamenti in uscita di una nota con migliaia
+di link) non pesano sul DOM né a ogni salvataggio.
+
 I divisori espongono ruolo, limiti e dimensione corrente. Tastiera e
 trascinamento modificano la stessa misura in pixel CSS; lo zoom della shell
 non altera il rapporto fra movimento del puntatore e larghezza risultante.
@@ -248,7 +254,26 @@ pannelli) lo Scrittoio compone:
   la barra multifunzione comune (schede e schede contestuali, gruppi raccolti
   da destra, lettere con Alt e F10, mini-barra), generica sulla vista e sulle
   etichette di chi la monta (i fogli accendono `openInPlace` e `motion`);
-  non sta nell'indice del kit: arriva con l'editor che la carica a parte;
+  non sta nell'indice del kit, perché arriva con
+  l'editor che la carica a parte. Le barre degli editor hanno tre forme,
+  scritte una volta nel tema e non in ogni editor: la barra a schede
+  (`kit/ribbon/`), la barra in una fila e la colonna degli strumenti. La
+  barra a schede mette su ogni pezzo due classi, quella col prefisso di chi
+  la monta (`grid-ribbon-…`, `rich-ribbon-…`) e `kit-ribbon-…`, che porta la
+  forma e la pelle comuni; le regole col prefisso restano alle parti solo di
+  quell'editor. La fila non ha un costruttore: chi costruisce la barra mette sul suo DOM
+  `kit-bar` (il vassoio), `kit-bar-group` (un foglietto), `kit-bar-button`
+  e `kit-bar-field`, e per ciò che non ci sta usa `kit/options-bar.ts`
+  (`kit-options`, «…»). Le frecce della fila sono `kit/toolbar-keys.ts`
+  (`rovingToolbar`): un solo punto di tabulazione, destra e sinistra che
+  girano ai capi, Home ed End, soltanto fra i controlli visibili e accesi;
+  in un campo di testo le frecce passano oltre solo ai capi del testo, ed
+  Escape resta a chi monta la barra. La prima ad adottarla è la barra di
+  formato delle note. La colonna è `kit/tool-rail.ts` (`kit-rail`). Fila
+  e colonna hanno la forma in `theme/scrittoio/structure.css` e la pelle in
+  `theme/scrittoio/skin/kit.css`; il vassoio è il ruolo facoltativo
+  `--bar-tray` della ricetta, col ripiego su `--sheet-2` per un tema che
+  non lo dichiara;
 - `moto/`: molle, FLIP, presenza e gesti. Le animazioni sono fotogrammi
   chiave WAAPI di sola `transform` e `opacity`; il livello `appearance.motion`
   e la preferenza del sistema decidono quanto movimento esiste, e lo stato
@@ -265,110 +290,24 @@ pannelli) lo Scrittoio compone:
   contratto del tema lo esporta in `layers`
   ([ADR 0222](../decisions/0222-tre-strati-e-l-aspetto-del-contenuto.md)).
 
-I predefiniti dell'aspetto li dichiara l'host, uguali alla serie (test Rust).
-L'accento di serie è lo smeraldo, 160; i colori di stato ne restano a 30°
-(`statusHue`); `avvio/colori.test.ts` lega l'avvio alla ricetta, logo compreso
-([`--logo-*`](../reference/permissions-and-security.md)). Cassetti: sidebar da
-208 a 400 px, ispettore da 248 a 440 px, col divisore del kit. Un tema `theme-1`
-non si monta; uno con `extends` lascia la pelle di serie in `pelle` e aggiunge la sua in `pelle-tema`, dopo ([ADR 0240](../decisions/0240-la-pelle-che-eredita.md)).
+I predefiniti dell'aspetto (accento, i tre caratteri, corpo di 18 px,
+interlinea, giustezza di 58 caratteri) li dichiara l'host e coincidono con
+quelli della serie; un test Rust lo verifica. Un valore scelto in Aspetto resta
+quello scelto. L'accento di serie è lo smeraldo, 160; i colori di stato ne
+restano a 30° (`statusHue`), e `avvio/colori.test.ts` lega l'avvio alla
+ricetta, logo compreso
+([`--logo-*`](../reference/permissions-and-security.md)). I divisori dei
+cassetti sono il divisore del kit: sidebar da 208 a 400 px, ispettore da 248 a
+440 px. Un tema `theme-1` non si monta; uno con
+`extends` lascia la pelle di serie in `pelle` e aggiunge la sua in `pelle-tema`,
+dopo ([ADR 0240](../decisions/0240-la-pelle-che-eredita.md)).
 
 ### Comportamenti della shell
 
-Ciò che la shell fa sopra le porte generiche, senza contratti propri:
-
-- **Avvisi.** I toast si impilano (al più tre visibili), portano azioni e un
-  «Annulla» generico quando l'esito del comando dichiara `outcome.undo`; il
-  centro attività tiene lo storico dei lavori. Cestinare più note insieme non
-  ha un «Annulla» unico: l'annullamento del vault disfa l'ultima operazione, e
-  le note tornano dal cestino una a una. Avvisi e attività dicono l'ora come
-  «adesso», «2 min fa», poi l'ora senza secondi (i secondi nel suggerimento).
-  Un vault senza rilevamento delle modifiche esterne lo dice in testa al
-  centro con «Riapri il vault», che scrive ciò che è in sospeso, chiude il
-  vault nell'host e lo riapre.
-- **Scrittura.** Con la barra di formattazione spenta
-  (`chrome.formatbar.visible`) compare la mini-barra sulla selezione;
-  l'impostazione `editor.minibar` (`auto`, `always`, `menu`, `off`) dice se
-  compare anche col tasto destro e su ogni selezione. Il «/» a inizio riga o
-  dopo uno spazio apre nella nota il menu dei blocchi e dei comandi, filtrato
-  da ciò che si scrive dopo (`editor.slash` lo spegne); con una selezione il
-  menu «/» ha il suo campo. Entrambi passano per l'interfaccia della
-  superficie testuale, mai per oggetti CodeMirror.
-- **Tasto destro negli editor.** Un solo ascoltatore sul riquadro
-  (`panels/document.ts`) chiede alla superficie il suo `contextMenu(at)` e lo
-  compone in `panels/editor-menu.ts` con le stesse sezioni, nello stesso
-  ordine, in ogni editor: ciò che sta sotto il puntatore (prima le correzioni
-  del correttore), gli appunti, «Formato», «Trasforma in» e «Inserisci»,
-  «Comandi» (i comandi del registro dichiarati per il «/») con le voci dei
-  plugin per la nota o il file, e le utilità. Al primo livello stanno al più
-  dodici voci, il resto scende in «Altro». Un id d'azione o di comando prende
-  nome, icona, stato e accordo da chi lo dichiara, e senza dichiarazione non
-  si vede. Il menu si apre senza IPC; Maiusc+tasto destro e un evento già
-  gestito (la griglia delle tabelle, il disegno) lasciano passare il menu del
-  sistema o quello proprio; il tasto Menu e Maiusc+F10 lo aprono sotto il
-  cursore. Sui collegamenti una scheda al passaggio mostra
-  la destinazione (`render_embed`) con apri, di fianco e nuova linguetta; un
-  collegamento irrisolto offre «Crea». In Live, col cursore in un
-  collegamento, Maiusc+Alt+Invio apre la scheda col fuoco sulla prima azione;
-  Esc riporta il fuoco nel testo.
-- **Cerca.** Il cassetto espone le opzioni che la porta regge (maiuscole,
-  regex, tolleranza, parola intera) e «Sostituisci nel vault»: prima il piano
-  (`vault.replace` in `dry_run`), poi «Applica». La sostituzione è letterale e
-  sensibile alle maiuscole, solo sulle note dei risultati. Una ricerca si
-  salva come segnalibro.
-- **Scrivania.** Il riquadro vuoto offre nota nuova, nota del giorno, da
-  modello (solo se il comando è nel registro), recenti, bozze da recuperare e
-  «Da sistemare» (una riga per nota con collegamenti rotti, da
-  `vault_health`; se la query fallisce il gruppo manca).
-- **Albero.** Ctrl/Cmd-clic e Ctrl-Spazio aggiungono o tolgono una nota dalla
-  scelta, Maiusc-clic sceglie l'intervallo fra le note visibili, Esc la
-  azzera. Una barra sopra l'albero dice quante sono e offre «Sposta in…»,
-  «Sposta nel cestino» e «Deseleziona»; il tasto destro su una nota scelta
-  apre lo stesso menu, con «Copia» e «In una cartella nuova». La scelta è solo
-  su ciò che l'albero mostra, e ciò che esce dal DOM esce dalla scelta.
-- **Binario.** Riordino e nascondimento sono `chrome.rail.order` e
-  `chrome.rail.hidden`; la voce «Ripristina ordine e icone predefiniti» li
-  riporta a `[]`.
-- **Grafo.** La tela ha i comandi di zoom e «Inquadra tutto»; la legenda è un
-  insieme di interruttori di visibilità per gruppo, che si compone con la
-  maschera della linea del tempo.
-- **Linguette.** Rilasciata sul corpo di un foglio, una linguetta si
-  divide (quattro bordi) o si sposta in coda al riquadro (centro);
-  `splitWithTab` in `state/layout.ts` è la regola pura. Fuori dalla finestra
-  una linguetta di nota diventa finestra, solo con
-  `platformSupports("multipleWindows")` e dove il motore consegna `dragend`
-  fuori finestra. Ogni gesto ha il suo comando nel menu della linguetta.
-- **Menu contestuale estendibile.** Le view sulla superficie `context_menu`
-  (`ui/context-views.ts`) si aggiungono in coda al menu di una nota, di una
-  cartella o di un file dell'albero. Il bersaglio del clic non è nel contesto
-  di sessione: viaggia nei `params` di `render_view` e `view_action`, e la
-  shell manda solo le chiavi che la view dichiara fra i propri `ParamSpec`
-  (`target`, l'id cliccato; `target_kind`, `note`, `folder` o `file`). Dall'albero
-  restituito si prendono i `button` e i `list_item` con un'azione, al più
-  quattro view e otto voci per view, con trecento millisecondi per rispondere:
-  una view che sbaglia o tarda non compare e il menu resta quello della shell.
-- **Ricerca nel menu dell'applicazione.** «Cerca» è il sesto menu del
-  marchio (`ui/app-menu-search.ts`): un campo con elenco che filtra, senza
-  accenti né maiuscole, le voci di tutti gli altri menu, ciascuna col nome del
-  suo menu e la sua scorciatoia. Non ha un elenco proprio: legge quelli dei
-  menu.
-- **Cartelle che si aprono sostando.** Trascinando una nota, una cartella
-  chiusa si apre dopo 700 ms sopra di lei (`scheduleHoverOpen` in
-  `panels/explorer.ts`); il timer è uno solo, e passare oltre, lasciare o
-  finire il trascinamento lo azzera.
-- **Rinomina nell'albero.** Un nome rifiutato (non valido, già in uso, errore
-  del kernel) riapre il campo con ciò che è stato scritto e la frase accanto,
-  `role="alert"`, che sparisce alla prima battuta; il toast non serve.
-- **Avvisi dentro il foglio.** Sotto il banner del conflitto (`drawNotices` in
-  `panels/document.ts`) il foglio tiene una riga per avviso: errore di
-  salvataggio con «Riprova» (`shell.doc.save`), sola lettura mentre una
-  cancellazione aspetta la risposta, bozza ritrovata, nota cambiata o
-  riscritta su disco con buffer sporco, nota ricaricata, e la modalità
-  limitata dei componenti, che è del vault. Quelli derivati dalla sessione
-  durano quanto il suo stato; gli altri sono fatti del controllore
-  (`state/sheet-notices.ts`) che restano finché non si chiudono, e un
-  salvataggio riuscito toglie «cambiato su disco» ma non la bozza. Una nota
-  rimossa da fuori chiude la sua linguetta: l'avviso resta sul riquadro che la
-  mostrava, con «Ricrea» se c'era testo non salvato, finché non si chiude.
+Avvisi, scrittura, menu delle modalità, tasto destro negli editor, ricerca,
+scrivania, albero, binario, grafo, linguette, menu contestuale estendibile e
+avvisi dentro il foglio stanno sopra le porte generiche, senza contratti
+propri: li descrive [Comportamenti della shell](shell-behaviours.md).
 
 ## Shell e piattaforma
 

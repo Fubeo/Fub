@@ -71,6 +71,10 @@ sono selezionati.
 - Mod+Shift+↑/↓ sposta il blocco del cursore, o la selezione di blocchi, fra i
   fratelli; le voci numerate si rinumerano; un annulla torna indietro in un
   passo.
+- Alt+↑/↓ sulle righe del testo (fuori dalle proprietà) non portano una riga
+  del corpo dentro il frontmatter, né le sue righe `---` fuori. Mod+D non copia
+  le righe `---` della testata, che farebbero una seconda testata; le proprietà
+  si copiano come le altre righe.
 - Backspace all'inizio di un paragrafo lo unisce al testo del blocco sopra.
 - Dentro un blocco di codice Tab e Shift+Tab rientrano il codice e Mod+A
   seleziona prima il codice, poi tutta la nota.
@@ -89,10 +93,15 @@ delle righe prima che CodeMirror le riscriva e le anima dal posto vecchio con
 `moto`, soltanto con `transform` e `opacity`.
 
 - **Sollevare e posare.** Trascinato, il blocco sale (scala 1,015 e ombra) e i
-  fratelli fra il suo posto e la linea si scostano. Al rilascio ognuno scivola
-  al suo posto e il blocco atterra dall'immagine sollevata con un piccolo
-  rimbalzo e un alone d'accento; Esc lo riporta indietro allo stesso modo.
-- **Scambiare.** Mod+Shift+↑/↓ fa scivolare le righe dal posto vecchio.
+  fratelli fra il suo posto e la linea si scostano. Sale soltanto il blocco: la
+  testata della pagina e i widget degli altri blocchi restano fermi. Al rilascio
+  ognuno scivola al suo posto e il blocco atterra dall'immagine sollevata con un
+  piccolo rimbalzo e un alone d'accento; Esc lo riporta indietro allo stesso modo.
+  Trascinato sopra il frontmatter, il blocco si posa subito sotto di lui, che
+  non si trascina.
+- **Scambiare.** Mod+Shift+↑/↓ fa scivolare le righe dal posto vecchio. Il
+  frontmatter resta sempre il primo blocco: niente gli passa davanti, lui non
+  scende, e «Sposta su» non compare sul primo testo che lo segue.
 - **Trasformare.** Il testo cresce o cala sul posto con la scala dei
   caratteri, il segno nuovo entra con un rimbalzo e i blocchi sotto scivolano.
   Un gesto che ne interrompe uno ancora in corsa riparte da dov'era.
@@ -127,7 +136,7 @@ le proprietà subito sotto. Sono righe del frontmatter, scritte come le altre
 proprietà, e in Sorgente si vedono così:
 
 ```yaml
-icon: 🧳
+icon: 🧳            # o una figura: icon: fub:book
 cover: ../Risorse/mare.png
 cssclasses: [wide, sans]
 ```
@@ -138,8 +147,11 @@ cssclasses: [wide, sans]
   il file, o la cartella, con i collegamenti; Esc torna al nome di prima. Un
   nome che non si può usare o che c'è già non rinomina niente e lo dice. ↑ sulla
   prima riga del testo porta al titolo, ↓ e Invio dal titolo al testo.
-- **Icona.** Un'emoji, scelta cercandola per nome in italiano o in inglese.
-  Si vede anche fuori dalla pagina, quando l'indice ha letto la nota salvata:
+- **Icona.** Un'emoji, scelta cercandola per nome in italiano o in inglese, o
+  una delle figure monocrome dell'esplora, che stanno prima delle emoji e si
+  scrivono `icon: fub:book`. Una figura prende il colore del testo; un `fub:`
+  con un nome che questa versione non conosce non si mostra, e la testata
+  offre di nuovo «Aggiungi un'icona». Si vede anche fuori dalla pagina, quando l'indice ha letto la nota salvata:
   nella sua riga dell'esplora (e in quella della cartella di cui è la pagina,
   se l'esplora non le ha dato un'icona sua), nella sua scheda e prima dei
   `[[wikilink]]` che la nominano in Live e in Blocchi. Due note omonime con
@@ -308,6 +320,8 @@ schede stanno nella cache del bundle, ricostruibile. «Pagina web»
   di `crates/fub-format-markdown/src/render.rs`;
 - `apps/client/src/state/page-rename.ts`: la rinomina dal titolo;
 - `apps/client/src/state/page-icons.ts`: le icone fuori dalla pagina;
+- `apps/client/src/ui/page-mark.ts`: che cosa vuol dire un valore d'icona
+  (un'emoji o una figura `fub:<nome>`);
 - `apps/client/src/state/people.ts`: la cartella delle persone;
 - `apps/client/src/editors/text/profiles/markdown/dates.ts` e
   `apps/client/src/state/dates.ts`: le date di `@` e la giornaliera, gemella

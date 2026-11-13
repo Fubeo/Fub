@@ -31,7 +31,7 @@ function emptyTree(title: string): UiNode {
   return { node: "empty_state", title, detail: null, action: null };
 }
 
-const renderView = vi.fn(async (): Promise<UiNode> => emptyTree("vuoto"));
+const renderView = vi.fn(async (_view?: string): Promise<UiNode> => emptyTree("vuoto"));
 const viewAction = vi.fn(async () => ({ kind: "none" }));
 const listViews = vi.fn(async (): Promise<ViewSpec[]> => []);
 
@@ -262,9 +262,128 @@ describe("l'inspector a tab", () => {
     expect(follows.hidden).toBe(false);
     expect(follows.dataset.state).toBe("none");
     expect(follows.textContent).toBe("Nessuna nota in primo piano");
+    // Con una nota davanti la riga dice «Segue la nota», a voce bassa: il nome
+    // della nota sta nel suggerimento, così un nome lungo non spinge il titolo.
+    const layout = await import("../state/layout");
+    const store = await import("../state/store");
+    layout.openIn(layout.layout.focus, "Cartella/Una nota dal nome lungo.md");
+    store.emit("active-doc", "Cartella/Una nota dal nome lungo.md");
+    expect(follows.dataset.state).toBe("doc");
+    expect(follows.textContent).toBe("Segue la nota");
+    follows.dispatchEvent(new FocusEvent("focus"));
+    const tip = document.getElementById(follows.getAttribute("aria-describedby") ?? "");
+    expect(tip?.textContent).toBe("Segue: Una nota dal nome lungo");
+    follows.dispatchEvent(new FocusEvent("blur"));
     // Una view che non dipende dal documento non ne parla.
     right.querySelectorAll<HTMLButtonElement>(".inspector-tab")[1]!.click();
     expect(follows.hidden).toBe(true);
+  });
+
+  it("una scheda chiusa non disegna le sue righe finché non si apre", async () => {
+    // Le uscite di una nota lunga sono centinaia di righe, ognuna con la sua
+    // icona. Chiusa, la scheda non le mette nel DOM a ogni giro: le mette quando
+    // si apre, con l'albero più recente che il provider ha dato.
+    const rows = (count: number): UiNode => ({
+      node: "list",
+      items: Array.from({ length: count }, (_, i) => ({
+        node: "list_item" as const,
+        title: `Nota ${i}`,
+        subtitle: null,
+        action: null,
+        selected: false,
+        drag: { kind: "document" as const, doc: `Cartella/Nota ${i}.md` },
+      })),
+    });
+    renderView.mockImplementation(async (view) => (view === "backlinks" ? rows(300) : emptyTree("vuoto")));
+    try {
+      listViews.mockResolvedValueOnce([
+        spec("outline", "right_sidebar"),
+        spec("backlinks", "right_sidebar"),
+      ]);
+      const views = await loadViews();
+      const panelHost = await import("./panel-host");
+      await views.mountDeclaredViews();
+
+      const right = document.getElementById("views-right")!;
+      const tabs = [...right.querySelectorAll<HTMLButtonElement>(".inspector-tab")];
+      const content = right.querySelector<HTMLElement>('.declared-view[data-view-id="backlinks"]')!;
+      // La scheda è chiusa: il provider è stato interrogato, le righe no.
+      expect(renderView.mock.calls.map((call) => call[0])).toContain("backlinks");
+      expect(content.querySelectorAll(".ui-list-item")).toHaveLength(0);
+
+      // Mentre è chiusa, il giro più nuovo sostituisce quello che aspetta.
+      renderView.mockImplementation(async (view) => (view === "backlinks" ? rows(5) : emptyTree("vuoto")));
+      await panelHost.refreshPanel("backlinks");
+      expect(content.querySelectorAll(".ui-list-item")).toHaveLength(0);
+
+      tabs[1]!.click();
+      expect(content.querySelectorAll(".ui-list-item")).toHaveLength(5);
+
+      // Aperta, un giro si disegna subito.
+      renderView.mockImplementation(async (view) => (view === "backlinks" ? rows(7) : emptyTree("vuoto")));
+      await panelHost.refreshPanel("backlinks");
+      expect(content.querySelectorAll(".ui-list-item")).toHaveLength(7);
+    } finally {
+      renderView.mockImplementation(async () => emptyTree("vuoto"));
+    }
+  });
+
+  it("un'azione che risponde a scheda chiusa non lascia un albero vecchio per la riapertura", async () => {
+    // L'azione parte a scheda aperta; la risposta arriva dopo che la scheda si
+    // è chiusa. Un `patch` si applicherebbe al DOM e lascerebbe in attesa
+    // l'albero precedente: la riapertura mostrerebbe quello, non la verità.
+    const rows = (count: number): UiNode => ({
+      node: "list",
+      items: Array.from({ length: count }, (_, i) => ({
+        node: "list_item" as const,
+        title: `Nota ${i}`,
+        subtitle: null,
+        action: { action: "open", payload: i },
+        selected: false,
+        key: `n${i}`,
+        drag: { kind: "document" as const, doc: `Cartella/Nota ${i}.md` },
+      })),
+    });
+    let count = 3;
+    renderView.mockImplementation(async (view) => (view === "backlinks" ? rows(count) : emptyTree("vuoto")));
+    try {
+      listViews.mockResolvedValueOnce([
+        spec("outline", "right_sidebar"),
+        spec("backlinks", "right_sidebar"),
+      ]);
+      const views = await loadViews();
+      const panelHost = await import("./panel-host");
+      await views.mountDeclaredViews();
+
+      const right = document.getElementById("views-right")!;
+      const tabs = [...right.querySelectorAll<HTMLButtonElement>(".inspector-tab")];
+      const content = right.querySelector<HTMLElement>('.declared-view[data-view-id="backlinks"]')!;
+      const shownRows = () => content.querySelectorAll<HTMLElement>(".ui-list-item");
+      tabs[1]!.click();
+      expect(shownRows()).toHaveLength(3);
+
+      let answer!: (update: ViewUpdate) => void;
+      viewAction.mockImplementationOnce(() => new Promise<ViewUpdate>((resolve) => (answer = resolve)));
+      shownRows()[0]!.click();
+      tabs[0]!.click();
+
+      count = 4;
+      await panelHost.refreshPanel("backlinks");
+      count = 6;
+      answer({
+        kind: "patch",
+        key: "n0",
+        node: { node: "list_item", title: "Ritoccata", subtitle: null, action: null, selected: false, key: "n0" },
+      });
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      tabs[1]!.click();
+      expect(shownRows()).toHaveLength(6);
+      expect([...shownRows()].some((row) => row.textContent?.includes("Ritoccata"))).toBe(false);
+    } finally {
+      renderView.mockImplementation(async () => emptyTree("vuoto"));
+    }
   });
 
   it("la scheda di una view nata chiusa ne mostra il contenuto", async () => {

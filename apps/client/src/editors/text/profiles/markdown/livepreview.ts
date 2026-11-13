@@ -19,13 +19,14 @@ import {
   type ViewUpdate,
   WidgetType,
 } from "@codemirror/view";
-import { syntaxTree } from "@codemirror/language";
+import { ensureSyntaxTree, syntaxTree, syntaxTreeAvailable } from "@codemirror/language";
 import type { SyntaxNode } from "@lezer/common";
 // La lettura binaria di una casella è una regola del contratto, non del
 // disegno: `[/]`, `[-]`, `[>]` sono stati che esistono e non sono "fatto".
 import { taskChecked } from "../../../../rules/mirrored";
 import { t } from "../../../../i18n/strings";
 import { isAllowedLink } from "../../../../ui/sanitize";
+import { figureMask, PAGE_FIGURES, readPageMark } from "../../../../ui/page-mark";
 import type { SyntaxForm } from "../../../../host/contract";
 import {
   inlineDelimiters,
@@ -43,6 +44,7 @@ import {
   linkReferences,
   paragraphMathBlock,
   renderMarkdownState,
+  renderMarkdownStatePrefix,
 } from "./render";
 import { decodeDestination, normalizeLabel } from "./link-syntax";
 import { FOOTNOTE_DEFINITION } from "./grammar";
@@ -1444,14 +1446,17 @@ function inDecoration(d: LiveDeco, callbacks: LivePreviewCallbacks): Decoration 
       // puntatore, come l'anteprima al passaggio, non conosce la grammatica
       // di questo profilo.
       const target = parseWikilinkInner(d.data ?? "");
-      const icon = target.page ? callbacks.pageIcon?.(target.page) ?? null : null;
+      // Un'emoji si scrive col `::before`; una figura del set ha la sua
+      // maschera (`data-page-figure`); un `fub:` sconosciuto non si mostra.
+      const mark = readPageMark(target.page ? callbacks.pageIcon?.(target.page) ?? null : null);
       const person = target.page !== "" && callbacks.isPerson?.(target.page) === true;
       return Decoration.mark({
         class: person ? "cm-fub-wikilink cm-fub-person" : "cm-fub-wikilink",
         attributes: {
           [ATTR_WIKILINK]: d.data ?? "",
           "data-wikilink-page": target.page,
-          ...(icon ? { "data-page-icon": icon } : {}),
+          ...(mark?.kind === "text" ? { "data-page-icon": mark.text } : {}),
+          ...(mark?.kind === "figure" ? { "data-page-figure": mark.name } : {}),
           ...(target.heading ? { "data-wikilink-heading": target.heading } : {}),
           ...(target.block ? { "data-wikilink-block": target.block } : {}),
         },
@@ -1980,6 +1985,61 @@ function insideReplaced(replaced: readonly { from: number; to: number }[], posit
   return range !== undefined && range.from <= position && position < range.to;
 }
 
+/// Le figure del set accanto ai wikilink: una regola per figura, con la sua
+/// maschera. Si fanno quando si monta un editor e non al caricamento del
+/// modulo, perché una figura può essere registrata da un modulo che si monta
+/// dopo (la stella della cornice); si rifanno solo se le figure disegnate sono
+/// cambiate. Una figura che nessuno disegna non ha regola, e non mostra niente.
+let figureMarks: { key: string; theme: Extension } | null = null;
+
+function figureTheme(): Extension {
+  const masks = PAGE_FIGURES.map((name) => [name, figureMask(name)] as const).filter(([, mask]) => mask !== "");
+  const key = masks.map(([name, mask]) => `${name}=${mask}`).join(" ");
+  if (figureMarks?.key === key) return figureMarks.theme;
+  const theme = EditorView.baseTheme(Object.fromEntries(masks.map(([name, mask]) => [
+    // La forma dalla maschera, il colore dal testo del link, grande quanto
+    // una lettera.
+    `.cm-fub-wikilink[data-page-figure="${name}"]::before`,
+    {
+      content: "\"\"",
+      width: "1em",
+      height: "1em",
+      marginInlineEnd: "0.2em",
+      display: "inline-block",
+      verticalAlign: "-0.15em",
+      backgroundColor: "currentColor",
+      maskImage: mask,
+      maskRepeat: "no-repeat",
+      maskSize: "100% 100%",
+      WebkitMaskImage: mask,
+      WebkitMaskRepeat: "no-repeat",
+      WebkitMaskSize: "100% 100%",
+    },
+  ])));
+  figureMarks = { key, theme };
+  return theme;
+}
+
+/// Quanto lavora il parser in ogni pezzo del resto di un documento grande, in
+/// millisecondi: con la resa che ne segue sta dentro un fotogramma.
+const PARSE_SLICE_MS = 8;
+
+/// Il parser è arrivato in fondo al documento: la resa a metà si completa
+/// anche se l'albero dello stato era già quello.
+const restParsed = StateEffect.define<null>();
+
+/// `run` quando la pagina è libera: `requestIdleCallback` dove c'è, e non
+/// oltre 100 ms; altrimenti il prossimo giro del ciclo degli eventi. Torna
+/// la funzione che lo annulla.
+function whenIdle(run: () => void): () => void {
+  if (typeof requestIdleCallback === "function") {
+    const handle = requestIdleCallback(run, { timeout: 100 });
+    return () => cancelIdleCallback(handle);
+  }
+  const handle = setTimeout(run, 0);
+  return () => clearTimeout(handle);
+}
+
 export function livePreview(
   callbacks: LivePreviewCallbacks,
   forms?: readonly SyntaxForm[],
@@ -2007,34 +2067,76 @@ export function livePreview(
     decisions: string;
     decorations: DecorationSet;
     replaced: readonly { from: number; to: number }[];
+    /// `false`: la resa di un documento grande appena aperto, fin dove il
+    /// parser è arrivato (`renderMarkdownStatePrefix`); `parseRest` la
+    /// completa senza fermare la pagina.
+    complete: boolean;
   }
   const touched = (state: EditorState, from: number, to: number) =>
     state.selection.ranges.some((range) => range.from <= to && range.to >= from);
   const anchorsOf = (state: EditorState): ReadonlyMap<string, number> => state.field(blocks).document.anchors;
   const blocks = StateField.define<RenderState>({
     create(state) {
-      const document = renderMarkdownState(state, forms);
-      return buildBlocks(state, document, candidatesOf(document, state.facet(liveReveal)));
+      const { document, complete } = renderMarkdownStatePrefix(state, forms);
+      return buildBlocks(state, document, candidatesOf(document, state.facet(liveReveal)), complete);
     },
     update(value, transaction) {
       const changed = transaction.docChanged;
       const readOnlyChanged = transaction.startState.readOnly !== transaction.state.readOnly;
       const policy = transaction.state.facet(liveReveal);
       if (policy !== transaction.startState.facet(liveReveal)) {
-        return buildBlocks(transaction.state, value.document, candidatesOf(value.document, policy));
+        return buildBlocks(transaction.state, value.document, candidatesOf(value.document, policy), value.complete);
       }
       if (transaction.effects.some((effect) => effect.is(linkCardsChanged)) && !changed) {
-        return buildBlocks(transaction.state, value.document, value.candidates);
+        return buildBlocks(transaction.state, value.document, value.candidates, value.complete);
+      }
+      // La resa a metà di un documento grande si rifà a ogni modifica, fin
+      // dove l'albero arriva, e quando l'albero arriva in fondo: gli alberi
+      // intermedi del lavoratore del parser la rifarebbero tutta ogni volta.
+      const treeDone = !changed && syntaxTreeAvailable(transaction.state) && (
+        syntaxTree(transaction.startState) !== syntaxTree(transaction.state)
+        || transaction.effects.some((effect) => effect.is(restParsed)));
+      if (!value.complete && (changed || treeDone)) {
+        const previous = { document: value.document, changes: transaction.changes };
+        const { document, complete } = renderMarkdownStatePrefix(transaction.state, forms, previous);
+        return buildBlocks(transaction.state, document, candidatesOf(document, policy), complete);
       }
       if (!changed && !transaction.selection && !readOnlyChanged) return value;
       if (!changed) {
-        const next = buildBlocks(transaction.state, value.document, value.candidates);
+        const next = buildBlocks(transaction.state, value.document, value.candidates, value.complete);
         return next.decisions === value.decisions && !readOnlyChanged ? value : next;
       }
       const document = renderMarkdownState(transaction.state, forms, { document: value.document, changes: transaction.changes });
-      return buildBlocks(transaction.state, document, candidatesOf(document, policy));
+      return buildBlocks(transaction.state, document, candidatesOf(document, policy), true);
     },
     provide: (field) => EditorView.decorations.from(field, (value) => value.decorations),
+  });
+  // Il resto di un documento grande: il parser di CodeMirror ci arriva a
+  // pezzi brevi, quando la pagina è libera, e quando è in fondo una
+  // transazione (`restParsed`) porta l'albero nello stato e la resa si completa. Il
+  // lavoratore del parser, da solo, si ferma poco oltre la vista.
+  const parseRest = ViewPlugin.fromClass(class {
+    private cancel: (() => void) | null = null;
+    constructor(private readonly view: EditorView) {
+      this.schedule();
+    }
+    update(): void {
+      this.schedule();
+    }
+    private schedule(): void {
+      if (this.cancel || this.view.state.field(blocks).complete) return;
+      this.cancel = whenIdle(() => {
+        this.cancel = null;
+        const { state } = this.view;
+        if (state.field(blocks).complete) return;
+        if (ensureSyntaxTree(state, state.doc.length, PARSE_SLICE_MS)) this.view.dispatch({ effects: restParsed.of(null) });
+        else this.schedule();
+      });
+    }
+    destroy(): void {
+      this.cancel?.();
+      this.cancel = null;
+    }
   });
   // Le tabelle sono griglie (`table-widget.ts`), anche col cursore dentro: si
   // scrivono cella per cella, e la sorgente con le pipe è della modalità
@@ -2134,7 +2236,12 @@ export function livePreview(
     widgets.set(origin, { offset, dependencies, readOnly, grid, decoration });
     return decoration;
   }
-  function buildBlocks(state: EditorState, document: MarkdownDocument, candidates: readonly Candidate[]): RenderState {
+  function buildBlocks(
+    state: EditorState,
+    document: MarkdownDocument,
+    candidates: readonly Candidate[],
+    complete: boolean,
+  ): RenderState {
     const ranges: Range<Decoration>[] = [];
     const replaced: { from: number; to: number }[] = [];
     let decisions = "";
@@ -2184,7 +2291,7 @@ export function livePreview(
         lineFrom = end + 1;
       }
     }
-    return { document, candidates, decisions, decorations: Decoration.set(ranges, true), replaced };
+    return { document, candidates, decisions, decorations: Decoration.set(ranges, true), replaced, complete };
   }
   const buildInline = (view: EditorView, held: readonly SelectionRange[] | null): [DecorationSet, DecorationSet, DecorationSet] => {
     const active = revealOf(view.state, view.state.facet(liveReveal), held ?? view.state.selection.ranges);
@@ -2377,7 +2484,7 @@ export function livePreview(
     }
   });
   return [
-    theme, footnoteLabelsField, blocks, plugin, blockPrefixes(), emptyPairsExtension(), pendingGuide(), edgeSpaces(), keepMarks(), signsOnFirstLetter(), codeBlocks(), calloutGestures(), detailsLive(), imageGestures(), hangingIndent(), mathPopovers((view, pos, side) => formulaIn(view.plugin(plugin)?.decorations, pos, side)), liveHints(() => callbacks.slashEnabled?.() ?? false), deleteKeys, realign, tableGrids(callbacks),
+    theme, figureTheme(), footnoteLabelsField, blocks, parseRest, plugin, blockPrefixes(), emptyPairsExtension(), pendingGuide(), edgeSpaces(), keepMarks(), signsOnFirstLetter(), codeBlocks(), calloutGestures(), detailsLive(), imageGestures(), hangingIndent(), mathPopovers((view, pos, side) => formulaIn(view.plugin(plugin)?.decorations, pos, side)), liveHints(() => callbacks.slashEnabled?.() ?? false), deleteKeys, realign, tableGrids(callbacks),
     propertiesExtension(),
     callbacks.linkCard ? linkCardGestures(callbacks.linkCard) : [],
   ];

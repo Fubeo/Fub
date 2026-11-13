@@ -1232,141 +1232,6 @@ kbd,
   font-size: var(--text-sm);
 }
 
-/* La colonna degli strumenti: caselle quadrate a gruppi, separati da un filo;
-   lo strumento scelto ha il fondo tenue dell'accento, non un bordo. */
-.kit-rail {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: var(--space-2);
-  padding: var(--space-2);
-}
-.kit-rail[data-orientation="horizontal"] {
-  flex-direction: row;
-}
-.kit-rail-group {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-}
-.kit-rail[data-orientation="horizontal"] .kit-rail-group {
-  flex-direction: row;
-}
-.kit-rail-rule {
-  align-self: stretch;
-  border-top: 1px solid var(--outline);
-}
-.kit-rail[data-orientation="horizontal"] .kit-rail-rule {
-  border-top: none;
-  border-left: 1px solid var(--outline);
-}
-.kit-rail-slot {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  padding: 0;
-  border: none;
-  border-radius: var(--radius-sm);
-  background: transparent;
-  color: var(--muted);
-  cursor: pointer;
-}
-.kit-rail[data-size="large"] .kit-rail-slot {
-  width: 44px;
-  height: 44px;
-}
-.kit-rail-slot:hover {
-  background: var(--overlay-hover);
-  color: var(--text);
-}
-.kit-rail-slot:active {
-  background: var(--overlay-active);
-}
-.kit-rail-slot[aria-pressed="true"],
-.kit-rail-slot[aria-pressed="true"]:hover {
-  background: var(--accent-wash);
-  color: var(--accent);
-}
-.kit-rail-slot:focus-visible {
-  outline: var(--focus-ring-width) solid var(--focus-ring);
-  outline-offset: 0;
-}
-/* Nella colonna le icone sono da 20 px, sulla stessa griglia di 24. */
-.kit-rail-icon {
-  display: inline-flex;
-}
-.kit-rail-icon svg {
-  width: 20px;
-  height: 20px;
-}
-.kit-rail-corner {
-  border-top: 4px solid transparent;
-  border-right: 4px solid currentColor;
-  opacity: 0.6;
-}
-.kit-rail-flyout {
-  padding: var(--space-2);
-}
-.kit-rail-flyout-item {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  min-width: 180px;
-  padding: var(--space-2) var(--space-3);
-  border-radius: var(--radius-sm);
-  color: var(--text);
-  font-size: var(--text-sm);
-}
-.kit-rail-flyout-label {
-  flex: 1;
-}
-.kit-rail-flyout-keys {
-  color: var(--muted);
-  font-size: var(--text-xs);
-}
-
-/* La barra delle opzioni: una riga che non va a capo; ciò che non ci sta va
-   in «…». */
-.kit-options {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  min-width: 0;
-}
-.kit-options-row {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  min-width: 0;
-  overflow: hidden;
-  white-space: nowrap;
-}
-.kit-options-more {
-  height: var(--control-h);
-  padding: 0 var(--space-3);
-  border: none;
-  border-radius: var(--radius-sm);
-  background: transparent;
-  color: var(--text);
-  cursor: pointer;
-}
-.kit-options-more:hover {
-  background: var(--overlay-hover);
-}
-.kit-options-more:focus-visible {
-  outline: var(--focus-ring-width) solid var(--focus-ring);
-  outline-offset: 0;
-}
-.kit-options-overflow {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: var(--space-3);
-  padding: var(--space-4);
-}
-
 .kit-field-icon {
   display: inline-flex;
   grid-row: 1;
@@ -1550,6 +1415,649 @@ kbd,
   outline: var(--focus-ring-width) solid var(--focus-ring);
   outline-offset: -1px;
   border-radius: var(--radius-xs);
+}
+
+/* ── Barra a schede ──────────────────────────────────────────────────────── */
+
+/* ── La barra degli strumenti di serie: la pelle ───────────────────────────
+   Ricavata a macchina dalle regole della barra dei fogli: `.grid-ribbon-*`
+   diventa `.kit-ribbon-*`, con lo stesso testo, lo stesso ordine e la stessa
+   specificità. Il kit mette `kit-ribbon` sulla radice e `kit-ribbon-<parte>`
+   accanto a `<prefisso>-<parte>` su ogni pezzo. Ai fogli restano la
+   tavolozza, la galleria, i campioni, «Comandi», la formula e le schede.
+   Il vassoio più chiaro e le sezioni come le schede dell'ispettore (scelte
+   del 2026-11-04) stanno dentro queste regole: una per selettore. */
+/* La barra di serie è una testata di Fub, non un nastro d'ufficio. Le sezioni
+   sono una scelta a segmenti nel loro pozzetto, come le schede
+   dell'ispettore; i comandi stanno su un vassoio stondato, appena sotto la
+   carta, in foglietti col nome in grigio. Niente righe: separano lo spazio e
+   la carta. */
+.kit-ribbon {
+  padding-bottom: var(--space-2);
+  background: var(--sheet);
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: var(--text-sm);
+}
+/* Ritirata resta la fila delle sezioni: un filetto la stacca dal contenuto. */
+.kit-ribbon[data-collapsed="true"] {
+  padding-bottom: 0;
+  box-shadow: inset 0 -1px 0 var(--border);
+}
+.kit-ribbon-head {
+  gap: var(--space-4);
+  padding: var(--space-2) var(--space-4);
+}
+/* La fila delle sezioni è il pozzetto delle schede dell'ispettore e degli
+   spazi del cassetto: segmenti alti 26, il nome in grafite, la scelta è un
+   foglietto di carta alzata col nome in inchiostro, che scorre. Di giorno il
+   pozzetto è il velo sulla carta (il `--bg-hover` della scrivania, sulla
+   carta, sarebbe un grigio pieno); di notte è `--bg-hover`, un incavo, perché
+   un velo chiaro avrebbe il tono del foglietto. Il foglietto ha l'ombra di
+   contatto dei foglietti del vassoio e non `--shadow-1`: la fila scorre e
+   taglierebbe un alone lungo. */
+.kit-ribbon-tabs.kit-tabs {
+  gap: var(--space-1);
+  padding: var(--space-1);
+  border-radius: var(--radius-control);
+  background: var(--overlay-hover);
+  box-shadow: none;
+}
+.kit-ribbon-tabs .kit-tab {
+  gap: var(--space-2);
+  min-height: 26px;
+  padding: 0 var(--space-5);
+  border-radius: var(--radius-chip);
+  color: var(--muted);
+  font-size: var(--text-base);
+}
+.kit-ribbon-tabs .kit-tab:hover {
+  color: var(--text);
+}
+.kit-ribbon-tabs .kit-tab:not([aria-selected="true"]):hover {
+  background: var(--overlay-hover);
+}
+/* La scelta ha il nome più marcato. */
+.kit-ribbon-tabs .kit-tab[aria-selected="true"] {
+  color: var(--text);
+  font-weight: var(--weight-bold);
+}
+/* Ogni sezione è già larga quanto il suo nome marcato: un doppio invisibile
+   del nome (`data-label`, che il kit scrive) le dà la misura, così il cambio
+   di peso non sposta le vicine. È alto zero e non si legge. */
+.kit-ribbon-tabs .kit-tab-label::after {
+  content: attr(data-label);
+  display: block;
+  height: 0;
+  overflow: hidden;
+  font-weight: var(--weight-bold);
+  visibility: hidden;
+  pointer-events: none;
+  user-select: none;
+}
+.kit-ribbon-tabs > .kit-tab-indicator {
+  top: var(--space-1);
+  height: calc(100% - var(--space-1) * 2);
+  border-radius: var(--radius-chip);
+  background: var(--bg-elev);
+  box-shadow: 0 0 0 1px var(--overlay-hover), 0 1px 2px var(--overlay-active);
+}
+:root[data-theme="dark"] .kit-ribbon-tabs.kit-tabs {
+  background: var(--bg-hover);
+}
+:root[data-theme="dark"] .kit-ribbon-tabs > .kit-tab-indicator {
+  box-shadow: inset 0 1px 0 var(--overlay-hover);
+}
+/* Le sezioni per la selezione dicono di essere in più con l'accento e un
+   punto, anche quando sono scelte, e stanno un passo più in là dalle altre. */
+.kit-ribbon-tabs .kit-ribbon-contextual {
+  color: var(--accent);
+}
+.kit-ribbon-tabs .kit-ribbon-contextual[aria-selected="true"] {
+  color: var(--accent);
+}
+.kit-ribbon-tabs .kit-ribbon-contextual::before {
+  content: "";
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: var(--radius-pill);
+  background: currentColor;
+}
+.kit-ribbon-tabs .kit-tab:not(.kit-ribbon-contextual) + .kit-ribbon-contextual {
+  margin-inline-start: var(--space-3);
+}
+.kit-ribbon-toggle {
+  border: none;
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+.kit-ribbon-toggle:hover {
+  background: var(--overlay-hover);
+  color: var(--text);
+}
+/* Il vassoio dei comandi: lo stesso raggio di un foglio; i foglietti dentro
+   col raggio di un controllo, così gli angoli corrono paralleli. Il suo tono
+   è un ruolo suo (`--bar-tray`), lo stesso della barra in una fila e della
+   colonna, più vicino ai foglietti di `--sheet-2`, che usano anche i campi e
+   la fila delle linguette; senza il ruolo resta `--sheet-2`. */
+.kit-ribbon-toolbar {
+  gap: var(--space-2);
+  margin: 0 var(--space-4);
+  padding: var(--space-2);
+  border-radius: var(--radius-sheet);
+  background: var(--bar-tray, var(--sheet-2));
+}
+/* Un foglietto è un cartoncino tondo da ogni lato, appoggiato sul vassoio: un
+   filo d'inchiostro tutt'attorno e sotto un'ombra di contatto corta. Resta un
+   gradino sotto i fogli della scrivania: `--shadow-1` è la loro carta
+   (`--elevation-paper-shadow`) e qui non si usa; il suo alone di 20 px, poi,
+   il vassoio lo taglierebbe. L'ombra è fatta coi veli della shell,
+   `--overlay-hover` e `--overlay-active`: nessun token nuovo. */
+.kit-ribbon-group {
+  padding: var(--space-1) var(--space-2) var(--space-2);
+  border-radius: var(--radius-control);
+  background: var(--bg-elev);
+  box-shadow: 0 0 0 1px var(--overlay-hover), 0 1px 2px var(--overlay-active);
+}
+/* Il foglietto chiuso che si apre sul posto sale di un gradino: il filo e
+   l'ombra crescono, sempre sotto la carta. */
+.kit-ribbon-group[data-open="true"] {
+  box-shadow: 0 0 0 1px var(--overlay-active), 0 1px 1px var(--overlay-active), 0 2px 4px var(--overlay-active);
+}
+/* Nella luce scura un'ombra non si vede: il foglietto è la carta alzata col
+   filo di luce in cima e un filo attorno; quello aperto sul posto si schiarisce
+   verso il testo e il suo filo si fa più netto. */
+:root[data-theme="dark"]:not([data-contrast="high"]) .kit-ribbon-group {
+  box-shadow: inset 0 1px 0 var(--overlay-active), 0 0 0 1px var(--overlay-hover);
+}
+:root[data-theme="dark"] .kit-ribbon-group[data-open="true"] {
+  background: color-mix(in oklab, var(--bg-elev) 95%, var(--text));
+}
+:root[data-theme="dark"]:not([data-contrast="high"]) .kit-ribbon-group[data-open="true"] {
+  box-shadow: inset 0 1px 0 var(--overlay-active), 0 0 0 1px var(--overlay-active);
+}
+/* Contrasto alto: il filo è il bordo pieno della shell, tutt'attorno, di
+   giorno e di notte. */
+:root[data-contrast="high"] .kit-ribbon-group {
+  box-shadow: 0 0 0 1px var(--border);
+}
+:root[data-contrast="high"] .kit-ribbon-group[data-open="true"] {
+  box-shadow: 0 0 0 2px var(--border);
+}
+/* Il nome del gruppo è piccolo e grigio, scritto come si scrive: non
+   maiuscoletto, non nero. Dice dove si è, non chiede di essere letto. */
+.kit-ribbon-group-label {
+  padding: 0 var(--space-1);
+  color: var(--muted);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-regular);
+  line-height: 16px;
+}
+.kit-ribbon-group-body {
+  gap: var(--space-1) var(--space-2);
+}
+.kit-ribbon-stack {
+  gap: var(--space-1) var(--space-2);
+}
+.kit-ribbon-row {
+  gap: var(--space-1);
+}
+/* I pulsanti sono quelli della barra di formato: grafite a riposo, un velo al
+   passaggio, il velo d'accento quando sono accesi. */
+.kit-ribbon-button {
+  gap: var(--space-2);
+  padding: 0 var(--space-2);
+  border: none;
+  border-radius: var(--radius-chip);
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  line-height: var(--leading-tight);
+  cursor: pointer;
+}
+.kit-ribbon-large {
+  padding: 0 var(--space-2);
+}
+.kit-ribbon-arrow {
+  padding: 0 var(--space-1);
+}
+.kit-ribbon-button:hover:not([aria-disabled="true"]),
+.kit-ribbon-button[aria-expanded="true"] {
+  background: var(--overlay-hover);
+  color: var(--text);
+}
+.kit-ribbon-button:active:not([aria-disabled="true"]) {
+  background: var(--overlay-active);
+}
+/* Un pulsante diviso è un pezzo solo con due bocche: sotto il puntatore si
+   vela tutto, e la parte che risponde un po' di più. */
+.kit-ribbon-split > .kit-ribbon-button:first-child {
+  border-radius: var(--radius-chip) 0 0 var(--radius-chip);
+}
+.kit-ribbon-split > .kit-ribbon-arrow {
+  border-radius: 0 var(--radius-chip) var(--radius-chip) 0;
+}
+.kit-ribbon-split:hover > .kit-ribbon-button:not([aria-disabled="true"]) {
+  background: var(--overlay-hover);
+  color: var(--text);
+}
+.kit-ribbon-split:hover > .kit-ribbon-button:hover:not([aria-disabled="true"]) {
+  background: var(--overlay-active);
+}
+/* «Acceso» è lo stesso ovunque nella shell: velo d'accento e inchiostro blu. */
+.kit-ribbon-button[aria-pressed="true"] {
+  background: var(--accent-wash);
+  color: var(--accent);
+}
+.kit-ribbon-button[aria-disabled="true"],
+.kit-ribbon-select:disabled,
+.kit-ribbon-input:disabled,
+.kit-ribbon-check:has(> input:disabled) {
+  opacity: 0.4;
+  cursor: default;
+}
+.kit-ribbon-toggle:focus-visible,
+.kit-ribbon-button:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: -2px;
+}
+.kit-ribbon-glyph {
+  font-family: var(--font-ui);
+  font-size: var(--text-base);
+}
+.kit-ribbon-color-bar {
+  border-radius: var(--radius-pill);
+  box-shadow: inset 0 0 0 1px var(--border);
+}
+/* I campi sono i campi di Fub (`skin/controls.css`): carta, il confine dei
+   controlli, il raggio di controllo; il passaggio scurisce il confine e il
+   fuoco lo fa blu con l'alone. */
+.kit-ribbon-select,
+.kit-ribbon-input {
+  height: 28px;
+  padding: 0 var(--space-3);
+  border: 1px solid var(--outline);
+  border-radius: var(--radius-control);
+  background: var(--sheet);
+  color: var(--text);
+  font: inherit;
+  text-overflow: ellipsis;
+}
+.kit-ribbon-select:hover:not(:disabled),
+.kit-ribbon-input:hover:not(:disabled) {
+  border-color: var(--text);
+}
+.kit-ribbon-select:focus-visible,
+.kit-ribbon-input:focus-visible {
+  border-color: var(--focus-ring);
+  outline-offset: -1px;
+  box-shadow: 0 0 0 4px var(--accent-veil);
+}
+.kit-ribbon-check {
+  gap: var(--space-3);
+  min-height: 28px;
+  padding: 0 var(--space-3);
+  border-radius: var(--radius-chip);
+  color: var(--muted);
+  cursor: pointer;
+}
+.kit-ribbon-check:hover:not(:has(> input:disabled)) {
+  background: var(--overlay-hover);
+  color: var(--text);
+}
+.kit-ribbon-check input {
+  margin: 0;
+  accent-color: var(--accent);
+}
+/* Le lettere di Alt: pastiglie scure, staccate dalla carta da un anello, come
+   il conteggio sulle icone della cornice. */
+.kit-ribbon-keytip {
+  min-width: 16px;
+  padding: 0 var(--space-2);
+  border-radius: var(--radius-pill);
+  background: var(--text);
+  box-shadow: 0 0 0 2px var(--sheet), var(--shadow-2);
+  color: var(--sheet);
+  font-size: 10px;
+  font-weight: var(--weight-bold);
+  line-height: 16px;
+  text-align: center;
+}
+/* Il pulsante del foglietto chiuso riempie il foglietto: il velo del
+   passaggio copre tutta la sua carta, col raggio della carta. Due a pila:
+   ognuno è alto metà di un foglietto aperto, e i due, col passo del vassoio
+   fra loro, sono alti quanto lui ((80 − 4) / 2). Il disegno, il nome e la
+   freccina come in un gettone; la freccina, grigia, dice «si apre qui». */
+.kit-ribbon-group[data-collapsed="true"] {
+  min-height: 38px;
+  padding: 0;
+}
+.kit-ribbon-group-toggle {
+  gap: var(--space-3);
+  padding: 0 var(--space-3) 0 var(--space-4);
+  border-radius: var(--radius-control);
+  color: var(--text);
+}
+.kit-ribbon-group-toggle .kit-ribbon-chevron {
+  color: var(--muted);
+}
+/* Uno solo: alto quanto un foglietto aperto (80), anche quando i foglietti
+   sono tutti chiusi e nessuno dà l'altezza al vassoio, e largo almeno 48 px
+   come una tessera. */
+.kit-ribbon-group[data-collapsed="true"][data-alone="true"] {
+  min-height: 80px;
+}
+.kit-ribbon-group[data-alone="true"] > .kit-ribbon-group-toggle {
+  gap: var(--space-2);
+  min-width: 48px;
+  padding: var(--space-2) var(--space-4);
+}
+.kit-ribbon-group[data-alone="true"] > .kit-ribbon-group-toggle > svg {
+  border-radius: var(--radius-pill);
+  background: var(--overlay-hover);
+}
+.kit-ribbon-group[data-alone="true"] > .kit-ribbon-group-toggle .kit-ribbon-label {
+  color: var(--muted);
+  font-size: var(--text-xs);
+  line-height: 14px;
+}
+.kit-ribbon-group[data-alone="true"] > .kit-ribbon-group-toggle:hover .kit-ribbon-label {
+  color: var(--text);
+}
+/* L'accesso rapido accanto alle sezioni. */
+.kit-ribbon-quick {
+  gap: var(--space-1);
+}
+/* In un foglio stretto si stringono di un passo i margini della testata, i
+   segmenti, il loro nome e il vassoio, che restano allineati: a 700 px le
+   sezioni ci stanno tutte, anche quella della selezione. */
+@container sheet (max-width: 900px) {
+  .kit-ribbon-head {
+    gap: var(--space-3);
+    padding: var(--space-2) var(--space-3);
+  }
+  .kit-ribbon-tabs.kit-tabs {
+    gap: 0;
+  }
+  .kit-ribbon-tabs .kit-tab {
+    padding: 0 var(--space-3);
+    font-size: var(--text-sm);
+  }
+  .kit-ribbon-tabs .kit-tab:not(.kit-ribbon-contextual) + .kit-ribbon-contextual {
+    margin-inline-start: var(--space-2);
+  }
+  .kit-ribbon-toolbar {
+    margin: 0 var(--space-3);
+  }
+}
+/* In colori forzati i fondi spariscono: la scelta la dice il contorno del
+   kit (`.kit-tab[aria-selected]`), il pozzetto, il vassoio e i foglietti un
+   bordo vero, e il foglietto aperto sul posto un contorno in più. */
+@media (forced-colors: active) {
+  .kit-ribbon-tabs > .kit-tab-indicator {
+    background: transparent;
+  }
+  .kit-ribbon-tabs.kit-tabs,
+  .kit-ribbon-toolbar,
+  .kit-ribbon-group {
+    border: 1px solid CanvasText;
+  }
+  .kit-ribbon-group[data-open="true"] {
+    outline: 1px solid CanvasText;
+  }
+}
+
+/* ── Barra in una fila e colonna ─────────────────────────────────────────── */
+
+/* ── La barra in una fila: la pelle (`kit-bar`) ──────────────────────────────
+   Gli stessi valori della barra a schede qui sopra (il vassoio, i foglietti,
+   i pulsanti), scritti una volta sola sulle classi del kit: il kit non
+   conosce gli editor, e ogni barra li prende mettendo le classi e togliendo
+   le sue regole vecchie. La bolla della selezione resta una bolla: i suoi
+   pulsanti sono questi, ma non sta in un vassoio. */
+.kit-bar {
+  gap: var(--space-2);
+  margin: 0 var(--space-4) var(--space-2);
+  padding: var(--space-2);
+  border: 0;
+  border-radius: var(--radius-sheet);
+  background: var(--bar-tray, var(--sheet-2));
+  color: var(--muted);
+  font-family: var(--font-ui);
+  font-size: var(--text-sm);
+}
+@container sheet (max-width: 900px) {
+  .kit-bar {
+    margin: 0 var(--space-3) var(--space-2);
+  }
+}
+/* Un foglietto è un cartoncino sul vassoio, come nella barra a schede. */
+.kit-bar .kit-bar-group {
+  gap: var(--space-1);
+  padding: var(--space-1);
+  border: 0;
+  border-radius: var(--radius-control);
+  background: var(--bg-elev);
+  box-shadow: 0 0 0 1px var(--overlay-hover), 0 1px 2px var(--overlay-active);
+}
+:root[data-theme="dark"] .kit-bar .kit-bar-group {
+  background: var(--bg-elev);
+  box-shadow: inset 0 1px 0 var(--overlay-active), 0 0 0 1px var(--overlay-hover);
+}
+:root[data-contrast="high"] .kit-bar .kit-bar-group {
+  box-shadow: 0 0 0 1px var(--border);
+}
+@media (forced-colors: active) {
+  .kit-bar,
+  .kit-bar .kit-bar-group {
+    border: 1px solid CanvasText;
+  }
+}
+/* La fila del kit dentro un vassoio non ha fondo suo: il vassoio ce l'ha già. */
+.kit-bar > .kit-options,
+.kit-bar .kit-options-row {
+  gap: var(--space-2);
+  padding: 0;
+  background: transparent;
+}
+
+/* I pulsanti: grafite a riposo, un velo al passaggio, il velo d'accento
+   quando sono accesi. */
+.kit-bar-button,
+.kit-options-more {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  padding: 0 var(--space-2);
+  border: none;
+  border-radius: var(--radius-chip);
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-weight: var(--weight-regular);
+  line-height: var(--leading-tight);
+  cursor: pointer;
+}
+.kit-bar-button:hover:not(:disabled, [aria-disabled="true"]),
+.kit-bar-button[aria-expanded="true"],
+.kit-options-more:hover,
+.kit-options-more[aria-expanded="true"] {
+  background: var(--overlay-hover);
+  color: var(--text);
+}
+.kit-bar-button:active:not(:disabled, [aria-disabled="true"]) {
+  background: var(--overlay-active);
+}
+.kit-bar-button[aria-pressed="true"],
+.kit-bar-button[aria-checked="true"] {
+  background: var(--accent-wash);
+  color: var(--accent);
+}
+.kit-bar-button:disabled,
+.kit-bar-button[aria-disabled="true"] {
+  background: transparent;
+  opacity: 0.4;
+  cursor: default;
+}
+.kit-bar-button:focus-visible,
+.kit-options-more:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: -2px;
+}
+.kit-bar-button > svg,
+.kit-options-more > svg {
+  flex: none;
+  width: 16px;
+  height: 16px;
+}
+/* I campi sono quelli della barra a schede. */
+.kit-bar-field {
+  height: 28px;
+  margin: 0;
+  padding: 0 var(--space-3);
+  border: 1px solid var(--outline);
+  border-radius: var(--radius-control);
+  background: var(--sheet);
+  color: var(--text);
+  font: inherit;
+  text-overflow: ellipsis;
+}
+.kit-bar-field:hover:not(:disabled) {
+  border-color: var(--text);
+}
+.kit-bar-field:focus-visible {
+  border-color: var(--focus-ring);
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: -1px;
+  box-shadow: 0 0 0 4px var(--accent-veil);
+}
+
+/* La barra delle opzioni (`kit/options-bar.ts`): una riga che non va a capo,
+   e ciò che non ci sta va in «…». La forma della riga sta in `structure.css`;
+   il «…» è un pulsante della fila, qui sopra. */
+.kit-options {
+  gap: var(--space-2);
+}
+.kit-options-row {
+  gap: var(--space-3);
+}
+.kit-options-overflow {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-4);
+}
+
+/* ── La colonna degli strumenti (`kit/tool-rail.ts`) ─────────────────────────
+   La stessa barra in piedi: il vassoio stondato, i gruppi come foglietti,
+   niente filo fra i gruppi. Le caselle tengono le loro misure (32, 44 col dito
+   o in `data-size="large"`); lo strumento scelto ha il fondo tenue
+   dell'accento, non un bordo. */
+.kit-rail {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  margin: var(--space-2) 0 var(--space-2) var(--space-4);
+  padding: var(--space-2);
+  border-radius: var(--radius-sheet);
+  background: var(--bar-tray, var(--sheet-2));
+}
+.kit-rail[data-orientation="horizontal"] {
+  flex-direction: row;
+}
+.kit-rail-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-1);
+  border-radius: var(--radius-control);
+  background: var(--bg-elev);
+  box-shadow: 0 0 0 1px var(--overlay-hover), 0 1px 2px var(--overlay-active);
+}
+:root[data-theme="dark"] .kit-rail-group {
+  background: var(--bg-elev);
+  box-shadow: inset 0 1px 0 var(--overlay-active), 0 0 0 1px var(--overlay-hover);
+}
+:root[data-contrast="high"] .kit-rail-group {
+  box-shadow: 0 0 0 1px var(--border);
+}
+.kit-rail[data-orientation="horizontal"] .kit-rail-group {
+  flex-direction: row;
+}
+.kit-rail-rule {
+  display: none;
+}
+.kit-rail-slot {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-chip);
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+.kit-rail[data-size="large"] .kit-rail-slot {
+  width: 44px;
+  height: 44px;
+}
+.kit-rail-slot:hover {
+  background: var(--overlay-hover);
+  color: var(--text);
+}
+.kit-rail-slot:active {
+  background: var(--overlay-active);
+}
+.kit-rail-slot[aria-pressed="true"],
+.kit-rail-slot[aria-pressed="true"]:hover {
+  background: var(--accent-wash);
+  color: var(--accent);
+}
+.kit-rail-slot:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: 0;
+}
+/* Nella colonna le icone sono da 20 px, sulla stessa griglia di 24. */
+.kit-rail-icon {
+  display: inline-flex;
+}
+.kit-rail-icon svg {
+  width: 20px;
+  height: 20px;
+}
+.kit-rail-corner {
+  border-top: 4px solid transparent;
+  border-right: 4px solid currentColor;
+  opacity: 0.6;
+}
+.kit-rail-flyout {
+  padding: var(--space-2);
+}
+.kit-rail-flyout-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-width: 180px;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font-size: var(--text-sm);
+}
+.kit-rail-flyout-label {
+  flex: 1;
+}
+.kit-rail-flyout-keys {
+  color: var(--muted);
+  font-size: var(--text-xs);
 }
 
 /* ── Garanzie ────────────────────────────────────────────────────────────── */
@@ -1798,9 +2306,13 @@ kbd,
   color: var(--text);
 }
 
+/* Il pulsante premuto: un foglietto sollevato, non una macchia blu. Chi è
+   acceso è carta col suo rilievo, e l'icona torna inchiostro. Lo stesso nel
+   binario, più sotto. */
 .titlebar-btn[aria-pressed="true"] {
-  background: var(--accent-wash);
-  color: var(--accent);
+  background: var(--bg-elev);
+  box-shadow: var(--shadow-1);
+  color: var(--text);
 }
 
 .titlebar-btn:disabled {
@@ -1848,19 +2360,20 @@ kbd,
   pointer-events: none;
 }
 
-/* La pillola: a riposo dice dove sei. La cartella in grafite, il titolo in
-   inchiostro, i tasti del lanciatore su un tassello di foglio. */
+/* La pillola è il campo dei comandi: un pozzetto con la lente, l'invito in
+   grafite e i tasti del lanciatore su un tassello di carta. Sul telefono, a
+   riposo, dice dove sei: la cartella in grafite, il titolo in inchiostro. */
 .pill {
   display: inline-flex;
   align-items: center;
-  gap: var(--space-3);
+  gap: var(--space-4);
   padding: 0 var(--space-2) 0 var(--space-5);
   border: none;
-  border-radius: var(--radius-pill);
+  border-radius: var(--radius-control);
   background: var(--bg-hover);
   color: var(--muted);
   font-family: var(--font-ui);
-  font-size: var(--text-base);
+  font-size: var(--text-md);
   text-align: left;
   cursor: pointer;
   transition: transform var(--duration-state) var(--ease);
@@ -1877,11 +2390,12 @@ kbd,
 .pill-icon {
   display: inline-flex;
   flex: none;
+  color: var(--muted);
 }
 
 .pill-icon svg {
-  width: 14px;
-  height: 14px;
+  width: 16px;
+  height: 16px;
 }
 
 .pill-path {
@@ -1908,11 +2422,12 @@ kbd,
 }
 
 .pill .titlebar-shortcut {
-  padding: 0 var(--space-4);
-  border-color: transparent;
-  border-radius: var(--radius-pill);
-  background: var(--sheet);
+  padding: 0 var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xs);
+  background: var(--bg-elev);
   color: var(--muted);
+  font-size: var(--text-xs);
 }
 
 /* I controlli della finestra: larghi quanto la struttura dice, alti quanto la
@@ -2095,25 +2610,26 @@ kbd,
   transform: scale(0.96);
 }
 
+/* Il pannello scelto è un foglietto sollevato, come il pulsante premuto della
+   barra del titolo: carta col suo rilievo, l'icona in inchiostro e senza velo. */
 .rail-btn[aria-pressed="true"],
 .rail-btn[aria-expanded="true"] {
-  background: var(--accent-wash);
-  color: var(--accent);
+  background: var(--bg-elev);
+  box-shadow: var(--shadow-1);
+  color: var(--text);
 }
 
-/* L'icona scelta si «inchiostra»: a riposo è solo contorno, da attiva le forme
-   chiuse prendono un velo del colore d'accento. I tratti aperti non si
-   riempiono (un segmento non ha area), quindi non serve distinguerli. */
 .rail-btn[aria-pressed="true"] svg,
 .rail-btn[aria-expanded="true"] svg,
 .inspector-tab[aria-selected="true"] svg {
-  fill: color-mix(in oklab, var(--accent) 22%, transparent);
+  fill: none;
 }
 
-/* A cassetto chiuso il pannello resta scelto ma non si vede: l'icona torna a
-   riposo, e si riaccende quando il cassetto si apre. */
+/* A cassetto chiuso il pannello resta scelto ma non si vede: il bottone torna
+   a riposo, e si risolleva quando il cassetto si apre. */
 .rail[data-drawer="closed"] .rail-btn[aria-pressed="true"] {
   background: transparent;
+  box-shadow: none;
   color: var(--muted);
 }
 
@@ -2139,13 +2655,28 @@ kbd,
   line-height: 1;
 }
 
-/* La tacca del pannello aperto: un tratto di matita blu sul bordo del
-   binario, che scivola da un'icona all'altra. */
+/* La tacca del pannello aperto scivola ancora da un'icona all'altra, ma non
+   si vede: il pannello scelto lo dice il foglietto sollevato. */
 .rail-notch {
   width: 3px;
   height: 16px;
   border-radius: 0 var(--radius-pill) var(--radius-pill) 0;
-  background: var(--accent);
+  background: transparent;
+}
+
+/* Senza colori propri il rilievo del foglietto sparisce: il pulsante premuto
+   tiene un filo del colore del testo. L'anello del fuoco gli passa sopra. */
+@media (forced-colors: active) {
+  .titlebar-btn[aria-pressed="true"],
+  .rail-btn[aria-pressed="true"],
+  .rail-btn[aria-expanded="true"] {
+    outline: 1px solid CanvasText;
+    outline-offset: -1px;
+  }
+
+  .rail[data-drawer="closed"] .rail-btn[aria-pressed="true"] {
+    outline: none;
+  }
 }
 
 /* ── L'ispettore: titolo e schede ────────────────────────────────────────── */
@@ -2154,7 +2685,7 @@ kbd,
   display: flex;
   align-items: center;
   min-height: var(--drawer-head-h);
-  padding: 0 var(--drawer-pad) 0 calc(var(--drawer-pad) + var(--space-4));
+  padding: 0 var(--drawer-pad);
   overflow: hidden;
   color: var(--text);
   font-family: var(--font-ui);
@@ -2170,52 +2701,74 @@ kbd,
   text-overflow: ellipsis;
 }
 
-/* «Segue: nota»: a destra del titolo, in grafite. Cede per prima, perché il
-   titolo dice che vista è e questa riga solo da che cosa dipende. */
+/* «● Segue la nota»: il punto dice che la vista è legata al foglio acceso.
+   Il titolo non cede: è «Segue…» che si accorcia coi puntini. */
+.inspector-title > span:first-child {
+  flex: none;
+}
+
+/* A destra del titolo, in grafite: dice da che cosa dipende la vista, e il
+   nome della nota sta nel suggerimento. */
 .inspector-title > .inspector-follows {
   flex: 0 1 auto;
   margin-left: auto;
   padding-left: var(--space-5);
   color: var(--muted);
-  font-size: var(--text-sm);
+  font-size: var(--text-base);
   font-weight: var(--weight-regular);
+}
+.inspector-title > .inspector-follows::before {
+  content: "";
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-right: var(--space-3);
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+  vertical-align: 0.1em;
 }
 .inspector-title > .inspector-follows[hidden] {
   display: none;
 }
 
+/* Le schede sono un pozzetto, come gli spazi del cassetto: parti uguali,
+   l'accesa è un foglietto. */
 .inspector-tabs {
   display: flex;
   flex-shrink: 0;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: center;
   gap: var(--space-1);
-  padding: 0 var(--drawer-pad) var(--space-3);
+  margin: var(--space-3) var(--drawer-pad) var(--space-3);
+  padding: var(--space-1);
+  border-radius: var(--radius-control);
+  background: var(--bg-hover);
 }
 
 .inspector-tab {
   display: inline-flex;
-  flex-shrink: 0;
+  flex: 1 1 0;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
+  width: auto;
+  height: 26px;
   padding: 0;
   border: none;
-  border-radius: var(--radius-control);
+  border-radius: var(--radius-chip);
   background: transparent;
   color: var(--muted);
   cursor: pointer;
 }
 
 .inspector-tab:hover {
-  background: var(--bg-hover);
+  background: var(--overlay-hover);
   color: var(--text);
 }
 
 .inspector-tab[aria-selected="true"] {
-  background: var(--accent-wash);
-  color: var(--accent);
+  background: var(--bg-elev);
+  box-shadow: var(--shadow-1);
+  color: var(--text);
 }
 
 /* ── La banda di stato ───────────────────────────────────────────────────── */
@@ -2226,7 +2779,7 @@ kbd,
   background: var(--bg);
   color: var(--muted);
   font-family: var(--font-ui);
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
   font-variant-numeric: tabular-nums;
 }
 
@@ -2263,13 +2816,15 @@ kbd,
 }
 
 .status-item--button {
+  gap: var(--space-2);
+  min-height: 22px;
   padding: 0 var(--space-3);
   border: none;
   border-radius: var(--radius-chip);
   background: transparent;
   color: var(--muted);
   font-family: var(--font-ui);
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
   cursor: pointer;
 }
 
@@ -2281,6 +2836,51 @@ kbd,
 /* Un adattamento della carta acceso. */
 .status-item--button[aria-pressed="true"] {
   background: var(--accent-wash);
+  color: var(--text);
+}
+
+/* ── La banda: la modalità è un bottone ──────────────────────────────────── */
+.status-mode > svg {
+  width: 14px;
+  height: 14px;
+}
+/* La freccia è un posto di 12 px, e la sua figura lo riempie. */
+.status-mode > .status-mode-arrow {
+  display: inline-flex;
+  width: 12px;
+  height: 12px;
+  color: var(--muted);
+}
+.status-mode > .status-mode-arrow > svg {
+  width: 100%;
+  height: 100%;
+}
+.status-mode[aria-expanded="true"] {
+  background: var(--bg-elev);
+  box-shadow: var(--shadow-1);
+  color: var(--text);
+}
+.status-item--button:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: -1px;
+}
+/* «Si scrive» è lo stato normale di un documento: lo dice la banda, a voce
+   bassa, accanto alla modalità. Premuto apre lo stesso riquadro del chip. Gli
+   altri stati (sola lettura, parti chiuse, motore spento) restano nella
+   testata, dove si vedono. */
+.status-standing {
+  color: var(--muted);
+}
+.status-standing > .status-standing-mark {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: var(--radius-pill);
+  background: var(--success);
+}
+.status-standing[aria-expanded="true"] {
+  background: var(--bg-elev);
+  box-shadow: var(--shadow-1);
   color: var(--text);
 }
 
@@ -2393,25 +2993,90 @@ kbd,
   white-space: nowrap;
 }
 /* Il rientro a sinistra è quello del contenuto delle righe: nome del
-   pannello, etichette, icone e triangoli cadono sulla stessa verticale. */
+   pannello, etichette, icone e triangoli cadono sulla stessa verticale. A
+   destra poco margine: le azioni a icona hanno già l'aria del loro bottone. */
 .sidebar .panel-title {
   min-height: var(--drawer-head-h);
-  padding: 0 0 0 var(--space-4);
+  padding: 0 var(--space-1) 0 var(--space-4);
   font-size: var(--text-lg);
   line-height: var(--leading-tight);
 }
-/* Un titolo che ne segue un altro è un'**etichetta di sezione** («Appuntate»):
-   maiuscoletto piccolo in grafite, che nomina senza pesare. Fra i due può
-   stare il campo che filtra le note: conta l'ordine, non la vicinanza. */
+/* Fra la striscia degli spazi e il titolo un respiro, come nel mockup. */
+.space-strip + .panel-title {
+  margin-top: var(--space-4);
+  font-size: var(--text-lg);
+  font-weight: var(--weight-bold);
+}
+/* **Le azioni a icona del titolo** («ordina», «nuova nota»): figure in
+   grafite, senza fondo finché il puntatore non le cerca. */
+.panel-title-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+.icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-chip);
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+.icon-button > svg {
+  width: 16px;
+  height: 16px;
+}
+.icon-button:hover {
+  background: var(--overlay-hover);
+  color: var(--text);
+}
+.icon-button:active {
+  background: var(--overlay-active);
+}
+.icon-button:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: -2px;
+}
+/* Spenta (nessun vault aperto) la figura resta, più chiara, e non risponde. */
+.icon-button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.icon-button:disabled:hover {
+  background: transparent;
+  color: var(--muted);
+}
+
+/* Un titolo che ne segue un altro è un'**etichetta di sezione**
+   («Appuntate», «Tutte le note 18»): una parola in tondo, in grafite, che
+   nomina senza pesare; a destra, se c'è, il conto. Fra i due può stare il
+   campo che filtra le note: conta l'ordine, non la vicinanza. */
 .files-panel .panel-title ~ .panel-title,
 .bookmarks-panel .palette-row {
-  min-height: var(--space-8);
-  padding: var(--space-3) var(--space-4) 0;
+  min-height: var(--row-h);
+  padding: var(--space-5) var(--space-4) 0;
   color: var(--muted);
-  font-size: var(--text-xs);
-  font-weight: var(--weight-bold);
-  letter-spacing: var(--tracking-caps);
-  text-transform: uppercase;
+  font-size: var(--text-base);
+  font-weight: var(--weight-medium);
+  letter-spacing: 0;
+  text-transform: none;
+}
+/* Dopo le appuntate un po' d'aria in più: «Tutte le note» apre un'altra parte. */
+.files-panel .panel-title + .plain-list {
+  padding-bottom: var(--space-4);
+}
+/* Il conto di una sezione, in cifre della stessa larghezza. */
+.panel-count {
+  flex: none;
+  color: var(--muted);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-regular);
+  font-variant-numeric: tabular-nums;
 }
 /* L'esito della ricerca («Risultati: 4», «Nessun risultato», «Indicizzazione
    in corso…») è una riga di stato, non un titolo: grafite, corpo piccolo. È
@@ -2473,56 +3138,92 @@ kbd,
   color: var(--danger);
 }
 
-/* **La striscia degli spazi**: tutto il vault, una pillola per spazio, «+».
-   Sta sulla verticale del contenuto, come il titolo che la segue. */
+/* **La striscia degli spazi**: un pozzetto come le schede dell'ispettore.
+   L'acceso è un foglietto con figura e nome, gli altri soltanto la figura (il
+   nome è l'etichetta accessibile). «+» resta fuori, il più discreto. Non va
+   a capo: se gli spazi sono tanti il pozzetto taglia. */
 .space-strip {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: center;
-  gap: var(--space-2);
-  padding: var(--space-3) 0 0 var(--space-4);
+  gap: var(--space-3);
+  min-height: var(--tab-h);
+  padding: 0 0 0 var(--space-2);
+}
+.space-well {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 1 auto;
+  gap: var(--space-1);
+  min-width: 0;
+  padding: var(--space-1);
+  overflow: hidden;
+  border-radius: var(--radius-control);
+  background: var(--bg-hover);
 }
 .space-chip {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: var(--space-9);
-  height: var(--space-8);
-  padding: 0 var(--space-4);
+  flex: none;
+  gap: var(--space-3);
+  min-width: 32px;
+  height: 26px;
+  padding: 0 var(--space-3);
   border: none;
-  border-radius: var(--radius-pill);
-  background: var(--bg-hover);
+  border-radius: var(--radius-chip);
+  background: transparent;
   color: var(--muted);
-  font-size: var(--text-sm);
+  font-size: var(--text-base);
   line-height: 1;
   cursor: pointer;
 }
-/* La casa e gli spazi senza un'emoji scelta portano la figura a linea. */
-.space-chip > svg {
-  width: var(--space-6);
-  height: var(--space-6);
-}
 .space-chip:hover,
 .space-chip:active {
-  background: var(--bg-active);
+  background: var(--overlay-hover);
   color: var(--text);
 }
-/* Lo spazio acceso. Le pillole portano un'emoji, che non prende il colore:
-   il blu lo dice allora anche un filo sul contorno, non il solo fondo. */
+/* La casa e gli spazi senza un'emoji scelta portano la figura a linea;
+   l'emoji scelta sta nella stessa misura. */
+.space-chip > svg,
+.space-chip-icon > svg {
+  width: 16px;
+  height: 16px;
+}
+.space-chip-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  font-size: 14px;
+  line-height: 1;
+}
+.space-chip-name {
+  display: none;
+}
+/* Lo spazio acceso: un foglietto sollevato dal pozzetto, col suo nome. */
 .space-chip[aria-pressed="true"] {
-  background: var(--accent-wash);
-  box-shadow: inset 0 0 0 1px var(--accent);
-  color: var(--accent);
-  font-weight: var(--weight-bold);
+  padding: 0 var(--space-5) 0 var(--space-4);
+  background: var(--bg-elev);
+  box-shadow: var(--shadow-1);
+  color: var(--text);
+  font-weight: var(--weight-medium);
+}
+.space-chip[aria-pressed="true"] > .space-chip-name {
+  display: inline;
 }
 /* «+» è l'ultimo della fila e il più discreto: senza fondo finché non lo si
    cerca. */
 .space-chip.add {
-  min-width: var(--space-8);
+  min-width: 28px;
+  height: 28px;
   padding: 0;
+  border-radius: var(--radius-chip);
   background: transparent;
   color: var(--muted);
-  font-size: var(--text-lg);
+  font-size: var(--text-xl);
+  font-weight: var(--weight-regular);
 }
 .space-chip.add:hover {
   background: var(--bg-hover);
@@ -2639,20 +3340,31 @@ kbd,
   letter-spacing: 0;
 }
 
-/* **Il selettore dell'icona** (emoji) di una nota o di una cartella: un
-   foglietto che galleggia dove si è cliccato. */
+/* **Il selettore dell'icona** di una nota o di una cartella: un foglietto che
+   galleggia dove si è cliccato. Due sezioni col loro titolo in tondo: le
+   figure monocrome del set, che prendono il colore del testo come le icone
+   dell'albero, e le emoji, che restano una scelta piena. Quella scelta ha il
+   velo d'accento. */
 .icon-picker {
   position: fixed;
   z-index: var(--z-picker);
-  width: 232px;
+  width: 248px;
   padding: var(--space-4);
   background: var(--bg-elev);
-  border: 1px solid var(--border);
+  border: 0;
   border-radius: var(--radius-menu);
-  box-shadow: var(--shadow-3);
+  box-shadow: 0 0 0 1px var(--border), var(--shadow-3);
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
+}
+.icon-picker-title {
+  color: var(--muted);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+}
+.icon-picker .icon-grid + .icon-picker-title {
+  margin-top: var(--space-2);
 }
 .icon-picker .icon-grid {
   display: grid;
@@ -2664,17 +3376,28 @@ kbd,
   padding: 0;
   border-radius: var(--radius-chip);
   background: transparent;
+  color: var(--muted);
   font-size: var(--text-xl);
   line-height: 1;
 }
-/* Sotto il puntatore la matita blu, come le voci del menu da cui il selettore
-   si apre: il grigio della scrivania, su questa carta rialzata, al buio
-   sarebbe un buco più scuro del fondo. */
 .icon-picker .icon-grid button:hover {
-  background: var(--accent-wash);
+  background: var(--overlay-hover);
+  color: var(--text);
 }
 .icon-picker .icon-grid button:active {
-  background: var(--accent-veil);
+  background: var(--overlay-active);
+}
+.icon-picker .icon-grid button[aria-pressed="true"] {
+  background: var(--accent-wash);
+  color: var(--accent);
+}
+.icon-picker .icon-grid button:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: -2px;
+}
+.icon-picker .icon-grid--figures button > svg {
+  width: 18px;
+  height: 18px;
 }
 .icon-picker input {
   height: var(--control-h);
@@ -2703,8 +3426,8 @@ kbd,
   font-size: var(--text-sm);
 }
 .icon-picker .icon-none:hover {
-  background: var(--accent-wash);
-  color: var(--accent);
+  background: var(--overlay-hover);
+  color: var(--text);
 }
 .icon-picker .icon-none:active {
   background: var(--accent-veil);
@@ -2808,9 +3531,23 @@ kbd,
   margin-top: var(--space-4);
 }
 /* Il filtro per percorso sta sopra l'albero (`shell.explorer.filter`): un
-   campo largo quanto le righe, staccato da ciò che filtra. */
+   pozzetto pieno con la lente, largo quanto le righe. È il campo del kit con
+   la sua figura (`icon: "search"`), senza bordo: il pozzetto lo fa il fondo.
+   Al fuoco torna carta, con l'anello del kit. */
 .explorer-filter {
-  padding: 0 var(--space-2) var(--space-3);
+  padding: var(--space-2) 0 var(--space-3);
+}
+.explorer-filter .kit-field-box {
+  height: 32px;
+  border-color: transparent;
+  background: var(--bg-hover);
+}
+.explorer-filter .kit-field-box:has(> .kit-field-input:focus-visible) {
+  border-color: var(--focus-ring);
+  background: var(--sheet);
+}
+.explorer-filter .kit-field-input {
+  font-size: var(--text-md);
 }
 
 /* **Una riga del cassetto**: nota o cartella, nell'albero o tra le appuntate.
@@ -2826,7 +3563,7 @@ kbd,
   padding: 0 var(--space-4);
   border-radius: var(--radius-control);
   color: var(--text);
-  font-size: var(--text-base);
+  font-size: var(--text-md);
   line-height: var(--leading-tight);
   white-space: nowrap;
   overflow: hidden;
@@ -2883,29 +3620,18 @@ kbd,
 }
 
 /* **La nota aperta.** Lo stato si legge da dove è annunciato: nell'albero è il
-   `treeitem` a essere selezionato, fra le appuntate è la riga a essere
-   «quella corrente». La dice la matita blu — fondo tenue, inchiostro blu,
-   peso da titolo — e non un grigio: è l'unica riga del cassetto che parla del
-   foglio aperto. */
+   `treeitem` a essere selezionato. È un foglietto sollevato dal cassetto:
+   l'icona prende il blu, il nome resta inchiostro e sale di peso. È l'unica
+   riga del cassetto che parla del foglio aperto: fra le appuntate la puntina
+   tiene la colonna dell'icona, e la stessa nota non ha un segno suo. */
 [role="treeitem"][aria-selected="true"] > .tree-row {
-  background: var(--accent-wash);
-  color: var(--accent);
-  font-weight: var(--weight-bold);
+  background: var(--bg-elev);
+  box-shadow: var(--shadow-1);
+  color: var(--text);
+  font-weight: var(--weight-medium);
 }
-/* Fra le appuntate la stessa nota ha soltanto un punto blu sul bordo: la riga
-   accesa è una, nell'albero. Sta su pixel interi: a mezzo pixel il suo
-   bordo si sfuma in modo diverso secondo gli strati della pagina, e le foto
-   di un'andata e ritorno non tornano uguali. */
-.tree-row[aria-current="true"]::before {
-  content: "";
-  position: absolute;
-  top: 50%;
-  left: var(--space-2);
-  width: 6px;
-  height: 6px;
-  margin-top: -3px;
-  border-radius: 50%;
-  background: var(--accent);
+[role="treeitem"][aria-selected="true"] > .tree-row:hover {
+  background: var(--bg-elev);
 }
 
 /* Il fuoco da tastiera sta sul `treeitem`, che contiene anche il sottoalbero:
@@ -2949,6 +3675,19 @@ kbd,
 [role="treeitem"][aria-selected="true"] > .tree-row > .row-icon > svg {
   color: var(--accent);
 }
+/* La puntina delle appuntate, un poco più piccola delle figure dell'albero. */
+.row-icon.row-pin > svg {
+  width: 14px;
+  height: 14px;
+}
+/* Il conto di una cartella, a destra, in grafite: le sue voci dirette. */
+.row-count {
+  flex: none;
+  margin-left: auto;
+  color: var(--muted);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+}
 /* La miniatura (T26): l'anteprima che il file ha già, nella colonna
    dell'icona e alla sua misura, ritagliata al quadrato; il filo la stacca dal
    fondo della riga accesa. L'orientamento di un RAW non sta qui: lo scrive il
@@ -2982,9 +3721,9 @@ kbd,
   background-image: linear-gradient(to bottom left, transparent 50%, var(--accent) 50%);
 }
 
-/* **Il triangolino di apertura.** Nel markup è un carattere (▸ o ▾): qui il
-   carattere si spegne e il triangolo si disegna, uno solo, che ruota quando
-   la cartella è aperta. */
+/* **Il gallone di apertura.** Nel markup è un carattere (▸ o ▾): qui il
+   carattere si spegne e si disegna una «›» sottile, due lati di un quadratino,
+   che ruota verso il basso quando la cartella è aperta. */
 .chevron {
   position: relative;
   display: inline-flex;
@@ -3004,16 +3743,21 @@ kbd,
 }
 .chevron::before {
   content: "";
-  width: 8px;
-  height: 8px;
-  background: currentColor;
-  clip-path: polygon(25% 8%, 85% 50%, 25% 92%);
+  box-sizing: border-box;
+  width: 6px;
+  height: 6px;
+  margin-left: -2px;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: rotate(-45deg);
   transition: transform var(--duration-fast) var(--ease);
 }
 .chevron[aria-expanded="true"]::before {
-  transform: rotate(90deg);
+  margin-top: -3px;
+  margin-left: 0;
+  transform: rotate(45deg);
 }
-/* Il bersaglio è più largo del disegno: 24 px attorno a un triangolo di 8. */
+/* Il bersaglio è più largo del disegno: 24 px attorno a un gallone di 6. */
 .chevron::after {
   content: "";
   position: absolute;
@@ -3024,7 +3768,7 @@ kbd,
   background: transparent;
   color: var(--text);
 }
-/* Una cartella vuota non ha niente da aprire: il triangolo non c'è, il suo
+/* Una cartella vuota non ha niente da aprire: il gallone non c'è, il suo
    posto resta. */
 .chevron:disabled {
   opacity: 0;
@@ -3033,7 +3777,7 @@ kbd,
 [role="treeitem"][aria-selected="true"] > .tree-row .chevron {
   color: var(--accent);
 }
-/* Una foglia tiene il posto del triangolo delle cartelle sorelle: cartelle e
+/* Una foglia tiene il posto del gallone delle cartelle sorelle: cartelle e
    note dello stesso livello hanno l'icona sulla stessa colonna. Lo tiene
    anche «…e altre N», che comincia dove cominciano le icone delle righe che
    continua. */
@@ -3046,7 +3790,7 @@ kbd,
   margin-right: calc(var(--space-2) * -1);
 }
 /* Dove in cima non c'è nessuna cartella (uno spazio di sole note, un vault
-   piatto) non c'è un triangolo a cui fare posto: le note partono dalla
+   piatto) non c'è un gallone a cui fare posto: le note partono dalla
    verticale delle appuntate e del titolo. */
 .plain-list:not(:has(> li > .tree-row > .chevron)) > li > .tree-row.leaf::before,
 .plain-list:not(:has(> li > .tree-row > .chevron)) > li > .tree-row.troncata::before {
@@ -3150,8 +3894,8 @@ kbd,
     outline: 2px solid Highlight;
     outline-offset: -2px;
   }
-  /* Il triangolo disegnato è un fondo, e non c'è più: torna il carattere del
-     markup (▸ o ▾), che dice da sé se la cartella è aperta. */
+  /* Il gallone disegnato coi bordi non direbbe da sé il verso in ogni tema
+     del sistema: torna il carattere del markup (▸ o ▾), che lo dice. */
   .chevron {
     font-size: var(--text-xs);
   }
@@ -3738,14 +4482,18 @@ kbd,
 /* ── La carta ────────────────────────────────────────────────────────────── */
 
 /* Il foglio è l'unico oggetto rialzato della finestra. Quello col fuoco sale
-   di un gradino: con due fogli affiancati è così che si legge dove si scrive. */
+   di un gradino: con due fogli affiancati è così che si legge dove si scrive.
+   L'ombra è di un foglio appoggiato sulla scrivania: un contatto stretto, una
+   penombra corta ai fianchi e una lunga sotto. I due strati larghi hanno lo
+   spread negativo, così l'ombra scende e non sale sopra la carta. I valori
+   sono ruoli della ricetta; un tema che non li ha tiene le ombre di sempre. */
 .pane::before {
   border-radius: var(--radius-sheet);
   background: var(--sheet);
-  box-shadow: var(--shadow-1);
+  box-shadow: var(--shadow-sheet, var(--shadow-1));
 }
 .pane.focus::before {
-  box-shadow: var(--shadow-2);
+  box-shadow: var(--shadow-sheet-focus, var(--shadow-2));
 }
 /* Sotto la prima linguetta, quando è lei l'attiva, l'angolo del foglio è vivo:
    il fianco della linguetta scende dritto in quello del foglio. La toppa che
@@ -3822,6 +4570,16 @@ kbd,
 .tab-entry::before {
   background: var(--sheet);
 }
+/* L'attiva e il foglio fanno un'ombra sola: la stessa del foglio, ai fianchi e
+   sopra la linguetta. Dove la linguetta entra nel foglio la struttura la
+   taglia (`clip-path`), e lì non resta nessun segno. */
+.tab-entry:has(> .tab[aria-selected="true"]):not([data-lifted]) {
+  border-radius: var(--tab-radius, 8px) var(--tab-radius, 8px) 0 0;
+  box-shadow: var(--shadow-sheet, none);
+}
+.pane.focus .tab-entry:has(> .tab[aria-selected="true"]):not([data-lifted]) {
+  box-shadow: var(--shadow-sheet-focus, none);
+}
 .tab-entry::after {
   border-radius: var(--radius-chip);
   background: var(--bg-hover);
@@ -3848,6 +4606,7 @@ kbd,
 .tab {
   display: inline-flex;
   align-items: center;
+  gap: var(--space-3);
   padding: 0 var(--space-2) 0 var(--space-5);
   border: none;
   border-radius: var(--radius-chip);
@@ -3864,7 +4623,7 @@ kbd,
 }
 .tab[aria-selected="true"] {
   color: var(--text);
-  font-weight: var(--weight-bold);
+  font-weight: var(--weight-medium);
 }
 .tab:focus-visible {
   outline: var(--focus-ring-width) solid var(--focus-ring);
@@ -3876,13 +4635,18 @@ kbd,
   overflow: hidden;
   text-overflow: ellipsis;
 }
+/* Ogni linguetta porta la figura del suo formato, anche la nota: tenue a
+   riposo, piena sull'attiva. */
 .tab-pin,
 .tab-format {
-  width: 12px;
-  height: 12px;
-  margin-right: var(--space-2);
+  width: 14px;
+  height: 14px;
+  margin-right: var(--space-4);
   color: var(--muted);
-  vertical-align: -1px;
+  vertical-align: -2px;
+}
+.tab[aria-selected="true"] .tab-format {
+  color: var(--text);
 }
 /* L'icona della pagina (`icon:`), un'emoji: grande quanto il nome, staccata
    come le figure. */
@@ -4035,16 +4799,16 @@ kbd,
   box-shadow: calc(-1 * var(--space-4)) 0 var(--space-4) var(--bg), var(--space-2) 0 0 var(--bg);
 }
 
-/* ── La testata ──────────────────────────────────────────────────────────── */
+/* ── La testata: solo il percorso, «Salvato» e «…» ──────────────────────── */
 
-/* Sta sulla carta e senza filetto: percorso a sinistra, modalità, stato e
-   menu a destra. */
+/* Sta sulla carta e senza filetto: il percorso a sinistra, lo stato e il menu
+   a destra. Il formato non c'è: lo dice la linguetta. */
 .pane-toolbar {
-  gap: var(--space-4);
-  padding: 0 var(--space-4) 0 var(--space-6);
+  gap: var(--space-5);
+  padding: 0 var(--space-4) 0 var(--space-7);
   color: var(--muted);
   font-family: var(--font-ui);
-  font-size: var(--text-sm);
+  font-size: var(--text-base);
 }
 .pane-toolbar > .muted {
   overflow: hidden;
@@ -4052,16 +4816,47 @@ kbd,
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-/* «WORD», «ODT» accanto al percorso: un'etichetta, non un bottone. */
-.pane-toolbar > .pane-format {
-  padding: 1px var(--space-2);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-chip);
+/* Il percorso a briciole: la cartella disegnata, il vault e le cartelle in
+   grafite, il nome in inchiostro. */
+.sheet-title {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-width: 0;
   color: var(--muted);
-  font-size: var(--text-xs);
+  font-size: var(--text-base);
+}
+.sheet-title > svg {
+  flex: none;
+  width: 15px;
+  height: 15px;
+  color: var(--muted);
+}
+/* La barra fra le cartelle è un segno, non un testo: la grafite dei bordi dei
+   campi, che resta sopra 3:1 in tutte e due le luci senza farsi leggere. */
+.crumb-sep {
+  flex: none;
+  color: var(--outline);
+}
+/* Il nome resta intero finché può: parte dalla sua misura, e il vault e le
+   cartelle prendono soltanto lo spazio che avanza (partono da zero e crescono
+   fino al loro testo). In un percorso lunghissimo cedono quindi le cartelle,
+   ciascuna con la sua ellissi; un nome lunghissimo cede per ultimo, e intero
+   sta nel suggerimento. */
+.crumb-name {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text);
   font-weight: var(--weight-medium);
-  letter-spacing: 0.04em;
-  line-height: 1.4;
+  text-overflow: ellipsis;
+}
+.sheet-title [data-folder] {
+  flex: 1 1 0;
+  min-width: 0;
+  max-width: max-content;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 /* Lo stato del documento accanto al percorso: si scrive tutto, in parte o per
    niente. Un chip che si preme e apre il riquadro col perché. */
@@ -4211,6 +5006,16 @@ kbd,
   line-height: 1;
   cursor: pointer;
 }
+/* «…» è una figura, non tre caratteri. */
+.pane-toolbar > [data-pane-menu] {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.pane-toolbar > [data-pane-menu] > svg {
+  width: 16px;
+  height: 16px;
+}
 .pane-toolbar > [data-pane-menu]:hover,
 .pane-toolbar > [data-pane-menu][aria-expanded="true"] {
   background: var(--overlay-hover);
@@ -4220,37 +5025,16 @@ kbd,
   outline: var(--focus-ring-width) solid var(--focus-ring);
   outline-offset: -2px;
 }
-/* Le modalità in un bottone solo, in una testata stretta: dice quella accesa
-   con la matita blu dei segmenti, e apre la scelta. */
-.pane-toolbar > .pane-mode-current {
-  align-items: center;
-  gap: var(--space-2);
-  min-height: 28px;
-  padding: 0 var(--space-4);
-  border: none;
-  border-radius: var(--radius-chip);
-  background: var(--accent-wash);
-  color: var(--accent);
-  font: inherit;
-  font-size: var(--text-sm);
-  font-weight: var(--weight-bold);
-  white-space: nowrap;
-  cursor: pointer;
-}
-.pane-toolbar > .pane-mode-current::after {
-  content: "▾";
-  font-weight: var(--weight-regular);
-}
-.pane-toolbar > .pane-mode-current:focus-visible {
+/* Il bottone della modalità sta nel foglio, dopo la barra di formato: un tondo
+   in basso a destra, o la casella piatta all'angolo della fila al telefono.
+   L'anello del fuoco è rientrato: su un bordo dello schermo uno sporgente
+   uscirebbe. */
+.pane > .pane-mode-current:focus-visible {
   outline: var(--focus-ring-width) solid var(--focus-ring);
   outline-offset: -2px;
 }
-/* Un foglio stretto (tre affiancati, la finestra piccola): i passi del
-   selettore e il menu cedono respiro prima che il selettore ceda una voce. */
+/* Un foglio stretto (tre affiancati, la finestra piccola): «…» cede respiro. */
 @container sheet-head (max-width: 320px) {
-  .pane-toolbar > .segmented .segmented-option {
-    padding: 0 var(--space-2);
-  }
   .pane-toolbar > [data-pane-menu] {
     width: 24px;
   }
@@ -4355,61 +5139,24 @@ kbd,
 
 /* ── La barra di formattazione ───────────────────────────────────────────── */
 
-/* Sulla carta come la testata, con un filo sotto che la separa dal testo. I
-   gruppi si dividono con un filo corto, non con una riga a tutta altezza. */
-.format-bar {
+/* La barra di un riquadro veste la barra in una fila del kit (`kit-bar`, in
+   `skin/kit.css`): il vassoio, i gruppi come foglietti, i pulsanti di serie.
+   La bolla della selezione e la mini-barra sono la stessa barra fuori dal
+   vassoio, con gli stessi pulsanti: qui prendono la voce della fila e il filo
+   corto che divide i gruppi. */
+.format-bar:not(.kit-bar) {
   gap: var(--space-2);
-  padding: 0 var(--space-5);
   color: var(--muted);
   font-family: var(--font-ui);
   font-size: var(--text-sm);
-  box-shadow: inset 0 -1px 0 var(--border);
 }
-.format-bar-group {
+.format-bar:not(.kit-bar) > .format-bar-group {
   gap: var(--space-1);
   padding-right: var(--space-3);
   background: linear-gradient(var(--border-strong), var(--border-strong)) right center / 1px 16px no-repeat;
 }
-.format-bar-group:last-of-type {
+.format-bar:not(.kit-bar) > .format-bar-group:last-of-type {
   background-image: none;
-}
-.format-bar-button,
-.format-bar-menu {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: var(--space-2);
-  min-width: 28px;
-  height: 28px;
-  padding: 0 var(--space-3);
-  border: none;
-  border-radius: var(--radius-chip);
-  background: transparent;
-  color: var(--muted);
-  font: inherit;
-  line-height: 1;
-  cursor: pointer;
-}
-.format-bar-button:hover:not(:disabled),
-.format-bar-menu:hover:not(:disabled),
-.format-bar-menu[aria-expanded="true"] {
-  background: var(--overlay-hover);
-  color: var(--text);
-}
-/* «Acceso» è lo stesso ovunque nella shell: velo d'accento e inchiostro blu. */
-.format-bar-button[aria-pressed="true"] {
-  background: var(--accent-wash);
-  color: var(--accent);
-}
-.format-bar-button:focus-visible,
-.format-bar-menu:focus-visible {
-  outline: var(--focus-ring-width) solid var(--focus-ring);
-  outline-offset: -2px;
-}
-.format-bar-button:disabled,
-.format-bar-menu:disabled {
-  opacity: 0.4;
-  cursor: default;
 }
 /* Il selettore dello stile dice lo stile a parole, come in un elaboratore di
    testi: largo abbastanza da non ballare fra «Titolo 1» e «Testo normale». */
@@ -4489,13 +5236,14 @@ kbd,
   font-size: var(--text-base);
   text-align: left;
 }
+/* L'etichetta parla a voce bassa: in tondo, non in maiuscoletto. */
 .sheet-desk-label {
   padding: 0 var(--space-4);
   color: var(--muted);
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
   font-weight: var(--weight-medium);
-  letter-spacing: var(--tracking-caps);
-  text-transform: uppercase;
+  letter-spacing: 0;
+  text-transform: none;
 }
 .sheet-desk-row {
   padding: var(--space-3) var(--space-4);
@@ -4790,8 +5538,8 @@ kbd,
 
 /* Misura e interlinea stanno sulla riga in Live e sull'elemento in Lettura: la
    stessa scatola, quindi la stessa altezza. La gerarchia la fanno misura e
-   stacco; il peso resta leggero finché il corpo è grande (l'asse ottico del
-   carattere fa il resto) e sale a 600 quando il titolo scende verso il testo. */
+   stacco; il titolo della nota (2,22 em, 40 px su 18) e i capitoli (1,39 em,
+   25 px) sono pieni, a 600, come i titoli minori. */
 .markdown-rendered h1,
 .markdown-rendered h2,
 .markdown-rendered h3,
@@ -4834,19 +5582,19 @@ kbd,
 }
 .markdown-rendered h1,
 .cm-editor .cm-content .cm-fub-h1-line {
-  padding-top: calc(var(--text-reading) * 0.9);
-  font-size: 2em;
-  font-weight: var(--weight-medium);
-  letter-spacing: -0.018em;
+  padding-top: calc(var(--text-reading) * 0.5);
+  font-size: 2.22em;
+  font-weight: var(--weight-bold);
+  letter-spacing: -0.02em;
   line-height: 1.15;
 }
 .markdown-rendered h2,
 .cm-editor .cm-content .cm-fub-h2-line {
-  padding-top: calc(var(--text-reading) * 0.7);
-  font-size: 1.5em;
-  font-weight: var(--weight-medium);
+  padding-top: calc(var(--text-reading) * 0.6);
+  font-size: 1.39em;
+  font-weight: var(--weight-bold);
   letter-spacing: -0.012em;
-  line-height: 1.2;
+  line-height: 1.28;
 }
 .markdown-rendered h3,
 .cm-editor .cm-content .cm-fub-h3-line {
@@ -4894,7 +5642,8 @@ kbd,
 /* ── Collegamenti, etichette, evidenziati ────────────────────────────────── */
 
 /* Un `[testo](url)` e un `[[Nota]]` sono lo stesso gesto: lo stesso inchiostro
-   e lo stesso filo sottile. La regola copre ogni `<a>` reso, così il viola
+   blu e lo stesso filo sottile, a metà forza; sotto il puntatore il filo
+   prende l'inchiostro pieno. La regola copre ogni `<a>` reso, così il viola
    dello user-agent non compare mai. */
 .markdown-rendered a,
 .cm-editor .cm-content .cm-fub-link,
@@ -4902,13 +5651,15 @@ kbd,
   color: var(--doc-link);
   cursor: pointer;
   text-decoration: underline;
+  text-decoration-color: color-mix(in oklab, var(--doc-link) 42%, transparent);
   text-decoration-thickness: 1px;
-  text-underline-offset: 0.2em;
+  text-underline-offset: 0.22em;
 }
 .markdown-rendered a:hover,
 .cm-editor .cm-content .cm-fub-link:hover,
 .cm-editor .cm-content .cm-fub-wikilink:hover {
   color: var(--accent-soft);
+  text-decoration-color: currentColor;
 }
 /* In Live la sintassi colora per conto suo lo span interno: qui eredita, o il
    filo sarebbero due e il passaggio non cambierebbe niente. */
@@ -5392,11 +6143,12 @@ kbd,
 
 /* ── Citazioni e richiami ────────────────────────────────────────────────── */
 
-/* La citazione è un filo e un corsivo: nessun fondo. */
+/* La citazione è un filo e un corsivo in grafite: nessun fondo. */
 .markdown-rendered blockquote,
 .cm-editor .cm-content .cm-line.cm-fub-quote {
-  padding-left: 1.1em;
-  border-left: 2px solid var(--doc-rule);
+  padding-left: 1em;
+  border-left: 2px solid var(--border-strong);
+  color: var(--muted);
   font-style: italic;
 }
 /* Dentro un corsivo l'enfasi torna dritta, o non si vedrebbe. */
@@ -5409,191 +6161,133 @@ kbd,
   color: var(--doc-gutter-fg);
   font-style: normal;
 }
-/* Il richiamo è un velo del suo colore: niente bordo, il titolo lo nomina. Un
-   tipo che la pelle non conosce resta neutro — colorarlo a caso lo farebbe
-   leggere come un avviso. */
+/* Il richiamo è una scheda neutra: ogni tipo ha la stessa carta e lo stesso
+   filo, nel carattere dell'interfaccia. Il colore del tipo resta solo sul
+   cerchietto davanti al titolo (in Lettura) e sulla pastiglia del tipo (in
+   Live); il titolo in grassetto apre la riga e il testo lo segue. Un tipo che
+   la pelle non conosce ha il cerchietto dell'informazione. */
 .markdown-rendered .callout {
-  padding: var(--space-5) var(--space-6);
+  position: relative;
+  padding: var(--space-5) var(--space-7) var(--space-5) 44px;
+  border: 1px solid var(--border);
   border-radius: var(--radius-control);
   background: var(--sheet-2);
-}
-.markdown-rendered .callout-title {
-  margin-bottom: var(--space-2);
-  color: var(--doc-heading);
+  color: var(--doc-fg);
   font-family: var(--font-ui);
-  font-size: 0.82em;
+  font-size: var(--text-md);
+  line-height: 1.55;
+}
+.markdown-rendered .callout > .callout-title {
+  display: inline;
+  margin: 0 var(--space-2) 0 0;
+  color: var(--doc-heading);
+  font-size: 1em;
   font-weight: var(--weight-bold);
 }
-.markdown-rendered .callout > .callout-title:last-child {
-  margin-bottom: 0;
+.markdown-rendered .callout > .callout-title + p {
+  display: inline;
 }
-.markdown-rendered summary.callout-title {
+/* Il richiamo ripiegabile tiene il suo triangolo: il sommario resta una riga
+   a sé, e il testo comincia sotto. */
+.markdown-rendered .callout > summary.callout-title {
+  display: list-item;
   cursor: pointer;
 }
-.markdown-rendered details.callout:not([open]) > summary.callout-title {
-  margin-bottom: 0;
+.markdown-rendered .callout > summary.callout-title + p {
+  display: block;
 }
 .markdown-rendered summary.callout-title:focus-visible {
   border-radius: var(--radius-xs);
   outline: var(--focus-ring-width) solid var(--focus-ring);
   outline-offset: var(--focus-ring-offset);
 }
-.markdown-rendered .callout[data-callout="note"],
-.cm-editor .cm-content .cm-line.cm-fub-callout-line[data-callout="note"],
-.markdown-rendered .callout[data-callout="info"],
-.cm-editor .cm-content .cm-line.cm-fub-callout-line[data-callout="info"],
-.markdown-rendered .callout[data-callout="abstract"],
-.cm-editor .cm-content .cm-line.cm-fub-callout-line[data-callout="abstract"],
-.markdown-rendered .callout[data-callout="summary"],
-.cm-editor .cm-content .cm-line.cm-fub-callout-line[data-callout="summary"],
-.markdown-rendered .callout[data-callout="todo"],
-.cm-editor .cm-content .cm-line.cm-fub-callout-line[data-callout="todo"],
-.markdown-rendered .callout[data-callout="tldr"],
-.cm-editor .cm-content .cm-line.cm-fub-callout-line[data-callout="tldr"] {
-  background: var(--info-wash);
+.markdown-rendered .callout > .callout-title::before {
+  content: "i";
+  position: absolute;
+  top: 14px;
+  left: 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  width: 17px;
+  height: 17px;
+  border: 1.5px solid var(--accent);
+  border-radius: var(--radius-pill);
+  color: var(--accent);
+  font-family: var(--font-ui);
+  font-size: 11px;
+  font-weight: var(--weight-bold);
+  line-height: 1;
 }
-.markdown-rendered .callout[data-callout="note"] > .callout-title,
-.cm-editor .cm-content .cm-fub-callout-line[data-callout="note"] .cm-fub-callout-type,
-.cm-editor .cm-content .cm-fub-callout-line[data-callout="note"] .cm-fub-callout-title,
-.markdown-rendered .callout[data-callout="info"] > .callout-title,
-.cm-editor .cm-content .cm-fub-callout-line[data-callout="info"] .cm-fub-callout-type,
-.cm-editor .cm-content .cm-fub-callout-line[data-callout="info"] .cm-fub-callout-title,
-.markdown-rendered .callout[data-callout="abstract"] > .callout-title,
-.cm-editor .cm-content .cm-fub-callout-line[data-callout="abstract"] .cm-fub-callout-type,
-.cm-editor .cm-content .cm-fub-callout-line[data-callout="abstract"] .cm-fub-callout-title,
-.markdown-rendered .callout[data-callout="summary"] > .callout-title,
-.cm-editor .cm-content .cm-fub-callout-line[data-callout="summary"] .cm-fub-callout-type,
-.cm-editor .cm-content .cm-fub-callout-line[data-callout="summary"] .cm-fub-callout-title,
-.markdown-rendered .callout[data-callout="todo"] > .callout-title,
-.cm-editor .cm-content .cm-fub-callout-line[data-callout="todo"] .cm-fub-callout-type,
-.cm-editor .cm-content .cm-fub-callout-line[data-callout="todo"] .cm-fub-callout-title,
-.markdown-rendered .callout[data-callout="tldr"] > .callout-title,
-.cm-editor .cm-content .cm-fub-callout-line[data-callout="tldr"] .cm-fub-callout-type,
-.cm-editor .cm-content .cm-fub-callout-line[data-callout="tldr"] .cm-fub-callout-title {
-  color: var(--info);
-}
-.markdown-rendered .callout[data-callout="tip"],
-.cm-editor .cm-content .cm-line.cm-fub-callout-line[data-callout="tip"],
-.markdown-rendered .callout[data-callout="hint"],
-.cm-editor .cm-content .cm-line.cm-fub-callout-line[data-callout="hint"],
-.markdown-rendered .callout[data-callout="success"],
-.cm-editor .cm-content .cm-line.cm-fub-callout-line[data-callout="success"],
-.markdown-rendered .callout[data-callout="check"],
-.cm-editor .cm-content .cm-line.cm-fub-callout-line[data-callout="check"],
-.markdown-rendered .callout[data-callout="done"],
-.cm-editor .cm-content .cm-line.cm-fub-callout-line[data-callout="done"] {
-  background: var(--success-wash);
-}
-.markdown-rendered .callout[data-callout="tip"] > .callout-title,
-.cm-editor .cm-content .cm-fub-callout-line[data-callout="tip"] .cm-fub-callout-type,
-.cm-editor .cm-content .cm-fub-callout-line[data-callout="tip"] .cm-fub-callout-title,
-.markdown-rendered .callout[data-callout="hint"] > .callout-title,
-.cm-editor .cm-content .cm-fub-callout-line[data-callout="hint"] .cm-fub-callout-type,
-.cm-editor .cm-content .cm-fub-callout-line[data-callout="hint"] .cm-fub-callout-title,
-.markdown-rendered .callout[data-callout="success"] > .callout-title,
-.cm-editor .cm-content .cm-fub-callout-line[data-callout="success"] .cm-fub-callout-type,
-.cm-editor .cm-content .cm-fub-callout-line[data-callout="success"] .cm-fub-callout-title,
-.markdown-rendered .callout[data-callout="check"] > .callout-title,
-.cm-editor .cm-content .cm-fub-callout-line[data-callout="check"] .cm-fub-callout-type,
-.cm-editor .cm-content .cm-fub-callout-line[data-callout="check"] .cm-fub-callout-title,
-.markdown-rendered .callout[data-callout="done"] > .callout-title,
-.cm-editor .cm-content .cm-fub-callout-line[data-callout="done"] .cm-fub-callout-type,
-.cm-editor .cm-content .cm-fub-callout-line[data-callout="done"] .cm-fub-callout-title {
-  color: var(--success);
-}
-.markdown-rendered .callout[data-callout="warning"],
-.cm-editor .cm-content .cm-line.cm-fub-callout-line[data-callout="warning"],
-.markdown-rendered .callout[data-callout="caution"],
-.cm-editor .cm-content .cm-line.cm-fub-callout-line[data-callout="caution"],
-.markdown-rendered .callout[data-callout="attention"],
-.cm-editor .cm-content .cm-line.cm-fub-callout-line[data-callout="attention"],
-.markdown-rendered .callout[data-callout="important"],
-.cm-editor .cm-content .cm-line.cm-fub-callout-line[data-callout="important"],
-.markdown-rendered .callout[data-callout="question"],
-.cm-editor .cm-content .cm-line.cm-fub-callout-line[data-callout="question"],
-.markdown-rendered .callout[data-callout="help"],
-.cm-editor .cm-content .cm-line.cm-fub-callout-line[data-callout="help"],
-.markdown-rendered .callout[data-callout="faq"],
-.cm-editor .cm-content .cm-line.cm-fub-callout-line[data-callout="faq"] {
-  background: var(--warning-wash);
-}
-.markdown-rendered .callout[data-callout="warning"] > .callout-title,
-.cm-editor .cm-content .cm-fub-callout-line[data-callout="warning"] .cm-fub-callout-type,
-.cm-editor .cm-content .cm-fub-callout-line[data-callout="warning"] .cm-fub-callout-title,
-.markdown-rendered .callout[data-callout="caution"] > .callout-title,
-.cm-editor .cm-content .cm-fub-callout-line[data-callout="caution"] .cm-fub-callout-type,
-.cm-editor .cm-content .cm-fub-callout-line[data-callout="caution"] .cm-fub-callout-title,
-.markdown-rendered .callout[data-callout="attention"] > .callout-title,
-.cm-editor .cm-content .cm-fub-callout-line[data-callout="attention"] .cm-fub-callout-type,
-.cm-editor .cm-content .cm-fub-callout-line[data-callout="attention"] .cm-fub-callout-title,
-.markdown-rendered .callout[data-callout="important"] > .callout-title,
-.cm-editor .cm-content .cm-fub-callout-line[data-callout="important"] .cm-fub-callout-type,
-.cm-editor .cm-content .cm-fub-callout-line[data-callout="important"] .cm-fub-callout-title,
-.markdown-rendered .callout[data-callout="question"] > .callout-title,
-.cm-editor .cm-content .cm-fub-callout-line[data-callout="question"] .cm-fub-callout-type,
-.cm-editor .cm-content .cm-fub-callout-line[data-callout="question"] .cm-fub-callout-title,
-.markdown-rendered .callout[data-callout="help"] > .callout-title,
-.cm-editor .cm-content .cm-fub-callout-line[data-callout="help"] .cm-fub-callout-type,
-.cm-editor .cm-content .cm-fub-callout-line[data-callout="help"] .cm-fub-callout-title,
-.markdown-rendered .callout[data-callout="faq"] > .callout-title,
-.cm-editor .cm-content .cm-fub-callout-line[data-callout="faq"] .cm-fub-callout-type,
-.cm-editor .cm-content .cm-fub-callout-line[data-callout="faq"] .cm-fub-callout-title {
+.markdown-rendered .callout[data-callout="warning"] > .callout-title::before,
+.markdown-rendered .callout[data-callout="caution"] > .callout-title::before,
+.markdown-rendered .callout[data-callout="important"] > .callout-title::before {
+  content: "!";
+  border-color: var(--warning);
   color: var(--warning);
 }
-.markdown-rendered .callout[data-callout="danger"],
-.cm-editor .cm-content .cm-line.cm-fub-callout-line[data-callout="danger"],
-.markdown-rendered .callout[data-callout="error"],
-.cm-editor .cm-content .cm-line.cm-fub-callout-line[data-callout="error"],
-.markdown-rendered .callout[data-callout="failure"],
-.cm-editor .cm-content .cm-line.cm-fub-callout-line[data-callout="failure"],
-.markdown-rendered .callout[data-callout="fail"],
-.cm-editor .cm-content .cm-line.cm-fub-callout-line[data-callout="fail"],
-.markdown-rendered .callout[data-callout="bug"],
-.cm-editor .cm-content .cm-line.cm-fub-callout-line[data-callout="bug"],
-.markdown-rendered .callout[data-callout="missing"],
-.cm-editor .cm-content .cm-line.cm-fub-callout-line[data-callout="missing"] {
-  background: var(--danger-wash);
-}
-.markdown-rendered .callout[data-callout="danger"] > .callout-title,
-.cm-editor .cm-content .cm-fub-callout-line[data-callout="danger"] .cm-fub-callout-type,
-.cm-editor .cm-content .cm-fub-callout-line[data-callout="danger"] .cm-fub-callout-title,
-.markdown-rendered .callout[data-callout="error"] > .callout-title,
-.cm-editor .cm-content .cm-fub-callout-line[data-callout="error"] .cm-fub-callout-type,
-.cm-editor .cm-content .cm-fub-callout-line[data-callout="error"] .cm-fub-callout-title,
-.markdown-rendered .callout[data-callout="failure"] > .callout-title,
-.cm-editor .cm-content .cm-fub-callout-line[data-callout="failure"] .cm-fub-callout-type,
-.cm-editor .cm-content .cm-fub-callout-line[data-callout="failure"] .cm-fub-callout-title,
-.markdown-rendered .callout[data-callout="fail"] > .callout-title,
-.cm-editor .cm-content .cm-fub-callout-line[data-callout="fail"] .cm-fub-callout-type,
-.cm-editor .cm-content .cm-fub-callout-line[data-callout="fail"] .cm-fub-callout-title,
-.markdown-rendered .callout[data-callout="bug"] > .callout-title,
-.cm-editor .cm-content .cm-fub-callout-line[data-callout="bug"] .cm-fub-callout-type,
-.cm-editor .cm-content .cm-fub-callout-line[data-callout="bug"] .cm-fub-callout-title,
-.markdown-rendered .callout[data-callout="missing"] > .callout-title,
-.cm-editor .cm-content .cm-fub-callout-line[data-callout="missing"] .cm-fub-callout-type,
-.cm-editor .cm-content .cm-fub-callout-line[data-callout="missing"] .cm-fub-callout-title {
+.markdown-rendered .callout[data-callout="danger"] > .callout-title::before,
+.markdown-rendered .callout[data-callout="error"] > .callout-title::before,
+.markdown-rendered .callout[data-callout="bug"] > .callout-title::before {
+  content: "!";
+  border-color: var(--danger);
   color: var(--danger);
 }
-.markdown-rendered .callout[data-callout="example"],
-.cm-editor .cm-content .cm-line.cm-fub-callout-line[data-callout="example"] {
-  background: var(--accent-wash);
+.markdown-rendered .callout[data-callout="tip"] > .callout-title::before,
+.markdown-rendered .callout[data-callout="success"] > .callout-title::before,
+.markdown-rendered .callout[data-callout="done"] > .callout-title::before {
+  content: "✓";
+  border-color: var(--success);
+  color: var(--success);
 }
-.markdown-rendered .callout[data-callout="example"] > .callout-title,
-.cm-editor .cm-content .cm-fub-callout-line[data-callout="example"] .cm-fub-callout-type,
-.cm-editor .cm-content .cm-fub-callout-line[data-callout="example"] .cm-fub-callout-title {
+.markdown-rendered .callout kbd {
+  font-size: var(--text-sm);
+}
+/* In Live il colore del tipo sta solo sulla sua pastiglia: il titolo resta
+   neutro, come in Lettura. */
+.cm-editor .cm-content .cm-fub-callout-line[data-callout="note"] .cm-fub-callout-type,
+.cm-editor .cm-content .cm-fub-callout-line[data-callout="info"] .cm-fub-callout-type,
+.cm-editor .cm-content .cm-fub-callout-line[data-callout="abstract"] .cm-fub-callout-type,
+.cm-editor .cm-content .cm-fub-callout-line[data-callout="summary"] .cm-fub-callout-type,
+.cm-editor .cm-content .cm-fub-callout-line[data-callout="todo"] .cm-fub-callout-type,
+.cm-editor .cm-content .cm-fub-callout-line[data-callout="tldr"] .cm-fub-callout-type {
+  color: var(--info);
+}
+.cm-editor .cm-content .cm-fub-callout-line[data-callout="tip"] .cm-fub-callout-type,
+.cm-editor .cm-content .cm-fub-callout-line[data-callout="hint"] .cm-fub-callout-type,
+.cm-editor .cm-content .cm-fub-callout-line[data-callout="success"] .cm-fub-callout-type,
+.cm-editor .cm-content .cm-fub-callout-line[data-callout="check"] .cm-fub-callout-type,
+.cm-editor .cm-content .cm-fub-callout-line[data-callout="done"] .cm-fub-callout-type {
+  color: var(--success);
+}
+.cm-editor .cm-content .cm-fub-callout-line[data-callout="warning"] .cm-fub-callout-type,
+.cm-editor .cm-content .cm-fub-callout-line[data-callout="caution"] .cm-fub-callout-type,
+.cm-editor .cm-content .cm-fub-callout-line[data-callout="attention"] .cm-fub-callout-type,
+.cm-editor .cm-content .cm-fub-callout-line[data-callout="important"] .cm-fub-callout-type,
+.cm-editor .cm-content .cm-fub-callout-line[data-callout="question"] .cm-fub-callout-type,
+.cm-editor .cm-content .cm-fub-callout-line[data-callout="help"] .cm-fub-callout-type,
+.cm-editor .cm-content .cm-fub-callout-line[data-callout="faq"] .cm-fub-callout-type {
+  color: var(--warning);
+}
+.cm-editor .cm-content .cm-fub-callout-line[data-callout="danger"] .cm-fub-callout-type,
+.cm-editor .cm-content .cm-fub-callout-line[data-callout="error"] .cm-fub-callout-type,
+.cm-editor .cm-content .cm-fub-callout-line[data-callout="failure"] .cm-fub-callout-type,
+.cm-editor .cm-content .cm-fub-callout-line[data-callout="fail"] .cm-fub-callout-type,
+.cm-editor .cm-content .cm-fub-callout-line[data-callout="bug"] .cm-fub-callout-type,
+.cm-editor .cm-content .cm-fub-callout-line[data-callout="missing"] .cm-fub-callout-type {
+  color: var(--danger);
+}
+.cm-editor .cm-content .cm-fub-callout-line[data-callout="example"] .cm-fub-callout-type {
   color: var(--accent);
 }
-.markdown-rendered .callout[data-callout="quote"] > .callout-title,
 .cm-editor .cm-content .cm-fub-callout-line[data-callout="quote"] .cm-fub-callout-type,
-.cm-editor .cm-content .cm-fub-callout-line[data-callout="quote"] .cm-fub-callout-title,
-.markdown-rendered .callout[data-callout="cite"] > .callout-title,
-.cm-editor .cm-content .cm-fub-callout-line[data-callout="cite"] .cm-fub-callout-type,
-.cm-editor .cm-content .cm-fub-callout-line[data-callout="cite"] .cm-fub-callout-title {
+.cm-editor .cm-content .cm-fub-callout-line[data-callout="cite"] .cm-fub-callout-type {
   color: var(--doc-gutter-fg);
 }
 
 /* In Live, col cursore dentro, il callout resta un riquadro (D1): le righe
-   hanno il velo del tipo, gli angoli la prima e l'ultima; la testata è la
+   hanno la stessa carta neutra per ogni tipo, gli angoli la prima e l'ultima; la testata è la
    pastiglia del tipo e il titolo. */
 .cm-editor .cm-content .cm-line.cm-fub-callout-line {
   padding-inline: var(--space-6);
@@ -5767,9 +6461,16 @@ kbd,
 
 /* Un elenco in Live è una riga per voce, senza aria in mezzo: in Lettura le
    voci (e i paragrafi che il renderer ci mette dentro) stanno a margine zero. */
-.markdown-rendered ul,
 .markdown-rendered ol {
   padding-left: 1.4em;
+}
+/* Il punto è grafite e staccato dal testo: in Lettura il rientro dell'elenco
+   puntato, in Live il margine attorno al segno che il pallino copre. */
+.markdown-rendered ul {
+  padding-left: 1.25em;
+}
+.cm-editor .cm-content .cm-fub-bullet:not(.cm-fub-bullet-task) {
+  margin-inline: 0.3em 0.35em;
 }
 .markdown-rendered li,
 .markdown-rendered li > p,
@@ -5791,6 +6492,9 @@ kbd,
 .markdown-rendered li.task {
   margin-left: -1.4em;
   list-style: none;
+}
+.markdown-rendered ul > li.task {
+  margin-left: -1.25em;
 }
 /* La casella è quella dei controlli generici — una sola in tutta l'app, alta
    quanto il corpo del testo. Qui c'è solo dove sta rispetto alla riga:
@@ -6549,6 +7253,49 @@ kbd,
   box-shadow:
     0 0 0 var(--focus-ring-width) var(--focus-ring),
     var(--shadow-3);
+}
+
+/* ── La riga dei dati, sotto il titolo ──────────────────────────────────── */
+/* Modificata, collegamenti, etichette: carattere dell'interfaccia, grafite,
+   le etichette come in testo. Non è testo della nota: non si seleziona col
+   corpo e non si scrive. */
+.note-facts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3) var(--space-7);
+  margin: 0;
+  padding: var(--space-4) 0 var(--space-6);
+  color: var(--muted);
+  font-family: var(--font-ui);
+  font-size: var(--text-md);
+  line-height: var(--leading-tight);
+  white-space: normal;
+  user-select: none;
+}
+.note-fact {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+.note-fact > svg {
+  width: 15px;
+  height: 15px;
+}
+.note-fact-tags {
+  gap: var(--space-2);
+}
+.note-tag {
+  padding: var(--space-1) var(--space-4);
+  border-radius: var(--radius-chip);
+  background: var(--accent-wash);
+  color: var(--accent);
+  font-size: var(--text-base);
+  font-weight: var(--weight-medium);
+}
+.markdown-rendered .tag,
+.cm-editor .cm-content .cm-fub-tag {
+  border-radius: var(--radius-chip);
 }
 
 /* ── skin/tabella.css ───────────────────────────────────────────────────── */
@@ -7516,41 +8263,11 @@ kbd,
   background: var(--sheet-2);
   padding: 0 var(--space-4);
 }
-/* La barra multifunzione: le schede su un filetto, i gruppi divisi da un
-   filo e col nome sotto, a voce bassa. I controlli sono quieti come quelli
-   della striscia dei documenti; lo stato acceso prende il velo d'accento. */
-.rich-ribbon {
-  border-bottom: 1px solid var(--border);
-  background: var(--sheet);
-  color: var(--text);
-  font-family: var(--font-ui);
-  font-size: var(--text-sm);
-}
-.rich-ribbon-head {
-  gap: var(--space-2);
-  padding: var(--space-1) var(--space-4) 0;
-  box-shadow: inset 0 -1px 0 var(--border);
-}
-.rich-ribbon-tabs.kit-tabs {
-  gap: var(--space-1);
-  padding-bottom: 0;
-  box-shadow: none;
-}
-.rich-ribbon-tabs .kit-tab {
-  min-height: 30px;
-  padding: 0 var(--space-4);
-  font-size: var(--text-sm);
-}
-.rich-ribbon-tabs .rich-ribbon-contextual {
-  background: var(--accent-wash);
-  color: var(--accent);
-}
-.rich-ribbon[data-collapsed="true"] .rich-ribbon-head {
-  box-shadow: none;
-}
-.grid-ribbon-gallery-item,
-.rich-ribbon-toggle,
-.rich-ribbon-button {
+/* La barra del documento veste la barra a schede del kit (`.kit-ribbon-*`,
+   in `skin/kit.css`). Qui restano le parti che il kit non ha: i pulsanti della
+   galleria dei fogli, i glifi del formato, la mini-barra del menu e le
+   etichette dei campi. */
+.grid-ribbon-gallery-item {
   border: none;
   border-radius: var(--radius-chip);
   background: transparent;
@@ -7558,79 +8275,13 @@ kbd,
   font: inherit;
   cursor: pointer;
 }
-.rich-ribbon-toggle {
-  color: var(--muted);
-}
-.rich-ribbon-toolbar {
-  padding: var(--space-2) var(--space-3) var(--space-1);
-}
-.rich-ribbon-group {
-  padding: 0 var(--space-3);
-  border-right: 1px solid var(--border);
-}
-.rich-ribbon-group:last-child {
-  border-right: none;
-}
-.rich-ribbon-group-body {
-  gap: var(--space-1);
-}
-.rich-ribbon-group-label {
-  padding-top: var(--space-1);
-  color: var(--muted);
-  font-size: var(--text-xs);
-}
-.rich-ribbon-stack {
-  gap: 1px;
-}
-.rich-ribbon-row {
-  gap: 1px;
-}
-.rich-ribbon-button {
-  gap: var(--space-1);
-  padding: 0 var(--space-2);
-  line-height: var(--leading-tight);
-}
-.rich-ribbon-large {
-  padding: var(--space-2) var(--space-2) 0;
-  font-size: var(--text-xs);
-}
-.rich-ribbon-arrow {
-  padding: 0 2px;
-  color: var(--muted);
-}
-.grid-ribbon-gallery-item:hover,
-.rich-ribbon-toggle:hover,
-.rich-ribbon-button:hover:not([aria-disabled="true"]),
-.rich-ribbon-button[aria-expanded="true"] {
+.grid-ribbon-gallery-item:hover {
   background: var(--overlay-hover);
   color: var(--text);
 }
-.rich-ribbon-button:active:not([aria-disabled="true"]) {
-  background: var(--overlay-active);
-}
-.rich-ribbon-split:hover > .rich-ribbon-button {
-  box-shadow: inset 0 0 0 1px var(--border);
-}
-.rich-ribbon-button[aria-pressed="true"] {
-  background: var(--accent-wash);
-  color: var(--accent);
-}
-.rich-ribbon-button[aria-disabled="true"],
-.rich-ribbon-check:has(> input:disabled) {
-  opacity: 0.4;
-  cursor: default;
-}
-.grid-ribbon-gallery-item:focus-visible,
-.rich-ribbon-toggle:focus-visible,
-.rich-ribbon-button:focus-visible,
-.rich-ribbon-select:focus-visible,
-.rich-ribbon-input:focus-visible {
+.grid-ribbon-gallery-item:focus-visible {
   outline: var(--focus-ring-width) solid var(--focus-ring);
   outline-offset: -2px;
-}
-.rich-ribbon-glyph {
-  font-family: var(--font-ui);
-  font-size: var(--text-base);
 }
 .grid-ribbon-bold,
 .rich-ribbon-bold { font-weight: var(--weight-bold); }
@@ -7647,47 +8298,12 @@ kbd,
 .rich-ribbon-underline { text-decoration: underline; }
 .grid-ribbon-strike,
 .rich-ribbon-strike { text-decoration: line-through; }
-.rich-ribbon-color-bar {
-  border-radius: 1px;
-  box-shadow: inset 0 0 0 1px var(--border);
-}
-.rich-ribbon-select,
-.rich-ribbon-input {
-  height: 24px;
-  padding: 0 var(--space-2);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-chip);
-  background: var(--sheet);
-  color: var(--text);
-  font: inherit;
-}
-.rich-ribbon-check {
-  gap: var(--space-2);
-  min-height: 24px;
-  padding: 0 var(--space-2);
-  cursor: pointer;
-}
-.rich-ribbon-check input {
-  margin: 0;
-  accent-color: var(--accent);
-}
 .grid-ribbon-field-label,
 .rich-ribbon-field-label {
   margin-inline-end: var(--space-2);
   color: var(--muted);
 }
-.rich-ribbon-keytip {
-  padding: 0 var(--space-1);
-  border-radius: var(--radius-xs);
-  background: var(--text);
-  box-shadow: var(--shadow-2);
-  color: var(--sheet);
-  font-size: 10px;
-  font-weight: var(--weight-bold);
-  line-height: 14px;
-}
-.grid-ribbon-popup-group,
-.rich-ribbon-popup-group {
+.grid-ribbon-popup-group {
   padding: var(--space-3);
 }
 .grid-ribbon-gallery {
@@ -7719,26 +8335,9 @@ kbd,
   font-size: var(--text-xs);
 }
 
-/* La barra dei fogli è una testata di Fub, non un nastro d'ufficio. Le sezioni
-   sono una scelta a segmenti nel suo pozzetto, come in Impostazioni; i comandi
-   stanno su un vassoio stondato, un tono sotto la carta, in foglietti col nome
-   in grigio. Niente righe: separano lo spazio e la carta. */
-.grid-ribbon {
-  padding-bottom: var(--space-2);
-  background: var(--sheet);
-  color: var(--text);
-  font-family: var(--font-ui);
-  font-size: var(--text-sm);
-}
-/* Ritirata resta la fila delle sezioni: un filetto la stacca dalla formula. */
-.grid-ribbon[data-collapsed="true"] {
-  padding-bottom: 0;
-  box-shadow: inset 0 -1px 0 var(--border);
-}
-.grid-ribbon-head {
-  gap: var(--space-4);
-  padding: var(--space-2) var(--space-4);
-}
+/* La barra dei fogli: la forma e la pelle sono quelle di ogni barra a
+   schede (`skin/kit.css`, «Barra a schede»). Qui restano le parti solo sue:
+   ciò che copre il vassoio quando si ritira, la tavolozza, «Comandi». */
 /* Chi copre il vassoio che si ritira ha il fondo del foglio: attraverso la
    formula e la griglia non si vede mai la barra. */
 .grid-formula-bar,
@@ -7752,220 +8351,6 @@ kbd,
 }
 .grid-draft-notice {
   background: linear-gradient(var(--warning-wash), var(--warning-wash)), var(--sheet);
-}
-/* Il pozzetto delle sezioni è quello di `.segmented` (`skin/controls.css`):
-   un velo appena, il raggio di un controllo, i segmenti col raggio di una
-   pastiglia; la scelta ha il velo d'accento, che scorre. */
-.grid-ribbon-tabs.kit-tabs {
-  gap: var(--space-1);
-  padding: var(--space-1);
-  border-radius: var(--radius-control);
-  background: var(--overlay-hover);
-  box-shadow: none;
-}
-.grid-ribbon-tabs .kit-tab {
-  gap: var(--space-2);
-  min-height: 24px;
-  padding: 0 var(--space-5);
-  border-radius: var(--radius-chip);
-  color: var(--muted);
-  font-size: var(--text-sm);
-}
-.grid-ribbon-tabs .kit-tab:hover {
-  color: var(--text);
-}
-.grid-ribbon-tabs .kit-tab[aria-selected="true"] {
-  color: var(--accent);
-}
-.grid-ribbon-tabs > .kit-tab-indicator {
-  top: var(--space-1);
-  height: calc(100% - var(--space-1) * 2);
-  border-radius: var(--radius-chip);
-  background: var(--accent-wash);
-}
-/* Le sezioni per la selezione dicono di essere in più con l'accento e un
-   punto, e stanno un passo più in là dalle altre. */
-.grid-ribbon-tabs .grid-ribbon-contextual {
-  color: var(--accent);
-}
-.grid-ribbon-tabs .grid-ribbon-contextual::before {
-  content: "";
-  flex: none;
-  width: 6px;
-  height: 6px;
-  border-radius: var(--radius-pill);
-  background: currentColor;
-}
-.grid-ribbon-tabs .kit-tab:not(.grid-ribbon-contextual) + .grid-ribbon-contextual {
-  margin-inline-start: var(--space-3);
-}
-.grid-ribbon-toggle {
-  border: none;
-  border-radius: var(--radius-control);
-  background: transparent;
-  color: var(--muted);
-  cursor: pointer;
-}
-.grid-ribbon-toggle:hover {
-  background: var(--overlay-hover);
-  color: var(--text);
-}
-/* Il vassoio dei comandi: lo stesso raggio di un foglio; i foglietti dentro
-   col raggio di un controllo, così gli angoli corrono paralleli. */
-.grid-ribbon-toolbar {
-  gap: var(--space-2);
-  margin: 0 var(--space-4);
-  padding: var(--space-2);
-  border-radius: var(--radius-sheet);
-  background: var(--sheet-2);
-}
-/* Un foglietto è carta sul vassoio, con un orlo sotto al posto dell'ombra:
-   un'ombra vera, nel vassoio stretto, verrebbe tagliata. */
-.grid-ribbon-group {
-  padding: var(--space-1) var(--space-2) var(--space-2);
-  border-radius: var(--radius-control);
-  background: var(--bg-elev);
-  box-shadow: 0 1px 0 var(--border);
-}
-/* Il nome del gruppo è piccolo e grigio, scritto come si scrive: non
-   maiuscoletto, non nero. Dice dove si è, non chiede di essere letto. */
-.grid-ribbon-group-label {
-  padding: 0 var(--space-1);
-  color: var(--muted);
-  font-size: var(--text-xs);
-  font-weight: var(--weight-regular);
-  line-height: 16px;
-}
-.grid-ribbon-group-body {
-  gap: var(--space-1) var(--space-2);
-}
-.grid-ribbon-stack {
-  gap: var(--space-1) var(--space-2);
-}
-.grid-ribbon-row {
-  gap: var(--space-1);
-}
-/* I pulsanti sono quelli della barra di formato: grafite a riposo, un velo al
-   passaggio, il velo d'accento quando sono accesi. */
-.grid-ribbon-button {
-  gap: var(--space-2);
-  padding: 0 var(--space-2);
-  border: none;
-  border-radius: var(--radius-chip);
-  background: transparent;
-  color: var(--muted);
-  font: inherit;
-  line-height: var(--leading-tight);
-  cursor: pointer;
-}
-.grid-ribbon-large {
-  padding: 0 var(--space-2);
-}
-.grid-ribbon-arrow {
-  padding: 0 var(--space-1);
-}
-.grid-ribbon-button:hover:not([aria-disabled="true"]),
-.grid-ribbon-button[aria-expanded="true"] {
-  background: var(--overlay-hover);
-  color: var(--text);
-}
-.grid-ribbon-button:active:not([aria-disabled="true"]) {
-  background: var(--overlay-active);
-}
-/* Un pulsante diviso è un pezzo solo con due bocche: sotto il puntatore si
-   vela tutto, e la parte che risponde un po' di più. */
-.grid-ribbon-split > .grid-ribbon-button:first-child {
-  border-radius: var(--radius-chip) 0 0 var(--radius-chip);
-}
-.grid-ribbon-split > .grid-ribbon-arrow {
-  border-radius: 0 var(--radius-chip) var(--radius-chip) 0;
-}
-.grid-ribbon-split:hover > .grid-ribbon-button:not([aria-disabled="true"]) {
-  background: var(--overlay-hover);
-  color: var(--text);
-}
-.grid-ribbon-split:hover > .grid-ribbon-button:hover:not([aria-disabled="true"]) {
-  background: var(--overlay-active);
-}
-/* «Acceso» è lo stesso ovunque nella shell: velo d'accento e inchiostro blu. */
-.grid-ribbon-button[aria-pressed="true"] {
-  background: var(--accent-wash);
-  color: var(--accent);
-}
-.grid-ribbon-button[aria-disabled="true"],
-.grid-ribbon-select:disabled,
-.grid-ribbon-input:disabled,
-.grid-ribbon-check:has(> input:disabled) {
-  opacity: 0.4;
-  cursor: default;
-}
-.grid-ribbon-toggle:focus-visible,
-.grid-ribbon-button:focus-visible,
-.grid-ribbon-palette-empty:focus-visible {
-  outline: var(--focus-ring-width) solid var(--focus-ring);
-  outline-offset: -2px;
-}
-.grid-ribbon-glyph {
-  font-family: var(--font-ui);
-  font-size: var(--text-base);
-}
-.grid-ribbon-color-bar {
-  border-radius: var(--radius-pill);
-  box-shadow: inset 0 0 0 1px var(--border);
-}
-/* I campi sono i campi di Fub (`skin/controls.css`): carta, il confine dei
-   controlli, il raggio di controllo; il passaggio scurisce il confine e il
-   fuoco lo fa blu con l'alone. */
-.grid-ribbon-select,
-.grid-ribbon-input {
-  height: 28px;
-  padding: 0 var(--space-3);
-  border: 1px solid var(--outline);
-  border-radius: var(--radius-control);
-  background: var(--sheet);
-  color: var(--text);
-  font: inherit;
-  text-overflow: ellipsis;
-}
-.grid-ribbon-select:hover:not(:disabled),
-.grid-ribbon-input:hover:not(:disabled) {
-  border-color: var(--text);
-}
-.grid-ribbon-select:focus-visible,
-.grid-ribbon-input:focus-visible {
-  border-color: var(--focus-ring);
-  outline-offset: -1px;
-  box-shadow: 0 0 0 4px var(--accent-veil);
-}
-.grid-ribbon-check {
-  gap: var(--space-3);
-  min-height: 28px;
-  padding: 0 var(--space-3);
-  border-radius: var(--radius-chip);
-  color: var(--muted);
-  cursor: pointer;
-}
-.grid-ribbon-check:hover:not(:has(> input:disabled)) {
-  background: var(--overlay-hover);
-  color: var(--text);
-}
-.grid-ribbon-check input {
-  margin: 0;
-  accent-color: var(--accent);
-}
-/* Le lettere di Alt: pastiglie scure, staccate dalla carta da un anello, come
-   il conteggio sulle icone della cornice. */
-.grid-ribbon-keytip {
-  min-width: 16px;
-  padding: 0 var(--space-2);
-  border-radius: var(--radius-pill);
-  background: var(--text);
-  box-shadow: 0 0 0 2px var(--sheet), var(--shadow-2);
-  color: var(--sheet);
-  font-size: 10px;
-  font-weight: var(--weight-bold);
-  line-height: 16px;
-  text-align: center;
 }
 /* La tavolozza dei colori parla come un menu: titoli piccoli in grigio,
    campioni stondati. */
@@ -7987,6 +8372,10 @@ kbd,
 }
 .grid-ribbon-palette-empty:hover {
   background: var(--overlay-hover);
+}
+.grid-ribbon-palette-empty:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: -2px;
 }
 .grid-ribbon-palette-title {
   margin: var(--space-2) 0 0;
@@ -8012,131 +8401,10 @@ kbd,
   outline: var(--focus-ring-width) solid var(--focus-ring);
   outline-offset: 1px;
 }
-/* In un foglio stretto si stringono di un passo i margini della testata, i
-   segmenti e il vassoio, che restano allineati: a 700 px le sezioni ci stanno
-   tutte, anche quella della selezione. */
-@container sheet (max-width: 900px) {
-  .grid-ribbon-head {
-    gap: var(--space-3);
-    padding: var(--space-2) var(--space-3);
-  }
-  .grid-ribbon-tabs.kit-tabs {
-    gap: 0;
-  }
-  .grid-ribbon-tabs .kit-tab {
-    padding: 0 var(--space-3);
-  }
-  .grid-ribbon-tabs .kit-tab:not(.grid-ribbon-contextual) + .grid-ribbon-contextual {
-    margin-inline-start: var(--space-2);
-  }
-  .grid-ribbon-toolbar {
-    margin: 0 var(--space-3);
-  }
-}
-/* In colori forzati i fondi spariscono: la scelta la dice il contorno del
-   kit, il pozzetto, il vassoio e i foglietti un bordo vero. */
-@media (forced-colors: active) {
-  .grid-ribbon-tabs > .kit-tab-indicator {
-    background: transparent;
-  }
-  .grid-ribbon-tabs.kit-tabs,
-  .grid-ribbon-toolbar,
-  .grid-ribbon-group {
-    border: 1px solid CanvasText;
-  }
-}
-
-/* Un foglietto è un cartoncino tondo da ogni lato, appoggiato sul vassoio: un
-   filo d'inchiostro tutt'attorno e sotto un'ombra di contatto corta. Resta un
-   gradino sotto i fogli della scrivania: `--shadow-1` è la loro carta
-   (`--elevation-paper-shadow`) e qui non si usa; il suo alone di 20 px, poi,
-   il vassoio lo taglierebbe. L'ombra è fatta coi veli della shell,
-   `--overlay-hover` e `--overlay-active`: nessun token nuovo. */
-.grid-ribbon-group {
-  box-shadow: 0 0 0 1px var(--overlay-hover), 0 1px 2px var(--overlay-active);
-}
-/* Il foglietto chiuso che si apre sul posto sale di un gradino: il filo e
-   l'ombra crescono, sempre sotto la carta. */
-.grid-ribbon-group[data-open="true"] {
-  box-shadow: 0 0 0 1px var(--overlay-active), 0 1px 1px var(--overlay-active), 0 2px 4px var(--overlay-active);
-}
-/* Nella luce scura un'ombra non si vede: il foglietto è un poco più chiaro
-   del vassoio e ha un filo di luce sul bordo di sopra. */
-:root[data-theme="dark"] .grid-ribbon-group {
-  background: color-mix(in oklab, var(--bg-elev) 95%, var(--text));
-  box-shadow: inset 0 1px 0 var(--overlay-active);
-}
-:root[data-theme="dark"] .grid-ribbon-group[data-open="true"] {
-  background: color-mix(in oklab, var(--bg-elev) 90%, var(--text));
-  box-shadow: inset 0 1px 0 var(--overlay-active), 0 0 0 1px var(--overlay-hover);
-}
-/* Contrasto alto: il filo è il bordo pieno della shell, tutt'attorno. */
-:root[data-contrast="high"] .grid-ribbon-group {
-  box-shadow: 0 0 0 1px var(--border);
-}
-:root[data-contrast="high"] .grid-ribbon-group[data-open="true"] {
-  box-shadow: 0 0 0 2px var(--border);
-}
-@media (forced-colors: active) {
-  .grid-ribbon-group[data-open="true"] {
-    outline: 1px solid CanvasText;
-  }
-}
-
-/* Il pulsante del foglietto chiuso riempie il foglietto: il velo del
-   passaggio copre tutta la sua carta, col raggio della carta. */
-.grid-ribbon-group[data-collapsed="true"] {
-  padding: 0;
-}
-.grid-ribbon-group-toggle {
-  border-radius: var(--radius-control);
-  color: var(--text);
-}
-
-/* Due a pila: ognuno è alto metà di un foglietto aperto, e i due, col passo
-   del vassoio fra loro, sono alti quanto lui ((80 − 4) / 2). Il disegno, il
-   nome e la freccina come in un gettone; la freccina, grigia, dice «si apre
-   qui». */
-.grid-ribbon-group[data-collapsed="true"] {
-  min-height: 38px;
-}
-.grid-ribbon-group-toggle {
-  gap: var(--space-3);
-  padding: 0 var(--space-3) 0 var(--space-4);
-}
-.grid-ribbon-group-toggle .grid-ribbon-chevron {
-  color: var(--muted);
-}
-/* Uno solo: alto quanto un foglietto aperto (80), anche quando i foglietti
-   sono tutti chiusi e nessuno dà l'altezza al vassoio, e largo almeno 48 px
-   come una tessera. */
-.grid-ribbon-group[data-collapsed="true"][data-alone="true"] {
-  min-height: 80px;
-}
-.grid-ribbon-group[data-alone="true"] > .grid-ribbon-group-toggle {
-  gap: var(--space-2);
-  min-width: 48px;
-  padding: var(--space-2) var(--space-4);
-}
-.grid-ribbon-group[data-alone="true"] > .grid-ribbon-group-toggle > svg {
-  border-radius: var(--radius-pill);
-  background: var(--overlay-hover);
-}
-.grid-ribbon-group[data-alone="true"] > .grid-ribbon-group-toggle .grid-ribbon-label {
-  color: var(--muted);
-  font-size: var(--text-xs);
-  line-height: 14px;
-}
-.grid-ribbon-group[data-alone="true"] > .grid-ribbon-group-toggle:hover .grid-ribbon-label {
-  color: var(--text);
-}
 /* «Comandi» apre la fila: un gettone pieno accanto al pozzetto delle sezioni,
    alto quanto lui e col suo stesso velo, la porta di tutti i comandi. Aperto
    prende il velo d'accento, come la voce di un menu che ha aperto il suo
    sottomenu. */
-.grid-ribbon-quick {
-  gap: var(--space-1);
-}
 .grid-ribbon-quick .grid-ribbon-button {
   padding: 0 var(--space-4) 0 var(--space-3);
   border-radius: var(--radius-control);
@@ -8985,7 +9253,6 @@ kbd,
    soltanto sua. Meno inchiostro del foglio: le cifre dei campi sono
    tabulari, la galleria degli stili scrive ogni nome nel suo carattere. */
 .rich-ribbon-quick {
-  gap: 1px;
   margin-inline-end: var(--space-2);
   padding-inline-end: var(--space-2);
   border-right: 1px solid var(--border);
@@ -9269,6 +9536,12 @@ kbd,
 }
 /* Il foglio che scorre è l'arresto del Tab del documento: l'anello sta
    dentro il riquadro. */
+/* Chi copre il vassoio che si ritira ha il fondo del foglio, come nei fogli:
+   attraverso la pagina non si vede mai la barra. Pagina e Lettura hanno la
+   loro scrivania, più sotto. */
+.rich-page {
+  background: var(--sheet);
+}
 .rich-page:focus-visible {
   outline: none;
   box-shadow: inset 0 0 0 var(--focus-ring-width) var(--focus-ring);
@@ -9598,15 +9871,6 @@ kbd,
    barra in tutti e due i temi: il nero al buio, il giallo alla luce. La carta
    è bianca in ogni tema, perché è il fondo su cui il disegno si legge fuori
    dall'editor; il tavolo attorno segue il tema. */
-.draw-header {
-  gap: var(--space-2) var(--space-5);
-  padding: var(--space-2);
-  background: var(--bg-elev);
-  border-bottom: 1px solid var(--border);
-}
-.draw-toolbar {
-  gap: var(--space-2) var(--space-5);
-}
 /* La colonna degli strumenti: lo stesso fondo della barra, un filo verso il
    foglio. */
 .draw-rail {
@@ -9616,10 +9880,14 @@ kbd,
   border-style: solid;
   border-color: var(--border);
 }
+/* La testa (`.draw-header`) è una barra in una fila del kit: il vassoio, i
+   foglietti e i pulsanti li veste `skin/kit.css`. Le regole dei gruppi e dei
+   pulsanti qui sotto sono per quelli fuori dalla testa: la colonna, la barra
+   della selezione, i pannelli. */
 .draw-group {
   gap: var(--space-1);
 }
-.draw-button {
+.draw-button:not(.kit-bar-button) {
   color: var(--muted);
   border-radius: var(--radius-sm);
   transition:
@@ -9627,7 +9895,7 @@ kbd,
     color var(--duration-fast) var(--ease),
     box-shadow var(--duration-fast) var(--ease);
 }
-.draw-button:hover:not(:disabled, [aria-disabled="true"]) {
+.draw-button:not(.kit-bar-button):hover:not(:disabled, [aria-disabled="true"]) {
   background: var(--overlay-hover);
   color: var(--text);
 }
@@ -9635,8 +9903,8 @@ kbd,
    l'opzione premuta: il fondo tenue dell'accento e l'icona nell'accento,
    come nella colonna degli strumenti; non un bordo. Lo dicono due segni, il
    fondo e il colore del segno, non uno solo. */
-.draw-button[aria-checked="true"],
-.draw-button[aria-pressed="true"] {
+.draw-button:not(.kit-bar-button)[aria-checked="true"],
+.draw-button:not(.kit-bar-button)[aria-pressed="true"] {
   background: var(--accent-wash);
   color: var(--accent);
 }
@@ -9651,8 +9919,8 @@ kbd,
 }
 /* Un comando che adesso non si usa: sbiadito. Nelle proprietà resta
    raggiungibile (`aria-disabled`), e dice perché. */
-.draw-button:disabled,
-.draw-button[aria-disabled="true"] {
+.draw-button:not(.kit-bar-button):disabled,
+.draw-button:not(.kit-bar-button)[aria-disabled="true"] {
   opacity: 0.4;
 }
 .draw-zoom-level {
@@ -11012,93 +11280,62 @@ button.draw-isolation-crumb:hover {
 /* ── Il PDF ──────────────────────────────────────────────────────────────── */
 
 /*
-   Le pagine sono fogli posati su un piano un tono sotto la carta; sopra, la
-   pillola dei comandi e la riga «pagina N di M». La superficie e la vista
-   portano la stessa classe: la vista è quella dentro.
+   La barra di serie in cima, il piano sotto. Non più una pillola sospesa che
+   va a capo: la barra in una fila sta sulla carta, sotto la testata, come
+   quella del documento; le pagine sono fogli posati sul piano un tono sotto.
+   «Pagina N di M» passa nella banda. La superficie e la vista portano la
+   stessa classe: la vista è quella dentro.
 */
 .media-surface > .media-pdf {
   display: flex;
   flex-direction: column;
   flex: 1;
   min-height: 0;
-  background: var(--sheet-2);
+  background: var(--sheet);
 }
 .media-surface > .media-pdf:focus-visible {
   outline-offset: calc(var(--focus-ring-width) * -2);
 }
+/* La barra del PDF è la barra di serie (`kit-bar`): qui solo ciò che è suo.
+   Non va mai a capo: in una finestra stretta, col sommario e «Annota», la
+   fila scorre di lato. Il sommario è un elenco a tendina largo quanto un
+   titolo corto. */
 .media-pdf-toolbar {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  align-self: center;
-  justify-content: center;
-  gap: var(--space-1);
-  box-sizing: border-box;
-  max-width: calc(100% - 2 * var(--space-5));
-  margin: var(--space-5) var(--space-5) 0;
-  padding: var(--space-2);
-  border-radius: var(--radius-pill);
-  background: var(--bg-elev);
-  box-shadow: var(--shadow-3);
-  font-family: var(--font-ui);
-  font-size: var(--text-sm);
-  line-height: var(--leading-normal);
+  overflow-x: auto;
+  scrollbar-width: thin;
 }
-.media-pdf-toolbar > button {
+.media-pdf-toolbar > select.kit-bar-field {
+  flex: 0 1 12rem;
+  min-width: 6rem;
+}
+/* La ricerca: il campo dei campi, con la lente dentro. */
+.media-pdf-search {
+  position: relative;
   display: inline-flex;
+  flex: 0 1 14rem;
   align-items: center;
-  justify-content: center;
-  flex: none;
-  min-width: 28px;
-  height: 28px;
-  padding: 0 var(--space-4);
-  border: 0;
-  border-radius: var(--radius-pill);
-  background: transparent;
+  min-width: 8rem;
+}
+.media-pdf-search > svg {
+  position: absolute;
+  left: var(--space-4);
+  width: 14px;
+  height: 14px;
   color: var(--muted);
-  font: inherit;
-  font-weight: var(--weight-medium);
-  cursor: pointer;
+  pointer-events: none;
 }
-.media-pdf-toolbar > button:hover,
-.media-pdf-toolbar > button:focus-visible {
-  background: var(--overlay-hover);
-  color: var(--text);
+.media-pdf-search > .kit-bar-field {
+  flex: 1 1 auto;
+  width: 100%;
+  min-width: 0;
+  padding-left: calc(var(--space-4) + 14px + var(--space-3));
 }
-.media-pdf-toolbar > button:active {
-  background: var(--overlay-active);
-  color: var(--text);
+.media-pdf-toolbar > .kit-options-more {
+  margin-inline-start: auto;
 }
-.media-pdf-toolbar > button:disabled {
-  background: transparent;
-  color: var(--muted);
-  opacity: 0.4;
-  cursor: default;
-}
-/* Il campo è quello di tutti, in misura di pillola. */
-.media-pdf-toolbar > input {
-  flex: 0 1 12rem;
-  min-width: 6rem;
-  height: 28px;
-  margin: 0 var(--space-2);
-  padding: 0 var(--space-5);
-  border-radius: var(--radius-pill);
-  font-size: var(--text-sm);
-}
-/* Il sommario è un elenco a tendina, in misura di pillola come il campo. */
-.media-pdf-toolbar > select {
-  flex: 0 1 12rem;
-  min-width: 6rem;
-  height: 28px;
-  margin: 0 var(--space-2);
-  padding: 0 var(--space-4);
-  border-radius: var(--radius-pill);
-  font-size: var(--text-sm);
-}
-.media-pdf-toolbar > button[aria-pressed="true"] {
-  background: var(--overlay-active);
-  color: var(--text);
-}
+/* La riga di stato si vede col caricamento, gli errori e la ricerca; la
+   pagina la dice la banda, e qui resta per il lettore di schermo
+   (`.sr-only`, della struttura, che la toglie dalla vista). */
 .media-pdf > [role="status"] {
   margin: var(--space-4) var(--space-5) 0;
   color: var(--muted);
@@ -11112,6 +11349,7 @@ button.draw-isolation-crumb:hover {
   display: flex;
   flex: 1;
   min-height: 0;
+  background: var(--sheet-2);
 }
 .media-pdf-thumbs {
   display: flex;
@@ -11194,6 +11432,12 @@ button.draw-isolation-crumb:hover {
 }
 .media-pdf-page.media-pdf-spread canvas {
   margin: 0;
+}
+/* Le annotazioni sopra la pagina hanno gli angoli del foglio. La loro riga
+   (il PDF cambiato, un file che non si legge) veste come la riga di stato
+   qui sopra, `.media-pdf > [role="status"]`. */
+.media-pdf-annotations {
+  border-radius: var(--radius-xs);
 }
 .media-pdf-page > p {
   max-width: 34rem;
@@ -11307,17 +11551,20 @@ button.draw-isolation-crumb:hover {
   cursor: default;
 }
 
-/* ── I file delle app Craft ──────────────────────────────────────────────── */
+/* ── I file delle app Craft: un foglietto sollevato ───────────────────────── */
 
 /* La scheda di un disegno, di un'immagine o di un progetto: l'anteprima con
-   lo zoom delle foto e, sotto, la riga dei dati in grafite. Senza anteprima,
-   un riquadro sobrio come ciò che non si apre, senza il segno d'allarme: il
-   nome, i dati, ciò che succede e un'azione sola nel colore d'accento. */
+   lo zoom delle foto e, sotto, la riga dei dati in grafite. Senza anteprima la
+   scheda non è un riquadro tratteggiato: è un foglietto di carta posato sul
+   piano, come la nota aperta nel cassetto, col nome in inchiostro e i dati in
+   grafite. Le risposte sono quelle dei pulsanti del kit (`kit-button`): un
+   fondo anche a riposo, uguali fra loro, perché è una scelta e non un invito. */
 .craft-card {
   display: flex;
   flex-direction: column;
   flex: 1;
   min-height: 0;
+  background: var(--sheet-2);
 }
 .craft-info {
   flex: none;
@@ -11332,18 +11579,25 @@ button.draw-isolation-crumb:hover {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: var(--space-3);
+  gap: var(--space-2);
   box-sizing: border-box;
-  max-width: 36rem;
+  max-width: 30rem;
   margin: auto;
-  padding: var(--space-9);
-  border: 1px dashed var(--border);
-  border-radius: var(--radius-control);
+  padding: var(--space-9) var(--space-9) var(--space-8);
+  border: 0;
+  border-radius: var(--radius-sheet);
+  background: var(--bg-elev);
+  box-shadow: 0 0 0 1px var(--overlay-hover), var(--shadow-1);
   color: var(--muted);
-  font-size: var(--text-md);
+  font-size: var(--text-base);
   line-height: var(--leading-normal);
   overflow-wrap: anywhere;
   text-align: center;
+}
+/* Nel contrasto alto il filo attorno al foglietto è quello dei bordi; nei
+   colori forzati l'ombra sparisce e il bordo torna. */
+:root[data-contrast="high"] .craft-empty {
+  box-shadow: 0 0 0 1px var(--border);
 }
 .craft-empty > .craft-info {
   padding: 0;
@@ -11351,51 +11605,73 @@ button.draw-isolation-crumb:hover {
 .craft-empty-name {
   margin: 0;
   color: var(--text);
+  font-size: var(--text-lg);
   font-weight: var(--weight-medium);
 }
 .craft-empty-state {
   margin: 0;
 }
+.craft-ask-answer,
 .craft-render {
-  margin-top: var(--space-3);
-  padding: var(--space-3) var(--space-5);
+  min-height: var(--control-h);
+  padding: 0 var(--space-6);
   border: 0;
   border-radius: var(--radius-control);
-  background: transparent;
-  color: var(--accent);
+  background: var(--overlay-hover);
+  color: var(--text);
   font: inherit;
   font-family: var(--font-ui);
   font-size: var(--text-base);
   font-weight: var(--weight-medium);
   cursor: pointer;
 }
+.craft-render {
+  margin-top: var(--space-3);
+}
+.craft-ask-answer:hover,
 .craft-render:hover,
-.craft-render:focus-visible {
-  background: var(--accent-wash);
-  color: var(--accent-soft);
-}
+.craft-ask-answer:active,
 .craft-render:active {
-  background: var(--accent-veil);
-  color: var(--accent-soft);
+  background: var(--overlay-active);
+  color: var(--text);
 }
-.craft-render:disabled {
-  background: transparent;
-  color: var(--muted);
+.craft-ask-answer:focus-visible,
+.craft-render:focus-visible {
+  background: var(--overlay-hover);
+  color: var(--text);
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: 2px;
+}
+/* Spente come quelle del kit: lo stesso fondo, a un terzo dell'inchiostro. */
+.craft-ask-answer:disabled,
+.craft-ask-answer:disabled:hover,
+.craft-render:disabled,
+.craft-render:disabled:hover {
+  background: var(--overlay-hover);
+  color: var(--text);
   opacity: 0.4;
   cursor: default;
 }
+@media (forced-colors: active) {
+  .craft-empty {
+    border: 1px solid CanvasText;
+  }
+  .craft-ask-answer,
+  .craft-render {
+    border: 1px solid ButtonText;
+  }
+}
 
-/* La domanda sulle anteprime fatte dalle app (T23), nel riquadro al posto del
-   pulsante: un filo la stacca da ciò che dice il file. Le due risposte pesano
-   uguale, perché è una scelta e non un invito. */
+/* La domanda sulle anteprime fatte dalle app (T23), nel foglietto al posto del
+   pulsante: un filo la stacca da ciò che dice il file. */
 .craft-ask {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: var(--space-4);
-  margin-top: var(--space-3);
+  gap: var(--space-5);
+  margin-top: var(--space-4);
   padding-top: var(--space-6);
-  border-top: 1px solid var(--border);
+  border-top: 1px solid var(--overlay-active);
 }
 .craft-ask-text {
   max-width: 30rem;
@@ -11408,33 +11684,6 @@ button.draw-isolation-crumb:hover {
   flex-wrap: wrap;
   justify-content: center;
   gap: var(--space-3) var(--space-4);
-}
-.craft-ask-answer {
-  padding: var(--space-3) var(--space-6);
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius-control);
-  background: transparent;
-  color: var(--accent);
-  font: inherit;
-  font-family: var(--font-ui);
-  font-size: var(--text-base);
-  font-weight: var(--weight-medium);
-  cursor: pointer;
-}
-.craft-ask-answer:hover,
-.craft-ask-answer:focus-visible {
-  background: var(--accent-wash);
-  color: var(--accent-soft);
-}
-.craft-ask-answer:active {
-  background: var(--accent-veil);
-  color: var(--accent-soft);
-}
-.craft-ask-answer:disabled {
-  background: transparent;
-  color: var(--muted);
-  opacity: 0.4;
-  cursor: default;
 }
 .craft-ask-hint {
   margin: 0;
@@ -11723,6 +11972,7 @@ button.draw-isolation-crumb:hover {
   gap: var(--space-5);
   font-family: var(--font-reading);
 }
+/* Le diapositive: «3 / 12» in tondo, come la banda. */
 .slide-status {
   margin: 0;
   color: var(--muted);
@@ -11730,9 +11980,9 @@ button.draw-isolation-crumb:hover {
   font-size: var(--text-sm);
   font-variant-numeric: tabular-nums;
   font-weight: var(--weight-medium);
-  letter-spacing: var(--tracking-caps);
+  letter-spacing: 0;
   text-align: center;
-  text-transform: uppercase;
+  text-transform: none;
 }
 /* Il margine automatico centra la slide finché ci sta e la lascia scorrere
    dall'inizio quando è più alta del palco. */
@@ -12082,10 +12332,11 @@ h6.ui-heading {
 
 /* ── Sezioni ─────────────────────────────────────────────────────────────── */
 
-/* L'intestazione di una sezione è un'etichetta di cassetto: maiuscoletto
-   piccolo in grafite, che nomina senza pesare. Il triangolo è disegnato —
-   quello del sistema cambia forma da una macchina all'altra — ed è lo stesso
-   dell'albero dei file. */
+/* L'intestazione di una sezione è in tondo: «In entrata · 2», «In uscita ·
+   2», «Menzioni non collegate · 1». Il nome si scrive come si scrive, in
+   grafite, e il conto lo segue. Il triangolo è disegnato — quello del sistema
+   cambia forma da una macchina all'altra — ed è lo stesso dell'albero dei
+   file. */
 .ui-section {
   margin: 0;
 }
@@ -12097,11 +12348,11 @@ h6.ui-heading {
   padding: 0 var(--space-4);
   border-radius: var(--radius-control);
   color: var(--muted);
-  font-size: var(--text-xs);
-  font-weight: var(--weight-bold);
-  letter-spacing: var(--tracking-caps);
+  font-size: var(--text-base);
+  font-weight: var(--weight-medium);
+  letter-spacing: 0;
   line-height: var(--leading-tight);
-  text-transform: uppercase;
+  text-transform: none;
   list-style: none;
   cursor: pointer;
 }
@@ -12144,8 +12395,8 @@ h6.ui-heading {
 
 /* ── Righe: elenchi e alberi ─────────────────────────────────────────────── */
 
-/* Una voce di elenco è una riga di cassetto. L'altezza minima è scritta dal
-   nodo (un bersaglio); qui c'è il resto: rientro, raggio, e due righe di
+/* Una voce di elenco è una riga di cassetto. L'altezza minima è scritta dalla
+   struttura (un bersaglio); qui c'è il resto: rientro, raggio, e due righe di
    testo che non si pestano. */
 .ui-list-item {
   padding: var(--space-2) var(--space-4);
@@ -12643,6 +12894,130 @@ h6.ui-heading {
   background: var(--bg-active);
 }
 
+/* ── La struttura: un filo a sinistra, la voce corrente è una tacca blu ───
+   Vale per la vista «Struttura» (`data-view-id="outline"`), non per ogni
+   albero dichiarato: un albero di etichette resta com'è. */
+.declared-view[data-view-id="outline"] .ui-tree {
+  border-left: 1px solid var(--border);
+}
+.declared-view[data-view-id="outline"] .ui-tree-label {
+  min-height: var(--row-h);
+  padding: 0 var(--space-4) 0 var(--space-5);
+  border-radius: 0 var(--radius-chip) var(--radius-chip) 0;
+  color: var(--muted);
+  font-size: var(--text-md);
+}
+.declared-view[data-view-id="outline"] .ui-tree-label::before {
+  content: none;
+}
+.declared-view[data-view-id="outline"] .ui-tree-item > .ui-children {
+  margin-left: var(--space-5);
+}
+.declared-view[data-view-id="outline"] .ui-tree-label.clickable:hover {
+  background: var(--overlay-hover);
+  color: var(--text);
+}
+.declared-view[data-view-id="outline"] .ui-tree-item[aria-selected="true"] > .ui-tree-label,
+.declared-view[data-view-id="outline"] .ui-tree-item[aria-selected="true"] > .ui-tree-label.clickable:hover {
+  background: transparent;
+  color: var(--text);
+  font-weight: var(--weight-bold);
+}
+/* La tacca sta sul filo, a qualunque profondità: 2 px centrati sulla riga di
+   1 px, alti 16. */
+.declared-view[data-view-id="outline"] .ui-tree-item[aria-selected="true"] > .ui-tree-label::after {
+  inset: 6px auto 6px -1.5px;
+  width: 2px;
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+}
+.declared-view[data-view-id="outline"] .ui-children .ui-tree-item[aria-selected="true"] > .ui-tree-label::after {
+  left: calc(-1 * var(--space-5) - 1.5px);
+}
+.declared-view[data-view-id="outline"] .ui-children .ui-children .ui-tree-item[aria-selected="true"] > .ui-tree-label::after {
+  left: calc(-2 * var(--space-5) - 1.5px);
+}
+
+/* ── «In entrata 3»: chi punta qui, il nome a sinistra e la cartella a destra.
+   La sezione la dichiara la vista Struttura con la chiave `outline-incoming`
+   (`incoming` è già dei Collegamenti). */
+.ui-section[data-key="outline-incoming"] {
+  margin-top: var(--space-8);
+}
+.ui-section[data-key="outline-incoming"] > summary {
+  padding: 0;
+  color: var(--muted);
+  font-size: var(--text-base);
+  font-weight: var(--weight-medium);
+  letter-spacing: 0;
+  text-transform: none;
+}
+.ui-section[data-key="outline-incoming"] > summary::before {
+  content: none;
+}
+.ui-section[data-key="outline-incoming"] > summary:hover {
+  background: transparent;
+  color: var(--text);
+}
+.ui-section[data-key="outline-incoming"] > .ui-children {
+  padding: var(--space-2) 0 0;
+}
+/* In riga, e non nella griglia delle voci con l'icona qui sotto: il nome e la
+   cartella stanno sulla stessa linea. */
+.ui-section[data-key="outline-incoming"] .ui-list-item {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: flex-start;
+  gap: var(--space-4);
+  /* 28 più i 2 px fra una voce e l'altra: il passo di 30 del mockup */
+  min-height: var(--row-h);
+  padding: 0 var(--space-3);
+  border-radius: var(--radius-chip);
+  font-size: var(--text-md);
+}
+.ui-section[data-key="outline-incoming"] .ui-list-item-title {
+  flex: 1 1 auto;
+  font-weight: var(--weight-regular);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ui-section[data-key="outline-incoming"] .ui-list-item-subtitle {
+  flex: none;
+  margin: 0;
+  /* grafite e non più chiaro: la cartella è testo, e sotto 4,5:1 non si legge */
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+/* L'icona di una voce che nomina una nota: la sua, come nell'albero. */
+.ui-list-item-icon {
+  display: inline-flex;
+  flex: none;
+  color: var(--muted);
+}
+.ui-list-item-icon > svg {
+  width: 15px;
+  height: 15px;
+}
+/* Altrove (i Collegamenti) la voce è in colonna, col contesto sotto il nome:
+   l'icona sta a sinistra della prima riga, e il testo le si allinea accanto. */
+.ui-list-item:has(> .ui-list-item-icon) {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-content: center;
+  align-items: start;
+  column-gap: var(--space-3);
+}
+.ui-list-item:has(> .ui-list-item-icon) > .ui-list-item-icon {
+  grid-row: span 2;
+}
+.ui-list-item:has(> .ui-list-item-icon) > .ui-list-item-title,
+.ui-list-item:has(> .ui-list-item-icon) > .ui-list-item-subtitle {
+  grid-column: 2;
+}
+
 /* In colori forzati i fondi sono del sistema e le ombre non ci sono: ciò che
    era detto con un fondo — un triangolo, una pastiglia, un guasto, la voce
    scelta — torna a dirsi con un colore del sistema o con un contorno. */
@@ -12964,13 +13339,12 @@ h6.ui-heading {
   padding-top: var(--space-5);
   border-top: 1px solid var(--border);
 }
+/* Le etichette del pannello e della legenda si scrivono come si scrive. */
 .graph-panel-sezione-titolo {
   margin-bottom: var(--space-2);
   color: var(--muted);
-  font-size: var(--text-xs);
-  font-weight: var(--weight-bold);
-  letter-spacing: var(--tracking-caps);
-  text-transform: uppercase;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
 }
 
 /* Un parametro: il nome, il valore con le cifre in colonna, e sotto il
@@ -13192,10 +13566,8 @@ h6.ui-heading {
   content: attr(aria-label);
   flex: none;
   color: var(--muted);
-  font-size: var(--text-xs);
-  font-weight: var(--weight-bold);
-  letter-spacing: var(--tracking-caps);
-  text-transform: uppercase;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
 }
 .graph-legend li {
   flex: none;
@@ -13503,19 +13875,25 @@ h6.ui-heading {
   overflow: hidden;
   text-overflow: ellipsis;
 }
-/* La scorciatoia: a destra, in grafite, con le cifre in colonna. Non è una
-   pastiglia — in una colonna di voci dieci bordini farebbero rumore. */
+/* La scorciatoia: a destra, in grafite, in un tasto come nel mockup — un velo
+   e un filo sotto, senza bordino — con le cifre in colonna. Sta prima della
+   spunta, che chiude la riga. Scelta dell'utente (B), 2026-11-04. */
 .context-menu .menu-hint {
   flex: none;
+  order: 2;
+  min-width: 20px;
   margin-left: auto;
-  padding: 0 0 0 var(--space-5);
+  padding: 0 var(--space-2);
   border: none;
-  background: transparent;
+  border-radius: var(--radius-xs);
+  background: var(--overlay-hover);
+  box-shadow: inset 0 -1px 0 var(--border);
   color: var(--muted);
-  font-family: var(--font-mono);
+  font-family: var(--font-ui);
   font-size: var(--text-xs);
   font-variant-numeric: tabular-nums;
-  line-height: var(--leading-tight);
+  line-height: 18px;
+  text-align: center;
 }
 .context-menu button:focus-visible .menu-hint {
   color: var(--accent);
@@ -13577,19 +13955,20 @@ h6.ui-heading {
   text-overflow: ellipsis;
 }
 
-/* **Il segno della scelta** sta in una colonna fissa a sinistra. Nel markup
-   viene dopo il nome ed è un carattere: qui passa davanti (`order`), il
-   carattere si spegne e la spunta si disegna — la stessa delle caselle.
-   Le voci senza scelta dello stesso menu tengono il posto della colonna, così
-   i nomi cadono tutti sulla stessa verticale. */
+/* **Il segno della scelta** chiude la riga, a destra, come nel mockup. Nel
+   markup è un carattere: si spegne e la spunta si disegna in blu — la stessa
+   delle caselle, anche per una scelta fra alternative. Senza una colonna a
+   sinistra i nomi cadono tutti sulla stessa verticale. Scelta dell'utente
+   (B), 2026-11-04. */
 .context-menu .menu-check {
   display: inline-flex;
   flex: none;
-  order: -1;
+  order: 3;
   align-items: center;
   justify-content: center;
   width: 16px;
   height: 16px;
+  margin-inline-start: var(--space-4);
   font-size: 0;
 }
 .context-menu button[aria-checked="true"] .menu-check::before {
@@ -13598,16 +13977,6 @@ h6.ui-heading {
   height: 10px;
   background: var(--accent);
   clip-path: polygon(8% 54%, 20% 42%, 40% 62%, 80% 20%, 92% 32%, 40% 86%);
-}
-/* Una scelta fra alternative ha il pallino, un interruttore la spunta. */
-.context-menu button[role="menuitemradio"][aria-checked="true"] .menu-check::before {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  clip-path: none;
-}
-.context-menu:has(.menu-check) button:not(:has(.menu-check)) {
-  padding-left: calc(var(--space-4) * 2 + 16px);
 }
 
 /* Un filetto rientrato, con la sua aria sopra e sotto. A metà del
@@ -13666,6 +14035,8 @@ h6.ui-heading {
 }
 .context-menu .menu-more {
   padding-left: var(--space-4);
+  background: transparent;
+  box-shadow: none;
 }
 
 /* Un gruppo con un nome è per chi ascolta: chi guarda vede le voci e il
@@ -13675,8 +14046,8 @@ h6.ui-heading {
   flex-direction: column;
 }
 
-/* **La testata** dice che cosa si è toccato: l'icona, il tipo in maiuscoletto
-   e il nome. Non si sceglie e non prende il fuoco. */
+/* **La testata** dice che cosa si è toccato: l'icona, il tipo in tondo e il
+   nome. Non si sceglie e non prende il fuoco. */
 .context-menu .menu-head {
   display: flex;
   align-items: center;
@@ -13684,10 +14055,8 @@ h6.ui-heading {
   min-width: 0;
   padding: var(--space-1) var(--space-4) var(--space-3);
   color: var(--muted);
-  font-size: var(--text-xs);
-  font-weight: var(--weight-bold);
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
   white-space: nowrap;
 }
 .context-menu .menu-head > svg {
@@ -13699,9 +14068,7 @@ h6.ui-heading {
   overflow: hidden;
   color: var(--text);
   font-size: var(--text-base);
-  letter-spacing: 0;
   text-overflow: ellipsis;
-  text-transform: none;
 }
 
 /* **La riga degli appunti**: Taglia, Copia e Incolla come tre pulsanti con
@@ -13956,10 +14323,8 @@ h6.ui-heading {
   position: relative;
   padding: var(--space-5) var(--space-5) var(--space-2);
   color: var(--muted);
-  font-size: var(--text-xs);
-  font-weight: var(--weight-bold);
-  letter-spacing: var(--tracking-caps);
-  text-transform: uppercase;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
 }
 .slash-panel .slash-group:first-of-type .slash-section {
   padding-top: var(--space-2);
@@ -14076,10 +14441,8 @@ h6.ui-heading {
 }
 .slash-panel .slash-preview-title {
   color: var(--muted);
-  font-size: var(--text-xs);
-  font-weight: var(--weight-bold);
-  letter-spacing: var(--tracking-caps);
-  text-transform: uppercase;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
 }
 /* L'anteprima: un pezzo di foglio coi caratteri della nota. */
 .slash-panel .slash-stage {
@@ -14838,10 +15201,8 @@ h6.ui-heading {
   margin: 0;
   padding: var(--space-4) var(--space-6) 0;
   color: var(--muted);
-  font-size: var(--text-xs);
-  font-weight: var(--weight-bold);
-  letter-spacing: var(--tracking-caps);
-  text-transform: uppercase;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
 }
 .modale .docsearch-summary:empty {
   display: none;
@@ -15641,6 +16002,31 @@ h6.ui-heading {
 .save-state[data-state="fallito"]::before,
 .save-state[data-state="conflitto"]::before {
   background: var(--danger);
+}
+/* «Salvato» ha la spunta verde, non il punto grigio: il punto resta per ciò
+   che è in sospeso, e il rosso per ciò che è andato storto. Il bottone della
+   testata ripete la classe: al telefono `sheets/sheets.css` arriva dopo la
+   pelle e il suo `display: block` vincerebbe. */
+.save-state,
+.save-state.sheet-save {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-3);
+  font-size: var(--text-base);
+}
+.save-state:not(:empty)::before {
+  margin-right: 0;
+}
+.save-state[data-state="salvato"]::before {
+  box-sizing: border-box;
+  width: 5px;
+  height: 9px;
+  margin: -3px var(--space-1) 0 var(--space-1);
+  border-right: 1.5px solid var(--success);
+  border-bottom: 1.5px solid var(--success);
+  border-radius: 0;
+  background: transparent;
+  transform: rotate(45deg);
 }
 
 /* L'attesa del secondo tasto di una sequenza: una pastiglia che galleggia in
@@ -16926,8 +17312,11 @@ h6.ui-heading {
   gap: var(--space-1);
 }
 
-/* La scheda corrente è la sola cosa azzurra piena dell'indice: lo stato si
- * legge da `aria-selected`, che è ciò che il lettore di schermo annuncia. */
+/* Il posto dove si è, nell'indice, è un foglietto sollevato come la nota
+ * aperta nel cassetto: carta, un'ombra breve, l'icona in blu. Una scelta fra
+ * alternative (i segmenti) resta il velo d'accento, come le sezioni della
+ * barra. Lo stato si legge da `aria-selected`, che è ciò che il lettore di
+ * schermo annuncia. */
 .settings-tab {
   display: flex;
   align-items: center;
@@ -16950,9 +17339,14 @@ h6.ui-heading {
 }
 
 .settings-tab[aria-selected="true"] {
-  background: var(--accent-wash);
-  color: var(--accent);
-  font-weight: var(--weight-bold);
+  background: var(--bg-elev);
+  box-shadow: var(--shadow-1);
+  color: var(--text);
+  font-weight: var(--weight-medium);
+}
+
+.settings-tab[aria-selected="true"]:hover {
+  background: var(--bg-elev);
 }
 
 .settings-tab-icon {
@@ -16988,10 +17382,8 @@ h6.ui-heading {
   margin: 0 0 var(--space-3);
   padding: 0 var(--space-5);
   color: var(--muted);
-  font-size: var(--text-xs);
-  font-weight: var(--weight-bold);
-  letter-spacing: var(--tracking-caps);
-  text-transform: uppercase;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
 }
 
 .settings-toc-list {
@@ -18550,10 +18942,8 @@ h6.ui-heading {
 .components-group-title {
   margin: 0;
   color: var(--muted);
-  font-size: var(--text-xs);
-  font-weight: var(--weight-bold);
-  letter-spacing: var(--tracking-caps);
-  text-transform: uppercase;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
 }
 
 .components-group-sub {
@@ -18745,10 +19135,8 @@ h6.ui-heading {
 .components-preview-head {
   margin: 0;
   color: var(--muted);
-  font-size: var(--text-xs);
-  font-weight: var(--weight-bold);
-  letter-spacing: var(--tracking-caps);
-  text-transform: uppercase;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
 }
 
 .components-preview-section {
@@ -19054,14 +19442,12 @@ h6.ui-heading {
 }
 
 /* --- i vault recenti --------------------------------------------------------- */
-/* L'etichetta di una sezione: piccola, maiuscola, in grafite. */
+/* «Vault recenti»: l'etichetta della scrivania, in tondo e in grafite. */
 .onboarding h3 {
   margin: var(--space-6) 0 var(--space-4);
   color: var(--muted);
-  font-size: var(--text-xs);
-  font-weight: var(--weight-bold);
-  letter-spacing: var(--tracking-caps);
-  text-transform: uppercase;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
 }
 
 /* I recenti sono fogli posati in fila al centro della scrivania; quando non
@@ -19385,5 +19771,5 @@ h6.ui-heading {
 .sheet-ghost::before {
   border-radius: var(--radius-sheet);
   background: var(--sheet);
-  box-shadow: var(--shadow-1);
+  box-shadow: var(--shadow-sheet, var(--shadow-1));
 }

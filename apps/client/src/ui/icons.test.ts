@@ -37,15 +37,20 @@ const sources = import.meta.glob("../**/*.{ts,tsx,js,mjs,html,css}", {
 describe("il costrutto delle icone", () => {
   it("tutte le icone rispettano griglia e tratto dichiarati", () => {
     const names = iconNames();
-    // Il set conta quarantatré icone (§31.4, misurabile con questo test): la
+    // Il set conta cinquantuno icone (§31.4, misurabile con questo test): la
     // ventottesima è la puntina delle tab appuntate, tre sono quelle che le
     // view di sincronizzazione e pubblicazione dichiarano, la casa è quella
     // della striscia degli spazi, quattro (informazioni, componente,
     // tastiera, schermo) sono delle schede delle impostazioni, e cinque
     // dicono il formato di un documento (Word, OpenDocument, foglio, disegno,
     // foto); le forbici e i due fogli sono Taglia e Copia nella riga degli
-    // appunti dei menu.
-    expect(names).toHaveLength(43);
+    // appunti dei menu. Le ultime otto sono di Scrittoio 2: le quattro
+    // figure delle modalità (penna, blocchi, codice, occhio) e le quattro del
+    // cassetto (scrivi, ordina, orologio, freccia in su); poi «…» della
+    // testata del foglio, e le undici figure che una cartella o una nota
+    // sceglie (libro, calendario, bandiera, idea, in arrivo, archivio,
+    // immagine, cuore, lavoro, persone, musica).
+    expect(names).toHaveLength(63);
     expect(new Set(names).size).toBe(names.length);
 
     for (const name of names) {

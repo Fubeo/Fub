@@ -45,7 +45,7 @@
   --drawer-head-h: 36px;
   --sidebar-w: 264px;
   --sidebar-min: 208px;
-  --inspector-w: 300px;
+  --inspector-w: 264px;
   --inspector-min: 248px;
   --status-h: 26px;
 
@@ -190,6 +190,26 @@
 .kit-dialog-actions > :focus {
   outline: var(--focus-ring-width) solid var(--focus-ring);
   outline-offset: var(--focus-ring-offset);
+}
+
+/* Gli stili che `ui/node.ts` scriveva in linea sulle righe di un elenco e di
+   un albero passano qui, uguali: la pelle li può ora cambiare. */
+.ui-list-item {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-height: max(var(--space-9, 32px), 28px);
+}
+.ui-tree-label {
+  display: flex;
+  align-items: center;
+  min-height: max(var(--space-9, 32px), 28px);
+}
+.ui-tree-label > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .ui-webview-frame {
@@ -560,6 +580,12 @@ body {
   min-height: 0;
 }
 
+/* Le schede dell'ispettore salgono sulla riga delle linguette: in cima, prima
+   del titolo. */
+.inspector-tabs {
+  order: -1;
+}
+
 #views-right {
   flex: 1;
   display: flex;
@@ -623,30 +649,59 @@ body {
 
 /* ── La scrivania e i fogli ──────────────────────────────────────────────── */
 
+/* L'ombra del foglio esce dalla scrivania. `#panes` taglia ciò che esce
+   (`overflow: hidden`): l'ombra della carta finiva contro il suo bordo, e
+   restava un rettangolo. La scrivania si allarga di `--sheet-reach` verso i
+   vicini che stanno dentro la finestra (il cassetto o il binario a sinistra,
+   l'ispettore agganciato a destra, la banda sotto) e restituisce la stessa
+   misura in padding: i fogli restano dove sono, la scatola esterna non cambia
+   e l'ombra ha spazio per sfumare. Verso il bordo della finestra non si
+   allarga mai: l'eccedenza renderebbe `#app` scorrevole da programma. La
+   fascia in più non prende i clic: il cassetto, l'ispettore, la banda e i
+   divisori sotto l'ombra restano vivi. */
 #panes {
+  --sheet-reach: 20px;
+  --reach-l: var(--sheet-reach);
+  --reach-r: 0px;
+  --reach-b: var(--sheet-reach);
   flex: 1 1 0;
   min-width: 0;
   min-height: 0;
-  height: 100%;
+  height: calc(100% + var(--reach-b));
   overflow: hidden;
   display: flex;
-  padding: 0 var(--sheet-gap) var(--sheet-gap) 0;
+  margin: 0 calc(-1 * var(--reach-r)) calc(-1 * var(--reach-b)) calc(-1 * var(--reach-l));
+  padding: 0 calc(var(--sheet-gap) + var(--reach-r)) calc(var(--sheet-gap) + var(--reach-b)) var(--reach-l);
+  pointer-events: none;
 }
 
 /* Senza cassetto accanto, il margine torna anche da quel lato. */
 #layout:not(:has(> #sidebar:not([hidden]))) > #panes,
 #layout.layout-compact > #panes {
-  padding-left: var(--sheet-gap);
+  padding-left: calc(var(--sheet-gap) + var(--reach-l));
 }
 
 #layout:has(> #right-pane:not([hidden])):not(.layout-compact):not(.layout-inspector-overlay) > #panes {
-  padding-right: 0;
+  --reach-r: var(--sheet-reach);
+  padding-right: var(--reach-r);
+}
+
+/* Il benvenuto non ha fogli, la modalità concentrata non ha vicini: niente
+   fascia. Senza la banda di stato, sotto c'è il bordo della finestra. */
+#app[data-welcome] #panes,
+#app[data-focus-mode] #panes {
+  --sheet-reach: 0px;
+}
+
+#app[data-status-off] #panes {
+  --reach-b: 0px;
 }
 
 #panes > * {
   flex: 1 1 0;
   min-width: 0;
   min-height: 0;
+  pointer-events: auto;
 }
 
 #panes:has(> .onboarding:not([hidden])) > .pane,
@@ -696,23 +751,37 @@ body {
    uno pseudo-elemento del riquadro e non un contenitore, perché testata, barra
    di formattazione, avvisi e contenuto sono fratelli: così sono una superficie
    sola senza cambiare il DOM che il controllore conosce. */
+/* Il foglio sta sopra i vicini, perché la sua ombra cada su di loro e non
+   sotto: l'ispettore viene dopo nel DOM e la coprirebbe. Divisori, cassetti
+   e menu restano sopra. */
 .pane {
   display: flex;
   flex-direction: column;
   min-width: 0;
   min-height: 0;
   position: relative;
+  z-index: var(--z-sheet);
   isolation: isolate;
 }
 
 /* La carta comincia `--tab-lap` sopra il fondo della striscia: lì la linguetta
-   attiva la copre, e il giunto resta chiuso anche a uno zoom frazionario. */
+   attiva la copre, e il giunto resta chiuso anche a uno zoom frazionario.
+
+   La carta ha uno strato suo (`translateZ(0)`): la sua ombra, una pila di
+   strati, si dipinge una volta e non a ogni battuta. Nello stesso strato del
+   testo ogni carattere scritto ridipingeva anche l'ombra, e dove la WebView
+   dipinge senza GPU (WebKitGTK sotto Xvfb, una macchina senza accelerazione)
+   il tasto arrivava sullo schermo in quasi il doppio del tempo. Non
+   `will-change: transform`: Chromium allinea quello strato al pixel intero, e
+   con fogli larghi un numero frazionario di pixel il bordo della carta si
+   spostava di uno. */
 .pane::before {
   content: "";
   position: absolute;
   inset: calc(var(--tab-h) - var(--tab-lap)) 0 0 0;
   z-index: -1;
   pointer-events: none;
+  transform: translateZ(0);
 }
 
 /* Senza linguette non c'è carta da raccordare: il segnaposto prende tutto il
@@ -854,6 +923,13 @@ body {
   opacity: 1;
 }
 
+/* L'ombra dell'attiva (la pelle) si ferma dove comincia la carta, `--tab-lap`
+   sopra il fondo: sotto c'è il foglio, che ha la sua, e il giunto resta
+   senza segno. Ai fianchi e sopra resta spazio per sfumare. */
+.tab-entry:has(> .tab[aria-selected="true"]):not([data-lifted]) {
+  clip-path: inset(-24px -24px var(--tab-lap) -24px);
+}
+
 /* Il fondo al passaggio: una pastiglia che resta staccata dalla carta. */
 .tab-entry::after {
   content: "";
@@ -884,7 +960,7 @@ body {
 
 /* La testata. La cronologia del riquadro sta nella barra del titolo, che segue
    il foglio col fuoco: qui non si ripete. L'ordine a vista è percorso,
-   modalità, stato, menu; quello del DOM resta del controllore. */
+   stato, menu; quello del DOM resta del controllore. */
 .pane-toolbar {
   display: flex;
   align-items: center;
@@ -911,21 +987,13 @@ body {
   order: 1;
 }
 
-/* L'etichetta del formato sta subito dopo il percorso: il titolo, che di
-   solito spinge il resto a destra (`sheets/sheets.css`), le cede lo spazio. */
-.pane-toolbar > .pane-format {
-  flex: none;
-  order: 1;
-  margin-inline-end: auto;
-  white-space: nowrap;
-}
-.pane-toolbar:has(> .pane-format:not([hidden])) > .muted,
-.pane-toolbar:has(> .pane-standing:not([hidden])) > .muted {
+/* Lo stato del documento sta subito dopo il percorso: il titolo, che di
+   solito spinge il resto a destra (`sheets/sheets.css`), gli cede lo spazio. */
+.pane-toolbar:has(> .pane-standing:not([hidden]):not([data-standing="writes"])) > .muted {
   margin-right: 0;
 }
 
-/* Lo stato del documento viene dopo il formato, e spinge lui il resto a
-   destra. */
+/* Lo stato spinge lui il resto a destra. */
 .pane-toolbar > .pane-standing {
   display: inline-flex;
   flex: none;
@@ -936,40 +1004,29 @@ body {
 .pane-toolbar > .pane-standing[hidden] {
   display: none;
 }
-.pane-toolbar:has(> .pane-standing:not([hidden])) > .pane-format {
-  margin-inline-end: 0;
+
+/* «Si scrive» è lo stato normale di un documento: non lo dice la testata ma
+   la banda, a voce bassa, accanto alla modalità (`status-band.ts`); sul
+   telefono, che non ha la banda, la prima voce di «…». Gli altri stati (parti
+   chiuse, solo il testo, sola lettura) restano qui, dove si vedono. */
+.pane-toolbar > .pane-standing[data-standing="writes"] {
+  display: none;
 }
 
-/* Se lo spazio non basta cede prima lo stato, che la banda ripete, poi il
-   selettore; mai il menu, che è la sola strada, dal foglio, per dividerlo e
-   chiuderlo. Il fattore minimo fa cedere il selettore solo a stato esaurito. */
-.pane-toolbar > .segmented {
-  flex: 0 0.001 auto;
-  min-width: 0;
-  overflow: hidden;
-  order: 2;
-}
-
+/* Se lo spazio non basta cede prima lo stato, che la banda ripete; mai il
+   menu, che è la sola strada, dal foglio, per dividerlo e chiuderlo. */
 .pane-toolbar > .pane-status-slot {
   flex: 0 1 auto;
   order: 3;
 }
 
-/* Le modalità in un bottone solo: c'è soltanto dove i segmenti taglierebbero
-   il nome della nota, cioè in una testata stretta (il telefono, tre fogli
-   affiancati). */
-.pane-toolbar > .pane-mode-current {
+/* La modalità si sceglie dalla banda: la testata non mostra più né i
+   segmenti né il bottone che li riassume. Il bottone è un figlio del foglio,
+   dopo la barra di formato, e si vede soltanto sul telefono, dove la banda
+   non c'è o si è ritirata (`mobile.css`). */
+.pane-toolbar > .segmented,
+.pane > .pane-mode-current {
   display: none;
-  flex: 0 0 auto;
-  order: 2;
-}
-@container sheet-head (max-width: 440px) {
-  .pane-toolbar > .segmented {
-    display: none;
-  }
-  .pane-toolbar > .pane-mode-current:not([hidden]) {
-    display: inline-flex;
-  }
 }
 
 /* In una testata stretta il percorso e lo stato avrebbero un pezzo di lettera
@@ -979,7 +1036,6 @@ body {
   .pane-toolbar > .muted {
     visibility: hidden;
   }
-  .pane-toolbar > .pane-format,
   .pane-toolbar > .pane-standing {
     display: none;
   }
@@ -1031,14 +1087,29 @@ body {
   display: none;
 }
 
+/* La barra di formato di un riquadro è una barra in una fila (`kit-bar`, più
+   sotto): la fila la dà il kit, qui restano l'altezza e il taglio, perché ciò
+   che non ci sta va in «…». */
 .format-bar {
-  display: flex;
-  align-items: center;
   flex: 0 0 var(--format-bar-h);
   height: var(--format-bar-h);
-  min-width: 0;
   overflow: hidden;
   white-space: nowrap;
+}
+/* Col dito i pulsanti della fila sono alti 44 (la regola `pointer: coarse` di
+   `kit-bar-button`): la barra li segue invece di tagliarli. */
+@media (pointer: coarse) {
+  .format-bar.kit-bar {
+    flex-basis: auto;
+    height: auto;
+    min-height: var(--format-bar-h);
+  }
+}
+/* Fuori dal vassoio (la bolla della selezione, la mini-barra) la fila è sua. */
+.format-bar:not(.kit-bar) {
+  display: flex;
+  align-items: center;
+  min-width: 0;
 }
 
 /* La bolla di selezione: la barra, ristretta, accanto al testo scelto. Sta sopra
@@ -1053,12 +1124,6 @@ body {
 .selection-bubble .format-bar {
   flex: 0 0 auto;
   overflow: visible;
-}
-
-.format-bar-group {
-  display: inline-flex;
-  align-items: center;
-  flex: 0 0 auto;
 }
 
 /* Barra spenta: i suoi gesti restano alla bolla di selezione, alla tastiera e al
@@ -1200,6 +1265,30 @@ body {
 #status-band > .status-side--end {
   margin-left: auto;
   flex: none;
+}
+
+/* La banda stretta. Con «Si scrive» e la modalità a destra, sotto gli 800 px
+   la lingua del documento si fa da parte (la dice già il correttore), e ciò
+   che sta a sinistra si taglia invece di passare sotto la parte destra. */
+#status-band > #status-start,
+#status-band > #views-status {
+  overflow: hidden;
+}
+@media (max-width: 800px) {
+  #status-band [data-surface-item="language"] {
+    display: none;
+  }
+}
+
+/* Un menu aperto non sta mai sotto un toast. La pila sta nel `body`, sopra
+   `#app` che isola i suoi piani, e il menu nasce dentro `#app`: nessun
+   `z-index` lo porterebbe sopra. La voce della modalità apre il suo menu in
+   basso a destra, proprio dove scende la pila, e un guasto resta finché non lo
+   si chiude: senza questa regola la voce che si vuole scegliere starebbe sotto
+   l'avviso. Finché il menu è aperto la pila si fa da parte, e torna intera
+   quando si chiude; la regione viva ha già detto il testo. */
+body:has(#context-menu:not([hidden])) > .toast-stack {
+  visibility: hidden;
 }
 
 #key-pending {
@@ -1467,6 +1556,58 @@ body {
 
 #app[data-focus-mode] .desk::before {
   opacity: 1;
+}
+
+/* ── La barra in una fila (`kit-bar`) ────────────────────────────────────────
+   La stessa barra della barra a schede quando sta in una fila sola: il
+   vassoio (`kit-bar`), i foglietti senza nome (`kit-bar-group`), gli stessi
+   pulsanti (`kit-bar-button`) e campi (`kit-bar-field`). Le classi le mette
+   chi costruisce la barra: la barra di formato delle note, la testa del
+   disegno, la barra del PDF. Lo scorrimento resta di ciascuna: la barra di
+   formato taglia e manda il resto in «…». La lavagna segue il piano N6. */
+.kit-bar {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  min-width: 0;
+}
+.kit-bar-group {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+}
+/* La fila del kit (`kit/options-bar.ts`) dentro un vassoio: una riga sola, e
+   ciò che non ci sta va in «…» (`kit-options-more`). */
+.kit-options {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  min-width: 0;
+  overflow: hidden;
+}
+.kit-options-row {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+}
+/* Col mouse i pulsanti della fila sono alti 28, come nella barra a schede; col
+   dito sono bersagli da 44. */
+@media (pointer: fine) {
+  .kit-bar-button,
+  .kit-options-more {
+    min-width: 28px;
+    min-height: 28px;
+    height: 28px;
+  }
+}
+@media (pointer: coarse) {
+  .kit-bar-button,
+  .kit-options-more {
+    min-width: 44px;
+    min-height: 44px;
+  }
 }
 
 /* ── Le superfici degli editor: geometria che nessun tema decide ─────────── */
@@ -1913,130 +2054,184 @@ body {
   overflow-x: auto;
 }
 
-/* La barra multifunzione del foglio (`editors/grid/ribbon/`): la fila delle
-   schede, poi i gruppi di una scheda in una striscia d'altezza fissa. Un
-   gruppo che non ci sta si raccoglie nel suo pulsante (`data-collapsed`); le
-   lettere di Excel sono distintivi posati sopra i controlli. */
-.rich-ribbon-host { flex: none; min-width: 0; }
-.rich-ribbon {
+/* ── La barra degli strumenti di serie: la forma ───────────────────────────
+   Ricavata a macchina dalle regole della barra dei fogli: `.grid-ribbon-*`
+   diventa `.kit-ribbon-*`, con lo stesso testo, lo stesso ordine e la stessa
+   specificità. Il kit mette `kit-ribbon` sulla radice e `kit-ribbon-<parte>`
+   accanto a `<prefisso>-<parte>` su ogni pezzo. Ai fogli restano la
+   tavolozza, la galleria, i campioni, «Comandi», la formula e le schede. */
+.kit-ribbon {
   display: flex;
   flex-direction: column;
   min-width: 0;
 }
-.rich-ribbon-head {
+.kit-ribbon-head {
   display: flex;
   align-items: center;
   min-width: 0;
 }
-.rich-ribbon-tabs {
-  flex: 1;
+/* Le sezioni stanno in un pozzetto che abbraccia i loro nomi; se non ci
+   stanno, il pozzetto scorre. L'evidenza della scelta corre dietro i nomi: la
+   fila è un piano a sé, e il segno ci sta sotto. */
+.kit-ribbon-tabs {
+  flex: 0 1 auto;
   min-width: 0;
   overflow-x: auto;
+  isolation: isolate;
+  scrollbar-width: none;
 }
-.rich-ribbon-tabs .kit-tab,
-.rich-ribbon-item,
-.rich-ribbon-group {
+.kit-ribbon-tabs > .kit-tab-indicator {
+  z-index: -1;
+}
+.kit-ribbon-tabs .kit-tab,
+.kit-ribbon-item,
+.kit-ribbon-group {
   position: relative;
 }
-.rich-ribbon-toggle {
+/* Il nome lungo di una sezione per la selezione finisce coi puntini: quello
+   intero resta nel nome accessibile e nel suggerimento. */
+.kit-ribbon-contextual .kit-tab-label {
+  max-width: 12em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.kit-ribbon-toggle {
   display: inline-flex;
   flex: none;
   align-items: center;
   justify-content: center;
   width: 28px;
   height: 28px;
+  margin-inline-start: auto;
   padding: 0;
 }
-.rich-ribbon-toggle svg { width: 16px; height: 16px; }
-.rich-ribbon-panel { min-width: 0; }
-.rich-ribbon-toolbar {
+.kit-ribbon-toggle svg {
+  width: 16px;
+  height: 16px;
+}
+.kit-ribbon-panel {
+  min-width: 0;
+}
+/* Il vassoio abbraccia i suoi foglietti: nessuna altezza fissa. */
+.kit-ribbon-toolbar {
   display: flex;
   align-items: stretch;
-  height: 102px;
   min-width: 0;
   overflow: hidden;
 }
-.rich-ribbon-group {
+/* Un foglietto: il nome in alto, sotto due file di comandi alte 28. */
+.kit-ribbon-group {
   display: flex;
   flex: none;
   flex-direction: column;
+  min-width: 0;
 }
-.rich-ribbon-group-body {
-  display: flex;
-  flex: 1;
-  align-items: flex-start;
+.kit-ribbon-group-label {
+  display: block;
+  order: -1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
-.rich-ribbon-group[data-collapsed="true"] > .rich-ribbon-group-body,
-.rich-ribbon-group[data-collapsed="true"] > .rich-ribbon-group-label {
+.kit-ribbon-group-body,
+.kit-ribbon-stack {
+  display: grid;
+  grid-template-rows: repeat(2, 28px);
+  grid-auto-columns: max-content;
+  grid-auto-flow: column;
+  align-items: center;
+}
+/* Una pila prende le due file; se ne ha tre, la terza va in una colonna
+   accanto. */
+.kit-ribbon-group-body > .kit-ribbon-stack {
+  grid-row: 1 / -1;
+}
+.kit-ribbon-group[data-collapsed="true"] > .kit-ribbon-group-body {
   display: none;
 }
-.rich-ribbon-group-label {
-  flex: none;
-  white-space: nowrap;
-  text-align: center;
-}
-.rich-ribbon-stack {
-  display: flex;
-  flex-direction: column;
-}
-.rich-ribbon-row,
-.rich-ribbon-item,
-.rich-ribbon-field,
-.rich-ribbon-check,
-.rich-ribbon-chevron {
+.kit-ribbon-row,
+.kit-ribbon-item,
+.kit-ribbon-field,
+.kit-ribbon-check,
+.kit-ribbon-chevron {
   display: inline-flex;
   align-items: center;
 }
-.rich-ribbon-row { display: flex; }
-.rich-ribbon-button {
+.kit-ribbon-row {
+  display: flex;
+}
+.kit-ribbon-button {
   position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   white-space: nowrap;
 }
-.rich-ribbon-small {
+/* Alti 28 come nella barra di formato; larghi 24 quando portano solo
+   l'icona, perché una fila di Home ne tiene dieci. */
+.kit-ribbon-small {
   min-width: 24px;
-  height: 24px;
+  height: 28px;
 }
-.rich-ribbon-small svg { flex: none; width: 16px; height: 16px; }
-.rich-ribbon-large {
-  flex-direction: column;
+/* Il pulsante grande di una volta è un gettone su una riga: icona, nome e la
+   freccina, se apre qualcosa. Una taglia sola in tutta la barra. */
+.kit-ribbon-large {
   justify-content: flex-start;
-  min-width: 44px;
-  max-width: 96px;
-  height: 76px;
+  min-width: 28px;
+  height: 28px;
 }
-.rich-ribbon-large svg { flex: none; width: 26px; height: 26px; }
-/* Il nome di un pulsante grande sta in due righe al più, sopra il nome del
-   gruppo. */
-.rich-ribbon-large .rich-ribbon-label {
-  max-height: 2.5em;
-  overflow: hidden;
-  white-space: normal;
-  text-align: center;
+.kit-ribbon-small svg,
+.kit-ribbon-large svg {
+  flex: none;
+  width: 16px;
+  height: 16px;
 }
-.rich-ribbon-large .rich-ribbon-chevron svg,
-.rich-ribbon-chevron svg { width: 10px; height: 10px; }
-.rich-ribbon-split-large { flex-direction: column; }
-.rich-ribbon-split-large > .rich-ribbon-large { height: 58px; }
-.rich-ribbon-split-large > .rich-ribbon-arrow { align-self: stretch; height: 18px; }
-.rich-ribbon-arrow { min-width: 14px; }
-.rich-ribbon-glyph {
+.kit-ribbon-chevron svg {
+  width: 10px;
+  height: 10px;
+}
+.kit-ribbon-glyph {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   width: 16px;
 }
-.rich-ribbon-color-bar {
+/* Un pulsante diviso grande è un gettone diviso, come quelli piccoli. */
+.kit-ribbon-split-large {
+  flex-direction: row;
+}
+.kit-ribbon-arrow {
+  align-self: stretch;
+  min-width: 14px;
+}
+.kit-ribbon-color-bar {
   position: absolute;
   left: 4px;
   right: 4px;
-  bottom: 2px;
+  bottom: 3px;
   height: 3px;
 }
-.rich-ribbon-panel[data-compact="true"] .rich-ribbon-small .rich-ribbon-label { display: none; }
-.rich-ribbon-keytip {
+/* Un foglietto chiuso: resta il suo nome e, sotto, un gettone alto quanto le
+   due file, col disegno del gruppo e la freccina che dice «si apre qui». */
+.kit-ribbon-group-toggle {
+  justify-content: center;
+  height: calc(28px * 2 + var(--space-1, 2px));
+}
+.kit-ribbon-group-toggle .kit-ribbon-label {
+  display: none;
+}
+.kit-ribbon-group-toggle .kit-ribbon-chevron {
+  transform: rotate(-90deg);
+}
+/* Quando lo spazio manca, prima i pulsanti piccoli perdono il nome; se non
+   basta, lo perdono anche i gettoni del foglietto aperto (quelli del suo
+   contenuto: il pulsante di un foglietto chiuso tiene il suo nome). */
+.kit-ribbon-panel[data-compact="true"] .kit-ribbon-small .kit-ribbon-label,
+.kit-ribbon-panel[data-dense="true"] .kit-ribbon-group-body .kit-ribbon-large .kit-ribbon-label {
+  display: none;
+}
+.kit-ribbon-keytip {
   position: absolute;
   left: 50%;
   bottom: -4px;
@@ -2045,8 +2240,105 @@ body {
   pointer-events: none;
   white-space: nowrap;
 }
-.grid-ribbon-popup-group,
-.rich-ribbon-popup-group { display: flex; }
+/* Nella testata la lettera scende fino al bordo della fila, sotto il nome:
+   il nome resta leggibile e la lettera non esce dalla fila, che scorre. */
+.kit-ribbon-head .kit-ribbon-keytip {
+  bottom: -6px;
+}
+/* Il foglietto chiuso non ha il nome sopra e un pulsante vuoto sotto: il
+   pulsante è il foglietto, e il nome ci sta dentro. Come sta dentro lo dicono
+   le regole della pila e della tessera, qui sotto. */
+.kit-ribbon-group[data-collapsed="true"] > .kit-ribbon-group-label {
+  display: none;
+}
+.kit-ribbon-group-toggle {
+  flex: 1 1 auto;
+  height: auto;
+}
+.kit-ribbon-group-toggle .kit-ribbon-label {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* Al telefono nemmeno coi foglietti tutti chiusi la sezione ci sta sempre:
+   allora il vassoio scorre sotto il dito, senza barra di scorrimento, e il
+   foglietto che si apre si porta in vista. */
+.kit-ribbon-toolbar {
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+}
+/* I foglietti chiusi: due per colonna «a pila», ognuno su una riga; quello
+   che resta solo nella sua colonna è alto quanto un foglietto aperto, «a
+   tessera». */
+/* Il vassoio è una griglia di due file che si riempie per colonne: un
+   foglietto aperto le prende tutte e due, uno chiuso una sola, e due chiusi
+   di fila stanno uno sopra l'altro, larghi uguali. L'ordine resta quello della
+   sezione: niente `dense`. */
+.kit-ribbon-toolbar {
+  display: grid;
+  grid-auto-columns: max-content;
+  grid-auto-flow: column;
+  grid-template-rows: repeat(2, auto);
+}
+.kit-ribbon-group {
+  grid-row: span 2;
+}
+.kit-ribbon-group[data-collapsed="true"] {
+  grid-row: span 1;
+}
+/* L'ultimo chiuso di una fila dispari resta solo nella sua colonna (il kit
+   lo segna con `data-alone`): prende tutte e due le file. */
+.kit-ribbon-group[data-collapsed="true"][data-alone="true"] {
+  grid-row: span 2;
+}
+/* Due a pila: il disegno, il nome accanto e la freccina. */
+.kit-ribbon-group-toggle {
+  justify-content: flex-start;
+}
+/* Un nome lunghissimo («Visualizzazioni cartella di lavoro») finisce coi
+   puntini: quello intero è il nome del pulsante e il suo suggerimento. */
+.kit-ribbon-group-toggle .kit-ribbon-label {
+  max-width: 10em;
+}
+.kit-ribbon-group-toggle .kit-ribbon-chevron {
+  margin-inline-start: auto;
+}
+/* Uno solo: il disegno in un tondo e il nome sotto, in mezzo al foglietto;
+   il nome va a capo una volta, in due righe pari, e uno più lungo finisce
+   coi puntini. */
+.kit-ribbon-group[data-alone="true"] > .kit-ribbon-group-toggle {
+  flex-direction: column;
+  justify-content: center;
+  white-space: normal;
+}
+.kit-ribbon-group[data-alone="true"] > .kit-ribbon-group-toggle > svg {
+  box-sizing: content-box;
+  padding: 6px;
+}
+.kit-ribbon-group[data-alone="true"] > .kit-ribbon-group-toggle .kit-ribbon-label {
+  display: -webkit-box;
+  max-width: 7em;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  text-align: center;
+  text-wrap: balance;
+}
+.kit-ribbon-group[data-alone="true"] > .kit-ribbon-group-toggle .kit-ribbon-chevron {
+  display: none;
+}
+/* La fila dell'accesso rapido, prima delle sezioni. */
+.kit-ribbon-quick {
+  display: flex;
+  flex: none;
+  align-items: center;
+}
+
+/* L'ospite della barra del documento (`editors/rich/ribbon.ts`): la forma
+   della barra è quella del kit (`.kit-ribbon-*`, più su). */
+.rich-ribbon-host { flex: none; min-width: 0; }
+.grid-ribbon-popup-group { display: flex; }
 .grid-ribbon-gallery {
   display: flex;
   flex-direction: column;
@@ -2069,171 +2361,10 @@ body {
   text-overflow: ellipsis;
 }
 
-/* La barra dei fogli: una testata con le sezioni in un pozzetto e un vassoio
-   di foglietti. Ha regole sue, separate da quelle dei documenti qui sopra,
-   che restano com'erano. */
+/* La barra dei fogli: la forma è quella del kit (`.kit-ribbon-*`, più su);
+   qui restano le parti solo sue, la tavolozza e i campioni, e i piani della
+   formula e della griglia che le salgono sopra. */
 .grid-ribbon-host { flex: none; min-width: 0; }
-.grid-ribbon {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-}
-.grid-ribbon-head {
-  display: flex;
-  align-items: center;
-  min-width: 0;
-}
-/* Le sezioni stanno in un pozzetto che abbraccia i loro nomi; se non ci
-   stanno, il pozzetto scorre. L'evidenza della scelta corre dietro i nomi: la
-   fila è un piano a sé, e il segno ci sta sotto. */
-.grid-ribbon-tabs {
-  flex: 0 1 auto;
-  min-width: 0;
-  overflow-x: auto;
-  isolation: isolate;
-  scrollbar-width: none;
-}
-.grid-ribbon-tabs > .kit-tab-indicator {
-  z-index: -1;
-}
-.grid-ribbon-tabs .kit-tab,
-.grid-ribbon-item,
-.grid-ribbon-group {
-  position: relative;
-}
-/* Il nome lungo di una sezione per la selezione finisce coi puntini: quello
-   intero resta nel nome accessibile e nel suggerimento. */
-.grid-ribbon-contextual .kit-tab-label {
-  max-width: 12em;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.grid-ribbon-toggle {
-  display: inline-flex;
-  flex: none;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  margin-inline-start: auto;
-  padding: 0;
-}
-.grid-ribbon-toggle svg { width: 16px; height: 16px; }
-.grid-ribbon-panel { min-width: 0; }
-/* Il vassoio abbraccia i suoi foglietti: nessuna altezza fissa. */
-.grid-ribbon-toolbar {
-  display: flex;
-  align-items: stretch;
-  min-width: 0;
-  overflow: hidden;
-}
-/* Un foglietto: il nome in alto, sotto due file di comandi alte 28. */
-.grid-ribbon-group {
-  display: flex;
-  flex: none;
-  flex-direction: column;
-  min-width: 0;
-}
-.grid-ribbon-group-label {
-  display: block;
-  order: -1;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.grid-ribbon-group-body,
-.grid-ribbon-stack {
-  display: grid;
-  grid-template-rows: repeat(2, 28px);
-  grid-auto-columns: max-content;
-  grid-auto-flow: column;
-  align-items: center;
-}
-/* Una pila prende le due file; se ne ha tre, la terza va in una colonna
-   accanto. */
-.grid-ribbon-group-body > .grid-ribbon-stack {
-  grid-row: 1 / -1;
-}
-.grid-ribbon-group[data-collapsed="true"] > .grid-ribbon-group-body {
-  display: none;
-}
-.grid-ribbon-row,
-.grid-ribbon-item,
-.grid-ribbon-field,
-.grid-ribbon-check,
-.grid-ribbon-chevron {
-  display: inline-flex;
-  align-items: center;
-}
-.grid-ribbon-row { display: flex; }
-.grid-ribbon-button {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  white-space: nowrap;
-}
-/* Alti 28 come nella barra di formato; larghi 24 quando portano solo
-   l'icona, perché una fila di Home ne tiene dieci. */
-.grid-ribbon-small {
-  min-width: 24px;
-  height: 28px;
-}
-/* Il pulsante grande di una volta è un gettone su una riga: icona, nome e la
-   freccina, se apre qualcosa. Una taglia sola in tutta la barra. */
-.grid-ribbon-large {
-  justify-content: flex-start;
-  min-width: 28px;
-  height: 28px;
-}
-.grid-ribbon-small svg,
-.grid-ribbon-large svg { flex: none; width: 16px; height: 16px; }
-.grid-ribbon-chevron svg { width: 10px; height: 10px; }
-.grid-ribbon-glyph {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 16px;
-}
-/* Un pulsante diviso grande è un gettone diviso, come quelli piccoli. */
-.grid-ribbon-split-large { flex-direction: row; }
-.grid-ribbon-arrow {
-  align-self: stretch;
-  min-width: 14px;
-}
-.grid-ribbon-color-bar {
-  position: absolute;
-  left: 4px;
-  right: 4px;
-  bottom: 3px;
-  height: 3px;
-}
-/* Un foglietto chiuso: resta il suo nome e, sotto, un gettone alto quanto le
-   due file, col disegno del gruppo e la freccina che dice «si apre qui». */
-.grid-ribbon-group-toggle {
-  justify-content: center;
-  height: calc(28px * 2 + var(--space-1, 2px));
-}
-.grid-ribbon-group-toggle .grid-ribbon-label { display: none; }
-.grid-ribbon-group-toggle .grid-ribbon-chevron { transform: rotate(-90deg); }
-/* Quando lo spazio manca, prima i pulsanti piccoli perdono il nome; se non
-   basta, lo perdono anche i gettoni del foglietto aperto (quelli del suo
-   contenuto: il pulsante di un foglietto chiuso tiene il suo nome). */
-.grid-ribbon-panel[data-compact="true"] .grid-ribbon-small .grid-ribbon-label,
-.grid-ribbon-panel[data-dense="true"] .grid-ribbon-group-body .grid-ribbon-large .grid-ribbon-label { display: none; }
-.grid-ribbon-keytip {
-  position: absolute;
-  left: 50%;
-  bottom: -4px;
-  z-index: var(--z-menu);
-  transform: translateX(-50%);
-  pointer-events: none;
-  white-space: nowrap;
-}
-/* Nella testata la lettera scende fino al bordo della fila, sotto il nome:
-   il nome resta leggibile e la lettera non esce dalla fila, che scorre. */
-.grid-ribbon-head .grid-ribbon-keytip { bottom: -6px; }
 .grid-ribbon-palette {
   display: flex;
   flex-direction: column;
@@ -2255,93 +2386,6 @@ body {
    stesso piano. */
 .grid-notice,
 .grid-draft-notice { position: relative; z-index: 2; }
-
-/* Il foglietto chiuso non ha il nome sopra e un pulsante vuoto sotto: il
-   pulsante è il foglietto, e il nome ci sta dentro. Come sta dentro lo dicono
-   le regole della pila e della tessera, qui sotto. */
-.grid-ribbon-group[data-collapsed="true"] > .grid-ribbon-group-label {
-  display: none;
-}
-.grid-ribbon-group-toggle {
-  flex: 1 1 auto;
-  height: auto;
-}
-.grid-ribbon-group-toggle .grid-ribbon-label {
-  display: block;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-/* Al telefono nemmeno coi foglietti tutti chiusi la sezione ci sta sempre:
-   allora il vassoio scorre sotto il dito, senza barra di scorrimento, e il
-   foglietto che si apre si porta in vista. */
-.grid-ribbon-toolbar {
-  overflow-x: auto;
-  overflow-y: hidden;
-  overscroll-behavior-x: contain;
-  scrollbar-width: none;
-}
-
-/* I foglietti chiusi: due per colonna «a pila», ognuno su una riga; quello
-   che resta solo nella sua colonna è alto quanto un foglietto aperto, «a
-   tessera». */
-/* Il vassoio è una griglia di due file che si riempie per colonne: un
-   foglietto aperto le prende tutte e due, uno chiuso una sola, e due chiusi
-   di fila stanno uno sopra l'altro, larghi uguali. L'ordine resta quello della
-   sezione: niente `dense`. */
-.grid-ribbon-toolbar {
-  display: grid;
-  grid-auto-columns: max-content;
-  grid-auto-flow: column;
-  grid-template-rows: repeat(2, auto);
-}
-.grid-ribbon-group {
-  grid-row: span 2;
-}
-.grid-ribbon-group[data-collapsed="true"] {
-  grid-row: span 1;
-}
-/* L'ultimo chiuso di una fila dispari resta solo nella sua colonna (il kit
-   lo segna con `data-alone`): prende tutte e due le file. */
-.grid-ribbon-group[data-collapsed="true"][data-alone="true"] {
-  grid-row: span 2;
-}
-/* Due a pila: il disegno, il nome accanto e la freccina. */
-.grid-ribbon-group-toggle {
-  justify-content: flex-start;
-}
-/* Un nome lunghissimo («Visualizzazioni cartella di lavoro») finisce coi
-   puntini: quello intero è il nome del pulsante e il suo suggerimento. */
-.grid-ribbon-group-toggle .grid-ribbon-label {
-  max-width: 10em;
-}
-.grid-ribbon-group-toggle .grid-ribbon-chevron {
-  margin-inline-start: auto;
-}
-/* Uno solo: il disegno in un tondo e il nome sotto, in mezzo al foglietto;
-   il nome va a capo una volta, in due righe pari, e uno più lungo finisce
-   coi puntini. */
-.grid-ribbon-group[data-alone="true"] > .grid-ribbon-group-toggle {
-  flex-direction: column;
-  justify-content: center;
-  white-space: normal;
-}
-.grid-ribbon-group[data-alone="true"] > .grid-ribbon-group-toggle > svg {
-  box-sizing: content-box;
-  padding: 6px;
-}
-.grid-ribbon-group[data-alone="true"] > .grid-ribbon-group-toggle .grid-ribbon-label {
-  display: -webkit-box;
-  max-width: 7em;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-  text-align: center;
-  text-wrap: balance;
-}
-.grid-ribbon-group[data-alone="true"] > .grid-ribbon-group-toggle .grid-ribbon-chevron {
-  display: none;
-}
-/* La fila dell'accesso rapido, prima delle sezioni: il gettone «Comandi». */
-.grid-ribbon-quick { display: flex; flex: none; align-items: center; }
 
 /* Le finestre del foglio (`editors/grid/dialogs/`): una colonna di campi, il
    nome a sinistra e il controllo a destra. Le finestre larghe (Formato celle,
@@ -2529,17 +2573,22 @@ body {
   align-items: center;
   gap: 4px;
 }
-/* La barra del documento (`editors/rich/ribbon.ts`) è quella del kit, con le
-   regole della barra del foglio; qui soltanto ciò che il foglio non ha:
-   l'accesso rapido accanto alle schede e la galleria degli stili. */
-.rich-ribbon-quick { display: flex; flex: none; align-items: center; }
-.rich-ribbon-styles { display: flex; align-items: stretch; height: 64px; }
+/* La barra del documento (`editors/rich/ribbon.ts`) è la barra a schede del
+   kit (`.kit-ribbon-*`); qui soltanto ciò che è suo: la galleria degli stili,
+   che sta nelle due file del suo foglietto. L'accesso rapido accanto alle
+   schede prende la forma di `.kit-ribbon-quick`. */
+.rich-ribbon-styles {
+  display: flex;
+  grid-row: 1 / -1;
+  align-items: stretch;
+  height: calc(28px * 2 + var(--space-1, 2px));
+}
 .rich-ribbon-styles-cells { display: flex; align-items: stretch; min-width: 0; }
 .rich-ribbon-style {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 76px;
+  width: 64px;
   min-width: 0;
   overflow: hidden;
 }
@@ -2556,6 +2605,16 @@ body {
 .rich-findbar-row { display: flex; flex-wrap: wrap; align-items: center; }
 .rich-findbar-row > .kit-field { flex: 0 1 240px; }
 .rich-findbar-close { margin-left: auto; }
+/* La ricerca e la pagina stanno sopra la barra, come la formula e la griglia
+   dei fogli: quando la barra si ritira o si riapre le salgono sopra e la
+   scoprono, e l'immagine del vassoio che svanisce (un riquadro fisso dentro
+   la barra) resta sotto di loro, che vengono dopo. Nessun `z-index`: la
+   pagina non diventa un contesto di sovrapposizione, così il disegno
+   ingrandito (`.rich-drawing-large`) resta sopra la ricerca, e il pulsante
+   dei commenti del telefono, che viene dopo, sopra la pagina. L'avviso sta
+   sopra la barra, fuori dalla tenda. */
+.rich-findbar,
+.rich-page { position: relative; }
 /* I riquadri della barra: titolo, campi, azioni in fondo. */
 .rich-strip-panel { display: flex; flex-direction: column; width: 288px; max-width: 100%; }
 .rich-strip-panel-body { display: flex; flex-direction: column; }
@@ -3246,29 +3305,28 @@ body {
   min-height: 0;
   container-type: inline-size;
 }
-/* La barra in alto (B4) è una riga sola: menu, Annulla e Ripeti, la riga
-   delle opzioni, che manda in «…» ciò che non ci sta, ed «Esporta». */
+/* La barra in alto (B4) è una barra in una fila del kit (`kit-bar`, che dà
+   la fila, i foglietti e i pulsanti): menu, Annulla e Ripeti, la riga delle
+   opzioni, che manda in «…» ciò che non ci sta, ed «Esporta». Qui resta ciò
+   che è suo: la testa non si stringe, la riga prende lo spazio che avanza e
+   «Esporta» va in fondo. */
 .draw-header {
-  display: flex;
   flex: none;
-  align-items: center;
-  min-width: 0;
 }
 .draw-toolbar {
   flex: 1 1 auto;
 }
-.draw-top {
-  flex: none;
-}
 .draw-top:last-child {
   margin-inline-start: auto;
 }
+/* I gruppi e i pulsanti fuori dalla testa: la colonna, la barra della
+   selezione, i pannelli. Quelli della testa sono del kit. */
 .draw-group {
   display: inline-flex;
   flex: none;
   align-items: center;
 }
-.draw-button {
+.draw-button:not(.kit-bar-button) {
   display: inline-flex;
   flex: none;
   align-items: center;
@@ -3278,7 +3336,7 @@ body {
   padding: 0;
 }
 @media (pointer: coarse) {
-  .draw-button {
+  .draw-button:not(.kit-bar-button) {
     min-width: 44px;
     min-height: 44px;
   }
@@ -5048,6 +5106,28 @@ textarea.draw-properties-input {
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
 }
+/* Le annotazioni nel visore dei PDF: ogni pagina sta nel suo posto, largo
+   quanto il canvas, e lo strato delle annotazioni gli sta sopra, grande
+   quanto lui, in sola lettura: i clic lo attraversano. Una pelle non lo
+   sposta, perché i tratti cadono dove li mette «Annota». */
+.media-pdf-sheet {
+  position: relative;
+  display: block;
+  width: fit-content;
+  margin: 0 auto;
+}
+.media-pdf-spread > .media-pdf-sheet {
+  margin: 0;
+}
+.media-pdf-annotations {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  user-select: none;
+}
 @media (max-width: 40rem) {
   .pdf-body {
     flex-direction: column;
@@ -5055,11 +5135,6 @@ textarea.draw-properties-input {
   .pdf-list {
     flex: 0 1 45%;
   }
-}
-/* «Annota» nel visore del PDF: un bersaglio da 44 px, come quelli del
-   foglio dove porta. */
-.media-pdf-annotate {
-  min-height: 44px;
 }
 @media (forced-colors: active) {
   .draw-width-bar,

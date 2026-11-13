@@ -232,17 +232,35 @@ export function mountTabStrips(lifetime: Lifetime): void {
     }
   };
 
-  // Una striscia cambia nei figli (la vista li rifà) e nella selezione.
+  // Una striscia cambia nei figli (la vista li rifà) e nella selezione. Si
+  // guarda al fotogramma dopo, non subito: l'osservatore scatta a metà di un
+  // cambio di scheda, fra la striscia ridisegnata e l'editor nuovo ancora da
+  // montare, e leggere lì posti e scorrimento costringeva il motore a un
+  // layout in più. Nel fotogramma il layout è quello che si disegna, e i
+  // cambi arrivati nel frattempo fanno un'occhiata sola, sullo stato finale.
+  const touched = new Set<HTMLElement>();
+  let frame: number | null = null;
+  const look = (): void => {
+    frame = null;
+    if (lifetime.closed) return;
+    const owners = [...touched];
+    touched.clear();
+    for (const owner of owners) if (owner.isConnected) settle(owner);
+  };
   const strip = new MutationObserver((records) => {
     if (lifetime.closed) return;
-    const touched = new Set<HTMLElement>();
     for (const record of records) {
       const owner = stripOf(record.target);
       if (owner) touched.add(owner);
     }
-    for (const owner of touched) settle(owner);
+    if (touched.size > 0 && frame === null) frame = requestAnimationFrame(look);
   });
-  lifetime.add(() => strip.disconnect());
+  lifetime.add(() => {
+    strip.disconnect();
+    if (frame !== null) cancelAnimationFrame(frame);
+    frame = null;
+    touched.clear();
+  });
 
   /// Le strisce nascono e muoiono coi riquadri. Si guardano una per una e non
   /// con un solo osservatore sull'albero dei fogli: lì dentro c'è l'editor, e

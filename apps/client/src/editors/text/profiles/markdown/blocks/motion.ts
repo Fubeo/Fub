@@ -88,13 +88,35 @@ function textSize(el: HTMLElement): number {
   return size || parseFloat(getComputedStyle(el).fontSize) || 0;
 }
 
+/// La testata della pagina (`page.ts`) sta sopra il primo blocco, alla sua
+/// stessa posizione, ma non è di nessun blocco: nessun gesto la solleva né la
+/// muove.
+function isPageHeader(el: Element): boolean {
+  return el.classList.contains("cm-fub-page");
+}
+
+/// Se la riga o il widget `el` appartiene al tratto `span` di un blocco: ne
+/// comincia dentro, per posizione nel documento e non per dove cade sullo
+/// schermo, e non è la testata.
+export function ownsRow(view: EditorView, el: Element, span: { readonly from: number; readonly to: number }): boolean {
+  if (isPageHeader(el)) return false;
+  let pos: number;
+  try {
+    pos = view.posAtDOM(el, 0);
+  } catch {
+    return false;
+  }
+  return pos >= span.from && pos <= span.to;
+}
+
 /// Le righe del contenuto in vista, con un margine: gli elementi figli del
-/// contenuto, righe e widget di blocco. `font` dice di chi leggere il carattere.
+/// contenuto, righe e widget di blocco, senza la testata. `font` dice di chi
+/// leggere il carattere.
 function visibleBoxes(view: EditorView, font: (pos: number) => boolean = () => false): Box[] {
   const scroller = view.scrollDOM.getBoundingClientRect();
   const out: Box[] = [];
   for (const child of Array.from(view.contentDOM.children)) {
-    if (!(child instanceof HTMLElement)) continue;
+    if (!(child instanceof HTMLElement) || isPageHeader(child)) continue;
     const rect = child.getBoundingClientRect();
     if (rect.height === 0 || rect.bottom < scroller.top - MARGIN || rect.top > scroller.bottom + MARGIN) continue;
     let pos: number;

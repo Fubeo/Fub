@@ -161,3 +161,23 @@ export async function collect(session) {
   const ms = Math.round(performance.now() - started);
   return typeof did === "number" ? { on: true, did, ms } : { on: false, ms };
 }
+
+/// La pendenza di una serie di residui, in MiB per giro: la mediana delle
+/// pendenze fra ogni coppia di giri (lo stimatore di Theil e Sen). La memoria
+/// della WebView sale e scende a dente di sega col ritmo del suo GC, di
+/// ±150 MiB: una lettura alta in cima o in fondo sposta la retta dei minimi
+/// quadrati di decine di MiB per giro (#284), la mediana no, finché le letture
+/// fuori ritmo restano meno di tre su dieci. Un giro senza lettura (`null`)
+/// resta fuori e non sposta gli altri.
+export function pendenza(ys) {
+  const points = ys.map((y, i) => [i + 1, y]).filter(([, y]) => typeof y === "number" && Number.isFinite(y));
+  const slopes = [];
+  for (let i = 0; i < points.length; i++) {
+    for (let j = i + 1; j < points.length; j++) slopes.push((points[j][1] - points[i][1]) / (points[j][0] - points[i][0]));
+  }
+  if (slopes.length === 0) return null;
+  slopes.sort((a, b) => a - b);
+  const mid = slopes.length >> 1;
+  const median = slopes.length % 2 ? slopes[mid] : (slopes[mid - 1] + slopes[mid]) / 2;
+  return Math.round(median * 100) / 100;
+}

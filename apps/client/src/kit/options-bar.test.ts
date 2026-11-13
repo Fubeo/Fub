@@ -91,6 +91,99 @@ describe("createOptionsBar", () => {
     expect(bar.overflow()).toEqual([]);
   });
 
+  it("rifà il conto quando l'owner cambia un controllo che sta già in «…»", async () => {
+    const frame = () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    const bar = createOptionsBar({ label: "Opzioni", moreLabel: "Altre opzioni", lifetime: life });
+    document.body.append(bar.element);
+    sized(bar.element, 110);
+    bar.element.querySelector<HTMLElement>(".kit-options-more")!.getBoundingClientRect = () =>
+      ({ width: 20, height: 24, x: 0, y: 0, left: 0, top: 0, right: 20, bottom: 24, toJSON: () => ({}) });
+    // Un involucro col suo gruppo: largo finché l'owner lo mostra, zero quando
+    // lo nasconde; nascosto dalla barra, zero comunque.
+    const holder = document.createElement("div");
+    const group = document.createElement("div");
+    group.textContent = "selezione";
+    holder.append(group);
+    const box = (width: number) => ({ width, height: 24, x: 0, y: 0, left: 0, top: 0, right: width, bottom: 24, toJSON: () => ({}) });
+    holder.getBoundingClientRect = () => box(holder.hidden || group.hidden ? 0 : 300);
+    const after = control("dopo", 40);
+    bar.setItems([control("prima", 40, 1), { id: "selezione", element: holder }, after]);
+    // Al primo conto il gruppo è ancora visibile e non ci sta: escono lui e
+    // quello dopo.
+    expect(bar.overflow()).toEqual(["selezione", "dopo"]);
+
+    // I conti della barra non ne chiamano altri: solo i due fotogrammi
+    // chiesti qui.
+    let asked = 0;
+    const original = window.requestAnimationFrame;
+    window.requestAnimationFrame = (callback) => {
+      asked += 1;
+      return original(callback);
+    };
+    try {
+      bar.fit();
+      await frame();
+      await frame();
+      expect(asked).toBe(2);
+    } finally {
+      window.requestAnimationFrame = original;
+    }
+
+    group.hidden = true;
+    await frame();
+    await frame();
+    expect(bar.overflow()).toEqual([]);
+    expect(after.element.hidden).toBe(false);
+  });
+
+  it("il testo che cambia dentro un controllo non rifà il conto", async () => {
+    const frame = () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    const bar = createOptionsBar({ label: "Opzioni", moreLabel: "Altre opzioni", lifetime: life });
+    document.body.append(bar.element);
+    sized(bar.element, 110);
+    bar.element.querySelector<HTMLElement>(".kit-options-more")!.getBoundingClientRect = () =>
+      ({ width: 20, height: 24, x: 0, y: 0, left: 0, top: 0, right: 20, bottom: 24, toJSON: () => ({}) });
+    // La percentuale dello zoom, in un controllo finito in «…» e in uno che
+    // si vede: cambia a ogni passo della rotella.
+    const items = [control("colore", 40, 2), control("zoom", 40, 1), control("vista", 40)];
+    bar.setItems(items);
+    expect(bar.overflow()).toEqual(["vista"]);
+    let asked = 0;
+    const original = window.requestAnimationFrame;
+    window.requestAnimationFrame = (callback) => {
+      asked += 1;
+      return original(callback);
+    };
+    try {
+      items[1]!.element.textContent = "58%";
+      items[2]!.element.textContent = "61%";
+      await Promise.resolve();
+      await frame();
+      expect(asked).toBe(1);
+    } finally {
+      window.requestAnimationFrame = original;
+    }
+  });
+
+  it("rifare il conto non toglie il fuoco al controllo appena premuto", () => {
+    const bar = createOptionsBar({ label: "Opzioni", moreLabel: "Altre opzioni", lifetime: life });
+    document.body.append(bar.element);
+    sized(bar.element, 110);
+    bar.element.querySelector<HTMLElement>(".kit-options-more")!.getBoundingClientRect = () =>
+      ({ width: 20, height: 24, x: 0, y: 0, left: 0, top: 0, right: 20, bottom: 24, toJSON: () => ({}) });
+    const items = [control("colore", 40, 2), control("spessore", 40, 1), control("levigatura", 40)];
+    bar.setItems(items);
+    expect(bar.overflow()).toEqual(["levigatura"]);
+    items[0]!.element.focus();
+    expect(document.activeElement).toBe(items[0]!.element);
+    bar.fit();
+    expect(document.activeElement).toBe(items[0]!.element);
+    sized(bar.element, 400);
+    bar.fit();
+    expect(bar.overflow()).toEqual([]);
+    expect(document.activeElement).toBe(items[0]!.element);
+  });
+
   it("chiudere la vita non lascia ascolti", () => {
     const ledger = listenerLedger(document, window);
     const bar = createOptionsBar({ label: "Opzioni", moreLabel: "Altre opzioni", lifetime: life });

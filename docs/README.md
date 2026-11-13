@@ -46,6 +46,7 @@ flowchart LR
 | [Editor e anteprima](product/editor-and-preview.md) | le superfici di scrittura |
 | [Blocchi](product/editor-blocks.md) | la superficie a blocchi |
 | [Tasto destro, mini-barra e «/»](product/editor-menus.md) | i menu degli editor |
+| [La riga dei dati](product/editor-note-facts.md) | modifica, collegamenti ed etichette sotto il titolo |
 | [Correttore](product/proofing.md) | l'ortografia mentre si scrive |
 | [Documenti di Word](product/word-documents.md) | la videoscrittura nel vault |
 | [Annotazioni dei PDF](product/pdf-annotations.md) | scrivere accanto ai PDF |
@@ -67,7 +68,8 @@ all'export, dalla sessione dal tablet ai disegni grandi.
 - [Modello del documento](architecture/document-model.md) e
   [Storage e identità](architecture/storage-and-identity.md)
 - [Runtime, eventi e job](architecture/runtime-events-and-jobs.md)
-- [Frontend e IPC](architecture/frontend-and-ipc.md) e
+- [Frontend e IPC](architecture/frontend-and-ipc.md),
+  [i comportamenti della shell](architecture/shell-behaviours.md) e
   [la cornice del telefono](architecture/phone-frame.md)
 - [Superfici dell'editor](architecture/editor-surfaces.md), la
   [superficie ricca e il correttore](architecture/rich-surface-and-proofing.md)

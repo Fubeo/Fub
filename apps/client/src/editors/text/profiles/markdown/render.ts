@@ -1,4 +1,4 @@
-import { ensureSyntaxTree } from "@codemirror/language";
+import { ensureSyntaxTree, syntaxTree, syntaxTreeAvailable } from "@codemirror/language";
 import type { ChangeDesc, EditorState } from "@codemirror/state";
 import type { SyntaxNode, Tree } from "@lezer/common";
 import type { SyntaxForm } from "../../../../host/contract";
@@ -1010,6 +1010,9 @@ function buildDocument(source: string, tree: Tree, forms?: readonly SyntaxForm[]
   if (cursor.firstChild()) {
     do {
       const { from, to, name } = cursor;
+      // Un albero che va oltre la sorgente è quello di un documento più lungo,
+      // reso soltanto fino a un blocco (`renderMarkdownStatePrefix`).
+      if (to > source.length) break;
       if (name === "HTMLBlock") htmlTops.push({ from, to, html: source.slice(from, to) });
       else if (name === "FencedCode" && TOC_FENCE.test(source.slice(from, Math.min(to, from + 16)))) hasToc = true;
       const candidate = untouched.get(from);
@@ -1323,6 +1326,49 @@ export function renderMarkdownState(
 ): MarkdownDocument {
   const { source, tree } = stateTree(state);
   return buildDocument(source, tree, forms, previous);
+}
+
+/// Fin dove un documento si rende tutto, in un colpo, quando l'editor lo
+/// apre: oltre, la prima resa si ferma qui (`renderMarkdownStatePrefix`). In
+/// caratteri: nel banco il parser di CodeMirror ne legge da tre a diecimila
+/// al millisecondo (meno appena aperto, quando il motore JavaScript non l'ha
+/// ancora ottimizzato), e ventimila coprono più volte la prima schermata di
+/// qualunque finestra.
+export const PREFIX_RENDER_FROM = 20_000;
+
+/// La resa di uno stato, fin dove l'albero di CodeMirror è già arrivato.
+export interface StatePrefixRender {
+  readonly document: MarkdownDocument;
+  /// `false`: la resa si ferma prima della fine del documento, e la sua
+  /// sorgente (`document.source`) è soltanto l'inizio del testo.
+  readonly complete: boolean;
+}
+
+/// La resa di uno stato senza leggere tutto un documento grande. Fino a
+/// `PREFIX_RENDER_FROM` caratteri, o con l'albero già in fondo, è
+/// `renderMarkdownState`. Oltre, il parser va avanti fino a quel punto e la
+/// resa si ferma all'ultimo blocco di primo livello che l'albero ha chiuso:
+/// il blocco dopo potrebbe continuare nel testo non ancora letto. Le
+/// definizioni di link e note scritte più in basso arrivano con la resa
+/// completa, che chi chiama fa quando l'albero è in fondo
+/// (`ensureSyntaxTree` a pezzi, poi una transazione).
+export function renderMarkdownStatePrefix(
+  state: EditorState,
+  forms?: readonly SyntaxForm[],
+  previous?: PreviousRender,
+): StatePrefixRender {
+  const length = state.doc.length;
+  if (length <= PREFIX_RENDER_FROM || syntaxTreeAvailable(state, length)) {
+    return { document: renderMarkdownState(state, forms, previous), complete: true };
+  }
+  const tree = ensureSyntaxTree(state, PREFIX_RENDER_FROM, TREE_BUDGET) ?? syntaxTree(state);
+  if (tree.topNode.name !== "Document") return { document: renderMarkdownState(state, forms, previous), complete: true };
+  if (tree.length >= length) {
+    return { document: buildDocument(state.doc.toString(), tree, forms, previous), complete: true };
+  }
+  const last = tree.topNode.lastChild;
+  const cut = last ? last.from : 0;
+  return { document: buildDocument(state.doc.sliceString(0, cut), tree, forms, previous), complete: false };
 }
 
 /// Le definizioni dei link di uno stato, per chiave normalizzata: quelle che
