@@ -2166,7 +2166,7 @@ Fatto quando: il ricalcolo a ogni D è ≤ 2 ms con la sonda di T23a; la
 latenza dei tasti di S8 scende sotto 16 ms al p50; la croce si vede uguale
 (foto); `scripts/check.sh --rapido` verde.
 Prova: scripts/check.sh --rapido
-Stato: [ ] da fare
+Stato: [x] fatto · b4cb19f95..ceb074e96 · la croce sta su un velo (`.canvas-pen-veil`) sopra schede e prese, mostrato con `data-idle` tolto solo con un mouse o una penna sospesa e il mouse che scrive; menu, filo, doppio clic, rotella e deposito guardano sotto il velo (`#targetOf`/`#elementAt`); keydown di D da 67–152 a 1,5–3 ms di mediana, latenza dei tasti S8 p50 da 74–203 a 26–40 ms (non sotto 16: la sonda misura fino al secondo rAF); nuovo valore `S8.keyLatency.p50` senza soglia. I ~50 ms all'inizio del tratto sono pittura: 30–40 ms li dipingono i riquadri di T20c → T20f
 
 ## T20e · Il rilascio del tratto senza rilettura e senza lavoro di troppo
 
@@ -2198,6 +2198,39 @@ vettori, `scripts/check.sh --rapido` verde.
 Prova: scripts/check.sh --rapido; cargo test -p fub-canvas-core
 Stato: [ ] da fare
 
+## T20f · I riquadri dei bersagli senza pittura all'inizio del tratto
+
+Perché: N6 T20d ha misurato che all'inizio di un tratto i riquadri dei
+bersagli di T20c (`.canvas-ink-frames`, `#placeInkFrame`) costano 30–40 ms
+di pittura (con il velo: 49–95 ms con i riquadri, 23–59 senza); la cattura
+del puntatore sul viewport toglie anche `:hover` alla scheda viva e la
+ridipinge (15–25 ms). Con `will-change` sui riquadri i risultati sono
+misti. Task scritto dall'orchestratore (2026-11-13).
+Tocca: `apps/client/src/editors/canvas/engine.ts` (`#placeInkFrame`, la
+cattura del puntatore all'inizio del tratto), `apps/client/src/theme/scrittoio/structure.css`
+(i riquadri), `apps/client/src/editors/canvas/engine-ink.test.ts`,
+`docs/architecture/canvas-ink-layer.md`.
+Non toccare: lo strato della penna di N4; il velo di T20d; le soglie del banco.
+Dipende da: T20d
+Cosa fare:
+- Prima la misura con la traccia CDP (o la sonda di T23a) sullo stesso
+  gesto di S8: quanto dipinge il primo fotogramma del tratto, con e senza
+  riquadri, con e senza la cattura, giri alternati e carico scritto accanto.
+- Poi i riquadri che non ridipingono l'area della scheda: uno strato
+  composto proprio (per esempio `transform` invece di `left`/`top`, un
+  solo elemento riusato, nessun cambio di misura a ogni tratto), e la
+  cattura che non toglie `:hover` alla scheda viva se il motore può
+  evitarlo senza perdere il rilascio fuori dalla vista.
+Casi limite: il tratto che esce dalla vista e rilascia fuori; la penna vera
+e il mouse con D; la lavagna da 2.000 schede; il tema chiaro e scuro (i
+riquadri si vedono uguali).
+Fatto quando: all'inizio del tratto la pittura del primo fotogramma scende
+di almeno 25 ms rispetto a oggi sulla stessa macchina a carico simile, i
+riquadri si vedono come prima (foto nelle due luci), i test della penna
+verdi.
+Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run src/editors/canvas
+Stato: [ ] da fare
+
 ## T21 · La prova del cancello
 
 Perché: il secondo punto del cancello: trascini un `.xlsx` dal sistema, ci
@@ -2206,7 +2239,7 @@ Tocca: `apps/client/src/canvas-cards.e2e.test.ts` (da T12),
 `docs/development/ink-input-smoke-test.md` (una sezione «Le schede vive»).
 Non toccare: il codice di prodotto (se la prova trova un difetto, il coder
 lo scrive nel rapporto e il pianificatore apre un task).
-Dipende da: T15, T17, T20a–T20e, T32 e T32b (lo stesso contenuto), T34 (la cartella); N4 T12
+Dipende da: T15, T17, T20a–T20f, T32 e T32b (lo stesso contenuto), T34 (la cartella); N4 T12
 (nella base)
 Cosa fare:
 - Nella prova e2e: un `File` `.xlsx` (byte noti) rilasciato sulla lavagna;
