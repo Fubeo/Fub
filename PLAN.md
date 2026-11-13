@@ -885,7 +885,7 @@ Fatto quando: `cargo test -p fub-canvas-core --test layout_vectors` passa
 con i casi nuovi, e i casi dei bottoni coincidono con `engine.ts`.
 Prova: scripts/check.sh --rapido; cargo test -p fub-canvas-core --test
 layout_vectors
-Stato: [ ] da fare
+Stato: [x] fatto · 89fbf15d2..ef1efe662 · `layout/arrange.rs` con `align`, `distribute` (formule di `#layoutSelection` riscontrate riga per riga), `grid`/`row`/`column` e `tree` a strati col metodo «tidy» sui contorni; i valori attesi dei bottoni vengono da una copia verbatim di `#layoutSelection` e `snap` eseguita in Node; `tree` dà posizioni con l'angolo in (0, 0) (l'origine la somma chi chiama), archi per indice, `grid`/`row`/`column` prendono `gap` e `origin`; i casi in `canvas-layout.json` sono letti solo dal test Rust: il confronto vivo con `engine.ts` arriva quando T11 fa scrivere la barra con le operazioni
 
 ## T6 · Lo schema delle operazioni
 
