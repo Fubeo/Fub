@@ -975,7 +975,7 @@ secchi, non tutte con tutte).
 Fatto quando: `cargo test -p fub-canvas-core --test check` passa con un
 caso per codice e per avviso.
 Prova: scripts/check.sh --rapido; cargo test -p fub-canvas-core --test check
-Stato: [ ] da fare
+Stato: [x] fatto · 41bffea80..bc1a2877f · `check.rs` (validate → serde → compile, problemi con codice, indice, puntatore e al più tre nomi vicini; serde dà una frase fissa) e `summary.rs`; avvisi `overlap`, `half_in_group`, `text_overflow` solo sulle schede toccate, cercati con una griglia di celle da 256; al più `MAX_WARNINGS` = 100 avvisi con `warnings_omitted` esatto (2000 schede nello stesso punto: 100 + 1 998 900); 31 test; quattro helper resi `pub(crate)` fuori Tocca (`describe`, `spec`, `layout`) invece di copiarli; la compilazione resta quadratica nelle schede nuove (già prima)
 
 ## T8 · I comandi che leggono: `canvas.read`, `canvas.check`, `canvas.guide`
 
