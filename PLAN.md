@@ -2127,7 +2127,7 @@ Fatto quando: all'inizio del tratto il ricalcolo di stile è ≤ 5 ms con la
 sonda; S8 non ha più il fotogramma di 80–140 ms all'inizio del tratto; foto
 uguali a prima; `scripts/check.sh --rapido` verde.
 Prova: scripts/check.sh --rapido
-Stato: [ ] da fare
+Stato: [x] fatto · i riquadri si nascondono con `data-idle` e `visibility`; ricalcolo 6–75 ms → 0–1 ms; S8, fotogramma più lungo nei primi 300 ms del tratto, 7 coppie alternate: mediana 110 → 52 ms, oltre 140 ms 31/70 → 3/70; riquadro uguale al pixel. Restano ~50 ms all'inizio del tratto anche senza riquadri e senza D: da cercare con la traccia in T20d
 
 ## T20d · La croce della penna senza ricalcolo della lavagna
 
@@ -2154,6 +2154,11 @@ Cosa fare:
 - Il banco prova o esclude la ripetizione automatica di D sotto Xvfb (il
   punto 5 di T23a): se D si ripete, il banco non conta quei fotogrammi
   contro la meta, e lo scrive.
+- Prima di correggere, la traccia CDP dei primi 300 ms di un tratto: T20c
+  ha lasciato ~50 ms che non vengono dai riquadri né da D (la sonda di
+  T20c sta in `scratchpad/sonda-t20c.patch` dell'orchestratore, nel
+  resoconto). Se la causa è di questo task si corregge qui, se no si
+  scrive con il suo task.
 Casi limite: la penna scelta dal menu (la croce senza D); il dito; la
 gomma; una scheda in scrittura sotto il velo (il clic ci entra quando la
 penna non è attiva).
