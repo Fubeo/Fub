@@ -167,11 +167,15 @@ e quanti nomi mancano al nucleo: `cargo test -p fub-canvas-core --test task_corp
 -- --nocapture`.
 
 Le risposte di un modello si provano così, fuori dalla CI:
-`FUB_CANVAS_ESITI=<cartella> cargo test -p fub-canvas-core --test task_corpus
-esiti_di_un_modello_se_richiesti -- --nocapture`. La cartella ha un file
-`<compito>.json` per compito: la lista delle operazioni, come `ops`. Il test
-le applica a `before` e dice quali passano; un compito senza file salta, e lo
-dice. Senza la variabile non fa nulla, e in CI non gira nessun modello.
+
+```sh
+FUB_CANVAS_ESITI=<cartella> cargo test -p fub-canvas-core --test task_corpus esiti_di_un_modello_se_richiesti -- --nocapture
+```
+
+La cartella ha un file `<compito>.json` per compito: la lista delle operazioni,
+come `ops`. Il test le applica a `before` e dice quali passano; un compito senza
+file salta, e lo dice. Senza la variabile non fa nulla, e in CI non gira nessun
+modello.
 
 ## Che cosa non misura
 
