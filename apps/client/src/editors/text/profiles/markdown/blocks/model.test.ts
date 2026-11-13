@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { markdown } from "@codemirror/lang-markdown";
-import { ensureSyntaxTree } from "@codemirror/language";
+import { ensureSyntaxTree, syntaxTree } from "@codemirror/language";
 import { type ChangeSpec, EditorState } from "@codemirror/state";
 import { markdownGrammar } from "../grammar";
 import { blockAt, blockModel, buildBlocks, updateBlocks, type Block } from "./model";
@@ -146,6 +146,23 @@ describe("le modifiche", () => {
       state = state.update({}).state;
       expect(shape(state.field(blockModel).blocks), `passo ${step}`).toEqual(shape(buildBlocks(state).blocks));
     }
+  });
+
+  // Su una macchina carica il parser si ferma a metà nei suoi 20 ms: il
+  // modello nato da quell'albero non ha i gruppi dopo il punto dove si era
+  // fermato, e quando l'albero arriva in fondo non può tenere quelli di prima.
+  it("un modello letto da un albero a metà si rifà quando l'albero arriva in fondo", () => {
+    const long = Array.from({ length: 80 }, (_, i) => base.replace("Titolo", `Titolo ${i}`)).join("\n\n");
+    const start = EditorState.create({ doc: long, extensions: [markdown({ base: markdownGrammar }), blockModel] });
+    expect(syntaxTree(start).length).toBeLessThan(start.doc.length);
+    let model = buildBlocks(start);
+    const first = start.update({ changes: { from: 3, insert: "a" } });
+    model = updateBlocks(model, first);
+    ensureSyntaxTree(first.state, first.state.doc.length, 5000);
+    const second = first.state.update({ changes: { from: 4, insert: "b" } });
+    expect(syntaxTree(second.state).length).toBe(second.state.doc.length);
+    model = updateBlocks(model, second);
+    expect(shape(model.blocks)).toEqual(shape(buildBlocks(second.state).blocks));
   });
 
   // Il modello cerca il punto da rifare e i gruppi che tornano uguali per

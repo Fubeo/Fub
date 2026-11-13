@@ -266,8 +266,12 @@ export function updateBlocks(model: BlockModel, tr: Transaction): BlockModel {
   if (!tr.docChanged) return before === after ? model : buildBlocks(tr.state);
   const doc = tr.state.doc;
   // Il frontmatter cambia la lettura di quello che lo segue; un albero ancora
-  // a metà si rilegge quando arriva in fondo.
-  if (model.blocks[0]?.kind === "frontmatter" || frontmatterRange(doc) || after.length < doc.length) {
+  // a metà si rilegge quando arriva in fondo, e un modello letto da un albero
+  // a metà non ha i gruppi dopo il punto dove si era fermato.
+  if (
+    model.blocks[0]?.kind === "frontmatter" || frontmatterRange(doc) || after.length < doc.length ||
+    model.parsed < tr.startState.doc.length
+  ) {
     return buildBlocks(tr.state);
   }
   let fromA = Infinity;

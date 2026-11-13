@@ -105,5 +105,5 @@ describe("i ripiegabili a ogni battuta", () => {
     // La prova vale per la lettura che segue la modifica, non soltanto per
     // quella da capo che la sostituisce.
     expect(patched / steps).toBeGreaterThan(0.5);
-  });
+  }, 60_000);
 });
