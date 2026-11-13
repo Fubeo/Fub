@@ -14,11 +14,20 @@
 //!   (`{count, x, y, width, height, gap}`) aggiunge `count` testi vuoti
 //!   impilati, `s0`, `s1`…, a `y + i·(height + gap)`;
 //! - una misura del contenuto è `null` o `[larghezza, altezza]`;
-//! - un rettangolo è `{x, y, width, height}`, e `expect: null` vuol dire `None`.
+//! - un rettangolo è `{x, y, width, height}`, e `expect: null` vuol dire `None`;
+//! - `align` e `distribute` ricevono rettangoli e un lato (`left`, `center`,
+//!   `right`, `top`, `middle`, `bottom`) o un asse (`horizontal`, `vertical`);
+//! - `grid`, `row` e `column` ricevono le misure `[[larghezza, altezza], …]`, il
+//!   `gap` e l'origine `[x, y]`; `tree` riceve le misure, gli archi `[[da, a], …]`
+//!   come indici, un verso (`down`, `up`, `right`, `left`) e il `gap`;
+//! - le posizioni attese sono `[[x, y], …]`, una per scheda, nell'ordine dato.
 
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 
+use fub_canvas_core::layout::arrange::{
+    align, column, distribute, grid, row, tree, Align, Axis, Direction,
+};
 use fub_canvas_core::layout::{
     auto_place, born_size, card_kind, estimate_text_height, group_rect, inside, nearest_sides,
     place_near, snap, CardKind, Rect,
@@ -30,7 +39,7 @@ use serde_json::{json, Value};
 const MIN_CASES: usize = 120;
 
 /// Quanti casi almeno per ogni funzione: una regola senza vettori non è provata.
-const MIN_PER_FN: [(&str, usize); 9] = [
+const MIN_PER_FN: [(&str, usize); 15] = [
     ("snap", 9),
     ("card_kind", 21),
     ("born_size", 36),
@@ -40,6 +49,12 @@ const MIN_PER_FN: [(&str, usize); 9] = [
     ("inside", 8),
     ("nearest_sides", 9),
     ("group_rect", 6),
+    ("align", 12),
+    ("distribute", 8),
+    ("grid", 5),
+    ("row", 1),
+    ("column", 1),
+    ("tree", 12),
 ];
 
 /// Le specie con il loro nome nel file. `Craft` c'è, anche se `card_kind` non la
@@ -125,6 +140,89 @@ fn rect_arg(value: &Value) -> Option<Rect> {
         width: num(&value["width"]),
         height: num(&value["height"]),
     })
+}
+
+/// Un elenco di rettangoli, come `align` e `distribute` lo ricevono.
+fn rects_arg(value: &Value) -> Vec<Rect> {
+    value
+        .as_array()
+        .expect("un elenco di rettangoli")
+        .iter()
+        .map(|rect| rect_arg(rect).expect("una scheda non è null"))
+        .collect()
+}
+
+/// Una coppia `[a, b]`: una misura o una posizione.
+fn pair_arg(value: &Value) -> (f64, f64) {
+    let pair = value
+        .as_array()
+        .unwrap_or_else(|| panic!("attesa una coppia, letto {value}"));
+    assert_eq!(pair.len(), 2, "una coppia è [a, b]");
+    (num(&pair[0]), num(&pair[1]))
+}
+
+fn sizes_arg(value: &Value) -> Vec<(f64, f64)> {
+    value
+        .as_array()
+        .expect("un elenco di misure")
+        .iter()
+        .map(pair_arg)
+        .collect()
+}
+
+fn edges_arg(value: &Value) -> Vec<(usize, usize)> {
+    value
+        .as_array()
+        .expect("un elenco di archi")
+        .iter()
+        .map(|edge| {
+            let pair = edge.as_array().expect("un arco è [da, a]");
+            assert_eq!(pair.len(), 2, "un arco è [da, a]");
+            let index = |value: &Value| value.as_u64().expect("un indice") as usize;
+            (index(&pair[0]), index(&pair[1]))
+        })
+        .collect()
+}
+
+fn align_arg(value: &Value) -> Align {
+    match value.as_str() {
+        Some("left") => Align::Left,
+        Some("center") => Align::Center,
+        Some("right") => Align::Right,
+        Some("top") => Align::Top,
+        Some("middle") => Align::Middle,
+        Some("bottom") => Align::Bottom,
+        _ => panic!("lato sconosciuto {value}"),
+    }
+}
+
+fn axis_arg(value: &Value) -> Axis {
+    match value.as_str() {
+        Some("horizontal") => Axis::Horizontal,
+        Some("vertical") => Axis::Vertical,
+        _ => panic!("asse sconosciuto {value}"),
+    }
+}
+
+fn direction_arg(value: &Value) -> Direction {
+    match value.as_str() {
+        Some("down") => Direction::Down,
+        Some("up") => Direction::Up,
+        Some("right") => Direction::Right,
+        Some("left") => Direction::Left,
+        _ => panic!("verso sconosciuto {value}"),
+    }
+}
+
+/// Le posizioni attese, una coppia per scheda, nell'ordine dato.
+fn assert_positions(name: &str, actual: &[(f64, f64)], expect: &Value) {
+    let expected = expect
+        .as_array()
+        .unwrap_or_else(|| panic!("{name}: attesa una lista di coppie"));
+    assert_eq!(actual.len(), expected.len(), "{name}: numero di schede");
+    for (index, (position, want)) in actual.iter().zip(expected).enumerate() {
+        assert_eq!(*position, pair_arg(want), "{name}: scheda {index}");
+    }
 }
 
 fn node_arg(value: &Value) -> CanvasNode {
@@ -277,6 +375,41 @@ fn check(name: &str, case: &Value) -> String {
                 .collect();
             assert_rect(name, group_rect(&rects, num(&args[1])), expect);
         }
+        "align" => assert_positions(
+            name,
+            &align(&rects_arg(&args[0]), align_arg(&args[1])),
+            expect,
+        ),
+        "distribute" => assert_positions(
+            name,
+            &distribute(&rects_arg(&args[0]), axis_arg(&args[1])),
+            expect,
+        ),
+        "grid" => assert_positions(
+            name,
+            &grid(&sizes_arg(&args[0]), num(&args[1]), pair_arg(&args[2])),
+            expect,
+        ),
+        "row" => assert_positions(
+            name,
+            &row(&sizes_arg(&args[0]), num(&args[1]), pair_arg(&args[2])),
+            expect,
+        ),
+        "column" => assert_positions(
+            name,
+            &column(&sizes_arg(&args[0]), num(&args[1]), pair_arg(&args[2])),
+            expect,
+        ),
+        "tree" => assert_positions(
+            name,
+            &tree(
+                &sizes_arg(&args[0]),
+                &edges_arg(&args[1]),
+                direction_arg(&args[2]),
+                num(&args[3]),
+            ),
+            expect,
+        ),
         other => panic!("{name}: funzione sconosciuta {other:?}"),
     }
     function
@@ -373,4 +506,101 @@ fn i_numeri_non_finiti_non_vanno_in_panico() {
     )
     .expect("una scheda");
     assert!(!grown.width.is_finite());
+}
+
+/// Le misure enormi (il più grande intero sicuro, e più schede così) non danno
+/// né `NaN` né `Infinity`: le posizioni restano finite.
+#[test]
+fn le_misure_enormi_restano_finite() {
+    let huge = 9_007_199_254_740_991.0_f64;
+    let sizes = vec![(huge, huge); 4];
+    let edges = [(0, 1), (0, 2), (2, 3)];
+    let rects: Vec<Rect> = (0..4)
+        .map(|index| Rect {
+            x: huge * index as f64,
+            y: huge * index as f64,
+            width: huge,
+            height: huge,
+        })
+        .collect();
+    let answers = [
+        grid(&sizes, 24.0, (0.0, 0.0)),
+        row(&sizes, 24.0, (0.0, 0.0)),
+        column(&sizes, 24.0, (0.0, 0.0)),
+        tree(&sizes, &edges, Direction::Down, 24.0),
+        tree(&sizes, &edges, Direction::Left, 24.0),
+        align(&rects, Align::Center),
+        align(&rects, Align::Bottom),
+        distribute(&rects, Axis::Horizontal),
+        distribute(&rects, Axis::Vertical),
+    ];
+    for positions in answers {
+        assert_eq!(positions.len(), 4);
+        for (x, y) in positions {
+            assert!(x.is_finite() && y.is_finite(), "posizione {x}, {y}");
+        }
+    }
+}
+
+/// Un albero di 2000 schede in fila (una catena e una stella) dà le posizioni
+/// attese. Il metodo tidy è lineare (un contorno per strato, unito dal più
+/// piccolo): il test prova il risultato, non il tempo, che sul PC carico non è
+/// misurabile.
+#[test]
+fn un_albero_di_2000_schede_in_fila() {
+    let sizes = vec![(100.0, 50.0); 2000];
+    let chain: Vec<(usize, usize)> = (0..1999).map(|node| (node, node + 1)).collect();
+    let down = tree(&sizes, &chain, Direction::Down, 24.0);
+    for (node, &(x, y)) in down.iter().enumerate() {
+        assert_eq!((x, y), (0.0, 146.0 * node as f64), "catena, scheda {node}");
+    }
+    // Una stella: la radice e 1999 figli in fila, la radice centrata sopra di loro.
+    let star: Vec<(usize, usize)> = (1..2000).map(|child| (0, child)).collect();
+    let fan = tree(&sizes, &star, Direction::Down, 24.0);
+    assert_eq!(fan[0], (123_876.0, 0.0), "la radice centrata sui figli");
+    for (child, &(x, y)) in fan.iter().enumerate().skip(1) {
+        assert_eq!(
+            (x, y),
+            (124.0 * (child - 1) as f64, 146.0),
+            "stella, figlio {child}"
+        );
+    }
+}
+
+/// Un valore non finito non va in panico: ogni funzione dà tante posizioni
+/// quante schede ha, e chi chiama rifiuta i valori non finiti prima di scriverli.
+#[test]
+fn i_numeri_non_finiti_di_arrange_non_vanno_in_panico() {
+    let sizes = [
+        (f64::NAN, 1.0),
+        (f64::INFINITY, 2.0),
+        (3.0, f64::NEG_INFINITY),
+    ];
+    assert_eq!(grid(&sizes, 24.0, (0.0, 0.0)).len(), 3);
+    assert_eq!(
+        tree(&sizes, &[(0, 1), (1, 2), (2, 0)], Direction::Right, 24.0).len(),
+        3
+    );
+    let rects = [
+        Rect {
+            x: f64::NAN,
+            y: 0.0,
+            width: 1.0,
+            height: 1.0,
+        },
+        Rect {
+            x: 0.0,
+            y: f64::INFINITY,
+            width: f64::INFINITY,
+            height: 1.0,
+        },
+        Rect {
+            x: 2.0,
+            y: 2.0,
+            width: 3.0,
+            height: f64::NAN,
+        },
+    ];
+    assert_eq!(align(&rects, Align::Left).len(), 3);
+    assert_eq!(distribute(&rects, Axis::Vertical).len(), 3);
 }
