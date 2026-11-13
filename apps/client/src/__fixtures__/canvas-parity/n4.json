@@ -1,0 +1,139 @@
+{
+  "version": 1,
+  "source": "N4",
+  "max_missing": 4,
+  "entries": [
+    {
+      "id": "N4.ink.pen_card",
+      "name": "Scrivi con la penna sopra una scheda",
+      "source": "N4",
+      "gui": [{ "plan": "N4 T12" }, { "plan": "N4 T3" }],
+      "writes": "file",
+      "state": "by_hand",
+      "ops": [
+        {
+          "op": "add_strokes",
+          "layer": { "node": "f1" },
+          "strokes": [
+            {
+              "tool": "pen",
+              "brush": "pf1 size=2 thinning=0.25 smoothing=0.5 streamline=0.5 taperStart=2 taperEnd=8 capStart=1 capEnd=1 sim=1 pen=ballpoint",
+              "color": "#0072b2",
+              "anchor": { "kind": "card", "width": 480, "height": 304 },
+              "ink": "1 s100 cxyt 4000,6000,0 400,0,8 400,0,8"
+            }
+          ]
+        }
+      ],
+      "computes": "la stringa `ink`, il pennello della penna, l'ancora e a chi va il tratto",
+      "target_ops": [
+        {
+          "op": "draw",
+          "on": "auto",
+          "points": [[40, 460], [44, 460], [48, 460]],
+          "pen": "ballpoint",
+          "color": "blue"
+        }
+      ],
+      "task": "T16"
+    },
+    {
+      "id": "N4.ink.pen_free",
+      "name": "Scrivi con la penna sul vuoto",
+      "source": "N4",
+      "gui": [{ "plan": "N4 T12" }],
+      "writes": "file",
+      "state": "by_hand",
+      "ops": [
+        {
+          "op": "add_strokes",
+          "layer": "board",
+          "strokes": [
+            {
+              "tool": "pen",
+              "brush": "pf1 size=2 thinning=0.25 smoothing=0.5 streamline=0.5 taperStart=2 taperEnd=8 capStart=1 capEnd=1 sim=1 pen=ballpoint",
+              "color": "#0072b2",
+              "anchor": { "kind": "free" },
+              "ink": "1 s100 cxyt 150000,0,0 400,400,8"
+            }
+          ]
+        }
+      ],
+      "computes": "la stringa `ink` e il pennello",
+      "target_ops": [{ "op": "draw", "on": "board", "points": [[1500, 0], [1504, 4]], "pen": "ballpoint" }],
+      "task": "T16"
+    },
+    {
+      "id": "N4.ink.highlighter",
+      "name": "Evidenzia",
+      "source": "N4",
+      "gui": [{ "plan": "N4 T21" }],
+      "writes": "file",
+      "state": "by_hand",
+      "ops": [
+        {
+          "op": "add_strokes",
+          "layer": { "node": "t1" },
+          "strokes": [
+            {
+              "tool": "highlighter",
+              "brush": "pf1 size=16 thinning=0 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=1 pen=highlighter",
+              "color": "#f0e442",
+              "anchor": { "kind": "card", "width": 320, "height": 160 },
+              "ink": "1 s100 cxyt 2000,4000,0 20000,0,8"
+            }
+          ]
+        }
+      ],
+      "computes": "lo strumento, il pennello, la stringa `ink`",
+      "target_ops": [
+        {
+          "op": "draw",
+          "on": "t1",
+          "points": [[20, 40], [220, 40]],
+          "pen": "highlighter",
+          "color": "yellow"
+        }
+      ],
+      "task": "T16"
+    },
+    {
+      "id": "N4.ink.menu",
+      "name": "Scegli penna, colore e spessore",
+      "source": "N4",
+      "gui": [{ "plan": "N4 T21" }, { "plan": "N4 T16" }],
+      "writes": "nothing",
+      "state": "view",
+      "note": "La scelta non scrive; in codice sono gli argomenti `pen`, `color`, `size` di `draw`."
+    },
+    {
+      "id": "N4.ink.erase_stroke",
+      "name": "Gomma: togli il tratto intero",
+      "source": "N4",
+      "gui": [{ "plan": "N4 T13" }],
+      "writes": "file",
+      "state": "code",
+      "ops": [{ "op": "erase_strokes", "layer": { "node": "f1" }, "ids": ["s1"] }],
+      "note": "Gli id dei tratti li dà `canvas.read` (T8, con l'inchiostro da T17)."
+    },
+    {
+      "id": "N4.ink.erase_piece",
+      "name": "Gomma: taglia il pezzo strofinato",
+      "source": "N4",
+      "gui": [{ "plan": "N4 T22" }],
+      "writes": "file",
+      "state": "missing",
+      "computes": "il taglio dei campioni, che N4 T22 fa solo in TypeScript (`ink/tools/split.ts`)",
+      "target_ops": [{ "op": "erase_along", "points": [[100, 450], [140, 450]], "size": 12 }],
+      "task": "T18"
+    },
+    {
+      "id": "N4.ink.mouse",
+      "name": "Scrivi col mouse, tasto D",
+      "source": "N4",
+      "gui": [{ "plan": "N4 T13" }, { "plan": "N4 T16" }, { "plan": "N4 T19" }],
+      "writes": "nothing",
+      "state": "view"
+    }
+  ]
+}

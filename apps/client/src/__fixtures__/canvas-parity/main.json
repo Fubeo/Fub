@@ -1,0 +1,516 @@
+{
+  "version": 1,
+  "source": "main",
+  "max_missing": 13,
+  "entries": [
+    {
+      "id": "main.card.add_text",
+      "name": "Aggiungi una scheda di testo",
+      "source": "main",
+      "gui": [{ "menu": "canvas.add.text" }, { "toolbar": "add-text" }, { "gesture": "dblclick-empty" }],
+      "writes": "file",
+      "state": "by_hand",
+      "ops": [
+        {
+          "op": "add_card",
+          "node": { "type": "text", "text": "Idea", "x": 1400, "y": 0, "width": 320, "height": 160 }
+        }
+      ],
+      "computes": "il posto (la GUI: il centro della vista) e le misure 320×160",
+      "target_ops": [{ "op": "add_card", "text": "Idea" }],
+      "task": "T9"
+    },
+    {
+      "id": "main.card.add_file",
+      "name": "Aggiungi una scheda di file",
+      "source": "main",
+      "gui": [{ "menu": "canvas.add.file" }, { "toolbar": "add-file" }],
+      "writes": "file",
+      "state": "by_hand",
+      "ops": [
+        {
+          "op": "add_card",
+          "node": {
+            "type": "file",
+            "file": "Corsi/appunti.md",
+            "x": 1400,
+            "y": 0,
+            "width": 320,
+            "height": 160
+          }
+        }
+      ],
+      "computes": "il posto e le misure",
+      "target_ops": [{ "op": "add_card", "file": "Corsi/appunti.md" }],
+      "task": "T9",
+      "note": "La GUI di main dà 320×160 a ogni file; il codice dà le misure di nascita per tipo (D-11 di N6), come la GUI dopo N6 T9."
+    },
+    {
+      "id": "main.card.add_link",
+      "name": "Aggiungi una scheda di link",
+      "source": "main",
+      "gui": [{ "menu": "canvas.add.link" }, { "toolbar": "add-link" }],
+      "writes": "file",
+      "state": "by_hand",
+      "ops": [
+        {
+          "op": "add_card",
+          "node": {
+            "type": "link",
+            "url": "https://example.org/a",
+            "x": 1400,
+            "y": 0,
+            "width": 320,
+            "height": 120
+          }
+        }
+      ],
+      "computes": "il posto e le misure 320×120",
+      "target_ops": [{ "op": "add_card", "url": "https://example.org/a" }],
+      "task": "T9"
+    },
+    {
+      "id": "main.card.add_group",
+      "name": "Aggiungi un gruppo",
+      "source": "main",
+      "gui": [{ "menu": "canvas.add.group" }, { "toolbar": "add-group" }, { "menu": "canvas.add" }],
+      "writes": "file",
+      "state": "by_hand",
+      "ops": [
+        {
+          "op": "add_card",
+          "node": { "type": "group", "label": "Nuovo", "x": 1400, "y": 0, "width": 480, "height": 320 }
+        }
+      ],
+      "computes": "il posto e le misure 480×320",
+      "target_ops": [{ "op": "add_card", "label": "Nuovo" }],
+      "task": "T9"
+    },
+    {
+      "id": "main.card.drop_files",
+      "name": "Trascina o incolla file del vault",
+      "source": "main",
+      "gui": [{ "gesture": "drop-files" }],
+      "writes": "file",
+      "state": "by_hand",
+      "ops": [
+        {
+          "op": "add_card",
+          "node": { "type": "file", "file": "Corsi/a.md", "x": 1400, "y": 0, "width": 320, "height": 160 }
+        },
+        {
+          "op": "add_card",
+          "node": { "type": "file", "file": "Corsi/b.md", "x": 1432, "y": 32, "width": 320, "height": 160 }
+        }
+      ],
+      "computes": "il posto e le misure di ogni scheda",
+      "target_ops": [{ "op": "add_card", "file": "Corsi/a.md" }, { "op": "add_card", "file": "Corsi/b.md" }],
+      "task": "T9",
+      "note": "I byte di un file che viene da fuori entrano con il deposito degli allegati: eccezione external-bytes. Il codice mette in fila file già nel vault."
+    },
+    {
+      "id": "main.card.paste_text",
+      "name": "Incolla o trascina un testo o un URL",
+      "source": "main",
+      "gui": [{ "gesture": "paste-text" }, { "gesture": "drop-text" }],
+      "writes": "file",
+      "state": "by_hand",
+      "ops": [
+        {
+          "op": "add_card",
+          "node": {
+            "type": "text",
+            "text": "Testo incollato",
+            "x": 1400,
+            "y": 0,
+            "width": 320,
+            "height": 160
+          }
+        }
+      ],
+      "computes": "il posto e le misure; testo o link",
+      "target_ops": [{ "op": "add_card", "text": "Testo incollato" }],
+      "task": "T9"
+    },
+    {
+      "id": "main.card.replace_file",
+      "name": "Sostituisci il file di una scheda",
+      "source": "main",
+      "gui": [{ "gesture": "drop-on-file-card" }],
+      "writes": "file",
+      "state": "code",
+      "ops": [{ "op": "set", "id": "f1", "fields": { "file": "Corsi/voti-2.xlsx", "subpath": null } }]
+    },
+    {
+      "id": "main.card.convert_to_note",
+      "name": "Trasforma il testo in una nota",
+      "source": "main",
+      "gui": [{ "gesture": "convert-to-note" }],
+      "writes": "file",
+      "state": "missing",
+      "computes": "`set` non cambia il tipo: la GUI scrive una toppa che lo fa",
+      "target_ops": [{ "op": "convert", "id": "t1", "file": "Corsi/Perché la media è bassa.md" }],
+      "port": "note.create (la nota col testo), poi l'operazione",
+      "task": "T13"
+    },
+    {
+      "id": "main.card.edit",
+      "name": "Scrivi nella scheda (testo, file, URL, titolo del gruppo)",
+      "source": "main",
+      "gui": [
+        { "menu": "canvas.edit" },
+        { "key": "Enter" },
+        { "gesture": "dblclick-card" },
+        { "gesture": "edit-commit" }
+      ],
+      "writes": "file",
+      "state": "code",
+      "ops": [{ "op": "set", "id": "t1", "fields": { "text": "Perché la media è così bassa?" } }]
+    },
+    {
+      "id": "main.card.open",
+      "name": "Apri il file o il link",
+      "source": "main",
+      "gui": [{ "menu": "canvas.open" }, { "menu": "canvas.open_url" }],
+      "writes": "nothing",
+      "state": "view"
+    },
+    {
+      "id": "main.card.move",
+      "name": "Sposta le schede",
+      "source": "main",
+      "gui": [
+        { "gesture": "drag-card" },
+        { "key": "ArrowLeft" },
+        { "key": "ArrowRight" },
+        { "key": "ArrowUp" },
+        { "key": "ArrowDown" },
+        { "key": "Shift+ArrowLeft" },
+        { "key": "Shift+ArrowRight" },
+        { "key": "Shift+ArrowUp" },
+        { "key": "Shift+ArrowDown" }
+      ],
+      "writes": "file",
+      "state": "code",
+      "ops": [{ "op": "move", "ids": ["t1"], "dx": 8, "dy": 0 }]
+    },
+    {
+      "id": "main.group.drag",
+      "name": "Sposta un gruppo con le schede dentro",
+      "source": "main",
+      "gui": [{ "gesture": "drag-group" }],
+      "writes": "file",
+      "state": "by_hand",
+      "ops": [{ "op": "move", "ids": ["g1", "t1", "t2"], "dx": 40, "dy": 0 }],
+      "computes": "quali schede stanno tutte dentro il gruppo",
+      "target_ops": [{ "op": "move", "ids": ["g1"], "dx": 40, "dy": 0, "contents": true }],
+      "task": "T10"
+    },
+    {
+      "id": "main.card.resize",
+      "name": "Ridimensiona una scheda",
+      "source": "main",
+      "gui": [{ "gesture": "resize-handle" }],
+      "writes": "file",
+      "state": "code",
+      "ops": [{ "op": "resize", "id": "t1", "width": 400, "height": 200 }]
+    },
+    {
+      "id": "main.color.preset",
+      "name": "Colora con un colore di serie",
+      "source": "main",
+      "gui": [
+        { "menu": "canvas.color" },
+        { "menu": "canvas.color.1" },
+        { "menu": "canvas.color.2" },
+        { "menu": "canvas.color.3" },
+        { "menu": "canvas.color.4" },
+        { "menu": "canvas.color.5" },
+        { "menu": "canvas.color.6" },
+        { "field": "node-color" }
+      ],
+      "writes": "file",
+      "state": "code",
+      "ops": [{ "op": "set", "id": "t1", "fields": { "color": "1" } }],
+      "target_ops": [{ "op": "color", "ids": ["t1", "t2"], "color": "red" }],
+      "task": "T10",
+      "note": "Già in codice; T10 aggiunge i nomi e più schede in un'operazione."
+    },
+    {
+      "id": "main.color.none",
+      "name": "Togli il colore",
+      "source": "main",
+      "gui": [{ "menu": "canvas.color.none" }],
+      "writes": "file",
+      "state": "code",
+      "ops": [{ "op": "set", "id": "t1", "fields": { "color": null } }]
+    },
+    {
+      "id": "main.color.hex",
+      "name": "Colora con un colore scritto",
+      "source": "main",
+      "gui": [{ "field": "node-color-hex" }],
+      "writes": "file",
+      "state": "code",
+      "ops": [{ "op": "set", "id": "t1", "fields": { "color": "#0064b0" } }]
+    },
+    {
+      "id": "main.duplicate",
+      "name": "Duplica",
+      "source": "main",
+      "gui": [{ "menu": "canvas.duplicate" }, { "toolbar": "duplicate" }, { "key": "Mod+D" }],
+      "writes": "file",
+      "state": "by_hand",
+      "ops": [
+        {
+          "op": "add_card",
+          "node": {
+            "type": "text",
+            "text": "Perché la media è bassa?",
+            "x": 32,
+            "y": 32,
+            "width": 320,
+            "height": 160
+          }
+        }
+      ],
+      "computes": "la copia dei campi, il posto +32 agganciato, gli id nuovi",
+      "target_ops": [{ "op": "duplicate", "ids": ["t1", "t2"] }],
+      "task": "T11",
+      "note": "La GUI di main non copia gli archi fra le schede duplicate; `duplicate` li copia (D1)."
+    },
+    {
+      "id": "main.delete",
+      "name": "Togli schede e archi",
+      "source": "main",
+      "gui": [
+        { "menu": "canvas.delete" },
+        { "toolbar": "delete" },
+        { "key": "Delete" },
+        { "key": "Backspace" }
+      ],
+      "writes": "file",
+      "state": "code",
+      "ops": [{ "op": "remove", "ids": ["t2"] }]
+    },
+    {
+      "id": "main.order.front",
+      "name": "Porta sopra",
+      "source": "main",
+      "gui": [{ "menu": "canvas.order" }, { "menu": "canvas.bring_front" }, { "toolbar": "bring-front" }],
+      "writes": "file",
+      "state": "code",
+      "ops": [{ "op": "reorder", "ids": ["t1"] }]
+    },
+    {
+      "id": "main.order.back",
+      "name": "Porta sotto",
+      "source": "main",
+      "gui": [{ "menu": "canvas.send_back" }, { "toolbar": "send-back" }],
+      "writes": "file",
+      "state": "by_hand",
+      "ops": [{ "op": "reorder", "ids": ["t1", "g1", "t2", "f1", "p1", "l1"] }],
+      "computes": "l'ordine di tutte le altre schede",
+      "target_ops": [{ "op": "reorder", "ids": ["t1"], "to": "back" }],
+      "task": "T10"
+    },
+    {
+      "id": "main.align",
+      "name": "Allinea",
+      "source": "main",
+      "gui": [
+        { "menu": "canvas.align" },
+        { "menu": "canvas.align.left" },
+        { "menu": "canvas.align.center" },
+        { "menu": "canvas.align.right" },
+        { "menu": "canvas.align.top" },
+        { "menu": "canvas.align.middle" },
+        { "menu": "canvas.align.bottom" },
+        { "toolbar": "left" },
+        { "toolbar": "center" },
+        { "toolbar": "right" },
+        { "toolbar": "top" },
+        { "toolbar": "middle" },
+        { "toolbar": "bottom" }
+      ],
+      "writes": "file",
+      "state": "by_hand",
+      "ops": [{ "op": "move", "ids": ["t2"], "dx": -400, "dy": 0 }],
+      "computes": "i bordi o i centri comuni, agganciati a 8",
+      "target_ops": [{ "op": "align", "ids": ["t2", "f1"], "to": "left" }],
+      "task": "T11"
+    },
+    {
+      "id": "main.distribute",
+      "name": "Distribuisci",
+      "source": "main",
+      "gui": [
+        { "menu": "canvas.distribute_x" },
+        { "menu": "canvas.distribute_y" },
+        { "toolbar": "distribute-x" },
+        { "toolbar": "distribute-y" }
+      ],
+      "writes": "file",
+      "state": "by_hand",
+      "ops": [{ "op": "move", "ids": ["t2"], "dx": 104, "dy": 0 }],
+      "computes": "gli spazi uguali fra i centri",
+      "target_ops": [{ "op": "distribute", "ids": ["t1", "t2", "l1"], "axis": "x" }],
+      "task": "T11"
+    },
+    {
+      "id": "main.select",
+      "name": "Scegli schede e archi",
+      "source": "main",
+      "gui": [
+        { "key": "Mod+A" },
+        { "gesture": "click-select" },
+        { "field": "select-edge" }
+      ],
+      "writes": "nothing",
+      "state": "view",
+      "note": "Il codice nomina le schede per id; `canvas.read` (T8) dà gli id in ordine di lettura."
+    },
+    {
+      "id": "main.view.fit",
+      "name": "Mostra tutto",
+      "source": "main",
+      "gui": [{ "menu": "canvas.fit" }, { "toolbar": "fit" }, { "key": "Mod+0" }],
+      "writes": "nothing",
+      "state": "view"
+    },
+    {
+      "id": "main.view.fit_selection",
+      "name": "Mostra la selezione",
+      "source": "main",
+      "gui": [{ "menu": "canvas.fit_selection" }, { "toolbar": "fit-selection" }],
+      "writes": "nothing",
+      "state": "view"
+    },
+    {
+      "id": "main.view.zoom",
+      "name": "Ingrandisci e rimpicciolisci",
+      "source": "main",
+      "gui": [
+        { "menu": "canvas.zoom_in" },
+        { "menu": "canvas.zoom_out" },
+        { "toolbar": "zoom-in" },
+        { "toolbar": "zoom-out" },
+        { "key": "Mod+=" },
+        { "key": "Mod++" },
+        { "key": "Mod+-" },
+        { "gesture": "wheel-zoom" }
+      ],
+      "writes": "nothing",
+      "state": "view"
+    },
+    {
+      "id": "main.view.pan",
+      "name": "Sposta la vista",
+      "source": "main",
+      "gui": [{ "gesture": "pan" }],
+      "writes": "nothing",
+      "state": "view"
+    },
+    {
+      "id": "main.undo",
+      "name": "Annulla e ripeti",
+      "source": "main",
+      "gui": [{ "key": "Mod+Z" }, { "key": "Mod+Shift+Z" }, { "key": "Mod+Y" }],
+      "writes": "file",
+      "state": "port",
+      "port": "l'Undo che `canvas.apply` restituisce, o `fub_write` del testo letto prima con la sua revisione",
+      "note": "Nessuna operazione «annulla»: la cronologia è della sessione, non del file."
+    },
+    {
+      "id": "main.copy",
+      "name": "Copia",
+      "source": "main",
+      "gui": [{ "clipboard": "copy" }],
+      "writes": "nothing",
+      "state": "view",
+      "note": "Da codice si legge con `canvas.read` (T8); il frammento si rimette con `insert` (T13)."
+    },
+    {
+      "id": "main.edge.connect",
+      "name": "Collega due schede",
+      "source": "main",
+      "gui": [{ "gesture": "connect-handle" }],
+      "writes": "file",
+      "state": "code",
+      "ops": [{ "op": "connect", "edge": { "fromNode": "t2", "toNode": "f1", "toEnd": "arrow" } }],
+      "target_ops": [{ "op": "connect", "from": "t2", "to": "f1" }],
+      "task": "T9",
+      "note": "Già in codice; T9 accorcia la forma."
+    },
+    {
+      "id": "main.edge.reconnect",
+      "name": "Sposta un estremo dell'arco",
+      "source": "main",
+      "gui": [{ "gesture": "reconnect-end" }, { "field": "edge-fromNode" }, { "field": "edge-toNode" }],
+      "writes": "file",
+      "state": "code",
+      "ops": [{ "op": "set", "id": "e1", "fields": { "toNode": "f1" } }]
+    },
+    {
+      "id": "main.edge.reverse",
+      "name": "Inverti l'arco",
+      "source": "main",
+      "gui": [{ "menu": "canvas.edge.reverse" }],
+      "writes": "file",
+      "state": "by_hand",
+      "ops": [
+        {
+          "op": "set",
+          "id": "e1",
+          "fields": {
+            "fromNode": "t2",
+            "fromSide": "left",
+            "toNode": "t1",
+            "toSide": "right",
+            "fromEnd": "arrow",
+            "toEnd": null
+          }
+        }
+      ],
+      "computes": "lo scambio di estremi, lati e punte",
+      "target_ops": [{ "op": "reverse", "ids": ["e1"] }],
+      "task": "T11"
+    },
+    {
+      "id": "main.edge.label",
+      "name": "Scrivi l'etichetta dell'arco",
+      "source": "main",
+      "gui": [{ "field": "edge-label" }],
+      "writes": "file",
+      "state": "code",
+      "ops": [{ "op": "set", "id": "e1", "fields": { "label": "perché" } }]
+    },
+    {
+      "id": "main.edge.color",
+      "name": "Colora l'arco",
+      "source": "main",
+      "gui": [{ "field": "edge-color" }, { "field": "edge-color-hex" }],
+      "writes": "file",
+      "state": "code",
+      "ops": [{ "op": "set", "id": "e1", "fields": { "color": "4" } }]
+    },
+    {
+      "id": "main.edge.sides",
+      "name": "Scegli i lati dell'arco",
+      "source": "main",
+      "gui": [{ "field": "edge-fromSide" }, { "field": "edge-toSide" }],
+      "writes": "file",
+      "state": "code",
+      "ops": [{ "op": "set", "id": "e1", "fields": { "fromSide": "bottom", "toSide": "top" } }]
+    },
+    {
+      "id": "main.edge.ends",
+      "name": "Scegli le punte dell'arco",
+      "source": "main",
+      "gui": [{ "field": "edge-fromEnd" }, { "field": "edge-toEnd" }],
+      "writes": "file",
+      "state": "code",
+      "ops": [{ "op": "set", "id": "e1", "fields": { "fromEnd": "arrow" } }]
+    }
+  ]
+}

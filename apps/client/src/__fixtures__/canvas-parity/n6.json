@@ -1,0 +1,638 @@
+{
+  "version": 1,
+  "source": "N6",
+  "max_missing": 19,
+  "entries": [
+    {
+      "id": "N6.card.drop_vault",
+      "name": "Trascina un file dall'albero: misure per tipo",
+      "source": "N6",
+      "gui": [{ "plan": "N6 T9" }, { "plan": "N6 T15" }],
+      "writes": "file",
+      "state": "by_hand",
+      "ops": [
+        {
+          "op": "add_card",
+          "node": {
+            "type": "file",
+            "file": "Corsi/foto.png",
+            "x": 1400,
+            "y": 0,
+            "width": 480,
+            "height": 360
+          }
+        }
+      ],
+      "computes": "le misure di nascita per tipo (D-11)",
+      "target_ops": [{ "op": "add_card", "file": "Corsi/foto.png", "content_size": [4032, 3024] }],
+      "task": "T9"
+    },
+    {
+      "id": "N6.card.drop_many",
+      "name": "Trascina molti file: griglia e gruppo",
+      "source": "N6",
+      "gui": [{ "plan": "N6 T9" }],
+      "writes": "file",
+      "state": "by_hand",
+      "ops": [
+        {
+          "op": "add_card",
+          "node": {
+            "id": "a",
+            "type": "file",
+            "file": "Corsi/a.md",
+            "x": 1400,
+            "y": 0,
+            "width": 320,
+            "height": 240
+          }
+        },
+        {
+          "op": "add_card",
+          "node": {
+            "id": "b",
+            "type": "file",
+            "file": "Corsi/b.md",
+            "x": 1744,
+            "y": 0,
+            "width": 320,
+            "height": 240
+          }
+        }
+      ],
+      "computes": "la griglia di ceil(√n) colonne, il passo 24, il gruppo sopra 12",
+      "target_ops": [
+        { "op": "add_card", "id": "a", "file": "Corsi/a.md" },
+        { "op": "add_card", "id": "b", "file": "Corsi/b.md" },
+        { "op": "layout", "ids": ["a", "b"], "kind": "grid" }
+      ],
+      "task": "T12"
+    },
+    {
+      "id": "N6.text.grow",
+      "name": "La scheda di testo cresce col testo",
+      "source": "N6",
+      "gui": [{ "plan": "N6 T44" }, { "plan": "N6 T46" }],
+      "writes": "file",
+      "state": "by_hand",
+      "ops": [{ "op": "resize", "id": "t1", "width": 480, "height": 200 }],
+      "computes": "la misura del testo",
+      "target_ops": [{ "op": "resize", "id": "t1", "fit": "content" }],
+      "task": "T10",
+      "note": "La GUI misura il testo nel DOM; il codice stima con la regola di `text_size` (eccezione dom-text-fit: può differire di qualche riga)."
+    },
+    {
+      "id": "N6.text.new_below",
+      "name": "Ctrl+Invio: una scheda sotto",
+      "source": "N6",
+      "gui": [{ "plan": "N6 T44" }],
+      "writes": "file",
+      "state": "by_hand",
+      "ops": [
+        {
+          "op": "add_card",
+          "node": { "type": "text", "text": "Poi", "x": 0, "y": 184, "width": 320, "height": 160 }
+        }
+      ],
+      "computes": "il posto sotto, a 24, con la stessa larghezza",
+      "target_ops": [{ "op": "add_card", "text": "Poi", "near": "t1", "side": "bottom" }],
+      "task": "T9"
+    },
+    {
+      "id": "N6.text.new_right",
+      "name": "Ctrl+Maiusc+Invio: una scheda a destra, collegata",
+      "source": "N6",
+      "gui": [{ "plan": "N6 T44" }],
+      "writes": "file",
+      "state": "by_hand",
+      "ops": [
+        {
+          "op": "add_card",
+          "node": {
+            "id": "n",
+            "type": "text",
+            "text": "Perché",
+            "x": 1368,
+            "y": 0,
+            "width": 320,
+            "height": 160
+          }
+        },
+        {
+          "op": "connect",
+          "edge": {
+            "fromNode": "l1",
+            "fromSide": "right",
+            "toNode": "n",
+            "toSide": "left",
+            "toEnd": "arrow"
+          }
+        }
+      ],
+      "computes": "il posto a destra e i lati dell'arco",
+      "target_ops": [
+        { "op": "add_card", "id": "n", "text": "Perché", "near": "l1", "side": "right" },
+        { "op": "connect", "from": "l1", "to": "n" }
+      ],
+      "task": "T9"
+    },
+    {
+      "id": "N6.color.names",
+      "name": "I colori con un nome",
+      "source": "N6",
+      "gui": [{ "plan": "N6 T47" }],
+      "writes": "file",
+      "state": "code",
+      "ops": [{ "op": "set", "id": "t1", "fields": { "color": "#0064b0" } }],
+      "target_ops": [{ "op": "color", "ids": ["t1"], "color": "note-blue" }],
+      "task": "T10"
+    },
+    {
+      "id": "N6.group.selection",
+      "name": "Raggruppa la selezione",
+      "source": "N6",
+      "gui": [{ "plan": "N6 T51" }],
+      "writes": "file",
+      "state": "by_hand",
+      "ops": [
+        {
+          "op": "add_card",
+          "node": {
+            "id": "g2",
+            "type": "group",
+            "label": "",
+            "x": -24,
+            "y": 376,
+            "width": 968,
+            "height": 528
+          }
+        },
+        { "op": "reorder", "ids": ["g1", "t1", "t2", "g2", "f1", "p1", "l1"] }
+      ],
+      "computes": "il rettangolo con il margine e il posto nell'ordine (sotto le schede)",
+      "target_ops": [{ "op": "group", "ids": ["f1", "p1"] }],
+      "task": "T11"
+    },
+    {
+      "id": "N6.resize.fit",
+      "name": "Doppio clic sulla maniglia: misura del contenuto",
+      "source": "N6",
+      "gui": [{ "plan": "N6 T66" }],
+      "writes": "file",
+      "state": "by_hand",
+      "ops": [{ "op": "resize", "id": "p1", "width": 360, "height": 480 }],
+      "computes": "la misura del contenuto",
+      "target_ops": [{ "op": "resize", "id": "p1", "fit": "content" }],
+      "task": "T10"
+    },
+    {
+      "id": "N6.edge.nearest",
+      "name": "Collega senza mirare: i lati più vicini",
+      "source": "N6",
+      "gui": [{ "plan": "N6 T67" }],
+      "writes": "file",
+      "state": "by_hand",
+      "ops": [
+        {
+          "op": "connect",
+          "edge": {
+            "fromNode": "t1",
+            "fromSide": "bottom",
+            "toNode": "f1",
+            "toSide": "top",
+            "toEnd": "arrow"
+          }
+        }
+      ],
+      "computes": "i lati più vicini",
+      "target_ops": [{ "op": "connect", "from": "t1", "to": "f1", "sides": "auto" }],
+      "task": "T9"
+    },
+    {
+      "id": "N6.edge.drop_empty",
+      "name": "Lascia il filo nel vuoto: una scheda nuova collegata",
+      "source": "N6",
+      "gui": [{ "plan": "N6 T67" }],
+      "writes": "file",
+      "state": "by_hand",
+      "ops": [
+        {
+          "op": "add_card",
+          "node": { "id": "n", "type": "text", "text": "", "x": 0, "y": 728, "width": 320, "height": 160 }
+        },
+        {
+          "op": "connect",
+          "edge": {
+            "fromNode": "f1",
+            "fromSide": "bottom",
+            "toNode": "n",
+            "toSide": "top",
+            "toEnd": "arrow"
+          }
+        }
+      ],
+      "computes": "il posto della scheda nuova e i lati",
+      "target_ops": [
+        { "op": "add_card", "id": "n", "type": "text", "near": "f1", "side": "bottom" },
+        { "op": "connect", "from": "f1", "to": "n", "sides": "auto" }
+      ],
+      "task": "T9"
+    },
+    {
+      "id": "N6.clipboard.paste",
+      "name": "Incolla schede copiate",
+      "source": "N6",
+      "gui": [{ "plan": "N6 T68" }],
+      "writes": "file",
+      "state": "by_hand",
+      "ops": [
+        {
+          "op": "add_card",
+          "node": {
+            "id": "c1",
+            "type": "text",
+            "text": "Perché la media è bassa?",
+            "x": 1400,
+            "y": 0,
+            "width": 320,
+            "height": 160
+          }
+        },
+        {
+          "op": "add_card",
+          "node": {
+            "id": "c2",
+            "type": "text",
+            "text": "Ripasso",
+            "x": 1800,
+            "y": 0,
+            "width": 320,
+            "height": 160
+          }
+        },
+        {
+          "op": "connect",
+          "edge": {
+            "fromNode": "c1",
+            "fromSide": "right",
+            "toNode": "c2",
+            "toSide": "left",
+            "toEnd": "arrow"
+          }
+        }
+      ],
+      "computes": "gli id nuovi, gli archi rimappati, lo spostamento",
+      "target_ops": [
+        {
+          "op": "insert",
+          "fragment": {
+            "version": 1,
+            "nodes": [
+              {
+                "id": "t1",
+                "type": "text",
+                "text": "Perché la media è bassa?",
+                "x": 0,
+                "y": 0,
+                "width": 320,
+                "height": 160
+              },
+              {
+                "id": "t2",
+                "type": "text",
+                "text": "Ripasso",
+                "x": 400,
+                "y": 0,
+                "width": 320,
+                "height": 160
+              }
+            ],
+            "edges": [{ "id": "e1", "fromNode": "t1", "toNode": "t2", "toEnd": "arrow" }]
+          },
+          "x": 1400,
+          "y": 0
+        }
+      ],
+      "task": "T13"
+    },
+    {
+      "id": "N6.convert.extract",
+      "name": "Estrai in una nota",
+      "source": "N6",
+      "gui": [{ "plan": "N6 T70" }],
+      "writes": "file",
+      "state": "missing",
+      "computes": "`set` non cambia il tipo",
+      "target_ops": [{ "op": "convert", "id": "t2", "file": "Corsi/Ripasso.md" }],
+      "port": "note.create, poi l'operazione",
+      "task": "T13"
+    },
+    {
+      "id": "N6.convert.copy_here",
+      "name": "Copia qui il testo del file",
+      "source": "N6",
+      "gui": [{ "plan": "N6 T70" }],
+      "writes": "file",
+      "state": "by_hand",
+      "ops": [
+        {
+          "op": "add_card",
+          "node": {
+            "type": "text",
+            "text": "(il testo letto)",
+            "x": 1400,
+            "y": 0,
+            "width": 480,
+            "height": 400
+          }
+        }
+      ],
+      "computes": "le misure del testo",
+      "target_ops": [{ "op": "add_card", "text": "(il testo letto)", "near": "f1", "side": "right" }],
+      "port": "fub_read del file",
+      "task": "T9"
+    },
+    {
+      "id": "N6.card.relink",
+      "name": "Ritrova un file mancante, sostituisci il file",
+      "source": "N6",
+      "gui": [{ "plan": "N6 T16" }, { "plan": "N6 T70" }],
+      "writes": "file",
+      "state": "code",
+      "ops": [{ "op": "set", "id": "f1", "fields": { "file": "Archivio/voti.xlsx" } }]
+    },
+    {
+      "id": "N6.pages.spread",
+      "name": "Spargi le pagine del PDF",
+      "source": "N6",
+      "gui": [{ "plan": "N6 T72" }],
+      "writes": "file",
+      "state": "by_hand",
+      "ops": [
+        {
+          "op": "add_card",
+          "node": {
+            "type": "file",
+            "file": "Corsi/dispensa.pdf",
+            "subpath": "#page=1",
+            "x": 944,
+            "y": 400,
+            "width": 360,
+            "height": 480
+          }
+        },
+        {
+          "op": "add_card",
+          "node": {
+            "type": "file",
+            "file": "Corsi/dispensa.pdf",
+            "subpath": "#page=2",
+            "x": 1328,
+            "y": 400,
+            "width": 360,
+            "height": 480
+          }
+        }
+      ],
+      "computes": "la fila accanto, l'a capo dopo 10, il gruppo sopra 12",
+      "target_ops": [{ "op": "spread_pages", "id": "p1", "pages": [1, 2] }],
+      "task": "T14"
+    },
+    {
+      "id": "N6.parts.excerpt",
+      "name": "Estratti: pagine, zona, sezioni, ritaglio",
+      "source": "N6",
+      "gui": [
+        { "plan": "N6 T73" },
+        { "plan": "N6 T74" },
+        { "plan": "N6 T75" },
+        { "plan": "N6 T78" },
+        { "plan": "N6 T80" },
+        { "plan": "N6 T81" },
+        { "plan": "N6 T82" }
+      ],
+      "writes": "file",
+      "state": "by_hand",
+      "ops": [
+        {
+          "op": "set",
+          "id": "p1",
+          "fields": { "subpath": "#page=3", "fub:parts": { "kind": "pages", "pages": [3, 4] } }
+        }
+      ],
+      "computes": "la forma di `fub:parts` (N6 T73) e il `subpath` che la prima parte dà",
+      "target_ops": [{ "op": "excerpt", "id": "p1", "part": { "kind": "pages", "pages": [3, 4] } }],
+      "task": "T14"
+    },
+    {
+      "id": "N6.ink.page",
+      "name": "Inchiostro sulla pagina del PDF",
+      "source": "N6",
+      "gui": [{ "plan": "N6 T19" }],
+      "writes": "file",
+      "state": "missing",
+      "computes": "l'ancora di pagina",
+      "target_ops": [
+        {
+          "op": "draw",
+          "on": { "card": "p1", "page": 3, "page_size": [595, 842] },
+          "points": [[72, 100], [300, 100]]
+        }
+      ],
+      "task": "T19"
+    },
+    {
+      "id": "N6.ink.cell",
+      "name": "Inchiostro attaccato a una cella",
+      "source": "N6",
+      "gui": [{ "plan": "N6 T37" }, { "plan": "N6 T38" }],
+      "writes": "file",
+      "state": "missing",
+      "computes": "l'ancora di cella",
+      "target_ops": [
+        {
+          "op": "draw",
+          "on": { "card": "f1", "sheet": "Foglio1", "cell": "B3" },
+          "points": [[2, 10], [60, 10]]
+        }
+      ],
+      "task": "T19"
+    },
+    {
+      "id": "N6.ink.lasso",
+      "name": "Lazo: sposta i tratti",
+      "source": "N6",
+      "gui": [{ "plan": "N6 T86" }],
+      "writes": "file",
+      "state": "code",
+      "ops": [{ "op": "move_strokes", "layer": "board", "ids": ["s1"], "dx": 40, "dy": 0 }],
+      "note": "L'operazione la porta N6 T86, in snake_case (Differenze); la sua forma esatta la decide N6."
+    },
+    {
+      "id": "N6.ink.restyle",
+      "name": "Cambia penna o colore ai tratti",
+      "source": "N6",
+      "gui": [{ "plan": "N6 T86" }],
+      "writes": "file",
+      "state": "code",
+      "ops": [{ "op": "restyle_strokes", "layer": "board", "ids": ["s1"], "color": "#d55e00" }],
+      "note": "Come sopra: N6 T86."
+    },
+    {
+      "id": "N6.ink.shapes",
+      "name": "Forme dal tratto e linea dritta",
+      "source": "N6",
+      "gui": [{ "plan": "N6 T87" }],
+      "writes": "file",
+      "state": "by_hand",
+      "ops": [
+        {
+          "op": "add_strokes",
+          "layer": "board",
+          "strokes": [
+            {
+              "tool": "pen",
+              "brush": "pf1 size=6 thinning=0 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=1 pen=marker",
+              "color": "#d55e00",
+              "anchor": { "kind": "free" },
+              "ink": "1 s100 cxyt 0,0,0 10000,0,8"
+            }
+          ]
+        }
+      ],
+      "computes": "i campioni della forma",
+      "target_ops": [
+        {
+          "op": "draw",
+          "on": "board",
+          "shape": { "kind": "rect", "x": 1400, "y": 0, "width": 200, "height": 100 },
+          "pen": "marker",
+          "color": "vermilion"
+        }
+      ],
+      "task": "T16"
+    },
+    {
+      "id": "N6.card.write_inside",
+      "name": "Scrivi dentro una scheda di nota o di foglio",
+      "source": "N6",
+      "gui": [{ "plan": "N6 T40" }, { "plan": "N6 T41" }, { "plan": "N6 T42" }, { "plan": "N6 T43" }],
+      "writes": "other-file",
+      "state": "port",
+      "port": "fub_write sulla nota; i comandi dei fogli per le celle",
+      "note": "Cambia il file della scheda, non la lavagna."
+    },
+    {
+      "id": "N6.inspector.raw",
+      "name": "L'ispettore: numeri e nodo grezzo",
+      "source": "N6",
+      "gui": [{ "plan": "N6 T59" }],
+      "writes": "file",
+      "state": "code",
+      "ops": [
+        {
+          "op": "set",
+          "id": "t1",
+          "fields": { "x": 16, "fub:nota": "campo di un altro programma" }
+        }
+      ]
+    },
+    {
+      "id": "N6.put_page",
+      "name": "Metti la pagina sulla lavagna",
+      "source": "N6",
+      "gui": [{ "plan": "N6 T84" }],
+      "writes": "file",
+      "state": "by_hand",
+      "ops": [
+        {
+          "op": "add_card",
+          "node": {
+            "type": "file",
+            "file": "Corsi/dispensa.pdf",
+            "subpath": "#page=5",
+            "x": 1400,
+            "y": 0,
+            "width": 360,
+            "height": 480
+          }
+        }
+      ],
+      "computes": "le misure di nascita del PDF",
+      "target_ops": [{ "op": "add_card", "file": "Corsi/dispensa.pdf", "subpath": "#page=5" }],
+      "task": "T9"
+    },
+    {
+      "id": "N6.guides",
+      "name": "Guide e griglia durante il gesto",
+      "source": "N6",
+      "gui": [{ "plan": "N6 T71" }],
+      "writes": "file",
+      "state": "exception",
+      "note": "Le guide aiutano la mano mentre trascina; il codice scrive numeri esatti, o usa `align`, `distribute`, `layout`, e `near`."
+    },
+    {
+      "id": "N6.ink.owner",
+      "name": "A chi va il tratto mentre si scrive (e Alt per libero)",
+      "source": "N6",
+      "gui": [{ "plan": "N6 T69" }],
+      "writes": "file",
+      "state": "by_hand",
+      "ops": [
+        {
+          "op": "add_strokes",
+          "layer": "board",
+          "strokes": [
+            {
+              "tool": "pen",
+              "brush": "pf1 size=2 thinning=0.25 smoothing=0.5 streamline=0.5 taperStart=2 taperEnd=8 capStart=1 capEnd=1 sim=1 pen=ballpoint",
+              "color": "#000000",
+              "anchor": { "kind": "free" },
+              "ink": "1 s100 cxyt 4000,46000,0 400,0,8"
+            }
+          ]
+        }
+      ],
+      "computes": "la regola dell'ancora",
+      "target_ops": [{ "op": "draw", "on": "auto", "points": [[40, 460], [44, 460]] }],
+      "task": "T16",
+      "note": "`on: \"auto\"` usa la regola di N4 T3 (e di N6 T19 e T38 quando ci sono); `on: \"board\"` è Alt."
+    },
+    {
+      "id": "N6.view",
+      "name": "Vista, navigatore, indietro e avanti, cerca, lettore da vicino, entrare nella scheda",
+      "source": "N6",
+      "gui": [
+        { "plan": "N6 T14" },
+        { "plan": "N6 T35" },
+        { "plan": "N6 T36" },
+        { "plan": "N6 T53" },
+        { "plan": "N6 T55" },
+        { "plan": "N6 T56" },
+        { "plan": "N6 T57" },
+        { "plan": "N6 T60" },
+        { "plan": "N6 T76" }
+      ],
+      "writes": "nothing",
+      "state": "view"
+    },
+    {
+      "id": "N6.chrome",
+      "name": "Catalogo, barra della selezione, menu radiale, lavagna vuota",
+      "source": "N6",
+      "gui": [{ "plan": "N6 T48" }, { "plan": "N6 T51" }, { "plan": "N6 T62" }, { "plan": "N6 T63" }],
+      "writes": "nothing",
+      "state": "view",
+      "note": "Ospitano comandi; ognuno ha la sua voce qui. Dopo N6 ogni comando del catalogo dichiara la sua operazione (T23)."
+    },
+    {
+      "id": "N6.settings",
+      "name": "Impostazioni della lavagna, dove vanno i file trascinati",
+      "source": "N6",
+      "gui": [{ "plan": "N6 T33" }, { "plan": "N6 T34" }],
+      "writes": "nothing",
+      "state": "exception",
+      "note": "Impostazioni di Fub, non contenuto della lavagna."
+    }
+  ]
+}
