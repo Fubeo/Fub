@@ -3926,7 +3926,7 @@ Fatto quando: la scelta si salva nell'host e sopravvive al riavvio; le foto
 del banco della barra di formato, del PDF e del disegno, nelle due luci,
 mostrano le due varianti; `npm run bench:a11y` è verde.
 Prova: scripts/check.sh --rapido; cd apps/client && npm run theme:verify
-Stato: [ ] da fare
+Stato: [x] fatto · 848941bfb..bbe045933 · `appearance.bars` (`light`/`marked`, di macchina) nell'host; `data-bars="marked"` sulla radice anche nel primo fotogramma (cache) e nelle finestre dei documenti (`loader.ts`, fuori Tocca); `:root[data-bars="marked"] { --bar-tray: var(--sheet-2) }` in `skin/kit.css`, accanto ai consumatori; la riga «Le barre» viene dal registro con i testi nel catalogo dell'host (come «Densità»), quindi `settings.ts` e `i18n/catalog.ts` non cambiano; bench:a11y 172/172 nelle due luci; la differenza fra le due scelte è piccola (#f8faf8 → #f3f7f4 di giorno), come prescrive D6 C
 
 ## T12 · #237 R04: la griglia e le modifiche che vengono da fuori
 
