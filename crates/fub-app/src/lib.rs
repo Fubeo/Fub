@@ -62,6 +62,7 @@ pub use fub_host::{
 pub use fub_wasm_host::managed::InstalledPluginInfo;
 mod avvio;
 mod document_windows;
+mod domande;
 mod frame_rate;
 mod live;
 mod mobile;
@@ -1086,13 +1087,26 @@ fn invoke_command(
 /// proprio, e la dieta dell'IPC (§16.6) diventa praticabile — un'allowlist che
 /// vieta i comandi bespoke non deve più dire di no a feature che non hanno altra
 /// strada.
+///
+/// Gira fuori dal thread principale, in fila (`domande`): una domanda può
+/// durare centinaia di millisecondi — il correttore che controlla una nota
+/// lunga (`fub.proof`), una ricerca su un vault grande — e sul thread
+/// principale ferma la finestra, che per tutto quel tempo non presenta
+/// fotogrammi. Le domande di una stessa corsia rispondono nell'ordine in cui
+/// sono entrate, come prima.
 #[tauri::command]
-fn query_index(
-    host: State<Host>,
+async fn query_index(
+    app: AppHandle,
+    corsie: State<'_, domande::Corsie>,
     query: IndexQuery,
     vault: Option<String>,
 ) -> Result<IndexResult, PluginError> {
-    host.query_index(vault.as_deref(), query)
+    let corsia = domande::corsia(&query);
+    corsie
+        .chiedi(corsia, move || {
+            app.state::<Host>().query_index(vault.as_deref(), query)
+        })
+        .await
 }
 
 /// **Ferma un lavoro lungo** (§10.3): l'altro capo di `Host::cancel_job`, che
@@ -2885,6 +2899,7 @@ pub fn run() {
         .manage(CatalogConfig(config_dir.clone()))
         .manage(limited)
         .manage(document_windows::DocumentWindows::default())
+        .manage(domande::Corsie::default())
         .manage(live::LiveSessions::new())
         .on_window_event(|window, event| {
             document_windows::on_window_event(window, event);
