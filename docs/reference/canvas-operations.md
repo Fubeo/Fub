@@ -180,8 +180,8 @@ un arco in fondo alla lista degli archi.
 
 Le operazioni d'intento (`CanvasOp`, in `crates/fub-canvas-core/src/ops.rs`),
 con i loro esempi e i loro errori, stanno in
-[La lavagna come codice](canvas-code.md#le-operazioni). Qui restano le toppe
-che le operazioni producono.
+[La lavagna come codice](canvas-code.md#le-operazioni). Le toppe che le
+operazioni producono sono descritte sopra, in «Le toppe».
 
 ## Comandi
 

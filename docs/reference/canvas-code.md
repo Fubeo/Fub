@@ -54,7 +54,8 @@ Le regole della forma:
 
 ### Prima e dopo
 
-Una piccola mappa con le operazioni di oggi. Ogni numero si scrive a mano:
+Una piccola mappa con le operazioni che la lavagna accetta. Ogni numero si
+scrive a mano:
 
 ```json
 [
