@@ -2338,4 +2338,4 @@ Fatto quando: la PR #300 è pronta e ogni job è verde; la revisione e la
 prova nell'app vera sono scritte nella PR; nessun task resta aperto;
 l'utente ha detto sì al merge.
 Prova: gh pr checks 300
-Stato: [ ] da fare
+Stato: [~] in corso (2026-11-13, orchestratore)
