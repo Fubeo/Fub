@@ -85,6 +85,7 @@ all'export, dalla sessione dal tablet ai disegni grandi.
 - Prove manuali: [l'inchiostro](development/ink-input-smoke-test.md) e [il moto](development/motion-smoke-test.md)
 - [Le misure nella WebView](development/webview-measurements.md) e [le misure prese](misure/README.md)
 - [Creare un plugin](development/plugin-authoring.md)
+- [La parità della lavagna](development/canvas-parity.md): l'inventario di ciò che la GUI fa e della sua forma in codice
 - [Stile della documentazione](development/documentation-style.md) e [versionamento e release](development/versioning-and-releases.md)
 
 ## Consultare i contratti

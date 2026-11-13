@@ -50,6 +50,7 @@
 | le stringhe dell'editor dei disegni | `apps/client/src/editors/spatial/strings.ts`, con le voci per area (italiano e inglese insieme) in `strings/` |
 | la tavolozza dell'inchiostro | `apps/client/src/ink/palette.ts` (Okabe–Ito) |
 | i sei colori della lavagna | `apps/client/src/editors/canvas/engine.ts` |
+| l'inventario della parità della lavagna (le voci e i test) | `apps/client/src/__fixtures__/canvas-parity/`, con le regole in `docs/development/canvas-parity.md` |
 | il limite dei 64 MiB per i media | `apps/client/src/editors/media/media-types.ts` |
 | il sanificatore dell'HTML | `apps/client/src/ui/sanitize.ts` |
 | le molle del moto | `apps/client/src/moto/spring.ts` |
