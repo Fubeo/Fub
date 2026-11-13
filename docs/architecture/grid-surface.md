@@ -46,10 +46,19 @@ Finché il giornale ha soltanto celle l'undo è locale alla superficie; in
 modalità a comandi annulla e ripeti sono del documento (`edit.undo`,
 `edit.redo`). Un giornale cambiato altrove (un altro
 riquadro, un salvataggio, una ricarica) riapre la sessione e chiude la
-precedente; la bozza aperta resta, con il cursore e il fuoco. Se la sua cella
-è cambiata sotto, un avviso chiede «Tieni la tua» o «Prendi quella nuova»; se
-il foglio non c'è più, la bozza si chiude e l'avviso lo dice. Se non c'è una
-superficie compatibile,
+precedente; la bozza aperta resta, con il cursore e il fuoco, e segue la sua
+riga se questa si sposta. Se la sua cella è cambiata sotto, un avviso chiede
+«Tieni la tua» o «Prendi quella nuova»; se il foglio non c'è più, la bozza si
+chiude e l'avviso lo dice. Se la riga della cella non c'è più, la cella si
+chiude e la bozza va negli appunti, con l'avviso; se gli appunti rifiutano, il
+testo resta scritto nell'avviso. Con una cella aperta, una riscrittura che
+cambia altre celle dice «il file è cambiato fuori da Fub mentre scrivevi: il
+resto del foglio è aggiornato». Le celle si confrontano per input, non il
+testo del giornale: l'eco del proprio salvataggio non dice niente. La storia
+dell'annulla si svuota quando una sua cella è cambiata sotto (il controllo
+gira alla riapertura, e prima di annullare o ripetere): un annulla non riporta
+i dati di prima, e l'avviso lo dice. In sola lettura il controllo è lo stesso.
+Se non c'è una superficie compatibile,
 la sessione non si apre o una finestra fallisce, la superficie dichiara
 `data-grid-protocol="unavailable"`, lo dice nell'avviso e non scrive; il
 linguaggio delle formule non si duplica in TypeScript.
