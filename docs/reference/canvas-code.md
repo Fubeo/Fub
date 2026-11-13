@@ -1,13 +1,14 @@
 # La lavagna come codice
 
 > **Ambito:** la lavagna come codice: le tre letture di una lavagna (`outline`,
-> `code`, `json`), le misure e i posti che il nucleo decide per una scheda, e
-> le operazioni d'intento con cui una lavagna si scrive.
+> `code`, `json`), le misure e i posti che il nucleo decide per una scheda, le
+> operazioni d'intento con cui una lavagna si scrive, e il loro schema.
 > **Fonti autorevoli:** `crates/fub-canvas-core/src/describe.rs` (le letture),
 > `crates/fub-canvas-core/src/layout.rs` (misure e posti),
-> `crates/fub-canvas-core/src/ops.rs` (le operazioni), i loro test in
-> `crates/fub-canvas-core/tests/describe.rs`, `layout_vectors.rs` e
-> `op_vectors.rs`, e i vettori in `apps/client/src/__fixtures__/canvas-layout.json`,
+> `crates/fub-canvas-core/src/ops.rs` (le operazioni),
+> `crates/fub-canvas-core/src/spec.rs` (lo schema e il controllo), i loro test in
+> `crates/fub-canvas-core/tests/describe.rs`, `layout_vectors.rs`, `op_vectors.rs`
+> e `spec.rs`, e i vettori in `apps/client/src/__fixtures__/canvas-layout.json`,
 > `canvas-ops/` e `canvas-read/`.
 
 Questa pagina dice come una lavagna si legge come codice e come si scrive.
@@ -364,4 +365,71 @@ scritti a mano: `before`, `seed` facoltativo (0 se manca), `ops` e `expect`
 con `outcome` (`applied`, `rejected` o `malformed`) e, secondo il caso,
 `after`, `created` ed `error`. `crates/fub-canvas-core/tests/op_vectors.rs` li
 fa girare e controlla anche che l'inversa delle toppe ridia `before`.
+
+## Lo schema
+
+Lo schema delle operazioni sta nel nucleo, in `crates/fub-canvas-core/src/spec.rs`.
+`OPS` ha una voce per operazione: il nome, una riga di riepilogo, i campi con
+il loro tipo e se sono obbligatori, e gli esempi. Coincide con serde campo per
+campo, e `crates/fub-canvas-core/tests/spec.rs` lo controlla. Un'operazione
+nuova entra in `OPS` nello stesso task che la aggiunge.
+
+I tipi dei campi sono `id`, `ids` (una lista di id), `number` (un intero: anche
+`1.0` e `1e2` lo sono, `1.5` no), `text`, `bool`, `enum` (una stringa presa da
+un elenco), `node` (una scheda), `edge` (un arco), `object`, `points` (una lista
+di liste di numeri) e `any`.
+
+**Lo schema JSON.** `json_schema()` dà lo schema JSON 2020-12 della lista: una
+lista non vuota, e un `oneOf` con un ramo per operazione. Ogni ramo ha `op`
+costante, `additionalProperties: false`, i campi obbligatori e gli esempi.
+
+**Il controllo.** `validate` dà i problemi di una lista prima della lettura, con
+`{code, index, path, message, suggestion?, fix?}`:
+
+| Campo | Vuol dire |
+|---|---|
+| `code` | il codice, nella tabella sotto |
+| `index` | la posizione dell'operazione nella lista, da zero; `null` se il problema riguarda la lista intera |
+| `path` | dove sta, come puntatore JSON (RFC 6901): `/2/dx` |
+| `message` | una frase fissa in inglese, come gli errori di `OpError`; le frasi per le persone le fa il catalogo di `fub-features` |
+| `suggestion` | il nome o i nomi più vicini, a distanza di Levenshtein al più 2 |
+| `fix` | l'operazione intera con la correzione; c'è solo quando la correzione è una sola e il posto è libero |
+
+| Codice | Quando | `message` |
+|---|---|---|
+| `invalid` | la lista è vuota. Serde la legge: è la sola differenza, voluta | `the list has no operations` |
+| `unknown_op` | manca `op`, o il suo valore non è il nome di un'operazione | `no operation has this name` |
+| `unknown_field` | un campo che l'operazione non ha | `the operation has no such field` |
+| `missing_field` | un campo obbligatorio che manca | `a required field is missing` |
+| `wrong_type` | un tipo JSON sbagliato. Vale anche per la lista che non è una lista, e per un'operazione che non è un oggetto | `the value has the wrong JSON type` |
+| `bad_value` | un valore fuori dall'elenco ammesso | `the value is not one of the allowed values` |
+
+Le regole:
+
+- Un'operazione con il nome sbagliato non ha i suoi campi controllati: non si
+  sa quali sono.
+- I nomi vicini si cercano ignorando le maiuscole ASCII: `Add-Card` è vicino a
+  `add_card`. Serde resta sensibile alle maiuscole, quindi il nome sbagliato non
+  si legge, e il `fix` lo corregge.
+- Il `fix` c'è solo se il vicino è uno, e se il campo corretto non è già
+  nell'operazione: con `dx` già scritto, `dX` ha il suggerimento ma non il `fix`.
+- Una stringa al posto di una lista di id ha il `fix` con la lista: `"ids": "t1"`
+  diventa `"ids": ["t1"]`.
+- Il `fix` corregge solo ciò che si sa correggere. Con `{"op": "add-card"}` il
+  `fix` è `{"op": "add_card"}`, e `node` manca: la lista corretta dà poi
+  `missing_field` su `/0/node`.
+- `validate` è lineare: 100 000 operazioni si controllano. Non c'è un tetto al
+  loro numero; i tetti di [`OpError::TooMany`](#gli-errori-delle-operazioni) sono
+  sulle schede e sugli archi.
+
+Un esempio, con la lista `[{"op": "add-card"}]`:
+
+```json
+[{"code": "unknown_op", "index": 0, "path": "/0/op", "message": "no operation has this name", "suggestion": "add_card", "fix": {"op": "add_card"}}]
+```
+
+I test di `tests/spec.rs` controllano che `OPS` abbia una voce per variante, che
+ogni esempio si legga e compili sulla lavagna d'esempio di `spec.rs`, che
+`validate` non trovi problemi se e solo se serde legge la lista, sui vettori di
+`canvas-ops/` e sul corpus `canvas-tasks/` quando c'è.
 

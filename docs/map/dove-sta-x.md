@@ -25,6 +25,7 @@
 | JSON Canvas (`.canvas`) | `crates/fub-format-canvas/schema/canvas-v1.schema.json` |
 | il modello e le regole della lavagna | `crates/fub-canvas-core/` e `docs/reference/canvas-format.md` |
 | la lavagna letta come codice (`outline`, `code`, `json`) | `crates/fub-canvas-core/src/describe.rs` e `docs/reference/canvas-code.md` |
+| lo schema delle operazioni della lavagna, il suo controllo (`validate`) | `crates/fub-canvas-core/src/spec.rs` e `docs/reference/canvas-code.md` («Lo schema») |
 | la proiezione dei documenti ricchi | `docs/reference/rich-projection.md` |
 | il protocollo della sessione live | `docs/reference/live-session.md` |
 | gli strumenti del server MCP | `docs/reference/mcp-server.md` |
