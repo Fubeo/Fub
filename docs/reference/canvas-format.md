@@ -31,6 +31,11 @@ lavagna, scritto una volta sola:
   in byte UTF-8 del sorgente di prima, mai a metà di un carattere). Un
   rifiuto (`CommitError`) lascia `Core` com'era; i casi sono in
   `crates/fub-canvas-core/tests/commit.rs`.
+- `layout`: le misure e i posti di una scheda nuova (`card_kind`,
+  `born_size`, `auto_place`, `place_near`, `group_rect`), uguali alla GUI;
+  le regole in [la lavagna come codice](canvas-code.md).
+- `describe`: la lavagna letta come schema (`outline`), come operazioni che
+  la ricreano (`code`) e come modello (`json`), nella stessa pagina.
 
 Il nucleo è **puro**. Dipende soltanto da `serde`, `serde_json` e `thiserror`;
 non vede il contratto (`fub-abi`), il Markdown, il kernel né un toolkit, non fa
