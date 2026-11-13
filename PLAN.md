@@ -793,7 +793,7 @@ Fatto quando: `cargo test -p fub-canvas-core --test task_corpus` passa con
 20 compiti, e la tabella dei caratteri esce con `-- --nocapture`.
 Prova: scripts/check.sh --rapido; cargo test -p fub-canvas-core --test
 task_corpus -- --nocapture
-Stato: [ ] da fare
+Stato: [x] fatto · 20 compiti in `canvas-tasks/` e `tests/task_corpus.rs`, col cricchetto sui `needs`; due controlli in più (`color`, `spaced`); le forme di `ops` delle operazioni future sono proposte e il cricchetto le riallinea quando arrivano; 05, 06 e 18 (inchiostro) compilano con N4 in main; `canvas-parity.md` è a 183 righe (T1 diceva 120: sta nella soglia di 450)
 
 ## T4 · Leggere la lavagna come codice
 
