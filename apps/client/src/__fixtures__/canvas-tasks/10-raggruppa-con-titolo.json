@@ -1,0 +1,24 @@
+{
+  "about": "Raggruppare due schede con un titolo: il gruppo sta sotto di loro, con la sua etichetta, e le contiene.",
+  "prompt": "Raggruppa «Pioggia» e «Fiume» in un gruppo intitolato «Acqua dolce».",
+  "before": {
+    "nodes": [
+      { "id": "pi", "type": "text", "text": "Pioggia", "x": 0, "y": 0, "width": 320, "height": 160 },
+      { "id": "fi", "type": "text", "text": "Fiume", "x": 400, "y": 0, "width": 320, "height": 160 }
+    ],
+    "edges": []
+  },
+  "ops_today": [
+    { "op": "add_card", "node": { "id": "g", "type": "group", "label": "Acqua dolce", "x": -24, "y": -24, "width": 768, "height": 208 } },
+    { "op": "reorder", "ids": ["pi", "fi"] }
+  ],
+  "ops": [
+    { "op": "group", "ids": ["pi", "fi"], "label": "Acqua dolce" }
+  ],
+  "needs": ["group"],
+  "checks": [
+    { "in_group": { "label": "Acqua dolce", "texts": ["Pioggia", "Fiume"] } },
+    { "count": { "kind": "group", "n": 1 } },
+    { "no_overlap": { "texts": ["Pioggia", "Fiume"] } }
+  ]
+}

@@ -1,0 +1,18 @@
+{
+  "about": "Cerchiare una scheda a pennarello: un ovale che la copre. Serve l'inchiostro in codice (N4), quindi con main non si può.",
+  "prompt": "Cerchia la scheda «Evaporazione» con un ovale a pennarello, in vermiglio.",
+  "before": {
+    "nodes": [
+      { "id": "e", "type": "text", "text": "Evaporazione", "x": 400, "y": 320, "width": 320, "height": 160 }
+    ],
+    "edges": []
+  },
+  "ops_today": null,
+  "ops": [
+    { "op": "draw", "on": "e", "shape": { "kind": "ellipse", "x": 8, "y": 8, "width": 304, "height": 144 }, "pen": "marker", "color": "vermilion" }
+  ],
+  "needs": ["draw"],
+  "checks": [
+    { "strokes": { "on_text": "Evaporazione", "n": 1 } }
+  ]
+}

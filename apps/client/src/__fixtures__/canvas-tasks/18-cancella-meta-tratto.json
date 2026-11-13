@@ -1,0 +1,40 @@
+{
+  "about": "Cancellare metà di un tratto: la gomma che taglia toglie un pezzo al centro, e il tratto resta in due. Serve l'inchiostro in codice (N4), quindi con main non si può. Il tratto è scritto come lo documenta N4 (`fub:ink`).",
+  "prompt": "Con la gomma che taglia, togli un pezzetto al centro del tratto a pennarello sullo schizzo «Schizzo»: restano due tratti.",
+  "before": {
+    "nodes": [
+      {
+        "id": "sc",
+        "type": "text",
+        "text": "Schizzo",
+        "x": 400,
+        "y": 320,
+        "width": 320,
+        "height": 160,
+        "fub:ink": {
+          "v": 1,
+          "strokes": [
+            {
+              "id": "s-mh0k2q1x-4f9a-1",
+              "tool": "pen",
+              "at": "2026-11-02T09:20:31.250Z",
+              "brush": "pf1 size=3 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=0 pen=ballpoint",
+              "color": "#0072b2",
+              "anchor": { "kind": "card", "width": 320, "height": 160 },
+              "ink": "1 s100 cxypt 12050,3020,128,0 25,-3,2,8 31,-5,0,8"
+            }
+          ]
+        }
+      }
+    ],
+    "edges": []
+  },
+  "ops_today": null,
+  "ops": [
+    { "op": "erase_along", "on": "sc", "points": [[150, -8], [150, 168]], "size": 16 }
+  ],
+  "needs": ["erase_along"],
+  "checks": [
+    { "strokes": { "on_text": "Schizzo", "n": 2 } }
+  ]
+}

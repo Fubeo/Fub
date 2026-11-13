@@ -1,0 +1,21 @@
+{
+  "about": "Una scaletta da un elenco: una scheda per riga, in colonna. Lavagna vuota.",
+  "prompt": "Ecco i capitoli della tesi: Introduzione, Metodi, Risultati, Conclusioni. Mettili sulla lavagna come scaletta: una scheda per capitolo, in colonna, dall'alto in basso.",
+  "before": { "nodes": [], "edges": [] },
+  "ops_today": [
+    { "op": "add_card", "node": { "id": "a1", "type": "text", "text": "Introduzione", "x": 0, "y": 0, "width": 320, "height": 160 } },
+    { "op": "add_card", "node": { "id": "a2", "type": "text", "text": "Metodi", "x": 0, "y": 184, "width": 320, "height": 160 } },
+    { "op": "add_card", "node": { "id": "a3", "type": "text", "text": "Risultati", "x": 0, "y": 368, "width": 320, "height": 160 } },
+    { "op": "add_card", "node": { "id": "a4", "type": "text", "text": "Conclusioni", "x": 0, "y": 552, "width": 320, "height": 160 } }
+  ],
+  "ops": [
+    { "op": "from_outline", "text": "Introduzione\nMetodi\nRisultati\nConclusioni" }
+  ],
+  "needs": ["from_outline"],
+  "checks": [
+    { "count": { "kind": "text", "n": 4 } },
+    { "aligned": { "texts": ["Introduzione", "Metodi", "Risultati", "Conclusioni"], "axis": "left" } },
+    { "spaced": { "texts": ["Introduzione", "Metodi", "Risultati", "Conclusioni"], "axis": "y" } },
+    { "no_overlap": {} }
+  ]
+}

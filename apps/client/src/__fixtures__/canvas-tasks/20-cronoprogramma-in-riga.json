@@ -1,0 +1,39 @@
+{
+  "about": "Un cronoprogramma in riga: cinque fasi da sinistra a destra, con una freccia fra una e la successiva.",
+  "prompt": "Metti in riga le cinque fasi del progetto, da sinistra a destra, con una freccia fra ciascuna e la successiva: Analisi, Progetto, Sviluppo, Collaudo, Rilascio.",
+  "before": { "nodes": [], "edges": [] },
+  "ops_today": [
+    { "op": "add_card", "node": { "id": "a1", "type": "text", "text": "Analisi", "x": 0, "y": 0, "width": 320, "height": 160 } },
+    { "op": "add_card", "node": { "id": "a2", "type": "text", "text": "Progetto", "x": 368, "y": 0, "width": 320, "height": 160 } },
+    { "op": "add_card", "node": { "id": "a3", "type": "text", "text": "Sviluppo", "x": 736, "y": 0, "width": 320, "height": 160 } },
+    { "op": "add_card", "node": { "id": "a4", "type": "text", "text": "Collaudo", "x": 1104, "y": 0, "width": 320, "height": 160 } },
+    { "op": "add_card", "node": { "id": "a5", "type": "text", "text": "Rilascio", "x": 1472, "y": 0, "width": 320, "height": 160 } },
+    { "op": "connect", "edge": { "fromNode": "a1", "toNode": "a2", "fromSide": "right", "toSide": "left", "toEnd": "arrow" } },
+    { "op": "connect", "edge": { "fromNode": "a2", "toNode": "a3", "fromSide": "right", "toSide": "left", "toEnd": "arrow" } },
+    { "op": "connect", "edge": { "fromNode": "a3", "toNode": "a4", "fromSide": "right", "toSide": "left", "toEnd": "arrow" } },
+    { "op": "connect", "edge": { "fromNode": "a4", "toNode": "a5", "fromSide": "right", "toSide": "left", "toEnd": "arrow" } }
+  ],
+  "ops": [
+    { "op": "add_card", "id": "f1", "text": "Analisi" },
+    { "op": "add_card", "id": "f2", "text": "Progetto", "near": "f1", "side": "right" },
+    { "op": "add_card", "id": "f3", "text": "Sviluppo", "near": "f2", "side": "right" },
+    { "op": "add_card", "id": "f4", "text": "Collaudo", "near": "f3", "side": "right" },
+    { "op": "add_card", "id": "f5", "text": "Rilascio", "near": "f4", "side": "right" },
+    { "op": "connect", "from": "f1", "to": "f2", "sides": "auto" },
+    { "op": "connect", "from": "f2", "to": "f3", "sides": "auto" },
+    { "op": "connect", "from": "f3", "to": "f4", "sides": "auto" },
+    { "op": "connect", "from": "f4", "to": "f5", "sides": "auto" }
+  ],
+  "needs": ["add_card.id", "add_card.near", "add_card.side", "add_card.text", "connect.from", "connect.sides", "connect.to"],
+  "checks": [
+    { "count": { "kind": "text", "n": 5 } },
+    { "count": { "kind": "edge", "n": 4 } },
+    { "aligned": { "texts": ["Analisi", "Progetto", "Sviluppo", "Collaudo", "Rilascio"], "axis": "top" } },
+    { "spaced": { "texts": ["Analisi", "Progetto", "Sviluppo", "Collaudo", "Rilascio"], "axis": "x" } },
+    { "has_edge": { "from_text": "Analisi", "to_text": "Progetto" } },
+    { "has_edge": { "from_text": "Progetto", "to_text": "Sviluppo" } },
+    { "has_edge": { "from_text": "Sviluppo", "to_text": "Collaudo" } },
+    { "has_edge": { "from_text": "Collaudo", "to_text": "Rilascio" } },
+    { "no_overlap": {} }
+  ]
+}

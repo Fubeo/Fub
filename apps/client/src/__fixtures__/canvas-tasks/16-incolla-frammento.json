@@ -1,0 +1,34 @@
+{
+  "about": "Incollare un frammento copiato da un'altra lavagna: due schede e la loro freccia, sotto una scheda che c'è già.",
+  "prompt": "Incolla qui il frammento copiato dall'altra lavagna: le schede «Domanda» e «Risposta» con la freccia fra loro, sotto «Lezione».",
+  "before": {
+    "nodes": [
+      { "id": "lez", "type": "text", "text": "Lezione", "x": 0, "y": 0, "width": 320, "height": 160 }
+    ],
+    "edges": []
+  },
+  "ops_today": [
+    { "op": "add_card", "node": { "id": "d", "type": "text", "text": "Domanda", "x": 0, "y": 216, "width": 320, "height": 160 } },
+    { "op": "add_card", "node": { "id": "r", "type": "text", "text": "Risposta", "x": 368, "y": 216, "width": 320, "height": 160 } },
+    { "op": "connect", "edge": { "fromNode": "d", "toNode": "r", "fromSide": "right", "toSide": "left", "toEnd": "arrow" } }
+  ],
+  "ops": [
+    { "op": "insert", "fragment": {
+        "version": 1,
+        "nodes": [
+          { "id": "d", "type": "text", "text": "Domanda", "x": 0, "y": 0, "width": 320, "height": 160 },
+          { "id": "r", "type": "text", "text": "Risposta", "x": 368, "y": 0, "width": 320, "height": 160 }
+        ],
+        "edges": [
+          { "id": "x", "fromNode": "d", "toNode": "r", "fromSide": "right", "toSide": "left", "toEnd": "arrow" }
+        ]
+    } }
+  ],
+  "needs": ["insert"],
+  "checks": [
+    { "has_card": { "text": "Domanda" } },
+    { "has_card": { "text": "Risposta" } },
+    { "has_edge": { "from_text": "Domanda", "to_text": "Risposta" } },
+    { "count": { "kind": "text", "n": 3 } }
+  ]
+}

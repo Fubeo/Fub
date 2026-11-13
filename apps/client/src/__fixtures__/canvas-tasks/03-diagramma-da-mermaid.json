@@ -1,0 +1,25 @@
+{
+  "about": "Un diagramma di flusso da Mermaid: tre nodi in un ciclo, da sinistra a destra. Lavagna vuota.",
+  "prompt": "Fammi il diagramma del ciclo dell'acqua con Mermaid: Evaporazione va a Condensazione, poi a Precipitazione, e da Precipitazione torna a Evaporazione. Da sinistra a destra.",
+  "before": { "nodes": [], "edges": [] },
+  "ops_today": [
+    { "op": "add_card", "node": { "id": "a", "type": "text", "text": "Evaporazione", "x": 0, "y": 0, "width": 320, "height": 160 } },
+    { "op": "add_card", "node": { "id": "b", "type": "text", "text": "Condensazione", "x": 368, "y": 0, "width": 320, "height": 160 } },
+    { "op": "add_card", "node": { "id": "c", "type": "text", "text": "Precipitazione", "x": 736, "y": 0, "width": 320, "height": 160 } },
+    { "op": "connect", "edge": { "fromNode": "a", "toNode": "b", "fromSide": "right", "toSide": "left", "toEnd": "arrow" } },
+    { "op": "connect", "edge": { "fromNode": "b", "toNode": "c", "fromSide": "right", "toSide": "left", "toEnd": "arrow" } },
+    { "op": "connect", "edge": { "fromNode": "c", "toNode": "a", "fromSide": "bottom", "toSide": "bottom", "toEnd": "arrow" } }
+  ],
+  "ops": [
+    { "op": "from_mermaid", "text": "flowchart LR\n  A[Evaporazione] --> B[Condensazione] --> C[Precipitazione] --> A" }
+  ],
+  "needs": ["from_mermaid"],
+  "checks": [
+    { "count": { "kind": "text", "n": 3 } },
+    { "count": { "kind": "edge", "n": 3 } },
+    { "has_edge": { "from_text": "Evaporazione", "to_text": "Condensazione" } },
+    { "has_edge": { "from_text": "Condensazione", "to_text": "Precipitazione" } },
+    { "has_edge": { "from_text": "Precipitazione", "to_text": "Evaporazione" } },
+    { "no_overlap": {} }
+  ]
+}

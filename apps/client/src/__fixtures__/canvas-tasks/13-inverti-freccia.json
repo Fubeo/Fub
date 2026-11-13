@@ -1,0 +1,26 @@
+{
+  "about": "Invertire una freccia: la punta passa all'altra scheda, e resta una sola freccia.",
+  "prompt": "La freccia fra «Causa» ed «Effetto» va al contrario: deve partire da «Effetto» e arrivare a «Causa».",
+  "before": {
+    "nodes": [
+      { "id": "causa", "type": "text", "text": "Causa", "x": 0, "y": 0, "width": 320, "height": 160 },
+      { "id": "effetto", "type": "text", "text": "Effetto", "x": 400, "y": 0, "width": 320, "height": 160 }
+    ],
+    "edges": [
+      { "id": "e1", "fromNode": "causa", "toNode": "effetto", "fromSide": "right", "toSide": "left", "toEnd": "arrow" }
+    ]
+  },
+  "ops_today": [
+    { "op": "remove", "ids": ["e1"] },
+    { "op": "connect", "edge": { "fromNode": "effetto", "toNode": "causa", "fromSide": "left", "toSide": "right", "toEnd": "arrow" } }
+  ],
+  "ops": [
+    { "op": "reverse", "ids": ["e1"] }
+  ],
+  "needs": ["reverse"],
+  "checks": [
+    { "has_edge": { "from_text": "Effetto", "to_text": "Causa" } },
+    { "count": { "kind": "edge", "n": 1 } },
+    { "no_overlap": {} }
+  ]
+}
