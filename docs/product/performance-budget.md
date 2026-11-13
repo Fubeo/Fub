@@ -234,25 +234,27 @@ Il budget è una **mediana di 4 ms** e un **novantesimo percentile di 8 ms**
 per battuta, in ogni modalità di scrittura, anche su 7.201 righe: il banco
 esce con errore se uno dei due è superato. Le cifre sono mediana · novantesimo
 percentile · massimo, su pc-debian-di-fub (Intel Core i5-13600KF, Debian 13,
-Chromium della revisione Playwright fissata), mediana di tre giri del banco
-alternati con quelli del codice di prima, il 13 novembre 2026 con un carico
-medio da 3 a 13 (la macchina faceva anche altri lavori).
+Chromium della revisione Playwright fissata): per ogni cifra la mediana di sei
+giri del banco alternati con sei del codice di prima (`05437b3db`), il 14
+novembre 2026 con un carico medio da 3,5 a 5,8 (la macchina faceva anche altri
+lavori).
 
-| Nota | Modalità | Battuta | Cursore |
-|---|---|---:|---:|
-| 901 righe | Sorgente | 3,9 · 4,3 · 9,2 ms | 3,5 · 3,7 · 3,9 ms |
-| 901 righe | Live | 2,9 · 5,2 · 23,8 ms | 2,6 · 4,3 · 4,7 ms |
-| 901 righe | Blocchi | 5,1 · 5,7 · 13,0 ms | 4,7 · 5,0 · 5,1 ms |
-| 7.201 righe | Sorgente | 6,0 · 7,2 · 17,3 ms | 3,6 · 3,9 · 5,4 ms |
-| 7.201 righe | Live | 4,7 · 7,2 · 33,9 ms | 5,3 · 5,7 · 5,8 ms |
-| 7.201 righe | Blocchi | 4,6 · 7,6 · 30,0 ms | 4,8 · 5,6 · 5,6 ms |
+| Nota | Modalità | Battuta | Cursore | Prima: battuta |
+|---|---|---:|---:|---:|
+| 901 righe | Sorgente | 2,0 · 3,8 · 8,6 ms | 2,0 · 3,8 · 4,2 ms | 2,2 · 2,9 · 7,4 ms |
+| 901 righe | Live | 3,1 · 5,6 · 19,1 ms | 2,2 · 4,0 · 4,3 ms | 3,9 · 6,4 · 22,0 ms |
+| 901 righe | Blocchi | 3,7 · 6,1 · 20,8 ms | 2,3 · 3,3 · 4,4 ms | 4,1 · 7,3 · 21,9 ms |
+| 7.201 righe | Sorgente | 4,2 · 6,0 · 13,5 ms | 2,1 · 2,8 · 3,7 ms | 3,6 · 5,8 · 17,4 ms |
+| 7.201 righe | Live | 5,7 · 8,4 · 38,0 ms | 3,0 · 3,9 · 4,2 ms | 6,8 · 11,5 · 29,1 ms |
+| 7.201 righe | Blocchi | 5,5 · 9,6 · 24,2 ms | 3,1 · 4,4 · 5,2 ms | 7,6 · 11,9 · 37,8 ms |
 
-Negli stessi giri il codice di prima dava sulla nota grande 16,6 · 37,9 ·
-83,9 ms in Live e 7,6 · 12,7 · 38,1 ms in Blocchi; su server-di-fub, prima,
-6,4 · 8,8 · 17,6 ms. Sulla macchina carica la Live e i Blocchi stanno nel
-novantesimo ma non ancora nella mediana di 4 ms, e la Sorgente, che non fa
-nient'altro, varia da 2,8 a 6 ms da un giro all'altro: il numero da guardare
-è la distanza dalla Sorgente, non la cifra di un giro solo.
+**Il budget non è ancora rispettato sulla nota grande.** La Sorgente, che non
+fa altro che il lavoro di CodeMirror e della sessione del documento, sta già
+intorno ai 4 ms (da 2,7 a 5,6 da un giro all'altro, con lo stesso codice), e
+la Live e i Blocchi le stanno sopra di circa un millisecondo e mezzo (prima
+erano tre). Fra un giro e l'altro la stessa nota varia di più di quanto valga
+una correzione: il numero da guardare è la distanza dalla Sorgente, non la
+cifra di un giro solo.
 
 Una battuta lavora soltanto vicino alle posizioni del cambio, mai con un giro
 sui blocchi di primo livello:
@@ -262,14 +264,27 @@ sui blocchi di primo livello:
   soltanto quelli dal blocco prima della modifica al primo nodo dopo che
   l'albero nuovo ha uguale a prima; i nodi dopo restano quelli di prima,
   spostati senza toccarli. Le definizioni dei blocchi non riletti tornano dalla
-  resa di prima, e le loro posizioni si calcolano soltanto se servono. Si
-  rende tutto da capo quando la modifica tocca il frontmatter, un `^id` su una
-  riga sua, una definizione, un titolo, un blocco HTML o un indice, o quando
-  il tratto da rileggere supera i 256 nodi;
+  resa di prima, e le loro posizioni si calcolano soltanto se servono. Il testo
+  della resa è quello di prima con le modifiche incollate, non le righe del
+  documento ricomposte. Si rende tutto da capo quando la modifica tocca il
+  frontmatter, un `^id` su una riga sua, una definizione, un titolo, un blocco
+  HTML o un indice (anche dentro una citazione o una lista), o quando il tratto
+  da rileggere supera i 256 nodi;
 - **i blocchi resi della Live** sono un insieme di intervalli che una modifica
   sposta tutto in una volta; se ne rifanno soltanto quelli del tratto riletto
   e quelli che la selezione di prima o di adesso tocca. Un cursore che si
   muove rifà i blocchi da cui esce e in cui entra;
+- **le decorazioni in riga della Live** (i segni nascosti, gli stili, le
+  pastiglie) si rifanno soltanto nei nodi di primo livello che la modifica
+  cambia, in quelli che la selezione di prima o di adesso tocca, dove un blocco
+  reso compare o sparisce e ai bordi del tratto visibile che si sposta; le
+  altre si spostano. Si rifanno tutte quando cambiano la politica di
+  rivelazione, «A capo» di un recinto, le icone delle pagine, le definizioni,
+  il frontmatter o una riga con `[^`;
+- **i ripiegabili** (`details-live.ts`) e **la riga dei fatti** della nota
+  (`note-facts.ts`) seguono i nodi di primo livello che la modifica cambia
+  (`top-changes.ts`, la stessa regola della resa): rileggono quelli, e degli
+  altri tengono quello che sapevano;
 - **il modello dei Blocchi** cerca il punto da rifare e i gruppi che tornano
   uguali per posizione, con una ricerca binaria, e scorre l'albero soltanto
   dal punto della modifica al primo gruppo uguale.
@@ -280,20 +295,33 @@ posto nuovo. Se cambiano le definizioni del documento (riferimenti, note,
 ancore dei titoli, sintassi) i blocchi si rendono tutti, perché potrebbero
 leggerle.
 
-Resta proporzionale alla nota il lavoro di CodeMirror: dopo una modifica il
-parser incrementale rilegge l'albero fino in fondo, riusando i nodi di prima
-uno a uno, e su 7.201 righe costa da solo 1–2 ms. La Sorgente, che non fa
-altro, è il pavimento della battuta. Anche i ripiegabili della Live
-(`details-live.ts`) scorrono i nodi di primo livello a ogni aggiornamento.
+Resta proporzionale alla nota il lavoro che la Sorgente fa uguale:
 
-Siccome questo banco non sta nella CI, la guardia in CI è
-`render-incremental.test.ts`: conta i nodi che la resa guarda e i blocchi che
-la Live rifà, e una battuta in un paragrafo, in un recinto di duemila righe,
-in una tabella o in un riquadro ne guarda al più sei (prima di questa resa
-tutti: 801 su una nota di 200 sezioni). Dopo ogni modifica a caso la resa è
-uguale a una resa da capo dello stesso albero, e i blocchi della Live a quelli
-di una Live appena aperta; `blocks/model.test.ts` prova lo stesso per il
-modello dei Blocchi.
+- **il parser di CodeMirror**: dopo una modifica, se l'albero di prima era
+  completo, `LanguageState.apply` rilegge fino in fondo (fino a 20 ms), e il
+  parser Markdown riusa i nodi di prima uno a uno; i linguaggi dei recinti
+  (`codeLanguages`) aggiungono il parser misto, che scorre l'albero esterno. È
+  CodeMirror da solo: nessun nostro chiamante chiede l'albero oltre, e
+  `ensureSyntaxTree` fino in fondo nella resa trova l'albero già completo.
+  Togliere i linguaggi dei recinti, in una prova a parte, non cambia la
+  battuta più del rumore fra i giri;
+- **la sessione del documento** tiene il testo intero come stringa e a ogni
+  battuta lo ripassa (`lineFeeds`, l'operazione applicata);
+- **la selezione del DOM** che CodeMirror riscrive.
+
+Resta proporzionale alla parte visibile, a ogni battuta, il rientro sospeso
+delle voci (`hanging.ts`).
+
+Siccome questo banco non sta nella CI, le guardie in CI contano il lavoro di
+una battuta: `render-incremental.test.ts` per la resa e i blocchi della Live
+(una battuta in un paragrafo, in un recinto di duemila righe, in una tabella
+o in un riquadro guarda al più sei nodi; prima di questa resa tutti, 801 su
+una nota di 200 sezioni), `livepreview-inline.dom.test.ts` per le decorazioni
+in riga (al più otto righe lette, contro tutto il tratto visibile),
+`details-live.test.ts` e `note-facts.test.ts` per i ripiegabili e la riga dei
+fatti (al più sei nodi, contro 1.200 e 600), e `blocks/model.test.ts` per il
+modello dei Blocchi. Dopo ogni modifica a caso il risultato è quello di una
+lettura da capo dello stesso albero.
 
 ### L'apertura di una nota grande
 
