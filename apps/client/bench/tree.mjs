@@ -216,15 +216,15 @@ function probeScript() {
     });
 }
 
-/// Aspetta che l'albero sia fermo: nessuna risposta dell'indice per `ms` dopo
-/// l'ultima, e il primo disegno dipinto. Le risposte le registra il banco
-/// (`TREE_ARRIVALS`), perché i compiti lunghi della pagina non si vedono (vedi
+/// Aspetta che l'albero sia fermo: nessun elenco dell'indice per `ms` dopo
+/// l'ultimo, e il primo disegno dipinto. Gli elenchi li registra il banco
+/// (`TREE_ARRIVALS`); i compiti lunghi della pagina non si vedono (vedi
 /// `selfTest`).
 async function quiet(page, ms = QUIET_MS) {
   await page.waitForFunction(
     (ms) => {
-      const arrivals = globalThis.__fubTreeBench.arrivals;
-      const lastArrival = arrivals.length > 0 ? arrivals[arrivals.length - 1].answeredAt : 0;
+      const lists = globalThis.__fubTreeBench.arrivals.filter((a) => a.kind === "folders" || a.kind === "entries");
+      const lastArrival = lists.length > 0 ? lists[lists.length - 1].answeredAt : 0;
       const last = Math.max(lastArrival, window.__treeProbe.firstDraw?.paintedAt ?? 0);
       return performance.now() - last >= ms;
     },
@@ -268,6 +268,20 @@ function windowStats(win, paintedAt) {
 // Le misure.
 // ---------------------------------------------------------------------------
 
+/// Quanto ha speso il finto dell'indice in una finestra: le risposte arrivate
+/// dentro, e il tempo di ciascuna. Il finto risponde sul thread della pagina,
+/// quindi questo tempo sta dentro i fotogrammi ma non è dell'albero.
+async function indexTime(page, from, to) {
+  const index = await page.evaluate(
+    ([from, to]) => {
+      const inside = globalThis.__fubTreeBench.arrivals.filter((a) => a.answeredAt >= from && a.answeredAt <= to);
+      return { queries: inside.length, ms: inside.reduce((sum, a) => sum + (a.answeredAt - a.requestedAt), 0) };
+    },
+    [from, to],
+  );
+  return { queries: index.queries, ms: round(index.ms) };
+}
+
 /// Apre la cartella con un clic e aspetta che `selector` sia dipinto. La finestra
 /// resta aperta ancora `TAIL_MS`, per ciò che l'albero fa dopo il disegno.
 async function openFolder(page, path, selector, tailMs = TAIL_MS) {
@@ -282,7 +296,8 @@ async function openFolder(page, path, selector, tailMs = TAIL_MS) {
   );
   await page.waitForTimeout(tailMs);
   const win = await page.evaluate(() => window.__treeProbe.stop());
-  return { paintedAt, ...windowStats(win, paintedAt) };
+  const index = await indexTime(page, win.startedAt, win.endedAt);
+  return { paintedAt, ...windowStats(win, paintedAt), index };
 }
 
 /// Scorre l'albero fino all'ultima riga, con la rotella, e conta i fotogrammi.
@@ -320,7 +335,8 @@ async function scrollToEnd(page) {
   }
   await frame(page);
   const win = await page.evaluate(() => window.__treeProbe.stop());
-  return { from: box.top, to: state.top, height: state.height, client: state.client, steps, ...windowStats(win, null) };
+  const index = await indexTime(page, win.startedAt, win.endedAt);
+  return { from: box.top, to: state.top, height: state.height, client: state.client, steps, ...windowStats(win, null), index };
 }
 
 /// Il nome che il lanciatore cerca: il nome della nota, senza cartella e `.md`.
@@ -539,7 +555,7 @@ function say(result) {
   const label = result.cpu > 1 ? `pagina ${result.cpu} volte più lenta` : "velocità normale";
   console.log(`vault da ${count(result.fixture.total)} file, ${label} (carico ${result.load.start.join(" ")} → ${result.load.end.join(" ")}, ${result.browser})`);
   console.log(`  primo disegno  ${ms(result.firstDraw.paintedMs)} dall'arrivo dell'elenco (vista ${ms(result.firstDraw.seenMs)}, soglia ${FIRST_DRAW_LIMIT_MS} ms)`);
-  console.log(`  apertura «${result.fixture.big}»  dipinta in ${ms(result.open.clickToPaintMs)}, ${result.open.rows} righe con «${result.open.truncated ?? "nessuna voce in più"}»; fotogramma più lungo ${ms(result.open.frameMaxMs)} (soglia ${OPEN_FRAME_LIMIT_MS} ms)`);
+  console.log(`  apertura «${result.fixture.big}»  dipinta in ${ms(result.open.clickToPaintMs)}, ${result.open.rows} righe con «${result.open.truncated ?? "nessuna voce in più"}»; fotogramma più lungo ${ms(result.open.frameMaxMs)} (soglia ${OPEN_FRAME_LIMIT_MS} ms), di cui il finto dell'indice ${ms(result.open.index.ms)} in ${result.open.index.queries} risposte`);
   console.log(`  scorrimento    ${result.scroll.steps} passi fino in fondo; fotogramma più lungo ${ms(result.scroll.frameMaxMs)} (soglia ${SCROLL_FRAME_LIMIT_MS} ms)`);
   console.log(`  ricerca        «${searchedName(result.fixture.target)}» con ${result.search.keys} tasti: elenco dipinto in ${ms(result.search.lookupMs)} dall'ultimo tasto, ${result.search.options} voci`);
   console.log(`  catena         ${result.chain.steps.length} aperture, la più lenta dipinta in ${ms(result.chain.maxClickToPaintMs)}, fotogramma più lungo ${ms(result.chain.maxFrameMs)} (senza soglia)`);

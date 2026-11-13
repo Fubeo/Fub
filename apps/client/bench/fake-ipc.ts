@@ -114,7 +114,7 @@ type ConnectorsBenchMetadata = Readonly<{
 
 /// Ciò che il banco dell'albero (`tree.mjs`) legge del vault che apre: le
 /// cartelle, la catena, il nome lungo e la nota da cercare, e quando ogni
-/// elenco dell'albero è arrivato al client.
+/// risposta dell'indice è arrivata al client.
 type TreeBenchMetadata = Readonly<{
   fixture: Readonly<{
     total: number;
@@ -129,11 +129,13 @@ type TreeBenchMetadata = Readonly<{
   arrivals: TreeArrival[];
 }>;
 
-/// Un elenco che l'albero chiede all'indice: le cartelle o le voci, di una
-/// cartella (`scope`, `null` per tutto il vault), con l'ora della domanda e
-/// quella della risposta, in millisecondi dall'avvio della pagina.
+/// Una risposta dell'indice durante il banco dell'albero: di che specie è la
+/// domanda, di quale cartella (`scope`, `null` se non ne ha una), e l'ora della
+/// domanda e quella della risposta, in millisecondi dall'avvio della pagina. Il
+/// finto risponde sul thread della pagina, quindi il suo tempo sta dentro i
+/// fotogrammi: il banco lo conta a parte.
 type TreeArrival = {
-  kind: "folders" | "entries";
+  kind: IndexQuery["kind"];
   scope: string | null;
   descendants: boolean | null;
   requestedAt: number;
@@ -274,7 +276,8 @@ globalThis.__fubLargeBench = Object.freeze({
 // `?vault=5000` mette nel vault i cinquemila file del banco dell'albero
 // (`vault-fixture.ts`), e basta: né il corpus né la scenografia, perché
 // l'albero conta i file del vault e non deve contarne altri. `TREE_ARRIVALS`
-// dice quando ogni elenco arriva al client: il primo disegno si misura da lì.
+// dice quando ogni risposta dell'indice arriva al client: il primo disegno si
+// misura da lì.
 const TREE: TreeFixture | null = params.get("vault") === "5000" ? treeFixture() : null;
 const TREE_ARRIVALS: TreeArrival[] = [];
 
@@ -1824,14 +1827,14 @@ function snippetOf(doc: string, text: string): Pick<DocumentMatch, "snippet" | "
   return { snippet, highlights };
 }
 
-/// Quando l'indice risponde un elenco dell'albero, per `tree.mjs`: la domanda
-/// e la risposta, con l'ora di ciascuna. Senza il banco dell'albero la risposta
-/// passa com'è, e non si registra niente.
+/// Ogni risposta dell'indice, per `tree.mjs`: la domanda e la risposta, con
+/// l'ora di ciascuna. Senza il banco dell'albero la risposta passa com'è, e non
+/// si registra niente.
 async function timedQuery(q: IndexQuery, answer: () => Promise<IndexResult>): Promise<IndexResult> {
-  if (TREE === null || (q.kind !== "folders" && q.kind !== "entries")) return answer();
+  if (TREE === null) return answer();
   const requestedAt = performance.now();
   const result = await answer();
-  const scope = q.kind === "folders" ? q.under : q.within;
+  const scope = q.kind === "folders" ? q.under : q.kind === "entries" ? q.within : null;
   TREE_ARRIVALS.push({
     kind: q.kind,
     scope: scope?.path ?? null,
