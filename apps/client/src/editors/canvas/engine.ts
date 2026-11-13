@@ -4073,7 +4073,7 @@ export class CanvasEngine {
    */
   #placeInkFrame(frames: HTMLElement, holder: CanvasNode | null): void {
     if (!holder) {
-      frames.hidden = true;
+      frames.setAttribute("data-idle", "");
       return;
     }
     // I lati ereditano la misura dal contenitore: quattro scritture, non sedici.
@@ -4083,7 +4083,7 @@ export class CanvasEngine {
     frames.style.setProperty("--canvas-frame-w", `${holder.width}px`);
     frames.style.setProperty("--canvas-frame-h", `${holder.height}px`);
     if (!frames.isConnected) this.#stage.append(frames);
-    frames.hidden = false;
+    frames.removeAttribute("data-idle");
   }
 
   /** L'etichetta e i lati del bordo: creati la prima volta, poi gli stessi. */
@@ -4098,7 +4098,11 @@ export class CanvasEngine {
     this.#viewport.append(label);
     const frames = document.createElement("div");
     frames.className = "canvas-ink-frames";
-    frames.hidden = true;
+    // Come l'etichetta: si nasconde con `data-idle`, mai con `hidden`. Le
+    // regole `:has()` della shell leggono `[hidden]` dentro `#layout`,
+    // `#panes` e `.pane`: cambiarlo qui sotto farebbe ricalcolare lo stile di
+    // tutta la finestra all'inizio di ogni tratto (80–140 ms col foglio vivo).
+    frames.setAttribute("data-idle", "");
     frames.setAttribute("aria-hidden", "true");
     for (const side of INK_FRAME_SIDES) {
       const edge = document.createElement("div");
@@ -4137,7 +4141,7 @@ export class CanvasEngine {
     const target = this.#inkTarget;
     if (!target) return;
     this.#inkTarget = null;
-    target.frames.hidden = true;
+    target.frames.setAttribute("data-idle", "");
     target.label.setAttribute("data-idle", "");
   }
 
@@ -4507,7 +4511,7 @@ export class CanvasEngine {
   #hideStrokeHolder(): void {
     const marks = this.#inkMarks;
     if (!marks || this.#inkTarget) return;
-    marks.frames.hidden = true;
+    marks.frames.setAttribute("data-idle", "");
     marks.label.setAttribute("data-idle", "");
   }
 

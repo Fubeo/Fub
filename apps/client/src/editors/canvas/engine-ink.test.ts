@@ -1154,7 +1154,7 @@ describe("a chi appartiene il tratto (T69)", () => {
   const label = (host: HTMLElement) => host.querySelector<HTMLElement>(".canvas-ink-label:not([data-idle])");
   /** Le schede col bordo tratteggiato: il contenitore dei lati sullo stage dice di chi è. */
   const targets = (host: HTMLElement) =>
-    [...host.querySelectorAll<HTMLElement>(".canvas-stage > .canvas-ink-frames:not([hidden])")].map((el) => el.dataset.node);
+    [...host.querySelectorAll<HTMLElement>(".canvas-stage > .canvas-ink-frames:not([data-idle])")].map((el) => el.dataset.node);
   const said = (host: HTMLElement) => host.querySelector<HTMLElement>(".canvas-ink-said")?.textContent ?? null;
   /** Il livello che tiene l'ultimo tratto scritto: l'id della scheda, o `null` per la radice. */
   function layerOfLast(changes: readonly CanvasChange[]): string | null {
@@ -1275,6 +1275,56 @@ describe("a chi appartiene il tratto (T69)", () => {
     // Lo stesso nodo di testo: l'etichetta non si è riscritta.
     expect(label(host)!.firstChild).toBe(text);
     stroke.lift();
+  });
+
+  it("bordo ed etichetta si mostrano e si tolgono senza toccare `hidden`, che le regole `:has()` della shell leggono (T20c)", () => {
+    const { host } = mounted();
+    const observer = new MutationObserver(() => {});
+    observer.observe(host, { subtree: true, attributes: true, attributeFilter: ["hidden"] });
+    const marked = (record: MutationRecord) =>
+      record.target instanceof Element && record.target.closest(".canvas-ink-frames, .canvas-ink-label") !== null;
+    // Una scheda, poi a cavallo di due (libero), poi un'altra scheda; poi un tratto fuori da tutte.
+    const first = penDown(host, card(host, "t"), [120, 40]);
+    first.move([150, 50]);
+    expect(targets(host)).toEqual(["t"]);
+    first.move([250, 50]);
+    first.move([350, 50]);
+    expect(targets(host)).toEqual([]);
+    first.lift();
+    const second = penDown(host, card(host, "img"), [340, 40]);
+    second.move([360, 50]);
+    expect(targets(host)).toEqual(["img"]);
+    second.lift();
+    const third = penDown(host, viewportOf(host), [120, 400]);
+    third.move([140, 420]);
+    expect(targets(host)).toEqual([]);
+    expect(label(host)?.textContent).toBe(t("canvas.ink.free"));
+    third.lift();
+    const frames = host.querySelector<HTMLElement>(".canvas-stage > .canvas-ink-frames")!;
+    expect(frames.hasAttribute("hidden")).toBe(false);
+    expect(frames.hasAttribute("data-idle")).toBe(true);
+    expect(observer.takeRecords().filter(marked)).toEqual([]);
+    observer.disconnect();
+  });
+
+  it("nessuna regola `:has()` dei fogli di stile legge `data-idle`: mostrare il bordo non ricalcola la shell (T20c)", () => {
+    const sheets = import.meta.glob<string>("../../**/*.css", { query: "?raw", import: "default", eager: true });
+    expect(Object.keys(sheets).length).toBeGreaterThan(10);
+    const reading: string[] = [];
+    for (const [path, css] of Object.entries(sheets)) {
+      for (let at = css.indexOf(":has("); at >= 0; at = css.indexOf(":has(", at + 1)) {
+        // L'argomento fino alla parentesi che chiude la sua.
+        let depth = 0;
+        let end = at + 4;
+        for (; end < css.length; end++) {
+          if (css[end] === "(") depth++;
+          else if (css[end] === ")" && --depth === 0) break;
+        }
+        const argument = css.slice(at, end + 1);
+        if (argument.includes("data-idle")) reading.push(`${path}: ${argument}`);
+      }
+    }
+    expect(reading).toEqual([]);
   });
 
   it("l'etichetta si misura dopo il layout e resta la stessa da un tratto all'altro; vicino al bordo destro va a sinistra", () => {
@@ -1398,7 +1448,7 @@ describe("il lazo sceglie e sposta l'inchiostro (T86)", () => {
     viewport.dispatchEvent(pointerEvent("pointerdown", { ...MOUSE, ...at([140, 320]), button: 0, buttons: 1 }));
     viewport.dispatchEvent(pointerEvent("pointermove", { ...MOUSE, ...at([110, 180]), button: -1, buttons: 1 }));
     viewport.dispatchEvent(pointerEvent("pointermove", { ...MOUSE, ...at([80, 50]), button: -1, buttons: 1 }));
-    expect([...host.querySelectorAll<HTMLElement>(".canvas-stage > .canvas-ink-frames:not([hidden])")].map((el) => el.dataset.node)).toEqual(["t"]);
+    expect([...host.querySelectorAll<HTMLElement>(".canvas-stage > .canvas-ink-frames:not([data-idle])")].map((el) => el.dataset.node)).toEqual(["t"]);
     expect(host.querySelector(".canvas-ink-label:not([data-idle])")?.textContent).toBe(t("canvas.ink.attach", { name: "nota" }));
     viewport.dispatchEvent(pointerEvent("pointerup", { ...MOUSE, ...at([80, 50]), button: 0, buttons: 0 }));
 
@@ -1417,7 +1467,7 @@ describe("il lazo sceglie e sposta l'inchiostro (T86)", () => {
     expect(notice(host)).toBe(t("canvas.ink.moved_to", { name: "nota" }));
     expect(action(host, "undo-removal")?.textContent).toBe(t("app.undo"));
     expect(action(host, "free-ink")?.textContent).toBe(t("canvas.ink.make_free"));
-    expect(host.querySelectorAll(".canvas-stage > .canvas-ink-frames:not([hidden])")).toHaveLength(0);
+    expect(host.querySelectorAll(".canvas-stage > .canvas-ink-frames:not([data-idle])")).toHaveLength(0);
 
     // «Annulla» riporta il testo di prima, byte per byte.
     action(host, "undo-removal")!.click();

@@ -3580,6 +3580,13 @@ body:has(#context-menu:not([hidden])) > .toast-stack {
   pointer-events: none;
 }
 
+/* Senza una scheda bersaglio: al suo posto, ma non si vede. Non `[hidden]`: le regole
+   `:has()` della shell leggono quell'attributo, e cambiarlo qui farebbe
+   ricalcolare lo stile di tutta la finestra all'inizio di ogni tratto. */
+.canvas-ink-frames[data-idle] {
+  visibility: hidden;
+}
+
 .canvas-ink-frame {
   --canvas-frame-gap: 4px;
   --canvas-frame-size: 2px;
