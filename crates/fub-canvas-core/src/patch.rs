@@ -369,7 +369,14 @@ pub fn same_edge(left: &CanvasEdge, right: &CanvasEdge) -> bool {
 /// Il modello dopo le toppe, su una copia (`canvasDraft`): tutte le toppe o
 /// nessuna, e `canvas` non cambia.
 pub fn draft(canvas: &Canvas, patches: &[CanvasPatch]) -> Result<Canvas, PatchError> {
-    let mut draft = canvas.clone();
+    draft_owned(canvas.clone(), patches)
+}
+
+/// Come [`draft`], su una lavagna che il chiamante dà via: niente copia.
+pub(crate) fn draft_owned(
+    mut draft: Canvas,
+    patches: &[CanvasPatch],
+) -> Result<Canvas, PatchError> {
     let mut index = 0;
     while index < patches.len() {
         index = step(&mut draft, patches, index)?;
