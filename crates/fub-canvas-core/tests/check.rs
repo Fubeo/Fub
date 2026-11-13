@@ -5,7 +5,7 @@
 
 use std::path::PathBuf;
 
-use fub_canvas_core::check::{check, CheckReport, Code, WarningCode};
+use fub_canvas_core::check::{check, CheckReport, Code, WarningCode, MAX_WARNINGS};
 use fub_canvas_core::describe::{outline, DescribeOptions};
 use fub_canvas_core::ops::{compile, CanvasOp};
 use fub_canvas_core::patch::draft;
@@ -581,6 +581,53 @@ fn duemila_schede_nuove_si_controllano_con_la_griglia() {
     );
 }
 
+/// `n` schede nuove nello stesso punto si coprono a coppie: `n · (n − 1) / 2`
+/// avvisi di copertura. Il rapporto ne porta `MAX_WARNINGS`, e il conto di quelli
+/// che restano fuori è esatto: ogni coppia si conta una volta sola.
+fn stacked_cards(count: usize) -> CheckReport {
+    let ops: Vec<Value> = (0..count)
+        .map(|i| text_card(&format!("c{i}"), 0, 0, 320, 160, ""))
+        .collect();
+    check(&Canvas::default(), &Value::Array(ops), 1)
+}
+
+#[test]
+fn quindici_schede_nello_stesso_punto_contano_le_coppie_una_volta() {
+    // 15 · 14 / 2 = 105 coppie: 100 nel rapporto, 5 contate.
+    let report = stacked_cards(15);
+    assert!(report.ok, "{:?}", report.problems);
+    assert_eq!(report.warnings.len(), MAX_WARNINGS);
+    assert_eq!(report.warnings_omitted, 105 - MAX_WARNINGS);
+
+    // 14 · 13 / 2 = 91 coppie: tutte nel rapporto, nessuna omessa.
+    let report = stacked_cards(14);
+    assert_eq!(report.warnings.len(), 91);
+    assert_eq!(report.warnings_omitted, 0);
+}
+
+#[test]
+fn duemila_schede_nello_stesso_punto_si_tagliano_a_cento() {
+    let count = 2000;
+    let report = stacked_cards(count);
+    assert!(report.ok, "{:?}", report.problems);
+    let pairs = count * (count - 1) / 2;
+    assert_eq!(report.warnings.len(), MAX_WARNINGS);
+    assert_eq!(report.warnings_omitted, pairs - MAX_WARNINGS);
+    assert!(report
+        .warnings
+        .iter()
+        .all(|warning| warning.code == WarningCode::Overlap));
+    // Le prime in ordine di indice: c0 con c1, …, c0 con c100.
+    assert_eq!(
+        report.warnings[0].ids,
+        vec!["c0".to_owned(), "c1".to_owned()]
+    );
+    assert_eq!(
+        report.warnings[MAX_WARNINGS - 1].ids,
+        vec!["c0".to_owned(), "c100".to_owned()]
+    );
+}
+
 // ---------------------------------------------------------------------------
 // La pagina: l'esempio di «Il controllo»
 // ---------------------------------------------------------------------------
@@ -600,6 +647,7 @@ fn l_esempio_della_pagina_e_quello_che_dice_il_codice() {
             "ok": true,
             "problems": [],
             "warnings": [{"code": "overlap", "ids": ["t1", "f1"]}],
+            "warnings_omitted": 0,
             "summary": {
                 "cards_added": [],
                 "cards_removed": [],
@@ -630,6 +678,7 @@ fn l_esempio_della_pagina_e_quello_che_dice_il_codice() {
     assert_eq!(value["ok"], json!(false));
     assert_eq!(value["summary"], Value::Null);
     assert_eq!(value["outline_after"], Value::Null);
+    assert_eq!(value["warnings_omitted"], json!(0));
     assert_eq!(
         value["problems"][0],
         json!({"code": "unknown_node", "index": 0, "path": "/0/ids/0", "message": "there is no node with this id", "suggestion": "t1, t2"})

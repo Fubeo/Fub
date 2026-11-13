@@ -36,6 +36,11 @@ const CELL: i128 = 256;
 /// (un gruppo ampio) sta nella lista delle grandi, che si confronta con tutte.
 const MAX_CELLS: i128 = 16;
 
+/// Quanti avvisi al più porta il rapporto. Gli altri si contano in
+/// [`CheckReport::warnings_omitted`], senza elencarli: un mucchio di schede nello
+/// stesso punto dà milioni di coppie.
+pub const MAX_WARNINGS: usize = 100;
+
 /// Il rapporto di [`check`]. Con `ok: false` ci sono solo i problemi: `summary`
 /// e `outline_after` sono `null`.
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -45,8 +50,12 @@ pub struct CheckReport {
     /// I problemi che impediscono di scrivere, in ordine. La compilazione si
     /// ferma al primo, come [`ops::compile`].
     pub problems: Vec<Problem>,
-    /// Gli avvisi sulle schede che la lista tocca.
+    /// Gli avvisi sulle schede che la lista tocca: al più [`MAX_WARNINGS`], nell'ordine
+    /// del testo, delle coperture e dei gruppi.
     pub warnings: Vec<Warning>,
+    /// Quanti avvisi non entrano in `warnings`: il conto è esatto, ogni coppia
+    /// si conta una volta. Di solito è `0`.
+    pub warnings_omitted: usize,
     /// Che cosa cambierebbe.
     pub summary: Option<Summary>,
     /// La lettura della lavagna dopo la lista, come [`describe::outline`].
@@ -59,6 +68,7 @@ impl CheckReport {
             ok: false,
             problems,
             warnings: Vec::new(),
+            warnings_omitted: 0,
             summary: None,
             outline_after: None,
         }
@@ -153,6 +163,18 @@ impl Problem {
         }
     }
 
+    /// L'operazione `index` che serde non legge, dopo che la forma l'ha accettata.
+    fn unread(index: usize) -> Self {
+        Self {
+            code: Code::Invalid,
+            index: Some(index),
+            path: format!("/{index}"),
+            message: "the operation does not match its schema".to_owned(),
+            suggestion: None,
+            fix: None,
+        }
+    }
+
     fn compile(error: &OpError, raw: &Value, canvas: &Canvas) -> Self {
         let index = error.index();
         let (code, path, message, suggestion) = match error {
@@ -240,7 +262,7 @@ pub fn check(canvas: &Canvas, raw: &Value, seed: u64) -> CheckReport {
     };
     let ops = match read_ops(list) {
         Ok(ops) => ops,
-        Err(unread) => return CheckReport::refused(vec![unread.into_problem()]),
+        Err(index) => return CheckReport::refused(vec![Problem::unread(index)]),
     };
     let compiled = match ops::compile(canvas, &ops, seed) {
         Ok(compiled) => compiled,
@@ -255,47 +277,24 @@ pub fn check(canvas: &Canvas, raw: &Value, seed: u64) -> CheckReport {
         }
     };
     let summary = summarize(canvas, &compiled);
-    let warnings = warnings(&after, &touched(&summary));
+    let (warnings, warnings_omitted) = warnings(&after, &touched(&summary));
     CheckReport {
         ok: true,
         problems: Vec::new(),
         warnings,
+        warnings_omitted,
         summary: Some(summary),
         outline_after: Some(describe::outline(&after, &DescribeOptions::default())),
     }
 }
 
-/// Un'operazione che serde non legge, con la sua posizione e il motivo.
-struct Unread {
-    index: usize,
-    reason: String,
-}
-
-impl Unread {
-    fn into_problem(self) -> Problem {
-        Problem {
-            code: Code::Invalid,
-            index: Some(self.index),
-            path: format!("/{}", self.index),
-            message: self.reason,
-            suggestion: None,
-            fix: None,
-        }
-    }
-}
-
 /// Le operazioni come le legge serde. `validate` ha già detto che la forma è
-/// giusta: un'operazione che serde non legge è un divario fra i due, e si dice
-/// come `invalid` sulla sua posizione. Si ferma alla prima.
-fn read_ops(list: &[Value]) -> Result<Vec<CanvasOp>, Unread> {
+/// giusta: un'operazione che serde non legge è un divario fra i due. Si ferma
+/// alla prima, e dà la sua posizione: il dettaglio di serde non esce.
+fn read_ops(list: &[Value]) -> Result<Vec<CanvasOp>, usize> {
     list.iter()
         .enumerate()
-        .map(|(index, value)| {
-            serde_json::from_value(value.clone()).map_err(|error| Unread {
-                index,
-                reason: error.to_string(),
-            })
-        })
+        .map(|(index, value)| serde_json::from_value(value.clone()).map_err(|_| index))
         .collect()
 }
 
@@ -310,14 +309,20 @@ fn touched(summary: &Summary) -> HashSet<&str> {
 }
 
 /// Gli avvisi della lavagna di dopo, solo per le coppie che hanno almeno una
-/// scheda toccata. L'ordine è quello della lavagna: prima il testo che non ci
-/// sta, poi le coperture, poi le schede a cavallo di un gruppo.
-fn warnings(after: &Canvas, touched: &HashSet<&str>) -> Vec<Warning> {
+/// scheda toccata. Il rapporto ne porta al più [`MAX_WARNINGS`], nell'ordine
+/// del testo, delle coperture e dei gruppi; il conto di quelli che restano
+/// fuori è esatto e si dà a parte. Ogni coppia si conta una volta sola.
+fn warnings(after: &Canvas, touched: &HashSet<&str>) -> (Vec<Warning>, usize) {
     let nodes = &after.nodes;
-    let mut warnings: Vec<Warning> = nodes
+    let touched_flags: Vec<bool> = nodes
         .iter()
-        .filter(|node| touched.contains(node.id.as_str()))
-        .filter_map(|node| {
+        .map(|node| touched.contains(node.id.as_str()))
+        .collect();
+    let texts: Vec<Warning> = nodes
+        .iter()
+        .zip(&touched_flags)
+        .filter(|(_, flag)| **flag)
+        .filter_map(|(node, _)| {
             text_overflow(node).map(|height| Warning {
                 code: WarningCode::TextOverflow,
                 ids: vec![node.id.clone()],
@@ -327,14 +332,16 @@ fn warnings(after: &Canvas, touched: &HashSet<&str>) -> Vec<Warning> {
         .collect();
 
     let grid = Grid::new(nodes);
-    let mut covered: BTreeSet<(usize, usize)> = BTreeSet::new();
-    let mut straddling: BTreeSet<(usize, usize)> = BTreeSet::new();
+    let mut covered = Found::default();
+    let mut straddling = Found::default();
     for (index, node) in nodes.iter().enumerate() {
-        if !touched.contains(node.id.as_str()) {
+        if !touched_flags[index] {
             continue;
         }
         for other in grid.candidates(node, nodes.len()) {
-            if other == index {
+            // Una coppia di due schede toccate arriva da tutte e due le parti:
+            // si conta solo dalla parte della scheda con l'indice più piccolo.
+            if other == index || (touched_flags[other] && other < index) {
                 continue;
             }
             let other_node = &nodes[other];
@@ -345,17 +352,15 @@ fn warnings(after: &Canvas, touched: &HashSet<&str>) -> Vec<Warning> {
                 node.node_type == CanvasNodeType::Group,
                 other_node.node_type == CanvasNodeType::Group,
             ) {
-                (false, false) => {
-                    covered.insert((index.min(other), index.max(other)));
-                }
+                (false, false) => covered.add((index.min(other), index.max(other))),
                 (false, true) => {
                     if !inside(node, other_node) {
-                        straddling.insert((index, other));
+                        straddling.add((index, other));
                     }
                 }
                 (true, false) => {
                     if !inside(other_node, node) {
-                        straddling.insert((other, index));
+                        straddling.add((other, index));
                     }
                 }
                 (true, true) => {}
@@ -363,17 +368,40 @@ fn warnings(after: &Canvas, touched: &HashSet<&str>) -> Vec<Warning> {
         }
     }
 
-    warnings.extend(covered.into_iter().map(|(first, second)| Warning {
+    let total = texts.len() + covered.total + straddling.total;
+    let mut warnings = texts;
+    warnings.extend(covered.first.into_iter().map(|(first, second)| Warning {
         code: WarningCode::Overlap,
         ids: vec![nodes[first].id.clone(), nodes[second].id.clone()],
         estimated_height: None,
     }));
-    warnings.extend(straddling.into_iter().map(|(card, group)| Warning {
+    warnings.extend(straddling.first.into_iter().map(|(card, group)| Warning {
         code: WarningCode::HalfInGroup,
         ids: vec![nodes[card].id.clone(), nodes[group].id.clone()],
         estimated_height: None,
     }));
-    warnings
+    warnings.truncate(MAX_WARNINGS);
+    let omitted = total - warnings.len();
+    (warnings, omitted)
+}
+
+/// Le coppie di un tipo: il conto di tutte, e le prime [`MAX_WARNINGS`] in ordine
+/// di indice. Si tengono solo le prime, così due milioni di coppie non stanno in
+/// memoria.
+#[derive(Default)]
+struct Found {
+    total: usize,
+    first: BTreeSet<(usize, usize)>,
+}
+
+impl Found {
+    fn add(&mut self, pair: (usize, usize)) {
+        self.total += 1;
+        self.first.insert(pair);
+        if self.first.len() > MAX_WARNINGS {
+            self.first.pop_last();
+        }
+    }
 }
 
 /// L'altezza che [`estimate_text_height`] vuole per il testo di una scheda di
@@ -537,4 +565,27 @@ fn locate(raw: &Value, index: usize, text: &str) -> String {
 /// Un nome come segmento di puntatore JSON (RFC 6901).
 fn escape(segment: &str) -> String {
     segment.replace('~', "~0").replace('/', "~1")
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    use super::*;
+
+    /// Un'operazione che la forma accetta ma serde non legge dà la sua posizione,
+    /// e il rapporto dice la frase fissa, non il motivo di serde.
+    #[test]
+    fn un_errore_di_serde_non_esce_nel_rapporto() {
+        let list = vec![
+            json!({"op": "move", "ids": ["a"], "dx": 0, "dy": 0}),
+            json!({"op": "move", "ids": ["a"]}),
+        ];
+        assert_eq!(read_ops(&list), Err(1));
+        let problem = Problem::unread(1);
+        assert_eq!(problem.code, Code::Invalid);
+        assert_eq!(problem.index, Some(1));
+        assert_eq!(problem.path, "/1");
+        assert_eq!(problem.message, "the operation does not match its schema");
+    }
 }
