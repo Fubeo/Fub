@@ -481,13 +481,11 @@ fn the_week_starts_on_the_first_day_of_the_locale() {
 
 #[test]
 fn a_read_only_note_is_not_written() {
-    use std::os::unix::fs::PermissionsExt;
-
     let vault = seeded_vault();
     let path = vault.root.join("Oggi.md");
-    let mut permissions = std::fs::metadata(&path).unwrap().permissions();
-    permissions.set_mode(0o444);
-    std::fs::set_permissions(&path, permissions).unwrap();
+    // `set_readonly` toglie i bit di scrittura su Unix e mette l'attributo su
+    // Windows: la stessa prova sui tre sistemi della CI.
+    set_read_only(&path, true);
 
     let clock = Fixed(Arc::new(AtomicU64::new(0)));
     friday_night(&clock);
@@ -509,6 +507,18 @@ fn a_read_only_note_is_not_written() {
         shown.iter().any(|m| m == READ_ONLY),
         "la vista dice che la nota è in sola lettura: {shown:?}"
     );
+    // Su Windows la cartella temporanea non si cancella con un file in sola lettura.
+    set_read_only(&path, false);
+}
+
+fn set_read_only(path: impl AsRef<std::path::Path>, read_only: bool) {
+    let path = path.as_ref();
+    let mut permissions = std::fs::metadata(path).unwrap().permissions();
+    // Su Unix `set_readonly(false)` dà la scrittura a tutti: va bene per una
+    // cartella temporanea che sta per essere cancellata.
+    #[allow(clippy::permissions_set_readonly_false)]
+    permissions.set_readonly(read_only);
+    std::fs::set_permissions(path, permissions).unwrap();
 }
 
 #[test]
