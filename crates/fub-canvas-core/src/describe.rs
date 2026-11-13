@@ -234,7 +234,7 @@ fn edge_line(edge: &CanvasEdge) -> String {
 
 /// Il testo che una riga mostra per una scheda: il testo, l'etichetta del
 /// gruppo, il percorso del file col suo sottopercorso, il collegamento.
-fn card_text(node: &CanvasNode) -> Option<String> {
+pub(crate) fn card_text(node: &CanvasNode) -> Option<String> {
     match node.node_type {
         CanvasNodeType::Text => node.text.clone(),
         CanvasNodeType::Group => node.label.clone(),
@@ -258,7 +258,7 @@ fn innermost_group<'a>(groups: &[&'a CanvasNode], node: &CanvasNode) -> Option<&
 
 /// Accorcia un testo a [`TEXT_CHARS`] caratteri, il `…` compreso. Conta i
 /// caratteri, non i byte.
-fn shorten(text: &str) -> String {
+pub(crate) fn shorten(text: &str) -> String {
     if text.chars().count() <= TEXT_CHARS {
         return text.to_owned();
     }

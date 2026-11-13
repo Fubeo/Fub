@@ -513,7 +513,7 @@ fn nearest(given: &str, names: impl IntoIterator<Item = &'static str>) -> Vec<&'
 /// [`MAX_DISTANCE`]. Il confronto ignora le maiuscole ASCII: `Add-Card` è vicino
 /// a `add_card`. È solo un suggerimento: serde resta sensibile alle maiuscole, e
 /// un nome che non è esatto non si legge.
-fn distance(given: &str, name: &str) -> Option<usize> {
+pub(crate) fn distance(given: &str, name: &str) -> Option<usize> {
     let given: Vec<char> = given.to_ascii_lowercase().chars().collect();
     let name: Vec<char> = name.chars().collect();
     if given.len().abs_diff(name.len()) > MAX_DISTANCE {

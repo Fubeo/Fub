@@ -372,7 +372,7 @@ fn beyond_all(canvas: &Canvas, start: Rect, axis: Axis) -> Rect {
 }
 
 /// Se due rettangoli hanno un'area in comune. Un bordo che combacia non conta.
-fn overlaps(a: &Rect, b: &Rect) -> bool {
+pub(crate) fn overlaps(a: &Rect, b: &Rect) -> bool {
     a.x < b.right() && b.x < a.right() && a.y < b.bottom() && b.y < a.bottom()
 }
 
