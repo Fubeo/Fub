@@ -404,10 +404,13 @@ fn check_fields(inv: &Inventory, errors: &mut Errors) {
     }
 }
 
+/// Un campo di una voce: se c'è, e come si chiama.
+type Field<'a> = (bool, &'a str);
+
 fn field_problems(entry: &Entry) -> Vec<String> {
     let state = entry.state.as_str();
-    // Ciò che lo stato vuole e ciò che non vuole: `(presente, nome del campo)`.
-    let (wants, refuses): (Vec<(bool, &str)>, Vec<(bool, &str)>) = match state {
+    // Ciò che lo stato vuole e ciò che non vuole.
+    let (wants, refuses): (Vec<Field>, Vec<Field>) = match state {
         "code" => (
             vec![(has_list(&entry.ops), "ops")],
             vec![
