@@ -1880,7 +1880,7 @@ Fatto quando: `craft.test.ts` prova anteprima, «Apri con», componente
 spento; `cards.test.ts` prova le estensioni nuove.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/canvas/cards
-Stato: [ ] da fare
+Stato: [x] fatto (2026-11-13) · 79bc972fa, 9e78ed35b (prima del cherry-pick) · differenze: niente «Accendi…», perché K5 T24 non è nella base: col componente spento la scheda dice la ragione e offre «Apri con…»; «Accendi…» si aggiunge dopo il merge di K5 (#300); l'XMP resta una scheda di file; col consenso acceso «Crea l'anteprima» parte solo al clic; `offersRender` e `limitText` copiati da `editors/craft/surface.ts` per non caricare quel modulo pigro con la lavagna; pagina nuova `docs/reference/canvas-craft.md` · rischi: il file mancante col componente spento non si scopre; `not_found` di `craft.preview` sul file rotto è supposto, non visto sull'host vero
 
 ## T19 · L'inchiostro sulla pagina del PDF
 
@@ -1991,7 +1991,7 @@ Prova: scripts/check.sh --rapido; cd apps/client && npm run build && cd
 ../.. && cargo build --release --locked -p fub-app --features
 tauri/custom-protocol && cd apps/client && xvfb-run -a npm run bench:webview
 -- --only=S3,S9 --budgets=targets --native-driver=/usr/bin/WebKitWebDriver
-Stato: [ ] da fare
+Stato: [x] fatto (2026-11-13) · 1a17ac2d8, 490d0ce13 (prima del cherry-pick) · `docs/misure/2026-11-13-lavagna-fogli-vivi-s9.md`: 20 fogli vivi a zoom 0,51 in tre giri sotto Xvfb; S9 p95 91–100 ms, max 128–346 ms; S3 sul ramo p95 44–47 ms, uguale alla base (45 ms) · differenze: la lavagna è `S9/Fogli vivi.canvas` (con «Lavagna» S3 avrebbe aperto un file a caso); il blocco 5×4 sta a x negative, così il JSON di S3 resta identico; la vista arriva al blocco con 18 scatti di Ctrl+rotella mandati dalla pagina, niente pulsante di mezzo; i gesti di S3 stanno in `moveAndZoom`, uguali; la nota su `env -u WAYLAND_DISPLAY GDK_BACKEND=x11` in una sessione Wayland · rischi: WebKitWebDriver non consegna il rilascio del pulsante di mezzo, quindi S3 misura lo zoom con uno spostamento ancora aperto; nessuna soglia della CI per S9 finché non c'è una misura del runner
 
 ## T21 · La prova del cancello
 
