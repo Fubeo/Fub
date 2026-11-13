@@ -3,9 +3,11 @@
 import { StateEffect, type EditorState, type Extension, type Range, type Text, type Transaction } from "@codemirror/state";
 import {
   EditorSelection,
+  Facet,
   findClusterBreak,
   Prec,
-  type RangeSet,
+  RangeSet,
+  RangeValue,
   type SelectionRange,
   StateField,
   type TransactionSpec,
@@ -39,12 +41,15 @@ import {
 } from "../../../../rules/syntax";
 import {
   blockOrigin,
+  blocksAround,
   findTrailingAnchor,
   frontmatterRange,
   linkReferences,
+  movedBlock,
   paragraphMathBlock,
   renderMarkdownState,
   renderMarkdownStatePrefix,
+  renderPatch,
 } from "./render";
 import { decodeDestination, normalizeLabel } from "./link-syntax";
 import { FOOTNOTE_DEFINITION } from "./grammar";
@@ -2003,6 +2008,57 @@ function insideReplaced(replaced: readonly { from: number; to: number }[], posit
   return range !== undefined && range.from <= position && position < range.to;
 }
 
+/// Gli intervalli che i blocchi resi coprono dentro `ranges`, in ordine e
+/// disgiunti: fra le decorazioni dei blocchi soltanto i blocchi resi hanno
+/// una lunghezza.
+function replacedIn(decorations: DecorationSet, ranges: readonly { from: number; to: number }[]): { from: number; to: number }[] {
+  const found: { from: number; to: number }[] = [];
+  for (const range of ranges) {
+    decorations.between(range.from, range.to, (from, to) => {
+      if (to > from && (found.length === 0 || from >= found[found.length - 1]!.to)) found.push({ from, to });
+    });
+  }
+  return found;
+}
+
+/// Un blocco che il cursore lontano lascia reso, fra i candidati della Live:
+/// l'intervallo va dall'inizio della sua prima riga a quello del blocco dopo.
+class CandidateMark extends RangeValue {
+  constructor(
+    /// Il blocco, con le posizioni di quando il candidato è nato.
+    readonly block: MarkdownBlock,
+    /// Quanto il blocco comincia dopo l'inizio del candidato.
+    readonly offset: number,
+    readonly length: number,
+    /// Una tabella che la griglia sa leggere: resta griglia anche col cursore
+    /// dentro, perché la griglia è il modo di scriverla.
+    readonly grid: boolean,
+    /// Un paragrafo che è soltanto un indirizzo: la sua scheda (K8).
+    readonly linkCard: string | undefined,
+    /// La scelta che la selezione ha dettato: blocco reso o sorgente, righe
+    /// vuote dopo nascoste o no. Uguale, il candidato resta quello di prima.
+    readonly decision: string,
+  ) {
+    super();
+  }
+  decided(decision: string): CandidateMark {
+    return new CandidateMark(this.block, this.offset, this.length, this.grid, this.linkCard, decision);
+  }
+}
+
+/// Il campo dei blocchi resi di una Live, per chi conta il suo lavoro.
+const liveBlocksField = Facet.define<StateField<{ readonly visited: number }>, StateField<{ readonly visited: number }> | undefined>({
+  combine: (fields) => fields[0],
+});
+
+/// Quanti blocchi l'ultimo aggiornamento della Live ha guardato: tutti quando
+/// si rifà da capo, quelli vicini alla modifica e alla selezione per una
+/// battuta. `null` senza Live. Per i test, che contano il lavoro di una battuta.
+export function liveBlocksVisited(state: EditorState): number | null {
+  const field = state.facet(liveBlocksField);
+  return field ? state.field(field, false)?.visited ?? null : null;
+}
+
 /// Le figure del set accanto ai wikilink: una regola per figura, con la sua
 /// maschera. Si fanno quando si monta un editor e non al caricamento del
 /// modulo, perché una figura può essere registrata da un modulo che si monta
@@ -2062,33 +2118,20 @@ export function livePreview(
   callbacks: LivePreviewCallbacks,
   forms?: readonly SyntaxForm[],
 ): Extension {
-  /// Un blocco che il cursore lontano lascia reso: `from` è l'inizio della
-  /// sua prima riga, `next` quello del blocco dopo.
-  interface Candidate {
-    block: MarkdownBlock;
-    from: number;
-    to: number;
-    next: number;
-    /// Una tabella che la griglia sa leggere: resta griglia anche col cursore
-    /// dentro, perché la griglia è il modo di scriverla.
-    grid: boolean;
-    /// Un paragrafo che è soltanto un indirizzo: la sua scheda (K8).
-    linkCard?: string;
-  }
   interface RenderState {
     document: MarkdownDocument;
-    /// I blocchi rendibili, ricavati una volta per documento: una selezione
-    /// che si muove ripassa solo questi, non tutto il documento.
-    candidates: readonly Candidate[];
-    /// Le scelte che la selezione ha dettato: blocco reso o sorgente, riga
-    /// vuota nascosta o no. Uguali, lo stato resta quello di prima.
-    decisions: string;
+    /// I blocchi rendibili, ognuno dall'inizio della sua prima riga a quello
+    /// del blocco dopo, con la scelta che la selezione ha dettato. Una
+    /// modifica li sposta tutti senza guardarli, e se ne rifanno soltanto
+    /// quelli che la modifica o la selezione toccano.
+    candidates: RangeSet<CandidateMark>;
     decorations: DecorationSet;
-    replaced: readonly { from: number; to: number }[];
     /// `false`: la resa di un documento grande appena aperto, fin dove il
     /// parser è arrivato (`renderMarkdownStatePrefix`); `parseRest` la
     /// completa senza fermare la pagina.
     complete: boolean;
+    /// Quanti blocchi l'ultimo aggiornamento ha guardato (`liveBlocksVisited`).
+    visited: number;
   }
   const touched = (state: EditorState, from: number, to: number) =>
     state.selection.ranges.some((range) => range.from <= to && range.to >= from);
@@ -2096,38 +2139,44 @@ export function livePreview(
   const blocks = StateField.define<RenderState>({
     create(state) {
       const { document, complete } = renderMarkdownStatePrefix(state, forms);
-      return buildBlocks(state, document, candidatesOf(document, state.facet(liveReveal)), complete);
+      return buildAll(state, document, complete);
     },
     update(value, transaction) {
+      const { state } = transaction;
       const changed = transaction.docChanged;
-      const readOnlyChanged = transaction.startState.readOnly !== transaction.state.readOnly;
-      const policy = transaction.state.facet(liveReveal);
-      if (policy !== transaction.startState.facet(liveReveal)) {
-        return buildBlocks(transaction.state, value.document, candidatesOf(value.document, policy), value.complete);
+      const readOnlyChanged = transaction.startState.readOnly !== state.readOnly;
+      if (state.facet(liveReveal) !== transaction.startState.facet(liveReveal)) {
+        return buildAll(state, value.document, value.complete);
       }
       if (transaction.effects.some((effect) => effect.is(linkCardsChanged)) && !changed) {
-        return buildBlocks(transaction.state, value.document, value.candidates, value.complete);
+        return buildAll(state, value.document, value.complete);
       }
       // La resa a metà di un documento grande si rifà a ogni modifica, fin
       // dove l'albero arriva, e quando l'albero arriva in fondo: gli alberi
       // intermedi del lavoratore del parser la rifarebbero tutta ogni volta.
-      const treeDone = !changed && syntaxTreeAvailable(transaction.state) && (
-        syntaxTree(transaction.startState) !== syntaxTree(transaction.state)
+      const treeDone = !changed && syntaxTreeAvailable(state) && (
+        syntaxTree(transaction.startState) !== syntaxTree(state)
         || transaction.effects.some((effect) => effect.is(restParsed)));
       if (!value.complete && (changed || treeDone)) {
         const previous = { document: value.document, changes: transaction.changes };
-        const { document, complete } = renderMarkdownStatePrefix(transaction.state, forms, previous);
-        return buildBlocks(transaction.state, document, candidatesOf(document, policy), complete);
+        const { document, complete } = renderMarkdownStatePrefix(state, forms, previous);
+        return buildAll(state, document, complete);
       }
       if (!changed && !transaction.selection && !readOnlyChanged) return value;
       if (!changed) {
-        const next = buildBlocks(transaction.state, value.document, value.candidates, value.complete);
-        return next.decisions === value.decisions && !readOnlyChanged ? value : next;
+        if (readOnlyChanged) return buildAll(state, value.document, value.complete);
+        return patchBlocks(value, transaction, value.document) ?? buildAll(state, value.document, value.complete);
       }
-      const document = renderMarkdownState(transaction.state, forms, { document: value.document, changes: transaction.changes });
-      return buildBlocks(transaction.state, document, candidatesOf(document, policy), true);
+      const document = renderMarkdownState(state, forms, { document: value.document, changes: transaction.changes });
+      // Ogni widget confronta la sola lettura e le definizioni, e una scheda
+      // nuova può cambiare tipo: allora si rifanno tutti.
+      if (readOnlyChanged || document.dependencies !== value.document.dependencies
+        || transaction.effects.some((effect) => effect.is(linkCardsChanged))) {
+        return buildAll(state, document, true);
+      }
+      return patchBlocks(value, transaction, document) ?? buildAll(state, document, true);
     },
-    provide: (field) => EditorView.decorations.from(field, (value) => value.decorations),
+    provide: (field) => [EditorView.decorations.from(field, (value) => value.decorations), liveBlocksField.of(field)],
   });
   // Il resto di un documento grande: il parser di CodeMirror ci arriva a
   // pezzi brevi, quando la pagina è libera, e quando è in fondo una
@@ -2200,38 +2249,6 @@ export function livePreview(
   // documento: cercare un a capo costa meno che scendere nell'albero delle
   // righe di CodeMirror, e lo si fa per ogni blocco a ogni battuta.
   const lineStart = (source: string, position: number): number => source.lastIndexOf("\n", position - 1) + 1;
-  function candidatesOf(document: MarkdownDocument, policy: RevealPolicy): Candidate[] {
-    const { source } = document;
-    const candidates: Candidate[] = [];
-    for (let index = 0; index < document.blocks.length; index++) {
-      const block = document.blocks[index]!;
-      if (INLINE_KINDS.has(block.kind) && block.kind !== "paragraph") continue;
-      const { rendered, grid } = shapeOf(block);
-      const following = document.blocks[index + 1];
-      const url = !rendered && callbacks.linkCard && block.kind === "paragraph" ? bareUrl(block.source) : null;
-      if (url) {
-        candidates.push({
-          block,
-          from: lineStart(source, block.from),
-          to: block.to,
-          next: following ? lineStart(source, following.from) : source.length,
-          grid: false,
-          linkCard: url,
-        });
-        continue;
-      }
-      if (!rendered) continue;
-      if (policy !== "riga" && block.kind === "paragraph" && onlyImages(block.source)) continue;
-      candidates.push({
-        block,
-        from: lineStart(source, block.from),
-        to: block.to,
-        next: following ? lineStart(source, following.from) : source.length,
-        grid,
-      });
-    }
-    return candidates;
-  }
   // La decorazione di un blocco reso torna la stessa finché il blocco viene
   // dalla stessa resa e niente di ciò che il widget confronta cambia: per
   // CodeMirror è la decorazione di prima, spostata, e non va confrontata.
@@ -2254,66 +2271,166 @@ export function livePreview(
     widgets.set(origin, { offset, dependencies, readOnly, grid, decoration });
     return decoration;
   }
-  function buildBlocks(
+  /// Il candidato di un blocco, se il blocco si può rendere: dall'inizio della
+  /// sua prima riga all'inizio della riga del blocco dopo. La scelta è ancora
+  /// da fare.
+  function candidateOf(
+    block: MarkdownBlock,
+    following: MarkdownBlock | null,
+    source: string,
+    policy: RevealPolicy,
+  ): Range<CandidateMark> | null {
+    if (INLINE_KINDS.has(block.kind) && block.kind !== "paragraph") return null;
+    const { rendered, grid } = shapeOf(block);
+    const url = !rendered && callbacks.linkCard && block.kind === "paragraph" ? bareUrl(block.source) : null;
+    if (!url) {
+      if (!rendered) return null;
+      if (policy !== "riga" && block.kind === "paragraph" && onlyImages(block.source)) return null;
+    }
+    const from = lineStart(source, block.from);
+    const next = following ? lineStart(source, following.from) : source.length;
+    const mark = new CandidateMark(block, block.from - from, block.to - block.from, url ? false : grid, url ?? undefined, "");
+    return mark.range(from, Math.max(next, block.to));
+  }
+  /// La scelta di un candidato per la selezione di adesso, con le sue
+  /// decorazioni: blocco reso o sorgente, righe vuote dopo nascoste o no.
+  function decide(
     state: EditorState,
     document: MarkdownDocument,
-    candidates: readonly Candidate[],
-    complete: boolean,
-  ): RenderState {
+    from: number,
+    next: number,
+    mark: CandidateMark,
+  ): { decision: string; ranges: Range<Decoration>[] } {
     const ranges: Range<Decoration>[] = [];
-    const replaced: { from: number; to: number }[] = [];
-    let decisions = "";
-    for (const { block, from, to, next, grid, linkCard } of candidates) {
-      if (linkCard !== undefined) {
-        // Col cursore dentro, l'indirizzo si scrive com'è.
-        if (touched(state, from, to) || !callbacks.linkCard) {
-          decisions += "s";
-          continue;
-        }
-        const card = callbacks.linkCard.view(linkCard);
-        decisions += `k${card.kind}`;
-        ranges.push(Decoration.replace({ block: true, widget: new LinkCardWidget(linkCard, card) }).range(from, to));
-        replaced.push({ from, to });
-        continue;
-      }
-      if (!grid && touched(state, from, to)) {
-        decisions += "s";
-        // Un diagramma toccato si scrive come codice, e il disegno resta
-        // sotto (C5).
-        if (block.kind === "diagram" && /^ {0,3}(`{3,}|~{3,})\s*mermaid\b/i.test(block.source)) {
-          ranges.push(Decoration.widget({ block: true, side: 1, widget: new DiagramLiveWidget(fenceBody(block.source)) }).range(to));
-        } else if (block.kind === "math") {
-          // Così anche un blocco `$$` (C6).
-          ranges.push(Decoration.widget({ block: true, side: 1, widget: new MathBlockLiveWidget(blockTex(block.source)) }).range(to));
-        }
-        continue;
-      }
-      decisions += grid ? "t" : "r";
-      ranges.push(widgetOf(block, from, document.dependencies, state.readOnly, grid).range(from, to));
-      replaced.push({ from, to });
-      // Le righe dopo il blocco, fino al prossimo: dalla riga di `to` se
-      // comincia lì, altrimenti dalla seguente.
-      const { source } = document;
-      const after = source.indexOf("\n", to);
-      let lineFrom = lineStart(source, to) === to ? to : after === -1 ? -1 : after + 1;
-      while (lineFrom !== -1 && lineFrom < next) {
-        const end = source.indexOf("\n", lineFrom);
-        const lineTo = end === -1 ? source.length : end;
-        if (!/\S/.test(source.slice(lineFrom, lineTo)) && !touched(state, lineFrom, lineTo)) {
-          ranges.push(GAP.range(lineFrom));
-          decisions += "g";
-        } else {
-          decisions += "-";
-        }
-        if (end === -1) break;
-        lineFrom = end + 1;
-      }
+    const to = from + mark.offset + mark.length;
+    const { linkCard, grid } = mark;
+    if (linkCard !== undefined) {
+      // Col cursore dentro, l'indirizzo si scrive com'è.
+      if (touched(state, from, to) || !callbacks.linkCard) return { decision: "s", ranges };
+      const card = callbacks.linkCard.view(linkCard);
+      ranges.push(Decoration.replace({ block: true, widget: new LinkCardWidget(linkCard, card) }).range(from, to));
+      return { decision: `k${card.kind}`, ranges };
     }
-    return { document, candidates, decisions, decorations: Decoration.set(ranges, true), replaced, complete };
+    const block = movedBlock(mark.block, from + mark.offset);
+    if (!grid && touched(state, from, to)) {
+      // Un diagramma toccato si scrive come codice, e il disegno resta
+      // sotto (C5).
+      if (block.kind === "diagram" && /^ {0,3}(`{3,}|~{3,})\s*mermaid\b/i.test(block.source)) {
+        ranges.push(Decoration.widget({ block: true, side: 1, widget: new DiagramLiveWidget(fenceBody(block.source)) }).range(to));
+      } else if (block.kind === "math") {
+        // Così anche un blocco `$$` (C6).
+        ranges.push(Decoration.widget({ block: true, side: 1, widget: new MathBlockLiveWidget(blockTex(block.source)) }).range(to));
+      }
+      return { decision: "s", ranges };
+    }
+    let decision = grid ? "t" : "r";
+    ranges.push(widgetOf(block, from, document.dependencies, state.readOnly, grid).range(from, to));
+    // Le righe dopo il blocco, fino al prossimo: dalla riga di `to` se
+    // comincia lì, altrimenti dalla seguente.
+    const { source } = document;
+    const after = source.indexOf("\n", to);
+    let lineFrom = lineStart(source, to) === to ? to : after === -1 ? -1 : after + 1;
+    while (lineFrom !== -1 && lineFrom < next) {
+      const end = source.indexOf("\n", lineFrom);
+      const lineTo = end === -1 ? source.length : end;
+      if (!/\S/.test(source.slice(lineFrom, lineTo)) && !touched(state, lineFrom, lineTo)) {
+        ranges.push(GAP.range(lineFrom));
+        decision += "g";
+      } else {
+        decision += "-";
+      }
+      if (end === -1) break;
+      lineFrom = end + 1;
+    }
+    return { decision, ranges };
+  }
+  /// Candidati e decorazioni di tutto il documento: quando la Live parte, e
+  /// quando una modifica cambia ciò che ogni blocco reso confronta.
+  function buildAll(state: EditorState, document: MarkdownDocument, complete: boolean): RenderState {
+    const policy = state.facet(liveReveal);
+    const { source, blocks: all } = document;
+    const marks: Range<CandidateMark>[] = [];
+    const ranges: Range<Decoration>[] = [];
+    for (let index = 0; index < all.length; index++) {
+      const candidate = candidateOf(all[index]!, all[index + 1] ?? null, source, policy);
+      if (!candidate) continue;
+      const { decision, ranges: own } = decide(state, document, candidate.from, candidate.to, candidate.value);
+      marks.push(candidate.value.decided(decision).range(candidate.from, candidate.to));
+      for (const range of own) ranges.push(range);
+    }
+    return { document, candidates: RangeSet.of(marks), decorations: Decoration.set(ranges, true), complete, visited: all.length };
+  }
+  /// L'aggiornamento di una battuta o di un cursore che si muove: candidati e
+  /// decorazioni di prima, spostati dalla modifica, e rifatti soltanto dove
+  /// la resa ha lavorato (`renderPatch`) e dove la selezione, di prima o di
+  /// adesso, tocca un candidato. `null` quando la resa è stata rifatta da capo.
+  function patchBlocks(value: RenderState, transaction: Transaction, document: MarkdownDocument): RenderState | null {
+    const { state } = transaction;
+    const changed = transaction.docChanged;
+    let { candidates, decorations } = value;
+    const added: Range<CandidateMark>[] = [];
+    const dropped = new Set<CandidateMark>();
+    const ranges: Range<Decoration>[] = [];
+    const cleared: { from: number; to: number }[] = [];
+    let visited = 0;
+    if (changed) {
+      const span = renderPatch(document);
+      if (!span) return null;
+      candidates = candidates.map(transaction.changes);
+      decorations = decorations.map(transaction.changes);
+      const { source } = document;
+      const policy = state.facet(liveReveal);
+      const { blocks: near, following } = blocksAround(document, span.from, span.to);
+      const from = near.length > 0 ? lineStart(source, near[0]!.from) : span.from;
+      const to = following ? Math.max(from, lineStart(source, following.from)) : source.length;
+      candidates.between(from, to, (start, _end, mark) => {
+        if (start >= from && start < to) dropped.add(mark);
+      });
+      for (let index = 0; index < near.length; index++) {
+        visited++;
+        const candidate = candidateOf(near[index]!, near[index + 1] ?? following, source, policy);
+        if (!candidate) continue;
+        const { decision, ranges: own } = decide(state, document, candidate.from, candidate.to, candidate.value);
+        added.push(candidate.value.decided(decision).range(candidate.from, candidate.to));
+        for (const range of own) ranges.push(range);
+      }
+      cleared.push({ from, to });
+    }
+    // La selezione di prima, portata dalla modifica, e quella di adesso: i
+    // candidati che toccano rifanno la scelta, e cambiano se è diversa.
+    const spans: { from: number; to: number }[] = [];
+    for (const range of transaction.startState.selection.ranges) {
+      spans.push(changed
+        ? { from: transaction.changes.mapPos(range.from, -1), to: transaction.changes.mapPos(range.to, 1) }
+        : range);
+    }
+    for (const range of state.selection.ranges) spans.push(range);
+    const seen = new Set<CandidateMark>();
+    for (const span of spans) {
+      candidates.between(span.from, span.to, (from, to, mark) => {
+        if (dropped.has(mark) || seen.has(mark)) return;
+        seen.add(mark);
+        visited++;
+        const { decision, ranges: own } = decide(state, document, from, to, mark);
+        if (decision === mark.decision) return;
+        dropped.add(mark);
+        added.push(mark.decided(decision).range(from, to));
+        for (const range of own) ranges.push(range);
+        cleared.push({ from, to });
+      });
+    }
+    if (!changed && cleared.length === 0) return value;
+    for (const { from, to } of cleared) {
+      candidates = candidates.update({ filterFrom: from, filterTo: to, filter: (_from, _to, mark) => !dropped.has(mark) });
+      decorations = decorations.update({ filterFrom: from, filterTo: to, filter: (start) => start < from || start >= to });
+    }
+    candidates = candidates.update({ add: added, sort: true });
+    decorations = decorations.update({ add: ranges, sort: true });
+    return { document, candidates, decorations, complete: value.complete, visited };
   }
   const buildInline = (view: EditorView, held: readonly SelectionRange[] | null): [DecorationSet, DecorationSet, DecorationSet] => {
     const active = revealOf(view.state, view.state.facet(liveReveal), held ?? view.state.selection.ranges);
-    const replaced = view.state.field(blocks).replaced;
+    const replaced = replacedIn(view.state.field(blocks).decorations, view.visibleRanges);
     // Dentro il frontmatter non c'è Markdown: né riga orizzontale né titolo.
     const yaml = frontmatterRange(view.state.doc);
     const decorations: Range<Decoration>[] = [];
