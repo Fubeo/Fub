@@ -158,10 +158,16 @@ il tratto rimasto giù terrebbe la lavagna («un tratto alla volta»), quindi
 prima del mouse lo scenario manda alla finestra un `blur`, che lo annulla,
 fuori dalla misura. Per ogni tratto il referto dà i path asciutti
 (`written`) e, per i fotogrammi oltre 33 ms, l'ultimo evento del puntatore
-prima di ognuno (`phases`): il movimento, il rilascio o nessuno. Lo
+prima di ognuno (`phases`): il movimento, il rilascio o nessuno. Coi tratti
+del mouse conta anche D (`phases.d`): le pressioni e le ripetizioni
+automatiche del tasto tenuto. Un fotogramma dopo una ripetizione va nella
+fase «ripetizione di D», e `S8.penFrameGap.*` non lo conta (lo prende dai
+fotogrammi di `phases` senza quelli); il referto lo scrive nelle note. Lo
 spostamento parte dalla testata della scheda del foglio, va avanti e indietro e la
 posa 60 px più in basso. Il referto dà `S8.penFrameGap.max` (l'obiettivo
-di N4, 33 ms, solo fra i `targets`), `S8.moveFrameGap.max` senza tetto, i
+di N4, 33 ms, solo fra i `targets`), `S8.keyLatency.p50` (dal tasto D al
+secondo fotogramma dopo, come la latenza dei tasti della sonda: almeno un
+fotogramma intero), `S8.moveFrameGap.max` senza tetto, i
 path asciutti prima e dopo (`S8.dryPaths.*`) e lo sha256 di `voti.xlsx`
 letto dal disco prima della penna e 3 s dopo lo spostamento: il foglio non
 deve cambiare. Il referto dà `sheetLive` e `sheetState`: se la scheda del

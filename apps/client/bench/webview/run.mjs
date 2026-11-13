@@ -388,11 +388,25 @@ async function applyProfile(session, nome) {
 /// tratto o la scheda si muove, `pointerup` quando il tratto si scrive o la
 /// scheda si posa, niente se il fotogramma è lungo da solo); `phases()` rende
 /// i fotogrammi oltre 33 ms per fase, col più lungo di ognuna, e ferma tutto.
+/// Conta anche D (T20d): le pressioni e le ripetizioni automatiche del tasto
+/// tenuto, che sotto Xvfb potrebbero arrivare a metà tratto. Un fotogramma
+/// dopo una ripetizione va nella fase «ripetizione di D», non in quella del
+/// tratto: non conta come movimento o rilascio.
 const PHASES_SCRIPT = `
-  const state = { last: null, gaps: [], frame: 0, stopped: false };
+  const state = { last: null, gaps: [], frame: 0, stopped: false, d: { pressioni: 0, ripetizioni: 0 } };
   const seen = (event) => { state.last = event.type; };
   const kinds = ["pointerdown", "pointermove", "pointerup"];
   for (const kind of kinds) document.addEventListener(kind, seen, { capture: true, passive: true });
+  const key = (event) => {
+    if (event.key !== "d" && event.key !== "D") return;
+    if (event.repeat) {
+      state.d.ripetizioni += 1;
+      state.last = "ripetizione di D";
+    } else {
+      state.d.pressioni += 1;
+    }
+  };
+  window.addEventListener("keydown", key, { capture: true, passive: true });
   let before = performance.now();
   const tick = (now) => {
     if (state.stopped) return;
@@ -406,13 +420,17 @@ const PHASES_SCRIPT = `
     state.stopped = true;
     cancelAnimationFrame(state.frame);
     for (const kind of kinds) document.removeEventListener(kind, seen, { capture: true });
-    const out = {};
+    window.removeEventListener("keydown", key, { capture: true });
+    const out = { d: state.d };
     for (const [gap, last] of state.gaps) {
       if (gap <= 33) continue;
       const entry = out[last] ?? (out[last] = { over33: 0, max: 0 });
       entry.over33 += 1;
       entry.max = Math.max(entry.max, Math.round(gap));
     }
+    // I fotogrammi senza quelli dopo una ripetizione di D: il più lungo e il p95.
+    const kept = state.gaps.filter(([, last]) => last !== "ripetizione di D").map(([gap]) => gap).sort((a, b) => a - b);
+    out.senzaRipetizioni = kept.length === 0 ? { max: 0, p95: 0 } : { max: Math.round(kept[kept.length - 1]), p95: Math.round(kept[Math.min(kept.length - 1, Math.floor(kept.length * 0.95))]) };
     return out;
   };
   return true;
@@ -741,6 +759,8 @@ const SCENARIOS = {
     /// I path asciutti dopo ogni tratto, e i fotogrammi lunghi per fase.
     const written = [];
     let penPhases = null;
+    /// Le ripetizioni automatiche di D viste durante i tratti del mouse.
+    let keyRepeats = 0;
     await start(session);
     await session.execute(PHASES_SCRIPT);
     try {
@@ -783,6 +803,13 @@ const SCENARIOS = {
       }
       penPhases = await session.execute(PHASES_READ);
       report = await stop(session);
+      // La ripetizione automatica di D tenuto (T20d): se c'è, i fotogrammi che
+      // la seguono non contano contro la meta del tratto.
+      const d = penPhases?.d ?? { pressioni: 0, ripetizioni: 0 };
+      keyRepeats = d.ripetizioni;
+      notes.push(keyRepeats === 0
+        ? `D: ${d.pressioni} pressioni, nessuna ripetizione automatica del tasto tenuto: i fotogrammi del tratto contano tutti`
+        : `D: ${d.pressioni} pressioni e ${keyRepeats} ripetizioni automatiche del tasto tenuto: i fotogrammi dopo una ripetizione sono nella fase «ripetizione di D» e S8.penFrameGap non li conta (${JSON.stringify(penPhases.senzaRipetizioni)} invece di max ${report.frames.max}, p95 ${report.frames.p95})`);
     }
     await pause(500);
     const dryAfterPen = await dryPaths();
@@ -825,8 +852,10 @@ const SCENARIOS = {
       phases: { pen: penPhases, move: movePhases },
       notes,
       values: {
-        "S8.penFrameGap.max": report.frames.max,
-        "S8.penFrameGap.p95": report.frames.p95,
+        "S8.penFrameGap.max": keyRepeats > 0 ? penPhases.senzaRipetizioni.max : report.frames.max,
+        "S8.penFrameGap.p95": keyRepeats > 0 ? penPhases.senzaRipetizioni.p95 : report.frames.p95,
+        // La latenza dei tasti (D) fino al secondo fotogramma dopo il tasto.
+        "S8.keyLatency.p50": report.input.key.p50,
         "S8.moveFrameGap.max": move.frames.max,
         "S8.dryPaths.prima": dryBefore,
         "S8.dryPaths.dopo": dryAfterMove,
