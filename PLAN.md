@@ -706,7 +706,7 @@ fallisce se si toglie una voce di menu dall'inventario.
 Prova: scripts/check.sh --rapido; cargo test -p fub-canvas-core --test
 parity; cd apps/client && npx vitest run src/editors/canvas/parity.test.ts;
 node .github/scripts/check-doc-links.mjs
-Stato: [ ] da fare
+Stato: [x] fatto · d516f9eb7..8e9b1a1ac · il gesto `marquee` esce da `main.select`: main non ha un rettangolo di selezione (vedi DECISIONS)
 
 ## T2 · Le misure e i posti nel nucleo
 
@@ -747,7 +747,7 @@ Fatto quando: `cargo test -p fub-canvas-core --test layout_vectors` passa
 su tutti i vettori; ogni funzione pubblica ha il suo rustdoc in italiano.
 Prova: scripts/check.sh --rapido; cargo test -p fub-canvas-core --test
 layout_vectors
-Stato: [ ] da fare
+Stato: [x] fatto · 96da69289..b2d0cd9f4 · la specie coincide con `cardKindOf` di N6; differenze dal piano in DECISIONS
 
 ## T3 · Il corpus dei compiti
 
