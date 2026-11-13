@@ -1,0 +1,4 @@
+[
+ {"id":"foglio-comandi","scena":"grid-commands","mods":["cornice","testataFile","kitRibbon","modo"],"dopo":1280,"modsDopo":["kitRibbon","modo","apriComandi"]},
+ {"id":"foglio-comandi-cerca","scena":"grid-commands-search","mods":["cornice","testataFile","kitRibbon","modo"],"dopo":1280,"modsDopo":["kitRibbon","modo","apriComandiCerca"]}
+]

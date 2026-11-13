@@ -245,6 +245,42 @@ describe("la riga dice dove vale il valore, e a cosa riporta «Azzera»", () => 
     const ids = group.getAttribute("aria-describedby")!.split(" ");
     expect(ids.map((id) => document.getElementById(id)?.textContent)).toContain("scelto per questa macchina");
   });
+
+  describe("le barre: una riga Aspetto dopo «Densità», con due scelte", () => {
+    const bars = (value: string, source: SettingEntry["source"]) => entry(
+      "appearance.bars",
+      {
+        kind: "choice",
+        default: "light",
+        options: [
+          { value: "light", label: "Chiare" },
+          { value: "marked", label: "Marcate" },
+        ],
+      },
+      value,
+      source,
+      "Aspetto",
+    );
+
+    it("«Marcate» scelta porta il segno, «Predefinito: Chiare» e «Azzera», e sta dopo la densità", async () => {
+      await openPanel([density("comfortable", "default"), bars("marked", "machine")]);
+      const row = document.querySelector<HTMLElement>('[data-setting-key="appearance.bars"]')!;
+      expect(row.dataset.modified).toBe("true");
+      expect(row.querySelector(".setting-default")?.textContent).toBe("Predefinito: Chiare");
+      expect(row.querySelector(".setting-reset")?.textContent).toBe("Azzera");
+      expect(row.querySelector('[role="radio"][data-choice="marked"]')?.getAttribute("aria-checked")).toBe("true");
+      const order = [...document.querySelectorAll<HTMLElement>("#settings-body [data-setting-key]")]
+        .map((el) => el.dataset.settingKey);
+      expect(order.indexOf("appearance.bars")).toBe(order.indexOf("appearance.density") + 1);
+    });
+
+    it("scegliere «Marcate» scrive l'impostazione della macchina, senza ricaricare", async () => {
+      await openPanel([bars("light", "default")]);
+      const marked = document.querySelector<HTMLButtonElement>('[data-setting-key="appearance.bars"] [data-choice="marked"]')!;
+      marked.click();
+      await vi.waitFor(() => expect(fake.setSetting).toHaveBeenCalledWith("appearance.bars", "marked"));
+    });
+  });
 });
 
 describe("il controllo nasce dalla forma del dato", () => {

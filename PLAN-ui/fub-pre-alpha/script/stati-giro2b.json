@@ -1,0 +1,231 @@
+[
+{
+"id": "g2-due-riquadri",
+"scena": "g2-due-riquadri",
+"mods": [
+"nota",
+"pdfBarra",
+"kitBar",
+"modo"
+]
+},
+{
+"id": "g2-due-riquadri-700",
+"scena": "g2-due-riquadri",
+"mods": [
+"nota",
+"pdfBarra",
+"kitBar",
+"modo"
+],
+"dopo": 700,
+"modsDopo": [
+"kitBar",
+"modo"
+]
+},
+{
+"id": "g2-pdf-cerca",
+"scena": "g2-pdf-cerca",
+"mods": [
+"cornice",
+"testataFile",
+"pdfBarra",
+"kitBar",
+"modo",
+"via"
+]
+},
+{
+"id": "g2-pdf-cerca-700",
+"scena": "g2-pdf-cerca",
+"mods": [
+"cornice",
+"testataFile",
+"pdfBarra",
+"kitBar",
+"modo",
+"via"
+],
+"dopo": 700,
+"modsDopo": [
+"kitBar",
+"modo"
+]
+},
+{
+"id": "g2-pdf-nessuno",
+"scena": "g2-pdf-nessuno",
+"mods": [
+"cornice",
+"testataFile",
+"pdfBarra",
+"kitBar",
+"modo",
+"via"
+]
+},
+{
+"id": "g2-pdf-miniature",
+"scena": "g2-pdf-miniature",
+"mods": [
+"cornice",
+"testataFile",
+"pdfBarra",
+"kitBar",
+"modo",
+"via"
+]
+},
+{
+"id": "g2-pdf-due",
+"scena": "g2-pdf-due",
+"mods": [
+"cornice",
+"testataFile",
+"pdfBarra",
+"kitBar",
+"modo",
+"via"
+]
+},
+{
+"id": "g2-pdf-scuro",
+"scena": "g2-pdf-scuro",
+"mods": [
+"cornice",
+"testataFile",
+"pdfBarra",
+"kitBar",
+"modo",
+"via"
+]
+},
+{
+"id": "g2-foglio-risultato-carica",
+"scena": "grid-result-loading",
+"mods": [
+"cornice",
+"testataFile",
+"kitRibbon",
+"modo",
+"via"
+]
+},
+{
+"id": "g2-foglio-risultato-errore",
+"scena": "grid-result-error",
+"mods": [
+"cornice",
+"testataFile",
+"kitRibbon",
+"modo",
+"via"
+]
+},
+{
+"id": "g2-foglio-risultato-molti",
+"scena": "grid-result-many",
+"mods": [
+"cornice",
+"testataFile",
+"kitRibbon",
+"modo",
+"via"
+]
+},
+{
+"id": "g2-foglio-scrive",
+"scena": "grid-editing",
+"mods": [
+"cornice",
+"testataFile",
+"kitRibbon",
+"modo",
+"via"
+]
+},
+{
+"id": "g2-lanciatore-vuoto",
+"scena": "launcher-empty",
+"mods": [
+"cornice",
+"banda",
+"modo"
+]
+},
+{
+"id": "g2-lanciatore-comandi",
+"scena": "launcher-commands",
+"mods": [
+"cornice",
+"banda",
+"modo"
+]
+},
+{
+"id": "g2-conferma-pericolo",
+"scena": "confirm-danger",
+"mods": [
+"cornice",
+"banda",
+"modo"
+]
+},
+{
+"id": "g2-filo-titoli",
+"scena": "heading-thread",
+"mods": [
+"nota",
+"modo"
+]
+},
+{
+"id": "g2-comp-spegni",
+"scena": "g2-comp-spegni",
+"mods": [
+"cornice",
+"banda",
+"modo",
+"via"
+]
+},
+{
+"id": "g2-comp-orfani",
+"scena": "g2-comp-orfani",
+"mods": [
+"cornice",
+"banda",
+"modo",
+"via"
+]
+},
+{
+"id": "g2-comp-cerca",
+"scena": "g2-comp-cerca",
+"mods": [
+"cornice",
+"banda",
+"modo",
+"via"
+]
+},
+{
+"id": "g2-nuovo",
+"scena": "g2-nuovo",
+"mods": [
+"cornice",
+"banda",
+"modo"
+]
+},
+{
+"id": "g2-rinomina",
+"scena": "g2-rinomina",
+"mods": [
+"cornice",
+"banda",
+"modo"
+]
+}
+]

@@ -1,0 +1,382 @@
+[
+{
+"id": "blocchi-menu-700",
+"scena": "blocchi-03-menu",
+"modo": "blocks",
+"mods": [
+"cornice",
+"banda",
+"modo"
+],
+"dopo": 700,
+"modsDopo": [
+"modo"
+]
+},
+{
+"id": "live-tabella-700",
+"scena": "live-14-tabella-attiva",
+"mods": [
+"cornice",
+"banda",
+"modo"
+],
+"dopo": 700,
+"modsDopo": [
+"modo"
+]
+},
+{
+"id": "slash-700",
+"scena": "slash-01-aperto",
+"mods": [
+"cornice",
+"banda",
+"modo"
+],
+"dopo": 700,
+"modsDopo": [
+"modo"
+]
+},
+{
+"id": "palette-file-700",
+"scena": "launcher-files",
+"mods": [
+"cornice",
+"banda",
+"modo"
+],
+"dopo": 700,
+"modsDopo": [
+"modo"
+]
+},
+{
+"id": "salvataggio-700",
+"scena": "save-state",
+"mods": [
+"cornice",
+"banda",
+"modo"
+],
+"dopo": 700,
+"modsDopo": [
+"modo"
+]
+},
+{
+"id": "conferma-700",
+"scena": "confirm-danger",
+"mods": [
+"cornice",
+"banda",
+"modo"
+],
+"dopo": 700,
+"modsDopo": [
+"modo"
+]
+},
+{
+"id": "avvisi-700",
+"scena": "notices",
+"mods": [
+"cornice",
+"banda",
+"modo",
+"via"
+],
+"dopo": 700,
+"modsDopo": [
+"modo"
+]
+},
+{
+"id": "toast-700",
+"scena": "toast",
+"mods": [
+"cornice",
+"banda",
+"modo",
+"via"
+],
+"dopo": 700,
+"modsDopo": [
+"modo"
+]
+},
+{
+"id": "schede-700",
+"scena": "tabs",
+"mods": [
+"cornice",
+"banda",
+"modo",
+"via"
+],
+"dopo": 700,
+"modsDopo": [
+"modo"
+]
+},
+{
+"id": "concentrazione-700",
+"scena": "concentration",
+"mods": [
+"cornice",
+"banda",
+"modo",
+"via"
+],
+"dopo": 700,
+"modsDopo": [
+"modo"
+]
+},
+{
+"id": "nuovo-vault-700",
+"scena": "new-vault-profile",
+"mods": [
+"via"
+],
+"dopo": 700,
+"modsDopo": [
+"modo"
+]
+},
+{
+"id": "aspetto-700",
+"scena": "prefs-appearance",
+"mods": [
+"cornice",
+"banda",
+"modo",
+"via"
+],
+"dopo": 700,
+"modsDopo": [
+"modo"
+]
+},
+{
+"id": "impostazioni-vault-700",
+"scena": "settings-vault",
+"mods": [
+"cornice",
+"banda",
+"modo",
+"via"
+],
+"dopo": 700,
+"modsDopo": [
+"modo"
+]
+},
+{
+"id": "nota-pdf-700",
+"scena": "nota-pdf",
+"mods": [
+"cornice",
+"banda",
+"modo",
+"via"
+],
+"dopo": 700,
+"modsDopo": [
+"modo"
+]
+},
+{
+"id": "craft-spente-700",
+"scena": "craft-spente",
+"mods": [
+"cornice",
+"testataFile",
+"modo",
+"via"
+],
+"dopo": 700,
+"modsDopo": [
+"modo"
+]
+},
+{
+"id": "craft-prepara-700",
+"scena": "craft-prepara",
+"mods": [
+"cornice",
+"testataFile",
+"modo",
+"via"
+],
+"dopo": 700,
+"modsDopo": [
+"modo"
+]
+},
+{
+"id": "craft-rotto-700",
+"scena": "craft-rotto",
+"mods": [
+"cornice",
+"testataFile",
+"modo",
+"via"
+],
+"dopo": 700,
+"modsDopo": [
+"modo"
+]
+},
+{
+"id": "foto-700",
+"scena": "raw",
+"mods": [
+"cornice",
+"testataFile",
+"modo",
+"via"
+],
+"dopo": 700,
+"modsDopo": [
+"modo"
+]
+},
+{
+"id": "foglio-modifica-700",
+"scena": "grid-editing",
+"mods": [
+"cornice",
+"testataFile",
+"kitRibbon",
+"modo"
+],
+"dopo": 700,
+"modsDopo": [
+"kitRibbon",
+"modo"
+]
+},
+{
+"id": "documento-oggetti-700",
+"scena": "document-objects",
+"modo": "page",
+"mods": [
+"cornice",
+"banda",
+"testataFile",
+"kitRibbon",
+"modo",
+"via"
+],
+"dopo": 700,
+"modsDopo": [
+"kitRibbon",
+"modo"
+]
+},
+{
+"id": "disegno-selezione-700",
+"scena": "draw-selection",
+"modo": "drawing",
+"mods": [
+"cornice",
+"banda",
+"testataFile",
+"kitBar",
+"modo"
+],
+"dopo": 700,
+"modsDopo": [
+"kitBar",
+"modo"
+]
+},
+{
+"id": "componenti-700",
+"scena": "settings-components",
+"mods": [
+"cornice",
+"banda",
+"modo",
+"via"
+],
+"dopo": 700,
+"modsDopo": [
+"modo"
+]
+},
+{
+"id": "ricerca-700",
+"scena": "search",
+"mods": [
+"cornice",
+"banda",
+"datiNota",
+"modo",
+"via"
+],
+"dopo": 700,
+"modsDopo": [
+"modo"
+]
+},
+{
+"id": "grafo-700",
+"scena": "graph",
+"mods": [
+"cornice",
+"modo",
+"via"
+],
+"dopo": 700,
+"modsDopo": [
+"modo"
+]
+},
+{
+"id": "vuoto-700",
+"scena": "empty",
+"mods": [
+"pillola",
+"modo",
+"via"
+],
+"dopo": 700,
+"modsDopo": [
+"modo"
+]
+},
+{
+"id": "zero-700",
+"scena": "launcher-empty",
+"mods": [
+"cornice",
+"banda",
+"modo"
+],
+"dopo": 700,
+"modsDopo": [
+"modo"
+]
+},
+{
+"id": "sola-lettura-700",
+"scena": "document-readonly",
+"mods": [
+"cornice",
+"banda",
+"testataFile",
+"kitRibbon",
+"modo",
+"via"
+],
+"dopo": 700,
+"modsDopo": [
+"kitRibbon",
+"modo"
+],
+"modo": "page"
+}
+]

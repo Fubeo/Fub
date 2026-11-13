@@ -1,0 +1,116 @@
+/* → theme/scrittoio/skin/kit.css (dopo le regole ricavate) */
+/* ── Il vassoio più chiaro ───────────────────────────────────────────────────
+   Il vassoio dei comandi si avvicina ai foglietti: di giorno sta a metà fra
+   `--sheet-2` e la carta, di notte un passo sotto `--sheet-2`. È un ruolo
+   suo (`--bar-tray`), perché `--sheet-2` lo usano anche i campi e la fila
+   delle linguette; la barra in una fila e la colonna lo prendono anche loro
+   (più sotto), così i vassoi restano uno. I foglietti si staccano ancora: di
+   giorno col filo e l'ombra di contatto di sempre, di notte con la carta
+   alzata (`--bg-elev`), il filo di luce in cima e un filo attorno; la carta
+   schiarita verso il testo resta solo a quello aperto sul posto, che sale
+   ancora di un gradino. Col contrasto alto il filo di notte
+   si ferma e resta il bordo pieno attorno a ogni foglietto, come oggi; la
+   carta è quella alzata, come nelle altre due barre. */
+.kit-ribbon-toolbar {
+  background: var(--bar-tray, var(--sheet-2));
+}
+:root[data-theme="dark"] .kit-ribbon-group {
+  background: var(--bg-elev);
+}
+:root[data-theme="dark"] .kit-ribbon-group[data-open="true"] {
+  background: color-mix(in oklab, var(--bg-elev) 95%, var(--text));
+}
+:root[data-theme="dark"]:not([data-contrast="high"]) .kit-ribbon-group {
+  box-shadow: inset 0 1px 0 var(--overlay-active), 0 0 0 1px var(--overlay-hover);
+}
+:root[data-theme="dark"]:not([data-contrast="high"]) .kit-ribbon-group[data-open="true"] {
+  box-shadow: inset 0 1px 0 var(--overlay-active), 0 0 0 1px var(--overlay-active);
+}
+
+/* ── Le sezioni come le schede dell'ispettore ────────────────────────────────
+   La fila delle sezioni è il pozzetto delle schede dell'ispettore e degli
+   spazi del cassetto: segmenti alti 26, il nome in grafite, la scelta è un
+   foglietto di carta alzata col nome in inchiostro, che scorre. Di giorno il
+   pozzetto resta il velo sulla carta (il `--bg-hover` della scrivania, sulla
+   carta, sarebbe un grigio pieno); di notte è `--bg-hover`, un incavo, perché
+   un velo chiaro avrebbe il tono del foglietto. Il foglietto ha l'ombra di
+   contatto dei foglietti del vassoio e non `--shadow-1`: la fila scorre e
+   taglierebbe un alone lungo. Le sezioni per la selezione tengono l'accento e
+   il punto. Il peso non cambia con la scelta: la fila non si allarga. In
+   colori forzati resta il contorno del kit (`.kit-tab[aria-selected]`). */
+.kit-ribbon-tabs .kit-tab {
+  min-height: 26px;
+  font-size: var(--text-base);
+}
+.kit-ribbon-tabs .kit-tab:not([aria-selected="true"]):hover {
+  background: var(--overlay-hover);
+}
+.kit-ribbon-tabs .kit-tab[aria-selected="true"] {
+  color: var(--text);
+}
+.kit-ribbon-tabs .kit-ribbon-contextual[aria-selected="true"] {
+  color: var(--accent);
+}
+.kit-ribbon-tabs > .kit-tab-indicator {
+  background: var(--bg-elev);
+  box-shadow: 0 0 0 1px var(--overlay-hover), 0 1px 2px var(--overlay-active);
+}
+:root[data-theme="dark"] .kit-ribbon-tabs.kit-tabs {
+  background: var(--bg-hover);
+}
+:root[data-theme="dark"] .kit-ribbon-tabs > .kit-tab-indicator {
+  box-shadow: inset 0 1px 0 var(--overlay-hover);
+}
+/* Nel foglio stretto il nome torna di un passo più piccolo: a 700 px le
+   sezioni ci stanno tutte, quella della selezione compresa. */
+@container sheet (max-width: 900px) {
+  .kit-ribbon-tabs .kit-tab {
+    font-size: var(--text-sm);
+  }
+}
+
+/* variante prima-vassoio */
+/* Com'era: il vassoio `--sheet-2`, i foglietti di notte schiariti a mano. */
+.kit-ribbon-toolbar,
+.kit-bar,
+.kit-rail {
+  background: var(--sheet-2);
+}
+:root[data-theme="dark"]:not([data-contrast="high"]) .kit-bar .kit-bar-group,
+:root[data-theme="dark"]:not([data-contrast="high"]) .kit-rail-group {
+  background: color-mix(in oklab, var(--bg-elev) 95%, var(--text));
+  box-shadow: inset 0 1px 0 var(--overlay-active);
+}
+:root[data-theme="dark"]:not([data-contrast="high"]) .kit-ribbon-group {
+  background: color-mix(in oklab, var(--bg-elev) 95%, var(--text));
+  box-shadow: inset 0 1px 0 var(--overlay-active);
+}
+:root[data-theme="dark"]:not([data-contrast="high"]) .kit-ribbon-group[data-open="true"] {
+  background: color-mix(in oklab, var(--bg-elev) 90%, var(--text));
+  box-shadow: inset 0 1px 0 var(--overlay-active), 0 0 0 1px var(--overlay-hover);
+}
+/* fine variante prima-vassoio */
+
+/* variante prima-sezioni */
+/* Com'era: segmenti alti 24 in corpo 12, la scelta col velo d'accento. */
+.kit-ribbon-tabs .kit-tab {
+  min-height: 24px;
+  font-size: var(--text-sm);
+}
+.kit-ribbon-tabs .kit-tab:not([aria-selected="true"]):hover {
+  background: transparent;
+}
+.kit-ribbon-tabs .kit-tab[aria-selected="true"] {
+  color: var(--accent);
+}
+.kit-ribbon-tabs > .kit-tab-indicator {
+  background: var(--accent-wash);
+  box-shadow: none;
+}
+:root[data-theme="dark"] .kit-ribbon-tabs.kit-tabs {
+  background: var(--overlay-hover);
+}
+:root[data-theme="dark"] .kit-ribbon-tabs > .kit-tab-indicator {
+  box-shadow: none;
+}
+/* fine variante prima-sezioni */

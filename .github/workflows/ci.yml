@@ -656,12 +656,14 @@ jobs:
         working-directory: apps/client
       - run: npm run build
         working-directory: apps/client
-      - name: l'app come la si distribuisce, con la shell dentro
-        run: cargo build --release --locked -p fub-app --features tauri/custom-protocol
+      # `bench-gc` dà all'app il gancio della raccolta forzata che R1 chiede
+      # prima di ogni lettura (#284); il rilascio non lo accende.
+      - name: l'app di release con la shell dentro e il gancio della raccolta (bench-gc)
+        run: cargo build --release --locked -p fub-app --features tauri/custom-protocol,bench-gc
       - name: tauri-driver, alla versione fissata
         run: cargo install tauri-driver --version "=2.1.0" --locked
       - name: S1–S3, S7, la memoria (R1), le tessere (T1), l'indicizzazione (I1), il nucleo della lavagna (L1) e i chunk dei profili (C1) nella WebKitGTK
-        run: xvfb-run -a -s "-screen 0 1280x800x24 -maxclients 2048" npm run bench:webview -- --only=S1,S2,S3,S7,R1,T1,I1,L1,C1 --native-driver=/usr/bin/WebKitWebDriver
+        run: xvfb-run -a -s "-screen 0 1280x800x24 -maxclients 2048 -noreset" npm run bench:webview -- --only=S1,S2,S3,S7,R1,T1,I1,L1,C1 --native-driver=/usr/bin/WebKitWebDriver
         working-directory: apps/client
       - name: il referto delle misure
         if: always()

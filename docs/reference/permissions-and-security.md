@@ -123,6 +123,18 @@ preview dalle Impostazioni non cambia la scelta persistente: annullamento o
 chiusura rimontano il tema autorevole precedente; un bundle non leggibile o
 rifiutato non ottiene un mount parziale.
 
+Il logo (Marcuzzo, nella barra, nelle Informazioni e all'avvio) prende i
+colori da cinque ruoli facoltativi: `--logo-cartella`, `--logo-cartella-retro`,
+`--logo-cartella-ombra`, `--logo-foglio-1` e `--logo-foglio-2`. La serie li
+ricava dall'accento (`logoColors` in `recipe.ts`) con la cartella tenuta alla
+soglia dei segni su `--bg` e `--bg-elev`. Un tema installato che non dichiara
+nessun ruolo del logo li riceve prima della validazione, calcolati dal suo
+`--accent` per la stessa luce e lo stesso contrasto (`completeSheet` della
+serie); un tema che ne dichiara anche uno solo resta com'è, e i ruoli mancanti
+cadono sull'accento e su `--sheet-2`. Il gufo tiene i suoi colori. Con i colori
+forzati il logo diventa una sagoma nei colori di sistema, regola in
+`structure.css`, che un tema non tocca.
+
 Un tema veste la cornice e i segni di Fub, e il contenuto soltanto dove la
 modalità della superficie ne dà l'autorità al tema: una regola sul contenuto si
 scrive sotto `.look-tema`. In `look-file` i valori del file e la sua carta

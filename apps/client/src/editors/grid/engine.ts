@@ -29,6 +29,7 @@ import { adapter, type Adapter, type Paper } from "../../theme/adapt";
 import type { Theme } from "../../theme/theme";
 import type { PdfEngineLoader } from "../media/pdf-view";
 import { t, onLanguage, plural, resolvedLanguage, type Key } from "../../i18n/strings";
+import { writeClipboardText } from "../../platform/clipboard";
 import { createTabs, textButton, type TabsHandle } from "../../kit";
 import { openLifetime, type Lifetime } from "../../ui/lifetime";
 import { createTextEngine, type TextEngine } from "../text/engine";
@@ -41,6 +42,7 @@ import {
   coordinateAt,
   normalizedSelection,
   positionOf,
+  type GridCoordinate,
   type GridPosition,
   type GridSelection,
   type GridSheet,
@@ -248,6 +250,64 @@ interface EditingState {
   /// L'input che la cella ha preso sotto la bozza, da un salvataggio o da un
   /// altro riquadro, finché non si sceglie quale tenere.
   theirs: string | null;
+  /// La cella per id (foglio, riga, colonna): una riscrittura la ritrova anche
+  /// se la sua riga si è spostata, o dice che non c'è più.
+  readonly coordinate: GridCoordinate | undefined;
+}
+
+/// Il foglio come si mostrava quando una riscrittura da fuori è arrivata: le
+/// righe e le colonne per id, e l'input di ogni cella letta per id, così si
+/// dice quali celle sono cambiate davvero.
+interface ShownWindow {
+  readonly rowStart: number;
+  readonly columnStart: number;
+  readonly rows: readonly string[];
+  readonly columns: readonly string[];
+  readonly inputs: ReadonlyMap<string, string>;
+}
+
+const inputKey = (row: string, column: string): string => `${row}\u0000${column}`;
+
+/// Le finestre lette del foglio `sheet`, per il confronto dopo una riscrittura.
+function shownWindows(windows: readonly GridBytesWindow[], sheet: string): ShownWindow[] {
+  return windows.filter((window) => window.sheet === sheet).map((window) => ({
+    rowStart: window.row_start,
+    columnStart: window.column_start,
+    rows: window.rows.map((row) => row.id),
+    columns: window.columns.map((column) => column.id),
+    inputs: new Map(window.cells.map((cell) => [inputKey(cell.key.row, cell.key.column), cell.input] as const)),
+  }));
+}
+
+/// Vero se una cella letta prima e dopo ha un input diverso, salvo la cella
+/// `open` che si sta scrivendo: quella ha la sua bozza e il suo avviso.
+function changedElsewhere(before: readonly ShownWindow[], after: readonly ShownWindow[], open: GridCoordinate | undefined): boolean {
+  const isOpen = (row: string, column: string): boolean => open !== undefined && row === open.row && column === open.column;
+  for (const old of before) {
+    for (const next of after) {
+      const rowFrom = Math.max(old.rowStart, next.rowStart);
+      const rowTo = Math.min(old.rowStart + old.rows.length, next.rowStart + next.rows.length);
+      const columnFrom = Math.max(old.columnStart, next.columnStart);
+      const columnTo = Math.min(old.columnStart + old.columns.length, next.columnStart + next.columns.length);
+      for (let row = rowFrom; row < rowTo; row += 1) {
+        for (let column = columnFrom; column < columnTo; column += 1) {
+          const oldRow = old.rows[row - old.rowStart]!;
+          const oldColumn = old.columns[column - old.columnStart]!;
+          const newRow = next.rows[row - next.rowStart]!;
+          const newColumn = next.columns[column - next.columnStart]!;
+          if (isOpen(oldRow, oldColumn) || isOpen(newRow, newColumn)) continue;
+          const was = old.inputs.get(inputKey(oldRow, oldColumn)) ?? "";
+          if (was !== (next.inputs.get(inputKey(newRow, newColumn)) ?? "")) return true;
+        }
+      }
+    }
+  }
+  return false;
+}
+
+/// Gli avvisi che stanno insieme su una riga, saltando quelli vuoti.
+function joinNotices(...parts: readonly (string | null)[]): string {
+  return parts.filter((part): part is string => Boolean(part)).join(" ");
 }
 
 /// Il modo della cella aperta, come lo dice la banda di stato.
@@ -691,6 +751,10 @@ export class GridEngine {
 
   undo(): boolean {
     if (this.#commandMode()) return this.#documentHistory(UNDO);
+    if (this.#dropStaleHistory()) {
+      this.#addNotice(t("grid.external.undo"));
+      return false;
+    }
     const patches = this.#undo.pop();
     if (!patches) return false;
     if (!this.#commit(inverseGridPatches(patches), "undo", false)) {
@@ -703,6 +767,10 @@ export class GridEngine {
 
   redo(): boolean {
     if (this.#commandMode()) return this.#documentHistory(REDO);
+    if (this.#dropStaleHistory()) {
+      this.#addNotice(t("grid.external.undo"));
+      return false;
+    }
     const patches = this.#redo.pop();
     if (!patches) return false;
     if (!this.#commit(patches, "redo", false)) {
@@ -1242,6 +1310,9 @@ export class GridEngine {
   /// quelle scritte mentre si apre partono dopo di lei.
   #openWorkbook(journal: string, reset: boolean): void {
     const epoch = ++this.#bytesEpoch;
+    // Con una cella aperta, il foglio come si vede adesso: la riapertura dice
+    // se le sue celle sono cambiate, oltre a quella che si scrive.
+    const shown = !reset && this.#editing ? shownWindows(this.#windows, this.#sheet().id) : null;
     this.#journal = journal;
     this.#bytesOpening = true;
     this.#root.dataset.gridProfile = "workbook";
@@ -1253,10 +1324,10 @@ export class GridEngine {
       this.#undo = [];
       this.#redo = [];
     }
-    this.#enqueueProtocol(() => this.#openBytes(journal, reset, epoch));
+    this.#enqueueProtocol(() => this.#openBytes(journal, reset, epoch, shown));
   }
 
-  async #openBytes(journal: string, reset: boolean, epoch: number): Promise<void> {
+  async #openBytes(journal: string, reset: boolean, epoch: number, shown: readonly ShownWindow[] | null): Promise<void> {
     if (this.#destroyed || epoch !== this.#bytesEpoch) return;
     const host = this.#options.grid;
     const doc = this.#options.documentId;
@@ -1305,7 +1376,7 @@ export class GridEngine {
       this.#bytesMessage = null;
       this.#root.dataset.gridProtocol = "v2";
       this.#showView(sheet.id, top);
-      this.#checkDraft(top);
+      this.#afterRewrite(top, shown);
       this.#followMedia();
     } catch (error) {
       if (this.#destroyed || epoch !== this.#bytesEpoch) return;
@@ -3318,7 +3389,15 @@ export class GridEngine {
     if (this.#editing && (!samePosition(this.#editing.position, position) || this.#editing.owner !== owner)) {
       this.#finishEditing(true, "input", false);
     }
-    this.#editing = { position, original: current, draft: initial ?? current, owner, mode, theirs: null };
+    this.#editing = {
+      position,
+      original: current,
+      draft: initial ?? current,
+      owner,
+      mode,
+      theirs: null,
+      coordinate: coordinateAt(this.#sheet(), position),
+    };
     if (owner === "cell") {
       const cell = this.#findCell(position);
       if (!cell) {
@@ -3627,6 +3706,102 @@ export class GridEngine {
   #takeTheirs(): void {
     if (this.#editing?.theirs === null) return;
     this.#finishEditing(false, "input");
+  }
+
+  /// Dopo una riscrittura da fuori (un altro riquadro, un salvataggio, una
+  /// ricarica): la bozza si tiene, o si chiude se la sua riga non c'è più; la
+  /// storia dell'annulla si svuota se una sua cella è cambiata; e un avviso lo
+  /// dice. `before` è il foglio com'era quando una cella era aperta.
+  #afterRewrite(top: boolean, before: readonly ShownWindow[] | null): void {
+    const editing = this.#editing;
+    const closed = editing !== null && !top && this.#followEditing(editing);
+    this.#checkDraft(top);
+    const notes: string[] = [];
+    const open = this.#editing;
+    if (open && !closed && !top && before
+      && changedElsewhere(before, shownWindows(this.#windows, this.#sheet().id), open.coordinate)) {
+      notes.push(t("grid.external.writing"));
+    }
+    if (this.#dropStaleHistory()) notes.push(t("grid.external.undo"));
+    if (notes.length) this.#addNotice(...notes);
+  }
+
+  /// La cella aperta segue la sua riga, anche se questa si è spostata. Se la
+  /// riga non c'è più, la cella si chiude e la bozza va negli appunti. Vero se
+  /// la cella si è chiusa.
+  #followEditing(editing: EditingState): boolean {
+    if (!editing.coordinate) return false;
+    const at = positionOf(this.#sheet(), editing.coordinate);
+    if (!at) {
+      this.#finishEditing(false, "input", false);
+      if (editing.draft !== editing.original) this.#copyDraft(editing.draft);
+      return true;
+    }
+    if (!samePosition(at, editing.position)) {
+      this.#editing = { ...editing, position: at };
+      this.#render();
+    }
+    return false;
+  }
+
+  /// La bozza che la riga ha portato via va negli appunti. Se gli appunti
+  /// rifiutano, il testo resta scritto nell'avviso: non si perde in silenzio.
+  #copyDraft(draft: string): void {
+    writeClipboardText(draft).then(
+      () => this.#addNotice(t("grid.draft.row_gone", { draft })),
+      () => this.#addNotice(t("grid.draft.row_gone_lost", { draft })),
+    );
+  }
+
+  /// Un avviso in più, dietro quelli che la griglia mostra già: è il canale di
+  /// `#refuse`.
+  #addNotice(...texts: readonly string[]): void {
+    if (this.#destroyed) return;
+    this.#refuse(joinNotices(this.#bytesMessage, ...texts));
+  }
+
+  /// Se una cella della storia non è più quella che la storia ha lasciata
+  /// (un'altra mano l'ha cambiata), la storia si svuota: un annulla non riporta
+  /// i dati di prima. Vero se si è svuotata.
+  #dropStaleHistory(): boolean {
+    if (!this.#undo.length && !this.#redo.length) return false;
+    const moved = this.#staleIn(this.#undo, (patch) => patch.after?.input ?? "")
+      || this.#staleIn(this.#redo, (patch) => patch.before?.input ?? "");
+    if (!moved) return false;
+    this.#undo = [];
+    this.#redo = [];
+    return true;
+  }
+
+  /// Vero se una cella di `stack` letta adesso non ha più l'input che la voce
+  /// più recente che la tocca ha lasciato (`expect`): le voci più vecchie di
+  /// una stessa cella vengono dopo, e il loro valore non conta. Una cella non
+  /// letta, o di un altro foglio, non si può dire: si dirà quando sarà letta.
+  #staleIn(stack: readonly (readonly GridCellPatch[])[], expect: (patch: GridCellPatch) => string): boolean {
+    const sheet = this.#sheet();
+    // Le posizioni per id una volta sola: `positionOf` scorrerebbe il foglio a
+    // ogni cella, e questo controllo gira a ogni riapertura.
+    const rows = new Map<string, number>();
+    sheet.rows.forEach((row, index) => { if (!rows.has(row.id)) rows.set(row.id, index); });
+    const columns = new Map<string, number>();
+    sheet.columns.forEach((column, index) => { if (!columns.has(column.id)) columns.set(column.id, index); });
+    const seen = new Set<string>();
+    for (let index = stack.length - 1; index >= 0; index -= 1) {
+      for (const patch of stack[index]!) {
+        const { coordinate } = patch;
+        const key = `${coordinate.sheet}\u0000${coordinate.row}\u0000${coordinate.column}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        if (coordinate.sheet !== sheet.id) continue;
+        const row = rows.get(coordinate.row);
+        const column = columns.get(coordinate.column);
+        if (row === undefined || column === undefined) continue;
+        const position = { row, column };
+        if (!this.#windowAt(position)) continue;
+        if ((this.#workbookCell(position)?.bytes.input ?? "") !== expect(patch)) return true;
+      }
+    }
+    return false;
   }
 
   #positionEditor(position: GridPosition): void {

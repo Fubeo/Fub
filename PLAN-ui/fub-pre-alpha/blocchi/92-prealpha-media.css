@@ -1,0 +1,7 @@
+/* → theme/scrittoio/skin/media.css (PA T30) */
+/* ── Un file che Fub non apre ──────────────────────────────────────────────
+   Sotto la spiegazione, una riga d'azioni centrata come il testo. */
+.craft-empty-actions {
+  justify-content: center;
+  margin-top: var(--space-4);
+}

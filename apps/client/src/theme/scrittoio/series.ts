@@ -6,11 +6,21 @@
  * quello che c'è di serie, non una versione. Cambiano il motore, i fogli, la
  * pelle e i predefiniti.
  */
+import { channels } from "../contrast";
+import { fromHex } from "../oklch";
 import type { Density, ThemeSeries } from "../theme";
 import fonts from "./fonts.css?raw";
 import { compactnessTokens } from "./measures";
 import { THEME_2_ENGINE, THEME_2_PROFILE } from "./profile";
-import { accentPalette, DEFAULT_ACCENT_HUE, SHEETS } from "./recipe";
+import {
+  accentPalette,
+  type ContrastLevel,
+  DEFAULT_ACCENT_HUE,
+  type Light,
+  LOGO_ROLES,
+  logoColors,
+  SHEETS,
+} from "./recipe";
 import sheetDarkHigh from "./sheet-dark-high.css?raw";
 import sheetDark from "./sheet-dark.css?raw";
 import sheetLightHigh from "./sheet-light-high.css?raw";
@@ -99,4 +109,74 @@ export const SCRITTOIO_SERIES: ThemeSeries = {
       ...accentPalette(light, contrast, value.accent),
     };
   },
+  completeSheet: completeLogoSheet,
 };
+
+/// La croma dell'accento a cui la cartella ha la croma piena dei file
+/// dell'utente: sotto, la cartella scala verso il grigio.
+const LOGO_FULL_CHROMA = 0.08;
+
+/// Le dichiarazioni delle regole `:root` di un foglio che valgono per questa
+/// luce e questo contrasto, nell'ordine in cui il foglio le scrive. Contano
+/// `:root` da solo e con gli attributi `data-theme` e `data-contrast`; una
+/// regola con altri attributi o altri selettori non è dei colori del foglio.
+function rootDeclarations(sheet: string, light: Light, contrast: ContrastLevel): Record<string, string> {
+  const text = sheet.replace(/\/\*[\s\S]*?\*\//g, "");
+  const out: Record<string, string> = {};
+  for (const rule of text.matchAll(/(:root[^{};]*)\{([^{}]*)\}/g)) {
+    const selector = rule[1]!.trim();
+    if (!/^:root(\[[^\]]+\])*$/.test(selector)) continue;
+    const attributes = [...selector.matchAll(/\[([^\]]+)\]/g)].map((match) => match[1]!.replace(/\s+/g, ""));
+    const applies = attributes.every((attribute) => {
+      if (attribute === `data-theme="${light}"`) return true;
+      if (attribute === 'data-contrast="high"') return contrast === "high";
+      return false;
+    });
+    if (!applies) continue;
+    for (const declaration of rule[2]!.matchAll(/--([_a-zA-Z][_a-zA-Z0-9-]*)\s*:\s*([^;{}]+)/g)) {
+      out[declaration[1]!] = declaration[2]!.trim();
+    }
+  }
+  return out;
+}
+
+/// Un colore pieno come `#rrggbb`, o `null` se il conto non lo sa leggere (un
+/// `var()`, un velo con l'alfa, un nome).
+function solidHex(value: string | undefined): string | null {
+  if (value === undefined) return null;
+  try {
+    return `#${channels(value).map((v) => Math.round(v).toString(16).padStart(2, "0")).join("")}`;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * I colori del logo per un tema installato che non li dichiara (D26): la
+ * cartella prende la tinta e la croma del suo `--accent` e si stacca dai suoi
+ * `--bg` e `--bg-elev`, con la stessa regola della serie (`logoColors`). Un
+ * tema che dichiara anche uno solo dei ruoli `--logo-*` si tiene i suoi, e
+ * quelli che non dice cadono nel ripiego della pelle. Senza un accento
+ * leggibile il foglio resta com'è, e la pelle ripiega sull'accento.
+ */
+export function completeLogoSheet(sheet: string, light: Light, contrast: ContrastLevel): string {
+  const declared = rootDeclarations(sheet, light, contrast);
+  if (LOGO_ROLES.some((role) => Object.prototype.hasOwnProperty.call(declared, role))) return sheet;
+  const accent = solidHex(declared.accent);
+  if (accent === null) return sheet;
+  const backgrounds = [solidHex(declared.bg), solidHex(declared["bg-elev"])].filter(
+    (value): value is string => value !== null,
+  );
+  const { h, c } = fromHex(accent);
+  const colors = logoColors(light, contrast, h, backgrounds, Math.min(1, c / LOGO_FULL_CHROMA));
+  const lines = Object.entries(colors).map(([role, value]) => `  --${role}: ${value};`);
+  const separator = sheet.endsWith("\n") ? "" : "\n";
+  return [
+    `${sheet}${separator}`,
+    "/* I colori del logo, ricavati da Fub dall'accento e dai fondi del tema (D26). */",
+    ":root {",
+    ...lines,
+    "}",
+    "",
+  ].join("\n");
+}

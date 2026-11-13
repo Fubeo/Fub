@@ -222,6 +222,9 @@ export default defineConfig({
           ? [
               fileURLToPath(new URL("../../crates/fub-scene/tests/corpus", import.meta.url)),
               fileURLToPath(new URL("../clipper/icons", import.meta.url)),
+              // Le forme del logo (D26): `src/ui/marcuzzo.test.ts` tiene le
+              // copie del client uguali ai file.
+              fileURLToPath(new URL("../../assets/logo", import.meta.url)),
             ]
           : []),
       ],

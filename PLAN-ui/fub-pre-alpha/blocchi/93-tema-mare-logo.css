@@ -1,0 +1,37 @@
+/* → nessun file: la serie li calcola al montaggio del tema (theme/theme.ts, scrittoio/series.ts; PA T49, D26) */
+/* I colori del logo per il tema «Mare», che non li dichiara. GENERATO da
+   script/logo-temi.mjs con `logoColors` della ricetta: non si modifica a
+   mano. Nel prodotto li calcola il caricatore dall'accento e dai fondi del
+   tema; il simulatore li monta insieme al tema. */
+/* accento #1d4f91 (tinta 256.8, croma 0.121), fondi #e6ebf1 #ffffff */
+:root[data-theme="light"] {
+  --logo-cartella: #5787ca;
+  --logo-cartella-retro: #426aa1;
+  --logo-cartella-ombra: #4c73a8;
+  --logo-foglio-1: #b7b2d8;
+  --logo-foglio-2: #7aa9be;
+}
+/* accento #163f78 (tinta 257.6, croma 0.108), fondi #e6ebf1 #ffffff */
+:root[data-theme="light"][data-contrast="high"] {
+  --logo-cartella: #3d6aac;
+  --logo-cartella-retro: #294e83;
+  --logo-cartella-ombra: #33578a;
+  --logo-foglio-1: #b8b1d8;
+  --logo-foglio-2: #7aa9be;
+}
+/* accento #8db4f0 (tinta 258.8, croma 0.097), fondi #0a0f17 #1f2837 */
+:root[data-theme="dark"] {
+  --logo-cartella: #99bcf2;
+  --logo-cartella-retro: #7a9dd4;
+  --logo-cartella-ombra: #86a6d7;
+  --logo-foglio-1: #345c98;
+  --logo-foglio-2: #7d70ab;
+}
+/* accento #a7c6f5 (tinta 258.6, croma 0.075), fondi #0a0f17 #1f2837 */
+:root[data-theme="dark"][data-contrast="high"] {
+  --logo-cartella: #9bbcee;
+  --logo-cartella-retro: #7c9dd0;
+  --logo-cartella-ombra: #88a6d3;
+  --logo-foglio-1: #375c94;
+  --logo-foglio-2: #7d71a8;
+}

@@ -1,0 +1,19 @@
+/* → theme/scrittoio/skin/draw.css (K5 T21, PA T27) */
+/* ── Il disegno vuoto ──────────────────────────────────────────────────────
+   Una riga sola, al centro del foglio, che dice da dove si comincia. Non
+   prende i clic: si disegna anche sopra. */
+.draw-empty-hint {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  max-width: 36ch;
+  margin: 0;
+  padding: var(--space-4) var(--space-5);
+  color: var(--muted);
+  font-family: var(--font-ui);
+  font-size: var(--text-sm);
+  line-height: var(--leading-normal);
+  text-align: center;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}

@@ -1,0 +1,872 @@
+diff -ruN a/apps/client/bench/corpus.ts b/apps/client/bench/corpus.ts
+--- a/apps/client/bench/corpus.ts
++++ b/apps/client/bench/corpus.ts
+@@ -28,18 +28,24 @@
+   "Benvenuto.md": [
+     "# Benvenuto in Fub",
+     "",
+-    "Questa è la nota che il banco apre per prima. Serve a fotografare lo stato",
+-    "normale: un titolo, due paragrafi di prosa, un elenco e un paio di",
+-    "riferimenti — cioè quello che si vede il novantanove per cento del tempo.",
++    "Questa è la nota che il banco apre per prima. Serve a fotografare lo stato normale: un titolo, due paragrafi di prosa, un elenco e un paio di riferimenti — cioè quello che si vede il novantanove per cento del tempo.",
+     "",
+-    "La sintassi per intero sta in [[Sintassi di Fub]], i colori dei linguaggi",
+-    "in [[Frammenti di codice]]. #tema #banco",
++    "La sintassi per intero sta in [[Sintassi di Fub]], i colori dei linguaggi in [[Frammenti di codice]].",
++    "",
++    "## Da dove partire",
+     "",
+     "- Un elenco corto",
+     "- con tre voci",
+     "- e nient'altro dentro",
+     "",
++    "> [!info] Una scorciatoia sola.",
++    "> <kbd>Ctrl O</kbd> apre le note, cerca nel vault, esegue i comandi.",
++    "",
++    "## Una regola",
++    "",
+     "> Ciò che non si guarda non si migliora.",
++    "",
++    "#tema #banco",
+   ].join("\n"),
+ 
+   "Guida/Sintassi di Fub.md": [
+@@ -151,6 +157,8 @@
+     "Contati i token: ottantatré per foglio, gemelli.",
+   ].join("\n"),
+ 
++  "Progetti/Mappa del banco.canvas": "{\n \"nodes\": [\n  {\n   \"id\": \"a\",\n   \"type\": \"text\",\n   \"x\": 0,\n   \"y\": 0,\n   \"width\": 260,\n   \"height\": 120,\n   \"text\": \"## Il banco\\nGuarda ogni scena in **due luci**.\"\n  },\n  {\n   \"id\": \"b\",\n   \"type\": \"file\",\n   \"x\": 340,\n   \"y\": -40,\n   \"width\": 300,\n   \"height\": 200,\n   \"file\": \"Benvenuto.md\"\n  },\n  {\n   \"id\": \"c\",\n   \"type\": \"text\",\n   \"x\": 0,\n   \"y\": 200,\n   \"width\": 260,\n   \"height\": 90,\n   \"text\": \"Le baseline arrivano dal runner.\",\n   \"color\": \"4\"\n  },\n  {\n   \"id\": \"d\",\n   \"type\": \"text\",\n   \"x\": 340,\n   \"y\": 220,\n   \"width\": 300,\n   \"height\": 80,\n   \"text\": \"Una scheda dal titolo lunghissimo che non sta su una riga sola\",\n   \"color\": \"6\"\n  }\n ],\n \"edges\": [\n  {\n   \"id\": \"e1\",\n   \"fromNode\": \"a\",\n   \"fromSide\": \"right\",\n   \"toNode\": \"b\",\n   \"toSide\": \"left\"\n  },\n  {\n   \"id\": \"e2\",\n   \"fromNode\": \"a\",\n   \"fromSide\": \"bottom\",\n   \"toNode\": \"c\",\n   \"toSide\": \"top\",\n   \"label\": \"poi\"\n  }\n ]\n}",
++
+   "Progetti/Il banco che vede.md": [
+     "# Il banco che vede",
+     "",
+@@ -254,10 +262,13 @@
+     "stato normale: un titolo, due paragrafi di prosa, un elenco e un paio di",
+     "riferimenti — cioè quello che si vede il novantanove per cento del tempo.</p>",
+     '<p>La sintassi per intero sta in <a class="wikilink" data-wikilink-page="Sintassi di Fub" href="#">Sintassi di Fub</a>,',
+-    'i colori dei linguaggi in <a class="wikilink" data-wikilink-page="Frammenti di codice" href="#">Frammenti di codice</a>.',
+-    '<span class="tag" data-tag="tema">#tema</span> <span class="tag" data-tag="banco">#banco</span></p>',
++    'i colori dei linguaggi in <a class="wikilink" data-wikilink-page="Frammenti di codice" href="#">Frammenti di codice</a>.</p>',
++    "<h2>Da dove partire</h2>",
+     "<ul><li>Un elenco corto</li><li>con tre voci</li><li>e nient'altro dentro</li></ul>",
++    '<div class="callout" data-callout="info"><div class="callout-title">Una scorciatoia sola.</div><p><kbd>Ctrl O</kbd> apre le note, cerca nel vault, esegue i comandi.</p></div>',
++    "<h2>Una regola</h2>",
+     "<blockquote><p>Ciò che non si guarda non si migliora.</p></blockquote>",
++    '<p><span class="tag" data-tag="tema">#tema</span> <span class="tag" data-tag="banco">#banco</span></p>',
+   ].join("\n"),
+ 
+   "Guida/Sintassi di Fub.md": [
+diff -ruN a/apps/client/bench/fake-ipc.ts b/apps/client/bench/fake-ipc.ts
+--- a/apps/client/bench/fake-ipc.ts
++++ b/apps/client/bench/fake-ipc.ts
+@@ -133,6 +133,9 @@
+ // ---------------------------------------------------------------------------
+ 
+ const params = new URLSearchParams(globalThis.window.location.search);
++/// Le icone del banco sono monocrome (`fub:<nome>`, Scrittoio 2); `?icone=emoji`
++/// rimette le emoji, che restano una scelta piena.
++const ICONE_EMOJI = params.get("icone") === "emoji";
+ 
+ const graphNodesParam = params.get("graphNodes");
+ const graphSeedParam = params.get("graphSeed");
+@@ -617,10 +620,10 @@
+       description: "Dimensione del testo nelle superfici di lettura.",
+       group: "Aspetto",
+       scope: "machine",
+-      kind: { kind: "number", default: 17, min: 12, max: 28 },
++      kind: { kind: "number", default: 18, min: 12, max: 28 },
+       program_writable: false,
+     },
+-    value: 17,
++    value: 18,
+     source: "default",
+   },
+   {
+@@ -643,10 +646,10 @@
+       description: "Larghezza massima della colonna di lettura.",
+       group: "Aspetto",
+       scope: "machine",
+-      kind: { kind: "number", default: 68, min: 40, max: 100 },
++      kind: { kind: "number", default: 58, min: 40, max: 100 },
+       program_writable: false,
+     },
+-    value: 68,
++    value: 58,
+     source: "default",
+   },
+   {
+@@ -701,6 +704,27 @@
+   },
+   {
+     spec: {
++      key: "appearance.motion",
++      label: "Animazioni",
++      description: "Segue la preferenza del sistema, oppure toglie rimbalzi e scene, oppure riduce sempre le animazioni dell'interfaccia.",
++      group: "Aspetto",
++      scope: "machine",
++      kind: {
++        kind: "choice",
++        default: "",
++        options: [
++          { value: "", label: "Come il sistema" },
++          { value: "calm", label: "Calme" },
++          { value: "reduced", label: "Ridotte" },
++        ],
++      },
++      program_writable: false,
++    },
++    value: "",
++    source: "default",
++  },
++  {
++    spec: {
+       key: "editor.line_numbers",
+       label: "Numeri di riga",
+       description: "Mostra la grondaia con il numero di ogni riga.",
+@@ -956,7 +980,7 @@
+   {
+     root: "/Bench vault",
+     name: "Vault del banco",
+-    icon: "📷",
++    icon: ICONE_EMOJI ? "📷" : null,
+     favorite: true,
+     last_opened: 0,
+     keys_seen: {},
+@@ -978,7 +1002,9 @@
+ /// L'organizzazione del vault: due note appuntate, tre icone, uno spazio. Il
+ /// finto risponde tutto vuoto — che è onesto e invisibile.
+ const ORGANIZATION: Organization = {
+-  icons: { "Benvenuto.md": "👋", Guida: "📘", Diario: "📅" },
++  icons: ICONE_EMOJI
++    ? { "Benvenuto.md": "👋", Guida: "📘", Diario: "📅", Progetti: "🚀" }
++    : { Guida: "fub:book", Diario: "fub:calendar" },
+   pinned: ["Benvenuto.md", "Guida/Sintassi di Fub.md"],
+   order: {},
+   spaces: ["Guida", "Diario", "Progetti"],
+@@ -1048,24 +1074,13 @@
+     roots: [
+       {
+         node: "tree_item",
+-        label: "Sintassi di Fub",
++        label: "Benvenuto in Fub",
+         selected: false,
+         expanded: true,
+         action: { action: "goto", payload: 1 },
+         children: [
+-          { node: "tree_item", label: "Titoli", selected: false, expanded: false, action: { action: "goto", payload: 2 }, children: [] },
+-          {
+-            node: "tree_item",
+-            label: "Testo",
+-            selected: false,
+-            expanded: true,
+-            action: { action: "goto", payload: 3 },
+-            children: [
+-              { node: "tree_item", label: "Riferimenti", selected: false, expanded: false, action: { action: "goto", payload: 4 }, children: [] },
+-            ],
+-          },
+-          { node: "tree_item", label: "Tabella", selected: false, expanded: false, action: { action: "goto", payload: 5 }, children: [] },
+-          { node: "tree_item", label: "Codice", selected: false, expanded: false, action: { action: "goto", payload: 6 }, children: [] },
++          { node: "tree_item", label: "Da dove partire", selected: true, expanded: false, action: { action: "goto", payload: 7 }, children: [] },
++          { node: "tree_item", label: "Una regola", selected: false, expanded: false, action: { action: "goto", payload: 16 }, children: [] },
+         ],
+       },
+     ],
+@@ -1243,7 +1258,7 @@
+   },
+   root: ROOT,
+   view: VIEWS,
+-  commands: ON_MOBILE ? [...BENCH_COMMANDS, ...FORMAT_COMMANDS] : [...BENCH_COMMANDS, ...SLASH_COMMANDS],
++  commands: ON_MOBILE || params.get("formatbar") === "1" ? [...BENCH_COMMANDS, ...FORMAT_COMMANDS] : [...BENCH_COMMANDS, ...SLASH_COMMANDS],
+   settings: [...SETTINGS, ...(DRAWING === null ? [] : DRAW_WORKSPACE), ...CRAFT_SETTINGS],
+   syntaxForms: [...MARKDOWN_SYNTAX],
+   ...(WORKBOOK_DOC === null ? {} : {
+@@ -1413,6 +1428,26 @@
+ /// L'albero di una view della scenografia, nella lingua della shell. La
+ /// struttura no: le sue voci sono i titoli della nota.
+ function treeOf(view: string): UiNode | undefined {
++  // Sonda del pianificatore pre-alpha (solo nella copia di cattura): il cestino
++  // pieno, con la forma di `fub-features/src/trash.rs`.
++  if (view === "trash" && new URLSearchParams(globalThis.location.search).get("cestino") === "pieno") {
++    const riga = (key: string, title: string, when: string): UiNode => ({
++      node: "stack", dir: "row", gap: 1, key, children: [
++        { node: "list_item", title, subtitle: `Cestinata il ${when}`, action: null, selected: false },
++        { node: "button", label: "Ripristina", intent: "primary", action: { action: "restore", payload: { entry: key } } },
++      ],
++    } as unknown as UiNode);
++    return {
++      node: "stack", dir: "column", gap: 1, children: [
++        { node: "list", items: [
++          riga(".trash/3-Idee sparse.md", "Idee sparse", "5 novembre 2026, 10:42"),
++          riga(".trash/2-Lista della spesa.md", "Lista della spesa", "4 novembre 2026, 18:03"),
++          riga(".trash/1-Vecchio indice.md", "Vecchio indice", "28 ottobre 2026, 09:15"),
++        ] },
++        { node: "button", label: "Svuota il cestino", intent: "danger", action: { action: "empty", payload: null } },
++      ],
++    } as unknown as UiNode;
++  }
+   const tree = TREES[view];
+   return tree && view !== "outline" ? inShellLanguage(tree) : tree;
+ }
+diff -ruN a/apps/client/bench/scene.mjs b/apps/client/bench/scene.mjs
+--- a/apps/client/bench/scene.mjs
++++ b/apps/client/bench/scene.mjs
+@@ -1750,6 +1750,13 @@
+ async function openFolder(page, path) {
+   const item = `#file-list li[role="treeitem"][data-path="${path}"]`;
+   const row = `${item} > .tree-row.folder`;
++  // Pianificatore pre-alpha: sul telefono l'albero sta nel cassetto, che si
++  // apre qui se è chiuso; il fotografo lo richiude dopo la preparazione.
++  const compact = await page.evaluate(() => document.querySelector("#layout")?.classList.contains("layout-compact") ?? false);
++  if (compact && !(await page.isVisible("#sidebar-scrim"))) {
++    await page.click('#views-ribbon .rail-btn[data-panel="files"]');
++    await page.waitForSelector("#sidebar-scrim:not([hidden])");
++  }
+   await page.waitForSelector(row);
+   const open = await page.evaluate(
+     (sel) => document.querySelector(sel)?.getAttribute("aria-expanded") === "true",
+@@ -1801,4 +1808,455 @@
+   const page = PAGES[scene.page ?? ""] ?? "/";
+   const query = [`light=${light}`, scene.query].filter(Boolean).join("&");
+   return `${base}${page}?${query}`;
+-}
+\ No newline at end of file
++}
++// ---------------------------------------------------------------------------
++// Prototipo di Scrittoio 2 (sonda usa-e-getta, non entra nel repository).
++// ---------------------------------------------------------------------------
++async function protoNota(page) {
++  await openNote(page, "Guida/Sintassi di Fub.md");
++  await openWorkbook(page);
++  await page.click(".pane.focus .tab >> nth=0");
++  await page.waitForSelector('.pane.focus .tab[data-index="0"][aria-selected="true"]');
++  for (const path of ["Dati", "Guida"]) {
++    const item = `#file-list li[role="treeitem"][data-path="${path}"]`;
++    if (await page.evaluate((sel) => document.querySelector(sel)?.getAttribute("aria-expanded") === "true", item)) {
++      await page.click(`${item} > .tree-row.folder`);
++    }
++  }
++  const line = page.locator(".pane.focus .cm-line", { hasText: "con tre voci" }).first();
++  const box = await line.boundingBox();
++  if (box) await page.mouse.click(box.x + box.width - 4, box.y + box.height / 2);
++  await page.keyboard.press("End");
++  await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
++}
++SCENE.push(...onPage("shell", [
++  { id: "proto-nota", title: "Prototipo: la nota in Live", query: "workbook=1", prepare: protoNota },
++  { id: "proto-nota-barra", title: "Prototipo: la nota con la barra di formattazione", query: "workbook=1&formatbar=1", prepare: protoNota },
++  { id: "proto-icone", title: "Prototipo: le emoji", query: "workbook=1&icone=emoji", prepare: protoNota },
++  {
++    id: "proto-foglio",
++    title: "Prototipo: il foglio",
++    query: "workbook=1",
++    prepare: async (page) => {
++      await openRibbon(page, "any");
++    },
++  },
++  {
++    id: "proto-lavagna",
++    title: "Prototipo: la lavagna",
++    prepare: async (page) => {
++      await openFromTree(page, "Progetti/Mappa del banco.canvas", ".pane.focus .canvas-toolbar");
++      await page.waitForTimeout(400);
++    },
++  },
++]));
++// ---------------------------------------------------------------------------
++// Secondo giro del simulatore di pre-alpha (sonda usa-e-getta, non entra nel
++// repository): la cornice, i file, le impostazioni, i riquadri.
++// ---------------------------------------------------------------------------
++async function apriImpostazioni(page, tab) {
++  await page.click("#open-settings");
++  await page.waitForSelector("#settings-body .setting-row");
++  if (tab) {
++    await page.click(`#settings-tabs button[data-tab="${tab}"]`);
++    await page.waitForTimeout(400);
++  }
++}
++async function vaiSezione(page, testo) {
++  await page.click(`#settings-toc-list button[data-target]:has-text("${testo}")`);
++  await page.waitForTimeout(500);
++}
++async function menuRiquadro(page, voce) {
++  await page.click(".pane.focus [data-pane-menu]");
++  await page.waitForSelector("#context-menu .menu-head");
++  await page.click(`#context-menu [role="menuitem"]:has-text("${voce}")`);
++  await page.waitForTimeout(400);
++}
++async function scriviSenzaSalvare(page) {
++  await protoNota(page);
++  await page.evaluate(() => {
++    window.bench.fault("writeDocument", "Il disco è pieno");
++    window.bench.fault("saveDraft", "Il disco è pieno");
++  });
++  await page.keyboard.type(" e una riga che non si salva");
++  await page.waitForTimeout(2500);
++}
++async function trascinaScheda(page) {
++  await protoNota(page);
++  await page.evaluate(() => {
++    const tab =
++      document.querySelector('.pane.focus .tab[draggable="true"]:not([aria-selected="true"])') ??
++      document.querySelector('.pane.focus [draggable="true"]');
++    const body = document.querySelector(".pane.focus .cm-scroller") ?? document.querySelector(".pane.focus");
++    const dt = new DataTransfer();
++    tab.dispatchEvent(new DragEvent("dragstart", { bubbles: true, cancelable: true, dataTransfer: dt }));
++    const r = body.getBoundingClientRect();
++    body.dispatchEvent(
++      new DragEvent("dragover", { bubbles: true, cancelable: true, dataTransfer: dt, clientX: r.right - 30, clientY: r.top + r.height / 2 }),
++    );
++  });
++  await page.waitForSelector(".tab-drop-preview");
++}
++SCENE.push(...onPage("shell", [
++  ...[0, 1, 2, 3].map((n) => ({
++    id: `g2-ispettore-${n}`,
++    title: `L'ispettore, scheda ${n + 1}`,
++    query: "workbook=1",
++    prepare: async (page) => {
++      await protoNota(page);
++      await page.click(`#right-pane .inspector-tab >> nth=${n}`);
++      await page.waitForTimeout(600);
++    },
++  })),
++  {
++    id: "g2-ispettore-chiuso",
++    title: "L'ispettore chiuso",
++    query: "workbook=1",
++    prepare: async (page) => {
++      await protoNota(page);
++      await page.click("#toggle-inspector");
++      await page.waitForTimeout(500);
++    },
++  },
++  ...[["Editor", "editor"], ["Vault", "vault"], ["Diagnostica", "diagnostica"], ["Profili", "profili"]].map(([testo, id]) => ({
++    id: `g2-imp-${id}`,
++    title: `Le preferenze: la sezione ${testo}`,
++    prepare: async (page) => {
++      await apriImpostazioni(page);
++      await vaiSezione(page, testo);
++    },
++  })),
++  { id: "g2-imp-tasti", title: "Le preferenze: le scorciatoie", prepare: (page) => apriImpostazioni(page, "shortcuts") },
++  { id: "g2-imp-info", title: "Le preferenze: le informazioni", prepare: (page) => apriImpostazioni(page, "about") },
++  {
++    id: "g2-menu-riquadro",
++    title: "Il menu del riquadro",
++    query: "workbook=1",
++    prepare: async (page) => {
++      await protoNota(page);
++    },
++  },
++  {
++    id: "g2-due-riquadri",
++    title: "Due riquadri: la nota e il PDF",
++    query: "pdf-scena=nota",
++    prepare: async (page) => {
++      await openPdfNote(page, true);
++      await menuRiquadro(page, "Dividi a destra");
++      await fromTreeDrawer(page, async () => {
++        await openFolder(page, "Casa");
++        await page.click('#file-list .tree-row[data-path="Casa/contratto-affitto.pdf"]');
++      });
++      await aspettaPdf(page);
++    },
++  },
++  {
++    id: "g2-live-lettura",
++    title: "Due riquadri: la stessa nota in Live e in Lettura",
++    query: "workbook=1",
++    prepare: async (page) => {
++      await protoNota(page);
++      await menuRiquadro(page, "Dividi a destra");
++      await page.click('.pane.focus .pane-toolbar button[data-mode="reading"]').catch(() => {});
++      await page.waitForTimeout(600);
++    },
++  },
++  { id: "g2-trascina", title: "Una scheda trascinata sul bordo destro: l'anteprima della divisione", query: "workbook=1", prepare: trascinaScheda },
++  {
++    id: "g2-nuovo",
++    title: "Il menu Nuovo del titolo dell'albero",
++    prepare: async (page) => {
++      await page.click("#files-title", { button: "right" });
++      await page.waitForSelector("#context-menu .menu-head");
++      await page.hover('#context-menu [role="menuitem"]:has-text("Nuova nota")');
++      await page.waitForTimeout(500);
++    },
++  },
++  {
++    id: "g2-rinomina",
++    title: "Una nota dell'albero rinominata sul posto",
++    prepare: async (page) => {
++      await page.click('#file-list li[data-path="Benvenuto.md"] > .tree-row', { button: "right" });
++      await page.click('#context-menu [role="menuitem"]:has-text("Rinomina")');
++      await page.waitForSelector("#file-list input");
++      await page.keyboard.press("End");
++      await page.keyboard.type(" di marzo");
++    },
++  },
++  {
++    id: "g2-cestino",
++    title: "Il cestino con tre note",
++    query: "cestino=pieno",
++    prepare: async (page) => {
++      await page.click('#views-ribbon .rail-btn[data-panel="trash"]');
++      await page.waitForTimeout(700);
++    },
++  },
++  {
++    id: "g2-cestino-stretto",
++    title: "Il cestino nella finestra stretta, nel cassetto",
++    query: "cestino=pieno",
++    viewport: { width: 700, height: 800 },
++    prepare: async (page) => {
++      await page.waitForSelector("#layout.layout-compact");
++      await page.click('#views-ribbon .rail-btn[data-panel="trash"]');
++      await page.waitForSelector("#sidebar-scrim:not([hidden])");
++      await page.waitForTimeout(500);
++    },
++  },
++  {
++    id: "g2-cestino-vuoto",
++    title: "Il cestino vuoto",
++    prepare: async (page) => {
++      await page.click('#views-ribbon .rail-btn[data-panel="trash"]');
++      await page.waitForTimeout(700);
++    },
++  },
++  {
++    id: "g2-non-salvata",
++    title: "Chiudere una nota che non si è potuta salvare",
++    query: "workbook=1",
++    prepare: async (page) => {
++      await scriviSenzaSalvare(page);
++      await page.click('.pane.focus .tab-entry:has(.tab[aria-selected="true"]) > .tab-close');
++      await page.waitForSelector(".kit-dialog");
++    },
++  },
++  {
++    id: "g2-salvataggio-fallito",
++    title: "Il salvataggio fallito: la riga sopra il foglio e lo stato aperto",
++    query: "workbook=1",
++    prepare: async (page) => {
++      await scriviSenzaSalvare(page);
++      await page.focus(".pane.focus .sheet-save");
++      await page.keyboard.press("Enter");
++      await page.waitForSelector(".kit-popover .sheet-save-panel");
++    },
++  },
++  {
++    id: "g2-bozza",
++    title: "All'apertura: una nota aveva del testo non salvato",
++    query: "bozze=intatta",
++    prepare: async (page) => {
++      await page.waitForSelector("#toasts .toast");
++    },
++  },
++  {
++    id: "g2-bozza-divergente",
++    title: "All'apertura: la bozza e il file cambiato nel frattempo",
++    query: "bozze=divergente",
++    prepare: async (page) => {
++      await page.waitForSelector("#toasts .toast");
++      await openNote(page, "Guida/Sintassi di Fub.md");
++      await page.waitForTimeout(600);
++    },
++  },
++]));
++
++// Secondo giro, il PDF: cercare, le miniature, due pagine, il PDF scuro.
++async function aspettaPdf(page) {
++  await page.waitForFunction(() => {
++    const pdf = document.querySelector(".pane.focus .media-pdf");
++    return /\d/.test(pdf?.querySelector('[role="status"]')?.textContent ?? "")
++      && (pdf?.querySelector(".media-pdf-page canvas")?.width ?? 0) > 0;
++  });
++  await page.mouse.move(0, 0);
++}
++async function pdfBottone(page, testo) {
++  await page.click(`.pane.focus .media-pdf-toolbar button:has-text("${testo}")`);
++  await page.waitForTimeout(900);
++  await page.mouse.move(0, 0);
++}
++SCENE.push(...onPage("shell", [
++  {
++    id: "g2-pdf-cerca",
++    title: "Il PDF: una parola cercata, la riga dice dove",
++    query: "pdf-scena=domanda",
++    prepare: async (page) => {
++      await openPdfQuestion(page);
++      await page.fill(".pane.focus .media-pdf-toolbar input[type=search]", "Roma");
++      await page.evaluate(() => {
++        document.querySelector(".pane.focus .media-pdf-toolbar input[type=search]")
++          .dispatchEvent(new Event("change", { bubbles: true }));
++      });
++      await page.waitForFunction(() => /Roma/.test(document.querySelector(".pane.focus .media-pdf [role=status]")?.textContent ?? "")
++        || /1/.test(document.querySelector(".pane.focus .media-pdf [role=status]")?.textContent ?? ""));
++      await page.waitForTimeout(500);
++    },
++  },
++  {
++    id: "g2-pdf-nessuno",
++    title: "Il PDF: una parola che non c'è",
++    query: "pdf-scena=domanda",
++    prepare: async (page) => {
++      await openPdfQuestion(page);
++      await page.fill(".pane.focus .media-pdf-toolbar input[type=search]", "cauzione");
++      await page.evaluate(() => {
++        document.querySelector(".pane.focus .media-pdf-toolbar input[type=search]")
++          .dispatchEvent(new Event("change", { bubbles: true }));
++      });
++      await page.waitForTimeout(1200);
++    },
++  },
++  {
++    id: "g2-pdf-miniature",
++    title: "Il PDF con le miniature delle pagine",
++    query: "pdf-scena=domanda",
++    prepare: async (page) => {
++      await openPdfQuestion(page);
++      await pdfBottone(page, "Miniature");
++    },
++  },
++  {
++    id: "g2-pdf-due",
++    title: "Il PDF a due pagine affiancate",
++    query: "pdf-scena=domanda",
++    prepare: async (page) => {
++      await openPdfQuestion(page);
++      await pdfBottone(page, "Due pagine");
++    },
++  },
++  {
++    id: "g2-pdf-scuro",
++    title: "Il PDF con le pagine scure",
++    query: "pdf-scena=domanda",
++    prepare: async (page) => {
++      await openPdfQuestion(page);
++      await pdfBottone(page, "Colori scuri");
++    },
++  },
++]));
++
++// Secondo giro, i componenti: spegnere uno che serve ad altri, e quelli che
++// restano senza nessuno.
++async function apriComponenti(page) {
++  await page.click("#open-settings");
++  await page.click('#settings-tabs button[data-tab="components"]');
++  await page.waitForSelector('#settings-body .components-profile[aria-pressed="true"]');
++  await page.waitForSelector("#settings-body .components-row");
++}
++SCENE.push(...onPage("shell", [
++  {
++    id: "g2-comp-spegni",
++    title: "I componenti: spegnerne uno che serve ad altri chiede prima",
++    prepare: async (page) => {
++      await apriComponenti(page);
++      await page.click('#settings-body [data-group="supporto"] .components-group-toggle');
++      await page.click('#settings-body #component-fub\\.penna');
++      await page.waitForSelector(".kit-dialog");
++      await page.waitForTimeout(400);
++    },
++  },
++  {
++    id: "g2-comp-orfani",
++    title: "I componenti: uno spento, e quelli che non servono più",
++    prepare: async (page) => {
++      await apriComponenti(page);
++      await page.click('#settings-body [data-group="supporto"] .components-group-toggle');
++      await page.click('#settings-body #component-fub\\.penna');
++      await page.waitForSelector(".kit-dialog");
++      await page.click('.kit-dialog .kit-dialog-actions button >> nth=-1');
++      await page.waitForTimeout(900);
++    },
++  },
++  {
++    id: "g2-comp-cerca",
++    title: "I componenti: una ricerca che non trova niente",
++    prepare: async (page) => {
++      await apriComponenti(page);
++      await page.fill("#settings-body .components-page input[type=search]", "zzzz");
++      await page.waitForTimeout(500);
++    },
++  },
++]));
++
++// Terzo giro (pianificatore pre-alpha): trova e sostituisci, le parti chiuse
++// del docx, i livelli e la scelta multipla del disegno, l'errore di formula.
++SCENE.push(...onPage("shell", [
++  {
++    id: "g3-doc-trova",
++    title: "Il documento: trova e sostituisci",
++    query: "rich=docx",
++    prepare: async (page) => {
++      await openRichDocument(page, "Documenti/Prova.docx");
++      await page.click(".pane.focus .rich-surface .ProseMirror");
++      await page.keyboard.press("Control+h");
++      await page.waitForSelector(".pane.focus form.rich-findbar");
++      await page.keyboard.type("revisione");
++      await page.waitForTimeout(600);
++    },
++  },
++  {
++    id: "g3-doc-chiuse-pannello",
++    title: "Il documento con parti chiuse: la prima mostrata",
++    query: "rich=closed",
++    prepare: async (page) => {
++      await openRichDocument(page, "Documenti/Chiuso.docx");
++      await page.click(".pane.focus .pane-standing-chip");
++      await page.waitForTimeout(700);
++    },
++  },
++  {
++    id: "g3-disegno-livelli",
++    title: "Il disegno col pannello Livelli dell'ispettore",
++    query: "connectors=6",
++    prepare: async (page) => {
++      await openDrawing(page);
++      if (!(await page.isVisible("#right-pane .inspector-tab"))) await page.click("#toggle-inspector");
++      await page.click('#right-pane .inspector-tab[aria-controls="surface-panel-draw-layers"], #right-pane .inspector-tab:has-text("Livelli")');
++      await page.waitForTimeout(700);
++    },
++  },
++  {
++    id: "g3-disegno-tutto",
++    title: "Il disegno con tutte le figure scelte",
++    query: "connectors=6",
++    prepare: async (page) => {
++      await openDrawing(page);
++      await page.keyboard.press("v");
++      await page.keyboard.press("Control+a");
++      await page.waitForTimeout(600);
++    },
++  },
++  {
++    id: "g3-disegno-zoom",
++    title: "Il disegno: la scelta dello zoom nella banda",
++    query: "connectors=6",
++    prepare: async (page) => {
++      await openDrawing(page);
++      await page.click('#status-band [data-surface-item="zoom"]');
++      await page.waitForTimeout(600);
++    },
++  },
++  {
++    id: "g3-foglio-errore",
++    title: "Il foglio: una formula che divide per zero",
++    query: "workbook=1",
++    prepare: async (page) => {
++      await openWorkbook(page);
++      await writeInCell(page, 6, 1, "=1/0");
++      await page.keyboard.press("Enter");
++      await page.keyboard.press("ArrowUp");
++      await page.waitForTimeout(700);
++    },
++  },
++]));
++
++// Terzo giro, seconda parte: il PDF che non si legge (la lettura dei byte
++// fallisce: la superficie media dice la ragione nella riga di stato).
++SCENE.push(...onPage("shell", [
++  {
++    id: "g3-pdf-rotto",
++    title: "Il PDF che non si legge",
++    query: "pdf-scena=domanda",
++    prepare: async (page) => {
++      await page.evaluate(() => window.bench.fault("resourceReadChunk", "Il file non è un PDF valido: manca la tabella dei riferimenti."));
++      await fromTreeDrawer(page, async () => {
++        await openFolder(page, "Casa");
++        await page.click('#file-list .tree-row[data-path="Casa/contratto-affitto.pdf"]');
++        await page.waitForTimeout(1500);
++      });
++      await page.mouse.move(0, 0);
++    },
++  },
++]));
+diff -ruN a/apps/client/src/editors/rich/icons.ts b/apps/client/src/editors/rich/icons.ts
+--- a/apps/client/src/editors/rich/icons.ts
++++ b/apps/client/src/editors/rich/icons.ts
+@@ -27,6 +27,8 @@
+   "rc-indent-more": [...LINES, "M4 9l3 3-3 3"],
+   "rc-spacing": ["M11 6h9", "M11 12h9", "M11 18h9", "M5 4v16", "M3 6l2-2 2 2", "M3 18l2 2 2-2"],
+   "rc-quote": ["M6 9h4v4H7l-1 3", "M14 9h4v4h-3l-1 3"],
++  // SONDA scrittoio-2: la figura di Carattere, la stessa dei fogli.
++  "rc-font": ["M5 19l6-14h2l6 14", "M8 14h8"],
+   "rc-styles": ["M4 4h7v7H4z", "M13 4h7v7h-7z", "M4 13h7v7H4z", "M13 13h7v7h-7z"],
+   "rc-find": ["M10.5 4a6.5 6.5 0 1 1 0 13 6.5 6.5 0 0 1 0-13z", "M15.5 15.5 20 20"],
+   "rc-replace": ["M4 7h11", "M12 4l3 3-3 3", "M20 17H9", "M12 14l-3 3 3 3"],
+diff -ruN a/apps/client/src/editors/rich/ribbon.ts b/apps/client/src/editors/rich/ribbon.ts
+--- a/apps/client/src/editors/rich/ribbon.ts
++++ b/apps/client/src/editors/rich/ribbon.ts
+@@ -386,12 +386,12 @@
+     keytip: "H",
+     // Stretta, la barra raccoglie prima Modifica e Stili, poi Paragrafo;
+     // Carattere resta.
+-    fold: ["editing", "styles", "paragraph"],
++    fold: ["editing", "styles", "paragraph", "font"], // SONDA scrittoio-2: al telefono si raccoglie anche Carattere
+     groups: [
+       {
+         id: "font",
+         label: "rich.ribbon.group.font",
+-        icon: "rc-styles",
++        icon: "rc-font", // SONDA scrittoio-2
+         keytip: "ZF",
+         columns: [
+           {
+@@ -1128,6 +1128,8 @@
+   const ribbon = mountKitRibbon<RichView, Key, RichExtra>({
+     host,
+     prefix: "rich-ribbon",
++    // SONDA scrittoio-2 (Q8, consigliata): il gruppo raccolto si apre sul posto, come nei fogli.
++    openInPlace: true,
+     menuPrefix: "rich.menu.",
+     tabs: RICH_TABS,
+     quick: RICH_QUICK,
+diff -ruN a/apps/client/src/host/fake.ts b/apps/client/src/host/fake.ts
+--- a/apps/client/src/host/fake.ts
++++ b/apps/client/src/host/fake.ts
+@@ -1167,6 +1167,20 @@
+       }
+       case "drafts": {
+         const drafts: DraftInfo[] = [];
++        // Sonda del pianificatore pre-alpha (solo nella copia di cattura):
++        // `?bozze=intatta|divergente|orfana` ritrova una bozza all'apertura.
++        const bozze = new URLSearchParams(globalThis.location?.search ?? "").get("bozze");
++        const doc = docs.get("Guida/Sintassi di Fub.md");
++        if (bozze && doc) {
++          drafts.push({
++            doc: bozze === "orfana" ? "Guida/Appunti persi.md" : "Guida/Sintassi di Fub.md",
++            at: Date.now() - 60_000,
++            base: doc.revision,
++            exists: bozze !== "orfana",
++            current: bozze === "divergente" ? "r9999" : doc.revision,
++            text: `${doc.text}\n\nUna riga scritta prima che Fub si chiudesse.\n`,
++          });
++        }
+         return { kind: "drafts", value: paginate(drafts, q.page) };
+       }
+       case "vault_health": {
+diff -ruN a/apps/client/src/panels/explorer.ts b/apps/client/src/panels/explorer.ts
+--- a/apps/client/src/panels/explorer.ts
++++ b/apps/client/src/panels/explorer.ts
+@@ -1432,10 +1432,17 @@
+ 
+ /// L'icona di una riga: quella scelta da chi scrive, che resta com'è, o
+ /// senza una scelta la figura a linea del kit (`line`).
++/// Prototipo Scrittoio 2: un'icona scelta è un'emoji o `fub:<nome>`, una
++/// figura monocroma del set.
++function appendEntryIcon(host: HTMLElement, icon: string): void {
++  if (icon.startsWith("fub:")) host.append(iconEl(icon.slice(4)) ?? iconEl("folder") ?? "");
++  else host.textContent = icon;
++}
++
+ function rowIcon(icon: string | null, line?: string): HTMLElement {
+   const span = document.createElement("span");
+   span.className = "row-icon";
+-  if (icon !== null) span.textContent = icon;
++  if (icon !== null) appendEntryIcon(span, icon);
+   else if (line) span.append(iconEl(line) ?? "");
+   span.setAttribute("aria-hidden", "true");
+   return span;
+@@ -1445,7 +1452,7 @@
+ /// gliene ha data una: nei menu e nei titoli una figura di ripiego è rumore.
+ function namedFolder(path: string, name = childName(path)): string {
+   const icon = state.meta.icons[path];
+-  return icon ? `${icon} ${name}` : name;
++  return icon && !icon.startsWith("fub:") ? `${icon} ${name}` : name;
+ }
+ 
+ /// Apre o chiude una cartella. Aprirne una **chiede il suo contenuto**
+@@ -1696,18 +1703,33 @@
+   home.className = "space-chip";
+   home.setAttribute("aria-pressed", String(state.activeSpace === null));
+   home.append(iconEl("home") ?? "");
++  const homeName = document.createElement("span");
++  homeName.className = "space-chip-name";
++  homeName.setAttribute("aria-hidden", "true");
++  homeName.textContent = "Vault";
++  home.append(homeName);
+   home.setAttribute("aria-label", t("explorer.whole_vault"));
+   setTooltip(home, t("explorer.whole_vault"));
+   home.addEventListener("click", () => selectSpace(null));
+-  spaceStripEl.appendChild(home);
++  const well = document.createElement("span");
++  well.className = "space-well";
++  well.appendChild(home);
++  spaceStripEl.appendChild(well);
+ 
+   for (const path of state.meta.spaces) {
+     const chip = document.createElement("button");
+     chip.className = "space-chip";
+     chip.setAttribute("aria-pressed", String(state.activeSpace === path));
+     const chosen = state.meta.icons[path];
+-    if (chosen) chip.textContent = chosen;
+-    else chip.append(iconEl("folder") ?? "");
++    const glyph = document.createElement("span");
++    glyph.className = "space-chip-icon";
++    if (chosen) appendEntryIcon(glyph, chosen);
++    else glyph.append(iconEl("folder") ?? "");
++    const name = document.createElement("span");
++    name.className = "space-chip-name";
++    name.setAttribute("aria-hidden", "true");
++    name.textContent = childName(path);
++    chip.append(glyph, name);
+     // Nome annunciato (V15): l'emoji scelta e il nome dello spazio, non solo
+     // il simbolo.
+     chip.setAttribute("aria-label", namedFolder(path));
+@@ -1720,7 +1742,7 @@
+         { label: t("explorer.not_a_space"), run: () => removeSpace(path) },
+       ]);
+     });
+-    spaceStripEl.appendChild(chip);
++    well.appendChild(chip);
+   }
+ 
+   const add = document.createElement("button");
+diff -ruN a/apps/client/src/ui/icons.ts b/apps/client/src/ui/icons.ts
+--- a/apps/client/src/ui/icons.ts
++++ b/apps/client/src/ui/icons.ts
+@@ -96,6 +96,32 @@
+   info: '<circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/>',
+   keyboard: '<rect x="3" y="6" width="18" height="12" rx="2"/><path d="M7 10h.01M11 10h.01M15 10h.01M8 14h8"/>',
+   monitor: '<rect x="3" y="4" width="18" height="12" rx="2"/><path d="M9 20h6M12 16v4"/>',
++
++  // --- Scrittoio 2: le modalità della banda -------------------------------
++  pen: '<path d="M4 20l1-4.5L15.5 5a2.1 2.1 0 0 1 3 3L8 18.5z"/><path d="M13.5 7l3 3"/>',
++  blocks: '<rect x="4" y="4" width="16" height="7" rx="1.5"/><rect x="4" y="13" width="16" height="7" rx="1.5"/>',
++  code: '<path d="M9 7l-5 5 5 5M15 7l5 5-5 5"/>',
++  eye: '<path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z"/><circle cx="12" cy="12" r="2.8"/>',
++  check: '<path d="M5 12.5l4.5 4.5L19 7.5"/>',
++  compose: '<path d="M11 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-5"/><path d="M17.5 3.5a2.1 2.1 0 0 1 3 3L12 15l-4 1 1-4z"/>',
++  sort: '<path d="M4 7h16M7 12h10M10 17h4"/>',
++  clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
++  "chevron-up": '<path d="M7 14l5-5 5 5"/>',
++  dots: '<path d="M6 12h.01M12 12h.01M18 12h.01"/>',
++  plus: '<path d="M12 5v14M5 12h14"/>',
++  // --- Scrittoio 2: le icone monocrome che una cartella o una nota sceglie --
++  book: '<path d="M5 4.5A1.5 1.5 0 0 1 6.5 3H19v15H6.5A1.5 1.5 0 0 0 5 19.5z"/><path d="M5 19.5A1.5 1.5 0 0 0 6.5 21H19v-3"/>',
++  calendar: '<rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 10h16M8 3v4M16 3v4"/>',
++  star: '<path d="M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8L12 16.9l-5.2 2.7 1-5.8L3.5 9.7l5.9-.9z"/>',
++  flag: '<path d="M5 21V4"/><path d="M5 4h11l-2 4 2 4H5"/>',
++  bulb: '<path d="M9 18h6M10 21h4"/><path d="M12 3a6 6 0 0 0-3.5 10.9c.6.5 1 1.2 1 2.1h5c0-.9.4-1.6 1-2.1A6 6 0 0 0 12 3z"/>',
++  inbox: '<path d="M4 13l2.5-8h11L20 13v6a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1z"/><path d="M4 13h4.5l1 2h5l1-2H20"/>',
++  archive: '<rect x="3" y="4" width="18" height="5" rx="1"/><path d="M5 9v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V9M10 13h4"/>',
++  image: '<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="1.8"/><path d="M21 16l-5-5-9 9"/>',
++  heart: '<path d="M12 20s-7.5-4.6-7.5-10A4.5 4.5 0 0 1 12 7.2 4.5 4.5 0 0 1 19.5 10c0 5.4-7.5 10-7.5 10z"/>',
++  briefcase: '<rect x="3" y="7" width="18" height="13" rx="2"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2M3 13h18"/>',
++  people: '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><path d="M16 4.6a3.5 3.5 0 0 1 0 6.8M18 14.2a6.5 6.5 0 0 1 3.5 5.8"/>',
++  music: '<path d="M9 18V5l11-2v13"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="17.5" cy="16" r="2.5"/>',
+ };
+ 
+ /// L'SVG di un'icona, come stringa HTML pronta per `innerHTML`.
+diff -ruN a/crates/fub-canvas-wasm/src/api.rs b/crates/fub-canvas-wasm/src/api.rs
+--- a/crates/fub-canvas-wasm/src/api.rs
++++ b/crates/fub-canvas-wasm/src/api.rs
+@@ -98,6 +98,8 @@
+             OpError::DuplicateId { id, .. } => ("DuplicateId", Some(id)),
+             OpError::TooMany { .. } => ("TooMany", None),
+             OpError::Invalid { .. } => ("Invalid", None),
++            OpError::UnknownStroke { id, .. } => ("UnknownStroke", Some(id)),
++            OpError::ForeignLayer { .. } => ("ForeignLayer", None),
+         };
+         failure
+             .detail

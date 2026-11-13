@@ -11,7 +11,8 @@ import foglio from "../../public/avvio/avvio.css?raw";
 import { DEFAULT_ACCENT_HUE, VARIANTS, palette, type ContrastLevel, type Light } from "../theme/scrittoio/recipe";
 
 /// Ogni variabile dello strato, col ruolo della ricetta da cui si legge. Le
-/// prime otto sono le stesse di `COLORI` in `consegna.ts`.
+/// prime otto e le ultime cinque, la cartella del logo (D26), sono le stesse
+/// di `COLORI` in `consegna.ts`.
 const RUOLI: Readonly<Record<string, string>> = {
   sfondo: "bg",
   testo: "text",
@@ -24,6 +25,11 @@ const RUOLI: Readonly<Record<string, string>> = {
   velo: "overlay-hover",
   "velo-forte": "overlay-active",
   ombra: "shadow-2",
+  cartella: "logo-cartella",
+  "cartella-retro": "logo-cartella-retro",
+  "cartella-ombra": "logo-cartella-ombra",
+  "foglio-1": "logo-foglio-1",
+  "foglio-2": "logo-foglio-2",
 };
 
 type Dichiarazioni = Record<string, string>;

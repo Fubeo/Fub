@@ -33,7 +33,7 @@ import {
 } from "./cursor-elements";
 import { pairElementsAt } from "./empty-pair";
 import { addProperty, canMoveProperty, moveProperty } from "./properties";
-import { colorsAt, CONTENT_COLORS, setContentColor } from "./color";
+import { canSetContentColor, colorsAt, CONTENT_COLORS, setContentColor } from "./color";
 import {
   dedentListItem,
   deleteTableColumn,
@@ -1102,7 +1102,7 @@ function colorActions(): [string, MarkdownAction][] {
       entries.push([`${prefix}.${color ?? "default"}`, {
         run,
         active: (state) => colorsAt(state)[kind] === color,
-        applicable: wouldRun(run),
+        applicable: canSetContentColor(kind, color),
         prose: true,
       }]);
     }

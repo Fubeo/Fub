@@ -1,0 +1,994 @@
+[
+{
+"id": "g2-menu",
+"scena": "menu",
+"mods": [
+"cornice",
+"banda",
+"modo"
+]
+},
+{
+"id": "g2-menu-700",
+"scena": "menu",
+"mods": [
+"cornice",
+"banda",
+"modo"
+],
+"dopo": 700,
+"modsDopo": [
+"modo"
+]
+},
+{
+"id": "g2-vault",
+"scena": "vault-chip",
+"mods": [
+"cornice",
+"banda",
+"modo"
+]
+},
+{
+"id": "g2-vault-700",
+"scena": "vault-chip",
+"mods": [
+"cornice",
+"banda",
+"modo"
+],
+"dopo": 700,
+"modsDopo": [
+"modo"
+]
+},
+{
+"id": "g2-attivita",
+"scena": "activity",
+"mods": [
+"cornice",
+"banda",
+"modo",
+"via"
+]
+},
+{
+"id": "g2-attivita-700",
+"scena": "activity",
+"mods": [
+"cornice",
+"banda",
+"modo",
+"via"
+],
+"dopo": 700,
+"modsDopo": [
+"modo"
+]
+},
+{
+"id": "g2-ispettore-0",
+"scena": "g2-ispettore-0",
+"mods": [
+"nota",
+"modo"
+]
+},
+{
+"id": "g2-ispettore-1",
+"scena": "g2-ispettore-1",
+"mods": [
+"nota",
+"modo"
+]
+},
+{
+"id": "g2-ispettore-2",
+"scena": "g2-ispettore-2",
+"mods": [
+"nota",
+"modo"
+]
+},
+{
+"id": "g2-ispettore-3",
+"scena": "g2-ispettore-3",
+"mods": [
+"nota",
+"modo"
+]
+},
+{
+"id": "g2-ispettore-chiuso",
+"scena": "g2-ispettore-chiuso",
+"mods": [
+"nota",
+"modo"
+]
+},
+{
+"id": "g2-imp-editor",
+"scena": "g2-imp-editor",
+"mods": [
+"cornice",
+"banda",
+"modo",
+"via"
+]
+},
+{
+"id": "g2-imp-vault",
+"scena": "g2-imp-vault",
+"mods": [
+"cornice",
+"banda",
+"modo",
+"via"
+]
+},
+{
+"id": "g2-imp-diagnostica",
+"scena": "g2-imp-diagnostica",
+"mods": [
+"cornice",
+"banda",
+"modo",
+"via"
+]
+},
+{
+"id": "g2-imp-profili",
+"scena": "g2-imp-profili",
+"mods": [
+"cornice",
+"banda",
+"modo",
+"via"
+]
+},
+{
+"id": "g2-imp-tasti",
+"scena": "g2-imp-tasti",
+"mods": [
+"cornice",
+"banda",
+"modo",
+"via"
+]
+},
+{
+"id": "g2-imp-info",
+"scena": "g2-imp-info",
+"mods": [
+"cornice",
+"banda",
+"modo",
+"via"
+]
+},
+{
+"id": "g2-imp-info-700",
+"scena": "g2-imp-info",
+"mods": [
+"cornice",
+"banda",
+"modo",
+"via"
+],
+"dopo": 700,
+"modsDopo": [
+"modo"
+]
+},
+{
+"id": "g2-menu-riquadro",
+"scena": "g2-menu-riquadro",
+"mods": [
+"nota",
+"modo"
+]
+},
+{
+"id": "g2-due-riquadri",
+"scena": "g2-due-riquadri",
+"mods": [
+"nota",
+"modo"
+]
+},
+{
+"id": "g2-due-riquadri-700",
+"scena": "g2-due-riquadri",
+"mods": [
+"nota",
+"modo"
+],
+"dopo": 700,
+"modsDopo": [
+"modo"
+]
+},
+{
+"id": "g2-live-lettura",
+"scena": "g2-live-lettura",
+"mods": [
+"nota",
+"modo"
+]
+},
+{
+"id": "g2-trascina",
+"scena": "g2-trascina",
+"mods": [
+"nota",
+"modo"
+]
+},
+{
+"id": "g2-nuovo",
+"scena": "g2-nuovo",
+"mods": [
+"cornice",
+"banda",
+"modo"
+]
+},
+{
+"id": "g2-rinomina",
+"scena": "g2-rinomina",
+"mods": [
+"cornice",
+"banda",
+"modo"
+]
+},
+{
+"id": "g2-cestino",
+"scena": "g2-cestino",
+"mods": [
+"cornice",
+"banda",
+"modo",
+"via"
+]
+},
+{
+"id": "g2-cestino-700",
+"scena": "g2-cestino",
+"mods": [
+"cornice",
+"banda",
+"modo",
+"via"
+],
+"dopo": 700,
+"modsDopo": [
+"modo"
+]
+},
+{
+"id": "g2-cestino-vuoto",
+"scena": "g2-cestino-vuoto",
+"mods": [
+"cornice",
+"banda",
+"modo",
+"via"
+]
+},
+{
+"id": "g2-non-salvata",
+"scena": "g2-non-salvata",
+"mods": [
+"nota",
+"modo"
+]
+},
+{
+"id": "g2-non-salvata-700",
+"scena": "g2-non-salvata",
+"mods": [
+"nota",
+"modo"
+],
+"dopo": 700,
+"modsDopo": [
+"modo"
+]
+},
+{
+"id": "g2-salvataggio-fallito",
+"scena": "g2-salvataggio-fallito",
+"mods": [
+"nota",
+"modo"
+]
+},
+{
+"id": "g2-salvataggio-fallito-700",
+"scena": "g2-salvataggio-fallito",
+"mods": [
+"nota",
+"modo"
+],
+"dopo": 700,
+"modsDopo": [
+"modo"
+]
+},
+{
+"id": "g2-bozza",
+"scena": "g2-bozza",
+"mods": [
+"corniceConAvvisi",
+"banda",
+"datiNota",
+"modo",
+"via"
+]
+},
+{
+"id": "g2-bozza-700",
+"scena": "g2-bozza",
+"mods": [
+"corniceConAvvisi",
+"banda",
+"datiNota",
+"modo",
+"via"
+],
+"dopo": 700,
+"modsDopo": [
+"modo"
+]
+},
+{
+"id": "g2-bozza-divergente",
+"scena": "g2-bozza-divergente",
+"mods": [
+"corniceConAvvisi",
+"banda",
+"datiNota",
+"modo",
+"via"
+]
+},
+{
+"id": "g2-conflitto-lettura",
+"scena": "proto-nota",
+"mods": [
+"notaIn",
+"modo",
+"conflitto"
+],
+"modoNota": "reading"
+},
+{
+"id": "g2-conflitto-lettura-700",
+"scena": "proto-nota",
+"mods": [
+"notaIn",
+"modo",
+"conflitto"
+],
+"modoNota": "reading",
+"dopo": 700,
+"modsDopo": [
+"modo"
+]
+},
+{
+"id": "g2-compatta",
+"scena": "compact",
+"mods": [
+"cornice",
+"banda",
+"modo",
+"via"
+]
+},
+{
+"id": "g2-stretta",
+"scena": "narrow",
+"mods": [
+"cornice",
+"banda",
+"modo",
+"via"
+]
+},
+{
+"id": "g2-stretta-cassetto",
+"scena": "narrow-drawer",
+"mods": [
+"cornice",
+"banda",
+"modo"
+]
+},
+{
+"id": "g2-tema",
+"scena": "prefs-theme-settings",
+"mods": [
+"cornice",
+"banda",
+"modo",
+"via"
+]
+},
+{
+"id": "g2-app-esterne",
+"scena": "settings-external-apps",
+"mods": [
+"cornice",
+"banda",
+"modo",
+"via"
+]
+},
+{
+"id": "g2-titolo-rinomina",
+"scena": "title-rename",
+"mods": [
+"cornice",
+"banda",
+"modo"
+]
+},
+{
+"id": "g2-conferma",
+"scena": "confirm",
+"mods": [
+"cornice",
+"banda",
+"modo"
+]
+},
+{
+"id": "g2-lanciatore-anteprima",
+"scena": "launcher-preview",
+"mods": [
+"cornice",
+"banda",
+"modo"
+]
+},
+{
+"id": "g2-lanciatore-cerca",
+"scena": "launcher-search",
+"mods": [
+"cornice",
+"banda",
+"modo"
+]
+},
+{
+"id": "g2-foglio-selection",
+"scena": "grid-selection",
+"mods": [
+"cornice",
+"testataFile",
+"kitRibbon",
+"modo",
+"via"
+]
+},
+{
+"id": "g2-foglio-formula",
+"scena": "grid-formula",
+"mods": [
+"cornice",
+"testataFile",
+"kitRibbon",
+"modo",
+"via"
+]
+},
+{
+"id": "g2-foglio-resize",
+"scena": "grid-resize",
+"mods": [
+"cornice",
+"testataFile",
+"kitRibbon",
+"modo",
+"via"
+]
+},
+{
+"id": "g2-foglio-command-form",
+"scena": "grid-command-form",
+"mods": [
+"cornice",
+"testataFile",
+"kitRibbon",
+"modo",
+"via"
+]
+},
+{
+"id": "g2-foglio-ribbon-table",
+"scena": "grid-ribbon-table",
+"mods": [
+"cornice",
+"testataFile",
+"kitRibbon",
+"modo",
+"via"
+]
+},
+{
+"id": "g2-foglio-ribbon-keytips",
+"scena": "grid-ribbon-keytips",
+"mods": [
+"cornice",
+"testataFile",
+"kitRibbon",
+"modo",
+"via"
+]
+},
+{
+"id": "g2-foglio-ribbon-open",
+"scena": "grid-ribbon-open",
+"mods": [
+"cornice",
+"testataFile",
+"kitRibbon",
+"modo",
+"via"
+]
+},
+{
+"id": "g2-foglio-ribbon-palette",
+"scena": "grid-ribbon-palette",
+"mods": [
+"cornice",
+"testataFile",
+"kitRibbon",
+"modo",
+"via"
+]
+},
+{
+"id": "g2-foglio-ribbon-collapsed",
+"scena": "grid-ribbon-collapsed",
+"mods": [
+"cornice",
+"testataFile",
+"kitRibbon",
+"modo",
+"via"
+]
+},
+{
+"id": "g2-foglio-ribbon-readonly",
+"scena": "grid-ribbon-readonly",
+"mods": [
+"cornice",
+"testataFile",
+"kitRibbon",
+"modo",
+"via"
+]
+},
+{
+"id": "g2-foglio-commands-context-off",
+"scena": "grid-commands-context-off",
+"mods": [
+"cornice",
+"testataFile",
+"kitRibbon",
+"modo",
+"via"
+]
+},
+{
+"id": "g2-foglio-commands-table",
+"scena": "grid-commands-table",
+"mods": [
+"cornice",
+"testataFile",
+"kitRibbon",
+"modo",
+"via"
+]
+},
+{
+"id": "g2-foglio-commands-readonly",
+"scena": "grid-commands-readonly",
+"mods": [
+"cornice",
+"testataFile",
+"kitRibbon",
+"modo",
+"via"
+]
+},
+{
+"id": "g2-foglio-result-table",
+"scena": "grid-result-table",
+"mods": [
+"cornice",
+"testataFile",
+"kitRibbon",
+"modo",
+"via"
+]
+},
+{
+"id": "g2-foglio-result-empty",
+"scena": "grid-result-empty",
+"mods": [
+"cornice",
+"testataFile",
+"kitRibbon",
+"modo",
+"via"
+]
+},
+{
+"id": "g2-foglio-tab-inserisci",
+"scena": "proto-foglio",
+"mods": [
+"cornice",
+"testataFile",
+"kitRibbon",
+"modo",
+"clicca",
+"via"
+],
+"clicca": [
+".pane.focus .kit-ribbon-tabs .kit-tab >> nth=1"
+]
+},
+{
+"id": "g2-foglio-tab-layout",
+"scena": "proto-foglio",
+"mods": [
+"cornice",
+"testataFile",
+"kitRibbon",
+"modo",
+"clicca",
+"via"
+],
+"clicca": [
+".pane.focus .kit-ribbon-tabs .kit-tab >> nth=2"
+]
+},
+{
+"id": "g2-foglio-tab-formule",
+"scena": "proto-foglio",
+"mods": [
+"cornice",
+"testataFile",
+"kitRibbon",
+"modo",
+"clicca",
+"via"
+],
+"clicca": [
+".pane.focus .kit-ribbon-tabs .kit-tab >> nth=3"
+]
+},
+{
+"id": "g2-foglio-tab-dati",
+"scena": "proto-foglio",
+"mods": [
+"cornice",
+"testataFile",
+"kitRibbon",
+"modo",
+"clicca",
+"via"
+],
+"clicca": [
+".pane.focus .kit-ribbon-tabs .kit-tab >> nth=4"
+]
+},
+{
+"id": "g2-foglio-tab-revisione",
+"scena": "proto-foglio",
+"mods": [
+"cornice",
+"testataFile",
+"kitRibbon",
+"modo",
+"clicca",
+"via"
+],
+"clicca": [
+".pane.focus .kit-ribbon-tabs .kit-tab >> nth=5"
+]
+},
+{
+"id": "g2-foglio-tab-visualizza",
+"scena": "proto-foglio",
+"mods": [
+"cornice",
+"testataFile",
+"kitRibbon",
+"modo",
+"clicca",
+"via"
+],
+"clicca": [
+".pane.focus .kit-ribbon-tabs .kit-tab >> nth=6"
+]
+},
+{
+"id": "g2-foglio-secondo",
+"scena": "proto-foglio",
+"mods": [
+"cornice",
+"testataFile",
+"kitRibbon",
+"modo",
+"clicca",
+"via"
+],
+"clicca": [
+".pane.focus .kit-tabs[aria-label=\"Fogli\"] .kit-tab >> nth=1"
+]
+},
+{
+"id": "g2-doc-tab-inserisci",
+"scena": "document-docx",
+"mods": [
+"cornice",
+"banda",
+"testataFile",
+"kitRibbon",
+"modo",
+"clicca",
+"via"
+],
+"modo": "page",
+"clicca": [
+".pane.focus .kit-ribbon-tabs .kit-tab >> nth=1"
+]
+},
+{
+"id": "g2-doc-tab-disegna",
+"scena": "document-docx",
+"mods": [
+"cornice",
+"banda",
+"testataFile",
+"kitRibbon",
+"modo",
+"clicca",
+"via"
+],
+"modo": "page",
+"clicca": [
+".pane.focus .kit-ribbon-tabs .kit-tab >> nth=2"
+]
+},
+{
+"id": "g2-doc-tab-layout",
+"scena": "document-docx",
+"mods": [
+"cornice",
+"banda",
+"testataFile",
+"kitRibbon",
+"modo",
+"clicca",
+"via"
+],
+"modo": "page",
+"clicca": [
+".pane.focus .kit-ribbon-tabs .kit-tab >> nth=3"
+]
+},
+{
+"id": "g2-doc-tab-revisione",
+"scena": "document-docx",
+"mods": [
+"cornice",
+"banda",
+"testataFile",
+"kitRibbon",
+"modo",
+"clicca",
+"via"
+],
+"modo": "page",
+"clicca": [
+".pane.focus .kit-ribbon-tabs .kit-tab >> nth=4"
+]
+},
+{
+"id": "g2-doc-tab-visualizza",
+"scena": "document-docx",
+"mods": [
+"cornice",
+"banda",
+"testataFile",
+"kitRibbon",
+"modo",
+"clicca",
+"via"
+],
+"modo": "page",
+"clicca": [
+".pane.focus .kit-ribbon-tabs .kit-tab >> nth=5"
+]
+},
+{
+"id": "g2-doc-prestato",
+"scena": "docx-due-righe",
+"mods": [
+"cornice",
+"banda",
+"testataFile",
+"modo",
+"via"
+]
+},
+{
+"id": "g2-disegno-penna",
+"scena": "draw-open",
+"mods": [
+"cornice",
+"banda",
+"testataFile",
+"kitBar",
+"modo",
+"clicca",
+"via"
+],
+"modo": "drawing",
+"clicca": [
+".pane.focus .kit-rail .draw-tool[aria-label=\"Penna\"]"
+]
+},
+{
+"id": "g2-disegno-gomma",
+"scena": "draw-open",
+"mods": [
+"cornice",
+"banda",
+"testataFile",
+"kitBar",
+"modo",
+"clicca",
+"via"
+],
+"modo": "drawing",
+"clicca": [
+".pane.focus .kit-rail .draw-tool[aria-label=\"Gomma\"]"
+]
+},
+{
+"id": "g2-disegno-rettangolo",
+"scena": "draw-open",
+"mods": [
+"cornice",
+"banda",
+"testataFile",
+"kitBar",
+"modo",
+"clicca",
+"via"
+],
+"modo": "drawing",
+"clicca": [
+".pane.focus .kit-rail .draw-tool[aria-label=\"Rettangolo\"]"
+]
+},
+{
+"id": "g2-disegno-mano",
+"scena": "draw-open",
+"mods": [
+"cornice",
+"banda",
+"testataFile",
+"kitBar",
+"modo",
+"clicca",
+"via"
+],
+"modo": "drawing",
+"clicca": [
+".pane.focus .kit-rail .draw-tool[aria-label=\"Mano\"]"
+]
+},
+{
+"id": "g2-foto-senza",
+"scena": "photo-senza-xmp",
+"mods": [
+"cornice",
+"testataFile",
+"modo",
+"via"
+]
+},
+{
+"id": "g2-raw-girato",
+"scena": "raw-girato",
+"mods": [
+"cornice",
+"testataFile",
+"modo",
+"via"
+]
+},
+{
+"id": "g2-raw-senza",
+"scena": "raw-senza",
+"mods": [
+"cornice",
+"testataFile",
+"modo",
+"via"
+]
+},
+{
+"id": "g2-nota-pdf-senza",
+"scena": "nota-pdf-senza",
+"mods": [
+"cornice",
+"banda",
+"modo",
+"via"
+]
+},
+{
+"id": "g2-craft-peso",
+"scena": "craft-peso",
+"mods": [
+"cornice",
+"testataFile",
+"modo",
+"via"
+]
+},
+{
+"id": "g2-craft-fallita",
+"scena": "craft-fallita",
+"mods": [
+"cornice",
+"testataFile",
+"modo",
+"via"
+]
+},
+{
+"id": "g2-tel-doc-pannello",
+"scena": "mobile-document-panel",
+"mods": [
+"testata",
+"schede",
+"senzaAvvisi",
+"modo",
+"testataFile",
+"kitRibbon"
+]
+},
+{
+"id": "g2-tel-foglio-aperto",
+"scena": "mobile-grid-ribbon-open",
+"mods": [
+"testata",
+"schede",
+"senzaAvvisi",
+"modo",
+"testataFile",
+"kitRibbon"
+]
+},
+{
+"id": "g2-tel-sdraiato",
+"scena": "mobile-landscape",
+"mods": [
+"testata",
+"schede",
+"senzaAvvisi",
+"modo"
+]
+}
+]

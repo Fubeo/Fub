@@ -1,0 +1,26 @@
+/* → skin/centres.css */
+/* «Salvato» ha la spunta verde, non il punto grigio: il punto resta per ciò
+   che è in sospeso, e il rosso per ciò che è andato storto. Il bottone della
+   testata ripete la classe: al telefono `sheets/sheets.css` arriva dopo la
+   pelle e il suo `display: block` vincerebbe. */
+.save-state,
+.save-state.sheet-save {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-3);
+  font-size: var(--text-base);
+}
+.save-state:not(:empty)::before {
+  margin-right: 0;
+}
+.save-state[data-state="salvato"]::before {
+  box-sizing: border-box;
+  width: 5px;
+  height: 9px;
+  margin: -3px var(--space-1) 0 var(--space-1);
+  border-right: 1.5px solid var(--success);
+  border-bottom: 1.5px solid var(--success);
+  border-radius: 0;
+  background: transparent;
+  transform: rotate(45deg);
+}

@@ -18,7 +18,11 @@ dubbio su una scelta tecnica si decide, non si chiede.
 
 - l'ordine dei task pronti. Lavorano due coder alla volta (Opus,
   ragionamento medio) e nessun altro agente: è la regola dell'utente dal
-  2026-11-07 (dal 2026-11-04 era un coder solo), e la cambia solo l'utente;
+  2026-11-07 (dal 2026-11-04 era un coder solo), e la cambia solo l'utente.
+  Dal 2026-11-10 un task semplice può andare a un coder Haiku 5.5, e di
+  coder Haiku ne lavorano quanti ne servono (regola dell'utente): quale
+  task è semplice e quanti Haiku insieme lo decide l'orchestratore (vedi
+  «Il ramo, le consegne e i due coder» in `PLAN.md`);
 - il come che il piano approvato lascia aperto: nomi, tipi, dove sta una
   funzione, la forma di un messaggio d'errore, la forma dei test;
 - un piccolo refactor dentro i file del task;
@@ -99,6 +103,209 @@ ciò che non dipende dalla risposta.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-13 · fub-pre-alpha · `main` (d69f4da8c, con #343–#346) entra nel
+  ramo con un merge. R1 tiene le due correzioni di #284: dal ramo la raccolta
+  forzata (PA T62) e la lettura più bassa del minuto, da `main` (#344) trenta
+  giri e la pendenza di Theil e Sen. Perché: si coprono a vicenda (la raccolta
+  toglie il dente di sega, la mediana resiste alle letture fuori ritmo) e
+  nessuna delle due ha ancora una misura del runner che dica che l'altra
+  basta. Il prezzo è il job WebView più lungo (circa un minuto per giro):
+  quando c'è la prima misura del runner con tutte e due, si ritarano giri e
+  attesa, e si scrive qui.
+- 2026-11-11 · editor (EC T1) · Alt+↑/↓ nel profilo Markdown non attraversa il confine fra frontmatter e corpo, e Mod+D sulla testata del frontmatter non ne crea una seconda; il `Tocca` di EC T1 si allarga al comando del profilo e al suo test · Perché: il coder ha trovato che Alt+↑ sulla prima riga del corpo la porta dentro il frontmatter (il corpo perde la riga); la scelta che non perde dati vince, e i blocchi restano coerenti con la tastiera.
+- 2026-11-11 · anteprima · nel merge di `main` (riordino) dentro `anteprima/tutto`, che è solo locale, il motore della griglia resta quello del ramo della griglia (`grid/engine.ts` e `engine.test.ts` com'erano), e i moduli nuovi di `main` (`engine-geometry.ts`, `engine-host.ts`, `test-support.ts`, `engine.{objects,pointer,workbook}.test.ts`) escono dall'anteprima; i documenti in conflitto prendono la forma di `main` · Perché: portare il lavoro della griglia sui moduli nuovi è un task da coder Opus, da fare sul ramo della griglia quando riprende; l'anteprima serve a provare l'app, e il motore della griglia non cambia comportamento.
+- 2026-11-11 · fub-pre-alpha · `main` (6249d976b, riordino #323 e moduli #327–#333) entra con un merge in pre-alpha, N6, N4 e Scrittoio 2; nei conflitti di `docs/map/repo.md` e `dove-sta-x.md` resta la struttura nuova più le righe dei piani (il grafo dei crate ora sta solo in `docs/architecture/overview.md`) · Perché: meno resta fuori da `main`, meno costano i prossimi riordini.
+- 2026-11-10 · pa · L'utente aggiunge alla pre-alpha «L'editor di Fub» (https://claude.ai/artifact/EYe7e9baTxYujXXnPirXjw): «questo si aggiunge al piano». Entra in Fase C come un piano suo, `piano/editor-completo`; il `PLAN.md` lo scrive `/pianifica` (l'orchestratore non avvia pianificatori); D15 e D17 restano sulla consigliata · Perché: 83 task con Tocca e Non toccare vanno disegnati prima di darli ai coder, e la regola degli agenti lascia all'utente l'avvio del pianificatore.
+- 2026-11-10 · fub-pre-alpha (utente) · i coder Haiku lavorano con
+  `effort: "xhigh"`, non più `max`. Perché: lo chiede l'utente («cambia gli
+  haiku coder da qui in avanti da effort max a xhigh»). Vale per i coder
+  avviati da qui in avanti; quelli già al lavoro finiscono come sono partiti.
+  Con lo stesso effort girano i tester del collaudo (uno alla volta,
+  `~/.cache/fub-prealpha/collaudo/`, difetti in
+  `~/.cache/fub-prealpha/funzionalitarotte.md`).
+
+- 2026-11-10 · fub-pre-alpha (utente) · a Haiku vanno anche task medi,
+  non solo i ritocchi: restano a Opus solo quelli molto complessi (scelte
+  di disegno aperte, contratti pubblici e formati su disco, sicurezza,
+  movimento e resa delicati, prototipi, molte aree insieme) · parole
+  dell'utente: «Haiku non è affatto scarso come coder, quindi semplici sì,
+  ma non proprio rinominare i file e basta […] non parliamo di cose
+  estremamente complesse, ma nemmeno solo quelle due bischerate».
+- 2026-11-10 · fub-pre-alpha (utente) · i task semplici li può fare un
+  coder Haiku 5.5, senza un numero massimo; tutti gli altri restano a Opus
+  medio, due alla volta. Sostituisce «mai Sonnet né Haiku» del 2026-11-08.
+  Parole dell'utente: «se c'è un compito particolarmente semplice che può
+  essere fatto da Haiku 5.5, potresti assegnarlo a lui. Per il resto dei
+  task, Opus 5.5 medio. Per quanto riguarda i task semplici, puoi
+  letteralmente avviarne quante ne vuoi di Haiku», e poi «Haiku puoi
+  metterlo anche con effort max» (quindi `effort: "max"`) · i task piccoli e chiusi
+  non devono aspettare uno dei due posti Opus. Il limite vero è il
+  computer (15 GB di RAM, 20–45 GB di `target/` per worktree), e la
+  revisione resta la stessa per tutti.
+- 2026-11-09 · PA (dopo il piano) · le funzioni avanzate non ancora
+  provate a fondo si potranno nascondere in una versione ridotta e solida:
+  spente e invisibili di serie, con un gruppo «In prova» chiuso in
+  Impostazioni › Componenti per chi vuole accenderle; si scoprono una alla
+  volta man mano che l'utente le prova. Scelta dell'utente fra «Spente +
+  In prova», «Nascoste del tutto» e «Tolte dal programma». Non si fa ora:
+  è lavoro dopo la fine del piano pre-alpha, e né l'elenco delle funzioni
+  né i coder cambiano. Da ricordare quando si pianifica: un vault senza
+  chiavi `components.*` oggi vale «tutto acceso», quindi il «nascosto di
+  serie» deve stare nel canale della build, non nel profilo del vault.
+- 2026-11-09 · PA T49 (D28) · il logo Marcuzzo e il nome «Fub» non sono
+  open: «tutti i diritti riservati» per i file del logo (`assets/logo/`,
+  le icone dell'app) e una regola scritta sul marchio (per esempio
+  `TRADEMARKS.md` alla radice, come Firefox e Rust): un fork deve togliere
+  Marcuzzo e cambiare nome, e non può presentarsi come Fub; il codice resta
+  `MIT OR Apache-2.0`. Sostituisce il consiglio CC BY-SA di D28 · l'utente:
+  «io voglio che nessuno possa forcare mettendo il logo di Marcuzzo, però il
+  resto del codice è chill», e alla domanda sul nome: «Logo e nome». La
+  catena del logo: immagine da Google Flow (i termini di Google: Google non
+  rivendica la proprietà dei contenuti generati), vettoriale con Recraft,
+  ritocchi in ArtCraft. Resta da sapere il piano di Recraft usato: col
+  piano gratuito i termini di Recraft dicono che l'immagine resta di
+  Recraft, senza uso commerciale; coi piani a pagamento è dell'utente.
+  L'utente ha usato Recraft con una chiave API di OpenRouter, cioè a
+  pagamento: Recraft dice che chi genera con l'API possiede l'immagine, e
+  OpenRouter rimanda ai termini del modello. D28 è chiusa, T49 può partire.
+- 2026-11-09 · K5 T9 · la licenza IJG di `jpeg-encoder` entra con
+  un'eccezione stretta in `deny.toml` (solo quel crate) e la frase di
+  ringraziamento in `THIRD_PARTY_NOTICES.md`; l'IJG non entra nell'elenco
+  generale · l'utente, fra A (eccezione stretta), B (IJG sempre ammessa) e
+  C (l'encoder di `image`): «A». L'utente vuole che le immagini restino di
+  chi le crea e nessuna responsabilità per i file rovinati: l'IJG non tocca
+  né l'una né l'altra (esclude anche lei ogni garanzia).
+- 2026-11-09 · S2 T29 · il visore del PDF disegna le annotazioni del
+  `.fubann` sopra le pagine, in sola lettura, con l'interruttore «Mostra le
+  annotazioni»; «Annota» resta per modificarle · l'utente, fra tre strade
+  (il visore le mostra, aprire già annotato, solo un avviso): «Visore le
+  mostra». Il task va in S2 e non in PA perché la barra del PDF e la sua
+  pagina sono di S2 T18, che non è ancora in `main`: un task PA sulla barra
+  di `main` farebbe conflitto alla fusione di #309.
+- 2026-11-09 · K2 · #290 unita in `main` (cd080044) dopo la prova D-2
+  dell'utente e la CI completa verde; le sei baseline nuove
+  (`settings-components-*`, `new-vault-profile-*`, `mobile-settings-*`)
+  vengono dall'artifact del runner; la pagina del contratto dei componenti
+  è separata da `ipc-contract.md` per stare nel tetto delle pagine. Un rosso
+  di `d43-misura-delle-colonne` visto una volta e verde al secondo giro:
+  da aprire come issue se torna. Perché: è la regola D13 A, e la soglia di
+  merge alta (CI completa, diff letto, baseline guardate).
+- 2026-11-09 · PA, S2, K5 · `main` unita nei rami dei piani dopo #290;
+  `check-scope.mjs` tiene la forma di `main` (ogni file fuori dai crate) più
+  il riconoscimento dei percorsi relativi che K5 aveva aggiunto. Perché:
+  la forma di `main` copre anche le doc, quella di K5 i test che leggono
+  `"../../apps/client/src/…"`; insieme non perdono nessun caso.
+- 2026-11-09 · griglia T2 · la soglia del gestore dello scorrimento, che il
+  piano lascia all'orchestratore dopo la prima misura: nel banco G2 (14
+  rotelle da 900 px), sui quattro giri, gestore p90 ≤ 12 ms e peggiore
+  ≤ 30 ms, fotogramma chiesto peggiore ≤ 20 ms; T2 rimandato al coder prima
+  dell'integrazione · la prima versione toglie il bianco (1 px contro 424) ma
+  porta il peggiore del gestore a 53–59 ms (base 28–40) quando arriva una
+  finestra di celle: un compito lungo mentre si scorre è peggio di prima, e
+  nessun task dopo T2 tocca `#showView`. Il coder misura dove va il tempo e
+  controlla se il tab-order rosso al buio (grid-editing, grid-formula) c'era
+  già sulla base.
+- 2026-11-09 · K2 · dopo il merge di main `docs/reference/ipc-contract.md`
+  passava la soglia (589 righe contro 550): la sezione «Componenti» è
+  diventata `docs/reference/components-contract.md`, con un riassunto e il
+  link nel contratto IPC, come la sessione live · spezzare per argomento è la
+  regola delle pagine; i cinque test vitest rossi del controllo rapido erano
+  di tempo sotto carico, verdi rilanciati da soli. #290 segnata pronta a
+  be4b179a, CI completa in corso.
+- 2026-11-09 · griglia T1 · integrato con le differenze del coder: la
+  cartella grande sta fra le scene dei soli gesti (niente baseline né a11y),
+  i livelli dei segni sono a misura zero e li taglia `clip-path` (con livelli
+  grandi quanto la zona axe non misurava più il contrasto delle celle), il
+  piano è largo e alto quanto il foglio (era la causa della colonna ferma che
+  scivolava dopo ~430 px) · i tre controlli G1 sono verdi (0 fotogrammi
+  diversi, altezza 29 px contro 27 ±2, quadratino intero 8×8) e le foto
+  combaciano col prototipo; `clip-path` è provato solo in Chromium, la prova
+  in WebKit resta per T8. Il coder ha usato per sbaglio la porta 1431 nelle
+  prime prove del banco (nessun servizio lì, ora spenta): nei brief va scritto
+  `FUB_BENCH_PORT` esplicito.
+- 2026-11-09 · K2 · la prova di D-2 è fatta dall'utente da solo sulla 1432
+  (i cinque compiti: «mi sembrava che funzionasse»), dopo tre correzioni
+  della sola 1432 (componenti, «Annota il PDF» e il `.fubann` dal ponte;
+  SHA-256 in JavaScript fuori da https): #290 si allinea a `main` e si segna
+  pronta. Dalla prova tre difetti del programma, da mettere in un task: la
+  «Struttura» ferma sulla nota di prima quando si apre un PDF, la nota
+  d'errore delle annotazioni alta un riquadro, i tratti fuori pagina dopo il
+  ripiego A4 · D-2 chiede il resoconto prima di segnarla pronta, e l'utente
+  ha detto che le prove con altre persone si rinviano.
+- 2026-11-09 · K5 T6 · integrato senza aspettare la licenza IJG di
+  `jpeg-encoder` (lo usa `render` per il JPEG): oggi `cargo deny` di Fub è
+  verde perché nessun crate di Fub dipende dal motore, diventa rosso a T9; la
+  scelta (eccezione in `deny.toml`, IJG nell'elenco, o una patch 0003 che usa
+  l'encoder di `image`) è dell'utente, perché tocca la politica delle licenze ·
+  la regola «deny.toml solo chiedendo»; T7 e i task del client non ne
+  dipendono. In CI: due passi `check` e i test del workspace di VectorCraft
+  accanto a GridCraft; `vectorcraft` nella matrice di `motori-upstream.yml`,
+  le due librerie di craft-libs no (lo stesso repository aprirebbe due issue
+  per un tag).
+- 2026-11-09 · pre-alpha (utente) · rinviati: la prova con cinque persone
+  (PA T17, e ciò che la usa), il giro a mano sugli installer (PA T23,
+  «con calma quando avrò tempo») e la firma di Windows (PA T50, D20
+  sospesa: niente spese ora, si decide alla release); la prova di K2 (D-2)
+  la fa l'utente da solo · «tu fai il codice […] accontentiamoci di me che
+  provo il codice»; i coder lavorano sui task sbloccati di ogni fase mentre
+  un task aspetta l'utente.
+- 2026-11-09 · k5 (orchestratore) · K5 T6: il PDF del motore si spegne
+  togliendo `vectorcraft-pdf` ed `eps` dal grafo di `engine` (patch 0002,
+  codice dietro `cfg`), non con una feature spenta; `vendor.mjs check` si
+  allarga in T6 (righe radice facoltative fino a T9, nomi come
+  `craft-docpath`, percorsi con il trattino) e le due librerie hanno un
+  `Cargo.toml` di workspace di Fub · Cargo risolve nel lock anche le
+  dipendenze facoltative dei membri, e `craft-pdf` non è su crates.io né si
+  copia (D-2 (a) dell'utente: il PDF resta spento); copiarlo (D-2 (b)) o
+  prenderlo da Git cambierebbe la risposta dell'utente o la politica delle
+  fonti. La patch è grande (circa 56 file): si propone a monte.
+- 2026-11-09 · scrittoio-2 (orchestratore) · S2 T9 aggiunge l'intento
+  non privilegiato `fub.inspector.tab` (`fub_abi::ui::INSPECTOR_TAB_NS`,
+  payload `{ view }`): «e altri N» sotto la Struttura porta ai Collegamenti;
+  si accetta come aggiunta additiva, documentata nel contratto IPC · il
+  registro delle view non aveva un modo di cambiare scheda dell'ispettore,
+  e l'intento cambia solo ciò che si guarda, quindi non serve privilegio.
+- 2026-11-09 · scrittoio-2 (orchestratore) · `bench:a11y` rosso in 119
+  scene su «3 collegamenti» (S2 T12, già integrato): Invio e Spazio
+  lanciavano l'azione senza un clic; corretto dall'orchestratore (b22a6650)
+  perché sono poche righe, prima di integrare T27, T28, T9 e T13 · da ora
+  ogni integrazione chiude su `bench:a11y` sul ramo unito, non solo su
+  quello del coder; il disco pieno (ENOSPC, 0 byte) aveva fermato i giri
+  finali dei coder, ora si fa `cargo clean` nei worktree finiti.
+- 2026-11-09 · scrittoio-2 (orchestratore) · S2 T21 si integra con il
+  banco dell'accessibilità rosso solo su `conflitto-lettura` (il clic sulla
+  riga della nota va in timeout), rosso già prima del task e fuori dai suoi
+  file; il gruppo «Carattere» del documento entra fra quelli che si
+  raccolgono, in T28 · il clic rosso è un seguito già aperto del ramo;
+  senza «Carattere» fra i raccolti il telefono non è come il prototipo
+  approvato e a 700 px il gruppo resta tagliato.
+- 2026-11-09 · scrittoio-2 (utente, orchestratore) · nuovo S2 T28: la
+  barra a schede del documento accende il movimento del kit
+  (`motion: true`) come la barra dei fogli, con la tenda sopra il vassoio;
+  dopo T21, che le dà l'apertura sul posto · l'utente vuole le animazioni
+  della barra dei fogli (K3 T18–T19) in tutte le barre a schede; il piano
+  S2 le aveva lasciate fuori, e una sonda ha misurato che nel documento si
+  muove solo il segno della sezione. Il movimento resta scritto una volta,
+  nel kit; le barre in una fila non hanno sezioni né tenda, e restano come
+  sono.
+- 2026-11-09 · fub-pre-alpha · nuovo PA T62: un gancio di fub-app, spento
+  di serie e acceso solo dal banco, fa raccogliere la WebView prima di ogni
+  lettura di R1 (#284) · T21 ha mostrato che il minimo in 60 s non basta, e
+  ogni rosso a caso allunga una consegna di mezz'ora; le soglie non si
+  alzano, perché nasconderebbero una perdita vera.
+- 2026-11-08 · fub-pre-alpha (utente) · le consegne diventano più grandi e
+  più rare: una ogni 12–15 task integrati, o una per traguardo (per esempio
+  «Scrittoio 2 completo»); la CI completa (Windows, macOS, banchi e baseline
+  dal runner) gira solo sulle consegne; sul ramo del piano resta la CI corta
+  di ogni push, che l'orchestratore non aspetta; i coder lavorano ai task
+  successivi mentre la CI va avanti · la CI non ferma la scrittura del
+  codice, ma la CI completa e le baseline costano; una CI sola alla fine
+  mescolerebbe i difetti di centinaia di task, e le baseline non si
+  potrebbero più guardare una per una.
+- 2026-11-08 · fub-pre-alpha (utente) · i coder restano Opus medio, mai
+  Sonnet né Haiku · la rilavorazione e i giri di CI in più costano più del
+  tempo che un modello più leggero risparmierebbe.
+
 - 2026-11-13 · K5 T30 · il piano si chiude col sì dell'utente; restano fuori, come issue o limiti noti: il tetto alle istanze dei motori per vault (`issue-istanze-motore.md`), i `detail` delle parti solo in italiano, il campo «Testo» per un `<text>` senza `tspan`, `ripristina` fuori da `catch_panic`, le proposte a monte per VectorCraft (bozza non inviata) e il test instabile `close_a_vault_and_latest_round_in_which_and_again_open` visto una volta sotto carico · non cambiano il comportamento che K5 promette, e ognuno è più piccolo o più largo del piano.
 - 2026-11-13 · K5 T30 · la prova sull'app vera ha trovato gli errori delle sei porte del disegno consegnati con la chiave del catalogo (un oggetto sul filo): il client leggeva ogni `unserved` come un guasto, e un disegno riaperto a motore spento restava «fermo» anche dopo la riaccensione. Corretto nel proprietario, `fub-app` (`drawing_port` passa da `for_the_shell`, come Componenti), non rilassando `asPluginError` nel client; il `BadArgs` di un sync resta un fermo della sessione (con «Riprova») e si sono corretti commento e docs che dicevano il contrario · il contratto vuole messaggi già tradotti, e cambiare il comportamento della sessione in T30 non serviva: un `BadArgs` del sync è solo un difetto, e il fermo è la strada sicura.
 - 2026-11-13 · K5 T23 · accettati i due `kind` nuovi del chip (`reduced`, `stopped`) in `editors/core/registry.ts` al posto di `body`, e il ramo resta con `bench/scene.test.ts` rosso finché le 6 baseline delle scene nuove non arrivano dal runner (primo passo di T30) · Perché: il prototipo approvato usa quei due segni (vuoto e rosso), e le baseline si fanno solo sul runner Linux.
@@ -126,13 +333,6 @@ La più recente in cima: data · piano · decisione · perché.
   (come per WordCraft e GridCraft) e le patch si riformattano senza
   cambiare effetto · scelta dell'orchestratore fra questo e togliere
   `vendor/` dal controllo di fmt, che sarebbe diverso per motore.
-- 2026-11-09 · K5 T9 · la licenza IJG di `jpeg-encoder` entra con
-  un'eccezione stretta in `deny.toml` (solo quel crate) e la frase di
-  ringraziamento in `THIRD_PARTY_NOTICES.md`; l'IJG non entra nell'elenco
-  generale · l'utente, fra A (eccezione stretta), B (IJG sempre ammessa) e
-  C (l'encoder di `image`): «A». L'utente vuole che le immagini restino di
-  chi le crea e nessuna responsabilità per i file rovinati: l'IJG non tocca
-  né l'una né l'altra (esclude anche lei ogni garanzia).
 - 2026-11-12 · Scrittoio 2 T26 · S3 restava rosso anche con l'ombra senza sfocatura (1235–2332 ms in tre corse): le corse CI con la cronologia dei fotogrammi (rami `prova/s3-*`) mostrano che il buco cade prima del primo `pointerdown`, nel primo disegno delle 300 schede (lavagna ferma a 1798 ms su main, 2582–2636 sul ramo), e che lo spostamento costa uguale (130–210 ms a fotogramma). Togliere `translateZ(0)` da `.pane::before` non accorcia l'apertura (2718 ms) e porta S1 a 537 ms: lo strato resta. Il difetto è di S3, che misurava dalla prima scheda: corretto in main con la PR #342 (`S3.apertura` solo referto). Baseline dell'ombra nuova dal runner (c965ede72, run 43160817254): 137 scene chiare, cambia solo l'anello dell'ombra. Il merge finale lo decide l'orchestratore, non più l'utente · parole dell'utente: «ma non eravamo d'accordo sul fatto che i merge li decidevi tu?». Delle cinque domande di gusto resta aperta solo il vassoio della barra a una riga e della colonna (vedi 2026-11-04).
 - 2026-11-11 · Scrittoio 2 T26 · la WebView del runner era rossa due volte su S3 (massimo fra fotogrammi 1754 e 1806 ms, soglia 1600; main 471): rilanciata una volta, poi indagata; la causa è la `box-shadow` sfocata a tre strati del foglio (T27), che WebKit senza GPU ridipinge a ogni passo della camera (~20 ms a fotogramma); ogni strato sfocato diventa una pila di ombre nette (`sharpLayers` in `recipe.ts`), stessa forma entro pochi livelli di colore; misura con la WebKitGTK di Playwright: max 74→49 ms (main 58) · Perché: l'utente vuole l'app «estremamente fluida» e il foglio con l'ombra approvata si tiene uguale a occhio.
 - 2026-11-05 · K2 · Il componente «File delle app Craft» (`fub.craft`, N7,
@@ -2070,3 +2270,4 @@ La più recente in cima: data · piano · decisione · perché.
   dati di T12 spinge l'ultima del DOM sotto la banda); la pastiglia del titolo non
   fa più crescere la riga del cursore (salto di 7–9 px, già su `main`) · le
   baseline di T25 si prendono dopo, con questi cambi dentro.
+- 2026-11-13 · PA T12 · accettate tre deviazioni dal testo del task: (1) la storia dell'annulla si svuota solo quando una cella che la storia tocca non ha più l'input lasciato dall'ultima voce (la storia tiene già l'input confermato dal provider, `0.250` → `0.25`), non a ogni riscrittura; (2) l'avviso «mentre scrivevi» scatta solo se cambia un'altra cella, non quella aperta; (3) la bozza segue la sua riga per id se la riga si sposta (sulla base finiva nella riga sbagliata), e la colonna cancellata fa come la riga · Perché: svuotare a ogni riscrittura cancellerebbe l'annulla a ogni salvataggio, perché l'eco del proprio salvataggio è anch'essa una riscrittura; la regola del piano («un annulla non riporta i dati di prima») resta vera. Da provare sull'app vera: gli appunti scritti fuori da un gesto possono essere negati (il testo resta nell'avviso).

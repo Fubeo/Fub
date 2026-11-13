@@ -42,14 +42,14 @@ Editor in-cell e formula bar usano due istanze di `TextEngine` con
 nel giornale, lo pubblica subito alla sessione e lo consegna al provider, che
 controlla le preimmagini sulla revisione, rifiuta le celle bloccate e risponde
 con le celle da rileggere. Le modifiche in coda partono una dopo l'altra.
-Finché il giornale ha soltanto celle l'undo è locale alla superficie; in
-modalità a comandi annulla e ripeti sono del documento (`edit.undo`,
-`edit.redo`). Un giornale cambiato altrove (un altro
-riquadro, un salvataggio, una ricarica) riapre la sessione e chiude la
-precedente; la bozza aperta resta, con il cursore e il fuoco. Se la sua cella
-è cambiata sotto, un avviso chiede «Tieni la tua» o «Prendi quella nuova»; se
-il foglio non c'è più, la bozza si chiude e l'avviso lo dice. Se non c'è una
-superficie compatibile,
+Finché il giornale ha soltanto celle l'undo è locale alla superficie; a
+comandi annulla e ripeti sono del documento (`edit.undo`, `edit.redo`). Un
+giornale cambiato altrove riapre la sessione; la bozza resta e segue la sua
+riga. Se la sua cella è cambiata sotto, un avviso chiede «Tieni la tua» o
+«Prendi quella nuova»; se la riga non c'è più, la bozza va negli appunti;
+se il foglio non c'è più, si chiude con l'avviso. Con la bozza aperta,
+un'altra cella cambiata lo dice nell'avviso. Una cella della storia cambiata
+svuota l'annulla, con avviso. Se non c'è una superficie compatibile,
 la sessione non si apre o una finestra fallisce, la superficie dichiara
 `data-grid-protocol="unavailable"`, lo dice nell'avviso e non scrive; il
 linguaggio delle formule non si duplica in TypeScript.

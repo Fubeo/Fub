@@ -1,0 +1,140 @@
+/* → skin/drawers.css */
+/* ── La striscia degli spazi: un pozzetto ────────────────────────────────── */
+/* Gli spazi stanno in un pozzetto come le schede dell'ispettore: l'acceso è un
+   foglietto con icona e nome, gli altri solo l'icona (il nome è l'etichetta
+   accessibile). «+» resta fuori, il più discreto. Non va più a capo. */
+.space-strip {
+  flex-wrap: nowrap;
+  gap: var(--space-3);
+  min-height: var(--tab-h);
+  padding: 0 0 0 var(--space-2);
+}
+.space-well {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 1 auto;
+  gap: var(--space-1);
+  min-width: 0;
+  padding: var(--space-1);
+  overflow: hidden;
+  border-radius: var(--radius-control);
+  background: var(--bg-hover);
+}
+.space-chip {
+  flex: none;
+  gap: var(--space-3);
+  min-width: 32px;
+  height: 26px;
+  padding: 0 var(--space-3);
+  border-radius: var(--radius-chip);
+  background: transparent;
+  color: var(--muted);
+  font-size: var(--text-base);
+}
+.space-chip:hover,
+.space-chip:active {
+  background: var(--overlay-hover);
+  color: var(--text);
+}
+.space-chip > svg,
+.space-chip-icon > svg {
+  width: 16px;
+  height: 16px;
+}
+.space-chip-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  font-size: 14px;
+  line-height: 1;
+}
+.space-chip-name {
+  display: none;
+}
+.space-chip[aria-pressed="true"] {
+  padding: 0 var(--space-5) 0 var(--space-4);
+  background: var(--bg-elev);
+  box-shadow: var(--shadow-1);
+  color: var(--text);
+  font-weight: var(--weight-medium);
+}
+.space-chip[aria-pressed="true"] > .space-chip-name {
+  display: inline;
+}
+.space-chip.add {
+  min-width: 28px;
+  height: 28px;
+  border-radius: var(--radius-chip);
+  font-size: var(--text-xl);
+  font-weight: var(--weight-regular);
+}
+
+/* ── Il titolo del cassetto e le sue azioni a icona ──────────────────────── */
+.sidebar .panel-title {
+  padding: 0 var(--space-1) 0 var(--space-4);
+}
+/* Fra la striscia degli spazi e il titolo un respiro, come nel mockup. */
+.space-strip + .panel-title {
+  margin-top: var(--space-4);
+  font-size: var(--text-lg);
+  font-weight: var(--weight-bold);
+}
+.panel-title-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+.icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-chip);
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+.icon-button > svg {
+  width: 16px;
+  height: 16px;
+}
+.icon-button:hover {
+  background: var(--overlay-hover);
+  color: var(--text);
+}
+.icon-button:active {
+  background: var(--overlay-active);
+}
+.icon-button:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: -2px;
+}
+
+/* ── Le etichette di sezione: in tondo, non in maiuscoletto ─────────────── */
+/* «Appuntate», «Tutte le note 18»: una parola in grafite, a destra il conto. */
+.files-panel .panel-title ~ .panel-title,
+.bookmarks-panel .palette-row {
+  min-height: var(--row-h);
+  padding: var(--space-5) var(--space-4) 0;
+  color: var(--muted);
+  font-size: var(--text-base);
+  font-weight: var(--weight-medium);
+  letter-spacing: 0;
+  text-transform: none;
+}
+/* Dopo le appuntate un po' d'aria in più: «Tutte le note» apre un'altra parte. */
+.files-panel .panel-title + .plain-list {
+  padding-bottom: var(--space-4);
+}
+.panel-count {
+  flex: none;
+  color: var(--muted);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-regular);
+  font-variant-numeric: tabular-nums;
+}

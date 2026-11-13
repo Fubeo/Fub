@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { EditorSelection, EditorState } from "@codemirror/state";
-import { colorsAt, setContentColor, type ColorKind, type ContentColor } from "./color";
+import { MARKDOWN_ACTIONS, markdownActionState } from "./actions";
+import { canSetContentColor, colorsAt, CONTENT_COLORS, setContentColor, type ColorKind, type ContentColor } from "./color";
 import { colorClasses, renderInline } from "./render-inline";
 
 // I colori del contenuto (K1): classi fisse, un tag che avvolge, una classe
@@ -84,5 +85,49 @@ describe("dare un colore", () => {
   it("una nota di sola lettura non cambia", () => {
     const state = EditorState.create({ doc: "x", extensions: EditorState.readOnly.of(true), selection: EditorSelection.single(0, 1) });
     expect(color(state, "text", "red").ran).toBe(false);
+  });
+});
+
+describe("se un colore si può dare (#293)", () => {
+  const cases: [string, number, number][] = [
+    ["uno due tre", 4, 7],
+    ['uno <span class="fub-color-red">due</span> tre', 32, 35],
+    ['<mark class="fub-bg-blue">due</mark>', 26, 29],
+    ['<span class="fub-color-red fub-bg-blue">x</span>', 40, 41],
+    ["- [ ] compito", 13, 13],
+    ["", 0, 0],
+  ];
+  const values: (ContentColor | null)[] = [null, "red", "blue", "gray"];
+
+  it("decide come il comando, per ogni colore e ogni tratto", () => {
+    for (const [doc, anchor, head] of cases) {
+      for (const kind of ["text", "fill"] as const) {
+        for (const value of values) {
+          const state = at(doc, anchor, head);
+          expect(canSetContentColor(kind, value)(state), `${doc} ${kind} ${value}`).toBe(color(state, kind, value).ran);
+        }
+      }
+    }
+    const readOnly = EditorState.create({ doc: "x", extensions: EditorState.readOnly.of(true), selection: EditorSelection.single(0, 1) });
+    expect(canSetContentColor("text", "red")(readOnly)).toBe(false);
+  });
+
+  it("non costruisce transazioni: la barra del formato lo chiede a ogni tasto", () => {
+    let built = 0;
+    const state = EditorState.create({
+      doc: "uno due tre",
+      selection: EditorSelection.single(4, 7),
+      extensions: EditorState.transactionFilter.of((tr) => {
+        built++;
+        return tr;
+      }),
+    });
+    for (const kind of ["text", "fill"] as const) {
+      for (const value of [null, ...CONTENT_COLORS]) canSetContentColor(kind, value)(state);
+    }
+    for (const [id, action] of MARKDOWN_ACTIONS) {
+      if (id.startsWith("markdown.color.") || id.startsWith("markdown.background.")) markdownActionState(action, state);
+    }
+    expect(built).toBe(0);
   });
 });

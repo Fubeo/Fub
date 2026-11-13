@@ -1,0 +1,106 @@
+/* → skin/sheets.css */
+/* ── La testata: solo il percorso, «Salvato» e «…» ──────────────────────── */
+.pane-toolbar {
+  gap: var(--space-5);
+  padding: 0 var(--space-4) 0 var(--space-7);
+  font-size: var(--text-base);
+}
+/* Il percorso a briciole: la cartella disegnata, il vault e le cartelle in
+   grafite, il nome in inchiostro. */
+.sheet-title {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-width: 0;
+  color: var(--muted);
+  font-size: var(--text-base);
+}
+.sheet-title > svg {
+  flex: none;
+  width: 15px;
+  height: 15px;
+  color: var(--muted);
+}
+/* La barra fra le cartelle è un segno, non un testo: la grafite dei bordi dei
+   campi, che resta sopra 3:1 in tutte e due le luci senza farsi leggere. */
+.crumb-sep {
+  color: var(--outline);
+}
+.crumb-name {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text);
+  font-weight: var(--weight-medium);
+  text-overflow: ellipsis;
+}
+.sheet-title [data-folder] {
+  flex: none;
+}
+/* «…» è una figura, non tre caratteri. */
+.pane-toolbar > [data-pane-menu] {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-chip);
+}
+.pane-toolbar > [data-pane-menu] > svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* ── Le linguette ────────────────────────────────────────────────────────── */
+/* Ogni linguetta porta la figura del suo formato, anche la nota. */
+.tab {
+  gap: var(--space-3);
+  padding: 0 var(--space-2) 0 var(--space-5);
+}
+.tab-pin,
+.tab-format {
+  width: 14px;
+  height: 14px;
+  margin-right: var(--space-4);
+  vertical-align: -2px;
+}
+.tab[aria-selected="true"] {
+  font-weight: var(--weight-medium);
+}
+.tab[aria-selected="true"] .tab-format {
+  color: var(--text);
+}
+
+/* ── La scrivania dei fogli: l'etichetta in tondo ─────────────────────────── */
+.sheet-desk-label {
+  font-size: var(--text-sm);
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+/* ── L'ombra del foglio ───────────────────────────────────────────────────────
+   Un foglio appoggiato sulla scrivania: un contatto stretto, una penombra
+   corta ai fianchi e una lunga sotto. I due strati larghi hanno lo spread
+   negativo, così l'ombra scende e non sale sopra la carta, dove la linguetta
+   accesa la attraversa senza rilievo. Col fuoco lo stesso disegno, un passo
+   più fondo. I valori sono ruoli della ricetta; un tema che non li ha tiene
+   le ombre di sempre. */
+.pane::before {
+  box-shadow: var(--shadow-sheet, var(--shadow-1));
+}
+.pane.focus::before {
+  box-shadow: var(--shadow-sheet-focus, var(--shadow-2));
+}
+
+/* variante prima-ombra */
+/* Com'era: la scrivania non si allarga e l'ombra è quella della carta. */
+#panes {
+  --sheet-reach: 0px;
+}
+.pane {
+  z-index: auto;
+}
+.pane::before {
+  box-shadow: var(--shadow-1);
+}
+.pane.focus::before {
+  box-shadow: var(--shadow-2);
+}
+/* fine variante prima-ombra */

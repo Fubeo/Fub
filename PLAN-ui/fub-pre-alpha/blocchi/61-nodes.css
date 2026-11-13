@@ -1,0 +1,11 @@
+/* → theme/scrittoio/skin/nodes.css */
+/* ── Le sezioni delle viste: in tondo ───────────────────────────────────────
+   «In entrata · 2», «In uscita · 2», «Menzioni non collegate · 1»: il nome
+   della sezione si scrive come si scrive, in grafite, e il conto lo segue. */
+.ui-section > summary {
+  color: var(--muted);
+  font-size: var(--text-base);
+  font-weight: var(--weight-medium);
+  letter-spacing: 0;
+  text-transform: none;
+}

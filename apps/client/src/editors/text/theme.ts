@@ -1,54 +1,44 @@
-// Il tema dell'editor, scritto **con i token** invece che con dei colori.
+// Il tema dell'editor di testo: le classi, non i colori.
 //
-// Prima qui c'era una riga sola — `import { oneDark }` — e sembrava la scelta
-// più economica possibile. Costava però una cosa che non si vedeva: i colori
-// della superficie del documento erano dichiarati **due volte**, una in
-// `theme/scrittoio/sheet-dark.css` (dove li leggono la modalità Lettura e la vivi
-// una dentro il pacchetto `@codemirror/theme-one-dark` (dove li legge la
-// modalità Sorgente). Le due liste erano uguali perché qualcuno le aveva
-// ricopiate a mano, e il commento accanto ai token lo diceva: *«i valori
-// vengono dal tema dell'editor»*. Una promessa del genere — «le tre modalità
-// sono la stessa nota vista in tre modi» (FEATURES 4.1) — regge finché nessuno
-// tocca un valore da un lato solo.
+// Prima qui c'era una riga sola — `import { oneDark }` — e i colori della
+// superficie del documento erano dichiarati due volte: nei fogli del tema, dove
+// li leggono la Lettura e la Live, e dentro `@codemirror/theme-one-dark`, dove
+// li leggeva la Sorgente. Poi i colori sono diventati `var(--…)` scritti qui,
+// con `EditorView.theme`: una lista sola, ma fuori dalla pelle, e un tema che
+// cambiava i ruoli non poteva vestire l'editor di testo come veste il resto
+// (issue #242).
 //
-// Con un tema chiaro la cosa smetteva di essere teorica: `oneDark` è scuro per
-// definizione, e non c'è nessun valore da cambiare in `theme/scrittoio/sheet-dark.css`
-// schiarirlo. O si montava un secondo pacchetto — e allora le liste diventavano
-// tre — o i colori venivano da dove già stanno.
+// Adesso l'editor di testo si veste come ogni altro componente: i colori, i
+// caratteri e i segni stanno nella pelle, sotto le classi `.cm-*`
+// (`theme/scrittoio/skin/editors.css`), e gli hook sono nel contratto del tema
+// (`theme/author/contract.json`). Qui resta ciò che solo CodeMirror sa fare:
+// dire a ogni pezzo di sintassi la sua classe, e dichiarare la luce.
 //
-// Quindi vengono da lì: ogni colore qui sotto è un `var(--…)`. CodeMirror li
-// passa a `StyleModule` senza guardarli, e il browser li risolve sull'elemento
-// dell'editor come farebbe per qualunque altra regola — il che vuol dire che
-// **cambiare tema non richiede di ricostruire l'editor**: cambia l'attributo
-// sulla radice e i colori seguono, documento e cronologia di undo intatti.
-//
-// Le due tavolozze sono One Dark e One Light, che sono la stessa tavolozza in
-// due luci (`theme/scrittoio/sheet-dark.css` e `theme/scrittoio/sheet-light.css`, `--syn-*`). Restare su quella famiglia invece
-// di sceglierne una nuova è ciò che rende «la stessa nota, in due luci»
-// un'affermazione vera e non due gusti affiancati.
+// Cambiare tema non ricostruisce l'editor: cambia il foglio montato e i colori
+// seguono, documento e cronologia di undo intatti.
 import { EditorView } from "@codemirror/view";
 import { HighlightStyle, syntaxHighlighting } from "@codemirror/language";
 import type { Extension } from "@codemirror/state";
 import { tags as t } from "@lezer/highlight";
 import type { Theme } from "../../theme/theme";
 
-/// Le regole di sintassi. Sono quelle di One Dark — stessi raggruppamenti di
-/// tag, stesso ordine — con i colori sostituiti dai token: così il giorno che
-/// un tema di terze parti (6.2) ridichiara `--syn-string`, cambia la stringa in
-/// **tutti** i linguaggi, e non solo dove qualcuno si è ricordato di guardare.
+/// Le regole di sintassi: i raggruppamenti di tag di One Dark, ciascuno con la
+/// sua classe `fub-syn-*`. Il colore lo dà la pelle con i ruoli `--syn-*`,
+/// così un tema che ridichiara `--syn-string` cambia la stringa in **tutti** i
+/// linguaggi, e una pelle può vestire un gruppo senza toccare gli altri.
 ///
-/// L'ordine conta e non è decorativo: `t.link` compare due volte — una nel
-/// gruppo degli operatori, una da solo con la sottolineatura — e in
-/// `HighlightStyle` vince l'ultima. Riordinare queste righe cambia la resa.
+/// L'ordine conta e non è decorativo, due volte. `t.link` compare in due
+/// gruppi — gli operatori e il collegamento — e in `HighlightStyle` vince
+/// l'ultimo. E un pezzo di testo può avere più classi insieme (un collegamento
+/// dentro un titolo): la pelle scrive le regole nello stesso ordine di queste
+/// righe, e la regola che viene dopo vince. Riordinare una delle due liste
+/// cambia la resa.
 const syntaxStyle = HighlightStyle.define([
-  { tag: t.keyword, color: "var(--syn-keyword)" },
-  {
-    tag: [t.name, t.deleted, t.character, t.propertyName, t.macroName],
-    color: "var(--syn-name)",
-  },
-  { tag: [t.function(t.variableName), t.labelName], color: "var(--syn-function)" },
-  { tag: [t.color, t.constant(t.name), t.standard(t.name)], color: "var(--syn-literal)" },
-  { tag: [t.definition(t.name), t.separator], color: "var(--doc-fg)" },
+  { tag: t.keyword, class: "fub-syn-keyword" },
+  { tag: [t.name, t.deleted, t.character, t.propertyName, t.macroName], class: "fub-syn-name" },
+  { tag: [t.function(t.variableName), t.labelName], class: "fub-syn-function" },
+  { tag: [t.color, t.constant(t.name), t.standard(t.name)], class: "fub-syn-constant" },
+  { tag: [t.definition(t.name), t.separator], class: "fub-syn-definition" },
   {
     tag: [
       t.typeName,
@@ -60,138 +50,42 @@ const syntaxStyle = HighlightStyle.define([
       t.self,
       t.namespace,
     ],
-    color: "var(--syn-type)",
+    class: "fub-syn-type",
   },
   {
     tag: [t.operator, t.operatorKeyword, t.url, t.escape, t.regexp, t.link, t.special(t.string)],
-    color: "var(--syn-operator)",
+    class: "fub-syn-operator",
   },
-  { tag: [t.meta, t.comment], color: "var(--syn-comment)" },
-  { tag: t.strong, fontWeight: "bold" },
-  { tag: t.monospace, color: "var(--doc-fg)", backgroundColor: "var(--doc-fill)", fontFamily: "var(--font-mono)" },
-  { tag: t.emphasis, fontStyle: "italic" },
-  { tag: t.strikethrough, textDecoration: "line-through" },
-  { tag: t.link, color: "var(--doc-link)", textDecoration: "underline" },
+  { tag: [t.meta, t.comment], class: "fub-syn-comment" },
+  { tag: t.strong, class: "fub-syn-strong" },
+  { tag: t.monospace, class: "fub-syn-monospace" },
+  { tag: t.emphasis, class: "fub-syn-emphasis" },
+  { tag: t.strikethrough, class: "fub-syn-strikethrough" },
+  { tag: t.link, class: "fub-syn-link" },
   // Il testo del titolo in Sorgente usa lo stesso inchiostro della resa
   // (`doc-heading`, che vale come il corpo): solo i `#` restano sintassi
   // (processingInstruction). `--syn-heading` resta per gli altri linguaggi.
-  { tag: t.heading, fontWeight: "bold", color: "var(--doc-heading)" },
-  { tag: [t.atom, t.bool, t.special(t.variableName)], color: "var(--syn-literal)" },
-  { tag: [t.processingInstruction, t.string, t.inserted], color: "var(--syn-string)" },
-  { tag: t.invalid, color: "var(--syn-invalid)" },
+  { tag: t.heading, class: "fub-syn-heading" },
+  { tag: [t.atom, t.bool, t.special(t.variableName)], class: "fub-syn-atom" },
+  { tag: [t.processingInstruction, t.string, t.inserted], class: "fub-syn-string" },
+  { tag: t.invalid, class: "fub-syn-invalid" },
 ]);
 
-/// Le superfici dell'editor: il foglio, il cursore, la selezione, il margine.
-///
-/// Quello che la pelle della shell faceva da fuori con due regole su `#editor .cm-editor`
-/// sta adesso qui, perché è **lo stesso lavoro**: un pezzo dei colori
-/// dell'editor scritto nel foglio della shell e un pezzo dentro il tema era la
-/// divisione che aveva prodotto il doppione di partenza.
-const surfaces = EditorView.theme({
-  "&": {
-    color: "var(--doc-fg)",
-    backgroundColor: "var(--doc-bg)",
-  },
-  ".cm-content": {
-    caretColor: "var(--doc-caret)",
-    fontFamily: "var(--font-mono)",
-    fontSize: "var(--text-base)",
-    lineHeight: "var(--leading-normal)",
-  },
-  ".cm-cursor, .cm-dropCursor": {
-    borderLeftColor: "var(--doc-caret)",
-  },
-  // Il profilo Markdown applica la tipografia di lettura al contenuto.
-  // Il motore mantiene il default monospace per gli altri profili.
-  // La selezione la disegna CodeMirror (`drawSelection`) come rettangolo
-  // dietro il testo (layer a z-index negativo di serie) e sotto la riga
-  // attiva opaca in paint order (verificato con `elementsFromPoint`): né il
-  // fondo del rettangolo né un suo bordo emergono sopra `--doc-active-line`.
-  // La selezione nativa è spenta da `hideNativeSelection`: `::selection` qui
-  // perde contro `transparent !important` e resta lettera morta. La regola di
-  // CodeMirror colora già il caso con focus (`#233` al buio, `#d7d4f0` in
-  // luce) con specificità maggiore: qui si alza solo il caso senza focus.
-  ".cm-selectionBackground": {
-    backgroundColor: "var(--doc-selection)",
-  },
-  // La riga attiva si spegne dove c'è una selezione (`engine.ts` aggiunge
-  // `cm-fub-no-active-line` sulle righe selezionate): la `lineDecoration`
-  // coprirebbe il rettangolo di selezione in paint order. Specificità sopra
-  // il tema via `Prec.highest` dal motore, non da qui.
-  ".cm-line.cm-fub-no-active-line.cm-activeLine": {
-    backgroundColor: "transparent",
-  },
-  ".cm-activeLine": {
-    backgroundColor: "var(--doc-active-line)",
-  },
-  ".cm-selectionMatch": {
-    backgroundColor: "var(--doc-fill)",
-  },
-  "&.cm-focused .cm-matchingBracket, &.cm-focused .cm-nonmatchingBracket": {
-    backgroundColor: "var(--doc-fill)",
-    outline: "1px solid var(--doc-rule-soft)",
-  },
-  ".cm-gutters": {
-    backgroundColor: "var(--doc-bg)",
-    color: "var(--doc-gutter-fg)",
-    fontFamily: "var(--font-mono)",
-    border: "none",
-  },
-  ".cm-activeLineGutter": {
-    backgroundColor: "var(--doc-active-line)",
-  },
-  ".cm-foldPlaceholder": {
-    backgroundColor: "transparent",
-    border: "none",
-    color: "var(--doc-gutter-fg)",
-  },
-  ".cm-panels": {
-    backgroundColor: "var(--bg-elev)",
-    color: "var(--text)",
-  },
-  ".cm-searchMatch": {
-    backgroundColor: "var(--doc-highlight)",
-  },
-  ".cm-searchMatch.cm-searchMatch-selected": {
-    backgroundColor: "var(--doc-selection)",
-  },
-  ".cm-tooltip": {
-    border: "1px solid var(--border)",
-    backgroundColor: "var(--doc-tooltip-bg)",
-  },
-  ".cm-tooltip .cm-tooltip-arrow:before": {
-    borderTopColor: "transparent",
-    borderBottomColor: "transparent",
-  },
-  ".cm-tooltip .cm-tooltip-arrow:after": {
-    borderTopColor: "var(--doc-tooltip-bg)",
-    borderBottomColor: "var(--doc-tooltip-bg)",
-  },
-  // La riga su cui cadrà l'Invio, col fondo della palette: quello della riga
-  // attiva sul fondo del tooltip non si distingueva, e con i quattordici
-  // modelli di diagramma bisogna vedere quale si sta per scegliere.
-  ".cm-tooltip-autocomplete": {
-    "& > ul > li[aria-selected]": {
-      backgroundColor: "var(--bg-active)",
-      color: "var(--doc-fg)",
-    },
-  },
-});
+/// La sintassi di serie, senza colori: le classi della pelle.
+const syntax = syntaxHighlighting(syntaxStyle);
 
 /// Il tema dell'editor per una delle due luci.
 ///
-/// I colori non dipendono dall'argomento — li risolve il CSS — ma **una** cosa
-/// sì: il flag `dark`, che CodeMirror non usa per colorare bensì per dichiarare
-/// in che luce si trova, e da cui dipendono la resa dei controlli nativi dentro
-/// l'editor e la scelta della variante scura dei suoi stili di base. È l'unica
-/// ragione per cui questa è una funzione e non una costante.
+/// Non c'è un colore che dipenda dall'argomento — li risolve la pelle — ma
+/// **una** cosa sì: il flag `dark`, che CodeMirror non usa per colorare bensì
+/// per dichiarare in che luce si trova, e da cui dipendono la resa dei
+/// controlli nativi dentro l'editor e la variante dei suoi stili di base che
+/// la pelle copre. È l'unica ragione per cui questa è una funzione.
 export function editorTheme(theme: Theme): Extension {
   return [
-    surfaces,
-    // Il flag va su un tema **vuoto**: `EditorView.theme` accetta le opzioni
-    // solo insieme a delle regole, e ricreare `superfici` a ogni cambio di tema
-    // rigenererebbe un foglio di stile intero per un booleano.
+    // `EditorView.theme` accetta le opzioni solo insieme a delle regole: il
+    // flag va su un tema vuoto.
     EditorView.theme({}, { dark: theme === "dark" }),
-    syntaxHighlighting(syntaxStyle),
+    syntax,
   ];
 }

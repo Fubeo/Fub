@@ -1,0 +1,141 @@
+/* → skin/frame.css */
+/* ── Il pulsante premuto: un foglietto sollevato, non una macchia blu ─────── */
+/* Vale per il binario e per i bottoni della barra del titolo: chi è acceso è
+   carta bianca col suo rilievo, l'icona torna inchiostro senza velo. */
+.rail-btn[aria-pressed="true"],
+.rail-btn[aria-expanded="true"],
+.titlebar-btn[aria-pressed="true"] {
+  background: var(--bg-elev);
+  box-shadow: var(--shadow-1);
+  color: var(--text);
+}
+.rail-btn[aria-pressed="true"] svg,
+.rail-btn[aria-expanded="true"] svg,
+.inspector-tab[aria-selected="true"] svg {
+  fill: none;
+}
+.rail-notch {
+  background: transparent;
+}
+
+/* ── La pillola diventa il campo dei comandi ─────────────────────────────── */
+.pill {
+  gap: var(--space-4);
+  padding: 0 var(--space-2) 0 var(--space-5);
+  border-radius: var(--radius-control);
+  background: var(--bg-hover);
+  font-size: var(--text-md);
+}
+.pill:hover {
+  background: var(--bg-active);
+}
+.pill-icon {
+  color: var(--muted);
+}
+.pill-icon svg {
+  width: 16px;
+  height: 16px;
+}
+.pill .titlebar-shortcut {
+  padding: 0 var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xs);
+  background: var(--bg-elev);
+  color: var(--muted);
+  font-size: var(--text-xs);
+}
+
+/* ── L'ispettore ─────────────────────────────────────────────────────────── */
+/* Le schede sono un pozzetto, come gli spazi del cassetto: quattro parti
+   uguali, l'accesa è un foglietto. */
+.inspector-tabs {
+  flex-wrap: nowrap;
+  gap: var(--space-1);
+  margin: var(--space-3) var(--drawer-pad) var(--space-3);
+  padding: var(--space-1);
+  border-radius: var(--radius-control);
+  background: var(--bg-hover);
+}
+.inspector-tab {
+  flex: 1 1 0;
+  width: auto;
+  height: 26px;
+  border-radius: var(--radius-chip);
+}
+.inspector-tab:hover {
+  background: var(--overlay-hover);
+}
+.inspector-tab[aria-selected="true"] {
+  background: var(--bg-elev);
+  box-shadow: var(--shadow-1);
+  color: var(--text);
+}
+.inspector-title {
+  padding: 0 var(--drawer-pad);
+  font-size: var(--text-lg);
+}
+/* «● Segue la nota»: il punto dice che la vista è legata al foglio acceso.
+   Il titolo non cede: è «Segue…» che si accorcia coi puntini, come oggi. */
+.inspector-title > span:first-child {
+  flex: none;
+}
+.inspector-title > .inspector-follows {
+  font-size: var(--text-base);
+}
+.inspector-title > .inspector-follows::before {
+  content: "";
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-right: var(--space-3);
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+  vertical-align: 0.1em;
+}
+
+/* ── La banda: la modalità è un bottone ──────────────────────────────────── */
+.status-band {
+  font-size: var(--text-sm);
+}
+.status-item--button {
+  gap: var(--space-2);
+  min-height: 22px;
+  font-size: var(--text-sm);
+}
+.status-mode > svg {
+  width: 14px;
+  height: 14px;
+}
+.status-mode > .status-mode-arrow {
+  width: 12px;
+  height: 12px;
+  color: var(--muted);
+}
+.status-mode[aria-expanded="true"] {
+  background: var(--bg-elev);
+  box-shadow: var(--shadow-1);
+  color: var(--text);
+}
+.status-item--button:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: -1px;
+}
+/* «Si scrive» è lo stato normale di un documento: lo dice la banda, a voce
+   bassa, accanto alla modalità. Premuto apre lo stesso riquadro del chip. Gli
+   altri stati (sola lettura, parti chiuse, motore spento) restano nella
+   testata, dove si vedono. */
+.status-standing {
+  color: var(--muted);
+}
+.status-standing > .status-standing-mark {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: var(--radius-pill);
+  background: var(--success);
+}
+.status-standing[aria-expanded="true"] {
+  background: var(--bg-elev);
+  box-shadow: var(--shadow-1);
+  color: var(--text);
+}

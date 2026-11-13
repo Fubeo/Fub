@@ -92,8 +92,13 @@
   else root.removeAttribute("data-avvio-moto");
 
   // I colori della luce risolta. Un valore che non è un colore, o che potrebbe
-  // uscire dalla dichiarazione, si scarta: resta quello di serie del CSS.
-  var CHIAVI = ["sfondo", "testo", "tenue", "accento", "inchiostro", "bordo", "guasto", "fuoco"];
+  // uscire dalla dichiarazione, si scarta: resta quello di serie del CSS. Le
+  // ultime cinque sono la cartella del logo nella tinta del tema (D26); una
+  // cache di prima non le ha, e il logo resta quello di serie.
+  var CHIAVI = [
+    "sfondo", "testo", "tenue", "accento", "inchiostro", "bordo", "guasto", "fuoco",
+    "cartella", "cartella-retro", "cartella-ombra", "foglio-1", "foglio-2",
+  ];
   var tavolozze = avvio && avvio.colori && typeof avvio.colori === "object" ? avvio.colori : null;
   var colori = tavolozze ? tavolozze[luce + (contrasto === "high" ? "-high" : "")] : null;
   var supporta = window.CSS && typeof window.CSS.supports === "function";

@@ -1,0 +1,8 @@
+/* → theme/scrittoio/series.ts: defaults.body 17 → 18 e defaults.measure
+   68 → 58 (non è pelle: sono i valori di partenza del corpo e della misura di
+   lettura, che la persona può cambiare in Aspetto). 58ch di Newsreader a
+   18 px sono 574 px: la colonna del mockup, con gli stessi a capo. */
+:root {
+  --text-reading: 18px;
+  --content-width: 58ch;
+}

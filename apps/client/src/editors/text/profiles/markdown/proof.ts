@@ -442,16 +442,16 @@ export function markdownProof(options: MarkdownProofOptions): Extension {
   );
 }
 
-/// L'aspetto dei segni: un'ondina sotto la parola, del colore del tema.
+/// La forma dei segni: un'ondina sotto la parola al posto della zigzag di
+/// CodeMirror. L'ondina e il suo colore li dà la pelle
+/// (`theme/scrittoio/skin/editors.css`), con i ruoli del tema.
 export const proofTheme = EditorView.baseTheme({
   ".cm-lintRange.cm-fub-proof-spelling": {
     backgroundImage: "none",
-    textDecoration: "underline wavy var(--danger, #d33) 1px",
     textUnderlineOffset: "3px",
   },
   ".cm-lintRange.cm-fub-proof-grammar": {
     backgroundImage: "none",
-    textDecoration: "underline wavy var(--warning, #c80) 1px",
     textUnderlineOffset: "3px",
   },
 });

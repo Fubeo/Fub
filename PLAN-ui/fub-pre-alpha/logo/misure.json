@@ -1,0 +1,793 @@
+{
+ "tinte": [
+  {
+   "id": "smeraldo",
+   "tinta": 160,
+   "varianti": {
+    "light-normal": {
+     "colori": {
+      "cartella": "#37996c",
+      "cartella-retro": "#267853",
+      "cartella-ombra": "#36805d",
+      "foglio-1": "#8ec3c2",
+      "foglio-2": "#95a982"
+     },
+     "fondi": [
+      "#e7efe9",
+      "#ffffff"
+     ],
+     "cartella": 3.02,
+     "retro": 4.6,
+     "soglia": 3,
+     "regge": true
+    },
+    "light-high": {
+     "colori": {
+      "cartella": "#077b50",
+      "cartella-retro": "#005b39",
+      "cartella-ombra": "#116442",
+      "foglio-1": "#8ec3c2",
+      "foglio-2": "#95a982"
+     },
+     "fondi": [
+      "#e7efe9",
+      "#ffffff"
+     ],
+     "cartella": 4.53,
+     "retro": 7.01,
+     "soglia": 4.5,
+     "regge": true
+    },
+    "dark-normal": {
+     "colori": {
+      "cartella": "#89cca8",
+      "cartella-retro": "#67ad88",
+      "cartella-ombra": "#77b493",
+      "foglio-1": "#006e46",
+      "foglio-2": "#238b8b"
+     },
+     "fondi": [
+      "#08110b",
+      "#1e2923"
+     ],
+     "cartella": 8.07,
+     "retro": 5.66,
+     "soglia": 3,
+     "regge": true
+    },
+    "dark-high": {
+     "colori": {
+      "cartella": "#89cca8",
+      "cartella-retro": "#67ad88",
+      "cartella-ombra": "#77b493",
+      "foglio-1": "#006e46",
+      "foglio-2": "#238b8b"
+     },
+     "fondi": [
+      "#08110b",
+      "#1e2923"
+     ],
+     "cartella": 8.07,
+     "retro": 5.66,
+     "soglia": 4.5,
+     "regge": true
+    }
+   }
+  },
+  {
+   "id": "matita-blu",
+   "tinta": 265,
+   "varianti": {
+    "light-normal": {
+     "colori": {
+      "cartella": "#6484cc",
+      "cartella-retro": "#4c67a2",
+      "cartella-ombra": "#5670a8",
+      "foglio-1": "#bcb0d6",
+      "foglio-2": "#7da8c1"
+     },
+     "fondi": [
+      "#e8edf5",
+      "#ffffff"
+     ],
+     "cartella": 3.13,
+     "retro": 4.74,
+     "soglia": 3,
+     "regge": true
+    },
+    "light-high": {
+     "colori": {
+      "cartella": "#4b69af",
+      "cartella-retro": "#354d86",
+      "cartella-ombra": "#3e568d",
+      "foglio-1": "#bcb0d6",
+      "foglio-2": "#7da8c1"
+     },
+     "fondi": [
+      "#e8edf5",
+      "#ffffff"
+     ],
+     "cartella": 4.54,
+     "retro": 6.99,
+     "soglia": 4.5,
+     "regge": true
+    },
+    "dark-normal": {
+     "colori": {
+      "cartella": "#a0baf3",
+      "cartella-retro": "#809bd4",
+      "cartella-ombra": "#8ca4d7",
+      "foglio-1": "#3e5999",
+      "foglio-2": "#836ea8"
+     },
+     "fondi": [
+      "#0a0e16",
+      "#212730"
+     ],
+     "cartella": 7.74,
+     "retro": 5.41,
+     "soglia": 3,
+     "regge": true
+    },
+    "dark-high": {
+     "colori": {
+      "cartella": "#a0baf3",
+      "cartella-retro": "#809bd4",
+      "cartella-ombra": "#8ca4d7",
+      "foglio-1": "#3e5999",
+      "foglio-2": "#836ea8"
+     },
+     "fondi": [
+      "#0a0e16",
+      "#212730"
+     ],
+     "cartella": 7.74,
+     "retro": 5.41,
+     "soglia": 4.5,
+     "regge": true
+    }
+   }
+  },
+  {
+   "id": "viola",
+   "tinta": 300,
+   "varianti": {
+    "light-normal": {
+     "colori": {
+      "cartella": "#9175c1",
+      "cartella-retro": "#725b99",
+      "cartella-ombra": "#7a64a0",
+      "foglio-1": "#ceabc6",
+      "foglio-2": "#93a0c7"
+     },
+     "fondi": [
+      "#ececf5",
+      "#ffffff"
+     ],
+     "cartella": 3.24,
+     "retro": 4.87,
+     "soglia": 3,
+     "regge": true
+    },
+    "light-high": {
+     "colori": {
+      "cartella": "#795ea7",
+      "cartella-retro": "#5b4480",
+      "cartella-ombra": "#634d87",
+      "foglio-1": "#ceabc6",
+      "foglio-2": "#93a0c7"
+     },
+     "fondi": [
+      "#ececf5",
+      "#ffffff"
+     ],
+     "cartella": 4.5,
+     "retro": 6.92,
+     "soglia": 4.5,
+     "regge": true
+    },
+    "dark-normal": {
+     "colori": {
+      "cartella": "#c3aeea",
+      "cartella-retro": "#a48fcc",
+      "cartella-ombra": "#ac99cf",
+      "foglio-1": "#664c8f",
+      "foglio-2": "#9c6690"
+     },
+     "fondi": [
+      "#0f0d15",
+      "#27242f"
+     ],
+     "cartella": 7.66,
+     "retro": 5.35,
+     "soglia": 3,
+     "regge": true
+    },
+    "dark-high": {
+     "colori": {
+      "cartella": "#c3aeea",
+      "cartella-retro": "#a48fcc",
+      "cartella-ombra": "#ac99cf",
+      "foglio-1": "#664c8f",
+      "foglio-2": "#9c6690"
+     },
+     "fondi": [
+      "#0f0d15",
+      "#27242f"
+     ],
+     "cartella": 7.66,
+     "retro": 5.35,
+     "soglia": 4.5,
+     "regge": true
+    }
+   }
+  },
+  {
+   "id": "prugna",
+   "tinta": 340,
+   "varianti": {
+    "light-normal": {
+     "colori": {
+      "cartella": "#b4699c",
+      "cartella-retro": "#8e517a",
+      "cartella-ombra": "#965b82",
+      "foglio-1": "#d8aaac",
+      "foglio-2": "#ad97bd"
+     },
+     "fondi": [
+      "#f2eaf1",
+      "#ffffff"
+     ],
+     "cartella": 3.27,
+     "retro": 4.94,
+     "soglia": 3,
+     "regge": true
+    },
+    "light-high": {
+     "colori": {
+      "cartella": "#9b5284",
+      "cartella-retro": "#763b64",
+      "cartella-ombra": "#7e456c",
+      "foglio-1": "#d8aaac",
+      "foglio-2": "#ad97bd"
+     },
+     "fondi": [
+      "#f2eaf1",
+      "#ffffff"
+     ],
+     "cartella": 4.53,
+     "retro": 6.91,
+     "soglia": 4.5,
+     "regge": true
+    },
+    "dark-normal": {
+     "colori": {
+      "cartella": "#e1a5cc",
+      "cartella-retro": "#c286ad",
+      "cartella-ombra": "#c791b4",
+      "foglio-1": "#83416f",
+      "foglio-2": "#a96469"
+     },
+     "fondi": [
+      "#130b11",
+      "#2d232a"
+     ],
+     "cartella": 7.55,
+     "retro": 5.27,
+     "soglia": 3,
+     "regge": true
+    },
+    "dark-high": {
+     "colori": {
+      "cartella": "#e1a5cc",
+      "cartella-retro": "#c286ad",
+      "cartella-ombra": "#c791b4",
+      "foglio-1": "#83416f",
+      "foglio-2": "#a96469"
+     },
+     "fondi": [
+      "#130b11",
+      "#2d232a"
+     ],
+     "cartella": 7.55,
+     "retro": 5.27,
+     "soglia": 4.5,
+     "regge": true
+    }
+   }
+  },
+  {
+   "id": "terracotta",
+   "tinta": 55,
+   "varianti": {
+    "light-normal": {
+     "colori": {
+      "cartella": "#bb723c",
+      "cartella-retro": "#94582b",
+      "cartella-ombra": "#9b6138",
+      "foglio-1": "#c5b690",
+      "foglio-2": "#c4938f"
+     },
+     "fondi": [
+      "#f4eae6",
+      "#ffffff"
+     ],
+     "cartella": 3.18,
+     "retro": 4.81,
+     "soglia": 3,
+     "regge": true
+    },
+    "light-high": {
+     "colori": {
+      "cartella": "#a05921",
+      "cartella-retro": "#7a4010",
+      "cartella-ombra": "#824a20",
+      "foglio-1": "#c5b690",
+      "foglio-2": "#c4938f"
+     },
+     "fondi": [
+      "#f4eae6",
+      "#ffffff"
+     ],
+     "cartella": 4.5,
+     "retro": 6.91,
+     "soglia": 4.5,
+     "regge": true
+    },
+    "dark-normal": {
+     "colori": {
+      "cartella": "#e6ac85",
+      "cartella-retro": "#c78d65",
+      "cartella-ombra": "#cc9774",
+      "foglio-1": "#894912",
+      "foglio-2": "#8f7836"
+     },
+     "fondi": [
+      "#150c07",
+      "#2f241e"
+     ],
+     "cartella": 7.62,
+     "retro": 5.34,
+     "soglia": 3,
+     "regge": true
+    },
+    "dark-high": {
+     "colori": {
+      "cartella": "#e6ac85",
+      "cartella-retro": "#c78d65",
+      "cartella-ombra": "#cc9774",
+      "foglio-1": "#894912",
+      "foglio-2": "#8f7836"
+     },
+     "fondi": [
+      "#150c07",
+      "#2f241e"
+     ],
+     "cartella": 7.62,
+     "retro": 5.34,
+     "soglia": 4.5,
+     "regge": true
+    }
+   }
+  },
+  {
+   "id": "ocra",
+   "tinta": 80,
+   "varianti": {
+    "light-normal": {
+     "colori": {
+      "cartella": "#aa7d25",
+      "cartella-retro": "#866116",
+      "cartella-ombra": "#8e6b28",
+      "foglio-1": "#b6bc94",
+      "foglio-2": "#c09781"
+     },
+     "fondi": [
+      "#f2ece4",
+      "#ffffff"
+     ],
+     "cartella": 3.16,
+     "retro": 4.79,
+     "soglia": 3,
+     "regge": true
+    },
+    "light-high": {
+     "colori": {
+      "cartella": "#8e6400",
+      "cartella-retro": "#6b4900",
+      "cartella-ombra": "#745204",
+      "foglio-1": "#b6bc94",
+      "foglio-2": "#c09781"
+     },
+     "fondi": [
+      "#f2ece4",
+      "#ffffff"
+     ],
+     "cartella": 4.5,
+     "retro": 6.94,
+     "soglia": 4.5,
+     "regge": true
+    },
+    "dark-normal": {
+     "colori": {
+      "cartella": "#d8b57a",
+      "cartella-retro": "#b99658",
+      "cartella-ombra": "#bf9f6a",
+      "foglio-1": "#7a5400",
+      "foglio-2": "#79813f"
+     },
+     "fondi": [
+      "#130d06",
+      "#2c251b"
+     ],
+     "cartella": 7.79,
+     "retro": 5.45,
+     "soglia": 3,
+     "regge": true
+    },
+    "dark-high": {
+     "colori": {
+      "cartella": "#d8b57a",
+      "cartella-retro": "#b99658",
+      "cartella-ombra": "#bf9f6a",
+      "foglio-1": "#7a5400",
+      "foglio-2": "#79813f"
+     },
+     "fondi": [
+      "#130d06",
+      "#2c251b"
+     ],
+     "cartella": 7.79,
+     "retro": 5.45,
+     "soglia": 4.5,
+     "regge": true
+    }
+   }
+  },
+  {
+   "id": "salvia",
+   "tinta": 130,
+   "varianti": {
+    "light-normal": {
+     "colori": {
+      "cartella": "#6f9345",
+      "cartella-retro": "#557432",
+      "cartella-ombra": "#5f7c3f",
+      "foglio-1": "#97c3af",
+      "foglio-2": "#a9a378"
+     },
+     "fondi": [
+      "#eceee5",
+      "#ffffff"
+     ],
+     "cartella": 3.02,
+     "retro": 4.56,
+     "soglia": 3,
+     "regge": true
+    },
+    "light-high": {
+     "colori": {
+      "cartella": "#527626",
+      "cartella-retro": "#3a5714",
+      "cartella-ombra": "#435f22",
+      "foglio-1": "#97c3af",
+      "foglio-2": "#a9a378"
+     },
+     "fondi": [
+      "#eceee5",
+      "#ffffff"
+     ],
+     "cartella": 4.51,
+     "retro": 7.02,
+     "soglia": 4.5,
+     "regge": true
+    },
+    "dark-normal": {
+     "colori": {
+      "cartella": "#a8c68b",
+      "cartella-retro": "#89a76b",
+      "cartella-ombra": "#94af79",
+      "foglio-1": "#47681e",
+      "foglio-2": "#3f8b6d"
+     },
+     "fondi": [
+      "#0c1008",
+      "#24281e"
+     ],
+     "cartella": 7.96,
+     "retro": 5.58,
+     "soglia": 3,
+     "regge": true
+    },
+    "dark-high": {
+     "colori": {
+      "cartella": "#a8c68b",
+      "cartella-retro": "#89a76b",
+      "cartella-ombra": "#94af79",
+      "foglio-1": "#47681e",
+      "foglio-2": "#3f8b6d"
+     },
+     "fondi": [
+      "#0c1008",
+      "#24281e"
+     ],
+     "cartella": 7.96,
+     "retro": 5.58,
+     "soglia": 4.5,
+     "regge": true
+    }
+   }
+  },
+  {
+   "id": "petrolio",
+   "tinta": 205,
+   "varianti": {
+    "light-normal": {
+     "colori": {
+      "cartella": "#0097a4",
+      "cartella-retro": "#007681",
+      "cartella-ombra": "#00808b",
+      "foglio-1": "#98bdd8",
+      "foglio-2": "#7aae9f"
+     },
+     "fondi": [
+      "#e4efef",
+      "#ffffff"
+     ],
+     "cartella": 3,
+     "retro": 4.58,
+     "soglia": 3,
+     "regge": true
+    },
+    "light-high": {
+     "colori": {
+      "cartella": "#007782",
+      "cartella-retro": "#005860",
+      "cartella-ombra": "#00616a",
+      "foglio-1": "#98bdd8",
+      "foglio-2": "#7aae9f"
+     },
+     "fondi": [
+      "#e4efef",
+      "#ffffff"
+     ],
+     "cartella": 4.52,
+     "retro": 6.98,
+     "soglia": 4.5,
+     "regge": true
+    },
+    "dark-normal": {
+     "colori": {
+      "cartella": "#73cbd5",
+      "cartella-retro": "#4dacb6",
+      "cartella-ombra": "#62b3bc",
+      "foglio-1": "#006972",
+      "foglio-2": "#4481ab"
+     },
+     "fondi": [
+      "#051112",
+      "#1b292b"
+     ],
+     "cartella": 8.03,
+     "retro": 5.64,
+     "soglia": 3,
+     "regge": true
+    },
+    "dark-high": {
+     "colori": {
+      "cartella": "#73cbd5",
+      "cartella-retro": "#4dacb6",
+      "cartella-ombra": "#62b3bc",
+      "foglio-1": "#006972",
+      "foglio-2": "#4481ab"
+     },
+     "fondi": [
+      "#051112",
+      "#1b292b"
+     ],
+     "cartella": 8.03,
+     "retro": 5.64,
+     "soglia": 4.5,
+     "regge": true
+    }
+   }
+  }
+ ],
+ "temi": [
+  {
+   "id": "carta",
+   "varianti": {
+    "light-normal": {
+     "accento": "#8e3a1f",
+     "colori": {
+      "cartella": "#c06c51",
+      "cartella-retro": "#98533d",
+      "cartella-ombra": "#a05d48",
+      "foglio-1": "#cdb391",
+      "foglio-2": "#c3929a"
+     },
+     "fondi": [
+      "#ece4d4",
+      "#fdfbf6"
+     ],
+     "cartella": 3.02,
+     "retro": 4.56,
+     "soglia": 3,
+     "regge": true
+    },
+    "light-high": {
+     "accento": "#7a2f16",
+     "colori": {
+      "cartella": "#a14f36",
+      "cartella-retro": "#7a3822",
+      "cartella-ombra": "#82422d",
+      "foglio-1": "#cdb391",
+      "foglio-2": "#c3929a"
+     },
+     "fondi": [
+      "#ece4d4",
+      "#fdfbf6"
+     ],
+     "cartella": 4.51,
+     "retro": 6.88,
+     "soglia": 4.5,
+     "regge": true
+    }
+   }
+  },
+  {
+   "id": "mare",
+   "varianti": {
+    "light-normal": {
+     "accento": "#1d4f91",
+     "colori": {
+      "cartella": "#5787ca",
+      "cartella-retro": "#426aa1",
+      "cartella-ombra": "#4c73a8",
+      "foglio-1": "#b7b2d8",
+      "foglio-2": "#7aa9be"
+     },
+     "fondi": [
+      "#e6ebf1",
+      "#ffffff"
+     ],
+     "cartella": 3.06,
+     "retro": 4.6,
+     "soglia": 3,
+     "regge": true
+    },
+    "light-high": {
+     "accento": "#163f78",
+     "colori": {
+      "cartella": "#3d6aac",
+      "cartella-retro": "#294e83",
+      "cartella-ombra": "#33578a",
+      "foglio-1": "#b8b1d8",
+      "foglio-2": "#7aa9be"
+     },
+     "fondi": [
+      "#e6ebf1",
+      "#ffffff"
+     ],
+     "cartella": 4.54,
+     "retro": 6.97,
+     "soglia": 4.5,
+     "regge": true
+    },
+    "dark-normal": {
+     "accento": "#8db4f0",
+     "colori": {
+      "cartella": "#99bcf2",
+      "cartella-retro": "#7a9dd4",
+      "cartella-ombra": "#86a6d7",
+      "foglio-1": "#345c98",
+      "foglio-2": "#7d70ab"
+     },
+     "fondi": [
+      "#0a0f17",
+      "#1f2837"
+     ],
+     "cartella": 7.64,
+     "retro": 5.36,
+     "soglia": 3,
+     "regge": true
+    },
+    "dark-high": {
+     "accento": "#a7c6f5",
+     "colori": {
+      "cartella": "#9bbcee",
+      "cartella-retro": "#7c9dd0",
+      "cartella-ombra": "#88a6d3",
+      "foglio-1": "#375c94",
+      "foglio-2": "#7d71a8"
+     },
+     "fondi": [
+      "#0a0f17",
+      "#1f2837"
+     ],
+     "cartella": 7.64,
+     "retro": 5.36,
+     "soglia": 4.5,
+     "regge": true
+    }
+   }
+  },
+  {
+   "id": "officina",
+   "varianti": {
+    "light-normal": {
+     "accento": "#a33f00",
+     "colori": {
+      "cartella": "#bf6d4a",
+      "cartella-retro": "#975437",
+      "cartella-ombra": "#9f5e42",
+      "foglio-1": "#cbb490",
+      "foglio-2": "#c39396"
+     },
+     "fondi": [
+      "#e3e4e6",
+      "#ffffff"
+     ],
+     "cartella": 3,
+     "retro": 4.54,
+     "soglia": 3,
+     "regge": true
+    },
+    "light-high": {
+     "accento": "#8a3500",
+     "colori": {
+      "cartella": "#9e512c",
+      "cartella-retro": "#78381a",
+      "cartella-ombra": "#804226",
+      "foglio-1": "#cab490",
+      "foglio-2": "#c39396"
+     },
+     "fondi": [
+      "#e3e4e6",
+      "#ffffff"
+     ],
+     "cartella": 4.5,
+     "retro": 6.94,
+     "soglia": 4.5,
+     "regge": true
+    },
+    "dark-normal": {
+     "accento": "#ff9a52",
+     "colori": {
+      "cartella": "#e7ac86",
+      "cartella-retro": "#c88c65",
+      "cartella-ombra": "#cc9774",
+      "foglio-1": "#8a4914",
+      "foglio-2": "#907836"
+     },
+     "fondi": [
+      "#101113",
+      "#23262a"
+     ],
+     "cartella": 7.7,
+     "retro": 5.35,
+     "soglia": 3,
+     "regge": true
+    },
+    "dark-high": {
+     "accento": "#ffb27a",
+     "colori": {
+      "cartella": "#e6ad84",
+      "cartella-retro": "#c78d64",
+      "cartella-ombra": "#cb9873",
+      "foglio-1": "#894910",
+      "foglio-2": "#8e7936"
+     },
+     "fondi": [
+      "#101113",
+      "#23262a"
+     ],
+     "cartella": 7.72,
+     "retro": 5.37,
+     "soglia": 4.5,
+     "regge": true
+    }
+   }
+  }
+ ]
+}

@@ -1,0 +1,6 @@
+[
+ {"id":"g4-conflitto-confronta","scena":"proto-nota","mods":["nota","modo","conflitto","confronta"]},
+ {"id":"g4-conflitto-mio","scena":"proto-nota","mods":["nota","modo","conflitto","confermaMio"]},
+ {"id":"g4-conflitto-disco","scena":"proto-nota","mods":["nota","modo","conflitto","confermaDisco"]},
+ {"id":"g4-conflitto-dopo","scena":"proto-nota","mods":["nota","modo","conflitto","conflittoDopo"]}
+]

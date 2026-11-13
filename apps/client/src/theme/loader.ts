@@ -736,6 +736,8 @@ export interface MirroredTheme {
   readonly options?: MirroredOptions;
   /** Il set di icone del tema montato, già validato. Assente senza set. */
   readonly icons?: Readonly<Record<string, readonly string[]>>;
+  /** `appearance.bars` «marcate» (`data-bars`). Assente vuol dire `light`. */
+  readonly bars?: "marked";
 }
 
 export function mountedTheme(): MirroredTheme {
@@ -745,12 +747,14 @@ export function mountedTheme(): MirroredTheme {
     if (ORDER.includes(layer)) layers.push({ layer, text: el.textContent ?? "" });
   }
   const icons = themeIcons();
+  const marked = document.documentElement.dataset.bars === "marked";
   return {
     light: document.documentElement.dataset.theme ?? "",
     contrast: document.documentElement.dataset.contrast ?? "",
     layers,
     options: mountedThemeOptions(document.documentElement),
     ...(Object.keys(icons).length > 0 ? { icons } : {}),
+    ...(marked ? { bars: "marked" as const } : {}),
   };
 }
 
@@ -769,6 +773,8 @@ export function mountMirroredTheme(theme: MirroredTheme): void {
   }
   document.documentElement.dataset.theme = theme.light;
   document.documentElement.dataset.contrast = theme.contrast;
+  if (theme.bars === "marked") document.documentElement.dataset.bars = "marked";
+  else delete document.documentElement.dataset.bars;
   mountMirroredOptions(document.documentElement, theme.options);
   // Il set arriva da un'altra finestra: `replaceThemeIcons` lo ripassa dalla
   // regola, e uno che non regge lascia la serie.

@@ -33,7 +33,8 @@
 /* I colori di serie delle quattro luci, da theme/scrittoio/sheet-dark.css,
    sheet-light.css, sheet-dark-high.css, sheet-light-high.css (--bg, --text,
    --muted, --accent, --accent-contrast, --border, --danger, --focus-ring,
-   --overlay-hover, --overlay-active, --shadow-2). Senza attributo la luce è
+   --overlay-hover, --overlay-active, --shadow-2, e i cinque --logo-* della
+   cartella di Marcuzzo, D26). Senza attributo la luce è
    scura, come il ripiego di theme.ts; senza JS decide il sistema. Un tema
    installato o un accento scelto arrivano da luce.js, in linea su <html>.
    src/avvio/colori.test.ts li tiene uguali alla ricetta: cambiata la ricetta,
@@ -52,6 +53,11 @@
   --avvio-velo: rgb(228 233 230 / 7%);
   --avvio-velo-forte: rgb(228 233 230 / 12%);
   --avvio-ombra: 0 1px 2px rgb(0 0 0 / 28%), 0 10px 28px rgb(0 0 0 / 28%);
+  --avvio-cartella: #89cca8;
+  --avvio-cartella-retro: #67ad88;
+  --avvio-cartella-ombra: #77b493;
+  --avvio-foglio-1: #006e46;
+  --avvio-foglio-2: #238b8b;
 }
 @media (prefers-color-scheme: light) {
   :root:not([data-avvio-luce]) {
@@ -67,6 +73,11 @@
     --avvio-velo: rgb(23 34 27 / 5%);
     --avvio-velo-forte: rgb(23 34 27 / 9%);
     --avvio-ombra: 0 1px 2px rgb(24 28 44 / 6%), 0 10px 28px rgb(24 28 44 / 10%);
+    --avvio-cartella: #37996c;
+    --avvio-cartella-retro: #267853;
+    --avvio-cartella-ombra: #36805d;
+    --avvio-foglio-1: #8ec3c2;
+    --avvio-foglio-2: #95a982;
   }
 }
 :root[data-avvio-luce="light"] {
@@ -82,6 +93,11 @@
   --avvio-velo: rgb(23 34 27 / 5%);
   --avvio-velo-forte: rgb(23 34 27 / 9%);
   --avvio-ombra: 0 1px 2px rgb(24 28 44 / 6%), 0 10px 28px rgb(24 28 44 / 10%);
+  --avvio-cartella: #37996c;
+  --avvio-cartella-retro: #267853;
+  --avvio-cartella-ombra: #36805d;
+  --avvio-foglio-1: #8ec3c2;
+  --avvio-foglio-2: #95a982;
 }
 :root[data-avvio-luce="dark"][data-avvio-contrasto="high"] {
   --avvio-testo: #f1f7f3;
@@ -102,6 +118,9 @@
   --avvio-fuoco: #004e30;
   --avvio-velo: rgb(6 16 10 / 5%);
   --avvio-velo-forte: rgb(6 16 10 / 9%);
+  --avvio-cartella: #077b50;
+  --avvio-cartella-retro: #005b39;
+  --avvio-cartella-ombra: #116442;
 }
 
 /* Il fondo del documento è già quello dell'app: niente bianco fra un disegno
@@ -144,9 +163,13 @@ body:has(> .avvio) {
   text-align: center;
 }
 
-/* Il marchio della barra, due volte più grande: 56 px, raggio 16, la effe di
-   Newsreader in corsivo. Alla consegna, in scala 0,5, è esattamente
-   #brand-menu (28 px, raggio 8, glifo 19 px). */
+/* Il marchio: Marcuzzo intero (`marcuzzo.svg`, D26) a 56 px, senza tessera
+   né ombra. Il gufo ha i colori del disegno; la cartella e i fogli quelli
+   della luce risolta: di serie i ruoli `--logo-*` dei quattro fogli della
+   ricetta, scritti qui sopra perché l'avvio si disegna prima di ogni foglio;
+   con un tema o una tinta scelti arrivano da luce.js, salvati alla consegna
+   con le chiavi `cartella`, `cartella-retro`, `cartella-ombra`, `foglio-1` e
+   `foglio-2`. */
 .avvio-marchio {
   position: relative;
   display: grid;
@@ -154,33 +177,35 @@ body:has(> .avvio) {
   width: 56px;
   height: 56px;
   border-radius: 16px;
-  background: var(--avvio-accento);
-  color: var(--avvio-inchiostro);
+  background: none;
   opacity: 0;
   transform: scale(0.96);
   transition:
     opacity 220ms cubic-bezier(0.22, 1, 0.36, 1),
     transform 360ms cubic-bezier(0.22, 1, 0.36, 1);
 }
-.avvio-marchio::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  box-shadow: var(--avvio-ombra);
-  pointer-events: none;
-}
 .avvio[data-marchio] .avvio-marchio {
   opacity: 1;
   transform: none;
 }
-.avvio-glifo {
-  font-family: "Avvio Newsreader", Georgia, "Times New Roman", serif;
-  font-size: 38px;
-  font-style: italic;
-  font-weight: 500;
-  line-height: 1;
-  transform: translateY(-2px);
+.avvio-logo {
+  width: 56px;
+  height: 56px;
+}
+.avvio-logo .logo-cartella {
+  fill: var(--avvio-cartella);
+}
+.avvio-logo .logo-cartella-retro {
+  fill: var(--avvio-cartella-retro);
+}
+.avvio-logo .logo-cartella-ombra {
+  fill: var(--avvio-cartella-ombra);
+}
+.avvio-logo .logo-foglio-1 {
+  fill: var(--avvio-foglio-1);
+}
+.avvio-logo .logo-foglio-2 {
+  fill: var(--avvio-foglio-2);
 }
 /* Il segnale del guasto: un punto rosso sull'angolo, staccato dal fondo. */
 .avvio-segnale {
@@ -431,10 +456,33 @@ body:has(> .avvio) {
   pointer-events: none;
 }
 /* Colori forzati (alto contrasto di Windows): il marchio tiene un bordo, la
-   scia prende il colore di sistema. */
+   scia prende il colore di sistema. Il logo diventa una sagoma, come quello
+   della pelle (skin/frame.css): la cartella nel colore del testo, il gufo nel
+   grigio del sistema, le facce, gli occhi e i fogli nel colore del fondo. */
 @media (forced-colors: active) {
   .avvio-marchio {
     outline: 1px solid CanvasText;
+  }
+  .avvio-logo {
+    forced-color-adjust: none;
+  }
+  .avvio-logo path[class] {
+    fill: CanvasText;
+    stroke: none;
+  }
+  .avvio-logo path.logo-piumaggio,
+  .avvio-logo path.logo-pancia,
+  .avvio-logo path.logo-ali,
+  .avvio-logo path.logo-ombra,
+  .avvio-logo path.logo-zampe {
+    fill: GrayText;
+  }
+  .avvio-logo path.logo-bianco,
+  .avvio-logo path.logo-occhi,
+  .avvio-logo path.logo-becco-luce,
+  .avvio-logo path.logo-foglio-1,
+  .avvio-logo path.logo-foglio-2 {
+    fill: Canvas;
   }
   .avvio-scia {
     background: Highlight;

@@ -1,0 +1,47 @@
+/* → theme/scrittoio/skin/media.css */
+/* ── Il PDF: la barra di serie in cima, il piano sotto ──────────────────────
+   Non più una pillola sospesa che va a capo: la barra in una fila sta sulla
+   carta, sotto la testata, come quella del documento; le pagine sono fogli
+   sul piano un tono sotto. «Pagina N di M» passa nella banda. */
+.media-surface > .media-pdf {
+  background: var(--sheet);
+}
+.media-pdf-body {
+  background: var(--sheet-2);
+}
+/* La barra del PDF è la barra di serie (`kit-bar`): qui solo ciò che è suo.
+   Il sommario è un elenco a tendina largo quanto un titolo corto. */
+.media-pdf-toolbar > select.kit-bar-field {
+  flex: 0 1 12rem;
+  min-width: 6rem;
+}
+/* La ricerca: il campo dei campi, con la lente dentro. */
+.media-pdf-search {
+  position: relative;
+  display: inline-flex;
+  flex: 0 1 14rem;
+  align-items: center;
+  min-width: 8rem;
+}
+.media-pdf-search > svg {
+  position: absolute;
+  left: var(--space-4);
+  width: 14px;
+  height: 14px;
+  color: var(--muted);
+  pointer-events: none;
+}
+.media-pdf-search > .kit-bar-field {
+  flex: 1 1 auto;
+  width: 100%;
+  min-width: 0;
+  padding-left: calc(var(--space-4) + 14px + var(--space-3));
+}
+.media-pdf-toolbar > .kit-options-more {
+  margin-inline-start: auto;
+}
+/* Le diapositive: «3 / 12» in tondo. */
+.slide-status {
+  letter-spacing: 0;
+  text-transform: none;
+}

@@ -228,6 +228,7 @@ Tutti i comandi girano da `apps/client/`; gli script sorgente sono in
 | `npm run bench:grid` | i gesti della griglia con mouse e tastiera veri |
 | `npm run bench:graph-scale` | il grafo a 2k/10k nodi: tempi, heap, soak |
 | `npm run bench:large` | i disegni grandi (da 200 a 49 900 elementi) nell'app vera |
+| `npm run bench:tree` | l'albero di un vault da 5.000 file: primo disegno, apertura, scorrimento, ricerca, a velocità normale e con la pagina quattro volte più lenta |
 | `npm run bench:webview` | le misure nella WebView vera (vedi [webview-measurements.md](webview-measurements.md)) |
 
 Varianti usate dalle prove di accettazione della Graph View e dei disegni
@@ -240,6 +241,7 @@ npm run bench:graph-scale -- --nodes 10000 --seed 6 --cycles 1 --soak-windows 8
 npm run bench:graph-scale -- --nodes 10000 --seed 6 --cycles 1 --soak-windows 16
 npm run bench:large -- --elements 30000   # da 200 a 49 900 elementi, senza soglie
 npm run bench:large -- --cpu 4            # la pagina quattro volte più lenta
+npm run bench:tree -- --cpu 4             # l'albero da 5.000 file, solo a pagina quattro volte più lenta
 ```
 
 ## Visuale e accessibilità

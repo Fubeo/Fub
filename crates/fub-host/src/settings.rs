@@ -145,6 +145,11 @@ pub const APPEARANCE_THEME: &str = "appearance.theme";
 pub const APPEARANCE_THEME_ID: &str = "appearance.theme-id";
 pub const APPEARANCE_CONTRAST: &str = "appearance.contrast";
 pub const APPEARANCE_DENSITY: &str = "appearance.density";
+/// Il vassoio sotto le schede, le barre dei comandi e la colonna degli
+/// strumenti: `light` (di serie, appena più chiaro della carta) o `marked`
+/// (il tono di `--sheet-2`, che si stacca di più). Lo legge `theme.ts`, che
+/// mette l'attributo `data-bars` sulla radice; la pelle fa il resto.
+pub const APPEARANCE_BARS: &str = "appearance.bars";
 pub const APPEARANCE_BODY: &str = "appearance.body";
 pub const APPEARANCE_LINE_HEIGHT: &str = "appearance.line-height";
 pub const APPEARANCE_MEASURE: &str = "appearance.measure";
@@ -939,6 +944,16 @@ fn appearance_settings() -> Vec<SettingSpec> {
                 UiOption::new("relaxed", Text::key(C_DENSITY_RELAXED)),
             ],
         ),
+        choice(
+            APPEARANCE_BARS,
+            C_BARS,
+            C_BARS_DESC,
+            "light",
+            vec![
+                UiOption::new("light", Text::key(C_BARS_LIGHT)),
+                UiOption::new("marked", Text::key(C_BARS_MARKED)),
+            ],
+        ),
         number(
             CHROME_COMPACTNESS,
             C_COMPACTNESS,
@@ -1576,6 +1591,10 @@ const C_CSS_SNIPPETS: &str = "core.css_snippets";
 const C_CSS_SNIPPETS_DESC: &str = "core.css_snippets.desc";
 const C_DENSITY_COMFORTABLE: &str = "core.density.comfortable";
 const C_DENSITY_RELAXED: &str = "core.density.relaxed";
+const C_BARS: &str = "core.bars";
+const C_BARS_DESC: &str = "core.bars.desc";
+const C_BARS_LIGHT: &str = "core.bars.light";
+const C_BARS_MARKED: &str = "core.bars.marked";
 const C_BODY: &str = "core.body";
 const C_BODY_DESC: &str = "core.body.desc";
 const C_LINE_HEIGHT: &str = "core.line_height";
@@ -2238,6 +2257,13 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with(C_DENSITY_COMPACT, "Compatta")
         .with(C_DENSITY_COMFORTABLE, "Comoda")
         .with(C_DENSITY_RELAXED, "Rilassata")
+        .with(C_BARS, "Le barre")
+        .with(
+            C_BARS_DESC,
+            "Il vassoio sotto le schede, le barre dei comandi e la colonna degli strumenti: chiaro, vicino alla carta, o marcato, che si stacca di più.",
+        )
+        .with(C_BARS_LIGHT, "Chiare")
+        .with(C_BARS_MARKED, "Marcate")
         .with(C_BODY, "Corpo del testo (px)")
         .with(
             C_BODY_DESC,
@@ -2866,6 +2892,13 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with(C_DENSITY_COMPACT, "Compact")
         .with(C_DENSITY_COMFORTABLE, "Comfortable")
         .with(C_DENSITY_RELAXED, "Relaxed")
+        .with(C_BARS, "Bars")
+        .with(
+            C_BARS_DESC,
+            "The tray under the tabs, the command bars and the tools column: light, close to the paper, or marked, standing out more.",
+        )
+        .with(C_BARS_LIGHT, "Light")
+        .with(C_BARS_MARKED, "Marked")
         .with(C_BODY, "Text size (px)")
         .with(C_BODY_DESC, "Text size on reading surfaces.")
         .with(C_LINE_HEIGHT, "Line height")
@@ -3224,6 +3257,8 @@ fn set_log_levels(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use fub_abi::settings::{SettingSource, SettingValue};
+    use fub_kernel::MachineSettings;
 
     /// Senza la feature `craft` nessuna delle cinque di «App esterne» c'è.
     #[cfg(not(feature = "craft"))]
@@ -3441,5 +3476,75 @@ mod tests {
         assert_eq!(caps, FRAME_RATE_CAPS.map(Some).to_vec());
         assert_eq!(frame_rate_cap("59"), None);
         assert_eq!(frame_rate_cap("veloce"), None);
+    }
+
+    /// Le barre sono una scelta di macchina fra due, di serie il vassoio
+    /// chiaro, e la riga sta subito dopo «Densità», come nel prototipo.
+    #[test]
+    fn the_bars_are_a_machine_choice_of_light_or_marked_after_density() {
+        let machine = core_machine_settings();
+        let at = |key: &str| machine.iter().position(|spec| spec.key == key);
+        assert_eq!(at(APPEARANCE_BARS), at(APPEARANCE_DENSITY).map(|i| i + 1));
+        let spec = &machine[at(APPEARANCE_BARS).expect("le barre sono dichiarate")];
+        let SettingKind::Choice { default, options } = &spec.kind else {
+            panic!("le barre sono una scelta");
+        };
+        assert_eq!(default, "light");
+        let values: Vec<&str> = options.iter().map(|option| option.value.as_str()).collect();
+        assert_eq!(values, ["light", "marked"]);
+        assert!(!spec.program_writable);
+    }
+
+    fn bars_file(dir: &tempfile::TempDir) -> camino::Utf8PathBuf {
+        camino::Utf8PathBuf::from_path_buf(dir.path().join("settings.json"))
+            .expect("una cartella di prova con un percorso UTF-8")
+    }
+
+    /// La scelta sopravvive al riavvio: la macchina la scrive sul suo file, e
+    /// aprendolo di nuovo la rilegge, senza che la shell la ricordi.
+    #[test]
+    fn the_marked_tray_survives_a_restart() {
+        let dir = tempfile::tempdir().expect("una cartella di prova");
+        let path = bars_file(&dir);
+        {
+            let (machine, _) = MachineSettings::open(&path);
+            machine
+                .declare(&core_machine_settings())
+                .expect("lo schema della macchina");
+            machine
+                .set(APPEARANCE_BARS, SettingValue::Text("marked".into()))
+                .expect("la scelta si scrive");
+        }
+        let (reopened, warning) = MachineSettings::open(&path);
+        assert!(warning.is_none(), "{warning:?}");
+        reopened
+            .declare(&core_machine_settings())
+            .expect("lo schema della macchina");
+        assert_eq!(
+            reopened.effective(APPEARANCE_BARS).expect("dichiarata"),
+            (SettingValue::Text("marked".into()), SettingSource::Machine)
+        );
+    }
+
+    /// Un valore che non è né `light` né `marked` (un file scritto a mano, o una
+    /// versione futura con un'altra scelta) vale il predefinito: non spegne il
+    /// vassoio, come per ogni scelta di macchina.
+    #[test]
+    fn an_unknown_bars_value_falls_back_to_the_light_tray() {
+        let dir = tempfile::tempdir().expect("una cartella di prova");
+        let path = bars_file(&dir);
+        std::fs::write(
+            &path,
+            r#"{"version":2,"values":{"appearance.bars":"neon"}}"#,
+        )
+        .expect("il file di prova");
+        let (machine, _) = MachineSettings::open(&path);
+        machine
+            .declare(&core_machine_settings())
+            .expect("lo schema della macchina");
+        assert_eq!(
+            machine.effective(APPEARANCE_BARS).expect("dichiarata"),
+            (SettingValue::Text("light".into()), SettingSource::Default)
+        );
     }
 }

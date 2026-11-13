@@ -33,8 +33,9 @@ il link», «Apri con un'altra app», «Mostra nell'esploratore», «Incolla sen
 formattazione».
 
 Lo stesso lessico tiene le parole dei componenti, uguali nella pagina
-«Componenti» delle impostazioni, nel riquadro di un file il cui editor è spento
-e nella riga di comando: Componente (non «Plugin», «Estensione», «Modulo»),
+«Componenti» delle impostazioni, nella scheda di un componente installato
+(«Acceso», «Spegni il componente prima di toglierlo.», «Togli»), nel riquadro
+di un file il cui editor è spento e nella riga di comando: Componente (non «Plugin», «Estensione», «Modulo»),
 Accendi e Spegni (non «Abilita», «Disabilita», «Disattiva»), Serve a, Non serve
 più, Togli, Tienili, Profilo, personalizzato, più avanti e solo come file. Le
 voci di un componente spento non ci sono nei menu (barra laterale, «Nuovo» e
@@ -207,6 +208,8 @@ griglia delle tabelle in Live ha il suo
 - `apps/client/src/i18n/lexicon.ts`: il lessico dei menu;
 - `apps/client/src/ui/menu-budget.test.ts` coi casi di `ui/menu-cases.ts`: il
   bilancio di ogni menu;
+- `apps/client/src/i18n/lexicon-settings.test.ts`: il lessico nei testi
+  `settings.components.*` delle impostazioni;
 - `apps/client/src/ui/system-menu.ts`: il menu della WebView spento dove Fub
   non ne ha uno;
 - `apps/client/src/panels/mini-bar.ts`: la mini-barra;

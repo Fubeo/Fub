@@ -1,0 +1,9 @@
+[
+ {"id":"pz-menu-testo","scena":"menu-testo","mods":[]},
+ {"id":"pz-menu-link","scena":"menu-link","mods":[]},
+ {"id":"pz-menu-albero","scena":"menu-albero-nota","mods":[]},
+ {"id":"pz-menu-cartella","scena":"menu-albero-cartella","mods":[]},
+ {"id":"pz-menu-scheda","scena":"menu-scheda","mods":[]},
+ {"id":"foglio-comandi","scena":"grid-commands","mods":["cornice","testataFile","kitRibbon","modo"],"dopo":1280,"modsDopo":["kitRibbon","modo"]},
+ {"id":"foglio-comandi-cerca","scena":"grid-commands-search","mods":["cornice","testataFile","kitRibbon","modo"],"dopo":1280,"modsDopo":["kitRibbon","modo"]}
+]

@@ -1,0 +1,4795 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Celle dei fogli</title>
+<!-- Prototipo del piano «griglia-celle»: le celle della griglia dei fogli, i
+     loro segni e i loro movimenti, allo stesso livello della barra di K3.
+     Generato da uno script del pianificatore. Le copie del CSS di Fub sono
+     marcate «copia» e non si spostano; i blocchi «→ file» sono il codice
+     nuovo che i task portano in quei file; i blocchi «solo prototipo»
+     restano qui. `data-griglia="nuova"` e `data-griglia="oggi"` sono le due
+     griglie del confronto: la barra del prototipo accende le une o le altre.
+     La barra multifunzione non c'è: sta nel prototipo di K3
+     (PLAN-ui/menu-comandi-fogli.html). -->
+<!-- solo prototipo: Fub porta i suoi caratteri (theme/scrittoio/fonts.css). -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700&amp;family=IBM+Plex+Mono:wght@400&amp;display=swap">
+<style>
+/* da theme/scrittoio/sheet-light.css (copia dei token della luce chiara) */
+:root {
+  --space-1: 2px;
+  --space-2: 4px;
+  --space-3: 6px;
+  --space-4: 8px;
+  --space-5: 12px;
+  --space-6: 16px;
+  --space-7: 20px;
+  --space-8: 24px;
+  --space-9: 32px;
+  --space-10: 48px;
+  --space-11: 64px;
+  --control-h: 32px;
+  --row-h: 28px;
+  --radius-xs: 4px;
+  --radius-chip: 6px;
+  --radius-control: 8px;
+  --radius-menu: 10px;
+  --radius-sheet: 12px;
+  --radius-dialog: 14px;
+  --radius-pill: 999px;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --font-ui: "Hanken Grotesk Variable", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-reading: "Newsreader Variable", Georgia, "Times New Roman", serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  --text-xs: 11px;
+  --text-sm: 12px;
+  --text-base: 13px;
+  --text-md: 14px;
+  --text-lg: 15px;
+  --text-xl: 16px;
+  --text-2xl: 19px;
+  --text-3xl: 23px;
+  --text-reading: 17px;
+  --text-source: 14px;
+  --weight-regular: 400;
+  --weight-medium: 500;
+  --weight-bold: 600;
+  --leading-tight: 1.3;
+  --leading-normal: 1.45;
+  --leading-relaxed: 1.65;
+  --content-width: 68ch;
+  --tracking-caps: 0.06em;
+  --duration-state: 90ms;
+  --duration-fast: 140ms;
+  --duration-med: 220ms;
+  --duration-slow: 360ms;
+  --duration-scene: 560ms;
+  --ease: cubic-bezier(0.25, 0.1, 0.25, 1);
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-in: cubic-bezier(0.32, 0, 0.67, 0);
+  --spring-snap-k: 560;
+  --spring-snap-c: 38;
+  --spring-soft-k: 300;
+  --spring-soft-c: 30;
+  --spring-wide-k: 170;
+  --spring-wide-c: 24;
+  --spring-elastic-k: 420;
+  --spring-elastic-c: 20;
+  --spring-jelly-k: 260;
+  --spring-jelly-c: 12;
+  --focus-ring-width: 2px;
+  --focus-ring-offset: 2px;
+  --bg: #e8edf5;
+  --bg-chrome: #e8edf5;
+  --bg-panel: #e8edf5;
+  --bg-hover: #dce4ee;
+  --bg-active: #d1dae6;
+  --sheet: #fcfdff;
+  --sheet-2: #f3f6f9;
+  --bg-input: #f3f6f9;
+  --bg-elev: #ffffff;
+  --overlay-hover: rgb(26 31 41 / 5%);
+  --overlay-active: rgb(26 31 41 / 9%);
+  --scrim: rgb(14 22 36 / 32%);
+  --text: #1a1f29;
+  --muted: #5a5f6a;
+  --border: #d3d8e0;
+  --border-strong: #b2b8c2;
+  --outline: #808691;
+  --accent: #2b56cc;
+  --accent-soft: #1a40b6;
+  --accent-contrast: #fafcff;
+  --accent-wash: #d8e5ff;
+  --accent-veil: rgb(43 86 204 / 12%);
+  --focus-ring: #2b56cc;
+  --danger: #ca131b;
+  --danger-wash: rgb(202 19 27 / 12%);
+  --danger-contrast: #fffbfa;
+  --warning: #905900;
+  --warning-wash: rgb(144 89 0 / 14%);
+  --warning-contrast: #fefbf8;
+  --success: #007541;
+  --success-wash: rgb(0 117 65 / 14%);
+  --success-contrast: #f9fdfa;
+  --info: #006ba0;
+  --info-wash: rgb(0 107 160 / 12%);
+  --info-contrast: #f9fcff;
+  --highlight: #fade4e;
+  --amber: #d18500;
+  --shadow-1: 0 1px 1px rgb(24 28 44 / 5%), 0 6px 20px rgb(24 28 44 / 7%);
+  --shadow-2: 0 1px 2px rgb(24 28 44 / 6%), 0 10px 28px rgb(24 28 44 / 10%);
+  --shadow-3: 0 2px 4px rgb(24 28 44 / 8%), 0 14px 36px rgb(24 28 44 / 14%);
+  --shadow-4: 0 3px 8px rgb(24 28 44 / 9%), 0 20px 52px rgb(24 28 44 / 18%);
+  --shadow-5: 0 4px 10px rgb(24 28 44 / 10%), 0 28px 70px rgb(24 28 44 / 22%);
+  --shadow-6: 0 6px 14px rgb(24 28 44 / 12%), 0 32px 80px rgb(24 28 44 / 24%);
+  --shadow-7: 0 10px 24px rgb(24 28 44 / 16%), 0 40px 96px rgb(24 28 44 / 28%);
+  --shadow-sm: 0 1px 1px rgb(24 28 44 / 5%), 0 6px 20px rgb(24 28 44 / 7%);
+  --shadow-md: 0 2px 4px rgb(24 28 44 / 8%), 0 14px 36px rgb(24 28 44 / 14%);
+  --shadow-lg: 0 4px 10px rgb(24 28 44 / 10%), 0 28px 70px rgb(24 28 44 / 22%);
+  --elevation-paper-surface: #fcfdff;
+  --elevation-paper-border: #fcfdff;
+  --elevation-paper-shadow: 0 1px 1px rgb(24 28 44 / 5%), 0 6px 20px rgb(24 28 44 / 7%);
+  --elevation-base-surface: #e8edf5;
+  --elevation-base-border: #e8edf5;
+  --elevation-base-shadow: none;
+  --elevation-chrome-surface: #e8edf5;
+  --elevation-chrome-border: #e8edf5;
+  --elevation-chrome-shadow: none;
+  --elevation-floating-surface: #ffffff;
+  --elevation-floating-border: #ffffff;
+  --elevation-floating-shadow: 0 2px 4px rgb(24 28 44 / 8%), 0 14px 36px rgb(24 28 44 / 14%);
+  --elevation-dialog-surface: #ffffff;
+  --elevation-dialog-border: #ffffff;
+  --elevation-dialog-shadow: 0 4px 10px rgb(24 28 44 / 10%), 0 28px 70px rgb(24 28 44 / 22%);
+  --draw-desk: #edeef1;
+  --graph-node: #808693;
+  --graph-node-active: #2b56cc;
+  --graph-node-hover: #1a40b6;
+  --doc-bg: #fcfdff;
+  --doc-active-line: #f4f7fb;
+  --doc-selection: #d0defd;
+  --doc-tooltip-bg: #ffffff;
+  --doc-fill: rgb(26 31 41 / 8%);
+  --doc-fill-soft: rgb(26 31 41 / 5%);
+  --doc-rule: rgb(26 31 41 / 30%);
+  --doc-rule-soft: rgb(26 31 41 / 16%);
+  --doc-highlight: rgb(250 222 78 / 55%);
+  --doc-fg: #22272f;
+  --doc-link: #2c57cd;
+  --doc-heading: #22272f;
+  --doc-danger: #c60817;
+  --doc-gutter-fg: #5d626d;
+  --doc-caret: #2b56cc;
+  --syn-keyword: #6f4797;
+  --syn-name: #9a3936;
+  --syn-function: #215da5;
+  --syn-literal: #904700;
+  --syn-type: #785800;
+  --syn-operator: #006b74;
+  --syn-comment: #5c626e;
+  --syn-string: #067132;
+  --syn-heading: #22272f;
+  --syn-invalid: #993a33;
+  --doc-ins: #2c57cd;
+  --doc-del: #c60817;
+  --doc-proof-spell: #d01d21;
+  --doc-proof-gram: #a16500;
+  --doc-find: #f6e697;
+  --doc-find-now: #fac053;
+  --doc-comment: #b16f00;
+  --doc-author-1: #0060bf;
+  --doc-author-2: #b02a2d;
+  --doc-author-3: #007219;
+  --doc-author-4: #813faa;
+  --doc-author-5: #934f00;
+  --doc-author-6: #006d72;
+  --doc-syntax-near: #588963;
+  --doc-ghost: #797e88;
+  --doc-wavy: #b16f00;
+  --doc-block-hover: rgb(26 31 41 / 4%);
+  --doc-block-selected: rgb(43 86 204 / 12%);
+  --doc-drop-line: #2b56cc;
+  --doc-color-gray: #5e626b;
+  --doc-tint-gray: #e4e8ef;
+  --doc-color-brown: #84573e;
+  --doc-tint-brown: #f6e4da;
+  --doc-color-orange: #984b00;
+  --doc-tint-orange: #ffe1ce;
+  --doc-color-yellow: #795f00;
+  --doc-tint-yellow: #f4e7c3;
+  --doc-color-green: #007231;
+  --doc-tint-green: #d2f2d7;
+  --doc-color-blue: #0064b0;
+  --doc-tint-blue: #d7eaff;
+  --doc-color-purple: #7847a6;
+  --doc-tint-purple: #eee1ff;
+  --doc-color-pink: #9e366f;
+  --doc-tint-pink: #ffddec;
+  --doc-color-red: #b7191c;
+  --doc-tint-red: #ffdfdb;
+  --paper-bg: #ffffff;
+  --paper-ink: #14161a;
+  --paper-link: #2c57cd;
+  --paper-danger: #c60817;
+  --paper-rule: rgb(20 22 26 / 30%);
+  --paper-rule-soft: rgb(20 22 26 / 16%);
+  --paper-fill: rgb(20 22 26 / 8%);
+  --paper-fill-soft: rgb(20 22 26 / 5%);
+  --paper-caret: #2c57cd;
+  --paper-selection: #d0defd;
+  --paper-active-line: #f4f7fb;
+  --paper-highlight: rgb(250 222 78 / 55%);
+  --paper-ins: #2c57cd;
+  --paper-del: #c60817;
+  --paper-proof-spell: #d01d21;
+  --paper-proof-gram: #a16500;
+  --paper-find: #f6e697;
+  --paper-find-now: #fac053;
+  --paper-comment: #b16f00;
+  --paper-author-1: #0060bf;
+  --paper-author-2: #b02a2d;
+  --paper-author-3: #007219;
+  --paper-author-4: #813faa;
+  --paper-author-5: #934f00;
+  --paper-author-6: #006d72;
+  color-scheme: light;
+  font-family: var(--font-ui);
+  font-size: var(--text-base);
+}
+</style>
+<style>
+/* da theme/scrittoio/sheet-dark.css (copia dei token della luce scura: la radice
+   prende data-luce="scura" dalla barra del prototipo) */
+:root[data-luce="scura"] {
+  --space-1: 2px;
+  --space-2: 4px;
+  --space-3: 6px;
+  --space-4: 8px;
+  --space-5: 12px;
+  --space-6: 16px;
+  --space-7: 20px;
+  --space-8: 24px;
+  --space-9: 32px;
+  --space-10: 48px;
+  --space-11: 64px;
+  --control-h: 32px;
+  --row-h: 28px;
+  --radius-xs: 4px;
+  --radius-chip: 6px;
+  --radius-control: 8px;
+  --radius-menu: 10px;
+  --radius-sheet: 12px;
+  --radius-dialog: 14px;
+  --radius-pill: 999px;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --font-ui: "Hanken Grotesk Variable", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-reading: "Newsreader Variable", Georgia, "Times New Roman", serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  --text-xs: 11px;
+  --text-sm: 12px;
+  --text-base: 13px;
+  --text-md: 14px;
+  --text-lg: 15px;
+  --text-xl: 16px;
+  --text-2xl: 19px;
+  --text-3xl: 23px;
+  --text-reading: 17px;
+  --text-source: 14px;
+  --weight-regular: 400;
+  --weight-medium: 500;
+  --weight-bold: 600;
+  --leading-tight: 1.3;
+  --leading-normal: 1.45;
+  --leading-relaxed: 1.65;
+  --content-width: 68ch;
+  --tracking-caps: 0.06em;
+  --duration-state: 90ms;
+  --duration-fast: 140ms;
+  --duration-med: 220ms;
+  --duration-slow: 360ms;
+  --duration-scene: 560ms;
+  --ease: cubic-bezier(0.25, 0.1, 0.25, 1);
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-in: cubic-bezier(0.32, 0, 0.67, 0);
+  --spring-snap-k: 560;
+  --spring-snap-c: 38;
+  --spring-soft-k: 300;
+  --spring-soft-c: 30;
+  --spring-wide-k: 170;
+  --spring-wide-c: 24;
+  --spring-elastic-k: 420;
+  --spring-elastic-c: 20;
+  --spring-jelly-k: 260;
+  --spring-jelly-c: 12;
+  --focus-ring-width: 2px;
+  --focus-ring-offset: 2px;
+  --bg: #0a0e16;
+  --bg-chrome: #0a0e16;
+  --bg-panel: #0a0e16;
+  --bg-hover: #121720;
+  --bg-active: #1a1f2a;
+  --sheet: #151a21;
+  --sheet-2: #1d222a;
+  --bg-input: #1d222a;
+  --bg-elev: #212730;
+  --overlay-hover: rgb(229 232 237 / 7%);
+  --overlay-active: rgb(229 232 237 / 12%);
+  --scrim: rgb(0 0 0 / 52%);
+  --text: #e5e8ed;
+  --muted: #a0a5ae;
+  --border: #2b303a;
+  --border-strong: #424853;
+  --outline: #747b87;
+  --accent: #82a8fd;
+  --accent-soft: #a3c0ff;
+  --accent-contrast: #070d1a;
+  --accent-wash: #213156;
+  --accent-veil: rgb(130 168 253 / 20%);
+  --focus-ring: #82a8fd;
+  --danger: #f66d67;
+  --danger-wash: rgb(246 109 103 / 18%);
+  --danger-contrast: #180807;
+  --warning: #eeb154;
+  --warning-wash: rgb(238 177 84 / 20%);
+  --warning-contrast: #150b01;
+  --success: #5ec386;
+  --success-wash: rgb(94 195 134 / 20%);
+  --success-contrast: #031108;
+  --info: #73baea;
+  --info-wash: rgb(115 186 234 / 18%);
+  --info-contrast: #020f19;
+  --highlight: rgb(216 189 81 / 30%);
+  --amber: #eeb154;
+  --shadow-1: 0 1px 1px rgb(0 0 0 / 25%), 0 6px 20px rgb(0 0 0 / 22%);
+  --shadow-2: 0 1px 2px rgb(0 0 0 / 28%), 0 10px 28px rgb(0 0 0 / 28%);
+  --shadow-3: 0 2px 4px rgb(0 0 0 / 30%), 0 14px 36px rgb(0 0 0 / 38%);
+  --shadow-4: 0 3px 8px rgb(0 0 0 / 32%), 0 20px 52px rgb(0 0 0 / 44%);
+  --shadow-5: 0 4px 10px rgb(0 0 0 / 35%), 0 28px 70px rgb(0 0 0 / 50%);
+  --shadow-6: 0 6px 14px rgb(0 0 0 / 38%), 0 32px 80px rgb(0 0 0 / 54%);
+  --shadow-7: 0 10px 24px rgb(0 0 0 / 42%), 0 40px 96px rgb(0 0 0 / 60%);
+  --shadow-sm: 0 1px 1px rgb(0 0 0 / 25%), 0 6px 20px rgb(0 0 0 / 22%);
+  --shadow-md: 0 2px 4px rgb(0 0 0 / 30%), 0 14px 36px rgb(0 0 0 / 38%);
+  --shadow-lg: 0 4px 10px rgb(0 0 0 / 35%), 0 28px 70px rgb(0 0 0 / 50%);
+  --elevation-paper-surface: #151a21;
+  --elevation-paper-border: #151a21;
+  --elevation-paper-shadow: 0 1px 1px rgb(0 0 0 / 25%), 0 6px 20px rgb(0 0 0 / 22%);
+  --elevation-base-surface: #0a0e16;
+  --elevation-base-border: #0a0e16;
+  --elevation-base-shadow: none;
+  --elevation-chrome-surface: #0a0e16;
+  --elevation-chrome-border: #0a0e16;
+  --elevation-chrome-shadow: none;
+  --elevation-floating-surface: #212730;
+  --elevation-floating-border: #212730;
+  --elevation-floating-shadow: 0 2px 4px rgb(0 0 0 / 30%), 0 14px 36px rgb(0 0 0 / 38%);
+  --elevation-dialog-surface: #212730;
+  --elevation-dialog-border: #212730;
+  --elevation-dialog-shadow: 0 4px 10px rgb(0 0 0 / 35%), 0 28px 70px rgb(0 0 0 / 50%);
+  --draw-desk: #2b2e32;
+  --graph-node: #747b87;
+  --graph-node-active: #82a8fd;
+  --graph-node-hover: #a3c0ff;
+  --doc-bg: #151a21;
+  --doc-active-line: #1b1f28;
+  --doc-selection: #26365c;
+  --doc-tooltip-bg: #212730;
+  --doc-fill: rgb(229 232 237 / 11%);
+  --doc-fill-soft: rgb(229 232 237 / 7%);
+  --doc-rule: rgb(229 232 237 / 34%);
+  --doc-rule-soft: rgb(229 232 237 / 20%);
+  --doc-highlight: rgb(216 189 81 / 30%);
+  --doc-fg: #dbdee3;
+  --doc-link: #82a8fd;
+  --doc-heading: #dbdee3;
+  --doc-danger: #ff746e;
+  --doc-gutter-fg: #a0a5ae;
+  --doc-caret: #82a8fd;
+  --syn-keyword: #c8a5f0;
+  --syn-name: #f69b94;
+  --syn-function: #87bafd;
+  --syn-literal: #eea471;
+  --syn-type: #d8b260;
+  --syn-operator: #4fccd9;
+  --syn-comment: #98a0ac;
+  --syn-string: #82cb92;
+  --syn-heading: #dbdee3;
+  --syn-invalid: #f69c91;
+  --doc-ins: #82a8fd;
+  --doc-del: #ff746e;
+  --doc-proof-spell: #f66d67;
+  --doc-proof-gram: #eeb154;
+  --doc-find: #473d13;
+  --doc-find-now: #755010;
+  --doc-comment: #eeb154;
+  --doc-author-1: #7cb4fc;
+  --doc-author-2: #f4928a;
+  --doc-author-3: #7fc581;
+  --doc-author-4: #c89bea;
+  --doc-author-5: #e99e5e;
+  --doc-author-6: #30c8cf;
+  --doc-syntax-near: #679270;
+  --doc-ghost: #7b808a;
+  --doc-wavy: #d49838;
+  --doc-block-hover: rgb(229 232 237 / 6%);
+  --doc-block-selected: rgb(130 168 253 / 20%);
+  --doc-drop-line: #82a8fd;
+  --doc-color-gray: #acb1bb;
+  --doc-tint-gray: #2f3339;
+  --doc-color-brown: #cda894;
+  --doc-tint-brown: #3f2f26;
+  --doc-color-orange: #ec9c63;
+  --doc-tint-orange: #4b290f;
+  --doc-color-yellow: #cbae5e;
+  --doc-tint-yellow: #3e310b;
+  --doc-color-green: #7fc48e;
+  --doc-tint-green: #1c3b23;
+  --doc-color-blue: #78b6f6;
+  --doc-tint-blue: #193550;
+  --doc-color-purple: #c29feb;
+  --doc-tint-purple: #3a2a4b;
+  --doc-color-pink: #e793bb;
+  --doc-tint-pink: #492537;
+  --doc-color-red: #ff8b7f;
+  --doc-tint-red: #53211d;
+  --paper-bg: #ffffff;
+  --paper-ink: #14161a;
+  --paper-link: #2c57cd;
+  --paper-danger: #c60817;
+  --paper-rule: rgb(20 22 26 / 30%);
+  --paper-rule-soft: rgb(20 22 26 / 16%);
+  --paper-fill: rgb(20 22 26 / 8%);
+  --paper-fill-soft: rgb(20 22 26 / 5%);
+  --paper-caret: #2c57cd;
+  --paper-selection: #d0defd;
+  --paper-active-line: #f4f7fb;
+  --paper-highlight: rgb(250 222 78 / 55%);
+  --paper-ins: #2c57cd;
+  --paper-del: #c60817;
+  --paper-proof-spell: #d01d21;
+  --paper-proof-gram: #a16500;
+  --paper-find: #f6e697;
+  --paper-find-now: #fac053;
+  --paper-comment: #b16f00;
+  --paper-author-1: #0060bf;
+  --paper-author-2: #b02a2d;
+  --paper-author-3: #007219;
+  --paper-author-4: #813faa;
+  --paper-author-5: #934f00;
+  --paper-author-6: #006d72;
+  color-scheme: dark;
+  font-family: var(--font-ui);
+  font-size: var(--text-base);
+}
+</style>
+<style>
+/* da theme/scrittoio/sheet-light-high.css (copia: il contrasto alto della luce chiara) */
+:root[data-luce="chiara-alta"] {
+  --space-1: 2px;
+  --space-2: 4px;
+  --space-3: 6px;
+  --space-4: 8px;
+  --space-5: 12px;
+  --space-6: 16px;
+  --space-7: 20px;
+  --space-8: 24px;
+  --space-9: 32px;
+  --space-10: 48px;
+  --space-11: 64px;
+  --control-h: 32px;
+  --row-h: 28px;
+  --radius-xs: 4px;
+  --radius-chip: 6px;
+  --radius-control: 8px;
+  --radius-menu: 10px;
+  --radius-sheet: 12px;
+  --radius-dialog: 14px;
+  --radius-pill: 999px;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --font-ui: "Hanken Grotesk Variable", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-reading: "Newsreader Variable", Georgia, "Times New Roman", serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  --text-xs: 11px;
+  --text-sm: 12px;
+  --text-base: 13px;
+  --text-md: 14px;
+  --text-lg: 15px;
+  --text-xl: 16px;
+  --text-2xl: 19px;
+  --text-3xl: 23px;
+  --text-reading: 17px;
+  --text-source: 14px;
+  --weight-regular: 400;
+  --weight-medium: 500;
+  --weight-bold: 600;
+  --leading-tight: 1.3;
+  --leading-normal: 1.45;
+  --leading-relaxed: 1.65;
+  --content-width: 68ch;
+  --tracking-caps: 0.06em;
+  --duration-state: 90ms;
+  --duration-fast: 140ms;
+  --duration-med: 220ms;
+  --duration-slow: 360ms;
+  --duration-scene: 560ms;
+  --ease: cubic-bezier(0.25, 0.1, 0.25, 1);
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-in: cubic-bezier(0.32, 0, 0.67, 0);
+  --spring-snap-k: 560;
+  --spring-snap-c: 38;
+  --spring-soft-k: 300;
+  --spring-soft-c: 30;
+  --spring-wide-k: 170;
+  --spring-wide-c: 24;
+  --spring-elastic-k: 420;
+  --spring-elastic-c: 20;
+  --spring-jelly-k: 260;
+  --spring-jelly-c: 12;
+  --focus-ring-width: 2px;
+  --focus-ring-offset: 2px;
+  --bg: #e8edf5;
+  --bg-chrome: #e8edf5;
+  --bg-panel: #e8edf5;
+  --bg-hover: #dce4ee;
+  --bg-active: #d1dae6;
+  --sheet: #fcfdff;
+  --sheet-2: #f3f6f9;
+  --bg-input: #f3f6f9;
+  --bg-elev: #ffffff;
+  --overlay-hover: rgb(9 13 22 / 5%);
+  --overlay-active: rgb(9 13 22 / 9%);
+  --scrim: rgb(14 22 36 / 32%);
+  --text: #090d16;
+  --muted: #3e434d;
+  --border: #666b76;
+  --border-strong: #5d646f;
+  --outline: #666b76;
+  --accent: #1235ab;
+  --accent-soft: #1235ab;
+  --accent-contrast: #fafcff;
+  --accent-wash: #d8e5ff;
+  --accent-veil: rgb(18 53 171 / 12%);
+  --focus-ring: #1235ab;
+  --danger: #980009;
+  --danger-wash: rgb(152 0 9 / 12%);
+  --danger-contrast: #fffbfa;
+  --warning: #694000;
+  --warning-wash: rgb(105 64 0 / 14%);
+  --warning-contrast: #fefbf8;
+  --success: #00552d;
+  --success-wash: rgb(0 85 45 / 14%);
+  --success-contrast: #f9fdfa;
+  --info: #004d76;
+  --info-wash: rgb(0 77 118 / 12%);
+  --info-contrast: #f9fcff;
+  --highlight: #fade4e;
+  --amber: #d18500;
+  --shadow-1: 0 1px 1px rgb(24 28 44 / 5%), 0 6px 20px rgb(24 28 44 / 7%);
+  --shadow-2: 0 1px 2px rgb(24 28 44 / 6%), 0 10px 28px rgb(24 28 44 / 10%);
+  --shadow-3: 0 2px 4px rgb(24 28 44 / 8%), 0 14px 36px rgb(24 28 44 / 14%);
+  --shadow-4: 0 3px 8px rgb(24 28 44 / 9%), 0 20px 52px rgb(24 28 44 / 18%);
+  --shadow-5: 0 4px 10px rgb(24 28 44 / 10%), 0 28px 70px rgb(24 28 44 / 22%);
+  --shadow-6: 0 6px 14px rgb(24 28 44 / 12%), 0 32px 80px rgb(24 28 44 / 24%);
+  --shadow-7: 0 10px 24px rgb(24 28 44 / 16%), 0 40px 96px rgb(24 28 44 / 28%);
+  --shadow-sm: 0 1px 1px rgb(24 28 44 / 5%), 0 6px 20px rgb(24 28 44 / 7%);
+  --shadow-md: 0 2px 4px rgb(24 28 44 / 8%), 0 14px 36px rgb(24 28 44 / 14%);
+  --shadow-lg: 0 4px 10px rgb(24 28 44 / 10%), 0 28px 70px rgb(24 28 44 / 22%);
+  --elevation-paper-surface: #fcfdff;
+  --elevation-paper-border: #fcfdff;
+  --elevation-paper-shadow: 0 1px 1px rgb(24 28 44 / 5%), 0 6px 20px rgb(24 28 44 / 7%);
+  --elevation-base-surface: #e8edf5;
+  --elevation-base-border: #e8edf5;
+  --elevation-base-shadow: none;
+  --elevation-chrome-surface: #e8edf5;
+  --elevation-chrome-border: #e8edf5;
+  --elevation-chrome-shadow: none;
+  --elevation-floating-surface: #ffffff;
+  --elevation-floating-border: #666b76;
+  --elevation-floating-shadow: 0 2px 4px rgb(24 28 44 / 8%), 0 14px 36px rgb(24 28 44 / 14%);
+  --elevation-dialog-surface: #ffffff;
+  --elevation-dialog-border: #666b76;
+  --elevation-dialog-shadow: 0 4px 10px rgb(24 28 44 / 10%), 0 28px 70px rgb(24 28 44 / 22%);
+  --draw-desk: #edeef1;
+  --graph-node: #656c78;
+  --graph-node-active: #1235ab;
+  --graph-node-hover: #1235ab;
+  --doc-bg: #fcfdff;
+  --doc-active-line: #f4f7fb;
+  --doc-selection: #d0defd;
+  --doc-tooltip-bg: #ffffff;
+  --doc-fill: rgb(9 13 22 / 8%);
+  --doc-fill-soft: rgb(9 13 22 / 5%);
+  --doc-rule: rgb(9 13 22 / 30%);
+  --doc-rule-soft: rgb(9 13 22 / 16%);
+  --doc-highlight: rgb(250 222 78 / 55%);
+  --doc-fg: #0d121a;
+  --doc-link: #1538ae;
+  --doc-heading: #0d121a;
+  --doc-danger: #910008;
+  --doc-gutter-fg: #414650;
+  --doc-caret: #1235ab;
+  --syn-keyword: #5b3281;
+  --syn-name: #822323;
+  --syn-function: #01458a;
+  --syn-literal: #713500;
+  --syn-type: #5b4100;
+  --syn-operator: #004e55;
+  --syn-comment: #404651;
+  --syn-string: #005120;
+  --syn-heading: #0d121a;
+  --syn-invalid: #822320;
+  --doc-ins: #1538ae;
+  --doc-del: #910008;
+  --doc-proof-spell: #c60817;
+  --doc-proof-gram: #8c5600;
+  --doc-find: #f6e697;
+  --doc-find-now: #fac053;
+  --doc-comment: #8c5600;
+  --doc-author-1: #00448d;
+  --doc-author-2: #910012;
+  --doc-author-3: #00520d;
+  --doc-author-4: #68238e;
+  --doc-author-5: #6d3800;
+  --doc-author-6: #004e52;
+  --doc-syntax-near: #3c6c47;
+  --doc-ghost: #5e626b;
+  --doc-wavy: #8c5600;
+  --doc-block-hover: rgb(9 13 22 / 4%);
+  --doc-block-selected: rgb(18 53 171 / 12%);
+  --doc-drop-line: #1235ab;
+  --doc-color-gray: #42464f;
+  --doc-tint-gray: #e4e8ef;
+  --doc-color-brown: #653b23;
+  --doc-tint-brown: #f6e4da;
+  --doc-color-orange: #713500;
+  --doc-tint-orange: #ffe1ce;
+  --doc-color-yellow: #584300;
+  --doc-tint-yellow: #f4e7c3;
+  --doc-color-green: #005120;
+  --doc-tint-green: #d2f2d7;
+  --doc-color-blue: #004781;
+  --doc-tint-blue: #d7eaff;
+  --doc-color-purple: #5e2d8a;
+  --doc-tint-purple: #eee1ff;
+  --doc-color-pink: #811956;
+  --doc-tint-pink: #ffddec;
+  --doc-color-red: #910008;
+  --doc-tint-red: #ffdfdb;
+  --paper-bg: #ffffff;
+  --paper-ink: #050608;
+  --paper-link: #1538ae;
+  --paper-danger: #910008;
+  --paper-rule: rgb(5 6 8 / 30%);
+  --paper-rule-soft: rgb(5 6 8 / 16%);
+  --paper-fill: rgb(5 6 8 / 8%);
+  --paper-fill-soft: rgb(5 6 8 / 5%);
+  --paper-caret: #1538ae;
+  --paper-selection: #d0defd;
+  --paper-active-line: #f4f7fb;
+  --paper-highlight: rgb(250 222 78 / 55%);
+  --paper-ins: #1538ae;
+  --paper-del: #910008;
+  --paper-proof-spell: #c60817;
+  --paper-proof-gram: #8c5600;
+  --paper-find: #f6e697;
+  --paper-find-now: #fac053;
+  --paper-comment: #8c5600;
+  --paper-author-1: #00448d;
+  --paper-author-2: #910012;
+  --paper-author-3: #00520d;
+  --paper-author-4: #68238e;
+  --paper-author-5: #6d3800;
+  --paper-author-6: #004e52;
+  color-scheme: light;
+  font-family: var(--font-ui);
+  font-size: var(--text-base);
+}
+</style>
+<style>
+/* da theme/scrittoio/sheet-dark-high.css (copia: il contrasto alto della luce scura) */
+:root[data-luce="scura-alta"] {
+  --space-1: 2px;
+  --space-2: 4px;
+  --space-3: 6px;
+  --space-4: 8px;
+  --space-5: 12px;
+  --space-6: 16px;
+  --space-7: 20px;
+  --space-8: 24px;
+  --space-9: 32px;
+  --space-10: 48px;
+  --space-11: 64px;
+  --control-h: 32px;
+  --row-h: 28px;
+  --radius-xs: 4px;
+  --radius-chip: 6px;
+  --radius-control: 8px;
+  --radius-menu: 10px;
+  --radius-sheet: 12px;
+  --radius-dialog: 14px;
+  --radius-pill: 999px;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --font-ui: "Hanken Grotesk Variable", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-reading: "Newsreader Variable", Georgia, "Times New Roman", serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  --text-xs: 11px;
+  --text-sm: 12px;
+  --text-base: 13px;
+  --text-md: 14px;
+  --text-lg: 15px;
+  --text-xl: 16px;
+  --text-2xl: 19px;
+  --text-3xl: 23px;
+  --text-reading: 17px;
+  --text-source: 14px;
+  --weight-regular: 400;
+  --weight-medium: 500;
+  --weight-bold: 600;
+  --leading-tight: 1.3;
+  --leading-normal: 1.45;
+  --leading-relaxed: 1.65;
+  --content-width: 68ch;
+  --tracking-caps: 0.06em;
+  --duration-state: 90ms;
+  --duration-fast: 140ms;
+  --duration-med: 220ms;
+  --duration-slow: 360ms;
+  --duration-scene: 560ms;
+  --ease: cubic-bezier(0.25, 0.1, 0.25, 1);
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-in: cubic-bezier(0.32, 0, 0.67, 0);
+  --spring-snap-k: 560;
+  --spring-snap-c: 38;
+  --spring-soft-k: 300;
+  --spring-soft-c: 30;
+  --spring-wide-k: 170;
+  --spring-wide-c: 24;
+  --spring-elastic-k: 420;
+  --spring-elastic-c: 20;
+  --spring-jelly-k: 260;
+  --spring-jelly-c: 12;
+  --focus-ring-width: 2px;
+  --focus-ring-offset: 2px;
+  --bg: #0a0e16;
+  --bg-chrome: #0a0e16;
+  --bg-panel: #0a0e16;
+  --bg-hover: #121720;
+  --bg-active: #1a1f2a;
+  --sheet: #151a21;
+  --sheet-2: #1d222a;
+  --bg-input: #1d222a;
+  --bg-elev: #212730;
+  --overlay-hover: rgb(242 245 251 / 7%);
+  --overlay-active: rgb(242 245 251 / 12%);
+  --scrim: rgb(0 0 0 / 52%);
+  --text: #f2f5fb;
+  --muted: #bac0c9;
+  --border: #868d9a;
+  --border-strong: #8c939f;
+  --outline: #868d9a;
+  --accent: #a2c0ff;
+  --accent-soft: #a3c0ff;
+  --accent-contrast: #070d1a;
+  --accent-wash: #213156;
+  --accent-veil: rgb(162 192 255 / 20%);
+  --focus-ring: #a2c0ff;
+  --danger: #ff938b;
+  --danger-wash: rgb(255 147 139 / 18%);
+  --danger-contrast: #180807;
+  --warning: #eeb154;
+  --warning-wash: rgb(238 177 84 / 20%);
+  --warning-contrast: #150b01;
+  --success: #60c588;
+  --success-wash: rgb(96 197 136 / 20%);
+  --success-contrast: #031108;
+  --info: #73baea;
+  --info-wash: rgb(115 186 234 / 18%);
+  --info-contrast: #020f19;
+  --highlight: rgb(216 189 81 / 30%);
+  --amber: #eeb154;
+  --shadow-1: 0 1px 1px rgb(0 0 0 / 25%), 0 6px 20px rgb(0 0 0 / 22%);
+  --shadow-2: 0 1px 2px rgb(0 0 0 / 28%), 0 10px 28px rgb(0 0 0 / 28%);
+  --shadow-3: 0 2px 4px rgb(0 0 0 / 30%), 0 14px 36px rgb(0 0 0 / 38%);
+  --shadow-4: 0 3px 8px rgb(0 0 0 / 32%), 0 20px 52px rgb(0 0 0 / 44%);
+  --shadow-5: 0 4px 10px rgb(0 0 0 / 35%), 0 28px 70px rgb(0 0 0 / 50%);
+  --shadow-6: 0 6px 14px rgb(0 0 0 / 38%), 0 32px 80px rgb(0 0 0 / 54%);
+  --shadow-7: 0 10px 24px rgb(0 0 0 / 42%), 0 40px 96px rgb(0 0 0 / 60%);
+  --shadow-sm: 0 1px 1px rgb(0 0 0 / 25%), 0 6px 20px rgb(0 0 0 / 22%);
+  --shadow-md: 0 2px 4px rgb(0 0 0 / 30%), 0 14px 36px rgb(0 0 0 / 38%);
+  --shadow-lg: 0 4px 10px rgb(0 0 0 / 35%), 0 28px 70px rgb(0 0 0 / 50%);
+  --elevation-paper-surface: #151a21;
+  --elevation-paper-border: #151a21;
+  --elevation-paper-shadow: 0 1px 1px rgb(0 0 0 / 25%), 0 6px 20px rgb(0 0 0 / 22%);
+  --elevation-base-surface: #0a0e16;
+  --elevation-base-border: #0a0e16;
+  --elevation-base-shadow: none;
+  --elevation-chrome-surface: #0a0e16;
+  --elevation-chrome-border: #0a0e16;
+  --elevation-chrome-shadow: none;
+  --elevation-floating-surface: #212730;
+  --elevation-floating-border: #868d9a;
+  --elevation-floating-shadow: 0 2px 4px rgb(0 0 0 / 30%), 0 14px 36px rgb(0 0 0 / 38%);
+  --elevation-dialog-surface: #212730;
+  --elevation-dialog-border: #868d9a;
+  --elevation-dialog-shadow: 0 4px 10px rgb(0 0 0 / 35%), 0 28px 70px rgb(0 0 0 / 50%);
+  --draw-desk: #2b2e32;
+  --graph-node: #7b828e;
+  --graph-node-active: #a2c0ff;
+  --graph-node-hover: #a3c0ff;
+  --doc-bg: #151a21;
+  --doc-active-line: #1b1f28;
+  --doc-selection: #26365c;
+  --doc-tooltip-bg: #212730;
+  --doc-fill: rgb(242 245 251 / 11%);
+  --doc-fill-soft: rgb(242 245 251 / 7%);
+  --doc-rule: rgb(242 245 251 / 34%);
+  --doc-rule-soft: rgb(242 245 251 / 20%);
+  --doc-highlight: rgb(216 189 81 / 30%);
+  --doc-fg: #eff2f7;
+  --doc-link: #acc7ff;
+  --doc-heading: #eff2f7;
+  --doc-danger: #ffb4ad;
+  --doc-gutter-fg: #c2c7d0;
+  --doc-caret: #a2c0ff;
+  --syn-keyword: #d9baff;
+  --syn-name: #ffb4ad;
+  --syn-function: #a0caff;
+  --syn-literal: #ffb785;
+  --syn-type: #e8c270;
+  --syn-operator: #5dd8e5;
+  --syn-comment: #c0c7d4;
+  --syn-string: #8ed79d;
+  --syn-heading: #eff2f7;
+  --syn-invalid: #ffb4aa;
+  --doc-ins: #acc7ff;
+  --doc-del: #ffb4ad;
+  --doc-proof-spell: #ff746e;
+  --doc-proof-gram: #eeb154;
+  --doc-find: #473d13;
+  --doc-find-now: #704a07;
+  --doc-comment: #eeb154;
+  --doc-author-1: #a0caff;
+  --doc-author-2: #ffb4ad;
+  --doc-author-3: #90d892;
+  --doc-author-4: #e0b7ff;
+  --doc-author-5: #ffb87c;
+  --doc-author-6: #4adae1;
+  --doc-syntax-near: #7eaa86;
+  --doc-ghost: #9aa0a9;
+  --doc-wavy: #d49838;
+  --doc-block-hover: rgb(242 245 251 / 6%);
+  --doc-block-selected: rgb(162 192 255 / 20%);
+  --doc-drop-line: #a2c0ff;
+  --doc-color-gray: #c1c7d1;
+  --doc-tint-gray: #2f3339;
+  --doc-color-brown: #e5bfaa;
+  --doc-tint-brown: #3f2f26;
+  --doc-color-orange: #ffb785;
+  --doc-tint-orange: #4b290f;
+  --doc-color-yellow: #e2c474;
+  --doc-tint-yellow: #3e310b;
+  --doc-color-green: #91d79f;
+  --doc-tint-green: #1c3b23;
+  --doc-color-blue: #9acbff;
+  --doc-tint-blue: #193550;
+  --doc-color-purple: #d9baff;
+  --doc-tint-purple: #3a2a4b;
+  --doc-color-pink: #ffb0d5;
+  --doc-tint-pink: #492537;
+  --doc-color-red: #ffb4aa;
+  --doc-tint-red: #53211d;
+  --paper-bg: #ffffff;
+  --paper-ink: #050608;
+  --paper-link: #1538ae;
+  --paper-danger: #910008;
+  --paper-rule: rgb(5 6 8 / 30%);
+  --paper-rule-soft: rgb(5 6 8 / 16%);
+  --paper-fill: rgb(5 6 8 / 8%);
+  --paper-fill-soft: rgb(5 6 8 / 5%);
+  --paper-caret: #1538ae;
+  --paper-selection: #d0defd;
+  --paper-active-line: #f4f7fb;
+  --paper-highlight: rgb(250 222 78 / 55%);
+  --paper-ins: #1538ae;
+  --paper-del: #910008;
+  --paper-proof-spell: #c60817;
+  --paper-proof-gram: #8c5600;
+  --paper-find: #f6e697;
+  --paper-find-now: #fac053;
+  --paper-comment: #8c5600;
+  --paper-author-1: #00448d;
+  --paper-author-2: #910012;
+  --paper-author-3: #00520d;
+  --paper-author-4: #68238e;
+  --paper-author-5: #6d3800;
+  --paper-author-6: #004e52;
+  color-scheme: dark;
+  font-family: var(--font-ui);
+  font-size: var(--text-base);
+}
+</style>
+<style>
+/* da theme/scrittoio/skin/foundation.css (copia, non si sposta) */
+/* righe 1–162 */
+/* Le fondamenta: la pagina, il bottone nudo, gli intenti, il testo attenuato,
+   i piani del rilievo. Ogni altro pezzo parte da qui. */
+
+/* La pagina è la scrivania: il piano di fondo, senza rilievo. Il carattere
+   dell'interfaccia vale ovunque, tranne dove un foglio dichiara il suo. */
+html, body, .app {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: var(--text-base);
+  line-height: var(--leading-normal);
+  font-optical-sizing: auto;
+  font-kerning: normal;
+  text-rendering: optimizeLegibility;
+  accent-color: var(--accent);
+}
+
+/* Le barre di scorrimento sono un filo: non hanno pista, e il pollice ha il
+   colore dei tratti. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) transparent;
+}
+
+::selection {
+  background: var(--accent-veil);
+}
+
+/* Il salto al contenuto. Il meccanismo — fisso, fuori dallo schermo, rivelato
+   dal fuoco — è della struttura; qui la superficie con cui arriva. */
+.skip-link {
+  top: var(--space-4);
+  left: var(--space-4);
+  padding: var(--space-4) var(--space-6);
+  border-radius: var(--radius-control);
+  background: var(--bg-elev);
+  color: var(--text);
+  font-weight: var(--weight-bold);
+  text-decoration: none;
+  box-shadow: var(--shadow-3);
+  transition: transform var(--duration-med) var(--ease-out);
+}
+.skip-link:focus {
+  transform: translateY(0);
+}
+
+.muted {
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+
+/* Lo scheletro: righe del colore del passaggio al posto di ciò che tarda.
+   Fermo: l'attesa non ha bisogno di luccicare. Le righe si accorciano a
+   turno, come un testo. */
+.skeleton {
+  display: block;
+  padding: var(--space-3) var(--space-4);
+}
+.skeleton-line {
+  display: block;
+  height: 0.75em;
+  border-radius: var(--radius-chip);
+  background: var(--bg-hover);
+}
+.skeleton-line + .skeleton-line {
+  margin-top: var(--space-4);
+}
+/* La sagoma di un elenco di righe, al passo di quelle vere. */
+.skeleton-rows {
+  padding: var(--space-5) var(--space-6);
+}
+.skeleton-rows .skeleton-line + .skeleton-line {
+  margin-top: var(--space-7);
+}
+.skeleton-line:nth-child(3n + 2) {
+  width: 72%;
+}
+.skeleton-line:nth-child(3n) {
+  width: 48%;
+}
+
+/* Il bottone nudo è un fantasma: niente fondo finché non lo si sfiora. Sta a
+   specificità zero, così un componente che gli dà una classe decide da solo
+   anche il proprio passaggio, senza doverlo disfare. */
+:where(button) {
+  padding: var(--space-3) var(--space-5);
+  border: none;
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: var(--text-base);
+  cursor: pointer;
+}
+:where(button:hover) {
+  background: var(--overlay-hover);
+}
+:where(button:active) {
+  background: var(--overlay-active);
+}
+:where(button:disabled) {
+  opacity: 0.4;
+  cursor: default;
+}
+:where(button:disabled:hover),
+:where(button:disabled:active) {
+  background: transparent;
+}
+
+/* L'azione primaria: una per superficie. Dialoghi, stati vuoti, conferme. */
+button.primary,
+.ui-button.intent-primary {
+  background: var(--accent);
+  color: var(--accent-contrast);
+  font-weight: var(--weight-bold);
+  transition: scale var(--duration-state) var(--ease);
+}
+/* L'inchiostro cambia col fondo: `--accent-soft` è più chiaro dell'accento al
+   buio e più scuro alla luce, e `--bg` gli sta sopra in tutte e due — è la
+   coppia che il presidio del contrasto misura. */
+button.primary:hover,
+.ui-button.intent-primary:hover {
+  background: var(--accent-soft);
+  color: var(--bg);
+}
+button.primary:active,
+.ui-button.intent-primary:active {
+  scale: 0.98;
+}
+button.primary:disabled,
+.ui-button.intent-primary:disabled {
+  background: var(--accent);
+  color: var(--accent-contrast);
+  scale: 1;
+}
+
+/* L'azione distruttiva non grida a riposo: il rosso arriva col gesto. */
+.ui-button.intent-danger {
+  color: var(--danger);
+}
+/* Pieno e non velato: il rosso sul suo velo non arriva a 4,5:1. */
+.ui-button.intent-danger:hover {
+  background: var(--danger);
+  color: var(--danger-contrast);
+}
+
+/* I cinque piani nel catalogo del banco: stessa anatomia, tre token per riga. */
+.elevation-paper,
+.elevation-base,
+.elevation-chrome,
+.elevation-floating,
+.elevation-dialog {
+  min-height: var(--space-10);
+  padding: var(--space-4);
+  border: 1px solid;
+  border-radius: var(--radius-control);
+}
+.elevation-paper { background: var(--elevation-paper-surface); border-color: var(--elevation-paper-border); box-shadow: var(--elevation-paper-shadow); }
+.elevation-base { background: var(--elevation-base-surface); border-color: var(--elevation-base-border); box-shadow: var(--elevation-base-shadow); }
+.elevation-chrome { background: var(--elevation-chrome-surface); border-color: var(--elevation-chrome-border); box-shadow: var(--elevation-chrome-shadow); }
+.elevation-floating { background: var(--elevation-floating-surface); border-color: var(--elevation-floating-border); box-shadow: var(--elevation-floating-shadow); }
+.elevation-dialog { background: var(--elevation-dialog-surface); border-color: var(--elevation-dialog-border); box-shadow: var(--elevation-dialog-shadow); }
+</style>
+<style>
+/* da theme/scrittoio/structure.css (copia, non si sposta): la carta del file e i segni sulla carta */
+/* righe 70–109 */
+/* ── Gli aspetti del contenuto ──────────────────────────────────────────────
+ *
+ * La radice del contenuto di un riquadro porta `look-tema`, `look-file` o
+ * `look-adattato` (`theme/content-look.ts`). La meccanica sta qui, e non in una
+ * pelle, perché dice di chi è un colore e non che colore è.
+ *
+ * In `look-file` il contenuto sta sulla carta del file, che è chiara anche di
+ * notte: i segni di Fub sul contenuto (cursore, selezione, riga attiva,
+ * revisioni, correttore, ricerca, commenti) prendono i colori di quella carta,
+ * `--paper-*`, o un cursore fatto per il foglio scuro sparirebbe. Il ripiego è
+ * per un tema che non li dichiara: sono i valori della serie. `look-adattato`
+ * e `look-tema` lasciano i segni alla carta del tema.
+ *
+ * La carta stessa (`--doc-bg`, `--doc-fg`, i filetti, l'evidenziatore) passa a
+ * `--paper-*` con la superficie che la dipinge, il documento: le superfici
+ * `file` di oggi (immagini, anteprima SVG, diapositive, disegno) disegnano
+ * ancora sulla carta del tema, e ricollegarne l'inchiostro senza il fondo
+ * metterebbe un testo scuro su un fondo scuro.
+ *
+ * Un ruolo facoltativo della carta del tema (`--doc-ins`, `--doc-find`, …) non
+ * ha un ripiego qui: dichiararlo su una classe vincerebbe sul foglio del tema.
+ * Chi lo legge porta il suo, `var(--doc-ins, var(--doc-link))`. */
+.look-file {
+  --doc-caret: var(--paper-caret, #2c57cd);
+  --doc-selection: var(--paper-selection, #d0defd);
+  --doc-active-line: var(--paper-active-line, #f4f7fb);
+  --doc-ins: var(--paper-ins, #2c57cd);
+  --doc-del: var(--paper-del, #c60817);
+  --doc-proof-spell: var(--paper-proof-spell, #d01d21);
+  --doc-proof-gram: var(--paper-proof-gram, #a16500);
+  --doc-find: var(--paper-find, #f6e697);
+  --doc-find-now: var(--paper-find-now, #fac053);
+  --doc-comment: var(--paper-comment, #b16f00);
+  --doc-author-1: var(--paper-author-1, #0060bf);
+  --doc-author-2: var(--paper-author-2, #b02a2d);
+  --doc-author-3: var(--paper-author-3, #007219);
+  --doc-author-4: var(--paper-author-4, #813faa);
+  --doc-author-5: var(--paper-author-5, #934f00);
+  --doc-author-6: var(--paper-author-6, #006d72);
+}
+
+/* righe 113–115 */
+[hidden] {
+  display: none !important;
+}
+
+/* righe 2388–2409 */
+/* La carta del file. In `look-file` il documento sta sulla carta del file,
+   chiara in ogni luce: la scrivania ricollega la carta (`--doc-*`) ai ruoli
+   `--paper-*`, con i valori della serie per un tema che non li dichiara. In
+   `look-adattato` la carta resta quella del tema, e i colori del file li porta
+   sulla carta `editors/rich/tints.ts`. La griglia di una cartella di Excel fa
+   lo stesso, nella sua vista. */
+.look-file .rich-desk,
+.look-file .grid-viewport {
+  --doc-bg: var(--paper-bg, #ffffff);
+  --doc-fg: var(--paper-ink, #14161a);
+  --doc-heading: var(--paper-ink, #14161a);
+  --doc-link: var(--paper-link, #2c57cd);
+  --doc-danger: var(--paper-danger, #c60817);
+  --doc-rule: var(--paper-rule, rgb(20 22 26 / 30%));
+  --doc-rule-soft: var(--paper-rule-soft, rgb(20 22 26 / 16%));
+  --doc-fill: var(--paper-fill, rgb(20 22 26 / 8%));
+  --doc-fill-soft: var(--paper-fill-soft, rgb(20 22 26 / 5%));
+  --doc-highlight: var(--paper-highlight, rgb(250 222 78 / 55%));
+  /* Il testo dei segni di Fub (il nome di un'interruzione, un segnaposto):
+     l'inchiostro verso la carta, a 5,5:1 sul bianco. */
+  --doc-gutter-fg: color-mix(in oklab, var(--paper-ink, #14161a) 60%, var(--paper-bg, #ffffff));
+}
+</style>
+<style>
+/* da theme/scrittoio/structure.css (copia, non si sposta): la geometria della griglia di oggi */
+/* righe 1417–1860 */
+/* ── Le superfici degli editor: geometria che nessun tema decide ─────────── */
+
+.grid-surface {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+}
+
+.grid-formula-bar {
+  display: flex;
+  flex: 0 0 2.25rem;
+  min-width: 0;
+}
+
+.grid-cell-name {
+  display: inline-flex;
+  flex: 0 0 4.25rem;
+  align-items: center;
+  justify-content: center;
+}
+
+.grid-formula-editor {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.grid-formula-editor .cm-editor,
+.grid-cell-editor .cm-editor {
+  height: 100%;
+}
+
+.grid-viewport {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+}
+
+/* Il canvas dà la misura dello scorrimento e viene dopo le righe: non prende
+   il puntatore, che va alle celle sotto. */
+.grid-canvas {
+  position: relative;
+  min-width: 100%;
+  min-height: 100%;
+  pointer-events: none;
+}
+
+.grid-cells,
+.grid-column-headers,
+.grid-row-headers {
+  position: absolute;
+  inset: 0;
+}
+
+.grid-column-headers,
+.grid-row-headers {
+  pointer-events: none;
+}
+
+.grid-cell,
+.grid-header,
+.grid-corner,
+.grid-cell-editor {
+  position: absolute;
+  box-sizing: border-box;
+}
+
+.grid-cell {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  overflow: hidden;
+  padding: 0.3rem 0.45rem;
+  white-space: nowrap;
+}
+
+/* Il testo sta sopra la barra di dati, e si taglia dove la cella finisce.
+   Un testo che passa nelle celle vuote accanto è largo quanto serve, fino
+   al limite che la griglia gli dà. */
+/* Le celle sono contenuto con l'aspetto del file (`GRID_MODES`): in
+   `look-file` stanno sulla carta del file, chiara in ogni luce, con i
+   riempimenti e i colori del file; in `look-adattato` sulla carta del tema,
+   con i colori del file portati su di lei da `editors/grid/paint.ts`, fondo e
+   testo in coppia. Il testo automatico è l'inchiostro della carta, e i fili
+   della griglia sono quelli della carta. Le intestazioni di righe e colonne
+   sono cornice, e restano del tema. */
+.look-file .grid-viewport,
+.look-adattato .grid-viewport { background-color: var(--doc-bg, #ffffff); }
+.look-file .grid-cell,
+.look-adattato .grid-cell {
+  border-right: 1px solid var(--doc-rule, rgb(20 22 26 / 30%));
+  border-bottom: 1px solid var(--doc-rule, rgb(20 22 26 / 30%));
+  font-variant-numeric: tabular-nums;
+  line-height: 1.3;
+}
+.look-file .grid-cell {
+  background-color: var(--file-fill, transparent);
+  color: var(--file-color, var(--doc-fg, #14161a));
+}
+.look-adattato .grid-cell {
+  background-color: var(--file-fill-a, transparent);
+  color: var(--file-color-a, var(--doc-fg, #14161a));
+}
+/* Un foglio senza griglia: i fili delle celle spariscono, i bordi del file
+   restano. */
+.look-file .no-gridlines .grid-cell,
+.look-adattato .no-gridlines .grid-cell { border-color: transparent; }
+/* Ciò che resta fermo ha la carta sotto, perché le celle che scorrono gli
+   passano dietro. */
+.look-file .grid-cell.frozen { background-color: var(--file-fill, var(--doc-bg, #ffffff)); }
+.look-adattato .grid-cell.frozen { background-color: var(--file-fill-a, var(--doc-bg, #ffffff)); }
+
+.grid-cell-text {
+  position: relative;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.grid-cell.spill {
+  overflow: visible;
+  z-index: 1;
+}
+
+.grid-cell.spill > .grid-cell-text {
+  width: max-content;
+}
+
+/* Righe e colonne bloccate restano ferme sopra quelle che scorrono; i fili
+   del blocco stanno sopra tutte. Ogni riga sta sopra il canvas, che viene
+   dopo nel DOM: senza puntatore non copre nulla, ma chi misura il contrasto
+   lo crederebbe davanti al testo delle celle. */
+.grid-row {
+  z-index: 1;
+}
+
+.grid-row.frozen {
+  z-index: 6;
+}
+
+.grid-cell.frozen,
+.grid-border.frozen {
+  z-index: 2;
+}
+
+.grid-column-header.frozen {
+  z-index: 4;
+}
+
+.grid-freeze {
+  position: absolute;
+  z-index: 7;
+  pointer-events: none;
+}
+
+/* La riga delle intestazioni sta sopra tutto: anche sopra la cella aperta
+   di una riga scorsa sotto di lei, che il disegno tiene per l'editor. */
+.grid-column-header-row {
+  z-index: 8;
+}
+
+/* I bordi del file stanno sui fili della griglia, in un riquadro sopra la
+   cella. */
+.grid-border {
+  position: absolute;
+  box-sizing: border-box;
+  pointer-events: none;
+}
+
+.grid-data-bar {
+  position: absolute;
+  top: 3px;
+  bottom: 3px;
+  left: 2px;
+  pointer-events: none;
+}
+
+.grid-icon {
+  position: absolute;
+  bottom: 0.3rem;
+  left: 0.25rem;
+  line-height: 1;
+  pointer-events: none;
+}
+
+.grid-comment-mark {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 0;
+  height: 0;
+  border-style: solid;
+  border-width: 0 7px 7px 0;
+  pointer-events: none;
+}
+
+/* La scheda di una nota o di un commento: il thread scorre, i gesti restano
+   sotto. */
+.grid-comment-card {
+  display: flex;
+  flex-direction: column;
+  min-width: 240px;
+}
+.grid-comment-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+}
+.grid-comment-thread {
+  max-height: min(240px, 40vh);
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  list-style: none;
+}
+.grid-comment-post {
+  display: flex;
+  flex-direction: column;
+}
+.grid-comment-text {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.grid-comment-reply {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+}
+.grid-comment-field {
+  box-sizing: border-box;
+  width: 100%;
+  resize: vertical;
+}
+.grid-comment-actions {
+  display: flex;
+  flex-wrap: wrap;
+}
+.grid-comment-error {
+  margin: 0;
+}
+.grid-comment-error[hidden] { display: none; }
+
+/* Gli oggetti del foglio galleggiano sopra le celle e passano sotto le
+   intestazioni e le righe bloccate, come in Excel. Quelli nella cella (un
+   grafico sparkline, un'immagine nella cella) lasciano il clic alla cella. */
+.grid-object {
+  position: absolute;
+  z-index: 2;
+  box-sizing: border-box;
+}
+
+.grid-object.frozen {
+  z-index: 6;
+}
+
+.grid-object.in-cell {
+  pointer-events: none;
+}
+
+.grid-object.movable {
+  cursor: move;
+  touch-action: none;
+  user-select: none;
+}
+
+.grid-object-image {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: fill;
+  pointer-events: none;
+}
+
+.grid-object.in-cell .grid-object-image {
+  object-fit: contain;
+}
+
+.grid-object-missing {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
+  padding: 0.25rem;
+  overflow: hidden;
+  text-align: center;
+}
+
+.grid-object-shape {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
+.grid-object-figure {
+  position: absolute;
+  top: 0;
+  left: 0;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.grid-object-text {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  overflow: hidden;
+  line-height: 1.2;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  pointer-events: none;
+}
+
+/* Il quadratino di riempimento sta sopra le celle che scorrono e sotto le
+   righe bloccate; il contorno del riempimento tirato e le formiche di un
+   taglio non prendono il puntatore. */
+.grid-selection,
+.grid-fill-handle,
+.grid-fill-preview,
+.grid-move-preview,
+.grid-formula-ref,
+.grid-cut-mark {
+  position: absolute;
+  z-index: 3;
+  box-sizing: border-box;
+}
+
+.grid-fill-handle,
+.grid-viewport.filling {
+  cursor: crosshair;
+}
+
+/* Il bordo fra due intestazioni si tira: la guida e la misura stanno sopra
+   tutto, anche sulle intestazioni ferme, e non prendono il puntatore. */
+.grid-resize-guide,
+.grid-resize-label {
+  position: absolute;
+  z-index: 9;
+  box-sizing: border-box;
+  pointer-events: none;
+}
+
+.grid-resize-label {
+  white-space: nowrap;
+}
+
+.grid-viewport.resize-column {
+  cursor: col-resize;
+}
+
+.grid-viewport.resize-row {
+  cursor: row-resize;
+}
+
+/* Il bordo della selezione si tira per spostarla. */
+.grid-viewport.move-selection,
+.grid-viewport.moving {
+  cursor: move;
+}
+
+.grid-selection,
+.grid-fill-preview,
+.grid-move-preview,
+.grid-formula-ref,
+.grid-cut-mark {
+  pointer-events: none;
+}
+
+.grid-object-handle {
+  position: absolute;
+  z-index: 1;
+  box-sizing: border-box;
+  width: 9px;
+  height: 9px;
+  margin: -4.5px 0 0 -4.5px;
+}
+
+.grid-object-handle.nw,
+.grid-object-handle.se {
+  cursor: nwse-resize;
+}
+
+.grid-object-handle.ne,
+.grid-object-handle.sw {
+  cursor: nesw-resize;
+}
+
+.grid-object-handle.n,
+.grid-object-handle.s {
+  cursor: ns-resize;
+}
+
+.grid-object-handle.e,
+.grid-object-handle.w {
+  cursor: ew-resize;
+}
+
+.grid-object-text-editor {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  resize: none;
+  cursor: text;
+}
+
+.grid-header {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.grid-column-header,
+.grid-row-header {
+  z-index: 3;
+}
+
+.grid-corner {
+  z-index: 4;
+}
+
+.grid-cell-editor {
+  z-index: 5;
+  overflow: hidden;
+}
+
+.grid-notice { flex: none; margin: 0; }
+
+.grid-sheets {
+  flex: none;
+  min-width: 0;
+  overflow-x: auto;
+}
+
+</style>
+<style>
+/* da theme/scrittoio/skin/editors.css (copia, non si sposta): la pelle della griglia di oggi */
+/* righe 353–669 */
+/* ── Il foglio di calcolo ────────────────────────────────────────────────── */
+
+/* Una griglia è un dato: carattere dell'interfaccia, cifre in colonna, fili
+   sottili. Le intestazioni stanno un tono sotto la carta; la cella attiva ha
+   l'anello d'accento, la selezione il suo velo. Le celle sono contenuto con
+   l'aspetto del file: la loro carta, i fili e il testo li disegna
+   `structure.css`, e qui restano la cornice e i segni, presi dalla riga. */
+.grid-surface {
+  color: var(--doc-fg);
+  font-family: var(--font-ui);
+  font-size: var(--text-base);
+}
+.grid-formula-bar {
+  border-bottom: 1px solid var(--border);
+}
+.grid-cell-name {
+  border-right: 1px solid var(--border);
+  color: var(--muted);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+  font-weight: var(--weight-bold);
+}
+/* La formula sta al centro della sua barra, con un margine dal nome. È una
+   riga sola: evidenziarla come «riga attiva» la tingerebbe sempre tutta. */
+.grid-formula-editor .cm-editor .cm-content {
+  padding: var(--space-4) var(--space-4);
+}
+.grid-formula-editor .cm-editor .cm-content .cm-activeLine {
+  background-color: transparent;
+}
+.grid-viewport {
+  outline: none;
+}
+/* Niente anello attorno al riquadro: il fuoco è il bordo della cella attiva,
+   che la griglia indica con `aria-activedescendant`. Senza una cella attiva
+   da mostrare (ogni asse nascosto) l'anello torna. */
+.grid-viewport:focus-visible:not([aria-activedescendant]) {
+  box-shadow: inset 0 0 0 var(--focus-ring-width) var(--focus-ring);
+}
+.grid-header,
+.grid-corner {
+  border-right: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+}
+.grid-header,
+.grid-corner {
+  background: var(--sheet-2);
+  color: var(--muted);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+  font-weight: var(--weight-bold);
+}
+/* Le intestazioni della selezione prendono l'accento, come nei fogli di
+   calcolo. */
+.grid-header.selected {
+  box-shadow: inset 0 0 0 999px var(--accent-veil);
+  color: var(--accent);
+}
+/* E un filo d'accento sul lato verso le celle. */
+.grid-column-header.selected {
+  box-shadow: inset 0 -2px 0 var(--accent), inset 0 0 0 999px var(--accent-veil);
+}
+.grid-row-header.selected {
+  box-shadow: inset -2px 0 0 var(--accent), inset 0 0 0 999px var(--accent-veil);
+}
+/* Dove ci sono colonne o righe nascoste, una tacca doppia sull'intestazione
+   che le segue. */
+.grid-column-header.after-hidden {
+  border-left: 3px double var(--muted);
+}
+.grid-row-header.after-hidden {
+  border-top: 3px double var(--muted);
+}
+/* Il filo del blocco è quello di Excel. */
+.grid-freeze {
+  background: var(--muted);
+}
+/* Il segno di una nota nell'angolo, come in Excel: rosso per le note,
+   d'accento per i commenti in thread. */
+.grid-comment-mark {
+  border-color: transparent var(--danger) transparent transparent;
+}
+.grid-comment-mark.threaded {
+  border-color: transparent var(--accent) transparent transparent;
+}
+/* Un thread risolto si spegne, come in Excel. */
+.grid-comment-mark.threaded.resolved {
+  border-color: transparent var(--muted) transparent transparent;
+}
+.grid-comment-card {
+  gap: var(--space-4);
+}
+.grid-comment-head {
+  gap: var(--space-3);
+}
+.grid-comment-kind {
+  color: var(--text);
+  font-weight: var(--weight-bold);
+}
+.grid-comment-where,
+.grid-comment-resolved {
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+.grid-comment-thread {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  scrollbar-width: thin;
+}
+.grid-comment-post {
+  gap: var(--space-1);
+  font-size: var(--text-sm);
+  line-height: var(--leading-normal);
+}
+.grid-comment-post + .grid-comment-post {
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--border);
+}
+.grid-comment-author {
+  color: var(--text);
+  font-weight: var(--weight-medium);
+}
+.grid-comment-text {
+  color: var(--text);
+}
+.grid-comment-card.threaded .grid-comment-post + .grid-comment-post {
+  padding-left: var(--space-4);
+}
+.grid-comment-reply {
+  gap: var(--space-2);
+}
+.grid-comment-field {
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  background: var(--bg-input);
+  color: var(--text);
+  font: inherit;
+  font-size: var(--text-sm);
+}
+.grid-comment-field:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.grid-comment-actions {
+  gap: var(--space-2);
+}
+.grid-comment-action {
+  font-size: var(--text-sm);
+}
+.grid-comment-error {
+  color: var(--danger);
+  font-size: var(--text-sm);
+}
+/* Un oggetto selezionato ha il filo d'accento e le maniglie tonde, come in
+   Excel; uno che Fub non mostra resta un riquadro tratteggiato col perché. */
+.grid-object.selected {
+  outline: 1px solid var(--accent);
+}
+.grid-object-handle {
+  border: 1px solid var(--accent);
+  border-radius: 50%;
+  background: var(--bg-elev);
+}
+.grid-object-missing {
+  border: 1px dashed var(--border);
+  background: var(--sheet-2);
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+.grid-object-text-editor {
+  border: 2px solid var(--accent);
+  background: var(--bg-elev);
+  color: var(--doc-fg);
+}
+/* Il velo è un'ombra interna e non un fondo: una cella può avere un colore
+   suo, scritto dal foglio, e la selezione deve vedersi anche lì sopra. */
+.grid-row .selected {
+  box-shadow: inset 0 0 0 999px var(--accent-veil);
+}
+.grid-row .active {
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+/* Dentro un intervallo la cella attiva resta bianca, con un filo: il bordo
+   forte è quello del rettangolo. */
+.grid-viewport.ranged .grid-row .active {
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+.grid-selection {
+  border: 2px solid var(--accent);
+}
+/* Il quadratino all'angolo della selezione, e il riempimento tirato a
+   tratteggio come in Excel. */
+.grid-fill-handle {
+  border: 1px solid var(--sheet);
+  background: var(--accent);
+}
+.grid-fill-preview {
+  border: 2px dashed var(--accent);
+}
+/* Dove andrà la selezione tirata per il bordo. */
+.grid-move-preview {
+  border: 2px solid var(--muted);
+}
+/* I riferimenti della formula aperta: ogni intervallo è contornato del
+   colore che il riferimento ha nel testo. */
+.grid-formula-ref-1 {
+  border: 2px solid var(--doc-author-1);
+}
+.grid-formula-ref-2 {
+  border: 2px solid var(--doc-author-2);
+}
+.grid-formula-ref-3 {
+  border: 2px solid var(--doc-author-3);
+}
+.grid-formula-ref-4 {
+  border: 2px solid var(--doc-author-4);
+}
+.grid-formula-ref-5 {
+  border: 2px solid var(--doc-author-5);
+}
+.grid-formula-ref-6 {
+  border: 2px solid var(--doc-author-6);
+}
+.grid-cell-editor .cm-formula-ref-1,
+.grid-formula-editor .cm-formula-ref-1 {
+  color: var(--doc-author-1);
+}
+.grid-cell-editor .cm-formula-ref-2,
+.grid-formula-editor .cm-formula-ref-2 {
+  color: var(--doc-author-2);
+}
+.grid-cell-editor .cm-formula-ref-3,
+.grid-formula-editor .cm-formula-ref-3 {
+  color: var(--doc-author-3);
+}
+.grid-cell-editor .cm-formula-ref-4,
+.grid-formula-editor .cm-formula-ref-4 {
+  color: var(--doc-author-4);
+}
+.grid-cell-editor .cm-formula-ref-5,
+.grid-formula-editor .cm-formula-ref-5 {
+  color: var(--doc-author-5);
+}
+.grid-cell-editor .cm-formula-ref-6,
+.grid-formula-editor .cm-formula-ref-6 {
+  color: var(--doc-author-6);
+}
+/* Le formiche di un taglio: il tratteggio fitto dice «si sposta». Stanno
+   ferme: un moto che non finisce è ammesso solo per un lavoro in corso. */
+.grid-cut-mark {
+  border: 2px dashed var(--accent);
+}
+/* La guida di una misura tirata, e la misura accanto. */
+.grid-resize-guide {
+  background: var(--accent);
+}
+.grid-resize-label {
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-elev);
+  box-shadow: var(--shadow-2);
+  color: var(--text);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+}
+.grid-cell-editor {
+  border: 2px solid var(--accent);
+  background: var(--bg-elev);
+  box-shadow: var(--shadow-2);
+}
+/* Una cella di una cartella di Excel che legge una cella cambiata mostra
+   ancora il valore del file, che Fub non ricalcola: lo dice un filo a puntini
+   sotto, che resta anche sul colore della cella. Una cella cambiata qui e
+   anche nel file ha un contorno tratteggiato, dentro i suoi fili. */
+.grid-row .stale {
+  text-decoration: underline dotted var(--muted);
+  text-underline-offset: 3px;
+}
+.grid-row .conflict {
+  outline: 2px dashed var(--danger);
+  outline-offset: -3px;
+}
+/* L'avviso della cartella sta sopra la barra, come per i documenti di
+   videoscrittura: ciò che Fub non mostra, i valori non ricalcolati, i
+   conflitti e l'ultimo gesto rifiutato. */
+.grid-notice {
+  padding: var(--space-3) var(--space-9);
+  background: var(--info-wash);
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
+  font-size: var(--text-sm);
+}
+/* La bozza la cui cella è cambiata sotto: la domanda e i due pulsanti. */
+.grid-draft-notice {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-9);
+  background: var(--warning-wash);
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
+  font-size: var(--text-sm);
+}
+.grid-draft-notice > p {
+  flex: 1 1 auto;
+  margin: 0;
+}
+/* Le schede dei fogli stanno sotto la griglia, come nei fogli di calcolo. */
+.grid-sheets {
+  border-top: 1px solid var(--border);
+  background: var(--sheet-2);
+  padding: 0 var(--space-4);
+}
+</style>
+<style data-griglia="sempre">
+/* → structure.css (T1 e T2: il piano della griglia). Tutto ciò che si vede
+   sta in un piano grande quanto il foglio, a strati nella stessa cella di una
+   griglia CSS: la carta, le righe, i segni, e le fasce ferme (la testa in
+   alto, la colonna a sinistra) che restano al loro posto col solo `sticky`,
+   senza che lo script le rimetta a ogni scorrimento. */
+.grid-plane {
+  position: relative;
+  display: grid;
+  grid-template: var(--grid-h) / var(--grid-w);
+  isolation: isolate;
+  pointer-events: none;
+}
+.grid-plane > *,
+.grid-head > * {
+  grid-area: 1 / 1;
+  align-self: start;
+  justify-self: start;
+}
+/* La testa: la riga delle intestazioni e le righe bloccate. */
+.grid-head {
+  position: sticky;
+  top: 0;
+  z-index: 6;
+  display: grid;
+  grid-template: var(--grid-top-h) / var(--grid-w);
+  width: var(--grid-w);
+  height: var(--grid-top-h);
+}
+.grid-rows {
+  position: relative;
+  width: var(--grid-w);
+  height: var(--grid-h);
+}
+.grid-plane .grid-row {
+  display: flex;
+  width: var(--grid-w);
+  height: var(--grid-row);
+}
+.grid-rows > .grid-row {
+  position: absolute;
+  left: 0;
+}
+.grid-head > .grid-row {
+  position: relative;
+}
+.grid-head > .grid-row.frozen {
+  margin-top: var(--grid-head-h);
+}
+.grid-plane .grid-row > * {
+  top: 0;
+  flex: none;
+  height: 100%;
+}
+/* Le intestazioni delle righe e le colonne bloccate stanno nel flusso della
+   riga, una dopo l'altra, e si fermano a sinistra da sole. */
+.grid-plane .grid-corner,
+.grid-plane .grid-row-header,
+.grid-plane .grid-column-header.frozen,
+.grid-plane .grid-cell.frozen {
+  position: sticky;
+}
+.grid-plane .grid-corner,
+.grid-plane .grid-row-header {
+  left: 0;
+  width: var(--grid-head-w);
+}
+/* Le righe non fanno più da contesto di sovrapposizione: le celle, i segni e
+   le fasce ferme si ordinano tutti nel piano. */
+.grid-plane .grid-row,
+.grid-plane .grid-row.frozen,
+.grid-plane .grid-column-header-row,
+.grid-plane .grid-column-header:not(.frozen),
+.grid-plane .grid-cell:not(.frozen) {
+  z-index: auto;
+}
+.grid-plane .grid-corner,
+.grid-plane .grid-row-header,
+.grid-plane .grid-column-header.frozen,
+.grid-plane .grid-cell.frozen {
+  z-index: 3;
+}
+/* Ciò che sta fermo nell'angolo in alto a sinistra del riquadro: la guida e
+   la misura di un bordo tirato. */
+.grid-fixed {
+  position: sticky;
+  top: 0;
+  left: 0;
+  z-index: 8;
+  width: 0;
+  height: 0;
+}
+</style>
+<style data-griglia="nuova">
+/* → structure.css (T1: la carta). Sotto le celle c'è la carta del file coi
+   suoi fili: dove una riga non è ancora disegnata si vede la griglia vuota,
+   mai il bianco. Le celle sono opache, perché il filo della carta non si
+   sommi al loro. */
+.grid-paper {
+  position: relative;
+  z-index: 0;
+  width: var(--grid-w);
+  height: var(--grid-h);
+  background:
+    repeating-linear-gradient(to bottom, transparent 0 calc(var(--grid-row) - 1px), var(--doc-rule, rgb(20 22 26 / 30%)) 0 var(--grid-row)),
+    var(--doc-bg, #ffffff);
+}
+.grid-rule-column {
+  position: absolute;
+  top: 0;
+  width: 1px;
+  height: 100%;
+  background: var(--doc-rule, rgb(20 22 26 / 30%));
+}
+.no-gridlines .grid-paper {
+  background: var(--doc-bg, #ffffff);
+}
+.no-gridlines .grid-rule-column {
+  display: none;
+}
+.grid-paper-top,
+.grid-paper-corner {
+  width: var(--grid-left-w);
+  height: var(--grid-top-h);
+  background: linear-gradient(var(--sheet-2) 0 var(--grid-head-h), var(--doc-bg, #ffffff) 0);
+}
+.grid-paper-top {
+  position: relative;
+  z-index: 0;
+  width: var(--grid-w);
+}
+.grid-paper-corner {
+  position: sticky;
+  left: 0;
+  z-index: 2;
+}
+/* La fascia ferma a sinistra: le intestazioni delle righe e la carta delle
+   colonne bloccate, coi loro fili, anche dove la riga non c'è ancora. */
+.grid-paper-left {
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  display: flex;
+  width: var(--grid-left-w);
+  height: calc(var(--grid-h) - var(--grid-top-h));
+  margin-top: var(--grid-top-h);
+}
+.grid-paper-left-head {
+  flex: none;
+  width: var(--grid-head-w);
+  border-right: 1px solid var(--border);
+  box-sizing: border-box;
+  background:
+    repeating-linear-gradient(to bottom, transparent 0 calc(var(--grid-row) - 1px), var(--border) 0 var(--grid-row)),
+    var(--sheet-2);
+}
+.grid-paper-left-cells {
+  flex: 1;
+  border-right: 1px solid var(--doc-rule, rgb(20 22 26 / 30%));
+  box-sizing: border-box;
+  background:
+    repeating-linear-gradient(to bottom, transparent 0 calc(var(--grid-row) - 1px), var(--doc-rule, rgb(20 22 26 / 30%)) 0 var(--grid-row)),
+    var(--doc-bg, #ffffff);
+}
+.look-file .grid-plane .grid-cell {
+  background-color: var(--file-fill, var(--doc-bg, #ffffff));
+}
+.look-adattato .grid-plane .grid-cell {
+  background-color: var(--file-fill-a, var(--doc-bg, #ffffff));
+}
+/* Il dito scorre, e solo scorre: la selezione col dito la fa la griglia
+   (tocco, doppio tocco, tocco lungo). */
+.grid-viewport {
+  touch-action: pan-x pan-y;
+}
+</style>
+<style data-griglia="nuova">
+/* → structure.css (T2 e T3: i livelli dei segni). Un segno sta nel livello
+   della zona dove cade: il corpo che scorre, la testa che scorre solo di
+   lato, la colonna ferma che scorre solo in giù, l'angolo che non scorre.
+   Ogni livello taglia ciò che esce dalla sua zona; le fasce opache coprono
+   ciò che le scorre sotto. Il livello «lift» di una zona porta la cella
+   aperta e i segni di un angolo (il quadratino, le maniglie del tocco), che
+   possono uscire dalla zona; per il corpo è il suo livello. */
+.grid-marks-body {
+  position: relative;
+  z-index: 1;
+  width: var(--grid-w);
+  height: var(--grid-h);
+}
+.grid-marks-top {
+  position: relative;
+  z-index: 1;
+  width: var(--grid-w);
+  height: var(--grid-top-h);
+  overflow: clip;
+}
+.grid-lift-top {
+  position: relative;
+  z-index: 1;
+  width: 0;
+  height: 0;
+}
+.grid-marks-corner {
+  position: sticky;
+  left: 0;
+  z-index: 4;
+  width: var(--grid-left-w);
+  height: var(--grid-top-h);
+  overflow: clip;
+}
+.grid-lift-corner {
+  position: sticky;
+  left: 0;
+  z-index: 5;
+  width: 0;
+  height: 0;
+}
+.grid-marks-left {
+  position: sticky;
+  left: 0;
+  z-index: 4;
+  width: var(--grid-left-w);
+  height: calc(var(--grid-h) - var(--grid-top-h));
+  margin-top: var(--grid-top-h);
+  overflow: clip;
+}
+.grid-lift-left {
+  position: sticky;
+  left: 0;
+  z-index: 5;
+  width: 0;
+  height: 0;
+  margin-top: var(--grid-top-h);
+}
+.grid-mark {
+  position: absolute;
+  box-sizing: border-box;
+  transform-origin: 0 0;
+  pointer-events: none;
+}
+.grid-mark.handle {
+  z-index: 1;
+}
+.grid-mark.freeze {
+  z-index: 2;
+}
+.grid-mark.ants {
+  overflow: hidden;
+}
+.grid-ants {
+  position: absolute;
+  top: 0;
+  left: -8px;
+}
+.grid-mark.h > .grid-ants {
+  width: calc(100% + 8px);
+  height: 100%;
+}
+.grid-mark.v > .grid-ants {
+  top: -8px;
+  left: 0;
+  width: 100%;
+  height: calc(100% + 8px);
+}
+/* Le maniglie del tocco non prendono il puntatore: la presa è un cerchio
+   attorno al loro angolo (`gripAt`), anche dove una fascia ferma ne copre
+   metà. */
+.grid-mark.touch {
+  z-index: 3;
+  width: 14px;
+  height: 14px;
+  transform-origin: 50% 50%;
+}
+</style>
+<style data-griglia="nuova">
+/* → skin/editors.css (T3: i segni). Il colore dei segni è l'inchiostro del
+   cursore della carta: sulla carta del file, chiara in ogni luce, resta
+   leggibile anche nelle luci scure, dove l'accento del tema è chiaro. */
+.look-file .grid-viewport {
+  --grid-mark: var(--paper-caret, #2c57cd);
+}
+.look-adattato .grid-viewport {
+  --grid-mark: var(--accent);
+}
+.grid-mark.edge,
+.grid-mark.ring,
+.grid-mark.handle {
+  background: var(--grid-mark);
+}
+.grid-mark.handle {
+  box-shadow: 0 0 0 1px var(--doc-bg, #ffffff);
+  cursor: crosshair;
+}
+.grid-mark.veil {
+  background: color-mix(in srgb, var(--grid-mark) 14%, transparent);
+}
+/* Le intestazioni della selezione: il velo e il filo d'accento del tema,
+   perché le intestazioni sono cornice e non carta. */
+.grid-mark.band-col {
+  background: var(--accent-veil);
+  box-shadow: inset 0 -2px 0 var(--accent);
+}
+.grid-mark.band-row {
+  background: var(--accent-veil);
+  box-shadow: inset -2px 0 0 var(--accent);
+}
+.grid-plane .grid-header.selected {
+  box-shadow: none;
+}
+.grid-mark.freeze {
+  background: var(--muted);
+}
+/* Copia: un tratteggio largo; taglio: un tratteggio fitto. */
+.grid-mark.copy.h {
+  background: repeating-linear-gradient(90deg, var(--grid-mark) 0 6px, transparent 6px 10px);
+}
+.grid-mark.copy.v {
+  background: repeating-linear-gradient(180deg, var(--grid-mark) 0 6px, transparent 6px 10px);
+}
+.grid-mark.cut.h {
+  background: repeating-linear-gradient(90deg, var(--grid-mark) 0 3px, transparent 3px 6px);
+}
+.grid-mark.cut.v {
+  background: repeating-linear-gradient(180deg, var(--grid-mark) 0 3px, transparent 3px 6px);
+}
+.grid-mark.flash {
+  background: color-mix(in srgb, var(--grid-mark) 30%, transparent);
+}
+.grid-mark.h > .grid-ants {
+  background: repeating-linear-gradient(90deg, var(--grid-mark) 0 4px, transparent 4px 8px);
+}
+.grid-mark.v > .grid-ants {
+  background: repeating-linear-gradient(180deg, var(--grid-mark) 0 4px, transparent 4px 8px);
+}
+.grid-mark.touch {
+  border-radius: 50%;
+  background: var(--grid-mark);
+  box-shadow: 0 0 0 2px var(--doc-bg, #ffffff), var(--shadow-2);
+}
+/* Una cella scritta che aspetta la risposta del foglio: la formula si vede
+   come la si è scritta, più tenue, finché il foglio non dà il valore. */
+.grid-plane .grid-cell.pending {
+  color: color-mix(in srgb, var(--file-color, var(--doc-fg, #14161a)) 55%, var(--doc-bg, #ffffff));
+}
+/* La guida e la misura di un bordo tirato. */
+.grid-plane .grid-resize-guide {
+  background: var(--grid-mark);
+}
+</style>
+<style data-griglia="nuova">
+/* → structure.css e skin/editors.css (T4: la cella aperta). È la cella
+   stessa, col suo carattere, la sua carta e il suo allineamento, sollevata
+   da una cornice: il testo non si sposta di un pixel quando si apre. Cresce
+   a destra a colonne intere fin dove il riquadro lo permette, poi va a capo
+   e cresce in giù. */
+.grid-plane .grid-cell-editor {
+  z-index: auto;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  overflow: visible;
+  border: 0;
+  background: var(--file-fill, var(--doc-bg, #ffffff));
+  box-shadow: none;
+  color: var(--file-color, var(--doc-fg, #14161a));
+  caret-color: var(--doc-caret, #2c57cd);
+  pointer-events: auto;
+}
+.grid-cell-editor-frame {
+  position: absolute;
+  inset: -1px;
+  border: 2px solid var(--grid-mark);
+  box-shadow: var(--shadow-2);
+  pointer-events: none;
+}
+.grid-cell-editor-text {
+  min-width: 0;
+  padding: 0 0.45rem 0.3rem;
+  overflow: hidden;
+  outline: none;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.3;
+  white-space: pre;
+}
+.grid-cell-editor.wraps .grid-cell-editor-text {
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+</style>
+<style data-griglia="oggi">
+/* solo prototipo: la griglia di oggi, coi segni dove li mette il motore
+   (`editors/grid/engine.ts`) e il suo editor di CodeMirror col carattere
+   del codice. */
+.grid-marks-oggi {
+  position: relative;
+  z-index: 3;
+  width: 0;
+  height: 0;
+}
+.grid-oggi-lines {
+  position: relative;
+  z-index: 7;
+  width: 0;
+  height: 0;
+}
+.proto-cm-line {
+  margin: 3px 2px;
+  padding: 0 8px;
+  overflow: hidden;
+  background: var(--doc-active-line, #f4f7fb);
+  color: var(--doc-fg, #14161a);
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 13px;
+  line-height: 18px;
+  white-space: pre;
+}
+.grid-cell-editor .proto-cm-line {
+  caret-color: var(--doc-caret, #2c57cd);
+  outline: none;
+}
+</style>
+<style>
+/* solo prototipo: la pagina attorno alla finestra e la barra degli stati
+   (le stesse del prototipo della barra). */
+:root,
+:root[data-luce] {
+  --font-ui: "Hanken Grotesk Variable", "Hanken Grotesk", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+html,
+body {
+  height: 100%;
+  margin: 0;
+}
+body {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: var(--text-base);
+}
+.proto-bar {
+  position: relative;
+  z-index: 100;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-4) var(--space-7);
+  padding: var(--space-4) var(--space-6);
+  border-bottom: 1px dashed var(--border-strong);
+  background: var(--bg-panel);
+}
+.proto-bar h1 {
+  margin: 0;
+  font-size: var(--text-md);
+  font-weight: var(--weight-bold);
+}
+.proto-field {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+.proto-field label {
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+.proto-field select {
+  min-height: 28px;
+  padding: 0 var(--space-3);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-chip);
+  background: var(--bg-input);
+  color: var(--text);
+  font: inherit;
+}
+.proto-field select:disabled {
+  opacity: 0.5;
+}
+.proto-notes {
+  position: relative;
+}
+.proto-notes summary {
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius-chip);
+  color: var(--accent);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  cursor: pointer;
+}
+.proto-notes summary:hover {
+  background: var(--overlay-hover);
+}
+.proto-notes-body {
+  position: absolute;
+  top: calc(100% + var(--space-3));
+  left: 0;
+  width: min(600px, 90vw);
+  max-height: 70vh;
+  overflow: auto;
+  padding: var(--space-5) var(--space-6);
+  border-radius: var(--radius-menu);
+  background: var(--bg-elev);
+  box-shadow: var(--shadow-3);
+  font-size: var(--text-sm);
+  line-height: var(--leading-normal);
+}
+.proto-notes-body h2 {
+  margin: var(--space-4) 0 var(--space-2);
+  font-size: var(--text-base);
+}
+.proto-notes-body h2:first-child {
+  margin-top: 0;
+}
+.proto-notes-body ul,
+.proto-notes-body ol {
+  margin: 0;
+  padding-left: 1.3em;
+}
+.proto-notes-body li + li {
+  margin-top: var(--space-2);
+}
+.proto-log {
+  flex: 1 1 16em;
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--text-sm);
+  text-align: right;
+}
+.proto-stage {
+  display: flex;
+  flex: 1;
+  justify-content: center;
+  min-height: 0;
+  padding: var(--space-6);
+  overflow: hidden;
+}
+.proto-window {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 1280px;
+  height: 100%;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sheet);
+  background: var(--sheet);
+  box-shadow: var(--shadow-2);
+}
+.proto-window[data-larghezza="stretta"] {
+  width: 700px;
+}
+/* Un telefono in piedi, come le scene `mobile-*` del banco (390 px). */
+.proto-window[data-larghezza="telefono"] {
+  width: 390px;
+}
+/* Fa da `.pane-editor`: la superficie della griglia la riempie. */
+.proto-pane {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+.proto-formula-text {
+  display: flex;
+  align-items: center;
+  height: 100%;
+  padding: 0 var(--space-4);
+  overflow: hidden;
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: var(--text-sm);
+  white-space: pre;
+}
+/* come `.grid-sheets`: le linguette dei fogli sotto la griglia */
+.proto-sheets {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  flex: none;
+  gap: var(--space-2);
+  padding: 0 var(--space-4);
+  border-top: 1px solid var(--border);
+  background: var(--sheet-2);
+  overflow: hidden;
+  white-space: nowrap;
+}
+.proto-sheets span {
+  padding: var(--space-2) var(--space-5);
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+.proto-sheets span[aria-current="true"] {
+  background: var(--sheet);
+  color: var(--text);
+  font-weight: var(--weight-bold);
+  box-shadow: inset 0 -2px 0 var(--accent);
+}
+</style>
+</head>
+<body>
+<header class="proto-bar" aria-label="Comandi del prototipo">
+  <h1 data-i18n="(solo prototipo)">Prototipo · le celle dei fogli</h1>
+  <div class="proto-field">
+    <label for="proto-stato" data-i18n="(solo prototipo)">Stato</label>
+    <select id="proto-stato">
+      <option value="riposo">A riposo: C4 attiva</option>
+      <option value="intervallo">Un intervallo: C4:E9</option>
+      <option value="oltre">Un intervallo oltre la riga bloccata, scorso</option>
+      <option value="editor">Cella aperta: A5 con un testo lungo</option>
+      <option value="misura">Una colonna tirata vicino al bordo</option>
+      <option value="riempimento">Riempimento in attesa del foglio</option>
+      <option value="copiata">Intervallo copiato</option>
+      <option value="tagliata">Intervallo tagliato</option>
+      <option value="telefono">Al telefono: maniglie del tocco lungo</option>
+    </select>
+  </div>
+  <div class="proto-field">
+    <label for="proto-griglia" data-i18n="(solo prototipo)">Griglia</label>
+    <select id="proto-griglia">
+      <option value="nuova">Nuova</option>
+      <option value="oggi">Di oggi</option>
+    </select>
+  </div>
+  <div class="proto-field">
+    <label for="proto-risponde" data-i18n="(solo prototipo)">Il foglio risponde</label>
+    <select id="proto-risponde">
+      <option value="accetta">Sì, dopo 1,5 s (come la copia sulla 1448)</option>
+      <option value="subito">Sì, subito</option>
+      <option value="rifiuta">No, dopo 1,5 s (foglio protetto)</option>
+    </select>
+  </div>
+  <div class="proto-field">
+    <label for="proto-copia" data-i18n="(solo prototipo)">Segno della copia</label>
+    <select id="proto-copia">
+      <option value="entrambi">Tratteggio e battito (consigliato)</option>
+      <option value="tratteggio">Solo il tratteggio</option>
+      <option value="battito">Solo il battito</option>
+    </select>
+  </div>
+  <div class="proto-field">
+    <label for="proto-puntatore" data-i18n="(solo prototipo)">Selezione col puntatore</label>
+    <select id="proto-puntatore">
+      <option value="scivola" selected>Scivola sempre, come coi tasti (scelta dall'utente)</option>
+      <option value="segue">Segue il puntatore: cresce scivolando, cala subito</option>
+      <option value="salta">Salta col puntatore, scivola coi tasti</option>
+    </select>
+  </div>
+  <div class="proto-field">
+    <label for="proto-filo" data-i18n="(solo prototipo)">Maniglie sul filo del blocco</label>
+    <select id="proto-filo">
+      <option value="coperte">Scorrono sotto la fascia ferma, come le celle (consigliato)</option>
+      <option value="sopra">Intere sopra la fascia ferma</option>
+    </select>
+  </div>
+  <div class="proto-field">
+    <label for="proto-luce" data-i18n="(solo prototipo)">Luce</label>
+    <select id="proto-luce">
+      <option value="chiara">Chiara</option>
+      <option value="scura">Scura</option>
+      <option value="chiara-alta">Chiara, contrasto alto</option>
+      <option value="scura-alta">Scura, contrasto alto</option>
+    </select>
+  </div>
+  <div class="proto-field">
+    <label for="proto-larghezza" data-i18n="(solo prototipo)">Larghezza</label>
+    <select id="proto-larghezza">
+      <option value="piena">Piena</option>
+      <option value="stretta">700 px</option>
+      <option value="telefono">Telefono, 390 px</option>
+    </select>
+  </div>
+  <div class="proto-field">
+    <label for="proto-movimento" data-i18n="(solo prototipo)">Movimento</label>
+    <select id="proto-movimento">
+      <option value="si">Sì</option>
+      <option value="ridotto">Ridotto</option>
+    </select>
+  </div>
+  <details class="proto-notes">
+    <summary data-i18n="(solo prototipo)">Note</summary>
+    <div class="proto-notes-body" data-i18n="(solo prototipo)">
+      <h2>Che cosa cambia nella griglia nuova</h2>
+      <ul>
+        <li><b>La carta sotto.</b> Sotto le celle c'è la carta del file coi suoi fili. Scorrendo veloci si vede al massimo la griglia vuota, mai il bianco. Le righe si disegnano nel gestore dello scorrimento, con un riquadro intero di margine sopra e sotto, e restano quelle che c'erano: si aggiungono e si tolgono solo ai bordi.</li>
+        <li><b>Le fasce ferme stanno ferme da sole.</b> La riga delle intestazioni, le righe bloccate, le intestazioni delle righe e le colonne bloccate sono <code>sticky</code> nel piano: non c'è più uno script che le rimette a posto a ogni fotogramma, quindi non saltano.</li>
+        <li><b>I segni stanno nella zona dove cadono.</b> Il corpo, la testa, la colonna ferma e l'angolo hanno ognuno il suo livello. Un intervallo che passa la riga bloccata ha la sua parte ferma in alto e quella che scorre sotto, e non copre mai le intestazioni né la colonna bloccata.</li>
+        <li><b>Un solo rettangolo, simmetrico.</b> Ogni lato copre il filo della griglia e un pixel dentro. Con più celle, la cella attiva ha un anello sottile e il resto un velo. Il colore è l'inchiostro del cursore della carta (6,3:1 sul bianco in ogni luce), non l'accento del tema, che nelle luci scure è chiaro.</li>
+        <li><b>I segni restano e scivolano.</b> I pezzi del rettangolo, del velo e delle intestazioni ci sono sempre: una freccia li sposta, non li ricrea. Vanno dalla cella di prima a quella nuova con la molla <i>GLIDE</i>.</li>
+        <li><b>La cella aperta è la cella.</b> Stesso carattere, stessa carta, stesso posto del testo: aprirla non sposta niente. Cresce a destra a colonne intere fin dove il riquadro lo permette, poi va a capo e cresce in giù. La cornice compare in 90 ms.</li>
+        <li><b>Si vede subito ciò che si scrive.</b> Un numero va a destra appena lo si conferma; una formula resta com'è scritta, tenue, finché il foglio non dà il valore, che compare con una dissolvenza. Una colonna tirata prende subito la larghezza, e le colonne dopo scivolano. Se il foglio dice di no, tutto torna indietro scivolando e la riga in alto dice perché.</li>
+        <li><b>Riempimento, copia e incolla.</b> Il contorno del riempimento resta finché il foglio non risponde, e mentre aspetta le formiche camminano; poi i valori arrivano uno dopo l'altro. Una copia lascia un tratteggio largo e un battito, un taglio un tratteggio fitto. Incollare mostra subito i valori.</li>
+        <li><b>Il dito scorre.</b> Trascinare col dito scorre e basta. Un tocco sceglie la cella, due la aprono, un tocco lungo mette le due maniglie per allargare la selezione.</li>
+      </ul>
+      <h2>Il movimento</h2>
+      <ul>
+        <li>Le molle sono della griglia e non rimbalzano: <i>GLIDE</i> 1400/75 per i segni, <i>SLIDE</i> 700/53 per le colonne che scivolano e le maniglie (<code>moto/spring.ts</code> non cambia). Dalla barra restano 90 ms per una cosa che compare, 140 ms per una che esce, 12 ms fra un valore e l'altro (al massimo 8).</li>
+        <li><b>Un solo motore.</b> Dieci numeri (il rettangolo, la cella attiva, l'angolo del quadratino) e, a ogni fotogramma, tutti i pezzi di tutte le zone disegnati da quei numeri: i lati, l'anello, il velo, le fasce e il quadratino non possono separarsi. Il puntatore cambia solo dove vanno i numeri; il passo si fa una volta per fotogramma, quindi un mouse a 1000 Hz e uno a 60 danno lo stesso moto. Un numero non torna mai indietro e non passa mai il suo bersaglio, e la cella attiva resta dentro il rettangolo.</li>
+        <li><b>Col puntatore</b> (D-7, scelta «Selezione col puntatore», risposta dell'utente il 2026-11-04: «scivola sempre»): la selezione scivola come coi tasti, anche quando cala, quindi per un attimo resta più grande della scelta. Le altre due scelte restano da guardare: «Segue il puntatore» (cresce scivolando e cala subito) e «Salta col puntatore» (identica alla scelta in ogni fotogramma, senza moto col mouse).</li>
+        <li><b>Le maniglie sul filo del blocco</b> (D-8, scelta «Maniglie sul filo del blocco»): il quadratino e le maniglie del tocco sono un pezzo solo, intero, nel livello della zona del loro angolo. Sul filo di una colonna o di una riga bloccata la fascia ferma ne copre la parte che le passa sotto, come copre le celle, e scorrendo spariscono sotto la fascia insieme alla loro cella; la presa è un cerchio attorno all'angolo, intera anche dove la fascia copre metà maniglia. L'altra scelta: «Intere sopra la fascia», che le sposta lo script a ogni scorrimento (un fotogramma dopo le celle) e, quando l'angolo passa sotto la fascia, le riporta giù di colpo.</li>
+        <li><b>Movimento ridotto</b>: niente scivola. I segni saltano, le colonne saltano, le formiche stanno ferme; restano le dissolvenze di 90 ms, come nella barra, e il battito della copia, che è solo una dissolvenza.</li>
+        <li>Nel prototipo le corse le fa una copia di <code>run</code> della barra e i segni un ciclo di <code>requestAnimationFrame</code>; nel codice vero le fa <code>editors/grid/grid-motion.ts</code> con <code>animate</code>, <code>flip</code> e <code>stagger</code> di <code>moto/</code>, e i segni un ascoltatore di <code>onFrame</code> con <code>advanceSpring</code> (T3).</li>
+      </ul>
+      <h2>Che cosa non c'è nel prototipo</h2>
+      <ul>
+        <li>La barra multifunzione e il menu dei comandi: sono nel prototipo di K3.</li>
+        <li>Il motore vero: i valori, le somme e le serie li calcola lo script. Lo stato «Riempimento» scrive prima 10 e 20 in C4 e C5, perché si veda la serie.</li>
+        <li>Le righe si tirano come le colonne: il prototipo mostra le colonne.</li>
+        <li>I formati dei numeri del file («1,234.00 €» all'inglese) sono quelli di oggi e non c'entrano con questo piano.</li>
+      </ul>
+      <h2>Domande per l'utente</h2>
+      <ol>
+        <li>Il segno della copia: tratteggio e battito, solo uno dei due?</li>
+        <li>La cella aperta che cresce copre le celle accanto anche quando non sono vuote (come Excel)?</li>
+        <li>Mostrare subito una larghezza o un numero prima che il foglio risponda, e tornare indietro se dice di no?</li>
+        <li>Al telefono, il tocco lungo per le maniglie va bene?</li>
+        <li>La velocità della selezione (D-5)? (Col puntatore scivola sempre: D-7 ha la risposta.)</li>
+        <li>Le formiche che camminano mentre il foglio risponde a un riempimento?</li>
+        <li>Sul filo del blocco, una maniglia che la fascia ferma copre a metà (D-8) va bene, o la vuoi intera sopra la fascia?</li>
+      </ol>
+    </div>
+  </details>
+  <p class="proto-log" role="status" aria-live="polite"></p>
+</header>
+
+<main class="proto-stage">
+  <div class="proto-window" data-larghezza="piena" aria-label="Bilancio 2026.xlsx">
+    <div class="proto-pane look-file">
+      <div class="grid-surface">
+        <p class="grid-notice" role="status" hidden></p>
+        <div class="grid-formula-bar">
+          <span class="grid-cell-name">C4</span>
+          <div class="grid-formula-editor"><span class="proto-formula-text"></span></div>
+        </div>
+        <div class="grid-viewport" tabindex="0" role="grid" aria-label="Foglio di calcolo" data-i18n-aria="grid.label"></div>
+        <div class="proto-sheets" aria-hidden="true"><span aria-current="true">Grande</span><span>Libero</span></div>
+      </div>
+    </div>
+  </div>
+</main>
+
+<script>
+(() => {
+  "use strict";
+
+  // ── Il movimento ────────────────────────────────────────────────────────
+  // solo prototipo: le costanti e la molla sono quelle di `moto/spring.ts`,
+  // copiate qui con i loro nomi come nel prototipo della barra, e il passo
+  // della molla è quello di `sampleSpring`. Nel codice vero le corse le fanno
+  // `animate`, `flip` e `stagger` di `moto/`, chiamate da
+  // `editors/grid/grid-motion.ts` (T3), e i segni li porta lì un ascoltatore
+  // di `onFrame` con `advanceSpring` (vedi «Il motore dei segni»); il livello
+  // «calmo» lo decide `moto/level.ts` e qui non c'è.
+  const SPRINGS = {
+    snap: { stiffness: 560, damping: 38 },
+    soft: { stiffness: 300, damping: 30 },
+    wide: { stiffness: 170, damping: 24 },
+  };
+  const DURATION = { state: 90, swap: 140 };
+  const STAGGER_MS = 12;
+  const STAGGER_MAX = 8;
+  const SAMPLE_MS = 1000 / 60;
+  const SPRING_MAX_MS = 2000;
+  // Le corse della griglia (T3, costanti di `editors/grid/grid-motion.ts`).
+  const ENTER_SCALE = 0.96; // le maniglie del tocco lungo, come una sezione che compare nella barra
+  const ANTS_STEP = 8; // un passo delle formiche, il periodo del loro tratteggio
+  const ANTS_MS = 320; // il tempo di un passo
+  // Le molle della griglia: un po' più svelte di `snap` e `soft` della barra,
+  // e appena sovrasmorzate (radici 35 e 40 al secondo per `GLIDE`, 25 e 28
+  // per `SLIDE`). Su una griglia un segno che passa il bersaglio e torna
+  // indietro si legge come un difetto, non come un rimbalzo.
+  // `GLIDE` porta i segni (al 90 % in circa 105 ms, fermo in 250), `SLIDE` le
+  // colonne che scivolano e le maniglie del tocco lungo (al 90 % in 150 ms).
+  const GLIDE = { stiffness: 1400, damping: 75 };
+  const SLIDE = { stiffness: 700, damping: 53 };
+
+  const STEP_S = 1 / 480;
+  /// Avanza `state` ({ x, v }, v al secondo) verso `target` di `seconds`, a
+  /// passi non più lunghi di `STEP_S`: è `advanceSpring` di `moto/spring.ts`.
+  function advanceSpring(spring, state, target, seconds) {
+    let steps = Math.max(1, Math.ceil(seconds / STEP_S - 1e-9));
+    const h = seconds / steps;
+    while (steps-- > 0) {
+      state.v += (-spring.stiffness * (state.x - target) - spring.damping * state.v) * h;
+      state.x += state.v * h;
+    }
+  }
+  /// L'avanzamento 0 → 1 di una molla, un valore ogni `SAMPLE_MS`; `v0` è la
+  /// velocità di partenza, in avanzamento al secondo.
+  function sampleSpring(spring, v0 = 0) {
+    const precision = 0.001;
+    const state = { x: 0, v: v0 };
+    const values = [0];
+    const last = Math.round(SPRING_MAX_MS / SAMPLE_MS);
+    for (let index = 1; index <= last; index++) {
+      advanceSpring(spring, state, 1, SAMPLE_MS / 1000);
+      if (index === last || (Math.abs(state.x - 1) < precision && Math.abs(state.v) < precision * 20)) {
+        values.push(1);
+        break;
+      }
+      values.push(state.x);
+    }
+    return values;
+  }
+  // Gli stati scelti dalla barra del prototipo si mettono senza corse: il
+  // movimento parte dai gesti.
+  let still = 0;
+  function quietly(fn) {
+    still += 1;
+    try {
+      fn();
+    } finally {
+      still -= 1;
+    }
+  }
+  const reduced = () => look.movimento.value === "ridotto";
+  const flights = new Map(); // elemento → { motion, from, values }
+  const lawOf = (spring) => (typeof spring === "string" ? SPRINGS[spring] : spring);
+  const onlyMoves = (from) => !!from && Object.keys(from).every((k) => k === "x" || k === "y");
+  /// L'avanzamento di una corsa a molla adesso, e la sua velocità al secondo.
+  function progressOf(flight) {
+    const { values, motion } = flight;
+    const last = values.length - 1;
+    const t = Math.max(0, Number(motion.currentTime ?? 0)) / SAMPLE_MS;
+    if (t >= last) return { p: 1, dp: 0 };
+    const k = Math.floor(t);
+    return { p: values[k] + (values[k + 1] - values[k]) * (t - k), dp: ((values[k + 1] - values[k]) / SAMPLE_MS) * 1000 };
+  }
+  function halt(el) {
+    flights.get(el)?.motion.cancel();
+    flights.delete(el);
+  }
+  /// La posa a un avanzamento `p` fra `from` (0) e il riposo (1).
+  function pose(from, p) {
+    const k = 1 - p;
+    const frame = {};
+    if (from.x !== undefined || from.y !== undefined || from.scale !== undefined || from.scaleX !== undefined) {
+      const sx = 1 + ((from.scaleX ?? from.scale ?? 1) - 1) * k;
+      const sy = 1 + ((from.scaleY ?? from.scale ?? 1) - 1) * k;
+      frame.transform = `translate(${(from.x ?? 0) * k}px, ${(from.y ?? 0) * k}px) scale(${sx}, ${sy})`;
+    }
+    if (from.opacity !== undefined) frame.opacity = Math.min(1, Math.max(0, from.opacity + (1 - from.opacity) * p));
+    return frame;
+  }
+  /// Porta `target` da `from` al riposo: con una molla, o in `duration` ms.
+  /// Ridotto: niente, o una dissolvenza di `DURATION.state` se lo si chiede.
+  /// Una corsa di sola posizione che ne interrompe un'altra parte da dove
+  /// l'elemento si vede, con la sua velocità: ciò che restava della corsa
+  /// vecchia si somma alla nuova, invece di sparire in un salto.
+  function run(target, { from, spring = SLIDE, duration, easing: curve = "linear", delay = 0, whenReduced = "none" }) {
+    const old = flights.get(target);
+    old?.motion.cancel();
+    flights.delete(target);
+    if (still > 0) return null;
+    let frames;
+    let time;
+    let easing = "linear";
+    let values = null;
+    if (reduced()) {
+      if (whenReduced !== "fade") return null;
+      frames = [{ opacity: 0 }, { opacity: 1 }];
+      time = DURATION.state;
+    } else if (duration) {
+      frames = [pose(from, 0), pose(from, 1)];
+      time = duration;
+      easing = curve;
+    } else {
+      let v0 = 0;
+      if (old?.values && onlyMoves(from) && onlyMoves(old.from)) {
+        const { p, dp } = progressOf(old);
+        const ox = old.from.x ?? 0;
+        const oy = old.from.y ?? 0;
+        from = { x: (from.x ?? 0) + ox * (1 - p), y: (from.y ?? 0) + oy * (1 - p) };
+        const axis = Math.abs(from.x) >= Math.abs(from.y) ? "x" : "y";
+        const speed = -(axis === "x" ? ox : oy) * dp;
+        if (Math.abs(from[axis]) > 0.5) v0 = -speed / from[axis];
+      }
+      values = sampleSpring(lawOf(spring), v0);
+      frames = values.map((p) => pose(from, p));
+      time = (values.length - 1) * SAMPLE_MS;
+    }
+    const motion = target.animate(frames, { duration: time, delay, easing, fill: "backwards" });
+    const flight = { motion, from, values };
+    flights.set(target, flight);
+    const done = () => {
+      if (flights.get(target) === flight) flights.delete(target);
+    };
+    motion.finished.then(done, done);
+    return motion;
+  }
+  /// Un'uscita: una copia di `el` che svanisce in `DURATION.swap` (ridotto:
+  /// `DURATION.state`), mentre l'originale sparisce subito (`exitGhost`).
+  function ghostOut(el) {
+    if (still > 0 || el.hidden) return;
+    const ghost = el.cloneNode(true);
+    ghost.removeAttribute("id");
+    el.after(ghost);
+    const motion = ghost.animate([{ opacity: 1 }, { opacity: 0 }], {
+      duration: reduced() ? DURATION.state : DURATION.swap,
+      easing: "ease-out",
+      fill: "forwards",
+    });
+    const gone = () => ghost.remove();
+    motion.finished.then(gone, gone);
+  }
+
+  // ── Il foglio del prototipo ─────────────────────────────────────────────
+  // solo prototipo: le misure sono quelle della cartella «Grande» sulla 1448
+  // (30 colonne, 3100 righe, riga 1 e colonna A bloccate, scala 1,4).
+  const ROWS = 3100;
+  const COLS = 30;
+  const DATA_ROWS = 3000;
+  const DATA_COLS = 20;
+  const HEAD_W = 52;
+  const HEAD_H = 28;
+  const ROW_H = 28;
+  const TH = HEAD_H + ROW_H; // la testa: intestazioni e riga bloccata
+  const WORKBOOK_SCALE = 1.4;
+  const RESIZE_SLOP = 4;
+  const FILL_SLOP = 6;
+  const GRIP_R = 9; // la presa di una maniglia del tocco: il cerchio e il suo bordo
+  const TAP_MOVE = 8;
+  const LONG_PRESS_MS = 450;
+  const DOUBLE_TAP_MS = 300;
+  const BASE_WIDTHS = [176, 90, 181, 211, ...Array(COLS - 4).fill(90)];
+  let widths = [...BASE_WIDTHS];
+  let X = [];
+  function measure() {
+    X = [HEAD_W];
+    for (let c = 0; c < COLS; c++) X.push(X[c] + widths[c]);
+  }
+  measure();
+  const LW = () => X[1];
+  const W = () => X[COLS];
+  const H = HEAD_H + ROWS * ROW_H;
+  const Y = (r) => HEAD_H + r * ROW_H;
+  const clampR = (r) => Math.max(0, Math.min(ROWS - 1, r));
+  const clampC = (c) => Math.max(0, Math.min(COLS - 1, c));
+  function colAt(x) {
+    for (let c = 0; c < COLS; c++) if (x < X[c + 1]) return c;
+    return COLS - 1;
+  }
+  const rowAt = (y) => clampR(Math.floor((y - HEAD_H) / ROW_H));
+  function columnLabel(c) {
+    let s = "";
+    let n = c + 1;
+    while (n > 0) {
+      const m = (n - 1) % 26;
+      s = String.fromCharCode(65 + m) + s;
+      n = Math.floor((n - 1) / 26);
+    }
+    return s;
+  }
+  const a1 = (r, c) => `${columnLabel(c)}${r + 1}`;
+  const rangeA1 = (g) => (g.r0 === g.r1 && g.c0 === g.c1 ? a1(g.r0, g.c0) : `${a1(g.r0, g.c0)}:${a1(g.r1, g.c1)}`);
+
+  const NAMES = ["Luce", "Gas", "Acqua", "Telefono", "Treno", "Libri", "Cinema", "Cena fuori", "Affitto", "Spesa"];
+  const MONTHS = ["Gennaio", "Febbraio", "Marzo", "Aprile", "Maggio", "Giugno", "Luglio", "Agosto", "Settembre", "Ottobre", "Novembre", "Dicembre"];
+  // Le colonne in euro col formato del file, all'inglese come oggi.
+  const EURO = new Set([3, 6, 9, 12, 13]);
+  const EN = new Intl.NumberFormat("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const IT = new Intl.NumberFormat("it-IT", { maximumFractionDigits: 2 });
+  const NUMBER = /^-?\d+(?:[.,]\d+)?$/;
+  const edits = new Map();
+  /// Ciò che una cella mostra mentre il foglio non ha ancora risposto.
+  const rawShown = new Map();
+  const key = (r, c) => `${r},${c}`;
+
+  function baseInput(r, c) {
+    if (r >= DATA_ROWS || c >= DATA_COLS) return "";
+    if (r === 0) return c === 0 ? "Voce" : c <= 12 ? MONTHS[c - 1] : c === 13 ? "Totale" : `Colonna ${columnLabel(c)}`;
+    if (c === 0) return `${NAMES[(r - 1) % 10]} ${r}`;
+    if (c <= 12) return String(-125 + 101 * (c - 1) + 37 * (r - 1));
+    if (c === 13) return `=SUM(B${r + 1}:M${r + 1})`;
+    if (c === 14 && r % 6 === 0) return `nota ${r}`;
+    if (c === 16 && r % 4 === 1) return String(r * 3);
+    if (c === 18 && r % 9 === 2) return `nota ${r}`;
+    return "";
+  }
+  const inputAt = (r, c) => (edits.has(key(r, c)) ? edits.get(key(r, c)) : baseInput(r, c));
+  const toNumber = (s) => Number(s.trim().replace(",", "."));
+  function parseRef(s) {
+    const m = /^([A-Z]+)(\d+)$/.exec(s.trim().toUpperCase());
+    if (!m) return null;
+    let c = 0;
+    for (const ch of m[1]) c = c * 26 + ch.charCodeAt(0) - 64;
+    return { r: Number(m[2]) - 1, c: c - 1 };
+  }
+  function valueAt(r, c, depth = 0) {
+    const input = inputAt(r, c);
+    if (input.startsWith("=")) return evaluate(input.slice(1), depth);
+    if (NUMBER.test(input.trim())) return toNumber(input);
+    return input;
+  }
+  function evaluate(expr, depth) {
+    if (depth > 8) return "#RIF!";
+    const sum = /^SUM\((\w+):(\w+)\)$/i.exec(expr.trim());
+    if (sum) {
+      const a = parseRef(sum[1]);
+      const b = parseRef(sum[2]);
+      if (!a || !b) return "#NOME?";
+      let total = 0;
+      for (let r = Math.min(a.r, b.r); r <= Math.max(a.r, b.r); r++)
+        for (let c = Math.min(a.c, b.c); c <= Math.max(a.c, b.c); c++) {
+          const v = valueAt(r, c, depth + 1);
+          if (typeof v === "number") total += v;
+        }
+      return total;
+    }
+    const ref = parseRef(expr);
+    if (ref) {
+      const v = valueAt(ref.r, ref.c, depth + 1);
+      return v === "" ? 0 : v;
+    }
+    if (NUMBER.test(expr.trim())) return toNumber(expr);
+    return "#NOME?";
+  }
+  function shown(r, c) {
+    const v = valueAt(r, c);
+    if (typeof v === "number") return { text: EURO.has(c) ? `${EN.format(v)} €` : String(v), number: true };
+    return { text: v, number: false };
+  }
+  function lookOf(r, c) {
+    const head = r === 0 && c < DATA_COLS;
+    return { fill: head ? "#DDEBF7" : "", color: head ? "#000" : "", bold: head || (c === 13 && r > 0 && r < DATA_ROWS) };
+  }
+
+  // ── La selezione e i gesti in corso ─────────────────────────────────────
+  const sel = { anchor: { r: 3, c: 2 }, focus: { r: 3, c: 2 }, active: { r: 3, c: 2 } };
+  function range() {
+    return {
+      r0: Math.min(sel.anchor.r, sel.focus.r),
+      c0: Math.min(sel.anchor.c, sel.focus.c),
+      r1: Math.max(sel.anchor.r, sel.focus.r),
+      c1: Math.max(sel.anchor.c, sel.focus.c),
+    };
+  }
+  const sameRange = (a, b) => a && b && a.r0 === b.r0 && a.c0 === b.c0 && a.r1 === b.r1 && a.c1 === b.c1;
+  const inRange = (g, r, c) => r >= g.r0 && r <= g.r1 && c >= g.c0 && c <= g.c1;
+  const boxOf = (g) => ({ L: X[g.c0], R: X[g.c1 + 1], T: Y(g.r0), B: Y(g.r1 + 1) });
+  function setSel(anchor, focus = anchor, active = anchor) {
+    sel.anchor = { ...anchor };
+    sel.focus = { ...focus };
+    sel.active = { ...active };
+  }
+  let clip = null; // { range, cut, data }
+  let fill = null; // { source, target, waiting }
+  let resize = null; // { index, start, now, x0 }
+  let editor = null; // { r, c, how, el, text, layer }
+  let handles = false;
+  let drag = null;
+  let lastTap = null;
+  let lastPointer = "mouse";
+  let generation = 0;
+  const timers = [];
+
+  // ── Gli elementi della pagina ───────────────────────────────────────────
+  const $ = (id) => document.getElementById(id);
+  const viewport = document.querySelector(".grid-viewport");
+  const win = document.querySelector(".proto-window");
+  const pane = document.querySelector(".proto-pane");
+  const cellName = document.querySelector(".grid-cell-name");
+  const formulaText = document.querySelector(".proto-formula-text");
+  const notice = document.querySelector(".grid-notice");
+  const logEl = document.querySelector(".proto-log");
+  const look = {
+    stato: $("proto-stato"),
+    griglia: $("proto-griglia"),
+    risponde: $("proto-risponde"),
+    copia: $("proto-copia"),
+    puntatore: $("proto-puntatore"),
+    filo: $("proto-filo"),
+    luce: $("proto-luce"),
+    larghezza: $("proto-larghezza"),
+    movimento: $("proto-movimento"),
+  };
+  const mode = () => look.griglia.value;
+  const nuova = () => mode() === "nuova";
+  const touchMode = () => nuova() && (look.larghezza.value === "telefono" || lastPointer === "touch");
+  function div(className) {
+    const el = document.createElement("div");
+    if (className) el.className = className;
+    return el;
+  }
+  function place(el, r) {
+    el.style.left = `${r.x}px`;
+    el.style.top = `${r.y}px`;
+    el.style.width = `${r.w}px`;
+    el.style.height = `${r.h}px`;
+  }
+  const log = (text) => {
+    logEl.textContent = text;
+  };
+  function showNotice(text) {
+    notice.textContent = text;
+    notice.hidden = false;
+  }
+  const hideNotice = () => {
+    notice.hidden = true;
+  };
+  function setVars() {
+    const s = viewport.style;
+    s.setProperty("--grid-w", `${W()}px`);
+    s.setProperty("--grid-h", `${H}px`);
+    s.setProperty("--grid-row", `${ROW_H}px`);
+    s.setProperty("--grid-head-h", `${HEAD_H}px`);
+    s.setProperty("--grid-head-w", `${HEAD_W}px`);
+    s.setProperty("--grid-top-h", `${TH}px`);
+    s.setProperty("--grid-left-w", `${LW()}px`);
+  }
+
+  // ── Le celle ────────────────────────────────────────────────────────────
+  const cellId = (r, c) => `proto-c-${r}-${c}`;
+  const cellEl = (r, c) => document.getElementById(cellId(r, c));
+  function makeCell(r, c) {
+    const el = div(c < 1 ? "grid-cell frozen" : "grid-cell");
+    el.id = cellId(r, c);
+    el.dataset.row = String(r);
+    el.dataset.column = String(c);
+    el.setAttribute("role", "gridcell");
+    el.setAttribute("aria-rowindex", String(r + 2));
+    el.setAttribute("aria-colindex", String(c + 2));
+    el.style.alignContent = "end";
+    const l = lookOf(r, c);
+    if (l.fill) el.style.setProperty("--file-fill", l.fill);
+    if (l.color) el.style.setProperty("--file-color", l.color);
+    if (l.bold) el.style.fontWeight = "var(--weight-bold)";
+    el.append(div("grid-cell-text"));
+    paint(el, r, c);
+    return el;
+  }
+  /// Rimette il testo della cella; dice se è cambiato.
+  function paint(el, r, c) {
+    const text = el.firstChild;
+    const raw = rawShown.get(key(r, c));
+    let s;
+    let end;
+    let pending = false;
+    if (raw) {
+      s = raw.text;
+      end = raw.align === "end";
+      pending = raw.pending;
+    } else {
+      const v = shown(r, c);
+      s = v.text;
+      end = v.number;
+    }
+    const changed = text.textContent !== s || (text.style.textAlign === "end") !== end || el.classList.contains("pending") !== pending;
+    text.textContent = s;
+    text.style.textAlign = end ? "end" : "";
+    el.classList.toggle("pending", pending);
+    return changed;
+  }
+  /// Ridipinge le celle disegnate. Nella griglia nuova ciò che cambia compare
+  /// con una dissolvenza, una cella dopo l'altra se `stagger`.
+  function refresh({ fade = false, stagger = false } = {}) {
+    const changed = [];
+    for (const el of viewport.querySelectorAll(".grid-cell")) {
+      if (paint(el, Number(el.dataset.row), Number(el.dataset.column))) changed.push(el);
+    }
+    if (fade && nuova()) {
+      changed.forEach((el, i) =>
+        run(el.firstChild, {
+          from: { opacity: 0 },
+          duration: DURATION.state,
+          delay: stagger ? Math.min(i, STAGGER_MAX) * STAGGER_MS : 0,
+          whenReduced: "fade",
+        }),
+      );
+    }
+    syncFormula();
+  }
+  function placeCol(el, c) {
+    el.style.left = `${c < 1 ? X[0] : X[c]}px`;
+    el.style.width = `${widths[c]}px`;
+  }
+  function columnHeader(c) {
+    const h = div(c < 1 ? "grid-header grid-column-header frozen" : "grid-header grid-column-header");
+    h.dataset.column = String(c);
+    h.setAttribute("role", "columnheader");
+    h.setAttribute("aria-colindex", String(c + 2));
+    h.textContent = columnLabel(c);
+    return h;
+  }
+  function rowHeader(r) {
+    const h = div("grid-header grid-row-header");
+    h.dataset.row = String(r);
+    h.setAttribute("role", "rowheader");
+    h.textContent = String(r + 1);
+    return h;
+  }
+
+  // ── La griglia nuova: il piano ──────────────────────────────────────────
+  let dom = null;
+  const LAYERS = ["body", "top", "left", "corner"];
+  const pool = new Map(); // `${layer}:${name}` → elemento
+  const shownMarks = new Map(); // id → rettangolo nel livello
+  const rowMap = new Map();
+  let rowFirst = -1;
+  let rowLast = -1;
+
+  function buildNuova() {
+    setVars();
+    const plane = div("grid-plane");
+    const paper = div("grid-paper");
+    paper.setAttribute("aria-hidden", "true");
+    for (let c = 0; c < COLS; c++) {
+      const rule = div("grid-rule-column");
+      rule.dataset.column = String(c);
+      paper.append(rule);
+    }
+    const rows = div("grid-rows");
+    rows.setAttribute("role", "rowgroup");
+    const marksBody = div("grid-marks-body");
+    const paperLeft = div("grid-paper-left");
+    paperLeft.append(div("grid-paper-left-head"), div("grid-paper-left-cells"));
+    const marksLeft = div("grid-marks-left");
+    const liftLeft = div("grid-lift-left");
+    const head = div("grid-head");
+    head.setAttribute("role", "rowgroup");
+    const paperTop = div("grid-paper-top");
+    const headerRow = div("grid-row grid-column-header-row");
+    headerRow.setAttribute("role", "row");
+    headerRow.setAttribute("aria-rowindex", "1");
+    const corner = div("grid-corner");
+    corner.setAttribute("role", "presentation");
+    headerRow.append(corner);
+    for (let c = 0; c < COLS; c++) headerRow.append(columnHeader(c));
+    const frozenRow = makeRow(0);
+    const marksTop = div("grid-marks-top");
+    const liftTop = div("grid-lift-top");
+    const paperCorner = div("grid-paper-corner");
+    const marksCorner = div("grid-marks-corner");
+    const liftCorner = div("grid-lift-corner");
+    head.append(paperTop, headerRow, frozenRow, marksTop, liftTop, paperCorner, marksCorner, liftCorner);
+    const fixed = div("grid-fixed");
+    const guide = div("grid-resize-guide");
+    const label = div("grid-resize-label");
+    guide.hidden = true;
+    label.hidden = true;
+    fixed.append(guide, label);
+    for (const el of [paperLeft, marksBody, marksLeft, liftLeft, paperTop, marksTop, liftTop, paperCorner, marksCorner, liftCorner, fixed])
+      el.setAttribute("aria-hidden", "true");
+    plane.append(paper, rows, marksBody, paperLeft, marksLeft, liftLeft, head, fixed);
+    viewport.append(plane);
+    dom = {
+      plane,
+      paper,
+      rows,
+      head,
+      headerRow,
+      guide,
+      label,
+      layers: { body: marksBody, top: marksTop, left: marksLeft, corner: marksCorner },
+      lifts: { body: marksBody, top: liftTop, left: liftLeft, corner: liftCorner },
+      freeze: {},
+    };
+    // I fili del blocco: fermi, nei livelli della testa e della colonna.
+    for (const [id, layer] of [
+      ["h-top", "top"],
+      ["h-corner", "corner"],
+      ["v-left", "left"],
+      ["v-corner", "corner"],
+    ]) {
+      const line = div("grid-mark freeze");
+      dom.layers[layer].append(line);
+      dom.freeze[id] = line;
+    }
+    layoutColumns();
+    renderRows();
+  }
+  function makeRow(r) {
+    const row = div(r < 1 ? "grid-row frozen" : "grid-row");
+    row.dataset.row = String(r);
+    row.setAttribute("role", "row");
+    row.setAttribute("aria-rowindex", String(r + 2));
+    if (r >= 1) row.style.top = `${Y(r)}px`;
+    const g = range();
+    const header = rowHeader(r);
+    if (r >= g.r0 && r <= g.r1) header.classList.add("selected");
+    row.append(header);
+    for (let c = 0; c < COLS; c++) {
+      const cell = makeCell(r, c);
+      placeCol(cell, c);
+      row.append(cell);
+    }
+    return row;
+  }
+  /// Le righe del corpo: un riquadro intero di margine sopra e sotto, nel
+  /// gestore dello scorrimento. Le righe che restano non si toccano; si
+  /// aggiungono e si tolgono solo ai bordi, e un salto le rifà tutte.
+  function renderRows() {
+    if (!nuova() || !dom) return;
+    const v = viewport;
+    const span = v.clientHeight;
+    const first = Math.max(1, Math.floor((v.scrollTop - span - HEAD_H) / ROW_H));
+    const last = Math.min(ROWS - 1, Math.ceil((v.scrollTop + 2 * span - HEAD_H) / ROW_H));
+    const make = (a, b) => {
+      const frag = document.createDocumentFragment();
+      for (let r = a; r <= b; r++) {
+        const row = makeRow(r);
+        rowMap.set(r, row);
+        frag.append(row);
+      }
+      return frag;
+    };
+    if (!rowMap.size || first > rowLast || last < rowFirst) {
+      rowMap.clear();
+      dom.rows.replaceChildren(make(first, last));
+    } else {
+      for (let r = rowFirst; r < first; r++) {
+        rowMap.get(r)?.remove();
+        rowMap.delete(r);
+      }
+      for (let r = last + 1; r <= rowLast; r++) {
+        rowMap.get(r)?.remove();
+        rowMap.delete(r);
+      }
+      if (first < rowFirst) dom.rows.prepend(make(first, rowFirst - 1));
+      if (last > rowLast) dom.rows.append(make(rowLast + 1, last));
+    }
+    rowFirst = first;
+    rowLast = last;
+    syncActive();
+  }
+  /// Le colonne dove le larghezze dicono: celle, intestazioni, fili, livelli.
+  function layoutColumns() {
+    measure();
+    setVars();
+    if (!nuova() || !dom) return;
+    for (const el of dom.plane.querySelectorAll(".grid-cell[data-column], .grid-column-header[data-column]"))
+      placeCol(el, Number(el.dataset.column));
+    for (const el of dom.paper.querySelectorAll(".grid-rule-column")) el.style.left = `${X[Number(el.dataset.column) + 1] - 1}px`;
+    const f = dom.freeze;
+    place(f["h-top"], { x: 0, y: TH - 1, w: W(), h: 1 });
+    place(f["h-corner"], { x: 0, y: TH - 1, w: LW(), h: 1 });
+    place(f["v-left"], { x: LW() - 1, y: 0, w: 1, h: H - TH });
+    place(f["v-corner"], { x: LW() - 1, y: HEAD_H, w: 1, h: HEAD_H });
+    if (editor) placeEditor();
+  }
+
+  // ── I segni della griglia nuova ─────────────────────────────────────────
+  // Ogni segno è fatto di pezzi (i quattro lati del rettangolo, l'anello, il
+  // velo, il quadratino, le fasce delle intestazioni) che ci sono sempre: un
+  // gesto li sposta, non li ricrea. Ogni pezzo sta in ogni livello dove cade,
+  // tagliato alla zona del livello; i fili del blocco restano scoperti.
+  function edges(prefix, cls, b, t, extra = {}) {
+    return [
+      { name: `${prefix}-top`, cls: `${cls} h`, x: b.L - 1, y: b.T - 1, w: b.R - b.L + 1, h: t, ...extra },
+      { name: `${prefix}-bottom`, cls: `${cls} h`, x: b.L - 1, y: b.B - t, w: b.R - b.L + 1, h: t, ...extra },
+      { name: `${prefix}-left`, cls: `${cls} v`, x: b.L - 1, y: b.T - 1, w: t, h: b.B - b.T + 1, ...extra },
+      { name: `${prefix}-right`, cls: `${cls} v`, x: b.R - t, y: b.T - 1, w: t, h: b.B - b.T + 1, ...extra },
+    ];
+  }
+  /// I numeri dei segni che scivolano, in coordinate della griglia: il
+  /// rettangolo (`bL`…`bB`), la cella attiva (`aL`…`aB`) e l'angolo del
+  /// quadratino (`hR`, `hB`). Sono questi dieci numeri a correre, non i pezzi:
+  /// ogni pezzo si disegna da loro in ogni fotogramma, così i lati, l'anello,
+  /// il velo, le fasce e il quadratino restano attaccati anche quando un gesto
+  /// nuovo arriva a metà corsa.
+  function marksGeometry() {
+    const b = boxOf(range());
+    const a = boxOf({ r0: sel.active.r, c0: sel.active.c, r1: sel.active.r, c1: sel.active.c });
+    const hb = fill ? boxOf(fill.target) : b;
+    return [b.L, b.T, b.R, b.B, a.L, a.T, a.R, a.B, hb.R, hb.B];
+  }
+  function marksParts(G = marksGeometry()) {
+    const [bL, bT, bR, bB, aL, aT, aR, aB, hR, hB] = G;
+    const b = { L: bL, T: bT, R: bR, B: bB };
+    const a = { L: aL, T: aT, R: aR, B: aB };
+    const g = range();
+    const lone = g.r0 === g.r1 && g.c0 === g.c1;
+    const parts = [];
+    // Sul tratteggio di una copia o di un taglio il bordo pieno lo coprirebbe.
+    if (!(clip && sameRange(clip.range, g))) parts.push(...edges("rect", "edge", b, 2));
+    // L'anello e il velo si disegnano anche su una cella sola, dove l'anello
+    // sta sotto il bordo e il velo è vuoto: allargando la selezione escono dal
+    // bordo, stringendola ci rientrano, invece di comparire e sparire di colpo.
+    const grown = [
+      ...edges("ring", "ring", a, 1),
+      { name: "veil-top", cls: "veil", x: b.L, y: b.T, w: b.R - b.L, h: a.T - b.T },
+      { name: "veil-bottom", cls: "veil", x: b.L, y: a.B, w: b.R - b.L, h: b.B - a.B },
+      { name: "veil-left", cls: "veil", x: b.L, y: a.T, w: a.L - b.L, h: a.B - a.T },
+      { name: "veil-right", cls: "veil", x: a.R, y: a.T, w: b.R - a.R, h: a.B - a.T },
+    ];
+    for (const p of grown) parts.push({ ...p, grows: true, rest: !lone });
+    if (!editor && !touchMode() && !fill?.waiting) parts.push({ name: "handle", cls: "handle", x: hR - 5, y: hB - 5, w: 8, h: 8, corner: [hR, hB, false] });
+    parts.push({ name: "band-col", cls: "band-col", x: b.L, y: 0, w: b.R - b.L, h: HEAD_H, layers: ["top", "corner"] });
+    parts.push({ name: "band-row", cls: "band-row", x: 0, y: b.T, w: HEAD_W, h: b.B - b.T, layers: ["left", "corner"] });
+    if (clip && (clip.cut || look.copia.value !== "battito")) parts.push(...edges("clip", clip.cut ? "cut" : "copy", boxOf(clip.range), 2, { glide: false }));
+    if (fill && !sameRange(fill.source, fill.target)) parts.push(...edges("fill", "ants", boxOf(fill.target), 2, { glide: false }));
+    if (handles && nuova()) {
+      parts.push(
+        { name: "touch-a", cls: "touch", x: b.L - 8, y: b.T - 8, w: 14, h: 14, handle: "a", appear: "soft", mid: true, corner: [b.L, b.T, true] },
+        { name: "touch-b", cls: "touch", x: b.R - 8, y: b.B - 8, w: 14, h: 14, handle: "b", appear: "soft", mid: true, corner: [b.R, b.B, false] },
+      );
+    }
+    return parts;
+  }
+  /// La zona di un angolo della griglia. Un angolo che apre il rettangolo
+  /// (`start`: in alto a sinistra) sta nella zona della cella dopo di lui, uno
+  /// che lo chiude in quella della cella prima: sul filo del blocco, l'angolo
+  /// di B2 è del corpo, quello in basso a destra di A1 è dell'angolo fermo.
+  function cornerZone(x, y, start) {
+    const fx = start ? x < LW() : x <= LW();
+    const fy = start ? y < TH : y <= TH;
+    return fx && fy ? "corner" : fy ? "top" : fx ? "left" : "body";
+  }
+  /// Dove si vede, nel riquadro, l'angolo (x, y) della griglia; `null` se sta
+  /// sotto una fascia ferma.
+  function cornerSeen(x, y, start) {
+    const zone = cornerZone(x, y, start);
+    const sx = zone === "left" || zone === "corner" ? x : x - viewport.scrollLeft;
+    const sy = zone === "top" || zone === "corner" ? y : y - viewport.scrollTop;
+    if ((zone === "body" || zone === "top") && sx < LW() - 0.5) return null;
+    if ((zone === "body" || zone === "left") && sy < TH - 0.5) return null;
+    return { x: sx, y: sy, zone };
+  }
+  /// Il pezzo `p` intero, nelle coordinate del livello di `layer`.
+  const wholeRect = (layer, p) => ({ x: p.x, y: layer === "left" ? p.y - TH : p.y, w: p.w, h: p.h });
+  /// Il livello di un pezzo d'angolo, e di quanto spostarlo dalle coordinate
+  /// della griglia: il livello «lift» della zona del suo angolo, che scorre
+  /// con lui, così una fascia ferma copre la parte che le passa sotto. Con
+  /// «Maniglie sul filo: intere sopra la fascia» (D-8, solo prototipo) un
+  /// pezzo che tocca una fascia ferma, finché il suo angolo si vede, sale nel
+  /// livello di quella fascia, spostato a mano di quanto il corpo è scorso:
+  /// lo sposta il gestore di `scroll`, quindi resta indietro di un fotogramma
+  /// rispetto alle celle, e quando l'angolo passa sotto la fascia torna giù.
+  function pointSpot([x, y, start]) {
+    const zone = cornerZone(x, y, start);
+    const s = look.filo.value === "sopra" ? cornerSeen(x, y, start) : null;
+    if (!s) return { layer: zone, dx: 0, dy: 0 };
+    const fx = zone === "left" || zone === "corner" || s.x - 1 - GRIP_R < LW();
+    const fy = zone === "top" || zone === "corner" || s.y - 1 - GRIP_R < TH;
+    return { layer: fx && fy ? "corner" : fy ? "top" : fx ? "left" : "body", dx: fx ? s.x - x : 0, dy: fy ? s.y - y : 0 };
+  }
+  const pointRect = (layer, o, at) => wholeRect(layer, { x: o.x + at.dx, y: o.y + at.dy, w: o.w, h: o.h });
+  /// Il pezzo `p` tagliato alla zona di `layer`, nelle coordinate del livello.
+  /// I lati si fermano un pixel prima del filo del blocco, le fasce delle
+  /// intestazioni al bordo della zona. Fuori dalla zona non c'è (`null`);
+  /// `loose`, per i fotogrammi di una corsa, lo schiaccia invece in una riga
+  /// vuota sul bordo della zona, da cui entra o in cui esce.
+  function clipRect(layer, p, loose = false) {
+    const band = p.cls.startsWith("band");
+    const yMax = band ? TH : TH - 1;
+    const xMax = band ? LW() : LW() - 1;
+    const capY = layer === "top" || layer === "corner" ? yMax : Infinity;
+    const capX = layer === "left" || layer === "corner" ? xMax : Infinity;
+    const floorY = layer === "left" ? TH : -Infinity;
+    let x1 = p.x;
+    let y1 = p.y;
+    let x2 = p.x + Math.max(0, p.w);
+    let y2 = p.y + Math.max(0, p.h);
+    if (loose) {
+      const fitY = (y) => Math.min(capY, Math.max(floorY, y));
+      x1 = Math.min(capX, x1);
+      x2 = Math.min(capX, x2);
+      y1 = fitY(y1);
+      y2 = fitY(y2);
+      return { x: x1, y: layer === "left" ? y1 - TH : y1, w: x2 - x1, h: y2 - y1 };
+    }
+    x2 = Math.min(x2, capX);
+    y2 = Math.min(y2, capY);
+    y1 = Math.max(y1, floorY);
+    if (x2 <= x1 || y2 <= y1) return null;
+    return { x: x1, y: layer === "left" ? y1 - TH : y1, w: x2 - x1, h: y2 - y1 };
+  }
+  // ── Il motore dei segni ─────────────────────────────────────────────────
+  // Un solo motore porta i dieci numeri e a ogni fotogramma disegna da loro
+  // tutti i pezzi di tutti i livelli, con un `transform` dal loro posto di
+  // riposo: i pezzi non possono non essere d'accordo, perché vengono dagli
+  // stessi numeri nello stesso istante. Gli eventi cambiano solo il bersaglio
+  // (`want`); le regole e il passo della molla si applicano una volta per
+  // fotogramma, col tempo passato da quello prima, quindi quanti eventi
+  // arrivano in un fotogramma non cambia il moto. Nel codice vero il
+  // fotogramma è un ascoltatore di `onFrame` (`moto/ticker.ts`) e il passo è
+  // `advanceSpring` di `moto/spring.ts`.
+  //
+  // Le regole, per ognuno dei numeri:
+  // - non torna mai indietro: una velocità che porta lontano dal bersaglio
+  //   (un bersaglio nuovo dall'altra parte) si azzera;
+  // - non passa mai il bersaglio: la velocità verso il bersaglio non supera
+  //   la radice lenta della molla per la distanza che manca, e da lì una
+  //   molla sovrasmorzata arriva senza passarlo (se il passo numerico lo
+  //   passasse, il numero si ferma sul bersaglio);
+  // - la cella attiva sta sempre dentro il rettangolo: su un lato dove ne
+  //   esce, si sposta l'uno o l'altro, sempre verso il proprio bersaglio;
+  // - il quadratino sta sull'angolo del rettangolo, o su quello del
+  //   riempimento mentre lo si tira.
+  // Col puntatore, nel modo «segue» (D-7), la cella attiva salta, un lato del
+  // rettangolo che cala salta e uno che cresce scivola: la selezione non
+  // mostra mai una cella che il puntatore non ha scelto.
+  const REST_PX = 0.1; // fermo: a meno di un decimo di pixel…
+  const REST_SPEED = 2; // …e sotto i 2 px al secondo
+  const POP_REST = 0.001; // la comparsa morbida finisce come `sampleSpring`
+  /// La radice lenta della molla (1/s): sotto questa velocità per pixel che
+  /// manca, una molla sovrasmorzata arriva senza passare il bersaglio.
+  /// `GLIDE` 35, `SLIDE` 25.
+  const slowRoot = (s) => (s.damping - Math.sqrt(Math.max(0, s.damping * s.damping - 4 * s.stiffness))) / 2;
+  let want = null; // { G, spring, pointer, fill }: dove vanno i segni
+  let view = null; // { x, v }: dove si vedono adesso, e a che velocità (px al secondo)
+  let beatId = 0;
+  let lastBeat = 0;
+  const pops = new Map(); // maniglia del tocco → { x, v }: la comparsa morbida, da 0 a 1
+  const drawnStyle = new Map(); // elemento → l'ultimo stile scritto
+  // [numero del rettangolo, numero della cella attiva, +1 se il rettangolo sta prima]
+  const SIDES = [
+    [0, 4, 1],
+    [1, 5, 1],
+    [2, 6, -1],
+    [3, 7, -1],
+  ];
+  /// La cella attiva dentro il rettangolo. Su un lato dove la cella attiva
+  /// esce, il rettangolo la raggiunge se il suo bersaglio sta oltre di lei;
+  /// altrimenti è la cella attiva a fermarsi sul lato.
+  function contain(G) {
+    const { x, v } = view;
+    for (const [b, a, s] of SIDES) {
+      if ((x[a] - x[b]) * s >= 0) continue;
+      if ((x[a] - G[b]) * s >= 0) {
+        x[b] = x[a];
+        v[b] = v[a];
+      } else {
+        x[a] = x[b];
+        v[a] = v[b];
+      }
+    }
+  }
+  const atTarget = () => view.x.every((x, i) => x === want.G[i]) && view.v.every((v) => v === 0);
+  /// Un passo di `dt` secondi: le regole sul bersaglio, la molla, il
+  /// contenimento. Dice se tutti i numeri sono arrivati.
+  function step(dt) {
+    const { G, spring, pointer } = want;
+    const { x, v } = view;
+    if (pointer) {
+      for (let i = 4; i < 8; i++) {
+        x[i] = G[i];
+        v[i] = 0;
+      }
+      for (let i = 0; i < 4; i++) {
+        const grows = i < 2 ? G[i] < x[i] : G[i] > x[i];
+        if (!grows) {
+          x[i] = G[i];
+          v[i] = 0;
+        }
+      }
+      contain(G);
+    }
+    const slow = slowRoot(spring);
+    const s = { x: 0, v: 0 };
+    for (let i = 0; i < 8; i++) {
+      const d = x[i] - G[i];
+      if (d === 0) {
+        v[i] = 0;
+        continue;
+      }
+      if (v[i] * d > 0) v[i] = 0;
+      if (Math.abs(v[i]) > slow * Math.abs(d)) v[i] = -Math.sign(d) * slow * Math.abs(d);
+      s.x = x[i];
+      s.v = v[i];
+      if (dt > 0) advanceSpring(spring, s, G[i], dt);
+      if ((s.x - G[i]) * d <= 0 || (Math.abs(s.x - G[i]) < REST_PX && Math.abs(s.v) < REST_SPEED)) {
+        s.x = G[i];
+        s.v = 0;
+      }
+      x[i] = s.x;
+      v[i] = s.v;
+    }
+    contain(G);
+    for (const [h, b] of [
+      [8, 2],
+      [9, 3],
+    ]) {
+      x[h] = want.fill ? G[h] : x[b];
+      v[h] = want.fill ? 0 : v[b];
+    }
+    return atTarget();
+  }
+  function beat(time) {
+    beatId = 0;
+    if (!want || !view || !dom) return;
+    const dt = Math.min(100, Math.max(0, time - lastBeat)) / 1000;
+    lastBeat = time;
+    const moving = !step(dt);
+    for (const [el, p] of pops) {
+      if (dt > 0) advanceSpring(SLIDE, p, 1, dt);
+      if (Math.abs(1 - p.x) < POP_REST && Math.abs(p.v) < POP_REST * 20) pops.delete(el);
+    }
+    draw();
+    if (moving || pops.size) beatId = requestAnimationFrame(beat);
+  }
+  function startBeat() {
+    if (beatId) return;
+    lastBeat = performance.now();
+    beatId = requestAnimationFrame(beat);
+  }
+  function stopMarks() {
+    if (beatId) cancelAnimationFrame(beatId);
+    beatId = 0;
+    want = null;
+    view = null;
+    pops.clear();
+    drawnStyle.clear();
+  }
+  /// Porta `el`, messo nel rettangolo `base`, a vedersi nel rettangolo `img`.
+  /// Scrive solo ciò che cambia.
+  function style(el, base, img, mid, opacity) {
+    const sx = img.w / base.w;
+    const sy = img.h / base.h;
+    const ox = mid ? base.w / 2 : 0;
+    const oy = mid ? base.h / 2 : 0;
+    const tx = img.x - base.x - ox * (1 - sx);
+    const ty = img.y - base.y - oy * (1 - sy);
+    const same = Math.abs(tx) < 1e-3 && Math.abs(ty) < 1e-3 && Math.abs(sx - 1) < 1e-6 && Math.abs(sy - 1) < 1e-6;
+    const box = `${base.x} ${base.y} ${base.w} ${base.h}`;
+    const tf = same ? "" : `translate(${tx}px, ${ty}px) scale(${sx}, ${sy})`;
+    const op = opacity === null ? "" : String(opacity);
+    let last = drawnStyle.get(el);
+    if (!last) drawnStyle.set(el, (last = {}));
+    if (last.box !== box) {
+      place(el, base);
+      last.box = box;
+    }
+    if (last.tf !== tf) {
+      el.style.transform = tf;
+      last.tf = tf;
+    }
+    if (last.op !== op) {
+      el.style.opacity = op;
+      last.op = op;
+    }
+    if (el.hidden) el.hidden = false;
+  }
+  /// Disegna ogni pezzo in ogni livello dove cade, dalla geometria che si
+  /// vede. Un pezzo col suo riposo sta lì, e un `transform` lo porta dove i
+  /// numeri dicono; uno senza riposo (l'anello e il velo su una cella sola,
+  /// un pezzo che esce da un livello) resta nel posto che aveva e si nasconde
+  /// quando i numeri arrivano; uno senza riposo che non si vedeva non compare.
+  /// I pezzi che non scivolano (tratteggi e formiche) stanno al loro riposo.
+  /// Un pezzo che segna un angolo (il quadratino, le maniglie del tocco) non
+  /// si taglia: sta intero nel livello «lift» della zona del suo angolo (il
+  /// corpo per il corpo), che non taglia, quindi passa sopra le zone sotto la
+  /// sua e le fasce ferme sopra la sua lo coprono, come gli altri segni. Se
+  /// l'angolo passa in un'altra zona, il pezzo cambia livello nello stesso
+  /// fotogramma, senza ricomparire.
+  /// Un pezzo che compare al suo riposo si dissolve dentro in
+  /// `DURATION.state`; le maniglie del tocco crescono da `ENTER_SCALE` con la
+  /// molla `SLIDE`; un pezzo che non serve più sparisce subito.
+  function draw() {
+    const G = want.G;
+    const resting = view.x.every((x, i) => x === G[i]);
+    const seen = new Map(marksParts(view.x).map((p) => [p.name, p]));
+    const next = new Set();
+    for (const p of marksParts(G)) {
+      const q = seen.get(p.name) ?? p;
+      const point = !!p.corner;
+      const sp = point ? pointSpot(p.corner) : null;
+      const sq = point ? pointSpot(q.corner) : null;
+      for (const layer of point ? [sq.layer] : (p.layers ?? LAYERS)) {
+        const id = `${layer}:${p.name}`;
+        const T = p.rest === false ? null : point ? (sp.layer === layer ? pointRect(layer, p, sp) : null) : clipRect(layer, p);
+        const was = shownMarks.get(id);
+        const fixed = p.glide === false || resting;
+        const R = fixed ? T : point ? pointRect(layer, q, sq) : clipRect(layer, q, true);
+        const base = fixed ? T : (T ?? was ?? (point ? R : null));
+        if (!base) continue;
+        next.add(id);
+        let el = pool.get(id);
+        if (!el) {
+          el = div();
+          el.hidden = true;
+          (point ? dom.lifts : dom.layers)[layer].append(el);
+          pool.set(id, el);
+        }
+        const cls = `grid-mark ${p.cls}`;
+        if (el.className !== cls) el.className = cls;
+        if (p.cls.startsWith("ants") && !el.firstChild) el.append(div("grid-ants"));
+        if (p.handle) el.dataset.handle = p.handle;
+        // un pezzo d'angolo che arriva da un altro livello non ricompare: si
+        // porta dietro la sua comparsa
+        const from = point && !was ? LAYERS.find((l) => l !== layer && shownMarks.has(`${l}:${p.name}`)) : undefined;
+        if (from) {
+          const pop0 = pops.get(pool.get(`${from}:${p.name}`));
+          if (pop0) pops.set(el, pop0);
+        } else if (!was) {
+          if (p.appear === "soft") {
+            if (reduced()) run(el, { from: { opacity: 0 }, duration: DURATION.state, whenReduced: "fade" });
+            else if (still === 0) pops.set(el, { x: 0, v: 0 });
+          } else if (R === base || (R.x === base.x && R.y === base.y && R.w === base.w && R.h === base.h)) {
+            run(el, { from: { opacity: 0 }, duration: DURATION.state, whenReduced: "fade" });
+          }
+        }
+        const pop = pops.get(el);
+        let img = R;
+        if (pop) {
+          const k = ENTER_SCALE + (1 - ENTER_SCALE) * pop.x;
+          img = { x: R.x + (R.w * (1 - k)) / 2, y: R.y + (R.h * (1 - k)) / 2, w: R.w * k, h: R.h * k };
+        }
+        style(el, base, img, !!p.mid, pop ? Math.min(1, Math.max(0, pop.x)) : null);
+        shownMarks.set(id, base);
+      }
+    }
+    for (const id of [...shownMarks.keys()]) {
+      if (next.has(id)) continue;
+      const el = pool.get(id);
+      halt(el);
+      pops.delete(el);
+      el.hidden = true;
+      shownMarks.delete(id);
+    }
+  }
+  /// Mette i segni dove la selezione dice. Coi tasti (e coi comandi) tutti i
+  /// numeri scivolano con la molla `spring`; col puntatore (`pointer`) come
+  /// dice la scelta «Selezione col puntatore» (D-7). Senza corsa (`glide`
+  /// falso, movimento ridotto, gli stati della barra) i segni saltano.
+  /// Disegna subito i pezzi alla geometria che si vede: chi compare o sparisce
+  /// lo fa adesso, chi scivola parte dal fotogramma dopo.
+  function updateMarks({ glide = true, spring = GLIDE, pointer = false } = {}) {
+    syncHeaders();
+    syncFormula();
+    if (!nuova()) {
+      scheduleOggi();
+      return;
+    }
+    if (!dom) return;
+    const G = marksGeometry();
+    const how = pointer ? look.puntatore.value : "scivola";
+    want = { G, spring, pointer: how === "segue", fill: !!fill };
+    if (!glide || how === "salta" || still > 0 || reduced() || !view) view = { x: G.slice(), v: G.map(() => 0) };
+    draw();
+    if (!atTarget() || pops.size) startBeat();
+  }
+  /// I pezzi visibili il cui nome comincia con `prefix`.
+  const marksNamed = (prefix) => [...shownMarks.keys()].filter((id) => id.split(":")[1].startsWith(prefix)).map((id) => pool.get(id));
+  /// Il battito di una copia: un velo che svanisce in `DURATION.swap`. È solo
+  /// una dissolvenza, quindi resta anche col movimento ridotto.
+  function pulse(g) {
+    if (still > 0 || !dom) return;
+    const b = boxOf(g);
+    const p = { name: "flash", cls: "flash", x: b.L, y: b.T, w: b.R - b.L, h: b.B - b.T };
+    for (const layer of LAYERS) {
+      const r = clipRect(layer, p);
+      if (!r) continue;
+      const el = div("grid-mark flash");
+      place(el, r);
+      dom.layers[layer].append(el);
+      const motion = el.animate([{ opacity: 1 }, { opacity: 0 }], { duration: DURATION.swap, easing: "ease-out", fill: "forwards" });
+      const gone = () => el.remove();
+      motion.finished.then(gone, gone);
+    }
+  }
+  // Le formiche del riempimento: ferme mentre lo si tira, in cammino mentre
+  // il foglio risponde (un lavoro in corso), mai col movimento ridotto.
+  const antFlights = [];
+  function startAnts() {
+    stopAnts();
+    if (!nuova() || reduced()) return;
+    for (const id of shownMarks.keys()) {
+      const name = id.split(":")[1];
+      if (!name.startsWith("fill-")) continue;
+      const strip = pool.get(id).firstChild;
+      const side = name.slice(5);
+      const step = `${ANTS_STEP}px`;
+      const [a, b] =
+        side === "top"
+          ? ["translate(0, 0)", `translate(${step}, 0)`]
+          : side === "bottom"
+            ? [`translate(${step}, 0)`, "translate(0, 0)"]
+            : side === "right"
+              ? ["translate(0, 0)", `translate(0, ${step})`]
+              : [`translate(0, ${step})`, "translate(0, 0)"];
+      antFlights.push(strip.animate([{ transform: a }, { transform: b }], { duration: ANTS_MS, iterations: Infinity }));
+    }
+  }
+  function stopAnts() {
+    for (const a of antFlights) a.cancel();
+    antFlights.length = 0;
+  }
+
+  // ── La griglia di oggi (solo prototipo) ─────────────────────────────────
+  // Com'è `editors/grid/engine.ts` adesso: le righe si rifanno tutte in un
+  // `requestAnimationFrame` con due righe di margine, la colonna bloccata la
+  // rimette lo script a ogni fotogramma, i segni sono rifatti e stanno sotto
+  // la riga bloccata, l'editor è di CodeMirror dentro la cella.
+  let frameAsked = 0;
+  function scheduleOggi() {
+    if (!frameAsked) frameAsked = requestAnimationFrame(renderOggi);
+  }
+  function buildOggi() {
+    setVars();
+    const marks = div("grid-marks-oggi");
+    const lines = div("grid-oggi-lines");
+    const canvas = div("grid-canvas");
+    marks.setAttribute("aria-hidden", "true");
+    lines.setAttribute("aria-hidden", "true");
+    canvas.setAttribute("aria-hidden", "true");
+    viewport.append(marks, lines, canvas);
+    dom = { marks, lines, canvas, rowEls: [] };
+    renderOggi();
+  }
+  function stick(el, top, width, height) {
+    el.style.position = "sticky";
+    el.style.top = `${top}px`;
+    el.style.width = `${width}px`;
+    el.style.height = `${height}px`;
+    el.style.marginBottom = `${-height}px`;
+  }
+  function stickLeft(el, width, height) {
+    el.style.position = "sticky";
+    el.style.left = "0px";
+    el.style.width = `${width}px`;
+    el.style.height = `${height}px`;
+  }
+  const absolute = (el, x, y, w, h) => {
+    el.style.position = "absolute";
+    place(el, { x, y, w, h });
+  };
+  const columnLeftOggi = (c) => X[c] + (c < 1 ? viewport.scrollLeft : 0);
+  function rangeBoxOggi(g) {
+    const top = Y(g.r0) + (g.r0 < 1 ? viewport.scrollTop : 0);
+    return { x: columnLeftOggi(g.c0), y: top, w: X[g.c1 + 1] - X[g.c0], h: Y(g.r1 + 1) - Y(g.r0) };
+  }
+  function renderOggi() {
+    if (frameAsked) cancelAnimationFrame(frameAsked);
+    frameAsked = 0;
+    if (nuova() || !dom) return;
+    measure();
+    setVars();
+    dom.canvas.style.width = `${W()}px`;
+    dom.canvas.style.height = `${H}px`;
+    const v = viewport;
+    const st = v.scrollTop;
+    const sl = v.scrollLeft;
+    const firstRow = Math.max(1, Math.floor(st / ROW_H) + 1 - 2);
+    const lastRow = Math.min(ROWS - 1, Math.ceil((st + v.clientHeight - HEAD_H) / ROW_H) - 1 + 2);
+    const cols = [0];
+    for (let c = 1; c < COLS; c++) if (X[c + 1] > sl + LW() - 2 * 90 && X[c] < sl + v.clientWidth + 2 * 90) cols.push(c);
+    const g = range();
+    const lone = g.r0 === g.r1 && g.c0 === g.c1;
+    const fresh = [];
+    const headerRow = div("grid-row grid-column-header-row");
+    headerRow.setAttribute("role", "row");
+    stick(headerRow, 0, W(), HEAD_H);
+    const corner = div("grid-corner");
+    stickLeft(corner, HEAD_W, HEAD_H);
+    headerRow.append(corner);
+    for (const c of cols) {
+      const h = columnHeader(c);
+      if (c >= g.c0 && c <= g.c1) h.classList.add("selected");
+      absolute(h, columnLeftOggi(c), 0, widths[c], HEAD_H);
+      headerRow.append(h);
+    }
+    fresh.push(headerRow);
+    const rowOggi = (r) => {
+      const row = div(r < 1 ? "grid-row frozen" : "grid-row");
+      row.dataset.row = String(r);
+      row.setAttribute("role", "row");
+      if (r < 1) stick(row, HEAD_H, W(), ROW_H);
+      else absolute(row, 0, Y(r), W(), ROW_H);
+      const header = rowHeader(r);
+      if (r >= g.r0 && r <= g.r1) header.classList.add("selected");
+      stickLeft(header, HEAD_W, ROW_H);
+      row.append(header);
+      for (const c of cols) {
+        const cell = makeCell(r, c);
+        absolute(cell, columnLeftOggi(c), 0, widths[c], ROW_H);
+        if (inRange(g, r, c)) cell.classList.add("selected");
+        if (r === sel.active.r && c === sel.active.c) cell.classList.add("active");
+        row.append(cell);
+      }
+      return row;
+    };
+    fresh.push(rowOggi(0));
+    for (let r = firstRow; r <= lastRow; r++) fresh.push(rowOggi(r));
+    for (const el of dom.rowEls) el.remove();
+    dom.rowEls = fresh;
+    const frag = document.createDocumentFragment();
+    frag.append(...fresh);
+    v.insertBefore(frag, dom.marks);
+    v.classList.toggle("ranged", !lone);
+    // L'editor torna nella sua cella, rifatta.
+    if (editor) {
+      const cell = cellEl(editor.r, editor.c);
+      if (cell) {
+        const focused = document.activeElement === editor.text;
+        cell.append(editor.el);
+        if (focused) focusEnd(editor.text);
+      }
+    }
+    // I segni, rifatti.
+    const marks = [];
+    const cutHere = clip?.cut && sameRange(clip.range, g);
+    if (!lone && !cutHere) {
+      const s = div("grid-selection");
+      absolute(s, ...Object.values(rangeBoxOggi(g)));
+      marks.push(s);
+    }
+    if (fill && !fill.waiting && !sameRange(fill.source, fill.target)) {
+      const p = div("grid-fill-preview");
+      absolute(p, ...Object.values(rangeBoxOggi(fill.target)));
+      marks.push(p);
+    }
+    {
+      const b = rangeBoxOggi(fill && !fill.waiting ? fill.target : g);
+      const h = div("grid-fill-handle");
+      absolute(h, b.x + b.w - 4, b.y + b.h - 4, 8, 8);
+      marks.push(h);
+    }
+    if (clip?.cut) {
+      const m = div("grid-cut-mark");
+      absolute(m, ...Object.values(rangeBoxOggi(clip.range)));
+      marks.push(m);
+    }
+    if (resize) {
+      const x = columnLeftOggi(resize.index) + resize.now;
+      const guide = div("grid-resize-guide");
+      absolute(guide, x - 1, st, 2, v.clientHeight);
+      const label = div("grid-resize-label");
+      label.textContent = resizeText(resize.now);
+      label.style.position = "absolute";
+      label.style.left = `${x + 6}px`;
+      label.style.top = `${st + HEAD_H + 4}px`;
+      marks.push(guide, label);
+    }
+    dom.marks.replaceChildren(...marks);
+    const rowsLine = div("grid-freeze grid-freeze-rows");
+    absolute(rowsLine, sl, st + TH - 1, v.clientWidth, 1);
+    const colsLine = div("grid-freeze grid-freeze-columns");
+    absolute(colsLine, sl + LW() - 1, st, 1, v.clientHeight);
+    dom.lines.replaceChildren(rowsLine, colsLine);
+    syncActive();
+  }
+
+  // ── Intestazioni, formula, cella attiva ─────────────────────────────────
+  function syncHeaders() {
+    if (!nuova()) return;
+    const g = range();
+    for (const h of viewport.querySelectorAll(".grid-column-header")) {
+      const c = Number(h.dataset.column);
+      h.classList.toggle("selected", c >= g.c0 && c <= g.c1);
+    }
+    for (const h of viewport.querySelectorAll(".grid-row-header")) {
+      const r = Number(h.dataset.row);
+      h.classList.toggle("selected", r >= g.r0 && r <= g.r1);
+    }
+    syncActive();
+  }
+  function syncActive() {
+    const a = sel.active;
+    if (cellEl(a.r, a.c)) viewport.setAttribute("aria-activedescendant", cellId(a.r, a.c));
+    else viewport.removeAttribute("aria-activedescendant");
+  }
+  function syncFormula() {
+    const a = sel.active;
+    cellName.textContent = editor ? a1(editor.r, editor.c) : a1(a.r, a.c);
+    formulaText.textContent = editor ? editor.text.textContent : (rawShown.get(key(a.r, a.c))?.text ?? inputAt(a.r, a.c));
+  }
+
+  // ── La risposta del foglio ──────────────────────────────────────────────
+  // solo prototipo: il foglio vero risponde quando il motore ha finito; qui
+  // la barra sceglie quando e se.
+  function respond(what, done) {
+    const gen = generation;
+    const how = look.risponde.value;
+    const delay = how === "subito" ? 0 : 1500;
+    log(delay ? `${what}: il foglio risponde fra 1,5 s…` : what);
+    timers.push(
+      setTimeout(() => {
+        if (gen !== generation) return;
+        const ok = how !== "rifiuta";
+        done(ok);
+        log(ok ? `${what}: il foglio ha detto sì.` : `${what}: il foglio ha detto no.`);
+        if (!ok) showNotice("La modifica non è entrata: il foglio è protetto.");
+      }, delay),
+    );
+  }
+  /// Una cella scritta dall'editor. Nella griglia nuova un numero va subito a
+  /// destra e una formula resta com'è scritta, tenue; il valore del foglio
+  /// arriva con una dissolvenza. Oggi il testo resta a sinistra finché il
+  /// foglio non risponde.
+  function commitCell(r, c, input) {
+    const k = key(r, c);
+    if (input === inputAt(r, c)) return;
+    const number = NUMBER.test(input.trim());
+    const formula = input.trim().startsWith("=");
+    rawShown.set(k, nuova() ? { text: input, align: number ? "end" : "start", pending: formula } : { text: input, align: "start", pending: false });
+    refresh();
+    respond(`${a1(r, c)} ← ${input || "vuota"}`, (ok) => {
+      rawShown.delete(k);
+      if (ok) edits.set(k, input);
+      refresh({ fade: true });
+    });
+  }
+  /// Più celle scritte insieme (incolla, cancella): sono valori noti, quindi
+  /// la griglia nuova li mostra subito, uno dopo l'altro, e torna indietro se
+  /// il foglio dice di no. Oggi arrivano con la risposta.
+  function applyWrites(what, writes, { stagger = true } = {}) {
+    const previous = new Map([...writes.keys()].map((k) => [k, edits.has(k) ? edits.get(k) : undefined]));
+    const set = () => {
+      for (const [k, v] of writes) edits.set(k, v);
+    };
+    const undo = () => {
+      for (const [k, v] of previous) {
+        if (v === undefined) edits.delete(k);
+        else edits.set(k, v);
+      }
+    };
+    if (nuova()) {
+      set();
+      refresh({ fade: true, stagger });
+      respond(what, (ok) => {
+        if (!ok) {
+          undo();
+          refresh({ fade: true });
+        }
+      });
+    } else {
+      respond(what, (ok) => {
+        if (ok) {
+          set();
+          refresh();
+        }
+      });
+    }
+  }
+
+  // ── L'editor della cella ────────────────────────────────────────────────
+  const measureCtx = document.createElement("canvas").getContext("2d");
+  function focusEnd(el) {
+    el.focus({ preventScroll: true });
+    const s = getSelection();
+    s.removeAllRanges();
+    const r = document.createRange();
+    r.selectNodeContents(el);
+    r.collapse(false);
+    s.addRange(r);
+  }
+  /// Apre la cella: `edit` (F2, doppio clic) tiene l'allineamento e le
+  /// frecce muovono il cursore; `enter` (si scrive) parte da sinistra e le
+  /// frecce confermano e vanno avanti.
+  function openEditor(r, c, how, initial) {
+    if (editor) commitEditor(null);
+    hideNotice();
+    if (!(sel.active.r === r && sel.active.c === c)) setSel({ r, c });
+    const input = how === "edit" ? (rawShown.get(key(r, c))?.text ?? inputAt(r, c)) : (initial ?? "");
+    if (nuova()) {
+      const layer = r < 1 ? (c < 1 ? "corner" : "top") : c < 1 ? "left" : "body";
+      const el = div("grid-cell-editor");
+      const frame = div("grid-cell-editor-frame");
+      frame.setAttribute("aria-hidden", "true");
+      const text = div("grid-cell-editor-text");
+      text.contentEditable = "plaintext-only";
+      text.spellcheck = false;
+      text.setAttribute("role", "textbox");
+      text.setAttribute("aria-label", `Cella ${a1(r, c)}`);
+      const l = lookOf(r, c);
+      if (l.fill) el.style.setProperty("--file-fill", l.fill);
+      if (l.color) el.style.setProperty("--file-color", l.color);
+      if (l.bold) el.style.fontWeight = "var(--weight-bold)";
+      const cell = cellEl(r, c);
+      text.style.paddingTop = `${cell ? cell.firstChild.offsetTop : 7}px`;
+      if (how === "edit" && NUMBER.test(input.trim())) text.style.textAlign = "end";
+      text.textContent = input;
+      el.append(frame, text);
+      dom.lifts[layer].append(el);
+      editor = { r, c, how, el, text, layer };
+      placeEditor();
+      run(frame, { from: { opacity: 0 }, duration: DURATION.state, whenReduced: "fade" });
+    } else {
+      const el = div("grid-cell-editor");
+      el.style.inset = "0";
+      const text = div("proto-cm-line");
+      text.contentEditable = "plaintext-only";
+      text.spellcheck = false;
+      text.setAttribute("role", "textbox");
+      text.textContent = input;
+      el.append(text);
+      cellEl(r, c)?.append(el);
+      editor = { r, c, how, el, text, layer: null };
+    }
+    editor.text.addEventListener("keydown", editorKey);
+    editor.text.addEventListener("input", () => {
+      if (nuova()) placeEditor();
+      syncFormula();
+    });
+    focusEnd(editor.text);
+    updateMarks({ glide: false });
+  }
+  /// La cella aperta cresce a destra a colonne intere fin dove il riquadro lo
+  /// permette, poi va a capo e cresce in giù, a righe intere.
+  function placeEditor() {
+    const { r, c, layer, el, text } = editor;
+    el.style.left = `${X[c]}px`;
+    el.style.top = `${Y(r) - (layer === "left" ? TH : 0)}px`;
+    el.style.height = `${ROW_H - 1}px`;
+    el.classList.remove("wraps");
+    const cs = getComputedStyle(text);
+    measureCtx.font = cs.font || `${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`;
+    const needed = measureCtx.measureText(text.textContent).width + parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight) + 4;
+    const v = viewport;
+    let right = X[c + 1];
+    let fits = needed <= right - X[c] - 1;
+    if (!fits) {
+      const sticky = c < 1;
+      const limit = sticky ? v.clientWidth : v.scrollLeft + v.clientWidth;
+      for (let k = c + 2; k <= COLS; k++) {
+        const edge = sticky ? X[k] - v.scrollLeft : X[k];
+        if (sticky && edge <= LW()) continue;
+        if (edge > limit) break;
+        right = edge;
+        if (needed <= right - X[c] - 1) {
+          fits = true;
+          break;
+        }
+      }
+    }
+    el.style.width = `${right - X[c] - 1}px`;
+    if (!fits) {
+      el.classList.add("wraps");
+      el.style.height = `${Math.ceil(text.scrollHeight / ROW_H) * ROW_H - 1}px`;
+    }
+  }
+  function editorKey(e) {
+    e.stopPropagation();
+    const k = e.key;
+    const arrows = { ArrowUp: [-1, 0], ArrowDown: [1, 0], ArrowLeft: [0, -1], ArrowRight: [0, 1] };
+    if (k === "Enter" && !e.altKey) {
+      e.preventDefault();
+      commitEditor(e.shiftKey ? [-1, 0] : [1, 0]);
+    } else if (k === "Tab") {
+      e.preventDefault();
+      commitEditor(e.shiftKey ? [0, -1] : [0, 1]);
+    } else if (k === "Escape") {
+      e.preventDefault();
+      closeEditor();
+      updateMarks({ glide: false });
+    } else if (editor.how === "enter" && arrows[k]) {
+      e.preventDefault();
+      commitEditor(arrows[k]);
+    }
+  }
+  function closeEditor() {
+    if (!editor) return;
+    editor.el.remove();
+    editor = null;
+    viewport.focus({ preventScroll: true });
+    if (!nuova()) scheduleOggi();
+  }
+  function commitEditor(move) {
+    if (!editor) return;
+    const { r, c } = editor;
+    const input = editor.text.textContent;
+    closeEditor();
+    commitCell(r, c, input);
+    if (move) moveActive(move[0], move[1], false);
+    else updateMarks({ glide: false });
+  }
+
+  // ── Selezione, tasti, scorrimento ───────────────────────────────────────
+  function reveal(p) {
+    const v = viewport;
+    if (p.r >= 1) {
+      if (Y(p.r) < v.scrollTop + TH) v.scrollTop = Y(p.r) - TH;
+      else if (Y(p.r + 1) > v.scrollTop + v.clientHeight) v.scrollTop = Y(p.r + 1) - v.clientHeight;
+    }
+    if (p.c >= 1) {
+      if (X[p.c] < v.scrollLeft + LW()) v.scrollLeft = X[p.c] - LW();
+      else if (X[p.c + 1] > v.scrollLeft + v.clientWidth) v.scrollLeft = X[p.c + 1] - v.clientWidth;
+    }
+  }
+  function moveActive(dr, dc, extend) {
+    hideNotice();
+    if (extend) {
+      sel.focus = { r: clampR(sel.focus.r + dr), c: clampC(sel.focus.c + dc) };
+      reveal(sel.focus);
+    } else {
+      const a = { r: clampR(sel.active.r + dr), c: clampC(sel.active.c + dc) };
+      setSel(a);
+      handles = false;
+      reveal(a);
+    }
+    updateMarks();
+  }
+  function goTo(r, c) {
+    setSel({ r, c });
+    reveal({ r, c });
+    updateMarks();
+  }
+  const pageRows = () => Math.max(1, Math.floor((viewport.clientHeight - TH) / ROW_H));
+  function copy(cut) {
+    const g = range();
+    const data = [];
+    for (let r = g.r0; r <= g.r1; r++) {
+      const row = [];
+      for (let c = g.c0; c <= g.c1; c++) row.push(inputAt(r, c));
+      data.push(row);
+    }
+    clip = { range: g, cut, data };
+    if (nuova() && !cut && look.copia.value !== "tratteggio") pulse(g);
+    updateMarks();
+    log(`${rangeA1(g)} ${cut ? "tagliato" : "copiato"}: Esc toglie il segno, Ctrl+V incolla.`);
+  }
+  function paste() {
+    if (!clip) return;
+    hideNotice();
+    const rows = clip.data.length;
+    const cols = clip.data[0].length;
+    const r0 = sel.active.r;
+    const c0 = sel.active.c;
+    const dest = { r0, c0, r1: clampR(r0 + rows - 1), c1: clampC(c0 + cols - 1) };
+    const writes = new Map();
+    if (clip.cut) {
+      for (let r = clip.range.r0; r <= clip.range.r1; r++)
+        for (let c = clip.range.c0; c <= clip.range.c1; c++) if (!inRange(dest, r, c)) writes.set(key(r, c), "");
+    }
+    for (let i = 0; i <= dest.r1 - r0; i++) for (let j = 0; j <= dest.c1 - c0; j++) writes.set(key(r0 + i, c0 + j), clip.data[i][j]);
+    if (clip.cut) clip = null;
+    setSel({ r: dest.r0, c: dest.c0 }, { r: dest.r1, c: dest.c1 });
+    updateMarks();
+    applyWrites(`Incollato in ${rangeA1(dest)}`, writes);
+  }
+  function clearRange() {
+    const g = range();
+    const writes = new Map();
+    for (let r = g.r0; r <= g.r1; r++) for (let c = g.c0; c <= g.c1; c++) if (inputAt(r, c) !== "") writes.set(key(r, c), "");
+    if (writes.size) applyWrites(`${rangeA1(g)} cancellato`, writes, { stagger: false });
+  }
+  viewport.addEventListener("keydown", (e) => {
+    if (editor && editor.el.contains(e.target)) return;
+    const mod = e.ctrlKey || e.metaKey;
+    const k = e.key;
+    if (mod && (k === "c" || k === "C")) {
+      e.preventDefault();
+      copy(false);
+      return;
+    }
+    if (mod && (k === "x" || k === "X")) {
+      e.preventDefault();
+      copy(true);
+      return;
+    }
+    if (mod && (k === "v" || k === "V")) {
+      e.preventDefault();
+      paste();
+      return;
+    }
+    switch (k) {
+      case "ArrowUp":
+        moveActive(-1, 0, e.shiftKey);
+        break;
+      case "ArrowDown":
+        moveActive(1, 0, e.shiftKey);
+        break;
+      case "ArrowLeft":
+        moveActive(0, -1, e.shiftKey);
+        break;
+      case "ArrowRight":
+        moveActive(0, 1, e.shiftKey);
+        break;
+      case "Tab":
+        moveActive(0, e.shiftKey ? -1 : 1, false);
+        break;
+      case "Enter":
+        moveActive(e.shiftKey ? -1 : 1, 0, false);
+        break;
+      case "PageDown":
+        moveActive(pageRows(), 0, e.shiftKey);
+        break;
+      case "PageUp":
+        moveActive(-pageRows(), 0, e.shiftKey);
+        break;
+      case "Home":
+        if (mod) goTo(1, 1);
+        else goTo(sel.active.r, 0);
+        break;
+      case "F2":
+        openEditor(sel.active.r, sel.active.c, "edit");
+        break;
+      case "Escape":
+        if (clip) {
+          clip = null;
+          updateMarks();
+        }
+        break;
+      case "Delete":
+      case "Backspace":
+        clearRange();
+        break;
+      default:
+        if (k.length === 1 && !mod && !e.altKey) {
+          e.preventDefault();
+          openEditor(sel.active.r, sel.active.c, "enter", k);
+        }
+        return;
+    }
+    e.preventDefault();
+  });
+  viewport.addEventListener("scroll", () => {
+    if (nuova()) {
+      renderRows();
+      if (resize) drawResize();
+      // Scorrendo mentre si trascina, sotto il puntatore fermo passa
+      // un'altra cella: la selezione la segue come se si fosse mosso.
+      if (drag?.x !== undefined) dragTo({ clientX: drag.x, clientY: drag.y });
+      // D-8 «intere sopra la fascia»: i pezzi d'angolo saliti nel livello
+      // fermo li sposta lo script
+      if (look.filo.value === "sopra" && dom && want && view) draw();
+    } else scheduleOggi();
+  });
+  window.addEventListener("resize", () => {
+    if (nuova()) renderRows();
+    else scheduleOggi();
+  });
+
+  // ── Il puntatore ────────────────────────────────────────────────────────
+  /// Che cosa c'è sotto il punto: le coordinate del riquadro diventano
+  /// quelle del piano, tenendo ferme la testa e la colonna bloccata.
+  function hit(e, { clampToGrid = false } = {}) {
+    const v = viewport;
+    const box = v.getBoundingClientRect();
+    let vx = e.clientX - box.left - v.clientLeft;
+    let vy = e.clientY - box.top - v.clientTop;
+    if (!clampToGrid && (vx < 0 || vy < 0 || vx >= v.clientWidth || vy >= v.clientHeight)) return null;
+    vx = Math.max(0, Math.min(v.clientWidth - 1, vx));
+    vy = Math.max(0, Math.min(v.clientHeight - 1, vy));
+    const x = vx < LW() ? vx : vx + v.scrollLeft;
+    const y = vy < TH ? vy : vy + v.scrollTop;
+    if (clampToGrid) return { kind: "cell", r: rowAt(Math.max(HEAD_H, y)), c: colAt(Math.max(HEAD_W, x)) };
+    // Il quadratino di riempimento, nel punto dove si vede, e non sotto una
+    // fascia ferma.
+    if (!touchMode() && !editor) {
+      const b = boxOf(range());
+      const h = cornerSeen(b.R, b.B, false);
+      if (h && Math.abs(vx - (h.x - 1)) <= FILL_SLOP && Math.abs(vy - (h.y - 1)) <= FILL_SLOP) return { kind: "fill" };
+    }
+    if (vy < HEAD_H) {
+      if (vx < HEAD_W) return { kind: "corner" };
+      for (let k = 1; k <= COLS; k++) {
+        const edge = k === 1 ? X[1] : X[k] - v.scrollLeft;
+        if (k > 1 && edge <= LW()) continue;
+        if (Math.abs(vx - edge) <= RESIZE_SLOP) return { kind: "resize", index: k - 1 };
+      }
+      return { kind: "col", c: colAt(x) };
+    }
+    const r = rowAt(y);
+    if (vx < HEAD_W) return { kind: "row", r };
+    return { kind: "cell", r, c: colAt(x) };
+  }
+  /// La maniglia del tocco sotto il punto (`"a"`, `"b"` o `null`): dentro il
+  /// cerchio attorno al suo angolo, come si vede adesso, anche dove una fascia
+  /// ferma ne copre una parte; non se l'angolo stesso sta sotto la fascia.
+  function gripAt(e) {
+    if (!handles || !nuova() || !dom) return null;
+    const box = viewport.getBoundingClientRect();
+    const vx = e.clientX - box.left - viewport.clientLeft;
+    const vy = e.clientY - box.top - viewport.clientTop;
+    const V = view ? view.x : marksGeometry();
+    for (const [h, x, y, start] of [
+      ["b", V[2], V[3], false],
+      ["a", V[0], V[1], true],
+    ]) {
+      const s = cornerSeen(x, y, start);
+      if (s && Math.hypot(vx - (s.x - 1), vy - (s.y - 1)) <= GRIP_R) return h;
+    }
+    return null;
+  }
+  const touchy = (e) => nuova() && (e.pointerType === "touch" || (e.pointerType === "mouse" && look.larghezza.value === "telefono"));
+  viewport.addEventListener("pointerdown", (e) => {
+    if (e.button !== 0) return;
+    lastPointer = e.pointerType === "touch" ? "touch" : lastPointer === "touch" && e.pointerType !== "mouse" ? "touch" : e.pointerType;
+    if (editor && editor.el.contains(e.target)) return;
+    if (editor) commitEditor(null);
+    viewport.focus({ preventScroll: true });
+    const grip = gripAt(e);
+    if (grip) {
+      e.preventDefault();
+      const g = range();
+      const fixed = grip === "b" ? { r: g.r0, c: g.c0 } : { r: g.r1, c: g.c1 };
+      drag = { kind: "handle", fixed, x: e.clientX, y: e.clientY };
+      viewport.setPointerCapture(e.pointerId);
+      return;
+    }
+    const h = hit(e);
+    if (!h) return;
+    hideNotice();
+    if (touchy(e)) {
+      const t = { x: e.clientX, y: e.clientY, h, panned: false, long: false, mouse: e.pointerType === "mouse", sl: viewport.scrollLeft, st: viewport.scrollTop };
+      t.timer = setTimeout(() => {
+        if (t.panned) return;
+        t.long = true;
+        if (h.kind === "cell") {
+          if (!inRange(range(), h.r, h.c)) setSel({ r: h.r, c: h.c });
+          handles = true;
+          updateMarks({ pointer: true });
+          log("Tocco lungo: le due maniglie allargano la selezione.");
+        }
+      }, LONG_PRESS_MS);
+      drag = { kind: "touch", t };
+      if (t.mouse) viewport.setPointerCapture(e.pointerId);
+      return;
+    }
+    if (h.kind === "resize") {
+      e.preventDefault();
+      resize = { index: h.index, start: widths[h.index], now: widths[h.index], x0: e.clientX };
+      drag = { kind: "resize" };
+      viewport.setPointerCapture(e.pointerId);
+      drawResize();
+    } else if (h.kind === "fill") {
+      e.preventDefault();
+      fill = { source: range(), target: range(), waiting: false };
+      drag = { kind: "fill", x: e.clientX, y: e.clientY };
+      viewport.classList.add("filling");
+      viewport.setPointerCapture(e.pointerId);
+      updateMarks({ pointer: true });
+    } else if (h.kind === "corner") {
+      setSel({ r: 0, c: 0 }, { r: ROWS - 1, c: COLS - 1 });
+      updateMarks({ pointer: true });
+    } else if (h.kind === "col") {
+      setSel({ r: 0, c: h.c }, { r: ROWS - 1, c: h.c });
+      updateMarks({ pointer: true });
+    } else if (h.kind === "row") {
+      setSel({ r: h.r, c: 0 }, { r: h.r, c: COLS - 1 });
+      updateMarks({ pointer: true });
+    } else {
+      e.preventDefault();
+      if (e.shiftKey) sel.focus = { r: h.r, c: h.c };
+      else setSel({ r: h.r, c: h.c });
+      handles = false;
+      drag = { kind: "select", x: e.clientX, y: e.clientY };
+      viewport.setPointerCapture(e.pointerId);
+      updateMarks({ pointer: true });
+    }
+  });
+  /// La selezione, una maniglia o il riempimento tirati fino al punto `e`:
+  /// un evento del puntatore, o l'ultimo punto dopo uno scorrimento.
+  function dragTo(e) {
+    drag.x = e.clientX;
+    drag.y = e.clientY;
+    const h = hit(e, { clampToGrid: true });
+    if (drag.kind === "select") {
+      if (sel.focus.r === h.r && sel.focus.c === h.c) return;
+      sel.focus = { r: h.r, c: h.c };
+      updateMarks({ pointer: true });
+    } else if (drag.kind === "handle") {
+      if (sel.focus.r === h.r && sel.focus.c === h.c) return;
+      setSel(drag.fixed, { r: h.r, c: h.c }, sel.active);
+      if (!inRange(range(), sel.active.r, sel.active.c)) sel.active = { r: range().r0, c: range().c0 };
+      updateMarks({ pointer: true });
+    } else if (drag.kind === "fill") {
+      const s = fill.source;
+      const down = h.r > s.r1 ? h.r - s.r1 : h.r < s.r0 ? h.r - s.r0 : 0;
+      const right = h.c > s.c1 ? h.c - s.c1 : h.c < s.c0 ? h.c - s.c0 : 0;
+      let target = { ...s };
+      if (down !== 0 && Math.abs(down) >= Math.abs(right)) target = { ...s, r0: Math.min(s.r0, h.r), r1: Math.max(s.r1, h.r) };
+      else if (right !== 0) target = { ...s, c0: Math.min(s.c0, h.c), c1: Math.max(s.c1, h.c) };
+      if (sameRange(target, fill.target)) return;
+      fill.target = target;
+      updateMarks({ pointer: true });
+    }
+  }
+  viewport.addEventListener("pointermove", (e) => {
+    if (!drag) {
+      if (e.pointerType === "mouse" && !touchy(e)) {
+        const h = hit(e);
+        viewport.style.cursor = h?.kind === "resize" ? "col-resize" : h?.kind === "fill" ? "crosshair" : "";
+      }
+      return;
+    }
+    if (drag.kind === "touch") {
+      const t = drag.t;
+      if (!t.panned && Math.hypot(e.clientX - t.x, e.clientY - t.y) > TAP_MOVE) {
+        t.panned = true;
+        clearTimeout(t.timer);
+      }
+      // Col dito scorre il navigatore; col mouse al telefono lo fa la sonda.
+      if (t.panned && t.mouse && !t.long) {
+        viewport.scrollLeft = t.sl - (e.clientX - t.x);
+        viewport.scrollTop = t.st - (e.clientY - t.y);
+      }
+      return;
+    }
+    if (drag.kind === "resize") {
+      resize.now = Math.max(8, Math.round(resize.start + e.clientX - resize.x0));
+      drawResize();
+      return;
+    }
+    dragTo(e);
+  });
+  function endDrag(e, cancelled) {
+    if (!drag) return;
+    // Il rilascio conta come l'ultimo spostamento: la selezione finisce
+    // sotto il punto dove il puntatore si è alzato.
+    if (!cancelled && drag.x !== undefined && nuova()) dragTo(e);
+    const d = drag;
+    drag = null;
+    if (viewport.hasPointerCapture?.(e.pointerId)) viewport.releasePointerCapture(e.pointerId);
+    if (d.kind === "touch") {
+      const t = d.t;
+      clearTimeout(t.timer);
+      if (cancelled || t.panned || t.long) return;
+      const h = t.h;
+      if (h.kind === "cell") {
+        const now = performance.now();
+        if (lastTap && now - lastTap.t < DOUBLE_TAP_MS && lastTap.r === h.r && lastTap.c === h.c) {
+          lastTap = null;
+          openEditor(h.r, h.c, "edit");
+        } else {
+          lastTap = { t: now, r: h.r, c: h.c };
+          handles = false;
+          setSel({ r: h.r, c: h.c });
+          updateMarks({ pointer: true });
+        }
+      } else if (h.kind === "col") {
+        setSel({ r: 0, c: h.c }, { r: ROWS - 1, c: h.c });
+        updateMarks({ pointer: true });
+      } else if (h.kind === "row") {
+        setSel({ r: h.r, c: 0 }, { r: h.r, c: COLS - 1 });
+        updateMarks({ pointer: true });
+      }
+      return;
+    }
+    if (d.kind === "resize") finishResize();
+    else if (d.kind === "fill") finishFill();
+    else updateMarks({ pointer: true });
+  }
+  // Su un tocco vero, chi decide se il foglio scorre è l'elemento toccato
+  // (`touch-action`); la presa di una maniglia invece è geometrica, quindi la
+  // si ferma qui: un dito sulla maniglia la tira, non fa scorrere il foglio.
+  viewport.addEventListener(
+    "touchstart",
+    (e) => {
+      if (e.touches.length === 1 && gripAt(e.touches[0])) e.preventDefault();
+    },
+    { passive: false },
+  );
+  viewport.addEventListener("pointerup", (e) => endDrag(e, false));
+  viewport.addEventListener("pointercancel", (e) => endDrag(e, true));
+  viewport.addEventListener("dblclick", (e) => {
+    if (touchMode() && look.larghezza.value === "telefono") return;
+    if (editor && editor.el.contains(e.target)) return;
+    const h = hit(e);
+    if (h?.kind === "cell") openEditor(h.r, h.c, "edit");
+  });
+
+  // ── Larghezza di una colonna ────────────────────────────────────────────
+  const pixelsToChars = (px) => (px <= 0 ? 0 : px < 12 ? px / 12 : (px - 5) / 7);
+  function resizeText(now) {
+    const px = Math.round(now / WORKBOOK_SCALE);
+    return `Larghezza: ${IT.format(pixelsToChars(px))} (${px} px)`;
+  }
+  /// La guida e la misura stanno ferme nel riquadro; la misura non esce mai
+  /// dal riquadro: va dall'altra parte della guida quando a destra non c'è
+  /// posto.
+  function drawResize() {
+    if (!nuova()) {
+      scheduleOggi();
+      return;
+    }
+    const { index, now } = resize;
+    const v = viewport;
+    const edge = index < 1 ? HEAD_W + now : X[index] + now - v.scrollLeft;
+    place(dom.guide, { x: edge - 2, y: 0, w: 2, h: v.clientHeight });
+    dom.guide.hidden = false;
+    dom.label.textContent = resizeText(now);
+    dom.label.hidden = false;
+    const lw = dom.label.offsetWidth;
+    let left = edge + 6;
+    if (left + lw > v.clientWidth - 6) left = edge - 6 - lw;
+    left = Math.max(6, Math.min(left, v.clientWidth - 6 - lw));
+    dom.label.style.left = `${left}px`;
+    dom.label.style.top = `${HEAD_H + 6}px`;
+  }
+  /// Nella griglia nuova la larghezza tirata vale subito: le colonne dopo
+  /// scivolano col *soft*, i segni con lo *snap*; se il foglio dice di no
+  /// tutto torna indietro scivolando. Oggi la colonna torna com'era finché il
+  /// foglio non risponde, poi salta.
+  function finishResize() {
+    const { index, start, now } = resize;
+    resize = null;
+    if (!nuova()) {
+      scheduleOggi();
+      if (now === start) return;
+      respond(`Colonna ${columnLabel(index)} a ${Math.round(now / WORKBOOK_SCALE)} px`, (ok) => {
+        if (!ok) return;
+        widths[index] = now;
+        measure();
+        scheduleOggi();
+      });
+      return;
+    }
+    dom.guide.hidden = true;
+    ghostOut(dom.label);
+    dom.label.hidden = true;
+    if (now === start) return;
+    applyWidth(index, now);
+    respond(`Colonna ${columnLabel(index)} a ${Math.round(now / WORKBOOK_SCALE)} px`, (ok) => {
+      if (!ok) applyWidth(index, start);
+    });
+  }
+  function applyWidth(index, w) {
+    const delta = w - widths[index];
+    const v = viewport;
+    const movers = [];
+    if (still === 0 && !reduced()) {
+      const top = v.scrollTop;
+      const bottom = top + v.clientHeight;
+      const right = v.scrollLeft + v.clientWidth + Math.abs(delta);
+      for (const el of dom.plane.querySelectorAll("[data-column]")) {
+        const c = Number(el.dataset.column);
+        const rule = el.classList.contains("grid-rule-column");
+        if (rule ? c < index : c <= index) continue;
+        if (X[c] > right) continue;
+        const row = el.closest(".grid-rows > .grid-row");
+        if (row) {
+          const r = Number(row.dataset.row);
+          if (Y(r + 1) < top || Y(r) > bottom) continue;
+        }
+        movers.push(el);
+      }
+      if (editor && editor.c > index) movers.push(editor.el);
+    }
+    widths[index] = w;
+    layoutColumns();
+    for (const el of movers) run(el, { from: { x: -delta }, spring: SLIDE });
+    updateMarks({ spring: SLIDE });
+  }
+
+  // ── Riempimento ─────────────────────────────────────────────────────────
+  function seriesOf(list) {
+    const n = list.length;
+    const nums = list.map((s) => (NUMBER.test(s.trim()) ? toNumber(s) : null));
+    const tidy = (v) => (Number.isInteger(v) ? String(v) : String(Math.round(v * 1e6) / 1e6));
+    if (n >= 2 && nums.every((v) => v !== null)) {
+      const step = (nums[n - 1] - nums[0]) / (n - 1);
+      return (i) => tidy(nums[0] + step * i);
+    }
+    const tails = list.map((s) => /^(.*\D)(\d+)$/.exec(s));
+    if (tails.every(Boolean) && tails.every((t) => t[1] === tails[0][1])) {
+      const a = Number(tails[0][2]);
+      const step = n > 1 ? (Number(tails[n - 1][2]) - a) / (n - 1) : 1;
+      return (i) => `${tails[0][1]}${tidy(a + step * i)}`;
+    }
+    return (i) => list[((i % n) + n) % n];
+  }
+  function series(source, target) {
+    const out = new Map();
+    if (target.r0 !== source.r0 || target.r1 !== source.r1) {
+      for (let c = source.c0; c <= source.c1; c++) {
+        const list = [];
+        for (let r = source.r0; r <= source.r1; r++) list.push(inputAt(r, c));
+        const at = seriesOf(list);
+        for (let r = target.r0; r <= target.r1; r++) if (r < source.r0 || r > source.r1) out.set(key(r, c), at(r - source.r0));
+      }
+    } else {
+      for (let r = source.r0; r <= source.r1; r++) {
+        const list = [];
+        for (let c = source.c0; c <= source.c1; c++) list.push(inputAt(r, c));
+        const at = seriesOf(list);
+        for (let c = target.c0; c <= target.c1; c++) if (c < source.c0 || c > source.c1) out.set(key(r, c), at(c - source.c0));
+      }
+    }
+    return out;
+  }
+  /// Nella griglia nuova il contorno resta finché il foglio non risponde e le
+  /// formiche camminano; poi i valori arrivano uno dopo l'altro, il contorno
+  /// esce e la selezione scivola su tutto. Oggi il contorno sparisce al
+  /// rilascio e i valori saltano dentro con la risposta.
+  function finishFill() {
+    viewport.classList.remove("filling");
+    if (sameRange(fill.source, fill.target)) {
+      fill = null;
+      updateMarks();
+      return;
+    }
+    const { source, target } = fill;
+    const writes = series(source, target);
+    const done = (ok) => {
+      if (nuova()) {
+        stopAnts();
+        for (const el of marksNamed("fill-")) ghostOut(el);
+      }
+      fill = null;
+      if (ok) {
+        for (const [k, v] of writes) edits.set(k, v);
+        setSel({ r: target.r0, c: target.c0 }, { r: target.r1, c: target.c1 }, sel.active);
+      }
+      updateMarks();
+      refresh({ fade: true, stagger: true });
+    };
+    if (nuova()) {
+      fill.waiting = true;
+      updateMarks();
+      startAnts();
+    } else {
+      fill = null;
+      scheduleOggi();
+    }
+    respond(`Riempito ${rangeA1(target)}`, done);
+  }
+
+  // ── L'aspetto ───────────────────────────────────────────────────────────
+  if (matchMedia("(prefers-reduced-motion: reduce)").matches) look.movimento.value = "ridotto";
+  function applyLook() {
+    const g = mode();
+    for (const s of document.querySelectorAll("style[data-griglia]"))
+      s.media = s.dataset.griglia === "sempre" || s.dataset.griglia === g ? "all" : "not all";
+    const root = document.documentElement;
+    root.dataset.luce = look.luce.value;
+    // Come la shell (`theme/theme.ts`): la luce e il contrasto sulla radice.
+    root.dataset.theme = look.luce.value.startsWith("scura") ? "dark" : "light";
+    root.dataset.contrast = look.luce.value.endsWith("-alta") ? "high" : "normal";
+    win.dataset.larghezza = look.larghezza.value;
+    pane.classList.toggle("grid-nuova", g === "nuova");
+  }
+
+  // ── Gli stati ───────────────────────────────────────────────────────────
+  const STATES = {
+    riposo: "C4 attiva. Frecce, Maiusc+frecce, Tab, Invio, F2 o si scrive; Ctrl+C, Ctrl+X, Ctrl+V; il bordo fra due intestazioni si tira, il quadratino riempie.",
+    intervallo: "C4:E9: la cella attiva ha l'anello, il resto il velo.",
+    oltre: "C1:E9, scorso in giù e a destra: la parte nella riga bloccata resta in alto.",
+    editor: "A5 aperta con un testo lungo: Invio conferma, Esc lascia com'era.",
+    misura: "Il bordo di una colonna vicino al lato destro, tirato di 60 px.",
+    riempimento: "C4:C5 (10 e 20) tirato fino a C12: il foglio non ha ancora risposto.",
+    copiata: "C4:E9 copiato: Ctrl+V incolla nella cella attiva, Esc toglie il segno.",
+    tagliata: "C4:E9 tagliato: Ctrl+V lo sposta.",
+    telefono: "Al telefono: un tocco sceglie, due aprono, un tocco lungo mette le maniglie.",
+  };
+  function setState(name) {
+    generation += 1;
+    for (const t of timers) clearTimeout(t);
+    timers.length = 0;
+    stopAnts();
+    if (frameAsked) cancelAnimationFrame(frameAsked);
+    frameAsked = 0;
+    editor = null;
+    clip = null;
+    fill = null;
+    resize = null;
+    drag = null;
+    handles = false;
+    lastTap = null;
+    lastPointer = "mouse";
+    edits.clear();
+    rawShown.clear();
+    widths = [...BASE_WIDTHS];
+    measure();
+    stopMarks();
+    pool.clear();
+    shownMarks.clear();
+    rowMap.clear();
+    rowFirst = rowLast = -1;
+    hideNotice();
+    if (name === "telefono") look.larghezza.value = "telefono";
+    applyLook();
+    viewport.replaceChildren();
+    viewport.classList.remove("ranged", "filling");
+    viewport.style.cursor = "";
+    viewport.scrollTop = 0;
+    viewport.scrollLeft = 0;
+    dom = null;
+    if (nuova()) buildNuova();
+    else buildOggi();
+    const scroll = (top, left) => {
+      viewport.scrollTop = top;
+      viewport.scrollLeft = left;
+      if (nuova()) renderRows();
+      else renderOggi();
+    };
+    quietly(() => {
+      switch (name) {
+        case "intervallo":
+          setSel({ r: 3, c: 2 }, { r: 8, c: 4 });
+          break;
+        case "oltre":
+          setSel({ r: 0, c: 2 }, { r: 8, c: 4 });
+          scroll(140, 112);
+          break;
+        case "editor":
+          setSel({ r: 4, c: 0 });
+          break;
+        case "misura": {
+          setSel({ r: 3, c: 2 });
+          const v = viewport;
+          let index = 1;
+          for (let k = 1; k < COLS; k++) if (X[k + 1] + 60 - v.scrollLeft <= v.clientWidth - 4) index = k;
+          resize = { index, start: widths[index], now: widths[index] + 60, x0: 0 };
+          break;
+        }
+        case "riempimento":
+          edits.set(key(3, 2), "10");
+          edits.set(key(4, 2), "20");
+          setSel({ r: 3, c: 2 }, { r: 4, c: 2 });
+          if (nuova()) fill = { source: range(), target: { r0: 3, c0: 2, r1: 11, c1: 2 }, waiting: true };
+          break;
+        case "copiata":
+        case "tagliata": {
+          setSel({ r: 3, c: 2 }, { r: 8, c: 4 });
+          const g = range();
+          const data = [];
+          for (let r = g.r0; r <= g.r1; r++) {
+            const row = [];
+            for (let c = g.c0; c <= g.c1; c++) row.push(inputAt(r, c));
+            data.push(row);
+          }
+          clip = { range: g, cut: name === "tagliata", data };
+          break;
+        }
+        case "telefono":
+          setSel({ r: 2, c: 1 }, { r: 5, c: 1 });
+          lastPointer = "touch";
+          handles = nuova();
+          break;
+        default:
+          setSel({ r: 3, c: 2 });
+      }
+      refresh();
+      if (nuova()) {
+        updateMarks();
+        if (resize) drawResize();
+      } else renderOggi();
+      if (name === "editor") openEditor(4, 0, "enter", "Luce 4 — bolletta di gennaio e febbraio, con il conguaglio");
+    });
+    if (fill?.waiting) startAnts();
+    if (name !== "editor") viewport.focus({ preventScroll: true });
+    log(STATES[name] ?? "");
+  }
+
+  look.stato.addEventListener("change", () => setState(look.stato.value));
+  for (const name of ["griglia", "larghezza"]) look[name].addEventListener("change", () => setState(look.stato.value));
+  look.luce.addEventListener("change", applyLook);
+  look.filo.addEventListener("change", () => {
+    if (nuova() && dom && want && view) draw();
+  });
+  look.movimento.addEventListener("change", () => {
+    if (fill?.waiting) startAnts();
+    // Col movimento ridotto una corsa in volo arriva subito.
+    if (reduced() && nuova() && want && dom) {
+      view = { x: want.G.slice(), v: want.G.map(() => 0) };
+      pops.clear();
+      draw();
+    }
+  });
+
+  // Solo per le sonde: lo stato della griglia senza leggere il DOM.
+  window.__celle = {
+    range,
+    sel,
+    widths: () => [...widths],
+    rows: () => rowMap.size,
+    edits: () => Object.fromEntries(edits),
+    editor: () => (editor ? { r: editor.r, c: editor.c, how: editor.how, text: editor.text.textContent } : null),
+    setState,
+  };
+
+  // Lo stato dall'indirizzo
+  // (#stato=oltre&griglia=oggi&luce=scura&larghezza=stretta&movimento=ridotto),
+  // per le foto.
+  const asked = new URLSearchParams(location.hash.slice(1));
+  for (const [name, select] of Object.entries(look)) if (asked.get(name)) select.value = asked.get(name);
+  applyLook();
+  // Dopo il carattere: l'editor si misura con le lettere vere.
+  document.fonts.ready.then(() => setState(look.stato.value));
+})();
+
+</script>
+</body>
+</html>

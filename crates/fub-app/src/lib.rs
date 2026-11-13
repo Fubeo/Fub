@@ -62,6 +62,8 @@ pub use fub_host::{
 };
 pub use fub_wasm_host::managed::InstalledPluginInfo;
 mod avvio;
+#[cfg(feature = "bench-gc")]
+mod bench_gc;
 mod document_windows;
 mod domande;
 mod frame_rate;
@@ -3122,6 +3124,18 @@ pub fn run() {
             }
             #[cfg(not(mobile))]
             start_control(app);
+            // Il banco della memoria (R1) può chiedere la raccolta forzata
+            // della WebView, ma soltanto in una build con `bench-gc`; senza
+            // `FUB_BENCH_GC` non succede niente.
+            #[cfg(feature = "bench-gc")]
+            bench_gc::install(app);
+            #[cfg(not(feature = "bench-gc"))]
+            if std::env::var_os("FUB_BENCH_GC").is_some() {
+                tracing::warn!(
+                    target: "fub.app",
+                    "FUB_BENCH_GC ignored: this build has no bench-gc feature"
+                );
+            }
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![

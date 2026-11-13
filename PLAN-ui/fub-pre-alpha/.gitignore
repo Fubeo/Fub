@@ -1,0 +1,8 @@
+# Le catture grezze e quelle rifatte (centinaia di MB), la cache di Vite di
+# cattura.mjs e le prove restano sulla macchina che le prende: nel repository
+# vanno solo sim-dati-N.js (script/finto/LEGGIMI.md).
+/catture/
+/catture-r/
+/vite-cache/
+/prove/
+/out/

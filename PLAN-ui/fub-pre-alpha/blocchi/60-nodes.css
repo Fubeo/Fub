@@ -1,0 +1,104 @@
+/* → skin/nodes.css */
+/* ── La struttura: un filo a sinistra, la voce corrente è una tacca blu ───
+   Vale per la vista «Struttura» (`data-view-id="outline"`), non per ogni
+   albero dichiarato: un albero di etichette resta com'è. */
+.declared-view[data-view-id="outline"] .ui-tree {
+  border-left: 1px solid var(--border);
+}
+.declared-view[data-view-id="outline"] .ui-tree-label {
+  min-height: var(--row-h);
+  padding: 0 var(--space-4) 0 var(--space-5);
+  border-radius: 0 var(--radius-chip) var(--radius-chip) 0;
+  color: var(--muted);
+  font-size: var(--text-md);
+}
+.declared-view[data-view-id="outline"] .ui-tree-label::before {
+  content: none;
+}
+.declared-view[data-view-id="outline"] .ui-tree-item > .ui-children {
+  margin-left: var(--space-5);
+}
+.declared-view[data-view-id="outline"] .ui-tree-label.clickable:hover {
+  background: var(--overlay-hover);
+  color: var(--text);
+}
+.declared-view[data-view-id="outline"] .ui-tree-item[aria-selected="true"] > .ui-tree-label,
+.declared-view[data-view-id="outline"] .ui-tree-item[aria-selected="true"] > .ui-tree-label.clickable:hover {
+  background: transparent;
+  color: var(--text);
+  font-weight: var(--weight-bold);
+}
+/* La tacca sta sul filo, a qualunque profondità: 2 px centrati sulla riga di
+   1 px, alti 16. */
+.declared-view[data-view-id="outline"] .ui-tree-item[aria-selected="true"] > .ui-tree-label::after {
+  inset: 6px auto 6px -1.5px;
+  width: 2px;
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+}
+.declared-view[data-view-id="outline"] .ui-children .ui-tree-item[aria-selected="true"] > .ui-tree-label::after {
+  left: calc(-1 * var(--space-5) - 1.5px);
+}
+.declared-view[data-view-id="outline"] .ui-children .ui-children .ui-tree-item[aria-selected="true"] > .ui-tree-label::after {
+  left: calc(-2 * var(--space-5) - 1.5px);
+}
+
+/* ── «In entrata 3»: chi punta qui, il nome a sinistra e la cartella a destra.
+   La sezione la dichiara la vista Struttura con la chiave `outline-incoming` (`incoming` è già dei Collegamenti). */
+.ui-section[data-key="outline-incoming"] {
+  margin-top: var(--space-8);
+}
+.ui-section[data-key="outline-incoming"] > summary {
+  padding: 0;
+  color: var(--muted);
+  font-size: var(--text-base);
+  font-weight: var(--weight-medium);
+  letter-spacing: 0;
+  text-transform: none;
+}
+.ui-section[data-key="outline-incoming"] > summary::before {
+  content: none;
+}
+.ui-section[data-key="outline-incoming"] > summary:hover {
+  background: transparent;
+  color: var(--text);
+}
+.ui-section[data-key="outline-incoming"] > .ui-children {
+  padding: var(--space-2) 0 0;
+}
+.ui-section[data-key="outline-incoming"] .ui-list-item {
+  flex-direction: row;
+  align-items: center;
+  justify-content: flex-start;
+  gap: var(--space-4);
+  /* 28 più i 2 px fra una voce e l'altra: il passo di 30 del mockup */
+  min-height: var(--row-h);
+  padding: 0 var(--space-3);
+  border-radius: var(--radius-chip);
+  font-size: var(--text-md);
+}
+.ui-section[data-key="outline-incoming"] .ui-list-item-title {
+  flex: 1 1 auto;
+  font-weight: var(--weight-regular);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ui-section[data-key="outline-incoming"] .ui-list-item-subtitle {
+  flex: none;
+  margin: 0;
+  /* grafite e non più chiaro: la cartella è testo, e sotto 4,5:1 non si legge */
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+/* L'icona di una voce che nomina una nota: la sua, come nell'albero. */
+.ui-list-item-icon {
+  display: inline-flex;
+  flex: none;
+  color: var(--muted);
+}
+.ui-list-item-icon > svg {
+  width: 15px;
+  height: 15px;
+}
