@@ -2282,7 +2282,7 @@ lo spostamento di un gruppo di un solo figlio uguale a ciò che scrive il
 client (registrato dal client), e il caso Ctrl/⌘ sul figlio; il cancello
 esce con 0.
 Prova: scripts/check.sh --rapido; cargo test -p fub-disegno --test gesti_selezione; node tools/disegno-cancello/cancello.mjs
-Stato: [~] in corso (2026-11-13, coder su base 62f75b3ec)
+Stato: [x] fatto (2026-11-13) · differenze: `differenza()` riceve `unita: Option<&HashSet<NodeId>>` (con le unità, la `transform` va al gruppo solo se è un'unità; senza, la regola di prima); le unità arrivano da `applica` e, per i gesti fatti dal motore, dal nuovo `Strumento::unita` al commit (quindi anche `gesti/mod.rs`); `Contesto::memo` fa calcolare `analizza` della Selezione una volta per pezzo di gesto; `comandi.rs` passa `None`; una frase in `disegno.md`. Cambia anche due figli dello stesso gruppo scelti insieme (ora la `transform` va a ciascuno, come nel client, test `piu_unita_scelte`). Latenze sul file di 1 MiB a carico alto: commit p95 6,6–6,9 ms contro 10,6 senza unità nelle stesse condizioni
 
 ## T30 · La CI completa e la revisione prima del merge
 
