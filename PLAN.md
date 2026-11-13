@@ -1864,6 +1864,63 @@ docs/decisions/0241-inchiostro-sulla-lavagna.md
 Stato: [ ] da fare
 Aspetta: l'uscita della prova con Obsidian (il kit di T7), che incolla l'utente.
 
+## T23a · Dove va il tempo sotto la penna, e la correzione
+
+Perché: T23 ha misurato 174 ms a penna sopra il foglio vivo (meta 33 ms) e
+non dice dove va il tempo; la voce del cancello resta aperta. L'utente vuole
+l'app «estremamente fluida» (2026-11-11): prima di T25 si trova il costo e
+lo si toglie, non si alza la meta. Task scritto dall'orchestratore
+(2026-11-13), perché il limite degli agenti non prevede un pianificatore per
+N4; la scelta è sua per la regola di autonomia: vedi DECISIONS.md.
+Tocca: i file dell'inchiostro dove sta il costo
+(`apps/client/src/editors/canvas/engine.ts`, `ink-layer.ts`, `ink-paint.ts`,
+`apps/client/src/ink/`), i loro test, la pelle della lavagna
+(`apps/client/src/theme/scrittoio/skin/editors.css`, `structure.css`) se la
+correzione è di disegno; una pagina nuova
+`docs/misure/lavagna-inchiostro-profilo-AAAA-MM-GG.md` e
+`docs/misure/README.md`.
+Non toccare: le schede di N6 (`editors/canvas/cards*`, i renderer): se il
+costo sta lì, si scrive con i numeri e l'orchestratore porta un task nel
+piano di N6; `budgets.json` (nessuna meta si alza); il formato dei tratti
+nel `.canvas`; `.github/workflows/ci.yml`.
+Dipende da: T23
+Cosa fare:
+- Una cartella di lavoro a parte dal ramo di N6 che contiene N4 (come T23,
+  sotto `~/.cache/fub-k1/`), così il foglio è vivo; le correzioni si fanno
+  sul ramo di N4 e si portano nella cartella con `git cherry-pick` per
+  rimisurare.
+- Profilo: segni di User Timing (`performance.mark`/`measure`) attorno al
+  ridisegno della scia, a `#render` e al commit del tratto, letti dal banco
+  WebView con S8 (lo scenario di T23 com'è); in più, lo stesso giro nel
+  Chromium del banco con la traccia CDP, per vedere chi tiene il fotogramma
+  (script, stile, layout, pittura). I segni restano solo se costano zero
+  quando nessuno li legge; sennò stanno in una sonda fuori dal repo.
+- La pagina dice, per i tre tipi di fotogramma lungo di T23 (scia, rilascio,
+  senza evento), dove va il tempo con i numeri.
+- Correzione dove il costo è dell'inchiostro, con la strada di qualità
+  maggiore che il profilo indica (per esempio: la scia sul suo strato di
+  composizione, `contain` sulla zona sotto, il commit del tratto che non
+  rifà il disegno delle schede, il lavoro spezzato fuori dal fotogramma);
+  ogni correzione col suo test della regola.
+- Dopo la correzione, S8 tre giri come T23, sotto Xvfb e sullo schermo vero
+  se l'app dell'utente è chiusa (`pidof fub`; sennò dentro un D-Bus privato
+  con `dbus-run-session`), numeri accanto a quelli di T23.
+Casi limite: il costo che sta nella pittura software di Xvfb e sparisce con
+la GPU (lo schermo vero lo dice: T23 ha visto 168 e 180 ms anche lì); il
+costo nelle schede di N6 (si scrive, non si corregge qui); la penna vera che
+il driver non manda (mouse con D, come T15); il moto ridotto; il tema scuro.
+Fatto quando: la pagina del profilo è in `docs/misure/` e nell'indice, con
+dove va il tempo e i numeri dopo la correzione; nessun fotogramma oltre
+33 ms a penna sopra il foglio vivo, oppure la parte che resta è scritta con
+la sua causa e il suo task (in N6 o in un'issue); `scripts/check.sh --rapido`
+verde.
+Prova: (nella cartella di lavoro) cd apps/client && npm run build && cd
+../.. && cargo build --release --locked -p fub-app --features
+tauri/custom-protocol && cd apps/client && dbus-run-session -- xvfb-run -a
+npm run bench:webview -- --only=S8 --budgets=targets --port=4481
+--native-driver=/usr/bin/WebKitWebDriver
+Stato: [ ] da fare
+
 ## T25 · La CI completa e la revisione prima del merge
 
 Perché: merge-n3n4 (b): N4 entra in `main` solo dopo N3, a task tutti fatti,
@@ -1873,7 +1930,7 @@ Tocca: nessun file di prodotto in partenza; ciò che la CI o la revisione
 trovano, nei file dei task che l'hanno scritto.
 Non toccare: N3 e N6 (li segue il loro orchestratore); la storia del ramo
 (niente force-push senza chiedere).
-Dipende da: tutti i task, T23 e T24 compresi; N3 in `main` (N3 T23 fatto e
+Dipende da: tutti i task, T23, T23a e T24 compresi; N3 in `main` (N3 T23 fatto e
 fuso)
 Cosa fare (lo fa l'orchestratore):
 - Dopo il merge di N3, porta la base della PR #298 da

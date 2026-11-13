@@ -99,6 +99,13 @@ ciò che non dipende dalla risposta.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-13 · N4 T23a · L'orchestratore scrive da solo il task che profila e
+  corregge i 174 ms a penna sopra il foglio vivo, invece di chiedere
+  all'utente la forma del task (come diceva la voce del 2026-11-11). Perché:
+  il 2026-11-13 l'utente ha dato autonomia sulle scelte tecniche («fai sempre
+  la scelta che porterà al massimo della qualità»), e vuole l'app
+  «estremamente fluida»; la meta di 33 ms non si alza. Il costo che sta nelle
+  schede di N6 diventa un task del piano di N6, non una correzione in N4.
 - 2026-11-11 · N4 T23 · La seconda misura non chiude la voce del cancello:
   174 ms a penna sul foglio vivo (meta 33), 47 fotogrammi lunghi su 215, di cui
   11 col tratto in movimento, 10 al rilascio e 26 senza evento del puntatore;
