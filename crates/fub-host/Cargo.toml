@@ -200,6 +200,7 @@ official-features = [
     "backlinks",
     "outline",
     "tags",
+    "tasks",
     "properties",
     "template",
     "queries",
@@ -220,6 +221,7 @@ versioning = ["fub-features/versioning"]
 backlinks = ["fub-features/backlinks"]
 outline = ["fub-features/outline"]
 tags = ["fub-features/tags"]
+tasks = ["fub-features/tasks"]
 properties = ["fub-features/properties"]
 template = ["fub-features/template"]
 queries = ["fub-features/queries"]
