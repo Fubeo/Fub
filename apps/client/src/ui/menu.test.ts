@@ -28,6 +28,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { setMotionDriver, setMotionPreference } from "../moto";
 import { createManualDriver } from "../moto/driver";
 import { closeContextMenu, menuPointFor, pickIcon, registerMenuSearch, showContextMenu } from "./menu";
+import { openLifetime } from "./lifetime";
+import { mountFrameIcons } from "../shells/scrittoio/icons";
 
 /** Un evento di mouse verosimile, che è tutto ciò che le due funzioni leggono. */
 function clickEvent(): MouseEvent {
@@ -358,12 +360,101 @@ describe("il selettore di icona", () => {
   it("scegliere un'emoji chiude e riporta la scelta una volta sola", () => {
     const choices: (string | null)[] = [];
     pickIcon(clickEvent(), (i) => choices.push(i));
-    document.querySelector<HTMLButtonElement>("#icon-picker .icon-grid button")!.click();
+    document.querySelector<HTMLButtonElement>("#icon-picker .icon-grid--emoji button")!.click();
     vi.runAllTimers();
 
-    expect(choices).toHaveLength(1);
+    expect(choices).toEqual(["📝"]);
     expect(document.getElementById("icon-picker")).toBeNull();
     expect(tab().defaultPrevented).toBe(false);
+  });
+
+  it("è un dialogo modale col suo nome: la trappola del fuoco lo dice", () => {
+    pickIcon(clickEvent(), () => {});
+    const pop = document.getElementById("icon-picker")!;
+    expect(pop.getAttribute("role")).toBe("dialog");
+    expect(pop.getAttribute("aria-modal")).toBe("true");
+    expect(pop.getAttribute("aria-label")).toBe("Scegli un'icona");
+    expect(pop.contains(document.activeElement)).toBe(true);
+  });
+
+  it("le figure vengono prima delle emoji, ciascun gruppo col suo titolo", () => {
+    pickIcon(clickEvent(), () => {});
+    const pop = document.getElementById("icon-picker")!;
+    const titles = [...pop.querySelectorAll<HTMLElement>(".icon-picker-title")];
+    expect(titles.map((title) => title.textContent)).toEqual(["Figure", "Emoji"]);
+    const [figures, emoji] = [...pop.querySelectorAll<HTMLElement>(".icon-grid")];
+    expect(figures!.classList.contains("icon-grid--figures")).toBe(true);
+    expect(emoji!.classList.contains("icon-grid--emoji")).toBe(true);
+    // Ogni gruppo prende il nome dal suo titolo.
+    expect(figures!.getAttribute("role")).toBe("group");
+    expect(document.getElementById(figures!.getAttribute("aria-labelledby")!)).toBe(titles[0]);
+    // Le figure, disegnate, con il valore e il nome per chi ascolta. Senza la
+    // cornice nessuno disegna la stella, e la stella non si offre.
+    const drawn = [...figures!.querySelectorAll<HTMLButtonElement>("button")];
+    expect(drawn.map((button) => button.dataset.icon)).toEqual([
+      "fub:vault", "fub:notes", "fub:book", "fub:calendar", "fub:home", "fub:flag", "fub:bulb",
+      "fub:inbox", "fub:archive", "fub:image", "fub:heart", "fub:briefcase", "fub:people", "fub:music",
+    ]);
+    expect(drawn.every((button) => button.querySelector("svg") !== null)).toBe(true);
+    expect(drawn[2]!.getAttribute("aria-label")).toBe("Libro");
+    // Anche un'emoji dice il suo valore.
+    expect(emoji!.querySelector<HTMLButtonElement>("button")!.dataset.icon).toBe("📝");
+    // Il campo per incollarne una resta, e ha il fuoco.
+    expect(document.activeElement).toBe(pop.querySelector("input"));
+    pop.querySelector<HTMLButtonElement>(".icon-none")!.click();
+    vi.runAllTimers();
+  });
+
+  it("con la cornice c'è anche la stella, dopo la casa", () => {
+    const life = openLifetime();
+    mountFrameIcons(life);
+    try {
+      pickIcon(clickEvent(), () => {});
+      const values = [...document.querySelectorAll<HTMLButtonElement>("#icon-picker .icon-grid--figures button")].map((button) => button.dataset.icon);
+      expect(values).toHaveLength(15);
+      expect(values.slice(4, 6)).toEqual(["fub:home", "fub:star"]);
+      document.querySelector<HTMLButtonElement>("#icon-picker .icon-none")!.click();
+      vi.runAllTimers();
+    } finally {
+      life.close();
+    }
+  });
+
+  it("scegliere una figura riporta `fub:<nome>`", () => {
+    const choices: (string | null)[] = [];
+    pickIcon(clickEvent(), (i) => choices.push(i));
+    document.querySelector<HTMLButtonElement>('#icon-picker [data-icon="fub:heart"]')!.click();
+    vi.runAllTimers();
+
+    expect(choices).toEqual(["fub:heart"]);
+    expect(document.getElementById("icon-picker")).toBeNull();
+  });
+
+  it("l'icona di oggi è premuta, le altre no", () => {
+    pickIcon(clickEvent(), () => {});
+    expect(document.querySelectorAll('#icon-picker [aria-pressed="true"]')).toHaveLength(0);
+    vi.runAllTimers();
+    pickIcon(clickEvent(), () => {}, { current: "fub:book" });
+    const pressed = [...document.querySelectorAll<HTMLElement>('#icon-picker [aria-pressed="true"]')];
+    expect(pressed.map((button) => button.dataset.icon)).toEqual(["fub:book"]);
+    // Chiuso per la sua via: il caso dopo parte senza una trappola aperta.
+    document.querySelector<HTMLButtonElement>("#icon-picker .icon-none")!.click();
+    vi.runAllTimers();
+  });
+
+  it("Escape chiude il selettore e il fuoco torna dov'era", () => {
+    const opener = document.createElement("button");
+    document.body.append(opener);
+    opener.focus();
+    const choices: (string | null)[] = [];
+    pickIcon(clickEvent(), (i) => choices.push(i));
+    expect(document.activeElement).not.toBe(opener);
+    document.activeElement!.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
+    vi.runAllTimers();
+
+    expect(document.getElementById("icon-picker")).toBeNull();
+    expect(document.activeElement).toBe(opener);
+    expect(choices).toEqual([]);
   });
 });
 

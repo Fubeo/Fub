@@ -265,6 +265,12 @@ describe("il ricongiungimento delle bozze orfane", () => {
 // vera, contro l'host finto.
 const CONSENT = "craft.cli-previews";
 const GUIDA = "Manuali/guida.pdf";
+const FOTO = "Foto/mare.png";
+/// Un PNG di un pixel: l'immagine ha una modalità sola.
+const PNG = Uint8Array.from(
+  atob("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII="),
+  (c) => c.charCodeAt(0),
+);
 
 const consentSetting = (value: CraftRenderConsent): SettingEntry => ({
   spec: {
@@ -334,7 +340,10 @@ async function start(consent: CraftRenderConsent, app: string | null = "PdfCraft
   });
   const host = createFakeHost({
     file: { "Benvenuto.md": "# Benvenuto\n", "Altra.md": "# Altra\n", "Lettera.docx": rich("ciao"), ...notes },
-    resources: { [GUIDA]: { bytes: new TextEncoder().encode("test"), mime: "application/pdf" } },
+    resources: {
+      [GUIDA]: { bytes: new TextEncoder().encode("test"), mime: "application/pdf" },
+      [FOTO]: { bytes: PNG, mime: "image/png" },
+    },
     craft: { docs: {} },
     craftRender,
     settings: [consentSetting(consent)],
@@ -829,6 +838,244 @@ describe("il testo non salvato resta (#237)", () => {
     expect(sessions.inspect(BENVENUTO)).toMatchObject({ dirty: true, result: "conflitto" });
     expect(sessions.text(BENVENUTO)).toContain(TYPED);
     expect(host.files()[BENVENUTO]).toBe(restored);
+  });
+});
+
+// Ciò che le fasi dopo spostano (la modalità, la testata) e non deve cambiare
+// di significato: fissato qui prima di toccarlo (Scrittoio 2, T1).
+describe("la testata del riquadro, prima di Scrittoio 2", () => {
+  const NOTA = "Progetti/Fub/Diario.md";
+  const panes = () => [...document.querySelectorAll<HTMLElement>(".pane")];
+  const toolbarOf = (pane: HTMLElement) => pane.querySelector<HTMLElement>(".pane-toolbar")!;
+  // Il bottone della modalità è un figlio del foglio, dopo la barra di formato (T3).
+  const currentOf = (pane: HTMLElement) => pane.querySelector<HTMLButtonElement>(":scope > .pane-mode-current")!;
+  const radios = () => [...document.querySelectorAll<HTMLElement>("#context-menu [role=menuitemradio]")];
+  const labelOf = (item: Element) => item.querySelector(".menu-label")?.textContent ?? "";
+
+  beforeEach(() => {
+    activeStop?.();
+    activeStop = null;
+    document.body.innerHTML = "";
+    localStorage.clear();
+  });
+
+  afterEach(async () => {
+    const menu = await import("../ui/menu");
+    menu.closeContextMenu();
+  });
+
+  it("il bottone della modalità elenca le modalità della superficie e ne segna una sola", async () => {
+    await start("off", null, { [NOTA]: "# Diario\n\nUna riga.\n" });
+    await open(NOTA);
+    const { t } = await import("../i18n/strings");
+    const pane = panes()[0]!;
+    const current = currentOf(pane);
+    expect(current.hidden).toBe(false);
+    expect(current.getAttribute("aria-haspopup")).toBe("menu");
+    current.click();
+    await settle();
+    expect(current.getAttribute("aria-expanded")).toBe("true");
+    // L'ordine non si fissa: Scrittoio 2 (T2) lo cambia.
+    expect(new Set(radios().map(labelOf))).toEqual(new Set(["Live", "Blocchi", "Sorgente", "Lettura"]));
+    const checked = radios().filter((item) => item.getAttribute("aria-checked") === "true");
+    expect(checked.map(labelOf)).toEqual(["Live"]);
+    expect(current.getAttribute("aria-label")).toBe(t("document.toolbar.mode_current", { mode: "Live" }));
+  });
+
+  it("la voce scelta cambia la modalità del suo riquadro, non quella dell'altro", async () => {
+    await start("off", null, { [NOTA]: "# Diario\n\nUna riga.\n" });
+    await open(NOTA);
+    const { openDocumentBeside } = await import("./document");
+    await openDocumentBeside("Benvenuto.md", "row");
+    await settle();
+    await waitFor("due riquadri con la nota", () => panes().length === 2 && panes().every((p) => p.dataset.mode === "live_preview"));
+    const [left, right] = panes();
+    // Il menu del riquadro **senza** fuoco: il clic lo porta a fuoco e cambia lui.
+    const layout = await import("../state/layout");
+    expect(layout.layout.focus).toBe(right!.dataset.pane);
+    // Come il clic vero in Chromium e WebKitGTK: il bottone prende il fuoco
+    // prima del clic, e il menu, chiudendosi, glielo rende.
+    currentOf(left!).focus();
+    currentOf(left!).click();
+    expect(layout.layout.focus).toBe(left!.dataset.pane);
+    await settle();
+    radios().find((item) => labelOf(item) === "Sorgente")!.click();
+    await waitFor("il riquadro di sinistra in Sorgente", () => left!.dataset.mode === "source");
+    expect(right!.dataset.mode).toBe("live_preview");
+    expect(currentOf(left!).getAttribute("aria-expanded")).toBe("false");
+    expect(currentOf(left!).textContent).toBe("Sorgente");
+    expect(currentOf(right!).textContent).toBe("Live");
+  });
+
+  it("il bottone della modalità ha la figura e il nome della modalità accesa, e il suggerimento (T2)", async () => {
+    await start("off", null, { [NOTA]: "# Diario\n\nUna riga.\n" });
+    await open(NOTA);
+    const { t } = await import("../i18n/strings");
+    const { icon } = await import("../ui/icons");
+    const current = currentOf(panes()[0]!);
+    const figure = () => current.querySelector(":scope > svg")?.innerHTML;
+    const name = () => current.querySelector(":scope > .pane-mode-name")?.textContent;
+    const tooltip = () => {
+      current.dispatchEvent(new FocusEvent("focus"));
+      return document.getElementById(current.getAttribute("aria-describedby") ?? "")?.textContent;
+    };
+    const drawn = (which: string) => new DOMParser().parseFromString(icon(which), "image/svg+xml").documentElement.innerHTML;
+    expect(figure()).toBe(drawn("pen"));
+    expect(name()).toBe("Live");
+    expect(tooltip()).toBe("Live");
+    expect(current.getAttribute("aria-label")).toBe(t("document.toolbar.mode_current", { mode: "Live" }));
+    const svg = current.querySelector(":scope > svg");
+    // Ridisegnare la testata senza cambiare modalità non riscrive la figura.
+    const { synchronize } = await import("./document");
+    await synchronize();
+    expect(current.querySelector(":scope > svg")).toBe(svg);
+    current.click();
+    await settle();
+    radios().find((item) => labelOf(item) === "Blocchi")!.click();
+    await waitFor("la nota in Blocchi", () => panes()[0]!.dataset.mode === "blocks");
+    expect(figure()).toBe(drawn("blocks"));
+    expect(name()).toBe("Blocchi");
+    expect(tooltip()).toBe("Blocchi");
+    expect(current.getAttribute("aria-label")).toBe(t("document.toolbar.mode_current", { mode: "Blocchi" }));
+  });
+
+  it("il bottone della modalità sta nel foglio dopo la barra di formato, non nella testata (T3)", async () => {
+    await start("off", null, { [NOTA]: "# Diario\n\nUna riga.\n" });
+    await open(NOTA);
+    const pane = panes()[0]!;
+    const current = currentOf(pane);
+    expect(current.hidden).toBe(false);
+    expect(toolbarOf(pane).querySelector(".pane-mode-current")).toBeNull();
+    expect(current.previousElementSibling?.classList.contains("format-bar")).toBe(true);
+    // Nel giro del Tab, che segue il DOM (nessun `tabindex` positivo), viene
+    // dopo la testata e dopo la barra, e prima del testo.
+    const before = (node: Element) => (node.compareDocumentPosition(current) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0;
+    const focusables = [...pane.querySelectorAll<HTMLElement>("button, [tabindex]")].filter((node) => node.tabIndex >= 0);
+    expect(focusables.filter((node) => node.closest(".pane-toolbar, .format-bar")).every(before)).toBe(true);
+    expect(focusables.some((node) => node.closest(".pane-toolbar"))).toBe(true);
+    expect(before(pane.querySelector(":scope > .format-bar")!)).toBe(true);
+    expect(before(pane.querySelector("[role=tabpanel]")!)).toBe(false);
+    // I segmenti restano nel DOM della testata, nascosti dalla cornice.
+    expect(toolbarOf(pane).querySelector(":scope > .segmented")).not.toBeNull();
+  });
+
+  it("chiusa la linguetta a fuoco, l'ultima, il fuoco va a «…» della testata (T3)", async () => {
+    await start("off", null, { [NOTA]: "# Diario\n\nUna riga.\n" });
+    await open(NOTA);
+    const pane = panes()[0]!;
+    const { closeOtherTabs } = await import("./document");
+    closeOtherTabs();
+    await waitFor("una linguetta sola", () => pane.querySelectorAll(".pane-tabs .tab").length === 1);
+    // La crocetta della linguetta, premuta da tastiera: la linguetta sparisce
+    // col fuoco dentro, e non ce n'è un'altra che lo prenda.
+    const close = pane.querySelector<HTMLButtonElement>(".pane-tabs .tab-close")!;
+    close.focus();
+    expect(document.activeElement).toBe(close);
+    close.click();
+    await waitFor("il riquadro senza linguette", () => pane.querySelectorAll(".pane-tabs .tab").length === 0);
+    await settle();
+    expect(document.activeElement).toBe(toolbarOf(pane).querySelector("[data-pane-menu]"));
+  });
+
+  it("le briciole: la cartella disegnata e il vault, le cartelle con `data-folder`, poi il nome", async () => {
+    await start("off", null, { [NOTA]: "# Diario\n" });
+    await open(NOTA);
+    const { icon } = await import("../ui/icons");
+    const store = await import("../state/store");
+    const drawn = (which: string) => new DOMParser().parseFromString(icon(which), "image/svg+xml").documentElement.innerHTML;
+    const crumbs = toolbarOf(panes()[0]!).querySelector<HTMLElement>(":scope > .muted")!;
+    // Il vault del banco finto è `/vault`: il nome è la cartella.
+    expect(store.state.vaultName).toBe("vault");
+    expect(crumbs.dataset.path).toBe(NOTA);
+    expect(crumbs.firstElementChild!.tagName.toLowerCase()).toBe("svg");
+    expect(crumbs.firstElementChild!.innerHTML).toBe(drawn("folder"));
+    expect([...crumbs.querySelectorAll<HTMLElement>("[data-folder]")].map((f) => [f.dataset.folder, f.textContent])).toEqual([
+      ["", "vault"],
+      ["Progetti", "Progetti"],
+      ["Progetti/Fub", "Fub"],
+    ]);
+    // Fra i pezzi un segno nascosto al lettore di schermo, non una «/» nel testo
+    // del percorso; la nota si chiama senza «.md».
+    const seps = [...crumbs.querySelectorAll<HTMLElement>(":scope > .crumb-sep")];
+    expect(seps).toHaveLength(3);
+    expect(seps.every((sep) => sep.getAttribute("aria-hidden") === "true")).toBe(true);
+    expect(crumbs.lastElementChild!.className).toBe("crumb-name");
+    expect(crumbs.lastElementChild!.textContent).toBe("Diario");
+    // Il formato non sta più nella testata.
+    expect(toolbarOf(panes()[0]!).querySelector(".pane-format")).toBeNull();
+    // Una nota alla radice: il vault e il nome.
+    await open("Benvenuto.md");
+    expect([...crumbs.querySelectorAll<HTMLElement>("[data-folder]")].map((f) => f.dataset.folder)).toEqual([""]);
+    expect(crumbs.querySelector(".crumb-name")!.textContent).toBe("Benvenuto");
+    // Un file che non è una nota tiene l'estensione, che dice il formato.
+    await open("Lettera.docx");
+    expect(crumbs.querySelector(".crumb-name")!.textContent).toBe("Lettera.docx");
+    // Il nome scelto dalla persona arriva dopo: la testata si ridisegna.
+    store.setVaultName("Appunti");
+    expect(crumbs.querySelector("[data-folder='']")!.textContent).toBe("Appunti");
+    // Senza nome il percorso parte dal nome.
+    store.setVaultName("");
+    expect(crumbs.querySelectorAll("[data-folder]")).toHaveLength(0);
+    expect(crumbs.querySelector(".crumb-name")!.textContent).toBe("Lettera.docx");
+  });
+
+  it("il formato lo dice la linguetta: la figura per ogni documento, il nome per chi non è una nota", async () => {
+    await start("off", null, { [NOTA]: "# Diario\n" });
+    await open(NOTA);
+    await open("Lettera.docx");
+    const { icon } = await import("../ui/icons");
+    const { t } = await import("../i18n/strings");
+    const drawn = (which: string) => new DOMParser().parseFromString(icon(which), "image/svg+xml").documentElement.innerHTML;
+    const tabOf = (doc: string) => [...document.querySelectorAll<HTMLElement>(".pane .tab")].find((tab) => tab.dataset.key?.includes(doc))!;
+    const note = tabOf(NOTA);
+    const word = tabOf("Lettera.docx");
+    expect(note.querySelector(".tab-name > svg.tab-format")!.innerHTML).toBe(drawn("notes"));
+    expect(note.getAttribute("aria-label")).toBe("Diario");
+    expect(word.querySelector(".tab-name > svg.tab-format")!.innerHTML).toBe(drawn("format-word"));
+    expect(word.getAttribute("aria-label")).toBe(`Lettera · ${t("format.kind.word")}`);
+  });
+
+  it("il menu «…» di una nota ha le voci di oggi", async () => {
+    await start("off", null, { [NOTA]: "# Diario\n" });
+    await open(NOTA);
+    const { t } = await import("../i18n/strings");
+    const { icon } = await import("../ui/icons");
+    const menu = toolbarOf(panes()[0]!).querySelector<HTMLButtonElement>("[data-pane-menu]")!;
+    // «…» è la figura della cornice, non tre caratteri.
+    expect(menu.textContent).toBe("");
+    expect(menu.querySelector(":scope > svg")!.innerHTML).toBe(
+      new DOMParser().parseFromString(icon("more"), "image/svg+xml").documentElement.innerHTML,
+    );
+    expect(menu.getAttribute("aria-label")).toBe(t("document.pane.menu"));
+    menu.click();
+    await settle();
+    expect([...document.querySelectorAll("#context-menu .menu-label")].map((l) => l.textContent)).toEqual([
+      t("pane.menu.split_right"),
+      t("pane.menu.split_down"),
+      t("pane.print"),
+      t("pane.slides"),
+      t("pane.recorder.open"),
+      t("pane.menu.close_tab"),
+      t("pane.menu.close_pane"),
+    ]);
+  });
+
+  it("una superficie con una modalità sola non ha il bottone, e un riquadro vuoto nemmeno", async () => {
+    await start("off", null);
+    await open(FOTO);
+    const pane = panes()[0]!;
+    await waitFor("l'immagine montata", () => pane.dataset.mode !== undefined && currentOf(pane).hidden);
+    expect(toolbarOf(pane).querySelector<HTMLElement>(":scope > .segmented")!.hidden).toBe(true);
+    const registry = await import("../ui/commands");
+    // Si chiudono l'immagine e la nota di benvenuto: il riquadro resta vuoto.
+    const close = registry.allCommands().find((entry) => entry.id === "shell.tab.close")!;
+    for (let i = 0; i < 4 && toolbarOf(pane).querySelector(":scope > .muted")!.textContent !== ""; i += 1) {
+      await close.run!();
+      await settle();
+    }
+    expect(toolbarOf(pane).querySelector(":scope > .muted")!.textContent).toBe("");
+    expect(currentOf(pane).hidden).toBe(true);
+    expect(toolbarOf(pane).querySelector<HTMLElement>(":scope > .pane-nav")!.hidden).toBe(true);
   });
 });
 

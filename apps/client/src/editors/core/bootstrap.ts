@@ -11,13 +11,18 @@ import type { GridPalette } from "../grid/palette/commands";
 import type { GridActiveCellSource } from "../grid/compact";
 import { onLanguage, resolvedLanguage, t, type Key } from "../../i18n/strings";
 import { onEvent } from "../../state/kernel";
+import { noteFactsSource } from "../../state/note-facts";
+import { notify } from "../../ui/notify";
+import { revealSidePanel } from "../../ui/side-panels";
 import { PROOF_NS, type ProofPorts } from "./proof-ports";
 import { currentTheme } from "../../theme/theme";
 import { mountBaseSurface } from "../base/surface";
 import { BASE_OWNER, BASE_PROFILE, BASE_FORMAT } from "../base/data";
 import { createTextEngine } from "../text/engine";
 import { createPlainTextProfile } from "../text/profiles/plain-text";
-import { mountMediaSurface, profileForKind, type MediaSurfaceDeps } from "../media/media-surface";
+import { mountMediaSurface, profileForKind, type MediaSurfaceDeps, type PdfAnnotationsPort } from "../media/media-surface";
+import { readAllResource } from "../media/resource-port";
+import { isErrorKind } from "../../host/errors";
 import { mediaKindOfId, mimeOfId } from "../media/media-types";
 import { mountSvgSurface, SVG_PROFILE } from "../text/profiles/svg";
 import {
@@ -38,7 +43,6 @@ import type { WebCardPort } from "../canvas/cards/web";
 import type { PdfCardPort } from "../canvas/cards/pdf";
 import type { SheetCardPort } from "../grid/card";
 import { openResourcePort, type ResourcePort, type ResourceTransport } from "../media/resource-port";
-import { isErrorKind } from "../../host/errors";
 import {
   CANVAS_FAMILY,
   CANVAS_FORMAT,
@@ -567,6 +571,17 @@ export function createDocumentSurfaceRegistry(
   options: SurfaceBootstrapOptions,
 ): DocumentSurfaceRegistry {
   const registry = new DocumentSurfaceRegistry();
+  // La riga dei dati sotto il titolo delle note: la lettura (indice e
+  // anagrafe) la fa la shell, e l'editor la riceve; «3 collegamenti» apre la
+  // scheda Collegamenti dell'ispettore, come «Mostra le note che lo usano».
+  // L'ispettore (`ui/views.ts`) si carica al primo clic: al montaggio del
+  // modulo cerca il suo posto nella pagina, che qui non è detto ci sia.
+  const noteFacts = noteFactsSource(() => {
+    revealSidePanel("inspector");
+    void import("../../ui/views").then(({ selectInspectorTab }) => {
+      if (!selectInspectorTab("backlinks")) notify(t("explorer.used_by_missing"), "info");
+    }, () => {});
+  });
   registry.register({
     owner: "fub.shell.text",
     family: "text",
@@ -604,6 +619,7 @@ export function createDocumentSurfaceRegistry(
             onNewSubpage: options.onNewSubpage,
             pageIcons: options.pageIcons,
             linkCards: options.linkCards,
+            noteFacts,
             completions: options.completions,
             slash: options.slash,
             proof: {
@@ -737,8 +753,48 @@ function mountViewer(options: SurfaceBootstrapOptions, profile: string, context:
         show: (root, doc, life) =>
           showPhotoData(root, doc, { onOpenDocument: options.onOpenDocument, onSearchTag: options.onSearchTag }, life),
       },
+      // Le annotazioni sopra le pagine del PDF, solo quando il vault le serve
+      // (il comando «Annota» c'è): lette con la porta delle risorse, rilette
+      // agli eventi dei documenti.
+      annotations: options.media.annotations ?? pdfAnnotationsPort(options.media),
     })
     : staticSurface("viewer", profile, context, "viewer.unavailable");
+}
+
+/// Il `.fubann` di un PDF per il visore: il testo con la porta delle risorse
+/// (un file che non c'è è `null`), e i cambi dagli eventi dei documenti e dei
+/// file, mai per tasto. Un vault riaperto o degli eventi persi lo rileggono.
+function pdfAnnotationsPort(media: MediaSurfaceDeps): PdfAnnotationsPort {
+  return {
+    available: () => media.annotate?.available() ?? false,
+    read: async (id) => {
+      try {
+        const { bytes } = await readAllResource(media.transport, id);
+        return new TextDecoder("utf-8", { ignoreBOM: true }).decode(bytes);
+      } catch (error) {
+        if (isErrorKind(error, "not_found")) return null;
+        throw error;
+      }
+    },
+    watch: (id, changed) => {
+      const touches = (...ids: string[]): void => {
+        if (ids.includes(id)) changed();
+      };
+      const stops = [
+        onEvent("document_changed", (e) => touches(e.id)),
+        onEvent("entry_changed", (e) => touches(e.id)),
+        onEvent("document_removed", (e) => touches(e.id)),
+        onEvent("entry_removed", (e) => touches(e.id)),
+        onEvent("document_renamed", (e) => touches(e.from, e.to)),
+        onEvent("entry_renamed", (e) => touches(e.from, e.to)),
+        onEvent("vault_opened", changed),
+        onEvent("overflow", changed),
+      ];
+      return () => {
+        for (const stop of stops) stop();
+      };
+    },
+  };
 }
 
 type GridModule = typeof import("../grid/engine");

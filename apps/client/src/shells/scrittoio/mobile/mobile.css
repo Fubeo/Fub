@@ -152,6 +152,12 @@
     display: none;
   }
 
+  /* Senza la banda, sotto il foglio c'è il bordo dello schermo: la scrivania
+     non si allarga in basso, ai fianchi sì, come sul computer. */
+  :root[data-client-shell="mobile"] #panes {
+    --reach-b: 0px;
+  }
+
   :root[data-client-shell="mobile"] #app:not([data-welcome]) #open-help,
   :root[data-client-shell="mobile"] #app:not([data-welcome]) #toggle-light {
     display: none;
@@ -170,13 +176,46 @@
   }
 }
 
+/* ── La barra di formato: la fila piatta ─────────────────────────────────
+   Sul computer la barra di formato sta nel vassoio della barra in una fila
+   (`kit-bar`). Al telefono resta la fila a tutta larghezza: i bersagli da
+   dito non entrano in un vassoio alto quanto la barra, e in piedi il bottone
+   della modalità ne chiude l'ultima casella. I gruppi si dividono con un filo
+   corto, e un filo separa la fila dal testo (in piedi passa sopra). */
+:root[data-client-shell="mobile"] .pane > .format-bar {
+  box-shadow: inset 0 -1px 0 var(--border);
+}
+:root[data-client-shell="mobile"] .pane > .format-bar.kit-bar {
+  margin: 0;
+  padding: 0 var(--space-5);
+  border-radius: 0;
+  background: transparent;
+}
+:root[data-client-shell="mobile"] .pane > .format-bar.kit-bar > .kit-bar-group {
+  padding: 0 var(--space-3) 0 0;
+  border-radius: 0;
+  background: linear-gradient(var(--border-strong), var(--border-strong)) right center / 1px 16px no-repeat;
+  box-shadow: none;
+}
+:root[data-client-shell="mobile"] .pane > .format-bar.kit-bar > .kit-bar-group:last-of-type {
+  background-image: none;
+}
+
+/* Il segno del livello («H1») vive nel margine sinistro, che al telefono è
+   più stretto di lui: si vedrebbe tagliato contro il bordo. Il livello si
+   legge e si cambia nella barra in basso («Titolo 1»). Nascosto e non tolto:
+   la riga del titolo tiene le stesse misure e CodeMirror non rimisura. */
+:root[data-client-shell="mobile"] .cm-editor .cm-content .cm-fub-heading-pill {
+  visibility: hidden;
+}
+
 /* ── Sotto i 600 px: una colonna ─────────────────────────────────────────── */
 
 @media (max-width: 599px) {
-  /* La barra del titolo: marchio, pillola, campanella. Il vault, indietro e
-     avanti, i lavori in corso e l'ispettore stanno nel menu del marchio, nel
-     lanciatore e nella barra inferiore. I lavori tornano a vista finché ce n'è
-     uno in corso. */
+  /* La barra del titolo: pillola e campanella (il marchio qui non si vede,
+     più sotto). Il vault, indietro e avanti, i lavori in corso e l'ispettore
+     stanno nel lanciatore, nella barra inferiore e nel gesto indietro del
+     telefono. I lavori tornano a vista finché ce n'è uno in corso. */
   :root[data-client-shell="mobile"] #topbar {
     grid-template-columns: auto minmax(0, 1fr) auto;
   }
@@ -264,8 +303,8 @@
     display: none;
   }
 
-  /* Aiuto e luce stanno nel menu del marchio e nel lanciatore: nella barra
-     restano finché non c'è un vault, quando le icone dei pannelli non ci sono. */
+  /* Aiuto e luce stanno nel lanciatore: nella barra restano finché non c'è un
+     vault, quando le icone dei pannelli non ci sono. */
   :root[data-client-shell="mobile"] #app:not([data-welcome]) #open-help,
   :root[data-client-shell="mobile"] #app:not([data-welcome]) #toggle-light {
     display: none;
@@ -330,7 +369,9 @@
     box-shadow: inset 0 1px 0 var(--border);
   }
 
-  :root[data-client-shell="mobile"] .pane:not(:has(.cm-focused)) > .format-bar:not(:focus-within):not(:has([aria-expanded="true"])) {
+  /* Col menu delle modalità aperto la barra resta, e il bottone che ne chiude
+     la fila non salta: aprirlo porta il fuoco fuori dal testo. */
+  :root[data-client-shell="mobile"] .pane:not(:has(.cm-focused)):not(:has(> .pane-mode-current[aria-expanded="true"])) > .format-bar:not(:focus-within):not(:has([aria-expanded="true"])) {
     display: none;
   }
 
@@ -411,5 +452,150 @@
   :root[data-client-shell="mobile"] .rich-surface > .rich-side-open {
     display: inline-flex;
     min-height: var(--touch);
+  }
+}
+
+/* ── La modalità in basso a destra ──────────────────────────────────────────
+   Dove la banda non c'è, la modalità la dice il bottone del foglio: in piedi,
+   e sdraiato quando l'altezza manca (la banda si ritira dai 600 px in su sotto
+   i 500 di altezza, più su). È la sola icona in un tondo alto un dito,
+   all'angolo basso della carta: lì il pollice arriva, e lì stanno Annulla e
+   Ripeti mentre si scrive. Il nome resta all'etichetta e al suggerimento. Il
+   bottone viene dopo la barra di formato, nel DOM e nel giro del Tab.
+   Sdraiato la barra di formato sta in cima, come sul computer: il tondo resta
+   all'angolo anche mentre si scrive, nel margine bianco a destra del testo.
+   L'anello del fuoco sta dentro il tondo (`shells/mobile/mobile.css`). */
+@media (max-width: 599px), (max-height: 500px) {
+  :root[data-client-shell="mobile"] .pane > .pane-mode-current:not([hidden]) {
+    position: absolute;
+    right: var(--space-6);
+    bottom: var(--space-6);
+    z-index: 2;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: var(--touch);
+    height: var(--touch);
+    padding: 0;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-pill);
+    background: var(--bg-elev);
+    box-shadow: var(--shadow-2);
+  }
+  :root[data-client-shell="mobile"] .pane > .pane-mode-current > svg {
+    flex: none;
+    width: 20px;
+    height: 20px;
+  }
+  :root[data-client-shell="mobile"] .pane > .pane-mode-current > .pane-mode-name {
+    display: none;
+  }
+  :root[data-client-shell="mobile"] .pane > .pane-mode-current:hover {
+    background: linear-gradient(var(--overlay-hover), var(--overlay-hover)), var(--bg-elev);
+  }
+  /* Il tondo resta carta anche premuto: il velo si stende sopra, non al posto. */
+  :root[data-client-shell="mobile"] .pane > .pane-mode-current[aria-expanded="true"] {
+    background: linear-gradient(var(--accent-wash), var(--accent-wash)), var(--bg-elev);
+    color: var(--accent);
+  }
+
+  /* Il documento ha il suo pulsante dei commenti in basso a destra: si sposta
+     a sinistra del tondo, sulla stessa riga. */
+  :root[data-client-shell="mobile"] .pane:has(> .pane-mode-current:not([hidden])) .rich-surface > .rich-side-open {
+    right: calc(var(--space-6) + var(--touch) + var(--space-4));
+  }
+}
+
+@media (max-width: 599px) {
+  /* In piedi, mentre si scrive, c'è la barra di formato in fondo: il bottone
+     ne chiude la fila, piatto, nell'ultima casella dopo Annulla, Ripeti e il
+     resto. La barra gli lascia il posto, e il filo che la separa dal testo
+     passa anche sopra di lui. Le condizioni sono quelle che mostrano la barra,
+     più il suo menu aperto. Con la tastiera aperta la fila sta sopra i tasti. */
+  :root[data-client-shell="mobile"] .pane:has(> .pane-mode-current:not([hidden])) > .format-bar {
+    margin-inline-end: var(--touch);
+  }
+  :root[data-client-shell="mobile"] #app:not([data-formatbar-off]) .pane:has(> .format-bar:not([hidden])):is(:has(.cm-focused), :has(> .format-bar:focus-within), :has(> .format-bar [aria-expanded="true"]), :has(> .pane-mode-current[aria-expanded="true"])) > .pane-mode-current:not([hidden]) {
+    right: 0;
+    bottom: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: inset 0 1px 0 var(--border);
+  }
+  :root[data-client-shell="mobile"] #app:not([data-formatbar-off]) .pane:has(> .format-bar:not([hidden])):is(:has(.cm-focused), :has(> .format-bar:focus-within), :has(> .format-bar [aria-expanded="true"]), :has(> .pane-mode-current[aria-expanded="true"])) > .pane-mode-current:not([hidden]):hover {
+    background: var(--overlay-hover);
+  }
+  :root[data-client-shell="mobile"] #app:not([data-formatbar-off]) .pane:has(> .format-bar:not([hidden])):is(:has(.cm-focused), :has(> .format-bar:focus-within), :has(> .format-bar [aria-expanded="true"]), :has(> .pane-mode-current[aria-expanded="true"])) > .pane-mode-current[aria-expanded="true"] {
+    background: var(--accent-wash);
+  }
+}
+
+/* ── La testata del telefono: il nome, lo stato, «…» ───────────────────────
+   La testata è stretta e, in piedi, la banda non c'è: resta il nome del file
+   (con l'estensione, che sul telefono dice il formato), lo stato e «…». Le
+   cartelle si leggono nel cassetto. */
+:root[data-client-shell="mobile"] .sheet-title > svg,
+:root[data-client-shell="mobile"] .sheet-title > [data-folder],
+:root[data-client-shell="mobile"] .sheet-title > .crumb-sep {
+  display: none;
+}
+:root[data-client-shell="mobile"] .sheet-title {
+  gap: 0;
+}
+/* «Si scrive» è lo stato normale: sul telefono sta in «…» (la prima voce, che
+   apre la stessa spiegazione del chip). Gli altri stati restano nella testata,
+   dove si vedono, col chip dei 44 px del tocco (`shells/mobile/mobile.css`). */
+:root[data-client-shell="mobile"] .pane-toolbar > .pane-standing[data-standing="writes"] {
+  display: none;
+}
+
+@media (max-width: 599px) {
+  /* ── In piedi il foglio è lo schermo ──────────────────────────────────────
+     Niente scrivania ai fianchi: la carta va da un bordo all'altro, con gli
+     angoli vivi. `--sheet-gap` a zero vince anche la regola della struttura
+     che rimette il margine a sinistra quando il cassetto è chiuso. La carta
+     tocca la barra di sotto: non c'è scrivania dove l'ombra possa cadere, e
+     la scrivania non si allarga per lei. */
+  :root[data-client-shell="mobile"] #panes {
+    --sheet-gap: 0px;
+    --sheet-reach: 0px;
+  }
+  :root[data-client-shell="mobile"] .pane::before,
+  :root[data-client-shell="mobile"] .pane > [role="tabpanel"] {
+    border-radius: 0;
+  }
+  :root[data-client-shell="mobile"] .pane::before,
+  :root[data-client-shell="mobile"] .pane.focus::before,
+  :root[data-client-shell="mobile"] .pane .tab-entry:has(> .tab[aria-selected="true"]):not([data-lifted]) {
+    box-shadow: none;
+  }
+
+  /* ── La barra del titolo senza il marchio ─────────────────────────────────
+     In piedi la barra del titolo tiene la pillola e la campanella: il marchio
+     se ne va, e la pillola parte da dove stava lui. Il menu dell'applicazione
+     qui non ha più una porta, e non perde niente: ogni sua voce è un comando,
+     e la pillola apre il lanciatore che li esegue tutti; le impostazioni sono
+     anche nella barra inferiore, e indietro è il gesto del telefono. Il bottone
+     resta nel DOM (lo cercano `frame/brand-menu.ts` e i test): non si vede, e
+     il fuoco che tornerebbe a lui va alla pillola. Sdraiato, da 600 px, la
+     barra del titolo è quella stretta del computer, e il marchio torna con il
+     menu. */
+  :root[data-client-shell="mobile"] #brand-menu {
+    display: none;
+  }
+
+  /* ── Lo stato in figura ───────────────────────────────────────────────────
+     «Salvato» è la spunta, ciò che è in sospeso il punto: la parola resta al
+     nome del bottone e al suggerimento. Ciò che è andato storto tiene la
+     parola rossa, perché è la sola che deve farsi leggere. Alto e largo un
+     dito. */
+  :root[data-client-shell="mobile"] .pane-toolbar .sheet-save:not([data-state="fallito"]):not([data-state="conflitto"]) {
+    justify-content: center;
+    min-width: var(--touch);
+    min-height: var(--touch);
+    padding: 0;
+    gap: 0;
+    font-size: 0;
   }
 }

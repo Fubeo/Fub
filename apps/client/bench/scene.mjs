@@ -72,12 +72,18 @@ const FAILURES = {
 
 /// Un telefono in piedi: la finestra delle scene di `mobile.html`.
 const PHONE = { width: 390, height: 844 };
+/// Il catalogo del kit intero, fino alla barra in una fila e alla colonna.
+const KIT_WINDOW = { width: 1280, height: 960 };
 /// La finestra in cui, con l'albero aperto e l'ispettore chiuso, il foglio è
 /// largo 700 px: la misura «700 px» del prototipo della barra dei fogli.
 const SHEET_700 = { width: 1016, height: 800 };
 /// La finestra in cui, senza l'albero e l'ispettore, il foglio è largo
 /// 1248 px: la misura «piena» del prototipo.
 const SHEET_FULL = { width: 1308, height: 800 };
+/// La nota nella finestra minima del computer (`minWidth` e un'altezza da
+/// prototipo): la misura «700 px» del prototipo di Scrittoio 2, che sul
+/// computer non si può avere.
+const NOTE_NARROW = { width: 800, height: 800 };
 /// Una finestra documento appena aperta.
 const DOCUMENT_WINDOW = { width: 900, height: 700 };
 
@@ -356,7 +362,7 @@ export const SCENE = onPage("shell", [
     title: "Modalità Lettura: il documento reso",
     prepare: async (page) => {
       await openNote(page, "Guida/Sintassi di Fub.md");
-      await page.click('.pane.focus .pane-toolbar button[data-mode="reading"]');
+      await chooseMode(page, "reading");
       await page.waitForSelector(".pane-preview h1, .markdown-preview h1");
     },
   },
@@ -375,7 +381,7 @@ export const SCENE = onPage("shell", [
         await api.writeDocument("Benvenuto.md", "# Benvenuto in Fub\n\nCambiata da un'altra app.\n", { kind: "dictated" });
       });
       await page.waitForSelector(".pane.focus [data-banner='document.conflict.body']:not([hidden]) .conflict-actions");
-      await page.click('.pane.focus .pane-toolbar button[data-mode="reading"]');
+      await chooseMode(page, "reading");
       await page.waitForSelector(".pane.focus [data-banner='document.conflict.body'] [data-conflict-reading]");
       await page.focus(".pane.focus .conflict-actions button >> nth=0");
     },
@@ -385,7 +391,7 @@ export const SCENE = onPage("shell", [
     title: "Modalità Sorgente: la tavolozza della sintassi",
     prepare: async (page) => {
       await openNote(page, "Guida/Frammenti di codice.md");
-      await page.click('.pane.focus .pane-toolbar button[data-mode="source"]');
+      await chooseMode(page, "source");
       await page.waitForSelector(".cm-content");
     },
   },
@@ -394,7 +400,10 @@ export const SCENE = onPage("shell", [
     title: "L'ispettore, sulla seconda scheda",
     prepare: async (page) => {
       await page.click("#right-pane .inspector-tab >> nth=1");
-      await page.waitForSelector("#right-pane .ui-list-item, #right-pane .ui-empty-state");
+      // Nella scheda aperta: anche la Struttura, nascosta, ha le sue voci («In entrata»).
+      await page.waitForSelector(
+        "#right-pane .declared-view-panel:not([hidden]) :is(.ui-list-item, .ui-empty-state)",
+      );
     },
   },
   {
@@ -809,25 +818,83 @@ export const SCENE = onPage("shell", [
     id: "nota-tre-modi",
     title: "La stessa nota in Sorgente, Live e Lettura: tre fogli affiancati",
     prepare: async (page) => {
-      // In un foglio stretto le modalità sono un bottone solo che apre la
-      // scelta; in uno largo, i segmenti.
-      const chooseMode = async (mode, label) => {
-        const segment = page.locator(`.pane.focus .pane-toolbar button[data-mode="${mode}"]`);
-        if (await segment.isVisible()) return segment.click();
-        await page.click(".pane.focus .pane-toolbar .pane-mode-current");
-        await page.click(`#context-menu [role="menuitemradio"]:has-text("${label}")`);
-      };
+      // La modalità del riquadro a fuoco si sceglie dalla banda.
       await openNote(page, "Guida/Sintassi di Fub.md");
-      await chooseMode("source", "Sorgente");
+      await chooseMode(page, "source");
       await runScrittoioCommand(page, "Dividi il riquadro a destra");
-      await chooseMode("live_preview", "Live");
+      await chooseMode(page, "live_preview");
       await runScrittoioCommand(page, "Dividi il riquadro a destra");
-      await chooseMode("reading", "Lettura");
+      await chooseMode(page, "reading");
       await page.waitForSelector('.pane[data-mode="source"] .cm-content');
       await page.waitForSelector('.pane[data-mode="live_preview"] .cm-content');
       await page.waitForSelector('.pane[data-mode="reading"] .pane-preview');
     },
   },
+  // **Scrittoio 2** (il prototipo `PLAN-ui/scrittoio-2.html` resta nella storia
+  // del ramo `piano/scrittoio-2`, fino a 480a538d9): gli stati del prototipo che
+  // prima non avevano una foto. La nota è quella che il banco apre per prima;
+  // la finestra «stretta» è la minima della finestra vera (800 px, come
+  // `minWidth` di Tauri), lo stato a 700 px più vicino che il computer mostri.
+  {
+    id: "banda-modalita",
+    title: "La nota col menu delle modalità aperto dalla banda",
+    prepare: async (page) => {
+      await page.waitForSelector(".pane.focus .cm-content");
+      await page.click("#status-mode");
+      await page.waitForSelector('#context-menu [role="menuitemradio"][aria-checked="true"]');
+      await page.waitForSelector('#status-mode[aria-expanded="true"]');
+    },
+  },
+  {
+    id: "nota-stretta",
+    title: "La nota nella finestra minima, 800 px: i cassetti ritirati, la banda intera",
+    viewport: NOTE_NARROW,
+    prepare: async (page) => {
+      await page.waitForSelector("#layout.layout-compact");
+      await page.waitForSelector(".pane.focus .cm-content");
+    },
+  },
+  ...[
+    ["barra-formato", "La nota con la barra di formato, sul computer"],
+    ["barra-formato-stretta", "La barra di formato nella finestra minima, 800 px: ciò che non ci sta va in «…»", NOTE_NARROW],
+  ].map(([id, title, viewport]) => ({
+    id,
+    title,
+    // `?formatbar=1` dà alla finestra principale i comandi di formato che
+    // l'host finto dà solo al telefono: senza, le scene di oggi restano com'erano.
+    query: "formatbar=1",
+    ...(viewport ? { viewport } : {}),
+    prepare: async (page) => {
+      // Il cursore nella prima voce dell'elenco, come il prototipo: la barra
+      // dice premuto «Elenco puntato». La barra si monta coi comandi, che
+      // arrivano dopo la nota: la scena aspetta i suoi pulsanti e lo stato.
+      await page.click('.pane.focus .cm-content .cm-line:has-text("Un elenco corto")');
+      await page.keyboard.press("End");
+      await page.waitForSelector(".pane.focus .format-bar.kit-bar .kit-bar-button");
+      await page.waitForSelector('.pane.focus .format-bar .kit-bar-button[aria-pressed="true"]');
+      await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+    },
+  })),
+  ...[
+    ["icone-figure", "Il selettore dell'icona su una cartella: le figure del vault", ""],
+    ["icone-emoji", "Il selettore dell'icona su una cartella, col vault delle emoji", "icone=emoji"],
+  ].map(([id, title, query]) => ({
+    id,
+    title,
+    query,
+    prepare: async (page) => {
+      // Dalla strada vera: il tasto destro sulla cartella, poi «Organizza» e
+      // «Icona…», con un clic ciascuno (il passaggio del puntatore apre il
+      // sottomenu dopo una pausa, e l'orologio del banco è fermo). Il
+      // selettore nasce dove si è cliccato col tasto destro, come nel prototipo.
+      await page.click('#file-list li[data-path="Guida"] > .tree-row', { button: "right", position: { x: 40, y: 18 } });
+      await page.click('#context-menu [role="menuitem"]:has-text("Organizza")');
+      await page.click('.context-submenu [role="menuitem"]:has-text("Icona…")');
+      await page.waitForSelector('#icon-picker .icon-grid--figures [data-icon^="fub:"]');
+      await page.waitForSelector("#context-menu", { state: "detached" });
+      await page.waitForSelector("#icon-picker input:focus");
+    },
+  })),
   // **La Live** (`?live=<caso>`, vedi `live-fixture.ts`): le scene del piano
   // «Live e Blocchi», ognuna con il suo testo, il cursore nel punto che il caso
   // dice e, dove serve, i tasti che scrive. È il «prima» con cui ogni fase si
@@ -1188,6 +1255,7 @@ export const SCENE = onPage("shell", [
     {
       id: "kit",
       title: "Il kit: ogni primitiva nei suoi stati",
+      viewport: KIT_WINDOW,
       prepare: async () => {},
     },
     {
@@ -1217,6 +1285,7 @@ export const SCENE = onPage("shell", [
     {
       id: "kit-focus",
       title: "Il kit: il fuoco vero da tastiera, e la scheda che ne esce",
+      viewport: KIT_WINDOW,
       prepare: async (page) => {
         // Da tastiera, perché l'anello sia quello di `:focus-visible` e non il
         // gemello che la pagina tiene fermo: quattro Tab portano al rimando.
@@ -1329,32 +1398,48 @@ export const SCENE = onPage("shell", [
       viewport: PHONE,
       prepare: async (page) => {
         await openRichDocument(page, "Documenti/Prova.docx");
-        // Il pallino dello stato nella testata resta il chip di 24 px del
-        // computer, non un cerchio di 44, e si tocca lo stesso 10 px sopra e
-        // sotto il suo centro (`shells/mobile/mobile.css`, PA T47).
+        // Il documento si scrive tutto: «Si scrive» sta in «…», e la testata
+        // non lo mostra (`shells/scrittoio/mobile/mobile.css`). Gli altri
+        // stati sì: il pallino resta il chip di 24 px del computer, non un
+        // cerchio di 44, e si tocca lo stesso 10 px sopra e sotto il suo
+        // centro (`shells/mobile/mobile.css`, PA T47). Lo si misura come
+        // «parti chiuse», per lo spazio di una misura sola: nello stesso giro
+        // il tipo torna quello vero, e la foto non lo vede.
         await page.waitForFunction(() => {
           const chip = document.querySelector(".pane.focus .pane-toolbar .pane-standing-chip");
-          if (!(chip instanceof HTMLElement) || chip.getClientRects().length === 0) return false;
-          const r = chip.getBoundingClientRect();
-          if (r.height > 24.5 || r.width >= 44) return false;
-          const x = r.left + r.width / 2;
-          const y = r.top + r.height / 2;
-          // Il suo tocco non copre il bottone della modalità accanto.
-          const mode = document.querySelector(".pane.focus .pane-toolbar > .pane-mode-current");
-          const m = mode?.getBoundingClientRect();
-          const modeFree = !m || m.width === 0
-            || document.elementFromPoint(m.left + 1, m.top + m.height / 2)?.closest(".pane-mode-current") === mode;
-          return modeFree
-            && document.elementFromPoint(x, y - 10)?.closest(".pane-standing-chip") === chip
-            && document.elementFromPoint(x, y + 10)?.closest(".pane-standing-chip") === chip;
+          const standing = chip?.parentElement;
+          if (!(chip instanceof HTMLElement) || !(standing instanceof HTMLElement) || standing.hidden) return false;
+          if (standing.dataset.standing !== "writes" || chip.getClientRects().length !== 0) return false;
+          const measure = () => {
+            if (chip.getClientRects().length === 0) return false;
+            const r = chip.getBoundingClientRect();
+            if (r.height > 24.5 || r.width >= 44) return false;
+            const x = r.left + r.width / 2;
+            const y = r.top + r.height / 2;
+            // Il suo tocco non copre il bottone della modalità.
+            const mode = document.querySelector(".pane.focus > .pane-mode-current");
+            const m = mode?.getBoundingClientRect();
+            const modeFree = !m || m.width === 0
+              || document.elementFromPoint(m.left + 1, m.top + m.height / 2)?.closest(".pane-mode-current") === mode;
+            return modeFree
+              && document.elementFromPoint(x, y - 10)?.closest(".pane-standing-chip") === chip
+              && document.elementFromPoint(x, y + 10)?.closest(".pane-standing-chip") === chip;
+          };
+          standing.dataset.standing = "closed";
+          try {
+            return measure();
+          } finally {
+            standing.dataset.standing = "writes";
+          }
         }, null, { timeout: 5_000 });
         // Il fuoco della tastiera sul bottone della modalità: dal menu «…»
-        // un passo indietro, così l'anello è quello di `:focus-visible`. Il
-        // bottone sta sulla carta o accanto: l'anello sta dentro il suo
-        // rettangolo, cioè lo scarto è negativo e largo almeno quanto la linea
-        // (`shells/mobile/mobile.css`, PA T47).
+        // un passo avanti (il documento non ha la barra di formato), così
+        // l'anello è quello di `:focus-visible`. Il bottone è il tondo sulla
+        // carta: l'anello sta dentro il suo rettangolo, cioè lo scarto è
+        // negativo e largo almeno quanto la linea (`shells/mobile/mobile.css`,
+        // PA T47).
         await page.focus(".pane.focus [data-pane-menu]");
-        await page.keyboard.press("Shift+Tab");
+        await page.keyboard.press("Tab");
         await page.waitForFunction(() => {
           const mode = document.activeElement;
           if (!(mode instanceof HTMLElement) || !mode.matches(".pane.focus .pane-mode-current:focus-visible")) return false;
@@ -1588,6 +1673,21 @@ async function runCommand(page, title) {
   await page.waitForSelector("#command-palette", { state: "detached" });
 }
 
+/// Il nome delle modalità nel menu, in italiano come il banco.
+const MODE_LABELS = { live_preview: "Live", blocks: "Blocchi", source: "Sorgente", reading: "Lettura" };
+
+/// Sceglie la modalità del riquadro a fuoco come la persona (Scrittoio 2, T3):
+/// dalla voce della banda, e dove la banda non c'è (il telefono) dal tondo del
+/// foglio; poi la voce del menu col suo nome. I segmenti della testata restano
+/// nel DOM ma non si vedono, e Playwright non clicca ciò che non si vede.
+export async function chooseMode(page, mode, label = MODE_LABELS[mode]) {
+  if (await page.isVisible(`.pane.focus[data-mode="${mode}"]`)) return;
+  if (await page.isVisible("#status-mode")) await page.click("#status-mode");
+  else await page.click(".pane.focus > .pane-mode-current");
+  await page.click(`#context-menu [role="menuitemradio"]:has-text("${label}")`);
+  await page.waitForSelector(`.pane.focus[data-mode="${mode}"]`);
+}
+
 /// Apre una nota dall'albero. Sta in una funzione perché due scene la fanno, e
 /// perché il modo di aprirla è una cosa che può cambiare: cambierà qui.
 ///
@@ -1616,8 +1716,8 @@ async function openNote(page, path) {
 async function openLive(page, keys, scroll, mode = "live_preview") {
   const doc = await page.evaluate(() => globalThis.__fubLiveBench?.doc ?? null);
   if (doc === null) throw new Error("la pagina non ha la nota della Live");
-  // In una finestra stretta l'albero sta nel cassetto, e le modalità sono un
-  // bottone solo: come in `openRichDocument` e in `nota-tre-modi`.
+  // In una finestra stretta l'albero sta nel cassetto, come in
+  // `openRichDocument`; la modalità la sceglie `chooseMode`.
   const compact = await page.evaluate(() => document.querySelector("#layout")?.classList.contains("layout-compact") ?? false);
   if (compact) {
     await page.click('#views-ribbon .rail-btn[data-panel="files"]');
@@ -1629,12 +1729,7 @@ async function openLive(page, keys, scroll, mode = "live_preview") {
     await page.click("#sidebar-scrim", { position: { x: scrim.width - 8, y: 8 } });
     await page.waitForSelector("#sidebar-scrim", { state: "hidden" });
   }
-  const live = page.locator(`.pane.focus .pane-toolbar button[data-mode="${mode}"]`);
-  if (await live.isVisible()) await live.click();
-  else if (!(await page.isVisible(`.pane.focus[data-mode="${mode}"]`))) {
-    await page.click(".pane.focus .pane-toolbar .pane-mode-current");
-    await page.click(`#context-menu [role="menuitemradio"]:has-text("${mode === "blocks" ? "Blocchi" : "Live"}")`);
-  }
+  await chooseMode(page, mode);
   await page.waitForSelector(`.pane.focus[data-mode="${mode}"] .cm-content`);
   await page.evaluate(async (bottom) => {
     // La vista si prende dal modulo del pacchetto testuale, lo stesso che la

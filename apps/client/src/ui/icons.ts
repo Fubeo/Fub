@@ -105,6 +105,35 @@ const SVG: Record<string, string> = {
   info: '<circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/>',
   keyboard: '<rect x="3" y="6" width="18" height="12" rx="2"/><path d="M7 10h.01M11 10h.01M15 10h.01M8 14h8"/>',
   monitor: '<rect x="3" y="4" width="18" height="12" rx="2"/><path d="M9 20h6M12 16v4"/>',
+
+  // --- Scrittoio 2: le modalità e il cassetto ------------------------------
+  // Le figure dei ruoli delle modalità (penna, codice, occhio) e dei Blocchi;
+  // poi il «nuovo», l'ordine e l'ora del cassetto, e la freccia che lo chiude.
+  pen: '<path d="M4 20l1-4.5L15.5 5a2.1 2.1 0 0 1 3 3L8 18.5z"/><path d="M13.5 7l3 3"/>',
+  blocks: '<rect x="4" y="4" width="16" height="7" rx="1.5"/><rect x="4" y="13" width="16" height="7" rx="1.5"/>',
+  code: '<path d="M9 7l-5 5 5 5M15 7l5 5-5 5"/>',
+  eye: '<path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z"/><circle cx="12" cy="12" r="2.8"/>',
+  compose: '<path d="M11 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-5"/><path d="M17.5 3.5a2.1 2.1 0 0 1 3 3L12 15l-4 1 1-4z"/>',
+  sort: '<path d="M4 7h16M7 12h10M10 17h4"/>',
+  clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+  "chevron-up": '<path d="M7 14l5-5 5 5"/>',
+  // «…» della testata del foglio: lo disegna la vista del documento, che si
+  // monta prima della cornice; la cornice lo usa uguale.
+  more: '<path d="M6 12h.01M12 12h.01M18 12h.01"/>',
+  // --- Scrittoio 2: le figure che una cartella o una nota sceglie ----------
+  // Monocrome, prendono il colore del testo; `ui/page-mark.ts` le legge da
+  // un valore `fub:<nome>`. `star` non c'è: la cornice la registra già.
+  book: '<path d="M5 4.5A1.5 1.5 0 0 1 6.5 3H19v15H6.5A1.5 1.5 0 0 0 5 19.5z"/><path d="M5 19.5A1.5 1.5 0 0 0 6.5 21H19v-3"/>',
+  calendar: '<rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 10h16M8 3v4M16 3v4"/>',
+  flag: '<path d="M5 21V4"/><path d="M5 4h11l-2 4 2 4H5"/>',
+  bulb: '<path d="M9 18h6M10 21h4"/><path d="M12 3a6 6 0 0 0-3.5 10.9c.6.5 1 1.2 1 2.1h5c0-.9.4-1.6 1-2.1A6 6 0 0 0 12 3z"/>',
+  inbox: '<path d="M4 13l2.5-8h11L20 13v6a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1z"/><path d="M4 13h4.5l1 2h5l1-2H20"/>',
+  archive: '<rect x="3" y="4" width="18" height="5" rx="1"/><path d="M5 9v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V9M10 13h4"/>',
+  image: '<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="1.8"/><path d="M21 16l-5-5-9 9"/>',
+  heart: '<path d="M12 20s-7.5-4.6-7.5-10A4.5 4.5 0 0 1 12 7.2 4.5 4.5 0 0 1 19.5 10c0 5.4-7.5 10-7.5 10z"/>',
+  briefcase: '<rect x="3" y="7" width="18" height="13" rx="2"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2M3 13h18"/>',
+  people: '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><path d="M16 4.6a3.5 3.5 0 0 1 0 6.8M18 14.2a6.5 6.5 0 0 1 3.5 5.8"/>',
+  music: '<path d="M9 18V5l11-2v13"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="17.5" cy="16" r="2.5"/>',
 };
 
 /// L'SVG di un'icona, come stringa HTML pronta per `innerHTML`.
@@ -299,6 +328,16 @@ function onlyPaths(svg: SVGElement, count: number): boolean {
     if (child.localName !== "path" || child.attributes.length !== 1 || !child.hasAttribute("d")) return false;
   }
   return true;
+}
+
+/// Un'icona come immagine `data:` autonoma (con il suo `xmlns`), pronta per un
+/// `url(…)` CSS: per chi non può mettere un nodo nella pagina, come una
+/// maschera dietro un `::before`. Stringa vuota se il nome è sconosciuto.
+export function iconDataUrl(name: string): string {
+  const html = icon(name);
+  if (!html) return "";
+  const svg = html.replace("<svg ", '<svg xmlns="http://www.w3.org/2000/svg" ');
+  return `data:image/svg+xml,${encodeURIComponent(svg)}`;
 }
 
 /// L'elemento SVG di un'icona, per chi vuole attaccarci un ascoltore o
