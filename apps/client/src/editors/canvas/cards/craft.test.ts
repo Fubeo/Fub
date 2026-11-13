@@ -411,6 +411,38 @@ describe("il componente spento", () => {
   });
 });
 
+describe("entrare nella scheda", () => {
+  it("con la barra in vista Invio la fa entrare, col componente acceso o spento", async () => {
+    const on = mount(fakePort(answered(preview())).port);
+    await settle();
+    expect(on.view.enter?.()).toBe(true);
+
+    const off = mount(fakePort(answered(preview()), { served: false }).port);
+    await settle();
+    expect(off.view.enter?.()).toBe(true);
+  });
+
+  it("senza barra, ferma o chiusa non c'è in cui entrare", async () => {
+    const loading = mount(fakePort(() => new Promise<CraftPreviewAnswer | null>(() => {})).port);
+    expect(loading.state()).toBe("loading");
+    expect(loading.view.enter?.()).toBe(false);
+
+    const missing = mount(fakePort(() => Promise.reject({ kind: "not_found", message: "manca" })).port);
+    await settle();
+    expect(missing.state()).toBe("missing");
+    expect(missing.view.enter?.()).toBe(false);
+
+    const still = mount(fakePort(answered(preview())).port, new CardCache(), "snapshot");
+    expect(still.state()).toBe("placeholder");
+    expect(still.view.enter?.()).toBe(false);
+
+    const picture = mount(fakePort(answered(preview())).port);
+    await settle();
+    picture.view.destroy();
+    expect(picture.view.enter?.()).toBe(false);
+  });
+});
+
 describe("il consenso alle anteprime delle app", () => {
   it("spento: lo dice e non offre nessun comando", async () => {
     const { port } = fakePort(answered(withoutImage({ render: offer("off") })));

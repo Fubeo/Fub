@@ -473,6 +473,11 @@ function mountCraftCard(port: CraftCardPort, host: HTMLElement, initial: CardMod
         fromCache();
       }
     },
+    // Invio fa entrare nella scheda: la tela salta i contenuti di una scheda
+    // che non si entra, e «Accendi…», «Apri» e «Apri con…» non si raggiungono
+    // con Tab. C'è da entrare solo con la barra dei pulsanti in vista (non
+    // durante il caricamento, col segnaposto o col file mancante).
+    enter: () => !lifetime.closed && mode === "live" && root.querySelector(".canvas-card-craft-actions") !== null,
     contentAspect: () => (lifetime.closed ? null : aspect),
     destroy: () => lifetime.close(),
   };
