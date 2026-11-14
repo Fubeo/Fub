@@ -2497,11 +2497,14 @@ fn a_replace_the_disk_refuses_keeps_the_installed_theme() {
 // --- collegare una cartella, e il tema cambia al salvataggio (PA T37) -------
 
 use fub_host::theme::{ThemeFolderLink, ThemeLink, ThemeLinkState};
+#[cfg(feature = "notify-watcher")]
 use std::sync::mpsc;
+#[cfg(feature = "notify-watcher")]
 use std::time::Duration;
 
 /// L'host con la modalità sviluppatore accesa e un'uscita degli eventi del
 /// tema collegato che li manda in un canale.
+#[cfg(feature = "notify-watcher")]
 fn linking(config: &Utf8Path) -> (Host, mpsc::Receiver<ThemeLink>) {
     let host = developer(config, true);
     let (sent, got) = mpsc::channel();
@@ -2523,12 +2526,14 @@ fn link(host: &Host, folder: &Utf8Path) -> ThemeLink {
 }
 
 /// Il primo evento entro qualche secondo (il debounce è di 200 ms).
+#[cfg(feature = "notify-watcher")]
 fn next_event(got: &mpsc::Receiver<ThemeLink>) -> ThemeLink {
     got.recv_timeout(Duration::from_secs(10))
         .expect("the linked folder sends an event")
 }
 
 /// Nessun evento per un po': i salvataggi fatti non arrivano più.
+#[cfg(feature = "notify-watcher")]
 fn no_event(got: &mpsc::Receiver<ThemeLink>) {
     if let Ok(link) = got.recv_timeout(Duration::from_millis(900)) {
         panic!("no event was expected, got {link:?}");
@@ -2536,6 +2541,7 @@ fn no_event(got: &mpsc::Receiver<ThemeLink>) {
 }
 
 /// Aspetta che l'osservatore abbia consegnato tutto ciò che c'era, e svuota.
+#[cfg(feature = "notify-watcher")]
 fn drain(got: &mpsc::Receiver<ThemeLink>) {
     while got.recv_timeout(Duration::from_millis(600)).is_ok() {}
 }
@@ -2906,6 +2912,25 @@ fn switching_or_resetting_a_profile_keeps_the_linked_folder() {
     // ricollega niente.
     host.duplicate_settings_profile(None, SettingScope::Machine, &first, "copia")
         .unwrap();
+    // Sul disco la copia non ha la chiave (l'esportazione la toglierebbe
+    // comunque: si guarda il file).
+    let on_disk: serde_json::Value = serde_json::from_str(
+        &std::fs::read_to_string(fub_host::config::machine_settings_path(&config)).unwrap(),
+    )
+    .unwrap();
+    let copy = &on_disk["profiles"]["copia"]["values"];
+    assert!(copy.is_object(), "{on_disk}");
+    assert!(
+        copy.get(fub_host::settings::DEVELOPER_THEME_FOLDER)
+            .is_none(),
+        "{copy}"
+    );
+    assert!(
+        on_disk["profiles"][first.as_str()]["values"]
+            .get(fub_host::settings::DEVELOPER_THEME_FOLDER)
+            .is_some(),
+        "the source still holds it: the copy really dropped it"
+    );
     host.unlink_theme_folder().unwrap();
     host.switch_settings_profile(None, SettingScope::Machine, "copia")
         .unwrap();
@@ -2935,4 +2960,88 @@ fn developer_mode_off_with_a_vault_open_unmounts_the_watch() {
     assert_eq!(host.watched_theme_folder(), None);
     std::fs::write(folder.join("skin.css"), ".surface { color: red; }\n").unwrap();
     no_event(&got);
+}
+
+// --- la cartella collegata sparisce e torna ---------------------------------
+
+/// Salva `skin.css` finché un evento lo dice, con l'osservatore vivo: i
+/// salvataggi arrivano di nuovo. Una scadenza, non un'attesa senza fine.
+#[cfg(feature = "notify-watcher")]
+fn saves_arrive_again(folder: &Utf8Path, got: &mpsc::Receiver<ThemeLink>) {
+    let deadline = std::time::Instant::now() + Duration::from_secs(15);
+    let mut round = 0;
+    while std::time::Instant::now() < deadline {
+        round += 1;
+        std::fs::write(
+            folder.join("skin.css"),
+            format!(".surface {{ color: inherit; }} /* {round} */\n"),
+        )
+        .unwrap();
+        while let Ok(event) = got.recv_timeout(Duration::from_millis(400)) {
+            if event.state == ThemeLinkState::Ready
+                && event.watched
+                && event.changed.iter().any(|file| file == "skin.css")
+            {
+                return;
+            }
+        }
+    }
+    panic!("the saves never arrived again");
+}
+
+/// Un build che rifà la cartella (`rm -rf dist`, poi i file di nuovo) prima
+/// che l'osservatore se ne accorga: la cartella è un'altra, il vecchio
+/// osservatore è morto, e il custode rimonta da solo. I salvataggi arrivano.
+#[cfg(feature = "notify-watcher")]
+#[test]
+fn a_folder_rebuilt_in_place_is_watched_again() {
+    let (_config_dir, config) = folders();
+    let (_source_dir, source) = folders();
+    let folder = source.join("dist");
+    write_theme(&folder, "acme.collegato", "theme-2", "");
+    let (host, got) = linking(&config);
+    let folder = link(&host, &folder).folder;
+    let folder = Utf8PathBuf::from(folder);
+
+    std::fs::remove_dir_all(&folder).unwrap();
+    write_theme(&folder, "acme.collegato", "theme-2", "");
+    saves_arrive_again(&folder, &got);
+    assert!(host.theme_link().unwrap().watched);
+    host.close_theme_link();
+}
+
+/// La cartella tolta: l'evento dice `missing` e non guardata; rimessa, il
+/// custode la riprova da solo, la shell la rilegge e i salvataggi arrivano.
+#[cfg(feature = "notify-watcher")]
+#[test]
+fn a_folder_that_comes_back_is_watched_again() {
+    let (_config_dir, config) = folders();
+    let (_source_dir, source) = folders();
+    let folder = source.join("carta");
+    write_theme(&folder, "acme.collegato", "theme-2", "");
+    let (host, got) = linking(&config);
+    let folder = Utf8PathBuf::from(link(&host, &folder).folder);
+
+    std::fs::remove_dir_all(&folder).unwrap();
+    let mut last = next_event(&got);
+    while let Ok(more) = got.recv_timeout(Duration::from_millis(600)) {
+        last = more;
+    }
+    assert_eq!(last.state, ThemeLinkState::Missing);
+    assert!(!last.watched, "a removed folder is not watched any more");
+    assert!(!host.theme_link().unwrap().watched);
+
+    write_theme(&folder, "acme.collegato", "theme-2", "");
+    // Il custode la riprova da solo e lo dice: pronta e guardata.
+    let deadline = std::time::Instant::now() + Duration::from_secs(10);
+    loop {
+        let event = got
+            .recv_timeout(deadline.saturating_duration_since(std::time::Instant::now()))
+            .expect("the keeper says the folder is back");
+        if event.state == ThemeLinkState::Ready && event.watched {
+            break;
+        }
+    }
+    saves_arrive_again(&folder, &got);
+    host.close_theme_link();
 }

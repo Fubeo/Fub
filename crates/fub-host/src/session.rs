@@ -1183,6 +1183,14 @@ pub struct Host {
     /// chiave [`crate::settings::DEVELOPER_THEME_FOLDER`] e la modalità
     /// sviluppatore ([`Host::sync_theme_link`]).
     theme_keeper: Arc<crate::theme_watch::ThemeKeeper>,
+    /// **Il turno delle chiavi locali** ([`PROFILE_LOCAL_KEYS`]): lo tengono
+    /// il cambio e l'azzeramento di un profilo di macchina per tutto il passo
+    /// (cambio e ripristino), e i gesti che scrivono la cartella collegata
+    /// («Collega una cartella…», «Scollega»). Così un collegamento che arriva
+    /// a metà di un cambio di profilo non viene sovrascritto dal ripristino.
+    /// Il turno di scrittura della macchina è privato del kernel: questo è il
+    /// turno dell'host, attorno a lui.
+    local_keys_turn: Mutex<()>,
 }
 
 impl Default for Host {
@@ -1281,6 +1289,7 @@ impl Host {
             session_notice: Mutex::new(None),
             theme_folder: Mutex::new(crate::theme::ThemeFolderGrant::default()),
             theme_keeper: Arc::default(),
+            local_keys_turn: Mutex::new(()),
             uris: Default::default(),
             machine: with_the_schema(MachineSettings::in_memory()),
             view_states: ViewStates::in_memory(),
@@ -2447,10 +2456,19 @@ impl Host {
     /// Aspetta prima che un cambio di collegamento in volo sia deciso, così
     /// `watched` dice com'è davvero: chi la chiama è già fuori dal thread
     /// principale.
+    ///
+    /// Se la cartella è pronta ma nessuno la guarda (sparita e tornata, un
+    /// osservatore che il sistema ha perso), chiede al custode di riprovare
+    /// adesso: chiedere com'è vale anche come «riprova».
     pub fn theme_link(&self) -> Option<crate::theme::ThemeLink> {
         self.theme_keeper.settle();
         let folder = self.linked_theme_folder()?;
         let mut link = crate::theme::theme_link(self.config_dir.as_deref(), &folder);
+        if link.state == crate::theme::ThemeLinkState::Ready
+            && !self.theme_keeper.is_watching(&folder)
+        {
+            self.theme_keeper.revive();
+        }
         link.watched = self.theme_keeper.is_watching(&folder);
         Some(link)
     }
@@ -2512,6 +2530,10 @@ impl Host {
             .unwrap_or_else(|_| source.to_owned());
         let (link, recorded) =
             crate::theme::link_folder(self.config_dir.as_deref(), &folder, || {
+                let _turn = self
+                    .local_keys_turn
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner);
                 self.machine.set(
                     crate::settings::DEVELOPER_THEME_FOLDER,
                     fub_abi::settings::SettingValue::Text(folder.to_string()),
@@ -2533,8 +2555,14 @@ impl Host {
     /// «Scollega»: azzera la chiave e smonta l'osservatore. Senza modalità
     /// sviluppatore, come buttare un permesso: si può sempre.
     pub fn unlink_theme_folder(&self) -> Result<(), PluginError> {
-        self.machine
-            .reset(crate::settings::DEVELOPER_THEME_FOLDER)?;
+        {
+            let _turn = self
+                .local_keys_turn
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            self.machine
+                .reset(crate::settings::DEVELOPER_THEME_FOLDER)?;
+        }
         self.tell_observer(crate::settings::DEVELOPER_THEME_FOLDER)
     }
 
@@ -3205,16 +3233,17 @@ impl Host {
     ) -> Result<(), PluginError> {
         match scope {
             fub_abi::settings::SettingScope::Machine => {
-                self.keeping_local_keys(|machine| {
+                let restored = self.keeping_local_keys(|machine| {
                     machine
                         .switch_profile(name)
                         .map_err(|e| PluginError::BadArgs(e.into()))
                 })?;
-                // A profile can alter any machine key; subscribers must reread the index.
+                // A profile can alter any machine key; subscribers must reread
+                // the index, even when restoring a local key failed.
                 for entry in self.machine.entries() {
                     self.tell_observer(&entry.spec.key)?;
                 }
-                Ok(())
+                restored
             }
             fub_abi::settings::SettingScope::Vault => {
                 with_event_drain(&self.session_workspace(vault)?, |ws| {
@@ -3233,15 +3262,17 @@ impl Host {
     ) -> Result<(), PluginError> {
         match scope {
             fub_abi::settings::SettingScope::Machine => {
-                self.keeping_local_keys(|machine| {
+                let restored = self.keeping_local_keys(|machine| {
                     machine
                         .reset_profile(name)
                         .map_err(|e| PluginError::BadArgs(e.into()))
                 })?;
+                // A profile can alter any machine key; subscribers must reread
+                // the index, even when restoring a local key failed.
                 for entry in self.machine.entries() {
                     self.tell_observer(&entry.spec.key)?;
                 }
-                Ok(())
+                restored
             }
             fub_abi::settings::SettingScope::Vault => self.in_session(vault, |session| {
                 with_event_drain(&session.workspace, |ws| ws.reset_settings_profile(name))?
@@ -3367,25 +3398,46 @@ impl Host {
     /// viaggiano coi profili ([`PROFILE_LOCAL_KEYS`]): il loro valore di
     /// prima torna com'era, qualunque cosa il profilo portasse. Un profilo
     /// non collega una cartella, e non la scollega.
+    ///
+    /// Tiene il turno delle chiavi locali per tutto il passo. Il risultato di
+    /// fuori dice se il cambio è riuscito (se no niente è cambiato); quello di
+    /// dentro se il ripristino è riuscito: se no il profilo è cambiato lo
+    /// stesso, e chi chiama deve dirlo agli osservatori prima di rispondere
+    /// con l'errore.
     fn keeping_local_keys(
         &self,
         change: impl FnOnce(&MachineSettings) -> Result<(), PluginError>,
-    ) -> Result<(), PluginError> {
+    ) -> Result<Result<(), PluginError>, PluginError> {
+        let _turn = self
+            .local_keys_turn
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let before: Vec<_> = PROFILE_LOCAL_KEYS
             .iter()
             .map(|key| (*key, explicit_value(&self.machine, key)))
             .collect();
         change(&self.machine)?;
+        let mut restored = Ok(());
         for (key, value) in before {
             if explicit_value(&self.machine, key) == value {
                 continue;
             }
-            match value {
-                Some(value) => self.machine.set(key, value)?,
-                None => self.machine.reset(key)?,
+            let put_back = match value {
+                Some(value) => self.machine.set(key, value),
+                None => self.machine.reset(key),
+            };
+            if let Err(error) = put_back {
+                tracing::warn!(
+                    target: "fub.host",
+                    key,
+                    "a machine-local key could not be restored after a profile change: {error:?}"
+                );
+                if restored.is_ok() {
+                    restored = Err(error);
+                }
             }
         }
-        Ok(())
+        Ok(restored)
     }
 
     fn machine_only(&self, vault: Option<&str>, key: &str) -> bool {
