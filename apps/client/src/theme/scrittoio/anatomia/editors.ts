@@ -55,6 +55,11 @@ export const EDITORS: PartAnatomy = {
     // un'interruzione fra due fogli, e l'intestazione che si scrive sul posto.
     // Sono segni di Fub sulla carta, non il testo del file.
     { name: "rich-sheet-marks", layer: "segno", states: [S("rest"), S("focused")], hooks: ["rich-sheet-head", "rich-sheet-foot", "rich-sheet-name", "rich-running-bar", "rich-running-label", "rich-running-area", "rich-token"] },
+    // I compiti nella nota: la pastiglia della scadenza (Live, Lettura e il
+    // recinto) è un segno di Fub sulla carta; il recinto ```tasks``` è la resa
+    // di una ricerca, con la casella che spunta nella nota d'origine.
+    { name: "task-due", layer: "segno", states: REST, hooks: ["cm-fub-due", "cm-fub-due-near", "task-due", "task-due-near"] },
+    { name: "tasks-block", layer: "segno", layers: { "markdown-rendered": "contenuto" }, states: [S("rest"), S("hover"), S("focused"), S("selected")], hooks: ["markdown-rendered", "block-tasks", "block-query-note", "tasks-list", "tasks-item", "tasks-check", "tasks-done", "tasks-text", "tasks-note", "tasks-skipped", "tasks-notice"] },
     { name: "canvas-edge", layer: "contenuto", layers: { "canvas-edge-hit": "segno", "canvas-edge-reconnect": "segno" }, states: [S("rest"), S("selected"), S("dragging")], hooks: ["canvas-edge-hit", "canvas-edge-line", "canvas-edge-arrow", "canvas-edge-label", "canvas-edge-reconnect"] },
   ],
 };

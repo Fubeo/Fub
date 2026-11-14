@@ -60,5 +60,11 @@ export const DRAWERS: PartAnatomy = {
       states: [S("rest"), S("selected"), S("focused")],
       hooks: ["views-status", "declared-view-panel", "declared-view", "ui-stack", "ui-text", "views-modal"],
     },
+    // La vista «Compiti» nell'ispettore: righe a due piani, gruppi in maiuscoletto.
+    {
+      name: "tasks-view",
+      states: [S("rest"), S("hover"), S("focused")],
+      hooks: ["declared-view", "ui-section", "ui-children", "ui-row", "ui-checkbox", "ui-field-label", "ui-button"],
+    },
   ],
 };

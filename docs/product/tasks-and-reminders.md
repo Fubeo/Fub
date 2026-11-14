@@ -60,7 +60,63 @@ Il nome della nota d'origine, accanto al compito, apre la nota.
   si usa la ricerca.
 - La vista legge le note con compiti aperti dall'indice di ricerca. Se il vault
   non ha un indice attivo, la vista lo dice invece di mostrare un elenco vuoto.
-- Il recinto ```` ```tasks ```` nelle note e i promemoria non ci sono ancora.
+- I promemoria non ci sono ancora.
+
+## La scadenza nel testo
+
+Nella nota, in Live e in Lettura, il `📅` con la sua data diventa una
+pastiglia: grigia di solito, **arancione** quando il compito è aperto e la
+scadenza cade prima di sette giorni dal giorno corrente (scaduti compresi). La pastiglia
+mostra la data com'è scritta: il file non cambia. Un compito fatto resta
+grigio; una data che non esiste (`2026-02-30`) resta testo semplice. In Live,
+dove sta il cursore, torna il testo semplice.
+
+## Il recinto ```` ```tasks ````
+
+Un recinto di codice con la parola `tasks` mostra, dentro la nota, i compiti
+che rispondono alle sue righe, come il plugin Tasks di Obsidian. Si vede in Live
+(fuori dal cursore) e in Lettura; il testo del recinto resta nel file com'è.
+
+```tasks
+not done
+due before tomorrow
+path includes Progetti
+tag includes #lavoro
+```
+
+Ogni riga restringe la lista (valgono tutte insieme). Le righe capite:
+
+| Riga | Cosa tiene |
+| --- | --- |
+| `not done` | i compiti aperti |
+| `done` | i compiti fatti |
+| `due before <data>`, `due after <data>`, `due on <data>`, `due <data>` | i compiti aperti con la scadenza prima, dopo o in quel giorno |
+| `path includes <testo>` | i compiti delle note il cui percorso contiene il testo |
+| `tag includes <tag>` | i compiti con quel tag, o con un suo figlio (`#lavoro/fub`) |
+
+La data è `AAAA-MM-GG`, oppure `today`, `tomorrow`, `yesterday`. Le righe
+vuote e quelle che iniziano con `#` non contano. Senza una riga sullo stato il
+recinto mostra aperti e fatti, come il plugin. Una riga che Fub non capisce
+(`sort by`, `group by`, `hide`…) non ferma il recinto: è saltata e il recinto
+lo scrive sopra la lista. Un recinto vuoto non mostra tutto il vault: dice come
+si scrive.
+
+Le righe diventano una ricerca di Fub (`task:todo`, `due:<`, `path:`, `tag:`):
+la ricerca trova le note, e il recinto legge i compiti di ognuna. La lista è
+ordinata per scadenza, poi per nota e posizione. Il riquadro accanto a un
+compito lo spunta con `note.task.toggle`, come nella vista: se la nota nel
+frattempo è cambiata in quel punto non scrive e lo dice; dopo la spunta il
+recinto si ridisegna. Il nome della nota apre la nota.
+
+Il recinto legge al più **50** note e disegna al più **100** compiti: quando
+taglia lo scrive. Se il componente «Compiti» è spento il recinto lo dice invece
+di cercare. Il recinto non si aggiorna da solo quando cambia un'altra nota: si
+aggiorna quando la nota che lo contiene si ridisegna.
+
+La traduzione delle righe e la lettura dei compiti di una nota sono in
+`apps/client/src/editors/text/profiles/markdown/tasks-query.ts`; il disegno del
+recinto e la pastiglia in Lettura in `query-block.ts`, la pastiglia in Live in
+`livepreview.ts`.
 
 ## Il componente
 

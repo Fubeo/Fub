@@ -2486,3 +2486,88 @@
   text-decoration: underline wavy var(--doc-proof-gram, var(--doc-danger)) 1px;
   text-underline-offset: 3px;
 }
+/* La scadenza di un compito (`📅 AAAA-MM-GG`): una pastiglia sulla carta,
+   nella Live come segno sul testo, in Lettura e nel recinto ```tasks``` come
+   elemento. Arancio quando è vicina: passata, oggi o entro una settimana. */
+.cm-editor .cm-content .cm-fub-due,
+.markdown-rendered .task-due {
+  padding: 0.12em 0.5em;
+  border-radius: var(--radius-chip);
+  background: var(--doc-fill-soft);
+  box-shadow: inset 0 0 0 1px var(--doc-rule);
+  color: var(--doc-gutter-fg);
+  font-family: var(--font-ui);
+  font-size: 0.8em;
+  font-weight: var(--weight-medium);
+  white-space: nowrap;
+}
+.cm-editor .cm-content .cm-fub-due-near,
+.markdown-rendered .task-due-near {
+  background: var(--doc-tint-orange);
+  box-shadow: none;
+  color: var(--doc-color-orange);
+}
+/* Il recinto ```tasks```: una riga per compito, con la casella, il testo e
+   sotto, in piccolo, la nota d'origine. Viene dopo il degrado dei blocchi che
+   nessuno disegna (`[class^="block-"]` in `document.css`), e lo scavalca a
+   parità di peso: questo blocco Fub lo disegna. */
+.markdown-rendered .block-tasks {
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--doc-rule-soft);
+  font-family: inherit;
+  font-size: inherit;
+  white-space: normal;
+}
+.markdown-rendered .block-tasks > .block-query-note {
+  margin: 0 0 var(--space-1);
+  padding: 0;
+  border: none;
+  color: var(--doc-gutter-fg);
+  font-family: var(--font-ui);
+  font-size: var(--text-sm);
+  white-space: normal;
+}
+.markdown-rendered .tasks-list {
+  margin: 0.2em 0;
+  padding: 0;
+  list-style: none;
+}
+.markdown-rendered .tasks-item {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  column-gap: 0.6em;
+  align-items: baseline;
+  margin: 0;
+  padding: 0.3em 0.4em;
+  border-radius: var(--radius-control);
+}
+.markdown-rendered .tasks-item:hover {
+  background: var(--doc-block-hover);
+}
+.markdown-rendered .tasks-check {
+  margin: 0;
+  accent-color: var(--doc-link);
+}
+.markdown-rendered .tasks-check:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: var(--focus-ring-offset);
+}
+.markdown-rendered .tasks-done .tasks-text {
+  color: var(--doc-gutter-fg);
+  text-decoration: line-through;
+}
+.markdown-rendered .tasks-note {
+  grid-column: 2;
+  color: var(--doc-gutter-fg);
+  font-family: var(--font-ui);
+  font-size: 0.78em;
+  text-decoration: none;
+}
+.markdown-rendered .tasks-note:hover {
+  color: var(--doc-link);
+  text-decoration: underline;
+}
+.markdown-rendered .tasks-skipped,
+.markdown-rendered .tasks-notice {
+  color: var(--doc-color-orange);
+}
