@@ -2098,7 +2098,7 @@ Fatto quando: test del rettangolo (sceglie, Maiusc, Esc, clic, dito che
 sposta, impostazione «sposta la vista»), il suggerimento vero nei due modi,
 foto in tutte e due le luci; `scripts/check.sh --rapido` verde.
 Prova: scripts/check.sh --rapido
-Stato: [ ] da fare
+Stato: [x] fatto · coder/n6-t20b (703dec663, Haiku), unito in 1d15ec09a, check rapido verde 34 passi · `marquee.ts`; col mouse il vuoto sceglie con un rettangolo (archi fra due scelte compresi), Maiusc aggiunge, Esc annulla, clic toglie; dito e penna spostano la vista; impostazione di macchina «Trascinare nel vuoto» (Sceglie / Sposta la vista) e suggerimento che segue; si chiude con cattura persa, movimento senza tasto e blur (T20a); oltre 2.000 schede spento come il lazo; ~6,5 ms per movimento a 2.000 schede in Chromium (18 prima dei ritocchi a `resizableSelection`, `boxOf`, `data-selection`). Foto in tutte e due le luci guardate dall'orchestratore. S3/S8 sul runner alla prossima CI completa
 
 ## T20c · I riquadri dei bersagli senza ricalcolo della shell
 
