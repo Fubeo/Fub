@@ -276,6 +276,11 @@ fn observe_inlines(inlines: &[Inline], or: &mut Observed) {
                 if custom_kind == "math" {
                     or.syntaxes.insert(syntax::MATH.to_string());
                 }
+                if custom_kind == custom_kind::COMMENT_RANGE
+                    || custom_kind == custom_kind::COMMENT_MESSAGE
+                {
+                    or.syntaxes.insert(syntax::COMMENTS.to_string());
+                }
             }
             Inline::Emph(children)
             | Inline::Strong(children)
@@ -1501,4 +1506,328 @@ fn the_corpus_exercises_every_family() {
         "solo {mixed} casi mescolano due famiglie: è lì che i riconoscitori si \
          disturbano a vicenda, ed è lì che una divergenza si nasconde"
     );
+}
+
+// ---------------------------------------------------------------------------
+// I commenti con la discussione (CriticMarkup)
+// ---------------------------------------------------------------------------
+
+/// **I commenti tornano byte per byte.** I casi del corpus il cui nome comincia
+/// con «discussione» sono scritti nella forma del serializzatore: riscriverli dal
+/// modello deve ridare il file com'era, passo, messaggi e intestazioni compresi.
+#[test]
+fn comments_return_byte_for_byte() {
+    let p = provider();
+    let mut seen = 0;
+    for c in corpus().iter().filter(|c| c.name.starts_with("discussione")) {
+        let model = parse(c.source);
+        assert!(
+            !comment_messages(&model).is_empty(),
+            "il caso `{}` non ha prodotto nessun messaggio",
+            c.name
+        );
+        let written = p.serialize(&model).expect("un commento si sa scrivere");
+        assert_eq!(
+            written, c.source,
+            "il caso `{}` non torna byte per byte",
+            c.name
+        );
+        seen += 1;
+    }
+    assert!(seen >= 5, "solo {seen} casi di commento nel corpus");
+}
+
+/// I messaggi di un modello, in ordine: `[autore, data, testo, ancorato]`, con
+/// lo span di ciascuno.
+fn comment_messages(model: &DocumentModel) -> Vec<(Value, Span)> {
+    fn inline(nodes: &[Inline], out: &mut Vec<(Value, Span)>) {
+        for n in nodes {
+            match n {
+                Inline::Custom {
+                    custom_kind: kind,
+                    attrs,
+                    span,
+                } if kind == custom_kind::COMMENT_MESSAGE => out.push((
+                    json!([
+                        attrs["author"],
+                        attrs["date"],
+                        attrs["text"],
+                        attrs["anchored"]
+                    ]),
+                    *span,
+                )),
+                Inline::Emph(kids)
+                | Inline::Strong(kids)
+                | Inline::Strikethrough(kids)
+                | Inline::Superscript(kids)
+                | Inline::Subscript(kids) => inline(kids, out),
+                Inline::Link {
+                    label: Some(kids), ..
+                } => inline(kids, out),
+                _ => {}
+            }
+        }
+    }
+    let mut out = Vec::new();
+    walk_inlines(&model.body, &mut |nodes| inline(nodes, &mut out));
+    out
+}
+
+/// Ogni fila di inline dei blocchi, in ordine (senza scendere negli inline).
+fn walk_inlines(blocks: &[Block], f: &mut dyn FnMut(&[Inline])) {
+    for b in blocks {
+        match b {
+            Block::Paragraph { inlines, .. } | Block::Heading { inlines, .. } => f(inlines),
+            Block::List { items, .. } => {
+                for item in items {
+                    walk_inlines(&item.blocks, f);
+                }
+            }
+            Block::Quote { blocks, .. } | Block::Custom { blocks, .. } => walk_inlines(blocks, f),
+            Block::Table { head, rows, .. } => {
+                for row in head.iter().chain(rows) {
+                    for cell in &row.cells {
+                        f(&cell.inlines);
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+}
+
+#[test]
+fn a_message_is_not_text_of_the_note() {
+    let source = "Il {==passo con [[Nota]]==}{>>@Anna: vedi [[Altra]] e #etichetta e **forte** parolarara<<} fine.\n";
+    let model = parse(source);
+    let messages = comment_messages(&model);
+    assert_eq!(messages.len(), 1);
+    assert_eq!(
+        messages[0].0,
+        json!([
+            "Anna",
+            null,
+            "vedi [[Altra]] e #etichetta e **forte** parolarara",
+            true
+        ])
+    );
+    // Il link del passo c'è, quello del messaggio no; il tag del messaggio
+    // nemmeno.
+    let targets: Vec<String> = model
+        .links
+        .iter()
+        .map(|l| l.target.wiki_inner().unwrap_or_default())
+        .collect();
+    assert_eq!(targets, ["Nota"]);
+    assert!(model.tags.is_empty(), "{:?}", model.tags);
+    assert!(!model.text.contains("parolarara"), "{:?}", model.text);
+    assert!(model.text.contains("passo con Nota"), "{:?}", model.text);
+}
+
+#[test]
+fn comments_are_off_without_their_syntax() {
+    let source = "Il {==passo==}{>>@Anna: messaggio<<}.\n";
+    let model = provider()
+        .parse(&source.into(), &ParseContext::bare("a.md"))
+        .expect("parsa");
+    assert!(comment_messages(&model).is_empty());
+    assert!(model.text.contains("messaggio"));
+}
+
+#[test]
+fn a_highlight_without_a_message_stays_what_it_was() {
+    for source in [
+        "{==senza==} dopo\n",
+        "==evidenziato== dopo\n",
+        "{==a==} {>>b<<}\n",
+        "{==a\n\nb==}{>>c<<}\n",
+    ] {
+        let model = parse(source);
+        let ranges = kind_names(&model).contains(custom_kind::COMMENT_RANGE);
+        assert!(!ranges, "{source:?} ha prodotto un passo commentato");
+    }
+}
+
+#[test]
+fn a_message_stays_on_its_line() {
+    let model = parse("> {>>a\n> b<<} c\n");
+    assert!(comment_messages(&model).is_empty());
+    let model = parse("un {==passo\nsu due righe==}{>>@Anna: sì<<}\n");
+    assert_eq!(comment_messages(&model).len(), 1);
+}
+
+/// **Il fuzzer dei commenti, con le tabelle.** Documenti montati a caso da
+/// pezzi che si disturbano: i quattro segni, le barre di cella (escapate e
+/// no), il codice, i dollari, link, tag, enfasi e a capo, dentro paragrafi,
+/// titoli, voci, citazioni e celle. Oltre alle proprietà di ogni modello:
+///
+/// - ogni messaggio e ogni estremo stanno sui loro byte, segni compresi;
+/// - nessun link e nessun tag nasce dentro un messaggio;
+/// - riscritto dal modello, il documento porta ancora ogni messaggio, byte per
+///   byte.
+///
+/// «Riletto, ha gli stessi messaggi» vale sui casi del corpus
+/// ([`comments_return_byte_for_byte`]), non qui: i byte di un messaggio si
+/// copiano tali e quali, quindi un suo `*` o `$` resta un delimitatore per il
+/// parser, e dove il serializzatore escapa il testo vicino (`  **{` diventa
+/// `\**{`, `$$` diventa `\$$`) il delimitatore del messaggio può trovare un
+/// compagno che prima non aveva. I byte ci sono tutti; si rilegge diverso solo
+/// un documento riscritto dal modello, non uno aperto e salvato dall'editor.
+#[test]
+fn comments_and_tables_break_no_property() {
+    const PIECES: [&str; 33] = [
+        "{==",
+        "==}",
+        "{>>",
+        "<<}",
+        "@Anna Bianchi 2026-11-08 17:40: ",
+        "2026-11-08: ",
+        "\\|",
+        "|",
+        "\\{==",
+        "\\{>>",
+        "**",
+        "*",
+        "`",
+        "$",
+        "[[N]]",
+        "#t",
+        "parola",
+        " ",
+        " ",
+        "\\",
+        "<",
+        ">",
+        "=",
+        "{",
+        "}",
+        "^[n]",
+        "\n",
+        "é",
+        "~~",
+        "==",
+        // Commenti già interi, perché il caso non resti raro.
+        "{==passo==}{>>@Anna: nota<<}",
+        "{>>a \\| b<<}",
+        "{==x==}{>>2026-11-08: y<<}{>>z<<}",
+    ];
+    let (cases, seed) = (how_many_cases("FUB_FUZZ_COMMENTI", 2_000), seed());
+    let p = provider();
+    let mut rng = Case64::new(seed ^ 0xC0FFEE);
+    let mut with_messages = 0usize;
+    let mut in_cells = 0usize;
+    let pieces = |rng: &mut Case64, most: usize| {
+        let mut s = String::new();
+        for _ in 0..1 + rng.until_a(most) {
+            s.push_str(PIECES[rng.until_a(PIECES.len())]);
+        }
+        s
+    };
+    for n in 0..cases {
+        let mut source = String::new();
+        for _ in 0..1 + rng.until_a(4) {
+            let line = |rng: &mut Case64| pieces(rng, 12).replace('\n', " ");
+            match rng.until_a(5) {
+                0 => {
+                    let columns = 1 + rng.until_a(3);
+                    let row = |rng: &mut Case64| {
+                        let cells: Vec<String> = (0..columns).map(|_| line(rng)).collect();
+                        format!("| {} |\n", cells.join(" | "))
+                    };
+                    source.push_str(&row(&mut rng));
+                    source.push_str(&format!("|{}\n", " --- |".repeat(columns)));
+                    for _ in 0..1 + rng.until_a(3) {
+                        source.push_str(&row(&mut rng));
+                    }
+                }
+                1 => source.push_str(&format!("# {}\n", line(&mut rng))),
+                2 => source.push_str(&format!("- {}\n", line(&mut rng))),
+                3 => source.push_str(&format!("> {}\n", line(&mut rng))),
+                // Un paragrafo può andare a capo: un passo sì, un messaggio no.
+                _ => {
+                    source.push_str(pieces(&mut rng, 16).trim_matches('\n'));
+                    source.push('\n');
+                }
+            }
+            source.push('\n');
+        }
+        let fail = |what: &str| -> ! {
+            panic!(
+                "caso {n} di {cases}: {what}.\nPer rifarlo: FUB_FUZZ_SEME={seed} \
+                 FUB_FUZZ_COMMENTI={} cargo test -p fub-format-markdown --test the_corpus \
+                 -- comments_and_tables\nLa sorgente: {source:?}",
+                n + 1
+            )
+        };
+        let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            conformance::no_span_panics_its_user(&p, &source, &ctx())
+        }));
+        if outcome.is_err() {
+            fail("una proprietà del modello è rotta (il panico è qui sopra)");
+        }
+        let model = parse(&source);
+        let messages = comment_messages(&model);
+        with_messages += usize::from(!messages.is_empty());
+        let mut marks = Vec::new();
+        walk_inlines(&model.body, &mut |nodes| {
+            for n in nodes {
+                if let Inline::Custom {
+                    custom_kind: kind,
+                    attrs,
+                    span,
+                } = n
+                {
+                    marks.push((kind.clone(), attrs.clone(), *span));
+                }
+            }
+        });
+        for (kind, attrs, span) in &marks {
+            let Some(slice) = source.get(span.start..span.end) else {
+                fail("lo span di un commento non affetta la sorgente");
+            };
+            let written = attrs["source"].as_str().unwrap_or_default();
+            if kind == custom_kind::COMMENT_MESSAGE {
+                in_cells += usize::from(slice != written);
+                if (slice != written && slice.replace("\\|", "|") != written)
+                    || !slice.starts_with("{>>")
+                    || !slice.ends_with("<<}")
+                    || slice.contains(['\n', '\r'])
+                {
+                    fail(&format!("un messaggio non sta sui suoi byte: {slice:?}"));
+                }
+            }
+            if kind == custom_kind::COMMENT_RANGE && slice != written {
+                fail(&format!("un estremo non sta sui suoi byte: {slice:?}"));
+            }
+        }
+        for (_, message) in &messages {
+            let inside = |s: &Span| message.start <= s.start && s.end <= message.end;
+            if model.links.iter().any(|l| inside(&l.span))
+                || model.tags.iter().any(|t| inside(&t.span))
+            {
+                fail("un link o un tag è nato dentro un messaggio");
+            }
+        }
+        let Ok(written) = p.serialize(&model) else {
+            fail("un documento con dei commenti non si sa riscrivere");
+        };
+        for (kind, attrs, _) in &marks {
+            let message = attrs["source"].as_str().unwrap_or_default();
+            if kind == custom_kind::COMMENT_MESSAGE
+                && !written.contains(message)
+                && !written.contains(&message.replace('|', "\\|"))
+            {
+                fail(&format!(
+                    "riscritto, il documento ha perso il messaggio {message:?}\n\
+                     Riscritto: {written:?}"
+                ));
+            }
+        }
+    }
+    assert!(
+        with_messages * 10 > cases,
+        "solo {with_messages} documenti su {cases} hanno un messaggio: il generatore \
+         non sta provando i commenti"
+    );
+    assert!(in_cells > 0, "nessun messaggio con una `\\|` in una cella");
 }
