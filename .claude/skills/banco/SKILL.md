@@ -21,6 +21,11 @@ file in `src/` knows the bench exists, so keep it that way.
   `fault(port, reason)`, `throttle(port)` and `calls`, for error, pending and
   event states. The fake `setSetting` writes the value before a `fault` rejects
   the call.
+- `window.bench.writeFromOutside(id, text)` is another app writing the file:
+  the bytes change and the event comes with the watcher origin. Use it, not
+  `emit`, for an outside change: an emitted event has the shell-write origin,
+  and since the fake sends no echoes the shell takes it for the echo of its
+  own save and says nothing.
 - Output goes to `bench/.output/`: `attuale/` (latest photos), `differenze/`
   (diffs), `foglio-di-contatto.html` (contact sheet) and
   `accessibilita/accessibilita.json` (a11y `failures` and `incompletes` per
