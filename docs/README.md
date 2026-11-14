@@ -128,8 +128,7 @@ dalla penna alle tavole, dall'import all'export, fino ai disegni grandi.
 
 ## Vedere stato e direzione
 
-- [Stato del progetto](project/status.md): dove siamo, l'ordine di lavoro, il
-  rilascio e lo stato di M5
+- [Stato del progetto](project/status.md): dove siamo, l'ordine di lavoro, il rilascio, M5
 
 ## Capire le decisioni
 
