@@ -175,6 +175,12 @@ pub(crate) fn scan(bytes: &[u8], wanted: &BTreeSet<u32>) -> Result<SheetLayout, 
                         }
                     }
                     (1, b"cols") => in_cols = !empty,
+                    (2, b"col") if in_cols && layout.cols.len() >= MAX_COLS as usize => {
+                        return Err("more column ranges than a worksheet has columns".into());
+                    }
+                    (2, b"row") if in_sheet_data && layout.rows.len() >= MAX_ROWS as usize => {
+                        return Err("more rows than a worksheet has".into());
+                    }
                     (2, b"col") if in_cols => {
                         if let (Some(min), Some(max)) =
                             (u32_attr(element, b"min"), u32_attr(element, b"max"))
@@ -402,6 +408,28 @@ mod tests {
             b"<sheetData>"
         );
         assert!(xml[..layout.sheet_data.end].ends_with(b"</sheetData>"));
+    }
+
+    /// Ogni riga letta resta in `rows`: un foglio non ne ha più di
+    /// `MAX_ROWS`, e uno che ne dichiara di più si rifiuta invece di crescere
+    /// in memoria finché il processo cade.
+    #[test]
+    fn piu_righe_di_un_foglio_si_rifiutano() {
+        let sheet = |rows: usize| {
+            format!(
+                "<worksheet><sheetData>{}</sheetData></worksheet>",
+                "<row/>".repeat(rows)
+            )
+            .into_bytes()
+        };
+        let at_limit = scan(&sheet(MAX_ROWS as usize), &BTreeSet::new()).unwrap();
+        assert_eq!(at_limit.rows.len(), MAX_ROWS as usize);
+        assert!(scan(&sheet(MAX_ROWS as usize + 1), &BTreeSet::new()).is_err());
+        let cols = format!(
+            "<worksheet><cols>{}</cols><sheetData/></worksheet>",
+            "<col min=\"1\" max=\"1\"/>".repeat(MAX_COLS as usize + 1)
+        );
+        assert!(scan(cols.as_bytes(), &BTreeSet::new()).is_err());
     }
 
     #[test]

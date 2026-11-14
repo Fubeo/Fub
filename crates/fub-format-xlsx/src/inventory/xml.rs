@@ -91,6 +91,26 @@ pub(super) fn parse(
     stream: Option<(&str, &str)>,
     sink: &mut dyn FnMut(Node) -> Result<(), InventoryError>,
 ) -> Result<Node, InventoryError> {
+    parse_within(bytes, part, budget, stream, sink, LIMITS.retained)
+}
+
+/// [`parse`] con il tetto dei nodi tenuti in memoria ([`Limits::retained`]).
+fn parse_within(
+    bytes: &[u8],
+    part: &str,
+    budget: &mut Budget,
+    stream: Option<(&str, &str)>,
+    sink: &mut dyn FnMut(Node) -> Result<(), InventoryError>,
+    retained: u64,
+) -> Result<Node, InventoryError> {
+    // I nodi vivi sono quelli aperti meno quelli andati al flusso.
+    let mut opened = 0u64;
+    let freed = std::cell::Cell::new(0u64);
+    let mut counted = |node: Node| {
+        freed.set(freed.get().saturating_add(subtree(&node)));
+        sink(node)
+    };
+    let sink: &mut dyn FnMut(Node) -> Result<(), InventoryError> = &mut counted;
     let mut reader = NsReader::from_reader(bytes);
     reader.config_mut().check_end_names = true;
     let mut stack: Vec<Node> = Vec::new();
@@ -154,6 +174,10 @@ pub(super) fn parse(
         if budget.elements > LIMITS.elements {
             return Err(InventoryError::Limit("xml elements"));
         }
+        opened += 1;
+        if opened.saturating_sub(freed.get()) > retained {
+            return Err(InventoryError::Limit("xml nodes in memory"));
+        }
         if stack.len() >= LIMITS.depth {
             return Err(InventoryError::Limit("xml depth"));
         }
@@ -201,6 +225,17 @@ pub(super) fn parse(
     root.ok_or_else(|| xml_error(part, "no root element"))
 }
 
+/// I nodi di un sotto albero, lui compreso.
+fn subtree(node: &Node) -> u64 {
+    let mut count = 0u64;
+    let mut todo = vec![node];
+    while let Some(next) = todo.pop() {
+        count += 1;
+        todo.extend(next.kids.iter());
+    }
+    count
+}
+
 /// Il testo fra gli elementi di un elemento che ha figli è soltanto spazio.
 fn close(node: &mut Node) {
     if !node.kids.is_empty() && node.text.trim().is_empty() {
@@ -235,4 +270,68 @@ fn attach(
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn budget() -> Budget {
+        Budget {
+            elements: 0,
+            visits: 0,
+        }
+    }
+
+    /// I nodi che restano nell'albero hanno un tetto; quelli che vanno al
+    /// flusso non contano, perché se ne vanno appena chiusi.
+    #[test]
+    fn i_nodi_tenuti_in_memoria_hanno_un_tetto() {
+        let flat = format!("<r>{}</r>", "<a/>".repeat(10));
+        let kept = parse_within(
+            flat.as_bytes(),
+            "p",
+            &mut budget(),
+            None,
+            &mut |_| Ok(()),
+            8,
+        );
+        assert_eq!(
+            kept.unwrap_err(),
+            InventoryError::Limit("xml nodes in memory")
+        );
+        let mut rows = 0;
+        let streamed = parse_within(
+            flat.as_bytes(),
+            "p",
+            &mut budget(),
+            Some(("r", "a")),
+            &mut |_| {
+                rows += 1;
+                Ok(())
+            },
+            8,
+        );
+        assert!(streamed.is_ok());
+        assert_eq!(rows, 10);
+        let nested = format!("<r>{}</r>", "<a><b/><c/></a>".repeat(10));
+        let streamed = parse_within(
+            nested.as_bytes(),
+            "p",
+            &mut budget(),
+            Some(("r", "a")),
+            &mut |_| Ok(()),
+            8,
+        );
+        assert!(streamed.is_ok());
+        assert!(parse_within(
+            flat.as_bytes(),
+            "p",
+            &mut budget(),
+            None,
+            &mut |_| Ok(()),
+            11
+        )
+        .is_ok());
+    }
 }

@@ -68,12 +68,18 @@ pub(crate) struct Limits {
     pub elements: u64,
     /// Parti raggiunte, contando ogni volta che una relazione le raggiunge.
     pub visits: usize,
+    /// Nodi di una parte tenuti in memoria insieme: quelli che non vanno al
+    /// flusso (le righe del foglio, le stringhe condivise). Un nodo costa un
+    /// centinaio di byte, e [`Limits::elements`] da solo lascerebbe crescere
+    /// l'albero di una parte ostile fino a gigabyte.
+    pub retained: u64,
 }
 
 pub(crate) const LIMITS: Limits = Limits {
     depth: 256,
     elements: 50_000_000,
     visits: 100_000,
+    retained: 4_000_000,
 };
 
 /// Perché un pacchetto non si inventaria.
