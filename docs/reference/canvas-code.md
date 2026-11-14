@@ -490,13 +490,9 @@ id, la disposizione e i limiti stanno in [Da Mermaid e da una scaletta](canvas-i
 
 ### `draw`
 
-Scrive un tratto d'inchiostro dai punti o da una forma, con la penna e il colore
-per nome; con `on: "auto"` il tratto va alla scheda come con la penna. I campi,
-le forme e gli errori stanno in [L'inchiostro, in codice](canvas-ink.md#in-codice).
-
-```json
-{ "op": "draw", "on": "t1", "shape": { "kind": "line", "x1": 24, "y1": 152, "x2": 296, "y2": 152 }, "pen": "marker" }
-```
+Scrive un tratto d'inchiostro dai punti o da una forma, con penna e colore per
+nome: `{"op": "draw", "on": "t1", "shape": {"kind": "rect", "x": 8, "y": 8, "width": 304,
+"height": 144}}`. Campi, forme, `on` ed errori: [In codice](canvas-ink.md#in-codice).
 
 ### Gli id nuovi
 

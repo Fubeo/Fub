@@ -202,6 +202,43 @@ fn una_scheda_che_il_formato_non_accetta_e_invalid() {
 }
 
 #[test]
+fn un_livello_estraneo_punta_al_campo_che_lo_sceglie() {
+    // La scheda `t1` e la radice hanno un livello `v: 2`, che Fub non legge.
+    let canvas = parse(
+        r##"{
+  "nodes": [
+    {"id":"t1","type":"text","x":0,"y":0,"width":320,"height":160,"text":"Ciclo","fub:ink":{"v":2,"strokes":[]}}
+  ],
+  "edges": [],
+  "fub:ink": {"v": 2, "strokes": []}
+}"##,
+    )
+    .expect("la lavagna si apre");
+    let path = |ops: Value| {
+        let report = check(&canvas, &ops, 1);
+        assert_eq!(codes(&report), vec![Code::ForeignLayer], "{ops}");
+        report.problems[0].path.clone()
+    };
+    assert_eq!(
+        path(json!([{"op": "erase_strokes", "layer": {"node": "t1"}, "ids": ["s1"]}])),
+        "/0/layer"
+    );
+    assert_eq!(
+        path(json!([{"op": "draw", "on": "t1", "points": [[0, 0]]}])),
+        "/0/on"
+    );
+    assert_eq!(
+        path(json!([{"op": "draw", "on": "board", "points": [[0, 0]]}])),
+        "/0/on"
+    );
+    // Senza `on` vale `"auto"`: il tratto lontano dalla scheda va sulla radice.
+    assert_eq!(
+        path(json!([{"op": "draw", "points": [[1000, 1000]]}])),
+        "/0"
+    );
+}
+
+#[test]
 fn la_centomillesima_scheda_e_too_many() {
     let canvas = Canvas {
         nodes: (0..100_000)

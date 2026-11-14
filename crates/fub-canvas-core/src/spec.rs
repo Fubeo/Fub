@@ -740,7 +740,7 @@ pub const OPS: &[OpSpec] = &[
                 kind: FieldKind::Text,
                 required: false,
                 default: Some("\"auto\""),
-                doc_it: "Di chi è il tratto e in che coordinate sono i punti: `\"auto\"` (coordinate della lavagna; il tratto va alla scheda più in alto che lo contiene almeno per metà, o resta libero), `\"board\"` (la lavagna, tratto libero) o l'id di una scheda (le sue coordinate, 0,0 in alto a sinistra).",
+                doc_it: "Di chi è il tratto e in che coordinate sono i punti: `\"auto\"` (coordinate della lavagna; conta solo la scheda più in alto che il riquadro del tratto tocca: la scheda lo prende se contiene il centro del riquadro e almeno metà della sua area, e se il suo livello non è estraneo; altrimenti il tratto resta libero, anche se una scheda sotto lo conterrebbe tutto), `\"board\"` (la lavagna, tratto libero) o l'id di una scheda (le sue coordinate, 0,0 in alto a sinistra).",
             },
             optional(
                 "points",

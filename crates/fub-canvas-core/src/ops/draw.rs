@@ -105,8 +105,7 @@ pub struct DrawArgs {
     pub id: Option<String>,
 }
 
-/// Le forme di `draw`, quelle che la GUI riconosce da un tratto. Le
-/// coordinate sono quelle di `on`.
+/// Le forme di `draw`. Le coordinate sono quelle di `on`.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum DrawShape {

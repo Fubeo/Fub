@@ -45,7 +45,7 @@ nessuna.
 | `too_many`, `too_many_moved` | la lavagna avrebbe più di 100 000 schede o 200 000 archi, o un `insert` porta più di 10 000 schede, o un testo di `from_mermaid` o `from_outline` passa i suoi limiti, o un tratto di `draw` ha più di 10 000 punti; `too_many_moved` è un `move` con `contents` che tocca più di 1 000 schede | — |
 | `invalid` | una scheda o un arco che il formato non accetta, col motivo in `message`; un tratto di `add_strokes` che non si disegnerebbe; un'operazione che la forma accetta e serde no, con la frase fissa `the operation does not match its schema` | — |
 | `unknown_stroke` | `erase_strokes` con un id che non è un tratto del livello | — |
-| `foreign_layer` | `add_strokes`, `erase_strokes` o `draw` su un livello d'inchiostro che Fub non legge (`path` è il suo `layer`) | — |
+| `foreign_layer` | `add_strokes`, `erase_strokes` o `draw` su un livello d'inchiostro che Fub non legge (`path` è il suo `layer`, l'`on` di `draw`, o l'operazione intera per un `draw` senza `on` finito sulla radice) | — |
 
 I nomi vicini sono quelli dello schema: distanza al più 2, maiuscole ASCII
 ignorate (`T1` ha il vicino `t1`). Sono al più tre, alla distanza minima, nell'ordine
