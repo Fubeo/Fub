@@ -672,8 +672,8 @@ const STRINGS: &[(&str, &str, &str)] = &[
     ),
     (
         E_READ_MAX_CHARS_FORM,
-        "max_chars vale solo per la forma outline: {form} si legge intera.",
-        "max_chars applies only to the outline form: {form} is read whole.",
+        "max_chars vale per le forme outline e json: {form} si legge intera.",
+        "max_chars applies to the outline and json forms: {form} is read whole.",
     ),
     (
         E_READ_WRITE,

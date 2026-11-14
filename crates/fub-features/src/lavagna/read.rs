@@ -4,7 +4,9 @@
 //! Le tre forme vengono dal nucleo (`describe`, T4). Qui si aggiungono la
 //! revisione letta, i conti e il riquadro (le stesse cifre della prima riga
 //! dell'outline, in campi), e il limite di serie dell'outline: una lavagna di
-//! 100 000 schede non si rovescia in una risposta.
+//! 100 000 schede non si rovescia in una risposta. Con `json`, accanto al
+//! modello (dove `fub:ink` resta com'è nel file) c'è `ink_read`, la lettura
+//! dell'inchiostro, con lo stesso limite di serie sui suoi punti.
 
 use std::collections::HashSet;
 
@@ -20,7 +22,8 @@ use serde_json::json;
 
 use super::*;
 
-/// Quanti caratteri al più dà l'outline, se la chiamata non dice altro.
+/// Quanti caratteri al più dà l'outline, e la lettura dell'inchiostro di
+/// `json`, se la chiamata non dice altro.
 const OUTLINE_CHARS: usize = 20_000;
 
 /// Il limite più alto di `max_chars`: 2⁵³, l'ultimo intero che un numero JSON
@@ -74,8 +77,8 @@ pub(super) fn canvas_read(
     let options = DescribeOptions {
         ids,
         max_chars: match form {
-            Form::Outline => Some(max_chars.unwrap_or(OUTLINE_CHARS)),
-            Form::Code | Form::Json => None,
+            Form::Outline | Form::Json => Some(max_chars.unwrap_or(OUTLINE_CHARS)),
+            Form::Code => None,
         },
     };
 
@@ -99,6 +102,7 @@ pub(super) fn canvas_read(
         }
         Form::Json => {
             payload["model"] = describe::json(canvas, &options).map_err(|_| write_error(&doc))?;
+            payload["ink_read"] = describe::ink_read(canvas, &options);
         }
     }
     Ok(CommandOutcome::done().with_effect(CommandEffect::Custom {
@@ -118,13 +122,15 @@ fn ids(raw: Option<&str>) -> Result<Option<Vec<String>>, PluginError> {
         .map_err(|_| PluginError::BadArgs(Text::key(E_READ_IDS)))
 }
 
-/// Il limite dell'outline: un intero da zero in su. Vale solo per l'outline: le
-/// altre forme non si tagliano, perché una lista tagliata non si ricompila.
+/// Il limite dell'outline e dei punti di `ink_read`: un intero da zero in su.
+/// Non vale per `code`, perché una lista tagliata non si ricompila; con `json`
+/// taglia solo i punti della lettura, mai il modello, e il taglio si vede
+/// (`points_omitted`).
 fn max_chars(args: &Args<'_>, form: Form) -> Result<Option<usize>, PluginError> {
     let Some(raw) = args.number(MAX_CHARS) else {
         return Ok(None);
     };
-    if form != Form::Outline {
+    if form == Form::Code {
         return Err(PluginError::BadArgs(Text::message(
             E_READ_MAX_CHARS_FORM,
             vec![Arg::text("form", form.name())],
