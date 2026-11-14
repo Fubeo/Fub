@@ -441,6 +441,12 @@ finestre è di `crates/fub-format-xlsx/src/grid.rs`; la fixture
 `apps/client/src/__fixtures__/xlsx-grid.json` la lega alla shell
 (`crates/fub-format-xlsx/tests/ts_grid.rs`).
 
+## Depositare un file
+
+`resource_write` deposita byte grezzi, coi parametri nella testata
+`x-fub-resource-write`; il contratto intero (campi, `reuse: "same-content"`,
+ricevuta, errori e limiti) sta in [Depositare un file](resource-write.md).
+
 ## Percorsi
 
 Il frontend invia path relativi o root di vault secondo la porta. Le regole di

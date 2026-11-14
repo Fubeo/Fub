@@ -81,6 +81,7 @@
 - Come si scrivono i documenti di Word nel vault? → [product/word-documents.md](../product/word-documents.md)
 - Come si annotano i PDF del vault? → [product/pdf-annotations.md](../product/pdf-annotations.md)
 - Come sono fatti i file delle app Craft (disegni, immagini, foto)? → [product/craft-files.md](../product/craft-files.md)
+- Che cosa mostra una scheda della lavagna, come ci si scrive e dove vanno i file portati dentro? → [product/lavagna.md](../product/lavagna.md)
 - Come si cercano informazioni e si seguono link e grafo nel vault? → [product/search-links-and-graph.md](../product/search-links-and-graph.md)
 - Come si porta dentro e fuori dal vault (import/export)? → [product/import-and-export.md](../product/import-and-export.md)
 - Come si creano un documento Word o una cartella Excel dal vault? → [product/new-documents.md](../product/new-documents.md)
@@ -130,6 +131,7 @@
 
 - Qual è il contratto condiviso (ABI e WIT) fra core, provider nativi e componenti WASM? → [reference/abi-and-wit.md](../reference/abi-and-wit.md)
 - Qual è il confine JSON (contratto IPC) fra shell TypeScript e `fub-app`? → [reference/ipc-contract.md](../reference/ipc-contract.md)
+- Come la shell deposita un file nel vault (`resource_write`, il riuso dello stesso contenuto)? → [reference/resource-write.md](../reference/resource-write.md)
 - Qual è il contratto delle due porte IPC dei componenti? → [reference/components-contract.md](../reference/components-contract.md)
 - Quali file Fub scrive a livello macchina e dentro un vault (layout su disco)? → [reference/on-disk-layout.md](../reference/on-disk-layout.md)
 - Come si fidano bundle, capability, confini del vault e runtime WASM? → [reference/permissions-and-security.md](../reference/permissions-and-security.md)

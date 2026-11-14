@@ -1,0 +1,15 @@
+{
+  "name": "read-image-on-pdf",
+  "description": "La specie image su un PDF non vale: si mostra il subpath.",
+  "source": "{\n  \"nodes\": [\n    { \"id\": \"n1\", \"type\": \"file\", \"file\": \"Libro.pdf\", \"subpath\": \"#page=4\", \"x\": 0, \"y\": 0, \"width\": 400, \"height\": 500,\n      \"fub:parts\": { \"kind\": \"image\", \"rect\": [0, 0, 1, 0.5] } }\n  ],\n  \"edges\": []\n}\n",
+  "expect": {
+    "cards": [
+      {
+        "node": "n1",
+        "state": "kept",
+        "reason": "file",
+        "shows": "#page=4"
+      }
+    ]
+  }
+}

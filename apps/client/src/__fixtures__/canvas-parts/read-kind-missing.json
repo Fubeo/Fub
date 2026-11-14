@@ -1,0 +1,15 @@
+{
+  "name": "read-kind-missing",
+  "description": "Senza kind il campo non si capisce.",
+  "source": "{\n  \"nodes\": [\n    { \"id\": \"n1\", \"type\": \"file\", \"file\": \"Libro.pdf\", \"subpath\": \"#page=1\", \"x\": 0, \"y\": 0, \"width\": 400, \"height\": 500,\n      \"fub:parts\": { \"pages\": [1, 2] } }\n  ],\n  \"edges\": []\n}\n",
+  "expect": {
+    "cards": [
+      {
+        "node": "n1",
+        "state": "kept",
+        "reason": "kind",
+        "shows": "#page=1"
+      }
+    ]
+  }
+}

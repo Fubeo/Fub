@@ -274,6 +274,47 @@ describe("gli strumenti della colonna nel pannello", () => {
   });
 });
 
+describe("gli strumenti della colonna della lavagna nel pannello", () => {
+  const CANVAS_TOOLBAR = "canvas.toolbar";
+  const ALL_TOOLS = ["select", "hand", "pen", "highlighter", "eraser", "text", "connect"];
+  const toolbar = (value: string[]): SettingEntry => ({
+    spec: {
+      key: CANVAS_TOOLBAR,
+      label: "Strumenti della colonna",
+      description: "",
+      group: "Lavagna",
+      scope: "vault",
+      kind: { kind: "list", default: [] },
+      program_writable: false,
+    },
+    value,
+    source: value.length === 0 ? "default" : "vault",
+  });
+  const box = (tool: string): HTMLInputElement => document.getElementById(`setting-${CANVAS_TOOLBAR}-${tool}`) as HTMLInputElement;
+
+  it("una casella per strumento della lavagna; cambiata una, la lista si scrive nel suo ordine", async () => {
+    await openPanel([toolbar(["pen", "select"])]);
+    expect(box("pen").checked).toBe(true);
+    expect(box("hand").checked).toBe(false);
+    const input = box("hand");
+    input.focus();
+    input.click();
+    await vi.waitFor(() => expect(fake.setSetting).toHaveBeenCalled());
+    expect(fake.setSetting).toHaveBeenLastCalledWith(CANVAS_TOOLBAR, ["pen", "select", "hand"]);
+  });
+
+  it("vuota, la colonna di serie: tutte le caselle accese", async () => {
+    await openPanel([toolbar([])]);
+    for (const tool of ALL_TOOLS) expect(box(tool).checked, tool).toBe(true);
+  });
+
+  it("il predefinito accanto a «Azzera» dice quelli di serie", async () => {
+    await openPanel([toolbar(["pen"])]);
+    const row = document.querySelector<HTMLElement>(`[data-setting-key="${CANVAS_TOOLBAR}"]`)!;
+    expect(row.querySelector(".setting-default")?.textContent).toBe("Predefinito: Quelli di serie");
+  });
+});
+
 describe("il focus resta sulla riga (A03)", () => {
   function toggleEntry(key: string, value: boolean): SettingEntry {
     return {

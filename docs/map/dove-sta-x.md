@@ -45,7 +45,8 @@
 | `SettingSpec` e i livelli delle impostazioni | `crates/fub-abi/src/settings.rs` |
 | `perf.probe` (la sonda N0) | `crates/fub-host/src/settings.rs`, montata da `apps/client/src/perf/` |
 | `draw.workspace` (Semplice o Completo) | le impostazioni della feature `draw`, `crates/fub-features/src/draw.rs` |
-| `canvas.ink_mouse_remember`, `canvas.finger_moves_card` | le impostazioni della feature `lavagna`, `crates/fub-features/src/lavagna.rs`; le legge `apps/client/src/editors/canvas/preferences.ts` |
+| le tredici impostazioni della lavagna, `canvas.*` (`ink_mouse_remember`, `finger_moves_card`, `finger_writes`, `pen_button`, `wheel`, `drag_empty`, `workspace`, `toolbar`, `grid`, `snap`, `parts_picker`, `drop_folder`, `drop_folder_path`) | le impostazioni della feature `lavagna`, `crates/fub-features/src/lavagna.rs`; le chiavi, i valori di serie e la lettura in `apps/client/src/rules/canvas-settings.ts`, le legge e le segue `apps/client/src/editors/canvas/preferences.ts` |
+| dove vanno i file trascinati dal computer sulla lavagna (`canvas.drop_folder`) | `apps/client/src/state/canvas-intake.ts` (`dropFolderFor`, `depositCanvasFiles`); la cartella delle note è `files.attachment-folder`, letta in `apps/client/src/state/document-controller.ts` |
 | il registro dei comandi del vault | `crates/fub-features/src/commands.rs` e i suoi moduli in `commands/` (dogfood del `CommandProvider`) |
 | il catalogo dei comandi dei fogli | `crates/fub-abi/src/grid_bytes.rs`, servito in `crates/fub-format-xlsx` |
 | il lessico dei menu | `apps/client/src/i18n/lexicon.ts` |
@@ -53,7 +54,8 @@
 | le stringhe dell'editor dei disegni | `apps/client/src/editors/spatial/strings.ts`, con le voci per area (italiano e inglese insieme) in `strings/` |
 | il disegno sul motore (chi possiede che cosa) | [Il disegno sul motore](../architecture/disegno.md) |
 | la tavolozza dell'inchiostro | `apps/client/src/ink/palette.ts` (Okabe–Ito) |
-| i sei colori della lavagna | `apps/client/src/editors/canvas/engine.ts` |
+| i colori della lavagna (i sei di JSON Canvas, i nove delle note, «Altro…») | `apps/client/src/editors/canvas/colors.ts` |
+| le schede vive della lavagna (`liveCardIds`, `LIVE_ZOOM_MIN`, `MAX_LIVE_CARDS`) e il contratto dei renderer | `apps/client/src/editors/canvas/cards.ts`; i renderer in `apps/client/src/editors/canvas/cards/` e `apps/client/src/editors/grid/card.ts` |
 | il limite dei 64 MiB per i media | `apps/client/src/editors/media/media-types.ts` |
 | il sanificatore dell'HTML | `apps/client/src/ui/sanitize.ts` |
 | le molle del moto | `apps/client/src/moto/spring.ts` |

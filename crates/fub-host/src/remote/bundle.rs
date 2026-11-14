@@ -390,12 +390,7 @@ impl JobLock {
     fn acquire(root: &Path) -> Result<Self, PluginError> {
         std::fs::create_dir_all(root)
             .map_err(|_| PluginError::Io("sync state root unavailable".into()))?;
-        let file = std::fs::OpenOptions::new()
-            .read(true)
-            .write(true)
-            .create(true)
-            .truncate(false)
-            .open(root.join("sync-pass.lock"))
+        let file = open_regular_lock(&root.join("sync-pass.lock"))
             .map_err(|_| PluginError::Io("sync lock unavailable".into()))?;
         file.try_lock().map_err(|error| match error {
             std::fs::TryLockError::WouldBlock => {
@@ -407,6 +402,14 @@ impl JobLock {
         })?;
         Ok(Self { _file: file })
     }
+}
+
+/// Apre (o crea) il lock del passo di sync, solo se è un file regolare. Come
+/// il lock dello scrittore del vault (`automation::lock_vault_writer`): un
+/// collegamento o una cartella al suo posto farebbe bloccare a due processi
+/// due file diversi, e «sync already running» non varrebbe più.
+fn open_regular_lock(path: &Path) -> std::io::Result<std::fs::File> {
+    crate::regular_file::open_regular(path, crate::regular_file::Access::Lock)
 }
 
 /// Stato durevole del job (file atomici sotto la root TRUSTED).
@@ -693,17 +696,46 @@ fn http_request(
             _ => PluginError::Io("sync transport failed".into()),
         })?;
     if !(200..300).contains(&response.status) {
-        let path_base = path.split('?').next().unwrap_or(path);
-        let detail = format!("sync {path_base} -> {}", response.status);
-        return Err(match response.status {
-            401 | 403 | 429 => PluginError::PermissionDenied(detail.into()),
-            404 => PluginError::NotFound(detail.into()),
-            409 => PluginError::Conflict(detail.into()),
-            _ => PluginError::Io(detail.into()),
-        });
+        return Err(status_error(path, response.status, &response.body));
     }
     serde_json::from_slice(&response.body)
         .map_err(|_| PluginError::Internal("sync invalid JSON response".into()))
+}
+
+/// I codici con cui un server rifiuta i parametri KDF di una busta: quello
+/// di oggi e quelli dei server di prima, che chiedevano la loro sola versione.
+const KDF_REFUSALS: [&str; 4] = [
+    "unsupported wrap version",
+    "stale wrap version",
+    "bad wrap version",
+    "bad wrap iterations",
+];
+
+/// L'errore di una risposta del server che non è un successo. Un server di
+/// un'altra versione che non conosce i parametri KDF della busta è
+/// `BadArgs` con un testo per chi legge, non un `400` muto: è
+/// un'incompatibilità che resta finché qualcuno non aggiorna, come «sync non
+/// configurato», e non un `Unserved` (rete assente, da ritentare). Una nuova
+/// variante di `PluginError` cambierebbe il contratto di `fub-abi` e il WIT.
+fn status_error(path: &str, status: u16, body: &[u8]) -> PluginError {
+    let code = serde_json::from_slice::<serde_json::Value>(body)
+        .ok()
+        .and_then(|value| value.get("error")?.as_str().map(str::to_owned));
+    if status == 400
+        && code
+            .as_deref()
+            .is_some_and(|code| KDF_REFUSALS.contains(&code))
+    {
+        return PluginError::BadArgs(fub_abi::text::Text::key("host.sync.kdf_unsupported"));
+    }
+    let path_base = path.split('?').next().unwrap_or(path);
+    let detail = format!("sync {path_base} -> {status}");
+    match status {
+        401 | 403 | 429 => PluginError::PermissionDenied(detail.into()),
+        404 => PluginError::NotFound(detail.into()),
+        409 => PluginError::Conflict(detail.into()),
+        _ => PluginError::Io(detail.into()),
+    }
 }
 
 #[cfg(test)]
@@ -793,6 +825,32 @@ mod conflict_copy_tests {
 }
 
 #[cfg(test)]
+mod kdf_refusal_tests {
+    /// Un client nuovo davanti a un server di prima: la busta `ver=2` torna
+    /// `400 stale wrap version` (o `bad wrap version`), e chi legge riceve un
+    /// errore tipizzato col suo testo, non un `400` senza parole. Non è
+    /// `Unserved`: chi riprova quando la rete torna non deve riprovare questo.
+    #[test]
+    fn a_server_that_does_not_know_the_kdf_version_is_a_typed_error() {
+        for code in super::KDF_REFUSALS {
+            let body = serde_json::to_vec(&serde_json::json!({ "error": code })).unwrap();
+            let error = super::status_error("/v1/sync/invite", 400, &body);
+            match error {
+                fub_abi::PluginError::BadArgs(fub_abi::text::Text::Message(message)) => {
+                    assert_eq!(message.key, "host.sync.kdf_unsupported", "{code}");
+                }
+                other => panic!("{code}: {other:?}"),
+            }
+        }
+        let body = br#"{"error":"bad wrapped vdk"}"#;
+        assert!(matches!(
+            super::status_error("/v1/sync/invite", 400, body),
+            fub_abi::PluginError::Io(_)
+        ));
+    }
+}
+
+#[cfg(test)]
 mod recovery_tests {
     use super::JobLock;
 
@@ -811,6 +869,29 @@ mod recovery_tests {
             "stable lock inode must stay"
         );
         drop(second);
+    }
+
+    /// Un collegamento o una cartella al posto del lock non si blocca: due
+    /// processi bloccherebbero due file diversi.
+    #[test]
+    fn a_lock_that_is_not_a_regular_file_is_refused() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::create_dir(dir.path().join("sync-pass.lock")).unwrap();
+        assert!(matches!(
+            JobLock::acquire(dir.path()),
+            Err(fub_abi::PluginError::Io(_))
+        ));
+        #[cfg(unix)]
+        {
+            let other = tempfile::tempdir().unwrap();
+            let target = other.path().join("altrove.lock");
+            std::fs::write(&target, b"").unwrap();
+            std::os::unix::fs::symlink(&target, other.path().join("sync-pass.lock")).unwrap();
+            assert!(matches!(
+                JobLock::acquire(other.path()),
+                Err(fub_abi::PluginError::Io(_))
+            ));
+        }
     }
 }
 

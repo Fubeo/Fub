@@ -415,6 +415,8 @@ struct Scanner<'a> {
     rels: &'a BTreeMap<String, String>,
     limits: &'a Limits,
     elements: u64,
+    /// I caratteri di testo letti, per [`Limits::chars`].
+    chars: u64,
     depth: usize,
     blocks: Vec<Vec<Token>>,
     /// Ciò che va con il blocco che segue: segni fra due blocchi, l'apertura
@@ -455,6 +457,7 @@ pub(crate) fn scan(
         rels,
         limits,
         elements: 0,
+        chars: 0,
         depth: 0,
         blocks: Vec::new(),
         pending: Vec::new(),
@@ -1345,6 +1348,7 @@ impl<'a> Scanner<'a> {
                 }
                 "t" | "delText" => {
                     let node = self.capture(child, child_empty)?;
+                    self.count_chars(node.text.chars().count())?;
                     pieces.extend(node.text.chars().map(Piece::Char));
                 }
                 "instrText" | "delInstrText" => {
@@ -1402,6 +1406,16 @@ impl<'a> Scanner<'a> {
             }
         }
         self.flush(&mut pieces, &props);
+        Ok(())
+    }
+
+    /// Conta `n` caratteri di testo, prima che diventino segni: oltre
+    /// [`Limits::chars`] il flusso non si fa, invece di chiedere gigabyte.
+    fn count_chars(&mut self, n: usize) -> Result<(), ScanError> {
+        self.chars = self.chars.saturating_add(n as u64);
+        if self.chars > self.limits.chars {
+            return Err(InventoryError::Limit("text characters").into());
+        }
         Ok(())
     }
 
@@ -1583,6 +1597,32 @@ mod tests {
         scan(xml.as_bytes(), &BTreeMap::new(), &crate::inventory::LIMITS)
             .expect("scan")
             .blocks
+    }
+
+    #[test]
+    fn il_testo_oltre_il_tetto_non_diventa_segni() {
+        // Un segno per carattere: senza tetto un paragrafo di centinaia di
+        // milioni di caratteri chiede gigabyte prima di qualunque controllo.
+        let xml = format!(
+            r#"<w:document {W}><w:body><w:p><w:r><w:t>{}</w:t></w:r><w:r><w:t>{}</w:t></w:r></w:p></w:body></w:document>"#,
+            "a".repeat(6),
+            "b".repeat(6)
+        );
+        let limits = Limits {
+            chars: 10,
+            ..crate::inventory::LIMITS
+        };
+        assert!(matches!(
+            scan(xml.as_bytes(), &BTreeMap::new(), &limits),
+            Err(ScanError::Inventory(InventoryError::Limit(
+                "text characters"
+            )))
+        ));
+        let limits = Limits {
+            chars: 12,
+            ..crate::inventory::LIMITS
+        };
+        assert!(scan(xml.as_bytes(), &BTreeMap::new(), &limits).is_ok());
     }
 
     fn one(body: &str) -> Vec<Token> {

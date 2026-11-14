@@ -810,6 +810,43 @@ export const SCENE = onPage("shell", [
     viewport: { width, height: 800 },
     prepare: openDrawing,
   })),
+  // **La lavagna** (T61): vuota, con le schede e con una scheda attiva, le
+  // lavagne di `?lavagna=1` (vedi `fake-ipc.ts`). Le schede si raggiungono
+  // col Tab, come le raggiunge chi usa la tastiera, e ognuna ha il suo nome.
+  {
+    id: "lavagna-vuota",
+    title: "Una lavagna vuota: il Tab va al primo pulsante per cominciare",
+    query: "lavagna=1",
+    prepare: async (page) => {
+      await openBoard(page, "Lavagne/Vuota.canvas");
+      await page.keyboard.press("Tab");
+      await page.waitForSelector(".pane.focus .canvas-blank button:focus");
+    },
+  },
+  {
+    id: "lavagna",
+    title: "Una lavagna con un gruppo, quattro schede e tre fili, col fuoco su una scheda raggiunta col Tab",
+    query: "lavagna=1",
+    prepare: async (page) => {
+      await openBoard(page, "Lavagne/Statistica.canvas");
+      // Il gruppo, poi la prima scheda dentro.
+      await page.keyboard.press("Tab");
+      await page.keyboard.press("Tab");
+      await page.waitForSelector('.pane.focus .canvas-node[data-node="varianza"][aria-label]:focus');
+    },
+  },
+  {
+    id: "lavagna-attiva",
+    title: "La stessa lavagna con la scheda della nota attiva, entrata con Invio",
+    query: "lavagna=1",
+    prepare: async (page) => {
+      await openBoard(page, "Lavagne/Statistica.canvas");
+      for (let i = 0; i < 3; i++) await page.keyboard.press("Tab");
+      await page.waitForSelector('.pane.focus .canvas-node[data-node="media"]:focus');
+      await page.keyboard.press("Enter");
+      await page.waitForSelector('.pane.focus .canvas-node[data-node="media"][data-card-active]');
+    },
+  },
   // **I documenti di videoscrittura**: un `.docx` e un `.odt` aperti dalla
   // proiezione vera del codec (`?rich=…`, vedi `fake-ipc.ts`), largo e nella
   // finestra di un documento appena aperto.
@@ -1919,6 +1956,17 @@ async function openFromTree(page, path, ready) {
     await page.click("#sidebar-scrim", { position: { x: scrim.width - 8, y: 8 } });
     await page.waitForSelector("#sidebar-scrim", { state: "hidden" });
   }
+}
+
+/// Apre la lavagna `path` dall'albero e dà il fuoco alla lavagna, come un clic
+/// nel vuoto: da lì parte il Tab delle scene `lavagna-*`.
+async function openBoard(page, path) {
+  await openFromTree(page, path, ".pane.focus .canvas-viewport");
+  await page.waitForFunction(
+    () => document.querySelector(".pane.focus .canvas-viewport")?.dataset.canvasProtocol !== undefined
+      || document.querySelector(".pane.focus .canvas-blank:not([hidden])") !== null,
+  );
+  await page.focus(".pane.focus .canvas-viewport");
 }
 
 /// Apre il disegno dei connettori e aspetta che sia dipinto, col fuoco sulla

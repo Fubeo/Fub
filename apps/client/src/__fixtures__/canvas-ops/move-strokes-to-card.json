@@ -1,0 +1,113 @@
+{
+  "about": "Un tratto libero spostato di (20, 10) sopra la scheda n passa a lei: in fondo ai suoi tratti, con l'ancora card alla misura di adesso e i punti meno l'angolo della scheda (170, 90) → (70, 40). Il livello della radice resta vuoto e la sua chiave sparisce; gli altri campi del tratto restano.",
+  "before": {
+    "nodes": [
+      {
+        "id": "n",
+        "type": "text",
+        "x": 100,
+        "y": 50,
+        "width": 200,
+        "height": 100,
+        "text": "voti",
+        "fub:ink": {
+          "v": 1,
+          "strokes": [
+            {
+              "id": "k1",
+              "tool": "pen",
+              "brush": "pf1 size=3 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=0 pen=ballpoint",
+              "color": "#0072b2",
+              "anchor": {
+                "kind": "card",
+                "width": 200,
+                "height": 100
+              },
+              "ink": "1 s100 cxy 500,500 10,0"
+            }
+          ]
+        }
+      }
+    ],
+    "edges": [],
+    "fub:ink": {
+      "v": 1,
+      "strokes": [
+        {
+          "id": "s1",
+          "tool": "pen",
+          "at": "2026-11-10T09:00:00.000Z",
+          "brush": "pf1 size=3 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=0 pen=ballpoint",
+          "color": "#0072b2",
+          "anchor": {
+            "kind": "free"
+          },
+          "ink": "1 s100 cxy 15000,8000 1000,500",
+          "fub:tag": "x"
+        }
+      ]
+    }
+  },
+  "ops": [
+    {
+      "op": "move_strokes",
+      "layer": "board",
+      "ids": [
+        "s1"
+      ],
+      "dx": 20,
+      "dy": 10,
+      "to": {
+        "node": "n"
+      }
+    }
+  ],
+  "expect": {
+    "outcome": "applied",
+    "after": {
+      "nodes": [
+        {
+          "id": "n",
+          "type": "text",
+          "x": 100,
+          "y": 50,
+          "width": 200,
+          "height": 100,
+          "text": "voti",
+          "fub:ink": {
+            "v": 1,
+            "strokes": [
+              {
+                "id": "k1",
+                "tool": "pen",
+                "brush": "pf1 size=3 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=0 pen=ballpoint",
+                "color": "#0072b2",
+                "anchor": {
+                  "kind": "card",
+                  "width": 200,
+                  "height": 100
+                },
+                "ink": "1 s100 cxy 500,500 10,0"
+              },
+              {
+                "id": "s1",
+                "tool": "pen",
+                "at": "2026-11-10T09:00:00.000Z",
+                "brush": "pf1 size=3 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=0 pen=ballpoint",
+                "color": "#0072b2",
+                "anchor": {
+                  "kind": "card",
+                  "width": 200,
+                  "height": 100
+                },
+                "ink": "1 s100 cxy 7000,4000 1000,500",
+                "fub:tag": "x"
+              }
+            ]
+          }
+        }
+      ],
+      "edges": []
+    }
+  }
+}

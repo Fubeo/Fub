@@ -1,0 +1,21 @@
+{
+  "name": "write-size-only",
+  "description": "Solo la misura: l'allineamento di serie non si scrive.",
+  "node": {
+    "id": "t1",
+    "type": "text",
+    "x": 0,
+    "y": 0,
+    "width": 300,
+    "height": 120,
+    "text": "nota"
+  },
+  "style": {
+    "size": "xl",
+    "align": "start"
+  },
+  "expect": {
+    "outcome": "written",
+    "text": "{\"v\":1,\"size\":\"xl\"}"
+  }
+}

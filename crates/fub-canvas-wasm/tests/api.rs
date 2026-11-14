@@ -81,6 +81,11 @@ fn ink_layers_follow_the_commits() {
 }
 
 #[test]
+fn stroke_commits_follow_the_model() {
+    common::stroke_commits_follow_the_model(&mut Api::default());
+}
+
+#[test]
 fn the_utf16_edit_rebuilds_the_new_source() {
     common::utf16_round_trip(&mut Api::default());
 }

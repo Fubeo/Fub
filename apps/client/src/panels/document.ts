@@ -22,6 +22,8 @@ import { api } from "../host/ipc";
 import { emit, on, state } from "../state/store";
 import { documentSessions } from "../state/document-session";
 import { lentTo, unlend } from "../state/lend";
+import { saveStateKey } from "../state/saving";
+import type { CardNotices } from "../state/card-editors";
 import { appPreviewSubject, CRAFT_CONSENT_SETTING, craftServed, forgetConsent, peekPreview, previewOf, renderPreview, watchCraftPreviews } from "../state/craft-previews";
 import { openDocument as openRecreated } from "../state/document-controller";
 import { clearRemovedNotice, dismissSheetNotice, limitedMode, removedNoticeOf, sheetNoticesOf, type SheetNoticeKind } from "../state/sheet-notices";
@@ -268,6 +270,8 @@ const view: PaneView = {
   },
   drawToolbar,
   drawConflict: (pane, doc) => drawConflict(frameOf(pane), doc),
+  drawCardConflict,
+  drawCardNotices,
   drawSave,
   focusTab: (pane, index) => focusPaneTab(frameOf(pane), index),
   focusedTab,
@@ -1410,7 +1414,24 @@ const deferredConflicts = new Set<string>();
 
 function drawConflict(r: PaneFrame, doc: string | null): void {
   drawNotices(r, doc);
-  const box = r.conflictEl;
+  if (doc) redrawCardNotices(doc);
+  // In Lettura il reso viene dal buffer della sessione, lo stesso della
+  // scrittura: la riga dice che quel testo è quello di chi scrive, non
+  // ancora salvato, e non la versione sul disco (R03).
+  const pane = paneOf(r.id);
+  const reading = pane !== undefined && selectedMode(pane)?.contextMode === "reading";
+  fillConflict(r.conflictEl, doc, reading, () => drawConflict(r, doc));
+}
+
+/// La stessa scelta dentro una scheda della lavagna che scrive nel documento
+/// (N6 T41): il banner del riquadro, nel corpo della scheda.
+function drawCardConflict(box: HTMLElement, doc: string): void {
+  fillConflict(box, doc, false, () => drawCardConflict(box, doc));
+}
+
+/// Il banner del conflitto di `doc` in `box`, o `box` vuoto e nascosto se
+/// non c'è conflitto. `redraw` lo ridisegna dopo «Decidi dopo» e «Riprendi».
+function fillConflict(box: HTMLElement, doc: string | null, readingMode: boolean, redraw: () => void): void {
   box.replaceChildren();
   if (!doc || documentSessions.saveState(doc) !== "conflitto") {
     if (doc) deferredConflicts.delete(doc);
@@ -1434,7 +1455,7 @@ function drawConflict(r: PaneFrame, doc: string | null): void {
     reopen.textContent = t("document.conflict.resume");
     reopen.addEventListener("click", () => {
       deferredConflicts.delete(current);
-      drawConflict(r, current);
+      redraw();
     });
     box.append(line, reopen);
     return;
@@ -1446,11 +1467,7 @@ function drawConflict(r: PaneFrame, doc: string | null): void {
   const body = document.createElement("p");
   body.textContent = t("document.conflict.body");
   body.setAttribute("data-doc", current);
-  // In Lettura il reso viene dal buffer della sessione, lo stesso della
-  // scrittura: la riga dice che quel testo è quello di chi scrive, non
-  // ancora salvato, e non la versione sul disco (R03).
-  const pane = paneOf(r.id);
-  const reading = pane && selectedMode(pane)?.contextMode === "reading" ? document.createElement("p") : null;
+  const reading = readingMode ? document.createElement("p") : null;
   if (reading) {
     reading.dataset.conflictReading = "";
     reading.textContent = t("document.conflict.reading");
@@ -1502,7 +1519,7 @@ function drawConflict(r: PaneFrame, doc: string | null): void {
   theirs.addEventListener("click", () => void ask("theirs"));
   cancel.addEventListener("click", () => {
     deferredConflicts.add(current);
-    drawConflict(r, current);
+    redraw();
   });
   actions.append(compare, mine, theirs, cancel);
   box.append(title, body, ...(reading ? [reading] : []), actions);
@@ -1602,9 +1619,12 @@ function noticeLinesOf(doc: string): SheetLine[] {
       id: notice.kind,
       tone: notice.kind === "reloaded" ? "info" : "warning",
       text: t(NOTICE_KEY[notice.kind], { doc: name, detail }).trim(),
+      // Chiuso in un posto, l'avviso se ne va da ogni superficie della nota:
+      // i riquadri e le schede della lavagna che ci scrivono (N6 T96).
       dismiss: () => {
         dismissSheetNotice(doc, notice.kind);
         for (const frame of frames.values()) drawNotices(frame, doc);
+        redrawCardNotices(doc);
       },
     });
   }
@@ -1681,8 +1701,46 @@ function redrawNoticesOf(doc: string): void {
 }
 
 function drawNotices(r: PaneFrame, doc: string | null): void {
-  const box = r.noticeEl;
-  const lines = noticeLines(doc, r.id);
+  fillNotices(r.noticeEl, noticeLines(doc, r.id));
+}
+
+/// Le caselle degli avvisi delle schede della lavagna che scrivono in una nota
+/// (N6 T96), col documento di ciascuna adesso (segue le rinomine) e chi
+/// avvisare dopo un disegno.
+const cardNoticeBoxes = new Map<HTMLElement, { readonly doc: () => string; readonly drawn: () => void }>();
+
+/// Gli avvisi della nota dentro una scheda della lavagna che ci scrive (N6
+/// T96): le stesse righe di un riquadro (`noticeLinesOf`: la bozza ritrovata,
+/// il salvataggio fallito, la sola lettura col suo perché, il prestito a
+/// un'app), con le stesse azioni. Chiudere un avviso qui lo chiude anche nei
+/// riquadri e nelle altre schede, e al contrario.
+function drawCardNotices(box: HTMLElement, doc: () => string, drawn: () => void): CardNotices {
+  const entry = { doc, drawn };
+  const redraw = (): void => {
+    if (cardNoticeBoxes.get(box) !== entry) return;
+    fillNotices(box, noticeLinesOf(doc()));
+    drawn();
+  };
+  cardNoticeBoxes.set(box, entry);
+  redraw();
+  return {
+    redraw,
+    dispose: () => {
+      if (cardNoticeBoxes.get(box) === entry) cardNoticeBoxes.delete(box);
+    },
+  };
+}
+
+function redrawCardNotices(doc: string): void {
+  for (const [box, entry] of [...cardNoticeBoxes]) {
+    if (entry.doc() !== doc) continue;
+    fillNotices(box, noticeLinesOf(doc));
+    entry.drawn();
+  }
+}
+
+/// Le righe degli avvisi in `box`, nascosto se non ce n'è nessuna.
+function fillNotices(box: HTMLElement, lines: readonly SheetLine[]): void {
   // Stessa firma = stesso disegno: un ridisegno dello stato non deve rifare i
   // nodi sotto un fuoco che sta sul pulsante di un avviso.
   const signature = lines.map((line) => `${line.id}:${line.text}`).join("\n");
@@ -1743,13 +1801,5 @@ function drawSave(): void {
     return;
   }
   el.dataset.state = state;
-  el.textContent = t(STATE_KEY[state]);
+  el.textContent = t(saveStateKey(state));
 }
-
-const STATE_KEY = {
-  "salvato": "save.saved",
-  "in_corso": "save.saving",
-  "non_salvato": "save.unsaved",
-  "fallito": "save.failed",
-  "conflitto": "save.conflitto",
-} as const;

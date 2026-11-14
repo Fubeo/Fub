@@ -20,7 +20,7 @@
 //! tocca: è [`PatchError::ForeignLayer`], che il commit dà come `invalid`
 //! ([`PatchError::reason`]).
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fmt;
 
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
@@ -369,9 +369,17 @@ pub fn same_edge(left: &CanvasEdge, right: &CanvasEdge) -> bool {
 /// Il modello dopo le toppe, su una copia (`canvasDraft`): tutte le toppe o
 /// nessuna, e `canvas` non cambia.
 pub fn draft(canvas: &Canvas, patches: &[CanvasPatch]) -> Result<Canvas, PatchError> {
-    let mut draft = canvas.clone();
-    for (index, patch) in patches.iter().enumerate() {
-        step(&mut draft, index, patch)?;
+    draft_owned(canvas.clone(), patches)
+}
+
+/// Come [`draft`], su una lavagna che il chiamante dà via: niente copia.
+pub(crate) fn draft_owned(
+    mut draft: Canvas,
+    patches: &[CanvasPatch],
+) -> Result<Canvas, PatchError> {
+    let mut index = 0;
+    while index < patches.len() {
+        index = step(&mut draft, patches, index)?;
     }
     Ok(draft)
 }
@@ -391,7 +399,13 @@ fn edge_position(canvas: &Canvas, id: &str) -> Option<usize> {
     canvas.edges.iter().position(|edge| edge.id == id)
 }
 
-fn step(draft: &mut Canvas, index: usize, patch: &CanvasPatch) -> Result<(), PatchError> {
+/// Applica la toppa `index` di `patches` (e, per una toppa `ink`, quelle
+/// vicine sullo stesso livello) e dà la posizione della prossima da
+/// applicare.
+fn step(draft: &mut Canvas, patches: &[CanvasPatch], index: usize) -> Result<usize, PatchError> {
+    let Some(patch) = patches.get(index) else {
+        return Ok(patches.len());
+    };
     match patch {
         CanvasPatch::UpsertNode { before, after, at } => {
             let current = node_position(draft, &after.id);
@@ -546,14 +560,11 @@ fn step(draft: &mut Canvas, index: usize, patch: &CanvasPatch) -> Result<(), Pat
                 .collect();
             draft.nodes = nodes;
         }
-        CanvasPatch::Ink {
-            layer,
-            at,
-            before,
-            after,
-        } => ink_step(draft, index, layer, *at, before.as_ref(), after.as_ref())?,
+        // Le toppe `ink` vicine sullo stesso livello vanno insieme: il
+        // livello si legge e si riscrive una volta per la serie.
+        CanvasPatch::Ink { layer, .. } => return ink_run(draft, patches, index, layer),
     }
-    Ok(())
+    Ok(index + 1)
 }
 
 /// I campi di chi tiene il livello `layer`: la radice o la prima scheda con
@@ -573,95 +584,175 @@ pub fn same_stroke(left: &InkStroke, right: &InkStroke) -> bool {
     same_value(&left.to_value(), &right.to_value())
 }
 
-fn ink_step(
+/// Applica la serie di toppe `ink` che parte da `start` e continua con le
+/// toppe `ink` vicine sullo stesso livello `layer`, e dà la posizione della
+/// prima toppa dopo la serie.
+///
+/// Il livello si legge una volta all'inizio e si riscrive una volta alla
+/// fine: il risultato e gli errori (con l'`index` della toppa colpevole)
+/// sono quelli di una toppa alla volta, che rileggerebbe e riscriverebbe il
+/// livello ogni volta (`docs/reference/canvas-ink.md`; il confronto è in
+/// `tests/ink_runs.rs`). Così duemila toppe su un livello di duemila tratti
+/// costano millisecondi, non secondi. Per questo:
+///
+/// - i controlli della prima toppa vengono nell'ordine di sempre: toppa
+///   vuota, chi tiene il livello, livello estraneo; per le altre chi tiene il
+///   livello c'è ancora e il livello, appena scritto, si rileggerebbe uguale;
+/// - un livello che a metà serie resta nudo perde la chiave in quel momento
+///   (`shift_remove`) e riparte come livello nuovo, `{"v": 1, "strokes": []}`:
+///   un tratto aggiunto dopo rimette la chiave in fondo, come rileggendo;
+/// - un tratto con l'`id` vuoto (lo può fare solo chi costruisce le toppe in
+///   Rust: il JSON non lo legge) chiude la serie, così la toppa dopo rilegge il
+///   livello e lo trova estraneo come prima.
+fn ink_run(
     draft: &mut Canvas,
-    index: usize,
+    patches: &[CanvasPatch],
+    start: usize,
     layer: &LayerRef,
-    at: usize,
-    before: Option<&InkStroke>,
-    after: Option<&InkStroke>,
-) -> Result<(), PatchError> {
-    if before.is_none() && after.is_none() {
-        return Err(PatchError::EmptyInk { index });
+) -> Result<usize, PatchError> {
+    if let Some(CanvasPatch::Ink {
+        before: None,
+        after: None,
+        ..
+    }) = patches.get(start)
+    {
+        return Err(PatchError::EmptyInk { index: start });
     }
     let Some(fields) = ink_holder(draft, layer) else {
         let id = match layer {
             LayerRef::Node(id) => id.as_str(),
             LayerRef::Board => "",
         };
-        return Err(stale_node(index, id));
+        return Err(stale_node(start, id));
     };
     let mut ink = match fields.get(INK_KEY) {
         None => InkLayer::default(),
         Some(value) => InkLayer::from_value(value).map_err(|reason| PatchError::ForeignLayer {
-            index,
+            index: start,
             layer: layer.clone(),
             reason,
         })?,
     };
-    let len = ink.strokes.len();
-    match before {
-        None if at > len => {
-            return Err(PatchError::InkAtOutOfRange {
-                index,
-                layer: layer.clone(),
-                at,
-                len,
-            })
+    // Gli id del livello: un livello letto non ne ha di doppi, e i passi non
+    // ne fanno.
+    let mut ids: HashSet<String> = ink.strokes.iter().map(|stroke| stroke.id.clone()).collect();
+    let mut index = start;
+    while let Some(CanvasPatch::Ink {
+        layer: next,
+        at,
+        before,
+        after,
+    }) = patches.get(index)
+    {
+        if next != layer {
+            break;
         }
-        Some(before)
-            if !ink
-                .strokes
-                .get(at)
-                .is_some_and(|current| same_stroke(current, before)) =>
-        {
-            return Err(PatchError::Stale {
-                index,
-                subject: Subject::Stroke {
-                    layer: layer.clone(),
-                    id: before.id.clone(),
-                },
-            });
+        let change = InkChange {
+            index,
+            layer,
+            at: *at,
+            before: before.as_ref(),
+            after: after.as_ref(),
+        };
+        change.apply(&mut ink, &mut ids)?;
+        index += 1;
+        if ink.is_bare() {
+            // `shift_remove`: gli altri campi restano nel loro ordine.
+            fields.shift_remove(INK_KEY);
+            ink = InkLayer::default();
         }
-        None | Some(_) => {}
-    }
-    if let Some(after) = after {
-        // Il posto che il tratto prende: con `before` quello del tratto di
-        // prima, che non conta come doppione.
-        let replaced = before.map(|_| at);
-        let taken = ink
-            .strokes
-            .iter()
-            .enumerate()
-            .any(|(position, stroke)| Some(position) != replaced && stroke.id == after.id);
-        if taken {
-            return Err(PatchError::DuplicateStroke {
-                index,
-                layer: layer.clone(),
-                id: after.id.clone(),
-            });
+        if after.as_ref().is_some_and(|after| after.id.is_empty()) {
+            break;
         }
     }
-    match (before, after) {
-        (None, Some(after)) => ink.strokes.insert(at, after.clone()),
-        (Some(_), Some(after)) => {
-            if let Some(slot) = ink.strokes.get_mut(at) {
-                *slot = after.clone();
-            }
-        }
-        (Some(_), None) => {
-            ink.strokes.remove(at);
-        }
-        (None, None) => return Err(PatchError::EmptyInk { index }),
-    }
-    if ink.is_bare() {
-        // `shift_remove`: gli altri campi restano nel loro ordine.
-        fields.shift_remove(INK_KEY);
-    } else {
+    if !ink.is_bare() {
         // Una chiave che c'è resta al suo posto; una nuova va in fondo.
         fields.insert(INK_KEY.to_owned(), ink.to_value());
     }
-    Ok(())
+    Ok(index)
+}
+
+/// Una toppa `ink` da applicare a un livello già letto.
+struct InkChange<'a> {
+    index: usize,
+    layer: &'a LayerRef,
+    at: usize,
+    before: Option<&'a InkStroke>,
+    after: Option<&'a InkStroke>,
+}
+
+impl InkChange<'_> {
+    /// Cambia `ink` (e i suoi `ids`) come dice la toppa, o dice perché non
+    /// si può; con un errore `ink` può restare a metà, e la bozza si butta.
+    fn apply(&self, ink: &mut InkLayer, ids: &mut HashSet<String>) -> Result<(), PatchError> {
+        let InkChange {
+            index,
+            layer,
+            at,
+            before,
+            after,
+        } = *self;
+        if before.is_none() && after.is_none() {
+            return Err(PatchError::EmptyInk { index });
+        }
+        let len = ink.strokes.len();
+        match before {
+            None if at > len => {
+                return Err(PatchError::InkAtOutOfRange {
+                    index,
+                    layer: layer.clone(),
+                    at,
+                    len,
+                })
+            }
+            Some(before)
+                if !ink
+                    .strokes
+                    .get(at)
+                    .is_some_and(|current| same_stroke(current, before)) =>
+            {
+                return Err(PatchError::Stale {
+                    index,
+                    subject: Subject::Stroke {
+                        layer: layer.clone(),
+                        id: before.id.clone(),
+                    },
+                });
+            }
+            None | Some(_) => {}
+        }
+        if let Some(after) = after {
+            // Con `before` il tratto di prima, che è al posto `at` e ha il suo
+            // stesso id, lascia il posto: non conta come doppione.
+            let replaced = before.is_some_and(|before| before.id == after.id);
+            if !replaced && ids.contains(&after.id) {
+                return Err(PatchError::DuplicateStroke {
+                    index,
+                    layer: layer.clone(),
+                    id: after.id.clone(),
+                });
+            }
+        }
+        match (before, after) {
+            (None, Some(after)) => {
+                ink.strokes.insert(at, after.clone());
+                ids.insert(after.id.clone());
+            }
+            (Some(_), Some(after)) => {
+                if let Some(slot) = ink.strokes.get_mut(at) {
+                    ids.remove(&slot.id);
+                    ids.insert(after.id.clone());
+                    *slot = after.clone();
+                }
+            }
+            (Some(_), None) => {
+                let removed = ink.strokes.remove(at);
+                ids.remove(&removed.id);
+            }
+            (None, None) => return Err(PatchError::EmptyInk { index }),
+        }
+        Ok(())
+    }
 }
 
 fn stale_node(index: usize, id: &str) -> PatchError {

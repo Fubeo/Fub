@@ -1,0 +1,25 @@
+{
+  "name": "write-group-card",
+  "description": "Un gruppo non ha testo da misurare: rifiutato.",
+  "node": {
+    "id": "t1",
+    "type": "group",
+    "x": 0,
+    "y": 0,
+    "width": 300,
+    "height": 120,
+    "label": "gruppo",
+    "fub:text": {
+      "v": 1,
+      "size": "l"
+    }
+  },
+  "style": {
+    "size": "m",
+    "align": "start"
+  },
+  "expect": {
+    "outcome": "refused",
+    "reason": "node"
+  }
+}

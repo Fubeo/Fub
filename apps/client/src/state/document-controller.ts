@@ -28,9 +28,10 @@
 // nessun selettore. La vista della shell di oggi è `panels/document.ts`.
 import { pickFromList } from "../ui/dialogs";
 import { rebaseStaleChange, type EditorChange } from "../editors/core/text-operation";
-import { createDocumentSurfaceRegistry, setComponentEditors } from "../editors/core/bootstrap";
-import { VECTOR_PROFILE, uisForFile } from "../editors/core/component-surfaces";
-import { componentsReady, mountComponents, onComponents, refreshComponents, type Components } from "./components";
+import { createDocumentSurfaceRegistry, setComponentEditors, type CanvasCardPorts } from "../editors/core/bootstrap";
+import type { CanvasNotesPort } from "../editors/canvas/engine";
+import { UI_CRAFT, VECTOR_PROFILE, uisForFile } from "../editors/core/component-surfaces";
+import { components, componentsReady, mountComponents, onComponents, refreshComponents, type Components } from "./components";
 import {
   selectionSetOf,
   type DocumentSurfaceRegistry,
@@ -58,12 +59,12 @@ import { openResourcePort, type ResourceTransport } from "../editors/media/resou
 import { vaultImageSource } from "../editors/text/profiles/markdown/media";
 import { renderMarkdown } from "../editors/text/profiles/markdown/render";
 import { blockIds, type BlockOption } from "../editors/text/profiles/markdown/completions";
-import { depositAttachment, depositFiles, DEFAULT_ATTACHMENT_FOLDER, relativeUrl, type AttachmentDeposit } from "../editors/media/attachment-target";
+import { depositFiles, DEFAULT_ATTACHMENT_FOLDER, relativeUrl, type AttachmentDeposit } from "../editors/media/attachment-target";
 import { createViewStateCrashDeposit } from "../editors/media/recorder-store";
 import { mountRecorderSurface } from "../editors/media/recorder-surface";
 import { printDocument } from "../editors/media/print-view";
 import { mountSlidePresentation } from "../ui/slides";
-import { mountMarkdown, mountRenderedDocument } from "../editors/text/profiles/markdown/mount";
+import { mountMarkdown, mountRenderedDocument, type MarkdownMountOptions } from "../editors/text/profiles/markdown/mount";
 import { applyNoteCssClasses } from "../theme/snippets";
 import { Queue } from "../ui/race";
 import { openWebPage } from "../ui/web-viewer";
@@ -76,16 +77,21 @@ import { linkCardView, requestLinkCard } from "./link-cards";
 import type { Theme } from "../theme/theme";
 import { contentLookPreference, markLook, resolveLook, type Look } from "../theme/content-look";
 import { api } from "../host/ipc";
-import { WITHOUT_PAGE, documentOutline, matchingDocuments, notesByName, renderPrint, resolvedReference, searchExpression, settings, vaultEntries, vaultTags } from "../host/query";
-import { theseDocuments, type PaneMode, type SyntaxForm, type VaultEntry, type ViewContext } from "../host/contract";
+import { WITHOUT_PAGE, documentOutline, existingDocuments, matchingDocuments, notesByName, renderEmbed, renderPrint, resolvedReference, searchExpression, settings, vaultEntries, vaultTags } from "../host/query";
+import { theseDocuments, type DocumentSource, type PaneMode, type SyntaxForm, type VaultEntry, type ViewContext } from "../host/contract";
 import { existingRecentNotes } from "./recent";
 import { linkPreference, markdownDestination, wikiPathCandidates, type LinkFormat, type LinkPreference } from "./note-links";
 import { onEvent } from "./kernel";
 import { drawingFonts } from "./drawing-fonts";
-import { emit, on, state } from "./store";
+import { emit, on, readState, state, writeState } from "./store";
+import { depositCanvasFiles, resolveCanvasPaths } from "./canvas-intake";
+import { LAVAGNA_BUNDLE, preferencesOf } from "../rules/canvas-settings";
+import { revealSetting } from "../panels/settings";
 import { CASE_KEY, caseOf, toRecover } from "./drafts";
 import { addSheetNotice, clearAllRemovedNotices, clearSheetNotices, dismissSheetNotice, moveSheetNotices, setLimitedMode, setRemovedNotice } from "./sheet-notices";
 import { syntaxForms, unsavedDrafts } from "../host/query";
+import { createCardEditorPort, type CardEditorHub, type CardNotices } from "./card-editors";
+import { createFormatBar, type GroupId } from "../panels/format-bar";
 import type { ComponentRefusal, ComponentRow, DraftInfo, Origin } from "../host/contract";
 import {
   documentSessions,
@@ -137,11 +143,12 @@ import {
   type Tab,
 } from "./layout";
 import { createNote, handToSystem, loadCommandSpecs, openVaultRoot, vaultArg } from "./vault";
-import { lendHeld, lentDocuments, mountLends, onLendChanged, provideLendGate, renameLend, unlend } from "./lend";
+import { lendHeld, lentDocuments, lentTo, mountLends, onLendChanged, provideLendGate, renameLend, unlend } from "./lend";
 import { confirm } from "../platform/confirm";
-import { registerShellCommand, type CommandEntry } from "../ui/commands";
+import { registerShellCommand, showComponent, type CommandEntry } from "../ui/commands";
 import type { LiveCommandTargets } from "../editors/spatial/live/commands";
 import { EXPORT_COMMAND } from "../ui/shell-ids.generated";
+import { trashWithConfirm } from "../panels/trash";
 import { showActivity } from "../panels/activity";
 import { notify } from "../ui/notify";
 import { applyIntent } from "../ui/intents";
@@ -154,7 +161,9 @@ import { noteTargets } from "../editors/text/profiles/markdown/kinds";
 import type { SelectionBox } from "../editors/core/editor-actions";
 import { mountViewInPane, unmountViewFromPane, primaryView } from "../ui/views";
 import { errorText, isErrorKind } from "../host/errors";
-import { renderOnOpen } from "./craft-previews";
+import { craftServed, previewOf, renderOnOpen, renderPreview, watchCraftPreviews } from "./craft-previews";
+import { openWithEntry } from "../panels/open-with";
+import { showContextMenu } from "../ui/menu";
 import { writeChrome } from "./machine-chrome";
 import { onLanguage, t } from "../i18n/strings";
 import { openLifetime, type Lifetime } from "../ui/lifetime";
@@ -243,6 +252,12 @@ export interface PaneView {
   drawToolbar(pane: Pane): void;
   /// Il banner del conflitto per il documento attivo del riquadro, o niente.
   drawConflict(pane: Pane, doc: string | null): void;
+  /// Lo stesso banner dentro una scheda della lavagna che scrive nel
+  /// documento (N6 T41): in `box`, o `box` vuoto e nascosto.
+  drawCardConflict(box: HTMLElement, doc: string): void;
+  /// Gli avvisi del documento dentro una scheda della lavagna che ci scrive
+  /// (N6 T96), quelli di un riquadro, in `box`; `drawn` dopo ogni disegno.
+  drawCardNotices(box: HTMLElement, doc: () => string, drawn: () => void): CardNotices;
   /// Lo stato del salvataggio del documento col fuoco. Senza un posto dove
   /// scriverlo non fa niente.
   drawSave(): void;
@@ -340,6 +355,15 @@ let view: PaneView = {
   drawViewSurface: unmounted,
   drawToolbar: unmounted,
   drawConflict: unmounted,
+  drawCardConflict: (box) => {
+    box.replaceChildren();
+    box.hidden = true;
+  },
+  drawCardNotices: (box) => {
+    box.replaceChildren();
+    box.hidden = true;
+    return { redraw: () => {}, dispose: () => {} };
+  },
   drawSave: () => {},
   focusTab: unmounted,
   focusedTab: () => null,
@@ -370,16 +394,58 @@ export function paneOf(id: string): Pane | undefined {
 }
 
 // --- montaggio --------------------------------------------------------------
-async function createCanvasNote(text: string): Promise<string> {
+/// Le note della lavagna (T70): «Estrai in una nota» e «Copia il testo qui».
+/// Si crea con `note.create` e si legge come le altre note; gli errori
+/// arrivano alla tela come frasi.
+const canvasNotes: CanvasNotesPort = {
+  freeName: canvasFreeName,
+  create: async (folder, name, text) => {
+    try {
+      return await createCanvasNote(folder, name, text);
+    } catch (error) {
+      throw new Error(errorText(error));
+    }
+  },
+  read: async (path) => {
+    try {
+      return documentSessions.text(path) ?? (await api.readDocument(path)).text;
+    } catch (error) {
+      throw new Error(errorText(error));
+    }
+  },
+};
+
+async function createCanvasNote(folder: string, name: string, text: string): Promise<string> {
   // Creazione, lettura e scrittura sono un gesto solo: stanno tutte nel vault
   // in cui il gesto è partito, anche se `createNote` aspetta e ne viene aperto
-  // un altro (FUB-001).
+  // un altro (FUB-001). La cartella `""` è la radice: `createNote` non ci
+  // mette quella delle note nuove.
   const vault = openVaultRoot();
-  const doc = await createNote();
+  const doc = await createNote(name, folder);
   if (!doc) throw new Error("note.create did not return a created document");
+  if (text === "") return doc;
   const source = await api.readDocument(doc, vault);
   await api.writeDocument(doc, text, { kind: "descends_from", value: source.revision }, vault);
   return doc;
+}
+
+/// Il nome da proporre per una nota `name` in `folder` (T70): `name`, o il
+/// primo `name 1`, `name 2`… che nessun documento della cartella usa (senza
+/// guardare l'estensione né le maiuscole). Solo una proposta, come quella del
+/// kernel per «Senza titolo»: se il nome si occupa prima di crearla,
+/// `note.create` lo rifiuta invece di sovrascrivere.
+export async function canvasFreeName(folder: string, name: string): Promise<string> {
+  const entries = await vaultEntries(WITHOUT_PAGE, "document", { path: folder, descendants: false });
+  const taken = new Set(entries.items.map((entry) => {
+    const base = entry.id.slice(entry.id.lastIndexOf("/") + 1);
+    const dot = base.lastIndexOf(".");
+    return (dot > 0 ? base.slice(0, dot) : base).toLocaleLowerCase();
+  }));
+  if (!taken.has(name.toLocaleLowerCase())) return name;
+  for (let n = 1; ; n += 1) {
+    const candidate = `${name} ${n}`;
+    if (!taken.has(candidate.toLocaleLowerCase())) return candidate;
+  }
 }
 
 /// Quanti file del vault propone la scelta di una card file: gli altri si
@@ -387,15 +453,26 @@ async function createCanvasNote(text: string): Promise<string> {
 const CANVAS_FILE_CHOICES = 500;
 
 /// Il file a cui punta una nuova card file del canvas: uno che c'è, scelto
-/// dall'utente, non un segnaposto.
-async function pickCanvasFile(): Promise<string | null> {
-  const page = await vaultEntries({ offset: 0, limit: CANVAS_FILE_CHOICES });
+/// dall'utente, non un segnaposto. Con `name` (il file di una scheda che non
+/// c'è più, «Ritrova…») gli omonimi vanno per primi, e si chiede tutto il
+/// vault: un omonimo oltre il tetto della lista non si troverebbe.
+async function pickCanvasFile(name?: string): Promise<string | null> {
+  const page = await vaultEntries(name === undefined ? { offset: 0, limit: CANVAS_FILE_CHOICES } : WITHOUT_PAGE);
+  const entries = name === undefined ? page.items : namesakesFirst(page.items, name).slice(0, CANVAS_FILE_CHOICES);
   return pickFromList<string>({
     title: t("canvas.pick_file"),
     placeholder: t("canvas.pick_file_filter"),
-    items: page.items.map((entry) => ({ label: pageName(entry.id), detail: entry.id, value: entry.id })),
-    more: Math.max(0, page.total - page.offset - page.items.length),
+    items: entries.map((entry) => ({ label: pageName(entry.id), detail: entry.id, value: entry.id })),
+    more: Math.max(0, page.total - entries.length),
   });
+}
+
+/// Le voci che hanno lo stesso nome (senza cartelle, senza distinguere le
+/// maiuscole) in testa, nell'ordine che avevano; il resto dopo, com'era.
+function namesakesFirst<T extends { readonly id: string }>(entries: readonly T[], name: string): T[] {
+  const wanted = name.toLocaleLowerCase();
+  const same = (entry: T): boolean => (entry.id.split("/").pop() ?? entry.id).toLocaleLowerCase() === wanted;
+  return [...entries.filter(same), ...entries.filter((entry) => !same(entry))];
 }
 
 /// Il documento a cui porta un collegamento del disegno `from`: uno che c'è,
@@ -425,6 +502,191 @@ const mediaTransport: ResourceTransport = {
   read_chunk: api.resourceReadChunk,
   close: api.resourceClose,
 };
+
+/// La montatura sicura del Markdown dentro una lavagna, la stessa per le
+/// schede di testo e per le schede di nota: i link si aprono col gesto e si
+/// risolvono da `documentId`.
+function canvasMarkdownMount(documentId: string): MarkdownMountOptions {
+  return {
+    documentId,
+    openWikilink: (page, heading, block) => openWikilink(page, heading, block, undefined, { gesture: true }),
+    openFigure,
+    openPath: async (path, from) => {
+      const target = await resolvedReference({ kind: "path", value: path }, from ?? documentId);
+      if (!target) throw new Error(t("preview.target_missing"));
+      await openDocument(target.doc, { gesture: true });
+      if (target.at) await reveal(target.doc, { span: target.at.span });
+    },
+    searchTag: (tag) => deps.searchTag(tag),
+  };
+}
+
+/// Gli eventi del kernel che cambiano ciò che una scheda mostra del suo file:
+/// i `document_*` per un file che un formato serve (una nota, un foglio), gli
+/// `entry_*` per gli altri (un'immagine, un PDF).
+function watchCardFile(path: string, changed: () => void): () => void {
+  const mine = (id: string): void => {
+    if (id === path) changed();
+  };
+  const moved = (from: string, to: string): void => {
+    if (from === path || to === path) changed();
+  };
+  const stops = [
+    onEvent("document_changed", (e) => mine(e.id)),
+    onEvent("entry_changed", (e) => mine(e.id)),
+    onEvent("document_removed", (e) => mine(e.id)),
+    onEvent("entry_removed", (e) => mine(e.id)),
+    onEvent("document_renamed", (e) => moved(e.from, e.to)),
+    onEvent("entry_renamed", (e) => moved(e.from, e.to)),
+  ];
+  return () => {
+    for (const stop of stops) stop();
+  };
+}
+
+/// La porta per scrivere dentro le schede (N6 T40): le stesse sessioni e lo
+/// stesso registro delle superfici dei riquadri di questa finestra, e la
+/// stessa sola lettura (`heldReadOnly`). Nasce al primo uso: caricare il
+/// modulo non legge ancora la collezione delle sessioni.
+let cardEditorHub: CardEditorHub | null = null;
+function cardEditorsHub(): CardEditorHub {
+  cardEditorHub ??= createCardEditorPort({
+    sessions: documentSessions,
+    surfaces: () => surfaceRegistry ?? null,
+    held: heldReadOnly,
+    heldWhy,
+    shownInPane: isOpen,
+    theme: () => theme,
+    forms: syntaxForms,
+    toolbar: cardToolbar,
+    conflict: (box, path) => view.drawCardConflict(box, path),
+    notices: (box, path, drawn) => view.drawCardNotices(box, path, drawn),
+    // Una scheda chiusa sopra un salvataggio fallito: la domanda di un
+    // riquadro, e «Tieni» riapre la nota nel riquadro col fuoco (T102).
+    unsaved: (path) => keepOrDiscardUnsaved(path, layout.focus),
+  });
+  return cardEditorHub;
+}
+
+/// I gruppi della barra di formato di una scheda (T41): tutti tranne la
+/// cronologia, perché sulla lavagna Annulla e Ripeti stanno in cima e,
+/// mentre si scrive, valgono per il testo.
+const CARD_TOOLBAR_GROUPS: readonly GroupId[] = ["block", "inline", "links", "lists", "blocks", "table", "other"];
+
+/// La barra di formato di una scheda che scrive: la stessa dei riquadri, per
+/// la superficie della scheda, ridisegnata quando cambiano i comandi.
+function cardToolbar(surface: EditorSurface, life: Lifetime): HTMLElement {
+  const bar = createFormatBar({
+    surface: () => surface,
+    writing: () => true,
+    focusPane: () => {},
+    runCommand: (id) => deps.runCommand(id),
+    only: CARD_TOOLBAR_GROUPS,
+  });
+  bar.update(state.commandSpecs);
+  life.add(on("commands", () => bar.update(state.commandSpecs)));
+  life.add(() => bar.destroy());
+  return bar.element;
+}
+const cardEditors: CardEditorHub = {
+  open: (path, host, options) => cardEditorsHub().open(path, host, options),
+  openText: (host, text, options) => cardEditorsHub().openText(host, text, options),
+  written: (surfaceId, change) => cardEditorHub?.written(surfaceId, change) ?? false,
+  failed: (surfaceId, error) => cardEditorHub?.failed(surfaceId, error) ?? false,
+  holds: (path) => cardEditorHub?.holds(path) ?? false,
+  renamed: () => cardEditorHub?.renamed(),
+  refreshReadOnly: () => cardEditorHub?.refreshReadOnly(),
+  setTheme: (next) => cardEditorHub?.setTheme(next),
+  destroyAll: () => cardEditorHub?.destroyAll(),
+};
+
+/// Le porte delle schede della lavagna (N6 T12). Le immagini e i PDF si
+/// leggono dalla `transport` dei media (`mediaTransport`), i fogli con le
+/// chiamate di `gridHost`: le passa la registrazione della lavagna.
+const canvasCards: CanvasCardPorts = {
+  editors: cardEditors,
+  note: {
+    show: async (path, heading, host, life) => {
+      const content = await renderEmbed(path, heading, null);
+      if (life.closed) return;
+      // Chiusa la vita, la resa resta, ferma: la scheda ferma la mostra.
+      life.add(mountMarkdown(host, content.html, { ...canvasMarkdownMount(path), keepOnTeardown: true }));
+    },
+  },
+  sheet: {
+    // La sessione aperta del documento, se c'è (A-9): la scheda mostra ciò
+    // che il foglio mostra, anche non salvato. Sennò il giornale vuoto sui
+    // byte del disco.
+    source: async (path) => {
+      const vault = openVaultRoot();
+      let read: DocumentSource;
+      try {
+        read = await api.readDocument(path, ...vaultArg(vault));
+      } catch (error) {
+        if (isErrorKind(error, "not_found")) return null;
+        throw error;
+      }
+      const session = openVaultRoot() === vault ? documentSessions.inspect(path) : undefined;
+      if (session?.lifecycle === "open" && session.base.kind === "descends_from") {
+        return { journal: session.text, base: session.base.value, format: read.format_id };
+      }
+      return { journal: "", base: read.revision, format: read.format_id };
+    },
+  },
+  web: {
+    view: linkCardView,
+    request: requestLinkCard,
+    watch: (changed) => on("link-cards", changed),
+    // Il consenso, la barra e gli errori sono del visore della finestra.
+    open: async (url) => {
+      await openWebPage(url);
+    },
+  },
+  craft: {
+    served: craftServed,
+    // La riga spenta che serve il file: l'id per «Accendi…» e il nome per la
+    // ragione, come nel riquadro «solo come file».
+    offComponent: () => {
+      const row = components()?.offRowFor(UI_CRAFT);
+      return row ? { id: row.id, name: row.nome } : null;
+    },
+    // «Accendi…» apre la riga nella pagina Componenti (K5 T24); senza
+    // impostazioni montate dà falso.
+    showComponent,
+    // Il componente acceso o spento cambia i comandi che il kernel elenca.
+    onServed: (changed) => on("commands", changed),
+    preview: (path) => previewOf(path, "large"),
+    watchPreviews: watchCraftPreviews,
+    render: (path) => renderPreview(path, "large"),
+    openWith: (path, anchor) => void openCardWith(path, anchor),
+  },
+  open: (path, subpath) => {
+    const page = linkedPdfPage(path, subpath?.replace(/^#/, ""));
+    void openDocument(path, page === null ? { gesture: true } : { gesture: true, page }).catch((error: unknown) => {
+      notify(errorText(error), "guasto");
+    });
+  },
+  watch: watchCardFile,
+};
+
+/// «Apri con…» da una scheda della lavagna (T18): il menu delle app di N7
+/// sotto il pulsante, come il sottomenu dell'albero. Senza app Craft
+/// installate non c'è niente da scegliere, e il file va all'app del sistema.
+async function openCardWith(path: string, anchor: HTMLElement): Promise<void> {
+  const entry = openWithEntry(path, { system: () => void handToSystem(path, true) });
+  const items = entry.items;
+  if (items === undefined) {
+    entry.run?.();
+    return;
+  }
+  try {
+    const choices = typeof items === "function" ? await items() : items;
+    if (!anchor.isConnected) return;
+    showContextMenu(anchor, choices, { label: entry.label });
+  } catch (error) {
+    notify(errorText(error), "guasto");
+  }
+}
 
 /// Un'immagine del vault che un disegno mostra per nome. Gli SVG non si
 /// propongono: nel vault sono disegni, e a un disegno si porta un
@@ -478,8 +740,14 @@ async function attachmentDeposit(doc: string): Promise<AttachmentDeposit> {
   return {
     folder,
     fromDocument: doc,
-    write: (id, bytes) => api.resourceWrite(id, bytes, null, vault),
+    write: (id, bytes, options) => api.resourceWrite(id, bytes, null, vault, options),
   };
+}
+
+/// Le cartelle che `files.excluded-folders` tiene fuori dal vault: indice e albero.
+async function excludedFolders(): Promise<readonly string[]> {
+  const value = (await settings()).find((entry) => entry.spec.key === "files.excluded-folders")?.value;
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
 }
 
 /// Un'immagine remota di `doc` scaricata fra i suoi allegati, dopo il «sì»
@@ -837,12 +1105,18 @@ export function mountDocumentController(lifetime: Lifetime, d: DocumentDeps, pan
     window.clearTimeout(contextTimer);
     contextTimer = undefined;
   });
+  // Gli editor dentro le schede muoiono con la shell, come i riquadri.
+  lifetime.add(() => cardEditors.destroyAll());
   surfaceRegistry = createDocumentSurfaceRegistry({
-    onChange: written,
+    // Una superficie di scheda scrive dalla sua porta; le altre sono riquadri.
+    onChange: (paneId, change) => {
+      if (!cardEditors.written(paneId, change)) written(paneId, change);
+    },
     onSelectionChange: (paneId) => {
       if (layout.focus === paneId) scheduleContext();
     },
     onFail: (paneId, error) => {
+      if (cardEditors.failed(paneId, error)) return;
       const r = panes.get(paneId);
       if (r?.shown?.k === "doc") failSurface(r, r.shown.doc, error);
     },
@@ -873,8 +1147,35 @@ export function mountDocumentController(lifetime: Lifetime, d: DocumentDeps, pan
       await openDocument(target.doc, { gesture: true });
       if (target.at) await reveal(target.doc, { span: target.at.span });
     },
+    // Il menu di una scheda della lavagna (T17) e «Apri a lato per questo»
+    // (T45): accanto, allo stesso punto.
+    onOpenPathBeside: openPathBeside,
+    // Un link di una scheda della lavagna (N6 T57) porta al file del vault che
+    // risolve, come un link di una nota: `null` se non c'è (un link rotto). Chi
+    // sceglie se la scheda è già sulla lavagna lo decide la tela.
+    resolveCardLink: async (link, from) => {
+      const target = await resolvedReference(
+        link.kind === "wiki"
+          ? { kind: "wiki", value: { page: link.page, heading: link.heading, block: link.block } }
+          : { kind: "path", value: link.path },
+        from ?? activeDoc() ?? undefined,
+      );
+      return target?.doc ?? null;
+    },
+    // «Sposta anche il file nel cestino»: lo stesso gesto dell'albero
+    // (`note.trash`, la domanda del cestino di sistema, l'avviso con
+    // «Annulla»). Se dopo il file c'è ancora, è rimasto: una domanda a cui si
+    // è detto di no, o un gesto già in corso.
+    onTrashPath: async (path) => {
+      try {
+        await trashWithConfirm(path);
+      } catch (error) {
+        throw new Error(errorText(error));
+      }
+      return !(await existingDocuments([path])).has(path);
+    },
     onImportRemoteImage: importRemoteImage,
-    onCreateCanvasNote: createCanvasNote,
+    canvasNotes,
     onPickCanvasFile: pickCanvasFile,
     onPickDrawingLink: pickDrawingLink,
     drawingImages: {
@@ -897,18 +1198,9 @@ export function mountDocumentController(lifetime: Lifetime, d: DocumentDeps, pan
     },
     drawingFonts,
     withDrawings: loadLiveCommands,
-    renderCanvasMarkdown: (_nodeId, text, host, documentId, forms) => mountMarkdown(host, renderMarkdown(text, forms).html, {
-      documentId,
-      openWikilink: (page, heading, block) => openWikilink(page, heading, block, undefined, { gesture: true }),
-      openFigure,
-      openPath: async (path, from) => {
-        const target = await resolvedReference({ kind: "path", value: path }, from ?? documentId);
-        if (!target) throw new Error(t("preview.target_missing"));
-        await openDocument(target.doc, { gesture: true });
-        if (target.at) await reveal(target.doc, { span: target.at.span });
-      },
-      searchTag: (tag) => deps.searchTag(tag),
-    }),
+    renderCanvasMarkdown: (_nodeId, text, host, documentId, forms) =>
+      mountMarkdown(host, renderMarkdown(text, forms).html, canvasMarkdownMount(documentId)),
+    canvasCards,
     canvasMedia: {
       openExternal: async () => { throw new Error(t("errors.document.no_external")); },
       // Il consenso, la barra e gli errori sono del visore della finestra.
@@ -916,16 +1208,23 @@ export function mountDocumentController(lifetime: Lifetime, d: DocumentDeps, pan
     },
     canvasAttachments: {
       expandFiles: droppedFiles,
-      deposit: async (files, documentId) => {
-        const deposit = await attachmentDeposit(documentId);
-        const paths: string[] = [];
-        for (const file of files) {
-          if (file.size > 64 * 1024 * 1024) throw new Error(t("errors.attachment.too_large", { name: file.name }));
-          const saved = await depositAttachment(deposit, file.name, new Uint8Array(await file.arrayBuffer()));
-          paths.push(saved.receipt.id);
-        }
-        return paths;
-      },
+      // Dall'albero: solo gli id che il vault conferma (G1).
+      resolvePaths: (data) => resolveCanvasPaths(data, {
+        existingDocuments,
+        folderEntries: async (folder) => new Set((await vaultEntries(WITHOUT_PAGE, undefined, { path: folder, descendants: false })).items.map((entry) => entry.id)),
+      }),
+      // Dal computer: una copia sola per file, e lo stesso file si riusa (G2).
+      // Il vault che ha già quei byte lo dice l'host (`reuse`), non il client.
+      // La cartella la sceglie `canvas.drop_folder`, letta a ogni trascinamento.
+      deposit: (files, documentId, cards) => depositCanvasFiles(files, documentId, {
+        deposit: attachmentDeposit,
+        dropFolder: async () => preferencesOf(await settings(LAVAGNA_BUNDLE)),
+        excludedFolders,
+        notify,
+        readState,
+        writeState,
+        revealSetting,
+      }, cards),
     },
     onSearchTag: (tag) => deps.searchTag(tag),
     onRenamePage: renamePage,
@@ -1153,6 +1452,9 @@ export function mountDocumentController(lifetime: Lifetime, d: DocumentDeps, pan
   const renamed = (from: string, to: string): void => {
     const outcome = documentSessions.rename(from, to);
     if (outcome.kind !== "collision") {
+      // Le schede che scrivono nella nota tengono la sessione col nome nuovo
+      // (anche se la rinomina l'ha già fatta la sessione, `already-renamed`).
+      cardEditors.renamed();
       moveSheetNotices(from, to);
       renameInDocumentCaches(from, to);
       // Il prestito segue il file col nome nuovo, come le schede qui sotto.
@@ -1652,11 +1954,16 @@ export function closeUnpinnedTabs(): void {
 }
 
 /// Cronologia avanti/indietro del riquadro col fuoco (shell.pane.back/forward).
+/// Prima chiede alla superficie del riquadro, che può avere una storia sua (i
+/// salti della vista di una lavagna, T56); solo se lei dice `false` vale la
+/// cronologia del riquadro.
 export function paneBack(): void {
+  if (panes.get(layout.focus)?.surface?.jumps?.back()) return;
   if (goBack(layout.focus)) void synchronize();
 }
 
 export function paneForward(): void {
+  if (panes.get(layout.focus)?.surface?.jumps?.forward()) return;
   if (goForward(layout.focus)) void synchronize();
 }
 
@@ -1748,7 +2055,8 @@ export async function releaseTab(paneId: string, tab: Tab | null): Promise<void>
 /// Un documento che nessun riquadro mostra più viene rilasciato dalla sessione:
 /// il flush, la bozza e la chiusura sono una sola decisione del suo owner.
 async function dismissIfUnwatched(doc: string, paneId: string = layout.focus): Promise<void> {
-  if (panesWithDoc(doc).length > 0) return;
+  // Anche una scheda della lavagna che ci scrive dentro la tiene aperta.
+  if (panesWithDoc(doc).length > 0 || cardEditors.holds(doc)) return;
   const outcome = await documentSessions.release(doc);
   if (outcome.kind === "unsaved") await keepOrDiscardUnsaved(doc, paneId);
 }
@@ -1763,8 +2071,9 @@ async function keepOrDiscardUnsaved(doc: string, paneId: string): Promise<void> 
     cancelLabel: t("document.close_unsaved.keep"),
     danger: true,
   }).catch(() => false);
-  // Nel frattempo qualcuno può averla riaperta: allora ha già un riquadro.
-  if (panesWithDoc(doc).length > 0) return;
+  // Nel frattempo qualcuno può averla riaperta: allora ha già un riquadro, o
+  // una scheda della lavagna ci scrive, e scartarla le toglierebbe il testo.
+  if (panesWithDoc(doc).length > 0 || cardEditors.holds(doc)) return;
   if (discard) {
     documentSessions.discardUnsaved(doc);
     return;
@@ -2122,6 +2431,7 @@ function setReadOnlyForDocument(doc: string, readOnly: boolean): void {
   for (const paneId of panesWithDoc(doc)) {
     panes.get(paneId)?.surface?.setReadOnly?.(readOnly || closeDraining || lendHeld(doc));
   }
+  cardEditors.refreshReadOnly();
 }
 
 /// Perché una scheda di `doc` non accetta modifiche: la chiusura in corso,
@@ -2131,6 +2441,17 @@ function heldReadOnly(doc: string): boolean {
   return closeDraining || documentSessions.isDeletionPending(doc) || lendHeld(doc);
 }
 
+/// Perché `doc` è fermo (`heldReadOnly`), con le parole delle righe di un
+/// riquadro; `null` se non lo è. Lo dice una scheda della lavagna che non
+/// entra in scrittura (N6 T96).
+function heldWhy(doc: string): string | null {
+  if (documentSessions.isDeletionPending(doc)) return t("notice.read_only", { doc: docTitle(doc) });
+  const app = lentTo(doc);
+  if (app !== null) return t("lend.notice", { app });
+  if (closeDraining || lendHeld(doc)) return t("canvas.card.readonly_why", { name: docTitle(doc) });
+  return null;
+}
+
 /** Ferma gli input locali prima del drain delle finestre e del salvataggio. */
 export function freezeDocumentSurfaces(frozen: boolean): void {
   closeDraining = frozen;
@@ -2138,6 +2459,7 @@ export function freezeDocumentSurfaces(frozen: boolean): void {
     const doc = activeDoc(paneId);
     if (doc) pane.surface?.setReadOnly?.(frozen || documentSessions.isDeletionPending(doc) || lendHeld(doc));
   }
+  cardEditors.refreshReadOnly();
 }
 
 /// Come si chiama una tab.
@@ -3132,7 +3454,7 @@ export async function openDocument(id: string, options: OpenOptions = {}): Promi
     releaseIntent();
     // A failed or superseded opening must not leave the owner retained solely
     // by its reservation. A tab already present still counts as a watcher.
-    if (!isOpen(id)) await documentSessions.release(id);
+    if (!isOpen(id) && !cardEditors.holds(id)) await documentSessions.release(id);
   }
 }
 
@@ -3155,12 +3477,83 @@ export async function openFromView(id: string): Promise<void> {
   await openDocument(id);
 }
 
+/// Come si apre un documento accanto.
+export interface BesideOptions extends OpenOptions {
+  /// Se il riquadro vicino (quello che `split` metterebbe accanto: il
+  /// fratello dopo, nella stessa fila) mostra già il documento, si va lì
+  /// invece di dividere, e la pagina chiesta arriva alla superficie che c'è.
+  /// Assente: si divide sempre, come per un `fub://open`.
+  readonly reuse?: boolean;
+}
+
 /// Apre un documento in un riquadro nuovo accanto a quello col fuoco, a
-/// destra (`row`) o sotto (`col`): è il `split` di un `fub://open`.
-export async function openDocumentBeside(id: string, dir: "row" | "col", options: OpenOptions = {}): Promise<void> {
-  const other = split(layout.focus, dir);
+/// destra (`row`) o sotto (`col`): è il `split` di un `fub://open`. Con
+/// `reuse` torna al vicino che lo mostra già.
+export async function openDocumentBeside(id: string, dir: "row" | "col", options: BesideOptions = {}): Promise<void> {
+  const { reuse, ...open } = options;
+  const near = reuse === true ? neighbourShowing(layout.focus, dir, id) : null;
+  const other = near ?? split(layout.focus, dir);
   if (other) focusPane(other);
-  await openDocument(id, options);
+  await openDocument(id, open);
+}
+
+/// Il riquadro accanto a `pane` nella direzione `dir` (a destra per `row`,
+/// sotto per `col`: dove `split` mette il riquadro nuovo), se la sua scheda
+/// attiva è `doc`; `null` se non c'è o mostra altro.
+///
+/// Vale anche in una disposizione annidata (T102): fra le divisioni in quella
+/// direzione che contengono `pane`, la più interna che ha qualcosa dopo il
+/// ramo di `pane` dà il ramo accanto, e di quel ramo contano i riquadri che
+/// toccano il lato verso `pane` (il primo di ogni divisione nella stessa
+/// direzione, tutti in quella dell'altra). Con riga [colonna [A, B], C] il
+/// riquadro accanto ad A e a B è C; con riga [A, colonna [C, D]] accanto ad A
+/// sono C e D, e vince il primo che mostra `doc`.
+function neighbourShowing(pane: string, dir: "row" | "col", doc: string): string | null {
+  const contains = (node: LayoutNode): boolean =>
+    node.k === "leaf" ? node.pane === pane : node.children.some(contains);
+  // Il ramo dopo quello di `pane` nella divisione più interna in `dir`.
+  let beside: LayoutNode | null = null;
+  let node: LayoutNode = layout.tree;
+  while (node.k !== "leaf") {
+    const at = node.children.findIndex(contains);
+    if (at < 0) return null;
+    if (node.dir === dir && at + 1 < node.children.length) beside = node.children[at + 1]!;
+    node = node.children[at]!;
+  }
+  if (beside === null) return null;
+  // I riquadri del ramo accanto che toccano il lato verso `pane`, in ordine.
+  const edge = (branch: LayoutNode): string[] => {
+    if (branch.k === "leaf") return [branch.pane];
+    if (branch.dir === dir) return edge(branch.children[0]!);
+    return branch.children.flatMap(edge);
+  };
+  return edge(beside).find((near) => activeDoc(near) === doc) ?? null;
+}
+
+/// Il frammento di un percorso dopo il `#` (`page=3`, `Titolo`, `B3`), o
+/// `null` se non ce n'è uno.
+function pathFragment(path: string): string | null {
+  const at = path.indexOf("#");
+  const fragment = at < 0 ? "" : path.slice(at + 1).trim();
+  return fragment === "" ? null : fragment;
+}
+
+/// «Apri a lato» di un percorso del vault (il menu di una scheda della
+/// lavagna, T17; «Apri a lato per questo», T45): accanto, o nel riquadro
+/// vicino che lo mostra già, allo stesso punto. `#page=N` di un PDF arriva
+/// alla pagina; un punto che la risoluzione porta (`at`) si rivela; un altro
+/// frammento che non arriva da nessuna parte (una cella, `#B3`: la griglia
+/// non sa ancora riceverla) apre il file in cima, e lo dice.
+export async function openPathBeside(path: string, from?: string): Promise<void> {
+  const target = await resolvedReference({ kind: "path", value: path }, from ?? activeDoc() ?? undefined);
+  if (!target) throw new Error(t("preview.target_missing"));
+  const fragment = pathFragment(path);
+  const page = fragment === null ? null : linkedPdfPage(target.doc, fragment);
+  await openDocumentBeside(target.doc, "row", { reuse: true, ...(page === null ? {} : { page }) });
+  if (target.at) await reveal(target.doc, { span: target.at.span });
+  else if (fragment !== null && page === null && activeDoc() === target.doc) {
+    notify(t("document.reveal_unavailable", { doc: docTitle(target.doc) }), "info");
+  }
 }
 
 /// Chiude il documento aperto **in ogni riquadro**, senza salvarlo: lo si usa
@@ -3671,4 +4064,5 @@ export function setEditorTheme(t: Theme): void {
   // U26: solo `setTheme` sulla superficie viva, mai `setDoc`/rimonto:
   // selezione, scroll e history restano dove sono.
   for (const r of panes.values()) r.surface?.setTheme?.(t);
+  cardEditors.setTheme(t);
 }

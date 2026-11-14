@@ -1,12 +1,12 @@
 // Le preferenze della lavagna su questo computer.
 //
-// - **Le due impostazioni** della macchina che il bundle `fub.lavagna`
-//   dichiara (`crates/fub-features/src/lavagna.rs`), spente di serie:
-//   `canvas.ink_mouse_remember` («Ricorda se scrivi col mouse») e
-//   `canvas.finger_moves_card` («Il dito sposta le schede»). Si leggono dal
-//   canale dati e si seguono con `setting_changed`, così un cambio nelle
-//   Impostazioni, anche da un'altra finestra, vale subito nelle lavagne
-//   aperte. Un valore che non è un interruttore vale spento.
+// - **Le tredici impostazioni** del gruppo «Lavagna» che il bundle `fub.lavagna`
+//   dichiara (`crates/fub-features/src/lavagna.rs`), ciascuna col suo valore di
+//   serie. Si leggono dal canale dati e si seguono con `setting_changed`, così
+//   un cambio nelle Impostazioni, anche da un'altra finestra, vale subito nelle
+//   lavagne aperte. Un valore che non regge la sua specie vale il suo di serie,
+//   e la lettura non scrive niente. La cartella dei file trascinati si giudica
+//   con le regole dei nomi nuovi (`dropFolderPathOf`).
 // - **L'ultimo stato di «Scrivi col mouse»** è uno stato della vista,
 //   `canvas.ink_mouse`, uno per computer: si scrive a ogni cambio, e una
 //   lavagna che si apre lo riprende solo se «Ricorda se scrivi col mouse» è
@@ -19,6 +19,11 @@
 //   di una versione futura vale la scelta di serie; un campo che non si legge
 //   vale il suo di serie, uno spessore fuori dall'intervallo va al bordo.
 //
+// Le chiavi, le scelte, i valori di serie e la lettura pura (`preferencesOf`)
+// stanno in `rules/canvas-settings.ts`, fuori da questa cartella: lo stato di
+// documento le usa già all'avvio, e non deve portarsi dietro la lavagna. Qui si
+// riesporta tutto, e si fa la parte che legge, segue e ricorda.
+//
 // L'ultima lettura resta qui: una lavagna nuova parte da lì, e la lettura che
 // fa la conferma o la corregge.
 
@@ -26,31 +31,50 @@ import { api } from "../../host/ipc";
 import { settings } from "../../host/query";
 import { isPenId } from "../../ink/pens";
 import { onEvent } from "../../state/kernel";
-import type { SettingEntry } from "../../host/contract";
 import { DEFAULT_INK_CHOICE, inkWidthOf, type InkPenChoice, type InkPenKind } from "./ink-record";
+import {
+  DEFAULT_PREFERENCES,
+  DROP_FOLDER_KEY,
+  DRAG_EMPTY_KEY,
+  DROP_FOLDER_PATH_KEY,
+  FINGER_MOVES_CARD_KEY,
+  FINGER_WRITES_KEY,
+  GRID_KEY,
+  INK_MOUSE_REMEMBER_KEY,
+  LAVAGNA_BUNDLE,
+  PARTS_PICKER_KEY,
+  PEN_BUTTON_KEY,
+  SNAP_KEY,
+  TOOLBAR_KEY,
+  WHEEL_KEY,
+  WORKSPACE_KEY,
+  preferencesOf,
+  type CanvasPreferences,
+} from "../../rules/canvas-settings";
 
-/// Il bundle che dichiara le impostazioni della lavagna.
-export const LAVAGNA_BUNDLE = "fub.lavagna";
+// Le chiavi, le scelte e la lettura stanno nel modulo neutro: qui si riesporta
+// tutto, perché `engine.ts` e i test le importano da questo file.
+export * from "../../rules/canvas-settings";
 
-/// L'impostazione «Ricorda se scrivi col mouse».
-export const INK_MOUSE_REMEMBER_KEY = "canvas.ink_mouse_remember";
-
-/// L'impostazione «Il dito sposta le schede».
-export const FINGER_MOVES_CARD_KEY = "canvas.finger_moves_card";
+/// Le chiavi che la lavagna segue: un cambio di una di queste rilegge.
+const FOLLOWED_KEYS: ReadonlySet<string> = new Set([
+  INK_MOUSE_REMEMBER_KEY,
+  FINGER_MOVES_CARD_KEY,
+  FINGER_WRITES_KEY,
+  PEN_BUTTON_KEY,
+  WHEEL_KEY,
+  DRAG_EMPTY_KEY,
+  WORKSPACE_KEY,
+  TOOLBAR_KEY,
+  GRID_KEY,
+  SNAP_KEY,
+  PARTS_PICKER_KEY,
+  DROP_FOLDER_KEY,
+  DROP_FOLDER_PATH_KEY,
+]);
 
 /// La chiave dello stato di vista che ricorda «Scrivi col mouse».
 export const INK_MOUSE_KEY = "canvas.ink_mouse";
-
-/// Le impostazioni della lavagna, come le dice la macchina.
-export interface CanvasPreferences {
-  /// Una lavagna che si apre riprende l'ultimo «Scrivi col mouse».
-  readonly inkMouseRemember: boolean;
-  /// Il dito sposta la scheda che tocca, e la lavagna solo sul vuoto.
-  readonly fingerMovesCard: boolean;
-}
-
-/// Le impostazioni di serie: tutte e due spente.
-export const DEFAULT_PREFERENCES: CanvasPreferences = Object.freeze({ inkMouseRemember: false, fingerMovesCard: false });
 
 let lastPreferences: CanvasPreferences = DEFAULT_PREFERENCES;
 let preferenceReads = 0;
@@ -61,13 +85,6 @@ let lastInkMouse: boolean | null = null;
 /// Le scritture di «Scrivi col mouse» in fila, e quante ne sono partite.
 let inkSaving: Promise<void> = Promise.resolve();
 let inkSaves = 0;
-
-/// Le impostazioni dalle righe `entries` del bundle. Una chiave che manca, o
-/// un valore che non è un interruttore, vale spento.
-export function preferencesOf(entries: readonly SettingEntry[]): CanvasPreferences {
-  const on = (key: string): boolean => entries.find((entry) => entry.spec.key === key)?.value === true;
-  return { inkMouseRemember: on(INK_MOUSE_REMEMBER_KEY), fingerMovesCard: on(FINGER_MOVES_CARD_KEY) };
-}
 
 /// Le impostazioni dell'ultima lettura: quelle di serie prima della prima.
 export function currentPreferences(): CanvasPreferences {
@@ -90,7 +107,7 @@ async function readPreferences(): Promise<CanvasPreferences> {
   }
 }
 
-/// Legge le impostazioni adesso e a ogni cambio delle due chiavi, e le dà a
+/// Legge le impostazioni adesso e a ogni cambio delle tredici chiavi, e le dà a
 /// `apply`; una lettura superata da una più recente non arriva. Torna la
 /// funzione che smette: chi chiama ne è il proprietario.
 export function watchPreferences(apply: (preferences: CanvasPreferences) => void): () => void {
@@ -103,7 +120,7 @@ export function watchPreferences(apply: (preferences: CanvasPreferences) => void
     });
   };
   const stop = onEvent("setting_changed", (event) => {
-    if (event.key === INK_MOUSE_REMEMBER_KEY || event.key === FINGER_MOVES_CARD_KEY) read();
+    if (FOLLOWED_KEYS.has(event.key)) read();
   });
   read();
   return () => {

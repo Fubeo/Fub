@@ -1,0 +1,21 @@
+{
+  "name": "read-not-object",
+  "description": "fub:parts che non è un oggetto si conserva.",
+  "source": "{\n  \"nodes\": [\n    { \"id\": \"n1\", \"type\": \"file\", \"file\": \"Libro.pdf\", \"subpath\": \"#page=1\", \"x\": 0, \"y\": 0, \"width\": 400, \"height\": 500,\n      \"fub:parts\": [1, 2] },\n    { \"id\": \"n2\", \"type\": \"file\", \"file\": \"Libro.pdf\", \"subpath\": \"#page=1\", \"x\": 0, \"y\": 0, \"width\": 400, \"height\": 500,\n      \"fub:parts\": null }\n  ],\n  \"edges\": []\n}\n",
+  "expect": {
+    "cards": [
+      {
+        "node": "n1",
+        "state": "kept",
+        "reason": "object",
+        "shows": "#page=1"
+      },
+      {
+        "node": "n2",
+        "state": "kept",
+        "reason": "object",
+        "shows": "#page=1"
+      }
+    ]
+  }
+}

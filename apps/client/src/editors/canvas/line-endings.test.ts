@@ -57,7 +57,6 @@ function mount(original: string): { engine: CanvasEngine; host: HTMLElement; cha
     onSelectionChange: () => {},
     onOpenWikilink: () => {},
     onOpenPath: () => {},
-    onCreateNote: () => {},
     media: { openExternal: () => {} },
     renderMarkdownForCard: () => () => {},
   } as never);

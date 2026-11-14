@@ -1,0 +1,21 @@
+{
+  "about": "Un campo che move_strokes non conosce è un errore di lettura.",
+  "before": {
+    "nodes": []
+  },
+  "ops": [
+    {
+      "op": "move_strokes",
+      "layer": "board",
+      "ids": [
+        "s1"
+      ],
+      "dx": 5,
+      "dy": 5,
+      "scale": 2
+    }
+  ],
+  "expect": {
+    "outcome": "malformed"
+  }
+}

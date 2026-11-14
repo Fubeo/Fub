@@ -75,6 +75,7 @@ pub mod registry;
 mod rename_recovery;
 pub mod renderer;
 pub mod safety;
+pub mod same_content;
 pub mod session;
 pub mod settings;
 pub mod snapshot;

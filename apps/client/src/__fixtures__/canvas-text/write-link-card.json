@@ -1,0 +1,21 @@
+{
+  "name": "write-link-card",
+  "description": "Una scheda di link non ha testo da misurare: rifiutato.",
+  "node": {
+    "id": "t1",
+    "type": "link",
+    "x": 0,
+    "y": 0,
+    "width": 300,
+    "height": 120,
+    "url": "https://example.org"
+  },
+  "style": {
+    "size": "s",
+    "align": "end"
+  },
+  "expect": {
+    "outcome": "refused",
+    "reason": "node"
+  }
+}

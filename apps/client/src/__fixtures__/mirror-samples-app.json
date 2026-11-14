@@ -482,6 +482,18 @@
       "restart_required": false
     }
   ],
+  "ResourceWriteReceipt": [
+    {
+      "id": "Allegati/foto.png",
+      "revision": "sha256:0f4636c78f65d3639ece5a064b5ae753e3408614a14fb18ab4d7540d2c248543",
+      "reused": false
+    },
+    {
+      "id": "Allegati/foto 1.png",
+      "revision": "sha256:0f4636c78f65d3639ece5a064b5ae753e3408614a14fb18ab4d7540d2c248543",
+      "reused": true
+    }
+  ],
   "LiveStart": [
     {
       "document": {
