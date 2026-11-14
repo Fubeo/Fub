@@ -739,6 +739,40 @@ describe("il testo non salvato resta (#237)", () => {
     await expectRecoverable(host, sessions);
   });
 
+  it("T63 · un cambio da fuori mentre «Modifiche non salvate» chiede la chiude come «Tienila aperta»", async () => {
+    const { host, sessions } = await unsavedNote();
+    const { t } = await import("../i18n/strings");
+    const layouts = await import("../state/layout");
+    const controller = await import("../state/document-controller");
+    const title = t("document.close_unsaved.title");
+    const asking = () => [...document.querySelectorAll<HTMLElement>("dialog, [role=dialog], [role=alertdialog]")]
+      .filter((el) => el.isConnected && (el.textContent ?? "").includes(title));
+    const paneId = layouts.layout.focus;
+    const index = layouts.pane(paneId)!.tabs.findIndex((tab) => tab.k === "doc" && tab.doc === BENVENUTO);
+    const closing = controller.closeTabAt(paneId, index);
+    await waitFor("la finestra «Modifiche non salvate»", () => asking().length === 1);
+    expect(layouts.panesWithDoc(BENVENUTO)).toEqual([]);
+
+    // Mentre chiede, il disco torna buono e un'altra applicazione cambia la nota.
+    repairWrite?.();
+    repairDraft?.();
+    repairWrite = repairDraft = null;
+    const outside = "# Benvenuto\nscritto da un'altra applicazione\n";
+    host.writeFromOutside(BENVENUTO, outside);
+
+    await waitFor("la finestra chiusa dal cambio da fuori", () => asking().length === 0);
+    await closing;
+    await settle();
+    // La nota è tornata dov'era, col testo battuto e la barra del conflitto;
+    // il disco ha ancora il testo dell'altra applicazione.
+    expect(layouts.panesWithDoc(BENVENUTO)).toEqual([paneId]);
+    expect(shows(TYPED)).toBe(true);
+    expect(sessions.text(BENVENUTO)).toContain(TYPED);
+    await waitFor("la barra del conflitto", () => visible(".conflict-banner").length === 1);
+    expect(sessions.inspect(BENVENUTO)).toMatchObject({ dirty: true, result: "conflitto" });
+    expect(host.files()[BENVENUTO]).toBe(outside);
+  });
+
   it("R02 · un ripristino dalla cronologia tiene il testo e dice che il file è cambiato", async () => {
     const { host, sessions } = await unsavedNote();
     const restored = "# Benvenuto\nla versione di ieri\n";

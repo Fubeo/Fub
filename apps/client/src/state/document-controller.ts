@@ -1752,25 +1752,52 @@ async function dismissIfUnwatched(doc: string, paneId: string = layout.focus): P
   if (outcome.kind === "unsaved") await keepOrDiscardUnsaved(doc, paneId);
 }
 
+/// Le domande «Modifiche non salvate» aperte, per documento: un cambio da
+/// fuori sulla nota le ritira (`applyExternalChange`).
+const unsavedQuestions = new Map<string, AbortController>();
+
 /// La linguetta è già chiusa, ma il buffer non si è potuto salvare: la sessione
 /// è ancora viva, ed è l'unica copia del lavoro. Si chiede, e senza una
 /// risposta esplicita la nota torna aperta dov'era.
+///
+/// Se mentre si chiede il file cambia da fuori, la domanda è vecchia: scartare
+/// vorrebbe dire scegliere fra due testi che la persona non ha visto. La
+/// finestra si chiude come «Tienila aperta», la nota torna, e il salvataggio
+/// che segue trova il disco cambiato e mette la barra del conflitto: la scelta
+/// resta sua.
 async function keepOrDiscardUnsaved(doc: string, paneId: string): Promise<void> {
-  const discard = await confirm(t("document.close_unsaved", { doc: pageName(doc) }), {
-    title: t("document.close_unsaved.title"),
-    okLabel: t("document.close_unsaved.discard"),
-    cancelLabel: t("document.close_unsaved.keep"),
-    danger: true,
-  }).catch(() => false);
+  const withdraw = new AbortController();
+  unsavedQuestions.get(doc)?.abort();
+  unsavedQuestions.set(doc, withdraw);
+  let discard: boolean;
+  try {
+    discard = await confirm(t("document.close_unsaved", { doc: pageName(doc) }), {
+      title: t("document.close_unsaved.title"),
+      okLabel: t("document.close_unsaved.discard"),
+      cancelLabel: t("document.close_unsaved.keep"),
+      danger: true,
+    }, withdraw.signal).catch(() => false);
+  } finally {
+    if (unsavedQuestions.get(doc) === withdraw) unsavedQuestions.delete(doc);
+  }
+  const changedOutside = withdraw.signal.aborted;
   // Nel frattempo qualcuno può averla riaperta: allora ha già un riquadro.
   if (panesWithDoc(doc).length > 0) return;
-  if (discard) {
+  if (discard && !changedOutside) {
     documentSessions.discardUnsaved(doc);
     return;
   }
   openIn(paneState(paneId) ? paneId : layout.focus, doc);
   await synchronize();
   view.drawSave();
+  // Il conflitto si vede al primo salvataggio: lo si tenta subito, invece di
+  // aspettare la battuta dopo. Se il disco è ancora guasto il testo resta nel
+  // buffer, come prima.
+  if (changedOutside && panesWithDoc(doc).length > 0) {
+    await documentSessions.flush(doc);
+    drawPaneConflict(doc);
+    view.drawSave();
+  }
 }
 
 // --- disegnare i riquadri ---------------------------------------------------
@@ -3319,6 +3346,9 @@ async function applyExternalChange(id: string, outcome: ExternalChangeResult): P
   if (outcome.kind === "echo") return;
   invalidateDocumentCaches(id);
   if (outcome.kind === "warning") {
+    // La nota cambiata da fuori mentre «Modifiche non salvate» chiede: la
+    // domanda si ritira e la nota torna (`keepOrDiscardUnsaved`).
+    unsavedQuestions.get(id)?.abort();
     if (outcome.cause === "altra_app") {
       addSheetNotice(id, "overwritten");
       notify(t("document.overwritten", { doc: id }), "guasto");
