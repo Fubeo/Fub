@@ -5554,7 +5554,7 @@ riportare, mai una soglia da alzare: ci-soglia (a)).
 Fatto quando: `gh pr checks 302` è tutto verde; il rapporto della
 revisione non ha errori aperti; l'utente ha detto sì al merge.
 Prova: gh pr checks 302; scripts/check.sh
-Stato: [ ] da fare
+Stato: [~] PR #302 pronta (CI completa in corso) · revisione `code-review high` fatta il 2026-11-14: nove difetti, diventati T101 (lo stesso contenuto, kernel e host) e T102 (le schede che si chiudono, client); il merge dopo T101, T102 e la CI verde (dal 2026-11-10 il merge lo decide l'agente)
 
 ## T91 · Tre difetti della lavagna visti dal collaudo
 
