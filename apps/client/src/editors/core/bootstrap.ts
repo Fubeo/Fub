@@ -2,7 +2,7 @@ import { mountMarkdownSurface, type EditorSlashHost, type PageIcons, type System
 import type { CompletionSources } from "../text/profiles/markdown/completions";
 import type { LinkCardSource } from "../text/profiles/markdown/link-card";
 import { api } from "../../host/ipc";
-import { openVaultRoot, state as shellState, vaultArg } from "../../state/store";
+import { on as onSignal, openVaultRoot, state as shellState, vaultArg } from "../../state/store";
 import type { GridHost } from "../grid/engine";
 import { openLifetime } from "../../ui/lifetime";
 import type { GridDialogs, GridRibbon } from "../grid/ribbon/ribbon";
@@ -36,9 +36,10 @@ import { makePdfJsLoader, pdfIdWithoutFragment, type PdfEngineLoader, type PdfJs
 import type { CanvasAttachmentPort, CanvasCards, CanvasMediaPort, CanvasNotesPort, CardLinkRef } from "../canvas/engine";
 import type { DrawingImagePort } from "../canvas/surface";
 import type { CardEditorPort, CardMode, CardRenderer, CardSnapshots, CardView } from "../canvas/cards";
+import type { CardCitations } from "../canvas/card-head";
 import type { NoteCardPort } from "../canvas/cards/note";
 import type { PartsPickerPort } from "../canvas/parts-picker";
-import { documentOutline } from "../../host/query";
+import { backlinkCount, documentOutline } from "../../host/query";
 import type { WebCardPort } from "../canvas/cards/web";
 import type { PdfCardPort } from "../canvas/cards/pdf";
 import type { CraftCardPort } from "../canvas/cards/craft";
@@ -435,10 +436,33 @@ async function loadCanvasCards(options: SurfaceBootstrapOptions, ports: CanvasCa
       registry: cards.createCardRegistry(renderers),
       snapshots,
       watch,
+      citations: CANVAS_CITATIONS,
       ...(pdfPort ? { pdfPages: pdf.pdfPagesReader(pdfPort) } : {}),
     };
   };
 }
+
+/// «↩ N» nella testata delle schede (T22): quante note citano il file, con la
+/// domanda `backlinks` dell'indice che ha già la riga dei dati della nota.
+/// Nessuna porta nuova. I conti possono cambiare quando l'indice cambia: un
+/// documento scritto, rinominato o tolto, un lotto, un vault aperto.
+const CANVAS_CITATIONS: CardCitations = {
+  count: (path) => backlinkCount(path),
+  watch: (changed) => {
+    const stops = [
+      onSignal("documents", changed),
+      onEvent("document_changed", changed),
+      onEvent("document_removed", changed),
+      onEvent("document_renamed", changed),
+      onEvent("batch_ended", changed),
+      onEvent("vault_opened", changed),
+      onEvent("overflow", changed),
+    ];
+    return () => {
+      for (const stop of stops) stop();
+    };
+  },
+};
 
 /// Il selettore delle sezioni della lavagna (T74): il sommario che l'indice
 /// ha già (`documentOutline`, la domanda `outline`) e la resa di una sezione

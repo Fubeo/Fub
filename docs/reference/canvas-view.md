@@ -252,6 +252,31 @@ maniglie e le prese non ci sono; l'inchiostro della scheda sta dopo il
 titolo nel nodo e resta disegnato a ogni livello. Con l'alto contrasto i
 blocchi hanno un bordo.
 
+## Le citazioni e le copie
+
+La testata di una scheda di file (`card-head.ts`, N6 T22) porta, subito dopo
+il titolo, due numeri che non si stringono mai: in una testata stretta si
+taglia il titolo.
+
+- **«↩ N»** (`.canvas-node-cites`): quante note citano il file. Il conto è
+  dell'indice, con la domanda `backlinks` di `query_index` che la shell dà
+  alla tela (`CanvasCards.citations`): nessuna IPC nuova. Si chiede una
+  volta per file, al più quattro domande insieme; quando l'indice può essere
+  cambiato (un documento scritto, rinominato o tolto, un lotto, il vault
+  aperto) i conti si richiedono dopo 600 ms, e quelli di prima restano in
+  vista finché arrivano i nuovi. Una risposta vecchia non scrive sopra una
+  nuova; una che fallisce lascia il numero com'era. Zero: nessun segno. Il
+  lettore di schermo legge «Citata da N note» (`canvas.card.cites`).
+- **«×N»** (`.canvas-node-twins`): quante schede della lavagna mostrano lo
+  stesso file (C14), il `subpath` escluso: un estratto è una copia della
+  nota. È un pulsante: al passaggio o col fuoco tutte le copie, anche fuori
+  dalla vista, si illuminano (`data-card-twin`, un filo caldo e un alone,
+  senza animazione; da lontano il filo resta di 2 px sullo schermo), e si
+  spengono quando il pulsante perde passaggio e fuoco, o quando la copia da
+  cui si erano accese sparisce. La banda di stato dice «N copie di questo
+  file» per le copie illuminate, o per quelle della sola scheda scelta, e un
+  clic sulla voce le inquadra.
+
 ## Cercare
 
 Ctrl+F (il comando `shell.doc.search`, che chiede prima `find()` alla

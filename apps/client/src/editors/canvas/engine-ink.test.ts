@@ -1446,7 +1446,9 @@ describe("la scheda tiene l'aspetto del passaggio sotto il velo e il tratto (T20
   it("ogni regola della pelle che mostra qualcosa al passaggio sulla scheda vale anche con `data-hover-held`", () => {
     const skin = editorsSkin;
     const rules = [...skin.matchAll(/([^{}]+)\{[^}]*\}/g)].map(([, selectors]) => selectors!.split(",").map((s) => s.replace(/\/\*[\s\S]*?\*\//g, "").trim()));
-    const hovering = rules.flat().filter((selector) => /^\.canvas-node[\w-]*(\[[^\]]+\])*:hover/.test(selector));
+    // La scheda (`canvas-node`, `canvas-node-file`…), non una sua parte col
+    // proprio passaggio (`canvas-node-twins`, T22).
+    const hovering = rules.flat().filter((selector) => /^\.canvas-node(?:-(?:text|file|link|group))?(\[[^\]]+\])*:hover/.test(selector));
     expect(hovering.length).toBeGreaterThanOrEqual(3);
     for (const selector of hovering) {
       const twin = selector.replace(":hover", "[data-hover-held]");

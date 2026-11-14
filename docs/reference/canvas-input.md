@@ -509,7 +509,7 @@ quelli che non cambiano il file (Apri). I fili scelti da soli non la mostrano.
 
 ## La banda di stato
 
-La banda di stato dello Scrittoio dice della lavagna quattro cose. La shell la
+La banda di stato dello Scrittoio dice della lavagna cinque cose. La shell la
 disegna da `EditorSurface.status`; le voci vengono da `engine.statusItems()`
 (`chrome/status.ts`).
 
@@ -520,6 +520,9 @@ disegna da `EditorSurface.status`; le voci vengono da `engine.statusItems()`
   scelta, e dice perché.
 - **Schede scelte**: «N schede scelte», o «Una scheda scelta». Compare solo con
   una scelta. Mentre si scrive in una nota, al suo posto «In scrittura: Nota».
+- **Copie**: «N copie di questo file», per le copie che «×N» illumina o per
+  quelle della sola scheda scelta; un clic le inquadra
+  ([Le citazioni e le copie](canvas-view.md#le-citazioni-e-le-copie)).
 - **Sola lettura**: compare quando la lavagna non si cambia, per il pannello in
   sola lettura o perché il file ha una chiave doppia. Il suggerimento dice
   perché.

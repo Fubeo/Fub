@@ -10,9 +10,11 @@
 // fuoco. Le voci si leggono quando la shell le disegna; la tela le dice
 // cambiate a fine gesto (`onStatusChange`), non a ogni fotogramma.
 //
-// Che cosa non c'è ancora: le copie della stessa nota (C14, T22: non c'è un
-// modo per contarle sulla lavagna), e il modo della lavagna, che la shell dice
-// già con le sue modalità.
+// Le copie dello stesso file (C14, T22), quando «×N» le illumina o la sola
+// scheda scelta ne ha: quante sono, con un clic che le inquadra.
+//
+// Che cosa non c'è: il modo della lavagna, che la shell dice già con le sue
+// modalità.
 
 import { settings } from "../../../host/query";
 import { t } from "../../../i18n/strings";
@@ -42,6 +44,14 @@ export interface CanvasStatusCommand {
   run(): void;
 }
 
+/// Le copie dello stesso file sulla lavagna, come la banda le dice (T22).
+export interface CanvasStatusTwins {
+  /// Quante schede mostrano il file, almeno due.
+  readonly count: number;
+  /// Inquadra tutte le copie.
+  frame(): void;
+}
+
 /// Ciò che la banda legge della lavagna e ciò che la banda può chiedere.
 export interface CanvasStatusPort {
   /// Lo zoom in percentuale intera.
@@ -53,6 +63,12 @@ export interface CanvasStatusPort {
   writing?(): string | null;
   /// Perché la lavagna non si cambia adesso, o `null` se si cambia.
   readOnlyWhy(): string | null;
+  /**
+   * Le copie dello stesso file sulla lavagna (C14, T22): quelle illuminate da
+   * «×N», o quelle della sola scheda scelta, e come inquadrarle; `null` se
+   * non ce ne sono. Assente, la banda non le dice.
+   */
+  twins?(): CanvasStatusTwins | null;
   /// La cartella dove vanno i file trascinati adesso.
   folder(): string;
   /// Lo zoom assoluto, al centro della vista.
@@ -99,6 +115,16 @@ export function canvasStatusItems(port: CanvasStatusPort): SurfaceStatusItem[] {
   if (writing !== null) items.push({ id: "writing", text: t("canvas.status.writing", { name: writing }) });
   else if (chosen === 1) items.push({ id: "chosen", text: t("canvas.status.chosen.one") });
   else if (chosen > 1) items.push({ id: "chosen", text: t("canvas.status.chosen", { n: chosen }) });
+  // Le copie dello stesso file (C14): dove sono, con un clic che le inquadra.
+  const twins = port.twins?.() ?? null;
+  if (twins !== null && twins.count > 1) {
+    items.push({
+      id: "twins",
+      text: t("canvas.status.twins", { n: twins.count }),
+      hint: t("canvas.status.twins.frame", { n: twins.count }),
+      open: () => twins.frame(),
+    });
+  }
   const why = port.readOnlyWhy();
   if (why !== null) items.push({ id: "readonly", text: t("canvas.status.readonly"), hint: why });
   const folder = port.folder();

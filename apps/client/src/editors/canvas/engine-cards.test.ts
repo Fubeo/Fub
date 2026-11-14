@@ -2733,3 +2733,119 @@ describe("cerca nella lavagna (T60)", () => {
     }
   });
 });
+
+describe("la testata: «↩ N» e le gemelle (T22)", () => {
+  /** Una nota due volte (la seconda lontana, fuori dalla vista), un'immagine e un testo. */
+  const TWINS = [
+    { id: "a", type: "file", x: 0, y: 0, width: 240, height: 160, file: "Note/idea.md" },
+    { id: "b", type: "file", x: 40000, y: 30000, width: 240, height: 160, file: "Note/idea.md", subpath: "#Titolo" },
+    { id: "c", type: "file", x: 320, y: 0, width: 240, height: 160, file: "img/foto.png" },
+    { id: "t", type: "text", x: 0, y: 240, width: 240, height: 120, text: "testo" },
+  ];
+
+  const twinsButton = (host: HTMLElement, id: string): HTMLButtonElement | null =>
+    card(host, id).querySelector<HTMLButtonElement>(":scope > .canvas-node-handle > .canvas-node-twins");
+  const lit = (host: HTMLElement): string[] =>
+    [...host.querySelectorAll<HTMLElement>(".canvas-node[data-card-twin]")].map((el) => el.dataset.node!).sort();
+
+  it("«×2» sulle schede dello stesso file, dopo il titolo; il `subpath` non conta", () => {
+    const { engine, host } = mounted(boardSource(TWINS));
+    expect(twinsButton(host, "a")?.textContent).toBe("×2");
+    expect(twinsButton(host, "b")?.textContent).toBe("×2");
+    expect(twinsButton(host, "a")?.getAttribute("aria-label")).toBe("2 copie su questa lavagna");
+    expect(twinsButton(host, "c")).toBeNull();
+    expect(twinsButton(host, "t")).toBeNull();
+    expect(twinsButton(host, "a")?.previousElementSibling?.classList.contains("canvas-node-title")).toBe(true);
+    engine.destroy();
+  });
+
+  it("al passaggio su «×2» le gemelle si illuminano, anche fuori vista; uscendo si spengono", () => {
+    const { engine, host } = mounted(boardSource(TWINS));
+    const button = twinsButton(host, "a")!;
+    button.dispatchEvent(new PointerEvent("pointerover", { bubbles: true }));
+    expect(lit(host)).toEqual(["a", "b"]);
+    // Dentro il pulsante non è uscire.
+    button.dispatchEvent(new PointerEvent("pointerout", { bubbles: true, relatedTarget: button.firstChild }));
+    expect(lit(host)).toEqual(["a", "b"]);
+    button.dispatchEvent(new PointerEvent("pointerout", { bubbles: true, relatedTarget: card(host, "c") }));
+    expect(lit(host)).toEqual([]);
+    engine.destroy();
+  });
+
+  it("col fuoco su «×2» le gemelle si illuminano e la banda dice quante sono; un clic sulla voce le inquadra", () => {
+    // Una scheda lontana dall'altra parte: tutta la lavagna non è le sole gemelle.
+    const far = { id: "z", type: "text", x: -90000, y: -90000, width: 240, height: 120, text: "lontano" };
+    const { engine, host } = mounted(boardSource([...TWINS, far]));
+    expect(engine.statusItems().some((item) => item.id === "twins")).toBe(false);
+    twinsButton(host, "b")!.focus();
+    expect(lit(host)).toEqual(["a", "b"]);
+    const item = engine.statusItems().find((entry) => entry.id === "twins");
+    expect(item?.text).toBe("2 copie di questo file");
+    const stage = host.querySelector<HTMLElement>(".canvas-stage")!;
+    const before = stage.style.transform;
+    item!.open!();
+    expect(stage.style.transform).not.toBe(before);
+    twinsButton(host, "b")!.blur();
+    expect(lit(host)).toEqual([]);
+    engine.destroy();
+  });
+
+  it("la scheda scelta da sola con delle gemelle: la banda le dice", () => {
+    const { engine, host } = mounted(boardSource(TWINS));
+    card(host, "a").focus();
+    expect(engine.statusItems().find((entry) => entry.id === "twins")?.text).toBe("2 copie di questo file");
+    card(host, "c").focus();
+    expect(engine.statusItems().some((entry) => entry.id === "twins")).toBe(false);
+    engine.destroy();
+  });
+
+  it("«×30» su trenta copie, tutte illuminate insieme", () => {
+    const copies = Array.from({ length: 30 }, (_, index) => ({
+      id: `n${index}`, type: "file", x: (index % 6) * 300, y: Math.floor(index / 6) * 200, width: 240, height: 160, file: "Note/idea.md",
+    }));
+    const { engine, host } = mounted(boardSource(copies));
+    expect(twinsButton(host, "n29")?.textContent).toBe("×30");
+    twinsButton(host, "n7")!.dispatchEvent(new PointerEvent("pointerover", { bubbles: true }));
+    expect(lit(host)).toHaveLength(30);
+    engine.destroy();
+  });
+
+  it("la copia tolta mentre è illuminata: le altre si spengono e «×N» sparisce", () => {
+    const { engine, host } = mounted(boardSource(TWINS));
+    twinsButton(host, "a")!.dispatchEvent(new PointerEvent("pointerover", { bubbles: true }));
+    expect(lit(host)).toEqual(["a", "b"]);
+    engine.syncDoc(boardSource(TWINS.filter((node) => node.id !== "a")));
+    expect(lit(host)).toEqual([]);
+    expect(twinsButton(host, "b")).toBeNull();
+    expect(engine.statusItems().some((entry) => entry.id === "twins")).toBe(false);
+    engine.destroy();
+  });
+
+  it("con tre copie, togliere quella da cui si erano illuminate spegne le altre, che restano «×2»", () => {
+    const three = [...TWINS, { id: "d", type: "file", x: 600, y: 300, width: 240, height: 160, file: "Note/idea.md" }];
+    const { engine, host } = mounted(boardSource(three));
+    twinsButton(host, "d")!.dispatchEvent(new PointerEvent("pointerover", { bubbles: true }));
+    expect(lit(host)).toEqual(["a", "b", "d"]);
+    engine.syncDoc(boardSource(three.filter((node) => node.id !== "d")));
+    expect(lit(host)).toEqual([]);
+    expect(twinsButton(host, "a")?.textContent).toBe("×2");
+    engine.destroy();
+  });
+
+  it("«↩ N» dall'indice, una domanda per file; nessun segno se nessuna nota cita il file", async () => {
+    const counts: Record<string, number> = { "Note/idea.md": 3, "img/foto.png": 0 };
+    const count = vi.fn(async (path: string) => counts[path] ?? 0);
+    const cards: CanvasCards = { ...cardsOf(), citations: { count, watch: () => () => {} } };
+    const { engine, host } = mounted(boardSource(TWINS), { cards });
+    await settle();
+    expect(count.mock.calls.map(([path]) => path).sort()).toEqual(["Note/idea.md", "img/foto.png"]);
+    const cites = card(host, "a").querySelector(":scope > .canvas-node-handle > .canvas-node-cites");
+    expect(cites?.querySelector("[aria-hidden]")?.textContent).toBe("↩ 3");
+    expect(cites?.querySelector(".sr-only")?.textContent).toBe("Citata da 3 note");
+    // I numeri prima del resto della riga: il titolo, «↩ 3», «×2».
+    expect(cites?.previousElementSibling?.classList.contains("canvas-node-title")).toBe(true);
+    expect(cites?.nextElementSibling?.classList.contains("canvas-node-twins")).toBe(true);
+    expect(card(host, "c").querySelector(".canvas-node-cites")).toBeNull();
+    engine.destroy();
+  });
+});

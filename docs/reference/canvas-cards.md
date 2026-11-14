@@ -134,7 +134,8 @@ trascinati dal computer o dall'albero, o incollati:
 - mentre si trascinano file o voci dell'albero, rettangoli tratteggiati
   (`canvas-drop-ghost`) mostrano dove nasceranno le schede, uno per file in
   `dataTransfer.items`, o uno solo se non si sa (le voci dell'albero, WebKit
-  che non dice i tipi). Spariscono all'uscita e al rilascio.
+  che non dice i tipi); oltre dodici, la cornice del gruppo col numero
+  (`canvas-drop-ghost-group`). Spariscono all'uscita e al rilascio.
 
 Il deposito dei file del computer (`depositCanvasFiles`) si ferma al primo
 file che l'host rifiuta, con un `CanvasDepositError` che porta i percorsi
@@ -331,7 +332,7 @@ aggiorna solo il suo livello.
 Quando un renderer scopre che il file non c'è, chiama `context.missing()`. La
 tela smonta la vista e mostra il segnaposto «File mancante: {percorso}»
 (`canvas.card.missing`), con `data-card-missing="true"` sulla scheda e due
-gesti in testo:
+pulsanti del kit sotto (`.canvas-card-missing`):
 
 - **Ritrova…** (`canvas.card.relink`) apre il selettore dei file del vault,
   col nome del file che manca. Gli omonimi vengono per primi. Con un nome il
