@@ -4917,7 +4917,7 @@ fiducia, «Sostituisci» e la lista della diagnosi con un tema rifiutato del
 finto host; mirror e fixture rigenerati.
 Prova: scripts/check.sh --rapido; cargo test -p fub-host --test themes;
 cd apps/client && npx vitest run src/panels/
-Stato: [~] in corso (coder/pa-t36, da 3f68c4a66, 2026-11-14)
+Stato: [~] coder/pa-t36 @ 46e31f610, check verde · fatte le tre correzioni (un esito solo per tentativo con `check_theme_folder` + impronta; `developer.mode` senza T37/T38; `ReplaceFailed` provato in unità) · da rifare prima di integrare: la finestra di `replace_failed` mostra il testo inglese dell'host («I/O error… the previous theme could not go back…»); serve un campo tipizzato per la cartella dove il vecchio è rimasto e un testo tutto italiano, senza `errorText` grezzo · rischio aperto: la cartella `.tmp-old-…` resta in `themes/` e nessuno la pulisce
 
 ## T37 · Collegare una cartella, e il tema cambia al salvataggio
 
