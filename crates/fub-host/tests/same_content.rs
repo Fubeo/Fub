@@ -58,6 +58,28 @@ fn the_open_vault_finds_the_same_bytes_under_another_name() {
 }
 
 #[test]
+fn a_vault_just_opened_already_knows_its_files() {
+    // La scansione installa l'anagrafe prima che il vault si possa usare: chi
+    // chiede subito dopo l'apertura, senza aspettare l'indicizzazione, ha una
+    // risposta e non «l'indice non è pronto». È ciò che rende definitiva la
+    // prima risposta che la lavagna riceve (`depositOrReuse`).
+    let (_dir, root) = vault(&[
+        ("Note/originale.md", b"# Titolo\n"),
+        ("Scritti/altro.md", b"# Altro, piu lungo\n"),
+    ]);
+    let host = Host::without_watcher();
+    host.open(&root).unwrap();
+    assert_eq!(
+        host.same_content(None, &DocId::new("Arrivi/nuova.md"), b"# Titolo\n")
+            .unwrap(),
+        SameContent::Found {
+            id: DocId::new("Note/originale.md"),
+        }
+    );
+    host.wait_indexed(None).unwrap();
+}
+
+#[test]
 fn the_same_size_with_other_bytes_is_not_the_same_content() {
     let (_dir, root) = vault(&[("Note/originale.md", b"# Titolo\n")]);
     let host = Host::without_watcher();

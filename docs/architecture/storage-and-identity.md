@@ -251,19 +251,28 @@ flowchart TD
 ```
 
 I candidati sono le voci dell'indice vivo con la stessa misura e la stessa
-estensione del nome che si vuole scrivere, senza badare a maiuscole e
-minuscole, fuori dal cestino, da `.fub/` e dalle cartelle escluse. Un `.txt`
+estensione del nome che si vuole scrivere, fuori dal cestino, da `.fub/` e
+dalle cartelle escluse. L'estensione è quella grezza dell'ultimo segmento,
+piegata in minuscolo e confrontata uguale: il registro dei formati non si
+interroga, quindi `.md` e `.markdown` sono due tipi anche se un formato li
+servisse entrambi. È prudente di proposito: chi riusa un file scrive un
+collegamento a lui, e quel collegamento non deve cambiare estensione. Un `.txt`
 con i byte di una nota `.md` non è quella nota, e un file senza estensione
 trova solo un file senza estensione. Un contenuto di 0 byte non si ritrova mai.
 La domanda non legge `.fub/data/entries.json`: quella tabella si scrive alla
 fine dell'indicizzazione e alla chiusura, mentre l'indice vivo conosce subito
 un file scritto o cambiato nella sessione. Prima che la scansione abbia
-installato l'anagrafe la risposta è «non so». Un file che l'indice non conosce
-ancora, perché è arrivato da fuori senza il rilevatore, non è un candidato: la
-risposta è «non trovato», e chi chiede copia.
+installato l'anagrafe la risposta è «non so»; l'host però pubblica un vault
+solo dopo la scansione, e un rebuild svuota e rimette l'anagrafe nello stesso
+prestito, quindi da `Host::same_content` questo «non so» non arriva. Un file
+che l'indice non conosce ancora, perché è arrivato da fuori senza il
+rilevatore, non è un candidato: la risposta è «non trovato», e chi chiede
+copia.
 
 Ogni candidato porta un'impronta: quella della voce, se misura e data del file
-sono ancora quelle della voce, oppure una calcolata leggendo il file a pezzi.
+sono ancora quelle della voce e l'impronta è nella forma corrente (`sha256:`),
+oppure una calcolata leggendo il file a pezzi. Un'impronta FNV-1a di una
+tabella scritta prima di SHA-256 non dice né sì né no, e si ricalcola.
 L'impronta sceglie il candidato, ma solo un confronto dei byte intero dà
 «trovato»: un'impronta vecchia può solo far copiare. Un candidato che non si
 legge, che cambia mentre lo si legge (misura, data, segno del cambio o
@@ -271,9 +280,22 @@ identità) o che non ha più la misura cercata si salta, e della sua impronta no
 si impara niente.
 
 Un'impronta calcolata torna all'indice vivo sotto il lucchetto del workspace
-(`Workspace::learn_fingerprints`), e si tiene soltanto se la voce ha ancora la
-misura e la data lette e se quella data è anteriore alla domanda: una voce
-cambiata nel frattempo, da una scrittura o dal rilevatore, non torna indietro.
+(`Workspace::learn_fingerprints`), nello stesso vault a cui si è fatta la
+domanda, e si tiene soltanto se:
+
+- la data letta è anteriore all'istante della domanda, preso dall'orologio del
+  vault (*racily clean*);
+- il file è ancora quello letto: stesso segno del cambio e stessa identità;
+- la voce ha ancora la misura e la data lette: una voce cambiata nel
+  frattempo, da una scrittura o dal rilevatore, non torna indietro;
+- la riga dell'anagrafe con quella misura e quella data, se c'è, descrive lo
+  stesso file. Un file sostituito da un altro con la stessa misura e la stessa
+  data, senza il rilevatore, ha una voce che descrive ancora quello di prima,
+  e l'impronta del nuovo certificherebbe i metadati del vecchio.
+
+La consegna è un prestito esclusivo breve, senza drenare eventi: imparare
+un'impronta non ne produce, e l'indice non ha un lucchetto suo fuori dal
+workspace.
 Su disco la porta l'anagrafe (`EntryStore`), l'unica che scrive
 `entries.json`, la prossima volta che si scrive. Il formato non cambia:
 l'impronta è il campo che la voce già porta.

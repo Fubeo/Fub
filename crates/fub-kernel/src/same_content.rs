@@ -189,6 +189,12 @@ impl Observed {
 /// file che non ne ha (`LICENSE`) e per uno che è **solo** estensione
 /// (`.gitignore`), dove il punto iniziale non separa un nome da un tipo. La
 /// stessa regola di `fub_abi::rules::media`.
+///
+/// Due nomi sono dello stesso tipo se queste estensioni sono **uguali**, e
+/// basta: il registro non si interroga, quindi `.md` e `.markdown` sono due
+/// tipi anche se un formato li servisse entrambi. È prudente di proposito:
+/// chi riusa un file scrive un collegamento a lui, e quel collegamento non
+/// deve avere un'estensione diversa da quella del nome che si voleva.
 fn extension_of(id: &str) -> Option<String> {
     let name = id.rsplit('/').next().unwrap_or(id);
     match name.rsplit_once('.') {

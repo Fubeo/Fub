@@ -22,12 +22,15 @@ revisione) e `reuse`, facoltativo. Un campo in più, un tipo sbagliato o un
 `expected` dato pure. Senza `reuse` il deposito è quello di sempre.
 
 Con `reuse: "same-content"` l'host cerca un file del vault con la stessa
-estensione di `id` ed esattamente questi byte, mai per un contenuto vuoto
+estensione di `id` (grezza, piegata in minuscolo: `.md` e `.markdown` sono
+due tipi) ed esattamente questi byte, mai per un contenuto vuoto
 ([Lo stesso contenuto](../architecture/storage-and-identity.md)), e
 ricontrolla che ci sia ancora: allora non scrive niente. Se non c'è, o se non
 sa rispondere, scrive: nel dubbio si deposita. La lavagna (`depositOrReuse`)
 chiede il riuso solo col primo nome; dopo un `already_exists` i nomi seguenti
-sono scritture semplici, senza rifare la ricerca. La ricevuta
+sono scritture semplici, senza rifare la ricerca: la risposta non dipende dal
+nome, e il «non so» di un vault aperto viene dai limiti, che con gli stessi
+byte rispondono uguale. La ricevuta
 (`ResourceWriteReceipt`) porta `id` e `revision` del file scritto, o di quello
 che c'era, e `reused` (vero solo se non si è scritto; assente in una ricevuta
 di prima = `false`). Gli errori sono quelli di una scrittura (`already_exists`,
