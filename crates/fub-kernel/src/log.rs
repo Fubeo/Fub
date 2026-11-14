@@ -402,10 +402,23 @@ impl FileSink {
         if let Some(dir) = self.path.parent() {
             std::fs::create_dir_all(dir)?;
         }
-        let file = std::fs::OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(&self.path)?;
+        let mut options = std::fs::OpenOptions::new();
+        options.create(true).append(true);
+        // Il log nomina percorsi e documenti del vault: lo legge soltanto chi
+        // lo scrive, come gli altri file di stato della macchina.
+        #[cfg(unix)]
+        std::os::unix::fs::OpenOptionsExt::mode(&mut options, 0o600);
+        let file = options.open(&self.path)?;
+        // Un log di prima, nato coi permessi della umask, si stringe qui: sul
+        // descrittore, quindi sul file che si scrive davvero.
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mode = file.metadata()?.permissions().mode();
+            if mode & 0o077 != 0 {
+                file.set_permissions(std::fs::Permissions::from_mode(mode & 0o700))?;
+            }
+        }
         let data = file.metadata();
         let written = data.as_ref().map(|m| m.len()).unwrap_or(0);
         let who = data.ok().as_ref().and_then(identity_of);
@@ -759,6 +772,25 @@ mod tests {
             and.contains(path.as_str()),
             "l'errore non dice quale file: {and}"
         );
+    }
+
+    /// Il log lo legge soltanto chi lo scrive: un file nuovo nasce `0600`, e
+    /// uno di prima, leggibile da altri, si stringe alla riapertura.
+    #[cfg(unix)]
+    #[test]
+    fn the_log_is_readable_only_by_its_owner() {
+        use std::os::unix::fs::PermissionsExt;
+        let (_tmp, dir) = tempdir();
+        let path = dir.join("fub.log");
+        drop(FileSink::open(&path).expect("il file si apre"));
+        let mode = |path: &Utf8Path| std::fs::metadata(path).unwrap().permissions().mode() & 0o777;
+        assert_eq!(mode(&path), 0o600);
+
+        let old = dir.join("vecchio.log");
+        std::fs::write(&old, b"prima\n").unwrap();
+        std::fs::set_permissions(&old, std::fs::Permissions::from_mode(0o644)).unwrap();
+        drop(FileSink::open(&old).expect("il file si apre"));
+        assert_eq!(mode(&old), 0o600);
     }
 
     /// Il file ruota, e ciò che c'era prima si ritrova in `.1`.
