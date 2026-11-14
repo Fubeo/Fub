@@ -1,9 +1,13 @@
 // I tasti della Tabella, in due modi.
 //
 // - **Foglio** (il foglio e il Markdown): la tabella ha il fuoco e una cella
-//   attiva; le frecce la muovono, Maiusc allarga, Ctrl va al bordo; Invio e
-//   F2 aprono la cella, un carattere la riscrive; Tab va avanti e dall'ultima
-//   cella aggiunge una riga.
+//   attiva; le frecce la muovono, Maiusc allarga, Ctrl va al bordo dei dati;
+//   Invio e F2 aprono la cella, un carattere la riscrive; Tab va avanti e
+//   dall'ultima cella aggiunge una riga; con più celle scelte Invio e Tab
+//   girano dentro la selezione. Maiusc+Spazio sceglie la riga,
+//   Ctrl+Spazio la colonna, tutti e due la tabella; Ctrl+D riempie in giù,
+//   Ctrl+R a destra; Ctrl+«+» e Ctrl+«−» inseriscono e tolgono righe o
+//   colonne; Maiusc+F8 aggiunge un intervallo agli altri.
 // - **Documento** (il docx): il cursore è nel testo della cella; le frecce
 //   restano del testo, Tab e Maiusc+Tab vanno di cella in cella, e Maiusc con
 //   una freccia che esce dalla cella comincia la selezione di celle.
@@ -18,11 +22,16 @@ export interface KeyLike {
   readonly ctrlKey: boolean;
   readonly metaKey: boolean;
   readonly altKey: boolean;
+  /// Il tasto fisico, quando l'evento lo dice: le scorciatoie dei fogli di
+  /// calcolo lo leggono come Excel.
+  readonly code?: string;
 }
 
 export type TableIntent =
   | { readonly kind: "move"; readonly rows: number; readonly columns: number; readonly extend: boolean }
   | { readonly kind: "edge"; readonly row: "first" | "last" | null; readonly column: "first" | "last" | null; readonly extend: boolean }
+  /// Ctrl con una freccia: fino al bordo dei dati (`navigation.ts`, `dataEdge`).
+  | { readonly kind: "jump"; readonly rows: -1 | 0 | 1; readonly columns: -1 | 0 | 1; readonly extend: boolean }
   | { readonly kind: "page"; readonly direction: -1 | 1; readonly extend: boolean }
   | { readonly kind: "tab"; readonly step: 1 | -1 }
   | { readonly kind: "enter"; readonly step: 1 | -1 }
@@ -34,7 +43,56 @@ export type TableIntent =
   | { readonly kind: "redo" }
   | { readonly kind: "menu" }
   | { readonly kind: "leave" }
-  | { readonly kind: "format"; readonly which: TableFormat };
+  | { readonly kind: "format"; readonly which: TableFormat }
+  | { readonly kind: "whole"; readonly which: WholeTarget }
+  | { readonly kind: "fill"; readonly direction: FillDirection }
+  | { readonly kind: "structure"; readonly change: StructureChange }
+  | { readonly kind: "add-ranges" };
+
+/// Che cosa Maiusc+Spazio, Ctrl+Spazio e tutti e due scelgono per intero.
+export type WholeTarget = "row" | "column" | "table";
+/// Ctrl+D e Ctrl+R.
+export type FillDirection = "down" | "right";
+/// Ctrl+«+» e Ctrl+«−».
+export type StructureChange = "insert" | "delete";
+
+/// Maiusc+Spazio la riga, Ctrl (o Cmd)+Spazio la colonna, tutti e due la
+/// tabella; `null` per ogni altro tasto.
+export function wholeKey(event: KeyLike): WholeTarget | null {
+  if (event.altKey) return null;
+  if (event.key !== " " && event.code !== "Space") return null;
+  const mod = event.ctrlKey || event.metaKey;
+  if (mod && event.shiftKey) return "table";
+  if (mod) return "column";
+  return event.shiftKey ? "row" : null;
+}
+
+/// Ctrl+D riempie in giù, Ctrl+R a destra, dal tasto fisico come Excel; senza
+/// il tasto fisico, dalla lettera.
+export function fillKey(event: KeyLike): FillDirection | null {
+  if (!(event.ctrlKey || event.metaKey) || event.shiftKey || event.altKey) return null;
+  const letter = event.code ? event.code : `Key${event.key.toUpperCase()}`;
+  if (letter === "KeyD") return "down";
+  if (letter === "KeyR") return "right";
+  return null;
+}
+
+/// Ctrl+«+» inserisce, Ctrl+«−» toglie. Come Excel conta il tasto fisico
+/// (Maiusc+«=» e il «+» del tastierino); conta anche il carattere, perché su
+/// una tastiera italiana «+» ha un tasto suo.
+export function structureKey(event: KeyLike): StructureChange | null {
+  if (!(event.ctrlKey || event.metaKey) || event.altKey) return null;
+  const code = event.code ?? "";
+  if (code === "NumpadAdd" || (event.shiftKey && code === "Equal") || event.key === "+") return "insert";
+  if (code === "NumpadSubtract" || (!event.shiftKey && code === "Minus") || (!event.shiftKey && event.key === "-")) return "delete";
+  return null;
+}
+
+/// Maiusc+F8: gli intervalli scelti restano, e ci si sposta per sceglierne un
+/// altro.
+export function addRangesKey(event: KeyLike): boolean {
+  return event.key === "F8" && event.shiftKey && !event.ctrlKey && !event.metaKey && !event.altKey;
+}
 
 /// Le enfasi che i tasti chiedono: l'adattatore sa come il suo formato le
 /// scrive.
@@ -46,6 +104,13 @@ export function sheetIntent(event: KeyLike): TableIntent | null {
   const mod = event.ctrlKey || event.metaKey;
   const { key, shiftKey: extend } = event;
   const lower = key.toLowerCase();
+  const whole = wholeKey(event);
+  if (whole) return { kind: "whole", which: whole };
+  const fill = fillKey(event);
+  if (fill) return { kind: "fill", direction: fill };
+  const structure = structureKey(event);
+  if (structure) return { kind: "structure", change: structure };
+  if (addRangesKey(event)) return { kind: "add-ranges" };
   if (mod && !event.altKey) {
     if (lower === "z") return { kind: extend ? "redo" : "undo" };
     if (lower === "y") return { kind: "redo" };
@@ -53,10 +118,10 @@ export function sheetIntent(event: KeyLike): TableIntent | null {
     if (!extend && lower === "b") return { kind: "format", which: "bold" };
     if (!extend && lower === "i") return { kind: "format", which: "italic" };
     if (extend && lower === "x") return { kind: "format", which: "strike" };
-    if (key === "ArrowUp") return { kind: "edge", row: "first", column: null, extend };
-    if (key === "ArrowDown") return { kind: "edge", row: "last", column: null, extend };
-    if (key === "ArrowLeft") return { kind: "edge", row: null, column: "first", extend };
-    if (key === "ArrowRight") return { kind: "edge", row: null, column: "last", extend };
+    if (key === "ArrowUp") return { kind: "jump", rows: -1, columns: 0, extend };
+    if (key === "ArrowDown") return { kind: "jump", rows: 1, columns: 0, extend };
+    if (key === "ArrowLeft") return { kind: "jump", rows: 0, columns: -1, extend };
+    if (key === "ArrowRight") return { kind: "jump", rows: 0, columns: 1, extend };
     if (key === "Home") return { kind: "edge", row: "first", column: "first", extend };
     if (key === "End") return { kind: "edge", row: "last", column: "last", extend };
     // Ctrl+C, X e V diventano gli eventi degli appunti.
@@ -72,7 +137,9 @@ export function sheetIntent(event: KeyLike): TableIntent | null {
     case "End": return { kind: "edge", row: null, column: "last", extend };
     case "PageUp": return { kind: "page", direction: -1, extend };
     case "PageDown": return { kind: "page", direction: 1, extend };
-    case "Enter": return extend ? { kind: "enter", step: -1 } : { kind: "edit" };
+    // Invio apre la cella scelta da sola; con più celle scelte gira dentro la
+    // selezione. Lo decide chi conosce la selezione.
+    case "Enter": return { kind: "enter", step: extend ? -1 : 1 };
     case "F2": return { kind: "edit" };
     case "Delete":
     case "Backspace": return { kind: "clear" };
@@ -111,18 +178,60 @@ export function editingIntent(event: KeyLike, mode: "replace" | "edit"): Editing
   }
 }
 
+/// Che cosa sa il modo documento della tabella di adesso: se ci sono celle
+/// scelte (`cells`) e se si stanno aggiungendo intervalli con Maiusc+F8
+/// (`adding`).
+export interface DocumentCells {
+  readonly cells: boolean;
+  readonly adding: boolean;
+}
+
 /// Nel modo documento: Tab e Maiusc+Tab di cella in cella, Maiusc con una
 /// freccia verso fuori della cella per scegliere celle. `atEdge` dice se il
 /// cursore è all'inizio (`start`) o alla fine (`end`) del testo della cella.
-export function documentIntent(event: KeyLike, atEdge: { readonly start: boolean; readonly end: boolean }): TableIntent | null {
+///
+/// I gesti del foglio che nel testo non scrivono niente valgono sempre dentro
+/// una tabella: Ctrl+Spazio la colonna, Ctrl+Maiusc+Spazio la tabella,
+/// Maiusc+F8. Quelli che nel testo hanno già un senso valgono soltanto con
+/// celle scelte, perché il testo li tiene: Maiusc+Spazio (uno spazio scritto
+/// tenendo Maiusc), Invio, Ctrl+D, Ctrl+R (allinea a destra), Ctrl+«+» (apice)
+/// e Ctrl+«−». Mentre si aggiungono intervalli le frecce muovono la cella.
+/// Ctrl con una freccia resta del testo (salta di parola): nel documento non
+/// va al bordo dei dati.
+export function documentIntent(
+  event: KeyLike,
+  atEdge: { readonly start: boolean; readonly end: boolean },
+  table: DocumentCells = { cells: false, adding: false },
+): TableIntent | null {
+  const whole = wholeKey(event);
+  if (whole && (whole !== "row" || table.cells)) return { kind: "whole", which: whole };
+  if (addRangesKey(event)) return { kind: "add-ranges" };
+  if (table.cells) {
+    const fill = fillKey(event);
+    if (fill) return { kind: "fill", direction: fill };
+    const structure = structureKey(event);
+    if (structure) return { kind: "structure", change: structure };
+  }
   if (event.ctrlKey || event.metaKey || event.altKey) return null;
+  if (event.key === "Escape") return { kind: "leave" };
   if (event.key === "Tab") return { kind: "tab", step: event.shiftKey ? -1 : 1 };
+  if (event.key === "Enter" && table.cells) return { kind: "enter", step: event.shiftKey ? -1 : 1 };
+  const step = ARROWS[event.key];
+  if (!step) return null;
+  if (table.adding && !event.shiftKey) return { kind: "move", rows: step[0], columns: step[1], extend: false };
   if (!event.shiftKey) return null;
   if ((event.key === "ArrowRight" || event.key === "ArrowDown") && atEdge.end) {
-    return { kind: "move", rows: event.key === "ArrowDown" ? 1 : 0, columns: event.key === "ArrowRight" ? 1 : 0, extend: true };
+    return { kind: "move", rows: step[0], columns: step[1], extend: true };
   }
   if ((event.key === "ArrowLeft" || event.key === "ArrowUp") && atEdge.start) {
-    return { kind: "move", rows: event.key === "ArrowUp" ? -1 : 0, columns: event.key === "ArrowLeft" ? -1 : 0, extend: true };
+    return { kind: "move", rows: step[0], columns: step[1], extend: true };
   }
   return null;
 }
+
+const ARROWS: Readonly<Record<string, readonly [number, number]>> = {
+  ArrowUp: [-1, 0],
+  ArrowDown: [1, 0],
+  ArrowLeft: [0, -1],
+  ArrowRight: [0, 1],
+};

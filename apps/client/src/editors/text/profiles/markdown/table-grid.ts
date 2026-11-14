@@ -268,6 +268,7 @@ export class TableGrid implements TableGridActions {
         });
       },
       writeClipboard: (data) => writeClipboardText(data.text),
+      notice: (text) => notify(text, "info"),
       focused: () => host.focused(),
       changed: () => host.changed(),
     }, "markdown-rendered");
@@ -288,6 +289,12 @@ export class TableGrid implements TableGridActions {
 
   get editing(): boolean {
     return this.#frame.editing;
+  }
+
+  /// La cella in cui si lavora: dentro una selezione di più celle Invio e Tab
+  /// la fanno girare senza muovere la selezione.
+  get active(): GridPosition {
+    return toPosition(this.#frame.active);
   }
 
   /// La tabella è cambiata nel testo (una modifica, un annulla, un altro

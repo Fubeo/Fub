@@ -70,8 +70,11 @@ Si modificano:
   Tab e Maiusc+Tab vanno alla cella dopo e prima, col suo testo scelto, e
   Tab nell'ultima cella aggiunge una riga. Maiusc con una freccia alla fine
   (o all'inizio) del testo di una cella, o il trascinamento da una cella a
-  un'altra, sceglie più celle: Canc le svuota, Ctrl+C e Ctrl+X le copiano
-  come un foglio di calcolo, «Unisci celle» le unisce se stanno in una riga;
+  un'altra, sceglie più celle: Canc le svuota, Ctrl+C le copia come un foglio
+  di calcolo, Ctrl+X le segna e l'incolla le sposta, «Unisci celle» le unisce
+  se stanno in una riga; sulle celle scelte valgono i gesti dei fogli di
+  calcolo (Ctrl+Spazio, Ctrl+D, Ctrl+«+», Maiusc+F8…), descritti in
+  [Tabelle](editor-tables.md#nei-documenti);
 - le immagini e le note nuove, dalla scheda **Inserisci**:
   **Immagine** sceglie un PNG, un JPEG o un GIF del vault (fino a 16 MB) e lo
   mette al cursore, nel testo, alla sua misura (un pixel CSS è tre quarti di

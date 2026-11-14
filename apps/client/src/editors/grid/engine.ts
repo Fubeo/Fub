@@ -33,9 +33,10 @@ import { createTabs, textButton, type TabsHandle } from "../../kit";
 import { openLifetime, type Lifetime } from "../../ui/lifetime";
 import { createTextEngine, type TextEngine } from "../text/engine";
 import { createFormulaProfile, formulaReferences, operandSlot, type FormulaMove } from "../text/profiles/formula";
-import { isMultiCell, nextCell, nextInRange, type Move, type Shape } from "../../tabella/navigation";
-import { clipboardData, clipboardRows, pasteTargets, type ClipboardCell } from "../../tabella/clipboard";
-import { touches, withRange } from "../../tabella/selection";
+import { dataEdge, isMultiCell, nextCell, nextInRange, type Move, type Shape } from "../../tabella/navigation";
+import { clipboardData, clipboardRows, cutDestination, pasteTargets, type ClipboardCell } from "../../tabella/clipboard";
+import { covers, touches, withRange } from "../../tabella/selection";
+import { addRangesKey, wholeKey } from "../../tabella/keys";
 import {
   columnLabel,
   coordinateAt,
@@ -634,6 +635,18 @@ export class GridEngine {
     return active
       ? { anchor: { ...anchor }, focus: { ...focus }, active: { ...active } }
       : { anchor: { ...anchor }, focus: { ...focus } };
+  }
+
+  /// Le celle tagliate in attesa di un incolla, sul foglio di adesso, o
+  /// `null`: lo stesso segno della Tabella (`TableFrame.cutRange`).
+  cutRange(): { r0: number; c0: number; r1: number; c1: number } | null {
+    const mark = this.#cutMark;
+    return mark && mark.sheet === this.#sheet().id ? tableRange(mark.range) : null;
+  }
+
+  /// Quanti intervalli sono scelti (Ctrl+clic, Maiusc+F8).
+  rangeCount(): number {
+    return this.#others.length + 1;
   }
 
   /// Il modo della cella: «Pronto», «Inserisci» o «Modifica».
@@ -3051,9 +3064,9 @@ export class GridEngine {
     return Boolean(this.#workbookCell(position)?.cell.input);
   }
 
-  /// Ctrl+freccia: fino al bordo dei dati, come in Excel. Da una cella piena
-  /// accanto a un'altra piena si va all'ultima del blocco; altrimenti alla
-  /// prima piena, o al bordo del foglio. Contano le celle lette.
+  /// Ctrl+freccia: fino al bordo dei dati, con la regola di ogni tabella
+  /// (`dataEdge`); le righe e le colonne nascoste si saltano, e contano le
+  /// celle lette.
   #jump(rowStep: -1 | 0 | 1, columnStep: -1 | 0 | 1, extend: boolean): void {
     const axis = rowStep ? "row" : "column";
     const step = rowStep || columnStep;
@@ -3061,22 +3074,9 @@ export class GridEngine {
     const at = (index: number): GridPosition => axis === "row"
       ? { row: index, column: from.column }
       : { row: from.row, column: index };
-    let index = axis === "row" ? from.row : from.column;
-    let next = this.#nextVisible(axis, index, step);
-    if (next === index) return;
-    if (this.#filled(at(index)) && this.#filled(at(next))) {
-      while (next !== index && this.#filled(at(next))) {
-        index = next;
-        next = this.#nextVisible(axis, index, step);
-      }
-    } else {
-      index = next;
-      while (!this.#filled(at(index))) {
-        next = this.#nextVisible(axis, index, step);
-        if (next === index) break;
-        index = next;
-      }
-    }
+    const start = axis === "row" ? from.row : from.column;
+    const index = dataEdge(start, (current) => this.#nextVisible(axis, current, step), (current) => this.#filled(at(current)));
+    if (index === start) return;
     this.#select(at(index), extend);
   }
 
@@ -3174,10 +3174,13 @@ export class GridEngine {
       return;
     }
     if (this.#commands.length && !this.#readOnly) {
-      const range = this.#selectedRange();
       const context = {
-        wholeRows: range.columnStart === this.#edgeVisible("column", false) && range.columnEnd === this.#edgeVisible("column", true),
-        wholeColumns: range.rowStart === this.#edgeVisible("row", false) && range.rowEnd === this.#edgeVisible("row", true),
+        ...covers(tableRange(this.#selectedRange()), {
+          r0: this.#edgeVisible("row", false),
+          c0: this.#edgeVisible("column", false),
+          r1: this.#edgeVisible("row", true),
+          c1: this.#edgeVisible("column", true),
+        }),
         currency: currencyFormat(resolvedLanguage()),
       };
       const shortcut = shortcutCommand(event, context);
@@ -3198,10 +3201,11 @@ export class GridEngine {
       this.#stepSheet(event.key === "PageDown" ? 1 : -1);
       return;
     }
-    if (event.key === " " && (event.shiftKey || modifier) && !event.altKey) {
+    const whole = wholeKey(event);
+    if (whole) {
       event.preventDefault();
-      if (event.shiftKey && modifier) this.#selectAll();
-      else this.#selectWhole(event.shiftKey ? "row" : "column");
+      if (whole === "table") this.#selectAll();
+      else this.#selectWhole(whole);
       return;
     }
     if (modifier && event.key.startsWith("Arrow")) {
@@ -3238,7 +3242,7 @@ export class GridEngine {
       // Maiusc+F8 aggiunge alla selezione: ciò che è scelto resta, e ci si
       // sposta per scegliere un altro intervallo; di nuovo, o Esc, smette.
       case "F8":
-        if (!extend) return;
+        if (!addRangesKey(event)) return;
         this.#adding = !this.#adding;
         if (this.#adding) {
           this.#others = this.#rangesOf(withRange(this.#others.map(tableRange), tableRange(this.#selectedRange())));
@@ -3777,14 +3781,12 @@ export class GridEngine {
   /// L'incolla dopo un taglio: gli input vanno all'angolo della selezione e
   /// le celle tagliate che restano fuori si svuotano, in un passo solo.
   #pasteCut(mark: { readonly range: GridRange; readonly text: string }): void {
-    const target = this.#selectedRange();
-    const rows = mark.range.rowEnd - mark.range.rowStart;
-    const columns = mark.range.columnEnd - mark.range.columnStart;
+    const destination = cutDestination(tableRange(mark.range), tableRange(this.#selectedRange()));
     const to: GridRange = {
-      rowStart: target.rowStart,
-      columnStart: target.columnStart,
-      rowEnd: target.rowStart + rows,
-      columnEnd: target.columnStart + columns,
+      rowStart: destination.r0,
+      columnStart: destination.c0,
+      rowEnd: destination.r1,
+      columnEnd: destination.c1,
     };
     const inside = (range: GridRange, row: number, column: number) =>
       row >= range.rowStart && row <= range.rowEnd && column >= range.columnStart && column <= range.columnEnd;

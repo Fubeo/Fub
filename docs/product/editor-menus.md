@@ -222,7 +222,7 @@ presta all'app ([Il prestito](craft-files.md#il-prestito)).
 
 Il disegno ha i suoi menu ([Disegni, selezione](drawing-selection.md)); la
 griglia delle tabelle in Live ha il suo
-([Editor e anteprima](editor-and-preview.md#tabelle-in-live)).
+([Tabelle](editor-tables.md#tabelle-in-live)).
 
 ## Dove si trova
 
