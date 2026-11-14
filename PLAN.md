@@ -4617,7 +4617,7 @@ Casi limite: il conflitto che arriva mentre la finestra di R01 è aperta
 resta).
 Fatto quando: `npm run bench:giro -- --solo=guasti` è verde.
 Prova: scripts/check.sh --rapido; cd apps/client && npm run build && npm run bench:giro -- --solo=guasti --out=$TMPDIR/giro
-Stato: [~] coder/pa-t30 @ ebd7ef3c5 · 15 compiti in `giro/guasti.mjs`, check verde, `--telefono` verde; il giro trova due difetti (fuoco perso con Ctrl+E in Lettura; «Modifiche non salvate» che resta aperta sotto un cambio da fuori): diventano T63, sullo stesso ramo · fuori Tocca `bench/fake-ipc.ts` (Cestino vero del finto, `window.bench.writeFromOutside`)
+Stato: [x] integrato 2026-11-14 (coder/pa-t30 @ 277ceb351, merge 57d6aa016) · 15 compiti in `giro/guasti.mjs`, verdi in chiaro e in scuro, check verde 20 passi; i due difetti trovati dal giro sono T63, sullo stesso ramo · fuori Tocca `bench/fake-ipc.ts` (Cestino vero del finto, `window.bench.writeFromOutside`)
 
 ## T31 · L'APK di prova parte in un emulatore della CI
 
@@ -6356,4 +6356,4 @@ Fatto quando: i due test sono rossi sulla base e verdi dopo; il giro
 `--solo=guasti` e il giro intero sono verdi senza controlli allentati.
 Prova: npx vitest run dei due test; giro `--solo=guasti`; scripts/check.sh
 --rapido
-Stato: [~] in corso (coder/pa-t30, dopo il commit del giro, 2026-11-14)
+Stato: [x] integrato 2026-11-14 con T30 (coder/pa-t30 @ 277ceb351) · quattro giri di revisione; avvisi di stato uno per nota col nome della pagina, conferma del conflitto in una frase; resta aperto: la finestra «Conflitto su …» mostra ancora il percorso grezzo
