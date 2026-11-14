@@ -28,6 +28,10 @@ vi.mock("./preferences", async (importOriginal) => ({
   },
 }));
 
+// Le prove aspettano il fotogramma del rettangolo: sotto il carico di una macchina
+// che compila in parallelo, cinque secondi non bastano a una prova che lavora bene.
+vi.setConfig({ testTimeout: 30_000 });
+
 beforeAll(async () => {
   await canvasCoreReady();
 });
@@ -317,6 +321,20 @@ describe("il rettangolo del trascinamento nel vuoto con la Selezione (N6 T20b)",
     release(host, [49 * 120 + 50, 70]);
     engine.destroy();
   }, 60_000);
+
+  it("il rettangolo che esce dalla finestra arriva dove va il puntatore, e la vista non scorre da sola", async () => {
+    const { engine, host } = mounted(BOARD);
+    const camera = cameraOf(host);
+    // Dal punto (250, 150), fuori da «a», il puntatore va molto oltre l'angolo alto a sinistra.
+    dragOnEmpty(host, [250, 150], [-900, -700]);
+    expect(marqueeOf(host)).toEqual({ x: -900, y: -700, width: 1150, height: 850 });
+    await frame();
+    expect(engine.selection().nodes).toEqual(["a"]);
+    expect(cameraOf(host)).toEqual(camera);
+    release(host, [-900, -700]);
+    expect(cameraOf(host)).toEqual(camera);
+    engine.destroy();
+  });
 
   it("la riga della Selezione dice il gesto di adesso: cambiata l'impostazione, il suggerimento si rifà", () => {
     const { engine, host } = mounted(BOARD);
