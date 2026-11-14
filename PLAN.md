@@ -539,7 +539,7 @@ Scrittura; la scena «a riposo» è verde; la battuta resta nel budget.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/text/profiles/markdown src/state/mode-menu.test.ts
 src/surface-modes.e2e.test.ts
-Stato: [~] PR #359 (feat/modalita-scrittura) · coder al lavoro sui rossi del banco del movimento; baseline dal runner
+Stato: [~] PR #359 (feat/modalita-scrittura) · 2026-11-14: main portato dentro, baseline rimesse quelle di main; il runner ne cambia 178 (la testata di Scrittura in ogni nota, voluta). Non accettate: in `slash-08-stretta` (800×800) la tavolozza «/» si apre in su, copre titolo e barra degli strumenti e arriva a y=0 sopra la barra della finestra. Da correggere prima delle baseline: la tavolozza resta sotto la riga accorciandosi fino a un minimo, e se si apre in su non sale oltre il bordo alto dell'editor; poi rivedere le 178 foto
 
 ## T4 · Impostazioni e comandi vecchi portano a Scrittura
 
