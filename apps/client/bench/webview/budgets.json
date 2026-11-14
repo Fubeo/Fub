@@ -9,6 +9,7 @@
     "S5.penFrameGap.max": 33,
     "S6.coldStart": 1500,
     "S7.frameGap.max": 33,
+    "S8.penFrameGap.max": 33,
     "I1.nota.p95": 50,
     "I1.tessera.p95": 50,
     "R1.residuo.MiB": 50,

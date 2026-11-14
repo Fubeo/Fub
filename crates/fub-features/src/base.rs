@@ -212,6 +212,10 @@ fn required(plan: &Planned<'_>) -> Result<Vec<String>, PluginError> {
             }
         }
     }
+    // La data del calendario e inizio e fine della linea del tempo sono
+    // proprietà da leggere, come una colonna.
+    let (date, start, end) = time_keys(plan.view);
+    keys.extend([date, start, end].into_iter().flatten().map(str::to_string));
     collect_filter(&plan.definition.filters, &mut keys);
     collect_filter(&plan.view.filters, &mut keys);
     for summary in &plan.view.summaries {
@@ -701,6 +705,90 @@ fn matches_filter(filter: &FilterDef, ctx: &RowContext) -> bool {
 struct ResultRow {
     doc: String,
     ctx: RowContext,
+    /// Solo per calendario e linea del tempo.
+    time: Option<RowTime>,
+}
+
+/// Un giorno civile come è scritto nella nota: anno, mese, giorno. L'ora e il
+/// fuso della data non lo spostano.
+type CivilDay = (i32, u8, u8);
+
+/// Dove sta una riga nella vista di calendario o di linea del tempo.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum RowTime {
+    /// Il calendario: il giorno della proprietà data, se la nota ce l'ha.
+    Day(Option<CivilDay>),
+    /// La linea del tempo: inizio e fine, se ci sono. Una fine prima
+    /// dell'inizio si mostra e si segna.
+    Span {
+        start: Option<CivilDay>,
+        end: Option<CivilDay>,
+    },
+}
+
+impl RowTime {
+    fn to_json(self) -> Value {
+        match self {
+            RowTime::Day(day) => json!({ "day": day.map(iso_day) }),
+            RowTime::Span { start, end } => json!({
+                "start": start.map(iso_day),
+                "end": end.map(iso_day),
+                "inverted": matches!((start, end), (Some(start), Some(end)) if end < start),
+            }),
+        }
+    }
+}
+
+fn iso_day((year, month, day): CivilDay) -> String {
+    format!("{year:04}-{month:02}-{day:02}")
+}
+
+/// Il giorno civile di una proprietà data. Una proprietà che non è una data,
+/// o che manca, non ha giorno.
+fn civil_day(value: Option<&PropertyValue>) -> Option<CivilDay> {
+    match value? {
+        PropertyValue::Date(date)
+            if (1..=12).contains(&date.month) && (1..=31).contains(&date.day) =>
+        {
+            Some((date.year, date.month, date.day))
+        }
+        _ => None,
+    }
+}
+
+/// Le proprietà che legge una vista di tempo, senza il prefisso `prop.`: la
+/// data del calendario, o inizio e fine della linea del tempo. Le altre viste
+/// non ne hanno.
+fn time_keys(view: &BaseViewDef) -> (Option<&str>, Option<&str>, Option<&str>) {
+    let Some(fub) = &view.fub else {
+        return (None, None, None);
+    };
+    match view.view_type {
+        ViewType::Calendar => (fub.date.as_deref().map(property_name), None, None),
+        ViewType::Timeline => (
+            None,
+            fub.start.as_deref().map(property_name),
+            fub.end.as_deref().map(property_name),
+        ),
+        _ => (None, None, None),
+    }
+}
+
+fn property_name(key: &str) -> &str {
+    key.strip_prefix("prop.").unwrap_or(key)
+}
+
+fn row_time(plan: &Planned<'_>, props: &BTreeMap<String, PropertyValue>) -> Option<RowTime> {
+    let (date, start, end) = time_keys(plan.view);
+    let prop = |key: Option<&str>| civil_day(key.and_then(|key| props.get(key)));
+    match plan.view.view_type {
+        ViewType::Calendar => Some(RowTime::Day(prop(date))),
+        ViewType::Timeline => Some(RowTime::Span {
+            start: prop(start),
+            end: prop(end),
+        }),
+        _ => None,
+    }
 }
 fn aggregate(kind: AggregateKind, values: &[BaseValue]) -> BaseValue {
     let filled: Vec<&BaseValue> = values.iter().filter(|value| !value.is_empty()).collect();
@@ -811,6 +899,7 @@ fn derive(
         .map(str::to_lowercase);
     let mut result = Vec::new();
     for input in rows {
+        let time = row_time(plan, &input.props);
         let mut ctx = RowContext {
             props: input
                 .props
@@ -852,6 +941,7 @@ fn derive(
         result.push(ResultRow {
             doc: input.doc,
             ctx,
+            time,
         });
     }
     let mut summaries = BTreeMap::new();
@@ -944,7 +1034,11 @@ fn derive(
                     values.insert(key.clone(), field(key, &row.ctx));
                 }
             }
-            json!({"doc":row.doc,"values":values})
+            let mut out = json!({"doc":row.doc,"values":values});
+            if let Some(time) = row.time {
+                out["time"] = time.to_json();
+            }
+            out
         })
         .collect::<Vec<_>>();
     Ok(json!({"rows":rows,"summaries":summaries}))
@@ -967,6 +1061,9 @@ fn respond(query: Value) -> Result<Value, PluginError> {
             let required_props = required(&plan)?;
             let view_type =
                 serde_json::to_value(plan.view.view_type).map_err(|e| bad(e.to_string()))?;
+            // Le proprietà di tempo che la vista legge: il piano le dice alla
+            // superficie, che sceglie cosa mostrare se mancano.
+            let (date_key, start_key, end_key) = time_keys(plan.view);
             let labels: BTreeMap<_, _> = plan
                 .definition
                 .properties
@@ -979,7 +1076,7 @@ fn respond(query: Value) -> Result<Value, PluginError> {
                 })
                 .collect();
             Ok(
-                json!({"view":plan.view.name,"view_type":view_type,"columns":columns(&plan),"column_labels":labels,"required_props":required_props,"all_properties":plan.view.search.as_deref().is_some_and(|s| !s.is_empty()),"group":plan.view.group.as_ref().map(|g| &g.key),"limit":plan.view.limit,"map":plan.view.map,"create_defaults":create_defaults(&plan.definition.filters, &plan.view.filters)}),
+                json!({"view":plan.view.name,"view_type":view_type,"columns":columns(&plan),"column_labels":labels,"required_props":required_props,"all_properties":plan.view.search.as_deref().is_some_and(|s| !s.is_empty()),"group":plan.view.group.as_ref().map(|g| &g.key),"limit":plan.view.limit,"map":plan.view.map,"date_key":date_key,"start_key":start_key,"end_key":end_key,"create_defaults":create_defaults(&plan.definition.filters, &plan.view.filters)}),
             )
         }
         "derive" => derive(
@@ -1107,6 +1204,7 @@ const E_BASE_CHANGED: &str = "base.view.e_base_changed";
 const E_UNKNOWN_KEY: &str = "base.view.e_unknown_key";
 const E_VALUE_JSON: &str = "base.view.e_value_json";
 const E_BAD_VALUE: &str = "base.view.e_bad_value";
+const E_NOT_FOR_VIEW: &str = "base.view.e_not_for_view";
 const E_UNREADABLE: &str = "base.view.e_unreadable";
 const E_LIMIT_BYTES: &str = "base.view.e_limit_bytes";
 const E_LIMIT_VIEWS: &str = "base.view.e_limit_views";
@@ -1343,6 +1441,10 @@ fn patch_failure(doc: &DocId, error: PatchError) -> PluginError {
             E_BAD_VALUE,
             vec![Arg::text(KEY, key.as_str())],
         )),
+        PatchError::NotForView(key) => PluginError::BadArgs(Text::message(
+            E_NOT_FOR_VIEW,
+            vec![Arg::text(KEY, key.as_str())],
+        )),
         PatchError::Unsafe { line, .. } => {
             PluginError::BadArgs(about(E_UNSAFE, doc, vec![Arg::int(LINE, line as i64)]))
         }
@@ -1433,8 +1535,8 @@ const STRINGS: &[(&str, &str, &str)] = &[
     ("base.view.set.key.title", "Chiave", "Key"),
     (
         "base.view.set.key.desc",
-        "Una fra: name, type, order, filters, sort, group, summaries, limit, search, map.",
-        "One of: name, type, order, filters, sort, group, summaries, limit, search, map.",
+        "Una fra: name, type, order, filters, sort, group, summaries, limit, search, map, date, start, end.",
+        "One of: name, type, order, filters, sort, group, summaries, limit, search, map, date, start, end.",
     ),
     ("base.view.set.value.title", "Valore", "Value"),
     (
@@ -1473,8 +1575,8 @@ const STRINGS: &[(&str, &str, &str)] = &[
     ("base.view.add.type.title", "Tipo", "Type"),
     (
         "base.view.add.type.desc",
-        "Il tipo: table, cards, list, kanban o map. Assente = table.",
-        "The type: table, cards, list, kanban or map. Absent = table.",
+        "Il tipo: table, cards, list, kanban, map, calendar o timeline. Assente = table.",
+        "The type: table, cards, list, kanban, map, calendar or timeline. Absent = table.",
     ),
     ("base.view.add.base.title", "Revisione di partenza", "Base revision"),
     (
@@ -1594,6 +1696,11 @@ const STRINGS: &[(&str, &str, &str)] = &[
         E_BAD_VALUE,
         "Il valore non va bene per la chiave «{key}».",
         "The value does not fit the key «{key}».",
+    ),
+    (
+        E_NOT_FOR_VIEW,
+        "La chiave «{key}» non va in questo tipo di vista.",
+        "The key «{key}» does not belong to this kind of view.",
     ),
     (
         E_UNREADABLE,
@@ -1854,5 +1961,89 @@ mod tests {
             derived["rows"][0]["values"]["formula.a"],
             json!({"kind":"error","value":"cycle"})
         );
+    }
+
+    const TIME_SOURCE: &str = "views:\n  - name: Cal\n    type: table\n    fub:\n      view: calendar\n      date: prop.scadenza\n  - name: Lin\n    type: timeline\n    fub:\n      start: inizio\n      end: fine\n  - name: Nuda\n    type: calendar\n";
+
+    fn date(year: i32, month: u8, day: u8, time: Value) -> Value {
+        json!({"kind":"date","value":{"year":year,"month":month,"day":day,"time":time}})
+    }
+
+    #[test]
+    fn il_piano_dice_le_proprieta_di_tempo_e_le_chiede_alla_lettura() {
+        let calendar =
+            respond(json!({"version":1,"op":"plan","source":TIME_SOURCE,"view":"Cal"})).unwrap();
+        assert_eq!(calendar["view_type"], "calendar");
+        assert_eq!(calendar["date_key"], "scadenza");
+        assert_eq!(calendar["start_key"], Value::Null);
+        assert_eq!(calendar["required_props"], json!(["scadenza"]));
+
+        let timeline =
+            respond(json!({"version":1,"op":"plan","source":TIME_SOURCE,"view":"Lin"})).unwrap();
+        assert_eq!(timeline["view_type"], "timeline");
+        assert_eq!(
+            (timeline["start_key"].clone(), timeline["end_key"].clone()),
+            (json!("inizio"), json!("fine"))
+        );
+        assert_eq!(timeline["required_props"], json!(["fine", "inizio"]));
+
+        // Un calendario senza `fub:` si legge: la data manca, e lo dice il piano.
+        let bare =
+            respond(json!({"version":1,"op":"plan","source":TIME_SOURCE,"view":"Nuda"})).unwrap();
+        assert_eq!(bare["view_type"], "calendar");
+        assert_eq!(bare["date_key"], Value::Null);
+    }
+
+    #[test]
+    fn il_calendario_dice_il_giorno_di_ogni_nota_e_l_ora_non_lo_sposta() {
+        let derived = respond(json!({"version":1,"op":"derive","source":TIME_SOURCE,"view":"Cal","now_ms":0,"rows":[
+            {"doc":"a.md","props":{"scadenza":date(2026, 11, 14, Value::Null)}},
+            {"doc":"b.md","props":{"scadenza":date(2026, 11, 14, json!({"hour":23,"minute":30,"second":0,"offset_minutes":120}))}},
+            {"doc":"c.md","props":{"scadenza":{"kind":"text","value":"domani"}}},
+            {"doc":"d.md","props":{}}
+        ]})).unwrap();
+        assert_eq!(derived["rows"][0]["time"], json!({"day":"2026-11-14"}));
+        assert_eq!(derived["rows"][1]["time"], json!({"day":"2026-11-14"}));
+        assert_eq!(derived["rows"][2]["time"], json!({"day":null}));
+        assert_eq!(derived["rows"][3]["time"], json!({"day":null}));
+    }
+
+    #[test]
+    fn la_linea_del_tempo_dice_inizio_e_fine_e_segna_la_fine_prima_dell_inizio() {
+        let derived = respond(json!({"version":1,"op":"derive","source":TIME_SOURCE,"view":"Lin","now_ms":0,"rows":[
+            {"doc":"a.md","props":{"inizio":date(2026, 11, 10, Value::Null),"fine":date(2026, 11, 12, Value::Null)}},
+            {"doc":"b.md","props":{"inizio":date(2026, 11, 12, Value::Null),"fine":date(2026, 11, 10, Value::Null)}},
+            {"doc":"c.md","props":{"inizio":date(2026, 11, 10, Value::Null)}},
+            {"doc":"d.md","props":{"fine":date(2026, 11, 10, Value::Null)}}
+        ]})).unwrap();
+        assert_eq!(
+            derived["rows"][0]["time"],
+            json!({"start":"2026-11-10","end":"2026-11-12","inverted":false})
+        );
+        assert_eq!(
+            derived["rows"][1]["time"],
+            json!({"start":"2026-11-12","end":"2026-11-10","inverted":true})
+        );
+        assert_eq!(
+            derived["rows"][2]["time"],
+            json!({"start":"2026-11-10","end":null,"inverted":false})
+        );
+        assert_eq!(
+            derived["rows"][3]["time"],
+            json!({"start":null,"end":"2026-11-10","inverted":false})
+        );
+    }
+
+    /// Le viste che non sono di tempo non portano il campo `time`.
+    #[test]
+    fn una_tabella_non_porta_il_tempo() {
+        let table = format!("{TIME_SOURCE}  - name: Tab\n    type: table\n");
+        let derived = respond(
+            json!({"version":1,"op":"derive","source":table,"view":"Tab","now_ms":0,"rows":[
+                {"doc":"a.md","props":{"scadenza":date(2026, 11, 14, Value::Null)}}
+            ]}),
+        )
+        .unwrap();
+        assert!(derived["rows"][0].get("time").is_none());
     }
 }

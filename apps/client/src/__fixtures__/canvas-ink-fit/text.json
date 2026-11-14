@@ -1,0 +1,44 @@
+{
+  "name": "text",
+  "description": "Una scheda di testo: l'inchiostro resta fermo.",
+  "card": {
+    "type": "text",
+    "text": "Perché la media è così bassa?"
+  },
+  "ref": {
+    "width": 280,
+    "height": 90
+  },
+  "size": {
+    "width": 560,
+    "height": 90
+  },
+  "expect": {
+    "mode": "fixed",
+    "s": 1,
+    "x": 0,
+    "y": 0,
+    "points": [
+      {
+        "from": [
+          10,
+          10
+        ],
+        "to": [
+          10,
+          10
+        ]
+      },
+      {
+        "from": [
+          280,
+          90
+        ],
+        "to": [
+          280,
+          90
+        ]
+      }
+    ]
+  }
+}

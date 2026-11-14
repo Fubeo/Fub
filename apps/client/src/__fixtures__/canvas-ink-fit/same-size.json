@@ -1,0 +1,44 @@
+{
+  "name": "same-size",
+  "description": "Una misura uguale a quella di riferimento: niente cambia.",
+  "card": {
+    "type": "file",
+    "file": "Foto/lavagna.png"
+  },
+  "ref": {
+    "width": 200,
+    "height": 100
+  },
+  "size": {
+    "width": 200,
+    "height": 100
+  },
+  "expect": {
+    "mode": "scale",
+    "s": 1,
+    "x": 0,
+    "y": 0,
+    "points": [
+      {
+        "from": [
+          37,
+          12
+        ],
+        "to": [
+          37,
+          12
+        ]
+      },
+      {
+        "from": [
+          200,
+          100
+        ],
+        "to": [
+          200,
+          100
+        ]
+      }
+    ]
+  }
+}
