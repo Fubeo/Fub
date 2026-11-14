@@ -130,6 +130,22 @@ describe("visore web", () => {
     expect(fake.open).not.toHaveBeenCalled();
   });
 
+  it("con il visore montato il browser di sistema riceve soltanto un indirizzo http(s)", async () => {
+    const p = ports(true);
+    const viewer = mountWebViewer(openLifetime(), document.body, p);
+    await settle();
+    for (const url of ["javascript:alert(1)", "file:///etc/passwd", "data:text/html,x", "ftp://esempio.it/"]) {
+      expect(await viewer.open(url)).toBe(false);
+      expect(await openWebPage(url)).toBe(false);
+      viewer.openLink(url, false);
+      openWebLink(url, true);
+    }
+    await settle();
+    expect(p.openExternal).not.toHaveBeenCalled();
+    expect(p.confirm).not.toHaveBeenCalled();
+    expect(fake.open).not.toHaveBeenCalled();
+  });
+
   it("una pagina fermata su un altro sito chiede una volta; rifiutato, tace", async () => {
     approved = ["esempio.it"];
     const p = ports(false);

@@ -168,10 +168,16 @@ export function mountWebViewer(life: Lifetime, parent: HTMLElement, ports: WebVi
     return asking;
   }
 
+  /// Il browser di sistema riceve soltanto http(s): `openExternal` non
+  /// guarda lo schema, e un disegno o una nota possono portarne qualunque.
+  function external(url: string): void {
+    if (webAddress(url)) ports.openExternal(url);
+  }
+
   async function open(url: string, leaving = false): Promise<boolean> {
     const site = viewerSite(url);
     if (!site) {
-      ports.openExternal(url);
+      external(url);
       return false;
     }
     await reread();
@@ -237,7 +243,7 @@ export function mountWebViewer(life: Lifetime, parent: HTMLElement, ports: WebVi
     open: (url) => open(url),
     openLink: (url, viaViewer) => {
       if ((viaViewer || linksInViewer) && viewerSite(url)) void open(url);
-      else ports.openExternal(url);
+      else external(url);
     },
   };
   declared = viewer;
