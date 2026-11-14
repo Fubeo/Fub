@@ -1224,7 +1224,7 @@ Fatto quando: `cargo test -p fub-canvas-core` passa; i vettori di
 (gli stessi casi di T5); `parity` dice 5 voci in meno.
 Prova: scripts/check.sh --rapido; cargo test -p fub-canvas-core; cd
 apps/client && npx vitest run src/editors/canvas/wasm
-Stato: [ ] da fare
+Stato: [x] fatto · coder/lic-t11 (be8479e32, Haiku) unito sopra T10b, con i conflitti risolti dall'orchestratore (test di `op_vectors.rs` di tutti e due, `TooManyMoved` riportato nella tabella degli errori e in `canvas-check.md`) e le cinque operazioni nuove nella descrizione MCP di `fub_canvas_apply`, nel test della guida e in `mcp-server.md` · `align`, `distribute`, `duplicate` (con `as` facoltativo), `reverse`, `group` dopo `color` in `spec::OPS`; 32 vettori; parità main 5→1, N6 10→9; «Il controllo» spostato in `docs/reference/canvas-check.md` per il tetto di 550 righe (`canvas-code.md` ora 518). `reverse` inverte nodi e lati e tiene le punte per ruolo, quindi la freccia cambia verso (scelta a, vedi DECISIONS.md); in T23 la GUI prende questa regola. Corpus 09: la terza scheda a x 1008 per l'aggancio a 8 della barra.
 
 ## T12 · Disponi: `layout`
 
