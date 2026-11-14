@@ -34,7 +34,7 @@ vi.mock("../../../ui/tooltip", () => ({
     el.dataset.tip = text;
   },
 }));
-vi.mock("../../../ui/icons", () => ({ icon: (name: string) => `<svg data-icon="${name}"></svg>` }));
+vi.mock("../../../ui/icons", () => ({ icon: (name: string) => `<svg data-icon="${name}"></svg>`, iconEl: () => null }));
 // Il cambio di luce ha il suo banco (`light.test.ts`): qui conta solo che il
 // piede lo monti, con la stessa vita.
 vi.mock("./light", () => ({ mountLightSwitch: (lifetime: unknown) => world.lightMounts.push(lifetime) }));

@@ -5,16 +5,17 @@ export const MENUS: PartAnatomy = {
   part: "menus",
   layer: "cornice",
   components: [
-    { name: "context-menu", states: [S("rest")], hooks: ["context-menu", "menu-separator", "menu-group", "menu-empty"] },
-    { name: "menu-head", states: [S("rest")], hooks: ["menu-head", "menu-head-name"] },
-    { name: "menu-clipboard", states: [S("rest"), S("hover"), S("focused")], hooks: ["menu-clipboard", "menu-quick"] },
-    { name: "menu-foot", states: [S("rest")], hooks: ["menu-foot", "menu-foot-query", "menu-path"] },
+    { name: "context-menu", states: [S("rest")], hooks: ["context-menu", "menu-at-point", "menu-items", "menu-glide", "menu-lit", "menu-separator", "menu-group", "menu-group-label", "menu-empty"] },
+    { name: "menu-head", states: [S("rest")], hooks: ["menu-head", "menu-head-kind", "menu-head-name"] },
+    { name: "menu-clipboard", states: [S("rest"), S("hover"), S("focused"), S("pressed")], hooks: ["menu-clipboard", "menu-clipboard-glide", "menu-quick", "menu-pressed"] },
+    { name: "menu-choices", states: [S("rest"), S("hover"), S("focused"), S("pressed")], hooks: ["menu-choices", "menu-choice", "menu-choice-set", "menu-choice-name"] },
+    { name: "menu-foot", states: [S("rest")], hooks: ["menu-foot", "menu-foot-text", "menu-foot-query", "menu-foot-caret", "menu-finding", "menu-path"] },
     { name: "context-submenu", states: [S("rest")], hooks: ["context-submenu", "menu-more"] },
     { name: "context-strip", states: [S("rest")], hooks: ["context-strip", "format-bar"] },
     {
       name: "menu-item",
       states: [S("rest"), S("hover"), S("focused"), S("selected"), S("disabled")],
-      hooks: ["menu-label", "menu-hint", "menu-body", "menu-description", "menu-swatches", "menu-swatch", "menu-check", "menu-icon", "menu-sample", "menu-sample-box"],
+      hooks: ["menu-label", "menu-hint", "menu-description", "menu-quiet", "menu-swatches", "menu-swatch", "menu-check", "menu-icon", "menu-sample", "menu-sample-box"],
     },
     {
       name: "slash-panel",
