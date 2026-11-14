@@ -355,6 +355,17 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
             ),
         ),
         (
+            "crates/fub-kernel/src/same_content.rs::extension_of",
+            (
+                Family::ContextualCase,
+                "è il «tipo» con cui lo stesso contenuto (T101) confronta due nomi del vault fra \
+                 loro, senza interrogare il registro. Prende l'estensione del solo nome, come \
+                 `media.rs`, perché un file senza estensione in una cartella col punto non \
+                 diventi un tipo; piega in Unicode come `documents.rs::extension_of`, perché \
+                 due nomi che il registro servirebbe con lo stesso formato siano lo stesso tipo.",
+            ),
+        ),
+        (
             "crates/fub-abi/src/transfer.rs::extension",
             (
                 Family::ContextualCase,
