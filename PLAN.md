@@ -1057,7 +1057,7 @@ della chiave e che il file riletto dà la definizione attesa; l'e2e dei
 comandi prova annulla e conflitto.
 Prova: scripts/check.sh --rapido; cargo nextest run -p fub-format-base -p
 fub-features base
-Stato: [ ] da fare
+Stato: [x] fatto · in main (#352, 5d233c366) · `crates/fub-format-base/src/patch.rs` cambia una chiave, aggiunge o toglie una vista con modifiche al testo minime; rifiuta YAML di flusso, ancore, tag e rientri strani, e riverifica che la rilettura dia la definizione attesa; comandi `base.view.set/add/remove` con revisione ed errori tipizzati; `docs/product/bases.md`
 
 ## T15 · Base: filtro, ordina, proprietà a vista
 
