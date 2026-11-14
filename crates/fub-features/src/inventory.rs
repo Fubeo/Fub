@@ -92,7 +92,7 @@ use crate::backlinks::{self, BacklinksView, BACKLINKS_ID};
 #[cfg(feature = "backup")]
 use crate::backup::{self, BackupCommands, BackupView, BACKUP_ID};
 #[cfg(feature = "base")]
-use crate::base::{BaseIndex, BASE_ID};
+use crate::base::{self, BaseCommands, BaseIndex, BASE_ID};
 #[cfg(feature = "blocks")]
 use crate::blocks::{
     self, CommentRule, DiagramRenderer, DiagramRule, HighlightRule, MathRenderer, MathRule,
@@ -524,9 +524,11 @@ static OFFICIALS: &[OfficialFeature] = &[
     OfficialFeature {
         id: BASE_ID,
         name: "Base",
-        catalog: fub_format_base::embed_catalog,
+        catalog: base::catalog,
         view: None,
-        commands: None,
+        // Scrivere una chiave, aggiungere o togliere una vista: la toppa del
+        // testo sta in `fub-format-base`, il comando qui.
+        commands: Some(|| Box::new(BaseCommands)),
         index: Some(|| Box::new(BaseIndex::new())),
         syntax: Some(|| vec![Box::new(fub_format_base::BaseRule)]),
         renderers: Some(|| vec![Box::new(fub_format_base::BaseRenderer)]),
