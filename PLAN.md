@@ -1150,6 +1150,36 @@ caso con un'immagine vera piccola nel vault di prova; `parity` dice 6 voci
 in meno.
 Prova: scripts/check.sh --rapido; cargo test -p fub-canvas-core; cargo
 test -p fub-features --features lavagna,draw --test lavagna
+Stato: [x] fatto · coder/lic-t10 (c2b1ca9cf, 3 commit, Haiku) unito in f3a803dd0 sopra T22 · `MoveArgs`/`ResizeArgs`/`ReorderArgs`/`ColorArgs` (varianti newtype, logica in `ops/adjust.rs`); `resize` con `fit: content` e `content_size` facoltativo, `width`/`height` facoltativi; `reorder` con `to: back`; `move` con `contents`; `set` normalizza `fields.color` (nome → numero, esadecimale minuscolo) e rifiuta `#abc` e gli esadecimali a 4/8 cifre in ingresso (i file che li hanno si leggono ancora, nella forma intera). `canvas.apply` e `canvas.check` misurano immagini e PDF (`lavagna/prefill.rs`, tetto 32 MiB). Fuori da Tocca: `layout.rs`, `draw/annotated.rs`, `lavagna.rs`, `guide.rs`, `tests/spec.rs`. `canvas-code.md` è a 550 righe, il tetto: T11–T14 asciugano o spostano. Restano per T10b: l'anteprima che non misura i file, la descrizione MCP di `fub_canvas_apply`, il tetto di `move` con `contents`.
+
+## T10b · L'anteprima misura come `canvas.apply`, e MCP dice le operazioni nuove
+
+Perché: T10 ha fatto misurare i file a `canvas.apply` e `canvas.check`, ma
+`canvas.preview` (T21) non li misura: l'anteprima di una scheda immagine o
+PDF con `fit: content` può venire diversa dal file scritto. La descrizione
+dello strumento MCP `fub_canvas_apply` (T22) non nomina `color`, `reorder`
+con `to`, `move` con `contents` e `resize` con `fit`. `move` con `contents`
+non ha un tetto al costo (gruppi × schede). Task scritto dall'orchestratore
+(2026-11-14) dal rapporto di T10.
+Tocca: `crates/fub-features/src/lavagna/preview.rs`,
+`crates/fub-features/src/lavagna/prefill.rs` (solo per riusarlo),
+`crates/fub-cli/src/mcp/tools.rs` (la descrizione), `crates/fub-canvas-core/src/ops/adjust.rs`
+(il tetto), i loro test, `docs/reference/canvas-code.md` se una riga cambia.
+Non toccare: il formato delle operazioni; le altre operazioni.
+Dipende da: T10, T21, T22
+Cosa fare:
+- `canvas.preview` passa dallo stesso riempimento di `canvas.apply`
+  (`prefill`), così le misure dei file sono le stesse; un test con un PNG
+  vero nel vault temporaneo prova che anteprima e scrittura danno la stessa
+  altezza.
+- La descrizione di `fub_canvas_apply` nomina le operazioni e i campi nuovi
+  di T10, presa dalla tavola `spec::OPS` se la descrizione già la usa,
+  altrimenti a mano nello stesso stile.
+- `move` con `contents`: un tetto chiaro (per esempio sulle schede toccate,
+  coi limiti che `ops` già usa per le altre operazioni) e un errore tipizzato
+  oltre il tetto, con il test.
+Fatto quando: i tre test verdi; `scripts/check.sh --rapido` verde.
+Prova: scripts/check.sh --rapido; cargo nextest run -p fub-features --features lavagna,draw --test lavagna
 Stato: [ ] da fare
 
 ## T11 · Allinea, distribuisci, duplica, inverti, raggruppa
