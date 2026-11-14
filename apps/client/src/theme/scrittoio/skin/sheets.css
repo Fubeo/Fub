@@ -375,9 +375,12 @@
   font-weight: var(--weight-medium);
   text-overflow: ellipsis;
 }
+/* Cedere non vuol dire sparire: una cartella si stringe fino all'iniziale con
+   l'ellissi, non a zero. Larga zero lasciava le sole barre, «/ / Il banco…»,
+   quando accanto lo stato è lungo («Salvataggio fallito»). */
 .sheet-title [data-folder] {
   flex: 1 1 0;
-  min-width: 0;
+  min-width: 1.75em;
   max-width: max-content;
   overflow: hidden;
   text-overflow: ellipsis;
