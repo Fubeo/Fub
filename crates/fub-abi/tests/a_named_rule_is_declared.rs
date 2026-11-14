@@ -355,6 +355,19 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
             ),
         ),
         (
+            "crates/fub-kernel/src/same_content.rs::extension_of",
+            (
+                Family::ContextualCase,
+                "è il «tipo» con cui lo stesso contenuto (T101) confronta due nomi del vault fra \
+                 loro: l'estensione grezza, piegata in minuscolo e confrontata uguale, senza \
+                 interrogare il registro. `.md` e `.markdown` sono quindi due tipi, anche se il \
+                 registro li servisse con lo stesso formato: è prudente di proposito, perché \
+                 riusare un file non deve cambiare l'estensione del collegamento che lo nomina. \
+                 Prende l'estensione del solo nome, come `media.rs`, perché un file senza \
+                 estensione in una cartella col punto non diventi un tipo.",
+            ),
+        ),
+        (
             "crates/fub-abi/src/transfer.rs::extension",
             (
                 Family::ContextualCase,

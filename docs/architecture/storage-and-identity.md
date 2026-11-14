@@ -228,54 +228,101 @@ descrivono stato o provenienza. Deve avere:
 
 ## Lo stesso contenuto
 
-Il vault non tiene un indice per contenuto. La domanda «c'è già un file con
-questi byte?» si risponde con le voci dell'anagrafe, e dove l'anagrafe non
-basta la risposta è «non so». Chi copia un contenuto nel vault la usa per
+Il vault non tiene un indice per contenuto. La domanda «c'è già un file di
+questo tipo con questi byte?» si risponde con l'indice vivo del workspace, cioè
+le voci dell'anagrafe in memoria con misura, data e impronta, e dove l'indice
+non basta la risposta è «non so». Chi copia un contenuto nel vault la usa per
 riusare un file che c'è già, anche con un altro nome, invece di duplicarlo.
-`Vault::same_content` la risponde a chi ha un lettore, `Vault::same_content_bytes`
-a chi ha già i byte in memoria, e l'host la espone come `Host::same_content`.
+`Workspace::prepare_same_content` prende i candidati, `PreparedSameContent::invoke`
+confronta i byte già in memoria, e l'host la espone come `Host::same_content`.
 
 ```mermaid
 flowchart TD
-    Q["contenuto che arriva"] --> T{"anagrafe leggibile?"}
+    Q["contenuto che arriva"] --> T{"scansione finita?"}
     T -- "no" --> U["non so: si copia"]
-    T -- "sì" --> C{"al più 64 candidati?"}
+    T -- "sì" --> E{"0 byte?"}
+    E -- "sì" --> N
+    E -- "no" --> C{"al più 64 candidati?"}
     C -- "no" --> U
-    C -- "sì" --> H["impronta registrata o calcolata"]
+    C -- "sì" --> H["impronta della voce o calcolata"]
     H --> B{"byte uguali?"}
     B -- "sì" --> F["trovato: il primo per percorso"]
     B -- "no" --> N["non trovato"]
 ```
 
-I candidati sono le voci dell'anagrafe della stessa misura, fuori dal cestino,
-da `.fub/` e dalle cartelle escluse. Un file che l'anagrafe non conosce ancora
-non è un candidato: la risposta è «non trovato», e chi chiede copia.
+I candidati sono le voci dell'indice vivo con la stessa misura e la stessa
+estensione del nome che si vuole scrivere, fuori dal cestino, da `.fub/` e
+dalle cartelle escluse. L'estensione è quella grezza dell'ultimo segmento,
+piegata in minuscolo e confrontata uguale: il registro dei formati non si
+interroga, quindi `.md` e `.markdown` sono due tipi anche se un formato li
+servisse entrambi. È prudente di proposito: chi riusa un file scrive un
+collegamento a lui, e quel collegamento non deve cambiare estensione. Un `.txt`
+con i byte di una nota `.md` non è quella nota, e un file senza estensione
+trova solo un file senza estensione. Un contenuto di 0 byte non si ritrova mai.
+La domanda non legge `.fub/data/entries.json`: quella tabella si scrive alla
+fine dell'indicizzazione e alla chiusura, mentre l'indice vivo conosce subito
+un file scritto o cambiato nella sessione. Prima che la scansione abbia
+installato l'anagrafe la risposta è «non so»; l'host però pubblica un vault
+solo dopo la scansione, e un rebuild svuota e rimette l'anagrafe nello stesso
+prestito, quindi da `Host::same_content` questo «non so» non arriva. Un file
+che l'indice non conosce ancora, perché è arrivato da fuori senza il
+rilevatore, non è un candidato: la risposta è «non trovato», e chi chiede
+copia.
 
-Ogni candidato porta un'impronta: quella registrata nella voce, se la voce
-descrive ancora il file (misura, data, segno del cambio e identità), oppure una
-calcolata leggendo il file a pezzi. L'impronta sceglie il candidato, ma solo un
-confronto dei byte intero dà «trovato». Un candidato che non si legge, che
-cambia mentre lo si legge o che non ha più la misura cercata si salta, e della
-sua impronta non si registra niente.
+Ogni candidato porta un'impronta: quella della voce, se misura e data del file
+sono ancora quelle della voce e l'impronta è nella forma corrente
+(`Revision::is_current_form`), oppure una calcolata leggendo il file a pezzi.
+Un'impronta FNV-1a di una tabella scritta prima di SHA-256 non dice né sì né
+no, e si ricalcola. L'impronta sceglie il candidato, ma solo un confronto dei
+byte intero dà «trovato»: un'impronta vecchia può solo far copiare. Un
+candidato che non si legge, che cambia mentre lo si legge (misura, data, segno
+del cambio o identità) o che non ha più la misura cercata si salta, e della
+sua impronta non si impara niente.
 
-Un'impronta calcolata si registra nella voce soltanto se misura, data, segno
-del cambio e identità sono ancora quelli letti, e se la data del file è
-anteriore alla domanda: una data uguale all'istante della domanda può ancora
-cambiare senza cambiare la misura. La registrazione non riscrive una tabella
-rotta o di un'altra versione, e non crea una tabella che manca. Il formato non
-cambia: l'impronta è il campo che la voce già porta.
+Un'impronta calcolata torna all'indice vivo sotto il lucchetto del workspace
+(`Workspace::learn_fingerprints`), nello stesso vault a cui si è fatta la
+domanda, insieme al **testimone** del file letto (`FileWitness`: segno del
+cambio e identità, presi dalla domanda fuori dal lucchetto). Si tiene soltanto
+se:
+
+- la data letta è anteriore all'istante della domanda, preso dall'orologio del
+  vault (*racily clean*);
+- la voce ha ancora la misura e la data lette: una voce cambiata nel
+  frattempo, da una scrittura o dal rilevatore, non torna indietro;
+- la riga dell'anagrafe con quella misura e quella data, se c'è, descrive lo
+  stesso file. Un file sostituito da un altro con la stessa misura e la stessa
+  data, senza il rilevatore, ha una voce che descrive ancora quello di prima,
+  e l'impronta del nuovo certificherebbe i metadati del vecchio.
+
+Sotto il lucchetto si confronta soltanto: nessuna domanda al supporto, e la
+riga dell'anagrafe non si copia. L'indice tiene il testimone accanto
+all'impronta finché la voce non cambia. La domanda dopo crede l'impronta solo
+se il file appena guardato ha lo stesso testimone, e `store_entries` non la
+scrive in una riga il cui file adesso è un altro: alla riapertura quel file si
+rilegge invece di essere certificato con i byte di prima. Due testimoni dicono
+lo stesso file se ogni campo che entrambi conoscono coincide; un campo che una
+parte non conosce non decide, per il segno come per l'identità.
+
+La consegna è un prestito esclusivo breve: `Custody::write` prende il turno di
+scrittura prima del lucchetto, quindi non entra a metà del lavoro di un altro
+writer, e non drena eventi, perché imparare un'impronta non ne produce.
+L'indice non ha un lucchetto suo fuori dal workspace. Su disco la porta
+l'anagrafe (`EntryStore`), l'unica che scrive `entries.json`, la prossima
+volta che si scrive. Il formato non cambia: l'impronta è il campo che la voce
+già porta.
 
 Ci sono due limiti, costanti con nome: `MAX_CANDIDATES`, 64 candidati, e
-`MAX_BYTES_READ`, 512 MiB letti per domanda. Oltre questi limiti, o quando la
-tabella manca, non si legge o è rotta, la risposta è «non so» e chi chiede
-copia: nel dubbio si copia.
+`MAX_BYTES_READ`, 512 MiB letti per domanda. Oltre questi limiti la risposta è
+«non so» e chi chiede copia: nel dubbio si copia. Troppi candidati danno lo
+stesso «non so» a ogni domanda con quei byte; il budget finito invece no,
+perché le impronte imparate rendono la domanda dopo più economica. Per questo
+`Host::same_content` fa da sé un secondo giro, uno solo, quando il primo ha
+finito il budget e ha insegnato almeno un'impronta all'indice. Il contenuto
+che arriva si confronta dove sta, senza copia.
 
-Un contenuto che arriva da un lettore si copia in memoria una volta sola, entro
-lo stesso limite. Un contenuto già in memoria si confronta dove sta, senza copia.
-
-Il lucchetto del vault non si tiene mentre si legge. La domanda prende le voci,
-lascia il lucchetto, legge, rientra e ricontrolla il segno del cambio prima di
-registrare un'impronta. I collegamenti simbolici non si seguono: lo storage è
+Il lucchetto del workspace non si tiene mentre si legge. La domanda prende i
+candidati, lascia il lucchetto, legge, e rientra solo per consegnare le
+impronte imparate. I collegamenti simbolici non si seguono: lo storage è
 radicato nel vault, e nessuna lettura ne esce.
 
 ## Schemi

@@ -150,10 +150,10 @@ export async function depositAttachment(
 /// altrimenti scrive al candidato, come `depositAttachment`. Il client non
 /// legge i file del vault per confrontarli: il confronto è dell'host, che lo
 /// fa prima di rispondere e, nel dubbio, scrive. I candidati sono quelli di
-/// `depositAttachment` («foto.png», «foto 1.png», …): un `already_exists`
-/// passa al successivo, ogni altro errore dell'host (un nome che il vault
-/// rifiuta, l'I/O) risale. Le note e il registratore restano su
-/// `depositAttachment`.
+/// `depositAttachment` («foto.png», «foto 1.png», …): il riuso si chiede solo
+/// al primo, un `already_exists` passa al successivo con una scrittura
+/// semplice, ogni altro errore dell'host (un nome che il vault rifiuta, l'I/O)
+/// risale. Le note e il registratore restano su `depositAttachment`.
 export async function depositOrReuse(
   deposit: AttachmentDeposit,
   originalName: string,
@@ -163,9 +163,23 @@ export async function depositOrReuse(
   if (bytes.byteLength > MAX_ATTACHMENT_BYTES) {
     throw new Error(t("errors.attachment.too_large", { name }));
   }
+  // La domanda «c'è già?» si fa una volta sola, col primo candidato: la sua
+  // risposta dipende dai byte, dall'estensione (uguale per tutti i candidati)
+  // e da ciò che il vault contiene, non dal nome. Dopo un `already_exists`
+  // l'host ha risposto «no» o «non so». «L'indice non è pronto» non arriva
+  // mai da un vault aperto (l'anagrafe c'è prima che il vault si possa usare,
+  // e un rebuild la rimette nello stesso prestito); troppi candidati danno lo
+  // stesso «non so» a ogni domanda con questi byte; il budget di lettura
+  // finito non è stabile, perché le impronte imparate rendono la domanda dopo
+  // più economica, ma il secondo giro lo fa l'host dentro la stessa domanda
+  // (`Host::same_content`). Rifarla qui a ogni nome costerebbe una ricerca per
+  // nome occupato: i nomi seguenti sono scritture «solo se nuovo».
+  let asked = false;
   for (const candidate of attachmentCandidates(deposit, name)) {
+    const options: ResourceWriteOptions | undefined = asked ? undefined : { reuse: "same-content" };
+    asked = true;
     try {
-      const written = await deposit.write(candidate, bytes, { reuse: "same-content" });
+      const written = await deposit.write(candidate, bytes, options);
       return { receipt: { id: written.id, revision: written.revision }, reused: written.reused === true };
     } catch (error) {
       if (!isAlreadyExists(error)) throw error;

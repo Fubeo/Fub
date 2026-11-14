@@ -3978,18 +3978,78 @@ impl Host {
         Self::write_bytes_in(&workspace, id, bytes, expected)
     }
 
-    /// Cerca fra i file del vault quello che ha questi byte (`None`: il vault
-    /// corrente), anche con un altro nome: vedi [`SameContent`]. Il vault si
-    /// prende sotto la custodia per un attimo, e il confronto si fa fuori da essa,
-    /// sui byte già in memoria.
+    /// Cerca fra i file del vault (`None`: il vault corrente) quello che ha
+    /// questi byte e lo stesso tipo di `target`, il nome che si vorrebbe
+    /// scrivere, anche con un altro nome: vedi [`SameContent`].
+    ///
+    /// Il vault si risolve **una volta**: la domanda e le impronte imparate
+    /// rispondendo vanno alla stessa custodia anche se nel frattempo il vault
+    /// corrente cambia. I candidati vengono dall'indice vivo, presi sotto la
+    /// custodia per un attimo; il confronto si fa fuori da essa, sui byte già
+    /// in memoria. Nessuna chiamata a un provider col lucchetto preso, e
+    /// nessuna scrittura di `entries.json` fuori dall'anagrafe.
+    ///
+    /// Un «non so» per budget finito ([`UnknownReason::BudgetExhausted`]) non è
+    /// stabile come gli altri: le impronte che quel giro ha imparato rendono il
+    /// giro dopo più economico, e il giro dopo può arrivare a un candidato che
+    /// il primo non ha letto. Allora, e solo se il primo giro ha davvero
+    /// insegnato qualcosa all'indice, si fa **un** secondo giro, qui dentro:
+    /// chi chiede fa sempre una domanda sola, e nessuna per nome occupato.
+    ///
+    /// [`UnknownReason::BudgetExhausted`]: fub_kernel::same_content::UnknownReason::BudgetExhausted
     pub fn same_content(
         &self,
         vault: Option<&str>,
+        target: &DocId,
         bytes: &[u8],
     ) -> Result<SameContent, PluginError> {
-        let prepared =
-            self.read_workspace(vault, |workspace| Ok(workspace.prepare_same_content()))?;
-        Ok(prepared.invoke(bytes))
+        let workspace = self.session_workspace(vault)?;
+        let (answer, kept) = Self::same_content_round(&workspace, target, bytes)?;
+        let exhausted = matches!(
+            answer,
+            SameContent::Unknown {
+                reason: fub_kernel::same_content::UnknownReason::BudgetExhausted
+            }
+        );
+        if exhausted && kept > 0 {
+            return Ok(Self::same_content_round(&workspace, target, bytes)?.0);
+        }
+        Ok(answer)
+    }
+
+    /// Un giro della domanda di [`same_content`](Self::same_content): la
+    /// risposta, e quante impronte imparate l'indice ha tenuto.
+    ///
+    /// Le impronte tornano all'indice con [`Custody::write`], che **prende il
+    /// turno di scrittura** prima del lucchetto (la presa lo porta con sé fino
+    /// al rilascio): se un altro writer ha il turno aperto attraverso il codice
+    /// di un provider (decisione 0120), la consegna aspetta che lo chiuda e non
+    /// entra a metà del suo lavoro. Non si drenano eventi: imparare
+    /// un'impronta non ne produce, e l'indice non ha un lucchetto suo fuori dal
+    /// workspace. L'indice le ricontrolla contro l'anagrafe; un'impronta che
+    /// non si riesce a riportare costa solo una rilettura la prossima volta.
+    fn same_content_round(
+        workspace: &Custody<Workspace>,
+        target: &DocId,
+        bytes: &[u8],
+    ) -> Result<(SameContent, usize), PluginError> {
+        let prepared = workspace
+            .read()?
+            .prepare_same_content(target, bytes.len() as u64);
+        let fub_kernel::same_content::SameContentOutcome { answer, learned } =
+            prepared.invoke(bytes);
+        let mut kept = 0;
+        if !learned.is_empty() {
+            match workspace.write() {
+                Ok(mut workspace) => {
+                    kept = workspace.learn_fingerprints(learned);
+                }
+                Err(and) => {
+                    tracing::warn!(target: "fub.host", "impronte non riportate nell'indice: {and}");
+                }
+            }
+        }
+        Ok((answer, kept))
     }
 
     /// Scrive la proiezione `source` di un documento di videoscrittura.
@@ -5054,7 +5114,7 @@ impl crate::resources::ResourceWrite for Host {
             }
         }
         if reuse_same {
-            if let Some(receipt) = self.reused_resource(vault, bytes) {
+            if let Some(receipt) = self.reused_resource(vault, &id, bytes) {
                 return Ok(receipt);
             }
         }
@@ -5069,21 +5129,23 @@ impl crate::resources::ResourceWrite for Host {
 
 impl Host {
     /// La ricevuta del file che il vault ha già con questi byte, o `None`:
-    /// allora si scrive. `None` vale anche per «non so» (limiti, tabella delle
-    /// voci assente o rotta) e per una domanda che fallisce: nel dubbio si
-    /// deposita, mai si perde un deposito.
+    /// allora si scrive. `None` vale anche per «non so» (limiti, indice non
+    /// ancora pronto) e per una domanda che fallisce: nel dubbio si deposita,
+    /// mai si perde un deposito.
     ///
-    /// Il confronto è quello di [`Host::same_content`] (vault preso sotto la
-    /// custodia, byte confrontati fuori). Prima di rispondere si ricontrolla,
-    /// coi soli metadati e fuori dalla custodia, che il file trovato ci sia
-    /// ancora e abbia ancora questa misura: un file sparito fra il confronto e
-    /// la risposta non si nomina, si scrive.
+    /// Il confronto è quello di [`Host::same_content`] (candidati dello stesso
+    /// tipo di `target` presi dall'indice vivo sotto la custodia, byte
+    /// confrontati fuori). Prima di rispondere si ricontrolla, coi soli
+    /// metadati e fuori dalla custodia, che il file trovato ci sia ancora e
+    /// abbia ancora questa misura: un file sparito fra il confronto e la
+    /// risposta non si nomina, si scrive.
     fn reused_resource(
         &self,
         vault: Option<&str>,
+        target: &DocId,
         bytes: &[u8],
     ) -> Option<crate::resources::ResourceWriteReceipt> {
-        let SameContent::Found { id } = self.same_content(vault, bytes).ok()? else {
+        let SameContent::Found { id } = self.same_content(vault, target, bytes).ok()? else {
             return None;
         };
         let prepared = self

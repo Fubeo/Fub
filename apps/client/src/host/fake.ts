@@ -227,6 +227,20 @@ const CHUNK_MAX = 64 * 1024;
 /// so», e il deposito si scrive.
 const SAME_CONTENT_MAX_CANDIDATES = 64;
 const SAME_CONTENT_MAX_BYTES = 512 * 1024 * 1024;
+
+/// Le cartelle escluse di serie, come `DEFAULT_EXCLUDED` di
+/// `crates/fub-kernel/src/ignore.rs`.
+const DEFAULT_EXCLUDED_FOLDERS = [".obsidian", ".git", "node_modules", "target", "lost+found", "System Volume Information", "$RECYCLE.BIN"];
+
+/// Il tipo di un nome per lo stesso contenuto, come `extension_of` del kernel:
+/// l'estensione dell'ultimo segmento, in minuscolo, o `null` per un nome che
+/// non ne ha (`LICENSE`) o che è solo estensione (`.gitignore`, `nota.`).
+function sameContentExtension(id: string): string | null {
+  const name = id.slice(id.lastIndexOf("/") + 1);
+  const cut = name.lastIndexOf(".");
+  if (cut <= 0 || cut === name.length - 1) return null;
+  return name.slice(cut + 1).toLowerCase();
+}
 /// I formati di `fub-format-rich` con la feature `rich` dell'host.
 const RICH_FAKE_FORMATS: ReadonlySet<string> = new Set(["docx", "odt", "rtf", "doc"]);
 /// Le estensioni delle cartelle di `fub-format-xlsx`, con la feature `xlsx`
@@ -702,14 +716,27 @@ export function createFakeHost(options: Options = {}): FakeHost {
     return doc.bytes ?? new TextEncoder().encode(doc.text);
   }
 
-  /// Il file finto che ha esattamente questi byte, il primo per percorso, o
-  /// `null` (nessuno, o «non so» oltre i limiti): la stessa domanda di
-  /// `Vault::same_content_bytes`. Il cestino del finto non sta in `docs`, e
-  /// `.fub/` non conta.
-  function sameContent(wanted: Uint8Array): string | null {
+  /// Il file finto dello stesso tipo di `target` che ha esattamente questi
+  /// byte, il primo per percorso, o `null` (nessuno, contenuto vuoto, o «non
+  /// so» oltre i limiti): la stessa domanda di `Host::same_content`
+  /// (`crates/fub-kernel/src/same_content.rs`). Il tipo è l'estensione del
+  /// nome, piegata in minuscolo e confrontata uguale (`sameContentExtension`).
+  /// Il cestino del finto non sta in `docs`; i file esclusi non sono candidati
+  /// (`excludedFromSameContent`).
+  ///
+  /// **Dove il finto è diverso.** Il budget: l'host vero spende i byte che
+  /// legge davvero (un'impronta già nota non costa niente, un candidato scelto
+  /// costa due letture, impronta e confronto) e risponde «non so» per budget
+  /// finito; il finto non tiene impronte e conta una lettura per candidato.
+  /// Con 512 MiB di budget e 64 MiB per deposito la differenza non si vede
+  /// in nessun banco, e simularla vorrebbe dire rifare l'indice nel finto.
+  function sameContent(target: string, wanted: Uint8Array): string | null {
+    if (wanted.byteLength === 0) return null;
     if (wanted.byteLength > SAME_CONTENT_MAX_BYTES) return null;
+    const type = sameContentExtension(target);
     const candidates = [...docs.entries()]
-      .filter(([id]) => !id.startsWith(".fub/"))
+      .filter(([id]) => !excludedFromSameContent(id))
+      .filter(([id]) => sameContentExtension(id) === type)
       .map(([id, doc]) => [id, bytesOf(doc)] as const)
       .filter(([, bytes]) => bytes.byteLength === wanted.byteLength)
       .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
@@ -721,6 +748,33 @@ export function createFakeHost(options: Options = {}): FakeHost {
       if (bytes.every((byte, at) => byte === wanted[at])) return id;
     }
     return null;
+  }
+
+  /// Il file `id` è fuori dai candidati dello stesso contenuto, come per
+  /// `IgnorePolicy::excludes_path` del kernel? Ogni segmento si confronta con
+  /// la chiave di risoluzione (trim, NFC, minuscolo): la struttura (`.fub`,
+  /// `.trash`) sempre, i nascosti (un punto davanti, `~$…`, `…~`, `#…#`) se
+  /// `files.show-hidden` non li mostra, le cartelle di `files.excluded-folders`
+  /// (o della lista di serie) solo come cartelle. Il `.gitignore` e i
+  /// temporanei di scrittura il finto non li ha.
+  function excludedFromSameContent(id: string): boolean {
+    const key = (name: string) => name.trim().normalize("NFC").toLowerCase();
+    const setting = (name: string) => settings.find((entry) => entry.spec.key === name)?.value;
+    const shown = setting("files.show-hidden");
+    const showHidden = typeof shown === "boolean" ? shown : false;
+    const declared = setting("files.excluded-folders");
+    const folders = new Set((Array.isArray(declared) ? declared : DEFAULT_EXCLUDED_FOLDERS).map(key));
+    const segments = id.split("/");
+    return segments.some((segment, at) => {
+      const name = key(segment);
+      if (name === ".fub" || name === ".trash") return true;
+      const hidden = name.startsWith(".")
+        || (name.startsWith("~$") && name.length > 2)
+        || (name.endsWith("~") && name.length > 1)
+        || (name.length > 2 && name.startsWith("#") && name.endsWith("#"));
+      if (!showHidden && hidden) return true;
+      return at + 1 < segments.length && folders.has(name);
+    });
   }
 
   /// Il formato che il registro dei provider riconoscerebbe dall'estensione,
@@ -1749,7 +1803,7 @@ export function createFakeHost(options: Options = {}): FakeHost {
           throw { kind: "bad_args", message: `host fake: \`reuse\` con \`expected\` per «${id}»` } satisfies PluginError;
         }
         if (reuse !== undefined) {
-          const found = sameContent(bytes);
+          const found = sameContent(id, bytes);
           const there = found === null ? undefined : docs.get(found);
           if (found !== null && there) return { id: found, revision: there.revision, reused: true };
         }

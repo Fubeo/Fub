@@ -869,6 +869,13 @@ impl Vault {
         self.clock = clock;
     }
 
+    /// L'istante di adesso secondo l'orologio di questo vault, quello che un
+    /// banco può iniettare: chi confronta un istante con le date dei file del
+    /// vault (la regola *racily clean*) lo prende da qui, non dal sistema.
+    pub(crate) fn now_unix_millis(&self) -> u64 {
+        self.clock.now_unix_millis()
+    }
+
     /// Aggancia le impostazioni da cui leggere la politica di esclusione.
     ///
     /// Builder e non parametro di [`on`](Vault::on) per la ragione di
@@ -1186,39 +1193,6 @@ impl Vault {
     /// dell'indicizzazione — e a ogni cestinata o rinomina.
     pub fn fingerprint(&self, id: &DocId) -> Result<Revision> {
         self.read_with(id, |storage, path| fingerprint_of(storage, path))
-    }
-
-    /// **Lo stesso contenuto**: c'è già un file del vault con questi byte, anche
-    /// con un altro nome? Ritorna il primo per percorso (`Found`), o `NotFound`,
-    /// o `Unknown` se la risposta non si può dare senza superare un limite o
-    /// senza una tabella che si legge.
-    ///
-    /// `bytes_len` dichiara quanti byte arrivano da `incoming`, e serve a
-    /// scegliere i candidati prima di leggerli: un contenuto di misura diversa
-    /// non è mai lo stesso. Un `incoming` che non ne porta esattamente tanti è
-    /// un errore di chi chiama, non una risposta.
-    ///
-    /// I candidati sono le voci della tabella con quella misura, fuori dal
-    /// cestino, da `.fub/` e dalle cartelle escluse: è ciò che il vault ha già
-    /// indicizzato, e un file che la tabella non conosce ancora non si trova. In
-    /// quel caso la risposta è `NotFound` e chi chiede copia, che è il verso
-    /// sicuro. I byte che arrivano da `incoming` si copiano in memoria una volta
-    /// sola, entro [`crate::same_content::MAX_BYTES_READ`]; chi li ha già in mano
-    /// usa [`Vault::same_content_bytes`]. Vedi [`crate::same_content`] per le
-    /// regole e i limiti.
-    pub fn same_content(
-        &self,
-        bytes_len: u64,
-        incoming: &mut dyn std::io::Read,
-    ) -> Result<crate::same_content::SameContent> {
-        crate::same_content::find(self, bytes_len, incoming, self.clock.now_unix_millis())
-    }
-
-    /// La stessa domanda con i byte già in memoria: si confrontano dove stanno,
-    /// senza copiarli. Non fallisce: un problema di lettura è già una risposta
-    /// («non so», o un candidato saltato).
-    pub fn same_content_bytes(&self, bytes: &[u8]) -> crate::same_content::SameContent {
-        crate::same_content::find_bytes(self, bytes, self.clock.now_unix_millis())
     }
 
     fn read_with<T>(

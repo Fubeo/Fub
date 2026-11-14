@@ -410,3 +410,40 @@ fn the_entries_of_a_folder_cost_the_folder_not_the_vault() {
     assert_eq!(ids(&index, Some(FolderScope::direct(""))), ["a.png"]);
     assert_eq!(ids(&index, None).len(), N + 6);
 }
+
+#[test]
+fn clearing_the_index_forgets_the_scan_and_the_instants() {
+    let storage = Arc::new(crate::storage::MemStorage::new());
+    let settings = Arc::new(std::sync::RwLock::new(
+        crate::settings::SettingsStore::open(
+            camino::Utf8Path::new("/vault"),
+            storage.clone(),
+            crate::settings::MachineSettings::in_memory(),
+        ),
+    ));
+    let mut index = CoreIndex::new(
+        Arc::new(crate::registry::FormatRegistry::new()),
+        settings,
+        crate::organization::OrganizationStore::in_memory(),
+        Arc::new(crate::drafts::Drafts::open(
+            camino::Utf8Path::new("/vault"),
+            storage,
+        )),
+    );
+    let id = DocId::new("foto.png");
+    // Una voce osservata nel suo stesso istante, e la scansione finita.
+    index.set_entry_observed(asset("foto.png"), 1);
+    index.mark_scanned();
+    assert!(index.anagrafe_complete());
+    assert!(index.observed_at_the_same_instant(&id));
+
+    // Svuotato, l'indice non sa più quali file ci sono finché una scansione
+    // non lo dice di nuovo, e non si porta dietro gli istanti delle voci che
+    // non ha più.
+    index.clear();
+    assert!(
+        !index.anagrafe_complete(),
+        "un indice svuotato non ha finito nessuna scansione"
+    );
+    assert!(!index.observed_at_the_same_instant(&id));
+}
