@@ -9,13 +9,14 @@ use super::*;
 /// (oggi `ver=1`/210.000 e `ver=2`/600.000) e nessun'altra, così un client
 /// che scrive ancora `ver=1` e uno che scrive già `ver=2` parlano allo stesso
 /// server. Una coppia sconosciuta è `unsupported wrap version`: il client la
-/// traduce in un errore tipizzato con un testo per chi legge.
+/// traduce in un errore tipizzato con un testo per chi legge. Ogni altro
+/// difetto di forma è `bad wrapped vdk`.
 fn check_wrap(wrapped: &crate::crypto::WrappedVdk) -> Result<(), HttpResponse> {
-    if crate::crypto::kdf_iterations(wrapped.kdf.ver) != Some(wrapped.kdf.iterations) {
-        return Err(HttpResponse::err(400, "unsupported wrap version"));
-    }
-    crate::crypto::unwrap_vdk_shape_ok(wrapped)
-        .map_err(|_| HttpResponse::err(400, "bad wrapped vdk"))
+    use crate::crypto::WrapShapeError;
+    crate::crypto::unwrap_vdk_shape_ok(wrapped).map_err(|error| match error {
+        WrapShapeError::UnsupportedKdf => HttpResponse::err(400, "unsupported wrap version"),
+        _ => HttpResponse::err(400, "bad wrapped vdk"),
+    })
 }
 
 pub(super) fn handle_invite(

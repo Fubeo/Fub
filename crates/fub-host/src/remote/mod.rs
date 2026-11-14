@@ -66,9 +66,23 @@ pub const VAULT_KDF_ITERATIONS_V2: u32 = 600_000;
 /// Le iterazioni di una versione nota dei parametri KDF vault: una busta con
 /// altre coppie non si deriva, perché i parametri vengono dal server.
 pub fn vault_kdf_iterations(ver: u32) -> Option<u32> {
+    vault_kdf_rounds(ver).map(std::num::NonZeroU32::get)
+}
+
+/// [`vault_kdf_iterations`] nella forma che PBKDF2 vuole: la tabella è l'unica
+/// fonte, e una voce a zero non compila.
+fn vault_kdf_rounds(ver: u32) -> Option<std::num::NonZeroU32> {
+    const fn nonzero(iterations: u32) -> std::num::NonZeroU32 {
+        match std::num::NonZeroU32::new(iterations) {
+            Some(iterations) => iterations,
+            None => panic!("a KDF version needs iterations"),
+        }
+    }
+    const V1: std::num::NonZeroU32 = nonzero(VAULT_KDF_ITERATIONS_V1);
+    const V2: std::num::NonZeroU32 = nonzero(VAULT_KDF_ITERATIONS_V2);
     match ver {
-        1 => Some(VAULT_KDF_ITERATIONS_V1),
-        2 => Some(VAULT_KDF_ITERATIONS_V2),
+        1 => Some(V1),
+        2 => Some(V2),
         _ => None,
     }
 }
@@ -120,13 +134,10 @@ pub fn vault_kdf_fresh() -> Result<VaultKdfParams, String> {
 /// una coppia di versione e iterazioni di [`vault_kdf_iterations`]: i
 /// parametri vengono dal server o da un file, e la regola vale dove si deriva.
 pub fn derive_vault_kek(passphrase: &str, params: &VaultKdfParams) -> Result<[u8; 32], String> {
-    use std::num::NonZeroU32;
-    if vault_kdf_iterations(params.ver) != Some(params.iterations) {
-        return Err("unsupported kdf parameters".to_string());
-    }
+    let iters = vault_kdf_rounds(params.ver)
+        .filter(|rounds| rounds.get() == params.iterations)
+        .ok_or_else(|| "unsupported kdf parameters".to_string())?;
     let salt = vault_b64_salt(&params.salt_b64)?;
-    let iters = NonZeroU32::new(params.iterations)
-        .ok_or_else(|| "kdf iterations must be nonzero".to_string())?;
     let mut out = [0u8; 32];
     ring::pbkdf2::derive(
         ring::pbkdf2::PBKDF2_HMAC_SHA256,
