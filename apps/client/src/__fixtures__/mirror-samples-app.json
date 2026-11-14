@@ -277,19 +277,19 @@
         ],
         "icons": "icons.json"
       },
+      "skin": ".carta { color: inherit; }",
+      "assets": {
+        "theme://acme.carta/carta.woff2": [
+          119,
+          79,
+          70,
+          50
+        ]
+      },
       "lights": [
         {
           "light": "dark",
           "sheet": null,
-          "skin": ".carta { color: inherit; }",
-          "assets": {
-            "theme://acme.carta/carta.woff2": [
-              119,
-              79,
-              70,
-              50
-            ]
-          },
           "named": [
             "theme://acme.carta/carta.png"
           ]
@@ -379,6 +379,21 @@
       "id": "acme.carta",
       "name": "Carta",
       "version": "0.4.0"
+    },
+    {
+      "outcome": "blocked",
+      "why": "pointer",
+      "path": "/home/chi/.config/fub/themes/acme.carta"
+    },
+    {
+      "outcome": "blocked",
+      "why": "link",
+      "path": "/home/chi/.config/fub/themes/acme.carta"
+    },
+    {
+      "outcome": "blocked",
+      "why": "layout",
+      "path": "/home/chi/.config/fub/themes"
     },
     {
       "outcome": "refused",

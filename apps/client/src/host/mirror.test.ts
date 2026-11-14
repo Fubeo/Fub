@@ -19,6 +19,7 @@ import type {
   ComponentsApplied,
   ComponentsMap,
   DiskCause,
+  ThemeBlock,
   ThemeFolderCheck,
   ThemeFolderInstall,
   ThemeFolderLight,
@@ -1919,11 +1920,11 @@ describe("mirror TS↔Rust", () => {
     const fields: Record<ThemeFolderCheck["outcome"], string[]> = {
       cancelled: keysOf<Extract<ThemeFolderCheck, { outcome: "cancelled" }>>({ outcome: true }),
       ready: keysOf<Extract<ThemeFolderCheck, { outcome: "ready" }>>({
-        outcome: true, folder: true, manifest: true, lights: true, digest: true,
+        outcome: true, folder: true, manifest: true, skin: true, assets: true, lights: true, digest: true,
       }),
       refused: keysOf<Extract<ThemeFolderCheck, { outcome: "refused" }>>({ outcome: true, folder: true, refusal: true }),
     };
-    const lightKeys = keysOf<ThemeFolderLight>({ light: true, sheet: true, skin: true, assets: true, named: true });
+    const lightKeys = keysOf<ThemeFolderLight>({ light: true, sheet: true, named: true });
     const refusalFields: Record<ThemeFolderRefusal["reason"], string[]> = {
       not_a_theme: ["reason"],
       engine: keysOf<Extract<ThemeFolderRefusal, { reason: "engine" }>>({ reason: true, declared: true }),
@@ -1941,9 +1942,10 @@ describe("mirror TS↔Rust", () => {
           break;
         case "ready":
           expect(sample.digest).toMatch(/^sha256:[0-9a-f]{64}$/);
+          expect(sample.skin === null || typeof sample.skin === "string").toBe(true);
+          for (const bytes of Object.values(sample.assets)) expect(Array.isArray(bytes)).toBe(true);
           for (const light of sample.lights) {
             expect(Object.keys(light).sort()).toEqual(lightKeys);
-            for (const bytes of Object.values(light.assets)) expect(Array.isArray(bytes)).toBe(true);
             for (const name of light.named) expect(typeof name).toBe("string");
           }
           break;
@@ -1972,6 +1974,7 @@ describe("mirror TS↔Rust", () => {
       revoked: keysOf<Extract<ThemeFolderInstall, { outcome: "revoked" }>>({
         outcome: true, id: true, name: true, version: true,
       }),
+      blocked: keysOf<Extract<ThemeFolderInstall, { outcome: "blocked" }>>({ outcome: true, why: true, path: true }),
       replace_failed: keysOf<Extract<ThemeFolderInstall, { outcome: "replace_failed" }>>({
         outcome: true, id: true, name: true, version: true, kept: true, error: true,
       }),
@@ -1982,6 +1985,8 @@ describe("mirror TS↔Rust", () => {
     };
     const causes: Record<DiskCause, true> = { full: true, denied: true, other: true };
     const seenCauses = new Set<string>();
+    const blocks: Record<ThemeBlock, true> = { pointer: true, link: true, layout: true };
+    const seenBlocks = new Set<string>();
     for (const sample of samples) {
       switch (sample.outcome) {
         case "installed":
@@ -1991,6 +1996,11 @@ describe("mirror TS↔Rust", () => {
           expect(sample.installed_version === null || typeof sample.installed_version === "string").toBe(true);
           break;
         case "revoked":
+          break;
+        case "blocked":
+          expect(blocks[sample.why]).toBe(true);
+          seenBlocks.add(sample.why);
+          expect(typeof sample.path).toBe("string");
           break;
         case "replace_failed":
           // Un nome dentro la cartella dei temi, non un percorso.
@@ -2016,6 +2026,7 @@ describe("mirror TS↔Rust", () => {
     }
     expect(new Set(samples.map((sample) => sample.outcome))).toEqual(new Set(Object.keys(fields)));
     expect(seenCauses).toEqual(new Set(Object.keys(causes)));
+    expect(seenBlocks).toEqual(new Set(Object.keys(blocks)));
   });
 
   it("«Apri con» porta i tre modi di consegna e le tre righe del menu", () => {

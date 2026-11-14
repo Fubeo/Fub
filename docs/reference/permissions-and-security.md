@@ -130,13 +130,16 @@ persona nella finestra **nativa** che l'app apre dentro `check_theme_folder`,
 solo per la shell principale, col titolo scritto dall'host: la webview non
 passa né il path né il titolo.
 
-L'host tiene la cartella controllata e l'impronta dei suoi byte, ed è un
-permesso che vale **una volta e per un esito**: `install_theme_from_folder`
+L'host tiene la cartella controllata, l'impronta dei suoi byte e il manifest
+letto da quei byte, ed è un permesso che vale **una volta e per un esito**: `install_theme_from_folder`
 riceve solo l'impronta, installa soltanto quella cartella e consuma il
 permesso. Una collisione lo rinnova solo per la risposta «Sostituisci», una
 volta; il «no», il rifiuto del cancello della shell e ogni nuova apertura
 della finestra lo scartano (`discard_theme_folder`, o l'apertura stessa).
-Senza permesso l'esito è `unchecked`, e niente si scrive. Una webview
+Senza permesso l'esito è `unchecked`, e niente si scrive. Ogni controllo e
+ogni scarto aprono una generazione nuova del permesso: un controllo lento, o
+il rinnovo dopo una collisione, non tornano sopra un controllo o un «no»
+arrivati nel frattempo. Una webview
 compromessa con la modalità accesa può al più aprire la finestra di scelta:
 senza il gesto della persona non legge né installa niente, e dopo un «no» non
 sostituisce niente.
@@ -151,19 +154,29 @@ quello letto con `read_theme` fuori dal catalogo; la cache del primo
 fotogramma tiene solo l'id). La cartella non può portare lo stato del
 catalogo che scrive solo Fub: un `.fub-current.json` (che `read_theme`
 seguirebbe), una sua copia temporanea o `.generations` nella radice sono un
-rifiuto tipizzato (`catalog_state`). L'installazione confronta l'impronta del
-controllo con la sorgente **prima** di leggerne il manifest, e di nuovo coi
-byte copiati nella staging: l'esito parla solo dei byte controllati, e una
-cartella cambiata nel frattempo è `changed` e non si pubblica. Per il resto
-passa dalle stesse porte di `install_theme` (serie riservata, rename atomico)
-e il tema ha la fiducia di ogni tema non di serie.
+rifiuto tipizzato (`catalog_state`). L'installazione sonda prima la
+destinazione col manifest del controllo, senza scrivere; poi legge la
+sorgente **una volta**, copiandola nella staging e prendendone l'impronta
+nello stesso passaggio, e confronta l'impronta con quella del controllo: i
+byte pubblicati sono quelli dell'impronta, l'esito parla solo dei byte
+controllati, e una cartella cambiata (o tolta, o rinominata) nel frattempo è
+`changed` e non si pubblica. Le porte si ripassano sulla staging; per il resto
+l'installazione passa dalle stesse regole di `install_theme` (serie
+riservata, rename atomico) e il tema ha la fiducia di ogni tema non di
+serie.
 
 Un id già installato non si tocca: l'esito è `collision`, e solo la risposta
 «Sostituisci» (`replace`) lo sostituisce. Un tema installato revocato dal
 catalogo non si sostituisce mai da cartella (`revoked`): la copia nuova non ha
-puntatore e cancellerebbe la revoca. Un tema installato che non si legge (il
-puntatore rotto, una radice che non è una cartella) è una `collision` senza
-versione, e si può sostituire: lo decide la persona. La sostituzione non
+puntatore e cancellerebbe la revoca. Per la stessa ragione un puntatore del
+catalogo che non si legge (rotto, o che non si lascia aprire) ferma
+l'installazione (`blocked`, `pointer`): potrebbe dire «revocato». Neanche un
+link simbolico al posto del tema installato o della cartella dei temi si
+attraversa (`blocked`, `link`), né una forma che non è una cartella (`blocked`,
+`layout`): non sono difetti della cartella scelta, e l'esito lo dice. Un tema
+installato senza puntatore che non si legge (il manifest rotto, una radice
+che non è una cartella) è invece una `collision` senza versione, e si può
+sostituire: lo decide la persona. La sostituzione non
 toglie il vecchio prima: la copia nuova si verifica accanto, il vecchio si
 sposta da parte (una voce `.tmp-old-` che la scansione salta), il nuovo prende
 il suo nome, e solo allora il vecchio si cancella. Se il vecchio non si lascia

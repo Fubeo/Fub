@@ -1484,6 +1484,11 @@ export const IT = { // --- la scocca -------------------------------------------
 "settings.themes.refusal.catalog_state": "È lo stato del catalogo che scrive Fub, non parte del tema: toglilo dalla cartella.",
 "settings.themes.refusal.malformed": "Il tema non è ben formato: {detail}",
 "settings.themes.refusal.revoked": "«{name}» è stato ritirato dal catalogo e Fub non lo installa, nemmeno da una cartella.",
+"settings.themes.blocked.pointer":
+  "Il tema già installato con lo stesso id ha il file della versione rotto, o che non si apre: potrebbe essere ritirato dal catalogo, quindi Fub non lo sostituisce. Toglilo a mano da {path} e riprova.",
+"settings.themes.blocked.link":
+  "Al posto di {path} c'è un collegamento: Fub non scrive attraverso un collegamento. Toglilo e riprova.",
+"settings.themes.blocked.layout": "{path} non è una cartella che Fub sa usare per i temi: sistemala a mano e riprova.",
 // --- i tasti che il vault propone (§23.13) -----------------------------
 //
 // Il testo dice che **non sono attive**, e lo dice per primo: chi legge deve
@@ -4713,6 +4718,11 @@ export const EN: Record<Key, string> = { "app.skip_to_editor": "Skip to the edit
 "settings.themes.refusal.catalog_state": "It is catalog state that Fub writes, not part of the theme: remove it from the folder.",
 "settings.themes.refusal.malformed": "The theme is not well formed: {detail}",
 "settings.themes.refusal.revoked": "«{name}» was withdrawn from the catalog and Fub does not install it, not even from a folder.",
+"settings.themes.blocked.pointer":
+  "The theme already installed with the same id has a broken version file, or one that does not open: it might be withdrawn from the catalog, so Fub does not replace it. Remove it by hand from {path} and try again.",
+"settings.themes.blocked.link":
+  "There is a link in place of {path}: Fub does not write through a link. Remove it and try again.",
+"settings.themes.blocked.layout": "{path} is not a folder Fub can use for themes: fix it by hand and try again.",
 "settings.vault_keys.title": "This vault proposes {count} shortcuts",
 "settings.vault_keys.hint":
   "A vault carries its own shortcuts with it, and these come from outside: until you look at them they press nothing, and the combinations declared by the commands are what counts.",

@@ -13,7 +13,7 @@
 // Il catalogo dei temi è quello vero (`theme/theme.ts` col cancello del
 // loader), servito dall'host finto: il rifiuto del loader è quello vero.
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { PluginError, SettingEntry, ThemeFolderRefusal } from "../host/contract";
+import type { PluginError, SettingEntry, ThemeBlock, ThemeFolderRefusal } from "../host/contract";
 import type { FakeHost, ThemeFolderFake } from "../host/fake";
 
 const box = vi.hoisted(() => ({
@@ -115,6 +115,7 @@ async function open(options: {
   folders?: Record<string, ThemeFolderFake | ThemeFolderRefusal | PluginError>;
   installed?: ThemeFolderFake[];
   revoked?: string[];
+  blocked?: Record<string, ThemeBlock>;
   inUse?: string;
 }): Promise<void> {
   document.querySelector<HTMLButtonElement>("#settings-close")?.click();
@@ -129,6 +130,7 @@ async function open(options: {
     themePayloads: Object.assign({}, ...installed.map((theme) => theme.payloads)),
     themeFolders: options.folders ?? {},
     revokedThemes: options.revoked,
+    blockedThemes: options.blocked,
     pickThemeFolder: () => box.folder,
   });
   await reloadThemeCatalog();
@@ -410,9 +412,9 @@ describe("installare un tema da una cartella", () => {
     expect(dialog()).toBeNull();
     const [block] = diagnoses();
     expect(block!.querySelector(".setting-label")!.textContent).toBe("«Carta» è rifiutato: 1 motivo");
-    // L'elenco non lo mostra fra i temi installati, e la diagnosi non lo
-    // contraddice: è ritirato, e Fub non lo installa.
-    expect(block!.querySelector(".muted")!.textContent).toMatch(/Il tema resta fuori dai temi installati\.$/);
+    // Il tema ritirato resta sul disco com'era, come per ogni rifiuto davanti
+    // a un tema installato.
+    expect(block!.querySelector(".muted")!.textContent).toMatch(/Il tema installato resta com'era\.$/);
     expect(rowsOf(block!)).toEqual([
       ["revoked", "«Carta» è stato ritirato dal catalogo e Fub non lo installa, nemmeno da una cartella."],
     ]);
@@ -421,6 +423,30 @@ describe("installare un tema da una cartella", () => {
     expect(box.notify.mock.calls).toEqual([
       ["«Carta» non è installato: 1 motivo, lo trovi sotto «Temi installati».", "guasto"],
     ]);
+    expect(gates("installThemeFromFolder")).toHaveLength(1);
+    expect(await box.host!.module.api.listThemes()).toEqual([]);
+  });
+
+  it("un tema installato che non si tocca è una riga col suo perché e il posto, senza domanda", async () => {
+    await open({
+      developer: true,
+      blocked: { "acme.carta": "pointer" },
+      folders: { "/temi/carta": folderTheme("acme.carta", "Carta", "0.4.0") },
+    });
+    box.folder = "/temi/carta";
+    installButton()!.click();
+
+    await vi.waitFor(() => expect(diagnoses()).toHaveLength(1));
+    expect(dialog()).toBeNull();
+    const [block] = diagnoses();
+    expect(block!.querySelector(".setting-label")!.textContent).toBe("«Carta» è rifiutato: 1 motivo");
+    expect(rowsOf(block!)).toEqual([
+      [
+        "blocked_pointer",
+        "Il tema già installato con lo stesso id ha il file della versione rotto, o che non si apre: potrebbe essere ritirato dal catalogo, quindi Fub non lo sostituisce. Toglilo a mano da /config/themes/acme.carta e riprova.",
+      ],
+    ]);
+    expect(block!.querySelector(".tema-diagnosi-riga")!.classList.contains("tema-diagnosi-riga--tema")).toBe(true);
     expect(gates("installThemeFromFolder")).toHaveLength(1);
     expect(await box.host!.module.api.listThemes()).toEqual([]);
   });

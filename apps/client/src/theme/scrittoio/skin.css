@@ -19356,6 +19356,10 @@ h6.ui-heading {
   .tema-diagnosi-riga {
     grid-template-columns: 7em minmax(0, 1fr);
   }
+  /* Un motivo di tutto il tema ha già due colonne: resta com'è. */
+  .tema-diagnosi-riga--tema {
+    grid-template-columns: 8em minmax(0, 1fr);
+  }
 }
 
 /* ── skin/welcome.css ───────────────────────────────────────────────────── */

@@ -170,8 +170,6 @@ export type ThemeFolderRefusal =
 export interface ThemeFolderLight {
   light: ThemeLight;
   sheet: string | null;
-  skin: string | null;
-  assets: Record<string, readonly number[]>;
   named: string[];
 }
 
@@ -189,7 +187,15 @@ export interface ThemeFolderLight {
  */
 export type ThemeFolderCheck =
   | { outcome: "cancelled" }
-  | { outcome: "ready"; folder: string; manifest: ThemeManifest; lights: ThemeFolderLight[]; digest: string }
+  | {
+      outcome: "ready";
+      folder: string;
+      manifest: ThemeManifest;
+      skin: string | null;
+      assets: Record<string, readonly number[]>;
+      lights: ThemeFolderLight[];
+      digest: string;
+    }
   | { outcome: "refused"; folder: string; refusal: ThemeFolderRefusal };
 
 /**
@@ -198,6 +204,16 @@ export type ThemeFolderCheck =
  * altro guasto.
  */
 export type DiskCause = "full" | "denied" | "other";
+
+/**
+ * Perché un'installazione da cartella non tocca ciò che c'è già nella cartella
+ * dei temi di Fub (`fub_host::theme::ThemeBlock`): il tema installato con lo
+ * stesso id ha il file della versione del catalogo che non si legge
+ * (`pointer`: potrebbe dire «ritirato»), al suo posto o al posto della
+ * cartella dei temi c'è un collegamento (`link`), o non è una cartella che Fub
+ * sa usare (`layout`).
+ */
+export type ThemeBlock = "pointer" | "link" | "layout";
 
 /**
  * Com'è andata un'installazione da cartella (`install_theme_from_folder`,
@@ -212,6 +228,8 @@ export type DiskCause = "full" | "denied" | "other";
  *   quello installato non si legge più;
  * - `revoked`: il tema installato con lo stesso id è revocato dal catalogo, e
  *   una cartella non lo sostituisce; niente è stato toccato;
+ * - `blocked`: ciò che c'è nella cartella dei temi di Fub non si tocca (`why`),
+ *   e `path` è dove, da mostrare; niente è stato toccato;
  * - `replace_failed`: il nuovo si è fermato e il vecchio non è riuscito a
  *   tornare al suo nome. `kept` è il nome della cartella, dentro la cartella
  *   dei temi, dove il vecchio è rimasto: la shell lo dice con le sue parole.
@@ -236,6 +254,7 @@ export type ThemeFolderInstall =
       installed_version: string | null;
     }
   | { outcome: "revoked"; id: string; name: string; version: string }
+  | { outcome: "blocked"; why: ThemeBlock; path: string }
   | { outcome: "replace_failed"; id: string; name: string; version: string; kept: string; error: PluginError }
   | { outcome: "refused"; refusal: ThemeFolderRefusal }
   | { outcome: "changed" }

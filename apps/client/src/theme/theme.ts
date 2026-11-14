@@ -615,10 +615,10 @@ export function themeRejections(): readonly ThemeRejection[] {
  * fuori non arriva mai nella cartella dei temi. Una voce per luce rifiutata,
  * coi motivi così come sono; vuoto vuol dire che il catalogo lo prenderebbe.
  *
- * Dei byte degli asset arrivano solo quelli che il cancello legge (i caratteri
- * e il set di icone); gli altri arrivano per nome, e il cancello ne controlla
- * solo la presenza: qui stanno nel fascio senza byte. Il fascio serve solo al
- * cancello, non si monta.
+ * La pelle e i byte degli asset che il cancello legge (i caratteri e il set di
+ * icone) arrivano una volta per tutte le luci; gli altri asset arrivano per
+ * nome, luce per luce, e il cancello ne controlla solo la presenza: qui stanno
+ * nel fascio senza byte. Il fascio serve solo al cancello, non si monta.
  */
 export function vetThemeFolder(
   check: Extract<ThemeFolderCheck, { outcome: "ready" }>,
@@ -633,8 +633,8 @@ export function vetThemeFolder(
     }
     const assets: Record<string, readonly number[]> = {};
     for (const name of read.named) assets[name] = [];
-    Object.assign(assets, read.assets);
-    const payload: ThemePayload = { manifest: check.manifest, light, sheet: read.sheet, skin: read.skin, assets };
+    Object.assign(assets, check.assets);
+    const payload: ThemePayload = { manifest: check.manifest, light, sheet: read.sheet, skin: check.skin, assets };
     const reasons = validateThemeBundle(themeBundle(payload, light, contrast), light);
     if (reasons.length > 0) rejected.push({ light, reasons });
   }

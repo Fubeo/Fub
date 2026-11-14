@@ -147,7 +147,7 @@ nemmeno il titolo della finestra di scelta:
 | `ThemeFolderCheck.outcome` | Campi | Che cosa vuol dire |
 |---|---|---|
 | `cancelled` | — | la finestra di scelta è stata chiusa |
-| `ready` | `folder`, `manifest`, `lights`, `digest` | la cartella passa le porte dell'host; `folder` è il path scelto, da mostrare; `lights` ha un `ThemeFolderLight` per luce dichiarata (`light`, `sheet`, `skin`, `assets` coi byte solo dei caratteri e del set di icone, `named` per gli altri asset citati); `digest` è l'impronta dei byte. La shell fa girare sui fasci lo stesso cancello del catalogo |
+| `ready` | `folder`, `manifest`, `skin`, `assets`, `lights`, `digest` | la cartella passa le porte dell'host; `folder` è il path scelto, da mostrare; `skin` e `assets` (i byte solo dei caratteri e del set di icone) valgono per ogni luce e viaggiano una volta; `lights` ha un `ThemeFolderLight` per luce dichiarata (`light`, `sheet`, `named` per gli altri asset citati da foglio o pelle); `digest` è l'impronta dei byte. La shell fa girare sui fasci lo stesso cancello del catalogo |
 | `refused` | `folder`, `refusal` | la cartella non è un tema installabile; `refusal` (`ThemeFolderRefusal`, col campo `reason`) è uno di `not_a_theme`, `engine {declared}`, `permissions`, `invalid_id {id}`, `series`, `traversal {path}` (relativo alla cartella), `catalog_state {file}` (il puntatore `.fub-current.json` o `.generations`: li scrive solo Fub), `malformed {detail}`. La shell lo dice con le sue parole |
 
 Tutti e tre rispondono `permission_denied` a una finestra che non è la shell
@@ -166,6 +166,7 @@ campo `outcome`:
 | `installed` | `id`, `name`, `version`, `replaced` | il tema è installato; `replaced` se ha preso il posto di uno con lo stesso id |
 | `collision` | `id`, `name`, `version`, `installed_version` | un id già installato, niente toccato; `installed_version` è `null` se quello installato non si legge (si può sostituire lo stesso) |
 | `revoked` | `id`, `name`, `version` | il tema installato con lo stesso id è revocato dal catalogo: una cartella non lo sostituisce (la copia nuova cancellerebbe la revoca), niente toccato |
+| `blocked` | `why`, `path` | ciò che c'è nella cartella dei temi non si tocca, niente toccato; `why` (`ThemeBlock`) è `pointer` (il tema installato con lo stesso id ha il puntatore del catalogo che non si legge: potrebbe dire «revocato»), `link` (un link simbolico al posto del tema installato o della cartella dei temi) o `layout` (non è una cartella che Fub sa usare); `path` è dove, da mostrare |
 | `replace_failed` | `id`, `name`, `version`, `kept`, `error` | con `replace`, il nuovo non è entrato e il vecchio non è tornato al suo nome; `kept` è il nome della cartella, dentro quella dei temi, dove è rimasto (la shell lo dice con le sue parole); `error` (un `PluginError`) è il guasto del disco, per il log e la diagnosi copiata |
 | `refused` | `refusal` | le porte dell'installazione hanno rifiutato i byte controllati (un `ThemeFolderRefusal`, come sopra); niente scritto |
 | `changed` | — | la cartella non ha più i byte del controllo; niente scritto |

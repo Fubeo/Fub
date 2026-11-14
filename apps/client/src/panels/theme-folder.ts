@@ -17,7 +17,7 @@
 //   cosa.
 import { api } from "../host/ipc";
 import { errorText, isErrorKind } from "../host/errors";
-import type { DiskCause, ThemeFolderCheck, ThemeFolderInstall, ThemeFolderRefusal } from "../host/contract";
+import type { DiskCause, ThemeBlock, ThemeFolderCheck, ThemeFolderInstall, ThemeFolderRefusal } from "../host/contract";
 import { openDialog } from "../kit/dialog";
 import { writeClipboardText } from "../platform/clipboard";
 import { plural, resolvedLanguage, t } from "../i18n/strings";
@@ -300,6 +300,18 @@ function discard(): void {
   void api.discardThemeFolder().catch(() => undefined);
 }
 
+/// La frase di ogni perché che blocca.
+const BLOCKED: Record<ThemeBlock, "settings.themes.blocked.pointer" | "settings.themes.blocked.link" | "settings.themes.blocked.layout"> = {
+  pointer: "settings.themes.blocked.pointer",
+  link: "settings.themes.blocked.link",
+  layout: "settings.themes.blocked.layout",
+};
+
+/// Una diagnosi di un solo motivo che riguarda tutto il tema.
+function wholeTheme(name: string, code: string, why: string, kept: boolean): Diagnosis {
+  return { name, at: Date.now(), rows: [{ file: null, where: null, code, why }], text: [why], kept };
+}
+
 /// Il rifiuto tipizzato dell'host, come diagnosi di una riga.
 function hostRefusal(name: string, refused: ThemeFolderRefusal, kept = false): Diagnosis {
   const row = refusalRow(refused);
@@ -436,8 +448,15 @@ export async function installThemeFolder(host: ThemeFolderHost): Promise<void> {
   if (host.lifetime.closed && outcome.outcome !== "installed" && outcome.outcome !== "replace_failed") return;
   switch (outcome.outcome) {
     case "revoked": {
+      // Il tema ritirato resta installato com'era, come per un rifiuto.
       const why = t("settings.themes.refusal.revoked", { name: outcome.name });
-      await showRefusal(host, { name: outcome.name, at: Date.now(), rows: [{ file: null, where: null, code: "revoked", why }], text: [why] });
+      await showRefusal(host, wholeTheme(outcome.name, "revoked", why, true));
+      return;
+    }
+    case "blocked": {
+      // Non è un difetto della cartella: è ciò che c'è già fra i temi di Fub.
+      const why = t(BLOCKED[outcome.why], { path: outcome.path });
+      await showRefusal(host, wholeTheme(manifest.name, `blocked_${outcome.why}`, why, false));
       return;
     }
     case "refused":
