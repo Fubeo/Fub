@@ -652,8 +652,8 @@ const STRINGS: &[(&str, &str, &str)] = &[
     ),
     (
         "canvas.read.max_chars.desc",
-        "Solo per la forma outline: taglia a una riga intera e dice quante ne restano. Assente = 20 000.",
-        "Only for the outline form: cuts at a whole line and says how many remain. Absent = 20 000.",
+        "Con outline taglia a una riga intera e dice quante ne restano; con json taglia solo i punti di ink_read e scrive points_omitted; con code non vale. Assente = 20 000.",
+        "With outline it cuts at a whole line and says how many remain; with json it cuts only the points of ink_read and writes points_omitted; it does not apply to code. Absent = 20 000.",
     ),
     (
         E_READ_FORM,
@@ -672,8 +672,8 @@ const STRINGS: &[(&str, &str, &str)] = &[
     ),
     (
         E_READ_MAX_CHARS_FORM,
-        "max_chars vale solo per la forma outline: {form} si legge intera.",
-        "max_chars applies only to the outline form: {form} is read whole.",
+        "max_chars vale per le forme outline e json: {form} si legge intera.",
+        "max_chars applies to the outline and json forms: {form} is read whole.",
     ),
     (
         E_READ_WRITE,

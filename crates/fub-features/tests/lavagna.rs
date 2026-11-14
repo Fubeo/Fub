@@ -577,6 +577,62 @@ fn la_forma_json_e_il_modello_e_si_da_solo_se_chiesta() {
     assert_eq!(payload["model"]["edges"].as_array().map(Vec::len), Some(1));
 }
 
+/// Una lavagna con un tratto libero di 2000 campioni.
+fn ink_board() -> String {
+    let deltas = vec!["1,1"; 1_999].join(" ");
+    json!({"nodes": [{"id": "a", "type": "text", "x": 0, "y": 0, "width": 200, "height": 80,
+        "text": "Ciao"}], "edges": [],
+        "fub:ink": {"v": 1, "strokes": [{"id": "s1", "tool": "pen",
+            "brush": "pf1 size=3 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=0 pen=ballpoint",
+            "color": "#0072b2", "anchor": {"kind": "free"},
+            "ink": format!("1 s10 cxy 0,0 {deltas}")}]}})
+    .to_string()
+}
+
+#[test]
+fn la_forma_json_tiene_l_inchiostro_del_file_e_accanto_la_sua_lettura() {
+    let source = ink_board();
+    let (_vault, mut ws) = with_board(&source);
+    let outcome = read_cmd(
+        &mut ws,
+        json!({ "doc": BOARD, "form": "json" }),
+        InvokeMode::Apply,
+    )
+    .expect("si legge");
+    let payload = custom(&outcome);
+    let file: Value = serde_json::from_str(&source).unwrap();
+    assert_eq!(payload["model"]["fub:ink"], file["fub:ink"]);
+    // Il limite di serie, 20 000 caratteri, vale anche per la lettura.
+    assert_eq!(payload["ink_read"][0]["layer"], "board");
+    assert!(payload["ink_read"].to_string().chars().count() <= 20_000);
+    assert!(payload["ink_read"][0]["strokes"][0]["points_omitted"].is_u64());
+
+    let outcome = read_cmd(
+        &mut ws,
+        json!({ "doc": BOARD, "form": "json", "max_chars": 1_000_000 }),
+        InvokeMode::Apply,
+    )
+    .expect("si legge");
+    let stroke = &custom(&outcome)["ink_read"][0]["strokes"][0];
+    assert_eq!(stroke["points"].as_array().map(Vec::len), Some(2000));
+    assert!(stroke.get("points_omitted").is_none());
+
+    // `max_chars` taglia i punti della lettura, e lo dice; il modello no.
+    let outcome = read_cmd(
+        &mut ws,
+        json!({ "doc": BOARD, "form": "json", "max_chars": 1000 }),
+        InvokeMode::Apply,
+    )
+    .expect("max_chars vale anche per json");
+    let payload = custom(&outcome);
+    assert_eq!(payload["model"]["fub:ink"], file["fub:ink"]);
+    assert!(payload["ink_read"].to_string().chars().count() <= 1000);
+    let stroke = &payload["ink_read"][0]["strokes"][0];
+    let shown = stroke["points"].as_array().map_or(0, Vec::len);
+    assert!(shown > 0 && shown < 2000, "{shown}");
+    assert_eq!(stroke["points_omitted"], json!(2000 - shown));
+}
+
 #[test]
 fn ids_legge_solo_quelle_schede_e_gli_archi_fra_loro() {
     let (_vault, mut ws) = with_board(READ_BOARD);
@@ -676,18 +732,13 @@ fn max_chars_taglia_l_outline_a_una_riga_intera_e_dice_quante_ne_restano() {
         "dentro il limite non si taglia"
     );
 
-    for (form, raw) in [("code", json!(10)), ("json", json!(10))] {
-        let error = read_cmd(
-            &mut ws,
-            json!({ "doc": BOARD, "form": form, "max_chars": raw }),
-            InvokeMode::Apply,
-        )
-        .expect_err("max_chars vale solo per l'outline");
-        assert!(
-            matches!(error, PluginError::BadArgs(_)),
-            "{form}: {error:?}"
-        );
-    }
+    let error = read_cmd(
+        &mut ws,
+        json!({ "doc": BOARD, "form": "code", "max_chars": 10 }),
+        InvokeMode::Apply,
+    )
+    .expect_err("max_chars non vale per il codice");
+    assert!(matches!(error, PluginError::BadArgs(_)), "{error:?}");
     for raw in [json!(-1), json!(1.5)] {
         let error = read_cmd(
             &mut ws,

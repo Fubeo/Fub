@@ -1471,7 +1471,7 @@ Fatto quando: `cargo test -p fub-canvas-core --test describe` passa con i
 vettori d'inchiostro.
 Prova: scripts/check.sh --rapido; cargo test -p fub-canvas-core --test
 describe
-Stato: [ ] da fare
+Stato: [x] fatto (coder/lic-t17 @ 9eef387f5, merge c9a3dfc9c) · righe `ink=N [bad=M] x y w×h` e `ink board`; archi senza inchiostro; `add_strokes` solo per i livelli ricreabili uguali; json tiene `fub:ink` com'è e la lettura decodificata va in `ink_read`; max_chars con json taglia solo i punti di `ink_read`
 
 ## T18 · La gomma che taglia: `erase_along`
 
