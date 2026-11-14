@@ -1,0 +1,34 @@
+{
+  "name": "hidden-name",
+  "description": "Un nome che è solo un punto e un'estensione (.png) non ha estensione: resta fermo.",
+  "card": {
+    "type": "file",
+    "file": "Foto/.png"
+  },
+  "ref": {
+    "width": 200,
+    "height": 100
+  },
+  "size": {
+    "width": 400,
+    "height": 200
+  },
+  "expect": {
+    "mode": "fixed",
+    "s": 1,
+    "x": 0,
+    "y": 0,
+    "points": [
+      {
+        "from": [
+          20,
+          10
+        ],
+        "to": [
+          20,
+          10
+        ]
+      }
+    ]
+  }
+}

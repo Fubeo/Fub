@@ -1,0 +1,60 @@
+{
+  "name": "reason-ink",
+  "description": "Un ink con un'altra versione, un'altra scala, il primo t diverso da 0, un campione monco, a senza z, una pressione oltre 255, un canale sconosciuto, vuoto o assente: ragione ink.",
+  "source": "{\n  \"nodes\": [],\n  \"edges\": [],\n  \"fub:ink\": { \"v\": 1, \"strokes\": [\n    { \"id\": \"s-1\", \"tool\": \"pen\", \"brush\": \"pf1 size=3 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=0 pen=ballpoint\", \"color\": \"#0072b2\", \"anchor\": { \"kind\": \"free\" }, \"ink\": \"2 s100 cxy 0,0\" },\n    { \"id\": \"s-2\", \"tool\": \"pen\", \"brush\": \"pf1 size=3 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=0 pen=ballpoint\", \"color\": \"#0072b2\", \"anchor\": { \"kind\": \"free\" }, \"ink\": \"1 s1000 cxy 0,0\" },\n    { \"id\": \"s-3\", \"tool\": \"pen\", \"brush\": \"pf1 size=3 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=0 pen=ballpoint\", \"color\": \"#0072b2\", \"anchor\": { \"kind\": \"free\" }, \"ink\": \"1 s100 cxypt 100,100,128,5\" },\n    { \"id\": \"s-4\", \"tool\": \"pen\", \"brush\": \"pf1 size=3 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=0 pen=ballpoint\", \"color\": \"#0072b2\", \"anchor\": { \"kind\": \"free\" }, \"ink\": \"1 s100 cxy 100,100 5\" },\n    { \"id\": \"s-5\", \"tool\": \"pen\", \"brush\": \"pf1 size=3 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=0 pen=ballpoint\", \"color\": \"#0072b2\", \"anchor\": { \"kind\": \"free\" }, \"ink\": \"1 s100 cxya 0,0,30\" },\n    { \"id\": \"s-6\", \"tool\": \"pen\", \"brush\": \"pf1 size=3 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=0 pen=ballpoint\", \"color\": \"#0072b2\", \"anchor\": { \"kind\": \"free\" }, \"ink\": \"1 s100 cxyp 0,0,300\" },\n    { \"id\": \"s-7\", \"tool\": \"pen\", \"brush\": \"pf1 size=3 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=0 pen=ballpoint\", \"color\": \"#0072b2\", \"anchor\": { \"kind\": \"free\" }, \"ink\": \"1 s100 cxyq 0,0,1 10,10,0\" },\n    { \"id\": \"s-8\", \"tool\": \"pen\", \"brush\": \"pf1 size=3 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=0 pen=ballpoint\", \"color\": \"#0072b2\", \"anchor\": { \"kind\": \"free\" }, \"ink\": \"\" },\n    { \"id\": \"s-9\", \"tool\": \"pen\", \"brush\": \"pf1 size=3 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=0 pen=ballpoint\", \"color\": \"#0072b2\", \"anchor\": { \"kind\": \"free\" } }\n  ] }\n}\n",
+  "expect": {
+    "layers": [
+      {
+        "layer": "board",
+        "state": "ok",
+        "strokes": [
+          {
+            "id": "s-1",
+            "drawn": false,
+            "reason": "ink"
+          },
+          {
+            "id": "s-2",
+            "drawn": false,
+            "reason": "ink"
+          },
+          {
+            "id": "s-3",
+            "drawn": false,
+            "reason": "ink"
+          },
+          {
+            "id": "s-4",
+            "drawn": false,
+            "reason": "ink"
+          },
+          {
+            "id": "s-5",
+            "drawn": false,
+            "reason": "ink"
+          },
+          {
+            "id": "s-6",
+            "drawn": false,
+            "reason": "ink"
+          },
+          {
+            "id": "s-7",
+            "drawn": false,
+            "reason": "ink"
+          },
+          {
+            "id": "s-8",
+            "drawn": false,
+            "reason": "ink"
+          },
+          {
+            "id": "s-9",
+            "drawn": false,
+            "reason": "ink"
+          }
+        ]
+      }
+    ]
+  }
+}

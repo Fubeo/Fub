@@ -1,4 +1,5 @@
-//! La facciata attraverso il livello sicuro ([`Cores`]): i vettori, il
+//! La facciata attraverso il livello sicuro ([`Cores`]): i vettori (anche
+//! quelli dell'inchiostro), il
 //! tratto UTF-16, gli ingressi sbagliati, gli handle, le dimensioni e i
 //! risultati. `tests/abi.rs` fa gli stessi controlli attraverso le funzioni
 //! `extern "C"`.
@@ -52,6 +53,9 @@ impl Via for Api {
     fn node_at(&mut self, handle: u32, byte: u32) -> Result<Option<usize>, Value> {
         self.0.node_at(handle, byte as usize).map_err(error)
     }
+    fn ink_layers(&mut self, handle: u32) -> Result<Value, Value> {
+        answer(self.0.ink_layers(handle))
+    }
     fn close(&mut self, handle: u32) -> Result<(), Value> {
         self.0.close(handle).map_err(error)
     }
@@ -62,6 +66,18 @@ fn every_vector_gives_the_text_the_edit_and_the_error() {
     let mut api = Api::default();
     common::every_vector(&mut api);
     assert!(api.0.is_empty(), "una lavagna è rimasta aperta");
+}
+
+#[test]
+fn every_ink_vector_gives_the_layers_of_the_core() {
+    let mut api = Api::default();
+    common::every_ink_vector(&mut api);
+    assert!(api.0.is_empty(), "una lavagna è rimasta aperta");
+}
+
+#[test]
+fn ink_layers_follow_the_commits() {
+    common::ink_layers_follow_commits(&mut Api::default());
 }
 
 #[test]

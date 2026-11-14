@@ -14,7 +14,8 @@ use fub_canvas_core::patch::same_value;
 use fub_canvas_core::source::canvas_value;
 use serde_json::{json, Value};
 
-/// Una via fino al nucleo: le sette funzioni della facciata, più il modello.
+/// Una via fino al nucleo: le funzioni della facciata, più il modello e i
+/// livelli d'inchiostro.
 pub trait Via {
     fn open(&mut self, source: &[u8]) -> Result<(u32, Value), Value>;
     fn reset(&mut self, handle: u32, source: &[u8]) -> Result<Value, Value>;
@@ -23,6 +24,7 @@ pub trait Via {
     fn compile(&mut self, handle: u32, request: &[u8]) -> Result<Value, Value>;
     fn model(&mut self, handle: u32) -> Result<Value, Value>;
     fn node_at(&mut self, handle: u32, byte: u32) -> Result<Option<usize>, Value>;
+    fn ink_layers(&mut self, handle: u32) -> Result<Value, Value>;
     fn close(&mut self, handle: u32) -> Result<(), Value>;
 }
 
@@ -251,6 +253,82 @@ pub fn every_vector(via: &mut impl Via) {
     for (name, vector) in read_vectors("canvas-ops") {
         run_op_vector(via, &name, &vector);
     }
+}
+
+/// Quanti vettori dell'inchiostro: gli stessi 28 di
+/// `crates/fub-canvas-core/tests/ink_vectors.rs` e di
+/// `apps/client/src/editors/canvas/wasm/ink-vectors.test.ts`.
+pub const INK_VECTORS: usize = 28;
+
+/// Ogni vettore di `canvas-ink/`: `ink_layers` dà i livelli attesi (quelli
+/// che legge il nucleo nativo), la stessa risposta finché il testo non
+/// cambia, e i livelli del testo nuovo dopo un `reset`. Su un handle chiuso
+/// è `handle`.
+pub fn every_ink_vector(via: &mut impl Via) {
+    let vectors = read_vectors("canvas-ink");
+    assert_eq!(vectors.len(), INK_VECTORS, "canvas-ink: i vettori");
+    for (name, vector) in &vectors {
+        let source = vector["source"].as_str().expect("source");
+        let (handle, _) = via
+            .open(source.as_bytes())
+            .unwrap_or_else(|e| panic!("{name}: non si apre: {e}"));
+        let given = via
+            .ink_layers(handle)
+            .unwrap_or_else(|e| panic!("{name}: ink_layers rifiuta: {e}"));
+        assert_eq!(given, vector["expect"], "{name}: i livelli");
+        assert_eq!(
+            via.ink_layers(handle).expect("di nuovo"),
+            given,
+            "{name}: il testo non è cambiato"
+        );
+        // Una lavagna vuota non ha livelli; il testo di prima li ridà.
+        via.reset(handle, b"").expect("reset");
+        assert_eq!(
+            via.ink_layers(handle).expect("vuota"),
+            json!({ "layers": [] }),
+            "{name}: dopo reset"
+        );
+        via.reset(handle, source.as_bytes()).expect("reset");
+        assert_eq!(via.ink_layers(handle).expect("riaperta"), given, "{name}");
+        via.close(handle).expect("close");
+        expect_code(via.ink_layers(handle), "handle");
+    }
+}
+
+/// Un tratto di penna libero, valido, con questo id.
+pub fn free_stroke(id: &str) -> Value {
+    json!({
+        "id": id,
+        "tool": "pen",
+        "brush": "pf1 size=3 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=0 pen=ballpoint",
+        "color": "#0072b2",
+        "anchor": { "kind": "free" },
+        "ink": "1 s100 cxy 4000,2500 120,40 95,-10",
+    })
+}
+
+/// La toppa che aggiunge [`free_stroke`] in cima al livello della radice.
+pub fn add_free_stroke(id: &str) -> Vec<u8> {
+    bytes(&json!([{
+        "kind": "ink", "layer": "board", "at": 0, "before": null, "after": free_stroke(id),
+    }]))
+}
+
+/// Un `commit` d'inchiostro cambia la risposta di `ink_layers`, e l'annulla
+/// la rimette.
+pub fn ink_layers_follow_commits(via: &mut impl Via) {
+    let (handle, _) = via.open(br#"{"nodes":[],"edges":[]}"#).expect("si apre");
+    let empty = json!({ "layers": [] });
+    assert_eq!(via.ink_layers(handle).expect("vuota"), empty);
+    let committed = via.commit(handle, &add_free_stroke("s-1")).expect("commit");
+    assert_eq!(
+        via.ink_layers(handle).expect("dopo"),
+        json!({ "layers": [{ "layer": "board", "state": "ok", "strokes": [{ "id": "s-1", "drawn": true }] }] })
+    );
+    via.commit(handle, &bytes(&committed["inverse"]))
+        .expect("annulla");
+    assert_eq!(via.ink_layers(handle).expect("annullata"), empty);
+    via.close(handle).expect("close");
 }
 
 /// Una lavagna di una scheda di testo, con o senza BOM e CRLF.

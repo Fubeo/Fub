@@ -1,0 +1,8 @@
+{
+  "name": "ink-on-edge",
+  "description": "Un fub:ink su un arco è un campo sconosciuto dell'arco, non un livello.",
+  "source": "{\n  \"nodes\": [\n    { \"id\": \"a\", \"type\": \"text\", \"text\": \"a\", \"x\": 0, \"y\": 0, \"width\": 100, \"height\": 60 },\n    { \"id\": \"b\", \"type\": \"text\", \"text\": \"b\", \"x\": 200, \"y\": 0, \"width\": 100, \"height\": 60 }\n  ],\n  \"edges\": [\n    { \"id\": \"e1\", \"fromNode\": \"a\", \"toNode\": \"b\",\n      \"fub:ink\": { \"v\": 1, \"strokes\": [\n        { \"id\": \"s-1\", \"tool\": \"pen\", \"brush\": \"pf1 size=3 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=0 pen=ballpoint\", \"color\": \"#0072b2\", \"anchor\": { \"kind\": \"free\" }, \"ink\": \"1 s100 cxy 4000,2500 120,40 95,-10\" }\n      ] } }\n  ]\n}\n",
+  "expect": {
+    "layers": []
+  }
+}

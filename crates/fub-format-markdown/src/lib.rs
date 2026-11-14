@@ -60,6 +60,10 @@ impl FormatProvider for MarkdownProvider {
             // Le formule fra dollari, che legge il parser (vedi
             // `parse::build_options`); il recinto `math` resta della regola.
             syntax::MATH,
+            // I commenti con la discussione (`{==…==}{>>…<<}`, CriticMarkup), che
+            // legge il parser (vedi `parse/comments.rs`); i `%%…%%` sotto lo
+            // stesso nome restano della regola, come il recinto `math`.
+            syntax::COMMENTS,
             // Non è una sintassi: dice che il sorgente è prosa, e che le
             // feature possono scriverci testo senza romperlo.
             fub_abi::options::source::PROSE,

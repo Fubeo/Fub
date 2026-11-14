@@ -1,0 +1,6 @@
+{
+  "about": "Il livello è \"board\" o {\"node\": id}: un'altra stringa, o un campo che l'operazione non conosce, è un errore di lettura.",
+  "before": {},
+  "ops": [{ "op": "add_strokes", "layer": "nodes", "strokes": [] }],
+  "expect": { "outcome": "malformed" }
+}
