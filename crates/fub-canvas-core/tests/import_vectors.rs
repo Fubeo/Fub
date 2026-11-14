@@ -83,6 +83,10 @@ fn describe(error: &OpError) -> Value {
             json!({"kind": "TooMany", "index": index})
         }
         OpError::Invalid { index, .. } => json!({"kind": "Invalid", "index": index}),
+        OpError::UnknownStroke { index, id } => {
+            json!({"kind": "UnknownStroke", "index": index, "id": id})
+        }
+        OpError::ForeignLayer { index, .. } => json!({"kind": "ForeignLayer", "index": index}),
     }
 }
 

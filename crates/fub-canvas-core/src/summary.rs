@@ -3,7 +3,8 @@
 //! cambia. [`summarize`] lo legge dalle toppe di [`Compiled`], non dal
 //! confronto di due lavagne: una scheda nata e tolta nello stesso giro non
 //! compare, e una scheda cambiata da più operazioni compare una volta sola, con
-//! il saldo del giro.
+//! il saldo del giro. I tratti d'inchiostro nati e tolti (le toppe `ink`) si
+//! contano per livello allo stesso modo.
 //!
 //! Ogni voce porta l'id, e per una scheda il suo testo accorciato come nella
 //! lettura ([`crate::describe::outline`]). Le regole e un esempio stanno in
@@ -15,6 +16,7 @@ use serde::Serialize;
 use serde_json::{Map, Value};
 
 use crate::describe::{card_text, shorten};
+use crate::ink::{InkStroke, LayerRef};
 use crate::model::{Canvas, CanvasEdge, CanvasNode};
 use crate::ops::Compiled;
 use crate::patch::{self, same_value, CanvasPatch};
@@ -37,6 +39,23 @@ pub struct Summary {
     pub edges_changed: Vec<EdgeChange>,
     /// Se l'ordine delle schede rimaste è cambiato, per un `reorder`.
     pub order_changed: bool,
+    /// I tratti nati, col loro livello. Senza tratti il campo non si scrive.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub strokes_added: Vec<StrokeRef>,
+    /// I tratti tolti, col loro livello. Senza tratti il campo non si scrive.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub strokes_removed: Vec<StrokeRef>,
+    /// I tratti rimasti che una toppa ha sostituito. Senza il campo non si
+    /// scrive.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub strokes_changed: Vec<StrokeRef>,
+}
+
+/// Un tratto d'inchiostro nato, tolto o cambiato, e il livello dove sta.
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct StrokeRef {
+    pub id: String,
+    pub layer: LayerRef,
 }
 
 /// Una scheda nata o tolta.
@@ -118,6 +137,7 @@ pub struct EdgeChange {
 pub fn summarize(canvas: &Canvas, compiled: &Compiled) -> Summary {
     let mut nodes = Track::new();
     let mut edges = Track::new();
+    let mut strokes: Track<(LayerRef, InkStroke)> = Track::new();
     for patch in &compiled.patches {
         match patch {
             CanvasPatch::UpsertNode { before, after, .. } => {
@@ -133,6 +153,20 @@ pub fn summarize(canvas: &Canvas, compiled: &Compiled) -> Summary {
                 *edges.touch(&before.id, Some(before)) = None;
             }
             CanvasPatch::Reorder { .. } => {}
+            CanvasPatch::Ink {
+                layer,
+                before,
+                after,
+                ..
+            } => {
+                let Some(id) = after.as_ref().or(before.as_ref()).map(|s| s.id.clone()) else {
+                    continue;
+                };
+                let key = stroke_key(layer, &id);
+                let before = before.clone().map(|stroke| (layer.clone(), stroke));
+                *strokes.touch(&key, before.as_ref()) =
+                    after.clone().map(|stroke| (layer.clone(), stroke));
+            }
         }
     }
 
@@ -157,6 +191,23 @@ pub fn summarize(canvas: &Canvas, compiled: &Compiled) -> Summary {
             }
         }
     }
+    for (before, after) in strokes.entries {
+        match (before, after) {
+            (None, None) => {}
+            (None, Some((layer, stroke))) => summary.strokes_added.push(StrokeRef {
+                id: stroke.id,
+                layer,
+            }),
+            (Some((layer, stroke)), None) => summary.strokes_removed.push(StrokeRef {
+                id: stroke.id,
+                layer,
+            }),
+            (Some(_), Some((layer, stroke))) => summary.strokes_changed.push(StrokeRef {
+                id: stroke.id,
+                layer,
+            }),
+        }
+    }
     // Solo un `reorder` cambia l'ordine di chi resta: le altre toppe aggiungono
     // o tolgono, e non si fa la copia della lavagna se non serve.
     let reordered = compiled
@@ -166,6 +217,14 @@ pub fn summarize(canvas: &Canvas, compiled: &Compiled) -> Summary {
     summary.order_changed = reordered
         && patch::draft(canvas, &compiled.patches).is_ok_and(|after| !same_order(canvas, &after));
     summary
+}
+
+/// La chiave di un tratto nel giro: lo stesso id può stare in due livelli.
+fn stroke_key(layer: &LayerRef, id: &str) -> String {
+    match layer {
+        LayerRef::Board => format!("board\u{0}{id}"),
+        LayerRef::Node(node) => format!("node\u{0}{node}\u{0}{id}"),
+    }
 }
 
 /// Le entrate di un giro, una per id, nell'ordine del primo incontro: com'era

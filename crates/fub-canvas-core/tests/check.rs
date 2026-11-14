@@ -719,6 +719,8 @@ fn kind_code(kind: &str) -> Code {
         "DuplicateId" => Code::DuplicateId,
         "TooMany" => Code::TooMany,
         "Invalid" => Code::Invalid,
+        "UnknownStroke" => Code::UnknownStroke,
+        "ForeignLayer" => Code::ForeignLayer,
         other => panic!("un `kind` sconosciuto {other:?}"),
     }
 }

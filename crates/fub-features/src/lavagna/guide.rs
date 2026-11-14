@@ -106,6 +106,8 @@ fn kind_name(kind: FieldKind) -> &'static str {
         FieldKind::Color => "color",
         FieldKind::Sides => "sides",
         FieldKind::Pair => "pair",
+        FieldKind::Layer => "layer",
+        FieldKind::Strokes => "strokes",
         FieldKind::Any => "any",
     }
 }

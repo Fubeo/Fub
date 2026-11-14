@@ -1,7 +1,8 @@
 //! Le operazioni d'intento sulla lavagna (`CanvasOp`): «aggiungi», «sposta»,
 //! «ridimensiona», «collega», «togli», «cambia», «porta sopra», «allinea»,
 //! «distribuisci», «duplica», «inverti», «raggruppa», «dispone», «incolla»,
-//! «trasforma in file», «da Mermaid», «da una scaletta». Un agente o
+//! «trasforma in file», «da Mermaid», «da una scaletta», «aggiungi tratti»,
+//! «cancella tratti». Un agente o
 //! la sessione dal tablet pensano così, non in toppe con l'immagine di
 //! prima: [`compile`] traduce una lista di operazioni nelle toppe di
 //! [`crate::patch`], che sono la sola forma con cui una lavagna cambia.
@@ -33,6 +34,7 @@ use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::{Map, Value};
 use thiserror::Error;
 
+use crate::ink::{InkLayer, InkStroke, LayerRef, StrokeState, INK_KEY};
 use crate::model::{Canvas, CanvasEdge, CanvasError, CanvasNode, MAX_SAFE_INTEGER};
 use crate::patch::{self, upsert_edge_patch, upsert_node_patch, CanvasPatch, Null};
 
@@ -125,6 +127,16 @@ pub enum CanvasOp {
     /// Una scaletta rientrata diventa un albero di schede. Il lettore è in
     /// `import/outline.rs`, le regole in `ops/import.rs`.
     FromOutline(FromOutlineArgs),
+    /// Aggiunge i tratti `strokes` in cima al livello `layer` (la radice o
+    /// una scheda), nell'ordine dato. Ogni tratto è come nel file, campi
+    /// sconosciuti compresi, e deve disegnarsi in quel livello; `id` è
+    /// facoltativo (assente o `null`: lo dà il seme).
+    AddStrokes {
+        layer: LayerRef,
+        strokes: Vec<Map<String, Value>>,
+    },
+    /// Cancella dal livello `layer` i tratti `ids`.
+    EraseStrokes { layer: LayerRef, ids: Vec<String> },
 }
 
 impl CanvasOp {
@@ -151,6 +163,8 @@ impl CanvasOp {
             Self::Convert(_) => "convert",
             Self::FromMermaid(_) => "from_mermaid",
             Self::FromOutline(_) => "from_outline",
+            Self::AddStrokes { .. } => "add_strokes",
+            Self::EraseStrokes { .. } => "erase_strokes",
         }
     }
 }
@@ -160,9 +174,9 @@ impl CanvasOp {
 pub struct Compiled {
     /// Le toppe, nell'ordine in cui si applicano.
     pub patches: Vec<CanvasPatch>,
-    /// Gli id di ogni scheda e arco aggiunti (`add_card`, `connect`,
-    /// `duplicate`, `group`, `insert`, `from_mermaid`, `from_outline`), dati o
-    /// generati, nell'ordine delle operazioni.
+    /// Gli id di ogni scheda, arco e tratto aggiunti (`add_card`, `connect`,
+    /// `duplicate`, `group`, `insert`, `from_mermaid`, `from_outline`,
+    /// `add_strokes`), dati o generati, nell'ordine delle operazioni.
     pub created: Vec<String>,
     /// Ciò che le operazioni non hanno potuto tenere, nell'ordine delle
     /// operazioni: al più [`MAX_NOTES`]. Senza note il campo non si scrive.
@@ -223,7 +237,8 @@ pub enum OpError {
     #[error("canvas op {index}: there is no node or edge {id:?}")]
     UnknownEdge { index: usize, id: String },
     /// Un id dato che c'è già (nel modello di partenza o creato nello stesso
-    /// giro), o un id ripetuto nella lista `ids` di un'operazione.
+    /// giro; per un tratto, nel suo livello), o un id ripetuto nella lista
+    /// `ids` di un'operazione.
     #[error("canvas op {index}: id {id:?} is already taken or repeated")]
     DuplicateId { index: usize, id: String },
     /// La lavagna avrebbe più schede o archi del limite, o un `insert` porta
@@ -242,6 +257,12 @@ pub enum OpError {
     /// può fare così com'è (un campo vietato, un id ambiguo).
     #[error("canvas op {index}: {reason}")]
     Invalid { index: usize, reason: String },
+    /// `erase_strokes` di un id che non è un tratto del livello.
+    #[error("canvas op {index}: there is no ink stroke {id:?} in the layer")]
+    UnknownStroke { index: usize, id: String },
+    /// Il livello d'inchiostro è estraneo: Fub non ci scrive.
+    #[error("canvas op {index}: the ink layer is foreign")]
+    ForeignLayer { index: usize, layer: LayerRef },
 }
 
 impl OpError {
@@ -253,7 +274,9 @@ impl OpError {
             | Self::DuplicateId { index, .. }
             | Self::TooMany { index, .. }
             | Self::TooManyMoved { index, .. }
-            | Self::Invalid { index, .. } => *index,
+            | Self::Invalid { index, .. }
+            | Self::UnknownStroke { index, .. }
+            | Self::ForeignLayer { index, .. } => *index,
         }
     }
 }
@@ -380,6 +403,8 @@ impl Compiler {
             CanvasOp::Convert(args) => self.convert(index, args)?,
             CanvasOp::FromMermaid(args) => self.import_mermaid(index, args)?,
             CanvasOp::FromOutline(args) => self.import_outline(index, args)?,
+            CanvasOp::AddStrokes { layer, strokes } => self.add_strokes(index, layer, strokes)?,
+            CanvasOp::EraseStrokes { layer, ids } => self.erase_strokes(index, layer, ids)?,
         };
         if patches.is_empty() {
             return Ok(());
@@ -633,6 +658,130 @@ impl Compiler {
                 id: id.to_owned(),
             }),
         }
+    }
+
+    /// Il livello d'inchiostro `layer` com'è adesso: vuoto se chi lo tiene
+    /// non ha la chiave. Una scheda che non c'è è `UnknownNode`, un livello
+    /// estraneo `ForeignLayer`.
+    fn ink_layer(&self, index: usize, layer: &LayerRef) -> Result<InkLayer, OpError> {
+        let value = match layer {
+            LayerRef::Board => self.working.extra.get(INK_KEY),
+            LayerRef::Node(id) => self.node(index, id)?.extra.get(INK_KEY),
+        };
+        match value {
+            None => Ok(InkLayer::default()),
+            Some(value) => InkLayer::from_value(value).map_err(|_| OpError::ForeignLayer {
+                index,
+                layer: layer.clone(),
+            }),
+        }
+    }
+
+    /// Una toppa `ink` per tratto, in fondo al livello. Gli id generati
+    /// saltano quelli del livello e quelli dati prima nella stessa
+    /// operazione; un id dato che il livello ha già è `DuplicateId`.
+    fn add_strokes(
+        &mut self,
+        index: usize,
+        layer: &LayerRef,
+        strokes: &[Map<String, Value>],
+    ) -> Result<Vec<CanvasPatch>, OpError> {
+        let ink = self.ink_layer(index, layer)?;
+        let mut taken: HashSet<String> = ink.strokes.iter().map(|s| s.id.clone()).collect();
+        let start = ink.strokes.len();
+        let mut patches = Vec::with_capacity(strokes.len());
+        for (at, fields) in (start..).zip(strokes) {
+            let id = match fields.get("id") {
+                None | Some(Value::Null) => loop {
+                    let id = self.ids.next_id();
+                    if !taken.contains(&id) {
+                        break id;
+                    }
+                },
+                Some(Value::String(id)) if id.is_empty() => {
+                    return Err(OpError::Invalid {
+                        index,
+                        reason: "a stroke `id` cannot be empty".to_owned(),
+                    })
+                }
+                Some(Value::String(id)) if taken.contains(id) => {
+                    return Err(OpError::DuplicateId {
+                        index,
+                        id: id.clone(),
+                    })
+                }
+                Some(Value::String(id)) => id.clone(),
+                Some(_) => {
+                    return Err(OpError::Invalid {
+                        index,
+                        reason: "`id` must be a string".to_owned(),
+                    })
+                }
+            };
+            let mut fields = fields.clone();
+            fields.insert("id".to_owned(), Value::String(id.clone()));
+            let stroke = InkStroke::from_value(&Value::Object(fields)).map_err(|error| {
+                OpError::Invalid {
+                    index,
+                    reason: format!("invalid stroke: {error}"),
+                }
+            })?;
+            if let StrokeState::Kept(reason) = stroke.state(layer) {
+                return Err(OpError::Invalid {
+                    index,
+                    reason: format!(
+                        "stroke {id:?} cannot be drawn in this layer ({})",
+                        reason.as_str()
+                    ),
+                });
+            }
+            patches.push(CanvasPatch::Ink {
+                layer: layer.clone(),
+                at,
+                before: None,
+                after: Some(stroke),
+            });
+            taken.insert(id.clone());
+            self.created.push(id);
+        }
+        Ok(patches)
+    }
+
+    /// Una toppa `ink` per tratto, nell'ordine dato, ognuna con la posizione
+    /// del tratto dopo quelle prima. Un tratto che non si disegna si
+    /// conserva e non si cancella (`Invalid`).
+    fn erase_strokes(
+        &mut self,
+        index: usize,
+        layer: &LayerRef,
+        ids: &[String],
+    ) -> Result<Vec<CanvasPatch>, OpError> {
+        distinct(index, ids)?;
+        let mut strokes = self.ink_layer(index, layer)?.strokes;
+        let mut patches = Vec::with_capacity(ids.len());
+        for id in ids {
+            let at = strokes
+                .iter()
+                .position(|stroke| stroke.id == *id)
+                .ok_or_else(|| OpError::UnknownStroke {
+                    index,
+                    id: id.clone(),
+                })?;
+            let before = strokes.remove(at);
+            if !before.state(layer).is_drawn() {
+                return Err(OpError::Invalid {
+                    index,
+                    reason: format!("stroke {id:?} is not drawn, and Fub keeps it as it is"),
+                });
+            }
+            patches.push(CanvasPatch::Ink {
+                layer: layer.clone(),
+                at,
+                before: Some(before),
+                after: None,
+            });
+        }
+        Ok(patches)
     }
 
     /// Un arco va bene se le sue schede ci sono e se passa le regole del

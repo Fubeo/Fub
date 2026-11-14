@@ -129,6 +129,11 @@ pub enum Code {
     TooMany,
     /// Un `move` con `contents` tocca più schede del tetto: la lista si divide.
     TooManyMoved,
+    /// Un id che non è un tratto del livello: `erase_strokes`.
+    UnknownStroke,
+    /// Un livello d'inchiostro che Fub non legge: `add_strokes` o
+    /// `erase_strokes` non lo toccano.
+    ForeignLayer,
 }
 
 impl Code {
@@ -222,6 +227,18 @@ impl Problem {
             OpError::Invalid { reason, .. } => {
                 (Code::Invalid, format!("/{index}"), reason.clone(), None)
             }
+            OpError::UnknownStroke { id, .. } => (
+                Code::UnknownStroke,
+                locate(raw, index, id),
+                "there is no stroke with this id in the layer".to_owned(),
+                None,
+            ),
+            OpError::ForeignLayer { .. } => (
+                Code::ForeignLayer,
+                format!("/{index}/layer"),
+                "the ink of this layer is not Fub's, and Fub keeps it as it is".to_owned(),
+                None,
+            ),
         };
         Self {
             code,

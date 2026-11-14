@@ -92,7 +92,7 @@ use crate::backlinks::{self, BacklinksView, BACKLINKS_ID};
 #[cfg(feature = "backup")]
 use crate::backup::{self, BackupCommands, BackupView, BACKUP_ID};
 #[cfg(feature = "base")]
-use crate::base::{BaseIndex, BASE_ID};
+use crate::base::{self, BaseCommands, BaseIndex, BASE_ID};
 #[cfg(feature = "blocks")]
 use crate::blocks::{
     self, CommentRule, DiagramRenderer, DiagramRule, HighlightRule, MathRenderer, MathRule,
@@ -124,6 +124,8 @@ use crate::search::{self, SEARCH_ID};
 use crate::stats::{self, StatsView, STATS_ID};
 #[cfg(feature = "tags")]
 use crate::tags::{self, TagCommands, TagPanelView, TAGS_ID};
+#[cfg(feature = "tasks")]
+use crate::tasks::{self, TasksView, TASKS_ID};
 #[cfg(feature = "template")]
 use crate::template::{self, TemplateCommands, TemplateView, TEMPLATE_ID};
 #[cfg(feature = "trash")]
@@ -328,6 +330,24 @@ static OFFICIALS: &[OfficialFeature] = &[
         requires: &[],
         wiring: HostWiring::None,
     },
+    // I compiti usano la ricerca se c'è (`uses` nella mappa, non `requires`: la
+    // ricerca non offre servizi), e la vista dice quando non può leggere.
+    #[cfg(feature = "tasks")]
+    OfficialFeature {
+        id: TASKS_ID,
+        name: "Tasks",
+        catalog: tasks::catalog,
+        view: Some(|| Box::new(TasksView)),
+        commands: None,
+        index: None,
+        syntax: None,
+        renderers: None,
+        exports: None,
+        settings: None,
+        provides: &[],
+        requires: &[],
+        wiring: HostWiring::None,
+    },
     #[cfg(feature = "properties")]
     OfficialFeature {
         id: PROPERTIES_ID,
@@ -504,9 +524,11 @@ static OFFICIALS: &[OfficialFeature] = &[
     OfficialFeature {
         id: BASE_ID,
         name: "Base",
-        catalog: fub_format_base::embed_catalog,
+        catalog: base::catalog,
         view: None,
-        commands: None,
+        // Scrivere una chiave, aggiungere o togliere una vista: la toppa del
+        // testo sta in `fub-format-base`, il comando qui.
+        commands: Some(|| Box::new(BaseCommands)),
         index: Some(|| Box::new(BaseIndex::new())),
         syntax: Some(|| vec![Box::new(fub_format_base::BaseRule)]),
         renderers: Some(|| vec![Box::new(fub_format_base::BaseRenderer)]),
@@ -591,7 +613,7 @@ static OFFICIALS: &[OfficialFeature] = &[
         syntax: None,
         renderers: None,
         exports: None,
-        settings: None,
+        settings: Some(lavagna::settings),
         provides: &[],
         requires: &[],
         wiring: HostWiring::None,

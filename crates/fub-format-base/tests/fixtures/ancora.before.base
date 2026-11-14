@@ -1,0 +1,7 @@
+views:
+  - name: Tutte
+    type: table
+    order: &colonne [file.name]
+  - name: Liste
+    type: list
+    order: *colonne

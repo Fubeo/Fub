@@ -1,0 +1,34 @@
+{
+  "name": "text-with-file-field",
+  "description": "Conta il tipo: una scheda di testo con un campo file che nomina un'immagine resta ferma.",
+  "card": {
+    "type": "text",
+    "file": "Foto/lavagna.png"
+  },
+  "ref": {
+    "width": 200,
+    "height": 100
+  },
+  "size": {
+    "width": 400,
+    "height": 100
+  },
+  "expect": {
+    "mode": "fixed",
+    "s": 1,
+    "x": 0,
+    "y": 0,
+    "points": [
+      {
+        "from": [
+          50,
+          25
+        ],
+        "to": [
+          50,
+          25
+        ]
+      }
+    ]
+  }
+}

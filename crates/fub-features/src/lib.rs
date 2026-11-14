@@ -57,6 +57,11 @@
 //! - [`lavagna`] — la lavagna: il comando `canvas.apply`, che porta in un
 //!   file `.canvas` una lista di operazioni del nucleo (`fub-canvas-core`)
 //!   come una modifica sola, con anteprima e annulla.
+//! - [`tasks`] — i compiti del vault come
+//!   [`ViewProvider`](fub_abi::traits::ViewProvider): i compiti aperti di tutte
+//!   le note, raggruppati per scadenza, con la spunta che passa dal comando
+//!   `note.task.toggle`. Le note le trova `query_index`, dietro la feature
+//!   `tasks`, che accende `search`.
 //! - [`inventory`] — l'elenco delle feature qui sopra, e non una descrizione di
 //!   esso: è da qui che `fub_host::mount` le monta, quindi una feature fuori
 //!   dall'elenco semplicemente non c'è. Le view ne sono un sottoinsieme
@@ -105,6 +110,8 @@ pub mod search;
 pub mod stats;
 #[cfg(feature = "tags")]
 pub mod tags;
+#[cfg(feature = "tasks")]
+pub mod tasks;
 #[cfg(feature = "template")]
 pub mod template;
 #[cfg(feature = "trash")]
@@ -166,7 +173,7 @@ pub use properties::{
     PropertiesCommands, PropertiesView, GLOBAL_PROPERTIES_VIEW, NOTES_ALIAS_ADD,
     NOTES_PROPERTIES_CLEAR, NOTES_PROPERTY_REMOVE, NOTES_PROPERTY_SET, PROPERTIES_ID,
     PROPERTIES_STATUS_VIEW, PROPERTIES_VIEW, PROPERTY_KEYS_MIGRATE, PROPERTY_KEY_DELETE,
-    PROPERTY_KEY_RENAME, PROPERTY_TYPE_SET,
+    PROPERTY_KEY_RENAME, PROPERTY_OPTION_SET, PROPERTY_TYPES_RESTORE, PROPERTY_TYPE_SET,
 };
 #[cfg(feature = "queries")]
 pub use queries::{
@@ -182,6 +189,8 @@ pub use stats::{
 };
 #[cfg(feature = "tags")]
 pub use tags::{build_tags_view, TagCommands, TagPanelView, TAGS_ID, TAGS_VIEW, TAG_RENAME};
+#[cfg(feature = "tasks")]
+pub use tasks::{TasksView, TASKS_ID, TASKS_VIEW};
 #[cfg(feature = "template")]
 pub use template::{
     TemplateCommands, TemplateView, CLOCK_12, CLOCK_24, CLOCK_DATETIME, CLOCK_TIME,
