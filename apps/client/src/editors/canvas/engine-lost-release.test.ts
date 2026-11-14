@@ -318,3 +318,21 @@ describe("il gesto che perde il rilascio si chiude come un rilascio (T20a)", () 
     engine.destroy();
   });
 });
+
+describe("il menu radiale che la penna tiene si chiude col suo gesto (T20a)", () => {
+  for (const closing of [LOST_CAPTURE, NO_BUTTON, BLURRED]) {
+    it(`il tasto laterale della penna chiuso con ${closing.name} chiude il menu, e il rilascio che arriva dopo non sceglie niente`, () => {
+      const { engine, host } = mounted(BOARD);
+      const viewport = viewportOf(host);
+      const tool = engine.tool;
+      pointer(viewport, "pointerdown", { pointerId: 21, pointerType: "pen", button: 2, buttons: 2, pressure: 0.5, ...at(300, 300) });
+      expect(document.querySelector(".draw-radial")).not.toBeNull();
+      closing.close(viewport, 21, "pen", at(300, 300));
+      expect(document.querySelector(".draw-radial")).toBeNull();
+      pointer(viewport, "pointerup", { pointerId: 21, pointerType: "pen", button: 2, buttons: 0, pressure: 0, ...at(380, 300) });
+      expect(document.querySelector(".draw-radial")).toBeNull();
+      expect(engine.tool).toBe(tool);
+      engine.destroy();
+    });
+  }
+});

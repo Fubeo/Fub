@@ -9043,8 +9043,12 @@ export class CanvasEngine {
    */
   #gestureLost(event: PointerEvent): void {
     if (!this.#gestureOpen(event.pointerId)) return;
+    // Il menu radiale che il puntatore teneva si chiude con lui: senza rilascio
+    // non c'è una voce su cui si è alzato, e nessuna si sceglie.
+    const menu = this.#menuHeld === event.pointerId;
     this.#gestureEnd(event, true);
     this.#menuLet(event.pointerId);
+    if (menu) this.#radial?.close();
     if (this.#viewport.hasPointerCapture?.(event.pointerId)) this.#viewport.releasePointerCapture(event.pointerId);
   }
 
