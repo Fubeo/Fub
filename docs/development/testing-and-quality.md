@@ -249,7 +249,7 @@ npm run bench:giro -- --solo=avvio --luce=light       # un gruppo, nella luce gi
 ```
 
 Il corridore è `bench/giro.mjs`; i gruppi, in ordine, sono in
-`bench/giro/elenco.mjs`, uno per file accanto. Oggi c'è il gruppo `avvio`:
+`bench/giro/elenco.mjs`, uno per file accanto. Il gruppo `avvio` prova
 il primo avvio senza vault fino alla scrivania senza lo strato d'avvio,
 l'apertura del vault, una cartella e una nota dall'albero, un titolo, una lista
 e un grassetto scritti in Live, le quattro modalità sulla stessa nota (questo
