@@ -16,6 +16,14 @@ use quick_xml::events::{BytesStart, Event};
 
 use crate::RichError;
 
+/// Quanti elementi uno dentro l'altro si leggono, al più. La lettura del
+/// documento ricorre sull'albero (sezioni, elenchi, tabelle, testo), un
+/// livello di pila per livello di annidamento: senza tetto un `content.xml`
+/// ostile, con milioni di elementi annidati, esaurisce la pila e fa cadere il
+/// processo, che `catch_unwind` non ferma. LibreOffice non arriva a qualche
+/// decina di livelli; 256 lascia margine e sta in una pila di 2 MiB.
+pub(crate) const MAX_XML_DEPTH: usize = 256;
+
 /// L'indice di un nodo in [`Tree::nodes`].
 pub(crate) type NodeId = usize;
 
@@ -167,10 +175,12 @@ fn build(source: &[u8]) -> Result<Vec<Node>, RichError> {
         let end = position(&reader)?;
         match event {
             Event::Start(tag) => {
+                too_deep(&open)?;
                 let id = push_element(&mut nodes, &open, &tag, start..end)?;
                 open.push(id);
             }
             Event::Empty(tag) => {
+                too_deep(&open)?;
                 push_element(&mut nodes, &open, &tag, start..end)?;
             }
             Event::End(_) => {
@@ -210,6 +220,16 @@ fn build(source: &[u8]) -> Result<Vec<Node>, RichError> {
         return Err(RichError::Codec("xml: unclosed element".into()));
     }
     Ok(nodes)
+}
+
+/// Un elemento nuovo dentro `open` supererebbe [`MAX_XML_DEPTH`].
+fn too_deep(open: &[NodeId]) -> Result<(), RichError> {
+    if open.len() >= MAX_XML_DEPTH {
+        return Err(RichError::Codec(format!(
+            "xml: nesting deeper than {MAX_XML_DEPTH} elements"
+        )));
+    }
+    Ok(())
 }
 
 fn position(reader: &quick_xml::Reader<&[u8]>) -> Result<usize, RichError> {
@@ -351,6 +371,24 @@ mod tests {
                     Err(RichError::Codec(_))
                 ),
                 "{bad}"
+            );
+        }
+    }
+
+    #[test]
+    fn oltre_il_tetto_di_annidamento_è_un_errore_del_codec() {
+        let nested = |levels: usize| {
+            format!("{}{}", "<a>".repeat(levels), "</a>".repeat(levels)).into_bytes()
+        };
+        assert!(Tree::parse(nested(MAX_XML_DEPTH)).is_ok());
+        let empty_inside = format!(
+            "{}<b/>{}",
+            "<a>".repeat(MAX_XML_DEPTH),
+            "</a>".repeat(MAX_XML_DEPTH)
+        );
+        for bad in [nested(MAX_XML_DEPTH + 1), empty_inside.into_bytes()] {
+            assert!(
+                matches!(Tree::parse(bad), Err(RichError::Codec(why)) if why.contains("nesting")),
             );
         }
     }
