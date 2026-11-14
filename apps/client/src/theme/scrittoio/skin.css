@@ -5227,6 +5227,11 @@ kbd,
   width: min(100%, var(--content-width));
   margin-inline: auto;
 }
+/* Il riquadro di lettura riempie la carta, che taglia ciò che sborda: col
+   fuoco l'anello sta dentro, come sulle altre superfici a tutta carta. */
+.pane-preview:focus-visible {
+  outline-offset: calc(var(--focus-ring-width) * -2);
+}
 
 /* Il riquadro vuoto: una frase nel carattere del testo e i gesti per
    cominciare, sul piano. */
