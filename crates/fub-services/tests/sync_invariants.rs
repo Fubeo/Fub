@@ -729,6 +729,14 @@ fn an_admin_cannot_revoke_the_owner_or_a_peer() {
     join(&mut state, &owner, &admin, "admin");
     join(&mut state, &owner, &peer, "admin");
     join(&mut state, &admin, &writer, "writer");
+    // Un Admin non nomina un altro Admin, che poi non potrebbe togliere.
+    let (status, body) = call(
+        &mut state,
+        "/v1/sync/invite",
+        &admin,
+        serde_json::json!({ "vault_id": VAULT, "role": "admin" }),
+    );
+    assert_eq!(status, 403, "{body}");
     let revoke = |account: &str| serde_json::json!({ "vault_id": VAULT, "account_id": account });
 
     // L'ultimo Owner resta: né un Admin né l'Owner stesso lo tolgono.

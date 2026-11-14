@@ -43,6 +43,14 @@ pub(super) fn handle_invite(
     if let Err(r) = authorize(state, &resource, &account, Role::Admin) {
         return r;
     }
+    // Un Admin invita soltanto ruoli sotto il suo; l'Owner anche Admin.
+    let own = state
+        .acls
+        .get(&resource)
+        .and_then(|acl| acl.role_of(&account));
+    if !crate::acl::may_grant(own, req.role) {
+        return HttpResponse::err(403, "role too low");
+    }
     if let Err(r) = step_up_mfa(state, &account, req.code.as_deref()) {
         return r;
     }
