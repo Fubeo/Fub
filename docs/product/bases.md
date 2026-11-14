@@ -1,15 +1,17 @@
 # Basi (file `.base`)
 
 Una Base è un file `.base` che mostra le note del vault come tabella, schede,
-elenco, bacheca, mappa, calendario o linea del tempo. Il file è testo YAML che
-si legge e si scrive a mano: Fub lo cambia solo nelle righe che un comando
-tocca, e lascia il resto com'è.
+elenco, bacheca o mappa. Il calendario e la linea del tempo si leggono e si
+scrivono già nel file, ma la Base non li disegna ancora: arrivano con le
+prossime modifiche dell'editor (vedi sotto). Il file è testo YAML che si legge
+e si scrive a mano: Fub lo cambia solo nelle righe che un comando tocca, e lascia
+il resto com'è.
 
 ```mermaid
 flowchart LR
     NOTE["note del vault"] --> FILTRI["filtri e colonne"]
     FILE[".base"] --> FILTRI
-    FILTRI --> VISTA["vista: tabella, schede, elenco, bacheca, mappa, calendario, linea del tempo"]
+    FILTRI --> VISTA["vista: tabella, schede, elenco, bacheca, mappa"]
     COMANDO["comando base.view.*"] --> FILE
 ```
 
@@ -33,7 +35,9 @@ Le chiavi che Fub non conosce restano nel file e non vengono interpretate.
 Ogni voce di `views` ha una chiave `name` (obbligatoria, unica nel file) e una
 chiave `type`, che è una fra `table`, `cards`, `list`, `kanban`, `map`,
 `calendar` e `timeline`. Un `type` che Fub non conosce rende il file illeggibile
-come Base. Le altre chiavi sono facoltative:
+come Base. La Base disegna oggi le prime cinque: una vista `calendar` o
+`timeline` si mostra come un tipo che la Base non disegna (un errore sulla vista,
+con «Riprova»). Le altre chiavi sono facoltative:
 
 | Chiave | A che serve |
 |---|---|
@@ -49,10 +53,13 @@ come Base. Le altre chiavi sono facoltative:
 
 ## Calendario e linea del tempo
 
-Il calendario mostra le note nel giorno di una proprietà data. La linea del
-tempo mostra ogni nota come una barra fra la proprietà d'inizio e quella di
-fine, o come un punto se manca la fine. Tutte e due leggono le proprietà delle
-note, e le chiavi che dicono quali sono stanno nel blocco `fub:` della vista:
+Il calendario mostrerà le note nel giorno di una proprietà data. La linea del
+tempo mostrerà ogni nota come una barra fra la proprietà d'inizio e quella di
+fine, o come un punto se manca la fine. Oggi il file le legge e le scrive, e la
+valutazione dà il giorno di ogni nota, ma la superficie non le disegna: le
+disegnano i task T17 (calendario) e T34 (linea del tempo) del piano dell'editor.
+Tutte e due leggono le proprietà delle note, e le chiavi che dicono quali sono
+stanno nel blocco `fub:` della vista:
 
 | Chiave in `fub` | Vista | A che serve |
 |---|---|---|
