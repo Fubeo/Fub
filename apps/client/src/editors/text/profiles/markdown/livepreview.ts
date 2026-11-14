@@ -98,6 +98,7 @@ import { linkDialogOpener } from "./link-dialog";
 import { liveStrings } from "./strings";
 import { topChanges } from "./top-changes";
 import { bareUrl, linkCardGestures, linkCardsChanged, LinkCardWidget, type LinkCardSource } from "./link-card";
+import { markPresence } from "../../../core/presence";
 
 /// I varchi verso il resto dell'app: il modulo non importa `api.ts` né tocca
 /// lo stato — chi monta l'editor inietta cosa succede al click.
@@ -1236,6 +1237,7 @@ class InlineImageWidget extends WidgetType {
     root.addEventListener("markdown-resize", measure);
     const handle = document.createElement("span");
     handle.className = "cm-fub-image-handle";
+    markPresence(handle, "request");
     handle.setAttribute("aria-hidden", "true");
     handle.title = liveStrings.t("live.image.handle");
     root.append(handle);

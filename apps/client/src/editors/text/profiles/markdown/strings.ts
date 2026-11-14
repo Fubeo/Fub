@@ -6,7 +6,6 @@
 import { catalog, type Catalog } from "../../../../i18n/strings";
 
 const IT = {
-  "blocks.mode": "Blocchi",
   "blocks.kind.paragraph": "Testo",
   "blocks.kind.heading": "Titolo {level}",
   "blocks.kind.bullet": "Elenco puntato",
@@ -182,7 +181,6 @@ const IT = {
 } as const;
 
 const EN: Record<keyof typeof IT, string> = {
-  "blocks.mode": "Blocks",
   "blocks.kind.paragraph": "Text",
   "blocks.kind.heading": "Heading {level}",
   "blocks.kind.bullet": "Bulleted list",

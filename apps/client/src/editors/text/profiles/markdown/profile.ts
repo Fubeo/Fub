@@ -20,7 +20,6 @@ import { markdownPaste } from "./paste";
 import { openLinkKeymap } from "./open-link";
 import { markdownGrammar } from "./grammar";
 import { frontmatterRange } from "./render";
-import { liveReveal } from "../../live-reveal";
 import { blockIdMarks } from "./block-id";
 import { transformKeymap } from "./blocks/transform";
 import type { NoteFactsExtensions } from "./note-facts";
@@ -147,7 +146,7 @@ const frontmatter: Extension = [
 export interface MarkdownProfileOptions {
   readonly callbacks: LivePreviewCallbacks;
   readonly completions: CompletionSources;
-  /// La riga dei dati sotto il titolo: in Live e nei Blocchi (dove la mette
+  /// La riga dei dati sotto il titolo: in Scrittura (coi Blocchi la mette
   /// la testata), mai in Sorgente. Senza, la riga non c'è.
   readonly noteFacts?: NoteFactsExtensions;
 }
@@ -157,9 +156,9 @@ export interface MarkdownProfile {
   extensions(): Extension;
   /// Changes whether live-preview decorations are mounted on the next reconfigure.
   setLivePreview(on: boolean): void;
-  /// I Blocchi (H1): `null` spenti; altrimenti le loro estensioni, sopra la
-  /// Live, con la politica `mai` qualunque sia `editor.live-reveal`. Si
-  /// caricano a richiesta: fino ad allora `[]` tiene già la politica.
+  /// I Blocchi (H1), dentro Scrittura: `null` spenti; altrimenti le loro
+  /// estensioni, sopra la resa viva, con la rivelazione dei segni di
+  /// `editor.live-reveal` come il resto della resa.
   setBlocks(extension: Extension | null): void;
   /// Replaces the syntax declaration used by live preview on the next reconfigure.
   setSyntaxForms(forms: readonly SyntaxForm[]): void;
@@ -191,9 +190,11 @@ export function createMarkdownProfile(options: MarkdownProfileOptions): Markdown
         openLinkKeymap(options.callbacks),
         markdown({ base: markdownGrammar, codeLanguages: languages }),
         cursorElements,
-        // «Trasforma in» da tastiera (Mod-Alt-0…8) vale in Live e in Blocchi.
+        // «Trasforma in» da tastiera (Mod-Alt-0…8) vale in Scrittura.
         previewOn ? [livePreview(options.callbacks, syntaxForms), linkDialog(options.completions.searchNotes), blockIdMarks, Prec.high(keymap.of(transformKeymap))] : [],
-        previewOn && blocks !== null ? [Prec.highest(liveReveal.of("mai")), blocks] : [],
+        // I Blocchi stanno dentro Scrittura, sopra la resa viva; la
+        // rivelazione dei segni resta quella di `editor.live-reveal`.
+        previewOn && blocks !== null ? blocks : [],
         previewOn && options.noteFacts ? [options.noteFacts.field, blocks === null ? options.noteFacts.live : []] : [],
         markdownCompletions(options.completions),
         proof,

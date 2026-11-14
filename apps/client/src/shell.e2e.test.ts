@@ -333,7 +333,9 @@ const VAULT = {
 };
 
 function editorTexts(): string[] {
-  return [...document.querySelectorAll(".cm-content")].map((content) =>
+  // `.cm-scroller > `: il livello dei fantasmi dei Blocchi (`blocks/motion.ts`)
+  // porta la classe del contenuto, ma non è un editor.
+  return [...document.querySelectorAll(".cm-scroller > .cm-content")].map((content) =>
     [...content.querySelectorAll(".cm-line")].map((line) => line.textContent ?? "").join("\n"),
   );
 }
@@ -1424,7 +1426,7 @@ describe("apri un vault", () => {
         (button) => button.dataset.mode,
       );
 
-    expect(modes()).toEqual(["source", "live_preview", "blocks", "reading"]);
+    expect(modes()).toEqual(["source", "live_preview", "reading"]);
     // `start` rimonta i moduli dopo i mock: serve l'esemplare vivo del pannello,
     // non un import statico catturato prima di `vi.resetModules`.
     const { openDocument } = await import("./panels/document");
@@ -1446,7 +1448,7 @@ describe("apri un vault", () => {
     expect(document.querySelector<HTMLElement>(".pane.focus")?.dataset.mode).toBe("source");
     document.querySelector<HTMLElement>(".tab")?.click();
     await settle();
-    expect(modes()).toEqual(["source", "live_preview", "blocks", "reading"]);
+    expect(modes()).toEqual(["source", "live_preview", "reading"]);
     expect(
       document.querySelector<HTMLElement>(".pane.focus .pane-toolbar button[aria-pressed='true']")
         ?.dataset.mode,
@@ -3938,7 +3940,7 @@ describe("la modalità di ogni famiglia di superfici", () => {
     current.click();
     expect(current.getAttribute("aria-expanded")).toBe("true");
     const radios = [...document.querySelectorAll<HTMLElement>("#context-menu [role=menuitemradio]")];
-    expect(radios.map((item) => item.querySelector(".menu-label")?.textContent)).toEqual(["Live", "Blocchi", "Sorgente", "Lettura"]);
+    expect(radios.map((item) => item.querySelector(".menu-label")?.textContent)).toEqual(["Scrittura", "Sorgente", "Lettura"]);
     expect(radios.filter((item) => item.getAttribute("aria-checked") === "true")).toHaveLength(1);
     radios.find((item) => item.querySelector(".menu-label")?.textContent === "Sorgente")!.click();
     await settle();

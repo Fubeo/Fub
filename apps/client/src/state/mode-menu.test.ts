@@ -12,10 +12,12 @@ const fake = vi.hoisted(() => ({
 }));
 vi.mock("./document-controller", async () => {
   const layout = await import("./layout");
+  const { modeById } = await import("../editors/core/surface-modes");
   return {
     paneOf: (id: string) => fake.panes.get(id),
+    // Come il vero: anche un id di prima (`formerIds`) nomina la sua modalità.
     selectedMode: (r: { surface?: { modes: readonly SurfaceMode[] }; mode?: string } | undefined) =>
-      r?.surface?.modes.find((mode) => mode.id === r.mode) ?? r?.surface?.modes[0],
+      (r?.surface ? modeById(r.surface.modes, r.mode) : undefined) ?? r?.surface?.modes[0],
     setMode: async (mode: string) => {
       fake.calls.push([layout.layout.focus, mode]);
     },
@@ -88,10 +90,17 @@ afterEach(() => {
 });
 
 describe("l'ordine del menu delle modalità", () => {
-  it("Markdown: Live, Blocchi, Sorgente, poi la riga e Lettura", () => {
+  it("Markdown: Scrittura, Sorgente, poi la riga e Lettura (T3)", () => {
     paneWith(layout.focus, MARKDOWN_MODES);
-    expect(labels(layout.focus)).toEqual(["Live", "Blocchi", "Sorgente", "Lettura"]);
-    expect(separators(layout.focus)).toEqual([3]);
+    expect(labels(layout.focus)).toEqual(["Scrittura", "Sorgente", "Lettura"]);
+    expect(separators(layout.focus)).toEqual([2]);
+  });
+
+  it("un riquadro salvato nei Blocchi di prima segna Scrittura, e i Blocchi non sono una voce", () => {
+    paneWith(layout.focus, MARKDOWN_MODES, "blocks");
+    const items = modeMenuItems(layout.focus);
+    expect(items.map((item) => item.label)).toEqual(["Scrittura", "Sorgente", "Lettura"]);
+    expect(items.filter((item) => item.checked).map((item) => item.label)).toEqual(["Scrittura"]);
   });
 
   it("SVG: Diviso, Sorgente, la riga, Anteprima", () => {
@@ -116,7 +125,7 @@ describe("l'ordine del menu delle modalità", () => {
 
   it("senza lettura non c'è la riga", () => {
     paneWith(layout.focus, MARKDOWN_MODES.filter((mode) => mode.contextMode !== "reading"));
-    expect(labels(layout.focus)).toEqual(["Live", "Blocchi", "Sorgente"]);
+    expect(labels(layout.focus)).toEqual(["Scrittura", "Sorgente"]);
     expect(separators(layout.focus)).toEqual([]);
   });
 
@@ -127,18 +136,18 @@ describe("l'ordine del menu delle modalità", () => {
   });
 
   it("la voce accesa è scelta e segnata, le altre no; ognuna è una scelta fra alternative", () => {
-    paneWith(layout.focus, MARKDOWN_MODES, "blocks");
+    paneWith(layout.focus, MARKDOWN_MODES, "source");
     const items = modeMenuItems(layout.focus);
     expect(items.every((item) => item.choice === "radio")).toBe(true);
-    expect(items.filter((item) => item.checked).map((item) => item.label)).toEqual(["Blocchi"]);
-    expect(items.filter((item) => item.selected).map((item) => item.label)).toEqual(["Blocchi"]);
+    expect(items.filter((item) => item.checked).map((item) => item.label)).toEqual(["Sorgente"]);
+    expect(items.filter((item) => item.selected).map((item) => item.label)).toEqual(["Sorgente"]);
   });
 });
 
 describe("le icone delle modalità", () => {
   it("le dichiarate, e per le altre quella del ruolo", () => {
     paneWith(layout.focus, MARKDOWN_MODES);
-    expect(modeMenuItems(layout.focus).map((item) => item.icon)).toEqual(["pen", "blocks", "code", "eye"]);
+    expect(modeMenuItems(layout.focus).map((item) => item.icon)).toEqual(["pen", "code", "eye"]);
     paneWith(layout.focus, VECTOR_MODES);
     expect(modeMenuItems(layout.focus).map((item) => item.icon)).toEqual(["pen", "eye"]);
   });
@@ -193,10 +202,10 @@ describe("le icone delle modalità", () => {
 });
 
 describe("le scorciatoie delle modalità", () => {
-  it("sono quelle dei comandi: Blocchi e Lettura hanno un tasto, Live e Sorgente no", () => {
+  it("sono quelle dei comandi: Lettura ha un tasto, Scrittura e Sorgente no", () => {
     paneWith(layout.focus, MARKDOWN_MODES);
     const hints = Object.fromEntries(modeMenuItems(layout.focus).map((item) => [item.label, item.hint]));
-    expect(hints).toEqual({ Live: undefined, Blocchi: "Ctrl+Shift+B", Sorgente: undefined, Lettura: "Ctrl+E" });
+    expect(hints).toEqual({ Scrittura: undefined, Sorgente: undefined, Lettura: "Ctrl+E" });
   });
 
   it("una scorciatoia cambiata dalla persona compare al posto della dichiarata", async () => {
@@ -204,7 +213,7 @@ describe("le scorciatoie delle modalità", () => {
     await loadKeyOverrides();
     paneWith(layout.focus, MARKDOWN_MODES);
     const hints = Object.fromEntries(modeMenuItems(layout.focus).map((item) => [item.label, item.hint]));
-    expect(hints).toEqual({ Live: undefined, Blocchi: "Ctrl+Shift+B", Sorgente: "Ctrl+Alt+S", Lettura: undefined });
+    expect(hints).toEqual({ Scrittura: undefined, Sorgente: "Ctrl+Alt+S", Lettura: undefined });
   });
 
   it("del documento solo la prima scrittura porta il tasto della Live", async () => {

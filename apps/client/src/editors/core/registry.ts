@@ -47,6 +47,13 @@ export interface SurfaceMode {
    * know the name, the mode takes the figure of its role (`state/mode-menu.ts`).
    */
   readonly icon?: string;
+  /**
+   * Ids this mode answers to besides its own: modes the surface no longer
+   * declares because they merged into this one (the Markdown `blocks`, now
+   * inside Scrittura). A saved pane or a command that names one gets this
+   * mode; the menu never lists them.
+   */
+  readonly formerIds?: readonly string[];
 }
 
 export interface SurfaceMountContext {

@@ -16,7 +16,7 @@ import { isFolderPage, pageName, taskChecked } from "../../../../rules/mirrored"
 import { onLanguage, t } from "../../../../i18n/strings";
 import type { NoteFacts, NoteFactsSource } from "../../../../state/note-facts";
 import { noteFactsChanged, noteFactsExtensions, noteFactsLabels, renderNoteFacts } from "./note-facts";
-import { liveStrings } from "./strings";
+import { blocksMode } from "./blocks";
 import { pageIconsChanged } from "./livepreview";
 import { linkCardsChanged, type LinkCardSource } from "./link-card";
 import { mountMarkdown, sourceElementAt, type MarkdownMountOptions } from "./mount";
@@ -39,6 +39,7 @@ import type {
   SurfaceReference,
   SurfaceScrollLink,
 } from "../../../core/registry";
+import { modeById } from "../../../core/surface-modes";
 import type { EditorChange } from "../../../core/text-operation";
 import { createTextEngine } from "../../engine";
 import type { CompletionSources } from "./completions";
@@ -101,18 +102,25 @@ const CODE_LANGUAGES: readonly (readonly [string, string])[] = [
 /// testo, «Originale» toglie la misura.
 const IMAGE_WIDTHS = { small: 240, medium: 480 } as const;
 
-/// Le quattro viste esclusive sullo stesso buffer. `source`, `live_preview`
-/// e `blocks` scrivono nella stessa vista; `reading` la nasconde e mostra il
-/// reso. I Blocchi sono la Live con maniglie, menu e trascinamento: per i
-/// comandi della shell hanno il ruolo della Live.
-export type MarkdownMode = "source" | "live_preview" | "blocks" | "reading";
+/// Le tre viste esclusive sullo stesso buffer (D1 A, E1). `live_preview` è
+/// **Scrittura**: la resa viva con dentro i Blocchi (maniglie, testata,
+/// selezione di blocchi); `source` è il Markdown com'è sul disco; le due
+/// scrivono nella stessa vista. `reading` la nasconde e mostra il reso.
+export type MarkdownMode = "source" | "live_preview" | "reading";
 
+/// `blocks`, la modalità Blocchi di prima, è confluita in Scrittura: un
+/// riquadro salvato lì o un comando che la nomina ottiene Scrittura.
 export const MARKDOWN_MODES: readonly SurfaceMode[] = [
   { id: "source", label: () => t("mode.source"), presentation: "surface", contextMode: "source", looks: ["tema"] },
-  { id: "live_preview", label: () => t("mode.live"), presentation: "surface", contextMode: "live_preview", looks: ["tema"] },
-  { id: "blocks", label: () => liveStrings.t("blocks.mode"), presentation: "surface", contextMode: "live_preview", looks: ["tema"], icon: "blocks" },
+  { id: "live_preview", label: () => t("mode.live"), presentation: "surface", contextMode: "live_preview", looks: ["tema"], formerIds: ["blocks"] },
   { id: "reading", label: () => t("mode.reading"), presentation: "rendered", contextMode: "reading", looks: ["tema"] },
 ];
+
+/// La modalità che `requested` nomina, o quella in cui è confluita; `null`
+/// se la nota non la conosce.
+export function markdownModeOf(requested: string): MarkdownMode | null {
+  return (modeById(MARKDOWN_MODES, requested)?.id as MarkdownMode | undefined) ?? null;
+}
 
 /// Un file come lo nomina la nota (un percorso o un wikilink), o come lo sa
 /// già il vault (`vault`, l'id della resa).
@@ -248,10 +256,6 @@ let proofModule: typeof import("./proof") | null = null;
 const FOLLOW_QUIET_MS = 150;
 const STRICT_LINE_BREAKS_KEY = "editor.strict-line-breaks";
 const RTL_KEY = "editor.rtl";
-
-function isMarkdownMode(mode: string): mode is MarkdownMode {
-  return MARKDOWN_MODES.some((candidate) => candidate.id === mode);
-}
 
 /// I titoli della pagina, fuori dai blocchi di codice: l'anteprima
 /// dell'Indice nel «/» mostra questi.
@@ -479,6 +483,25 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
     profile.setProof(mounted.extension);
   };
   if (proofModule) installProof(proofModule);
+
+  // I Blocchi sono dentro Scrittura, la modalità in cui la nota si apre:
+  // si montano con l'editor, non dopo, perché testata e maniglie ci siano
+  // dal primo disegno e nessun secondo `reconfigure` sposti il testo.
+  const blocksExtension: Extension = blocksMode({
+    page: () => pageName(resources?.documentId ?? documentId),
+    notify: (message, tone) => notify(message, tone),
+    folderPage: () => isFolderPage(resources?.documentId ?? documentId),
+    rename: opts.onRenamePage
+      ? (name) => opts.onRenamePage!(resources?.documentId ?? documentId, name)
+      : undefined,
+    // L'immagine della Live ha il menu della superficie, con la
+    // larghezza e «Sostituisci»: la resa non apre il suo.
+    mountImage: (root, html) => mountMarkdown(root, html, { ...renderedOptions(), imageMenu: false }),
+    subpage: opts.onNewSubpage
+      ? (name) => opts.onNewSubpage!(resources?.documentId ?? documentId, name)
+      : undefined,
+  });
+  presentation(mode);
 
   const engine = createTextEngine(parent, {
     onChange: (change) => {
@@ -755,40 +778,10 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
     if (anchor) scrollReadingTo(anchor.from, anchor.top);
   }
 
-  // I Blocchi stanno in un pezzo a parte, caricato la prima volta che
-  // servono: chi non li usa non lo paga. Finché arriva, la Live con la
-  // politica `mai`; poi si rimonta con le loro estensioni.
-  let blocksExtension: Extension | null = null;
-  let blocksLoading = false;
+  // Scrittura monta i Blocchi con la resa viva; Sorgente e Lettura no.
   function presentation(next: MarkdownMode): void {
-    profile.setLivePreview(next === "live_preview" || next === "blocks");
-    profile.setBlocks(next === "blocks" ? (blocksExtension ?? []) : null);
-    if (next !== "blocks" || blocksExtension || blocksLoading) return;
-    blocksLoading = true;
-    void import("./blocks").then(
-      ({ blocksMode }) => {
-        blocksLoading = false;
-        if (life.closed) return;
-        blocksExtension = blocksMode({
-          page: () => pageName(resources?.documentId ?? documentId),
-          notify: (message, tone) => notify(message, tone),
-          folderPage: () => isFolderPage(resources?.documentId ?? documentId),
-          rename: opts.onRenamePage
-            ? (name) => opts.onRenamePage!(resources?.documentId ?? documentId, name)
-            : undefined,
-          // L'immagine della Live ha il menu della superficie, con la
-          // larghezza e «Sostituisci»: la resa non apre il suo.
-          mountImage: (root, html) => mountMarkdown(root, html, { ...renderedOptions(), imageMenu: false }),
-          subpage: opts.onNewSubpage
-            ? (name) => opts.onNewSubpage!(resources?.documentId ?? documentId, name)
-            : undefined,
-        });
-        if (mode !== "blocks") return;
-        profile.setBlocks(blocksExtension);
-        engine.reconfigure();
-      },
-      () => { blocksLoading = false; },
-    );
+    profile.setLivePreview(next === "live_preview");
+    profile.setBlocks(next === "live_preview" ? blocksExtension : null);
   }
 
   /// Il blocco della Lettura su cui si è aperto l'ultimo menu: in Lettura è
@@ -1558,8 +1551,9 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
     // scelte, non il punto di partenza.
     defaultMode: "live_preview",
     setMode(next) {
-      if (!isMarkdownMode(next)) throw new RangeError(`surface mode ${next} is not supported`);
-      setMode(next);
+      const known = markdownModeOf(next);
+      if (known === null) throw new RangeError(`surface mode ${next} is not supported`);
+      setMode(known);
       actionsChanged();
     },
     buffer: {

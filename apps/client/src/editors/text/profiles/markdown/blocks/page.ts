@@ -18,6 +18,7 @@ import { imageHtml } from "../render-inline";
 import { liveStrings } from "../strings";
 import { blocksOptions, type BlocksOptions } from "./handles";
 import { noteFactsElement, noteFactsOf, sameLabels, type NoteFactsLabels } from "../note-facts";
+import { markPresence } from "../../../../core/presence";
 
 /// Le classi della pagina che il menu «…» scrive in `cssclasses`; il tema le
 /// applica al riquadro (`fub-note--*`). Le altre classi della nota restano.
@@ -146,6 +147,7 @@ class PageHeaderWidget extends WidgetType {
 
     const tools = document.createElement("div");
     tools.className = "cm-fub-page-tools";
+    markPresence(tools, "hover");
     const tool = (label: string, run: (button: HTMLButtonElement) => void): HTMLButtonElement => {
       const button = document.createElement("button");
       button.type = "button";
