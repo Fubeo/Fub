@@ -10,6 +10,7 @@
 
 import { isErrorKind } from "../host/errors";
 import type { Origin } from "../host/contract";
+import type { Key } from "../i18n/strings";
 
 /// L'esito dell'ultima scrittura di un buffer.
 ///
@@ -62,6 +63,22 @@ export function stateOf(buf: { dirty: boolean; result: Outcome } | undefined): S
   if (buf.result === "in_corso") return "in_corso";
   return buf.dirty ? "non_salvato" : "salvato";
 }
+
+/// La parola che dice uno stato del salvataggio: la stessa nella testata di un
+/// riquadro (`#save-state`) e nella riga del titolo di una scheda della
+/// lavagna che scrive nel documento (N6 T96), perché le due dicano la stessa
+/// cosa della stessa sessione.
+export function saveStateKey(state: SaveState): Key {
+  return SAVE_STATE_KEY[state];
+}
+
+const SAVE_STATE_KEY = {
+  "salvato": "save.saved",
+  "in_corso": "save.saving",
+  "non_salvato": "save.unsaved",
+  "fallito": "save.failed",
+  "conflitto": "save.conflitto",
+} as const satisfies Record<SaveState, Key>;
 
 /// **Che specie di fallimento è questo**, e quindi cosa se ne fa chi salva.
 ///

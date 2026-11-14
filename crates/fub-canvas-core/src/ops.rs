@@ -28,9 +28,16 @@ use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::{Map, Value};
 use thiserror::Error;
 
-use crate::ink::{InkLayer, InkStroke, LayerRef, StrokeState, INK_KEY};
+use fub_ink_codec::brush::InkBrush;
+use fub_ink_codec::ink::{round_half_up, Ink};
+
+use crate::ink::{
+    DrawnStroke, InkAnchor, InkLayer, InkStroke, LayerRef, StrokeState, INK_KEY, INK_MAX_BYTES,
+};
+use crate::js::js_number;
 use crate::model::{
-    Canvas, CanvasEdge, CanvasError, CanvasNode, MAX_EDGES, MAX_NODES, MAX_SAFE_INTEGER,
+    Canvas, CanvasEdge, CanvasError, CanvasNode, CanvasNodeType, MAX_EDGES, MAX_NODES,
+    MAX_SAFE_INTEGER,
 };
 use crate::patch::{self, upsert_edge_patch, upsert_node_patch, CanvasPatch, Null};
 
@@ -85,6 +92,35 @@ pub enum CanvasOp {
     },
     /// Cancella dal livello `layer` i tratti `ids`.
     EraseStrokes { layer: LayerRef, ids: Vec<String> },
+    /// Sposta i tratti `ids` del livello `layer` di `dx`, `dy` in unità della
+    /// lavagna. Con `to` diverso da `layer` i tratti passano a quel livello:
+    /// i punti si riportano nelle unità della nuova ancora (`card` alla
+    /// misura di adesso della scheda, o `free` sulla radice). `aspect` è la
+    /// proporzione del contenuto che la scheda di `layer` mostra, se il
+    /// client la sa (T39, T98): non si scrive nel file.
+    MoveStrokes {
+        layer: LayerRef,
+        ids: Vec<String>,
+        dx: f64,
+        dy: f64,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        to: Option<LayerRef>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        aspect: Option<f64>,
+    },
+    /// Cambia il colore (`#rrggbb`) e lo spessore del pennello (`size`, in
+    /// unità della lavagna) dei tratti `ids` del livello `layer`. `aspect`
+    /// come in `MoveStrokes`.
+    RestyleStrokes {
+        layer: LayerRef,
+        ids: Vec<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        color: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        size: Option<f64>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        aspect: Option<f64>,
+    },
 }
 
 /// Il risultato di [`compile`]: le toppe e gli id creati.
@@ -94,7 +130,8 @@ pub struct Compiled {
     pub patches: Vec<CanvasPatch>,
     /// Gli id di ogni scheda, arco e tratto aggiunti (`add_card`,
     /// `connect`, `add_strokes`), dati o generati, nell'ordine delle
-    /// operazioni.
+    /// operazioni; e quelli nuovi dei tratti che `move_strokes` porta in un
+    /// livello dove il loro id era già preso.
     pub created: Vec<String>,
 }
 
@@ -125,7 +162,8 @@ pub enum OpError {
     /// può fare così com'è (un campo vietato, un id ambiguo).
     #[error("canvas op {index}: {reason}")]
     Invalid { index: usize, reason: String },
-    /// `erase_strokes` di un id che non è un tratto del livello.
+    /// `erase_strokes`, `move_strokes` o `restyle_strokes` di un id che non è
+    /// un tratto del livello.
     #[error("canvas op {index}: there is no ink stroke {id:?} in the layer")]
     UnknownStroke { index: usize, id: String },
     /// Il livello d'inchiostro è estraneo: Fub non ci scrive.
@@ -236,6 +274,21 @@ impl Compiler {
             CanvasOp::Reorder { ids } => self.reorder(index, ids)?,
             CanvasOp::AddStrokes { layer, strokes } => self.add_strokes(index, layer, strokes)?,
             CanvasOp::EraseStrokes { layer, ids } => self.erase_strokes(index, layer, ids)?,
+            CanvasOp::MoveStrokes {
+                layer,
+                ids,
+                dx,
+                dy,
+                to,
+                aspect,
+            } => self.move_strokes(index, layer, ids, (*dx, *dy), to.as_ref(), *aspect)?,
+            CanvasOp::RestyleStrokes {
+                layer,
+                ids,
+                color,
+                size,
+                aspect,
+            } => self.restyle_strokes(index, layer, ids, (color.as_deref(), *size), *aspect)?,
         };
         if patches.is_empty() {
             return Ok(());
@@ -710,6 +763,235 @@ impl Compiler {
         Ok(patches)
     }
 
+    /// Dove si disegna il livello `layer`: la scheda che lo tiene (il suo
+    /// angolo e la misura dei suoi tratti) o la lavagna.
+    fn frame(&self, index: usize, layer: &LayerRef) -> Result<Frame, OpError> {
+        match layer {
+            LayerRef::Board => Ok(Frame::Board),
+            LayerRef::Node(id) => Ok(Frame::Card(Box::new(self.node(index, id)?.clone()))),
+        }
+    }
+
+    /// I tratti `ids` del livello, nell'ordine dato, ognuno con la sua
+    /// posizione e il suo disegno. Un id che non c'è è `UnknownStroke`, uno
+    /// ripetuto `DuplicateId`; un tratto che non si disegna si conserva com'è
+    /// (`Invalid`).
+    fn drawn_strokes(
+        &self,
+        index: usize,
+        layer: &LayerRef,
+        ids: &[String],
+    ) -> Result<(InkLayer, Vec<(usize, DrawnStroke)>), OpError> {
+        distinct(index, ids)?;
+        let ink = self.ink_layer(index, layer)?;
+        let mut found = Vec::with_capacity(ids.len());
+        for id in ids {
+            let at = ink
+                .strokes
+                .iter()
+                .position(|stroke| stroke.id == *id)
+                .ok_or_else(|| OpError::UnknownStroke {
+                    index,
+                    id: id.clone(),
+                })?;
+            let StrokeState::Drawn(drawn) = ink.strokes[at].state(layer) else {
+                return Err(OpError::Invalid {
+                    index,
+                    reason: format!("stroke {id:?} is not drawn, and Fub keeps it as it is"),
+                });
+            };
+            found.push((at, *drawn));
+        }
+        Ok((ink, found))
+    }
+
+    /// Sposta i tratti `ids` di `delta` (unità della lavagna). Nello stesso
+    /// livello cambia solo `ink`, una toppa per tratto al suo posto. In un
+    /// altro livello (`to`) li toglie da `layer` come `erase_strokes`, poi li
+    /// aggiunge in fondo a `to` nell'ordine dato, con l'ancora nuova; un id
+    /// che `to` ha già ne prende uno nuovo dal seme. `aspect` è la
+    /// proporzione del contenuto della scheda di `layer` (`ink_fit`).
+    fn move_strokes(
+        &mut self,
+        index: usize,
+        layer: &LayerRef,
+        ids: &[String],
+        delta: (f64, f64),
+        to: Option<&LayerRef>,
+        aspect: Option<f64>,
+    ) -> Result<Vec<CanvasPatch>, OpError> {
+        if !(delta.0.is_finite() && delta.1.is_finite()) {
+            return Err(OpError::Invalid {
+                index,
+                reason: "`dx` and `dy` must be finite numbers".to_owned(),
+            });
+        }
+        let (ink, found) = self.drawn_strokes(index, layer, ids)?;
+        let source = self.frame(index, layer)?;
+        let Some(target_ref) = to.filter(|to| *to != layer) else {
+            let mut patches = Vec::with_capacity(found.len());
+            for (at, drawn) in found {
+                let before = &ink.strokes[at];
+                let fit = source.fit(&drawn.anchor, aspect);
+                if fit.s <= 0.0 {
+                    return Err(hidden(index, &before.id));
+                }
+                let moved = shifted(&drawn.ink, 1.0, (delta.0 / fit.s, delta.1 / fit.s))
+                    .map_err(|reason| stroke_error(index, &before.id, &reason))?;
+                let mut after = before.clone();
+                after.ink = Some(Value::String(moved));
+                patches.push(CanvasPatch::Ink {
+                    layer: layer.clone(),
+                    at,
+                    before: Some(before.clone()),
+                    after: Some(after),
+                });
+            }
+            return Ok(patches);
+        };
+        let target_ink = self.ink_layer(index, target_ref)?;
+        let (anchor, origin) = match self.frame(index, target_ref)? {
+            Frame::Board => (InkAnchor::Free, (0.0, 0.0)),
+            Frame::Card(node) => (InkAnchor::card_of(&node), corner(&node)),
+        };
+        let start = source.corner();
+        let mut taken: HashSet<String> = target_ink.strokes.iter().map(|s| s.id.clone()).collect();
+        let mut remaining = ink.strokes;
+        let mut patches = Vec::with_capacity(found.len() * 2);
+        let mut additions = Vec::with_capacity(found.len());
+        // Ogni tratto entra in fondo a `to`, dopo quelli che ha già.
+        for (end, (id, (_, drawn))) in (target_ink.strokes.len()..).zip(ids.iter().zip(found)) {
+            let at = remaining
+                .iter()
+                .position(|stroke| stroke.id == *id)
+                .ok_or_else(|| OpError::UnknownStroke {
+                    index,
+                    id: id.clone(),
+                })?;
+            let before = remaining.remove(at);
+            let fit = source.fit(&drawn.anchor, aspect);
+            if fit.s <= 0.0 {
+                return Err(hidden(index, id));
+            }
+            // Il punto `p` dell'ancora vecchia sta sulla lavagna in
+            // `angolo + fit + s·p`; nella nuova ancora, meno il suo angolo.
+            let offset = (
+                start.0 + fit.x + delta.0 - origin.0,
+                start.1 + fit.y + delta.1 - origin.1,
+            );
+            let moved = shifted(&drawn.ink, fit.s, offset)
+                .map_err(|reason| stroke_error(index, id, &reason))?;
+            let mut after = before.clone();
+            after.ink = Some(Value::String(moved));
+            after.anchor = Some(anchor.to_value());
+            if fit.s != 1.0 {
+                // Lo spessore segue i punti: il tratto si vede uguale.
+                let brush = before.brush.as_ref().and_then(Value::as_str).unwrap_or("");
+                let size = brush_size(&drawn.brush) * fit.s;
+                let resized = resized_brush(brush, size)
+                    .map_err(|reason| stroke_error(index, id, &reason))?;
+                after.brush = Some(Value::String(resized));
+            }
+            if taken.contains(&after.id) {
+                let fresh = loop {
+                    let fresh = self.ids.next_id();
+                    if !taken.contains(&fresh) {
+                        break fresh;
+                    }
+                };
+                after.id = fresh.clone();
+                self.created.push(fresh);
+            }
+            if !after.state(target_ref).is_drawn() {
+                return Err(OpError::Invalid {
+                    index,
+                    reason: format!("stroke {id:?} cannot be drawn in the new layer"),
+                });
+            }
+            taken.insert(after.id.clone());
+            patches.push(CanvasPatch::Ink {
+                layer: layer.clone(),
+                at,
+                before: Some(before),
+                after: None,
+            });
+            additions.push(CanvasPatch::Ink {
+                layer: target_ref.clone(),
+                at: end,
+                before: None,
+                after: Some(after),
+            });
+        }
+        patches.extend(additions);
+        Ok(patches)
+    }
+
+    /// Cambia colore e spessore dei tratti `ids`, una toppa per tratto al
+    /// suo posto; un tratto che resta uguale non ne ha. Lo spessore è in
+    /// unità della lavagna: sul tratto di una scheda `scale` si divide per il
+    /// suo fattore (con la proporzione del contenuto `aspect`, se c'è), così
+    /// si vede come è chiesto.
+    fn restyle_strokes(
+        &mut self,
+        index: usize,
+        layer: &LayerRef,
+        ids: &[String],
+        (color, size): (Option<&str>, Option<f64>),
+        aspect: Option<f64>,
+    ) -> Result<Vec<CanvasPatch>, OpError> {
+        if color.is_none() && size.is_none() {
+            return Err(OpError::Invalid {
+                index,
+                reason: "`restyle_strokes` needs `color` or `size`".to_owned(),
+            });
+        }
+        if let Some(color) = color {
+            let digits = color.strip_prefix('#').unwrap_or("");
+            if digits.len() != 6 || !digits.bytes().all(|b| b.is_ascii_hexdigit()) {
+                return Err(OpError::Invalid {
+                    index,
+                    reason: "`color` must be #rrggbb".to_owned(),
+                });
+            }
+        }
+        if size.is_some_and(|size| !(size.is_finite() && size > 0.0)) {
+            return Err(OpError::Invalid {
+                index,
+                reason: "`size` must be a finite number greater than zero".to_owned(),
+            });
+        }
+        let (ink, found) = self.drawn_strokes(index, layer, ids)?;
+        let frame = self.frame(index, layer)?;
+        let mut patches = Vec::with_capacity(found.len());
+        for (at, drawn) in found {
+            let before = &ink.strokes[at];
+            let mut after = before.clone();
+            if let Some(color) = color {
+                after.color = Some(Value::String(color.to_owned()));
+            }
+            if let Some(size) = size {
+                let fit = frame.fit(&drawn.anchor, aspect);
+                if fit.s <= 0.0 {
+                    return Err(hidden(index, &before.id));
+                }
+                let brush = before.brush.as_ref().and_then(Value::as_str).unwrap_or("");
+                let resized = resized_brush(brush, size / fit.s)
+                    .map_err(|reason| stroke_error(index, &before.id, &reason))?;
+                after.brush = Some(Value::String(resized));
+            }
+            if patch::same_stroke(before, &after) {
+                continue;
+            }
+            patches.push(CanvasPatch::Ink {
+                layer: layer.clone(),
+                at,
+                before: Some(before.clone()),
+                after: Some(after),
+            });
+        }
+        Ok(patches)
+    }
+
     /// Un arco va bene se le sue schede ci sono e se passa le regole del
     /// modello.
     fn check_edge(&self, index: usize, edge: &CanvasEdge) -> Result<(), OpError> {
@@ -724,6 +1006,250 @@ impl Compiler {
             extra: Map::new(),
         };
         alone.validate().map_err(|error| invalid(index, &error))
+    }
+}
+
+/// Dove si disegna un livello: la radice, o la scheda che lo tiene.
+enum Frame {
+    Board,
+    Card(Box<CanvasNode>),
+}
+
+impl Frame {
+    /// L'angolo in alto a sinistra, in unità della lavagna.
+    fn corner(&self) -> (f64, f64) {
+        match self {
+            Frame::Board => (0.0, 0.0),
+            Frame::Card(node) => corner(node),
+        }
+    }
+
+    /// Come la resa porta un tratto con l'ancora `anchor` sulla lavagna:
+    /// sulla radice com'è; su una scheda come dice «La misura della scheda»
+    /// di `docs/reference/canvas-ink.md`. Un tratto con l'ancora di pagina o
+    /// di cella non ha una misura qui: dove la pagina o la cella sta nella
+    /// scheda lo sa solo la resa, e il nucleo non sposta né ridimensiona quel
+    /// tratto (`hidden`). `aspect` è la proporzione del contenuto che la
+    /// scheda mostra, se il client la sa.
+    fn fit(&self, anchor: &InkAnchor, aspect: Option<f64>) -> Fit {
+        match (self, anchor) {
+            (Frame::Card(node), InkAnchor::Card { width, height }) => {
+                ink_fit(node, *width, *height, aspect)
+            }
+            (_, InkAnchor::Page { .. } | InkAnchor::Cell { .. }) => Fit::HIDDEN,
+            _ => Fit::IDENTITY,
+        }
+    }
+}
+
+/// Da unità dell'ancora a unità della scheda di adesso: il punto `(px, py)`
+/// va a `(x + s·px, y + s·py)`.
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct Fit {
+    s: f64,
+    x: f64,
+    y: f64,
+}
+
+impl Fit {
+    const IDENTITY: Fit = Fit {
+        s: 1.0,
+        x: 0.0,
+        y: 0.0,
+    };
+    const HIDDEN: Fit = Fit {
+        s: 0.0,
+        x: 0.0,
+        y: 0.0,
+    };
+}
+
+#[allow(clippy::cast_precision_loss)]
+fn corner(node: &CanvasNode) -> (f64, f64) {
+    // Coordinate intere entro ±(2^53−1): il cast è esatto.
+    (node.x as f64, node.y as f64)
+}
+
+/// Le estensioni delle schede `scale` (`canvas-ink.md`, «La misura della
+/// scheda»): le immagini e il PDF.
+const SCALED_EXTENSIONS: [&str; 13] = [
+    "png", "jpg", "jpeg", "gif", "webp", "svg", "bmp", "ico", "avif", "heic", "tif", "tiff", "pdf",
+];
+
+/// Il modo `scale`: una scheda `file` il cui file, per l'estensione (senza
+/// distinguere maiuscole), è un'immagine o un PDF. È la regola di
+/// `inkFitMode` del client, con gli stessi vettori (`canvas-ink-fit/`).
+fn scales(node: &CanvasNode) -> bool {
+    if node.node_type != CanvasNodeType::File {
+        return false;
+    }
+    let Some(file) = node.file.as_deref() else {
+        return false;
+    };
+    let base = file.rsplit('/').next().unwrap_or("");
+    let Some((stem, extension)) = base.rsplit_once('.') else {
+        return false;
+    };
+    // `.png` da solo è un nome nascosto senza estensione.
+    if stem.is_empty() {
+        return false;
+    }
+    let extension = extension.to_ascii_lowercase();
+    SCALED_EXTENSIONS.contains(&extension.as_str())
+}
+
+/// La regola `inkFit` del client: con `scale` lo stesso fattore nei due
+/// sensi, il minore, centrato; con `fixed` il tratto resta com'è. Con una
+/// proporzione del contenuto `aspect` che vale (finita e maggiore di zero) il
+/// riquadro del contenuto nella misura `ref` va sul riquadro del contenuto
+/// nella misura di adesso (`content_box`); senza, o con una che non vale, la
+/// regola di N4. Mai `NaN`. Gli stessi vettori del client:
+/// `canvas-ink-fit/` e `canvas-ink-fit-aspect/`.
+#[allow(clippy::cast_precision_loss)]
+fn ink_fit(node: &CanvasNode, ref_width: f64, ref_height: f64, aspect: Option<f64>) -> Fit {
+    if !scales(node) {
+        return Fit::IDENTITY;
+    }
+    let (w, h) = (node.width as f64, node.height as f64);
+    if !(ref_width.is_finite() && ref_height.is_finite() && ref_width > 0.0 && ref_height > 0.0) {
+        return Fit::HIDDEN;
+    }
+    if !(w.is_finite() && h.is_finite() && w >= 0.0 && h >= 0.0) {
+        return Fit::HIDDEN;
+    }
+    if let Some(aspect) = aspect.filter(|aspect| aspect.is_finite() && *aspect > 0.0) {
+        let from = content_box((ref_width, ref_height), aspect);
+        let to = content_box((w, h), aspect);
+        let (Some(from), Some(to)) = (from, to) else {
+            return Fit::HIDDEN;
+        };
+        // `content_box` dà misure finite: qui zero è l'unico caso.
+        if from.2 <= 0.0 {
+            return Fit::HIDDEN;
+        }
+        let s = to.2 / from.2;
+        if !s.is_finite() {
+            return Fit::HIDDEN;
+        }
+        return Fit {
+            s,
+            x: to.0 - s * from.0,
+            y: to.1 - s * from.1,
+        };
+    }
+    let s = (w / ref_width).min(h / ref_height);
+    Fit {
+        s,
+        x: (w - ref_width * s) / 2.0,
+        y: (h - ref_height * s) / 2.0,
+    }
+}
+
+/// Il riquadro `(x, y, larghezza, altezza)` del contenuto di proporzione
+/// `aspect` in una scheda `w × h`: il più grande che ci sta intero, al centro
+/// (`contentBox` del client). `None` se non è finito.
+fn content_box((w, h): (f64, f64), aspect: f64) -> Option<(f64, f64, f64, f64)> {
+    let width = w.min(h * aspect);
+    let height = width / aspect;
+    (width.is_finite() && height.is_finite())
+        .then(|| ((w - width) / 2.0, (h - height) / 2.0, width, height))
+}
+
+/// L'inchiostro `ink` coi punti `p` portati a `scale·p + offset` (unità
+/// locali), riscritto. Con `scale` uguale a 1 i punti si spostano tutti
+/// dello stesso intero, così la forma resta identica e cambia solo il primo
+/// campione; altrimenti ogni punto si riquantizza con `floor(v + 0,5)`. Gli
+/// altri canali non cambiano.
+fn shifted(ink: &Ink, scale: f64, offset: (f64, f64)) -> Result<String, String> {
+    let factor = ink.scale().factor();
+    let width = ink.channels().len();
+    let mut values = Vec::with_capacity(ink.len() * width);
+    #[allow(clippy::cast_possible_truncation, clippy::cast_precision_loss)]
+    let integer = |value: f64| -> Result<i64, String> {
+        if value.is_finite() && value.abs() <= MAX_SAFE_INTEGER as f64 {
+            Ok(value as i64)
+        } else {
+            Err("the moved points are out of range".to_owned())
+        }
+    };
+    let step = (
+        integer(round_half_up(offset.0, factor))?,
+        integer(round_half_up(offset.1, factor))?,
+    );
+    for i in 0..ink.len() {
+        let sample = ink.sample(i);
+        let (x, y) = if scale == 1.0 {
+            (
+                sample[0]
+                    .checked_add(step.0)
+                    .ok_or("the moved points are out of range")?,
+                sample[1]
+                    .checked_add(step.1)
+                    .ok_or("the moved points are out of range")?,
+            )
+        } else {
+            #[allow(clippy::cast_precision_loss)]
+            let (x, y) = (sample[0] as f64, sample[1] as f64);
+            (
+                integer((scale * x + offset.0 * factor + 0.5).floor())?,
+                integer((scale * y + offset.1 * factor + 0.5).floor())?,
+            )
+        };
+        values.push(x);
+        values.push(y);
+        values.extend_from_slice(&sample[2..]);
+    }
+    let moved = Ink::new(ink.scale(), ink.channels(), values).map_err(|error| error.to_string())?;
+    let text = moved.encode();
+    if text.len() > INK_MAX_BYTES {
+        return Err("the moved stroke is too large".to_owned());
+    }
+    Ok(text)
+}
+
+/// Lo spessore del pennello, in unità dell'ancora.
+fn brush_size(brush: &InkBrush) -> f64 {
+    match brush {
+        InkBrush::Pf1(brush) => brush.size,
+        InkBrush::Nib1(brush) => brush.size,
+    }
+}
+
+/// Il pennello `brush` con lo spessore `size`: la voce `size=` cambia al suo
+/// posto (o, se manca, entra dopo il nome dell'algoritmo), le altre restano
+/// come sono scritte. Il risultato si deve rileggere.
+fn resized_brush(brush: &str, size: f64) -> Result<String, String> {
+    let value = format!("size={}", js_number(size));
+    let mut tokens: Vec<String> = brush.split(' ').map(str::to_owned).collect();
+    match tokens.iter().position(|token| token.starts_with("size=")) {
+        Some(at) => tokens[at] = value,
+        None => {
+            let at = tokens
+                .iter()
+                .position(|token| !token.is_empty())
+                .map_or(tokens.len(), |at| at + 1);
+            tokens.insert(at, value);
+        }
+    }
+    let text = tokens.join(" ");
+    InkBrush::parse(&text)
+        .map_err(|error| format!("the brush does not take the new size ({error})"))?;
+    Ok(text)
+}
+
+fn hidden(index: usize, id: &str) -> OpError {
+    OpError::Invalid {
+        index,
+        reason: format!(
+            "stroke {id:?} has no place the core can compute in its card (the card has no size, or the stroke is anchored to a PDF page or a sheet cell)"
+        ),
+    }
+}
+
+fn stroke_error(index: usize, id: &str, reason: &str) -> OpError {
+    OpError::Invalid {
+        index,
+        reason: format!("stroke {id:?}: {reason}"),
     }
 }
 
@@ -865,4 +1391,213 @@ fn saturating_integer<'de, D: Deserializer<'de>>(deserializer: D) -> Result<i64,
     }
 
     deserializer.deserialize_any(Saturating)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    /// La scheda di un vettore di `canvas-ink-fit/`, alla misura `size`.
+    fn fit_card(card: &Value, size: &Value) -> CanvasNode {
+        let mut fields = card.as_object().cloned().unwrap_or_default();
+        fields.insert("id".to_owned(), json!("n"));
+        fields.insert("x".to_owned(), json!(0));
+        fields.insert("y".to_owned(), json!(0));
+        fields.insert("width".to_owned(), size["width"].clone());
+        fields.insert("height".to_owned(), size["height"].clone());
+        serde_json::from_value(Value::Object(fields)).expect("la scheda del vettore")
+    }
+
+    /// La misura della scheda si calcola come nel client: gli stessi vettori
+    /// di `inkFit` (`apps/client/src/__fixtures__/canvas-ink-fit/`).
+    #[test]
+    fn the_fit_follows_the_client_vectors() {
+        let folder = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../../apps/client/src/__fixtures__/canvas-ink-fit");
+        let mut seen = 0;
+        for entry in std::fs::read_dir(folder).expect("la cartella dei vettori") {
+            let path = entry.expect("una voce").path();
+            let text = std::fs::read_to_string(&path).expect("il file");
+            let vector: Value = serde_json::from_str(&text).expect("JSON");
+            let name = vector["name"].as_str().unwrap_or_default();
+            let node = fit_card(&vector["card"], &vector["size"]);
+            let width = vector["ref"]["width"].as_f64().expect("ref.width");
+            let height = vector["ref"]["height"].as_f64().expect("ref.height");
+            let expect = &vector["expect"];
+            assert_eq!(scales(&node), expect["mode"] == "scale", "{name}: il modo");
+            let fit = ink_fit(&node, width, height, None);
+            same_fit(name, fit, expect);
+            seen += 1;
+        }
+        assert!(seen >= 20, "troppo pochi vettori: {seen}");
+    }
+
+    /// `s`, `x`, `y` e i punti di un vettore (`expect`).
+    fn same_fit(name: &str, fit: Fit, expect: &Value) {
+        for (key, got) in [("s", fit.s), ("x", fit.x), ("y", fit.y)] {
+            let want = expect[key].as_f64().expect("un numero");
+            assert!(
+                (got - want).abs() < 1e-9,
+                "{name}: {key} = {got}, non {want}"
+            );
+        }
+        for point in expect["points"].as_array().into_iter().flatten() {
+            let coordinate = |field: &str, at: usize| point[field][at].as_f64().expect("un numero");
+            let got = (
+                fit.x + fit.s * coordinate("from", 0),
+                fit.y + fit.s * coordinate("from", 1),
+            );
+            let want = (coordinate("to", 0), coordinate("to", 1));
+            assert!(
+                (got.0 - want.0).abs() < 1e-9 && (got.1 - want.1).abs() < 1e-9,
+                "{name}: il punto va in {got:?}, non in {want:?}"
+            );
+        }
+    }
+
+    /// Con la proporzione del contenuto (T39, T98) la misura si calcola come
+    /// nel client: i vettori di `inkFit` con `aspect`
+    /// (`apps/client/src/__fixtures__/canvas-ink-fit-aspect/`).
+    #[test]
+    fn the_fit_with_the_content_aspect_follows_the_client_vectors() {
+        let folder = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../../apps/client/src/__fixtures__/canvas-ink-fit-aspect");
+        let mut seen = 0;
+        for entry in std::fs::read_dir(folder).expect("la cartella dei vettori") {
+            let path = entry.expect("una voce").path();
+            let text = std::fs::read_to_string(&path).expect("il file");
+            let vector: Value = serde_json::from_str(&text).expect("JSON");
+            let name = vector["name"].as_str().unwrap_or_default();
+            let node = fit_card(&vector["card"], &vector["size"]);
+            let width = vector["ref"]["width"].as_f64().expect("ref.width");
+            let height = vector["ref"]["height"].as_f64().expect("ref.height");
+            let aspect = vector["aspect"].as_f64();
+            let expect = &vector["expect"];
+            assert_eq!(scales(&node), expect["mode"] == "scale", "{name}: il modo");
+            same_fit(name, ink_fit(&node, width, height, aspect), expect);
+            seen += 1;
+        }
+        assert!(seen >= 7, "troppo pochi vettori: {seen}");
+    }
+
+    /// Una proporzione che non vale (zero, negativa, non finita) dà la
+    /// regola senza proporzione, e non cambia mai una scheda `fixed`.
+    #[test]
+    fn a_content_aspect_that_is_not_valid_gives_the_rule_without_it() {
+        let image = fit_card(
+            &json!({ "type": "file", "file": "Foto/lavagna.png" }),
+            &json!({ "width": 600, "height": 200 }),
+        );
+        let plain = ink_fit(&image, 300.0, 300.0, None);
+        for aspect in [0.0, -2.0, f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
+            assert_eq!(
+                ink_fit(&image, 300.0, 300.0, Some(aspect)),
+                plain,
+                "{aspect}"
+            );
+        }
+        assert_ne!(ink_fit(&image, 300.0, 300.0, Some(2.0)), plain);
+        let note = fit_card(
+            &json!({ "type": "text", "text": "" }),
+            &json!({ "width": 600, "height": 200 }),
+        );
+        assert_eq!(ink_fit(&note, 300.0, 300.0, Some(2.0)), Fit::IDENTITY);
+        // La scheda di misura zero: il tratto non si vede, mai `NaN`.
+        let flat = fit_card(
+            &json!({ "type": "file", "file": "Foto/lavagna.png" }),
+            &json!({ "width": 0, "height": 200 }),
+        );
+        let fit = ink_fit(&flat, 300.0, 300.0, Some(2.0));
+        assert!(
+            fit.s == 0.0 && fit.x.is_finite() && fit.y.is_finite(),
+            "{fit:?}"
+        );
+    }
+
+    #[test]
+    fn a_shift_by_whole_units_changes_only_the_first_sample() {
+        let ink = Ink::decode("1 s100 cxypt 12050,3020,128,0 25,-3,2,8 31,-5,0,8").unwrap();
+        assert_eq!(
+            shifted(&ink, 1.0, (10.0, -0.004)).unwrap(),
+            "1 s100 cxypt 13050,3020,128,0 25,-3,2,8 31,-5,0,8"
+        );
+        assert_eq!(
+            shifted(&ink, 0.5, (1.0, 0.0)).unwrap(),
+            "1 s100 cxypt 6125,1510,128,0 13,-1,2,8 15,-3,0,8"
+        );
+        let far = Ink::decode("1 s100 cxy 0,0").unwrap();
+        assert!(shifted(&far, 1.0, (1e300, 0.0)).is_err());
+    }
+
+    #[test]
+    fn the_brush_size_changes_in_place() {
+        let pf1 = "pf1 size=3 thinning=0.5 pen=ballpoint";
+        assert_eq!(
+            resized_brush(pf1, 6.5).unwrap(),
+            "pf1 size=6.5 thinning=0.5 pen=ballpoint"
+        );
+        assert_eq!(
+            resized_brush("pf1 thinning=0.5", 2.0).unwrap(),
+            "pf1 size=2 thinning=0.5"
+        );
+        assert_eq!(resized_brush("pf1", 2.0).unwrap(), "pf1 size=2");
+        assert_eq!(
+            resized_brush("nib1 size=12 tip=1", 4.0).unwrap(),
+            "nib1 size=4 tip=1"
+        );
+        assert!(resized_brush(pf1, 0.0).is_err());
+    }
+
+    /// Un tratto con l'ancora di pagina o di cella: il nucleo non sa dove la
+    /// pagina o la cella sta nella scheda, e non lo sposta né lo
+    /// ridimensiona; il colore sì, e la gomma lo toglie.
+    #[test]
+    fn a_page_or_cell_stroke_is_not_moved_or_resized_by_the_core() {
+        for (file, anchor) in [
+            (
+                "carta.pdf",
+                r#"{"kind":"page","page":2,"width":595,"height":842}"#,
+            ),
+            (
+                "conti.xlsx",
+                r#"{"kind":"cell","sheet":"Foglio1","cell":"B3"}"#,
+            ),
+        ] {
+            let source = format!(
+                r##"{{"nodes":[{{"id":"p","type":"file","file":"{file}","x":0,"y":0,"width":300,"height":400,
+                "fub:ink":{{"v":1,"strokes":[{{"id":"s1","tool":"pen","brush":"pf1 size=3","color":"#0072b2",
+                "anchor":{anchor},"ink":"1 s100 cxy 100,100 10,0"}}]}}}}]}}"##
+            );
+            content_anchored_stroke_stays(&source);
+        }
+    }
+
+    fn content_anchored_stroke_stays(source: &str) {
+        let canvas = crate::read::parse(source).unwrap();
+        let layer = LayerRef::Node("p".to_owned());
+        let ids = vec!["s1".to_owned()];
+        let op = |value: Value| -> CanvasOp { serde_json::from_value(value).unwrap() };
+        for refused in [
+            json!({ "op": "move_strokes", "layer": { "node": "p" }, "ids": ["s1"], "dx": 5, "dy": 5 }),
+            json!({ "op": "move_strokes", "layer": { "node": "p" }, "ids": ["s1"], "dx": 0, "dy": 0, "to": "board" }),
+            json!({ "op": "restyle_strokes", "layer": { "node": "p" }, "ids": ["s1"], "size": 4 }),
+        ] {
+            let error = compile(&canvas, &[op(refused.clone())], 1).unwrap_err();
+            assert!(
+                matches!(error, OpError::Invalid { .. }),
+                "{refused}: {error:?}"
+            );
+        }
+        let recolor = CanvasOp::RestyleStrokes {
+            layer: layer.clone(),
+            ids: ids.clone(),
+            color: Some("#d55e00".to_owned()),
+            size: None,
+            aspect: None,
+        };
+        assert!(compile(&canvas, &[recolor], 1).is_ok());
+        let erase = op(json!({ "op": "erase_strokes", "layer": { "node": "p" }, "ids": ids }));
+        assert!(compile(&canvas, &[erase], 1).is_ok());
+    }
 }

@@ -295,6 +295,31 @@ describe("lo strato d'inchiostro della lavagna", () => {
     expect(board).toEqual([]);
   });
 
+  it("il tasto laterale che la lavagna tiene per sé (T63): l'appoggio va a onBarrel, il tratto non scrive né cancella", () => {
+    const erased: string[] = [];
+    const barrel: PointerEvent[] = [];
+    let erases = false;
+    mount({
+      barrelErases: () => erases,
+      onBarrel: (event) => barrel.push(event),
+      onEraseStart: () => erased.push("start"),
+      onErase: () => erased.push("erase"),
+      onEraseEnd: () => erased.push("end"),
+    });
+    viewport.dispatchEvent(down({ ...PEN, button: 2, buttons: 2, clientX: 120, clientY: 140, timeStamp: 0 }));
+    viewport.dispatchEvent(move({ ...PEN, buttons: 2, clientX: 130, clientY: 150, timeStamp: 8 }));
+    document.dispatchEvent(up({ ...PEN, button: 2, buttons: 0, clientX: 130, clientY: 150, timeStamp: 12 }));
+    expect(barrel.map((event) => [event.type, event.button])).toEqual([["pointerdown", 2]]);
+    expect(erased).toEqual([]);
+    expect(strokes).toEqual([]);
+    // Letto a ogni appoggio: tornato «gomma», il tasto cancella di nuovo.
+    erases = true;
+    viewport.dispatchEvent(down({ ...PEN, button: 2, buttons: 2, clientX: 120, clientY: 140, timeStamp: 100 }));
+    document.dispatchEvent(up({ ...PEN, button: 2, buttons: 0, clientX: 120, clientY: 140, timeStamp: 110 }));
+    expect(barrel).toHaveLength(1);
+    expect(erased[0]).toBe("start");
+  });
+
   it("setMouse: il mouse scrive dal prossimo appoggio, e torna alla lavagna; un tratto già giù finisce", () => {
     const layer = mount();
     layer.setMouse("ink");

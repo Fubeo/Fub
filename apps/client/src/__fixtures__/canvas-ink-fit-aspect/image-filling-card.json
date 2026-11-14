@@ -1,0 +1,19 @@
+{
+  "name": "image-filling-card",
+  "description": "Un'immagine 4:3 che riempiva la scheda 400×300 in cui il tratto è scritto: con aspect = W / H la regola è quella senza aspect (la scheda allargata a 800×300, l'immagine al centro).",
+  "card": { "type": "file", "file": "Foto/lavagna.jpg" },
+  "aspect": 1.3333333333333333,
+  "ref": { "width": 400, "height": 300 },
+  "size": { "width": 800, "height": 300 },
+  "expect": {
+    "mode": "scale",
+    "s": 1,
+    "x": 200,
+    "y": 0,
+    "points": [
+      { "from": [0, 0], "to": [200, 0] },
+      { "from": [400, 300], "to": [600, 300] },
+      { "from": [100, 150], "to": [300, 150] }
+    ]
+  }
+}

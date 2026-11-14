@@ -1,0 +1,16 @@
+{
+  "name": "write-sections-one",
+  "description": "Una sezione sola la dice già il subpath: niente campo.",
+  "file": "Statistica.md",
+  "parts": {
+    "kind": "sections",
+    "sections": [
+      "Capitolo#Varianza"
+    ]
+  },
+  "expect": {
+    "outcome": "written",
+    "subpath": "#Capitolo#Varianza",
+    "parts": null
+  }
+}

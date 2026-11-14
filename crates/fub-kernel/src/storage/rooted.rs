@@ -356,11 +356,32 @@ impl RootedFsStorage {
         Ok(!metadata.is_file())
     }
 
+    /// I nomi del file a `path`. Su Unix bastano i metadati già letti; su
+    /// Windows il numero sta soltanto sull'handle, e il file si apre per
+    /// chiederlo a [`Self::handle_link_count`].
     fn link_count(&self, path: &Utf8Path, metadata: &Metadata) -> io::Result<u64> {
         #[cfg(unix)]
         {
             use cap_std::fs::MetadataExt;
             let _ = path;
+            Ok(metadata.nlink())
+        }
+        #[cfg(windows)]
+        {
+            let file = self.dir.open(self.rel(path)?)?;
+            Self::handle_link_count(&file, metadata)
+        }
+    }
+
+    /// I nomi del file **già aperto**: su Unix dai suoi metadati, su Windows
+    /// dal suo handle. [`Self::link_count`] su Windows riapre il path, e fra
+    /// la prima apertura e la seconda il nome può portare a un altro file:
+    /// chi ha già un handle conta su quello.
+    fn handle_link_count(file: &cap_std::fs::File, metadata: &Metadata) -> io::Result<u64> {
+        #[cfg(unix)]
+        {
+            use cap_std::fs::MetadataExt;
+            let _ = file;
             Ok(metadata.nlink())
         }
         #[cfg(windows)]
@@ -371,10 +392,9 @@ impl RootedFsStorage {
                 GetFileInformationByHandle, BY_HANDLE_FILE_INFORMATION,
             };
             let _ = metadata;
-            let file = self.dir.open(self.rel(path)?)?;
             let mut info = MaybeUninit::<BY_HANDLE_FILE_INFORMATION>::zeroed();
             // SAFETY: `info` è storage valido per la syscall e l'handle resta
-            // vivo per l'intera chiamata.
+            // vivo per l'intera chiamata (lo tiene `file`, preso in prestito).
             let ok =
                 unsafe { GetFileInformationByHandle(file.as_raw_handle() as _, info.as_mut_ptr()) };
             if ok == 0 {
@@ -779,11 +799,39 @@ impl VaultStorage for RootedFsStorage {
         })
     }
 
+    /// La stessa regola della scrittura ([`Self::unsafe_write_target`]): un
+    /// symlink, un hardlink o un target non regolare dentro il vault non si
+    /// appende, perché le righe finirebbero nel file a cui il collegamento
+    /// porta (un registro `.fub/journal.jsonl` che punta a una nota la
+    /// riempirebbe di JSON). Si guarda prima di aprire e di nuovo sul file
+    /// aperto, prima di scrivere un byte: un collegamento messo al posto del
+    /// file fra le due cose ha un'altra identità e si rifiuta.
     fn append(&self, path: &Utf8Path, bytes: &[u8]) -> io::Result<()> {
         self.create_parent(path)?;
+        let refuse =
+            |why: &str| io::Error::new(io::ErrorKind::InvalidInput, format!("{why}: {path}"));
+        if self.unsafe_write_target(path)? {
+            return Err(refuse(
+                "append rifiutato su symlink, hardlink o target non regolare",
+            ));
+        }
         let mut options = OpenOptions::new();
         options.append(true).create(true);
         let mut file = self.dir.open_with(self.rel(path)?, &options)?;
+        let opened = file.metadata()?;
+        if !opened.is_file() || Self::handle_link_count(&file, &opened)? != 1 {
+            return Err(refuse("append rifiutato su un target non regolare"));
+        }
+        #[cfg(unix)]
+        {
+            use cap_std::fs::MetadataExt;
+            let named = self.dir.symlink_metadata(self.rel(path)?)?;
+            if named.file_type().is_symlink()
+                || (named.dev(), named.ino()) != (opened.dev(), opened.ino())
+            {
+                return Err(refuse("target cambiato durante l'append"));
+            }
+        }
         file.write_all(bytes)
     }
 
@@ -1324,6 +1372,39 @@ mod tests {
         assert!(!moved.join("source.txt").exists());
         assert_eq!(std::fs::read(&from).unwrap(), b"outside");
         assert!(!to.exists());
+    }
+
+    /// Un registro del vault che è un collegamento a una nota: appendere
+    /// scriverebbe le righe del registro dentro la nota. Come la scrittura,
+    /// l'append rifiuta symlink, hardlink e target non regolari, e la nota
+    /// resta com'era.
+    #[cfg(unix)]
+    #[test]
+    fn append_refuses_links_inside_the_vault() {
+        use std::os::unix::fs::symlink;
+        let dir = tempfile::tempdir().unwrap();
+        let root = Utf8PathBuf::from_path_buf(dir.path().to_owned()).unwrap();
+        let note = root.join("Nota.md");
+        std::fs::write(&note, b"# Nota\n").unwrap();
+        std::fs::create_dir_all(root.join(".fub")).unwrap();
+        symlink("../Nota.md", root.join(".fub/journal.jsonl")).unwrap();
+        std::fs::hard_link(&note, root.join(".fub/entries.jsonl")).unwrap();
+        std::fs::create_dir_all(root.join(".fub/cartella")).unwrap();
+        let storage = RootedFsStorage::open(&root).unwrap();
+
+        for name in ["journal.jsonl", "entries.jsonl", "cartella"] {
+            let error = storage
+                .append(&root.join(".fub").join(name), b"{\"op\":1}\n")
+                .unwrap_err();
+            assert_eq!(error.kind(), io::ErrorKind::InvalidInput, "{name}: {error}");
+        }
+        assert_eq!(std::fs::read(&note).unwrap(), b"# Nota\n");
+
+        // Un file regolare, o uno che non c'è ancora, si appende.
+        let log = root.join(".fub/nuovo.jsonl");
+        storage.append(&log, b"uno\n").unwrap();
+        storage.append(&log, b"due\n").unwrap();
+        assert_eq!(std::fs::read(&log).unwrap(), b"uno\ndue\n");
     }
 
     #[cfg(unix)]

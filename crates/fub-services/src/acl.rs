@@ -129,6 +129,14 @@ pub fn check_revoke(acl: &ShareAcl, by: &str, target: &str) -> Result<(), Revoke
     }
 }
 
+/// Vero se chi ha il ruolo `by` può concedere `role`: un Owner concede ogni
+/// ruolo, gli altri soltanto ruoli sotto il proprio. È la regola di
+/// [`check_revoke`] dalla parte di chi entra: senza, un Admin nominerebbe
+/// altri Admin, che poi non potrebbe togliere.
+pub fn may_grant(by: Option<Role>, role: Role) -> bool {
+    by.is_some_and(|own| own == Role::Owner || own > role)
+}
+
 /// `Ok(())` se `account_id` copre `need` su `acl`, altrimenti errore tipizzato.
 pub fn check(acl: &ShareAcl, account_id: &str, need: Role) -> Result<(), String> {
     match acl.role_of(account_id) {

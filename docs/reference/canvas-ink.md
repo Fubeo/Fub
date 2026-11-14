@@ -111,15 +111,34 @@ L'ancora dice in quali unità sono i punti del tratto.
 |---|---|---|
 | `{"kind": "card", "width": W, "height": H}` | solo nel livello di una scheda | unità della scheda alla misura `W × H`, origine nell'angolo in alto a sinistra |
 | `{"kind": "free"}` | solo nel livello della radice | coordinate della lavagna |
+| `{"kind": "page", "page": N, "width": W, "height": H}` | solo nel livello di una scheda | punti PDF dall'angolo in alto a sinistra della pagina `N` (sotto, «L'ancora di pagina») |
+| `{"kind": "cell", "sheet": F, "cell": C}` | solo nel livello di una scheda | pixel del foglio al 100% dall'angolo in alto a sinistra della cella `C` del foglio `F` (sotto, «L'ancora di cella») |
 
 - **`W`, `H`:** la misura della scheda quando il tratto si è scritto, numeri
   finiti maggiori di zero. Dicono in che unità sono i punti; come seguono la
   misura di adesso lo dice «La misura della scheda». Si confrontano per valore: `640.0` e `6.4e2` sono
   640.
-- **Fuori posto:** un'ancora `card` alla radice o `free` su una scheda non è
-  valida, e il tratto non si disegna.
+- **Fuori posto:** un'ancora `card`, `page` o `cell` alla radice, o `free` su una
+  scheda, non è valida, e il tratto non si disegna.
 - **Altri campi dell'ancora:** si conservano dopo quelli noti e non cambiano
   il significato.
+- **Un `kind` sconosciuto** (di una versione più nuova): il tratto si
+  conserva com'è e non si disegna. Il perché delle ancore di contenuto sta
+  nell'[ADR 0243](../decisions/0243-le-ancore-di-contenuto.md).
+
+### L'ancora di pagina
+
+Un tratto scritto sulla pagina di una scheda PDF è della pagina, non della
+scheda: i punti sono in punti PDF dall'angolo della pagina, e si vede solo
+quando la scheda mostra quella pagina. Le regole: [L'ancora di
+pagina](canvas-ink-anchors.md#lancora-di-pagina).
+
+### L'ancora di cella
+
+Un tratto scritto sopra la griglia di una scheda di foglio è della cella sotto
+il centro del suo riquadro: i punti sono in pixel del foglio al 100%
+dall'angolo della cella, e il tratto segue la cella quando il foglio scorre.
+Le regole: [L'ancora di cella](canvas-ink-anchors.md#lancora-di-cella).
 
 ## Come si disegna
 
@@ -132,7 +151,8 @@ L'ancora dice in quali unità sono i punti del tratto.
   porta il tratto da `W × H` alla misura di adesso `w × h` dipende dalla
   scheda (sotto, «La misura della scheda»).
 - **Un tratto che esce dalla scheda** resta valido: i punti non hanno limiti
-  di posizione, e ciò che esce si vede, non si taglia.
+  di posizione, e ciò che esce si vede, non si taglia (un tratto di pagina o
+  di cella invece si taglia alla scheda, sopra).
 
 ### La misura della scheda
 
@@ -148,6 +168,21 @@ tratti:
   scheda: `s = min(w / W, h / H)`, `dx = (w − W · s) / 2`,
   `dy = (h − H · s) / 2`. È ciò che fa SVG con `viewBox="0 0 W H"` e
   `preserveAspectRatio="xMidYMid meet"` su un riquadro `w × h`.
+- **Il contenuto (`scale` con la proporzione):** quando la resa sa la
+  proporzione `a` (larghezza / altezza) del contenuto che la scheda mostra
+  (l'immagine, o la zona che ne mostra; la pagina intera del PDF), il
+  tratto segue il contenuto e non la scheda. Il contenuto sta centrato e
+  intero: in `W × H` è `C = (W − c) / 2, (H − c / a) / 2, c × c / a` con
+  `c = min(W, H · a)`, in `w × h` è `D` allo stesso modo. Allora
+  `s = D.w / C.w`, `dx = D.x − s · C.x`, `dy = D.y − s · C.y`. Esempio:
+  un PDF A4 (`a = 0,7071`) scritto su `400 × 400` e visto su `400 × 800`
+  ha `C = 58,6, 0, 282,8 × 400` e `D = 0, 117,2, 400 × 565,7`, quindi
+  `s = 1,414`, `dx = −82,8`, `dy = 117,2`. Una proporzione assente, zero,
+  negativa o non finita torna alla regola di sopra; con `a = W / H` le due
+  regole danno lo stesso. Il file non scrive `a`: la sa solo chi ha il
+  contenuto, e il client la dà al nucleo nelle operazioni che portano un
+  tratto (`aspect` di `move_strokes` e `restyle_strokes`); senza, il nucleo
+  usa la regola senza proporzione.
 - **Con `fixed`** l'inchiostro resta alla misura in cui è stato scritto,
   nell'angolo in alto a sinistra, qualunque sia la misura di adesso.
 - **Immagine e PDF** si riconoscono dall'estensione del campo `file`, senza
@@ -168,7 +203,10 @@ tratti:
 I vettori stanno in `apps/client/src/__fixtures__/canvas-ink-fit/`, un caso
 per file, scritti a mano: `name`, `description`, la scheda (`card`, con
 `type` e `file`), `ref` (`W`, `H`), `size` (`w`, `h`) e in `expect` il modo,
-`s`, `x` (`dx`), `y` (`dy`) e qualche punto `from` → `to`.
+`s`, `x` (`dx`), `y` (`dy`) e qualche punto `from` → `to`. Il nucleo Rust
+li fa girare con `ink_fit`. Quelli con la proporzione stanno accanto, in
+`canvas-ink-fit-aspect/`, con il campo in più `aspect`: li provano il
+client (`ink-fit.test.ts`) e il nucleo, con `ink_fit` e la proporzione.
 
 ## Il livello estraneo
 
@@ -197,7 +235,7 @@ fissa, la prima che vale in quest'ordine:
 | Ragione | Quando |
 |---|---|
 | `tool` | `tool` manca o non è `"pen"` né `"highlighter"` |
-| `anchor` | `anchor` manca, non è un oggetto, ha un `kind` sconosciuto o fuori posto, o una misura che manca o non è un numero maggiore di zero |
+| `anchor` | `anchor` manca, non è un oggetto, ha un `kind` sconosciuto o fuori posto, una misura che manca o non è un numero maggiore di zero, (`page`) una pagina che non è un intero da 1 in su, o (`cell`) un foglio vuoto o una cella che non è A1 |
 | `color` | `color` manca o non è `#rrggbb` |
 | `brush` | `brush` manca o non è un pennello valido della §5 |
 | `ink` | `ink` manca, non rispetta la grammatica o i limiti della §5, o ha un canale sconosciuto |
@@ -216,8 +254,9 @@ fissa, la prima che vale in quest'ordine:
 
 - **Ordine dei campi del tratto:** `id`, `tool`, `at`, `brush`, `color`,
   `anchor`, `ink`, poi gli sconosciuti nell'ordine in cui erano.
-- **Ordine dei campi dell'ancora:** `kind`, `width`, `height`, poi gli
-  sconosciuti.
+- **Ordine dei campi dell'ancora:** `kind`, `page` (solo l'ancora di
+  pagina), `width`, `height`, poi gli sconosciuti; per l'ancora di cella
+  `kind`, `sheet`, `cell`, poi gli sconosciuti.
 - **Il primo tratto** di una scheda o della radice crea il livello
   `{"v": 1, "strokes": [...]}` in fondo ai campi di chi lo tiene.
 - **L'ultimo tratto tolto:** se il livello resta esattamente
@@ -255,6 +294,69 @@ l'inchiostro, ma quando riscrive il file lo conserva.
   (scheda per scheda, la radice e il `fub:ink` dell'arco), se c'è ancora, se
   è uguale per valore o che cosa è cambiato, e se la scheda si è spostata o
   ridimensionata; esce con 0 solo se ogni livello è intatto.
+
+## Il Lazo
+
+Il Lazo (`canvas.tool.lasso`, tasto `Q`, in tendina sotto la Selezione nella
+[colonna degli strumenti](canvas-input.md#la-colonna-degli-strumenti))
+sceglie schede e tratti con un giro a mano libera (`lasso.ts`, pura). La riga
+delle opzioni spiega il gesto finché non c'è una scheda scelta.
+
+- **Il giro** si chiude da solo e segue la regola pari-dispari. Una scheda è
+  dentro se lo è tutto il suo rettangolo, un tratto se lo sono tutti i suoi
+  punti. Un tratto di una scheda scelta non si sceglie: va con lei. Un
+  livello estraneo, un tratto che non si disegna e un tratto di pagina o di
+  cella (sopra, «L'ancora») non si scelgono. Con
+  `Maiusc` il giro aggiunge alla scelta; un clic senza giro sceglie la
+  scheda sotto, o toglie la scelta. `Esc` e un altro strumento la tolgono.
+- **I tratti scelti** hanno il contorno d'accento e una cornice tratteggiata
+  attorno (`.canvas-lasso`, sullo stage sopra l'inchiostro).
+- **Trascinare** dentro la scelta sposta schede e tratti insieme; gli
+  originali restano attenuati sotto finché la mano non si alza. Come
+  [mentre la penna scrive](canvas-input.md#mentre-la-penna-scrive), la cornice
+  e l'etichetta dicono a quale scheda i tratti passeranno, con la stessa
+  regola dell'ancora; con `Alt` restano liberi.
+- **All'alzata** un commit solo (`move` per le schede, `move_strokes` per
+  livello) che «Annulla» riporta uguale. Se i tratti passano a un'altra
+  scheda, un avviso dice «Ora fa parte di {nome}» con «Annulla» e «Rendilo
+  libero» (li riporta sulla radice, dove sono).
+- **La barra della selezione** con dei tratti scelti ha il colore (la tavolozza
+  della penna) e lo spessore (il cursore della penna) dei tratti: ogni scelta
+  è un `restyle_strokes`, un passo d'annulla. I pulsanti delle schede restano
+  solo se ci sono schede scelte.
+- **In sola lettura** il Lazo sceglie ma non sposta e non cambia.
+
+## Le forme, Maiusc e il righello
+
+Una forma resta un tratto `fub:ink` (D-22): nessun campo e nessun formato
+nuovo. La guida del tratto in corso è `StrokeGuide` (`ink-shapes.ts`); il
+riconoscimento e il righello sono quelli del disegno (`recognize.ts`,
+`ruler.ts`), importati come funzioni pure.
+
+- **La penna ferma.** Un tratto a penna tenuto fermo mezzo secondo alla fine
+  diventa la forma a cui somiglia: linea, freccia, rettangolo, ellisse,
+  poligono o stella. Sotto 40 pixel sullo schermo resta inchiostro: è la
+  misura della scrittura. La scia mostra subito la forma e il lettore di
+  schermo la sente; finché la penna resta giù, muoverla la regola come nel
+  disegno e `Maiusc` la fa regolare. L'evidenziatore, un tratto sul righello
+  e un tratto spezzato al limite dei campioni non diventano forme.
+- **All'alzata, due passi.** Prima il tratto com'era, poi una toppa `ink` che
+  ne cambia l'`ink` al suo posto: stesso `id`, `tool`, `at`, `brush`,
+  `color` e `anchor`. Il primo annulla riporta il tratto, il secondo lo
+  toglie. I campioni corrono lungo il contorno a passi di 1,5 unità con la
+  pressione mediana del tratto; la freccia è l'asta e la punta in un tratto
+  solo, con la punta del disegno.
+- **Maiusc** durante il tratto lo scrive dritto dal primo punto all'ultimo, a
+  passi di 15°; premuto a metà tratto, la scia si raddrizza subito.
+- **Il righello** («Righello» nella colonna) sta sopra la lavagna e non entra
+  nel file. È largo 72 pixel dello schermo a ogni zoom; il corpo si sposta,
+  la rotella e le frecce lo girano a gradi, con `Maiusc` a passi di 15°, e
+  `Inizio` lo raddrizza. Un tratto che comincia entro 16 pixel da un bordo (12
+  col mouse, 24 col dito) lo segue: ogni campione va sul bordo, scostato di
+  mezza punta.
+- **La latenza.** A ogni campione la guida guarda solo se la punta è uscita
+  dal punto fermo; la forma si cerca una volta, quando il mezzo secondo è
+  passato.
 
 ## Toppa e operazioni
 
@@ -321,6 +423,58 @@ che Fub non sa disegnare si conserva e non si cancella: `Invalid`.
 
 ```json
 { "op": "erase_strokes", "layer": { "node": "f1" }, "ids": ["s1", "s3"] }
+```
+
+### `move_strokes`
+
+Sposta i tratti `ids` del livello `layer` di `dx`, `dy`, in unità della
+lavagna (numeri finiti, altrimenti `Invalid`). È l'operazione del Lazo.
+
+- **Nello stesso livello** (`to` assente o uguale a `layer`) cambia solo
+  `ink`, una toppa `ink` per tratto al suo posto. Lo spostamento si porta
+  nelle unità dell'ancora e si arrotonda all'intero, e tutti i punti si
+  spostano di quello: la forma resta identica e cambia solo il primo
+  campione.
+- **In un altro livello** (`to`) i tratti escono da `layer` come con
+  `erase_strokes` ed entrano in fondo a `to`, nell'ordine dato, con
+  l'ancora nuova: `card` alla misura di adesso della scheda, o `free` sulla
+  radice. I punti si riportano nelle unità della nuova ancora con
+  [«La misura della scheda»](#la-misura-della-scheda) (un tratto del PDF
+  che passa a una nota cambia scala), arrotondati all'intero; lo spessore
+  del pennello segue la stessa scala. Un id che `to` ha già ne prende uno
+  nuovo dal seme, e `created` lo dice.
+- **La proporzione del contenuto** (`aspect`, facoltativo): quella che la
+  scheda di `layer` mostra, se il client la sa. Il nucleo porta il tratto
+  come la resa, con [il contenuto](#la-misura-della-scheda), così col Lazo
+  il tratto va dove dice il puntatore anche su una scheda ridimensionata con
+  un'altra proporzione. Assente, zero o negativa: la regola senza
+  proporzione, come prima. Non conta sulla radice né sulle schede `fixed`,
+  e non si scrive nel file.
+- **Gli errori:** un id che non c'è è `UnknownStroke`, uno ripetuto
+  `DuplicateId`; un tratto che Fub non sa disegnare si conserva (`Invalid`),
+  e così uno che nel livello nuovo non si disegnerebbe; un livello estraneo,
+  da una parte o dall'altra, è `ForeignLayer`.
+
+```json
+{ "op": "move_strokes", "layer": { "node": "pdf1" }, "ids": ["s1"],
+  "dx": 40, "dy": -12, "to": { "node": "nota1" }, "aspect": 0.7071 }
+```
+
+### `restyle_strokes`
+
+Cambia il colore (`color`, `#rrggbb`) e lo spessore del pennello (`size`,
+in unità della lavagna) dei tratti `ids` del livello `layer`: almeno uno dei
+due, altrimenti `Invalid`, e `size` è un numero finito maggiore di zero.
+Una toppa `ink` per tratto al suo posto; un tratto che resta uguale non ne
+ha. Lo spessore cambia la voce `size=` del pennello dove sta scritta, le
+altre voci restano come sono. Sul tratto di una scheda che scala, `size` si
+divide per il fattore della scheda (con `aspect`, facoltativo, come in
+`move_strokes`), così il tratto si vede come è chiesto. Gli errori sugli id
+sono quelli di `move_strokes`.
+
+```json
+{ "op": "restyle_strokes", "layer": "board", "ids": ["s1", "s3"],
+  "color": "#d55e00", "size": 6 }
 ```
 
 `move` e `resize` non toccano l'inchiostro: i punti di una scheda sono in

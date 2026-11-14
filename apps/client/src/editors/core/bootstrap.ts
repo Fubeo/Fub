@@ -2,11 +2,13 @@ import { mountMarkdownSurface, type EditorSlashHost, type PageIcons, type System
 import type { CompletionSources } from "../text/profiles/markdown/completions";
 import type { LinkCardSource } from "../text/profiles/markdown/link-card";
 import { api } from "../../host/ipc";
-import { openVaultRoot, state as shellState, vaultArg } from "../../state/store";
+import { on as onSignal, openVaultRoot, state as shellState, vaultArg } from "../../state/store";
 import type { GridHost } from "../grid/engine";
+import { openLifetime } from "../../ui/lifetime";
 import type { GridDialogs, GridRibbon } from "../grid/ribbon/ribbon";
 import type { GridMenuHost } from "../grid/menu";
 import type { GridPalette } from "../grid/palette/commands";
+import type { GridActiveCellSource } from "../grid/compact";
 import { onLanguage, resolvedLanguage, t, type Key } from "../../i18n/strings";
 import { onEvent } from "../../state/kernel";
 import { noteFactsSource } from "../../state/note-facts";
@@ -31,8 +33,18 @@ import { CRAFT_PREVIEW_COMMAND } from "../../host/craft";
 import { isRawPhoto } from "../../ui/format-kind";
 import { showPhotoData } from "../craft/photo-data";
 import { makePdfJsLoader, pdfIdWithoutFragment, type PdfEngineLoader, type PdfJsModule } from "../media/pdf-view";
-import type { CanvasAttachmentPort, CanvasMediaPort } from "../canvas/engine";
+import type { CanvasAttachmentPort, CanvasCards, CanvasMediaPort, CanvasNotesPort, CardLinkRef } from "../canvas/engine";
 import type { DrawingImagePort } from "../canvas/surface";
+import type { CardEditorPort, CardMode, CardRenderer, CardSnapshots, CardView } from "../canvas/cards";
+import type { CardCitations } from "../canvas/card-head";
+import type { NoteCardPort } from "../canvas/cards/note";
+import type { PartsPickerPort } from "../canvas/parts-picker";
+import { backlinkSources, documentOutline, existingDocuments, linkedFrom } from "../../host/query";
+import type { WebCardPort } from "../canvas/cards/web";
+import type { PdfCardPort } from "../canvas/cards/pdf";
+import type { CraftCardPort } from "../canvas/cards/craft";
+import type { SheetCardPort } from "../grid/card";
+import { openResourcePort, type ResourcePort, type ResourceTransport } from "../media/resource-port";
 import {
   CANVAS_FAMILY,
   CANVAS_FORMAT,
@@ -83,6 +95,16 @@ export interface SurfaceBootstrapOptions extends SurfaceCallbacks {
   readonly onOpenFigure?: (doc: string) => void | Promise<void>;
   /// «Apri a lato» dal menu di un wikilink: la nota in un riquadro accanto.
   readonly onOpenWikilinkBeside?: (page: string, heading: string | null, block: string | null) => void | Promise<void>;
+  /// «Apri a lato» dal menu di una scheda della lavagna: il file `path` (con
+  /// il suo `#…`) in un riquadro accanto, come `onOpenPath`.
+  readonly onOpenPathBeside?: (path: string, from?: string) => void | Promise<void>;
+  /// Dove porta un link scritto in una scheda della lavagna (N6 T57): il file
+  /// del vault a cui punta, o `null` se non c'è. Lo risolve la shell.
+  readonly resolveCardLink?: (link: CardLinkRef, from?: string) => Promise<string | null>;
+  /// «Sposta anche il file nel cestino» dal menu di una scheda della lavagna:
+  /// il documento `path` nel cestino col gesto dell'albero. `true` se ci è
+  /// andato, `false` se è rimasto; un rifiuto dell'host è un errore.
+  readonly onTrashPath?: (path: string) => Promise<boolean>;
   /// Un file nominato da una nota aperto con un'altra app o mostrato
   /// nell'esploratore.
   readonly onShowFile?: (target: SystemTarget, from: string, where: "app" | "explorer") => void | Promise<void>;
@@ -122,8 +144,12 @@ export interface SurfaceBootstrapOptions extends SurfaceCallbacks {
   readonly media?: MediaSurfaceDeps;
   readonly canvasMedia?: CanvasMediaPort;
   readonly canvasAttachments?: CanvasAttachmentPort;
-  readonly onCreateCanvasNote?: (text: string) => Promise<string>;
-  readonly onPickCanvasFile?: () => Promise<string | null>;
+  /// Le note della lavagna (T70): il nome libero, la nota che nasce col testo,
+  /// il testo di una nota.
+  readonly canvasNotes?: CanvasNotesPort;
+  /// Il file del vault per una scheda: scelto dall'utente. Con `name` (il nome
+  /// di un file mancante, «Ritrova…») gli omonimi vengono per primi.
+  readonly onPickCanvasFile?: (name?: string) => Promise<string | null>;
   /// Il documento a cui porta un collegamento del disegno `from`, scelto
   /// dall'utente; `current` è l'`href` del collegamento che si cambia.
   readonly onPickDrawingLink?: (from: string, current: string | null) => Promise<string | null>;
@@ -143,6 +169,36 @@ export interface SurfaceBootstrapOptions extends SurfaceCallbacks {
     documentId: string,
     forms: readonly SyntaxForm[] | undefined,
   ) => (() => void) | void;
+  /// Le porte delle schede di file e di link della lavagna (N6). Le immagini
+  /// e i PDF si leggono dalla `transport` di `media`, i fogli con le chiamate
+  /// di `gridHost`. Assente (un'altra finestra, le prove vecchie): le schede
+  /// hanno il corpo di sempre.
+  readonly canvasCards?: CanvasCardPorts;
+}
+
+/// Ciò che la shell dà alle schede della lavagna. Ogni porta legge e basta:
+/// nessun renderer scrive il file che mostra. Si scrive soltanto con
+/// `editors`, sulla sessione del documento.
+export interface CanvasCardPorts {
+  /// La nota resa dentro la scheda: `renderEmbed` e la montatura delle schede
+  /// di testo.
+  readonly note: Pick<NoteCardPort, "show">;
+  /// Il giornale, la base e il formato da cui una scheda di foglio apre la
+  /// sua sessione (A-9).
+  readonly sheet: Pick<SheetCardPort, "source">;
+  /// Le schede delle pagine web: la cache delle schede di link e il visore.
+  readonly web: WebCardPort;
+  /// Le schede dei file Craft (T18): le anteprime di N7, il componente che le
+  /// serve e «Apri con…». Senza, un file Craft è una scheda di file.
+  readonly craft?: Omit<CraftCardPort, "open" | "watch">;
+  /// Apre il file di una scheda («Apri», il doppio clic).
+  open(path: string, subpath: string | null): void;
+  /// Avvisa quando il file `path` cambia, sparisce o cambia nome; restituisce
+  /// come smettere.
+  watch(path: string, changed: () => void): () => void;
+  /// La porta per scrivere dentro le schede (T40): l'editor vero del file,
+  /// sulla stessa sessione di un riquadro. Senza, le schede restano in lettura.
+  readonly editors?: CardEditorPort;
 }
 
 /// Le porte del correttore legate al vault in cui la superficie nasce: le
@@ -278,6 +334,284 @@ function pdfEngineLoader(): Promise<PdfEngineLoader> {
 }
 
 const loadPdf: PdfEngineLoader = async (bytes) => (await pdfEngineLoader())(bytes);
+
+/// Le immagini ferme delle schede: una cache sola per finestra, per tutte le
+/// lavagne che vi si aprono, legata al vault in cui si sono fatte. Una lavagna
+/// montata in un altro vault la svuota: lo stesso percorso è un altro file.
+let windowSnapshots: { readonly cache: CardSnapshots & { clear(): void }; vault: string | undefined } | null = null;
+
+/// Le schede di una superficie della lavagna, dato il suo contenitore.
+type CanvasCardsFor = (context: SurfaceMountContext) => CanvasCards;
+
+/// I renderer delle schede, caricati col codice della lavagna (A-14): non
+/// pesano sull'avvio di Fub. La scheda di foglio arriva con un suo `import()`
+/// al primo foglio.
+async function loadCanvasCards(options: SurfaceBootstrapOptions, ports: CanvasCardPorts): Promise<CanvasCardsFor> {
+  const [cards, { CardCache }, note, image, pdf, web, craft] = await Promise.all([
+    import("../canvas/cards"),
+    import("../canvas/card-cache"),
+    import("../canvas/cards/note"),
+    import("../canvas/cards/image"),
+    import("../canvas/cards/pdf"),
+    import("../canvas/cards/web"),
+    import("../canvas/cards/craft"),
+  ]);
+  windowSnapshots ??= { cache: new CardCache(), vault: openVaultRoot() };
+  const snapshots = windowSnapshots.cache;
+  // Un file cambiato non mostra più l'immagine ferma di prima, in nessuna
+  // scheda: la cache lo dimentica prima che la scheda lo rilegga.
+  const watch = (path: string, changed: () => void): (() => void) =>
+    ports.watch(path, () => {
+      snapshots.forget(path);
+      changed();
+    });
+  const open = (path: string, subpath: string | null): void => ports.open(path, subpath);
+  const fixed: CardRenderer[] = [
+    note.noteCardRenderer({ show: ports.note.show, watch, open }),
+    web.webCardRenderer(ports.web),
+  ];
+  // «Apri» apre il file nella modalità di Fub, come il doppio clic.
+  if (ports.craft) fixed.push(craft.craftCardRenderer({ ...ports.craft, open: (path) => open(path, null), watch }));
+  const media = options.media;
+  // La porta dei PDF: la scheda la legge, e «Spargi le pagine» ne conta le pagine (T72).
+  const pdfPort: PdfCardPort | null = media ? {
+    read: async (path) => {
+      const port = await openCardResource(media.transport, path);
+      if (!port) return null;
+      try {
+        return await port.readAll();
+      } finally {
+        await port.close();
+      }
+    },
+    load: media.pdfLoader ?? loadPdf,
+    watch,
+  } : null;
+  if (media && pdfPort) {
+    const transport = media.transport;
+    fixed.push(
+      image.imageCardRenderer({
+        read: async (path) => {
+          const port = await openCardResource(transport, path);
+          if (!port) return null;
+          try {
+            // Oltre il tetto della scheda i byte non si leggono: la scheda
+            // lo dice dal descrittore.
+            const bytes = port.descriptor.len > image.IMAGE_CARD_MAX_BYTES ? new Uint8Array(0) : await port.readAll();
+            return { bytes, descriptor: port.descriptor };
+          } finally {
+            await port.close();
+          }
+        },
+        open: (path) => open(path, null),
+        watch,
+      }),
+      pdf.pdfCardRenderer(pdfPort),
+    );
+  }
+  const grid = options.gridHost;
+  return (context) => {
+    const vault = openVaultRoot();
+    if (windowSnapshots && windowSnapshots.vault !== vault) {
+      windowSnapshots.cache.clear();
+      windowSnapshots.vault = vault;
+    }
+    const renderers = [...fixed];
+    if (grid) {
+      renderers.push(lazySheetRenderer(async () => {
+        const { sheetCardRenderer } = await import("../grid/card");
+        return sheetCardRenderer({
+          host: grid,
+          source: ports.sheet.source,
+          // La carta del tema, se il riquadro della lavagna mostra l'aspetto
+          // adattato.
+          paper: () => adaptedPaper(context.parent) ?? undefined,
+          watch,
+          open,
+        });
+      }));
+    }
+    // Lo stesso ascolto dei renderer: una scheda mancante aspetta il file con questo.
+    return {
+      registry: cards.createCardRegistry(renderers),
+      snapshots,
+      watch,
+      citations: CANVAS_CITATIONS,
+      ...(pdfPort ? { pdfPages: pdf.pdfPagesReader(pdfPort) } : {}),
+    };
+  };
+}
+
+/// «↩ N» nella testata delle schede (T22): quante note citano il file, e
+/// quali, con la domanda `backlinks` dell'indice; i file che una nota cita
+/// adesso con `documents` (`linked` uscente). Nessuna porta nuova.
+///
+/// I conti cambiano solo quando cambiano dei link, e l'avviso dice di quali
+/// documenti: uno cambiato senza l'aspetto `links` non tocca nessun conto,
+/// uno tolto o rinominato tocca sé stesso e ciò che citava. Un lotto, un
+/// vault aperto, un `overflow` e il segnale `documents` (una creazione, un
+/// ripristino) non dicono quali: «non so» (`null`).
+const CITERS_PAGE = 64;
+const CANVAS_CITATIONS: CardCitations = {
+  count: async (path) => {
+    const { total, sources } = await backlinkSources(path, CITERS_PAGE);
+    return { total, citers: sources };
+  },
+  linksFrom: async (doc, among) => {
+    const list = [...among];
+    const [linked, indexed] = await Promise.all([linkedFrom(doc, list), existingDocuments(list)]);
+    // Di un file che l'indice non conosce (un PDF, un'immagine) non si sa se
+    // `doc` lo cita adesso: può essere toccato.
+    return list.filter((path) => linked.has(path) || !indexed.has(path));
+  },
+  watch: (changed) => {
+    const unknown = () => changed(null);
+    const stops = [
+      onSignal("documents", unknown),
+      onEvent("document_changed", (event) => {
+        const aspects = event.changes?.aspects;
+        if (aspects && !aspects.includes("links")) return;
+        changed([event.id]);
+      }),
+      onEvent("document_removed", (event) => changed([event.id])),
+      onEvent("document_renamed", (event) => changed([event.from, event.to])),
+      onEvent("batch_ended", unknown),
+      onEvent("vault_opened", unknown),
+      onEvent("overflow", unknown),
+    ];
+    return () => {
+      for (const stop of stops) stop();
+    };
+  },
+};
+
+/// Il selettore delle sezioni della lavagna (T74): il sommario che l'indice
+/// ha già (`documentOutline`, la domanda `outline`) e la resa di una sezione
+/// con la stessa porta della scheda di nota. Nessuna porta nuova.
+function canvasParts(ports: CanvasCardPorts): PartsPickerPort {
+  return {
+    // Il byte del titolo (`span.start`) serve alla copia di un estratto (T99).
+    outline: async (path) => (await documentOutline(path)).map((heading) => ({ level: heading.level, text: heading.text, start: heading.span.start })),
+    show: (path, heading, host, life) => ports.note.show(path, heading, host, life),
+  };
+}
+
+/// Apre i byte di una scheda nel vault di adesso; `null` se il file non c'è.
+async function openCardResource(transport: ResourceTransport, path: string): Promise<ResourcePort | null> {
+  try {
+    return await openResourcePort(transport, path, openVaultRoot());
+  } catch (error) {
+    if (isErrorKind(error, "not_found")) return null;
+    throw error;
+  }
+}
+
+/// Il tetto dei byte che si leggono per misurare un'immagine: quello della
+/// scheda d'immagine e del deposito.
+const MEASURE_IMAGE_MAX_BYTES = 64 * 1024 * 1024;
+
+/// La misura in pixel di un'immagine del vault, per la scheda che nasce dal
+/// rilascio sulla lavagna (T15): dall'intestazione del file se la dice
+/// (`decodeImage`), sennò dall'immagine decodificata. `null` se il file non
+/// c'è, è oltre il tetto, o non si decodifica: la tela usa la misura di serie.
+function measureCanvasImage(transport: ResourceTransport) {
+  return async (path: string): Promise<{ width: number; height: number } | null> => {
+    try {
+      const port = await openCardResource(transport, path);
+      if (!port) return null;
+      let bytes: Uint8Array;
+      try {
+        if (port.descriptor.len > MEASURE_IMAGE_MAX_BYTES) return null;
+        bytes = await port.readAll();
+      } finally {
+        await port.close().catch(() => undefined);
+      }
+      const { decodeImage } = await import("../media/image-view");
+      const decoded = decodeImage(port.descriptor, bytes);
+      try {
+        if (decoded.width && decoded.height) return { width: decoded.width, height: decoded.height };
+        const image = new Image();
+        image.src = decoded.url;
+        await image.decode();
+        return image.naturalWidth > 0 && image.naturalHeight > 0
+          ? { width: image.naturalWidth, height: image.naturalHeight }
+          : null;
+      } finally {
+        URL.revokeObjectURL(decoded.url);
+      }
+    } catch {
+      return null;
+    }
+  };
+}
+
+/// L'HTML degli appunti come Markdown, con la stessa conversione dell'incolla
+/// dell'editor Markdown: il suo codice arriva al primo incolla di celle.
+async function clipboardMarkdown(data: DataTransfer): Promise<string | null> {
+  const { markdownFromClipboard } = await import("../text/profiles/markdown/paste");
+  return markdownFromClipboard(data);
+}
+
+/// Il renderer delle schede di foglio, il cui codice arriva col primo foglio.
+/// Finché non c'è, la vista tiene il modo che la tela le chiede e lo passa
+/// alla scheda vera appena montata; una vista distrutta prima non monta
+/// niente. Un `import()` fallito lascia la scheda com'è e si riprova alla
+/// scheda dopo.
+function lazySheetRenderer(load: () => Promise<CardRenderer>): CardRenderer {
+  let loaded: CardRenderer | null = null;
+  let loading: Promise<CardRenderer> | null = null;
+  return {
+    kinds: ["sheet"],
+    mount(node, host, mode, context): CardView {
+      if (loaded) return loaded.mount(node, host, mode, context);
+      let view: CardView | null = null;
+      let current: CardMode = mode;
+      let destroyed = false;
+      loading ??= load().then(
+        (renderer) => (loaded = renderer),
+        (error: unknown) => {
+          loading = null;
+          throw error;
+        },
+      );
+      loading.then(
+        (renderer) => {
+          if (destroyed || context.lifetime.closed) return;
+          try {
+            view = renderer.mount(node, host, current, context);
+          } catch (error) {
+            console.warn(`canvas: la scheda ${node.id} non si mostra (sheet)`, error);
+          }
+        },
+        (error: unknown) => console.warn("canvas: la scheda di foglio non si carica", error),
+      );
+      return {
+        setMode(next) {
+          current = next;
+          view?.setMode(next);
+        },
+        resize: () => view?.resize?.(),
+        enter: () => view?.enter?.() ?? false,
+        leave: () => view?.leave?.(),
+        key: (event) => view?.key?.(event) ?? false,
+        // Scrivere nelle celle (T42): prima che la scheda vera ci sia non si
+        // scrive, e la tela la lascia attiva da leggere.
+        edit: (from) => view?.edit?.(from) ?? false,
+        // L'inchiostro di cella (T38): prima che la scheda vera ci sia non
+        // si vede nessuna cella; quando le disegna, lo dice lei alla tela
+        // (`cellsShown`).
+        cellAt: (point) => view?.cellAt?.(point) ?? null,
+        cellRect: (sheet, cell) => view?.cellRect?.(sheet, cell) ?? null,
+        destroy() {
+          destroyed = true;
+          const mounted = view;
+          view = null;
+          mounted?.destroy();
+        },
+      };
+    },
+  };
+}
 
 /**
  * Registers the shell's built-in surface families. Every owner goes through
@@ -517,15 +851,25 @@ function pdfAnnotationsPort(media: MediaSurfaceDeps): PdfAnnotationsPort {
 
 type GridModule = typeof import("../grid/engine");
 type GridMenuModule = typeof import("../grid/menu");
+type GridCompactModule = typeof import("../grid/compact");
 
 function mountGrid(
   options: SurfaceBootstrapOptions,
   grid: GridModule,
   menu: GridMenuModule,
+  compactKit: GridCompactModule,
   profile: string,
   context: SurfaceMountContext,
 ): EditorSurface {
     if (profile !== GRID_PROFILE) throw new Error(`grid surface profile ${profile} is not registered`);
+    // Dentro una scheda della lavagna (N6 T42) il foglio scrive soltanto
+    // valori e formule: niente nastro, finestre, tavolozza, linguette né
+    // comandi di struttura (`editors/grid/compact.ts`); la cella attiva e la
+    // sua formula vanno a chi ospita la scheda come dati (`activeCell`).
+    const compact = context.compact === true;
+    const compactLife = openLifetime();
+    let activeCell: GridActiveCellSource | null = null;
+    const cellChanged = (): void => activeCell?.changed();
     // La barra multifunzione e le finestre arrivano con un `import()`: chi
     // non apre una cartella di Excel non le scarica. La barra si aggiorna
     // con i richiami del motore, al più una volta per fotogramma; una
@@ -543,21 +887,29 @@ function mountGrid(
       revision: context.revision,
       documentId: context.documentId,
       base: () => options.documentBase?.(context.documentId) ?? context.revision ?? null,
-      onChange: (change) => options.onChange(context.paneId, change),
+      onChange: (change) => {
+        options.onChange(context.paneId, change);
+        cellChanged();
+      },
       onSelectionChange: () => {
         options.onSelectionChange(context.paneId);
         ribbon?.schedule();
+        cellChanged();
       },
       onCommands: () => ribbon?.schedule(),
-      onView: () => ribbon?.schedule(),
+      onView: () => {
+        ribbon?.schedule();
+        cellChanged();
+      },
       onEditMode: () => {
         for (const listener of statusListeners) listener();
+        cellChanged();
       },
-      onDialog: (dialog) => {
+      onDialog: compact ? undefined : (dialog) => {
         if (dialogs) dialogs.open(dialog);
         else waiting = dialog;
       },
-      grid: options.gridHost,
+      grid: compact && options.gridHost ? compactKit.compactGridHost(options.gridHost) : options.gridHost,
       theme: currentTheme(),
       pdf: options.media?.pdfLoader ?? loadPdf,
       exportPdf: options.exportDocument && {
@@ -572,13 +924,17 @@ function mountGrid(
     engine.setPaper(adaptedPaper(context.parent));
     // I comandi del catalogo nella tavolozza arrivano allo stesso modo.
     let palette: GridPalette | null = null;
-    void import("../grid/palette/commands").then(
+    if (compact) {
+      compactKit.guardCompactKeys(context.parent, () => engine.editMode(), compactLife);
+      activeCell = compactKit.activeCellSource(engine, context.parent, compactLife);
+    }
+    if (!compact) void import("../grid/palette/commands").then(
       ({ mountGridPalette }) => {
         if (!destroyed) palette = mountGridPalette(engine);
       },
       () => {},
     );
-    void import("../grid/ribbon/ribbon").then(
+    if (!compact) void import("../grid/ribbon/ribbon").then(
       ({ mountRibbon, mountGridDialogs }) => {
         if (destroyed) return;
         ribbon = mountRibbon(engine);
@@ -618,6 +974,7 @@ function mountGrid(
       contextMenu: (at) => menu.gridContextMenu(menuHost, at),
       miniBar: () => menu.gridMiniBar(menuHost),
       paletteCommands: () => palette?.commands() ?? [],
+      ...(activeCell ? { activeCell } : {}),
       status: {
         counts: false,
         items: () => [{
@@ -632,6 +989,7 @@ function mountGrid(
       },
       destroy: () => {
         destroyed = true;
+        compactLife.close();
         statusListeners.clear();
         looks.disconnect();
         ribbon?.destroy();
@@ -701,8 +1059,8 @@ export const COMPONENT_EDITORS: Readonly<Record<string, readonly EditorPart[]>> 
       formats: { [GRID_FORMAT]: GRID_PROFILE },
       factory: {
         load: async () => {
-          const [grid, menu] = await Promise.all([import("../grid/engine"), import("../grid/menu")]);
-          return { mount: (profile, context) => mountGrid(options, grid, menu, profile, context) };
+          const [grid, menu, compact] = await Promise.all([import("../grid/engine"), import("../grid/menu"), import("../grid/compact")]);
+          return { mount: (profile, context) => mountGrid(options, grid, menu, compact, profile, context) };
         },
       },
     }),
@@ -761,7 +1119,10 @@ export const COMPONENT_EDITORS: Readonly<Record<string, readonly EditorPart[]>> 
       formats: { [CANVAS_FORMAT]: CANVAS_PROFILE },
       factory: {
         load: async () => {
-          const { mountCanvasSurface } = await import("../canvas/surface");
+          const [{ mountCanvasSurface }, cards] = await Promise.all([
+            import("../canvas/surface"),
+            options.canvasCards ? loadCanvasCards(options, options.canvasCards) : null,
+          ]);
           return {
             mount: (profile, context) => mountCanvasSurface(profile, context, {
               onChange: options.onChange,
@@ -769,8 +1130,13 @@ export const COMPONENT_EDITORS: Readonly<Record<string, readonly EditorPart[]>> 
               onFail: options.onFail,
               onOpenWikilink: options.onOpenWikilink,
               onOpenPath: options.onOpenPath,
-              onCreateNote: options.onCreateCanvasNote,
+              ...(options.onOpenPathBeside ? { onOpenPathBeside: options.onOpenPathBeside } : {}),
+              ...(options.onOpenWikilinkBeside ? { onOpenWikilinkBeside: options.onOpenWikilinkBeside } : {}),
+              ...(options.resolveCardLink ? { resolveCardLink: options.resolveCardLink } : {}),
+              ...(options.onTrashPath ? { onTrashPath: options.onTrashPath } : {}),
+              ...(options.canvasNotes ? { notes: options.canvasNotes } : {}),
               onPickFile: options.onPickCanvasFile,
+              ...(options.onOpenSettings ? { onOpenSettings: options.onOpenSettings } : {}),
               onPickDrawingLink: options.onPickDrawingLink,
               drawingImages: options.drawingImages,
               drawingFonts: options.drawingFonts,
@@ -780,6 +1146,11 @@ export const COMPONENT_EDITORS: Readonly<Record<string, readonly EditorPart[]>> 
                 : undefined,
               media: options.canvasMedia,
               attachments: options.canvasAttachments,
+              cards: cards?.(context),
+              cardEditors: options.canvasCards?.editors,
+              ...(options.media ? { measureImage: measureCanvasImage(options.media.transport) } : {}),
+              clipboardMarkdown: clipboardMarkdown,
+              ...(options.canvasCards ? { parts: canvasParts(options.canvasCards) } : {}),
             }),
           };
         },

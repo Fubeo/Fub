@@ -1,0 +1,19 @@
+{
+  "name": "image-replaced",
+  "description": "Il file sostituito con un'immagine quadrata: il tratto scritto su una scheda 400×300 segue la proporzione di adesso (1). Il quadrato nella scheda di allora è 300×300 a x = 50; nella scheda di adesso, 300×300, la riempie.",
+  "card": { "type": "file", "file": "Foto/schema.webp" },
+  "aspect": 1,
+  "ref": { "width": 400, "height": 300 },
+  "size": { "width": 300, "height": 300 },
+  "expect": {
+    "mode": "scale",
+    "s": 1,
+    "x": -50,
+    "y": 0,
+    "points": [
+      { "from": [50, 0], "to": [0, 0] },
+      { "from": [350, 300], "to": [300, 300] },
+      { "from": [200, 150], "to": [150, 150] }
+    ]
+  }
+}

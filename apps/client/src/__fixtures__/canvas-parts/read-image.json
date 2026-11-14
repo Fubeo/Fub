@@ -1,0 +1,15 @@
+{
+  "name": "read-image",
+  "description": "Un ritaglio di un'immagine girato di 90 gradi: nessun subpath.",
+  "source": "{\n  \"nodes\": [\n    { \"id\": \"n1\", \"type\": \"file\", \"file\": \"Foto/lavagna.png\", \"x\": 0, \"y\": 0, \"width\": 400, \"height\": 500,\n      \"fub:parts\": { \"kind\": \"image\", \"rect\": [0, 0.25, 1, 0.5], \"rotate\": 90 } }\n  ],\n  \"edges\": []\n}\n",
+  "expect": {
+    "cards": [
+      {
+        "node": "n1",
+        "state": "ok",
+        "parts": "{\"kind\":\"image\",\"rect\":[0,0.25,1,0.5],\"rotate\":90}",
+        "shows": null
+      }
+    ]
+  }
+}

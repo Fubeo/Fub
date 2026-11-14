@@ -4,8 +4,10 @@
 // bozza resta recuperabile via `recoverDrafts`. Le view uscite si smontano
 // per pane. Il layout corrente non si tocca finché il nuovo non è pronto:
 // prima si calcola (con fallback), poi si pubblica con `setLayout`, poi si
-// disegna. Nessuna sessione duplicata: `(vault,doc)` resta unica.
-import { documentSessions } from "./document-session";
+// disegna. Nessuna sessione duplicata: `(vault,doc)` resta unica. Una
+// sessione si lascia solo da `releaseSession`, che sa delle schede della
+// lavagna che ci scrivono (N6 T96).
+import { releaseSession } from "./card-editors";
 import { panes, pane, panesWithDoc, setLayout, type Layout } from "./layout";
 
 async function releaseUnwatched(next: Layout): Promise<void> {
@@ -27,7 +29,7 @@ async function releaseUnwatched(next: Layout): Promise<void> {
   }
   for (const id of current) {
     if (panesWithDoc(id, next).length > 0) continue;
-    await documentSessions.release(id);
+    await releaseSession(id);
   }
 }
 

@@ -1,0 +1,15 @@
+{
+  "name": "read-image-rotate-any",
+  "description": "Fub legge qualsiasi rotazione, anche non multipla di 90.",
+  "source": "{\n  \"nodes\": [\n    { \"id\": \"n1\", \"type\": \"file\", \"file\": \"foto.JPG\", \"x\": 0, \"y\": 0, \"width\": 400, \"height\": 500,\n      \"fub:parts\": { \"kind\": \"image\", \"rect\": [0.1, 0.1, 0.5, 0.5], \"rotate\": -37.5 } }\n  ],\n  \"edges\": []\n}\n",
+  "expect": {
+    "cards": [
+      {
+        "node": "n1",
+        "state": "ok",
+        "parts": "{\"kind\":\"image\",\"rect\":[0.1,0.1,0.5,0.5],\"rotate\":-37.5}",
+        "shows": null
+      }
+    ]
+  }
+}

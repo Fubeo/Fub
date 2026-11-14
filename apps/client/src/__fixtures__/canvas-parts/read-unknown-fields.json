@@ -1,0 +1,16 @@
+{
+  "name": "read-unknown-fields",
+  "description": "I campi sconosciuti dentro fub:parts si conservano nel loro ordine, dopo i noti; una chiave che sembra un indice va prima, come in JavaScript; 2.50 riscritto è 2.5.",
+  "source": "{\n  \"nodes\": [\n    { \"id\": \"n1\", \"type\": \"file\", \"file\": \"Libro.PDF\", \"subpath\": \"#page=1\", \"x\": 0, \"y\": 0, \"width\": 400, \"height\": 500,\n      \"fub:parts\": { \"kind\": \"pages\", \"pages\": [1, 2, 3], \"zoom\": 2.50, \"nota\": { \"b\": 1, \"a\": [true, null] }, \"1\": \"uno\" } }\n  ],\n  \"edges\": []\n}\n",
+  "expect": {
+    "cards": [
+      {
+        "node": "n1",
+        "state": "ok",
+        "parts": "{\"1\":\"uno\",\"kind\":\"pages\",\"pages\":[1,2,3],\"zoom\":2.5,\"nota\":{\"b\":1,\"a\":[true,null]}}",
+        "shows": "#page=1",
+        "layout": "row"
+      }
+    ]
+  }
+}

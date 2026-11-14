@@ -484,6 +484,26 @@ fn same_token(given: &str, expected: &str) -> bool {
             == 0
 }
 
+/// Uno dei `WORKERS` posti delle chiamate in corso, reso a `Drop`.
+struct Slot(Arc<AtomicUsize>);
+
+impl Slot {
+    /// Un posto libero, se c'è.
+    fn take(active: &Arc<AtomicUsize>) -> Option<Slot> {
+        if active.fetch_add(1, Ordering::SeqCst) >= WORKERS {
+            active.fetch_sub(1, Ordering::SeqCst);
+            return None;
+        }
+        Some(Slot(Arc::clone(active)))
+    }
+}
+
+impl Drop for Slot {
+    fn drop(&mut self) {
+        self.0.fetch_sub(1, Ordering::SeqCst);
+    }
+}
+
 fn accept_loop(listener: TcpListener, stop: Arc<AtomicBool>, token: String, handler: Arc<Handler>) {
     let active = Arc::new(AtomicUsize::new(0));
     let token: Arc<str> = token.into();
@@ -494,24 +514,22 @@ fn accept_loop(listener: TcpListener, stop: Arc<AtomicBool>, token: String, hand
         let Ok(stream) = stream else {
             continue;
         };
-        if active.fetch_add(1, Ordering::SeqCst) >= WORKERS {
-            active.fetch_sub(1, Ordering::SeqCst);
+        let Some(slot) = Slot::take(&active) else {
             let _ = respond(
                 &stream,
                 Reply::Err(PluginError::Unserved(Text::key("host.control.busy"))),
             );
             continue;
-        }
-        let (active, token, handler) = (
-            Arc::clone(&active),
-            Arc::clone(&token),
-            Arc::clone(&handler),
-        );
+        };
+        let (token, handler) = (Arc::clone(&token), Arc::clone(&handler));
+        // Lo slot vive nella chiusura: torna libero quando la chiamata finisce,
+        // quando pania, e anche quando il thread non parte e la chiusura si
+        // butta senza girare.
         let spawned = std::thread::Builder::new()
             .name("fub-control-call".into())
             .spawn(move || {
+                let _slot = slot;
                 serve(stream, &token, &*handler);
-                active.fetch_sub(1, Ordering::SeqCst);
             });
         if spawned.is_err() {
             tracing::warn!(target: "fub.host", "canale di controllo: thread non avviato");
@@ -583,6 +601,24 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let path = camino::Utf8PathBuf::from_path_buf(tmp.path().to_path_buf()).unwrap();
         (tmp, path)
+    }
+
+    /// Un posto torna libero comunque finisca chi lo tiene: anche se il
+    /// thread non parte e la chiusura che lo porta si butta senza girare.
+    #[test]
+    fn a_slot_is_given_back_even_when_its_thread_never_runs() {
+        let active = Arc::new(AtomicUsize::new(0));
+        let mut slots: Vec<Slot> = (0..WORKERS).map(|_| Slot::take(&active).unwrap()).collect();
+        assert!(Slot::take(&active).is_none());
+        let held = slots.pop().unwrap();
+        let unrun = move || {
+            let _slot = held;
+        };
+        drop(unrun);
+        let again = Slot::take(&active).expect("il posto è tornato");
+        assert_eq!(active.load(Ordering::SeqCst), WORKERS);
+        drop((slots, again));
+        assert_eq!(active.load(Ordering::SeqCst), 0);
     }
 
     #[test]

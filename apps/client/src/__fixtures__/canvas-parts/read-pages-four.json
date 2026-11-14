@@ -1,0 +1,16 @@
+{
+  "name": "read-pages-four",
+  "description": "Quattro pagine scelte con layout one: valide, il subpath è la prima.",
+  "source": "{\n  \"nodes\": [\n    { \"id\": \"n1\", \"type\": \"file\", \"file\": \"Libri/Statistica.pdf\", \"subpath\": \"#page=3\", \"x\": 0, \"y\": 0, \"width\": 400, \"height\": 500,\n      \"fub:parts\": { \"kind\": \"pages\", \"pages\": [3, 4, 5, 8], \"layout\": \"one\" } }\n  ],\n  \"edges\": []\n}\n",
+  "expect": {
+    "cards": [
+      {
+        "node": "n1",
+        "state": "ok",
+        "parts": "{\"kind\":\"pages\",\"pages\":[3,4,5,8],\"layout\":\"one\"}",
+        "shows": "#page=3",
+        "layout": "one"
+      }
+    ]
+  }
+}

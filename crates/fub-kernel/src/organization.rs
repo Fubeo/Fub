@@ -56,7 +56,9 @@
 //!   tiene dati autorevoli.
 
 use std::collections::HashSet;
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
+
+use crate::poison::SharedShelter;
 
 use camino::{Utf8Path, Utf8PathBuf};
 use fub_abi::organization::Organization;
@@ -143,11 +145,11 @@ pub struct OrganizationStore {
     /// L'organizzazione, che è **anche** ciò che sta nel sidecar: un
     /// [`Durable`] perché «su disco prima, in memoria dopo» non dipendesse dal
     /// fatto che chi scrive la prossima mutazione legga il commento sotto.
-    data: RwLock<Durable<Organization>>,
+    data: SharedShelter<Durable<Organization>>,
     /// Cosa è andato storto **dopo** l'apertura: una migrazione che non si è
     /// potuta scrivere. Chi monta le mostra e se ne fa carico svuotandole, come
     /// per gli avvisi della configurazione.
-    warnings: RwLock<Vec<String>>,
+    warnings: SharedShelter<Vec<String>>,
 }
 
 impl OrganizationStore {
@@ -165,12 +167,12 @@ impl OrganizationStore {
             Arc::new(OrganizationStore {
                 path: Some(path.clone()),
                 storage: Some(storage),
-                data: RwLock::new(Durable::new(data)),
+                data: SharedShelter::new(Durable::new(data)),
                 // Le chiavi che il recinto ha scartato **non** rendono il file
                 // illeggibile: il resto dell'organizzazione vale, e la
                 // scrittura successiva le lascerà indietro. Quello che non
                 // possono fare è sparire in silenzio.
-                warnings: RwLock::new(notice_pruned(&path, pruned).into_iter().collect()),
+                warnings: SharedShelter::new(notice_pruned(&path, pruned).into_iter().collect()),
             }),
             warning,
         )
@@ -181,15 +183,15 @@ impl OrganizationStore {
         Arc::new(OrganizationStore {
             path: None,
             storage: None,
-            data: RwLock::new(Durable::new(Organization::default())),
-            warnings: RwLock::new(Vec::new()),
+            data: SharedShelter::new(Durable::new(Organization::default())),
+            warnings: SharedShelter::new(Vec::new()),
         })
     }
 
     /// L'organizzazione intera: è ciò che il canale dati restituisce a
     /// [`IndexQuery::Organization`](fub_abi::traits::IndexQuery::Organization).
     pub fn snapshot(&self) -> Organization {
-        (*self.data.read().expect("organization")).clone()
+        (*self.data.read()).clone()
     }
 
     /// L'emoji di un path (`None` la toglie).
@@ -296,7 +298,7 @@ impl OrganizationStore {
     /// soltanto dopo [`forget`](Self::forget). Un guasto in mezzo lascia l'icona
     /// in due posti, non in nessuno.
     pub fn park(&self, doc: &str) -> ParkedOrganization {
-        let org = self.data.read().expect("organization");
+        let org = self.data.read();
         ParkedOrganization {
             icon: org.icons.get(doc).cloned(),
             pinned_at: org.pinned.iter().position(|pinned| pinned == doc),
@@ -389,7 +391,7 @@ impl OrganizationStore {
     /// Gli avvisi accumulati dopo l'apertura, svuotandoli: chi li prende se ne
     /// fa carico.
     pub fn take_warnings(&self) -> Vec<String> {
-        std::mem::take(&mut *self.warnings.write().expect("organization"))
+        std::mem::take(&mut *self.warnings.write())
     }
 
     /// Annota che una migrazione non si è potuta scrivere.
@@ -400,7 +402,7 @@ impl OrganizationStore {
     /// verso giusto è: la rinomina vale, l'icona resta indietro, e qualcuno lo
     /// dice.
     pub(crate) fn warn(&self, message: String) {
-        self.warnings.write().expect("organization").push(message);
+        self.warnings.write().push(message);
     }
 
     /// Applica `f` **a ciò che sta nel sidecar adesso**, e adotta il risultato.
@@ -429,7 +431,7 @@ impl OrganizationStore {
             f(org);
             without_duplicates(org);
         };
-        let mut data = self.data.write().expect("organization");
+        let mut data = self.data.write();
         // Lo store in memoria — quello di un test — non ha un disco da
         // rileggere: ciò che c'è «adesso» è ciò che si ha.
         let (Some(path), Some(storage)) = (&self.path, &self.storage) else {
@@ -446,7 +448,7 @@ impl OrganizationStore {
         // Il file può essere stato riscritto a mano *dopo* l'apertura: la
         // fusione rilegge, e ciò che il recinto scarta lo si dice adesso.
         if let Some(warning) = notice_pruned(path, pruned) {
-            self.warnings.write().expect("organization").push(warning);
+            self.warnings.write().push(warning);
         }
         outcome
     }
@@ -837,6 +839,27 @@ mod tests {
         assert_eq!(org.icons.get("note/a.md").map(String::as_str), Some("📌"));
         assert_eq!(org.pinned, ["note/b.md"]);
         assert_eq!(org.spaces, ["note"]);
+    }
+
+    /// Un panico dentro una mutazione non lascia l'organizzazione a metà (la
+    /// mutazione lavora su una copia) e non spegne lo store: le chiamate dopo
+    /// si riprendono dal lucchetto avvelenato invece di panicare a loro volta.
+    #[test]
+    fn a_panic_inside_a_mutation_does_not_poison_the_store() {
+        let store = OrganizationStore::in_memory();
+        store.set_pinned("a.md", true).unwrap();
+        let panicking = Arc::clone(&store);
+        let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            panicking.update(|org| {
+                org.pinned.push("mezzo.md".into());
+                panic!("a metà della mutazione");
+            })
+        }));
+        assert!(outcome.is_err());
+        assert_eq!(store.snapshot().pinned, ["a.md"]);
+        store.set_pinned("b.md", true).unwrap();
+        assert_eq!(store.snapshot().pinned, ["a.md", "b.md"]);
+        assert!(store.take_warnings().is_empty());
     }
 
     #[test]

@@ -1,0 +1,20 @@
+{
+  "name": "pdf-page-square-card",
+  "description": "Una pagina 3:4 scritta in una scheda 600×400 (la pagina al centro, 300×400 a x = 150) e mostrata in una scheda 400×400 (300×400 a x = 50): l'inchiostro segue la pagina. Senza aspect sarebbe s = 0,667.",
+  "card": { "type": "file", "file": "Corsi/dispensa.pdf" },
+  "aspect": 0.75,
+  "ref": { "width": 600, "height": 400 },
+  "size": { "width": 400, "height": 400 },
+  "expect": {
+    "mode": "scale",
+    "s": 1,
+    "x": -100,
+    "y": 0,
+    "points": [
+      { "from": [150, 0], "to": [50, 0] },
+      { "from": [450, 400], "to": [350, 400] },
+      { "from": [300, 200], "to": [200, 200] },
+      { "from": [0, 0], "to": [-100, 0] }
+    ]
+  }
+}

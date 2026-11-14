@@ -1,0 +1,102 @@
+{
+  "about": "Un tratto scritto su un PDF a 640×420, ora a 320×210 (modo scale, s = 0,5), portato sulla nota m con (410, 20): ogni punto va sulla lavagna (0,5·p), si sposta e si riporta nelle unità della nota, (100, 80) → (60, 60) e (120, 80) → (70, 60); lo spessore segue i punti (3 → 1,5), così il tratto si vede uguale.",
+  "before": {
+    "nodes": [
+      {
+        "id": "p",
+        "type": "file",
+        "file": "Corsi/dispensa.pdf",
+        "x": 0,
+        "y": 0,
+        "width": 320,
+        "height": 210,
+        "fub:ink": {
+          "v": 1,
+          "strokes": [
+            {
+              "id": "s1",
+              "tool": "pen",
+              "brush": "pf1 size=3 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=0 pen=ballpoint",
+              "color": "#0072b2",
+              "anchor": {
+                "kind": "card",
+                "width": 640,
+                "height": 420
+              },
+              "ink": "1 s100 cxy 10000,8000 2000,0"
+            }
+          ]
+        }
+      },
+      {
+        "id": "m",
+        "type": "text",
+        "x": 400,
+        "y": 0,
+        "width": 300,
+        "height": 200,
+        "text": "appunti"
+      }
+    ],
+    "edges": []
+  },
+  "ops": [
+    {
+      "op": "move_strokes",
+      "layer": {
+        "node": "p"
+      },
+      "ids": [
+        "s1"
+      ],
+      "dx": 410,
+      "dy": 20,
+      "to": {
+        "node": "m"
+      }
+    }
+  ],
+  "expect": {
+    "outcome": "applied",
+    "after": {
+      "nodes": [
+        {
+          "id": "p",
+          "type": "file",
+          "file": "Corsi/dispensa.pdf",
+          "x": 0,
+          "y": 0,
+          "width": 320,
+          "height": 210
+        },
+        {
+          "id": "m",
+          "type": "text",
+          "x": 400,
+          "y": 0,
+          "width": 300,
+          "height": 200,
+          "text": "appunti",
+          "fub:ink": {
+            "v": 1,
+            "strokes": [
+              {
+                "id": "s1",
+                "tool": "pen",
+                "brush": "pf1 size=1.5 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=0 pen=ballpoint",
+                "color": "#0072b2",
+                "anchor": {
+                  "kind": "card",
+                  "width": 300,
+                  "height": 200
+                },
+                "ink": "1 s100 cxy 6000,6000 1000,0"
+              }
+            ]
+          }
+        }
+      ],
+      "edges": []
+    }
+  }
+}

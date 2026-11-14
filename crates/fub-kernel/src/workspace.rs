@@ -142,6 +142,7 @@ use crate::registry::FormatRegistry;
 use crate::rename_recovery::{self, RenameRecoveryEdit, RenameRecoveryReceipt, RenameRecoveryScan};
 use crate::renderer::RenderedDocument;
 use crate::safety::Gate;
+use crate::same_content::{LearnedFingerprints, SameContentOutcome};
 use crate::session::{ContextChange, Session};
 use crate::settings::{MachineSettings, SettingsStore, SharedSettings};
 use crate::transfer::{MemorySink, OpenSources, ResourceLease, SourceBacking, PROLOGUE};
@@ -2852,6 +2853,14 @@ pub struct PreparedResourceOpen {
     id: DocId,
 }
 
+/// La domanda «c'è già questo contenuto nel vault?» sul vault attivo, eseguibile
+/// senza custodia workspace: i candidati si prendono dall'indice vivo sotto il
+/// lucchetto, il confronto si fa fuori (vedi [`crate::same_content`]).
+pub struct PreparedSameContent {
+    vault: crate::vault::Vault,
+    plan: crate::same_content::Plan,
+}
+
 /// Il lettore delle lease di un vault, da tenere fuori dal workspace.
 ///
 /// È la forma durevole di [`PreparedResourceOpen`] e
@@ -3607,6 +3616,17 @@ impl PreparedDocumentBytesWrite {
 impl PreparedResourceOpen {
     pub fn invoke(self) -> Result<ResourceLease> {
         crate::transfer::resource_open_on(&self.vault, &self.id)
+    }
+}
+
+impl PreparedSameContent {
+    /// Il contenuto, già in memoria, confrontato con i candidati: vedi
+    /// [`SameContent`](crate::same_content::SameContent). I byte devono essere
+    /// quelli della misura data a [`Workspace::prepare_same_content`]; le
+    /// impronte calcolate per strada tornano all'indice con
+    /// [`Workspace::learn_fingerprints`].
+    pub fn invoke(self, bytes: &[u8]) -> SameContentOutcome {
+        crate::same_content::answer(&self.vault, self.plan, bytes)
     }
 }
 
@@ -5724,6 +5744,7 @@ impl Workspace {
         for entry in entries {
             self.indexes.core.set_entry_observed(entry, observed_at);
         }
+        self.indexes.core.mark_scanned();
 
         // **Riapertura incrementale**: per ogni documento descritto dall'anagrafe
         // (size+mtime+timbro di cambiamento → impronta) che porta i metadati e
@@ -6483,14 +6504,26 @@ impl Workspace {
             .values()
             .filter(|entry| !self.indexes.core.observed_at_the_same_instant(&entry.id))
             .map(|entry| {
+                let now = crate::same_content::FileWitness::of(&self.docs.vault, &entry.id);
+                // Un'impronta imparata da una domanda vale per il file su cui
+                // la si è imparata: se adesso al suo posto c'è un altro file,
+                // con la stessa misura e la stessa data e senza un evento, la
+                // riga non la porta, e la prossima apertura rilegge il file
+                // invece di certificarlo con i byte di prima.
+                let fingerprint = entry.fingerprint.clone().filter(|_| {
+                    self.indexes
+                        .core
+                        .learned_on(&entry.id)
+                        .is_none_or(|witness| witness.agrees(&now))
+                });
                 (
                     entry.id.clone(),
                     StoredEntry {
                         size: entry.size,
                         mtime: entry.mtime,
-                        change_stamp: self.docs.vault.change_stamp(&entry.id),
-                        identity: self.docs.vault.file_identity(&entry.id),
-                        fingerprint: entry.fingerprint.clone(),
+                        change_stamp: now.change_stamp,
+                        identity: now.identity,
+                        fingerprint,
                         metadata: self.indexes.core.stored_metadata(&entry.id),
                     },
                 )
@@ -6572,6 +6605,82 @@ impl Workspace {
             vault: self.docs.vault.clone(),
             id: valid_doc_id(id.as_str())?,
         })
+    }
+
+    /// La domanda «c'è già un file con questi `bytes_len` byte, dello stesso
+    /// tipo di `target`?», da fare fuori dal lucchetto del workspace: i
+    /// candidati si prendono adesso dall'indice vivo (le voci in memoria, con
+    /// misura e impronta), il vault si clona, e la custodia si rilascia (vedi
+    /// [`PreparedSameContent`]). Finché la scansione non ha installato
+    /// l'anagrafe la risposta è «non so».
+    pub fn prepare_same_content(&self, target: &DocId, bytes_len: u64) -> PreparedSameContent {
+        let plan = crate::same_content::plan(
+            self.indexes.core.entries.values(),
+            |id| self.indexes.core.learned_on(id),
+            self.indexes.core.anagrafe_complete(),
+            &self.docs.vault.ignore_policy(),
+            target,
+            bytes_len,
+        );
+        PreparedSameContent {
+            vault: self.docs.vault.clone(),
+            plan,
+        }
+    }
+
+    /// Riporta nell'indice vivo le impronte che una domanda sul contenuto ha
+    /// calcolato fuori dal lucchetto. Ciascuna si tiene solo se:
+    ///
+    /// - la data letta era già nel passato quando la domanda è cominciata
+    ///   (*racily clean*);
+    /// - la voce c'è ancora con la misura e la data lette: una voce cambiata
+    ///   nel frattempo, da una scrittura o dal rilevatore, non torna indietro;
+    /// - se l'anagrafe ha una riga con quella misura e quella data, la riga
+    ///   descrive lo stesso file ([`FileWitness::agrees`](crate::same_content::FileWitness::agrees)).
+    ///   Un file sostituito da un altro con la stessa misura e la stessa data,
+    ///   senza che il rilevatore lo dicesse, ha una voce che descrive ancora
+    ///   quello di prima.
+    ///
+    /// Il file letto (segno del cambio e identità) l'ha preso la domanda, fuori
+    /// dal lucchetto: qui si confronta soltanto, senza domande al supporto e
+    /// senza copiare la riga dell'anagrafe. L'impronta resta nella voce col
+    /// suo testimone: chi la usa dopo la crede solo per quel file, e
+    /// [`store_entries`](Self::store_entries) non la scrive per un file che nel
+    /// frattempo è un altro.
+    ///
+    /// Non scrive niente su disco: l'anagrafe porta le impronte in
+    /// `entries.json` con [`store_entries`](Self::store_entries), l'unico che lo
+    /// scrive. Ritorna quante impronte ha tenuto.
+    pub fn learn_fingerprints(&mut self, learned: LearnedFingerprints) -> usize {
+        let mut kept = 0;
+        for learned in learned.0 {
+            if learned.mtime == 0 || learned.mtime >= learned.observed_at {
+                continue;
+            }
+            let table_disagrees = self
+                .entry_store
+                .ask_known(&learned.id, |known| {
+                    known.describes(learned.size, learned.mtime)
+                        && !learned.witness.agrees(&crate::same_content::FileWitness {
+                            change_stamp: known.change_stamp,
+                            identity: known.identity,
+                        })
+                })
+                .unwrap_or(false);
+            if table_disagrees {
+                continue;
+            }
+            if self.indexes.core.learn_fingerprint(
+                &learned.id,
+                learned.size,
+                learned.mtime,
+                &learned.fingerprint,
+                learned.witness,
+            ) {
+                kept += 1;
+            }
+        }
+        kept
     }
 
     fn check_resource_lease(&self, lease: &ResourceLease) -> Result<()> {

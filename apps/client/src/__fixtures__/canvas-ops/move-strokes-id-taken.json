@@ -1,0 +1,113 @@
+{
+  "about": "La scheda n ha già un tratto s1 (una copia di scheda): il tratto libero s1 che le passa prende un id nuovo dal seme (il seme 0 dà e220a8397b1dcdaf), che va in created.",
+  "before": {
+    "nodes": [
+      {
+        "id": "n",
+        "type": "text",
+        "x": 100,
+        "y": 50,
+        "width": 200,
+        "height": 100,
+        "text": "voti",
+        "fub:ink": {
+          "v": 1,
+          "strokes": [
+            {
+              "id": "s1",
+              "tool": "pen",
+              "brush": "pf1 size=3 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=0 pen=ballpoint",
+              "color": "#0072b2",
+              "anchor": {
+                "kind": "card",
+                "width": 200,
+                "height": 100
+              },
+              "ink": "1 s100 cxy 500,500 10,0"
+            }
+          ]
+        }
+      }
+    ],
+    "edges": [],
+    "fub:ink": {
+      "v": 1,
+      "strokes": [
+        {
+          "id": "s1",
+          "tool": "pen",
+          "brush": "pf1 size=3 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=0 pen=ballpoint",
+          "color": "#0072b2",
+          "anchor": {
+            "kind": "free"
+          },
+          "ink": "1 s100 cxy 15000,8000 1000,500"
+        }
+      ]
+    }
+  },
+  "seed": 0,
+  "ops": [
+    {
+      "op": "move_strokes",
+      "layer": "board",
+      "ids": [
+        "s1"
+      ],
+      "dx": 0,
+      "dy": 0,
+      "to": {
+        "node": "n"
+      }
+    }
+  ],
+  "expect": {
+    "outcome": "applied",
+    "after": {
+      "nodes": [
+        {
+          "id": "n",
+          "type": "text",
+          "x": 100,
+          "y": 50,
+          "width": 200,
+          "height": 100,
+          "text": "voti",
+          "fub:ink": {
+            "v": 1,
+            "strokes": [
+              {
+                "id": "s1",
+                "tool": "pen",
+                "brush": "pf1 size=3 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=0 pen=ballpoint",
+                "color": "#0072b2",
+                "anchor": {
+                  "kind": "card",
+                  "width": 200,
+                  "height": 100
+                },
+                "ink": "1 s100 cxy 500,500 10,0"
+              },
+              {
+                "id": "e220a8397b1dcdaf",
+                "tool": "pen",
+                "brush": "pf1 size=3 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=0 pen=ballpoint",
+                "color": "#0072b2",
+                "anchor": {
+                  "kind": "card",
+                  "width": 200,
+                  "height": 100
+                },
+                "ink": "1 s100 cxy 5000,3000 1000,500"
+              }
+            ]
+          }
+        }
+      ],
+      "edges": []
+    },
+    "created": [
+      "e220a8397b1dcdaf"
+    ]
+  }
+}

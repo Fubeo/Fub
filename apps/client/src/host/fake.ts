@@ -73,6 +73,7 @@ import type {
   PlannedEdit,
   QueryExpr,
   ResourceDescriptor,
+  ResourceWriteReceipt,
   QueryPredicate,
   SettingEntry,
   SettingValue,
@@ -221,6 +222,25 @@ interface Lease {
 
 /// Il tetto di una fetta di `resourceReadChunk`, come quello del kernel.
 const CHUNK_MAX = 64 * 1024;
+/// I limiti della domanda «lo stesso contenuto» (`fub_kernel::same_content`,
+/// A-17): al più tante voci della stessa misura e tanti byte letti; oltre, «non
+/// so», e il deposito si scrive.
+const SAME_CONTENT_MAX_CANDIDATES = 64;
+const SAME_CONTENT_MAX_BYTES = 512 * 1024 * 1024;
+
+/// Le cartelle escluse di serie, come `DEFAULT_EXCLUDED` di
+/// `crates/fub-kernel/src/ignore.rs`.
+const DEFAULT_EXCLUDED_FOLDERS = [".obsidian", ".git", "node_modules", "target", "lost+found", "System Volume Information", "$RECYCLE.BIN"];
+
+/// Il tipo di un nome per lo stesso contenuto, come `extension_of` del kernel:
+/// l'estensione dell'ultimo segmento, in minuscolo, o `null` per un nome che
+/// non ne ha (`LICENSE`) o che è solo estensione (`.gitignore`, `nota.`).
+function sameContentExtension(id: string): string | null {
+  const name = id.slice(id.lastIndexOf("/") + 1);
+  const cut = name.lastIndexOf(".");
+  if (cut <= 0 || cut === name.length - 1) return null;
+  return name.slice(cut + 1).toLowerCase();
+}
 /// I formati di `fub-format-rich` con la feature `rich` dell'host.
 const RICH_FAKE_FORMATS: ReadonlySet<string> = new Set(["docx", "odt", "rtf", "doc"]);
 /// Le estensioni delle cartelle di `fub-format-xlsx`, con la feature `xlsx`
@@ -694,6 +714,67 @@ export function createFakeHost(options: Options = {}): FakeHost {
   /// I byte di un documento come li vedrebbe il disco.
   function bytesOf(doc: Document): Uint8Array {
     return doc.bytes ?? new TextEncoder().encode(doc.text);
+  }
+
+  /// Il file finto dello stesso tipo di `target` che ha esattamente questi
+  /// byte, il primo per percorso, o `null` (nessuno, contenuto vuoto, o «non
+  /// so» oltre i limiti): la stessa domanda di `Host::same_content`
+  /// (`crates/fub-kernel/src/same_content.rs`). Il tipo è l'estensione del
+  /// nome, piegata in minuscolo e confrontata uguale (`sameContentExtension`).
+  /// Il cestino del finto non sta in `docs`; i file esclusi non sono candidati
+  /// (`excludedFromSameContent`).
+  ///
+  /// **Dove il finto è diverso.** Il budget: l'host vero spende i byte che
+  /// legge davvero (un'impronta già nota non costa niente, un candidato scelto
+  /// costa due letture, impronta e confronto) e risponde «non so» per budget
+  /// finito; il finto non tiene impronte e conta una lettura per candidato.
+  /// Con 512 MiB di budget e 64 MiB per deposito la differenza non si vede
+  /// in nessun banco, e simularla vorrebbe dire rifare l'indice nel finto.
+  function sameContent(target: string, wanted: Uint8Array): string | null {
+    if (wanted.byteLength === 0) return null;
+    if (wanted.byteLength > SAME_CONTENT_MAX_BYTES) return null;
+    const type = sameContentExtension(target);
+    const candidates = [...docs.entries()]
+      .filter(([id]) => !excludedFromSameContent(id))
+      .filter(([id]) => sameContentExtension(id) === type)
+      .map(([id, doc]) => [id, bytesOf(doc)] as const)
+      .filter(([, bytes]) => bytes.byteLength === wanted.byteLength)
+      .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
+    if (candidates.length > SAME_CONTENT_MAX_CANDIDATES) return null;
+    let read = 0;
+    for (const [id, bytes] of candidates) {
+      read += bytes.byteLength;
+      if (read > SAME_CONTENT_MAX_BYTES) return null;
+      if (bytes.every((byte, at) => byte === wanted[at])) return id;
+    }
+    return null;
+  }
+
+  /// Il file `id` è fuori dai candidati dello stesso contenuto, come per
+  /// `IgnorePolicy::excludes_path` del kernel? Ogni segmento si confronta con
+  /// la chiave di risoluzione (trim, NFC, minuscolo): la struttura (`.fub`,
+  /// `.trash`) sempre, i nascosti (un punto davanti, `~$…`, `…~`, `#…#`) se
+  /// `files.show-hidden` non li mostra, le cartelle di `files.excluded-folders`
+  /// (o della lista di serie) solo come cartelle. Il `.gitignore` e i
+  /// temporanei di scrittura il finto non li ha.
+  function excludedFromSameContent(id: string): boolean {
+    const key = (name: string) => name.trim().normalize("NFC").toLowerCase();
+    const setting = (name: string) => settings.find((entry) => entry.spec.key === name)?.value;
+    const shown = setting("files.show-hidden");
+    const showHidden = typeof shown === "boolean" ? shown : false;
+    const declared = setting("files.excluded-folders");
+    const folders = new Set((Array.isArray(declared) ? declared : DEFAULT_EXCLUDED_FOLDERS).map(key));
+    const segments = id.split("/");
+    return segments.some((segment, at) => {
+      const name = key(segment);
+      if (name === ".fub" || name === ".trash") return true;
+      const hidden = name.startsWith(".")
+        || (name.startsWith("~$") && name.length > 2)
+        || (name.endsWith("~") && name.length > 1)
+        || (name.length > 2 && name.startsWith("#") && name.endsWith("#"));
+      if (!showHidden && hidden) return true;
+      return at + 1 < segments.length && folders.has(name);
+    });
   }
 
   /// Il formato che il registro dei provider riconoscerebbe dall'estensione,
@@ -1709,8 +1790,23 @@ export function createFakeHost(options: Options = {}): FakeHost {
         return lease.url;
       },
       // `expected` null è «solo creazione», una stringa è il CAS sulla
-      // revisione: è il contratto di `resource_write`.
-      resourceWrite: (id, bytes, expected, vault) => gate("resourceWrite", [id, bytes, expected, vault], Promise.resolve().then(() => {
+      // revisione: è il contratto di `resource_write`. Con `reuse:
+      // "same-content"` un file con gli stessi byte risponde al posto della
+      // scrittura (lo scenario dell'host vero lo lega in
+      // `fake-resources.test.ts`).
+      resourceWrite: (id, bytes, expected, vault, options) => gate("resourceWrite", options === undefined ? [id, bytes, expected, vault] : [id, bytes, expected, vault, options], Promise.resolve().then((): ResourceWriteReceipt => {
+        const reuse: unknown = options?.reuse;
+        if (reuse !== undefined && reuse !== "same-content") {
+          throw { kind: "bad_args", message: `host fake: \`reuse\` sconosciuto (${String(reuse)})` } satisfies PluginError;
+        }
+        if (reuse !== undefined && expected !== null) {
+          throw { kind: "bad_args", message: `host fake: \`reuse\` con \`expected\` per «${id}»` } satisfies PluginError;
+        }
+        if (reuse !== undefined) {
+          const found = sameContent(id, bytes);
+          const there = found === null ? undefined : docs.get(found);
+          if (found !== null && there) return { id: found, revision: there.revision, reused: true };
+        }
         const before = docs.get(id);
         if (expected === null && before) {
           throw { kind: "already_exists", message: `host fake: «${id}» esiste già` } satisfies PluginError;
@@ -1721,7 +1817,7 @@ export function createFakeHost(options: Options = {}): FakeHost {
         const rev = writeBytes(id, bytes, before?.bytes ? before.mime : undefined);
         const kind = entryKind(id);
         emit(kind === "document" ? { type: "document_changed", id } : { type: "entry_changed", id, kind });
-        return { id, revision: rev };
+        return { id, revision: rev, reused: false };
       })),
       viewerOpen: (url, title, policy) =>
         gate("viewerOpen", [url, title, policy], Promise.reject(new Error("host fake: isolated viewer is unavailable"))),

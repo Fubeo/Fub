@@ -1,0 +1,80 @@
+{
+  "about": "Lo spessore è in unità della lavagna: su un PDF scritto a 640×420 e ora a 320×210 (s = 0,5) uno spessore 4 diventa size=8 nel pennello, e si vede 4.",
+  "before": {
+    "nodes": [
+      {
+        "id": "p",
+        "type": "file",
+        "file": "Corsi/dispensa.pdf",
+        "x": 0,
+        "y": 0,
+        "width": 320,
+        "height": 210,
+        "fub:ink": {
+          "v": 1,
+          "strokes": [
+            {
+              "id": "s1",
+              "tool": "pen",
+              "brush": "pf1 size=3 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=0 pen=ballpoint",
+              "color": "#0072b2",
+              "anchor": {
+                "kind": "card",
+                "width": 640,
+                "height": 420
+              },
+              "ink": "1 s100 cxy 10000,8000 2000,0"
+            }
+          ]
+        }
+      }
+    ],
+    "edges": []
+  },
+  "ops": [
+    {
+      "op": "restyle_strokes",
+      "layer": {
+        "node": "p"
+      },
+      "ids": [
+        "s1"
+      ],
+      "size": 4
+    }
+  ],
+  "expect": {
+    "outcome": "applied",
+    "after": {
+      "nodes": [
+        {
+          "id": "p",
+          "type": "file",
+          "file": "Corsi/dispensa.pdf",
+          "x": 0,
+          "y": 0,
+          "width": 320,
+          "height": 210,
+          "fub:ink": {
+            "v": 1,
+            "strokes": [
+              {
+                "id": "s1",
+                "tool": "pen",
+                "brush": "pf1 size=8 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=0 pen=ballpoint",
+                "color": "#0072b2",
+                "anchor": {
+                  "kind": "card",
+                  "width": 640,
+                  "height": 420
+                },
+                "ink": "1 s100 cxy 10000,8000 2000,0"
+              }
+            ]
+          }
+        }
+      ],
+      "edges": []
+    }
+  }
+}
