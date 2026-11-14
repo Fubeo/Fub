@@ -524,6 +524,56 @@ pub const OPS: &[OpSpec] = &[
             r#"{"op":"layout","kind":"tree","direction":"right","gap":32}"#,
         ],
     },
+    OpSpec {
+        name: "insert",
+        summary_it: "Incolla un frammento copiato (`fragment`, la forma degli appunti: `version` 1, `nodes`, `edges`): ogni scheda e ogni arco prende un id nuovo, e il frammento va come un blocco in `x`, `y`, accanto a `near` o nel posto automatico.",
+        fields: &[
+            required(
+                "fragment",
+                FieldKind::Object,
+                "Il frammento: `{\"version\": 1, \"nodes\": [...], \"edges\": [...]}`, le schede e gli archi come nel file, ognuno col suo `id`. Gli archi vanno fra schede del frammento. Al più 10 000 schede.",
+            ),
+            optional(
+                "x",
+                FieldKind::Number,
+                "Dove va il bordo sinistro del frammento. Va con `y`, e non con `near`.",
+            ),
+            optional(
+                "y",
+                FieldKind::Number,
+                "Dove va il bordo alto del frammento. Va con `x`, e non con `near`.",
+            ),
+            optional(
+                "near",
+                FieldKind::Id,
+                "La scheda accanto alla quale va il frammento, come un blocco.",
+            ),
+            FieldSpec {
+                name: "side",
+                kind: FieldKind::Enum(SIDES),
+                required: false,
+                default: Some("\"right\""),
+                doc_it: "Il lato di `near` dove va il frammento.",
+            },
+        ],
+        examples: &[
+            r#"{"op":"insert","fragment":{"version":1,"nodes":[{"id":"a","type":"text","text":"Domanda","x":0,"y":0,"width":320,"height":160},{"id":"b","type":"text","text":"Risposta","x":400,"y":0,"width":320,"height":160}],"edges":[{"id":"e","fromNode":"a","toNode":"b","toEnd":"arrow"}]},"near":"f1","side":"bottom"}"#,
+            r#"{"op":"insert","fragment":{"version":1,"nodes":[{"id":"a","type":"text","text":"Copia","x":40,"y":40,"width":320,"height":160}],"edges":[]},"x":800,"y":0}"#,
+        ],
+    },
+    OpSpec {
+        name: "convert",
+        summary_it: "Trasforma la scheda di testo `id` nella scheda del file `file`, con lo stesso posto, le stesse misure e lo stesso colore. Il file lo scrive prima un'altra porta.",
+        fields: &[
+            required("id", FieldKind::Id, "La scheda di testo da trasformare."),
+            required(
+                "file",
+                FieldKind::Text,
+                "Il percorso del file nel vault, non vuoto: la nota col testo, scritta prima (per esempio con `fub_create`).",
+            ),
+        ],
+        examples: &[r#"{"op":"convert","id":"t2","file":"Idee/Evaporazione.md"}"#],
+    },
 ];
 
 /// La lavagna su cui girano gli esempi di [`OPS`]: due schede di testo, una

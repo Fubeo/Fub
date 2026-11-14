@@ -1,6 +1,7 @@
 //! Le operazioni d'intento sulla lavagna (`CanvasOp`): «aggiungi», «sposta»,
 //! «ridimensiona», «collega», «togli», «cambia», «porta sopra», «allinea»,
-//! «distribuisci», «duplica», «inverti», «raggruppa», «dispone». Un agente o
+//! «distribuisci», «duplica», «inverti», «raggruppa», «dispone», «incolla»,
+//! «trasforma in file». Un agente o
 //! la sessione dal tablet pensano così, non in toppe con l'immagine di
 //! prima: [`compile`] traduce una lista di operazioni nelle toppe di
 //! [`crate::patch`], che sono la sola forma con cui una lavagna cambia.
@@ -37,8 +38,10 @@ mod align;
 mod card;
 pub(crate) mod color;
 mod connect;
+mod convert;
 mod duplicate;
 mod group;
+mod insert;
 mod layout;
 mod reverse;
 
@@ -46,8 +49,10 @@ pub use adjust::{ColorArgs, Fit, MoveArgs, ReorderArgs, ReorderTo, ResizeArgs};
 pub use align::{AlignArgs, AlignTo, DistributeArgs, DistributeAxis};
 pub use card::AddCardArgs;
 pub use connect::{AutoWord, ConnectArgs, Ends, SidePair, Sides};
+pub use convert::ConvertArgs;
 pub use duplicate::DuplicateArgs;
 pub use group::GroupArgs;
+pub use insert::{InsertArgs, MAX_INSERTED};
 pub use layout::{LayoutArgs, LayoutDirection, LayoutKind};
 pub use reverse::ReverseArgs;
 
@@ -102,6 +107,12 @@ pub enum CanvasOp {
     /// Dispone le schede in griglia, in riga, in colonna o ad albero. Le regole
     /// sono in `ops/layout.rs`.
     Layout(LayoutArgs),
+    /// Incolla un frammento degli appunti (`{version: 1, nodes, edges}`) con id
+    /// nuovi, come un blocco. Le regole sono in `ops/insert.rs`.
+    Insert(InsertArgs),
+    /// Una scheda di testo diventa una scheda di file, allo stesso posto. Le
+    /// regole sono in `ops/convert.rs`.
+    Convert(ConvertArgs),
 }
 
 impl CanvasOp {
@@ -124,6 +135,8 @@ impl CanvasOp {
             Self::Reverse(_) => "reverse",
             Self::Group(_) => "group",
             Self::Layout(_) => "layout",
+            Self::Insert(_) => "insert",
+            Self::Convert(_) => "convert",
         }
     }
 }
@@ -133,8 +146,9 @@ impl CanvasOp {
 pub struct Compiled {
     /// Le toppe, nell'ordine in cui si applicano.
     pub patches: Vec<CanvasPatch>,
-    /// Gli id di ogni scheda e arco aggiunti (`add_card`, `connect`), dati
-    /// o generati, nell'ordine delle operazioni.
+    /// Gli id di ogni scheda e arco aggiunti (`add_card`, `connect`,
+    /// `duplicate`, `group`, `insert`), dati o generati, nell'ordine delle
+    /// operazioni.
     pub created: Vec<String>,
 }
 
@@ -143,7 +157,8 @@ pub struct Compiled {
 #[derive(Clone, Debug, PartialEq, Eq, Error)]
 pub enum OpError {
     /// L'operazione vuole una scheda che non c'è (`move`, `resize`, `reorder`,
-    /// `align`, `distribute`, `duplicate`, `group`, gli estremi di un arco).
+    /// `align`, `distribute`, `duplicate`, `group`, `convert`, il `near` di
+    /// `insert`, gli estremi di un arco).
     #[error("canvas op {index}: there is no node {id:?}")]
     UnknownNode { index: usize, id: String },
     /// `remove`, `set` o `color` di un id che non è né una scheda né un arco; e
@@ -154,7 +169,8 @@ pub enum OpError {
     /// giro), o un id ripetuto nella lista `ids` di un'operazione.
     #[error("canvas op {index}: id {id:?} is already taken or repeated")]
     DuplicateId { index: usize, id: String },
-    /// La lavagna avrebbe più schede o archi del limite.
+    /// La lavagna avrebbe più schede o archi del limite, o un `insert` porta
+    /// più schede di [`MAX_INSERTED`].
     #[error("canvas op {index}: a canvas holds at most {limit} {what}")]
     TooMany {
         index: usize,
@@ -282,6 +298,8 @@ impl Compiler {
             CanvasOp::Reverse(args) => self.reverse(index, args)?,
             CanvasOp::Group(args) => self.group(index, args)?,
             CanvasOp::Layout(args) => self.layout(index, args)?,
+            CanvasOp::Insert(args) => self.insert(index, args)?,
+            CanvasOp::Convert(args) => self.convert(index, args)?,
         };
         if patches.is_empty() {
             return Ok(());
