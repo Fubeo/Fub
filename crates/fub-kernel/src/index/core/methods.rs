@@ -85,6 +85,7 @@ impl CoreIndex {
             entries: BTreeMap::new(),
             names: EntryNames::default(),
             observed_in_the_own_instant: BTreeSet::new(),
+            scanned: false,
             folders: BTreeSet::new(),
             tags: TagCounts::default(),
             graph: LinkGraph::with_prose(registry.prose_formats()),
@@ -462,6 +463,46 @@ impl CoreIndex {
         self.names.remove_entry(id);
         self.observed_in_the_own_instant.remove(id);
         self.entries.remove(id).map(|and| and.kind)
+    }
+
+    /// Dice che la scansione ha installato l'anagrafe intera: da qui `entries`
+    /// sa quali file ci sono (vedi [`anagrafe_complete`](Self::anagrafe_complete)).
+    pub(crate) fn mark_scanned(&mut self) {
+        self.scanned = true;
+    }
+
+    /// Vero se una scansione ha già installato l'anagrafe intera. Prima, una
+    /// voce che manca non dice che il file manca.
+    pub(crate) fn anagrafe_complete(&self) -> bool {
+        self.scanned
+    }
+
+    /// Mette nella voce `id` l'impronta che qualcuno ha calcolato leggendo il
+    /// file fuori dal lucchetto, se la voce descrive ancora quel file: stessa
+    /// misura e stessa data di quando lo si è osservato. Una voce cambiata nel
+    /// frattempo (una scrittura, il rilevatore) vince, e l'impronta si butta.
+    /// Ritorna `true` se l'ha tenuta.
+    ///
+    /// Tocca solo l'impronta: i nomi e il segno *racily clean* di `entries`
+    /// non dipendono da lei, quindi non serve passare da `install_entry`.
+    pub(crate) fn learn_fingerprint(
+        &mut self,
+        id: &DocId,
+        size: u64,
+        mtime: u64,
+        fingerprint: &Revision,
+    ) -> bool {
+        let Some(entry) = self.entries.get_mut(id) else {
+            return false;
+        };
+        if entry.size != size || entry.mtime != mtime {
+            return false;
+        }
+        if entry.fingerprint.as_ref() == Some(fingerprint) {
+            return false;
+        }
+        entry.fingerprint = Some(fingerprint.clone());
+        true
     }
 
     pub(crate) fn rebuild_graph(&mut self) {

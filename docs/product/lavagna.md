@@ -182,8 +182,9 @@ La prima copia lo dice con una notifica e «Cambia cartella»; la banda di stato
 mostra la cartella, e un clic apre l'impostazione. Se la cartella è esclusa
 dalla ricerca, la notifica lo dice a ogni copia.
 
-Un file **c'è già** quando il vault ha un file con gli stessi byte, anche con
-un altro nome. Allora non si copia: la scheda punta al file che c'era, e la
+Un file **c'è già** quando il vault ha un file dello stesso tipo (la stessa
+estensione) con gli stessi byte, anche con un altro nome; un file vuoto si
+copia sempre. Allora non si copia: la scheda punta al file che c'era, e la
 notifica «Già nel vault come…» offre «Fanne una copia». L'impronta del
 contenuto sceglie i candidati, ma decidono i byte, confrontati uno per uno;
 oltre i limiti della domanda, o nel dubbio, si copia. Lo decide il kernel

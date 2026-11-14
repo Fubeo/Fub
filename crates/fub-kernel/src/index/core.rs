@@ -164,6 +164,10 @@ pub(crate) struct CoreIndex {
     /// dell'osservazione — e tenuta da parte fino a quando serve, cioè quando
     /// qualcuno scrive. Ci si passa dalle stesse due porte di `nomi`.
     observed_in_the_own_instant: BTreeSet<DocId>,
+    /// Vero da quando una scansione ha installato l'anagrafe intera: prima
+    /// `entries` non dice quali file ci sono, e chi chiede «c'è già un file
+    /// con questi byte?» non può rispondere «no» (T101).
+    scanned: bool,
     /// **Le cartelle** (§14.3), come la camminata le ha viste.
     ///
     /// Un insieme di path e non una mappa di record: ciò che si sa di una

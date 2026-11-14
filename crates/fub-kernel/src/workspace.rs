@@ -142,7 +142,7 @@ use crate::registry::FormatRegistry;
 use crate::rename_recovery::{self, RenameRecoveryEdit, RenameRecoveryReceipt, RenameRecoveryScan};
 use crate::renderer::RenderedDocument;
 use crate::safety::Gate;
-use crate::same_content::SameContent;
+use crate::same_content::{LearnedFingerprints, SameContentOutcome};
 use crate::session::{ContextChange, Session};
 use crate::settings::{MachineSettings, SettingsStore, SharedSettings};
 use crate::transfer::{MemorySink, OpenSources, ResourceLease, SourceBacking, PROLOGUE};
@@ -2854,11 +2854,11 @@ pub struct PreparedResourceOpen {
 }
 
 /// La domanda «c'è già questo contenuto nel vault?» sul vault attivo, eseguibile
-/// senza custodia workspace: il vault si prende sotto il lucchetto, il confronto
-/// si fa fuori (vedi
-/// [`Vault::same_content_bytes`](crate::vault::Vault::same_content_bytes)).
+/// senza custodia workspace: i candidati si prendono dall'indice vivo sotto il
+/// lucchetto, il confronto si fa fuori (vedi [`crate::same_content`]).
 pub struct PreparedSameContent {
     vault: crate::vault::Vault,
+    plan: crate::same_content::Plan,
 }
 
 /// Il lettore delle lease di un vault, da tenere fuori dal workspace.
@@ -3620,10 +3620,13 @@ impl PreparedResourceOpen {
 }
 
 impl PreparedSameContent {
-    /// Il contenuto, già in memoria, cercato fra i file del vault: vedi
-    /// [`SameContent`].
-    pub fn invoke(self, bytes: &[u8]) -> SameContent {
-        self.vault.same_content_bytes(bytes)
+    /// Il contenuto, già in memoria, confrontato con i candidati: vedi
+    /// [`SameContent`](crate::same_content::SameContent). I byte devono essere
+    /// quelli della misura data a [`Workspace::prepare_same_content`]; le
+    /// impronte calcolate per strada tornano all'indice con
+    /// [`Workspace::learn_fingerprints`].
+    pub fn invoke(self, bytes: &[u8]) -> SameContentOutcome {
+        crate::same_content::answer(&self.vault, self.plan, bytes)
     }
 }
 
@@ -5741,6 +5744,7 @@ impl Workspace {
         for entry in entries {
             self.indexes.core.set_entry_observed(entry, observed_at);
         }
+        self.indexes.core.mark_scanned();
 
         // **Riapertura incrementale**: per ogni documento descritto dall'anagrafe
         // (size+mtime+timbro di cambiamento → impronta) che porta i metadati e
@@ -6591,13 +6595,48 @@ impl Workspace {
         })
     }
 
-    /// La domanda sul contenuto, da fare fuori dal lucchetto del workspace: si
-    /// prende il vault clonato e si rilascia la custodia (vedi
-    /// [`PreparedSameContent`]).
-    pub fn prepare_same_content(&self) -> PreparedSameContent {
+    /// La domanda «c'è già un file con questi `bytes_len` byte, dello stesso
+    /// tipo di `target`?», da fare fuori dal lucchetto del workspace: i
+    /// candidati si prendono adesso dall'indice vivo (le voci in memoria, con
+    /// misura e impronta), il vault si clona, e la custodia si rilascia (vedi
+    /// [`PreparedSameContent`]). Finché la scansione non ha installato
+    /// l'anagrafe la risposta è «non so».
+    pub fn prepare_same_content(&self, target: &DocId, bytes_len: u64) -> PreparedSameContent {
+        let plan = crate::same_content::plan(
+            self.indexes.core.entries.values(),
+            self.indexes.core.anagrafe_complete(),
+            &self.docs.vault.ignore_policy(),
+            target,
+            bytes_len,
+        );
         PreparedSameContent {
             vault: self.docs.vault.clone(),
+            plan,
         }
+    }
+
+    /// Riporta nell'indice vivo le impronte che una domanda sul contenuto ha
+    /// calcolato fuori dal lucchetto. Ciascuna si tiene solo se la voce c'è
+    /// ancora con la misura e la data lette, e se quella data era già nel
+    /// passato quando la domanda è cominciata (*racily clean*): una voce
+    /// cambiata nel frattempo, da una scrittura o dal rilevatore, non torna
+    /// indietro. Non scrive niente su disco: l'anagrafe porta le impronte in
+    /// `entries.json` con [`store_entries`](Self::store_entries), l'unico che lo
+    /// scrive. Ritorna quante impronte ha tenuto.
+    pub fn learn_fingerprints(&mut self, learned: LearnedFingerprints) -> usize {
+        learned
+            .0
+            .into_iter()
+            .filter(|learned| learned.mtime != 0 && learned.mtime < learned.observed_at)
+            .filter(|learned| {
+                self.indexes.core.learn_fingerprint(
+                    &learned.id,
+                    learned.size,
+                    learned.mtime,
+                    &learned.fingerprint,
+                )
+            })
+            .count()
     }
 
     fn check_resource_lease(&self, lease: &ResourceLease) -> Result<()> {

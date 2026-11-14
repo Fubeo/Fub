@@ -147,11 +147,12 @@ pub enum ResourceReuse {
     /// Si scrive sempre: il deposito di sempre.
     #[default]
     Never,
-    /// Se un file del vault ha esattamente questi byte (anche con un altro
-    /// nome), non si scrive e la ricevuta nomina quel file. Vale solo per un
-    /// file nuovo (`expected` nullo). Quando l'host non sa rispondere (limiti,
-    /// tabella delle voci assente o rotta), si scrive: nel dubbio si deposita,
-    /// mai si perde un deposito.
+    /// Se un file del vault con la stessa estensione ha esattamente questi
+    /// byte (anche con un altro nome), non si scrive e la ricevuta nomina quel
+    /// file; un contenuto vuoto non si riusa mai. Vale solo per un file nuovo
+    /// (`expected` nullo). Quando l'host non sa rispondere (limiti, indice non
+    /// ancora pronto), si scrive: nel dubbio si deposita, mai si perde un
+    /// deposito.
     SameContent,
 }
 
