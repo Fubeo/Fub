@@ -2,8 +2,9 @@
 //! operazioni, senza scriverla. Non scrive niente.
 //!
 //! Il disegno è del nucleo (`fub_canvas_core::preview`, T21): qui si leggono la
-//! lavagna e la revisione, si applica la lista con le stesse regole di
-//! `canvas.check` (la porta è `after_ops`), e si sceglie la forma dell'immagine:
+//! lavagna e la revisione, si riempiono le misure dei file (come in
+//! `canvas.apply`), si applica la lista con le stesse regole di `canvas.check`
+//! (la porta è `after_ops`), e si sceglie la forma dell'immagine:
 //! un PNG con `draw`, che ha i caratteri di Fub, altrimenti l'SVG come testo. Il
 //! payload porta anche l'elenco delle schede col loro numero, quello dell'immagine
 //! e della lettura, e se il testo di una scheda non si vede per intero.
@@ -49,10 +50,15 @@ pub(super) fn canvas_preview(
     // disegno sono quelli che la scrittura darebbe.
     let seed = seed.unwrap_or_else(|| Fnv1a::hash(revision.0.as_bytes()));
     let drawn: Cow<'_, Canvas> = match list {
-        Some(list) => Cow::Owned(
-            preview::after_ops(core.canvas(), &list, seed)
-                .map_err(|problems| refused(&doc, &problems))?,
-        ),
+        Some(list) => {
+            // Le misure dei file entrano prima del disegno, come in `canvas.apply`
+            // e `canvas.check`: l'anteprima e la scrittura danno la stessa altezza.
+            let list = measure_list(&*host, core.canvas(), list);
+            Cow::Owned(
+                preview::after_ops(core.canvas(), &list, seed)
+                    .map_err(|problems| refused(&doc, &problems))?,
+            )
+        }
         None => Cow::Borrowed(core.canvas()),
     };
 

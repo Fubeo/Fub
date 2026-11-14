@@ -1584,4 +1584,40 @@ mod con_draw {
             );
         }
     }
+
+    #[test]
+    fn l_anteprima_misura_i_file_come_la_scrittura() {
+        // Un PNG di 4×2 pixel: `add_card` senza misura e `resize` con `fit` ne
+        // prendono le proporzioni. Il disegno della lista prima di scrivere e
+        // quello della lavagna scritta sono lo stesso PNG: stessa altezza.
+        let (_vault, mut ws) = vault_with(&[("schemi/foto.png", png_file(4, 2))]);
+        let ops = json!([
+            { "op": "add_card", "id": "foto", "file": "schemi/foto.png", "x": 400, "y": 0 },
+            { "op": "resize", "id": "foto", "width": 240, "fit": "content" }
+        ])
+        .to_string();
+        let (planned, planned_pixels) = picture(&mut ws, json!({ "doc": BOARD, "ops": ops }));
+        apply(
+            &mut ws,
+            json!({ "doc": BOARD, "ops": ops }),
+            InvokeMode::Apply,
+        )
+        .expect("le operazioni si applicano");
+        let foto = card(&ws, "foto");
+        assert_eq!(
+            (&foto["width"], &foto["height"]),
+            (&json!(240), &json!(120)),
+            "{foto}"
+        );
+        let (written, written_pixels) = picture(&mut ws, json!({ "doc": BOARD }));
+        assert_eq!(
+            (&planned["width"], &planned["height"]),
+            (&written["width"], &written["height"]),
+            "la stessa altezza"
+        );
+        assert!(
+            planned_pixels == written_pixels,
+            "l'anteprima e la lavagna scritta disegnano lo stesso"
+        );
+    }
 }
