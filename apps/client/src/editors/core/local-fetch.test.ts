@@ -29,4 +29,19 @@ describe("le letture locali", () => {
     expect(await appFile("/fonts/literata.woff2")).toBe(font);
     expect(fetched).toHaveBeenCalledWith("/fonts/literata.woff2", expect.objectContaining(EXPECTED));
   });
+
+  // Il presidio non dimostra il comportamento: i due test sopra lo fanno per
+  // le letture che hanno un punto d'ingresso. Questo ferma il prossimo
+  // `fetch` nudo, come quello dei caratteri dei diagrammi.
+  it("nessun sorgente del client chiama fetch senza le opzioni delle letture locali", () => {
+    const sources = import.meta.glob("../../**/*.ts", { query: "?raw", import: "default", eager: true }) as Record<string, string>;
+    const bare: string[] = [];
+    for (const [path, text] of Object.entries(sources)) {
+      if (path.endsWith(".test.ts") || path.endsWith("/local-fetch.ts")) continue;
+      for (const match of text.matchAll(/(?<![\w.])fetch\(([^\n]*)/g)) {
+        if (!match[1].includes("LOCAL_FETCH")) bare.push(`${path}: ${match[0].trim()}`);
+      }
+    }
+    expect(bare).toEqual([]);
+  });
 });

@@ -265,8 +265,15 @@ label. Nega le nuove finestre e i download.
   e lo dice. In prova il comando non chiama la rete.
 
 Un link `https` di una nota va al browser di sistema. Va al visore con Alt+clic
-o quando `viewer.links` è acceso. Un indirizzo che il visore non apre resta al
-browser di sistema.
+o quando `viewer.links` è acceso. Un indirizzo `http` che il visore non apre
+va al browser di sistema; ogni altro schema non si apre, con o senza visore
+montato (`apps/client/src/ui/web-viewer.ts`). Un nodo `web_view` di una vista
+incornicia soltanto un indirizzo `https:`.
+
+Le letture del client con `fetch` (asset del vault, file dell'app, tessere
+della mappa) non seguono redirect e non portano credenziali né referrer:
+passano da `LOCAL_FETCH` in `apps/client/src/editors/core/local-fetch.ts`, e un
+test ferma un `fetch` senza quelle opzioni.
 
 ## Host nativo del clipper
 

@@ -12,6 +12,7 @@ import { openVaultRoot, vaultArg } from "../../state/vault";
 import type { BufferedSurface, SurfaceMountContext } from "../core/registry";
 import type { SurfaceMenu, SurfaceMenuItem } from "../core/editor-menu";
 import { uniformRowRange } from "../core/row-window";
+import { LOCAL_FETCH } from "../core/local-fetch";
 import {
   BASE_FORMAT, BASE_MAP_ATTRIBUTION_FALLBACK, BASE_RENDERER_NS,
   allowedBaseTileUrl, baseRowsToCsv, baseSurfaceModes, cellText, deriveBaseRows, expectedProperty, groupBaseRows,
@@ -556,7 +557,7 @@ export function mountBaseSurface(
         for (let col = 0; col < count; col++) for (let row = 0; row < count; row++) {
           const url = allowedBaseTileUrl(template, provider.kind, allowedHosts, level, col, row);
           if (!url) throw new Error("tile endpoint outside allowlist");
-          const response = await fetch(url, { signal: request.signal, redirect: "error", credentials: "omit", referrerPolicy: "no-referrer" });
+          const response = await fetch(url, { ...LOCAL_FETCH, signal: request.signal });
           const mime = response.headers.get("content-type")?.split(";")[0]?.trim().toLowerCase();
           const types = provider.kind === "vector" ? ["image/svg+xml"] : ["image/png", "image/jpeg", "image/webp"];
           if (!response.ok || !mime || !types.includes(mime) || !response.body || Number(response.headers.get("content-length") ?? 0) > 1024 * 1024) throw new Error("tile response unavailable or unsupported");
