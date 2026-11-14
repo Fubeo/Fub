@@ -637,7 +637,6 @@ export class GridEngine {
       : { anchor: { ...anchor }, focus: { ...focus } };
   }
 
-  /// Il modo della cella: «Pronto», «Inserisci» o «Modifica».
   /// Le celle tagliate in attesa di un incolla, sul foglio di adesso, o
   /// `null`: lo stesso segno della Tabella (`TableFrame.cutRange`).
   cutRange(): { r0: number; c0: number; r1: number; c1: number } | null {
@@ -650,6 +649,7 @@ export class GridEngine {
     return this.#others.length + 1;
   }
 
+  /// Il modo della cella: «Pronto», «Inserisci» o «Modifica».
   editMode(): GridEditMode {
     return this.#editing?.mode ?? "ready";
   }

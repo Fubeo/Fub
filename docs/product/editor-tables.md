@@ -47,7 +47,9 @@ celle il puntatore resta la freccia.
   sposta in un passo solo; Escape rinuncia, e ogni altra modifica della
   tabella toglie il segno. Il segno vale dentro la sua tabella: incollato in
   un'altra tabella o nel testo, il taglio è un incolla qualunque e le celle
-  tagliate restano dove sono.
+  tagliate restano dove sono, e il primo taglio lo dice. Un taglio che
+  incollato uscirebbe dal bordo della tabella non sposta niente: è un incolla
+  qualunque.
 - Mod+D copia in giù la prima riga scelta (con una riga sola, quella sopra;
   l'intestazione non scende nel corpo), Mod+R a destra la prima colonna. Il
   quadratino nell'angolo della selezione continua la serie.
@@ -87,6 +89,9 @@ spostare, ordinare o allineare riscrive la tabella incolonnata: ogni colonna
 larga quanto la sua cella più lunga (almeno tre), le celle allineate come dice
 il delimitatore. Una tabella che è già incolonnata così resta incolonnata anche
 quando cambia una cella. Una pipe in una cella diventa `\|`, un a capo `<br>`.
+Anche quando la tabella si incolonna di nuovo, il testo cambia soltanto dove
+cambia: le righe uguali restano intatte, e il cursore e la selezione degli
+altri riquadri sulla stessa nota restano al loro posto.
 
 Le celle mostrano la resa in riga (grassetto, codice, link, formule); Mod+clic
 segue un link o un tag. Con la griglia a fuoco la barra di formattazione agisce
@@ -99,7 +104,9 @@ e si copia, ma non si scrive.
 Nelle tabelle del docx il cursore resta nel testo: le frecce sono del testo,
 Tab e Maiusc+Tab vanno di cella in cella (Tab dall'ultima aggiunge una riga),
 e Maiusc con una freccia che esce dalla cella, o il trascinamento da una cella
-all'altra, sceglie un rettangolo di celle; Mod+trascina ne aggiunge un altro.
+all'altra, sceglie un rettangolo di celle; Mod+trascina ne aggiunge un altro,
+e Mod+clic aggiunge una cella. Mod+clic fuori dalla tabella delle celle scelte
+le lascia.
 
 I gesti del foglio che nel testo non scrivono niente valgono sempre dentro una
 tabella: Mod+Spazio sceglie la colonna, Mod+Maiusc+Spazio la tabella,
@@ -112,7 +119,8 @@ toccano soltanto dove nessuna cella è unita. Senza celle scelte Invio va a
 capo, Mod+R allinea a destra e Mod+«+» fa l'apice, come nel resto del testo.
 
 Sulle celle scelte Canc svuota tutti gli intervalli, copia passa TSV e una
-tabella HTML, e «Unisci celle» unisce una riga. Taglia segna le celle come nel
+tabella HTML (con più intervalli rifiuta, e lo dice, come i fogli), e
+«Unisci celle» unisce una riga. Taglia segna le celle come nel
 modo foglio, dentro la loro tabella, e l'incolla le sposta in un passo solo;
 Escape toglie prima il segno, poi gli intervalli aggiunti, poi le celle. Ogni
 gesto è un passo d'annullamento, e le celle restano scelte.
@@ -137,7 +145,8 @@ descritta in [Editor e anteprima](editor-and-preview.md#la-griglia).
   cornice e moto)
 - `apps/client/src/editors/text/profiles/markdown/table-grid.ts`,
   `table-model.ts` e `table-widget.ts`
-- `apps/client/src/editors/rich/cell-selection.ts`
+- `apps/client/src/editors/rich/cell-selection.ts` e `table-structure.ts` (righe
+  e colonne, comuni ai comandi del documento)
 - `apps/client/src/editors/grid/engine.ts` e `shortcuts.ts`
 - `apps/client/src/panels/format-bar.ts` (i tasti della tabella per il dito)
 - `apps/client/src/theme/scrittoio/skin/tabella.css`

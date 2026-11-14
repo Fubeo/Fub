@@ -24,16 +24,17 @@
 import type { Node as PmNode, ResolvedPos } from "prosemirror-model";
 import { Plugin, PluginKey, TextSelection, type EditorState, type Transaction } from "prosemirror-state";
 import { Decoration, DecorationSet, type EditorView } from "prosemirror-view";
-import type { TableCaps, TableEdit } from "../../tabella/adapter";
+import type { TableCaps } from "../../tabella/adapter";
 import { clipboardData, cutMoves, cutTarget, tellCutOnce, type CutMark } from "../../tabella/clipboard";
 import { structureEdit } from "../../tabella/commands";
 import { documentIntent } from "../../tabella/keys";
-import { isMultiCell, nextInRange, type Cell, type Move, type Range, type Shape } from "../../tabella/navigation";
+import { boundedShape, isMultiCell, nextInRange, type Cell, type Move, type Range } from "../../tabella/navigation";
 import { fillCopy, rangeBetween, touches, wholeRange, withRange } from "../../tabella/selection";
 import { t } from "../../i18n/strings";
 import { openLifetime, type Lifetime } from "../../ui/lifetime";
 import { notify } from "../../ui/notify";
 import { richSchema } from "./schema";
+import { applyTableEdit } from "./table-structure";
 
 const { para, row: rowType, cell: cellType, table: tableType } = richSchema.nodes;
 
@@ -240,17 +241,6 @@ function edges(state: EditorState, box: CellBox): { start: boolean; end: boolean
   return { start: from <= start, end: to >= end };
 }
 
-/// I passi fra righe e colonne di una tabella senza nascoste.
-function shapeOf(size: { readonly rows: number; readonly columns: number }): Shape {
-  return {
-    step: (axis, from, step) => {
-      const next = from + step;
-      return next >= 0 && next < (axis === "row" ? size.rows : size.columns) ? next : from;
-    },
-    visible: () => true,
-  };
-}
-
 function onKey(view: EditorView, event: KeyboardEvent): boolean {
   const state = view.state;
   const plugin = cellKey.getState(state) ?? NONE;
@@ -300,7 +290,7 @@ function onKey(view: EditorView, event: KeyboardEvent): boolean {
     case "enter": {
       if (!multi || !isMultiCell(range)) return false;
       const move: Move = intent.kind === "tab" ? (intent.step > 0 ? "right" : "left") : (intent.step > 0 ? "down" : "up");
-      view.dispatch(chooseCells(state, { ...current, active: nextInRange(range, active, move, shapeOf(size)) }));
+      view.dispatch(chooseCells(state, { ...current, active: nextInRange(range, active, move, boundedShape(size)) }));
       return true;
     }
     case "whole": {
@@ -339,7 +329,7 @@ function onKey(view: EditorView, event: KeyboardEvent): boolean {
       const change = structureEdit({ range, active, size, caps: DOCUMENT_TABLE_CAPS }, intent.change);
       if (!change) return true;
       const tr = state.tr;
-      if (!applyStructure(tr, here.table, here.tablePos, change.edit)) return true;
+      if (!applyTableEdit(tr, here.table, here.tablePos, change.edit)) return true;
       view.dispatch(chooseCells(state, {
         tablePos: here.tablePos,
         anchor: change.select.anchor,
@@ -365,62 +355,6 @@ function onKey(view: EditorView, event: KeyboardEvent): boolean {
     default:
       return false;
   }
-}
-
-/// Le righe e le colonne che Ctrl+«+» e Ctrl+«−» inseriscono o tolgono. Le
-/// colonne si toccano soltanto dove nessuna cella è unita, come i comandi
-/// delle colonne. `false` se il cambio non si può fare.
-function applyStructure(tr: Transaction, table: PmNode, tablePos: number, edit: TableEdit): boolean {
-  const rows: PmNode[] = [];
-  table.forEach((row) => rows.push(row));
-  const even = rows.every((row) => row.childCount === rows[0]!.childCount && Array.from({ length: row.childCount }, (_, c) => row.child(c)).every((cell) => cell.attrs.span === 1));
-  const emptyCell = (cell: PmNode) => {
-    const first = cell.firstChild;
-    return cellType.create({ ...cell.attrs, k: null }, para.create(first?.type === para ? first.attrs : null));
-  };
-  const emptyRow = (like: PmNode) => {
-    const cells: PmNode[] = [];
-    like.forEach((cell) => cells.push(emptyCell(cell)));
-    return rowType.create({ ...like.attrs, k: null }, cells);
-  };
-  let next: PmNode[];
-  switch (edit.kind) {
-    case "insert-rows": {
-      const like = rows[Math.min(edit.at, rows.length - 1)]!;
-      next = [...rows.slice(0, edit.at), ...Array.from({ length: edit.count }, () => emptyRow(like)), ...rows.slice(edit.at)];
-      break;
-    }
-    case "delete-rows":
-      next = rows.filter((_, index) => index < edit.from || index > edit.to);
-      if (next.length === 0) return false;
-      break;
-    case "insert-columns": {
-      if (!even) return false;
-      next = rows.map((row) => {
-        const cells: PmNode[] = [];
-        row.forEach((cell) => cells.push(cell));
-        const like = cells[Math.min(edit.at, cells.length - 1)]!;
-        cells.splice(edit.at, 0, ...Array.from({ length: edit.count }, () => emptyCell(like)));
-        return rowType.create(row.attrs, cells);
-      });
-      break;
-    }
-    case "delete-columns": {
-      if (!even || edit.to - edit.from + 1 >= rows[0]!.childCount) return false;
-      next = rows.map((row) => {
-        const cells: PmNode[] = [];
-        row.forEach((cell, _offset, index) => {
-          if (index < edit.from || index > edit.to) cells.push(cell);
-        });
-        return rowType.create(row.attrs, cells);
-      });
-      break;
-    }
-    default:
-      return false;
-  }
-  tr.replaceWith(tablePos, tablePos + table.nodeSize, tableType.create(table.attrs, next));
-  return true;
 }
 
 function copyCells(view: EditorView, event: ClipboardEvent, cut: boolean): boolean {
