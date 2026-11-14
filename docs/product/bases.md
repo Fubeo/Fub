@@ -72,9 +72,9 @@ Il nome della proprietà si scrive con o senza il prefisso `prop.` (`due` e
 formule non sono ancora date del calendario. Una vista senza la sua chiave si
 legge, e il piano dice che la chiave manca (`date_key` o `start_key` vuoti).
 
-**La forma su disco.** Obsidian non conosce ancora `calendar` e `timeline`. Fino
-alla prova con Obsidian, Fub scrive il calendario come `type: table` con un
-blocco `fub:` che porta il tipo vero, e Obsidian ignora quel blocco:
+**La forma su disco.** Obsidian non conosce `calendar` e `timeline`, quindi
+Fub scrive il calendario come `type: table` con un blocco `fub:` che porta il
+tipo vero. Obsidian mostra quella vista come una tabella e conserva il blocco:
 
 ```yaml
 views:
@@ -97,15 +97,28 @@ e passare a quella è cambiare le due righe di `disk_form`, in
 una tabella, come prima. Una vecchia versione di Fub legge la forma di ripiego
 come tabella, senza errori; la forma nativa la rifiuta come tipo sconosciuto.
 
-**Come si prova con Obsidian.** Il file
+**Che cosa fa Obsidian.** La prova del 2026-11-14, con Obsidian 1.13.7:
+
+- la forma nativa (`calendario.prova-obsidian.base`) apre il file e
+  l'elenco delle viste, ma al posto di ogni vista c'è «Unknown view type:
+  calendar» (e `timeline`): Obsidian non disegna le due viste, quindi Fub
+  resta sul ripiego;
+- la forma di ripiego (`calendario.ripiego.base`) mostra Calendario e Linea
+  come tabelle, con le note del vault;
+- quando l'utente cambia vista, Obsidian riscrive il `.base`: il blocco `fub:`
+  e i suoi valori restano, ma **i commenti YAML spariscono** e le chiavi
+  cambiano ordine (`type` prima di `name`). Un commento scritto in un `.base`
+  dura finché Obsidian non lo riscrive.
+
+**Come si rifà la prova** (con una versione nuova di Obsidian). Il file
 `crates/fub-format-base/tests/fixtures/calendario.prova-obsidian.base` ha le
 due viste nella forma nativa. Serve una cartella di prova in Obsidian (una
 cartella vuota, non il vault vero) con il file rinominato in `Prova.base` e
 le tre note `Riunione.md`, `Consegna.md` e `Idea.md` della cartella
 `crates/fub-format-base/tests/fixtures/prova-obsidian/`. Si apre `Prova.base`
 e si guarda: se si vedono le viste Calendario e Linea, con le note nei giorni
-giusti, Obsidian regge la forma nativa; se Obsidian rifiuta tutto il file, o
-mostra un errore al posto delle viste, resta il ripiego.
+giusti, Obsidian regge la forma nativa e si cambia `disk_form`; se mostra un
+errore al posto delle viste, resta il ripiego.
 
 **Che cosa legge la vista.** Per ogni nota la valutazione dà il suo giorno. Il
 giorno è la data come è scritta: l'ora e il fuso non lo spostano. Un valore che

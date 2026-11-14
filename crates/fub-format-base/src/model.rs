@@ -421,8 +421,9 @@ pub struct FubViewDef {
 /// La forma su disco di un tipo di vista: il valore di `type` e, se il tipo
 /// non lo porta da sé, `fub.view`.
 ///
-/// È il ripiego di Q3 (T17a): finché la prova con Obsidian non dice che
-/// Obsidian regge `calendar` e `timeline`, Fub scrive `table` con `fub.view`.
+/// È il ripiego di Q3 (T17a): Obsidian 1.13.7 non regge `calendar` e
+/// `timeline` (prova del 2026-11-14, «Unknown view type»), quindi Fub scrive
+/// `table` con `fub.view`, che Obsidian mostra come tabella e conserva.
 /// Passare alla forma nativa è cambiare queste due righe in
 /// `(ViewType::Calendar, None)` e `(ViewType::Timeline, None)`: la lettura
 /// accetta già entrambe le forme.
