@@ -1355,10 +1355,71 @@ function askedDocs(expr: QueryExpr): string[] | null {
   return docs.length > 0 ? docs : null;
 }
 
+/// Una resa di Markdown per le note che il banco non ha scritte a mano in
+/// `OUTPUT`: titoli, paragrafi, elenchi (con le caselle dei compiti), blocchi
+/// di codice, collegamenti e grassetto. Non è il renderer vero, e non vuole
+/// esserlo: basta a non mostrare il sorgente grezzo, col suo `#`, nell'anteprima.
+function plainHtml(markdown: string): string {
+  const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  const inline = (s: string) => esc(s)
+    .replace(/\[\[([^\]|]+)\|([^\]]+)\]\]/g, "$2")
+    .replace(/\[\[([^\]]+)\]\]/g, "$1")
+    .replace(/`([^`]+)`/g, "<code>$1</code>")
+    .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
+    .replace(/\*([^*]+)\*/g, "<em>$1</em>");
+  const out: string[] = [];
+  let paragraph: string[] = [];
+  let items: string[] = [];
+  let fence: string[] | null = null;
+  const flush = (): void => {
+    if (paragraph.length > 0) out.push(`<p>${paragraph.map(inline).join(" ")}</p>`);
+    if (items.length > 0) out.push(`<ul>${items.join("")}</ul>`);
+    paragraph = [];
+    items = [];
+  };
+  for (const line of markdown.split("\n")) {
+    if (fence !== null) {
+      if (line.startsWith("```")) {
+        out.push(`<pre><code>${esc(fence.join("\n"))}</code></pre>`);
+        fence = null;
+      } else fence.push(line);
+      continue;
+    }
+    if (line.startsWith("```")) {
+      flush();
+      fence = [];
+      continue;
+    }
+    const heading = /^(#{1,6})\s+(.*)$/.exec(line);
+    if (heading) {
+      flush();
+      const level = heading[1]!.length;
+      out.push(`<h${level}>${inline(heading[2]!)}</h${level}>`);
+      continue;
+    }
+    const item = /^\s*[-*]\s+(?:\[([ xX])\]\s+)?(.*)$/.exec(line);
+    if (item) {
+      if (paragraph.length > 0) flush();
+      const box = item[1] === undefined ? "" : `<input type="checkbox" disabled${item[1] === " " ? "" : " checked"}> `;
+      items.push(`<li>${box}${inline(item[2]!)}</li>`);
+      continue;
+    }
+    if (line.trim() === "") {
+      flush();
+      continue;
+    }
+    if (items.length > 0) flush();
+    paragraph.push(line);
+  }
+  if (fence !== null) out.push(`<pre><code>${esc(fence.join("\n"))}</code></pre>`);
+  flush();
+  return out.join("\n");
+}
+
 const RESPONSES: Partial<Record<IndexQuery["kind"], (q: IndexQuery) => IndexResult>> = {
   render_preview: (q) => {
     const doc = (q as { doc: string }).doc;
-    const html = OUTPUT[doc] ?? `<p>${(CORPUS[doc] ?? "").split("\n")[0] ?? ""}</p>`;
+    const html = OUTPUT[doc] ?? plainHtml(CORPUS[doc] ?? "");
     return { kind: "render_preview", value: { html, parts: [] } };
   },
   render_embed: (q) => {
