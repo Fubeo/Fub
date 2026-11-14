@@ -270,22 +270,23 @@ rilevatore, non è un candidato: la risposta è «non trovato», e chi chiede
 copia.
 
 Ogni candidato porta un'impronta: quella della voce, se misura e data del file
-sono ancora quelle della voce e l'impronta è nella forma corrente (`sha256:`),
-oppure una calcolata leggendo il file a pezzi. Un'impronta FNV-1a di una
-tabella scritta prima di SHA-256 non dice né sì né no, e si ricalcola.
-L'impronta sceglie il candidato, ma solo un confronto dei byte intero dà
-«trovato»: un'impronta vecchia può solo far copiare. Un candidato che non si
-legge, che cambia mentre lo si legge (misura, data, segno del cambio o
-identità) o che non ha più la misura cercata si salta, e della sua impronta non
-si impara niente.
+sono ancora quelle della voce e l'impronta è nella forma corrente
+(`Revision::is_current_form`), oppure una calcolata leggendo il file a pezzi.
+Un'impronta FNV-1a di una tabella scritta prima di SHA-256 non dice né sì né
+no, e si ricalcola. L'impronta sceglie il candidato, ma solo un confronto dei
+byte intero dà «trovato»: un'impronta vecchia può solo far copiare. Un
+candidato che non si legge, che cambia mentre lo si legge (misura, data, segno
+del cambio o identità) o che non ha più la misura cercata si salta, e della
+sua impronta non si impara niente.
 
 Un'impronta calcolata torna all'indice vivo sotto il lucchetto del workspace
 (`Workspace::learn_fingerprints`), nello stesso vault a cui si è fatta la
-domanda, e si tiene soltanto se:
+domanda, insieme al **testimone** del file letto (`FileWitness`: segno del
+cambio e identità, presi dalla domanda fuori dal lucchetto). Si tiene soltanto
+se:
 
 - la data letta è anteriore all'istante della domanda, preso dall'orologio del
   vault (*racily clean*);
-- il file è ancora quello letto: stesso segno del cambio e stessa identità;
 - la voce ha ancora la misura e la data lette: una voce cambiata nel
   frattempo, da una scrittura o dal rilevatore, non torna indietro;
 - la riga dell'anagrafe con quella misura e quella data, se c'è, descrive lo
@@ -293,17 +294,31 @@ domanda, e si tiene soltanto se:
   data, senza il rilevatore, ha una voce che descrive ancora quello di prima,
   e l'impronta del nuovo certificherebbe i metadati del vecchio.
 
-La consegna è un prestito esclusivo breve, senza drenare eventi: imparare
-un'impronta non ne produce, e l'indice non ha un lucchetto suo fuori dal
-workspace.
-Su disco la porta l'anagrafe (`EntryStore`), l'unica che scrive
-`entries.json`, la prossima volta che si scrive. Il formato non cambia:
-l'impronta è il campo che la voce già porta.
+Sotto il lucchetto si confronta soltanto: nessuna domanda al supporto, e la
+riga dell'anagrafe non si copia. L'indice tiene il testimone accanto
+all'impronta finché la voce non cambia. La domanda dopo crede l'impronta solo
+se il file appena guardato ha lo stesso testimone, e `store_entries` non la
+scrive in una riga il cui file adesso è un altro: alla riapertura quel file si
+rilegge invece di essere certificato con i byte di prima. Due testimoni dicono
+lo stesso file se ogni campo che entrambi conoscono coincide; un campo che una
+parte non conosce non decide, per il segno come per l'identità.
+
+La consegna è un prestito esclusivo breve: `Custody::write` prende il turno di
+scrittura prima del lucchetto, quindi non entra a metà del lavoro di un altro
+writer, e non drena eventi, perché imparare un'impronta non ne produce.
+L'indice non ha un lucchetto suo fuori dal workspace. Su disco la porta
+l'anagrafe (`EntryStore`), l'unica che scrive `entries.json`, la prossima
+volta che si scrive. Il formato non cambia: l'impronta è il campo che la voce
+già porta.
 
 Ci sono due limiti, costanti con nome: `MAX_CANDIDATES`, 64 candidati, e
 `MAX_BYTES_READ`, 512 MiB letti per domanda. Oltre questi limiti la risposta è
-«non so» e chi chiede copia: nel dubbio si copia. Il contenuto che arriva si
-confronta dove sta, senza copia.
+«non so» e chi chiede copia: nel dubbio si copia. Troppi candidati danno lo
+stesso «non so» a ogni domanda con quei byte; il budget finito invece no,
+perché le impronte imparate rendono la domanda dopo più economica. Per questo
+`Host::same_content` fa da sé un secondo giro, uno solo, quando il primo ha
+finito il budget e ha insegnato almeno un'impronta all'indice. Il contenuto
+che arriva si confronta dove sta, senza copia.
 
 Il lucchetto del workspace non si tiene mentre si legge. La domanda prende i
 candidati, lascia il lucchetto, legge, e rientra solo per consegnare le

@@ -29,8 +29,10 @@ ricontrolla che ci sia ancora: allora non scrive niente. Se non c'è, o se non
 sa rispondere, scrive: nel dubbio si deposita. La lavagna (`depositOrReuse`)
 chiede il riuso solo col primo nome; dopo un `already_exists` i nomi seguenti
 sono scritture semplici, senza rifare la ricerca: la risposta non dipende dal
-nome, e il «non so» di un vault aperto viene dai limiti, che con gli stessi
-byte rispondono uguale. La ricevuta
+nome. Il «non so» di un vault aperto viene dai limiti: troppi candidati
+rispondono uguale con gli stessi byte, e per il budget di lettura finito
+l'host fa da sé un secondo giro, uno solo, se il primo ha insegnato impronte
+all'indice. La ricevuta
 (`ResourceWriteReceipt`) porta `id` e `revision` del file scritto, o di quello
 che c'era, e `reused` (vero solo se non si è scritto; assente in una ricevuta
 di prima = `false`). Gli errori sono quelli di una scrittura (`already_exists`,
