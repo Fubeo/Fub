@@ -15,4 +15,6 @@ export interface Judged {
   pass: boolean;
 }
 
+export declare function worst(values: readonly number[]): number;
+
 export declare function judgeSamples(samples: readonly number[], limits: number | readonly number[]): Judged;

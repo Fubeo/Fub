@@ -12,11 +12,14 @@
 // quel fotogramma (il garbage collector, lo scheduler della macchina
 // condivisa) lo porta sopra la soglia senza che l'editor sia lento. Sui
 // runner GitHub è successo: il tasto V a 49 900 elementi misurava 57 ms in un
-// giro e 184 nel successivo, con tre compiti lunghi nella finestra. Così le
-// corse che rispondono si fanno `REPEATS` volte, ognuna dallo stesso stato, e
-// ogni passo si giudica sulla **mediana** delle sue misure: un campione
-// storto su tre non la sposta, una lentezza vera sì, perché tocca tutti i
-// giri. La soglia resta quella.
+// giro e 184 nel successivo, con tre compiti lunghi nella finestra; e un
+// compito del runner di 74 ms, fuori da ogni passo, ha fatto rossa una
+// scelta. Così le corse si fanno `REPEATS` volte, ognuna dallo stesso stato,
+// e ogni passo si giudica sulla **mediana** delle sue misure, come
+// l'assestamento peggiore di ogni giro e il compito lungo peggiore fuori dai
+// passi (`worst`, 0 per un giro che non ne ha): un campione storto su tre non
+// la sposta, una lentezza vera sì, perché tocca tutti i giri. La soglia
+// resta quella.
 //
 // Se i campioni dello stesso passo hanno soglie diverse (un giro ridisegna la
 // vista e un altro no), si prende la mediana dello **scarto** di ciascuno
@@ -44,4 +47,12 @@ export function judgeSamples(samples, limits) {
   if (each.length !== samples.length) throw new RangeError("una soglia per campione, o una per tutti");
   const excess = median(samples.map((ms, i) => ms - each[i]));
   return { medianMs: median(samples), samplesMs: [...samples], limitsMs: each, pass: excess <= 0 };
+}
+
+/// Il più grande di un elenco di tempi, 0 se è vuoto: il compito lungo
+/// peggiore di un giro fuori dai passi, o il suo assestamento peggiore. Un
+/// giro senza conta 0, e la mediana dei giri si confronta con la soglia come
+/// quella di un passo.
+export function worst(values) {
+  return values.reduce((a, b) => Math.max(a, b), 0);
 }

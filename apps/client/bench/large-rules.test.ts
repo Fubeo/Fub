@@ -6,7 +6,7 @@
 // elementi costa meno di 60 ms, e un giro con tre compiti lunghi del runner
 // nella finestra lo ha portato a 184.
 import { describe, expect, it } from "vitest";
-import { REPEATS, judgeSamples, median } from "./large-rules.mjs";
+import { REPEATS, judgeSamples, median, worst } from "./large-rules.mjs";
 
 describe("i passi ripetuti del banco delle scene grandi", () => {
   it("si ripetono un numero dispari di volte", () => {
@@ -42,6 +42,17 @@ describe("i passi ripetuti del banco delle scene grandi", () => {
     expect(judgeSamples([90, 250, 95], [100, 300, 100]).pass).toBe(true);
     expect(judgeSamples([120, 250, 130], [100, 300, 100]).pass).toBe(false);
     expect(() => judgeSamples([1, 2], [100])).toThrow(RangeError);
+  });
+
+  it("un compito lungo fuori dai passi in un giro solo non fa rosso, in tutti sì", () => {
+    // Il peggiore di ogni giro, 0 se non ce n'è; la soglia è quella di un
+    // compito lungo, 50 ms. In CI: 74 ms al terzo giro della scelta.
+    const perRound = [[], [], [74, 51]].map(worst);
+    expect(perRound).toEqual([0, 0, 74]);
+    expect(judgeSamples(perRound, 50).pass).toBe(true);
+    // Il compito di 80 ms piantato in ogni giro, come fa la prova del banco.
+    expect(judgeSamples([[80], [80, 12], [80]].map(worst), 50).pass).toBe(false);
+    expect(judgeSamples([0, 54, 60], 50).pass).toBe(false);
   });
 
   it("la mediana", () => {
