@@ -156,16 +156,87 @@ impl UreqNetwork {
 
 /// `url` come si può mostrare in un errore: schema, host, porta e percorso,
 /// senza credenziali (`user:pass@`), query e frammento.
+///
+/// L'indirizzo si legge col parser di `http` (lo stesso che userà la
+/// richiesta), non tagliando a mano: una password con `?`, `#` o `/` dentro
+/// confonde un taglio sui caratteri, non un parser. Un indirizzo che non si
+/// legge non si mostra: resta lo schema, se c'è.
 fn shown_url(url: &str) -> String {
-    let base = url.split(['?', '#']).next().unwrap_or("");
-    let Some((scheme, rest)) = base.split_once("://") else {
-        return base.to_owned();
+    let unreadable = || match url.split_once("://") {
+        Some((scheme, _))
+            if !scheme.is_empty()
+                && scheme
+                    .chars()
+                    .all(|c| c.is_ascii_alphanumeric() || "+-.".contains(c)) =>
+        {
+            format!("{scheme}://<unreadable address>")
+        }
+        _ => "<unreadable address>".to_owned(),
     };
-    let (authority, path) = rest.find('/').map_or((rest, ""), |at| rest.split_at(at));
-    let host = authority
-        .rsplit_once('@')
-        .map_or(authority, |(_, host)| host);
-    format!("{scheme}://{host}{path}")
+    let Ok(uri) = url.parse::<ureq::http::Uri>() else {
+        return unreadable();
+    };
+    let (Some(scheme), Some(host)) = (uri.scheme_str(), uri.host()) else {
+        return unreadable();
+    };
+    let port = uri
+        .port_u16()
+        .map(|port| format!(":{port}"))
+        .unwrap_or_default();
+    // L'autorità, tolte le credenziali, deve essere proprio host e porta: con
+    // `user:pa?ss@host` il parser legge `user` come host e `pa` come porta
+    // che non è un numero, e un pezzo di credenziale finirebbe in vista.
+    let authority = uri.authority().map_or("", |authority| authority.as_str());
+    let bare = authority.rsplit_once('@').map_or(authority, |(_, bare)| bare);
+    if bare != format!("{host}{port}") {
+        return unreadable();
+    }
+    let path = match uri.path() {
+        "/" if !url.split_once("://").is_some_and(|(_, rest)| rest.contains('/')) => "",
+        path => path,
+    };
+    format!("{scheme}://{host}{port}{path}")
+}
+
+/// Il motivo di un errore di trasporto, con parole fisse: il testo di
+/// `ureq::Error` può ripetere l'indirizzo intero (un `BadUri` lo porta tale
+/// e quale), credenziali e query comprese.
+fn transport_reason(error: &ureq::Error) -> &'static str {
+    match error {
+        ureq::Error::Timeout(_) => "timed out",
+        ureq::Error::HostNotFound => "host not found",
+        ureq::Error::ConnectionFailed => "connection failed",
+        ureq::Error::Io(io) => io_reason(io),
+        ureq::Error::BodyExceedsLimit(_) => "response body above the host ceiling",
+        ureq::Error::TooManyRedirects | ureq::Error::RedirectFailed => "redirect failed",
+        ureq::Error::Tls(_) => "TLS failure",
+        ureq::Error::Http(_) | ureq::Error::BadUri(_) => "invalid request",
+        ureq::Error::StatusCode(_) => "unexpected status",
+        _ => "transport failure",
+    }
+}
+
+/// Il motivo di un errore di lettura, con parole fisse. Il reader di `ureq`
+/// avvolge i suoi errori in un `io::Error`: si riconoscono e si nominano come
+/// quelli di trasporto.
+fn io_reason(error: &std::io::Error) -> &'static str {
+    if let Some(inner) = error
+        .get_ref()
+        .and_then(|inner| inner.downcast_ref::<ureq::Error>())
+    {
+        return transport_reason(inner);
+    }
+    match error.kind() {
+        std::io::ErrorKind::Interrupted => "cancelled",
+        std::io::ErrorKind::TimedOut => "timed out",
+        std::io::ErrorKind::ConnectionRefused => "connection refused",
+        std::io::ErrorKind::ConnectionReset | std::io::ErrorKind::ConnectionAborted => {
+            "connection reset"
+        }
+        std::io::ErrorKind::UnexpectedEof => "connection closed early",
+        std::io::ErrorKind::InvalidData => "invalid data",
+        _ => "read failure",
+    }
 }
 
 impl UreqNetwork {
@@ -179,7 +250,9 @@ impl UreqNetwork {
         // query, frammento e credenziali, dove un chiamante può aver messo un
         // segreto.
         let shown = shown_url(&request.url);
-        let io = |and: ureq::Error| PluginError::Io(format!("{shown}: {and}").into());
+        let io = |and: ureq::Error| {
+            PluginError::Io(format!("{shown}: {}", transport_reason(&and)).into())
+        };
         let mut builder = ureq::http::Request::builder()
             .method(request.method.as_str())
             .uri(&request.url);
@@ -193,13 +266,13 @@ impl UreqNetwork {
             Some(body) => {
                 let req = builder
                     .body(&body[..])
-                    .map_err(|and| PluginError::BadArgs(format!("{shown}: {and}").into()))?;
+                    .map_err(|_| PluginError::BadArgs(format!("{shown}: invalid request").into()))?;
                 agent.run(req).map_err(io)?
             }
             None => {
                 let req = builder
                     .body(())
-                    .map_err(|and| PluginError::BadArgs(format!("{shown}: {and}").into()))?;
+                    .map_err(|_| PluginError::BadArgs(format!("{shown}: invalid request").into()))?;
                 agent.run(req).map_err(io)?
             }
         };
@@ -223,12 +296,12 @@ impl UreqNetwork {
                 };
                 let mut body = Vec::new();
                 reader.read_to_end(&mut body).map_err(|and| {
-                    PluginError::Io(format!("{shown}: the response body could not be read (host ceiling is {MAX_BODY} bytes): {and}").into())
+                    PluginError::Io(format!("{shown}: the response body could not be read (host ceiling is {MAX_BODY} bytes): {}", io_reason(&and)).into())
                 })?;
                 body
             }
             None => response.body_mut().with_config().limit(MAX_BODY).read_to_vec().map_err(|and| {
-                PluginError::Io(format!("{shown}: the response body could not be read (host ceiling is {MAX_BODY} bytes): {and}").into())
+                PluginError::Io(format!("{shown}: the response body could not be read (host ceiling is {MAX_BODY} bytes): {}", transport_reason(&and)).into())
             })?,
         };
         Ok(HttpResponse {
@@ -332,7 +405,29 @@ mod tests {
             "https://api.esempio.org:8443/v1/x"
         );
         assert_eq!(shown_url("http://h?x=1"), "http://h");
-        assert_eq!(shown_url("non un url?x"), "non un url");
+        assert_eq!(shown_url("https://h/"), "https://h/");
+        // Una password con `?`, `/` o `#` dentro non confonde il parser: o
+        // l'indirizzo si legge e le credenziali spariscono, o non si mostra.
+        for url in [
+            "https://user:pa?ss@host/x",
+            "https://user:p/ss@host/x",
+            "https://user:p#ss@host/x",
+            "https://user:pa ss@host/x",
+        ] {
+            let shown = shown_url(url);
+            assert!(!shown.contains("pa") && !shown.contains("ss@"), "{url} -> {shown}");
+            assert!(!shown.contains("user"), "{url} -> {shown}");
+        }
+        assert_eq!(shown_url("non un url?x"), "<unreadable address>");
+        assert_eq!(
+            shown_url("https://user:pa ss@host/x"),
+            "https://<unreadable address>"
+        );
+        // Il motivo non ripete il testo di `ureq`, che può portare l'indirizzo.
+        let bad = ureq::Error::BadUri("https://user:segreto@h/?token=segreto".into());
+        assert_eq!(transport_reason(&bad), "invalid request");
+        let wrapped = std::io::Error::other(ureq::Error::BadUri("segreto".into()));
+        assert_eq!(io_reason(&wrapped), "invalid request");
         let err = UreqNetwork::new()
             .fetch(HttpRequest::get("http://127.0.0.1:1/nothing?token=segreto"))
             .expect_err("nobody listens there");
