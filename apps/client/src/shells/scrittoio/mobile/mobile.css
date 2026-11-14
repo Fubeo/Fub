@@ -241,16 +241,19 @@
     display: none;
   }
 
-  /* I sette modi non stanno in una riga, e una fila che scorre qui non ha
-     niente che prenda il fuoco (il Tab cambia modo dal campo): vanno a capo.
-     Il segno scorre lungo una riga sola; su due non saprebbe dove stare, e il
+  /* I sette modi stanno su una riga che scorre in orizzontale, senza barra
+     (la regola di base del lanciatore): il Tab non cambia più modo, e non c'è
+     una fila da mandare a capo. Il segno del modo non segue lo scorrimento: il
      modo scelto resta detto dal suo colore. */
-  :root[data-client-shell="mobile"] .launcher-modes {
-    flex-wrap: wrap;
-    overflow-x: visible;
+  :root[data-client-shell="mobile"] .launcher-modes > .kit-tab-indicator {
+    display: none;
   }
 
-  :root[data-client-shell="mobile"] .launcher-modes > .kit-tab-indicator {
+  /* Niente tasti sul telefono: «Apri nel pannello» dice solo la parola, e
+     sparisce quando non c'è una domanda da portare, così non sembra un comando
+     spento. */
+  :root[data-client-shell="mobile"] .launcher-panel .launcher-key,
+  :root[data-client-shell="mobile"] .launcher-panel:disabled {
     display: none;
   }
 

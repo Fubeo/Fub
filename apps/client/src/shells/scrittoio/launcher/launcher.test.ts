@@ -844,6 +844,8 @@ describe("le azioni di una riga (Tab)", () => {
     button.click();
     expect(titles()).toContain("launcher.action.open");
     expect(button.hidden).toBe(true);
+    // Il tocco non lascia il fuoco sul bottone: torna al campo.
+    expect(document.activeElement).toBe(field());
   });
 
   it("Apri qui e Apri a lato aprono la nota e chiudono", async () => {

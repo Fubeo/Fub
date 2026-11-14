@@ -323,7 +323,9 @@ export function mountLauncher(lifetime: Lifetime): Launcher {
             const snippet = row.snippet;
             detail((into) => into.append(highlighted(snippet.text, snippet.highlights)));
           }
-          meta.textContent = row.hit === "recent" ? t("launcher.row.recent") : folderOf(row.doc);
+          // La cartella, anche fra le recenti: il gruppo «Recenti» dice già che
+          // sono recenti, e scriverlo accanto a ogni riga sarebbe un doppione.
+          meta.textContent = folderOf(row.doc);
           break;
         }
         case "person":
@@ -623,6 +625,17 @@ export function mountLauncher(lifetime: Lifetime): Launcher {
       }
     };
 
+    /// Il modo scelto resta in vista quando la fila scorre (sul telefono, dove
+    /// i sette modi non stanno tutti in una riga). Si sposta solo la fila.
+    const keepInView = (each: Mode): void => {
+      const button = tabs.tab(each);
+      if (!button) return;
+      const box = button.getBoundingClientRect();
+      const bar = strip.getBoundingClientRect();
+      if (box.left < bar.left) strip.scrollLeft -= bar.left - box.left;
+      else if (box.right > bar.right) strip.scrollLeft += box.right - bar.right;
+    };
+
     /// Passa a un modo. Con un testo la domanda è quella; senza, torna l'ultima
     /// che il modo ricorda, scelta tutta: scrivere la sostituisce.
     function setMode(next: Mode, asked?: string): void {
@@ -635,6 +648,7 @@ export function mountLauncher(lifetime: Lifetime): Launcher {
       input.value = value;
       memory.remember(next, value);
       if (tabs.selected() !== next) tabs.select(next);
+      keepInView(next);
       outOfTabOrder();
       const name = t(MODE_LABEL[next]);
       if (said.textContent !== name) said.textContent = name;
@@ -704,6 +718,9 @@ export function mountLauncher(lifetime: Lifetime): Launcher {
     life.listen(toPanel, "click", () => carry());
     life.listen(toActions, "click", () => {
       if (actionable(list.active())) enterActions(list.active() as Extract<Row, { kind: "note" | "person" }>);
+      // Il fuoco torna al campo: il bottone, che ha preso il tocco, non deve
+      // restare col suo contorno di fuoco (il riquadro strano del telefono).
+      input.focus();
     });
     // In cattura: è un Invio, e l'elenco non deve prenderlo per una scelta.
     life.listen(surface, "keydown", (event) => {
