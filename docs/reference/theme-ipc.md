@@ -89,7 +89,13 @@ errori sono `bad_args` (un path che non è UTF-8) e `internal` (la finestra di
 scelta non ha risposto). `unlink_theme_folder` non chiede la modalità
 sviluppatore. `ThemeLink` porta `folder` (il path canonico, da mostrare),
 `id` e `name` dell'ultimo manifest letto (`null` se non se n'è letto uno),
-`changed` e lo stato, nel campo `state`:
+`changed`, `watched` e lo stato, nel campo `state`. `watched` dice se un
+osservatore vivo guarda la cartella: l'host la guarda solo se è `ready`, e
+`false` vuol dire che i salvataggi non arrivano (la cartella non era pronta,
+o il sistema non ha più osservatori). Aspetto lo dice con cosa fare. La
+chiave `developer.theme-folder` non viaggia coi profili di macchina (vedi
+[permessi e sicurezza](permissions-and-security.md#temi-installati)). Gli
+stati:
 
 | `state` | Campi | Che cosa vuol dire |
 |---|---|---|

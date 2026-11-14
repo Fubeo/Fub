@@ -294,12 +294,15 @@ export type ThemeLinkState =
  * Il tema collegato com'è adesso (`fub_host::theme::ThemeLink`): la cartella
  * (da mostrare), l'id e il nome dell'ultimo manifest letto, lo stato e, nel
  * campanello `fub://theme-changed`, i file salvati relativi alla cartella.
+ * `watched` dice se un osservatore vivo guarda la cartella: `false` vuol dire
+ * che i salvataggi non arrivano.
  */
 export type ThemeLink = {
   folder: string;
   id: string | null;
   name: string | null;
   changed: string[];
+  watched: boolean;
 } & ThemeLinkState;
 
 /** Com'è andato «Collega una cartella…» (`fub_host::theme::ThemeFolderLink`). */

@@ -8,7 +8,10 @@
 //!
 //! - **una cartella sola**, quella scritta nella chiave
 //!   [`DEVELOPER_THEME_FOLDER`](crate::settings::DEVELOPER_THEME_FOLDER), e
-//!   solo con la modalità sviluppatore accesa: con una cartella nuova il
+//!   solo con la modalità sviluppatore accesa e solo se le porte la dicono
+//!   `ready` (mai una radice qualunque, mai seguendo i link simbolici); il
+//!   montaggio gira su un thread del custode, mai su quello di chi scrive
+//!   l'impostazione, e fra due richieste vince l'ultima; con una cartella nuova il
 //!   vecchio osservatore si smonta prima che parta il nuovo, e si smonta con
 //!   «Scollega», con la modalità spenta e alla chiusura dell'app;
 //! - **un debounce di circa 200 ms** ([`THEME_WATCH_DEBOUNCE`]): un editor che
@@ -21,12 +24,13 @@
 //!   volo finisca (`Debouncer::stop` aspetta il suo thread) tenendo il proprio
 //!   lucchetto, e dopo lo smontaggio niente di vecchio esce più.
 
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::time::Duration;
 
 use camino::{Utf8Path, Utf8PathBuf};
 
-use crate::theme::{theme_link, ThemeLink};
+use crate::theme::{theme_link, ThemeLink, ThemeLinkState};
 
 /// Quanto aspetta il debouncer prima di dire che la cartella è cambiata.
 pub const THEME_WATCH_DEBOUNCE: Duration = Duration::from_millis(200);
@@ -47,15 +51,35 @@ struct Known {
 
 /// Il custode del tema collegato: la cartella guardata e il suo osservatore.
 ///
-/// Ogni cambio di collegamento passa da [`ThemeKeeper::watch`], serializzato
-/// dal lucchetto `ops`; la consegna degli eventi non lo prende mai.
-#[derive(Default)]
+/// Ogni cambio di collegamento passa da [`ThemeKeeper::watch_now`] o da
+/// [`ThemeKeeper::request`], serializzato dal lucchetto `ops`; la consegna
+/// degli eventi non lo prende mai. Ogni richiesta ha un numero (`generation`):
+/// sotto `ops` passa soltanto l'ultima, quindi un risultato vecchio non
+/// sovrascrive mai uno nuovo.
 pub(crate) struct ThemeKeeper {
     /// Serializza montaggio e smontaggio, e tiene ciò che è montato.
     ops: Mutex<Mounted>,
     /// L'uscita, che l'app installa dopo aver creato la finestra.
     sink: Arc<Mutex<Option<ThemeLinkSink>>>,
     known: Arc<Mutex<Known>>,
+    /// Il numero dell'ultima richiesta: chi arriva sotto `ops` con un numero
+    /// più vecchio non tocca niente.
+    generation: AtomicU64,
+    /// Chiuso (fine dell'app): nessuna richiesta monta più niente.
+    closed: AtomicBool,
+    /// I thread delle richieste in volo, che [`ThemeKeeper::settle`] aspetta.
+    pending: Mutex<Vec<std::thread::JoinHandle<()>>>,
+    /// Chi fa partire l'osservatore: `FolderWatch::start`, o un finto nei test.
+    start: StartWatch,
+}
+
+/// Fa partire l'osservatore di una cartella.
+type StartWatch = fn(&Utf8Path, Delivery) -> Result<FolderWatch, String>;
+
+impl Default for ThemeKeeper {
+    fn default() -> Self {
+        Self::starting_with(FolderWatch::start)
+    }
 }
 
 #[derive(Default)]
@@ -69,35 +93,123 @@ fn held<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
 }
 
 impl ThemeKeeper {
+    fn starting_with(start: StartWatch) -> Self {
+        Self {
+            ops: Mutex::default(),
+            sink: Arc::default(),
+            known: Arc::default(),
+            generation: AtomicU64::new(0),
+            closed: AtomicBool::new(false),
+            pending: Mutex::default(),
+            start,
+        }
+    }
+
     /// Installa l'uscita degli eventi; gli osservatori già montati la usano
     /// dal prossimo cambio.
     pub(crate) fn set_sink(&self, sink: ThemeLinkSink) {
         *held(&self.sink) = Some(sink);
     }
 
-    /// La cartella guardata adesso, se c'è.
+    /// La cartella guardata adesso da un osservatore vivo, se c'è.
     pub(crate) fn watched(&self) -> Option<Utf8PathBuf> {
-        held(&self.ops).folder.clone()
+        let mounted = held(&self.ops);
+        mounted.watch.as_ref().and(mounted.folder.clone())
     }
 
-    /// Guarda `folder`, o niente con `None`. La stessa cartella già guardata
-    /// non si rimonta; una diversa smonta prima la vecchia (aspettando la sua
-    /// consegna in volo) e poi monta la nuova. Un osservatore che non parte
-    /// (la piattaforma non lo sa fare, la cartella è sparita) lascia il
-    /// collegamento senza rimontaggi, e lo dice nel log: il tema resta
-    /// leggibile, e lo stato della cartella lo dice
-    /// [`theme_link`](crate::theme::theme_link).
-    ///
-    /// Con `again` anche la stessa cartella si rimonta: chi la collega di nuovo
-    /// (sparita e tornata) vuole che la si guardi da capo.
-    pub(crate) fn watch(
+    /// `folder` è guardata adesso da un osservatore vivo?
+    pub(crate) fn is_watching(&self, folder: &Utf8Path) -> bool {
+        let mounted = held(&self.ops);
+        mounted.watch.is_some() && mounted.folder.as_deref() == Some(folder)
+    }
+
+    /// Chiede un cambio di collegamento **fuori da chi chiama**: `resolve`
+    /// (che rilegge la chiave e la modalità) e il montaggio, che legge il disco
+    /// e aspetta lo smontaggio del vecchio, girano su un thread loro. Così un
+    /// comando sincrono dell'app, sul thread principale, non si ferma qui. Fra
+    /// più richieste vince l'ultima.
+    pub(crate) fn request(
+        self: &Arc<Self>,
+        resolve: impl FnOnce() -> (Option<Utf8PathBuf>, Option<Utf8PathBuf>) + Send + 'static,
+    ) {
+        if self.closed.load(Ordering::Acquire) {
+            return;
+        }
+        let generation = self.generation.fetch_add(1, Ordering::AcqRel) + 1;
+        let keeper = Arc::clone(self);
+        let spawned = std::thread::Builder::new()
+            .name("fub-theme-link".into())
+            .spawn(move || {
+                let (config_dir, folder) = resolve();
+                keeper.apply(generation, config_dir.as_deref(), folder.as_deref(), false);
+            });
+        match spawned {
+            Ok(handle) => {
+                let mut pending = held(&self.pending);
+                pending.retain(|handle| !handle.is_finished());
+                pending.push(handle);
+            }
+            Err(error) => tracing::warn!(
+                target: "fub.host",
+                "the linked theme folder could not be synchronised: {error}"
+            ),
+        }
+    }
+
+    /// Aspetta che le richieste in volo abbiano finito: chi legge lo stato
+    /// subito dopo un cambio (Aspetto, i test) vede quello deciso.
+    pub(crate) fn settle(&self) {
+        let pending = std::mem::take(&mut *held(&self.pending));
+        for handle in pending {
+            let _ = handle.join();
+        }
+    }
+
+    /// Guarda `folder` adesso, da chi chiama (che è già fuori dal thread
+    /// principale): come una richiesta, ma senza thread. Con `again` anche la
+    /// stessa cartella si rimonta: chi la collega di nuovo (sparita e tornata)
+    /// vuole che la si guardi da capo.
+    pub(crate) fn watch_now(
         &self,
         config_dir: Option<&Utf8Path>,
         folder: Option<&Utf8Path>,
         again: bool,
     ) {
+        if self.closed.load(Ordering::Acquire) {
+            return;
+        }
+        let generation = self.generation.fetch_add(1, Ordering::AcqRel) + 1;
+        self.apply(generation, config_dir, folder, again);
+    }
+
+    /// Guarda `folder`, o niente con `None`, se la richiesta `generation` è
+    /// ancora l'ultima. La stessa cartella già guardata non si rimonta; una
+    /// diversa smonta prima la vecchia (aspettando la sua consegna in volo).
+    ///
+    /// Si monta solo su una cartella che adesso è `ready`: una cartella
+    /// mancante, rifiutata o di un altro tema non si guarda, e nessun percorso
+    /// arrivato da chissà dove (`/`) apre un osservatore ricorsivo. Un
+    /// osservatore che non parte (la piattaforma non lo sa fare, il sistema ha
+    /// finito gli osservatori) lascia il collegamento senza rimontaggi, e lo
+    /// dice il campo `watched` di [`ThemeLink`].
+    fn apply(
+        &self,
+        generation: u64,
+        config_dir: Option<&Utf8Path>,
+        folder: Option<&Utf8Path>,
+        again: bool,
+    ) {
         let mut mounted = held(&self.ops);
-        if !again && mounted.folder.as_deref() == folder {
+        if generation != self.generation.load(Ordering::Acquire) {
+            return;
+        }
+        if self.closed.load(Ordering::Acquire) && folder.is_some() {
+            return;
+        }
+        if !again
+            && mounted.folder.as_deref() == folder
+            && (folder.is_none() || mounted.watch.is_some())
+        {
             return;
         }
         // Prima si smonta: `drop` aspetta la consegna in volo del vecchio.
@@ -112,13 +224,17 @@ impl ThemeKeeper {
             id: first.id,
             name: first.name,
         };
+        mounted.folder = Some(folder.to_owned());
+        if first.state != ThemeLinkState::Ready {
+            return;
+        }
         let deliver = Delivery {
             config_dir: config_dir.map(Utf8Path::to_owned),
             folder: folder.to_owned(),
             sink: self.sink.clone(),
             known: self.known.clone(),
         };
-        match FolderWatch::start(folder, deliver) {
+        match (self.start)(folder, deliver) {
             Ok(watch) => mounted.watch = Some(watch),
             Err(error) => tracing::warn!(
                 target: "fub.host",
@@ -126,12 +242,15 @@ impl ThemeKeeper {
                 "the linked theme folder is not watched: {error}"
             ),
         }
-        mounted.folder = Some(folder.to_owned());
     }
 
-    /// Smonta l'osservatore (chiusura dell'app): come `watch(None)`.
+    /// Smonta l'osservatore (chiusura dell'app): dopo, nessuna richiesta
+    /// rimonta più niente.
     pub(crate) fn close(&self) {
-        self.watch(None, None, false);
+        self.closed.store(true, Ordering::Release);
+        self.settle();
+        let generation = self.generation.fetch_add(1, Ordering::AcqRel) + 1;
+        self.apply(generation, None, None, false);
     }
 }
 
@@ -152,6 +271,8 @@ impl Delivery {
     fn changed(&self, touched: impl IntoIterator<Item = std::path::PathBuf>) {
         let mut link = theme_link(self.config_dir.as_deref(), &self.folder);
         link.changed = saved_files(&self.folder, touched);
+        // Chi consegna è l'osservatore vivo.
+        link.watched = true;
         {
             let mut known = held(&self.known);
             if link.id.is_some() {
@@ -186,7 +307,7 @@ fn saved_files(
         let Ok(relative) = path.strip_prefix(folder) else {
             continue;
         };
-        if relative.as_str().is_empty() {
+        if relative.as_str().is_empty() || !stays_inside(folder, relative) {
             continue;
         }
         let regular = std::fs::symlink_metadata(&path).is_ok_and(|metadata| metadata.is_file());
@@ -206,6 +327,28 @@ fn saved_files(
         .collect()
 }
 
+/// `relative` resta dentro `folder`: solo nomi veri (niente `..`), e nessuna
+/// cartella di mezzo è un link simbolico, che porterebbe il file fuori.
+#[cfg_attr(not(feature = "notify-watcher"), allow(dead_code))]
+fn stays_inside(folder: &Utf8Path, relative: &Utf8Path) -> bool {
+    let mut parts = relative.components().peekable();
+    let mut at = folder.to_owned();
+    while let Some(part) = parts.next() {
+        let camino::Utf8Component::Normal(name) = part else {
+            return false;
+        };
+        at.push(name);
+        if parts.peek().is_some() {
+            let directory =
+                std::fs::symlink_metadata(&at).is_ok_and(|metadata| metadata.file_type().is_dir());
+            if !directory {
+                return false;
+            }
+        }
+    }
+    true
+}
+
 #[cfg(feature = "notify-watcher")]
 use notify_folder::FolderWatch;
 
@@ -217,7 +360,9 @@ mod notify_folder {
     use camino::Utf8Path;
     use notify::event::EventKind;
     use notify::{RecommendedWatcher, RecursiveMode};
-    use notify_debouncer_full::{new_debouncer, DebounceEventResult, Debouncer, RecommendedCache};
+    use notify_debouncer_full::{
+        new_debouncer_opt, DebounceEventResult, Debouncer, RecommendedCache,
+    };
 
     use super::{Delivery, THEME_WATCH_DEBOUNCE};
 
@@ -233,7 +378,10 @@ mod notify_folder {
         pub(super) fn start(folder: &Utf8Path, deliver: Delivery) -> Result<Self, String> {
             let live = Arc::new(AtomicBool::new(true));
             let open = live.clone();
-            let mut debouncer = new_debouncer(
+            // I link simbolici dentro la cartella non si seguono: le porte li
+            // rifiutano, e un osservatore che li seguisse guarderebbe fuori.
+            let config = notify::Config::default().with_follow_symlinks(false);
+            let mut debouncer = new_debouncer_opt::<_, RecommendedWatcher, RecommendedCache>(
                 THEME_WATCH_DEBOUNCE,
                 None,
                 move |result: DebounceEventResult| {
@@ -263,6 +411,8 @@ mod notify_folder {
                         }
                     }
                 },
+                RecommendedCache::new(),
+                config,
             )
             .map_err(|error| error.to_string())?;
             debouncer
@@ -300,6 +450,110 @@ impl FolderWatch {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn temporary() -> (tempfile::TempDir, Utf8PathBuf) {
+        let dir = tempfile::tempdir().unwrap();
+        let path = Utf8PathBuf::from_path_buf(dir.path().canonicalize().unwrap()).unwrap();
+        (dir, path)
+    }
+
+    /// Un tema che passa le porte: manifest, un foglio per luce, la pelle.
+    fn write_theme(root: &Utf8Path, id: &str) {
+        std::fs::create_dir_all(root).unwrap();
+        let manifest = format!(
+            r#"{{"id": "{id}", "name": "Prova", "version": "1.0.0", "engine": "theme-2", "lights": ["light", "dark"], "asset_namespace": "theme://{id}/", "motion": ["opacity", "transform"]}}"#
+        );
+        std::fs::write(root.join("manifest.json"), manifest).unwrap();
+        std::fs::write(root.join("sheet-light.css"), "body { color: #333; }\n").unwrap();
+        std::fs::write(root.join("sheet-dark.css"), "body { color: #ddd; }\n").unwrap();
+        std::fs::write(root.join("skin.css"), ".surface { color: inherit; }\n").unwrap();
+    }
+
+    fn never_started(folder: &Utf8Path, _deliver: Delivery) -> Result<FolderWatch, String> {
+        panic!("no watch may start on {folder}");
+    }
+
+    fn refused(_folder: &Utf8Path, _deliver: Delivery) -> Result<FolderWatch, String> {
+        Err("no more watches on this system".into())
+    }
+
+    /// Una cartella che non è pronta non si guarda mai: né la radice del disco
+    /// (un valore arrivato da fuori), né una cartella vuota, né una sparita.
+    #[test]
+    fn only_a_ready_folder_is_watched() {
+        let keeper = ThemeKeeper::starting_with(never_started);
+        let (_dir, empty) = temporary();
+        for folder in [Utf8Path::new("/"), empty.as_path(), &empty.join("sparita")] {
+            keeper.watch_now(None, Some(folder), true);
+            assert_eq!(keeper.watched(), None);
+            assert!(!keeper.is_watching(folder));
+        }
+    }
+
+    /// Un osservatore che non parte lascia il collegamento non guardato, e lo
+    /// si sa: `watched` resta falso.
+    #[test]
+    fn a_watch_that_does_not_start_is_not_watching() {
+        let keeper = ThemeKeeper::starting_with(refused);
+        let (_dir, root) = temporary();
+        let folder = root.join("carta");
+        write_theme(&folder, "acme.carta");
+        keeper.watch_now(None, Some(&folder), false);
+        assert!(!keeper.is_watching(&folder));
+        assert_eq!(keeper.watched(), None);
+    }
+
+    /// Fra due richieste vince l'ultima, anche se la prima finisce dopo.
+    #[cfg(feature = "notify-watcher")]
+    #[test]
+    fn the_last_request_wins() {
+        let keeper = Arc::new(ThemeKeeper::default());
+        let (_dir, root) = temporary();
+        let first = root.join("carta");
+        let second = root.join("lino");
+        write_theme(&first, "acme.carta");
+        write_theme(&second, "acme.lino");
+        let (release, wait) = std::sync::mpsc::channel::<()>();
+        let slow = first.clone();
+        keeper.request(move || {
+            let _ = wait.recv_timeout(Duration::from_secs(10));
+            (None, Some(slow))
+        });
+        let fast = second.clone();
+        keeper.request(move || (None, Some(fast)));
+        // La seconda ha già deciso; poi la prima arriva, vecchia.
+        while !keeper.is_watching(&second) {
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        release.send(()).unwrap();
+        keeper.settle();
+        assert_eq!(keeper.watched().as_deref(), Some(second.as_path()));
+        keeper.close();
+        assert_eq!(keeper.watched(), None);
+        // Chiuso, niente rimonta più.
+        keeper.request(move || (None, Some(first)));
+        keeper.settle();
+        assert_eq!(keeper.watched(), None);
+    }
+
+    /// Un nome con `..`, o un file dietro una cartella che è un link
+    /// simbolico, non è un file salvato della cartella.
+    #[cfg(unix)]
+    #[test]
+    fn saved_files_stay_inside_the_folder() {
+        let (_outside_dir, outside) = temporary();
+        std::fs::write(outside.join("segreto.css"), "a").unwrap();
+        let (_dir, root) = temporary();
+        let folder = root.join("carta");
+        std::fs::create_dir_all(&folder).unwrap();
+        std::fs::write(root.join("vicino.css"), "a").unwrap();
+        std::os::unix::fs::symlink(&outside, folder.join("fuori")).unwrap();
+        let touched = vec![
+            folder.join("..").join("vicino.css").into_std_path_buf(),
+            folder.join("fuori").join("segreto.css").into_std_path_buf(),
+        ];
+        assert!(saved_files(&folder, touched).is_empty());
+    }
 
     #[test]
     fn saved_files_are_the_regular_files_inside_the_folder() {

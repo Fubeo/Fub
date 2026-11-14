@@ -2811,9 +2811,128 @@ fn reopening_with_the_folder_gone_says_missing() {
     reopened.sync_theme_link();
     let link = reopened.theme_link().expect("the key survives the restart");
     assert_eq!(link.state, ThemeLinkState::Missing);
+    assert!(!link.watched, "a missing folder is not watched");
     assert!(reopened.themes().unwrap().is_empty());
     assert!(reopened
         .read_theme("acme.collegato", fub_abi::theme::ThemeLight::Light)
         .is_err());
     reopened.close_theme_link();
+}
+
+// --- la cartella collegata non viaggia coi profili di macchina --------------
+
+use fub_abi::settings::SettingScope;
+
+/// Il valore scritto della chiave della cartella collegata, `None` se vuoto.
+fn linked_key(host: &Host) -> Option<String> {
+    let entry = host
+        .machine_settings()
+        .into_iter()
+        .find(|entry| entry.spec.key == fub_host::settings::DEVELOPER_THEME_FOLDER)
+        .expect("the key is declared");
+    match entry.value {
+        fub_abi::settings::SettingValue::Text(folder) if !folder.is_empty() => Some(folder),
+        _ => None,
+    }
+}
+
+/// Un profilo come lo scriverebbe chi vuole collegare `folder` di nascosto:
+/// quello attivo esportato, rinominato, con la chiave dentro.
+fn profile_with_folder(host: &Host, name: &str, folder: &str) -> String {
+    let (active, _) = host.settings_profiles(None, SettingScope::Machine).unwrap();
+    let exported = host
+        .export_settings_profile(None, SettingScope::Machine, &active)
+        .unwrap();
+    let mut profile: serde_json::Value = serde_json::from_str(&exported).unwrap();
+    profile["name"] = name.into();
+    profile["values"][fub_host::settings::DEVELOPER_THEME_FOLDER] = folder.into();
+    profile["values"][fub_host::settings::DEVELOPER_MODE] = true.into();
+    profile.to_string()
+}
+
+/// Un profilo importato e attivato con la chiave non collega niente: nessun
+/// osservatore, nessun tema, e il valore resta quello di prima.
+#[test]
+fn an_imported_profile_does_not_link_a_folder() {
+    let (_config_dir, config) = folders();
+    let host = developer(&config, true);
+    let evil = profile_with_folder(&host, "altrove", "/");
+    host.import_settings_profile(None, SettingScope::Machine, &evil)
+        .expect("the rest of the profile imports");
+    let exported = host
+        .export_settings_profile(None, SettingScope::Machine, "altrove")
+        .unwrap();
+    assert!(
+        !exported.contains(fub_host::settings::DEVELOPER_THEME_FOLDER),
+        "{exported}"
+    );
+    host.switch_settings_profile(None, SettingScope::Machine, "altrove")
+        .unwrap();
+    assert_eq!(linked_key(&host), None);
+    assert_eq!(host.watched_theme_folder(), None);
+    assert!(host.theme_link().is_none());
+    assert!(host.themes().unwrap().is_empty());
+}
+
+/// Cambiare, copiare e azzerare un profilo lasciano la cartella collegata
+/// com'era, ed esportarlo non la porta fuori.
+#[test]
+fn switching_or_resetting_a_profile_keeps_the_linked_folder() {
+    let (_config_dir, config) = folders();
+    let (_source_dir, source) = folders();
+    let folder = source.join("carta");
+    write_theme(&folder, "acme.collegato", "theme-2", "");
+    let host = developer(&config, true);
+    let linked = link(&host, &folder);
+    let kept = Some(linked.folder.clone());
+    let (first, _) = host.settings_profiles(None, SettingScope::Machine).unwrap();
+    assert!(!host
+        .export_settings_profile(None, SettingScope::Machine, &first)
+        .unwrap()
+        .contains(fub_host::settings::DEVELOPER_THEME_FOLDER));
+
+    let other = profile_with_folder(&host, "altrove", "/");
+    host.import_settings_profile(None, SettingScope::Machine, &other)
+        .unwrap();
+    host.switch_settings_profile(None, SettingScope::Machine, "altrove")
+        .unwrap();
+    assert_eq!(linked_key(&host), kept);
+    host.reset_settings_profile(None, SettingScope::Machine, "altrove")
+        .unwrap();
+    assert_eq!(linked_key(&host), kept);
+
+    // Il primo profilo ha ancora la chiave scritta prima di cambiare: copiarlo
+    // non la porta nella copia, e attivare la copia dopo «Scollega» non
+    // ricollega niente.
+    host.duplicate_settings_profile(None, SettingScope::Machine, &first, "copia")
+        .unwrap();
+    host.unlink_theme_folder().unwrap();
+    host.switch_settings_profile(None, SettingScope::Machine, "copia")
+        .unwrap();
+    assert_eq!(linked_key(&host), None);
+    host.switch_settings_profile(None, SettingScope::Machine, &first)
+        .unwrap();
+    assert_eq!(linked_key(&host), None, "switching back does not relink");
+    assert_eq!(host.watched_theme_folder(), None);
+}
+
+/// Con un vault aperto la modalità sviluppatore passa dal `Workspace`:
+/// spegnerla smonta lo stesso l'osservatore.
+#[cfg(feature = "notify-watcher")]
+#[test]
+fn developer_mode_off_with_a_vault_open_unmounts_the_watch() {
+    let (_config_dir, config) = folders();
+    let (_source_dir, source) = folders();
+    let (_vault_dir, v) = vault();
+    let folder = source.join("carta");
+    write_theme(&folder, "acme.collegato", "theme-2", "");
+    let (host, got) = linking(&config);
+    host.open(&v).expect("opens");
+    link(&host, &folder);
+    assert!(host.watched_theme_folder().is_some());
+    assert!(host.theme_link().unwrap().watched);
+    set_developer(&host, false);
+    assert_eq!(host.watched_theme_folder(), None);
+    std::fs::write(folder.join("skin.css"), ".surface { color: red; }\n").unwrap();
+    no_event(&got);
 }

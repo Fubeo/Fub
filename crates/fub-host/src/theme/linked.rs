@@ -41,6 +41,10 @@ pub enum ThemeLinkState {
 /// manifest letto (restano quelli di prima se il manifest di adesso non si
 /// legge), lo stato e, nell'evento di un salvataggio (`fub://theme-changed`),
 /// i file salvati, relativi alla cartella.
+///
+/// `watched` dice se un osservatore vivo guarda la cartella: `false` vuol dire
+/// che i salvataggi non arrivano (la cartella non è pronta, il sistema non ha
+/// più osservatori, l'host non ne ha uno), e Aspetto lo dice con cosa fare.
 #[derive(Clone, Debug, PartialEq, serde::Serialize)]
 pub struct ThemeLink {
     pub folder: String,
@@ -49,6 +53,7 @@ pub struct ThemeLink {
     #[serde(flatten)]
     pub state: ThemeLinkState,
     pub changed: Vec<String>,
+    pub watched: bool,
 }
 
 /// Com'è andato «Collega una cartella…» (`Host::link_theme_folder`).
@@ -157,6 +162,7 @@ pub fn theme_link(config_dir: Option<&Utf8Path>, folder: &Utf8Path) -> ThemeLink
         name: manifest.map(|manifest| manifest.name),
         state,
         changed: Vec::new(),
+        watched: false,
     }
 }
 

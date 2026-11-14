@@ -368,14 +368,16 @@
       "changed": [
         "skin.css",
         "fonts/carta.woff2"
-      ]
+      ],
+      "watched": true
     },
     {
       "folder": "/home/chi/temi/carta",
       "id": null,
       "name": null,
       "state": "missing",
-      "changed": []
+      "changed": [],
+      "watched": false
     },
     {
       "folder": "/home/chi/temi/carta",
@@ -388,14 +390,16 @@
       },
       "changed": [
         "manifest.json"
-      ]
+      ],
+      "watched": true
     },
     {
       "folder": "/home/chi/temi/carta",
       "id": "acme.carta",
       "name": "Carta",
       "state": "collision",
-      "changed": []
+      "changed": [],
+      "watched": false
     },
     {
       "folder": "/home/chi/temi/carta",
@@ -406,7 +410,8 @@
         "kind": "io",
         "message": "/home/chi/temi/carta: Permission denied"
       },
-      "changed": []
+      "changed": [],
+      "watched": false
     }
   ],
   "ThemeFolderLink": [
@@ -422,7 +427,8 @@
         "state": "ready",
         "changed": [
           "skin.css"
-        ]
+        ],
+        "watched": true
       }
     },
     {
@@ -432,7 +438,8 @@
         "id": "acme.carta",
         "name": "Carta",
         "state": "collision",
-        "changed": []
+        "changed": [],
+        "watched": false
       }
     }
   ],

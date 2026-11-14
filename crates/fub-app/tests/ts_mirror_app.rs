@@ -92,6 +92,7 @@ fn theme_link(
         name: Some("Carta".into()),
         state,
         changed: changed.iter().map(|file| file.to_string()).collect(),
+        watched: !changed.is_empty(),
     }
 }
 

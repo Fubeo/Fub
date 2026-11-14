@@ -322,6 +322,9 @@ export interface Options {
   /// `developer.theme-folder`), un path di `themeFolders`. Una cartella che
   /// `themeFolders` non ha è sparita (`missing`).
   linkedThemeFolder?: string | null;
+  /// L'osservatore della cartella collegata non parte (il sistema non ne ha
+  /// più): `watched` resta falso, e i salvataggi non arrivano.
+  themeWatchFails?: boolean;
   /// Temi installati revocati dal catalogo: non stanno in `themes` (l'host non
   /// li elenca), e «Installa da cartella…» con lo stesso id è `revoked`.
   revokedThemes?: string[];
@@ -695,6 +698,9 @@ export function createFakeHost(options: Options = {}): FakeHost {
   /// L'ultimo id e nome letti, come li ricorda il custode dell'host.
   let linkedKnown: { id: string | null; name: string | null } = { id: null, name: null };
   const themeChanged = new Set<(link: ThemeLink) => void>();
+  /// Un osservatore vivo guarda `linkedSource`: come l'host, lo si monta solo
+  /// su una cartella pronta, e solo se parte.
+  let watching = false;
 
   function developerIsOn(): boolean {
     return settings.find((entry) => entry.spec.key === DEVELOPER_MODE_KEY)?.value === true;
@@ -713,7 +719,8 @@ export function createFakeHost(options: Options = {}): FakeHost {
       state = themes.some((theme) => theme.manifest.id === manifest!.id) ? { state: "collision" } : { state: "ready" };
     }
     if (manifest) linkedKnown = { id: manifest.id, name: manifest.name };
-    return { folder: source, id: linkedKnown.id, name: linkedKnown.name, changed: [], ...state };
+    const watched = watching && source === linkedSource;
+    return { folder: source, id: linkedKnown.id, name: linkedKnown.name, changed: [], watched, ...state };
   }
 
   /// La cartella collegata pronta, se la modalità sviluppatore è accesa.
@@ -743,7 +750,8 @@ export function createFakeHost(options: Options = {}): FakeHost {
       return { outcome: "refused", link };
     }
     linkedSource = source;
-    return { outcome: "linked", link };
+    watching = options.themeWatchFails !== true;
+    return { outcome: "linked", link: { ...link, watched: watching } };
   }
 
   function developerOn(): void {
@@ -1375,6 +1383,8 @@ export function createFakeHost(options: Options = {}): FakeHost {
     spec: { ...e.spec },
   }));
   const syntaxForms = (options.syntaxForms ?? []).map((form) => ({ ...form }));
+  // All'avvio l'host guarda la cartella collegata se è pronta.
+  watching = linkedReady() !== null && options.themeWatchFails !== true;
 
   /// Scrive, e **lo dice**: il backend vero emette `setting_changed` da tutte e
   /// due le porte — dal `Workspace` con un vault aperto, dall'host senza
@@ -2299,6 +2309,7 @@ export function createFakeHost(options: Options = {}): FakeHost {
         gate("linkThemeFolder", [], new Promise<ThemeFolderLink>((resolve) => resolve(linkThemeFolder()))),
       unlinkThemeFolder: () => {
         linkedSource = null;
+        watching = false;
         linkedKnown = { id: null, name: null };
         return gate("unlinkThemeFolder", [], Promise.resolve());
       },
@@ -2663,7 +2674,8 @@ export function createFakeHost(options: Options = {}): FakeHost {
     },
     themeFolderChanged: (changed = []) => {
       if (linkedSource === null || !developerIsOn() || themeChanged.size === 0) return false;
-      const link = { ...readLink(linkedSource), changed };
+      if (options.themeWatchFails === true) return false;
+      const link = { ...readLink(linkedSource), changed, watched: true };
       for (const handler of [...themeChanged]) handler(link);
       return true;
     },

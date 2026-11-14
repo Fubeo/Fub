@@ -425,9 +425,11 @@ pub const DEVELOPER_MODE: &str = "developer.mode";
 /// vuoto se nessuna è collegata. Di **macchina** come la modalità che la apre,
 /// e **non** scrivibile da un programma; nemmeno la webview la scrive
 /// (`Host::set_setting_for_user` la rifiuta): la scrive solo l'host quando
-/// collega, e azzerarla è scollegare. L'host la rilegge con le stesse porte di
-/// un'installazione, quindi un valore arrivato da un profilo importato non
-/// apre più di una cartella scelta.
+/// collega, e azzerarla è scollegare. **Non viaggia coi profili** di macchina:
+/// un'importazione o una copia la scartano, un'esportazione non la porta
+/// fuori, e cambiare o azzerare un profilo lascia il valore di prima
+/// (`PROFILE_LOCAL_KEYS` in `session.rs`). L'host la rilegge con le stesse
+/// porte di un'installazione, e guarda la cartella solo se è un tema pronto.
 pub const DEVELOPER_THEME_FOLDER: &str = "developer.theme-folder";
 
 /// Preferenze locali della replica; identità, pairing e chiavi non sono impostazioni.

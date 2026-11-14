@@ -3270,7 +3270,8 @@ pub fn run() {
             // Il tema collegato: gli eventi vanno solo alla finestra
             // principale, e l'osservatore parte se la chiave e la modalità
             // sviluppatore lo dicono (una cartella sparita non ferma l'avvio:
-            // lo stato lo dice alla shell).
+            // lo stato lo dice alla shell). `sync_theme_link` non si ferma qui:
+            // legge il disco e monta su un thread del custode.
             {
                 let events = app.handle().clone();
                 let host = app.state::<Host>();

@@ -2047,7 +2047,7 @@ describe("mirror TS↔Rust", () => {
 
   it("il tema collegato porta i suoi stati, e il collegamento i suoi esiti", () => {
     const links = appFixture.ThemeLink as ThemeLink[];
-    const base = { folder: true, id: true, name: true, state: true, changed: true } as const;
+    const base = { folder: true, id: true, name: true, state: true, changed: true, watched: true } as const;
     const fields: Record<ThemeLink["state"], string[]> = {
       ready: keysOf<Extract<ThemeLink, { state: "ready" }>>(base),
       missing: keysOf<Extract<ThemeLink, { state: "missing" }>>(base),
