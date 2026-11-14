@@ -116,6 +116,55 @@ async fn the_checks_run_in_the_order_of_the_spec() {
     assert_eq!(attempt(live.target.clone(), 2).await, 4007);
 }
 
+/// Un QR non sopporta segreti sbagliati senza fine: al quinto si brucia, la
+/// shell riceve `pairingExpired` e nemmeno il segreto giusto entra più. Un QR
+/// nuovo riparte da zero errori.
+#[tokio::test(start_paused = true)]
+async fn too_many_wrong_secrets_spend_the_qr() {
+    let mut live = start();
+    let wrong = PairingTarget {
+        secret: PairingSecret::parse("AAAAAAAAAAAAAAAAAAAAAA").unwrap(),
+        ..live.target.clone()
+    };
+    let attempt = |target: PairingTarget| {
+        let net = live.net.clone();
+        let tls = live.target.clone();
+        async move {
+            let mut raw = Raw::open(&net, &tls).await;
+            raw.hello(&target).await;
+            raw.closed().await
+        }
+    };
+    for _ in 1..crate::limits::MAX_SECRET_FAILURES {
+        let closed = attempt(wrong.clone()).await;
+        assert_eq!(closed.code, Some(4004));
+        assert_eq!(closed.detail.as_deref(), Some("the pairing secret is wrong"));
+        assert!(live.host.pairing().is_some(), "the QR still stands");
+    }
+    let closed = attempt(wrong.clone()).await;
+    assert_eq!(closed.code, Some(4004));
+    assert_eq!(
+        closed.detail.as_deref(),
+        Some("too many wrong pairing secrets: the QR is spent")
+    );
+    live.events
+        .find(|event| matches!(event, LiveEvent::PairingExpired).then_some(()))
+        .await;
+    assert!(live.host.pairing().is_none());
+    let closed = attempt(live.target.clone()).await;
+    assert_eq!(
+        closed.detail.as_deref(),
+        Some("the pairing secret expired or was used")
+    );
+
+    let renewed = live.host.renew_pairing().unwrap();
+    let target = PairingTarget::parse(&renewed.payload).unwrap();
+    for _ in 1..crate::limits::MAX_SECRET_FAILURES {
+        assert_eq!(attempt(wrong.clone()).await.code, Some(4004));
+    }
+    join(&live.net, &target).await;
+}
+
 #[tokio::test(start_paused = true)]
 async fn an_unused_secret_expires_after_five_minutes() {
     let mut live = start();

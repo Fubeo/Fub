@@ -83,8 +83,11 @@ fubdraw://live?h=<ip>:<porta>&s=<sessione>&k=<segreto>&f=<impronta>&n=<nome>
   solo sul PC.
 
 Il primo `hello` valido consuma il segreto. Un segreto sbagliato no: il QR
-resta buono per lo scrittore che lo ha davvero inquadrato. Alla scadenza la
-shell riceve `pairingExpired`.
+resta buono per lo scrittore che lo ha davvero inquadrato. Il quinto segreto
+sbagliato sullo stesso QR però lo brucia: chi arriva al segreto ha già l'id di
+sessione, che sta solo nel QR, quindi cinque errori sono un tentativo e non un
+lettore che sbaglia. La connessione chiude con 4004 e la shell riceve
+`pairingExpired`, come alla scadenza.
 
 `LiveHost::renew_pairing` emette un QR nuovo, con un segreto nuovo valido
 5 minuti. Mentre uno scrittore è collegato la richiesta è rifiutata. Uno
@@ -500,7 +503,7 @@ quello in cui la rete ha aggiunto meno rumore.
 |---|---|---|
 | chi ascolta il Wi-Fi | TLS 1.3 su ogni connessione | dimensioni e ritmo dei messaggi |
 | uomo nel mezzo attivo | impronta del certificato nel QR, firma del handshake verificata | nessuno nel crate |
-| dispositivo estraneo sulla rete | segreto monouso di 128 bit, valido 5 minuti, consegnato col QR | chi fotografa il QR prima del tablet |
+| dispositivo estraneo sulla rete | segreto monouso di 128 bit, valido 5 minuti, consegnato col QR; al quinto segreto sbagliato il QR non vale più | chi fotografa il QR prima del tablet |
 | pagina web di un altro sito | percorso `/live` e `Origin` dell'host | nessuno nel crate |
 | contenuto ostile in un commit | forma e misura controllate; la validazione resta alla shell | quello della validazione della shell |
 | esaurimento di risorse | limiti del protocollo e dell'host, un solo scrittore | nessuno nel crate |
