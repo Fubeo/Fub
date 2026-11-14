@@ -8,8 +8,9 @@ import { type ChangeSet, type Extension, type Range, StateEffect } from "@codemi
 import { Decoration, type DecorationSet, EditorView, ViewPlugin, type ViewUpdate } from "@codemirror/view";
 import { openLifetime } from "../../../../ui/lifetime";
 
-/// I blocchi in cui non ci sono voci da rientrare: non si scende dentro.
-const NO_ITEMS = new Set(["FencedCode", "CodeBlock", "HTMLBlock", "Table"]);
+/// I blocchi che possono contenere voci: negli altri (paragrafi, titoli,
+/// codice, tabelle) non si scende, e le loro parti in riga non si guardano.
+const HOLDS_ITEMS = new Set(["Document", "Blockquote", "BulletList", "OrderedList"]);
 
 /// Le righe d'apertura delle voci visibili e la fine del loro prefisso.
 ///
@@ -27,8 +28,7 @@ export function listPrefixes(view: EditorView): Prefix[] {
     from: visible[0]!.from,
     to: visible[visible.length - 1]!.to,
     enter(node) {
-      if (NO_ITEMS.has(node.name)) return false;
-      if (node.name !== "ListItem") return;
+      if (node.name !== "ListItem") return HOLDS_ITEMS.has(node.name);
       const mark = node.node.getChild("ListMark");
       if (!mark) return;
       const line = doc.lineAt(node.from);

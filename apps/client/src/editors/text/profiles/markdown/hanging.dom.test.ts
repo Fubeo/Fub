@@ -30,6 +30,16 @@ describe("il prefisso delle voci", () => {
   });
 });
 
+describe("il prefisso delle voci nelle citazioni", () => {
+  it("trova le voci di una citazione e quelle annidate, non i paragrafi", () => {
+    const doc = "Testo con - un trattino.\n\n> - in citazione\n>   1. annidata\n\n| - | no |\n| --- | --- |";
+    const view = new EditorView({ parent: document.body, state: EditorState.create({ doc, extensions: markdown({ base: markdownGrammar }) }) });
+    views.push(view);
+    ensureSyntaxTree(view.state, doc.length, 1000);
+    expect(listPrefixes(view).map(({ line, end }) => doc.slice(line, end))).toEqual(["> - ", ">   1. "]);
+  });
+});
+
 describe("il prefisso delle voci sotto i blocchi resi", () => {
   it("una voce coperta da un blocco reso resta fuori, quelle prima e dopo no", () => {
     const doc = "- uno\n\n> - due, una voce lunga\n> - tre, anche questa\n\n- quattro";
