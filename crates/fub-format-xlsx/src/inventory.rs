@@ -68,13 +68,22 @@ pub(crate) struct Limits {
     pub elements: u64,
     /// Parti raggiunte, contando ogni volta che una relazione le raggiunge.
     pub visits: usize,
-    /// Byte stimati dell'albero di una parte tenuto in memoria: i nodi che
-    /// non vanno al flusso (le righe del foglio, le stringhe condivise), coi
-    /// loro nomi, attributi e testi. [`Limits::elements`] da solo lascerebbe
-    /// crescere l'albero di una parte ostile fino a molti gigabyte; un tetto
-    /// sul numero dei nodi, invece, rifiuterebbe una parte onesta di milioni
-    /// di elementi piccoli (i record di una cache pivot), che pesa meno di
-    /// una ostile di nodi grossi. La stima conta la memoria, non i nodi.
+    /// Byte stimati, per eccesso, dell'albero di una parte tenuto in memoria:
+    /// i nodi che non vanno al flusso (le righe del foglio, le stringhe
+    /// condivise), coi loro nomi, attributi e testi, contando la capacità
+    /// dei vettori e l'arrotondamento dell'allocatore. [`Limits::elements`]
+    /// da solo lascerebbe crescere l'albero di una parte ostile fino a molti
+    /// gigabyte; un tetto sul numero dei nodi, invece, non vede quanto pesa
+    /// un nodo.
+    ///
+    /// Il tetto di 1,5 GiB è la memoria vera che il vecchio tetto di 4
+    /// milioni di nodi lasciava usare: misurata (massimo RSS del processo di
+    /// test) su 4,2 milioni di elementi piccoli, i record di una cache pivot
+    /// di un milione di righe, era 1,45 GiB. Con gli attributi stretti alla
+    /// loro misura la stessa parte usa 1,04 GiB veri (input e processo
+    /// compresi) e ne stima 1,25: si legge ancora, la stima sta sopra la
+    /// memoria vera, e una parte ostile non va oltre quella che il vecchio
+    /// tetto concedeva.
     pub retained_bytes: u64,
 }
 
@@ -82,7 +91,7 @@ pub(crate) const LIMITS: Limits = Limits {
     depth: 256,
     elements: 50_000_000,
     visits: 100_000,
-    retained_bytes: 2 << 30,
+    retained_bytes: 3 << 29,
 };
 
 /// Perché un pacchetto non si inventaria.

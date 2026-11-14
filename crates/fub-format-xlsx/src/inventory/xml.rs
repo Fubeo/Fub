@@ -131,16 +131,14 @@ fn parse_within(
                     .xml_content(quick_xml::XmlVersion::Implicit1_0)
                     .map_err(|error| xml_error(part, error))?;
                 if let Some(open) = stack.last_mut() {
-                    open.text.push_str(&text);
-                    added = added.saturating_add(text.len() as u64);
+                    added = added.saturating_add(push_text(open, &text));
                 }
                 (None, false)
             }
             Event::CData(text) => {
                 let text = text.decode().map_err(|error| xml_error(part, error))?;
                 if let Some(open) = stack.last_mut() {
-                    open.text.push_str(&text);
-                    added = added.saturating_add(text.len() as u64);
+                    added = added.saturating_add(push_text(open, &text));
                 }
                 (None, false)
             }
@@ -158,8 +156,7 @@ fn parse_within(
                     }
                 };
                 if let Some(open) = stack.last_mut() {
-                    open.text.push_str(&resolved);
-                    added = added.saturating_add(resolved.len() as u64);
+                    added = added.saturating_add(push_text(open, &resolved));
                 }
                 (None, false)
             }
@@ -212,6 +209,9 @@ fn parse_within(
                 .into_owned();
             attrs.push((format!("{}{attr_name}", short(&attr_ns)), value));
         }
+        // Il primo `push` riserva quattro coppie: un elemento con un solo
+        // attributo (il caso comune dei record) ne terrebbe tre vuote.
+        attrs.shrink_to_fit();
         let node = Node {
             name,
             attrs,
@@ -235,17 +235,47 @@ fn parse_within(
     root.ok_or_else(|| xml_error(part, "no root element"))
 }
 
-/// I byte stimati di un nodo senza i suoi figli: la struttura, il nome, ogni
-/// attributo con la sua coppia di stringhe, il testo. Una stima per difetto
-/// (non conta la capacità in più dei vettori), uguale quando il nodo entra
-/// nell'albero e quando ne esce.
+/// Il posto di un nodo nel vettore dei figli di suo padre, contato due volte:
+/// un vettore che cresce raddoppiando può tenere fino a metà posti vuoti.
+const SLOT: u64 = 2 * std::mem::size_of::<Node>() as u64;
+
+/// I byte che l'allocatore impegna per un blocco di `capacity` byte, per
+/// eccesso: un'intestazione di 8 byte, l'arrotondamento a 16 e un blocco
+/// minimo di 32 (malloc di glibc). Un blocco vuoto non è allocato.
+fn heap(capacity: usize) -> u64 {
+    if capacity == 0 {
+        return 0;
+    }
+    (capacity as u64)
+        .saturating_add(8)
+        .next_multiple_of(16)
+        .max(32)
+}
+
+/// I byte stimati, per eccesso, di un nodo senza i suoi figli: il suo posto
+/// nel padre, il nome, il vettore degli attributi con le loro stringhe e il
+/// testo, ognuno con la capacità che ha davvero. È uguale quando il nodo
+/// entra nell'albero (più i testi aggiunti, vedi [`push_text`]) e quando ne
+/// esce.
 fn cost(node: &Node) -> u64 {
-    let attrs: usize = node
+    let pair = std::mem::size_of::<(String, String)>();
+    let strings: u64 = node
         .attrs
         .iter()
-        .map(|(key, value)| std::mem::size_of::<(String, String)>() + key.len() + value.len())
+        .map(|(key, value)| heap(key.capacity()) + heap(value.capacity()))
         .sum();
-    (std::mem::size_of::<Node>() + node.name.len() + attrs + node.text.len()) as u64
+    SLOT + heap(node.name.capacity())
+        + heap(node.attrs.capacity() * pair)
+        + strings
+        + heap(node.text.capacity())
+}
+
+/// Aggiunge `text` al testo di `open`, e torna di quanti byte stimati è
+/// cresciuto: la differenza fra il blocco di prima e quello di adesso.
+fn push_text(open: &mut Node, text: &str) -> u64 {
+    let before = heap(open.text.capacity());
+    open.text.push_str(text);
+    heap(open.text.capacity()).saturating_sub(before)
 }
 
 /// I byte stimati di un sotto albero, lui compreso.
@@ -260,11 +290,11 @@ fn subtree(node: &Node) -> u64 {
 }
 
 /// Il testo fra gli elementi di un elemento che ha figli è soltanto spazio:
-/// si toglie, e torna quanti byte ha tolto.
+/// si toglie, col suo blocco, e torna quanti byte stimati ha liberato.
 fn close(node: &mut Node) -> u64 {
     if !node.kids.is_empty() && node.text.trim().is_empty() {
-        let cleared = node.text.len() as u64;
-        node.text.clear();
+        let cleared = heap(node.text.capacity());
+        node.text = String::new();
         return cleared;
     }
     0
@@ -310,8 +340,9 @@ mod tests {
         }
     }
 
-    /// Un nodo `<a/>` senza attributi né testo, per la stima.
-    const BARE: u64 = std::mem::size_of::<Node>() as u64 + 1;
+    /// Un nodo `<a/>` senza attributi né testo, per la stima: il suo posto e
+    /// il blocco minimo del nome.
+    const BARE: u64 = SLOT + 32;
 
     /// I nodi che restano nell'albero hanno un tetto; quelli che vanno al
     /// flusso non contano, perché se ne vanno appena chiusi.
@@ -380,6 +411,11 @@ mod tests {
         let root = parse(xml.as_bytes(), "p", &mut budget(), None, &mut |_| Ok(()))
             .expect("una parte onesta si legge");
         assert_eq!(root.kids.len(), rows);
+        // La stima che il tetto ha visto: sta sotto il tetto con margine, e
+        // sopra la memoria vera misurata per la stessa parte.
+        let estimated = subtree(&root);
+        assert!(estimated < LIMITS.retained_bytes, "{estimated}");
+        assert!(estimated > 1_000 << 20, "{estimated}");
     }
 
     /// Il tetto conta anche attributi e testi: pochi nodi grossi lo passano
