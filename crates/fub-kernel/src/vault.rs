@@ -1862,10 +1862,16 @@ impl Vault {
                 let sidecar = self.trash_sidecar_path(&id);
                 // Lo stesso `stat` che lo sweep richiederà prima di
                 // distruggere: due domande uguali, confrontabili.
-                let Ok(stat) = self.storage.stat(&entry.path) else {
+                let io = |source| KernelError::Io {
+                    path: entry.path.clone(),
+                    source,
+                };
+                let Some(stat) =
+                    crate::error::optional(self.storage.stat(&entry.path)).map_err(io)?
+                else {
                     continue;
                 };
-                let seen = self.trash_file_seen(&entry.path, stat);
+                let seen = self.trash_file_seen(&entry.path, stat).map_err(io)?;
                 out.push(CensusEntry {
                     path: entry.path,
                     sidecar,
@@ -1911,15 +1917,20 @@ impl Vault {
         } in &cataloged
         {
             // Una voce cambiata dopo il censimento non è più quella che
-            // l'utente ha deciso di distruggere: resta, col suo sidecar.
-            match crate::error::optional(self.storage.stat(path)) {
-                Ok(None) => continue,
-                Ok(Some(stat)) if self.trash_file_seen(path, stat) == *seen => {}
-                Ok(Some(_)) | Err(_) => {
-                    tracing::warn!(target: "fub.kernel", %path,
-                        "trash entry changed after the census: kept");
-                    continue;
-                }
+            // l'utente ha deciso di distruggere: resta, col suo sidecar. Un
+            // guasto del supporto mentre lo si chiede invece risale, come per
+            // la `remove` qui sotto (0193): non è una voce cambiata.
+            let io = |source| KernelError::Io {
+                path: path.clone(),
+                source,
+            };
+            let Some(stat) = crate::error::optional(self.storage.stat(path)).map_err(io)? else {
+                continue;
+            };
+            if self.trash_file_seen(path, stat).map_err(io)? != *seen {
+                tracing::warn!(target: "fub.kernel", %path,
+                    "trash entry changed after the census: kept");
+                continue;
             }
             // Si distrugge solo questa voce, e solo se c'è ancora: chi l'ha già
             // tolta (un'altra finestra, un sync) non si conta — il risultato
@@ -1971,12 +1982,14 @@ struct TrashFileSeen {
 }
 
 impl Vault {
-    fn trash_file_seen(&self, path: &Utf8Path, stat: Stat) -> TrashFileSeen {
-        TrashFileSeen {
+    /// Come è ora il file `path`. Un errore del supporto risale: «non lo so»
+    /// è già `None` nella risposta del backend, non un errore da tacere.
+    fn trash_file_seen(&self, path: &Utf8Path, stat: Stat) -> std::io::Result<TrashFileSeen> {
+        Ok(TrashFileSeen {
             stat,
-            identity: self.storage.file_identity(path).ok().flatten(),
-            change: self.storage.change_stamp(path).ok().flatten(),
-        }
+            identity: self.storage.file_identity(path)?,
+            change: self.storage.change_stamp(path)?,
+        })
     }
 }
 

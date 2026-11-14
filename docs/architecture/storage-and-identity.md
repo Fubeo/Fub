@@ -111,7 +111,9 @@ Svuotare il cestino distrugge soltanto le voci che al censimento avevano già
 un sidecar valido, e ciascuna solo se subito prima della rimozione è ancora lo
 stesso file: identità, dimensione, data e timbro di cambiamento. Una voce che
 un'altra finestra o un altro processo Fub ha sostituito nel frattempo resta,
-col suo sidecar, e non si conta. Fra quell'ultimo controllo e la rimozione
+col suo sidecar, e non si conta. Un guasto del supporto durante quel controllo
+non è una voce cambiata: risale come errore `Io`, come quello della rimozione,
+e il cestino non risulta svuotato. Fra quell'ultimo controllo e la rimozione
 resta la finestra di una chiamata di sistema: chiuderla vorrebbe un lock
 inter-processo sul vault che il kernel non ha.
 

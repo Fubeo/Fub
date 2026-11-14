@@ -1341,6 +1341,9 @@ fn the_rollback_from_the_system_trash_puts_the_note_back() {
 struct ReplacedAfterCensus {
     inner: FsStorage,
     replaced: std::sync::atomic::AtomicBool,
+    /// Invece di sostituire la voce, il supporto si guasta mentre lo sweep
+    /// chiede la sua identità.
+    fails: bool,
 }
 
 impl VaultStorage for ReplacedAfterCensus {
@@ -1387,6 +1390,12 @@ impl VaultStorage for ReplacedAfterCensus {
                 .replaced
                 .swap(true, std::sync::atomic::Ordering::SeqCst)
         {
+            if self.fails {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::PermissionDenied,
+                    "the disk refuses",
+                ));
+            }
             self.inner
                 .write(path, b"replaced by another process")
                 .expect("the other process writes");
@@ -1412,6 +1421,7 @@ fn emptying_the_trash_keeps_an_entry_replaced_after_the_census() {
     let storage = Arc::new(ReplacedAfterCensus {
         inner: FsStorage,
         replaced: std::sync::atomic::AtomicBool::new(false),
+        fails: false,
     });
     let mut ws = fx.workspace_on(storage);
 
@@ -1431,4 +1441,33 @@ fn emptying_the_trash_keeps_an_entry_replaced_after_the_census() {
         b"replaced by another process",
         "the replaced entry was destroyed"
     );
+}
+
+/// **Un guasto del supporto non passa per una voce cambiata.** Se chiedere
+/// l'identità della voce fallisce davvero, lo svuotamento risale l'errore
+/// invece di dire «fatto» con la voce ancora nel cestino (0193).
+#[test]
+fn emptying_the_trash_reports_a_storage_failure_on_the_recheck() {
+    let fx = Fixture::new();
+    fx.put("One.txt", "first");
+    let storage = Arc::new(ReplacedAfterCensus {
+        inner: FsStorage,
+        replaced: std::sync::atomic::AtomicBool::new(false),
+        fails: true,
+    });
+    let mut ws = fx.workspace_on(storage);
+
+    ws.delete_document(&DocId::new("One.txt")).unwrap();
+    let one = ws.list_trash().unwrap()[0].id.clone();
+
+    assert!(
+        ws.empty_trash().is_err(),
+        "a failing disk is not an empty trash"
+    );
+    assert_eq!(
+        std::fs::read(fx.root.join(one.as_str())).unwrap(),
+        b"first",
+        "the entry stays in the trash"
+    );
+    assert_eq!(ws.list_trash().unwrap().len(), 1, "and keeps its sidecar");
 }
