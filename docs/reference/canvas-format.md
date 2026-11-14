@@ -20,8 +20,19 @@ lavagna, scritto una volta sola:
   i lati e gli estremi degli archi), i limiti (`MAX_SOURCE_BYTES`,
   `MAX_NODES`, `MAX_EDGES`, …), l'errore `CanvasError` e `Canvas::validate`.
   Ogni livello (la radice, ogni scheda, ogni arco) tiene in `extra` i campi
-  che il modello non conosce, `fub:ink` compreso.
+  che il modello non conosce, `fub:ink` compreso: la sua forma è in
+  [L'inchiostro della lavagna](canvas-ink.md).
 - `read`: `parse(source)`, dal testo del file al modello validato.
+- `ink`: i livelli d'inchiostro `fub:ink` delle schede e della radice.
+  `read_layers(&canvas)` li dà tutti, nell'ordine di `nodes` e poi la radice,
+  e `layer(&canvas, &LayerRef)` uno solo (`LayerRef` è `"board"` oppure
+  `{"node": id}`). Un livello è valido (`InkLayer`, coi suoi `InkStroke`) o
+  estraneo (`ForeignLayer`, il perché); un tratto si disegna (`DrawnStroke`,
+  già decodificato) o si conserva con la ragione (`SkipReason`). La stringa
+  `ink` e il pennello si controllano con `fub-ink-codec` e i suoi limiti. Il
+  livello resta nei campi sconosciuti di chi lo tiene, e `InkLayer::to_value`
+  lo riscrive uguale per valore. Le regole sono in [L'inchiostro della
+  lavagna](canvas-ink.md); i vettori li legge `tests/ink_vectors.rs`.
 - `js`, `source`, `patch`, `ops`: la scrittura come la fa JavaScript, il
   ritocco del sorgente, le toppe con la loro inversa e le operazioni
   d'intento.
@@ -37,8 +48,9 @@ lavagna, scritto una volta sola:
 - `describe`: la lavagna letta come schema (`outline`), come operazioni che
   la ricreano (`code`) e come modello (`json`), nella stessa pagina.
 
-Il nucleo è **puro**. Dipende soltanto da `serde`, `serde_json` e `thiserror`;
-non vede il contratto (`fub-abi`), il Markdown, il kernel né un toolkit, non fa
+Il nucleo è **puro**. Dipende soltanto da `serde`, `serde_json`, `thiserror`
+e dal codec dei tratti `fub-ink-codec` (che porta con sé il nucleo
+dell'inchiostro `fub-ink`, puro come lui); non vede il contratto (`fub-abi`), il Markdown, il kernel né un toolkit, non fa
 I/O e compila per `wasm32-unknown-unknown`, perché la WebView lo carica come
 modulo WebAssembly. Non va mai in panico su un input: ogni errore è un
 `CanvasError`.
@@ -52,7 +64,10 @@ decimali così.
 
 L'elenco è chiuso, e `the_canvas_core_stands_alone` in
 `crates/fub-abi/tests/dependency_invariant.rs` lo verifica insieme alle
-dipendenze dirette:
+dipendenze dirette. Nella chiusura del nucleo i soli membri del workspace
+ammessi sono `fub-ink-codec` e `fub-ink`, per l'inchiostro delle schede
+(un'eccezione nominata, `CANVAS_CORE_ALLOWED_MEMBERS`); il nucleo è a sua
+volta fra i clienti ammessi del codec (`the_ink_codec_stands_alone`).
 
 | Cliente | Che cosa ne fa |
 |---|---|
@@ -124,6 +139,12 @@ vettori della lettura. Nel dubbio si apre e si conserva.
   `"backgroundStyle": "tile"` resta `tile`; la tela disegna un valore che non
   conosce come assente. Lo schema `canvas-v1.schema.json` dice ciò che Fub
   scrive, non ciò che legge, e non cambia.
+- **Punte di serie.** Non è una regola del nucleo: `fromEnd` e `toEnd` restano
+  come sono nel file, e il nucleo non ne deduce nulla. La tela le disegna come
+  dice JSON Canvas 1.0: senza `fromEnd` nessuna punta all'inizio, senza
+  `toEnd` la freccia alla fine (`DEFAULT_EDGE_END` in
+  `apps/client/src/editors/canvas/model.ts`). Invertendo la direzione di un
+  arco si scrive solo la punta che non è di serie.
 
 ## Scrittura
 

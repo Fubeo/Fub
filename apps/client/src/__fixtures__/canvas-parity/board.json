@@ -1,7 +1,7 @@
 {
   "version": 1,
   "about": "Inventario della parità della lavagna: ogni azione che una persona fa dalla GUI (main, N4, N6) e la forma in codice che la fa. Stati: code (un'operazione la fa, con la stessa regola), composed (operazioni più un'altra porta, in `port`), port (la fa un'altra porta, nessuna operazione), by_hand (si fa con le operazioni che ci sono, ma chi scrive calcola a mano ciò che la GUI decide: `computes`), missing (nessuna operazione la fa), view (non scrive il file), exception (resta fuori, `note` dice perché). `ops` compila su `board`; `target_ops` è la forma che porta il task `task`. Regole in PLAN.md, sezione «La parità».",
-  "merged": ["main"],
+  "merged": ["main", "N4"],
   "board": {
     "nodes": [
       {

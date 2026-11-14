@@ -68,6 +68,10 @@ const GESTURES: Readonly<Record<string, string>> = {
   "connect-handle": "trascina dal pulsante «→» di una scheda su un'altra: crea un arco",
   "reconnect-end": "trascina un estremo di un arco su un'altra scheda: lo ricollega",
   "convert-to-note": "il pulsante di una scheda di testo la trasforma in nota e in file",
+  "pen-on-card": "la penna, o il mouse che scrive, traccia sopra una scheda: il tratto va nella scheda",
+  "pen-free": "la penna, o il mouse che scrive, traccia sul vuoto: un tratto libero della lavagna",
+  "erase-stroke": "la gomma (la punta che cancella, o lo strumento Gomma) passa su un tratto: lo toglie intero",
+  "erase-piece": "la gomma «Solo il pezzo» strofina un tratto: ne taglia il pezzo toccato",
 };
 
 /**
@@ -95,6 +99,7 @@ const KEYS: readonly string[] = [
   "Shift+ArrowRight",
   "Shift+ArrowUp",
   "Shift+ArrowDown",
+  "D",
 ];
 
 /** I tasti dell'annulla: si premono dopo una mossa, perché annullano qualcosa. */

@@ -21,7 +21,8 @@
 // nota grande, dalla transazione al layout forzato, senza il disegno. Due note
 // sintetiche (`live-fixture.ts`, 901 e 7.201 righe) in ogni modalità di
 // scrittura; trenta battute e venti spostamenti del cursore di 200 caratteri.
-// Il budget è la mediana della battuta.
+// Il budget vale per la mediana e per il novantesimo percentile della
+// battuta: una battuta su dieci lenta si sente quanto una mediana alta.
 //
 // **L'apertura** di una nota grande (`--only=apertura`, `live-fixture.ts`:
 // 4.000 paragrafi, circa 765 KB) misura dal clic nell'albero quando la prima
@@ -40,7 +41,7 @@
 // Si tiene la mediana dei giri: il primo giro paga la compilazione dei moduli,
 // e un giro solo non dice niente su una macchina che fa anche altro. I budget
 // sono in `docs/product/performance-budget.md`; il banco esce diverso da zero
-// se una mediana li supera. Non sta nella CI: i tempi del runner condiviso non
+// se una mediana, o il novantesimo della battuta, li supera. Non sta nella CI: i tempi del runner condiviso non
 // sono quelli di una macchina di chi scrive.
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -97,7 +98,8 @@ const INTERACTIONS = [
 ];
 
 /// La battuta: le note, per numero di sezioni, e le modalità in cui si
-/// scrive. Il budget vale per la mediana della battuta, in millisecondi.
+/// scrive. Il budget vale per la mediana e il novantesimo della battuta, in
+/// millisecondi.
 const TYPING = {
   id: "battuta",
   title: "Una battuta in una nota grande",
@@ -109,7 +111,7 @@ const TYPING = {
   ],
   keystrokes: 30,
   moves: 20,
-  budget: 4,
+  budget: { median: 4, p90: 8 },
 };
 
 /// L'apertura di una nota grande: il caso della Live `lunga-4000`, 4.000
@@ -483,7 +485,7 @@ try {
             title: `${TYPING.title}: ${result.lines} righe, ${label}`,
             budget: { type: TYPING.budget },
             ...result,
-            pass: result.type.median <= TYPING.budget,
+            pass: result.type.median <= TYPING.budget.median && result.type.p90 <= TYPING.budget.p90,
           };
         } catch (error) {
           row = { id: `${TYPING.id}-${sections}-${mode}`, title: `${TYPING.title}: ${label}`, pass: false, error: String(error?.message ?? error).split("\n")[0] };
@@ -496,7 +498,7 @@ try {
         const ms = (s) => `${s.median} · ${s.p90} · ${s.max} ms`;
         console.log(
           `${row.pass ? "·" : "✗"} ${row.id} — ${row.title}\n` +
-            `    battuta ${ms(row.type)} (mediana ≤ ${TYPING.budget}) · cursore ${ms(row.move)}`,
+            `    battuta ${ms(row.type)} (mediana ≤ ${TYPING.budget.median}, novantesimo ≤ ${TYPING.budget.p90}) · cursore ${ms(row.move)}`,
         );
       }
     }

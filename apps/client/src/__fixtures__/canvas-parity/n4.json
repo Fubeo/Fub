@@ -7,7 +7,7 @@
       "id": "N4.ink.pen_card",
       "name": "Scrivi con la penna sopra una scheda",
       "source": "N4",
-      "gui": [{ "plan": "N4 T12" }, { "plan": "N4 T3" }],
+      "gui": [{ "gesture": "pen-on-card" }],
       "writes": "file",
       "state": "by_hand",
       "ops": [
@@ -41,7 +41,7 @@
       "id": "N4.ink.pen_free",
       "name": "Scrivi con la penna sul vuoto",
       "source": "N4",
-      "gui": [{ "plan": "N4 T12" }],
+      "gui": [{ "gesture": "pen-free" }],
       "writes": "file",
       "state": "by_hand",
       "ops": [
@@ -67,7 +67,7 @@
       "id": "N4.ink.highlighter",
       "name": "Evidenzia",
       "source": "N4",
-      "gui": [{ "plan": "N4 T21" }],
+      "gui": [{ "toolbar": "ink-pen" }],
       "writes": "file",
       "state": "by_hand",
       "ops": [
@@ -101,7 +101,7 @@
       "id": "N4.ink.menu",
       "name": "Scegli penna, colore e spessore",
       "source": "N4",
-      "gui": [{ "plan": "N4 T21" }, { "plan": "N4 T16" }],
+      "gui": [{ "toolbar": "ink-pen" }],
       "writes": "nothing",
       "state": "view",
       "note": "La scelta non scrive; in codice sono gli argomenti `pen`, `color`, `size` di `draw`."
@@ -110,7 +110,7 @@
       "id": "N4.ink.erase_stroke",
       "name": "Gomma: togli il tratto intero",
       "source": "N4",
-      "gui": [{ "plan": "N4 T13" }],
+      "gui": [{ "gesture": "erase-stroke" }],
       "writes": "file",
       "state": "code",
       "ops": [{ "op": "erase_strokes", "layer": { "node": "f1" }, "ids": ["s1"] }],
@@ -120,7 +120,7 @@
       "id": "N4.ink.erase_piece",
       "name": "Gomma: taglia il pezzo strofinato",
       "source": "N4",
-      "gui": [{ "plan": "N4 T22" }],
+      "gui": [{ "gesture": "erase-piece" }],
       "writes": "file",
       "state": "missing",
       "computes": "il taglio dei campioni, che N4 T22 fa solo in TypeScript (`ink/tools/split.ts`)",
@@ -131,7 +131,7 @@
       "id": "N4.ink.mouse",
       "name": "Scrivi col mouse, tasto D",
       "source": "N4",
-      "gui": [{ "plan": "N4 T13" }, { "plan": "N4 T16" }, { "plan": "N4 T19" }],
+      "gui": [{ "toolbar": "ink-mouse" }, { "key": "D" }],
       "writes": "nothing",
       "state": "view"
     }

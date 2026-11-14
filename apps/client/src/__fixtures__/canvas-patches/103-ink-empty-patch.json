@@ -1,0 +1,10 @@
+{
+  "name": "ink-empty-patch",
+  "description": "Una toppa ink senza tratto né prima né dopo: invalid",
+  "before": "{\"nodes\":[],\"edges\":[]}",
+  "patches": [{"kind":"ink","layer":"board","at":0,"before":null,"after":null}],
+  "expect": {
+    "outcome": "rejected",
+    "reason": "invalid"
+  }
+}

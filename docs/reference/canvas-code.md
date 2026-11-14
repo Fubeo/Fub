@@ -499,7 +499,9 @@ con l'aritmetica a 64 bit che si avvolge, e lo stato di partenza uguale al
 seme. L'id è `z` in sedici cifre esadecimali minuscole, come quelli di
 Obsidian: col seme 0 il primo è `e220a8397b1dcdaf`. Un giro di `compile` salta
 gli id presi (di schede, archi o del giro stesso); un id dato a mano, se è preso,
-è `DuplicateId`. `created` dice gli id aggiunti, in ordine.
+è `DuplicateId`. `created` dice gli id aggiunti (schede, archi e tratti), in
+ordine. Gli id dei tratti sono unici nel livello: un id generato per un tratto
+salta quelli del suo livello.
 
 ### Gli errori delle operazioni
 
@@ -512,7 +514,9 @@ Ogni errore (`OpError`) dice quale operazione della lista non si compila
 | `UnknownEdge` | `remove`, `set` o `color` di un id che non è né una scheda né un arco; `reverse` di un id che non è un arco |
 | `DuplicateId` | un id dato che è già preso (anche in `as`); un id ripetuto nella lista di `move`, `remove`, `reorder`, `color`, `align`, `distribute`, `duplicate` o `layout` |
 | `TooMany`, `TooManyMoved` | la lavagna avrebbe più di 100 000 schede o 200 000 archi, anche con le copie, il gruppo o il frammento; un `insert` porta più di 10 000 schede; i [limiti](canvas-import.md#i-limiti-e-gli-errori) di `from_mermaid` e `from_outline`; `TooManyMoved` è un `move` con `contents` che tocca più di 1 000 schede |
-| `Invalid` | una scheda o un arco che il formato non accetta; una forma breve incompleta o mescolata con la intera; `set` di `id` o `type`; un `resize` senza misure o con `fit` e `height`; un id che è sia una scheda sia un arco; `duplicate` con `as` di altra lunghezza da `ids`; `group` senza schede; `layout` con `direction` fuori da `tree`, con `x` senza `y` (o viceversa), o con `gap` negativo; un frammento di `insert` che non si incolla (vedi sopra); `convert` di una scheda che non è un testo, o con `file` vuoto; un testo che `from_mermaid` o `from_outline` non legge ([i loro errori](canvas-import.md#i-limiti-e-gli-errori)) |
+| `Invalid` | una scheda o un arco che il formato non accetta; una forma breve incompleta o mescolata con la intera; `set` di `id` o `type`; un `resize` senza misure o con `fit` e `height`; un id che è sia una scheda sia un arco; `duplicate` con `as` di altra lunghezza da `ids`; `group` senza schede; `layout` con `direction` fuori da `tree`, con `x` senza `y` (o viceversa), o con `gap` negativo; un frammento di `insert` che non si incolla (vedi sopra); `convert` di una scheda che non è un testo, o con `file` vuoto; un testo che `from_mermaid` o `from_outline` non legge ([i loro errori](canvas-import.md#i-limiti-e-gli-errori)); un tratto che non si disegnerebbe |
+| `UnknownStroke` | `erase_strokes` di un id che non è un tratto del livello |
+| `ForeignLayer` | `add_strokes` o `erase_strokes` su un livello estraneo |
 
 I vettori stanno in `apps/client/src/__fixtures__/canvas-ops/`, uno per file
 (`before`, `seed`, `ops`, `expect`); `tests/op_vectors.rs` li fa girare e

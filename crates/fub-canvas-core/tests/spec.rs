@@ -101,6 +101,8 @@ fn sample(kind: FieldKind) -> Value {
         FieldKind::Color => json!("red"),
         FieldKind::Sides => json!("auto"),
         FieldKind::Pair => json!([1, 2]),
+        FieldKind::Layer => json!("board"),
+        FieldKind::Strokes => json!([]),
         FieldKind::Any => Value::Null,
     }
 }
@@ -119,6 +121,8 @@ fn wrong(kind: FieldKind) -> Option<Value> {
         | FieldKind::Patch
         | FieldKind::Sides => Some(json!(1)),
         FieldKind::Pair => Some(json!("a")),
+        FieldKind::Layer => Some(json!(1)),
+        FieldKind::Strokes => Some(json!("a")),
     }
 }
 

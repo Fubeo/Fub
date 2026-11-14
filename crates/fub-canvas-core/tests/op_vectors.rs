@@ -74,6 +74,10 @@ fn describe(error: &OpError) -> Value {
             json!({"kind": "TooMany", "index": index})
         }
         OpError::Invalid { index, .. } => json!({"kind": "Invalid", "index": index}),
+        OpError::UnknownStroke { index, id } => {
+            json!({"kind": "UnknownStroke", "index": index, "id": id})
+        }
+        OpError::ForeignLayer { index, .. } => json!({"kind": "ForeignLayer", "index": index}),
     }
 }
 
@@ -190,7 +194,19 @@ fn ogni_vettore_passa() {
 #[test]
 fn ci_sono_i_vettori_del_cancello_e_del_passo() {
     let names: Vec<String> = read_vectors().into_iter().map(|(name, _)| name).collect();
-    for name in ["agent-board.json", "move-with-ink.json"] {
+    for name in [
+        "agent-board.json",
+        "move-with-ink.json",
+        "add-strokes-board.json",
+        "add-strokes-card.json",
+        "add-strokes-seed-id.json",
+        "erase-strokes.json",
+        "erase-strokes-unknown.json",
+        "add-strokes-foreign.json",
+        "move-card-with-ink.json",
+        "resize-card-with-ink.json",
+        "remove-card-with-ink.json",
+    ] {
         assert!(names.iter().any(|seen| seen == name), "manca {name}");
     }
 }
@@ -224,6 +240,8 @@ fn ogni_operazione_ha_un_vettore() {
         "convert",
         "from_mermaid",
         "from_outline",
+        "add_strokes",
+        "erase_strokes",
     ] {
         assert!(seen.contains(op), "nessun vettore usa {op:?}");
     }
@@ -499,7 +517,9 @@ fn le_operazioni_si_riscrivono_uguali() {
         {"op": "from_mermaid", "text": "graph LR\nA-->B", "near": "a", "side": "left"},
         {"op": "from_outline", "text": "a\n  b"},
         {"op": "from_outline", "text": "a\n  b", "direction": "down", "x": 0, "y": 8, "prefix": "s-"},
-        {"op": "from_outline", "text": "a\n  b", "near": "a", "side": "bottom"}
+        {"op": "from_outline", "text": "a\n  b", "near": "a", "side": "bottom"},
+        {"op": "add_strokes", "layer": {"node": "a"}, "strokes": [{"tool": "pen"}]},
+        {"op": "erase_strokes", "layer": "board", "ids": ["s1"]}
     ]);
     let read: Vec<CanvasOp> = serde_json::from_value(ops.clone()).expect("si leggono");
     assert_eq!(serde_json::to_value(&read).expect("si scrivono"), ops);

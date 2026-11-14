@@ -43,7 +43,7 @@ e la geometria sono funzioni che il prodotto chiama.
 | nucleo, TypeScript | `apps/client/src/ink/input/` | le stesse regole, per il percorso caldo |
 | formato dei campioni | `apps/client/src/ink/sample.ts` | `fub:ink`, quantizzazione, limite dei campioni |
 | pennello | `apps/client/src/ink/brush.ts`, `pf1.ts`, `pf1-live.ts`, `nib1.ts` | `fub:brush`, contorno, contorno che cresce, punta piatta |
-| penne | `apps/client/src/ink/pens.ts` | le sette ricette del pennello con un nome, misura, opacità, fusione |
+| penne | `apps/client/src/ink/pens.ts` (fa fede), copia in `crates/fub-ink-codec/src/pens.rs` | le sette ricette del pennello con un nome, misura, opacità, fusione; la tavolozza è in `palette.ts` |
 | geometria | `apps/client/src/ink/geometry.ts` | trasformazioni dei campioni, tratto dritto |
 | strumenti | `apps/client/src/ink/tools/` | contratto, registro, penna, evidenziatore, gomma, taglio dei tratti (`split.ts`) |
 | adattatore del browser | `apps/client/src/ink/dom/` | `attachInkInput` |
@@ -101,8 +101,13 @@ Le regole che la sessione garantisce:
 ignorato. La punta della penna disegna; la penna girata (`button` 5) e il
 tasto laterale (`button` 2) fanno anch'essi un tratto, coi ruoli `erase` e
 `barrel`, che `StrokeStart.role` porta a chi disegna. Ogni tratto vive finché
-è premuto il suo bit di `buttons` (1, 32, 2). Il mouse disegna col tasto
-principale.
+è premuto il suo bit di `buttons` (1, 32, 2). Il tasto centrale del mouse
+muove la vista; il principale segue la politica del mouse, che sceglie il
+prodotto (`mouse` nella configurazione, `setMousePolicy` mentre vive): `ink`,
+quella di serie, disegna, `ignore` lo lascia a chi sta sotto, per esempio a
+una lavagna dove il mouse seleziona. Vale dal prossimo appoggio: un tratto
+in corso finisce com'è. Un tipo di puntatore sconosciuto (`""`) segue il
+mouse: un driver che manda la penna così, con `ignore`, non scrive.
 Un dito non disegna mentre una penna tocca lo schermo o è sospesa: è il palmo, e
 un suo tratto già cominciato si annulla quando la penna arriva. Con due dita
 giù il gesto è di navigazione. Altrimenti decide la politica del tocco
@@ -196,6 +201,16 @@ nome nel pennello come `pen=<id>`; una penna che non segue la pressione non la
 simula nemmeno col mouse. La penna dice anche quanto copre e come si fonde
 (`penLook`): l'evidenziatore moltiplica. La forma è in
 [`scene-format-pens.md`](../reference/scene-format-pens.md).
+
+`pens.ts` e `palette.ts` fanno fede. `crates/fub-ink-codec/src/pens.rs` li
+copia in Rust, per chi scrive i tratti senza la GUI: le penne, la tavolozza e
+`pen_brush`, che dà lo stesso pennello di `penBrush` dentro l'intervallo delle
+misure. Lo specchio `apps/client/src/__fixtures__/ink-pens.json` li lega:
+`crates/fub-ink-codec/tests/pens_mirror.rs` lo scrive dal Rust e
+`apps/client/src/ink/pens-mirror.test.ts` vuole le stesse risposte da
+TypeScript. Dopo un cambiamento voluto in `pens.ts`, si cambia `pens.rs` e si
+rigenera lo specchio con
+`UPDATE_MIRROR=1 cargo test -p fub-ink-codec --test pens_mirror`.
 
 La gomma precisa usa `ink/tools/split.ts`: i campioni di un tratto si tagliano
 dove il cerchio della gomma tocca l'inchiostro, e ogni pezzo resta un tratto
@@ -306,6 +321,12 @@ di sopra, e non chiamano mai l'IPC durante il tratto; la sessione
 Il test (`motore/gesti.test.ts`) rigioca i vettori dei gesti
 (`__fixtures__/disegno-gesti/`) col motore finto dell'host, che risponde le
 loro operazioni: il testo dopo il gesto è quello del vettore, in un passo.
+
+## La lavagna
+
+La penna sulla lavagna (lo strato, l'asciutto nelle schede, il passo di
+annulla, la gomma, il dito) sta in [L'inchiostro sulla
+lavagna](ink-on-canvas.md).
 
 ## Confini e verifica
 

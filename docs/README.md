@@ -45,13 +45,16 @@ flowchart LR
 | [Explorer e cartelle](product/explorer-and-folders.md) | l'albero, le appuntate, gli spazi |
 | [Editor e anteprima](product/editor-and-preview.md) | le superfici di scrittura |
 | [Blocchi](product/editor-blocks.md) | la superficie a blocchi |
+| [Scrivere nell'editor](product/editor-writing.md) | l'incolla degli indirizzi, e la scrittura |
 | [Tasto destro, mini-barra e «/»](product/editor-menus.md) | i menu degli editor |
+| [Basi (file `.base`)](product/bases.md) | le viste, i filtri, i limiti e che cosa si scrive sul file |
 | [La riga dei dati](product/editor-note-facts.md) | modifica, collegamenti ed etichette sotto il titolo |
 | [Correttore](product/proofing.md) | l'ortografia mentre si scrive |
 | [Documenti di Word](product/word-documents.md) | la videoscrittura nel vault |
 | [Annotazioni dei PDF](product/pdf-annotations.md) | scrivere accanto ai PDF |
 | [File delle app Craft](product/craft-files.md) | disegni, immagini e foto delle app Craft |
 | [Ricerca, link e grafo](product/search-links-and-graph.md) | trovare e seguire |
+| [Compiti](product/tasks-and-reminders.md) | i compiti del vault per scadenza, e come si spuntano |
 | [Importare ed esportare](product/import-and-export.md) | dentro e fuori dal vault |
 | [Plugin ed estensioni](product/plugins-and-extensions.md) | come Fub cresce |
 | [Budget prestazionali](product/performance-budget.md) | i numeri e i gate della CI |
@@ -75,7 +78,8 @@ all'export, dalla sessione dal tablet ai disegni grandi.
   [superficie ricca e il correttore](architecture/rich-surface-and-proofing.md)
   e la [superficie dei fogli](architecture/grid-surface.md), con gli
   [editor dei componenti](architecture/component-editors.md)
-- [Inchiostro e strumenti](architecture/ink-and-tools.md) e
+- [Inchiostro e strumenti](architecture/ink-and-tools.md),
+  [l'inchiostro sulla lavagna](architecture/ink-on-canvas.md) e
   [il disegno sul motore](architecture/disegno.md)
 - [Runtime dei plugin](architecture/plugin-runtime.md), i [provider WASM](architecture/wasm-providers.md) e [capability e sandbox](architecture/plugin-security.md)
 - [Lo strato dei motori](architecture/motori.md)
@@ -105,15 +109,17 @@ all'export, dalla sessione dal tablet ai disegni grandi.
   disegno
 - [Le porte della griglia](reference/grid-ipc.md): l'IPC dei fogli di
   calcolo
-- [Il formato della lavagna](reference/canvas-format.md): il nucleo
-  `fub-canvas-core` e le regole di lettura e scrittura delle `.canvas`, e
-  le [operazioni sulla lavagna](reference/canvas-operations.md): le toppe e
-  la loro inversa, [la lavagna come codice](reference/canvas-code.md): le
-  letture, le misure e i posti, le operazioni d'intento, il loro
-  [schema](reference/canvas-schema.md),
-  [Mermaid e le scalette](reference/canvas-import.md) che diventano una
-  lavagna e [il controllo](reference/canvas-check.md) che dice che cosa cambierebbe
+- [Il formato della lavagna](reference/canvas-format.md) (`fub-canvas-core`),
+  le [toppe](reference/canvas-operations.md) con la loro inversa,
+  [la lavagna come codice](reference/canvas-code.md) (letture, misure, operazioni
+  d'intento) col suo [schema](reference/canvas-schema.md),
+  [Mermaid e le scalette](reference/canvas-import.md), [il controllo](reference/canvas-check.md)
+  e [l'inchiostro della lavagna](reference/canvas-ink.md) (`fub:ink`)
 - [Il server MCP](reference/mcp-server.md)
+- [Le convenzioni scritte nelle note](reference/note-conventions.md): i
+  commenti con la discussione (`{==passo==}{>>messaggio<<}`)
+- [I tipi delle proprietà](reference/property-types.md): il registro
+  `properties.types`, le opzioni di Selezione e Stato e i loro comandi
 - [I formati dei file Craft](reference/craft-formats.md), gli
   [XMP accanto alle foto](reference/xmp-sidecars.md) e le
   [app esterne](reference/external-editors.md)
@@ -122,8 +128,6 @@ all'export, dalla sessione dal tablet ai disegni grandi.
 
 - [Stato del progetto](project/status.md): dove siamo, l'ordine di lavoro, il
   rilascio e lo stato di M5
-- [Runtime dei plugin](architecture/plugin-runtime.md), con i
-  [provider WASM](architecture/wasm-providers.md)
 
 ## Capire le decisioni
 

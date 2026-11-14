@@ -81,6 +81,10 @@ pub enum FieldKind {
     Sides,
     /// Due numeri, `[w, h]`.
     Pair,
+    /// Un livello d'inchiostro: `"board"` (la radice) o `{"node": id}`.
+    Layer,
+    /// Una lista di tratti d'inchiostro, ognuno un oggetto come nel file.
+    Strokes,
     /// Un valore qualunque.
     Any,
 }
@@ -665,18 +669,54 @@ pub const OPS: &[OpSpec] = &[
             r#"{"op":"from_outline","text":"- Tesi\n  - Metodi\n  - Risultati","direction":"down","x":0,"y":600,"prefix":"s-"}"#,
         ],
     },
+    OpSpec {
+        name: "add_strokes",
+        summary_it: "Aggiunge tratti d'inchiostro già codificati in cima al livello `layer` (la radice o una scheda), nell'ordine dato. È la forma grezza di `fub:ink`.",
+        fields: &[
+            required(
+                "layer",
+                FieldKind::Layer,
+                "Il livello: `\"board\"` per i tratti liberi, `{\"node\": id}` per quelli di una scheda.",
+            ),
+            required(
+                "strokes",
+                FieldKind::Strokes,
+                "I tratti come nel file (`tool`, `brush`, `color`, `anchor`, `ink`), campi sconosciuti compresi. `id` è facoltativo: senza, lo dà il seme. Un tratto che non si disegnerebbe in quel livello è `invalid`.",
+            ),
+        ],
+        examples: &[
+            r##"{"op":"add_strokes","layer":"board","strokes":[{"tool":"pen","brush":"pf1 size=3 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=0 pen=ballpoint","color":"#0072b2","anchor":{"kind":"free"},"ink":"1 s100 cxy 4000,2500 120,40 95,-10"}]}"##,
+        ],
+    },
+    OpSpec {
+        name: "erase_strokes",
+        summary_it: "Cancella dal livello `layer` i tratti `ids`. Un tratto che Fub non disegna si conserva e non si cancella.",
+        fields: &[
+            required(
+                "layer",
+                FieldKind::Layer,
+                "Il livello: `\"board\"` per i tratti liberi, `{\"node\": id}` per quelli di una scheda.",
+            ),
+            required("ids", FieldKind::Ids, "Gli id dei tratti da cancellare."),
+        ],
+        examples: &[r#"{"op":"erase_strokes","layer":"board","ids":["s1"]}"#],
+    },
 ];
 
 /// La lavagna su cui girano gli esempi di [`OPS`]: due schede di testo, una
-/// di file e un arco fra le due di testo.
-const EXAMPLE_CANVAS: &str = r#"{
+/// di file, un arco fra le due di testo e un tratto libero, `s1`, per gli
+/// esempi dell'inchiostro.
+const EXAMPLE_CANVAS: &str = r##"{
   "nodes": [
     {"id": "t1", "type": "text", "x": 0, "y": 0, "width": 320, "height": 160, "text": "Ciclo dell'acqua"},
     {"id": "t2", "type": "text", "x": 400, "y": 0, "width": 320, "height": 160, "text": "Evaporazione"},
     {"id": "f1", "type": "file", "x": 0, "y": 240, "width": 320, "height": 200, "file": "schemi/acqua.png"}
   ],
-  "edges": [{"id": "e1", "fromNode": "t1", "toNode": "t2", "label": "porta a"}]
-}"#;
+  "edges": [{"id": "e1", "fromNode": "t1", "toNode": "t2", "label": "porta a"}],
+  "fub:ink": {"v": 1, "strokes": [
+    {"id": "s1", "tool": "pen", "brush": "pf1 size=3 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=0 pen=ballpoint", "color": "#0072b2", "anchor": {"kind": "free"}, "ink": "1 s100 cxy 4000,2500 120,40 95,-10"}
+  ]}
+}"##;
 
 /// La lavagna d'esempio di [`OPS`].
 pub fn example_canvas() -> Result<Canvas, CanvasError> {
@@ -865,6 +905,8 @@ fn check_field(
         FieldKind::Color => check_color(index, object, field, path, value, problems),
         FieldKind::Sides => check_sides(index, object, field, path, value, problems),
         FieldKind::Pair => check_pair(index, path, value, problems),
+        FieldKind::Layer => check_layer(index, path, value, problems),
+        FieldKind::Strokes => check_strokes(index, path, value, problems),
     }
 }
 
@@ -1103,6 +1145,53 @@ fn check_points(index: usize, path: String, value: &Value, problems: &mut Vec<Pr
     }
 }
 
+/// Un livello d'inchiostro, come lo legge [`crate::ink::LayerRef`]: la parola
+/// `board`, o un oggetto col solo campo `node`, un testo.
+fn check_layer(index: usize, path: String, value: &Value, problems: &mut Vec<Problem>) {
+    match value {
+        Value::String(word) if word == "board" => {}
+        Value::String(_) => problems.push(Problem::new(ProblemCode::BadValue, Some(index), path)),
+        Value::Object(fields) => {
+            match fields.get("node") {
+                Some(Value::String(_)) => {}
+                Some(_) => problems.push(Problem::new(
+                    ProblemCode::WrongType,
+                    Some(index),
+                    format!("{path}/node"),
+                )),
+                None => problems.push(Problem::new(
+                    ProblemCode::MissingField,
+                    Some(index),
+                    format!("{path}/node"),
+                )),
+            }
+            for key in fields.keys().filter(|key| key.as_str() != "node") {
+                problems.push(Problem::new(
+                    ProblemCode::UnknownField,
+                    Some(index),
+                    format!("{path}/{}", escape(key)),
+                ));
+            }
+        }
+        _ => problems.push(Problem::new(ProblemCode::WrongType, Some(index), path)),
+    }
+}
+
+/// Una lista di tratti: ogni voce è un oggetto. I campi del tratto li legge la
+/// compilazione, che dice `invalid` per un tratto che non si legge.
+fn check_strokes(index: usize, path: String, value: &Value, problems: &mut Vec<Problem>) {
+    let Value::Array(strokes) = value else {
+        problems.push(Problem::new(ProblemCode::WrongType, Some(index), path));
+        return;
+    };
+    for (position, stroke) in strokes.iter().enumerate() {
+        if !stroke.is_object() {
+            let at = format!("{path}/{position}");
+            problems.push(Problem::new(ProblemCode::WrongType, Some(index), at));
+        }
+    }
+}
+
 fn wrong_unless(fits: bool, index: usize, path: String, problems: &mut Vec<Problem>) {
     if !fits {
         problems.push(Problem::new(ProblemCode::WrongType, Some(index), path));
@@ -1272,6 +1361,18 @@ fn field_schema(field: &FieldSpec) -> Value {
             "minItems": 2,
             "maxItems": 2,
         }),
+        FieldKind::Layer => json!({
+            "oneOf": [
+                { "const": "board" },
+                {
+                    "type": "object",
+                    "properties": { "node": { "type": "string" } },
+                    "required": ["node"],
+                    "additionalProperties": false,
+                },
+            ],
+        }),
+        FieldKind::Strokes => json!({ "type": "array", "items": { "type": "object" } }),
         FieldKind::Any => json!({}),
     };
     if let Value::Object(map) = &mut schema {

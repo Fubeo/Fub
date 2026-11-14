@@ -24,7 +24,8 @@ I tipi dei campi sono `id`, `ids` (una lista di id), `number` (un intero: anche
 un elenco), `node` (una scheda), `edge` (un arco), `color` (un nome, `"1"`…`"6"`
 o `#rrggbb`, o `null`), `sides` (`"auto"` o `{from, to}`), `pair` (due numeri,
 `[w, h]`), `object`, `patch` (i campi nuovi di `set`, col suo `color`), `points`
-(una lista di liste di numeri) e `any`. Un campo facoltativo `null` vale come
+(una lista di liste di numeri), `layer` (un livello d'inchiostro: `"board"` o
+`{"node": id}`), `strokes` (una lista di tratti, ognuno un oggetto) e `any`. Un campo facoltativo `null` vale come
 assente, per la forma e per serde.
 
 ## Lo schema JSON

@@ -36,6 +36,9 @@ chiave e nello stesso ordine.
 | `upsert-edge` | l'arco com'era, o `null` | l'arco nuovo | facoltativo |
 | `remove-edge` | l'arco com'era | `null` | facoltativo |
 | `reorder` | gli id delle schede, in ordine | gli stessi, nel nuovo ordine | no |
+| `ink` | il tratto com'era, o `null` | il tratto nuovo, o `null` | sì, nei tratti |
+
+La toppa `ink` è descritta nella sezione [Inchiostro](#inchiostro).
 
 Nelle toppe delle schede `at` è una posizione nella lista delle schede, che è
 anche la profondità: la prima scheda sta sotto tutte le altre. Nelle toppe
@@ -130,6 +133,14 @@ Ogni errore (`PatchError`) dice quale toppa della lista non si applica
 | `NodeHasEdges` | si toglie una scheda che ha ancora un arco |
 | `MissingEndpoint` | un arco collega una scheda che non c'è |
 | `NotAPermutation` | in `reorder`, `after` ha un id che non c'è, uno ripetuto o ne manca uno |
+| `InkAtOutOfRange` | in `ink` che aggiunge, `at` oltre la fine dei tratti del livello |
+| `ForeignLayer` | in `ink`, il livello è estraneo |
+| `DuplicateStroke` | in `ink`, il tratto di dopo ha l'id di un altro tratto del livello |
+| `EmptyInk` | in `ink`, `before` e `after` sono tutti e due `null` |
+
+Il commit dà una ragione in una parola (`PatchError::reason`): `invalid` per
+`ForeignLayer`, `DuplicateStroke` ed `EmptyInk`, che porterebbero a un
+livello che Fub non scrive; `stale` per tutti gli altri.
 
 Una toppa scritta male non arriva nemmeno alla copia: è un errore di
 lettura. Sono scritte male, per esempio, un `kind` sconosciuto, un `after`
@@ -158,6 +169,7 @@ inverso. Applicata dopo la lista, ridà il modello di prima.
 | `upsert-edge` con `before` uguale a `null` | `remove-edge` senza `at` |
 | `remove-edge` | `upsert-edge` con `before` uguale a `null` e lo stesso `at` |
 | `reorder` | `reorder` con `before` e `after` scambiati |
+| `ink` | `ink` con `before` e `after` scambiati e lo stesso `at` |
 
 Gli `at` di una lista di `remove-node`, e quelli di una lista di
 `remove-edge`, sono le posizioni nel modello di partenza. Per questo l'inversa
@@ -182,6 +194,13 @@ Le operazioni d'intento (`CanvasOp`, in `crates/fub-canvas-core/src/ops.rs`),
 con i loro esempi e i loro errori, stanno in
 [La lavagna come codice](canvas-code.md#le-operazioni). Le toppe che le
 operazioni producono sono descritte sopra, in «Le toppe».
+
+## Inchiostro
+
+La toppa `ink` e le operazioni `add_strokes` ed `erase_strokes` stanno
+nell'[inchiostro della lavagna](canvas-ink.md#toppa-e-operazioni). `move` e
+`resize` non toccano l'inchiostro; `remove` lo porta via con la scheda, e
+l'annulla lo rimette.
 
 ## Comandi
 
@@ -274,41 +293,9 @@ Un documento che non è una lavagna, o un `.canvas` che non si apre, è
 `ids` che non è una lista JSON di testi, un `max_chars` che non è un intero da
 zero in su e un `max_chars` con `code` o `json` sono `BadArgs`.
 
-`canvas.check` («Controlla le operazioni», «Check the operations») dice che cosa
-cambierebbe una lista di operazioni, prima di scriverla, e non scrive niente.
-Ha i parametri di `canvas.apply`: `doc` e `ops` obbligatori, `base` e `seed`
-facoltativi, con la stessa regola per il seme (di serie la revisione). Un
-documento che non è una lavagna, un `.canvas` che non si apre e un `ops` che
-non è JSON sono `BadArgs`, come in `canvas.apply`; ogni altro difetto della
-lista è un problema nel rapporto, e il comando riesce.
-
-L'esito è l'effetto `Custom` con payload `{"version": 1, "kind": "check",
-"ok", "problems", "warnings", "warnings_omitted", "summary",
-"outline_after"}`. La forma del rapporto è quella di
-[Il controllo](canvas-check.md), con due aggiunte. `warnings_omitted`
-dice quanti avvisi non entrano nei primi cento. Ogni problema porta `text`, la
-chiave del catalogo della sua frase (`canvas.check.p_<codice>`, in italiano e in
-inglese): la frase la rende chi mostra il rapporto, e il payload resta
-strutturato. Quando `base` non è la revisione del file, il rapporto ha in più il
-problema `stale_base`, con indice `null` e percorso `""`: non è un errore, e il
-rapporto non ha riassunto né lettura di dopo. La notifica è un riassunto per
-chi legge: `canvas.check.n_summary` con i conti, o `canvas.check.n_refused` con
-il numero dei problemi.
-
-Con una lista che si scrive, un esempio è la lavagna di `a` alta 160 e della
-scheda `b` nuova a fianco, con `a` spostata di 40 (il test
-`controllare_dice_il_riassunto_e_non_scrive` lo fissa intero):
-
-```json
-{"version": 1, "kind": "check", "ok": true, "problems": [], "warnings": [{"code": "overlap", "ids": ["a", "b"]}], "warnings_omitted": 0, "summary": {"cards_added": [{"id": "b", "text": "Poi"}], "cards_removed": [], "cards_changed": [{"id": "a", "text": "Ciao", "moved": {"from": {"x": 0, "y": 0}, "to": {"x": 40, "y": 0}}}], "edges_added": [], "edges_removed": [], "edges_changed": [], "order_changed": false}, "outline_after": "cards 2 edges 0 groups 0 bounds 40 0 260×160\n1 a text \"Ciao\" 40 0 200×160\n2 b text \"Poi\" 100 0 200×160"}
-```
-
-Con una lista che non si scrive, `ok` è `false`, `summary` e `outline_after` sono
-`null`, e ogni problema ha il suo codice, la posizione (`index`, da zero),
-`path` e `text`, per esempio `{"code": "unknown_op", "index": 0, "path":
-"/0/op", "message": "no operation has this name", "text": {"key":
-"canvas.check.p_unknown_op"}}`. I codici sono quelli del [controllo](canvas-check.md) e
-dello [schema](canvas-schema.md).
+`canvas.check` («Controlla le operazioni», «Check the operations») dice che
+cosa cambierebbe una lista di operazioni, senza scriverla: i parametri, il
+payload e gli esempi stanno in [Il controllo](canvas-check.md#il-comando).
 
 `canvas.guide` («Guida alla lavagna», «Whiteboard guide») dà la guida per scrivere
 una lavagna con le operazioni, e non legge nessun documento. Il payload ha
@@ -425,6 +412,7 @@ sotto. `src/api.rs` è il livello sicuro (una tabella di lavagne per handle),
 | `canvas_compile(h, ptr, len) -> i32` | `{"ops", "seed"}` | 0 o -1 | `{"patches", "created"}` |
 | `canvas_model(h) -> i32` | | 0 o -1 | `{"canvas"}` |
 | `canvas_node_at(h, byte) -> i32` | | l'indice, -1 fuori da ogni scheda, -2 se fallisce | vuoto |
+| `canvas_ink_layers(h) -> i32` | | 0 o -1 | `{"layers"}` |
 | `canvas_close(h) -> i32` | | 0 o -1 | vuoto |
 | `result_ptr() -> ptr`, `result_len() -> len` | | | dove sta il risultato |
 
@@ -450,6 +438,10 @@ sotto. `src/api.rs` è il livello sicuro (una tabella di lavagne per handle),
 - `canvas_node_at` dà l'indice della scheda il cui oggetto nel sorgente
   contiene il byte `byte`, contato in UTF-8 dall'inizio del testo, BOM
   compreso.
+- `canvas_ink_layers` dà i livelli d'inchiostro come li legge il nucleo
+  (`read_layers`), nella forma di `expect` dei
+  [vettori dell'inchiostro](canvas-ink.md#i-vettori). Come `canvas_model`
+  non ha ingresso da liberare; la risposta è nel risultato, del modulo.
 - Gli handle partono da 1, crescono e non si riusano: 0 e `u32::MAX` non sono
   mai handle, e un handle chiuso risponde `handle` per sempre.
 
@@ -496,10 +488,12 @@ per chi indaga e non per l'utente.
 
 I test sono in `crates/fub-canvas-wasm/tests/`: `api.rs` passa dal livello
 sicuro, `abi.rs` dalle funzioni `extern "C"` chiamate in nativo, con gli
-stessi controlli (ogni vettore di `canvas-patches/` e `canvas-ops/`, il
-tratto UTF-16 con caratteri di uno, due, tre e quattro byte, BOM e CRLF, ogni
-ingresso sbagliato, gli handle, 16 MiB e un byte in più, un risultato più
-grande di 64 KiB) e, in `abi.rs`, la memoria viva uguale dopo 10 000 giri.
+stessi controlli (ogni vettore di `canvas-patches/` e `canvas-ops/`, ogni
+vettore di `canvas-ink/` per `canvas_ink_layers`, il tratto UTF-16 con
+caratteri di uno, due, tre e quattro byte, BOM e CRLF, ogni ingresso
+sbagliato, gli handle, 16 MiB e un byte in più, un risultato più grande di
+64 KiB) e, in `abi.rs`, la memoria viva uguale dopo 10 000 giri, anche di
+`canvas_ink_layers` con un commit d'inchiostro.
 
 ### Nella shell
 
@@ -525,7 +519,10 @@ wasm32-unknown-unknown`).
 
 `core.ts` compila il modulo una volta e dà `openCore(testo)`, una
 `CanvasCore` per lavagna con `model`, `reset`, `commit`, `preview`,
-`compile`, `nodeAt` e `close`. Rilegge le viste della memoria dopo ogni
+`compile`, `nodeAt`, `inkLayers` e `close`. `inkLayers` chiede i livelli al
+nucleo una volta per testo (apertura, `reset`, `commit`) e fino al cambio
+ridà lo stesso array congelato; lo usano i costruttori dei tratti di
+`operation.ts` e `inkLayerStates` di `ink-record.ts`. Rilegge le viste della memoria dopo ogni
 chiamata e libera ogni ingresso con `fub_free`, anche quando la chiamata
 fallisce. Un testo con un surrogato spaiato è un errore `utf8` prima di
 arrivare al modulo, mai un U+FFFD. Gli errori sono `CanvasCoreError` con i
@@ -533,4 +530,5 @@ arrivare al modulo, mai un U+FFFD. Gli errori sono `CanvasCoreError` con i
 di lei risponde `trap`, e il prossimo `openCore` fa un'istanza nuova) e `load`
 (il modulo non si carica; il prossimo `openCore` riprova). `close` si può
 ripetere; dopo `close` ogni altra chiamata risponde `handle`. I test sono
-`wasm/core.test.ts` e `wasm/vectors.test.ts`, sul `.wasm` vero.
+`wasm/core.test.ts`, `wasm/vectors.test.ts` e `wasm/ink-vectors.test.ts`,
+sul `.wasm` vero.

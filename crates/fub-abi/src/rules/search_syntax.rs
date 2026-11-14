@@ -22,7 +22,9 @@
 //!   diventa numero, booleano o data ISO quando lo è, altrimenti testo;
 //! - operatori `nome:valore`, con valore anche fra virgolette: `tag:`,
 //!   `path:` (sottostringa, o glob se contiene `*`/`?`), `folder:`, `file:`
-//!   (nel nome), `content:` (nel corpo), `heading:`, `ext:`, `task:todo` /
+//!   (nel nome), `content:` (nel corpo), `heading:`, `comment:` (nei messaggi
+//!   dei commenti, autore compreso: vedi [`COMMENT_PREDICATE_NS`]), `ext:`,
+//!   `task:todo` /
 //!   `task:done`, `match-case:` (testo con maiuscole esatte), `ignore-case:` (testo senza
 //!   distinguere le maiuscole, anche quando la barra ha «maiuscole» acceso);
 //! - `line:`, `block:`, `section:` vogliono tutte le parole nella stessa riga,
@@ -51,6 +53,13 @@ pub const MAX_LITERALS: usize = 32;
 /// gruppo, e così la distribuzione: senza un tetto una riga di migliaia di `(`
 /// esauriva lo stack. Oltre, la riga è `TooComplex` sulla `(` di troppo.
 pub const MAX_DEPTH: usize = 32;
+
+/// Il predicato di `comment:`: un [`QueryPredicate::Custom`] con questo `ns` e
+/// per `predicate` un [`TextQuery`] (i campi vuoti), cercato nei messaggi dei
+/// commenti (`{>>…<<}`), autore compreso, e non nel corpo. È custom perché
+/// [`TextField`] è un enum della WIT, che resta com'è; lo serve la ricerca
+/// full-text (`fub.search`), nel namespace del core.
+pub const COMMENT_PREDICATE_NS: &str = "fub:comment";
 
 /// Perché una riga non è una ricerca.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -478,6 +487,7 @@ enum Operator {
     Folder,
     File,
     Content,
+    Comment,
     Heading,
     Ext,
     Task,
@@ -497,6 +507,7 @@ impl Operator {
             "folder" => Self::Folder,
             "file" => Self::File,
             "content" => Self::Content,
+            "comment" => Self::Comment,
             "heading" => Self::Heading,
             "ext" => Self::Ext,
             "task" => Self::Task,
@@ -570,6 +581,16 @@ impl Operator {
             }
             Self::File => text_predicate(value, mode, vec![TextField::Name], false),
             Self::Content => text_predicate(value, mode, vec![TextField::Body], false),
+            Self::Comment => {
+                let QueryPredicate::Text(text) = text_predicate(value, mode, vec![], false) else {
+                    unreachable!("text_predicate fa un predicato di testo")
+                };
+                QueryPredicate::Custom {
+                    ns: COMMENT_PREDICATE_NS.to_string(),
+                    predicate: serde_json::to_value(text)
+                        .expect("un TextQuery si scrive sempre in JSON"),
+                }
+            }
             Self::Heading => text_predicate(value, mode, vec![TextField::Heading], false),
             Self::MatchCase => text_predicate(value, mode, vec![], true),
             Self::IgnoreCase => text_predicate(value, mode, vec![], false),

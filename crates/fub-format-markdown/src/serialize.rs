@@ -795,7 +795,8 @@ fn write_inline(inline: &Inline, blank_after: bool, out: &mut String) -> Result<
 /// Ogni barra rovescia in più è un byte nel file dell'utente, quindi il criterio
 /// non è «tutta la punteggiatura ASCII» ma «questo carattere, **qui**, rileggerebbe
 /// come sintassi»: `_` solo fuori da una parola, `<` solo davanti a un nome,
-/// `~ = %` solo raddoppiati, `$` solo davanti a ciò che non è spazio (anche
+/// `~ = %` solo raddoppiati, `{` solo davanti a `==` o `>>` (aprirebbe un
+/// commento), `$` solo davanti a ciò che non è spazio (anche
 /// quando è l'inline che segue, per questo `blank_after`), `^` solo dove sarebbe
 /// un marcatore d'ancora, `#` solo dove [`scan_tags`] prende un tag — che non è una regola somigliante,
 /// è **la** regola, chiamata qui perché sia la stessa da tutt'e due i lati.
@@ -838,6 +839,12 @@ fn write_text(s: &str, blank_after: bool, out: &mut String) {
             }
             '<' => after.is_some_and(|d| d.is_alphanumeric() || "/!?".contains(d)),
             '~' | '=' | '%' => after == Some(c),
+            // `{==` e `{>>` aprono un commento (CriticMarkup): un testo che li
+            // porta li porta letterali, e così devono rileggersi.
+            '{' => {
+                let rest = &s[the + 1..];
+                rest.starts_with("==") || rest.starts_with(">>")
+            }
             '$' => after.map_or(!blank_after, |d| !d.is_whitespace()),
             '^' => {
                 before.is_none_or(char::is_whitespace) && after.is_some_and(char::is_alphanumeric)

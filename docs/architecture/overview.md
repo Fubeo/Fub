@@ -86,7 +86,6 @@ flowchart TD
     markdown --> sdk
     svg --> abi
     svg --> scene
-    scene --> ink
     wasmhost --> abi
     wasmhost --> host
     wasmhost --> kernel
@@ -231,7 +230,8 @@ Il quarto blocco è il nucleo della lavagna, `fub-canvas-core`, con chi lo usa.
 Il quinto blocco è `fub-format-craft`, che legge in sola lettura i
 [file delle app Craft](../reference/craft-formats.md): dipende soltanto dal
 contratto, e lo usa soltanto `fub-host`, che ne monta i formati e il bundle
-`fub.craft` (feature `craft`).
+`fub.craft` (feature `craft`). In fondo al blocco c'è il codec dei tratti,
+`fub-ink-codec`, fra i disegni e il nucleo dell'inchiostro.
 
 ```mermaid
 flowchart LR
@@ -240,10 +240,12 @@ flowchart LR
 
     canvas["fub-format-canvas"]
     canvascore["fub-canvas-core"]
+    canvasinkcodec["fub-ink-codec"]
     canvaswasm["fub-canvas-wasm"]
     features["fub-features"]
 
     canvas --> canvascore
+    canvascore --> canvasinkcodec
     canvaswasm --> canvascore
     features --> canvascore
     features -.-> canvas
@@ -258,6 +260,14 @@ flowchart LR
     host --> craft
     craft --> abi
     craft -.-> sdk
+
+    %% E il codec dei tratti, fra i disegni e il nucleo dell'inchiostro.
+
+    scene["fub-scene"]
+    ink["fub-ink"]
+
+    scene --> canvasinkcodec
+    canvasinkcodec --> ink
 ```
 
 Il frontend TypeScript non è un crate Cargo. Entra nel sistema attraverso
@@ -272,23 +282,30 @@ di eventi per sessione.
 niente, nemmeno da `fub-abi`, perché deve poterlo usare ogni prodotto che
 raccoglie inchiostro e, un domani, un componente `wasm32-wasip2`. Lo
 verificano `dependency_invariant.rs` e la compilazione per quel bersaglio nella
-CI. Le frecce in ingresso sono quella di `fub-scene`, che ne usa il campione
-del tratto, e quella di `fub-format-rich`, che ne scrive e legge l'InkML
-dell'inchiostro dei documenti; chi altro può dipenderne è un elenco chiuso,
-deciso nell'[ADR 0204](../decisions/0204-nucleo-inchiostro.md) e allargato
-nell'[ADR 0226](../decisions/0226-inchiostro-e-disegni-nei-documenti.md).
+CI. Le frecce in ingresso sono quella di `fub-ink-codec`, che ne quantizza il
+campione del tratto, e quella di `fub-format-rich`, che ne scrive e legge
+l'InkML dell'inchiostro dei documenti; chi altro può dipenderne è un elenco
+chiuso, deciso nell'[ADR 0204](../decisions/0204-nucleo-inchiostro.md) e
+allargato nell'[ADR 0226](../decisions/0226-inchiostro-e-disegni-nei-documenti.md).
+`fub-ink-codec` è il codec di `fub:ink` e la grammatica di `fub:brush`, con
+le penne e la tavolozza copiate da quelle della GUI (`pens.rs`): sta
+fuori da `fub-scene` perché lo usa anche il nucleo della lavagna, che non deve
+portarsi dietro il lettore XML dei disegni, e dipende soltanto da `fub-ink`.
 
-`fub-canvas-core`, il nucleo della lavagna, non ha frecce verso altri crate
-del workspace: dipende soltanto da `serde`, `serde_json` e `thiserror`, e non
-vede `fub-abi` né il Markdown, perché lo carica anche la WebView come modulo
-`wasm32-unknown-unknown`. Ha il modello di una `.canvas` e la sua lettura; le
-sue frecce in ingresso sono quella di `fub-format-canvas`, che lo riespone con
-la stessa API, quella di `fub-features`, facoltativa dietro la feature
-`lavagna`, per il comando `canvas.apply`, e quella di `fub-canvas-wasm`, la
-facciata che la WebView carica come `.wasm`. Chi altro può dipenderne è un
-elenco chiuso (`dependency_invariant.rs`), e il giro completo di
-`scripts/check.sh` lo compila per quel bersaglio. Le regole stanno nel
-[formato della lavagna](../reference/canvas-format.md).
+`fub-canvas-core`, il nucleo della lavagna, ha una sola freccia verso un altro
+crate del workspace: `fub-ink-codec`, con cui legge e controlla l'inchiostro
+`fub:ink` delle schede, e che porta con sé soltanto `fub-ink`. Per il resto
+dipende da `serde`, `serde_json` e `thiserror`, e non vede `fub-abi` né il
+Markdown, perché lo carica anche la WebView come modulo
+`wasm32-unknown-unknown`. Ha il modello di una `.canvas`, la sua lettura e
+quella dei suoi livelli d'inchiostro; le sue frecce in ingresso sono quella di
+`fub-format-canvas`, che lo riespone con la stessa API, quella di
+`fub-features`, facoltativa dietro la feature `lavagna`, per i comandi
+`canvas.apply` e `canvas.create`, e quella di `fub-canvas-wasm`, la facciata
+che la WebView carica come `.wasm`. Chi altro può dipenderne è un elenco
+chiuso (`dependency_invariant.rs`), e il giro completo di `scripts/check.sh`
+lo compila per quel bersaglio. Le regole stanno nel [formato della
+lavagna](../reference/canvas-format.md).
 
 `fub-canvas-wasm` mette il nucleo dietro un'interfaccia C scritta a mano, senza
 librerie di collegamento: dipende solo dal nucleo, da `serde` e da
@@ -340,7 +357,7 @@ flowchart LR
 ```
 
 `fub-scene`, il lettore delle scene di FubDraw, ha come sola freccia in uscita
-`fub-ink`: non dipende da `fub-abi`, dal kernel, da Tauri o da Wasmtime, perché
+`fub-ink-codec`, di cui riespone i tipi: non dipende da `fub-abi`, dal kernel, da Tauri o da Wasmtime, perché
 deve poterlo usare anche un componente `wasm32-wasip2`. Lo verificano
 `dependency_invariant.rs` e la compilazione per quel bersaglio nella CI. Lo usa
 `fub-format-svg`, il provider del [formato della

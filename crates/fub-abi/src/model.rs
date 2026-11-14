@@ -712,8 +712,9 @@ mod property;
 
 pub use link::{parse_wikilink_inner, LinkTarget, ParsedWikilink};
 pub use property::{
-    valid_civil_date, DateFormats, DateOrder, PropertyDate, PropertyScalar, PropertyTime,
-    PropertyType, PropertyTypes, PropertyValue,
+    valid_civil_date, DateFormats, DateOrder, OptionMatch, PropertyColor, PropertyDate,
+    PropertyOption, PropertyScalar, PropertyTime, PropertyType, PropertyTypes, PropertyValue,
+    StatusGroup,
 };
 
 /// Un link estratto, piatto, con lo span nella sorgente e un po' di contesto
@@ -995,6 +996,29 @@ pub mod custom_kind {
     /// `attrs: { source: string }`, **delimitatori compresi**, perché riscriverlo
     /// è copiarlo e nascondere un commento non autorizza a perderlo.
     pub const COMMENT: &str = "comment";
+    /// Un estremo del passo commentato di una nota (inline): in Markdown il
+    /// `{==` che lo apre o il `==}` che lo chiude (CriticMarkup). Il passo sta
+    /// fra i due estremi, negli inline fratelli, ed è testo come ogni altro:
+    /// link, tag e formattazione restano suoi. `attrs: { source: string, edge:
+    /// "start" | "end" }`. I due estremi stanno sempre nella stessa fila di
+    /// inline, e dopo l'estremo `end` viene almeno un [`COMMENT_MESSAGE`].
+    ///
+    /// Non è [`COMMENT`]: quello è testo che l'autore scrive per sé (`%%…%%`),
+    /// questo è una discussione su un passo.
+    pub const COMMENT_RANGE: &str = "comment-range";
+    /// Un messaggio di una discussione (inline): in Markdown `{>>…<<}`.
+    /// `attrs: { source: string, author: string?, date: string?, text: string,
+    /// anchored: bool }`. `author` e `date` (`AAAA-MM-GG`, con ` HH:MM` se
+    /// c'è) sono `null` quando il messaggio non li scrive; `text` è il
+    /// messaggio senza intestazione. `anchored` dice che il messaggio commenta
+    /// il passo chiuso dal [`COMMENT_RANGE`] che lo precede (direttamente o
+    /// dopo altri messaggi); senza, commenta il punto in cui sta.
+    ///
+    /// Il testo di un messaggio non è testo della nota: non fa link né tag e
+    /// non entra nel testo del blocco. In una cella di tabella `source` e
+    /// `text` hanno già `\|` riportata a `|` (come il testo della cella), e lo
+    /// span copre i byte del file, barre comprese.
+    pub const COMMENT_MESSAGE: &str = "comment-message";
     /// Definition list: i figli sono `DEFINITION_TERM` e `DEFINITION_DESCRIPTION`
     /// alternati, nell'ordine della sorgente.
     pub const DEFINITION_LIST: &str = "definition-list";
@@ -1068,6 +1092,8 @@ pub mod custom_kind {
         (DIAGRAM, Payload::Body("source")),
         (HIGHLIGHT, Payload::Body("text")),
         (COMMENT, Payload::Source("source")),
+        (COMMENT_RANGE, Payload::Source("source")),
+        (COMMENT_MESSAGE, Payload::Source("source")),
         (DEFINITION_LIST, Payload::Children),
         (DEFINITION_TERM, Payload::Children),
         (DEFINITION_DESCRIPTION, Payload::Children),
