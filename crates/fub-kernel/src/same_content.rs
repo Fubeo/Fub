@@ -252,14 +252,11 @@ fn plan_within<'a>(
 }
 
 /// La domanda preparata, fuori dal lucchetto: legge i candidati e confronta.
+/// L'istante della domanda è quello dell'orologio del vault, lo stesso con cui
+/// l'anagrafe giudica le date dei file.
 pub(crate) fn answer(vault: &Vault, plan: Plan, wanted: &[u8]) -> SameContentOutcome {
-    answer_within(
-        vault,
-        plan,
-        wanted,
-        MAX_BYTES_READ,
-        crate::time::now_unix_millis(),
-    )
+    let started = vault.now_unix_millis();
+    answer_within(vault, plan, wanted, MAX_BYTES_READ, started)
 }
 
 fn answer_within(
@@ -364,12 +361,14 @@ fn holds(
         return Ok(false);
     };
     // L'impronta della voce si crede finché misura e data sono quelle della
-    // voce. Una voce vecchia con la stessa misura e la stessa data può solo far
-    // dire «no» a torto, cioè copiare: il «sì» lo danno sempre i byte.
-    let known = candidate
-        .fingerprint
-        .as_ref()
-        .filter(|_| now.size == candidate.size && now.mtime == candidate.mtime);
+    // voce, e finché è nella forma di quella che si confronta: una FNV-1a di una
+    // tabella scritta prima di SHA-256 non è mai uguale, ma non dice che i byte
+    // sono altri, e si ricalcola. Una voce vecchia con la stessa misura e la
+    // stessa data può solo far dire «no» a torto, cioè copiare: il «sì» lo
+    // danno sempre i byte.
+    let known = candidate.fingerprint.as_ref().filter(|known| {
+        now.size == candidate.size && now.mtime == candidate.mtime && same_form(known, wanted)
+    });
     let fingerprint = match known {
         Some(known) => known.clone(),
         None => {
@@ -399,6 +398,20 @@ fn holds(
         return Ok(false);
     };
     Ok(equal && Observed::of(storage, &path).as_ref() == Some(&now))
+}
+
+/// Le due impronte sono nella stessa forma (lo stesso prefisso prima dei due
+/// punti, la stessa lunghezza), quindi il loro confronto dice qualcosa? Una
+/// forma vecchia ([`Revision::matches_bytes`] accetta la FNV-1a a 16 cifre
+/// durante la migrazione) diversa da quella di [`Revision::of_bytes`] non
+/// dice né sì né no.
+fn same_form(known: &Revision, wanted: &Revision) -> bool {
+    fn scheme(revision: &Revision) -> Option<&str> {
+        revision.as_str().split_once(':').map(|(scheme, _)| scheme)
+    }
+    known.as_str().len() == wanted.as_str().len()
+        && scheme(known).is_some()
+        && scheme(known) == scheme(wanted)
 }
 
 /// Il file ha esattamente questi byte, letti a pezzi? Un file più corto o più
@@ -598,6 +611,40 @@ mod tests {
             SameContent::Found {
                 id: DocId::new("a.md")
             }
+        );
+    }
+
+    #[test]
+    fn a_fingerprint_of_an_older_form_is_computed_again() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let root = root_of(&dir);
+        put(&root, "a.md", b"ciao!");
+        let vault = Vault::open(&root).expect("vault");
+        let mut entries = entries_of(&vault, &["a.md"]);
+        // La voce viene da una tabella scritta prima di SHA-256: la sua impronta
+        // è la FNV-1a a 16 cifre **degli stessi byte**. Non è uguale a quella di
+        // ciò che arriva, ma non dice che i byte sono altri: si ricalcola.
+        let legacy = format!("{:016x}", fub_abi::edit::Fnv1a::hash(b"ciao!"));
+        entries[0].fingerprint = Some(Revision::new(legacy));
+        let mtime = entries[0].mtime;
+        let plan = plan_for(&vault, &entries, "b.md", 5, MAX_BYTES_READ);
+        let outcome = answer_within(&vault, plan, b"ciao!", MAX_BYTES_READ, mtime + 1);
+        assert_eq!(
+            outcome.answer,
+            SameContent::Found {
+                id: DocId::new("a.md")
+            }
+        );
+        assert_eq!(
+            outcome.learned,
+            LearnedFingerprints(vec![Learned {
+                id: DocId::new("a.md"),
+                size: 5,
+                mtime,
+                observed_at: mtime + 1,
+                fingerprint: Revision::of_bytes(b"ciao!"),
+            }]),
+            "l'impronta nella forma corrente torna all'indice"
         );
     }
 

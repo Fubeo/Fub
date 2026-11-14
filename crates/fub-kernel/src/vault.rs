@@ -869,6 +869,13 @@ impl Vault {
         self.clock = clock;
     }
 
+    /// L'istante di adesso secondo l'orologio di questo vault, quello che un
+    /// banco può iniettare: chi confronta un istante con le date dei file del
+    /// vault (la regola *racily clean*) lo prende da qui, non dal sistema.
+    pub(crate) fn now_unix_millis(&self) -> u64 {
+        self.clock.now_unix_millis()
+    }
+
     /// Aggancia le impostazioni da cui leggere la politica di esclusione.
     ///
     /// Builder e non parametro di [`on`](Vault::on) per la ragione di

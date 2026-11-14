@@ -20,6 +20,7 @@ use fub_abi::edit::Revision;
 use fub_abi::model::DocId;
 use fub_kernel::same_content::{SameContent, UnknownReason, MAX_CANDIDATES};
 use fub_kernel::storage::{DirEntry, FileIdentity, Merge, RootedFsStorage, Stat, VaultStorage};
+use fub_kernel::time::Clock;
 use fub_kernel::{data_root, FormatRegistry, MachineSettings, Workspace};
 use serde_json::Value;
 
@@ -576,6 +577,45 @@ fn a_write_of_the_index_while_a_fingerprint_is_learned_is_not_rolled_back() {
     );
     assert_eq!(ask(&mut workspace, "b.md", b"abcd"), SameContent::NotFound);
     assert_eq!(ask(&mut workspace, "b.md", b"efgh"), found("a.md"));
+}
+
+/// Un orologio fermo a un istante scelto dal test.
+struct Stopped(u64);
+
+impl Clock for Stopped {
+    fn now_unix_millis(&self) -> u64 {
+        self.0
+    }
+}
+
+#[test]
+fn the_instant_of_the_question_is_the_vault_clock() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let root = root_of(&dir);
+    put(&root, "a.md", b"abcd");
+
+    // Il controllo positivo: con l'orologio di sistema la data del file, di
+    // un'ora fa, è nel passato, e l'impronta si impara.
+    let mut workspace = open(&root);
+    let outcome = workspace
+        .prepare_same_content(&DocId::new("b.md"), 4)
+        .invoke(b"zzzz");
+    assert_eq!(outcome.answer, SameContent::NotFound);
+    assert_eq!(workspace.learn_fingerprints(outcome.learned), 1);
+
+    // Con l'orologio del vault fermo al 1970 la stessa data è nel futuro della
+    // domanda: l'impronta potrebbe descrivere un file che cambia ancora nello
+    // stesso istante, e non si impara.
+    let mut workspace = open(&root).with_clock(Arc::new(Stopped(1_000)));
+    let outcome = workspace
+        .prepare_same_content(&DocId::new("b.md"), 4)
+        .invoke(b"zzzz");
+    assert_eq!(outcome.answer, SameContent::NotFound);
+    assert_eq!(
+        workspace.learn_fingerprints(outcome.learned),
+        0,
+        "l'istante della domanda viene dall'orologio del vault"
+    );
 }
 
 thread_local! {
