@@ -63,7 +63,7 @@ Un tema `theme-2` può ridisegnare per nome le icone della shell. Il manifest no
 
 Il tema non aggiunge icone: ridisegna quelle che ci sono. Un alias ridisegnato vale per il nome a cui punta (`folder` è `vault`). Un nome che oggi nessuno disegna non rifiuta il tema (un modulo può registrarlo più tardi), ma non si vede. Cambiato tema, o annullata l'anteprima, le icone già sullo schermo tornano a quelle del tema scelto.
 
-I 467 nomi che un tema può ridisegnare (`theme/author/icon-names.json`, tenuto uguale a `iconNames()` da `src/ui/icon-names.test.ts`):
+I 468 nomi che un tema può ridisegnare (`theme/author/icon-names.json`, tenuto uguale a `iconNames()` da `src/ui/icon-names.test.ts`):
 
 ```text
 activity archive arrow-left arrow-right backlinks backup bell blocks book briefcase bulb calendar
@@ -125,7 +125,7 @@ rc-replace rc-rev-accept rc-rev-accept-all rc-rev-next rc-rev-previous rc-rev-re
 rc-rev-reject-all rc-row-after rc-row-before rc-row-delete rc-row-down rc-row-up rc-spacing rc-split
 rc-styles rc-table rc-toc rc-track rc-undo rc-wrap rc-wrap-behind rc-wrap-front rc-wrap-inline
 rc-wrap-square rc-zoom-in rc-zoom-out rc-zoom-reset restore ring search settings sort split square
-star stats sun sync tag template trash vault view warning
+star stats sun sync tag tasks template trash vault view warning
 ```
 
 ## Limiti e pubblicazione

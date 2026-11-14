@@ -124,6 +124,8 @@ use crate::search::{self, SEARCH_ID};
 use crate::stats::{self, StatsView, STATS_ID};
 #[cfg(feature = "tags")]
 use crate::tags::{self, TagCommands, TagPanelView, TAGS_ID};
+#[cfg(feature = "tasks")]
+use crate::tasks::{self, TasksView, TASKS_ID};
 #[cfg(feature = "template")]
 use crate::template::{self, TemplateCommands, TemplateView, TEMPLATE_ID};
 #[cfg(feature = "trash")]
@@ -319,6 +321,24 @@ static OFFICIALS: &[OfficialFeature] = &[
         catalog: tags::catalog,
         view: Some(|| Box::new(TagPanelView)),
         commands: Some(|| Box::new(TagCommands)),
+        index: None,
+        syntax: None,
+        renderers: None,
+        exports: None,
+        settings: None,
+        provides: &[],
+        requires: &[],
+        wiring: HostWiring::None,
+    },
+    // I compiti usano la ricerca se c'è (`uses` nella mappa, non `requires`: la
+    // ricerca non offre servizi), e la vista dice quando non può leggere.
+    #[cfg(feature = "tasks")]
+    OfficialFeature {
+        id: TASKS_ID,
+        name: "Tasks",
+        catalog: tasks::catalog,
+        view: Some(|| Box::new(TasksView)),
+        commands: None,
         index: None,
         syntax: None,
         renderers: None,
