@@ -326,6 +326,66 @@ vicini, con la distanza di «Lo schema»; senza vicini dà tutti i nomi. Per
 esempio `canvas.guide` con `topic` `move` dà `ops` con una sola voce, `name`
 `move`, uno schema con un solo ramo e solo gli esempi di `move`.
 
+`canvas.preview` («Anteprima della lavagna», «Whiteboard preview») disegna una
+lavagna come immagine, per vederne la forma (una freccia storta, due schede una
+sopra l'altra), e non scrive niente (`CommandScope::read_only()`). Il disegno è
+del nucleo (`fub_canvas_core::preview`): schede coi loro colori, gruppi
+tratteggiati con la loro etichetta, archi con le punte e l'etichetta a metà. Il
+PNG lo fa `fub-features` con la feature `draw`, coi caratteri che `draw`
+incorpora (Inter, Literata, JetBrains Mono): mai quelli di sistema, così la
+stessa lavagna dà gli stessi pixel su ogni macchina. Senza `draw` l'immagine è
+l'SVG come testo.
+
+| Parametro | Tipo | |
+|---|---|---|
+| `doc` | documento, obbligatorio | il file `.canvas`; un documento di un altro formato è `BadArgs` |
+| `ops` | testo | una lista JSON di operazioni: si disegna la lavagna di dopo, senza scriverla. Le regole sono quelle di `canvas.check`: una lista che non si scrive è `BadArgs`, con la posizione (da uno), il codice e il motivo del primo problema; un testo che non è JSON è `BadArgs` come in `canvas.apply` |
+| `base` | testo | la revisione che la lista ha letto; se il file ne ha un'altra è `Conflict`, come in `canvas.apply` |
+| `seed` | testo | il seme degli id nuovi, come in `canvas.apply`; di serie la revisione |
+| `size` | numero | il lato lungo in pixel, un intero da zero in su; di serie 1024, fuori da 64 a 2048 si stringe. Un numero che non è un intero, o negativo, è `BadArgs` |
+
+L'esito è l'effetto `Custom` con namespace `fub.lavagna` e payload
+`{"version": 1, "kind": "preview", "doc", "revision", "image", "outline",
+"outline_omitted"}`. `image` ha `media_type` (`image/png`, con `draw`;
+`image/svg+xml` senza), `width`, `height` in pixel e `data`: il PNG in base64,
+oppure l'SVG come testo. Il lato corto non scende sotto 64 pixel, e una lavagna
+vuota è un quadrato di 64.
+
+`outline` elenca le schede in ordine di modello (gruppi compresi), al più
+2 000; `outline_omitted` dice quante ne restano. Ogni voce ha `n`, il numero
+che la scheda porta nel disegno e che `canvas.read` dà alla sua riga, `id`,
+`kind` (le specie di `outline`: `text`, `note`, `group`…) e `clipped`. Con `ops`
+il numero è quello della lavagna di dopo.
+
+`clipped` è vero quando il testo della scheda non si vede per intero: o non
+entra nell'altezza, e l'ultima riga che si vede finisce con «…», o la scheda è
+troppo bassa per mostrarlo (meno di 12 pixel nell'immagine). Il nucleo non
+misura il font: un carattere più largo della stima esce dalla scheda, e il
+disegno lo taglia senza che `clipped` lo dica.
+
+Il testo è quello vero, tolti i segni del Markdown (titoli, citazioni, liste,
+caselle, recinti del codice, collegamenti, enfasi). Le righe si spezzano a
+caratteri, con la stima di [Misure e posti](canvas-code.md#misure-e-posti): una
+scheda alta quanto la stima di una scheda nuova ha tutte le sue righe. Una
+scheda file mostra il nome senza cartelle e col suo sottopercorso, un link il
+suo indirizzo, in JetBrains Mono. Un carattere che i tre font non hanno resta un
+segno sostitutivo del font, senza errore. Il testo sta in sezioni CDATA, così
+`<`, `&` e le virgolette restano come sono, senza entità; un carattere che XML
+non ammette diventa U+FFFD.
+
+I colori delle sei schede di serie sono valori fissi (un tono leggero per il
+riempimento, uno pieno per il tratto); un esadecimale si disegna com'è, e una
+scheda senza colore è grigia. Il margine attorno al contenuto è di 16 unità per
+lato.
+
+Errori: `canvas.preview.e_ops` (la lista non si disegna), `canvas.preview.e_size`
+(il lato non è un intero da zero in su), `canvas.preview.e_base` (la lavagna è
+cambiata: è un `Conflict`) e `canvas.preview.e_png` (il disegno non si è potuto
+rasterizzare, un difetto interno). Il disegno copre tutte le schede della
+lavagna, che il nucleo accetta fino a 100 000; solo l'elenco si ferma a 2 000. Una
+lavagna di diecimila schede si disegna sotto i due secondi in release, e con le
+schede piccole non mostra testo né numeri.
+
 ## WebAssembly
 
 La WebView usa lo stesso nucleo attraverso `fub-canvas-wasm`: un modulo
