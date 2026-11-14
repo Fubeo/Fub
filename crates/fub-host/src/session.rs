@@ -1178,6 +1178,19 @@ pub struct Host {
     /// ([`Host::install_theme_from_folder`]); la regola, con la sua
     /// generazione, sta in [`crate::theme::ThemeFolderGrant`].
     theme_folder: Mutex<crate::theme::ThemeFolderGrant>,
+    /// **Il custode del tema collegato** ([`Host::link_theme_folder`]): la
+    /// cartella guardata e il suo osservatore, montato e smontato secondo la
+    /// chiave [`crate::settings::DEVELOPER_THEME_FOLDER`] e la modalità
+    /// sviluppatore ([`Host::sync_theme_link`]).
+    theme_keeper: Arc<crate::theme_watch::ThemeKeeper>,
+    /// **Il turno delle chiavi locali** ([`PROFILE_LOCAL_KEYS`]): lo tengono
+    /// il cambio e l'azzeramento di un profilo di macchina per tutto il passo
+    /// (cambio e ripristino), e i gesti che scrivono la cartella collegata
+    /// («Collega una cartella…», «Scollega»). Così un collegamento che arriva
+    /// a metà di un cambio di profilo non viene sovrascritto dal ripristino.
+    /// Il turno di scrittura della macchina è privato del kernel: questo è il
+    /// turno dell'host, attorno a lui.
+    local_keys_turn: Mutex<()>,
 }
 
 impl Default for Host {
@@ -1275,6 +1288,8 @@ impl Host {
             startup_source: None,
             session_notice: Mutex::new(None),
             theme_folder: Mutex::new(crate::theme::ThemeFolderGrant::default()),
+            theme_keeper: Arc::default(),
+            local_keys_turn: Mutex::new(()),
             uris: Default::default(),
             machine: with_the_schema(MachineSettings::in_memory()),
             view_states: ViewStates::in_memory(),
@@ -2382,13 +2397,21 @@ impl Host {
         self.vaults.handle()
     }
 
-    /// Elenca i temi installati con un manifest e fogli completi.
+    /// Elenca i temi installati con un manifest e fogli completi, e il tema
+    /// collegato quando la sua cartella è pronta (fiducia `development`).
     pub fn themes(&self) -> Result<Vec<crate::theme::ThemeInfo>, PluginError> {
-        Ok(self
+        let mut themes = self
             .config_dir
             .as_deref()
             .map(crate::theme::list_themes)
-            .unwrap_or_default())
+            .unwrap_or_default();
+        if let Some(folder) = self.linked_theme_folder() {
+            themes.extend(crate::theme::linked_theme_info(
+                self.config_dir.as_deref(),
+                &folder,
+            ));
+        }
+        Ok(themes)
     }
 
     /// Legge una luce di un tema installato senza esporre il filesystem.
@@ -2397,11 +2420,150 @@ impl Host {
         id: &str,
         light: fub_abi::theme::ThemeLight,
     ) -> Result<crate::theme::ThemePayload, PluginError> {
+        if let Some(folder) = self.linked_theme_folder() {
+            if let Some(read) =
+                crate::theme::read_linked_theme(self.config_dir.as_deref(), &folder, id, light)
+            {
+                return read.map_err(Into::into);
+            }
+        }
         let dir = self
             .config_dir
             .as_deref()
             .ok_or_else(|| PluginError::Unserved("theme inventory unavailable".into()))?;
         crate::theme::read_theme(dir, id, light).map_err(Into::into)
+    }
+
+    // --- il tema collegato (modalità sviluppatore) ---------------------------
+
+    /// La cartella collegata, se la modalità sviluppatore è accesa e la chiave
+    /// ne nomina una: è la sola fonte di [`Host::themes`], [`Host::read_theme`]
+    /// e dell'osservatore.
+    fn linked_theme_folder(&self) -> Option<camino::Utf8PathBuf> {
+        linked_folder(&self.machine)
+    }
+
+    /// Installa l'uscita degli eventi del tema collegato: l'app ci mette
+    /// l'evento `fub://theme-changed` verso la finestra principale.
+    pub fn set_theme_link_sink(&self, sink: crate::theme_watch::ThemeLinkSink) {
+        self.theme_keeper.set_sink(sink);
+    }
+
+    /// Il tema collegato com'è adesso, `None` se nessuna cartella è collegata
+    /// o la modalità sviluppatore è spenta. Lo chiede Aspetto, e l'app
+    /// all'avvio per dire che la cartella non c'è più.
+    ///
+    /// Aspetta prima che un cambio di collegamento in volo sia deciso, così
+    /// `watched` dice com'è davvero: chi la chiama è già fuori dal thread
+    /// principale.
+    ///
+    /// Se la cartella è pronta ma nessuno la guarda (sparita e tornata, un
+    /// osservatore che il sistema ha perso), chiede al custode di riprovare
+    /// adesso: chiedere com'è vale anche come «riprova».
+    pub fn theme_link(&self) -> Option<crate::theme::ThemeLink> {
+        self.theme_keeper.settle();
+        let folder = self.linked_theme_folder()?;
+        let mut link = crate::theme::theme_link(self.config_dir.as_deref(), &folder);
+        if link.state == crate::theme::ThemeLinkState::Ready
+            && !self.theme_keeper.is_watching(&folder)
+        {
+            self.theme_keeper.revive();
+        }
+        link.watched = self.theme_keeper.is_watching(&folder);
+        Some(link)
+    }
+
+    /// Monta o smonta l'osservatore secondo la chiave e la modalità
+    /// sviluppatore, rilette adesso: la cartella collegata si guarda, niente
+    /// altrimenti. Lo chiamano l'avvio dell'app e ogni scrittura di una delle
+    /// due chiavi (`tell_observer`), quindi spegnere la modalità, azzerare la
+    /// chiave o collegare un'altra cartella smonta il vecchio.
+    ///
+    /// Non si ferma: la lettura della chiave, della cartella e il montaggio
+    /// girano su un thread del custode, perché chi chiama può essere un
+    /// comando sincrono sul thread principale (`set_setting`, il cambio di
+    /// profilo, l'avvio). Fra due sincronizzazioni vince l'ultima; nessun
+    /// lucchetto del workspace attraversa la chiamata.
+    pub fn sync_theme_link(&self) {
+        let machine = Arc::clone(&self.machine);
+        let config_dir = self.config_dir.clone();
+        self.theme_keeper
+            .request(move || (config_dir, linked_folder(&machine)));
+    }
+
+    /// Smonta l'osservatore alla chiusura dell'app; la chiave resta, e al
+    /// prossimo avvio [`Host::sync_theme_link`] lo rimonta.
+    pub fn close_theme_link(&self) {
+        self.theme_keeper.close();
+    }
+
+    /// La cartella guardata adesso da un osservatore vivo, se c'è, dopo che
+    /// i cambi in volo sono decisi: per i test del ciclo di vita.
+    pub fn watched_theme_folder(&self) -> Option<camino::Utf8PathBuf> {
+        self.theme_keeper.settle();
+        self.theme_keeper.watched()
+    }
+
+    /// Il titolo della finestra di scelta nativa di «Collega una cartella…»,
+    /// nella lingua di chi guarda: come [`Host::theme_folder_pick_title`].
+    pub fn theme_link_pick_title(&self) -> String {
+        let mut title = fub_abi::Text::key("host.theme_folder.link_title");
+        self.localize_core(None, &mut title);
+        title.to_string()
+    }
+
+    /// «Collega una cartella…»: `source` lo dà soltanto la finestra di scelta
+    /// nativa dell'app, mai la webview, e solo con la modalità sviluppatore
+    /// accesa. La cartella si legge con le porte dell'installazione
+    /// ([`crate::theme::theme_link`]); se è pronta (e il suo id non è di un
+    /// tema installato) il suo percorso canonico va nella chiave
+    /// [`crate::settings::DEVELOPER_THEME_FOLDER`] sotto il lucchetto del suo
+    /// id, e l'osservatore si rimonta su di lei. Un rifiuto lascia il
+    /// collegamento di prima.
+    pub fn link_theme_folder(
+        &self,
+        source: &camino::Utf8Path,
+    ) -> Result<crate::theme::ThemeFolderLink, PluginError> {
+        self.theme_folder_allowed()?;
+        let folder = source
+            .canonicalize_utf8()
+            .unwrap_or_else(|_| source.to_owned());
+        let (link, recorded) =
+            crate::theme::link_folder(self.config_dir.as_deref(), &folder, || {
+                let _turn = self
+                    .local_keys_turn
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner);
+                self.machine.set(
+                    crate::settings::DEVELOPER_THEME_FOLDER,
+                    fub_abi::settings::SettingValue::Text(folder.to_string()),
+                )
+            })?;
+        if !recorded {
+            return Ok(crate::theme::ThemeFolderLink::Refused { link });
+        }
+        // La stessa cartella collegata di nuovo si guarda da capo; chi chiama è
+        // già fuori dal thread principale.
+        self.theme_keeper
+            .watch_now(self.config_dir.as_deref(), Some(&folder), true);
+        let mut link = link;
+        link.watched = self.theme_keeper.is_watching(&folder);
+        self.tell_observer(crate::settings::DEVELOPER_THEME_FOLDER)?;
+        Ok(crate::theme::ThemeFolderLink::Linked { link })
+    }
+
+    /// «Scollega»: azzera la chiave e smonta l'osservatore. Senza modalità
+    /// sviluppatore, come buttare un permesso: si può sempre.
+    pub fn unlink_theme_folder(&self) -> Result<(), PluginError> {
+        {
+            let _turn = self
+                .local_keys_turn
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            self.machine
+                .reset(crate::settings::DEVELOPER_THEME_FOLDER)?;
+        }
+        self.tell_observer(crate::settings::DEVELOPER_THEME_FOLDER)
     }
 
     /// La modalità sviluppatore ([`crate::settings::DEVELOPER_MODE`]), riletta
@@ -2936,6 +3098,13 @@ impl Host {
         key: &str,
         value: fub_abi::settings::SettingValue,
     ) -> Result<(), PluginError> {
+        if key == crate::settings::DEVELOPER_THEME_FOLDER {
+            // Il percorso lo dà solo la finestra nativa di «Collega una
+            // cartella…» ([`Host::link_theme_folder`]), mai la webview.
+            return Err(PluginError::PermissionDenied(fub_abi::Text::key(
+                "host.theme_folder.link_only",
+            )));
+        }
         if self.machine_only(vault, key) {
             self.machine.set(key, value)?;
             crate::settings::reapply_log_levels(key, &self.machine, &self.levels);
@@ -2945,6 +3114,7 @@ impl Host {
             ws.set_setting(key, value)
         })??;
         crate::settings::reapply_log_levels(key, &self.machine, &self.levels);
+        self.follow_theme_link_key(key);
         self.if_key_remember_it(vault, key)
     }
 
@@ -2962,6 +3132,7 @@ impl Host {
         }
         with_event_drain(&self.session_workspace(vault)?, |ws| ws.reset_setting(key))??;
         crate::settings::reapply_log_levels(key, &self.machine, &self.levels);
+        self.follow_theme_link_key(key);
         self.if_key_remember_it(vault, key)
     }
 
@@ -3006,6 +3177,7 @@ impl Host {
             fub_abi::settings::SettingScope::Machine => self
                 .machine
                 .export_profile(name)
+                .and_then(|json| without_local_keys(&json, None))
                 .map_err(|e| PluginError::BadArgs(e.into())),
             fub_abi::settings::SettingScope::Vault => self.in_session(vault, |session| {
                 session.workspace.read()?.export_settings_profile(name)
@@ -3020,9 +3192,8 @@ impl Host {
         json: &str,
     ) -> Result<(), PluginError> {
         match scope {
-            fub_abi::settings::SettingScope::Machine => self
-                .machine
-                .import_profile(json)
+            fub_abi::settings::SettingScope::Machine => without_local_keys(json, None)
+                .and_then(|json| self.machine.import_profile(&json))
                 .map_err(|e| PluginError::BadArgs(e.into())),
             fub_abi::settings::SettingScope::Vault => self.in_session(vault, |session| {
                 with_event_drain(&session.workspace, |ws| ws.import_settings_profile(json))?
@@ -3038,9 +3209,13 @@ impl Host {
         name: &str,
     ) -> Result<(), PluginError> {
         match scope {
+            // La copia passa da fuori, come un'esportazione e un'importazione:
+            // così le chiavi di questa macchina restano fuori anche da lei.
             fub_abi::settings::SettingScope::Machine => self
                 .machine
-                .duplicate_profile(source, name)
+                .export_profile(source)
+                .and_then(|json| without_local_keys(&json, Some(name)))
+                .and_then(|json| self.machine.import_profile(&json))
                 .map_err(|e| PluginError::BadArgs(e.into())),
             fub_abi::settings::SettingScope::Vault => self.in_session(vault, |session| {
                 with_event_drain(&session.workspace, |ws| {
@@ -3058,14 +3233,17 @@ impl Host {
     ) -> Result<(), PluginError> {
         match scope {
             fub_abi::settings::SettingScope::Machine => {
-                self.machine
-                    .switch_profile(name)
-                    .map_err(|e| PluginError::BadArgs(e.into()))?;
-                // A profile can alter any machine key; subscribers must reread the index.
+                let restored = self.keeping_local_keys(|machine| {
+                    machine
+                        .switch_profile(name)
+                        .map_err(|e| PluginError::BadArgs(e.into()))
+                })?;
+                // A profile can alter any machine key; subscribers must reread
+                // the index, even when restoring a local key failed.
                 for entry in self.machine.entries() {
                     self.tell_observer(&entry.spec.key)?;
                 }
-                Ok(())
+                restored
             }
             fub_abi::settings::SettingScope::Vault => {
                 with_event_drain(&self.session_workspace(vault)?, |ws| {
@@ -3084,13 +3262,17 @@ impl Host {
     ) -> Result<(), PluginError> {
         match scope {
             fub_abi::settings::SettingScope::Machine => {
-                self.machine
-                    .reset_profile(name)
-                    .map_err(|e| PluginError::BadArgs(e.into()))?;
+                let restored = self.keeping_local_keys(|machine| {
+                    machine
+                        .reset_profile(name)
+                        .map_err(|e| PluginError::BadArgs(e.into()))
+                })?;
+                // A profile can alter any machine key; subscribers must reread
+                // the index, even when restoring a local key failed.
                 for entry in self.machine.entries() {
                     self.tell_observer(&entry.spec.key)?;
                 }
-                Ok(())
+                restored
             }
             fub_abi::settings::SettingScope::Vault => self.in_session(vault, |session| {
                 with_event_drain(&session.workspace, |ws| ws.reset_settings_profile(name))?
@@ -3202,6 +3384,62 @@ impl Host {
     /// pannelli aspettano; senza la terza, una chiave di vault scritta senza
     /// vault direbbe «non dichiarata» invece di «nessun vault aperto», che è la
     /// frase che dice cosa fare.
+    /// Una scrittura passata da un vault aperto (il `Workspace` la dice sul suo
+    /// bus, non a [`Host::tell_observer`]): l'osservatore del tema collegato
+    /// segue lo stesso le sue due chiavi.
+    fn follow_theme_link_key(&self, key: &str) {
+        if key == crate::settings::DEVELOPER_MODE || key == crate::settings::DEVELOPER_THEME_FOLDER
+        {
+            self.sync_theme_link();
+        }
+    }
+
+    /// Cambia o azzera un profilo di macchina tenendo le chiavi che non
+    /// viaggiano coi profili ([`PROFILE_LOCAL_KEYS`]): il loro valore di
+    /// prima torna com'era, qualunque cosa il profilo portasse. Un profilo
+    /// non collega una cartella, e non la scollega.
+    ///
+    /// Tiene il turno delle chiavi locali per tutto il passo. Il risultato di
+    /// fuori dice se il cambio è riuscito (se no niente è cambiato); quello di
+    /// dentro se il ripristino è riuscito: se no il profilo è cambiato lo
+    /// stesso, e chi chiama deve dirlo agli osservatori prima di rispondere
+    /// con l'errore.
+    fn keeping_local_keys(
+        &self,
+        change: impl FnOnce(&MachineSettings) -> Result<(), PluginError>,
+    ) -> Result<Result<(), PluginError>, PluginError> {
+        let _turn = self
+            .local_keys_turn
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let before: Vec<_> = PROFILE_LOCAL_KEYS
+            .iter()
+            .map(|key| (*key, explicit_value(&self.machine, key)))
+            .collect();
+        change(&self.machine)?;
+        let mut restored = Ok(());
+        for (key, value) in before {
+            if explicit_value(&self.machine, key) == value {
+                continue;
+            }
+            let put_back = match value {
+                Some(value) => self.machine.set(key, value),
+                None => self.machine.reset(key),
+            };
+            if let Err(error) = put_back {
+                tracing::warn!(
+                    target: "fub.host",
+                    key,
+                    "a machine-local key could not be restored after a profile change: {error:?}"
+                );
+                if restored.is_ok() {
+                    restored = Err(error);
+                }
+            }
+        }
+        Ok(restored)
+    }
+
     fn machine_only(&self, vault: Option<&str>, key: &str) -> bool {
         vault.is_none() && !self.has_current_vault() && self.machine.declares(key)
     }
@@ -3271,6 +3509,11 @@ impl Host {
     /// che si fa è dirlo, perché l'unico modo in cui questo caso finiva era in
     /// silenzio.
     fn tell_observer(&self, key: &str) -> Result<(), PluginError> {
+        if key == crate::settings::DEVELOPER_MODE || key == crate::settings::DEVELOPER_THEME_FOLDER
+        {
+            // L'osservatore del tema collegato segue le due chiavi.
+            self.sync_theme_link();
+        }
         if let Some(sink) = &self.sink {
             let delivers = sink.emit(&fub_abi::Notice::new(
                 fub_abi::Event::SettingChanged {
@@ -5278,6 +5521,56 @@ pub fn document_text(format: Option<&DocumentFormat>) -> DocumentText {
         DocumentText::GridJournal
     } else {
         DocumentText::Source
+    }
+}
+
+/// Le chiavi di macchina che **non viaggiano coi profili**: non entrano da
+/// un'importazione o da una copia, non escono da un'esportazione, e cambiare
+/// o azzerare un profilo lascia il loro valore. Sono le chiavi che solo un
+/// gesto dell'host scrive: la cartella del tema collegato, che sceglie la
+/// finestra nativa di «Collega una cartella…». Un profilo arrivato da fuori
+/// (anche da una webview che non regge) non le scrive mai.
+const PROFILE_LOCAL_KEYS: &[&str] = &[crate::settings::DEVELOPER_THEME_FOLDER];
+
+/// Il profilo `json` senza [`PROFILE_LOCAL_KEYS`] fra i valori, e col nome
+/// `rename` se c'è. Si legge con la forma del kernel
+/// ([`fub_kernel::settings::SettingsProfile`]), quindi un JSON che non è un
+/// profilo, o con una chiave doppia, si rifiuta come prima.
+fn without_local_keys(json: &str, rename: Option<&str>) -> Result<String, String> {
+    let mut profile: fub_kernel::settings::SettingsProfile =
+        serde_json::from_str(json).map_err(|e| e.to_string())?;
+    if let Some(name) = rename {
+        profile.name = name.into();
+    }
+    for key in PROFILE_LOCAL_KEYS {
+        profile.values.remove(*key);
+    }
+    serde_json::to_string_pretty(&profile).map_err(|e| e.to_string())
+}
+
+/// Il valore scritto di `key` nel livello macchina, `None` se vale il default.
+fn explicit_value(machine: &MachineSettings, key: &str) -> Option<fub_abi::settings::SettingValue> {
+    match machine.effective(key) {
+        Ok((value, source)) if source != fub_abi::settings::SettingSource::Default => Some(value),
+        _ => None,
+    }
+}
+
+/// La cartella collegata, se la modalità sviluppatore è accesa e la chiave ne
+/// nomina una.
+fn linked_folder(machine: &MachineSettings) -> Option<camino::Utf8PathBuf> {
+    let on = matches!(
+        machine.effective(crate::settings::DEVELOPER_MODE),
+        Ok((fub_abi::settings::SettingValue::Toggle(true), _))
+    );
+    if !on {
+        return None;
+    }
+    match machine.effective(crate::settings::DEVELOPER_THEME_FOLDER) {
+        Ok((fub_abi::settings::SettingValue::Text(folder), _)) if !folder.trim().is_empty() => {
+            Some(camino::Utf8PathBuf::from(folder))
+        }
+        _ => None,
     }
 }
 

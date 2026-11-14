@@ -104,6 +104,8 @@ all'export, dalla sessione dal tablet ai disegni grandi.
   disegno
 - [Le porte della griglia](reference/grid-ipc.md): l'IPC dei fogli di
   calcolo
+- [Le porte dei temi](reference/theme-ipc.md): elencare, leggere,
+  installare e collegare i temi
 - [Il formato della lavagna](reference/canvas-format.md): il nucleo
   `fub-canvas-core` e le regole di lettura e scrittura delle `.canvas`, e
   le [operazioni sulla lavagna](reference/canvas-operations.md): le toppe e

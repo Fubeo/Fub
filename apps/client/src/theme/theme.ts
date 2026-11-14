@@ -1,12 +1,12 @@
 // Luce, contrasto e preferenze personali: una risoluzione, un foglio montato.
 import { api } from "../host/ipc";
 import { settings } from "../host/query";
-import type { SettingEntry, ThemeFolderCheck, ThemeInfo, ThemePayload } from "../host/contract";
+import type { SettingEntry, ThemeFolderCheck, ThemeInfo, ThemeLink, ThemePayload } from "../host/contract";
 import { asPluginError, errorText } from "../host/errors";
 import { onEvent } from "../state/kernel";
 import { emit, on } from "../state/store";
 import type { Lifetime } from "../ui/lifetime";
-import { reportThemeTrouble } from "../ui/notify";
+import { notify, reportThemeTrouble } from "../ui/notify";
 import {
   mount,
   mountPreferences,
@@ -26,7 +26,7 @@ import { setFrameRatePreference } from "./frame-rate";
 import { setDiagramStylePreference } from "./diagram-style";
 import { setContentLookPreference } from "./content-look";
 import { applyThemeOptions, resolveThemeOptions, type ThemeOption } from "./options";
-import { t } from "../i18n/strings";
+import { plural, t } from "../i18n/strings";
 
 export type Theme = "light" | "dark";
 export type Density = "compact" | "comfortable" | "relaxed";
@@ -57,6 +57,11 @@ export const FRAME_RATE_KEY = "appearance.frame-rate";
 export const DIAGRAM_STYLE_KEY = "appearance.diagram-style";
 export const CONTENT_LOOK_KEY = "appearance.content-look";
 export const COMPACTNESS_KEY = "chrome.compactness";
+/// La modalità sviluppatore e la cartella del tema collegato
+/// (`fub_host::settings::DEVELOPER_MODE`, `DEVELOPER_THEME_FOLDER`): cambiarle
+/// cambia i temi che l'host elenca.
+const DEVELOPER_MODE = "developer.mode";
+export const DEVELOPER_THEME_FOLDER_KEY = "developer.theme-folder";
 const THEME_CACHE = "fub.appearance.theme";
 export const SERIES_THEME_ID = "fub.serie";
 const PREFERENCES_CACHE = "fub.appearance.preferences";
@@ -332,7 +337,7 @@ function reportLoadFailure(id: string, detail: string): void {
   reportThemeTrouble({
     type: "theme",
     theme: id,
-    reasons: [`fascio non leggibile: ${detail}`],
+    reasons: [t("theme.reason.unreadable", { detail })],
   });
 }
 
@@ -372,16 +377,16 @@ async function apply(): Promise<void> {
   if (requestedId !== SERIES_THEME_ID && !waitingForCatalog) {
     const info = installedThemes.find((theme) => theme.manifest.id === requestedId);
     if (!info) {
-      reportLoadFailure(requestedId, "tema assente dall'inventario");
+      reportLoadFailure(requestedId, t("theme.reason.not_listed"));
     } else if (!info.manifest.lights.includes(light)) {
-      reportLoadFailure(requestedId, `luce ${light} non offerta`);
+      reportLoadFailure(requestedId, t("theme.reason.light_missing", { light }));
     } else {
       try {
         const cached = catalogPayloads.get(`${requestedId}:${light}`);
         const payload = cached ?? (await api.readTheme(requestedId, light));
         if (generation !== applyGeneration) return;
         if (payload.manifest.id !== requestedId || payload.light !== light) {
-          reportLoadFailure(requestedId, "risposta del canale non coerente");
+          reportLoadFailure(requestedId, t("theme.reason.mismatch"));
         } else {
           mounted = mountThemeBundle(themeBundle(payload, light, contrast), light);
           if (mounted.mounted) actualId = requestedId;
@@ -576,7 +581,7 @@ async function readCatalog(): Promise<ThemeInfo[]> {
                 id: info.manifest.id,
                 name: info.manifest.name,
                 light: null,
-                reasons: [`fascio non leggibile: ${detail}`],
+                reasons: [t("theme.reason.unreadable", { detail })],
                 at: Date.now(),
               });
               return null;
@@ -585,7 +590,9 @@ async function readCatalog(): Promise<ThemeInfo[]> {
         );
         // Superata da una rilettura: il risultato è di quella.
         if (round !== catalogRound) return readCatalog();
-        installedThemes = verified.filter((info): info is ThemeInfo => info !== null);
+        const accepted = verified.filter((info): info is ThemeInfo => info !== null);
+        keepLastGoodLinked(themes, accepted, payloads);
+        installedThemes = accepted;
         catalogPayloads = payloads;
         catalogRejections = rejected;
         catalogLoaded = true;
@@ -602,10 +609,275 @@ async function readCatalog(): Promise<ThemeInfo[]> {
 
 /**
  * I temi che l'ultima lettura del catalogo ha lasciato fuori, coi motivi:
- * la diagnosi di Aspetto. Vuoto finché il catalogo non è letto.
+ * la diagnosi di Aspetto. Vuoto finché il catalogo non è letto. Il tema
+ * collegato non c'è: la sua diagnosi è in `linkedTheme()`.
  */
 export function themeRejections(): readonly ThemeRejection[] {
-  return catalogRejections;
+  const id = linked?.link.id ?? null;
+  return id === null ? catalogRejections : catalogRejections.filter((rejection) => rejection.id !== id);
+}
+
+// --- il tema collegato (PA T37) ---------------------------------------------
+//
+// Una cartella che l'host legge al suo posto e guarda: a ogni salvataggio
+// arriva `fub://theme-changed` con lo stato della cartella. Se il tema è quello
+// in uso o in anteprima si rilegge e si rimonta; un fascio nuovo rifiutato
+// (dal cancello della shell o dalle porte dell'host) **lascia l'ultimo buono**:
+// i fasci di `catalogPayloads` restano quelli, e ogni `apply` rimonta loro.
+// Un rimontaggio alla volta: un evento che arriva mentre uno è in volo aspetta,
+// e di quelli che aspettano vale l'ultimo.
+
+/** Il tema collegato visto dalla shell: lo stato dell'host e la sua storia qui. */
+export interface LinkedThemeStatus {
+  /** Lo stato dell'ultimo campanello o dell'ultima domanda all'host. */
+  readonly link: ThemeLink;
+  /** Da quando questa finestra lo sa collegato. */
+  readonly since: number;
+  /** L'ultimo rimontaggio riuscito, coi file salvati. */
+  readonly reloaded: { readonly at: number; readonly changed: readonly string[] } | null;
+  /** L'ora dell'ultimo fascio buono, `null` se non ce n'è stato uno. */
+  readonly goodAt: number | null;
+  /** L'ora dell'ultimo tentativo non riuscito. */
+  readonly attemptAt: number | null;
+  /** I motivi del cancello della shell, se l'ultimo tentativo li ha avuti. */
+  readonly rejection: ThemeRejection | null;
+}
+
+let linked: LinkedThemeStatus | null = null;
+/// Cambia a ogni collegamento e scollegamento: un rimontaggio cominciato prima
+/// non scrive più niente.
+let linkGeneration = 0;
+let linkInFlight = false;
+let linkWaiting: ThemeLink | null = null;
+/// La cartella collegata secondo l'ultima risposta dell'host: `undefined`
+/// finché non l'ha detto, `null` dopo «Scollega». Un campanello per un'altra
+/// cartella (partito prima dello scollegamento) non rimonta niente.
+let knownLinkFolder: string | null | undefined = undefined;
+
+/** Il tema collegato com'è adesso per la shell, `null` se non ce n'è uno. */
+export function linkedTheme(): LinkedThemeStatus | null {
+  return linked;
+}
+
+function updateLinked(link: ThemeLink, patch: Partial<Omit<LinkedThemeStatus, "link">> = {}): void {
+  const same = linked !== null && linked.link.folder === link.folder;
+  const base: LinkedThemeStatus = same
+    ? linked!
+    : { link, since: Date.now(), reloaded: null, goodAt: null, attemptAt: null, rejection: null };
+  linked = { ...base, ...patch, link };
+}
+
+/// I temi in sviluppo che una lettura del catalogo ha rifiutato tornano con
+/// l'ultimo fascio buono, se c'era: un salvataggio a metà non toglie il tema.
+/// Vale per i rifiuti del cancello della shell (l'host lo elenca, la shell no)
+/// e per quelli delle porte dell'host (`refused`, `unreadable`: l'host non lo
+/// elenca più, ma la cartella è ancora quella collegata).
+function keepLastGoodLinked(listed: ThemeInfo[], accepted: ThemeInfo[], payloads: Map<string, ThemePayload>): void {
+  const ids = new Set(listed.filter((info) => info.trust === "development").map((info) => info.manifest.id));
+  const held = linked?.link;
+  if (held !== undefined && held.id !== null && (held.state === "refused" || held.state === "unreadable")) {
+    ids.add(held.id);
+  }
+  for (const id of ids) {
+    if (accepted.some((theme) => theme.manifest.id === id)) continue;
+    const good = installedThemes.find((theme) => theme.manifest.id === id && theme.trust === "development");
+    if (!good) continue;
+    const lights = good.manifest.lights.map((light) => catalogPayloads.get(`${good.manifest.id}:${light}`));
+    if (lights.some((payload) => payload === undefined)) continue;
+    accepted.push(good);
+    for (const payload of lights) payloads.set(`${good.manifest.id}:${payload!.light}`, payload!);
+  }
+}
+
+/// Un rimontaggio del collegato sta per scrivere il catalogo: una lettura in
+/// volo, partita prima del salvataggio, non deve rimettere dopo di lui il
+/// fascio vecchio. Il suo giro è superato, e chi l'aspetta riceve una
+/// lettura nuova (che vede il salvataggio).
+function supersedeCatalogRead(): void {
+  catalogRound += 1;
+  if (!catalogLoaded) catalogRequest = null;
+}
+
+/// Toglie dal catalogo i temi in sviluppo (ce n'è al più uno) e i loro fasci.
+function dropLinkedFromCatalog(): void {
+  for (const info of installedThemes.filter((theme) => theme.trust === "development")) {
+    for (const light of info.manifest.lights) catalogPayloads.delete(`${info.manifest.id}:${light}`);
+  }
+  installedThemes = installedThemes.filter((theme) => theme.trust !== "development");
+}
+
+function linkSettled(): void {
+  emit("theme-link");
+}
+
+/**
+ * Chiede all'host com'è il tema collegato (Aspetto, l'avvio). `null` se
+ * nessuna cartella è collegata o la modalità sviluppatore è spenta.
+ */
+export async function refreshThemeLink(): Promise<LinkedThemeStatus | null> {
+  const generation = linkGeneration;
+  const link = await api.themeLink();
+  if (generation !== linkGeneration) return linked;
+  knownLinkFolder = link?.folder ?? null;
+  if (link === null) {
+    linked = null;
+    return null;
+  }
+  updateLinked(link);
+  adoptCatalogVerdict(link);
+  return linked;
+}
+
+/// Ciò che l'ultima lettura del catalogo ha deciso del tema collegato, se la
+/// storia di questa finestra non lo sa ancora: preso (l'ultimo buono è di
+/// adesso) o rifiutato coi motivi del cancello.
+function adoptCatalogVerdict(link: ThemeLink): void {
+  if (linked === null || linked.goodAt !== null || linked.attemptAt !== null || link.id === null) return;
+  const accepted = installedThemes.some((theme) => theme.manifest.id === link.id && theme.trust === "development");
+  if (accepted) {
+    updateLinked(link, { goodAt: Date.now() });
+    return;
+  }
+  const rejection = catalogRejections.find((old) => old.id === link.id) ?? null;
+  if (rejection !== null) updateLinked(link, { attemptAt: rejection.at, rejection });
+}
+
+/**
+ * Un collegamento nuovo (`link_theme_folder`) o uno scollegamento: la storia
+ * di prima non vale più, il catalogo si rilegge e chi è in uso si rimonta.
+ */
+export async function themeLinkChanged(link: ThemeLink | null): Promise<void> {
+  linkGeneration += 1;
+  linkWaiting = null;
+  linked = null;
+  knownLinkFolder = link?.folder ?? null;
+  if (link !== null) updateLinked(link);
+  await reloadThemeCatalog().catch(() => []);
+  if (link !== null) adoptCatalogVerdict(link);
+  linkSettled();
+}
+
+/** Il campanello `fub://theme-changed`: un rimontaggio in volo, al più uno che aspetta. */
+export function themeFolderChanged(link: ThemeLink): Promise<void> {
+  if (knownLinkFolder !== undefined && knownLinkFolder !== link.folder) return Promise.resolve();
+  if (linkInFlight) {
+    linkWaiting = link;
+    return Promise.resolve();
+  }
+  return runLinked(link);
+}
+
+async function runLinked(link: ThemeLink): Promise<void> {
+  linkInFlight = true;
+  const epoch = catalogEpoch;
+  try {
+    await remountLinked(link, epoch, linkGeneration);
+  } finally {
+    linkInFlight = false;
+    const next = linkWaiting;
+    linkWaiting = null;
+    if (next !== null && epoch === catalogEpoch) await runLinked(next);
+  }
+}
+
+/// Il tema mostrato adesso: quello in anteprima, o quello scelto.
+function shownThemeId(): string {
+  return previewSelection?.id ?? selectedThemeId;
+}
+
+async function remountLinked(link: ThemeLink, epoch: number, generation: number): Promise<void> {
+  const current = (): boolean => epoch === catalogEpoch && generation === linkGeneration;
+  const at = Date.now();
+  const id = link.id;
+  const name = link.name ?? link.id ?? "";
+  if (link.state === "missing") {
+    const wasShown = id !== null && shownThemeId() === id;
+    updateLinked(link, { attemptAt: at, rejection: null });
+    supersedeCatalogRead();
+    dropLinkedFromCatalog();
+    if (previewSelection?.id === id) previewSelection = null;
+    if (wasShown) notify(t("theme.linked.missing", { series: series.manifest.name }), "guasto");
+    await reread();
+    if (current()) linkSettled();
+    return;
+  }
+  if (link.state === "collision") {
+    updateLinked(link, { attemptAt: at, rejection: null });
+    if (previewSelection?.id === id) previewSelection = null;
+    await reloadThemeCatalog().catch(() => []);
+    if (current()) linkSettled();
+    return;
+  }
+  if (link.state !== "ready" || id === null) {
+    // Le porte dell'host hanno rifiutato il salvataggio (un manifest a metà),
+    // o il disco non legge: resta l'ultimo buono, e la diagnosi lo dice.
+    updateLinked(link, { attemptAt: at, rejection: null });
+    notify(plural(1, "theme.linked.rejected.one", "theme.linked.rejected", { name }), "guasto");
+    linkSettled();
+    return;
+  }
+
+  let info: ThemeInfo | undefined;
+  const payloads: ThemePayload[] = [];
+  let rejection: ThemeRejection | null = null;
+  try {
+    const listed = await api.listThemes();
+    if (!current()) return;
+    info = listed.find((theme) => theme.manifest.id === id && theme.trust === "development");
+    if (info === undefined) throw new Error(t("theme.reason.not_listed"));
+    const contrast = effectiveContrast(contrastChoice, mediaMatches(CONTRAST_QUERY, false));
+    for (const light of info.manifest.lights) {
+      const payload = await api.readTheme(id, light);
+      if (!current()) return;
+      if (payload.manifest.id !== id || payload.light !== light) throw new Error(t("theme.reason.mismatch"));
+      const reasons = validateThemeBundle(themeBundle(payload, light, contrast), light);
+      if (reasons.length > 0) {
+        rejection = { id, name: info.manifest.name, light, reasons, at };
+        break;
+      }
+      payloads.push(payload);
+    }
+  } catch (error) {
+    if (!current()) return;
+    rejection = { id, name, light: null, reasons: [t("theme.reason.unreadable", { detail: errorDetail(error) })], at };
+  }
+  if (!current()) return;
+  if (rejection !== null || info === undefined) {
+    const reasons = rejection?.reasons ?? [];
+    updateLinked(link, { attemptAt: at, rejection });
+    notify(
+      plural(Math.max(1, reasons.length), "theme.linked.rejected.one", "theme.linked.rejected", {
+        name: rejection?.name ?? name,
+      }),
+      "guasto",
+    );
+    linkSettled();
+    return;
+  }
+  // Il fascio nuovo è buono: prende il posto del vecchio, e chi lo mostra lo
+  // rimonta (`reread` rifà anche la scelta: un tema che all'avvio non reggeva
+  // e ora regge torna quello scelto).
+  supersedeCatalogRead();
+  dropLinkedFromCatalog();
+  installedThemes = [...installedThemes, info];
+  for (const payload of payloads) catalogPayloads.set(`${id}:${payload.light}`, payload);
+  catalogRejections = catalogRejections.filter((old) => old.id !== id);
+  updateLinked(link, { goodAt: at, reloaded: { at, changed: link.changed }, attemptAt: null, rejection: null });
+  await reread();
+  if (current()) linkSettled();
+}
+
+/// All'avvio, con la modalità sviluppatore accesa: se la cartella collegata
+/// non c'è più lo si dice, una volta, e l'avvio non si ferma.
+async function checkLinkAtStart(epoch: number): Promise<void> {
+  const developer = settingEntries.some((entry) => entry.spec.key === DEVELOPER_MODE && entry.value === true);
+  if (!developer) return;
+  const status = await refreshThemeLink().catch(() => null);
+  if (epoch !== catalogEpoch || status === null) return;
+  if (status.link.state === "missing") {
+    notify(t("theme.linked.missing_at_start", { folder: status.link.folder, series: series.manifest.name }), "guasto");
+  }
+  linkSettled();
 }
 
 /**
@@ -628,7 +900,7 @@ export function vetThemeFolder(
   for (const light of check.manifest.lights) {
     const read = check.lights.find((candidate) => candidate.light === light);
     if (read === undefined) {
-      rejected.push({ light, reasons: [`fascio non leggibile: ${check.manifest.id}:${light}`] });
+      rejected.push({ light, reasons: [t("theme.reason.unreadable", { detail: `${check.manifest.id}:${light}` })] });
       continue;
     }
     const assets: Record<string, readonly number[]> = {};
@@ -661,8 +933,10 @@ export async function themeCatalog(): Promise<ThemeInfo[]> {
 
 /** Core is bundled with the host. Installed themes are not executable code,
  * but remain community-owned CSS subject to the theme-1 trust gate. */
-export function themeTrust(id: string): "core" | "community" {
-  return id === SERIES_THEME_ID ? "core" : "community";
+export function themeTrust(id: string): "core" | "community" | "development" {
+  if (id === SERIES_THEME_ID) return "core";
+  const info = installedThemes.find((theme) => theme.manifest.id === id);
+  return info?.trust === "development" ? "development" : "community";
 }
 
 /** L'identità effettivamente scelta, non solo la luce che le appartiene. */
@@ -827,11 +1101,48 @@ export function mountTheme(lifetime: Lifetime, onChange: (theme: Theme) => void)
     const media = window.matchMedia?.(query);
     if (media) lifetime.listen(media, "change", () => void apply());
   }
-  lifetime.add(onEvent("setting_changed", () => void reread()));
+  lifetime.add(
+    onEvent("setting_changed", (event) => {
+      // La modalità sviluppatore e la cartella collegata cambiano i temi che
+      // l'host elenca: il catalogo si rilegge.
+      if (event.key === DEVELOPER_MODE || event.key === DEVELOPER_THEME_FOLDER_KEY) {
+        // La cartella può essere cambiata da un'altra finestra: si richiede.
+        knownLinkFolder = undefined;
+        if (event.key === DEVELOPER_MODE) {
+          linkGeneration += 1;
+          linked = null;
+        }
+        void reloadThemeCatalog().catch(() => []).finally(linkSettled);
+      } else void reread();
+    }),
+  );
   lifetime.add(on("vault", () => void reread()));
+  linked = null;
+  knownLinkFolder = undefined;
+  linkGeneration += 1;
+  linkWaiting = null;
+  listenThemeFolder(lifetime);
   themeSettled = false;
   const epoch = catalogEpoch;
   void reread().finally(() => {
     if (epoch === catalogEpoch) settleTheme();
+    void checkLinkAtStart(epoch);
   });
+}
+
+/// Il campanello del tema collegato vive quanto il montaggio del tema. Un host
+/// che non lo serve (un banco senza la porta) non ferma niente.
+function listenThemeFolder(lifetime: Lifetime): void {
+  let stop: (() => void) | null = null;
+  lifetime.add(() => {
+    stop?.();
+    stop = null;
+  });
+  void Promise.resolve()
+    .then(() => api.onThemeChanged((link) => void themeFolderChanged(link)))
+    .then((unlisten) => {
+      if (lifetime.closed) unlisten();
+      else stop = unlisten;
+    })
+    .catch(() => undefined);
 }

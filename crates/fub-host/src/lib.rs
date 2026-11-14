@@ -140,6 +140,8 @@ pub mod shell;
 pub mod support;
 mod teardown;
 pub mod theme;
+/// Il custode del tema collegato e l'osservatore della sua cartella.
+pub mod theme_watch;
 #[cfg(feature = "http-client")]
 pub mod updates;
 pub mod uri_inbox;

@@ -359,6 +359,90 @@
       }
     }
   ],
+  "ThemeLink": [
+    {
+      "folder": "/home/chi/temi/carta",
+      "id": "acme.carta",
+      "name": "Carta",
+      "state": "ready",
+      "changed": [
+        "skin.css",
+        "fonts/carta.woff2"
+      ],
+      "watched": true
+    },
+    {
+      "folder": "/home/chi/temi/carta",
+      "id": null,
+      "name": null,
+      "state": "missing",
+      "changed": [],
+      "watched": false
+    },
+    {
+      "folder": "/home/chi/temi/carta",
+      "id": "acme.carta",
+      "name": "Carta",
+      "state": "refused",
+      "refusal": {
+        "reason": "malformed",
+        "detail": "expected value at line 1 column 3"
+      },
+      "changed": [
+        "manifest.json"
+      ],
+      "watched": true
+    },
+    {
+      "folder": "/home/chi/temi/carta",
+      "id": "acme.carta",
+      "name": "Carta",
+      "state": "collision",
+      "changed": [],
+      "watched": false
+    },
+    {
+      "folder": "/home/chi/temi/carta",
+      "id": "acme.carta",
+      "name": "Carta",
+      "state": "unreadable",
+      "error": {
+        "kind": "io",
+        "message": "/home/chi/temi/carta: Permission denied"
+      },
+      "changed": [],
+      "watched": false
+    }
+  ],
+  "ThemeFolderLink": [
+    {
+      "outcome": "cancelled"
+    },
+    {
+      "outcome": "linked",
+      "link": {
+        "folder": "/home/chi/temi/carta",
+        "id": "acme.carta",
+        "name": "Carta",
+        "state": "ready",
+        "changed": [
+          "skin.css"
+        ],
+        "watched": true
+      }
+    },
+    {
+      "outcome": "refused",
+      "link": {
+        "folder": "/home/chi/temi/carta",
+        "id": "acme.carta",
+        "name": "Carta",
+        "state": "collision",
+        "changed": [],
+        "watched": false
+      }
+    }
+  ],
   "ThemeFolderInstall": [
     {
       "outcome": "installed",
