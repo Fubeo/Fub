@@ -2335,7 +2335,7 @@ aggiunto (esistono solo dopo la loro fusione).
 Fatto quando: `check-doc-links`, `check-doc-orphans` e `check-doc-size`
 passano.
 Prova: scripts/check.sh --rapido
-Stato: [ ] da fare
+Stato: [~] in corso (coder/n6-t23, da 39fe615ae, 2026-11-14)
 
 ## T24 · La seconda misura di N4 su questo ramo
 
