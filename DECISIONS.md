@@ -1873,3 +1873,13 @@ La più recente in cima: data · piano · decisione · perché.
 - 2026-10-31 · workflow · I coder non lanciano altri agenti, non pushano e non
   toccano la CI; pusha solo l'orchestratore, una volta per task unito · un solo
   punto che integra, e la CI di ogni push copre tutto ciò che c'è prima.
+
+- 2026-11-14 · editor T23 · La battuta della nota da 7.201 righe non arriva
+  a 4 · 8 dentro T23: la Sorgente sola costa 3,7–3,9 ms sui core P. T23 entra
+  in `main` con ciò che ha guadagnato (Live 6,3 → 4,9, Blocchi 6,6 → 5,5 di
+  mediana, due difetti corretti) e il resto va in T23b (l'evidenziatore sul
+  tratto visibile, i widget fuori dal campo). Il budget resta 4 · 8: non si
+  abbassa l'asticella e non si passa a un budget relativo. T3 e T25 partono da
+  T23 in `main`; T23b corre accanto e chiude prima di T26 · scelta
+  dell'orchestratore con l'autonomia data dall'utente il 2026-11-13 («fai
+  sempre la scelta che porterà al massimo della qualità»).

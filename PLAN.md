@@ -1497,6 +1497,43 @@ esce con errore oltre il budget.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/text/profiles/markdown/render-incremental.test.ts && node
 bench/interaction.mjs --only=battuta
+Stato: [~] in parte · ramo `perf/battuta-quattro-ms` (12 commit sopra 05437b3db, con main dentro), PR verso main · misure sul PC fisso (13600KF), banco fissato sui core P con `taskset -c 0-7 nice -n 19`, sei giri alternati con la base, nota da 7.201 righe, mediana · novantesimo in ms: Sorgente 3,9 · 5,9; Live 4,9 · 9,8 (base 6,3 · 10,8); Blocchi 5,5 · 10,5 (base 6,6 · 10,5), carico 3,6–9,7; la nota da 901 righe sta nel budget. Fatto: la Live rende e decora solo i blocchi vicini alla battuta, il modello dei Blocchi cerca il punto da rifare, ripiegabili e riga dei fatti rileggono solo i nodi cambiati, le decorazioni in riga si rifanno solo nei nodi toccati, le righe nascoste dopo i blocchi resi (`cm-markdown-gap`) vengono da un view plugin sul tratto visibile; `interaction.mjs` esce con errore oltre 4 · 8; due difetti corretti con un test che fallisce sulla base (l'indice dentro una citazione o una lista nella resa incrementale; il modello dei Blocchi letto da un albero a metà). Fuori Tocca: `top-changes.ts`, `note-facts.ts`, `code-block.ts` e tre test. Non raggiunto: 4 · 8 sulla nota grande, perché la sola Sorgente (il lavoro di CodeMirror) costa già 3,7–3,9 ms: il resto è in T23b. Il paragrafo diviso dal parse incrementale di CodeMirror (anche sulla base) è una issue a parte
+
+## T23b · La battuta nei 4 ms: l'evidenziatore e i widget fuori dal campo
+
+Perché: dopo T23 la Live costa ancora 4,9 · 9,8 ms e i Blocchi 5,5 · 10,5
+sulla nota da 7.201 righe, contro 4 · 8. Il profilo di T23 dice dove: il
+`HighlightStyle` di CodeMirror riceve il tratto visibile spezzato in circa
+sei pezzi dai blocchi resi (0,56 ms in Live contro 0,14 in Sorgente), e i
+widget dei blocchi stanno ancora nel campo, che CodeMirror confronta a ogni
+transazione. Task scritto dall'orchestratore (2026-11-14, D-T23b).
+Tocca: `apps/client/src/editors/text/theme.ts` (l'evidenziatore),
+`apps/client/src/editors/text/profiles/markdown/livepreview.ts` e i moduli
+dei widget dei blocchi resi, `markdown/blocks/` (solo ciò che la misura
+trova), i loro test, `docs/product/performance-budget.md`.
+Non toccare: `apps/client/src/tabella/` e `markdown/table-grid.ts` (T50); il
+comportamento visibile (i colori della sintassi restano quelli di oggi nelle
+due luci e nei temi d'esempio); il budget (4 · 8).
+Dipende da: T23 in `main`
+Cosa fare:
+- Misura prima, con lo stesso metodo di T23 (core P, sei giri alternati,
+  carico scritto accanto), e il profilo di una battuta in Live e in Blocchi.
+- Un evidenziatore che copre il tratto visibile in un pezzo solo, o che
+  salta i tratti coperti dai blocchi resi, con gli stessi colori di oggi
+  (un test confronta le classi date a un testo di prova, prima e dopo).
+- I widget dei blocchi resi fuori dal campo di stato, in un view plugin sul
+  tratto visibile come le righe nascoste di T23, se il profilo lo conferma.
+- Poi tutto ciò che il profilo mostra ancora sopra la Sorgente.
+Casi limite: battuta dentro un recinto di codice lungo, una tabella, un
+riquadro, una formula; Vim; IME; il tema scuro e un tema d'esempio; lo
+scorrimento veloce (i widget che entrano nella vista non tremano).
+Fatto quando: sulla nota da 7.201 righe Live e Blocchi stanno in 4 ms di
+mediana e 8 al novantesimo sul PC fisso con il metodo di T23, oppure, se
+la Sorgente stessa supera 3,5 ms, Live e Blocchi stanno entro 0,5 ms dalla
+Sorgente nella stessa corsa e il task scrive perché il resto è di
+CodeMirror; colori della sintassi uguali (test e foto nelle due luci).
+Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
+src/editors/text && node bench/interaction.mjs --only=battuta
 Stato: [ ] da fare
 
 ## T24 · Concentrazione nelle pagine e macchina da scrivere
@@ -1605,7 +1642,7 @@ se la pagina passa la soglia, in una pagina nuova
 `docs/development/giro-della-scrittura.md`).
 Non toccare: `bench/giro.mjs` (il corridore è di PA T14); i compiti di PA
 T26.
-Dipende da: T2, T26a, PA T14, PA T26
+Dipende da: T2, T26a, T23b, PA T14, PA T26
 Cosa fare:
 - Quaranta compiti, ognuno con ciò che si fa e ciò che conta come riuscito,
   dai flussi di E1–E18: scrivere e formattare, i blocchi coi blocchi accesi
