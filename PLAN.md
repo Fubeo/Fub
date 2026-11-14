@@ -979,7 +979,7 @@ Fatto quando: un test per prefisso, per azione e per il niente trovato; un
 test che l'anteprima non parte prima della pausa.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/shells/scrittoio/launcher src/panels/quick-switcher.dom.test.ts
-Stato: [~] PR #357 (feat/ctrl-o-prefissi @ efb386800) · Q1 consigliata · `@` solo Persone finché non c'è T39; niente Sbircia prima di T20; Rinomina e Sposta un'azione sola su `note.rename`; la finestra nuova esce dal lanciatore (resta nel menu di scheda e albero); stile dei gruppi e del pulsante «Azioni» in T82 · le intestazioni dei gruppi sono `presentation`, non opzioni (la WebView cercava la prima opzione); senza `outline` Tutto perde solo i Titoli; scena nuova `launcher-actions`; le baseline del lanciatore dal runner
+Stato: [~] PR #357 (feat/ctrl-o-prefissi @ efb386800) · Q1 consigliata · `@` solo Persone finché non c'è T39; niente Sbircia prima di T20; Rinomina e Sposta un'azione sola su `note.rename`; la finestra nuova esce dal lanciatore (resta nel menu di scheda e albero); stile dei gruppi e del pulsante «Azioni» in T82 · le intestazioni dei gruppi sono `presentation`, non opzioni (la WebView cercava la prima opzione); senza `outline` Tutto perde solo i Titoli; scena nuova `launcher-actions`; le baseline del lanciatore dal runner · CI 2026-11-14 (efb386800): rosso R1 della WebView (il primo risultato di «Lunga»/«Stampa»… non è il file) e nella foto `launcher-search` «nota» mette prima «Benvenuto» e poi «Nota lunga»: un nome che combacia deve venire prima; da correggere col coder prima delle baseline; rosso anche il banco dei disegni (tasto P 184 ms > 100), da rilanciare
 
 ## T14 · La riga dei suggerimenti
 
