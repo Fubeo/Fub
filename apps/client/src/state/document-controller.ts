@@ -1069,6 +1069,7 @@ export function mountDocumentController(lifetime: Lifetime, d: DocumentDeps, pan
   withdrawAllStateNotices();
   const stopSessionEvents = documentSessions.subscribe(handleSessionEvent);
   sessionEventsStop = stopSessionEvents;
+  syncBlindDraftNotice();
   lifetime.add(() => {
     closeDraining = false;
     stopSessionEvents();
@@ -2185,8 +2186,22 @@ function withdrawAllStateNotices(): void {
 
 /// Le bozze non arrivano più sul disco: è un fatto di tutte le sessioni (la
 /// rete sotto il testo non salvato), non di una nota, come dice la frase.
-/// Uno solo, finché una bozza non torna a scriversi (`draft-restored`).
+/// Uno solo, e solo finché serve: finché una bozza non torna a scriversi
+/// (`draft-restored`) e c'è ancora testo non salvato da proteggere.
 let blindDraftNotice: NoticeHandle | undefined;
+
+/// Allinea l'avviso della bozza allo stato della collezione: lo dice se la
+/// rete manca e c'è testo non salvato, lo ritira altrimenti. Lo chiamano ogni
+/// evento di sessione e il montaggio (un controller nuovo rilegge lo stato:
+/// la collezione non ripete `draft-blind` finché la rete resta giù).
+function syncBlindDraftNotice(): void {
+  const needed = documentSessions.isDraftBlind() && documentSessions.dirtyIds().length > 0;
+  if (needed && !blindDraftNotice) blindDraftNotice = notify(t("draft.blind"), "guasto");
+  else if (!needed && blindDraftNotice) {
+    blindDraftNotice.withdraw();
+    blindDraftNotice = undefined;
+  }
+}
 
 /// La nota è la tab attiva di almeno un riquadro: ciò che la barra e il foglio
 /// dicono lo si vede, e un avviso a galla lo ripeterebbe.
@@ -2230,6 +2245,7 @@ function handleSessionEvent(event: DocumentSessionEvent): void | Promise<void> {
   // Gli altri eventi ridisegnano comunque: il gate va tenuto al passo.
   const looksDifferent = sessionLookChanged(event.id);
   settleStateNotices(event.id);
+  if (event.kind !== "draft-blind") syncBlindDraftNotice();
   if (event.kind === "deletion-changed") {
     setReadOnlyForDocument(event.id, event.pending);
     view.drawSave();
@@ -2245,13 +2261,13 @@ function handleSessionEvent(event: DocumentSessionEvent): void | Promise<void> {
     return;
   }
   if (event.kind === "draft-blind") {
-    blindDraftNotice?.withdraw();
-    blindDraftNotice = notify(t("draft.blind"), "guasto");
+    // Il fatto si dice anche quando non viene dalla rete della collezione
+    // (la bozza di una nota sparita da fuori che non si scrive).
+    blindDraftNotice ??= notify(t("draft.blind"), "guasto");
     return;
   }
   if (event.kind === "draft-restored") {
-    blindDraftNotice?.withdraw();
-    blindDraftNotice = undefined;
+    syncBlindDraftNotice();
     return;
   }
   if (event.kind === "save-failed") {

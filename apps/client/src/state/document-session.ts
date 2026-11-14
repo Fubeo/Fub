@@ -1197,6 +1197,12 @@ export class DocumentSessionCollection implements DraftBufferStore {
   isDirty(id: string): boolean {
     return this.#sessions.get(id)?.dirty === true;
   }
+  /// Le bozze non arrivano più sul disco (l'ultima è fallita dopo un
+  /// `draft-blind`, e nessuna è tornata a scriversi): chi si monta dopo
+  /// l'evento lo rilegge qui.
+  isDraftBlind(): boolean {
+    return this.#blindDraft;
+  }
   /** Conservative fallback if a lifecycle flush rejects before reporting failures. */
   dirtyIds(): string[] {
     const ids: string[] = [];

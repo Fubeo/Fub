@@ -1044,6 +1044,35 @@ describe("il testo non salvato resta (#237)", () => {
     expect(toastsAbout("non è stato salvato")[0]).toContain("«Progetti» non è stato salvato");
   });
 
+  it("la bozza che non si scrive si ridice quando la shell si rimonta, finché la rete manca", async () => {
+    const { sessions } = await unsavedNote();
+    await sessions.flushDraft(BENVENUTO).catch(() => {});
+    await waitFor("l'avviso della bozza", () => toastsAbout("non arriva più sul disco").length === 1);
+    // Un nuovo montaggio della finestra: il vecchio ritira i suoi avvisi, il
+    // nuovo rilegge lo stato della collezione, che resta senza rete.
+    const shell = await import("../desktop-shell");
+    (await shell.startup)();
+    await settle();
+    expect(toastsAbout("non arriva più sul disco")).toEqual([]);
+    await shell.mountDesktopShell();
+    await settle();
+    await waitFor("l'avviso della bozza ridetto", () => toastsAbout("non arriva più sul disco").length === 1);
+  });
+
+  it("la bozza che non si scrive non si dice più quando non c'è testo da proteggere", async () => {
+    const { sessions } = await unsavedNote();
+    await sessions.flushDraft(BENVENUTO).catch(() => {});
+    await waitFor("l'avviso della bozza", () => toastsAbout("non arriva più sul disco").length === 1);
+    // Il disco della nota torna buono, la bozza no: la nota si salva, e non
+    // resta niente di non salvato.
+    repairWrite?.();
+    repairWrite = null;
+    await sessions.flush(BENVENUTO);
+    await settle();
+    expect(sessions.dirtyIds()).toEqual([]);
+    expect(toastsAbout("non arriva più sul disco")).toEqual([]);
+  });
+
   it("un salvataggio che non riesce si dice una volta, col titolo, e l'avviso se ne va quando la nota è salvata", async () => {
     const { sessions } = await unsavedNote();
     await sessions.flush(BENVENUTO).catch(() => {});
