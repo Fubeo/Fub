@@ -35,7 +35,7 @@ export interface BaseSurfaceDeps {
   readonly setViewState: (key: string, value: unknown) => Promise<void>;
 }
 
-export type BaseViewKind = "table" | "cards" | "list" | "kanban" | "map" | "calendar" | "timeline";
+export type BaseViewKind = "table" | "cards" | "list" | "kanban" | "map";
 export type BaseCellValue =
   | { kind: "empty" }
   | { kind: "number" | "date" | "duration"; value: number }
@@ -102,7 +102,11 @@ export async function parseBaseViews(deps: BaseSurfaceDeps, source: string): Pro
 export async function planBaseView(deps: BaseSurfaceDeps, source: string, view: string | null): Promise<BasePlan> {
   const raw = await baseQuery(deps, { version: 1, op: "plan", source, view });
   if (typeof raw.view !== "string") throw new Error("base: piano senza vista");
-  if (!["table", "cards", "list", "kanban", "map", "calendar", "timeline"].includes(String(raw.view_type))) throw new Error("base: tipo vista sconosciuto");
+  // calendar e timeline il contratto le porta già (T17a), ma la superficie non le
+  // disegna ancora: finché non le disegnano (T17 e T34) sono tipi che non si
+  // mostrano, come un tipo sconosciuto. T17 toglie questa riga e aggiunge i due
+  // tipi a BaseViewKind.
+  if (!["table", "cards", "list", "kanban", "map"].includes(String(raw.view_type))) throw new Error("base: tipo vista sconosciuto");
   const columns = strings(raw.columns, "colonne");
   const requiredProps = strings(raw.required_props, "dipendenze");
   const columnLabels = object(raw.column_labels, "etichette");

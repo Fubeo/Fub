@@ -26,13 +26,14 @@ describe("Base contract", () => {
     await expect(parseBaseViews(future, "version: 999\n")).rejects.toMatchObject({ kind: "bad_args" });
   });
 
-  it("accepts the calendar and timeline kinds of the contract and still rejects an unknown one", async () => {
-    for (const kind of ["calendar", "timeline"]) {
-      const bridge = deps(async () => custom({ view: "Agenda", view_type: kind, columns: [], column_labels: {}, required_props: [], all_properties: false, group: null, limit: null, map: null, create_defaults: {}, date_key: "due", start_key: null, end_key: null }));
-      await expect(planBaseView(bridge, source, "Agenda")).resolves.toMatchObject({ viewType: kind });
+  // T17 toglie questo test insieme alla riga che rifiuta i due tipi in data.ts.
+  it("refuses the calendar and timeline kinds until the surface draws them, as an unknown kind", async () => {
+    const planOf = (kind: string) => deps(async () => custom({ view: "Agenda", view_type: kind, columns: [], column_labels: {}, required_props: [], all_properties: false, group: null, limit: null, map: null, create_defaults: {}, date_key: "due", start_key: null, end_key: null }));
+    for (const kind of ["calendar", "timeline", "gallery"]) {
+      await expect(planBaseView(planOf(kind), source, "Agenda")).rejects.toThrow("tipo vista sconosciuto");
     }
-    const unknown = deps(async () => custom({ view: "Agenda", view_type: "gallery", columns: [], column_labels: {}, required_props: [], all_properties: false, group: null, limit: null, map: null, create_defaults: {} }));
-    await expect(planBaseView(unknown, source, "Agenda")).rejects.toThrow("tipo vista sconosciuto");
+    const drawn = deps(async () => custom({ view: "Board", view_type: "kanban", columns: [], column_labels: {}, required_props: [], all_properties: false, group: null, limit: null, map: null, create_defaults: {} }));
+    await expect(planBaseView(drawn, source, "Board")).resolves.toMatchObject({ viewType: "kanban" });
   });
 
   it("consumes every page beyond the former 2,000-row cutoff", async () => {
