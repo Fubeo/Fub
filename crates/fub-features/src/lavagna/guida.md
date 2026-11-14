@@ -115,10 +115,16 @@ il riassunto è vuoto e non c'è niente da annullare.
 
 - `outline` (di serie): una riga per scheda e per arco. Si taglia a 20 000
   caratteri, con l'ultima riga `…+N` che dice quante righe restano; `max_chars`
-  cambia il limite, e vale solo per questa forma.
-- `code`: le operazioni che ricreano la lavagna. Non si tagliano: una lista
-  tagliata non si può ricompilare.
-- `json`: il modello intero, com'è nel file. Chiedilo quando serve davvero.
+  cambia il limite. Una scheda con l'inchiostro ha `ink=N` e il riquadro dei
+  tratti; la riga `ink board` dice i tratti liberi.
+- `code`: le operazioni che ricreano la lavagna, inchiostro compreso
+  (`add_strokes`). Non si tagliano: una lista tagliata non si può ricompilare.
+- `json`: il modello intero, com'è nel file, `fub:ink` compreso: se rimandi
+  una scheda con `set`, rimanda il suo `fub:ink` così. Accanto c'è `ink_read`,
+  i tratti decodificati (`points`, `bounds`), solo da leggere: non scriverlo
+  mai in una scheda. `max_chars` (di serie 20 000) taglia i punti di
+  `ink_read` e lo dice con `points_omitted`. Chiedi `json` quando serve
+  davvero.
 
 ## Le operazioni
 

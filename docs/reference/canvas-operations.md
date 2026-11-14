@@ -269,14 +269,17 @@ nucleo, come descritte in [La lavagna come codice](canvas-code.md#leggere).
 | Parametro | Tipo | |
 |---|---|---|
 | `doc` | documento, obbligatorio | il file `.canvas` |
-| `form` | scelta, di serie `outline` | `outline`: una riga per scheda e per arco; `code`: la lista di operazioni che ricrea la lavagna; `json`: il modello, come nel file |
+| `form` | scelta, di serie `outline` | `outline`: una riga per scheda e per arco; `code`: la lista di operazioni che ricrea la lavagna; `json`: il modello, come nel file (`fub:ink` compreso), e accanto `ink_read`, la lettura dell'inchiostro |
 | `ids` | testo | una lista JSON di id: legge solo quelle schede e gli archi fra loro. Un id che non è una scheda si ignora, e i conti lo dicono; `[]` non legge nessuna scheda |
-| `max_chars` | numero | il limite dell'outline in caratteri, da zero in su; di serie 20 000. Con `code` o `json` è `BadArgs`: una lista tagliata non si ricompila |
+| `max_chars` | numero | il limite in caratteri, da zero in su; di serie 20 000. Con `outline` taglia l'outline, con `json` solo i punti di `ink_read` (mai il modello). Con `code` è `BadArgs`: una lista tagliata non si ricompila |
 
 L'esito è l'effetto `Custom` con namespace `fub.lavagna` e payload
 `{"version": 1, "kind": "read", "doc", "revision", "form", "counts", "bounds",
-"text"}`, dove `text` c'è per `outline` e `code`, e per `json` c'è `model` al
-suo posto. `revision` è la revisione del file che si è letta: è la `base` di
+"text"}`, dove `text` c'è per `outline` e `code`, e per `json` ci sono al suo
+posto `model` e `ink_read`. `model` è il file com'è, livelli `fub:ink` compresi:
+una scheda letta e rimandata con `set` non perde l'inchiostro. `ink_read` è
+solo da leggere: i tratti decodificati, come dice
+[In codice](canvas-ink.md#in-codice). `revision` è la revisione del file che si è letta: è la `base` di
 `canvas.check` e di `canvas.apply`. `counts` dà `cards`, `edges` e `groups` di
 ciò che si legge; `bounds` è il riquadro (`x`, `y`, `width`, `height`), o `null`
 se non c'è nessuna scheda. L'outline taglia a una riga intera, e l'ultima dice
@@ -291,7 +294,7 @@ revisione è abbreviata):
 Un documento che non è una lavagna, o un `.canvas` che non si apre, è
 `BadArgs` con le stesse frasi di `canvas.apply`. Una `form` fuori dalle tre, un
 `ids` che non è una lista JSON di testi, un `max_chars` che non è un intero da
-zero in su e un `max_chars` con `code` o `json` sono `BadArgs`.
+zero in su e un `max_chars` con `code` sono `BadArgs`.
 
 `canvas.check` («Controlla le operazioni», «Check the operations») dice che
 cosa cambierebbe una lista di operazioni, senza scriverla: i parametri, il

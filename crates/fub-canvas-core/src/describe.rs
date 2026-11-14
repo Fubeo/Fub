@@ -4,17 +4,24 @@
 //! - [`outline`]: una riga per scheda e per arco, per leggere in fretta;
 //! - [`code`]: la lista di operazioni che ricrea la lavagna. Compilata su una
 //!   lavagna vuota con [`crate::ops::compile`], dà la stessa lavagna;
-//! - [`json`]: il modello com'è, come lo scrive il file.
+//! - [`json`]: il modello com'è, come lo scrive il file, `fub:ink` compreso.
+//!   Accanto, [`ink_read`] dà i tratti decodificati: è solo da leggere, e non
+//!   sta nel modello, così una scheda letta e rimandata non perde l'inchiostro.
 //!
-//! Le tre forme prendono le stesse [`DescribeOptions`]: `ids` tiene solo quelle
-//! schede e gli archi fra loro, `max_chars` taglia solo l'[`outline`]. Nessuna
-//! parola in una lingua: le chiavi sono i nomi dei campi del formato. Le regole
-//! stanno in `docs/reference/canvas-code.md`.
+//! Le forme prendono le stesse [`DescribeOptions`]: `ids` tiene solo quelle
+//! schede e gli archi fra loro, `max_chars` taglia l'[`outline`] e i punti di
+//! [`ink_read`]. Nessuna parola in una lingua: le chiavi sono i
+//! nomi dei campi del formato. Le regole stanno in
+//! `docs/reference/canvas-code.md`, e quelle dell'inchiostro in
+//! `docs/reference/canvas-ink.md` («In codice»): le legge il modulo `ink`.
+
+mod ink;
 
 use std::collections::HashSet;
 
 use serde_json::{Map, Value};
 
+use crate::ink::{LayerRef, INK_KEY};
 use crate::layout::{self, card_kind, inside, CardKind};
 use crate::model::{
     Canvas, CanvasColor, CanvasEdge, CanvasEdgeEnd, CanvasEdgeSide, CanvasNode, CanvasNodeType,
@@ -36,8 +43,9 @@ pub struct DescribeOptions {
     pub ids: Option<Vec<String>>,
     /// Quanti caratteri al più dà l'[`outline`]. Si taglia a una riga intera e
     /// l'ultima riga dice quante ne restano, `…+N`. La prima riga esce sempre.
-    /// Le altre forme non si tagliano: una lista di operazioni tagliata non si
-    /// compila.
+    /// Di [`ink_read`] si tagliano soltanto i punti dei tratti. Il [`code`] e
+    /// il [`json`] non si tagliano: una lista di operazioni tagliata non si
+    /// compila, e un modello tagliato non è il file.
     pub max_chars: Option<usize>,
 }
 
@@ -82,8 +90,8 @@ impl<'a> View<'a> {
 }
 
 /// La lavagna in righe di testo: una riga per conto, con i conti in testa, poi
-/// una riga per scheda (col suo numero da 1, la posizione nel modello) e una per
-/// arco.
+/// la riga dell'inchiostro libero, una riga per scheda (col suo numero da 1, la
+/// posizione nel modello) e una per arco.
 ///
 /// La riga dei conti dice `cards`, `edges`, `groups` (quante sono di gruppo, fra
 /// le schede) e `bounds`, il riquadro che racchiude le schede: l'angolo alto a
@@ -93,6 +101,13 @@ impl<'a> View<'a> {
 /// [toEnd=none]`, dove i campi compaiono solo se non sono quelli di serie. Il
 /// testo è accorciato a 60 caratteri, e come stringa JSON, così una riga resta
 /// una riga.
+///
+/// Una scheda con l'inchiostro aggiunge `ink=N [bad=M] x y larghezza×altezza`:
+/// i tratti, quanti non si disegnano e il riquadro di quelli che si disegnano
+/// nelle coordinate della scheda (`-` se nessuno), o `ink=foreign` per un
+/// livello estraneo. L'inchiostro libero è la riga `ink board N …`, con le
+/// stesse parti in coordinate della lavagna; con `ids` non c'è, perché non è
+/// di una scheda. Gli archi non hanno inchiostro.
 pub fn outline(canvas: &Canvas, options: &DescribeOptions) -> String {
     let view = View::of(canvas, options);
     let groups: Vec<&CanvasNode> = canvas
@@ -101,6 +116,14 @@ pub fn outline(canvas: &Canvas, options: &DescribeOptions) -> String {
         .filter(|node| node.node_type == CanvasNodeType::Group)
         .collect();
     let mut lines = vec![counts(&view)];
+    if options.ids.is_none() {
+        if let Some(value) = canvas.extra.get(INK_KEY) {
+            lines.push(format!(
+                "ink board {}",
+                ink::summary(value, &LayerRef::Board, None)
+            ));
+        }
+    }
     lines.extend(
         view.nodes
             .iter()
@@ -111,28 +134,61 @@ pub fn outline(canvas: &Canvas, options: &DescribeOptions) -> String {
 }
 
 /// Le operazioni che ricreano la lavagna: prima una `add_card` per scheda, nel
-/// suo ordine, poi una `connect` per arco. Ogni scheda e ogni arco vanno nella
-/// forma breve quando ogni suo campo ci sta, e altrimenti sono il loro valore
-/// JSON del file, con i campi sconosciuti dentro.
+/// suo ordine, ognuna seguita dalla `add_strokes` del suo inchiostro se ce
+/// l'ha, poi una `connect` per arco, e in fondo la `add_strokes` dell'inchiostro
+/// libero. Ogni scheda e ogni arco vanno nella forma breve quando ogni suo campo
+/// ci sta, e altrimenti sono il loro valore JSON del file, con i campi
+/// sconosciuti dentro. I tratti vanno come nel file, con le stringhe esatte.
 ///
 /// Compilate su una lavagna vuota (`compile`, seme qualunque), ridanno le schede
-/// e gli archi nello stesso ordine e con gli stessi campi. La radice sconosciuta
-/// della lavagna non ci sta: nessuna operazione la scrive, e la dà [`json`].
+/// e gli archi nello stesso ordine e con gli stessi campi, inchiostro compreso.
+/// Un livello che `add_strokes` non ricrea uguale (estraneo, con un tratto che
+/// non si disegna, con campi in più o vuoto) resta nella scheda intera, com'è
+/// nel file. La radice sconosciuta della lavagna non ci sta, e nemmeno un
+/// livello libero così: nessuna operazione la scrive, e la dà [`json`]. Con
+/// `ids` l'inchiostro libero non c'è.
 pub fn code(canvas: &Canvas, options: &DescribeOptions) -> Vec<CanvasOp> {
     let view = View::of(canvas, options);
-    let cards = view.nodes.iter().map(|&(_, node)| card_op(node));
-    let links = view.edges.iter().map(|&edge| link_op(edge));
-    cards.chain(links).collect()
+    let mut ops = Vec::with_capacity(view.nodes.len() + view.edges.len() + 1);
+    for &(_, node) in &view.nodes {
+        card_ops(node, &mut ops);
+    }
+    ops.extend(view.edges.iter().map(|&edge| link_op(edge)));
+    if options.ids.is_none() {
+        let board = canvas.extra.get(INK_KEY);
+        ops.extend(board.and_then(|value| ink::strokes_op(value, LayerRef::Board)));
+    }
+    ops
 }
 
-/// La scheda come `add_card`: la forma breve se ci sta, altrimenti la scheda
-/// intera del file.
-fn card_op(node: &CanvasNode) -> CanvasOp {
-    let card = short_card(node).unwrap_or_else(|| AddCardArgs {
-        node: Some(object(node_value(node))),
+/// La scheda come `add_card`, poi il suo inchiostro come `add_strokes` se
+/// l'operazione lo ricrea uguale. La scheda va nella forma breve se ci sta,
+/// altrimenti intera, come nel file; un livello che non va in `add_strokes`
+/// resta dentro la scheda intera.
+fn card_ops(node: &CanvasNode, ops: &mut Vec<CanvasOp>) {
+    // `add_strokes` rimette il livello in fondo ai campi della scheda: lo porta
+    // solo se è già l'ultimo, così il giro non cambia l'ordine delle chiavi.
+    let strokes = node
+        .extra
+        .iter()
+        .next_back()
+        .filter(|(key, _)| key.as_str() == INK_KEY)
+        .and_then(|(_, value)| ink::strokes_op(value, LayerRef::Node(node.id.clone())));
+    let bare;
+    let card_node = if strokes.is_some() {
+        let mut without = node.clone();
+        without.extra.shift_remove(INK_KEY);
+        bare = without;
+        &bare
+    } else {
+        node
+    };
+    let card = short_card(card_node).unwrap_or_else(|| AddCardArgs {
+        node: Some(object(node_value(card_node))),
         ..AddCardArgs::default()
     });
-    CanvasOp::AddCard(card)
+    ops.push(CanvasOp::AddCard(card));
+    ops.extend(strokes);
 }
 
 /// La forma breve di una scheda, se ogni suo campo ci sta. L'`id`, `x` e `y`
@@ -254,7 +310,8 @@ fn short_link(edge: &CanvasEdge) -> Option<ConnectArgs> {
 
 /// Il modello com'è, come valore JSON: `nodes` ed `edges` sempre, poi la radice
 /// sconosciuta. Con `ids` ci sono solo quelle schede e gli archi fra loro, e
-/// la radice sconosciuta no: non è di una scheda.
+/// la radice sconosciuta no: non è di una scheda. I livelli `fub:ink` restano
+/// com'è nel file; la loro lettura è [`ink_read`].
 pub fn json(canvas: &Canvas, options: &DescribeOptions) -> Result<Value, SourceError> {
     if options.ids.is_none() {
         return canvas_value(canvas);
@@ -266,6 +323,27 @@ pub fn json(canvas: &Canvas, options: &DescribeOptions) -> Result<Value, SourceE
         extra: Map::new(),
     };
     canvas_value(&part)
+}
+
+/// La lettura dell'inchiostro, da mettere accanto al [`json`]: un oggetto per
+/// livello, `{layer, state, strokes}`, quelli delle schede nell'ordine del
+/// modello, poi quello della radice (senza `ids`). `layer` è `"board"` o
+/// `{"node": id}`, `state` è `ok` o `foreign` (un livello estraneo non elenca
+/// tratti). Un tratto che si disegna è `{id, color, size, tool, pen?, bounds,
+/// points}`, con i punti nelle coordinate di chi lo tiene arrotondati a 0,1;
+/// uno che non si disegna è `{id, bad}`, con la ragione.
+///
+/// È solo da leggere: non è il formato del file, e nessuna operazione la
+/// prende. `max_chars` ne taglia soltanto i punti (`points_omitted`). Le
+/// stringhe esatte dei tratti le danno [`json`] e [`code`].
+pub fn ink_read(canvas: &Canvas, options: &DescribeOptions) -> Value {
+    let view = View::of(canvas, options);
+    let nodes: Vec<&CanvasNode> = view.nodes.iter().map(|&(_, node)| node).collect();
+    let board = match options.ids {
+        None => canvas.extra.get(INK_KEY),
+        Some(_) => None,
+    };
+    ink::read_layers(&nodes, board, options.max_chars)
 }
 
 /// La riga dei conti: `cards 3 edges 1 groups 0 bounds 0 0 688×544`.
@@ -323,6 +401,10 @@ fn card_line(groups: &[&CanvasNode], number: usize, node: &CanvasNode) -> String
     }
     if let Some(group) = innermost_group(groups, node) {
         parts.push(format!("in={}", token(&group.id)));
+    }
+    if let Some(value) = node.extra.get(INK_KEY) {
+        let layer = LayerRef::Node(node.id.clone());
+        parts.push(format!("ink={}", ink::summary(value, &layer, Some(node))));
     }
     parts.join(" ")
 }

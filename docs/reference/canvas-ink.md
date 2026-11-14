@@ -330,6 +330,65 @@ via l'inchiostro della scheda con lei, e l'annulla lo rimette. I vettori
 sono `apps/client/src/__fixtures__/canvas-patches/*-ink-*.json` e
 `canvas-ops/*strokes*.json`, `canvas-ops/*-card-with-ink.json`.
 
+## In codice
+
+Le tre letture della lavagna ([La lavagna come codice](canvas-code.md#leggere))
+dicono anche l'inchiostro, con le regole di questa pagina: le stesse di
+`crates/fub-canvas-core/src/describe/ink.rs`.
+
+- **Le coordinate.** I punti di un tratto di una scheda sono nelle coordinate
+  della scheda com'è adesso, con 0,0 nell'angolo in alto a sinistra: la misura
+  dell'ancora si porta a quella di adesso come in [«La misura della
+  scheda»](#la-misura-della-scheda), e con `scale` anche lo spessore. Il modo
+  è quello della resa (`inkFitMode`): un `#` nel campo `file` non taglia il
+  nome, quindi `foto#1.png` scala anche se la sua specie di scheda è `file`.
+  Quelli di un tratto libero sono nelle coordinate della lavagna. Punti e
+  riquadri si arrotondano a 0,1, lo spessore `size` a 0,01; il riquadro va dal
+  punto più in alto a sinistra a quello più in basso a destra, senza lo
+  spessore.
+- **L'outline.** La riga di una scheda con l'inchiostro finisce con
+  `ink=N [bad=M] x y larghezza×altezza`: i tratti del livello, quanti non si
+  disegnano (un'ancora fuori posto si conta qui) e il riquadro di quelli che si
+  disegnano, o `-` se nessuno. Un livello estraneo è `ink=foreign`.
+  L'inchiostro libero è la riga `ink board …`, con le stesse parti, subito dopo
+  i conti. Con `ids` la riga libera non c'è. Gli archi non hanno livelli.
+
+```text
+cards 2 edges 0 groups 0 bounds 0 0 980×420
+ink board 1 40 25 2.2×0.4
+1 f1 sheet "Corsi/Statistica/voti.xlsx" 0 0 640×420 ink=1 120.5 30.1 0.6×0.1
+2 n2 text "Perché la media è così bassa?" 700 40 280×90
+```
+
+- **Il codice.** Dopo la `add_card` di una scheda viene la `add_strokes` del
+  suo livello, con ogni tratto com'è nel file: le stringhe `brush` e `ink`
+  esatte, `at` e i campi sconosciuti. L'inchiostro libero è l'ultima
+  `add_strokes`, sulla radice. Un livello che `add_strokes` non ricrea uguale,
+  chiavi nello stesso ordine (estraneo, con un tratto che non si disegna, con
+  campi in più, vuoto, con `v` scritto `1.0`, con le chiavi di un tratto in un
+  ordine diverso da [«Scrittura»](#scrittura), o seguito da un altro campo
+  della scheda) resta dentro la scheda intera, com'è; uno della radice
+  non sta nel codice, come gli altri campi sconosciuti della radice. `draw` è
+  per scrivere, non per rileggere.
+- **Il modello.** `json` tiene ogni `fub:ink` com'è nel file: una scheda
+  letta e rimandata con `set` porta il suo inchiostro intatto. La lettura sta
+  accanto, in `ink_read` (`describe::ink_read`; in `canvas.read` è il campo
+  `ink_read` del payload), ed è solo da leggere: non è il formato del file, e
+  scritta in una scheda sarebbe un campo sconosciuto. È un oggetto per
+  livello, `{layer, state, strokes}`, nell'ordine dei vettori: le schede
+  nell'ordine di `nodes`, poi la radice (non con `ids`). `layer` è `"board"`
+  o `{"node": id}`, `state` è `ok` o `foreign` (un livello estraneo ha
+  `strokes` vuoto). Un tratto che si disegna è
+  `{id, color, size, tool, pen?, bounds, points}`, con `pen` dal `pen=<id>`
+  del pennello, `bounds` come `{x, y, width, height}` e `points` come
+  `[[x, y], …]`; uno che non si disegna è `{id, bad}`, con la ragione.
+- **`max_chars`** taglia soltanto i punti di `ink_read`, mai il modello. Se la
+  lettura scritta come JSON compatto supera il limite, si mostrano i primi
+  punti nell'ordine dei tratti finché ci stanno: ogni tratto resta, col suo
+  `bounds` intero, e `points_omitted` dice quanti punti mancano. Se la lettura
+  senza punti supera già il limite, i tratti escono senza punti. In
+  `canvas.read` il limite di serie è 20 000, come per l'outline.
+
 ## I vettori
 
 `apps/client/src/__fixtures__/canvas-ink/` tiene un vettore per file, la prova

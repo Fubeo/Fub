@@ -198,14 +198,14 @@ pub fn specs() -> Value {
         },
         {
             "name": "fub_canvas_read",
-            "description": "Legge una lavagna (.canvas) e la sua revisione, che è la base di fub_canvas_apply. form: outline (di serie, una riga per scheda con il suo numero), code (la lista di operazioni che la ricrea) o json (il modello). Con ids legge solo quelle schede; con max_chars taglia l'outline. Legge e basta.",
+            "description": "Legge una lavagna (.canvas) e la sua revisione, che è la base di fub_canvas_apply. form: outline (di serie, una riga per scheda con il suo numero), code (la lista di operazioni che la ricrea) o json (il modello com'è nel file, fub:ink compreso, e accanto ink_read: i tratti d'inchiostro decodificati, solo da leggere). Con ids legge solo quelle schede; con max_chars taglia l'outline o i punti di ink_read. Legge e basta.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
                     "doc": { "type": "string", "description": "Path della lavagna nel vault, per esempio Agente/piano.canvas" },
                     "form": { "type": "string", "enum": ["outline", "code", "json"], "default": "outline", "description": "Come si legge la lavagna" },
                     "ids": { "type": ["array", "string"], "items": { "type": "string" }, "description": "Gli id delle schede da leggere, come lista o come testo JSON della lista" },
-                    "max_chars": { "type": "integer", "minimum": 0, "description": "Il limite dell'outline, in caratteri (solo con form outline)" }
+                    "max_chars": { "type": "integer", "minimum": 0, "description": "Il limite in caratteri dell'outline, o dei punti di ink_read con form json (non con form code)" }
                 },
                 "required": ["doc"],
                 "additionalProperties": false

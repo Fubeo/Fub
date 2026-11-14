@@ -1871,6 +1871,19 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
             ),
         ),
         (
+            "crates/fub-canvas-core/src/describe/ink.rs::scales",
+            (
+                Family::AsciiCase,
+                "abbassa l'estensione del file di una scheda per dire se il suo inchiostro scala \
+                 (`SCAN.PNG` scala come `scan.png`), in minuscolo come `extOf` di \
+                 `media-types.ts`, che la resa usa in `inkFitMode`: il modo deve coincidere col \
+                 suo, provato coi vettori di `canvas-ink-fit/`. Diverge da `kind_of_path` perché \
+                 la resa non taglia il nome al primo `#` (`foto#1.png` scala) e la specie della \
+                 scheda sì; non identifica né un nome né un path, decide solo dove si leggono i \
+                 punti.",
+            ),
+        ),
+        (
             "crates/fub-canvas-core/src/ops/color.rs::parse_hex",
             (
                 Family::AsciiCase,
