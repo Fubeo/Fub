@@ -45,7 +45,9 @@ celle il puntatore resta la freccia.
   la tabella, e un valore incollato riempie le celle scelte. Taglia non svuota:
   le celle tagliate restano tratteggiate finché non si incolla, e l'incolla le
   sposta in un passo solo; Escape rinuncia, e ogni altra modifica della
-  tabella toglie il segno.
+  tabella toglie il segno. Il segno vale dentro la sua tabella: incollato in
+  un'altra tabella o nel testo, il taglio è un incolla qualunque e le celle
+  tagliate restano dove sono.
 - Mod+D copia in giù la prima riga scelta (con una riga sola, quella sopra;
   l'intestazione non scende nel corpo), Mod+R a destra la prima colonna. Il
   quadratino nell'angolo della selezione continua la serie.
@@ -59,6 +61,9 @@ celle il puntatore resta la freccia.
   colonna attiva, allinea a sinistra, al centro o a destra, copia, taglia e
   svuota. I pulsanti «+ Riga» e «+ Colonna» sotto la tabella aggiungono in
   fondo. Al tocco due maniglie agli angoli della selezione la allargano.
+- Dove si scrive col dito, col cursore in una tabella la barra di
+  formattazione apre in testa Tab, Invio e «+ riga»: i primi due arrivano
+  alla tabella come i tasti veri, il terzo aggiunge una riga sotto.
 - Freccia su dalla prima riga, freccia giù dall'ultima ed Escape tornano al
   testo; freccia giù dalla riga sopra la tabella, e su da quella sotto, vi
   entrano. Mod+Z e Mod+Y annullano e ripetono come nel resto della nota.
@@ -94,10 +99,28 @@ e si copia, ma non si scrive.
 Nelle tabelle del docx il cursore resta nel testo: le frecce sono del testo,
 Tab e Maiusc+Tab vanno di cella in cella (Tab dall'ultima aggiunge una riga),
 e Maiusc con una freccia che esce dalla cella, o il trascinamento da una cella
-all'altra, sceglie un rettangolo di celle. Sulle celle scelte Canc svuota,
-copia e taglia passano TSV e una tabella HTML, e «Unisci celle» unisce una
-riga. I gesti del modo foglio (Maiusc+Spazio, Mod+D, Mod+«+», il segno del
-taglio) nel documento non ci sono: lì quei tasti scrivono testo.
+all'altra, sceglie un rettangolo di celle; Mod+trascina ne aggiunge un altro.
+
+I gesti del foglio che nel testo non scrivono niente valgono sempre dentro una
+tabella: Mod+Spazio sceglie la colonna, Mod+Maiusc+Spazio la tabella,
+Maiusc+F8 comincia ad aggiungere intervalli (e allora le frecce muovono la
+cella). Quelli che il testo usa già valgono soltanto con celle scelte:
+Maiusc+Spazio sceglie la riga, Invio e Tab fanno girare la cella attiva dentro
+la selezione, Mod+D e Mod+R riempiono, Mod+«+» e Mod+«−» inseriscono e
+tolgono righe o colonne, con le stesse regole del modo foglio; le colonne si
+toccano soltanto dove nessuna cella è unita. Senza celle scelte Invio va a
+capo, Mod+R allinea a destra e Mod+«+» fa l'apice, come nel resto del testo.
+
+Sulle celle scelte Canc svuota tutti gli intervalli, copia passa TSV e una
+tabella HTML, e «Unisci celle» unisce una riga. Taglia segna le celle come nel
+modo foglio, dentro la loro tabella, e l'incolla le sposta in un passo solo;
+Escape toglie prima il segno, poi gli intervalli aggiunti, poi le celle. Ogni
+gesto è un passo d'annullamento, e le celle restano scelte.
+
+Due gesti del foglio nel documento mancano apposta, e la prova comune lo dice
+col perché: Mod con una freccia, che nel testo salta di parola, e la cella da
+aprire, riscrivere o annullare, perché il cursore è già nel testo della cella.
+L'ordinamento manca perché il formato non lo sa fare.
 
 ## Nei fogli
 
@@ -116,4 +139,5 @@ descritta in [Editor e anteprima](editor-and-preview.md#la-griglia).
   `table-model.ts` e `table-widget.ts`
 - `apps/client/src/editors/rich/cell-selection.ts`
 - `apps/client/src/editors/grid/engine.ts` e `shortcuts.ts`
+- `apps/client/src/panels/format-bar.ts` (i tasti della tabella per il dito)
 - `apps/client/src/theme/scrittoio/skin/tabella.css`

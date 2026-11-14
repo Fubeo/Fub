@@ -352,7 +352,9 @@ apice, pedice, evidenziato, codice e formula in riga, commento `%%`, cancella
 formattazione, link, link a una nota, immagine, nota a piè di pagina, elenchi
 puntati, numerati e di attività, rientro, citazione, riquadro `> [!note]`,
 blocchi di codice e di formula, separatore e tabella, con un menu per righe,
-colonne e ordinamento. In Lettura la barra non c'è.
+colonne e ordinamento. Dove si scrive col dito, col cursore in una tabella la
+barra apre in testa Tab, Invio e «+ riga» ([Tabelle](editor-tables.md)). In
+Lettura la barra non c'è.
 
 Un pulsante agisce sulla selezione, o sulla parola sotto il cursore, come la
 scorciatoia corrispondente, e la modifica entra nella cronologia locale del
