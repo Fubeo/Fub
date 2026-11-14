@@ -16,7 +16,7 @@ import { isFolderPage, pageName, taskChecked } from "../../../../rules/mirrored"
 import { onLanguage, t } from "../../../../i18n/strings";
 import type { NoteFacts, NoteFactsSource } from "../../../../state/note-facts";
 import { noteFactsChanged, noteFactsExtensions, noteFactsLabels, renderNoteFacts } from "./note-facts";
-import { blocksMode } from "./blocks";
+import { blocksMode, pageArrives } from "./blocks";
 import { pageIconsChanged } from "./livepreview";
 import { linkCardsChanged, type LinkCardSource } from "./link-card";
 import { mountMarkdown, sourceElementAt, type MarkdownMountOptions } from "./mount";
@@ -820,6 +820,7 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
           top: anchor.top,
         });
       }
+      arrive(next);
       return;
     }
     const anchor = engine.getScrollAnchor();
@@ -828,6 +829,16 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
     presentation(next);
     engine.reconfigure();
     engine.restoreScrollAnchor(anchor);
+    arrive(next);
+  }
+
+  /// Il gesto che porta in Scrittura fa arrivare la pagina; aprire la nota no.
+  function arrive(next: MarkdownMode): void {
+    if (next !== "live_preview") return;
+    engine.runViewCommand((view) => {
+      view.dispatch({ effects: pageArrives.of(null) });
+      return true;
+    });
   }
 
   function syncReading(): void {
