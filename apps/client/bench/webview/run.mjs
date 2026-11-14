@@ -717,6 +717,13 @@ const SCENARIOS = {
     const empty = await settled(driverPid, pause);
     const steps = [];
     for (const [name, mode] of MODES) {
+      // Ogni file si cerca a indice pronto. Aprire il precedente può rimettere
+      // l'indice al lavoro: la barra diceva «Indicizzazione in corso» proprio
+      // mentre «Stampa» non era ancora un nome da trovare. Senza questa attesa
+      // il lanciatore dice «nessuna nota» (giusto per l'indice di quel momento),
+      // e il test lo leggeva come vero solo perché l'offerta «Crea nota» portava
+      // il nome cercato.
+      await indexed(session);
       await openByName(session, name, "");
       await session.waitFor("return [...document.querySelectorAll('.pane.focus .tab[aria-selected=true] .tab-name')].some((el) => el.textContent.includes(arguments[0]))", [name], 60_000);
       await pause(MEMORY_QUIET_MS);
