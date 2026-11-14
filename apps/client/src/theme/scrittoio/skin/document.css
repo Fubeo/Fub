@@ -393,6 +393,34 @@
 .cm-editor .cm-content .cm-fub-link-card-fetch:disabled {
   color: var(--doc-gutter-fg);
 }
+/* La scelta sotto un indirizzo incollato su una riga vuota (T25): «Link» e
+   «Scheda», due pulsanti piccoli nei toni del margine. Quello scelto è premuto. */
+.cm-editor .cm-content .cm-fub-address-choice {
+  display: flex;
+  gap: var(--space-2);
+  margin: var(--space-1) 0;
+  font-family: var(--font-ui);
+  font-size: var(--text-sm);
+}
+.cm-editor .cm-content .cm-fub-address-choice-link,
+.cm-editor .cm-content .cm-fub-address-choice-card {
+  padding: var(--space-1) var(--space-3);
+  border: 1px solid var(--doc-rule-soft);
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: var(--doc-gutter-fg);
+  font: inherit;
+}
+.cm-editor .cm-content .cm-fub-address-choice-link:hover,
+.cm-editor .cm-content .cm-fub-address-choice-card:hover {
+  background: var(--doc-fill-soft);
+  color: var(--doc-fg);
+}
+.cm-editor .cm-content .cm-fub-address-choice-link[aria-pressed="true"],
+.cm-editor .cm-content .cm-fub-address-choice-card[aria-pressed="true"] {
+  color: var(--doc-fg);
+  border-color: var(--doc-fg);
+}
 /* Un segno che si vede ancora in Live, con «elemento» o «riga»: un passo sotto
    la sintassi della Sorgente, dentro o fuori dallo span che la colora. */
 .cm-editor .cm-content .cm-fub-near,
