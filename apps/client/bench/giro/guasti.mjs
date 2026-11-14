@@ -127,16 +127,20 @@ async function scriviDaFuori(pagina, id, testo) {
   await pagina.evaluate(([doc, nuovo]) => window.bench.writeFromOutside(doc, nuovo), [id, testo]);
 }
 
-/// La riga del foglio che dice che un'altra applicazione ha cambiato la nota
-/// sotto il testo non salvato.
-async function cambiataDaFuori(pagina) {
-  const riga = rigaDelFoglio(pagina, "overwritten");
-  await riga.waitFor();
-  const detto = (await riga.innerText()).trim();
-  verifica(
-    detto.includes(`«${NOME}» è stato cambiato da un'altra applicazione: niente è stato sovrascritto, e al salvataggio sceglierai quale testo tenere.`),
-    `il foglio dice «${detto}»`,
-  );
+/// Il conflitto sulla nota a schermo si dice una volta, nella barra: né la
+/// riga «cambiata da fuori» del foglio né un avviso a galla lo ripetono.
+async function unSoloMessaggio(pagina, passo) {
+  const righe = await pagina.locator('.pane.focus .sheet-notice[data-notice="overwritten"], .pane.focus .sheet-notice[data-notice="changed_on_disk"]').count();
+  verifica(righe === 0, `${passo}: la barra del conflitto e la riga del foglio dicono la stessa cosa`);
+  const avvisi = await pagina.locator(`.toast .toast-text:has-text("${NOME}")`).allInnerTexts();
+  verifica(avvisi.length === 0, `${passo}: con la nota a schermo restano gli avvisi ${avvisi.map((testo) => `«${testo}»`).join(", ")}`);
+}
+
+/// Nessun avviso a galla parla ancora della nota: lo stato di cui dicevano
+/// è finito.
+async function nessunAvvisoDellaNota(pagina, passo) {
+  const avvisi = await pagina.locator(`.toast .toast-text:has-text("${NOME}")`).allInnerTexts();
+  verifica(avvisi.length === 0, `${passo}: restano gli avvisi ${avvisi.map((testo) => `«${testo}»`).join(", ")}`);
 }
 
 /// Guasta una porta del finto; `ripara` la rimette.
@@ -384,7 +388,7 @@ const conflittoUsaDisco = {
     await scriviDaFuori(pagina, NOTA, dopoIlPrimoConflitto);
     const barra = await barraDelConflitto(pagina);
     verifica((await leggi(pagina, NOTA)) === dopoIlPrimoConflitto, "il salvataggio in conflitto ha scritto sul disco");
-    await cambiataDaFuori(pagina);
+    await unSoloMessaggio(pagina, "il primo conflitto");
     await giro.foto("barra");
 
     // «Confronta»: il testo su disco e il mio, riga per riga.
@@ -473,7 +477,7 @@ const solaLettura = {
     await guasta(pagina, "writeDocument", { kind: "permission_denied", message: `il file è in sola lettura: ${NOTA}` });
     await scriviInFondo(pagina, SOLA_LETTURA);
     await aspettaStato(pagina, "fallito");
-    await avviso(pagina, `${NOTA} è in sola lettura: Fub non lo sovrascrive`);
+    await avviso(pagina, `«${NOME}» è in sola lettura: Fub non lo sovrascrive`);
     await rigaDelFoglio(pagina, "save_failed").waitFor();
     verifica(!(await leggi(pagina, NOTA)).includes(SOLA_LETTURA), "il file in sola lettura è stato scritto");
     verifica((await testoDelRiquadro(pagina)).includes(SOLA_LETTURA), "il riquadro ha perso il testo non salvato");
@@ -489,6 +493,8 @@ const solaLettura = {
     // L'avviso dice sola lettura, non un guasto del disco.
     const guasto = await pagina.locator('.toast .toast-text:has-text("non è stato salvato")').count();
     verifica(guasto === 0, "la shell ha detto un guasto del disco invece della sola lettura");
+    // Salvata, l'avviso della sola lettura se ne va: parlava di uno stato finito.
+    await nessunAvvisoDellaNota(pagina, "salvata dopo la sola lettura");
   },
 };
 
@@ -887,11 +893,12 @@ const ripristinoConTestoNonSalvato = {
     await prima.waitFor({ state: "detached" });
     await aspettaStato(pagina, "salvato");
     await scriviInFondo(pagina, PRIMA_DEL_RIPRISTINO);
-    // Il ripristino: l'host riscrive il file con la versione vecchia.
+    // Il ripristino: l'host riscrive il file con la versione vecchia. Il
+    // foglio lo dice finché il salvataggio, poco dopo, non trova il disco
+    // cambiato: allora la barra del conflitto dice tutto, e la riga se ne va.
     await scriviDaFuori(pagina, NOTA, versioneVecchia);
-    await cambiataDaFuori(pagina);
-    // Poi il salvataggio trova il disco cambiato: il conflitto, e la scelta.
     await barraDelConflitto(pagina);
+    await unSoloMessaggio(pagina, "il conflitto dopo il ripristino");
     verifica((await testoDelRiquadro(pagina)).includes(PRIMA_DEL_RIPRISTINO), "il ripristino ha tolto il testo non salvato dal riquadro");
     verifica((await leggi(pagina, NOTA)) === versioneVecchia, "il testo non salvato ha coperto la versione ripristinata senza chiedere");
     await giro.foto("ripristinata");
@@ -919,7 +926,7 @@ const salvataggioCheFallisce = {
     await guasta(pagina, "writeDocument", "il disco è pieno");
     await scriviInFondo(pagina, NEL_GUASTO);
     await aspettaStato(pagina, "fallito");
-    await avviso(pagina, `${NOTA} non è stato salvato: il disco è pieno`);
+    await avviso(pagina, `«${NOME}» non è stato salvato: il disco è pieno`);
     const riga = rigaDelFoglio(pagina, "save_failed");
     await riga.waitFor();
     verifica((await riga.getAttribute("role")) === "alert", "l'avviso del foglio non è un allarme");
@@ -939,6 +946,7 @@ const salvataggioCheFallisce = {
     verifica(testo.includes(`${NEL_GUASTO} Fine.`), "a porta buona il salvataggio non ha scritto il testo del guasto");
     verifica((await rigaDelFoglio(pagina, "save_failed").count()) === 0, "l'avviso del foglio è rimasto dopo il salvataggio");
     verifica(!(await pagina.isVisible(".pane.focus .tab.dirty")), "la linguetta si dice ancora non salvata");
+    await nessunAvvisoDellaNota(pagina, "salvata dopo il guasto");
   },
 };
 
