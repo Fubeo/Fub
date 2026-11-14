@@ -32,7 +32,7 @@ vi.mock("../host/ipc", () => ({
 vi.mock("../host/dialog", () => ({ confirm: fake.confirm, pickFile: vi.fn(), pickFolder: vi.fn() }));
 vi.mock("../host/query", () => ({ settings: () => fake.readSettings() }));
 vi.mock("../state/kernel", () => ({ onEvent: vi.fn() }));
-vi.mock("../ui/commands", () => ({ allCommands: () => [], keybindingKey: (id: string) => id }));
+vi.mock("../ui/commands", () => ({ allCommands: () => [], keybindingKey: (id: string) => id, registerComponentRow: () => () => {} }));
 vi.mock("../ui/permissions", () => ({
   TRUST_LABELS: {},
   isPermissionKey: () => false,

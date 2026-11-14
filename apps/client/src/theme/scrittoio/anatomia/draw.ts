@@ -16,7 +16,7 @@ export const DRAW: PartAnatomy = {
         "draw-navigator": "segno",
       },
       hooks: [
-        "draw-header", "draw-toolbar", "draw-export", "draw-export-text", "draw-rail", "draw-group", "draw-button", "draw-zoom-level", "draw-layer-button",
+        "draw-export", "draw-export-text", "draw-rail", "draw-group", "draw-button", "kit-bar-button", "draw-zoom-level", "draw-layer-button",
         "draw-layer-state", "draw-swatch-frame", "draw-swatch", "draw-width-bar", "draw-size-glyph", "draw-pen-choice", "draw-pen-name", "draw-pen-gallery", "draw-pen-gallery-heading", "draw-pen-gallery-list", "draw-pen-gallery-item", "draw-pen-gallery-empty", "draw-pen-gallery-save", "draw-pen-preview", "draw-pen-saved-remove", "draw-pen-size", "draw-eraser-mode", "draw-eraser-mode-name", "draw-title",
         "draw-title-input", "draw-surface", "draw-zoom-box", "draw-navigator", "draw-navigator-sheets",
         "draw-navigator-shapes", "draw-navigator-view", "draw-arrange", "draw-arrange-input", "draw-arrange-suffix", "draw-page",

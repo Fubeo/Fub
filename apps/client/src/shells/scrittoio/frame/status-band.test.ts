@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { emit, state } from "../../../state/store";
+import { emit, on, state } from "../../../state/store";
 import { openLifetime, type Lifetime } from "../../../ui/lifetime";
 import { activeMotions, createManualDriver, setMotionDriver } from "../../../moto";
 
@@ -19,8 +19,20 @@ const world = vi.hoisted(() => ({
   language: "it",
   tab: null as { k: string } | null,
   pane: undefined as unknown,
+  /// I riquadri per id, quando il test ne apre più d'uno.
+  panes: null as Map<string, unknown> | null,
+  layout: { focus: "p1" },
   zoomed: [] as number[],
   tooltips: new Map<Element, string>(),
+  /// Il menu che la banda ha aperto per ultimo, e le modalità scelte.
+  menu: null as null | {
+    anchor: HTMLElement;
+    items: { label: string; icon?: string; checked?: boolean; run?: () => void }[];
+    onClose?: () => void;
+  },
+  menusClosed: 0,
+  focused: [] as string[],
+  modesSet: [] as string[],
 }));
 
 vi.mock("../../../host/query", () => ({
@@ -42,8 +54,28 @@ vi.mock("../../../i18n/strings", () => ({
   },
 }));
 vi.mock("../../../state/document-controller", () => ({
-  paneOf: () => world.pane,
+  paneOf: (id: string) => (world.panes ? world.panes.get(id) : world.pane),
   selectedMode: (pane: { mode?: { label(): string } } | undefined) => pane?.mode,
+  setMode: (id: string) => {
+    world.modesSet.push(id);
+    return Promise.resolve();
+  },
+}));
+vi.mock("../../../ui/commands", () => ({
+  allCommands: () => [],
+  displayBinding: () => "",
+}));
+vi.mock("../../../ui/menu", () => ({
+  showContextMenu: (anchor: HTMLElement, items: NonNullable<typeof world.menu>["items"], options: { onClose?: () => void } = {}) => {
+    world.menu = { anchor, items, onClose: options.onClose };
+  },
+  closeContextMenu: () => {
+    const open = world.menu;
+    if (!open) return;
+    world.menu = null;
+    world.menusClosed += 1;
+    open.onClose?.();
+  },
 }));
 vi.mock("../../../state/document-session", () => ({
   documentSessions: {
@@ -62,7 +94,12 @@ vi.mock("../../../state/kernel", () => ({
 }));
 vi.mock("../../../state/layout", () => ({
   activeTab: () => world.tab,
-  layout: { focus: "p1" },
+  layout: world.layout,
+  pane: (id: string) => (world.panes ? world.panes.get(id) : world.pane) ? { id } : undefined,
+  focusPane: (id: string) => {
+    world.focused.push(id);
+    world.layout.focus = id;
+  },
 }));
 vi.mock("../../../state/zoom", () => ({
   zoomBy: (delta: number) => {
@@ -93,8 +130,18 @@ function deferred<T>(): { promise: Promise<T>; resolve(value: T): void } {
   return { promise, resolve };
 }
 
+/// Il ruolo di una modalità dal suo nome, come lo dichiarano le superfici vere.
+const ROLE: Record<string, string> = { Lettura: "reading", Sorgente: "source" };
+
+/// Un riquadro con `modes` modalità: la prima è quella accesa, col nome dato.
 function surface(modes: number, label = "Live"): unknown {
-  return { surface: { modes: Array.from({ length: modes }, (_, i) => ({ id: `m${i}` })) }, mode: { label: () => label } };
+  const active = { id: "m0", contextMode: ROLE[label] ?? "live_preview", label: () => label };
+  const others = Array.from({ length: Math.max(0, modes - 1) }, (_, i) => ({
+    id: `m${i + 1}`,
+    contextMode: "live_preview",
+    label: () => `Altra ${i + 1}`,
+  }));
+  return { surface: { modes: [active, ...others] }, mode: active };
 }
 
 beforeEach(() => {
@@ -104,7 +151,9 @@ beforeEach(() => {
     <footer id="status-band">
       <span id="status-index" hidden></span>
       <span id="status-saving" hidden></span>
-      <span id="status-mode" hidden></span>
+      <div id="status-end">
+        <button type="button" id="status-mode" class="status-mode" aria-haspopup="menu" aria-expanded="false" hidden></button>
+      </div>
       <button id="status-fit-width" hidden></button>
       <button id="status-fit-page" hidden></button>
       <button id="status-zoom" hidden></button>
@@ -120,8 +169,14 @@ beforeEach(() => {
   world.language = "it";
   world.tab = null;
   world.pane = undefined;
+  world.panes = null;
+  world.layout.focus = "p1";
   world.zoomed = [];
   world.tooltips.clear();
+  world.menu = null;
+  world.menusClosed = 0;
+  world.focused = [];
+  world.modesSet = [];
   state.vaultRoot = "/casa/vault";
   life = openLifetime();
 });
@@ -261,6 +316,191 @@ describe("la modalità", () => {
     await settle();
     expect(el("status-mode").textContent).toBe("Sorgente");
   });
+
+  it("con due riquadri dice quella del riquadro a fuoco, e cambia quando il fuoco passa", () => {
+    world.tab = { k: "doc" };
+    world.panes = new Map([
+      ["p1", surface(4, "Live")],
+      ["p2", surface(3, "Sorgente")],
+    ]);
+    mountStatusBand(life);
+    expect(el("status-mode").textContent).toBe("Live");
+    world.layout.focus = "p2";
+    emit("layout");
+    expect(el("status-mode").textContent).toBe("Sorgente");
+    world.layout.focus = "p1";
+    emit("layout");
+    expect(el("status-mode").textContent).toBe("Live");
+  });
+
+  it("una superficie con una modalità sola, come un'immagine, non la dice", () => {
+    world.tab = { k: "doc" };
+    world.panes = new Map([
+      ["p1", surface(4, "Live")],
+      ["p2", surface(1, "Immagine")],
+    ]);
+    mountStatusBand(life);
+    expect(el("status-mode").hidden).toBe(false);
+    world.layout.focus = "p2";
+    emit("layout");
+    expect(el("status-mode").hidden).toBe(true);
+    expect(el("status-mode").textContent).toBe("");
+  });
+
+  it("è un bottone con la figura, il nome e la freccia della modalità del riquadro a fuoco (T3)", () => {
+    world.tab = { k: "doc" };
+    world.panes = new Map([
+      ["p1", surface(4, "Live")],
+      ["p2", surface(3, "Sorgente")],
+    ]);
+    mountStatusBand(life);
+    const button = el("status-mode");
+    const figure = () => button.querySelector(":scope > svg")?.getAttribute("data-icon");
+    const name = () => button.querySelector(":scope > .status-mode-name")?.textContent;
+    expect(button.tagName).toBe("BUTTON");
+    expect(figure()).toBe("pen");
+    expect(name()).toBe("Live");
+    const arrow = button.querySelector<HTMLElement>(":scope > .status-mode-arrow")!;
+    expect(arrow.getAttribute("aria-hidden")).toBe("true");
+    expect(arrow.querySelector("svg")?.getAttribute("data-icon")).toBe("chevron-up");
+    expect(button.lastElementChild).toBe(arrow);
+    expect(button.getAttribute("aria-label")).toBe('document.toolbar.mode_current {"mode":"Live"}');
+    // Lo stesso giro senza cambiare modalità non riscrive la figura.
+    const svg = button.querySelector(":scope > svg");
+    emit("layout");
+    expect(button.querySelector(":scope > svg")).toBe(svg);
+    world.layout.focus = "p2";
+    emit("layout");
+    expect(figure()).toBe("code");
+    expect(name()).toBe("Sorgente");
+    expect(button.getAttribute("aria-label")).toBe('document.toolbar.mode_current {"mode":"Sorgente"}');
+  });
+
+  it("la figura che l'editor registra col motore arriva quando la superficie si fa sentire", async () => {
+    const { registerIcon } = await import("../../../ui/icons");
+    const listeners = new Set<() => void>();
+    const status = {
+      items: () => [],
+      subscribe: (listener: () => void) => {
+        listeners.add(listener);
+        return () => listeners.delete(listener);
+      },
+    };
+    const active = { id: "page", contextMode: "live_preview", icon: "t3-figura-tarda", label: () => "Pagina" };
+    world.tab = { k: "doc" };
+    world.pane = { surface: { modes: [active, { id: "read", contextMode: "reading", label: () => "Lettura" }], status }, mode: active };
+    mountStatusBand(life);
+    const figure = () => el("status-mode").querySelector(":scope > svg")?.getAttribute("data-icon");
+    // Finché nessuno la disegna vale quella del ruolo.
+    expect(figure()).toBe("pen");
+    const release = registerIcon("t3-figura-tarda", ["M4 4h16"]);
+    try {
+      for (const listener of listeners) listener();
+      expect(figure()).toBe("t3-figura-tarda");
+    } finally {
+      release();
+    }
+  });
+
+  it("il clic apre il menu del riquadro a fuoco, e la voce cambia la modalità di quel riquadro", () => {
+    world.tab = { k: "doc" };
+    world.panes = new Map([
+      ["p1", surface(4, "Live")],
+      ["p2", surface(3, "Sorgente")],
+    ]);
+    world.layout.focus = "p2";
+    mountStatusBand(life);
+    const button = el("status-mode");
+    button.click();
+    expect(world.menu?.anchor).toBe(button);
+    expect(button.getAttribute("aria-expanded")).toBe("true");
+    expect(world.menu!.items.map((item) => item.label)).toEqual(["Altra 1", "Altra 2", "Sorgente"]);
+    expect(world.menu!.items.filter((item) => item.checked).map((item) => item.label)).toEqual(["Sorgente"]);
+    // Il menu, chiudendosi, renderebbe il fuoco all'editor dell'altro riquadro:
+    // la voce sceglie lo stesso per il suo.
+    world.layout.focus = "p1";
+    world.menu!.items[0]!.run!();
+    expect(world.focused[world.focused.length - 1]).toBe("p2");
+    expect(world.layout.focus).toBe("p2");
+    expect(world.modesSet).toEqual(["m1"]);
+  });
+
+  it("↑ apre il menu, e alla chiusura il fuoco torna al bottone", () => {
+    world.tab = { k: "doc" };
+    world.pane = surface(3, "Live");
+    mountStatusBand(life);
+    const button = el("status-mode") as HTMLButtonElement;
+    const other = document.createElement("button");
+    document.body.append(other);
+    other.focus();
+    button.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }));
+    expect(world.menu).toBeNull();
+    button.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowUp", bubbles: true, cancelable: true }));
+    expect(world.menu?.anchor).toBe(button);
+    expect(button.getAttribute("aria-expanded")).toBe("true");
+    // Esc o un clic fuori: il menu si chiude e il fuoco torna qui, anche se il
+    // clic non gliel'aveva dato.
+    world.menu!.onClose!();
+    world.menu = null;
+    expect(button.getAttribute("aria-expanded")).toBe("false");
+    expect(document.activeElement).toBe(button);
+  });
+
+  it("una superficie con una modalità sola non apre niente", () => {
+    world.tab = { k: "doc" };
+    world.pane = surface(1, "Immagine");
+    mountStatusBand(life);
+    el("status-mode").click();
+    expect(world.menu).toBeNull();
+  });
+
+  it("il riquadro si chiude col menu aperto: il menu si chiude", () => {
+    world.tab = { k: "doc" };
+    world.panes = new Map([
+      ["p1", surface(4, "Live")],
+      ["p2", surface(3, "Sorgente")],
+    ]);
+    world.layout.focus = "p2";
+    mountStatusBand(life);
+    el("status-mode").click();
+    expect(world.menu).not.toBeNull();
+    // Il fuoco che passa all'altro riquadro non chiude niente: il menu è del
+    // riquadro per cui si è aperto.
+    world.layout.focus = "p1";
+    emit("layout");
+    expect(world.menusClosed).toBe(0);
+    world.panes.delete("p2");
+    emit("layout");
+    expect(world.menusClosed).toBe(1);
+    expect(el("status-mode").getAttribute("aria-expanded")).toBe("false");
+  });
+
+  it("smontata col menu aperto lo chiude, e il bottone non apre più", () => {
+    world.tab = { k: "doc" };
+    world.pane = surface(3, "Live");
+    mountStatusBand(life);
+    el("status-mode").click();
+    life.close();
+    expect(world.menusClosed).toBe(1);
+    el("status-mode").click();
+    expect(world.menu).toBeNull();
+  });
+
+  it("il fuoco su un riquadro vuoto non dice niente, e tornato sulla nota la ridice", () => {
+    world.tab = { k: "doc" };
+    world.panes = new Map([["p1", surface(4, "Live")], ["p2", { surface: null }]]);
+    mountStatusBand(life);
+    expect(el("status-mode").textContent).toBe("Live");
+    world.layout.focus = "p2";
+    world.tab = null;
+    emit("layout");
+    expect(el("status-mode").hidden).toBe(true);
+    world.layout.focus = "p1";
+    world.tab = { k: "doc" };
+    emit("layout");
+    expect(el("status-mode").hidden).toBe(false);
+    expect(el("status-mode").textContent).toBe("Live");
+  });
 });
 
 describe("la carta adattata alla vista", () => {
@@ -373,7 +613,9 @@ describe("le voci della superficie", () => {
     };
     return { pane, said, changed, listeners };
   }
-  const items = () => [...document.querySelectorAll<HTMLElement>("[data-surface-item]")];
+  // «Si scrive» porta anche lui `data-surface-item`, ma non è una voce della
+  // superficie: ha la sua parte, più sotto.
+  const items = () => [...document.querySelectorAll<HTMLElement>("[data-surface-item]:not(#status-standing)")];
 
   it("stanno prima della modalità, un clic apre, e il conteggio dichiarato si fa da parte", async () => {
     const { pane, said, changed } = statusPane();
@@ -390,7 +632,9 @@ describe("le voci della superficie", () => {
       ["SPAN", "Pagina 1 di 2"],
       ["BUTTON", "418 parole"],
     ]);
-    expect(items()[1]!.nextElementSibling).toBe(el("status-mode"));
+    // Prima di «Si scrive», che sta subito prima della modalità.
+    expect(items()[1]!.nextElementSibling).toBe(el("status-standing"));
+    expect(el("status-standing").nextElementSibling).toBe(el("status-mode"));
     expect(world.tooltips.get(items()[1]!)).toBe("Apri il conteggio");
     expect(el("status-band").hasAttribute("data-surface-counts")).toBe(true);
     items()[1]!.click();
@@ -428,6 +672,116 @@ describe("le voci della superficie", () => {
     life.close();
     expect(listeners.size).toBe(0);
     expect(items()).toHaveLength(0);
+  });
+});
+
+describe("«Si scrive»", () => {
+  type Kind = "writes" | "closed" | "body" | "readonly";
+  const TEXT: Record<Kind, string> = { writes: "Si scrive", closed: "2 parti chiuse", body: "Solo il testo", readonly: "Sola lettura" };
+  /// Una superficie con lo stato del documento, che si può cambiare.
+  function standingPane(first: Kind | null) {
+    let kind = first;
+    const listeners = new Set<() => void>();
+    const pane = {
+      surface: {
+        modes: [{ id: "a" }, { id: "b" }],
+        standing: {
+          current: () => (kind ? { kind, text: TEXT[kind], title: `${TEXT[kind]}, per esteso`, body: "", recording: false } : null),
+          subscribe(listener: () => void) {
+            listeners.add(listener);
+            return () => listeners.delete(listener);
+          },
+        },
+      },
+      mode: { label: () => "Pagina" },
+    };
+    return {
+      pane,
+      listeners,
+      set(next: Kind | null) {
+        kind = next;
+        for (const listener of [...listeners]) listener();
+      },
+    };
+  }
+  const button = () => el("status-standing") as HTMLButtonElement;
+
+  it("nasce in JS prima della modalità, e si vede solo quando il documento si scrive tutto", () => {
+    const doc = standingPane("writes");
+    world.tab = { k: "doc" };
+    world.pane = doc.pane;
+    mountStatusBand(life);
+    const standing = button();
+    expect(standing.tagName).toBe("BUTTON");
+    expect([...standing.classList]).toEqual(["status-item", "status-item--button", "status-standing"]);
+    expect(standing.dataset.surfaceItem).toBe("standing");
+    expect(standing.getAttribute("aria-haspopup")).toBe("dialog");
+    expect(standing.nextElementSibling).toBe(el("status-mode"));
+    expect(standing.hidden).toBe(false);
+    expect(standing.textContent).toBe("Si scrive");
+    expect(standing.querySelector(".status-standing-mark")!.getAttribute("aria-hidden")).toBe("true");
+    expect(standing.getAttribute("aria-label")).toBe('document.standing.label {"state":"Si scrive"}');
+    expect(world.tooltips.get(standing)).toBe("Si scrive, per esteso");
+    // Gli altri stati restano nel chip della testata: la banda si spegne.
+    for (const kind of ["closed", "body", "readonly"] as const) {
+      doc.set(kind);
+      expect(standing.hidden, kind).toBe(true);
+    }
+    doc.set("writes");
+    expect(standing.hidden).toBe(false);
+    doc.set(null);
+    expect(standing.hidden).toBe(true);
+  });
+
+  it("premuto, chiede la spiegazione con sé come ancora", () => {
+    world.tab = { k: "doc" };
+    world.pane = standingPane("writes").pane;
+    mountStatusBand(life);
+    const anchors: HTMLElement[] = [];
+    life.add(on("standing-open", (anchor) => anchors.push(anchor)));
+    button().click();
+    expect(anchors).toEqual([button()]);
+  });
+
+  it("segue il riquadro a fuoco, e un riquadro vuoto o una vista non lo accendono", () => {
+    const writes = standingPane("writes");
+    const readonly = standingPane("readonly");
+    world.tab = { k: "doc" };
+    world.panes = new Map<string, unknown>([
+      ["p1", writes.pane],
+      ["p2", readonly.pane],
+      ["p3", {}],
+    ]);
+    mountStatusBand(life);
+    expect(button().hidden).toBe(false);
+    world.layout.focus = "p2";
+    emit("layout");
+    expect(button().hidden).toBe(true);
+    // Ascolta solo il riquadro a fuoco.
+    expect(writes.listeners.size).toBe(0);
+    expect(readonly.listeners.size).toBe(1);
+    world.layout.focus = "p3";
+    emit("layout");
+    expect(button().hidden).toBe(true);
+    expect(readonly.listeners.size).toBe(0);
+    world.layout.focus = "p1";
+    emit("layout");
+    expect(button().hidden).toBe(false);
+    world.tab = { k: "view" };
+    emit("active-doc", null);
+    expect(button().hidden).toBe(true);
+    expect(writes.listeners.size).toBe(0);
+  });
+
+  it("smontata, il bottone se ne va e lo stato non è più ascoltato", () => {
+    const doc = standingPane("writes");
+    world.tab = { k: "doc" };
+    world.pane = doc.pane;
+    mountStatusBand(life);
+    expect(doc.listeners.size).toBe(1);
+    life.close();
+    expect(document.getElementById("status-standing")).toBeNull();
+    expect(doc.listeners.size).toBe(0);
   });
 });
 

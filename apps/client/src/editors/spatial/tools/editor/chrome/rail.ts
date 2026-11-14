@@ -18,7 +18,7 @@ type Layout = readonly (readonly (readonly ToolId[])[])[];
 const VECTOR: Layout = [
   [["select"], ["hand", "zoom"]],
   [["pen", "highlighter"], ["eraser"]],
-  [["rect", "ellipse", "line", "arrow"]],
+  [["rect", "ellipse", "line", "arrow"], ["text"]],
 ];
 
 const PDF: Layout = [

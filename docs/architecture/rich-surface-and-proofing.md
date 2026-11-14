@@ -175,24 +175,24 @@ l'IPC.
   col motore: la barra del kit (`kit/ribbon/ribbon.ts`, la stessa del
   foglio) con le schede Home, Inserisci, Layout, Revisione, Visualizza e la
   contestuale Tabella, Annulla e Ripeti accanto alle schede, le lettere con
-  Alt o F10 e Ctrl+F1 per ritirarla. Ogni controllo è un'azione del motore
+  Alt o F10 e Ctrl+F1 per ritirarla, i gruppi raccolti aperti nella barra
+  (`openInPlace`), forma, pelle e moto del kit (`motion: true`, la tenda è la
+  ricerca con `.rich-page`). Ogni controllo è un'azione del motore
   (`RICH_ACTION_IDS`, con i suoi accordi), un valore che il motore scrive
   (tipo, dimensione, stile del paragrafo, con la galleria che scrive ogni
-  nome nel carattere del documento), un riquadro di
-  `editors/rich/panels.ts` o una scheda del pannello di destra
-  (`side.ts`). Layout ha le gallerie veloci della pagina (Margini,
-  Orientamento, Dimensione, Colonne), con ciò che c'è segnato e una voce
-  «Altre opzioni di pagina…» che apre Proprietà; Conteggio apre Proprietà
-  sul conteggio. Il catalogo della barra spegne col perché ciò
-  che non si dà adesso: in sola lettura ciò che scrive (restano Trova,
-  Conteggio, Commenti, scorrere le revisioni e lo zoom), mentre si registra
-  il formato. La superficie dichiara `ownBar`, e la barra di formattazione
-  della shell non si mostra sopra; la mini-barra del menu è quella della
-  barra. Lo zoom è il comando della shell (`runShellCommand`). «Copia formato» lo tiene
-  il motore e lo applica alla prossima selezione finita (puntatore o Maiusc
-  rilasciati). **Immagine** sceglie un'immagine del vault con la porta delle
-  immagini del disegno (`DrawingImagePort`: `pick`, poi `read` dal documento
-  con il tetto di 16 MB), senza IPC propria.
+  nome nel carattere del documento), un riquadro di `panels.ts` o una scheda
+  del pannello di destra (`side.ts`). Layout ha le gallerie veloci della
+  pagina (Margini, Orientamento, Dimensione, Colonne) con il segno e «Altre
+  opzioni di pagina…» per Proprietà, come Conteggio. Il catalogo della
+  barra spegne col perché ciò che non si dà adesso: in sola lettura ciò che
+  scrive (restano Trova, Conteggio, Commenti, scorrere le revisioni e lo zoom),
+  mentre si registra il formato. La superficie dichiara `ownBar`, e la barra di
+  formattazione della shell non si mostra sopra; la mini-barra del menu è quella
+  della barra. Lo zoom è il comando della shell (`runShellCommand`). «Copia
+  formato» lo tiene il motore e lo applica alla prossima selezione finita
+  (puntatore o Maiusc rilasciati). **Immagine** sceglie un'immagine del vault
+  con la porta delle immagini del disegno (`DrawingImagePort`: `pick`, poi
+  `read` dal documento con il tetto di 16 MB), senza IPC propria.
 - `editors/rich/review.ts` trova, sostituisce e conta sul testo verbatim di
   un paragrafo alla volta, con una foglia (a-capo, oggetto, segno) per
   posizione: un'occorrenza torna a un intervallo esatto e non porta via un
@@ -355,16 +355,16 @@ sull'elemento.
 
 Il moto della carta (`editors/rich/rich-motion.ts`) segue la regola del palco:
 il testo è sempre al suo posto finale, e si muove la sagoma di ogni foglio
-(`.rich-sheet-paper`). `RichMotion` osserva la classe `look-*`,
-`data-mode` e la barra, e tiene una fotografia del «prima» aggiornata a ogni
+(`.rich-sheet-paper`). `RichMotion` osserva la classe `look-*`, `data-mode`
+e la barra nascosta in Lettura (non quella ritirata, che muove la pagina
+come tenda), e tiene una fotografia del «prima» aggiornata a ogni
 scorrimento e a ogni misura: il paragrafo in cima alla vista resta in cima
 (`readingPoint`, `keepReadingPoint`), e ogni sagoma va dal rettangolo che si
 vedeva, anche a metà di una corsa, a quello nuovo. Lo zoom e i fogli rifatti
 da una modifica scritta li annuncia il motore: lo zoom tiene il centro della
 vista, un foglio nuovo esce da quello sopra, di uno tolto resta una sagoma
-(`.rich-sheet-ghost`) che si dissolve. Un documento aperto o cambiato da
-fuori non muove niente; le coreografie `rich-*` di `bench/motion-rules.mjs`
-lo misurano.
+(`.rich-sheet-ghost`) che si dissolve. Un documento aperto o cambiato da fuori
+non muove niente; le coreografie `rich-*` di `bench/motion-rules.mjs` lo misurano.
 
 Andare a un punto (Trova, la revisione dopo o prima, una voce di Commenti o
 di Revisioni) è una transazione col segno `GO_TO`. Il motore la scorre da sé,
@@ -407,9 +407,9 @@ adattatore per formato.
   il collegamento dell'host (`HostWiring::MachineDictionaries`).
 - Il client, `apps/client/src/editors/core/proof.ts`, non conosce CodeMirror
   né formati. Legge le impostazioni, spezza le richieste entro i limiti della
-  route, ricorda i segmenti già controllati, converte gli offset in code unit
-  UTF-16 e scarta le risposte arrivate dopo un cambio di configurazione. Senza
-  la feature (`unserved`) risponde `null`.
+  route, converte gli offset in code unit UTF-16 e scarta le risposte tardive;
+  i segmenti controllati col dizionario presente stanno in una LRU dell'app
+  (`ProofCache`) per le superfici rimontate. Senza feature risponde `null`.
 - L'adattatore del formato estrae la prosa e tiene la mappa a pezzi verso il
   buffer. Quello Markdown
   (`apps/client/src/editors/text/profiles/markdown/proof.ts`) mette `U+FFFC`

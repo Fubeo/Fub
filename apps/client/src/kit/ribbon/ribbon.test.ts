@@ -719,3 +719,163 @@ describe("la barra del kit, un menu nell'accesso rapido", () => {
     expect(document.getElementById("context-menu")).toBeNull();
   });
 });
+
+describe("la barra del kit, le due classi di ogni pezzo", () => {
+  /// I pezzi che il kit fa da sé nella barra montata qui sotto: testata,
+  /// sezioni, vassoio, foglietti, pulsanti, campi e lettere.
+  const PARTS = [
+    "head",
+    "quick",
+    "tabs",
+    "toggle",
+    "panels",
+    "panel",
+    "toolbar",
+    "group",
+    "group-label",
+    "group-body",
+    "group-toggle",
+    "stack",
+    "row",
+    "item",
+    "button",
+    "small",
+    "large",
+    "label",
+    "glyph",
+    "chevron",
+    "split",
+    "split-large",
+    "arrow",
+    "color-bar",
+    "field",
+    "select",
+    "check",
+    "contextual",
+    "keytip",
+  ];
+
+  for (const prefix of ["grid-ribbon", "rich-ribbon"]) {
+    it(`col prefisso ${prefix} ogni pezzo porta anche kit-ribbon-<pezzo>, e si cerca col prefisso`, () => {
+      ribbon.destroy();
+      document.body.replaceChildren();
+      const root = document.createElement("div");
+      const place = document.createElement("div");
+      root.append(place);
+      document.body.append(root);
+      view = { bold: false, inTable: true };
+      states = [
+        { id: "doc.bold", enabled: true },
+        { id: "doc.undo", enabled: true },
+        { id: "doc.paste", enabled: true },
+        { id: "doc.size", enabled: true },
+        { id: "doc.ruler", enabled: true },
+        { id: "doc.color", enabled: true },
+        { id: "table.addRow", enabled: true },
+      ];
+      const tabs: readonly RibbonTab<Control, Key>[] = [
+        {
+          id: "home",
+          label: "home",
+          keytip: "H",
+          groups: [
+            {
+              id: "font",
+              label: "font",
+              icon: "bold",
+              keytip: "ZF",
+              columns: [
+                { kind: "split", id: "doc.paste", label: "stamp", menuLabel: "rows", keytip: "1", size: "large", menu: () => [] },
+                {
+                  rows: [
+                    [{ kind: "button", id: "doc.bold", label: "bold", keytip: "2", glyph: "G" }],
+                    [
+                      {
+                        kind: "select",
+                        id: "doc.size",
+                        label: "font",
+                        keytip: "3",
+                        width: 48,
+                        options: () => [{ value: "11", label: { raw: "11" } }],
+                        value: () => "11",
+                        params: (value) => ({ size: value }),
+                      },
+                    ],
+                  ],
+                },
+                { kind: "check", id: "doc.ruler", label: "rows", keytip: "4", checked: () => false, params: (on) => ({ on }) },
+                { kind: "stamp", id: "doc.color", label: "stamp", keytip: "5", glyph: "A" },
+              ],
+            },
+          ],
+        },
+        TABS[1]!,
+      ];
+      const mounted = mountRibbon<View, Key, StampControl>({
+        host: place,
+        prefix,
+        menuPrefix: "doc.menu.",
+        tabs,
+        quick: [{ kind: "button", id: "doc.undo", label: "rows", keytip: "1", glyph: "↶" }],
+        mini: [],
+        chevrons: { down: "chevron", up: "chevron" },
+        strings: {
+          label: () => "Barra",
+          collapse: () => "Comprimi",
+          expand: () => "Mostra",
+          unavailable: (label, reason) => `${label}: ${reason}`,
+          empty: () => "Nessuna voce",
+          mini: () => "Mini-barra",
+          quick: () => "Accesso rapido",
+        },
+        t: (key) => WORDS[key],
+        commands: () => states,
+        commandable: () => true,
+        view: () => view,
+        contextShown: (context, now) => context === "table" && now.inTable,
+        command: () => {},
+        openDialog: () => {},
+        focus: () => {},
+        languages: () => () => {},
+        // Il pulsante del colore dei fogli: un pulsante diviso che chi monta la
+        // barra fa a mano, coi pezzi del kit scritti col prefisso, e una parte
+        // solo sua (la tavolozza) che resta col prefisso soltanto.
+        extra: (control, group, parts) => {
+          const wrap = parts.wrap(control);
+          wrap.classList.add(`${prefix}-split`);
+          const main = parts.button(control, () => parts.t(control.label), () => {});
+          const bar = document.createElement("span");
+          bar.className = `${prefix}-color-bar`;
+          main.append(bar);
+          const arrow = document.createElement("button");
+          arrow.type = "button";
+          arrow.className = `${prefix}-button ${prefix}-arrow`;
+          arrow.append(parts.chevron());
+          const swatch = document.createElement("span");
+          swatch.className = parts.cls("swatch");
+          wrap.append(main, arrow, swatch);
+          return { control, group, wrap, shown: true, update: () => {}, activate: () => {}, relabel: () => {} };
+        },
+      });
+      const ribbonEl = place.querySelector<HTMLElement>(`.${prefix}`)!;
+      expect(ribbonEl.classList.contains("kit-ribbon")).toBe(true);
+      // Alt mostra le lettere delle sezioni: anche loro sono pezzi.
+      root.dispatchEvent(new KeyboardEvent("keydown", { key: "Alt", bubbles: true }));
+      root.dispatchEvent(new KeyboardEvent("keyup", { key: "Alt", bubbles: true, cancelable: true }));
+
+      for (const part of PARTS) {
+        const mine = [...place.querySelectorAll(`.${prefix}-${part}`)];
+        expect(mine.length, `${prefix}-${part}`).toBeGreaterThan(0);
+        for (const el of mine) expect(el.classList.contains(`kit-ribbon-${part}`), `${prefix}-${part}`).toBe(true);
+        expect(place.querySelectorAll(`.kit-ribbon-${part}`).length, `kit-ribbon-${part}`).toBe(mine.length);
+      }
+      // La parte solo di chi monta la barra resta col prefisso soltanto, e
+      // `parts.cls` dà la classe sola, buona per `classList`.
+      expect(place.querySelector(`.${prefix}-swatch`)!.className).toBe(`${prefix}-swatch`);
+      // Ogni nome di sezione porta il suo doppio per la pelle.
+      const labels = [...place.querySelectorAll<HTMLElement>(".kit-tab-label")];
+      expect(labels.map((label) => label.dataset.label)).toEqual(["Home", "Tabella"]);
+      mounted.destroy();
+    });
+  }
+});

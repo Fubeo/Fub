@@ -733,6 +733,8 @@ describe("navigazione accessibile dell'esploratore", () => {
   });
 
   it("una cartella del percorso nella testata si apre nell'esplora; il nome resta il titolo", async () => {
+    // Il nome scelto dalla persona per il vault apre il percorso.
+    box.known = [{ root: "/vault", name: "Appunti", icon: null, favorite: false, last_opened: 0, keys_seen: {} }];
     await start(VAULT);
     const noteItem = () =>
       document.querySelector<HTMLElement>('#file-list li[data-path="note/Riunione.md"]');
@@ -746,9 +748,14 @@ describe("navigazione accessibile dell'esploratore", () => {
     await waitFor("la cartella si richiude", () => !noteItem());
 
     const crumb = document.querySelector<HTMLElement>(".pane.focus .pane-toolbar > .muted")!;
-    expect(crumb.textContent).toBe("note/Riunione.md");
-    const folder = crumb.querySelector<HTMLElement>("[data-folder]")!;
-    expect(folder.dataset.folder).toBe("note");
+    expect(crumb.dataset.path).toBe("note/Riunione.md");
+    // Le briciole: la cartella disegnata, il vault, la cartella, il nome.
+    expect(crumb.firstElementChild?.tagName.toLowerCase()).toBe("svg");
+    await waitFor("il nome del vault", () => crumb.querySelector("[data-folder='']")?.textContent === "Appunti");
+    expect([...crumb.querySelectorAll<HTMLElement>("[data-folder]")].map((f) => f.textContent)).toEqual(["Appunti", "note"]);
+    expect(crumb.querySelectorAll(".crumb-sep[aria-hidden='true']")).toHaveLength(2);
+    expect(crumb.querySelector(".crumb-name")?.textContent).toBe("Riunione");
+    const folder = crumb.querySelector<HTMLElement>("[data-folder='note']")!;
     expect(folder.textContent).toBe("note");
     // Due colpi sulla cartella non aprono il campo della rinomina.
     folder.dispatchEvent(new MouseEvent("click", { bubbles: true, detail: 1 }));
@@ -762,7 +769,7 @@ describe("navigazione accessibile dell'esploratore", () => {
 });
 
 describe("il formato si vede", () => {
-  it("un Word ha la sua icona nell'albero e nella scheda, e «WORD» accanto al percorso; una nota no", async () => {
+  it("un Word ha la sua icona nell'albero e nella linguetta; la testata ha solo briciole, «Salvato» e «…»", async () => {
     const rich = JSON.stringify({ format: "fub-rich", version: 1, blocks: [{ t: "para", role: { kind: "body" }, c: [{ t: "text", x: "ciao" }] }] });
     await start({ ...VAULT, "Lettera.docx": rich });
     const row = (path: string) => document.querySelector<HTMLElement>(`#file-list li[data-path="${path}"] > .tree-row`);
@@ -770,15 +777,29 @@ describe("il formato si vede", () => {
     expect(row("Lettera.docx")!.querySelector(".row-icon svg")).not.toBeNull();
     expect(row("Benvenuto.md")!.classList.contains("no-icon")).toBe(true);
     row("Lettera.docx")!.click();
-    const tag = () => document.querySelector<HTMLElement>(".pane.focus .pane-toolbar > .pane-format");
-    await waitFor("il Word si apre", () => tag()?.hidden === false);
-    expect(tag()!.textContent).toBe("WORD");
-    const tab = document.querySelector<HTMLElement>('.pane.focus .tab[aria-selected="true"]')!;
-    expect(tab.querySelector(".tab-format")).not.toBeNull();
-    expect(tab.getAttribute("aria-label")).toContain("Documento di Word");
+    const bar = () => document.querySelector<HTMLElement>(".pane.focus .pane-toolbar")!;
+    const name = () => bar().querySelector<HTMLElement>(":scope > .muted .crumb-name")?.textContent;
+    await waitFor("il Word si apre", () => name() === "Lettera.docx");
+    // Il formato non è più un'etichetta della testata: lo dice la linguetta.
+    expect(bar().querySelector(".pane-format")).toBeNull();
+    const tab = () => document.querySelector<HTMLElement>('.pane.focus .tab[aria-selected="true"]')!;
+    expect(tab().querySelector("svg.tab-format")).not.toBeNull();
+    expect(tab().getAttribute("aria-label")).toContain("Documento di Word");
+    // «Salvato» è il bottone dello stato, che ridice la parola nel nome; «…» è
+    // una figura col nome di sempre.
+    const save = bar().querySelector<HTMLButtonElement>(".pane-status-slot button.sheet-save")!;
+    await waitFor("lo stato del Word", () => save.dataset.state === "salvato");
+    expect(save.textContent).toBe("Salvato");
+    expect(save.getAttribute("aria-label")).toContain("Salvato");
+    const menu = bar().querySelector<HTMLButtonElement>(":scope > [data-pane-menu]")!;
+    expect(menu.textContent).toBe("");
+    expect(menu.querySelector(":scope > svg")).not.toBeNull();
+    expect(menu.getAttribute("aria-label")).toBe("Azioni del riquadro");
+    // Una nota ha la figura della nota nella linguetta, e nessun nome di formato.
     row("Benvenuto.md")!.click();
-    await waitFor("la nota si apre", () => tag()?.hidden === true);
-    expect(document.querySelector('.pane.focus .tab[aria-selected="true"] .tab-format')).toBeNull();
+    await waitFor("la nota si apre", () => name() === "Benvenuto");
+    expect(tab().querySelector("svg.tab-format")).not.toBeNull();
+    expect(tab().getAttribute("aria-label")).not.toContain("Documento di Word");
   });
 });
 
@@ -1254,6 +1275,47 @@ describe("apri un vault", () => {
       "Riunione",
       "Spesa",
     ]);
+  });
+
+  it("aprire e chiudere una cartella rifà solo il suo sottoalbero: le righe di fuori restano gli stessi nodi", async () => {
+    const host = await start({ ...VAULT, "zeta/Uno.md": "uno\n", "note/sotto/Tre.md": "tre\n" });
+    const entryOf = (path: string) => document.querySelector<HTMLElement>(`#file-list li[data-path="${path}"]`);
+    const outside = () => ["Benvenuto.md", "note", "zeta"].map((path) => entryOf(path));
+    const before = outside();
+    expect(before.every((li) => li !== null)).toBe(true);
+    const folderRow = entryOf("note")!.querySelector<HTMLElement>(":scope > .tree-row")!;
+    const chevron = folderRow.querySelector<HTMLButtonElement>(":scope > .chevron")!;
+
+    chevron.click();
+    await waitFor("la cartella si apre", () => entryOf("note/Spesa.md") !== null);
+    expect(outside()).toEqual(before);
+    expect(entryOf("note")!.querySelector(":scope > .tree-row")).toBe(folderRow);
+    expect(entryOf("note")!.getAttribute("aria-expanded")).toBe("true");
+    expect(chevron.getAttribute("aria-expanded")).toBe("true");
+    expect(chevron.textContent).toBe("\u25be");
+    // Il sottoalbero è quello di sempre: le sottocartelle, poi le note.
+    const group = entryOf("note")!.querySelector(":scope > .tree-children")!;
+    expect([...group.querySelectorAll<HTMLElement>(':scope > li[role="treeitem"]')].map((li) => li.dataset.path)).toEqual([
+      "note/sotto",
+      "note/Riunione.md",
+      "note/Spesa.md",
+    ]);
+    expect(group.previousElementSibling).toBe(folderRow);
+
+    chevron.click();
+    await waitFor("la cartella si chiude", () => entryOf("note/Spesa.md") === null);
+    expect(outside()).toEqual(before);
+    expect(entryOf("note")!.getAttribute("aria-expanded")).toBe("false");
+    expect(chevron.textContent).toBe("\u25b8");
+    expect(entryOf("note")!.querySelector(":scope > .tree-children:not([inert])")).toBeNull();
+
+    // Se fuori è cambiato qualcosa nel frattempo, si ridisegna tutto: niente
+    // resta indietro.
+    host.writeFromOutside("Altro.md", "altro\n");
+    chevron.click();
+    await waitFor("la cartella si apre col resto aggiornato", () =>
+      entryOf("note/Spesa.md") !== null && entryOf("Altro.md") !== null,
+    );
   });
 
   it("gli allegati stanno nell'albero: un media si apre nel visualizzatore, un file ignoto no", async () => {
@@ -3867,7 +3929,7 @@ describe("la modalità di ogni famiglia di superfici", () => {
 
   it("il bottone solo dice la modalità accesa e la cambia da un menu di scelte", async () => {
     await start(VAULT);
-    const current = document.querySelector<HTMLButtonElement>(".pane.focus .pane-toolbar .pane-mode-current")!;
+    const current = document.querySelector<HTMLButtonElement>(".pane.focus > .pane-mode-current")!;
     const pressed = () =>
       document.querySelector<HTMLElement>('.pane.focus .pane-toolbar button[data-mode][aria-pressed="true"]')?.textContent;
     expect(current.hidden).toBe(false);
@@ -3876,13 +3938,27 @@ describe("la modalità di ogni famiglia di superfici", () => {
     current.click();
     expect(current.getAttribute("aria-expanded")).toBe("true");
     const radios = [...document.querySelectorAll<HTMLElement>("#context-menu [role=menuitemradio]")];
-    expect(radios.map((item) => item.querySelector(".menu-label")?.textContent)).toEqual(["Sorgente", "Live", "Blocchi", "Lettura"]);
+    expect(radios.map((item) => item.querySelector(".menu-label")?.textContent)).toEqual(["Live", "Blocchi", "Sorgente", "Lettura"]);
     expect(radios.filter((item) => item.getAttribute("aria-checked") === "true")).toHaveLength(1);
-    radios[0]!.click();
+    radios.find((item) => item.querySelector(".menu-label")?.textContent === "Sorgente")!.click();
     await settle();
     expect(paneMode()).toBe("source");
     expect(current.textContent).toBe("Sorgente");
     expect(current.getAttribute("aria-expanded")).toBe("false");
+  });
+
+  it("con due riquadri aperti, `shell.mode.source` cambia solo quello a fuoco", async () => {
+    await start(VAULT);
+    await twoPanes();
+    const modes = () => [...document.querySelectorAll<HTMLElement>(".pane")].map((pane) => pane.dataset.mode);
+    const focused = () => [...document.querySelectorAll<HTMLElement>(".pane")].findIndex((pane) => pane.classList.contains("focus"));
+    expect(modes()).toEqual(["live_preview", "live_preview"]);
+    expect(focused()).toBe(1);
+    const registry = await import("./ui/commands");
+    await registry.allCommands().find((entry) => entry.id === "shell.mode.source")!.run!();
+    await settle();
+    expect(modes()).toEqual(["live_preview", "source"]);
+    expect(focused()).toBe(1);
   });
 
   it("una nota in Sorgente non fa aprire la tela seguente come JSON", async () => {

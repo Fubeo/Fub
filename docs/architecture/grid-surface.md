@@ -215,12 +215,12 @@ e dal libro della cartella; la scheda della tabella compare con la selezione
 dentro una tabella. La tavolozza disegna i colori del tema con le sfumature
 di ECMA-376 (`palette.ts`), le gallerie gli stili di tabella e di cella.
 
-Nello stile di Fub le schede stanno in un pozzetto nella testata, e i
-comandi su un vassoio stondato, un tono sotto la carta, in foglietti
-sollevati col nome del gruppo in grigio sotto i controlli; la pelle è nei
-blocchi `.grid-ribbon-…` di `structure.css` e `skin/editors.css`, e sotto i
-900 px del foglio (`@container sheet`) testata e vassoio si stringono di un
-passo.
+La forma e la pelle della barra sono del kit: ogni pezzo porta
+`kit-ribbon-<pezzo>` accanto a `grid-ribbon-<pezzo>`, vestito da
+`structure.css` e da «Barra a schede» in `skin/kit.css` (sezioni come le
+schede dell'ispettore, vassoio `--bar-tray`), che vengono prima; ai
+`.grid-ribbon-…` restano tavolozza, gallerie, campioni, «Comandi» e i piani
+della formula e della griglia.
 
 La barra si percorre con le frecce (un solo controllo per scheda sta nel
 Tab), Esc torna alla griglia, Alt o F10 mostrano le lettere di Excel. Quando

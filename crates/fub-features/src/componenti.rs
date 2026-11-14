@@ -15,11 +15,12 @@
 //!
 //! # Righe che non sono bundle
 //!
-//! PDF, Penna, Dizionari e i due motori sono componenti senza un bundle loro
+//! PDF, Penna, Dizionari e i tre motori sono componenti senza un bundle loro
 //! (`bundle: false`): sono sempre dentro il binario. Penna, Dizionari e i
-//! motori li richiede o li usa qualcun altro; il PDF si spegne a mano, e il suo
-//! stato sta nelle chiavi `components.*` del vault (`fub_host::componenti`),
-//! non in `plugins.disabled`. I loro id sono quelli dell'ADR, e nel manifest di
+//! motori dei documenti e dei fogli li richiede o li usa qualcun altro; il PDF
+//! e il Motore del disegno si spengono a mano, e il loro stato sta nelle
+//! chiavi `components.*` del vault (`fub_host::componenti`), non in
+//! `plugins.disabled`. I loro id sono quelli dell'ADR, e nel manifest di
 //! chi li richiede non compaiono: vedi [`SOLO_DELLA_MAPPA`].
 //!
 //! # Profili
@@ -225,6 +226,14 @@ pub fn righe() -> Vec<Riga> {
             .group("scrivere")
             .requires(&["fub.markdown"])
             .cargo_feature("tags"),
+        // La vista legge le note con compiti dall'indice di ricerca: senza, la
+        // vista lo dice. È `uses`, non `requires`, perché la ricerca non offre servizi.
+        #[cfg(feature = "tasks")]
+        Riga::modalita("fub.tasks", "component.tasks.name")
+            .group("scrivere")
+            .requires(&["fub.markdown"])
+            .uses(&["fub.search"])
+            .cargo_feature("tasks"),
         #[cfg(feature = "properties")]
         Riga::servizio("fub.properties", "component.properties.name")
             .group("scrivere")
@@ -292,11 +301,24 @@ pub fn righe() -> Vec<Riga> {
             .group("scrivere")
             .requires(&["fub.markdown", "fub.dizionari"])
             .cargo_feature("proof"),
+        // I disegni usano il motore se c'è (`uses`, non `requires`): spento il
+        // motore, o compilato senza, si disegna con gli strumenti semplici.
         #[cfg(feature = "draw")]
         Riga::servizio("fub.draw", "component.draw.name")
             .group("disegnare")
+            .uses(&["fub.motore-vettoriale"])
             .ui(&["editors/spatial"])
             .cargo_feature("draw"),
+        // Il motore del disegno (`fub-disegno` in `fub-host`): ha un
+        // interruttore suo, acceso di serie, e non è di supporto. Richiede i
+        // disegni, che senza di lui restano; non è un bundle, quindi spento a
+        // mano sta in `components.off`, come il PDF.
+        #[cfg(feature = "engine-drawing")]
+        Riga::motore("fub.motore-vettoriale", "component.motore-vettoriale.name")
+            .group("disegnare")
+            .requires(&["fub.draw"])
+            .cargo_feature("engine-drawing")
+            .senza_bundle(),
         // I file delle app Craft: il bundle e i formati stanno in `fub-host`.
         // Spento il componente, l'anteprima non c'è e i formati restano.
         #[cfg(feature = "craft")]
@@ -321,7 +343,9 @@ pub fn righe() -> Vec<Riga> {
             .cargo_feature("xlsx"),
         // Il bundle porta `canvas.apply`, che cambia una `.canvas` con le
         // operazioni del nucleo (`fub-canvas-core`); l'editor sta nel client.
-        // Spenta, l'host non registra nemmeno il formato `.canvas`.
+        // Spenta, l'host non registra nemmeno il formato `.canvas`. Il Motore
+        // del disegno (`fub.motore-vettoriale`) ora è una riga della mappa, ma
+        // la lavagna non lo usa ancora: lo userà con N6.
         #[cfg(feature = "lavagna")]
         Riga::modalita("fub.lavagna", "component.lavagna.name")
             .group("pensare")
@@ -492,6 +516,11 @@ const DESCRIZIONI: &[(&str, &str, &str)] = &[
         "Every tag in the vault, and the notes that carry it.",
     ),
     (
+        "component.tasks.description",
+        "I compiti aperti di tutte le note, per scadenza, da spuntare dove stanno.",
+        "The open tasks of every note, by due date, to check where they are.",
+    ),
+    (
         "component.properties.description",
         "Le proprietà in testa alla nota, da leggere e cambiare.",
         "The properties at the top of a note, to read and change.",
@@ -602,6 +631,11 @@ const DESCRIZIONI: &[(&str, &str, &str)] = &[
         "Page layout and commands for documents.",
     ),
     (
+        "component.motore-vettoriale.description",
+        "Disegna, sposta e cambia le forme dei disegni. Spento, i disegni usano gli strumenti semplici.",
+        "Draws, moves and reshapes the shapes in drawings. When off, drawings use the simple tools.",
+    ),
+    (
         "component.motore-fogli.description",
         "Formule, calcolo e comandi dei fogli.",
         "Formulas, calculation and commands for spreadsheets.",
@@ -643,6 +677,7 @@ const NOMI: &[(&str, &str, &str)] = &[
     ("component.backlinks.name", "Collegamenti", "Backlinks"),
     ("component.outline.name", "Struttura", "Structure"),
     ("component.tags.name", "Tag", "Tags"),
+    ("component.tasks.name", "Compiti", "Tasks"),
     ("component.properties.name", "Proprietà", "Properties"),
     ("component.template.name", "Template", "Template"),
     ("component.queries.name", "Query", "Queries"),
@@ -676,6 +711,11 @@ const NOMI: &[(&str, &str, &str)] = &[
         "component.motore-documenti.name",
         "Motore dei documenti",
         "Document engine",
+    ),
+    (
+        "component.motore-vettoriale.name",
+        "Motore del disegno",
+        "Drawing engine",
     ),
     (
         "component.motore-fogli.name",

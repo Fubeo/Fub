@@ -76,7 +76,18 @@ vi.mock("../host/dialog", () => ({
 }));
 vi.mock("../host/query", () => ({ settings: async () => box.entries }));
 vi.mock("../state/kernel", () => ({ onEvent: vi.fn() }));
-vi.mock("../ui/commands", () => ({ allCommands: () => [], keybindingKey: (id: string) => id, newKinds: () => ["note"] }));
+vi.mock("../ui/commands", async (importOriginal) => {
+  // La porta della riga di un componente è quella vera: la registra il
+  // pannello, la chiama chi dice «Accendi…».
+  const actual = await importOriginal<typeof import("../ui/commands")>();
+  return {
+    allCommands: () => [],
+    keybindingKey: (id: string) => id,
+    newKinds: () => ["note"],
+    registerComponentRow: actual.registerComponentRow,
+    showComponent: actual.showComponent,
+  };
+});
 vi.mock("../ui/a11y", () => ({ trapFocus: () => () => {} }));
 vi.mock("../ui/motion", () => ({
   enterSurface: () => {},
@@ -89,6 +100,7 @@ vi.mock("../ui/notify", () => ({ notify: box.notify }));
 // sostituibile e un import statico legherebbe settings all'IPC reale.
 const { createFakeHost } = await import("../host/fake");
 const { mountSettings } = await import("./settings");
+const { showComponent } = await import("../ui/commands");
 
 function installed(overrides: Partial<InstalledPluginInfo> = {}): InstalledPluginInfo {
   return {
@@ -636,5 +648,82 @@ describe("radiogroup del tema e della luce", () => {
         expect(radios.filter((radio) => radio.getAttribute("aria-checked") === "true")).toHaveLength(1);
       }
     });
+  });
+});
+
+describe("la riga di un componente da aprire", () => {
+  function mountPanel(): void {
+    document.body.innerHTML = `
+      <button id="open-settings"></button>
+      <section id="settings-panel" hidden>
+        <div id="settings-tabs" role="tablist">
+          <button data-tab="settings"></button>
+          <button data-tab="components"></button>
+        </div>
+        <button id="settings-close"></button>
+        <div id="settings-body"></div>
+      </section>`;
+    mountSettings({ openVault: async () => {}, reloadProvider: box.reloadProvider });
+  }
+  const panel = () => document.querySelector<HTMLElement>("#settings-panel")!;
+  const tabOf = (name: string) => document.querySelector<HTMLElement>(`button[data-tab="${name}"]`)!;
+  const searchSwitch = () => document.querySelector<HTMLInputElement>('[data-focus-key="switch:fub.search"]');
+
+  it("a pannello chiuso apre la scheda «Componenti» con la riga a fuoco e segnata", async () => {
+    mountPanel();
+    expect(showComponent("fub.search")).toBe(true);
+    await vi.waitFor(() => expect(document.activeElement).toBe(searchSwitch()));
+    expect(panel().hidden).toBe(false);
+    expect(tabOf("components").getAttribute("aria-selected")).toBe("true");
+    expect(document.querySelector('[data-component="fub.search"]')!.classList).toContain("components-row--found");
+    // Il primo gesto dell'utente toglie il segno, e il fuoco resta.
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown" }));
+    expect(document.querySelector(".components-row--found")).toBeNull();
+    expect(document.activeElement).toBe(searchSwitch());
+  });
+
+  it("a pannello aperto su un'altra scheda cambia scheda e annulla l'anteprima del tema", async () => {
+    const entries = [choiceEntry("appearance.theme", "light", ["light", "dark"])];
+    box.entries = entries;
+    box.themes = [theme("fub.serie", ["light", "dark"])];
+    document.documentElement.dataset.theme = box.themeLight;
+    box.host = createFakeHost({ settings: entries });
+    mountPanel();
+    document.querySelector<HTMLButtonElement>("#open-settings")!.click();
+    await vi.waitFor(() => expect(document.querySelectorAll('[role="radiogroup"]').length).toBeGreaterThan(1));
+    const catalog = [...document.querySelectorAll<HTMLElement>('[role="radiogroup"]')][1]!;
+    [...catalog.querySelectorAll<HTMLButtonElement>('[role="radio"]')]
+      .find((radio) => radio.dataset.themeLight === "dark")!
+      .click();
+    await vi.waitFor(() => expect(box.preview).not.toBeNull());
+
+    expect(showComponent("fub.search")).toBe(true);
+    await vi.waitFor(() => expect(document.activeElement).toBe(searchSwitch()));
+    expect(box.preview).toBeNull();
+    expect(tabOf("components").getAttribute("aria-selected")).toBe("true");
+  });
+
+  it("un componente che la mappa non ha apre la scheda e basta", async () => {
+    mountPanel();
+    expect(showComponent("fub.nessuno")).toBe(true);
+    await vi.waitFor(() => expect(document.querySelector('[data-component="fub.search"]')).not.toBeNull());
+    expect(tabOf("components").getAttribute("aria-selected")).toBe("true");
+    expect(document.querySelector(".components-row--found")).toBeNull();
+  });
+
+  it("il pannello chiuso prima che la riga arrivi non si riapre", async () => {
+    mountPanel();
+    expect(showComponent("fub.search")).toBe(true);
+    document.querySelector<HTMLButtonElement>("#settings-close")!.click();
+    await new Promise((resolve) => setTimeout(resolve, 60));
+    expect(panel().hidden).toBe(true);
+    expect(document.querySelector(".components-row--found")).toBeNull();
+  });
+
+  it("smontato il pannello, la porta non apre più niente", () => {
+    mountPanel();
+    const stop = mountSettings({ openVault: async () => {}, reloadProvider: box.reloadProvider });
+    stop();
+    expect(showComponent("fub.search")).toBe(false);
   });
 });

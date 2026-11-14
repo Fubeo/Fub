@@ -266,15 +266,24 @@ const sheets = (count) => (page) =>
 /// Un comando della shell dal registro che servono menu, lanciatore e tastiera.
 /// Senza passare da un bottone della cornice: il suo hover e la sua pressione
 /// hanno transizioni loro, che non sono il moto di questo gesto.
-/// Un punto sull'ultima riga della nota, dove un menu deve aprirsi sopra il
-/// puntatore.
+/// Un punto sull'ultima riga **che si vede** della nota, dove un menu deve
+/// aprirsi sopra il puntatore. CodeMirror disegna anche righe oltre il bordo
+/// del foglio: l'ultima del DOM può stare sotto la banda di stato (con la riga
+/// dei dati sotto il titolo, S2 T12, a 640 px di altezza ci sta), e il clic
+/// destro lì cade sulla banda, che non apre nessun menu. Vale la riga più in
+/// basso il cui punto sta dentro il riquadro visibile dello scorritore. Si
+/// misura la geometria e non `elementFromPoint`: a menu aperto il punto è
+/// coperto dal menu, e la stessa domanda deve dare lo stesso punto prima e dopo.
 const menuEdgePoint = (page) =>
   page.evaluate(() => {
-    const lines = document.querySelectorAll(".pane.focus .cm-line");
-    const line = lines[lines.length - 1]?.getBoundingClientRect();
-    return line
-      ? { x: Math.round(line.left + 40), y: Math.round(line.top + line.height / 2) }
-      : { x: 400, y: window.innerHeight - 40 };
+    const scroller = document.querySelector(".pane.focus .cm-scroller")?.getBoundingClientRect();
+    const lines = [...document.querySelectorAll(".pane.focus .cm-line")].reverse();
+    for (const line of lines) {
+      const box = line.getBoundingClientRect();
+      const point = { x: Math.round(box.left + 40), y: Math.round(box.top + box.height / 2) };
+      if (!scroller || (point.y > scroller.top && point.y < scroller.bottom)) return point;
+    }
+    return { x: 400, y: window.innerHeight - 40 };
   });
 const shellCommand = (id) => (page) =>
   page.evaluate(async (command) => {

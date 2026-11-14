@@ -15,6 +15,17 @@ export interface ExitSpec extends MotionSpec {
   layer?: HTMLElement;
 }
 
+/// Come preparare l'immagine.
+export interface PrepareOptions {
+  /// Le figlie dirette di `el` che cominciano a questa altezza o più giù (px
+  /// della finestra) restano fuori dall'immagine, con tutte quelle dopo: un
+  /// elenco lungo che esce si vede fino al bordo di ciò che lo taglia, e
+  /// copiare e posare le sue duecento righe nascoste costerebbe il fotogramma.
+  /// Il riquadro dell'immagine resta quello intero, e chi resta non si sposta:
+  /// si tolgono solo le ultime.
+  cutBelow?: number;
+}
+
 /// Un'uscita misurata e non ancora partita.
 export interface Ghost {
   /// Posa l'immagine e la anima verso `to` (di serie la sola dissolvenza),
@@ -83,7 +94,7 @@ function copyLiveState(original: Element, copy: Element): void {
 /// Misura `el` e ne prepara l'immagine. Va chiamata **prima** di toglierlo o
 /// nasconderlo; poi il chiamante cambia lo stato e chiama `play`. Nel livello
 /// «ridotto» non crea niente, qualunque sia `whenReduced`.
-export function prepareExit(el: HTMLElement): Ghost {
+export function prepareExit(el: HTMLElement, options: PrepareOptions = {}): Ghost {
   if (motionLevel() === "reduced" || motionDriver().instant || !el.isConnected) return IDLE;
   // Se stava ancora entrando, l'immagine prosegue da quella posa: il
   // rettangolo si misura a riposo e la posa passa alla corsa d'uscita.
@@ -93,12 +104,24 @@ export function prepareExit(el: HTMLElement): Ghost {
   // Un elemento senza riquadro (già nascosto) non ha un'uscita da mostrare.
   if (box.width === 0 && box.height === 0) return IDLE;
 
-  const node = el.cloneNode(true) as HTMLElement;
+  const kept = keptChildren(el, options.cutBelow);
+  let node: HTMLElement;
+  if (kept === el.children.length) {
+    node = el.cloneNode(true) as HTMLElement;
+  } else {
+    node = el.cloneNode(false) as HTMLElement;
+    for (let index = 0; index < kept; index++) node.append(el.children[index]!.cloneNode(true));
+  }
   for (const marked of [node, ...node.querySelectorAll(MARKED)]) {
     for (const name of STRIPPED) marked.removeAttribute(name);
   }
-  const originals = [el, ...el.querySelectorAll("*")];
-  const copies = [node, ...node.querySelectorAll("*")];
+  // Le coppie originale-copia, nello stesso ordine: senza le figlie tagliate.
+  const subtree = (root: Element, count: number): Element[] => [
+    root,
+    ...[...root.children].slice(0, count).flatMap((child) => [child, ...child.querySelectorAll("*")]),
+  ];
+  const originals = subtree(el, kept);
+  const copies = subtree(node, kept);
   const scrolled: [Element, number, number][] = [];
   /// Ciò che dentro l'elemento era ancora in corsa (un dialogo che saliva sul
   /// suo velo): nell'immagine prosegue verso il riposo da dov'era, invece di
@@ -160,6 +183,19 @@ export function prepareExit(el: HTMLElement): Ghost {
       return motion;
     },
   };
+}
+
+/// Quante figlie dirette di `el` entrano nell'immagine: fino alla prima che
+/// comincia a `cutBelow` o più giù. Senza taglio, tutte. Gli elementi senza
+/// riquadro (nascosti) non decidono il taglio.
+function keptChildren(el: HTMLElement, cutBelow: number | undefined): number {
+  const children = el.children;
+  if (cutBelow === undefined) return children.length;
+  for (let index = 0; index < children.length; index++) {
+    const box = children[index]!.getBoundingClientRect();
+    if ((box.width > 0 || box.height > 0) && box.top >= cutBelow) return index;
+  }
+  return children.length;
 }
 
 /// L'uscita in un colpo: misura, posa l'immagine e la anima. Il chiamante la

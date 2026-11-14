@@ -19,6 +19,7 @@ export const DOCUMENT: PartAnatomy = {
     { name: "document-tag", states: [S("rest"), S("hover"), S("focused")], hooks: ["tag", "cm-fub-tag"] },
     { name: "document-quote", states: REST, hooks: ["cm-fub-quote", "cm-fub-quote-mark"] },
     { name: "document-callout", states: [S("rest"), S("focused")], hooks: ["callout", "callout-title", "cm-fub-callout-line", "cm-fub-callout-type", "cm-fub-callout-title", "cm-fub-callout-fold"] },
+    { name: "document-list", states: REST, hooks: ["cm-fub-bullet", "cm-fub-bullet-task"] },
     { name: "document-task", states: [S("rest"), S("hover"), S("selected"), S("focused"), S("disabled")], hooks: ["task", "cm-fub-checkbox", "cm-fub-done"] },
     { name: "document-code", layers: { "markdown-code-copy": "cornice" }, states: [S("rest"), S("hover"), S("pressed"), S("focused")], hooks: ["cm-fub-code-line", "cm-fub-codeblock", "markdown-code-copy", "cm-fub-code-header", "cm-fub-code-lang", "cm-fub-code-wrap", "cm-fub-diagram-notice", "cm-fub-math-field", "cm-fub-math-popover-preview"] },
     { name: "document-figure", states: REST, hooks: ["cm-fub-hr", "math-block", "katex-display", "image-missing", "image-remote", "image-remote-load", "cm-fub-image", "cm-fub-image-selected", "cm-fub-image-handle", "cm-fub-image-size", "cm-fub-image-dialog", "cm-fub-image-shares", "craft-figure", "craft-figure-page"] },
@@ -26,6 +27,8 @@ export const DOCUMENT: PartAnatomy = {
     { name: "document-diagram", layers: { "mermaid-bar": "cornice", "mermaid-action": "cornice", "mermaid-swatches": "cornice" }, states: INTERACTIVE, hooks: ["mermaid-diagram", "mermaid-bar", "mermaid-action", "mermaid-swatches"] },
     { name: "document-blocks", layers: { "cm-fub-block-menu": "cornice" }, states: [S("rest"), S("hover"), S("selected"), S("focused")], hooks: ["cm-fub-block-handles", "cm-fub-block-add", "cm-fub-block-grip", "cm-fub-block-drop", "cm-fub-block-selected", "cm-fub-block-mark", "cm-fub-block-halo", "cm-fub-block-pass", "cm-fub-block-lift", "cm-fub-block-id", "cm-fub-block-menu", "cm-fub-color-swatch"] },
     { name: "document-page", states: [S("rest"), S("hover"), S("focused")], hooks: ["cm-fub-page-cover", "cm-fub-page-icon", "cm-fub-page-tool", "cm-fub-page-title", "cm-fub-page-check", "fub-note--wide", "fub-note--small", "fub-note--serif", "fub-note--sans", "fub-note--mono"] },
+    // La riga dei dati sotto il titolo: modificata, collegamenti, etichette.
+    { name: "document-facts", states: [S("rest"), S("hover"), S("focused")], hooks: ["note-facts", "note-fact", "note-fact-tags", "note-tag"] },
     { name: "document-properties", states: REST, hooks: ["cm-fub-frontmatter", "block-frontmatter-unparsed", "block-footnote-definition"] },
     { name: "declarative-slot", layer: "cornice", states: REST, hooks: ["ui-slot"] },
     { name: "declarative-node-content", layer: "cornice", states: REST, hooks: ["ui-heading", "empty-note"] },

@@ -17,7 +17,7 @@ export const NODES: PartAnatomy = {
     {
       name: "declarative-node-row",
       states: SELECTABLE,
-      hooks: ["clickable", "ui-list", "ui-list-item", "ui-list-item-subtitle", "ui-tree", "ui-tree-item", "ui-tree-label", "ui-row"],
+      hooks: ["clickable", "ui-list", "ui-list-item", "ui-list-item-icon", "ui-list-item-title", "ui-list-item-subtitle", "ui-tree", "ui-tree-item", "ui-tree-label", "ui-row"],
     },
     { name: "declarative-node-table", states: REST, hooks: ["ui-table", "ui-empty-cell"] },
     { name: "declarative-node-tabs", states: SELECTABLE, hooks: ["ui-tab-bar", "ui-tab-button"] },

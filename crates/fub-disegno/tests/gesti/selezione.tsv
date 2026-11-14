@@ -1,0 +1,3 @@
+# Le differenze ammesse fra la selezione del motore e i vettori dei gesti
+# (docs/reference/scene-gestures.md): vettore<TAB>perché.
+connettore-segue	il connettore che segue l'oggetto spostato lo riscrive il client (K5 T10), non la selezione del motore

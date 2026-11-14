@@ -179,7 +179,10 @@ describe("il prezzo di un ridisegno (§2.9)", () => {
     const entryPages = queries(host)
       .filter(
         (q): q is Extract<IndexQuery, { kind: "entries" }> =>
+          // Le domande dell'albero: ogni specie di voce. La riga dei dati della
+          // nota aperta chiede le sole note della sua cartella, ed è un'altra.
           q.kind === "entries" &&
+          q.of_kind == null &&
           q.within?.path === "" &&
           q.within.descendants === false,
       )

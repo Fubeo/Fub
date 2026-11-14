@@ -144,6 +144,19 @@ describe("i cenni (B5, B6)", () => {
     expect(document.querySelector(".cm-fub-heading-pill-button")).toBeNull();
   });
 
+  it("la pastiglia del titolo non prende altezza nella riga", () => {
+    // Compare solo col cursore sul titolo: se il suo supporto fosse alto, il
+    // titolo crescerebbe entrando e calerebbe uscendo, e tutto sotto salterebbe
+    // (al titolo di 40 px erano 9 px). Il supporto è un punto sulla linea di
+    // base, e il pulsante gli sta sopra fuori dal flusso.
+    live("# Benvenuto| in Fub\n\naltro");
+    const holder = document.querySelector<HTMLElement>(".cm-fub-heading-pill")!;
+    const button = holder.querySelector<HTMLElement>(".cm-fub-heading-pill-button")!;
+    expect(getComputedStyle(holder).height).toBe("0px");
+    expect(getComputedStyle(holder).width).toBe("0px");
+    expect(getComputedStyle(button).position).toBe("absolute");
+  });
+
   it("il segnaposto sta sulla riga vuota del cursore e non è nel testo", () => {
     const view = live("prima\n|\ndopo");
     expect(document.querySelector(".cm-fub-placeholder")?.textContent).toBe("Scrivi, oppure premi / per i comandi");

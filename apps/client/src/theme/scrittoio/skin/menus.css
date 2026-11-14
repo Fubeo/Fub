@@ -67,19 +67,25 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
-/* La scorciatoia: a destra, in grafite, con le cifre in colonna. Non è una
-   pastiglia — in una colonna di voci dieci bordini farebbero rumore. */
+/* La scorciatoia: a destra, in grafite, in un tasto come nel mockup — un velo
+   e un filo sotto, senza bordino — con le cifre in colonna. Sta prima della
+   spunta, che chiude la riga. Scelta dell'utente (B), 2026-11-04. */
 .context-menu .menu-hint {
   flex: none;
+  order: 2;
+  min-width: 20px;
   margin-left: auto;
-  padding: 0 0 0 var(--space-5);
+  padding: 0 var(--space-2);
   border: none;
-  background: transparent;
+  border-radius: var(--radius-xs);
+  background: var(--overlay-hover);
+  box-shadow: inset 0 -1px 0 var(--border);
   color: var(--muted);
-  font-family: var(--font-mono);
+  font-family: var(--font-ui);
   font-size: var(--text-xs);
   font-variant-numeric: tabular-nums;
-  line-height: var(--leading-tight);
+  line-height: 18px;
+  text-align: center;
 }
 .context-menu button:focus-visible .menu-hint {
   color: var(--accent);
@@ -141,19 +147,20 @@
   text-overflow: ellipsis;
 }
 
-/* **Il segno della scelta** sta in una colonna fissa a sinistra. Nel markup
-   viene dopo il nome ed è un carattere: qui passa davanti (`order`), il
-   carattere si spegne e la spunta si disegna — la stessa delle caselle.
-   Le voci senza scelta dello stesso menu tengono il posto della colonna, così
-   i nomi cadono tutti sulla stessa verticale. */
+/* **Il segno della scelta** chiude la riga, a destra, come nel mockup. Nel
+   markup è un carattere: si spegne e la spunta si disegna in blu — la stessa
+   delle caselle, anche per una scelta fra alternative. Senza una colonna a
+   sinistra i nomi cadono tutti sulla stessa verticale. Scelta dell'utente
+   (B), 2026-11-04. */
 .context-menu .menu-check {
   display: inline-flex;
   flex: none;
-  order: -1;
+  order: 3;
   align-items: center;
   justify-content: center;
   width: 16px;
   height: 16px;
+  margin-inline-start: var(--space-4);
   font-size: 0;
 }
 .context-menu button[aria-checked="true"] .menu-check::before {
@@ -162,16 +169,6 @@
   height: 10px;
   background: var(--accent);
   clip-path: polygon(8% 54%, 20% 42%, 40% 62%, 80% 20%, 92% 32%, 40% 86%);
-}
-/* Una scelta fra alternative ha il pallino, un interruttore la spunta. */
-.context-menu button[role="menuitemradio"][aria-checked="true"] .menu-check::before {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  clip-path: none;
-}
-.context-menu:has(.menu-check) button:not(:has(.menu-check)) {
-  padding-left: calc(var(--space-4) * 2 + 16px);
 }
 
 /* Un filetto rientrato, con la sua aria sopra e sotto. A metà del
@@ -230,6 +227,8 @@
 }
 .context-menu .menu-more {
   padding-left: var(--space-4);
+  background: transparent;
+  box-shadow: none;
 }
 
 /* Un gruppo con un nome è per chi ascolta: chi guarda vede le voci e il
@@ -239,8 +238,8 @@
   flex-direction: column;
 }
 
-/* **La testata** dice che cosa si è toccato: l'icona, il tipo in maiuscoletto
-   e il nome. Non si sceglie e non prende il fuoco. */
+/* **La testata** dice che cosa si è toccato: l'icona, il tipo in tondo e il
+   nome. Non si sceglie e non prende il fuoco. */
 .context-menu .menu-head {
   display: flex;
   align-items: center;
@@ -248,10 +247,8 @@
   min-width: 0;
   padding: var(--space-1) var(--space-4) var(--space-3);
   color: var(--muted);
-  font-size: var(--text-xs);
-  font-weight: var(--weight-bold);
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
   white-space: nowrap;
 }
 .context-menu .menu-head > svg {
@@ -263,9 +260,7 @@
   overflow: hidden;
   color: var(--text);
   font-size: var(--text-base);
-  letter-spacing: 0;
   text-overflow: ellipsis;
-  text-transform: none;
 }
 
 /* **La riga degli appunti**: Taglia, Copia e Incolla come tre pulsanti con
@@ -520,10 +515,8 @@
   position: relative;
   padding: var(--space-5) var(--space-5) var(--space-2);
   color: var(--muted);
-  font-size: var(--text-xs);
-  font-weight: var(--weight-bold);
-  letter-spacing: var(--tracking-caps);
-  text-transform: uppercase;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
 }
 .slash-panel .slash-group:first-of-type .slash-section {
   padding-top: var(--space-2);
@@ -640,10 +633,8 @@
 }
 .slash-panel .slash-preview-title {
   color: var(--muted);
-  font-size: var(--text-xs);
-  font-weight: var(--weight-bold);
-  letter-spacing: var(--tracking-caps);
-  text-transform: uppercase;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
 }
 /* L'anteprima: un pezzo di foglio coi caratteri della nota. */
 .slash-panel .slash-stage {

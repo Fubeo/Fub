@@ -34,7 +34,7 @@ ascolta niente e non chiede fotogrammi.
 |---|---|---|
 | S1 | 200 caratteri in fondo a una nota di 5.000 righe | p95 tasto → fotogramma |
 | S2 | venti passaggi fra note di un vault di 10.000 | p95 gesto → nota visibile |
-| S3 | spostamento e zoom di una lavagna di 300 schede, 20 note vive | p95 e massimo fra fotogrammi |
+| S3 | spostamento e zoom di una lavagna di 300 schede, 20 note vive, partiti quando la lavagna è ferma | p95 e massimo fra fotogrammi; l'apertura in ms, solo referto |
 | S4 | trascinamento del grafo di 10.000 nodi | p95 e massimo fra fotogrammi |
 | S5 | tratto di penna di 3 s su un disegno di 2.000 tracciati | massimo fra fotogrammi |
 | S6 | avvio a freddo fino alla prima nota | ms |
@@ -61,7 +61,7 @@ La procedura è fissa:
    3 s dopo ognuno;
 3. **chiuse**: chiuse tutte le schede, una lettura dopo 10 s e una dopo 60 s
    (**chiuse.tardi**);
-4. **giri**: dieci volte tutti i file aperti e poi tutto chiuso, una lettura
+4. **giri**: trenta volte tutti i file aperti e poi tutto chiuso, una lettura
    10 s dopo ogni chiusura, e alla fine una dopo 60 s.
 
 Ogni momento si legge in tutto e per gruppo di processi
@@ -74,14 +74,32 @@ memoria che le schede chiuse tengono ancora un minuto dopo. Lo fanno le cache
 (caratteri, immagini decodificate, tessere), la memoria di JavaScript che la
 WebView non ha ancora raccolto e le pagine che l'allocatore ha liberato ma non
 ha restituito al sistema. I giri dicono se cresce: `R1.giri.primo.MiB` e
-`R1.giri.ultimo.MiB` sono il residuo dopo il primo e dopo il decimo giro,
-`R1.giri.pendenza.MiB` la retta dei minimi quadrati sui dieci residui, in MiB
-per giro, e `R1.giri.tardi.MiB` il residuo un minuto dopo l'ultimo giro; gli
+`R1.giri.ultimo.MiB` sono il residuo dopo il primo e dopo il trentesimo giro,
+`R1.giri.pendenza.MiB` la mediana delle pendenze fra ogni coppia di giri (lo
+stimatore di Theil e Sen), in MiB per giro, e `R1.giri.tardi.MiB` il residuo un minuto dopo l'ultimo giro; gli
 stessi valori ci sono per ogni gruppo. Una pendenza vicina a zero è memoria
 che torna o si riusa; una pendenza positiva è memoria che ogni giro lascia.
+
+La memoria della WebView sale e scende a dente di sega, di circa 150 MiB, col
+ritmo del suo GC. Con dieci giri e la retta dei minimi quadrati, una lettura
+alta in cima o bassa in fondo spostava la pendenza di decine di MiB: sul
+runner andava da -25 a 70 MiB per giro sullo stesso albero (#284). Trenta
+giri e la mediana la tengono entro pochi MiB, e il job WebView dura una
+dozzina di minuti in più.
 La tolleranza, fissata in K0, sta in `budgets.json`: come obiettivo (il
 cancello di K3) residuo entro 50 MiB e pendenza entro 1 MiB per giro, sul
 runner una volta e mezza il peggiore visto.
+
+S3 misura lo spostamento, non l'apertura. Il primo disegno delle 300 schede
+dura secondi sul runner, e la sua coda, se cade dopo `start`, diventa il
+massimo fra fotogrammi a seconda di quando lo scenario parte. Per questo S3
+aspetta la lavagna ferma: dalla prima `.canvas-node` conta i fotogrammi, e
+la lavagna è ferma al primo che chiude cinque intervalli di fila sotto
+100 ms. Solo dopo parte la misura. Il tempo dalla prima scheda alla lavagna
+ferma va nel referto come `S3.apertura`, col buco più lungo fra due
+fotogrammi dentro l'apertura (`S3.apertura.buco`); non hanno soglia. Una
+lavagna che non si ferma entro 15 s dalla prima scheda fa fallire lo
+scenario, col buco più lungo visto.
 
 T1 è la prima delle tre vie del piano dei componenti per la tela dei motori
 (tessere verso la WebView, superficie wgpu nativa, egui): misura il trasporto
@@ -203,6 +221,22 @@ esce con 1 se un valore supera la soglia scelta.
 
 Il job `webview` della CI fa lo stesso con S1–S3, S7, R1, T1, I1, L1 e C1, sotto Xvfb e
 senza scheda grafica, e carica il referto come artifact `webview-<sha>`.
+
+Una macchina con la scheda grafica non vede ciò che costa alla CI dipingere:
+WebKitGTK usa la GPU anche sotto `xvfb-run`, e un'ombra o una sfumatura che
+il runner ridipinge a ogni tasto lì non pesa. Per misurare come la CI, la
+WebView va obbligata a Mesa in software:
+
+```bash
+__EGL_VENDOR_LIBRARY_FILENAMES=/usr/share/glvnd/egl_vendor.d/50_mesa.json \
+LIBGL_ALWAYS_SOFTWARE=1 GALLIUM_DRIVER=llvmpipe \
+xvfb-run -a npm run bench:webview -- --only=S1 --native-driver=/usr/bin/WebKitWebDriver
+```
+
+Così S1 scende a una ventina di campioni, come in CI: la sonda misura un
+tasto alla volta, e quando un fotogramma è lento i tasti di WebDriver vi si
+accodano. Pochi campioni insieme a un p95 alto vogliono dire fotogrammi lenti
+da dipingere. Un confronto fra due versioni si fa alternando le corse.
 
 ## macOS
 

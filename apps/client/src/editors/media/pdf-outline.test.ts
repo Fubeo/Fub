@@ -79,7 +79,7 @@ it("«Adatta alla larghezza» si accende e si spegne", async () => {
   const life = new Lifetime();
   const view = mountPdfView(descriptor, new Uint8Array([1]), { loader: async () => fake(undefined) }, life);
   await settle();
-  const button = [...view.element.querySelectorAll("button")].find((b) => b.textContent === t("media.pdf.fit_width"))!;
+  const button = [...view.element.querySelectorAll("button")].find((b) => b.getAttribute("aria-label") === t("media.pdf.fit_width"))!;
   button.click();
   await settle();
   expect(button.getAttribute("aria-pressed")).toBe("true");
@@ -103,14 +103,14 @@ it("«Due pagine» affianca la dispari e la pari, e le frecce vanno di due", asy
   await settle();
   const buttons = [...view.element.querySelectorAll("button")];
   const status = view.element.querySelector("[role=status]")!;
-  buttons.find((b) => b.textContent === t("media.pdf.two_pages"))!.click();
+  buttons.find((b) => b.getAttribute("aria-label") === t("media.pdf.two_pages"))!.click();
   await settle();
   expect(status.textContent).toBe(t("media.pdf.pages", { first: 1, last: 2, count: 5 }));
-  buttons.find((b) => b.textContent === "›")!.click();
+  buttons.find((b) => b.getAttribute("aria-label") === t("media.pdf.next"))!.click();
   await settle();
   expect(status.textContent).toBe(t("media.pdf.pages", { first: 3, last: 4, count: 5 }));
   expect(drawn.slice(-2)).toEqual([2, 3]);
-  buttons.find((b) => b.textContent === "›")!.click();
+  buttons.find((b) => b.getAttribute("aria-label") === t("media.pdf.next"))!.click();
   await settle();
   // L'ultima pagina, dispari, resta sola.
   expect(status.textContent).toBe(t("media.pdf.page", { page: 5, count: 5 }));
@@ -123,7 +123,7 @@ it("«Colori scuri» inverte le pagine e torna indietro", async () => {
   const life = new Lifetime();
   const view = mountPdfView(descriptor, new Uint8Array([1]), { loader: async () => fake(undefined) }, life);
   await settle();
-  const button = [...view.element.querySelectorAll("button")].find((b) => b.textContent === t("media.pdf.dark"))!;
+  const button = [...view.element.querySelectorAll("button")].find((b) => b.getAttribute("aria-label") === t("media.pdf.dark"))!;
   const page = view.element.querySelector("canvas")!;
   button.click();
   expect(button.getAttribute("aria-pressed")).toBe("true");
@@ -139,8 +139,8 @@ it("«Miniature» apre la colonna delle pagine, che segna quella davanti e ci po
     loader: async () => ({ ...fake(undefined), renderThumbnail: async () => {} }),
   }, life);
   await settle();
-  const button = [...view.element.querySelectorAll("button")].find((b) => b.textContent === t("media.pdf.thumbnails"))!;
-  expect(button.hidden).toBe(false);
+  const button = [...view.element.querySelectorAll("button")].find((b) => b.getAttribute("aria-label") === t("media.pdf.thumbnails"))!;
+  expect(button.closest("[hidden]")).toBeNull();
   const column = view.element.querySelector<HTMLElement>("nav.media-pdf-thumbs")!;
   expect(column.hidden).toBe(true);
   button.click();
@@ -158,6 +158,6 @@ it("«Miniature» apre la colonna delle pagine, che segna quella davanti e ci po
   const bare = new Lifetime();
   const plain = mountPdfView(descriptor, new Uint8Array([1]), { loader: async () => fake(undefined) }, bare);
   await settle();
-  expect([...plain.element.querySelectorAll("button")].find((b) => b.textContent === t("media.pdf.thumbnails"))!.hidden).toBe(true);
+  expect([...plain.element.querySelectorAll("button")].find((b) => b.getAttribute("aria-label") === t("media.pdf.thumbnails"))!.closest("[hidden]")).not.toBeNull();
   bare.close();
 });

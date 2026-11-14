@@ -43,7 +43,7 @@ export interface StrokeShapesContext {
   finishHeld: (g: InkGesture) => void;
   finishShape: (g: ShapeGesture) => void;
   destinationNow: () => Destination | null;
-  followingDraft: (g: SelectGesture, m: Matrix, transforms: Map<PaintNode, string | null>) => Map<PaintNode, string>;
+  followingDraft: (g: Pick<SelectGesture, "units" | "lines">, m: Matrix, transforms: Map<PaintNode, string | null>) => Map<PaintNode, string>;
 }
 
 /// Monta le forme dal tratto e i connettori che seguono.
@@ -254,7 +254,7 @@ export function installStrokeShapes(ctx: EditorContext): void {
   /// I connettori che seguono gli oggetti presi da `g`, portati di `m`, una
   /// trasformazione della scena, per l'anteprima: i loro `d`, e in
   /// `transforms` le loro etichette dove vanno, se `g` non le porta già.
-  const followingDraft = (g: SelectGesture, m: Matrix, transforms: Map<PaintNode, string | null>): Map<PaintNode, string> => {
+  const followingDraft = (g: Pick<SelectGesture, "units" | "lines">, m: Matrix, transforms: Map<PaintNode, string | null>): Map<PaintNode, string> => {
     const paths = new Map<PaintNode, string>();
     const model = ctx.engine.model;
     if (model === null) return paths;

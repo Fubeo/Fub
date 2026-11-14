@@ -116,6 +116,19 @@ export function typingNote(sections: number): LiveCase {
   return { text, cursor: text.indexOf("Testo **forte**", Math.floor(text.length / 2)) };
 }
 
+/// La nota lunga del banco dell'apertura (`interaction.mjs --only=apertura`):
+/// `paragraphs` paragrafi di prosa semplice, «Paragrafo N: …», separati da una
+/// riga vuota. Quattromila fanno circa 765 KB, come la nota con cui il
+/// collaudo sull'app vera ha misurato l'apertura. Nessun cursore: la nota si
+/// guarda dall'alto, come dopo un clic nell'albero.
+export function longNote(paragraphs: number): LiveCase {
+  const body =
+    "una riga di prosa senza segni, abbastanza lunga da andare a capo nel foglio come il testo vero di una nota, " +
+    "con qualche parola in più perché il paragrafo pesi circa centonovanta byte.";
+  const text = Array.from({ length: paragraphs }, (_, i) => `Paragrafo ${i + 1}: ${body}`).join("\n\n");
+  return { text: `${text}\n`, cursor: null };
+}
+
 /// I casi, per nome. Il nome è quello della query (`?live=…`).
 export const LIVE_CASES: Readonly<Record<string, LiveCase>> = {
   panoramica: { text: NOTE, cursor: null },
@@ -242,6 +255,7 @@ export const LIVE_CASES: Readonly<Record<string, LiveCase>> = {
   ].join("\n")),
   "battuta-50": typingNote(50),
   "battuta-400": typingNote(400),
+  "lunga-4000": longNote(4000),
 };
 
 /// Il caso della query, o niente.

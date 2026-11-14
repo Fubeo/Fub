@@ -238,7 +238,10 @@ describe("la barra e il foglio", () => {
     mount();
     const toolbar = host.querySelector('[role="toolbar"]')!;
     expect(toolbar.getAttribute("aria-label")).toBe("Strumenti di disegno");
-    const groups = [...toolbar.querySelectorAll(".draw-group:not([hidden])")].map((group) => [group.getAttribute("role"), group.getAttribute("aria-label")]);
+    // La barra è la testa intera; la riga delle opzioni è una fila dentro.
+    expect(toolbar.classList.contains("draw-header")).toBe(true);
+    expect(toolbar.querySelector(".draw-toolbar")!.hasAttribute("role")).toBe(false);
+    const groups = [...toolbar.querySelectorAll(".draw-toolbar .draw-group:not([hidden])")].map((group) => [group.getAttribute("role"), group.getAttribute("aria-label")]);
     expect(groups).toEqual([
       ["group", "Colore"],
       ["radiogroup", "Spessore"],
@@ -253,9 +256,10 @@ describe("la barra e il foglio", () => {
     expect(rail.getAttribute("aria-label")).toBe("Strumenti");
     expect(rail.getAttribute("aria-orientation")).toBe("vertical");
     const tools = railSlots();
-    expect(tools.map((control) => control.getAttribute("aria-label"))).toEqual(["Selezione", "Mano", "Penna", "Gomma", "Rettangolo"]);
-    expect(tools.map((control) => control.getAttribute("aria-pressed"))).toEqual(["false", "false", "true", "false", "false"]);
-    expect(railNames()).toEqual(["Selezione", "Mano", "Zoom", "Penna", "Evidenziatore", "Gomma", "Rettangolo", "Ellisse", "Linea", "Freccia"]);
+    expect(tools.map((control) => control.getAttribute("aria-label"))).toEqual(["Selezione", "Mano", "Penna", "Gomma", "Rettangolo", "Testo"]);
+    expect(tools.map((control) => control.getAttribute("aria-pressed"))).toEqual(["false", "false", "true", "false", "false", "false"]);
+    expect(tools[5]!.getAttribute("aria-keyshortcuts")).toBe("T");
+    expect(railNames()).toEqual(["Selezione", "Mano", "Zoom", "Penna", "Evidenziatore", "Gomma", "Rettangolo", "Ellisse", "Linea", "Freccia", "Testo"]);
     expect(tools[4]!.getAttribute("aria-keyshortcuts")).toBe("R");
     tools[4]!.focus();
     expect(document.getElementById(tools[4]!.getAttribute("aria-describedby")!)?.textContent).toMatch(/^Rettangolo \(R\) — .*Maiusc/);
@@ -270,15 +274,44 @@ describe("la barra e il foglio", () => {
     expect(surface().getAttribute("aria-label")).toBe("Foglio del disegno");
   });
 
-  it("danno alla barra un solo punto di tabulazione, e le frecce la percorrono", () => {
-    mount();
-    const buttons = [...host.querySelectorAll<HTMLButtonElement>('.draw-toolbar[role="toolbar"] button:not([hidden])')];
-    expect(buttons.filter((control) => control.tabIndex === 0)).toHaveLength(1);
-    buttons[0]!.focus();
-    key("ArrowRight", {}, buttons[0]!);
-    expect(document.activeElement).toBe(buttons[1]);
-    expect(buttons[1]!.tabIndex).toBe(0);
-    expect(buttons[0]!.tabIndex).toBe(-1);
+  it("danno alla testa un solo punto di tabulazione, e le frecce la percorrono dal menu a «Esporta»", () => {
+    mount(SOURCE, { onExport: () => {} });
+    const header = host.querySelector<HTMLElement>('.draw-header[role="toolbar"]')!;
+    const controls = (): HTMLElement[] => [...header.querySelectorAll<HTMLElement>("button, input, select")];
+    const reachable = (): HTMLElement[] =>
+      controls().filter((control) => !(control as HTMLButtonElement).disabled && control.closest("[hidden]") === null && !(control instanceof HTMLInputElement && control.type === "range"));
+    // Un solo controllo della testa sta nel Tab: il menu del disegno, il primo.
+    const stops = controls().filter((control) => control.tabIndex === 0);
+    expect(stops.map((control) => control.getAttribute("aria-label"))).toEqual(["Disegno"]);
+    const menu = stops[0]!;
+    menu.focus();
+    key("ArrowRight", {}, menu);
+    const second = reachable()[1]!;
+    expect(document.activeElement).toBe(second);
+    expect(second.tabIndex).toBe(0);
+    expect(menu.tabIndex).toBe(-1);
+    // Ai capi la fila gira: «Esporta» è l'ultimo, e da lì si torna al menu.
+    key("End", {}, second);
+    const last = document.activeElement as HTMLElement;
+    expect(last.getAttribute("aria-label")).toBe("Esporta");
+    key("ArrowRight", {}, last);
+    expect(document.activeElement).toBe(menu);
+    key("ArrowLeft", {}, menu);
+    expect(document.activeElement).toBe(last);
+    key("Home", {}, last);
+    expect(document.activeElement).toBe(menu);
+    expect(controls().filter((control) => control.tabIndex === 0)).toEqual([menu]);
+  });
+
+  it("vestono la testa del kit: il vassoio, i foglietti e i pulsanti", () => {
+    mount(SOURCE, { onExport: () => {} });
+    const header = host.querySelector<HTMLElement>(".draw-header")!;
+    expect(header.classList.contains("kit-bar")).toBe(true);
+    for (const group of header.querySelectorAll(".draw-group")) expect(group.classList.contains("kit-bar-group"), group.getAttribute("aria-label") ?? group.className).toBe(true);
+    for (const control of header.querySelectorAll(".draw-button")) expect(control.classList.contains("kit-bar-button"), control.getAttribute("aria-label") ?? "").toBe(true);
+    // La colonna e la barra della selezione hanno la loro pelle.
+    for (const control of host.querySelectorAll(".draw-rail .draw-button, .draw-arrange .draw-button")) expect(control.classList.contains("kit-bar-button")).toBe(false);
+    expect(host.querySelector(".draw-rail .draw-group")!.classList.contains("kit-bar-group")).toBe(false);
   });
 
   it("hanno in alto il menu del disegno, Annulla e Ripeti", () => {
@@ -552,7 +585,7 @@ describe("l'evidenziatore e il colore", () => {
     editor.select(["o1a2b3c4d"]);
     editor.setWorkspace("full");
     expect(editor.workspace).toBe("full");
-    expect(railNames()).toEqual(["Selezione", "Mano", "Zoom", "Penna", "Evidenziatore", "Gomma", "Rettangolo", "Ellisse", "Linea", "Freccia"]);
+    expect(railNames()).toEqual(["Selezione", "Mano", "Zoom", "Penna", "Evidenziatore", "Gomma", "Rettangolo", "Ellisse", "Linea", "Freccia", "Testo"]);
     expect(free()).toBe(true);
     expect(railTool("Evidenziatore").title).toBe("Evidenziatore (Shift+P)");
     // Lo strumento, il documento, la selezione e la cronologia restano.
@@ -6715,7 +6748,7 @@ describe("lo spazio di lavoro e la colonna personalizzata", () => {
     mount(SOURCE, { workspace: "simple", onWorkspace });
     expect(host.querySelector<HTMLElement>(".draw-editor")!.dataset.workspace).toBe("simple");
     expect(rail().dataset.size).toBe("large");
-    expect(railNames()).toEqual(["Selezione", "Mano", "Zoom", "Penna", "Evidenziatore", "Gomma", "Rettangolo", "Ellisse", "Linea", "Freccia"]);
+    expect(railNames()).toEqual(["Selezione", "Mano", "Zoom", "Penna", "Evidenziatore", "Gomma", "Rettangolo", "Ellisse", "Linea", "Freccia", "Testo"]);
     expect(fullButton().hidden).toBe(false);
 
     fullButton().click();

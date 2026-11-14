@@ -36,7 +36,7 @@
 // poi rilegge l'impostazione dal canale dati, quindi il banco scrive tutte e
 // due — la cache qui sotto, prima che `main.ts` giri, e il valore di
 // `appearance.theme` fra le impostazioni che serve.
-import { COMPONENT_SCENARIO, createFakeHost, type GridBytesFake, type Options } from "../src/host/fake";
+import { COMPONENT_SCENARIO, createFakeHost, type DrawingFake, type GridBytesFake, type Options } from "../src/host/fake";
 import { MARKDOWN_SYNTAX } from "../src/rules/syntax.generated";
 import XLSX_GRID from "../src/__fixtures__/xlsx-grid.json";
 import RICH_PROJECTION from "../src/__fixtures__/rich-projection.json";
@@ -46,6 +46,9 @@ import type {
   BundleInfo,
   CommandSpec,
   DocumentMatch,
+  DrawingGesture,
+  DrawingLoss,
+  DrawingOutcome,
   IndexQuery,
   IndexResult,
   JobStatus,
@@ -60,6 +63,7 @@ import type {
 import { inShellLanguage } from "./fake-english";
 import { SPECS as SLASH_SPECS } from "../src/panels/slash/fixture.test-data";
 import { CONNECTORS_DOC, connectorsFixture, type ConnectorsFixture } from "./connectors-fixture";
+import { DEFS_ID } from "../src/editors/spatial/scene/ids";
 import { LARGE_DOC, largeFixture, type LargeFixture } from "./large-fixture";
 import { LIVE_DOC, liveCase } from "./live-fixture";
 import { PHOTO_CRAFT, photoCase, photoResources } from "./photo-fixture";
@@ -367,7 +371,9 @@ if (RAW_SCENE !== null && (PHOTO !== null || CRAFT_SCENE !== null)) throw new Ra
 
 /// Il PDF e il Word delle scene T31 (`?pdf-scena=nota|nota-senza|domanda|due-righe`,
 /// vedi `craft-fixture.ts`): la nota che incorpora il PDF, la scheda del PDF
-/// con la domanda sulle anteprime, il Word prestato con la domanda.
+/// con la domanda sulle anteprime, il Word prestato con la domanda. Con
+/// `?pdf-scena=annotato` (S2 T29) il PDF ha le sue annotazioni e la feature
+/// `draw` è accesa.
 const PDF_SCENE = pdfSceneCase(params.get("pdf-scena"));
 if (PDF_SCENE !== null && (PHOTO !== null || CRAFT_SCENE !== null || RAW_SCENE !== null)) throw new RangeError("pdf-scena is a vault of its own");
 
@@ -421,6 +427,87 @@ const DRAWING = CONNECTORS !== null
   : LARGE !== null
     ? { doc: LARGE_DOC, text: LARGE.text }
     : null;
+
+// `?drawing=acceso|spento|errore` dà al banco il motore del disegno (K5 T23),
+// per le scene del chip del motore (`draw-engine-*` in `scene.mjs`). Senza,
+// come l'host senza il componente, le porte del disegno rispondono
+// `unserved` e il disegno resta sugli strumenti semplici, come lo conoscono
+// le foto di prima.
+//
+// - `acceso`: l'apertura dice due parti che restano come sono, due righe
+//   delle parti del corpus (`crates/fub-disegno/tests/corpus/perdite.tsv`)
+//   sugli elementi del disegno dei connettori: le risorse in `<defs>` e la
+//   prima forma. I gesti rispondono le operazioni dei vettori dei gesti
+//   (`__fixtures__/disegno-gesti/`) quando il disegno e lo strumento sono
+//   quelli di un vettore; ogni altro gesto non scrive niente (`empty`): il
+//   motore del banco sa soltanto i vettori.
+// - `spento`: il motore spento nel vault, ogni porta del disegno `unserved`.
+// - `errore`: l'apertura fallisce con `internal`, il motore è fermo.
+const DRAWING_ENGINE_PARAM = params.get("drawing");
+if (DRAWING_ENGINE_PARAM !== null && !["acceso", "spento", "errore"].includes(DRAWING_ENGINE_PARAM)) {
+  throw new RangeError("drawing must be acceso, spento or errore");
+}
+
+/// Un vettore dei gesti, per quel che il motore del banco ne legge.
+interface BenchGestureVector {
+  readonly input: string;
+  readonly gesture: { readonly tool: string };
+  readonly expect: { readonly ops: readonly unknown[] | null; readonly selection: readonly string[]; readonly refused: DrawingOutcome["refused"] };
+}
+
+const GESTURE_VECTORS = Object.values(
+  import.meta.glob("../src/__fixtures__/disegno-gesti/*.json", { import: "default", eager: true }),
+) as BenchGestureVector[];
+
+/// Gli id nuovi che il motore del banco ha dato: uno nuovo per ogni `@n` di
+/// ogni rilascio.
+let benchDrawingIds = 0;
+
+/// L'esito di un gesto del motore del banco sulla copia di testo `text`.
+function benchDrawingOutcome(gesture: DrawingGesture, text: string): DrawingOutcome {
+  const outcome: DrawingOutcome = { revision: gesture.revision, preview: null, ops: null, selection: gesture.selection, losses: [], refused: null, frame: null };
+  if (gesture.phase !== "commit") return outcome;
+  const vector = GESTURE_VECTORS.find((each) => each.gesture.tool === gesture.tool && each.input === text);
+  if (vector === undefined) return { ...outcome, refused: "empty" };
+  const names = new Map<string, string>();
+  const real = (value: string): string =>
+    value.replace(/@(\d+)/g, (found) => {
+      if (!names.has(found)) names.set(found, `oz${String(++benchDrawingIds).padStart(7, "0")}`);
+      return names.get(found)!;
+    });
+  return {
+    ...outcome,
+    ops: vector.expect.ops === null ? null : real(JSON.stringify(vector.expect.ops)),
+    selection: vector.expect.selection.map(real),
+    refused: vector.expect.refused,
+  };
+}
+
+/// Il motore del disegno del banco, se la query ne chiede uno.
+function benchDrawingEngine(): DrawingFake | undefined {
+  if (DRAWING_ENGINE_PARAM === "spento") return { spento: () => true };
+  if (DRAWING_ENGINE_PARAM === "errore") {
+    return {
+      open: () => {
+        throw { kind: "internal", message: "banco: il motore del disegno si è fermato" };
+      },
+    };
+  }
+  if (DRAWING_ENGINE_PARAM !== "acceso") return undefined;
+  const first = CONNECTORS?.shapes[0]?.id ?? null;
+  const losses: DrawingLoss[] = [
+    { element: DEFS_ID, kind: "unmapped", detail: "dentro <defs>: una risorsa, non un oggetto del disegno" },
+    ...(first === null ? [] : [{ element: first, kind: "unmapped" as const, detail: "il motore non ne fa un oggetto suo" }]),
+  ];
+  let instances = 0;
+  return {
+    open: () => ({ instance: `banco-${++instances}`, revision: "0", mapped: 0, unmapped: losses.length, losses }),
+    gesto: (gesture, copia) => benchDrawingOutcome(gesture, copia.text),
+  };
+}
+
+/// Il motore del disegno del banco: `undefined` senza `?drawing=`.
+const DRAWING_ENGINE = benchDrawingEngine();
 
 // Il ramo Darwin deve nascere prima che `mountTitlebar` legga la piattaforma:
 // la query prepara il browser del banco, mai la shell di produzione.
@@ -537,10 +624,10 @@ const BENCH_COMMANDS: CommandSpec[] = [
   command("stats.open", "Statistiche del documento", "Parole, caratteri, collegamenti", null),
 ];
 
-/// La barra di formattazione la fotografa solo il telefono (`mobile.html`),
-/// dove sta sopra la tastiera. Nelle altre pagine i comandi sono quelli del
-/// banco, e le loro foto con loro.
-const ON_MOBILE = globalThis.window.location.pathname.endsWith("/mobile.html");
+/// La barra di formattazione la fotografa il telefono (`mobile.html`), dove
+/// sta sopra la tastiera, e la finestra principale con `?formatbar=1`. Nelle
+/// altre pagine i comandi sono quelli del banco, e le loro foto con loro.
+const ON_MOBILE = globalThis.window.location.pathname.endsWith("/mobile.html") || params.get("formatbar") === "1";
 const FORMAT_COMMANDS: CommandSpec[] = (
   [
     ["text.undo", "Annulla"],
@@ -854,10 +941,10 @@ const SETTINGS: SettingEntry[] = [
       description: "Dimensione del testo nelle superfici di lettura.",
       group: "Aspetto",
       scope: "machine",
-      kind: { kind: "number", default: 17, min: 12, max: 28 },
+      kind: { kind: "number", default: 18, min: 12, max: 28 },
       program_writable: false,
     },
-    value: 17,
+    value: 18,
     source: "default",
   },
   {
@@ -880,10 +967,10 @@ const SETTINGS: SettingEntry[] = [
       description: "Larghezza massima della colonna di lettura.",
       group: "Aspetto",
       scope: "machine",
-      kind: { kind: "number", default: 68, min: 40, max: 100 },
+      kind: { kind: "number", default: 58, min: 40, max: 100 },
       program_writable: false,
     },
-    value: 68,
+    value: 58,
     source: "default",
   },
   {
@@ -1198,10 +1285,18 @@ const KNOWN_VAULTS = [
 // La scenografia: le risposte del canale dati che `finto.ts` non dà.
 // ---------------------------------------------------------------------------
 
-/// L'organizzazione del vault: due note appuntate, tre icone, uno spazio. Il
+/// Le icone del vault: le figure monocrome `fub:<nome>`, come il mockup. Con
+/// `?icone=emoji` tornano le emoji di prima, perché una scena le possa ancora
+/// fotografare; ogni altro valore del parametro vale le figure.
+const ICONS: Record<string, string> =
+  params.get("icone") === "emoji"
+    ? { "Benvenuto.md": "👋", Guida: "📘", Diario: "📅" }
+    : { Guida: "fub:book", Diario: "fub:calendar" };
+
+/// L'organizzazione del vault: due note appuntate, le icone, uno spazio. Il
 /// finto risponde tutto vuoto — che è onesto e invisibile.
 const ORGANIZATION: Organization = {
-  icons: { "Benvenuto.md": "👋", Guida: "📘", Diario: "📅" },
+  icons: ICONS,
   pinned: ["Benvenuto.md", "Guida/Sintassi di Fub.md"],
   order: {},
   spaces: ["Guida", "Diario", "Progetti"],
@@ -1241,6 +1336,25 @@ const TAG = [
 /// Ciò che non è qui dentro passa a `finto.ts` **intatto**, regola del lancio
 /// compresa: un banco che rispondesse a tutto non direbbe più quale query la
 /// shell ha imparato a fare da sola.
+/// I dati della riga sotto il titolo, per nota: Benvenuto ha due etichette,
+/// tre collegamenti ed è stata modificata due ore prima dell'ora del banco,
+/// come nel prototipo. La nota delle scene della Live (`?live=`) ha gli
+/// stessi, perché la loro foto si confronta con lo stesso stato.
+const BENVENUTO_FACTS = { tags: ["tema", "banco"], links: 3, mtime: Date.parse("2026-08-19T07:30:00+02:00") };
+const NOTE_FACTS: Record<string, { tags: string[]; links: number; mtime: number }> = {
+  "Benvenuto.md": BENVENUTO_FACTS,
+  [LIVE_DOC]: BENVENUTO_FACTS,
+};
+
+/// I documenti nominati da una domanda ristretta (`theseDocuments`), o `null`
+/// per una domanda su tutto il vault.
+function askedDocs(expr: QueryExpr): string[] | null {
+  if (expr.any.length === 0) return null;
+  const docs = expr.any.flatMap((clause) => clause.all.flatMap((literal) =>
+    !literal.negated && literal.predicate.kind === "docs" ? literal.predicate.docs : []));
+  return docs.length > 0 ? docs : null;
+}
+
 const RESPONSES: Partial<Record<IndexQuery["kind"], (q: IndexQuery) => IndexResult>> = {
   render_preview: (q) => {
     const doc = (q as { doc: string }).doc;
@@ -1256,7 +1370,19 @@ const RESPONSES: Partial<Record<IndexQuery["kind"], (q: IndexQuery) => IndexResu
     }
     return { kind: "render_embed", value: { doc_id: doc, html: OUTPUT[doc], parts: [] } };
   },
-  tags: () => ({ kind: "tags", value: { items: TAG, offset: 0, total: TAG.length } }),
+  // Le etichette di tutto il vault; quelle di una nota sola (la riga dei
+  // dati sotto il titolo) sono della nota Benvenuto, come il prototipo.
+  tags: (q) => {
+    const docs = q.kind === "tags" ? askedDocs(q.matching) : null;
+    if (docs === null) return { kind: "tags", value: { items: TAG, offset: 0, total: TAG.length } };
+    const items = docs.flatMap((doc) => NOTE_FACTS[doc]?.tags ?? []).map((name) => ({ name, count: 1 }));
+    return { kind: "tags", value: { items, offset: 0, total: items.length } };
+  },
+  // Quante note citano una nota: il finto non tiene i backlink.
+  backlinks: (q) => {
+    const total = q.kind === "backlinks" ? (NOTE_FACTS[q.target]?.links ?? 0) : 0;
+    return { kind: "backlinks", value: { items: [], offset: 0, total } };
+  },
   organization: () => ({ kind: "organization", value: ORGANIZATION }),
   jobs: () => ({ kind: "jobs", value: JOBS }),
 };
@@ -1266,30 +1392,50 @@ const RESPONSES: Partial<Record<IndexQuery["kind"], (q: IndexQuery) => IndexResu
 /// fotografare senza inventarsi del markup: **non c'è markup**, c'è un albero
 /// del contratto e il renderer della shell.
 const TREES: Record<string, UiNode> = {
+  // La forma è quella del provider `outline` (fub-features): l'albero dei
+  // titoli e, sotto, «In entrata» con le note che puntano qui (le tre del
+  // prototipo, per la nota Benvenuto che il banco apre per prima).
   outline: {
-    node: "tree",
-    roots: [
+    node: "stack",
+    dir: "column",
+    gap: 2,
+    children: [
       {
-        node: "tree_item",
-        label: "Sintassi di Fub",
-        selected: false,
-        expanded: true,
-        action: { action: "goto", payload: 1 },
-        children: [
-          { node: "tree_item", label: "Titoli", selected: false, expanded: false, action: { action: "goto", payload: 2 }, children: [] },
+        node: "tree",
+        roots: [
           {
             node: "tree_item",
-            label: "Testo",
+            label: "Sintassi di Fub",
             selected: false,
             expanded: true,
-            action: { action: "goto", payload: 3 },
+            action: { action: "goto", payload: 1 },
             children: [
-              { node: "tree_item", label: "Riferimenti", selected: false, expanded: false, action: { action: "goto", payload: 4 }, children: [] },
+              { node: "tree_item", label: "Titoli", selected: false, expanded: false, action: { action: "goto", payload: 2 }, children: [] },
+              {
+                node: "tree_item",
+                label: "Testo",
+                selected: false,
+                expanded: true,
+                action: { action: "goto", payload: 3 },
+                children: [
+                  { node: "tree_item", label: "Riferimenti", selected: false, expanded: false, action: { action: "goto", payload: 4 }, children: [] },
+                ],
+              },
+              { node: "tree_item", label: "Tabella", selected: false, expanded: false, action: { action: "goto", payload: 5 }, children: [] },
+              { node: "tree_item", label: "Codice", selected: false, expanded: false, action: { action: "goto", payload: 6 }, children: [] },
             ],
           },
-          { node: "tree_item", label: "Tabella", selected: false, expanded: false, action: { action: "goto", payload: 5 }, children: [] },
-          { node: "tree_item", label: "Codice", selected: false, expanded: false, action: { action: "goto", payload: 6 }, children: [] },
         ],
+      },
+      {
+        node: "section", title: "In entrata · 3", collapsed: false, key: "outline-incoming", children: [{
+          node: "list",
+          items: [
+            { node: "list_item", title: "Sintassi di Fub", subtitle: "Guida", action: { action: "open", payload: { doc: "Guida/Sintassi di Fub.md" } }, selected: false, key: "Guida/Sintassi di Fub.md#0", drag: { kind: "document", doc: "Guida/Sintassi di Fub.md" } },
+            { node: "list_item", title: "Il banco che vede", subtitle: "Progetti", action: { action: "open", payload: { doc: "Progetti/Il banco che vede.md" } }, selected: false, key: "Progetti/Il banco che vede.md#0", drag: { kind: "document", doc: "Progetti/Il banco che vede.md" } },
+            { node: "list_item", title: "2026-08-19", subtitle: "Diario", action: { action: "open", payload: { doc: "Diario/2026-08-19.md" } }, selected: false, key: "Diario/2026-08-19.md#0", drag: { kind: "document", doc: "Diario/2026-08-19.md" } },
+          ],
+        }],
       },
     ],
   },
@@ -1302,7 +1448,7 @@ const TREES: Record<string, UiNode> = {
     gap: 4,
     children: [
       {
-        node: "section", title: "Entranti · 2", collapsed: false, key: "incoming", children: [{
+        node: "section", title: "In entrata · 2", collapsed: false, key: "incoming", children: [{
           node: "list",
           items: [
             { node: "list_item", title: "Benvenuto", subtitle: "…sta in Sintassi di Fub, i colori della nota e i link…", action: { action: "open", payload: "Benvenuto.md" }, selected: false, drag: { kind: "document", doc: "Benvenuto.md" } },
@@ -1311,7 +1457,7 @@ const TREES: Record<string, UiNode> = {
         }],
       },
       {
-        node: "section", title: "Uscenti · 2", collapsed: false, key: "outgoing", children: [{
+        node: "section", title: "In uscita · 2", collapsed: false, key: "outgoing", children: [{
           node: "list",
           items: [
             { node: "list_item", title: "Benvenuto", subtitle: "Un wikilink risolto: Benvenuto.", action: { action: "open", payload: "Benvenuto.md" }, selected: false, drag: { kind: "document", doc: "Benvenuto.md" } },
@@ -1466,8 +1612,12 @@ const options: Options = {
   },
   root: ROOT,
   view: VIEWS,
-  commands: ON_MOBILE ? [...BENCH_COMMANDS, ...FORMAT_COMMANDS] : [...BENCH_COMMANDS, ...SLASH_COMMANDS],
-  settings: [...SETTINGS, ...(DRAWING === null ? [] : DRAW_WORKSPACE), ...CRAFT_SETTINGS, ...WORKBOOK_CHROME],
+  commands: [
+    ...(ON_MOBILE ? [...BENCH_COMMANDS, ...FORMAT_COMMANDS] : [...BENCH_COMMANDS, ...SLASH_COMMANDS]),
+    // Il PDF annotato ha «Annota», il comando della feature `draw`.
+    ...(PDF_SCENE === "annotato" ? [command("pdf.annotate", "Annota il PDF", "Crea o apre le annotazioni del PDF", null, true)] : []),
+  ],
+  settings: [...SETTINGS, ...(DRAWING === null && PDF_SCENE !== "annotato" ? [] : DRAW_WORKSPACE), ...CRAFT_SETTINGS, ...WORKBOOK_CHROME],
   syntaxForms: [...MARKDOWN_SYNTAX],
   ...(WORKBOOK_DOC === null ? {} : {
     // Il JSON allarga le unioni del contratto (`kind`, `lock`) a `string`.
@@ -1479,7 +1629,11 @@ const options: Options = {
       ...(BENCH_OUTCOMES === undefined ? {} : { outcomes: BENCH_OUTCOMES }),
     } as GridBytesFake,
   }),
-  ...(DRAWING === null ? {} : { draw: true }),
+  ...(DRAWING === null && PDF_SCENE !== "annotato" ? {} : { draw: true }),
+  // Il motore del disegno (`drawing`) c'è solo con `?drawing=`: senza, le
+  // porte del disegno rispondono `unserved` come l'host senza il componente,
+  // e gli strumenti del disegno restano quelli del client.
+  ...(DRAWING_ENGINE === undefined ? {} : { drawing: DRAWING_ENGINE }),
   ...(PHOTO === null ? {} : { craft: PHOTO_CRAFT }),
   ...(CRAFT_SCENE === null ? {} : {
     craft: craftSceneCraft(CRAFT_SCENE),
@@ -1644,15 +1798,18 @@ const behind = host.module.api;
 /// vault, che non si traduce.
 const HOST_TEXT: ReadonlySet<IndexQuery["kind"]> = new Set(["settings", "jobs"]);
 
-/// L'albero di una view della scenografia, nella lingua della shell. La
-/// struttura no: le sue voci sono i titoli della nota.
+/// L'albero di una view della scenografia, nella lingua della shell. Della
+/// struttura soltanto «In entrata»: le voci dell'albero sono i titoli della nota.
 function treeOf(view: string): UiNode | undefined {
   const tree = TREES[view];
-  return tree && view !== "outline" ? inShellLanguage(tree) : tree;
+  if (!tree || view !== "outline") return tree && inShellLanguage(tree);
+  if (tree.node !== "stack") return tree;
+  return { ...tree, children: tree.children.map((child) => (child.node === "tree" ? child : inShellLanguage(child))) };
 }
 
 /// L'albero con scelta la voce il cui salto porta `payload`, e nessun'altra.
 function choose(node: UiNode, payload: unknown): UiNode {
+  if (node.node === "stack") return { ...node, children: node.children.map((item) => choose(item, payload)) };
   if (node.node === "tree") return { ...node, roots: node.roots.map((item) => choose(item, payload) as typeof item) };
   if (node.node !== "tree_item") return node;
   return {
@@ -1749,6 +1906,14 @@ export const api: typeof host.module.api = {
           value: { ...result.value, items: result.value.items.map((hit) => hit.doc === LIVE_DOC ? { ...hit, properties: [{ key: "cssclasses", value }] } : hit) },
         };
       }
+    }
+    if (q.kind === "entries" && result.kind === "entries") {
+      // L'ultima modifica delle note della riga dei dati: il finto le dà
+      // tutte a zero.
+      return {
+        ...result,
+        value: { ...result.value, items: result.value.items.map((entry) => NOTE_FACTS[entry.id] ? { ...entry, mtime: NOTE_FACTS[entry.id]!.mtime } : entry) },
+      };
     }
     if (q.kind === "documents" && result.kind === "documents") {
       const text = searchedText(q.matching);

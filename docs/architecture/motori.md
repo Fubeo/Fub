@@ -28,8 +28,8 @@ tutti nello stesso modo, da un posto solo:
 
 `fub-motori` non nomina nessun motore e non dipende da nessun adattatore. I
 motori di terzi si nominano soltanto dai loro adattatori
-(`check-engine-boundary.mjs`, `WORDCRAFT_OWNERS` e `GRIDCRAFT_OWNERS` in
-`dependency_invariant.rs`): sono gli adattatori a dipendere da `fub-motori`
+(`check-engine-boundary.mjs`, `WORDCRAFT_OWNERS`, `GRIDCRAFT_OWNERS` e
+`VECTORCRAFT_OWNERS` in `dependency_invariant.rs`): sono gli adattatori a dipendere da `fub-motori`
 e a iscrivervi il loro motore.
 
 ## I pezzi
@@ -40,7 +40,8 @@ e a iscrivervi il loro motore.
 | `Lavori` | `src/lavori.rs` | il gruppo di thread dei motori, costruito al primo lavoro |
 | `Cache`, `Budget` | `src/memoria.rs` | le cache dei motori come le vede il budget, e il budget |
 | `Tetto` | `src/pressione.rs` | il tetto della memoria e la pressione che lo abbassa |
-| `Servizi` | `src/servizi.rs` | ciò che i motori hanno in comune: `lavori()` e `memoria()` |
+| `Servizi` | `src/servizi.rs` | ciò che i motori hanno in comune: `lavori()`, `memoria()` e `caratteri()` |
+| `Caratteri` | `src/caratteri.rs` | le facce date dall'host e le famiglie generiche |
 | `Motori`, `Voce` | `src/registro.rs` | il registro dove ogni adattatore iscrive il suo motore |
 | `importa`, `verifica_copertura` | `src/catalogo.rs` | i comandi di un motore come comandi di Fub, e la prova che nessuno resta fuori |
 | `Modulo`, `Campo`, `Tipo` | `src/modulo.rs` | il modulo dei parametri di un comando, letto dallo schema del motore |
@@ -165,9 +166,16 @@ separati, con il numero di thread e il tetto che la prova sceglie
 (`Tetto::fisso`), e `Motori::nuovi(servizi)` un registro separato.
 
 `Servizi` ha i campi privati e un metodo per servizio (`lavori()`,
-`memoria()`): un servizio nuovo, come la scheda grafica o l'archivio comune
-dei caratteri, si aggiunge con il primo motore che lo usa senza cambiare chi
-usa quelli che ci sono.
+`memoria()`, `caratteri()`): uno nuovo si aggiunge senza toccare gli altri.
+
+## I caratteri
+
+Un motore non legge i caratteri del sistema: lo stesso documento esce uguale
+ovunque. L'host dà i suoi, una volta sola, con `fornisci_caratteri(Caratteri::nuovi(facce, generiche))`;
+la seconda chiamata restituisce in `Err` ciò che ha ricevuto. Le facce sono
+byte `'static`, senza copie; `Generiche` nomina le famiglie di `serif`,
+`sans-serif` e `monospace`. `caratteri()` dà a tutti la stessa `Arc`, o
+`None` prima (il motore non è pronto). Zero facce vanno bene (i testi usano il ripiego del motore).
 
 ## Come un adattatore iscrive il suo motore
 
@@ -400,6 +408,8 @@ mano: si rigenera con
   sotto il tetto; cache che liberano meno o niente; tetto zero; `Weak` morte;
   due `rispetta()` insieme senza lucchetti tenuti; i lettori di `meminfo` e di
   PSI sui campioni; `/proc/pressure` assente; letture non ripetute.
+- `crates/fub-motori/tests/caratteri.rs`: `None` prima; le stesse facce
+  dopo; il secondo `fornisci_caratteri` restituito; zero facce; dieci thread.
 - `crates/fub-motori/tests/registro.rs`: iscrizione, `scalda_per`, iscrizioni
   doppie; servizi e registro del processo; nome e numero dei thread; un panico
   in un lavoro.
