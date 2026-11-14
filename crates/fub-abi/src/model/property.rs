@@ -1,10 +1,14 @@
-//! Le proprietà del frontmatter: tipi dichiarati, valori, date e ore, e i
-//! formati di data.
+//! Le proprietà del frontmatter: tipi dichiarati, opzioni di Selezione e
+//! Stato, valori, date e ore, e i formati di data.
 
 use super::*;
 
 /// The vault's declared interpretation of a frontmatter key. The JSON source
 /// remains authoritative even when its value cannot be interpreted as this type.
+///
+/// `Select`, `Status` e `Url` stanno in coda (additivi). Il valore resta un
+/// testo del frontmatter: Selezione e Stato lo confrontano con le opzioni del
+/// registro ([`PropertyTypes::option_match`]), Url lo tiene così com'è.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum PropertyType {
@@ -15,14 +19,176 @@ pub enum PropertyType {
     Date,
     DateTime,
     Tags,
+    /// Una scelta fra le opzioni dichiarate nel registro.
+    Select,
+    /// Una scelta fra le opzioni, raggruppate in Da fare, In corso e Fatto.
+    Status,
+    /// Un indirizzo: un testo, che chi lo mostra apre come link.
+    Url,
+}
+
+impl PropertyType {
+    /// Il tipo ha opzioni nel registro (Selezione e Stato).
+    pub fn has_options(self) -> bool {
+        matches!(self, PropertyType::Select | PropertyType::Status)
+    }
+}
+
+/// I nove colori di un'opzione. Sono i nove nomi dei colori del contenuto,
+/// nello stesso ordine (`CONTENT_COLORS` in `apps/client/src/ui/sanitize.ts`
+/// e in `crates/fub-format-markdown/src/render.rs`): una tavola sola. Il
+/// colore vero lo dà il tema (`--doc-color-*`, `--doc-tint-*`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PropertyColor {
+    Gray,
+    Brown,
+    Orange,
+    Yellow,
+    Green,
+    Blue,
+    Purple,
+    Pink,
+    Red,
+}
+
+impl PropertyColor {
+    /// Tutti i colori, in ordine di dichiarazione.
+    pub const ALL: [PropertyColor; 9] = [
+        PropertyColor::Gray,
+        PropertyColor::Brown,
+        PropertyColor::Orange,
+        PropertyColor::Yellow,
+        PropertyColor::Green,
+        PropertyColor::Blue,
+        PropertyColor::Purple,
+        PropertyColor::Pink,
+        PropertyColor::Red,
+    ];
+
+    /// La parola scritta nel registro.
+    pub fn as_key(self) -> &'static str {
+        match self {
+            PropertyColor::Gray => "gray",
+            PropertyColor::Brown => "brown",
+            PropertyColor::Orange => "orange",
+            PropertyColor::Yellow => "yellow",
+            PropertyColor::Green => "green",
+            PropertyColor::Blue => "blue",
+            PropertyColor::Purple => "purple",
+            PropertyColor::Pink => "pink",
+            PropertyColor::Red => "red",
+        }
+    }
+
+    /// Il colore che quella parola nomina, o `None`.
+    pub fn from_key(s: &str) -> Option<PropertyColor> {
+        PropertyColor::ALL.into_iter().find(|c| c.as_key() == s)
+    }
+}
+
+/// Il gruppo di un'opzione di Stato.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum StatusGroup {
+    /// Da fare.
+    Todo,
+    /// In corso.
+    Doing,
+    /// Fatto.
+    Done,
+}
+
+impl StatusGroup {
+    /// I tre gruppi, nell'ordine delle corsie.
+    pub const ALL: [StatusGroup; 3] = [StatusGroup::Todo, StatusGroup::Doing, StatusGroup::Done];
+
+    /// La parola scritta nel registro.
+    pub fn as_key(self) -> &'static str {
+        match self {
+            StatusGroup::Todo => "todo",
+            StatusGroup::Doing => "doing",
+            StatusGroup::Done => "done",
+        }
+    }
+
+    /// Il gruppo che quella parola nomina, o `None`.
+    pub fn from_key(s: &str) -> Option<StatusGroup> {
+        StatusGroup::ALL.into_iter().find(|g| g.as_key() == s)
+    }
+}
+
+/// Un'opzione di una proprietà Selezione o Stato, com'è scritta nel registro.
+///
+/// Colore e gruppo restano **le parole scritte**, non l'enum: un registro
+/// scritto a mano, o da un Fub più nuovo, con un colore che questo Fub non
+/// conosce si legge lo stesso (il colore vale grigio, [`PropertyOption::color`])
+/// e, se si riscrive per un'altra ragione, la parola resta com'era. Un
+/// **campo** sconosciuto invece rende illeggibile il registro, come ogni campo
+/// sconosciuto del registro: non si riscrive.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PropertyOption {
+    /// Il testo che il frontmatter porta quando il valore è quest'opzione.
+    pub name: String,
+    /// Uno dei nove colori ([`PropertyColor::as_key`]); assente vale grigio.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub color: Option<String>,
+    /// Solo per lo Stato: `todo`, `doing` o `done`; assente vale `todo`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub group: Option<String>,
+}
+
+impl PropertyOption {
+    /// Un'opzione col solo nome.
+    pub fn named(name: impl Into<String>) -> Self {
+        PropertyOption {
+            name: name.into(),
+            color: None,
+            group: None,
+        }
+    }
+
+    /// Il colore da mostrare: quello scritto, o grigio se manca o se è una
+    /// parola che questo Fub non conosce.
+    pub fn color(&self) -> PropertyColor {
+        self.color
+            .as_deref()
+            .and_then(PropertyColor::from_key)
+            .unwrap_or(PropertyColor::Gray)
+    }
+
+    /// Il gruppo di Stato: quello scritto, o Da fare se manca o è sconosciuto.
+    pub fn group(&self) -> StatusGroup {
+        self.group
+            .as_deref()
+            .and_then(StatusGroup::from_key)
+            .unwrap_or(StatusGroup::Todo)
+    }
+}
+
+/// Dove cade un valore di Selezione o di Stato rispetto alle opzioni.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum OptionMatch<'a> {
+    /// Il testo è il nome di quest'opzione (la prima, se due hanno lo stesso
+    /// nome).
+    Found(&'a PropertyOption),
+    /// Il testo non è il nome di nessuna opzione: resta testo, segnato.
+    Outside,
 }
 
 /// Versioned, per-vault property declarations. Unrecognized schema versions
 /// cannot be silently interpreted as the current schema.
+///
+/// `options` (per chiave, le opzioni di Selezione e Stato nel loro ordine) è
+/// facoltativo e non si scrive quando è vuoto: un registro senza opzioni si
+/// serializza byte per byte come prima che il campo esistesse.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 pub struct PropertyTypes {
     pub version: u32,
     pub types: std::collections::BTreeMap<String, PropertyType>,
+    #[serde(skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub options: std::collections::BTreeMap<String, Vec<PropertyOption>>,
 }
 
 impl Default for PropertyTypes {
@@ -30,6 +196,7 @@ impl Default for PropertyTypes {
         Self {
             version: Self::VERSION,
             types: Default::default(),
+            options: Default::default(),
         }
     }
 }
@@ -41,6 +208,8 @@ impl<'de> Deserialize<'de> for PropertyTypes {
         struct Wire {
             version: u32,
             types: std::collections::BTreeMap<String, PropertyType>,
+            #[serde(default)]
+            options: std::collections::BTreeMap<String, Vec<PropertyOption>>,
         }
         let wire = Wire::deserialize(deserializer)?;
         if wire.version != PropertyTypes::VERSION {
@@ -51,6 +220,7 @@ impl<'de> Deserialize<'de> for PropertyTypes {
         Ok(Self {
             version: wire.version,
             types: wire.types,
+            options: wire.options,
         })
     }
 }
@@ -64,6 +234,36 @@ impl PropertyTypes {
             "tags" => Some(PropertyType::Tags),
             "aliases" | "alias" | "cssclasses" | "cssclass" => Some(PropertyType::List),
             _ => None,
+        })
+    }
+
+    /// Le opzioni dichiarate per `key`, nell'ordine del registro.
+    pub fn options(&self, key: &str) -> &[PropertyOption] {
+        self.options.get(key).map(Vec::as_slice).unwrap_or(&[])
+    }
+
+    /// L'opzione di `key` che si chiama `name`: la prima, se un registro
+    /// scritto a mano ne porta due con lo stesso nome.
+    pub fn option(&self, key: &str, name: &str) -> Option<&PropertyOption> {
+        self.options(key).iter().find(|option| option.name == name)
+    }
+
+    /// La proiezione di un valore di Selezione o di Stato sulle opzioni.
+    ///
+    /// `None` quando `key` non è dichiarata Selezione o Stato, o quando il
+    /// valore non è un testo (un numero, una lista, un `null`: la proiezione
+    /// tipizzata li lascia `Unknown` o `Empty`). Il confronto è esatto: il
+    /// valore è il nome dell'opzione, carattere per carattere.
+    pub fn option_match(&self, key: &str, value: &PropertyValue) -> Option<OptionMatch<'_>> {
+        if !self.resolve(key).is_some_and(PropertyType::has_options) {
+            return None;
+        }
+        let PropertyValue::Text(text) = value else {
+            return None;
+        };
+        Some(match self.option(key, text) {
+            Some(option) => OptionMatch::Found(option),
+            None => OptionMatch::Outside,
         })
     }
 }
@@ -319,7 +519,10 @@ impl PropertyValue {
                 ),
                 scalar => PropertyScalar::normalize(scalar, formats).into(),
             },
-            Some(T::Text) => match v {
+            // Selezione e Stato sono il testo dell'opzione; dove cada rispetto
+            // alle opzioni lo dice `PropertyTypes::option_match`. Url è un
+            // testo: nessuna convalida dell'indirizzo, che resta com'è scritto.
+            Some(T::Text | T::Select | T::Status | T::Url) => match v {
                 J::String(s) => PropertyValue::Text(s.clone()),
                 _ => PropertyValue::Unknown(v.clone()),
             },
