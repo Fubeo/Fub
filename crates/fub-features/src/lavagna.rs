@@ -879,7 +879,7 @@ mod tests {
     #[test]
     fn le_tredici_impostazioni_hanno_chiave_specie_e_valore_di_serie() {
         use fub_abi::settings::{SettingScope, SettingValue};
-        let want: [(&str, &str, SettingValue); 12] = [
+        let want: [(&str, &str, SettingValue); 13] = [
             (
                 "canvas.ink_mouse_remember",
                 "toggle",
