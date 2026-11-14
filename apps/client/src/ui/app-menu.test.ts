@@ -339,6 +339,46 @@ describe("il menu File e le creazioni", () => {
     teardown();
   });
 
+  it("→ su «Nuovo» apre il sottomenu e File resta aperto; ← nel sottomenu torna a «Nuovo»", async () => {
+    const teardown = mountWith(() => [{ label: "Nota", run: () => {} }, { label: "Cartella", run: () => {} }]);
+    const key = (target: Element, name: string): void => {
+      target.dispatchEvent(new KeyboardEvent("keydown", { key: name, bubbles: true, cancelable: true }));
+    };
+    const file = document.querySelector<HTMLButtonElement>("#app-menu-0")!;
+    const edit = document.querySelector<HTMLButtonElement>("#app-menu-1")!;
+    file.focus();
+    key(file, "ArrowDown");
+    const item = menuItems().find((entry) => nameOf(entry) === "Nuovo")!;
+    item.focus();
+    key(item, "ArrowRight");
+    await vi.waitFor(() => expect(document.querySelector(".context-submenu")).not.toBeNull());
+    expect(file.getAttribute("aria-expanded")).toBe("true");
+    expect(edit.getAttribute("aria-expanded")).not.toBe("true");
+    const submenu = document.querySelector<HTMLElement>(".context-submenu")!;
+    expect(submenu.contains(document.activeElement)).toBe(true);
+    key(document.activeElement!, "ArrowLeft");
+    await vi.waitFor(() => expect(document.querySelector(".context-submenu")).toBeNull());
+    expect(file.getAttribute("aria-expanded")).toBe("true");
+    expect(edit.getAttribute("aria-expanded")).not.toBe("true");
+    expect(document.activeElement).toBe(menuItems().find((entry) => nameOf(entry) === "Nuovo"));
+    teardown();
+  });
+
+  it("la ricerca non ripete «Nuova nota» come «Nuovo › Nota»", () => {
+    const teardown = mountWith(() => [
+      { label: "Nota", hint: "Ctrl+N", echoes: true, run: () => {} },
+      { label: "Cartella", run: () => {} },
+    ]);
+    document.querySelectorAll<HTMLButtonElement>("#app-menu > button")[5]!.click();
+    const input = document.querySelector<HTMLInputElement>(".app-menu-search-input")!;
+    input.value = "nota";
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    const options = [...document.querySelectorAll<HTMLElement>(".app-menu-search-option .app-menu-search-label")].map((option) => option.textContent);
+    expect(options).toContain("Nuova nota");
+    expect(options).not.toContain("Nuovo › Nota");
+    teardown();
+  });
+
   it("le importazioni stanno dopo «Nuovo ▸»", () => {
     const teardown = mountWith(
       () => [{ label: "Nota", run: () => {} }],

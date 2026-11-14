@@ -166,20 +166,33 @@ voci sono parenti, «Sposta nel cestino» in rosso per ultimo.
 ### Il menu «Nuovo»
 
 Il «+» del titolo dell'albero, anche al telefono, apre sotto di sé il menu
-«Nuovo», nello spazio attivo: Nota (con la scorciatoia di «Nuova nota»),
-Documento (.docx), Foglio (.xlsx), Disegno (.svg), Lavagna (.canvas), una
-riga, Nota da un modello… e Cartella. Lo stesso elenco è «Nuovo ▸» nel menu
-di una cartella (il file nasce in quella cartella), nel menu del titolo
-dell'albero e nel menu File dell'app. Ogni voce c'è soltanto se si può fare:
-la nota e la cartella sempre; il documento, il foglio, il disegno e la
-lavagna se il kernel dichiara `document.create`, `sheet.create`,
-`drawing.create` o `canvas.create` e il loro editor è acceso; «Nota da un
-modello…» se la cornice ha il lanciatore dei modelli e il kernel dichiara
-`note.from_template`. L'elenco si rilegge a ogni apertura; una voce il cui
-comando sparisce a menu aperto resta fino alla chiusura e, scelta, lo dice
-con un avviso. Ctrl+N fa ancora una nota diretta, senza menu, ed Esc chiude il
-menu e torna al «+». L'elenco sta in `apps/client/src/ui/commands.ts`
-(`newEntries`).
+«Nuovo»: Nota (con la scorciatoia di «Nuova nota»), Documento (.docx), Foglio
+(.xlsx), Disegno (.svg), Lavagna (.canvas), una riga, Nota da un modello… e
+Cartella. Il «+» è un interruttore: il secondo clic chiude il menu (come
+«Ordina» accanto). Lo stesso elenco è «Nuovo ▸» nel menu di una cartella, nel
+menu del titolo dell'albero e nel menu File dell'app; la ricerca del menu
+dell'app trova le sue voci come «Nuovo › Cartella», ma non «Nuovo › Nota», che
+è «Nuova nota».
+
+Dal menu di una cartella ogni file, la nota da un modello compresa, nasce in
+quella cartella. Dal «+», dal titolo e dal menu File la nota nasce dove la fa
+nascere Ctrl+N (con `files.new-note-folder` a `./`, accanto alla nota aperta),
+la cartella e gli altri file nella radice di ciò che si vede (lo spazio
+attivo, o il vault) e la nota da un modello nella radice del vault. «Cartella»
+mostra l'albero, se il pannello era chiuso o su Cerca, e ci apre il campo del
+nome.
+
+Ogni voce c'è soltanto se si può fare: la nota e la cartella sempre; il
+documento, il foglio, il disegno e la lavagna se il kernel dichiara
+`document.create`, `sheet.create`, `drawing.create` o `canvas.create` e il loro
+editor è acceso; «Nota da un modello…» se la cornice ha il lanciatore dei
+modelli e il kernel dichiara `note.from_template`. L'elenco si rilegge a ogni
+apertura. Una voce che a menu aperto non si può più fare resta fino alla
+chiusura e, scelta, lo dice con un avviso: «il componente che lo fa non è più
+acceso» se se ne sono andati il suo comando o il suo editor, «non si può creare
+da questa finestra» se c'è tutto ma manca chi lo fa partire. Ctrl+N fa ancora
+una nota diretta, senza menu, ed Esc chiude il menu e torna al «+». L'elenco
+sta in `apps/client/src/ui/commands.ts` (`newEntries`).
 
 Si trovano scrivendo: Espandi tutto nel titolo dell'albero; Copia i file e
 Deseleziona nella scelta; gli spostamenti fra riquadri e pile di una scheda;

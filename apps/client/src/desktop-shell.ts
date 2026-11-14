@@ -1072,8 +1072,8 @@ async function init(): Promise<Teardown> {
       label: t("palette.open_view", { title: spec.title }),
       run: () => openPrimaryView(spec.id),
     })),
-    // «Nuovo ▸»: l'elenco del «+» dell'albero (S34), nello spazio attivo.
-    creations: () => newEntries(state.activeSpace ?? ""),
+    // «Nuovo ▸»: l'elenco del «+» dell'albero (S34), dove nasce col gesto diretto.
+    creations: () => newEntries().map((entry) => (entry.kind === "note" ? { ...entry, echoes: true } : entry)),
     // «Importa disegno…» dopo «Nuovo ▸», se il kernel ha il comando.
     imports: () => (canImportDrawing() ? [{ label: t("menu.file.import_drawing"), run: () => void pickDrawingImport() }] : []),
     vault: vaultGestures,

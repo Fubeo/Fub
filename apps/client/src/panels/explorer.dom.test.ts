@@ -9,6 +9,7 @@
 // nome di una riga o di un titolo per chi ascolta più di quanto serva.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { FakeHost } from "../host/fake";
+import type { SettingEntry } from "../host/contract";
 
 vi.setConfig({ testTimeout: 20_000 });
 
@@ -84,6 +85,7 @@ async function waitFor(thing: string, cond: () => boolean, within = 3000): Promi
 interface Start {
   file?: Record<string, string>;
   resources?: Record<string, typeof BYTES>;
+  settings?: SettingEntry[];
 }
 
 async function start(options: Start = {}): Promise<FakeHost> {
@@ -91,6 +93,7 @@ async function start(options: Start = {}): Promise<FakeHost> {
   const host: FakeHost = createFakeHost({
     file: options.file ?? FILES,
     resources: options.resources ?? RESOURCES,
+    settings: options.settings ?? [],
   });
   box.host = host;
   const body = /<body[^>]*>([\s\S]*)<\/body>/.exec(rawHtml);
@@ -251,6 +254,103 @@ describe("le azioni del titolo", () => {
     folder.click();
     await quiet();
     expect(document.getElementById("context-menu")).toBeNull();
+    const field = document.querySelector<HTMLInputElement>("#file-list > input.new-folder");
+    expect(field).not.toBeNull();
+    expect(document.activeElement).toBe(field);
+  });
+
+  it("il «+» è un interruttore: il secondo clic chiude il menu e lo dice", async () => {
+    await start();
+    const button = document.getElementById("new-note") as HTMLButtonElement;
+    button.click();
+    expect(document.getElementById("context-menu")).not.toBeNull();
+    expect(button.getAttribute("aria-expanded")).toBe("true");
+    button.click();
+    await quiet();
+    expect(document.getElementById("context-menu")).toBeNull();
+    expect(button.getAttribute("aria-expanded")).toBe("false");
+    // E il terzo lo riapre.
+    button.click();
+    expect(document.getElementById("context-menu")).not.toBeNull();
+    expect(button.getAttribute("aria-expanded")).toBe("true");
+  });
+
+  it("anche «Ordina» è un interruttore", async () => {
+    await start();
+    const sort = document.getElementById("explorer-sort") as HTMLButtonElement;
+    sort.click();
+    expect(sort.getAttribute("aria-expanded")).toBe("true");
+    sort.click();
+    await quiet();
+    expect(document.getElementById("context-menu")).toBeNull();
+    expect(sort.getAttribute("aria-expanded")).toBe("false");
+  });
+
+  it("«Nota» del «+» nasce dove nasce Ctrl+N: con «./» accanto alla nota aperta, anche dentro uno spazio", async () => {
+    const host = await start({
+      settings: [{
+        spec: {
+          key: "files.new-note-folder",
+          label: "Cartella delle nuove note",
+          description: "",
+          group: "",
+          scope: "vault",
+          kind: { kind: "text", default: "" },
+          program_writable: false,
+        },
+        value: "./",
+        source: "vault",
+      } as SettingEntry],
+    });
+    const { state } = await import("../state/store");
+    const { openDocument } = await import("../state/document-controller");
+    const registry = await import("../ui/commands");
+    // Uno spazio vero: una cartella che non è fra gli spazi non resta attiva.
+    state.meta.spaces = [...state.meta.spaces, "Progetti"];
+    state.activeSpace = "Progetti";
+    const opened = "Progetti/Archivio/Vecchio.md";
+
+    /// Gli argomenti di ogni `note.create` chiesto al kernel.
+    const creations = (): unknown[] =>
+      host.calls.filter((call) => call.gate === "invokeCommand" && call.args[0] === "note.create").map((call) => call.args[1]);
+
+    /// Apre la nota, fa partire `create` e restituisce la cartella chiesta al
+    /// kernel per la nota nuova (il finto la crea sempre alla radice).
+    async function bornFrom(create: () => void): Promise<unknown> {
+      await openDocument(opened);
+      await quiet();
+      expect(state.currentDoc).toBe(opened);
+      expect(state.activeSpace).toBe("Progetti");
+      const before = creations().length;
+      create();
+      await waitFor("la nota nuova si chiede", () => creations().length > before);
+      const all = creations();
+      return (all[all.length - 1] as Record<string, string> | undefined)?.folder;
+    }
+
+    const byKeys = await bornFrom(() => void registry.allCommands().find((entry) => entry.id === "shell.note.new")!.run!());
+    expect(byKeys).toBe("Progetti/Archivio");
+    const byMenu = await bornFrom(() => {
+      document.getElementById("new-note")!.click();
+      [...document.querySelectorAll<HTMLElement>('#context-menu [role="menuitem"]')].find((item) => item.querySelector(".menu-label")?.textContent === "Nota")!.click();
+    });
+    expect(byMenu).toBe(byKeys);
+  });
+
+  it("«Nuovo ▸ Cartella» col pannello su Cerca e chiuso riporta l'albero e ci mette il campo", async () => {
+    await start();
+    const { showPanel } = await import("./sidebar");
+    const panels = await import("../ui/side-panels");
+    showPanel("search");
+    if (panels.sidePanelVisible("sidebar")) panels.toggleSidePanel("sidebar");
+    expect(panels.sidePanelVisible("sidebar")).toBe(false);
+    expect(document.getElementById("files-panel")!.hidden).toBe(true);
+    const registry = await import("../ui/commands");
+    // È la voce del menu File: lo stesso elenco, senza cartella scelta.
+    registry.newEntries().find((entry) => entry.kind === "folder")!.run();
+    await quiet();
+    expect(panels.sidePanelVisible("sidebar")).toBe(true);
+    expect(document.getElementById("files-panel")!.hidden).toBe(false);
     const field = document.querySelector<HTMLInputElement>("#file-list > input.new-folder");
     expect(field).not.toBeNull();
     expect(document.activeElement).toBe(field);

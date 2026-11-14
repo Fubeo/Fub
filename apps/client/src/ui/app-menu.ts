@@ -81,6 +81,9 @@ export interface MenuView {
 export interface MenuCreation extends MenuView {
   readonly hint?: string;
   readonly separator?: boolean;
+  /// `true` se un'altra voce del menu fa già lo stesso gesto («Nuovo › Nota»
+  /// è «Nuova nota»): la tendina la mostra, la ricerca una volta sola.
+  readonly echoes?: boolean;
 }
 
 
@@ -268,6 +271,9 @@ export function mountAppMenu(host: MenuHost): Teardown {
     // Mentre una voce del sottomenu è focalizzata, Left/Right cambia il
     // sottomenu aperto; le frecce verticali sono gestite da menu.ts.
     if (menuOpen === null) return;
+    // Una freccia che il menu ha già usato (→ su «Nuovo ▸» apre il sottomenu,
+    // ← nel sottomenu torna alla voce) non cambia anche il menu della barra.
+    if (e.defaultPrevented) return;
     const context = document.getElementById("context-menu");
     if (!context?.contains(e.target as Node)) return;
     if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
@@ -344,6 +350,9 @@ export function mountAppMenu(host: MenuHost): Teardown {
   /// Le voci di un menu come le vede chi le sceglie: lo stesso costruttore per
   /// la tendina e per la ricerca, perché scegliere da una o dall'altra è lo
   /// stesso gesto.
+  /// Le voci di «Nuovo ▸» che ripetono un'altra voce: la ricerca le salta.
+  const echoes = new WeakSet<MenuItem>();
+
   function itemsOf(entries: MenuEntry[]): MenuItem[] {
     return entries.flatMap((v): MenuItem[] => {
       if ("creations" in v) {
@@ -352,15 +361,19 @@ export function mountAppMenu(host: MenuHost): Teardown {
         return [{
           label: t("menu.file.new"),
           separator: v.separator,
-          items: creations.map((creation) => ({
-            label: creation.label,
-            hint: creation.hint,
-            separator: creation.separator,
-            run: () => {
-              close();
-              creation.run();
-            },
-          })),
+          items: creations.map((creation) => {
+            const item: MenuItem = {
+              label: creation.label,
+              hint: creation.hint,
+              separator: creation.separator,
+              run: () => {
+                close();
+                creation.run();
+              },
+            };
+            if (creation.echoes) echoes.add(item);
+            return item;
+          }),
         }];
       }
       if ("views" in v || "imports" in v || "vault" in v) {
@@ -401,9 +414,11 @@ export function mountAppMenu(host: MenuHost): Teardown {
   function searchable(): SearchableEntry[] {
     const seen = new Set<string>();
     // Le voci di un sottomenu («Nuovo ▸») si trovano col nome del sottomenu
-    // davanti: «Nuovo › Cartella».
+    // davanti: «Nuovo › Cartella». Quelle che ripetono un'altra voce no.
     const flat = (item: MenuItem): MenuItem[] =>
-      Array.isArray(item.items) ? (item.items as readonly MenuItem[]).map((child) => ({ ...child, label: `${item.label} › ${child.label}` })) : [item];
+      Array.isArray(item.items)
+        ? (item.items as readonly MenuItem[]).filter((child) => !echoes.has(child)).map((child) => ({ ...child, label: `${item.label} › ${child.label}` }))
+        : [item];
     return MENU.flatMap((menu) =>
       itemsOf(menu.entries)
         .flatMap(flat)
