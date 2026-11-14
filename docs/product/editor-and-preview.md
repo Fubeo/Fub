@@ -190,7 +190,8 @@ Lettura e nell'export. `data:` resta sorgente; una remota è un
 
 In Live un callout col cursore dentro resta un riquadro: la pastiglia del tipo
 apre i tipi, la freccia scambia `+` e `-`. Le voci d'elenco vanno a capo sotto
-il testo; cancellare o spostare righe rinumera le seguenti. L'HTML ammesso
+il testo, e così le righe che ne continuano il paragrafo, qualunque rientro
+abbiano scritto; cancellare o spostare righe rinumera le seguenti. L'HTML ammesso
 (`<kbd>`, `<u>`, i [colori](editor-blocks.md#i-colori)) si vede senza tag. I
 recinti con info string dichiarata (Mermaid, formule) tornano sorgente col
 cursore dentro, con la resa sotto. Con `mai` una formula in riga resta resa: un
