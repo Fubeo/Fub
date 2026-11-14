@@ -417,14 +417,14 @@ const conflittoUsaDisco = {
 
     // «Usa la versione su disco» chiede prima: «Annulla» non tocca niente.
     await barra.locator('button:text-is("Usa la versione su disco")').click();
-    let finestra = await conferma(pagina, `Conflitto su ${NOTA}`);
+    let finestra = await conferma(pagina, `Conflitto su ${NOME}`);
     await finestra.locator('button[data-action="cancel"]:text-is("Annulla")').click();
     await finestra.waitFor({ state: "detached" });
     verifica((await statoSalvataggio(pagina)) === "conflitto", "«Annulla» ha chiuso il conflitto");
     verifica((await testoDelRiquadro(pagina)).includes(MIA), "«Annulla» ha tolto il mio testo dal riquadro");
     verifica((await leggi(pagina, NOTA)) === dopoIlPrimoConflitto, "«Annulla» ha scritto sul disco");
     await barra.locator('button:text-is("Usa la versione su disco")').click();
-    finestra = await conferma(pagina, `Conflitto su ${NOTA}`);
+    finestra = await conferma(pagina, `Conflitto su ${NOME}`);
     await giro.foto("usa-disco-chiede");
     await finestra.locator('button[data-action="confirm"]').click();
     await finestra.waitFor({ state: "detached" });
@@ -449,7 +449,7 @@ const conflittoTieniMio = {
     await scriviDaFuori(pagina, NOTA, `${disco}\n${FUORI_ANCORA}\n`);
     const barra = await barraDelConflitto(pagina);
     await barra.locator('button:text-is("Mantieni il mio testo")').click();
-    const finestra = await conferma(pagina, `Conflitto su ${NOTA}`);
+    const finestra = await conferma(pagina, `Conflitto su ${NOME}`);
     await giro.foto("chiede");
     await finestra.locator('button[data-action="confirm"]').click();
     await finestra.waitFor({ state: "detached" });
@@ -894,7 +894,7 @@ const ripristinoConTestoNonSalvato = {
     // decide tenendo il suo testo, e si riparte da una nota salvata.
     await barraDelConflitto(pagina);
     await pagina.locator('.pane.focus .conflict-banner button:text-is("Mantieni il mio testo")').click();
-    const prima = await conferma(pagina, `Conflitto su ${NOTA}`);
+    const prima = await conferma(pagina, `Conflitto su ${NOME}`);
     await prima.locator('button[data-action="confirm"]').click();
     await prima.waitFor({ state: "detached" });
     await aspettaStato(pagina, "salvato");
@@ -909,7 +909,7 @@ const ripristinoConTestoNonSalvato = {
     verifica((await leggi(pagina, NOTA)) === versioneVecchia, "il testo non salvato ha coperto la versione ripristinata senza chiedere");
     await giro.foto("ripristinata");
     await pagina.locator('.pane.focus .conflict-banner button:text-is("Mantieni il mio testo")').click();
-    const finestra = await conferma(pagina, `Conflitto su ${NOTA}`);
+    const finestra = await conferma(pagina, `Conflitto su ${NOME}`);
     await finestra.locator('button[data-action="confirm"]').click();
     await finestra.waitFor({ state: "detached" });
     await aspettaStato(pagina, "salvato");

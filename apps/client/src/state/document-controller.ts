@@ -1137,7 +1137,7 @@ export function mountDocumentController(lifetime: Lifetime, d: DocumentDeps, pan
     invalidateLoads(id);
     if (outcome.dirty && outcome.text !== undefined) {
       const text = outcome.text;
-      notify(t("document.deleted_dirty", { doc: docTitle(id) }), "guasto", {
+      notify(t("document.deleted_dirty", { doc: pageName(id) }), "guasto", {
         label: t("document.recreate"),
         run: async () => {
           await recreate(text, vault);
@@ -1558,7 +1558,7 @@ export async function resolveDiscardingMine(doc: string | null): Promise<void> {
   }
   // La lettura mancata lascia il conflitto aperto: la scelta si può ripetere.
   if (outcome.kind === "discarded" && outcome.reload.kind === "unavailable") {
-    notify(t("document.reload_failed", { doc: docTitle(doc) }), "guasto");
+    notify(t("document.reload_failed", { doc: pageName(doc) }), "guasto");
   }
   redrawReading(doc);
   view.drawSave();
@@ -2222,7 +2222,7 @@ function handleSessionEvent(event: DocumentSessionEvent): void | Promise<void> {
       // solo anche se il file era già stato detto cambiato da fuori.
       const doc = event.id;
       if (!docOnScreen(doc) && !stateNotices.get(doc)?.outside) {
-        showStateNotice(doc, "outside", () => notify(t("document.save_conflict", { doc: docTitle(doc) }), "guasto"));
+        showStateNotice(doc, "outside", () => notify(t("document.save_conflict", { doc: pageName(doc) }), "guasto"));
       }
     } else if (isErrorKind(event.error, "permission_denied")) {
       // Il file è in sola lettura (PA T59), o l'host lo tiene tale per un
@@ -2231,7 +2231,7 @@ function handleSessionEvent(event: DocumentSessionEvent): void | Promise<void> {
       const doc = event.id;
       if (!deniedSaves.has(doc)) {
         deniedSaves.add(doc);
-        showStateNotice(doc, "save", () => notify(t("document.save_read_only", { doc: docTitle(doc) }), "guasto", {
+        showStateNotice(doc, "save", () => notify(t("document.save_read_only", { doc: pageName(doc) }), "guasto", {
           label: t("app.retry"),
           run: () => {
             deniedSaves.delete(doc);
@@ -2245,7 +2245,7 @@ function handleSessionEvent(event: DocumentSessionEvent): void | Promise<void> {
       // Un avviso per nota: il tentativo dopo che fallisce ancora prende il
       // posto del precedente, col motivo di adesso.
       const doc = event.id;
-      showStateNotice(doc, "save", () => notify(t("document.save_failed", { doc: docTitle(doc), reason: errorText(event.error) }), "guasto", {
+      showStateNotice(doc, "save", () => notify(t("document.save_failed", { doc: pageName(doc), reason: errorText(event.error) }), "guasto", {
         label: t("app.retry"),
         run: saveNow,
       }));
@@ -3496,8 +3496,8 @@ async function applyExternalChange(id: string, outcome: ExternalChangeResult): P
       addSheetNotice(id, overwritten ? "overwritten" : "changed_on_disk");
       if (!docOnScreen(id)) {
         showStateNotice(id, "outside", () => overwritten
-          ? notify(t("document.overwritten", { doc: docTitle(id) }), "guasto")
-          : notify(t("document.changed_on_disk", { doc: docTitle(id) }), "info"));
+          ? notify(t("document.overwritten", { doc: pageName(id) }), "guasto")
+          : notify(t("document.changed_on_disk", { doc: pageName(id) }), "info"));
       }
     }
     drawPaneConflict(id);

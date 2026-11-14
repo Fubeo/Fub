@@ -932,6 +932,24 @@ describe("il testo non salvato resta (#237)", () => {
     expect(toastsAbout("Benvenuto")).toEqual([]);
   });
 
+  it("la finestra che conferma una scelta del conflitto nomina la nota col titolo, non col percorso", async () => {
+    const { host, sessions } = await unsavedNote();
+    repair();
+    host.writeFromOutside(BENVENUTO, "# Benvenuto\nda un'altra applicazione\n");
+    await settle();
+    await sessions.flush(BENVENUTO);
+    await waitFor("la barra del conflitto", () => visible(".conflict-banner").length === 1);
+    visible('.conflict-banner button[data-choice="mine"]')[0]!.click();
+    const dialogs = () => [...document.querySelectorAll<HTMLElement>("dialog, [role=dialog], [role=alertdialog]")]
+      .filter((el) => el.isConnected && (el.textContent ?? "").includes("Conflitto su"));
+    await waitFor("la finestra della scelta", () => dialogs().length === 1);
+    const said = dialogs()[0]!.textContent ?? "";
+    expect(said).toContain("Conflitto su Benvenuto");
+    expect(said).not.toContain(BENVENUTO);
+    dialogs()[0]!.querySelector<HTMLButtonElement>('button[data-action="cancel"]')!.click();
+    await settle();
+  });
+
   it("fuori schermo, il cambio da fuori e il conflitto che segue fanno un avviso solo, col titolo; aperta la nota, resta la barra", async () => {
     const { host, sessions } = await unsavedNote();
     await open("Altra.md");
@@ -963,6 +981,20 @@ describe("il testo non salvato resta (#237)", () => {
     await settle();
     expect(sessions.saveState(BENVENUTO)).not.toBe("salvato");
     expect(toastsAbout("non arriva più sul disco")).toEqual([]);
+  });
+
+  it("la pagina di una cartella si nomina come la cartella, negli avvisi come nella finestra", async () => {
+    const PAGE = "Progetti/_index.md";
+    const host = await start("off", "PdfCraft", { [PAGE]: "# Progetti\n" });
+    await open(PAGE);
+    const { documentSessions: sessions } = await import("../state/document-session");
+    await waitFor("l'editor della pagina", () => mountedTextEditors().length > 0);
+    repairWrite = host.fault("writeDocument", "disco pieno");
+    appendToTextEditor(`\n${TYPED}`);
+    await waitFor("il testo nella sessione", () => sessions.isDirty(PAGE));
+    await sessions.flush(PAGE).catch(() => {});
+    await waitFor("l'avviso del salvataggio fallito", () => toastsAbout("non è stato salvato").length === 1);
+    expect(toastsAbout("non è stato salvato")[0]).toContain("«Progetti» non è stato salvato");
   });
 
   it("un salvataggio che non riesce si dice una volta, col titolo, e l'avviso se ne va quando la nota è salvata", async () => {
