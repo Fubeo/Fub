@@ -1178,6 +1178,11 @@ pub struct Host {
     /// ([`Host::install_theme_from_folder`]); la regola, con la sua
     /// generazione, sta in [`crate::theme::ThemeFolderGrant`].
     theme_folder: Mutex<crate::theme::ThemeFolderGrant>,
+    /// **Il custode del tema collegato** ([`Host::link_theme_folder`]): la
+    /// cartella guardata e il suo osservatore, montato e smontato secondo la
+    /// chiave [`crate::settings::DEVELOPER_THEME_FOLDER`] e la modalità
+    /// sviluppatore ([`Host::sync_theme_link`]).
+    theme_keeper: crate::theme_watch::ThemeKeeper,
 }
 
 impl Default for Host {
@@ -1275,6 +1280,7 @@ impl Host {
             startup_source: None,
             session_notice: Mutex::new(None),
             theme_folder: Mutex::new(crate::theme::ThemeFolderGrant::default()),
+            theme_keeper: crate::theme_watch::ThemeKeeper::default(),
             uris: Default::default(),
             machine: with_the_schema(MachineSettings::in_memory()),
             view_states: ViewStates::in_memory(),
@@ -2382,13 +2388,21 @@ impl Host {
         self.vaults.handle()
     }
 
-    /// Elenca i temi installati con un manifest e fogli completi.
+    /// Elenca i temi installati con un manifest e fogli completi, e il tema
+    /// collegato quando la sua cartella è pronta (fiducia `development`).
     pub fn themes(&self) -> Result<Vec<crate::theme::ThemeInfo>, PluginError> {
-        Ok(self
+        let mut themes = self
             .config_dir
             .as_deref()
             .map(crate::theme::list_themes)
-            .unwrap_or_default())
+            .unwrap_or_default();
+        if let Some(folder) = self.linked_theme_folder() {
+            themes.extend(crate::theme::linked_theme_info(
+                self.config_dir.as_deref(),
+                &folder,
+            ));
+        }
+        Ok(themes)
     }
 
     /// Legge una luce di un tema installato senza esporre il filesystem.
@@ -2397,11 +2411,121 @@ impl Host {
         id: &str,
         light: fub_abi::theme::ThemeLight,
     ) -> Result<crate::theme::ThemePayload, PluginError> {
+        if let Some(folder) = self.linked_theme_folder() {
+            if let Some(read) =
+                crate::theme::read_linked_theme(self.config_dir.as_deref(), &folder, id, light)
+            {
+                return read.map_err(Into::into);
+            }
+        }
         let dir = self
             .config_dir
             .as_deref()
             .ok_or_else(|| PluginError::Unserved("theme inventory unavailable".into()))?;
         crate::theme::read_theme(dir, id, light).map_err(Into::into)
+    }
+
+    // --- il tema collegato (modalità sviluppatore) ---------------------------
+
+    /// La cartella collegata, se la modalità sviluppatore è accesa e la chiave
+    /// ne nomina una: è la sola fonte di [`Host::themes`], [`Host::read_theme`]
+    /// e dell'osservatore.
+    fn linked_theme_folder(&self) -> Option<camino::Utf8PathBuf> {
+        self.theme_folder_allowed().ok()?;
+        match self
+            .machine
+            .effective(crate::settings::DEVELOPER_THEME_FOLDER)
+        {
+            Ok((fub_abi::settings::SettingValue::Text(folder), _)) if !folder.trim().is_empty() => {
+                Some(camino::Utf8PathBuf::from(folder))
+            }
+            _ => None,
+        }
+    }
+
+    /// Installa l'uscita degli eventi del tema collegato: l'app ci mette
+    /// l'evento `fub://theme-changed` verso la finestra principale.
+    pub fn set_theme_link_sink(&self, sink: crate::theme_watch::ThemeLinkSink) {
+        self.theme_keeper.set_sink(sink);
+    }
+
+    /// Il tema collegato com'è adesso, `None` se nessuna cartella è collegata
+    /// o la modalità sviluppatore è spenta. Lo chiede Aspetto, e l'app
+    /// all'avvio per dire che la cartella non c'è più.
+    pub fn theme_link(&self) -> Option<crate::theme::ThemeLink> {
+        let folder = self.linked_theme_folder()?;
+        Some(crate::theme::theme_link(self.config_dir.as_deref(), &folder))
+    }
+
+    /// Monta o smonta l'osservatore secondo la chiave e la modalità
+    /// sviluppatore, rilette adesso: la cartella collegata si guarda, niente
+    /// altrimenti. Lo chiamano l'avvio dell'app e ogni scrittura di una delle
+    /// due chiavi (`tell_observer`), quindi spegnere la modalità, azzerare la
+    /// chiave o collegare un'altra cartella smonta il vecchio.
+    pub fn sync_theme_link(&self) {
+        let folder = self.linked_theme_folder();
+        self.theme_keeper
+            .watch(self.config_dir.as_deref(), folder.as_deref(), false);
+    }
+
+    /// Smonta l'osservatore alla chiusura dell'app; la chiave resta, e al
+    /// prossimo avvio [`Host::sync_theme_link`] lo rimonta.
+    pub fn close_theme_link(&self) {
+        self.theme_keeper.close();
+    }
+
+    /// La cartella guardata adesso dall'osservatore, se c'è: per i test del
+    /// ciclo di vita.
+    pub fn watched_theme_folder(&self) -> Option<camino::Utf8PathBuf> {
+        self.theme_keeper.watched()
+    }
+
+    /// Il titolo della finestra di scelta nativa di «Collega una cartella…»,
+    /// nella lingua di chi guarda: come [`Host::theme_folder_pick_title`].
+    pub fn theme_link_pick_title(&self) -> String {
+        let mut title = fub_abi::Text::key("host.theme_folder.link_title");
+        self.localize_core(None, &mut title);
+        title.to_string()
+    }
+
+    /// «Collega una cartella…»: `source` lo dà soltanto la finestra di scelta
+    /// nativa dell'app, mai la webview, e solo con la modalità sviluppatore
+    /// accesa. La cartella si legge con le porte dell'installazione
+    /// ([`crate::theme::theme_link`]); se è pronta (e il suo id non è di un
+    /// tema installato) il suo percorso canonico va nella chiave
+    /// [`crate::settings::DEVELOPER_THEME_FOLDER`] sotto il lucchetto del suo
+    /// id, e l'osservatore si rimonta su di lei. Un rifiuto lascia il
+    /// collegamento di prima.
+    pub fn link_theme_folder(
+        &self,
+        source: &camino::Utf8Path,
+    ) -> Result<crate::theme::ThemeFolderLink, PluginError> {
+        self.theme_folder_allowed()?;
+        let folder = source
+            .canonicalize_utf8()
+            .unwrap_or_else(|_| source.to_owned());
+        let (link, recorded) =
+            crate::theme::link_folder(self.config_dir.as_deref(), &folder, || {
+                self.machine.set(
+                    crate::settings::DEVELOPER_THEME_FOLDER,
+                    fub_abi::settings::SettingValue::Text(folder.to_string()),
+                )
+            })?;
+        if !recorded {
+            return Ok(crate::theme::ThemeFolderLink::Refused { link });
+        }
+        // La stessa cartella collegata di nuovo si guarda da capo.
+        self.theme_keeper
+            .watch(self.config_dir.as_deref(), Some(&folder), true);
+        self.tell_observer(crate::settings::DEVELOPER_THEME_FOLDER)?;
+        Ok(crate::theme::ThemeFolderLink::Linked { link })
+    }
+
+    /// «Scollega»: azzera la chiave e smonta l'osservatore. Senza modalità
+    /// sviluppatore, come buttare un permesso: si può sempre.
+    pub fn unlink_theme_folder(&self) -> Result<(), PluginError> {
+        self.machine.reset(crate::settings::DEVELOPER_THEME_FOLDER)?;
+        self.tell_observer(crate::settings::DEVELOPER_THEME_FOLDER)
     }
 
     /// La modalità sviluppatore ([`crate::settings::DEVELOPER_MODE`]), riletta
@@ -2936,6 +3060,13 @@ impl Host {
         key: &str,
         value: fub_abi::settings::SettingValue,
     ) -> Result<(), PluginError> {
+        if key == crate::settings::DEVELOPER_THEME_FOLDER {
+            // Il percorso lo dà solo la finestra nativa di «Collega una
+            // cartella…» ([`Host::link_theme_folder`]), mai la webview.
+            return Err(PluginError::PermissionDenied(fub_abi::Text::key(
+                "host.theme_folder.link_only",
+            )));
+        }
         if self.machine_only(vault, key) {
             self.machine.set(key, value)?;
             crate::settings::reapply_log_levels(key, &self.machine, &self.levels);
@@ -3271,6 +3402,11 @@ impl Host {
     /// che si fa è dirlo, perché l'unico modo in cui questo caso finiva era in
     /// silenzio.
     fn tell_observer(&self, key: &str) -> Result<(), PluginError> {
+        if key == crate::settings::DEVELOPER_MODE || key == crate::settings::DEVELOPER_THEME_FOLDER
+        {
+            // L'osservatore del tema collegato segue le due chiavi.
+            self.sync_theme_link();
+        }
         if let Some(sink) = &self.sink {
             let delivers = sink.emit(&fub_abi::Notice::new(
                 fub_abi::Event::SettingChanged {

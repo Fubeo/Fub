@@ -282,6 +282,9 @@ pub const SETTINGS_WITH_THEIR_OWN_GESTURE: &[&str] = &[
     fub_kernel::properties::TYPES,
     // Il catalogo dei temi.
     crate::settings::APPEARANCE_THEME_ID,
+    // «Collega una cartella…» e «Scollega», in Aspetto: il percorso lo dà
+    // solo la finestra nativa.
+    crate::settings::DEVELOPER_THEME_FOLDER,
 ];
 
 /// Il job il cui esito, quando riesce, può portare gli artefatti di un export

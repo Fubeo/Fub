@@ -81,6 +81,45 @@ fn extending_manifest() -> fub_abi::theme::ThemeManifest {
 }
 
 /// Una cartella rifiutata, col motivo dato: il campione del mirror per ogni
+/// Il tema collegato in uno stato, coi file salvati dell'evento.
+fn theme_link(state: fub_host::theme::ThemeLinkState, changed: &[&str]) -> fub_host::theme::ThemeLink {
+    fub_host::theme::ThemeLink {
+        folder: "/home/chi/temi/carta".into(),
+        id: Some("acme.carta".into()),
+        name: Some("Carta".into()),
+        state,
+        changed: changed.iter().map(|file| file.to_string()).collect(),
+    }
+}
+
+/// Un campione per ogni stato del tema collegato.
+fn theme_links() -> Vec<Value> {
+    use fub_host::theme::ThemeLinkState;
+    let mut missing = theme_link(ThemeLinkState::Missing, &[]);
+    // Mai letto: né id né nome.
+    missing.id = None;
+    missing.name = None;
+    vec![
+        to_value(theme_link(ThemeLinkState::Ready, &["skin.css", "fonts/carta.woff2"])),
+        to_value(missing),
+        to_value(theme_link(
+            ThemeLinkState::Refused {
+                refusal: fub_host::theme::ThemeFolderRefusal::Malformed {
+                    detail: "expected value at line 1 column 3".into(),
+                },
+            },
+            &["manifest.json"],
+        )),
+        to_value(theme_link(ThemeLinkState::Collision, &[])),
+        to_value(theme_link(
+            ThemeLinkState::Unreadable {
+                error: PluginError::Io("/home/chi/temi/carta: Permission denied".into()),
+            },
+            &[],
+        )),
+    ]
+}
+
 /// `ThemeFolderRefusal`.
 fn folder_refusal(refusal: fub_host::theme::ThemeFolderRefusal) -> Value {
     to_value(fub_host::theme::ThemeFolderCheck::Refused {
@@ -331,6 +370,18 @@ fn expected() -> Value {
             }),
             folder_refusal(fub_host::theme::ThemeFolderRefusal::Malformed {
                 detail: "missing `id`".into(),
+            }),
+        ],
+        // Il tema collegato in ogni stato (lo stato è appiattito nel record,
+        // accanto alla cartella), e gli esiti di «Collega una cartella…».
+        "ThemeLink": theme_links(),
+        "ThemeFolderLink": [
+            to_value(fub_host::theme::ThemeFolderLink::Cancelled),
+            to_value(fub_host::theme::ThemeFolderLink::Linked {
+                link: theme_link(fub_host::theme::ThemeLinkState::Ready, &["skin.css"]),
+            }),
+            to_value(fub_host::theme::ThemeFolderLink::Refused {
+                link: theme_link(fub_host::theme::ThemeLinkState::Collision, &[]),
             }),
         ],
         // Gli esiti dell'installazione da cartella: la finestra della shell

@@ -419,6 +419,17 @@ pub const PERF_PROBE: &str = "perf.probe";
 /// applica l'host (`Host::install_theme_from_folder`), non il bottone nascosto.
 pub const DEVELOPER_MODE: &str = "developer.mode";
 
+/// La cartella del tema collegato, in sviluppo (vedi
+/// [`Host::link_theme_folder`](crate::Host::link_theme_folder)): il percorso
+/// che la persona ha scelto nella finestra nativa di «Collega una cartella…»,
+/// vuoto se nessuna è collegata. Di **macchina** come la modalità che la apre,
+/// e **non** scrivibile da un programma; nemmeno la webview la scrive
+/// (`Host::set_setting_for_user` la rifiuta): la scrive solo l'host quando
+/// collega, e azzerarla è scollegare. L'host la rilegge con le stesse porte di
+/// un'installazione, quindi un valore arrivato da un profilo importato non
+/// apre più di una cartella scelta.
+pub const DEVELOPER_THEME_FOLDER: &str = "developer.theme-folder";
+
 /// Preferenze locali della replica; identità, pairing e chiavi non sono impostazioni.
 pub const SYNC_SERVER_URL: &str = "sync.server_url";
 pub const SYNC_PAUSED: &str = "sync.paused";
@@ -616,6 +627,7 @@ pub fn core_settings() -> Vec<SettingSpec> {
     settings.push(log_verbose_spec());
     settings.push(perf_probe_spec());
     settings.push(developer_mode_spec());
+    settings.push(developer_theme_folder_spec());
     #[cfg(feature = "http-client")]
     settings.extend(service_settings());
     settings.extend(live_settings());
@@ -1456,6 +1468,20 @@ fn developer_mode_spec() -> SettingSpec {
     .for_machine()
 }
 
+/// La cartella collegata come [`SettingSpec`]: vedi [`DEVELOPER_THEME_FOLDER`].
+fn developer_theme_folder_spec() -> SettingSpec {
+    SettingSpec::new(
+        DEVELOPER_THEME_FOLDER,
+        Text::key(C_DEVELOPER_THEME_FOLDER),
+        SettingKind::Text {
+            default: String::new(),
+        },
+    )
+    .describing(Text::key(C_DEVELOPER_THEME_FOLDER_DESC))
+    .grouped(Text::key(C_GROUP_DEVELOPMENT))
+    .for_machine()
+}
+
 /// Le chiavi delle stringhe del core. Le `locale.*` non stanno qui: stanno
 /// accanto alle impostazioni che descrivono, in `fub_kernel::locale`, e
 /// arrivano al montaggio come secondo catalogo della stessa lingua.
@@ -1695,6 +1721,8 @@ const C_PERF_PROBE_DESC: &str = "core.perf.probe.desc";
 const C_GROUP_DEVELOPMENT: &str = "core.group.development";
 const C_DEVELOPER_MODE: &str = "core.developer.mode";
 const C_DEVELOPER_MODE_DESC: &str = "core.developer.mode.desc";
+const C_DEVELOPER_THEME_FOLDER: &str = "core.developer.theme_folder";
+const C_DEVELOPER_THEME_FOLDER_DESC: &str = "core.developer.theme_folder.desc";
 const C_GROUP_SYNC: &str = "core.group.sync";
 const C_SYNC_SERVER_URL: &str = "core.sync.server_url";
 const C_SYNC_SERVER_URL_DESC: &str = "core.sync.server_url.desc";
@@ -1971,6 +1999,11 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         )
         .with("host.theme_folder.unavailable", "Fub non ha una cartella per i temi su questo computer.")
         .with("host.theme_folder.pick_title", "Scegli la cartella del tema")
+        .with("host.theme_folder.link_title", "Scegli la cartella del tema da collegare")
+        .with(
+            "host.theme_folder.link_only",
+            "La cartella collegata si sceglie con «Collega una cartella…» in Aspetto.",
+        )
         .with(
             "host.theme_folder.pick_failed",
             "La finestra per scegliere la cartella non ha risposto: riprova.",
@@ -2431,8 +2464,15 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with(C_DEVELOPER_MODE, "Modalità sviluppatore")
         .with(
             C_DEVELOPER_MODE_DESC,
-            "Per chi scrive un tema: in «Temi installati» compare «Installa da \
-             cartella…», che lo controlla e lo installa dalla sua cartella.",
+            "Per chi scrive un tema: in «Temi installati» compaiono «Installa da \
+             cartella…», che lo controlla e lo installa dalla sua cartella, e \
+             «Collega una cartella…», che lo rimonta a ogni salvataggio.",
+        )
+        .with(C_DEVELOPER_THEME_FOLDER, "Cartella collegata")
+        .with(
+            C_DEVELOPER_THEME_FOLDER_DESC,
+            "La cartella del tema in sviluppo: Fub la guarda e rimonta il tema a \
+             ogni salvataggio. Si sceglie e si scollega da «Temi installati».",
         );
     for level in fub_kernel::log::Level::ALL {
         it = it.with(
@@ -2630,6 +2670,11 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         )
         .with("host.theme_folder.unavailable", "Fub has no theme folder on this computer.")
         .with("host.theme_folder.pick_title", "Choose the theme folder")
+        .with("host.theme_folder.link_title", "Choose the theme folder to link")
+        .with(
+            "host.theme_folder.link_only",
+            "The linked folder is chosen with «Link a folder…» in Appearance.",
+        )
         .with(
             "host.theme_folder.pick_failed",
             "The window to choose the folder did not answer: try again.",
@@ -3082,7 +3127,14 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with(
             C_DEVELOPER_MODE_DESC,
             "For theme authors: «Install from folder…» appears under \
-             «Installed themes», and checks and installs a theme from its folder.",
+             «Installed themes», and checks and installs a theme from its folder, \
+             with «Link a folder…», which remounts it at every save.",
+        )
+        .with(C_DEVELOPER_THEME_FOLDER, "Linked folder")
+        .with(
+            C_DEVELOPER_THEME_FOLDER_DESC,
+            "The folder of the theme in development: Fub watches it and remounts \
+             the theme at every save. It is chosen and unlinked under «Installed themes».",
         );
     for level in fub_kernel::log::Level::ALL {
         en = en.with(
@@ -3450,6 +3502,25 @@ mod tests {
         assert!(core_machine_settings()
             .iter()
             .any(|spec| spec.key == DEVELOPER_MODE));
+    }
+
+    #[test]
+    fn the_linked_theme_folder_is_machine_text_that_no_program_writes() {
+        let spec = core_settings()
+            .into_iter()
+            .find(|spec| spec.key == DEVELOPER_THEME_FOLDER)
+            .expect("il core dichiara la cartella del tema collegato");
+        assert_eq!(spec.scope, fub_abi::settings::SettingScope::Machine);
+        assert_eq!(
+            spec.kind,
+            SettingKind::Text {
+                default: String::new()
+            }
+        );
+        // Un programma che potesse scriverla sceglierebbe da sé la cartella
+        // che l'host legge.
+        assert!(!spec.program_writable);
+        assert!(crate::shell::SETTINGS_WITH_THEIR_OWN_GESTURE.contains(&DEVELOPER_THEME_FOLDER));
     }
 
     #[test]
