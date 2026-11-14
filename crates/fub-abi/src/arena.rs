@@ -87,6 +87,11 @@ pub enum ArenaError {
     /// ricostruirla alla lettera non terminerebbe.
     #[error("{arena}: index {index} reaches itself; the arena is not a tree")]
     Cycle { arena: String, index: u32 },
+    /// Un albero più profondo di [`MAX_ARENA_DEPTH`]: ricostruirlo ricorre un
+    /// livello di pila per livello, e una catena lunga arrivata dal confine
+    /// esaurirebbe la pila dell'host invece di essere rifiutata.
+    #[error("{arena}: nesting deeper than {limit} levels")]
+    TooDeep { arena: String, limit: u32 },
     /// Uno span più grande di quanto la piattaforma possa indicizzare (wasm32).
     #[error("span: {value} does not fit in a usize on this platform")]
     SpanTooWide { value: u64 },
@@ -97,6 +102,19 @@ fn out_of_range(arena: &str, index: u32, len: usize) -> ArenaError {
         arena: arena.to_string(),
         index,
         len: u32::try_from(len).unwrap_or(u32::MAX),
+    }
+}
+
+/// I livelli che `rebuild` attraversa per arena (blocchi, inline, nodi di
+/// UI), al più: lo stesso tetto del modello del documento e del traduttore
+/// WASM, che lo controlla già prima di ricostruire. Qui è la seconda difesa,
+/// per chi arriva all'arena da un'altra strada.
+pub const MAX_ARENA_DEPTH: u32 = model::MAX_DOCUMENT_DEPTH;
+
+fn too_deep(arena: &str) -> ArenaError {
+    ArenaError::TooDeep {
+        arena: arena.to_string(),
+        limit: MAX_ARENA_DEPTH,
     }
 }
 
@@ -528,6 +546,9 @@ impl DocumentTree {
         if path.contains(&at) {
             return Err(cycle("blocks", at.0));
         }
+        if path.len() >= MAX_ARENA_DEPTH as usize {
+            return Err(too_deep("blocks"));
+        }
         path.push(at);
         let block = match node {
             Block::Heading {
@@ -682,6 +703,9 @@ impl DocumentTree {
             .ok_or_else(|| out_of_range("inlines", at.0, self.inlines.len()))?;
         if path.contains(&at) {
             return Err(cycle("inlines", at.0));
+        }
+        if path.len() >= MAX_ARENA_DEPTH as usize {
+            return Err(too_deep("inlines"));
         }
         path.push(at);
         let inline = match node {
@@ -944,6 +968,9 @@ impl UiTree {
             .ok_or_else(|| out_of_range("nodes", at.0, self.nodes.len()))?;
         if path.contains(&at) {
             return Err(cycle("nodes", at.0));
+        }
+        if path.len() >= MAX_ARENA_DEPTH as usize {
+            return Err(too_deep("nodes"));
         }
         path.push(at);
         let kind = match &node.kind {
@@ -1967,6 +1994,79 @@ mod tests {
             tree.rebuild(),
             Err(ArenaError::Cycle { index: 0, .. })
         ));
+    }
+
+    /// Una catena lunga senza cicli, arrivata dal confine: ricostruirla
+    /// ricorreva un livello per nodo e la pila dell'host finiva. Oltre il
+    /// tetto è un errore tipizzato, fino al tetto si ricostruisce.
+    #[test]
+    fn a_chain_deeper_than_the_limit_is_an_error_not_a_stack_overflow() {
+        let quotes = |levels: u32| DocumentTree {
+            blocks: (0..levels)
+                .map(|at| Block::Quote {
+                    blocks: if at + 1 < levels {
+                        vec![BlockRef(at + 1)]
+                    } else {
+                        Vec::new()
+                    },
+                    anchor: None,
+                    span: Span::default(),
+                })
+                .collect(),
+            inlines: Vec::new(),
+            roots: vec![BlockRef(0)],
+        };
+        assert!(quotes(MAX_ARENA_DEPTH).rebuild().is_ok());
+        assert!(matches!(
+            quotes(MAX_ARENA_DEPTH + 1).rebuild(),
+            Err(ArenaError::TooDeep { .. })
+        ));
+        let deep = quotes(200_000);
+        let outcome = std::thread::Builder::new()
+            .stack_size(2 * 1024 * 1024)
+            .spawn(move || deep.rebuild().map(|_| ()))
+            .unwrap()
+            .join()
+            .expect("la ricostruzione non cade");
+        assert!(matches!(outcome, Err(ArenaError::TooDeep { .. })));
+
+        let emphases = DocumentTree {
+            blocks: vec![Block::Paragraph {
+                inlines: vec![InlineRef(0)],
+                anchor: None,
+                span: Span::default(),
+            }],
+            inlines: (0..200_000u32)
+                .map(|at| Inline::Emph(vec![InlineRef(at + 1)]))
+                .chain(std::iter::once(Inline::HardBreak))
+                .collect(),
+            roots: vec![BlockRef(0)],
+        };
+        assert!(matches!(
+            emphases.rebuild(),
+            Err(ArenaError::TooDeep { .. })
+        ));
+
+        let stacks = UiTree {
+            nodes: (0..200_000u32)
+                .map(|at| UiNode {
+                    key: None,
+                    kind: crate::arena::UiKind::Stack {
+                        dir: Axis::Row,
+                        gap: 0,
+                        children: vec![UiRef(at + 1)],
+                    },
+                    drag: None,
+                })
+                .chain(std::iter::once(UiNode {
+                    key: None,
+                    kind: crate::arena::UiKind::Pending { label: None },
+                    drag: None,
+                }))
+                .collect(),
+            root: UiRef(0),
+        };
+        assert!(matches!(stacks.rebuild(), Err(ArenaError::TooDeep { .. })));
     }
 
     #[test]

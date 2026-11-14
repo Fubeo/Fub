@@ -128,6 +128,7 @@ pub mod publish;
 mod query;
 pub mod records;
 pub mod registry;
+pub mod regular_file;
 #[cfg(feature = "http-client")]
 pub mod remote;
 pub mod resources;

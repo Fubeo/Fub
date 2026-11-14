@@ -12,7 +12,9 @@
 //! ([`BUDGET`]): oltre, il tratto si allinea sulle **ancore**, gli elementi che
 //! compaiono una volta sola in tutti e due i lati (l'idea di patience diff), e
 //! i tratti fra due ancore ricominciano da capo. Un tratto senza ancore resta
-//! senza coppie. Chi usa il risultato lo legge come «toccato», mai come
+//! senza coppie. Anche le ancore hanno un tetto ([`ANCHOR_BUDGET`],
+//! [`ANCHOR_SPAN`]), e i loro tratti stanno in una pila esplicita: un file
+//! ostile costa al più il tetto, mai la pila del thread o gigabyte di memoria. Chi usa il risultato lo legge come «toccato», mai come
 //! «uguale»: un allineamento più povero costa lavoro in più o un controllo in
 //! più, non una garanzia in meno.
 
@@ -23,6 +25,25 @@ use std::hash::Hash;
 /// ancore.
 pub(crate) const BUDGET: u64 = 64_000_000;
 
+/// Gli elementi che le ancore possono contare in tutto: ogni tratto li conta
+/// una volta per lato. Oltre, i tratti restano senza coppie.
+pub(crate) const ANCHOR_BUDGET: u64 = 64_000_000;
+
+/// Il tratto più lungo (i due lati insieme) su cui si cercano ancore: la
+/// tabella degli elementi è grande quanto il tratto.
+pub(crate) const ANCHOR_SPAN: usize = 4_000_000;
+
+/// Fin dove arriva `d` nei vettori di Myers con `remaining` passi di lavoro
+/// ancora permessi: al passo `d` il lavoro speso è almeno `d²`, quindi oltre
+/// la radice il tetto ferma la ricerca prima. Mai oltre `max_d`.
+fn reach(remaining: u64, max_d: isize) -> isize {
+    if remaining == 0 {
+        return 0;
+    }
+    let limit = isize::try_from(remaining.isqrt().saturating_add(1)).unwrap_or(isize::MAX);
+    limit.min(max_d)
+}
+
 /// Le coppie di una sottosequenza comune di `a` e `b`, crescenti.
 pub(crate) fn common<T: Eq + Hash>(a: &[T], b: &[T]) -> Vec<(usize, usize)> {
     let mut out = Vec::new();
@@ -30,16 +51,29 @@ pub(crate) fn common<T: Eq + Hash>(a: &[T], b: &[T]) -> Vec<(usize, usize)> {
         a,
         b,
         spent: 0,
+        anchored: 0,
         out: &mut out,
     };
     work.walk(0, a.len(), 0, b.len());
     out
 }
 
+/// Un passo della pila delle ancore, nell'ordine in cui scrive le coppie.
+enum Step {
+    /// Un tratto da allineare.
+    Span(usize, usize, usize, usize),
+    /// Un'ancora.
+    Pair(usize, usize),
+    /// Il suffisso comune di un tratto: `n` coppie da `(a, b)`.
+    Suffix(usize, usize, usize),
+}
+
 struct Work<'a, T> {
     a: &'a [T],
     b: &'a [T],
     spent: u64,
+    /// Gli elementi già contati dalle ancore, per [`ANCHOR_BUDGET`].
+    anchored: u64,
     out: &'a mut Vec<(usize, usize)>,
 }
 
@@ -63,7 +97,7 @@ impl<T: Eq + Hash> Work<'_, T> {
                     self.walk(a0, x, b0, y);
                     self.walk(x, a1, y, b1);
                 }
-                None => self.anchors(a0, a1, b0, b1),
+                None => self.walk_anchored(a0, a1, b0, b1),
             }
         }
         self.out.extend((0..suffix).map(|k| (a1 + k, b1 + k)));
@@ -73,7 +107,10 @@ impl<T: Eq + Hash> Work<'_, T> {
     /// c'è niente in comune o il lavoro supera il tetto.
     fn bisect(&mut self, a0: usize, a1: usize, b0: usize, b1: usize) -> Option<(usize, usize)> {
         let (n, m) = ((a1 - a0) as isize, (b1 - b0) as isize);
-        let max_d = (n + m + 1) / 2;
+        // I vettori servono fin dove il tetto lascia arrivare `d`, non fino a
+        // metà dei due lati: con due lati di cento milioni di elementi
+        // sarebbero gigabyte allocati prima del primo passo.
+        let max_d = reach(BUDGET.saturating_sub(self.spent), (n + m + 1) / 2);
         let offset = max_d;
         let length = 2 * max_d + 2;
         let mut v1 = vec![-1isize; length as usize];
@@ -161,10 +198,16 @@ impl<T: Eq + Hash> Work<'_, T> {
         None
     }
 
-    /// Allinea il tratto sugli elementi che compaiono una volta sola per
-    /// lato, nell'ordine più lungo che rispettano tutti e due, e ricomincia
-    /// fra un'ancora e l'altra.
-    fn anchors(&mut self, a0: usize, a1: usize, b0: usize, b1: usize) {
+    /// Le ancore di `a[a0..a1]` e `b[b0..b1]`: gli elementi che compaiono una
+    /// volta sola per lato, nell'ordine più lungo che rispettano tutti e due.
+    /// Vuota se il tratto supera i tetti delle ancore.
+    fn anchors(&mut self, a0: usize, a1: usize, b0: usize, b1: usize) -> Vec<(usize, usize)> {
+        let size = (a1 - a0) + (b1 - b0);
+        let spend = self.anchored.saturating_add(size as u64);
+        if size > ANCHOR_SPAN || spend > ANCHOR_BUDGET {
+            return Vec::new();
+        }
+        self.anchored = spend;
         let mut seen: HashMap<&T, (u32, usize, u32, usize)> = HashMap::new();
         for i in a0..a1 {
             let entry = seen.entry(&self.a[i]).or_insert((0, i, 0, 0));
@@ -182,39 +225,55 @@ impl<T: Eq + Hash> Work<'_, T> {
             .filter(|(na, _, nb, _)| *na == 1 && *nb == 1)
             .map(|(_, i, _, j)| (i, j))
             .collect();
-        if unique.is_empty() {
-            return;
-        }
         unique.sort_unstable();
-        let chain = longest_increasing(&unique);
-        let (mut i, mut j) = (a0, b0);
-        for (x, y) in chain {
-            self.walk_anchored(i, x, j, y);
-            self.out.push((x, y));
-            i = x + 1;
-            j = y + 1;
-        }
-        self.walk_anchored(i, a1, j, b1);
+        longest_increasing(&unique)
     }
 
-    /// Fra due ancore, con il tetto già superato: prefisso, suffisso e ancore
-    /// del tratto, senza Myers.
-    fn walk_anchored(&mut self, mut a0: usize, mut a1: usize, mut b0: usize, mut b1: usize) {
-        while a0 < a1 && b0 < b1 && self.a[a0] == self.b[b0] {
-            self.out.push((a0, b0));
-            a0 += 1;
-            b0 += 1;
+    /// Con il tetto di Myers già superato: prefisso, suffisso e ancore del
+    /// tratto, e da capo fra un'ancora e l'altra, senza Myers. I tratti
+    /// aspettano in una pila esplicita: le ancore si annidano quanto il
+    /// documento è lungo, la pila del thread no.
+    fn walk_anchored(&mut self, a0: usize, a1: usize, b0: usize, b1: usize) {
+        let mut todo = vec![Step::Span(a0, a1, b0, b1)];
+        while let Some(step) = todo.pop() {
+            let (mut a0, mut a1, mut b0, mut b1) = match step {
+                Step::Pair(x, y) => {
+                    self.out.push((x, y));
+                    continue;
+                }
+                Step::Suffix(a1, b1, n) => {
+                    self.out.extend((0..n).map(|k| (a1 + k, b1 + k)));
+                    continue;
+                }
+                Step::Span(a0, a1, b0, b1) => (a0, a1, b0, b1),
+            };
+            while a0 < a1 && b0 < b1 && self.a[a0] == self.b[b0] {
+                self.out.push((a0, b0));
+                a0 += 1;
+                b0 += 1;
+            }
+            let mut suffix = 0;
+            while a0 < a1 && b0 < b1 && self.a[a1 - 1] == self.b[b1 - 1] {
+                a1 -= 1;
+                b1 -= 1;
+                suffix += 1;
+            }
+            // In ordine inverso: la pila restituisce prima l'ultimo entrato.
+            todo.push(Step::Suffix(a1, b1, suffix));
+            if a0 < a1 && b0 < b1 {
+                let chain = self.anchors(a0, a1, b0, b1);
+                if chain.is_empty() {
+                    continue;
+                }
+                let mut next = (a1, b1);
+                for &(x, y) in chain.iter().rev() {
+                    todo.push(Step::Span(x + 1, next.0, y + 1, next.1));
+                    todo.push(Step::Pair(x, y));
+                    next = (x, y);
+                }
+                todo.push(Step::Span(a0, next.0, b0, next.1));
+            }
         }
-        let mut suffix = 0;
-        while a0 < a1 && b0 < b1 && self.a[a1 - 1] == self.b[b1 - 1] {
-            a1 -= 1;
-            b1 -= 1;
-            suffix += 1;
-        }
-        if a0 < a1 && b0 < b1 {
-            self.anchors(a0, a1, b0, b1);
-        }
-        self.out.extend((0..suffix).map(|k| (a1 + k, b1 + k)));
     }
 }
 
@@ -327,6 +386,7 @@ mod tests {
             a: &work_a,
             b: &work_b,
             spent: BUDGET,
+            anchored: 0,
             out: &mut out,
         };
         work.walk(0, work_a.len(), 0, work_b.len());
@@ -338,6 +398,94 @@ mod tests {
             assert_eq!(work_a[i], work_b[j]);
         }
         assert!(!out.is_empty());
+    }
+
+    /// Due lati in cui ogni livello ha una sola ancora, e l'ancora del livello
+    /// sotto compare due volte nel livello sopra: le ancore si trovano una
+    /// alla volta, un livello dentro l'altro, `levels` volte.
+    fn nested_anchors(levels: u32) -> (Vec<u32>, Vec<u32>) {
+        let (mut a, mut b) = (Vec::new(), Vec::new());
+        for k in (1..=levels).rev() {
+            let (above, here) = (10 * (k - 1) + 4, 10 * k + 4);
+            a.extend([10 * k, above, here]);
+            b.extend([10 * k + 1, above, here]);
+        }
+        a.push(0);
+        b.push(1);
+        for k in 1..=levels {
+            a.push(10 * k + 2);
+            b.push(10 * k + 3);
+        }
+        (a, b)
+    }
+
+    /// Le ancore annidate non consumano la pila: prima una ricorsione per
+    /// livello la esauriva, e il processo cadeva senza un errore.
+    #[test]
+    fn le_ancore_annidate_non_esauriscono_la_pila() {
+        let levels = 2000;
+        let (a, b) = nested_anchors(levels);
+        let out = std::thread::Builder::new()
+            .stack_size(256 * 1024)
+            .spawn(move || {
+                let mut out = Vec::new();
+                let mut work = Work {
+                    a: &a,
+                    b: &b,
+                    spent: BUDGET,
+                    anchored: 0,
+                    out: &mut out,
+                };
+                work.walk(0, a.len(), 0, b.len());
+                (a, b, out)
+            })
+            .unwrap()
+            .join();
+        let (a, b, out) = out.expect("l'allineamento non cade");
+        for window in out.windows(2) {
+            assert!(window[0].0 < window[1].0 && window[0].1 < window[1].1);
+        }
+        for &(i, j) in &out {
+            assert_eq!(a[i], b[j]);
+        }
+        // Ogni livello dà la sua ancora e l'ancora di sopra.
+        assert_eq!(out.len(), 2 * levels as usize);
+    }
+
+    /// Il lavoro delle ancore ha un tetto: oltre, un tratto resta senza
+    /// coppie, che vuol dire «toccato», e il conto non cresce col quadrato.
+    #[test]
+    fn il_lavoro_delle_ancore_ha_un_tetto() {
+        let (a, b) = nested_anchors(2000);
+        let mut out = Vec::new();
+        let mut work = Work {
+            a: &a,
+            b: &b,
+            spent: BUDGET,
+            anchored: ANCHOR_BUDGET - 10_000,
+            out: &mut out,
+        };
+        work.walk(0, a.len(), 0, b.len());
+        assert!(work.anchored <= ANCHOR_BUDGET + a.len() as u64 + b.len() as u64);
+        assert!(out.len() < 2 * 2000);
+        for &(i, j) in &out {
+            assert_eq!(a[i], b[j]);
+        }
+    }
+
+    /// I vettori di Myers sono grandi quanto il lavoro che il tetto permette,
+    /// non quanto i due lati: due lati enormi e diversi non chiedono gigabyte.
+    #[test]
+    fn la_memoria_di_myers_segue_il_tetto() {
+        assert!(reach(BUDGET, isize::MAX / 4) <= 8_001);
+        assert_eq!(reach(BUDGET, 10), 10);
+        assert_eq!(reach(0, 1_000_000), 0);
+        // Niente in comune e troppo per le ancore: nessuna coppia, e i vettori
+        // restano piccoli (senza tetto sarebbero 2 · 8 · 10⁷ byte).
+        let n = 5_000_000u32;
+        let a: Vec<u32> = (0..n).collect();
+        let b: Vec<u32> = (n..2 * n).collect();
+        assert!(common(&a, &b).is_empty());
     }
 
     #[test]

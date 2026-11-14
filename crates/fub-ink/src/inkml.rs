@@ -43,6 +43,20 @@ const WRITE_PRESSURE_MAX: f64 = 32767.0;
 /// grande non è inchiostro scritto a mano.
 pub const MAX_TRACES: usize = 10_000;
 
+/// Quanti nodi (elementi, attributi e testi) l'albero di una parte InkML
+/// tiene, al più. Un tratto che Fub scrive col suo pennello completo, rientrato
+/// come lo riscrive un altro programma, ne costa 42 (il pennello con otto
+/// proprietà e i loro attributi, la traccia, gli spazi fra i tag): 64 per
+/// tratto lasciano margine a contesti e attributi in più senza rifiutare la
+/// parte più grande che [`MAX_TRACES`] ammette. Il tetto vale durante la
+/// lettura, prima di [`MAX_TRACES`]: senza, venti megabyte di `<a/>`
+/// diventano milioni di nodi prima di qualunque conto; così restano 640.000.
+pub const MAX_NODES: usize = 64 * MAX_TRACES;
+
+/// Quanti valori ha un punto di una traccia, al più: un valore per canale, e
+/// nessun formato ne dichiara così tanti.
+const MAX_POINT_VALUES: usize = 64;
+
 /// La punta del pennello.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum InkTip {
@@ -182,7 +196,11 @@ pub fn to_inkml(ink: &InkDocument) -> String {
         let _ = write!(
             out,
             "<inkml:brushProperty name=\"color\" value=\"{}\"/>",
-            brush.color.to_ascii_uppercase()
+            // Il campo è pubblico: un colore che non è `#rrggbb` non entra
+            // nell'attributo, dove chiuderebbe le virgolette.
+            hex_color(&brush.color)
+                .unwrap_or_else(|| InkBrush::default().color)
+                .to_ascii_uppercase()
         );
         if brush.transparency > 0 {
             let _ = write!(
@@ -326,6 +344,8 @@ fn unescape(text: &str) -> String {
 struct Parser<'a> {
     text: &'a str,
     at: usize,
+    /// I nodi letti, per [`MAX_NODES`].
+    nodes: usize,
 }
 
 impl<'a> Parser<'a> {
@@ -359,10 +379,20 @@ impl<'a> Parser<'a> {
         }
     }
 
+    /// Conta `n` nodi nuovi: oltre [`MAX_NODES`] la parte è troppo grande.
+    fn count(&mut self, n: usize) -> Result<(), InkmlError> {
+        self.nodes = self.nodes.saturating_add(n);
+        if self.nodes > MAX_NODES {
+            return Err(InkmlError::TooLarge);
+        }
+        Ok(())
+    }
+
     fn element(&mut self, depth: usize) -> Result<Element, InkmlError> {
         if depth > 64 {
             return Err(self.malformed("troppo annidato"));
         }
+        self.count(1)?;
         let rest = self.rest();
         if !rest.starts_with('<') {
             return Err(self.malformed("atteso un elemento"));
@@ -394,6 +424,7 @@ impl<'a> Parser<'a> {
             let close = after[1..]
                 .find(quote)
                 .ok_or_else(|| self.malformed("virgolette non chiuse"))?;
+            self.count(1)?;
             attrs.insert(local(key).to_owned(), unescape(&after[1..1 + close]));
             attr_text = after[close + 2..].trim_start();
         }
@@ -428,6 +459,7 @@ impl<'a> Parser<'a> {
                 let end = cdata
                     .find("]]>")
                     .ok_or_else(|| self.malformed("CDATA non chiuso"))?;
+                self.count(1)?;
                 element.children.push(Node::Text(cdata[..end].to_owned()));
                 self.at += 9 + end + 3;
                 continue;
@@ -438,6 +470,7 @@ impl<'a> Parser<'a> {
                 continue;
             }
             let end = rest.find('<').unwrap_or(rest.len());
+            self.count(1)?;
             element.children.push(Node::Text(unescape(&rest[..end])));
             self.at += end;
         }
@@ -445,7 +478,11 @@ impl<'a> Parser<'a> {
 }
 
 fn parse(text: &str) -> Result<Element, InkmlError> {
-    let mut parser = Parser { text, at: 0 };
+    let mut parser = Parser {
+        text,
+        at: 0,
+        nodes: 0,
+    };
     parser.skip_misc()?;
     parser.element(0)
 }
@@ -548,6 +585,14 @@ fn pen_id(value: &str) -> bool {
             .all(|b| b.is_ascii_alphanumeric() || b == b'-')
 }
 
+/// `#rrggbb` minuscolo, se `value` è un colore di sei cifre esadecimali (con
+/// il `#` davanti o senza).
+fn hex_color(value: &str) -> Option<String> {
+    let hex = value.trim_start_matches('#');
+    (hex.len() == 6 && hex.chars().all(|c| c.is_ascii_hexdigit()))
+        .then(|| format!("#{}", hex.to_ascii_lowercase()))
+}
+
 fn brush_of(element: &Element) -> InkBrush {
     let mut brush = InkBrush::default();
     for property in element.elements().filter(|el| el.name == "brushProperty") {
@@ -561,9 +606,8 @@ fn brush_of(element: &Element) -> InkBrush {
             "width" => brush.width = length().unwrap_or(brush.width),
             "height" => brush.height = length().unwrap_or(brush.height),
             "color" => {
-                let hex = value.trim_start_matches('#');
-                if hex.len() == 6 && hex.chars().all(|c| c.is_ascii_hexdigit()) {
-                    brush.color = format!("#{}", hex.to_ascii_lowercase());
+                if let Some(color) = hex_color(value) {
+                    brush.color = color;
                 }
             }
             "transparency" => {
@@ -612,6 +656,11 @@ fn trace_points(text: &str) -> Result<Vec<Vec<Read>>, InkmlError> {
         let raw = raw.trim();
         if raw.is_empty() {
             continue;
+        }
+        // Il tetto vale mentre si legge: una traccia di milioni di punti si
+        // ferma al primo oltre il limite, non dopo averli tenuti tutti.
+        if points.len() >= crate::MAX_SAMPLES {
+            return Err(InkmlError::TooLarge);
         }
         let mut values = Vec::new();
         let bytes = raw.as_bytes();
@@ -663,6 +712,9 @@ fn trace_points(text: &str) -> Result<Vec<Vec<Read>>, InkmlError> {
             let value: f64 = token
                 .parse()
                 .map_err(|_| InkmlError::Unsupported(format!("valore «{token}»")))?;
+            if values.len() >= MAX_POINT_VALUES {
+                return Err(InkmlError::TooLarge);
+            }
             values.push((mode, value));
         }
         points.push(values);
@@ -847,6 +899,76 @@ mod tests {
             t,
             tilt: None,
         }
+    }
+
+    /// I tetti valgono durante la lettura: una parte di nodi vuoti, una
+    /// traccia di troppi punti o un punto di troppi valori sono `TooLarge`
+    /// prima di tenere tutto in memoria.
+    #[test]
+    fn i_tetti_valgono_mentre_si_legge() {
+        let ink = |inside: &str| format!("<ink xmlns=\"{INKML_NS}\">{inside}</ink>");
+        let empty = ink(&"<a/>".repeat(MAX_NODES + 1));
+        assert_eq!(parse(&empty).unwrap_err(), InkmlError::TooLarge);
+        // La radice e il suo `xmlns` sono due nodi.
+        assert!(parse(&ink(&"<a/>".repeat(MAX_NODES - 2))).is_ok());
+
+        let points = vec!["1 2"; crate::MAX_SAMPLES + 1].join(",");
+        assert!(matches!(trace_points(&points), Err(InkmlError::TooLarge)));
+        let points = vec!["1 2"; crate::MAX_SAMPLES].join(",");
+        assert_eq!(trace_points(&points).unwrap().len(), crate::MAX_SAMPLES);
+
+        let wide = vec!["1"; MAX_POINT_VALUES + 1].join(" ");
+        assert!(matches!(trace_points(&wide), Err(InkmlError::TooLarge)));
+    }
+
+    /// Il tetto dei nodi non rifiuta quello che Fub stesso scrive: una parte
+    /// di [`MAX_TRACES`] tratti, ognuno col suo pennello e con tutte le
+    /// proprietà, anche rientrata come la riscrive un altro programma, si
+    /// rilegge intera.
+    #[test]
+    fn la_parte_più_grande_che_fub_scrive_si_rilegge() {
+        let strokes: Vec<InkStroke> = (0..MAX_TRACES)
+            .map(|index| InkStroke {
+                brush: InkBrush {
+                    color: format!("#{index:06x}"),
+                    width: 1.0 + index as f64 / 100.0,
+                    height: 2.0,
+                    tip: InkTip::Rectangle,
+                    highlighter: true,
+                    transparency: (index % 255 + 1) as u8,
+                    ignore_pressure: true,
+                    pen: Some(format!("penna-{index}")),
+                },
+                samples: vec![sample(0.0, 0.0, 0.5, 0.0), sample(1.0, 0.0, 0.5, 8.0)],
+            })
+            .collect();
+        let written = to_inkml(&InkDocument { strokes });
+        let indented = written.replace("><", ">\n    <");
+        for text in [&written, &indented] {
+            let back = from_inkml(text).expect("Fub rilegge quello che scrive");
+            assert_eq!(back.strokes.len(), MAX_TRACES);
+            assert_eq!(
+                back.strokes[MAX_TRACES - 1].brush.pen.as_deref(),
+                Some("penna-9999")
+            );
+        }
+    }
+
+    #[test]
+    fn un_colore_che_non_è_esadecimale_non_entra_nell_attributo() {
+        let ink = InkDocument {
+            strokes: vec![InkStroke {
+                brush: InkBrush {
+                    color: "\"/><x a=\"".into(),
+                    ..InkBrush::default()
+                },
+                samples: vec![sample(0.0, 0.0, 0.5, 0.0), sample(1.0, 0.0, 0.5, 8.0)],
+            }],
+        };
+        let text = to_inkml(&ink);
+        assert!(!text.contains("<x "), "{text}");
+        let back = from_inkml(&text).unwrap();
+        assert_eq!(back.strokes[0].brush.color, InkBrush::default().color);
     }
 
     #[test]

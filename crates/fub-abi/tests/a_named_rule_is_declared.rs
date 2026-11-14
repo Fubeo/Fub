@@ -606,12 +606,21 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
             ),
         ),
         (
+            "crates/fub-ink/src/inkml.rs::hex_color",
+            (
+                Family::AsciiCase,
+                "porta il colore del pennello InkML in minuscolo, la forma di `fub-ink`, in lettura \
+                 e prima di scriverlo, dopo aver controllato sei cifre esadecimali ASCII. \
+                 Normalizza un numero, non confronta nomi.",
+            ),
+        ),
+        (
             "crates/fub-ink/src/inkml.rs::brush_of",
             (
                 Family::AsciiCase,
-                "legge il colore del pennello InkML in minuscolo, la forma di `fub-ink`, dopo \
-                 aver controllato sei cifre esadecimali ASCII. Normalizza un numero, non \
-                 confronta nomi.",
+                "legge i valori `rectangle` di `tip` e `true` di `ignorePressure` del pennello \
+                 InkML senza badare al caso, come li scrivono Word e OneNote: sono parole \
+                 chiuse di un vocabolario ASCII, non nomi di file o di chiavi.",
             ),
         ),
         (
@@ -1974,7 +1983,7 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
             ),
         ),
         (
-            "crates/fub-scene/src/analysis.rs::active_content",
+            "crates/fub-scene/src/analysis.rs::is_active_attr",
             (
                 Family::AsciiCase,
                 "riconosce i gestori di evento `on*` senza badare al caso, per l'avviso S005: \

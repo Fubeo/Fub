@@ -640,6 +640,13 @@ pub fn resource_read_at(
     offset: u64,
     len: usize,
 ) -> Result<Vec<u8>, KernelError> {
+    // La lease ha i campi pubblici e si clona: il path che porta si recinta
+    // di nuovo qui, dove si compone, come fa `Vault::path_for`. Un `..` o un
+    // path assoluto scritto dopo l'apertura non arriva allo storage.
+    fub_abi::rules::path_policy::fenced(&lease.path).map_err(|why| KernelError::BadName {
+        name: lease.path.clone(),
+        why: why.to_string(),
+    })?;
     let path = lease.root.join(lease.path.as_str());
     let before = storage.stat(&path).map_err(|source| KernelError::Io {
         path: path.clone(),
