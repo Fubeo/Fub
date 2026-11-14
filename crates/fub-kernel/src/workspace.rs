@@ -6504,14 +6504,26 @@ impl Workspace {
             .values()
             .filter(|entry| !self.indexes.core.observed_at_the_same_instant(&entry.id))
             .map(|entry| {
+                let now = crate::same_content::FileWitness::of(&self.docs.vault, &entry.id);
+                // Un'impronta imparata da una domanda vale per il file su cui
+                // la si è imparata: se adesso al suo posto c'è un altro file,
+                // con la stessa misura e la stessa data e senza un evento, la
+                // riga non la porta, e la prossima apertura rilegge il file
+                // invece di certificarlo con i byte di prima.
+                let fingerprint = entry.fingerprint.clone().filter(|_| {
+                    self.indexes
+                        .core
+                        .learned_on(&entry.id)
+                        .is_none_or(|witness| witness.agrees(&now))
+                });
                 (
                     entry.id.clone(),
                     StoredEntry {
                         size: entry.size,
                         mtime: entry.mtime,
-                        change_stamp: self.docs.vault.change_stamp(&entry.id),
-                        identity: self.docs.vault.file_identity(&entry.id),
-                        fingerprint: entry.fingerprint.clone(),
+                        change_stamp: now.change_stamp,
+                        identity: now.identity,
+                        fingerprint,
                         metadata: self.indexes.core.stored_metadata(&entry.id),
                     },
                 )
@@ -6604,6 +6616,7 @@ impl Workspace {
     pub fn prepare_same_content(&self, target: &DocId, bytes_len: u64) -> PreparedSameContent {
         let plan = crate::same_content::plan(
             self.indexes.core.entries.values(),
+            |id| self.indexes.core.learned_on(id),
             self.indexes.core.anagrafe_complete(),
             &self.docs.vault.ignore_policy(),
             target,
@@ -6620,16 +6633,20 @@ impl Workspace {
     ///
     /// - la data letta era già nel passato quando la domanda è cominciata
     ///   (*racily clean*);
-    /// - il file nel vault è **ancora quello letto**: stesso timbro di
-    ///   cambiamento e stessa identità adesso, sotto il lucchetto;
     /// - la voce c'è ancora con la misura e la data lette: una voce cambiata
     ///   nel frattempo, da una scrittura o dal rilevatore, non torna indietro;
     /// - se l'anagrafe ha una riga con quella misura e quella data, la riga
-    ///   descrive lo stesso file (timbro, e identità quando entrambe la
-    ///   conoscono). Un file sostituito da un altro con la stessa misura e la
-    ///   stessa data, senza che il rilevatore lo dicesse, ha una voce che
-    ///   descrive ancora quello di prima: la sua impronta, attaccata alla voce,
-    ///   certificherebbe i metadati del file di prima con i byte del nuovo.
+    ///   descrive lo stesso file ([`FileWitness::agrees`](crate::same_content::FileWitness::agrees)).
+    ///   Un file sostituito da un altro con la stessa misura e la stessa data,
+    ///   senza che il rilevatore lo dicesse, ha una voce che descrive ancora
+    ///   quello di prima.
+    ///
+    /// Il file letto (segno del cambio e identità) l'ha preso la domanda, fuori
+    /// dal lucchetto: qui si confronta soltanto, senza domande al supporto e
+    /// senza copiare la riga dell'anagrafe. L'impronta resta nella voce col
+    /// suo testimone: chi la usa dopo la crede solo per quel file, e
+    /// [`store_entries`](Self::store_entries) non la scrive per un file che nel
+    /// frattempo è un altro.
     ///
     /// Non scrive niente su disco: l'anagrafe porta le impronte in
     /// `entries.json` con [`store_entries`](Self::store_entries), l'unico che lo
@@ -6640,7 +6657,17 @@ impl Workspace {
             if learned.mtime == 0 || learned.mtime >= learned.observed_at {
                 continue;
             }
-            if !self.still_the_file_read(&learned) {
+            let table_disagrees = self
+                .entry_store
+                .ask_known(&learned.id, |known| {
+                    known.describes(learned.size, learned.mtime)
+                        && !learned.witness.agrees(&crate::same_content::FileWitness {
+                            change_stamp: known.change_stamp,
+                            identity: known.identity,
+                        })
+                })
+                .unwrap_or(false);
+            if table_disagrees {
                 continue;
             }
             if self.indexes.core.learn_fingerprint(
@@ -6648,34 +6675,12 @@ impl Workspace {
                 learned.size,
                 learned.mtime,
                 &learned.fingerprint,
+                learned.witness,
             ) {
                 kept += 1;
             }
         }
         kept
-    }
-
-    /// Il file di `learned` è ancora quello che la domanda ha letto, e la riga
-    /// dell'anagrafe con la sua misura e la sua data, se c'è, parla di lui? Le
-    /// domande al supporto sono `stat`, non letture: si fanno sotto il
-    /// lucchetto come in [`store_entries`](Self::store_entries).
-    fn still_the_file_read(&self, learned: &crate::same_content::Learned) -> bool {
-        let vault = &self.docs.vault;
-        if vault.change_stamp(&learned.id) != learned.change_stamp
-            || vault.file_identity(&learned.id) != learned.identity
-        {
-            return false;
-        }
-        self.entry_store
-            .known(&learned.id)
-            .filter(|known| known.describes(learned.size, learned.mtime))
-            .is_none_or(|known| {
-                known.same_change_stamp(learned.change_stamp)
-                    && match (&known.identity, &learned.identity) {
-                        (Some(stored), Some(observed)) => stored == observed,
-                        _ => true,
-                    }
-            })
     }
 
     fn check_resource_lease(&self, lease: &ResourceLease) -> Result<()> {

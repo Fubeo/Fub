@@ -85,6 +85,7 @@ impl CoreIndex {
             entries: BTreeMap::new(),
             names: EntryNames::default(),
             observed_in_the_own_instant: BTreeSet::new(),
+            learned_on: BTreeMap::new(),
             scanned: false,
             folders: BTreeSet::new(),
             tags: TagCounts::default(),
@@ -130,6 +131,7 @@ impl CoreIndex {
         self.folders.clear();
         self.tags.clear();
         self.observed_in_the_own_instant.clear();
+        self.learned_on.clear();
         self.scanned = false;
         self.graph_epoch = 0;
     }
@@ -386,8 +388,26 @@ impl CoreIndex {
     }
 
     fn install_entry(&mut self, entry: VaultEntry) {
+        // Il testimone di un'impronta imparata resta solo se la voce nuova
+        // porta la stessa impronta per la stessa misura e la stessa data: chi
+        // reinstalla la voce senza averla riletta (la seconda fase che trova
+        // l'impronta già data) non ne fa un'impronta senza testimone.
+        let same = self.entries.get(&entry.id).is_some_and(|before| {
+            before.size == entry.size
+                && before.mtime == entry.mtime
+                && before.fingerprint == entry.fingerprint
+        });
+        if !same {
+            self.learned_on.remove(&entry.id);
+        }
         self.names.insert_entry(&entry.id, entry.kind);
         self.entries.insert(entry.id.clone(), entry);
+    }
+
+    /// Il file su cui una domanda ha imparato l'impronta della voce `id`, se è
+    /// così che la voce l'ha avuta.
+    pub(crate) fn learned_on(&self, id: &DocId) -> Option<crate::same_content::FileWitness> {
+        self.learned_on.get(id).copied()
     }
 
     /// Se di questa voce **non ci si può fidare fino alla prossima apertura**:
@@ -468,6 +488,7 @@ impl CoreIndex {
     pub(crate) fn remove_entry(&mut self, id: &DocId) -> Option<EntryKind> {
         self.names.remove_entry(id);
         self.observed_in_the_own_instant.remove(id);
+        self.learned_on.remove(id);
         self.entries.remove(id).map(|and| and.kind)
     }
 
@@ -487,7 +508,8 @@ impl CoreIndex {
     /// file fuori dal lucchetto, se la voce descrive ancora quel file: stessa
     /// misura e stessa data di quando lo si è osservato. Una voce cambiata nel
     /// frattempo (una scrittura, il rilevatore) vince, e l'impronta si butta.
-    /// Ritorna `true` se l'ha tenuta.
+    /// Accanto all'impronta resta `witness`, il file letto (vedi
+    /// [`learned_on`](Self::learned_on)). Ritorna `true` se l'ha tenuta.
     ///
     /// Tocca solo l'impronta: i nomi e il segno *racily clean* di `entries`
     /// non dipendono da lei, quindi non serve passare da `install_entry`.
@@ -497,6 +519,7 @@ impl CoreIndex {
         size: u64,
         mtime: u64,
         fingerprint: &Revision,
+        witness: crate::same_content::FileWitness,
     ) -> bool {
         let Some(entry) = self.entries.get_mut(id) else {
             return false;
@@ -504,10 +527,13 @@ impl CoreIndex {
         if entry.size != size || entry.mtime != mtime {
             return false;
         }
-        if entry.fingerprint.as_ref() == Some(fingerprint) {
+        if entry.fingerprint.as_ref() == Some(fingerprint)
+            && self.learned_on.get(id) == Some(&witness)
+        {
             return false;
         }
         entry.fingerprint = Some(fingerprint.clone());
+        self.learned_on.insert(id.clone(), witness);
         true
     }
 

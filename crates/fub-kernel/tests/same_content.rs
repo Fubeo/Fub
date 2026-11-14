@@ -12,6 +12,7 @@ use std::alloc::{GlobalAlloc, Layout, System};
 use std::cell::Cell;
 use std::fs;
 use std::io;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime};
 
@@ -35,6 +36,8 @@ struct Interposed {
     /// Alla prima lettura a pezzi di questo path, il file viene riscritto con
     /// questi byte.
     rewritten_after_read: Mutex<Option<(Utf8PathBuf, Vec<u8>)>>,
+    /// Quante domande di identità e di segno del cambio ha ricevuto.
+    witness_questions: AtomicUsize,
 }
 
 impl VaultStorage for Interposed {
@@ -99,10 +102,12 @@ impl VaultStorage for Interposed {
     }
 
     fn file_identity(&self, path: &Utf8Path) -> io::Result<Option<FileIdentity>> {
+        self.witness_questions.fetch_add(1, Ordering::SeqCst);
         self.inner.file_identity(path)
     }
 
     fn change_stamp(&self, path: &Utf8Path) -> io::Result<Option<u64>> {
+        self.witness_questions.fetch_add(1, Ordering::SeqCst);
         self.inner.change_stamp(path)
     }
 
@@ -117,6 +122,7 @@ impl Interposed {
             inner: RootedFsStorage::open(root).expect("radice"),
             failing: Vec::new(),
             rewritten_after_read: Mutex::new(None),
+            witness_questions: AtomicUsize::new(0),
         }
     }
 
@@ -629,23 +635,89 @@ fn replace_keeping_the_date(root: &Utf8Path, rel: &str, bytes: &[u8]) {
 }
 
 #[test]
-fn a_file_replaced_after_the_question_teaches_nothing() {
+fn a_fingerprint_learned_on_a_file_replaced_afterwards_is_not_believed() {
     let dir = tempfile::tempdir().expect("tempdir");
     let root = root_of(&dir);
     put(&root, "a.md", b"abcd");
     let mut workspace = open(&root);
 
-    // La domanda legge «a.md» fuori dal lucchetto e ne calcola l'impronta…
+    // La domanda legge «a.md» fuori dal lucchetto e ne calcola l'impronta, e
+    // la consegna: la voce la tiene, col file su cui l'ha imparata…
     let outcome = workspace
         .prepare_same_content(&DocId::new("b.md"), 4)
         .invoke(b"zzzz");
-    assert!(!outcome.learned.is_empty());
-    // …poi, prima che l'impronta torni, un altro file prende il suo posto con
-    // la stessa misura e la stessa data: l'impronta letta non è la sua.
+    assert_eq!(workspace.learn_fingerprints(outcome.learned), 1);
+    // …poi un altro file prende il suo posto con la stessa misura e la stessa
+    // data, senza che il rilevatore lo dica: l'impronta non è la sua.
     replace_keeping_the_date(&root, "a.md", b"efgh");
-    assert_eq!(workspace.learn_fingerprints(outcome.learned), 0);
     assert_eq!(ask(&mut workspace, "b.md", b"abcd"), SameContent::NotFound);
-    assert_eq!(ask(&mut workspace, "b.md", b"efgh"), found("a.md"));
+    assert_eq!(
+        ask(&mut workspace, "b.md", b"efgh"),
+        found("a.md"),
+        "la domanda dopo vede che il file è un altro, e rilegge"
+    );
+}
+
+#[test]
+fn the_entry_store_does_not_certify_a_file_replaced_after_the_learning() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let root = root_of(&dir);
+    put(&root, "a.md", b"abcd");
+    let mut workspace = open(&root);
+    let outcome = workspace
+        .prepare_same_content(&DocId::new("b.md"), 4)
+        .invoke(b"zzzz");
+    assert_eq!(workspace.learn_fingerprints(outcome.learned), 1);
+
+    // Il file è sostituito senza evento, con la stessa misura e la stessa data;
+    // poi l'anagrafe scrive la tabella col segno che il file ha adesso.
+    replace_keeping_the_date(&root, "a.md", b"efgh");
+    workspace.store_entries();
+    assert_ne!(
+        recorded_fingerprint(&root, "a.md"),
+        Some(Revision::of_bytes(b"abcd").0),
+        "la riga col segno del file nuovo non porta l'impronta dei byte vecchi"
+    );
+    drop(workspace);
+
+    // Riaperto, il vault non crede a un'impronta vecchia: i byte di prima non
+    // ci sono, quelli di adesso sì.
+    let mut reopened = open(&root);
+    assert_ne!(
+        recorded_fingerprint(&root, "a.md"),
+        Some(Revision::of_bytes(b"abcd").0)
+    );
+    assert_eq!(ask(&mut reopened, "b.md", b"abcd"), SameContent::NotFound);
+    assert_eq!(ask(&mut reopened, "b.md", b"efgh"), found("a.md"));
+}
+
+#[test]
+fn learning_under_the_lock_asks_the_storage_nothing() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let root = root_of(&dir);
+    for n in 0..8 {
+        put(
+            &root,
+            &format!("pila/{n}.bin"),
+            format!("byte{n}").as_bytes(),
+        );
+    }
+    let storage = Arc::new(Interposed::over(&root));
+    let mut workspace = open_on(&root, Arc::clone(&storage));
+
+    let outcome = workspace
+        .prepare_same_content(&DocId::new("nuovo.bin"), 5)
+        .invoke(b"altro");
+    assert_eq!(outcome.answer, SameContent::NotFound);
+    // Segno e identità li ha presi la domanda, fuori dal lucchetto: dentro si
+    // confronta soltanto.
+    let before = storage.witness_questions.load(Ordering::SeqCst);
+    assert_eq!(workspace.learn_fingerprints(outcome.learned), 8);
+    assert_eq!(
+        storage.witness_questions.load(Ordering::SeqCst),
+        before,
+        "nessuna domanda al supporto sotto il lucchetto esclusivo"
+    );
 }
 
 /// Un orologio fermo a un istante scelto dal test.

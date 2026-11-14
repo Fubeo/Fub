@@ -107,6 +107,46 @@ pub(crate) struct Candidate {
     pub(crate) size: u64,
     pub(crate) mtime: u64,
     pub(crate) fingerprint: Option<Revision>,
+    /// Il file su cui l'impronta è stata imparata da una domanda, se è così
+    /// che la voce l'ha avuta: l'impronta vale solo per quel file.
+    pub(crate) witness: Option<FileWitness>,
+}
+
+/// **Quale file**, oltre a misura e data: il segno del cambio e l'identità
+/// che il supporto dà per un path, letti senza aprire il file.
+///
+/// Due testimoni dicono lo stesso file se **ogni campo che entrambi conoscono
+/// coincide** ([`FileWitness::agrees`]). Un campo che uno dei due non conosce
+/// non decide, né in un verso né nell'altro: un supporto che non sa dare il
+/// segno (una memoria, un archivio) o una riga scritta prima che lo si
+/// registrasse non bloccano per sempre l'impronta, e il «sì» lo danno
+/// comunque i byte. La regola è una per il segno e per l'identità.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) struct FileWitness {
+    pub(crate) change_stamp: Option<u64>,
+    pub(crate) identity: Option<FileIdentity>,
+}
+
+impl FileWitness {
+    /// Il testimone di `id` adesso, come lo dà il supporto del vault.
+    pub(crate) fn of(vault: &Vault, id: &DocId) -> FileWitness {
+        FileWitness {
+            change_stamp: vault.change_stamp(id),
+            identity: vault.file_identity(id),
+        }
+    }
+
+    /// Dicono lo stesso file? Vedi il tipo: ogni campo noto a entrambi deve
+    /// coincidere, uno ignoto da una parte non decide.
+    pub(crate) fn agrees(&self, other: &FileWitness) -> bool {
+        fn same<T: PartialEq>(a: &Option<T>, b: &Option<T>) -> bool {
+            match (a, b) {
+                (Some(a), Some(b)) => a == b,
+                _ => true,
+            }
+        }
+        same(&self.change_stamp, &other.change_stamp) && same(&self.identity, &other.identity)
+    }
 }
 
 /// Quello che si decide sotto il lucchetto, senza leggere niente: o la risposta
@@ -119,16 +159,17 @@ pub(crate) enum Plan {
 
 /// Un'impronta calcolata da una domanda, da riportare all'indice vivo: vale
 /// per la voce `id` solo se la voce ha ancora `size` e `mtime`, se `mtime` è
-/// strettamente anteriore a `observed_at` (la regola *racily clean*), e se il
-/// file è ancora quello letto (`change_stamp`, `identity`): vedi
-/// [`Workspace::learn_fingerprints`](crate::Workspace::learn_fingerprints).
+/// strettamente anteriore a `observed_at` (la regola *racily clean*). Il
+/// `witness` è il file letto, preso fuori dal lucchetto mentre si calcolava
+/// l'impronta: l'indice lo tiene accanto all'impronta, e chi la usa dopo (la
+/// domanda seguente, l'anagrafe che la scrive) la crede solo per quel file.
+/// Vedi [`Workspace::learn_fingerprints`](crate::Workspace::learn_fingerprints).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Learned {
     pub(crate) id: DocId,
     pub(crate) size: u64,
     pub(crate) mtime: u64,
-    pub(crate) change_stamp: Option<u64>,
-    pub(crate) identity: Option<FileIdentity>,
+    pub(crate) witness: FileWitness,
     pub(crate) observed_at: u64,
     pub(crate) fingerprint: Revision,
 }
@@ -160,8 +201,7 @@ pub struct SameContentOutcome {
 struct Observed {
     size: u64,
     mtime: u64,
-    change_stamp: Option<u64>,
-    identity: Option<FileIdentity>,
+    witness: FileWitness,
 }
 
 impl Observed {
@@ -179,8 +219,10 @@ impl Observed {
         Some(Observed {
             size: stat.size,
             mtime: stat.mtime,
-            change_stamp: storage.change_stamp(path).ok()?,
-            identity: storage.file_identity(path).ok()?,
+            witness: FileWitness {
+                change_stamp: storage.change_stamp(path).ok()?,
+                identity: storage.file_identity(path).ok()?,
+            },
         })
     }
 }
@@ -209,18 +251,28 @@ fn extension_of(id: &str) -> Option<String> {
 /// lucchetto del workspace.
 pub(crate) fn plan<'a>(
     entries: impl IntoIterator<Item = &'a VaultEntry>,
+    witness_of: impl Fn(&DocId) -> Option<FileWitness>,
     ready: bool,
     policy: &IgnorePolicy,
     target: &DocId,
     bytes_len: u64,
 ) -> Plan {
-    plan_within(entries, ready, policy, target, bytes_len, MAX_BYTES_READ)
+    plan_within(
+        entries,
+        witness_of,
+        ready,
+        policy,
+        target,
+        bytes_len,
+        MAX_BYTES_READ,
+    )
 }
 
 /// [`plan`] con il budget esplicito, perché i test di unità provino i limiti
 /// senza leggere 512 MiB.
 fn plan_within<'a>(
     entries: impl IntoIterator<Item = &'a VaultEntry>,
+    witness_of: impl Fn(&DocId) -> Option<FileWitness>,
     ready: bool,
     policy: &IgnorePolicy,
     target: &DocId,
@@ -245,6 +297,7 @@ fn plan_within<'a>(
             size: entry.size,
             mtime: entry.mtime,
             fingerprint: entry.fingerprint.clone(),
+            witness: witness_of(&entry.id),
         })
         .collect();
     if candidates.is_empty() {
@@ -371,13 +424,21 @@ fn holds(
         return Ok(false);
     };
     // L'impronta della voce si crede finché misura e data sono quelle della
-    // voce, e finché è nella forma di quella che si confronta: una FNV-1a di una
-    // tabella scritta prima di SHA-256 non è mai uguale, ma non dice che i byte
-    // sono altri, e si ricalcola. Una voce vecchia con la stessa misura e la
+    // voce, finché è nella forma corrente ([`Revision::is_current_form`]: una
+    // FNV-1a di una tabella scritta prima di SHA-256 non è mai uguale, ma non
+    // dice che i byte sono altri, e si ricalcola) e, se una domanda l'ha
+    // imparata, finché il file è quello su cui l'ha imparata: il testimone si
+    // confronta con quello appena letto, senza un'altra domanda al supporto.
+    // Una voce vecchia con la stessa misura e la
     // stessa data può solo far dire «no» a torto, cioè copiare: il «sì» lo
     // danno sempre i byte.
     let known = candidate.fingerprint.as_ref().filter(|known| {
-        now.size == candidate.size && now.mtime == candidate.mtime && same_form(known, wanted)
+        now.size == candidate.size
+            && now.mtime == candidate.mtime
+            && known.is_current_form()
+            && candidate
+                .witness
+                .is_none_or(|witness| witness.agrees(&now.witness))
     });
     let fingerprint = match known {
         Some(known) => known.clone(),
@@ -393,8 +454,7 @@ fn holds(
                 id: candidate.id.clone(),
                 size: now.size,
                 mtime: now.mtime,
-                change_stamp: now.change_stamp,
-                identity: now.identity,
+                witness: now.witness,
                 observed_at: started,
                 fingerprint: computed.clone(),
             });
@@ -410,20 +470,6 @@ fn holds(
         return Ok(false);
     };
     Ok(equal && Observed::of(storage, &path).as_ref() == Some(&now))
-}
-
-/// Le due impronte sono nella stessa forma (lo stesso prefisso prima dei due
-/// punti, la stessa lunghezza), quindi il loro confronto dice qualcosa? Una
-/// forma vecchia ([`Revision::matches_bytes`] accetta la FNV-1a a 16 cifre
-/// durante la migrazione) diversa da quella di [`Revision::of_bytes`] non
-/// dice né sì né no.
-fn same_form(known: &Revision, wanted: &Revision) -> bool {
-    fn scheme(revision: &Revision) -> Option<&str> {
-        revision.as_str().split_once(':').map(|(scheme, _)| scheme)
-    }
-    known.as_str().len() == wanted.as_str().len()
-        && scheme(known).is_some()
-        && scheme(known) == scheme(wanted)
 }
 
 /// Il file ha esattamente questi byte, letti a pezzi? Un file più corto o più
@@ -491,12 +537,107 @@ mod tests {
     ) -> Plan {
         plan_within(
             entries,
+            |_| None,
             true,
             &vault.ignore_policy(),
             &DocId::new(target),
             len,
             budget,
         )
+    }
+
+    #[test]
+    fn after_a_budget_exhausted_the_fingerprints_learned_take_a_second_question_further() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let root = root_of(&dir);
+        put(&root, "a.bin", b"aaaa");
+        put(&root, "b.bin", b"bbbb");
+        put(&root, "c.bin", b"cccc");
+        let vault = Vault::open(&root).expect("vault");
+        let mut entries = entries_of(&vault, &["a.bin", "b.bin", "c.bin"]);
+        let ask = |entries: &[VaultEntry], learned: &[Learned]| {
+            let plan = plan_within(
+                entries,
+                |id| {
+                    learned
+                        .iter()
+                        .find(|learned| learned.id == *id)
+                        .map(|learned| learned.witness)
+                },
+                true,
+                &vault.ignore_policy(),
+                &DocId::new("nuovo.bin"),
+                4,
+                8,
+            );
+            answer_within(&vault, plan, b"cccc", 8, u64::MAX)
+        };
+
+        // Il primo giro legge «a» e «b» per prenderne l'impronta, e il budget
+        // finisce prima di «c»: «non so», ma due impronte imparate.
+        let first = ask(&entries, &[]);
+        assert_eq!(first.answer, unknown(UnknownReason::BudgetExhausted));
+        assert_eq!(first.learned.0.len(), 2);
+
+        // Con le impronte nell'indice il giro dopo non rilegge «a» e «b», e il
+        // budget basta per «c»: è perché l'host ne fa uno, e uno solo.
+        for learned in &first.learned.0 {
+            let entry = entries
+                .iter_mut()
+                .find(|entry| entry.id == learned.id)
+                .expect("la voce imparata");
+            entry.fingerprint = Some(learned.fingerprint.clone());
+        }
+        let second = ask(&entries, &first.learned.0);
+        assert_eq!(
+            second.answer,
+            SameContent::Found {
+                id: DocId::new("c.bin")
+            }
+        );
+    }
+
+    #[test]
+    fn a_witness_field_decides_only_when_both_sides_know_it() {
+        let id = |file| Some(FileIdentity { volume: 1, file });
+        let full = FileWitness {
+            change_stamp: Some(10),
+            identity: id(7),
+        };
+        // Lo stesso file, e due file diversi per un campo o per l'altro.
+        assert!(full.agrees(&full));
+        assert!(!full.agrees(&FileWitness {
+            change_stamp: Some(11),
+            ..full
+        }));
+        assert!(!full.agrees(&FileWitness {
+            identity: id(8),
+            ..full
+        }));
+        // Un campo che una parte non conosce non decide, per il segno come per
+        // l'identità, e nei due versi: una riga senza segno non blocca
+        // l'impronta per sempre.
+        let no_stamp = FileWitness {
+            change_stamp: None,
+            ..full
+        };
+        let no_identity = FileWitness {
+            identity: None,
+            ..full
+        };
+        for partial in [no_stamp, no_identity, FileWitness::default()] {
+            assert!(full.agrees(&partial), "{partial:?}");
+            assert!(partial.agrees(&full), "{partial:?}");
+        }
+        // Ma ciò che è noto decide anche accanto a un campo ignoto.
+        assert!(!no_stamp.agrees(&FileWitness {
+            change_stamp: None,
+            identity: id(8),
+        }));
+        assert!(!no_identity.agrees(&FileWitness {
+            change_stamp: Some(11),
+            identity: None,
+        }));
     }
 
     #[test]
@@ -518,6 +659,7 @@ mod tests {
 
         let plan = plan_within(
             &entries,
+            |_| None,
             false,
             &vault.ignore_policy(),
             &DocId::new("b.md"),
@@ -653,8 +795,7 @@ mod tests {
                 id: DocId::new("a.md"),
                 size: 5,
                 mtime,
-                change_stamp: vault.change_stamp(&DocId::new("a.md")),
-                identity: vault.file_identity(&DocId::new("a.md")),
+                witness: FileWitness::of(&vault, &DocId::new("a.md")),
                 observed_at: mtime + 1,
                 fingerprint: Revision::of_bytes(b"ciao!"),
             }]),
@@ -681,8 +822,7 @@ mod tests {
                 id: DocId::new("a.md"),
                 size: 4,
                 mtime,
-                change_stamp: vault.change_stamp(&DocId::new("a.md")),
-                identity: vault.file_identity(&DocId::new("a.md")),
+                witness: FileWitness::of(&vault, &DocId::new("a.md")),
                 observed_at: mtime + 1,
                 fingerprint: Revision::of_bytes(b"abcd"),
             }])
