@@ -1602,7 +1602,7 @@ due chiamate uguali danno gli stessi byte, e i pixel di una scheda con
 testo non sono tutti del colore della scheda) e l'SVG senza `draw`.
 Prova: scripts/check.sh --rapido; cargo test -p fub-canvas-core --test
 preview; cargo test -p fub-features --features lavagna,draw --test lavagna
-Stato: [ ] da fare
+Stato: [x] fatto · db2d9a3e7..fb0ed24dd · `preview.rs` nel nucleo (`sketch_svg`, tre SVG attesi in `tests/preview/`), `canvas.preview` in `lavagna/preview.rs`: PNG con `draw` (da `draw::svg_png`, i soli `FACES`), SVG come testo senza; foto guardate (forma, caratteri, testo tagliato, 100 schede). Scarti: (1) `encode_png` resta com'era: il PNG passa da `draw::svg_png`, così il database dei font sta in un posto solo; (2) il testo va in sezioni CDATA, perché la guardia di `fub-abi` vieta le entità fuori da `html.rs` e il nucleo non dipende da `fub-abi`; (3) le costanti della stima sono ripetute in `preview.rs` (layout.rs era di T9 nello stesso momento) e un test le fissa contro `estimate_text_height`: da unificare; (4) `outline` del payload è `{n, id, kind, clipped}`, al più 2000, con `outline_omitted`; (5) le parole si spezzano a caratteri come la stima, quindi una parola lunga va a capo a metà; (6) i tratti non si disegnano finché l'inchiostro in codice non c'è (T15–T17); (7) `preview: true` di `apply` è di T22. Restano: emoji, cinese ed ebraico sono il segno sostitutivo (come prescrive il piano); a 100 000 schede l'SVG testuale pesa decine di MB; un testo che esce in larghezza non dà `clipped` (il nucleo non misura il font)
 
 ## T22 · MCP: leggere, guidare, controllare prima di scrivere
 
