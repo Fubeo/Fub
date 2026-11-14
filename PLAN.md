@@ -539,7 +539,7 @@ Scrittura; la scena «a riposo» è verde; la battuta resta nel budget.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/text/profiles/markdown src/state/mode-menu.test.ts
 src/surface-modes.e2e.test.ts
-Stato: [ ] da fare
+Stato: [~] PR #359 (feat/modalita-scrittura) · coder al lavoro sui rossi del banco del movimento; baseline dal runner
 
 ## T4 · Impostazioni e comandi vecchi portano a Scrittura
 
@@ -1596,7 +1596,7 @@ Fatto quando: i tre casi dell'incolla (su selezione, su riga vuota, dentro
 testo) hanno un test; un test DOM della scelta.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/text/profiles/markdown/paste.test.ts
-Stato: [ ] da fare
+Stato: [~] PR #360 (feat/incolla-indirizzo) · la scelta sotto l'indirizzo è una barra da tastiera (un punto di Tab, frecce, Invio/Spazio, Esc tiene Link); Tab nella scelta chiude col Link
 
 ## T26a · La regola al tocco
 
@@ -2584,7 +2584,7 @@ adattatori (Markdown, documento, foglio); una nota con dieci tabelle con la
 battuta nel budget; il confine verde.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/tabella src/editors/grid src/editors/text/profiles/markdown/table-grid.test.ts
-Stato: [ ] da fare
+Stato: [~] in corso (feat/tabella-gesti-foglio)
 
 ## T51 · I gesti nuovi, per tabella e foglio
 
@@ -3624,7 +3624,7 @@ ed elenco; un test di «Copia come» da tastiera; il moto a fotogrammi fermi
 in `bench/motion.mjs`; il contrasto delle scorciatoie misurato.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/ui/menu.test.ts src/ui/menu-budget.test.ts src/panels/editor-menu.test.ts
-Stato: [ ] da fare
+Stato: [~] PR #358 (feat/menu-una-lingua) · il tocco di 200 ms prima del gesto (Esc annulla; subito con il movimento ridotto); si unisce prima di T3
 
 ## T82 · Lo spazio comandi nella stessa lingua
 
