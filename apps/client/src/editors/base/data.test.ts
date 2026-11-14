@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { IndexQuery, IndexResult } from "../../host/contract";
 import {
   allowedBaseTileUrl, baseRowsToCsv, cellText, deriveBaseRows, expectedProperty, fetchAllDocuments,
-  parseBaseEmbed, parseBaseViews, prepareBaseMutations,
+  parseBaseEmbed, parseBaseViews, planBaseView, prepareBaseMutations,
   persistBaseView, restoreBaseView, type BaseSurfaceDeps,
 } from "./data";
 
@@ -24,6 +24,15 @@ describe("Base contract", () => {
     await expect(parseBaseViews(bridge, source)).rejects.toThrow("viste");
     const future = deps(async () => { throw { kind: "bad_args", message: "unsupported version" }; });
     await expect(parseBaseViews(future, "version: 999\n")).rejects.toMatchObject({ kind: "bad_args" });
+  });
+
+  it("accepts the calendar and timeline kinds of the contract and still rejects an unknown one", async () => {
+    for (const kind of ["calendar", "timeline"]) {
+      const bridge = deps(async () => custom({ view: "Agenda", view_type: kind, columns: [], column_labels: {}, required_props: [], all_properties: false, group: null, limit: null, map: null, create_defaults: {}, date_key: "due", start_key: null, end_key: null }));
+      await expect(planBaseView(bridge, source, "Agenda")).resolves.toMatchObject({ viewType: kind });
+    }
+    const unknown = deps(async () => custom({ view: "Agenda", view_type: "gallery", columns: [], column_labels: {}, required_props: [], all_properties: false, group: null, limit: null, map: null, create_defaults: {} }));
+    await expect(planBaseView(unknown, source, "Agenda")).rejects.toThrow("tipo vista sconosciuto");
   });
 
   it("consumes every page beyond the former 2,000-row cutoff", async () => {
