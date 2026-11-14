@@ -1448,6 +1448,7 @@ export const IT = { // --- la scocca -------------------------------------------
 "settings.themes.developer_off":
   "La modalità sviluppatore è spenta: accendila nel gruppo «Sviluppo» per installare da una cartella.",
 "settings.themes.install_failed": "Il tema non si è installato: {reason}",
+"settings.themes.install_failed_kept": "Il tema non si è installato: {reason}. Quello installato resta com'era.",
 "settings.themes.replace.title": "«{name}» è già installato",
 "settings.themes.replace.body":
   "La cartella {folder} ha lo stesso id, «{id}», con la versione {version} (installata: {installed}). La cartella nuova è già controllata: si può sostituire.",
@@ -1458,7 +1459,7 @@ export const IT = { // --- la scocca -------------------------------------------
 "settings.themes.replace_failed.title": "«{name}» non si è installato",
 "settings.themes.replace_failed.body":
   "Il nuovo non è entrato, e il vecchio non è tornato al suo posto: è rimasto nella cartella dei temi, col nome «{kept}». La cartella {folder} resta dov'è: installalo di nuovo.",
-"settings.themes.replace_failed.in_use": "Per ora torna Scrittoio.",
+"settings.themes.replace_failed.in_use": "Per ora torna Scrittoio; la tua scelta resta, e torna quando lo installi di nuovo.",
 "settings.themes.replace_failed.ok": "Ho capito",
 "settings.themes.diagnosis.title.one": "«{name}» è rifiutato: {n} motivo",
 "settings.themes.diagnosis.title": "«{name}» è rifiutato: {n} motivi",
@@ -1470,6 +1471,15 @@ export const IT = { // --- la scocca -------------------------------------------
 "settings.themes.diagnosis.copy": "Copia la diagnosi",
 "settings.themes.diagnosis.copied": "Diagnosi copiata.",
 "settings.themes.diagnosis.copy_failed": "La diagnosi non si è copiata: {reason}",
+"settings.themes.refusal.not_a_theme": "Nella cartella non c'è manifest.json: non è la cartella di un tema.",
+"settings.themes.refusal.engine": "Il manifest dichiara il motore «{declared}», che questo Fub non conosce.",
+"settings.themes.refusal.permissions": "Il manifest dichiara dei permessi: un tema non ne ha.",
+"settings.themes.refusal.invalid_id": "L'id «{id}» non si può usare come nome di una cartella.",
+"settings.themes.refusal.series": "L'id «fub.serie» è del tema di serie: scegline un altro.",
+"settings.themes.refusal.traversal": "È un collegamento, o porta fuori dalla cartella: un tema è fatto solo di file suoi.",
+"settings.themes.refusal.catalog_state": "È lo stato del catalogo che scrive Fub, non parte del tema: toglilo dalla cartella.",
+"settings.themes.refusal.malformed": "Il tema non è ben formato: {detail}",
+"settings.themes.refusal.revoked": "Il tema installato con questo id è revocato dal catalogo: una cartella non lo sostituisce.",
 // --- i tasti che il vault propone (§23.13) -----------------------------
 //
 // Il testo dice che **non sono attive**, e lo dice per primo: chi legge deve
@@ -4663,6 +4673,7 @@ export const EN: Record<Key, string> = { "app.skip_to_editor": "Skip to the edit
 "settings.themes.developer_off":
   "Developer mode is off: turn it on in the «Development» group to install from a folder.",
 "settings.themes.install_failed": "The theme was not installed: {reason}",
+"settings.themes.install_failed_kept": "The theme was not installed: {reason}. The installed one stays as it was.",
 "settings.themes.replace.title": "«{name}» is already installed",
 "settings.themes.replace.body":
   "The folder {folder} has the same id, «{id}», with version {version} (installed: {installed}). The new folder has already been checked: it can replace it.",
@@ -4673,7 +4684,7 @@ export const EN: Record<Key, string> = { "app.skip_to_editor": "Skip to the edit
 "settings.themes.replace_failed.title": "«{name}» was not installed",
 "settings.themes.replace_failed.body":
   "The new one did not go in, and the old one did not go back to its place: it stayed in the themes folder, named «{kept}». The folder {folder} stays where it is: install it again.",
-"settings.themes.replace_failed.in_use": "For now Scrittoio is back.",
+"settings.themes.replace_failed.in_use": "For now Scrittoio is back; your choice stays, and comes back when you install it again.",
 "settings.themes.replace_failed.ok": "Got it",
 "settings.themes.diagnosis.title.one": "«{name}» is rejected: {n} reason",
 "settings.themes.diagnosis.title": "«{name}» is rejected: {n} reasons",
@@ -4685,6 +4696,15 @@ export const EN: Record<Key, string> = { "app.skip_to_editor": "Skip to the edit
 "settings.themes.diagnosis.copy": "Copy the diagnosis",
 "settings.themes.diagnosis.copied": "Diagnosis copied.",
 "settings.themes.diagnosis.copy_failed": "The diagnosis was not copied: {reason}",
+"settings.themes.refusal.not_a_theme": "There is no manifest.json in the folder: it is not a theme folder.",
+"settings.themes.refusal.engine": "The manifest declares the engine «{declared}», which this Fub does not know.",
+"settings.themes.refusal.permissions": "The manifest declares permissions: a theme has none.",
+"settings.themes.refusal.invalid_id": "The id «{id}» cannot be used as a folder name.",
+"settings.themes.refusal.series": "The id «fub.serie» belongs to the built-in theme: choose another one.",
+"settings.themes.refusal.traversal": "It is a link, or it leads out of the folder: a theme is made only of its own files.",
+"settings.themes.refusal.catalog_state": "It is catalog state that Fub writes, not part of the theme: remove it from the folder.",
+"settings.themes.refusal.malformed": "The theme is not well formed: {detail}",
+"settings.themes.refusal.revoked": "The installed theme with this id is revoked by the catalog: a folder does not replace it.",
 "settings.vault_keys.title": "This vault proposes {count} shortcuts",
 "settings.vault_keys.hint":
   "A vault carries its own shortcuts with it, and these come from outside: until you look at them they press nothing, and the combinations declared by the commands are what counts.",

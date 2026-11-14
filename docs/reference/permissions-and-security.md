@@ -119,26 +119,49 @@ sovrascrive un id esistente. I limiti correnti sono 64 KiB per il manifest,
 4 MiB per ciascun foglio/skin, 1.024 asset, 64 MiB per asset e 256 MiB totali.
 
 Oltre al catalogo firmato, un tema si installa da una cartella scelta dalla
-persona (`install_theme_from_folder`), ma solo con la modalità sviluppatore
-accesa (`developer.mode`: interruttore di macchina, spento di default, non
-scrivibile da programma). La regola sta nell'host
-(`Host::install_theme_from_folder`), che rilegge la chiave a ogni chiamata e
+persona, ma solo con la modalità sviluppatore accesa (`developer.mode`:
+interruttore di macchina, spento di default, non scrivibile da programma). La
+regola sta nell'host (`Host::check_theme_folder`,
+`Host::install_theme_from_folder`), che rilegge la chiave a ogni chiamata e
 risponde `permission_denied` se è spenta; il bottone che la shell nasconde non
-è la difesa. Prima di scrivere, la shell legge la cartella con
-`check_theme_folder` (stessa chiave, niente scritture) e la passa dal cancello
-del catalogo: un tema che la shell rifiuterebbe non arriva in `themes/`.
-L'installazione chiede l'impronta del controllo e la confronta con i byte
-copiati nella staging: una cartella cambiata nel frattempo è `conflict`, e non
-si pubblica. Per il resto passa dalle stesse porte di `install_theme`
-(manifest validato, serie riservata, niente symlink né traversal, limiti,
-rename atomico) e il tema ha la fiducia di ogni tema non di serie. Un id già
-installato non si tocca: l'esito è `collision`, e solo una seconda chiamata
-con `replace` lo sostituisce. La sostituzione non toglie il vecchio prima:
-la copia nuova si verifica accanto, il vecchio si sposta da parte (una
-cartella `.tmp-` che la scansione salta), il nuovo prende il suo nome, e solo
-allora il vecchio si cancella. Se il nuovo non entra il vecchio torna, ed è un
-errore; `replace_failed` resta per il caso in cui il vecchio non riesce a
-tornare, e il suo campo `kept` dice sotto quale nome è rimasto nella cartella
+è la difesa. La chiave però la può scrivere anche la webview
+(`set_setting`), quindi non basta: la cartella la sceglie la persona nella
+finestra **nativa** che l'app apre dentro `check_theme_folder`, solo per la
+shell principale, e la webview non passa mai un path. L'host tiene la
+cartella controllata e l'impronta dei suoi byte; `install_theme_from_folder`
+riceve solo l'impronta e installa soltanto quella cartella. Una webview
+compromessa con la modalità accesa può al più aprire la finestra di scelta:
+senza il gesto della persona non legge né installa niente.
+
+Prima di scrivere, la shell passa i fasci letti dal cancello del catalogo: un
+tema che la shell rifiuterebbe non arriva in `themes/`. Non è questo il
+presidio: l'host rifà le sue porte sulla sorgente e sulla staging
+(`ThemeBundle::load`: manifest, permessi, limiti, caratteri, icone, niente
+symlink né traversal), e la shell rivalida ogni tema che monta
+(`mountThemeBundle` chiama `validateThemeBundle` su ogni fascio, anche su
+quello letto con `read_theme` fuori dal catalogo; la cache del primo
+fotogramma tiene solo l'id). La cartella non può portare lo stato del
+catalogo che scrive solo Fub: un `.fub-current.json` (che `read_theme`
+seguirebbe), una sua copia temporanea o `.generations` nella radice sono un
+rifiuto tipizzato (`catalog_state`). L'installazione confronta l'impronta del
+controllo con i byte copiati nella staging: una cartella cambiata nel
+frattempo è `conflict`, e non si pubblica. Per il resto passa dalle stesse
+porte di `install_theme` (serie riservata, rename atomico) e il tema ha la
+fiducia di ogni tema non di serie.
+
+Un id già installato non si tocca: l'esito è `collision`, e solo una seconda
+chiamata con `replace` lo sostituisce. Un tema installato revocato dal
+catalogo non si sostituisce mai da cartella (`revoked`): la copia nuova non ha
+puntatore e cancellerebbe la revoca; un puntatore che non si legge è un
+errore, non un via libera. La sostituzione non toglie il vecchio prima: la
+copia nuova si verifica accanto, il vecchio si sposta da parte (una cartella
+`.tmp-old-` che la scansione salta), il nuovo prende il suo nome, e solo
+allora il vecchio si cancella. Se il vecchio non si lascia cancellare lo dice
+il log (`fub.host`), cambia nome in `.tmp-drop-` e lo spazza l'installazione
+successiva. Se il nuovo non entra il vecchio torna, ed è un errore;
+`replace_failed` resta per il caso in cui il vecchio non riesce a tornare, e
+il suo campo `kept` dice sotto quale nome `.tmp-old-` è rimasto nella
+cartella dei temi: è l'unica copia del vecchio, e niente la cancella da sola.
 dei temi. Niente la cancella da sola.
 
 Il client rivalida fogli, skin, asset, ruoli e contrasto prima del mount. Una

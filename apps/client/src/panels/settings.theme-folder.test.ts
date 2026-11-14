@@ -1,22 +1,25 @@
 // @vitest-environment happy-dom
 //
 // Installare un tema da una cartella, e leggere perché è rifiutato (PA T36):
-// il bottone c'è solo con la modalità sviluppatore, il tema installato entra
-// in «Temi installati» con la fiducia «Della comunità», un id già installato
-// chiede «Sostituisci», una sostituzione che si ferma lascia il vecchio (o lo
-// dice, se il vecchio non torna), e un tema rifiutato (dal cancello del
-// catalogo o dall'host) non arriva nella cartella dei temi: mostra una riga
-// per motivo e un avviso solo.
+// il bottone c'è solo con la modalità sviluppatore, la cartella la sceglie la
+// persona nella finestra nativa (la shell non passa path), il tema installato
+// entra in «Temi installati» con la fiducia «Della comunità», un id già
+// installato chiede «Sostituisci» (uno revocato no), una sostituzione che si
+// ferma lascia il vecchio (o lo dice, se il vecchio non torna), e un tema
+// rifiutato (dal cancello del catalogo o dall'host, con un motivo tipizzato)
+// non arriva nella cartella dei temi: mostra una riga per motivo e un avviso
+// solo.
 //
 // Il catalogo dei temi è quello vero (`theme/theme.ts` col cancello del
 // loader), servito dall'host finto: il rifiuto del loader è quello vero.
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { PluginError, SettingEntry } from "../host/contract";
+import type { PluginError, SettingEntry, ThemeFolderRefusal } from "../host/contract";
 import type { FakeHost, ThemeFolderFake } from "../host/fake";
 
 const box = vi.hoisted(() => ({
   host: null as FakeHost | null,
   folder: null as string | null,
+  teardown: null as (() => void) | null,
   notify: vi.fn(),
   trouble: vi.fn(),
   clipboard: vi.fn(async (_text: string) => {}),
@@ -39,7 +42,9 @@ vi.mock("../host/ipc", () => ({
 vi.mock("../host/dialog", () => ({
   confirm: () => Promise.resolve(true),
   pickFile: () => Promise.resolve(null),
-  pickFolder: () => Promise.resolve(box.folder),
+  // La cartella del tema non passa da qui: la sceglie la finestra nativa che
+  // l'app apre dentro `check_theme_folder` (`pickThemeFolder` del finto).
+  pickFolder: () => Promise.reject(new Error("pickFolder non serve all'installazione da cartella")),
 }));
 vi.mock("../state/kernel", () => ({ onEvent: vi.fn() }));
 vi.mock("../ui/commands", () => ({
@@ -59,7 +64,8 @@ vi.mock("../platform/clipboard", () => ({ writeClipboardText: box.clipboard }));
 
 const { createFakeHost, developerModeSetting, folderTheme, rejectedTheme } = await import("../host/fake");
 const { mountSettings } = await import("./settings");
-const { reloadThemeCatalog } = await import("../theme/theme");
+const { currentThemeId, reloadThemeCatalog, themeCatalog } = await import("../theme/theme");
+const { settings } = await import("../host/query");
 const { diagnosisRows, forgetThemeRefusal, refusalRow } = await import("./theme-folder");
 
 function themeEntry(): SettingEntry {
@@ -86,18 +92,43 @@ function themeEntry(): SettingEntry {
   };
 }
 
+/// La scelta salvata del tema (`appearance.theme-id`), scritta dalle Impostazioni.
+function themeIdEntry(id: string): SettingEntry {
+  return {
+    spec: {
+      key: "appearance.theme-id",
+      label: "Tema scelto",
+      description: "",
+      group: "Aspetto",
+      scope: "machine",
+      kind: { kind: "text", default: "fub.serie" },
+      program_writable: false,
+    },
+    value: id,
+    source: "machine",
+  };
+}
+
 async function open(options: {
   developer: boolean;
-  folders?: Record<string, ThemeFolderFake | PluginError>;
+  folders?: Record<string, ThemeFolderFake | ThemeFolderRefusal | PluginError>;
   installed?: ThemeFolderFake[];
+  revoked?: string[];
+  inUse?: string;
 }): Promise<void> {
   document.querySelector<HTMLButtonElement>("#settings-close")?.click();
   const installed = options.installed ?? [];
   box.host = createFakeHost({
-    settings: [themeEntry(), developerModeSetting(options.developer)],
+    settings: [
+      themeEntry(),
+      developerModeSetting(options.developer),
+      ...(options.inUse ? [themeIdEntry(options.inUse)] : []),
+    ],
     themes: installed.map((theme) => theme.info),
     themePayloads: Object.assign({}, ...installed.map((theme) => theme.payloads)),
     themeFolders: options.folders ?? {},
+    revokedThemes: options.revoked,
+    pickThemeFolder: () => box.folder,
   });
   await reloadThemeCatalog();
   document.body.innerHTML = `
@@ -107,7 +138,7 @@ async function open(options: {
       <button id="settings-close"></button>
       <div id="settings-body"></div>
     </section>`;
-  mountSettings({ openVault: async () => {}, reloadProvider: async () => {} });
+  box.teardown = mountSettings({ openVault: async () => {}, reloadProvider: async () => {} });
   document.querySelector<HTMLButtonElement>("#open-settings")!.click();
   await vi.waitFor(() => expect(document.querySelector('[data-setting-key="developer.mode"]')).not.toBeNull());
 }
@@ -151,20 +182,23 @@ describe("installare un tema da una cartella", () => {
     await vi.waitFor(() => expect(catalogOptions()).toContain("Carta · chiaro · Della comunità"));
     expect(catalogOptions()).toContain("Carta · scuro · Della comunità");
     expect(box.notify).toHaveBeenCalledWith("«Carta» installato: lo trovi fra i temi installati.", "info");
-    // Prima la lettura senza scrivere, poi l'installazione con la sua impronta.
+    // Prima la scelta nella finestra nativa e la lettura senza scrivere, poi
+    // l'installazione con la sua impronta: la shell non passa mai un path.
     const digest = expect.stringMatching(/^fake-/);
-    expect(gates("checkThemeFolder")).toEqual([["/temi/carta"]]);
-    expect(gates("installThemeFromFolder")).toEqual([["/temi/carta", false, digest]]);
+    expect(gates("checkThemeFolder")).toEqual([["Scegli la cartella del tema"]]);
+    expect(gates("installThemeFromFolder")).toEqual([[false, digest]]);
     expect(diagnoses()).toEqual([]);
   });
 
-  it("annullare la scelta della cartella non chiede niente all'host", async () => {
+  it("annullare la scelta della cartella non installa niente e non dice niente", async () => {
     await open({ developer: true });
     box.folder = null;
     installButton()!.click();
-    await new Promise((resolve) => setTimeout(resolve, 20));
-    expect(box.host!.calls.some((call) => call.gate === "installThemeFromFolder")).toBe(false);
-    expect(box.host!.calls.some((call) => call.gate === "checkThemeFolder")).toBe(false);
+    await vi.waitFor(() => expect(installButton()!.disabled).toBe(false));
+    expect(gates("checkThemeFolder")).toHaveLength(1);
+    expect(gates("installThemeFromFolder")).toEqual([]);
+    expect(box.notify).not.toHaveBeenCalled();
+    expect(diagnoses()).toEqual([]);
   });
 
   it("un id già installato chiede «Sostituisci», e Sostituisci installa il nuovo", async () => {
@@ -188,8 +222,8 @@ describe("installare un tema da una cartella", () => {
     );
     const digest = expect.stringMatching(/^fake-/);
     expect(gates("installThemeFromFolder")).toEqual([
-      ["/temi/carta", false, digest],
-      ["/temi/carta", true, digest],
+      [false, digest],
+      [true, digest],
     ]);
     expect(await box.host!.module.api.listThemes()).toEqual([
       expect.objectContaining({ manifest: expect.objectContaining({ version: "0.4.0" }) }),
@@ -227,12 +261,15 @@ describe("installare un tema da una cartella", () => {
     await vi.waitFor(() => expect(dialog()).not.toBeNull());
     dialog()!.querySelector<HTMLButtonElement>('[data-action="replace"]')!.click();
 
-    await vi.waitFor(() => expect(diagnoses()).toHaveLength(1));
-    const [block] = diagnoses();
-    expect(block!.querySelector(".muted")!.textContent).toMatch(/Il tema installato resta com'era\.$/);
+    // Non è un rifiuto del tema: un avviso solo, che dice anche che il vecchio resta.
+    await vi.waitFor(() => expect(box.notify).toHaveBeenCalledTimes(1));
     expect(box.notify.mock.calls).toEqual([
-      ["«carta» non è installato: 1 motivo, lo trovi sotto «Temi installati».", "guasto"],
+      [
+        "Il tema non si è installato: I/O error: /config/themes/acme.carta: No space left on device. Quello installato resta com'era.",
+        "guasto",
+      ],
     ]);
+    expect(diagnoses()).toEqual([]);
     expect((await box.host!.module.api.listThemes())[0]!.manifest.version).toBe("0.3.2");
     expect(catalogOptions()).toContain("Carta · chiaro · Della comunità");
   });
@@ -307,6 +344,91 @@ describe("installare un tema da una cartella", () => {
     );
     expect(await box.host!.module.api.listThemes()).toEqual([]);
   });
+
+  it("un tema installato revocato non si sostituisce: niente domanda, una riga e un avviso", async () => {
+    await open({
+      developer: true,
+      revoked: ["acme.carta"],
+      folders: { "/temi/carta": folderTheme("acme.carta", "Carta", "0.4.0") },
+    });
+    box.folder = "/temi/carta";
+    installButton()!.click();
+
+    await vi.waitFor(() => expect(diagnoses()).toHaveLength(1));
+    expect(dialog()).toBeNull();
+    const [block] = diagnoses();
+    expect(block!.querySelector(".setting-label")!.textContent).toBe("«Carta» è rifiutato: 1 motivo");
+    expect(block!.querySelector(".muted")!.textContent).toMatch(/Il tema installato resta com'era\.$/);
+    expect(rowsOf(block!)).toEqual([
+      ["—", "—", "revoked", "Il tema installato con questo id è revocato dal catalogo: una cartella non lo sostituisce."],
+    ]);
+    expect(box.notify.mock.calls).toEqual([
+      ["«Carta» non è installato: 1 motivo, lo trovi sotto «Temi installati».", "guasto"],
+    ]);
+    expect(gates("installThemeFromFolder")).toHaveLength(1);
+    expect(await box.host!.module.api.listThemes()).toEqual([]);
+  });
+
+  it("la sostituzione fallita del tema in uso: l'aspetto torna a Scrittoio, la scelta salvata resta", async () => {
+    const failing: ThemeFolderFake = {
+      ...folderTheme("acme.carta", "Carta", "0.4.0"),
+      replaceError: { kind: "io", message: "I/O error: kept in /config/themes/.tmp-old-1-2" },
+      replaceLost: true,
+    };
+    await open({
+      developer: true,
+      inUse: "acme.carta",
+      installed: [folderTheme("acme.carta", "Carta", "0.3.2")],
+      folders: { "/temi/carta": failing },
+    });
+    expect(currentThemeId()).toBe("acme.carta");
+    box.folder = "/temi/carta";
+    installButton()!.click();
+    await vi.waitFor(() => expect(dialog()).not.toBeNull());
+    dialog()!.querySelector<HTMLButtonElement>('[data-action="replace"]')!.click();
+
+    await vi.waitFor(() => expect(dialog()?.getAttribute("role")).toBe("alertdialog"));
+    expect(dialog()!.querySelector(".kit-dialog-description")!.textContent).toContain(
+      "Per ora torna Scrittoio; la tua scelta resta, e torna quando lo installi di nuovo.",
+    );
+    dialog()!.querySelector<HTMLButtonElement>('[data-action="ok"]')!.click();
+    await vi.waitFor(() => expect(dialog()).toBeNull());
+    expect(currentThemeId()).toBe("fub.serie");
+    const saved = () => settings().then((entries) => entries.find((entry) => entry.spec.key === "appearance.theme-id")!);
+    expect(await saved()).toMatchObject({ value: "acme.carta", source: "machine" });
+    expect(gates("setSetting")).toEqual([]);
+
+    // Installato di nuovo, il tema scelto torna in uso da sé.
+    delete failing.replaceError;
+    installButton()!.click();
+    await vi.waitFor(() =>
+      expect(box.notify).toHaveBeenCalledWith("«Carta» installato: lo trovi fra i temi installati.", "info"),
+    );
+    expect(currentThemeId()).toBe("acme.carta");
+  });
+
+  it("le Impostazioni smontate mentre «Sostituisci» lavora: il catalogo si rilegge, niente si disegna né si dice", async () => {
+    await open({
+      developer: true,
+      installed: [folderTheme("acme.carta", "Carta", "0.3.2")],
+      folders: { "/temi/carta": folderTheme("acme.carta", "Carta", "0.4.0") },
+    });
+    box.folder = "/temi/carta";
+    installButton()!.click();
+    await vi.waitFor(() => expect(dialog()).not.toBeNull());
+    const release = box.host!.throttle("installThemeFromFolder");
+    dialog()!.querySelector<HTMLButtonElement>('[data-action="replace"]')!.click();
+    await vi.waitFor(() => expect(gates("installThemeFromFolder")).toHaveLength(2));
+    box.teardown!();
+    const listed = gates("listThemes").length;
+    release();
+
+    await vi.waitFor(() => expect(gates("listThemes").length).toBeGreaterThan(listed));
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect((await themeCatalog())[0]!.manifest.version).toBe("0.4.0");
+    expect(box.notify).not.toHaveBeenCalled();
+    expect(dialog()).toBeNull();
+  });
 });
 
 describe("la diagnosi di un tema rifiutato", () => {
@@ -362,22 +484,60 @@ describe("la diagnosi di un tema rifiutato", () => {
     expect(box.notify).toHaveBeenCalledTimes(1);
   });
 
-  it("una cartella che l'host rifiuta (senza manifest.json) è una diagnosi di una riga", async () => {
-    const refusal: PluginError = {
-      kind: "bad_args",
-      message: "invalid arguments: malformed theme manifest: missing theme file `/temi/vuota/manifest.json`",
-    };
-    await open({ developer: true, folders: { "/temi/vuota": refusal } });
+  it("una cartella che l'host rifiuta (senza manifest.json) è una diagnosi di una riga, in italiano", async () => {
+    await open({ developer: true, folders: { "/temi/vuota": { reason: "not_a_theme" } } });
     box.folder = "/temi/vuota";
     installButton()!.click();
 
     await vi.waitFor(() => expect(diagnoses()).toHaveLength(1));
     const [block] = diagnoses();
     expect(block!.querySelector(".setting-label")!.textContent).toBe("«vuota» è rifiutato: 1 motivo");
-    expect(rowsOf(block!)).toEqual([["manifest.json", "—", "bad_args", refusal.message]]);
+    expect(rowsOf(block!)).toEqual([
+      ["manifest.json", "—", "not-a-theme", "Nella cartella non c'è manifest.json: non è la cartella di un tema."],
+    ]);
     expect(box.notify.mock.calls).toEqual([
       ["«vuota» non è installato: 1 motivo, lo trovi sotto «Temi installati».", "guasto"],
     ]);
+    expect(gates("installThemeFromFolder")).toEqual([]);
+  });
+
+  it("lo stato del catalogo nella cartella: la riga nomina il file", async () => {
+    await open({ developer: true, folders: { "/temi/carta": { reason: "catalog_state", file: ".fub-current.json" } } });
+    box.folder = "/temi/carta";
+    installButton()!.click();
+
+    await vi.waitFor(() => expect(diagnoses()).toHaveLength(1));
+    expect(rowsOf(diagnoses()[0]!)).toEqual([
+      [
+        ".fub-current.json",
+        "—",
+        "catalog-state",
+        "È lo stato del catalogo che scrive Fub, non parte del tema: toglilo dalla cartella.",
+      ],
+    ]);
+    expect(await box.host!.module.api.listThemes()).toEqual([]);
+  });
+
+  it("un guasto dopo un rifiuto toglie la diagnosi vecchia anche dallo schermo, e lo dice una volta", async () => {
+    await open({
+      developer: true,
+      folders: {
+        "/temi/vuota": { reason: "not_a_theme" },
+        "/temi/sparita": { kind: "io", message: "I/O error: /temi/sparita: no such folder" },
+      },
+    });
+    box.folder = "/temi/vuota";
+    installButton()!.click();
+    await vi.waitFor(() => expect(diagnoses()).toHaveLength(1));
+    box.notify.mockClear();
+
+    box.folder = "/temi/sparita";
+    await vi.waitFor(() => expect(installButton()!.disabled).toBe(false));
+    installButton()!.click();
+    await vi.waitFor(() => expect(box.notify).toHaveBeenCalledTimes(1));
+    expect(box.notify.mock.calls[0]![1]).toBe("guasto");
+    expect(box.notify.mock.calls[0]![0]).toMatch(/^Il tema non si è installato: /);
+    await vi.waitFor(() => expect(diagnoses()).toEqual([]));
   });
 
   it("senza rifiuti la diagnosi non c'è", async () => {
@@ -411,13 +571,30 @@ describe("i motivi si dividono in campi, non si riscrivono", () => {
     ]);
   });
 
-  it("il rifiuto dell'host porta il suo tipo, e il file quando il messaggio lo nomina", () => {
-    expect(refusalRow({ kind: "io", message: "I/O error: /x/skin.css: permission denied" })).toEqual({
-      file: "skin.css",
+  it("il rifiuto tipizzato dell'host: il file che nomina, il motivo per codice, il perché della shell", () => {
+    expect(refusalRow({ reason: "traversal", path: "font/fuori.woff2" })).toEqual({
+      file: "font/fuori.woff2",
       where: null,
-      code: "io",
-      why: "I/O error: /x/skin.css: permission denied",
+      code: "traversal",
+      why: "È un collegamento, o porta fuori dalla cartella: un tema è fatto solo di file suoi.",
     });
-    expect(refusalRow({ kind: "bad_args", message: "`acme` contains `/x/escape`, which escapes" }).file).toBeNull();
+    expect(refusalRow({ reason: "engine", declared: "theme-9" })).toEqual({
+      file: "manifest.json",
+      where: null,
+      code: "engine",
+      why: "Il manifest dichiara il motore «theme-9», che questo Fub non conosce.",
+    });
+    expect(refusalRow({ reason: "permissions" }).code).toBe("permissions");
+    expect(refusalRow({ reason: "invalid_id", id: "Acme Carta" }).why).toBe(
+      "L'id «Acme Carta» non si può usare come nome di una cartella.",
+    );
+    expect(refusalRow({ reason: "series" }).file).toBe("manifest.json");
+    // Il motivo di una forma sbagliata è dell'host: arriva così com'è, dopo la frase della shell.
+    expect(refusalRow({ reason: "malformed", detail: "missing `id`" })).toEqual({
+      file: null,
+      where: null,
+      code: "malformed",
+      why: "Il tema non è ben formato: missing `id`",
+    });
   });
 });

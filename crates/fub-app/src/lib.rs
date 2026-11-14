@@ -1558,39 +1558,83 @@ fn read_theme(
     host.read_theme(&id, light)
 }
 
-/// Legge la cartella che la persona ha scelto (`pickFolder`) senza
-/// installarla: il manifest, il fascio di ogni luce e l'impronta dei byte
-/// (`Host::check_theme_folder`), così la shell fa girare i suoi cancelli CSS
-/// prima che niente arrivi nella configurazione. Solo con la modalità
-/// sviluppatore accesa (la regola è dell'host). Legge il disco: fuori dal
-/// thread principale.
+/// Quanto può essere lungo il titolo della finestra di scelta che la shell
+/// chiede per «Installa da cartella…».
+const MAX_PICK_TITLE_CHARS: usize = 200;
+
+/// «Installa da cartella…»: la persona sceglie la cartella di un tema nella
+/// finestra **nativa**, aperta qui, e l'host la legge senza installarla
+/// (`Host::check_theme_folder`): il manifest, il fascio di ogni luce e
+/// l'impronta dei byte, perché la shell faccia girare i suoi cancelli CSS
+/// prima che niente arrivi nella configurazione.
+///
+/// La webview non dà un path: chiede la finestra (col suo `title`) e riceve
+/// l'esito, con la cartella scelta da mostrare. Così la modalità sviluppatore,
+/// che la webview può accendere con `set_setting`, non basta a far leggere o
+/// installare una cartella che la persona non ha scelto. Solo la shell
+/// principale; la modalità si controlla prima di aprire la finestra, e l'host
+/// la ricontrolla. La finestra chiusa è `cancelled`.
 #[tauri::command]
 async fn check_theme_folder(
     app: AppHandle,
-    source: String,
+    window: tauri::WebviewWindow,
+    title: String,
 ) -> Result<fub_host::theme::ThemeFolderCheck, PluginError> {
+    use tauri_plugin_dialog::DialogExt;
+    guard_main_shell(&window, "install themes from a folder")?;
+    {
+        let host = app.state::<Host>();
+        let allowed = host.theme_folder_allowed();
+        for_the_shell(&host, None, allowed)?;
+    }
+    let title: String = title.chars().take(MAX_PICK_TITLE_CHARS).collect();
+    let (sender, receiver) = std::sync::mpsc::sync_channel(1);
+    let dialog = app.dialog().file();
+    // Il genitore della finestra di dialogo esiste solo sul desktop.
+    #[cfg(desktop)]
+    let dialog = dialog.set_parent(&window);
+    dialog.set_title(title).pick_folder(move |selection| {
+        let _ = sender.send(selection);
+    });
     off_main(app, move |host| {
-        let result = host.check_theme_folder(Utf8Path::new(&source));
+        let result = receiver
+            .recv()
+            .map_err(|_| PluginError::Internal(fub_abi::Text::key("host.theme_folder.pick_failed")))
+            .and_then(|selection| match selection {
+                None => Ok(fub_host::theme::ThemeFolderCheck::Cancelled),
+                Some(selected) => {
+                    let unreadable = || {
+                        PluginError::BadArgs(fub_abi::Text::key(
+                            "host.theme_folder.unreadable_path",
+                        ))
+                    };
+                    let path = selected.into_path().map_err(|_| unreadable())?;
+                    let path = Utf8PathBuf::from_path_buf(path).map_err(|_| unreadable())?;
+                    host.check_theme_folder(&path)
+                }
+            });
         for_the_shell(host, None, result)
     })
     .await
 }
 
-/// Installa la cartella che `check_theme_folder` ha letto, con la sua
-/// impronta (`digest`): la modalità sviluppatore, le porte dell'installazione
-/// e il confronto dei byte li applica l'host (`Host::install_theme_from_folder`).
-/// Con `replace` un tema con lo stesso id si sostituisce; senza, la collisione
-/// torna come esito e niente si tocca. La copia legge e scrive il disco: fuori
-/// dal thread principale.
+/// Installa la cartella che `check_theme_folder` ha fatto scegliere e ha
+/// letto: `digest` dice quale controllo la shell ha visto, il path lo tiene
+/// l'host (`Host::install_theme_from_folder`), che applica anche la modalità
+/// sviluppatore, le porte dell'installazione e il confronto dei byte. Con
+/// `replace` un tema con lo stesso id si sostituisce; senza, la collisione
+/// torna come esito e niente si tocca. Solo la shell principale. La copia
+/// legge e scrive il disco: fuori dal thread principale.
 #[tauri::command]
 async fn install_theme_from_folder(
     app: AppHandle,
-    source: String,
+    window: tauri::WebviewWindow,
     replace: bool,
     digest: String,
 ) -> Result<fub_host::theme::ThemeFolderInstall, PluginError> {
+    guard_main_shell(&window, "install themes from a folder")?;
     off_main(app, move |host| {
-        let result = host.install_theme_from_folder(Utf8Path::new(&source), replace, &digest);
+        let result = host.install_theme_from_folder(replace, &digest);
         for_the_shell(host, None, result)
     })
     .await

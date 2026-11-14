@@ -125,6 +125,7 @@ mod assets;
 mod bundle;
 mod discover;
 mod files;
+mod folder;
 mod install;
 mod pointer;
 
@@ -136,11 +137,14 @@ use files::{
     canonical_theme_root, check_id, create_nofollow, open_regular, open_themes_root,
     read_theme_bytes, read_theme_text, verify_themes_root,
 };
+pub use folder::{
+    check_theme_folder, install_theme_from_folder, ThemeFolderCheck, ThemeFolderInstall,
+    ThemeFolderLight, ThemeFolderRefusal,
+};
 pub use install::{
-    check_theme_folder, install_theme, install_theme_checked, install_theme_from_folder,
-    set_theme_revoked, set_theme_revoked_with_provenance, theme_catalog_provenance,
-    theme_revocation_provenance, theme_revoked, uninstall_theme, update_theme, ThemeFolderCheck,
-    ThemeFolderInstall,
+    install_theme, install_theme_checked, set_theme_revoked, set_theme_revoked_with_provenance,
+    theme_catalog_provenance, theme_revocation_provenance, theme_revoked, uninstall_theme,
+    update_theme,
 };
 pub use pointer::theme_tree_digest;
 use pointer::{

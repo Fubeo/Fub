@@ -126,28 +126,40 @@ rivalida il fascio; un tema che rifiuta resta fuori dal catalogo, e Aspetto
 mostra i motivi così come li scrive `validateThemeBundle`, una riga per
 motivo (file, riga:colonna, codice, perché).
 
-Installare un tema dalla cartella scelta con `pickFolder` sono due comandi,
-tutti e due solo con `developer.mode` acceso (spento, `permission_denied`: la
-regola è dell'host) e fuori dal thread principale:
+Installare un tema da una cartella sono due comandi della sola shell
+principale, tutti e due solo con `developer.mode` acceso (spento,
+`permission_denied`: la regola è dell'host) e fuori dal thread principale. La
+webview non passa mai un path:
 
-1. `check_theme_folder(source)` legge la cartella senza scrivere niente e
-   risponde `ThemeFolderCheck`: `manifest`, `payloads` (un `ThemePayload` per
-   luce dichiarata, come `read_theme`) e `digest`, l'impronta dei byte. La
-   shell fa girare sui fasci lo stesso cancello del catalogo: un tema che
-   rifiuterebbe non si installa, e Aspetto ne mostra i motivi;
-2. `install_theme_from_folder(source, replace, digest)` installa con
-   l'impronta del controllo: se i byte copiati non sono più quelli,
-   `conflict` e niente si scrive.
+1. `check_theme_folder(title)` apre la finestra nativa di scelta (col titolo
+   dato; la modalità si controlla prima di aprirla), legge la cartella scelta
+   senza scrivere niente e risponde `ThemeFolderCheck`, unione col campo
+   `outcome`. L'host tiene la cartella pronta come **la** cartella
+   controllata; un controllo nuovo prende il suo posto, un rifiuto la
+   dimentica;
+2. `install_theme_from_folder(replace, digest)` installa la cartella
+   controllata, se `digest` è l'impronta di quel controllo: senza controllo,
+   con un'impronta diversa o con byte copiati che non sono più quelli,
+   `conflict`, e niente si scrive. Dopo l'esito la cartella controllata si
+   dimentica, tranne che per `collision`, a cui risponde la seconda chiamata
+   con `replace`.
 
-Una cartella rifiutata è un errore tipato (`bad_args`, `io`, `unserved`,
-`conflict`); su questa strada `permission_denied` vuol dire solo la modalità
-spenta (un manifest con permessi è `bad_args`). Gli esiti dell'installazione
-sono `ThemeFolderInstall`, unione con il campo `outcome`:
+| `ThemeFolderCheck.outcome` | Campi | Che cosa vuol dire |
+|---|---|---|
+| `cancelled` | — | la finestra di scelta è stata chiusa |
+| `ready` | `folder`, `manifest`, `lights`, `digest` | la cartella passa le porte dell'host; `folder` è il path scelto, da mostrare; `lights` ha un `ThemeFolderLight` per luce dichiarata (`light`, `sheet`, `skin`, `assets` coi byte solo dei caratteri e del set di icone, `named` per gli altri asset); `digest` è l'impronta dei byte. La shell fa girare sui fasci lo stesso cancello del catalogo |
+| `refused` | `folder`, `refusal` | la cartella non è un tema installabile; `refusal` (`ThemeFolderRefusal`, col campo `reason`) è uno di `not_a_theme`, `engine {declared}`, `permissions`, `invalid_id {id}`, `series`, `traversal {path}` (relativo alla cartella), `catalog_state {file}` (il puntatore `.fub-current.json` o `.generations`: li scrive solo Fub), `malformed {detail}`. La shell lo dice con le sue parole |
+
+Su questa strada un errore è solo il disco (`io`), la cartella cambiata o non
+controllata (`conflict`), la modalità spenta (`permission_denied`) o la
+finestra di scelta guasta. Gli esiti dell'installazione sono
+`ThemeFolderInstall`, unione con il campo `outcome`:
 
 | `outcome` | Campi | Che cosa vuol dire |
 |---|---|---|
 | `installed` | `id`, `name`, `version`, `replaced` | il tema è installato; `replaced` se ha preso il posto di uno con lo stesso id |
 | `collision` | `id`, `name`, `version`, `installed_version` | un id già installato, niente toccato; `installed_version` è `null` se quello installato non si legge |
+| `revoked` | `id`, `name`, `version` | il tema installato con lo stesso id è revocato dal catalogo: una cartella non lo sostituisce (la copia nuova cancellerebbe la revoca), niente toccato |
 | `replace_failed` | `id`, `name`, `version`, `kept`, `error` | con `replace`, il nuovo non è entrato e il vecchio non è tornato al suo nome; `kept` è il nome della cartella, dentro quella dei temi, dove è rimasto (la shell lo dice con le sue parole); `error` (un `PluginError`) è il guasto del disco, per il log e la diagnosi copiata |
 
 Una sostituzione che si ferma rimettendo il vecchio al suo posto è un errore,

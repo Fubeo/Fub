@@ -614,16 +614,27 @@ export function themeRejections(): readonly ThemeRejection[] {
  * fascio e col contrasto di adesso, così un tema che il catalogo lascerebbe
  * fuori non arriva mai nella cartella dei temi. Una voce per luce rifiutata,
  * coi motivi così come sono; vuoto vuol dire che il catalogo lo prenderebbe.
+ *
+ * Dei byte degli asset arrivano solo quelli che il cancello legge (i caratteri
+ * e il set di icone); gli altri arrivano per nome, e il cancello ne controlla
+ * solo la presenza: qui stanno nel fascio senza byte. Il fascio serve solo al
+ * cancello, non si monta.
  */
-export function vetThemeFolder(check: ThemeFolderCheck): { light: Theme; reasons: string[] }[] {
+export function vetThemeFolder(
+  check: Extract<ThemeFolderCheck, { outcome: "ready" }>,
+): { light: Theme; reasons: string[] }[] {
   const contrast = effectiveContrast(contrastChoice, mediaMatches(CONTRAST_QUERY, false));
   const rejected: { light: Theme; reasons: string[] }[] = [];
   for (const light of check.manifest.lights) {
-    const payload = check.payloads.find((candidate) => candidate.light === light);
-    if (payload === undefined || payload.manifest.id !== check.manifest.id) {
+    const read = check.lights.find((candidate) => candidate.light === light);
+    if (read === undefined) {
       rejected.push({ light, reasons: [`fascio non leggibile: ${check.manifest.id}:${light}`] });
       continue;
     }
+    const assets: Record<string, readonly number[]> = {};
+    for (const name of read.named) assets[name] = [];
+    Object.assign(assets, read.assets);
+    const payload: ThemePayload = { manifest: check.manifest, light, sheet: read.sheet, skin: read.skin, assets };
     const reasons = validateThemeBundle(themeBundle(payload, light, contrast), light);
     if (reasons.length > 0) rejected.push({ light, reasons });
   }

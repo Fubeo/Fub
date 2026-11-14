@@ -148,22 +148,54 @@ export interface ThemePayload {
 }
 
 /**
- * La cartella di un tema letta senza installarla (`check_theme_folder`,
- * `fub_host::theme::ThemeFolderCheck`): il manifest, il fascio di ogni luce
- * dichiarata (come `read_theme` lo dà per un tema installato) e l'impronta
- * dei byte. La shell fa girare i suoi cancelli sui fasci; l'installazione
- * chiede la stessa impronta e si ferma (`conflict`) se la cartella è cambiata.
+ * Perché la cartella scelta non è un tema che Fub installa
+ * (`fub_host::theme::ThemeFolderRefusal`), coi campi per dirlo. La shell lo
+ * dice con le sue parole; `malformed.detail` è il motivo dell'host così com'è.
  */
-export interface ThemeFolderCheck {
-  manifest: ThemeManifest;
-  payloads: ThemePayload[];
-  digest: string;
+export type ThemeFolderRefusal =
+  | { reason: "not_a_theme" }
+  | { reason: "engine"; declared: string }
+  | { reason: "permissions" }
+  | { reason: "invalid_id"; id: string }
+  | { reason: "series" }
+  | { reason: "traversal"; path: string }
+  | { reason: "catalog_state"; file: string }
+  | { reason: "malformed"; detail: string };
+
+/**
+ * Il fascio di una luce della cartella, come lo chiede il cancello della shell
+ * (`fub_host::theme::ThemeFolderLight`): i byte solo degli asset che il
+ * cancello legge (i caratteri, il set di icone), gli altri asset per nome.
+ */
+export interface ThemeFolderLight {
+  light: ThemeLight;
+  sheet: string | null;
+  skin: string | null;
+  assets: Record<string, readonly number[]>;
+  named: string[];
 }
 
 /**
+ * La cartella di un tema scelta nella finestra nativa e letta senza
+ * installarla (`check_theme_folder`, `fub_host::theme::ThemeFolderCheck`).
+ * La webview non dà il path: lo sceglie la persona, e l'host tiene la
+ * cartella controllata.
+ *
+ * - `cancelled`: la finestra di scelta è stata chiusa;
+ * - `ready`: passa le porte dell'host; il manifest, il fascio di ogni luce
+ *   dichiarata e l'impronta che l'installazione chiede di nuovo. `folder` è
+ *   il path scelto, da mostrare;
+ * - `refused`: la cartella non è un tema installabile, e perché.
+ */
+export type ThemeFolderCheck =
+  | { outcome: "cancelled" }
+  | { outcome: "ready"; folder: string; manifest: ThemeManifest; lights: ThemeFolderLight[]; digest: string }
+  | { outcome: "refused"; folder: string; refusal: ThemeFolderRefusal };
+
+/**
  * Com'è andata un'installazione da cartella (`install_theme_from_folder`,
- * `fub_host::theme::ThemeFolderInstall`). Una cartella rifiutata, la cartella
- * cambiata dopo il controllo, una sostituzione che si ferma rimettendo il
+ * `fub_host::theme::ThemeFolderInstall`). La cartella cambiata dopo il
+ * controllo (o mai controllata), una sostituzione che si ferma rimettendo il
  * vecchio, o la modalità sviluppatore spenta, è un `PluginError` e non sta qui.
  *
  * - `installed`: il tema è installato; `replaced` se ha preso il posto di uno
@@ -171,6 +203,8 @@ export interface ThemeFolderCheck {
  * - `collision`: un tema con lo stesso id c'è già e niente è stato toccato; la
  *   cartella nuova è già controllata. `installed_version` è `null` quando
  *   quello installato non si legge più;
+ * - `revoked`: il tema installato con lo stesso id è revocato dal catalogo, e
+ *   una cartella non lo sostituisce; niente è stato toccato;
  * - `replace_failed`: il nuovo si è fermato e il vecchio non è riuscito a
  *   tornare al suo nome. `kept` è il nome della cartella, dentro la cartella
  *   dei temi, dove il vecchio è rimasto: la shell lo dice con le sue parole.
@@ -186,6 +220,7 @@ export type ThemeFolderInstall =
       version: string;
       installed_version: string | null;
     }
+  | { outcome: "revoked"; id: string; name: string; version: string }
   | { outcome: "replace_failed"; id: string; name: string; version: string; kept: string; error: PluginError };
 
 export interface VaultInfo {

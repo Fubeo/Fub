@@ -1576,17 +1576,23 @@ fn icons_need_theme_2() {
 
 // --- installare da una cartella, con la modalità sviluppatore ---------------
 
+use fub_host::theme::{ThemeFolderCheck, ThemeFolderInstall, ThemeFolderRefusal};
+
 /// L'host con la modalità sviluppatore accesa o spenta, scritta come la
 /// scrive la persona dalle Impostazioni.
 fn developer(config: &Utf8Path, on: bool) -> Host {
     let host = installed(config);
+    set_developer(&host, on);
+    host
+}
+
+fn set_developer(host: &Host, on: bool) {
     host.set_setting_for_user(
         None,
         fub_host::settings::DEVELOPER_MODE,
         fub_abi::settings::SettingValue::Toggle(on),
     )
     .expect("la modalità sviluppatore è un'impostazione della macchina");
-    host
 }
 
 fn write_versioned_theme(root: &Utf8Path, id: &str, version: &str) {
@@ -1602,10 +1608,34 @@ fn write_versioned_theme(root: &Utf8Path, id: &str, version: &str) {
     .unwrap();
 }
 
-/// L'impronta di una cartella, come la dà `check_theme_folder`; vuota per una
-/// cartella che l'impronta stessa rifiuta (l'installazione la rifiuta prima).
-fn digest(root: &Utf8Path) -> String {
-    fub_host::theme::theme_tree_digest(root).unwrap_or_default()
+/// Il controllo di una cartella che passa le porte: l'impronta che
+/// l'installazione chiede.
+fn checked(host: &Host, root: &Utf8Path) -> String {
+    match host.check_theme_folder(root).expect("reads the folder") {
+        ThemeFolderCheck::Ready { digest, .. } => digest,
+        other => panic!("expected Ready, got {other:?}"),
+    }
+}
+
+/// Il rifiuto tipizzato del controllo di una cartella.
+fn refused(host: &Host, root: &Utf8Path) -> ThemeFolderRefusal {
+    match host
+        .check_theme_folder(root)
+        .expect("a refusal is an outcome")
+    {
+        ThemeFolderCheck::Refused { folder, refusal } => {
+            assert_eq!(folder, root.as_str());
+            refusal
+        }
+        other => panic!("expected Refused, got {other:?}"),
+    }
+}
+
+/// Il giro della shell: controlla, poi installa coi byte controllati.
+fn install_folder(host: &Host, root: &Utf8Path, replace: bool) -> ThemeFolderInstall {
+    let digest = checked(host, root);
+    host.install_theme_from_folder(replace, &digest)
+        .expect("installs from the folder")
 }
 
 fn themes_dir_is_empty(config: &Utf8Path) -> bool {
@@ -1613,6 +1643,18 @@ fn themes_dir_is_empty(config: &Utf8Path) -> bool {
         .read_dir()
         .map(|mut it| it.next().is_none())
         .unwrap_or(true)
+}
+
+fn themes_entries(config: &Utf8Path) -> Vec<String> {
+    let mut names: Vec<String> = std::fs::read_dir(fub_host::config::themes_dir(config))
+        .map(|entries| {
+            entries
+                .map(|entry| entry.unwrap().file_name().into_string().unwrap())
+                .collect()
+        })
+        .unwrap_or_default();
+    names.sort();
+    names
 }
 
 /// Con la chiave accesa, una cartella temporanea diventa un tema installato:
@@ -1624,12 +1666,9 @@ fn a_theme_installs_from_a_folder_with_developer_mode_on() {
     write_versioned_theme(&root, "acme.carta", "0.3.2");
     let host = developer(&config, true);
 
-    let outcome = host
-        .install_theme_from_folder(&root, false, &digest(&root))
-        .expect("installs from the folder");
     assert_eq!(
-        outcome,
-        fub_host::theme::ThemeFolderInstall::Installed {
+        install_folder(&host, &root, false),
+        ThemeFolderInstall::Installed {
             id: "acme.carta".into(),
             name: "Prova".into(),
             version: "0.3.2".into(),
@@ -1651,16 +1690,23 @@ fn a_theme_installs_from_a_folder_with_developer_mode_on() {
     );
 }
 
-/// Spenta (il default), l'host rifiuta: la regola non è il bottone nascosto.
-/// Accesa e poi spenta, rifiuta di nuovo: la chiave si rilegge a ogni chiamata.
+/// Spenta (il default), l'host rifiuta di leggere e di installare: la regola
+/// non è il bottone nascosto. Spenta dopo il controllo, l'installazione si
+/// ferma: la chiave si rilegge a ogni chiamata.
 #[test]
 fn installing_from_a_folder_is_refused_with_developer_mode_off() {
     let (_config_dir, config) = folders();
     let (_dir, root) = folders();
     write_versioned_theme(&root, "acme.carta", "0.3.2");
 
-    let error = installed(&config)
-        .install_theme_from_folder(&root, false, &digest(&root))
+    let off = installed(&config);
+    let error = off.check_theme_folder(&root).expect_err("off by default");
+    assert!(
+        matches!(error, fub_abi::PluginError::PermissionDenied(_)),
+        "{error:?}"
+    );
+    let error = off
+        .install_theme_from_folder(false, "sha256:any")
         .expect_err("off by default");
     assert!(
         matches!(error, fub_abi::PluginError::PermissionDenied(_)),
@@ -1668,21 +1714,17 @@ fn installing_from_a_folder_is_refused_with_developer_mode_off() {
     );
     assert!(themes_dir_is_empty(&config));
     // Il rifiuto arriva alla shell come frase del catalogo, non come chiave.
-    let shown = installed(&config).localized_error(None, error);
+    let shown = off.localized_error(None, error);
     let wire = serde_json::to_value(&shown).expect("serializes");
     let sentence = wire["message"].as_str().expect("a sentence on the wire");
     assert!(!sentence.starts_with("host.theme_folder."), "{sentence}");
 
     let host = developer(&config, true);
-    host.set_setting_for_user(
-        None,
-        fub_host::settings::DEVELOPER_MODE,
-        fub_abi::settings::SettingValue::Toggle(false),
-    )
-    .unwrap();
+    let digest = checked(&host, &root);
+    set_developer(&host, false);
     let error = host
-        .install_theme_from_folder(&root, false, &digest(&root))
-        .expect_err("turned off while the picker was open");
+        .install_theme_from_folder(false, &digest)
+        .expect_err("turned off after the check");
     assert!(
         matches!(error, fub_abi::PluginError::PermissionDenied(_)),
         "{error:?}"
@@ -1690,9 +1732,79 @@ fn installing_from_a_folder_is_refused_with_developer_mode_off() {
     assert!(themes_dir_is_empty(&config));
 }
 
+/// L'installazione non prende un path: installa soltanto la cartella che il
+/// controllo ha letto, e solo se l'impronta è la sua. Senza controllo, con
+/// un'impronta inventata o con quella di un controllo superato è `Conflict`,
+/// e niente si scrive.
+#[test]
+fn only_the_checked_folder_can_be_installed() {
+    let (_config_dir, config) = folders();
+    let (_a_dir, a) = folders();
+    let (_b_dir, b) = folders();
+    write_versioned_theme(&a, "acme.carta", "0.3.2");
+    write_versioned_theme(&b, "acme.lino", "1.0.0");
+    let host = developer(&config, true);
+
+    let error = host
+        .install_theme_from_folder(false, &fub_host::theme::theme_tree_digest(&a).unwrap())
+        .expect_err("nothing was checked");
+    assert!(
+        matches!(error, fub_abi::PluginError::Conflict(_)),
+        "{error:?}"
+    );
+    let shown = host.localized_error(None, error);
+    let wire = serde_json::to_value(&shown).expect("serializes");
+    assert!(!wire["message"]
+        .as_str()
+        .unwrap()
+        .starts_with("host.theme_folder."));
+
+    let first = checked(&host, &a);
+    let error = host
+        .install_theme_from_folder(false, "sha256:made-up")
+        .expect_err("not the checked digest");
+    assert!(
+        matches!(error, fub_abi::PluginError::Conflict(_)),
+        "{error:?}"
+    );
+    let _second = checked(&host, &b);
+    let error = host
+        .install_theme_from_folder(false, &first)
+        .expect_err("a later check replaced the first");
+    assert!(
+        matches!(error, fub_abi::PluginError::Conflict(_)),
+        "{error:?}"
+    );
+    assert!(themes_dir_is_empty(&config));
+
+    // Un rifiuto dimentica la cartella controllata prima.
+    let digest = checked(&host, &a);
+    let (_empty_dir, empty) = folders();
+    assert_eq!(refused(&host, &empty), ThemeFolderRefusal::NotATheme);
+    let error = host
+        .install_theme_from_folder(false, &digest)
+        .expect_err("the refusal forgot the checked folder");
+    assert!(
+        matches!(error, fub_abi::PluginError::Conflict(_)),
+        "{error:?}"
+    );
+
+    // Dopo l'installazione la cartella controllata si dimentica.
+    let digest = checked(&host, &a);
+    host.install_theme_from_folder(false, &digest).unwrap();
+    let error = host
+        .install_theme_from_folder(true, &digest)
+        .expect_err("installed: check it again");
+    assert!(
+        matches!(error, fub_abi::PluginError::Conflict(_)),
+        "{error:?}"
+    );
+}
+
 /// Un id già installato: l'esito lo dice con le due versioni e non tocca
-/// niente; con `replace` il nuovo prende il posto del vecchio. Spegnere la
-/// chiave fra le due domande ferma la seconda e lascia il vecchio.
+/// niente; con `replace` (la stessa cartella controllata) il nuovo prende il
+/// posto del vecchio. Spegnere la chiave fra le due domande ferma la seconda e
+/// lascia il vecchio.
 #[test]
 fn an_installed_id_collides_and_replace_swaps_it() {
     let (_config_dir, config) = folders();
@@ -1702,15 +1814,13 @@ fn an_installed_id_collides_and_replace_swaps_it() {
     write_versioned_theme(&new, "acme.carta", "0.4.0");
     std::fs::write(new.join("skin.css"), ".surface { color: red; }\n").unwrap();
     let host = developer(&config, true);
-    host.install_theme_from_folder(&old, false, &digest(&old))
-        .unwrap();
+    install_folder(&host, &old, false);
 
-    let outcome = host
-        .install_theme_from_folder(&new, false, &digest(&new))
-        .unwrap();
+    let digest = checked(&host, &new);
+    let outcome = host.install_theme_from_folder(false, &digest).unwrap();
     assert_eq!(
         outcome,
-        fub_host::theme::ThemeFolderInstall::Collision {
+        ThemeFolderInstall::Collision {
             id: "acme.carta".into(),
             name: "Prova".into(),
             version: "0.4.0".into(),
@@ -1724,12 +1834,10 @@ fn an_installed_id_collides_and_replace_swaps_it() {
         "a collision touches nothing"
     );
 
-    let outcome = host
-        .install_theme_from_folder(&new, true, &digest(&new))
-        .unwrap();
+    let outcome = host.install_theme_from_folder(true, &digest).unwrap();
     assert_eq!(
         outcome,
-        fub_host::theme::ThemeFolderInstall::Installed {
+        ThemeFolderInstall::Installed {
             id: "acme.carta".into(),
             name: "Prova".into(),
             version: "0.4.0".into(),
@@ -1745,15 +1853,16 @@ fn an_installed_id_collides_and_replace_swaps_it() {
         "0.4.0",
         "the inventory reads the new one"
     );
+    assert_eq!(themes_entries(&config), vec!["acme.carta".to_string()]);
 
-    host.set_setting_for_user(
-        None,
-        fub_host::settings::DEVELOPER_MODE,
-        fub_abi::settings::SettingValue::Toggle(false),
-    )
-    .unwrap();
+    let digest = checked(&host, &old);
+    assert!(matches!(
+        host.install_theme_from_folder(false, &digest).unwrap(),
+        ThemeFolderInstall::Collision { .. }
+    ));
+    set_developer(&host, false);
     let error = host
-        .install_theme_from_folder(&old, true, &digest(&old))
+        .install_theme_from_folder(true, &digest)
         .expect_err("off between the collision and «Sostituisci»");
     assert!(matches!(error, fub_abi::PluginError::PermissionDenied(_)));
     assert_eq!(
@@ -1762,37 +1871,129 @@ fn an_installed_id_collides_and_replace_swaps_it() {
     );
 }
 
-/// Una cartella che non è un tema si ferma prima di toccare `themes/`, anche
-/// con `replace`: la sostituzione valida la cartella nuova prima di togliere
-/// il vecchio.
+/// Un tema installato revocato dal catalogo non si sostituisce da cartella:
+/// la copia nuova non ha puntatore, e cancellerebbe la revoca. L'esito lo
+/// dice prima della domanda «Sostituisci», e anche chiedendo `replace` niente
+/// si tocca: il tema resta revocato.
 #[test]
-fn a_folder_that_is_not_a_theme_is_refused_before_touching_the_installed_one() {
+fn a_revoked_installed_theme_is_not_replaced_from_a_folder() {
     let (_config_dir, config) = folders();
     let (_old_dir, old) = folders();
-    let (_empty_dir, empty) = folders();
+    let (_new_dir, new) = folders();
     write_versioned_theme(&old, "acme.carta", "0.3.2");
+    write_versioned_theme(&new, "acme.carta", "0.4.0");
+    std::fs::write(new.join("skin.css"), ".surface { color: red; }\n").unwrap();
     let host = developer(&config, true);
-    host.install_theme_from_folder(&old, false, &digest(&old))
-        .unwrap();
+    install_folder(&host, &old, false);
+    fub_host::theme::set_theme_revoked(&config, "acme.carta", true).unwrap();
 
+    for replace in [false, true] {
+        let digest = checked(&host, &new);
+        assert_eq!(
+            host.install_theme_from_folder(replace, &digest).unwrap(),
+            ThemeFolderInstall::Revoked {
+                id: "acme.carta".into(),
+                name: "Prova".into(),
+                version: "0.4.0".into(),
+            },
+            "replace: {replace}"
+        );
+    }
+    assert!(fub_host::theme::theme_revoked(&config, "acme.carta"));
+    assert_eq!(
+        std::fs::read_to_string(fub_host::config::themes_dir(&config).join("acme.carta/skin.css"))
+            .unwrap(),
+        ".surface { color: inherit; }\n"
+    );
+    assert_eq!(themes_entries(&config), vec!["acme.carta".to_string()]);
+}
+
+/// La cartella di chi scrive un tema non porta lo stato del catalogo: il
+/// puntatore alla versione (che `read_theme` seguirebbe), le sue copie
+/// temporanee e le generazioni. Il controllo lo rifiuta per nome, e niente si
+/// scrive.
+#[test]
+fn a_folder_with_catalog_state_is_refused() {
+    let (_config_dir, config) = folders();
+    let host = developer(&config, true);
+    for (file, make) in [
+        (".fub-current.json", false),
+        (".fub-current-1-2.json", false),
+        (".generations", true),
+    ] {
+        let (_dir, root) = folders();
+        write_versioned_theme(&root, "acme.carta", "0.3.2");
+        if make {
+            std::fs::create_dir_all(root.join(file).join("1-2")).unwrap();
+            write_versioned_theme(&root.join(file).join("1-2"), "acme.carta", "9.9.9");
+        } else {
+            std::fs::write(
+                root.join(file),
+                r#"{"version": 1, "generation": "", "revoked": true}"#,
+            )
+            .unwrap();
+        }
+        assert_eq!(
+            refused(&host, &root),
+            ThemeFolderRefusal::CatalogState { file: file.into() },
+            "{file}"
+        );
+        assert!(themes_dir_is_empty(&config), "{file}");
+    }
+}
+
+/// Un rifiuto della cartella è un esito tipizzato, coi campi per dirlo: mai
+/// un errore col messaggio dell'host da interpretare. `PermissionDenied` resta
+/// solo la modalità spenta.
+#[test]
+fn a_refused_folder_is_a_typed_outcome() {
+    let (_config_dir, config) = folders();
+    let host = developer(&config, true);
+
+    let (_empty_dir, empty) = folders();
     std::fs::write(empty.join("skin.css"), ".surface {}\n").unwrap();
-    let error = host
-        .install_theme_from_folder(&empty, true, &digest(&empty))
-        .expect_err("no manifest.json");
+    assert_eq!(refused(&host, &empty), ThemeFolderRefusal::NotATheme);
+
+    let (_permissions_dir, permissions) = folders();
+    write_theme(
+        &permissions,
+        "acme.carta",
+        "theme-2",
+        r#", "permissions": ["net"]"#,
+    );
+    assert_eq!(
+        refused(&host, &permissions),
+        ThemeFolderRefusal::Permissions
+    );
+
+    let (_engine_dir, engine) = folders();
+    write_theme(&engine, "acme.carta", "theme-9", "");
+    assert_eq!(
+        refused(&host, &engine),
+        ThemeFolderRefusal::Engine {
+            declared: "theme-9".into()
+        }
+    );
+
+    let (_series_dir, series) = folders();
+    write_theme(&series, fub_host::theme::SERIES_ID, "theme-2", "");
+    assert_eq!(refused(&host, &series), ThemeFolderRefusal::Series);
+
+    let (_malformed_dir, malformed) = folders();
+    write_theme(&malformed, "acme.carta", "theme-2", "");
+    std::fs::write(malformed.join("manifest.json"), "{ not json").unwrap();
     assert!(
         matches!(
-            error,
-            fub_abi::PluginError::BadArgs(_) | fub_abi::PluginError::Io(_)
+            refused(&host, &malformed),
+            ThemeFolderRefusal::Malformed { .. }
         ),
-        "{error:?}"
+        "a manifest that is not JSON"
     );
-    assert!(fub_host::config::themes_dir(&config)
-        .join("acme.carta/manifest.json")
-        .is_file());
+    assert!(themes_dir_is_empty(&config));
 }
 
 /// Un link simbolico dentro la cartella è un traversal, come per
-/// `install_theme`: niente resta in `themes/`.
+/// `install_theme`, e il rifiuto nomina il file relativo alla cartella.
 #[cfg(unix)]
 #[test]
 fn a_symlink_inside_the_folder_is_refused() {
@@ -1801,98 +2002,66 @@ fn a_symlink_inside_the_folder_is_refused() {
     write_versioned_theme(&root, "acme.carta", "0.3.2");
     std::os::unix::fs::symlink("/etc", root.join("escape")).unwrap();
 
-    let error = developer(&config, true)
-        .install_theme_from_folder(&root, false, &digest(&root))
-        .expect_err("symlink refused");
-    assert!(
-        matches!(error, fub_abi::PluginError::BadArgs(_)),
-        "{error:?}"
+    assert_eq!(
+        refused(&developer(&config, true), &root),
+        ThemeFolderRefusal::Traversal {
+            path: "escape".into()
+        }
     );
     assert!(themes_dir_is_empty(&config));
 }
 
-/// La serie resta riservata anche da cartella.
-#[test]
-fn the_series_id_is_reserved_from_a_folder_too() {
-    let (_config_dir, config) = folders();
-    let (_dir, root) = folders();
-    write_theme(&root, fub_host::theme::SERIES_ID, "theme-2", "");
-    let error = developer(&config, true)
-        .install_theme_from_folder(&root, true, &digest(&root))
-        .expect_err("reserved");
-    assert!(
-        matches!(error, fub_abi::PluginError::BadArgs(_)),
-        "{error:?}"
-    );
-}
-
-/// Leggere la cartella non scrive niente: il manifest, un fascio per luce
-/// (come `read_theme` per un tema installato) e l'impronta dei byte. Con la
-/// chiave spenta l'host rifiuta anche solo di leggerla.
+/// Leggere la cartella non scrive niente: il manifest, un fascio per luce e
+/// l'impronta dei byte. Dei byte degli asset viaggiano solo quelli che il
+/// cancello della shell legge (i caratteri, le icone); degli altri il nome.
 #[test]
 fn checking_a_folder_reads_both_lights_and_writes_nothing() {
     let (_config_dir, config) = folders();
     let (_dir, root) = folders();
     write_versioned_theme(&root, "acme.carta", "0.3.2");
-
-    let error = installed(&config)
-        .check_theme_folder(&root)
-        .expect_err("off by default");
-    assert!(
-        matches!(error, fub_abi::PluginError::PermissionDenied(_)),
-        "{error:?}"
-    );
+    std::fs::write(
+        root.join("skin.css"),
+        ".surface { background: url(\"theme://acme.carta/carta.png\"); }\n",
+    )
+    .unwrap();
+    std::fs::write(root.join("carta.png"), [0x89, b'P', b'N', b'G']).unwrap();
 
     let check = developer(&config, true)
         .check_theme_folder(&root)
         .expect("reads the folder");
-    assert_eq!(check.manifest.id, "acme.carta");
-    assert_eq!(check.digest, digest(&root));
-    let lights: Vec<_> = check.payloads.iter().map(|payload| payload.light).collect();
-    assert_eq!(
+    let ThemeFolderCheck::Ready {
+        folder,
+        manifest,
         lights,
+        digest,
+    } = check
+    else {
+        panic!("expected Ready, got {check:?}");
+    };
+    assert_eq!(folder, root.as_str());
+    assert_eq!(manifest.id, "acme.carta");
+    assert_eq!(digest, fub_host::theme::theme_tree_digest(&root).unwrap());
+    let order: Vec<_> = lights.iter().map(|light| light.light).collect();
+    assert_eq!(
+        order,
         vec![
             fub_abi::theme::ThemeLight::Light,
             fub_abi::theme::ThemeLight::Dark
         ]
     );
+    assert_eq!(lights[1].sheet.as_deref(), Some("body { color: #ddd; }\n"));
+    assert!(lights[0].assets.is_empty(), "an image travels by name");
     assert_eq!(
-        check.payloads[0].skin.as_deref(),
-        Some(".surface { color: inherit; }\n")
-    );
-    assert_eq!(
-        check.payloads[1].sheet.as_deref(),
-        Some("body { color: #ddd; }\n")
+        lights[0].named,
+        vec!["theme://acme.carta/carta.png".to_string()]
     );
     assert!(themes_dir_is_empty(&config), "a check writes nothing");
 }
 
-/// Un manifest che dichiara permessi è una cartella sbagliata (`BadArgs`), non
-/// un permesso negato: su questa strada `PermissionDenied` è solo la modalità
-/// spenta, e la shell lo riconosce dal tipo.
-#[test]
-fn a_manifest_with_permissions_is_a_bad_folder_not_a_denied_permission() {
-    let (_config_dir, config) = folders();
-    let (_dir, root) = folders();
-    write_theme(
-        &root,
-        "acme.carta",
-        "theme-2",
-        r#", "permissions": ["net"]"#,
-    );
-
-    let error = developer(&config, true)
-        .check_theme_folder(&root)
-        .expect_err("permissions refused");
-    assert!(
-        matches!(error, fub_abi::PluginError::BadArgs(_)),
-        "{error:?}"
-    );
-}
-
 /// L'installazione pubblica solo i byte controllati: una cartella cambiata
 /// dopo il controllo si ferma con `Conflict`, e niente si scrive. Con
-/// `replace` il tema installato resta com'era.
+/// `replace` il tema installato resta com'era. Anche una cartella che dopo il
+/// controllo è diventata da rifiutare è «cambiata», non un rifiuto nuovo.
 #[test]
 fn a_folder_changed_after_the_check_is_not_installed() {
     let (_config_dir, config) = folders();
@@ -1902,10 +2071,10 @@ fn a_folder_changed_after_the_check_is_not_installed() {
     write_versioned_theme(&new, "acme.carta", "0.4.0");
     let host = developer(&config, true);
 
-    let checked = host.check_theme_folder(&old).unwrap().digest;
+    let digest = checked(&host, &old);
     std::fs::write(old.join("skin.css"), ".surface { color: blue; }\n").unwrap();
     let error = host
-        .install_theme_from_folder(&old, false, &checked)
+        .install_theme_from_folder(false, &digest)
         .expect_err("changed after the check");
     assert!(
         matches!(error, fub_abi::PluginError::Conflict(_)),
@@ -1916,27 +2085,36 @@ fn a_folder_changed_after_the_check_is_not_installed() {
         "nothing published, no staging left"
     );
 
-    host.install_theme_from_folder(&old, false, &digest(&old))
-        .unwrap();
-    let checked = host.check_theme_folder(&new).unwrap().digest;
+    install_folder(&host, &old, false);
+    let digest = checked(&host, &new);
     std::fs::write(new.join("skin.css"), ".surface { color: red; }\n").unwrap();
     let error = host
-        .install_theme_from_folder(&new, true, &checked)
+        .install_theme_from_folder(true, &digest)
         .expect_err("changed before «Sostituisci»");
     assert!(
         matches!(error, fub_abi::PluginError::Conflict(_)),
         "{error:?}"
     );
-    let themes = fub_host::config::themes_dir(&config);
     assert_eq!(
-        std::fs::read_to_string(themes.join("acme.carta/skin.css")).unwrap(),
+        std::fs::read_to_string(fub_host::config::themes_dir(&config).join("acme.carta/skin.css"))
+            .unwrap(),
         ".surface { color: blue; }\n",
         "the installed theme stays as it was"
     );
     assert_eq!(
-        std::fs::read_dir(&themes).unwrap().count(),
-        1,
+        themes_entries(&config),
+        vec!["acme.carta".to_string()],
         "no staging and no copy set aside are left"
+    );
+
+    let digest = checked(&host, &new);
+    std::fs::write(new.join(".fub-current.json"), "{}").unwrap();
+    let error = host
+        .install_theme_from_folder(true, &digest)
+        .expect_err("catalog state appeared after the check");
+    assert!(
+        matches!(error, fub_abi::PluginError::Conflict(_)),
+        "{error:?}"
     );
 }
 
@@ -1959,14 +2137,14 @@ fn a_replace_the_disk_refuses_keeps_the_installed_theme() {
     write_versioned_theme(&old, "acme.carta", "0.3.2");
     write_versioned_theme(&new, "acme.carta", "0.4.0");
     let host = developer(&config, true);
-    host.install_theme_from_folder(&old, false, &digest(&old))
-        .unwrap();
+    install_folder(&host, &old, false);
+    let digest = checked(&host, &new);
 
     let themes = fub_host::config::themes_dir(&config);
     std::fs::set_permissions(&themes, std::fs::Permissions::from_mode(0o555)).unwrap();
     // Chi gira come root scrive lo stesso: la prova non dice niente.
     let writable = std::fs::create_dir(themes.join(".probe")).is_ok();
-    let result = host.install_theme_from_folder(&new, true, &digest(&new));
+    let result = host.install_theme_from_folder(true, &digest);
     std::fs::set_permissions(&themes, std::fs::Permissions::from_mode(0o755)).unwrap();
     if writable {
         return;

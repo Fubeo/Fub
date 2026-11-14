@@ -80,6 +80,15 @@ fn extending_manifest() -> fub_abi::theme::ThemeManifest {
     }
 }
 
+/// Una cartella rifiutata, col motivo dato: il campione del mirror per ogni
+/// `ThemeFolderRefusal`.
+fn folder_refusal(refusal: fub_host::theme::ThemeFolderRefusal) -> Value {
+    to_value(fub_host::theme::ThemeFolderCheck::Refused {
+        folder: "/home/chi/temi/rotto".into(),
+        refusal,
+    })
+}
+
 fn expected() -> Value {
     // La costruzione con TUTTI i campi è la guardia di esaustività: un campo
     // aggiunto a una struct non compila finché non è anche qui.
@@ -284,22 +293,48 @@ fn expected() -> Value {
             manifest: extending_manifest(),
             trust: "community",
         })],
-        // La cartella di un tema letta prima di installarla: il fascio di ogni
-        // luce (qui uno solo, che eredita) e l'impronta che l'installazione
-        // chiede di nuovo.
-        "ThemeFolderCheck": [to_value(fub_host::theme::ThemeFolderCheck {
-            manifest: extending_manifest(),
-            payloads: vec![ThemePayload {
-                manifest: extending_manifest(),
-                light: ThemeLight::Dark,
-                sheet: None,
-                skin: Some(".carta { color: inherit; }".into()),
-                assets: Default::default(),
-            }],
-            digest: "9f2c4d6e8a0b1c3d5e7f9a1b3c5d7e9f0a2b4c6d8e0f1a3b5c7d9e1f3a5b7c9d".into(),
-        })],
-        // I tre esiti dell'installazione da cartella: la finestra della shell
-        // li dice in tre modi diversi, e il mirror deve vederli tutti.
+        // La cartella di un tema letta prima di installarla, nei suoi tre
+        // esiti: chiusa la finestra di scelta; pronta, col fascio di ogni luce
+        // (qui uno solo, che eredita: i byte solo per il carattere, l'immagine
+        // per nome) e l'impronta che l'installazione chiede di nuovo;
+        // rifiutata, con un motivo tipizzato. Il mirror vede ogni motivo.
+        "ThemeFolderCheck": [
+            to_value(fub_host::theme::ThemeFolderCheck::Cancelled),
+            to_value(fub_host::theme::ThemeFolderCheck::Ready {
+                folder: "/home/chi/temi/carta".into(),
+                manifest: Box::new(extending_manifest()),
+                lights: vec![fub_host::theme::ThemeFolderLight {
+                    light: ThemeLight::Dark,
+                    sheet: None,
+                    skin: Some(".carta { color: inherit; }".into()),
+                    assets: [("theme://acme.carta/carta.woff2".to_string(), vec![0x77, 0x4f, 0x46, 0x32])]
+                        .into_iter()
+                        .collect(),
+                    named: vec!["theme://acme.carta/carta.png".into()],
+                }],
+                digest: "sha256:9f2c4d6e8a0b1c3d5e7f9a1b3c5d7e9f0a2b4c6d8e0f1a3b5c7d9e1f3a5b7c9d".into(),
+            }),
+            folder_refusal(fub_host::theme::ThemeFolderRefusal::NotATheme),
+            folder_refusal(fub_host::theme::ThemeFolderRefusal::Engine {
+                declared: "theme-9".into(),
+            }),
+            folder_refusal(fub_host::theme::ThemeFolderRefusal::Permissions),
+            folder_refusal(fub_host::theme::ThemeFolderRefusal::InvalidId {
+                id: "Acme Carta".into(),
+            }),
+            folder_refusal(fub_host::theme::ThemeFolderRefusal::Series),
+            folder_refusal(fub_host::theme::ThemeFolderRefusal::Traversal {
+                path: "font/fuori.woff2".into(),
+            }),
+            folder_refusal(fub_host::theme::ThemeFolderRefusal::CatalogState {
+                file: ".fub-current.json".into(),
+            }),
+            folder_refusal(fub_host::theme::ThemeFolderRefusal::Malformed {
+                detail: "missing `id`".into(),
+            }),
+        ],
+        // Gli esiti dell'installazione da cartella: la finestra della shell
+        // li dice in modi diversi, e il mirror deve vederli tutti.
         "ThemeFolderInstall": [
             to_value(fub_host::theme::ThemeFolderInstall::Installed {
                 id: "acme.carta".into(),
@@ -312,6 +347,11 @@ fn expected() -> Value {
                 name: "Carta".into(),
                 version: "0.4.0".into(),
                 installed_version: Some("0.3.2".into()),
+            }),
+            to_value(fub_host::theme::ThemeFolderInstall::Revoked {
+                id: "acme.carta".into(),
+                name: "Carta".into(),
+                version: "0.4.0".into(),
             }),
             to_value(fub_host::theme::ThemeFolderInstall::ReplaceFailed {
                 id: "acme.carta".into(),

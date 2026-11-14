@@ -21,7 +21,7 @@ use super::*;
 /// 4. la copia rifiuta i link simbolici e un file che, per path canonico,
 ///    esce dalla cartella (traversal);
 /// 5. la pubblicazione è un `rename` dentro la stessa filesystem: atomico.
-fn install_theme_internal(
+pub(super) fn install_theme_internal(
     config_dir: &Utf8Path,
     source: &Utf8Path,
     checked: Option<(&str, &str, &str, &serde_json::Value)>,
@@ -44,16 +44,26 @@ fn install_theme_internal(
     if theme.manifest.id == SERIES_ID {
         return Err(ThemeError::InvalidId(SERIES_ID.to_string()));
     }
+    if let Some(folder) = folder.as_deref_mut() {
+        // La cartella di chi scrive un tema non porta lo stato del catalogo:
+        // il puntatore e le generazioni li scrive solo Fub.
+        reject_catalog_state(&source_root)?;
+        folder.manifest = Some(theme.manifest.clone());
+    }
 
     let themes_dir = crate::config::themes_dir(config_dir);
     std::fs::create_dir_all(&themes_dir)
         .map_err(|and| ThemeError::Io(format!("{}: {and}", themes_dir)))?;
     let themes_root = open_themes_root(config_dir, &theme.manifest.id)?
         .ok_or_else(|| ThemeError::Io(format!("{}: no themes root", themes_dir)))?;
+    sweep_dropped(&themes_root);
     let dest = themes_root.path.join(&theme.manifest.id);
-    let replace = folder.as_ref().is_some_and(|folder| folder.replace);
+    // Una sola sonda di ciò che c'è sotto l'id: per l'installazione da
+    // cartella dice anche se il tema installato si può sostituire.
     let present = match themes_root.dir.symlink_metadata(&theme.manifest.id) {
-        Ok(_) if !replace => return Err(ThemeError::AlreadyInstalled(theme.manifest.id.clone())),
+        Ok(_) if folder.is_none() => {
+            return Err(ThemeError::AlreadyInstalled(theme.manifest.id.clone()))
+        }
         Ok(metadata) if metadata.file_type().is_symlink() => {
             return Err(ThemeError::Traversal {
                 id: theme.manifest.id.clone(),
@@ -69,6 +79,22 @@ fn install_theme_internal(
         Err(error) if error.kind() == io::ErrorKind::NotFound => false,
         Err(error) => return Err(ThemeError::Io(format!("{dest}: {error}"))),
     };
+    if present {
+        let folder = folder
+            .as_deref_mut()
+            .expect("only a folder install goes on past an installed id");
+        let stop = match installed_theme(&dest, &theme.manifest.id)? {
+            Installed::Revoked => Some(FolderStop::Revoked),
+            Installed::Live { version } if !folder.replace => Some(FolderStop::Collision {
+                installed_version: version,
+            }),
+            Installed::Live { .. } => None,
+        };
+        if let Some(stop) = stop {
+            folder.stopped = Some(stop);
+            return Err(ThemeError::AlreadyInstalled(theme.manifest.id.clone()));
+        }
+    }
 
     // Una cartella temporanea **dentro** `themes/`, con un nome che non può
     // collidere. `create_dir` è la prenotazione atomica: nessuna rimozione
@@ -125,7 +151,12 @@ fn install_theme_internal(
         if present {
             let lost = swap_theme(&themes_root, &staging_name, &theme.manifest.id, stamp)?;
             return match lost {
-                None => Ok(()),
+                None => {
+                    if let Some(folder) = folder.as_deref_mut() {
+                        folder.replaced = true;
+                    }
+                    Ok(())
+                }
                 Some((error, kept)) => {
                     if let Some(folder) = folder.as_deref_mut() {
                         folder.kept = Some(kept);
@@ -155,24 +186,138 @@ pub fn install_theme(config_dir: &Utf8Path, source: &Utf8Path) -> Result<Utf8Pat
     install_theme_internal(config_dir, source, None, None)
 }
 
-/// Come pubblica un'installazione da cartella: i byte attesi (il `digest` di
-/// [`check_theme_folder`]) e se un tema con lo stesso id si sostituisce.
-/// `kept` torna col nome della cartella (dentro `themes/`) dove il vecchio è
-/// rimasto, solo se la sostituzione lo ha spostato e non è riuscita a
-/// rimetterlo.
-struct FolderPublish<'a> {
-    digest: &'a str,
-    replace: bool,
-    kept: Option<String>,
+/// Come pubblica un'installazione da cartella, e che cosa ne torna.
+///
+/// Dentro: i byte attesi (il `digest` di
+/// [`check_theme_folder`](super::check_theme_folder)) e se un tema con lo
+/// stesso id si sostituisce. Fuori, scritti da [`install_theme_internal`] con
+/// la sua sola lettura della sorgente e la sua sola sonda della destinazione:
+/// il manifest letto, perché l'installazione si è fermata prima di copiare
+/// (`stopped`), se ha preso il posto di un tema (`replaced`) e, solo se la
+/// sostituzione ha spostato il vecchio e non è riuscita a rimetterlo, il nome
+/// della cartella dentro `themes/` dove il vecchio è rimasto (`kept`).
+pub(super) struct FolderPublish<'a> {
+    pub(super) digest: &'a str,
+    pub(super) replace: bool,
+    pub(super) manifest: Option<ThemeManifest>,
+    pub(super) stopped: Option<FolderStop>,
+    pub(super) replaced: bool,
+    pub(super) kept: Option<String>,
+}
+
+impl<'a> FolderPublish<'a> {
+    pub(super) fn new(digest: &'a str, replace: bool) -> Self {
+        Self {
+            digest,
+            replace,
+            manifest: None,
+            stopped: None,
+            replaced: false,
+            kept: None,
+        }
+    }
+}
+
+/// Perché un'installazione da cartella si è fermata davanti a un tema già
+/// installato, prima di toccare il disco.
+pub(super) enum FolderStop {
+    /// Senza `replace`: c'è già, e la persona deve decidere.
+    /// `installed_version` è `None` quando quello installato non si legge.
+    Collision { installed_version: Option<String> },
+    /// Il tema installato è revocato dal catalogo: sostituirlo cancellerebbe
+    /// la revoca con una copia senza puntatore, e non si fa.
+    Revoked,
+}
+
+/// Un tema installato sotto l'id, visto dalla sua radice.
+enum Installed {
+    /// Il puntatore del catalogo dice che è revocato.
+    Revoked,
+    /// Si può sostituire; `version` è quella che si legge, se si legge.
+    Live { version: Option<String> },
+}
+
+/// Legge il puntatore del tema installato in `dest`. Un puntatore che non si
+/// legge è un errore, non un via libera: niente si tocca.
+fn installed_theme(dest: &Utf8Path, id: &str) -> Result<Installed, ThemeError> {
+    let root = canonical_theme_root(dest, id)?;
+    let dir = match read_theme_pointer(&root, id)? {
+        Some(pointer) if pointer.revoked => return Ok(Installed::Revoked),
+        Some(pointer) => selected_theme_dir(&root, id, &pointer).ok(),
+        None => Some(root),
+    };
+    let version = dir
+        .and_then(|dir| ThemeBundle::load(&dir).ok())
+        .map(|theme| theme.manifest.version);
+    Ok(Installed::Live { version })
+}
+
+/// I nomi, nella radice della cartella di un tema, che sono stato del catalogo
+/// scritto da Fub e non parte del tema: il puntatore alla versione
+/// ([`POINTER_FILE`]), le sue copie temporanee e le generazioni conservate.
+/// [`read_theme`] segue il puntatore: copiato da una cartella, sceglierebbe lui
+/// che cosa si monta, o porterebbe una revoca finta.
+pub(super) fn reject_catalog_state(root: &Utf8Path) -> Result<(), ThemeError> {
+    let entries =
+        std::fs::read_dir(root).map_err(|and| ThemeError::Io(format!("{root}: {and}")))?;
+    for entry in entries {
+        let entry = entry.map_err(|and| ThemeError::Io(format!("{root}: {and}")))?;
+        let name = entry.file_name();
+        let name = name.to_string_lossy();
+        if name == ".generations" || name.starts_with(".fub-current") {
+            return Err(ThemeError::CatalogState {
+                file: name.into_owned(),
+            });
+        }
+    }
+    Ok(())
+}
+
+/// Il prefisso di un tema sostituito che non si è lasciato cancellare: resta
+/// sotto [`STAGING_PREFIX`] (la scansione lo salta) e si spazza alla prossima
+/// installazione ([`sweep_dropped`]). Diverso da `.tmp-old-`, la copia che una
+/// sostituzione fallita ha lasciato da parte e che non si cancella mai da sola:
+/// è l'unica copia del tema vecchio.
+pub(super) const DROP_PREFIX: &str = ".tmp-drop-";
+
+/// Toglie i temi sostituiti rimasti da un'installazione precedente
+/// ([`DROP_PREFIX`]). Solo cartelle vere; un guasto si scrive nel log e non
+/// ferma l'installazione.
+fn sweep_dropped(themes_root: &files::ThemesRoot) {
+    let Ok(entries) = themes_root.dir.entries() else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let name = entry.file_name().to_string_lossy().into_owned();
+        if !name.starts_with(DROP_PREFIX) {
+            continue;
+        }
+        let is_dir = themes_root
+            .dir
+            .symlink_metadata(&name)
+            .is_ok_and(|metadata| metadata.is_dir());
+        if !is_dir {
+            continue;
+        }
+        if let Err(error) = themes_root.dir.remove_dir_all(&name) {
+            tracing::warn!(
+                target: "fub.host",
+                "{}: a replaced theme could not be removed: {error}",
+                themes_root.path.join(&name)
+            );
+        }
+    }
 }
 
 // Uno scambio guastato apposta, per i test dell'unico esito che il disco non
 // sa produrre a comando: la sostituzione che non riesce a rimettere il
 // vecchio. `1` ferma la pubblicazione del nuovo, `2` anche il ritorno del
-// vecchio. Esiste solo nei test di unità.
+// vecchio. `DROP_FAULT` ferma la cancellazione del vecchio dopo uno scambio
+// riuscito. Esistono solo nei test di unità.
 #[cfg(test)]
 thread_local! {
     static SWAP_FAULT: std::cell::Cell<u8> = const { std::cell::Cell::new(0) };
+    static DROP_FAULT: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
 }
 
 fn swap_fault(step: u8) -> io::Result<()> {
@@ -184,8 +329,16 @@ fn swap_fault(step: u8) -> io::Result<()> {
     Ok(())
 }
 
+fn drop_fault() -> io::Result<()> {
+    #[cfg(test)]
+    if DROP_FAULT.with(std::cell::Cell::get) {
+        return Err(io::Error::other("drop fault injected by the test"));
+    }
+    Ok(())
+}
+
 /// Mette la staging al posto del tema installato con lo stesso id, senza mai
-/// perderlo: il vecchio si sposta da parte (una cartella `.tmp-` che la
+/// perderlo: il vecchio si sposta da parte (una cartella `.tmp-old-` che la
 /// scansione salta), il nuovo prende il suo nome, e solo allora il vecchio si
 /// cancella. Se il nuovo non entra il vecchio torna al suo posto e l'errore è
 /// `Err`. `Ok(Some((errore, nome)))` è il caso che resta: il nuovo non è
@@ -206,9 +359,27 @@ fn swap_theme(
     let published = swap_fault(1).and_then(|()| std::fs::rename(&staging, &dest));
     match published {
         Ok(()) => {
-            // Il nuovo è pubblicato: il vecchio da parte si toglie, e se non
-            // si toglie resta una `.tmp-` che la scansione salta.
-            let _ = themes_root.dir.remove_dir_all(&aside_name);
+            // Il nuovo è pubblicato: il vecchio da parte si toglie. Se non si
+            // toglie lo si dice nel log, e cambia nome perché la prossima
+            // installazione lo spazzi: una `.tmp-old-` resta solo quando è
+            // l'unica copia del vecchio.
+            let removed = drop_fault().and_then(|()| themes_root.dir.remove_dir_all(&aside_name));
+            if let Err(error) = removed {
+                tracing::warn!(
+                    target: "fub.host",
+                    "{aside}: the replaced theme could not be removed: {error}"
+                );
+                let dropped = format!("{DROP_PREFIX}{}-{stamp}", std::process::id());
+                if let Err(error) = themes_root
+                    .dir
+                    .rename(&aside_name, &themes_root.dir, &dropped)
+                {
+                    tracing::warn!(
+                        target: "fub.host",
+                        "{aside}: the replaced theme could not be set aside for removal: {error}"
+                    );
+                }
+            }
             Ok(None)
         }
         Err(and) => {
@@ -223,171 +394,6 @@ fn swap_theme(
                 ))),
             }
         }
-    }
-}
-
-/// La cartella di chi scrive un tema, letta **senza installarla**: il
-/// manifest, il fascio di ogni luce dichiarata (come [`read_theme`] lo dà per
-/// un tema installato) e l'impronta dei byte ([`theme_tree_digest`]).
-///
-/// Serve alla shell per far girare i suoi cancelli CSS prima che niente
-/// arrivi in `themes/`: l'installazione ([`install_theme_from_folder`]) chiede
-/// poi la stessa impronta, e pubblica solo se i byte copiati sono ancora
-/// quelli controllati.
-#[derive(Clone, Debug, serde::Serialize)]
-pub struct ThemeFolderCheck {
-    pub manifest: ThemeManifest,
-    pub payloads: Vec<ThemePayload>,
-    pub digest: String,
-}
-
-/// Legge e valida la cartella di un tema senza scrivere niente: le porte di
-/// [`ThemeBundle::load`], la serie riservata, il fascio di ogni luce.
-/// L'impronta si prende prima e dopo la lettura: se la cartella cambia mentre
-/// la si legge, l'esito è [`ThemeError::Changed`] e non un fascio che non
-/// corrisponde all'impronta.
-pub fn check_theme_folder(source: &Utf8Path) -> Result<ThemeFolderCheck, ThemeError> {
-    let source_id = source.file_name().unwrap_or_default().to_string();
-    let root = canonical_theme_root(source, &source_id)?;
-    let digest = theme_tree_digest(&root)?;
-    let manifest = ThemeBundle::load(&root)?.manifest;
-    if manifest.id == SERIES_ID {
-        return Err(ThemeError::InvalidId(SERIES_ID.to_string()));
-    }
-    let payloads = manifest
-        .lights
-        .iter()
-        .map(|light| discover::theme_payload(&root, manifest.clone(), *light))
-        .collect::<Result<Vec<_>, _>>()?;
-    if theme_tree_digest(&root)? != digest {
-        return Err(ThemeError::Changed(root.to_string()));
-    }
-    Ok(ThemeFolderCheck {
-        manifest,
-        payloads,
-        digest,
-    })
-}
-
-/// Com'è andata un'installazione da cartella (`install_theme_from_folder`).
-///
-/// Un rifiuto della cartella (manifest assente, link simbolico, limiti, byte
-/// cambiati dopo il controllo) è un errore tipizzato, e qui non c'è; anche una
-/// sostituzione che si ferma rimettendo il vecchio al suo posto è un errore,
-/// perché il disco è com'era. Qui ci sono i tre esiti che chi disegna deve
-/// dire in modo diverso: installato; un tema con lo stesso id c'è già, e
-/// niente è stato toccato; la sostituzione non ha pubblicato il nuovo e non è
-/// riuscita a rimettere il vecchio.
-#[derive(Clone, Debug, PartialEq, serde::Serialize)]
-#[serde(tag = "outcome", rename_all = "snake_case")]
-pub enum ThemeFolderInstall {
-    /// Il tema è in `<config>/themes/<id>/`; `replaced` dice se ne ha preso
-    /// il posto di uno con lo stesso id.
-    Installed {
-        id: String,
-        name: String,
-        version: String,
-        replaced: bool,
-    },
-    /// Un tema con questo id è già installato: la cartella nuova è già passata
-    /// dalle porte di [`install_theme`], e niente è stato toccato.
-    /// `installed_version` è `null` quando quello installato non si legge più.
-    Collision {
-        id: String,
-        name: String,
-        version: String,
-        installed_version: Option<String>,
-    },
-    /// Il nuovo non è entrato e il vecchio non è tornato al suo nome. `kept`
-    /// è il nome della cartella, dentro `themes/`, dove il vecchio è rimasto
-    /// (una `.tmp-old-…` che la scansione salta): è ciò che la shell dice, con
-    /// le sue parole. `error` è il guasto del disco così com'è, per il log e
-    /// per chi copia la diagnosi. La cartella sorgente resta dov'è.
-    ReplaceFailed {
-        id: String,
-        name: String,
-        version: String,
-        kept: String,
-        error: PluginError,
-    },
-}
-
-/// Installa un tema dalla cartella di chi lo scrive, con le porte di
-/// [`install_theme`] e in più l'impronta: `digest` è quello di
-/// [`check_theme_folder`], e la copia si pubblica solo se ha ancora quei byte
-/// ([`ThemeError::Changed`] altrimenti). La collisione si dice **prima** di
-/// toccare il disco.
-///
-/// Con `replace` un tema con lo stesso id si sostituisce senza toglierlo
-/// prima: la copia nuova si prepara e si verifica accanto, poi uno scambio di
-/// nomi la mette al posto del vecchio. Se il nuovo si ferma il vecchio resta
-/// (o torna) dov'era, ed è un errore; [`ThemeFolderInstall::ReplaceFailed`] è
-/// solo il caso in cui il vecchio non riesce a tornare.
-///
-/// Chi può chiederlo (la modalità sviluppatore) lo decide l'host, non questa
-/// funzione: vedi `Host::install_theme_from_folder`.
-pub fn install_theme_from_folder(
-    config_dir: &Utf8Path,
-    source: &Utf8Path,
-    replace: bool,
-    digest: &str,
-) -> Result<ThemeFolderInstall, ThemeError> {
-    let source_id = source.file_name().unwrap_or_default().to_string();
-    let source_root = canonical_theme_root(source, &source_id)?;
-    let manifest = ThemeBundle::load(&source_root)?.manifest;
-    if manifest.id == SERIES_ID {
-        return Err(ThemeError::InvalidId(SERIES_ID.to_string()));
-    }
-    let ThemeManifest {
-        id, name, version, ..
-    } = manifest;
-    let present = match open_themes_root(config_dir, &id)? {
-        None => false,
-        Some(root) => match root.dir.symlink_metadata(&id) {
-            Ok(_) => true,
-            Err(error) if error.kind() == io::ErrorKind::NotFound => false,
-            Err(error) => {
-                return Err(ThemeError::Io(format!(
-                    "{}: {error}",
-                    crate::config::themes_dir(config_dir).join(&id)
-                )))
-            }
-        },
-    };
-    if present && !replace {
-        let installed_version = list_themes(config_dir)
-            .into_iter()
-            .find(|theme| theme.manifest.id == id)
-            .map(|theme| theme.manifest.version);
-        return Ok(ThemeFolderInstall::Collision {
-            id,
-            name,
-            version,
-            installed_version,
-        });
-    }
-    let mut publish = FolderPublish {
-        digest,
-        replace,
-        kept: None,
-    };
-    match install_theme_internal(config_dir, &source_root, None, Some(&mut publish)) {
-        Ok(_) => Ok(ThemeFolderInstall::Installed {
-            id,
-            name,
-            version,
-            replaced: present,
-        }),
-        Err(error) => match publish.kept {
-            Some(kept) => Ok(ThemeFolderInstall::ReplaceFailed {
-                id,
-                name,
-                version,
-                kept,
-                error: error.into(),
-            }),
-            None => Err(error),
-        },
     }
 }
 
@@ -835,6 +841,70 @@ mod folder_swap_tests {
         assert!(
             list_themes(config).is_empty(),
             "the copy set aside is not a theme"
+        );
+    }
+
+    fn themes_entries(config: &Utf8Path) -> Vec<String> {
+        let mut names: Vec<String> = std::fs::read_dir(crate::config::themes_dir(config))
+            .unwrap()
+            .map(|entry| entry.unwrap().file_name().into_string().unwrap())
+            .collect();
+        names.sort();
+        names
+    }
+
+    /// Il nuovo è entrato ma il vecchio da parte non si lascia cancellare: non
+    /// resta in silenzio come `.tmp-old-` (il nome dell'unica copia di una
+    /// sostituzione fallita), cambia nome in `.tmp-drop-`, e la prossima
+    /// installazione lo spazza. Una `.tmp-old-` invece resta: niente la
+    /// cancella da solo.
+    #[test]
+    fn a_replaced_theme_that_cannot_be_removed_is_swept_by_the_next_install() {
+        let config_dir = tempfile::tempdir().unwrap();
+        let config = Utf8PathBuf::from_path_buf(config_dir.path().to_path_buf()).unwrap();
+        let (_old_dir, old) = folder("0.3.2", ".old {}\n");
+        let (_new_dir, new) = folder("0.4.0", ".new {}\n");
+        install_theme_from_folder(&config, &old, false, &theme_tree_digest(&old).unwrap()).unwrap();
+        let kept = crate::config::themes_dir(&config).join(".tmp-old-1-2");
+        std::fs::create_dir(&kept).unwrap();
+        std::fs::write(kept.join("skin.css"), ".kept {}\n").unwrap();
+
+        DROP_FAULT.with(|cell| cell.set(true));
+        let result =
+            install_theme_from_folder(&config, &new, true, &theme_tree_digest(&new).unwrap());
+        DROP_FAULT.with(|cell| cell.set(false));
+        assert!(
+            matches!(
+                result,
+                Ok(ThemeFolderInstall::Installed { replaced: true, .. })
+            ),
+            "{result:?}"
+        );
+        assert_eq!(installed_skin(&config), ".new {}\n");
+        let names = themes_entries(&config);
+        assert_eq!(names.len(), 3, "{names:?}");
+        assert!(names[0].starts_with(DROP_PREFIX), "{names:?}");
+        assert_eq!(
+            &names[1..],
+            &[".tmp-old-1-2".to_string(), "acme.carta".to_string()]
+        );
+
+        let (_other_dir, other) = folder("0.4.0", ".other {}\n");
+        std::fs::write(
+            other.join("manifest.json"),
+            std::fs::read_to_string(other.join("manifest.json"))
+                .unwrap()
+                .replace("acme.carta", "acme.lino"),
+        )
+        .unwrap();
+        install_theme(&config, &other).unwrap();
+        assert_eq!(
+            themes_entries(&config),
+            vec![
+                ".tmp-old-1-2".to_string(),
+                "acme.carta".to_string(),
+                "acme.lino".to_string()
+            ]
         );
     }
 }

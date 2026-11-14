@@ -20,6 +20,8 @@ import type {
   ComponentsMap,
   ThemeFolderCheck,
   ThemeFolderInstall,
+  ThemeFolderLight,
+  ThemeFolderRefusal,
   ThemeFont,
   ThemeInfo,
   ThemePayload,
@@ -984,7 +986,6 @@ const APP_RECORD_KEYS: Record<string, string[]> = {
     permissions: true,
   }),
   ThemeInfo: keysOf<ThemeInfo>({ manifest: true, trust: true }),
-  ThemeFolderCheck: keysOf<ThemeFolderCheck>({ manifest: true, payloads: true, digest: true }),
   ThemePayload: keysOf<ThemePayload>({
     manifest: true,
     light: true,
@@ -1347,7 +1348,7 @@ describe("mirror TS↔Rust", () => {
     }
     for (const type of [
       "ComponentWhy", "ComponentOrphans", "ComponentAction", "ComponentRefusal", "ComponentsApplied",
-      "ConfigFileKind", "ConfigStatus", "RecoverAction",
+      "ConfigFileKind", "ConfigStatus", "RecoverAction", "ThemeFolderCheck", "ThemeFolderInstall",
       "LiveEvent", "ShellMessage", "LeaveReason", "ReleaseReason", "EndReason", "NackReason",
     ]) {
       expect(appFixture[type], `manca il type ${type} nella fixture dell'app`).toBeTruthy();
@@ -1912,7 +1913,53 @@ describe("mirror TS↔Rust", () => {
     }
   });
 
-  it("l'installazione da cartella porta i suoi tre esiti, ognuno coi suoi campi", () => {
+  it("il controllo di una cartella di tema porta i suoi tre esiti e ogni motivo di rifiuto", () => {
+    const samples = appFixture.ThemeFolderCheck as ThemeFolderCheck[];
+    const fields: Record<ThemeFolderCheck["outcome"], string[]> = {
+      cancelled: keysOf<Extract<ThemeFolderCheck, { outcome: "cancelled" }>>({ outcome: true }),
+      ready: keysOf<Extract<ThemeFolderCheck, { outcome: "ready" }>>({
+        outcome: true, folder: true, manifest: true, lights: true, digest: true,
+      }),
+      refused: keysOf<Extract<ThemeFolderCheck, { outcome: "refused" }>>({ outcome: true, folder: true, refusal: true }),
+    };
+    const lightKeys = keysOf<ThemeFolderLight>({ light: true, sheet: true, skin: true, assets: true, named: true });
+    const refusalFields: Record<ThemeFolderRefusal["reason"], string[]> = {
+      not_a_theme: ["reason"],
+      engine: keysOf<Extract<ThemeFolderRefusal, { reason: "engine" }>>({ reason: true, declared: true }),
+      permissions: ["reason"],
+      invalid_id: keysOf<Extract<ThemeFolderRefusal, { reason: "invalid_id" }>>({ reason: true, id: true }),
+      series: ["reason"],
+      traversal: keysOf<Extract<ThemeFolderRefusal, { reason: "traversal" }>>({ reason: true, path: true }),
+      catalog_state: keysOf<Extract<ThemeFolderRefusal, { reason: "catalog_state" }>>({ reason: true, file: true }),
+      malformed: keysOf<Extract<ThemeFolderRefusal, { reason: "malformed" }>>({ reason: true, detail: true }),
+    };
+    const reasons = new Set<string>();
+    for (const sample of samples) {
+      switch (sample.outcome) {
+        case "cancelled":
+          break;
+        case "ready":
+          expect(sample.digest).toMatch(/^sha256:[0-9a-f]{64}$/);
+          for (const light of sample.lights) {
+            expect(Object.keys(light).sort()).toEqual(lightKeys);
+            for (const bytes of Object.values(light.assets)) expect(Array.isArray(bytes)).toBe(true);
+            for (const name of light.named) expect(typeof name).toBe("string");
+          }
+          break;
+        case "refused":
+          reasons.add(sample.refusal.reason);
+          expect(Object.keys(sample.refusal).sort()).toEqual(refusalFields[sample.refusal.reason]);
+          break;
+        default:
+          assertNever(sample);
+      }
+      expect(Object.keys(sample).sort()).toEqual(fields[sample.outcome]);
+    }
+    expect(new Set(samples.map((sample) => sample.outcome))).toEqual(new Set(Object.keys(fields)));
+    expect(reasons).toEqual(new Set(Object.keys(refusalFields)));
+  });
+
+  it("l'installazione da cartella porta i suoi esiti, ognuno coi suoi campi", () => {
     const samples = appFixture.ThemeFolderInstall as ThemeFolderInstall[];
     const fields: Record<ThemeFolderInstall["outcome"], string[]> = {
       installed: keysOf<Extract<ThemeFolderInstall, { outcome: "installed" }>>({
@@ -1920,6 +1967,9 @@ describe("mirror TS↔Rust", () => {
       }),
       collision: keysOf<Extract<ThemeFolderInstall, { outcome: "collision" }>>({
         outcome: true, id: true, name: true, version: true, installed_version: true,
+      }),
+      revoked: keysOf<Extract<ThemeFolderInstall, { outcome: "revoked" }>>({
+        outcome: true, id: true, name: true, version: true,
       }),
       replace_failed: keysOf<Extract<ThemeFolderInstall, { outcome: "replace_failed" }>>({
         outcome: true, id: true, name: true, version: true, kept: true, error: true,
@@ -1932,6 +1982,8 @@ describe("mirror TS↔Rust", () => {
           break;
         case "collision":
           expect(sample.installed_version === null || typeof sample.installed_version === "string").toBe(true);
+          break;
+        case "revoked":
           break;
         case "replace_failed":
           // Un nome dentro la cartella dei temi, non un percorso.

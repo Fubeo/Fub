@@ -1971,6 +1971,18 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         )
         .with("host.theme_folder.unavailable", "Fub non ha una cartella per i temi su questo computer.")
         .with(
+            "host.theme_folder.unchecked",
+            "La cartella del tema non è quella controllata: sceglila e controllala di nuovo.",
+        )
+        .with(
+            "host.theme_folder.pick_failed",
+            "La finestra per scegliere la cartella non ha risposto: riprova.",
+        )
+        .with(
+            "host.theme_folder.unreadable_path",
+            "Fub non sa leggere il percorso di questa cartella: spostala in una con un nome semplice.",
+        )
+        .with(
             "host.craft_render.over_limit",
             "Il file supera il peso massimo per un'anteprima fatta dall'app.",
         )
@@ -2620,6 +2632,18 @@ pub fn core_catalog() -> Vec<StringCatalog> {
             "To install a theme from a folder, turn on developer mode.",
         )
         .with("host.theme_folder.unavailable", "Fub has no theme folder on this computer.")
+        .with(
+            "host.theme_folder.unchecked",
+            "This is not the theme folder that was checked: choose it and check it again.",
+        )
+        .with(
+            "host.theme_folder.pick_failed",
+            "The window to choose the folder did not answer: try again.",
+        )
+        .with(
+            "host.theme_folder.unreadable_path",
+            "Fub cannot read the path of this folder: move it to one with a plain name.",
+        )
         .with(
             "host.craft_render.over_limit",
             "The file is over the maximum size for a preview made by the app.",

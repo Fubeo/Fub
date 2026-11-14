@@ -63,6 +63,10 @@ pub enum ThemeError {
     /// installare non sono più quelli dell'impronta (vedi
     /// [`check_theme_folder`](super::check_theme_folder)). Porta il path.
     Changed(String),
+    /// La cartella sorgente porta lo stato del catalogo che scrive solo Fub
+    /// (il puntatore alla versione, le generazioni): `file` è il nome nella
+    /// radice. Un tema non lo porta con sé.
+    CatalogState { file: String },
 }
 
 impl std::fmt::Display for ThemeError {
@@ -94,6 +98,10 @@ impl std::fmt::Display for ThemeError {
                 f,
                 "the theme folder `{and}` changed after it was checked: check it again"
             ),
+            ThemeError::CatalogState { file } => write!(
+                f,
+                "`{file}` is catalog state that only Fub writes, not part of a theme: will not install"
+            ),
         }
     }
 }
@@ -116,9 +124,10 @@ impl From<ThemeError> for PluginError {
         match and {
             ThemeError::Engine { .. } => PluginError::Unserved(and.to_string().into()),
             ThemeError::Permissions { .. } => PluginError::PermissionDenied(and.to_string().into()),
-            ThemeError::Malformed(_) | ThemeError::InvalidId(_) | ThemeError::Traversal { .. } => {
-                PluginError::BadArgs(and.to_string().into())
-            }
+            ThemeError::Malformed(_)
+            | ThemeError::InvalidId(_)
+            | ThemeError::Traversal { .. }
+            | ThemeError::CatalogState { .. } => PluginError::BadArgs(and.to_string().into()),
             ThemeError::AlreadyInstalled(_) => PluginError::AlreadyExists(and.to_string().into()),
             ThemeError::Io(_) => PluginError::Io(and.to_string().into()),
             ThemeError::Changed(_) => PluginError::Conflict(and.to_string().into()),

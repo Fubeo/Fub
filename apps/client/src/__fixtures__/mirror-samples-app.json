@@ -247,6 +247,11 @@
   ],
   "ThemeFolderCheck": [
     {
+      "outcome": "cancelled"
+    },
+    {
+      "outcome": "ready",
+      "folder": "/home/chi/temi/carta",
       "manifest": {
         "id": "acme.carta",
         "name": "Carta",
@@ -272,40 +277,86 @@
         ],
         "icons": "icons.json"
       },
-      "payloads": [
+      "lights": [
         {
-          "manifest": {
-            "id": "acme.carta",
-            "name": "Carta",
-            "version": "1.0.0",
-            "engine": "theme-2",
-            "lights": [
-              "light",
-              "dark"
-            ],
-            "asset_namespace": "theme://acme.carta/",
-            "motion": [
-              "opacity",
-              "transform"
-            ],
-            "extends": "fub.serie",
-            "fonts": [
-              {
-                "family": "Carta Serif",
-                "file": "fonts/carta.woff2",
-                "weight": 400,
-                "style": "italic"
-              }
-            ],
-            "icons": "icons.json"
-          },
           "light": "dark",
           "sheet": null,
           "skin": ".carta { color: inherit; }",
-          "assets": {}
+          "assets": {
+            "theme://acme.carta/carta.woff2": [
+              119,
+              79,
+              70,
+              50
+            ]
+          },
+          "named": [
+            "theme://acme.carta/carta.png"
+          ]
         }
       ],
-      "digest": "9f2c4d6e8a0b1c3d5e7f9a1b3c5d7e9f0a2b4c6d8e0f1a3b5c7d9e1f3a5b7c9d"
+      "digest": "sha256:9f2c4d6e8a0b1c3d5e7f9a1b3c5d7e9f0a2b4c6d8e0f1a3b5c7d9e1f3a5b7c9d"
+    },
+    {
+      "outcome": "refused",
+      "folder": "/home/chi/temi/rotto",
+      "refusal": {
+        "reason": "not_a_theme"
+      }
+    },
+    {
+      "outcome": "refused",
+      "folder": "/home/chi/temi/rotto",
+      "refusal": {
+        "reason": "engine",
+        "declared": "theme-9"
+      }
+    },
+    {
+      "outcome": "refused",
+      "folder": "/home/chi/temi/rotto",
+      "refusal": {
+        "reason": "permissions"
+      }
+    },
+    {
+      "outcome": "refused",
+      "folder": "/home/chi/temi/rotto",
+      "refusal": {
+        "reason": "invalid_id",
+        "id": "Acme Carta"
+      }
+    },
+    {
+      "outcome": "refused",
+      "folder": "/home/chi/temi/rotto",
+      "refusal": {
+        "reason": "series"
+      }
+    },
+    {
+      "outcome": "refused",
+      "folder": "/home/chi/temi/rotto",
+      "refusal": {
+        "reason": "traversal",
+        "path": "font/fuori.woff2"
+      }
+    },
+    {
+      "outcome": "refused",
+      "folder": "/home/chi/temi/rotto",
+      "refusal": {
+        "reason": "catalog_state",
+        "file": ".fub-current.json"
+      }
+    },
+    {
+      "outcome": "refused",
+      "folder": "/home/chi/temi/rotto",
+      "refusal": {
+        "reason": "malformed",
+        "detail": "missing `id`"
+      }
     }
   ],
   "ThemeFolderInstall": [
@@ -322,6 +373,12 @@
       "name": "Carta",
       "version": "0.4.0",
       "installed_version": "0.3.2"
+    },
+    {
+      "outcome": "revoked",
+      "id": "acme.carta",
+      "name": "Carta",
+      "version": "0.4.0"
     },
     {
       "outcome": "replace_failed",

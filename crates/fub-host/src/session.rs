@@ -1172,6 +1172,18 @@ pub struct Host {
     /// **I disegni aperti nel motore del disegno**, per vault
     /// ([`crate::drawing`]): la chiusura di un vault chiude i suoi.
     pub(crate) drawings: crate::drawing::Drawings,
+    /// **La cartella di tema controllata** ([`Host::check_theme_folder`]): il
+    /// path che la finestra di scelta nativa ha dato e l'impronta dei byte
+    /// letti. È l'unica che [`Host::install_theme_from_folder`] installa.
+    theme_folder: Mutex<Option<CheckedThemeFolder>>,
+}
+
+/// Una cartella di tema passata dal controllo: dove sta e l'impronta dei
+/// byte che la shell ha visto.
+#[derive(Clone, PartialEq)]
+struct CheckedThemeFolder {
+    source: Utf8PathBuf,
+    digest: String,
 }
 
 impl Default for Host {
@@ -1268,6 +1280,7 @@ impl Host {
             format_source: None,
             startup_source: None,
             session_notice: Mutex::new(None),
+            theme_folder: Mutex::new(None),
             uris: Default::default(),
             machine: with_the_schema(MachineSettings::in_memory()),
             view_states: ViewStates::in_memory(),
@@ -2398,8 +2411,10 @@ impl Host {
     }
 
     /// La modalità sviluppatore ([`crate::settings::DEVELOPER_MODE`]), riletta
-    /// a ogni chiamata: spenta, o illeggibile, vuol dire no.
-    fn developer_mode_on(&self) -> Result<(), PluginError> {
+    /// a ogni chiamata: spenta, o illeggibile, vuol dire no
+    /// (`PermissionDenied`). L'app la chiede prima di aprire la finestra di
+    /// scelta, e le due chiamate qui sotto la richiedono da sé.
+    pub fn theme_folder_allowed(&self) -> Result<(), PluginError> {
         let on = matches!(
             self.machine.effective(crate::settings::DEVELOPER_MODE),
             Ok((fub_abi::settings::SettingValue::Toggle(true), _))
@@ -2415,37 +2430,77 @@ impl Host {
 
     /// Legge la cartella di chi scrive un tema senza installarla
     /// ([`crate::theme::check_theme_folder`]), solo con la modalità
-    /// sviluppatore accesa: la shell ci fa girare i suoi cancelli CSS prima di
-    /// chiedere [`Host::install_theme_from_folder`] con la stessa impronta.
+    /// sviluppatore accesa. `source` lo dà soltanto la finestra di scelta
+    /// nativa dell'app, mai la webview: una cartella pronta resta qui come
+    /// **la** cartella controllata, ed è l'unica che
+    /// [`Host::install_theme_from_folder`] può installare. Un controllo nuovo
+    /// prende il posto del precedente; un rifiuto lo dimentica.
     pub fn check_theme_folder(
         &self,
         source: &camino::Utf8Path,
     ) -> Result<crate::theme::ThemeFolderCheck, PluginError> {
-        self.developer_mode_on()?;
-        crate::theme::check_theme_folder(source).map_err(folder_error)
+        self.theme_folder_allowed()?;
+        let check = crate::theme::check_theme_folder(source);
+        let pending = match &check {
+            Ok(crate::theme::ThemeFolderCheck::Ready { digest, .. }) => Some(CheckedThemeFolder {
+                source: source.to_owned(),
+                digest: digest.clone(),
+            }),
+            _ => None,
+        };
+        *self
+            .theme_folder
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = pending;
+        check.map_err(Into::into)
     }
 
-    /// Installa un tema dalla cartella di chi lo scrive
+    /// Installa la cartella che [`Host::check_theme_folder`] ha controllato
     /// ([`crate::theme::install_theme_from_folder`]), solo con la modalità
-    /// sviluppatore accesa ([`crate::settings::DEVELOPER_MODE`]) e solo coi
-    /// byte che [`Host::check_theme_folder`] ha dato (`digest`).
+    /// sviluppatore accesa e solo se `digest` è l'impronta di quel controllo:
+    /// la webview dice quale controllo ha visto, non quale path installare.
+    /// Senza un controllo, o con un'impronta diversa, è `Conflict`: niente si
+    /// scrive. Dopo l'esito la cartella controllata si dimentica, tranne che
+    /// per la collisione, a cui la persona risponde con «Sostituisci».
     ///
     /// La regola sta qui e non nel bottone che la shell nasconde: la chiave si
-    /// rilegge a ogni chiamata, quindi spegnerla mentre la finestra di scelta
-    /// è aperta (o fra la collisione e «Sostituisci») ferma la richiesta che
-    /// arriva dopo: `PermissionDenied`, che su questa strada vuol dire solo
-    /// questo (vedi `folder_error`).
+    /// rilegge a ogni chiamata, quindi spegnerla fra la collisione e
+    /// «Sostituisci» ferma la richiesta che arriva dopo (`PermissionDenied`,
+    /// che su questa strada vuol dire solo questo: un manifest con permessi è
+    /// un rifiuto del controllo, non un errore).
     pub fn install_theme_from_folder(
         &self,
-        source: &camino::Utf8Path,
         replace: bool,
         digest: &str,
     ) -> Result<crate::theme::ThemeFolderInstall, PluginError> {
-        self.developer_mode_on()?;
+        self.theme_folder_allowed()?;
         let dir = self.config_dir.as_deref().ok_or_else(|| {
             PluginError::Unserved(fub_abi::Text::key("host.theme_folder.unavailable"))
         })?;
-        crate::theme::install_theme_from_folder(dir, source, replace, digest).map_err(folder_error)
+        let pending = self
+            .theme_folder
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .clone()
+            .filter(|pending| pending.digest == digest)
+            .ok_or_else(|| {
+                PluginError::Conflict(fub_abi::Text::key("host.theme_folder.unchecked"))
+            })?;
+        let result =
+            crate::theme::install_theme_from_folder(dir, &pending.source, replace, &pending.digest);
+        if !matches!(
+            result,
+            Ok(crate::theme::ThemeFolderInstall::Collision { .. })
+        ) {
+            let mut slot = self
+                .theme_folder
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            if slot.as_ref() == Some(&pending) {
+                *slot = None;
+            }
+        }
+        result.map_err(Into::into)
     }
 
     /// I vault conosciuti: prima i preferiti, poi i recenti.
@@ -5205,19 +5260,6 @@ pub fn document_text(format: Option<&DocumentFormat>) -> DocumentText {
         DocumentText::GridJournal
     } else {
         DocumentText::Source
-    }
-}
-
-/// L'errore di una cartella di tema come lo legge chi la sta scrivendo. Un
-/// manifest che dichiara permessi è un manifest sbagliato (`BadArgs`), non un
-/// permesso negato: su questa strada `PermissionDenied` resta solo la modalità
-/// sviluppatore spenta, e la shell la riconosce dal `kind`.
-fn folder_error(error: crate::theme::ThemeError) -> PluginError {
-    match error {
-        crate::theme::ThemeError::Permissions { .. } => {
-            PluginError::BadArgs(error.to_string().into())
-        }
-        other => other.into(),
     }
 }
 
