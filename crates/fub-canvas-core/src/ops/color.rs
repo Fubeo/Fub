@@ -66,16 +66,17 @@ pub fn parse(text: &str) -> Option<CanvasColor> {
         "4" => PresetColor::Green,
         "5" => PresetColor::Cyan,
         "6" => PresetColor::Purple,
-        _ => return parse_hex(text),
+        _ => return parse_hex(text).map(CanvasColor::Hex),
     };
     Some(CanvasColor::Preset(preset))
 }
 
-/// `#rrggbb` in qualunque caso, come minuscolo.
-fn parse_hex(text: &str) -> Option<CanvasColor> {
+/// `#rrggbb` in qualunque caso, come minuscolo. Lo usa anche il colore
+/// dell'inchiostro di `draw` (`draw::ink_hex`), che vuole lo stesso esadecimale.
+pub(super) fn parse_hex(text: &str) -> Option<String> {
     let digits = text.strip_prefix('#')?;
     let well_formed = digits.len() == 6 && digits.bytes().all(|byte| byte.is_ascii_hexdigit());
-    well_formed.then(|| CanvasColor::Hex(format!("#{}", digits.to_ascii_lowercase())))
+    well_formed.then(|| format!("#{}", digits.to_ascii_lowercase()))
 }
 
 /// Il testo con cui la forma breve scrive questo colore, se ce n'è uno che

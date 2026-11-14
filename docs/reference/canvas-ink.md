@@ -370,7 +370,7 @@ nucleo fa ciò che fa la tela quando la penna si alza
   estraneo `ForeignLayer`. `auto` e `board` sono parole: una scheda con
   quell'id si raggiunge solo con `auto`.
 - **La pagina e la cella** (`{card, page}`, `{card, sheet, cell}`) non ci
-  sono ancora. Oggi un oggetto in `on` non si legge.
+  sono: un oggetto in `on` non si legge.
 
 Le forme, nelle coordinate di `on`:
 

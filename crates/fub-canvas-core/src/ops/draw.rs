@@ -25,6 +25,7 @@ use serde::{de, Deserialize, Deserializer, Serialize};
 use serde_json::{Map, Value};
 
 use super::anchor::{anchor_at, stroke_bounds};
+use super::color::parse_hex;
 use super::{refuse, saturating_integer, Compiler, OpError};
 use crate::ink::{InkAnchor, InkLayer, LayerRef, INK_KEY};
 use crate::layout::Rect;
@@ -150,14 +151,13 @@ pub fn is_pen_size(size: f64) -> bool {
 }
 
 /// Il colore `#rrggbb` minuscolo di un nome della tavolozza o di un
-/// `#rrggbb` (anche maiuscolo), o `None`.
+/// `#rrggbb` (anche maiuscolo), o `None`. L'esadecimale si legge come i
+/// colori delle schede, con `color::parse_hex`.
 pub fn ink_hex(text: &str) -> Option<String> {
     if let Some(color) = ink_color(text) {
         return Some(color.to_owned());
     }
-    let digits = text.strip_prefix('#')?;
-    (digits.len() == 6 && digits.bytes().all(|byte| byte.is_ascii_hexdigit()))
-        .then(|| format!("#{}", digits.to_ascii_lowercase()))
+    parse_hex(text)
 }
 
 /// Un campo facoltativo con un controllo: `null` vale come assente, un valore
