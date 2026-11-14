@@ -36,7 +36,7 @@ import type { TableAlign, TableBlock, TableCaps, TableClipboard, TableEdit, Tabl
 import { clipboardData, clipboardRows, cutMoves, cutTarget, pasteTargets, tellCutOnce, type CutMark } from "../clipboard";
 import { structureEdit, TABLE_ALIGNS, TABLE_COMMANDS, tableCommand, type TableCommandContext, type TableTarget } from "../commands";
 import { editingIntent, sheetIntent, type TableFormat } from "../keys";
-import { dataEdge, isMultiCell, nextInRange, type Cell, type Move, type Range, type Shape } from "../navigation";
+import { boundedShape, dataEdge, isMultiCell, nextInRange, type Cell, type Move, type Range, type Shape } from "../navigation";
 import { fillCopy, fillRange, rangeBetween, wholeRange, withRange } from "../selection";
 import { fillSeries } from "../series";
 import { animate } from "../../moto";
@@ -502,29 +502,35 @@ export class TableFrame {
     return { left: a.left, top: a.top, width: b.left + last.offsetWidth - a.left, height: b.top + last.offsetHeight - a.top };
   }
 
-  /// Posa un riquadro su `range` (o lo nasconde): la prima volta senza
-  /// scivolare, poi scivola dal posto di prima in `SELECT_MS`. Il posto è
-  /// dell'impaginazione (`left`, `top`, `width`, `height`); il moto è soltanto
-  /// `transform`, con `moto`, perché nella pagina le transizioni del CSS
-  /// sono spente (`skin/motion.css`).
-  #place(element: HTMLElement, range: Range | null): void {
-    const box = range ? this.#box(range) : null;
+  /// Dove sta adesso un riquadro, o `null` se è nascosto: si legge prima di
+  /// scrivere qualunque riquadro, perché ogni lettura dopo una scrittura
+  /// rifarebbe l'impaginazione.
+  #measure(element: HTMLElement): { left: number; top: number; width: number; height: number } | null {
+    return element.hidden ? null : { left: element.offsetLeft, top: element.offsetTop, width: element.offsetWidth, height: element.offsetHeight };
+  }
+
+  /// Posa un riquadro sul posto `box` già misurato (o lo nasconde): la prima
+  /// volta senza scivolare, poi scivola da `was`, il posto di prima, in
+  /// `SELECT_MS`. Il posto è dell'impaginazione (`left`, `top`, `width`,
+  /// `height`); il moto è soltanto `transform`, con `moto`, perché nella
+  /// pagina le transizioni del CSS sono spente (`skin/motion.css`). Qui si
+  /// scrive soltanto: niente letture del layout.
+  #place(
+    element: HTMLElement,
+    box: { left: number; top: number; width: number; height: number } | null,
+    was: { left: number; top: number; width: number; height: number } | null,
+    moves: boolean,
+  ): void {
     if (!box) {
       element.hidden = true;
       return;
     }
-    const was = element.hidden ? null : {
-      left: element.offsetLeft,
-      top: element.offsetTop,
-      width: element.offsetWidth,
-      height: element.offsetHeight,
-    };
     element.style.left = `${box.left}px`;
     element.style.top = `${box.top}px`;
     element.style.width = `${box.width}px`;
     element.style.height = `${box.height}px`;
     element.hidden = false;
-    if (!was || !this.#moves() || box.width <= 0 || box.height <= 0) return;
+    if (!was || !moves || box.width <= 0 || box.height <= 0) return;
     const x = was.left - box.left;
     const y = was.top - box.top;
     const scaleX = was.width / box.width;
@@ -535,14 +541,11 @@ export class TableFrame {
 
   /// I riquadri della selezione, della cella attiva e del taglio, la
   /// maniglia di riempimento e quelle del tocco. Le maniglie compaiono mentre
-  /// la tabella ha il fuoco e si può scrivere.
+  /// la tabella ha il fuoco e si può scrivere. Prima i nodi, poi si misura
+  /// tutto, poi si scrive tutto: un'impaginazione sola per ogni freccia.
   #placeOverlays(): void {
     const range = this.range;
     const active = this.active;
-    this.#place(this.#selectionBox, range);
-    this.#selectionBox.classList.toggle("is-multi", isMultiCell(range) || this.#others.length > 0);
-    this.#place(this.#activeBox, { r0: active.row, c0: active.column, r1: active.row, c1: active.column });
-    this.#place(this.#cutBox, this.#cut?.range ?? null);
     while (this.#otherBoxes.length < this.#others.length) {
       const box = overlay(`${C}-sel`);
       box.classList.add("is-multi", "is-other");
@@ -552,14 +555,25 @@ export class TableFrame {
     while (this.#otherBoxes.length > this.#others.length) this.#otherBoxes.pop()!.remove();
     // Ridisegnare la tabella toglie i riquadri dalla griglia: tornano qui.
     for (const box of this.#otherBoxes) if (box.parentNode !== this.#grid) this.#grid.insertBefore(box, this.#selectionBox);
-    this.#otherBoxes.forEach((box, index) => this.#place(box, this.#others[index]!));
+    // Si misura.
+    const boxes: [HTMLElement, Range | null][] = [
+      [this.#selectionBox, range],
+      [this.#activeBox, { r0: active.row, c0: active.column, r1: active.row, c1: active.column }],
+      [this.#cutBox, this.#cut?.range ?? null],
+      ...this.#otherBoxes.map((box, index): [HTMLElement, Range | null] => [box, this.#others[index]!]),
+    ];
+    const placed = boxes.map(([element, target]) => ({ element, box: target ? this.#box(target) : null, was: this.#measure(element) }));
     const writable = this.hasFocus() && this.#editing === null && !this.#host.readOnly();
     const corner = this.#box({ r0: range.r1, c0: range.c1, r1: range.r1, c1: range.c1 });
+    const whole = placed[0]!.box;
+    const moves = this.#moves();
+    // Si scrive.
+    for (const { element, box, was } of placed) this.#place(element, box, was, moves);
+    this.#selectionBox.classList.toggle("is-multi", isMultiCell(range) || this.#others.length > 0);
     this.#fillHandle.hidden = !writable || corner === null;
     if (corner && writable) {
       this.#fillHandle.style.transform = `translate(${corner.left + corner.width}px, ${corner.top + corner.height}px)`;
     }
-    const whole = this.#box(range);
     const [start, end] = this.#handles;
     start.hidden = end.hidden = !writable || whole === null;
     if (whole && writable) {
@@ -630,14 +644,7 @@ export class TableFrame {
   }
 
   #geometry(): Shape {
-    const { rows, columns } = this.#host.size();
-    return {
-      step: (axis, from, step) => {
-        const next = from + step;
-        return next >= 0 && next < (axis === "row" ? rows : columns) ? next : from;
-      },
-      visible: () => true,
-    };
+    return boundedShape(this.#host.size());
   }
 
   /// Ctrl con una freccia: fino al bordo dei dati.
@@ -1128,7 +1135,12 @@ export class TableFrame {
     handle.setPointerCapture?.(event.pointerId);
     const doc = this.#grid.ownerDocument;
     drag.listen(handle, "pointermove", (move) => {
-      const hit = this.#positionOf(doc.elementFromPoint?.(move.clientX, move.clientY) ?? null);
+      // Sotto il dito c'è prima la maniglia stessa, che si tiene: si guarda
+      // ciò che sta sotto di lei.
+      const under = doc.elementsFromPoint
+        ? doc.elementsFromPoint(move.clientX, move.clientY).find((element) => !element.closest(".tb-handle")) ?? null
+        : doc.elementFromPoint?.(move.clientX, move.clientY) ?? null;
+      const hit = this.#positionOf(under);
       if (hit?.kind !== "cell") return;
       this.#anchor = fixed;
       this.#focus = this.#clamp(hit);

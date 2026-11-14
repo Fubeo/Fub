@@ -245,6 +245,25 @@ describe("la cornice della Tabella", () => {
     expect(rows[2]![0]).toBe("Bea");
   });
 
+  it("la maniglia tenuta col dito non copre la cella sotto: la selezione la segue", () => {
+    const { frame, cell } = mount(ROWS);
+    frame.focus({ row: 1, column: 0 });
+    const handle = frame.element.querySelector<HTMLElement>('.tb-handle[data-end="end"]')!;
+    // Sotto il dito c'è prima la maniglia stessa, poi la cella.
+    const target = cell(2, 1);
+    const fromPoint = vi.spyOn(document, "elementFromPoint").mockReturnValue(handle);
+    Object.defineProperty(document, "elementsFromPoint", { configurable: true, value: () => [handle, target] });
+    try {
+      handle.dispatchEvent(new PointerEvent("pointerdown", { button: 0, pointerId: 1, bubbles: true, cancelable: true }));
+      handle.dispatchEvent(new PointerEvent("pointermove", { pointerId: 1, clientX: 10, clientY: 10, bubbles: true }));
+      expect(frame.selection.focus).toEqual({ row: 2, column: 1 });
+      expect(frame.selection.anchor).toEqual({ row: 1, column: 0 });
+    } finally {
+      fromPoint.mockRestore();
+      delete (document as { elementsFromPoint?: unknown }).elementsFromPoint;
+    }
+  });
+
   it("dà i nomi delle colonne dei fogli di calcolo", () => {
     expect([0, 25, 26, 51, 52, 701, 702].map(columnName)).toEqual(["A", "Z", "AA", "AZ", "BA", "ZZ", "AAA"]);
   });

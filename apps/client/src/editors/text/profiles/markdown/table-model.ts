@@ -228,6 +228,41 @@ export function serializeTable(data: TableData, prefix = ""): string {
   return lines.join("\n");
 }
 
+/// Il cambio più piccolo da `before` a `after` dentro `[from, to)`: si
+/// tolgono i caratteri uguali in testa e in coda.
+function trimmed(before: string, after: string, from: number): TableChange | null {
+  if (before === after) return null;
+  let head = 0;
+  const most = Math.min(before.length, after.length);
+  while (head < most && before[head] === after[head]) head++;
+  let tail = 0;
+  while (tail < most - head && before[before.length - 1 - tail] === after[after.length - 1 - tail]) tail++;
+  return { from: from + head, to: from + before.length - tail, insert: after.slice(head, after.length - tail) };
+}
+
+/// Le modifiche più piccole che portano `before` a `after`. Con tante righe
+/// quante prima ogni riga cambia soltanto dove cambia, e le righe uguali non
+/// si toccano; così una tabella incolonnata riscritta non porta il cursore
+/// degli altri riquadri fuori dal suo posto, perché i cambi si mappano.
+function smallestChanges(before: string, after: string): TableChange[] {
+  if (before === after) return [];
+  const old = before.split("\n");
+  const now = after.split("\n");
+  if (old.length === now.length) {
+    const changes: TableChange[] = [];
+    let start = 0;
+    for (let index = 0; index < old.length; start += old[index]!.length + 1, index++) {
+      const change = trimmed(old[index]!, now[index]!, start);
+      if (change) changes.push(change);
+    }
+    return changes;
+  }
+  // Righe aggiunte o tolte: un cambio solo, fra i caratteri uguali in testa e
+  // in coda (che comprendono le righe uguali).
+  const change = trimmed(before, after, 0);
+  return change ? [change] : [];
+}
+
 function sameShape(parsed: TableData, next: TableData): boolean {
   if (parsed.rows.length !== next.rows.length || parsed.aligns.length !== next.aligns.length) return false;
   return parsed.aligns.every((align, index) => align === next.aligns[index]);
@@ -239,8 +274,7 @@ export function tableChanges(parsed: ParsedTable, next: TableData): TableChange[
   const prefix = parsed.lines[0]?.prefix ?? "";
   // Una tabella incolonnata come la scrive Fub resta incolonnata.
   if (!sameShape(parsed, next) || parsed.source === serializeTable(parsed, prefix)) {
-    const insert = serializeTable(next, prefix);
-    return insert === parsed.source ? [] : [{ from: 0, to: parsed.source.length, insert }];
+    return smallestChanges(parsed.source, serializeTable(next, prefix));
   }
   const changes: TableChange[] = [];
   next.rows.forEach((row, r) => {

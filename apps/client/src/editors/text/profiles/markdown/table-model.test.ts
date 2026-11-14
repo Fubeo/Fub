@@ -105,6 +105,23 @@ describe("la scrittura", () => {
       .toBe("|Nome|Voto|\n|---|---|\n| Adalberto |10|");
   });
 
+  it("una tabella incolonnata cambia soltanto ciò che cambia: le altre righe restano intatte", () => {
+    const source = serializeTable({ rows: [["Nome", "Voto"], ["Ada", "10"], ["Bea", "9"]], aligns: [null, null] });
+    const second = source.indexOf("| Ada");
+    const third = source.indexOf("| Bea");
+    // Una cella che non sposta l'incolonnatura: un cambio dentro la sua riga.
+    const changes = tableChanges(parsed(source), setCell(parsed(source), 1, 1, "8"));
+    expect(changes.length).toBeGreaterThan(0);
+    for (const change of changes) {
+      expect(change.from).toBeGreaterThanOrEqual(second);
+      expect(change.to).toBeLessThan(third);
+    }
+    expect(apply(source, setCell(parsed(source), 1, 1, "8"))).toBe(source.replace("| 10   |", "| 8    |"));
+    // Una riga in fondo che non allarga le colonne: si aggiunge, il resto resta.
+    const added = tableChanges(parsed(source), insertRows(parsed(source), 3));
+    expect(added.every((change) => change.from >= source.length - 1)).toBe(true);
+  });
+
   it("una cella di una sola colonna, e una tabella di una cella", () => {
     expect(serializeTable({ rows: [[""]], aligns: [null] })).toBe("|     |\n| --- |");
     const one = "| x |\n| --- |";

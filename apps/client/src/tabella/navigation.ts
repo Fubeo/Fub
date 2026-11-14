@@ -28,6 +28,18 @@ export interface Shape {
   visible(axis: "row" | "column", index: number): boolean;
 }
 
+/// La forma di una tabella di `size` senza righe né colonne nascoste: un
+/// passo si ferma al bordo.
+export function boundedShape(size: { readonly rows: number; readonly columns: number }): Shape {
+  return {
+    step: (axis, from, step) => {
+      const next = from + step;
+      return next >= 0 && next < (axis === "row" ? size.rows : size.columns) ? next : from;
+    },
+    visible: () => true,
+  };
+}
+
 const AXIS: Record<Move, { readonly axis: "row" | "column"; readonly step: -1 | 1 }> = {
   down: { axis: "row", step: 1 },
   up: { axis: "row", step: -1 },
