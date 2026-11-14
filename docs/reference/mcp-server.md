@@ -163,10 +163,12 @@ formato, e `canvas.*` sono del componente `fub.lavagna`.
   `canvas.read`. Un PNG va come contenuto di MCP (`type: "image"`, con
   `image/png`), senza i byte nel testo. Un SVG, che esce senza `draw`, resta nel
   testo.
-- `fub_preview` su un file `.canvas` disegna la lavagna con `canvas.preview`:
-  `size` `"small"` la fa di 512 pixel sul lato lungo, `"large"` di 1024. Il
-  risultato ha `doc`, `revision`, `size`, `origin: "canvas"`, `missing` e
-  `limit_bytes` a `null`, `image` e `info` (`outline`, `outline_omitted`).
+- `fub_preview` su un file il cui nome finisce in `.canvas` (in minuscole;
+  un `.CANVAS` va all'anteprima di Craft) disegna la lavagna con
+  `canvas.preview`: `size` `"small"` la fa di 512 pixel sul lato lungo,
+  `"large"` di 1024. Il risultato ha `doc`, `revision`, `size`,
+  `origin: "canvas"`, `missing` e `limit_bytes` a `null`, `image` e `info`
+  (`outline`, `outline_omitted`).
 - Con il componente `fub.lavagna` spento questi strumenti rispondono
   `unavailable`, perché il comando non c'è, e la guida non è fra le risorse.
 

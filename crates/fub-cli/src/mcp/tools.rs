@@ -1249,10 +1249,12 @@ fn canvas_preview(c: &Connection, id: &DocId, size: &str) -> Result<Output, Fail
     })
 }
 
-/// Un documento è una lavagna se è un `.canvas`: è la sua estensione, come quella
-/// che il formato dichiara. Il routing di `fub_preview` si decide da qui.
+/// Un documento è una lavagna se il nome finisce in `.canvas` in minuscole, come
+/// quelli che Fub e Obsidian scrivono. Il routing di `fub_preview` si decide qui,
+/// con il suffisso esatto: il registro dei formati, che legge anche le maiuscole,
+/// non è interrogabile dalla CLI. Un `.CANVAS` va a Craft.
 fn is_canvas(doc: &str) -> bool {
-    doc.to_ascii_lowercase().ends_with(".canvas")
+    doc.ends_with(".canvas")
 }
 
 fn commands(c: &Connection, args: &Value) -> Result<Value, Failure> {
@@ -1617,11 +1619,12 @@ mod tests {
     }
 
     #[test]
-    fn una_lavagna_e_un_documento_con_estensione_canvas() {
+    fn una_lavagna_e_un_nome_che_finisce_in_canvas() {
         assert!(is_canvas("Agente/piano.canvas"));
-        assert!(is_canvas("Agente/PIANO.Canvas"));
         assert!(!is_canvas("Agente/bozza.md"));
         assert!(!is_canvas("Agente/piano.canvas.md"));
+        // Le maiuscole vanno a Craft: vedi `is_canvas`.
+        assert!(!is_canvas("Agente/PIANO.CANVAS"));
     }
 
     #[test]
