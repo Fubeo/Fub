@@ -1,10 +1,12 @@
 import { isStrictlyInsideCode } from "./parser";
 import { pasteHtml } from "../../paste-html";
-import { EditorView, ViewPlugin, keymap, type Command } from "@codemirror/view";
+import { StateEffect, StateField } from "@codemirror/state";
+import { Decoration, EditorView, ViewPlugin, keymap, type Command } from "@codemirror/view";
 import type TurndownService from "turndown";
 import { inContentSpace, sanitizeFragment, VAULT_SRC_ATTRIBUTE } from "../../../../ui/sanitize";
 import { readClipboard } from "../../../../platform/clipboard";
 import { escapeLinkLabel, linkDestination } from "./link-syntax";
+import { AddressChoiceWidget, bareUrl } from "./link-card";
 
 const markdownSource = /(?:^|\n)[ \t]{0,3}(?:#{1,6}\s|>\s|[-*+]\s|\d+[.)]\s|```|~~~)|\[[^\]\n]+\]\([^\n)]+\)|\*{1,2}[^*\n]+\*{1,2}|_{1,2}[^_\n]+_{1,2}|`[^`\n]+`/u;
 const contentAnchorPrefix = `#${inContentSpace("")}`;
@@ -221,8 +223,22 @@ export async function markdownFromClipboard(data: DataTransfer): Promise<string 
 /// Un indirizzo incollato su un testo selezionato diventa un link Markdown,
 /// `[testo](url)`, come in Obsidian. Solo un indirizzo intero (niente spazi,
 /// `http(s)://` o `mailto:`), una selezione sola su una riga, fuori dal codice,
-/// e che non sia già essa stessa un indirizzo.
+/// e che non sia già essa stessa un indirizzo. Su una riga vuota vale la
+/// scelta di `addressOnBlankLine`.
 const PASTED_URL = /^(?:https?:\/\/|mailto:)\S+$/iu;
+
+/// Il Markdown di un link `[testo](indirizzo)`. Un `|` non escapato chiuderebbe
+/// la cella se il link finisce in una tabella: nel testo si scrive `\|`, che in
+/// un paragrafo è lo stesso carattere, e nell'indirizzo `%7C`.
+function linkMarkdown(text: string, url: string): string {
+  return `[${escapePipes(escapeLinkLabel(text))}](${linkDestination(url).replace(/\|/gu, "%7C")})`;
+}
+
+/// Un `|` preceduto da un numero pari di `\` non è escapato, e lo diventa; uno
+/// già escapato resta com'è.
+function escapePipes(text: string): string {
+  return text.replace(/(\\*)\|/gu, (run, slashes: string) => (slashes.length % 2 === 0 ? `${slashes}\\|` : run));
+}
 
 function linkOverSelection(view: EditorView, data: DataTransfer): string | null {
   const { ranges } = view.state.selection;
@@ -232,8 +248,85 @@ function linkOverSelection(view: EditorView, data: DataTransfer): string | null 
   const { from, to } = ranges[0]!;
   const text = view.state.sliceDoc(from, to);
   if (text.includes("\n") || PASTED_URL.test(text.trim()) || isStrictlyInsideCode(view.state, from)) return null;
-  return `[${escapeLinkLabel(text)}](${linkDestination(url)})`;
+  return linkMarkdown(text, url);
 }
+
+/// L'indirizzo che si incolla da solo su una riga vuota, o `null`. Solo dagli
+/// appunti senza HTML: un HTML porta il suo titolo, e il convertitore ne fa già
+/// un link. Il cursore è solo, fuori dal codice, e la riga è vuota per davvero
+/// (uno spazio la lascia a testo, com'è sempre stato).
+function addressOnBlankLine(view: EditorView, data: DataTransfer): string | null {
+  if (data.getData("text/html")) return null;
+  const { ranges } = view.state.selection;
+  if (ranges.length !== 1 || !ranges[0]!.empty) return null;
+  const { from } = ranges[0]!;
+  if (view.state.doc.lineAt(from).length !== 0 || isStrictlyInsideCode(view.state, from)) return null;
+  const url = data.getData("text/plain").trim();
+  return PASTED_URL.test(url) ? url : null;
+}
+
+/// La scelta sotto un indirizzo incollato su una riga vuota. `link` è il
+/// Markdown scritto a `from`: «Scheda» lo sostituisce con l'indirizzo da solo.
+/// La scelta vale finché il testo non cambia e il cursore resta sul link.
+interface AddressChoice {
+  readonly from: number;
+  readonly link: string;
+  readonly url: string;
+}
+const offerAddressChoice = StateEffect.define<AddressChoice | null>();
+const addressChoice = StateField.define<AddressChoice | null>({
+  create: () => null,
+  update(value, transaction) {
+    for (const effect of transaction.effects) {
+      if (effect.is(offerAddressChoice)) return effect.value;
+    }
+    // Una battuta, Invio o Annulla tengono il Link: la scelta finisce lì.
+    if (value === null || transaction.docChanged) return null;
+    const { ranges, main } = transaction.state.selection;
+    const to = value.from + value.link.length;
+    return ranges.length === 1 && main.from >= value.from && main.to <= to ? value : null;
+  },
+  provide: (field) => EditorView.decorations.from(field, (choice) => (choice === null
+    ? Decoration.none
+    : Decoration.set(Decoration.widget({ widget: new AddressChoiceWidget(choice.url), block: true, side: 1 })
+      .range(choice.from + choice.link.length)))),
+});
+
+/// Il bottone della scelta sotto il puntatore, o `null`.
+function choiceButton(event: Event): HTMLElement | null {
+  const target = event.target instanceof Element ? event.target : null;
+  return target?.closest<HTMLElement>(".cm-fub-address-choice [data-choice]") ?? null;
+}
+
+const addressChoiceGestures = EditorView.domEventHandlers({
+  // Il pulsante non prende il fuoco e non sposta il cursore.
+  mousedown(event) {
+    if (event.button !== 0 || choiceButton(event) === null) return false;
+    event.preventDefault();
+    return true;
+  },
+  click(event, view) {
+    const button = choiceButton(event);
+    if (button === null) return false;
+    event.preventDefault();
+    const choice = view.state.field(addressChoice);
+    if (choice !== null && button.dataset.choice === "card" && !view.state.readOnly) {
+      const to = choice.from + choice.link.length;
+      // Il testo deve essere ancora quello scritto: altrimenti la scelta è vecchia.
+      if (view.state.sliceDoc(choice.from, to) === choice.link) {
+        view.dispatch({
+          changes: { from: choice.from, to, insert: choice.url },
+          selection: { anchor: choice.from + choice.url.length },
+          userEvent: "input.paste",
+        });
+        return true;
+      }
+    }
+    // «Link», o una scelta che non c'è più: il link resta com'è.
+    if (choice !== null) view.dispatch({ effects: offerAddressChoice.of(null) });
+    return true;
+  },
+});
 
 const pasteHandler = EditorView.domEventHandlers({
   paste(event, view) {
@@ -242,6 +335,19 @@ const pasteHandler = EditorView.domEventHandlers({
     if (link !== null) {
       event.preventDefault();
       view.dispatch(view.state.replaceSelection(link), { userEvent: "input.paste" });
+      return true;
+    }
+    const address = addressOnBlankLine(view, event.clipboardData);
+    if (address !== null) {
+      event.preventDefault();
+      const { from } = view.state.selection.main;
+      const markdown = linkMarkdown(address, address);
+      // «Scheda» esiste per le pagine web: un mailto è solo un link, senza scelta.
+      const offer = bareUrl(address) === null ? null : { from, link: markdown, url: address };
+      view.dispatch(view.state.replaceSelection(markdown), {
+        userEvent: "input.paste",
+        effects: offerAddressChoice.of(offer),
+      });
       return true;
     }
     // Nel codice l'HTML degli appunti resta il loro testo (C4): convertirlo
@@ -314,4 +420,10 @@ const preloadConverter = ViewPlugin.define(() => {
   return {};
 });
 
-export const markdownPaste = [pasteHandler, preloadConverter, keymap.of([{ key: "Mod-Shift-v", run: pastePlainText }])];
+export const markdownPaste = [
+  pasteHandler,
+  addressChoice,
+  addressChoiceGestures,
+  preloadConverter,
+  keymap.of([{ key: "Mod-Shift-v", run: pastePlainText }]),
+];

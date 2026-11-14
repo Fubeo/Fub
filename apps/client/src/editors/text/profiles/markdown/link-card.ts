@@ -125,6 +125,42 @@ export class LinkCardWidget extends WidgetType {
   ignoreEvent(event: Event): boolean { return event instanceof KeyboardEvent; }
 }
 
+/// La scelta sotto un indirizzo incollato su una riga vuota (T25): «Link», la
+/// scelta di partenza, e «Scheda», che scrive l'indirizzo da solo sulla riga.
+/// I pulsanti non prendono il fuoco: la battuta dopo tiene il Link, e i gesti
+/// stanno in `paste.ts`, che sa che cosa scrivere.
+export class AddressChoiceWidget extends WidgetType {
+  constructor(readonly url: string) { super(); }
+  eq(other: AddressChoiceWidget): boolean { return other.url === this.url; }
+  get estimatedHeight(): number { return 32; }
+  toDOM(): HTMLElement {
+    const root = document.createElement("div");
+    root.className = "cm-fub-address-choice";
+    root.contentEditable = "false";
+    root.dataset.url = this.url;
+    root.setAttribute("role", "group");
+    root.setAttribute("aria-label", liveStrings.t("paste.address.label"));
+    root.append(
+      choiceControl("link", liveStrings.t("paste.address.link"), liveStrings.t("paste.address.link.title"), true),
+      choiceControl("card", liveStrings.t("paste.address.card"), liveStrings.t("paste.address.card.title"), false),
+    );
+    return root;
+  }
+  ignoreEvent(event: Event): boolean { return event instanceof KeyboardEvent; }
+}
+
+function choiceControl(kind: "link" | "card", label: string, title: string, pressed: boolean): HTMLButtonElement {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.tabIndex = -1;
+  button.className = `cm-fub-address-choice-${kind}`;
+  button.dataset.choice = kind;
+  button.setAttribute("aria-pressed", String(pressed));
+  button.title = title;
+  button.textContent = label;
+  return button;
+}
+
 /// I gesti della scheda: il clic apre la pagina, il pulsante la chiede. Il
 /// `mousedown` non arriva all'editor, così il cursore non entra nel paragrafo
 /// e la scheda non torna indirizzo sotto il dito; ci si entra con le frecce.
