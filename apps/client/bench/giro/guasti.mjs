@@ -799,6 +799,18 @@ async function chiudiSenzaSalvare(pagina, frase) {
   return finestra;
 }
 
+/// Il percorso in testata del riquadro a fuoco si legge: ogni cartella
+/// mostra almeno la sua iniziale con l'ellissi, anche quando accanto lo stato
+/// è lungo («Salvataggio fallito», «Cambiato su disco»). Un segmento largo
+/// zero lascia solo le barre: «📁 / / Il banco…».
+async function percorsoLeggibile(pagina, passo) {
+  const vuote = await pagina.evaluate(() =>
+    [...document.querySelectorAll(".pane.focus .sheet-title [data-folder]")]
+      .filter((cartella) => (cartella.textContent ?? "").trim() !== "" && cartella.getBoundingClientRect().width < 10)
+      .map((cartella) => cartella.textContent.trim()));
+  verifica(vuote.length === 0, `${passo}: nel percorso in testata non si legge ${vuote.map((nome) => `«${nome}»`).join(", ")}`);
+}
+
 const chiudereNonSalvato = {
   id: "chiudere-non-salvato",
   nome: "chiudere con testo non salvato: la finestra chiede, «Tienila aperta» lascia il testo",
@@ -810,11 +822,15 @@ const chiudereNonSalvato = {
     await pagina.waitForSelector(aFuoco(NOME));
     verifica((await testoDelRiquadro(pagina)).includes(NON_SALVATO), "«Tienila aperta» ha riaperto la nota senza il testo");
     verifica(!(await leggi(pagina, NOTA)).includes(NON_SALVATO), "con la porta guasta il testo è finito sul disco");
+    // Si scriveva quando si è chiuso: il fuoco torna nel testo.
+    const fuocoDopo = await anello(pagina, "riaperta con «Tienila aperta»");
+    verifica(fuocoDopo.testo, `riaperta con «Tienila aperta», la tastiera è su ${fuocoDopo.dove}`);
+    await percorsoLeggibile(pagina, "riaperta col salvataggio fallito");
     await giro.foto("tenuta");
-    // Le porte tornano buone: Ctrl+S salva ciò che era rimasto.
+    // Le porte tornano buone: Ctrl+S, dalla tastiera rimasta nel testo,
+    // salva ciò che era rimasto.
     await ripara(pagina, "writeDocument");
     await ripara(pagina, "saveDraft");
-    await pagina.locator(".pane.focus .cm-content").click();
     await pagina.keyboard.press("Control+s");
     await aspettaStato(pagina, "salvato");
   },
@@ -840,6 +856,9 @@ const conflittoDuranteLaChiusura = {
     const chiusa = await finestra.waitFor({ state: "detached", timeout: ATTESA_CHIUSURA_MS }).then(() => true, () => false);
     verifica(chiusa, "arrivato il conflitto, la finestra «Modifiche non salvate» resta aperta e chiede ancora");
     await barraDelConflitto(pagina);
+    await percorsoLeggibile(pagina, "tornata col conflitto");
+    const fuocoDopo = await anello(pagina, "tornata col conflitto");
+    verifica(fuocoDopo.testo, `tornata col conflitto, la tastiera è su ${fuocoDopo.dove}`);
     await giro.foto("arriva-il-conflitto");
   },
   async controlla(pagina, host) {
