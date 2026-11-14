@@ -129,8 +129,8 @@ mod folder;
 mod install;
 mod pointer;
 
-use assets::{asset_inventory, validate_asset_limits, MAX_THEME_ASSET_BYTES};
-pub use bundle::{series_manifest, ThemeBundle, ThemeError, ThemeInfo, ThemePayload};
+use assets::{asset_inventory, asset_names, validate_asset_limits, MAX_THEME_ASSET_BYTES};
+pub use bundle::{series_manifest, DiskCause, ThemeBundle, ThemeError, ThemeInfo, ThemePayload};
 use discover::selected_theme_dir;
 pub use discover::{discover_themes, list_themes, read_theme};
 use files::{

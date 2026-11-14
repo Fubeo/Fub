@@ -1558,36 +1558,35 @@ fn read_theme(
     host.read_theme(&id, light)
 }
 
-/// Quanto può essere lungo il titolo della finestra di scelta che la shell
-/// chiede per «Installa da cartella…».
-const MAX_PICK_TITLE_CHARS: usize = 200;
-
 /// «Installa da cartella…»: la persona sceglie la cartella di un tema nella
 /// finestra **nativa**, aperta qui, e l'host la legge senza installarla
 /// (`Host::check_theme_folder`): il manifest, il fascio di ogni luce e
 /// l'impronta dei byte, perché la shell faccia girare i suoi cancelli CSS
 /// prima che niente arrivi nella configurazione.
 ///
-/// La webview non dà un path: chiede la finestra (col suo `title`) e riceve
-/// l'esito, con la cartella scelta da mostrare. Così la modalità sviluppatore,
-/// che la webview può accendere con `set_setting`, non basta a far leggere o
-/// installare una cartella che la persona non ha scelto. Solo la shell
-/// principale; la modalità si controlla prima di aprire la finestra, e l'host
-/// la ricontrolla. La finestra chiusa è `cancelled`.
+/// La webview non dà un path e non dà nemmeno il titolo della finestra: quella
+/// finestra è il punto in cui la persona dà il suo permesso, e la scrive
+/// l'host (`Host::theme_folder_pick_title`). La webview riceve l'esito, con la
+/// cartella scelta da mostrare. Così la modalità sviluppatore, che la webview
+/// può accendere con `set_setting`, non basta a far leggere o installare una
+/// cartella che la persona non ha scelto. Solo la shell principale; la
+/// modalità si controlla prima di aprire la finestra, e l'host la ricontrolla.
+/// Aprire la finestra scarta il permesso del controllo di prima, qualunque
+/// cosa la persona scelga poi; la finestra chiusa è `cancelled`.
 #[tauri::command]
 async fn check_theme_folder(
     app: AppHandle,
     window: tauri::WebviewWindow,
-    title: String,
 ) -> Result<fub_host::theme::ThemeFolderCheck, PluginError> {
     use tauri_plugin_dialog::DialogExt;
     guard_main_shell(&window, "install themes from a folder")?;
-    {
+    let title = {
         let host = app.state::<Host>();
+        host.forget_theme_folder();
         let allowed = host.theme_folder_allowed();
         for_the_shell(&host, None, allowed)?;
-    }
-    let title: String = title.chars().take(MAX_PICK_TITLE_CHARS).collect();
+        host.theme_folder_pick_title()
+    };
     let (sender, receiver) = std::sync::mpsc::sync_channel(1);
     let dialog = app.dialog().file();
     // Il genitore della finestra di dialogo esiste solo sul desktop.
@@ -1638,6 +1637,18 @@ async fn install_theme_from_folder(
         for_the_shell(host, None, result)
     })
     .await
+}
+
+/// Scarta la cartella che `check_theme_folder` ha controllato: la persona ha
+/// risposto «no» a «Sostituisci», o il cancello della shell l'ha rifiutata
+/// (`Host::forget_theme_folder`). Dopo, `install_theme_from_folder` risponde
+/// `unchecked`. Solo la shell principale; niente modalità sviluppatore, perché
+/// un permesso si può sempre buttare.
+#[tauri::command]
+fn discard_theme_folder(app: AppHandle, window: tauri::WebviewWindow) -> Result<(), PluginError> {
+    guard_main_shell(&window, "install themes from a folder")?;
+    app.state::<Host>().forget_theme_folder();
+    Ok(())
 }
 
 fn parse_installation(installation: &str) -> Result<u64, PluginError> {
@@ -3278,6 +3289,7 @@ pub fn run() {
             read_theme,
             check_theme_folder,
             install_theme_from_folder,
+            discard_theme_folder,
             list_installed_plugins,
             plugin_budget_snapshot,
             plugin_limited_mode,

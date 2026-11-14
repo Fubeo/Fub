@@ -93,9 +93,10 @@ fn refusal(error: ThemeError, root: &Utf8Path) -> Result<ThemeFolderRefusal, The
         }
         ThemeError::CatalogState { file } => ThemeFolderRefusal::CatalogState { file },
         ThemeError::Malformed(detail) => ThemeFolderRefusal::Malformed { detail },
-        error @ (ThemeError::AlreadyInstalled(_) | ThemeError::Io(_) | ThemeError::Changed(_)) => {
-            return Err(error)
-        }
+        error @ (ThemeError::AlreadyInstalled(_)
+        | ThemeError::Io(_)
+        | ThemeError::Disk { .. }
+        | ThemeError::Changed(_)) => return Err(error),
     })
 }
 
@@ -134,49 +135,63 @@ pub fn check_theme_folder(source: &Utf8Path) -> Result<ThemeFolderCheck, ThemeEr
 }
 
 /// Il resto della lettura, su una radice canonica che ha un manifest.
+///
+/// Gli asset si leggono una volta sola per tutte le luci, e solo quelli che il
+/// cancello della shell legge davvero (i file dei caratteri e il set di icone);
+/// degli altri basta il nome, per dire che ci sono.
 fn read_folder(
     root: &Utf8Path,
 ) -> Result<(ThemeManifest, Vec<ThemeFolderLight>, String), ThemeError> {
-    let root = root.to_owned();
-    install::reject_catalog_state(&root)?;
-    let digest = theme_tree_digest(&root)?;
-    let manifest = ThemeBundle::load(&root)?.manifest;
+    install::reject_catalog_state(root)?;
+    let digest = theme_tree_digest(root)?;
+    let manifest = ThemeBundle::load(root)?.manifest;
     if manifest.id == SERIES_ID {
         return Err(ThemeError::InvalidId(SERIES_ID.to_string()));
     }
+    let id = manifest.id.as_str();
+    let namespace = manifest.asset_namespace.as_str();
     let read: std::collections::BTreeSet<String> = manifest
         .fonts
         .iter()
-        .map(|font| format!("{}{}", manifest.asset_namespace, font.file))
+        .map(|font| format!("{namespace}{}", font.file))
         .chain(
             manifest
                 .icons
                 .iter()
-                .map(|file| format!("{}{file}", manifest.asset_namespace)),
+                .map(|file| format!("{namespace}{file}")),
         )
         .collect();
+    let bytes = asset_inventory(root, namespace, &read)?;
+    let present = asset_names(root, namespace)?;
+    let skin = read_theme_text(&root.join("skin.css"), root, id, MAX_THEME_CSS_BYTES, false)?;
+    // Come per il fascio del catalogo (`discover::theme_payload`): senza
+    // `extends` il foglio di ogni luce dichiarata è d'obbligo.
+    let required = manifest.extends.is_none();
     let lights = manifest
         .lights
         .iter()
-        .map(|light| {
-            let payload = discover::theme_payload(&root, manifest.clone(), *light)?;
-            let (assets, named): (
-                std::collections::BTreeMap<_, _>,
-                std::collections::BTreeMap<_, _>,
-            ) = payload
-                .assets
+        .map(|&light| {
+            let sheet_path = sheet_path(root, light);
+            let sheet = read_theme_text(&sheet_path, root, id, MAX_THEME_CSS_BYTES, required)?;
+            if required && sheet.is_none() {
+                return Err(ThemeError::Malformed(format!(
+                    "missing sheet `{sheet_path}`"
+                )));
+            }
+            let named = referenced_assets(sheet.as_deref(), skin.as_deref(), namespace)
                 .into_iter()
-                .partition(|(name, _)| read.contains(name));
+                .filter(|name| present.contains(name) && !read.contains(name))
+                .collect();
             Ok(ThemeFolderLight {
-                light: payload.light,
-                sheet: payload.sheet,
-                skin: payload.skin,
-                assets,
-                named: named.into_keys().collect(),
+                light,
+                sheet,
+                skin: skin.clone(),
+                assets: bytes.clone(),
+                named,
             })
         })
         .collect::<Result<Vec<_>, ThemeError>>()?;
-    if theme_tree_digest(&root)? != digest {
+    if theme_tree_digest(root)? != digest {
         return Err(ThemeError::Changed(root.to_string()));
     }
     Ok((manifest, lights, digest))
@@ -184,9 +199,8 @@ fn read_folder(
 
 /// Com'è andata un'installazione da cartella ([`install_theme_from_folder`]).
 ///
-/// Una sostituzione che si ferma rimettendo il vecchio al suo posto è un
-/// errore, perché il disco è com'era; anche la cartella cambiata dopo il
-/// controllo. Qui ci sono gli esiti che chi disegna deve dire in modo diverso.
+/// Ogni esito che chi disegna deve dire in modo diverso ha la sua variante, coi
+/// campi per dirlo: niente arriva come frase dell'host da interpretare.
 #[derive(Clone, Debug, PartialEq, serde::Serialize)]
 #[serde(tag = "outcome", rename_all = "snake_case")]
 pub enum ThemeFolderInstall {
@@ -226,69 +240,132 @@ pub enum ThemeFolderInstall {
         kept: String,
         error: PluginError,
     },
+    /// Le porte dell'installazione hanno rifiutato i byte controllati: è un
+    /// rifiuto della cartella come quelli del controllo, e niente è scritto.
+    Refused { refusal: ThemeFolderRefusal },
+    /// La cartella non ha più i byte del controllo: niente è scritto, e va
+    /// controllata di nuovo.
+    Changed,
+    /// Non c'è un controllo con questa impronta da installare: un controllo
+    /// più recente ha preso il suo posto, o è già stato usato o scartato.
+    /// Niente è scritto. Lo decide l'host (`Host::install_theme_from_folder`).
+    Unchecked,
+    /// Il disco non ha lasciato scrivere, e niente è cambiato: con `replace`
+    /// il tema installato è com'era. `cause` è il perché da dire; `error` è il
+    /// guasto così com'è, per il log e per chi copia la diagnosi.
+    Failed {
+        cause: DiskCause,
+        error: PluginError,
+    },
 }
 
 /// Installa la cartella che [`check_theme_folder`] ha letto, coi suoi byte:
-/// `digest` è l'impronta di quel controllo, e la copia si pubblica solo se ha
-/// ancora quei byte. Una sola lettura della sorgente e una sola sonda della
-/// destinazione ([`install_theme_internal`]): la collisione e la revoca si
-/// dicono **prima** di copiare.
+/// `digest` è l'impronta di quel controllo. L'impronta si confronta **prima**
+/// di ogni altra cosa ([`install_theme_internal`]): la collisione, la revoca e
+/// le porte parlano solo dei byte controllati, e la copia si pubblica solo se
+/// ha ancora quei byte. Una sola sonda della destinazione: la collisione e la
+/// revoca si dicono prima di copiare.
 ///
 /// Con `replace` un tema con lo stesso id si sostituisce senza toglierlo
 /// prima: la copia nuova si prepara e si verifica accanto, poi uno scambio di
 /// nomi la mette al posto del vecchio. Se il nuovo si ferma il vecchio resta
-/// (o torna) dov'era, ed è un errore; [`ThemeFolderInstall::ReplaceFailed`] è
-/// solo il caso in cui il vecchio non riesce a tornare.
+/// (o torna) dov'era ([`ThemeFolderInstall::Failed`]);
+/// [`ThemeFolderInstall::ReplaceFailed`] è solo il caso in cui il vecchio non
+/// riesce a tornare.
 ///
-/// Le porte sono deterministiche sui byte: se un rifiuto arriva qui e la
-/// cartella non ha più l'impronta che le ha passate, l'esito è
-/// [`ThemeError::Changed`], non il rifiuto di byte che nessuno ha controllato.
+/// Ogni fermata è un esito tipizzato. Le porte sono deterministiche sui byte:
+/// se un rifiuto arriva qui e la cartella non ha più l'impronta, l'esito è
+/// [`ThemeFolderInstall::Changed`], non il rifiuto di byte che nessuno ha
+/// controllato.
 pub fn install_theme_from_folder(
     config_dir: &Utf8Path,
     source: &Utf8Path,
     replace: bool,
     digest: &str,
-) -> Result<ThemeFolderInstall, ThemeError> {
+) -> ThemeFolderInstall {
     let mut publish = FolderPublish::new(digest, replace);
     let result = install_theme_internal(config_dir, source, None, Some(&mut publish));
-    let changed = |error: ThemeError| match error {
-        ThemeError::Io(_) | ThemeError::Changed(_) => error,
+    match (result, publish.stopped, publish.kept, publish.manifest) {
+        (_, Some(FolderStop::Collision { installed_version }), _, Some(manifest)) => {
+            ThemeFolderInstall::Collision {
+                id: manifest.id,
+                name: manifest.name,
+                version: manifest.version,
+                installed_version,
+            }
+        }
+        (_, Some(FolderStop::Revoked), _, Some(manifest)) => ThemeFolderInstall::Revoked {
+            id: manifest.id,
+            name: manifest.name,
+            version: manifest.version,
+        },
+        (Ok(_), _, _, Some(manifest)) => ThemeFolderInstall::Installed {
+            id: manifest.id,
+            name: manifest.name,
+            version: manifest.version,
+            replaced: publish.replaced,
+        },
+        (Err(error), _, Some(kept), Some(manifest)) => ThemeFolderInstall::ReplaceFailed {
+            id: manifest.id,
+            name: manifest.name,
+            version: manifest.version,
+            kept,
+            error: error.into(),
+        },
+        (Err(error), _, None, manifest) => stopped(error, source, digest, manifest),
+        (Ok(_), _, _, None) | (_, Some(_), _, None) | (Err(_), None, Some(_), None) => {
+            unreachable!("the manifest is read before anything is published or stopped")
+        }
+    }
+}
+
+/// L'esito di un'installazione che si è fermata con un errore, e niente è
+/// cambiato.
+fn stopped(
+    error: ThemeError,
+    source: &Utf8Path,
+    digest: &str,
+    manifest: Option<ThemeManifest>,
+) -> ThemeFolderInstall {
+    let error = match error {
+        ThemeError::Io(_) | ThemeError::Disk { .. } | ThemeError::Changed(_) => error,
         _ if theme_tree_digest(source).ok().as_deref() != Some(digest) => {
             ThemeError::Changed(source.to_string())
         }
         _ => error,
     };
-    let Some(ThemeManifest {
-        id, name, version, ..
-    }) = publish.manifest
-    else {
-        return Err(changed(
-            result.expect_err("the manifest is read before anything else"),
-        ));
-    };
-    match (result, publish.stopped, publish.kept) {
-        (_, Some(FolderStop::Collision { installed_version }), _) => {
-            Ok(ThemeFolderInstall::Collision {
-                id,
-                name,
-                version,
-                installed_version,
-            })
-        }
-        (_, Some(FolderStop::Revoked), _) => Ok(ThemeFolderInstall::Revoked { id, name, version }),
-        (Ok(_), None, _) => Ok(ThemeFolderInstall::Installed {
-            id,
-            name,
-            version,
-            replaced: publish.replaced,
-        }),
-        (Err(error), None, Some(kept)) => Ok(ThemeFolderInstall::ReplaceFailed {
-            id,
-            name,
-            version,
-            kept,
+    match error {
+        ThemeError::Changed(_) => ThemeFolderInstall::Changed,
+        ThemeError::Disk { cause, .. } => ThemeFolderInstall::Failed {
+            cause,
             error: error.into(),
-        }),
-        (Err(error), None, None) => Err(changed(error)),
+        },
+        ThemeError::Io(_) => ThemeFolderInstall::Failed {
+            cause: DiskCause::Other,
+            error: error.into(),
+        },
+        // Un tema comparso sotto l'id fra la sonda e la pubblicazione: è una
+        // collisione, di un tema che non si è potuto leggere.
+        ThemeError::AlreadyInstalled(_) if manifest.is_some() => {
+            let manifest = manifest.expect("checked above");
+            ThemeFolderInstall::Collision {
+                id: manifest.id,
+                name: manifest.name,
+                version: manifest.version,
+                installed_version: None,
+            }
+        }
+        error => {
+            let root = source
+                .canonicalize_utf8()
+                .unwrap_or_else(|_| source.to_owned());
+            match refusal(error, &root) {
+                Ok(refusal) => ThemeFolderInstall::Refused { refusal },
+                Err(error) => ThemeFolderInstall::Failed {
+                    cause: DiskCause::Other,
+                    error: error.into(),
+                },
+            }
+        }
     }
 }

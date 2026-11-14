@@ -353,6 +353,25 @@ fn expected() -> Value {
                 name: "Carta".into(),
                 version: "0.4.0".into(),
             }),
+            to_value(fub_host::theme::ThemeFolderInstall::Refused {
+                refusal: fub_host::theme::ThemeFolderRefusal::Traversal {
+                    path: "escape".into(),
+                },
+            }),
+            to_value(fub_host::theme::ThemeFolderInstall::Changed),
+            to_value(fub_host::theme::ThemeFolderInstall::Unchecked),
+            to_value(fub_host::theme::ThemeFolderInstall::Failed {
+                cause: fub_host::theme::DiskCause::Full,
+                error: PluginError::Io("I/O error: /config/themes/.tmp-1-2: No space left on device".into()),
+            }),
+            to_value(fub_host::theme::ThemeFolderInstall::Failed {
+                cause: fub_host::theme::DiskCause::Denied,
+                error: PluginError::Io("I/O error: /config/themes: Permission denied".into()),
+            }),
+            to_value(fub_host::theme::ThemeFolderInstall::Failed {
+                cause: fub_host::theme::DiskCause::Other,
+                error: PluginError::Io("I/O error: /config/themes: Input/output error".into()),
+            }),
             to_value(fub_host::theme::ThemeFolderInstall::ReplaceFailed {
                 id: "acme.carta".into(),
                 name: "Carta".into(),

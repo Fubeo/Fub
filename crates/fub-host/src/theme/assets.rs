@@ -9,16 +9,45 @@ pub(super) fn asset_inventory(
     needed: &std::collections::BTreeSet<String>,
 ) -> Result<std::collections::BTreeMap<String, Vec<u8>>, ThemeError> {
     let mut assets = std::collections::BTreeMap::new();
-    collect_assets(root, root, namespace, needed, &mut assets)?;
+    walk_assets(root, root, namespace, &mut |name, path| {
+        if !needed.contains(&name) {
+            return Ok(());
+        }
+        let bytes = read_theme_bytes(
+            path,
+            root,
+            root.file_name().unwrap_or_default(),
+            MAX_THEME_ASSET_BYTES,
+            true,
+        )?
+        .expect("required asset was checked by read_theme_bytes");
+        assets.insert(name, bytes);
+        Ok(())
+    })?;
     Ok(assets)
 }
 
-fn collect_assets(
+/// I nomi (`theme://…`) di tutti gli asset di un tema, senza leggerne i byte:
+/// le stesse regole di [`asset_inventory`] (niente link, solo file e
+/// cartelle, fuori i quattro file del tema).
+pub(super) fn asset_names(
+    root: &Utf8Path,
+    namespace: &str,
+) -> Result<std::collections::BTreeSet<String>, ThemeError> {
+    let mut names = std::collections::BTreeSet::new();
+    walk_assets(root, root, namespace, &mut |name, _| {
+        names.insert(name);
+        Ok(())
+    })?;
+    Ok(names)
+}
+
+/// Visita ogni asset sotto `dir` col suo nome nel namespace e il suo path.
+fn walk_assets(
     root: &Utf8Path,
     dir: &Utf8Path,
     namespace: &str,
-    needed: &std::collections::BTreeSet<String>,
-    assets: &mut std::collections::BTreeMap<String, Vec<u8>>,
+    visit: &mut dyn FnMut(String, &Utf8Path) -> Result<(), ThemeError>,
 ) -> Result<(), ThemeError> {
     let entries =
         std::fs::read_dir(dir).map_err(|error| ThemeError::Io(format!("{}: {error}", dir)))?;
@@ -42,7 +71,7 @@ fn collect_assets(
         let path = Utf8PathBuf::from_path_buf(entry.path())
             .map_err(|path| ThemeError::Io(format!("non-UTF-8 path: {}", path.display())))?;
         if file_type.is_dir() {
-            collect_assets(root, &path, namespace, needed, assets)?;
+            walk_assets(root, &path, namespace, visit)?;
             continue;
         }
         let relative = path
@@ -55,19 +84,7 @@ fn collect_assets(
         ) {
             continue;
         }
-        let name = format!("{namespace}{relative}");
-        if !needed.contains(&name) {
-            continue;
-        }
-        let bytes = read_theme_bytes(
-            &path,
-            root,
-            root.file_name().unwrap_or_default(),
-            MAX_THEME_ASSET_BYTES,
-            true,
-        )?
-        .expect("required asset was checked by read_theme_bytes");
-        assets.insert(name, bytes);
+        visit(format!("{namespace}{relative}"), &path)?;
     }
     Ok(())
 }

@@ -1734,8 +1734,8 @@ fn installing_from_a_folder_is_refused_with_developer_mode_off() {
 
 /// L'installazione non prende un path: installa soltanto la cartella che il
 /// controllo ha letto, e solo se l'impronta è la sua. Senza controllo, con
-/// un'impronta inventata o con quella di un controllo superato è `Conflict`,
-/// e niente si scrive.
+/// un'impronta inventata o con quella di un controllo superato è `Unchecked`,
+/// e niente si scrive; un'impronta sbagliata non tocca il controllo valido.
 #[test]
 fn only_the_checked_folder_can_be_installed() {
     let (_config_dir, config) = folders();
@@ -1744,61 +1744,206 @@ fn only_the_checked_folder_can_be_installed() {
     write_versioned_theme(&a, "acme.carta", "0.3.2");
     write_versioned_theme(&b, "acme.lino", "1.0.0");
     let host = developer(&config, true);
+    let unchecked = |replace: bool, digest: &str| {
+        assert_eq!(
+            host.install_theme_from_folder(replace, digest).unwrap(),
+            ThemeFolderInstall::Unchecked,
+            "{digest}"
+        );
+    };
 
-    let error = host
-        .install_theme_from_folder(false, &fub_host::theme::theme_tree_digest(&a).unwrap())
-        .expect_err("nothing was checked");
-    assert!(
-        matches!(error, fub_abi::PluginError::Conflict(_)),
-        "{error:?}"
-    );
-    let shown = host.localized_error(None, error);
-    let wire = serde_json::to_value(&shown).expect("serializes");
-    assert!(!wire["message"]
-        .as_str()
-        .unwrap()
-        .starts_with("host.theme_folder."));
-
+    unchecked(false, &fub_host::theme::theme_tree_digest(&a).unwrap());
     let first = checked(&host, &a);
-    let error = host
-        .install_theme_from_folder(false, "sha256:made-up")
-        .expect_err("not the checked digest");
-    assert!(
-        matches!(error, fub_abi::PluginError::Conflict(_)),
-        "{error:?}"
-    );
-    let _second = checked(&host, &b);
-    let error = host
-        .install_theme_from_folder(false, &first)
-        .expect_err("a later check replaced the first");
-    assert!(
-        matches!(error, fub_abi::PluginError::Conflict(_)),
-        "{error:?}"
-    );
+    unchecked(false, "sha256:made-up");
+    let second = checked(&host, &b);
+    unchecked(false, &first);
     assert!(themes_dir_is_empty(&config));
+    assert!(matches!(
+        host.install_theme_from_folder(false, &second).unwrap(),
+        ThemeFolderInstall::Installed { .. }
+    ));
 
-    // Un rifiuto dimentica la cartella controllata prima.
+    // Un rifiuto scarta la cartella controllata prima.
     let digest = checked(&host, &a);
     let (_empty_dir, empty) = folders();
     assert_eq!(refused(&host, &empty), ThemeFolderRefusal::NotATheme);
-    let error = host
-        .install_theme_from_folder(false, &digest)
-        .expect_err("the refusal forgot the checked folder");
-    assert!(
-        matches!(error, fub_abi::PluginError::Conflict(_)),
-        "{error:?}"
+    unchecked(false, &digest);
+    assert_eq!(themes_entries(&config), vec!["acme.lino".to_string()]);
+}
+
+/// Il controllo è un permesso che vale una volta e per un esito. Installato,
+/// non installa di nuovo; una collisione lo lascia solo per «Sostituisci», una
+/// volta; il «no» (o il rifiuto del cancello della shell) lo scarta, e allora
+/// una richiesta di sostituire che arriva dopo non tocca niente.
+#[test]
+fn a_checked_folder_installs_once() {
+    let (_config_dir, config) = folders();
+    let (_old_dir, old) = folders();
+    let (_new_dir, new) = folders();
+    write_versioned_theme(&old, "acme.carta", "0.3.2");
+    write_versioned_theme(&new, "acme.carta", "0.4.0");
+    std::fs::write(new.join("skin.css"), ".surface { color: red; }\n").unwrap();
+    let host = developer(&config, true);
+    let installed_skin = fub_host::config::themes_dir(&config).join("acme.carta/skin.css");
+    let old_skin = ".surface { color: inherit; }\n";
+
+    let digest = checked(&host, &old);
+    assert!(matches!(
+        host.install_theme_from_folder(false, &digest).unwrap(),
+        ThemeFolderInstall::Installed { .. }
+    ));
+    for replace in [false, true] {
+        assert_eq!(
+            host.install_theme_from_folder(replace, &digest).unwrap(),
+            ThemeFolderInstall::Unchecked,
+            "the same digest does not install twice (replace: {replace})"
+        );
+    }
+
+    // «No» a «Sostituisci»: il permesso si scarta.
+    let digest = checked(&host, &new);
+    assert!(matches!(
+        host.install_theme_from_folder(false, &digest).unwrap(),
+        ThemeFolderInstall::Collision { .. }
+    ));
+    host.forget_theme_folder();
+    assert_eq!(
+        host.install_theme_from_folder(true, &digest).unwrap(),
+        ThemeFolderInstall::Unchecked
+    );
+    assert_eq!(std::fs::read_to_string(&installed_skin).unwrap(), old_skin);
+
+    // Il rifiuto del cancello della shell su una cartella pronta, lo stesso.
+    let digest = checked(&host, &new);
+    host.forget_theme_folder();
+    assert_eq!(
+        host.install_theme_from_folder(true, &digest).unwrap(),
+        ThemeFolderInstall::Unchecked
+    );
+    assert_eq!(std::fs::read_to_string(&installed_skin).unwrap(), old_skin);
+
+    // Dopo la collisione il permesso risponde solo a «Sostituisci», una volta.
+    let digest = checked(&host, &new);
+    assert!(matches!(
+        host.install_theme_from_folder(false, &digest).unwrap(),
+        ThemeFolderInstall::Collision { .. }
+    ));
+    assert!(matches!(
+        host.install_theme_from_folder(true, &digest).unwrap(),
+        ThemeFolderInstall::Installed { replaced: true, .. }
+    ));
+    assert_eq!(
+        host.install_theme_from_folder(true, &digest).unwrap(),
+        ThemeFolderInstall::Unchecked
     );
 
-    // Dopo l'installazione la cartella controllata si dimentica.
-    let digest = checked(&host, &a);
-    host.install_theme_from_folder(false, &digest).unwrap();
-    let error = host
-        .install_theme_from_folder(true, &digest)
-        .expect_err("installed: check it again");
-    assert!(
-        matches!(error, fub_abi::PluginError::Conflict(_)),
-        "{error:?}"
+    // Una collisione seguita da un'altra domanda senza `replace` consuma il
+    // permesso: non si gira in tondo.
+    let digest = checked(&host, &old);
+    assert!(matches!(
+        host.install_theme_from_folder(false, &digest).unwrap(),
+        ThemeFolderInstall::Collision { .. }
+    ));
+    assert_eq!(
+        host.install_theme_from_folder(false, &digest).unwrap(),
+        ThemeFolderInstall::Unchecked
     );
+    assert_eq!(
+        host.install_theme_from_folder(true, &digest).unwrap(),
+        ThemeFolderInstall::Unchecked
+    );
+    assert_eq!(
+        std::fs::read_to_string(&installed_skin).unwrap(),
+        ".surface { color: red; }\n"
+    );
+}
+
+/// L'esito parla solo dei byte controllati: una cartella che dopo il
+/// controllo cambia id (e ora cadrebbe su un tema installato) è «cambiata»,
+/// non una collisione col manifest riletto.
+#[test]
+fn an_install_speaks_only_of_the_checked_bytes() {
+    let (_config_dir, config) = folders();
+    let (_old_dir, old) = folders();
+    let (_new_dir, new) = folders();
+    write_versioned_theme(&old, "acme.carta", "0.3.2");
+    write_versioned_theme(&new, "acme.lino", "1.0.0");
+    let host = developer(&config, true);
+    install_folder(&host, &old, false);
+
+    let digest = checked(&host, &new);
+    let manifest = std::fs::read_to_string(new.join("manifest.json")).unwrap();
+    std::fs::write(
+        new.join("manifest.json"),
+        manifest.replace("acme.lino", "acme.carta"),
+    )
+    .unwrap();
+    assert_eq!(
+        host.install_theme_from_folder(false, &digest).unwrap(),
+        ThemeFolderInstall::Changed
+    );
+
+    // E un tema revocato, lo stesso: prima l'impronta.
+    fub_host::theme::set_theme_revoked(&config, "acme.carta", true).unwrap();
+    std::fs::write(new.join("manifest.json"), &manifest).unwrap();
+    let digest = checked(&host, &new);
+    std::fs::write(
+        new.join("manifest.json"),
+        manifest.replace("acme.lino", "acme.carta"),
+    )
+    .unwrap();
+    assert_eq!(
+        host.install_theme_from_folder(true, &digest).unwrap(),
+        ThemeFolderInstall::Changed
+    );
+    assert_eq!(themes_entries(&config), vec!["acme.carta".to_string()]);
+}
+
+/// Un tema installato che non si legge (il puntatore rotto, la radice che non
+/// è una cartella) è una collisione senza versione, e si può sostituire: la
+/// persona lo vede nella domanda e decide lei.
+#[test]
+fn an_unreadable_installed_theme_collides_and_can_be_replaced() {
+    let (_config_dir, config) = folders();
+    let (_old_dir, old) = folders();
+    let (_new_dir, new) = folders();
+    write_versioned_theme(&old, "acme.carta", "0.3.2");
+    write_versioned_theme(&new, "acme.carta", "0.4.0");
+    let host = developer(&config, true);
+    let themes = fub_host::config::themes_dir(&config);
+
+    install_folder(&host, &old, false);
+    std::fs::write(themes.join("acme.carta/.fub-current.json"), "{ not json").unwrap();
+    let unknown = ThemeFolderInstall::Collision {
+        id: "acme.carta".into(),
+        name: "Prova".into(),
+        version: "0.4.0".into(),
+        installed_version: None,
+    };
+    let digest = checked(&host, &new);
+    assert_eq!(
+        host.install_theme_from_folder(false, &digest).unwrap(),
+        unknown
+    );
+    assert!(matches!(
+        host.install_theme_from_folder(true, &digest).unwrap(),
+        ThemeFolderInstall::Installed { replaced: true, .. }
+    ));
+    assert_eq!(host.themes().unwrap()[0].manifest.version, "0.4.0");
+
+    std::fs::remove_dir_all(themes.join("acme.carta")).unwrap();
+    std::fs::write(themes.join("acme.carta"), "not a folder").unwrap();
+    let digest = checked(&host, &new);
+    assert_eq!(
+        host.install_theme_from_folder(false, &digest).unwrap(),
+        unknown
+    );
+    assert!(matches!(
+        host.install_theme_from_folder(true, &digest).unwrap(),
+        ThemeFolderInstall::Installed { replaced: true, .. }
+    ));
+    assert!(themes.join("acme.carta/manifest.json").is_file());
+    assert_eq!(themes_entries(&config), vec!["acme.carta".to_string()]);
 }
 
 /// Un id già installato: l'esito lo dice con le due versioni e non tocca
@@ -2059,7 +2204,7 @@ fn checking_a_folder_reads_both_lights_and_writes_nothing() {
 }
 
 /// L'installazione pubblica solo i byte controllati: una cartella cambiata
-/// dopo il controllo si ferma con `Conflict`, e niente si scrive. Con
+/// dopo il controllo si ferma con `Changed`, e niente si scrive. Con
 /// `replace` il tema installato resta com'era. Anche una cartella che dopo il
 /// controllo è diventata da rifiutare è «cambiata», non un rifiuto nuovo.
 #[test]
@@ -2073,12 +2218,9 @@ fn a_folder_changed_after_the_check_is_not_installed() {
 
     let digest = checked(&host, &old);
     std::fs::write(old.join("skin.css"), ".surface { color: blue; }\n").unwrap();
-    let error = host
-        .install_theme_from_folder(false, &digest)
-        .expect_err("changed after the check");
-    assert!(
-        matches!(error, fub_abi::PluginError::Conflict(_)),
-        "{error:?}"
+    assert_eq!(
+        host.install_theme_from_folder(false, &digest).unwrap(),
+        ThemeFolderInstall::Changed
     );
     assert!(
         themes_dir_is_empty(&config),
@@ -2087,13 +2229,15 @@ fn a_folder_changed_after_the_check_is_not_installed() {
 
     install_folder(&host, &old, false);
     let digest = checked(&host, &new);
+    assert!(matches!(
+        host.install_theme_from_folder(false, &digest).unwrap(),
+        ThemeFolderInstall::Collision { .. }
+    ));
     std::fs::write(new.join("skin.css"), ".surface { color: red; }\n").unwrap();
-    let error = host
-        .install_theme_from_folder(true, &digest)
-        .expect_err("changed before «Sostituisci»");
-    assert!(
-        matches!(error, fub_abi::PluginError::Conflict(_)),
-        "{error:?}"
+    assert_eq!(
+        host.install_theme_from_folder(true, &digest).unwrap(),
+        ThemeFolderInstall::Changed,
+        "changed before «Sostituisci»"
     );
     assert_eq!(
         std::fs::read_to_string(fub_host::config::themes_dir(&config).join("acme.carta/skin.css"))
@@ -2107,19 +2251,20 @@ fn a_folder_changed_after_the_check_is_not_installed() {
         "no staging and no copy set aside are left"
     );
 
-    let digest = checked(&host, &new);
-    std::fs::write(new.join(".fub-current.json"), "{}").unwrap();
-    let error = host
-        .install_theme_from_folder(true, &digest)
-        .expect_err("catalog state appeared after the check");
-    assert!(
-        matches!(error, fub_abi::PluginError::Conflict(_)),
-        "{error:?}"
+    let (_other_dir, other) = folders();
+    write_versioned_theme(&other, "acme.lino", "1.0.0");
+    let digest = checked(&host, &other);
+    std::fs::write(other.join(".fub-current.json"), "{}").unwrap();
+    assert_eq!(
+        host.install_theme_from_folder(false, &digest).unwrap(),
+        ThemeFolderInstall::Changed,
+        "catalog state appeared after the check"
     );
 }
 
 /// Una sostituzione che il disco ferma prima dello scambio (la cartella dei
-/// temi non si scrive) è un errore, e il tema installato resta intatto: la
+/// temi non si scrive) è `Failed` col suo perché tipizzato (`denied`), e il
+/// tema installato resta intatto: la
 /// copia nuova si prepara accanto, il vecchio non si toglie prima.
 ///
 /// L'esito `ReplaceFailed` (il nuovo non entra **e** il vecchio non torna al
@@ -2149,8 +2294,17 @@ fn a_replace_the_disk_refuses_keeps_the_installed_theme() {
     if writable {
         return;
     }
-    let error = result.expect_err("the themes folder is read-only");
-    assert!(matches!(error, fub_abi::PluginError::Io(_)), "{error:?}");
+    let outcome = result.expect("a disk that refuses is an outcome");
+    assert!(
+        matches!(
+            outcome,
+            ThemeFolderInstall::Failed {
+                cause: fub_host::theme::DiskCause::Denied,
+                ..
+            }
+        ),
+        "{outcome:?}"
+    );
     let listed = host.themes().unwrap();
     assert_eq!(listed.len(), 1);
     assert_eq!(listed[0].manifest.version, "0.3.2", "the old one stays");
