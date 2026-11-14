@@ -3,11 +3,18 @@
 //! quando nessun file li ha. I casi di dettaglio (limiti, cestino, collegamenti)
 //! stanno nei test del kernel, `fub-kernel/tests/same_content.rs`.
 
-use camino::Utf8PathBuf;
+use std::io;
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::{Arc, Mutex};
+use std::time::{Duration, SystemTime};
+
+use camino::{Utf8Path, Utf8PathBuf};
 use fub_abi::model::DocId;
+use fub_host::mount::VaultStorageSource;
 use fub_host::resources::{ResourceReuse, ResourceWrite, ResourceWriteReceipt};
 use fub_host::Host;
 use fub_kernel::same_content::SameContent;
+use fub_kernel::storage::{DirEntry, FileIdentity, Merge, RootedFsStorage, Stat, VaultStorage};
 
 fn vault(files: &[(&str, &[u8])]) -> (tempfile::TempDir, Utf8PathBuf) {
     let dir = tempfile::tempdir().unwrap();
@@ -161,4 +168,169 @@ fn only_a_file_of_the_same_type_is_the_same_content() {
     assert_eq!(csv.id, DocId::new("dati.csv"));
     let empty_md = deposit(&host, &root, "altra.md", b"", ResourceReuse::SameContent);
     assert!(!empty_md.reused, "{empty_md:?}");
+}
+
+/// Un disco radicato che **conta** le letture a pezzi di un file e, alla prima,
+/// esegue un gancio: il modo di cambiare il vault corrente a metà di una
+/// domanda, fra i candidati presi e le impronte riportate.
+struct Watched {
+    inner: RootedFsStorage,
+    suffix: &'static str,
+    reads: Arc<AtomicUsize>,
+    hook: Hook,
+    failing: Arc<AtomicBool>,
+}
+
+type Hook = Arc<Mutex<Option<Box<dyn FnOnce() + Send>>>>;
+
+impl VaultStorage for Watched {
+    fn read(&self, path: &Utf8Path) -> io::Result<Vec<u8>> {
+        self.inner.read(path)
+    }
+    fn read_pieces(&self, path: &Utf8Path, piece: &mut dyn FnMut(&[u8])) -> io::Result<()> {
+        let watched = path.as_str().ends_with(self.suffix);
+        if watched && self.failing.load(Ordering::SeqCst) {
+            return Err(io::Error::new(
+                io::ErrorKind::PermissionDenied,
+                "letto male di proposito",
+            ));
+        }
+        self.inner.read_pieces(path, piece)?;
+        if watched {
+            self.reads.fetch_add(1, Ordering::SeqCst);
+            let hook = self.hook.lock().expect("il gancio di prova").take();
+            if let Some(hook) = hook {
+                hook();
+            }
+        }
+        Ok(())
+    }
+    fn write(&self, path: &Utf8Path, bytes: &[u8]) -> io::Result<Stat> {
+        self.inner.write(path, bytes)
+    }
+    fn update(&self, path: &Utf8Path, merge: Merge<'_>) -> io::Result<()> {
+        self.inner.update(path, merge)
+    }
+    fn append(&self, path: &Utf8Path, bytes: &[u8]) -> io::Result<()> {
+        self.inner.append(path, bytes)
+    }
+    fn rename(&self, from: &Utf8Path, to: &Utf8Path) -> io::Result<()> {
+        self.inner.rename(from, to)
+    }
+    fn rename_no_replace(&self, from: &Utf8Path, to: &Utf8Path) -> io::Result<()> {
+        self.inner.rename_no_replace(from, to)
+    }
+    fn remove(&self, path: &Utf8Path) -> io::Result<()> {
+        self.inner.remove(path)
+    }
+    fn list(&self, dir: &Utf8Path) -> io::Result<Vec<DirEntry>> {
+        self.inner.list(dir)
+    }
+    fn stat(&self, path: &Utf8Path) -> io::Result<Stat> {
+        self.inner.stat(path)
+    }
+    fn stat_no_follow(&self, path: &Utf8Path) -> io::Result<Stat> {
+        self.inner.stat_no_follow(path)
+    }
+    fn file_identity(&self, path: &Utf8Path) -> io::Result<Option<FileIdentity>> {
+        self.inner.file_identity(path)
+    }
+    fn change_stamp(&self, path: &Utf8Path) -> io::Result<Option<u64>> {
+        self.inner.change_stamp(path)
+    }
+    fn remove_empty_dir(&self, dir: &Utf8Path) -> io::Result<()> {
+        self.inner.remove_empty_dir(dir)
+    }
+}
+
+/// Ogni vault montato su un [`Watched`], con lo stesso contatore e lo stesso
+/// gancio.
+struct WatchedDisk {
+    suffix: &'static str,
+    reads: Arc<AtomicUsize>,
+    hook: Hook,
+    failing: Arc<AtomicBool>,
+}
+
+impl VaultStorageSource for WatchedDisk {
+    fn open(&self, root: &Utf8Path) -> io::Result<Arc<dyn VaultStorage>> {
+        Ok(Arc::new(Watched {
+            inner: RootedFsStorage::open(root)?,
+            suffix: self.suffix,
+            reads: Arc::clone(&self.reads),
+            hook: Arc::clone(&self.hook),
+            failing: Arc::clone(&self.failing),
+        }))
+    }
+}
+
+/// Scrive un file e lo porta nel passato: l'impronta di un file appena scritto
+/// non si impara (*racily clean*), e il test guarda il vault, non il tempo.
+fn aged(root: &Utf8Path, rel: &str, bytes: &[u8]) {
+    let path = root.join(rel);
+    std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+    std::fs::write(&path, bytes).unwrap();
+    std::fs::OpenOptions::new()
+        .write(true)
+        .open(&path)
+        .unwrap()
+        .set_modified(SystemTime::now() - Duration::from_secs(3600))
+        .unwrap();
+}
+
+#[test]
+fn the_fingerprints_learned_go_to_the_vault_that_was_asked() {
+    // Nel vault A un candidato della stessa misura con altri byte, che
+    // l'indicizzazione non è riuscita a leggere: la domanda ne calcola
+    // l'impronta, e la impara. Il vault B non ha quel file.
+    let (_a_dir, a) = vault(&[]);
+    aged(&a, "Foto/candidato.png", b"PNG di prova: AAAA");
+    let (_b_dir, b) = vault(&[("Note/nota.md", b"# Nota\n")]);
+    let reads = Arc::new(AtomicUsize::new(0));
+    let hook: Hook = Arc::new(Mutex::new(None));
+    let failing = Arc::new(AtomicBool::new(true));
+    let host = Arc::new(Host::without_watcher().with_storage(Arc::new(WatchedDisk {
+        suffix: "Foto/candidato.png",
+        reads: Arc::clone(&reads),
+        hook: Arc::clone(&hook),
+        failing: Arc::clone(&failing),
+    })));
+    host.open(&b).unwrap();
+    host.wait_indexed(Some(b.as_str())).unwrap();
+    host.open(&a).unwrap();
+    host.wait_indexed(Some(a.as_str())).unwrap();
+    assert_eq!(host.current(), Some(a.clone()));
+    failing.store(false, Ordering::SeqCst);
+
+    // A metà del confronto il vault corrente diventa B. Il gancio tiene una
+    // copia debole dell'host: il supporto vive dentro l'host stesso.
+    let weak = Arc::downgrade(&host);
+    let b_root = b.clone();
+    *hook.lock().unwrap() = Some(Box::new(move || {
+        if let Some(host) = weak.upgrade() {
+            host.set_current(&b_root).unwrap();
+        }
+    }));
+    reads.store(0, Ordering::SeqCst);
+    let wanted = b"PNG di prova: BBBB";
+    assert_eq!(
+        host.same_content(None, &DocId::new("Arrivi/nuova.png"), wanted)
+            .unwrap(),
+        SameContent::NotFound
+    );
+    assert_eq!(reads.load(Ordering::SeqCst), 1, "il candidato si legge una volta");
+    assert_eq!(host.current(), Some(b.clone()), "il gancio ha cambiato vault");
+
+    // L'impronta è arrivata ad A, che l'aveva chiesta: la seconda domanda la
+    // conosce, vede che è un'altra, e non rilegge il file.
+    assert_eq!(
+        host.same_content(Some(a.as_str()), &DocId::new("Arrivi/nuova.png"), wanted)
+            .unwrap(),
+        SameContent::NotFound
+    );
+    assert_eq!(
+        reads.load(Ordering::SeqCst),
+        1,
+        "l'impronta imparata è andata a un altro vault"
+    );
 }

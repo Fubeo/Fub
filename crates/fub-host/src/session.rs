@@ -3982,29 +3982,37 @@ impl Host {
     /// questi byte e lo stesso tipo di `target`, il nome che si vorrebbe
     /// scrivere, anche con un altro nome: vedi [`SameContent`].
     ///
-    /// I candidati vengono dall'indice vivo, presi sotto la custodia per un
-    /// attimo; il confronto si fa fuori da essa, sui byte già in memoria. Le
-    /// impronte calcolate per strada tornano all'indice sotto il suo lucchetto,
-    /// che le ricontrolla: nessuna chiamata a un provider col lucchetto preso,
-    /// e nessuna scrittura di `entries.json` fuori dall'anagrafe. Un'impronta
-    /// che non si riesce a riportare costa solo una rilettura la prossima volta.
+    /// Il vault si risolve **una volta**: la domanda e le impronte imparate
+    /// rispondendo vanno alla stessa custodia anche se nel frattempo il vault
+    /// corrente cambia. I candidati vengono dall'indice vivo, presi sotto la
+    /// custodia per un attimo; il confronto si fa fuori da essa, sui byte già
+    /// in memoria. Le impronte calcolate per strada tornano all'indice con un
+    /// prestito esclusivo breve, senza drenare eventi: imparare un'impronta non
+    /// ne produce, e l'indice non ha un lucchetto suo fuori dal workspace.
+    /// L'indice le ricontrolla contro l'anagrafe; nessuna chiamata a un
+    /// provider col lucchetto preso, e nessuna scrittura di `entries.json`
+    /// fuori dall'anagrafe. Un'impronta che non si riesce a riportare costa
+    /// solo una rilettura la prossima volta.
     pub fn same_content(
         &self,
         vault: Option<&str>,
         target: &DocId,
         bytes: &[u8],
     ) -> Result<SameContent, PluginError> {
-        let prepared = self.read_workspace(vault, |workspace| {
-            Ok(workspace.prepare_same_content(target, bytes.len() as u64))
-        })?;
+        let workspace = self.session_workspace(vault)?;
+        let prepared = workspace
+            .read()?
+            .prepare_same_content(target, bytes.len() as u64);
         let fub_kernel::same_content::SameContentOutcome { answer, learned } =
             prepared.invoke(bytes);
         if !learned.is_empty() {
-            if let Err(and) = self.write_workspace(vault, |workspace| {
-                workspace.learn_fingerprints(learned);
-                Ok(())
-            }) {
-                tracing::warn!(target: "fub.host", "impronte non riportate nell'indice: {and}");
+            match workspace.write() {
+                Ok(mut workspace) => {
+                    workspace.learn_fingerprints(learned);
+                }
+                Err(and) => {
+                    tracing::warn!(target: "fub.host", "impronte non riportate nell'indice: {and}");
+                }
             }
         }
         Ok(answer)
