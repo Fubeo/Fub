@@ -197,6 +197,11 @@ fn only_a_file_of_the_same_type_is_the_same_content() {
 /// domanda, fra i candidati presi e le impronte riportate.
 struct Watched {
     inner: RootedFsStorage,
+    /// Il file osservato, come path relativo con `/`. Si riconosce per
+    /// **componenti** ([`Utf8Path::ends_with`]), non come stringa: l'host apre
+    /// il vault sulla radice canonica, che su Windows è un path verbatim
+    /// (`\\?\C:\…`), e `join` su un path verbatim converte i `/` del
+    /// [`DocId`] in `\`. Un confronto di stringhe non vedrebbe mai il file.
     suffix: &'static str,
     reads: Arc<AtomicUsize>,
     hook: Hook,
@@ -210,7 +215,7 @@ impl VaultStorage for Watched {
         self.inner.read(path)
     }
     fn read_pieces(&self, path: &Utf8Path, piece: &mut dyn FnMut(&[u8])) -> io::Result<()> {
-        let watched = path.as_str().ends_with(self.suffix);
+        let watched = path.ends_with(self.suffix);
         if watched && self.failing.load(Ordering::SeqCst) {
             return Err(io::Error::new(
                 io::ErrorKind::PermissionDenied,
@@ -286,6 +291,11 @@ impl VaultStorageSource for WatchedDisk {
     }
 }
 
+/// La radice come la chiama l'host: canonica.
+fn canonical(root: &Utf8Path) -> Utf8PathBuf {
+    root.canonicalize_utf8().expect("la radice esiste")
+}
+
 /// Scrive un file e lo porta nel passato: l'impronta di un file appena scritto
 /// non si impara (*racily clean*), e il test guarda il vault, non il tempo.
 fn aged(root: &Utf8Path, rel: &str, bytes: &[u8]) {
@@ -321,7 +331,12 @@ fn the_fingerprints_learned_go_to_the_vault_that_was_asked() {
     host.wait_indexed(Some(b.as_str())).unwrap();
     host.open(&a).unwrap();
     host.wait_indexed(Some(a.as_str())).unwrap();
-    assert_eq!(host.current(), Some(a.clone()));
+    // L'host nomina un vault con la sua radice canonica (la chiave delle
+    // sessioni e del registro, come in `the_current_vault.rs`): su macOS
+    // `/private/var/…` per `/var/…`, su Windows il path verbatim `\\?\C:\…`
+    // per `C:\Users\RUNNER~1\…`.
+    let (a_key, b_key) = (canonical(&a), canonical(&b));
+    assert_eq!(host.current(), Some(a_key));
     failing.store(false, Ordering::SeqCst);
 
     // A metà del confronto il vault corrente diventa B. Il gancio tiene una
@@ -345,11 +360,7 @@ fn the_fingerprints_learned_go_to_the_vault_that_was_asked() {
         1,
         "il candidato si legge una volta"
     );
-    assert_eq!(
-        host.current(),
-        Some(b.clone()),
-        "il gancio ha cambiato vault"
-    );
+    assert_eq!(host.current(), Some(b_key), "il gancio ha cambiato vault");
 
     // L'impronta è arrivata ad A, che l'aveva chiesta: la seconda domanda la
     // conosce, vede che è un'altra, e non rilegge il file.
