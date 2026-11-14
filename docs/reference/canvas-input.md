@@ -7,8 +7,8 @@
 > banda di stato.
 > **Fonti autorevoli:** `apps/client/src/editors/canvas/engine.ts`
 > (`#keydown`, `#wheel`, le schede attive) e le prove in
-> `apps/client/src/editors/canvas/engine.test.ts` e
-> `engine-cards.test.ts`; per i comandi,
+> `apps/client/src/editors/canvas/engine.test.ts`,
+> `engine-cards.test.ts` e `engine-lost-release.test.ts`; per i comandi,
 > `apps/client/src/editors/canvas/chrome/commands.ts`, `command-search.ts`,
 > `rail.ts`, `options.ts`, `selection-bar.ts` e le loro prove; per la lavagna vuota,
 > `chrome/empty.ts` ed `chrome/empty.test.ts`; per la banda, `chrome/status.ts` e
@@ -170,6 +170,22 @@ dallo scatto dopo, senza riaprire la lavagna.
   sotto il puntatore non si sposta.
 - **Sopra una scheda non attiva** la rotella è della lavagna. **Dentro una
   scheda attiva** scorre la scheda, e Ctrl+rotella ingrandisce la lavagna.
+
+## Un gesto che perde il rilascio
+
+Un gesto della lavagna (lo spostamento della vista, il trascinamento di una
+scheda, il ridimensionamento, il filo, il Lazo, il pizzico e il dito) si
+chiude come se il puntatore si fosse alzato, una sola volta, quando il
+rilascio non arriva: la cattura del puntatore persa, un movimento senza tasto
+del mouse o della penna, o la finestra che perde il fuoco (Alt+Tab, un'altra
+finestra a metà gesto). La vista resta dov'è, una scheda si posa dove il
+puntatore l'ha portata, le schede vive tornano come dopo un rilascio, e un
+rilascio che arriva dopo non fa niente. Il dito non si chiude per la cattura
+persa, che il browser e lo strato della penna gli tolgono quando passa a
+scrivere: il suo gesto lo chiudono il rilascio, il `pointercancel` o la
+finestra. Il tratto della penna non passa da questa regola: lo tiene
+l'adattatore dell'inchiostro, che alla finestra che perde il fuoco e alla
+cattura persa lo annulla (vedi [L'inchiostro sulla lavagna](../architecture/canvas-ink-layer.md)).
 
 ## Comandi e tasti
 
