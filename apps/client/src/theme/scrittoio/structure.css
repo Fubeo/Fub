@@ -3446,6 +3446,19 @@ body:has(#context-menu:not([hidden])) > .toast-stack {
   pointer-events: none;
 }
 
+/* Oltre i dodici file, la cornice del gruppo che li terrà, col numero in
+   mezzo (prototipo T25). */
+.canvas-drop-ghost-group {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.canvas-drop-ghost-name {
+  box-sizing: border-box;
+  max-width: 100%;
+}
+
 /* L'inchiostro della lavagna: la scia sopra lo stage, l'asciutto dentro la
    scheda e sullo stage. Il colore è del tratto (`fill`), non del tema. */
 .canvas-ink-wet,
@@ -3966,6 +3979,46 @@ body:has(#context-menu:not([hidden])) > .toast-stack {
   flex: none;
   align-items: center;
   white-space: nowrap;
+}
+
+/* La testata (T22, prototipo T25): «↩ 2» quante note la citano, «×2» quante
+   copie ha sulla lavagna, e «Esc per uscire» della scheda attiva. Non si
+   stringono mai: in una testata stretta si taglia il titolo. */
+.canvas-node-cites,
+.canvas-node-twins,
+.canvas-exit-hint {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  white-space: nowrap;
+}
+.canvas-node-twins {
+  min-height: 20px;
+}
+
+/* L'ombra che dice «continua» (T22): fuori dalla scheda attiva la nota è
+   alta quanto il corpo e lo taglia; la pelle la sfuma sul fondo. Dentro, il
+   corpo scorre e l'ombra non c'è. */
+.canvas-node:not([data-card-active]) > .canvas-card-body > .canvas-card-note {
+  box-sizing: border-box;
+  height: 100%;
+  overflow: hidden;
+}
+
+/* «File mancante» (T16, prototipo T25): il messaggio e i due pulsanti al
+   centro della scheda. */
+.canvas-card-missing {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: center;
+  box-sizing: border-box;
+  height: 100%;
+}
+.canvas-card-missing-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3, 6px);
 }
 
 /* Scrivere nelle celle di un foglio (N6 T42, prototipo T27). La griglia del

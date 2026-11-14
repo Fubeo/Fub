@@ -988,6 +988,14 @@
     "canvas-card-craft-state",
     "canvas-card-craft-consent",
     "canvas-card-craft-render",
+    "canvas-node-cites",
+    "canvas-node-twins",
+    "canvas-card-pdf",
+    "canvas-card-pdf-page",
+    "canvas-card-pdf-previous",
+    "canvas-card-pdf-next",
+    "canvas-card-pdf-status",
+    "canvas-card-missing",
     "rich-ribbon-bold",
     "rich-ribbon-color-bar",
     "rich-ribbon-field-label",
@@ -1123,6 +1131,9 @@
     "canvas-lasso-frame",
     "canvas-lasso-chosen",
     "canvas-marquee-box",
+    "canvas-drop-ghost",
+    "canvas-drop-ghost-group",
+    "canvas-drop-ghost-name",
     "canvas-ruler-bar",
     "canvas-ruler-grip",
     "canvas-ruler-angle",
@@ -2699,6 +2710,14 @@
     "canvas-card-craft-state": "contenuto",
     "canvas-card-craft-consent": "contenuto",
     "canvas-card-craft-render": "contenuto",
+    "canvas-node-cites": "segno",
+    "canvas-node-twins": "segno",
+    "canvas-card-pdf": "contenuto",
+    "canvas-card-pdf-page": "contenuto",
+    "canvas-card-pdf-previous": "contenuto",
+    "canvas-card-pdf-next": "contenuto",
+    "canvas-card-pdf-status": "contenuto",
+    "canvas-card-missing": "contenuto",
     "rich-ribbon-bold": "cornice",
     "rich-ribbon-color-bar": "cornice",
     "rich-ribbon-field-label": "cornice",
@@ -2834,6 +2853,9 @@
     "canvas-lasso-frame": "segno",
     "canvas-lasso-chosen": "segno",
     "canvas-marquee-box": "segno",
+    "canvas-drop-ghost": "segno",
+    "canvas-drop-ghost-group": "segno",
+    "canvas-drop-ghost-name": "segno",
     "canvas-ruler-bar": "cornice",
     "canvas-ruler-grip": "cornice",
     "canvas-ruler-angle": "cornice",
@@ -6035,7 +6057,15 @@
         "canvas-card-craft-info",
         "canvas-card-craft-state",
         "canvas-card-craft-consent",
-        "canvas-card-craft-render"
+        "canvas-card-craft-render",
+        "canvas-node-cites",
+        "canvas-node-twins",
+        "canvas-card-pdf",
+        "canvas-card-pdf-page",
+        "canvas-card-pdf-previous",
+        "canvas-card-pdf-next",
+        "canvas-card-pdf-status",
+        "canvas-card-missing"
       ],
       "states": [
         "rest",
@@ -6293,6 +6323,18 @@
       "part": "editors",
       "hooks": [
         "canvas-marquee-box"
+      ],
+      "states": [
+        "rest"
+      ]
+    },
+    {
+      "name": "canvas-drop",
+      "part": "editors",
+      "hooks": [
+        "canvas-drop-ghost",
+        "canvas-drop-ghost-group",
+        "canvas-drop-ghost-name"
       ],
       "states": [
         "rest"
@@ -9377,10 +9419,10 @@
   "counts": {
     "required_roles": 154,
     "optional_roles": 66,
-    "hooks": 1709,
+    "hooks": 1720,
     "state_names": 7,
-    "assigned_states": 819,
-    "components": 243,
+    "assigned_states": 820,
+    "components": 244,
     "preference_tokens": 189
   }
 }
