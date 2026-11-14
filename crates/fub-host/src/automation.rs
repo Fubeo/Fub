@@ -58,20 +58,16 @@ pub fn writer_lock_path(root: &std::path::Path) -> std::io::Result<std::path::Pa
 /// `WouldBlock` se un altro lo tiene.
 pub(crate) fn lock_vault_writer(root: &std::path::Path) -> std::io::Result<VaultWriterLock> {
     let path = writer_lock_path(root)?;
-    if std::fs::symlink_metadata(&path)
-        .is_ok_and(|meta| !meta.is_file() || meta.file_type().is_symlink())
-    {
-        return Err(std::io::Error::new(
-            std::io::ErrorKind::PermissionDenied,
-            "vault writer lock is not a regular file",
-        ));
-    }
-    let file = std::fs::OpenOptions::new()
-        .read(true)
-        .write(true)
-        .create(true)
-        .truncate(false)
-        .open(path)?;
+    // Un collegamento o una cartella al posto del lock farebbe bloccare a due
+    // processi due file diversi: la regola vale all'apertura, non prima.
+    let file = crate::regular_file::open_regular(
+        &path,
+        std::fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .truncate(false),
+    )?;
     // Il lock di std è `flock` su Unix e `LockFileEx` su Windows, e muore col
     // processo; l'handle aperto possiede il lease. La contesa è `WouldBlock`
     // su ogni piattaforma: `fs2` su Windows dava l'errore grezzo 33, e un
@@ -1470,4 +1466,42 @@ pub fn write_nm_frame<W: std::io::Write>(
 /// Decodifica UTF-8 senza panico: byte non validi = bad_args, non sostituzione.
 pub fn nm_frame_to_str(frame: &[u8]) -> Result<&str, AutomationError> {
     std::str::from_utf8(frame).map_err(|_| AutomationError::bad_args("NM: frame non UTF-8"))
+}
+
+#[cfg(test)]
+mod writer_lock_tests {
+    /// Il lock dello scrittore è un file regolare accanto al vault: una
+    /// cartella o un collegamento al suo posto si rifiutano all'apertura, e
+    /// il file a cui il collegamento porta resta com'era.
+    #[test]
+    fn a_writer_lock_that_is_not_a_regular_file_is_refused() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().join("vault");
+        std::fs::create_dir(&root).unwrap();
+        let path = super::writer_lock_path(&root).unwrap();
+        std::fs::create_dir(&path).unwrap();
+        let error = super::lock_vault_writer(&root).err().expect("una cartella");
+        assert!(crate::regular_file::is_not_regular(&error), "{error:?}");
+        std::fs::remove_dir(&path).unwrap();
+        #[cfg(unix)]
+        {
+            let target = dir.path().join("altrove");
+            std::fs::write(&target, b"intatto").unwrap();
+            std::os::unix::fs::symlink(&target, &path).unwrap();
+            let error = super::lock_vault_writer(&root)
+                .err()
+                .expect("un collegamento");
+            assert!(crate::regular_file::is_not_regular(&error), "{error:?}");
+            assert_eq!(std::fs::read(&target).unwrap(), b"intatto");
+            std::fs::remove_file(&path).unwrap();
+        }
+        let held = super::lock_vault_writer(&root).expect("un file regolare si prende");
+        assert_eq!(
+            super::lock_vault_writer(&root)
+                .err()
+                .map(|error| error.kind()),
+            Some(std::io::ErrorKind::WouldBlock)
+        );
+        drop(held);
+    }
 }

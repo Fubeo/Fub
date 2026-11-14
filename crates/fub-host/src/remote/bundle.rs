@@ -409,27 +409,14 @@ impl JobLock {
 /// collegamento o una cartella al suo posto farebbe bloccare a due processi
 /// due file diversi, e «sync already running» non varrebbe più.
 fn open_regular_lock(path: &Path) -> std::io::Result<std::fs::File> {
-    let refused = || {
-        std::io::Error::new(
-            std::io::ErrorKind::PermissionDenied,
-            "sync lock is not a regular file",
-        )
-    };
-    if std::fs::symlink_metadata(path)
-        .is_ok_and(|meta| !meta.is_file() || meta.file_type().is_symlink())
-    {
-        return Err(refused());
-    }
-    let file = std::fs::OpenOptions::new()
-        .read(true)
-        .write(true)
-        .create(true)
-        .truncate(false)
-        .open(path)?;
-    if !file.metadata()?.is_file() {
-        return Err(refused());
-    }
-    Ok(file)
+    crate::regular_file::open_regular(
+        path,
+        std::fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .truncate(false),
+    )
 }
 
 /// Stato durevole del job (file atomici sotto la root TRUSTED).

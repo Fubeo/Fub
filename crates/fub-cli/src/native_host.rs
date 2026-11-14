@@ -348,20 +348,28 @@ fn attachment_commit(
 
 fn load_pairs_best_effort() -> Vec<fub_host::automation::PairEntry> {
     let path = pairing_file();
+    // Regolare e non un collegamento all'apertura (`fub_host::regular_file`),
+    // e su Unix del solo proprietario sul file aperto: un controllo sul path
+    // prima di leggere lascerebbe a un collegamento la finestra in mezzo.
+    let Ok(mut file) =
+        fub_host::regular_file::open_regular(&path, std::fs::OpenOptions::new().read(true))
+    else {
+        return Vec::new();
+    };
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
-        let Ok(meta) = std::fs::symlink_metadata(&path) else {
+        let Ok(meta) = file.metadata() else {
             return Vec::new();
         };
-        if !meta.is_file()
-            || meta.file_type().is_symlink()
-            || meta.permissions().mode() & 0o077 != 0
-        {
+        if meta.permissions().mode() & 0o077 != 0 {
             return Vec::new();
         }
     }
-    let raw = std::fs::read_to_string(&path).unwrap_or_else(|_| "{\"pairs\":[]}".to_string());
+    let mut raw = String::new();
+    if std::io::Read::read_to_string(&mut file, &mut raw).is_err() {
+        raw = "{\"pairs\":[]}".to_string();
+    }
     serde_json::from_str::<serde_json::Value>(&raw)
         .ok()
         .and_then(|v| v.get("pairs").cloned())

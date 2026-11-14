@@ -42,20 +42,26 @@ pub fn load_pairs(global: &GlobalArgs) -> Result<Vec<fub_host::automation::PairE
     // solo abbinamento nuovo.
     // Come il cancello del native host: un collegamento o un file che non è
     // regolare non è il file degli abbinamenti, e non si legge attraverso.
-    if std::fs::symlink_metadata(&path)
-        .is_ok_and(|meta| !meta.is_file() || meta.file_type().is_symlink())
-    {
-        return Err(Failure::new(
-            4,
-            "denied",
-            "pairing: il file non è un file regolare",
-        ));
-    }
-    let raw = match std::fs::read_to_string(&path) {
-        Ok(raw) => raw,
+    // La regola vale all'apertura (`fub_host::regular_file`), non in un
+    // controllo prima: fra le due cose un collegamento può prendere il posto
+    // del file.
+    let opened =
+        fub_host::regular_file::open_regular(&path, std::fs::OpenOptions::new().read(true));
+    let mut file = match opened {
+        Ok(file) => file,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
+        Err(e) if fub_host::regular_file::is_not_regular(&e) => {
+            return Err(Failure::new(
+                4,
+                "denied",
+                "pairing: il file non è un file regolare",
+            ));
+        }
         Err(e) => return Err(Failure::local(format!("pairing illeggibile: {e}"))),
     };
+    let mut raw = String::new();
+    std::io::Read::read_to_string(&mut file, &mut raw)
+        .map_err(|e| Failure::local(format!("pairing illeggibile: {e}")))?;
     let value: serde_json::Value = serde_json::from_str(&raw)
         .map_err(|e| Failure::local(format!("pairing illeggibile: {e}")))?;
     let pairs = value
