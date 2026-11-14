@@ -55,10 +55,18 @@
 //!
 //! # I tetti
 //!
-//! La vista legge al più [`READ_LIMIT`] compiti e ne disegna al più
-//! [`SHOW_LIMIT`], nell'ordine dei gruppi. Quando taglia lo dice: un vault con
-//! diecimila compiti non è una lista da scorrere, ed è meglio una lista corta
-//! che dice quanto manca che una lunga che si blocca al disegno.
+//! La vista tiene al più [`READ_LIMIT`] compiti e ne disegna al più
+//! [`SHOW_LIMIT`]. Il taglio viene **dopo l'ordine**: si leggono tutte le note
+//! che l'indice nomina, e di tanto in tanto si mettono in ordine i compiti
+//! tenuti e si scarta la coda, così i compiti che restano sono i primi
+//! nell'ordine della vista (o del recinto, col suo `limit`) e non i primi
+//! delle note lette. Quando taglia lo dice: un vault con diecimila compiti non
+//! è una lista da scorrere, ed è meglio una lista corta che dice quanto manca
+//! che una lunga che si blocca al disegno.
+//!
+//! Prima di leggere una nota si guarda ciò che il suo nome basta a dire (il
+//! `path includes` di un recinto): una nota che non può rispondere non si
+//! legge.
 
 mod query;
 
@@ -75,7 +83,7 @@ use fub_abi::html::escape;
 use fub_abi::locale::Weekday;
 use fub_abi::model::{canonical_tag, Block, DocId, DocumentModel, Inline};
 use fub_abi::query::{QueryExpr, QueryPredicate, TaskStatus};
-use fub_abi::rules::tasks::{iso_day, task_due, task_text};
+use fub_abi::rules::tasks::{due_is_near, iso_day, task_due, task_text};
 use fub_abi::session::ContextMask;
 use fub_abi::text::{Arg, StringCatalog, Text};
 use fub_abi::traits::{
@@ -109,7 +117,8 @@ pub const QUERY: &str = "query";
 /// un plugin di terzi. `tests/tasks_e2e.rs` lo cerca fra i comandi registrati.
 const NOTE_TASK_TOGGLE: &str = "note.task.toggle";
 
-/// Quanti compiti la vista legge al più. Oltre, il vault ne ha di più e la vista lo dice.
+/// Quanti compiti la vista tiene al più, i primi nel suo ordine. Oltre, il vault ne
+/// ha di più e la vista lo dice.
 pub const READ_LIMIT: usize = 10_000;
 /// Quanti compiti la vista disegna al più, nell'ordine dei gruppi.
 pub const SHOW_LIMIT: usize = 300;
@@ -524,8 +533,14 @@ struct Gathered {
     unread: usize,
 }
 
-/// Le note che l'indice nomina per `matching`, e di ciascuna i compiti che
-/// `keep` tiene.
+/// Le note che l'indice nomina per `matching` e che `reads` lascia leggere, e
+/// di ciascuna i compiti che `keep` tiene; ne restano al più `cap`, i primi
+/// secondo `order`.
+///
+/// Il taglio viene dopo l'ordine: quando i compiti tenuti superano il doppio
+/// di `cap` si ordinano e si scarta la coda, e così alla fine. La memoria resta
+/// proporzionale a `cap`, e i compiti che restano non dipendono dall'ordine in
+/// cui l'indice nomina le note.
 ///
 /// La revisione si legge **prima** del modello: se la nota cambia fra le due
 /// letture, la revisione è quella vecchia e la spunta trova un conflitto invece
@@ -533,7 +548,10 @@ struct Gathered {
 fn gather(
     host: &dyn ReadApi,
     matching: QueryExpr,
+    reads: impl Fn(&DocId) -> bool,
     keep: impl Fn(&Task) -> bool,
+    order: impl Fn(&mut [Task]),
+    cap: usize,
 ) -> Result<Gathered, PluginError> {
     let question = IndexQuery::Documents {
         matching,
@@ -544,7 +562,17 @@ fn gather(
     };
     let notes = host.query_index(question)?.documents()?;
     let mut gathered = Gathered::default();
+    let cut = |tasks: &mut Vec<Task>, more: &mut bool| {
+        if tasks.len() > cap {
+            order(tasks);
+            tasks.truncate(cap);
+            *more = true;
+        }
+    };
     for hit in notes.items {
+        if !reads(&hit.doc) {
+            continue;
+        }
         let revision = host.document_revision(&hit.doc).ok();
         match host.read_model(&hit.doc) {
             Ok(model) => gathered.tasks.extend(
@@ -558,12 +586,12 @@ fn gather(
             ),
             Err(_) => gathered.unread += 1,
         }
-        if gathered.tasks.len() > READ_LIMIT {
-            gathered.tasks.truncate(READ_LIMIT);
-            gathered.more = true;
-            break;
+        if gathered.tasks.len() > cap.saturating_mul(2) {
+            cut(&mut gathered.tasks, &mut gathered.more);
         }
     }
+    cut(&mut gathered.tasks, &mut gathered.more);
+    order(&mut gathered.tasks);
     Ok(gathered)
 }
 
@@ -587,7 +615,14 @@ fn tree(host: &dyn ReadApi, warning: Option<Text>) -> Result<UiNode, PluginError
         children.push(UiNode::failed(warning, None));
     }
 
-    let gathered = match gather(host, open_tasks(), |task| !task.checked) {
+    let gathered = match gather(
+        host,
+        open_tasks(),
+        |_| true,
+        |task| !task.checked,
+        |tasks| inspector_order(tasks, day),
+        READ_LIMIT,
+    ) {
         Ok(gathered) => gathered,
         Err(error) => {
             children.push(UiNode::failed(Text::key(query_failure(&error)), None));
@@ -598,23 +633,11 @@ fn tree(host: &dyn ReadApi, warning: Option<Text>) -> Result<UiNode, PluginError
         children.push(unread_notice(gathered.unread));
     }
 
-    let mut tasks = gathered.tasks;
+    let tasks = gathered.tasks;
     if tasks.is_empty() {
         children.push(UiNode::empty_state(Text::key(EMPTY)));
         return Ok(UiNode::column(1, children));
     }
-    tasks.sort_by_cached_key(|task| {
-        let due = match task.due {
-            Due::Day(d) => d,
-            Due::None | Due::Unreadable => i64::MAX,
-        };
-        (
-            group_of(task.due, day),
-            due,
-            task.doc.as_str().to_string(),
-            task.at,
-        )
-    });
 
     let total = tasks.len();
     let shown = total.min(SHOW_LIMIT);
@@ -657,6 +680,23 @@ fn tree(host: &dyn ReadApi, warning: Option<Text>) -> Result<UiNode, PluginError
     Ok(UiNode::column(1, children))
 }
 
+/// L'ordine della vista dell'ispettore: per gruppo, poi per scadenza, nota e
+/// posizione.
+fn inspector_order(tasks: &mut [Task], day: Calendar) {
+    tasks.sort_by_cached_key(|task| {
+        let due = match task.due {
+            Due::Day(d) => d,
+            Due::None | Due::Unreadable => i64::MAX,
+        };
+        (
+            group_of(task.due, day),
+            due,
+            task.doc.as_str().to_string(),
+            task.at,
+        )
+    });
+}
+
 /// L'albero di un recinto: le righe saltate dette, il conto, e i compiti che
 /// rispondono, nell'ordine chiesto.
 fn fence_tree(
@@ -686,10 +726,24 @@ fn fence_tree(
         children.push(UiNode::empty_state(Text::key(FENCE_EMPTY)));
         return Ok(UiNode::column(1, children));
     }
+    // Il limite del plugin vale dopo l'ordine, come il tetto: «i primi cinque
+    // per scadenza», non cinque qualunque. Un limite che taglia non è un vault
+    // con troppi compiti, e non si dice.
+    let cap = query.limit.map_or(READ_LIMIT, |limit| limit.min(READ_LIMIT));
     let gathered = match query.matching() {
         None => Gathered::default(),
-        Some(matching) => match gather(host, matching, |task| query.keeps(task)) {
-            Ok(gathered) => gathered,
+        Some(matching) => match gather(
+            host,
+            matching,
+            |doc| query.reads(doc),
+            |task| query.keeps(task),
+            |tasks| query.sort(tasks),
+            cap,
+        ) {
+            Ok(gathered) => Gathered {
+                more: gathered.more && cap == READ_LIMIT,
+                ..gathered
+            },
             Err(error) => {
                 children.push(UiNode::failed(Text::key(query_failure(&error)), None));
                 return Ok(UiNode::column(1, children));
@@ -699,15 +753,7 @@ fn fence_tree(
     if gathered.unread > 0 {
         children.push(unread_notice(gathered.unread));
     }
-    let mut tasks = gathered.tasks;
-    if let Some(limit) = query.limit {
-        // Il limite del plugin vale dopo l'ordine: «i primi cinque per
-        // scadenza», non cinque qualunque.
-        query.sort(&mut tasks);
-        tasks.truncate(limit);
-    } else {
-        query.sort(&mut tasks);
-    }
+    let tasks = gathered.tasks;
     if tasks.is_empty() {
         children.push(UiNode::empty_state(Text::key(FENCE_NONE)));
         return Ok(UiNode::column(1, children));
@@ -779,7 +825,9 @@ fn task_row(task: &Task, day: Calendar) -> UiNode {
     match task.due {
         Due::Day(due) => meta.push(UiNode::badge(
             Text::from(iso_day(due)),
-            if !task.checked && due < day.today {
+            // Vicina come la pastiglia nel testo (`due_is_near`): passata, di
+            // oggi o entro la settimana, e solo per un compito aperto.
+            if !task.checked && due_is_near(due, day.today) {
                 Intent::Danger
             } else {
                 Intent::Neutral

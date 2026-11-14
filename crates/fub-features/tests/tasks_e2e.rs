@@ -23,7 +23,7 @@ use fub_abi::custom::SyntaxTrigger;
 use fub_abi::event::Actor;
 use fub_abi::locale::{days_from_civil, Locale, Weekday};
 use fub_abi::traits::{CommandProvider, PluginManifest, ViewInstance, ViewProvider, ViewSurface};
-use fub_abi::ui::{ActionRef, UiAction, UiKind, UiNode, ViewUpdate};
+use fub_abi::ui::{ActionRef, Intent, UiAction, UiKind, UiNode, ViewUpdate};
 use fub_abi::PluginError;
 use fub_features::{
     CoreCommands, SearchIndex, TasksView, COMMANDS_ID, SEARCH_ID, TASKS_ID, TASKS_QUERY_VIEW,
@@ -765,5 +765,147 @@ fn the_fence_is_declared_by_a_syntax_rule_of_the_component() {
     assert!(
         !fub_features::tasks::renderers().is_empty(),
         "e il suo esportatore HTML"
+    );
+}
+
+/// Le scadenze disegnate, ognuna con la sua intenzione, nell'ordine dell'albero.
+fn badges(tree: &UiNode) -> Vec<(String, Intent)> {
+    fn walk(node: &UiNode, out: &mut Vec<(String, Intent)>) {
+        if let UiKind::Badge { label, intent } = &node.kind {
+            out.push((label.to_string(), *intent));
+        }
+        for child in node.children() {
+            walk(child, out);
+        }
+    }
+    let mut out = Vec::new();
+    walk(tree, &mut out);
+    out
+}
+
+#[test]
+fn the_badge_is_orange_when_the_due_date_is_near_like_the_pill() {
+    let vault = Vault::new();
+    // Venerdì 13: vicina è passata, oggi o fino a giovedì 19 compreso.
+    vault.put(
+        "Date.md",
+        "- [ ] Ieri 📅 2026-11-12\n\
+         - [ ] Fra sei giorni 📅 2026-11-19\n\
+         - [ ] Fra sette giorni 📅 2026-11-20\n\
+         - [x] Fatto ieri 📅 2026-11-12\n",
+    );
+    let clock = Fixed(Arc::new(AtomicU64::new(0)));
+    friday_night(&clock);
+    let ws = vault.open(&clock, locale(120, Weekday::Monday));
+    let tree = ws
+        .render_view(&fence("path includes date\nsort by due"))
+        .expect("il recinto si disegna");
+    assert_eq!(
+        badges(&tree),
+        vec![
+            ("2026-11-12".to_string(), Intent::Danger),
+            ("2026-11-12".to_string(), Intent::Neutral),
+            ("2026-11-19".to_string(), Intent::Danger),
+            ("2026-11-20".to_string(), Intent::Neutral),
+        ],
+        "la soglia è `due_is_near`, la stessa della pastiglia nel testo"
+    );
+}
+
+#[test]
+fn a_stale_revision_is_a_conflict_even_when_the_position_has_no_task_any_more() {
+    let vault = seeded_vault();
+    let clock = Fixed(Arc::new(AtomicU64::new(0)));
+    friday_night(&clock);
+    let mut ws = vault.open(&clock, locale(120, Weekday::Monday));
+    let tree = ws.render_view(&instance()).unwrap();
+    let payload = toggle_of(&tree, "Pagare la bolletta").payload;
+    let args = serde_json::json!({
+        "doc": payload["doc"],
+        "at": [payload["at"]],
+        "revision": payload["revision"],
+    });
+
+    // Una riga nuova in cima: la posizione letta cade dentro un paragrafo.
+    let changed = "Una riga scritta in cima alla nota\n\n- [ ] Pagare la bolletta 📅 2026-11-13\n";
+    vault.put("Oggi.md", changed);
+    ws.reindex().unwrap();
+    let refused = ws.invoke_command("note.task.toggle", args, InvokeMode::Apply, Actor::User);
+    assert!(
+        matches!(refused, Err(PluginError::Conflict(_))),
+        "la nota è cambiata, non «qui non c'è un compito»: {refused:?}"
+    );
+    assert_eq!(vault.read("Oggi.md"), changed, "niente è stato scritto");
+}
+
+#[test]
+fn a_note_outside_the_fence_path_is_not_read() {
+    let vault = Vault::new();
+    std::fs::create_dir(vault.root.join("Progetti")).unwrap();
+    std::fs::create_dir(vault.root.join("Altro")).unwrap();
+    vault.put("Progetti/Fub.md", "- [x] Consegnato 📅 2026-11-10\n");
+    vault.put("Altro/Casa.md", "- [x] Spesa 📅 2026-11-10\n");
+    let clock = Fixed(Arc::new(AtomicU64::new(0)));
+    friday_night(&clock);
+    let ws = vault.open(&clock, locale(120, Weekday::Monday));
+    // L'indice nomina ancora la nota, che dal disco è sparita: se la vista la
+    // leggesse, direbbe che una nota non si è letta. È il contatore delle
+    // letture.
+    std::fs::remove_file(vault.root.join("Altro/Casa.md")).unwrap();
+
+    let tree = ws
+        .render_view(&fence("done\npath includes progetti"))
+        .unwrap();
+    assert_eq!(task_labels(&tree), vec!["Consegnato".to_string()]);
+    assert!(
+        !messages(&tree).iter().any(|m| m.contains("non si sono lette")),
+        "la nota fuori dal percorso non si legge: {:?}",
+        messages(&tree)
+    );
+    // La prova vede davvero le letture: senza il percorso la nota sparita si
+    // legge, e la vista lo dice.
+    let everything = ws.render_view(&fence("done")).unwrap();
+    assert!(
+        messages(&everything)
+            .iter()
+            .any(|m| m.contains("non si sono lette")),
+        "{:?}",
+        messages(&everything)
+    );
+}
+
+#[test]
+fn the_cut_comes_after_the_order_in_the_view_and_in_the_fence() {
+    let vault = Vault::new();
+    // 503 note da 20 compiti lontani, più di quanti la vista ne tiene, e in
+    // fondo all'elenco una nota con l'unico compito scaduto.
+    for note in 0..503 {
+        let mut body = String::new();
+        for task in 0..20 {
+            body.push_str(&format!("- [ ] Compito {note}-{task} 📅 2026-12-20\n"));
+        }
+        vault.put(&format!("Note{note:03}.md"), &body);
+    }
+    vault.put("Zeta.md", "- [ ] Il più urgente 📅 2026-11-01\n");
+    let clock = Fixed(Arc::new(AtomicU64::new(0)));
+    friday_night(&clock);
+    let ws = vault.open(&clock, locale(120, Weekday::Monday));
+
+    let tree = ws.render_view(&instance()).unwrap();
+    let first = groups(&tree).into_iter().next().expect("un gruppo");
+    assert_eq!(
+        first,
+        ("Scaduti".to_string(), vec!["Il più urgente".to_string()]),
+        "lo scaduto c'è anche se la sua nota si legge per ultima"
+    );
+
+    let fenced = ws
+        .render_view(&fence("not done\nsort by due\nlimit 1"))
+        .unwrap();
+    assert_eq!(task_labels(&fenced), vec!["Il più urgente".to_string()]);
+    assert!(
+        !messages(&fenced).iter().any(|m| m.contains("più di 10000")),
+        "un limite che taglia non è un vault con troppi compiti: {:?}",
+        messages(&fenced)
     );
 }

@@ -1212,11 +1212,11 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
             ),
         ),
         (
-            "crates/fub-features/src/tasks/query.rs::keeps",
+            "crates/fub-features/src/tasks/query.rs::reads",
             (
                 Family::ContextualCase,
-                "l'altro capo di `understood`: piega il percorso del compito per cercarci l'ago \
-                 di `path includes`. Un contenimento di testo, non un'identità: «lavoro» trova \
+                "l'altro capo di `understood`: piega il percorso della nota per cercarci l'ago \
+                 di `path includes`, prima di leggerla e per ogni compito. Un contenimento di testo, non un'identità: «lavoro» trova \
                  `Lavoro/Note.md` e `Archivio lavoro.md`, come nel plugin.",
             ),
         ),

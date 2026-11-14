@@ -25,7 +25,7 @@
 //! `*` non diventa un glob), il tag è quello del compito e non della nota, e una
 //! scadenza conta anche per un compito fatto — che l'indice non indicizza.
 
-use fub_abi::model::canonical_tag;
+use fub_abi::model::{canonical_tag, DocId};
 use fub_abi::query::{DueBound, QueryClause, QueryExpr, QueryLiteral, QueryPredicate, TaskStatus};
 use fub_abi::rules::tag::is_sub_tag;
 use fub_abi::rules::tasks::{civil_day, iso_day};
@@ -131,6 +131,15 @@ impl TasksQuery {
         Some(QueryExpr { any })
     }
 
+    /// La nota può rispondere, a giudicare dal solo nome? È il `path
+    /// includes`, che si guarda prima di leggerla: una nota fuori dal percorso
+    /// non si legge. L'indice non lo può dire lui, perché il suo `Path` è un
+    /// glob che distingue le maiuscole e non sa proteggere un `*`.
+    pub(super) fn reads(&self, doc: &DocId) -> bool {
+        let path = doc.as_str().to_lowercase();
+        self.paths.iter().all(|part| path.contains(part.as_str()))
+    }
+
     /// Il compito risponde a tutte le righe?
     pub(super) fn keeps(&self, task: &Task) -> bool {
         let status = match self.status {
@@ -146,10 +155,7 @@ impl TasksQuery {
                 (Due::Day(day), DueTest::On(limit)) => day == *limit,
                 (Due::None | Due::Unreadable, _) => false,
             })
-            && self
-                .paths
-                .iter()
-                .all(|part| task.doc.as_str().to_lowercase().contains(part.as_str()))
+            && self.reads(&task.doc)
             && self.tags.iter().all(|wanted| {
                 task.tags
                     .iter()
