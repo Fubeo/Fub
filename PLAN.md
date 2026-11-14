@@ -1391,7 +1391,7 @@ Fatto quando: lo specchio passa in Rust e in Vitest; cambiando una cifra
 di `pens.ts`, Vitest fallisce.
 Prova: scripts/check.sh --rapido; cargo test -p fub-ink-codec; cd
 apps/client && npx vitest run src/ink/pens-mirror.test.ts
-Stato: [ ] da fare
+Stato: [x] integrato 2026-11-14 (coder/lic-t15 @ fb1dc77a0) · con il merge di main 2ce81bc90 (N4 e fub-ink-codec, 9 conflitti); un giro di revisione (4 punti: documenti canonici, doc di `pen_brush` fuori intervallo, riesportazioni di `lib.rs`, vettore escluso detto nel commento); check verde 33 passi · per T16: `PenTool` ripete `InkTool` di `fub-canvas-core`
 
 ## T16 · Disegnare in codice: `draw`
 

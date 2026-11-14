@@ -2298,3 +2298,9 @@ La più recente in cima: data · piano · decisione · perché.
   `confronta.mjs` → uscita 0, 8 livelli uguali per valore (n3 400×300 → 500×360,
   n4 1400,500 → 1100,760). Primo caso di T24: ADR 0241 accolta, sezione «Obsidian»
   riscritta senza la copia B · D-12 non serve.
+- 2026-11-14 · T15 · `lib.rs` di `fub-ink-codec` riesporta tutto ciò che
+  `pens.rs` rende pubblico, come già fa per `brush` e `ink`. `pen_brush` è uguale
+  a `penBrush` dentro l'intervallo delle misure. Fuori stringe con `clamp_size`
+  come i menu, e NaN vale la misura di serie. Lo specchio copre solo l'intervallo,
+  il test Rust copre il resto. Resta aperto per T16: `PenTool` ripete `InkTool`
+  di `fub-canvas-core` (stesse stringhe), da non convertire a mano due volte.
