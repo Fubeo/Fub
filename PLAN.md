@@ -1180,7 +1180,7 @@ Cosa fare:
   oltre il tetto, con il test.
 Fatto quando: i tre test verdi; `scripts/check.sh --rapido` verde.
 Prova: scripts/check.sh --rapido; cargo nextest run -p fub-features --features lavagna,draw --test lavagna
-Stato: [ ] da fare
+Stato: [x] fatto · coder/lic-t10b (1a6cd21ce, 3 commit, Haiku), avanti veloce · `canvas.preview` passa da `measure_list` come `canvas.apply` (test con un PNG vero: stessa altezza); `OpError::TooManyMoved` (problema `too_many_moved`, nella WASM resta `TooMany`) oltre 1.000 schede toccate da `move` con `contents`, controllato prima e dopo la scansione dei gruppi; la descrizione MCP di `fub_canvas_apply` è a mano (`fub-cli` non può usare `fub-canvas-core`) e il test la confronta con `canvas.guide`; corretti i due test MCP rossi dopo T10. Il tetto di 1.000 è da rivedere con una lavagna grande vera; la guida non lo nomina ancora (`spec.rs` fuori da Tocca).
 
 ## T11 · Allinea, distribuisci, duplica, inverti, raggruppa
 
