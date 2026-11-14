@@ -17,6 +17,7 @@ import { onLanguage, t } from "../../../../i18n/strings";
 import type { NoteFacts, NoteFactsSource } from "../../../../state/note-facts";
 import { noteFactsChanged, noteFactsExtensions, noteFactsLabels, renderNoteFacts } from "./note-facts";
 import { blocksMode, pageArrives } from "./blocks";
+import { liveStrings } from "./strings";
 import { pageIconsChanged } from "./livepreview";
 import { linkCardsChanged, type LinkCardSource } from "./link-card";
 import { mountMarkdown, sourceElementAt, type MarkdownMountOptions } from "./mount";
@@ -111,8 +112,8 @@ export type MarkdownMode = "source" | "live_preview" | "reading";
 /// `blocks`, la modalità Blocchi di prima, è confluita in Scrittura: un
 /// riquadro salvato lì o un comando che la nomina ottiene Scrittura.
 export const MARKDOWN_MODES: readonly SurfaceMode[] = [
-  { id: "source", label: () => t("mode.source"), presentation: "surface", contextMode: "source", looks: ["tema"] },
-  { id: "live_preview", label: () => t("mode.live"), presentation: "surface", contextMode: "live_preview", looks: ["tema"], formerIds: ["blocks"] },
+  { id: "source", label: () => t("mode.source"), description: () => liveStrings.t("mode.source.desc"), presentation: "surface", contextMode: "source", looks: ["tema"] },
+  { id: "live_preview", label: () => t("mode.live"), description: () => liveStrings.t("mode.writing.desc"), presentation: "surface", contextMode: "live_preview", looks: ["tema"], formerIds: ["blocks"] },
   { id: "reading", label: () => t("mode.reading"), presentation: "rendered", contextMode: "reading", looks: ["tema"] },
 ];
 

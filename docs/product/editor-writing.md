@@ -17,8 +17,11 @@ Una nota Markdown ha tre modalità:
   modalità di prima).
 
 Il commutatore in fondo alla banda di stato le elenca così: Scrittura,
-Sorgente e, dopo un separatore, Lettura. Le altre superfici tengono le loro
-modalità ([Editor e anteprima](editor-and-preview.md#modalità)).
+Sorgente e, dopo un separatore, Lettura. Accanto a Scrittura e Sorgente, in
+grigio, una frase dice che cosa sono («Il testo formattato e i blocchi», «Il
+Markdown com'è sul disco»): la dichiara la modalità (`description` di
+`SurfaceMode`). Le altre superfici tengono le loro modalità
+([Editor e anteprima](editor-and-preview.md#modalità)).
 
 Scrittura usa l'id di modalità `live_preview` e il ruolo `PaneMode::LivePreview`
 di sempre: per il riquadro, il layout salvato e i comandi è la stessa voce che

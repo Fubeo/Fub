@@ -96,6 +96,15 @@ describe("l'ordine del menu delle modalità", () => {
     expect(separators(layout.focus)).toEqual([2]);
   });
 
+  it("Markdown: accanto a Scrittura e Sorgente una frase dice che cosa sono, Lettura no", () => {
+    paneWith(layout.focus, MARKDOWN_MODES);
+    expect(modeMenuItems(layout.focus).map((item) => item.description)).toEqual([
+      "Il testo formattato e i blocchi",
+      "Il Markdown com'è sul disco",
+      undefined,
+    ]);
+  });
+
   it("un riquadro salvato nei Blocchi di prima segna Scrittura, e i Blocchi non sono una voce", () => {
     paneWith(layout.focus, MARKDOWN_MODES, "blocks");
     const items = modeMenuItems(layout.focus);

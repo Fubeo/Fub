@@ -73,8 +73,10 @@ export function modeMenuItems(paneId: string): MenuItem[] {
     const command = commandOf(mode, modes);
     const hint = command ? displayBinding(bindings.get(command)) : "";
     const current = active?.id === mode.id;
+    const description = mode.description?.();
     return {
       label: mode.label(),
+      ...(description ? { description } : {}),
       icon: modeIcon(mode),
       choice: "radio",
       checked: current,

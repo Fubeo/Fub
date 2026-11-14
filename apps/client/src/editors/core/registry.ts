@@ -48,6 +48,11 @@ export interface SurfaceMode {
    */
   readonly icon?: string;
   /**
+   * One line under the label in the mode menu that says what the mode is
+   * for. Without it the menu shows the label alone.
+   */
+  readonly description?: () => string;
+  /**
    * Ids this mode answers to besides its own: modes the surface no longer
    * declares because they merged into this one (the Markdown `blocks`, now
    * inside Scrittura). A saved pane or a command that names one gets this
