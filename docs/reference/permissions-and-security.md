@@ -72,6 +72,9 @@ attraverso lo stesso handle; poi toglie per nome la radice rimasta vuota. Una
 cartella messa al posto della demo dopo il controllo non si svuota, e la
 rimozione finale la rifiuta perché non è vuota. Il marcatore si toglie per
 ultimo: un azzeramento fermato a metà lascia una demo che il prossimo finisce.
+Su Windows cap-std (cap-primitives 4.0.3) fa rename, `remove_file` e
+`remove_dir_all` ricostruendo il percorso dall'handle aperto: qui e
+nell'export in una cartella resta una finestra stretta fino all'operazione.
 
 ## Temi installati
 
