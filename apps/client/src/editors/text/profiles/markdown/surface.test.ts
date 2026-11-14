@@ -81,6 +81,39 @@ describe("la superficie Markdown", () => {
     expect(parent.dataset.markdownMode).toBe("live_preview");
     ed.destroy();
   });
+  it("cambiando modo porta il fuoco dove si continua con la tastiera", () => {
+    const { ed, view, reading } = editor();
+    ed.buffer.setDoc("# Titolo\n\nuna riga da leggere\n");
+    view().dispatch({ selection: { anchor: 5 } });
+    view().focus();
+    expect(view().hasFocus).toBe(true);
+
+    // In Lettura l'editor sparisce: il fuoco va sul riquadro di lettura, non
+    // sul corpo della pagina.
+    ed.setMode("reading");
+    expect(document.activeElement).toBe(reading());
+
+    // Al ritorno in scrittura il fuoco torna all'editor, al cursore di prima.
+    ed.setMode("live_preview");
+    expect(view().hasFocus).toBe(true);
+    expect(view().state.selection.main.anchor).toBe(5);
+    ed.destroy();
+  });
+  it("cambiando modo non ruba il fuoco a chi lo ha fuori dalla superficie", () => {
+    const { ed, view } = editor();
+    ed.buffer.setDoc("testo");
+    const outside = document.createElement("button");
+    document.body.append(outside);
+    outside.focus();
+
+    ed.setMode("reading");
+    expect(document.activeElement).toBe(outside);
+    ed.setMode("source");
+    expect(document.activeElement).toBe(outside);
+    expect(view().hasFocus).toBe(false);
+    outside.remove();
+    ed.destroy();
+  });
   it("in lettura raccoglie le battute di un altro riquadro in un ridisegno solo", () => {
     vi.useFakeTimers();
     try {

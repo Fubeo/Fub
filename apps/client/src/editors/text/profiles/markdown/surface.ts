@@ -800,6 +800,9 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
     if (next === mode) return;
     readingPoint = null;
     const previous = mode;
+    // Il fuoco segue il modo solo se era già qui dentro: chi lo ha fuori
+    // dalla superficie (la palette, un altro riquadro) se lo tiene.
+    const hadFocus = parent.contains(document.activeElement);
     if (previous !== "reading" && next === "reading") {
       const anchor = engine.getScrollAnchor();
       mode = next;
@@ -808,6 +811,9 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
       engine.reconfigure();
       renderReading();
       scrollReadingTo(anchor.offset, anchor.top);
+      // L'editor nascosto lascerebbe il fuoco al corpo della pagina, senza
+      // anello: lo prende il riquadro di lettura, da cui si scorre e si copia.
+      if (hadFocus) reading.focus({ preventScroll: true });
       return;
     }
     if (previous === "reading" && next !== "reading") {
@@ -827,6 +833,8 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
           top: anchor.top,
         });
       }
+      // Si torna a scrivere dal cursore di prima, che la lettura non ha mosso.
+      if (hadFocus) engine.focus();
       return;
     }
     const anchor = engine.getScrollAnchor();
