@@ -532,6 +532,44 @@ describe("pipeline della penna", () => {
     for (const sample of ends()[0]!.samples) expect(Object.keys(sample)).toEqual(["x", "y", "t"]);
   });
 
+  it("con `mouse: \"ignore\"` il mouse non disegna e non si cattura; penna e dito sì", () => {
+    const input = attach({ mouse: "ignore" });
+    dispatch(down({ ...MOUSE, clientX: 0, clientY: 0, timeStamp: 0 }));
+    expect(input.roleOf(1)).toBe("ignore");
+    dispatch(move({ ...MOUSE, clientX: 6, clientY: 0, timeStamp: 8 }));
+    dispatch(up({ ...MOUSE, clientX: 6, clientY: 0, timeStamp: 16 }));
+    // Un driver che manda la penna come tipo sconosciuto segue il mouse.
+    dispatch(down({ pointerId: 3, pointerType: "", clientX: 0, clientY: 0, timeStamp: 20 }));
+    expect(input.roleOf(3)).toBe("ignore");
+    dispatch(up({ pointerId: 3, pointerType: "", clientX: 0, clientY: 0, timeStamp: 24 }));
+    // Il tasto centrale muove la vista come sempre.
+    dispatch(down({ ...MOUSE, button: 1, buttons: 4, clientX: 0, clientY: 0, timeStamp: 30 }));
+    expect(input.roleOf(1)).toBe("navigate");
+    dispatch(up({ ...MOUSE, button: 1, clientX: 0, clientY: 0, timeStamp: 32 }));
+    expect(log).toEqual([]);
+    dispatch(down({ ...PEN, clientX: 0, clientY: 0, timeStamp: 40 }));
+    dispatch(up({ ...PEN, clientX: 4, clientY: 0, timeStamp: 50, pressure: 0 }));
+    expect(ends().map((done) => done.pointerType)).toEqual(["pen"]);
+  });
+
+  it("la politica del mouse si cambia mentre la superficie vive, dal prossimo appoggio", () => {
+    const input = attach();
+    dispatch(down({ ...MOUSE, clientX: 0, clientY: 0, timeStamp: 0 }));
+    input.setMousePolicy("ignore");
+    dispatch(move({ ...MOUSE, clientX: 4, clientY: 0, timeStamp: 8 }));
+    dispatch(up({ ...MOUSE, clientX: 4, clientY: 0, timeStamp: 16 }));
+    // Il tratto cominciato finisce com'è.
+    expect(kinds()).toEqual(["start", "samples", "samples", "end"]);
+    expect(ends()[0]!.samples.map(({ x }) => x)).toEqual([0, 2]);
+    dispatch(down({ ...MOUSE, clientX: 0, clientY: 0, timeStamp: 20 }));
+    expect(input.roleOf(1)).toBe("ignore");
+    dispatch(up({ ...MOUSE, clientX: 0, clientY: 0, timeStamp: 24 }));
+    input.setMousePolicy("ink");
+    dispatch(down({ ...MOUSE, clientX: 0, clientY: 0, timeStamp: 30 }));
+    expect(input.roleOf(1)).toBe("ink");
+    expect(kinds()).toEqual(["start", "samples", "samples", "end", "start", "samples"]);
+  });
+
   it("il tasto principale rilasciato con un altro ancora giù chiude il tratto", () => {
     const input = attach();
     dispatch(down({ ...MOUSE, clientX: 0, clientY: 0, timeStamp: 0 }));

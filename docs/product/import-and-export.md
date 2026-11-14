@@ -178,7 +178,10 @@ al centro attività, da cui lo si salva dove si vuole.
   entrano nel file come `data:` URI (fino a 16 MiB l'una, 64 MiB per file), e
   le note incorporate entrano con la loro resa, fino a quattro livelli e senza
   giri. Il file porta una Content-Security-Policy che non esegue script e non
-  carica niente da fuori.
+  carica niente da fuori. I messaggi dei commenti
+  (`{==passo==}{>>messaggio<<}`) non entrano; con l'opzione
+  `{"comments": true}` ogni discussione diventa un rimando numerato dopo il
+  passo e una nota in fondo alla pagina.
 - **PDF** (`importers.pdf.single`): il testo della nota in un PDF statico, col
   nome della nota. Per diagrammi, formule e immagini c'è «Stampa», che il
   sistema salva anche in PDF.

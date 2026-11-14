@@ -46,7 +46,7 @@ import { openLifetime } from "../../ui/lifetime";
 import type { Lifetime } from "../../ui/lifetime";
 import type { InkSample } from "../sample";
 import { pointerTypeOf, type PointerSample } from "../input/pointer";
-import type { PointerRole, TouchPolicy } from "../input/roles";
+import type { MousePolicy, PointerRole, TouchPolicy } from "../input/roles";
 import {
   Session,
   type CancelReason,
@@ -83,6 +83,9 @@ export interface InkInputOptions {
   readonly onCancel: (id: number, reason: CancelReason) => void;
   /// Che cosa fa un dito quando nessuna penna è vicina (default `auto`).
   readonly touch?: TouchPolicy;
+  /// Che cosa fa il tasto principale del mouse (default `ink`). Con `ignore`
+  /// il mouse non disegna e i suoi eventi restano a chi sta sotto.
+  readonly mouse?: MousePolicy;
   /// Campioni per tratto prima di dividerlo (default `INK_MAX_SAMPLES`).
   readonly maxSamples?: number;
   /// La curva della pressione: dalla pressione della penna, 0…1, a quella del
@@ -110,6 +113,9 @@ export interface InkInput {
   /// Un tratto è in corso.
   readonly drawing: boolean;
   setTouchPolicy(policy: TouchPolicy): void;
+  /// La politica del mouse dal prossimo appoggio; un tratto in corso finisce
+  /// com'è.
+  setMousePolicy(policy: MousePolicy): void;
   /// Annulla il tratto in corso (`reason: "api"`); il puntatore smette di
   /// disegnare finché non si alza.
   cancel(): void;
@@ -123,6 +129,7 @@ export interface InkInput {
 export function attachInkInput(element: HTMLElement, options: InkInputOptions, owner: Lifetime): InkInput {
   const session = new Session({
     ...(options.touch === undefined ? {} : { touch: options.touch }),
+    ...(options.mouse === undefined ? {} : { mouse: options.mouse }),
     ...(options.maxSamples === undefined ? {} : { maxSamples: options.maxSamples }),
     curve: options.pressure ?? null,
   });
@@ -398,6 +405,9 @@ export function attachInkInput(element: HTMLElement, options: InkInputOptions, o
     },
     setTouchPolicy(policy) {
       session.setTouchPolicy(policy);
+    },
+    setMousePolicy(policy) {
+      session.setMousePolicy(policy);
     },
     cancel() {
       if (!destroyed) interrupt(session.cancel(), "api");

@@ -1,0 +1,34 @@
+{
+  "name": "video",
+  "description": "Un video resta fermo.",
+  "card": {
+    "type": "file",
+    "file": "Video/esperimento.mp4"
+  },
+  "ref": {
+    "width": 640,
+    "height": 360
+  },
+  "size": {
+    "width": 320,
+    "height": 180
+  },
+  "expect": {
+    "mode": "fixed",
+    "s": 1,
+    "x": 0,
+    "y": 0,
+    "points": [
+      {
+        "from": [
+          600,
+          300
+        ],
+        "to": [
+          600,
+          300
+        ]
+      }
+    ]
+  }
+}

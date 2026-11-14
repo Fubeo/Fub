@@ -21,6 +21,8 @@ impl IndexProvider for SearchIndex {
             QueryRoute::Predicate(PredicateKind::Folder),
             QueryRoute::Predicate(PredicateKind::Scoped),
             QueryRoute::Predicate(PredicateKind::TaskDue),
+            // `comment:`, il testo nei messaggi dei commenti.
+            QueryRoute::Predicate(PredicateKind::Custom(COMMENT_PREDICATE_NS.to_string())),
         ]
     }
 

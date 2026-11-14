@@ -1,0 +1,54 @@
+{
+  "name": "image-wider",
+  "description": "Un'immagine allargata: il fattore è quello dell'altezza, l'inchiostro si centra in larghezza.",
+  "card": {
+    "type": "file",
+    "file": "Foto/lavagna.png"
+  },
+  "ref": {
+    "width": 200,
+    "height": 100
+  },
+  "size": {
+    "width": 400,
+    "height": 100
+  },
+  "expect": {
+    "mode": "scale",
+    "s": 1,
+    "x": 100,
+    "y": 0,
+    "points": [
+      {
+        "from": [
+          0,
+          0
+        ],
+        "to": [
+          100,
+          0
+        ]
+      },
+      {
+        "from": [
+          200,
+          100
+        ],
+        "to": [
+          300,
+          100
+        ]
+      },
+      {
+        "from": [
+          50,
+          25
+        ],
+        "to": [
+          150,
+          25
+        ]
+      }
+    ]
+  }
+}

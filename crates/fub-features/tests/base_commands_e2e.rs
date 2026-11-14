@@ -231,6 +231,66 @@ fn una_vista_si_aggiunge_e_si_toglie_e_ciascun_passo_si_annulla() {
     );
 }
 
+/// Un calendario si aggiunge nella forma di ripiego (`type: table` con
+/// `fub.view`), la sua data si scrive dentro `fub:`, e ogni passo si annulla.
+#[test]
+fn un_calendario_si_aggiunge_con_la_data_in_fub_e_ogni_passo_si_annulla() {
+    let (_vault, mut ws) = with_base(BEFORE);
+    let added = invoke(
+        &mut ws,
+        BASE_VIEW_ADD,
+        json!({ "doc": BASE_FILE, "name": "Agenda", "type": "calendar" }),
+        InvokeMode::Apply,
+    )
+    .expect("il calendario si aggiunge");
+    let with_view = source(&ws, BASE_FILE);
+    assert!(
+        with_view.ends_with("  - name: Agenda\n    type: table\n    fub:\n      view: calendar\n"),
+        "{with_view}"
+    );
+
+    let dated = invoke(
+        &mut ws,
+        BASE_VIEW_SET,
+        json!({ "doc": BASE_FILE, "view": "Agenda", "key": "date", "value": "\"scadenza\"" }),
+        InvokeMode::Apply,
+    )
+    .expect("la data si scrive");
+    assert!(
+        source(&ws, BASE_FILE).ends_with("    fub:\n      view: calendar\n      date: scadenza\n"),
+        "{}",
+        source(&ws, BASE_FILE)
+    );
+
+    undo(&mut ws, dated);
+    assert_eq!(
+        source(&ws, BASE_FILE),
+        with_view,
+        "l'annulla ridà il calendario senza data"
+    );
+    undo(&mut ws, added);
+    assert_eq!(
+        source(&ws, BASE_FILE),
+        BEFORE,
+        "l'annulla ridà il file di prima"
+    );
+}
+
+/// La data non si scrive in una vista che non è un calendario, e il file resta.
+#[test]
+fn una_data_in_una_vista_che_non_e_calendario_si_rifiuta() {
+    let (_vault, mut ws) = with_base(BEFORE);
+    let error = invoke(
+        &mut ws,
+        BASE_VIEW_SET,
+        json!({ "doc": BASE_FILE, "view": "Stato", "key": "date", "value": "\"scadenza\"" }),
+        InvokeMode::Apply,
+    )
+    .expect_err("date non va in una bacheca");
+    assert!(matches!(error, PluginError::BadArgs(_)), "{error:?}");
+    assert_eq!(source(&ws, BASE_FILE), BEFORE, "non ha scritto");
+}
+
 #[test]
 fn una_chiave_in_flusso_si_rifiuta_e_il_file_resta() {
     let (_vault, mut ws) = with_base(BEFORE);

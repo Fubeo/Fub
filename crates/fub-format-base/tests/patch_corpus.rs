@@ -243,3 +243,111 @@ fn la_revisione_cambiata_fa_fallire_l_applicazione_e_non_scrive() {
         "la base non combacia più"
     );
 }
+
+/// Una vista di calendario nasce nella forma di ripiego: `type: table` e il
+/// blocco `fub:` con `view`. Poi la data si scrive dentro quel blocco.
+#[test]
+fn un_calendario_nuovo_nasce_nella_forma_di_ripiego_e_la_data_si_scrive_in_fub() {
+    let before = include_str!("fixtures/vista_unica.before.base");
+    let added = written(
+        before,
+        &BaseChange::AddView {
+            name: "Calendario".into(),
+            view_type: ViewType::Calendar,
+        },
+    );
+    assert_eq!(
+        added,
+        include_str!("fixtures/vista_unica.calendario.after.base")
+    );
+    let dated = written(&added, &set("Calendario", ViewKey::Date, json!("scadenza")));
+    assert_eq!(
+        dated,
+        include_str!("fixtures/vista_unica.calendario-data.after.base")
+    );
+    assert_eq!(comments(&dated), comments(before));
+    let read = BaseDefinition::parse(&dated).expect("si rilegge");
+    assert_eq!(read.views[1].view_type, ViewType::Calendar);
+    assert_eq!(
+        read.views[1]
+            .fub
+            .as_ref()
+            .and_then(|fub| fub.date.as_deref()),
+        Some("scadenza")
+    );
+}
+
+/// Il file della prova con Obsidian si legge come calendario e linea del
+/// tempo, e una modifica a vuoto lo lascia com'è, byte per byte.
+#[test]
+fn il_file_della_prova_si_rilegge_e_si_riscrive_byte_per_byte() {
+    let before = include_str!("fixtures/calendario.prova-obsidian.base");
+    let read = BaseDefinition::parse(before).expect("il file della prova si legge");
+    assert_eq!(read.views[0].view_type, ViewType::Calendar);
+    assert_eq!(read.views[1].view_type, ViewType::Timeline);
+
+    let same_date = written(before, &set("Calendario", ViewKey::Date, json!("scadenza")));
+    assert_eq!(same_date, before);
+    let same_end = written(before, &set("Linea", ViewKey::End, json!("fine")));
+    assert_eq!(same_end, before);
+
+    // Solo la riga della chiave cambiata: il commento sulla riga resta.
+    let moved = written(before, &set("Linea", ViewKey::Start, json!("partenza")));
+    assert_eq!(
+        moved,
+        before.replacen("start: inizio", "start: partenza", 1)
+    );
+    assert_eq!(comments(&moved), comments(before));
+}
+
+/// Cambiare tipo a un calendario di ripiego toglie il suo blocco `fub:`
+/// (la data non vale più); tornare allo stesso tipo non scrive niente.
+#[test]
+fn cambiare_tipo_al_calendario_di_ripiego_toglie_o_sostituisce_fub() {
+    let before = include_str!("fixtures/calendario.ripiego.base");
+    let to_table = written(before, &set("Calendario", ViewKey::Type, json!("table")));
+    assert_eq!(
+        to_table,
+        before.replacen(
+            "    fub:\n      view: calendar\n      date: scadenza   # la proprietà della data\n",
+            "",
+            1
+        )
+    );
+    let same = written(before, &set("Calendario", ViewKey::Type, json!("calendar")));
+    assert_eq!(same, before);
+    let to_timeline = written(before, &set("Calendario", ViewKey::Type, json!("timeline")));
+    assert_eq!(
+        to_timeline,
+        before.replacen(
+            "    fub:\n      view: calendar\n      date: scadenza   # la proprietà della data\n",
+            "    fub:\n      view: timeline\n",
+            1
+        )
+    );
+    let read = BaseDefinition::parse(&to_timeline).expect("si rilegge");
+    assert_eq!(read.views[0].view_type, ViewType::Timeline);
+    assert!(read.views[0]
+        .fub
+        .as_ref()
+        .is_some_and(|fub| fub.date.is_none()));
+}
+
+/// Una chiave di data o di linea del tempo nella vista sbagliata non si scrive.
+#[test]
+fn una_chiave_di_data_nella_vista_sbagliata_si_rifiuta() {
+    let before = include_str!("fixtures/calendario.ripiego.base");
+    assert!(matches!(
+        apply(before, &set("Linea", ViewKey::Date, json!("scadenza"))),
+        Err(PatchError::NotForView(ViewKey::Date))
+    ));
+    assert!(matches!(
+        apply(before, &set("Calendario", ViewKey::Start, json!("inizio"))),
+        Err(PatchError::NotForView(ViewKey::Start))
+    ));
+    let plain = include_str!("fixtures/vista_unica.before.base");
+    assert!(matches!(
+        apply(plain, &set("Tutte", ViewKey::End, json!("fine"))),
+        Err(PatchError::NotForView(ViewKey::End))
+    ));
+}

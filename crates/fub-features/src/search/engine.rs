@@ -63,6 +63,11 @@ impl SearchIndex {
         for due in &tasks.due {
             td.add_text(f.task_due, due);
         }
+        // Un valore per messaggio, come gli heading: due messaggi attaccati non
+        // fanno una frase.
+        for message in comment_texts(doc) {
+            td.add_text(f.comments, &message);
+        }
         td
     }
 
@@ -519,6 +524,22 @@ impl SearchIndex {
                         .collect::<Vec<_>>(),
                 ))))
             }
+            // `comment:`: lo stesso testo, cercato nei soli messaggi dei
+            // commenti.
+            QueryPredicate::Custom { ns, predicate } if ns == COMMENT_PREDICATE_NS => {
+                let text: TextQuery = serde_json::from_value(predicate.clone()).map_err(|err| {
+                    PluginError::BadArgs(Text::message(
+                        COMMENT_QUERY_SHAPE,
+                        vec![Arg::text(REASON, err.to_string())],
+                    ))
+                })?;
+                let weight = self.weights.read().expect("rwlock").body;
+                let Some(q) = self.text_query_on(&text, vec![(f.comments, weight)])? else {
+                    return Ok(None);
+                };
+                text_parts.push(q.box_clone());
+                Ok(Some(q))
+            }
             // Il routing non manda qui ciò che non è stato dichiarato: se
             // succede è un errore del kernel, non una domanda malposta.
             // Il `{what}` porta la foglia che non si valuta — il Debug del
@@ -542,12 +563,46 @@ impl SearchIndex {
     /// l'unico modo perché «Rust» trovi `rust` senza replicare qui le regole
     /// dell'analizzatore.
     fn text_query(&self, text: &TextQuery) -> Result<Option<Box<dyn Query>>, PluginError> {
+        let f = self.fields;
+        // Una sola lettura per query, e non una per campo: i quattro pesi vanno
+        // presi nello stesso istante, o una query lanciata mentre qualcuno
+        // muove uno slider potrebbe pesare il nome con la taratura nuova e gli
+        // heading con quella vecchia — un ordinamento che non corrisponde a
+        // nessuna configurazione mai esistita.
+        let w = *self.weights.read().expect("rwlock");
+        let wanted: Vec<(Field, f32)> = if text.fields.is_empty() {
+            vec![
+                (f.page_name, w.name),
+                (f.headings, w.heading),
+                (f.body, w.body),
+                (f.tags, w.tags),
+            ]
+        } else {
+            text.fields
+                .iter()
+                .map(|field| match field {
+                    TextField::Name => (f.page_name, w.name),
+                    TextField::Body => (f.body, w.body),
+                    TextField::Tags => (f.tags, w.tags),
+                    TextField::Heading => (f.headings, w.heading),
+                })
+                .collect()
+        };
+        self.text_query_on(text, wanted)
+    }
+
+    /// La foglia di testo sui campi `wanted` dello schema, ognuno col suo
+    /// peso: `text.fields` qui non conta più, l'ha già risolto chi chiama.
+    fn text_query_on(
+        &self,
+        text: &TextQuery,
+        wanted: Vec<(Field, f32)>,
+    ) -> Result<Option<Box<dyn Query>>, PluginError> {
         if text.case_sensitive && text.text.len() > MAX_REGEX_BYTES {
             return Err(PluginError::BadArgs(
                 "case-sensitive text exceeds 256 bytes".into(),
             ));
         }
-        let f = self.fields;
         if text.case_sensitive {
             let parts: Vec<String> = match text.mode {
                 TextMode::Phrase => vec![regex::escape(&text.text)],
@@ -578,36 +633,13 @@ impl SearchIndex {
                         .expect("escaped literal has a valid regular expression")
                 })
                 .collect::<Vec<_>>();
-            return self.scan_fields(&text.fields, |values| {
+            let stored: Vec<Field> = wanted.iter().map(|(field, _)| *field).collect();
+            return self.scan_stored(&stored, |values| {
                 expressions
                     .iter()
                     .all(|regex| values.iter().any(|value| regex.is_match(value)))
             });
         }
-        // Una sola lettura per query, e non una per campo: i quattro pesi vanno
-        // presi nello stesso istante, o una query lanciata mentre qualcuno
-        // muove uno slider potrebbe pesare il nome con la taratura nuova e gli
-        // heading con quella vecchia — un ordinamento che non corrisponde a
-        // nessuna configurazione mai esistita.
-        let w = *self.weights.read().expect("rwlock");
-        let wanted: Vec<(Field, f32)> = if text.fields.is_empty() {
-            vec![
-                (f.page_name, w.name),
-                (f.headings, w.heading),
-                (f.body, w.body),
-                (f.tags, w.tags),
-            ]
-        } else {
-            text.fields
-                .iter()
-                .map(|field| match field {
-                    TextField::Name => (f.page_name, w.name),
-                    TextField::Body => (f.body, w.body),
-                    TextField::Tags => (f.tags, w.tags),
-                    TextField::Heading => (f.headings, w.heading),
-                })
-                .collect()
-        };
         if text.text.trim().is_empty() {
             return Ok(None);
         }
@@ -721,6 +753,29 @@ impl SearchIndex {
     fn scan_fields(
         &self,
         requested: &[TextField],
+        matches: impl FnMut(&[&str]) -> bool,
+    ) -> Result<Option<Box<dyn Query>>, PluginError> {
+        let fields = if requested.is_empty() {
+            &ALL_TEXT_FIELDS[..]
+        } else {
+            requested
+        };
+        let stored: Vec<Field> = fields
+            .iter()
+            .map(|field| match field {
+                TextField::Name => self.fields.page_name,
+                TextField::Body => self.fields.body,
+                TextField::Tags => self.fields.tags,
+                TextField::Heading => self.fields.headings,
+            })
+            .collect();
+        self.scan_stored(&stored, matches)
+    }
+
+    /// [`Self::scan_fields`] sui campi memorizzati dello schema.
+    fn scan_stored(
+        &self,
+        stored: &[Field],
         mut matches: impl FnMut(&[&str]) -> bool,
     ) -> Result<Option<Box<dyn Query>>, PluginError> {
         self.commit()?;
@@ -730,11 +785,6 @@ impl SearchIndex {
                 "regex/case-sensitive search is limited to 2048 indexed documents".into(),
             ));
         }
-        let fields = if requested.is_empty() {
-            &ALL_TEXT_FIELDS[..]
-        } else {
-            requested
-        };
         let mut docs = Vec::new();
         let mut scanned = 0usize;
         let candidates = searcher
@@ -751,14 +801,8 @@ impl SearchIndex {
                 continue;
             };
             let mut values = Vec::new();
-            for field in fields {
-                let stored = match field {
-                    TextField::Name => self.fields.page_name,
-                    TextField::Body => self.fields.body,
-                    TextField::Tags => self.fields.tags,
-                    TextField::Heading => self.fields.headings,
-                };
-                values.extend(doc.get_all(stored).filter_map(|value| value.as_str()));
+            for field in stored {
+                values.extend(doc.get_all(*field).filter_map(|value| value.as_str()));
             }
             scanned = scanned.saturating_add(values.iter().map(|s| s.len()).sum::<usize>());
             if scanned > MAX_SCAN_BYTES {

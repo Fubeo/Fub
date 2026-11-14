@@ -4,7 +4,7 @@
 > `nib1`, la punta piatta. Versione 1.
 > **Fonti autorevoli:** `apps/client/src/ink/brush.ts` (grammatica),
 > `ink/nib1.ts` (contorno), `ink/pens.ts` (le ricette) e
-> `crates/fub-scene/src/brush.rs`, che legge allo stesso modo.
+> `crates/fub-ink-codec/src/brush.rs`, che legge allo stesso modo.
 
 Una parte del [formato della scena](scene-format.md), §5. Le sezioni del
 formato si citano come «formato della scena, §N».
