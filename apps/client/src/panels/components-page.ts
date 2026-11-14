@@ -55,7 +55,7 @@ import {
   type Components,
 } from "../state/components";
 import { on } from "../state/store";
-import { newKinds, type NewKind } from "../ui/commands";
+import { newKindLabel, newKinds, type NewKind } from "../ui/commands";
 import { icon } from "../ui/icons";
 import type { Lifetime } from "../ui/lifetime";
 import { notify } from "../ui/notify";
@@ -114,10 +114,16 @@ export function componentIcon(id: string): string {
 /// Il gruppo dei componenti che si aggiungono e si tolgono da soli.
 const SUPPORT = "supporto";
 
-/// Le voci del menu «Nuovo», con l'icona e il nome che il menu dice.
-const NEW_ENTRIES: Readonly<Record<NewKind, { icon: string; label: "components.preview.new.note" | "components.preview.new.drawing" }>> = {
-  note: { icon: "notes", label: "components.preview.new.note" },
-  drawing: { icon: "format-drawing", label: "components.preview.new.drawing" },
+/// Le figure delle voci del menu «Nuovo»; il nome è quello che il menu dice
+/// (`newKindLabel`).
+const NEW_ICONS: Readonly<Record<NewKind, string>> = {
+  note: "notes",
+  document: "format-word",
+  sheet: "format-sheet",
+  drawing: "format-drawing",
+  canvas: "layout-dashboard",
+  template: "template",
+  folder: "folder",
 };
 
 export interface ComponentsPageHooks {
@@ -541,15 +547,14 @@ export function mountComponentsPage(lifetime: Lifetime, hooks: ComponentsPageHoo
     items.className = "components-new";
     const kinds = newKinds();
     for (const kind of kinds) {
-      const entry = NEW_ENTRIES[kind];
       const item = document.createElement("li");
       item.className = "components-new-item";
       const figure = document.createElement("span");
       figure.className = "components-new-icon";
       figure.setAttribute("aria-hidden", "true");
-      figure.innerHTML = icon(entry.icon);
+      figure.innerHTML = icon(NEW_ICONS[kind]);
       const name = document.createElement("span");
-      name.textContent = t(entry.label);
+      name.textContent = newKindLabel(kind);
       item.append(figure, name);
       items.append(item);
     }

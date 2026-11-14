@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { CommandSpec, SettingEntry } from "../host/contract";
 import { state } from "../state/store";
 import { SHELL_KEYS } from "./shell-keys.generated";
@@ -31,8 +31,11 @@ import {
   launchCommand,
   resetCommandForms,
   canCreateDrawing,
+  newEntries,
+  newKindLabel,
   newKinds,
   newDrawing,
+  registerNewKindHost,
   registerComponentRow,
   showComponent,
   loadKeyOverrides,
@@ -49,9 +52,15 @@ vi.mock("../host/query", () => ({ settings: () => fromBackend() }));
 
 /// I componenti accesi: `null` (la mappa non è arrivata) vale tutto acceso.
 const spatial = vi.hoisted(() => ({ on: null as boolean | null }));
+/// Gli altri editor spenti, quando la mappa c'è.
+const off = vi.hoisted(() => new Set<string>());
 vi.mock("../state/components", () => ({
-  components: () => (spatial.on === null ? null : { uiOn: (ui: string) => ui !== "editors/spatial" || spatial.on }),
+  components: () =>
+    spatial.on === null ? null : { uiOn: (ui: string) => !off.has(ui) && (ui !== "editors/spatial" || spatial.on) },
 }));
+/// Gli avvisi che il menu «Nuovo» dà.
+const notices = vi.hoisted(() => [] as { message: string; tone: string }[]);
+vi.mock("./notify", () => ({ notify: (message: string, tone = "info") => notices.push({ message, tone }) }));
 
 /// Una riga di impostazione che è un accordo, come la manda il backend.
 function settingEntry(key: string, value: string): SettingEntry {
@@ -410,13 +419,13 @@ describe("le porte di «Nuovo disegno…»", () => {
   });
 
   it("«Nuovo» dice la nota sempre, e il disegno se il kernel li fa e i disegni sono accesi", () => {
-    expect(newKinds()).toEqual(["note"]);
+    expect(newKinds()).toEqual(["note", "folder"]);
     state.commandSpecs = [spec({ id: "drawing.create" })];
-    expect(newKinds()).toEqual(["note", "drawing"]);
+    expect(newKinds()).toEqual(["note", "drawing", "folder"]);
     spatial.on = false;
-    expect(newKinds()).toEqual(["note"]);
+    expect(newKinds()).toEqual(["note", "folder"]);
     spatial.on = true;
-    expect(newKinds()).toEqual(["note", "drawing"]);
+    expect(newKinds()).toEqual(["note", "drawing", "folder"]);
     spatial.on = null;
   });
 
@@ -846,5 +855,127 @@ describe("una scorciatoia come si annuncia", () => {
     expect(ariaBinding("Mod-k d", "other")).toBe("");
     expect(ariaBinding(null, "other")).toBe("");
     expect(ariaBinding("Hyper-x", "other")).toBe("");
+  });
+});
+
+describe("il menu «Nuovo»", () => {
+  const ALL = ["document.create", "sheet.create", "drawing.create", "canvas.create", "note.from_template"];
+  const made: string[] = [];
+  let removeHost: () => void = () => {};
+
+  beforeEach(() => {
+    made.length = 0;
+    notices.length = 0;
+    off.clear();
+    spatial.on = null;
+    removeHost = registerNewKindHost({
+      note: (folder) => made.push(`nota:${folder}`),
+      folder: (folder) => made.push(`cartella:${folder}`),
+    });
+  });
+
+  afterEach(() => removeHost());
+
+  /// Il lanciatore dei modelli dello Scrittoio, come lo dichiara.
+  function declareTemplates(): void {
+    registerShellCommand({
+      id: "shell.launcher.templates",
+      title: "launcher.command.templates",
+      description: "launcher.command.templates.desc",
+      layer: "global",
+      run: () => void made.push("modelli"),
+    });
+  }
+
+  const labels = (folder = ""): string[] => newEntries(folder).map((entry) => entry.label);
+
+  it("senza componenti oltre alle note ha la nota e la cartella", () => {
+    expect(newKinds()).toEqual(["note", "folder"]);
+    expect(labels()).toEqual(["Nota", "Cartella"]);
+  });
+
+  it("con tutti i comandi ha l'ordine di S34, la riga prima di «da un modello» e Ctrl+N accanto alla nota", () => {
+    state.commandSpecs = ALL.map((id) => spec({ id }));
+    declareTemplates();
+    registerShellCommand({ id: "shell.note.new", title: "commands.note.new", description: "commands.note.new.desc", layer: "global", run: () => {} });
+    const entries = newEntries("");
+    expect(entries.map((entry) => entry.label)).toEqual([
+      "Nota",
+      "Documento (.docx)",
+      "Foglio (.xlsx)",
+      "Disegno (.svg)",
+      "Lavagna (.canvas)",
+      "Nota da un modello…",
+      "Cartella",
+    ]);
+    expect(entries.filter((entry) => entry.separator).map((entry) => entry.kind)).toEqual(["template"]);
+    expect(entries[0]!.hint).toBe(displayBinding("Mod-n"));
+    expect(entries[0]!.hint).not.toBe("");
+    expect(entries.slice(1).every((entry) => entry.hint === undefined)).toBe(true);
+  });
+
+  it("ogni voce di un file c'è se il kernel dichiara il comando e il suo editor è acceso", () => {
+    state.commandSpecs = [spec({ id: "document.create" }), spec({ id: "canvas.create" })];
+    expect(newKinds()).toEqual(["note", "document", "canvas", "folder"]);
+    spatial.on = true;
+    off.add("editors/rich");
+    expect(newKinds()).toEqual(["note", "canvas", "folder"]);
+    off.add("editors/canvas");
+    state.commandSpecs = ALL.map((id) => spec({ id }));
+    off.add("editors/grid");
+    expect(newKinds()).toEqual(["note", "drawing", "folder"]);
+  });
+
+  it("«da un modello» vuole il lanciatore dei modelli e il comando del kernel", () => {
+    state.commandSpecs = [spec({ id: "note.from_template" })];
+    expect(newKinds()).not.toContain("template");
+    declareTemplates();
+    expect(newKinds()).toContain("template");
+    state.commandSpecs = [];
+    expect(newKinds()).not.toContain("template");
+  });
+
+  it("le voci fanno nascere il file nella cartella data; la radice non la passa", () => {
+    state.commandSpecs = ALL.map((id) => spec({ id }));
+    const started: { id: string; prefill: Readonly<Record<string, string>> }[] = [];
+    registerCommandStarter((entry, prefill) => started.push({ id: entry.id, prefill }));
+    for (const entry of newEntries("Scienze")) entry.run();
+    expect(made).toEqual(["nota:Scienze", "cartella:Scienze"]);
+    expect(started).toEqual([
+      { id: "document.create", prefill: { folder: "Scienze" } },
+      { id: "sheet.create", prefill: { folder: "Scienze" } },
+      { id: "drawing.create", prefill: { folder: "Scienze" } },
+      { id: "canvas.create", prefill: { folder: "Scienze" } },
+    ]);
+    started.length = 0;
+    newEntries("").find((entry) => entry.kind === "sheet")!.run();
+    expect(started).toEqual([{ id: "sheet.create", prefill: {} }]);
+    expect(notices).toEqual([]);
+  });
+
+  it("«da un modello» apre il lanciatore dei modelli", async () => {
+    state.commandSpecs = [spec({ id: "note.from_template" })];
+    declareTemplates();
+    newEntries("").find((entry) => entry.kind === "template")!.run();
+    await vi.waitFor(() => expect(made).toEqual(["modelli"]));
+  });
+
+  it("un comando che sparisce a menu aperto: la voce resta, e scelta lo dice con un avviso", () => {
+    state.commandSpecs = [spec({ id: "sheet.create" })];
+    const started: string[] = [];
+    registerCommandStarter((entry) => started.push(entry.id));
+    const entries = newEntries("");
+    state.commandSpecs = [];
+    entries.find((entry) => entry.kind === "sheet")!.run();
+    expect(started).toEqual([]);
+    expect(notices).toEqual([
+      { message: `«${newKindLabel("sheet")}» adesso non si può creare: il componente che lo fa non è più acceso.`, tone: "guasto" },
+    ]);
+  });
+
+  it("senza chi fa le note e le cartelle (una cornice senza albero) le due voci non ci sono", () => {
+    removeHost();
+    state.commandSpecs = [spec({ id: "drawing.create" })];
+    expect(labels()).toEqual(["Disegno (.svg)"]);
   });
 });

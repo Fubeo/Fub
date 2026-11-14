@@ -17,14 +17,15 @@ disegno»: [Disegni, importare](drawing-import.md).
 
 ## Da dove si apre
 
-«Nuovo disegno…» c'è dove Fub offre già di creare una nota, quando la
-feature `draw` è accesa:
+Il disegno nuovo c'è dove Fub offre già di creare una nota, quando la
+feature `draw` è accesa e i disegni sono accesi:
 
 - nella palette dei comandi, `drawing.create`;
-- nel menu dell'app, accanto a «Nuova nota»;
-- nel menu di una cartella dell'esplorazione, come «Nuovo disegno qui…», che
-  apre la finestra con quella cartella;
-- nel riquadro vuoto, e nella shell del telefono fra le altre creazioni.
+- come «Disegno (.svg)» nel menu «Nuovo» del «+» dell'albero, anche al
+  telefono, e in «Nuovo ▸» del menu File, del titolo dell'albero e di una
+  cartella, che apre la finestra con quella cartella
+  ([il menu «Nuovo»](editor-menus.md#il-menu-nuovo));
+- nel riquadro vuoto e nell'albero vuoto, come «Nuovo disegno…».
 
 Ogni porta apre la stessa finestra. Senza la feature `draw` non c'è nessuna
 delle porte, e nemmeno il comando.

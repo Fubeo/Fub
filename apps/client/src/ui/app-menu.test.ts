@@ -232,9 +232,9 @@ describe("il menu Vista e le view principali", () => {
 
     expect(labelsOf(3)).not.toContain("Vai a un'intestazione");
     closeContextMenu();
-    expect(labelsOf(0)).not.toContain("Nuova nota da un modello");
-    closeContextMenu();
 
+    // I modelli non hanno più una voce loro nel menu File: sono «Nota da un
+    // modello…» dentro «Nuovo ▸», con le altre creazioni.
     for (const id of [
       "shell.launcher.search",
       "shell.launcher.headings",
@@ -242,7 +242,7 @@ describe("il menu Vista e le view principali", () => {
       "shell.launcher.tags",
       "shell.launcher.templates",
     ] as const) declared.add(id);
-    expect(labelsOf(0)).toContain("Nuova nota da un modello");
+    expect(labelsOf(0)).not.toContain("Nuova nota da un modello");
     closeContextMenu();
     const go = labelsOf(3);
     expect(go.slice(0, 5)).toEqual([
@@ -266,29 +266,46 @@ describe("il menu File e le creazioni", () => {
     document.body.replaceChildren();
   });
 
-  function mountWith(creations: MenuHost["creations"]): () => void {
+  function mountWith(creations: MenuHost["creations"], imports?: MenuHost["imports"]): () => void {
     document.body.replaceChildren();
     const menubar = document.createElement("nav");
     menubar.id = "app-menu";
     document.body.append(menubar);
-    return mountAppMenu({ run: () => {}, creations });
+    return mountAppMenu({ run: () => {}, creations, imports });
   }
+
+  const menuItems = (): HTMLButtonElement[] => [...document.querySelectorAll<HTMLButtonElement>("#context-menu [role=menuitem]")];
+  const nameOf = (item: HTMLElement): string => item.querySelector(".menu-label")?.textContent ?? item.textContent ?? "";
 
   function fileMenuLabels(): string[] {
     document.querySelector<HTMLButtonElement>("#app-menu-0")!.click();
-    return [...document.querySelectorAll<HTMLElement>("#context-menu [role=menuitem]")].map(
-      (item) => item.textContent ?? "",
-    );
+    return menuItems().map(nameOf);
   }
 
-  it("mette «Nuovo disegno…» subito dopo «Nuova nota», e lo esegue", () => {
-    const opened: string[] = [];
-    const teardown = mountWith(() => [{ label: "Nuovo disegno…", run: () => opened.push("disegno") }]);
-    const labels = fileMenuLabels();
-    expect(labels.indexOf("Nuovo disegno…")).toBe(labels.indexOf("Nuova nota") + 1);
-    const item = [...document.querySelectorAll<HTMLButtonElement>("#context-menu [role=menuitem]")]
-      .find((entry) => entry.textContent === "Nuovo disegno…")!;
+  /// Le voci del sottomenu «Nuovo ▸», aperto col clic.
+  async function openNew(): Promise<HTMLElement[]> {
+    const item = menuItems().find((entry) => nameOf(entry) === "Nuovo")!;
+    expect(item.getAttribute("aria-haspopup")).toBe("menu");
     item.click();
+    await vi.waitFor(() => expect(document.querySelector(".context-submenu")).not.toBeNull());
+    const submenu = document.querySelector<HTMLElement>(".context-submenu");
+    if (submenu === null) throw new Error("«Nuovo» non ha aperto il suo sottomenu");
+    return [...submenu.querySelectorAll<HTMLElement>("[role=menuitem]")];
+  }
+
+  it("mette «Nuovo ▸» subito dopo «Nuova nota», con le creazioni dentro, e le esegue", async () => {
+    const opened: string[] = [];
+    const teardown = mountWith(() => [
+      { label: "Nota", hint: "Ctrl+N", run: () => opened.push("nota") },
+      { label: "Disegno (.svg)", run: () => opened.push("disegno") },
+      { label: "Cartella", separator: true, run: () => opened.push("cartella") },
+    ]);
+    const labels = fileMenuLabels();
+    expect(labels.indexOf("Nuovo")).toBe(labels.indexOf("Nuova nota") + 1);
+    const inside = await openNew();
+    expect(inside.map(nameOf)).toEqual(["Nota", "Disegno (.svg)", "Cartella"]);
+    expect(inside[0]!.getAttribute("aria-keyshortcuts")).toBe("Ctrl+N");
+    inside[1]!.click();
     expect(opened).toEqual(["disegno"]);
     // Il menu si è chiuso: la voce non lascia il menu aperto sotto la galleria.
     expect(document.querySelector("#app-menu-0")!.getAttribute("aria-expanded")).toBe("false");
@@ -298,7 +315,7 @@ describe("il menu File e le creazioni", () => {
   it("senza creazioni la voce non c'è, e il resto del menu File è quello di prima", () => {
     const without = mountWith(undefined);
     const bare = fileMenuLabels();
-    expect(bare).not.toContain("Nuovo disegno…");
+    expect(bare).not.toContain("Nuovo");
     expect(bare.indexOf("Nuova nota")).toBe(0);
     expect(bare[1]).not.toBe("");
     without();
@@ -308,16 +325,46 @@ describe("il menu File e le creazioni", () => {
     empty();
   });
 
-  it("legge l'elenco a ogni apertura: il comando che arriva dopo compare, quello che se ne va sparisce", () => {
+  it("la ricerca nel menu trova le voci di «Nuovo ▸» col nome del sottomenu davanti, e le esegue", () => {
+    const opened: string[] = [];
+    const teardown = mountWith(() => [{ label: "Cartella", run: () => opened.push("cartella") }]);
+    document.querySelectorAll<HTMLButtonElement>("#app-menu > button")[5]!.click();
+    const input = document.querySelector<HTMLInputElement>(".app-menu-search-input")!;
+    input.value = "cartella";
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    const options = [...document.querySelectorAll<HTMLElement>(".app-menu-search-option .app-menu-search-label")];
+    expect(options.map((option) => option.textContent)).toContain("Nuovo › Cartella");
+    options.find((option) => option.textContent === "Nuovo › Cartella")!.click();
+    expect(opened).toEqual(["cartella"]);
+    teardown();
+  });
+
+  it("le importazioni stanno dopo «Nuovo ▸»", () => {
+    const teardown = mountWith(
+      () => [{ label: "Nota", run: () => {} }],
+      () => [{ label: "Importa disegno…", run: () => {} }],
+    );
+    const labels = fileMenuLabels();
+    expect(labels.slice(0, 3)).toEqual(["Nuova nota", "Nuovo", "Importa disegno…"]);
+    teardown();
+  });
+
+  it("legge l'elenco a ogni apertura: il comando che arriva dopo compare, quello che se ne va sparisce", async () => {
     let declared = false;
-    const teardown = mountWith(() => (declared ? [{ label: "Nuovo disegno…", run: () => {} }] : []));
-    expect(fileMenuLabels()).not.toContain("Nuovo disegno…");
+    const teardown = mountWith(() => [
+      { label: "Nota", run: () => {} },
+      ...(declared ? [{ label: "Disegno (.svg)", run: () => {} }] : []),
+    ]);
+    fileMenuLabels();
+    expect((await openNew()).map(nameOf)).toEqual(["Nota"]);
     closeContextMenu();
     declared = true;
-    expect(fileMenuLabels()).toContain("Nuovo disegno…");
+    fileMenuLabels();
+    expect((await openNew()).map(nameOf)).toEqual(["Nota", "Disegno (.svg)"]);
     closeContextMenu();
     declared = false;
-    expect(fileMenuLabels()).not.toContain("Nuovo disegno…");
+    fileMenuLabels();
+    expect((await openNew()).map(nameOf)).toEqual(["Nota"]);
     teardown();
   });
 });

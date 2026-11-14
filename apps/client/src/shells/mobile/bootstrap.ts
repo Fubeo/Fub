@@ -11,7 +11,6 @@ import { declareShell } from "../../platform/capabilities";
 import { MOBILE_SHELL } from "./index";
 import { createLifecycleFlush, defaultLifecyclePorts, type LifecycleFlush } from "./lifecycle";
 import type { MobileBridge } from "./bridge";
-import { mountMobileCreations } from "./creation";
 import { mountMobileChrome } from "./touch";
 import { mountMobileViewport } from "./viewport";
 import { mountMobileOpenedActions, type MobileExternalPorts } from "./opened";
@@ -76,7 +75,6 @@ export function mountMobileShell(bridge: MobileBridge, options: MobileShellOptio
   const lifetime = openLifetime();
   mountMobileLifecycle(lifetime, defaultMobilePorts(bridge));
   mountMobileChrome(lifetime);
-  mountMobileCreations(lifetime);
   mountMobileViewport(lifetime);
   const grantStore = options.grantStore ?? options.storage?.store ?? mobileGrantStore(bridge);
   mountMobileOpenedActions(lifetime, bridge, {

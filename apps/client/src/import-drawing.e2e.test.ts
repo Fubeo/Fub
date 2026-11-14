@@ -207,12 +207,12 @@ beforeEach(() => {
 });
 
 describe("il menu File e la palette", () => {
-  it("offrono «Importa disegno…» dopo «Nuovo disegno…»; il file scelto dal disco diventa un disegno nella radice, che si apre", async () => {
+  it("offrono «Importa disegno…» dopo «Nuovo ▸»; il file scelto dal disco diventa un disegno nella radice, che si apre", async () => {
     const host = await start(VAULT, [drawingCreateSpec()]);
     const picked = catchPicker();
     document.querySelector<HTMLButtonElement>("#app-menu-0")!.click();
     const labels = menuLabels();
-    expect(labels.indexOf("Importa disegno…")).toBe(labels.indexOf("Nuovo disegno…") + 1);
+    expect(labels.indexOf("Importa disegno…")).toBe(labels.indexOf("Nuovo") + 1);
     await choose("Importa disegno…");
     // La scelta si apre nel gesto, e chiede i file dei due programmi.
     expect(picked).toHaveLength(1);
@@ -313,7 +313,7 @@ describe("i contestuali dell'albero", () => {
     expect(openContextMenu(folderRow("rete.drawio"))).not.toContain("Importa in un disegno…");
     openContextMenu(folderRow("note"));
     expect(await submenuLabels("Importa")).not.toContain("Un disegno…");
-    expect(openContextMenu(title())).toEqual(["Nuova nota", "Nuova cartella", "Ordina", "Comprimi tutto", "Importa"]);
+    expect(openContextMenu(title())).toEqual(["Nuova nota", "Nuovo", "Ordina", "Comprimi tutto", "Importa"]);
   });
 });
 

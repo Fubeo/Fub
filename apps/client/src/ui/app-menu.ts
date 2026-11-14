@@ -48,10 +48,13 @@ export interface MenuHost {
   /// Le view principali che si aprono senza argomenti, lette a ogni apertura
   /// del menu: un componente acceso o spento cambia l'elenco.
   views?(): readonly MenuView[];
-  /// Le creazioni oltre «Nuova nota» (oggi «Nuovo disegno…»), lette a ogni
-  /// apertura del menu: una feature accesa o spenta ne cambia l'elenco, e
-  /// senza il comando del kernel la voce non c'è.
+  /// Le voci di «Nuovo ▸», l'elenco dei tipi del «+» dell'albero (S34), lette
+  /// a ogni apertura del menu: un componente acceso o spento ne cambia
+  /// l'elenco, e senza il comando del kernel la voce non c'è.
   creations?(): readonly MenuCreation[];
+  /// Le importazioni dopo «Nuovo ▸» (oggi «Importa disegno…»), alle stesse
+  /// condizioni.
+  imports?(): readonly MenuView[];
   /// Snapshot completo e ripristino, se il kernel ha i comandi e un vault è
   /// aperto: comandi del kernel e non di shell, per questo arrivano da qui.
   vault?(): readonly MenuView[];
@@ -72,10 +75,13 @@ export interface MenuView {
   run(): void;
 }
 
-/// Una creazione come voce del menu File: il nome già tradotto e il gesto che
-/// la fa partire. Ha la forma di una view principale perché è lo stesso
-/// bisogno: una voce che il kernel decide se c'è.
-export type MenuCreation = MenuView;
+/// Una creazione come voce di «Nuovo ▸»: il nome già tradotto, il gesto che
+/// la fa partire e, se ne ha una, la scorciatoia («Nota», Ctrl+N); con
+/// `separator` una riga prima della voce.
+export interface MenuCreation extends MenuView {
+  readonly hint?: string;
+  readonly separator?: boolean;
+}
 
 
 /// I cinque menu, nell'ordine canonico. Le voci sono i comandi di shell già
@@ -94,8 +100,10 @@ type MenuEntry = (
   | { label: string; click: string }
   /// Il posto delle view principali dichiarate: zero, una o più voci.
   | { views: true }
-  /// Il posto delle altre creazioni: zero, una o più voci.
+  /// Il posto di «Nuovo ▸», se ha almeno una voce.
   | { creations: true }
+  /// Il posto delle importazioni: zero, una o più voci.
+  | { imports: true }
   /// Il posto dei gesti sul vault intero (snapshot, ripristino).
   | { vault: true }
 ) & { separator?: boolean };
@@ -106,7 +114,7 @@ const MENU: { title: string; entries: MenuEntry[] }[] = [
     entries: [
       { label: "menu.file.new_note", command: "shell.note.new" },
       { creations: true },
-      { label: "launcher.command.templates", command: "shell.launcher.templates", optional: true },
+      { imports: true },
       { label: "menu.file.save", command: "shell.doc.save" },
       { label: "menu.file.open_vault", command: "shell.vault.open", separator: true },
       { vault: true },
@@ -240,7 +248,13 @@ export function mountAppMenu(host: MenuHost): Teardown {
   }
 
   function onDocClick(e: MouseEvent): void {
-    if (!menubar.contains(e.target as Node)) close();
+    // Un clic dentro il menu aperto non è «fuori»: una voce che apre un
+    // sottomenu («Nuovo ▸») non deve chiudere tutto, e una voce che esegue
+    // chiude da sé.
+    const target = e.target as Node;
+    if (menubar.contains(target)) return;
+    if (target instanceof Element && target.closest(".context-menu")) return;
+    close();
   }
 
   function onKey(e: KeyboardEvent): void {
@@ -332,8 +346,25 @@ export function mountAppMenu(host: MenuHost): Teardown {
   /// stesso gesto.
   function itemsOf(entries: MenuEntry[]): MenuItem[] {
     return entries.flatMap((v): MenuItem[] => {
-      if ("views" in v || "creations" in v || "vault" in v) {
-        const extra = "views" in v ? host.views?.() : "creations" in v ? host.creations?.() : host.vault?.();
+      if ("creations" in v) {
+        const creations = host.creations?.() ?? [];
+        if (creations.length === 0) return [];
+        return [{
+          label: t("menu.file.new"),
+          separator: v.separator,
+          items: creations.map((creation) => ({
+            label: creation.label,
+            hint: creation.hint,
+            separator: creation.separator,
+            run: () => {
+              close();
+              creation.run();
+            },
+          })),
+        }];
+      }
+      if ("views" in v || "imports" in v || "vault" in v) {
+        const extra = "views" in v ? host.views?.() : "imports" in v ? host.imports?.() : host.vault?.();
         return (extra ?? []).map((view, i) => ({
           label: view.label,
           separator: i === 0 ? v.separator : undefined,
@@ -369,8 +400,13 @@ export function mountAppMenu(host: MenuHost): Teardown {
   /// in due), col nome del menu davanti.
   function searchable(): SearchableEntry[] {
     const seen = new Set<string>();
+    // Le voci di un sottomenu («Nuovo ▸») si trovano col nome del sottomenu
+    // davanti: «Nuovo › Cartella».
+    const flat = (item: MenuItem): MenuItem[] =>
+      Array.isArray(item.items) ? (item.items as readonly MenuItem[]).map((child) => ({ ...child, label: `${item.label} › ${child.label}` })) : [item];
     return MENU.flatMap((menu) =>
       itemsOf(menu.entries)
+        .flatMap(flat)
         .filter((item) => !seen.has(item.label) && seen.add(item.label))
         .map((item) => ({ group: t(menu.title as never), item })),
     );

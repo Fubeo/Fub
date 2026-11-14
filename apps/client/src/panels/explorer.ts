@@ -48,7 +48,9 @@ import { pickIcon, showContextMenu, type ContextMenuOptions, type MenuItem } fro
 import { drawPageMark, pageMarkText, readPageMark } from "../ui/page-mark";
 import { selectInspectorTab } from "../ui/views";
 import {
+  newEntries,
   newKinds,
+  registerNewKindHost,
   canImportDrawing,
   canImportFile,
   hasKernelCommand,
@@ -179,7 +181,14 @@ export function mountExplorer(lifetime: Lifetime): void {
   // gli attributi di `index.html`, che seguono la lingua.
   newNoteEl.replaceChildren(iconEl("compose") ?? "");
   sortButtonEl.replaceChildren(iconEl("sort") ?? "");
-  lifetime.listen(newNoteEl, "click", () => void newNote());
+  // Il «+» chiede il tipo (S34): apre sotto di sé il menu «Nuovo» dello
+  // spazio attivo. Ctrl+N resta la nota diretta, senza menu. La nota e la
+  // cartella le fa l'albero, per ogni porta del menu (anche il menu File).
+  lifetime.add(registerNewKindHost({
+    note: (folder) => void newNote(folder === "" ? null : folder),
+    folder: (folder) => startNewFolder(folder),
+  }));
+  lifetime.listen(newNoteEl, "click", (e) => openNewMenu(e.detail > 0));
   lifetime.listen(sortButtonEl, "click", () => {
     sortButtonEl.setAttribute("aria-expanded", "true");
     showContextMenu(sortButtonEl, sortItems(), {
@@ -1428,12 +1437,8 @@ function folderMenu(at: MouseEvent, path: string): void {
       { label: t("explorer.new_note_here"), hint: chordOf("shell.note.new"), run: () => void newNote(path) },
       {
         label: t("explorer.new_menu"),
-        items: [
-          { label: t("explorer.new.folder"), run: () => startNewFolder(path) },
-          // Il disegno nasce se il kernel sa farli: la cartella arriva alla
-          // galleria già scelta.
-          ...(newKinds().includes("drawing") ? [{ label: t("explorer.new.drawing"), run: () => void newDrawing(path) }] : []),
-        ],
+        // L'elenco del «+» (S34), con la cartella dove il file nasce già scelta.
+        items: newEntries(path),
       },
       importItems(path),
       { separator: true, label: t("explorer.rename"), hint: "F2", run: () => void renameFolderRow(path) },
@@ -1466,6 +1471,19 @@ function folderMenu(at: MouseEvent, path: string): void {
   );
 }
 
+/// Il menu «Nuovo» del «+» del titolo, sotto il pulsante: i tipi che si possono
+/// creare adesso, nello spazio attivo. Il fuoco parte dal «+», così Esc ci
+/// torna anche dopo un clic del mouse (che su WebKit non lo dà al pulsante).
+function openNewMenu(pointer: boolean): void {
+  newNoteEl.focus({ preventScroll: true });
+  newNoteEl.setAttribute("aria-expanded", "true");
+  showContextMenu(newNoteEl, newEntries(state.activeSpace ?? ""), {
+    label: t("explorer.new_menu"),
+    pointer,
+    onClose: () => newNoteEl.setAttribute("aria-expanded", "false"),
+  });
+}
+
 /// Il contestuale del titolo del pannello e dello spazio vuoto sotto l'ultima
 /// riga: crea e importa nella radice di ciò che si vede (il vault o lo spazio
 /// attivo), e ordina l'albero.
@@ -1473,8 +1491,7 @@ function rootMenu(at: MouseEvent): void {
   const root = state.activeSpace ?? "";
   showContextMenu(at, [
     { label: t("explorer.new_note"), hint: chordOf("shell.note.new"), run: () => void newNote(state.activeSpace) },
-    { label: t("explorer.new_folder"), run: () => startNewFolder(root) },
-    ...(newKinds().includes("drawing") ? [{ label: t("explorer.new_drawing_menu"), run: () => void newDrawing(root) }] : []),
+    { label: t("explorer.new_menu"), items: newEntries(root) },
     { separator: true, label: t("explorer.sort"), items: sortItems() },
     { label: t("explorer.collapse_all"), run: () => collapseAll() },
     { separator: true, ...importItems(root) },

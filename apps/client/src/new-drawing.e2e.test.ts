@@ -1,9 +1,9 @@
 // @vitest-environment happy-dom
 //
 // **Le porte di «Nuovo disegno…»**, sulla shell vera (`index.html` con `main.ts`)
-// e l'host finto: il menu File, il contestuale di una cartella e quello del
-// titolo dell'albero, e il riquadro vuoto. La porta della shell mobile ha il suo
-// banco (`shells/mobile/creation.test.ts`).
+// e l'host finto: il «+» dell'albero, «Nuovo ▸» del menu File, del contestuale di
+// una cartella e di quello del titolo dell'albero (lo stesso elenco, in
+// `ui/commands.ts`), il riquadro vuoto e l'albero vuoto.
 //
 // Ogni porta si prova due volte, **visibile e nascosta**: il kernel dichiara
 // `drawing.create` (la feature `draw` è accesa) o non lo dichiara, e una voce
@@ -141,6 +141,15 @@ async function submenuLabels(entry: string): Promise<string[]> {
   return [...sub.querySelectorAll("button")].map(labelOf);
 }
 
+/// Sceglie la voce di quel nome nel sottomenu già aperto.
+async function chooseInSubmenu(entry: string): Promise<void> {
+  const sub = document.querySelector<HTMLElement>(".context-submenu");
+  const selected = [...(sub?.querySelectorAll("button") ?? [])].find((b) => labelOf(b) === entry);
+  if (!selected) throw new Error(`nel sottomenu non c'è «${entry}»`);
+  (selected as HTMLElement).click();
+  await settle();
+}
+
 /// Registra un modulo proprio per `drawing.create` sul registro vivo della shell.
 async function registerForm(): Promise<Record<string, string>[]> {
   const { registerCommandForm } = await import("./ui/commands");
@@ -192,34 +201,64 @@ beforeEach(() => {
   fetched.length = 0;
 });
 
+describe("il «+» dell'albero", () => {
+  const plus = (): HTMLButtonElement => document.querySelector<HTMLButtonElement>("#new-note")!;
+
+  it("apre «Nuovo» col disegno fra la nota e la cartella, e passa lo spazio attivo al modulo", async () => {
+    await start(VAULT, [drawingCreateSpec()]);
+    const opened = await registerForm();
+    plus().click();
+    expect(menuLabels()).toEqual(["Nota", "Disegno (.svg)", "Cartella"]);
+    await choose("Disegno (.svg)");
+    expect(opened).toEqual([{}]);
+
+    const { state } = await import("./state/store");
+    state.activeSpace = "note";
+    plus().click();
+    await choose("Disegno (.svg)");
+    expect(opened).toEqual([{}, { folder: "note" }]);
+  });
+
+  it("senza il comando ha la nota e la cartella; «Nota» crea una nota e la apre", async () => {
+    const host = await start(VAULT, []);
+    plus().click();
+    expect(menuLabels()).toEqual(["Nota", "Cartella"]);
+    const before = Object.keys(host.files()).length;
+    await choose("Nota");
+    await waitFor("la nota nuova nasce", () => Object.keys(host.files()).length === before + 1);
+    expect(document.getElementById("context-menu")).toBeNull();
+  });
+});
+
 describe("il menu File", () => {
-  it("offre «Nuovo disegno…» dopo «Nuova nota» se il kernel ha il comando, e apre il modulo proprio", async () => {
+  it("offre «Nuovo ▸» dopo «Nuova nota», col disegno dentro se il kernel ha il comando, e apre il modulo proprio", async () => {
     await start(VAULT, [drawingCreateSpec()]);
     const opened = await registerForm();
     document.querySelector<HTMLButtonElement>("#app-menu-0")!.click();
     const labels = menuLabels();
-    expect(labels.indexOf("Nuovo disegno…")).toBe(labels.indexOf("Nuova nota") + 1);
-    await choose("Nuovo disegno…");
+    expect(labels.indexOf("Nuovo")).toBe(labels.indexOf("Nuova nota") + 1);
+    expect(await submenuLabels("Nuovo")).toEqual(["Nota", "Disegno (.svg)", "Cartella"]);
+    await chooseInSubmenu("Disegno (.svg)");
     expect(opened).toEqual([{}]);
   });
 
   it("non lo offre se il kernel non dichiara il comando", async () => {
     await start(VAULT, []);
     document.querySelector<HTMLButtonElement>("#app-menu-0")!.click();
-    expect(menuLabels()).not.toContain("Nuovo disegno…");
     expect(menuLabels()).toContain("Nuova nota");
+    expect(await submenuLabels("Nuovo")).toEqual(["Nota", "Cartella"]);
   });
 });
 
 describe("il contestuale di una cartella", () => {
-  it("offre «Nuovo ▸ Disegno…» dopo la nota, accanto alla cartella, e passa la cartella al modulo", async () => {
+  it("offre «Nuovo ▸ Disegno (.svg)» dopo la nota, prima della cartella, e passa la cartella al modulo", async () => {
     await start(VAULT, [drawingCreateSpec()]);
     const opened = await registerForm();
     const labels = openContextMenu(folderRow("note"));
     expect(labels.slice(0, 3)).toEqual(["Nuova nota qui", "Nuovo", "Importa"]);
-    expect(await submenuLabels("Nuovo")).toEqual(["Cartella", "Disegno…"]);
+    expect(await submenuLabels("Nuovo")).toEqual(["Nota", "Disegno (.svg)", "Cartella"]);
     openContextMenu(folderRow("note"));
-    await choose("Nuovo", "Disegno…");
+    await choose("Nuovo", "Disegno (.svg)");
     expect(opened).toEqual([{ folder: "note" }]);
   });
 
@@ -227,7 +266,7 @@ describe("il contestuale di una cartella", () => {
     await start(VAULT, []);
     const labels = openContextMenu(folderRow("note"));
     expect(labels).toContain("Nuova nota qui");
-    expect(await submenuLabels("Nuovo")).toEqual(["Cartella"]);
+    expect(await submenuLabels("Nuovo")).toEqual(["Nota", "Cartella"]);
   });
 
   it("senza un modulo registrato apre la palette sullo stesso comando, con la cartella nel campo, e confermarla crea il disegno lì", async () => {
@@ -247,7 +286,7 @@ describe("il contestuale di una cartella", () => {
     resetCommandForms();
     expect(hasCommandForm("drawing.create")).toBe(false);
     openContextMenu(folderRow("note"));
-    await choose("Nuovo", "Disegno…");
+    await choose("Nuovo", "Disegno (.svg)");
     await waitFor("la palette si apre sul modulo del comando", () => document.getElementById("command-palette") !== null);
     expect(document.querySelector(".draw-new")).toBeNull();
     const overlay = document.getElementById("command-palette")!;
@@ -269,7 +308,7 @@ describe("il contestuale di una cartella", () => {
     const { hasCommandForm } = await import("./ui/commands");
     expect(hasCommandForm("drawing.create")).toBe(true);
     openContextMenu(folderRow("note"));
-    await choose("Nuovo", "Disegno…");
+    await choose("Nuovo", "Disegno (.svg)");
     // Il codice della galleria si carica tardi, con un `import()`.
     await waitFor("la galleria si apre", () => document.querySelector(".draw-new") !== null);
     // Il suo posto non lo prende la palette.
@@ -309,24 +348,26 @@ describe("il contestuale di una cartella", () => {
 describe("il contestuale del titolo dell'albero", () => {
   const title = (): HTMLElement => document.querySelector<HTMLElement>("#files-title")!;
 
-  it("offre «Nuovo disegno…» dopo la nota e la cartella: nella radice senza cartella, in uno spazio con la sua", async () => {
+  it("offre «Nuovo ▸ Disegno (.svg)»: nella radice senza cartella, in uno spazio con la sua", async () => {
     await start(VAULT, [drawingCreateSpec()]);
     const opened = await registerForm();
     const labels = openContextMenu(title());
-    expect(labels).toEqual(["Nuova nota", "Nuova cartella", "Nuovo disegno…", "Ordina", "Comprimi tutto", "Importa"]);
-    await choose("Nuovo disegno…");
+    expect(labels).toEqual(["Nuova nota", "Nuovo", "Ordina", "Comprimi tutto", "Importa"]);
+    expect(await submenuLabels("Nuovo")).toEqual(["Nota", "Disegno (.svg)", "Cartella"]);
+    await chooseInSubmenu("Disegno (.svg)");
     expect(opened).toEqual([{}]);
 
     const { state } = await import("./state/store");
     state.activeSpace = "note";
     openContextMenu(title());
-    await choose("Nuovo disegno…");
+    await choose("Nuovo", "Disegno (.svg)");
     expect(opened).toEqual([{}, { folder: "note" }]);
   });
 
-  it("senza il comando ha soltanto la cartella", async () => {
+  it("senza il comando «Nuovo ▸» ha la nota e la cartella", async () => {
     await start(VAULT, []);
-    expect(openContextMenu(title())).toEqual(["Nuova nota", "Nuova cartella", "Ordina", "Comprimi tutto", "Importa"]);
+    expect(openContextMenu(title())).toEqual(["Nuova nota", "Nuovo", "Ordina", "Comprimi tutto", "Importa"]);
+    expect(await submenuLabels("Nuovo")).toEqual(["Nota", "Cartella"]);
   });
 });
 

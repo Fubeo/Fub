@@ -212,13 +212,48 @@ describe("«Tutte le note» sopra l'albero", () => {
 });
 
 describe("le azioni del titolo", () => {
-  it("«nuova nota» è una figura col suo nome", async () => {
+  it("«nuovo» è una figura col suo nome, che apre un menu", async () => {
     await start();
     const button = document.getElementById("new-note")!;
     expect(button.classList.contains("icon-button")).toBe(true);
     expect(button.querySelector("svg")).not.toBeNull();
-    expect(button.getAttribute("aria-label")).toBe("Crea una nota nuova");
+    expect(button.getAttribute("aria-label")).toBe("Crea un file nuovo");
+    expect(button.getAttribute("aria-haspopup")).toBe("menu");
     expect(button.textContent?.trim()).toBe("");
+  });
+
+  it("il «+» apre «Nuovo» sotto di sé dalla tastiera, col fuoco sulla Nota, ed Esc torna al «+»", async () => {
+    await start();
+    const button = document.getElementById("new-note") as HTMLButtonElement;
+    const items = (): HTMLElement[] => [...document.querySelectorAll<HTMLElement>('#context-menu [role="menuitem"]')];
+    // Invio e Spazio su un pulsante sono un clic senza puntatore (detail 0).
+    button.focus();
+    button.click();
+    expect(button.getAttribute("aria-expanded")).toBe("true");
+    const menu = document.getElementById("context-menu")!;
+    expect(menu.getAttribute("aria-label")).toBe("Nuovo");
+    const names = items().map((item) => item.querySelector(".menu-label")?.textContent ?? item.textContent);
+    expect(names[0]).toBe("Nota");
+    expect(names[names.length - 1]).toBe("Cartella");
+    expect(items()[0]!.getAttribute("aria-keyshortcuts")).not.toBeNull();
+    expect(document.activeElement).toBe(items()[0]);
+    document.activeElement!.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
+    await quiet();
+    expect(document.getElementById("context-menu")).toBeNull();
+    expect(button.getAttribute("aria-expanded")).toBe("false");
+    expect(document.activeElement).toBe(button);
+  });
+
+  it("«Cartella» del «+» apre il campo del nome in cima all'albero", async () => {
+    await start();
+    document.getElementById("new-note")!.click();
+    const folder = [...document.querySelectorAll<HTMLElement>('#context-menu [role="menuitem"]')].find((item) => item.textContent?.includes("Cartella"))!;
+    folder.click();
+    await quiet();
+    expect(document.getElementById("context-menu")).toBeNull();
+    const field = document.querySelector<HTMLInputElement>("#file-list > input.new-folder");
+    expect(field).not.toBeNull();
+    expect(document.activeElement).toBe(field);
   });
 
   it("«ordina» apre le stesse scelte del contestuale e cambia l'ordine dell'albero", async () => {

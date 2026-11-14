@@ -52,6 +52,7 @@ vi.mock("../ui/commands", () => ({
   allCommands: () => [],
   keybindingKey: (id: string) => id,
   newKinds: () => ["note"],
+  newKindLabel: () => "Nota",
   registerComponentRow: () => () => {},
   showComponent: () => false,
 }));
