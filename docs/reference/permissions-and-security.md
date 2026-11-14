@@ -388,7 +388,8 @@ diagnostici devono:
 
 Il file di log della macchina nasce `0600` su Unix, e uno di prima più
 aperto si stringe alla riapertura (`fub_kernel::log::FileSink`); se non si
-lascia stringere, il log si apre lo stesso e lo scrive nella sua prima riga.
+lascia stringere, il log si apre lo stesso e lo scrive in fondo al file, una
+volta per episodio, non a ogni riapertura.
 Gli errori della rete dell'host nominano l'indirizzo letto dal parser, senza
 credenziali, query e frammento, e il motivo con parole fisse, mai il testo
 dell'errore di trasporto; un indirizzo che non si legge non si mostra
@@ -398,7 +399,9 @@ I file di stato della macchina che devono essere regolari (il lock dello
 scrittore del vault, il lock del sync, il file degli abbinamenti del
 clipper) si aprono con `fub_host::regular_file::open_regular`: il
 collegamento al posto del file non si segue, una FIFO non blocca, e il
-controllo vale sul file aperto, non su un path guardato prima.
+controllo vale sul file aperto, non su un path guardato prima. Una cartella
+o un collegamento sono lo stesso rifiuto su ogni sistema, e un file che
+sparisce o cambia mentre si apre si riapre, poi si rifiuta.
 
 ## Documenti ostili
 
@@ -409,9 +412,10 @@ lettura, mai una pila o una memoria esaurite.
 - `.odt`: annidamento XML fino a 256 elementi (`fub_format_rich::odt`).
 - `.docx`: allineamento delle revisioni con un budget di lavoro e di memoria,
   senza ricorsione; al più 16 Mi caratteri di testo nell'inventario.
-- `.xlsx`: al più 2 GiB stimati di albero XML tenuto in memoria per parte
-  (nodi, nomi, attributi e testi; le righe che vanno al flusso non contano),
-  righe e colonne non oltre quelle di un foglio.
+- `.xlsx`: al più 1,5 GiB di albero XML tenuto in memoria per parte, stimati
+  per eccesso (nodi, nomi, attributi e testi con la capacità dei vettori e
+  l'arrotondamento dell'allocatore; le righe che vanno al flusso non
+  contano), righe e colonne non oltre quelle di un foglio.
 - InkML: nodi (al più 64 per tratto ammesso), punti per tratto e valori per
   punto contati durante la lettura; la parte più grande che Fub scrive si
   rilegge; un colore scritto è sempre `#rrggbb`.
@@ -441,7 +445,8 @@ lettura, mai una pila o una memoria esaurite.
   sconosciuta è `400 unsupported wrap version`. Un client che riceve quel
   rifiuto, o quelli dei server di prima (`stale wrap version`,
   `bad wrap version`, `bad wrap iterations`), mostra un errore tipizzato
-  (`host.sync.kdf_unsupported`) che chiede di aggiornare Fub o il server.
+  (`BadArgs` con `host.sync.kdf_unsupported`) che chiede di aggiornare Fub o
+  il server; non è un'assenza di rete e non si ritenta.
 - Ruoli `Owner > Admin > Writer > Reader`, nel sync e nei siti: chi non è
   Owner concede, toglie o cambia soltanto ruoli sotto il proprio
   (`fub_services::acl::may_grant`, `check_revoke`).
