@@ -32,6 +32,24 @@ describe("il prefisso delle voci", () => {
   });
 });
 
+describe("le righe che continuano una voce", () => {
+  it("partono dal testo della voce, col loro rientro scritto da togliere", () => {
+    const doc = "- [ ] Spedire i cataloghi\n  📅 2026-11-17\nsenza rientro\n\n- altra\n\n  paragrafo dopo una riga vuota\n> - in citazione\n>   che segue";
+    const view = new EditorView({ parent: document.body, state: EditorState.create({ doc, extensions: markdown({ base: markdownGrammar }) }) });
+    views.push(view);
+    forceParsing(view, doc.length, 10_000);
+    const found = listPrefixes(view).map(({ line, end, of }) => [doc.slice(line, end), of === undefined ? null : doc.slice(of, doc.indexOf("\n", of))]);
+    expect(found).toEqual([
+      ["- [ ] ", null],
+      ["  ", "- [ ] Spedire i cataloghi"],
+      ["", "- [ ] Spedire i cataloghi"],
+      ["- ", null],
+      ["> - ", null],
+      [">   ", "> - in citazione"],
+    ]);
+  });
+});
+
 describe("il prefisso delle voci nelle citazioni", () => {
   it("trova le voci di una citazione e quelle annidate, non i paragrafi", () => {
     const doc = "Testo con - un trattino.\n\n> - in citazione\n>   1. annidata\n\n| - | no |\n| --- | --- |";
