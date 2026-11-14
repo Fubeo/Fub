@@ -24,6 +24,8 @@ import type {
   ThemeFolderCheck,
   ThemeFolderInstall,
   ThemeFolderLight,
+  ThemeFolderLink,
+  ThemeLink,
   ThemeFolderRefusal,
   ThemeFont,
   ThemeInfo,
@@ -1352,6 +1354,7 @@ describe("mirror TS↔Rust", () => {
     for (const type of [
       "ComponentWhy", "ComponentOrphans", "ComponentAction", "ComponentRefusal", "ComponentsApplied",
       "ConfigFileKind", "ConfigStatus", "RecoverAction", "ThemeFolderCheck", "ThemeFolderInstall",
+      "ThemeLink", "ThemeFolderLink",
       "LiveEvent", "ShellMessage", "LeaveReason", "ReleaseReason", "EndReason", "NackReason",
     ]) {
       expect(appFixture[type], `manca il type ${type} nella fixture dell'app`).toBeTruthy();
@@ -2040,6 +2043,35 @@ describe("mirror TS↔Rust", () => {
     expect(seenCauses).toEqual(new Set(Object.keys(causes)));
     expect(seenBlocks).toEqual(new Set(Object.keys(blocks)));
     expect(seenSides).toEqual(new Set(Object.keys(sides)));
+  });
+
+  it("il tema collegato porta i suoi stati, e il collegamento i suoi esiti", () => {
+    const links = appFixture.ThemeLink as ThemeLink[];
+    const base = { folder: true, id: true, name: true, state: true, changed: true } as const;
+    const fields: Record<ThemeLink["state"], string[]> = {
+      ready: keysOf<Extract<ThemeLink, { state: "ready" }>>(base),
+      missing: keysOf<Extract<ThemeLink, { state: "missing" }>>(base),
+      refused: keysOf<Extract<ThemeLink, { state: "refused" }>>({ ...base, refusal: true }),
+      collision: keysOf<Extract<ThemeLink, { state: "collision" }>>(base),
+      unreadable: keysOf<Extract<ThemeLink, { state: "unreadable" }>>({ ...base, error: true }),
+    };
+    for (const link of links) {
+      expect(Object.keys(link).sort()).toEqual(fields[link.state]);
+      expect(typeof link.folder).toBe("string");
+      expect(link.id === null || typeof link.id === "string").toBe(true);
+      expect(link.name === null || typeof link.name === "string").toBe(true);
+      expect(link.changed.every((file) => typeof file === "string")).toBe(true);
+    }
+    expect(new Set(links.map((link) => link.state))).toEqual(new Set(Object.keys(fields)));
+
+    const outcomes = appFixture.ThemeFolderLink as ThemeFolderLink[];
+    const outcomeFields: Record<ThemeFolderLink["outcome"], string[]> = {
+      cancelled: keysOf<Extract<ThemeFolderLink, { outcome: "cancelled" }>>({ outcome: true }),
+      linked: keysOf<Extract<ThemeFolderLink, { outcome: "linked" }>>({ outcome: true, link: true }),
+      refused: keysOf<Extract<ThemeFolderLink, { outcome: "refused" }>>({ outcome: true, link: true }),
+    };
+    for (const outcome of outcomes) expect(Object.keys(outcome).sort()).toEqual(outcomeFields[outcome.outcome]);
+    expect(new Set(outcomes.map((outcome) => outcome.outcome))).toEqual(new Set(Object.keys(outcomeFields)));
   });
 
   it("«Apri con» porta i tre modi di consegna e le tre righe del menu", () => {

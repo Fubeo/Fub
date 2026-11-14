@@ -174,6 +174,42 @@ campo `outcome`:
 | `unchecked` | — | non c'è un controllo con questa impronta: uno più recente ha preso il suo posto, o è già stato usato o scartato; niente scritto |
 | `failed` | `cause`, `error` | il disco non ha lasciato scrivere e niente è cambiato (con `replace` il tema installato è com'era); `cause` (`DiskCause`) è `full`, `denied` o `other`; `error` è il guasto così com'è, mai da mostrare |
 
+Un autore di temi può anche **collegare** la cartella del suo tema invece di
+installarla: il tema compare fra quelli installati con la fiducia
+`development` e si rimonta a ogni salvataggio. Sono tre comandi della sola
+shell principale, fuori dal thread principale, e un evento:
+
+| Comando | Argomenti | Risposta |
+|---|---|---|
+| `link_theme_folder` | — | `ThemeFolderLink`, unione col campo `outcome`: `cancelled` (la finestra di scelta chiusa), `linked {link}`, `refused {link}` (il collegamento di prima resta) |
+| `unlink_theme_folder` | — | niente: l'host dimentica la cartella e smette di guardarla |
+| `theme_link` | — | `ThemeLink` o `null` (nessuna cartella collegata, o la modalità sviluppatore spenta) |
+
+Come `check_theme_folder`, `link_theme_folder` controlla `developer.mode`
+(spento, `permission_denied`), apre la finestra nativa col titolo dell'host e
+legge la cartella scelta con le porte dell'installazione, senza scrivere
+niente in `themes/`. La webview non passa né il path né il titolo. Gli altri
+errori sono `bad_args` (un path che non è UTF-8) e `internal` (la finestra di
+scelta non ha risposto). `unlink_theme_folder` non chiede la modalità
+sviluppatore. `ThemeLink` porta `folder` (il path canonico, da mostrare),
+`id` e `name` dell'ultimo manifest letto (`null` se non se n'è letto uno),
+`changed` e lo stato, nel campo `state`:
+
+| `state` | Campi | Che cosa vuol dire |
+|---|---|---|
+| `ready` | — | la cartella passa le porte; il tema è fra quelli che `list_themes` elenca, con `trust: "development"`, e `read_theme` lo legge dalla cartella |
+| `missing` | — | la cartella non c'è più (tolta o rinominata); il tema non è elencato |
+| `refused` | `refusal` | le porte rifiutano la cartella (un `ThemeFolderRefusal`, come sopra: un manifest a metà salvataggio, un link simbolico che esce) |
+| `collision` | — | un tema installato ha lo stesso `id`: vince quello installato, il collegato non è elencato |
+| `unreadable` | `error` | il disco non lascia leggere; `error` è il guasto così com'è, mai da mostrare |
+
+L'evento `fub://theme-changed`, alla sola finestra principale, porta un
+`ThemeLink` dopo ogni salvataggio nella cartella collegata, a raffiche
+raccolte (200 ms): `changed` ha i file salvati, relativi alla cartella, al
+più otto. La shell rilegge il tema con `list_themes` e `read_theme`, lo passa
+dal suo cancello e lo rimonta solo se regge: un fascio rifiutato lascia
+l'ultimo buono. Un evento dopo «Scollega» o con la modalità spenta non parte.
+
 Il catalogo firmato ha le sue porte (`catalog_install_theme`,
 `catalog_update_theme`, `catalog_rollback_theme`, `catalog_revoke_theme`). Le
 regole di sicurezza dei temi sono in

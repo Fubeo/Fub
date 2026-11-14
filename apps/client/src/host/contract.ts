@@ -274,6 +274,40 @@ export type ThemeFolderInstall =
   | { outcome: "unchecked" }
   | { outcome: "failed"; cause: DiskCause; error: PluginError };
 
+/**
+ * Che cosa è adesso la cartella del tema collegato
+ * (`fub_host::theme::ThemeLinkState`):
+ * - `ready`: passa le porte, e compare fra i temi in sviluppo;
+ * - `missing`: la cartella non c'è più;
+ * - `refused`: non è un tema che Fub legge, coi rifiuti dell'installazione;
+ * - `collision`: un tema installato ha lo stesso id;
+ * - `unreadable`: il disco non la legge. `error` non si mostra.
+ */
+export type ThemeLinkState =
+  | { state: "ready" }
+  | { state: "missing" }
+  | { state: "refused"; refusal: ThemeFolderRefusal }
+  | { state: "collision" }
+  | { state: "unreadable"; error: PluginError };
+
+/**
+ * Il tema collegato com'è adesso (`fub_host::theme::ThemeLink`): la cartella
+ * (da mostrare), l'id e il nome dell'ultimo manifest letto, lo stato e, nel
+ * campanello `fub://theme-changed`, i file salvati relativi alla cartella.
+ */
+export type ThemeLink = {
+  folder: string;
+  id: string | null;
+  name: string | null;
+  changed: string[];
+} & ThemeLinkState;
+
+/** Com'è andato «Collega una cartella…» (`fub_host::theme::ThemeFolderLink`). */
+export type ThemeFolderLink =
+  | { outcome: "cancelled" }
+  | { outcome: "linked"; link: ThemeLink }
+  | { outcome: "refused"; link: ThemeLink };
+
 export interface VaultInfo {
   root: string;
   // `documents` NON C'È PIÙ (§14.4): l'apertura portava l'elenco intero delle

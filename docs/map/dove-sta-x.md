@@ -45,6 +45,7 @@
 | `SettingSpec` e i livelli delle impostazioni | `crates/fub-abi/src/settings.rs` |
 | `perf.probe` (la sonda N0) | `crates/fub-host/src/settings.rs`, montata da `apps/client/src/perf/` |
 | `developer.mode` (la modalità sviluppatore) | `crates/fub-host/src/settings.rs`; la applicano `Host::check_theme_folder` e `Host::install_theme_from_folder`, il bottone sta in `apps/client/src/panels/theme-folder.ts` |
+| Il tema collegato (`developer.theme-folder`) | `crates/fub-host/src/theme/linked.rs` (lettura con le porte), `crates/fub-host/src/theme_watch.rs` (l'osservatore), `Host::link_theme_folder`; il rimontaggio in `apps/client/src/theme/theme.ts`, il blocco «Cartella collegata» in `apps/client/src/panels/theme-folder.ts` |
 | `draw.workspace` (Semplice o Completo) | le impostazioni della feature `draw`, `crates/fub-features/src/draw.rs` |
 | il registro dei comandi del vault | `crates/fub-features/src/commands.rs` e i suoi moduli in `commands/` (dogfood del `CommandProvider`) |
 | il catalogo dei comandi dei fogli | `crates/fub-abi/src/grid_bytes.rs`, servito in `crates/fub-format-xlsx` |

@@ -175,6 +175,22 @@ il resto l'installazione passa dalle stesse regole di `install_theme` (serie
 riservata, rename atomico) e il tema ha la fiducia di ogni tema non di
 serie.
 
+Il **tema collegato** (`Host::link_theme_folder`) segue le stesse regole
+d'ingresso: modalità sviluppatore accesa, cartella scelta nella finestra
+nativa dell'app, letta con le porte di `ThemeBundle::load` a ogni lettura (un
+link simbolico che esce, un `.fub-current.json`, un manifest a metà sono un
+rifiuto tipizzato). Il path canonico va nella chiave di macchina
+`developer.theme-folder`, che nessun programma scrive e che la webview non
+scrive con `set_setting` (`permission_denied`): la scrive solo il gesto
+«Collega una cartella…», e «Scollega» la azzera. La cartella non si copia in
+`themes/`, e un tema installato con lo stesso id vince (`collision`). Il tema
+ha la fiducia `development`, e la shell lo passa dallo stesso cancello di ogni
+altro tema a ogni rimontaggio: un fascio rifiutato non si monta, resta
+l'ultimo buono. L'osservatore della cartella vive nell'host (lo stesso
+`notify` del vault), solo con la modalità accesa e una cartella collegata:
+spenta la modalità, scollegata la cartella o chiusa l'app, smette di guardare
+e non manda più eventi.
+
 Un id già installato non si tocca: l'esito è `collision`, e solo la risposta
 «Sostituisci» (`replace`) lo sostituisce. Un tema installato revocato dal
 catalogo non si sostituisce mai da cartella (`revoked`): la copia nuova non ha

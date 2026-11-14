@@ -1495,6 +1495,37 @@ export const IT = { // --- la scocca -------------------------------------------
 "settings.themes.blocked.link":
   "Al posto di {path} c'è un collegamento: Fub non scrive attraverso un collegamento. Toglilo e riprova.",
 "settings.themes.blocked.layout": "{path} non è una cartella che Fub sa usare per i temi: sistemala a mano e riprova.",
+// --- collegare una cartella, e il tema cambia al salvataggio (PA T37) -------
+"settings.themes.link_folder": "Collega una cartella…",
+"settings.themes.linked.title": "Cartella collegata",
+"settings.themes.linked.hint": "{folder} · {name} · In sviluppo. Salvi un file e il tema si rimonta.",
+"settings.themes.linked.hint_unknown": "{folder} · In sviluppo. Salvi un file e il tema si rimonta.",
+"settings.themes.linked.unlink": "Scollega",
+"settings.themes.linked.linked_at": "Collegata alle {time}.",
+"settings.themes.linked.reloaded": "Ricaricato alle {time}.",
+"settings.themes.linked.reloaded_after": "Ricaricato alle {time}, dopo il salvataggio di {files}.",
+"settings.themes.linked.missing": "La cartella non c'è più: il tema collegato non si monta. Rimettila al suo posto o scollegala.",
+"settings.themes.linked.collision":
+  "Un tema installato ha lo stesso id, «{id}»: il collegato non si monta. Cambia l'id nel manifest, o disinstalla l'altro.",
+"settings.themes.linked.done": "«{name}» è collegato: compare fra i temi installati, in sviluppo.",
+"settings.themes.linked.not_linked.one": "«{name}» non è collegato: {n} motivo, lo trovi sotto «Temi installati».",
+"settings.themes.linked.not_linked": "«{name}» non è collegato: {n} motivi, li trovi sotto «Temi installati».",
+"settings.themes.linked.not_linked_collision":
+  "«{name}» non è collegato: un tema installato ha lo stesso id, «{id}».",
+"settings.themes.linked.not_linked_missing": "La cartella scelta non c'è più: non è collegata.",
+"settings.themes.linked.not_linked_unreadable": "Fub non riesce a leggere la cartella «{folder}»: non è collegata.",
+"settings.themes.linked.link_failed": "La cartella non si è collegata: {reason}",
+"settings.themes.linked.unlinked": "Cartella scollegata.",
+"settings.themes.linked.unlink_failed": "La cartella non si è scollegata: {reason}",
+"settings.themes.linked.unreadable": "Fub non riesce a leggere la cartella collegata: resta l'ultima versione buona.",
+"settings.themes.diagnosis.when_last_good":
+  "Tentativo delle {time}. Resta montato l'ultimo buono, delle {good}.",
+"settings.themes.diagnosis.when_listed_good":
+  "Tentativo delle {time}. Fra i temi installati resta l'ultimo buono, delle {good}.",
+"theme.linked.rejected.one": "«{name}» non si è rimontato: {n} motivo, lo trovi in Aspetto. Resta l'ultima versione buona.",
+"theme.linked.rejected": "«{name}» non si è rimontato: {n} motivi, li trovi in Aspetto. Resta l'ultima versione buona.",
+"theme.linked.missing": "La cartella del tema collegato non c'è più: torna {series}.",
+"theme.linked.missing_at_start": "La cartella del tema collegato, {folder}, non c'è più: Fub usa {series}. Rimettila al suo posto o scollegala in Aspetto.",
 // --- i tasti che il vault propone (§23.13) -----------------------------
 //
 // Il testo dice che **non sono attive**, e lo dice per primo: chi legge deve
@@ -4739,6 +4770,36 @@ export const EN: Record<Key, string> = { "app.skip_to_editor": "Skip to the edit
 "settings.themes.blocked.link":
   "There is a link in place of {path}: Fub does not write through a link. Remove it and try again.",
 "settings.themes.blocked.layout": "{path} is not a folder Fub can use for themes: fix it by hand and try again.",
+"settings.themes.link_folder": "Link a folder…",
+"settings.themes.linked.title": "Linked folder",
+"settings.themes.linked.hint": "{folder} · {name} · In development. Save a file and the theme is remounted.",
+"settings.themes.linked.hint_unknown": "{folder} · In development. Save a file and the theme is remounted.",
+"settings.themes.linked.unlink": "Unlink",
+"settings.themes.linked.linked_at": "Linked at {time}.",
+"settings.themes.linked.reloaded": "Reloaded at {time}.",
+"settings.themes.linked.reloaded_after": "Reloaded at {time}, after saving {files}.",
+"settings.themes.linked.missing": "The folder is gone: the linked theme is not mounted. Put it back or unlink it.",
+"settings.themes.linked.collision":
+  "An installed theme has the same id, «{id}»: the linked one is not mounted. Change the id in the manifest, or uninstall the other one.",
+"settings.themes.linked.done": "«{name}» is linked: it appears among the installed themes, in development.",
+"settings.themes.linked.not_linked.one": "«{name}» is not linked: {n} reason, you will find it under «Installed themes».",
+"settings.themes.linked.not_linked": "«{name}» is not linked: {n} reasons, you will find them under «Installed themes».",
+"settings.themes.linked.not_linked_collision":
+  "«{name}» is not linked: an installed theme has the same id, «{id}».",
+"settings.themes.linked.not_linked_missing": "The chosen folder is gone: it is not linked.",
+"settings.themes.linked.not_linked_unreadable": "Fub cannot read the folder «{folder}»: it is not linked.",
+"settings.themes.linked.link_failed": "The folder was not linked: {reason}",
+"settings.themes.linked.unlinked": "Folder unlinked.",
+"settings.themes.linked.unlink_failed": "The folder was not unlinked: {reason}",
+"settings.themes.linked.unreadable": "Fub cannot read the linked folder: the last good version stays.",
+"settings.themes.diagnosis.when_last_good":
+  "Attempt at {time}. The last good one, from {good}, stays mounted.",
+"settings.themes.diagnosis.when_listed_good":
+  "Attempt at {time}. The last good one, from {good}, stays among the installed themes.",
+"theme.linked.rejected.one": "«{name}» was not remounted: {n} reason, you will find it in Appearance. The last good version stays.",
+"theme.linked.rejected": "«{name}» was not remounted: {n} reasons, you will find them in Appearance. The last good version stays.",
+"theme.linked.missing": "The linked theme folder is gone: {series} is back.",
+"theme.linked.missing_at_start": "The linked theme folder, {folder}, is gone: Fub uses {series}. Put it back or unlink it in Appearance.",
 "settings.vault_keys.title": "This vault proposes {count} shortcuts",
 "settings.vault_keys.hint":
   "A vault carries its own shortcuts with it, and these come from outside: until you look at them they press nothing, and the combinations declared by the commands are what counts.",

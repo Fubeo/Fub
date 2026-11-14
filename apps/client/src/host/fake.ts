@@ -83,7 +83,10 @@ import type {
   ThemeFolderCheck,
   ThemeFolderInstall,
   ThemeFolderLight,
+  ThemeFolderLink,
   ThemeFolderRefusal,
+  ThemeLink,
+  ThemeLinkState,
   ThemeInfo,
   ThemePayload,
   UiNode,
@@ -315,6 +318,10 @@ export interface Options {
   /// La finestra nativa di scelta della cartella: il path scelto, `null` se la
   /// persona la chiude. Senza, la finestra si chiude sempre.
   pickThemeFolder?: () => string | null;
+  /// La cartella del tema collegato all'avvio (la chiave
+  /// `developer.theme-folder`), un path di `themeFolders`. Una cartella che
+  /// `themeFolders` non ha è sparita (`missing`).
+  linkedThemeFolder?: string | null;
   /// Temi installati revocati dal catalogo: non stanno in `themes` (l'host non
   /// li elenca), e «Installa da cartella…» con lo stesso id è `revoked`.
   revokedThemes?: string[];
@@ -505,6 +512,11 @@ export interface FakeHost {
   /// di più, perché è ciò che succede quando un ascoltatore si monta dopo il
   /// router — e un evento consegnato a nessuno non fallisce da sé.
   emit(event: KernelEvent): boolean;
+  /// La cartella del tema collegato è cambiata (`fub://theme-changed`): manda
+  /// a chi ascolta lo stato di adesso, coi file salvati. Chi prova modifica
+  /// prima `themeFolders` (un fascio nuovo, un rifiuto, la cartella tolta).
+  /// `false` se nessuna cartella è collegata o nessuno ascolta.
+  themeFolderChanged(changed?: string[]): boolean;
   /// Manda alla shell un gruppo di eventi di una sessione live, come farebbe
   /// l'host quando lo scrittore entra, scrive o esce.
   ///
@@ -676,6 +688,63 @@ export function createFakeHost(options: Options = {}): FakeHost {
   /// Gli id dei temi installati che il catalogo ha revocato: l'host non li
   /// elenca, e una cartella non li sostituisce.
   const revokedThemes = new Set(options.revokedThemes ?? []);
+
+  /// La cartella collegata (`developer.theme-folder`), e chi ascolta il suo
+  /// campanello.
+  let linkedSource: string | null = options.linkedThemeFolder ?? null;
+  /// L'ultimo id e nome letti, come li ricorda il custode dell'host.
+  let linkedKnown: { id: string | null; name: string | null } = { id: null, name: null };
+  const themeChanged = new Set<(link: ThemeLink) => void>();
+
+  function developerIsOn(): boolean {
+    return settings.find((entry) => entry.spec.key === DEVELOPER_MODE_KEY)?.value === true;
+  }
+
+  /// Lo stato della cartella collegata, come `fub_host::theme::theme_link`.
+  function readLink(source: string): ThemeLink {
+    const folder = themeFolders[source];
+    let state: ThemeLinkState;
+    let manifest: ThemeInfo["manifest"] | null = null;
+    if (folder === undefined) state = { state: "missing" };
+    else if ("kind" in folder) state = { state: "unreadable", error: folder };
+    else if ("reason" in folder) state = { state: "refused", refusal: folder };
+    else {
+      manifest = folder.info.manifest;
+      state = themes.some((theme) => theme.manifest.id === manifest!.id) ? { state: "collision" } : { state: "ready" };
+    }
+    if (manifest) linkedKnown = { id: manifest.id, name: manifest.name };
+    return { folder: source, id: linkedKnown.id, name: linkedKnown.name, changed: [], ...state };
+  }
+
+  /// La cartella collegata pronta, se la modalità sviluppatore è accesa.
+  function linkedReady(): ThemeFolderFake | null {
+    if (linkedSource === null || !developerIsOn()) return null;
+    const folder = themeFolders[linkedSource];
+    if (folder === undefined || "kind" in folder || "reason" in folder) return null;
+    const id = folder.info.manifest.id;
+    return themes.some((theme) => theme.manifest.id === id) ? null : folder;
+  }
+
+  function listedThemes(): ThemeInfo[] {
+    const linked = linkedReady();
+    return linked ? [...themes, { ...linked.info, trust: "development" }] : [...themes];
+  }
+
+  /// «Collega una cartella…», come `Host::link_theme_folder`.
+  function linkThemeFolder(): ThemeFolderLink {
+    developerOn();
+    const source = options.pickThemeFolder?.() ?? null;
+    if (source === null) return { outcome: "cancelled" };
+    const previous = linkedKnown;
+    linkedKnown = { id: null, name: null };
+    const link = readLink(source);
+    if (link.state !== "ready") {
+      linkedKnown = previous;
+      return { outcome: "refused", link };
+    }
+    linkedSource = source;
+    return { outcome: "linked", link };
+  }
 
   function developerOn(): void {
     const developer = settings.find((entry) => entry.spec.key === DEVELOPER_MODE_KEY);
@@ -2195,9 +2264,12 @@ export function createFakeHost(options: Options = {}): FakeHost {
       frameCapabilities: () => unavailable("frameCapabilities", []),
       settingRequiresReopen: (key) => unavailable("settingRequiresReopen", [key]),
       listBundles: () => gate("listBundles", [], Promise.resolve(bundles)),
-      listThemes: () => gate("listThemes", [], Promise.resolve(themes)),
+      listThemes: () => gate("listThemes", [], Promise.resolve(listedThemes())),
       readTheme: (id, light) => {
-        const payload = themePayloads[`${id}:${light}`];
+        const linked = linkedReady();
+        const payload = linked && linked.info.manifest.id === id
+          ? linked.payloads[`${id}:${light}`]
+          : themePayloads[`${id}:${light}`];
         if (!payload) {
           return gate(
             "readTheme",
@@ -2223,6 +2295,24 @@ export function createFakeHost(options: Options = {}): FakeHost {
           [replace, digest],
           new Promise<ThemeFolderInstall>((resolve) => resolve(installThemeFolder(replace, digest))),
         ),
+      linkThemeFolder: () =>
+        gate("linkThemeFolder", [], new Promise<ThemeFolderLink>((resolve) => resolve(linkThemeFolder()))),
+      unlinkThemeFolder: () => {
+        linkedSource = null;
+        linkedKnown = { id: null, name: null };
+        return gate("unlinkThemeFolder", [], Promise.resolve());
+      },
+      themeLink: () =>
+        gate(
+          "themeLink",
+          [],
+          Promise.resolve(linkedSource === null || !developerIsOn() ? null : readLink(linkedSource)),
+        ),
+      onThemeChanged: (handler) => {
+        calls.push({ gate: "onThemeChanged", args: [] });
+        themeChanged.add(handler);
+        return Promise.resolve(() => { themeChanged.delete(handler); });
+      },
       setPluginEnabled: (id, enabled) =>
         gate("setPluginEnabled", [id, enabled], Promise.resolve([])),
       componentsMap: (vault) =>
@@ -2570,6 +2660,12 @@ export function createFakeHost(options: Options = {}): FakeHost {
       const kind = entryKind(id);
       const event: KernelEvent = kind === "document" ? { type: "document_changed", id } : { type: "entry_changed", id, kind };
       listener?.({ event, origin: { actor: { kind: "watcher" }, batch: null } });
+    },
+    themeFolderChanged: (changed = []) => {
+      if (linkedSource === null || !developerIsOn() || themeChanged.size === 0) return false;
+      const link = { ...readLink(linkedSource), changed };
+      for (const handler of [...themeChanged]) handler(link);
+      return true;
     },
     requestDocumentWindowClose: (label) => {
       const request = documentWindows.get(label);
