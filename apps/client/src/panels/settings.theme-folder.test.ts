@@ -120,6 +120,7 @@ async function open(options: {
   blocked?: Record<string, ThemeBlock>;
   inUse?: string;
   linked?: string;
+  watchFails?: boolean;
 }): Promise<void> {
   document.querySelector<HTMLButtonElement>("#settings-close")?.click();
   const installed = options.installed ?? [];
@@ -136,6 +137,7 @@ async function open(options: {
     blockedThemes: options.blocked,
     pickThemeFolder: () => box.folder,
     linkedThemeFolder: options.linked ?? null,
+    themeWatchFails: options.watchFails,
   });
   await reloadThemeCatalog();
   document.body.innerHTML = `
@@ -796,6 +798,25 @@ describe("collegare la cartella di un tema in sviluppo (PA T37)", () => {
     expect(catalogOptions()).not.toContain("Carta · chiaro · In sviluppo");
     expect(box.notify).toHaveBeenCalledWith("Cartella scollegata.", "info");
     expect(gates("unlinkThemeFolder")).toEqual([[]]);
+  });
+
+  it("collegata ma non guardata: il blocco dice che i salvataggi non arrivano, e cosa fare", async () => {
+    const folders = { "/temi/carta": folderTheme("acme.carta", "Carta", "0.3.2") };
+    await open({ developer: true, folders });
+    box.folder = "/temi/carta";
+    linkButton()!.click();
+    await vi.waitFor(() => expect(linkedBlock()).not.toBeNull());
+    expect(linkedBlock()!.querySelector("[data-link-unwatched]")).toBeNull();
+    unlinkButton()!.click();
+    await vi.waitFor(() => expect(linkedBlock()).toBeNull());
+
+    await open({ developer: true, folders, watchFails: true });
+    linkButton()!.click();
+    await vi.waitFor(() => expect(linkedBlock()).not.toBeNull());
+    expect(linkedBlock()!.querySelector("[data-link-unwatched]")?.textContent).toBe(
+      "Fub non riesce a seguire questa cartella: i salvataggi non arrivano e il tema non si rimonta da solo. " +
+        "Scollegala e collegala di nuovo; se succede ancora, chiudi i programmi che seguono molte cartelle e riprova.",
+    );
   });
 
   it("annullare la scelta non collega niente e non dice niente", async () => {

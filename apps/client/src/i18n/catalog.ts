@@ -1518,6 +1518,7 @@ export const IT = { // --- la scocca -------------------------------------------
 "settings.themes.linked.unlinked": "Cartella scollegata.",
 "settings.themes.linked.unlink_failed": "La cartella non si è scollegata: {reason}",
 "settings.themes.linked.unreadable": "Fub non riesce a leggere la cartella collegata: resta l'ultima versione buona.",
+"settings.themes.linked.unwatched": "Fub non riesce a seguire questa cartella: i salvataggi non arrivano e il tema non si rimonta da solo. Scollegala e collegala di nuovo; se succede ancora, chiudi i programmi che seguono molte cartelle e riprova.",
 "settings.themes.diagnosis.when_last_good":
   "Tentativo delle {time}. Resta montato l'ultimo buono, delle {good}.",
 "settings.themes.diagnosis.when_listed_good":
@@ -1526,6 +1527,10 @@ export const IT = { // --- la scocca -------------------------------------------
 "theme.linked.rejected": "«{name}» non si è rimontato: {n} motivi, li trovi in Aspetto. Resta l'ultima versione buona.",
 "theme.linked.missing": "La cartella del tema collegato non c'è più: torna {series}.",
 "theme.linked.missing_at_start": "La cartella del tema collegato, {folder}, non c'è più: Fub usa {series}. Rimettila al suo posto o scollegala in Aspetto.",
+"theme.reason.unreadable": "fascio non leggibile: {detail}",
+"theme.reason.not_listed": "tema assente dall'inventario",
+"theme.reason.mismatch": "risposta del canale non coerente",
+"theme.reason.light_missing": "luce {light} non offerta",
 // --- i tasti che il vault propone (§23.13) -----------------------------
 //
 // Il testo dice che **non sono attive**, e lo dice per primo: chi legge deve
@@ -4792,6 +4797,7 @@ export const EN: Record<Key, string> = { "app.skip_to_editor": "Skip to the edit
 "settings.themes.linked.unlinked": "Folder unlinked.",
 "settings.themes.linked.unlink_failed": "The folder was not unlinked: {reason}",
 "settings.themes.linked.unreadable": "Fub cannot read the linked folder: the last good version stays.",
+"settings.themes.linked.unwatched": "Fub cannot follow this folder: your saves do not arrive and the theme is not remounted on its own. Unlink it and link it again; if it happens again, close the programs that follow many folders and try again.",
 "settings.themes.diagnosis.when_last_good":
   "Attempt at {time}. The last good one, from {good}, stays mounted.",
 "settings.themes.diagnosis.when_listed_good":
@@ -4800,6 +4806,10 @@ export const EN: Record<Key, string> = { "app.skip_to_editor": "Skip to the edit
 "theme.linked.rejected": "«{name}» was not remounted: {n} reasons, you will find them in Appearance. The last good version stays.",
 "theme.linked.missing": "The linked theme folder is gone: {series} is back.",
 "theme.linked.missing_at_start": "The linked theme folder, {folder}, is gone: Fub uses {series}. Put it back or unlink it in Appearance.",
+"theme.reason.unreadable": "bundle not readable: {detail}",
+"theme.reason.not_listed": "theme missing from the inventory",
+"theme.reason.mismatch": "inconsistent channel response",
+"theme.reason.light_missing": "light {light} not offered",
 "settings.vault_keys.title": "This vault proposes {count} shortcuts",
 "settings.vault_keys.hint":
   "A vault carries its own shortcuts with it, and these come from outside: until you look at them they press nothing, and the combinations declared by the commands are what counts.",

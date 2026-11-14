@@ -731,6 +731,15 @@ export function renderLinkedFolder(host: ThemeFolderHost, status: LinkedThemeSta
     ? t("settings.themes.linked.hint_unknown", { folder: status.link.folder })
     : t("settings.themes.linked.hint", { folder: status.link.folder, name: status.link.name });
   text.append(title, hint);
+  // Collegata, ma nessuno la guarda: i salvataggi non arrivano. Una cartella
+  // sparita lo dice già la riga di stato.
+  if (!status.link.watched && status.link.state !== "missing") {
+    const unwatched = document.createElement("div");
+    unwatched.className = "muted";
+    unwatched.dataset.linkUnwatched = "";
+    unwatched.textContent = t("settings.themes.linked.unwatched");
+    text.append(unwatched);
+  }
   const line = document.createElement("div");
   line.className = "setting-source";
   line.setAttribute("role", "status");

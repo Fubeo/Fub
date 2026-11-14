@@ -337,7 +337,7 @@ function reportLoadFailure(id: string, detail: string): void {
   reportThemeTrouble({
     type: "theme",
     theme: id,
-    reasons: [`fascio non leggibile: ${detail}`],
+    reasons: [t("theme.reason.unreadable", { detail })],
   });
 }
 
@@ -377,16 +377,16 @@ async function apply(): Promise<void> {
   if (requestedId !== SERIES_THEME_ID && !waitingForCatalog) {
     const info = installedThemes.find((theme) => theme.manifest.id === requestedId);
     if (!info) {
-      reportLoadFailure(requestedId, "tema assente dall'inventario");
+      reportLoadFailure(requestedId, t("theme.reason.not_listed"));
     } else if (!info.manifest.lights.includes(light)) {
-      reportLoadFailure(requestedId, `luce ${light} non offerta`);
+      reportLoadFailure(requestedId, t("theme.reason.light_missing", { light }));
     } else {
       try {
         const cached = catalogPayloads.get(`${requestedId}:${light}`);
         const payload = cached ?? (await api.readTheme(requestedId, light));
         if (generation !== applyGeneration) return;
         if (payload.manifest.id !== requestedId || payload.light !== light) {
-          reportLoadFailure(requestedId, "risposta del canale non coerente");
+          reportLoadFailure(requestedId, t("theme.reason.mismatch"));
         } else {
           mounted = mountThemeBundle(themeBundle(payload, light, contrast), light);
           if (mounted.mounted) actualId = requestedId;
@@ -581,7 +581,7 @@ async function readCatalog(): Promise<ThemeInfo[]> {
                 id: info.manifest.id,
                 name: info.manifest.name,
                 light: null,
-                reasons: [`fascio non leggibile: ${detail}`],
+                reasons: [t("theme.reason.unreadable", { detail })],
                 at: Date.now(),
               });
               return null;
@@ -669,16 +669,33 @@ function updateLinked(link: ThemeLink, patch: Partial<Omit<LinkedThemeStatus, "l
 
 /// I temi in sviluppo che una lettura del catalogo ha rifiutato tornano con
 /// l'ultimo fascio buono, se c'era: un salvataggio a metà non toglie il tema.
+/// Vale per i rifiuti del cancello della shell (l'host lo elenca, la shell no)
+/// e per quelli delle porte dell'host (`refused`, `unreadable`: l'host non lo
+/// elenca più, ma la cartella è ancora quella collegata).
 function keepLastGoodLinked(listed: ThemeInfo[], accepted: ThemeInfo[], payloads: Map<string, ThemePayload>): void {
-  for (const info of listed) {
-    if (info.trust !== "development" || accepted.some((theme) => theme.manifest.id === info.manifest.id)) continue;
-    const good = installedThemes.find((theme) => theme.manifest.id === info.manifest.id && theme.trust === "development");
+  const ids = new Set(listed.filter((info) => info.trust === "development").map((info) => info.manifest.id));
+  const held = linked?.link;
+  if (held !== undefined && held.id !== null && (held.state === "refused" || held.state === "unreadable")) {
+    ids.add(held.id);
+  }
+  for (const id of ids) {
+    if (accepted.some((theme) => theme.manifest.id === id)) continue;
+    const good = installedThemes.find((theme) => theme.manifest.id === id && theme.trust === "development");
     if (!good) continue;
     const lights = good.manifest.lights.map((light) => catalogPayloads.get(`${good.manifest.id}:${light}`));
     if (lights.some((payload) => payload === undefined)) continue;
     accepted.push(good);
     for (const payload of lights) payloads.set(`${good.manifest.id}:${payload!.light}`, payload!);
   }
+}
+
+/// Un rimontaggio del collegato sta per scrivere il catalogo: una lettura in
+/// volo, partita prima del salvataggio, non deve rimettere dopo di lui il
+/// fascio vecchio. Il suo giro è superato, e chi l'aspetta riceve una
+/// lettura nuova (che vede il salvataggio).
+function supersedeCatalogRead(): void {
+  catalogRound += 1;
+  if (!catalogLoaded) catalogRequest = null;
 }
 
 /// Toglie dal catalogo i temi in sviluppo (ce n'è al più uno) e i loro fasci.
@@ -776,6 +793,7 @@ async function remountLinked(link: ThemeLink, epoch: number, generation: number)
   if (link.state === "missing") {
     const wasShown = id !== null && shownThemeId() === id;
     updateLinked(link, { attemptAt: at, rejection: null });
+    supersedeCatalogRead();
     dropLinkedFromCatalog();
     if (previewSelection?.id === id) previewSelection = null;
     if (wasShown) notify(t("theme.linked.missing", { series: series.manifest.name }), "guasto");
@@ -806,12 +824,12 @@ async function remountLinked(link: ThemeLink, epoch: number, generation: number)
     const listed = await api.listThemes();
     if (!current()) return;
     info = listed.find((theme) => theme.manifest.id === id && theme.trust === "development");
-    if (info === undefined) throw new Error("tema assente dall'inventario");
+    if (info === undefined) throw new Error(t("theme.reason.not_listed"));
     const contrast = effectiveContrast(contrastChoice, mediaMatches(CONTRAST_QUERY, false));
     for (const light of info.manifest.lights) {
       const payload = await api.readTheme(id, light);
       if (!current()) return;
-      if (payload.manifest.id !== id || payload.light !== light) throw new Error("risposta del canale non coerente");
+      if (payload.manifest.id !== id || payload.light !== light) throw new Error(t("theme.reason.mismatch"));
       const reasons = validateThemeBundle(themeBundle(payload, light, contrast), light);
       if (reasons.length > 0) {
         rejection = { id, name: info.manifest.name, light, reasons, at };
@@ -821,7 +839,7 @@ async function remountLinked(link: ThemeLink, epoch: number, generation: number)
     }
   } catch (error) {
     if (!current()) return;
-    rejection = { id, name, light: null, reasons: [`fascio non leggibile: ${errorDetail(error)}`], at };
+    rejection = { id, name, light: null, reasons: [t("theme.reason.unreadable", { detail: errorDetail(error) })], at };
   }
   if (!current()) return;
   if (rejection !== null || info === undefined) {
@@ -839,6 +857,7 @@ async function remountLinked(link: ThemeLink, epoch: number, generation: number)
   // Il fascio nuovo è buono: prende il posto del vecchio, e chi lo mostra lo
   // rimonta (`reread` rifà anche la scelta: un tema che all'avvio non reggeva
   // e ora regge torna quello scelto).
+  supersedeCatalogRead();
   dropLinkedFromCatalog();
   installedThemes = [...installedThemes, info];
   for (const payload of payloads) catalogPayloads.set(`${id}:${payload.light}`, payload);
@@ -881,7 +900,7 @@ export function vetThemeFolder(
   for (const light of check.manifest.lights) {
     const read = check.lights.find((candidate) => candidate.light === light);
     if (read === undefined) {
-      rejected.push({ light, reasons: [`fascio non leggibile: ${check.manifest.id}:${light}`] });
+      rejected.push({ light, reasons: [t("theme.reason.unreadable", { detail: `${check.manifest.id}:${light}` })] });
       continue;
     }
     const assets: Record<string, readonly number[]> = {};

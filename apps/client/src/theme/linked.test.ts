@@ -19,6 +19,9 @@ const box = vi.hoisted(() => ({
   host: null as FakeHost | null,
   notify: vi.fn(),
   trouble: vi.fn(),
+  /// La prossima chiamata a questa porta aspetta `until` prima di rispondere
+  /// (con la risposta di quando è partita): una lettura lenta.
+  slowNext: null as { name: string; until: Promise<void> } | null,
 }));
 
 vi.mock("../host/ipc", () => ({
@@ -30,7 +33,13 @@ vi.mock("../host/ipc", () => ({
         const method = box.host.module.api[name as keyof typeof box.host.module.api] as (
           ...values: unknown[]
         ) => unknown;
-        return method(...args);
+        const result = method(...args);
+        const slow = box.slowNext;
+        if (slow !== null && slow.name === name) {
+          box.slowNext = null;
+          return slow.until.then(() => result);
+        }
+        return result;
       },
     },
   ),
@@ -39,7 +48,8 @@ vi.mock("../state/kernel", () => ({ onEvent: () => () => {} }));
 vi.mock("../ui/notify", () => ({ notify: box.notify, reportThemeTrouble: box.trouble }));
 
 const { createFakeHost, developerModeSetting, extendingTheme } = await import("../host/fake");
-const { currentThemeId, linkedTheme, mountTheme, themeFolderChanged } = await import("./theme");
+const { currentThemeId, linkedTheme, mountTheme, reloadThemeCatalog, themeCatalog, themeFolderChanged } =
+  await import("./theme");
 const { openLifetime } = await import("../ui/lifetime");
 const { linkedDiagnosis } = await import("../panels/theme-folder");
 
@@ -96,6 +106,7 @@ const settle = () => vi.waitFor(() => expect(linkedTheme()?.goodAt ?? null).not.
 
 beforeEach(() => {
   vi.clearAllMocks();
+  box.slowNext = null;
   document.head.innerHTML = "";
   document.documentElement.dataset.theme = "light";
   localStorage.clear();
@@ -209,6 +220,55 @@ describe("il tema collegato si rimonta a ogni salvataggio", () => {
     await vi.waitFor(() => expect(box.host!.themeFolderChanged([])).toBe(true));
     second.close();
     expect(box.host!.themeFolderChanged([])).toBe(false);
+  });
+
+  it("una lettura del catalogo partita prima del salvataggio non rimette il fascio vecchio", async () => {
+    const folders: Folders = { [FOLDER]: carta("v1") };
+    const lifetime = start(folders);
+    await vi.waitFor(() => expect(skin()).toContain("v1"));
+    await settle();
+
+    // Una rilettura del catalogo parte e la sua prima lettura del fascio (v1)
+    // resta in volo.
+    let release!: () => void;
+    box.slowNext = { name: "readTheme", until: new Promise<void>((resolve) => (release = resolve)) };
+    const reading = reloadThemeCatalog();
+    await vi.waitFor(() => expect(box.slowNext).toBeNull());
+
+    folders[FOLDER] = carta("v2");
+    box.host!.themeFolderChanged(["skin.css"]);
+    await vi.waitFor(() => expect(skin()).toContain("v2"));
+
+    // La lettura vecchia arriva dopo il rimontaggio: non scrive più niente.
+    release();
+    await reading;
+    await vi.waitFor(() => expect(linkedTheme()!.reloaded).not.toBeNull());
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(skin()).toContain("v2");
+    expect(skin()).not.toContain("v1");
+    lifetime.close();
+  });
+
+  it("un salvataggio che le porte dell'host rifiutano lascia l'ultimo buono anche dopo una rilettura", async () => {
+    const folders: Record<string, ThemeFolderFake | { reason: "malformed"; detail: string }> = {
+      [FOLDER]: carta("v1"),
+    };
+    const lifetime = start(folders as Folders);
+    await vi.waitFor(() => expect(skin()).toContain("v1"));
+    await settle();
+
+    folders[FOLDER] = { reason: "malformed", detail: "expected value at line 1 column 3" };
+    box.host!.themeFolderChanged(["manifest.json"]);
+    await vi.waitFor(() => expect(linkedTheme()!.link.state).toBe("refused"));
+
+    // L'host non elenca più il tema; il catalogo riletto lo tiene col fascio
+    // buono, e il tema in uso non torna alla serie.
+    await reloadThemeCatalog();
+    expect((await themeCatalog()).map((theme) => theme.manifest.id)).toContain(ID);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(currentThemeId()).toBe(ID);
+    expect(skin()).toContain("v1");
+    lifetime.close();
   });
 
   it("un campanello arrivato dopo uno scollegamento non rimonta niente", async () => {
