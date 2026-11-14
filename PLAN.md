@@ -1092,7 +1092,7 @@ Fatto quando: `cargo test -p fub-canvas-core` passa con i vettori nuovi;
 frecce non hanno più `needs`; Vitest dei vettori passa.
 Prova: scripts/check.sh --rapido; cargo test -p fub-canvas-core; cd
 apps/client && npx vitest run src/editors/canvas/wasm
-Stato: [ ] da fare
+Stato: [x] fatto · coder/lic-t9 (d562cada7, 7 commit) unito in b8f867183 sopra T21 · `AddCardArgs`/`ConnectArgs` in `ops/card.rs` e `ops/connect.rs` (varianti newtype: il JSON resta quello del piano), la tavola dei colori in `ops/color.rs`, 52 vettori nuovi in `canvas-ops/` (verdi anche nel .wasm), parity: main 13→7 e N6 19→12 voci da fare, i compiti 01, 07 e 20 senza `needs` (14 solo `layout`); ADR 0241 (la 0240 era presa). Scarti: (1) `describe::code` scrive la forma breve anche per gli archi; (2) i colori accettano anche «1»…«6» e `#rrggbb` in maiuscolo o minuscolo, come già diceva la guida; (3) regole in più, tutte `Invalid`: `side` o `gap` senza `near`, `gap` negativo, `label` fuori da un gruppo, `content_size` senza `file`; un `null` facoltativo vale assente; (4) fuori Tocca: tre bracci di `kind_name` in `lavagna/guide.rs` e la riga di `parse_hex` nel censimento delle regole d'identità di `fub-abi`; (5) la quattordicesima voce era già `code` (se ne accorciano le operazioni) e `N6.convert.copy_here` va in `composed` perché ha `port`; (6) con una misura scritta a mano e `near` a sinistra o sopra, il bordo che tocca resta a `gap` ma lo scivolamento usa la misura di nascita (scritto in canvas-code.md). Resta: `canvas.read` in forma `code` cambia per tutte le lavagne (forme brevi)
 
 ## T10 · Colori, ordine, gruppi che portano, misure che si adattano
 
