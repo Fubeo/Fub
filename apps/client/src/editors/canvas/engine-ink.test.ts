@@ -1720,7 +1720,7 @@ describe("a chi appartiene il tratto (T69)", () => {
     }
   });
 
-  it("un tratto annullato toglie etichetta e bordo e non annuncia niente; la gomma non ha etichetta", () => {
+  it("la finestra che perde il fuoco chiude il tratto e lo salva: etichetta e bordo vanno via, la gomma non ha etichetta", () => {
     const { host, changes } = mounted();
     const stroke = penDown(host, card(host, "t"), [20, 20]);
     stroke.move([60, 40]);
@@ -1728,14 +1728,26 @@ describe("a chi appartiene il tratto (T69)", () => {
     window.dispatchEvent(new Event("blur"));
     expect(label(host)).toBeNull();
     expect(targets(host)).toEqual([]);
-    expect(changes).toEqual([]);
-    expect(said(host)).toBeNull();
+    // Chiuso come un rilascio all'ultimo punto: il tratto si scrive (N6 T20a).
+    expect(inkChanges(changes)).toHaveLength(1);
 
     pen(host, card(host, "t"), across(0, 0));
     const lift = eraser(host, viewportOf(host), [[60, 5], [60, 30], [60, 45]], false);
     expect(label(host)).toBeNull();
     expect(targets(host)).toEqual([]);
     lift();
+  });
+
+  it("il pointercancel annulla il tratto della penna: etichetta e bordo vanno via, e non si scrive niente", () => {
+    const { host, changes } = mounted();
+    const stroke = penDown(host, card(host, "t"), [20, 20]);
+    stroke.move([60, 40]);
+    expect(label(host)).not.toBeNull();
+    viewportOf(host).dispatchEvent(pointerEvent("pointercancel", { ...PEN, timeStamp: clock }));
+    expect(label(host)).toBeNull();
+    expect(targets(host)).toEqual([]);
+    expect(changes).toEqual([]);
+    expect(said(host)).toBeNull();
   });
 });
 
@@ -2087,6 +2099,33 @@ describe("il dito scrive (T64)", () => {
     expect(camera(host).zoom).toBeCloseTo(Math.min(4, before.zoom * 2));
     one.up({ clientX: middle - half * 2, clientY: a.clientY });
     two.up({ clientX: middle + half * 2, clientY: b.clientY });
+    expect(inkChanges(changes)).toEqual([]);
+    expect(wetPaths(host)).toBe(0);
+  });
+
+  it("il dito che scrive perde la cattura quando il secondo arriva: il primo segno si toglie e il pizzico vale lo stesso", async () => {
+    const { host, changes } = await mountedWith({ fingerWrites: true });
+    const viewport = viewportOf(host);
+    const before = camera(host);
+    const one = finger(host, 11, viewport, [100, 300]);
+    const a = client(host, [110, 300]);
+    one.move(a, 15);
+    expect(wetPaths(host)).toBe(1);
+    clock += 15;
+    const two = finger(host, 12, viewport, [200, 300]);
+    expect(wetPaths(host)).toBe(0);
+    // Lo strato della penna toglie la cattura al primo dito, che il secondo ha preso per il pizzico: il browser la consegna dopo l'appoggio (T20a, T64).
+    clock += 1;
+    viewport.dispatchEvent(pointerEvent("lostpointercapture", { ...TOUCH, pointerId: 11, ...a, timeStamp: clock }));
+    const b = client(host, [200, 300]);
+    const middle = (a.clientX + b.clientX) / 2;
+    const half = (b.clientX - a.clientX) / 2;
+    one.move({ clientX: middle - half * 2, clientY: a.clientY });
+    two.move({ clientX: middle + half * 2, clientY: b.clientY });
+    expect(camera(host).zoom).toBeCloseTo(Math.min(4, before.zoom * 2));
+    one.up({ clientX: middle - half * 2, clientY: a.clientY });
+    two.up({ clientX: middle + half * 2, clientY: b.clientY });
+    // Il primo segno non è mai stato scritto, e nessun gesto è rimasto aperto.
     expect(inkChanges(changes)).toEqual([]);
     expect(wetPaths(host)).toBe(0);
   });

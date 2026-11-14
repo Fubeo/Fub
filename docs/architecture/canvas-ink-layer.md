@@ -36,7 +36,9 @@ coordinate della lavagna e `onEraseEnd`.
   `onStroke` in coordinate della lavagna, con pennello, colore e strumento
   letti all'inizio (`look`); la scia resta finché la lavagna non chiama
   `settle(id)` nello stesso giro in cui aggiunge l'asciutto. Un tratto
-  annullato (palmo, cattura persa, finestra nascosta) toglie subito la scia.
+  annullato (palmo, pagina nascosta, `pointercancel`) toglie subito la scia;
+  uno chiuso dalla cattura persa o dalla finestra che perde il fuoco si salva
+  come un rilascio, all'ultimo punto (N6 T20a).
   La sessione fa un tratto alla volta: una seconda penna non scrive e non
   arriva alla lavagna.
 - **L'asciutto.** `editors/canvas/ink-paint.ts`: `paintCard` mette nella
