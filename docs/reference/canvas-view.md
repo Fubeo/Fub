@@ -388,7 +388,11 @@ frammento apre il file in cima con l'avviso «Questa vista di … non sa portare
 a quel punto.». È il caso della cella: la griglia non riceve un punto da un
 link. Se il riquadro vicino, quello che la divisione metterebbe
 a destra, mostra già il file, si torna lì invece di dividere
-(`openDocumentBeside` con `reuse`; un `fub://open` divide sempre). Nella
+(`openDocumentBeside` con `reuse`; un `fub://open` divide sempre). Anche in
+una disposizione annidata: il vicino sta nel ramo dopo quello del riquadro
+col fuoco, nella divisione in riga più interna che ne ha uno, fra i riquadri
+di quel ramo che toccano il lato sinistro (con riga [colonna [A, B], C] è C;
+con riga [A, colonna [C, D]] è C o D, il primo che mostra il file). Nella
 finestra stretta (`data-narrow`) va invece a `onOpenPath`, nello stesso
 riquadro come «Apri», e il nome lo dice: «Apri qui su B3», «Apri qui per
 questo».

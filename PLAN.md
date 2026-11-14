@@ -5554,7 +5554,7 @@ riportare, mai una soglia da alzare: ci-soglia (a)).
 Fatto quando: `gh pr checks 302` è tutto verde; il rapporto della
 revisione non ha errori aperti; l'utente ha detto sì al merge.
 Prova: gh pr checks 302; scripts/check.sh
-Stato: [ ] da fare
+Stato: [~] PR #302 pronta (CI completa in corso) · revisione `code-review high` fatta il 2026-11-14: nove difetti, diventati T101 (lo stesso contenuto, kernel e host) e T102 (le schede che si chiudono, client); il merge dopo T101, T102 e la CI verde (dal 2026-11-10 il merge lo decide l'agente)
 
 ## T91 · Tre difetti della lavagna visti dal collaudo
 
@@ -5963,7 +5963,7 @@ Cosa fare:
 Fatto quando: un test per ciascun caso rosso sulla base e verde dopo; i test
 di T96 e di T30–T32 restano verdi.
 Prova: npx vitest run src/state; scripts/check.sh --rapido
-Stato: [ ] da fare
+Stato: [x] fatto · integrato da coder/n6-t102 (22559da89) · veri e corretti: `settle()` passa l'esito `unsaved` a `keepOrDiscardUnsaved` (che non scarta se una scheda ha ripreso la nota) e «Apri a lato» trova il vicino nelle divisioni annidate (regola in canvas-view.md); `destroyText` consegna il testo in sospeso (oggi non perdeva testo: l'editor manda ogni cambio subito); falso `noticeCopies`: anche «copied_excluded» dice dove sono andati i file · 4 test rossi sulla base · rischio: il collegamento `unsaved` nella shell è provato con una porta finta, non di punta a punta
 
 ## Non verificato stanotte
 
