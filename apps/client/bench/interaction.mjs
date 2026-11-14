@@ -106,8 +106,7 @@ const TYPING = {
   notes: [50, 400],
   modes: [
     ["source", "Sorgente"],
-    ["live_preview", "Live"],
-    ["blocks", "Blocchi"],
+    ["live_preview", "Scrittura"],
   ],
   keystrokes: 30,
   moves: 20,
@@ -254,8 +253,8 @@ async function measureTyping(stage, sections, mode) {
     await page.waitForSelector(tabOf("Guida/Live.md"));
     await chooseMode(page, mode);
     await page.waitForSelector(`.pane.focus[data-mode="${mode}"] .cm-content`);
-    // I Blocchi arrivano in un pezzo a parte: si misura quando ci sono.
-    if (mode === "blocks") await page.waitForSelector(".pane.focus .cm-fub-block-handles", { state: "attached" });
+    // Scrittura ha i Blocchi dentro: si misura con le maniglie montate.
+    if (mode === "live_preview") await page.waitForSelector(".pane.focus .cm-fub-block-handles", { state: "attached" });
     return await page.evaluate(async ({ keystrokes, moves }) => {
       const { findTextEditorOrThrow } = await import("/src/editors/text/test-support.ts");
       const view = findTextEditorOrThrow(document.querySelector(".pane.focus .cm-editor").parentElement);

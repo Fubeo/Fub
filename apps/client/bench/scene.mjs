@@ -911,8 +911,20 @@ export const SCENE = onPage("shell", [
     ...(viewport ? { viewport } : {}),
     prepare: (page) => openLive(page, keys, live === "panoramica-fondo" ? "bottom" : "top"),
   })),
-  // I Blocchi: la stessa nota, con la maniglia del blocco sotto il puntatore e
-  // quella del blocco del cursore; poi la selezione di blocchi e il menu.
+  // Scrittura a riposo (T3, E1, passo 1 del prototipo): la pagina mostra solo
+  // ciò che si legge. Prima della foto la scena prova i livelli di presenza:
+  // al passaggio maniglie e strumenti della testata compaiono senza spostare
+  // il testo; a foglio fermo nessun elemento `data-presence` e nessun pulsante
+  // che non sia contenuto si vede. Se no, la scena è rossa.
+  {
+    id: "scrittura-a-riposo",
+    title: "Scrittura a riposo: testata, proprietà e testo, senza maniglie né pulsanti sul foglio",
+    query: "live=pagina",
+    prepare: (page) => writingAtRest(page),
+  },
+  // Scrittura coi Blocchi: la stessa nota, con la maniglia del blocco sotto il
+  // puntatore e quella del blocco del cursore; poi la selezione di blocchi e il
+  // menu.
   ...[
     ["blocchi-01-passaggio", "riga-attiva", "I Blocchi col puntatore su un titolo: «+» e maniglia accanto", "hover"],
     ["blocchi-02-selezione", "riga-attiva", "I Blocchi con due blocchi selezionati (Esc, Shift+↓)", "select"],
@@ -927,7 +939,7 @@ export const SCENE = onPage("shell", [
     query: `live=${live}`,
     ...(viewport ? { viewport } : {}),
     prepare: async (page) => {
-      await openLive(page, [], "top", "blocks");
+      await openLive(page, [], "top");
       await page.waitForSelector(".pane.focus .cm-fub-block-handles");
       // La testata della pagina arriva dopo che il cursore è stato portato in
       // vista: secondo chi vince, la nota resta in cima o scende di 78 px. Il
@@ -1652,7 +1664,7 @@ async function runCommand(page, title) {
 }
 
 /// Il nome delle modalità nel menu, in italiano come il banco.
-const MODE_LABELS = { live_preview: "Live", blocks: "Blocchi", source: "Sorgente", reading: "Lettura" };
+const MODE_LABELS = { live_preview: "Scrittura", source: "Sorgente", reading: "Lettura" };
 
 /// Sceglie la modalità del riquadro a fuoco come la persona (Scrittoio 2, T3):
 /// dalla voce della banda, e dove la banda non c'è (il telefono) dal tondo del
@@ -1732,6 +1744,78 @@ async function openLive(page, keys, scroll, mode = "live_preview") {
     else await page.keyboard.type(key);
   }
   await settleLive(page, scroll === "bottom");
+}
+
+/// Scrittura a riposo (T3): apre la nota con la testata, prova che ciò che
+/// compare al passaggio non sposta il testo, poi ferma il foglio (puntatore
+/// fuori, nessun fuoco) e pretende che non si veda niente di ciò che compare
+/// al passaggio o a richiesta (`data-presence`), né un pulsante che non sia
+/// contenuto. Lancia, con l'elenco di ciò che si vede, se una delle due
+/// regole cade.
+async function writingAtRest(page) {
+  await openLive(page, [], "top");
+  await page.waitForSelector(".pane.focus .cm-fub-page-title");
+  const frames = () => page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  // Le posizioni del testo rispetto al contenuto, non alla finestra: il
+  // passaggio può far scorrere la nota, e lo scorrimento non è uno spostamento.
+  const textBoxes = () => page.evaluate(() => {
+    const content = document.querySelector(".pane.focus .cm-scroller > .cm-content");
+    const origin = content.getBoundingClientRect();
+    return [...content.querySelectorAll(":scope > .cm-line, .cm-fub-page-title, .note-facts")].slice(0, 24).map((el) => {
+      const box = el.getBoundingClientRect();
+      return `${Math.round(box.left - origin.left)},${Math.round(box.top - origin.top)}`;
+    });
+  });
+  await frames();
+  const before = await textBoxes();
+  await page.hover(".pane.focus .cm-content .cm-line:has-text('Cose da fare')");
+  await page.waitForSelector('.pane.focus .cm-fub-block-handles[data-active="true"]');
+  await page.hover(".pane.focus .cm-fub-page-title");
+  await page.waitForFunction(() => {
+    const tools = document.querySelector(".pane.focus .cm-fub-page-tools");
+    return tools !== null && Number(getComputedStyle(tools).opacity) > 0.95;
+  });
+  await frames();
+  const during = await textBoxes();
+  if (during.join(" ") !== before.join(" ")) {
+    throw new Error(`al passaggio il testo si è spostato: ${before.join(" ")} → ${during.join(" ")}`);
+  }
+  // Il foglio fermo: il puntatore fuori, nessun fuoco, la nota dall'alto.
+  await page.mouse.move(0, 0);
+  await page.evaluate(() => {
+    if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+    document.querySelector(".pane.focus .cm-scroller").scrollTop = 0;
+  });
+  // Una funzione sola, che il browser esegue per aspettare e poi per dire
+  // che cosa resta: Playwright ne manda il testo.
+  const seen = function visibleAtRest() {
+    const shown = (el) => {
+      for (let node = el; node && node !== document.body; node = node.parentElement) {
+        if (node.hidden) return false;
+        const style = getComputedStyle(node);
+        if (style.display === "none" || style.visibility === "hidden" || Number(style.opacity) < 0.05) return false;
+      }
+      const box = el.getBoundingClientRect();
+      return box.width > 0 && box.height > 0;
+    };
+    const sheet = document.querySelector(".pane.focus .cm-editor");
+    const name = (el) => `${el.tagName.toLowerCase()}.${[...el.classList].join(".")}`;
+    // I pulsanti che sono contenuto, a riposo anche nel prototipo: l'icona
+    // della pagina, la riga dei dati e la testata di un blocco di codice
+    // (lingua, «A capo», «Copia»).
+    const content = ".cm-fub-page-icon, .note-facts *, .cm-fub-code-header button";
+    return [
+      ...[...sheet.querySelectorAll("[data-presence]")].filter(shown).map((el) => `${name(el)}[${el.dataset.presence}]`),
+      ...[...sheet.querySelectorAll("button, [role=button]")].filter((el) => !el.closest("[data-presence]") && !el.matches(content) && shown(el)).map(name),
+    ];
+  };
+  try {
+    await page.waitForFunction(`(${seen})().length === 0`, null, { timeout: 5_000 });
+  } catch {
+    const left = await page.evaluate(seen);
+    throw new Error(`a riposo si vede ancora: ${left.join(", ")}`);
+  }
+  await frames();
 }
 
 /// La Live a riposo, prima della foto: due cose arrivavano dopo i due
