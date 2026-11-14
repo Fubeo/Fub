@@ -14,7 +14,7 @@ import {
 import { openLifetime, type Lifetime } from "../../../ui/lifetime";
 import { closeContextMenu, menuFind, showContextMenu } from "../../../ui/menu";
 import { setSearchPort } from "../../../state/search-port";
-import { state } from "../../../state/store";
+import { emit, state } from "../../../state/store";
 import type { Listing, Row } from "./sources";
 
 type Answer = Listing | Promise<Listing>;
@@ -531,6 +531,7 @@ describe("i modi", () => {
   });
 
   it("il campo cambia invito e i tasti del piede col modo", () => {
+    world.answer = () => listed([note("Uno.md")]);
     launcher.open("all");
     expect(field().placeholder).toBe("launcher.placeholder.all");
     const hints = (): string => document.querySelector(".launcher-hints")!.textContent ?? "";
@@ -539,6 +540,12 @@ describe("i modi", () => {
     (document.querySelectorAll<HTMLElement>('.launcher-modes [role="tab"]')[1] as HTMLElement).click();
     expect(field().placeholder).toBe("launcher.placeholder.commands");
     expect(hints()).toContain("launcher.hint.run");
+  });
+
+  it("senza una riga da scegliere il piede non dice che cosa fa Invio", () => {
+    world.answer = () => nothing("launcher.note.all.none");
+    launcher.open("all");
+    expect(document.querySelector(".launcher-hints")!.textContent).not.toContain("launcher.hint.open");
   });
 });
 
@@ -794,6 +801,8 @@ describe("le azioni di una riga (Tab)", () => {
     expect(shown).toHaveLength(6);
     expect(titles()).toEqual(["launcher.action.open", "launcher.action.split", "launcher.action.rename", "launcher.action.copy_link", "launcher.action.pin"]);
     expect(document.querySelector(".launcher-hints")!.textContent).toContain("launcher.hint.back");
+    // Con le azioni aperte la domanda non si porta al pannello: il controllo sparisce.
+    expect(toPanel().hidden).toBe(true);
   });
 
   it("Esc torna dall'elenco di prima, e non chiude il lanciatore", () => {
@@ -1095,6 +1104,26 @@ describe("le risposte che arrivano tardi", () => {
     await settle();
     expect(world.log).toEqual(["split p0 row", "open Nuova.md"]);
     expect(surface()).toBeNull();
+  });
+
+  it("una ricerca senza risultati si rifà quando i documenti cambiano: la nota arrivata nell'indice si vede", () => {
+    world.answer = () => nothing('launcher.note.all.create {"query":"Stampa","name":"Stampa"}');
+    launcher.open("all");
+    typed("Stampa");
+    expect(said()).toBe('launcher.note.all.create {"query":"Stampa","name":"Stampa"}');
+    world.answer = () => listed([note("R1/Stampa.pdf")]);
+    emit("documents");
+    expect(titles()).toEqual(["Stampa"]);
+    expect(said()).toBe("");
+  });
+
+  it("con dei risultati già visibili, un cambio di documenti non rifà la ricerca", () => {
+    world.answer = () => listed([note("Uno.md")]);
+    launcher.open("all");
+    typed("uno");
+    world.asked.length = 0;
+    emit("documents");
+    expect(world.asked).toEqual([]);
   });
 
   it("un Invio dato alla cieca non apre né crea niente; Maiusc-Invio crea solo a risposta vista", async () => {

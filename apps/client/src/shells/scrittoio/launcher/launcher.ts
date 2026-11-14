@@ -29,7 +29,7 @@ import { notify } from "../../../ui/notify";
 import { scopeLabel } from "../../../ui/palette";
 import { Race } from "../../../ui/race";
 import { skeleton, SKELETON_DELAY_MS } from "../../../ui/skeleton";
-import { state } from "../../../state/store";
+import { on, state } from "../../../state/store";
 import { actionRows, createNamed, step, toSearchPanel, withEnter } from "./actions";
 import { declareLauncherCommands } from "./commands";
 import {
@@ -453,7 +453,8 @@ export function mountLauncher(lifetime: Lifetime): Launcher {
         hints.append(hint(ENTER_KEY, t("launcher.hint.run")), hint("Esc", t("launcher.hint.back")));
         return;
       }
-      if (mode !== "help") hints.append(hint(ENTER_KEY, t(ENTER_HINT[mode])));
+      // Invio dice che cosa fa solo quando c'è una riga da scegliere.
+      if (mode !== "help" && list.active() !== null) hints.append(hint(ENTER_KEY, t(ENTER_HINT[mode])));
       if (OPENS_NOTES.includes(mode) && actionable(list.active())) {
         hints.append(hint(withEnter("Mod-Enter"), t("launcher.hint.split")));
       }
@@ -577,7 +578,8 @@ export function mountLauncher(lifetime: Lifetime): Launcher {
     /// Il controllo c'è per tutto «Tutto»; senza una domanda da portare è
     /// spento, non sparito: il piede non si muove mentre si scrive.
     const offerPanel = (): void => {
-      toPanel.hidden = mode !== "all";
+      // Con le azioni aperte la domanda non si porta: il piede dice Esc torna.
+      toPanel.hidden = mode !== "all" || actionsOf !== null;
       toPanel.disabled = mode !== "all" || toSearchPanel(input.value) === null;
     };
 
@@ -661,12 +663,14 @@ export function mountLauncher(lifetime: Lifetime): Launcher {
       const name = pageName(row.doc);
       paint({ rows: [{ kind: "group", key: "g:actions", title: t("launcher.group.actions", { name }) }, ...actionRows(row.doc)], note: null, total: null });
       status.textContent = t("launcher.group.actions", { name });
+      offerPanel();
     }
 
     /// Torna dalle azioni all'elenco di prima.
     function leaveActions(): void {
       if (actionsOf === null) return;
       actionsOf = null;
+      offerPanel();
       if (shown !== null) paint(shown);
       else {
         stale = true;
@@ -687,6 +691,15 @@ export function mountLauncher(lifetime: Lifetime): Launcher {
       offerPanel();
       ask();
     });
+
+    // L'indice può arrivare dopo la domanda: una ricerca di nomi senza risultati
+    // si rifà quando i documenti cambiano, senza aspettare una battuta in più.
+    // Un risultato vecchio non scrive sopra il nuovo: lo tiene la gara (`race`).
+    life.add(on("documents", () => {
+      if (stale || visible > 0 || actionsOf !== null || input.value.trim() === "") return;
+      if (mode !== "all" && mode !== "people") return;
+      query();
+    }));
 
     life.listen(toPanel, "click", () => carry());
     life.listen(toActions, "click", () => {
