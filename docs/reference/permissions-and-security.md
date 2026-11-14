@@ -386,6 +386,46 @@ diagnostici devono:
 - essere creati con un gesto esplicito;
 - non diventare canali di esportazione invisibili.
 
+Il file di log della macchina nasce `0600` su Unix, e uno di prima più
+aperto si stringe alla riapertura (`fub_kernel::log::FileSink`). Gli errori
+della rete dell'host nominano l'indirizzo senza credenziali, query e
+frammento (`fub_host::net`), perché arrivano al log e al plugin.
+
+## Documenti ostili
+
+Un file del vault può essere scritto da chiunque: chi lo legge ha un tetto
+mentre legge, non dopo, e oltre il tetto c'è un errore tipizzato o la sola
+lettura, mai una pila o una memoria esaurite.
+
+- `.odt`: annidamento XML fino a 256 elementi (`fub_format_rich::odt`).
+- `.docx`: allineamento delle revisioni con un budget di lavoro e di memoria,
+  senza ricorsione; al più 16 Mi caratteri di testo nell'inventario.
+- `.xlsx`: al più 4 milioni di nodi XML tenuti in memoria per parte (le righe
+  che vanno al flusso non contano), righe e colonne non oltre quelle di un
+  foglio.
+- InkML: nodi, punti per tratto e valori per punto contati durante la
+  lettura; un colore scritto è sempre `#rrggbb`.
+- Arene del modello e della UI: ricostruite fino a 64 livelli
+  (`fub_abi::arena::MAX_ARENA_DEPTH`), oltre è `ArenaError::TooDeep`.
+- SVG pulito per il web: senza script, gestori `on*`, URL `javascript:` e, in
+  un `foreignObject`, elementi che caricano altri documenti.
+- Import JSON generico: nel frontmatter entrano soltanto chiavi che sono
+  identificatori, e mai `title` o `source_file` del file.
+- Intenti di rinomina e lease di lettura recintano di nuovo i loro path prima
+  di comporli con la radice del vault.
+
+## Servizi remoti
+
+- La chiave del vault (VDK, 32 byte casuali) viaggia avvolta da una KEK
+  derivata dalla passphrase del vault con PBKDF2-HMAC-SHA256: le buste e le
+  password degli account nuove usano `ver=2`, 600.000 iterazioni; quelle di
+  `ver=1`, 210.000, si riaprono ancora. Ogni altra coppia di versione e
+  iterazioni si rifiuta prima di derivare, e nessuna derivazione supera
+  1.000.000 di iterazioni (`fub_services::crypto`, `fub_host::remote`).
+- Ruoli `Owner > Admin > Writer > Reader`, nel sync e nei siti: chi non è
+  Owner concede, toglie o cambia soltanto ruoli sotto il proprio
+  (`fub_services::acl::may_grant`, `check_revoke`).
+
 ## Segnalazioni
 
 La procedura per vulnerabilità è in [`../../SECURITY.md`](../../SECURITY.md).
