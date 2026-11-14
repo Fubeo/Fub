@@ -114,6 +114,8 @@ all'export, dalla sessione dal tablet ai disegni grandi.
 - [L'inchiostro della lavagna](reference/canvas-ink.md), i campi `fub:ink`
   di un `.canvas`
 - [Il server MCP](reference/mcp-server.md)
+- [Le convenzioni scritte nelle note](reference/note-conventions.md): i
+  commenti con la discussione (`{==passo==}{>>messaggio<<}`)
 - [I tipi delle proprietà](reference/property-types.md): il registro
   `properties.types`, le opzioni di Selezione e Stato e i loro comandi
 - [I formati dei file Craft](reference/craft-formats.md), gli
