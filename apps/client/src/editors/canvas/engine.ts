@@ -9058,7 +9058,8 @@ export class CanvasEngine {
    * della vista, il trascinamento di una scheda o di un tratto del Lazo, il
    * ridimensionamento, il filo, il giro del Lazo, il pizzico e il dito, il tocco
    * lungo, il menu radiale che il puntatore tiene. Il tratto della penna no:
-   * lo chiude l'adattatore (`ink/dom/pointer-adapter.ts`).
+   * lo tiene l'adattatore dell'inchiostro (`ink/dom/pointer-adapter.ts`), che
+   * lo annulla alla cattura persa e alla finestra.
    */
   #gestureOpen(pointerId: number): boolean {
     return this.#pan?.pointerId === pointerId || this.#tap?.pointerId === pointerId
