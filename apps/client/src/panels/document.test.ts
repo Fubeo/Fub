@@ -1018,12 +1018,21 @@ describe("il testo non salvato resta (#237)", () => {
     await waitFor("il testo nella sessione", () => sessions.isDirty(BENVENUTO));
     await sessions.flush(BENVENUTO).catch(() => {});
     await waitFor("l'avviso della sola lettura", () => toastsAbout("in sola lettura").length === 1);
+    const toastOf = () => [...document.querySelectorAll<HTMLElement>("#toasts > .toast")].find((toast) => (toast.textContent ?? "").includes("in sola lettura"));
+    const before = toastOf();
+    const { recentNotices } = await import("../ui/notify");
+    const told = () => recentNotices().filter((notice) => notice.text.includes("in sola lettura")).length;
+    const toldBefore = told();
     const NUOVO = "Benvenuto rinominato.md";
     host.renameFromOutside(BENVENUTO, NUOVO);
     await waitFor("la nota col nome nuovo", () => layouts.panesWithDoc(NUOVO).length === 1);
     await settle();
     expect(toastsAbout("in sola lettura")).toHaveLength(1);
     expect(toastsAbout("in sola lettura")[0]).toContain("«Benvenuto rinominato» è in sola lettura");
+    // Lo stesso avviso, riscritto: non si rifà, non si riannuncia, lo storico
+    // non lo conta due volte.
+    expect(toastOf()).toBe(before);
+    expect(told()).toBe(toldBefore);
     appendToTextEditor(" ancora");
     await sessions.flush(NUOVO).catch(() => {});
     await settle();

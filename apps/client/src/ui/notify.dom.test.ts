@@ -66,6 +66,19 @@ describe("la pila dei toast", () => {
     expect(toasts()).toHaveLength(1);
   });
 
+  it("un avviso riscritto resta lo stesso toast, col testo nuovo, e lo storico non cresce", () => {
+    const said = notify("«Prima» è in sola lettura", "guasto");
+    const toast = toasts()[0];
+    const told = recentNotices().length;
+    said.rewrite("«Dopo» è in sola lettura");
+    expect(toasts()).toEqual([toast]);
+    expect(toast!.querySelector(".toast-text")?.textContent).toBe("«Dopo» è in sola lettura");
+    expect(recentNotices()).toHaveLength(told);
+    said.withdraw();
+    said.rewrite("niente");
+    expect(toasts()).toHaveLength(0);
+  });
+
   it("due avvisi uguali fusi in un toast: ritirarne uno lascia il toast a chi lo tiene ancora", () => {
     const first = notify("La bozza non si scrive", "guasto");
     const second = notify("La bozza non si scrive", "guasto");

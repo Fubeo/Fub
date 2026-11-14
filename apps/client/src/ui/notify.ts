@@ -152,7 +152,7 @@ export function notify(
   announce(history[0]!);
   const toast = show(history[0]!, action === undefined ? [] : "label" in action ? [action] : action);
   redraw();
-  if (!toast) return { withdraw: () => {} };
+  if (!toast) return { withdraw: () => {}, rewrite: () => {} };
   holders.set(toast, (holders.get(toast) ?? 0) + 1);
   let held = true;
   return {
@@ -162,6 +162,12 @@ export function notify(
       const left = (holders.get(toast) ?? 1) - 1;
       holders.set(toast, left);
       if (left <= 0) dismissToast(toast);
+    },
+    rewrite: (next: string) => {
+      if (!held || !toast.isConnected) return;
+      toast.dataset["text"] = next;
+      const text = toast.querySelector(".toast-text");
+      if (text) text.textContent = next;
     },
   };
 }
@@ -177,6 +183,10 @@ const holders = new WeakMap<HTMLElement, number>();
 /// ogni avviso: è successo.
 export interface NoticeHandle {
   withdraw(): void;
+  /// Riscrive il testo del toast ancora a galla, senza rifarlo: niente nuovo
+  /// annuncio, niente riga in più nello storico (la nota ha cambiato nome, il
+  /// fatto è lo stesso).
+  rewrite(message: string): void;
 }
 
 /// Un gesto che l'avviso offre accanto al testo: «Annulla», «Apri», «Riprova».
