@@ -686,6 +686,50 @@ describe("«Apri a lato» di un percorso col punto (T45)", () => {
     expect(toasts().some((text) => text.includes("non sa portare"))).toBe(false);
   });
 
+  it("in una disposizione annidata ritrova il riquadro accanto che mostra già il PDF (T102)", async () => {
+    await start("off");
+    await open("Benvenuto.md");
+    const { openPathBeside } = await import("../state/document-controller");
+    await openPathBeside(`/${GUIDA}#page=3`, "Benvenuto.md");
+    await waitFor("la pagina 3", () => focusedPage() === "Pagina 3 di 5");
+    const [left, right] = await paneIds();
+    // riga [colonna [A, B], C]: A e B uno sopra l'altro, il PDF in C a destra.
+    const layoutModule = await layoutNow();
+    const below = layoutModule.split(left!, "col");
+    expect(below).not.toBeNull();
+    layoutModule.focusPane(left!);
+    await settle();
+    await openPathBeside(`/${GUIDA}#page=4`, "Benvenuto.md");
+    await settle();
+    expect(await paneIds()).toEqual([left, below, right]);
+    expect((await layoutNow()).layout.focus).toBe(right);
+    await waitFor("la pagina 4", () => focusedPage() === "Pagina 4 di 5");
+  });
+
+  it("accanto c'è una colonna: vale il riquadro di quella colonna che mostra già il PDF (T102)", async () => {
+    await start("off");
+    await open("Benvenuto.md");
+    const { openPathBeside } = await import("../state/document-controller");
+    await openPathBeside(`/${GUIDA}#page=3`, "Benvenuto.md");
+    await waitFor("la pagina 3", () => focusedPage() === "Pagina 3 di 5");
+    const [left, top] = await paneIds();
+    // riga [A, colonna [C, D]]: C passa a un'altra nota, il PDF va in D.
+    const layoutModule = await layoutNow();
+    const bottom = layoutModule.split(top!, "col");
+    expect(bottom).not.toBeNull();
+    layoutModule.focusPane(top!);
+    await open("Benvenuto.md");
+    layoutModule.focusPane(bottom!);
+    await open(GUIDA);
+    layoutModule.focusPane(left!);
+    await settle();
+    await openPathBeside(`/${GUIDA}#page=4`, "Benvenuto.md");
+    await settle();
+    expect(await paneIds()).toEqual([left, top, bottom]);
+    expect((await layoutNow()).layout.focus).toBe(bottom);
+    await waitFor("la pagina 4", () => focusedPage() === "Pagina 4 di 5");
+  });
+
   it("senza `reuse` (un `fub://open`) si divide come sempre", async () => {
     await start("off");
     await open("Benvenuto.md");

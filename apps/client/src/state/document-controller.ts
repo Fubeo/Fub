@@ -561,6 +561,9 @@ function cardEditorsHub(): CardEditorHub {
     toolbar: cardToolbar,
     conflict: (box, path) => view.drawCardConflict(box, path),
     notices: (box, path, drawn) => view.drawCardNotices(box, path, drawn),
+    // Una scheda chiusa sopra un salvataggio fallito: la domanda di un
+    // riquadro, e «Tieni» riapre la nota nel riquadro col fuoco (T102).
+    unsaved: (path) => keepOrDiscardUnsaved(path, layout.focus),
   });
   return cardEditorHub;
 }
@@ -2067,8 +2070,9 @@ async function keepOrDiscardUnsaved(doc: string, paneId: string): Promise<void> 
     cancelLabel: t("document.close_unsaved.keep"),
     danger: true,
   }).catch(() => false);
-  // Nel frattempo qualcuno può averla riaperta: allora ha già un riquadro.
-  if (panesWithDoc(doc).length > 0) return;
+  // Nel frattempo qualcuno può averla riaperta: allora ha già un riquadro, o
+  // una scheda della lavagna ci scrive, e scartarla le toglierebbe il testo.
+  if (panesWithDoc(doc).length > 0 || cardEditors.holds(doc)) return;
   if (discard) {
     documentSessions.discardUnsaved(doc);
     return;
@@ -3498,28 +3502,37 @@ export async function openDocumentBeside(id: string, dir: "row" | "col", options
   await openDocument(id, open);
 }
 
-/// Il riquadro accanto a `pane` nella direzione `dir` (il fratello dopo, nella
-/// fila di quella direzione: dove `split` mette il riquadro nuovo), se la sua
-/// scheda attiva è `doc`; `null` se non c'è o mostra altro.
+/// Il riquadro accanto a `pane` nella direzione `dir` (a destra per `row`,
+/// sotto per `col`: dove `split` mette il riquadro nuovo), se la sua scheda
+/// attiva è `doc`; `null` se non c'è o mostra altro.
+///
+/// Vale anche in una disposizione annidata (T102): fra le divisioni in quella
+/// direzione che contengono `pane`, la più interna che ha qualcosa dopo il
+/// ramo di `pane` dà il ramo accanto, e di quel ramo contano i riquadri che
+/// toccano il lato verso `pane` (il primo di ogni divisione nella stessa
+/// direzione, tutti in quella dell'altra). Con riga [colonna [A, B], C] il
+/// riquadro accanto ad A e a B è C; con riga [A, colonna [C, D]] accanto ad A
+/// sono C e D, e vince il primo che mostra `doc`.
 function neighbourShowing(pane: string, dir: "row" | "col", doc: string): string | null {
-  const firstLeaf = (node: LayoutNode): string => (node.k === "leaf" ? node.pane : firstLeaf(node.children[0]!));
-  const find = (node: LayoutNode): string | null => {
-    if (node.k === "leaf") return null;
-    if (node.dir === dir) {
-      const at = node.children.findIndex((child) => child.k === "leaf" && child.pane === pane);
-      if (at >= 0) {
-        const next = node.children[at + 1];
-        return next === undefined ? null : firstLeaf(next);
-      }
-    }
-    for (const child of node.children) {
-      const found = find(child);
-      if (found !== null) return found;
-    }
-    return null;
+  const contains = (node: LayoutNode): boolean =>
+    node.k === "leaf" ? node.pane === pane : node.children.some(contains);
+  // Il ramo dopo quello di `pane` nella divisione più interna in `dir`.
+  let beside: LayoutNode | null = null;
+  let node: LayoutNode = layout.tree;
+  while (node.k !== "leaf") {
+    const at = node.children.findIndex(contains);
+    if (at < 0) return null;
+    if (node.dir === dir && at + 1 < node.children.length) beside = node.children[at + 1]!;
+    node = node.children[at]!;
+  }
+  if (beside === null) return null;
+  // I riquadri del ramo accanto che toccano il lato verso `pane`, in ordine.
+  const edge = (branch: LayoutNode): string[] => {
+    if (branch.k === "leaf") return [branch.pane];
+    if (branch.dir === dir) return edge(branch.children[0]!);
+    return branch.children.flatMap(edge);
   };
-  const near = find(layout.tree);
-  return near !== null && activeDoc(near) === doc ? near : null;
+  return edge(beside).find((near) => activeDoc(near) === doc) ?? null;
 }
 
 /// Il frammento di un percorso dopo il `#` (`page=3`, `Titolo`, `B3`), o

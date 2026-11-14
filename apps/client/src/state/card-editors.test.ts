@@ -417,6 +417,58 @@ describe("la porta per scrivere dentro le schede", () => {
     await expect(sessions.release("Nota.md")).resolves.toEqual({ kind: "unsaved" });
   });
 
+  it("chiusa la scheda con un salvataggio che non riesce, si chiede come per un riquadro (T102)", async () => {
+    const asked: string[] = [];
+    extraDeps = { unsaved: async (path) => void asked.push(path) };
+    setup();
+    api.writeDocument = vi.fn(async () => {
+      throw { kind: "io", message: "disco pieno" };
+    });
+    const editor = await hub.open("Nota.md", document.createElement("div"), options());
+    editors[0]!.type("da non perdere");
+    editor!.destroy();
+    await settled();
+    expect(asked).toEqual(["Nota.md"]);
+    // La sessione resta aperta col testo finché la scelta non arriva.
+    expect(sessions.inspect("Nota.md")).toMatchObject({ text: "da non perdere", dirty: true });
+  });
+
+  it("se intanto un riquadro o un'altra scheda la riprende, non si chiede niente (T102)", async () => {
+    const asked: string[] = [];
+    extraDeps = { unsaved: async (path) => void asked.push(path) };
+    setup();
+    api.writeDocument = vi.fn(async () => {
+      throw { kind: "io", message: "disco pieno" };
+    });
+    const first = await hub.open("Nota.md", document.createElement("div"), options());
+    editors[0]!.type("da non perdere");
+    const second = await hub.open("Nota.md", document.createElement("div"), options());
+    first!.destroy();
+    await settled();
+    expect(asked).toEqual([]);
+    panes.add("Nota.md");
+    second!.destroy();
+    await settled();
+    expect(asked).toEqual([]);
+    expect(sessions.inspect("Nota.md")).toMatchObject({ text: "da non perdere", dirty: true });
+  });
+
+  it("la shell che se ne va non chiede: la bozza resta scritta (T102)", async () => {
+    const asked: string[] = [];
+    extraDeps = { unsaved: async (path) => void asked.push(path) };
+    setup();
+    api.writeDocument = vi.fn(async () => {
+      throw { kind: "io", message: "disco pieno" };
+    });
+    const saveDraft = vi.spyOn(api, "saveDraft");
+    await hub.open("Nota.md", document.createElement("div"), options());
+    editors[0]!.type("da non perdere");
+    hub.destroyAll();
+    await settled();
+    expect(asked).toEqual([]);
+    expect(saveDraft).toHaveBeenCalledWith("Nota.md", "da non perdere", expect.anything(), VAULT);
+  });
+
   it("chiusa senza conflitti, ciò che si è scritto si salva e la sessione esce", async () => {
     setup();
     const editor = await hub.open("Nota.md", document.createElement("div"), options());
@@ -724,6 +776,9 @@ describe("l'editor delle note sopra il testo di una scheda di testo", () => {
     focused = 0;
     forms: unknown = null;
     readonly reveals: number[] = [];
+    /// Il testo che la superficie tiene ancora (una composizione IME a metà):
+    /// arriva a `onChange` solo con `commitPending`.
+    held: string | null = null;
     constructor(
       readonly context: SurfaceMountContext,
       readonly onChange: (paneId: string, change: EditorChange) => void,
@@ -754,6 +809,13 @@ describe("l'editor delle note sopra il testo di una scheda di testo", () => {
             throw new Error("nessuna sessione scrive in una scheda di testo");
           },
           getDoc: () => this.text,
+          pendingText: () => this.held,
+          commitPending: () => {
+            const held = this.held;
+            if (held === null) return;
+            this.held = null;
+            this.type(held);
+          },
         },
         focus: () => {
           this.focused++;
@@ -873,6 +935,34 @@ describe("l'editor delle note sopra il testo di una scheda di testo", () => {
     await hub.openText(document.createElement("div"), "due", textOptions());
     hub.destroyAll();
     expect(made[1]!.destroyed).toBe(true);
+  });
+
+  it("smontato a metà di una composizione, il testo tenuto arriva a onText prima che la superficie se ne vada (T102)", async () => {
+    const texts: string[] = [];
+    const editor = await hub.openText(document.createElement("div"), "uno", textOptions((text) => texts.push(text)));
+    const surface = made[0]!;
+    surface.held = "uno と";
+    life.close();
+    expect(texts).toEqual(["uno と"]);
+    expect(surface.destroyed).toBe(true);
+    expect(editor!.text()).toBe("uno と");
+    // `destroy` ripetuto e `destroyAll` non consegnano due volte.
+    editor!.destroy();
+    hub.destroyAll();
+    expect(texts).toEqual(["uno と"]);
+  });
+
+  it("una superficie ferma non consegna più niente, nemmeno smontandosi (T102)", async () => {
+    const texts: string[] = [];
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    await hub.openText(document.createElement("div"), "uno", textOptions((text) => texts.push(text)));
+    const surface = made[0]!;
+    hub.failed(surface.context.paneId, new Error("guasto"));
+    surface.held = "uno e poi";
+    life.close();
+    expect(texts).toEqual([]);
+    expect(surface.destroyed).toBe(true);
+    error.mockRestore();
   });
 
   it("un testo che l'editor non terrebbe byte per byte resta al campo semplice", async () => {
