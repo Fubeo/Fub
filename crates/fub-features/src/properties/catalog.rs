@@ -410,6 +410,7 @@ fn options_it(catalog: StringCatalog) -> StringCatalog {
             E_NOT_CHOICE,
             "«{key}» non è una Selezione né uno Stato: le opzioni sono solo per questi due tipi.",
         )
+        .with(E_TYPES_SERIALIZE, "Non ho potuto scrivere il registro dei tipi: {reason}")
         .with(E_OPTION_EMPTY, "Il nome dell'opzione è vuoto.")
         .with(E_OPTION_TAKEN, "«{key}» ha già un'opzione «{option}».")
         .with(E_OPTION_MISSING, "«{key}» non ha un'opzione «{option}» da rinominare.")
@@ -491,6 +492,7 @@ fn options_en(catalog: StringCatalog) -> StringCatalog {
             E_NOT_CHOICE,
             "«{key}» is neither a Select nor a Status: options are only for these two types.",
         )
+        .with(E_TYPES_SERIALIZE, "Could not write the type registry: {reason}")
         .with(E_OPTION_EMPTY, "The option name is empty.")
         .with(E_OPTION_TAKEN, "«{key}» already has an option «{option}».")
         .with(E_OPTION_MISSING, "«{key}» has no option «{option}» to rename.")

@@ -135,6 +135,7 @@ const E_GROUP: &str = "e_group";
 const E_GROUP_NOT_STATUS: &str = "e_group_not_status";
 const E_TYPES_CHANGED: &str = "e_types_changed";
 const E_TYPES_UNREADABLE: &str = "e_types_unreadable";
+const E_TYPES_SERIALIZE: &str = "e_types_serialize";
 
 /// Le chiavi singolari che Obsidian ha sostituito con le plurali (1.4).
 const LEGACY_KEYS: [(&str, &str); 3] = [

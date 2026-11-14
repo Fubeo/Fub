@@ -409,9 +409,10 @@ fn writable_property_types(host: &dyn HostApi) -> Result<PropertyTypes, PluginEr
 fn property_types_raw(host: &dyn HostApi) -> Result<String, PluginError> {
     match host.setting(TYPES_KEY)? {
         SettingValue::Text(raw) => Ok(raw),
-        _ => Err(PluginError::BadArgs(
-            format!("{TYPES_KEY}: expected text").into(),
-        )),
+        _ => Err(PluginError::BadArgs(Text::message(
+            E_TYPES_UNREADABLE,
+            vec![Arg::text(KEY, TYPES_KEY)],
+        ))),
     }
 }
 
@@ -517,8 +518,12 @@ fn set_property_option(
             (P_OPTION_SET, entry.name.clone())
         }
     };
-    let after = serde_json::to_string(&types)
-        .map_err(|e| PluginError::Internal(format!("{TYPES_KEY}: {e}").into()))?;
+    let after = serde_json::to_string(&types).map_err(|e| {
+        PluginError::Internal(Text::message(
+            E_TYPES_SERIALIZE,
+            vec![Arg::text("reason", e.to_string())],
+        ))
+    })?;
     let named = || vec![Arg::text(KEY, &key), Arg::text(OPTION, &name)];
     if after == before {
         return Ok(CommandOutcome::notify(Text::message(
