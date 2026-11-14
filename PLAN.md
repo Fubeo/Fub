@@ -1675,7 +1675,7 @@ testa alla prima pagina e assenti sulla seconda, l'URI `fub-guida://` che
 non esiste, e la descrizione contro `canvas.guide`. L'elenco di
 `tools/list` del test cresce dei due nomi.
 Prova: scripts/check.sh --rapido; cargo test -p fub-cli --test mcp
-Stato: [ ] da fare
+Stato: [x] fatto · coder/lic-t22 (76ef57419) unito in f1a92f06f · `fub_canvas_read` e `fub_canvas_guide` (sola lettura), `fub_canvas_apply` che controlla prima di scrivere, `fub_preview` su una lavagna, le tre guide `fub-guida://` in testa alla prima pagina di `resources/list`; nessuno schema copiato: la descrizione di `fub_canvas_apply` nomina le operazioni, e un test la confronta con `canvas.guide`. Scarti: (1) il rifiuto del controllo è `isError: true` con `structuredContent {doc, written: false, ok: false, problems, warnings, summary}`; (2) l'anteprima è `{image, info: {outline, outline_omitted}}`, e lettura, controllo e guida tolgono `version` e `kind`; (3) le guide stanno sull'offset 0 (anche con cursore «0»); (4) `ops: []` è un problema `invalid` del controllo, non più `bad_args`; (5) `fub_preview` riconosce la lavagna dal suffisso `.canvas` minuscolo, e un `.CANVAS` va a Craft. Il registro dei formati, che decide, non è raggiungibile dalla CLI, e l'errore tipizzato «non è una lavagna» arriva già tradotto (`localized_host_result` in `fub-host/src/session.rs`): la chiave si perde. Restano: `outline_after` di `canvas.check` senza tetto (vedi T8); i motivi dei problemi sono i messaggi inglesi del nucleo (il testo MCP non passa dal catalogo)
 
 ## T23 · La GUI scrive con le operazioni: menu, barra, campi e tasti
 
