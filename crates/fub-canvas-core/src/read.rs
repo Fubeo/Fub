@@ -16,6 +16,8 @@ const BOM: char = '\u{feff}';
 /// deve essere un oggetto JSON Canvas che passa [`Canvas::validate`]. Le regole
 /// di lettura (R1–R5, R7, R8) sono in `docs/reference/canvas-format.md`.
 pub fn parse(source: &str) -> Result<Canvas, CanvasError> {
+    #[cfg(test)]
+    work::parsed(source.len());
     if source.len() > MAX_SOURCE_BYTES {
         return Err(CanvasError::Limit {
             what: "source bytes",
@@ -45,6 +47,26 @@ pub fn is_blank(source: &str) -> bool {
 /// carattere come gli altri.
 fn skip_bom(source: &str) -> &str {
     source.strip_prefix(BOM).unwrap_or(source)
+}
+
+/// Il lavoro del lettore, per i test che lo contano: quanti byte ha letto
+/// [`parse`].
+#[cfg(test)]
+pub(crate) mod work {
+    use std::cell::Cell;
+
+    thread_local! {
+        static PARSED: Cell<usize> = const { Cell::new(0) };
+    }
+
+    pub(crate) fn parsed(bytes: usize) {
+        PARSED.with(|parsed| parsed.set(parsed.get() + bytes));
+    }
+
+    /// I byte letti da [`super::parse`] da quando il thread è partito.
+    pub(crate) fn total() -> usize {
+        PARSED.with(Cell::get)
+    }
 }
 
 #[cfg(test)]

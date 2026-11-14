@@ -16,9 +16,7 @@ dubbio su una scelta tecnica si decide, non si chiede.
 
 ## L'orchestratore decide da solo
 
-- l'ordine dei task pronti. Lavorano due coder alla volta (Opus,
-  ragionamento medio) e nessun altro agente: è la regola dell'utente dal
-  2026-11-07 (dal 2026-11-04 era un coder solo), e la cambia solo l'utente;
+- l'ordine dei task pronti e quanti coder far lavorare insieme (al massimo tre);
 - il come che il piano approvato lascia aperto: nomi, tipi, dove sta una
   funzione, la forma di un messaggio d'errore, la forma dei test;
 - un piccolo refactor dentro i file del task;
@@ -40,93 +38,74 @@ dubbio su una scelta tecnica si decide, non si chiede.
 Ogni decisione presa da solo che un altro piano dovrebbe conoscere va nel
 registro.
 
-## Decide da solo, con più cura
+## Chiede sempre
 
-Dal 2026-11-08 l'utente lascia all'orchestratore anche le scelte che prima
-chiedeva, merge compresi: «fai sempre la scelta più adatta per ottenere il
-massimo risultato, anche mettendoci un po' di più. E ti lascio libero anche
-di fondere le branch con il main quando vuoi tu, quindi non aspettare le mie
-risposte. Basta che ottieni il massimo risultato e la massima
-personalizzazione e libertà dell'utente. E ovviamente mantenendo un certo
-grado di sicurezza e affidabilità del progetto.»
-
-Queste scelte l'orchestratore le prende da solo, ma con una soglia più alta,
-le scrive nel registro e le dice nel resoconto:
-
-- **il merge in `main`** di una consegna o di un ramo di piano: solo con la
-  PR pronta (non bozza), la CI completa verde sull'ultima testa (Linux,
-  Windows e macOS, banchi compresi quando tocca `apps/client/`), la
-  revisione del diff fatta, le baseline prese dal runner e guardate, e
-  nessun rosso tranne un instabile noto con la sua issue, rilanciato una
-  volta e passato. Mai `--admin`, mai saltare un controllo richiesto, mai
-  forzare. Dopo il merge, `origin/main` entra nei rami di piano puliti;
-- ciò che chi usa Fub vede o fa in modo diverso dal piano approvato: si
-  sceglie la strada che dà più qualità, più personalizzazione e più libertà
-  a chi usa Fub, e si fotografa;
-- il contratto pubblico (ABI, WIT, IPC, formati su disco letti da altri):
-  solo additivo, con le guardie di compatibilità verdi; mai rompere un
-  formato già pubblicato;
-- sicurezza e permessi: si sceglie sempre la strada più stretta; mai
-  allargare un permesso, una CSP o una capacità WASM per comodità;
-- una dipendenza esterna nuova: solo se il piano la implica, con licenza
-  compatibile e `cargo deny check` verde; mai cambiare la politica delle
-  licenze o della catena di fornitura;
-- cambiare «Fatto quando» o «Fuori scope», rinviare o dividere un task:
-  solo per un risultato migliore, mai per chiudere prima;
-- un test: si corregge la causa. Disattivarlo o metterlo in quarantena solo
-  se è instabile per una causa fuori da Fub, con una issue aperta, e mai un
-  test che prova sicurezza o dati.
-
-## Resta all'utente
-
-Solo ciò che l'orchestratore non può fare o che esce dal repository:
-
-- ciò che si fa con le mani o con persone: la prova di K2 con una persona,
-  la prova con cinque persone, il giro su un Mac, avviare il piano del
-  telefono;
-- licenze di opere altrui (il logo e ArtCraft), account e segreti
-  (SignPath, chiavi di firma);
-- la pubblicazione della pre-release (il tag `v0.2.0-prealpha.1` e la
-  release su GitHub): l'orchestratore la prepara e la dice pronta, l'utente
-  la pubblica o dice di pubblicarla.
+- ciò che chi usa Fub vede o fa in modo diverso da come dice il piano
+  approvato;
+- il contratto pubblico: ABI e WIT dei plugin, i comandi IPC del client che il
+  piano non nomina, un formato su disco che leggono altri programmi o versioni
+  già pubblicate;
+- sicurezza e permessi;
+- una dipendenza esterna nuova o una licenza;
+- cambiare «Fatto quando» o «Fuori scope», saltare o rinviare un task;
+- disattivare, saltare o mettere in quarantena un test;
+- il merge.
 
 Quando chiede: le domande di un momento tutte insieme, solo quelle la cui
 risposta cambia davvero il risultato, con la conseguenza pratica di ogni
-scelta e la raccomandazione per prima. Non si ferma ad aspettare: lavora su
-ciò che non dipende dalla risposta.
+scelta e la raccomandazione per prima.
 
 ## Registro
 
 La più recente in cima: data · piano · decisione · perché.
 
-- 2026-11-13 · N4 T23a · L'orchestratore scrive da solo il task che profila e
-  corregge i 174 ms a penna sopra il foglio vivo, invece di chiedere
-  all'utente la forma del task (come diceva la voce del 2026-11-11). Perché:
-  il 2026-11-13 l'utente ha dato autonomia sulle scelte tecniche («fai sempre
-  la scelta che porterà al massimo della qualità»), e vuole l'app
-  «estremamente fluida»; la meta di 33 ms non si alza. Il costo che sta nelle
-  schede di N6 diventa un task del piano di N6, non una correzione in N4.
-- 2026-11-13 · K5 T30 · il piano si chiude col sì dell'utente; restano fuori, come issue o limiti noti: il tetto alle istanze dei motori per vault (`issue-istanze-motore.md`), i `detail` delle parti solo in italiano, il campo «Testo» per un `<text>` senza `tspan`, `ripristina` fuori da `catch_panic`, le proposte a monte per VectorCraft (bozza non inviata) e il test instabile `close_a_vault_and_latest_round_in_which_and_again_open` visto una volta sotto carico · non cambiano il comportamento che K5 promette, e ognuno è più piccolo o più largo del piano.
-- 2026-11-13 · K5 T30 · la prova sull'app vera ha trovato gli errori delle sei porte del disegno consegnati con la chiave del catalogo (un oggetto sul filo): il client leggeva ogni `unserved` come un guasto, e un disegno riaperto a motore spento restava «fermo» anche dopo la riaccensione. Corretto nel proprietario, `fub-app` (`drawing_port` passa da `for_the_shell`, come Componenti), non rilassando `asPluginError` nel client; il `BadArgs` di un sync resta un fermo della sessione (con «Riprova») e si sono corretti commento e docs che dicevano il contrario · il contratto vuole messaggi già tradotti, e cambiare il comportamento della sessione in T30 non serviva: un `BadArgs` del sync è solo un difetto, e il fermo è la strada sicura.
-- 2026-11-13 · K5 T23 · accettati i due `kind` nuovi del chip (`reduced`, `stopped`) in `editors/core/registry.ts` al posto di `body`, e il ramo resta con `bench/scene.test.ts` rosso finché le 6 baseline delle scene nuove non arrivano dal runner (primo passo di T30) · Perché: il prototipo approvato usa quei due segni (vuoto e rosso), e le baseline si fanno solo sul runner Linux.
-- 2026-11-13 · K5 T35 · accettati `gesti/mod.rs` (`Strumento::unita`, `Contesto::memo`) e la chiamata in `comandi.rs` fuori dal Tocca stretto, e il caso nuovo dei due figli scelti insieme (la `transform` a ciascuno, registrato dal client) · Perché: il caso visto da T33 nasce da gesti fatti dal motore, e le unità si sanno solo al commit; il memo toglie il costo in più (circa 3 ms su 1 MiB) di rifare l'analisi.
-- 2026-11-13 · K5 T22 · il coder si è fermato: il prototipo approvato (scena 7a, «poi scrivilo nell'ispettore») conta su un campo che cambia le parole di un testo, e nel client non c'è (la `textarea` di `properties.ts` è la Descrizione del documento; nessuno scrive `op: "text"` su un testo libero). T22 si allarga a quel campo (`fields.ts`, `properties.ts`, `panel.ts`), che non c'è per un testo che `op: "text"` non riscrive senza perdite · Perché: è ciò che l'utente ha approvato nel prototipo, e senza il campo lo strumento scriverebbe sempre «Testo»; un editor sul foglio sarebbe un disegno nuovo da far vedere.
-- 2026-11-13 · K5 T21 · accettati i file toccati fuori da Tocca (`lazy.ts`, `panels/standing.ts`, la skin `sheets.css` con i rigenerati): senza `lazy.ts` il chip non arrivava alla shell, e il taglio dei nomi lunghi con l'elenco che scorre serve anche al chip del rich. Il `detail` delle perdite resta in italiano anche con l'interfaccia in inglese: si nota in T30 come limite noto, non si traduce ora · Perché: il motore scrive il `detail` come testo; tradurlo vuol dire un codice per ogni motivo nel contratto, una scelta più grande del chip.
-- 2026-11-13 · K5 T34 · il commit sul disegno di 1 MiB scende da p95 99 ms a 9,3–9,9 ms senza toccare VectorCraft: la differenza non scrive più in JSON il sottoalbero di un livello e prende per uguali i rami condivisi (`Arc::ptr_eq`); il ritorno della sessione alla copia (0,2 ms) resta com'è. Dei 9 ms rimasti, ~7,5 crescono col disegno dentro VectorCraft (eventi del commit 3,6 ms, `hit_test` della Selezione 4 ms): non si toccano ora · Perché: il tetto di A8 (50 ms) è passato con margine; una patch a `vendor/vectorcraft` per pochi millisecondi non vale il costo.
-- 2026-11-13 · K5 T33 · accettata la strada della mappa: i livelli che il lettore SVG del motore crea da gruppi di Fub tornano gruppi in `apertura.rs`, e il motore li disegna uguale. Il caso visto dal coder (un gruppo di un figlio solo riceve la `transform` sul figlio, il client sul gruppo) diventa T35, dopo T34; T30 ne dipende · Perché: il motore deve scrivere il testo che scrive oggi il client, non solo disegnare lo stesso, e la regola «un figlio solo» non sa che cosa l'utente ha scelto.
-- 2026-11-12 · K5 T20 · il cancello passa (32 file su 32) e ne nascono due task: T33 (un gruppo-livello di Inkscape figlio della radice è un livello nel motore e non si sposta, mentre oggi il client lo sposta) e T34 (il commit su un disegno di 1 MiB costa 82 ms di mediana e 99 ms al 95° percentile, contro i 50 di A8); T30 dipende da tutti e due. Il motore continua a prendere dal sistema i caratteri che le facce di Fub non hanno (greco, cirillico, CJK, emoji), anche se `FontDb::set_system_fallback(false)` lo spegnerebbe senza patch: la WebView disegna quei caratteri con le facce del sistema, e il motore deve colpire il testo che l'utente vede; la misura scrive che il risultato su quei testi dipende dalla macchina · Perché: chi usa Fub non deve perdere un gesto di oggi né sentire un disegno grande più lento, e un colpo su un testo deve seguire ciò che si vede.
-- 2026-11-12 · K5 T32 · il contorno delle linee a spessore variabile è una traduzione in Rust del calcolo del client (`src/profilo/`, ~3 700 righe), non le operazioni sui tracciati di VectorCraft: il risultato deve essere lo stesso `d` che scrive il client, e un algoritmo diverso darebbe un contorno diverso. Rimandato il coder una volta perché togliesse un lettore del `d` copiato da `fub-scene`: ora `fub-scene` rende pubblici `parse_path` e il suo segmento (`PathSegment`), fuori dal `Tocca` di T32 per decisione dell'orchestratore · Perché: due lettori dello stesso `d` possono divergere in silenzio, e uno basta.
-- 2026-11-12 · K5 T24 · il `Tocca` di T24 si allarga alla skin della casa (`theme/scrittoio/skin/settings.css`, i ganci in `anatomia/` e i derivati rigenerati): il prototipo approvato mette lì la classe `.components-row--found` della riga segnata · Perché: il codice del client non scrive stili, e la riga segnata del prototipo si vede solo con la sua regola nella skin.
-- 2026-11-12 · K5 T17 · accettati i tre file fuori dal `Tocca` di T17: la riga `vectorcraft-text` del workspace (`default-features = false`, già nel grafo: nessuna libreria nuova), `VECTORCRAFT_OWNERS` del test delle dipendenze e il paragrafo di `scene-gestures.md`; le facce di Fub entrano nella `FontDb::global()` del motore invece che in una nuova, perché è quella che il motore usa in tutto il suo codice. Che la `FontDb` catalogi anche i caratteri del sistema quando una famiglia manca resta una nota in T20 · Perché: una seconda `FontDb` non la vedrebbe nessuno, e spegnere il catalogo del sistema chiede una patch nella copia di VectorCraft, da provare prima col cancello.
-- 2026-11-12 · K5 T29 · accettati `motore_disegno_spento` con una funzione che legge le chiavi (serve al `Workspace` di `serves` e alle impostazioni del vault dell'host) e la lettura delle impostazioni solo quando un'istanza manca; l'orchestratore aggiunge i testi IT/EN delle cinque chiavi `host.drawing.*` nel catalogo di `settings.rs`, che T19 aveva lasciato senza. Le istanze restano aperte se le impostazioni cambiano fuori da `apply_components` (un profilo, il file cambiato a mano): non si sorvegliano le impostazioni per il disegno, e la pagina Componenti, la CLI e l'MCP passano tutti da `apply_components` · Perché: un errore deve arrivare con una frase, non con la sua chiave, e leggere le impostazioni a ogni gesto costerebbe su ogni tratto.
-- 2026-11-12 · K5 T28 · tenuti i due file fuori dal `Tocca` di T28: le chiavi `draw.reason.engine_off` e `draw.reason.engine_stopped` in `strings/tools.ts` (servono a dire perché il motore manca) e `colori.test.ts` (`motoreDa` prende ora una funzione che apre, per poter riaprire un'istanza nuova). Accettati anche `spento()`, `quandoChiusa()` e la riapertura col `session.id`: il motore spento lo dice subito, una `DocumentSession` chiusa non si riapre, un file rinominato riapre col nome nuovo · Perché: senza, il motore riacceso riaprirebbe col nome vecchio o su un documento già chiuso.
-- 2026-11-12 · K5 T18 · lo spessore delle linee a spessore variabile resta `unsupported` in T18 (il client riscala il profilo e ricalcola il contorno pieno con `widthTo`, un calcolo che in Rust non c'è) e diventa il task nuovo T32, da cui dipendono T20 e T30; accettati i cambi di T18 in `src/differenza.rs` e `src/motore.rs` (un tratto o un riempimento nuovi, il `fill` dei testi, la punta delle frecce, i tratteggi rimisurati) · Perché: col motore acceso il campo dello spessore oggi si spegne su quelle linee, e chi usa Fub non deve perdere un comando che senza motore funziona.
-- 2026-11-12 · K5 T15 · chiuso con la selezione che usa lo strumento del motore solo dove dà il risultato di Fub, e la matrice di Fub negli altri casi (nessun gesto `unsupported`); rimandato al coder una volta perché rifacesse Ctrl/⌘ dentro i gruppi e la soglia di trascinamento ricordata, che oggi Fub ha. La cornice girata tenuta fra due gesti su più oggetti la sa solo il client (`ctx.kept`): diventa il task nuovo T31 (un campo additivo in `DrawingGesture`, il client che lo manda, la selezione che lo usa), e T30 ne dipende · Perché: chi usa Fub non deve perdere un gesto che oggi funziona, e il contratto cambia solo con un campo opzionale.
-- 2026-11-12 · K5 T15 · `gesti/mod.rs` si allarga ancora di poco: il `Banco` tiene anche la pressione di Fub (il Down prima di `Strumento::evento`) e la passa a due metodi nuovi del tratto, con un'implementazione di base che le forme non riscrivono. Serve alla selezione per il riquadro (Fub sceglie solo ciò che sta dentro per intero, il motore ciò che il riquadro tocca) e per le maniglie (quella di Fub sta 4 px fuori dalla cornice e si prende entro 8 px, quella del motore sulla cornice entro 5 px). Una cornice inclinata da ridimensionare non si rifiuta con `unsupported`: il client, su `unsupported`, dice solo «rifiutato» senza ricadere sugli strumenti semplici, quindi si fa con la regola di Fub in `selezione.rs` · Perché: chi usa Fub non deve vedere la selezione cambiare regole né perdere un gesto che oggi funziona.
-- 2026-11-12 · K5 T14 · tenuti i due cambi di T14 fuori dal suo `Tocca`: in `src/gesti/mod.rs` il braccio delle forme in `strumento()` e l'aggancio `Strumento::evento(e, inizio, cx)` (le regole di Fub su griglia, Maiusc, Alt e Ctrl/⌘ prima dello strumento del motore, che le leggerebbe a modo suo); in `src/apertura.rs` un livello vuoto di Fub diventa un livello vuoto del motore (il lettore SVG del motore toglie i gruppi vuoti, e un disegno nuovo comincia con uno). T15 e T17 aggiungono il loro braccio in `strumento()` e impostano le loro tolleranze magnetiche (le forme le mettono a zero nelle prefs della sessione, che è condivisa) · Perché: senza, quattro vettori delle forme fallivano e in un disegno nuovo nessuna forma si scriveva; T15 ha bisogno dello stesso aggancio per la griglia di `snappedDelta`.
-- 2026-11-12 · K5 T13 · riaccesi i disegni, il Motore del disegno resta spento se il risolutore di K2 lo aveva spento con loro: il risolutore non ricorda lo stato di prima, e cambiarne le regole è fuori da K5. Il piano diceva «torna com'era prima»; vale il codice, scritto nel test di `fub-host/tests/componenti.rs`. Accettati anche `fub-disegno` per percorso in `fub-host` e i test della lavagna sotto la feature `lavagna`. Il caso di `fub.draw` in `plugins.disabled` va a T29 (nota nel piano) · Perché: una regola sola per le righe che ne richiedono un'altra, e il motore si riaccende con un clic nella pagina Componenti.
-- 2026-11-12 · K5 T11 · i caratteri non arrivano ancora alla `FontDb` del motore: costruirla dai `Caratteri` di T7 vuole `vectorcraft-text` come dipendenza diretta di `fub-disegno` (`Cargo.toml` e `Cargo.lock`, fuori dal `Tocca` di T11). Lo fa T17, a cui si aggiungono `crates/fub-disegno/Cargo.toml`, `Cargo.lock` e la sola `FontDb` in `src/motore.rs`; fino ad allora il motore usa i suoi caratteri di ripiego. Altre differenze di T11 accettate: `sincronizza`, `gesto` e `comando` rendono `Result<…, PluginError>`; l'import toglie le etichette e segna i livelli con `data-vc-layer`; un import rifiutato apre una copia vuota in sola lettura; nessun `.tsv` di differenze ammesse ancora (il lettore c'è, i file li scrivono T14–T17) · Perché: i caratteri servono solo al testo, che è T17, e la crate è già nel grafo (nessuna libreria nuova).
-- 2026-11-12 · K5 T27 · `hayro` passa da 0.5 a 0.6 in `fub-features` (rasterizzatore del PDF redatto e annotato): legge JPEG 2000 e fax e disegna con le stesse versioni del motore, e toglie quattro doppie; il motivo della 0.5 (un compilatore più nuovo) non vale con Rust 1.95; feature come prima (`embed-fonts` sì, `embed-cmaps` no). Provato uguale byte per byte su un PDF redatto semplice; su PDF complessi (JPEG 2000, JBIG2) i pixel possono cambiare. Il tetto `librerie_doppie` scende a 55 · Perché: D-3 (a), «allineo dove posso», e un rasterizzatore in comune col motore costa meno da tenere.
+- 2026-11-13 · N6 T20a · L'orchestratore aggiunge il task del gesto che perde
+  il rilascio. Perché: T20 ha visto la lavagna ferma in uno spostamento mai
+  chiuso (nessuna scheda viva) quando il rilascio non arriva, e nella vita
+  vera il rilascio si perde con un cambio di finestra a metà gesto; la regola
+  di autonomia del 2026-11-13 lascia all'orchestratore le scelte tecniche.
+- 2026-11-13 · N6 (merge di `main` fino a 05437b3db) · Dopo il merge `docs/reference/ipc-contract.md` era a 565 righe (tetto 550) e `docs/architecture/ink-and-tools.md` a 455 (tetto 450). Invece di comprimere, le parti di N6 hanno una pagina loro: «Depositare un file» (T3) va in `docs/reference/resource-write.md`, con un rimando nella sezione omonima del contratto (il commento di `host/ipc.ts` resta vero); «Lo strato della lavagna» e «Come lo usa la lavagna» vanno in `docs/architecture/ink-on-canvas.md`, con un rimando in `ink-and-tools.md`. Entrambe in `docs/map/pagine.md` · Perché: il codice batte il piano sui tetti delle pagine, e una pagina per argomento resta leggibile anche quando N6 aggiunge altro.
+- 2026-11-11 · N6 T89/T100 · la prova del pigro ha trovato che il doppio clic nel vuoto metteva la scheda al centro e solo scelta: l'orchestratore l'ha corretto da sé (T100, 4ee8c904b, una riga: `#placeText` come il doppio tocco) invece di passarlo al pianificatore; corretto anche `components.e2e.test.ts` (la spia di `getContext` che chiamava sé stessa) · Perché: `canvas-view.md` diceva già il comportamento giusto, la correzione è una riga con un test rosso prima e verde dopo; aprire un task per il pianificatore costava più del lavoro.
+- 2026-11-11 · N6 T99 · in revisione l'orchestratore ha chiesto al coder di togliere il lettore dei titoli Markdown scritto in `excerpt.ts` (il terzo nel client, con `headingOffset`): la copia delle sezioni usa il sommario del provider (`documentOutline`, byte dei titoli) e l'abbinamento delle chiavi del selettore delle parti · Perché: i titoli sono del provider Markdown; con due regole la scheda poteva mostrare una sezione (anche un titolo col trattino sotto) che la copia diceva sparita. `headingOffset` di `state/card-editors.ts` resta: fuori da N6, da segnalare.
+- 2026-11-11 · N6 T77 · integrato (merge 74001bf2d); l'orchestratore scrive T99 con gli avanzi di T70 (già promessi qui), di T77 (un solo `cardTarget`, il salto in Indietro) · Perché: piccoli pezzi che toccano `engine.ts`, insieme in un task dopo T98 invece che sparsi; l'ispettore della shell nello spazio Semplice resta fuori perché vuole un contratto della shell.
+- 2026-11-11 · N6 T39 · integrato (merge 678bd2093). L'orchestratore aggiunge T98: il nucleo non conosce la proporzione del contenuto, e col Lazo un tratto su una scheda d'immagine o PDF ridimensionata con un'altra proporzione si sposta male · Perché: è un difetto vero lasciato da T39, che tocca il nucleo e l'operazione: un task suo, dopo T39, invece di allargare T39.
+- 2026-11-11 · N6 T61 · integrato. Alt+← e Alt+→ vanno alla scheda vicina solo col fuoco su una scheda: la lavagna prende il tasto (preventDefault + stopPropagation) e Indietro non parte, anche se da quella parte non c'è niente (lo dice la regione viva); sulla lavagna senza una scheda a fuoco, e fuori, restano `shell.pane.back`/`forward` (T56). Altri scostamenti accettati: i comandi `canvas.nudge.<direzione>.fine` (Alt+Maiusc+frecce, 1 px) in `chrome/commands.ts`, che possiede i tasti; le schede `role="article"` (axe non ammette `group` su un `article`); il percorso Tab di `bench/a11y.mjs` segue le applicazioni che spostano il Tab sui loro figli; i docs in `canvas-view.md`, perché `canvas-cards.md` è al limite delle righe; nelle schede non attive i pulsanti interni si raggiungono dopo Invio. Le 6 baseline delle scene nuove arrivano dal runner · Perché: il piano dice «Alt da solo va alla scheda vicina»; un tasto ha un proprietario per contesto, come un editor di testo a fuoco tiene i suoi tasti.
+- 2026-11-11 · N6 T63 · integrato. Prima il tasto laterale della penna cancellava sempre; ora segue `canvas.pen_button`, e il valore di serie `radial` apre il menu: chi lo usava per cancellare sceglie «Cancella» nelle Impostazioni. Il Testo nel menu ha l'icona `canvas-text`, non `fmt-text` del prototipo; a sud-ovest il Nero, perché il Blu di adesso sta nel mezzo · Perché: è la regola di F10 del piano, e le icone della lavagna sono quelle della colonna.
+- 2026-11-11 · N6 T60 · integrato. Nel `.canvas` la ricerca ignora maiuscole e accenti (`resolutionKey` di `rules/mirrored.ts`); il contenuto delle note passa da `searchExpression`, che ignora le maiuscole ma non gli accenti: «citta» trova «città» in una scheda di testo e non in una nota. Resta così finché la ricerca del vault non cambia (è dell'indice, fuori da N6). Scrivere non muove la vista: il primo Invio va al primo risultato · Perché: la regola del piano («come la ricerca del vault») vale per le note; per il testo della lavagna si riusa la chiave di risoluzione che il client ha già.
+- 2026-11-11 · N6 · fuori piano, coder Haiku: il nome di una scheda di testo è la prima riga senza i segni del Markdown (`card-name.ts`, `textCardName`), una regola sola per la testata del menu, l'avviso del Lazo, l'etichetta della penna, il titolo da lontano e l'ispettore (tre copie prima) · Perché: «Ora fa parte di # Idee» e «Un **appunto**» da lontano si leggevano male.
+- 2026-11-11 · N6 · fuori piano, coder Opus: la nota ferma tiene la resa. La causa era la porta della shell (`document-controller.ts`), che attacca alla `life` il teardown di `mountMarkdown`, e quello svuota il contenitore; nuova opzione facoltativa `keepOnTeardown` di `MarkdownMountOptions`, passata solo dalla scheda di nota (gli altri consumatori svuotano come prima) · Perché: `note.ts` era già giusta, il difetto stava nella montatura condivisa; le altre specie di scheda non l'hanno.
+- 2026-11-11 · N6 T54 · integrato. Il titolo grande scala con `--canvas-detail-zoom`, scritto solo a fine gesto, invece di `--canvas-zoom` del prototipo: durante il gesto niente si rimpagina; a riposo è uguale. Il blocco usa il colore come `background` (nel codice non c'è `--canvas-paper` né l'anello `::after` del prototipo). Visto nelle foto: le note `still` sono riquadri vuoti, perché `cards/note.ts` chiudendo `contentLife` perde la resa che il suo commento dice di tenere; si corregge fuori piano nel proprietario (`note.ts`) · Perché: al fit di una lavagna grande (0,15–0,35) le note sarebbero tutte bianche.
+- 2026-11-11 · N6 · fuori piano, coder Opus: in `patch.rs` le toppe `ink` vicine sullo stesso livello si applicano leggendo e riscrivendo il livello una volta (`ink_run`); 2000 tratti spostati: compile 4,35 s → 17 ms, commit 4,29 s → 12 ms, annulla 4,24 s → 13 ms; `tests/ink_runs.rs` confronta 600 serie casuali con l'applicazione di prima (stesso testo o stesso errore con lo stesso `index`) · Perché: la fluidità viene prima, e il contratto delle toppe non cambia. Resta da misurare nella WebView il ridisegno del client dopo lo spostamento (~120 ms in jsdom).
+- 2026-11-11 · N6 T86 · Integrato il Lazo. Fuori dal Tocca, accettati: `ink-paint.ts`, `icon-names.json` (l'icona) e la regola `ops.rs::scales` dichiarata in `a_named_rule_is_declared.rs` (porta in Rust `inkFitMode`, con gli stessi vettori `canvas-ink-fit/`). Niente prototipo per il lazo in azione: la barra dei tratti riusa le classi del menu della penna. Da fare dopo, come task a parte: in `patch.rs` ogni toppa `ink` rilegge e riscrive tutto il livello (O(n²): 2000 tratti spostati ~7,7 s, anche `erase_strokes`); le toppe consecutive dello stesso livello vanno applicate in un passaggio. Il nome «# Idee» nell'avviso viene da `cardMenuName`, come l'etichetta di T69 · fonte: report del coder, revisione dell'orchestratore.
+- 2026-11-11 · N6 T42 · integrato; la domanda del coder (un accessore del motore della griglia per la formula, al posto della lettura dalla barra nascosta) diventa il task T97, dopo il porto di `grid/engine.ts` del piano griglia; la cella che esce dalla vista nelle righe bloccate è del motore e c'è già nel riquadro: issue all'utente, non in N6 · Perché: si corregge la causa nel proprietario, e `grid/engine.ts` ha conflitti aperti con la griglia.
+- 2026-11-11 · N6 · fuori piano, coder Haiku: il bundle d'avvio non porta più la lavagna (la CI era rossa dal 2026-11-10 sulla guardia «un componente che si può spegnere arriva all'avvio»); chiavi, valori di serie e lettura pura delle impostazioni `canvas.*` passano in `src/rules/canvas-settings.ts`, `editors/canvas/preferences.ts` le riesporta · Perché: la radice era un import statico di `preferences.ts` da `document-controller.ts` e `canvas-intake.ts`; un modulo neutro taglia lì senza import dinamici né cambi di tempi.
+- 2026-11-11 · N6 T57 · il lavoro del ramo `wip/n6-t57` era finito: l'orchestratore lo integra da sé (cherry-pick sulla punta di N6 dopo il merge di `main`, check rapido verde) invece di passarlo a un coder solo per rilanciare il check; il lampo della scheda raggiunta usa l'accento · Perché: stesso risultato, un worktree e una compilazione in meno sul PC dove l'utente lavora.
+- 2026-11-11 · N6 T45 · integrato con T45b (la parte della shell, decisa dall'orchestratore dopo il report di T45): `#page=N` arriva alla pagina del PDF accanto, il riquadro vicino che mostra già il documento si riusa (`BesideOptions.reuse`, solo da `openPathBeside`: `fub://open`, l'esplorazione e i wikilink dividono come prima), un frammento che non arriva apre in cima e lo dice; il punto dal cursore della scheda e il menu dell'editor nella scheda passano dopo T97 · Perché: senza la pagina e il riuso «allo stesso punto» non era vero, e il punto dal cursore tocca i file della griglia che aspettano il suo porto.
+- 2026-11-11 · N6 T65 · Ctrl+. (`Mod-.`) sulla lavagna come nel disegno (`draw.bare`, D8): stesso tasto, stesso significato, `data-bare` sulla superficie; vale solo dentro l'editor che ha il fuoco, quindi i due non si sovrappongono · Perché: un tasto per una funzione in tutti gli editor, ed è ciò che il prototipo T26 approvato mostra.
+- 2026-11-11 · N6 T65 · integrato. Fuori dal Tocca, accettati: `engine.ts` (il montaggio, `data-bare`, il navigatore), `chrome/commands.ts` (il comando `canvas.bare`), le due pagine di `docs/reference/`. Chiudere l'ispettore della shell nello spazio Semplice vuole un contratto della shell che oggi non c'è: resta aperto, da fare come task a parte · fonte: report del coder, foto del banco a 700 px confrontate col prototipo.
+- 2026-11-11 · N6 T64 · integrato. Fuori dal Tocca, accettati: `ink-layer.ts` (l'opzione `fingerWrites`), `chrome/icons.ts` e `icon-names.json` (l'icona), `structure.css` (le regole di `.canvas-rail-finger` accanto a «Completo»). Il palmo senza penna vicina che conta come secondo dito resta così: riconoscerlo è di N4 (`ink/`). «Il dito scrive» fra i comandi (Ctrl+/) va nel prossimo task che tocca `chrome/commands.ts` · fonte: report del coder, foto del banco.
+- 2026-11-11 · N6 T70 · integrato, con «Il dito scrive» nel catalogo dei comandi (aggiunta dell'orchestratore). Fuori dal Tocca, accettati: `chrome/commands.ts` e il suo test, due test che usavano `onCreateNote`, le pagine di `docs/`. «Sostituisci il file…» nell'ispettore, la sezione in «Copia il testo qui» e il test di `canvasFreeName` vanno in un task di rifinitura dopo T92 · fonte: report del coder, lettura del diff di `document-controller.ts`.
+- 2026-11-11 · N6 T78 · integrato dopo una correzione chiesta in revisione: la barra del taglio era dentro la scheda e scalava con lo zoom (a 35% non si premeva) e usciva dalla vista dopo una rotazione; ora sta come la barra della selezione, a misura fissa e sempre in vista. Fuori dal Tocca, accettati: `chrome/commands.ts`, `chrome/selection-bar.ts` (la posa sotto) coi loro test, `docs/reference/canvas-parts.md` · fonte: foto del banco a 1280, 700 e zoom 32%.
+- 2026-11-10 · n6 · T51 integrato: «Raggruppa» diventa il comando `canvas.group` (Ctrl+G); «Collega» con tre o più schede è spento col perché, anche se il prototipo lo mostra acceso · Perché: una barra che chiama comandi del catalogo resta una sola strada (tasti, menu, ricerca); collegare venti schede non ha un significato unico, e un pulsante spento che dice perché è più chiaro di uno che indovina.
+- 2026-11-10 · n6 · Le differenze di T41, su richiesta dell'utente («la soluzione più pulita e di qualità più alta, anche se ci vuole più tempo»): gli stati del salvataggio, la bozza ritrovata, la rinomina e i due punti aperti di T40 vanno nel task nuovo T96, che li prende dalla sessione e dalla banda, senza copie; la sola lettura segue la nota e non la lavagna (una lavagna che non si scrive non toglie la scrittura di una nota che si scrive); l'anello e la pillola vanno in T22. Restano come sono: il tasto centrale sposta la vista senza uscire dalla scrittura (si scrive, si guarda accanto, si continua); niente numeri di riga nella scheda (come la trasclusione del piano dell'editor); la barra di formato solo con `fub.formatting` (una funzione spenta non ne rende obbligatoria un'altra); `data-option="format"` è solo un nome · Perché: la scheda e il riquadro sono la stessa sessione e devono dire le stesse cose; ogni altra scelta dà più libertà o segue un'architettura che c'è già.
+- 2026-11-10 · n6 · T41 integrato: la nota si scrive nella scheda con l'editor Live vero, sulla stessa sessione del riquadro; le differenze (stati ridotti, niente avviso di bozza, anello solo su `[data-card-editing]`) aspettano T22 e T44; le pagine `canvas-input.md` e `canvas-cards.md` superavano 550 righe, quindi muoversi, griglia, navigatore e «Riaprire dove eri» vanno in una pagina nuova, `canvas-view.md` · Perché: la regola delle 550 righe è un controllo di CI, e quei capitoli parlano tutti della vista.
+- 2026-11-10 · n6 · L'utente sceglie (a) per la griglia di T71: i punti si vedono ogni 32 unità, la griglia resta accesa di serie, l'aggancio resta di 8; task T95, fatto dall'orchestratore · Perché: lo sfondo resta calmo come nel prototipo e la griglia si scopre da sola; le guide verdi restano (l'utente non ha chiesto altro).
+- 2026-11-10 · n6 · T71 integrato con guide d'accento e punti della griglia ogni 8 px, accesi di serie come dice il piano; l'aspetto (densità dei punti, griglia accesa di serie) è chiesto all'utente perché il prototipo T26 non lo mostra · Perché: è una scelta visibile su ogni lavagna, e il prototipo approvato ha lo sfondo liscio.
+- 2026-11-10 · n6 · L'utente sceglie (a) per il tratto libero negli appunti lasciato fuori da T68: un campo `fub:ink` alla radice della forma, versione sempre 1; task nuovo T94, dopo il lazo (T86) · Perché: è la stessa forma del livello della radice del `.canvas`, e chi non conosce il campo lo ignora senza rompersi.
+- 2026-11-10 · n6 · L'utente sceglie (a) per il doppio clic su una scheda mancante o illeggibile (diagnosi di T91): «Ritrova…» o «Apri» al posto del campo del percorso; task nuovo T93 · Perché: il campo del percorso lì non aiuta, i pulsanti di T16 dicono già che cosa fare.
+- 2026-11-10 · n6 · T74 integrato: il selettore va sotto la scheda dove a destra non c'è posto, la lista non è virtualizzata, le sezioni si scrivono nell'ordine della nota · Perché: sotto è la variante approvata a 700 px; `kit/list` non virtualizza e 300 righe reggono; l'ordine della nota è quello che la scheda mostra.
+- 2026-11-10 · n6 · T56 integrato: Alt+← e Alt+→ restano di `shell.pane.back`/`forward`, che chiedono prima alla lavagna e poi passano alla cronologia del riquadro · Perché: un tasto, un proprietario; un secondo comando sulla stessa chiave avrebbe litigato col registro dei tasti.
+- 2026-11-10 · n6 · T59 diviso in due passate (opzione c): prima l'ispettore con una porta finta, poi, dopo T69, tre metodi pubblici del motore (`selection()`, `doc()`, `commitPatches()`) e il cablaggio nella superficie; «Avanzate» resta dentro «Scheda» come nel prototipo · Perché: il motore era in mano a T69 e T53; un commit e un annulla passano da `#commit`, senza una seconda strada per scrivere.
+- 2026-11-10 · n6 · T72: «Spargi le pagine…» resta accesa finché un PDF non si è rivelato illeggibile, poi si spegne col perché; la soglia della conferma (200) conta le pagine scelte · Perché: il menu si costruisce senza aspettare pdf.js, e la conferma serve a non creare troppe schede, non a giudicare il file.
+- 2026-11-10 · n6 · T91 aggiunto al piano dopo il collaudo dell'area 12, e fatto: i gruppi stanno sempre sotto i fili, le prese di riattacco sopra i punti, la scheda PDF chiude il task di pdf.js 6 · Perché: erano difetti visti sulla 1432; l'ordine del file decideva se un gruppo copriva i fili, e un gruppo sotto è ciò che la persona si aspetta.
+- 2026-11-10 · n6 · L'utente sceglie (a) per la misura e l'allineamento del testo lasciati fuori da T50: un task nuovo, T92, con un campo `fub:text` accanto a `fub:ink` e `fub:parts` · Perché: il formato resta JSON Canvas, che Obsidian legge, e il campo nuovo sta fra quelli che gli altri programmi conservano o ignorano.
+- 2026-11-10 · n6 · L'utente approva i prototipi T27 (la modifica) e T28 (gli estratti) con le varianti consigliate, sapendo che cambieranno più avanti · Perché: sbloccano T41–T46 e T74–T78.
+- 2026-11-10 · n6 · T55: Nascondi e Mostra il navigatore sono due comandi del catalogo, non una spunta in un menu Vista che non c'è; i tratti d'inchiostro non contano per i bordi della mappa · Perché: esiste solo ciò che si può usare, e la mappa delle schede resta leggibile.
+- 2026-11-10 · n6 · T69: il bordo del tratto in corso è fatto di quattro lati sulla scena e l'etichetta vive nella vista, in coordinate dello schermo; `#render` non toglie `.canvas-ink-frames` né la cornice della scelta di T66 · Perché: il contorno sulla scheda ridipingeva tutta la scena di S8 e creava nodi a ogni tratto; così S8 resta come prima.
+- 2026-11-10 · n6 · T53: l'inerzia dopo uno spostamento viene solo dal dito, non dal
+  touchpad; + e − e lo zoom della banda non volano, volano i salti (0, Maiusc+1, Maiusc+2).
+  · Perché: il touchpad arriva come rotella e la tela non lo distingue dal mouse; un'inerzia
+  nostra raddoppierebbe quella del sistema. I passi piccoli col volo sembrano lenti.
 - 2026-11-11 · N4 T23 · La seconda misura non chiude la voce del cancello:
   174 ms a penna sul foglio vivo (meta 33), 47 fotogrammi lunghi su 215, di cui
   11 col tratto in movimento, 10 al rilascio e 26 senza evento del puntatore;
@@ -158,6 +137,438 @@ La più recente in cima: data · piano · decisione · perché.
   due errori nuovi (`UnknownStroke` con `id`, `ForeignLayer`) · è la
   fusione più piccola che lascia verdi i due lati; `ink_layers` nel
   `.wasm` e la fine di `readInkLayers` restano a T17.
+
+- 2026-11-10 · n6 · T66: la cornice di più schede scelte (non disegnata nel prototipo
+  T25) è tratteggiata d'accento come il fantasma del rilascio, e i gruppi tengono le
+  maniglie anche se il prototipo non le mostra. · Perché: il piano chiede la cornice, e
+  senza maniglie un gruppo non si ridimensiona più; il linguaggio è quello già approvato.
+
+- 2026-11-10 · n6 · T58: «prima i gruppi» resta alla lettera, e la regola
+  «più di metà» vince sull'esempio del prototipo. · Perché: è quello che
+  dice il piano, l'ordine serve anche al lettore di schermo (T61) e una
+  regola scritta si prova; l'esempio del prototipo cadeva proprio sul
+  confine della metà.
+
+- 2026-11-10 · n6 · T62: «Aggiungi file…» col selettore del browser
+  (`<input type="file">`) invece di `host/dialog.ts`. · Perché: il deposito
+  vuole dei `File` come un rilascio, `pickFile` dà un percorso solo; lo fa
+  già «Importa file…» dell'esplora, quindi non è una strada nuova.
+
+- 2026-11-10 · n6 · T15b: «Fanne una copia» si offre anche quando il
+  deposito si ferma a metà, per i file riusati prima dell'errore. · Perché:
+  quelle schede nascono come nel deposito riuscito, e negare la copia solo
+  perché un altro file è stato rifiutato lascerebbe la persona senza modo
+  di separarle.
+
+- 2026-11-10 · n6 · T47 integrato senza il caso del colore sconosciuto, che
+  diventa T47b (sul nucleo); tolto il vecchio selettore dei colori della
+  barra di N4. · Perché: il rifiuto viene da `validate_color` del nucleo,
+  fuori dalla riga «Tocca» di T47; il colore resta raggiungibile dal menu e
+  dalla riga delle opzioni con la stessa lista, quindi un secondo selettore
+  diverso sarebbe un doppione.
+
+- 2026-11-10 · n6 · T32b integrato con il ricordo di `reuse` tenuto da
+  `host/ipc.ts`, fuori dalla riga «Tocca». · Perché: è l'unico chiamante
+  di `writeResource` con la vita di una finestra; un globale di modulo
+  non si potrebbe azzerare nei test.
+
+- 2026-11-10 · n6 · T17 integrato con l'avviso di «Togli» senza stile suo
+  e Ctrl+] che sulla tastiera italiana non si fa. · Perché: nessun file
+  della pelle era nel task (lo stile arriva con T22/T89), e cambiare un
+  tasto del catalogo è una scelta che il piano non ha fatto: resta scritta
+  per chi rivede i tasti.
+
+- 2026-11-10 · n6 · T73 integrato: `fub:parts` ha un lettore TypeScript in
+  proprio accanto a quello Rust, tenuti uguali dai vettori comuni; ADR
+  0242. · Perché: le schede leggono il campo senza aspettare il `.wasm`,
+  e i vettori scritti a mano sono la prova del formato pubblico; il
+  numero dell'ADR va ricontrollato quando N4 e N6 arrivano in `main`.
+
+- 2026-11-10 · n6 · T34 integrato; la banda di T52 segue subito
+  `canvas.drop_folder` (correzione dell'orchestratore), e l'avviso della
+  cartella esclusa uscirà a ogni deposito in una cartella esclusa (in
+  T32b, che tocca lo stesso file). · Perché: banda e deposito devono dire
+  la stessa cartella; e un avviso solo la prima volta tacerebbe proprio
+  quando la cartella cambia verso una esclusa.
+
+- 2026-11-10 · n6 · T52 integrato: la banda dice la cartella dove il
+  deposito scrive davvero oggi, non quella che `canvas.drop_folder`
+  prometterà con T34. · Perché: una banda che dice una cartella sbagliata
+  inganna; T34 cambia il deposito e `dropFolderOf` insieme.
+
+- 2026-11-10 · n6 · T50 integrato senza misura e allineamento del testo,
+  in attesa della risposta dell'utente. · Perché: servono un campo nuovo
+  nel `.canvas`, formato che leggono altri programmi (Obsidian): è fra le
+  cose che si chiedono sempre.
+
+- 2026-11-10 · n6 · T32 diviso in T32 (il riuso chiesto all'host, fatto) e
+  T32b («Fanne una copia» con la scheda ripuntata, e il ricordo della
+  seduta per l'host senza `reuse`), stesso «Fatto quando». · Perché:
+  l'azione richiede una porta in `engine.ts`, che T32 non poteva toccare
+  e che T50 e T52 stavano cambiando; T32b parte dopo di loro. Fino ad
+  allora, sul ramo, un file già nel vault non si ricopia dalla lavagna.
+
+- 2026-11-10 · n6 · T40 integrato: le battute di una scheda passano dal
+  registro delle superfici della finestra (`onChange` con un id
+  `card-editor:<n>`) e la porta le smista, invece di un registro a parte.
+  · Perché: una sola strada per le modifiche, la stessa dei riquadri;
+  i due casi rari della rinomina e di `release` diretto restano scritti
+  nello `Stato:` per T41, che è il primo a usare la porta.
+
+- 2026-11-10 · n6 · T49 integrato: la colonna degli strumenti affianca la
+  barra di N4 invece di toglierla subito, e la sola lettura spegne tutti
+  gli strumenti che scrivono. · Perché: il menu della penna e le azioni
+  della barra hanno già i loro task (T50, T51), e spostarli qui avrebbe
+  rifatto il loro lavoro; spegnere e non nascondere segue il prototipo
+  approvato.
+
+- 2026-11-10 · n6 · T31 integrato: il riuso è un parametro esplicito del
+  trait `ResourceWrite` (non un default nascosto), e il client rifà il
+  deposito senza `reuse` quando l'host risponde `bad_args`. · Perché: la
+  forma deve dire sempre che cosa fa un deposito, come `expected`; e un
+  host di prima rifiuta il campo che non conosce: per lui è un «non so»,
+  e nel dubbio si scrive.
+- 2026-11-10 · n6 · T48 integrato. (1) I tasti valgono solo coi
+  modificatori scritti, anche se Ctrl+Maiusc+A e Alt+frecce smettono di
+  fare ciò che facevano. (2) «Entrare e uscire», «La rotella» e «Comandi e
+  tasti» passano da `canvas-cards.md` a `canvas-input.md`. · Perché: (1)
+  un tasto con un modificatore in più è un altro tasto, e Alt+← è
+  Indietro dello Scrittoio (ADR 0223); (2) con T35 e T48 la pagina era a
+  573 righe su 550, e quelle tre sezioni parlano della tela, non dei
+  renderer.
+- 2026-11-10 · n6 · T35 integrato così com'è: anche in `pan` le righe e
+  le pagine della rotella si convertono in pixel. · Perché: un mouse che
+  manda righe spostava la lavagna di pochi pixel a scatto; la conversione
+  è la stessa della lavagna del grafo.
+- 2026-11-10 · n6 · T30 integrato: l'impronta calcolata da «lo stesso
+  contenuto» si registra con un append fuori dal lucchetto del workspace,
+  dopo aver riosservato il file e riletto la coda, invece di rientrare
+  nella custodia come diceva il piano. · Perché: è la stessa disciplina
+  che `EntryStore::store` già segue (0067) per un dato ricostruibile; il
+  caso peggiore è un'impronta persa o una voce vecchia, che la prossima
+  scansione rifà, mai una risposta sbagliata (i byte decidono sempre).
+- 2026-11-10 · n6 · T33 integrato: il campo «Strumenti della colonna» usa
+  le caselle a chip della skin (come `draw.toolbar`), non le caselle
+  grigie del prototipo, e a valore vuoto mostra accesi i sette strumenti di
+  serie. · Perché: `.setting-features` è condiviso con `draw.toolbar`,
+  l'esclusione della sincronizzazione e gli indirizzi permessi; cambiarlo
+  per una riga li cambierebbe tutti, e il pannello deve avere un solo
+  aspetto per le liste. Le caselle accese dicono che cosa c'è davvero.
+- 2026-11-10 · n6 · T36 integrato: la vista ricordata si applica quando
+  arriva, ma solo a ciò che nessuno ha cambiato dall'apertura (camera,
+  scelta); se la lettura fallisce non si scrive fino alla prossima
+  apertura. Le rinominate ripartono dalla vista intera e lasciano una
+  chiave orfana: la shell non porta gli stati di vista con il nome. ·
+  Perché: lo stato si legge in modo asincrono e non deve coprire un gesto
+  dell'utente né uno stato di un'altra versione; spostare gli stati con il
+  nome è lavoro della shell, fuori da T36.
+- 2026-11-10 · n6 · T33: (1) `canvas.toolbar` si registra in
+  `panels/settings.ts` come `draw.toolbar`, con le caselle del prototipo
+  approvato (il piano diceva che il pannello disegna le righe da sé, ma per
+  le liste serve la registrazione). (2) Un `canvas.drop_folder_path` che
+  non vale (vuoto, `..`, assoluto, dentro `.fub/`) vale `Allegati`, il
+  valore di serie della chiave; il testo approvato della riga non cambia,
+  e a dire dove sono andati i file ci pensa la notifica di T34. T34
+  aggiornato: la cartella delle note solo se la pulizia svuota il percorso.
+  Perché: fedeltà al prototipo approvato, e una regola sola per il valore
+  che non vale (quella di ogni impostazione: vale quello di serie).
+
+- 2026-11-10 · n6 · T16: se il file torna o la scheda cambia mentre
+  «Ritrova…» è aperto, la scelta si scarta. Perché: regola di CLAUDE.md,
+  un risultato vecchio non sovrascrive lo stato nuovo; il file tornato
+  rimonta già la scheda da sé. Primo task di un Haiku a effort xhigh:
+  diff pulito, un commento vecchio in `cards.ts` sistemato da me.
+
+- 2026-11-10 · n6 · T14 provato in un Chromium vero (link non seguiti
+  fuori dalla scheda attiva, Ctrl+clic li segue, rotella dentro e fuori,
+  Esc, visore dell'immagine, «Apri»): un difetto, corretto prima di
+  chiudere (il fuoco andava al link e non alla scheda). Perché: i test di
+  jsdom non vedono il fuoco vero; la prova nel browser sì.
+
+- 2026-11-10 · n6 · T15 integrato senza il caso «l'host rifiuta un file a
+  metà»: va al task nuovo T15b, dopo T32 e T34. Perché: serve un errore
+  tipizzato in `canvas-intake.ts`, che T15 non poteva toccare e che T32 e
+  T34 cambiano prima; farlo dopo di loro evita conflitti, e intanto
+  l'errore si vede come prima (nessuna scheda nasce, i file copiati restano
+  nel vault). Ho anche rimesso al suo posto il commento di `isVaultPath`,
+  spostato per sbaglio sopra `measuredImage`.
+
+- 2026-11-10 · N6 · T14 integrato tenendo Ctrl+trascinare per spostare
+  la lavagna (il piano diceva che Ctrl+clic «oggi aggiunge alla scelta», il
+  codice invece sposta): Ctrl+clic senza movimento aggiunge o toglie dalla
+  scelta, Ctrl+clic su un link lo segue · Perché: togliere uno spostamento
+  che c'era è un cambio non chiesto; così valgono tutte e tre le cose. Una
+  scheda ferma ha il contenuto `inert`: Ctrl+clic sui suoi link non li
+  trova (solo le schede vive, cioè in vista, li seguono).
+- 2026-11-10 · N6 · T13 integrato con gli scostamenti del coder: la
+  scelta delle schede vive si rifà anche dopo ogni resa e con lo zoom da
+  pulsanti e tasti; la lavagna conta nascosta se un antenato è `[hidden]` o
+  `checkVisibility()` è falso (una vista nascosta con `visibility` o fuori
+  schermo resta trattata come visibile: le schede in vista restano vive,
+  niente si perde); la sezione nuova della pagina si chiama «Quando la tela
+  cambia il modo», per non confondersi con «Schede vive e ferme» · Perché:
+  ogni cambio di camera e di documento deve finire in una scelta nuova, e
+  il caso scoperto costa solo memoria.
+- 2026-11-10 · N6 · T29 integrato seguendo «Cosa fare» e non il «Fatto
+  quando»: le misure di nascita si arrotondano a interi anche per PDF e
+  immagini (PDF 360×509, non 512), e il test di T9 che le agganciava è
+  riscritto; anche il rettangolo del gruppo resta coi lati interi, non
+  multipli di 8. Superano il registro del 2026-11-02 («480×304»,
+  «agganciate a 8 px») · Perché: è A-16 (le misure di nascita non si
+  agganciano, le posizioni sì); il «Fatto quando» aveva contato solo il
+  foglio.
+- 2026-11-10 · N6 · T28 fatto, da approvare: `PLAN-ui/lavagna-estratti.html`
+  con otto stati (selettore di nota e di PDF, blocchi, scheda-estratto,
+  lettore, fonti, ritaglio, menu) e quattro note «Da decidere guardando»
+  (consigliate: al rilascio, la testata con le parti, «Mostra tutto il
+  file» nel menu, sotto la scheda a 700 px); una lavagna senza file dice
+  una riga nella linguetta Fonti invece di togliere la sezione. · Perché:
+  A-26 vuole la pagina prima di T74–T85; la quarta nota nasce dal caso
+  limite dei 700 px, e una linguetta vuota senza parole sembrava rotta.
+
+- 2026-11-10 · N6 · T12 integrato con due scostamenti accettati: `watch`
+  delle schede ascolta `document_changed/removed/renamed` oltre agli
+  `entry_*` (una nota cambiata manda solo `document_*`: col solo
+  `entry_changed` la scheda non si rifarebbe mai), e `snapshots.forget`
+  lo chiama `bootstrap.ts`, che tiene la cache · Perché: il piano diceva
+  `entry_changed` pensando ai file senza formato; il comportamento chiesto
+  (la scheda segue il file) vuole tutti e due.
+- 2026-11-10 · N6 · prototipo T26 (`PLAN-ui/lavagna-impianto.html`)
+  approvato con le varianti consigliate: la colonna del disegno con le
+  tendine, il navigatore in basso a destra, l'ispettore chiuso la prima
+  volta e poi come lo si lascia, sei strumenti nello spazio Semplice; il
+  menu delle penne nella riga delle opzioni è solo da guardare · parole
+  dell'utente: «accetto i tuoi consigli per tutte e 5». Perché: A-26, da
+  qui T49–T65 possono partire quando le loro dipendenze ci sono.
+- 2026-11-10 · N6 (A-15) · Riallineato a `piano/n4-inchiostro` @ bd38a567
+  (N4 fino a T22 e T15, N3 dentro) prima di T11, con un merge. Conflitti:
+  `PLAN.md` e `DECISIONS.md` restano quelli di N6; `i18n/catalog.ts` e
+  `docs/README.md` prendono le due parti. Perché: A-15, T11 lavora sopra
+  l'`engine.ts` di N4. Prove sul merge: `check.sh --rapido` verde (un
+  rosso noto e instabile, `new-drawing.e2e`, verde da solo), vitest intero
+  660 file / 11 620 test verdi.
+- 2026-11-09 · N6 · prototipo T26 (`PLAN-ui/lavagna-impianto.html`) fatto,
+  da approvare: l'impianto della lavagna copia i valori del disegno con
+  classi `canvas-*` nuove (`editors/spatial/` non si tocca, K5); il menu
+  delle penne di N4 passa nella riga delle opzioni; cinque note «Da
+  decidere guardando», consigliate: la colonna del disegno con le tendine,
+  il navigatore in basso a destra, l'ispettore chiuso la prima volta, sei
+  strumenti nello spazio Semplice · Perché: T49–T65 aspettano la riga
+  «Approvato» (A-26).
+- 2026-11-04 · N6 · prototipo T25 (`PLAN-ui/lavagna-schede.html`)
+  approvato con le varianti consigliate: titolo sopra la scheda (D-21 (a)
+  confermata), gemelle con la luce calda, «Esc per uscire» nella testata,
+  nomi delle impostazioni come frasi, notifica col percorso, colori come
+  oggi (il filo non prende il colore) · parole dell'utente: «preferisco
+  quella del piano originale. Mi piace il piano in schede della lavagna».
+- 2026-11-03 · N6 · merge di piano/n4-inchiostro (509772da) in
+  piano/n6-lavagna, come chiede A-15 prima di T11: PLAN.md resta quello di
+  N6, DECISIONS.md tiene le voci dei due rami in ordine di data, PLAN-
+  ui/lavagna-penne.html resta solo su N4; la PR #302 ora punta a
+  piano/n4-inchiostro. · Perché: T11, T73 e gli altri task che usano fub-
+  canvas-core e fub:ink hanno bisogno della base di N4.
+- 2026-11-03 · N6 · le risposte dell'utente alle domande nuove: D-20 (a), i
+  CSV in un piano suo che finisce con T88; D-21 (a), il titolo sopra la
+  scheda, come Obsidian (da rivedere sul prototipo T25; N4 lo usa per il
+  riquadro dell'inchiostro); D-22 (a), lazo e forme adesso sull'inchiostro
+  di N4 · le consigliate, accettate dall'utente («ci sto»).
+- 2026-11-03 · N4 · D-13 (a), nuova: il cursore dello spessore anche nei
+  disegni e nei documenti, non solo sulla lavagna; il task lo scrive il
+  pianificatore · parole dell'utente («si»): la stessa penna si usa allo
+  stesso modo in tutta Fub.
+- 2026-11-03 · N4 · terzo merge di `piano/n3-logica-in-rust` (fino a N3 T17
+  e alla fusione di main con #303, `async-executor` 1.14.1) dentro
+  `piano/n4-inchiostro`; PLAN.md resta quello di N4 e DECISIONS.md tiene le
+  righe di tutti e due · senza main la versione ritirata 1.14.0 teneva rosso
+  il controllo delle librerie, e N4 riceve main solo attraverso N3.
+- 2026-11-02 · N6 · Le risposte dell'utente a D-1…D-19 (e merge-n3n4,
+  ci-soglia): la v1 intera di `lavagna.md` (gli estratti di PDF aspettano
+  PdfCraft); i file trascinati vanno dove dice un'impostazione della
+  lavagna, che di serie segue quella delle note; «già nel vault» vuol dire
+  lo stesso contenuto ovunque, con l'impronta come dato derivato, i byte
+  provati uno per uno e dei limiti, e nel dubbio si copia; la pagina del PDF
+  sta nello stato della vista; l'inchiostro si attacca alla pagina e alla
+  cella; si scrive dentro le schede, sulla stessa sessione del riquadro; S9
+  nasce accanto a S3; i sei colori e in più ogni colore esatto; il CSV
+  aspetta il motore dei fogli (D-20); la rotella ha un'impostazione;
+  Ctrl+clic apre un link; il foglio nasce 480×300; N6 va avanti sopra il
+  ramo di N4 e si fonde dopo N3 e N4, con la CI completa e la revisione
+  (T90). Restano D-20, D-21 e D-22 · l'utente ha risposto, e dove la
+  risposta lasciava la scelta il piano ha preso la strada più sicura: nessun
+  byte perso, nessun formato rotto, Obsidian vede la stessa lavagna.
+- 2026-11-02 · N6 · T10: le porte della lavagna stanno in `state/canvas-
+  intake.ts`. Dall'albero si tengono solo gli id che l'host conferma: una
+  domanda sola a `existingDocuments` per tutte le voci, e per i file che
+  l'indice dei documenti non conosce (immagini, PDF) una domanda
+  `vaultEntries` per cartella invece di un `resourceOpen` per file; una nota
+  non confermata si scarta. Dal computer ogni file passa da
+  `depositOrReuse`; le notifiche («N file già nel vault, uso quelli», e la
+  prima volta «Copiati in cartella/» con «Cambia cartella») dicono anche ciò
+  che è stato fatto prima di un errore. `revealSetting` sceglie la scheda
+  dalla chiave (permessi → Componenti, scorciatoie → Scorciatoie, il resto →
+  Impostazioni) e apre un eventuale `<details>`. Resta in `engine.ts` (fuori
+  da T10): se nessuna voce dell'albero è confermata e il trascinamento porta
+  anche `text/plain`, nasce una scheda di testo. Perché: un trascinamento è
+  un dato che chiunque può scrivere, e un file non si copia due volte.
+- 2026-11-02 · N6 · T7: la scheda di foglio legge solo le finestre di celle
+  in vista (al massimo 256×128, scorrimento a righe e colonne intere), riusa
+  paintCell e le classi del foglio, chiude la sessione da ferma e a destroy
+  una volta sola e non chiama mai applyGridBytes; Stale arriva come errore
+  "conflict" e si riprova una volta. La copia: in produzione
+  writeClipboardText scrive con navigator.clipboard, che non accetta
+  un'attesa, quindi la selezione si allarga solo su celle già lette e Ctrl+C
+  non scrive niente se ne trova una non letta (l'orchestratore ha rimandato
+  indietro la prima versione, che copiava vuote le celle mai lette). In v1
+  non mostra grafici, immagini, barre di dati, icone, commenti, riquadri
+  bloccati né lo zoom; il bordo d'accento e «Esc per uscire» li disegna la
+  tela (data-card-entered). Perché: una copia non deve mai contenere dati
+  diversi dal file.
+- 2026-11-02 · N6 · T9: le schede portate sulla lavagna nascono in griglia
+  per righe (ogni colonna larga quanto la sua scheda più larga), ordinate
+  per nome e poi per percorso, agganciate a 8 px e mai sotto 40; il foglio
+  nasce 480×304 invece di 480×300 di D-11, perché 300 non è multiplo di 8;
+  un'immagine senza misura nasce 480×360 (4:3); un PDF largo 360 con
+  l'altezza della prima pagina (senza misura 360×480); un file Craft
+  320×160. DROP_SNAP e DROP_MIN_SIZE copiano le costanti di engine.ts (che
+  porta il DOM) e un test le tiene uguali. Perché: tutto ciò che nasce sta
+  sulla griglia della tela.
+- 2026-11-02 · N6 · T8: la scheda web non fa richieste da sé: mostra
+  indirizzo e dominio, e l'anteprima solo con «Mostra l'anteprima» (una
+  richiesta per clic); l'icona passa solo se è un data: di immagine raster
+  (la regola di safeIcon delle note, perché isAllowedLink ammetterebbe icone
+  http che farebbero rete); un'anteprima fallita resta sobria, col motivo
+  nel suggerimento e il pulsante per riprovare; un indirizzo non valido non
+  ha pulsanti. Tutte le schede dicono lo stato in data-card-state e la
+  specie in data-card-kind (allineate dall'orchestratore: l'immagine usava
+  data-state). Manca una chiave «Scarico l'anteprima…»: per ora «Apro…».
+  Perché: una lavagna aperta non contatta nessun sito senza che lo si
+  chieda.
+- 2026-11-02 · N6 · T6: la scheda PDF disegna la pagina in un canvas fuori
+  dal DOM e la copia in quello visibile (la cache chiude le immagini che
+  scarta), larga scheda × zoom × densità, al più 2× la scheda; la parte in
+  cache è snapshotPart("page-N", larghezza); la pagina di partenza viene da
+  #page con pdfPageFromFragment di pdf-view.ts; PgSu/PgGiù/Home/Fine senza
+  modificatori; un PDF rotto o cifrato dice «Non riesco a mostrare…». Da
+  decidere in T12/T13: un cambio di zoom ridisegna solo se la tela chiama
+  resize() o setMode. Perché: una scheda ferma resta leggibile senza tenere
+  aperto il motore PDF.
+- 2026-11-02 · N6 · T5: la scheda d'immagine riduce alla misura della scheda
+  con una sola decodifica (per JPEG, WebP e BMP la larghezza si legge
+  dall'intestazione), tiene in cache la parte `whole@<larghezza>` come dice
+  canvas-cards.md, mostra l'SVG solo come <img> da blob (mai svg o script
+  nel DOM) e, dipinto, lo tiene in cache come canvas; oltre 64 MiB, HEIC e
+  AVIF dicono «Non riesco a mostrare…» con «Apri». Rischio: il canvas della
+  scheda è una copia del bitmap in cache, quindi la memoria per scheda viva
+  raddoppia; lo stile delle classi nuove spetta a T12/T22. Perché: una foto
+  grande non pesa sulla tela più della sua scheda.
+- 2026-11-02 · N6 · T4: la scheda di nota non rende da sé ma chiede alla
+  shell (NoteCardPort.show, più watch e un open facoltativo per «Apri»);
+  ogni accensione rifà la resa, una scheda ferma non tiene ascoltatori e
+  mostra la resa di prima inerte, un contatore di generazione scarta le
+  risposte tardive; lo stato sta in data-card-state; `#A#B` mostra la
+  sezione più interna. Perché: la tela non importa l'editor di testo e la
+  scheda legge senza mai scrivere il file.
+- 2026-11-02 · N6 · T3: depositOrReuse riusa un file già depositato con gli
+  stessi byte (ricevuta ReusableReceipt, esito SameFile) invece di
+  duplicarlo. Perché: incollare due volte la stessa immagine non riempie il
+  vault di copie.
+- 2026-11-02 · N6 · T1: il contratto delle schede
+  (`editors/canvas/cards.ts`, `docs/reference/canvas-cards.md`). PenQuiet
+  non c'è ancora in main: `cards.ts` ha un tipo strutturale suo, `CardQuiet
+  { defer(key, work) }`, con la chiave `cards`. `snapshotPart` dà sempre
+  `prefisso@larghezza` (multiplo di 32, minimo 32). «Più vicine al centro»
+  si misura dal centro della vista al punto più vicino della scheda; se un
+  `setMode` lancia, le altre schede cambiano lo stesso e l'errore esce alla
+  fine; lo stesso renderer che nomina due volte una specie non è un
+  doppione.
+- 2026-11-02 · N6 · T2: la cache delle immagini ferme
+  (`editors/canvas/card-cache.ts`) ha un tipo suo, `CardCacheSnapshot`,
+  uguale per forma a quello del contratto di T1 senza importarlo; percorso e
+  parte restano chiavi separate (mai unite in una stringa); rimettere la
+  stessa immagine sotto la sua chiave non la chiude; un tetto negativo o NaN
+  vale 0, i byte 0, negativi o NaN contano 1. Il tetto di 64 MiB è un valore
+  di partenza.
+- 2026-11-02 · N4 · T20: l'utente approva il prototipo delle penne con una
+  modifica: lo spessore si sceglie con un cursore (la penna da 0,5 a 20
+  pixel, l'evidenziatore da 4 a 48), non con Sottile, Medio e Spesso;
+  A19–A23 valgono; nei disegni e nei documenti restano i tre spessori finché
+  l'utente non dice altro · l'ha chiesto guardando il prototipo, e un
+  cursore dà più scelta; il prototipo ora fa anche scrivere col mouse,
+  perché l'utente voleva provare le penne e non solo guardarle.
+- 2026-11-02 · N4 · Le risposte dell'utente a D-1…D-11: il posto
+  dell'inchiostro si decide dopo la prova con Obsidian (fino ad allora il
+  `.canvas`; D-12 se si perde); il menu delle penne e la gomma che taglia
+  già in N4, dopo il prototipo; due impostazioni spente di serie (ricorda
+  «Scrivi col mouse», il dito sposta le schede); su immagini e PDF
+  l'inchiostro scala senza deformarsi, sulle altre schede resta fermo; due
+  misure, la seconda sul foglio vero con N6; N4 in `main` solo dopo N3, con
+  la CI completa · D-1, D-4–D-7, D-9, D-10 e merge-n3n4 sono diverse dalla
+  prima opzione con cui il piano era andato avanti: task nuovi T17–T25, T4
+  e T5 da rivedere.
+- 2026-11-02 · N4 · T11: la toppa ink nel client sta in `operation.ts`, con
+  i costruttori dei tratti e `eraseStrokePatches` per la gomma; i vettori di
+  T10 passano anche dal lato della shell. `operation.ts` e `ink-record.ts`
+  si importano a vicenda, ma usano i valori dell'altro solo dentro le
+  funzioni, mai al caricamento del modulo, quindi il ciclo non rompe
+  l'ordine ESM. Perché: la tela e il nucleo devono costruire la stessa
+  toppa.
+- 2026-11-02 · N4 · T10: la toppa `ink` e le operazioni
+  `add_strokes`/`erase_strokes` stanno nel nucleo; l'id di un tratto nuovo
+  nasce dal seme dell'operazione, così due giri con lo stesso seme danno lo
+  stesso file. Due errori nuovi, `E_OP_UNKNOWN_STROKE` ed
+  `E_OP_FOREIGN_LAYER`, con le frasi anche in `fub-features` (lavagna.rs e
+  lavagna/apply.rs), che altrimenti non compilava. `source.rs` non si tocca:
+  il test prova che gli array annidati si accoppiano già per id. I vettori
+  ink sono numerati 46–62, dopo il 45 di N3, per non avere doppioni dopo la
+  fusione. Misura: su una scheda con 2000 tratti spostare la scheda dà una
+  toppa d'annulla di circa 6 MB mentre il file cambia di 1 byte; un tratto
+  nuovo aggiunge circa 1,5 KB al file. Perché: un agente deve poter
+  aggiungere e cancellare tratti con la stessa strada dell'annulla.
+- 2026-11-02 · N4 · T8: l'inchiostro fub:ink sta in fub-canvas-core (modulo
+  ink), che ora dipende anche da fub-ink-codec; i campi noti di un tratto
+  sono Option<Value>, così un tratto non valido si conserva com'era e il suo
+  stato si calcola a parte (Drawn o Kept con il perché); la versione del
+  livello resta il Number del file (1.0 resta 1.0). Aggiunti
+  InkAnchor::card_of/to_value e InkLayer::is_bare per T10. Perché: leggere
+  l'inchiostro non deve mai riscrivere ciò che non si capisce, e 28 vettori
+  danno lo stesso esito del TypeScript.
+- 2026-11-02 · N4 · T6: il codec dell'inchiostro in un crate suo,
+  `fub-ink-codec`, spostato con git mv; fub-scene lo riesporta e non dipende
+  più da fub-ink (`SCENE_ALLOWED_DIRECT=[fub-ink-codec, quick-xml, serde]`,
+  `INK_ALLOWED_DEPENDENTS=[fub-ink-codec, fub-format-rich]`,
+  `INK_CODEC_ALLOWED_DIRECT=[fub-ink]`, clienti `[fub-scene,
+  fub-canvas-core]`); in overview.md un quinto diagramma, perché il primo
+  era già a 20 nodi · la lavagna e il disegno leggono l'inchiostro dallo
+  stesso codec senza tirarsi dietro la scena. Nel check, fub-cli
+  `second_process_cannot_take_writer_and_sigint_exits_repl` è caduto per il
+  timeout di 10 s sotto carico e passa da solo (3 su 3); i commenti TS
+  dicono ancora «di fub-scene».
+- 2026-11-02 · N4 · secondo merge di `piano/n3-logica-in-rust` (fino a N3
+  T7, il commit e i vettori delle toppe) dentro `piano/n4-inchiostro`;
+  PLAN.md resta quello di N4 e DECISIONS.md tiene le righe di tutti e due:
+  senza il merge la PR #298 era in conflitto con la sua base e la CI non
+  partiva.
+- 2026-11-13 · K5 T30 · il piano si chiude col sì dell'utente; restano fuori, come issue o limiti noti: il tetto alle istanze dei motori per vault (`issue-istanze-motore.md`), i `detail` delle parti solo in italiano, il campo «Testo» per un `<text>` senza `tspan`, `ripristina` fuori da `catch_panic`, le proposte a monte per VectorCraft (bozza non inviata) e il test instabile `close_a_vault_and_latest_round_in_which_and_again_open` visto una volta sotto carico · non cambiano il comportamento che K5 promette, e ognuno è più piccolo o più largo del piano.
+- 2026-11-13 · K5 T30 · la prova sull'app vera ha trovato gli errori delle sei porte del disegno consegnati con la chiave del catalogo (un oggetto sul filo): il client leggeva ogni `unserved` come un guasto, e un disegno riaperto a motore spento restava «fermo» anche dopo la riaccensione. Corretto nel proprietario, `fub-app` (`drawing_port` passa da `for_the_shell`, come Componenti), non rilassando `asPluginError` nel client; il `BadArgs` di un sync resta un fermo della sessione (con «Riprova») e si sono corretti commento e docs che dicevano il contrario · il contratto vuole messaggi già tradotti, e cambiare il comportamento della sessione in T30 non serviva: un `BadArgs` del sync è solo un difetto, e il fermo è la strada sicura.
+- 2026-11-13 · K5 T23 · accettati i due `kind` nuovi del chip (`reduced`, `stopped`) in `editors/core/registry.ts` al posto di `body`, e il ramo resta con `bench/scene.test.ts` rosso finché le 6 baseline delle scene nuove non arrivano dal runner (primo passo di T30) · Perché: il prototipo approvato usa quei due segni (vuoto e rosso), e le baseline si fanno solo sul runner Linux.
+- 2026-11-13 · K5 T35 · accettati `gesti/mod.rs` (`Strumento::unita`, `Contesto::memo`) e la chiamata in `comandi.rs` fuori dal Tocca stretto, e il caso nuovo dei due figli scelti insieme (la `transform` a ciascuno, registrato dal client) · Perché: il caso visto da T33 nasce da gesti fatti dal motore, e le unità si sanno solo al commit; il memo toglie il costo in più (circa 3 ms su 1 MiB) di rifare l'analisi.
+- 2026-11-13 · K5 T22 · il coder si è fermato: il prototipo approvato (scena 7a, «poi scrivilo nell'ispettore») conta su un campo che cambia le parole di un testo, e nel client non c'è (la `textarea` di `properties.ts` è la Descrizione del documento; nessuno scrive `op: "text"` su un testo libero). T22 si allarga a quel campo (`fields.ts`, `properties.ts`, `panel.ts`), che non c'è per un testo che `op: "text"` non riscrive senza perdite · Perché: è ciò che l'utente ha approvato nel prototipo, e senza il campo lo strumento scriverebbe sempre «Testo»; un editor sul foglio sarebbe un disegno nuovo da far vedere.
+- 2026-11-13 · K5 T21 · accettati i file toccati fuori da Tocca (`lazy.ts`, `panels/standing.ts`, la skin `sheets.css` con i rigenerati): senza `lazy.ts` il chip non arrivava alla shell, e il taglio dei nomi lunghi con l'elenco che scorre serve anche al chip del rich. Il `detail` delle perdite resta in italiano anche con l'interfaccia in inglese: si nota in T30 come limite noto, non si traduce ora · Perché: il motore scrive il `detail` come testo; tradurlo vuol dire un codice per ogni motivo nel contratto, una scelta più grande del chip.
+- 2026-11-13 · K5 T34 · il commit sul disegno di 1 MiB scende da p95 99 ms a 9,3–9,9 ms senza toccare VectorCraft: la differenza non scrive più in JSON il sottoalbero di un livello e prende per uguali i rami condivisi (`Arc::ptr_eq`); il ritorno della sessione alla copia (0,2 ms) resta com'è. Dei 9 ms rimasti, ~7,5 crescono col disegno dentro VectorCraft (eventi del commit 3,6 ms, `hit_test` della Selezione 4 ms): non si toccano ora · Perché: il tetto di A8 (50 ms) è passato con margine; una patch a `vendor/vectorcraft` per pochi millisecondi non vale il costo.
+- 2026-11-13 · K5 T33 · accettata la strada della mappa: i livelli che il lettore SVG del motore crea da gruppi di Fub tornano gruppi in `apertura.rs`, e il motore li disegna uguale. Il caso visto dal coder (un gruppo di un figlio solo riceve la `transform` sul figlio, il client sul gruppo) diventa T35, dopo T34; T30 ne dipende · Perché: il motore deve scrivere il testo che scrive oggi il client, non solo disegnare lo stesso, e la regola «un figlio solo» non sa che cosa l'utente ha scelto.
+- 2026-11-12 · K5 T20 · il cancello passa (32 file su 32) e ne nascono due task: T33 (un gruppo-livello di Inkscape figlio della radice è un livello nel motore e non si sposta, mentre oggi il client lo sposta) e T34 (il commit su un disegno di 1 MiB costa 82 ms di mediana e 99 ms al 95° percentile, contro i 50 di A8); T30 dipende da tutti e due. Il motore continua a prendere dal sistema i caratteri che le facce di Fub non hanno (greco, cirillico, CJK, emoji), anche se `FontDb::set_system_fallback(false)` lo spegnerebbe senza patch: la WebView disegna quei caratteri con le facce del sistema, e il motore deve colpire il testo che l'utente vede; la misura scrive che il risultato su quei testi dipende dalla macchina · Perché: chi usa Fub non deve perdere un gesto di oggi né sentire un disegno grande più lento, e un colpo su un testo deve seguire ciò che si vede.
+- 2026-11-12 · K5 T32 · il contorno delle linee a spessore variabile è una traduzione in Rust del calcolo del client (`src/profilo/`, ~3 700 righe), non le operazioni sui tracciati di VectorCraft: il risultato deve essere lo stesso `d` che scrive il client, e un algoritmo diverso darebbe un contorno diverso. Rimandato il coder una volta perché togliesse un lettore del `d` copiato da `fub-scene`: ora `fub-scene` rende pubblici `parse_path` e il suo segmento (`PathSegment`), fuori dal `Tocca` di T32 per decisione dell'orchestratore · Perché: due lettori dello stesso `d` possono divergere in silenzio, e uno basta.
+- 2026-11-12 · K5 T24 · il `Tocca` di T24 si allarga alla skin della casa (`theme/scrittoio/skin/settings.css`, i ganci in `anatomia/` e i derivati rigenerati): il prototipo approvato mette lì la classe `.components-row--found` della riga segnata · Perché: il codice del client non scrive stili, e la riga segnata del prototipo si vede solo con la sua regola nella skin.
+- 2026-11-12 · K5 T17 · accettati i tre file fuori dal `Tocca` di T17: la riga `vectorcraft-text` del workspace (`default-features = false`, già nel grafo: nessuna libreria nuova), `VECTORCRAFT_OWNERS` del test delle dipendenze e il paragrafo di `scene-gestures.md`; le facce di Fub entrano nella `FontDb::global()` del motore invece che in una nuova, perché è quella che il motore usa in tutto il suo codice. Che la `FontDb` catalogi anche i caratteri del sistema quando una famiglia manca resta una nota in T20 · Perché: una seconda `FontDb` non la vedrebbe nessuno, e spegnere il catalogo del sistema chiede una patch nella copia di VectorCraft, da provare prima col cancello.
+- 2026-11-12 · K5 T29 · accettati `motore_disegno_spento` con una funzione che legge le chiavi (serve al `Workspace` di `serves` e alle impostazioni del vault dell'host) e la lettura delle impostazioni solo quando un'istanza manca; l'orchestratore aggiunge i testi IT/EN delle cinque chiavi `host.drawing.*` nel catalogo di `settings.rs`, che T19 aveva lasciato senza. Le istanze restano aperte se le impostazioni cambiano fuori da `apply_components` (un profilo, il file cambiato a mano): non si sorvegliano le impostazioni per il disegno, e la pagina Componenti, la CLI e l'MCP passano tutti da `apply_components` · Perché: un errore deve arrivare con una frase, non con la sua chiave, e leggere le impostazioni a ogni gesto costerebbe su ogni tratto.
+- 2026-11-12 · K5 T28 · tenuti i due file fuori dal `Tocca` di T28: le chiavi `draw.reason.engine_off` e `draw.reason.engine_stopped` in `strings/tools.ts` (servono a dire perché il motore manca) e `colori.test.ts` (`motoreDa` prende ora una funzione che apre, per poter riaprire un'istanza nuova). Accettati anche `spento()`, `quandoChiusa()` e la riapertura col `session.id`: il motore spento lo dice subito, una `DocumentSession` chiusa non si riapre, un file rinominato riapre col nome nuovo · Perché: senza, il motore riacceso riaprirebbe col nome vecchio o su un documento già chiuso.
+- 2026-11-12 · K5 T18 · lo spessore delle linee a spessore variabile resta `unsupported` in T18 (il client riscala il profilo e ricalcola il contorno pieno con `widthTo`, un calcolo che in Rust non c'è) e diventa il task nuovo T32, da cui dipendono T20 e T30; accettati i cambi di T18 in `src/differenza.rs` e `src/motore.rs` (un tratto o un riempimento nuovi, il `fill` dei testi, la punta delle frecce, i tratteggi rimisurati) · Perché: col motore acceso il campo dello spessore oggi si spegne su quelle linee, e chi usa Fub non deve perdere un comando che senza motore funziona.
+- 2026-11-12 · K5 T15 · chiuso con la selezione che usa lo strumento del motore solo dove dà il risultato di Fub, e la matrice di Fub negli altri casi (nessun gesto `unsupported`); rimandato al coder una volta perché rifacesse Ctrl/⌘ dentro i gruppi e la soglia di trascinamento ricordata, che oggi Fub ha. La cornice girata tenuta fra due gesti su più oggetti la sa solo il client (`ctx.kept`): diventa il task nuovo T31 (un campo additivo in `DrawingGesture`, il client che lo manda, la selezione che lo usa), e T30 ne dipende · Perché: chi usa Fub non deve perdere un gesto che oggi funziona, e il contratto cambia solo con un campo opzionale.
+- 2026-11-12 · K5 T15 · `gesti/mod.rs` si allarga ancora di poco: il `Banco` tiene anche la pressione di Fub (il Down prima di `Strumento::evento`) e la passa a due metodi nuovi del tratto, con un'implementazione di base che le forme non riscrivono. Serve alla selezione per il riquadro (Fub sceglie solo ciò che sta dentro per intero, il motore ciò che il riquadro tocca) e per le maniglie (quella di Fub sta 4 px fuori dalla cornice e si prende entro 8 px, quella del motore sulla cornice entro 5 px). Una cornice inclinata da ridimensionare non si rifiuta con `unsupported`: il client, su `unsupported`, dice solo «rifiutato» senza ricadere sugli strumenti semplici, quindi si fa con la regola di Fub in `selezione.rs` · Perché: chi usa Fub non deve vedere la selezione cambiare regole né perdere un gesto che oggi funziona.
+- 2026-11-12 · K5 T14 · tenuti i due cambi di T14 fuori dal suo `Tocca`: in `src/gesti/mod.rs` il braccio delle forme in `strumento()` e l'aggancio `Strumento::evento(e, inizio, cx)` (le regole di Fub su griglia, Maiusc, Alt e Ctrl/⌘ prima dello strumento del motore, che le leggerebbe a modo suo); in `src/apertura.rs` un livello vuoto di Fub diventa un livello vuoto del motore (il lettore SVG del motore toglie i gruppi vuoti, e un disegno nuovo comincia con uno). T15 e T17 aggiungono il loro braccio in `strumento()` e impostano le loro tolleranze magnetiche (le forme le mettono a zero nelle prefs della sessione, che è condivisa) · Perché: senza, quattro vettori delle forme fallivano e in un disegno nuovo nessuna forma si scriveva; T15 ha bisogno dello stesso aggancio per la griglia di `snappedDelta`.
+- 2026-11-12 · K5 T13 · riaccesi i disegni, il Motore del disegno resta spento se il risolutore di K2 lo aveva spento con loro: il risolutore non ricorda lo stato di prima, e cambiarne le regole è fuori da K5. Il piano diceva «torna com'era prima»; vale il codice, scritto nel test di `fub-host/tests/componenti.rs`. Accettati anche `fub-disegno` per percorso in `fub-host` e i test della lavagna sotto la feature `lavagna`. Il caso di `fub.draw` in `plugins.disabled` va a T29 (nota nel piano) · Perché: una regola sola per le righe che ne richiedono un'altra, e il motore si riaccende con un clic nella pagina Componenti.
+- 2026-11-12 · K5 T11 · i caratteri non arrivano ancora alla `FontDb` del motore: costruirla dai `Caratteri` di T7 vuole `vectorcraft-text` come dipendenza diretta di `fub-disegno` (`Cargo.toml` e `Cargo.lock`, fuori dal `Tocca` di T11). Lo fa T17, a cui si aggiungono `crates/fub-disegno/Cargo.toml`, `Cargo.lock` e la sola `FontDb` in `src/motore.rs`; fino ad allora il motore usa i suoi caratteri di ripiego. Altre differenze di T11 accettate: `sincronizza`, `gesto` e `comando` rendono `Result<…, PluginError>`; l'import toglie le etichette e segna i livelli con `data-vc-layer`; un import rifiutato apre una copia vuota in sola lettura; nessun `.tsv` di differenze ammesse ancora (il lettore c'è, i file li scrivono T14–T17) · Perché: i caratteri servono solo al testo, che è T17, e la crate è già nel grafo (nessuna libreria nuova).
+- 2026-11-12 · K5 T27 · `hayro` passa da 0.5 a 0.6 in `fub-features` (rasterizzatore del PDF redatto e annotato): legge JPEG 2000 e fax e disegna con le stesse versioni del motore, e toglie quattro doppie; il motivo della 0.5 (un compilatore più nuovo) non vale con Rust 1.95; feature come prima (`embed-fonts` sì, `embed-cmaps` no). Provato uguale byte per byte su un PDF redatto semplice; su PDF complessi (JPEG 2000, JBIG2) i pixel possono cambiare. Il tetto `librerie_doppie` scende a 55 · Perché: D-3 (a), «allineo dove posso», e un rasterizzatore in comune col motore costa meno da tenere.
 - 2026-11-09 · K5 T9 · `cargo fmt --all` segue le dipendenze a percorso e
   con `fub-disegno` nel workspace controlla anche le copie di VectorCraft e
   craft-libs: il `rustfmt.toml` dell'upstream entra fra i file gestiti
@@ -1250,75 +1661,6 @@ La più recente in cima: data · piano · decisione · perché.
   approvata · D-9 (b) è il consiglio dell'orchestratore contro quello del
   pianificatore (a): N3 cambia già il modello della lavagna, e un file
   dell'utente che non si apre è il difetto più grave.
-- 2026-11-03 · N4 · D-13 (a), nuova: il cursore dello spessore anche nei
-  disegni e nei documenti, non solo sulla lavagna; il task lo scrive il
-  pianificatore · parole dell'utente («si»): la stessa penna si usa allo
-  stesso modo in tutta Fub.
-- 2026-11-03 · N4 · terzo merge di `piano/n3-logica-in-rust` (fino a N3 T17
-  e alla fusione di main con #303, `async-executor` 1.14.1) dentro
-  `piano/n4-inchiostro`; PLAN.md resta quello di N4 e DECISIONS.md tiene le
-  righe di tutti e due · senza main la versione ritirata 1.14.0 teneva rosso
-  il controllo delle librerie, e N4 riceve main solo attraverso N3.
-- 2026-11-02 · N4 · T20: l'utente approva il prototipo delle penne con una
-  modifica: lo spessore si sceglie con un cursore (la penna da 0,5 a 20
-  pixel, l'evidenziatore da 4 a 48), non con Sottile, Medio e Spesso;
-  A19–A23 valgono; nei disegni e nei documenti restano i tre spessori finché
-  l'utente non dice altro · l'ha chiesto guardando il prototipo, e un
-  cursore dà più scelta; il prototipo ora fa anche scrivere col mouse,
-  perché l'utente voleva provare le penne e non solo guardarle.
-- 2026-11-02 · N4 · Le risposte dell'utente a D-1…D-11: il posto
-  dell'inchiostro si decide dopo la prova con Obsidian (fino ad allora il
-  `.canvas`; D-12 se si perde); il menu delle penne e la gomma che taglia
-  già in N4, dopo il prototipo; due impostazioni spente di serie (ricorda
-  «Scrivi col mouse», il dito sposta le schede); su immagini e PDF
-  l'inchiostro scala senza deformarsi, sulle altre schede resta fermo; due
-  misure, la seconda sul foglio vero con N6; N4 in `main` solo dopo N3, con
-  la CI completa · D-1, D-4–D-7, D-9, D-10 e merge-n3n4 sono diverse dalla
-  prima opzione con cui il piano era andato avanti: task nuovi T17–T25, T4
-  e T5 da rivedere.
-- 2026-11-02 · N4 · T11: la toppa ink nel client sta in `operation.ts`, con
-  i costruttori dei tratti e `eraseStrokePatches` per la gomma; i vettori di
-  T10 passano anche dal lato della shell. `operation.ts` e `ink-record.ts`
-  si importano a vicenda, ma usano i valori dell'altro solo dentro le
-  funzioni, mai al caricamento del modulo, quindi il ciclo non rompe
-  l'ordine ESM. Perché: la tela e il nucleo devono costruire la stessa
-  toppa.
-- 2026-11-02 · N4 · T10: la toppa `ink` e le operazioni
-  `add_strokes`/`erase_strokes` stanno nel nucleo; l'id di un tratto nuovo
-  nasce dal seme dell'operazione, così due giri con lo stesso seme danno lo
-  stesso file. Due errori nuovi, `E_OP_UNKNOWN_STROKE` ed
-  `E_OP_FOREIGN_LAYER`, con le frasi anche in `fub-features` (lavagna.rs e
-  lavagna/apply.rs), che altrimenti non compilava. `source.rs` non si tocca:
-  il test prova che gli array annidati si accoppiano già per id. I vettori
-  ink sono numerati 46–62, dopo il 45 di N3, per non avere doppioni dopo la
-  fusione. Misura: su una scheda con 2000 tratti spostare la scheda dà una
-  toppa d'annulla di circa 6 MB mentre il file cambia di 1 byte; un tratto
-  nuovo aggiunge circa 1,5 KB al file. Perché: un agente deve poter
-  aggiungere e cancellare tratti con la stessa strada dell'annulla.
-- 2026-11-02 · N4 · T8: l'inchiostro fub:ink sta in fub-canvas-core (modulo
-  ink), che ora dipende anche da fub-ink-codec; i campi noti di un tratto
-  sono Option<Value>, così un tratto non valido si conserva com'era e il suo
-  stato si calcola a parte (Drawn o Kept con il perché); la versione del
-  livello resta il Number del file (1.0 resta 1.0). Aggiunti
-  InkAnchor::card_of/to_value e InkLayer::is_bare per T10. Perché: leggere
-  l'inchiostro non deve mai riscrivere ciò che non si capisce, e 28 vettori
-  danno lo stesso esito del TypeScript.
-- 2026-11-02 · N4 · T6: il codec dell'inchiostro in un crate suo,
-  `fub-ink-codec`, spostato con git mv; fub-scene lo riesporta e non dipende
-  più da fub-ink (`SCENE_ALLOWED_DIRECT=[fub-ink-codec, quick-xml, serde]`,
-  `INK_ALLOWED_DEPENDENTS=[fub-ink-codec, fub-format-rich]`,
-  `INK_CODEC_ALLOWED_DIRECT=[fub-ink]`, clienti `[fub-scene,
-  fub-canvas-core]`); in overview.md un quinto diagramma, perché il primo
-  era già a 20 nodi · la lavagna e il disegno leggono l'inchiostro dallo
-  stesso codec senza tirarsi dietro la scena. Nel check, fub-cli
-  `second_process_cannot_take_writer_and_sigint_exits_repl` è caduto per il
-  timeout di 10 s sotto carico e passa da solo (3 su 3); i commenti TS
-  dicono ancora «di fub-scene».
-- 2026-11-02 · N4 · secondo merge di `piano/n3-logica-in-rust` (fino a N3
-  T7, il commit e i vettori delle toppe) dentro `piano/n4-inchiostro`;
-  PLAN.md resta quello di N4 e DECISIONS.md tiene le righe di tutti e due:
-  senza il merge la PR #298 era in conflitto con la sua base e la CI non
-  partiva.
 - 2026-11-02 · N3 · Le risposte dell'utente a D-1…D-8 e a merge-n3n4: le non
   ovvie sono tre. D-5 (c): il testo di una scheda si registra a pause di
   circa 250 ms, Esc registra invece di buttare (la D-10 nuova chiede
@@ -2247,21 +2589,14 @@ La più recente in cima: data · piano · decisione · perché.
   dati di T12 spinge l'ultima del DOM sotto la banda); la pastiglia del titolo non
   fa più crescere la riga del cursore (salto di 7–9 px, già su `main`) · le
   baseline di T25 si prendono dopo, con questi cambi dentro.
-- 2026-11-14 · workflow · La PR #298 si era chiusa da sola il 2026-11-10: GitHub
-  chiude una PR quando ne cancella il ramo base (`piano/n3-logica-in-rust`, dopo il
-  merge di N3). Riaperta con base `main`. La PR #302 (N6) ha base
-  `piano/n4-inchiostro`: va portata su `main` prima del merge di N4, o si chiude
-  allo stesso modo · un ramo base cancellato chiude senza avviso le PR sopra.
-- 2026-11-14 · T25 · Riallineato con `main` (0caf21879, poi db07c9995): le due
-  sezioni sulla lavagna a penna passano in `docs/architecture/ink-on-canvas.md`
-  perché `ink-and-tools.md` superava la soglia di 450 righe; in `overview.md` il
-  blocco Mermaid di `fub-ink-codec` è unito al precedente · nessuna soglia alzata.
-- 2026-11-14 · T24 · La prova con Obsidian l'ha fatta l'orchestratore, su
-  indicazione dell'utente («Non aspettare la mia approvazione, te vai! Io avevo già
-  approvato il piano. Se è conforme, allora ci sei»): Obsidian 1.13.7 di questo PC,
-  avviato isolato (HOME temporanea, `xvfb-run`, senza GPU, porta CDP 9333), vault
-  di prova vuoto nello scratchpad, «Spostami» trascinata e «Ridimensionami» tirata
-  dall'angolo col mouse (eventi veri, non scritture nel file), lavagna chiusa.
-  `confronta.mjs` → uscita 0, 8 livelli uguali per valore (n3 400×300 → 500×360,
-  n4 1400,500 → 1100,760). Primo caso di T24: ADR 0241 accolta, sezione «Obsidian»
-  riscritta senza la copia B · D-12 non serve.
+- 2026-11-13 · lavagna · Il trascinamento nel vuoto col mouse sceglie con un rettangolo, come in Obsidian, e la vista si sposta con Spazio, tasto di mezzo, rotella, Mano e dito (T20b); un'impostazione tiene il comportamento di prima («sposta la vista») · il suggerimento della Selezione prometteva già il rettangolo, e chi viene da Obsidian se lo aspetta; l'impostazione non toglie niente a chi si è abituato.
+- 2026-11-13 · fluidità · Il profilo di N4 T23a mette i fotogrammi lunghi della penna sopra il foglio vivo in codice di N6, non dell'inchiostro: i riquadri dei bersagli (T20c), la croce della penna ereditata su tutta la lavagna (T20d), il commit e l'`onChange` al rilascio (T20e). Sono task di N6, prima del cancello (T21) · l'utente vuole l'app «estremamente fluida», e la meta di 33 ms vale sopra il foglio vivo come altrove.
+- 2026-11-13 · N6 T20d · accettato il velo della croce sopra le schede (il menu, il filo, il doppio clic, la rotella e il deposito guardano sotto di lui); il velo resta quando il mouse esce dalla vista, e lo tolgono solo un dito o la penna fuori dal raggio; nuovo T20f per i 30–40 ms di pittura dei riquadri di T20c all'inizio del tratto, prima di T21 · Perché: con `cursor` sul viewport ogni pressione di D ricalcolava lo stile di tutta la lavagna (67–152 ms); il velo cambia un elemento solo. Toglierlo all'uscita del mouse farebbe perdere `:hover` e ridipingere la scheda a ogni rientro. I riquadri sono di T20c e la correzione chiede una misura sua.
+- 2026-11-14 · lavagna · T20a: alla cattura persa e al blur il tratto della penna si chiude e si salva fino all'ultimo campione (come dice il task), non si annulla come faceva l'adattatore di N4; `pointercancel` resta un annullamento, perché lì il sistema si prende il gesto (palmo, gesto del sistema). Perdere l'inchiostro disegnato per un Alt+Tab è una perdita di dati. Il coder tocca `src/ink/dom/pointer-adapter.ts` fuori da Tocca con l'OK dell'orchestratore. Il dito non si chiude alla cattura persa: T64 gliela toglie quando passa a scrivere.
+- 2026-11-14 · N6 T20a · La regola nuova dell'adattatore (cattura persa e blur salvano fino all'ultimo campione) vale per tutti i suoi consumatori: anche l'inchiostro del testo (`editors/rich/ink.ts`) e la curvatura di FubDraw, che già salvavano · un tratto perso non si butta, in nessun editor; restringerla alla lavagna terrebbe due regole per lo stesso gesto.
+- 2026-11-14 · lavagna · In `main` (#353) le punte di serie di JSON Canvas: `edgeEnd()` e `DEFAULT_EDGE_END` in `editors/canvas/model.ts` (senza `toEnd` la freccia alla fine, senza `fromEnd` nessuna all'inizio); l'inversione in `engine.ts` scrive solo ciò che non è di serie. Quando N6 riunisce `main`, `chrome/inspector.ts` (`tipsOf`, `reversedEdge`) e `#tipEnds` usano `edgeEnd()` invece di copiare la regola · una regola sola per le punte, nel client.
+- 2026-11-14 · N6 T20b · I testi della riga «Trascinare nel vuoto» («Sceglie», «Sposta la vista», la descrizione) e le due frasi del suggerimento li ha scritti il coder nello stile delle altre righe: il prototipo T25 non li aveva. Si tengono; se il prototipo li cambia, cambia anche il test Rust che li controlla · non è una scelta di gusto che l'utente ha chiesto di vedere.
+- 2026-11-14 · T22 · L'utente: «Non aspettare la mia approvazione, te vai! Io avevo
+  già approvato il piano. Se è conforme, allora ci sei». Il prototipo T25 (`PLAN-ui/
+  lavagna-schede.html`) vale come approvato con le varianti consigliate (D-10 (a):
+  bordo d'accento, «Esc per uscire», «↩ N» e «×2»); T22 parte senza mostrarlo prima.

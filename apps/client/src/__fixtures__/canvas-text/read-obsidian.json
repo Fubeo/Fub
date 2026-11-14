@@ -1,0 +1,8 @@
+{
+  "name": "read-obsidian",
+  "description": "Una lavagna di Obsidian non ha il campo: nessuna scheda da leggere.",
+  "source": "{\n  \"nodes\": [\n    { \"id\": \"t1\", \"type\": \"text\", \"text\": \"# Titolo\", \"x\": 0, \"y\": 0, \"width\": 300, \"height\": 120 },\n    { \"id\": \"f1\", \"type\": \"file\", \"file\": \"Nota.md\", \"x\": 400, \"y\": 0, \"width\": 300, \"height\": 120 }\n  ],\n  \"edges\": []\n}\n",
+  "expect": {
+    "cards": []
+  }
+}

@@ -21,6 +21,26 @@ export function edgeEnd(edge: CanvasEdge, endpoint: CanvasEdgeEndpoint): CanvasE
   return (endpoint === "from" ? edge.fromEnd : edge.toEnd) ?? DEFAULT_EDGE_END[endpoint];
 }
 
+/**
+ * L'arco con la direzione invertita: le estremità e i lati scambiati, le punte
+ * sulla scheda a cui stavano (la freccia di serie della fine diventa quella
+ * dell'inizio). Scrive solo le punte e i lati che non sono di serie, come nel file.
+ */
+export function reversedEdge(edge: CanvasEdge): CanvasEdge {
+  const next: CanvasEdge = { ...edge, fromNode: edge.toNode, toNode: edge.fromNode };
+  const startEnd = edgeEnd(edge, "to");
+  const finishEnd = edgeEnd(edge, "from");
+  if (startEnd === DEFAULT_EDGE_END.from) delete next.fromEnd;
+  else next.fromEnd = startEnd;
+  if (finishEnd === DEFAULT_EDGE_END.to) delete next.toEnd;
+  else next.toEnd = finishEnd;
+  if (edge.toSide === undefined) delete next.fromSide;
+  else next.fromSide = edge.toSide;
+  if (edge.fromSide === undefined) delete next.toSide;
+  else next.toSide = edge.fromSide;
+  return next;
+}
+
 export interface CanvasNode {
   id: string;
   type: CanvasNodeType;

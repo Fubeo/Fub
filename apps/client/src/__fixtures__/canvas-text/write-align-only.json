@@ -1,0 +1,21 @@
+{
+  "name": "write-align-only",
+  "description": "Solo l'allineamento: la misura di serie non si scrive.",
+  "node": {
+    "id": "t1",
+    "type": "text",
+    "x": 0,
+    "y": 0,
+    "width": 300,
+    "height": 120,
+    "text": "nota"
+  },
+  "style": {
+    "size": "m",
+    "align": "end"
+  },
+  "expect": {
+    "outcome": "written",
+    "text": "{\"v\":1,\"align\":\"end\"}"
+  }
+}

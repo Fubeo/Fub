@@ -22,7 +22,7 @@
 //   che il nucleo non legge.
 
 import { loadCanvasWasm } from "virtual:fub-canvas-wasm";
-import type { CanvasDocument } from "../model";
+import type { CanvasDocument, CanvasNode } from "../model";
 import type { CanvasPatch, LayerRef } from "../operation";
 
 /** I codici d'errore del modulo, più `trap` (l'istanza è morta) e `load` (il modulo non si carica). */
@@ -71,11 +71,85 @@ export interface CanvasSourceEdit {
   readonly text: string;
 }
 
+/** I tratti da `start` a `start + remove` di un livello sono diventati `insert`. */
+export interface CanvasStrokesChange {
+  readonly start: number;
+  readonly remove: number;
+  readonly insert: readonly unknown[];
+}
+
+/**
+ * Che cosa ha cambiato un commit di soli tratti (`canvas_commit`,
+ * `docs/reference/canvas-operations.md` § «WebAssembly»): le schede
+ * riscritte con la loro posizione in `nodes` (le schede non cambiano posto
+ * né numero), intere (`node`) o solo nella lista dei tratti del loro
+ * livello (`strokes`); le chiavi della radice riscritte intere (`root`), e
+ * il cambio della sola lista dei tratti della radice (`board`). Messo sul
+ * modello di prima dà quello di dopo.
+ */
+export interface CanvasModelChange {
+  readonly nodes: readonly (
+    | { readonly at: number; readonly node: CanvasNode }
+    | { readonly at: number; readonly id: string; readonly strokes: CanvasStrokesChange }
+  )[];
+  readonly root: Readonly<Record<string, unknown>>;
+  readonly board?: CanvasStrokesChange;
+}
+
 export interface CanvasCommitted {
   /** `prima.slice(0, start) + text + prima.slice(end)` è il sorgente nuovo. */
   readonly edit: CanvasSourceEdit;
   /** Le toppe dell'annulla, da dare a un altro `commit`. */
   readonly inverse: CanvasPatch[];
+  /** Solo per un commit di soli tratti: il modello nuovo senza rileggerlo con `model()`. */
+  readonly changed?: CanvasModelChange;
+}
+
+const INK_FIELD = "fub:ink";
+
+/** Il livello `layer` (il valore di `fub:ink`) con la lista dei tratti cambiata; `null` se non si può. */
+function splicedLayer(layer: unknown, change: CanvasStrokesChange): Record<string, unknown> | null {
+  if (typeof layer !== "object" || layer === null || Array.isArray(layer)) return null;
+  const strokes = (layer as Record<string, unknown>).strokes;
+  if (!Array.isArray(strokes) || change.start + change.remove > strokes.length) return null;
+  const next = strokes.slice(0, change.start).concat(change.insert, strokes.slice(change.start + change.remove));
+  // Lo spread tiene le chiavi nel loro ordine, `strokes` compresa.
+  return { ...(layer as Record<string, unknown>), strokes: next };
+}
+
+/**
+ * Il modello di dopo un commit di soli tratti: un oggetto nuovo, con le
+ * schede di `change` al loro posto e le chiavi della radice riscritte dove
+ * stavano; le altre schede, gli altri tratti e gli archi sono quelli di
+ * `doc`. `null` se `doc` non è il modello su cui il nucleo ha fatto il
+ * commit (un'altra scheda in quella posizione, un livello o una chiave
+ * della radice che manca): allora il modello si rilegge intero.
+ */
+export function changedModel(doc: CanvasDocument, change: CanvasModelChange): CanvasDocument | null {
+  const nodes = doc.nodes.slice();
+  for (const entry of change.nodes) {
+    const old = nodes[entry.at];
+    if ("node" in entry) {
+      if (old?.id !== entry.node.id) return null;
+      nodes[entry.at] = entry.node;
+      continue;
+    }
+    if (old?.id !== entry.id) return null;
+    const layer = splicedLayer(old[INK_FIELD], entry.strokes);
+    if (!layer) return null;
+    nodes[entry.at] = { ...old, [INK_FIELD]: layer };
+  }
+  const next: CanvasDocument = { ...doc, nodes };
+  for (const [key, value] of Object.entries(change.root)) {
+    if (!Object.prototype.hasOwnProperty.call(doc, key) || key === "nodes" || key === "edges") return null;
+    next[key] = value;
+  }
+  if (change.board) {
+    const layer = splicedLayer(doc[INK_FIELD], change.board);
+    if (!layer) return null;
+    next[INK_FIELD] = layer;
+  }
+  return next;
 }
 
 /** Un'operazione d'intento (`docs/reference/canvas-operations.md`), come JSON. */

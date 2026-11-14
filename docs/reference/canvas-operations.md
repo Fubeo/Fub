@@ -314,8 +314,8 @@ Ogni errore (`OpError`) dice quale operazione della lista non si compila
 | `DuplicateId` | un id dato che è già preso; un id ripetuto nella lista di `move`, `remove` o `reorder` |
 | `TooMany` | la lavagna avrebbe più di 100 000 schede o 200 000 archi |
 | `Invalid` | una scheda o un arco che il formato non accetta; `set` di `id` o `type`; un id che è sia una scheda sia un arco; un tratto che non si disegnerebbe |
-| `UnknownStroke` | `erase_strokes` di un id che non è un tratto del livello |
-| `ForeignLayer` | `add_strokes` o `erase_strokes` su un livello estraneo |
+| `UnknownStroke` | `erase_strokes`, `move_strokes` o `restyle_strokes` di un id che non è un tratto del livello |
+| `ForeignLayer` | un'operazione dell'inchiostro su un livello estraneo |
 
 I vettori stanno in `apps/client/src/__fixtures__/canvas-ops/`, uno per file,
 scritti a mano: `before`, `seed` facoltativo (0 se manca), `ops` e `expect`
@@ -325,9 +325,9 @@ fa girare e controlla anche che l'inversa delle toppe ridia `before`.
 
 ## Inchiostro
 
-La toppa `ink` e le operazioni `add_strokes` ed `erase_strokes`, con i loro
-esempi e i loro errori, stanno nell'[inchiostro della
-lavagna](canvas-ink.md#toppa-e-operazioni). `move` e `resize` non toccano
+La toppa `ink` e le operazioni `add_strokes`, `erase_strokes`, `move_strokes` e
+`restyle_strokes`, con i loro esempi e i loro errori, stanno nell'[inchiostro
+della lavagna](canvas-ink.md#toppa-e-operazioni). `move` e `resize` non toccano
 l'inchiostro; `remove` lo porta via con la scheda, e l'annulla lo rimette.
 
 ## Comandi
@@ -420,7 +420,7 @@ sotto. `src/api.rs` è il livello sicuro (una tabella di lavagne per handle),
 | `fub_free(ptr, len)` | | | |
 | `canvas_open(ptr, len) -> u32` | i byte del file | l'handle, 0 se fallisce | `{"handle", "canvas"}` |
 | `canvas_reset(h, ptr, len) -> i32` | i byte del file | 0 o -1 | `{"canvas"}` |
-| `canvas_commit(h, ptr, len) -> i32` | un array JSON di toppe | 0 o -1 | `{"edit", "inverse"}` |
+| `canvas_commit(h, ptr, len) -> i32` | un array JSON di toppe | 0 o -1 | `{"edit", "inverse"}`, più `changed` per un commit di soli tratti |
 | `canvas_preview(h, ptr, len) -> i32` | un array JSON di toppe | 0 o -1 | il sorgente intero, come testo |
 | `canvas_compile(h, ptr, len) -> i32` | `{"ops", "seed"}` | 0 o -1 | `{"patches", "created"}` |
 | `canvas_model(h) -> i32` | | 0 o -1 | `{"canvas"}` |
@@ -441,6 +441,8 @@ sotto. `src/api.rs` è il livello sicuro (una tabella di lavagne per handle),
   coppia di surrogati. Non porta il sorgente intero, che con un file grande
   costerebbe a ogni gesto. `inverse` sono le toppe dell'annulla, da dare a un
   altro `canvas_commit`.
+  Un commit di soli tratti porta anche `changed`: le schede riscritte, o solo il cambio della loro lista `strokes` (`{"start", "remove", "insert"}`), e così per la radice;
+  sul modello di prima dà quello di `canvas_model` (forma in `Cores::commit` di `src/api.rs`, `changedModel` di `core.ts`). Il nucleo ritocca e rilegge solo le parti cambiate, con gli stessi byte.
 - `canvas_preview` dà il sorgente che darebbe `canvas_commit` con le stesse
   toppe, o lo stesso errore, e non cambia la lavagna: serve alle bozze, che
   vogliono il testo intero.

@@ -1,0 +1,108 @@
+{
+  "files": {
+    "Allegati/a.png": "contenuto-uno",
+    "Allegati/b.png": "contenuto-due",
+    "Note/nota.md": "# Nota\n"
+  },
+  "steps": [
+    {
+      "meta": {
+        "id": "Lavagna/nuova.png",
+        "vault": null,
+        "expected": null,
+        "reuse": "same-content"
+      },
+      "text": "contenuto-uno",
+      "answer": {
+        "id": "Allegati/a.png",
+        "reused": true
+      }
+    },
+    {
+      "meta": {
+        "id": "Lavagna/nuova.png",
+        "vault": null,
+        "expected": null,
+        "reuse": "same-content"
+      },
+      "text": "contenuto-tre",
+      "answer": {
+        "id": "Lavagna/nuova.png",
+        "reused": false
+      }
+    },
+    {
+      "meta": {
+        "id": "Lavagna/altra.png",
+        "vault": null,
+        "expected": "sha256:abc",
+        "reuse": "same-content"
+      },
+      "text": "contenuto-uno",
+      "answer": {
+        "error": "bad_args"
+      }
+    },
+    {
+      "meta": {
+        "id": "Lavagna/altra.png",
+        "vault": null,
+        "expected": null,
+        "reuse": "copy"
+      },
+      "text": "contenuto-uno",
+      "answer": {
+        "error": "bad_args"
+      }
+    },
+    {
+      "meta": {
+        "id": "Allegati/a.png",
+        "vault": null,
+        "expected": null
+      },
+      "text": "contenuto-uno",
+      "answer": {
+        "error": "already_exists"
+      }
+    },
+    {
+      "meta": {
+        "id": "Lavagna/copia.png",
+        "vault": null,
+        "expected": null
+      },
+      "text": "contenuto-uno",
+      "answer": {
+        "id": "Lavagna/copia.png",
+        "reused": false
+      }
+    },
+    {
+      "meta": {
+        "id": "Lavagna/terza.png",
+        "vault": null,
+        "expected": null,
+        "reuse": "same-content"
+      },
+      "text": "contenuto-uno",
+      "answer": {
+        "id": "Allegati/a.png",
+        "reused": true
+      }
+    },
+    {
+      "meta": {
+        "id": "Lavagna/vuoto.png",
+        "vault": null,
+        "expected": null,
+        "reuse": "same-content"
+      },
+      "text": "",
+      "answer": {
+        "id": "Lavagna/vuoto.png",
+        "reused": false
+      }
+    }
+  ]
+}

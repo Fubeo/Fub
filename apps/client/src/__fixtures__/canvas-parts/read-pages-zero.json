@@ -1,0 +1,15 @@
+{
+  "name": "read-pages-zero",
+  "description": "Le pagine contano da 1: la pagina 0 non vale.",
+  "source": "{\n  \"nodes\": [\n    { \"id\": \"n1\", \"type\": \"file\", \"file\": \"Libro.pdf\", \"subpath\": \"#page=0\", \"x\": 0, \"y\": 0, \"width\": 400, \"height\": 500,\n      \"fub:parts\": { \"kind\": \"pages\", \"pages\": [0, 1] } }\n  ],\n  \"edges\": []\n}\n",
+  "expect": {
+    "cards": [
+      {
+        "node": "n1",
+        "state": "kept",
+        "reason": "field",
+        "shows": "#page=0"
+      }
+    ]
+  }
+}

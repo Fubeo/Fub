@@ -18,6 +18,8 @@ function drawable(id: string, points: readonly (readonly [number, number])[], re
     ref,
     brush: { size: 4 },
     ink: { scale: 100, samples: points.map(([x, y], t) => ({ x: x * 100, y: y * 100, t })) },
+    page: null,
+    cell: null,
   } as unknown as DrawableStroke;
 }
 
@@ -65,6 +67,49 @@ describe("che cosa prende la gomma sulla lavagna", () => {
     expect(swept(states, [50, 9], [60, 9])).toEqual([inkKey("board", "a")]);
     expect(swept(states, [50, 11], [60, 11])).toEqual([]);
     expect(swept(states, [40, 40], [60, 40])).toEqual([inkKey("board", "b")]);
+  });
+
+  it("un tratto di pagina si prende dove la pagina si vede, e solo se la scheda mostra la sua pagina (T19)", () => {
+    const pdf: CanvasNode = { id: "p", type: "file", x: 100, y: 0, width: 300, height: 460, file: "carta.pdf" } as CanvasNode;
+    // Scritto su una pagina 600 × 800 punti, mostrata 300 × 400 sotto una testata di 36: s = 0,5.
+    const onPage = { ...drawable("a", [[100, 100], [200, 100]], { width: 600, height: 800 }), page: 2 } as DrawableStroke;
+    const states = [layer(pdf, [onPage])];
+    const box = (page: number) => ({ page, size: { width: 600, height: 800 }, rect: { x: 0, y: 36, width: 300, height: 400 } });
+    const sweptWith = (pages: (id: string) => ReturnType<typeof box> | null, from: [number, number], to: [number, number]) => {
+      const source = new InkEraseSource(erasableInk(states, pages));
+      const sweep = new EraseSweep(ERASER, "pen");
+      sweep.along(source, from, 1);
+      sweep.along(source, to, 1);
+      return sweep.marked().map((unit) => unit.key);
+    };
+    // Sulla lavagna: (100 + 0,5·150, 0 + 36 + 0,5·100) = (175, 86).
+    expect(sweptWith(() => box(2), [175, 60], [175, 110])).toEqual([inkKey({ node: "p" }, "a")]);
+    expect(sweptWith(() => box(3), [175, 60], [175, 110])).toEqual([]);
+    expect(sweptWith(() => null, [175, 60], [175, 110])).toEqual([]);
+    // Senza chi dice la pagina, nessun tratto di pagina.
+    expect(erasableInk(states)).toEqual([]);
+    const [unit] = erasableInk(states, () => box(2));
+    expect(unit!.fit).toEqual({ s: 0.5, x: 100, y: 36 });
+  });
+
+  it("un tratto di cella si prende dove la scheda di foglio mostra la cella, e non se non la mostra (T37, T38)", () => {
+    const sheet: CanvasNode = { id: "f", type: "file", x: 10, y: 20, width: 480, height: 320, file: "conti.xlsx" } as CanvasNode;
+    const onCell = { ...drawable("a", [[0, 0], [50, 0]], null), cell: { sheet: "Foglio1", cell: "B3" } } as DrawableStroke;
+    const onCard = drawable("b", [[0, 0], [50, 0]], { width: 480, height: 320 });
+    const states = [layer(sheet, [onCell, onCard])];
+    // Senza chi dice dove sta la cella, o con la cella fuori vista: niente.
+    expect(erasableInk(states).map((unit) => unit.id)).toEqual(["b"]);
+    expect(erasableInk(states, undefined, undefined, () => null).map((unit) => unit.id)).toEqual(["b"]);
+    const asked: string[] = [];
+    const units = erasableInk(states, undefined, undefined, (node, name, cell) => {
+      asked.push(`${node} ${name}!${cell}`);
+      return { sheet: name, cell, rect: { x: 172, y: 84, width: 120, height: 28 }, zoom: 2 };
+    });
+    expect(asked).toEqual(["f Foglio1!B3"]);
+    expect(units.map((unit) => unit.id)).toEqual(["a", "b"]);
+    // Dall'angolo della cella, `zoom` unità della lavagna per pixel del foglio.
+    expect(units[0]!.fit).toEqual({ s: 2, x: 10 + 172, y: 20 + 84 });
+    expect(units[0]!.points).toEqual([182, 104, 282, 104]);
   });
 
   it("un livello estraneo e un tratto non disegnato non si prendono", () => {
@@ -168,6 +213,25 @@ describe("la gomma che taglia: i pezzi", () => {
     const pieces = cutInk(unit!, [[150, 0], [150, 100]], 3)!;
     expect(pieces).toHaveLength(2);
     expect(pieces[0]!.ink.samples[pieces[0]!.ink.samples.length - 1]!.x).toBeCloseTo(4500, -1);
+  });
+
+  it("su un'immagine segue il contenuto come la resa (T39)", () => {
+    // Riferimento 200 × 100 con un'immagine 1:1 (100 × 100 a x = 50); nella
+    // scheda 200 × 200 l'immagine è 200 × 200: s = 2, x = −100. Senza la
+    // proporzione s = 1 e y = 50.
+    const image: CanvasNode = { id: "i", type: "file", x: 0, y: 0, width: 200, height: 200, file: "foto.png" } as CanvasNode;
+    const stroke = { ...record("a", 0, 100, 50), anchor: { kind: "card", width: 200, height: 100 } };
+    const drawable = decodeStroke(stroke)!;
+    const states = [{ layer: { node: "i" }, node: image, state: "ok", strokes: [{ id: "a", drawn: true, stroke: drawable }], drawable: [drawable] }] as const;
+    const asked: string[] = [];
+    const [unit] = erasableInk(states as unknown as Parameters<typeof erasableInk>[0], () => null, (id) => {
+      asked.push(id);
+      return 1;
+    });
+    expect(asked).toEqual(["i"]);
+    expect(unit!.fit).toEqual({ s: 2, x: -100, y: 0 });
+    const [plain] = erasableInk(states as unknown as Parameters<typeof erasableInk>[0]);
+    expect(plain!.fit).toEqual({ s: 1, x: 0, y: 50 });
   });
 });
 

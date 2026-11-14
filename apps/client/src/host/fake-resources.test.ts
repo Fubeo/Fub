@@ -3,8 +3,9 @@
 // modello — e che i banchi usano per mostrare immagini vere.
 
 import { describe, expect, it, vi } from "vitest";
-import type { KernelEvent, LinkTarget } from "./contract";
+import type { KernelEvent, LinkTarget, SettingEntry } from "./contract";
 import { createFakeHost } from "./fake";
+import resourceWriteScenario from "../__fixtures__/resource-write-scenario.json";
 
 const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0]);
 
@@ -118,5 +119,119 @@ describe("i riferimenti agli allegati nell'host finto", () => {
     expect(await resolve({ kind: "path", value: "../../fuori.png" })).toBeNull();
     expect(await resolve({ kind: "wiki", value: { page: "schema.png", heading: null, block: null } })).toBe("Risorse/schema.png");
     expect(await resolve({ kind: "wiki", value: { page: "Una nota", heading: null, block: null } })).toBe("Guida/Una nota.md");
+  });
+});
+
+// Lo scenario registrato sull'host vero da `crates/fub-app/src/resources.rs`
+// (`the_fake_hosts_resource_write_scenario_is_what_the_real_host_answers`): le
+// stesse domande a `resourceWrite`, le stesse risposte.
+interface ScenarioStep {
+  meta: { id: string; vault: null; expected: string | null; reuse?: string };
+  text: string;
+  answer: { id: string; reused: boolean } | { error: string };
+}
+
+describe("resourceWrite con reuse risponde come l'host vero", () => {
+  it("gioca lo scenario registrato sull'host vero", async () => {
+    const scenario = resourceWriteScenario as { files: Record<string, string>; steps: ScenarioStep[] };
+    const encoder = new TextEncoder();
+    const resources = Object.fromEntries(
+      Object.entries(scenario.files).map(([id, text]) => [id, { bytes: encoder.encode(text) }]),
+    );
+    const { module } = createFakeHost({ resources });
+    const { api } = module;
+    expect(scenario.steps.length).toBeGreaterThan(0);
+    for (const step of scenario.steps) {
+      const { id, expected, reuse } = step.meta;
+      const options = reuse === undefined ? undefined : { reuse: reuse as "same-content" };
+      const answer = await api.resourceWrite(id, encoder.encode(step.text), expected, undefined, options).then(
+        async (receipt) => {
+          // La revisione della ricevuta è quella del file che nomina.
+          const opened = await api.resourceOpen(receipt.id);
+          expect(receipt.revision, id).toBe(opened.revision);
+          await api.resourceClose(opened.handle);
+          return { id: receipt.id, reused: receipt.reused };
+        },
+        (error: { kind: string }) => ({ error: error.kind }),
+      );
+      expect(answer, `${id} ${JSON.stringify(step.meta)}`).toEqual(step.answer);
+    }
+  });
+
+  it("un riuso non scrive e non emette eventi", async () => {
+    const png = new Uint8Array([1, 2, 3, 4]);
+    const host = createFakeHost({ resources: { "Allegati/a.png": { bytes: png } } });
+    const events: KernelEvent[] = [];
+    await host.module.onKernelEvent((notice) => events.push(notice.event));
+    const receipt = await host.module.api.resourceWrite("Lavagna/b.png", png.slice(), null, undefined, { reuse: "same-content" });
+    expect(receipt).toMatchObject({ id: "Allegati/a.png", reused: true });
+    await expect(host.module.api.resourceOpen("Lavagna/b.png")).rejects.toMatchObject({ kind: "not_found" });
+    expect(events).toEqual([]);
+  });
+
+  it("come l'host vero: solo la stessa estensione, e mai un contenuto vuoto", async () => {
+    const bytes = new Uint8Array([7, 7, 7, 7]);
+    const { module } = createFakeHost({
+      resources: {
+        "Allegati/foto.png": { bytes },
+        "Allegati/vuoto.png": { bytes: new Uint8Array() },
+        LICENSE: { bytes: new Uint8Array([9, 9]) },
+      },
+    });
+    const { api } = module;
+    // Il controllo positivo: la stessa estensione, maiuscole a parte, si ritrova.
+    await expect(api.resourceWrite("Lavagna/copia.PNG", bytes.slice(), null, undefined, { reuse: "same-content" }))
+      .resolves.toMatchObject({ id: "Allegati/foto.png", reused: true });
+    // Gli stessi byte con un'altra estensione non sono quel file: si scrive.
+    await expect(api.resourceWrite("Lavagna/foto.jpg", bytes.slice(), null, undefined, { reuse: "same-content" }))
+      .resolves.toMatchObject({ id: "Lavagna/foto.jpg", reused: false });
+    // Un contenuto vuoto non si ritrova mai, nemmeno fra i vuoti del suo tipo.
+    await expect(api.resourceWrite("Lavagna/nuovo.png", new Uint8Array(), null, undefined, { reuse: "same-content" }))
+      .resolves.toMatchObject({ id: "Lavagna/nuovo.png", reused: false });
+    // Un nome senza estensione trova solo un nome senza estensione.
+    await expect(api.resourceWrite("Altro/COPYING", new Uint8Array([9, 9]), null, undefined, { reuse: "same-content" }))
+      .resolves.toMatchObject({ id: "LICENSE", reused: true });
+  });
+
+  it("come l'host vero: i file esclusi non sono candidati", async () => {
+    const bytes = new Uint8Array([5, 5, 5]);
+    const write = (api: ReturnType<typeof createFakeHost>["module"]["api"], id: string) =>
+      api.resourceWrite(id, bytes.slice(), null, undefined, { reuse: "same-content" });
+    const hidden = { ".obsidian/x.png": { bytes }, "Note/.nascosta.png": { bytes }, "NODE_MODULES/p/y.png": { bytes }, "Foto/z.png~": { bytes } };
+    // Struttura, nascosti e cartelle escluse di serie (anche con le maiuscole):
+    // nessuno è «già nel vault».
+    const plain = createFakeHost({ resources: hidden });
+    await expect(write(plain.module.api, "Lavagna/a.png")).resolves.toMatchObject({ id: "Lavagna/a.png", reused: false });
+    // Un file che si chiama come una cartella esclusa è un file del vault.
+    const named = createFakeHost({ resources: { "Foto/target.png": { bytes } } });
+    await expect(write(named.module.api, "Lavagna/b.png")).resolves.toMatchObject({ id: "Foto/target.png", reused: true });
+    // Le impostazioni del vault spostano la preferenza, non la struttura.
+    const setting = (key: string, value: SettingEntry["value"]): SettingEntry => ({
+      spec: { key, label: key, description: "", group: "", scope: "vault", kind: { kind: "toggle", default: false }, program_writable: false },
+      value,
+      source: "vault",
+    } as SettingEntry);
+    const declared = createFakeHost({
+      resources: { "Bozze/c.png": { bytes }, ".fub/d.png": { bytes }, ".trash/e.png": { bytes } },
+      settings: [setting("files.excluded-folders", ["bozze"]), setting("files.show-hidden", true)],
+    });
+    await expect(write(declared.module.api, "Lavagna/c.png")).resolves.toMatchObject({ id: "Lavagna/c.png", reused: false });
+    const shown = createFakeHost({ resources: { "Note/.nascosta.png": { bytes } }, settings: [setting("files.show-hidden", true)] });
+    await expect(write(shown.module.api, "Lavagna/d.png")).resolves.toMatchObject({ id: "Note/.nascosta.png", reused: true });
+  });
+
+  it("oltre 64 candidati della stessa misura non sa, e scrive", async () => {
+    const resources: Record<string, { bytes: Uint8Array }> = {};
+    for (let n = 0; n < 65; n += 1) resources[`Pile/${String(n).padStart(3, "0")}.bin`] = { bytes: new Uint8Array([n, 0, 0, 0]) };
+    const { module } = createFakeHost({ resources });
+    // Gli stessi byte di `Pile/000.bin`: con 65 candidati la risposta è «non so».
+    const receipt = await module.api.resourceWrite("Nuovo.bin", new Uint8Array([0, 0, 0, 0]), null, undefined, { reuse: "same-content" });
+    expect(receipt).toMatchObject({ id: "Nuovo.bin", reused: false });
+    // Con 64 candidati si risponde.
+    const fewer = { ...resources };
+    delete fewer["Pile/064.bin"];
+    const small = createFakeHost({ resources: fewer });
+    await expect(small.module.api.resourceWrite("Nuovo.bin", new Uint8Array([0, 0, 0, 0]), null, undefined, { reuse: "same-content" }))
+      .resolves.toMatchObject({ id: "Pile/000.bin", reused: true });
   });
 });

@@ -1,0 +1,102 @@
+{
+  "about": "Cambiare colore e spessore di due tratti liberi cambia solo color e la voce size del pennello, al loro posto; il terzo tratto resta identico. Un secondo restyle dello stesso valore non fa toppe.",
+  "before": {
+    "nodes": [],
+    "fub:ink": {
+      "v": 1,
+      "strokes": [
+        {
+          "id": "s1",
+          "tool": "pen",
+          "brush": "pf1 size=3 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=0 pen=ballpoint",
+          "color": "#0072b2",
+          "anchor": {
+            "kind": "free"
+          },
+          "ink": "1 s100 cxy 100,100 10,0"
+        },
+        {
+          "id": "s2",
+          "tool": "pen",
+          "brush": "pf1 size=3 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=0 pen=ballpoint",
+          "color": "#0072b2",
+          "anchor": {
+            "kind": "free"
+          },
+          "ink": "1 s100 cxy 200,100 10,0"
+        },
+        {
+          "id": "s3",
+          "tool": "pen",
+          "brush": "pf1 size=3 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=0 pen=ballpoint",
+          "color": "#0072b2",
+          "anchor": {
+            "kind": "free"
+          },
+          "ink": "1 s100 cxy 300,100 10,0"
+        }
+      ]
+    }
+  },
+  "ops": [
+    {
+      "op": "restyle_strokes",
+      "layer": "board",
+      "ids": [
+        "s1",
+        "s3"
+      ],
+      "color": "#d55e00",
+      "size": 6
+    },
+    {
+      "op": "restyle_strokes",
+      "layer": "board",
+      "ids": [
+        "s1"
+      ],
+      "color": "#d55e00"
+    }
+  ],
+  "expect": {
+    "outcome": "applied",
+    "after": {
+      "nodes": [],
+      "fub:ink": {
+        "v": 1,
+        "strokes": [
+          {
+            "id": "s1",
+            "tool": "pen",
+            "brush": "pf1 size=6 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=0 pen=ballpoint",
+            "color": "#d55e00",
+            "anchor": {
+              "kind": "free"
+            },
+            "ink": "1 s100 cxy 100,100 10,0"
+          },
+          {
+            "id": "s2",
+            "tool": "pen",
+            "brush": "pf1 size=3 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=0 pen=ballpoint",
+            "color": "#0072b2",
+            "anchor": {
+              "kind": "free"
+            },
+            "ink": "1 s100 cxy 200,100 10,0"
+          },
+          {
+            "id": "s3",
+            "tool": "pen",
+            "brush": "pf1 size=6 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=0 pen=ballpoint",
+            "color": "#d55e00",
+            "anchor": {
+              "kind": "free"
+            },
+            "ink": "1 s100 cxy 300,100 10,0"
+          }
+        ]
+      }
+    }
+  }
+}

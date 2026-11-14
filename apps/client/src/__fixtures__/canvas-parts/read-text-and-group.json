@@ -1,0 +1,21 @@
+{
+  "name": "read-text-and-group",
+  "description": "Su una scheda di testo o su un gruppo il campo si conserva e si ignora.",
+  "source": "{\n  \"nodes\": [\n    { \"id\": \"t1\", \"type\": \"text\", \"text\": \"nota\", \"x\": 0, \"y\": 0, \"width\": 400, \"height\": 500,\n      \"fub:parts\": { \"kind\": \"pages\", \"pages\": [1, 2] } },\n    { \"id\": \"g1\", \"type\": \"group\", \"label\": \"gruppo\", \"x\": 0, \"y\": 0, \"width\": 400, \"height\": 500,\n      \"fub:parts\": { \"kind\": \"sections\", \"sections\": [\"A\", \"B\"] } }\n  ],\n  \"edges\": []\n}\n",
+  "expect": {
+    "cards": [
+      {
+        "node": "t1",
+        "state": "kept",
+        "reason": "node",
+        "shows": null
+      },
+      {
+        "node": "g1",
+        "state": "kept",
+        "reason": "node",
+        "shows": null
+      }
+    ]
+  }
+}

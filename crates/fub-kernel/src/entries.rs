@@ -331,6 +331,17 @@ impl EntryStore {
         self.known.read().ok()?.get(id).cloned()
     }
 
+    /// Una domanda su ciò che si sapeva di questo file, **senza copiarlo**: la
+    /// riga, metadati compresi, resta dov'è, ed esce solo la risposta. È per
+    /// chi chiede una cosa piccola sotto il lucchetto del workspace.
+    pub(crate) fn ask_known<R>(
+        &self,
+        id: &DocId,
+        ask: impl FnOnce(&StoredEntry) -> R,
+    ) -> Option<R> {
+        self.known.read().ok()?.get(id).map(ask)
+    }
+
     /// **Tutto** ciò che si sapeva, per chi ha una domanda sull'insieme e non su
     /// un file.
     ///

@@ -1,0 +1,16 @@
+{
+  "name": "read-size-unknown",
+  "description": "Una misura che Fub non conosce: il campo si conserva, la scheda di serie.",
+  "source": "{\n  \"nodes\": [\n    { \"id\": \"t1\", \"type\": \"text\", \"text\": \"nota\", \"x\": 0, \"y\": 0, \"width\": 300, \"height\": 120,\n      \"fub:text\": { \"v\": 1, \"size\": \"xxl\", \"align\": \"center\" } }\n  ],\n  \"edges\": []\n}\n",
+  "expect": {
+    "cards": [
+      {
+        "node": "t1",
+        "state": "kept",
+        "reason": "field",
+        "size": "m",
+        "align": "start"
+      }
+    ]
+  }
+}

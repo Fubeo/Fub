@@ -1,0 +1,16 @@
+{
+  "name": "read-unknown-fields",
+  "description": "I campi sconosciuti si conservano nel loro ordine, dopo i noti; una chiave che sembra un indice va prima, come in JavaScript; 2.50 riscritto è 2.5.",
+  "source": "{\n  \"nodes\": [\n    { \"id\": \"t1\", \"type\": \"text\", \"text\": \"nota\", \"x\": 0, \"y\": 0, \"width\": 300, \"height\": 120,\n      \"fub:text\": { \"v\": 1, \"size\": \"s\", \"shadow\": { \"b\": 1, \"a\": [true, null] }, \"1\": \"uno\", \"zoom\": 2.50 } }\n  ],\n  \"edges\": []\n}\n",
+  "expect": {
+    "cards": [
+      {
+        "node": "t1",
+        "state": "ok",
+        "text": "{\"1\":\"uno\",\"v\":1,\"size\":\"s\",\"shadow\":{\"b\":1,\"a\":[true,null]},\"zoom\":2.5}",
+        "size": "s",
+        "align": "start"
+      }
+    ]
+  }
+}

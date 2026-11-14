@@ -16,14 +16,27 @@
 //   in modifica, che resta com'è. Il `click` e il `dblclick` fatti col
 //   puntatore dopo un tratto, fino al `pointerdown` seguente, si fermano allo
 //   stesso modo: il doppio tocco della penna non crea una scheda. Il dito è
-//   `navigate` e il mouse `ignore`, finché la lavagna non lo fa scrivere
-//   (`setMouse("ink")`): i loro eventi arrivano alla lavagna.
+//   `navigate` finché la lavagna non lo fa scrivere (`fingerWrites`, letto a
+//   ogni appoggio: allora un dito scrive e il secondo dito annulla il tratto
+//   del primo e sposta), e il mouse `ignore` finché la lavagna non lo fa
+//   scrivere (`setMouse("ink")`): i loro eventi arrivano alla lavagna.
+// - **Il tasto laterale.** Cancella come il retro della penna, finché la
+//   lavagna non lo vuole per sé (`barrelErases` falso, T63): allora il suo
+//   tratto non scrive né cancella, tiene solo il silenzio della penna, e
+//   l'appoggio va a `onBarrel` (il menu radiale, lo spostamento, il Lazo). I
+//   movimenti e il rilascio arrivano alla lavagna come sempre.
 // - **La scia.** Un SVG `canvas-ink-wet` nel viewport, fuori dallo
 //   stage, con la trasformazione della camera (`setCamera`); un percorso per
 //   tratto, rifatto con `StrokePreview` una volta per evento (`onSettled`).
 //   Alla fine del tratto la scia resta finché `settle(id)` non la toglie, nello
 //   stesso giro in cui la lavagna aggiunge l'asciutto: niente buchi fra i due.
 //   Un tratto annullato toglie subito la sua scia.
+// - **Il tratto guidato** (T87). Se la lavagna dà una guida per il tratto della
+//   punta che comincia (`guide`), la guida riceve i campioni e dice come si
+//   vede la scia: sul bordo del righello, dritta con Maiusc, o la forma della
+//   penna ferma. Lo strato la ridisegna anche senza campioni nuovi
+//   (`repaint`), quando il tempo o un tasto la cambiano. Ciò che si scrive lo
+//   decide la lavagna all'alzata: lo strato consegna i campioni presi.
 // - **Il silenzio della penna.** Ogni tratto chiama `quiet.enter()` quando
 //   comincia e `quiet.leave()` una volta sola quando finisce o si annulla.
 
@@ -36,7 +49,7 @@ import { penLook } from "../../ink/pens";
 import { outlinePath } from "../../ink/pf1";
 import type { PenQuiet } from "../../ink/quiet";
 import type { InkSample } from "../../ink/sample";
-import { StrokePreview } from "../../ink/tools/stroke";
+import { previewOutline, StrokePreview } from "../../ink/tools/stroke";
 import type { StrokeInput } from "../../ink/tools/tool";
 import { openLifetime, type Lifetime } from "../../ui/lifetime";
 
@@ -49,6 +62,32 @@ export interface InkLook {
   readonly color: string;
   /// L'id dello strumento (`pen`, `highlighter`…).
   readonly tool: string;
+}
+
+/// Il tratto della punta che comincia, per chi lo guida (T87).
+export interface InkGuideStart {
+  readonly id: number;
+  readonly pointerType: InkPointerType;
+  /// Il pezzo continua un tratto spezzato al limite dei campioni.
+  readonly continued: boolean;
+  readonly look: InkLook;
+}
+
+/// Come si vede il tratto guidato: i campioni da disegnare al posto di quelli
+/// presi. Con `whole` falso crescono in coda come quelli presi (l'anteprima li
+/// prende un pezzo alla volta); vero, cambiano tutti e la scia si rifà.
+export interface InkGuidedTrail {
+  readonly samples: readonly InkSample[];
+  readonly predicted: readonly InkSample[];
+  readonly whole: boolean;
+}
+
+/// La guida di un tratto della punta (T87).
+export interface InkGuide {
+  /// Campioni nuovi del tratto, in coordinate della lavagna, nell'ordine.
+  add(samples: readonly InkSample[]): void;
+  /// La scia coi campioni presi e predetti di adesso; `null` com'è.
+  trail(samples: readonly InkSample[], predicted: readonly InkSample[]): InkGuidedTrail | null;
 }
 
 /// Un tratto finito, in coordinate della lavagna, con il suo aspetto.
@@ -68,9 +107,23 @@ export interface InkLayerOptions {
   readonly look: (input: StrokeInput) => InkLook;
   /// La punta (e il mouse che scrive) cancella invece di scrivere: lo
   /// strumento Gomma del menu della penna. Si legge all'inizio di ogni
-  /// tratto; il retro della penna e il tasto laterale cancellano sempre.
+  /// tratto; il retro della penna cancella sempre.
   readonly tipErases?: () => boolean;
+  /// Il tasto laterale cancella come il retro della penna (di serie). Si
+  /// legge all'inizio di ogni suo tratto; falso, il tratto non fa niente e
+  /// l'appoggio va a `onBarrel`.
+  readonly barrelErases?: () => boolean;
+  /// La penna si è appoggiata col tasto laterale che non cancella: l'evento
+  /// dell'appoggio, già fermato per la lavagna.
+  readonly onBarrel?: (event: PointerEvent) => void;
+  /// Un dito scrive con la penna scelta (`canvas.finger_writes`, T64), finché
+  /// una penna non è vicina e un secondo dito non arriva. Si legge a ogni
+  /// appoggio, prima della sessione; assente o falso, il dito sposta.
+  readonly fingerWrites?: () => boolean;
   readonly quiet: PenQuiet;
+  /// La guida del tratto della punta che comincia (T87), dopo il suo aspetto;
+  /// `null` o assente, il tratto si vede com'è.
+  readonly guide?: (start: InkGuideStart) => InkGuide | null;
   /// Un tratto della punta è finito: la scia resta finché non si chiama
   /// `settle(id)`. Un tratto spezzato al limite dei campioni arriva a pezzi,
   /// uno per id (`split`, `continued`).
@@ -105,6 +158,8 @@ export interface InkLayer {
   /// Che cosa fa il tasto principale del mouse dal prossimo appoggio: `ink`
   /// scrive, `ignore` lo lascia alla lavagna. Un tratto già giù finisce com'è.
   setMouse(policy: MousePolicy): void;
+  /// Ridisegna la scia dei tratti aperti: la loro guida è cambiata (T87).
+  repaint(): void;
   /// Annulla il tratto in corso.
   cancel(): void;
   /// Annulla il tratto in corso, toglie la scia e ogni ascoltatore.
@@ -114,10 +169,13 @@ export interface InkLayer {
 
 /// Un tratto aperto o finito che ha ancora la sua scia.
 interface Trail {
-  readonly kind: "ink" | "erase";
+  /// `aside`: il tasto laterale che la lavagna tiene per sé (`barrelErases`).
+  readonly kind: "ink" | "erase" | "aside";
   /// L'aspetto e l'anteprima, solo per la punta e finché il tratto è aperto.
   look: InkLook | null;
   preview: StrokePreview | null;
+  /// La guida della lavagna (T87), solo per la punta e finché il tratto è aperto.
+  guide: InkGuide | null;
   samples: InkSample[];
   predicted: readonly InkSample[];
   path: SVGPathElement | null;
@@ -138,6 +196,10 @@ export function mountInkLayer(options: InkLayerOptions, owner: Lifetime): InkLay
   /// L'ultimo `pointerdown` era di un puntatore che scrive o cancella: i
   /// `click` e `dblclick` che seguono sono suoi.
   let swallow = false;
+  /// Il tasto laterale cancella, letto una volta a ogni appoggio, prima
+  /// dell'adattatore: il tratto (che comincia all'appoggio o, con la penna
+  /// sospesa, quando preme) e `onBarrel` leggono la stessa risposta.
+  let barrelErases = true;
 
   const wet = document.createElementNS(SVG_NS, "svg");
   wet.setAttribute("class", "canvas-ink-wet");
@@ -160,7 +222,12 @@ export function mountInkLayer(options: InkLayerOptions, owner: Lifetime): InkLay
   function paint(id: number): void {
     const trail = trails.get(id);
     if (!trail || !trail.preview || !trail.look) return;
-    const outline = trail.preview.outline(trail.samples, trail.predicted, false);
+    const guided = trail.guide?.trail(trail.samples, trail.predicted) ?? null;
+    const outline = guided === null
+      ? trail.preview.outline(trail.samples, trail.predicted, false)
+      : guided.whole
+        ? previewOutline(guided.samples, guided.predicted, trail.look.brush, false)
+        : trail.preview.outline(guided.samples, guided.predicted, false);
     const d = outline.length > 2 ? outlinePath(outline) : "";
     if (!trail.path) {
       trail.path = document.createElementNS(SVG_NS, "path");
@@ -173,16 +240,24 @@ export function mountInkLayer(options: InkLayerOptions, owner: Lifetime): InkLay
     trail.path.setAttribute("d", d);
   }
 
+  // Prima dell'adattatore, che all'appoggio può già cominciare il tratto.
+  life.listen(viewport, "pointerdown", () => {
+    barrelErases = options.barrelErases?.() ?? true;
+    input.setTouchPolicy(options.fingerWrites?.() ? "ink" : "navigate");
+  }, { capture: true });
+
   const input: InkInput = attachInkInput(viewport, {
     toScene: (clientX, clientY) => options.toWorld(clientX, clientY),
     touch: "navigate",
     mouse: options.mouse ?? "ignore",
     scale: () => zoom,
     onStart: (stroke) => {
+      const aside = stroke.role === "barrel" && !barrelErases;
       const trail: Trail = {
-        kind: stroke.role === "ink" && !(options.tipErases?.() ?? false) ? "ink" : "erase",
+        kind: aside ? "aside" : stroke.role === "ink" && !(options.tipErases?.() ?? false) ? "ink" : "erase",
         look: null,
         preview: null,
+        guide: null,
         samples: [],
         predicted: [],
         path: null,
@@ -195,16 +270,20 @@ export function mountInkLayer(options: InkLayerOptions, owner: Lifetime): InkLay
       quiet.enter();
       if (trail.kind === "erase") {
         options.onEraseStart?.(stroke.id, stroke.pointerType);
-      } else {
+      } else if (trail.kind === "ink") {
         trail.look = options.look({ pressure: stroke.pressure, continued: stroke.continued });
         trail.preview = new StrokePreview(trail.look.brush);
+        trail.guide = options.guide?.({ id: stroke.id, pointerType: stroke.pointerType, continued: stroke.continued, look: trail.look }) ?? null;
       }
     },
     onSamples: (id, samples) => {
       const trail = trails.get(id);
       if (!trail) return;
       if (trail.kind === "erase") options.onErase?.(id, samples);
-      else trail.samples.push(...samples);
+      else if (trail.kind === "ink") {
+        trail.samples.push(...samples);
+        trail.guide?.add(samples);
+      }
     },
     onPredicted: (id, samples) => {
       const trail = trails.get(id);
@@ -219,12 +298,15 @@ export function mountInkLayer(options: InkLayerOptions, owner: Lifetime): InkLay
       trail.open = false;
       trail.look = null;
       trail.preview = null;
+      trail.guide = null;
       trail.samples = [];
       trail.predicted = [];
       try {
         if (trail.kind === "erase") {
           drop(stroke.id);
           options.onEraseEnd?.(stroke.id);
+        } else if (trail.kind === "aside") {
+          drop(stroke.id);
         } else if (look) {
           options.onStroke({ ...stroke, brush: look.brush, color: look.color, tool: look.tool });
         } else {
@@ -263,6 +345,7 @@ export function mountInkLayer(options: InkLayerOptions, owner: Lifetime): InkLay
     // (un secondo tratto mentre uno è in corso, un tasto che non conosce).
     swallow = event.pointerType === "pen" || (role !== null && strokes(role));
     if (swallow) stop(event);
+    if (role === "barrel" && !barrelErases) options.onBarrel?.(event);
   }, { capture: true });
   // Un `click` della tastiera (`detail` 0) non è della penna e passa.
   const afterStroke = (event: MouseEvent): void => {
@@ -287,6 +370,10 @@ export function mountInkLayer(options: InkLayerOptions, owner: Lifetime): InkLay
     setCamera(x, y, nextZoom) {
       zoom = nextZoom;
       wet.style.transform = `translate(${x}px, ${y}px) scale(${nextZoom})`;
+    },
+    repaint() {
+      if (destroyed) return;
+      for (const [id, trail] of trails) if (trail.open && trail.kind === "ink") paint(id);
     },
     settle(id) {
       const trail = trails.get(id);
