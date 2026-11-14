@@ -38,6 +38,7 @@
 // `appearance.theme` fra le impostazioni che serve.
 import { COMPONENT_SCENARIO, createFakeHost, type DrawingFake, type GridBytesFake, type Options } from "../src/host/fake";
 import { MARKDOWN_SYNTAX } from "../src/rules/syntax.generated";
+import { pageName } from "../src/rules/mirrored";
 import XLSX_GRID from "../src/__fixtures__/xlsx-grid.json";
 import RICH_PROJECTION from "../src/__fixtures__/rich-projection.json";
 import RICH_BENCH from "../src/__fixtures__/rich-bench.json";
@@ -54,6 +55,7 @@ import type {
   JobStatus,
   KnownVault,
   Organization,
+  PluginError,
   QueryExpr,
   SettingEntry,
   Span,
@@ -1896,7 +1898,6 @@ function liveTrash(): UiNode | undefined {
   if (TRASH_FULL) return undefined;
   const entries = host.trash();
   if (entries.length === 0) return undefined;
-  const pageName = (id: string) => id.slice(id.lastIndexOf("/") + 1).replace(/\.md$/, "");
   return {
     node: "stack",
     dir: "column",
@@ -1920,18 +1921,34 @@ function liveTrash(): UiNode | undefined {
   };
 }
 
-/// I comandi che cambiano il cestino del finto.
+/// I comandi che possono cambiare il cestino del finto.
 const TRASH_COMMANDS: ReadonlySet<string> = new Set(["note.trash", "trash.os", "folder.trash", "trash.restore", "trash.empty"]);
 
+/// Il cestino del finto in una riga confrontabile: cambia solo se è cambiato
+/// il cestino.
+function trashFingerprint(): string {
+  return JSON.stringify(host.trash());
+}
+
 /// Un'azione sul cestino vero del finto: «Ripristina» passa dal comando
-/// `trash.restore` e porta alla nota, come il provider; «Svuota» dal comando
-/// `trash.empty`. `undefined` se il cestino è quello della scenografia.
+/// `trash.restore` e porta alla nota dove il comando dice di averla rimessa,
+/// come il provider; «Svuota» dal comando `trash.empty`. `undefined` se il
+/// cestino è quello della scenografia.
+///
+/// Il kernel non rimette una nota sopra un file che occupa il suo nome
+/// (`already_exists`, e il provider chiede un nome libero); il finto invece
+/// scriverebbe sopra. Il banco non rischia la copia: col nome occupato
+/// l'azione fallisce come il comando vero, e niente si sovrascrive.
 async function liveTrashAction(action: string, payload: unknown): Promise<ViewUpdate | undefined> {
   if (TRASH_FULL || host.trash().length === 0) return undefined;
   if (action === "restore") {
     const { entry, original } = payload as { entry: string; original: string };
-    await api.invokeCommand("trash.restore", { entry });
-    return { kind: "navigate", doc_id: original };
+    if (host.files()[original] !== undefined) {
+      throw { kind: "already_exists", message: `«${pageName(original)}» c'è già: il cestino non la rimette sopra un'altra nota.` } satisfies PluginError;
+    }
+    const outcome = await api.invokeCommand("trash.restore", { entry });
+    const back = outcome.effect.kind === "navigate" ? outcome.effect.doc : original;
+    return { kind: "navigate", doc_id: back };
   }
   if (action === "empty") {
     await api.invokeCommand("trash.empty");
@@ -2045,12 +2062,14 @@ export const api: typeof host.module.api = {
       const payload = treeScenePreview(doc, (args as { size?: unknown }).size === "large" ? "large" : "small");
       if (payload !== null) return { notify: null, effect: { kind: "custom", ns: CRAFT_BUNDLE_NS, payload }, undo: null, partial: null };
     }
+    const trashBefore = TRASH_COMMANDS.has(id) ? trashFingerprint() : null;
     const outcome = await behind.invokeCommand(id, args, ...rest);
     // Dopo un comando che cambia il cestino il kernel vero rifà l'indice, e il
     // provider `trash` si fa ridisegnare a ogni giro dell'indice (`refresh`
     // di `trash.rs`). Il finto l'indice non l'ha: i due eventi partono qui,
-    // perché l'albero ritrovi la nota rimessa e il pannello si aggiorni.
-    if (TRASH_COMMANDS.has(id)) {
+    // perché l'albero ritrovi la nota rimessa e il pannello si aggiorni. Solo
+    // se il cestino è cambiato davvero: le altre scene non si ridisegnano.
+    if (trashBefore !== null && trashFingerprint() !== trashBefore) {
       host.emit({ type: "index_updated" });
       host.emit({ type: "view_invalidated", view: "trash", instance: null });
     }
