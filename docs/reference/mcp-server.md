@@ -1,7 +1,7 @@
 # Server MCP
 
 > **Ambito:** il server MCP di `fub-cli` (`fub-cli mcp`): trasporto, strumenti,
-> risorse, radici dell'automazione e regole di scrittura.
+> risorse, lavagne, radici dell'automazione e regole di scrittura.
 > **Fonti autorevoli:** `crates/fub-cli/src/mcp.rs`,
 > `crates/fub-cli/src/mcp/tools.rs`, `crates/fub-cli/src/mcp/access.rs`,
 > `crates/fub-cli/src/componenti.rs`, `crates/fub-cli/src/port.rs`, i comandi
@@ -60,11 +60,13 @@ CLI (`bad_args`, `not_found`, `denied`, `conflict`, `unavailable`, `local`).
 | `fub_query` | una chiave fra `backlinks`, `neighbors`, `tag` (le note col tag), `tags` (l'elenco) e `resolve` | `Backlinks`, `Neighbors`, `Documents`, `Tags`, `Resolve` | no |
 | `fub_read` | testo e revisione | `read_document` | no |
 | `fub_read_model` | il modello strutturato | `read_model` | no |
-| `fub_preview` | l'anteprima di un file Craft: l'immagine, se il file ne porta una, e i suoi dati | `invoke_user_command(craft.preview)` | no |
+| `fub_preview` | l'anteprima di un file Craft: l'immagine, se il file ne porta una, e i suoi dati; su una lavagna (`.canvas`), il suo disegno | `invoke_user_command(craft.preview)`, o `canvas.preview` per un `.canvas` | no |
 | `fub_write` | riscrive da una revisione | `write_document(DescendsFrom)` | sì |
 | `fub_create` | nota nuova, con un testo o da un modello | `note.create`, `note.from_template` | sì |
+| `fub_canvas_guide` | la guida della lavagna: il testo, le operazioni con i loro campi, lo schema e gli esempi; `topic` per una sola operazione | `canvas.guide` | no |
+| `fub_canvas_read` | la lavagna con la sua revisione, come testo, come lista di operazioni o come modello | `canvas.read` | no |
 | `fub_canvas_create` | lavagna nuova e vuota; `name` e `folder` facoltativi | `canvas.create` | sì |
-| `fub_canvas_apply` | operazioni su una lavagna da una revisione, in prova se non si chiede `apply` | `canvas.apply` | con `apply` |
+| `fub_canvas_apply` | operazioni su una lavagna da una revisione: controllate prima di tutto, in prova se non si chiede `apply`, con `preview` la lavagna di dopo | `canvas.check`, poi `canvas.apply` | con `apply` |
 | `fub_commands` | i comandi, con argomenti e se scrivono | `commands` | no |
 | `fub_invoke` | esegue un comando, in prova se non si chiede `apply` | `invoke_user_command` | con `apply` |
 | `fub_external_editors` | le app Craft che aprono un file, se sono installate e se sono aperte | `external_editors` | no |
@@ -77,6 +79,8 @@ CLI (`bad_args`, `not_found`, `denied`, `conflict`, `unavailable`, `local`).
 Ogni risultato riuscito porta i dati due volte: in `structuredContent` e,
 come testo JSON, nel primo elemento di `content`. Gli elenchi sono a pagine:
 `limit` da 1 a 200, 50 per difetto, e `offset`; la risposta dice `total`.
+Un rifiuto che ha qualcosa da spiegare (un controllo di `fub_canvas_apply`) è
+`isError: true`: i dati stanno in `structuredContent`, e il testo è una frase.
 
 `external_editors`, `open_with` e la lettura dei file passano dall'app
 desktop se tiene il vault, come le altre chiamate, e dall'host locale
@@ -85,6 +89,8 @@ altrimenti.
 ## I file Craft
 
 - `fub_preview { doc, size? }`: `size` è `"small"` (di partenza) o `"large"`.
+  Su un file `.canvas` non chiama `craft.preview` ma `canvas.preview`: vedi
+  [Le lavagne](#le-lavagne).
   Il risultato ha `doc`, `revision`, `size`, `origin` (`"file"` se
   l'immagine viene dal file, `"cli"` se viene da una copia già fatta prima
   con la riga di comando di un'app, `"none"` senza immagine), `missing`
@@ -126,12 +132,64 @@ eseguirebbe un programma fuori dal vault su un file che l'agente sceglie.
 `fub_open_with` è l'unico strumento che avvia un'app, e solo con `apply`,
 dentro le radici di scrittura.
 
+## Le lavagne
+
+Una lavagna si legge, si guida, si controlla e si scrive, in quest'ordine.
+Tutti i comandi passano da `invoke_user_command`: il server non conosce il
+formato, e `canvas.*` sono del componente `fub.lavagna`.
+
+- `fub_canvas_guide { topic? }` dà la guida di `canvas.guide`: `text` (la
+  stessa della risorsa `fub-guida://lavagna`), `ops` (ogni operazione con
+  i suoi campi), `schema` della lista e `examples`. Con `topic` sola
+  l'operazione di quel nome; un nome che non c'è è `bad_args`, con i nomi vicini.
+- `fub_canvas_read { doc, form?, ids?, max_chars? }` dà la lavagna come
+  `canvas.read`. `form` è `outline` (di serie: una riga per scheda, col suo
+  numero), `code` (la lista di operazioni che la ricrea) o `json` (il
+  modello). `ids` limita la lettura alle schede date, come lista o come testo
+  JSON; `max_chars` taglia l'outline. Il risultato ha `doc`, `revision` (la
+  base di `fub_canvas_apply`), `form`, `counts`, `bounds` e `text` o `model`.
+  Vuole la lavagna fra le radici di lettura.
+- `fub_canvas_apply` controlla la lista con `canvas.check` prima di tutto,
+  anche in prova. Con un problema non chiama `canvas.apply` e il file non
+  cambia: il risultato è `isError: true`, con `structuredContent`
+  `{doc, written: false, ok: false, problems, warnings, summary}`, e il testo
+  comincia col numero dei problemi e dice il primo (dove sta, il suo codice e
+  la sua frase). Il payload li porta tutti. Una revisione superata da sola è il
+  `conflict` di `canvas.apply`, con lo stesso codice e lo stesso testo di
+  sempre.
+- Con `"preview": true` la risposta porta `preview: {image, info}`: la lavagna
+  di dopo, disegnata da `canvas.preview` con la stessa lista e la stessa base
+  prima della scrittura. `info.outline` dà il numero di ogni scheda, come
+  `canvas.read`. Un PNG va come contenuto di MCP (`type: "image"`, con
+  `image/png`), senza i byte nel testo. Un SVG, che esce senza `draw`, resta nel
+  testo.
+- `fub_preview` su un file `.canvas` disegna la lavagna con `canvas.preview`:
+  `size` `"small"` la fa di 512 pixel sul lato lungo, `"large"` di 1024. Il
+  risultato ha `doc`, `revision`, `size`, `origin: "canvas"`, `missing` e
+  `limit_bytes` a `null`, `image` e `info` (`outline`, `outline_omitted`).
+- Con il componente `fub.lavagna` spento questi strumenti rispondono
+  `unavailable`, perché il comando non c'è, e la guida non è fra le risorse.
+
 ## Risorse
 
 Le note del vault sono risorse con l'URI di apertura di Fub,
 `fub://open?note=<path>`, a pagine da 100 (`cursor` è l'offset). `resources/read`
 legge l'URI con lo stesso parser di `fub://`: traversal e chiavi ignote sono
 rifiutati.
+
+Con il componente `fub.lavagna` acceso, la prima pagina (quella di offset 0,
+senza `cursor`) comincia con tre risorse della guida:
+
+| URI | Tipo | Che cosa è |
+|---|---|---|
+| `fub-guida://lavagna` | `text/markdown` | la guida di `fub_canvas_guide` |
+| `fub-guida://lavagna/schema` | `application/json` | lo schema della lista di operazioni |
+| `fub-guida://lavagna/esempi` | `application/json` | gli esempi |
+
+Il `cursor` resta l'offset delle note: le pagine dopo la prima non le
+ripetono. `resources/read` riconosce questi tre URI esatti; ogni altro
+`fub-guida://…` è `invalid_params`, e con il componente spento le tre risorse
+non ci sono.
 
 ## Radici dell'automazione
 
@@ -146,7 +204,8 @@ Gli stessi flag delle app Craft, ripetibili:
 Una radice che contiene il vault lo copre intero; una fuori dal vault non
 copre niente; una che non esiste ferma l'avvio. Le note fuori dalle radici di
 lettura non compaiono nella ricerca, fra i backlink, fra i vicini, fra le
-risorse, né come bersaglio di un link risolto.
+risorse, né come bersaglio di un link risolto. La guida della lavagna non è
+una nota: si legge con qualunque radice.
 
 ## Regole di scrittura
 
@@ -163,17 +222,20 @@ risorse, né come bersaglio di un link risolto.
   di scrittura la giudicano, e un nome preso è un `conflict`. Risponde
   `{doc, revision}`.
 - `fub_canvas_apply` porta in una lavagna una lista di operazioni
-  (`add_card`, `connect`, `move`, `resize`, `set`, `remove`, `reorder`; la
-  forma sta in [Operazioni sulla lavagna](canvas-operations.md)) come una
-  modifica sola, con `canvas.apply`. `ops` è la lista o il suo testo JSON; `base` è
+  (`add_card`, `connect`, `move`, `resize`, `set`, `remove`, `reorder`; i
+  campi sono in `fub_canvas_guide`, e la forma in
+  [Operazioni sulla lavagna](canvas-operations.md)) come una modifica sola,
+  con `canvas.apply`. `ops` è la lista o il suo testo JSON; `base` è
   obbligatoria come per `fub_write`, e una revisione superata è un
   `conflict`. Vuole la lavagna fra le radici di lettura e di scrittura, non
-  tutto il vault come `fub_invoke`. Senza `"apply": true` risponde col piano
-  (`dry_run: true`, `outcome`) e non scrive; con `apply` risponde
-  `{doc, dry_run: false, created, revision}`: gli id delle schede e degli
-  archi aggiunti, dati o nuovi, e la revisione dopo. Operazioni che non si
-  leggono o non si applicano, e un documento che non è una lavagna, sono
-  `bad_args`.
+  tutto il vault come `fub_invoke`. Il controllo viene prima di tutto: con un
+  problema il file non si tocca, né in prova né con `apply` (vedi
+  [Le lavagne](#le-lavagne)). Senza `"apply": true` risponde col piano
+  (`dry_run: true`, `check`, `outcome`) e non scrive; con `apply` risponde
+  `{doc, dry_run: false, created, revision, warnings}`: gli id delle schede e
+  degli archi aggiunti, dati o nuovi, la revisione dopo, e gli avvisi del
+  controllo. Un JSON che non si legge e un documento che non è una lavagna
+  sono `bad_args`.
 - `fub_invoke` senza `"apply": true` restituisce il piano e non scrive.
   Con `apply`, un comando che scrive si esegue soltanto se tutte le note del
   suo piano stanno sotto le radici di scrittura; un comando che non dice
