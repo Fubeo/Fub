@@ -1,7 +1,8 @@
 //! # Crittografia con librerie consolidate (P16.4)
 //!
-//! - KDF: PBKDF2-HMAC-SHA256, parametri **versionati** (`ver=1`, 210_000
-//!   iterazioni, sale unico 16 B per credenziale). [`derive_kek`].
+//! - KDF: PBKDF2-HMAC-SHA256, parametri **versionati** (`ver=2`, 600_000
+//!   iterazioni come chiede OWASP per SHA-256; `ver=1`, 210_000, resta
+//!   leggibile), sale unico 16 B per credenziale. [`derive_kek`].
 //! - AEAD: AES-256-GCM, nonce casuale 96 bit **per cifratura e per chiave**,
 //!   AAD canonica che lega protocollo, vault, epoch, op, replica, doc, kind,
 //!   vettore e rename routing.
@@ -19,9 +20,25 @@ use std::num::NonZeroU32;
 use subtle::ConstantTimeEq;
 
 /// Versione corrente dei parametri KDF (persistita: rotazioni future = ver+1).
-pub const KDF_VERSION: u32 = 1;
+/// Le credenziali e le buste nuove nascono con questa; quelle di `ver=1`
+/// restano leggibili coi loro parametri.
+pub const KDF_VERSION: u32 = 2;
 /// Iterazioni PBKDF2-HMAC-SHA256 per `ver=1`.
 pub const KDF_ITERATIONS_V1: u32 = 210_000;
+/// Iterazioni PBKDF2-HMAC-SHA256 per `ver=2`.
+pub const KDF_ITERATIONS_V2: u32 = 600_000;
+/// Iterazioni che [`derive_kek`] accetta, al più: i parametri arrivano da un
+/// file o da una busta, e `u32::MAX` terrebbe una CPU occupata per ore.
+pub const KDF_MAX_ITERATIONS: u32 = 1_000_000;
+
+/// Le iterazioni di una versione nota dei parametri KDF.
+pub fn kdf_iterations(ver: u32) -> Option<u32> {
+    match ver {
+        1 => Some(KDF_ITERATIONS_V1),
+        2 => Some(KDF_ITERATIONS_V2),
+        _ => None,
+    }
+}
 /// Lunghezza sale (16 B unici per credenziale).
 pub const SALT_LEN: usize = 16;
 /// Chiave dati vault (VDK): 32 B casuali, mai derivati dalla password.
@@ -36,7 +53,8 @@ pub struct KdfParams {
 }
 
 impl KdfParams {
-    /// Nuovi parametri `ver=1` con sale unico da CSPRNG (`ring::rand`).
+    /// Nuovi parametri della versione corrente con sale unico da CSPRNG
+    /// (`ring::rand`).
     pub fn fresh() -> Result<Self, String> {
         use ring::rand::{SecureRandom, SystemRandom};
         let rng = SystemRandom::new();
@@ -45,7 +63,7 @@ impl KdfParams {
             .map_err(|_| "rng unavailable".to_string())?;
         Ok(Self {
             ver: KDF_VERSION,
-            iterations: KDF_ITERATIONS_V1,
+            iterations: KDF_ITERATIONS_V2,
             salt_b64: B64.encode(salt),
         })
     }
@@ -61,6 +79,9 @@ pub fn derive_kek(passphrase: &str, params: &KdfParams) -> Result<[u8; 32], Stri
     let salt = params.salt()?;
     let iters = NonZeroU32::new(params.iterations)
         .ok_or_else(|| "kdf iterations must be nonzero".to_string())?;
+    if params.iterations > KDF_MAX_ITERATIONS {
+        return Err("kdf iterations above limit".to_string());
+    }
     let mut out = [0u8; 32];
     pbkdf2::derive(
         pbkdf2::PBKDF2_HMAC_SHA256,
@@ -285,8 +306,10 @@ pub fn wrap_vdk(vdk: &[u8; VDK_LEN], passphrase: &str) -> Result<WrappedVdk, Str
     wrap_vdk_with_kek(vdk, &kek, params)
 }
 
-/// Riapre una busta di [`wrap_vdk`]: la KEK si ricava dai parametri persistiti.
+/// Riapre una busta di [`wrap_vdk`]: la KEK si ricava dai parametri persistiti,
+/// che devono essere quelli di una versione nota.
 pub fn unwrap_vdk(wrapped: &WrappedVdk, passphrase: &str) -> Result<[u8; VDK_LEN], String> {
+    unwrap_vdk_shape_ok(wrapped)?;
     let kek = derive_kek(passphrase, &wrapped.kdf)?;
     unwrap_vdk_with_kek(wrapped, &kek)
 }
@@ -324,13 +347,17 @@ pub struct WrappedVdk {
     pub wrap_b64: String,
 }
 
-/// Structural check of a wrapped-VDK envelope (base64 shapes + 12 B nonce).
-/// The server is opaque to keys: it validates shape, never cleartext.
+/// Structural check of a wrapped-VDK envelope (known KDF version with its
+/// iterations, base64 shapes, 12 B nonce). The server is opaque to keys: it
+/// validates shape, never cleartext.
 pub fn unwrap_vdk_shape_ok(wrapped: &WrappedVdk) -> Result<(), String> {
     use base64::engine::general_purpose::STANDARD as B64;
     use base64::Engine;
     if wrapped.kdf.ver == 0 || wrapped.kdf.ver > KDF_VERSION {
         return Err("bad wrap version".to_string());
+    }
+    if kdf_iterations(wrapped.kdf.ver) != Some(wrapped.kdf.iterations) {
+        return Err("bad wrap iterations".to_string());
     }
     let nonce = B64
         .decode(&wrapped.nonce_b64)
@@ -345,4 +372,42 @@ pub fn unwrap_vdk_shape_ok(wrapped: &WrappedVdk) -> Result<(), String> {
         return Err("bad wrap length".to_string());
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Una busta nuova nasce con `ver=2` e 600_000 iterazioni; una di `ver=1`
+    /// si riapre ancora; parametri fuori dalle versioni note o oltre il tetto
+    /// si rifiutano prima di derivare.
+    #[test]
+    fn new_envelopes_use_v2_and_v1_still_opens() {
+        let vdk = [7u8; VDK_LEN];
+        let fresh = wrap_vdk(&vdk, "passphrase").unwrap();
+        assert_eq!((fresh.kdf.ver, fresh.kdf.iterations), (2, 600_000));
+        assert_eq!(unwrap_vdk(&fresh, "passphrase").unwrap(), vdk);
+
+        let v1 = KdfParams {
+            ver: 1,
+            iterations: KDF_ITERATIONS_V1,
+            ..KdfParams::fresh().unwrap()
+        };
+        let kek = derive_kek("passphrase", &v1).unwrap();
+        let old = wrap_vdk_with_kek(&vdk, &kek, v1).unwrap();
+        assert_eq!(unwrap_vdk(&old, "passphrase").unwrap(), vdk);
+
+        let mut tampered = fresh.clone();
+        tampered.kdf.iterations = u32::MAX;
+        assert!(unwrap_vdk_shape_ok(&tampered).is_err());
+        assert!(unwrap_vdk(&tampered, "passphrase").is_err());
+        let mut mixed = old.clone();
+        mixed.kdf.iterations = KDF_ITERATIONS_V2;
+        assert!(unwrap_vdk_shape_ok(&mixed).is_err());
+        let huge = KdfParams {
+            iterations: KDF_MAX_ITERATIONS + 1,
+            ..KdfParams::fresh().unwrap()
+        };
+        assert!(derive_kek("passphrase", &huge).is_err());
+    }
 }
