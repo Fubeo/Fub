@@ -87,12 +87,13 @@ use std::sync::{Arc, Mutex, RwLock};
 use camino::Utf8Path;
 use fub_abi::edit::{Fnv1a, Revision};
 use fub_abi::event::{Event, EventKind, EventMask, Notice};
-use fub_abi::model::{canonical_tag, Block, DocId, DocumentModel, Span};
+use fub_abi::model::{canonical_tag, Block, DocId, DocumentModel, Inline, Span};
 use fub_abi::query::{
     DueBound, QueryClause, QueryExpr, QueryPredicate, TaskStatus, TextField, TextMode, TextQuery,
     TextTolerance,
 };
 use fub_abi::rules::folders;
+use fub_abi::rules::search_syntax::COMMENT_PREDICATE_NS;
 use fub_abi::rules::snippet::SNIPPET_CHARS;
 use fub_abi::schema::SchemaVersion;
 use fub_abi::settings::{SettingKind, SettingSpec};
@@ -144,7 +145,9 @@ pub const SEARCH_ID: &str = "fub.search";
 /// sono coperti dall'impronta del contenuto.
 /// v7: `layout`, righe, blocchi e sezioni del corpo per `QueryPredicate::Scoped`.
 /// v8: `task_due`, le scadenze `📅` delle task aperte per `QueryPredicate::TaskDue`.
-const SCHEMA_VERSION: SchemaVersion = SchemaVersion::new(8);
+/// v9: `comments`, i messaggi dei commenti per `comment:`
+/// ([`COMMENT_PREDICATE_NS`]).
+const SCHEMA_VERSION: SchemaVersion = SchemaVersion::new(9);
 
 /// **La forma che quel numero versiona** (§15.3,
 /// [0106](../../../docs/decisions/0191-ui-dichiarativa-e-renderer.md)).
@@ -164,7 +167,7 @@ const SCHEMA_VERSION: SchemaVersion = SchemaVersion::new(8);
 #[cfg(test)]
 const FINGERPRINT_OF_THE_SCHEMA: &str = "doc_id:raw:stored page_name:default:stored \
 body:default:stored tags:raw:stored tag_paths:raw folder:raw folder_exact:raw \
-headings:default:stored task_state:raw layout:-:stored task_due:raw";
+headings:default:stored task_state:raw layout:-:stored task_due:raw comments:default:stored";
 
 /// Nome del manifest nello spazio dati del plugin (vedi [`Manifest`]).
 const MANIFEST: &str = "manifest.json";
@@ -323,7 +326,9 @@ pub use index::SearchIndex;
 pub use provider::SearchSettings;
 #[cfg(test)]
 use schema::schema_fingerprint;
-use schema::{build_schema, fingerprint, tag_names, task_states, Fields, Manifest};
+use schema::{
+    build_schema, comment_texts, fingerprint, tag_names, task_states, Fields, Manifest,
+};
 
 #[cfg(test)]
 mod tests;

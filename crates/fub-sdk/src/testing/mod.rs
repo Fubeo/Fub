@@ -478,6 +478,7 @@ fn format_of_series(ext: &str) -> Option<DocumentFormat> {
             fub_abi::options::syntax::FOOTNOTES,
             fub_abi::options::syntax::DEFINITION_LISTS,
             fub_abi::options::syntax::MATH,
+            fub_abi::options::syntax::COMMENTS,
             fub_abi::options::source::PROSE,
         ]),
     })

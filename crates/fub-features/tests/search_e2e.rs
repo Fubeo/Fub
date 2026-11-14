@@ -274,6 +274,58 @@ fn scoped_text_wants_every_word_in_the_same_line_block_or_section() {
     assert_eq!(ids_after(TextScope::Line), ["Elenco.md"]);
 }
 
+/// `comment:` cerca nei messaggi dei commenti (`{>>…<<}`), autore compreso;
+/// il testo di un messaggio non è testo della nota, e `content:` o una
+/// ricerca semplice non lo trovano. Il passo commentato invece è testo.
+#[test]
+fn comment_finds_the_messages_and_content_does_not() {
+    let v = Vault::new();
+    v.put(
+        "Bozza.md",
+        "Il {==passo commentato==}{>>@Anna Bianchi 2026-11-08 17:40: frase zoppicante<<}{>>@Bruno: Rivedere<<} qui.\n",
+    );
+    v.put("Punto.md", "Un punto {>>2026-11-09: zoppicante anche qui<<} e basta.\n");
+    v.put("Testo.md", "Una frase zoppicante nel corpo, senza commenti.\n");
+    let ws = v.open();
+    let ids = |line: &str| {
+        let expr = fub_abi::rules::search_syntax::parse(line, false).expect("una ricerca");
+        let mut names = matching(&ws, expr)
+            .into_iter()
+            .map(|m| m.doc.to_string())
+            .collect::<Vec<_>>();
+        names.sort();
+        names
+    };
+    assert_eq!(ids("comment:zoppicante"), ["Bozza.md", "Punto.md"]);
+    assert_eq!(ids("comment:Anna"), ["Bozza.md"]);
+    assert_eq!(ids("comment:\"frase zoppicante\""), ["Bozza.md"]);
+    assert_eq!(ids("match-case:Rivedere"), Vec::<String>::new());
+    assert_eq!(ids("content:zoppicante"), ["Testo.md"]);
+    assert_eq!(ids("zoppicante"), ["Testo.md"]);
+    assert_eq!(ids("content:commentato"), ["Bozza.md"]);
+    assert_eq!(ids("zoppicante -comment:zoppicante"), ["Testo.md"]);
+    assert!(ids("Anna").is_empty(), "l'autore non è testo della nota");
+    // La grafia esatta si confronta sul testo memorizzato dei messaggi.
+    let exact = |word: &str| {
+        let text = TextQuery {
+            case_sensitive: true,
+            ..TextQuery::terms(word)
+        };
+        matching(
+            &ws,
+            QueryExpr::of(QueryPredicate::Custom {
+                ns: fub_abi::rules::search_syntax::COMMENT_PREDICATE_NS.into(),
+                predicate: serde_json::to_value(text).unwrap(),
+            }),
+        )
+        .into_iter()
+        .map(|m| m.doc.to_string())
+        .collect::<Vec<_>>()
+    };
+    assert_eq!(exact("Rivedere"), ["Bozza.md"]);
+    assert!(exact("rivedere").is_empty());
+}
+
 #[test]
 fn finds_notes_by_content_title_and_tag() {
     let v = Vault::new();
