@@ -224,8 +224,8 @@ una nota: si legge con qualunque radice.
   di scrittura la giudicano, e un nome preso è un `conflict`. Risponde
   `{doc, revision}`.
 - `fub_canvas_apply` porta in una lavagna una lista di operazioni
-  (`add_card`, `connect`, `move`, `resize`, `set`, `remove`, `reorder`; i
-  campi sono in `fub_canvas_guide`, e la forma in
+  (`add_card`, `connect`, `move`, `resize`, `set`, `remove`, `reorder`,
+  `color`; i campi sono in `fub_canvas_guide`, e la forma in
   [Operazioni sulla lavagna](canvas-operations.md)) come una modifica sola,
   con `canvas.apply`. `ops` è la lista o il suo testo JSON; `base` è
   obbligatoria come per `fub_write`, e una revisione superata è un

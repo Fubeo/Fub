@@ -1078,7 +1078,7 @@ fn le_lavagne_si_leggono_e_si_guidano() {
     names.sort();
     assert_eq!(
         names,
-        ["add_card", "connect", "move", "remove", "reorder", "resize", "set"]
+        ["add_card", "color", "connect", "move", "remove", "reorder", "resize", "set"]
     );
     assert!(guide["schema"].is_object());
     assert!(!guide["examples"].as_array().unwrap().is_empty());
@@ -1335,6 +1335,32 @@ fn la_descrizione_di_fub_canvas_apply_nomina_le_operazioni_della_guida() {
             description.contains(&format!("`{name}`")),
             "manca {name}: {description}"
         );
+    }
+    // I campi che T10 ha aggiunto: la guida li ha, e la descrizione dice come si
+    // scrivono (senza backtick, che è riservato ai nomi delle operazioni).
+    let fields_of = |op: &str| -> Vec<String> {
+        guide["ops"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|entry| entry["name"] == op)
+            .unwrap_or_else(|| panic!("la guida non ha {op}"))["fields"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|field| field["name"].as_str().unwrap().to_string())
+            .collect()
+    };
+    for (op, field, shape) in [
+        ("move", "contents", "contents: true"),
+        ("resize", "fit", "fit: \"content\""),
+        ("reorder", "to", "to: \"back\""),
+    ] {
+        assert!(
+            fields_of(op).iter().any(|name| name == field),
+            "la guida non ha {op}.{field}"
+        );
+        assert!(description.contains(shape), "manca {shape}: {description}");
     }
     // Ciò che sta fra backtick e ha la forma di un nome è un'operazione.
     for token in description.split('`').skip(1).step_by(2) {
