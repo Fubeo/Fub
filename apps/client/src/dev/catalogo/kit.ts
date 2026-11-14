@@ -1,0 +1,637 @@
+// Il catalogo del kit: ogni primitiva di `src/kit/` col suo campione, negli
+// stati in cui una pelle la deve distinguere.
+//
+// Un campione è un'istanza, non markup che le somiglia: il menu si apre, il
+// divisore si trascina, le schede rispondono alle frecce. Gli stati che non
+// stanno fermi (passaggio, pressione, fuoco) li tiene fermi `forza.ts`, che chi
+// ospita il catalogo accende prima di chiamare `renderKit`.
+//
+// Lo ospitano due pagine: quella del banco (`bench/kit.html`), che lo
+// fotografa e ci prova le coreografie del kit — i campioni che si muovono
+// hanno un `id` che comincia per `sample-` — e la pagina «Tutti i componenti»
+// dell'app (`pagina.ts`). La cornice (le celle, le file, le didascalie) ha le
+// classi della pagina del banco: la veste lei, e nell'app `catalogo.css`, sotto
+// `.dev-catalog-kit`. I testi dei campioni sono dati d'esempio, in italiano
+// come quelli del banco.
+import {
+  attachHoverCard,
+  createList,
+  createOptionsBar,
+  createTabs,
+  createToolRail,
+  iconButton,
+  mountSplitter,
+  openDialog,
+  openPopover,
+  setPressed,
+  textButton,
+  textField,
+  type ButtonKind,
+  type PopoverHandle,
+} from "../../kit";
+import { iconEl } from "../../ui/icons";
+import { openLifetime, type Lifetime } from "../../ui/lifetime";
+import { force } from "./forza";
+
+/// Chi ospita il catalogo del kit.
+export interface KitHost {
+  /// La vita dei campioni: chiusa, se ne vanno i loro ascoltatori.
+  readonly lifetime: Lifetime;
+  /// Mette una sezione nella pagina, nella colonna che le spetta.
+  section(title: string, column: "left" | "right", ...content: Node[]): void;
+  /// Il popover, il dialogo e la scheda al passaggio. Di serie ci sono; chi
+  /// ospita il catalogo sopra il piano dei popover li lascia fuori.
+  readonly floating?: boolean;
+}
+
+function el<K extends keyof HTMLElementTagNameMap>(
+  tag: K,
+  className?: string,
+  text?: string,
+): HTMLElementTagNameMap[K] {
+  const node = document.createElement(tag);
+  if (className) node.className = className;
+  if (text !== undefined) node.textContent = text;
+  return node;
+}
+
+const caption = (text: string, className = "didascalia"): HTMLElement => el("span", className, text);
+
+function cell(text: string, ...content: Node[]): HTMLElement {
+  const node = el("div", "cella");
+  node.append(caption(text), ...content);
+  return node;
+}
+
+/// Disegna le sezioni del catalogo del kit, nell'ordine della pagina del banco.
+export function renderKit(host: KitHost): void {
+  const { lifetime } = host;
+  const section = (title: string, column: "left" | "right", ...content: Node[]): void =>
+    host.section(title, column, ...content);
+
+  const nothing = (): void => {};
+
+  interface Entry {
+    readonly id: string;
+    readonly label: string;
+    readonly icon?: string;
+    readonly disabled?: boolean;
+  }
+
+  function drawEntry(entry: Entry, row: HTMLElement): void {
+    const figure = entry.icon ? iconEl(entry.icon) : null;
+    if (figure) row.append(figure);
+    row.append(entry.label);
+  }
+
+  const ACTIONS: readonly Entry[] = [
+    { id: "open", label: "Apri in un nuovo foglio", icon: "notes" },
+    { id: "pin", label: "Fissa la linguetta", icon: "pin" },
+    { id: "tag", label: "Aggiungi un'etichetta", icon: "tag" },
+    { id: "history", label: "Cronologia", icon: "history", disabled: true },
+    { id: "trash", label: "Sposta nel cestino", icon: "trash" },
+  ];
+
+  // Le superfici che galleggiano sopra la pagina: chi le ospita sotto un suo
+  // piano più alto le lascia fuori (`floating: false`).
+  if (host.floating !== false) {
+    // ── Popover, dialogo, scheda al passaggio ────────────────────────────────────
+
+    /// Un pulsante che apre e chiude la sua superficie. Il gesto che la chiude «da
+    /// fuori» arriva prima del clic che la riaprirebbe: lo si riconosce qui, in
+    /// cattura e prima che un popover esista, quando la superficie c'è ancora.
+    function toggler(label: string, open: (anchor: HTMLButtonElement) => PopoverHandle): HTMLButtonElement {
+      let surface: PopoverHandle | null = null;
+      let closing = false;
+      const trigger: HTMLButtonElement = textButton({
+        label,
+        lifetime,
+        onPress() {
+          if (closing) {
+            closing = false;
+            return;
+          }
+          if (surface && !surface.closed) surface.close();
+          else surface = open(trigger);
+        },
+      });
+      lifetime.listen(
+        document,
+        "pointerdown",
+        (event) => {
+          closing =
+            surface !== null && !surface.closed && event.target instanceof Node && trigger.contains(event.target);
+        },
+        { capture: true },
+      );
+      return trigger;
+    }
+
+    const menuTrigger = toggler("Apri il menu", (anchor) => {
+      const life = openLifetime();
+      const box = el("div");
+      box.setAttribute("aria-label", "Azioni sulla nota");
+      let popover: PopoverHandle | null = null;
+      createList<Entry>({
+        container: box,
+        role: "menu",
+        focus: "roving",
+        items: ACTIONS,
+        key: (entry) => entry.id,
+        render: drawEntry,
+        disabled: (entry) => entry.disabled === true,
+        typeahead: (entry) => entry.label,
+        onActivate: () => popover?.close(),
+        lifetime: life,
+      });
+      // Col nome il popover è un dialogo, e un dialogo è una regione della pagina
+      // anche fuori dal suo `main`: dentro c'è il menu, che porta lo stesso nome.
+      popover = openPopover({
+        anchor,
+        content: box,
+        label: "Azioni sulla nota",
+        onClose: () => life.close(),
+        lifetime,
+      });
+      return popover;
+    });
+    menuTrigger.id = "sample-menu";
+
+    const panelTrigger = toggler("Apri il riquadro", (anchor) => {
+      const life = openLifetime();
+      let popover: PopoverHandle | null = null;
+      const close = (): void => popover?.close();
+      const name = textField({
+        label: "Nome della vista",
+        value: "Da rileggere",
+        clearable: { label: "Svuota il nome" },
+        lifetime: life,
+      });
+      const answers = el("div", "fila");
+      answers.append(
+        textButton({ label: "Annulla", onPress: close, lifetime: life }),
+        textButton({ label: "Salva", kind: "primary", onPress: close, lifetime: life }),
+      );
+      const box = el("div", "riquadro-libero");
+      box.append(name.element, answers);
+      popover = openPopover({
+        anchor,
+        content: box,
+        label: "Salva la vista",
+        onClose: () => life.close(),
+        lifetime,
+      });
+      return popover;
+    });
+    panelTrigger.id = "sample-panel";
+
+    const answer = caption("nessuna risposta");
+    answer.id = "sample-answer";
+    answer.setAttribute("role", "status");
+
+    const dialogTrigger = textButton({
+      label: "Apri il dialogo",
+      lifetime,
+      onPress() {
+        const life = openLifetime();
+        const name = textField({
+          label: "Nome della nota",
+          value: "Appunti di viaggio",
+          clearable: { label: "Svuota il nome" },
+          lifetime: life,
+        });
+        const dialog = openDialog<string>({
+          title: "Salvare le modifiche?",
+          description: "«Appunti di viaggio» ha modifiche che non sono ancora su disco.",
+          body: name.element,
+          actions: [
+            { id: "cancel", label: "Annulla", value: "annulla" },
+            { id: "discard", label: "Non salvare", kind: "danger", value: "non salvare" },
+            { id: "save", label: "Salva", kind: "primary", value: "salva" },
+          ],
+          dismissValue: "annulla",
+          lifetime,
+        });
+        void dialog.result.then((value) => {
+          life.close();
+          answer.textContent = `risposta: ${value}`;
+        });
+      },
+    });
+    dialogTrigger.id = "sample-dialog";
+
+    const link = el("a", "rimando", "Appunti di viaggio");
+    link.id = "sample-card";
+    link.href = "#sample-card";
+    lifetime.listen(link, "click", (event) => event.preventDefault());
+    attachHoverCard({
+      target: link,
+      label: "Anteprima di «Appunti di viaggio»",
+      load: () => {
+        const card = el("div", "scheda");
+        card.append(
+          el("strong", undefined, "Appunti di viaggio"),
+          el("p", undefined, "Lisbona, tre giorni. Il tram 28 al mattino presto, prima della fila; il miradouro al tramonto."),
+        );
+        return Promise.resolve(card);
+      },
+      lifetime,
+    });
+
+    {
+      const row = el("div", "fila");
+      row.append(
+        cell("popover · una lista", menuTrigger),
+        cell("popover · un riquadro", panelTrigger),
+        cell("dialogo", dialogTrigger),
+        cell("la sua risposta", answer),
+        cell("scheda al passaggio", link),
+      );
+      section("Popover, dialogo, scheda", "left", row);
+    }
+  }
+
+  // ── Pulsanti ─────────────────────────────────────────────────────────────────
+
+  const STATES = ["riposo", "passaggio", "premuto", "fuoco", "spento"] as const;
+  type State = (typeof STATES)[number];
+
+  /// Mette un pulsante in uno stato. La pressione vera arriva sempre sotto un
+  /// puntatore: è passaggio e pressione insieme.
+  function inState<T extends HTMLButtonElement>(button: T, state: State): T {
+    if (state === "passaggio") force(button, "hover");
+    else if (state === "premuto") force(button, "hover", "active");
+    else if (state === "fuoco") force(button, "focus");
+    else if (state === "spento") button.disabled = true;
+    return button;
+  }
+
+  function head(grid: HTMLElement, last: string): void {
+    grid.append(el("span"), ...[...STATES, last].map((state) => caption(state)));
+  }
+
+  {
+    const KINDS: readonly (readonly [string, ButtonKind, string, string])[] = [
+      ["normale", "normal", "Annulla", "notes"],
+      ["primario", "primary", "Salva", "pin"],
+      ["distruttivo", "danger", "Elimina", "trash"],
+    ];
+    const texts = el("div", "stati");
+    head(texts, "con icona");
+    for (const [name, kind, label, icon] of KINDS) {
+      texts.append(caption(name));
+      for (const state of STATES) {
+        texts.append(inState(textButton({ label, kind, onPress: nothing, lifetime }), state));
+      }
+      texts.append(textButton({ label, kind, icon, onPress: nothing, lifetime }));
+    }
+
+    const icons = el("div", "stati");
+    head(icons, "scelto");
+    icons.append(caption("a icona"));
+    for (const state of STATES) {
+      icons.append(inState(iconButton({ icon: "search", label: "Cerca", onPress: nothing, lifetime }), state));
+    }
+    const toggle: HTMLButtonElement = iconButton({
+      icon: "pin",
+      label: "Fissa",
+      chord: { display: "Ctrl+K", aria: "Control+K" },
+      pressed: true,
+      lifetime,
+      onPress: () => setPressed(toggle, toggle.getAttribute("aria-pressed") !== "true"),
+    });
+    toggle.id = "sample-toggle";
+    icons.append(toggle);
+
+    section("Pulsanti", "left", texts, icons);
+  }
+
+  // ── Campo ────────────────────────────────────────────────────────────────────
+
+  {
+    const grid = el("div", "campi");
+    const field = (
+      text: string,
+      options: Omit<Parameters<typeof textField>[0], "lifetime">,
+      dress?: (made: ReturnType<typeof textField>) => void,
+    ): void => {
+      const made = textField({ ...options, lifetime });
+      dress?.(made);
+      grid.append(cell(text, made.element));
+    };
+    const box = (made: ReturnType<typeof textField>): HTMLElement => made.input.parentElement!;
+    const clear = (made: ReturnType<typeof textField>): HTMLElement =>
+      made.element.querySelector<HTMLElement>(".kit-field-clear")!;
+
+    field("riposo", { label: "Titolo", placeholder: "Senza titolo" });
+    field("con l'icona", { label: "Cerca", placeholder: "Cerca nelle note", icon: "search" });
+    field("con «svuota»", {
+      label: "Filtro",
+      value: "bozza",
+      icon: "search",
+      clearable: { label: "Svuota il filtro" },
+    });
+    field("passaggio", { label: "Titolo", value: "Lisbona" }, (made) => force(box(made), "hover"));
+    field("fuoco", { label: "Titolo", value: "Lisbona" }, (made) => force(made.input, "focus"));
+    field("spento", { label: "Titolo", value: "Lisbona" }, (made) => {
+      made.input.disabled = true;
+    });
+    field("non valido", { label: "Titolo", value: "Lisbona/2" }, (made) => {
+      made.input.setAttribute("aria-invalid", "true");
+    });
+    field("non valido · fuoco", { label: "Titolo", value: "Lisbona/2" }, (made) => {
+      made.input.setAttribute("aria-invalid", "true");
+      force(made.input, "focus");
+    });
+    field("«svuota» · passaggio", { label: "Filtro", value: "bozza", clearable: { label: "Svuota il filtro" } }, (made) =>
+      force(clear(made), "hover"),
+    );
+    field("«svuota» · fuoco", { label: "Filtro", value: "bozza", clearable: { label: "Svuota il filtro" } }, (made) =>
+      force(clear(made), "focus"),
+    );
+
+    section("Campo", "right", grid);
+  }
+
+  // ── Lista ────────────────────────────────────────────────────────────────────
+
+  {
+    const FONTS: readonly Entry[] = [
+      { id: "newsreader", label: "Newsreader" },
+      { id: "hanken", label: "Hanken Grotesk" },
+      { id: "literata", label: "Literata" },
+      { id: "inter", label: "Inter" },
+      { id: "system", label: "Del sistema", disabled: true },
+    ];
+    const choice = el("div");
+    choice.id = "sample-listbox";
+    choice.setAttribute("aria-label", "Carattere di lettura");
+    const chosen = createList<Entry>({
+      container: choice,
+      role: "listbox",
+      items: FONTS,
+      key: (entry) => entry.id,
+      render: drawEntry,
+      disabled: (entry) => entry.disabled === true,
+      selected: (entry) => entry.id === "literata",
+      typeahead: (entry) => entry.label,
+      onActivate: nothing,
+      lifetime,
+    });
+    chosen.setActive("hanken");
+    const tray = el("div", "vassoio");
+    tray.append(choice);
+
+    const menu = el("div");
+    menu.id = "sample-menu-list";
+    menu.setAttribute("aria-label", "Azioni sulla nota");
+    const rows = createList<Entry>({
+      container: menu,
+      role: "menu",
+      focus: "roving",
+      items: ACTIONS,
+      key: (entry) => entry.id,
+      render: drawEntry,
+      disabled: (entry) => entry.disabled === true,
+      typeahead: (entry) => entry.label,
+      onActivate: nothing,
+      lifetime,
+    });
+    rows.setActive("pin");
+    const focused = rows.element("pin");
+    if (focused) force(focused, "focus");
+    const second = el("div", "vassoio");
+    second.append(menu);
+    // Un campione fermo: è la fotografia di una riga a fuoco, non un menu da
+    // usare. Un menu che si vede è, per chi naviga e per il banco
+    // dell'accessibilità, il piano che tiene il fuoco: lasciato vivo in mezzo
+    // alla pagina direbbe che tutto il resto gli sta sotto. Quello vero si apre
+    // da «Apri il menu».
+    second.inert = true;
+
+    const row = el("div", "fila");
+    row.append(
+      cell("scelta: attiva, scelta, spenta", tray),
+      cell("menu: l'attiva ha il fuoco", second),
+    );
+    section("Lista", "right", row);
+  }
+
+  // ── Schede ───────────────────────────────────────────────────────────────────
+
+  /// Schede coi loro pannelli: una scelta, una spenta, e due tenute ferme al
+  /// passaggio e col fuoco. Restano vere: le frecce e il clic scelgono.
+  function tabs(id: string, orientation: "horizontal" | "vertical", life: Lifetime): HTMLElement {
+    const NAMES: readonly (readonly [string, string, string?])[] = [
+      ["general", "Generale", "settings"],
+      ["look", "Aspetto"],
+      ["keys", "Tasti", "keyboard"],
+      ["sync", "Sincronia"],
+      ["advanced", "Avanzate"],
+    ];
+    const tablist = el("div");
+    tablist.id = id;
+    const panels = el("div");
+    const specs = NAMES.map(([key, label, icon]) => {
+      const panel = el("div", "pannello", `Il pannello «${label}».`);
+      panels.append(panel);
+      return { id: key, label, icon, panel, disabled: key === "advanced" };
+    });
+    const handle = createTabs({
+      tablist,
+      tabs: specs,
+      selected: "look",
+      orientation,
+      label: orientation === "vertical" ? "Preferenze, in colonna" : "Preferenze",
+      onSelect: nothing,
+      lifetime: life,
+    });
+    const hovered = handle.tab("keys");
+    if (hovered) force(hovered, "hover");
+    const focused = handle.tab("sync");
+    if (focused) force(focused, "focus");
+    const node = el("div", orientation === "vertical" ? "affiancate" : undefined);
+    node.append(tablist, panels);
+    return node;
+  }
+
+  {
+    const row = el("div", "fila");
+    const wide = cell(
+      "in riga: a riposo, scelta, al passaggio, a fuoco, spenta",
+      tabs("sample-tabs", "horizontal", lifetime),
+    );
+    wide.classList.add("cella-larga");
+    row.append(wide, cell("in colonna", tabs("sample-tabs-vertical", "vertical", lifetime)));
+    section("Schede", "left", row);
+  }
+
+  // ── Divisore ─────────────────────────────────────────────────────────────────
+
+  /// Due riquadri e la maniglia fra loro. Il primo è quello governato.
+  function split(
+    text: string,
+    orientation: "vertical" | "horizontal",
+    dress?: (handle: HTMLElement) => void,
+  ): HTMLElement {
+    const initial = orientation === "vertical" ? 56 : 28;
+    const [min, max] = orientation === "vertical" ? [32, 96] : [18, 44];
+    const box = el("div", orientation === "vertical" ? "riquadri" : "riquadri pila");
+    const first = el("div", "riquadro", "uno");
+    const handle = el("div", "maniglia");
+    const rest = el("div", "riquadro resto", "due");
+    let size = initial;
+    const paint = (px: number): void => {
+      first.style.setProperty(orientation === "vertical" ? "width" : "height", `${px}px`);
+    };
+    paint(size);
+    box.append(first, handle, rest);
+    mountSplitter({
+      handle,
+      orientation,
+      value: () => size,
+      min,
+      max,
+      onInput: paint,
+      onCommit(px) {
+        size = px;
+        paint(px);
+      },
+      onReset() {
+        size = initial;
+        paint(size);
+      },
+      label: orientation === "vertical" ? "Larghezza del primo riquadro" : "Altezza del primo riquadro",
+      lifetime,
+    });
+    dress?.(handle);
+    return cell(text, box);
+  }
+
+  {
+    const row = el("div", "fila");
+    const live = split("riposo: si trascina", "vertical");
+    live.querySelector<HTMLElement>(".maniglia")!.id = "sample-splitter";
+    row.append(
+      live,
+      split("passaggio", "vertical", (handle) => force(handle, "hover")),
+      split("fuoco", "vertical", (handle) => force(handle, "focus")),
+      split("trascinamento", "vertical", (handle) => {
+        handle.dataset.dragging = "";
+      }),
+      split("orizzontale · passaggio", "horizontal", (handle) => force(handle, "hover")),
+    );
+    section("Divisore", "left", row);
+  }
+
+  // ── Barra in una fila e colonna ──────────────────────────────────────────────
+
+  /// Un pulsante della fila. Le classi le mette chi costruisce la barra: il kit
+  /// non ha un costruttore della fila, ha la sua pelle.
+  function barButton(icon: string, label: string, pressed?: boolean): HTMLButtonElement {
+    const button = el("button", "kit-bar-button");
+    button.type = "button";
+    button.setAttribute("aria-label", label);
+    if (pressed !== undefined) button.setAttribute("aria-pressed", String(pressed));
+    const glyph = iconEl(icon);
+    if (glyph) button.append(glyph);
+    return button;
+  }
+
+  function sheetOf(...content: Node[]): HTMLElement {
+    const group = el("div", "kit-bar-group");
+    group.append(...content);
+    return group;
+  }
+
+  function barField(label: string, value: string): HTMLInputElement {
+    const input = el("input", "kit-bar-field");
+    input.type = "text";
+    input.value = value;
+    input.size = 10;
+    input.setAttribute("aria-label", label);
+    return input;
+  }
+
+  /// Una fila di tre foglietti: il terzo sta nella fila del kit, che non ci sta
+  /// tutta e manda il resto in «…».
+  function bar(label: string, dress?: (bar: HTMLElement) => void): HTMLElement {
+    const node = el("div", "kit-bar");
+    node.setAttribute("role", "toolbar");
+    node.setAttribute("aria-label", label);
+    const spento = barButton("trash", "Elimina");
+    spento.disabled = true;
+    const options = createOptionsBar({ label: `${label}: altre`, moreLabel: "Altre opzioni", lifetime });
+    options.setItems([
+      { id: "copia", element: sheetOf(barButton("cut", "Taglia"), barButton("copy", "Copia")), priority: 1 },
+      { id: "etichetta", element: sheetOf(barButton("tag", "Etichetta"), barButton("search", "Cerca")) },
+      { id: "storia", element: sheetOf(barButton("history", "Cronologia"), barButton("stats", "Statistiche")) },
+    ]);
+    node.append(
+      sheetOf(barButton("pin", "Fissa", true), barButton("notes", "Nota", false), spento),
+      sheetOf(barField("Carattere", "Newsreader")),
+      options.element,
+    );
+    dress?.(node);
+    return node;
+  }
+
+  {
+    const bars = el("div", "cella");
+    const rest = bar("Fila a riposo");
+    const states = bar("Fila negli stati", (node) => {
+      // 0 è acceso, 2 è spento: passaggio sul secondo, pressione e fuoco sui
+      // primi due del terzo foglietto, e il campo col fuoco.
+      const buttons = node.querySelectorAll<HTMLButtonElement>(".kit-bar-button");
+      force(buttons[1]!, "hover");
+      force(buttons[3]!, "hover", "active");
+      force(buttons[4]!, "focus");
+      force(node.querySelector<HTMLInputElement>(".kit-bar-field")!, "focus");
+    });
+    // Larga quanto basta perché l'ultimo foglietto non ci stia e vada in «…».
+    const narrow = (node: HTMLElement): HTMLElement => {
+      const box = el("div", "fila-stretta");
+      box.append(node);
+      return box;
+    };
+    bars.append(
+      caption("riposo: acceso, spento, campo, «…»"),
+      narrow(rest),
+      caption("passaggio, premuto, fuoco"),
+      narrow(states),
+    );
+
+    const rail = createToolRail({
+      label: "Strumenti",
+      groups: [
+        {
+          id: "scelta",
+          slots: [
+            { id: "nota", tools: [{ id: "nota", label: "Nota", icon: "notes", keys: "N" }] },
+            {
+              id: "cerca",
+              tools: [
+                { id: "cerca", label: "Cerca", icon: "search", keys: "F" },
+                { id: "etichetta", label: "Etichetta", icon: "tag", keys: "T" },
+              ],
+            },
+          ],
+        },
+        { id: "altro", slots: [{ id: "grafo", tools: [{ id: "grafo", label: "Grafo", icon: "graph", keys: "G" }] }] },
+      ],
+      active: "nota",
+      text: { more: (tool) => `Altri strumenti di ${tool}` },
+      onSelect: (tool) => rail.setActive(tool),
+      lifetime,
+    });
+    const slots = rail.element.querySelectorAll<HTMLElement>(".kit-rail-slot");
+    force(slots[1]!, "hover");
+    force(slots[2]!, "focus");
+
+    const row = el("div", "fila");
+    const column = cell("colonna: scelto, passaggio, fuoco", rail.element);
+    column.classList.add("cella-in-piedi");
+    row.append(bars, column);
+    section("Barra in una fila e colonna", "left", row);
+  }
+}
