@@ -492,15 +492,10 @@ di un riquadro (`notices`), ridisegnati a ogni evento della sessione.
 `leave()` registra il testo tenuto dall'editor e salva adesso; `destroy()` lo
 registra, stacca, smonta e lascia la prenotazione, una volta sola.
 
-Chiusa la lavagna (o la scheda), se nessun riquadro né altra scheda tiene il
-file, la sessione salva e si chiude come alla chiusura di un riquadro; se non
-può salvare (un conflitto, un disco che rifiuta) resta aperta con la bozza già
-scritta, e la shell chiede come per un riquadro (`unsaved`, che in
-`document-controller.ts` è `keepOrDiscardUnsaved`): «Tieni» riapre la nota nel
-riquadro col fuoco, «Scarta» chiude la sessione con la sua bozza. Se intanto
-un riquadro o un'altra scheda la riprende, non si chiede niente; la shell che
-se ne va (`destroyAll`) non chiede, e la bozza resta. Il lavoro non si perde
-mai in silenzio.
+Chiusa la lavagna o la scheda, se nessuno tiene il file la sessione salva e si
+chiude come per un riquadro; se non può salvare resta aperta con la bozza e la
+shell chiede come per un riquadro (`unsaved` → `keepOrDiscardUnsaved`), salvo
+se un riquadro o una scheda l'ha ripresa o la shell se ne va.
 
 ### La scheda di testo
 
@@ -509,9 +504,7 @@ lifetime, documentId, forms })` monta l'editor delle note in Live, senza
 sessione, con un nome nella cartella della lavagna per i link relativi. Ogni
 battuta va a `onText`, poi nel testo in sospeso della tela (commit dopo 250 ms,
 bozza intanto), con la misura della scheda cresciuta scrivendo ([crescita e tasti](canvas-input.md#scrivere-in-una-scheda-di-testo)).
-Smontato, l'editor consegna prima a `onText` il testo che tiene ancora
-(`commitPending`, una composizione a metà), come `destroy()` di una scheda di
-file; una superficie ferma non consegna più niente.
+Smontato, consegna prima a `onText` il testo tenuto (`commitPending`).
 Un testo che l'editor non terrebbe byte per byte, o `null`, lasciano il campo semplice.
 
 ### Scrivere in una scheda di foglio
