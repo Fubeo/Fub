@@ -6,9 +6,10 @@
 // c'è DOM e non c'è gara: chi chiama decide se una risposta è ancora quella
 // attesa.
 //
-// «Tutto» è la somma di tre gruppi: le note per nome, il testo delle note e i
-// titoli della nota aperta. Un gruppo è una riga d'intestazione (`group`) che
-// non si sceglie: le frecce la saltano.
+// «Tutto» è la somma di tre gruppi: i file per nome (le note, gli altri
+// documenti e i file che Fub mostra, come PDF e immagini), il testo delle note
+// e i titoli della nota aperta. Un gruppo è una riga d'intestazione (`group`)
+// che non si sceglie: le frecce la saltano.
 import type { Span } from "../../../host/contract";
 import { api } from "../../../host/ipc";
 import {
@@ -17,16 +18,17 @@ import {
   matchingDocuments,
   notesByName,
   searchExpression,
+  vaultEntries,
   vaultStatus,
   vaultTags,
 } from "../../../host/query";
 import { t } from "../../../i18n/strings";
-import { pageName } from "../../../rules/mirrored";
+import { childName, pageName } from "../../../rules/mirrored";
 import { charToByteIndex } from "../../../rules/offsets";
 import { searchedName } from "../../../rules/searched-name";
 import type { SlashSection } from "../../../editors/core/editor-menu";
 import { slashCatalog } from "../../../panels/slash/entries";
-import { paneOf } from "../../../state/document-controller";
+import { canShowFile, paneOf } from "../../../state/document-controller";
 import { activeDoc, layout } from "../../../state/layout";
 import { paletteHost } from "../../../state/palette-host";
 import { searchPeople, peopleFolder } from "../../../state/people";
@@ -43,6 +45,11 @@ export const TEMPLATE_COMMAND = "note.from_template";
 export const SEARCH_LIMIT = 50;
 /// Quante righe mostra un elenco che si filtra di qua.
 export const LIST_LIMIT = 200;
+/// Quanti file che non sono documenti «Tutto» mostra per nome: quanti le note
+/// per nome che il kernel dà.
+export const FILE_LIMIT = 20;
+/// Quante voci dell'anagrafe chiede ogni pagina, leggendo i file del vault.
+const ENTRY_PAGE = 500;
 /// I comandi che «Tutto» offre per la nota aperta, a campo vuoto.
 export const NOTE_COMMANDS: readonly string[] = ["note.export", "note.duplicate", "note.subpage"];
 /// Le sezioni del «/» che sono blocchi da inserire nella nota, nel loro ordine.
@@ -136,11 +143,76 @@ async function headingRows(doc: string, text: string): Promise<Row[]> {
   }));
 }
 
+/// I file del vault che non sono documenti e che Fub sa mostrare (un PDF,
+/// un'immagine, un audio), letti una volta per vault finché il lanciatore non
+/// li dimentica (`forgetFiles`, a ogni apertura). L'indice dei nomi conosce
+/// solo i documenti: questi li conosce l'anagrafe, che non ha una ricerca per
+/// nome, e la si legge a pagine come fa il disegno per le sue immagini.
+let files: { vault: string; ids: Promise<string[]> } | null = null;
+
+async function readFiles(): Promise<string[]> {
+  const found: string[] = [];
+  for (let offset = 0; ;) {
+    const page = await vaultEntries({ offset, limit: ENTRY_PAGE }, "asset");
+    for (const entry of page.items) if (canShowFile(entry.id)) found.push(entry.id);
+    offset += page.items.length;
+    if (page.items.length === 0 || offset >= page.total) break;
+  }
+  return found;
+}
+
+function vaultFiles(vault: string): Promise<string[]> {
+  if (files?.vault !== vault) {
+    const ids = readFiles();
+    const held = { vault, ids };
+    files = held;
+    // Una lettura fallita non resta in memoria: la prossima domanda riprova.
+    ids.catch(() => {
+      if (files === held) files = null;
+    });
+  }
+  return files.ids;
+}
+
+/// Dimentica i file letti: chi riapre il lanciatore vede quelli di adesso.
+export function forgetFiles(): void {
+  files = null;
+}
+
+/// I file (non documenti) il cui nome, estensione compresa, contiene ogni
+/// parola scritta: prima quelli il cui nome comincia così, poi gli altri.
+async function filesByName(vault: string, written: string): Promise<string[]> {
+  const all = await vaultFiles(vault);
+  return filterByText(all, written, childName, true).slice(0, FILE_LIMIT);
+}
+
+/// Le righe del gruppo dei nomi: i documenti nell'ordine che il kernel dà, e
+/// i file dopo. Un file che si chiama proprio come si è scritto («Stampa» per
+/// `Stampa.pdf`) sale subito dopo i documenti che si chiamano così, perché chi
+/// scrive un nome intero vuole quello.
+function namedRows(docs: readonly string[], found: readonly string[], written: string): string[] {
+  const wanted = written.toLocaleLowerCase();
+  const exact = (doc: string): boolean => pageName(doc).toLocaleLowerCase() === wanted;
+  // Un file che l'indice dà già fra i documenti non si ripete.
+  const listed = new Set(docs);
+  const extra = found.filter((doc) => !listed.has(doc));
+  let leading = 0;
+  while (leading < docs.length && exact(docs[leading]!)) leading += 1;
+  return [
+    ...docs.slice(0, leading),
+    ...extra.filter(exact),
+    ...docs.slice(leading),
+    ...extra.filter((doc) => !exact(doc)),
+  ];
+}
+
 /// «Tutto», a campo vuoto: le note recenti e tre comandi per la nota aperta.
-/// Con un testo: le note il cui nome lo contiene, le note che lo contengono
-/// nel testo (senza ripetere le prime) e i titoli della nota aperta.
+/// Con un testo: i file il cui nome lo contiene (le note, gli altri documenti
+/// e i file che Fub mostra), le note che lo contengono nel testo (senza
+/// ripetere le prime) e i titoli della nota aperta.
 async function everything(text: string): Promise<Listing> {
-  if (!state.vaultRoot) return nothing(t("launcher.note.no_vault"));
+  const vault = state.vaultRoot;
+  if (!vault) return nothing(t("launcher.note.no_vault"));
   const written = text.trim();
   const doc = activeDoc();
   if (written === "") {
@@ -165,11 +237,14 @@ async function everything(text: string): Promise<Listing> {
     return capped(rows);
   }
 
-  const names = await notesByName(written);
+  // I file sono un'aggiunta ai documenti: se l'anagrafe non risponde, le note
+  // per nome restano, come per i titoli.
+  const [docs, found] = await Promise.all([notesByName(written), filesByName(vault, written).catch(() => [])]);
+  const names = namedRows(docs, found, written);
   const named = new Set(names);
   const rows: Row[] = [];
   if (names.length > 0) {
-    rows.push(group("notes", t("launcher.group.notes")));
+    rows.push(group("files", t("launcher.group.files")));
     rows.push(...names.map((each) => noteRow(each, "name", null, null)));
   }
   let syntax: string | null = null;

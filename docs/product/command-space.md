@@ -20,7 +20,7 @@ al campo, cliccando la linguetta, oppure con il comando che apre quel modo.
 
 | Modo | Prefisso | Che cosa elenca |
 |---|---|---|
-| Tutto | nessuno | le note per nome, il testo delle note e i titoli della nota aperta |
+| Tutto | nessuno | i file per nome, il testo delle note e i titoli della nota aperta |
 | Comandi | `>` | i comandi del registro e le viste |
 | Etichette | `#` | le etichette del vault, con quante note le portano |
 | Persone | `@` | le note della cartella delle persone; una persona che non c'è si crea |
@@ -44,7 +44,14 @@ lo dice.
 
 Con un testo Tutto mostra tre gruppi, nell'ordine:
 
-- **Note**: le note il cui nome contiene il testo;
+- **File**: i file il cui nome contiene il testo. Prima i documenti (le note,
+  i documenti di Word, i fogli, le lavagne), nell'ordine di pertinenza che dà
+  l'indice; poi gli altri file che Fub sa mostrare (PDF, immagini, audio,
+  video), che l'indice dei nomi non conosce e che vengono dall'elenco dei file
+  del vault, letto una volta per apertura del lanciatore. Per questi conta il
+  nome con l'estensione (`pdf` trova i PDF), e un file che si chiama proprio
+  come si è scritto sale subito dopo i documenti che si chiamano così. Ogni
+  riga porta l'icona della sua specie;
 - **Nel testo**: le note in cui il testo compare nel contenuto, con l'estratto e
   il punto del primo riscontro (le note già elencate non si ripetono);
 - **Titoli**: i titoli della nota aperta che contengono il testo.
@@ -105,7 +112,9 @@ In Tutto, quando la finestra è larga abbastanza, a destra dell'elenco c'è
 l'anteprima della nota della riga attiva. Segue le frecce, ma aspetta una pausa
 breve (90 ms) prima di chiedere la nota: chi scorre in fretta non fa partire una
 resa per ogni riga. Mentre la resa nuova arriva resta quella di prima; se tarda,
-si attenua. Una nota che non si riesce a rendere lo dice nel riquadro.
+si attenua. Una nota che non si riesce a rendere lo dice nel riquadro. Un file
+che non è un documento (un PDF, un'immagine) non ha una resa: il riquadro lo
+dice senza chiederla.
 
 ## Dove sta
 

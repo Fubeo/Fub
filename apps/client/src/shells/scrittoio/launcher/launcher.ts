@@ -11,6 +11,7 @@
 // In «Tutto», dove la finestra lo permette, accanto all'elenco c'è l'anteprima
 // della nota attiva (`preview.ts`).
 import "./launcher.css";
+import { mediaKindOfId, type MediaKind } from "../../../editors/media/media-types";
 import { errorText } from "../../../host/errors";
 import { t, onLanguage } from "../../../i18n/strings";
 import { createList, createTabs, type ListHandle, type TabsHandle } from "../../../kit";
@@ -45,7 +46,7 @@ import {
   type Reading,
 } from "./model";
 import { createPreview } from "./preview";
-import { answersAtOnce, listing, selectable, type Listing, type Row } from "./sources";
+import { answersAtOnce, forgetFiles, listing, selectable, type Listing, type Row } from "./sources";
 
 /// Quanto si aspetta dopo l'ultima battuta prima di chiedere a una sorgente
 /// che risponde da lontano (ms).
@@ -127,6 +128,23 @@ interface Shown extends Listing {
   failed?: boolean;
 }
 
+/// L'icona dei file che non sono documenti, per specie. Un file d'altra specie
+/// non ne porta.
+const MEDIA_ICON: Readonly<Partial<Record<MediaKind, string>>> = {
+  image: "image",
+  pdf: "book",
+  audio: "music",
+  video: "monitor",
+};
+
+/// L'icona della riga di un file: il formato di un documento che non è una
+/// nota, o la specie di un file; nessuna per una nota.
+function kindIcon(doc: string): string | null {
+  const format = formatKindOf(doc);
+  if (format) return format === "note" ? null : FORMAT_ICON[format];
+  return MEDIA_ICON[mediaKindOfId(doc)] ?? null;
+}
+
 /// Le righe su cui Tab mostra le azioni: una nota o una persona.
 function actionable(row: Row | null): row is Extract<Row, { kind: "note" | "person" }> {
   return row !== null && (row.kind === "note" || row.kind === "person");
@@ -173,6 +191,9 @@ export function mountLauncher(lifetime: Lifetime): Launcher {
     const pill = document.getElementById("pill");
     const life = openLifetime();
     const race = new Race();
+    // I file del vault si rileggono a ogni apertura: quelli letti l'altra volta
+    // possono essere cambiati.
+    forgetFiles();
 
     const layer = el("div", "launcher-layer");
     const veil = el("div", "launcher-veil");
@@ -311,9 +332,10 @@ export function mountLauncher(lifetime: Lifetime): Launcher {
       };
       switch (row.kind) {
         case "note": {
-          // Un documento che non è una nota porta l'icona del suo formato.
-          const kind = formatKindOf(row.doc);
-          const format = kind && kind !== "note" ? iconEl(FORMAT_ICON[kind]) : null;
+          // Un documento che non è una nota porta l'icona del suo formato, un
+          // file (un PDF, un'immagine) quella della sua specie.
+          const drawn = kindIcon(row.doc);
+          const format = drawn ? iconEl(drawn) : null;
           if (format) {
             format.classList.add("launcher-row-format");
             title.append(format);

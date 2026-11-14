@@ -26,6 +26,13 @@ const world = vi.hoisted(() => {
     folder: "Persone",
     /// Le voci del «/» che la superficie sa fare, come le dà il catalogo.
     slash: [] as { id: string; label: string; section: string; action: boolean }[],
+    /// I file del vault che non sono documenti (l'anagrafe, `of_kind: asset`).
+    files: [] as string[],
+    /// Quelli che nessuna superficie sa mostrare.
+    hidden: [] as string[],
+    /// Le pagine dell'anagrafe chieste, e se l'anagrafe risponde.
+    entryPages: [] as { offset: number; limit: number }[],
+    entriesFail: false,
   };
 });
 
@@ -55,10 +62,18 @@ vi.mock("../../../host/query", () => ({
     return world.matches;
   },
   notesByName: async () => world.names,
+  vaultEntries: async (window: { offset: number; limit: number }, kind: string) => {
+    world.entryPages.push(window);
+    if (world.entriesFail) throw new Error("host fake: anagrafe guasta");
+    if (kind !== "asset") throw new Error(`il lanciatore chiede solo i file, non ${kind}`);
+    const items = world.files.slice(window.offset, window.offset + window.limit).map((id) => ({ id, kind: "asset", size: 1, mtime: 0, fingerprint: null }));
+    return { items, offset: window.offset, total: world.files.length };
+  },
   vaultStatus: async () => ({ indexing: world.indexing }),
   vaultTags: async () => world.tags,
 }));
 vi.mock("../../../state/document-controller", () => ({
+  canShowFile: (id: string) => !world.hidden.includes(id),
   paneOf: () => ({ shown: world.shown, surface: { buffer: world.buffer === undefined ? null : { getDoc: () => world.buffer } } }),
 }));
 vi.mock("../../../state/layout", () => ({
@@ -102,7 +117,7 @@ vi.mock("../../../ui/palette", () => ({
   paletteHistoryForTest: () => ["shell.palette"],
 }));
 
-import { LIST_LIMIT, SEARCH_LIMIT, TEMPLATE_COMMAND, answersAtOnce, listing, selectable, type Row } from "./sources";
+import { FILE_LIMIT, LIST_LIMIT, SEARCH_LIMIT, TEMPLATE_COMMAND, answersAtOnce, forgetFiles, listing, selectable, type Row } from "./sources";
 
 const ask = (mode: Parameters<typeof listing>[0], text: string) => listing(mode, text) as Promise<Awaited<ReturnType<typeof listing>>>;
 const keys = (rows: Row[]) => rows.map((row) => row.key);
@@ -131,6 +146,11 @@ beforeEach(() => {
   world.people = [];
   world.folder = "Persone";
   world.slash = [];
+  world.files = [];
+  world.hidden = [];
+  world.entryPages.length = 0;
+  world.entriesFail = false;
+  forgetFiles();
 });
 
 describe("Tutto, a campo vuoto", () => {
@@ -168,11 +188,11 @@ describe("Tutto, a campo vuoto", () => {
 });
 
 describe("Tutto con un testo", () => {
-  it("le note per nome vengono prima, nel gruppo «Note»", async () => {
+  it("le note per nome vengono prima, nel gruppo «File»", async () => {
     world.names = ["Guida/Banco.md"];
     const answer = await ask("all", " banco ");
     expect(answer.rows).toEqual([
-      { kind: "group", key: "g:notes", title: "launcher.group.notes" },
+      { kind: "group", key: "g:files", title: "launcher.group.files" },
       { kind: "note", key: "n:Guida/Banco.md", doc: "Guida/Banco.md", hit: "name", at: null, snippet: null },
     ]);
   });
@@ -183,7 +203,65 @@ describe("Tutto con un testo", () => {
     // graduatoria: la mostra com'è, e il gruppo dei nomi viene prima.
     world.names = ["Guida/Nota lunga.md", "Benvenuto.md", "Idee/Appunti nota.md"];
     const answer = await ask("all", "nota");
-    expect(keys(answer.rows)).toEqual(["g:notes", "n:Guida/Nota lunga.md", "n:Benvenuto.md", "n:Idee/Appunti nota.md"]);
+    expect(keys(answer.rows)).toEqual(["g:files", "n:Guida/Nota lunga.md", "n:Benvenuto.md", "n:Idee/Appunti nota.md"]);
+  });
+
+  it("un PDF e un'immagine si trovano per nome, come le note, dopo i documenti", async () => {
+    // L'indice dei nomi conosce i documenti; PDF e immagini li conosce
+    // l'anagrafe. «Tutto» apre ogni file che Fub sa mostrare, come il
+    // selettore di prima.
+    world.names = ["Appunti di stampa.md"];
+    world.files = ["R1/Stampa.pdf", "R1/Immagine.png", "Foto/Mare.jpg"];
+    expect(keys((await ask("all", "stampa")).rows)).toEqual(["g:files", "n:R1/Stampa.pdf", "n:Appunti di stampa.md"]);
+    world.names = [];
+    const image = await ask("all", "immagine");
+    expect(image.rows).toEqual([
+      { kind: "group", key: "g:files", title: "launcher.group.files" },
+      { kind: "note", key: "n:R1/Immagine.png", doc: "R1/Immagine.png", hit: "name", at: null, snippet: null },
+    ]);
+    // Il nome conta con l'estensione: «pdf» trova i PDF.
+    expect(keys((await ask("all", "pdf")).rows)).toEqual(["g:files", "n:R1/Stampa.pdf"]);
+  });
+
+  it("un file che si chiama come si è scritto sale dopo i documenti che si chiamano così", async () => {
+    world.names = ["Stampa.md", "Stampa vecchia.md"];
+    world.files = ["Archivio/Una stampa.png", "R1/Stampa.pdf"];
+    expect(keys((await ask("all", "Stampa")).rows)).toEqual([
+      "g:files",
+      "n:Stampa.md",
+      "n:R1/Stampa.pdf",
+      "n:Stampa vecchia.md",
+      "n:Archivio/Una stampa.png",
+    ]);
+  });
+
+  it("i file che nessuna superficie mostra non si offrono, e quelli che l'indice dà non si ripetono", async () => {
+    world.names = ["R1/Stampa.pdf"];
+    world.files = ["R1/Stampa.pdf", "Pacco/stampa.zip"];
+    world.hidden = ["Pacco/stampa.zip"];
+    expect(keys((await ask("all", "stampa")).rows)).toEqual(["g:files", "n:R1/Stampa.pdf"]);
+  });
+
+  it("l'anagrafe si legge tutta a pagine una volta per apertura, e si rilegge quando il lanciatore la dimentica", async () => {
+    world.files = Array.from({ length: 1203 }, (_, i) => `Foto/scatto ${i}.png`);
+    const first = await ask("all", "scatto");
+    expect(first.rows.filter(selectable)).toHaveLength(FILE_LIMIT);
+    expect(world.entryPages).toEqual([{ offset: 0, limit: 500 }, { offset: 500, limit: 500 }, { offset: 1000, limit: 500 }]);
+    await ask("all", "scatto 12");
+    expect(world.entryPages).toHaveLength(3);
+    forgetFiles();
+    world.files = ["Foto/scatto nuovo.png"];
+    expect(keys((await ask("all", "scatto")).rows)).toEqual(["g:files", "n:Foto/scatto nuovo.png"]);
+    expect(world.entryPages).toHaveLength(4);
+  });
+
+  it("se l'anagrafe non risponde le note per nome restano, e la domanda dopo riprova", async () => {
+    world.names = ["Stampa.md"];
+    world.files = ["R1/Stampa.pdf"];
+    world.entriesFail = true;
+    expect(keys((await ask("all", "stampa")).rows)).toEqual(["g:files", "n:Stampa.md"]);
+    world.entriesFail = false;
+    expect(keys((await ask("all", "stampa")).rows)).toEqual(["g:files", "n:Stampa.md", "n:R1/Stampa.pdf"]);
   });
 
   it("la ricerca nel testo porta estratto e punto del primo riscontro, senza ripetere le note per nome", async () => {
@@ -198,7 +276,7 @@ describe("Tutto con un testo", () => {
     const answer = await ask("all", "banco");
     expect(world.asked[0]).toEqual({ expr: { expr: "banco" }, window: { offset: 0, limit: SEARCH_LIMIT } });
     expect(answer.rows).toEqual([
-      { kind: "group", key: "g:notes", title: "launcher.group.notes" },
+      { kind: "group", key: "g:files", title: "launcher.group.files" },
       { kind: "note", key: "n:Uno.md", doc: "Uno.md", hit: "name", at: null, snippet: null },
       { kind: "group", key: "g:text", title: "launcher.group.text" },
       { kind: "note", key: "n:Due.md", doc: "Due.md", hit: "text", at: 7, snippet: { text: "un banco", highlights: [] } },
@@ -224,7 +302,7 @@ describe("Tutto con un testo", () => {
     world.outlineFails = true;
     const answer = await ask("all", "banco");
     expect(answer.note).toBeNull();
-    expect(keys(answer.rows)).toEqual(["g:notes", "n:Guida/Banco.md"]);
+    expect(keys(answer.rows)).toEqual(["g:files", "n:Guida/Banco.md"]);
   });
 
   it("la domanda all'indice dei titoli nomina il vault aperto", async () => {
@@ -236,7 +314,7 @@ describe("Tutto con un testo", () => {
     const answer = await ask("all", '"aperta');
     expect(answer).toEqual({ rows: [], note: "virgolette aperte", total: null });
     world.names = ["Aperta.md"];
-    expect(keys((await ask("all", '"aperta')).rows)).toEqual(["g:notes", "n:Aperta.md"]);
+    expect(keys((await ask("all", '"aperta')).rows)).toEqual(["g:files", "n:Aperta.md"]);
   });
 
   it("senza risultati propone di creare la nota, se il testo può essere un nome", async () => {

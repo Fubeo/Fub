@@ -32,12 +32,17 @@ const world = vi.hoisted(() => ({
   languageListeners: new Set<() => void>(),
   render: null as unknown as (doc: string) => Promise<{ html: string; parts: [] }>,
   rendered: [] as string[],
+  /// Quante volte il lanciatore ha dimenticato i file letti.
+  forgot: 0,
 }));
 
 vi.mock("./sources", () => ({
   TEMPLATE_COMMAND: "note.from_template",
   answersAtOnce: (mode: string) => mode === "commands" || mode === "line" || mode === "blocks" || mode === "help",
   selectable: (row: { kind: string }) => row.kind !== "group",
+  forgetFiles: () => {
+    world.forgot += 1;
+  },
   listing: (mode: string, text: string) => {
     world.asked.push([mode, text]);
     return world.answer(mode, text);
@@ -243,6 +248,7 @@ beforeEach(() => {
   world.answer = () => nothing("niente");
   world.rendered.length = 0;
   world.render = async (doc) => ({ html: `<p>Resa di ${doc}</p>`, parts: [] });
+  world.forgot = 0;
   resizeTo(1280, 800);
   common.switcher.mockClear();
   common.palette.mockClear();
@@ -381,7 +387,7 @@ describe("il campo è un combobox, l'elenco un listbox", () => {
 
   it("un'intestazione di gruppo non è un'opzione: la prima opzione è il primo risultato", () => {
     world.answer = () => listed([
-      { kind: "group", key: "g:notes", title: "Note" },
+      { kind: "group", key: "g:files", title: "Note" },
       note("Guida/Uno.md"),
       { kind: "group", key: "g:text", title: "Nel testo" },
       note("Due.md", { hit: "text", at: 3, snippet: { text: "un banco", highlights: [] } }),
@@ -552,6 +558,30 @@ describe("i modi", () => {
 describe("scegliere una riga", () => {
   beforeEach(() => {
     world.answer = () => listed([note("Guida/Uno.md"), note("Due.md")]);
+  });
+
+  it("un PDF e un'immagine trovati per nome portano l'icona della specie, e Invio li apre", async () => {
+    world.answer = () => listed([note("R1/Stampa.pdf"), note("R1/Immagine.png"), note("Relazione.docx"), note("Due.md")]);
+    launcher.open("all");
+    const icons = [...document.querySelectorAll<HTMLElement>(".launcher-row")].map(
+      (row) => row.querySelector<SVGElement>(".launcher-row-format")?.dataset.icon ?? null,
+    );
+    expect(icons).toEqual(["book", "image", "format-word", null]);
+    expect(document.querySelector(".launcher-row-title")?.textContent).toBe("Stampa");
+    press(field(), "Enter");
+    await settle();
+    expect(world.log).toEqual(["open R1/Stampa.pdf"]);
+  });
+
+  it("ogni apertura dimentica i file letti l'altra volta", () => {
+    launcher.open("all");
+    expect(world.forgot).toBe(1);
+    // Passare a un altro modo non è una nuova apertura.
+    launcher.open("commands");
+    expect(world.forgot).toBe(1);
+    launcher.close();
+    launcher.open("all");
+    expect(world.forgot).toBe(2);
   });
 
   it("Invio apre la riga attiva e chiude", async () => {
@@ -1317,6 +1347,22 @@ describe("l'anteprima accanto all'elenco", () => {
   beforeEach(() => {
     vi.useFakeTimers();
     world.answer = () => listed([note("a/Uno.md"), note("Due.md")]);
+  });
+
+  it("un file che non è un documento non chiede una resa: il riquadro lo dice", async () => {
+    world.answer = () => listed([note("R1/Stampa.pdf"), note("Due.md")]);
+    launcher.open("all");
+    vi.advanceTimersByTime(PREVIEW_DELAY_MS * 3);
+    await settle();
+    expect(world.rendered).toEqual([]);
+    expect(page().childElementCount).toBe(0);
+    expect(paneSays()).toBe("launcher.preview.file");
+    press(field(), "ArrowDown");
+    vi.advanceTimersByTime(PREVIEW_DELAY_MS);
+    await settle();
+    expect(world.rendered).toEqual(["Due.md"]);
+    expect(page().textContent).toBe("Resa di Due.md");
+    expect(paneSays()).toBe("");
   });
 
   it("nel modo dei file mostra la nota della riga attiva, dopo un momento", async () => {

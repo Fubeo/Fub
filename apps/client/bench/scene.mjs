@@ -1178,9 +1178,8 @@ export const SCENE = onPage("shell", [
     title: "Il lanciatore: la ricerca nel testo, come gruppo di Tutto",
     prepare: async (page) => {
       // Tutto non ha prefisso: scrivere e basta cerca anche nel testo, e i
-      // riscontri stanno nell'elenco di Tutto. Il finto indice del banco dà i
-      // riscontri nel testo anche come nomi, quindi il gruppo che li mostra è
-      // quello delle note: il gruppo «Nel testo» lo provano i test.
+      // riscontri stanno nell'elenco di Tutto. Prima il gruppo dei nomi («Nota
+      // lunga»), poi quello «Nel testo», dove sta la nota che si aspetta.
       await page.click("#pill");
       await page.waitForSelector(".launcher-input:focus");
       await page.fill(".launcher-input", SEARCH);
