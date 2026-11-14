@@ -5883,6 +5883,88 @@ Fatto quando: `engine.test.ts` («il doppio clic nel vuoto fa come il
 doppio tocco») rosso prima e verde dopo; lo scenario 3 di T89 senza Invio.
 Stato: [x] fatto · 4ee8c904b · dall'orchestratore (una riga); ha fatto vedere un difetto del test `components.e2e.test.ts`: la spia di `getContext` messa a ogni `beforeEach` senza `restoreAllMocks` chiamava sé stessa dal secondo test in poi (ricorsione infinita appena un canvas non PDF chiede il contesto, come l'editor della scheda in scrittura): l'originale si prende una volta sola
 
+## T101 · Lo stesso contenuto: dall'indice vivo, solo stesso tipo, una domanda sola
+
+Perché: la revisione di T90 (`code-review high`, 2026-11-14) ha trovato
+cinque difetti in «già nel vault» (T30–T32). La ricerca legge solo
+`.fub/data/entries.json`, che si scrive all'apertura e alla chiusura,
+quindi un file copiato nella sessione non si ritrova e la seconda copia
+diventa `foto 1.png`. Il confronto guarda solo i byte, così un `.csv` vuoto
+ritrova una nota vuota qualunque. `record_fingerprint` aggiunge righe al
+file senza il lucchetto di `EntryStore` e può riportare indietro i dati di
+una voce. Infine il client rifà la ricerca intera a ogni nome provato.
+Tocca: `crates/fub-kernel/src/same_content.rs`,
+`crates/fub-kernel/src/entries.rs`, `crates/fub-kernel/tests/same_content.rs`,
+il punto di `crates/fub-host/src/session.rs` che risponde alla domanda
+(`same_content_bytes` e dintorni) coi suoi test, `crates/fub-app` solo se
+la firma cambia (`resources`),
+`apps/client/src/editors/media/attachment-target.ts` col suo test; la riga
+del cancello e la pagina di `docs/` che descrive «già nel vault».
+Non toccare: il formato su disco di `entries.json` (resta una cache
+derivata: niente migrazione); il client della lavagna fuori da
+`attachment-target.ts`; la CI.
+Dipende da: T30–T32; mai insieme a T102 sugli stessi file (non ne ha in
+comune).
+Cosa fare:
+- Prima, per ogni difetto, un test che fallisce sulla base.
+- La domanda la fa l'indice vivo del workspace (le voci in memoria con
+  dimensione e impronta), non il file su disco: un file scritto nella
+  sessione, o cambiato, si ritrova subito. Se l'indice non è pronto, la
+  risposta è «non so» e si copia (D-3 (b): nel dubbio si copia).
+- L'impronta calcolata si registra dove vive l'indice, sotto il suo
+  lucchetto e senza una chiamata al provider col lucchetto preso; niente
+  scrittura del file che scavalchi `EntryStore`. Il file resta coerente con
+  la memoria.
+- Si ritrova solo un file con la stessa estensione, senza badare a
+  maiuscole e minuscole. Un file di 0 byte non si ritrova mai: si copia.
+- Il client chiede «stesso contenuto» una volta sola; i nomi dopo
+  `already_exists` sono scritture semplici «solo se nuovo».
+Fatto quando: un test per ciascun caso: il file copiato nella sessione si
+ritrova alla seconda volta; il `.csv` vuoto e il `.txt` uguale a una `.md`
+non ritrovano niente; una scrittura dell'indice durante la registrazione
+dell'impronta non torna indietro; sei nomi occupati fanno una ricerca sola.
+I test di T30–T32 restano verdi.
+Prova: cargo test -p fub-kernel --test same_content; cargo test -p fub-host;
+npx vitest run src/editors/media; scripts/check.sh --rapido
+Stato: [ ] da fare
+
+## T102 · Le schede che si chiudono non perdono niente
+
+Perché: la revisione di T90 (2026-11-14) ha trovato quattro difetti nel
+client della lavagna. `settle()` in `state/card-editors.ts` ignora
+l'esito `unsaved` di `sessions.release`: una nota scritta in una scheda con
+il salvataggio fallito si perde senza che nessuno chieda niente.
+`destroyText` non chiama `buffer.commitPending()` come fa `destroy()`.
+`noticeCopies` in `state/canvas-intake.ts` segna l'avviso come dato anche
+quando ha detto soltanto «cartella esclusa». `neighbourShowing` in
+`state/document-controller.ts` trova il riquadro a lato solo in una
+divisione piatta.
+Tocca: `apps/client/src/state/card-editors.ts`,
+`apps/client/src/state/canvas-intake.ts`,
+`apps/client/src/state/document-controller.ts` (solo `neighbourShowing`) e
+i loro test; la riga del cancello o la pagina di `docs/` se una regola si
+scrive diversa.
+Non toccare: `editors/media/attachment-target.ts` (T101); il kernel; la
+pelle.
+Dipende da: T96, T30–T32; mai insieme a T101 sugli stessi file (non ne ha
+in comune).
+Cosa fare:
+- Prima, per ogni difetto, un test che fallisce sulla base.
+- Una scheda che si chiude con la sessione sporca passa dalla stessa strada
+  di un riquadro (`keepOrDiscardUnsaved`): bozza tenuta o scelta chiesta,
+  mai testo perso in silenzio.
+- `destroyText` consegna il testo in sospeso prima di distruggere la
+  superficie, come `destroy()`, anche a metà di una composizione IME.
+- L'avviso «dove vanno i file» si segna come dato solo quando ha detto
+  davvero dove sono andati.
+- «Apri a lato» ritrova il riquadro che mostra già il file anche in una
+  disposizione annidata, secondo la regola scritta nella pagina della
+  lavagna.
+Fatto quando: un test per ciascun caso rosso sulla base e verde dopo; i test
+di T96 e di T30–T32 restano verdi.
+Prova: npx vitest run src/state; scripts/check.sh --rapido
+Stato: [ ] da fare
+
 ## Non verificato stanotte
 
 - Niente è stato compilato né provato: la macchina era carica e il disco
