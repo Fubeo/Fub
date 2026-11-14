@@ -40,7 +40,7 @@ pub mod tilt;
 pub use inkml::{from_inkml, to_inkml, InkBrush, InkDocument, InkStroke, InkTip, InkmlError};
 pub use pointer::{PointerKind, PointerSample, Tilt, View};
 pub use pressure::{PenCurve, DEFAULT_CURVE, MAX_MIN, MIN_FULL};
-pub use roles::{classify_pointer, PointerRole, RoleContext, TouchPolicy};
+pub use roles::{classify_pointer, MousePolicy, PointerRole, RoleContext, TouchPolicy};
 pub use sample::{Sample, MAX_SAMPLES};
 pub use session::{
     CancelReason, ConfigError, Effect, FinishedStroke, Session, SessionConfig, StrokeStart,

@@ -36,6 +36,7 @@ default = [
     "commands",
     "blocks",
     "base",
+    "tasks",
     "formatting",
     "proof",
     "rich",
@@ -78,6 +79,13 @@ blocks = []
 # sono comandi di `properties`: stessa dipendenza di funzionamento del template,
 # ripetuta nel manifest.
 base = ["dep:fub-format-base", "properties"]
+# I compiti del vault: la vista che raccoglie i compiti aperti di tutte le note e ne
+# spunta uno col comando `note.task.toggle`. Le note con compiti aperti le dà
+# `query_index` (la foglia `task:todo`, che risponde l'indice di ricerca), quindi
+# la vista non può leggere senza `search`: è una dipendenza di funzionamento,
+# come quella di `trash` da `commands`. Nel manifest non è un `requires` perché
+# `search` non offre un servizio; se il vault spegne la ricerca, la vista lo dice.
+tasks = ["search"]
 # La barra dichiara i pulsanti; la modifica la esegue la shell. Nessuna
 # dipendenza, di compilazione o di funzionamento.
 formatting = []

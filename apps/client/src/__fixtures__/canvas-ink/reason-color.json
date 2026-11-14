@@ -1,0 +1,35 @@
+{
+  "name": "reason-color",
+  "description": "Un colore assente, con un nome, con l'alfa o senza cancelletto: ragione color.",
+  "source": "{\n  \"nodes\": [],\n  \"edges\": [],\n  \"fub:ink\": { \"v\": 1, \"strokes\": [\n    { \"id\": \"s-1\", \"tool\": \"pen\", \"brush\": \"pf1 size=3 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=0 pen=ballpoint\", \"anchor\": { \"kind\": \"free\" }, \"ink\": \"1 s100 cxy 4000,2500 120,40 95,-10\" },\n    { \"id\": \"s-2\", \"tool\": \"pen\", \"brush\": \"pf1 size=3 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=0 pen=ballpoint\", \"color\": \"red\", \"anchor\": { \"kind\": \"free\" }, \"ink\": \"1 s100 cxy 4000,2500 120,40 95,-10\" },\n    { \"id\": \"s-3\", \"tool\": \"pen\", \"brush\": \"pf1 size=3 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=0 pen=ballpoint\", \"color\": \"#0072b2ff\", \"anchor\": { \"kind\": \"free\" }, \"ink\": \"1 s100 cxy 4000,2500 120,40 95,-10\" },\n    { \"id\": \"s-4\", \"tool\": \"pen\", \"brush\": \"pf1 size=3 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=0 pen=ballpoint\", \"color\": \"0072b2\", \"anchor\": { \"kind\": \"free\" }, \"ink\": \"1 s100 cxy 4000,2500 120,40 95,-10\" }\n  ] }\n}\n",
+  "expect": {
+    "layers": [
+      {
+        "layer": "board",
+        "state": "ok",
+        "strokes": [
+          {
+            "id": "s-1",
+            "drawn": false,
+            "reason": "color"
+          },
+          {
+            "id": "s-2",
+            "drawn": false,
+            "reason": "color"
+          },
+          {
+            "id": "s-3",
+            "drawn": false,
+            "reason": "color"
+          },
+          {
+            "id": "s-4",
+            "drawn": false,
+            "reason": "color"
+          }
+        ]
+      }
+    ]
+  }
+}

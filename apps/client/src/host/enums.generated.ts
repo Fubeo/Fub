@@ -178,6 +178,18 @@ export type NoteLevel = "info" | "warning" | "error";
 
 export type PaneMode = "source" | "live_preview" | "reading";
 
+export type PropertyColor =
+  | "gray"
+  | "brown"
+  | "orange"
+  | "yellow"
+  | "green"
+  | "blue"
+  | "purple"
+  | "pink"
+  | "red"
+;
+
 export type PropertyType =
   | "text"
   | "list"
@@ -186,6 +198,9 @@ export type PropertyType =
   | "date"
   | "date_time"
   | "tags"
+  | "select"
+  | "status"
+  | "url"
 ;
 
 export type RenderTarget = "screen" | "print" | "pdf" | "static_site";
@@ -197,6 +212,8 @@ export type SettingSource = "default" | "machine" | "vault";
 export type Severity = "warning" | "failure";
 
 export type SourceKind = "text" | "bytes";
+
+export type StatusGroup = "todo" | "doing" | "done";
 
 export type TaskStatus = "open" | "done";
 

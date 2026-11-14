@@ -1297,6 +1297,84 @@
     "style": []
   },
   {
+    "name": "discussione, commento su un passo con più messaggi",
+    "source": "Il {==passo **forte** con [[Nota]] e #tag==}{>>@Anna Bianchi 2026-11-08 17:40: va riscritto<<}{>>@Bruno Neri 2026-11-09 09:15: d'accordo<<} poi.\n",
+    "tag": [
+      {
+        "name": "tag",
+        "from": 37,
+        "to": 41
+      }
+    ],
+    "wikilink": [
+      {
+        "page": "Nota",
+        "embed": false,
+        "from": 26,
+        "to": 34
+      }
+    ],
+    "task": [],
+    "math": [],
+    "style": [
+      "strong"
+    ]
+  },
+  {
+    "name": "discussione, commento su un punto, senza autore",
+    "source": "Qui {>>2026-11-08: un messaggio senza nome<<} e il resto.\n",
+    "tag": [],
+    "wikilink": [],
+    "task": [],
+    "math": [],
+    "style": []
+  },
+  {
+    "name": "discussione, commento in un titolo, in una voce, in un riquadro e in una cella",
+    "source": "# Titolo {==t==}{>>@Anna 2026-11-08: sul titolo<<}\n\n- voce {==v==}{>>@Anna: sulla voce<<}\n\n> [!note]\n> riquadro {==r==}{>>@Anna: sul riquadro<<}\n\n| a | b |\n| --- | --- |\n| {==c==}{>>@Anna: uno \\| due<<} | d |\n",
+    "tag": [],
+    "wikilink": [],
+    "task": [],
+    "math": [],
+    "style": []
+  },
+  {
+    "name": "discussione, commento con i segni di chiusura nel messaggio",
+    "source": "{==a==}{>>@Anna: x >> y << z<<} fine\n",
+    "tag": [],
+    "wikilink": [],
+    "task": [],
+    "math": [],
+    "style": []
+  },
+  {
+    "name": "discussione, commento scritto a mano da una app che non conosce la convenzione",
+    "source": "Un {==passo==}{>>scritto a mano, senza intestazione<<}.\n",
+    "tag": [],
+    "wikilink": [],
+    "task": [],
+    "math": [],
+    "style": []
+  },
+  {
+    "name": "segni di commento che restano testo",
+    "source": "\\{==letterale==}{>>vero<<} e {==senza messaggio==} e {>>aperto\n\nnuovo<<} paragrafo\n\n`{==a==}{>>b<<}` e $x{>>y<<}$\n",
+    "tag": [],
+    "wikilink": [],
+    "task": [],
+    "math": [
+      {
+        "from": 103,
+        "to": 113,
+        "tex": "x{>>y<<}",
+        "block": false
+      }
+    ],
+    "style": [
+      "code"
+    ]
+  },
+  {
     "name": "frontmatter",
     "source": "---\ntitolo: X\n---\n\n# Corpo\n",
     "tag": [],

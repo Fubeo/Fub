@@ -168,7 +168,7 @@ nomi simili restano dati dell'utente.
 | `.fub/data/plugins/fub.linkcard/cards/*.json`, `.fub/data/plugins/fub.craft/previews/*.json` | derivata | 1 | schede dei collegamenti (`fub.linkcard`), anteprime dei file Craft (`fub.craft`) |
 
 `properties.types` è un valore autorevole dentro `.fub/settings.json`. Il valore
-ha un proprio schema JSON `{ "version": 1, "types": { ... } }`: separa la
+ha uno schema JSON suo, [`{ "version": 1, "types": … }`](property-types.md): separa la
 dichiarazione per nome dai valori, che restano nel frontmatter, e dagli indici,
 che sono ricostruibili. Una versione futura o un valore illeggibile non viene
 riscritto durante la lettura; finché non è compreso, il kernel usa

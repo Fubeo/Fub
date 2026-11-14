@@ -25,6 +25,7 @@ use std::collections::{HashMap, HashSet};
 use serde_json::{Map, Value};
 use thiserror::Error;
 
+use crate::ink::INK_KEY;
 use crate::js::{encode, encode_pretty, js_entries, js_string};
 use crate::model::{Canvas, CanvasEdge, CanvasNode};
 use crate::patch::{same_map, same_value};
@@ -228,6 +229,235 @@ fn slice(source: &str, start: usize, end: usize) -> Result<&str, SourceError> {
     })
 }
 
+// --- Il ritocco di una parte sola ------------------------------------------
+//
+// Un tratto d'inchiostro cambia il livello `fub:ink` di una scheda o della
+// radice, non il resto della lavagna. [`patch_source`] lo scriverebbe
+// leggendo tutto il sorgente; qui si ritocca solo la voce di `nodes` o il
+// valore di `fub:ink` della radice, con lo stesso [`Patcher::render`] che
+// `patch_source` userebbe per loro, e il resto resta com'è. I byte sono gli
+// stessi: lo prova `commit.rs` (`the_local_path_writes_what_the_whole_path_writes`).
+
+/// Dove stanno nel sorgente le voci di `nodes` e il valore di `fub:ink` della
+/// radice, in byte. Lo fa uno scanner su tutto il testo ([`SourceIndex::new`]);
+/// poi lo tiene al passo [`SourceIndex::replaced`], un pezzo sostituito alla
+/// volta, senza rileggere.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SourceIndex {
+    /// `(inizio, fine)` di ogni voce di `nodes`, nell'ordine dell'array.
+    nodes: Vec<(usize, usize)>,
+    /// Il campo `fub:ink` della radice, se c'è.
+    board_ink: Option<BoardInk>,
+}
+
+/// Il campo `fub:ink` della radice: il byte della virgoletta che apre la
+/// chiave e l'intervallo del valore.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct BoardInk {
+    key: usize,
+    start: usize,
+    end: usize,
+}
+
+/// Un pezzo del sorgente da sostituire: `source[start..end]` diventa `text`.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Splice {
+    pub start: usize,
+    pub end: usize,
+    pub text: String,
+}
+
+impl SourceIndex {
+    /// L'indice di `source`; `None` se il sorgente è vuoto (R1) o non è un
+    /// oggetto che lo scanner legge. Un `nodes` che manca o non è un array
+    /// non ha voci.
+    pub fn new(source: &str) -> Option<Self> {
+        if is_blank(source) {
+            return None;
+        }
+        let root = scan(source).ok()?;
+        let SpanKind::Object(fields) = &root.kind else {
+            return None;
+        };
+        let mut index = Self {
+            nodes: Vec::new(),
+            board_ink: None,
+        };
+        for field in fields {
+            match (field.key.as_ref(), &field.value.kind) {
+                ("nodes", SpanKind::Array(items)) => {
+                    index.nodes = items.iter().map(|item| (item.start, item.end)).collect();
+                }
+                (INK_KEY, _) => {
+                    index.board_ink = Some(BoardInk {
+                        key: field.start,
+                        start: field.value.start,
+                        end: field.value.end,
+                    });
+                }
+                _ => {}
+            }
+        }
+        Some(index)
+    }
+
+    /// Quante voci ha `nodes`.
+    pub fn node_count(&self) -> usize {
+        self.nodes.len()
+    }
+
+    /// `(inizio, fine)` della voce `at` di `nodes`.
+    pub fn node_span(&self, at: usize) -> Option<(usize, usize)> {
+        self.nodes.get(at).copied()
+    }
+
+    /// `(inizio, fine)` del valore di `fub:ink` della radice, se c'è.
+    pub fn board_ink_span(&self) -> Option<(usize, usize)> {
+        self.board_ink.map(|ink| (ink.start, ink.end))
+    }
+
+    /// Tiene l'indice al passo con `splice`, già applicato al sorgente. Il
+    /// pezzo deve essere una voce intera o il valore intero di `fub:ink`;
+    /// ciò che sta dopo si sposta. `false` se il pezzo taglia una voce:
+    /// allora l'indice non vale più.
+    pub fn replaced(&mut self, splice: &Splice) -> bool {
+        let Splice { start, end, text } = splice;
+        let moved = |offset: usize| offset - end + start + text.len();
+        let mut whole = true;
+        for span in &mut self.nodes {
+            if (span.0, span.1) == (*start, *end) {
+                span.1 = start + text.len();
+            } else if span.0 >= *end {
+                *span = (moved(span.0), moved(span.1));
+            } else if span.1 > *start {
+                whole = false;
+            }
+        }
+        if let Some(ink) = &mut self.board_ink {
+            if (ink.start, ink.end) == (*start, *end) {
+                ink.end = start + text.len();
+            } else if ink.key >= *end {
+                *ink = BoardInk {
+                    key: moved(ink.key),
+                    start: moved(ink.start),
+                    end: moved(ink.end),
+                };
+            } else if ink.end > *start {
+                whole = false;
+            }
+        }
+        whole
+    }
+}
+
+/// La voce `at` di `nodes` riscritta da `before` (la scheda che il sorgente
+/// tiene lì) ad `after`, con gli stessi byte che darebbe [`patch_source`] se
+/// il resto della lavagna non cambia. `None` se l'indice non torna con il
+/// sorgente: la voce non c'è, lo scanner non la legge come un oggetto che
+/// finisce dove l'indice dice, o il suo `id` non è quello di `before`.
+pub fn patch_node(
+    source: &str,
+    index: &SourceIndex,
+    at: usize,
+    before: &CanvasNode,
+    after: &CanvasNode,
+) -> Result<Option<Splice>, SourceError> {
+    let Some(&(start, end)) = index.nodes.get(at) else {
+        return Ok(None);
+    };
+    // La voce sta nella radice (1) e nell'array `nodes` (2), come per lo
+    // scanner di tutto il testo.
+    let Some(span) = scan_at(source, start, 2) else {
+        return Ok(None);
+    };
+    let SpanKind::Object(fields) = &span.kind else {
+        return Ok(None);
+    };
+    let id = fields
+        .iter()
+        .find(|field| field.key == "id")
+        .and_then(|field| source.get(field.value.start..field.value.end))
+        .and_then(|raw| serde_json::from_str::<String>(raw).ok());
+    if span.end != end || id.as_deref() != Some(before.id.as_str()) {
+        return Ok(None);
+    }
+    let mut text = String::with_capacity(end - start + 256);
+    Patcher { source }.render(
+        &mut text,
+        &span,
+        Some(&node_value(before)?),
+        &node_value(after)?,
+    )?;
+    Ok(Some(Splice { start, end, text }))
+}
+
+/// Il valore di `fub:ink` della radice riscritto da `before` ad `after`,
+/// con gli stessi byte che darebbe [`patch_source`] se la radice tiene la
+/// chiave e il resto della lavagna non cambia. `None` se la radice non ha il
+/// campo o l'indice non torna con il sorgente (anche una chiave scritta con
+/// un escape: allora il ritocco è quello di tutto il testo).
+pub fn patch_board_ink(
+    source: &str,
+    index: &SourceIndex,
+    before: &Value,
+    after: &Value,
+) -> Result<Option<Splice>, SourceError> {
+    let Some(ink) = index.board_ink else {
+        return Ok(None);
+    };
+    let key = format!("\"{INK_KEY}\"");
+    if !source
+        .get(ink.key..ink.start)
+        .is_some_and(|head| head.starts_with(&key))
+    {
+        return Ok(None);
+    }
+    // Il valore di un campo della radice sta a profondità 1.
+    let Some(span) = scan_at(source, ink.start, 1) else {
+        return Ok(None);
+    };
+    if span.end != ink.end {
+        return Ok(None);
+    }
+    let mut text = String::with_capacity(ink.end - ink.start + 256);
+    Patcher { source }.render(&mut text, &span, Some(before), after)?;
+    Ok(Some(Splice {
+        start: ink.start,
+        end: ink.end,
+        text,
+    }))
+}
+
+/// Il sorgente con i pezzi sostituiti; i pezzi sono in ordine e non si
+/// toccano. `None` se un pezzo cade fuori o fra due caratteri.
+pub fn apply_splices(source: &str, splices: &[Splice]) -> Option<String> {
+    let grown: usize = splices.iter().map(|splice| splice.text.len()).sum();
+    let mut out = String::with_capacity(source.len() + grown);
+    let mut from = 0;
+    for splice in splices {
+        if splice.start < from || splice.end < splice.start {
+            return None;
+        }
+        out.push_str(source.get(from..splice.start)?);
+        out.push_str(&splice.text);
+        from = splice.end;
+    }
+    out.push_str(source.get(from..)?);
+    Some(out)
+}
+
+/// Il valore che comincia al byte `pos`, letto come lo leggerebbe lo scanner
+/// di tutto il testo a profondità `depth`; `None` se non si legge.
+fn scan_at(source: &str, pos: usize, depth: usize) -> Option<Span<'_>> {
+    source.get(pos..)?;
+    let mut scanner = Scanner {
+        source,
+        bytes: source.as_bytes(),
+        pos,
+    };
+    scanner.value(depth).ok()
+}
+
 // --- Lo scanner -----------------------------------------------------------
 
 /// Dove sta un valore JSON nel sorgente, in byte: `start` è il primo byte,
@@ -256,6 +486,8 @@ struct Field<'a> {
 /// Legge `source` (un BOM iniziale si salta e resta fuori dalla radice) e
 /// rifiuta una chiave doppia a qualunque profondità.
 fn scan(source: &str) -> Result<Span<'_>, SourceError> {
+    #[cfg(test)]
+    work::scanned(source.len());
     let mut scanner = Scanner {
         source,
         bytes: source.as_bytes(),
@@ -913,4 +1145,25 @@ fn ids(values: &[Value]) -> Option<Vec<&str>> {
         .iter()
         .map(|value| value.get("id").and_then(Value::as_str))
         .collect()
+}
+
+/// Il lavoro dello scanner, per i test che lo contano: quanti byte hanno
+/// letto le scansioni di tutto il testo.
+#[cfg(test)]
+pub(crate) mod work {
+    use std::cell::Cell;
+
+    thread_local! {
+        static WHOLE: Cell<usize> = const { Cell::new(0) };
+    }
+
+    pub(crate) fn scanned(bytes: usize) {
+        WHOLE.with(|whole| whole.set(whole.get() + bytes));
+    }
+
+    /// I byte letti dalle scansioni di tutto il testo da quando il thread è
+    /// partito.
+    pub(crate) fn whole() -> usize {
+        WHOLE.with(Cell::get)
+    }
 }

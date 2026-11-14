@@ -167,6 +167,7 @@ fn the_whole_mounting_table_comes_up_without_a_webview() {
         "fub.stats",
         "fub.sync",
         "fub.tags",
+        "fub.tasks",
         "fub.template",
         "fub.trash",
         "fub.updates",

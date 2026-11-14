@@ -5,15 +5,15 @@
 //! preservano tutte le parti non toccate del YAML e del corpo.
 
 use fub_abi::command::{
-    Args, CommandEffect, CommandOutcome, CommandPlan, CommandReach, CommandScope, CommandSpec,
-    Failure, InvokeMode, ParamKind, ParamSpec, Partial, PlannedEdit, Undo,
+    Args, Choice, CommandEffect, CommandOutcome, CommandPlan, CommandReach, CommandScope,
+    CommandSpec, Failure, InvokeMode, ParamKind, ParamSpec, Partial, PlannedEdit, Undo,
 };
 use fub_abi::edit::{EditRequest, TextEdit};
 use fub_abi::error::PluginError;
 use fub_abi::event::{EventKind, EventMask};
 use fub_abi::model::{
-    DateFormats, DateOrder, DocId, DocumentModel, LinkTarget, PropertyScalar, PropertyType,
-    PropertyTypes, PropertyValue, Span,
+    DateFormats, DateOrder, DocId, DocumentModel, LinkTarget, OptionMatch, PropertyColor,
+    PropertyOption, PropertyScalar, PropertyType, PropertyTypes, PropertyValue, Span, StatusGroup,
 };
 use fub_abi::query::{QueryExpr, QueryPredicate};
 use fub_abi::session::{ContextKind, ContextMask};
@@ -23,7 +23,7 @@ use fub_abi::traits::{
     CommandProvider, Excerpts, HostApi, IndexQuery, IndexResult, PropertyFilter, PropertySelect,
     PropertyTest, ReadApi, ViewInstance, ViewInterests, ViewProvider, ViewSpec, ViewSurface,
 };
-use fub_abi::ui::{ActionRef, Intent, UiAction, UiKind, UiNode, ViewUpdate};
+use fub_abi::ui::{ActionRef, Intent, UiAction, UiKind, UiNode, UiOption, ViewUpdate};
 
 mod catalog;
 mod commands;
@@ -59,6 +59,12 @@ pub const NOTES_PROPERTIES_CLEAR: &str = "note.properties.clear";
 /// Converte le chiavi vecchie di Obsidian (`tag`, `alias`, `cssclass`) nelle
 /// plurali, su tutto il vault.
 pub const PROPERTY_KEYS_MIGRATE: &str = "property.keys.migrate";
+/// Aggiunge, rinomina o colora un'opzione di una proprietà Selezione o Stato
+/// nel registro dei tipi del vault.
+pub const PROPERTY_OPTION_SET: &str = "property.option.set";
+/// Rimette il registro dei tipi com'era, se nessuno l'ha cambiato nel
+/// frattempo: è l'annullo di [`PROPERTY_OPTION_SET`].
+pub const PROPERTY_TYPES_RESTORE: &str = "property.types.restore";
 
 /// Chiavi del core: il formato di data e il registro dei tipi del vault.
 const DATE_FORMAT_KEY: &str = "properties.date-format";
@@ -109,6 +115,27 @@ const P_DELETE: &str = "p_delete";
 const U_DELETE: &str = "u_delete";
 const P_MIGRATE: &str = "p_migrate";
 const U_MIGRATE: &str = "u_migrate";
+const OPTION: &str = "option";
+const NAME: &str = "name";
+const COLOR: &str = "color";
+const GROUP: &str = "group";
+const EXPECTED: &str = "expected";
+const P_OPTION_ADD: &str = "p_option_add";
+const P_OPTION_SET: &str = "p_option_set";
+const P_OPTION_SAME: &str = "p_option_same";
+const U_OPTION: &str = "u_option";
+const P_TYPES_RESTORE: &str = "p_types_restore";
+const U_TYPES_RESTORE: &str = "u_types_restore";
+const E_NOT_CHOICE: &str = "e_not_choice";
+const E_OPTION_EMPTY: &str = "e_option_empty";
+const E_OPTION_TAKEN: &str = "e_option_taken";
+const E_OPTION_MISSING: &str = "e_option_missing";
+const E_COLOR: &str = "e_color";
+const E_GROUP: &str = "e_group";
+const E_GROUP_NOT_STATUS: &str = "e_group_not_status";
+const E_TYPES_CHANGED: &str = "e_types_changed";
+const E_TYPES_UNREADABLE: &str = "e_types_unreadable";
+const E_TYPES_SERIALIZE: &str = "e_types_serialize";
 
 /// Le chiavi singolari che Obsidian ha sostituito con le plurali (1.4).
 const LEGACY_KEYS: [(&str, &str); 3] = [

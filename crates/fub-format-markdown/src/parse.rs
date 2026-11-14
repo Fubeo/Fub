@@ -437,6 +437,7 @@ fn recover_unreferenced_footnotes(source: &str, frontmatter_end: usize, body: &m
 }
 
 mod blocks;
+mod comments;
 mod definition_text;
 mod definitions;
 mod frontmatter;

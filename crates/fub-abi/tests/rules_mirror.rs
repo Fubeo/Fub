@@ -834,6 +834,7 @@ fn search_syntax_cases() -> Vec<Value> {
             false,
         ),
         ("task:todo task:done match-case:API ignore-case:Api", false),
+        ("comment:Anna -comment:\"da rivedere\" passo", false),
         ("/fo+\\/bar/ -/x/", false),
         (
             "[stato] [stato:attivo] [priorità:>2] [scadenza:<2026-10-01] [fatto:false]",

@@ -35,12 +35,17 @@ import { byId, follow } from "./dom";
 /// oltre la misura, una volta, e lo posa.
 const BEAT_SCALE = 0.8;
 
+/// Scrive la voce solo dove cambia: ogni evento di una sessione (ogni tratto
+/// della penna, ogni salvataggio) ridice il salvataggio, e una scrittura
+/// uguale costerebbe lo stesso un ricalcolo della banda.
 function show(el: HTMLElement | null, text: string, tone?: string): void {
   if (!el) return;
-  el.hidden = text === "";
-  el.textContent = text;
-  if (tone) el.dataset.tone = tone;
-  else delete el.dataset.tone;
+  const hidden = text === "";
+  if (el.hidden !== hidden) el.hidden = hidden;
+  if (el.textContent !== text) el.textContent = text;
+  if (tone) {
+    if (el.dataset.tone !== tone) el.dataset.tone = tone;
+  } else if (el.dataset.tone !== undefined) delete el.dataset.tone;
 }
 
 /// Il bottone della modalità: la figura della modalità accesa, il nome e la

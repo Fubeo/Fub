@@ -74,6 +74,7 @@ export const COMPONENT_ICONS: Readonly<Record<string, string>> = {
   "fub.backlinks": "backlinks",
   "fub.outline": "outline",
   "fub.tags": "tag",
+  "fub.tasks": "tasks",
   "fub.properties": "properties",
   "fub.template": "template",
   "fub.queries": "query",

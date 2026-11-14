@@ -31,6 +31,8 @@ pub(super) const SELECT_UNSUPPORTED: &str = "select_unsupported";
 /// soltanto dentro un numero limitato di candidati.
 pub(super) const SCOPE_TOO_MANY: &str = "scope_too_many";
 pub(super) const SCOPE_TOO_LARGE: &str = "scope_too_large";
+/// Il predicato di `comment:` non porta un `TextQuery`.
+pub(super) const COMMENT_QUERY_SHAPE: &str = "comment_query_shape";
 /// I nomi degli argomenti.
 pub(super) const PATH: &str = "path";
 pub(super) const REASON: &str = "reason";
@@ -189,6 +191,10 @@ pub fn catalog() -> Vec<StringCatalog> {
                  aggiungi una parola o un filtro.",
             )
             .with(
+                COMMENT_QUERY_SHAPE,
+                "La ricerca nei commenti vuole un testo da cercare ({reason}).",
+            )
+            .with(
                 SCOPE_TOO_LARGE,
                 "line:, block: e section: leggono al massimo 8 MiB di testo: \
                  aggiungi una parola o un filtro.",
@@ -259,6 +265,10 @@ pub fn catalog() -> Vec<StringCatalog> {
                 SCOPE_TOO_MANY,
                 "line:, block: and section: look at 2048 notes at most: \
                  add a word or a filter.",
+            )
+            .with(
+                COMMENT_QUERY_SHAPE,
+                "The search in comments wants a text to look for ({reason}).",
             )
             .with(
                 SCOPE_TOO_LARGE,

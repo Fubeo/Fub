@@ -1,0 +1,44 @@
+{
+  "name": "image-same-ratio",
+  "description": "Un'immagine ingrandita con le stesse proporzioni: l'inchiostro scala e riempie la scheda, senza spostamento.",
+  "card": {
+    "type": "file",
+    "file": "Foto/grafico.webp"
+  },
+  "ref": {
+    "width": 200,
+    "height": 100
+  },
+  "size": {
+    "width": 400,
+    "height": 200
+  },
+  "expect": {
+    "mode": "scale",
+    "s": 2,
+    "x": 0,
+    "y": 0,
+    "points": [
+      {
+        "from": [
+          10,
+          20
+        ],
+        "to": [
+          20,
+          40
+        ]
+      },
+      {
+        "from": [
+          200,
+          100
+        ],
+        "to": [
+          400,
+          200
+        ]
+      }
+    ]
+  }
+}

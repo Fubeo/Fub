@@ -1,0 +1,17 @@
+{
+  "name": "write-pages-one",
+  "description": "Una pagina sola la dice già il subpath: niente campo.",
+  "file": "Libro.pdf",
+  "parts": {
+    "kind": "pages",
+    "pages": [
+      3
+    ],
+    "layout": "one"
+  },
+  "expect": {
+    "outcome": "written",
+    "subpath": "#page=3",
+    "parts": null
+  }
+}

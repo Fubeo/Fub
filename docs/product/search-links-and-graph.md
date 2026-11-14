@@ -43,18 +43,18 @@ stessa espressione dalla regola `fub_abi::rules::search_syntax`. La sua gemella
 TypeScript è legata da una fixture, così la barra della shell, `fub-cli search`
 e i blocchi `query` incorporati leggono le stesse parole allo stesso modo:
 
-- parole separate da spazi in AND, `"frase esatta"`, `-x` per negare, `OR`
-  maiuscolo fra alternative e `( … )` per raggruppare;
-- `/regex/`, e i filtri di proprietà `[chiave]`, `[chiave:valore]`,
-  `[chiave:>v]`, `[chiave:<v]`, con valori numerici, booleani o date ISO
-  confrontati per specie;
-- gli operatori `tag:`, `path:`, `folder:`, `file:`, `content:`, `heading:`,
-  `ext:`, `task:todo`, `task:done` e `match-case:` e `ignore-case:` (quest’ultimo vince sull’opzione «maiuscole» della barra), con valore anche fra
-  virgolette;
-- `line:`, `block:` e `section:`, che vogliono tutte le parole nella stessa
-  riga scritta, nello stesso blocco (paragrafo, titolo, voce, codice, tabella)
-  o sotto lo stesso titolo: `line:(rosa spina)`, `block:"frase"`. Diventano
-  la foglia `scoped`, che l'indice full-text valuta sui suoi candidati.
+- parole separate da spazi in AND, `"frase esatta"`, `-x` per negare, `OR` maiuscolo fra
+  alternative e `( … )` per raggruppare;
+- `/regex/`, e i filtri di proprietà `[chiave]`, `[chiave:valore]`, `[chiave:>v]`, `[chiave:<v]`,
+  con valori numerici, booleani o date ISO confrontati per specie;
+- gli operatori `tag:`, `path:`, `folder:`, `file:`, `content:`, `heading:`, `ext:`, `task:todo`,
+  `task:done` e `match-case:` e `ignore-case:` (quest’ultimo vince sull’opzione «maiuscole» della
+  barra), con valore anche fra virgolette;
+- `line:`, `block:` e `section:`, che vogliono tutte le parole nella stessa riga scritta, nello stesso
+  blocco (paragrafo, titolo, voce, codice, tabella) o sotto lo stesso titolo: `line:(rosa spina)`,
+  `block:"frase"`. Diventano la foglia `scoped`, che l'indice full-text valuta sui suoi candidati.
+- `comment:parola` cerca nei messaggi dei [commenti](../reference/note-conventions.md), autore compreso,
+  che `content:` non vede: predicato `custom` `fub:comment` col suo `TextQuery`, campo `comments` (schema v9).
 - `due:2026-10-19`, `due:<D`, `due:<=D`, `due:>D` e `due:>=D`: le note con una
   task aperta la cui scadenza (`📅 AAAA-MM-GG` nel suo testo, la scrittura del
   plugin Tasks) cade quel giorno o da quel lato della data. Diventano la foglia

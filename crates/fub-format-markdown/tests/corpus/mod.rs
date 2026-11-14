@@ -265,6 +265,39 @@ pub fn corpus() -> Vec<Case> {
             "commenti ed evidenziati attorno a tag e wikilink",
             "%%a #uno c%% e %%d [[due]] f%%\n\n==g #tre h== ==i [[quattro]]==\n",
         ),
+        // --- i commenti con la discussione (CriticMarkup) ---
+        //
+        // I casi il cui nome comincia con «discussione» sono scritti nella forma
+        // che il serializzatore genera, e tornano byte per byte
+        // (`the_corpus.rs::comments_return_byte_for_byte`). I messaggi qui non
+        // portano link, tag né stili: la passata della shell li legge ancora
+        // come testo della nota, e la divergenza la chiude il suo task.
+        case(
+            "discussione, commento su un passo con più messaggi",
+            "Il {==passo **forte** con [[Nota]] e #tag==}{>>@Anna Bianchi 2026-11-08 17:40: va riscritto<<}{>>@Bruno Neri 2026-11-09 09:15: d'accordo<<} poi.\n",
+        ),
+        case(
+            "discussione, commento su un punto, senza autore",
+            "Qui {>>2026-11-08: un messaggio senza nome<<} e il resto.\n",
+        ),
+        case(
+            "discussione, commento in un titolo, in una voce, in un riquadro e in una cella",
+            "# Titolo {==t==}{>>@Anna 2026-11-08: sul titolo<<}\n\n- voce {==v==}{>>@Anna: sulla voce<<}\n\n> [!note]\n> riquadro {==r==}{>>@Anna: sul riquadro<<}\n\n| a | b |\n| --- | --- |\n| {==c==}{>>@Anna: uno \\| due<<} | d |\n",
+        ),
+        case(
+            "discussione, commento con i segni di chiusura nel messaggio",
+            "{==a==}{>>@Anna: x >> y << z<<} fine\n",
+        ),
+        case(
+            "discussione, commento scritto a mano da una app che non conosce la convenzione",
+            "Un {==passo==}{>>scritto a mano, senza intestazione<<}.\n",
+        ),
+        // Ciò che resta testo: il segno sotto escape, il passo senza messaggio,
+        // il segno che non si chiude nel paragrafo, il codice e la formula.
+        case(
+            "segni di commento che restano testo",
+            "\\{==letterale==}{>>vero<<} e {==senza messaggio==} e {>>aperto\n\nnuovo<<} paragrafo\n\n`{==a==}{>>b<<}` e $x{>>y<<}$\n",
+        ),
         // --- frontmatter ---
         case("frontmatter", "---\ntitolo: X\n---\n\n# Corpo\n"),
         case(

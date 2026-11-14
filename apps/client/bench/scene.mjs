@@ -170,6 +170,41 @@ export const SCENE = onPage("shell", [
       await page.waitForSelector("#context-menu .menu-head");
     },
   })),
+  // La lingua del menu (T81): la barra degli appunti, «Copia come» nella riga,
+  // la scelta che resta accesa e il sottomenu. La ricerca scritta non è una
+  // scena: dopo una lettera lo spazio entra nella ricerca invece di scegliere
+  // la voce, e il banco dell'accessibilità vuole un click da ogni Spazio.
+  ...[
+    ["menu-selezione", "Il tasto destro su una parola scelta: la barra degli appunti e «Copia come» nella riga", async (page) => {
+      await selectWordAndOpen(page);
+    }],
+    ["menu-copia-come", "«Copia come» acceso dalla tastiera, sul segno dell'HTML: il nome del formato nella riga", async (page) => {
+      await selectWordAndOpen(page, { keyboard: true });
+      await page.waitForSelector("#context-menu .menu-choices");
+      await pressUntil(page, "ArrowDown", () => document.querySelector("#context-menu .menu-choices")?.classList.contains("menu-lit") ?? false);
+      await page.keyboard.press("ArrowRight");
+    }],
+    ["menu-appunti-accesi", "La parte «Copia» della barra accesa: la linguetta chiara, e l'elenco spento", async (page) => {
+      await selectWordAndOpen(page, { keyboard: true });
+      await page.keyboard.press("ArrowUp");
+      await page.keyboard.press("ArrowRight");
+    }],
+    ["menu-sottomenu", "Il menu del testo col primo sottomenu aperto dalla tastiera", async (page) => {
+      await page.click('.pane.focus .cm-content .cm-line:has-text("Questa è la nota")', { button: "right", position: { x: 60, y: 8 } });
+      await page.waitForSelector("#context-menu .menu-foot");
+      await page.keyboard.press("ArrowDown");
+      await pressUntil(page, "ArrowDown", () => document.activeElement?.getAttribute("aria-haspopup") === "menu");
+      await page.keyboard.press("ArrowRight");
+      await page.waitForSelector(".context-submenu [role^=menuitem]");
+    }],
+  ].map(([id, title, open]) => ({
+    id,
+    title,
+    prepare: async (page) => {
+      await open(page);
+      await page.waitForSelector("#context-menu .menu-head");
+    },
+  })),
   {
     id: "settings",
     title: "Le preferenze: la configurazione",
@@ -788,6 +823,43 @@ export const SCENE = onPage("shell", [
     viewport: { width, height: 800 },
     prepare: openDrawing,
   })),
+  // **La lavagna** (T61): vuota, con le schede e con una scheda attiva, le
+  // lavagne di `?lavagna=1` (vedi `fake-ipc.ts`). Le schede si raggiungono
+  // col Tab, come le raggiunge chi usa la tastiera, e ognuna ha il suo nome.
+  {
+    id: "lavagna-vuota",
+    title: "Una lavagna vuota: il Tab va al primo pulsante per cominciare",
+    query: "lavagna=1",
+    prepare: async (page) => {
+      await openBoard(page, "Lavagne/Vuota.canvas");
+      await page.keyboard.press("Tab");
+      await page.waitForSelector(".pane.focus .canvas-blank button:focus");
+    },
+  },
+  {
+    id: "lavagna",
+    title: "Una lavagna con un gruppo, quattro schede e tre fili, col fuoco su una scheda raggiunta col Tab",
+    query: "lavagna=1",
+    prepare: async (page) => {
+      await openBoard(page, "Lavagne/Statistica.canvas");
+      // Il gruppo, poi la prima scheda dentro.
+      await page.keyboard.press("Tab");
+      await page.keyboard.press("Tab");
+      await page.waitForSelector('.pane.focus .canvas-node[data-node="varianza"][aria-label]:focus');
+    },
+  },
+  {
+    id: "lavagna-attiva",
+    title: "La stessa lavagna con la scheda della nota attiva, entrata con Invio",
+    query: "lavagna=1",
+    prepare: async (page) => {
+      await openBoard(page, "Lavagne/Statistica.canvas");
+      for (let i = 0; i < 3; i++) await page.keyboard.press("Tab");
+      await page.waitForSelector('.pane.focus .canvas-node[data-node="media"]:focus');
+      await page.keyboard.press("Enter");
+      await page.waitForSelector('.pane.focus .canvas-node[data-node="media"][data-card-active]');
+    },
+  },
   // **I documenti di videoscrittura**: un `.docx` e un `.odt` aperti dalla
   // proiezione vera del codec (`?rich=…`, vedi `fake-ipc.ts`), largo e nella
   // finestra di un documento appena aperto.
@@ -1810,6 +1882,17 @@ async function openFromTree(page, path, ready) {
   }
 }
 
+/// Apre la lavagna `path` dall'albero e dà il fuoco alla lavagna, come un clic
+/// nel vuoto: da lì parte il Tab delle scene `lavagna-*`.
+async function openBoard(page, path) {
+  await openFromTree(page, path, ".pane.focus .canvas-viewport");
+  await page.waitForFunction(
+    () => document.querySelector(".pane.focus .canvas-viewport")?.dataset.canvasProtocol !== undefined
+      || document.querySelector(".pane.focus .canvas-blank:not([hidden])") !== null,
+  );
+  await page.focus(".pane.focus .canvas-viewport");
+}
+
 /// Apre il disegno dei connettori e aspetta che sia dipinto, col fuoco sulla
 /// tela.
 async function openDrawing(page) {
@@ -2116,6 +2199,35 @@ async function openFolder(page, path) {
     item,
   );
   if (!open) await page.click(row);
+}
+
+/// Sceglie la parola «nota» della prima riga e apre il suo menu: col tasto
+/// destro sopra la parola, o dalla tastiera (Maiusc+F10), che parte dalla
+/// prima voce.
+async function selectWordAndOpen(page, { keyboard = false } = {}) {
+  const word = page.locator(".pane.focus .cm-content .cm-line >> text=/Questa è la nota/").first();
+  await word.waitFor();
+  const box = await word.boundingBox();
+  // «Questa è la »: la parola «nota» sta dopo i primi dodici caratteri.
+  const x = box.x + (await word.evaluate((line) => {
+    const range = document.createRange();
+    const text = line.firstChild?.nodeType === Node.TEXT_NODE ? line.firstChild : line.querySelector("*")?.firstChild ?? line.firstChild;
+    const at = text.textContent.indexOf("nota");
+    range.setStart(text, at);
+    range.setEnd(text, at + 2);
+    const rect = range.getBoundingClientRect();
+    return rect.right - line.getBoundingClientRect().left;
+  }));
+  const y = box.y + Math.min(box.height / 2, 10);
+  await page.mouse.dblclick(x, y);
+  if (keyboard) await page.keyboard.press("Shift+F10");
+  else await page.mouse.click(x, y, { button: "right" });
+  await page.waitForSelector("#context-menu .menu-clipboard");
+}
+
+/// Preme `key` finché `done` non dice di sì, al più dodici volte.
+async function pressUntil(page, key, done) {
+  for (let tries = 0; tries < 12 && !(await page.evaluate(done)); tries++) await page.keyboard.press(key);
 }
 
 /// Aspetta che il grafo abbia smesso di muoversi.

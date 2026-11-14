@@ -13,6 +13,21 @@
 //! L'editor della lavagna sta nel client (`editors/canvas`): questo modulo è
 //! la strada per chi la cambia senza vederla, cioè la palette, la riga di
 //! comando e un agente.
+//!
+//! # Le impostazioni
+//!
+//! [`settings`] dichiara le tredici impostazioni del gruppo «Lavagna», nell'ordine
+//! del pannello. Le prime sei sono della macchina, come i modi di scrivere e
+//! di toccare di questo computer; le altre sono del vault. Due dicono come si
+//! scrive e si tocca: [`CANVAS_INK_MOUSE_REMEMBER_KEY`] fa ricordare a ogni
+//! lavagna del computer se «Scrivi col mouse» era acceso, e
+//! [`CANVAS_FINGER_MOVES_CARD_KEY`] lascia al dito spostare la scheda che tocca.
+//! Le altre regolano il tasto della penna, la rotella, il trascinamento nel
+//! vuoto ([`CANVAS_DRAG_EMPTY_KEY`]), lo spazio di lavoro, la
+//! colonna, la griglia, l'aggancio, le parti di una nota e dove vanno i file
+//! trascinati. Le legge l'editor della lavagna (`editors/canvas/preferences.ts`
+//! nel client), che le segue dal vivo; il test del client
+//! `editors/canvas/settings-mirror.test.ts` confronta nomi, valori e ambiti.
 
 mod apply;
 mod create;
@@ -21,8 +36,10 @@ use fub_abi::command::{
     CommandOutcome, CommandReach, CommandScope, CommandSpec, InvokeMode, ParamKind, ParamSpec,
 };
 use fub_abi::error::PluginError;
+use fub_abi::settings::{SettingKind, SettingSpec};
 use fub_abi::text::{StringCatalog, Text};
 use fub_abi::traits::{CommandProvider, HostApi};
+use fub_abi::ui::UiOption;
 
 /// L'id del componente, lo stesso della sua riga nella mappa.
 pub const LAVAGNA_ID: &str = "fub.lavagna";
@@ -35,6 +52,72 @@ pub const CANVAS_CREATE: &str = "canvas.create";
 
 /// Il namespace dell'effetto che dice che cosa ha fatto `canvas.apply`.
 pub const LAVAGNA_NS: &str = LAVAGNA_ID;
+
+/// L'impostazione «Ricorda se scrivi col mouse»: accesa, ogni lavagna del
+/// computer si apre con «Scrivi col mouse» come l'ha lasciato l'ultima.
+pub const CANVAS_INK_MOUSE_REMEMBER_KEY: &str = "canvas.ink_mouse_remember";
+
+/// L'impostazione «Il dito sposta le schede»: accesa, il dito sposta la
+/// scheda che tocca, e la lavagna solo dove non ci sono schede.
+pub const CANVAS_FINGER_MOVES_CARD_KEY: &str = "canvas.finger_moves_card";
+
+/// L'impostazione «Il dito scrive»: acceso, su uno schermo touch un dito scrive
+/// con la penna scelta, come una penna vera.
+pub const CANVAS_FINGER_WRITES_KEY: &str = "canvas.finger_writes";
+
+/// L'impostazione «Il tasto della penna»: che cosa fa il tasto sul fianco della
+/// penna. Il primo valore è quello di serie.
+pub const CANVAS_PEN_BUTTON_KEY: &str = "canvas.pen_button";
+/// I valori di [`CANVAS_PEN_BUTTON_KEY`], nell'ordine dei pulsanti.
+pub const CANVAS_PEN_BUTTON_VALUES: [&str; 4] = ["radial", "eraser", "pan", "lasso"];
+
+/// L'impostazione «La rotella del mouse»: che cosa fa fuori da una scheda attiva.
+pub const CANVAS_WHEEL_KEY: &str = "canvas.wheel";
+/// I valori di [`CANVAS_WHEEL_KEY`]. Il primo è quello di serie.
+pub const CANVAS_WHEEL_VALUES: [&str; 2] = ["pan", "zoom"];
+
+/// L'impostazione «Trascinare nel vuoto»: che cosa fa il trascinamento col tasto
+/// sinistro sul vuoto della lavagna, con la Selezione. Il primo valore è quello di
+/// serie.
+pub const CANVAS_DRAG_EMPTY_KEY: &str = "canvas.drag_empty";
+/// I valori di [`CANVAS_DRAG_EMPTY_KEY`]: «sceglie» disegna un rettangolo e sceglie
+/// le schede che tocca; «sposta la vista» sposta la lavagna come prima.
+pub const CANVAS_DRAG_EMPTY_VALUES: [&str; 2] = ["select", "pan"];
+
+/// L'impostazione «Spazio di lavoro»: quanti strumenti e pannelli mostra la
+/// lavagna.
+pub const CANVAS_WORKSPACE_KEY: &str = "canvas.workspace";
+/// I valori di [`CANVAS_WORKSPACE_KEY`]. Il primo è quello di serie.
+pub const CANVAS_WORKSPACE_VALUES: [&str; 3] = ["auto", "full", "simple"];
+
+/// L'impostazione «Strumenti della colonna»: gli strumenti della colonna, nell'ordine
+/// in cui compaiono. Una lista vuota vale quella di serie.
+pub const CANVAS_TOOLBAR_KEY: &str = "canvas.toolbar";
+
+/// L'impostazione «Griglia»: mostra i punti della griglia sulla lavagna.
+pub const CANVAS_GRID_KEY: &str = "canvas.grid";
+
+/// L'impostazione «Aggancia le schede»: i bordi di una scheda che si sposta o si
+/// ridimensiona si agganciano alle schede vicine e alla griglia.
+pub const CANVAS_SNAP_KEY: &str = "canvas.snap";
+
+/// L'impostazione «Scegli le parti di una nota»: a una nota con titoli, portata
+/// sulla lavagna, si apre l'elenco delle sue parti.
+pub const CANVAS_PARTS_PICKER_KEY: &str = "canvas.parts_picker";
+
+/// L'impostazione «Dove vanno i file trascinati»: dove si copiano i file portati
+/// sulla lavagna dal computer, o incollati. Il primo valore è quello di serie.
+pub const CANVAS_DROP_FOLDER_KEY: &str = "canvas.drop_folder";
+/// I valori di [`CANVAS_DROP_FOLDER_KEY`]. Il primo è quello di serie.
+pub const CANVAS_DROP_FOLDER_VALUES: [&str; 3] = ["notes", "board", "folder"];
+
+/// L'impostazione «Cartella dei file trascinati»: il nome della cartella accanto
+/// alla lavagna, o il percorso nel vault per il valore `folder`. Il percorso non
+/// si controlla qui: il client, che lo usa, riporta a [`CANVAS_DROP_FOLDER_PATH_DEFAULT`]
+/// un nome che non va bene.
+pub const CANVAS_DROP_FOLDER_PATH_KEY: &str = "canvas.drop_folder_path";
+/// Il valore di serie di [`CANVAS_DROP_FOLDER_PATH_KEY`].
+pub const CANVAS_DROP_FOLDER_PATH_DEFAULT: &str = "Allegati";
 
 const DOC: &str = "doc";
 const OPS: &str = "ops";
@@ -62,6 +145,8 @@ const E_OP_DUPLICATE: &str = "canvas.apply.e_op_duplicate";
 const E_OP_TOO_MANY_NODES: &str = "canvas.apply.e_op_too_many_nodes";
 const E_OP_TOO_MANY_EDGES: &str = "canvas.apply.e_op_too_many_edges";
 const E_OP_INVALID: &str = "canvas.apply.e_op_invalid";
+const E_OP_UNKNOWN_STROKE: &str = "canvas.apply.e_op_unknown_stroke";
+const E_OP_FOREIGN_LAYER: &str = "canvas.apply.e_op_foreign_layer";
 const E_COMMIT_STALE: &str = "canvas.apply.e_commit_stale";
 const E_COMMIT_INVALID: &str = "canvas.apply.e_commit_invalid";
 const E_COMMIT_REJECTED: &str = "canvas.apply.e_commit_rejected";
@@ -85,6 +170,196 @@ const E_NAME_DEVICE: &str = "canvas.create.e_name_device";
 const E_NAME_TRAILING_DOT: &str = "canvas.create.e_name_trailing_dot";
 const E_NAME_HIDDEN: &str = "canvas.create.e_name_hidden";
 const E_NAME_TOO_LONG: &str = "canvas.create.e_name_too_long";
+
+const S_GROUP: &str = "s_group";
+const S_INK_MOUSE_REMEMBER: &str = "s_ink_mouse_remember";
+const S_INK_MOUSE_REMEMBER_DESC: &str = "s_ink_mouse_remember_desc";
+const S_FINGER_MOVES_CARD: &str = "s_finger_moves_card";
+const S_FINGER_MOVES_CARD_DESC: &str = "s_finger_moves_card_desc";
+const S_FINGER_WRITES: &str = "s_finger_writes";
+const S_FINGER_WRITES_DESC: &str = "s_finger_writes_desc";
+const S_PEN_BUTTON: &str = "s_pen_button";
+const S_PEN_BUTTON_DESC: &str = "s_pen_button_desc";
+const S_PEN_BUTTON_RADIAL: &str = "s_pen_button_radial";
+const S_PEN_BUTTON_ERASER: &str = "s_pen_button_eraser";
+const S_PEN_BUTTON_PAN: &str = "s_pen_button_pan";
+const S_PEN_BUTTON_LASSO: &str = "s_pen_button_lasso";
+const S_WHEEL: &str = "s_wheel";
+const S_WHEEL_DESC: &str = "s_wheel_desc";
+const S_WHEEL_PAN: &str = "s_wheel_pan";
+const S_WHEEL_ZOOM: &str = "s_wheel_zoom";
+const S_DRAG_EMPTY: &str = "s_drag_empty";
+const S_DRAG_EMPTY_DESC: &str = "s_drag_empty_desc";
+const S_DRAG_EMPTY_SELECT: &str = "s_drag_empty_select";
+const S_DRAG_EMPTY_PAN: &str = "s_drag_empty_pan";
+const S_WORKSPACE: &str = "s_workspace";
+const S_WORKSPACE_DESC: &str = "s_workspace_desc";
+const S_WORKSPACE_AUTO: &str = "s_workspace_auto";
+const S_WORKSPACE_FULL: &str = "s_workspace_full";
+const S_WORKSPACE_SIMPLE: &str = "s_workspace_simple";
+const S_TOOLBAR: &str = "s_toolbar";
+const S_TOOLBAR_DESC: &str = "s_toolbar_desc";
+const S_GRID: &str = "s_grid";
+const S_GRID_DESC: &str = "s_grid_desc";
+const S_SNAP: &str = "s_snap";
+const S_SNAP_DESC: &str = "s_snap_desc";
+const S_PARTS_PICKER: &str = "s_parts_picker";
+const S_PARTS_PICKER_DESC: &str = "s_parts_picker_desc";
+const S_DROP_FOLDER: &str = "s_drop_folder";
+const S_DROP_FOLDER_DESC: &str = "s_drop_folder_desc";
+const S_DROP_FOLDER_NOTES: &str = "s_drop_folder_notes";
+const S_DROP_FOLDER_BOARD: &str = "s_drop_folder_board";
+const S_DROP_FOLDER_FOLDER: &str = "s_drop_folder_folder";
+const S_DROP_FOLDER_PATH: &str = "s_drop_folder_path";
+const S_DROP_FOLDER_PATH_DESC: &str = "s_drop_folder_path_desc";
+
+/// Lo schema delle impostazioni della lavagna: le tredici del gruppo «Lavagna»,
+/// nell'ordine del pannello.
+///
+/// Le prime sei sono della **macchina**, come i suggerimenti dei disegni:
+/// dicono come si scrive e si tocca su questo computer (un mouse, uno schermo
+/// touch, una penna), non che cosa contiene il vault, e su un vault condiviso
+/// non cambiano le mani degli altri. Le altre sono del **vault**: la colonna,
+/// la griglia e i file trascinati appartengono a quella lavagna. Li scrive chi
+/// usa Fub dalle Impostazioni; nessuna è `program_writable`.
+///
+/// Il valore di una scelta è il suo id stabile, il primo della lista è quello di
+/// serie; la frase che lo mostra sta nel catalogo, in italiano e in inglese.
+pub fn settings() -> Vec<SettingSpec> {
+    vec![
+        row(
+            CANVAS_INK_MOUSE_REMEMBER_KEY,
+            S_INK_MOUSE_REMEMBER,
+            S_INK_MOUSE_REMEMBER_DESC,
+            SettingKind::Toggle { default: false },
+        )
+        .for_machine(),
+        row(
+            CANVAS_FINGER_MOVES_CARD_KEY,
+            S_FINGER_MOVES_CARD,
+            S_FINGER_MOVES_CARD_DESC,
+            SettingKind::Toggle { default: false },
+        )
+        .for_machine(),
+        row(
+            CANVAS_FINGER_WRITES_KEY,
+            S_FINGER_WRITES,
+            S_FINGER_WRITES_DESC,
+            SettingKind::Toggle { default: false },
+        )
+        .for_machine(),
+        row(
+            CANVAS_PEN_BUTTON_KEY,
+            S_PEN_BUTTON,
+            S_PEN_BUTTON_DESC,
+            choice(
+                &CANVAS_PEN_BUTTON_VALUES,
+                &[
+                    S_PEN_BUTTON_RADIAL,
+                    S_PEN_BUTTON_ERASER,
+                    S_PEN_BUTTON_PAN,
+                    S_PEN_BUTTON_LASSO,
+                ],
+            ),
+        )
+        .for_machine(),
+        row(
+            CANVAS_WHEEL_KEY,
+            S_WHEEL,
+            S_WHEEL_DESC,
+            choice(&CANVAS_WHEEL_VALUES, &[S_WHEEL_PAN, S_WHEEL_ZOOM]),
+        )
+        .for_machine(),
+        row(
+            CANVAS_DRAG_EMPTY_KEY,
+            S_DRAG_EMPTY,
+            S_DRAG_EMPTY_DESC,
+            choice(
+                &CANVAS_DRAG_EMPTY_VALUES,
+                &[S_DRAG_EMPTY_SELECT, S_DRAG_EMPTY_PAN],
+            ),
+        )
+        .for_machine(),
+        row(
+            CANVAS_WORKSPACE_KEY,
+            S_WORKSPACE,
+            S_WORKSPACE_DESC,
+            choice(
+                &CANVAS_WORKSPACE_VALUES,
+                &[S_WORKSPACE_AUTO, S_WORKSPACE_FULL, S_WORKSPACE_SIMPLE],
+            ),
+        ),
+        row(
+            CANVAS_TOOLBAR_KEY,
+            S_TOOLBAR,
+            S_TOOLBAR_DESC,
+            SettingKind::List {
+                default: Vec::new(),
+            },
+        ),
+        row(
+            CANVAS_GRID_KEY,
+            S_GRID,
+            S_GRID_DESC,
+            SettingKind::Toggle { default: true },
+        ),
+        row(
+            CANVAS_SNAP_KEY,
+            S_SNAP,
+            S_SNAP_DESC,
+            SettingKind::Toggle { default: true },
+        ),
+        row(
+            CANVAS_PARTS_PICKER_KEY,
+            S_PARTS_PICKER,
+            S_PARTS_PICKER_DESC,
+            SettingKind::Toggle { default: true },
+        ),
+        row(
+            CANVAS_DROP_FOLDER_KEY,
+            S_DROP_FOLDER,
+            S_DROP_FOLDER_DESC,
+            choice(
+                &CANVAS_DROP_FOLDER_VALUES,
+                &[
+                    S_DROP_FOLDER_NOTES,
+                    S_DROP_FOLDER_BOARD,
+                    S_DROP_FOLDER_FOLDER,
+                ],
+            ),
+        ),
+        row(
+            CANVAS_DROP_FOLDER_PATH_KEY,
+            S_DROP_FOLDER_PATH,
+            S_DROP_FOLDER_PATH_DESC,
+            SettingKind::Text {
+                default: CANVAS_DROP_FOLDER_PATH_DEFAULT.to_string(),
+            },
+        ),
+    ]
+}
+
+/// Una riga della sezione «Lavagna»: la chiave, il nome, la descrizione e la
+/// specie. Ambito di serie il vault; chi è della macchina lo dice con
+/// `for_machine`.
+fn row(key: &str, label: &str, description: &str, kind: SettingKind) -> SettingSpec {
+    SettingSpec::new(key, Text::key(label), kind)
+        .describing(Text::key(description))
+        .grouped(Text::key(S_GROUP))
+}
+
+/// Una scelta fra `values`, ognuno con la frase di `labels` nello stesso ordine.
+/// Il primo valore è quello di serie.
+fn choice(values: &[&str], labels: &[&str]) -> SettingKind {
+    SettingKind::Choice {
+        default: values.first().copied().unwrap_or_default().to_string(),
+        options: values
+            .iter()
+            .zip(labels)
+            .map(|(value, label)| UiOption::new(*value, Text::key(*label)))
+            .collect(),
+    }
+}
 
 /// I comandi della lavagna.
 pub struct LavagnaCommands;
@@ -254,6 +529,16 @@ const STRINGS: &[(&str, &str, &str)] = &[
         "Operation {position}: {reason}",
     ),
     (
+        E_OP_UNKNOWN_STROKE,
+        "Operazione {position}: nell'inchiostro non c'è il tratto «{id}».",
+        "Operation {position}: there is no stroke \"{id}\" in the ink.",
+    ),
+    (
+        E_OP_FOREIGN_LAYER,
+        "Operazione {position}: questo inchiostro non è scritto da Fub, e Fub non lo modifica.",
+        "Operation {position}: this ink was not written by Fub, and Fub does not change it.",
+    ),
+    (
         E_COMMIT_STALE,
         "Le operazioni non corrispondono più alla lavagna {doc}: riprova.",
         "The operations no longer match the whiteboard {doc}: retry.",
@@ -364,6 +649,107 @@ const STRINGS: &[(&str, &str, &str)] = &[
         "La lavagna non può chiamarsi «{doc}»: «{segment}» è troppo lungo (il massimo è {max} byte).",
         "The whiteboard cannot be called «{doc}»: «{segment}» is too long (at most {max} bytes).",
     ),
+    (S_GROUP, "Lavagna", "Whiteboard"),
+    (
+        S_INK_MOUSE_REMEMBER,
+        "Ricorda se scrivi col mouse",
+        "Remember whether you write with the mouse",
+    ),
+    (
+        S_INK_MOUSE_REMEMBER_DESC,
+        "Riaprendo una lavagna, l'interruttore «Scrivi col mouse» resta come l'hai lasciato. Spenta, la lavagna si apre sempre con l'interruttore spento. Il tasto D funziona sempre.",
+        "When you reopen a whiteboard, the «Write with the mouse» switch stays as you left it. Off, the whiteboard always opens with the switch off. The D key always works.",
+    ),
+    (
+        S_FINGER_MOVES_CARD,
+        "Il dito sposta le schede",
+        "A finger moves the cards",
+    ),
+    (
+        S_FINGER_MOVES_CARD_DESC,
+        "Sullo schermo touch il dito sposta la scheda che tocca, e la lavagna solo dove non ci sono schede. Spenta, il dito sposta sempre la lavagna e una scheda si sposta dalla sua testata. Due dita ingrandiscono sempre.",
+        "On a touch screen a finger moves the card it touches, and the whiteboard only where there are no cards. Off, a finger always moves the whiteboard and a card moves by its header. Two fingers always zoom.",
+    ),
+    (S_FINGER_WRITES, "Il dito scrive", "A finger writes"),
+    (
+        S_FINGER_WRITES_DESC,
+        "Sullo schermo touch un dito scrive con la penna scelta, come una penna vera; due dita spostano e ingrandiscono. Si cambia anche dall'interruttore in fondo alla colonna.",
+        "On a touch screen, a finger writes with the chosen pen, like a real pen. Two fingers move and zoom. It can also be changed with the switch at the bottom of the column.",
+    ),
+    (S_PEN_BUTTON, "Il tasto della penna", "The pen button"),
+    (
+        S_PEN_BUTTON_DESC,
+        "Che cosa fa il tasto sul fianco della penna: apre il menu radiale, cancella come il retro della penna, sposta la lavagna o sceglie col lazo. Su un computer senza penna non fa niente.",
+        "What the button on the side of the pen does: it opens the radial menu, erases like the back of the pen, moves the whiteboard or selects with the lasso. On a computer without a pen it does nothing.",
+    ),
+    (S_PEN_BUTTON_RADIAL, "Apre il menu", "Opens the menu"),
+    (S_PEN_BUTTON_ERASER, "Cancella", "Erases"),
+    (S_PEN_BUTTON_PAN, "Sposta la lavagna", "Moves the whiteboard"),
+    (S_PEN_BUTTON_LASSO, "Sceglie col lazo", "Selects with the lasso"),
+    (S_WHEEL, "La rotella del mouse", "The mouse wheel"),
+    (
+        S_WHEEL_DESC,
+        "Che cosa fa la rotella fuori da una scheda attiva. Ctrl+rotella e il pizzico ingrandiscono sempre; dentro una scheda attiva la rotella scorre la scheda.",
+        "What the wheel does outside an active card. Ctrl+wheel and pinch always zoom. Inside an active card, the wheel scrolls the card.",
+    ),
+    (S_WHEEL_PAN, "Sposta la lavagna", "Moves the whiteboard"),
+    (S_WHEEL_ZOOM, "Ingrandisce", "Zooms"),
+    (S_DRAG_EMPTY, "Trascinare nel vuoto", "Dragging on empty space"),
+    (
+        S_DRAG_EMPTY_DESC,
+        "Che cosa fa il trascinamento col tasto sinistro sul vuoto della lavagna, con la Selezione. «Sceglie» disegna un rettangolo e sceglie le schede che tocca; Maiusc aggiunge alla scelta, Esc la annulla. «Sposta la vista» sposta la lavagna, come prima. Spazio, il tasto di mezzo e la rotella spostano sempre la vista.",
+        "What a left-button drag on empty space does, with the Selection tool. «Selects» draws a rectangle and chooses the cards it touches; Shift adds to the choice, Esc cancels it. «Moves the view» moves the whiteboard, as before. Space, the middle button and the wheel always move the view.",
+    ),
+    (S_DRAG_EMPTY_SELECT, "Sceglie", "Selects"),
+    (S_DRAG_EMPTY_PAN, "Sposta la vista", "Moves the view"),
+    (S_WORKSPACE, "Spazio di lavoro", "Workspace"),
+    (
+        S_WORKSPACE_DESC,
+        "Completo offre tutti gli strumenti, il navigatore e l'ispettore; Semplice ha la colonna ridotta e caselle grandi, per il dito e la penna. Automatico sceglie Semplice sui dispositivi che hanno solo il tocco.",
+        "Full shows all the tools, the navigator and the inspector. Simple has a smaller column and large boxes, for the finger and the pen. Automatic chooses Simple on devices that only have touch.",
+    ),
+    (S_WORKSPACE_AUTO, "Automatico", "Automatic"),
+    (S_WORKSPACE_FULL, "Completo", "Full"),
+    (S_WORKSPACE_SIMPLE, "Semplice", "Simple"),
+    (S_TOOLBAR, "Strumenti della colonna", "Column tools"),
+    (
+        S_TOOLBAR_DESC,
+        "Gli strumenti che la colonna della lavagna mostra, in ordine; vuota, quelli di serie. Uno strumento tolto resta raggiungibile dai tasti e da Ctrl+/.",
+        "The tools the whiteboard column shows, in order. When it is empty, it shows the default ones. A tool you remove can still be used with its key or with Ctrl+/.",
+    ),
+    (S_GRID, "Griglia", "Grid"),
+    (
+        S_GRID_DESC,
+        "Mostra i punti della griglia sulla lavagna. Ctrl+' la mostra o la nasconde solo per la lavagna aperta.",
+        "Shows the grid dots on the whiteboard. Ctrl+' shows or hides it only for the open whiteboard.",
+    ),
+    (S_SNAP, "Aggancia le schede", "Snap cards"),
+    (
+        S_SNAP_DESC,
+        "Spostando o ridimensionando una scheda, i bordi si agganciano alle schede vicine e alla griglia. Alt tenuto lo spegne per quel gesto.",
+        "When you move or resize a card, its edges snap to nearby cards and to the grid. Holding Alt turns it off for that gesture.",
+    ),
+    (S_PARTS_PICKER, "Scegli le parti di una nota", "Choose the parts of a note"),
+    (
+        S_PARTS_PICKER_DESC,
+        "Portando sulla lavagna una nota con almeno due titoli, accanto alla scheda si apre l'elenco dei titoli per tenerne solo alcuni. Con Alt, mentre la lasci, arriva intera.",
+        "When you bring a note with at least two headings onto the whiteboard, a list of its headings opens next to the card, so you can keep only some. Hold Alt while you drop it to bring the whole note.",
+    ),
+    (S_DROP_FOLDER, "Dove vanno i file trascinati", "Where dragged files go"),
+    (
+        S_DROP_FOLDER_DESC,
+        "I file portati sulla lavagna dal computer, o incollati, si copiano nel vault qui. «Con le note» segue la cartella degli allegati delle note; «Con la lavagna» li mette in una cartella accanto alla lavagna; «In una cartella» sempre nella stessa cartella del vault. Un file che è già nel vault non si copia.",
+        "Files you bring onto the whiteboard from your computer, or paste, are copied into the vault here. «With the notes» uses the attachments folder of the notes. «With the whiteboard» uses a folder next to the whiteboard. «In a folder» always uses the same folder of the vault. A file already in the vault is not copied.",
+    ),
+    (S_DROP_FOLDER_NOTES, "Con le note", "With the notes"),
+    (S_DROP_FOLDER_BOARD, "Con la lavagna", "With the whiteboard"),
+    (S_DROP_FOLDER_FOLDER, "In una cartella", "In a folder"),
+    (S_DROP_FOLDER_PATH, "Cartella dei file trascinati", "Folder for dragged files"),
+    (
+        S_DROP_FOLDER_PATH_DESC,
+        "Il nome della cartella accanto alla lavagna, o il percorso nel vault per «In una cartella». Con «Con le note» non si usa.",
+        "The name of a folder next to the whiteboard, or the path in the vault for «In a folder». It is not used with «With the notes».",
+    ),
 ];
 
 /// Le stringhe del componente.
@@ -404,6 +790,8 @@ mod tests {
             E_OP_TOO_MANY_NODES,
             E_OP_TOO_MANY_EDGES,
             E_OP_INVALID,
+            E_OP_UNKNOWN_STROKE,
+            E_OP_FOREIGN_LAYER,
             E_COMMIT_STALE,
             E_COMMIT_INVALID,
             E_COMMIT_REJECTED,
@@ -425,6 +813,43 @@ mod tests {
             E_NAME_TRAILING_DOT,
             E_NAME_HIDDEN,
             E_NAME_TOO_LONG,
+            S_GROUP,
+            S_INK_MOUSE_REMEMBER,
+            S_INK_MOUSE_REMEMBER_DESC,
+            S_FINGER_MOVES_CARD,
+            S_FINGER_MOVES_CARD_DESC,
+            S_FINGER_WRITES,
+            S_FINGER_WRITES_DESC,
+            S_PEN_BUTTON,
+            S_PEN_BUTTON_DESC,
+            S_PEN_BUTTON_RADIAL,
+            S_PEN_BUTTON_ERASER,
+            S_PEN_BUTTON_PAN,
+            S_PEN_BUTTON_LASSO,
+            S_WHEEL,
+            S_WHEEL_DESC,
+            S_WHEEL_PAN,
+            S_WHEEL_ZOOM,
+            S_WORKSPACE,
+            S_WORKSPACE_DESC,
+            S_WORKSPACE_AUTO,
+            S_WORKSPACE_FULL,
+            S_WORKSPACE_SIMPLE,
+            S_TOOLBAR,
+            S_TOOLBAR_DESC,
+            S_GRID,
+            S_GRID_DESC,
+            S_SNAP,
+            S_SNAP_DESC,
+            S_PARTS_PICKER,
+            S_PARTS_PICKER_DESC,
+            S_DROP_FOLDER,
+            S_DROP_FOLDER_DESC,
+            S_DROP_FOLDER_NOTES,
+            S_DROP_FOLDER_BOARD,
+            S_DROP_FOLDER_FOLDER,
+            S_DROP_FOLDER_PATH,
+            S_DROP_FOLDER_PATH_DESC,
         ];
         for catalog in &catalogs {
             for key in keys {
@@ -437,5 +862,324 @@ mod tests {
         }
         assert_eq!(catalogs.len(), 2);
         assert_eq!(catalogs[0].entries.len(), STRINGS.len());
+    }
+
+    /// `text` com'è detto in `language`, col catalogo del componente.
+    fn said(text: &Text, language: &str) -> String {
+        let catalogs = catalog();
+        let locale = fub_abi::locale::Locale {
+            language: language.to_string(),
+            ..fub_abi::locale::Locale::default()
+        };
+        fub_abi::text::Strings::new(&catalogs, "it", &locale).render(text)
+    }
+
+    /// Le tredici impostazioni nell'ordine del pannello: la chiave, la specie, il
+    /// valore di serie, lo spazio. Le prime cinque sono della macchina.
+    #[test]
+    fn le_tredici_impostazioni_hanno_chiave_specie_e_valore_di_serie() {
+        use fub_abi::settings::{SettingScope, SettingValue};
+        let want: [(&str, &str, SettingValue); 13] = [
+            (
+                "canvas.ink_mouse_remember",
+                "toggle",
+                SettingValue::Toggle(false),
+            ),
+            (
+                "canvas.finger_moves_card",
+                "toggle",
+                SettingValue::Toggle(false),
+            ),
+            (
+                "canvas.finger_writes",
+                "toggle",
+                SettingValue::Toggle(false),
+            ),
+            (
+                "canvas.pen_button",
+                "choice",
+                SettingValue::Text("radial".into()),
+            ),
+            ("canvas.wheel", "choice", SettingValue::Text("pan".into())),
+            (
+                "canvas.drag_empty",
+                "choice",
+                SettingValue::Text("select".into()),
+            ),
+            (
+                "canvas.workspace",
+                "choice",
+                SettingValue::Text("auto".into()),
+            ),
+            ("canvas.toolbar", "list", SettingValue::List(Vec::new())),
+            ("canvas.grid", "toggle", SettingValue::Toggle(true)),
+            ("canvas.snap", "toggle", SettingValue::Toggle(true)),
+            ("canvas.parts_picker", "toggle", SettingValue::Toggle(true)),
+            (
+                "canvas.drop_folder",
+                "choice",
+                SettingValue::Text("notes".into()),
+            ),
+            (
+                "canvas.drop_folder_path",
+                "text",
+                SettingValue::Text("Allegati".into()),
+            ),
+        ];
+        let specs = settings();
+        assert_eq!(specs.len(), want.len());
+        for (index, (spec, (key, kind, default))) in specs.iter().zip(&want).enumerate() {
+            assert_eq!(spec.key, *key);
+            assert_eq!(spec.kind.name(), *kind, "{key}");
+            assert_eq!(&spec.kind.default_value(), default, "{key}");
+            assert!(!spec.program_writable, "{key}");
+            // Le prime sei sono della macchina: la rotella e il trascinamento nel vuoto
+            // sono come si tocca questo computer.
+            let scope = if index < 6 {
+                SettingScope::Machine
+            } else {
+                SettingScope::Vault
+            };
+            assert_eq!(spec.scope, scope, "{key}");
+            // Ogni specie prende il suo valore e nient'altro.
+            let other = match spec.kind.default_value() {
+                SettingValue::Toggle(_) => SettingValue::Text("sì".into()),
+                _ => SettingValue::Toggle(true),
+            };
+            assert!(spec.kind.rejects(&other).is_some(), "{key}");
+        }
+    }
+
+    /// Le scelte hanno i valori del piano, nell'ordine dei pulsanti, e un valore
+    /// fuori lista è un rifiuto per chi scrive.
+    #[test]
+    fn le_scelte_hanno_i_valori_del_piano() {
+        use fub_abi::settings::SettingValue;
+        let specs = settings();
+        let values = |key: &str| -> Vec<String> {
+            let spec = specs.iter().find(|spec| spec.key == key).expect(key);
+            match &spec.kind {
+                SettingKind::Choice { options, .. } => {
+                    options.iter().map(|option| option.value.clone()).collect()
+                }
+                other => panic!("{key} non è una scelta: {}", other.name()),
+            }
+        };
+        assert_eq!(
+            values(CANVAS_PEN_BUTTON_KEY),
+            ["radial", "eraser", "pan", "lasso"]
+        );
+        assert_eq!(values(CANVAS_WHEEL_KEY), ["pan", "zoom"]);
+        assert_eq!(values(CANVAS_DRAG_EMPTY_KEY), ["select", "pan"]);
+        assert_eq!(values(CANVAS_WORKSPACE_KEY), ["auto", "full", "simple"]);
+        assert_eq!(values(CANVAS_DROP_FOLDER_KEY), ["notes", "board", "folder"]);
+        for key in [
+            CANVAS_PEN_BUTTON_KEY,
+            CANVAS_WHEEL_KEY,
+            CANVAS_DRAG_EMPTY_KEY,
+            CANVAS_WORKSPACE_KEY,
+            CANVAS_DROP_FOLDER_KEY,
+        ] {
+            let spec = specs.iter().find(|spec| spec.key == key).expect(key);
+            assert!(
+                spec.kind
+                    .rejects(&SettingValue::Text("altro".into()))
+                    .is_some(),
+                "{key}"
+            );
+        }
+    }
+
+    /// I testi italiani del prototipo approvato (T25, «Come frasi»), parola per
+    /// parola: il nome e la descrizione di ogni riga.
+    #[test]
+    fn i_testi_italiani_sono_quelli_del_prototipo_approvato() {
+        let specs = settings();
+        let approved: [(&str, &str); 12] = [
+            (
+                "Ricorda se scrivi col mouse",
+                "Riaprendo una lavagna, l'interruttore «Scrivi col mouse» resta come l'hai lasciato. Spenta, la lavagna si apre sempre con l'interruttore spento. Il tasto D funziona sempre.",
+            ),
+            (
+                "Il dito sposta le schede",
+                "Sullo schermo touch il dito sposta la scheda che tocca, e la lavagna solo dove non ci sono schede. Spenta, il dito sposta sempre la lavagna e una scheda si sposta dalla sua testata. Due dita ingrandiscono sempre.",
+            ),
+            (
+                "Il dito scrive",
+                "Sullo schermo touch un dito scrive con la penna scelta, come una penna vera; due dita spostano e ingrandiscono. Si cambia anche dall'interruttore in fondo alla colonna.",
+            ),
+            (
+                "Il tasto della penna",
+                "Che cosa fa il tasto sul fianco della penna: apre il menu radiale, cancella come il retro della penna, sposta la lavagna o sceglie col lazo. Su un computer senza penna non fa niente.",
+            ),
+            (
+                "La rotella del mouse",
+                "Che cosa fa la rotella fuori da una scheda attiva. Ctrl+rotella e il pizzico ingrandiscono sempre; dentro una scheda attiva la rotella scorre la scheda.",
+            ),
+            (
+                "Spazio di lavoro",
+                "Completo offre tutti gli strumenti, il navigatore e l'ispettore; Semplice ha la colonna ridotta e caselle grandi, per il dito e la penna. Automatico sceglie Semplice sui dispositivi che hanno solo il tocco.",
+            ),
+            (
+                "Strumenti della colonna",
+                "Gli strumenti che la colonna della lavagna mostra, in ordine; vuota, quelli di serie. Uno strumento tolto resta raggiungibile dai tasti e da Ctrl+/.",
+            ),
+            (
+                "Griglia",
+                "Mostra i punti della griglia sulla lavagna. Ctrl+' la mostra o la nasconde solo per la lavagna aperta.",
+            ),
+            (
+                "Aggancia le schede",
+                "Spostando o ridimensionando una scheda, i bordi si agganciano alle schede vicine e alla griglia. Alt tenuto lo spegne per quel gesto.",
+            ),
+            (
+                "Scegli le parti di una nota",
+                "Portando sulla lavagna una nota con almeno due titoli, accanto alla scheda si apre l'elenco dei titoli per tenerne solo alcuni. Con Alt, mentre la lasci, arriva intera.",
+            ),
+            (
+                "Dove vanno i file trascinati",
+                "I file portati sulla lavagna dal computer, o incollati, si copiano nel vault qui. «Con le note» segue la cartella degli allegati delle note; «Con la lavagna» li mette in una cartella accanto alla lavagna; «In una cartella» sempre nella stessa cartella del vault. Un file che è già nel vault non si copia.",
+            ),
+            (
+                "Cartella dei file trascinati",
+                "Il nome della cartella accanto alla lavagna, o il percorso nel vault per «In una cartella». Con «Con le note» non si usa.",
+            ),
+        ];
+        // «Trascinare nel vuoto» (N6 T20b) non è nel prototipo T25: il suo testo
+        // si controlla qui sotto, a parte, finché il prototipo non lo porta.
+        let approved_rows = specs
+            .iter()
+            .filter(|spec| spec.key != CANVAS_DRAG_EMPTY_KEY);
+        for (spec, (label, description)) in approved_rows.zip(approved) {
+            assert_eq!(said(&spec.label, "it"), label, "{}", spec.key);
+            assert_eq!(said(&spec.description, "it"), description, "{}", spec.key);
+        }
+        let drag = specs
+            .iter()
+            .find(|spec| spec.key == CANVAS_DRAG_EMPTY_KEY)
+            .expect(CANVAS_DRAG_EMPTY_KEY);
+        assert_eq!(said(&drag.label, "it"), "Trascinare nel vuoto");
+        let it = said(&drag.description, "it");
+        assert!(it.contains("«Sceglie» disegna un rettangolo"), "{it}");
+        assert!(it.contains("Esc la annulla"), "{it}");
+    }
+
+    /// Le opzioni in italiano e in inglese, e le etichette inglesi delle righe.
+    #[test]
+    fn le_opzioni_e_l_inglese_dicono_le_stesse_cose() {
+        let specs = settings();
+        let labels = |key: &str, language: &str| -> Vec<String> {
+            let spec = specs.iter().find(|spec| spec.key == key).expect(key);
+            match &spec.kind {
+                SettingKind::Choice { options, .. } => options
+                    .iter()
+                    .map(|option| said(&option.label, language))
+                    .collect(),
+                other => panic!("{key} non è una scelta: {}", other.name()),
+            }
+        };
+        assert_eq!(
+            labels(CANVAS_PEN_BUTTON_KEY, "it"),
+            [
+                "Apre il menu",
+                "Cancella",
+                "Sposta la lavagna",
+                "Sceglie col lazo"
+            ]
+        );
+        assert_eq!(
+            labels(CANVAS_WHEEL_KEY, "it"),
+            ["Sposta la lavagna", "Ingrandisce"]
+        );
+        assert_eq!(
+            labels(CANVAS_DRAG_EMPTY_KEY, "it"),
+            ["Sceglie", "Sposta la vista"]
+        );
+        assert_eq!(
+            labels(CANVAS_WORKSPACE_KEY, "it"),
+            ["Automatico", "Completo", "Semplice"]
+        );
+        assert_eq!(
+            labels(CANVAS_DROP_FOLDER_KEY, "it"),
+            ["Con le note", "Con la lavagna", "In una cartella"]
+        );
+        assert_eq!(
+            labels(CANVAS_PEN_BUTTON_KEY, "en"),
+            [
+                "Opens the menu",
+                "Erases",
+                "Moves the whiteboard",
+                "Selects with the lasso"
+            ]
+        );
+        assert_eq!(
+            labels(CANVAS_WHEEL_KEY, "en"),
+            ["Moves the whiteboard", "Zooms"]
+        );
+        assert_eq!(
+            labels(CANVAS_DRAG_EMPTY_KEY, "en"),
+            ["Selects", "Moves the view"]
+        );
+        assert_eq!(
+            labels(CANVAS_WORKSPACE_KEY, "en"),
+            ["Automatic", "Full", "Simple"]
+        );
+        assert_eq!(
+            labels(CANVAS_DROP_FOLDER_KEY, "en"),
+            ["With the notes", "With the whiteboard", "In a folder"]
+        );
+        let english = [
+            "Remember whether you write with the mouse",
+            "A finger moves the cards",
+            "A finger writes",
+            "The pen button",
+            "The mouse wheel",
+            "Dragging on empty space",
+            "Workspace",
+            "Column tools",
+            "Grid",
+            "Snap cards",
+            "Choose the parts of a note",
+            "Where dragged files go",
+            "Folder for dragged files",
+        ];
+        for (spec, label) in specs.iter().zip(english) {
+            assert_eq!(said(&spec.label, "en"), label, "{}", spec.key);
+        }
+    }
+
+    #[test]
+    fn le_impostazioni_parlano_italiano_e_inglese() {
+        let specs = settings();
+        for spec in &specs {
+            for (language, group) in [("it", "Lavagna"), ("en", "Whiteboard")] {
+                assert_eq!(said(&spec.group, language), group, "{}", spec.key);
+                for text in [&spec.label, &spec.description] {
+                    let line = said(text, language);
+                    assert!(
+                        !line.is_empty() && !line.starts_with("s_"),
+                        "{} in {language}: «{line}»",
+                        spec.key
+                    );
+                }
+            }
+        }
+        // Le parole del prototipo approvato (PLAN-ui/lavagna-penne.html).
+        assert_eq!(said(&specs[0].label, "it"), "Ricorda se scrivi col mouse");
+        assert_eq!(said(&specs[1].label, "it"), "Il dito sposta le schede");
+        assert_eq!(
+            said(&specs[0].label, "en"),
+            "Remember whether you write with the mouse"
+        );
+        assert_eq!(said(&specs[1].label, "en"), "A finger moves the cards");
+        let it = said(&specs[0].description, "it");
+        assert!(it.contains("«Scrivi col mouse»"), "{it}");
+        assert!(it.contains("Il tasto D funziona sempre."), "{it}");
+        let en = said(&specs[0].description, "en");
+        assert!(en.contains("«Write with the mouse»"), "{en}");
+        let it = said(&specs[1].description, "it");
+        assert!(it.contains("Due dita ingrandiscono sempre."), "{it}");
+        let en = said(&specs[1].description, "en");
+        assert!(en.contains("Two fingers always zoom."), "{en}");
     }
 }

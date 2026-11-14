@@ -54,6 +54,66 @@ pub(super) fn tag_names(doc: &DocumentModel) -> Vec<String> {
     names
 }
 
+/// I messaggi dei commenti di un documento (`custom_kind::COMMENT_MESSAGE`),
+/// uno per valore: l'autore, se c'è, e il testo. Sono ciò che trova
+/// `comment:`, e stanno fuori dal corpo perché il testo di un messaggio non è
+/// testo della nota.
+pub(super) fn comment_texts(doc: &DocumentModel) -> Vec<String> {
+    fn inlines(nodes: &[Inline], out: &mut Vec<String>) {
+        for node in nodes {
+            match node {
+                Inline::Custom {
+                    custom_kind, attrs, ..
+                } if custom_kind == fub_abi::model::custom_kind::COMMENT_MESSAGE => {
+                    let field = |key: &str| attrs.get(key).and_then(|v| v.as_str());
+                    let text = field("text").unwrap_or_default();
+                    out.push(match field("author") {
+                        Some(author) => format!("{author} {text}"),
+                        None => text.to_string(),
+                    });
+                }
+                Inline::Emph(children)
+                | Inline::Strong(children)
+                | Inline::Superscript(children)
+                | Inline::Subscript(children)
+                | Inline::Strikethrough(children) => inlines(children, out),
+                Inline::Link {
+                    label: Some(label), ..
+                } => inlines(label, out),
+                _ => {}
+            }
+        }
+    }
+    fn blocks(nodes: &[Block], out: &mut Vec<String>) {
+        for block in nodes {
+            match block {
+                Block::Heading { inlines: i, .. } | Block::Paragraph { inlines: i, .. } => {
+                    inlines(i, out);
+                }
+                Block::List { items, .. } => {
+                    for item in items {
+                        blocks(&item.blocks, out);
+                    }
+                }
+                Block::Quote { blocks: b, .. } | Block::Custom { blocks: b, .. } => blocks(b, out),
+                Block::Table { head, rows, .. } => {
+                    for row in head.iter().chain(rows) {
+                        for cell in &row.cells {
+                            inlines(&cell.inlines, out);
+                        }
+                    }
+                }
+                Block::CodeBlock { .. }
+                | Block::ThematicBreak { .. }
+                | Block::ReferenceDefinition { .. } => {}
+            }
+        }
+    }
+    let mut out = Vec::new();
+    blocks(&doc.body, &mut out);
+    out
+}
+
 /// Impronta stabile di ciò che finisce nell'indice per un documento.
 ///
 /// L'impronta è quella del contratto ([`Fnv1a`]) e non una copia con le stesse
@@ -95,6 +155,13 @@ pub(super) fn fingerprint(doc: &DocumentModel) -> u64 {
     // diventa uno spazio, e la ricerca per riga lo vedrebbe vecchio.
     h.update(&[0]);
     h.update(scope::layout(doc).as_bytes());
+    // I messaggi dei commenti non stanno nel testo: un messaggio cambiato a
+    // corpo identico deve reindicizzare la nota.
+    h.update(&[0]);
+    for message in comment_texts(doc) {
+        h.update(message.as_bytes());
+        h.update(&[0x1f]);
+    }
     h.value()
 }
 /// Le task di un documento: se ce n'è una aperta, una fatta, e le scadenze
@@ -168,6 +235,8 @@ pub(super) struct Fields {
     /// Le scadenze delle task aperte, `AAAA-MM-GG`: una chiave per data, che
     /// si confronta come testo.
     pub(super) task_due: Field,
+    /// I messaggi dei commenti, uno per valore (vedi [`comment_texts`]).
+    pub(super) comments: Field,
 }
 
 /// La forma dello schema, in una riga: `nome:tokenizer[:stored]` per campo, in
@@ -226,6 +295,9 @@ pub(super) fn build_schema() -> (Schema, Fields) {
     // l'indice ha già trovato col corpo.
     let layout = b.add_text_field("layout", STORED);
     let task_due = b.add_text_field("task_due", STRING);
+    // Prosa, come il corpo, e memorizzata: la grafia esatta (`match-case`)
+    // si confronta sul testo, non sui token.
+    let comments = b.add_text_field("comments", TEXT | STORED);
     (
         b.build(),
         Fields {
@@ -240,6 +312,7 @@ pub(super) fn build_schema() -> (Schema, Fields) {
             task_state,
             layout,
             task_due,
+            comments,
         },
     )
 }

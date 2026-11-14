@@ -357,6 +357,33 @@ export async function backlinkCount(doc: string): Promise<number> {
   return runQuery({ kind: "backlinks", target: doc, page: { offset: 0, limit: 1 } }).then((page) => page.total);
 }
 
+/// Quante note citano `doc` e, se sono al più `limit` citazioni, quali
+/// (`null` se la finestra non le ha prese tutte). Una domanda sola, come
+/// [`backlinkCount`]: la usa la testata della lavagna per sapere quali conti
+/// un cambio di link può toccare.
+export async function backlinkSources(doc: string, limit: number): Promise<{ total: number; sources: string[] | null }> {
+  const page = await runQuery({ kind: "backlinks", target: doc, page: { offset: 0, limit } });
+  const sources = page.items.length >= page.total ? page.items.map((ref) => ref.source) : null;
+  return { total: page.total, sources };
+}
+
+/// I documenti di `among` che `doc` cita adesso (i suoi link uscenti), in una
+/// domanda sola. L'indice risponde solo per i documenti che conosce: chi deve
+/// sapere degli altri li chiede a [`existingDocuments`].
+export async function linkedFrom(doc: string, among: string[]): Promise<Set<string>> {
+  if (among.length === 0) return new Set();
+  const matching: QueryExpr = {
+    any: [{
+      all: [
+        { negated: false, predicate: { kind: "linked", doc, direction: "outbound" } },
+        { negated: false, predicate: { kind: "docs", docs: among } },
+      ],
+    }],
+  };
+  const page = await matchingDocuments(matching, WITHOUT_PAGE, "omit");
+  return new Set(page.items.map((match) => match.doc));
+}
+
 // `archiDelVault` stava qui: gli archi del grafo in una domanda sola, senza
 // finestra. **Non lo chiamava nessuno** — il grafo è un `ViewProvider` dalla
 // 0079 (`fub-features/src/graph.rs`) e li chiede da dentro il kernel, dove non

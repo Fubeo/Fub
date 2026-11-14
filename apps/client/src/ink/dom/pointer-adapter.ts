@@ -28,6 +28,11 @@
 //   bolla sullo stesso elemento, li leggono. Il `pointerup` e il
 //   `pointercancel` si ascoltano sul documento: arrivano anche se la cattura non
 //   è riuscita e il puntatore si è alzato fuori dalla superficie.
+// - **Il rilascio perso.** La cattura persa e la finestra che perde il fuoco
+//   chiudono il tratto aperto come un rilascio: il tratto si salva fino al suo
+//   ultimo punto (N6 T20a). Il `pointercancel` lo annulla, perché il sistema si
+//   prende il gesto (palmo, gesto del sistema), e la pagina nascosta lo annulla
+//   come prima. Un movimento senza il tasto del tratto lo chiude già la sessione.
 // - **La cattura è una richiesta.** La sessione chiede di catturare e di
 //   rilasciare il puntatore; un puntatore che il motore non considera attivo
 //   non si cattura, e il tratto prosegue con gli eventi che arrivano.
@@ -46,7 +51,7 @@ import { openLifetime } from "../../ui/lifetime";
 import type { Lifetime } from "../../ui/lifetime";
 import type { InkSample } from "../sample";
 import { pointerTypeOf, type PointerSample } from "../input/pointer";
-import type { PointerRole, TouchPolicy } from "../input/roles";
+import type { MousePolicy, PointerRole, TouchPolicy } from "../input/roles";
 import {
   Session,
   type CancelReason,
@@ -83,6 +88,9 @@ export interface InkInputOptions {
   readonly onCancel: (id: number, reason: CancelReason) => void;
   /// Che cosa fa un dito quando nessuna penna è vicina (default `auto`).
   readonly touch?: TouchPolicy;
+  /// Che cosa fa il tasto principale del mouse (default `ink`). Con `ignore`
+  /// il mouse non disegna e i suoi eventi restano a chi sta sotto.
+  readonly mouse?: MousePolicy;
   /// Campioni per tratto prima di dividerlo (default `INK_MAX_SAMPLES`).
   readonly maxSamples?: number;
   /// La curva della pressione: dalla pressione della penna, 0…1, a quella del
@@ -110,6 +118,9 @@ export interface InkInput {
   /// Un tratto è in corso.
   readonly drawing: boolean;
   setTouchPolicy(policy: TouchPolicy): void;
+  /// La politica del mouse dal prossimo appoggio; un tratto in corso finisce
+  /// com'è.
+  setMousePolicy(policy: MousePolicy): void;
   /// Annulla il tratto in corso (`reason: "api"`); il puntatore smette di
   /// disegnare finché non si alza.
   cancel(): void;
@@ -123,6 +134,7 @@ export interface InkInput {
 export function attachInkInput(element: HTMLElement, options: InkInputOptions, owner: Lifetime): InkInput {
   const session = new Session({
     ...(options.touch === undefined ? {} : { touch: options.touch }),
+    ...(options.mouse === undefined ? {} : { mouse: options.mouse }),
     ...(options.maxSamples === undefined ? {} : { maxSamples: options.maxSamples }),
     curve: options.pressure ?? null,
   });
@@ -133,6 +145,9 @@ export function attachInkInput(element: HTMLElement, options: InkInputOptions, o
   /// Il tratto che chi disegna ha ricevuto con `onStart` e a cui non ha ancora
   /// dato fine né annullamento.
   let open: number | null = null;
+  /// L'ultimo campione che la sessione ha avuto per il tratto aperto: la
+  /// finestra che perde il fuoco lo chiude da lì, come un rilascio.
+  let lastOpen: PointerSample | null = null;
   /// Quante consegne sono in corso (le callback rientrano) e a che punto è la
   /// generazione: un'interruzione dentro una consegna la fa avanzare, e gli
   /// effetti ancora da consegnare di quelle precedenti non valgono più.
@@ -291,6 +306,29 @@ export function attachInkInput(element: HTMLElement, options: InkInputOptions, o
     if (failed) throw failure;
   }
 
+  /// Ricorda l'ultimo campione di un puntatore che la sessione tiene per un
+  /// tratto aperto. Dopo ogni consegna: un puntatore che non disegna non lascia niente.
+  function remember(sample: PointerSample): void {
+    if (session.tracks(sample.pointerId)) lastOpen = sample;
+  }
+
+  /// Chiude il tratto del puntatore di `sample` come se il tasto si fosse alzato
+  /// senza il suo evento: la sessione lo finisce all'ultimo campione, che si
+  /// salva (`onEnd`), e il puntatore resta giù senza disegnare, come dopo un
+  /// annullamento (la sessione lo chiama «il tasto rilasciato con un altro
+  /// ancora giù»). Un puntatore senza tratto non fa niente.
+  function releasedButton(sample: PointerSample): void {
+    if (session.tracks(sample.pointerId)) run(session.pointerMove([], { ...sample, buttons: 0 }, []));
+  }
+
+  /// Chiude il tratto aperto per la finestra che perde il fuoco, dall'ultimo
+  /// campione che la sessione ha avuto. Senza un tratto aperto non fa niente.
+  function endOpenStroke(): void {
+    const last = lastOpen;
+    lastOpen = null;
+    if (last !== null) releasedButton(last);
+  }
+
   /// Un'interruzione (di chi disegna o della piattaforma): consegna gli effetti
   /// della sessione e annulla il tratto che chi disegna ha ancora aperto e la
   /// sessione non conosce più, come quello che stava per cominciare la
@@ -312,7 +350,12 @@ export function attachInkInput(element: HTMLElement, options: InkInputOptions, o
     if (options.stabilizer) session.setStabilizer(options.stabilizer());
     // Un contatto nuovo si porta nella scena con la vista di adesso.
     seen.delete(event.pointerId);
-    run(session.pointerDown(pointerOf(event, options.turn?.() ?? 0, options.scale?.() ?? 1)));
+    const sample = pointerOf(event, options.turn?.() ?? 0, options.scale?.() ?? 1);
+    try {
+      run(session.pointerDown(sample));
+    } finally {
+      remember(sample);
+    }
   }, { capture: true });
 
   life.listen(element, "pointermove", (event) => {
@@ -330,7 +373,12 @@ export function attachInkInput(element: HTMLElement, options: InkInputOptions, o
     const predicted = options.onPredicted !== undefined && typeof event.getPredictedEvents === "function"
       ? event.getPredictedEvents().map((one) => pointerOf(one, turn, scale, false))
       : [];
-    run(session.pointerMove(coalesced, pointerOf(event, turn, scale), predicted));
+    const sample = pointerOf(event, turn, scale);
+    try {
+      run(session.pointerMove(coalesced, sample, predicted));
+    } finally {
+      remember(sample);
+    }
   }, { capture: true });
 
   // `pointerrawupdate` arriva prima di `pointermove`, appena il dispositivo
@@ -346,7 +394,12 @@ export function attachInkInput(element: HTMLElement, options: InkInputOptions, o
     const coalesced = typeof event.getCoalescedEvents === "function"
       ? event.getCoalescedEvents().map((one) => pointerOf(one, turn, scale))
       : [];
-    run(session.pointerMove(coalesced, pointerOf(event, turn, scale), []));
+    const sample = pointerOf(event, turn, scale);
+    try {
+      run(session.pointerMove(coalesced, sample, []));
+    } finally {
+      remember(sample);
+    }
   }, { capture: true });
 
   // Sul documento, in cattura: il `pointerup` arriva anche se la cattura non è
@@ -364,8 +417,12 @@ export function attachInkInput(element: HTMLElement, options: InkInputOptions, o
     run(session.pointerCancel(event.pointerId));
   }, { capture: true });
 
+  // La cattura persa è un rilascio che non arriva più: il tratto si chiude e si
+  // salva all'ultimo campione, come un rilascio (N6 T20a). Il punto dell'evento
+  // non entra: il tasto non ha più un evento da cui leggerlo.
   life.listen(element, "lostpointercapture", (event) => {
-    run(session.lostCapture(event.pointerId));
+    if (!session.tracks(event.pointerId)) return;
+    releasedButton(pointerOf(event, options.turn?.() ?? 0, options.scale?.() ?? 1));
   });
 
   // `pointerleave` non risale: senza cattura arriva solo quando il puntatore
@@ -375,7 +432,17 @@ export function attachInkInput(element: HTMLElement, options: InkInputOptions, o
     session.pointerLeave(event.pointerId, pointerTypeOf(event.pointerType));
   });
 
-  if (view) life.listen(view, "blur", () => interrupt(session.interrupt("blur"), "blur"));
+  // La finestra che perde il fuoco chiude e salva il tratto aperto come un
+  // rilascio (N6 T20a); poi il resto della sessione si annulla come prima.
+  if (view) {
+    life.listen(view, "blur", () => {
+      try {
+        endOpenStroke();
+      } finally {
+        interrupt(session.interrupt("blur"), "blur");
+      }
+    });
+  }
   life.listen(doc, "visibilitychange", () => {
     if (doc.visibilityState === "hidden") interrupt(session.interrupt("hidden"), "hidden");
   });
@@ -398,6 +465,9 @@ export function attachInkInput(element: HTMLElement, options: InkInputOptions, o
     },
     setTouchPolicy(policy) {
       session.setTouchPolicy(policy);
+    },
+    setMousePolicy(policy) {
+      session.setMousePolicy(policy);
     },
     cancel() {
       if (!destroyed) interrupt(session.cancel(), "api");

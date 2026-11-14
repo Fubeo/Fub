@@ -179,6 +179,12 @@ const IT = {
   "live.image.apply": "Applica",
   "live.image.handle": "Larghezza dell'immagine",
   "live.image.size": "{width} px",
+  // Un indirizzo incollato su una riga vuota (T25).
+  "paste.address.label": "Come scrivere l'indirizzo",
+  "paste.address.link": "Link",
+  "paste.address.link.title": "Scrive l'indirizzo come link: è la scelta di partenza",
+  "paste.address.card": "Scheda",
+  "paste.address.card.title": "Scrive l'indirizzo da solo sulla riga: diventa una scheda del segnalibro, con l'anteprima a richiesta",
 } as const;
 
 const EN: Record<keyof typeof IT, string> = {
@@ -355,6 +361,12 @@ const EN: Record<keyof typeof IT, string> = {
   "live.image.apply": "Apply",
   "live.image.handle": "Image width",
   "live.image.size": "{width} px",
+  // Un indirizzo incollato su una riga vuota (T25).
+  "paste.address.label": "How to write the address",
+  "paste.address.link": "Link",
+  "paste.address.link.title": "Writes the address as a link: it is the starting choice",
+  "paste.address.card": "Card",
+  "paste.address.card.title": "Writes the address alone on its line: it becomes a bookmark card, with the preview on request",
 };
 
 // Il catalogo nasce alla prima frase, non all'import: chi importa la Live

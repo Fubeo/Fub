@@ -90,6 +90,7 @@
             "fub.search",
             "fub.stats",
             "fub.tags",
+            "fub.tasks",
             "fub.template",
             "fub.trash",
             "fub.versioning"
@@ -181,6 +182,24 @@
             "fub.markdown"
           ],
           "usa": []
+        },
+        {
+          "id": "fub.tasks",
+          "nome": "Compiti",
+          "gruppo": "scrivere",
+          "bundle": true,
+          "acceso": true,
+          "perche": "Scelto",
+          "richiesto_da": [],
+          "descrizione": "I compiti aperti di tutte le note, per scadenza, da spuntare dove stanno.",
+          "tipo": "mode",
+          "ui": [],
+          "richiede": [
+            "fub.markdown"
+          ],
+          "usa": [
+            "fub.search"
+          ]
         },
         {
           "id": "fub.properties",
@@ -711,6 +730,7 @@
           "fub.stats",
           "fub.sync",
           "fub.tags",
+          "fub.tasks",
           "fub.template",
           "fub.trash",
           "fub.updates",
@@ -731,6 +751,7 @@
             "fub.backlinks",
             "fub.outline",
             "fub.tags",
+            "fub.tasks",
             "fub.properties",
             "fub.template",
             "fub.queries",
@@ -769,6 +790,7 @@
             "fub.backlinks",
             "fub.outline",
             "fub.tags",
+            "fub.tasks",
             "fub.properties",
             "fub.template",
             "fub.queries",
@@ -802,6 +824,7 @@
             "fub.backlinks",
             "fub.outline",
             "fub.tags",
+            "fub.tasks",
             "fub.properties",
             "fub.template",
             "fub.queries",
@@ -833,6 +856,7 @@
             "fub.backlinks",
             "fub.outline",
             "fub.tags",
+            "fub.tasks",
             "fub.properties",
             "fub.template",
             "fub.queries",
@@ -865,6 +889,7 @@
             "fub.backlinks",
             "fub.outline",
             "fub.tags",
+            "fub.tasks",
             "fub.properties",
             "fub.template",
             "fub.queries",
@@ -978,6 +1003,7 @@
             "fub.search",
             "fub.stats",
             "fub.tags",
+            "fub.tasks",
             "fub.trash",
             "fub.versioning"
           ],
@@ -1068,6 +1094,24 @@
             "fub.markdown"
           ],
           "usa": []
+        },
+        {
+          "id": "fub.tasks",
+          "nome": "Compiti",
+          "gruppo": "scrivere",
+          "bundle": true,
+          "acceso": true,
+          "perche": "Scelto",
+          "richiesto_da": [],
+          "descrizione": "I compiti aperti di tutte le note, per scadenza, da spuntare dove stanno.",
+          "tipo": "mode",
+          "ui": [],
+          "richiede": [
+            "fub.markdown"
+          ],
+          "usa": [
+            "fub.search"
+          ]
         },
         {
           "id": "fub.properties",
@@ -1593,6 +1637,7 @@
           "fub.stats",
           "fub.sync",
           "fub.tags",
+          "fub.tasks",
           "fub.trash",
           "fub.updates",
           "fub.versioning",
@@ -1612,6 +1657,7 @@
             "fub.backlinks",
             "fub.outline",
             "fub.tags",
+            "fub.tasks",
             "fub.properties",
             "fub.template",
             "fub.queries",
@@ -1650,6 +1696,7 @@
             "fub.backlinks",
             "fub.outline",
             "fub.tags",
+            "fub.tasks",
             "fub.properties",
             "fub.template",
             "fub.queries",
@@ -1683,6 +1730,7 @@
             "fub.backlinks",
             "fub.outline",
             "fub.tags",
+            "fub.tasks",
             "fub.properties",
             "fub.template",
             "fub.queries",
@@ -1714,6 +1762,7 @@
             "fub.backlinks",
             "fub.outline",
             "fub.tags",
+            "fub.tasks",
             "fub.properties",
             "fub.template",
             "fub.queries",
@@ -1746,6 +1795,7 @@
             "fub.backlinks",
             "fub.outline",
             "fub.tags",
+            "fub.tasks",
             "fub.properties",
             "fub.template",
             "fub.queries",
@@ -1860,6 +1910,7 @@
             "fub.search",
             "fub.stats",
             "fub.tags",
+            "fub.tasks",
             "fub.template",
             "fub.trash",
             "fub.versioning"
@@ -1951,6 +2002,24 @@
             "fub.markdown"
           ],
           "usa": []
+        },
+        {
+          "id": "fub.tasks",
+          "nome": "Compiti",
+          "gruppo": "scrivere",
+          "bundle": true,
+          "acceso": true,
+          "perche": "Scelto",
+          "richiesto_da": [],
+          "descrizione": "I compiti aperti di tutte le note, per scadenza, da spuntare dove stanno.",
+          "tipo": "mode",
+          "ui": [],
+          "richiede": [
+            "fub.markdown"
+          ],
+          "usa": [
+            "fub.search"
+          ]
         },
         {
           "id": "fub.properties",
@@ -2479,6 +2548,7 @@
           "fub.stats",
           "fub.sync",
           "fub.tags",
+          "fub.tasks",
           "fub.template",
           "fub.trash",
           "fub.updates",
@@ -2499,6 +2569,7 @@
             "fub.backlinks",
             "fub.outline",
             "fub.tags",
+            "fub.tasks",
             "fub.properties",
             "fub.template",
             "fub.queries",
@@ -2537,6 +2608,7 @@
             "fub.backlinks",
             "fub.outline",
             "fub.tags",
+            "fub.tasks",
             "fub.properties",
             "fub.template",
             "fub.queries",
@@ -2570,6 +2642,7 @@
             "fub.backlinks",
             "fub.outline",
             "fub.tags",
+            "fub.tasks",
             "fub.properties",
             "fub.template",
             "fub.queries",
@@ -2601,6 +2674,7 @@
             "fub.backlinks",
             "fub.outline",
             "fub.tags",
+            "fub.tasks",
             "fub.properties",
             "fub.template",
             "fub.queries",
@@ -2633,6 +2707,7 @@
             "fub.backlinks",
             "fub.outline",
             "fub.tags",
+            "fub.tasks",
             "fub.properties",
             "fub.template",
             "fub.queries",
@@ -2748,6 +2823,7 @@
             "fub.search",
             "fub.stats",
             "fub.tags",
+            "fub.tasks",
             "fub.template",
             "fub.trash",
             "fub.versioning"
@@ -2839,6 +2915,24 @@
             "fub.markdown"
           ],
           "usa": []
+        },
+        {
+          "id": "fub.tasks",
+          "nome": "Compiti",
+          "gruppo": "scrivere",
+          "bundle": true,
+          "acceso": true,
+          "perche": "Scelto",
+          "richiesto_da": [],
+          "descrizione": "I compiti aperti di tutte le note, per scadenza, da spuntare dove stanno.",
+          "tipo": "mode",
+          "ui": [],
+          "richiede": [
+            "fub.markdown"
+          ],
+          "usa": [
+            "fub.search"
+          ]
         },
         {
           "id": "fub.properties",
@@ -3359,6 +3453,7 @@
           "fub.stats",
           "fub.sync",
           "fub.tags",
+          "fub.tasks",
           "fub.template",
           "fub.trash",
           "fub.updates",
@@ -3379,6 +3474,7 @@
             "fub.backlinks",
             "fub.outline",
             "fub.tags",
+            "fub.tasks",
             "fub.properties",
             "fub.template",
             "fub.queries",
@@ -3417,6 +3513,7 @@
             "fub.backlinks",
             "fub.outline",
             "fub.tags",
+            "fub.tasks",
             "fub.properties",
             "fub.template",
             "fub.queries",
@@ -3450,6 +3547,7 @@
             "fub.backlinks",
             "fub.outline",
             "fub.tags",
+            "fub.tasks",
             "fub.properties",
             "fub.template",
             "fub.queries",
@@ -3481,6 +3579,7 @@
             "fub.backlinks",
             "fub.outline",
             "fub.tags",
+            "fub.tasks",
             "fub.properties",
             "fub.template",
             "fub.queries",
@@ -3513,6 +3612,7 @@
             "fub.backlinks",
             "fub.outline",
             "fub.tags",
+            "fub.tasks",
             "fub.properties",
             "fub.template",
             "fub.queries",
@@ -3627,6 +3727,7 @@
             "fub.search",
             "fub.stats",
             "fub.tags",
+            "fub.tasks",
             "fub.template",
             "fub.trash",
             "fub.versioning"
@@ -3718,6 +3819,24 @@
             "fub.markdown"
           ],
           "usa": []
+        },
+        {
+          "id": "fub.tasks",
+          "nome": "Compiti",
+          "gruppo": "scrivere",
+          "bundle": true,
+          "acceso": true,
+          "perche": "Scelto",
+          "richiesto_da": [],
+          "descrizione": "I compiti aperti di tutte le note, per scadenza, da spuntare dove stanno.",
+          "tipo": "mode",
+          "ui": [],
+          "richiede": [
+            "fub.markdown"
+          ],
+          "usa": [
+            "fub.search"
+          ]
         },
         {
           "id": "fub.properties",
@@ -4247,6 +4366,7 @@
           "fub.stats",
           "fub.sync",
           "fub.tags",
+          "fub.tasks",
           "fub.template",
           "fub.trash",
           "fub.updates",
@@ -4267,6 +4387,7 @@
             "fub.backlinks",
             "fub.outline",
             "fub.tags",
+            "fub.tasks",
             "fub.properties",
             "fub.template",
             "fub.queries",
@@ -4305,6 +4426,7 @@
             "fub.backlinks",
             "fub.outline",
             "fub.tags",
+            "fub.tasks",
             "fub.properties",
             "fub.template",
             "fub.queries",
@@ -4338,6 +4460,7 @@
             "fub.backlinks",
             "fub.outline",
             "fub.tags",
+            "fub.tasks",
             "fub.properties",
             "fub.template",
             "fub.queries",
@@ -4369,6 +4492,7 @@
             "fub.backlinks",
             "fub.outline",
             "fub.tags",
+            "fub.tasks",
             "fub.properties",
             "fub.template",
             "fub.queries",
@@ -4401,6 +4525,7 @@
             "fub.backlinks",
             "fub.outline",
             "fub.tags",
+            "fub.tasks",
             "fub.properties",
             "fub.template",
             "fub.queries",
@@ -4516,6 +4641,7 @@
             "fub.search",
             "fub.stats",
             "fub.tags",
+            "fub.tasks",
             "fub.template",
             "fub.trash",
             "fub.versioning"
@@ -4607,6 +4733,24 @@
             "fub.markdown"
           ],
           "usa": []
+        },
+        {
+          "id": "fub.tasks",
+          "nome": "Compiti",
+          "gruppo": "scrivere",
+          "bundle": true,
+          "acceso": true,
+          "perche": "Scelto",
+          "richiesto_da": [],
+          "descrizione": "I compiti aperti di tutte le note, per scadenza, da spuntare dove stanno.",
+          "tipo": "mode",
+          "ui": [],
+          "richiede": [
+            "fub.markdown"
+          ],
+          "usa": [
+            "fub.search"
+          ]
         },
         {
           "id": "fub.properties",
@@ -5137,6 +5281,7 @@
           "fub.stats",
           "fub.sync",
           "fub.tags",
+          "fub.tasks",
           "fub.template",
           "fub.trash",
           "fub.updates",
@@ -5157,6 +5302,7 @@
             "fub.backlinks",
             "fub.outline",
             "fub.tags",
+            "fub.tasks",
             "fub.properties",
             "fub.template",
             "fub.queries",
@@ -5195,6 +5341,7 @@
             "fub.backlinks",
             "fub.outline",
             "fub.tags",
+            "fub.tasks",
             "fub.properties",
             "fub.template",
             "fub.queries",
@@ -5228,6 +5375,7 @@
             "fub.backlinks",
             "fub.outline",
             "fub.tags",
+            "fub.tasks",
             "fub.properties",
             "fub.template",
             "fub.queries",
@@ -5259,6 +5407,7 @@
             "fub.backlinks",
             "fub.outline",
             "fub.tags",
+            "fub.tasks",
             "fub.properties",
             "fub.template",
             "fub.queries",
@@ -5291,6 +5440,7 @@
             "fub.backlinks",
             "fub.outline",
             "fub.tags",
+            "fub.tasks",
             "fub.properties",
             "fub.template",
             "fub.queries",
@@ -5404,6 +5554,7 @@
             "fub.search",
             "fub.stats",
             "fub.tags",
+            "fub.tasks",
             "fub.template",
             "fub.trash",
             "fub.versioning"
@@ -5495,6 +5646,24 @@
             "fub.markdown"
           ],
           "usa": []
+        },
+        {
+          "id": "fub.tasks",
+          "nome": "Compiti",
+          "gruppo": "scrivere",
+          "bundle": true,
+          "acceso": true,
+          "perche": "Scelto",
+          "richiesto_da": [],
+          "descrizione": "I compiti aperti di tutte le note, per scadenza, da spuntare dove stanno.",
+          "tipo": "mode",
+          "ui": [],
+          "richiede": [
+            "fub.markdown"
+          ],
+          "usa": [
+            "fub.search"
+          ]
         },
         {
           "id": "fub.properties",
@@ -5994,6 +6163,7 @@
           "fub.stats",
           "fub.sync",
           "fub.tags",
+          "fub.tasks",
           "fub.template",
           "fub.trash",
           "fub.updates",
@@ -6013,6 +6183,7 @@
             "fub.backlinks",
             "fub.outline",
             "fub.tags",
+            "fub.tasks",
             "fub.properties",
             "fub.template",
             "fub.queries",
@@ -6051,6 +6222,7 @@
             "fub.backlinks",
             "fub.outline",
             "fub.tags",
+            "fub.tasks",
             "fub.properties",
             "fub.template",
             "fub.queries",
@@ -6084,6 +6256,7 @@
             "fub.backlinks",
             "fub.outline",
             "fub.tags",
+            "fub.tasks",
             "fub.properties",
             "fub.template",
             "fub.queries",
@@ -6115,6 +6288,7 @@
             "fub.backlinks",
             "fub.outline",
             "fub.tags",
+            "fub.tasks",
             "fub.properties",
             "fub.template",
             "fub.queries",
@@ -6147,6 +6321,7 @@
             "fub.backlinks",
             "fub.outline",
             "fub.tags",
+            "fub.tasks",
             "fub.properties",
             "fub.template",
             "fub.queries",
@@ -6260,6 +6435,7 @@
             "fub.search",
             "fub.stats",
             "fub.tags",
+            "fub.tasks",
             "fub.template",
             "fub.trash",
             "fub.versioning"
@@ -6351,6 +6527,24 @@
             "fub.markdown"
           ],
           "usa": []
+        },
+        {
+          "id": "fub.tasks",
+          "nome": "Compiti",
+          "gruppo": "scrivere",
+          "bundle": true,
+          "acceso": true,
+          "perche": "Scelto",
+          "richiesto_da": [],
+          "descrizione": "I compiti aperti di tutte le note, per scadenza, da spuntare dove stanno.",
+          "tipo": "mode",
+          "ui": [],
+          "richiede": [
+            "fub.markdown"
+          ],
+          "usa": [
+            "fub.search"
+          ]
         },
         {
           "id": "fub.properties",
@@ -6857,6 +7051,7 @@
           "fub.stats",
           "fub.sync",
           "fub.tags",
+          "fub.tasks",
           "fub.template",
           "fub.trash",
           "fub.updates",
@@ -6876,6 +7071,7 @@
             "fub.backlinks",
             "fub.outline",
             "fub.tags",
+            "fub.tasks",
             "fub.properties",
             "fub.template",
             "fub.queries",
@@ -6914,6 +7110,7 @@
             "fub.backlinks",
             "fub.outline",
             "fub.tags",
+            "fub.tasks",
             "fub.properties",
             "fub.template",
             "fub.queries",
@@ -6947,6 +7144,7 @@
             "fub.backlinks",
             "fub.outline",
             "fub.tags",
+            "fub.tasks",
             "fub.properties",
             "fub.template",
             "fub.queries",
@@ -6978,6 +7176,7 @@
             "fub.backlinks",
             "fub.outline",
             "fub.tags",
+            "fub.tasks",
             "fub.properties",
             "fub.template",
             "fub.queries",
@@ -7010,6 +7209,7 @@
             "fub.backlinks",
             "fub.outline",
             "fub.tags",
+            "fub.tasks",
             "fub.properties",
             "fub.template",
             "fub.queries",
@@ -7123,6 +7323,7 @@
             "fub.search",
             "fub.stats",
             "fub.tags",
+            "fub.tasks",
             "fub.template",
             "fub.trash",
             "fub.versioning"
@@ -7214,6 +7415,24 @@
             "fub.markdown"
           ],
           "usa": []
+        },
+        {
+          "id": "fub.tasks",
+          "nome": "Compiti",
+          "gruppo": "scrivere",
+          "bundle": true,
+          "acceso": true,
+          "perche": "Scelto",
+          "richiesto_da": [],
+          "descrizione": "I compiti aperti di tutte le note, per scadenza, da spuntare dove stanno.",
+          "tipo": "mode",
+          "ui": [],
+          "richiede": [
+            "fub.markdown"
+          ],
+          "usa": [
+            "fub.search"
+          ]
         },
         {
           "id": "fub.properties",
@@ -7723,6 +7942,7 @@
           "fub.stats",
           "fub.sync",
           "fub.tags",
+          "fub.tasks",
           "fub.template",
           "fub.trash",
           "fub.updates",
@@ -7742,6 +7962,7 @@
             "fub.backlinks",
             "fub.outline",
             "fub.tags",
+            "fub.tasks",
             "fub.properties",
             "fub.template",
             "fub.queries",
@@ -7780,6 +8001,7 @@
             "fub.backlinks",
             "fub.outline",
             "fub.tags",
+            "fub.tasks",
             "fub.properties",
             "fub.template",
             "fub.queries",
@@ -7813,6 +8035,7 @@
             "fub.backlinks",
             "fub.outline",
             "fub.tags",
+            "fub.tasks",
             "fub.properties",
             "fub.template",
             "fub.queries",
@@ -7844,6 +8067,7 @@
             "fub.backlinks",
             "fub.outline",
             "fub.tags",
+            "fub.tasks",
             "fub.properties",
             "fub.template",
             "fub.queries",
@@ -7876,6 +8100,7 @@
             "fub.backlinks",
             "fub.outline",
             "fub.tags",
+            "fub.tasks",
             "fub.properties",
             "fub.template",
             "fub.queries",
@@ -7989,6 +8214,7 @@
             "fub.search",
             "fub.stats",
             "fub.tags",
+            "fub.tasks",
             "fub.template",
             "fub.trash",
             "fub.versioning"
@@ -8080,6 +8306,24 @@
             "fub.markdown"
           ],
           "usa": []
+        },
+        {
+          "id": "fub.tasks",
+          "nome": "Compiti",
+          "gruppo": "scrivere",
+          "bundle": true,
+          "acceso": true,
+          "perche": "Scelto",
+          "richiesto_da": [],
+          "descrizione": "I compiti aperti di tutte le note, per scadenza, da spuntare dove stanno.",
+          "tipo": "mode",
+          "ui": [],
+          "richiede": [
+            "fub.markdown"
+          ],
+          "usa": [
+            "fub.search"
+          ]
         },
         {
           "id": "fub.properties",
@@ -8586,6 +8830,7 @@
           "fub.stats",
           "fub.sync",
           "fub.tags",
+          "fub.tasks",
           "fub.template",
           "fub.trash",
           "fub.updates",
@@ -8605,6 +8850,7 @@
             "fub.backlinks",
             "fub.outline",
             "fub.tags",
+            "fub.tasks",
             "fub.properties",
             "fub.template",
             "fub.queries",
@@ -8643,6 +8889,7 @@
             "fub.backlinks",
             "fub.outline",
             "fub.tags",
+            "fub.tasks",
             "fub.properties",
             "fub.template",
             "fub.queries",
@@ -8676,6 +8923,7 @@
             "fub.backlinks",
             "fub.outline",
             "fub.tags",
+            "fub.tasks",
             "fub.properties",
             "fub.template",
             "fub.queries",
@@ -8707,6 +8955,7 @@
             "fub.backlinks",
             "fub.outline",
             "fub.tags",
+            "fub.tasks",
             "fub.properties",
             "fub.template",
             "fub.queries",
@@ -8739,6 +8988,7 @@
             "fub.backlinks",
             "fub.outline",
             "fub.tags",
+            "fub.tasks",
             "fub.properties",
             "fub.template",
             "fub.queries",
@@ -8852,6 +9102,7 @@
             "fub.search",
             "fub.stats",
             "fub.tags",
+            "fub.tasks",
             "fub.template",
             "fub.trash",
             "fub.versioning"
@@ -8943,6 +9194,24 @@
             "fub.markdown"
           ],
           "usa": []
+        },
+        {
+          "id": "fub.tasks",
+          "nome": "Compiti",
+          "gruppo": "scrivere",
+          "bundle": true,
+          "acceso": true,
+          "perche": "Scelto",
+          "richiesto_da": [],
+          "descrizione": "I compiti aperti di tutte le note, per scadenza, da spuntare dove stanno.",
+          "tipo": "mode",
+          "ui": [],
+          "richiede": [
+            "fub.markdown"
+          ],
+          "usa": [
+            "fub.search"
+          ]
         },
         {
           "id": "fub.properties",
@@ -9442,6 +9711,7 @@
           "fub.stats",
           "fub.sync",
           "fub.tags",
+          "fub.tasks",
           "fub.template",
           "fub.trash",
           "fub.updates",
@@ -9463,6 +9733,7 @@
             "fub.backlinks",
             "fub.outline",
             "fub.tags",
+            "fub.tasks",
             "fub.properties",
             "fub.template",
             "fub.queries",
@@ -9501,6 +9772,7 @@
             "fub.backlinks",
             "fub.outline",
             "fub.tags",
+            "fub.tasks",
             "fub.properties",
             "fub.template",
             "fub.queries",
@@ -9534,6 +9806,7 @@
             "fub.backlinks",
             "fub.outline",
             "fub.tags",
+            "fub.tasks",
             "fub.properties",
             "fub.template",
             "fub.queries",
@@ -9565,6 +9838,7 @@
             "fub.backlinks",
             "fub.outline",
             "fub.tags",
+            "fub.tasks",
             "fub.properties",
             "fub.template",
             "fub.queries",
@@ -9597,6 +9871,7 @@
             "fub.backlinks",
             "fub.outline",
             "fub.tags",
+            "fub.tasks",
             "fub.properties",
             "fub.template",
             "fub.queries",
@@ -9710,6 +9985,7 @@
             "fub.search",
             "fub.stats",
             "fub.tags",
+            "fub.tasks",
             "fub.template",
             "fub.trash",
             "fub.versioning"
@@ -9801,6 +10077,24 @@
             "fub.markdown"
           ],
           "usa": []
+        },
+        {
+          "id": "fub.tasks",
+          "nome": "Compiti",
+          "gruppo": "scrivere",
+          "bundle": true,
+          "acceso": true,
+          "perche": "Scelto",
+          "richiesto_da": [],
+          "descrizione": "I compiti aperti di tutte le note, per scadenza, da spuntare dove stanno.",
+          "tipo": "mode",
+          "ui": [],
+          "richiede": [
+            "fub.markdown"
+          ],
+          "usa": [
+            "fub.search"
+          ]
         },
         {
           "id": "fub.properties",
@@ -10300,6 +10594,7 @@
           "fub.stats",
           "fub.sync",
           "fub.tags",
+          "fub.tasks",
           "fub.template",
           "fub.trash",
           "fub.updates",
@@ -10319,6 +10614,7 @@
             "fub.backlinks",
             "fub.outline",
             "fub.tags",
+            "fub.tasks",
             "fub.properties",
             "fub.template",
             "fub.queries",
@@ -10357,6 +10653,7 @@
             "fub.backlinks",
             "fub.outline",
             "fub.tags",
+            "fub.tasks",
             "fub.properties",
             "fub.template",
             "fub.queries",
@@ -10390,6 +10687,7 @@
             "fub.backlinks",
             "fub.outline",
             "fub.tags",
+            "fub.tasks",
             "fub.properties",
             "fub.template",
             "fub.queries",
@@ -10421,6 +10719,7 @@
             "fub.backlinks",
             "fub.outline",
             "fub.tags",
+            "fub.tasks",
             "fub.properties",
             "fub.template",
             "fub.queries",
@@ -10453,6 +10752,7 @@
             "fub.backlinks",
             "fub.outline",
             "fub.tags",
+            "fub.tasks",
             "fub.properties",
             "fub.template",
             "fub.queries",
@@ -10566,6 +10866,7 @@
             "fub.search",
             "fub.stats",
             "fub.tags",
+            "fub.tasks",
             "fub.template",
             "fub.trash",
             "fub.versioning"
@@ -10657,6 +10958,24 @@
             "fub.markdown"
           ],
           "usa": []
+        },
+        {
+          "id": "fub.tasks",
+          "nome": "Compiti",
+          "gruppo": "scrivere",
+          "bundle": true,
+          "acceso": true,
+          "perche": "Scelto",
+          "richiesto_da": [],
+          "descrizione": "I compiti aperti di tutte le note, per scadenza, da spuntare dove stanno.",
+          "tipo": "mode",
+          "ui": [],
+          "richiede": [
+            "fub.markdown"
+          ],
+          "usa": [
+            "fub.search"
+          ]
         },
         {
           "id": "fub.properties",
@@ -11157,6 +11476,7 @@
           "fub.stats",
           "fub.sync",
           "fub.tags",
+          "fub.tasks",
           "fub.template",
           "fub.trash",
           "fub.updates",
@@ -11176,6 +11496,7 @@
             "fub.backlinks",
             "fub.outline",
             "fub.tags",
+            "fub.tasks",
             "fub.properties",
             "fub.template",
             "fub.queries",
@@ -11214,6 +11535,7 @@
             "fub.backlinks",
             "fub.outline",
             "fub.tags",
+            "fub.tasks",
             "fub.properties",
             "fub.template",
             "fub.queries",
@@ -11247,6 +11569,7 @@
             "fub.backlinks",
             "fub.outline",
             "fub.tags",
+            "fub.tasks",
             "fub.properties",
             "fub.template",
             "fub.queries",
@@ -11278,6 +11601,7 @@
             "fub.backlinks",
             "fub.outline",
             "fub.tags",
+            "fub.tasks",
             "fub.properties",
             "fub.template",
             "fub.queries",
@@ -11310,6 +11634,7 @@
             "fub.backlinks",
             "fub.outline",
             "fub.tags",
+            "fub.tasks",
             "fub.properties",
             "fub.template",
             "fub.queries",
@@ -11425,6 +11750,7 @@
             "fub.search",
             "fub.stats",
             "fub.tags",
+            "fub.tasks",
             "fub.template",
             "fub.trash",
             "fub.versioning"
@@ -11516,6 +11842,24 @@
             "fub.markdown"
           ],
           "usa": []
+        },
+        {
+          "id": "fub.tasks",
+          "nome": "Compiti",
+          "gruppo": "scrivere",
+          "bundle": true,
+          "acceso": true,
+          "perche": "Scelto",
+          "richiesto_da": [],
+          "descrizione": "I compiti aperti di tutte le note, per scadenza, da spuntare dove stanno.",
+          "tipo": "mode",
+          "ui": [],
+          "richiede": [
+            "fub.markdown"
+          ],
+          "usa": [
+            "fub.search"
+          ]
         },
         {
           "id": "fub.properties",
@@ -12046,6 +12390,7 @@
           "fub.stats",
           "fub.sync",
           "fub.tags",
+          "fub.tasks",
           "fub.template",
           "fub.trash",
           "fub.updates",
@@ -12066,6 +12411,7 @@
             "fub.backlinks",
             "fub.outline",
             "fub.tags",
+            "fub.tasks",
             "fub.properties",
             "fub.template",
             "fub.queries",
@@ -12104,6 +12450,7 @@
             "fub.backlinks",
             "fub.outline",
             "fub.tags",
+            "fub.tasks",
             "fub.properties",
             "fub.template",
             "fub.queries",
@@ -12137,6 +12484,7 @@
             "fub.backlinks",
             "fub.outline",
             "fub.tags",
+            "fub.tasks",
             "fub.properties",
             "fub.template",
             "fub.queries",
@@ -12168,6 +12516,7 @@
             "fub.backlinks",
             "fub.outline",
             "fub.tags",
+            "fub.tasks",
             "fub.properties",
             "fub.template",
             "fub.queries",
@@ -12200,6 +12549,7 @@
             "fub.backlinks",
             "fub.outline",
             "fub.tags",
+            "fub.tasks",
             "fub.properties",
             "fub.template",
             "fub.queries",
@@ -12447,6 +12797,7 @@
             "fub.stats",
             "fub.sync",
             "fub.tags",
+            "fub.tasks",
             "fub.trash",
             "fub.updates",
             "fub.versioning",
@@ -12531,6 +12882,7 @@
             "fub.stats",
             "fub.sync",
             "fub.tags",
+            "fub.tasks",
             "fub.trash",
             "fub.updates",
             "fub.versioning",
@@ -12645,6 +12997,7 @@
             "fub.stats",
             "fub.sync",
             "fub.tags",
+            "fub.tasks",
             "fub.template",
             "fub.trash",
             "fub.updates",
@@ -12718,6 +13071,7 @@
             "fub.stats",
             "fub.sync",
             "fub.tags",
+            "fub.tasks",
             "fub.template",
             "fub.trash",
             "fub.updates",
@@ -12800,6 +13154,7 @@
             "fub.stats",
             "fub.sync",
             "fub.tags",
+            "fub.tasks",
             "fub.template",
             "fub.trash",
             "fub.updates",
@@ -12871,6 +13226,7 @@
             "fub.stats",
             "fub.sync",
             "fub.tags",
+            "fub.tasks",
             "fub.template",
             "fub.trash",
             "fub.updates",
@@ -12963,6 +13319,7 @@
             "fub.stats",
             "fub.sync",
             "fub.tags",
+            "fub.tasks",
             "fub.template",
             "fub.trash",
             "fub.updates",
@@ -13044,6 +13401,7 @@
             "fub.stats",
             "fub.sync",
             "fub.tags",
+            "fub.tasks",
             "fub.template",
             "fub.trash",
             "fub.updates",
@@ -13147,6 +13505,7 @@
             "fub.stats",
             "fub.sync",
             "fub.tags",
+            "fub.tasks",
             "fub.template",
             "fub.trash",
             "fub.updates",
@@ -13226,6 +13585,7 @@
             "fub.stats",
             "fub.sync",
             "fub.tags",
+            "fub.tasks",
             "fub.template",
             "fub.trash",
             "fub.updates",
@@ -13323,6 +13683,7 @@
             "fub.stats",
             "fub.sync",
             "fub.tags",
+            "fub.tasks",
             "fub.template",
             "fub.trash",
             "fub.updates",
@@ -13396,6 +13757,7 @@
             "fub.stats",
             "fub.sync",
             "fub.tags",
+            "fub.tasks",
             "fub.template",
             "fub.trash",
             "fub.updates",
@@ -13478,6 +13840,7 @@
             "fub.stats",
             "fub.sync",
             "fub.tags",
+            "fub.tasks",
             "fub.template",
             "fub.trash",
             "fub.updates",
@@ -13549,6 +13912,7 @@
             "fub.stats",
             "fub.sync",
             "fub.tags",
+            "fub.tasks",
             "fub.template",
             "fub.trash",
             "fub.updates",
@@ -13627,6 +13991,7 @@
             "fub.stats",
             "fub.sync",
             "fub.tags",
+            "fub.tasks",
             "fub.template",
             "fub.trash",
             "fub.updates",
@@ -13694,6 +14059,7 @@
             "fub.stats",
             "fub.sync",
             "fub.tags",
+            "fub.tasks",
             "fub.template",
             "fub.trash",
             "fub.updates",
@@ -13765,6 +14131,7 @@
             "fub.stats",
             "fub.sync",
             "fub.tags",
+            "fub.tasks",
             "fub.template",
             "fub.trash",
             "fub.updates",
@@ -13830,6 +14197,7 @@
             "fub.stats",
             "fub.sync",
             "fub.tags",
+            "fub.tasks",
             "fub.template",
             "fub.trash",
             "fub.updates",
@@ -13939,6 +14307,7 @@
             "fub.stats",
             "fub.sync",
             "fub.tags",
+            "fub.tasks",
             "fub.template",
             "fub.trash",
             "fub.updates",
@@ -14041,6 +14410,7 @@
             "fub.stats",
             "fub.sync",
             "fub.tags",
+            "fub.tasks",
             "fub.template",
             "fub.trash",
             "fub.updates",
@@ -14153,6 +14523,7 @@
             "fub.stats",
             "fub.sync",
             "fub.tags",
+            "fub.tasks",
             "fub.template",
             "fub.trash",
             "fub.updates",
@@ -14221,6 +14592,7 @@
             "fub.stats",
             "fub.sync",
             "fub.tags",
+            "fub.tasks",
             "fub.template",
             "fub.trash",
             "fub.updates",
@@ -14296,6 +14668,7 @@
             "fub.stats",
             "fub.sync",
             "fub.tags",
+            "fub.tasks",
             "fub.template",
             "fub.trash",
             "fub.updates",
@@ -14360,6 +14733,7 @@
             "fub.stats",
             "fub.sync",
             "fub.tags",
+            "fub.tasks",
             "fub.template",
             "fub.trash",
             "fub.updates",
@@ -14443,6 +14817,7 @@
             "fub.stats",
             "fub.sync",
             "fub.tags",
+            "fub.tasks",
             "fub.template",
             "fub.trash",
             "fub.updates",
@@ -14512,6 +14887,7 @@
             "fub.stats",
             "fub.sync",
             "fub.tags",
+            "fub.tasks",
             "fub.template",
             "fub.trash",
             "fub.updates",
@@ -14588,6 +14964,7 @@
             "fub.stats",
             "fub.sync",
             "fub.tags",
+            "fub.tasks",
             "fub.template",
             "fub.trash",
             "fub.updates",
@@ -14660,6 +15037,7 @@
             "fub.stats",
             "fub.sync",
             "fub.tags",
+            "fub.tasks",
             "fub.template",
             "fub.trash",
             "fub.updates",
@@ -14741,6 +15119,7 @@
             "fub.stats",
             "fub.sync",
             "fub.tags",
+            "fub.tasks",
             "fub.template",
             "fub.trash",
             "fub.updates",
@@ -14801,6 +15180,7 @@
             "fub.stats",
             "fub.sync",
             "fub.tags",
+            "fub.tasks",
             "fub.template",
             "fub.trash",
             "fub.updates",
@@ -14874,6 +15254,7 @@
             "fub.stats",
             "fub.sync",
             "fub.tags",
+            "fub.tasks",
             "fub.template",
             "fub.trash",
             "fub.updates",
@@ -14941,6 +15322,7 @@
             "fub.stats",
             "fub.sync",
             "fub.tags",
+            "fub.tasks",
             "fub.template",
             "fub.trash",
             "fub.updates",
@@ -15018,6 +15400,7 @@
             "fub.stats",
             "fub.sync",
             "fub.tags",
+            "fub.tasks",
             "fub.template",
             "fub.trash",
             "fub.updates",
@@ -15091,6 +15474,7 @@
             "fub.stats",
             "fub.sync",
             "fub.tags",
+            "fub.tasks",
             "fub.template",
             "fub.trash",
             "fub.updates",
@@ -15166,6 +15550,7 @@
             "fub.stats",
             "fub.sync",
             "fub.tags",
+            "fub.tasks",
             "fub.template",
             "fub.trash",
             "fub.updates",
@@ -15228,6 +15613,7 @@
             "fub.stats",
             "fub.sync",
             "fub.tags",
+            "fub.tasks",
             "fub.template",
             "fub.trash",
             "fub.updates",
@@ -15303,6 +15689,7 @@
             "fub.stats",
             "fub.sync",
             "fub.tags",
+            "fub.tasks",
             "fub.template",
             "fub.trash",
             "fub.updates",
@@ -15368,6 +15755,7 @@
             "fub.stats",
             "fub.sync",
             "fub.tags",
+            "fub.tasks",
             "fub.template",
             "fub.trash",
             "fub.updates",
@@ -15477,6 +15865,7 @@
             "fub.stats",
             "fub.sync",
             "fub.tags",
+            "fub.tasks",
             "fub.template",
             "fub.trash",
             "fub.updates",
@@ -15579,6 +15968,7 @@
             "fub.stats",
             "fub.sync",
             "fub.tags",
+            "fub.tasks",
             "fub.template",
             "fub.trash",
             "fub.updates",
@@ -15689,6 +16079,7 @@
             "fub.stats",
             "fub.sync",
             "fub.tags",
+            "fub.tasks",
             "fub.template",
             "fub.trash",
             "fub.updates",
@@ -15756,6 +16147,7 @@
             "fub.stats",
             "fub.sync",
             "fub.tags",
+            "fub.tasks",
             "fub.template",
             "fub.trash",
             "fub.updates",

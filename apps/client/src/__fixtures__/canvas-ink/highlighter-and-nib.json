@@ -1,0 +1,25 @@
+{
+  "name": "highlighter-and-nib",
+  "description": "L'evidenziatore e la punta piatta nib1 sono tratti validi; i canali a e z insieme pure.",
+  "source": "{\n  \"nodes\": [\n    { \"id\": \"n1\", \"type\": \"text\", \"text\": \"Teorema\", \"x\": 0, \"y\": 0, \"width\": 400, \"height\": 300,\n      \"fub:ink\": { \"v\": 1, \"strokes\": [\n        { \"id\": \"s-1\", \"tool\": \"highlighter\", \"brush\": \"pf1 size=24 thinning=0 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=0 capEnd=0 sim=1 pen=highlighter\", \"color\": \"#f0e442\", \"anchor\": { \"kind\": \"card\", \"width\": 400, \"height\": 300 }, \"ink\": \"1 s100 cxy 4000,2500 120,40 95,-10\" },\n        { \"id\": \"s-2\", \"tool\": \"pen\", \"brush\": \"nib1 size=12 tip=1 angle=35 fixation=0.9 thinning=0.3 tilt=1 smoothing=0.6 streamline=0.5 sim=0 pen=calligraphy\", \"color\": \"#000000\", \"anchor\": { \"kind\": \"card\", \"width\": 400, \"height\": 300 }, \"ink\": \"1 s100 cxypaz 1000,1000,140,60,45 30,10,4,0,2\" }\n      ] } }\n  ],\n  \"edges\": []\n}\n",
+  "expect": {
+    "layers": [
+      {
+        "layer": {
+          "node": "n1"
+        },
+        "state": "ok",
+        "strokes": [
+          {
+            "id": "s-1",
+            "drawn": true
+          },
+          {
+            "id": "s-2",
+            "drawn": true
+          }
+        ]
+      }
+    ]
+  }
+}

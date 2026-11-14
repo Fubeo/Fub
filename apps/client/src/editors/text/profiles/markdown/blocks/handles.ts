@@ -18,7 +18,7 @@ import type { DetailsPair } from "../details";
 import { colorsAt, CONTENT_COLORS, lineText, setContentColor, type ColorKind, type ContentColor } from "../color";
 import { blockAnchor, blockLink } from "./anchor";
 import { columnsRun, dropAsColumn, intoColumns } from "./columns";
-import { blockModel, kindName, type Block } from "./model";
+import { blockModel, blockStartingAt, innermostAt, kindName, type Block } from "./model";
 import { type BlockRun, moveRun, moveSiblings, pinnedFirst, siblingsOf } from "./move";
 import { blockSelection, cursorBlock, deleteRun, duplicateRun, runOfSelection, selectBlocks, setBlockSelection } from "./selection";
 import { canTransform, targetOf, transformTo, type TransformTarget, unwrap } from "./transform";
@@ -59,13 +59,7 @@ function keyOf(block: Block): BlockKey {
 }
 
 function indexOf(blocks: readonly Block[], key: BlockKey | null): number {
-  if (!key) return -1;
-  for (let i = 0; i < blocks.length; i++) {
-    const block = blocks[i]!;
-    if (block.from > key.from) break;
-    if (block.from === key.from && block.depth === key.depth) return i;
-  }
-  return -1;
+  return key ? blockStartingAt(blocks, key.from, key.depth) : -1;
 }
 
 const TARGET_NAMES: Record<TransformTarget, () => string> = {
@@ -330,12 +324,7 @@ class HandlesView {
     if (this.drag || (target instanceof Node && this.root.contains(target))) return;
     const pos = this.view.posAtCoords({ x, y }, false);
     const blocks = this.view.state.field(blockModel).blocks;
-    let found = -1;
-    for (let i = 0; i < blocks.length; i++) {
-      const block = blocks[i]!;
-      if (block.from > pos) break;
-      if (pos <= block.to) found = i;
-    }
+    const found = innermostAt(blocks, pos);
     const key = found >= 0 ? keyOf(blocks[found]!) : null;
     if (key && this.hovered && key.from === this.hovered.from && key.depth === this.hovered.depth) return;
     if (key) this.hovered = key;

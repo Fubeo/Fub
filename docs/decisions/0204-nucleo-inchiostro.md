@@ -40,10 +40,15 @@ Obbligatorio:
    legate da una fixture generata e da un test gemello. Una regola cambia in
    Rust e si rigenera la fixture; non si cambia da un lato solo.
 2. **`fub-ink` non dipende da niente** e compila per `wasm32-wasip2`. Chi può
-   dipenderne è un elenco chiuso, che ora contiene `fub-scene` e
-   `fub-format-rich` (InkML, ADR 0226). Aggiungere un cliente
-   è una decisione: si scrive qui e poi nell'elenco di
-   `dependency_invariant.rs`.
+   dipenderne è un elenco chiuso, che ora contiene `fub-ink-codec` e
+   `fub-format-rich` (InkML, ADR 0226). `fub-ink-codec` è il codec di
+   `fub:ink` e la grammatica di `fub:brush`, usciti da `fub-scene` senza
+   riscriverli: li usano i disegni e il nucleo della lavagna, che compila per
+   la WebView e non deve portarsi dietro il lettore XML dei disegni. Dipende
+   soltanto da `fub-ink`, e i suoi clienti sono un altro elenco chiuso:
+   `fub-scene`, che ne riespone i tipi, e `fub-canvas-core`. Aggiungere un
+   cliente all'uno o all'altro è una decisione: si scrive qui e poi
+   nell'elenco di `dependency_invariant.rs`.
 3. **`apps/client/src/ink/` non conosce i prodotti.** Importa soltanto se stesso,
    `perfect-freehand` e, dal solo adattatore del browser, `ui/lifetime`. Niente
    editor, shell, stato, `@tauri-apps`, `@codemirror` né un modulo il cui nome

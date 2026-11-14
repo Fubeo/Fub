@@ -4,7 +4,9 @@
 import type { CommandSpec } from "../host/contract";
 import type { EditorSurface } from "../editors/core/registry";
 import { mountMarkdownSurface } from "../editors/text/profiles/markdown/surface";
-import { mediaMenu } from "../editors/media/media-surface";
+import { mediaMenu, type Mounted } from "../editors/media/media-surface";
+import type { GridEngine } from "../editors/grid/engine";
+import { gridContextMenu } from "../editors/grid/menu";
 import { composeEditorMenu, type ComposedEditorMenu, type EditorMenuHost } from "../panels/editor-menu";
 import type { CommandEntry } from "./commands";
 
@@ -88,13 +90,14 @@ function noteCase(place: string, doc: string, at: number, mode: "source" | "live
 
 /// Un file che non è una nota, mostrato dal visualizzatore, con un'app Craft
 /// installata: «Apri con un'altra app» è il sottomenu, l'app di sistema per
-/// prima e poi le app che aprono il file.
-function fileCase(place: string, doc: string): MenuCase {
+/// prima e poi le app che aprono il file. Un PDF porta la sua pagina.
+function fileCase(place: string, doc: string, kind: "image" | "pdf" = "image"): MenuCase {
   return {
     place,
     open() {
       const element = document.createElement("div");
-      const raw = mediaMenu({ kind: "image", element }, null, doc, {
+      const mounted = (kind === "pdf" ? { kind, element, pdf: { page: () => 2 } } : { kind, element }) as Mounted;
+      const raw = mediaMenu(mounted, null, doc, {
         transport: { open: async () => Promise.reject(new Error("niente")), read_chunk: async () => new ArrayBuffer(0), close: async () => {} },
         assetUrl: (handle) => handle,
         copyText: async () => {},
@@ -115,6 +118,28 @@ function fileCase(place: string, doc: string): MenuCase {
   };
 }
 
+/// Una cella di una cartella di lavoro, dalla tastiera: gli appunti e il
+/// riferimento da copiare. La barra non è ancora arrivata, come all'apertura.
+function cellCase(place: string): MenuCase {
+  return {
+    place,
+    open() {
+      const engine = {
+        pointAt: () => "cell",
+        selectedObject: () => null,
+        writable: () => true,
+        commandable: () => true,
+        selectionRefs: () => ({ sheet: "Budget", range: "B3" }),
+        activeCellBox: () => ({ left: 40, top: 60, right: 120, bottom: 80 }),
+      } as unknown as GridEngine;
+      const raw = gridContextMenu({ engine, ribbon: () => null }, null);
+      if (!raw) throw new Error(`nessun menu per ${place}`);
+      const surface = { contextMenu: () => raw } as unknown as EditorSurface;
+      return { menu: composeEditorMenu(raw, hostOf(surface)), miniBar: raw.miniBar === true, close: () => {} };
+    },
+  };
+}
+
 const NOTE = "## Formula\n\nLa media e la [[Media]] di un #esame, vedi https://it.wikipedia.org/wiki/Media qui.\n\n- uno\n- due\n- [ ] fare\n\n```python\nx = 1\n```\n\n| Nome | Voto |\n| --- | --- |\n| Ada | 10 |\n";
 const at = (text: string, offset = 1): number => NOTE.indexOf(text) + offset;
 
@@ -131,4 +156,6 @@ export const MENU_CASES: readonly MenuCase[] = [
   noteCase("una tabella nel sorgente", NOTE, at("| Ada", 3), "source"),
   noteCase("la Lettura", NOTE, 0, "reading"),
   fileCase("un file con «Apri con un'altra app»", "Foto/IMG_0001.png"),
+  fileCase("una pagina di un PDF", "Documenti/Contratto di prestito.pdf", "pdf"),
+  cellCase("una cella di un foglio"),
 ];

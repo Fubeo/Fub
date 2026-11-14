@@ -228,41 +228,119 @@ tabella), con trenta battute e venti spostamenti del cursore di 200 caratteri:
 ```bash
 cd apps/client
 node bench/interaction.mjs --only=battuta
+taskset -c 0-7 nice -n 19 node bench/interaction.mjs --only=battuta  # core P
 ```
 
-Il budget è una **mediana di 4 ms** per battuta, in ogni modalità di
-scrittura, anche su 7.201 righe. Le cifre sono mediana · novantesimo
-percentile · massimo, su server-di-fub (AMD Ryzen 7 7730U, Chromium della
-revisione Playwright fissata).
+Il budget è una **mediana di 4 ms** e un **novantesimo percentile di 8 ms**
+per battuta, in ogni modalità di scrittura, anche su 7.201 righe: il banco
+esce con errore se uno dei due è superato. Le cifre sono mediana · novantesimo
+percentile · massimo, su pc-debian-di-fub (Intel Core i5-13600KF, Debian 13,
+Chromium della revisione Playwright fissata): per ogni cifra la mediana di sei
+giri del banco alternati con sei del codice di prima (`05437b3db`), il 14
+novembre 2026 con un carico medio da 3,5 a 5,8 (la macchina faceva anche altri
+lavori).
 
-| Nota | Modalità | Battuta | Cursore |
-|---|---|---:|---:|
-| 901 righe | Sorgente | 1,9 · 2,6 · 7,5 ms | 1,9 · 2,4 · 2,5 ms |
-| 901 righe | Live | 2,9 · 4,0 · 9,6 ms | 3,2 · 3,7 · 3,9 ms |
-| 901 righe | Blocchi | 2,9 · 4,1 · 9,4 ms | 2,8 · 3,1 · 3,2 ms |
-| 7.201 righe | Sorgente | 3,8 · 4,7 · 12,0 ms | 2,1 · 2,3 · 2,4 ms |
-| 7.201 righe | Live | 6,4 · 8,8 · 17,6 ms | 3,7 · 4,3 · 4,3 ms |
-| 7.201 righe | Blocchi | 6,4 · 8,9 · 17,2 ms | 3,0 · 3,5 · 3,5 ms |
+| Nota | Modalità | Battuta | Cursore | Prima: battuta |
+|---|---|---:|---:|---:|
+| 901 righe | Sorgente | 2,0 · 3,8 · 8,6 ms | 2,0 · 3,8 · 4,2 ms | 2,2 · 2,9 · 7,4 ms |
+| 901 righe | Live | 3,1 · 5,6 · 19,1 ms | 2,2 · 4,0 · 4,3 ms | 3,9 · 6,4 · 22,0 ms |
+| 901 righe | Blocchi | 3,7 · 6,1 · 20,8 ms | 2,3 · 3,3 · 4,4 ms | 4,1 · 7,3 · 21,9 ms |
+| 7.201 righe | Sorgente | 4,2 · 6,0 · 13,5 ms | 2,1 · 2,8 · 3,7 ms | 3,6 · 5,8 · 17,4 ms |
+| 7.201 righe | Live | 5,7 · 8,4 · 38,0 ms | 3,0 · 3,9 · 4,2 ms | 6,8 · 11,5 · 29,1 ms |
+| 7.201 righe | Blocchi | 5,5 · 9,6 · 24,2 ms | 3,1 · 4,4 · 5,2 ms | 7,6 · 11,9 · 37,8 ms |
 
-La Live rende di nuovo soltanto i blocchi che una modifica tocca
-(`renderMarkdownState` con la resa di prima e le modifiche della transazione).
-Un blocco di primo livello che l'albero nuovo ha nello stesso punto, con lo
-stesso nome e lo stesso testo, torna dalla resa di prima con le sue
-definizioni, spostato; se cambiano le definizioni del documento (riferimenti,
-note, ancore dei titoli, sintassi) si rende tutto. Il widget di un blocco
-tornato resta quello di prima: il suo `eq` non guarda la posizione, e dopo
-l'aggiornamento della vista le coordinate `data-md-*` del DOM tornano al posto
-nuovo.
-Prima di questa resa incrementale la battuta sulla nota grande costava
-13,8 · 17,3 · 26,6 ms. Sulla nota grande la Live, e con lei Blocchi, supera ancora il budget: a
-ogni battuta scorre tutti i blocchi di primo livello (2.800 su 7.201 righe),
-e la Sorgente da sola sta già a 3,8 ms. Le cifre della tabella sono soltanto
-di server-di-fub: su una macchina più lenta la battuta non è stata misurata.
+**Il budget non è ancora rispettato sulla nota grande.** La Sorgente, che fa
+soltanto il lavoro di CodeMirror e della sessione, sta già intorno ai 4 ms, e
+fra un giro e l'altro la stessa nota varia più di una correzione: il numero da
+guardare è la distanza dalla Sorgente, non la cifra di un giro solo.
 
-Siccome questo banco non sta nella CI, la guardia in CI è il test che conta le
-rese della Live (`render-incremental.test.ts`): una battuta in un paragrafo
-rende quel paragrafo e basta, e dopo ogni modifica la resa è uguale a una resa
-da capo.
+Sui core P (14 novembre, sei giri alternati; contano i tre con carico da 23 a
+49, gli altri arrivano a 101) la nota di 7.201 righe dà di mediana: Sorgente da
+3,4 a 4,9 ms, Live da 4,4 a 10,1 (prima da 6,4 a 7,8), Blocchi da 5,1 a 20,1
+(prima da 6,7 a 10,2). Sopra la Sorgente restano i widget di CodeMirror (qui
+sotto), le decorazioni in riga, il campo dei blocchi e i segni (0,3·0,3·0,2).
+
+Una battuta lavora soltanto vicino alle posizioni del cambio, mai con un giro
+sui blocchi di primo livello:
+
+- **la resa** (`renderMarkdownState` con la resa di prima e le modifiche della
+  transazione) tiene i nodi di primo livello in un elenco a pezzi, e rilegge
+  soltanto quelli dal blocco prima della modifica al primo nodo dopo che
+  l'albero nuovo ha uguale a prima; i nodi dopo restano quelli di prima,
+  spostati senza toccarli. Le definizioni dei blocchi non riletti tornano dalla
+  resa di prima, e le loro posizioni si calcolano soltanto se servono. Il testo
+  della resa è quello di prima con le modifiche incollate, non le righe del
+  documento ricomposte. Si rende tutto da capo quando la modifica tocca il
+  frontmatter, un `^id` su una riga sua, una definizione, un titolo, un blocco
+  HTML o un indice (anche dentro una citazione o una lista), o quando il tratto
+  da rileggere supera i 256 nodi;
+- **i blocchi resi della Live** sono un insieme di intervalli che una modifica
+  sposta tutto in una volta; se ne rifanno soltanto quelli del tratto riletto
+  e quelli che la selezione di prima o di adesso tocca. Un cursore che si
+  muove rifà i blocchi da cui esce e in cui entra;
+- **le decorazioni in riga della Live** (i segni nascosti, gli stili, le
+  pastiglie) si rifanno soltanto nei nodi di primo livello che la modifica
+  cambia, in quelli che la selezione di prima o di adesso tocca, dove un blocco
+  reso compare o sparisce e ai bordi del tratto visibile che si sposta; le
+  altre si spostano. Si rifanno tutte quando cambiano la politica di
+  rivelazione, «A capo» di un recinto, le icone delle pagine, le definizioni,
+  il frontmatter o una riga con `[^`;
+- **i ripiegabili** (`details-live.ts`) e **la riga dei fatti** della nota
+  (`note-facts.ts`) seguono i nodi di primo livello che la modifica cambia
+  (`top-changes.ts`, la stessa regola della resa): rileggono quelli, e degli
+  altri tengono quello che sapevano;
+- **il modello dei Blocchi** cerca il punto da rifare e i gruppi che tornano
+  uguali per posizione, con una ricerca binaria, e scorre l'albero soltanto
+  dal punto della modifica al primo gruppo uguale. Un modello letto da un
+  albero a metà si rifà da capo quando l'albero arriva in fondo;
+- **le righe nascoste dopo i blocchi resi** della Live (quelle con altezza
+  zero, `cm-markdown-gap`) non stanno nel campo dei blocchi ma in un plugin
+  della vista che dà soltanto quelle del tratto visibile: CodeMirror confronta
+  due volte a ogni aggiornamento tutte le decorazioni a punto della vista, e
+  prima erano 1.600 sulla nota grande (fino a 1,3 ms per battuta);
+- **la sintassi** (`theme.ts`, `highlightVisible`): i blocchi resi spezzano il
+  tratto visibile (sette pezzi nella Live), e `syntaxHighlighting` scorreva
+  l'albero dall'inizio per ognuno; il nostro plugin unisce i pezzi a meno di
+  4.000 caratteri in una passata e taglia ai pezzi, con le classi di CodeMirror
+  (`theme.test.ts`). Da 0,60 a 0,24 ms nella Live;
+- **il rientro sospeso** (`hanging.ts`) scorre una volta il tratto visibile e a
+  una battuta non rimisura se vista, altezze e prefissi restano (0,27 → 0,07);
+- **la guardia dei segni** (`format-toggle.ts`) rilegge una riga a battuta.
+
+Un blocco tornato tiene il suo widget: il suo `eq` non guarda la posizione, e
+dopo l'aggiornamento della vista le coordinate `data-md-*` del DOM tornano al
+posto nuovo. Se cambiano le definizioni del documento (riferimenti, note,
+ancore dei titoli, sintassi) i blocchi si rendono tutti, perché potrebbero
+leggerle.
+
+Resta proporzionale alla nota il lavoro che la Sorgente fa uguale:
+
+- **il parser di CodeMirror**: dopo una modifica, se l'albero di prima era
+  completo, `LanguageState.apply` rilegge fino in fondo (fino a 20 ms), e il
+  parser Markdown riusa i nodi di prima uno a uno; i linguaggi dei recinti
+  (`codeLanguages`) aggiungono il parser misto, che scorre l'albero esterno. È
+  CodeMirror da solo: nessun nostro chiamante chiede l'albero oltre, e
+  `ensureSyntaxTree` fino in fondo nella resa trova l'albero già completo.
+  Togliere i linguaggi dei recinti, in una prova a parte, non cambia la
+  battuta più del rumore fra i giri;
+- **la sessione del documento** tiene il testo intero come stringa e a ogni
+  battuta lo ripassa (`lineFeeds`, l'operazione applicata);
+- **la selezione del DOM** che CodeMirror riscrive.
+
+Resta di CodeMirror il lavoro sui widget di blocco, che un plugin della vista
+non può dare: `RangeSet.compare` li confronta tutti due volte a ogni
+aggiornamento (0,25 ms sulla nota grande).
+
+Siccome questo banco non sta nella CI, le guardie in CI contano il lavoro di
+una battuta: `render-incremental.test.ts` per la resa e i blocchi della Live
+(una battuta in un paragrafo, in un recinto di duemila righe, in una tabella
+o in un riquadro guarda al più sei nodi; prima di questa resa tutti, 801 su
+una nota di 200 sezioni), `livepreview-inline.dom.test.ts` per le decorazioni
+in riga (al più otto righe lette, contro tutto il tratto visibile),
+`details-live.test.ts` e `note-facts.test.ts` per i ripiegabili e la riga dei
+fatti (al più sei nodi, contro 1.200 e 600), e `blocks/model.test.ts` per il
+modello dei Blocchi. Dopo ogni modifica a caso il risultato è quello di una
+lettura da capo dello stesso albero.
 
 ### L'apertura di una nota grande
 

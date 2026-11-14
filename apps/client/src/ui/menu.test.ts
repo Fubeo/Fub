@@ -30,6 +30,11 @@ import { createManualDriver } from "../moto/driver";
 import { closeContextMenu, menuPointFor, pickIcon, registerMenuSearch, showContextMenu } from "./menu";
 import { openLifetime } from "./lifetime";
 import { mountFrameIcons } from "../shells/scrittoio/icons";
+import { channels, contrast } from "../theme/contrast";
+import sheetLight from "../theme/scrittoio/sheet-light.css?raw";
+import sheetLightHigh from "../theme/scrittoio/sheet-light-high.css?raw";
+import sheetDark from "../theme/scrittoio/sheet-dark.css?raw";
+import sheetDarkHigh from "../theme/scrittoio/sheet-dark-high.css?raw";
 
 /** Un evento di mouse verosimile, che è tutto ciò che le due funzioni leggono. */
 function clickEvent(): MouseEvent {
@@ -221,8 +226,8 @@ describe("le voci a scelta", () => {
     expect([...first.querySelectorAll<HTMLElement>(".menu-swatch")].map((swatch) => swatch.style.background))
       .toHaveLength(2);
     expect(first.querySelector(".menu-swatches")!.getAttribute("aria-hidden")).toBe("true");
-    expect(first.querySelector(".menu-body .menu-label")!.textContent).toBe("Aurora");
-    expect(first.querySelector(".menu-body .menu-description")!.textContent).toBe("Colori vivi");
+    expect(first.querySelector(".menu-label")!.textContent).toBe("Aurora");
+    expect(first.querySelector(".menu-description")!.textContent).toBe("Colori vivi");
     expect(first.querySelector(".menu-check")!.textContent).toBe("✓");
     expect(items[1]!.querySelector(".menu-check")!.textContent).toBe("");
     expect(items[3]!.querySelector(".menu-check")).toBeNull();
@@ -838,29 +843,117 @@ describe("la testata, la riga degli appunti e il piede", () => {
     expect(labels()).toEqual(["Incolla", "Apri"]);
   });
 
-  it("le frecce passano dalla riga degli appunti alle voci, ← e → dentro la riga", () => {
-    showContextMenu(clickEvent(), [{ label: "Apri", run: () => {} }], { clipboard: [clip("Taglia"), clip("Copia")], pointer: false });
-    const [cut, copy] = [...document.querySelectorAll<HTMLButtonElement>("#context-menu .menu-clipboard button")];
-    const open = document.querySelector<HTMLButtonElement>("#context-menu .menu-items [role=menuitem]")!;
+  it("aperto da tastiera parte dalla prima voce: ↑ sale alla barra, ← e → ne cambiano la parte, ↓ dall'ultima ci torna", () => {
+    showContextMenu(clickEvent(), [{ label: "Apri", run: () => {} }, { label: "Chiudi", run: () => {} }], {
+      clipboard: [clip("Taglia"), clip("Copia"), clip("Incolla")],
+      pointer: false,
+    });
+    const [cut, copy, paste] = [...document.querySelectorAll<HTMLButtonElement>("#context-menu .menu-clipboard button")];
+    const [open, close] = [...document.querySelectorAll<HTMLButtonElement>("#context-menu .menu-items [role=menuitem]")];
+    expect(document.activeElement, "la prima voce, non la barra").toBe(open);
+    key(open!, "ArrowUp");
     expect(document.activeElement).toBe(cut);
+    key(cut!, "ArrowLeft");
+    expect(document.activeElement, "← si ferma alla prima parte").toBe(cut);
     key(cut!, "ArrowRight");
-    expect(document.activeElement).toBe(copy);
-    key(copy!, "ArrowLeft");
-    expect(document.activeElement).toBe(cut);
-    key(cut!, "ArrowDown");
+    key(copy!, "ArrowRight");
+    expect(document.activeElement).toBe(paste);
+    key(paste!, "ArrowRight");
+    expect(document.activeElement, "→ si ferma all'ultima").toBe(paste);
+    key(paste!, "ArrowLeft");
     expect(document.activeElement).toBe(copy);
     key(copy!, "ArrowDown");
     expect(document.activeElement).toBe(open);
+    key(open!, "ArrowDown");
+    expect(document.activeElement).toBe(close);
+    key(close!, "ArrowDown");
+    expect(document.activeElement, "↓ dall'ultima torna sulla parte accesa per ultima").toBe(copy);
+    key(copy!, "ArrowUp");
+    expect(document.activeElement, "↑ dalla barra va all'ultima voce").toBe(close);
   });
 
-  it("il piede invita a scrivere, col tasto che cerca fra tutti i comandi", () => {
+  it("la scelta è una sola: barra o elenco, accesa dal puntatore e ferma quando il puntatore esce", () => {
+    showContextMenu(new MouseEvent("contextmenu", { clientX: 10, clientY: 10, button: 2 }), [
+      { label: "Apri", run: () => {} },
+      { label: "Chiudi", run: () => {} },
+    ], { clipboard: [clip("Taglia"), clip("Copia")] });
+    const menu = document.getElementById("context-menu")!;
+    const bar = menu.querySelector<HTMLElement>(".menu-clipboard")!;
+    const [cut, copy] = [...bar.querySelectorAll<HTMLButtonElement>("button")];
+    const [open, close] = [...menu.querySelectorAll<HTMLButtonElement>(".menu-items [role=menuitem]")];
+    const lit = (): Element[] => [...menu.querySelectorAll(".menu-lit")];
+    const move = (target: Element): void => {
+      target.dispatchEvent(new PointerEvent("pointermove", { bubbles: true, pointerType: "mouse" }));
+    };
+    expect(lit(), "aperto col mouse non accende niente").toEqual([]);
+    move(open!);
+    expect(lit(), "il primo movimento è il menu che nasce sotto il puntatore").toEqual([]);
+    move(open!);
+    expect(lit()).toEqual([open]);
+    expect(document.activeElement).toBe(open);
+    menu.dispatchEvent(new PointerEvent("pointerleave", { pointerType: "mouse" }));
+    expect(lit(), "uscito il puntatore la voce resta accesa").toEqual([open]);
+    move(copy!);
+    expect(lit(), "mai due accese").toEqual([copy]);
+    expect(bar.classList.contains("is-on")).toBe(true);
+    expect(menu.querySelector<HTMLElement>(".menu-glide")!.hidden).toBe(true);
+    key(copy!, "ArrowLeft");
+    expect(lit()).toEqual([cut]);
+    move(close!);
+    expect(lit()).toEqual([close]);
+    expect(bar.classList.contains("is-on")).toBe(false);
+    expect(menu.querySelector<HTMLElement>(".menu-glide")!.hidden).toBe(false);
+  });
+
+  it("una parte degli appunti premuta si fa d'accento, poi il menu si chiude e il gesto si fa una volta", () => {
+    const run = vi.fn();
+    showContextMenu(clickEvent(), [{ label: "Apri", run: () => {} }], { clipboard: [clip("Taglia"), clip("Copia", run)], pointer: false });
+    const bar = document.querySelector<HTMLElement>("#context-menu .menu-clipboard")!;
+    const copy = bar.querySelectorAll<HTMLButtonElement>("button")[1]!;
+    copy.click();
+    copy.click();
+    key(copy, "Enter");
+    expect(copy.classList.contains("menu-pressed")).toBe(true);
+    expect(bar.classList.contains("menu-pressed")).toBe(true);
+    expect(run, "prima la spunta").not.toHaveBeenCalled();
+    expect(document.getElementById("context-menu")).not.toBeNull();
+    vi.advanceTimersByTime(200);
+    expect(run).toHaveBeenCalledTimes(1);
+    expect(document.getElementById("context-menu")).toBeNull();
+  });
+
+  it("il piede è una fascia che invita a scrivere; il tasto di tutti i comandi sta sulla sua voce", () => {
     const off = registerMenuSearch({ hint: () => "Ctrl+Maiusc+P", run: () => {} });
-    showContextMenu(clickEvent(), [{ label: "Apri", run: () => {} }]);
+    showContextMenu(clickEvent(), [{ label: "Apri", run: () => {} }], { pointer: false });
     const foot = document.querySelector<HTMLElement>("#context-menu .menu-foot")!;
     expect(foot.getAttribute("aria-hidden")).toBe("true");
-    expect(foot.textContent).toContain("Scrivi per cercare");
-    expect(foot.querySelector("kbd")!.textContent).toBe("Ctrl+Maiusc+P");
+    expect(foot.textContent).toBe("Scrivi per trovare altro");
+    expect(foot.querySelector("kbd")).toBeNull();
+    type("zz");
+    expect(foot.classList.contains("menu-finding")).toBe(true);
+    expect(foot.querySelector(".menu-foot-query")!.textContent).toBe("zz");
+    const offer = document.querySelector<HTMLButtonElement>("#context-menu .menu-items [role=menuitem]")!;
+    expect(offer.querySelector(".menu-hint")!.textContent).toBe("Ctrl+Maiusc+P");
     off();
+  });
+
+  it("scrivendo, prima le voci del menu e poi, sotto «Altri comandi», quelle che si trovano solo scrivendo", () => {
+    showContextMenu(clickEvent(), [{ label: "Copia", run: () => {} }, { label: "Apri", run: () => {} }], {
+      searchable: [{ label: "Copia il percorso", run: () => {} }],
+      pointer: false,
+    });
+    type("cop");
+    expect(labels()).toEqual(["Copia", "Copia il percorso"]);
+    const heading = document.querySelector<HTMLElement>("#context-menu .menu-group-label")!;
+    expect(heading.textContent).toBe("Altri comandi");
+    const group = heading.closest(".menu-group")!;
+    expect(group.getAttribute("role")).toBe("group");
+    expect(group.querySelector(".menu-label")!.textContent).toBe("Copia il percorso");
+    key(document.activeElement!, "Backspace");
+    key(document.activeElement!, "Backspace");
+    key(document.activeElement!, "Backspace");
+    expect(document.querySelector("#context-menu .menu-group-label")).toBeNull();
+    expect(labels()).toEqual(["Copia", "Apri"]);
   });
 
   it("un menu a tendina non ha piede: una lettera va all'iniziale", () => {
@@ -886,7 +979,7 @@ describe("la testata, la riga degli appunti e il piede", () => {
     expect(document.activeElement).toBe(hit);
     const foot = document.querySelector<HTMLElement>("#context-menu .menu-foot")!;
     expect(foot.querySelector(".menu-foot-query")!.textContent).toBe("tab");
-    expect(foot.textContent).toContain("1 voce");
+    expect(foot.textContent, "il conto lo dice soltanto il menu che cerca dappertutto").not.toContain("voce");
     key(document.activeElement!, "Backspace");
     key(document.activeElement!, "Backspace");
     key(document.activeElement!, "Backspace");
@@ -951,18 +1044,126 @@ describe("il moto del menu", () => {
     vi.useRealTimers();
   });
 
-  it("entra con una dissolvenza di 90 ms, senza spostarsi", () => {
-    showContextMenu(clickEvent(), [{ label: "Apri", run: () => {} }]);
+  it("aperto in un punto nasce da lì in non più di 200 ms, con le parti una dopo l'altra", () => {
+    showContextMenu(clickEvent(), [
+      { label: "Apri", run: () => {} },
+      { label: "Chiudi", run: () => {} },
+    ], { header: { icon: "link", kind: "Link", name: "Media" }, clipboard: [{ label: "Taglia", run: () => {} }, { label: "Copia", run: () => {} }] });
+    const menu = document.getElementById("context-menu")!;
+    const play = driver.plays.find((p) => p.el === menu)!;
+    expect(play.timing.duration).toBeLessThanOrEqual(200);
+    expect(play.keyframes[0]!.transform).toContain("scale(0.94");
+    const parts = driver.plays.filter((p) => p.el !== menu && menu.contains(p.el));
+    const rows = [...menu.querySelectorAll(".menu-items [role=menuitem]")];
+    expect(parts.map((p) => p.el)).toEqual([menu.querySelector(".menu-head"), menu.querySelector(".menu-clipboard"), ...rows, menu.querySelector(".menu-foot")]);
+    expect(parts.map((p) => p.timing.delay)).toEqual([0, 15, 30, 45, 60]);
+    for (const part of parts) expect(part.timing.delay + part.timing.duration).toBeLessThanOrEqual(200);
+  });
+
+  it("a tendina entra con una dissolvenza di 90 ms, senza spostarsi", () => {
+    const trigger = document.createElement("button");
+    document.body.appendChild(trigger);
+    showContextMenu(trigger, [{ label: "Apri", run: () => {} }]);
     const play = driver.plays.find((p) => p.el.id === "context-menu")!;
     expect(play).toBeDefined();
     expect(play.timing.duration).toBe(90);
     expect(Object.keys(play.keyframes[0] ?? {})).not.toContain("transform");
   });
 
-  it("col moto ridotto non si muove affatto", () => {
+  it("il sottomenu entra da destra", async () => {
+    showContextMenu(clickEvent(), [{ label: "Inserisci", items: [{ label: "Tabella", run: () => {} }] }], { pointer: false });
+    const parent = document.querySelector<HTMLButtonElement>("#context-menu [role=menuitem]")!;
+    parent.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true, cancelable: true }));
+    await vi.runAllTimersAsync();
+    const sub = document.querySelector<HTMLElement>(".context-submenu")!;
+    const play = driver.plays.find((p) => p.el === sub)!;
+    expect(play.keyframes[0]!.transform).toContain("translate(12px");
+    expect(play.timing.duration).toBeLessThanOrEqual(200);
+  });
+
+  it("col moto ridotto non si muove affatto, e una parte premuta si fa subito", () => {
     setMotionPreference("reduced");
-    showContextMenu(clickEvent(), [{ label: "Apri", run: () => {} }]);
-    expect(driver.plays.filter((p) => p.el.id === "context-menu")).toHaveLength(0);
+    const run = vi.fn();
+    showContextMenu(clickEvent(), [{ label: "Apri", run: () => {} }], { clipboard: [{ label: "Taglia", run: () => {} }, { label: "Copia", run }] });
+    expect(driver.plays).toHaveLength(0);
+    document.querySelectorAll<HTMLButtonElement>("#context-menu .menu-quick")[1]!.click();
+    expect(run).toHaveBeenCalledTimes(1);
+    expect(document.getElementById("context-menu")).toBeNull();
+  });
+});
+
+describe("«Copia come» nella riga", () => {
+  const key = (target: EventTarget, name: string): void => {
+    target.dispatchEvent(new KeyboardEvent("keydown", { key: name, bubbles: true, cancelable: true }));
+  };
+  const copyAs = (runs: string[]) => ({
+    label: "Copia come",
+    items: [
+      { label: "Markdown", icon: "copy-markdown", run: () => runs.push("md") },
+      { label: "HTML", icon: "copy-html", run: () => runs.push("html") },
+      { label: "testo senza formattazione", run: () => runs.push("text") },
+    ],
+  });
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    document.body.replaceChildren();
+  });
+
+  afterEach(() => {
+    closeContextMenu();
+    vi.useRealTimers();
+  });
+
+  it("tiene i tre segni nella riga, col nome del formato per chi ascolta e per chi guarda la riga accesa", () => {
+    const runs: string[] = [];
+    showContextMenu(clickEvent(), [{ label: "Apri", run: () => {} }, copyAs(runs)], { pointer: false });
+    const row = document.querySelector<HTMLElement>("#context-menu .menu-choices")!;
+    expect(row.getAttribute("role")).toBe("group");
+    const signs = [...row.querySelectorAll<HTMLButtonElement>(".menu-choice")];
+    expect(signs.map((b) => b.getAttribute("aria-label"))).toEqual([
+      "Copia come Markdown",
+      "Copia come HTML",
+      "Copia come testo senza formattazione",
+    ]);
+    expect(signs.every((b) => b.querySelector("svg") !== null), "il testo trova il suo segno dal nome").toBe(true);
+    expect(document.querySelector("#context-menu [aria-haspopup]"), "niente sottomenu").toBeNull();
+    const name = row.querySelector(".menu-choice-name")!;
+    expect(name.textContent).toBe("");
+
+    key(document.activeElement!, "ArrowDown");
+    expect(document.activeElement).toBe(signs[0]);
+    expect(row.classList.contains("menu-lit")).toBe(true);
+    expect(name.textContent).toBe("Markdown");
+    key(signs[0]!, "ArrowRight");
+    expect(document.activeElement).toBe(signs[1]);
+    expect(name.textContent).toBe("HTML");
+    key(signs[1]!, "ArrowRight");
+    key(signs[2]!, "ArrowRight");
+    expect(document.activeElement, "→ si ferma all'ultimo").toBe(signs[2]);
+    expect(row.querySelector(".menu-label")!.textContent).toBe("Copia cometesto senza formattazione");
+    key(signs[2]!, "ArrowLeft");
+    expect(name.textContent).toBe("HTML");
+    key(signs[1]!, "ArrowUp");
+    expect(name.textContent, "spenta la riga, il nome sparisce").toBe("");
+    key(document.activeElement!, "ArrowDown");
+    expect(document.activeElement, "la riga ricorda la scelta").toBe(signs[1]);
+
+    signs[1]!.click();
+    key(signs[1]!, "Enter");
+    expect(signs[1]!.classList.contains("menu-pressed")).toBe(true);
+    expect(runs).toEqual([]);
+    vi.advanceTimersByTime(200);
+    expect(runs).toEqual(["html"]);
+    expect(document.getElementById("context-menu")).toBeNull();
+  });
+
+  it("più di tre scelte, o una senza segno, restano un sottomenu", () => {
+    showContextMenu(clickEvent(), [
+      { label: "Esporta", items: [{ label: "PDF", run: () => {} }, { label: "Word", run: () => {} }] },
+    ], { pointer: false });
+    expect(document.querySelector("#context-menu .menu-choices")).toBeNull();
+    expect(document.querySelector("#context-menu [aria-haspopup]")).not.toBeNull();
   });
 });
 
@@ -1103,4 +1304,50 @@ describe("il menu che cerca dappertutto", () => {
     expect(rows()[0]!.hasAttribute("aria-disabled")).toBe(false);
     expect(document.activeElement).toBe(rows()[0]);
   });
+});
+
+/// Il grigio delle scorciatoie e delle spiegazioni regge su ogni fondo del
+/// menu, nelle quattro luci: sul rialzo, sotto la pastiglia della scelta, nella
+/// barra degli appunti e nel piede. I veli si compongono sul rialzo prima di
+/// contare (`theme/contrast.ts` non legge l'alfa).
+describe("il contrasto dei grigi del menu", () => {
+  const sheets = { "sheet-light": sheetLight, "sheet-light-high": sheetLightHigh, "sheet-dark": sheetDark, "sheet-dark-high": sheetDarkHigh };
+  const token = (css: string, name: string): string => {
+    const found = new RegExp(`--${name}:\\s*([^;]+);`).exec(css);
+    if (found === null) throw new Error(`--${name} manca`);
+    return found[1]!.trim();
+  };
+  /// Un velo `rgb(r g b / a%)` sopra un colore pieno, con un peso in più per
+  /// le mescolanze (`color-mix` del piede).
+  const over = (veil: string, base: string, weight = 1): string => {
+    const m = /^rgb\(\s*(\d+)\s+(\d+)\s+(\d+)\s*\/\s*([\d.]+)%\s*\)$/.exec(veil);
+    if (m === null) throw new Error(`«${veil}» non è un velo`);
+    const alpha = (Number(m[4]) / 100) * weight;
+    const under = channels(base);
+    const mixed = [1, 2, 3].map((i, k) => Math.round(Number(m[i]) * alpha + under[k]! * (1 - alpha)));
+    return `rgb(${mixed.join(", ")})`;
+  };
+
+  for (const [name, css] of Object.entries(sheets)) {
+    it(`${name}: le scorciatoie, la riga accesa, la barra e il piede`, () => {
+      const elev = token(css, "bg-elev");
+      const muted = token(css, "muted");
+      const text = token(css, "text");
+      const lit = over(token(css, "overlay-hover"), elev);
+      const tray = over(token(css, "overlay-hover"), elev);
+      const foot = over(token(css, "overlay-hover"), elev, 0.55);
+      const measured = {
+        "grigio sul rialzo": contrast(muted, elev),
+        "grigio sotto la pastiglia": contrast(muted, lit),
+        "grigio nella barra": contrast(muted, tray),
+        "grigio nel piede": contrast(muted, foot),
+        "testo sotto la pastiglia": contrast(text, lit),
+        "nome del formato sotto la pastiglia": contrast(token(css, "accent"), lit),
+        "parte premuta": contrast(token(css, "accent-contrast"), token(css, "accent")),
+        "voce distruttiva accesa": contrast(token(css, "danger-contrast"), token(css, "danger")),
+        "voce distruttiva a riposo": contrast(token(css, "danger"), elev),
+      };
+      for (const [what, ratio] of Object.entries(measured)) expect(ratio, what).toBeGreaterThanOrEqual(4.5);
+    });
+  }
 });

@@ -474,6 +474,11 @@ const CALLERS: &[(&str, &str, &str)] = &[
         "the search e2e bench",
     ),
     (
+        "crates/fub-features/tests/tasks_e2e.rs",
+        "SEARCH_ID",
+        "the tasks e2e bench, with the search index behind the view",
+    ),
+    (
         "crates/fub-features/examples/search.rs",
         "SEARCH_ID",
         "the search session",

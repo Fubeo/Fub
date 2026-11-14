@@ -8,12 +8,34 @@ import { markdownFromClipboard, markdownPaste, pastePlainText } from "./paste";
 import { declareClipboard } from "../../../../platform/clipboard";
 import { pasteHtml } from "../../paste-html";
 
+const DOC = "prima\r\nqui\r\nfine";
+/// Come `DOC`, con una riga vuota al posto di «qui»: il cursore sta a 6.
+const BLANK = "prima\r\n\r\nfine";
+
+/// Un clic sul pulsante, come lo manda il puntatore.
+function press(element: Element | null | undefined): void {
+  element?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+}
+
+/// Un tasto premuto su `target`, come lo manda il browser.
+function key(target: EventTarget, name: string, modifiers: { shiftKey?: boolean } = {}): KeyboardEvent {
+  const event = new KeyboardEvent("keydown", { key: name, bubbles: true, cancelable: true, ...modifiers });
+  target.dispatchEvent(event);
+  return event;
+}
+
+/// Il fuoco sta su una voce della scelta montata in `host`.
+function focusInChoice(host: HTMLElement): boolean {
+  return host.querySelector(".cm-fub-address-choice")?.contains(document.activeElement) ?? false;
+}
+
 function paste(
   html: string,
   plain: string,
   markdown = "",
   selection?: EditorSelection,
   dispatch = true,
+  doc = DOC,
 ) {
   const host = document.createElement("div");
   document.body.append(host);
@@ -28,7 +50,7 @@ function paste(
     extensions: () => profile.extensions(),
   });
   const view = EditorView.findFromDOM(host)!;
-  engine.setDoc("prima\r\nqui\r\nfine");
+  engine.setDoc(doc);
   view.dispatch({ selection: selection ?? EditorSelection.range(6, 9) });
   const event = new Event("paste", { bubbles: true, cancelable: true });
   Object.defineProperty(event, "clipboardData", {
@@ -67,6 +89,220 @@ describe("Markdown clipboard paste", () => {
     empty.host.remove();
   });
 
+  it("su una riga vuota un indirizzo diventa link, e la scelta Link o Scheda sta sotto", () => {
+    const { engine, event, view, host } = paste("", "https://example.org/a", "", EditorSelection.single(6), true, BLANK);
+    expect(event.defaultPrevented).toBe(true);
+    expect(engine.getDoc()).toBe("prima\r\n[https://example.org/a](https://example.org/a)\r\nfine");
+    // La scelta è una barra di due pulsanti: Link premuto, Scheda no.
+    const choice = host.querySelector(".cm-fub-address-choice");
+    expect(choice?.getAttribute("role")).toBe("toolbar");
+    expect(choice?.getAttribute("aria-label")).toBe("Come scrivere l'indirizzo");
+    const buttons = [...(choice?.querySelectorAll("button") ?? [])];
+    expect(buttons.map((button) => button.textContent)).toEqual(["Link", "Scheda"]);
+    expect(buttons.map((button) => button.getAttribute("aria-pressed"))).toEqual(["true", "false"]);
+    // Il pulsante non prende il fuoco: il mousedown non esce dall'editor.
+    const down = new MouseEvent("mousedown", { bubbles: true, cancelable: true });
+    buttons[1]!.dispatchEvent(down);
+    expect(down.defaultPrevented).toBe(true);
+    // Scheda scrive l'indirizzo da solo sulla riga: è la scheda del segnalibro.
+    press(buttons[1]!);
+    expect(engine.getDoc()).toBe("prima\r\nhttps://example.org/a\r\nfine");
+    expect(host.querySelector(".cm-fub-address-choice")).toBeNull();
+    expect(view.state.selection.main.head).toBe(6 + "https://example.org/a".length);
+    engine.destroy();
+    host.remove();
+  });
+
+  it("la scelta Link, Invio o un'altra battuta tengono il link, e il cursore che esce chiude la scelta", () => {
+    const link = "[https://example.org/a](https://example.org/a)";
+    // Link: il link resta, la scelta si chiude.
+    const kept = paste("", "https://example.org/a", "", EditorSelection.single(6), true, BLANK);
+    press(kept.host.querySelector('[data-choice="link"]'));
+    expect(kept.engine.getDoc()).toBe(`prima\r\n${link}\r\nfine`);
+    expect(kept.host.querySelector(".cm-fub-address-choice")).toBeNull();
+    kept.engine.destroy();
+    kept.host.remove();
+    // Una battuta (Invio qui): il link resta, la scelta non torna.
+    const typed = paste("", "https://example.org/a", "", EditorSelection.single(6), true, BLANK);
+    const end = typed.view.state.selection.main.head;
+    typed.view.dispatch({ changes: { from: end, insert: "\n" }, selection: { anchor: end + 1 }, userEvent: "input.type" });
+    expect(typed.engine.getDoc()).toContain(link);
+    expect(typed.host.querySelector(".cm-fub-address-choice")).toBeNull();
+    typed.engine.destroy();
+    typed.host.remove();
+    // Il cursore che lascia la riga: la scelta si chiude, il testo resta.
+    const left = paste("", "https://example.org/a", "", EditorSelection.single(6), true, BLANK);
+    left.view.dispatch({ selection: { anchor: 0 } });
+    expect(left.host.querySelector(".cm-fub-address-choice")).toBeNull();
+    expect(left.engine.getDoc()).toContain(link);
+    left.engine.destroy();
+    left.host.remove();
+  });
+
+  it("da tastiera: Tab entra nella scelta, le frecce passano fra le voci, Invio su Scheda fa la scheda", () => {
+    const { engine, view, host } = paste("", "https://example.org/a", "", EditorSelection.single(6), true, BLANK);
+    const link = host.querySelector<HTMLElement>('[data-choice="link"]')!;
+    const card = host.querySelector<HTMLElement>('[data-choice="card"]')!;
+    // Tab dall'editor porta il fuoco sul Link, e la barra ha un solo punto di tabulazione.
+    expect(key(view.contentDOM, "Tab").defaultPrevented).toBe(true);
+    expect(document.activeElement).toBe(link);
+    expect([link.tabIndex, card.tabIndex]).toEqual([0, -1]);
+    // Le frecce passano da una voce all'altra, e il punto di tabulazione le segue.
+    key(link, "ArrowRight");
+    expect(document.activeElement).toBe(card);
+    expect([link.tabIndex, card.tabIndex]).toEqual([-1, 0]);
+    key(card, "ArrowLeft");
+    expect(document.activeElement).toBe(link);
+    key(link, "ArrowRight");
+    // Invio su Scheda: un solo clic, l'indirizzo da solo sulla riga, il fuoco nell'editor.
+    let clicks = 0;
+    card.addEventListener("click", () => clicks++);
+    expect(key(card, "Enter").defaultPrevented).toBe(true);
+    expect(clicks).toBe(1);
+    expect(engine.getDoc()).toBe("prima\r\nhttps://example.org/a\r\nfine");
+    expect(host.querySelector(".cm-fub-address-choice")).toBeNull();
+    expect(focusInChoice(host)).toBe(false);
+    engine.destroy();
+    host.remove();
+  });
+
+  it("da tastiera: Spazio su Link lascia il link, Esc lo tiene e riporta il fuoco nell'editor", () => {
+    const link = "[https://example.org/a](https://example.org/a)";
+    const space = paste("", "https://example.org/a", "", EditorSelection.single(6), true, BLANK);
+    key(space.view.contentDOM, "Tab");
+    let clicks = 0;
+    space.host.querySelector('[data-choice="link"]')!.addEventListener("click", () => clicks++);
+    key(space.host.querySelector('[data-choice="link"]')!, " ");
+    expect(clicks).toBe(1);
+    expect(space.engine.getDoc()).toBe(`prima\r\n${link}\r\nfine`);
+    expect(space.host.querySelector(".cm-fub-address-choice")).toBeNull();
+    space.engine.destroy();
+    space.host.remove();
+    // Esc: il link resta, la scelta chiude, il fuoco torna nell'editor.
+    const esc = paste("", "https://example.org/a", "", EditorSelection.single(6), true, BLANK);
+    key(esc.view.contentDOM, "Tab");
+    const escaped = key(esc.host.querySelector('[data-choice="link"]')!, "Escape");
+    expect(escaped.defaultPrevented).toBe(true);
+    expect(esc.engine.getDoc()).toBe(`prima\r\n${link}\r\nfine`);
+    expect(esc.host.querySelector(".cm-fub-address-choice")).toBeNull();
+    expect(focusInChoice(esc.host)).toBe(false);
+    esc.engine.destroy();
+    esc.host.remove();
+  });
+
+  it("da tastiera: un tasto che la scelta non prende tiene il Link e va all'editor; i modificatori da soli no", () => {
+    const link = "[https://example.org/a](https://example.org/a)";
+    const { engine, view, host } = paste("", "https://example.org/a", "", EditorSelection.single(6), true, BLANK);
+    key(view.contentDOM, "Tab");
+    const focused = host.querySelector<HTMLElement>('[data-choice="link"]')!;
+    // Premere Shift da solo non chiude la scelta.
+    key(focused, "Shift");
+    expect(host.querySelector(".cm-fub-address-choice")).not.toBeNull();
+    expect(document.activeElement).toBe(focused);
+    // Una lettera chiude la scelta col Link e porta il fuoco nell'editor.
+    key(focused, "x");
+    expect(host.querySelector(".cm-fub-address-choice")).toBeNull();
+    expect(focusInChoice(host)).toBe(false);
+    expect(engine.getDoc()).toBe(`prima\r\n${link}\r\nfine`);
+    engine.destroy();
+    host.remove();
+  });
+
+  it("da tastiera: Shift-Tab dalla scelta torna all'editor col Link; Tab senza scelta resta quello dell'editor", () => {
+    const { engine, view, host } = paste("", "https://example.org/a", "", EditorSelection.single(6), true, BLANK);
+    key(view.contentDOM, "Tab");
+    expect(key(document.activeElement as HTMLElement, "Tab", { shiftKey: true }).defaultPrevented).toBe(true);
+    expect(host.querySelector(".cm-fub-address-choice")).toBeNull();
+    expect(focusInChoice(host)).toBe(false);
+    // Senza scelta, Tab indenta come sempre, e non porta il fuoco da nessuna parte.
+    const plain = paste("", "", "", EditorSelection.single(7), false);
+    const before = plain.engine.getDoc();
+    expect(key(plain.view.contentDOM, "Tab").defaultPrevented).toBe(true);
+    expect(plain.engine.getDoc()).not.toBe(before);
+    expect(plain.host.querySelector(".cm-fub-address-choice")).toBeNull();
+    expect(focusInChoice(plain.host)).toBe(false);
+    plain.engine.destroy();
+    plain.host.remove();
+    engine.destroy();
+    host.remove();
+  });
+
+  it("l'indirizzo incollato dentro un testo entra com'è, senza link né scelta", () => {
+    const { engine, host } = paste("", "https://example.org/a", "", EditorSelection.single(7));
+    expect(engine.getDoc()).toBe("prima\r\nqhttps://example.org/aui\r\nfine");
+    expect(host.querySelector(".cm-fub-address-choice")).toBeNull();
+    engine.destroy();
+    host.remove();
+  });
+
+  it("su una riga vuota la scelta non parte per un indirizzo scritto a mano", () => {
+    const { engine, view, host } = paste("", "", "", EditorSelection.single(6), false, BLANK);
+    for (const char of "https://example.org") {
+      const at = view.state.selection.main.head;
+      view.dispatch({ changes: { from: at, insert: char }, selection: { anchor: at + 1 }, userEvent: "input.type" });
+    }
+    expect(engine.getDoc()).toBe("prima\r\nhttps://example.org\r\nfine");
+    expect(host.querySelector(".cm-fub-address-choice")).toBeNull();
+    engine.destroy();
+    host.remove();
+  });
+
+  it("i casi dell'incolla: mailto, spazi, più righe, codice, IME, tabella e HTML", () => {
+    // mailto: un link, senza Scheda, perché la scheda è per le pagine web.
+    const mail = paste("", "mailto:a@example.org", "", EditorSelection.single(6), true, BLANK);
+    expect(mail.engine.getDoc()).toBe("prima\r\n[mailto:a@example.org](mailto:a@example.org)\r\nfine");
+    expect(mail.host.querySelector(".cm-fub-address-choice")).toBeNull();
+    mail.engine.destroy();
+    mail.host.remove();
+    // Con spazi non è un indirizzo: entra com'è.
+    const spaced = paste("", "https://example.org/a b", "", EditorSelection.single(6), true, BLANK);
+    expect(spaced.engine.getDoc()).toBe("prima\r\nhttps://example.org/a b\r\nfine");
+    spaced.engine.destroy();
+    spaced.host.remove();
+    // Più righe: non è un indirizzo solo, e nessun link.
+    const lines = paste("", "https://example.org/a\nhttps://example.org/b", "", EditorSelection.single(6), true, BLANK);
+    expect(lines.engine.getDoc()).not.toContain("](");
+    expect(lines.host.querySelector(".cm-fub-address-choice")).toBeNull();
+    lines.engine.destroy();
+    lines.host.remove();
+    // Dentro un blocco di codice l'indirizzo resta testo.
+    const code = paste("", "https://example.org/a", "", EditorSelection.single(10), true, "prima\r\n```\r\n\r\n```\r\nfine");
+    expect(code.engine.getDoc()).toBe("prima\r\n```\r\nhttps://example.org/a\r\n```\r\nfine");
+    expect(code.host.querySelector(".cm-fub-address-choice")).toBeNull();
+    code.engine.destroy();
+    code.host.remove();
+    // Dagli appunti con HTML il titolo del link vince, e nessuna scelta.
+    const titled = paste('<a href="https://example.org/a">Titolo</a>', "https://example.org/a", "", EditorSelection.single(6), true, BLANK);
+    expect(titled.engine.getDoc()).toBe("prima\r\n[Titolo](https://example.org/a)\r\nfine");
+    expect(titled.host.querySelector(".cm-fub-address-choice")).toBeNull();
+    titled.engine.destroy();
+    titled.host.remove();
+    // Durante una composizione (IME) l'incolla non diventa link: entra com'è.
+    const ime = paste("", "", "", EditorSelection.single(6), false, BLANK);
+    ime.view.contentDOM.dispatchEvent(new CompositionEvent("compositionstart", { bubbles: true }));
+    const composed = new Event("paste", { bubbles: true, cancelable: true });
+    Object.defineProperty(composed, "clipboardData", {
+      value: { getData: (type: string) => (type === "text/plain" ? "https://example.org/a" : "") },
+    });
+    ime.view.contentDOM.dispatchEvent(composed);
+    expect(ime.engine.getDoc()).toBe("prima\r\nhttps://example.org/a\r\nfine");
+    ime.engine.destroy();
+    ime.host.remove();
+  });
+
+  it("in una cella di tabella il link non chiude la colonna", () => {
+    // Il `|` dell'indirizzo si codifica, e il testo selezionato resta nella sua cella.
+    const cell = paste("", "https://x.it/a|b", "", EditorSelection.single(6, 9), true, "| a | qui | b |");
+    expect(cell.engine.getDoc()).toBe("| a | [qui](https://x.it/a%7Cb) | b |");
+    cell.engine.destroy();
+    cell.host.remove();
+    // Una selezione che attraversa un `|` lo scrive escapato nel testo del link.
+    const across = paste("", "https://x.it", "", EditorSelection.single(6, 13), true, "| a | qui | b |");
+    expect(across.engine.getDoc()).toBe("| a | [qui \\| b](https://x.it) |");
+    across.engine.destroy();
+    across.host.remove();
+  });
+
   it("Mod-Shift-v incolla il testo semplice, senza link e senza conversione", async () => {
     const entries = [{
       types: ["text/html", "text/plain"],
@@ -78,6 +314,13 @@ describe("Markdown clipboard paste", () => {
       const plain = paste("", "", "", undefined, false);
       expect(pastePlainText(plain.view)).toBe(true);
       await vi.waitFor(() => expect(plain.engine.getDoc()).toBe("prima\r\nhttps://example.org\r\nfine"));
+      // Su una riga vuota è lo stesso: il testo com'è, senza link e senza scelta.
+      const blankPlain = paste("", "", "", EditorSelection.single(6), false, BLANK);
+      expect(pastePlainText(blankPlain.view)).toBe(true);
+      await vi.waitFor(() => expect(blankPlain.engine.getDoc()).toBe("prima\r\nhttps://example.org\r\nfine"));
+      expect(blankPlain.host.querySelector(".cm-fub-address-choice")).toBeNull();
+      blankPlain.engine.destroy();
+      blankPlain.host.remove();
       plain.engine.destroy();
       plain.host.remove();
       // Appunti negati: non entra niente, e niente salta.

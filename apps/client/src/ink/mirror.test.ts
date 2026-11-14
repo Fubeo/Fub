@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { pointerSample, pointerTypeOf, type PointerSample } from "./input/pointer";
 import { pressureCurve, validCurve } from "./input/pressure";
-import { classifyPointer } from "./input/roles";
+import { classifyPointer, type MousePolicy } from "./input/roles";
 import { Session, type CancelReason, type Effect } from "./input/session";
 import { Stabilizer, type StabilizerConfig } from "./input/stabilizer";
 import { anglesFromTilt, penAngles, reportsTilt } from "./input/tilt";
@@ -124,6 +124,13 @@ function sampleOf(json: Json): InkSample {
   return a === undefined ? withP : { ...withP, a, z: num(c.z) };
 }
 
+/// La politica del mouse della fixture: un valore che la copia TS non conosce
+/// è un errore, non un default.
+function mouseOf(v: Json | undefined): MousePolicy {
+  if (v === "ink" || v === "ignore") return v;
+  throw new Error(`politica del mouse sconosciuta: ${String(v)}`);
+}
+
 /// Lo scenario di `c` su una sessione nuova: gli effetti e lo stato dopo ogni
 /// evento, nella forma della fixture.
 function replay(c: Case): { effects: Effect[]; roles: Record<string, string | null>; drawing: boolean; penSeen: boolean }[] {
@@ -131,6 +138,7 @@ function replay(c: Case): { effects: Effect[]; roles: Record<string, string | nu
   const curve = config.curve === null ? null : (config.curve as Case);
   const session = new Session({
     touch: config.touch as "auto" | "ink" | "navigate",
+    mouse: mouseOf(config.mouse),
     maxSamples: num(config.maxSamples),
     curve: curve === null ? null : pressureCurve({ soft: num(curve.soft), min: num(curve.min), full: num(curve.full) }),
     stabilizer: stabilizerOf(config.stabilizer!),
@@ -173,6 +181,9 @@ function replay(c: Case): { effects: Effect[]; roles: Record<string, string | nu
       case "touch":
         session.setTouchPolicy(step.policy as "auto" | "ink" | "navigate");
         break;
+      case "mouse":
+        session.setMousePolicy(mouseOf(step.policy));
+        break;
       default:
         throw new Error(`evento sconosciuto: ${String(step.op)}`);
     }
@@ -198,6 +209,7 @@ const HANDLERS: Record<string, (c: Case) => unknown> = {
       { pointerType: String(c.pointerType), button: num(c.button) },
       {
         touch: c.touch as "auto" | "ink" | "navigate",
+        mouse: mouseOf(c.mouse),
         penSeen: c.penSeen === true,
         penNear: c.penNear === true,
         touchesDown: num(c.touchesDown),

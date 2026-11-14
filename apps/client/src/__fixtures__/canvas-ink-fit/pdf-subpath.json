@@ -1,0 +1,45 @@
+{
+  "name": "pdf-subpath",
+  "description": "Il subpath non conta: conta l'estensione del file.",
+  "card": {
+    "type": "file",
+    "file": "Corsi/dispensa.pdf",
+    "subpath": "#page=3"
+  },
+  "ref": {
+    "width": 300,
+    "height": 400
+  },
+  "size": {
+    "width": 900,
+    "height": 600
+  },
+  "expect": {
+    "mode": "scale",
+    "s": 1.5,
+    "x": 225,
+    "y": 0,
+    "points": [
+      {
+        "from": [
+          0,
+          0
+        ],
+        "to": [
+          225,
+          0
+        ]
+      },
+      {
+        "from": [
+          100,
+          100
+        ],
+        "to": [
+          375,
+          150
+        ]
+      }
+    ]
+  }
+}

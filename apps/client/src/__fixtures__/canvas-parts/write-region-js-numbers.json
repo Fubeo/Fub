@@ -1,0 +1,21 @@
+{
+  "name": "write-region-js-numbers",
+  "description": "I numeri come li scrive JavaScript: 1e-7, 0.30000000000000004.",
+  "file": "Libro.pdf",
+  "parts": {
+    "kind": "region",
+    "page": 1,
+    "rect": [
+      0.1,
+      0.2,
+      0.30000000000000004,
+      1e-07
+    ],
+    "key": "k"
+  },
+  "expect": {
+    "outcome": "written",
+    "subpath": "#page=1",
+    "parts": "{\"kind\":\"region\",\"page\":1,\"rect\":[0.1,0.2,0.30000000000000004,1e-7],\"key\":\"k\"}"
+  }
+}

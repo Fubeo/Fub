@@ -274,6 +274,9 @@ describe("la griglia", () => {
       mouse(cell(1, 0), "contextmenu", { button: 2 });
       [...document.querySelectorAll<HTMLButtonElement>("#context-menu [role=menuitem]")]
         .find((button) => button.textContent?.startsWith(t("table.menu.cut")))!.click();
+      // La parte premuta della barra si fa d'accento, poi il menu si chiude e
+      // il gesto si fa.
+      await vi.waitFor(() => expect(copied).toHaveLength(1));
       grid.focus({ row: 2, col: 1 });
       release();
       await Promise.resolve();

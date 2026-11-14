@@ -83,9 +83,11 @@ Le regole che la sessione garantisce:
 - gli eventi predetti vanno solo all'anteprima, ogni volta al posto dei
   precedenti, e non entrano mai nel tratto;
 - un tratto si conclude alzando il puntatore o chiudendosi al limite dei
-  campioni; ogni altra fine lo annulla per intero, con un motivo
-  (`pointercancel`, perdita della cattura, finestra senza fuoco, pagina
-  nascosta, palmo, secondo dito, richiesta esplicita, distruzione);
+  campioni. La perdita della cattura e la finestra senza fuoco lo chiudono
+  come un rilascio, all'ultimo punto, e il tratto si salva (N6 T20a); un
+  movimento senza il tasto del tratto lo chiude allo stesso modo. Ogni altra
+  fine lo annulla per intero, con un motivo (`pointercancel`, pagina nascosta,
+  palmo, secondo dito, richiesta esplicita, distruzione);
 - una penna con pressione 0 non comincia un tratto, e una penna sospesa non
   disegna;
 - mouse e dito non hanno il canale di pressione, e il pennello la simula;
@@ -101,8 +103,13 @@ Le regole che la sessione garantisce:
 ignorato. La punta della penna disegna; la penna girata (`button` 5) e il
 tasto laterale (`button` 2) fanno anch'essi un tratto, coi ruoli `erase` e
 `barrel`, che `StrokeStart.role` porta a chi disegna. Ogni tratto vive finché
-è premuto il suo bit di `buttons` (1, 32, 2). Il mouse disegna col tasto
-principale.
+è premuto il suo bit di `buttons` (1, 32, 2). Il tasto centrale del mouse
+muove la vista; il principale segue la politica del mouse, che sceglie il
+prodotto (`mouse` nella configurazione, `setMousePolicy` mentre vive): `ink`,
+quella di serie, disegna, `ignore` lo lascia a chi sta sotto, per esempio a
+una lavagna dove il mouse seleziona. Vale dal prossimo appoggio: un tratto
+in corso finisce com'è. Un tipo di puntatore sconosciuto (`""`) segue il
+mouse: un driver che manda la penna così, con `ignore`, non scrive.
 Un dito non disegna mentre una penna tocca lo schermo o è sospesa: è il palmo, e
 un suo tratto già cominciato si annulla quando la penna arriva. Con due dita
 giù il gesto è di navigazione. Altrimenti decide la politica del tocco
@@ -297,8 +304,9 @@ di sopra, e non chiamano mai l'IPC durante il tratto; la sessione
   di annulla; se una non vale non si scrive niente, lo si dice e lo si scrive
   in console. Un rifiuto (`locked`, `hidden`, `empty`…) si dice con le frasi
   dell'editor.
-- Un gesto annullato (un pizzico, il puntatore perso) manda `cancel` e
-  rimette la selezione. Il doppio clic che entra in un gruppo resta del
+- Un gesto annullato (un pizzico, `pointercancel`) manda `cancel` e rimette
+  la selezione; la cattura persa e la finestra che perde il fuoco chiudono il
+  tratto come un rilascio (`up`, N6 T20a). Il doppio clic che entra in un gruppo resta del
   client.
 - Il motore che si sta ancora aprendo si aspetta fino a 2 s
   (`ATTESA_APERTURA_MS`); se non arriva, il gesto non scrive niente.
@@ -306,6 +314,12 @@ di sopra, e non chiamano mai l'IPC durante il tratto; la sessione
 Il test (`motore/gesti.test.ts`) rigioca i vettori dei gesti
 (`__fixtures__/disegno-gesti/`) col motore finto dell'host, che risponde le
 loro operazioni: il testo dopo il gesto è quello del vettore, in un passo.
+
+## La lavagna
+
+La penna sulla lavagna (lo strato, l'asciutto nelle schede, il passo di
+annulla, la gomma, il dito) sta in [L'inchiostro sulla
+lavagna](ink-on-canvas.md).
 
 ## Confini e verifica
 

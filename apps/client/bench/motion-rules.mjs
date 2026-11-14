@@ -208,6 +208,9 @@ async function hover(page, selector) {
 
 const has = (selector) => (page) => page.evaluate((s) => document.querySelector(s) !== null, selector);
 const lacks = (selector) => (page) => page.evaluate((s) => document.querySelector(s) === null, selector);
+/// Nel menu aperto è accesa la voce `index` dell'elenco.
+const menuLit = (index) => (page) =>
+  page.evaluate((i) => document.querySelectorAll("#context-menu .menu-items [role^=menuitem]")[i]?.classList.contains("menu-lit") ?? false, index);
 /// Il menu «/» della scena chiuso togliendo il «/», poi riaperto con `query`
 /// scritto dopo (vuota: resta chiuso, la apre il gesto).
 const slashAgain = (query) => async (page) => {
@@ -543,6 +546,39 @@ export const CHOREOGRAPHIES = [
     undo: (page) => page.keyboard.press("Escape"),
     returned: lacks("#context-menu"),
     exit: true,
+  },
+  {
+    id: "menu-punto",
+    title: "Menu del tasto destro: nasce dal punto del clic, le parti entrano una dopo l'altra; esce sfumando, ferma",
+    sources: ["src/ui/menu.ts"],
+    scene: "startup",
+    act: (page) => page.click('.pane.focus .cm-content .cm-line:has-text("Questa è la nota")', { button: "right", position: { x: 60, y: 8 } }),
+    arrived: has("#context-menu .menu-foot"),
+    undo: (page) => page.keyboard.press("Escape"),
+    returned: lacks("#context-menu"),
+    exit: true,
+  },
+  {
+    id: "menu-pastiglia",
+    title: "Menu: la pastiglia della scelta scivola da una voce all'altra",
+    sources: ["src/ui/menu.ts"],
+    scene: "menu-testo",
+    // La prima freccia accende la prima voce, senza scivolare: da lì si misura.
+    setup: (page) => page.keyboard.press("ArrowDown"),
+    act: (page) => page.keyboard.press("ArrowDown"),
+    arrived: menuLit(1),
+    undo: (page) => page.keyboard.press("ArrowUp"),
+    returned: menuLit(0),
+  },
+  {
+    id: "menu-linguetta",
+    title: "Barra degli appunti: la linguetta chiara scivola da una parte all'altra",
+    sources: ["src/ui/menu.ts"],
+    scene: "menu-appunti-accesi",
+    act: (page) => page.keyboard.press("ArrowRight"),
+    arrived: has("#context-menu .menu-clipboard .menu-quick:nth-child(4).menu-lit"),
+    undo: (page) => page.keyboard.press("ArrowLeft"),
+    returned: has("#context-menu .menu-clipboard .menu-quick:nth-child(3).menu-lit"),
   },
   {
     id: "preferences",

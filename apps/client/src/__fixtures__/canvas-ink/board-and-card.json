@@ -1,0 +1,31 @@
+{
+  "name": "board-and-card",
+  "description": "L'esempio completo della pagina: un livello su una scheda file, uno alla radice; la scheda di testo senza livello non compare.",
+  "source": "{\n  \"nodes\": [\n    { \"id\": \"f1\", \"type\": \"file\", \"file\": \"Corsi/Statistica/voti.xlsx\", \"x\": 0, \"y\": 0, \"width\": 640, \"height\": 420,\n      \"fub:ink\": { \"v\": 1, \"strokes\": [\n        { \"id\": \"s-mh0k2q1x-4f9a-1\", \"tool\": \"pen\", \"at\": \"2026-11-02T09:20:31.250Z\", \"brush\": \"pf1 size=3 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=0 pen=ballpoint\", \"color\": \"#0072b2\", \"anchor\": { \"kind\": \"card\", \"width\": 640, \"height\": 420 }, \"ink\": \"1 s100 cxypt 12050,3020,128,0 25,-3,2,8 31,-5,0,8\" }\n      ] } },\n    { \"id\": \"n2\", \"type\": \"text\", \"text\": \"Perché la media è così bassa?\", \"x\": 700, \"y\": 40, \"width\": 280, \"height\": 90 }\n  ],\n  \"edges\": [],\n  \"fub:ink\": { \"v\": 1, \"strokes\": [\n    { \"id\": \"s-mh0k2r7c-0b1e-2\", \"tool\": \"pen\", \"brush\": \"pf1 size=3 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=0 pen=ballpoint\", \"color\": \"#0072b2\", \"anchor\": { \"kind\": \"free\" }, \"ink\": \"1 s100 cxy 4000,2500 120,40 95,-10\" }\n  ] }\n}\n",
+  "expect": {
+    "layers": [
+      {
+        "layer": {
+          "node": "f1"
+        },
+        "state": "ok",
+        "strokes": [
+          {
+            "id": "s-mh0k2q1x-4f9a-1",
+            "drawn": true
+          }
+        ]
+      },
+      {
+        "layer": "board",
+        "state": "ok",
+        "strokes": [
+          {
+            "id": "s-mh0k2r7c-0b1e-2",
+            "drawn": true
+          }
+        ]
+      }
+    ]
+  }
+}

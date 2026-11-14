@@ -457,6 +457,175 @@ fn property_registry_round_trips_and_rejects_unknown_schemas() {
     assert_eq!(registry.resolve("alias"), Some(PropertyType::List));
 }
 
+/// Un registro senza opzioni si riscrive byte per byte com'era prima che le
+/// opzioni esistessero: il campo nuovo non compare.
+#[test]
+fn a_registry_without_options_is_rewritten_byte_for_byte() {
+    for raw in [
+        r#"{"version":1,"types":{}}"#,
+        r#"{"version":1,"types":{"rating":"number","when":"date_time"}}"#,
+    ] {
+        let registry: PropertyTypes = serde_json::from_str(raw).unwrap();
+        assert!(registry.options.is_empty());
+        assert_eq!(serde_json::to_string(&registry).unwrap(), raw);
+    }
+}
+
+#[test]
+fn select_status_and_url_cross_the_registry_with_their_options() {
+    let raw = concat!(
+        r#"{"version":1,"types":{"link":"url","stage":"status","tint":"select"},"#,
+        r#""options":{"stage":[{"name":"Da fare","color":"gray","group":"todo"},"#,
+        r#"{"name":"Fatto","color":"green","group":"done"}],"#,
+        r#""tint":[{"name":"Rosso","color":"red"},{"name":"Senza"}]}}"#
+    );
+    let registry: PropertyTypes = serde_json::from_str(raw).unwrap();
+    assert_eq!(registry.resolve("tint"), Some(PropertyType::Select));
+    assert_eq!(registry.resolve("stage"), Some(PropertyType::Status));
+    assert_eq!(registry.resolve("link"), Some(PropertyType::Url));
+    assert_eq!(registry.options("stage").len(), 2);
+    assert_eq!(registry.options("missing"), &[] as &[PropertyOption]);
+    assert_eq!(
+        registry.option("stage", "Fatto").map(PropertyOption::group),
+        Some(StatusGroup::Done)
+    );
+    // Colore e gruppo assenti: grigio e Da fare, e non si inventano nel file.
+    let senza = registry.option("tint", "Senza").unwrap();
+    assert_eq!(senza.color(), PropertyColor::Gray);
+    assert_eq!(senza.group(), StatusGroup::Todo);
+    assert_eq!(serde_json::to_string(&registry).unwrap(), raw);
+    // Un campo sconosciuto in un'opzione è un registro di un altro Fub.
+    assert!(serde_json::from_str::<PropertyTypes>(
+        r#"{"version":1,"types":{},"options":{"a":[{"name":"x","icon":"star"}]}}"#
+    )
+    .is_err());
+    // Un registro futuro con le opzioni resta illeggibile.
+    assert!(serde_json::from_str::<PropertyTypes>(
+        r#"{"version":2,"types":{},"options":{"a":[{"name":"x"}]}}"#
+    )
+    .is_err());
+}
+
+#[test]
+fn the_nine_option_colors_are_the_content_colors() {
+    let keys: Vec<&str> = PropertyColor::ALL.iter().map(|c| c.as_key()).collect();
+    assert_eq!(
+        keys,
+        ["gray", "brown", "orange", "yellow", "green", "blue", "purple", "pink", "red"]
+    );
+    for color in PropertyColor::ALL {
+        assert_eq!(PropertyColor::from_key(color.as_key()), Some(color));
+        assert_eq!(
+            serde_json::to_value(color).unwrap(),
+            serde_json::json!(color.as_key())
+        );
+    }
+    for group in StatusGroup::ALL {
+        assert_eq!(StatusGroup::from_key(group.as_key()), Some(group));
+        assert_eq!(
+            serde_json::to_value(group).unwrap(),
+            serde_json::json!(group.as_key())
+        );
+    }
+}
+
+/// La proiezione tipizzata di Selezione, Stato e Url, coi casi limite.
+#[test]
+fn select_and_status_project_on_their_options() {
+    let registry: PropertyTypes = serde_json::from_value(serde_json::json!({
+        "version": 1,
+        "types": {"tint": "select", "stage": "status", "link": "url", "plain": "text"},
+        "options": {
+            "tint": [
+                {"name": "Rosso", "color": "red"},
+                {"name": "Rosso", "color": "blue"},
+                {"name": "Acqua", "color": "teal"}
+            ],
+            "stage": [{"name": "In corso", "color": "yellow", "group": "doing"},
+                      {"name": "Strano", "group": "later"}],
+            "plain": [{"name": "Rosso"}]
+        }
+    }))
+    .unwrap();
+    let fm = Frontmatter(
+        serde_json::json!({
+            "tint": "Rosso", "stage": "In corso", "link": "https://fub.example/a b",
+            "other": "Rosso", "plain": "Rosso",
+            "number_tint": 3, "list_tint": ["Rosso"], "empty_tint": null,
+            "outside": "Verde", "spaced": "Rosso "
+        })
+        .as_object()
+        .unwrap()
+        .clone(),
+    );
+    let mut types = registry.clone();
+    for key in [
+        "number_tint",
+        "list_tint",
+        "empty_tint",
+        "outside",
+        "spaced",
+    ] {
+        types.types.insert(key.into(), PropertyType::Select);
+        types
+            .options
+            .insert(key.into(), registry.options("tint").to_vec());
+    }
+    let get = |key| {
+        fm.property_with_types(key, &DateFormats::ISO, &types)
+            .unwrap()
+    };
+    let matched = |key| types.option_match(key, &get(key));
+
+    // Il valore è il testo dell'opzione, con l'opzione trovata.
+    assert_eq!(get("tint"), PropertyValue::Text("Rosso".into()));
+    let Some(OptionMatch::Found(rosso)) = matched("tint") else {
+        panic!("{:?}", matched("tint"));
+    };
+    // Due opzioni con lo stesso nome: vale la prima.
+    assert_eq!(rosso.color(), PropertyColor::Red);
+    let Some(OptionMatch::Found(in_corso)) = matched("stage") else {
+        panic!("{:?}", matched("stage"));
+    };
+    assert_eq!(
+        (in_corso.color(), in_corso.group()),
+        (PropertyColor::Yellow, StatusGroup::Doing)
+    );
+    // Un colore e un gruppo sconosciuti: grigio e Da fare, la parola resta.
+    let acqua = types.option("tint", "Acqua").unwrap();
+    assert_eq!(acqua.color(), PropertyColor::Gray);
+    assert_eq!(acqua.color.as_deref(), Some("teal"));
+    assert_eq!(
+        types.option("stage", "Strano").unwrap().group(),
+        StatusGroup::Todo
+    );
+    // Fuori dalle opzioni: resta testo, segnato. Il confronto è esatto.
+    assert_eq!(matched("outside"), Some(OptionMatch::Outside));
+    assert_eq!(matched("spaced"), Some(OptionMatch::Outside));
+    // Un valore YAML che non è testo non è un'opzione.
+    assert_eq!(
+        get("number_tint"),
+        PropertyValue::Unknown(serde_json::json!(3))
+    );
+    assert_eq!(
+        get("list_tint"),
+        PropertyValue::Unknown(serde_json::json!(["Rosso"]))
+    );
+    assert_eq!(get("empty_tint"), PropertyValue::Empty);
+    for key in ["number_tint", "list_tint", "empty_tint"] {
+        assert_eq!(matched(key), None, "{key}");
+    }
+    // Url è un testo, com'è scritto.
+    assert_eq!(
+        get("link"),
+        PropertyValue::Text("https://fub.example/a b".into())
+    );
+    assert_eq!(matched("link"), None);
+    // Le opzioni contano solo per Selezione e Stato.
+    assert_eq!(matched("plain"), None);
+    assert_eq!(matched("other"), None);
+}
+
 #[test]
 fn declared_types_interpret_without_rewriting_incompatible_source() {
     let source = serde_json::json!({

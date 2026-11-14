@@ -147,9 +147,9 @@ pub use locale::{HourCycle, Locale, Weekday};
 pub use model::Payload;
 pub use model::{
     Anchor, Block, ColumnAlign, DateFormats, DateOrder, DocId, DocumentModel, Frontmatter, Heading,
-    HeadingSlugs, Inline, Link, LinkTarget, ListItem, ParsedWikilink, PropertyDate, PropertyScalar,
-    PropertyTime, PropertyType, PropertyTypes, PropertyValue, Span, TableCell, TableRow, Tag,
-    TaskMarker,
+    HeadingSlugs, Inline, Link, LinkTarget, ListItem, OptionMatch, ParsedWikilink, PropertyColor,
+    PropertyDate, PropertyOption, PropertyScalar, PropertyTime, PropertyType, PropertyTypes,
+    PropertyValue, Span, StatusGroup, TableCell, TableRow, Tag, TaskMarker,
 };
 pub use net::{HttpHeader, HttpMethod, HttpRequest, HttpResponse};
 pub use options::{OptionMap, OptionStatus};

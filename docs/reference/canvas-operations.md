@@ -36,6 +36,9 @@ chiave e nello stesso ordine.
 | `upsert-edge` | l'arco com'era, o `null` | l'arco nuovo | facoltativo |
 | `remove-edge` | l'arco com'era | `null` | facoltativo |
 | `reorder` | gli id delle schede, in ordine | gli stessi, nel nuovo ordine | no |
+| `ink` | il tratto com'era, o `null` | il tratto nuovo, o `null` | sì, nei tratti |
+
+La toppa `ink` è descritta nella sezione [Inchiostro](#inchiostro).
 
 Nelle toppe delle schede `at` è una posizione nella lista delle schede, che è
 anche la profondità: la prima scheda sta sotto tutte le altre. Nelle toppe
@@ -130,6 +133,14 @@ Ogni errore (`PatchError`) dice quale toppa della lista non si applica
 | `NodeHasEdges` | si toglie una scheda che ha ancora un arco |
 | `MissingEndpoint` | un arco collega una scheda che non c'è |
 | `NotAPermutation` | in `reorder`, `after` ha un id che non c'è, uno ripetuto o ne manca uno |
+| `InkAtOutOfRange` | in `ink` che aggiunge, `at` oltre la fine dei tratti del livello |
+| `ForeignLayer` | in `ink`, il livello è estraneo |
+| `DuplicateStroke` | in `ink`, il tratto di dopo ha l'id di un altro tratto del livello |
+| `EmptyInk` | in `ink`, `before` e `after` sono tutti e due `null` |
+
+Il commit dà una ragione in una parola (`PatchError::reason`): `invalid` per
+`ForeignLayer`, `DuplicateStroke` ed `EmptyInk`, che porterebbero a un
+livello che Fub non scrive; `stale` per tutti gli altri.
 
 Una toppa scritta male non arriva nemmeno alla copia: è un errore di
 lettura. Sono scritte male, per esempio, un `kind` sconosciuto, un `after`
@@ -158,6 +169,7 @@ inverso. Applicata dopo la lista, ridà il modello di prima.
 | `upsert-edge` con `before` uguale a `null` | `remove-edge` senza `at` |
 | `remove-edge` | `upsert-edge` con `before` uguale a `null` e lo stesso `at` |
 | `reorder` | `reorder` con `before` e `after` scambiati |
+| `ink` | `ink` con `before` e `after` scambiati e lo stesso `at` |
 
 Gli `at` di una lista di `remove-node`, e quelli di una lista di
 `remove-edge`, sono le posizioni nel modello di partenza. Per questo l'inversa
@@ -286,7 +298,9 @@ Obsidian: col seme 0 il primo è `e220a8397b1dcdaf`. Un giro di `compile` usa
 un solo generatore, e salta gli id presi: quelli di schede e archi del modello
 di partenza e ogni id entrato nel modello nello stesso giro. Un id dato a mano
 segue la stessa regola: se è preso, è `DuplicateId`. `created` dice, in
-ordine, gli id di ogni scheda e arco aggiunti, dati o generati.
+ordine, gli id di ogni scheda, arco e tratto aggiunti, dati o generati. Gli
+id dei tratti sono unici nel livello: un id generato per un tratto salta
+quelli del suo livello.
 
 ### Gli errori delle operazioni
 
@@ -299,13 +313,22 @@ Ogni errore (`OpError`) dice quale operazione della lista non si compila
 | `UnknownEdge` | `remove` o `set` di un id che non è né una scheda né un arco |
 | `DuplicateId` | un id dato che è già preso; un id ripetuto nella lista di `move`, `remove` o `reorder` |
 | `TooMany` | la lavagna avrebbe più di 100 000 schede o 200 000 archi |
-| `Invalid` | una scheda o un arco che il formato non accetta; `set` di `id` o `type`; un id che è sia una scheda sia un arco |
+| `Invalid` | una scheda o un arco che il formato non accetta; `set` di `id` o `type`; un id che è sia una scheda sia un arco; un tratto che non si disegnerebbe |
+| `UnknownStroke` | `erase_strokes`, `move_strokes` o `restyle_strokes` di un id che non è un tratto del livello |
+| `ForeignLayer` | un'operazione dell'inchiostro su un livello estraneo |
 
 I vettori stanno in `apps/client/src/__fixtures__/canvas-ops/`, uno per file,
 scritti a mano: `before`, `seed` facoltativo (0 se manca), `ops` e `expect`
 con `outcome` (`applied`, `rejected` o `malformed`) e, secondo il caso,
 `after`, `created` ed `error`. `crates/fub-canvas-core/tests/op_vectors.rs` li
 fa girare e controlla anche che l'inversa delle toppe ridia `before`.
+
+## Inchiostro
+
+La toppa `ink` e le operazioni `add_strokes`, `erase_strokes`, `move_strokes` e
+`restyle_strokes`, con i loro esempi e i loro errori, stanno nell'[inchiostro
+della lavagna](canvas-ink.md#toppa-e-operazioni). `move` e `resize` non toccano
+l'inchiostro; `remove` lo porta via con la scheda, e l'annulla lo rimette.
 
 ## Comandi
 
@@ -397,11 +420,12 @@ sotto. `src/api.rs` è il livello sicuro (una tabella di lavagne per handle),
 | `fub_free(ptr, len)` | | | |
 | `canvas_open(ptr, len) -> u32` | i byte del file | l'handle, 0 se fallisce | `{"handle", "canvas"}` |
 | `canvas_reset(h, ptr, len) -> i32` | i byte del file | 0 o -1 | `{"canvas"}` |
-| `canvas_commit(h, ptr, len) -> i32` | un array JSON di toppe | 0 o -1 | `{"edit", "inverse"}` |
+| `canvas_commit(h, ptr, len) -> i32` | un array JSON di toppe | 0 o -1 | `{"edit", "inverse"}`, più `changed` per un commit di soli tratti |
 | `canvas_preview(h, ptr, len) -> i32` | un array JSON di toppe | 0 o -1 | il sorgente intero, come testo |
 | `canvas_compile(h, ptr, len) -> i32` | `{"ops", "seed"}` | 0 o -1 | `{"patches", "created"}` |
 | `canvas_model(h) -> i32` | | 0 o -1 | `{"canvas"}` |
 | `canvas_node_at(h, byte) -> i32` | | l'indice, -1 fuori da ogni scheda, -2 se fallisce | vuoto |
+| `canvas_ink_layers(h) -> i32` | | 0 o -1 | `{"layers"}` |
 | `canvas_close(h) -> i32` | | 0 o -1 | vuoto |
 | `result_ptr() -> ptr`, `result_len() -> len` | | | dove sta il risultato |
 
@@ -417,6 +441,8 @@ sotto. `src/api.rs` è il livello sicuro (una tabella di lavagne per handle),
   coppia di surrogati. Non porta il sorgente intero, che con un file grande
   costerebbe a ogni gesto. `inverse` sono le toppe dell'annulla, da dare a un
   altro `canvas_commit`.
+  Un commit di soli tratti porta anche `changed`: le schede riscritte, o solo il cambio della loro lista `strokes` (`{"start", "remove", "insert"}`), e così per la radice;
+  sul modello di prima dà quello di `canvas_model` (forma in `Cores::commit` di `src/api.rs`, `changedModel` di `core.ts`). Il nucleo ritocca e rilegge solo le parti cambiate, con gli stessi byte.
 - `canvas_preview` dà il sorgente che darebbe `canvas_commit` con le stesse
   toppe, o lo stesso errore, e non cambia la lavagna: serve alle bozze, che
   vogliono il testo intero.
@@ -427,6 +453,10 @@ sotto. `src/api.rs` è il livello sicuro (una tabella di lavagne per handle),
 - `canvas_node_at` dà l'indice della scheda il cui oggetto nel sorgente
   contiene il byte `byte`, contato in UTF-8 dall'inizio del testo, BOM
   compreso.
+- `canvas_ink_layers` dà i livelli d'inchiostro come li legge il nucleo
+  (`read_layers`), nella forma di `expect` dei
+  [vettori dell'inchiostro](canvas-ink.md#i-vettori). Come `canvas_model`
+  non ha ingresso da liberare; la risposta è nel risultato, del modulo.
 - Gli handle partono da 1, crescono e non si riusano: 0 e `u32::MAX` non sono
   mai handle, e un handle chiuso risponde `handle` per sempre.
 
@@ -473,10 +503,12 @@ per chi indaga e non per l'utente.
 
 I test sono in `crates/fub-canvas-wasm/tests/`: `api.rs` passa dal livello
 sicuro, `abi.rs` dalle funzioni `extern "C"` chiamate in nativo, con gli
-stessi controlli (ogni vettore di `canvas-patches/` e `canvas-ops/`, il
-tratto UTF-16 con caratteri di uno, due, tre e quattro byte, BOM e CRLF, ogni
-ingresso sbagliato, gli handle, 16 MiB e un byte in più, un risultato più
-grande di 64 KiB) e, in `abi.rs`, la memoria viva uguale dopo 10 000 giri.
+stessi controlli (ogni vettore di `canvas-patches/` e `canvas-ops/`, ogni
+vettore di `canvas-ink/` per `canvas_ink_layers`, il tratto UTF-16 con
+caratteri di uno, due, tre e quattro byte, BOM e CRLF, ogni ingresso
+sbagliato, gli handle, 16 MiB e un byte in più, un risultato più grande di
+64 KiB) e, in `abi.rs`, la memoria viva uguale dopo 10 000 giri, anche di
+`canvas_ink_layers` con un commit d'inchiostro.
 
 ### Nella shell
 
@@ -502,7 +534,10 @@ wasm32-unknown-unknown`).
 
 `core.ts` compila il modulo una volta e dà `openCore(testo)`, una
 `CanvasCore` per lavagna con `model`, `reset`, `commit`, `preview`,
-`compile`, `nodeAt` e `close`. Rilegge le viste della memoria dopo ogni
+`compile`, `nodeAt`, `inkLayers` e `close`. `inkLayers` chiede i livelli al
+nucleo una volta per testo (apertura, `reset`, `commit`) e fino al cambio
+ridà lo stesso array congelato; lo usano i costruttori dei tratti di
+`operation.ts` e `inkLayerStates` di `ink-record.ts`. Rilegge le viste della memoria dopo ogni
 chiamata e libera ogni ingresso con `fub_free`, anche quando la chiamata
 fallisce. Un testo con un surrogato spaiato è un errore `utf8` prima di
 arrivare al modulo, mai un U+FFFD. Gli errori sono `CanvasCoreError` con i
@@ -510,4 +545,5 @@ arrivare al modulo, mai un U+FFFD. Gli errori sono `CanvasCoreError` con i
 di lei risponde `trap`, e il prossimo `openCore` fa un'istanza nuova) e `load`
 (il modulo non si carica; il prossimo `openCore` riprova). `close` si può
 ripetere; dopo `close` ogni altra chiamata risponde `handle`. I test sono
-`wasm/core.test.ts` e `wasm/vectors.test.ts`, sul `.wasm` vero.
+`wasm/core.test.ts`, `wasm/vectors.test.ts` e `wasm/ink-vectors.test.ts`,
+sul `.wasm` vero.

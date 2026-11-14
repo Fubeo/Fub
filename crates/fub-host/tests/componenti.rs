@@ -61,6 +61,7 @@ fn before() -> BTreeSet<&'static str> {
         ("fub.backlinks", cfg!(feature = "backlinks")),
         ("fub.outline", cfg!(feature = "outline")),
         ("fub.tags", cfg!(feature = "tags")),
+        ("fub.tasks", cfg!(feature = "tasks")),
         ("fub.properties", cfg!(feature = "properties")),
         ("fub.template", cfg!(feature = "template")),
         ("fub.queries", cfg!(feature = "queries")),

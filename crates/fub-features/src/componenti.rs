@@ -226,6 +226,14 @@ pub fn righe() -> Vec<Riga> {
             .group("scrivere")
             .requires(&["fub.markdown"])
             .cargo_feature("tags"),
+        // La vista legge le note con compiti dall'indice di ricerca: senza, la
+        // vista lo dice. È `uses`, non `requires`, perché la ricerca non offre servizi.
+        #[cfg(feature = "tasks")]
+        Riga::modalita("fub.tasks", "component.tasks.name")
+            .group("scrivere")
+            .requires(&["fub.markdown"])
+            .uses(&["fub.search"])
+            .cargo_feature("tasks"),
         #[cfg(feature = "properties")]
         Riga::servizio("fub.properties", "component.properties.name")
             .group("scrivere")
@@ -508,6 +516,11 @@ const DESCRIZIONI: &[(&str, &str, &str)] = &[
         "Every tag in the vault, and the notes that carry it.",
     ),
     (
+        "component.tasks.description",
+        "I compiti aperti di tutte le note, per scadenza, da spuntare dove stanno.",
+        "The open tasks of every note, by due date, to check where they are.",
+    ),
+    (
         "component.properties.description",
         "Le proprietà in testa alla nota, da leggere e cambiare.",
         "The properties at the top of a note, to read and change.",
@@ -664,6 +677,7 @@ const NOMI: &[(&str, &str, &str)] = &[
     ("component.backlinks.name", "Collegamenti", "Backlinks"),
     ("component.outline.name", "Struttura", "Structure"),
     ("component.tags.name", "Tag", "Tags"),
+    ("component.tasks.name", "Compiti", "Tasks"),
     ("component.properties.name", "Proprietà", "Properties"),
     ("component.template.name", "Template", "Template"),
     ("component.queries.name", "Query", "Queries"),

@@ -78,9 +78,26 @@ const specs = (edits: readonly Edit[], shift = 0) =>
 
 // ── La prova che i segni reggono ─────────────────────────────────────────────
 
+/// Una riga letta da `readSigns`. Non si cambia: le letture si tengono.
+type SignsRead = Readonly<{ signs: ReadonlySet<number>; tree: Tree; indent: number; elements: ReadonlyMap<string, Read> }>;
+
+/// Le ultime righe lette. Una battuta rilegge la riga di prima e quella di
+/// adesso, e la riga di prima è quella di adesso della battuta precedente.
+const signsRead = new Map<string, SignsRead>();
+const SIGNS_KEPT = 8;
+
 /// I segni veri del testo, letto da solo: le posizioni di `*_~^` che l'albero
 /// legge come segno. Il rientro resta fuori, che non diventi codice.
-export function readSigns(text: string): { signs: Set<number>; tree: Tree; indent: number; elements: Map<string, Read> } {
+export function readSigns(text: string): SignsRead {
+  const known = signsRead.get(text);
+  if (known) return known;
+  const read = readSignsOf(text);
+  if (signsRead.size >= SIGNS_KEPT) signsRead.delete(signsRead.keys().next().value!);
+  signsRead.set(text, read);
+  return read;
+}
+
+function readSignsOf(text: string): SignsRead {
   const indent = /^[ \t]*/.exec(text)![0].length;
   const tree = markdownGrammar.parser.parse(text.slice(indent));
   const signs = new Set<number>();
@@ -157,6 +174,10 @@ function lostElements(before: string, after: string, local: ChangeSet): Read[] {
   }
   return out;
 }
+
+/// I caratteri senza i quali `readSigns` non trova elementi: quelli dei segni
+/// e `=` dell'evidenziato.
+const SIGN_IN_LINE = /[*_~^=]/;
 
 const onlySigns = (text: string): boolean => [...text].every((char) => SIGN_CHARS.has(char));
 
@@ -252,6 +273,8 @@ export function brokenTwins(state: EditorState, changes: ChangeSet): Edit[] {
     });
     const local = ChangeSet.of(specsOf, line.length);
     if (local.apply(Text.of([line.text])).toString() !== text) continue;
+    // Senza un carattere di segno la riga non ha elementi da perdere.
+    if (!SIGN_IN_LINE.test(line.text)) continue;
     for (const { element, marks } of lostElements(line.text, text, local)) {
       const tag = HTML_TWIN[element];
       if (!tag) continue;

@@ -6,10 +6,15 @@
 //! della lavagna (`fub-features`) e la facciata WebAssembly che la WebView
 //! carica (`fub-canvas-wasm`). Per questo il crate non nomina il contratto
 //! (`fub-abi`), il Markdown, il kernel né un toolkit: dipende solo da `serde`,
-//! `serde_json` (con `float_roundtrip`) e `thiserror`, e compila per
+//! `serde_json` (con `float_roundtrip`), `thiserror` e il codec dei tratti
+//! `fub-ink-codec` (per l'inchiostro `fub:ink`, [`ink`]), e compila per
 //! `wasm32-unknown-unknown`. `crates/fub-abi/tests/dependency_invariant.rs`
 //! lo verifica (`the_canvas_core_stands_alone`), e il giro completo di
 //! `scripts/check.sh` lo compila per quel bersaglio.
+//!
+//! Gli estratti di una scheda di file, il campo `fub:parts`, li legge e li
+//! scrive [`parts`]; la misura e l'allineamento del testo di una scheda, il
+//! campo `fub:text`, [`text`].
 //!
 //! Regola d'oro: **i byte che non si interpretano non si toccano**. Ogni
 //! livello del modello conserva i campi sconosciuti (`extra`).
@@ -19,12 +24,15 @@
 //! `docs/reference/canvas-format.md`.
 
 pub mod commit;
+pub mod ink;
 pub mod js;
 pub mod model;
 pub mod ops;
+pub mod parts;
 pub mod patch;
 pub mod read;
 pub mod source;
+pub mod text;
 
 pub use model::{
     Canvas, CanvasColor, CanvasEdge, CanvasEdgeEnd, CanvasEdgeSide, CanvasError, CanvasNode,

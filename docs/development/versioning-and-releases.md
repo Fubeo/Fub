@@ -66,13 +66,13 @@ un percorso obsoleto o un numero divergente fanno fallire la CI.
 | Schema | Dove | Versione | Contenuto |
 |---|---|---:|---|
 | registro dei vault | [`crates/fub-host/src/vaults.rs:50`](../../crates/fub-host/src/vaults.rs) | 1 | vault conosciuti dalla macchina |
-| organizzazione | [`crates/fub-kernel/src/organization.rs:78`](../../crates/fub-kernel/src/organization.rs) | 1 | albero, icone, spazi e voci appuntate |
+| organizzazione | [`crates/fub-kernel/src/organization.rs:80`](../../crates/fub-kernel/src/organization.rs) | 1 | albero, icone, spazi e voci appuntate |
 | stato di vista | [`crates/fub-kernel/src/viewstate.rs:57`](../../crates/fub-kernel/src/viewstate.rs) | 1 | posizione e stato per esemplare di vista |
 | anagrafe | [`crates/fub-kernel/src/entries.rs:147`](../../crates/fub-kernel/src/entries.rs) | 5 | metadati indicizzati delle voci |
 | impostazioni | [`crates/fub-kernel/src/settings.rs:115`](../../crates/fub-kernel/src/settings.rs) | 2 | valori per vault e macchina |
 | versioning | [`crates/fub-features/src/versioning/store.rs:6`](../../crates/fub-features/src/versioning/store.rs) | 1 | snapshot dei file |
 | snapshot globale | [`crates/fub-kernel/src/snapshot.rs:26`](../../crates/fub-kernel/src/snapshot.rs) | 1 | manifest autorevole, contenitore e record di recovery |
-| indice di ricerca | [`crates/fub-features/src/search.rs:147`](../../crates/fub-features/src/search.rs) | 8 | campi, opzioni e tokenizer dell'indice |
+| indice di ricerca | [`crates/fub-features/src/search.rs:150`](../../crates/fub-features/src/search.rs) | 9 | campi, opzioni e tokenizer dell'indice |
 | registro delle mutazioni | [`crates/fub-kernel/src/journal.rs:178`](../../crates/fub-kernel/src/journal.rs) | 1 | mutazioni applicate al vault |
 | bozze | [`crates/fub-kernel/src/drafts.rs:110`](../../crates/fub-kernel/src/drafts.rs) | 1 | contenuto non ancora salvato |
 | bundle diagnostico | [`crates/fub-kernel/src/maintenance.rs:242`](../../crates/fub-kernel/src/maintenance.rs) | 1 | copia dei fatti raccolti per la diagnostica |

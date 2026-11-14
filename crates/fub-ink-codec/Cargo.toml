@@ -1,0 +1,12 @@
+[package]
+name = "fub-ink-codec"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "Il codec dei tratti a mano libera: la stringa `fub:ink` (campioni quantizzati in differenze) e la grammatica dei pennelli `fub:brush` (`pf1`, `nib1`). Puro: dipende solo da `fub-ink`, niente XML, niente I/O, niente codice di piattaforma."
+
+[dependencies]
+# Il campione del tratto è del nucleo dell'inchiostro, che è puro e non ha
+# dipendenze a sua volta: il codec lo quantizza, non ne ridefinisce il tipo.
+fub-ink = { workspace = true }

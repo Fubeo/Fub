@@ -1133,6 +1133,62 @@
       }
     },
     {
+      "input": "comment:Anna -comment:\"da rivedere\" passo",
+      "typing": false,
+      "out": {
+        "ok": {
+          "any": [
+            {
+              "all": [
+                {
+                  "negated": false,
+                  "predicate": {
+                    "kind": "custom",
+                    "ns": "fub:comment",
+                    "predicate": {
+                      "text": "Anna",
+                      "mode": "terms",
+                      "fields": [],
+                      "tolerance": "exact",
+                      "partial_last_term": false,
+                      "case_sensitive": false
+                    }
+                  }
+                },
+                {
+                  "negated": true,
+                  "predicate": {
+                    "kind": "custom",
+                    "ns": "fub:comment",
+                    "predicate": {
+                      "text": "da rivedere",
+                      "mode": "phrase",
+                      "fields": [],
+                      "tolerance": "exact",
+                      "partial_last_term": false,
+                      "case_sensitive": false
+                    }
+                  }
+                },
+                {
+                  "negated": false,
+                  "predicate": {
+                    "kind": "text",
+                    "text": "passo",
+                    "mode": "terms",
+                    "fields": [],
+                    "tolerance": "exact",
+                    "partial_last_term": false,
+                    "case_sensitive": false
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
       "input": "/fo+\\/bar/ -/x/",
       "typing": false,
       "out": {

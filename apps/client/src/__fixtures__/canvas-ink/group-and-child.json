@@ -1,0 +1,33 @@
+{
+  "name": "group-and-child",
+  "description": "Un gruppo è una scheda: ha il suo livello, e il figlio che sta dentro di lui ha il suo. I livelli si elencano nell'ordine di nodes.",
+  "source": "{\n  \"nodes\": [\n    { \"id\": \"g1\", \"type\": \"group\", \"label\": \"Capitolo 2\", \"x\": 0, \"y\": 0, \"width\": 800, \"height\": 600,\n      \"fub:ink\": { \"v\": 1, \"strokes\": [\n        { \"id\": \"s-g1\", \"tool\": \"pen\", \"brush\": \"pf1 size=3 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=0 pen=ballpoint\", \"color\": \"#0072b2\", \"anchor\": { \"kind\": \"card\", \"width\": 800, \"height\": 600 }, \"ink\": \"1 s100 cxy 4000,2500 120,40 95,-10\" }\n      ] } },\n    { \"id\": \"t1\", \"type\": \"text\", \"text\": \"Definizione\", \"x\": 40, \"y\": 60, \"width\": 300, \"height\": 120,\n      \"fub:ink\": { \"v\": 1, \"strokes\": [\n        { \"id\": \"s-t1\", \"tool\": \"pen\", \"brush\": \"pf1 size=3 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=0 pen=ballpoint\", \"color\": \"#0072b2\", \"anchor\": { \"kind\": \"card\", \"width\": 300, \"height\": 120 }, \"ink\": \"1 s10 cxyt 800,600,0 12,3,9 10,-2,8\" }\n      ] } }\n  ],\n  \"edges\": []\n}\n",
+  "expect": {
+    "layers": [
+      {
+        "layer": {
+          "node": "g1"
+        },
+        "state": "ok",
+        "strokes": [
+          {
+            "id": "s-g1",
+            "drawn": true
+          }
+        ]
+      },
+      {
+        "layer": {
+          "node": "t1"
+        },
+        "state": "ok",
+        "strokes": [
+          {
+            "id": "s-t1",
+            "drawn": true
+          }
+        ]
+      }
+    ]
+  }
+}

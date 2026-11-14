@@ -28,8 +28,8 @@ mod common;
 
 use common::*;
 use fub_ink::{
-    angles_from_tilt, classify_pointer, pen_angles, reports_tilt, PenCurve, PointerKind,
-    RoleContext, Sample, Stabilizer, StabilizerConfig, Tilt, TouchPolicy,
+    angles_from_tilt, classify_pointer, pen_angles, reports_tilt, MousePolicy, PenCurve,
+    PointerKind, RoleContext, Sample, Stabilizer, StabilizerConfig, Tilt, TouchPolicy,
 };
 use serde_json::{json, Map, Value};
 
@@ -41,46 +41,55 @@ fn fixture_path() -> std::path::PathBuf {
 }
 
 const POLICIES: [TouchPolicy; 3] = [TouchPolicy::Auto, TouchPolicy::Ink, TouchPolicy::Navigate];
+const MOUSE_POLICIES: [MousePolicy; 2] = [MousePolicy::Ink, MousePolicy::Ignore];
 
+/// Ogni caso gira con le due politiche del mouse: la penna e il dito non
+/// cambiano, il tasto principale del mouse sì.
 fn role_cases() -> Vec<Value> {
     let mut cases = Vec::new();
-    let quiet = RoleContext {
-        touch: TouchPolicy::Auto,
-        pen_seen: false,
-        pen_near: false,
-        touches_down: 0,
-    };
     let mut push = |kind: PointerKind, button: i32, context: RoleContext| {
         cases.push(json!({
             "pointerType": kind.name(),
             "button": button,
             "touch": context.touch.name(),
+            "mouse": context.mouse.name(),
             "penSeen": context.pen_seen,
             "penNear": context.pen_near,
             "touchesDown": context.touches_down,
             "out": classify_pointer(kind, button, &context).name(),
         }));
     };
-    // La penna e il mouse non guardano il contesto: contano i tasti.
-    for kind in [PointerKind::Pen, PointerKind::Mouse] {
-        for button in [0, 1, 2, 3, 5] {
-            push(kind, button, quiet);
+    for mouse in MOUSE_POLICIES {
+        let quiet = RoleContext {
+            touch: TouchPolicy::Auto,
+            mouse,
+            pen_seen: false,
+            pen_near: false,
+            touches_down: 0,
+        };
+        // La penna e il mouse guardano solo i tasti (e il mouse la sua
+        // politica).
+        for kind in [PointerKind::Pen, PointerKind::Mouse] {
+            for button in [0, 1, 2, 3, 5] {
+                push(kind, button, quiet);
+            }
         }
-    }
-    for touch in POLICIES {
-        for pen_seen in [false, true] {
-            for pen_near in [false, true] {
-                for touches_down in 0..=2 {
-                    push(
-                        PointerKind::Touch,
-                        0,
-                        RoleContext {
-                            touch,
-                            pen_seen,
-                            pen_near,
-                            touches_down,
-                        },
-                    );
+        for touch in POLICIES {
+            for pen_seen in [false, true] {
+                for pen_near in [false, true] {
+                    for touches_down in 0..=2 {
+                        push(
+                            PointerKind::Touch,
+                            0,
+                            RoleContext {
+                                touch,
+                                mouse,
+                                pen_seen,
+                                pen_near,
+                                touches_down,
+                            },
+                        );
+                    }
                 }
             }
         }

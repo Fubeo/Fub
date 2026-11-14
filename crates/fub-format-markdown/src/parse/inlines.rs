@@ -25,11 +25,52 @@ pub(super) fn convert_inlines<'a>(
     let node_end = span_of(node, offsets).end;
     let mut inside_note: Option<usize> = None;
     let mut swallowed: Option<usize> = None;
+    // I commenti CriticMarkup di questo contenitore (`comments.rs`): i segni e
+    // i messaggi tagliano i nodi di testo, e ciò che sta dentro un messaggio
+    // non si converte.
+    let mut comments = if ctx.enabled(syntax::COMMENTS) {
+        comments::plan(node, source, offsets, ctx.enabled(syntax::FOOTNOTES))
+    } else {
+        None
+    };
     for child in node.children() {
         if let Some(mark) = swallowed.take() {
             out.truncate(mark);
         }
         let span = span_of(child, offsets);
+        if let Some(plan) = comments.as_mut() {
+            let is_text = matches!(child.data.borrow().value, NodeValue::Text(_));
+            if is_text && plan.touches(span) {
+                for piece in plan.split_text(span) {
+                    match piece {
+                        Ok(range) => {
+                            let Some(slice) = source.get(range.clone()) else {
+                                continue;
+                            };
+                            let decoded = decode_segment(source, slice, range.start);
+                            let text_base = text_out.len();
+                            text_out.push_str(&decoded);
+                            let projected = push_text_features(
+                                source,
+                                slice,
+                                &decoded,
+                                range.start,
+                                text_base,
+                                ctx,
+                                acc,
+                                &mut out,
+                            );
+                            project(text_out, text_base, decoded.len(), projected);
+                        }
+                        Err(mark) => out.push(mark),
+                    }
+                }
+                continue;
+            }
+            if !is_text && plan.swallows(span) {
+                continue;
+            }
+        }
         if inside_note.is_some_and(|close| span.start >= close) {
             inside_note = None;
         }

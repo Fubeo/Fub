@@ -79,7 +79,7 @@ destro su un oggetto che non è scelto prima lo sceglie.
   gruppo dentro un gruppo isolato, e Menu radiale: sempre meno di nove voci.
 
 Il resto, Incolla nello stesso punto con una selezione, Inverti la
-selezione, Rinomina, Sblocca tutto e Mostra tutto, si trova scrivendo, come dice il piede «Scrivi per cercare».
+selezione, Rinomina, Sblocca tutto e Mostra tutto, si trova scrivendo, come dice il piede «Scrivi per trovare altro».
 
 - **Seleziona tutto** (`Ctrl+A`) e **Inverti la selezione**, che sceglie
   tutto il resto: di un gruppo con dentro un oggetto scelto, gli altri oggetti

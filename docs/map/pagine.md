@@ -45,6 +45,7 @@
 - Come comunica la shell TypeScript con il core senza diffondere Tauri? → [architecture/frontend-and-ipc.md](../architecture/frontend-and-ipc.md)
 - Come la shell apre, mostra e modifica una cartella di Excel, e che cosa resta al provider? → [architecture/grid-surface.md](../architecture/grid-surface.md)
 - Come Fub raccoglie l'inchiostro e dove vivono penna, evidenziatore e gomma? → [architecture/ink-and-tools.md](../architecture/ink-and-tools.md)
+- Come la lavagna prende la penna, disegna il tratto nelle schede e ne fa un passo di annulla? → [architecture/ink-on-canvas.md](../architecture/ink-on-canvas.md)
 - Come Fub costruisce e inserisce i motori copiati (GridCraft e gli altri Craft)? → [architecture/motori.md](../architecture/motori.md)
 - Dove sta la cornice dello Scrittoio su un telefono, quando parte e che cosa cambia? → [architecture/phone-frame.md](../architecture/phone-frame.md)
 - Come usa Fub gli stessi contratti per provider nativi e componenti WASM con un solo Guard? → [architecture/plugin-runtime.md](../architecture/plugin-runtime.md)
@@ -79,6 +80,7 @@
 - Come si scrivono i documenti di Word nel vault? → [product/word-documents.md](../product/word-documents.md)
 - Come si annotano i PDF del vault? → [product/pdf-annotations.md](../product/pdf-annotations.md)
 - Come sono fatti i file delle app Craft (disegni, immagini, foto)? → [product/craft-files.md](../product/craft-files.md)
+- Che cosa mostra una scheda della lavagna, come ci si scrive e dove vanno i file portati dentro? → [product/lavagna.md](../product/lavagna.md)
 - Come si cercano informazioni e si seguono link e grafo nel vault? → [product/search-links-and-graph.md](../product/search-links-and-graph.md)
 - Come si porta dentro e fuori dal vault (import/export)? → [product/import-and-export.md](../product/import-and-export.md)
 - Come si creano un documento Word o una cartella Excel dal vault? → [product/new-documents.md](../product/new-documents.md)
@@ -128,6 +130,7 @@
 
 - Qual è il contratto condiviso (ABI e WIT) fra core, provider nativi e componenti WASM? → [reference/abi-and-wit.md](../reference/abi-and-wit.md)
 - Qual è il confine JSON (contratto IPC) fra shell TypeScript e `fub-app`? → [reference/ipc-contract.md](../reference/ipc-contract.md)
+- Come la shell deposita un file nel vault (`resource_write`, il riuso dello stesso contenuto)? → [reference/resource-write.md](../reference/resource-write.md)
 - Qual è il contratto delle due porte IPC dei componenti? → [reference/components-contract.md](../reference/components-contract.md)
 - Quali file Fub scrive a livello macchina e dentro un vault (layout su disco)? → [reference/on-disk-layout.md](../reference/on-disk-layout.md)
 - Come si fidano bundle, capability, confini del vault e runtime WASM? → [reference/permissions-and-security.md](../reference/permissions-and-security.md)

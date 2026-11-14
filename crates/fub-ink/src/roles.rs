@@ -8,8 +8,11 @@
 //! - la punta della penna disegna; la gomma della penna girata fa un tratto
 //!   da gomma, e il tasto laterale un tratto che gli strumenti usano come
 //!   hanno scelto (radiale, lazo, gomma o niente);
-//! - il mouse disegna con il tasto principale e muove la vista con quello
-//!   centrale;
+//! - il mouse muove la vista con il tasto centrale; con il principale decide
+//!   la politica del mouse, che sceglie il prodotto: `Ink` (il default)
+//!   disegna, `Ignore` non fa niente e lascia il tasto a chi c'è sotto (una
+//!   lavagna dove il mouse seleziona). Un puntatore di tipo sconosciuto segue
+//!   il mouse;
 //! - un dito non disegna mai mentre una penna tocca lo schermo o è sospesa
 //!   sopra la superficie: è il palmo. Quando la penna arriva, le dita già giù
 //!   diventano palmo anche loro e un loro tratto si annulla;
@@ -88,10 +91,33 @@ impl TouchPolicy {
     }
 }
 
+/// Che cosa fa il tasto principale del mouse. Lo sceglie il prodotto; il
+/// tasto centrale muove la vista con tutte e due.
+#[derive(Copy, Clone, Debug, Default, PartialEq, Eq)]
+pub enum MousePolicy {
+    /// Il tasto principale disegna.
+    #[default]
+    Ink,
+    /// Il tasto principale non disegna: il mouse resta a chi sta sotto.
+    Ignore,
+}
+
+impl MousePolicy {
+    /// Il nome della politica, lo stesso che usa il lato TypeScript.
+    pub fn name(self) -> &'static str {
+        match self {
+            MousePolicy::Ink => "ink",
+            MousePolicy::Ignore => "ignore",
+        }
+    }
+}
+
 /// Lo stato della superficie che la decisione guarda.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct RoleContext {
     pub touch: TouchPolicy,
+    /// Che cosa fa il tasto principale del mouse.
+    pub mouse: MousePolicy,
     /// Su questa superficie si è vista una penna, anche solo sospesa.
     pub pen_seen: bool,
     /// Una penna tocca la superficie o è sospesa sopra di lei.
@@ -142,7 +168,10 @@ pub fn classify_pointer(kind: PointerKind, button: i32, context: &RoleContext) -
             }
         }
         PointerKind::Mouse => match button {
-            PRIMARY => PointerRole::Ink,
+            PRIMARY => match context.mouse {
+                MousePolicy::Ink => PointerRole::Ink,
+                MousePolicy::Ignore => PointerRole::Ignore,
+            },
             MIDDLE => PointerRole::Navigate,
             _ => PointerRole::Ignore,
         },
@@ -156,6 +185,7 @@ mod tests {
     fn context() -> RoleContext {
         RoleContext {
             touch: TouchPolicy::Auto,
+            mouse: MousePolicy::Ink,
             pen_seen: false,
             pen_near: false,
             touches_down: 0,
@@ -203,6 +233,62 @@ mod tests {
             classify_pointer(PointerKind::Mouse, 2, &context()),
             PointerRole::Ignore
         );
+    }
+
+    #[test]
+    fn con_ignore_il_principale_del_mouse_non_fa_niente_e_il_centrale_muove_la_vista() {
+        let ignore = RoleContext {
+            mouse: MousePolicy::Ignore,
+            ..context()
+        };
+        assert_eq!(
+            classify_pointer(PointerKind::Mouse, 0, &ignore),
+            PointerRole::Ignore
+        );
+        assert_eq!(
+            classify_pointer(PointerKind::Mouse, 1, &ignore),
+            PointerRole::Navigate
+        );
+        for button in [2, 3, 4, 5] {
+            assert_eq!(
+                classify_pointer(PointerKind::Mouse, button, &ignore),
+                PointerRole::Ignore
+            );
+        }
+        assert_eq!(MousePolicy::default(), MousePolicy::Ink);
+    }
+
+    #[test]
+    fn la_politica_del_mouse_non_cambia_la_penna_e_il_dito() {
+        let touches = [TouchPolicy::Auto, TouchPolicy::Ink, TouchPolicy::Navigate];
+        for touch in touches {
+            for pen_seen in [false, true] {
+                for pen_near in [false, true] {
+                    for touches_down in 0..=2 {
+                        let ink = RoleContext {
+                            touch,
+                            mouse: MousePolicy::Ink,
+                            pen_seen,
+                            pen_near,
+                            touches_down,
+                        };
+                        let ignore = RoleContext {
+                            mouse: MousePolicy::Ignore,
+                            ..ink
+                        };
+                        for kind in [PointerKind::Pen, PointerKind::Touch] {
+                            for button in [0, 1, 2, 3, 5] {
+                                assert_eq!(
+                                    classify_pointer(kind, button, &ink),
+                                    classify_pointer(kind, button, &ignore),
+                                    "{kind:?} {button} {ink:?}"
+                                );
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 
     #[test]

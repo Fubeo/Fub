@@ -3707,7 +3707,7 @@ describe("la selezione avanzata, nel Completo", () => {
     expect(document.querySelector("#context-menu .menu-clipboard")).toBeNull();
     expect(menu().map(labelOf)).toEqual(["Incolla", "Incolla nello stesso punto", "Seleziona tutto", "Mostra tutto il disegno", "Menu radiale"]);
     expect(menu().every((entry) => entry.getAttribute("aria-disabled") === null)).toBe(true);
-    expect(document.querySelector("#context-menu .menu-foot")!.textContent).toContain("Scrivi per cercare");
+    expect(document.querySelector("#context-menu .menu-foot")!.textContent).toContain("Scrivi per trovare altro");
     item("Seleziona tutto").click();
     expect(editor.selection).toEqual([A, B, G]);
     // Il resto si trova scrivendo.

@@ -16,10 +16,11 @@
 //
 // Cambiare tema non ricostruisce l'editor: cambia il foglio montato e i colori
 // seguono, documento e cronologia di undo intatti.
-import { EditorView } from "@codemirror/view";
-import { HighlightStyle, syntaxHighlighting } from "@codemirror/language";
-import type { Extension } from "@codemirror/state";
-import { tags as t } from "@lezer/highlight";
+import { Decoration, EditorView, ViewPlugin, type DecorationSet, type ViewUpdate } from "@codemirror/view";
+import { HighlightStyle, syntaxTree } from "@codemirror/language";
+import { Prec, RangeSetBuilder, type Extension } from "@codemirror/state";
+import type { Tree } from "@lezer/common";
+import { highlightTree, tags as t, type Highlighter } from "@lezer/highlight";
 import type { Theme } from "../../theme/theme";
 
 /// Le regole di sintassi: i raggruppamenti di tag di One Dark, ciascuno con la
@@ -33,7 +34,7 @@ import type { Theme } from "../../theme/theme";
 /// dentro un titolo): la pelle scrive le regole nello stesso ordine di queste
 /// righe, e la regola che viene dopo vince. Riordinare una delle due liste
 /// cambia la resa.
-const syntaxStyle = HighlightStyle.define([
+export const syntaxStyle = HighlightStyle.define([
   { tag: t.keyword, class: "fub-syn-keyword" },
   { tag: [t.name, t.deleted, t.character, t.propertyName, t.macroName], class: "fub-syn-name" },
   { tag: [t.function(t.variableName), t.labelName], class: "fub-syn-function" },
@@ -71,8 +72,95 @@ const syntaxStyle = HighlightStyle.define([
   { tag: t.invalid, class: "fub-syn-invalid" },
 ]);
 
-/// La sintassi di serie, senza colori: le classi della pelle.
-const syntax = syntaxHighlighting(syntaxStyle);
+/// Sotto questa distanza in caratteri due tratti visibili si evidenziano in
+/// una passata sola, col pezzo nascosto in mezzo (vedi `highlightVisible`).
+const JOIN_GAP = 4_000;
+
+/// Dà a `add`, in ordine, le classi della sintassi dell'albero nei tratti
+/// visibili `ranges` (ordinati e disgiunti), tagliate ai tratti: le stesse
+/// che l'evidenziatore di CodeMirror dà chiamando `highlightTree` una volta
+/// per tratto.
+///
+/// Nella Live i blocchi resi spezzano il tratto della vista in molti pezzi, e
+/// ogni chiamata riparte dalla radice dell'albero. Qui i tratti vicini si
+/// uniscono in una chiamata sola, e ciò che cade fuori si scarta: il lavoro
+/// sprecato sotto un blocco reso resta sotto `JOIN_GAP` caratteri, mentre un
+/// recinto lungo reso in un widget non si evidenzia.
+export function highlightVisible(
+  tree: Tree,
+  highlighter: Highlighter,
+  ranges: readonly { from: number; to: number }[],
+  add: (from: number, to: number, classes: string) => void,
+  joinGap = JOIN_GAP,
+): void {
+  let start = 0;
+  while (start < ranges.length) {
+    let end = start;
+    while (end + 1 < ranges.length && ranges[end + 1]!.from - ranges[end]!.to <= joinGap) end += 1;
+    if (end === start) {
+      highlightTree(tree, highlighter, add, ranges[start]!.from, ranges[start]!.to);
+    } else {
+      let index = start;
+      highlightTree(tree, highlighter, (from, to, classes) => {
+        while (ranges[index]!.to <= from) index += 1;
+        for (let i = index; i <= end && ranges[i]!.from < to; i += 1) {
+          const cut = Math.max(from, ranges[i]!.from);
+          const upto = Math.min(to, ranges[i]!.to);
+          if (upto > cut) add(cut, upto, classes);
+        }
+      }, ranges[start]!.from, ranges[end]!.to);
+    }
+    start = end + 1;
+  }
+}
+
+/// L'evidenziatore della sintassi: quello di `syntaxHighlighting` di
+/// CodeMirror, con le stesse regole per rifarsi, che lavora sui tratti
+/// visibili con `highlightVisible`.
+const highlightPlugin = ViewPlugin.fromClass(class {
+  decorations: DecorationSet;
+  private tree: Tree;
+  private decoratedTo: number;
+  private readonly marks = new Map<string, Decoration>();
+  constructor(view: EditorView) {
+    this.tree = syntaxTree(view.state);
+    this.decorations = this.build(view);
+    this.decoratedTo = view.viewport.to;
+  }
+  update(update: ViewUpdate): void {
+    const tree = syntaxTree(update.state);
+    const { viewport } = update.view;
+    const decoratedTo = update.changes.mapPos(this.decoratedTo, 1);
+    // L'albero non arriva ancora in fondo alla vista e quella già colorata
+    // copre la vista: si sposta, come fa CodeMirror, in attesa dell'albero.
+    if (tree.length < viewport.to && tree.type === this.tree.type && decoratedTo >= viewport.to) {
+      this.decorations = this.decorations.map(update.changes);
+      this.decoratedTo = decoratedTo;
+    } else if (tree !== this.tree || update.viewportChanged) {
+      this.tree = tree;
+      this.decorations = this.build(update.view);
+      this.decoratedTo = viewport.to;
+    }
+  }
+  private build(view: EditorView): DecorationSet {
+    if (!this.tree.length) return Decoration.none;
+    const builder = new RangeSetBuilder<Decoration>();
+    highlightVisible(this.tree, syntaxStyle, view.visibleRanges, (from, to, classes) => {
+      let mark = this.marks.get(classes);
+      if (!mark) this.marks.set(classes, mark = Decoration.mark({ class: classes }));
+      builder.add(from, to, mark);
+    });
+    return builder.finish();
+  }
+}, { decorations: (value) => value.decorations });
+
+/// Le classi della sintassi (i colori li dà la pelle). `Prec.high` come
+/// l'evidenziatore di CodeMirror: i segni della sintassi stanno dentro le
+/// altre decorazioni a segno.
+const visibleHighlighting: Extension = [
+  Prec.high(highlightPlugin),
+  ...(syntaxStyle.module ? [EditorView.styleModule.of(syntaxStyle.module)] : []),
+];
 
 /// Il tema dell'editor per una delle due luci.
 ///
@@ -86,6 +174,7 @@ export function editorTheme(theme: Theme): Extension {
     // `EditorView.theme` accetta le opzioni solo insieme a delle regole: il
     // flag va su un tema vuoto.
     EditorView.theme({}, { dark: theme === "dark" }),
-    syntax,
+    visibleHighlighting,
   ];
 }
+

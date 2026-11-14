@@ -1,0 +1,17 @@
+# Prova con Obsidian (T17a): un calendario e una linea del tempo nella forma
+# nativa, cioè `type: calendar` e `type: timeline`, come Fub li scriverebbe se
+# Obsidian li regge. Obsidian ignora il blocco `fub:`.
+# Come si prova: docs/product/bases.md, «Calendario e linea del tempo».
+version: 1
+views:
+  # Le note nel giorno della loro scadenza.
+  - name: Calendario
+    type: calendar
+    fub:
+      date: scadenza   # la proprietà della data
+  # Le note come barre fra l'inizio e la fine.
+  - name: Linea
+    type: timeline
+    fub:
+      start: inizio
+      end: fine

@@ -1,6 +1,6 @@
 import { ensureSyntaxTree, syntaxTree, syntaxTreeAvailable } from "@codemirror/language";
 import type { ChangeDesc, EditorState } from "@codemirror/state";
-import type { SyntaxNode, Tree } from "@lezer/common";
+import type { SyntaxNode, Tree, TreeCursor } from "@lezer/common";
 import type { SyntaxForm } from "../../../../host/contract";
 import { declaredFences } from "../../../../rules/syntax";
 import { normalizeLineBreaks } from "../../../../rules/offsets";
@@ -201,10 +201,11 @@ function stripDelimiters(value: string): string {
 /// possono stare soltanto qui dentro.
 const CONTAINERS = new Set(["Document", "Blockquote", "BulletList", "OrderedList", "ListItem"]);
 
-/// Dove comincia ogni `[^` della sorgente, in ordine.
-function footnoteOpeners(source: string): number[] {
+/// Dove comincia ogni `[^` della sorgente, in ordine; soltanto in `[from, to)`
+/// se c'è.
+function footnoteOpeners(source: string, from = 0, to = source.length): number[] {
   const found: number[] = [];
-  for (let at = source.indexOf("[^"); at !== -1; at = source.indexOf("[^", at + 2)) found.push(at);
+  for (let at = source.indexOf("[^", from); at !== -1 && at < to; at = source.indexOf("[^", at + 2)) found.push(at);
   return found;
 }
 
@@ -397,6 +398,21 @@ const MATH_INFOS: Record<string, true> = { math: true, latex: true, tex: true };
 
 /// L'apertura di un recinto ```toc``` (K4).
 const TOC_FENCE = /^ {0,3}(?:`{3,}|~{3,})[ \t]*toc(?:[ \t]|\r?\n|$)/i;
+/// Un'apertura ```toc``` in qualunque punto di un testo: il filtro prima di
+/// cercarla nell'albero di una citazione o di una lista.
+const TOC_ANYWHERE = /(?:`{3,}|~{3,})[ \t]*toc/i;
+
+/// Se un nodo di primo livello tiene un recinto ```toc```: è il nodo, o sta
+/// dentro (una citazione, una lista), dove si rende lo stesso indice.
+function holdsToc(source: string, name: string, from: number, to: number, node: () => SyntaxNode): boolean {
+  if (name === "FencedCode") return TOC_FENCE.test(source.slice(from, Math.min(to, from + 16)));
+  if (name === "Paragraph" || name === "HTMLBlock" || !TOC_ANYWHERE.test(source.slice(from, to))) return false;
+  const cursor = node().cursor();
+  while (cursor.next() && cursor.from < to) {
+    if (cursor.name === "FencedCode" && TOC_FENCE.test(source.slice(cursor.from, Math.min(cursor.to, cursor.from + 16)))) return true;
+  }
+  return false;
+}
 
 /// Un recinto con questa info, se il vault lo dichiara, è una formula.
 export function isMathInfo(info: string): boolean {
@@ -915,26 +931,281 @@ class LazyBlock implements MarkdownBlock {
   }
 }
 
+/// Un nodo di primo livello dell'albero, con le definizioni che porta al
+/// documento e il blocco che ne è nato. Le posizioni sono relative al pezzo
+/// della lista che lo tiene (`TopList`).
+interface TopEntry {
+  readonly from: number;
+  readonly to: number;
+  readonly name: string;
+  readonly found: Found;
+  /// Un recinto ```toc``` (K4): con un indice nella nota i titoli entrano
+  /// nelle dipendenze.
+  readonly toc: boolean;
+  /// Il blocco nato dal nodo; `null` per un nodo dentro il frontmatter e per
+  /// un ID a parte, che sta nel blocco prima.
+  readonly block: LazyBlock | null;
+}
+
+/// Un nodo di primo livello con le posizioni di adesso.
+interface PlacedTop {
+  readonly entry: TopEntry;
+  readonly from: number;
+  readonly to: number;
+}
+
+/// Quanti nodi tiene un pezzo della lista.
+const PIECE = 32;
+
+interface Piece {
+  readonly entries: readonly TopEntry[];
+  /// Quanto le modifiche dopo la lettura hanno spostato i nodi del pezzo.
+  readonly shift: number;
+}
+
+function shiftedTop(entry: TopEntry, shift: number): TopEntry {
+  return shift === 0 ? entry : { ...entry, from: entry.from + shift, to: entry.to + shift };
+}
+
+function piecesOf(entries: readonly TopEntry[]): Piece[] {
+  if (entries.length === 0) return [];
+  if (entries.length <= PIECE * 2) return [{ entries, shift: 0 }];
+  const pieces: Piece[] = [];
+  for (let at = 0; at < entries.length; at += PIECE) pieces.push({ entries: entries.slice(at, at + PIECE), shift: 0 });
+  return pieces;
+}
+
+/// I nodi di primo livello del documento, a pezzi. Una battuta rifà soltanto
+/// il pezzo che tocca: quelli dopo cambiano lo spostamento e tengono i loro
+/// nodi, senza che nessuno li visiti.
+class TopList {
+  private readonly starts: readonly number[];
+  readonly size: number;
+  private constructor(private readonly pieces: readonly Piece[]) {
+    const starts: number[] = [];
+    let size = 0;
+    for (const piece of pieces) {
+      starts.push(size);
+      size += piece.entries.length;
+    }
+    this.starts = starts;
+    this.size = size;
+  }
+
+  static of(entries: readonly TopEntry[]): TopList {
+    return new TopList(piecesOf(entries));
+  }
+
+  /// Il pezzo che tiene il nodo `index`.
+  private pieceOf(index: number): number {
+    let low = 0;
+    let high = this.pieces.length - 1;
+    while (low < high) {
+      const middle = (low + high + 1) >> 1;
+      if (this.starts[middle]! <= index) low = middle;
+      else high = middle - 1;
+    }
+    return low;
+  }
+
+  at(index: number): PlacedTop {
+    const p = this.pieceOf(index);
+    const piece = this.pieces[p]!;
+    const entry = piece.entries[index - this.starts[p]!]!;
+    return { entry, from: entry.from + piece.shift, to: entry.to + piece.shift };
+  }
+
+  /// Il primo nodo che finisce a `position` o dopo; `size` se non ce n'è.
+  firstEndingFrom(position: number): number {
+    let low = 0;
+    let high = this.pieces.length;
+    while (low < high) {
+      const middle = (low + high) >> 1;
+      const piece = this.pieces[middle]!;
+      if (piece.entries[piece.entries.length - 1]!.to + piece.shift < position) low = middle + 1;
+      else high = middle;
+    }
+    if (low === this.pieces.length) return this.size;
+    const piece = this.pieces[low]!;
+    let first = 0;
+    let last = piece.entries.length - 1;
+    while (first < last) {
+      const middle = (first + last) >> 1;
+      if (piece.entries[middle]!.to + piece.shift < position) first = middle + 1;
+      else last = middle;
+    }
+    return this.starts[low]! + first;
+  }
+
+  forEach(visit: (entry: TopEntry, from: number, to: number) => void): void {
+    for (const piece of this.pieces) {
+      for (const entry of piece.entries) visit(entry, entry.from + piece.shift, entry.to + piece.shift);
+    }
+  }
+
+  /// La lista con i nodi `[low, high)` sostituiti da `added`, scritti nelle
+  /// posizioni di adesso, e quelli dopo spostati di `delta`.
+  replace(low: number, high: number, added: readonly TopEntry[], delta: number): TopList {
+    if (this.size === 0) return TopList.of(added);
+    const first = this.pieceOf(Math.min(low, this.size - 1));
+    const last = high > low ? this.pieceOf(high - 1) : first;
+    const middle: TopEntry[] = [];
+    const head = this.pieces[first]!;
+    for (let index = this.starts[first]!; index < low; index++) {
+      middle.push(shiftedTop(head.entries[index - this.starts[first]!]!, head.shift));
+    }
+    for (const entry of added) middle.push(entry);
+    const tail = this.pieces[last]!;
+    const tailEnd = this.starts[last]! + tail.entries.length;
+    for (let index = Math.max(high, this.starts[last]!); index < tailEnd; index++) {
+      middle.push(shiftedTop(tail.entries[index - this.starts[last]!]!, tail.shift + delta));
+    }
+    const after = this.pieces.slice(last + 1);
+    return new TopList([
+      ...this.pieces.slice(0, first),
+      ...piecesOf(middle),
+      ...(delta === 0 ? after : after.map((piece) => ({ entries: piece.entries, shift: piece.shift + delta }))),
+    ]);
+  }
+}
+
+/// Dove la resa di una modifica ha lavorato, nella sorgente nuova: dall'inizio
+/// del primo nodo rifatto all'inizio del primo nodo tornato com'era (o alla
+/// fine del testo). Fuori da qui i blocchi sono quelli di prima, spostati.
+export interface RenderPatch {
+  readonly from: number;
+  readonly to: number;
+}
+
+interface DocumentState {
+  readonly source: string;
+  readonly tops: TopList;
+  readonly frontmatter: { readonly from: number; readonly to: number } | null;
+  readonly frontmatterBlock: LazyBlock | null;
+  readonly collected: Collected;
+  readonly dependencies: string;
+  readonly forms: readonly SyntaxForm[] | undefined;
+  /// Le generazioni dei blocchi vivi, con quanti blocchi ciascuna.
+  readonly alive: ReadonlyMap<number, number>;
+  /// Quanti blocchi questo giro ha reso dalla sorgente.
+  readonly fresh: number;
+  /// Quanti nodi di primo livello questo giro ha guardato.
+  readonly visited: number;
+  /// `null` per una resa da capo.
+  readonly patch: RenderPatch | null;
+}
+
 class LazyDocument implements MarkdownDocument {
-  private cached: string | undefined;
-  constructor(
-    readonly source: string,
-    readonly blocks: readonly LazyBlock[],
-    readonly dependencies: string,
-    readonly anchors: ReadonlyMap<string, number>,
-    /// Quanti blocchi questo giro ha reso dalla sorgente.
-    readonly fresh: number,
-  ) {}
+  private cachedHtml: string | undefined;
+  private cachedAnchors: ReadonlyMap<string, number> | undefined;
+  constructor(readonly state: DocumentState, private cachedBlocks?: readonly LazyBlock[]) {}
+  get source(): string {
+    return this.state.source;
+  }
+  get dependencies(): string {
+    return this.state.dependencies;
+  }
+  /// I blocchi in fila, con le posizioni di adesso: si mettono in fila
+  /// soltanto quando qualcuno li chiede tutti.
+  get blocks(): readonly LazyBlock[] {
+    if (this.cachedBlocks === undefined) {
+      const blocks: LazyBlock[] = [];
+      if (this.state.frontmatterBlock) blocks.push(this.state.frontmatterBlock);
+      this.state.tops.forEach((entry, from) => {
+        if (entry.block) blocks.push(entry.block.from === from ? entry.block : LazyBlock.moved(entry.block, from));
+      });
+      this.cachedBlocks = blocks;
+    }
+    return this.cachedBlocks;
+  }
+  get anchors(): ReadonlyMap<string, number> {
+    if (this.cachedAnchors === undefined) {
+      const { collected } = this.state;
+      const anchors = new Map<string, number>();
+      for (const [position, id] of collected.headingIds) if (id) anchors.set(id, position);
+      for (const block of this.blocks) if (block.record.id) anchors.set(block.record.id, block.from);
+      for (const note of collected.footnotes.values()) {
+        anchors.set(`fn-${note.number}`, note.from);
+        for (const [position, occurrence] of note.references) anchors.set(`fnref-${note.number}-${occurrence}`, position);
+      }
+      this.cachedAnchors = anchors;
+    }
+    return this.cachedAnchors;
+  }
   get html(): string {
-    if (this.cached === undefined) this.cached = this.blocks.map((block) => block.html).join("");
-    return this.cached;
+    if (this.cachedHtml === undefined) this.cachedHtml = this.blocks.map((block) => block.html).join("");
+    return this.cachedHtml;
   }
 }
 
 /// Quanti blocchi la resa ha letto dalla sorgente: gli altri sono tornati dalla
 /// resa di prima. Per i test, che contano il lavoro di una battuta.
 export function freshBlocks(document: MarkdownDocument): number | null {
-  return document instanceof LazyDocument ? document.fresh : null;
+  return document instanceof LazyDocument ? document.state.fresh : null;
+}
+
+/// Quanti nodi di primo livello la resa ha guardato: tutti per una resa da
+/// capo, soltanto quelli vicini alla modifica per una battuta. Per i test.
+export function visitedBlocks(document: MarkdownDocument): number | null {
+  return document instanceof LazyDocument ? document.state.visited : null;
+}
+
+/// Dove la resa di una modifica ha lavorato (`RenderPatch`); `null` per una
+/// resa da capo, dopo la quale ogni blocco può essere diverso.
+export function renderPatch(document: MarkdownDocument): RenderPatch | null {
+  return document instanceof LazyDocument ? document.state.patch : null;
+}
+
+/// I blocchi che toccano `[from, to)`, con quello subito prima, e il primo
+/// blocco dopo. Con le posizioni di adesso, senza mettere in fila gli altri.
+export function blocksAround(
+  document: MarkdownDocument,
+  from: number,
+  to: number,
+): { readonly blocks: readonly MarkdownBlock[]; readonly following: MarkdownBlock | null } {
+  if (!(document instanceof LazyDocument)) {
+    const all = document.blocks;
+    let first = all.findIndex((block) => block.to >= from);
+    if (first === -1) first = all.length;
+    first = Math.max(0, first - 1);
+    let end = first;
+    while (end < all.length && (end === first || all[end]!.from < to)) end++;
+    return { blocks: all.slice(first, end), following: all[end] ?? null };
+  }
+  const { tops, frontmatterBlock } = document.state;
+  const placed = (index: number): LazyBlock | null => {
+    const { entry, from: at } = tops.at(index);
+    if (!entry.block) return null;
+    return entry.block.from === at ? entry.block : LazyBlock.moved(entry.block, at);
+  };
+  const blocks: LazyBlock[] = [];
+  let index = tops.firstEndingFrom(from);
+  // Il blocco prima: si risale oltre i nodi senza blocco.
+  let before = index - 1;
+  while (before >= 0 && !tops.at(before).entry.block) before--;
+  if (before >= 0) {
+    blocks.push(placed(before)!);
+    index = before + 1;
+  } else if (frontmatterBlock) {
+    blocks.push(frontmatterBlock);
+  }
+  let following: LazyBlock | null = null;
+  for (; index < tops.size; index++) {
+    const block = placed(index);
+    if (!block) continue;
+    if (block.from >= to && blocks.length > 0) {
+      following = block;
+      break;
+    }
+    blocks.push(block);
+  }
+  return { blocks, following };
+}
+
+/// `block` spostato perché cominci a `from`.
+export function movedBlock(block: MarkdownBlock, from: number): MarkdownBlock {
+  if (block.from === from || !(block instanceof LazyBlock)) return block;
+  return LazyBlock.moved(block, from);
 }
 
 /// Il blocco reso davvero da cui `block` viene: lo stesso per una resa nuova.
@@ -983,17 +1254,192 @@ function untouchedBlocks(previous: PreviousRender | undefined): Map<number, Lazy
   previous.changes.iterChangedRanges((fromA, toA, _fromB, toB) => changed.push({ fromA, toA, delta: toB - toA }));
   let next = 0;
   let delta = 0;
-  for (const block of previous.document.blocks) {
+  previous.document.state.tops.forEach((entry, from, to) => {
+    const block = entry.block;
     // Una modifica che finisce prima del blocco lo sposta e basta; una che lo
     // tocca, anche soltanto ai bordi, lo fa rendere di nuovo.
-    while (next < changed.length && changed[next]!.toA < block.from) delta = changed[next++]!.delta;
-    if (block.record.node === "" || (next < changed.length && changed[next]!.fromA <= block.to)) continue;
-    untouched.set(block.from + delta, block);
-  }
+    while (next < changed.length && changed[next]!.toA < from) delta = changed[next++]!.delta;
+    if (!block || block.record.node === "" || (next < changed.length && changed[next]!.fromA <= to)) return;
+    untouched.set(from + delta, block);
+  });
   return untouched;
 }
 
+/// L'ID scritto su un paragrafo che non ha altro (`^id`), che va al blocco prima.
+function loneAnchorId(slice: string): string | null {
+  const lone = /^\^([^\s]+)[ \t]*$/.exec(slice.trim());
+  return lone && validAnchor(lone[1]!) ? canonicalAnchor(lone[1]!) : null;
+}
+
+/// Ciò che serve a rendere un nodo di primo livello.
+interface TopContext {
+  readonly source: string;
+  readonly aux: RenderAux;
+  readonly detailsOpen: ReadonlyMap<number, DetailsHead>;
+  readonly detailsClose: ReadonlySet<number>;
+  readonly generation: number;
+}
+
+/// Il blocco di un nodo di primo livello. L'ID a parte (`^id`) lo unisce chi
+/// chiama al blocco prima.
+function renderTop(node: SyntaxNode, found: Found, context: TopContext): LazyBlock {
+  const { source, aux, detailsOpen, detailsClose, generation } = context;
+  const from = node.from;
+  const to = node.to;
+  const slice = source.slice(from, to);
+  const block = (record: Omit<BlockRecord, "node" | "found">): LazyBlock =>
+    new LazyBlock({ ...record, node: node.name, found }, generation);
+  switch (node.name) {
+    case "HorizontalRule":
+      return block({ from, to, kind: "hr", source: slice, id: null, render: () => `<hr${mdAttrs(from, to)}>` });
+    case "LinkReference":
+      return block({ from, to, kind: "definition", source: slice, id: null, render: () => "" });
+    case "HTMLBlock": {
+      const head = detailsOpen.get(from);
+      const closing = detailsClose.has(from);
+      return block({
+        from,
+        to,
+        kind: "html",
+        source: slice,
+        id: null,
+        render: () => head ? detailsOpening(slice, head, from, to) : closing ? "</details>" : rawHtmlBlock(source, from, to),
+      });
+    }
+    case "CommentBlock":
+      return block({ from, to, kind: "html", source: slice, id: null, render: () => "" });
+    case "ProcessingInstructionBlock":
+      return block({
+        from,
+        to,
+        kind: "html",
+        source: slice,
+        id: null,
+        render: () => `<div class="block-html"${mdAttrs(from, to)}><pre>${escapeHtml(slice)}</pre></div>`,
+      });
+    case "FencedCode":
+    case "CodeBlock": {
+      const closed = node.name === "CodeBlock" || node.getChildren("CodeMark").length === 2;
+      // Un recinto con info string **dichiarata** (mermaid, math, …) è un
+      // blocco reso, non codice: la Live lo mostra come la Lettura.
+      const info = node.getChild("CodeInfo");
+      const infoWord = info === null ? "" : source.slice(info.from, info.to).trim().split(/\s+/)[0]!.toLowerCase();
+      // Così l'indice (K4): non si scrive come codice, si legge reso.
+      const declared = info !== null && (aux.declared.has(infoWord) || infoWord === "toc");
+      return block({
+        from,
+        to,
+        kind: !closed ? "incomplete" : declared ? "diagram" : "code",
+        source: slice,
+        id: null,
+        render: () => renderCodeNode(node, aux),
+      });
+    }
+    case "Table":
+      return block({
+        from,
+        to,
+        kind: "table",
+        source: slice,
+        id: null,
+        render: () => renderTableNode(node, aux),
+        cells: () => renderTableCells(node, aux),
+      });
+    case "BulletList":
+    case "OrderedList":
+      return block({ from, to, kind: "list", source: slice, id: null, render: () => renderListNode(node, aux) });
+    case "Blockquote":
+      return block({
+        from,
+        to,
+        kind: isCalloutNode(node, source) ? "callout" : "blockquote",
+        source: slice,
+        id: null,
+        render: () => renderBlockquoteNode(node, aux),
+      });
+    case "Paragraph": {
+      const tex = paragraphMathBlock(mathOf(aux.ctx, node), slice);
+      if (tex !== null) {
+        const anchor = findTrailingAnchor(slice);
+        return block({
+          from,
+          to,
+          kind: "math",
+          source: slice,
+          id: anchor && anchor.start > 0 ? canonicalAnchor(anchor.raw) : null,
+          render: (resolved) => mathBlockHtml(tex, from, to, resolved),
+        });
+      }
+      if (FOOTNOTE_DEFINITION.test(slice)) {
+        return block({ from, to, kind: "footnote-definition", source: slice, id: null, render: () => renderFootnoteDefNode(node, aux) });
+      }
+      const anchor = findTrailingAnchor(slice);
+      let id: string | null = null;
+      let contentTo = to;
+      if (anchor && anchor.start > 0) {
+        id = canonicalAnchor(anchor.raw);
+        contentTo = from + anchor.start;
+        while (contentTo > from && (source[contentTo - 1] === " " || source[contentTo - 1] === "\t")) contentTo--;
+      }
+      return block({
+        from,
+        to,
+        kind: "paragraph",
+        source: slice,
+        id,
+        render: (resolved) => {
+          const inner = from < contentTo ? renderInline(aux.ctx, from, contentTo, node) : "";
+          return loneFigure(node, source, contentTo, inner, `${idAttr(resolved)}${mdAttrs(from, to)}`)
+            ?? `<p${idAttr(resolved)}${mdAttrs(from, to)}>${inner}</p>`;
+        },
+      });
+    }
+    default: {
+      if (/^(ATXHeading[1-6]|SetextHeading[1-2])$/.test(node.name)) {
+        const rawId = aux.headingIds.get(from) ?? null;
+        const level = headingLevel(node.name);
+        return block({
+          from,
+          to,
+          kind: `heading-${level}`,
+          source: slice,
+          id: rawId === "" ? null : rawId,
+          render: () => renderHeadingNode(node, aux),
+        });
+      }
+      return block({ from, to, kind: "paragraph", source: slice, id: null, render: () => renderInnerBlock(node, aux, []) });
+    }
+  }
+}
+
+/// Il contesto della resa per le definizioni di `collected`, lette soltanto
+/// quando un blocco si rende davvero.
+function auxOf(source: string, forms: readonly SyntaxForm[] | undefined, collected: Collected): RenderAux {
+  const ctx: MarkdownRenderContext = {
+    source,
+    forms,
+    references: collected.references,
+    get footnotes() {
+      return collected.footnotes;
+    },
+  };
+  return {
+    ctx,
+    get headingIds() {
+      return collected.headingIds;
+    },
+    declared: new Set(declaredFences(forms).map((info) => info.toLowerCase())),
+    toc: collected.toc,
+  };
+}
+
 function buildDocument(source: string, tree: Tree, forms?: readonly SyntaxForm[], previous?: PreviousRender): MarkdownDocument {
+  return (previous && patchDocument(source, tree, forms, previous)) || wholeDocument(source, tree, forms, previous);
+}
+
+/// La resa di tutti i nodi di primo livello. Con la resa di prima, quelli che
+/// la modifica non tocca ne tornano spostati, se le definizioni sono le stesse.
+function wholeDocument(source: string, tree: Tree, forms?: readonly SyntaxForm[], previous?: PreviousRender): LazyDocument {
   const generation = ++generations;
   const frontmatter = detectFrontmatter(source);
   // Un nodo di primo livello che l'albero nuovo ha nello stesso punto, con
@@ -1003,7 +1449,7 @@ function buildDocument(source: string, tree: Tree, forms?: readonly SyntaxForm[]
   let openers: number[] | null = null;
   // Il cursore scorre i figli senza farne nodi: il nodo serve soltanto a chi
   // va letto di nuovo.
-  const tops: { from: number; node: SyntaxNode | null; found: Found; before: LazyBlock | null }[] = [];
+  const tops: { from: number; to: number; name: string; toc: boolean; node: SyntaxNode | null; found: Found; before: LazyBlock | null }[] = [];
   const htmlTops: TopBlock[] = [];
   let hasToc = false;
   const cursor = tree.cursor();
@@ -1013,15 +1459,16 @@ function buildDocument(source: string, tree: Tree, forms?: readonly SyntaxForm[]
       // Un albero che va oltre la sorgente è quello di un documento più lungo,
       // reso soltanto fino a un blocco (`renderMarkdownStatePrefix`).
       if (to > source.length) break;
+      const toc = holdsToc(source, name, from, to, () => cursor.node);
       if (name === "HTMLBlock") htmlTops.push({ from, to, html: source.slice(from, to) });
-      else if (name === "FencedCode" && TOC_FENCE.test(source.slice(from, Math.min(to, from + 16)))) hasToc = true;
+      else if (toc) hasToc = true;
       const candidate = untouched.get(from);
       const before = candidate && candidate.record.node === name && candidate.record.found
         && candidate.to - candidate.from === to - from ? candidate : null;
-      if (before) tops.push({ from, node: null, found: before.record.found!, before });
+      if (before) tops.push({ from, to, name, toc, node: null, found: before.record.found!, before });
       else {
         const node = cursor.node;
-        tops.push({ from, node, found: findDefinitions(source, node, openers ??= footnoteOpeners(source)), before: null });
+        tops.push({ from, to, name, toc, node, found: findDefinitions(source, node, openers ??= footnoteOpeners(source)), before: null });
       }
     } while (cursor.nextSibling());
   }
@@ -1044,223 +1491,14 @@ function buildDocument(source: string, tree: Tree, forms?: readonly SyntaxForm[]
   // rileggerla.
   const reuse = previous?.document.dependencies === written;
   const dependencies = reuse ? previous!.document.dependencies : written;
-  const ctx: MarkdownRenderContext = {
-    source,
-    forms,
-    references: collected.references,
-    footnotes: collected.footnotes,
-  };
-  const aux: RenderAux = {
-    ctx,
-    headingIds: collected.headingIds,
-    declared: new Set(declaredFences(forms).map((info) => info.toLowerCase())),
-    toc: collected.toc,
-  };
-  const blocks: LazyBlock[] = [];
-  const pushTopLevel = (node: SyntaxNode, found: Found): void => {
-    const from = node.from;
-    const to = node.to;
-    const slice = source.slice(from, to);
-    const push = (record: Omit<BlockRecord, "node" | "found">): void => {
-      blocks.push(new LazyBlock({ ...record, node: node.name, found }, generation));
-    };
-    switch (node.name) {
-      case "HorizontalRule":
-        push({
-          from,
-          to,
-          kind: "hr",
-          source: slice,
-          id: null,
-          render: () => `<hr${mdAttrs(from, to)}>`,
-        });
-        return;
-      case "LinkReference":
-        push({
-          from,
-          to,
-          kind: "definition",
-          source: slice,
-          id: null,
-          render: () => "",
-        });
-        return;
-      case "HTMLBlock": {
-        const head = detailsOpen.get(from);
-        const closing = detailsClose.has(from);
-        push({
-          from,
-          to,
-          kind: "html",
-          source: slice,
-          id: null,
-          render: () => head ? detailsOpening(slice, head, from, to) : closing ? "</details>" : rawHtmlBlock(source, from, to),
-        });
-        return;
-      }
-      case "CommentBlock":
-        push({
-          from,
-          to,
-          kind: "html",
-          source: slice,
-          id: null,
-          render: () => "",
-        });
-        return;
-      case "ProcessingInstructionBlock":
-        push({
-          from,
-          to,
-          kind: "html",
-          source: slice,
-          id: null,
-          render: () => `<div class="block-html"${mdAttrs(from, to)}><pre>${escapeHtml(slice)}</pre></div>`,
-        });
-        return;
-      case "FencedCode":
-      case "CodeBlock": {
-        const closed = node.name === "CodeBlock" || node.getChildren("CodeMark").length === 2;
-        // Un recinto con info string **dichiarata** (mermaid, math, …) è un
-        // blocco reso, non codice: la Live lo mostra come la Lettura.
-        const info = node.getChild("CodeInfo");
-        const infoWord = info === null ? "" : source.slice(info.from, info.to).trim().split(/\s+/)[0]!.toLowerCase();
-        // Così l'indice (K4): non si scrive come codice, si legge reso.
-        const declared = info !== null && (aux.declared.has(infoWord) || infoWord === "toc");
-        push({
-          from,
-          to,
-          kind: !closed ? "incomplete" : declared ? "diagram" : "code",
-          source: slice,
-          id: null,
-          render: () => renderCodeNode(node, aux),
-        });
-        return;
-      }
-      case "Table":
-        push({
-          from,
-          to,
-          kind: "table",
-          source: slice,
-          id: null,
-          render: () => renderTableNode(node, aux),
-          cells: () => renderTableCells(node, aux),
-        });
-        return;
-      case "BulletList":
-      case "OrderedList":
-        push({
-          from,
-          to,
-          kind: "list",
-          source: slice,
-          id: null,
-          render: () => renderListNode(node, aux),
-        });
-        return;
-      case "Blockquote":
-        push({
-          from,
-          to,
-          kind: isCalloutNode(node, source) ? "callout" : "blockquote",
-          source: slice,
-          id: null,
-          render: () => renderBlockquoteNode(node, aux),
-        });
-        return;
-      case "Paragraph": {
-        const tex = paragraphMathBlock(mathOf(aux.ctx, node), slice);
-        if (tex !== null) {
-          const anchor = findTrailingAnchor(slice);
-          push({
-            from,
-            to,
-            kind: "math",
-            source: slice,
-            id: anchor && anchor.start > 0 ? canonicalAnchor(anchor.raw) : null,
-            render: (resolved) => mathBlockHtml(tex, from, to, resolved),
-          });
-          return;
-        }
-        if (FOOTNOTE_DEFINITION.test(slice)) {
-          push({
-            from,
-            to,
-            kind: "footnote-definition",
-            source: slice,
-            id: null,
-            render: () => renderFootnoteDefNode(node, aux),
-          });
-          return;
-        }
-        const lone = /^\^([^\s]+)[ \t]*$/.exec(slice.trim());
-        const previous = blocks[blocks.length - 1];
-        if (lone && validAnchor(lone[1]!) && previous) {
-          const id = canonicalAnchor(lone[1]!);
-          const { from: previousFrom, to: previousTo } = previous;
-          blocks[blocks.length - 1] = new LazyBlock({
-            from: previousFrom,
-            to,
-            kind: previous.kind,
-            source: source.slice(previousFrom, to),
-            id,
-            node: "",
-            render: () => `<div${idAttr(id)}${mdAttrs(previousFrom, previousTo)}>${previous.html}</div>`,
-          }, generation);
-          return;
-        }
-        const anchor = findTrailingAnchor(slice);
-        let id: string | null = null;
-        let contentTo = to;
-        if (anchor && anchor.start > 0) {
-          id = canonicalAnchor(anchor.raw);
-          contentTo = from + anchor.start;
-          while (contentTo > from && (source[contentTo - 1] === " " || source[contentTo - 1] === "\t")) contentTo--;
-        }
-        push({
-          from,
-          to,
-          kind: "paragraph",
-          source: slice,
-          id,
-          render: (resolved) => {
-            const inner = from < contentTo ? renderInline(aux.ctx, from, contentTo, node) : "";
-            return loneFigure(node, source, contentTo, inner, `${idAttr(resolved)}${mdAttrs(from, to)}`)
-              ?? `<p${idAttr(resolved)}${mdAttrs(from, to)}>${inner}</p>`;
-          },
-        });
-        return;
-      }
-      default: {
-        if (/^(ATXHeading[1-6]|SetextHeading[1-2])$/.test(node.name)) {
-          const rawId = collected.headingIds.get(from) ?? null;
-          const level = headingLevel(node.name);
-          push({
-            from,
-            to,
-            kind: `heading-${level}`,
-            source: slice,
-            id: rawId === "" ? null : rawId,
-            render: () => renderHeadingNode(node, aux),
-          });
-          return;
-        }
-        push({
-          from,
-          to,
-          kind: "paragraph",
-          source: slice,
-          id: null,
-          render: () => renderInnerBlock(node, aux, []),
-        });
-      }
-    }
-  };
+  const context: TopContext = { source, aux: auxOf(source, forms, collected), detailsOpen, detailsClose, generation };
 
+  const blocks: LazyBlock[] = [];
+  const entries: { from: number; to: number; name: string; found: Found; toc: boolean; block: LazyBlock | null }[] = [];
+  let frontmatterBlock: LazyBlock | null = null;
   if (frontmatter) {
     const slice = source.slice(frontmatter.from, frontmatter.to);
-    blocks.push(new LazyBlock({
+    frontmatterBlock = new LazyBlock({
       from: frontmatter.from,
       to: frontmatter.to,
       kind: "frontmatter",
@@ -1269,31 +1507,266 @@ function buildDocument(source: string, tree: Tree, forms?: readonly SyntaxForm[]
       node: "",
       render: () =>
         `<div class="block-frontmatter-unparsed"${mdAttrs(frontmatter.from, frontmatter.to)}><pre>${escapeHtml(slice)}</pre></div>`,
-    }, generation));
+    }, generation);
+    blocks.push(frontmatterBlock);
   }
+  // Chi tiene l'ultimo blocco: l'indice del suo nodo, -1 il frontmatter.
+  let owner = -1;
   let fresh = 0;
   const kept = new Set<number>();
   for (const top of tops) {
+    const entry = { from: top.from, to: top.to, name: top.name, found: top.found, toc: top.toc, block: null as LazyBlock | null };
+    entries.push(entry);
     if (frontmatter && top.from < frontmatter.to) continue;
     if (top.before && reuse) {
       const moved = LazyBlock.moved(top.before, top.from);
       kept.add(moved.generation);
       blocks.push(moved);
+      entry.block = moved;
+      owner = entries.length - 1;
       continue;
     }
     fresh++;
     // Un blocco tornato con le definizioni ma da rendere di nuovo.
-    pushTopLevel(top.node ?? nodeAt(tree, top.from), top.found);
+    const node = top.node ?? nodeAt(tree, top.from);
+    const previousBlock = blocks[blocks.length - 1];
+    const lone = node.name === "Paragraph" && previousBlock ? loneAnchorId(source.slice(top.from, top.to)) : null;
+    if (lone !== null && previousBlock) {
+      const { from: previousFrom, to: previousTo } = previousBlock;
+      const merged = new LazyBlock({
+        from: previousFrom,
+        to: top.to,
+        kind: previousBlock.kind,
+        source: source.slice(previousFrom, top.to),
+        id: lone,
+        node: "",
+        render: () => `<div${idAttr(lone)}${mdAttrs(previousFrom, previousTo)}>${previousBlock.html}</div>`,
+      }, generation);
+      blocks[blocks.length - 1] = merged;
+      if (owner === -1) frontmatterBlock = merged;
+      else entries[owner]!.block = merged;
+      continue;
+    }
+    const block = renderTop(node, top.found, context);
+    blocks.push(block);
+    entry.block = block;
+    owner = entries.length - 1;
   }
-  if (kept.size >= GENERATIONS) return buildDocument(source, tree, forms);
-  const anchors = new Map<string, number>();
-  for (const [position, id] of collected.headingIds) if (id) anchors.set(id, position);
-  for (const block of blocks) if (block.record.id) anchors.set(block.record.id, block.from);
-  for (const note of collected.footnotes.values()) {
-    anchors.set(`fn-${note.number}`, note.from);
-    for (const [position, occurrence] of note.references) anchors.set(`fnref-${note.number}-${occurrence}`, position);
+  if (kept.size >= GENERATIONS) return wholeDocument(source, tree, forms);
+  const alive = new Map<number, number>();
+  for (const block of blocks) alive.set(block.generation, (alive.get(block.generation) ?? 0) + 1);
+  return new LazyDocument({
+    source,
+    tops: TopList.of(entries),
+    frontmatter,
+    frontmatterBlock,
+    collected,
+    dependencies,
+    forms,
+    alive,
+    fresh: frontmatter ? fresh + 1 : fresh,
+    visited: tops.length,
+    patch: null,
+  }, blocks);
+}
+
+/// Le definizioni di prima, con le posizioni portate avanti dalle modifiche:
+/// si rifanno soltanto quando qualcuno le legge. `changes` va dalla resa in
+/// cui `base` è stata letta a questa.
+class MovedDefinitions implements Collected {
+  private cachedHeadings: ReadonlyMap<number, string> | undefined;
+  private cachedFootnotes: ReadonlyMap<string, MarkdownFootnote> | undefined;
+  constructor(readonly base: Collected, readonly changes: ChangeDesc, readonly steps: number) {}
+  get references(): ReadonlyMap<string, MarkdownLinkDefinition> {
+    return this.base.references;
   }
-  return new LazyDocument(source, blocks, dependencies, anchors, frontmatter ? fresh + 1 : fresh);
+  get toc(): readonly TocEntry[] {
+    return this.base.toc;
+  }
+  get headingIds(): ReadonlyMap<number, string> {
+    this.cachedHeadings ??= new Map([...this.base.headingIds].map(([at, id]) => [this.changes.mapPos(at, 1), id]));
+    return this.cachedHeadings;
+  }
+  get footnotes(): ReadonlyMap<string, MarkdownFootnote> {
+    if (this.cachedFootnotes === undefined) {
+      const map = (at: number) => this.changes.mapPos(at, 1);
+      this.cachedFootnotes = new Map([...this.base.footnotes].map(([label, note]) => [label, {
+        ...note,
+        from: map(note.from),
+        to: map(note.to),
+        contentFrom: map(note.contentFrom),
+        references: new Map([...note.references].map(([at, occurrence]) => [map(at), occurrence])),
+      }]));
+    }
+    return this.cachedFootnotes;
+  }
+}
+
+/// Dopo quante battute le definizioni spostate si rileggono davvero: la
+/// catena delle modifiche non cresce senza fine.
+const MOVED_STEPS = 64;
+
+function movedDefinitions(collected: Collected, changes: ChangeDesc): Collected {
+  if (collected instanceof MovedDefinitions) {
+    if (collected.steps < MOVED_STEPS) return new MovedDefinitions(collected.base, collected.changes.composeDesc(changes), collected.steps + 1);
+    const { references, footnotes, headingIds, toc } = collected;
+    return new MovedDefinitions({ references, footnotes, headingIds, toc }, changes, 1);
+  }
+  return new MovedDefinitions(collected, changes, 1);
+}
+
+/// Quanti nodi nuovi una modifica può leggere prima che convenga la resa da capo.
+const PATCH_LIMIT = 256;
+
+/// Un nodo che non porta niente alle definizioni del documento, oltre ai
+/// richiami di nota.
+const inert = (top: { readonly name: string; readonly toc: boolean; readonly found: Found }): boolean =>
+  top.name !== "HTMLBlock" && !top.toc
+  && top.found.defs.length === 0 && top.found.headings.length === 0 && top.found.references.length === 0;
+
+/// Se la prima riga è `---`: il frontmatter potrebbe cominciare qui.
+function opensFrontmatter(source: string): boolean {
+  const start = source.startsWith("﻿") ? 1 : 0;
+  const end = source.indexOf("\n", start);
+  return end !== -1 && source.slice(start, end).trim() === "---";
+}
+
+/// La resa di una modifica che lavora soltanto vicino alle posizioni del
+/// cambio: si rileggono i nodi di primo livello dal blocco prima della
+/// modifica al primo nodo dopo che l'albero nuovo ha uguale a prima, e i nodi
+/// dopo restano quelli di prima, spostati. `null` quando non basta: una
+/// modifica nel frontmatter, un ID a parte, definizioni, titoli, ripiegabili
+/// o un indice toccati. Allora si rifà la resa intera, che dà lo stesso
+/// risultato.
+function patchDocument(source: string, tree: Tree, forms: readonly SyntaxForm[] | undefined, previous: PreviousRender): LazyDocument | null {
+  const old = previous.document;
+  if (!(old instanceof LazyDocument)) return null;
+  const was = old.state;
+  const { changes } = previous;
+  if (was.forms !== forms || changes.length !== was.source.length || changes.newLength !== source.length || tree.length !== source.length) {
+    return null;
+  }
+  let fromA = -1;
+  let toA = -1;
+  changes.iterChangedRanges((changeFrom, changeTo) => {
+    if (fromA < 0) fromA = changeFrom;
+    toA = changeTo;
+  });
+  const tops = was.tops;
+  if (fromA < 0 || tops.size === 0) return null;
+  const { frontmatter } = was;
+  if (frontmatter ? fromA < frontmatter.to : opensFrontmatter(source)) return null;
+  const delta = source.length - was.source.length;
+  // Si comincia dal nodo prima del primo che la modifica tocca: una riga
+  // scritta sotto un paragrafo può farne un titolo o una tabella.
+  let low = Math.max(0, tops.firstEndingFrom(fromA) - 1);
+  let cursor: TreeCursor;
+  for (;;) {
+    const start = tops.at(low).from;
+    if (start >= fromA || (frontmatter && start < frontmatter.to)) return null;
+    cursor = tree.cursor();
+    if (!cursor.childAfter(start)) return null;
+    if (cursor.from === start) break;
+    // L'albero nuovo ha unito il nodo a quello prima.
+    if (cursor.from > start || low === 0) return null;
+    low--;
+  }
+  const regionFrom = tops.at(low).from;
+  const generation = ++generations;
+  const alive = new Map(was.alive);
+  const removedCalls: { key: string; at: number }[] = [];
+  const added: TopEntry[] = [];
+  const fresh: { entry: { from: number; to: number; name: string; found: Found; toc: boolean; block: LazyBlock | null }; node: SyntaxNode }[] = [];
+  let visited = 0;
+  let index = low;
+  let resyncFrom = source.length;
+  let resynced = false;
+  // Un nodo di prima lascia la resa: deve essere un blocco qualunque.
+  const drop = (top: PlacedTop): boolean => {
+    const block = top.entry.block;
+    if (!block || block.record.node === "" || !inert(top.entry)) return false;
+    for (const call of top.entry.found.calls) removedCalls.push({ key: call.key, at: top.from + call.at });
+    const count = alive.get(block.generation)! - 1;
+    if (count === 0) alive.delete(block.generation);
+    else alive.set(block.generation, count);
+    return true;
+  };
+  // Dove un nodo di prima sta ora: -1 se la modifica lo tocca.
+  const mapped = (top: PlacedTop): number => top.to < fromA ? top.from : top.from > toA ? top.from + delta : -1;
+  for (;;) {
+    const { from, to, name } = cursor;
+    if (to > source.length) return null;
+    while (index < tops.size) {
+      const top = tops.at(index);
+      if (mapped(top) >= from) break;
+      if (!drop(top)) return null;
+      index++;
+      visited++;
+    }
+    if (index < tops.size) {
+      const top = tops.at(index);
+      // Soltanto un nodo col suo blocco: un ID a parte va al blocco prima, che
+      // qui potrebbe essere un altro.
+      const own = top.entry.block !== null && top.entry.block.record.node !== "";
+      if (own && mapped(top) === from && top.entry.name === name && top.to - top.from === to - from) {
+        // Un nodo dopo la modifica uguale a prima: da qui l'albero è quello
+        // di prima, spostato.
+        if (top.from > toA) {
+          resyncFrom = from;
+          resynced = true;
+          break;
+        }
+        // Un nodo prima della modifica, che l'albero nuovo legge uguale.
+        added.push(shiftedTop(top.entry, top.from - top.entry.from));
+        index++;
+        visited++;
+        if (!cursor.nextSibling()) break;
+        continue;
+      }
+    }
+    visited++;
+    if (fresh.length >= PATCH_LIMIT) return null;
+    const node = cursor.node;
+    const toc = holdsToc(source, name, from, to, () => node);
+    if (name === "Paragraph" && loneAnchorId(source.slice(from, to)) !== null) return null;
+    const entry = { from, to, name, toc, found: findDefinitions(source, node, footnoteOpeners(source, from, to)), block: null as LazyBlock | null };
+    if (!inert(entry)) return null;
+    fresh.push({ entry, node });
+    added.push(entry);
+    if (!cursor.nextSibling()) break;
+  }
+  if (!resynced) {
+    for (; index < tops.size; index++, visited++) if (!drop(tops.at(index))) return null;
+  }
+  if (visited > PATCH_LIMIT * 2) return null;
+  // I richiami di nota restano gli stessi, nello stesso ordine, e la modifica
+  // li porta dove sono ora: le definizioni del documento non cambiano, e si
+  // spostano con il testo.
+  const addedCalls = fresh.flatMap(({ entry }) => entry.found.calls.map((call) => ({ key: call.key, at: entry.from + call.at })));
+  if (addedCalls.length !== removedCalls.length) return null;
+  for (let at = 0; at < addedCalls.length; at++) {
+    const call = addedCalls[at]!;
+    const before = removedCalls[at]!;
+    if (call.key !== before.key || changes.mapPos(before.at, 1) !== call.at) return null;
+  }
+  if (fresh.length > 0) alive.set(generation, fresh.length);
+  if (alive.size > GENERATIONS) return null;
+  const collected = movedDefinitions(was.collected, changes);
+  const context: TopContext = { source, aux: auxOf(source, forms, collected), detailsOpen: new Map(), detailsClose: new Set(), generation };
+  for (const { entry, node } of fresh) entry.block = renderTop(node, entry.found, context);
+  return new LazyDocument({
+    source,
+    tops: tops.replace(low, index, added, delta),
+    frontmatter,
+    frontmatterBlock: was.frontmatterBlock,
+    collected,
+    dependencies: was.dependencies,
+    forms,
+    alive,
+    fresh: fresh.length,
+    visited,
+    patch: { from: regionFrom, to: resyncFrom },
+  });
 }
 
 /// Il nodo di primo livello che comincia a `from`.
@@ -1324,7 +1797,7 @@ export function renderMarkdownState(
   forms?: readonly SyntaxForm[],
   previous?: PreviousRender,
 ): MarkdownDocument {
-  const { source, tree } = stateTree(state);
+  const { source, tree } = stateTree(state, previous);
   return buildDocument(source, tree, forms, previous);
 }
 
@@ -1364,7 +1837,7 @@ export function renderMarkdownStatePrefix(
   const tree = ensureSyntaxTree(state, PREFIX_RENDER_FROM, TREE_BUDGET) ?? syntaxTree(state);
   if (tree.topNode.name !== "Document") return { document: renderMarkdownState(state, forms, previous), complete: true };
   if (tree.length >= length) {
-    return { document: buildDocument(state.doc.toString(), tree, forms, previous), complete: true };
+    return { document: buildDocument(sourceOf(state, previous), tree, forms, previous), complete: true };
   }
   const last = tree.topNode.lastChild;
   const cut = last ? last.from : 0;
@@ -1382,10 +1855,28 @@ export function linkReferences(state: EditorState): ReadonlyMap<string, Markdown
 /// millisecondi, prima di rifare l'albero da capo.
 const TREE_BUDGET = 200;
 
+/// Il testo di uno stato come stringa. Con la resa di prima di tutto il testo
+/// è quella sorgente con le modifiche: pochi pezzi da incollare invece di
+/// tutte le righe del documento, che su una nota grande sono la parte più
+/// cara di una battuta.
+function sourceOf(state: EditorState, previous?: PreviousRender): string {
+  const before = previous?.document.source;
+  if (before === undefined || before.length !== previous!.changes.length || previous!.changes.newLength !== state.doc.length) {
+    return state.doc.toString();
+  }
+  let source = "";
+  let at = 0;
+  previous!.changes.iterChangedRanges((fromA, toA, fromB, toB) => {
+    source += before.slice(at, fromA) + state.doc.sliceString(fromB, toB);
+    at = toA;
+  });
+  return source + before.slice(at);
+}
+
 /// L'albero di CodeMirror, portato in fondo al documento; uno nuovo soltanto se
 /// l'editor non ha un parser Markdown o non ci arriva in tempo.
-function stateTree(state: EditorState): { source: string; tree: Tree } {
-  const source = state.doc.toString();
+function stateTree(state: EditorState, previous?: PreviousRender): { source: string; tree: Tree } {
+  const source = sourceOf(state, previous);
   let tree = ensureSyntaxTree(state, state.doc.length, TREE_BUDGET);
   if (!tree || tree.length !== source.length || tree.topNode.name !== "Document") {
     tree = markdownGrammar.parser.parse(source);

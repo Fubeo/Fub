@@ -1,0 +1,21 @@
+{
+  "name": "write-defaults-none",
+  "description": "Di serie su una scheda senza campo: niente campo.",
+  "node": {
+    "id": "t1",
+    "type": "text",
+    "x": 0,
+    "y": 0,
+    "width": 300,
+    "height": 120,
+    "text": "nota"
+  },
+  "style": {
+    "size": "m",
+    "align": "start"
+  },
+  "expect": {
+    "outcome": "written",
+    "text": null
+  }
+}
