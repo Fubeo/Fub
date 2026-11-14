@@ -10,10 +10,14 @@
 // Cambiare il contenuto di una cella tocca soltanto quella cella: gli spazi
 // intorno, il resto della riga e le altre righe restano come l'autore li ha
 // scritti. Cambiare la forma — una riga o una colonna in più o in meno, un
-// ordinamento, un allineamento — riscrive la tabella intera in forma
-// canonica (`| a | b |`), perché lì ogni riga cambia comunque.
+// ordinamento, un allineamento — riscrive la tabella intera incolonnata
+// (`serializeTable`), perché lì ogni riga cambia comunque. Una tabella che
+// sul disco è già incolonnata così resta incolonnata anche quando cambia una
+// cella sola.
 //
 // Le pipe dentro una cella sono dati: nel testo sono `\|`, nel modello `|`.
+// L'a capo dentro una cella si scrive `<br>`; un `<br>` letto resta testo
+// della cella, che la Live mostra come a capo.
 
 import { sortOrder } from "../../../../tabella/sort";
 import { parseTsv as parseSheetTsv, tsvRows } from "../../../core/tsv";
@@ -166,28 +170,97 @@ export function cellAtOffset(parsed: ParsedTable, offset: number): GridPosition 
 
 // ── Scrittura ────────────────────────────────────────────────────────────────
 
-/// Il testo di una cella com'è nella sorgente: pipe protette, niente a capo.
+/// Il testo di una cella com'è nella sorgente: pipe protette, l'a capo come
+/// `<br>` (GFM non ha righe dentro una cella).
 export function escapeCell(text: string): string {
-  return text.replace(/\r?\n/g, " ").replace(/\|/g, "\\|");
+  return text.replace(/\r?\n/g, "<br>").replace(/\|/g, "\\|");
 }
 
-function delimiterCell(align: TableAlign): string {
-  return align === "center" ? ":---:" : align === "left" ? ":---" : align === "right" ? "---:" : "---";
+/// Quante colonne occupa un testo in un carattere a larghezza fissa: i
+/// caratteri larghi dell'Asia orientale e gli emoji ne prendono due, i segni
+/// che si combinano nessuna. Basta perché le pipe tornino in colonna negli
+/// editor di testo.
+export function textWidth(text: string): number {
+  let width = 0;
+  for (const char of text) {
+    const code = char.codePointAt(0)!;
+    if (/\p{M}/u.test(char) || code === 0x200d || (code >= 0xfe00 && code <= 0xfe0f)) continue;
+    const wide = (code >= 0x1100 && code <= 0x115f) || (code >= 0x2e80 && code <= 0xa4cf) || (code >= 0xac00 && code <= 0xd7a3)
+      || (code >= 0xf900 && code <= 0xfaff) || (code >= 0xfe30 && code <= 0xfe4f) || (code >= 0xff00 && code <= 0xff60)
+      || (code >= 0xffe0 && code <= 0xffe6) || (code >= 0x1f300 && code <= 0x1faff) || (code >= 0x20000 && code <= 0x3fffd);
+    width += wide ? 2 : 1;
+  }
+  return width;
+}
+
+/// `text` portato a `width` colonne secondo l'allineamento della colonna.
+function pad(text: string, width: number, align: TableAlign): string {
+  const room = Math.max(0, width - textWidth(text));
+  if (align === "right") return " ".repeat(room) + text;
+  if (align === "center") return " ".repeat(Math.floor(room / 2)) + text + " ".repeat(room - Math.floor(room / 2));
+  return text + " ".repeat(room);
+}
+
+/// La cella del delimitatore, lunga `width` (almeno tre trattini).
+function delimiterCell(align: TableAlign, width = 3): string {
+  const dashes = (count: number) => "-".repeat(Math.max(1, count));
+  if (align === "center") return `:${dashes(width - 2)}:`;
+  if (align === "left") return `:${dashes(width - 1)}`;
+  if (align === "right") return `${dashes(width - 1)}:`;
+  return dashes(width);
 }
 
 function rowLine(cells: readonly string[], prefix: string): string {
   return `${prefix}| ${cells.map(escapeCell).join(" | ")} |`;
 }
 
-/// La tabella in forma canonica.
+/// La tabella incolonnata: ogni colonna larga quanto la sua cella più
+/// lunga (almeno tre), le celle allineate come dice il delimitatore.
 export function serializeTable(data: TableData, prefix = ""): string {
-  const [header = [], ...body] = data.rows;
+  const escaped = data.rows.map((row) => data.aligns.map((_, c) => escapeCell(row[c] ?? "")));
+  const widths = data.aligns.map((_, c) => Math.max(3, ...escaped.map((row) => textWidth(row[c]!))));
+  const line = (cells: readonly string[]) => `${prefix}| ${cells.map((cell, c) => pad(cell, widths[c]!, data.aligns[c] ?? null)).join(" | ")} |`;
   const lines = [
-    rowLine(header, prefix),
-    `${prefix}| ${data.aligns.map(delimiterCell).join(" | ")} |`,
-    ...body.map((row) => rowLine(row, prefix)),
+    line(escaped[0] ?? data.aligns.map(() => "")),
+    `${prefix}| ${data.aligns.map((align, c) => delimiterCell(align, widths[c])).join(" | ")} |`,
+    ...escaped.slice(1).map(line),
   ];
   return lines.join("\n");
+}
+
+/// Il cambio più piccolo da `before` a `after` dentro `[from, to)`: si
+/// tolgono i caratteri uguali in testa e in coda.
+function trimmed(before: string, after: string, from: number): TableChange | null {
+  if (before === after) return null;
+  let head = 0;
+  const most = Math.min(before.length, after.length);
+  while (head < most && before[head] === after[head]) head++;
+  let tail = 0;
+  while (tail < most - head && before[before.length - 1 - tail] === after[after.length - 1 - tail]) tail++;
+  return { from: from + head, to: from + before.length - tail, insert: after.slice(head, after.length - tail) };
+}
+
+/// Le modifiche più piccole che portano `before` a `after`. Con tante righe
+/// quante prima ogni riga cambia soltanto dove cambia, e le righe uguali non
+/// si toccano; così una tabella incolonnata riscritta non porta il cursore
+/// degli altri riquadri fuori dal suo posto, perché i cambi si mappano.
+function smallestChanges(before: string, after: string): TableChange[] {
+  if (before === after) return [];
+  const old = before.split("\n");
+  const now = after.split("\n");
+  if (old.length === now.length) {
+    const changes: TableChange[] = [];
+    let start = 0;
+    for (let index = 0; index < old.length; start += old[index]!.length + 1, index++) {
+      const change = trimmed(old[index]!, now[index]!, start);
+      if (change) changes.push(change);
+    }
+    return changes;
+  }
+  // Righe aggiunte o tolte: un cambio solo, fra i caratteri uguali in testa e
+  // in coda (che comprendono le righe uguali).
+  const change = trimmed(before, after, 0);
+  return change ? [change] : [];
 }
 
 function sameShape(parsed: TableData, next: TableData): boolean {
@@ -198,10 +271,10 @@ function sameShape(parsed: TableData, next: TableData): boolean {
 /// Le modifiche che portano la sorgente da `parsed` a `next`, relative
 /// all'inizio della tabella, in ordine e senza sovrapposizioni.
 export function tableChanges(parsed: ParsedTable, next: TableData): TableChange[] {
-  if (!sameShape(parsed, next)) {
-    const prefix = parsed.lines[0]?.prefix ?? "";
-    const insert = serializeTable(next, prefix);
-    return insert === parsed.source ? [] : [{ from: 0, to: parsed.source.length, insert }];
+  const prefix = parsed.lines[0]?.prefix ?? "";
+  // Una tabella incolonnata come la scrive Fub resta incolonnata.
+  if (!sameShape(parsed, next) || parsed.source === serializeTable(parsed, prefix)) {
+    return smallestChanges(parsed.source, serializeTable(next, prefix));
   }
   const changes: TableChange[] = [];
   next.rows.forEach((row, r) => {

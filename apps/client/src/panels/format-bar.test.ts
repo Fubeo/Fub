@@ -350,6 +350,56 @@ describe("la barra di un riquadro", () => {
     expect(style.tabIndex).toBe(0);
   });
 
+  it("col dito e il cursore in una tabella, Tab, Invio e «+ riga» in testa alla barra", () => {
+    const fake = fakeActions(["markdown.bold", "markdown.table", "markdown.table.row.after"]);
+    let coarse = true;
+    const make = () => {
+      const bar = createFormatBar({
+        surface: () => surfaceWith(fake.actions),
+        writing: () => true,
+        focusPane: () => {},
+        runCommand: () => {},
+        coarse: () => coarse,
+      });
+      document.body.append(bar.element);
+      bars.push(bar);
+      return bar;
+    };
+    // Il testo dove sta il cursore: riceve i tasti.
+    const editor = document.createElement("div");
+    editor.tabIndex = 0;
+    document.body.append(editor);
+    const keys: string[] = [];
+    editor.addEventListener("keydown", (event) => keys.push(event.key));
+    editor.focus();
+
+    const bar = make();
+    fake.set("markdown.table.row.after", { enabled: false, active: null });
+    bar.update(SPECS);
+    const touch = bar.element.querySelector<HTMLElement>(".format-bar-touch")!;
+    expect(bar.element.firstElementChild).toBe(touch);
+    // Fuori da una tabella il gruppo non si vede.
+    expect(touch.hidden).toBe(true);
+    fake.set("markdown.table.row.after", { enabled: true, active: null });
+    bar.update(SPECS);
+    expect(touch.hidden).toBe(false);
+    const [tab, enter, add] = [...touch.querySelectorAll<HTMLButtonElement>("button")];
+    expect([tab!.textContent, enter!.textContent, add!.textContent]).toEqual(["Tab", "Invio", "+ riga"]);
+    tab!.click();
+    enter!.click();
+    add!.click();
+    expect(keys).toEqual(["Tab", "Enter"]);
+    expect(fake.runs).toEqual(["markdown.table.row.after"]);
+    expect(document.activeElement).toBe(editor);
+
+    // Col mouse non c'è.
+    coarse = false;
+    const desk = make();
+    desk.update(SPECS);
+    expect(desk.element.querySelector(".format-bar-touch")).toBeNull();
+    editor.remove();
+  });
+
   it("smontata, non segue più la superficie", () => {
     const fake = fakeActions(["markdown.bold"]);
     const { bar } = mount(surfaceWith(fake.actions));

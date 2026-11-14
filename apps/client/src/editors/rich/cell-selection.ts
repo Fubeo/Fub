@@ -1,26 +1,57 @@
 // La selezione di celle delle tabelle del documento, nel modo «documento»
 // della Tabella (`tabella/keys.ts`): il cursore resta nel testo della cella,
 // e Maiusc con una freccia che esce dalla cella, o il trascinamento da una
-// cella all'altra, sceglie un rettangolo di celle. Su quel rettangolo Canc
-// svuota, Ctrl+C e Ctrl+X passano TSV e una tabella HTML, e «Unisci celle»
+// cella all'altra, sceglie un rettangolo di celle. Su quel rettangolo valgono
+// i gesti del foglio (`documentIntent`): Canc svuota, Ctrl+C e Ctrl+X passano
+// TSV e una tabella HTML, Invio e Tab fanno girare la cella attiva, Ctrl+D e
+// Ctrl+R riempiono, Ctrl+«+» e Ctrl+«−» inseriscono e tolgono righe o
+// colonne, Maiusc+F8 aggiunge intervalli; Ctrl+Spazio e Ctrl+Maiusc+Spazio
+// scelgono la colonna e la tabella anche senza celle scelte. «Unisci celle»
 // unisce una riga.
 //
+// Taglia non svuota: segna le celle (`is-cell-cut`), e l'incolla che segue le
+// sposta in un passo solo; Escape rinuncia, e ogni modifica del documento
+// toglie il segno.
+//
 // Non è una `Selection` di ProseMirror: è uno stato del plugin accanto alla
-// selezione di testo, che resta nella cella attiva. Ogni modifica del
-// documento, ogni selezione nuova dalla tastiera e ogni clic lo spengono.
+// selezione di testo, che resta nella cella attiva. I gesti sulle celle le
+// tengono scelte, come nei fogli di calcolo; ogni altra modifica del
+// documento, ogni selezione nuova dalla tastiera e ogni clic le spengono. Il
+// segno del taglio lo spengono soltanto le modifiche. Ogni gesto è una
+// transazione sola: Ctrl+Z lo annulla in un passo.
 // Il perché di non usare `prosemirror-tables` sta nell'ADR 0225.
 
 import type { Node as PmNode, ResolvedPos } from "prosemirror-model";
 import { Plugin, PluginKey, TextSelection, type EditorState, type Transaction } from "prosemirror-state";
 import { Decoration, DecorationSet, type EditorView } from "prosemirror-view";
-import { clipboardData } from "../../tabella/clipboard";
+import type { TableCaps } from "../../tabella/adapter";
+import { clipboardData, cutMoves, cutTarget, tellCutOnce, type CutMark } from "../../tabella/clipboard";
+import { structureEdit } from "../../tabella/commands";
 import { documentIntent } from "../../tabella/keys";
-import type { Cell, Range } from "../../tabella/navigation";
-import { rangeBetween, touches } from "../../tabella/selection";
+import { boundedShape, isMultiCell, nextInRange, type Cell, type Move, type Range } from "../../tabella/navigation";
+import { fillCopy, rangeBetween, touches, wholeRange, withRange } from "../../tabella/selection";
+import { t } from "../../i18n/strings";
 import { openLifetime, type Lifetime } from "../../ui/lifetime";
+import { notify } from "../../ui/notify";
 import { richSchema } from "./schema";
+import { applyTableEdit } from "./table-structure";
 
 const { para, row: rowType, cell: cellType, table: tableType } = richSchema.nodes;
+
+/// Le capacità della tabella del documento per i gesti del foglio: righe e
+/// colonne si inseriscono e si tolgono; non c'è una riga d'intestazione.
+export const DOCUMENT_TABLE_CAPS: TableCaps = {
+  insertRows: true,
+  deleteRows: true,
+  moveRows: true,
+  insertColumns: true,
+  deleteColumns: true,
+  moveColumns: true,
+  sort: false,
+  align: false,
+  merge: true,
+  headerRows: 0,
+};
 
 /// Una cella con la sua colonna visiva: una cella unita copre `span` colonne.
 export interface CellBox {
@@ -63,23 +94,55 @@ export function cellAt($pos: ResolvedPos): { readonly table: PmNode; readonly ta
   return null;
 }
 
+/// Le celle scelte: la tabella, l'àncora e l'altro angolo dell'intervallo in
+/// cui si lavora (in colonne visive), la cella attiva quando Invio o Tab la
+/// fanno girare, gli altri intervalli e se se ne stanno aggiungendo.
+interface ChosenCells {
+  readonly tablePos: number;
+  readonly anchor: Cell;
+  readonly head: Cell;
+  readonly active?: Cell;
+  readonly others: readonly Range[];
+  readonly adding: boolean;
+}
+
 interface CellState {
-  /// La tabella, l'àncora e la cella attiva, in colonne visive.
-  readonly cells: { readonly tablePos: number; readonly anchor: Cell; readonly head: Cell } | null;
+  readonly cells: ChosenCells | null;
+  /// Le celle tagliate in attesa di un incolla, nella tabella `tablePos`.
+  readonly cut: (CutMark & { readonly tablePos: number }) | null;
 }
 
 const cellKey = new PluginKey<CellState>("rich-cell-selection");
-const NONE: CellState = { cells: null };
+const NONE: CellState = { cells: null, cut: null };
 
-/// Le celle scelte adesso, se ce ne sono più di una.
-export function selectedCells(state: EditorState): { readonly table: PmNode; readonly tablePos: number; readonly range: Range; readonly boxes: CellBox[] } | null {
+/// Le celle scelte adesso, se ce ne sono più di una (o più intervalli, o se
+/// se ne stanno aggiungendo). `boxes` sono quelle dell'intervallo in cui si
+/// lavora; `active` è la cella attiva, dove sta il cursore.
+export function selectedCells(state: EditorState): {
+  readonly table: PmNode;
+  readonly tablePos: number;
+  readonly range: Range;
+  readonly active: Cell;
+  readonly others: readonly Range[];
+  readonly boxes: CellBox[];
+} | null {
   const cells = cellKey.getState(state)?.cells;
   if (!cells) return null;
   const table = state.doc.nodeAt(cells.tablePos);
   if (table?.type !== tableType) return null;
   const range = rangeBetween(cells.anchor, cells.head);
-  const boxes = cellBoxes(table, cells.tablePos).filter((box) => touches(range, box.row, box.column, box.row, box.column + box.span - 1));
-  return boxes.length > 1 ? { table, tablePos: cells.tablePos, range, boxes } : null;
+  const boxes = boxesIn(cellBoxes(table, cells.tablePos), range);
+  if (boxes.length <= 1 && cells.others.length === 0 && !cells.adding) return null;
+  return { table, tablePos: cells.tablePos, range, active: cells.active ?? cells.anchor, others: cells.others, boxes };
+}
+
+/// Le celle segnate dal taglio, o `null`.
+export function cutCells(state: EditorState): Range | null {
+  return cellKey.getState(state)?.cut?.range ?? null;
+}
+
+function boxesIn(boxes: readonly CellBox[], range: Range): CellBox[] {
+  return boxes.filter((box) => touches(range, box.row, box.column, box.row, box.column + box.span - 1));
 }
 
 /// La cella che copre la colonna `column` della riga `row`.
@@ -87,43 +150,84 @@ function boxCovering(boxes: readonly CellBox[], row: number, column: number): Ce
   return boxes.find((box) => box.row === row && column >= box.column && column < box.column + box.span);
 }
 
-/// Sceglie le celle da `anchor` a `head` nella tabella in `tablePos`, col
-/// cursore nella cella attiva.
-function selectCells(state: EditorState, tablePos: number, anchor: Cell, head: Cell): Transaction {
-  const table = state.doc.nodeAt(tablePos)!;
-  const box = boxCovering(cellBoxes(table, tablePos), head.row, head.column);
-  const tr = state.tr.setMeta(cellKey, { cells: { tablePos, anchor, head } } satisfies CellState);
+/// Righe e colonne visive della tabella.
+function tableSize(table: PmNode, boxes: readonly CellBox[]): { readonly rows: number; readonly columns: number } {
+  return { rows: table.childCount, columns: Math.max(...boxes.map((box) => box.column + box.span)) };
+}
+
+/// Le celle scelte diventano `cells`, col cursore nella cella attiva (di
+/// solito l'àncora, come nei fogli di calcolo). Il segno del taglio resta,
+/// se `tr` non cambia il documento.
+function chooseCells(state: EditorState, cells: ChosenCells, tr: Transaction = state.tr): Transaction {
+  const table = tr.doc.nodeAt(cells.tablePos)!;
+  const active = cells.active ?? cells.anchor;
+  const box = boxCovering(cellBoxes(table, cells.tablePos), active.row, active.column);
+  const cut = tr.docChanged ? null : cellKey.getState(state)?.cut ?? null;
+  tr.setMeta(cellKey, { cells, cut } satisfies CellState);
   if (box) tr.setSelection(TextSelection.near(tr.doc.resolve(box.pos + 1)));
   return tr;
 }
 
-/// Svuota le celle scelte: ognuna resta, con un paragrafo vuoto come il suo
-/// primo.
+/// Un cambio delle celle che tiene le celle scelte (e niente segno).
+function keepCells(tr: Transaction, cells: ChosenCells | null): Transaction {
+  return tr.setMeta(cellKey, { cells, cut: null } satisfies CellState);
+}
+
+/// Riscrive le celle `boxes` con il contenuto che `content` dà a ognuna (o
+/// `null` per lasciarla), dalla fine così le posizioni restano buone. Si
+/// riscrive l'interno, così le celle e la tabella in `tablePos` restano dove
+/// sono; il cursore torna nella cella `cursor`.
+function rewriteCells(
+  tr: Transaction,
+  tablePos: number,
+  boxes: readonly CellBox[],
+  content: (box: CellBox) => PmNode | null,
+  cursor: Cell,
+): void {
+  for (const box of [...boxes].sort((a, b) => b.pos - a.pos)) {
+    const next = content(box);
+    if (next) tr.replaceWith(box.pos + 1, box.pos + box.node.nodeSize - 1, next.content);
+  }
+  const box = boxCovering(cellBoxes(tr.doc.nodeAt(tablePos)!, tablePos), cursor.row, cursor.column);
+  if (box) tr.setSelection(TextSelection.near(tr.doc.resolve(box.pos + 1)));
+}
+
+/// Una cella come `box`, vuota: un paragrafo vuoto come il suo primo.
+function emptied(box: CellBox): PmNode {
+  const first = box.node.firstChild;
+  return cellType.create(box.node.attrs, para.create(first?.type === para ? first.attrs : null));
+}
+
+/// Svuota le celle scelte, in tutti gli intervalli: ognuna resta, con un
+/// paragrafo vuoto come il suo primo, e resta scelta.
 export function clearCells(state: EditorState, dispatch?: (tr: Transaction) => void): boolean {
   const selected = selectedCells(state);
   if (!selected) return false;
   if (dispatch) {
+    const all = cellBoxes(selected.table, selected.tablePos);
+    const chosen = all.filter((box) => [selected.range, ...selected.others]
+      .some((range) => touches(range, box.row, box.column, box.row, box.column + box.span - 1)));
     const tr = state.tr;
-    for (const box of [...selected.boxes].reverse()) {
-      const first = box.node.firstChild;
-      const empty = para.create(first?.type === para ? first.attrs : null);
-      tr.replaceWith(box.pos + 1, box.pos + box.node.nodeSize - 1, empty);
-    }
-    dispatch(tr.scrollIntoView());
+    rewriteCells(tr, selected.tablePos, chosen, emptied, selected.active);
+    // Come nei fogli di calcolo le celle restano scelte.
+    dispatch(keepCells(tr, cellKey.getState(state)?.cells ?? null).scrollIntoView());
   }
   return true;
 }
 
-/// Il testo delle celle scelte, riga per riga: per gli appunti.
-function selectedRows(state: EditorState): { input: string; shown: string }[][] {
-  const selected = selectedCells(state);
-  if (!selected) return [];
+/// Il testo di una cella, coi blocchi a capo.
+function cellText(box: CellBox): string {
+  const blocks: string[] = [];
+  box.node.forEach((block) => blocks.push(block.textContent));
+  return blocks.join("\n");
+}
+
+/// Il testo delle celle di `range`, riga per riga: per gli appunti.
+function rangeRows(table: PmNode, tablePos: number, range: Range): { input: string; shown: string }[][] {
   const rows: { input: string; shown: string }[][] = [];
-  for (const box of selected.boxes) {
-    const line = (rows[box.row - selected.range.r0] ??= []);
-    const blocks: string[] = [];
-    box.node.forEach((block) => blocks.push(block.textContent));
-    const text = blocks.join("\n");
+  for (const box of boxesIn(cellBoxes(table, tablePos), range)) {
+    const line = (rows[box.row - range.r0] ??= []);
+    const text = cellText(box);
     line.push({ input: text, shown: text });
   }
   return rows.filter((line) => line !== undefined);
@@ -139,43 +243,182 @@ function edges(state: EditorState, box: CellBox): { start: boolean; end: boolean
 
 function onKey(view: EditorView, event: KeyboardEvent): boolean {
   const state = view.state;
-  const active = cellKey.getState(state)?.cells ?? null;
-  if (active && (event.key === "Delete" || event.key === "Backspace") && !event.ctrlKey && !event.metaKey && !event.altKey) {
+  const plugin = cellKey.getState(state) ?? NONE;
+  const chosen = plugin.cells;
+  if (chosen && (event.key === "Delete" || event.key === "Backspace") && !event.ctrlKey && !event.metaKey && !event.altKey) {
     return clearCells(state, view.dispatch);
   }
-  if (event.key === "Tab") return false;
   const here = cellAt(state.selection.$head);
-  if (!here) return false;
-  const intent = documentIntent(event, active ? { start: true, end: true } : edges(state, here.box));
-  if (intent?.kind !== "move") return false;
+  if (!here) {
+    if (event.key === "Escape" && plugin.cut) {
+      view.dispatch(state.tr.setMeta(cellKey, { ...plugin, cut: null } satisfies CellState));
+      return true;
+    }
+    return false;
+  }
+  const multi = selectedCells(state);
+  const intent = documentIntent(event, chosen ? { start: true, end: true } : edges(state, here.box), {
+    cells: multi !== null,
+    adding: chosen?.adding ?? false,
+  });
+  if (!intent) return false;
   const boxes = cellBoxes(here.table, here.tablePos);
-  const rows = here.table.childCount;
-  const columns = Math.max(...boxes.map((box) => box.column + box.span));
-  const anchor = active ?? { tablePos: here.tablePos, anchor: { row: here.box.row, column: here.box.column }, head: { row: here.box.row, column: here.box.column } };
-  const head = { row: anchor.head.row + intent.rows, column: anchor.head.column + intent.columns };
-  if (head.row < 0 || head.row >= rows || head.column < 0 || head.column >= columns) return active !== null;
-  // Una cella unita si attraversa tutta: la colonna dopo è oltre la sua fine.
-  const over = boxCovering(boxes, anchor.head.row, anchor.head.column);
-  if (over && intent.columns > 0) head.column = Math.min(columns - 1, over.column + over.span);
-  if (!boxCovering(boxes, head.row, head.column)) return active !== null;
-  view.dispatch(selectCells(state, anchor.tablePos, anchor.anchor, head));
-  return true;
+  const size = tableSize(here.table, boxes);
+  const own = chosen && chosen.tablePos === here.tablePos ? chosen : null;
+  const current = own ?? { tablePos: here.tablePos, anchor: { row: here.box.row, column: here.box.column }, head: { row: here.box.row, column: here.box.column }, others: [], adding: false };
+  const range = rangeBetween(current.anchor, current.head);
+  const active = current.active ?? current.anchor;
+  const bounds: Range = { r0: 0, c0: 0, r1: size.rows - 1, c1: size.columns - 1 };
+  switch (intent.kind) {
+    case "leave": {
+      // Prima il segno del taglio, poi gli altri intervalli, poi le celle.
+      if (plugin.cut) {
+        view.dispatch(state.tr.setMeta(cellKey, { ...plugin, cut: null } satisfies CellState));
+        return true;
+      }
+      if (own && (own.others.length > 0 || own.adding)) {
+        view.dispatch(chooseCells(state, { ...own, others: [], adding: false }));
+        return true;
+      }
+      if (multi) {
+        view.dispatch(state.tr.setMeta(cellKey, { ...plugin, cells: null } satisfies CellState));
+        return true;
+      }
+      return false;
+    }
+    case "tab":
+    case "enter": {
+      if (!multi || !isMultiCell(range)) return false;
+      const move: Move = intent.kind === "tab" ? (intent.step > 0 ? "right" : "left") : (intent.step > 0 ? "down" : "up");
+      view.dispatch(chooseCells(state, { ...current, active: nextInRange(range, active, move, boundedShape(size)) }));
+      return true;
+    }
+    case "whole": {
+      const whole = wholeRange(range, intent.which, bounds);
+      view.dispatch(chooseCells(state, {
+        ...current,
+        anchor: { row: whole.r0, column: whole.c0 },
+        head: { row: whole.r1, column: whole.c1 },
+        active: touches(whole, active.row, active.column) ? active : undefined,
+        others: current.adding ? current.others : [],
+      }));
+      return true;
+    }
+    case "add-ranges": {
+      const adding = !current.adding;
+      view.dispatch(chooseCells(state, { ...current, adding, others: adding ? withRange(current.others, range) : current.others }));
+      return true;
+    }
+    case "fill": {
+      if (!view.editable || current.others.length > 0) return true;
+      const copy = fillCopy(range, intent.direction, 0);
+      if (!copy) return true;
+      const sourceOf = (box: CellBox) => intent.direction === "down"
+        ? boxCovering(boxes, copy.source.r0, box.column)
+        : boxCovering(boxes, box.row, copy.source.c0);
+      const tr = state.tr;
+      rewriteCells(tr, here.tablePos, boxesIn(boxes, copy.target), (box) => {
+        const source = sourceOf(box);
+        return source && source.pos !== box.pos ? cellType.create(box.node.attrs, source.node.content) : null;
+      }, active);
+      view.dispatch(keepCells(tr, own).scrollIntoView());
+      return true;
+    }
+    case "structure": {
+      if (!view.editable || current.others.length > 0) return true;
+      const change = structureEdit({ range, active, size, caps: DOCUMENT_TABLE_CAPS }, intent.change);
+      if (!change) return true;
+      const tr = state.tr;
+      if (!applyTableEdit(tr, here.table, here.tablePos, change.edit)) return true;
+      view.dispatch(chooseCells(state, {
+        tablePos: here.tablePos,
+        anchor: change.select.anchor,
+        head: change.select.focus,
+        others: [],
+        adding: false,
+      }, tr).scrollIntoView());
+      return true;
+    }
+    case "move": {
+      const from = intent.extend ? current.head : active;
+      const head = { row: from.row + intent.rows, column: from.column + intent.columns };
+      if (head.row < 0 || head.row >= size.rows || head.column < 0 || head.column >= size.columns) return own !== null;
+      // Una cella unita si attraversa tutta: la colonna dopo è oltre la sua fine.
+      const over = boxCovering(boxes, from.row, from.column);
+      if (over && intent.columns > 0) head.column = Math.min(size.columns - 1, over.column + over.span);
+      if (!boxCovering(boxes, head.row, head.column)) return own !== null;
+      view.dispatch(chooseCells(state, intent.extend
+        ? { ...current, head, active: undefined }
+        : { ...current, anchor: head, head, active: undefined }));
+      return true;
+    }
+    default:
+      return false;
+  }
 }
 
 function copyCells(view: EditorView, event: ClipboardEvent, cut: boolean): boolean {
-  const rows = selectedRows(view.state);
-  if (rows.length === 0 || !event.clipboardData) return false;
+  const selected = selectedCells(view.state);
+  if (!selected || !event.clipboardData) return false;
   event.preventDefault();
-  const data = clipboardData(rows);
+  // Come nei fogli di calcolo: più intervalli non si copiano insieme, e lo si
+  // dice come la cornice.
+  if (selected.others.length > 0) {
+    notify(t("grid.multi.refused"), "info");
+    return true;
+  }
+  const data = clipboardData(rangeRows(selected.table, selected.tablePos, selected.range));
   event.clipboardData.setData("text/plain", data.text);
   event.clipboardData.setData("text/html", data.html);
-  if (cut && view.editable) clearCells(view.state, view.dispatch);
+  const plugin = cellKey.getState(view.state) ?? NONE;
+  const mark = cut && view.editable ? { range: selected.range, text: data.text, tablePos: selected.tablePos } : null;
+  view.dispatch(view.state.tr.setMeta(cellKey, { ...plugin, cut: mark } satisfies CellState));
+  if (mark && tellCutOnce()) notify(t("table.cut.marked"), "info");
+  return true;
+}
+
+/// L'incolla dopo un taglio: se gli appunti e le celle tagliate dicono
+/// ancora il taglio, il loro contenuto va all'angolo della selezione e le
+/// celle tagliate che restano fuori si svuotano, in un passo solo. Fuori dalla
+/// tabella, o oltre il suo bordo, l'incolla resta quello del testo.
+function pasteCut(view: EditorView, event: ClipboardEvent): boolean {
+  const state = view.state;
+  const mark = cellKey.getState(state)?.cut;
+  if (!mark || !event.clipboardData || !view.editable) return false;
+  const table = state.doc.nodeAt(mark.tablePos);
+  const here = cellAt(state.selection.$head);
+  if (table?.type !== tableType || !here || here.tablePos !== mark.tablePos) return false;
+  const now = clipboardData(rangeRows(table, mark.tablePos, mark.range)).text;
+  if (!cutMoves(mark, event.clipboardData.getData("text/plain"), now)) return false;
+  const selected = selectedCells(state);
+  const target = selected?.range ?? { r0: here.box.row, c0: here.box.column, r1: here.box.row, c1: here.box.column };
+  const boxes = cellBoxes(table, mark.tablePos);
+  const destination = cutTarget(mark.range, target, tableSize(table, boxes));
+  if (!destination) return false;
+  event.preventDefault();
+  const sources = boxesIn(boxes, mark.range);
+  const content = (box: CellBox): PmNode | null => {
+    if (touches(destination, box.row, box.column)) {
+      const source = boxCovering(sources, box.row - destination.r0 + mark.range.r0, box.column - destination.c0 + mark.range.c0);
+      return source ? cellType.create(box.node.attrs, source.node.content) : emptied(box);
+    }
+    return touches(mark.range, box.row, box.column) ? emptied(box) : null;
+  };
+  const tr = state.tr;
+  rewriteCells(tr, mark.tablePos, boxes, content, { row: destination.r0, column: destination.c0 });
+  view.dispatch(chooseCells(state, {
+    tablePos: mark.tablePos,
+    anchor: { row: destination.r0, column: destination.c0 },
+    head: { row: destination.r1, column: destination.c1 },
+    others: [],
+    adding: false,
+  }, tr).scrollIntoView());
   return true;
 }
 
 /// Il trascinamento da una cella all'altra: finché il puntatore resta nella
 /// cella di partenza è una selezione di testo; appena passa in un'altra della
-/// stessa tabella diventa di celle.
+/// stessa tabella diventa di celle. Mod+trascina aggiunge un intervallo.
 class CellDrag {
   readonly #view: EditorView;
   readonly #life: Lifetime;
@@ -189,12 +432,18 @@ class CellDrag {
 
   #start(event: MouseEvent): void {
     const view = this.#view;
-    // Un clic nuovo spegne le celle: le selezioni del puntatore dopo, no.
-    if (cellKey.getState(view.state)?.cells) view.dispatch(view.state.tr.setMeta(cellKey, NONE));
-    if (event.button !== 0 || event.shiftKey) return;
-    const at = view.posAtCoords({ left: event.clientX, top: event.clientY });
+    const plugin = cellKey.getState(view.state) ?? NONE;
+    const before = selectedCells(view.state);
+    const at = event.button === 0 && !event.shiftKey ? view.posAtCoords({ left: event.clientX, top: event.clientY }) : null;
     const from = at ? cellAt(view.state.doc.resolve(at.pos)) : null;
+    // Mod+clic aggiunge soltanto su una cella della stessa tabella; altrove è
+    // un clic qualunque.
+    const adding = (event.ctrlKey || event.metaKey) && before !== null && from !== null && before.tablePos === from.tablePos;
+    // Un clic nuovo spegne le celle (non il segno del taglio): le selezioni
+    // del puntatore dopo, no.
+    if (plugin.cells && !adding) view.dispatch(view.state.tr.setMeta(cellKey, { ...plugin, cells: null } satisfies CellState));
     if (!from) return;
+    const others = adding ? withRange(before.others, before.range) : [];
     this.#drag?.close();
     const drag = openLifetime();
     this.#drag = drag;
@@ -205,16 +454,19 @@ class CellDrag {
       const over = view.posAtCoords({ left: move.clientX, top: move.clientY });
       const to = over ? cellAt(view.state.doc.resolve(over.pos)) : null;
       if (!to || to.tablePos !== from.tablePos) return;
-      if (!celled && to.box.pos === from.box.pos) return;
+      if (!celled && to.box.pos === from.box.pos && others.length === 0) return;
       const head = { row: to.box.row, column: to.box.column };
       const current = cellKey.getState(view.state)?.cells;
-      if (current && current.head.row === head.row && current.head.column === head.column) return;
+      if (celled && current && current.head.row === head.row && current.head.column === head.column) return;
       celled = true;
-      view.dispatch(selectCells(view.state, from.tablePos, anchor, head));
+      view.dispatch(chooseCells(view.state, { tablePos: from.tablePos, anchor, head, others, adding: false }));
     });
     drag.listen(doc, "mouseup", () => {
       drag.close();
       if (this.#drag === drag) this.#drag = null;
+      // Mod+clic su una cella sola, senza trascinare: la cella è un intervallo
+      // in più, come nei fogli di calcolo.
+      if (adding && !celled) view.dispatch(chooseCells(view.state, { tablePos: from.tablePos, anchor, head: anchor, others, adding: false }));
     });
   }
 
@@ -231,9 +483,11 @@ export const cellSelectionPlugin = new Plugin<CellState>({
     apply(tr, value) {
       const meta = tr.getMeta(cellKey) as CellState | undefined;
       if (meta) return meta;
-      // Mentre si trascina il browser allarga la sua selezione di testo: le
-      // selezioni del puntatore non spengono le celle, il clic dopo sì.
-      if (tr.docChanged || (tr.selectionSet && !tr.getMeta("pointer"))) return value.cells ? NONE : value;
+      // Ogni modifica spegne le celle e il segno del taglio. Mentre si
+      // trascina il browser allarga la sua selezione di testo: le selezioni
+      // del puntatore non spengono le celle, il clic dopo sì.
+      if (tr.docChanged) return value === NONE ? value : NONE;
+      if (tr.selectionSet && !tr.getMeta("pointer") && value.cells) return { ...value, cells: null };
       return value;
     },
   },
@@ -243,14 +497,29 @@ export const cellSelectionPlugin = new Plugin<CellState>({
     handleDOMEvents: {
       copy: (view, event) => copyCells(view, event, false),
       cut: (view, event) => copyCells(view, event, true),
+      paste: (view, event) => pasteCut(view, event),
     },
     decorations(state) {
       const selected = selectedCells(state);
-      if (!selected) return null;
-      return DecorationSet.create(state.doc, [
-        Decoration.node(selected.tablePos, selected.tablePos + selected.table.nodeSize, { class: "has-cell-selection" }),
-        ...selected.boxes.map((box) => Decoration.node(box.pos, box.pos + box.node.nodeSize, { class: "is-cell-selected" })),
-      ]);
+      const plugin = cellKey.getState(state) ?? NONE;
+      const marks: Decoration[] = [];
+      if (selected) {
+        const all = cellBoxes(selected.table, selected.tablePos);
+        marks.push(Decoration.node(selected.tablePos, selected.tablePos + selected.table.nodeSize, { class: "has-cell-selection" }));
+        for (const box of all) {
+          if ([selected.range, ...selected.others].some((range) => touches(range, box.row, box.column, box.row, box.column + box.span - 1))) {
+            marks.push(Decoration.node(box.pos, box.pos + box.node.nodeSize, { class: "is-cell-selected" }));
+          }
+        }
+      }
+      const cut = plugin.cut;
+      const cutTable = cut ? state.doc.nodeAt(cut.tablePos) : null;
+      if (cut && cutTable?.type === tableType) {
+        for (const box of boxesIn(cellBoxes(cutTable, cut.tablePos), cut.range)) {
+          marks.push(Decoration.node(box.pos, box.pos + box.node.nodeSize, { class: "is-cell-cut" }));
+        }
+      }
+      return marks.length > 0 ? DecorationSet.create(state.doc, marks) : null;
     },
   },
 });

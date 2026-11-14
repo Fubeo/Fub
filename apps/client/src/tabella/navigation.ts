@@ -28,6 +28,18 @@ export interface Shape {
   visible(axis: "row" | "column", index: number): boolean;
 }
 
+/// La forma di una tabella di `size` senza righe né colonne nascoste: un
+/// passo si ferma al bordo.
+export function boundedShape(size: { readonly rows: number; readonly columns: number }): Shape {
+  return {
+    step: (axis, from, step) => {
+      const next = from + step;
+      return next >= 0 && next < (axis === "row" ? size.rows : size.columns) ? next : from;
+    },
+    visible: () => true,
+  };
+}
+
 const AXIS: Record<Move, { readonly axis: "row" | "column"; readonly step: -1 | 1 }> = {
   down: { axis: "row", step: 1 },
   up: { axis: "row", step: -1 },
@@ -100,4 +112,30 @@ function edge(range: Range, axis: "row" | "column", first: boolean, shape: Shape
   }
   for (let index = high; index >= low; index -= 1) if (shape.visible(axis, index)) return index;
   return high;
+}
+
+/// Ctrl con una freccia: fino al bordo dei dati, come nei fogli di calcolo.
+/// Da una cella piena accanto a un'altra piena si va all'ultima piena del
+/// tratto; altrimenti alla prima piena che si incontra, o al bordo della
+/// tabella. `advance` dà l'indice visibile dopo `index` nella direzione del
+/// tasto (`index` stesso quando oltre non c'è niente), `filled` se la cella
+/// a quell'indice è piena.
+export function dataEdge(from: number, advance: (index: number) => number, filled: (index: number) => boolean): number {
+  let index = from;
+  let next = advance(index);
+  if (next === index) return index;
+  if (filled(index) && filled(next)) {
+    while (next !== index && filled(next)) {
+      index = next;
+      next = advance(index);
+    }
+    return index;
+  }
+  index = next;
+  while (!filled(index)) {
+    next = advance(index);
+    if (next === index) break;
+    index = next;
+  }
+  return index;
 }

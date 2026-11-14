@@ -41,6 +41,7 @@ import { cellAt, cellBoxes, selectedCells } from "./cell-selection";
 import { canComment } from "./comments";
 import { goToRevision, resolveAll, resolveRevision } from "./review";
 import { richSchema } from "./schema";
+import { emptyCellLike, emptyRowLike, evenColumns } from "./table-structure";
 import { tracking } from "./track";
 
 const { para, row: rowType, cell: cellType, table: tableType, brk } = richSchema.nodes;
@@ -477,21 +478,6 @@ function rowAt($pos: ResolvedPos): InRow | null {
   return null;
 }
 
-/// Una cella vuota come `cell`: stesse proprietà di cella e del paragrafo.
-function emptyCellLike(cell: PmNode): PmNode {
-  const first = cell.firstChild;
-  const attrs = first?.type === para ? { ...first.attrs, role: BODY } : undefined;
-  return cellType.create(cell.attrs, para.create(attrs));
-}
-
-/// Una riga nuova come quella del cursore: stesse proprietà di riga e di
-/// cella (come «Inserisci riga» di Word), celle vuote.
-function emptyRowLike(row: PmNode): PmNode {
-  const cells: PmNode[] = [];
-  row.forEach((cell) => cells.push(emptyCellLike(cell)));
-  return rowType.create(row.attrs, cells);
-}
-
 export function insertRow(where: "before" | "after"): Command {
   return (state, dispatch) => {
     const at = rowAt(state.selection.$from);
@@ -557,15 +543,7 @@ interface InColumn extends InRow {
 function columnAt(state: EditorState): InColumn | null {
   const { $from } = state.selection;
   const at = rowAt($from);
-  if (!at) return null;
-  let even = true;
-  at.table.forEach((row) => {
-    even &&= row.childCount === at.row.childCount;
-    row.forEach((cell) => {
-      even &&= cell.attrs.span === 1;
-    });
-  });
-  if (!even) return null;
+  if (!at || !evenColumns(at.table)) return null;
   return { ...at, cellIndex: $from.index(at.depth), offset: $from.pos - $from.start(at.depth + 1) };
 }
 

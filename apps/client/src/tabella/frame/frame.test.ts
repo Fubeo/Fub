@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { TableCaps, TableClipboard, TableEdit, TableMenuEntry } from "../adapter";
-import { caseApplies, playCase, TABLE_CONFORMANCE } from "../conformance";
+import { caseApplies, expectedOf, playCase, seenOf, TABLE_CONFORMANCE, type ConformanceClipboard, type ConformanceTarget } from "../conformance";
 import { sortOrder } from "../sort";
 import { fillRange } from "../selection";
 import { columnName, TableFrame, type TableFrameHost } from "./frame";
@@ -214,26 +214,94 @@ describe("la cornice della Tabella", () => {
     expect(edits).toEqual([]);
   });
 
+  it("un cambio da fuori toglie il segno del taglio; un ridisegno senza cambi no", () => {
+    const { frame, rows, edits } = mount([["Nome", "Voto"], ["", ""], ["", ""], ["Bea", "9"]]);
+    const store = { text: "", html: "" };
+    frame.focus({ row: 1, column: 0 });
+    clipboardEvent("cut", store);
+    expect(frame.cutRange).toEqual({ r0: 1, c0: 0, r1: 1, c1: 0 });
+    frame.update();
+    expect(frame.cutRange).toEqual({ r0: 1, c0: 0, r1: 1, c1: 0 });
+    // Un annulla da fuori toglie la riga: al posto del segno ora c'è un'altra
+    // cella vuota, che l'incolla non deve spostare.
+    rows.splice(1, 1);
+    frame.update();
+    expect(frame.cutRange).toBeNull();
+    frame.focus({ row: 2, column: 0 });
+    clipboardEvent("paste", store);
+    expect(edits.every((edit) => edit.kind !== "set" || edit.blocks.length === 1)).toBe(true);
+  });
+
+  it("un taglio che incollato uscirebbe dalla tabella non sposta: è un incolla qualunque", () => {
+    const { frame, rows } = mount(ROWS);
+    const store = { text: "", html: "" };
+    frame.focus({ row: 1, column: 0 });
+    key("ArrowDown", { shiftKey: true });
+    clipboardEvent("cut", store);
+    frame.focus({ row: 2, column: 1 });
+    clipboardEvent("paste", store);
+    // Le celle tagliate restano: nessuna cella svuotata.
+    expect(rows[1]).toEqual(["Ada", "10"]);
+    expect(rows[2]![0]).toBe("Bea");
+  });
+
+  it("la maniglia tenuta col dito non copre la cella sotto: la selezione la segue", () => {
+    const { frame, cell } = mount(ROWS);
+    frame.focus({ row: 1, column: 0 });
+    const handle = frame.element.querySelector<HTMLElement>('.tb-handle[data-end="end"]')!;
+    // Sotto il dito c'è prima la maniglia stessa, poi la cella.
+    const target = cell(2, 1);
+    const fromPoint = vi.spyOn(document, "elementFromPoint").mockReturnValue(handle);
+    Object.defineProperty(document, "elementsFromPoint", { configurable: true, value: () => [handle, target] });
+    try {
+      handle.dispatchEvent(new PointerEvent("pointerdown", { button: 0, pointerId: 1, bubbles: true, cancelable: true }));
+      handle.dispatchEvent(new PointerEvent("pointermove", { pointerId: 1, clientX: 10, clientY: 10, bubbles: true }));
+      expect(frame.selection.focus).toEqual({ row: 2, column: 1 });
+      expect(frame.selection.anchor).toEqual({ row: 1, column: 0 });
+    } finally {
+      fromPoint.mockRestore();
+      delete (document as { elementsFromPoint?: unknown }).elementsFromPoint;
+    }
+  });
+
   it("dà i nomi delle colonne dei fogli di calcolo", () => {
     expect([0, 25, 26, 51, 52, 701, 702].map(columnName)).toEqual(["A", "Z", "AA", "AZ", "BA", "ZZ", "AAA"]);
   });
 });
 
+/// Un evento degli appunti sul fuoco, con gli appunti finti della prova.
+function clipboardEvent(kind: "cut" | "copy" | "paste", store: ConformanceClipboard): void {
+  const event = new Event(kind, { bubbles: true, cancelable: true });
+  Object.defineProperty(event, "clipboardData", {
+    value: {
+      setData: (type: string, value: string) => {
+        if (type === "text/plain") store.text = value;
+        if (type === "text/html") store.html = value;
+      },
+      getData: (type: string) => (type === "text/plain" ? store.text : type === "text/html" ? store.html : ""),
+    },
+  });
+  (document.activeElement ?? document.body).dispatchEvent(event);
+}
+
 describe("la prova comune, sulla cornice", () => {
+  const target: ConformanceTarget = { mode: "sheet", caps: ALL, bounded: true, delegates: false };
   for (const test of TABLE_CONFORMANCE) {
-    it.runIf(caseApplies(test, ALL))(test.name, () => {
+    it.runIf(caseApplies(test, target))(test.name, async () => {
       const { frame, rows } = mount(test.rows.map((row) => [...row]));
       frame.focus("first");
-      const seen = playCase(test, {
+      const seen = await playCase(test, {
         key: (name, init) => key(name, init),
         command: (id) => void frame.runCommand(id),
+        clipboard: clipboardEvent,
         cells: () => rows.map((row) => [...row]),
-        active: () => frame.selection.focus,
+        active: () => frame.active,
         range: () => frame.range,
+        cut: () => frame.cutRange,
+        ranges: () => frame.ranges.length,
       });
-      if (test.cells) expect(seen.cells).toEqual(test.cells);
-      if (test.active) expect(seen.active).toEqual(test.active);
-      if (test.range) expect(seen.range).toEqual(test.range);
+      const expected = expectedOf(test, target);
+      expect(seenOf(seen, expected)).toEqual(expected);
     });
   }
 });

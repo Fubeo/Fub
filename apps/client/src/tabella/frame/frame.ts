@@ -7,22 +7,40 @@
 // # I gesti
 //
 // Come in un foglio di calcolo: le frecce muovono la cella attiva, Maiusc
-// allarga la selezione, Ctrl va al bordo; Tab va avanti riga per riga e
-// dall'ultima cella aggiunge una riga; Invio o F2 aprono la cella, un
-// carattere la riscrive; Canc la svuota; Ctrl+C, X e V passano TSV e una
-// tabella HTML. Dentro la cella Invio conferma e scende, Tab conferma e
-// avanza, Esc annulla. Tirare la maniglia nell'angolo della selezione
-// riempie la serie.
+// allarga la selezione, Ctrl va al bordo dei dati; Maiusc+Spazio sceglie la
+// riga, Ctrl+Spazio la colonna, tutti e due la tabella; Tab va avanti riga per
+// riga e dall'ultima cella aggiunge una riga; Invio o F2 aprono la cella, un
+// carattere la riscrive; con più celle scelte Invio e Tab girano dentro la
+// selezione; Canc la svuota; Ctrl+C, X e V passano TSV e una tabella HTML, e
+// le celle tagliate restano tratteggiate finché non si incolla (Esc rinuncia).
+// Ctrl+D riempie in giù, Ctrl+R a destra; Ctrl+«+» e Ctrl+«−» inseriscono e
+// tolgono righe o colonne secondo ciò che è scelto; Maiusc+F8 e Ctrl+clic
+// aggiungono un intervallo agli altri. Dentro la cella Invio conferma e
+// scende, Tab conferma e avanza, Esc annulla. Tirare la maniglia nell'angolo
+// della selezione riempie la serie.
+//
+// # Il moto
+//
+// La selezione, la cella attiva e il segno del taglio sono tre riquadri sopra
+// le celle, che scivolano (la pelle dà il tempo); muoversi con le frecce non
+// ridisegna la tabella. Un cambio della tabella si anima con `motion.ts`.
+//
+// # Al tocco
+//
+// Un tocco sceglie una cella; le due maniglie agli angoli della selezione si
+// tirano per allargarla; un tocco lungo apre il menu.
 
 import { t } from "../../i18n/strings";
 import { openLifetime, type Lifetime } from "../../ui/lifetime";
-import type { TableAlign, TableCaps, TableClipboard, TableEdit, TableMenuEntry, TableSize } from "../adapter";
-import { clipboardData, clipboardRows, pasteTargets } from "../clipboard";
-import { TABLE_ALIGNS, TABLE_COMMANDS, tableCommand, type TableCommandContext, type TableTarget } from "../commands";
+import type { TableAlign, TableBlock, TableCaps, TableClipboard, TableEdit, TableMenuEntry, TableSize } from "../adapter";
+import { clipboardData, clipboardRows, cutMoves, cutTarget, pasteTargets, tellCutOnce, type CutMark } from "../clipboard";
+import { structureEdit, TABLE_ALIGNS, TABLE_COMMANDS, tableCommand, type TableCommandContext, type TableTarget } from "../commands";
 import { editingIntent, sheetIntent, type TableFormat } from "../keys";
-import type { Cell, Range } from "../navigation";
-import { fillRange, rangeBetween } from "../selection";
+import { boundedShape, dataEdge, isMultiCell, nextInRange, type Cell, type Move, type Range, type Shape } from "../navigation";
+import { fillCopy, fillRange, rangeBetween, wholeRange, withRange } from "../selection";
 import { fillSeries } from "../series";
+import { animate } from "../../moto";
+import { motionAllowed, offsetWithin, playChange, SELECT_EASE, SELECT_MS, snapshotChange, type ChangeSnapshot } from "./motion";
 
 /// Ciò che la cornice chiede a chi ospita la tabella.
 export interface TableFrameHost {
@@ -54,6 +72,9 @@ export interface TableFrameHost {
   /// Le voci dell'ospite in fondo al menu (il link di una cella).
   extraMenu?(): readonly TableMenuEntry[];
   writeClipboard(data: TableClipboard): Promise<void>;
+  /// Un avviso breve per chi scrive (un gesto che con più intervalli non si
+  /// fa). Senza, il gesto rifiutato tace.
+  notice?(text: string): void;
   focused?(): void;
   changed?(): void;
   /// `false` se la griglia non è una fermata del Tab: una tabella dentro un
@@ -77,6 +98,10 @@ interface Editing {
 
 /// Il prefisso delle classi della Tabella.
 const C = "tb";
+/// Quanto dura un tocco lungo prima di aprire il menu (ms), e quanto il dito
+/// può muoversi intanto (px).
+const LONG_PRESS_MS = 500;
+const LONG_PRESS_SLOP = 8;
 let serial = 0;
 
 export class TableFrame {
@@ -85,11 +110,31 @@ export class TableFrame {
   readonly #life: Lifetime;
   readonly #grid: HTMLElement;
   readonly #fillHandle: HTMLElement;
+  /// I riquadri sopra le celle: la selezione, la cella attiva, il taglio.
+  readonly #selectionBox: HTMLElement;
+  readonly #activeBox: HTMLElement;
+  readonly #cutBox: HTMLElement;
+  /// Le maniglie del tocco agli angoli della selezione.
+  readonly #handles: readonly [HTMLElement, HTMLElement];
   readonly #id = `tb-${++serial}`;
   #anchor: Cell = { row: 0, column: 0 };
   #focus: Cell = { row: 0, column: 0 };
+  /// La cella attiva quando Invio o Tab la portano dentro una selezione di
+  /// più celle senza cambiarla; `null` vale `#focus`.
+  #active: Cell | null = null;
+  /// Gli altri intervalli della selezione (Maiusc+F8, Ctrl+clic); quello in
+  /// cui si lavora è `range`.
+  #others: Range[] = [];
+  #otherBoxes: HTMLElement[] = [];
+  /// Maiusc+F8 acceso: muoversi tiene gli intervalli già scelti.
+  #adding = false;
+  #cut: CutMark | null = null;
+  /// La tabella com'era quando si è tagliato (`#tableText`).
+  #cutTable = "";
   #editing: Editing | null = null;
   #cells: HTMLElement[][] = [];
+  /// I testi che le celle mostrano adesso: il moto li confronta coi nuovi.
+  #texts: string[][] = [];
   #letters: HTMLElement[] = [];
   #rowHeads: HTMLElement[] = [];
   #shape = "";
@@ -98,6 +143,12 @@ export class TableFrame {
   #hydrated: (() => void) | null = null;
   /// Dove arriverebbe il riempimento mentre si tira la maniglia.
   #fillTo: Range | null = null;
+  /// Il tocco lungo in attesa, e dove è cominciato.
+  #press: ReturnType<typeof setTimeout> | null = null;
+  #pressAt: { readonly x: number; readonly y: number } | null = null;
+  /// Il tocco lungo ha aperto il menu: il `contextmenu` che il sistema manda
+  /// dopo non lo riapre.
+  #pressed = false;
 
   constructor(host: TableFrameHost, className = "") {
     this.#host = host;
@@ -114,20 +165,34 @@ export class TableFrame {
     this.#fillHandle.className = `${C}-fill`;
     this.#fillHandle.setAttribute("aria-hidden", "true");
     this.#fillHandle.title = t("table.menu.fill");
+    this.#selectionBox = overlay(`${C}-sel`);
+    this.#activeBox = overlay(`${C}-act`);
+    this.#cutBox = overlay(`${C}-cut`);
+    this.#handles = [overlay(`${C}-handle`), overlay(`${C}-handle`)];
+    this.#handles[0].dataset.end = "start";
+    this.#handles[1].dataset.end = "end";
+    // Il dito che tira una maniglia non scorre la pagina.
+    for (const handle of this.#handles) handle.style.touchAction = "none";
     this.element.append(this.#grid, this.#drawAdders());
     this.#life.listen(this.#grid, "keydown", (event) => this.#keydown(event));
     this.#life.listen(this.#grid, "mousedown", (event) => this.#mousedown(event));
     this.#life.listen(this.#grid, "dblclick", (event) => this.#dblclick(event));
     this.#life.listen(this.#grid, "contextmenu", (event) => this.#contextmenu(event));
+    this.#life.listen(this.#grid, "pointerdown", (event) => this.#pointerdown(event));
+    this.#life.listen(this.#grid, "pointermove", (event) => this.#pointermove(event));
+    this.#life.listen(this.#grid, "pointerup", () => this.#cancelPress());
+    this.#life.listen(this.#grid, "pointercancel", () => this.#cancelPress());
     this.#life.listen(this.#grid, "focusin", () => {
       this.#host.focused?.();
-      this.#placeFill();
+      this.#placeOverlays();
     });
-    this.#life.listen(this.#grid, "focusout", () => queueMicrotask(() => this.#placeFill()));
+    this.#life.listen(this.#grid, "focusout", () => queueMicrotask(() => this.#placeOverlays()));
     this.#life.listen(this.#grid, "copy", (event) => this.#copy(event, false));
     this.#life.listen(this.#grid, "cut", (event) => this.#copy(event, true));
     this.#life.listen(this.#grid, "paste", (event) => this.#paste(event));
     this.#life.listen(this.#fillHandle, "mousedown", (event) => this.#fillDrag(event));
+    for (const handle of this.#handles) this.#life.listen(handle, "pointerdown", (event) => this.#handleDrag(event, handle));
+    this.#life.add(() => this.#cancelPress());
     this.#render();
   }
 
@@ -137,8 +202,25 @@ export class TableFrame {
     return { anchor: this.#anchor, focus: this.#focus };
   }
 
+  /// La cella attiva: dove si scrive, e da dove partono Invio e Tab. Come
+  /// nei fogli di calcolo è l'àncora, finché Invio o Tab non la fanno girare
+  /// dentro la selezione.
+  get active(): Cell {
+    return this.#active ?? this.#anchor;
+  }
+
   get range(): Range {
     return rangeBetween(this.#anchor, this.#focus);
+  }
+
+  /// Tutti gli intervalli scelti; l'ultimo è quello in cui si lavora.
+  get ranges(): Range[] {
+    return [...this.#others, this.range];
+  }
+
+  /// Le celle tagliate in attesa di un incolla, o `null`.
+  get cutRange(): Range | null {
+    return this.#cut?.range ?? null;
   }
 
   get editing(): boolean {
@@ -146,11 +228,20 @@ export class TableFrame {
   }
 
   /// La tabella è cambiata (una modifica, un annulla, un altro riquadro): si
-  /// ridisegna, e la selezione resta dov'era finché c'è.
+  /// ridisegna, e la selezione resta dov'era finché c'è. Il cambio si vede:
+  /// le celle scivolano dal posto di prima.
   update(): void {
+    // Ogni modifica della tabella toglie il segno del taglio, anche quella da
+    // fuori (annulla, sorgente, un altro riquadro); un ridisegno senza cambi
+    // no. Si guarda soltanto quando c'è un segno.
+    if (this.#cut && this.#tableText() !== this.#cutTable) this.#cut = null;
+    const snapshot = this.#snapshot();
     this.#anchor = this.#clamp(this.#anchor);
     this.#focus = this.#clamp(this.#focus);
+    if (this.#active) this.#active = this.#clamp(this.#active);
+    this.#others = this.#others.map((range) => this.#clampRange(range));
     this.#render();
+    if (snapshot) playChange(snapshot, this.#grid, this.#cells, this.#texts, this.element);
   }
 
   /// Porta il fuoco nella tabella: sulla prima o sull'ultima riga (entrando
@@ -166,6 +257,7 @@ export class TableFrame {
   restore(selection: { anchor: Cell; focus: Cell }, focused: boolean): void {
     this.#anchor = this.#clamp(selection.anchor);
     this.#focus = this.#clamp(selection.focus);
+    this.#active = null;
     this.#paintSelection();
     if (focused) {
       this.#grid.focus({ preventScroll: true });
@@ -191,7 +283,7 @@ export class TableFrame {
   // ── Comandi ────────────────────────────────────────────────────────────────
 
   #context(): TableCommandContext {
-    return { range: this.range, active: this.#focus, size: this.#host.size(), caps: this.#host.caps() };
+    return { range: this.range, active: this.active, size: this.#host.size(), caps: this.#host.caps() };
   }
 
   /// Se il comando del catalogo `id` c'è in questa tabella, e se adesso vale.
@@ -211,12 +303,17 @@ export class TableFrame {
     return this.apply(edit, select);
   }
 
-  /// Fa un cambio, e sposta la selezione dove il gesto l'ha lasciata.
+  /// Fa un cambio, e sposta la selezione dove il gesto l'ha lasciata. Ogni
+  /// cambio toglie il segno del taglio, come nei fogli di calcolo.
   apply(edit: TableEdit, select?: TableTarget): boolean {
     const target = select ?? { anchor: this.#anchor, focus: this.#focus };
+    const keepActive = select === undefined ? this.#active : null;
     if (!this.#host.apply(edit, target)) return false;
+    this.#cut = null;
     this.#anchor = this.#clamp(target.anchor);
     this.#focus = this.#clamp(target.focus);
+    this.#active = keepActive ? this.#clamp(keepActive) : null;
+    if (select !== undefined) this.#others = [];
     this.#paintSelection();
     this.#scrollToFocus();
     this.#host.changed?.();
@@ -233,8 +330,39 @@ export class TableFrame {
     };
   }
 
+  #clampRange(range: Range): Range {
+    return rangeBetween(this.#clamp({ row: range.r0, column: range.c0 }), this.#clamp({ row: range.r1, column: range.c1 }));
+  }
+
+  /// La tabella intera: la prima e l'ultima riga e colonna.
+  #bounds(): Range {
+    const { rows, columns } = this.#host.size();
+    return { r0: 0, c0: 0, r1: rows - 1, c1: columns - 1 };
+  }
+
   #cellId(row: number, column: number): string {
     return `${this.#id}-r${row}c${column}`;
+  }
+
+  /// Se la tabella si muove adesso: non oltre seicento celle, mai col moto
+  /// ridotto.
+  #moves(): boolean {
+    const { rows, columns } = this.#host.size();
+    return motionAllowed(rows * columns);
+  }
+
+  /// La tabella di prima, se il cambio che arriva si deve vedere: la forma o
+  /// un testo sono diversi, la cornice è nel documento e il moto è acceso.
+  #snapshot(): ChangeSnapshot | null {
+    if (!this.element.isConnected || this.#cells.length === 0 || !this.#moves()) return null;
+    const { rows, columns } = this.#host.size();
+    const next = Array.from({ length: rows }, (_, r) => Array.from({ length: columns }, (_, c) => this.#host.cellText(r, c)));
+    const same = next.length === this.#texts.length && next.every((row, r) => {
+      const old = this.#texts[r]!;
+      return row.length === old.length && row.every((text, c) => text === old[c]);
+    });
+    if (same) return null;
+    return snapshotChange(this.#grid, this.#cells, this.#texts, next);
   }
 
   #render(): void {
@@ -245,6 +373,7 @@ export class TableFrame {
       this.#build();
       this.#shape = shape;
     }
+    this.#grid.classList.toggle("is-still", !this.#moves());
     this.#fill();
     this.#paintSelection();
   }
@@ -279,6 +408,7 @@ export class TableFrame {
     head.append(letters);
     const body = document.createElement("tbody");
     this.#cells = [];
+    this.#texts = [];
     this.#rowHeads = [];
     for (let r = 0; r < rows; r++) {
       const line = document.createElement("tr");
@@ -306,7 +436,8 @@ export class TableFrame {
       body.append(line);
     }
     table.append(head, body);
-    this.#grid.replaceChildren(table, this.#fillHandle);
+    this.#otherBoxes = [];
+    this.#grid.replaceChildren(table, this.#selectionBox, this.#cutBox, this.#activeBox, this.#fillHandle, ...this.#handles);
     this.#grid.setAttribute("aria-rowcount", String(rows));
     this.#grid.setAttribute("aria-colcount", String(columns));
   }
@@ -321,18 +452,19 @@ export class TableFrame {
     const caps = this.#host.caps();
     if (addRow) addRow.hidden = this.#host.readOnly() || !caps.insertRows;
     if (addColumn) addColumn.hidden = this.#host.readOnly() || !caps.insertColumns;
-    this.#cells.forEach((cells, r) => cells.forEach((cell, c) => {
-      if (this.#editing?.row === r && this.#editing.column === c) return;
-      cell.style.textAlign = this.#host.align?.(c) ?? "";
+    this.#texts = this.#cells.map((cells, r) => cells.map((cell, c) => {
       const text = this.#host.cellText(r, c);
+      if (this.#editing?.row === r && this.#editing.column === c) return text;
+      cell.style.textAlign = this.#host.align?.(c) ?? "";
       const content = document.createElement("div");
       content.className = `${C}-content`;
       if (text !== "" && this.#host.renderCell) this.#host.renderCell(r, c, content);
       else content.textContent = text;
       const key = `${text}\u0000${content.innerHTML}`;
-      if (cell.dataset.shown === key) return;
+      if (cell.dataset.shown === key) return text;
       cell.dataset.shown = key;
       cell.replaceChildren(content);
+      return text;
     }));
     this.#hydrated?.();
     this.#hydrated = this.#host.hydrate?.(this.#grid) ?? null;
@@ -340,32 +472,114 @@ export class TableFrame {
 
   #paintSelection(): void {
     const range = this.range;
+    const others = this.#others;
     const fill = this.#fillTo;
+    const cut = this.#cut?.range ?? null;
+    const active = this.active;
     this.#cells.forEach((cells, r) => cells.forEach((cell, c) => {
-      const selected = inside(range, r, c);
+      const selected = inside(range, r, c) || others.some((other) => inside(other, r, c));
       cell.classList.toggle("is-selected", selected);
-      cell.classList.toggle("is-active", r === this.#focus.row && c === this.#focus.column);
+      cell.classList.toggle("is-active", r === active.row && c === active.column);
       cell.classList.toggle("is-fill", fill !== null && !selected && inside(fill, r, c));
+      cell.classList.toggle("is-cut", cut !== null && inside(cut, r, c));
       cell.setAttribute("aria-selected", String(selected));
     }));
-    this.#letters.forEach((letter, c) => letter.classList.toggle("is-selected", c >= range.c0 && c <= range.c1));
-    this.#rowHeads.forEach((head, r) => head.classList.toggle("is-selected", r >= range.r0 && r <= range.r1));
-    this.#grid.setAttribute("aria-activedescendant", this.#cellId(this.#focus.row, this.#focus.column));
-    this.#placeFill();
+    const all = [range, ...others];
+    this.#letters.forEach((letter, c) => letter.classList.toggle("is-selected", all.some((area) => c >= area.c0 && c <= area.c1)));
+    this.#rowHeads.forEach((head, r) => head.classList.toggle("is-selected", all.some((area) => r >= area.r0 && r <= area.r1)));
+    this.#grid.setAttribute("aria-activedescendant", this.#cellId(active.row, active.column));
+    this.#placeOverlays();
   }
 
-  /// La maniglia nell'angolo in basso a destra della selezione, mentre la
-  /// tabella ha il fuoco e si può scrivere.
-  #placeFill(): void {
+  /// Il rettangolo di `range` nella griglia, dall'impaginazione: le corse in
+  /// volo delle celle non lo spostano.
+  #box(range: Range): { left: number; top: number; width: number; height: number } | null {
+    const first = this.#cells[range.r0]?.[range.c0];
+    const last = this.#cells[range.r1]?.[range.c1];
+    if (!first || !last) return null;
+    const a = offsetWithin(first, this.#grid);
+    const b = offsetWithin(last, this.#grid);
+    return { left: a.left, top: a.top, width: b.left + last.offsetWidth - a.left, height: b.top + last.offsetHeight - a.top };
+  }
+
+  /// Dove sta adesso un riquadro, o `null` se è nascosto: si legge prima di
+  /// scrivere qualunque riquadro, perché ogni lettura dopo una scrittura
+  /// rifarebbe l'impaginazione.
+  #measure(element: HTMLElement): { left: number; top: number; width: number; height: number } | null {
+    return element.hidden ? null : { left: element.offsetLeft, top: element.offsetTop, width: element.offsetWidth, height: element.offsetHeight };
+  }
+
+  /// Posa un riquadro sul posto `box` già misurato (o lo nasconde): la prima
+  /// volta senza scivolare, poi scivola da `was`, il posto di prima, in
+  /// `SELECT_MS`. Il posto è dell'impaginazione (`left`, `top`, `width`,
+  /// `height`); il moto è soltanto `transform`, con `moto`, perché nella
+  /// pagina le transizioni del CSS sono spente (`skin/motion.css`). Qui si
+  /// scrive soltanto: niente letture del layout.
+  #place(
+    element: HTMLElement,
+    box: { left: number; top: number; width: number; height: number } | null,
+    was: { left: number; top: number; width: number; height: number } | null,
+    moves: boolean,
+  ): void {
+    if (!box) {
+      element.hidden = true;
+      return;
+    }
+    element.style.left = `${box.left}px`;
+    element.style.top = `${box.top}px`;
+    element.style.width = `${box.width}px`;
+    element.style.height = `${box.height}px`;
+    element.hidden = false;
+    if (!was || !moves || box.width <= 0 || box.height <= 0) return;
+    const x = was.left - box.left;
+    const y = was.top - box.top;
+    const scaleX = was.width / box.width;
+    const scaleY = was.height / box.height;
+    if (Math.abs(x) < 0.5 && Math.abs(y) < 0.5 && Math.abs(scaleX - 1) < 0.01 && Math.abs(scaleY - 1) < 0.01) return;
+    animate(element, { from: { x, y, scaleX, scaleY }, duration: SELECT_MS, easing: SELECT_EASE });
+  }
+
+  /// I riquadri della selezione, della cella attiva e del taglio, la
+  /// maniglia di riempimento e quelle del tocco. Le maniglie compaiono mentre
+  /// la tabella ha il fuoco e si può scrivere. Prima i nodi, poi si misura
+  /// tutto, poi si scrive tutto: un'impaginazione sola per ogni freccia.
+  #placeOverlays(): void {
     const range = this.range;
-    const corner = this.#cells[range.r1]?.[range.c1];
-    const shown = corner !== undefined && this.hasFocus() && this.#editing === null && !this.#host.readOnly();
-    this.#fillHandle.hidden = !shown;
-    if (!shown) return;
-    const box = this.#grid.getBoundingClientRect();
-    const cell = corner.getBoundingClientRect();
-    this.#fillHandle.style.left = `${cell.right - box.left + this.#grid.scrollLeft}px`;
-    this.#fillHandle.style.top = `${cell.bottom - box.top + this.#grid.scrollTop}px`;
+    const active = this.active;
+    while (this.#otherBoxes.length < this.#others.length) {
+      const box = overlay(`${C}-sel`);
+      box.classList.add("is-multi", "is-other");
+      this.#grid.insertBefore(box, this.#selectionBox);
+      this.#otherBoxes.push(box);
+    }
+    while (this.#otherBoxes.length > this.#others.length) this.#otherBoxes.pop()!.remove();
+    // Ridisegnare la tabella toglie i riquadri dalla griglia: tornano qui.
+    for (const box of this.#otherBoxes) if (box.parentNode !== this.#grid) this.#grid.insertBefore(box, this.#selectionBox);
+    // Si misura.
+    const boxes: [HTMLElement, Range | null][] = [
+      [this.#selectionBox, range],
+      [this.#activeBox, { r0: active.row, c0: active.column, r1: active.row, c1: active.column }],
+      [this.#cutBox, this.#cut?.range ?? null],
+      ...this.#otherBoxes.map((box, index): [HTMLElement, Range | null] => [box, this.#others[index]!]),
+    ];
+    const placed = boxes.map(([element, target]) => ({ element, box: target ? this.#box(target) : null, was: this.#measure(element) }));
+    const writable = this.hasFocus() && this.#editing === null && !this.#host.readOnly();
+    const corner = this.#box({ r0: range.r1, c0: range.c1, r1: range.r1, c1: range.c1 });
+    const whole = placed[0]!.box;
+    const moves = this.#moves();
+    // Si scrive.
+    for (const { element, box, was } of placed) this.#place(element, box, was, moves);
+    this.#selectionBox.classList.toggle("is-multi", isMultiCell(range) || this.#others.length > 0);
+    this.#fillHandle.hidden = !writable || corner === null;
+    if (corner && writable) {
+      this.#fillHandle.style.transform = `translate(${corner.left + corner.width}px, ${corner.top + corner.height}px)`;
+    }
+    const [start, end] = this.#handles;
+    start.hidden = end.hidden = !writable || whole === null;
+    if (whole && writable) {
+      start.style.transform = `translate(${whole.left}px, ${whole.top}px)`;
+      end.style.transform = `translate(${whole.left + whole.width}px, ${whole.top + whole.height}px)`;
+    }
   }
 
   #scrollToFocus(): void {
@@ -406,18 +620,66 @@ export class TableFrame {
   #select(position: Cell, extend: boolean): void {
     this.#focus = this.#clamp(position);
     if (!extend) this.#anchor = this.#focus;
+    this.#active = null;
+    if (!extend && !this.#adding) this.#others = [];
     this.#paintSelection();
     this.#scrollToFocus();
     this.#host.changed?.();
   }
 
+  /// Sceglie `range` tenendo, se ci sta dentro, la cella attiva.
+  #selectRange(range: Range): void {
+    const active = this.active;
+    this.#anchor = { row: range.r0, column: range.c0 };
+    this.#focus = { row: range.r1, column: range.c1 };
+    this.#active = inside(range, active.row, active.column) ? active : null;
+    if (!this.#adding) this.#others = [];
+    this.#paintSelection();
+    this.#host.changed?.();
+  }
+
   #move(rows: number, columns: number, extend: boolean): void {
-    this.#select({ row: this.#focus.row + rows, column: this.#focus.column + columns }, extend);
+    const from = extend ? this.#focus : this.active;
+    this.#select({ row: from.row + rows, column: from.column + columns }, extend);
+  }
+
+  #geometry(): Shape {
+    return boundedShape(this.#host.size());
+  }
+
+  /// Ctrl con una freccia: fino al bordo dei dati.
+  #jump(rows: -1 | 0 | 1, columns: -1 | 0 | 1, extend: boolean): void {
+    const from = extend ? this.#focus : this.active;
+    const shape = this.#geometry();
+    const axis = rows !== 0 ? "row" : "column";
+    const step = (rows || columns) as -1 | 1;
+    const at = (index: number): Cell => (axis === "row" ? { row: index, column: from.column } : { row: from.row, column: index });
+    const index = dataEdge(
+      axis === "row" ? from.row : from.column,
+      (current) => shape.step(axis, current, step),
+      (current) => {
+        const cell = at(current);
+        return this.#host.cellText(cell.row, cell.column) !== "";
+      },
+    );
+    this.#select(at(index), extend);
+  }
+
+  /// Invio e Tab dentro una selezione di più celle: la cella attiva gira, la
+  /// selezione resta. `false` se la selezione è di una cella sola.
+  #cycle(move: Move): boolean {
+    const range = this.range;
+    if (!isMultiCell(range)) return false;
+    this.#active = nextInRange(range, this.active, move, this.#geometry());
+    this.#paintSelection();
+    this.#host.changed?.();
+    return true;
   }
 
   /// Tab e Maiusc+Tab: avanti e indietro lungo le righe. Dall'ultima cella
   /// Tab aggiunge una riga, come quando si compila una tabella.
   #tab(step: 1 | -1): void {
+    if (this.#cycle(step > 0 ? "right" : "left")) return;
     const { rows, columns } = this.#host.size();
     const index = this.#focus.row * columns + this.#focus.column + step;
     if (index >= rows * columns) {
@@ -430,11 +692,22 @@ export class TableFrame {
   }
 
   #selectAll(): void {
-    const { rows, columns } = this.#host.size();
-    this.#anchor = { row: 0, column: 0 };
-    this.#focus = { row: rows - 1, column: columns - 1 };
+    this.#selectRange(this.#bounds());
+  }
+
+  /// Maiusc+F8: acceso, l'intervallo di adesso resta scelto e ci si sposta per
+  /// sceglierne un altro; di nuovo, o Esc, smette.
+  #toggleAdding(): void {
+    this.#adding = !this.#adding;
+    if (this.#adding) this.#others = withRange(this.#others, this.range);
     this.#paintSelection();
-    this.#host.changed?.();
+  }
+
+  /// Un gesto che con più intervalli non si fa: lo si dice, e niente cambia.
+  #refuseMany(): boolean {
+    if (this.#others.length === 0) return false;
+    this.#host.notice?.(t("grid.multi.refused"));
+    return true;
   }
 
   // ── Tastiera ───────────────────────────────────────────────────────────────
@@ -454,36 +727,103 @@ export class TableFrame {
       case "undo": this.#host.undo(); break;
       case "redo": this.#host.redo(); break;
       case "select-all": this.#selectAll(); break;
+      case "whole": this.#selectRange(wholeRange(this.range, intent.which, this.#bounds())); break;
       case "format":
         if (this.#host.readOnly() || !this.#host.format?.(intent.which)) return;
         break;
       case "edge": {
-        const row = intent.row === "first" ? 0 : intent.row === "last" ? last : this.#focus.row;
-        const column = intent.column === "first" ? 0 : intent.column === "last" ? columns - 1 : this.#focus.column;
+        const from = intent.extend ? this.#focus : this.active;
+        const row = intent.row === "first" ? 0 : intent.row === "last" ? last : from.row;
+        const column = intent.column === "first" ? 0 : intent.column === "last" ? columns - 1 : from.column;
         this.#select({ row, column }, intent.extend);
         break;
       }
-      case "move":
-        if (intent.rows < 0 && this.#focus.row === 0 && !intent.extend) this.#host.leave("before");
-        else if (intent.rows > 0 && this.#focus.row === last && !intent.extend) this.#host.leave("after");
+      case "jump": this.#jump(intent.rows, intent.columns, intent.extend); break;
+      case "move": {
+        const from = intent.extend ? this.#focus : this.active;
+        if (intent.rows < 0 && from.row === 0 && !intent.extend) this.#host.leave("before");
+        else if (intent.rows > 0 && from.row === last && !intent.extend) this.#host.leave("after");
         else this.#move(intent.rows, intent.columns, intent.extend);
         break;
+      }
       case "page": this.#move(intent.direction * 10, 0, intent.extend); break;
       case "tab": this.#tab(intent.step); break;
-      case "enter": this.#move(intent.step, 0, false); break;
-      case "edit": this.#beginEditing(this.#focus, "edit"); break;
-      case "clear":
-        if (!this.#host.readOnly()) this.apply({ kind: "clear", range: this.range });
+      case "enter":
+        if (this.#cycle(intent.step > 0 ? "down" : "up")) break;
+        if (intent.step > 0) this.#beginEditing(this.active, "edit");
+        else this.#move(-1, 0, false);
         break;
-      case "leave": this.#host.leave("after"); break;
+      case "edit": this.#beginEditing(this.active, "edit"); break;
+      case "clear": this.#clear(); break;
+      case "fill":
+        if (this.#host.readOnly() || this.#refuseMany()) break;
+        this.#fillCopy(intent.direction);
+        break;
+      case "structure": {
+        if (this.#host.readOnly() || this.#refuseMany()) break;
+        const change = structureEdit(this.#context(), intent.change);
+        if (change) this.apply(change.edit, change.select);
+        break;
+      }
+      case "add-ranges": this.#toggleAdding(); break;
+      case "leave": this.#escape(); break;
       case "menu": this.#openMenu(null); break;
       case "type":
         if (this.#host.readOnly()) return;
-        this.#beginEditing(this.#focus, "replace", intent.text);
+        this.#beginEditing(this.active, "replace", intent.text);
         break;
     }
     event.preventDefault();
     event.stopPropagation();
+  }
+
+  /// Esc, un passo per volta: rinuncia al taglio, poi chiude gli altri
+  /// intervalli, poi riduce la selezione alla cella attiva, poi esce.
+  #escape(): void {
+    if (this.#cut) {
+      this.#cut = null;
+      this.#paintSelection();
+      return;
+    }
+    if (this.#adding || this.#others.length > 0) {
+      this.#adding = false;
+      this.#others = [];
+      this.#paintSelection();
+      return;
+    }
+    if (isMultiCell(this.range)) {
+      this.#select(this.active, false);
+      return;
+    }
+    this.#host.leave("after");
+  }
+
+  /// Canc: svuota ogni intervallo scelto, in un passo solo.
+  #clear(): void {
+    if (this.#host.readOnly()) return;
+    if (this.#others.length === 0) {
+      this.apply({ kind: "clear", range: this.range });
+      return;
+    }
+    this.apply({ kind: "set", blocks: this.ranges.map((range) => blank(range)) });
+  }
+
+  /// Ctrl+D e Ctrl+R: la prima riga (o colonna) scelta nelle altre, o quella
+  /// sopra (a sinistra) nella sola scelta. L'intestazione non scende nel
+  /// corpo.
+  #fillCopy(direction: "down" | "right"): void {
+    const copy = fillCopy(this.range, direction, this.#host.caps().headerRows);
+    if (!copy) return;
+    const { source, target } = copy;
+    const rows: string[][] = [];
+    for (let r = target.r0; r <= target.r1; r++) {
+      const line: string[] = [];
+      for (let c = target.c0; c <= target.c1; c++) {
+        line.push(direction === "down" ? this.#host.cellText(source.r0, c) : this.#host.cellText(r, source.c0));
+      }
+      rows.push(line);
+    }
+    this.apply({ kind: "set", blocks: [{ row: target.r0, column: target.c0, rows }] });
   }
 
   #editingKey(event: KeyboardEvent): void {
@@ -501,7 +841,8 @@ export class TableFrame {
       case "format": this.#host.formatInput?.(intent.which, editing.input); break;
       case "commit":
         this.#finishEditing(true);
-        this.#move(intent.rows, intent.columns, false);
+        // Dentro una selezione di più celle Invio gira, e la selezione resta.
+        if (event.key !== "Enter" || !this.#cycle(intent.rows > 0 ? "down" : "up")) this.#move(intent.rows, intent.columns, false);
         break;
       case "commit-tab":
         this.#finishEditing(true);
@@ -525,7 +866,14 @@ export class TableFrame {
     const { row, column } = this.#clamp(position);
     const cell = this.#cells[row]?.[column];
     if (!cell) return;
-    this.#select({ row, column }, false);
+    // Dentro una selezione di più celle la selezione resta, e la cella aperta
+    // diventa quella attiva: Invio e Tab poi girano lì dentro.
+    if (isMultiCell(this.range) && inside(this.range, row, column)) {
+      this.#active = { row, column };
+      this.#paintSelection();
+    } else {
+      this.#select({ row, column }, false);
+    }
     const original = this.#host.cellText(row, column);
     const input = document.createElement("input");
     input.type = "text";
@@ -537,7 +885,7 @@ export class TableFrame {
     delete cell.dataset.shown;
     const life = openLifetime();
     this.#editing = { row, column, input, mode, original, life };
-    this.#placeFill();
+    this.#placeOverlays();
     input.focus({ preventScroll: true });
     const at = caret ?? input.value.length;
     input.setSelectionRange(at, at);
@@ -587,7 +935,7 @@ export class TableFrame {
 
   #mousedown(event: MouseEvent): void {
     if (this.#editing && event.target instanceof Node && this.#editing.input.contains(event.target)) return;
-    if (event.target === this.#fillHandle) return;
+    if (event.target === this.#fillHandle || this.#handles.some((handle) => handle === event.target)) return;
     if (event.button === 0 && (event.ctrlKey || event.metaKey) && this.#host.activate?.(event)) {
       event.preventDefault();
       return;
@@ -596,34 +944,46 @@ export class TableFrame {
     if (!hit) return;
     if (event.button !== 0) {
       // Il tasto destro tiene la selezione se il clic ci cade dentro.
-      if (hit.kind === "cell" && !inside(this.range, hit.row, hit.column)) this.#select(hit, false);
+      if (hit.kind === "cell" && !this.ranges.some((range) => inside(range, hit.row, hit.column))) this.#select(hit, false);
       return;
     }
     event.preventDefault();
     this.#finishEditing(true, false);
     this.#grid.focus({ preventScroll: true });
+    // Ctrl+clic aggiunge un intervallo agli altri, come nei fogli di calcolo.
+    const adding = (event.ctrlKey || event.metaKey) && !event.shiftKey;
+    if (adding) this.#others = withRange(this.#others, this.range);
+    const keep = adding || this.#adding;
     const { rows, columns } = this.#host.size();
     if (hit.kind === "corner") {
       this.#selectAll();
       return;
     }
-    if (hit.kind === "col") {
-      const from = event.shiftKey ? this.#anchor.column : hit.column;
-      this.#anchor = { row: 0, column: from };
-      this.#focus = { row: rows - 1, column: hit.column };
+    if (hit.kind === "col" || hit.kind === "row") {
+      const others = keep ? this.#others : [];
+      if (hit.kind === "col") {
+        const from = event.shiftKey ? this.#anchor.column : hit.column;
+        this.#anchor = { row: 0, column: from };
+        this.#focus = { row: rows - 1, column: hit.column };
+      } else {
+        const from = event.shiftKey ? this.#anchor.row : hit.row;
+        this.#anchor = { row: from, column: 0 };
+        this.#focus = { row: hit.row, column: columns - 1 };
+      }
+      this.#active = null;
+      this.#others = others;
       this.#paintSelection();
       this.#host.changed?.();
       return;
     }
-    if (hit.kind === "row") {
-      const from = event.shiftKey ? this.#anchor.row : hit.row;
-      this.#anchor = { row: from, column: 0 };
-      this.#focus = { row: hit.row, column: columns - 1 };
+    if (keep && !event.shiftKey) {
+      this.#focus = this.#anchor = this.#clamp(hit);
+      this.#active = null;
       this.#paintSelection();
       this.#host.changed?.();
-      return;
+    } else {
+      this.#select(hit, event.shiftKey);
     }
-    this.#select(hit, event.shiftKey);
     // Trascinare allarga la selezione fino alla cella sotto il puntatore.
     this.#follow((over) => {
       if (over.row !== this.#focus.row || over.column !== this.#focus.column) this.#select(over, true);
@@ -719,8 +1079,81 @@ export class TableFrame {
     const hit = this.#positionOf(event.target);
     if (!hit) return;
     event.preventDefault();
-    if (hit.kind === "cell" && !inside(this.range, hit.row, hit.column)) this.#select(hit, false);
+    if (this.#pressed) {
+      this.#pressed = false;
+      return;
+    }
+    if (hit.kind === "cell" && !this.ranges.some((range) => inside(range, hit.row, hit.column))) this.#select(hit, false);
     this.#openMenu(event);
+  }
+
+  // ── Tocco ──────────────────────────────────────────────────────────────────
+
+  /// Un tocco lungo su una cella apre il menu, come il tasto destro.
+  #pointerdown(event: PointerEvent): void {
+    this.#pressed = false;
+    if (event.pointerType !== "touch") return;
+    if (this.#handles.some((handle) => handle === event.target)) return;
+    const hit = this.#positionOf(event.target);
+    if (hit?.kind !== "cell") return;
+    this.#cancelPress();
+    this.#pressAt = { x: event.clientX, y: event.clientY };
+    const at = { x: event.clientX, y: event.clientY };
+    this.#press = setTimeout(() => {
+      this.#press = null;
+      this.#pressAt = null;
+      if (this.#life.closed) return;
+      this.#pressed = true;
+      if (!this.ranges.some((range) => inside(range, hit.row, hit.column))) this.#select(hit, false);
+      this.#host.openMenu(this.menu(), at);
+    }, LONG_PRESS_MS);
+  }
+
+  #pointermove(event: PointerEvent): void {
+    const start = this.#pressAt;
+    if (!start) return;
+    if (Math.hypot(event.clientX - start.x, event.clientY - start.y) > LONG_PRESS_SLOP) this.#cancelPress();
+  }
+
+  #cancelPress(): void {
+    if (this.#press !== null) clearTimeout(this.#press);
+    this.#press = null;
+    this.#pressAt = null;
+  }
+
+  /// Una maniglia del tocco tirata: l'angolo opposto resta, quello tirato
+  /// segue il dito cella per cella.
+  #handleDrag(event: PointerEvent, handle: HTMLElement): void {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const range = this.range;
+    const fixed = handle.dataset.end === "start" ? { row: range.r1, column: range.c1 } : { row: range.r0, column: range.c0 };
+    this.#drag?.close();
+    const drag = openLifetime();
+    this.#drag = drag;
+    handle.setPointerCapture?.(event.pointerId);
+    const doc = this.#grid.ownerDocument;
+    drag.listen(handle, "pointermove", (move) => {
+      // Sotto il dito c'è prima la maniglia stessa, che si tiene: si guarda
+      // ciò che sta sotto di lei.
+      const under = doc.elementsFromPoint
+        ? doc.elementsFromPoint(move.clientX, move.clientY).find((element) => !element.closest(".tb-handle")) ?? null
+        : doc.elementFromPoint?.(move.clientX, move.clientY) ?? null;
+      const hit = this.#positionOf(under);
+      if (hit?.kind !== "cell") return;
+      this.#anchor = fixed;
+      this.#focus = this.#clamp(hit);
+      this.#active = null;
+      this.#paintSelection();
+      this.#host.changed?.();
+    });
+    const end = () => {
+      drag.close();
+      if (this.#drag === drag) this.#drag = null;
+    };
+    drag.listen(handle, "pointerup", end);
+    drag.listen(handle, "pointercancel", end);
   }
 
   // ── Menu ───────────────────────────────────────────────────────────────────
@@ -759,13 +1192,14 @@ export class TableFrame {
       keys: "Delete",
       separator: true,
       disabled: readOnly,
-      run: () => void this.apply({ kind: "clear", range: this.range }),
+      run: () => this.#clear(),
     });
     return [...entries, ...(this.#host.extraMenu?.() ?? [])];
   }
 
   #openMenu(event: MouseEvent | null): void {
-    const cell = this.#cells[this.#focus.row]?.[this.#focus.column];
+    const active = this.active;
+    const cell = this.#cells[active.row]?.[active.column];
     const box = cell?.getBoundingClientRect();
     const at = event ? { x: event.clientX, y: event.clientY } : { x: box?.left ?? 0, y: box?.bottom ?? 0 };
     this.#host.openMenu(this.menu(), at);
@@ -786,19 +1220,43 @@ export class TableFrame {
     return clipboardData(rows);
   }
 
+  /// Taglia non svuota: segna le celle, e l'incolla che segue le sposta.
+  #markCut(range: Range, text: string): void {
+    this.#cut = { range, text };
+    this.#cutTable = this.#tableText();
+    this.#paintSelection();
+    if (this.#host.notice && tellCutOnce()) this.#host.notice(t("table.cut.marked"));
+  }
+
+  /// Tutta la tabella come testo, per sapere se è cambiata dal taglio: le
+  /// celle tagliate possono dire ancora lo stesso (vuote) ed essere altre.
+  #tableText(): string {
+    const { rows, columns } = this.#host.size();
+    const cells: string[] = [`${rows}×${columns}`];
+    for (let r = 0; r < rows; r++) for (let c = 0; c < columns; c++) cells.push(this.#host.cellText(r, c));
+    return cells.join("\u0000");
+  }
+
   #copy(event: ClipboardEvent, cut: boolean): void {
     if (this.#editing || !event.clipboardData) return;
     event.preventDefault();
+    // Come nei fogli di calcolo: più intervalli non si copiano insieme.
+    if (this.#refuseMany()) return;
     const data = this.#clipboard(this.range);
     event.clipboardData.setData("text/plain", data.text);
     event.clipboardData.setData("text/html", data.html);
-    if (cut && !this.#host.readOnly()) this.apply({ kind: "clear", range: this.range });
+    if (cut && !this.#host.readOnly()) this.#markCut(this.range, data.text);
+    else if (this.#cut) {
+      this.#cut = null;
+      this.#paintSelection();
+    }
   }
 
   /// Copia e taglio dal menu: gli appunti rispondono dopo, e intanto la
-  /// selezione può spostarsi o la tabella cambiare. Il taglio svuota le celle
+  /// selezione può spostarsi o la tabella cambiare. Il taglio segna le celle
   /// copiate soltanto se il loro testo è ancora quello copiato.
   async #copyToClipboard(cut: boolean): Promise<void> {
+    if (this.#refuseMany()) return;
     const range = this.range;
     const data = this.#clipboard(range);
     try {
@@ -806,9 +1264,16 @@ export class TableFrame {
     } catch {
       return;
     }
-    if (!cut || this.#life.closed || this.#host.readOnly()) return;
+    if (this.#life.closed) return;
+    if (!cut || this.#host.readOnly()) {
+      if (this.#cut) {
+        this.#cut = null;
+        this.#paintSelection();
+      }
+      return;
+    }
     if (this.#clipboard(range).text !== data.text) return;
-    this.apply({ kind: "clear", range });
+    this.#markCut(range, data.text);
   }
 
   #paste(event: ClipboardEvent): void {
@@ -818,10 +1283,15 @@ export class TableFrame {
   }
 
   /// Incolla il testo (e l'HTML, se c'è) degli appunti sulla selezione, come
-  /// Mod-v: dal menu, dove gli appunti si leggono dopo il gesto. `false` se
-  /// non c'era niente da scrivere.
+  /// Mod-v: dal menu, dove gli appunti si leggono dopo il gesto. Dopo un
+  /// taglio di questa tabella, sposta le celle tagliate in un passo solo.
+  /// `false` se non c'era niente da scrivere.
   pasteData(text: string, html: string): boolean {
     if (this.#editing || this.#host.readOnly()) return false;
+    if (this.#refuseMany()) return false;
+    const mark = this.#cut;
+    const destination = mark ? cutTarget(mark.range, this.range, this.#host.size()) : null;
+    if (mark && destination && cutMoves(mark, text, this.#clipboard(mark.range).text)) return this.#pasteCut(mark, destination);
     const rows = clipboardRows(text, html);
     if (rows.length === 0) return false;
     const block = { rows: rows.length, columns: Math.max(...rows.map((row) => row.length)) };
@@ -834,9 +1304,43 @@ export class TableFrame {
       { anchor: { row: first.r0, column: first.c0 }, focus: { row: end.r1, column: end.c1 } },
     );
   }
+
+  /// L'incolla dopo un taglio: le celle tagliate si svuotano e il loro testo
+  /// va all'angolo della selezione (`destination`, dentro la tabella), in un
+  /// cambio solo.
+  #pasteCut(mark: CutMark, destination: Range): boolean {
+    const rows: string[][] = [];
+    for (let r = mark.range.r0; r <= mark.range.r1; r++) {
+      const line: string[] = [];
+      for (let c = mark.range.c0; c <= mark.range.c1; c++) line.push(this.#host.cellText(r, c));
+      rows.push(line);
+    }
+    return this.apply(
+      { kind: "set", blocks: [blank(mark.range), { row: destination.r0, column: destination.c0, rows }] },
+      { anchor: { row: destination.r0, column: destination.c0 }, focus: { row: destination.r1, column: destination.c1 } },
+    );
+  }
 }
 
 const one = (row: number, column: number): TableTarget => ({ anchor: { row, column }, focus: { row, column } });
+
+/// Un blocco di celle vuote grande come `range`.
+function blank(range: Range): TableBlock {
+  return {
+    row: range.r0,
+    column: range.c0,
+    rows: Array.from({ length: range.r1 - range.r0 + 1 }, () => Array.from({ length: range.c1 - range.c0 + 1 }, () => "")),
+  };
+}
+
+/// Un riquadro sopra le celle, nascosto finché non lo si posa.
+function overlay(className: string): HTMLElement {
+  const element = document.createElement("div");
+  element.className = className;
+  element.setAttribute("aria-hidden", "true");
+  element.hidden = true;
+  return element;
+}
 
 function inside(range: Range, row: number, column: number): boolean {
   return row >= range.r0 && row <= range.r1 && column >= range.c0 && column <= range.c1;
