@@ -398,24 +398,58 @@ describe("pipeline della penna", () => {
     expect(ends()).toEqual([]);
   });
 
-  it("la cattura persa, la finestra che perde il fuoco e la pagina nascosta annullano il tratto", () => {
+  it("la cattura persa chiude e salva il tratto della penna all'ultimo punto, come un rilascio, una volta sola", () => {
+    const input = attach();
+    dispatch(down({ ...PEN, clientX: 0, clientY: 0, timeStamp: 0 }));
+    dispatch(move({ ...PEN, clientX: 4, clientY: 0, timeStamp: 8 }));
+    dispatch(pointerEvent("lostpointercapture", { ...PEN, clientX: 6, clientY: 0, timeStamp: 10 }));
+    expect(kinds()).toEqual(["start", "samples", "samples", "end"]);
+    // Il tratto finisce all'ultimo campione che la sessione ha avuto: il punto dove la cattura si è persa non entra.
+    expect(ends()[0]!.samples.map(({ x }) => x)).toEqual([0, 2]);
+    expect(input.drawing).toBe(false);
+    // Il puntatore resta giù ma non disegna più finché non si alza.
+    expect(input.roleOf(7)).toBe("ignore");
+    expect(surface.hasPointerCapture(7)).toBe(false);
+    const count = log.length;
+    // Il rilascio che arriva dopo, e una seconda cattura persa, non fanno niente.
+    dispatch(up({ ...PEN, clientX: 9, clientY: 0, timeStamp: 12 }));
+    dispatch(pointerEvent("lostpointercapture", { ...PEN, clientX: 9, clientY: 0, timeStamp: 14 }));
+    expect(log).toHaveLength(count);
+  });
+
+  it("la cattura persa di un puntatore senza tratto non chiude niente", () => {
+    attach();
+    dispatch(pointerEvent("lostpointercapture", { ...MOUSE, timeStamp: 4 }));
+    expect(log).toEqual([]);
+  });
+
+  it("la finestra che perde il fuoco chiude e salva il tratto della penna all'ultimo punto, e il resto si annulla", () => {
+    const input = attach();
+    dispatch(down({ ...PEN, clientX: 0, clientY: 0, timeStamp: 0 }));
+    dispatch(move({ ...PEN, clientX: 4, clientY: 0, timeStamp: 8 }));
+    window.dispatchEvent(new Event("blur"));
+    expect(kinds()).toEqual(["start", "samples", "samples", "end"]);
+    // Il blur non ha un punto nuovo: l'ultimo campione è quello del movimento.
+    expect(ends()[0]!.samples.map(({ x }) => x)).toEqual([0, 2]);
+    expect(input.drawing).toBe(false);
+    const count = log.length;
+    // Un secondo blur, e il rilascio dopo, non fanno niente.
+    window.dispatchEvent(new Event("blur"));
+    dispatch(up({ ...PEN, clientX: 4, clientY: 0, timeStamp: 12 }));
+    expect(log).toHaveLength(count);
+  });
+
+  it("un movimento senza il tasto della penna chiude e salva il tratto, anche se il rilascio non arriva", () => {
+    attach();
+    dispatch(down({ ...PEN, clientX: 0, clientY: 0, timeStamp: 0 }));
+    dispatch(move({ ...PEN, buttons: 0, pressure: 0, clientX: 4, clientY: 0, timeStamp: 8 }));
+    expect(kinds()).toEqual(["start", "samples", "end"]);
+    expect(ends()[0]!.samples.map(({ x }) => x)).toEqual([0]);
+  });
+
+  it("la pagina nascosta annulla il tratto, con o senza cattura persa, e non lo salva", () => {
     const input = attach();
     dispatch(down({ ...MOUSE, clientX: 0, clientY: 0, timeStamp: 0 }));
-    dispatch(pointerEvent("lostpointercapture", { ...MOUSE, timeStamp: 4 }));
-    expect(latest()).toEqual({ kind: "cancel", id: 1, reason: "lostcapture" });
-    // Il puntatore resta giù ma non disegna più finché non si alza.
-    expect(input.roleOf(1)).toBe("ignore");
-    dispatch(move({ ...MOUSE, clientX: 9, clientY: 9, timeStamp: 8 }));
-    dispatch(up({ ...MOUSE, clientX: 9, clientY: 9, timeStamp: 9 }));
-    expect(ends()).toEqual([]);
-
-    dispatch(down({ ...MOUSE, clientX: 0, clientY: 0, timeStamp: 10 }));
-    window.dispatchEvent(new Event("blur"));
-    expect(latest()).toEqual({ kind: "cancel", id: 2, reason: "blur" });
-    expect(input.roleOf(1)).toBeNull();
-    dispatch(up({ ...MOUSE, clientX: 0, clientY: 0, timeStamp: 12 }));
-
-    dispatch(down({ ...MOUSE, clientX: 0, clientY: 0, timeStamp: 20 }));
     // Visibile: niente da annullare.
     document.dispatchEvent(new Event("visibilitychange"));
     expect(input.drawing).toBe(true);
@@ -425,7 +459,7 @@ describe("pipeline della penna", () => {
     } finally {
       delete (document as { visibilityState?: unknown }).visibilityState;
     }
-    expect(latest()).toEqual({ kind: "cancel", id: 3, reason: "hidden" });
+    expect(latest()).toEqual({ kind: "cancel", id: 1, reason: "hidden" });
     expect(ends()).toEqual([]);
   });
 
