@@ -1152,7 +1152,7 @@ riscritto byte per byte; l'esito della prova con Obsidian scritto in
 `Stato`.
 Prova: scripts/check.sh --rapido; cargo nextest run -p fub-format-base -p
 fub-features base
-Stato: [~] PR #356 (feat/base-calendario) · prova con Obsidian 1.13.7 fatta dall'orchestratore (2026-11-14): la forma nativa dà «Unknown view type», il ripiego si vede come tabella e Obsidian conserva `fub:` ma toglie i commenti YAML quando cambia vista → resta il ripiego (`disk_form` invariato), Q3 non serve; il client tratta calendario e linea come tipo sconosciuto fino a T17/T34 (opzione a: nessun controllo in `respond`)
+Stato: [x] fatto · in main (#356, 9030bcd8b, 2026-11-14) · prova con Obsidian 1.13.7 fatta dall'orchestratore (2026-11-14): la forma nativa dà «Unknown view type», il ripiego si vede come tabella e Obsidian conserva `fub:` ma toglie i commenti YAML quando cambia vista → resta il ripiego (`disk_form` invariato), Q3 non serve; il client tratta calendario e linea come tipo sconosciuto fino a T17/T34 (opzione a: nessun controllo in `respond`)
 
 ## T17 · Base: Calendario col trascinamento
 
@@ -1365,7 +1365,7 @@ l'opzione, mette le note. Dopo il task l'orchestratore chiede il giro
 `fuzz_completo` (CLAUDE.md).
 Prova: scripts/check.sh --rapido; cargo nextest run -p fub-format-markdown
 -p fub-abi -p fub-importers; cargo nextest run -p fub-features search
-Stato: [~] PR #355 (feat/commenti-criticmarkup), check rapido verde dopo main 5d233c366 · commento dentro `^[…]` resta testo della nota (il file non cambia); `comment:` campo a parte, schema ricerca v9; export con `{"comments": true}` · dopo il merge: `fuzz_completo`
+Stato: [x] fatto · in main (#355, f8ac46c5d, 2026-11-14), CI completa verde (rilanciato una volta un test di vendor/vectorcraft sulle bitmap a pezzi, verde al rilancio); `fuzz_completo` avviato su main · commento dentro `^[…]` resta testo della nota (il file non cambia); `comment:` campo a parte, schema ricerca v9; export con `{"comments": true}` · dopo il merge: `fuzz_completo`
 
 ## T21 · Commenti: lettura e scrittura nell'editor
 
