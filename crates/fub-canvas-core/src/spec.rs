@@ -9,7 +9,7 @@
 //! - [`validate`]: i problemi di una lista, prima della lettura, con un codice,
 //!   una posizione e, quando la correzione è una sola, l'operazione corretta.
 //!
-//! Le regole e i codici sono in `docs/reference/canvas-code.md`, «Lo schema».
+//! Le regole e i codici sono in `docs/reference/canvas-schema.md`.
 
 use serde::Serialize;
 use serde_json::{json, Map, Value};
