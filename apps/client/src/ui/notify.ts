@@ -152,12 +152,24 @@ export function notify(
   announce(history[0]!);
   const toast = show(history[0]!, action === undefined ? [] : "label" in action ? [action] : action);
   redraw();
+  if (!toast) return { withdraw: () => {} };
+  holders.set(toast, (holders.get(toast) ?? 0) + 1);
+  let held = true;
   return {
     withdraw: () => {
-      if (toast) dismissToast(toast);
+      if (!held) return;
+      held = false;
+      const left = (holders.get(toast) ?? 1) - 1;
+      holders.set(toast, left);
+      if (left <= 0) dismissToast(toast);
     },
   };
 }
+
+/// Quanti `NoticeHandle` tengono ancora un toast: un avviso uguale all'ultimo
+/// rinnova quel toast invece di aprirne un altro (`show`), e allora due
+/// handle puntano allo stesso. Il toast se ne va col ritiro dell'ultimo.
+const holders = new WeakMap<HTMLElement, number>();
 
 /// Ciò che `notify` rende a chi ha detto qualcosa su uno **stato** (un
 /// salvataggio che non riesce, un file cambiato da fuori): quando lo stato

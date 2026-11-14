@@ -66,6 +66,19 @@ describe("la pila dei toast", () => {
     expect(toasts()).toHaveLength(1);
   });
 
+  it("due avvisi uguali fusi in un toast: ritirarne uno lascia il toast a chi lo tiene ancora", () => {
+    const first = notify("La bozza non si scrive", "guasto");
+    const second = notify("La bozza non si scrive", "guasto");
+    expect(toasts()).toHaveLength(1);
+    first.withdraw();
+    expect(toasts()).toHaveLength(1);
+    // Ritirare di nuovo lo stesso non conta due volte.
+    first.withdraw();
+    expect(toasts()).toHaveLength(1);
+    second.withdraw();
+    expect(toasts()).toHaveLength(0);
+  });
+
   it("un avviso identico a quello in fondo ne rinnova il contatore invece di aprirne un altro", () => {
     notify("Salvataggio non riuscito", "guasto");
     notify("Salvataggio non riuscito", "guasto");
