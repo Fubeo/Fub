@@ -105,22 +105,15 @@ interface Trap {
   previous: HTMLElement | null;
 }
 
-/// Dove tornerà il fuoco che adesso sta in `node`, se `node` è dentro una
-/// superficie intrappolata (un menu, la palette): l'elemento da cui la
-/// superficie si è aperta, risalendo le superfici annidate. `null` fuori da
-/// ogni trappola. Serve a chi deve sapere «il fuoco è mio» anche quando sta in
-/// un menu che ha aperto lui e che vive fuori dal suo albero.
-export function focusReturnTarget(node: Node): HTMLElement | null {
-  let at: Node = node;
-  let found: HTMLElement | null = null;
-  for (let i = trapStack.length - 1; i >= 0; i--) {
-    const trap = trapStack[i]!;
-    if (!trap.root.contains(at)) continue;
-    found = trap.previous;
-    if (!found) return null;
-    at = found;
+/// Chi aveva il fuoco in `from` lo vuole adesso in `to`: ogni trappola aperta
+/// che, sciogliendosi, lo renderebbe dentro `from` lo rende a `to`. Serve a
+/// chi cambia sotto una superficie aperta (l'editor che passa alla Lettura
+/// mentre un suo menu o una finestra chiede): la superficie si tiene il fuoco
+/// finché è aperta, e chiusa non lo riporta su un elemento ormai nascosto.
+export function redirectFocusReturn(from: HTMLElement, to: HTMLElement): void {
+  for (const trap of trapStack) {
+    if (trap.previous && trap.previous !== to && from.contains(trap.previous)) trap.previous = to;
   }
-  return found;
 }
 
 export function focusableElements(root: HTMLElement): HTMLElement[] {
@@ -195,14 +188,14 @@ export function trapFocus(root: HTMLElement, close: () => void): Teardown {
     const where = trapStack.lastIndexOf(io);
     if (where >= 0) trapStack.splice(where, 1);
   });
-  const previous = io.previous;
   // Il fuoco torna da dove era partito. È la metà che si dimentica: senza,
   // chiudere una modale rimanda chi naviga da tastiera all'inizio del
   // documento, e deve rifare tutta la strada per tornare dov'era. Sta *prima*
   // dell'ascoltatore perché `chiudi()` disfa in ordine inverso: così a spostare
   // il fuoco è l'ultimo passo, quando la trappola non è più attaccata.
+  // Si legge alla chiusura: `redirectFocusReturn` può averlo spostato.
   lifetime.add(() => {
-    if (previous?.isConnected) previous.focus();
+    if (io.previous?.isConnected) io.previous.focus();
   });
 
   const onKey = (e: KeyboardEvent) => {

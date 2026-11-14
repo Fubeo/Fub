@@ -36,7 +36,7 @@ import samples from "../__fixtures__/mirror-samples.json";
 import type { UiNode } from "../host/contract";
 import css from "../theme/scrittoio/skin.css?raw";
 import { accessibleName, formatIssues, checkAccessibility } from "./a11y-check";
-import { activatable, focusReturnTarget, trapFocus, notActivatable } from "./a11y";
+import { activatable, redirectFocusReturn, trapFocus, notActivatable } from "./a11y";
 import { mountTree, unmountTree } from "./node";
 
 const nodes = samples.UiNode as unknown as UiNode[];
@@ -394,22 +394,32 @@ describe("due modali aperte: comanda l'ultima", () => {
 });
 
 describe("dove torna il fuoco di una superficie intrappolata", () => {
-  it("risale le superfici annidate fino a chi ha aperto la prima, e fuori non c'è", () => {
+  it("chi cambia sotto le superfici aperte sposta il loro ritorno; le altre restano", () => {
     document.body.innerHTML = `
-      <button id="editor">Editor</button>
+      <div id="riquadro"><button id="editor">Editor</button><button id="lettura">Lettura</button></div>
+      <button id="altro">Altro</button>
       <div id="menu" tabindex="-1"><button id="voce">Voce</button></div>
-      <div id="icone" tabindex="-1"><button id="icona">Icona</button></div>`;
+      <div id="finestra" tabindex="-1"><button id="ok">Ok</button></div>`;
     const at = (id: string) => document.getElementById(id)!;
     at("editor").focus();
     const releaseMenu = trapFocus(at("menu"), () => {});
     at("voce").focus();
-    const releaseIcons = trapFocus(at("icone"), () => {});
-    expect(focusReturnTarget(at("icona"))).toBe(at("editor"));
-    expect(focusReturnTarget(at("voce"))).toBe(at("editor"));
-    expect(focusReturnTarget(at("editor"))).toBeNull();
-    releaseIcons();
+    const releaseWindow = trapFocus(at("finestra"), () => {});
+    at("ok").focus();
+    redirectFocusReturn(at("riquadro"), at("lettura"));
+    // La finestra torna alla voce del menu (non è nel riquadro); il menu, che
+    // tornava all'editor, torna alla lettura.
+    releaseWindow();
+    expect(document.activeElement).toBe(at("voce"));
     releaseMenu();
-    expect(focusReturnTarget(at("voce"))).toBeNull();
+    expect(document.activeElement).toBe(at("lettura"));
+
+    at("altro").focus();
+    const releaseOther = trapFocus(at("menu"), () => {});
+    at("voce").focus();
+    redirectFocusReturn(at("riquadro"), at("lettura"));
+    releaseOther();
+    expect(document.activeElement).toBe(at("altro"));
   });
 });
 

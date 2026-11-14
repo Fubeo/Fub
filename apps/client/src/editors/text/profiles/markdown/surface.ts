@@ -27,8 +27,8 @@ import { openLifetime, type Lifetime } from "../../../../ui/lifetime";
 import { notify } from "../../../../ui/notify";
 import { errorText } from "../../../../host/errors";
 import { clipboardSupports, readClipboard, writeClipboardData, writeClipboardText } from "../../../../platform/clipboard";
-import { closeSlashPalette, openSlashPalette } from "../../../../ui/palette";
-import { focusReturnTarget } from "../../../../ui/a11y";
+import { closeSlashPalette, openSlashPalette, slashPaletteHolds } from "../../../../ui/palette";
+import { redirectFocusReturn } from "../../../../ui/a11y";
 import type {
   BufferedSurface,
   EditorSelections,
@@ -796,15 +796,22 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
   /// «questo punto» di «Copia il link a questo punto».
   let readingPoint: number | null = null;
 
-  /// Il fuoco è di questa superficie: dentro `parent`, o in una sua parte
-  /// montata fuori (il menu «/», un menu del testo) che glielo restituirà
-  /// quando si chiude.
+  /// Il fuoco è di questa superficie: dentro `parent`, o nel suo menu «/»,
+  /// che chiudendosi lo rende al testo. Un menu o una finestra aperti sopra
+  /// l'editor se lo tengono finché sono aperti (`focusTo`).
   function ownsFocus(): boolean {
     const active = document.activeElement;
     if (!active || active === document.body) return false;
-    if (parent.contains(active)) return true;
-    const back = focusReturnTarget(active);
-    return back !== null && parent.contains(back);
+    return parent.contains(active) || slashPaletteHolds(parent, active);
+  }
+
+  /// Il modo nuovo vuole il fuoco su `target`. Se il fuoco era della superficie
+  /// lo prende subito; in ogni caso le superfici aperte sopra (un menu del
+  /// testo, una finestra di conferma) che lo renderebbero all'elemento ormai
+  /// nascosto lo renderanno a `target` quando si chiudono.
+  function focusTo(target: HTMLElement, hadFocus: boolean, take: () => void): void {
+    redirectFocusReturn(parent, target);
+    if (hadFocus) take();
   }
 
   function setMode(next: MarkdownMode): void {
@@ -826,7 +833,7 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
       scrollReadingTo(anchor.offset, anchor.top);
       // L'editor nascosto lascerebbe il fuoco al corpo della pagina, senza
       // anello: lo prende il riquadro di lettura, da cui si scorre e si copia.
-      if (hadFocus) reading.focus({ preventScroll: true });
+      focusTo(reading, hadFocus, () => reading.focus({ preventScroll: true }));
       return;
     }
     if (previous === "reading" && next !== "reading") {
@@ -847,7 +854,13 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
         });
       }
       // Si torna a scrivere dal cursore di prima, che la lettura non ha mosso.
-      if (hadFocus) engine.focus();
+      let writing: HTMLElement | null = null;
+      engine.runViewCommand((view) => {
+        writing = view.contentDOM;
+        return false;
+      });
+      if (writing) focusTo(writing, hadFocus, () => engine.focus());
+      else if (hadFocus) engine.focus();
       return;
     }
     const anchor = engine.getScrollAnchor();

@@ -100,13 +100,14 @@ describe("la superficie Markdown", () => {
     expect(view().state.selection.main.anchor).toBe(5);
     ed.destroy();
   });
-  it("cambiando modo da un menu aperto dall'editor, fuori dal riquadro, il fuoco va alla Lettura", () => {
+  it("cambiando modo da un menu aperto dall'editor, il menu tiene il fuoco, e chiuso lo rende alla Lettura", () => {
     const { ed, view, reading } = editor();
     ed.buffer.setDoc("testo");
     view().focus();
     // Un menu del testo: montato fuori dal riquadro, col fuoco che torna
     // all'editor quando si chiude.
     const menu = document.createElement("div");
+    menu.setAttribute("role", "menu");
     const item = document.createElement("button");
     menu.append(item);
     document.body.append(menu);
@@ -115,9 +116,33 @@ describe("la superficie Markdown", () => {
     expect(document.activeElement).toBe(item);
 
     ed.setMode("reading");
-    expect(document.activeElement).toBe(reading());
+    expect(document.activeElement).toBe(item);
     release();
+    // Non torna all'editor nascosto: va dove si legge adesso.
+    expect(document.activeElement).toBe(reading());
     menu.remove();
+    ed.destroy();
+  });
+  it("cambiando modo con una finestra aperta sopra l'editor, la finestra tiene il fuoco; chiusa, va al modo nuovo", () => {
+    const { ed, view, reading } = editor();
+    ed.buffer.setDoc("testo");
+    view().focus();
+    const dialog = document.createElement("div");
+    dialog.setAttribute("role", "dialog");
+    const ok = document.createElement("button");
+    dialog.append(ok);
+    document.body.append(dialog);
+    const release = trapFocus(dialog, () => {});
+    ok.focus();
+
+    ed.setMode("reading");
+    expect(document.activeElement).toBe(ok);
+    ed.setMode("source");
+    expect(document.activeElement).toBe(ok);
+    ed.setMode("reading");
+    release();
+    expect(document.activeElement).toBe(reading());
+    dialog.remove();
     ed.destroy();
   });
   it("cambiando modo non ruba il fuoco a chi lo ha fuori dalla superficie", () => {
