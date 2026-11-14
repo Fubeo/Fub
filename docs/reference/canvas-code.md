@@ -138,15 +138,17 @@ leggibile. Le chiavi sono i nomi dei campi del formato (`color`, `fromSide`,
 
 `code(&Canvas, &DescribeOptions) -> Vec<CanvasOp>` dà la lista che ricrea la
 lavagna: prima una `add_card` per scheda, nel suo ordine, poi una `connect`
-per arco. Ogni scheda e ogni arco sono il loro valore JSON del file, con `x` e
-`y` sempre, e i campi sconosciuti dentro.
+per arco. Ogni scheda e ogni arco vanno in forma breve quando ogni campo ci sta
+(`id`, `x` e `y` sempre; `width` e `height` solo se non sono quelle di nascita;
+il colore con il suo nome); altrimenti sono il loro valore JSON del file, come
+`node` o `edge`, con i campi sconosciuti dentro.
 
 ```json
 [
-  { "op": "add_card", "node": { "id": "t1", "type": "text", "x": 0, "y": 0, "width": 320, "height": 160, "color": "5", "text": "Ciclo dell'acqua" } },
-  { "op": "add_card", "node": { "id": "t2", "type": "text", "x": 368, "y": 0, "width": 320, "height": 160, "text": "Evaporazione" } },
-  { "op": "add_card", "node": { "id": "f1", "type": "file", "x": 0, "y": 184, "width": 320, "height": 360, "file": "Scienze/nuvole.png" } },
-  { "op": "connect", "edge": { "id": "e1", "fromNode": "t1", "toNode": "t2", "toEnd": "arrow", "label": "usa" } }
+  { "op": "add_card", "id": "t1", "text": "Ciclo dell'acqua", "x": 0, "y": 0, "color": "cyan" },
+  { "op": "add_card", "id": "t2", "text": "Evaporazione", "x": 368, "y": 0 },
+  { "op": "add_card", "id": "f1", "file": "Scienze/nuvole.png", "x": 0, "y": 184, "width": 320 },
+  { "op": "connect", "id": "e1", "from": "t1", "to": "t2", "label": "usa" }
 ]
 ```
 
@@ -221,14 +223,17 @@ casi con i numeri stanno in `apps/client/src/__fixtures__/canvas-layout.json`.
   160.
 - **Posto automatico.** Su una lavagna vuota la scheda va in 0,0. Su una
   lavagna con schede va a 48 a destra della scheda più a destra, alla y della
-  più alta. In una lista, la scheda va sotto la precedente a 24, con la sua x.
+  più alta. In una lista, una scheda senza posto va sotto la precedente scheda
+  automatica a 24, con la sua x; se quella non c'è più nel modello, si riparte
+  come sopra.
 - **Vicino a.** Il lato di serie è `right`: a destra, a 48. `bottom` è a 24,
   `left` a 48, `top` a 24; `gap` cambia la distanza. A destra e a sinistra la y
   è quella di `near`; sopra e sotto la x è quella di `near`. Un testo sopra o
   sotto prende la larghezza di `near`. Se il posto tocca una scheda che non è un
   gruppo (né `near` stessa), la scheda scivola sull'asse perpendicolare, a 24 da
-  quella toccata, al più 1000 passi; poi va oltre tutte le schede. Un `near` che
-  non c'è dà `None`, e lo dice chi chiama.
+  quella toccata, al più 1000 passi; poi va oltre tutte le schede. Con una
+  misura scritta a mano, il lato che tocca `near` resta a `gap`; lo scivolamento
+  usa la misura di nascita. Un `near` che non c'è dà `None`, e lo dice chi chiama.
 - **Dentro un gruppo.** Una scheda è dentro se il suo rettangolo sta tutto in
   quello del gruppo, bordi compresi. Una scheda non è dentro sé stessa.
 - **Lati più vicini.** Si confrontano i centri. Se la distanza in orizzontale è
@@ -259,13 +264,24 @@ errore di lettura: un errore di battitura non diventa uno spostamento di zero.
 
 ### `add_card`
 
-Aggiunge una scheda in cima all'ordine. `node` è una scheda come nel file,
-campi sconosciuti compresi; `id` è facoltativo (assente o `null`: lo dà il
-seme).
+Aggiunge una scheda in cima all'ordine, in una di due forme che non si
+mescolano. **Intera:** `node` è una scheda come nel file, campi sconosciuti
+compresi; `id` dentro la scheda è facoltativo (assente o `null`: lo dà il seme).
+**Breve:** `text` (testo, di serie vuoto), `file`, `url` (un collegamento) o
+`label` (un gruppo, anche da solo) dicono il tipo; `type` (`text`, `file`,
+`link`, `group`) lo dice se serve. `x` e `y` insieme danno il posto; `near`,
+con `side` (di serie `right`) e `gap`, lo dà accanto a una scheda; senza
+nessuno dei due va in fondo alla lista automatica. `width` e `height` sono
+facoltativi, di serie quelli di nascita. Completano `id`, `color` (`red`…`purple`,
+`note-grey`…`note-red`, `"1"`…`"6"` o `#rrggbb`), `subpath` e `content_size`
+(`[w, h]`: i pixel di un'immagine, o i punti della prima pagina di un PDF).
 
 ```json
-{ "op": "add_card", "node": { "type": "text", "x": 0, "y": 0, "width": 260, "height": 120, "text": "Idea" } }
+{ "op": "add_card", "text": "Nuova idea", "near": "t2", "side": "bottom", "color": "cyan" }
 ```
+
+Un campo che non va col tipo, `x` senza `y`, un posto dato due volte, o la
+forma intera mescolata con la breve, è `Invalid`, con la frase che dice quale.
 
 ### `move`
 
@@ -288,12 +304,16 @@ Dà alla scheda `id` le misure nuove: almeno 1, e una misura enorme satura a
 
 ### `connect`
 
-Aggiunge un arco in fondo alla lista. `edge` è un arco come nel file; `id` è
-facoltativo come in `add_card`. Le due schede devono esserci; un arco da una
-scheda a sé stessa va bene.
+Aggiunge un arco in fondo alla lista, in una di due forme. `edge` è un arco
+come nel file, `id` dentro l'arco è facoltativo. In forma breve `from` e `to`
+sono le due schede, che devono esserci; `id`, `label` e `color` come in
+`add_card`. `sides` è `"auto"` (i lati più vicini, come in «Lati più vicini»)
+o `{from, to}` con i lati scelti: di serie nessun lato. `ends` è `arrow` (di
+serie, una punta alla scheda di arrivo), `none` o `both`. Un arco da una scheda
+a sé stessa va bene.
 
 ```json
-{ "op": "connect", "edge": { "fromNode": "a", "toNode": "b", "toEnd": "arrow" } }
+{ "op": "connect", "from": "a", "to": "b", "sides": "auto", "label": "porta a" }
 ```
 
 ### `remove`
@@ -361,7 +381,7 @@ Ogni errore (`OpError`) dice quale operazione della lista non si compila
 | `UnknownEdge` | `remove` o `set` di un id che non è né una scheda né un arco |
 | `DuplicateId` | un id dato che è già preso; un id ripetuto nella lista di `move`, `remove` o `reorder` |
 | `TooMany` | la lavagna avrebbe più di 100 000 schede o 200 000 archi |
-| `Invalid` | una scheda o un arco che il formato non accetta; `set` di `id` o `type`; un id che è sia una scheda sia un arco |
+| `Invalid` | una scheda o un arco che il formato non accetta; una forma breve incompleta o mescolata con la intera; `set` di `id` o `type`; un id che è sia una scheda sia un arco |
 
 I vettori stanno in `apps/client/src/__fixtures__/canvas-ops/`, uno per file,
 scritti a mano: `before`, `seed` facoltativo (0 se manca), `ops` e `expect`
@@ -379,8 +399,10 @@ nuova entra in `OPS` nello stesso task che la aggiunge.
 
 I tipi dei campi sono `id`, `ids` (una lista di id), `number` (un intero: anche
 `1.0` e `1e2` lo sono, `1.5` no), `text`, `bool`, `enum` (una stringa presa da
-un elenco), `node` (una scheda), `edge` (un arco), `object`, `points` (una lista
-di liste di numeri) e `any`.
+un elenco), `node` (una scheda), `edge` (un arco), `color` (un nome, `"1"`…`"6"`
+o `#rrggbb`, o `null`), `sides` (`"auto"` o `{from, to}`), `pair` (due numeri,
+`[w, h]`), `object`, `points` (una lista di liste di numeri) e `any`. Un campo
+facoltativo `null` vale come assente, per la forma e per serde.
 
 **Lo schema JSON.** `json_schema()` dà lo schema JSON 2020-12 della lista: una
 lista non vuota, e un `oneOf` con un ramo per operazione. Ogni ramo ha `op`
@@ -420,8 +442,8 @@ Le regole:
 - Una stringa al posto di una lista di id ha il `fix` con la lista: `"ids": "t1"`
   diventa `"ids": ["t1"]`.
 - Il `fix` corregge solo ciò che si sa correggere. Con `{"op": "add-card"}` il
-  `fix` è `{"op": "add_card"}`, e `node` manca: la lista corretta dà poi
-  `missing_field` su `/0/node`.
+  `fix` è `{"op": "add_card"}`: una scheda senza `node` né forma breve non si
+  scrive, e la compilazione lo dice con `invalid` su `/0`.
 - `validate` è lineare: 100 000 operazioni si controllano. Non c'è un tetto al
   loro numero; i tetti di [`OpError::TooMany`](#gli-errori-delle-operazioni) sono
   sulle schede e sugli archi.
