@@ -9752,8 +9752,12 @@ kbd,
 .canvas-node-link > .canvas-node-handle > .canvas-connect {
   opacity: 0;
 }
+/* `data-hover-held`: la scheda che il velo della penna o il tratto hanno
+   appena tolto al puntatore tiene l'aspetto del passaggio (T20f). */
 .canvas-node-file:hover > .canvas-node-handle > .canvas-connect,
 .canvas-node-link:hover > .canvas-node-handle > .canvas-connect,
+.canvas-node-file[data-hover-held] > .canvas-node-handle > .canvas-connect,
+.canvas-node-link[data-hover-held] > .canvas-node-handle > .canvas-connect,
 .canvas-node-file:focus-within > .canvas-node-handle > .canvas-connect,
 .canvas-node-link:focus-within > .canvas-node-handle > .canvas-connect,
 .canvas-node-file.selected > .canvas-node-handle > .canvas-connect,
@@ -9811,6 +9815,7 @@ kbd,
   opacity: 0;
 }
 .canvas-node[data-card-mode="live"]:hover .canvas-card-craft-actions,
+.canvas-node[data-card-mode="live"][data-hover-held] .canvas-card-craft-actions,
 .canvas-node[data-card-mode="live"]:focus-within .canvas-card-craft-actions,
 .canvas-node[data-card-mode="live"].selected .canvas-card-craft-actions,
 .canvas-card-craft:not([data-card-state="picture"]) > .canvas-card-craft-actions {
@@ -10343,6 +10348,7 @@ kbd,
   transform: translate(-50%, -50%);
 }
 .canvas-node:hover > .canvas-port::after,
+.canvas-node[data-hover-held] > .canvas-port::after,
 .canvas-node:focus-within > .canvas-port::after {
   opacity: 1;
 }
