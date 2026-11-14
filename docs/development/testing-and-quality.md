@@ -253,14 +253,27 @@ Il corridore è `bench/giro.mjs`; i gruppi, in ordine, sono in
 il primo avvio senza vault fino alla scrivania senza lo strato d'avvio,
 l'apertura del vault, una cartella e una nota dall'albero, un titolo, una lista
 e un grassetto scritti in Live, le quattro modalità sulla stessa nota (questo
-non al telefono). Al primo compito che fallisce il giro si ferma, dice quale e
+non al telefono). Il gruppo `scrivere` (solo nella finestra) mette una tabella
+dal «/» e sposta un blocco con la maniglia nei Blocchi, mette in grassetto una
+parola dalla mini-barra del tasto destro, esegue un comando dalla palette
+(Ctrl+Maiusc+P), apre una nota a lato e passa il fuoco fra i due riquadri,
+rinomina una nota dall'albero e guarda i link delle note che la nominano
+cambiare (nel finto host e nel riquadro aperto), cerca una parola e apre il
+pannello «In entrata» della nota trovata. Il suo primo compito ricarica la
+pagina con `?formatbar=1&slash=1`, perché solo così il finto host della
+finestra dichiara i comandi di formato che l'host vero ha sempre; ciò che il
+gruppo `avvio` aveva scritto nel finto in memoria si perde, e nessun compito
+dopo lo cerca. Al primo compito che fallisce il giro si ferma, dice quale e
 perché, fotografa la pagina (`…-errore.png`) ed esce con 1. Foto e referto
 (`giro.json`) vanno in `--out` (di serie `bench/.output/giro/`); la porta segue
 `FUB_BENCH_PORT` o `--port`.
 
 Che cosa **non** prova: i pixel (le foto non hanno baseline, si guardano: per
 i pixel c'è `bench:verify`), il motore vero (risponde il finto host, non
-`fub-host`, né un componente WASM), il sistema operativo (finestre, dialoghi,
+`fub-host`, né un componente WASM: i pannelli «Struttura» e «Collegamenti»
+del finto sono gli stessi per ogni nota, perciò il giro guarda «In entrata»
+sulla sola nota per cui è vero, e la rinomina del finto riscrive i wikilink ma
+non i link Markdown), il sistema operativo (finestre, dialoghi,
 WebView e installer: il selettore di cartella risponde il vault del banco).
 Quelli restano al giro a mano sugli installer.
 

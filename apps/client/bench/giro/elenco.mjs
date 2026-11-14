@@ -17,5 +17,6 @@
 // T29 ricette, componenti e aspetto, T30 conflitto, sola lettura, cestino,
 // tastiera e guasti), una riga qui e il suo file accanto.
 import { avvio } from "./avvio.mjs";
+import { scrivere } from "./scrivere.mjs";
 
-export const GRUPPI = [avvio];
+export const GRUPPI = [avvio, scrivere];

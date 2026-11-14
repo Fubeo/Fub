@@ -1688,7 +1688,13 @@ const options: Options = {
   root: ROOT,
   view: VIEWS,
   commands: [
-    ...(ON_MOBILE ? [...BENCH_COMMANDS, ...FORMAT_COMMANDS] : [...BENCH_COMMANDS, ...SLASH_COMMANDS]),
+    // Con `?formatbar=1&slash=1` ci sono tutti e due, come nell'host vero
+    // (il giro sul banco, `bench/giro/scrivere.mjs`): le voci del «/» vincono,
+    // perché portano anche la superficie `slash` che le gemelle della barra
+    // non hanno. Da soli, ognuno dà ciò che dava.
+    ...BENCH_COMMANDS,
+    ...SLASH_COMMANDS,
+    ...(ON_MOBILE ? FORMAT_COMMANDS.filter((format) => !SLASH_COMMANDS.some((slash) => slash.id === format.id)) : []),
     // Il PDF annotato ha «Annota», il comando della feature `draw`.
     ...(PDF_SCENE === "annotato" ? [command("pdf.annotate", "Annota il PDF", "Crea o apre le annotazioni del PDF", null, true)] : []),
   ],
