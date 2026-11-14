@@ -77,24 +77,62 @@ const R1_ROUNDS = 30;
 
 /// Un file per modalità, nell'ordine in cui R1 li apre: il nome che si cerca
 /// col selettore rapido e la modalità che il referto nomina.
-/// Un file per modalità, nell'ordine in cui R1 li apre. «Vai alla nota» cerca
-/// le note per nome e per alias (docs/product/search-links-and-graph.md): un
-/// PDF e un'immagine non si trovano così, e il banco di prima li «apriva» con
-/// l'offerta di creare una nota col loro nome. Restano fuori finché non c'è un
-/// passo che li apra dall'albero.
+/// Un file per modalità, nell'ordine in cui R1 li apre. Il terzo campo, dove c'è,
+/// è il percorso del file nell'albero. Ctrl O non ha un prefisso né una scheda
+/// per i file: il lanciatore cerca note per nome, nel testo e nei titoli
+/// (launcher/sources.ts), e sullo schermo vero «Stampa» non dava nessuna
+/// riga. Per questo PDF e immagine R1 li apre dall'albero, dopo aver mostrato
+/// la barra laterale col suo comando. Ogni apertura aspetta l'indice, come le altre.
 const MODES = [
   ["Lunga", "nota"],
   ["Lavagna", "lavagna"],
   ["Foglio", "disegno"],
   ["Documento", "documento"],
   ["Tabella", "foglio di calcolo"],
+  ["Stampa", "pdf", "R1/Stampa.pdf"],
+  ["Immagine", "immagine", "R1/Immagine.png"],
 ];
 
-/// Un accordo: il modificatore giù, il tasto, su tutti e due.
+/// Lo stesso accordo con più modificatori: giù tutti, il tasto, su tutti.
+const SIDEBAR_TOGGLE = [CTRL, ALT];
+const TREE_ROWS_SHOWN = "return [...document.querySelectorAll('#file-list .tree-row')].some((el) => el.getClientRects().length > 0);";
+const TAB_OPEN = "return [...document.querySelectorAll('.pane.focus .tab[aria-selected=true] .tab-name')].some((el) => el.textContent.includes(arguments[0]))";
+
+/// Apre un file dall'albero. La barra laterale a 800 px è chiusa: il suo comando
+/// (`shell.sidebar.toggle`, Mod-Alt-b) la apre, poi si espande la cartella e si
+/// clicca la riga. Se l'ha aperta questo passo, la richiude quando il file è
+/// aperto, così ogni passo parte dallo stesso schermo.
+async function openFromTree(session, name, path) {
+  const folder = path.split("/")[0];
+  let opened = false;
+  if (!(await session.execute(TREE_ROWS_SHOWN))) {
+    await chord(session, SIDEBAR_TOGGLE, "b");
+    opened = true;
+    await session.waitFor(TREE_ROWS_SHOWN, [], 30_000);
+  }
+  await session.execute(
+    "const li = [...document.querySelectorAll('#file-list li[role=\"treeitem\"]')].find((el) => el.dataset.path === arguments[0]); if (li && li.getAttribute('aria-expanded') !== 'true') li.querySelector(':scope > .tree-row.folder > .chevron')?.click();",
+    [folder],
+  );
+  await session.waitFor("return [...document.querySelectorAll('#file-list .tree-row')].some((el) => el.dataset.path === arguments[0])", [path], 30_000);
+  await session.execute("[...document.querySelectorAll('#file-list .tree-row')].find((el) => el.dataset.path === arguments[0])?.click();", [path]);
+  await session.waitFor(TAB_OPEN, [name], 60_000);
+  if (opened && (await session.execute(TREE_ROWS_SHOWN))) await chord(session, SIDEBAR_TOGGLE, "b");
+}
+
+/// Un passo di R1: per nome con Ctrl O, o dall'albero se la modalità ha un percorso.
+async function openStep(session, name, tree) {
+  if (tree) await openFromTree(session, name, tree);
+  else await openByName(session, name, "");
+}
+
+/// Un accordo: i modificatori giù, il tasto, su tutti (l'ultimo che è sceso è il
+/// primo che sale). Accetta un modificatore o una lista.
 async function chord(session, modifier, key) {
+  const mods = [modifier].flat();
   await session.actions([{ type: "key", id: "tastiera", actions: [
-    { type: "keyDown", value: modifier }, { type: "keyDown", value: key },
-    { type: "keyUp", value: key }, { type: "keyUp", value: modifier },
+    ...mods.map((m) => ({ type: "keyDown", value: m })), { type: "keyDown", value: key },
+    { type: "keyUp", value: key }, ...mods.toReversed().map((m) => ({ type: "keyUp", value: m })),
   ] }]);
 }
 
@@ -1093,12 +1131,12 @@ const SCENARIOS = {
     await pause(R1_SETTLE_MS);
     const empty = await settled(driverPid, pause);
     const steps = [];
-    for (const [name, mode] of MODES) {
-      // Chi cerca per nome lo fa a indice pronto: aprire il precedente può
-      // rimettere l'indice al lavoro, e un nome cercato in quel momento manca.
+    for (const [name, mode, tree] of MODES) {
+      // Ogni file si apre a indice pronto. Aprire il precedente può rimettere
+      // l'indice al lavoro, e un nome cercato in quel momento manca.
       await indexed(session);
-      await openByName(session, name, "");
-      await session.waitFor("return [...document.querySelectorAll('.pane.focus .tab[aria-selected=true] .tab-name')].some((el) => el.textContent.includes(arguments[0]))", [name], 60_000);
+      await openStep(session, name, tree);
+      await session.waitFor(TAB_OPEN, [name], 60_000);
       await pause(MEMORY_QUIET_MS);
       // Che cosa si è aperto davvero: l'etichetta della scheda dice il formato.
       const surface = await session.execute("return document.querySelector('.pane.focus .tab[aria-selected=true]')?.getAttribute('aria-label') ?? null;");
@@ -1113,9 +1151,12 @@ const SCENARIOS = {
     const late = await settled(driverPid, pause);
     const rounds = [];
     for (let round = 1; round <= R1_ROUNDS; round++) {
-      for (const [name] of MODES) {
-        await openByName(session, name, "");
-        await session.waitFor("return [...document.querySelectorAll('.pane.focus .tab[aria-selected=true] .tab-name')].some((el) => el.textContent.includes(arguments[0]))", [name], 60_000);
+      for (const [name, , tree] of MODES) {
+        // Come nel primo giro: l'indice al lavoro sposta l'elenco mentre si preme
+        // Invio, e il fuoco può finire nel testo (R1-fallito: «Indicizzazione» in corso).
+        await indexed(session);
+        await openStep(session, name, tree);
+        await session.waitFor(TAB_OPEN, [name], 60_000);
       }
       await pause(MEMORY_QUIET_MS);
       const open = await settled(driverPid, pause);
