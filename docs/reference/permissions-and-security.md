@@ -140,7 +140,9 @@ contano solo per chi li dichiara
 Il runtime:
 
 - usa Wasmtime component model;
-- non collega WASI;
+- non collega WASI, tranne `wasi:random` (`random` e `insecure-seed`): al
+  più 64 KiB per richiesta e 1 MiB sommando le richieste di una chiamata del
+  contratto, oltre è una trap;
 - non concede filesystem o rete direttamente;
 - serve soltanto le famiglie host disponibili;
 - applica limiti alla memoria lineare e alle tabelle;
