@@ -2,11 +2,22 @@
 //
 // Le tabelle del documento nel modo «documento» della Tabella: Tab fra le
 // celle, Maiusc con le frecce oltre la cella per scegliere celle, e sulle
-// celle scelte Canc, gli appunti e «Unisci celle».
+// celle scelte i gesti del foglio, gli appunti e «Unisci celle».
 import { afterEach, describe, expect, it } from "vitest";
 import { RichEngine } from "./engine";
-import { cellAt, selectedCells } from "./cell-selection";
-import { caseApplies, expectedOf, playCase, seenOf, TABLE_CONFORMANCE, type ConformanceTarget } from "../../tabella/conformance";
+import { cellAt, cellBoxes, cutCells, DOCUMENT_TABLE_CAPS, selectedCells } from "./cell-selection";
+import {
+  caseAbsence,
+  caseApplies,
+  expectedOf,
+  playCase,
+  seenOf,
+  TABLE_CONFORMANCE,
+  type ConformanceCase,
+  type ConformanceClipboard,
+  type ConformanceDriver,
+  type ConformanceTarget,
+} from "../../tabella/conformance";
 import { parseProjection, type Block, type Para, type Table, type TextInline } from "./projection";
 
 let engines: RichEngine[] = [];
@@ -86,7 +97,10 @@ describe("le tabelle del documento", () => {
     expect(document.querySelector(".has-cell-selection")).not.toBeNull();
     expect(press("Delete")).toBe(true);
     expect(grid(e)).toEqual([["", "", "c"], ["", "", "f"]]);
-    expect(selectedCells(e.state)).toBeNull();
+    // Come nei fogli di calcolo le celle restano scelte, e Ctrl+Z torna in un passo.
+    expect(selectedCells(e.state)?.range).toEqual({ r0: 0, c0: 0, r1: 1, c1: 1 });
+    expect(press("z", { ctrlKey: true })).toBe(true);
+    expect(grid(e)).toEqual([["a", "b", "c"], ["d", "e", "f"]]);
   });
 
   it("dentro il testo della cella Maiusc+freccia resta del testo", () => {
@@ -114,6 +128,51 @@ describe("le tabelle del documento", () => {
     expect(grid(e)[0]).toEqual(["a+b+c"]);
   });
 
+  it("il taglio segna le celle (non le svuota), Esc toglie il segno, una modifica anche", () => {
+    const e = engine([["a", "b"], ["c", "d"]]);
+    e.select(at(e, "a") + 1);
+    press("ArrowDown", { shiftKey: true });
+    const cut = () => {
+      const event = new Event("cut", { bubbles: true, cancelable: true }) as ClipboardEvent;
+      Object.defineProperty(event, "clipboardData", { value: { setData: () => {} } });
+      document.querySelector<HTMLElement>(".rich-content")!.dispatchEvent(event);
+      return event.defaultPrevented;
+    };
+    expect(cut()).toBe(true);
+    expect(grid(e)).toEqual([["a", "b"], ["c", "d"]]);
+    expect(document.querySelectorAll(".is-cell-cut")).toHaveLength(2);
+    expect(press("Escape")).toBe(true);
+    expect(document.querySelectorAll(".is-cell-cut")).toHaveLength(0);
+    expect(selectedCells(e.state)).not.toBeNull();
+    cut();
+    expect(document.querySelectorAll(".is-cell-cut")).toHaveLength(2);
+    e.apply((state, dispatch) => {
+      dispatch?.(state.tr.insertText("x"));
+      return true;
+    });
+    expect(document.querySelectorAll(".is-cell-cut")).toHaveLength(0);
+  });
+
+  it("dove ci sono celle unite Ctrl+«+» non inserisce colonne", () => {
+    const e = engine([["a", "b", "c"], ["d", "e", "f"]]);
+    e.select(at(e, "a") + 1);
+    press("ArrowRight", { shiftKey: true });
+    e.run("rich.table.merge");
+    e.select(at(e, "f") + 1);
+    expect(press(" ", { ctrlKey: true, code: "Space" })).toBe(true);
+    expect(press("+", { ctrlKey: true, shiftKey: true, code: "Equal" })).toBe(true);
+    expect(grid(e)).toEqual([["a+b", "c"], ["d", "e", "f"]]);
+  });
+
+  it("senza celle scelte Invio, Ctrl+D e Ctrl+«+» restano del testo", () => {
+    const e = engine([["a", "b"], ["c", "d"]]);
+    e.select(at(e, "a") + 1);
+    expect(press("d", { ctrlKey: true, code: "KeyD" })).toBe(false);
+    expect(press("+", { ctrlKey: true, shiftKey: true, code: "Equal" })).toBe(false);
+    expect(selectedCells(e.state)).toBeNull();
+    expect(grid(e)).toEqual([["a", "b"], ["c", "d"]]);
+  });
+
   it("copia le celle scelte in TSV e in una tabella HTML", () => {
     const e = engine([["a", "b"], ["c", "d"]]);
     e.select(at(e, "a") + 1);
@@ -128,35 +187,100 @@ describe("le tabelle del documento", () => {
 });
 
 describe("la prova comune della Tabella, sul documento", () => {
-  const target: ConformanceTarget = {
-    mode: "document",
-    caps: { insertRows: true, deleteRows: false, moveRows: false, insertColumns: false, deleteColumns: false, moveColumns: false, sort: false, align: false, merge: true, headerRows: 0 },
-    bounded: true,
-    delegates: false,
+  const target: ConformanceTarget = { mode: "document", caps: DOCUMENT_TABLE_CAPS, bounded: true, delegates: false };
+
+  /// La cella del cursore.
+  const here = (e: RichEngine) => {
+    const found = cellAt(e.state.selection.$head)!;
+    return { row: found.box.row, column: found.box.column };
   };
+
+  /// Un tasto come lo premerebbe la persona: una freccia senza Maiusc che la
+  /// tabella lascia al testo il browser la porta nella cella accanto. Qui il
+  /// cursore va alla fine del testo di quella cella.
+  function key(e: RichEngine, name: string, init: KeyboardEventInit): void {
+    if (press(name, init)) return;
+    const step = ({ ArrowUp: [-1, 0], ArrowDown: [1, 0], ArrowLeft: [0, -1], ArrowRight: [0, 1] } as Record<string, [number, number]>)[name];
+    if (!step || init.shiftKey || init.ctrlKey) return;
+    const found = cellAt(e.state.selection.$head);
+    if (!found) return;
+    const next = cellBoxes(found.table, found.tablePos).find((box) => box.row === found.box.row + step[0] && box.column === found.box.column + step[1]);
+    if (next) e.select(next.pos + next.node.nodeSize - 2);
+  }
+
+  /// Un evento degli appunti sul testo del documento, con gli appunti finti.
+  function clipboard(kind: "cut" | "copy" | "paste", store: ConformanceClipboard): void {
+    const event = new Event(kind, { bubbles: true, cancelable: true });
+    Object.defineProperty(event, "clipboardData", {
+      value: {
+        setData: (type: string, value: string) => {
+          if (type === "text/plain") store.text = value;
+          if (type === "text/html") store.html = value;
+        },
+        getData: (type: string) => (type === "text/plain" ? store.text : type === "text/html" ? store.html : ""),
+      },
+    });
+    document.querySelector<HTMLElement>(".rich-content")!.dispatchEvent(event);
+  }
+
+  /// `refused` raccoglie i comandi che il documento non ha eseguito.
+  function driver(e: RichEngine, refused: string[] = []): ConformanceDriver {
+    return {
+      key: (name, init) => key(e, name, init),
+      command: (id) => {
+        if (!e.run(id)) refused.push(id);
+      },
+      clipboard,
+      cells: () => grid(e),
+      active: () => here(e),
+      range: () => {
+        const chosen = selectedCells(e.state);
+        if (chosen) return chosen.range;
+        const cell = here(e);
+        return { r0: cell.row, c0: cell.column, r1: cell.row, c1: cell.column };
+      },
+      cut: () => cutCells(e.state),
+      ranges: () => {
+        const chosen = selectedCells(e.state);
+        return chosen ? chosen.others.length + 1 : 1;
+      },
+    };
+  }
+
+  /// Il documento della prova, col cursore alla fine del testo della prima cella.
+  function start(test: ConformanceCase): RichEngine {
+    const e = engine(test.rows.map((row) => [...row]));
+    const first = test.rows[0]![0]!;
+    e.select(at(e, first) + first.length);
+    return e;
+  }
+
   for (const test of TABLE_CONFORMANCE) {
-    it.runIf(caseApplies(test, target))(test.name, async () => {
-      const e = engine(test.rows.map((row) => [...row]));
-      // Il cursore parte alla fine del testo della prima cella.
-      const first = test.rows[0]![0]!;
-      e.select(at(e, first) + first.length);
-      const seen = await playCase(test, {
-        key: (name, init) => void press(name, init),
-        command: (id) => void e.run(id),
-        cells: () => grid(e),
-        active: () => {
-          const here = cellAt(e.state.selection.$head)!;
-          return { row: here.box.row, column: here.box.column };
-        },
-        range: () => {
-          const chosen = selectedCells(e.state);
-          if (chosen) return chosen.range;
-          const here = cellAt(e.state.selection.$head)!;
-          return { r0: here.box.row, c0: here.box.column, r1: here.box.row, c1: here.box.column };
-        },
+    if (caseApplies(test, target)) {
+      it(test.name, async () => {
+        const seen = await playCase(test, driver(start(test)));
+        const expected = expectedOf(test, target);
+        expect(seenOf(seen, expected)).toEqual(expected);
       });
-      const expected = expectedOf(test, target);
-      expect(seenOf(seen, expected)).toEqual(expected);
+      continue;
+    }
+    const reason = caseAbsence(test, target);
+    if (reason === null) continue;
+    it(`${test.name}: assente (${reason})`, async () => {
+      const e = start(test);
+      const refused: string[] = [];
+      const seen = await playCase(test, driver(e, refused));
+      if (test.absent?.document) {
+        // Un gesto che manca apposta la Tabella non lo prende: i tasti restano
+        // del testo (Invio va a capo), la forma della tabella non cambia e
+        // non ci sono celle scelte né segni del taglio.
+        expect(seen.cells.map((row) => row.length)).toEqual(test.rows.map((row) => row.length));
+        expect(selectedCells(e.state)).toBeNull();
+        expect(cutCells(e.state)).toBeNull();
+      } else {
+        // Manca una capacità: il documento rifiuta il comando che la chiede.
+        expect(refused.length).toBeGreaterThan(0);
+      }
     });
   }
 });

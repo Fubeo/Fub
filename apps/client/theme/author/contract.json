@@ -684,6 +684,7 @@
     "is-fill",
     "has-cell-selection",
     "is-cell-selected",
+    "is-cell-cut",
     "cm-focused",
     "cm-scroller",
     "cm-activeLine",
@@ -2293,6 +2294,7 @@
     "is-fill": "segno",
     "has-cell-selection": "contenuto",
     "is-cell-selected": "segno",
+    "is-cell-cut": "segno",
     "cm-focused": "contenuto",
     "cm-scroller": "contenuto",
     "cm-activeLine": "segno",
@@ -5147,7 +5149,8 @@
       "part": "tabella",
       "hooks": [
         "has-cell-selection",
-        "is-cell-selected"
+        "is-cell-selected",
+        "is-cell-cut"
       ],
       "states": [
         "rest",
@@ -8876,7 +8879,7 @@
   "counts": {
     "required_roles": 154,
     "optional_roles": 66,
-    "hooks": 1607,
+    "hooks": 1608,
     "state_names": 7,
     "assigned_states": 765,
     "components": 226,

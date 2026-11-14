@@ -62,4 +62,25 @@ describe("i tasti della Tabella", () => {
       .toEqual({ kind: "move", rows: -1, columns: 0, extend: true });
     expect(documentIntent(press("ArrowDown"), { start: true, end: true })).toBeNull();
   });
+
+  it("nel documento: i gesti del foglio che il testo non usa valgono sempre, gli altri con celle scelte", () => {
+    const edge = { start: true, end: true };
+    const cells = { cells: true, adding: false };
+    expect(documentIntent(press(" ", { ctrlKey: true }), edge)).toEqual({ kind: "whole", which: "column" });
+    expect(documentIntent(press(" ", { ctrlKey: true, shiftKey: true }), edge)).toEqual({ kind: "whole", which: "table" });
+    expect(documentIntent(press("F8", { shiftKey: true }), edge)).toEqual({ kind: "add-ranges" });
+    // Nel testo Maiusc+Spazio scrive, Invio va a capo, Ctrl+R allinea.
+    expect(documentIntent(press(" ", { shiftKey: true }), edge)).toBeNull();
+    expect(documentIntent(press("Enter"), edge)).toBeNull();
+    expect(documentIntent(press("r", { ctrlKey: true, code: "KeyR" }), edge)).toBeNull();
+    expect(documentIntent(press("+", { ctrlKey: true, shiftKey: true, code: "Equal" }), edge)).toBeNull();
+    expect(documentIntent(press(" ", { shiftKey: true }), edge, cells)).toEqual({ kind: "whole", which: "row" });
+    expect(documentIntent(press("Enter", { shiftKey: true }), edge, cells)).toEqual({ kind: "enter", step: -1 });
+    expect(documentIntent(press("d", { ctrlKey: true, code: "KeyD" }), edge, cells)).toEqual({ kind: "fill", direction: "down" });
+    expect(documentIntent(press("-", { ctrlKey: true, code: "Minus" }), edge, cells)).toEqual({ kind: "structure", change: "delete" });
+    // Ctrl con una freccia resta del testo.
+    expect(documentIntent(press("ArrowDown", { ctrlKey: true }), edge, cells)).toBeNull();
+    expect(documentIntent(press("ArrowRight"), edge, { cells: true, adding: true })).toEqual({ kind: "move", rows: 0, columns: 1, extend: false });
+    expect(documentIntent(press("ArrowRight"), edge, cells)).toBeNull();
+  });
 });

@@ -5,7 +5,13 @@
 //
 // Gli adattatori sono di due modi (`keys.ts`): «foglio» (la tabella delle
 // note, la cornice, il foglio) e «documento» (le tabelle del docx, dove il
-// cursore resta nel testo della cella). Ogni caso dice in quali modi vale.
+// cursore resta nel testo della cella). Un caso vale in tutti e due, se non
+// dice altrimenti (`modes`); dove il gesto non ha senso lo dice col perché
+// (`absent`), e la prova lì controlla che non cambi niente.
+//
+// Nel modo documento il cursore parte alla fine del testo della prima cella,
+// e una freccia senza Maiusc che la tabella lascia al testo il driver la
+// porta alla fine del testo della cella accanto, come farebbe il browser.
 // Il foglio non ha un bordo: i casi che contano sul bordo della tabella
 // (`bounded`) lì confrontano soltanto la cella attiva e le celle. Il foglio
 // esegue alcuni gesti coi comandi del suo catalogo: lì il caso controlla il
@@ -30,8 +36,11 @@ export type ConformanceStep =
 export interface ConformanceCase {
   readonly name: string;
   readonly rows: readonly (readonly string[])[];
-  /// I modi in cui il caso vale (di solito soltanto «foglio»).
+  /// I modi in cui il caso vale (di solito tutti e due).
   readonly modes?: readonly ConformanceMode[];
+  /// I modi in cui il gesto manca apposta, col perché: lì la prova non lo
+  /// salta, controlla che il gesto non cambi niente (`caseAbsence`).
+  readonly absent?: Partial<Record<ConformanceMode, string>>;
   /// Le capacità che il caso chiede: senza, l'adattatore lo salta.
   readonly needs?: readonly (keyof Omit<TableCaps, "headerRows">)[];
   /// Il risultato conta sul bordo della tabella: dove non c'è (il foglio) si
@@ -96,9 +105,23 @@ export interface ConformanceResult {
 /// Se l'adattatore `target` può eseguire il caso.
 export function caseApplies(test: ConformanceCase, target: TableCaps | ConformanceTarget): boolean {
   const full: ConformanceTarget = "mode" in target ? target : { mode: "sheet", caps: target, bounded: true, delegates: false };
-  if (!(test.modes ?? ["sheet"]).includes(full.mode)) return false;
+  if (!(test.modes ?? ALL_MODES).includes(full.mode) || test.absent?.[full.mode]) return false;
   if (full.delegates && test.delegated) return true;
   return (test.needs ?? []).every((need) => full.caps[need]);
+}
+
+const ALL_MODES: readonly ConformanceMode[] = ["sheet", "document"];
+
+/// Perché il gesto del caso manca apposta in `target`: il modo lo dice
+/// (`absent`), o manca una capacità che il caso chiede. `null` se il caso
+/// vale, o se è una variante di un altro modo (`modes`).
+export function caseAbsence(test: ConformanceCase, target: ConformanceTarget): string | null {
+  if (!(test.modes ?? ALL_MODES).includes(target.mode)) return null;
+  const reason = test.absent?.[target.mode];
+  if (reason) return reason;
+  if (target.delegates && test.delegated) return null;
+  const missing = (test.needs ?? []).filter((need) => !target.caps[need]);
+  return missing.length > 0 ? `il formato non ha la capacità ${missing.join(", ")}` : null;
 }
 
 /// Ciò che il test si aspetta da `target`: i campi che lì non contano mancano.
@@ -142,8 +165,15 @@ export async function playCase(test: ConformanceCase, driver: ConformanceDriver)
 }
 
 const ROWS = [["Nome", "Voto"], ["Ada", "10"], ["Bea", "9"]] as const;
+/// Una tabella di tre colonne, per le righe intere.
+const WIDE = [["Nome", "Voto", "Nota"], ["Ada", "10", "bene"], ["Bea", "9", "ok"]] as const;
 /// Una tabella coi buchi, per il bordo dei dati.
 const HOLES = [["Nome", "Voto"], ["Ada", ""], ["", "9"], ["Cleo", "7"]] as const;
+
+/// Nel documento Ctrl con una freccia è del testo.
+const WORD_JUMP = "nel testo Ctrl con una freccia salta di parola: nel documento non va al bordo dei dati";
+/// Nel documento non c'è una cella aperta.
+const IN_TEXT = "il cursore è già nel testo della cella: non c'è una cella da aprire, riscrivere o annullare";
 
 export const TABLE_CONFORMANCE: readonly ConformanceCase[] = [
   {
@@ -154,24 +184,28 @@ export const TABLE_CONFORMANCE: readonly ConformanceCase[] = [
   },
   {
     name: "Ctrl con una freccia va al bordo",
+    absent: { document: WORD_JUMP },
     rows: ROWS,
     steps: [{ key: "ArrowDown", mod: true }, { key: "ArrowRight", mod: true }],
     active: { row: 2, column: 1 },
   },
   {
     name: "Ctrl con una freccia si ferma al bordo dei dati",
+    absent: { document: WORD_JUMP },
     rows: HOLES,
     steps: [{ key: "ArrowDown", mod: true }],
     active: { row: 1, column: 0 },
   },
   {
     name: "Ctrl con una freccia da una cella in fondo ai dati salta alla prima piena",
+    absent: { document: WORD_JUMP },
     rows: HOLES,
     steps: [{ key: "ArrowDown", mod: true }, { key: "ArrowDown", mod: true }],
     active: { row: 3, column: 0 },
   },
   {
     name: "un carattere riscrive la cella, Invio conferma e scende",
+    absent: { document: IN_TEXT },
     rows: ROWS,
     steps: [{ key: "ArrowDown" }, { key: "Z" }, { key: "Enter" }],
     cells: [["Nome", "Voto"], ["Z", "10"], ["Bea", "9"]],
@@ -179,6 +213,7 @@ export const TABLE_CONFORMANCE: readonly ConformanceCase[] = [
   },
   {
     name: "Esc annulla la cella aperta",
+    absent: { document: IN_TEXT },
     rows: ROWS,
     steps: [{ key: "ArrowDown" }, { key: "F2" }, { key: "Escape" }],
     cells: [["Nome", "Voto"], ["Ada", "10"], ["Bea", "9"]],
@@ -186,6 +221,7 @@ export const TABLE_CONFORMANCE: readonly ConformanceCase[] = [
   },
   {
     name: "Tab conferma la cella e va avanti lungo la riga",
+    absent: { document: IN_TEXT },
     rows: ROWS,
     steps: [{ key: "ArrowDown" }, { key: "Q" }, { key: "Tab" }],
     cells: [["Nome", "Voto"], ["Q", "10"], ["Bea", "9"]],
@@ -193,6 +229,9 @@ export const TABLE_CONFORMANCE: readonly ConformanceCase[] = [
   },
   {
     name: "Tab dall'ultima cella aggiunge una riga",
+    // Nel documento Ctrl+Fine va alla fine del documento: c'è la variante
+    // «documento: Tab dall'ultima cella aggiunge una riga».
+    modes: ["sheet"],
     needs: ["insertRows"],
     bounded: true,
     rows: ROWS,
@@ -207,12 +246,13 @@ export const TABLE_CONFORMANCE: readonly ConformanceCase[] = [
     cells: [["Nome", "Voto"], ["", ""], ["Bea", "9"]],
   },
   {
+    // Nel documento Maiusc+Spazio senza celle scelte scrive uno spazio.
     name: "Maiusc+Spazio sceglie la riga",
     bounded: true,
-    rows: ROWS,
-    steps: [{ key: "ArrowDown" }, { key: " ", shift: true, code: "Space" }],
+    rows: WIDE,
+    steps: [{ key: "ArrowDown" }, { key: "ArrowRight", shift: true }, { key: " ", shift: true, code: "Space" }],
     active: { row: 1, column: 0 },
-    range: { r0: 1, c0: 0, r1: 1, c1: 1 },
+    range: { r0: 1, c0: 0, r1: 1, c1: 2 },
   },
   {
     name: "Ctrl+Spazio sceglie la colonna",
@@ -246,23 +286,23 @@ export const TABLE_CONFORMANCE: readonly ConformanceCase[] = [
   {
     name: "il taglio segna le celle e non le svuota",
     rows: ROWS,
-    steps: [{ key: "ArrowDown" }, { clipboard: "cut" }],
+    steps: [{ key: "ArrowDown" }, { key: "ArrowRight", shift: true }, { clipboard: "cut" }],
     cells: [["Nome", "Voto"], ["Ada", "10"], ["Bea", "9"]],
-    cut: { r0: 1, c0: 0, r1: 1, c1: 0 },
+    cut: { r0: 1, c0: 0, r1: 1, c1: 1 },
   },
   {
     name: "Esc toglie il segno del taglio",
     rows: ROWS,
-    steps: [{ key: "ArrowDown" }, { clipboard: "cut" }, { key: "Escape" }],
+    steps: [{ key: "ArrowDown" }, { key: "ArrowRight", shift: true }, { clipboard: "cut" }, { key: "Escape" }],
     cells: [["Nome", "Voto"], ["Ada", "10"], ["Bea", "9"]],
     cut: null,
   },
   {
     name: "l'incolla dopo il taglio sposta le celle in un passo",
     rows: ROWS,
-    steps: [{ key: "ArrowDown" }, { clipboard: "cut" }, { key: "ArrowDown" }, { key: "ArrowRight" }, { clipboard: "paste" }],
-    cells: [["Nome", "Voto"], ["", "10"], ["Bea", "Ada"]],
-    active: { row: 2, column: 1 },
+    steps: [{ key: "ArrowDown" }, { key: "ArrowRight", shift: true }, { clipboard: "cut" }, { key: "ArrowDown" }, { clipboard: "paste" }],
+    cells: [["Nome", "Voto"], ["", ""], ["Ada", "10"]],
+    active: { row: 2, column: 0 },
     cut: null,
   },
   {
@@ -284,7 +324,7 @@ export const TABLE_CONFORMANCE: readonly ConformanceCase[] = [
     needs: ["insertRows"],
     delegated: "home.insertRows",
     rows: ROWS,
-    steps: [{ key: "ArrowDown" }, { key: " ", shift: true, code: "Space" }, { key: "+", mod: true, shift: true, code: "Equal" }],
+    steps: [{ key: "ArrowDown" }, { key: "ArrowRight", shift: true }, { key: " ", shift: true, code: "Space" }, { key: "+", mod: true, shift: true, code: "Equal" }],
     cells: [["Nome", "Voto"], ["", ""], ["Ada", "10"], ["Bea", "9"]],
     active: { row: 1, column: 0 },
   },
@@ -293,7 +333,7 @@ export const TABLE_CONFORMANCE: readonly ConformanceCase[] = [
     needs: ["deleteRows"],
     delegated: "home.deleteRows",
     rows: ROWS,
-    steps: [{ key: "ArrowDown" }, { key: " ", shift: true, code: "Space" }, { key: "-", mod: true, code: "Minus" }],
+    steps: [{ key: "ArrowDown" }, { key: "ArrowRight", shift: true }, { key: " ", shift: true, code: "Space" }, { key: "-", mod: true, code: "Minus" }],
     cells: [["Nome", "Voto"], ["Bea", "9"]],
   },
   {
@@ -334,8 +374,8 @@ export const TABLE_CONFORMANCE: readonly ConformanceCase[] = [
     cells: [["Voto", "Nome"], ["10", "Ada"], ["9", "Bea"]],
     active: { row: 0, column: 0 },
   },
-  // ── Nel modo «documento» il cursore parte alla fine del testo della prima
-  // cella: le frecce restano del testo finché non escono dalla cella.
+  // ── Le varianti del modo «documento»: le frecce restano del testo finché
+  // non escono dalla cella, e Ctrl+Z annulla un gesto in un passo.
   {
     name: "documento: Tab va alla cella dopo",
     modes: ["document"],
@@ -343,6 +383,14 @@ export const TABLE_CONFORMANCE: readonly ConformanceCase[] = [
     steps: [{ key: "Tab" }],
     cells: [["Nome", "Voto"], ["Ada", "10"], ["Bea", "9"]],
     active: { row: 0, column: 1 },
+  },
+  {
+    name: "documento: Tab dall'ultima cella aggiunge una riga",
+    modes: ["document"],
+    rows: ROWS,
+    steps: [{ key: "Tab" }, { key: "Tab" }, { key: "Tab" }, { key: "Tab" }, { key: "Tab" }, { key: "Tab" }],
+    cells: [["Nome", "Voto"], ["Ada", "10"], ["Bea", "9"], ["", ""]],
+    active: { row: 3, column: 0 },
   },
   {
     name: "documento: Maiusc con una freccia che esce dalla cella sceglie le celle",
@@ -357,5 +405,32 @@ export const TABLE_CONFORMANCE: readonly ConformanceCase[] = [
     rows: ROWS,
     steps: [{ key: "ArrowDown", shift: true }, { key: "Delete" }],
     cells: [["", "Voto"], ["", "10"], ["Bea", "9"]],
+  },
+  {
+    name: "documento: Ctrl+Z annulla in un passo una riga inserita",
+    modes: ["document"],
+    rows: ROWS,
+    steps: [
+      { key: "ArrowDown" }, { key: "ArrowRight", shift: true }, { key: " ", shift: true, code: "Space" },
+      { key: "+", mod: true, shift: true, code: "Equal" }, { key: "z", mod: true, code: "KeyZ" },
+    ],
+    cells: [["Nome", "Voto"], ["Ada", "10"], ["Bea", "9"]],
+  },
+  {
+    name: "documento: Ctrl+Z annulla in un passo un riempimento",
+    modes: ["document"],
+    rows: ROWS,
+    steps: [{ key: "ArrowDown" }, { key: "ArrowDown", shift: true }, { key: "d", mod: true, code: "KeyD" }, { key: "z", mod: true, code: "KeyZ" }],
+    cells: [["Nome", "Voto"], ["Ada", "10"], ["Bea", "9"]],
+  },
+  {
+    name: "documento: Ctrl+Z annulla in un passo un taglio incollato",
+    modes: ["document"],
+    rows: ROWS,
+    steps: [
+      { key: "ArrowDown" }, { key: "ArrowRight", shift: true }, { clipboard: "cut" },
+      { key: "ArrowDown" }, { clipboard: "paste" }, { key: "z", mod: true, code: "KeyZ" },
+    ],
+    cells: [["Nome", "Voto"], ["Ada", "10"], ["Bea", "9"]],
   },
 ];

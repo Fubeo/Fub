@@ -178,18 +178,60 @@ export function editingIntent(event: KeyLike, mode: "replace" | "edit"): Editing
   }
 }
 
+/// Che cosa sa il modo documento della tabella di adesso: se ci sono celle
+/// scelte (`cells`) e se si stanno aggiungendo intervalli con Maiusc+F8
+/// (`adding`).
+export interface DocumentCells {
+  readonly cells: boolean;
+  readonly adding: boolean;
+}
+
 /// Nel modo documento: Tab e Maiusc+Tab di cella in cella, Maiusc con una
 /// freccia verso fuori della cella per scegliere celle. `atEdge` dice se il
 /// cursore è all'inizio (`start`) o alla fine (`end`) del testo della cella.
-export function documentIntent(event: KeyLike, atEdge: { readonly start: boolean; readonly end: boolean }): TableIntent | null {
+///
+/// I gesti del foglio che nel testo non scrivono niente valgono sempre dentro
+/// una tabella: Ctrl+Spazio la colonna, Ctrl+Maiusc+Spazio la tabella,
+/// Maiusc+F8. Quelli che nel testo hanno già un senso valgono soltanto con
+/// celle scelte, perché il testo li tiene: Maiusc+Spazio (uno spazio scritto
+/// tenendo Maiusc), Invio, Ctrl+D, Ctrl+R (allinea a destra), Ctrl+«+» (apice)
+/// e Ctrl+«−». Mentre si aggiungono intervalli le frecce muovono la cella.
+/// Ctrl con una freccia resta del testo (salta di parola): nel documento non
+/// va al bordo dei dati.
+export function documentIntent(
+  event: KeyLike,
+  atEdge: { readonly start: boolean; readonly end: boolean },
+  table: DocumentCells = { cells: false, adding: false },
+): TableIntent | null {
+  const whole = wholeKey(event);
+  if (whole && (whole !== "row" || table.cells)) return { kind: "whole", which: whole };
+  if (addRangesKey(event)) return { kind: "add-ranges" };
+  if (table.cells) {
+    const fill = fillKey(event);
+    if (fill) return { kind: "fill", direction: fill };
+    const structure = structureKey(event);
+    if (structure) return { kind: "structure", change: structure };
+  }
   if (event.ctrlKey || event.metaKey || event.altKey) return null;
+  if (event.key === "Escape") return { kind: "leave" };
   if (event.key === "Tab") return { kind: "tab", step: event.shiftKey ? -1 : 1 };
+  if (event.key === "Enter" && table.cells) return { kind: "enter", step: event.shiftKey ? -1 : 1 };
+  const step = ARROWS[event.key];
+  if (!step) return null;
+  if (table.adding && !event.shiftKey) return { kind: "move", rows: step[0], columns: step[1], extend: false };
   if (!event.shiftKey) return null;
   if ((event.key === "ArrowRight" || event.key === "ArrowDown") && atEdge.end) {
-    return { kind: "move", rows: event.key === "ArrowDown" ? 1 : 0, columns: event.key === "ArrowRight" ? 1 : 0, extend: true };
+    return { kind: "move", rows: step[0], columns: step[1], extend: true };
   }
   if ((event.key === "ArrowLeft" || event.key === "ArrowUp") && atEdge.start) {
-    return { kind: "move", rows: event.key === "ArrowUp" ? -1 : 0, columns: event.key === "ArrowLeft" ? -1 : 0, extend: true };
+    return { kind: "move", rows: step[0], columns: step[1], extend: true };
   }
   return null;
 }
+
+const ARROWS: Readonly<Record<string, readonly [number, number]>> = {
+  ArrowUp: [-1, 0],
+  ArrowDown: [1, 0],
+  ArrowLeft: [0, -1],
+  ArrowRight: [0, 1],
+};
