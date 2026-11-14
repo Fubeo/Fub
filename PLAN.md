@@ -5554,7 +5554,7 @@ riportare, mai una soglia da alzare: ci-soglia (a)).
 Fatto quando: `gh pr checks 302` è tutto verde; il rapporto della
 revisione non ha errori aperti; l'utente ha detto sì al merge.
 Prova: gh pr checks 302; scripts/check.sh
-Stato: [~] PR #302 pronta (CI completa in corso) · revisione `code-review high` fatta il 2026-11-14: nove difetti, diventati T101 (lo stesso contenuto, kernel e host) e T102 (le schede che si chiudono, client); il merge dopo T101, T102 e la CI verde (dal 2026-11-10 il merge lo decide l'agente)
+Stato: [~] PR #302 pronta (CI completa in corso) · revisione `code-review high` fatta il 2026-11-14: nove difetti, diventati T101 (lo stesso contenuto, kernel e host) e T102 (le schede che si chiudono, client); T101 e T102 integrati; il merge dopo la CI completa verde (dal 2026-11-10 il merge lo decide l'agente)
 
 ## T91 · Tre difetti della lavagna visti dal collaudo
 
@@ -5926,7 +5926,7 @@ dell'impronta non torna indietro; sei nomi occupati fanno una ricerca sola.
 I test di T30–T32 restano verdi.
 Prova: cargo test -p fub-kernel --test same_content; cargo test -p fub-host;
 npx vitest run src/editors/media; scripts/check.sh --rapido
-Stato: [ ] da fare
+Stato: [x] fatto · coder/n6-t101 integrato (3b4b6d116) dopo tre giri di revisione `code-review medium`: impronte imparate col testimone (segno e identità) che `store_entries` scarta se il file è un altro, forma corrente da `Revision::is_current_form`, la cartella risolta una volta, secondo giro dell'host solo dopo un budget finito, finto allineato (stessa estensione, mai 0 byte, cartelle escluse); check --rapido verde 35 passi
 
 ## T102 · Le schede che si chiudono non perdono niente
 
