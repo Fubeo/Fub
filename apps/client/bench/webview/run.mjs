@@ -7,7 +7,7 @@
 //   node bench/webview/run.mjs --app=../../target/release/fub [--only=S1,S2,S3,C1]
 //        [--driver=tauri-driver] [--native-driver=/usr/bin/WebKitWebDriver]
 //        [--budgets=ci|targets] [--out=bench/.output/webview] [--dist=dist]
-//        [--x11]  (sotto Xvfb su una sessione Wayland: l'app resta in X11)
+//        [--x11 | --wayland]  (con WAYLAND_DISPLAY: --x11 sotto Xvfb, --wayland sullo schermo)
 //
 // Avvia `tauri-driver` con un vault e una configurazione scritti in una
 // cartella temporanea (`fixtures.mjs`): la sonda è accesa dalle impostazioni
@@ -32,6 +32,7 @@ import { pendenza, settled } from "./memory.mjs";
 import { CANVAS_SCRIPT, COMMITS, OPENS, SIZES, builtModule } from "./canvas.mjs";
 import { INDEXING_SCRIPT } from "./indexing.mjs";
 import { TILES_SCRIPT } from "./tiles.mjs";
+import { waylandProblem } from "./display.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const args = Object.fromEntries(process.argv.slice(2).map((arg) => {
@@ -1320,12 +1321,8 @@ async function main() {
   const root = mkdtempSync(join(tmpdir(), "fub-webview-"));
   const { vault, config } = writeFixtures(root);
   benchVault = vault;
-  // Con `WAYLAND_DISPLAY` GTK apre la finestra in Wayland, anche dentro Xvfb:
-  // sullo schermo di chi misura, non sul display che il driver muove con il
-  // puntatore. `--x11` toglie la variabile al driver e chiede X11.
-  if (process.env.WAYLAND_DISPLAY && !x11) {
-    console.log("! WAYLAND_DISPLAY è impostato: la finestra va sullo schermo Wayland. Sotto Xvfb su una sessione Wayland aggiungi --x11.");
-  }
+  // `--x11` toglie `WAYLAND_DISPLAY` al driver e chiede X11: la guardia in
+  // fondo al file ha già detto che cosa scegliere (`display.mjs`).
   const driverEnv = { ...process.env, FUB_VAULT: vault, FUB_CONFIG_DIR: config };
   if (x11) {
     delete driverEnv.WAYLAND_DISPLAY;
@@ -1455,4 +1452,12 @@ async function main() {
   }
 }
 
-await main();
+// Prima di tutto il resto: con `WAYLAND_DISPLAY` e senza una scelta il banco non
+// scrive fixture e non avvia il driver (`display.mjs`).
+const problem = waylandProblem(process.env, args);
+if (problem) {
+  console.error(problem);
+  process.exitCode = 2;
+} else {
+  await main();
+}
