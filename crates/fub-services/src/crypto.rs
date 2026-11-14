@@ -75,13 +75,20 @@ impl KdfParams {
 }
 
 /// Deriva 32 B di chiave da passphrase + parametri (PBKDF2-HMAC-SHA256).
+///
+/// La regola dei parametri vale qui, dove si deriva, per ogni chiamante
+/// (buste della VDK, password degli account): soltanto una coppia di versione
+/// e iterazioni di [`kdf_iterations`], mai oltre [`KDF_MAX_ITERATIONS`].
 pub fn derive_kek(passphrase: &str, params: &KdfParams) -> Result<[u8; 32], String> {
-    let salt = params.salt()?;
-    let iters = NonZeroU32::new(params.iterations)
-        .ok_or_else(|| "kdf iterations must be nonzero".to_string())?;
+    if kdf_iterations(params.ver) != Some(params.iterations) {
+        return Err("unsupported kdf parameters".to_string());
+    }
     if params.iterations > KDF_MAX_ITERATIONS {
         return Err("kdf iterations above limit".to_string());
     }
+    let salt = params.salt()?;
+    let iters = NonZeroU32::new(params.iterations)
+        .ok_or_else(|| "kdf iterations must be nonzero".to_string())?;
     let mut out = [0u8; 32];
     pbkdf2::derive(
         pbkdf2::PBKDF2_HMAC_SHA256,
@@ -409,5 +416,18 @@ mod tests {
             ..KdfParams::fresh().unwrap()
         };
         assert!(derive_kek("passphrase", &huge).is_err());
+        // La regola vale dove si deriva: una coppia che nessuna versione ha si
+        // rifiuta anche sotto il tetto.
+        for (ver, iterations) in [(1, KDF_ITERATIONS_V2), (2, KDF_ITERATIONS_V1), (3, 1_000)] {
+            let odd = KdfParams {
+                ver,
+                iterations,
+                ..KdfParams::fresh().unwrap()
+            };
+            assert!(
+                derive_kek("passphrase", &odd).is_err(),
+                "{ver}/{iterations}"
+            );
+        }
     }
 }

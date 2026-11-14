@@ -716,17 +716,43 @@ fn http_request(
             _ => PluginError::Io("sync transport failed".into()),
         })?;
     if !(200..300).contains(&response.status) {
-        let path_base = path.split('?').next().unwrap_or(path);
-        let detail = format!("sync {path_base} -> {}", response.status);
-        return Err(match response.status {
-            401 | 403 | 429 => PluginError::PermissionDenied(detail.into()),
-            404 => PluginError::NotFound(detail.into()),
-            409 => PluginError::Conflict(detail.into()),
-            _ => PluginError::Io(detail.into()),
-        });
+        return Err(status_error(path, response.status, &response.body));
     }
     serde_json::from_slice(&response.body)
         .map_err(|_| PluginError::Internal("sync invalid JSON response".into()))
+}
+
+/// I codici con cui un server rifiuta i parametri KDF di una busta: quello
+/// di oggi e quelli dei server di prima, che chiedevano la loro sola versione.
+const KDF_REFUSALS: [&str; 4] = [
+    "unsupported wrap version",
+    "stale wrap version",
+    "bad wrap version",
+    "bad wrap iterations",
+];
+
+/// L'errore di una risposta del server che non è un successo. Un server di
+/// un'altra versione che non conosce i parametri KDF della busta è
+/// `Unserved` con un testo per chi legge, non un `400` muto.
+fn status_error(path: &str, status: u16, body: &[u8]) -> PluginError {
+    let code = serde_json::from_slice::<serde_json::Value>(body)
+        .ok()
+        .and_then(|value| value.get("error")?.as_str().map(str::to_owned));
+    if status == 400
+        && code
+            .as_deref()
+            .is_some_and(|code| KDF_REFUSALS.contains(&code))
+    {
+        return PluginError::Unserved(fub_abi::text::Text::key("host.sync.kdf_unsupported"));
+    }
+    let path_base = path.split('?').next().unwrap_or(path);
+    let detail = format!("sync {path_base} -> {status}");
+    match status {
+        401 | 403 | 429 => PluginError::PermissionDenied(detail.into()),
+        404 => PluginError::NotFound(detail.into()),
+        409 => PluginError::Conflict(detail.into()),
+        _ => PluginError::Io(detail.into()),
+    }
 }
 
 #[cfg(test)]
@@ -812,6 +838,31 @@ mod conflict_copy_tests {
             conflict_copy_id("a.md", "op-1").unwrap(),
             conflict_copy_id("a.md", "op-2").unwrap()
         );
+    }
+}
+
+#[cfg(test)]
+mod kdf_refusal_tests {
+    /// Un client nuovo davanti a un server di prima: la busta `ver=2` torna
+    /// `400 stale wrap version` (o `bad wrap version`), e chi legge riceve un
+    /// errore tipizzato col suo testo, non un `400` senza parole.
+    #[test]
+    fn a_server_that_does_not_know_the_kdf_version_is_a_typed_error() {
+        for code in super::KDF_REFUSALS {
+            let body = serde_json::to_vec(&serde_json::json!({ "error": code })).unwrap();
+            let error = super::status_error("/v1/sync/invite", 400, &body);
+            match error {
+                fub_abi::PluginError::Unserved(fub_abi::text::Text::Message(message)) => {
+                    assert_eq!(message.key, "host.sync.kdf_unsupported", "{code}");
+                }
+                other => panic!("{code}: {other:?}"),
+            }
+        }
+        let body = br#"{"error":"bad wrapped vdk"}"#;
+        assert!(matches!(
+            super::status_error("/v1/sync/invite", 400, body),
+            fub_abi::PluginError::Io(_)
+        ));
     }
 }
 

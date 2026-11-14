@@ -116,9 +116,14 @@ pub fn vault_kdf_fresh() -> Result<VaultKdfParams, String> {
     })
 }
 
-/// Deriva 32 B di KEK da passphrase + parametri (PBKDF2-HMAC-SHA256).
+/// Deriva 32 B di KEK da passphrase + parametri (PBKDF2-HMAC-SHA256), solo per
+/// una coppia di versione e iterazioni di [`vault_kdf_iterations`]: i
+/// parametri vengono dal server o da un file, e la regola vale dove si deriva.
 pub fn derive_vault_kek(passphrase: &str, params: &VaultKdfParams) -> Result<[u8; 32], String> {
     use std::num::NonZeroU32;
+    if vault_kdf_iterations(params.ver) != Some(params.iterations) {
+        return Err("unsupported kdf parameters".to_string());
+    }
     let salt = vault_b64_salt(&params.salt_b64)?;
     let iters = NonZeroU32::new(params.iterations)
         .ok_or_else(|| "kdf iterations must be nonzero".to_string())?;
@@ -1263,6 +1268,19 @@ mod vault_kdf_tests {
         let mut downgraded = value;
         downgraded["kdf"]["ver"] = 1.into();
         assert!(unwrap_for_passphrase("passphrase", &downgraded).is_err());
+
+        // La regola vale anche chiamando la derivazione da sola.
+        for (ver, iterations) in [(2, u32::MAX), (1, VAULT_KDF_ITERATIONS_V2), (3, 1_000)] {
+            let odd = VaultKdfParams {
+                ver,
+                iterations,
+                ..vault_kdf_fresh().unwrap()
+            };
+            assert!(
+                derive_vault_kek("passphrase", &odd).is_err(),
+                "{ver}/{iterations}"
+            );
+        }
     }
 }
 

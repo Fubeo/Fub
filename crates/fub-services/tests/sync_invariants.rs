@@ -1831,3 +1831,89 @@ fn an_invite_bound_to_an_account_refuses_everyone_else() {
     );
     assert_eq!(status, 200, "{body}");
 }
+
+/// La regola di transizione dei parametri KDF, a tutti e due gli ingressi
+/// della busta (caricamento della chiave e invito): `ver=1`/210.000, quella
+/// dei client di prima, e `ver=2`/600.000, quella dei client nuovi, passano;
+/// ogni altra coppia è `400 unsupported wrap version`.
+#[test]
+fn the_server_accepts_both_kdf_versions_and_nothing_else() {
+    use fub_services::crypto::{
+        derive_kek, wrap_vdk_with_kek, KdfParams, KDF_ITERATIONS_V1, KDF_ITERATIONS_V2,
+    };
+    let v2 = KdfParams::fresh().unwrap();
+    let v1 = KdfParams {
+        ver: 1,
+        iterations: KDF_ITERATIONS_V1,
+        ..KdfParams::fresh().unwrap()
+    };
+    let wrap = |params: KdfParams| {
+        let kek = derive_kek("passphrase del vault", &params).unwrap();
+        wrap_vdk_with_kek(&[5u8; 32], &kek, params).unwrap()
+    };
+    let (old, new) = (wrap(v1), wrap(v2));
+    let tampered = |base: &fub_services::crypto::WrappedVdk, ver: u32, iterations: u32| {
+        let mut envelope = base.clone();
+        envelope.kdf.ver = ver;
+        envelope.kdf.iterations = iterations;
+        envelope
+    };
+    let cases = [
+        (old.clone(), 200),
+        (new.clone(), 200),
+        (tampered(&old, 1, KDF_ITERATIONS_V2), 400),
+        (tampered(&new, 2, KDF_ITERATIONS_V1), 400),
+        (tampered(&new, 3, KDF_ITERATIONS_V2), 400),
+        (tampered(&new, 0, KDF_ITERATIONS_V2), 400),
+        (tampered(&new, 2, u32::MAX), 400),
+    ];
+    for (at, (envelope, expected)) in cases.into_iter().enumerate() {
+        let dir = temp_data_dir(&format!("kdf-transition-{at}"));
+        let mut state = open_state(&dir);
+        let owner = auth_for(&mut state, "kdf-owner");
+        let mut a = Replica::new("kdf");
+        let op = a.op("notes/kdf.md", OpKind::Create, "claim");
+        push(&mut state, &owner, &a.id, &[op]);
+        let stored = sync::handle(
+            &mut state,
+            "POST",
+            "/v1/sync/vault-key",
+            Some(&owner),
+            &serde_json::to_vec(&serde_json::json!({ "vault_id": VAULT, "wrapped": envelope }))
+                .unwrap(),
+        );
+        let invited = sync::handle(
+            &mut state,
+            "POST",
+            "/v1/sync/invite",
+            Some(&owner),
+            &serde_json::to_vec(&serde_json::json!({
+                "vault_id": VAULT, "role": "reader", "wrapped_vdk": envelope,
+            }))
+            .unwrap(),
+        );
+        let ok = |status: u16| {
+            if expected == 200 {
+                (200..300).contains(&status)
+            } else {
+                status == expected
+            }
+        };
+        assert!(
+            ok(stored.status),
+            "case {at}, key: {}",
+            String::from_utf8_lossy(&stored.body)
+        );
+        assert!(
+            ok(invited.status),
+            "case {at}, invite: {}",
+            String::from_utf8_lossy(&invited.body)
+        );
+        if expected == 400 {
+            for body in [&stored.body, &invited.body] {
+                let value: serde_json::Value = serde_json::from_slice(body).unwrap();
+                assert_eq!(value["error"], "unsupported wrap version", "case {at}");
+            }
+        }
+    }
+}

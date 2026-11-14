@@ -2,6 +2,22 @@
 
 use super::*;
 
+/// Una busta che il server accetta, all'invito e al caricamento della chiave.
+///
+/// La regola di transizione dei parametri KDF: il server accetta ogni coppia
+/// di versione e iterazioni che [`crate::crypto::kdf_iterations`] conosce
+/// (oggi `ver=1`/210.000 e `ver=2`/600.000) e nessun'altra, così un client
+/// che scrive ancora `ver=1` e uno che scrive già `ver=2` parlano allo stesso
+/// server. Una coppia sconosciuta è `unsupported wrap version`: il client la
+/// traduce in un errore tipizzato con un testo per chi legge.
+fn check_wrap(wrapped: &crate::crypto::WrappedVdk) -> Result<(), HttpResponse> {
+    if crate::crypto::kdf_iterations(wrapped.kdf.ver) != Some(wrapped.kdf.iterations) {
+        return Err(HttpResponse::err(400, "unsupported wrap version"));
+    }
+    crate::crypto::unwrap_vdk_shape_ok(wrapped)
+        .map_err(|_| HttpResponse::err(400, "bad wrapped vdk"))
+}
+
 pub(super) fn handle_invite(
     state: &mut ServiceState,
     auth: Option<&str>,
@@ -55,15 +71,12 @@ pub(super) fn handle_invite(
         return r;
     }
     // Validate an attached wrapped-VDK envelope structurally (opaque to the
-    // server: current KDF version, well-formed base64, 12 B nonce). The
+    // server: a known KDF version, well-formed base64, 12 B nonce). The
     // envelope is produced client-side with `crypto::wrap_vdk` from the
     // explicit vault passphrase — never the account password.
     if let Some(w) = &req.wrapped_vdk {
-        if w.kdf.ver != crate::crypto::KDF_VERSION {
-            return HttpResponse::err(400, "stale wrap version");
-        }
-        if crate::crypto::unwrap_vdk_shape_ok(w).is_err() {
-            return HttpResponse::err(400, "bad wrapped vdk");
+        if let Err(r) = check_wrap(w) {
+            return r;
         }
     }
     let dir = sync_dir_of(state);
@@ -296,11 +309,8 @@ pub(super) fn handle_vault_key_store(
     if let Err(r) = authorize(state, &resource, &account, Role::Owner) {
         return r;
     }
-    if req.wrapped.kdf.ver != crate::crypto::KDF_VERSION {
-        return HttpResponse::err(400, "stale wrap version");
-    }
-    if crate::crypto::unwrap_vdk_shape_ok(&req.wrapped).is_err() {
-        return HttpResponse::err(400, "bad wrapped vdk");
+    if let Err(r) = check_wrap(&req.wrapped) {
+        return r;
     }
     let dir = sync_dir_of(state);
     let mut shares = match load_shares(&dir) {
