@@ -296,6 +296,14 @@ da scaricare, sono i siti `https` e il loopback `http` (`127.0.0.1`,
 sito remoto parte soltanto se l'utente ha concesso quell'origine anche nelle opzioni
 (`apps/clipper/src/interpreter.js`).
 
+La chiave dell'assistente remoto, se l'utente la scrive nelle opzioni, sta
+nello spazio locale dell'estensione (`storage.local`, voce `fub-ai-key`): il
+popup la legge in memoria per la sola domanda e la dimentica dopo, e non
+entra mai in una pagina, in un indirizzo `fub://` o in una cattura. Il rischio
+che resta: chi legge il profilo del browser con i diritti dell'utente, o un
+difetto che esegua codice nella pagina delle opzioni, legge anche la chiave.
+Il pulsante «Forget API key» delle opzioni la toglie.
+
 La conversione della pagina in Markdown (`apps/clipper/src/convert.js`, gemella
 di `crates/fub-importers/src/html.rs`, che la usano anche gli importatori e il
 salvataggio del visore) legge un `href` come lo legge il browser: senza
