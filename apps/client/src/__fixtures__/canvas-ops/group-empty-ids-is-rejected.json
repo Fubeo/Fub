@@ -1,0 +1,8 @@
+{
+  "about": "group senza schede: un gruppo attorno al nulla non ha rettangolo. Invalid, con la ragione che dice di dare almeno una scheda.",
+  "before": { "nodes": [
+    { "id": "a", "type": "text", "x": 0, "y": 0, "width": 320, "height": 160, "text": "a" }
+  ] },
+  "ops": [{ "op": "group", "ids": [] }],
+  "expect": { "outcome": "rejected", "error": { "kind": "Invalid", "index": 0 } }
+}

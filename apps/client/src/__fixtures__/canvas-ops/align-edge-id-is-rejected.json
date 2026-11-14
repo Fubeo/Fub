@@ -1,0 +1,12 @@
+{
+  "about": "align di un arco: e1 è un arco, non una scheda, e align lavora solo sulle schede (UnknownNode).",
+  "before": {
+    "nodes": [
+      { "id": "a", "type": "text", "x": 0, "y": 0, "width": 100, "height": 60, "text": "a" },
+      { "id": "b", "type": "text", "x": 200, "y": 100, "width": 100, "height": 60, "text": "b" }
+    ],
+    "edges": [{ "id": "e1", "fromNode": "a", "toNode": "b" }]
+  },
+  "ops": [{ "op": "align", "ids": ["a", "e1"], "to": "top" }],
+  "expect": { "outcome": "rejected", "error": { "kind": "UnknownNode", "index": 0, "id": "e1" } }
+}

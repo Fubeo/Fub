@@ -15,7 +15,7 @@
   "ops": [
     { "op": "group", "ids": ["pi", "fi"], "label": "Acqua dolce" }
   ],
-  "needs": ["group"],
+  "needs": [],
   "checks": [
     { "in_group": { "label": "Acqua dolce", "texts": ["Pioggia", "Fiume"] } },
     { "count": { "kind": "group", "n": 1 } },

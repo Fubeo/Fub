@@ -202,7 +202,19 @@ fn ogni_operazione_ha_un_vettore() {
         }
     }
     for op in [
-        "add_card", "move", "resize", "connect", "remove", "set", "reorder",
+        "add_card",
+        "move",
+        "resize",
+        "connect",
+        "remove",
+        "set",
+        "reorder",
+        "color",
+        "align",
+        "distribute",
+        "duplicate",
+        "reverse",
+        "group",
     ] {
         assert!(seen.contains(op), "nessun vettore usa {op:?}");
     }
@@ -258,6 +270,53 @@ fn la_scheda_oltre_il_limite_e_too_many() {
     after.validate().expect("il modello di dopo è valido");
 }
 
+/// Duplicare e raggruppare oltre il limite danno `TooMany`, come aggiungere una
+/// scheda: la copia che porta a 100 000 entra, la successiva no. Un gruppo conta
+/// come scheda.
+#[test]
+fn duplicare_e_raggruppare_oltre_il_limite_e_too_many() {
+    let canvas = Canvas {
+        nodes: (0..99_999).map(|i| text_node(format!("n{i}"))).collect(),
+        ..Canvas::default()
+    };
+    let two: Vec<CanvasOp> =
+        serde_json::from_value(json!([{"op": "duplicate", "ids": ["n0", "n1"]}]))
+            .expect("l'operazione si legge");
+    let error = compile(&canvas, &two, 0).expect_err("due copie superano il limite");
+    assert!(
+        matches!(
+            error,
+            OpError::TooMany {
+                index: 0,
+                what: "nodes",
+                limit: 100_000
+            }
+        ),
+        "{error:?}"
+    );
+    let ops: Vec<CanvasOp> = serde_json::from_value(json!([
+        {"op": "duplicate", "ids": ["n0"]},
+        {"op": "group", "ids": ["n1"]}
+    ]))
+    .expect("le operazioni si leggono");
+    let error = compile(&canvas, &ops, 0).expect_err("il gruppo sarebbe la 100 001ª scheda");
+    assert!(
+        matches!(
+            error,
+            OpError::TooMany {
+                index: 1,
+                what: "nodes",
+                limit: 100_000
+            }
+        ),
+        "{error:?}"
+    );
+    let one = compile(&canvas, &ops[..1], 0).expect("la copia è la 100 000ª scheda");
+    let after = draft(&canvas, &one.patches).expect("le toppe si applicano");
+    assert_eq!(after.nodes.len(), 100_000);
+    after.validate().expect("il modello di dopo è valido");
+}
+
 /// SplitMix64 col seme 0 dà per primo 0xe220a8397b1dcdaf, il valore di
 /// riferimento dell'algoritmo; i seguenti sono quelli dei vettori.
 #[test]
@@ -304,7 +363,13 @@ fn le_operazioni_si_riscrivono_uguali() {
         {"op": "connect", "edge": {"fromNode": "a", "toNode": "b"}},
         {"op": "remove", "ids": ["a"]},
         {"op": "set", "id": "a", "fields": {"color": null}},
-        {"op": "reorder", "ids": ["a"]}
+        {"op": "reorder", "ids": ["a"]},
+        {"op": "align", "ids": ["a", "b"], "to": "middle"},
+        {"op": "distribute", "ids": ["a", "b", "c"], "axis": "y"},
+        {"op": "duplicate", "ids": ["a"]},
+        {"op": "duplicate", "ids": ["a"], "dx": 0, "dy": 216, "as": ["b"]},
+        {"op": "reverse", "ids": ["e1"]},
+        {"op": "group", "ids": ["a"], "id": "g", "label": "Gruppo", "color": "red"}
     ]);
     let read: Vec<CanvasOp> = serde_json::from_value(ops.clone()).expect("si leggono");
     assert_eq!(serde_json::to_value(&read).expect("si scrivono"), ops);

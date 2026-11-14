@@ -16,11 +16,11 @@
     { "op": "connect", "edge": { "fromNode": "co2", "toNode": "ri2", "fromSide": "right", "toSide": "left", "toEnd": "arrow" } }
   ],
   "ops": [
-    { "op": "duplicate", "ids": ["co", "ri"], "as": ["co2", "ri2"] },
+    { "op": "duplicate", "ids": ["co", "ri"], "dx": 0, "dy": 216, "as": ["co2", "ri2"] },
     { "op": "set", "id": "co2", "fields": { "text": "Costi bis" } },
     { "op": "set", "id": "ri2", "fields": { "text": "Ricavi bis" } }
   ],
-  "needs": ["duplicate"],
+  "needs": [],
   "checks": [
     { "has_card": { "text": "Costi" } },
     { "has_card": { "text": "Costi bis" } },

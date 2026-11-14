@@ -1,0 +1,33 @@
+{
+  "about": "duplicate con as: le copie si chiamano co2 e ri2, a dy 216 (sotto l'originale), e l'arco copiato non prende un id del seme (il primo del seme va a lui). Poi set le rinomina: la forma del compito 12.",
+  "before": {
+    "nodes": [
+      { "id": "co", "type": "text", "x": 0, "y": 0, "width": 320, "height": 160, "text": "Costi" },
+      { "id": "ri", "type": "text", "x": 400, "y": 0, "width": 320, "height": 160, "text": "Ricavi" }
+    ],
+    "edges": [
+      { "id": "e1", "fromNode": "co", "toNode": "ri", "fromSide": "right", "toSide": "left", "toEnd": "arrow" }
+    ]
+  },
+  "ops": [
+    { "op": "duplicate", "ids": ["co", "ri"], "dx": 0, "dy": 216, "as": ["co2", "ri2"] },
+    { "op": "set", "id": "co2", "fields": { "text": "Costi bis" } },
+    { "op": "set", "id": "ri2", "fields": { "text": "Ricavi bis" } }
+  ],
+  "expect": {
+    "outcome": "applied",
+    "after": {
+      "nodes": [
+        { "id": "co", "type": "text", "x": 0, "y": 0, "width": 320, "height": 160, "text": "Costi" },
+        { "id": "ri", "type": "text", "x": 400, "y": 0, "width": 320, "height": 160, "text": "Ricavi" },
+        { "id": "co2", "type": "text", "x": 0, "y": 216, "width": 320, "height": 160, "text": "Costi bis" },
+        { "id": "ri2", "type": "text", "x": 400, "y": 216, "width": 320, "height": 160, "text": "Ricavi bis" }
+      ],
+      "edges": [
+        { "id": "e1", "fromNode": "co", "toNode": "ri", "fromSide": "right", "toSide": "left", "toEnd": "arrow" },
+        { "id": "e220a8397b1dcdaf", "fromNode": "co2", "toNode": "ri2", "fromSide": "right", "toSide": "left", "toEnd": "arrow" }
+      ]
+    },
+    "created": ["co2", "ri2", "e220a8397b1dcdaf"]
+  }
+}

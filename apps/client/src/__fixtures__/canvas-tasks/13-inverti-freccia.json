@@ -17,7 +17,7 @@
   "ops": [
     { "op": "reverse", "ids": ["e1"] }
   ],
-  "needs": ["reverse"],
+  "needs": [],
   "checks": [
     { "has_edge": { "from_text": "Effetto", "to_text": "Causa" } },
     { "count": { "kind": "edge", "n": 1 } },

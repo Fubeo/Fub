@@ -938,7 +938,7 @@ fn ops_today_null_senza_needs_non_si_legge() {
     let task = Task::read(
         "prova",
         r#"{"about":"a","prompt":"b","before":{"nodes":[]},"ops_today":null,
-            "ops":[{"op":"align","ids":[],"to":"left"}],"checks":[]}"#,
+            "ops":[{"op":"from_mermaid","text":"flowchart LR"}],"checks":[]}"#,
     )
     .expect("il compito si legge");
     let errors = needs_errors(&task);
