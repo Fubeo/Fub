@@ -175,6 +175,9 @@ describe("la pastiglia della scadenza", () => {
       ["📅 2026-11-15", "task-due task-due-near"],
     ]);
     expect(pills[3]!.title).toContain("Data non leggibile");
+    // Un codice che è tutto la scadenza sta dentro la pastiglia, non intorno.
+    expect(pills[4]!.parentElement?.tagName).toBe("LI");
+    expect(pills[4]!.querySelector("code")?.textContent).toBe("📅 2026-11-15");
     // Il testo resta quello del file, e una seconda passata non ne aggiunge.
     expect(container.querySelector("li")?.textContent).toBe("Vicina 📅 2026-11-16");
     markTaskDues(container, "2026-11-14");
@@ -189,6 +192,7 @@ describe("la pastiglia della scadenza", () => {
     expect(pill?.textContent).toBe("📅 2026-11-16");
     expect(container.querySelector("li")?.textContent).toBe("Pagare 📅 2026-11-16 poi");
     // Il codice entra intero nella pastiglia: non se ne fa una copia.
+    // (Anche quando è tutto la scadenza: vedi «Nel codice» sopra.)
     expect(container.querySelectorAll("code")).toHaveLength(1);
     expect(pill?.querySelector("code")?.textContent).toBe("2026-11-16");
   });
@@ -273,6 +277,7 @@ describe("la pastiglia della scadenza", () => {
         "- [ ] Pagare 📅 `2026-11-17 mattina` poi",
         "- [ ] Su due righe",
         "  📅 2026-11-18",
+        "- [ ] Tutta nel codice `📅 2026-11-19`",
         "- [ ] Padre",
         "  ```",
         "  📅 2026-11-19",
@@ -284,9 +289,13 @@ describe("la pastiglia della scadenza", () => {
         ["📅 2026-11-16", "cm-fub-due cm-fub-due-near"],
         ["📅 2026-11-17 mattina", "cm-fub-due cm-fub-due-near"],
         ["📅 2026-11-18", "cm-fub-due cm-fub-due-near"],
+        ["📅 2026-11-19", "cm-fub-due cm-fub-due-near"],
       ]);
       // La pastiglia contiene il codice intero, non ne è tagliata.
       expect(pills[1]!.querySelector(".cm-fub-code")?.textContent).toBe("2026-11-17 mattina");
+      // Un codice che è tutto la scadenza sta dentro la pastiglia, non intorno.
+      expect(pills[3]!.closest(".cm-fub-code")).toBeNull();
+      expect(pills[3]!.querySelector(".cm-fub-code")?.textContent).toBe("📅 2026-11-19");
     } finally {
       engine.destroy();
       parent.remove();

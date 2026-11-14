@@ -165,6 +165,16 @@ function wholeElements(range: Range): void {
   const endElement = outermost(range.endContainer);
   if (startElement) range.setStartBefore(startElement);
   if (endElement) range.setEndAfter(endElement);
+  // Un elemento di cui il tratto copre tutto il testo (il codice
+  // `📅 2026-11-16`) si prende intero: dentro il suo fondo la pastiglia sarebbe
+  // una toppa su una toppa. Ci si ferma alla voce e al suo paragrafo.
+  for (;;) {
+    const around = range.commonAncestorContainer;
+    const element = around instanceof Element ? around : around.parentElement;
+    if (!element || element.matches("li, p") || element.parentNode === null) break;
+    if (range.toString() !== element.textContent) break;
+    range.selectNode(element);
+  }
 }
 
 /// Un bordo dentro il testo di uno span di posizione fedele al sorgente: lo

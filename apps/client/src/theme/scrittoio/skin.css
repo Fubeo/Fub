@@ -9977,7 +9977,7 @@ kbd,
 /* La misura della pastiglia è la stessa dovunque stia: dentro un codice, che
    è già a 0.88em, i suoi 0.8em si contano dal testo intorno al codice. E un
    codice che la pastiglia prende intero (`📅 \`2026-11-16\``) ne veste il
-   corpo: niente seconda toppa, niente seconda riduzione. */
+   corpo: niente seconda toppa, niente seconda riduzione, la stessa voce. */
 .cm-editor .cm-content .cm-fub-code .cm-fub-due,
 .markdown-rendered code .task-due {
   font-size: calc(0.8em / 0.88);
@@ -9986,7 +9986,13 @@ kbd,
 .markdown-rendered .task-due code {
   padding: 0;
   background: transparent;
+  color: inherit;
+  font-family: inherit;
   font-size: 1em;
+}
+.cm-editor .cm-content .cm-fub-due .cm-fub-code span {
+  color: inherit;
+  font-family: inherit;
 }
 /* Una data che non si legge (`📅 2026-02-30`): la pastiglia resta, col bordo
    tratteggiato del refuso; il titolo dice come si scrive. */

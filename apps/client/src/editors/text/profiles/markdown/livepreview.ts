@@ -1017,7 +1017,9 @@ export function computeDecorations(
 
   keepPunctuation(doc, out);
   for (const pill of pills) out.push(wholePill(pill, out));
-  out.sort((a, b) => a.from - b.from || a.to - b.to);
+  // A pari tratto la pastiglia viene prima, cioè fuori: CodeMirror annida per
+  // primo il segno che trova per primo.
+  out.sort((a, b) => a.from - b.from || a.to - b.to || Number(b.kind === "task-due") - Number(a.kind === "task-due"));
   return out;
 }
 
@@ -1034,19 +1036,45 @@ const LINE_KINDS: ReadonlySet<LiveDecoKind> = new Set(["quote-line", "codeblock-
 /// prima. Così la pastiglia prende per intero l'elemento che tocca, come in
 /// Lettura (`markTaskDues`): sta dentro un elemento che la contiene o
 /// contiene quelli che tocca, mai a cavallo.
+///
+/// E un elemento di cui la pastiglia copre tutto ciò che si vede (il codice
+/// `` `📅 2026-11-16` `` fuori dalla riga del cursore) sta dentro di lei, coi
+/// suoi segni nascosti: intorno, il suo fondo farebbe una toppa sulla toppa.
 export function wholePill(pill: LiveDeco, others: readonly LiveDeco[]): LiveDeco {
   let { from, to } = pill;
-  for (let grown = true; grown; ) {
-    grown = false;
-    for (const other of others) {
-      if (other === pill || LINE_KINDS.has(other.kind) || other.from >= other.to) continue;
-      const inside = other.from <= from && to <= other.to;
-      const around = from <= other.from && other.to <= to;
-      if (other.to <= from || to <= other.from || inside || around) continue;
-      from = Math.min(from, other.from);
-      to = Math.max(to, other.to);
-      grown = true;
+  const marks = others.filter((d) => d !== pill && !LINE_KINDS.has(d.kind) && d.from < d.to);
+  const hides = marks.filter((d) => d.kind === "hide");
+  const hidden = (a: number, b: number) => {
+    for (let at = a; at < b; at++) {
+      if (!hides.some((d) => d.from <= at && at < d.to)) return false;
     }
+    return true;
+  };
+  const grow = () => {
+    for (let grown = true; grown; ) {
+      grown = false;
+      for (const other of marks) {
+        const inside = other.from <= from && to <= other.to;
+        const around = from <= other.from && other.to <= to;
+        if (other.to <= from || to <= other.from || inside || around) continue;
+        from = Math.min(from, other.from);
+        to = Math.max(to, other.to);
+        grown = true;
+      }
+    }
+  };
+  grow();
+  const covered = marks.some((other) => other.kind !== "hide" && other.from <= from && to <= other.to
+    && hidden(other.from, from) && hidden(to, other.to));
+  if (covered) {
+    for (let moved = true; moved; ) {
+      moved = false;
+      for (const hide of hides) {
+        if (hide.to === from) { from = hide.from; moved = true; }
+        if (hide.from === to) { to = hide.to; moved = true; }
+      }
+    }
+    grow();
   }
   return { ...pill, from, to };
 }
