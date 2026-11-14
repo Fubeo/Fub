@@ -92,10 +92,31 @@
     return typeof src === "string" && /^https?:\/\/[^\s"'<>]+$/i.test(src);
   }
 
+  // An href/src as the browser reads it: no control characters or spaces at
+  // the ends, no tab or newline inside, so `java\tscript:` is `javascript:`.
+  // Mirror of `browser_href` in html.rs.
+  function browserHref(raw) {
+    return String(raw || "").replace(/^[\x00-\x20]+|[\x00-\x20]+$/g, "").replace(/[\t\n\r]/g, "");
+  }
+
+  // A non-http link destination the Markdown can carry as it is. Schemes
+  // that run or embed (javascript:, vbscript:, data:) and a scheme masked by
+  // an entity (`&#106;avascript:`) or an escape (`javascript\:`), which
+  // Markdown would resolve, stay as text. Other schemes stay, as an importer
+  // carries its own (`evernote://`) and rendering filters them again.
+  // Mirror of `safe_destination` in html.rs.
+  function safeDestination(d) {
+    if (/[\s\x00-\x1f\x7f-\x9f"'<>]/.test(d)) return false;
+    var head = d.split(/[/?#]/)[0];
+    if (/[&\\]/.test(head)) return false;
+    var colon = head.indexOf(":");
+    return colon === -1 || !/^(javascript|vbscript|data)$/i.test(head.slice(0, colon));
+  }
+
   function mdUrl(u) {
     var s = String(u);
-    // URLs reaching here passed isHttpImg (no spaces/parens) or are relative
-    // fragments; wrap in <> when a paren slipped through from page markup.
+    // URLs reaching here passed safeDestination (no spaces); wrap in <>
+    // when a paren slipped through from page markup.
     if (/[()]/.test(s)) return "<" + s.replace(/[<>]/g, "") + ">";
     return s;
   }
@@ -151,8 +172,8 @@
       if (attrs && (attrs.onclick !== undefined || attrs.onload !== undefined || attrs.onerror !== undefined)) {
         notes.push({ level: "info", message: "dropped event handler attribute", entry: name });
       }
-      var href = attrs.href || attrs.src || "";
-      if (/^\s*javascript:/i.test(href)) {
+      var href = browserHref(attrs.href || attrs.src || "");
+      if (/^javascript:/i.test(href)) {
         notes.push({ level: "warn", message: "dropped javascript: URL", entry: name });
         if (name === "a") { if (!closing) linkStack.push(null); else linkStack.pop(); }
         continue;
@@ -186,13 +207,13 @@
           break;
         case "a":
           if (!closing) {
-            var h = attrs.href || "";
-            linkStack.push(h);
+            linkStack.push(browserHref(attrs.href || ""));
             out.push("[");
           } else {
             var dest = linkStack.pop();
-            if (dest && isHttpImg(dest)) out.push("](" + mdUrl(dest) + ")");
-            else if (dest) { out.push("](" + mdUrl(dest) + ")"); notes.push({ level: "info", message: "kept non-http link as text", entry: "a" }); }
+            if (dest === null) { /* a dropped javascript: link wrote no "[" */ }
+            else if (dest && isHttpImg(dest)) out.push("](" + mdUrl(dest) + ")");
+            else if (dest) { out.push(safeDestination(dest) ? "](" + mdUrl(dest) + ")" : "]"); notes.push({ level: "info", message: "kept non-http link as text", entry: "a" }); }
             else out.push("]");
           }
           break;

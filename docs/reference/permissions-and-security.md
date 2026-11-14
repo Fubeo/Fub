@@ -288,6 +288,16 @@ nome che non è un manifest dell'host resta com'è; `--uninstall` toglie
 soltanto ciò che l'host ha scritto. Quando l'invio ripiega, il popup scrive i
 due comandi con l'id vero dell'estensione.
 
+La conversione della pagina in Markdown (`apps/clipper/src/convert.js`, gemella
+di `crates/fub-importers/src/html.rs`, che la usano anche gli importatori e il
+salvataggio del visore) legge un `href` come lo legge il browser: senza
+caratteri di controllo ai bordi, senza tab e a capo in mezzo. Un link
+`javascript:` cade con la sua etichetta; uno `vbscript:` o `data:`, o uno
+schema mascherato da un'entità (`&#106;avascript:`) o da un escape
+(`javascript\:`) che il Markdown risolverebbe, resta testo. Gli altri schemi
+restano destinazioni, perché un importatore porta i suoi (`evernote://`): la
+resa li filtra di nuovo.
+
 ## Server MCP
 
 `fub-cli mcp` dà il vault a un agente, su stdio. Senza

@@ -224,6 +224,40 @@ fn is_http_img(src: &str) -> bool {
             .any(|c| c.is_whitespace() || c == '"' || c == '<' || c == '>')
 }
 
+/// Un `href`/`src` come lo legge il browser: senza caratteri di controllo né
+/// spazi ai bordi, senza tab e a capo in mezzo, così `java\tscript:` è
+/// `javascript:`. Gemella di `browserHref` in `convert.js`.
+fn browser_href(raw: &str) -> String {
+    raw.trim_matches(|c: char| c <= ' ')
+        .chars()
+        .filter(|c| !matches!(c, '\t' | '\n' | '\r'))
+        .collect()
+}
+
+/// Una destinazione non http che il Markdown può portare così com'è. Gli
+/// schemi che eseguono o incorporano (`javascript:`, `vbscript:`, `data:`) e
+/// uno schema mascherato da un'entità (`&#106;avascript:`) o da un escape
+/// (`javascript\:`), che il Markdown risolverebbe, restano testo. Gli altri
+/// schemi restano, perché un importatore porta i suoi (`evernote://`), e la
+/// resa li filtra di nuovo. Gemella di `safeDestination` in `convert.js`.
+fn safe_destination(dest: &str) -> bool {
+    if dest.chars().any(|c| {
+        c.is_whitespace() || c.is_control() || matches!(c, '\u{feff}' | '"' | '\'' | '<' | '>')
+    }) {
+        return false;
+    }
+    let head = dest.split(['/', '?', '#']).next().unwrap_or("");
+    if head.contains(['&', '\\']) {
+        return false;
+    }
+    match head.split_once(':') {
+        Some((scheme, _)) => !["javascript", "vbscript", "data"]
+            .iter()
+            .any(|active| scheme.eq_ignore_ascii_case(active)),
+        None => true,
+    }
+}
+
 fn md_url(u: &str) -> String {
     if u.contains('(') || u.contains(')') {
         format!("<{}>", u.replace(['<', '>'], ""))
@@ -357,14 +391,12 @@ pub fn html_to_markdown(html: &str, opts: &ClipOptions) -> (String, Vec<ClipAsse
                 entry: name.clone(),
             });
         }
-        let href = attr(&attrs, "href")
-            .or_else(|| attr(&attrs, "src"))
-            .unwrap_or("");
-        if href
-            .trim_start()
-            .to_ascii_lowercase()
-            .starts_with("javascript:")
-        {
+        let href = browser_href(
+            attr(&attrs, "href")
+                .or_else(|| attr(&attrs, "src"))
+                .unwrap_or(""),
+        );
+        if href.to_ascii_lowercase().starts_with("javascript:") {
             notes.push(ClipNote {
                 level: "warn",
                 message: "dropped javascript: URL".to_string(),
@@ -432,14 +464,23 @@ pub fn html_to_markdown(html: &str, opts: &ClipOptions) -> (String, Vec<ClipAsse
             }
             "a" => {
                 if !closing {
-                    link_stack.push(Some(attr(&attrs, "href").unwrap_or("").to_string()));
+                    link_stack.push(Some(browser_href(attr(&attrs, "href").unwrap_or(""))));
                     out.push("[".to_string());
                 } else {
-                    let dest = link_stack.pop().flatten().filter(|s| !s.is_empty());
+                    let popped = link_stack.pop();
+                    // Un link `javascript:` scartato non ha scritto la `[`.
+                    if matches!(popped, Some(None)) {
+                        continue;
+                    }
+                    let dest = popped.flatten().filter(|s| !s.is_empty());
                     match dest {
                         Some(d) if is_http_img(&d) => out.push(format!("]({})", md_url(&d))),
                         Some(d) => {
-                            out.push(format!("]({})", md_url(&d)));
+                            if safe_destination(&d) {
+                                out.push(format!("]({})", md_url(&d)));
+                            } else {
+                                out.push("]".to_string());
+                            }
                             notes.push(ClipNote {
                                 level: "info",
                                 message: "kept non-http link as text".to_string(),
@@ -741,6 +782,27 @@ pub fn convert_fragment(html: &str) -> Result<ClipResult, PluginError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Un `href` si legge come lo legge il browser, e diventa destinazione
+    /// solo se è sicura: niente schemi attivi né mascherati. Lo
+    /// stesso ingresso e la stessa uscita di `apps/clipper/tests/
+    /// security-limits.test.mjs`: i due convertitori restano 1:1.
+    #[test]
+    fn links_keep_only_safe_destinations() {
+        let html = "<p><a href=\"java\tscript:alert(1)\">a</a> <a href=\"\u{1}javascript:alert(1)\">b</a> <a href=\"data:text/html,x\">c</a> <a href=\"&#106;avascript:alert(1)\">d</a> <a href=\"javascript\\:alert(1)\">e</a> <a href=\"other.html#s\">f</a> <a href=\"#comment-1\">g</a> <a href=\"mailto:a@b.it\">h</a> <a href=\" https://x.it/a \">i</a> <a href=\"//evil.it/x\">j</a> <a href=\"evernote://a/b\">k</a> <a href=\"VBScript:x\">l</a></p>";
+        let (md, _, notes) = html_to_markdown(html, &ClipOptions::default());
+        assert_eq!(
+            md,
+            "a b [c] [d] [e] [f](other.html#s) [g](#comment-1) [h](mailto:a@b.it) [i](https://x.it/a) [j](//evil.it/x) [k](evernote://a/b) [l]"
+        );
+        assert_eq!(
+            notes
+                .iter()
+                .filter(|note| note.message == "dropped javascript: URL")
+                .count(),
+            2
+        );
+    }
 
     /// Una lista annidata oltre ogni ragione costa quanto è lunga: il testo di
     /// ogni voce resta, il rientro si ferma al tetto e una nota lo dice.

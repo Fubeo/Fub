@@ -1347,6 +1347,17 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
             ),
         ),
         (
+            "crates/fub-importers/src/html.rs::safe_destination",
+            (
+                Family::AsciiCase,
+                "confronta lo schema di un `href` importato con gli schemi attivi (`javascript`, \
+                 `vbscript`, `data`) in ASCII: gli schemi sono ASCII e si travestono di maiuscole. \
+                 Diverge da `is_safe_href` perché qui la lista è di ciò che si toglie, non di ciò \
+                 che passa: un importatore porta i suoi schemi (`evernote://`) e la resa li \
+                 filtra di nuovo; il link tolto resta testo.",
+            ),
+        ),
+        (
             "crates/fub-services/src/publish/guard.rs::is_safe_href",
             (
                 Family::AsciiCase,

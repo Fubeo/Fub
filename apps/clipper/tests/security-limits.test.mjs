@@ -166,6 +166,16 @@ describe("convert mirror (TransferOwner schema)", () => {
     assert.ok(r.markdown.startsWith("---\n"));
   });
 
+  it("reads an href as the browser does and writes only safe link destinations", () => {
+    // Same input and output as `links_keep_only_safe_destinations` in
+    // crates/fub-importers/src/html.rs: the two converters stay 1:1.
+    const html = "<p><a href=\"java\tscript:alert(1)\">a</a> <a href=\"\u0001javascript:alert(1)\">b</a> <a href=\"data:text/html,x\">c</a> <a href=\"&#106;avascript:alert(1)\">d</a> <a href=\"javascript\\:alert(1)\">e</a> <a href=\"other.html#s\">f</a> <a href=\"#comment-1\">g</a> <a href=\"mailto:a@b.it\">h</a> <a href=\" https://x.it/a \">i</a> <a href=\"//evil.it/x\">j</a> <a href=\"evernote://a/b\">k</a> <a href=\"VBScript:x\">l</a></p>";
+    const notes = [];
+    const md = Convert.htmlToMarkdown(html, {}, [], notes);
+    assert.equal(md, "a b [c] [d] [e] [f](other.html#s) [g](#comment-1) [h](mailto:a@b.it) [i](https://x.it/a) [j](//evil.it/x) [k](evernote://a/b) [l]");
+    assert.equal(notes.filter((n) => n.message === "dropped javascript: URL").length, 2);
+  });
+
   it("keeps markdown under the 1 MiB capture ceiling at the exact boundary", () => {
     // Exactly MAX_INPUT UTF-8 bytes of HTML: accepted, body truncated.
     const inner = "a".repeat(2 * 1024 * 1024 - 7);
