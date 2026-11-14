@@ -29,4 +29,7 @@ pub mod pens;
 
 pub use brush::{Brush, BrushError, InkBrush, Nib1Brush, NIB1, NIB1_KEYS, PF1, PF1_KEYS};
 pub use ink::{Ink, InkError, Sample, Scale};
-pub use pens::{ink_color, pen, pen_brush, PenSpec, INK_PALETTE, MAX_PEN_SIZE, MIN_PEN_SIZE, PENS};
+pub use pens::{
+    clamp_size, ink_color, pen, pen_brush, InkSwatch, PenBlend, PenRecipe, PenSpec, PenTool,
+    DEFAULT_PEN, INK_PALETTE, MAX_PEN_SIZE, MIN_PEN_SIZE, PENS, PEN_KEY,
+};

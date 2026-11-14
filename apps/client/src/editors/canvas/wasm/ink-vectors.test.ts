@@ -27,7 +27,12 @@ interface Vector {
 const INK_VECTORS = 28;
 /** Le toppe `ink` di `canvas-patches/` (87–103). */
 const INK_PATCH_VECTORS = 17;
-/** Le operazioni che portano l'inchiostro con la scheda, in `canvas-ops/`. */
+/**
+ * Le operazioni che portano l'inchiostro con la scheda, in `canvas-ops/`
+ * (`*with-ink*`). Resta fuori `insert-root-ink-is-rejected.json`: tocca
+ * l'inchiostro, ma è un rifiuto senza inchiostro portato, e la legge già
+ * `vectors.test.ts` con le altre operazioni.
+ */
 const INK_OP_VECTORS = 4;
 
 const inkFiles = import.meta.glob("../../../__fixtures__/canvas-ink/*", {

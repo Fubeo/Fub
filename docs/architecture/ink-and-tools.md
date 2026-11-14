@@ -43,7 +43,7 @@ e la geometria sono funzioni che il prodotto chiama.
 | nucleo, TypeScript | `apps/client/src/ink/input/` | le stesse regole, per il percorso caldo |
 | formato dei campioni | `apps/client/src/ink/sample.ts` | `fub:ink`, quantizzazione, limite dei campioni |
 | pennello | `apps/client/src/ink/brush.ts`, `pf1.ts`, `pf1-live.ts`, `nib1.ts` | `fub:brush`, contorno, contorno che cresce, punta piatta |
-| penne | `apps/client/src/ink/pens.ts` | le sette ricette del pennello con un nome, misura, opacità, fusione |
+| penne | `apps/client/src/ink/pens.ts` (fa fede), copia in `crates/fub-ink-codec/src/pens.rs` | le sette ricette del pennello con un nome, misura, opacità, fusione; la tavolozza è in `palette.ts` |
 | geometria | `apps/client/src/ink/geometry.ts` | trasformazioni dei campioni, tratto dritto |
 | strumenti | `apps/client/src/ink/tools/` | contratto, registro, penna, evidenziatore, gomma, taglio dei tratti (`split.ts`) |
 | adattatore del browser | `apps/client/src/ink/dom/` | `attachInkInput` |
@@ -201,6 +201,16 @@ nome nel pennello come `pen=<id>`; una penna che non segue la pressione non la
 simula nemmeno col mouse. La penna dice anche quanto copre e come si fonde
 (`penLook`): l'evidenziatore moltiplica. La forma è in
 [`scene-format-pens.md`](../reference/scene-format-pens.md).
+
+`pens.ts` e `palette.ts` fanno fede. `crates/fub-ink-codec/src/pens.rs` li
+copia in Rust, per chi scrive i tratti senza la GUI: le penne, la tavolozza e
+`pen_brush`, che dà lo stesso pennello di `penBrush` dentro l'intervallo delle
+misure. Lo specchio `apps/client/src/__fixtures__/ink-pens.json` li lega:
+`crates/fub-ink-codec/tests/pens_mirror.rs` lo scrive dal Rust e
+`apps/client/src/ink/pens-mirror.test.ts` vuole le stesse risposte da
+TypeScript. Dopo un cambiamento voluto in `pens.ts`, si cambia `pens.rs` e si
+rigenera lo specchio con
+`UPDATE_MIRROR=1 cargo test -p fub-ink-codec --test pens_mirror`.
 
 La gomma precisa usa `ink/tools/split.ts`: i campioni di un tratto si tagliano
 dove il cerchio della gomma tocca l'inchiostro, e ogni pezzo resta un tratto

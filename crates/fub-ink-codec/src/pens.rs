@@ -197,8 +197,10 @@ pub fn clamp_size(pen: &PenSpec, size: f64) -> f64 {
 }
 
 /// Il pennello della penna `pen` di misura `size`, per un tratto nato con o
-/// senza la pressione del dispositivo: lo stesso di `penBrush` di `pens.ts`.
-/// La misura si stringe prima con [`clamp_size`]. Senza pressione una penna
+/// senza la pressione del dispositivo. Dentro l'intervallo delle misure è lo
+/// stesso di `penBrush` di `pens.ts`; `penBrush` invece non stringe la misura,
+/// qui una misura fuori dall'intervallo si stringe con [`clamp_size`], come
+/// fanno i menu della GUI, e `NaN` vale la misura di serie. Senza pressione una penna
 /// che la segue la simula (`sim=1`); una penna che non la segue non la finge
 /// nemmeno, e il suo `sim` resta 0.
 pub fn pen_brush(pen: &PenSpec, size: f64, pressure: bool) -> InkBrush {
@@ -346,6 +348,30 @@ mod tests {
             pen_brush(pen, f64::NAN, true),
             pen_brush(pen, pen.size, true)
         );
+    }
+
+    /// La misura scritta nel pennello, per le due ricette.
+    fn written_size(brush: &InkBrush) -> f64 {
+        match brush {
+            InkBrush::Pf1(brush) => brush.size,
+            InkBrush::Nib1(brush) => brush.size,
+        }
+    }
+
+    #[test]
+    fn ogni_penna_stringe_la_misura_e_nan_vale_quella_di_serie() {
+        for pen in &PENS {
+            for pressure in [true, false] {
+                let id = pen.id;
+                let low = written_size(&pen_brush(pen, 0.0, pressure));
+                let high = written_size(&pen_brush(pen, 1e9, pressure));
+                let nan = written_size(&pen_brush(pen, f64::NAN, pressure));
+                assert_eq!(low, MIN_PEN_SIZE, "{id}: sotto l'intervallo");
+                assert_eq!(high, MAX_PEN_SIZE, "{id}: sopra l'intervallo");
+                assert_eq!(nan, pen.size, "{id}: NaN");
+                assert!(pen_brush(pen, f64::NAN, pressure).encode().is_ok(), "{id}");
+            }
+        }
     }
 
     #[test]
