@@ -114,9 +114,15 @@ export function codeWraps(state: EditorState, from: number): boolean {
   return !(state.field(unwrapped, false) ?? []).includes(from);
 }
 
-/// L'aggiornamento ha cambiato «A capo» di qualche blocco.
+/// L'aggiornamento ha cambiato «A capo» di qualche blocco, non soltanto
+/// spostato con il testo.
 export function codeWrapChanged(update: ViewUpdate): boolean {
-  return update.startState.field(unwrapped, false) !== update.state.field(unwrapped, false);
+  const before = update.startState.field(unwrapped, false);
+  const after = update.state.field(unwrapped, false);
+  if (before === after) return false;
+  if (!before || !after || before.length !== after.length) return true;
+  // Il campo segue le modifiche: spostato e basta non è un altro a capo.
+  return before.some((pos, index) => update.changes.mapPos(pos, 1) !== after[index]);
 }
 
 const noWrapLine = Decoration.line({ class: "cm-fub-code-nowrap" });

@@ -11,14 +11,16 @@
 // Un widget di blocco non si seleziona col testo, il cursore lo salta con le
 // frecce e copiare non lo copia: il testo copiato è quello del documento.
 import { syntaxTree } from "@codemirror/language";
-import { type EditorState, type Extension, Facet, type Range, StateEffect, StateField } from "@codemirror/state";
+import { type EditorState, type Extension, Facet, type Range, StateEffect, StateField, type Transaction } from "@codemirror/state";
 import { Decoration, type DecorationSet, EditorView, WidgetType } from "@codemirror/view";
 import { plural, t } from "../../../../i18n/strings";
 import type { NoteFacts } from "../../../../state/note-facts";
 import { iconEl } from "../../../../ui/icons";
 import { openLifetime, type Lifetime } from "../../../../ui/lifetime";
 import { relativeTime } from "../../../../ui/when";
+import type { Tree } from "@lezer/common";
 import { frontmatterRange } from "./render";
+import { topChanges } from "./top-changes";
 
 /// I due gesti della riga.
 export interface NoteFactsActions {
@@ -192,49 +194,114 @@ class NoteFactsWidget extends WidgetType {
   }
 }
 
-/// Dove sta la riga in Live: dopo la riga del primo titolo di primo livello,
-/// e senza titolo in cima al testo (dopo il frontmatter, se c'è).
-export function noteFactsPlace(state: EditorState): { at: number; side: 1 | -1 } {
+/// Il primo titolo di primo livello del testo, dopo il frontmatter: dove la
+/// riga si mette, e da quale albero viene.
+interface FirstHeading {
+  readonly tree: Tree;
+  /// Dove comincia il testo, dopo il frontmatter.
+  readonly bodyFrom: number;
+  readonly heading: { readonly from: number; readonly to: number } | null;
+  /// Quanti nodi di primo livello l'ultimo aggiornamento ha guardato.
+  readonly visited: number;
+}
+
+const isHeading1 = (name: string) => name === "ATXHeading1" || name === "SetextHeading1";
+
+/// Il primo titolo scorrendo i nodi di primo livello dall'inizio.
+function scanHeading(state: EditorState): FirstHeading {
   const front = frontmatterRange(state.doc);
   const bodyFrom = front ? front.to : 0;
-  const cursor = syntaxTree(state).cursor();
-  let heading: number | null = null;
+  const tree = syntaxTree(state);
+  const cursor = tree.cursor();
+  let heading: FirstHeading["heading"] = null;
+  let visited = 0;
   if (cursor.firstChild()) {
     do {
+      visited++;
       if (cursor.from < bodyFrom) continue;
-      if (cursor.name === "ATXHeading1" || cursor.name === "SetextHeading1") {
-        heading = cursor.to;
+      if (isHeading1(cursor.name)) {
+        heading = { from: cursor.from, to: cursor.to };
         break;
       }
     } while (cursor.nextSibling());
   }
-  if (heading !== null) return { at: state.doc.lineAt(heading).to, side: 1 };
-  if (front && front.to > 0) return { at: state.doc.lineAt(Math.max(front.to - 1, 0)).to, side: 1 };
+  return { tree, bodyFrom, heading, visited };
+}
+
+/// Il primo titolo dopo una modifica, guardando soltanto i nodi che cambia
+/// (`topChanges`). `null` quando non basta: il frontmatter si sposta, la
+/// modifica non si lascia seguire, o il titolo di prima smette di esserlo e
+/// quello dopo va cercato.
+function nextHeading(value: FirstHeading, tr: Transaction): FirstHeading | null {
+  const front = frontmatterRange(tr.state.doc);
+  const bodyFrom = front ? front.to : 0;
+  if (bodyFrom !== tr.changes.mapPos(value.bodyFrom)) return null;
+  const changed = topChanges(tr, value.tree);
+  if (!changed) return null;
+  const tree = syntaxTree(tr.state);
+  const visited = changed.nodes.length;
+  const was = value.heading;
+  // Prima del tratto riletto i nodi sono quelli di prima.
+  if (was && was.to <= changed.start) return { tree, bodyFrom, heading: was, visited };
+  const found = changed.nodes.find((node) => node.from >= bodyFrom && isHeading1(node.name));
+  if (found) return { tree, bodyFrom, heading: { from: found.from, to: found.to }, visited };
+  // Dopo il tratto i nodi sono quelli di prima, spostati.
+  if (changed.resync === null) return { tree, bodyFrom, heading: null, visited };
+  if (!was) return { tree, bodyFrom, heading: null, visited };
+  if (was.from >= changed.resync) {
+    return { tree, bodyFrom, heading: { from: was.from + changed.delta, to: was.to + changed.delta }, visited };
+  }
+  return null;
+}
+
+/// Dove sta la riga in Live: dopo la riga del primo titolo di primo livello,
+/// e senza titolo in cima al testo (dopo il frontmatter, se c'è).
+export function noteFactsPlace(state: EditorState): { at: number; side: 1 | -1 } {
+  return placeOf(state, scanHeading(state));
+}
+
+function placeOf(state: EditorState, first: FirstHeading): { at: number; side: 1 | -1 } {
+  if (first.heading !== null) return { at: state.doc.lineAt(first.heading.to).to, side: 1 };
+  if (first.bodyFrom > 0) return { at: state.doc.lineAt(Math.max(first.bodyFrom - 1, 0)).to, side: 1 };
   return { at: 0, side: -1 };
 }
 
-function liveDecorations(state: EditorState): DecorationSet {
+interface LiveFacts {
+  readonly decorations: DecorationSet;
+  readonly first: FirstHeading;
+}
+
+function liveFactsOf(state: EditorState, first: FirstHeading): LiveFacts {
   const labels = noteFactsOf(state);
   const host = state.facet(noteFactsHost);
-  if (!labels || !host) return Decoration.none;
-  const { at, side } = noteFactsPlace(state);
+  if (!labels || !host) return { decorations: Decoration.none, first };
+  const { at, side } = placeOf(state, first);
   const widget: Range<Decoration> = Decoration.widget({ widget: new NoteFactsWidget(labels, host.actions), block: true, side }).range(at);
-  return Decoration.set([widget]);
+  return { decorations: Decoration.set([widget]), first };
 }
 
 /// La riga della Live. Un campo e non un plugin, perché un widget di blocco
 /// lo può dare solo lo stato; si ricalcola quando cambiano i dati, il testo o
-/// l'albero (che arriva a pezzi).
-const liveFacts = StateField.define<DecorationSet>({
-  create: liveDecorations,
+/// l'albero (che arriva a pezzi). Il primo titolo si segue modifica per
+/// modifica: una battuta non scorre la nota.
+const liveFacts = StateField.define<LiveFacts>({
+  create: (state) => liveFactsOf(state, scanHeading(state)),
   update(value, transaction) {
-    const changed = transaction.docChanged
-      || transaction.effects.some((effect) => effect.is(noteFactsChanged))
-      || syntaxTree(transaction.state) !== syntaxTree(transaction.startState);
-    return changed ? liveDecorations(transaction.state) : value;
+    const treeChanged = syntaxTree(transaction.state) !== value.first.tree;
+    if (!transaction.docChanged && !treeChanged && !transaction.effects.some((effect) => effect.is(noteFactsChanged))) return value;
+    const first = transaction.docChanged ? nextHeading(value.first, transaction) ?? scanHeading(transaction.state)
+      : treeChanged ? scanHeading(transaction.state)
+      : value.first;
+    return liveFactsOf(transaction.state, first);
   },
-  provide: (field) => EditorView.decorations.from(field),
+  provide: (field) => EditorView.decorations.from(field, (value) => value.decorations),
 });
+
+/// Quanti nodi di primo livello l'ultimo aggiornamento della riga ha guardato
+/// per trovare il primo titolo. Per i test, che contano il lavoro di una battuta.
+export function noteFactsVisited(state: EditorState): number | null {
+  return state.field(liveFacts, false)?.first.visited ?? null;
+}
 
 /// Le estensioni della riga per una superficie: `field` va montato in Live e
 /// nei Blocchi (la testata ci legge), `live` solo in Live.
