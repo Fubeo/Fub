@@ -36,6 +36,8 @@ export type ReadingFont = string;
 export interface ThemePreviewSelection {
   id: string;
   light: Theme;
+  /** Il contrasto da provare. Assente, vale quello scelto (o del sistema). */
+  contrast?: ContrastLevel;
 }
 
 // Gemelle delle chiavi dichiarate in fub-host/src/settings.rs.
@@ -362,7 +364,8 @@ async function apply(): Promise<void> {
     previewSelection?.light ?? themeChoice,
     mediaMatches(DARK_QUERY, true),
   );
-  const contrast = effectiveContrast(contrastChoice, mediaMatches(CONTRAST_QUERY, false));
+  const contrast =
+    previewSelection?.contrast ?? effectiveContrast(contrastChoice, mediaMatches(CONTRAST_QUERY, false));
   setContentLookPreference(contentLookChoice, contrast === "high");
   const requestedId = previewSelection?.id ?? selectedThemeId;
   let mounted: ThemeMountResult | null = null;
@@ -687,8 +690,11 @@ export function currentThemePreview(): ThemePreviewSelection | null {
  * La selezione autorevole resta invariata: chiude o annulla il pannello e
  * cancelThemePreview rimonta il tema precedente. Più richieste rapide sono
  * serializzate dalla stessa generazione usata dalla selezione persistente.
+ *
+ * `contrast` prova anche un contrasto diverso da quello scelto (la pagina
+ * «Tutti i componenti»); assente, vale la scelta della persona.
  */
-export async function previewTheme(id: string, light: Theme): Promise<void> {
+export async function previewTheme(id: string, light: Theme, contrast?: ContrastLevel): Promise<void> {
   if (id !== SERIES_THEME_ID) {
     const info = installedThemes.find((theme) => theme.manifest.id === id);
     if (!info || !info.manifest.lights.includes(light)) {
@@ -696,7 +702,7 @@ export async function previewTheme(id: string, light: Theme): Promise<void> {
     }
   }
   const generation = ++selectionGeneration;
-  previewSelection = { id, light };
+  previewSelection = contrast === undefined ? { id, light } : { id, light, contrast };
   await apply();
   if (generation !== selectionGeneration) return;
   if (!mountedVariant.startsWith(id + ":" + light + ":")) {

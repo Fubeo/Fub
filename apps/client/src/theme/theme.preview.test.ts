@@ -82,4 +82,19 @@ describe("anteprima tema effimera", () => {
     expect(host.setSetting).toHaveBeenCalledWith(THEME_KEY, "dark");
     expect(host.setSetting).toHaveBeenCalledWith(THEME_ID_KEY, SERIES_THEME_ID);
   });
+
+  it("prova anche il contrasto alto, e annullando torna quello scelto", async () => {
+    await previewTheme(SERIES_THEME_ID, "dark", "high");
+
+    expect(currentThemePreview()).toEqual({ id: SERIES_THEME_ID, light: "dark", contrast: "high" });
+    expect(document.documentElement.dataset.theme).toBe("dark");
+    expect(document.documentElement.dataset.contrast).toBe("high");
+    expect(host.setSetting).not.toHaveBeenCalled();
+
+    await cancelThemePreview();
+
+    expect(document.documentElement.dataset.theme).toBe("light");
+    expect(document.documentElement.dataset.contrast).toBe("normal");
+    expect(host.setSetting).not.toHaveBeenCalled();
+  });
 });
