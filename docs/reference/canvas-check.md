@@ -36,7 +36,7 @@ nessuna.
 
 | Codice | Quando | `suggestion` |
 |---|---|---|
-| `unknown_node` | `move`, `resize`, `reorder`, `align`, `distribute`, `duplicate`, `group`, o un estremo di `connect`, con un id che non è una scheda | le schede col nome vicino |
+| `unknown_node` | `move`, `resize`, `reorder`, `align`, `distribute`, `duplicate`, `group`, `layout`, o un estremo di `connect`, con un id che non è una scheda | le schede col nome vicino |
 | `unknown_edge` | `remove`, `set` o `color` con un id che non è né una scheda né un arco; `reverse` con un id che non è un arco | le schede e gli archi col nome vicino |
 | `duplicate_id` | un id dato che c'è già, o ripetuto nella stessa operazione | — |
 | `too_many`, `too_many_moved` | la lavagna avrebbe più di 100 000 schede o 200 000 archi; `too_many_moved` è un `move` con `contents` che tocca più di 1 000 schede | — |

@@ -405,6 +405,26 @@ e sotto le schede. `label` è vuota di serie; `id` e `color` sono come in `add_c
 { "op": "group", "ids": ["t1", "t2"], "label": "Ciclo" }
 ```
 
+### `layout`
+
+Dispone le schede `ids` in una di quattro forme, come quando si lasciano cadere più
+file insieme: `grid` (`ceil(√n)` colonne, riempite per righe), `row` (una riga),
+`column` (una colonna) o `tree` (un albero a strati, con gli archi fra le schede
+date). Le schede vanno nell'ordine dato. `gap` è lo spazio fra due schede vicine (di
+serie 24, non negativo); fra gli strati di un albero è fisso a 96. L'origine è `x` e
+`y`, insieme; senza, è l'angolo in alto a sinistra delle schede date. Si aggancia a 8 in ogni caso.
+`direction` (`down` di serie, `right`, `up`, `left`) vale solo per `tree`.
+
+Un gruppo nella lista si muove come un blocco, con le schede che ci stanno dentro; una
+scheda data insieme al gruppo che la contiene va con lui, una volta sola. Senza `ids`
+sono le schede che non stanno in un gruppo, nell'ordine della lavagna. Un albero usa
+gli archi fra i blocchi, e senza archi è una riga di radici. Una posizione a metà
+pixel (un albero con misure dispari) si arrotonda, la metà sale.
+
+```json
+{ "op": "layout", "ids": ["f1", "f2", "f3", "f4", "f5", "f6"], "kind": "grid" }
+```
+
 ### Gli id nuovi
 
 Un id nuovo viene dal seme del chiamante (`seed`, un intero a 64 bit senza
@@ -432,11 +452,11 @@ Ogni errore (`OpError`) dice quale operazione della lista non si compila
 
 | Errore | Quando |
 |---|---|
-| `UnknownNode` | `move`, `resize`, `reorder`, `align`, `distribute`, `duplicate` o `group` di un id che non è una scheda; un arco verso una scheda che non c'è |
+| `UnknownNode` | `move`, `resize`, `reorder`, `align`, `distribute`, `duplicate`, `group` o `layout` di un id che non è una scheda; un arco verso una scheda che non c'è |
 | `UnknownEdge` | `remove`, `set` o `color` di un id che non è né una scheda né un arco; `reverse` di un id che non è un arco |
-| `DuplicateId` | un id dato che è già preso (anche in `as`); un id ripetuto nella lista di `move`, `remove`, `reorder`, `color`, `align`, `distribute` o `duplicate` |
+| `DuplicateId` | un id dato che è già preso (anche in `as`); un id ripetuto nella lista di `move`, `remove`, `reorder`, `color`, `align`, `distribute`, `duplicate` o `layout` |
 | `TooMany`, `TooManyMoved` | la lavagna avrebbe più di 100 000 schede o 200 000 archi, anche con le copie o il gruppo; `TooManyMoved` è un `move` con `contents` che tocca più di 1 000 schede |
-| `Invalid` | una scheda o un arco che il formato non accetta; una forma breve incompleta o mescolata con la intera; `set` di `id` o `type`; un `resize` senza misure o con `fit` e `height`; un id che è sia una scheda sia un arco; `duplicate` con `as` di altra lunghezza da `ids`; `group` senza schede |
+| `Invalid` | una scheda o un arco che il formato non accetta; una forma breve incompleta o mescolata con la intera; `set` di `id` o `type`; un `resize` senza misure o con `fit` e `height`; un id che è sia una scheda sia un arco; `duplicate` con `as` di altra lunghezza da `ids`; `group` senza schede; `layout` con `direction` fuori da `tree`, con `x` senza `y` (o viceversa), o con `gap` negativo |
 
 I vettori stanno in `apps/client/src/__fixtures__/canvas-ops/`, uno per file
 (`before`, `seed`, `ops`, `expect`); `tests/op_vectors.rs` li fa girare e
