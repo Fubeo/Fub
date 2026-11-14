@@ -70,7 +70,8 @@ L'azzeramento della demo apre la sua cartella senza seguire un collegamento al
 suo posto, legge `.fub-demo.json` da quella cartella aperta e la svuota
 attraverso lo stesso handle; poi toglie per nome la radice rimasta vuota. Una
 cartella messa al posto della demo dopo il controllo non si svuota, e la
-rimozione finale la rifiuta perché non è vuota.
+rimozione finale la rifiuta perché non è vuota. Il marcatore si toglie per
+ultimo: un azzeramento fermato a metà lascia una demo che il prossimo finisce.
 
 ## Temi installati
 
