@@ -151,13 +151,15 @@ export const SETTINGS: PartAnatomy = {
     },
     {
       // Perché un tema è rifiutato (PA T36): una riga per motivo, in quattro
-      // colonne — il file, riga:colonna, il codice, il perché.
+      // colonne — il file, riga:colonna, il codice, il perché; un motivo di
+      // tutto il tema (`--tema`) ha solo il codice e il perché.
       name: "theme-diagnosis",
       states: REST,
       hooks: [
         "tema-diagnosi",
         "tema-diagnosi-lista",
         "tema-diagnosi-riga",
+        "tema-diagnosi-riga--tema",
         "tema-diagnosi-file",
         "tema-diagnosi-dove",
         "tema-diagnosi-codice",

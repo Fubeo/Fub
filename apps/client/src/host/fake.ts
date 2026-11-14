@@ -78,6 +78,7 @@ import type {
   SettingValue,
   SyntaxForm,
   TextEdit,
+  DiskCause,
   ThemeFolderCheck,
   ThemeFolderInstall,
   ThemeFolderLight,
@@ -639,8 +640,9 @@ export function createFakeHost(options: Options = {}): FakeHost {
     }
   }
 
-  /// La cartella controllata, come la tiene l'host: l'unica installabile.
-  let checkedFolder: { source: string; digest: string } | null = null;
+  /// La cartella controllata, come la tiene l'host: il permesso, che vale una
+  /// volta, di installarla. Dopo una collisione vale solo per «Sostituisci».
+  let checkedFolder: { source: string; digest: string; replaceOnly: boolean } | null = null;
 
   function themeFolder(source: string): ThemeFolderFake | ThemeFolderRefusal {
     const folder = themeFolders[source];
@@ -666,14 +668,15 @@ export function createFakeHost(options: Options = {}): FakeHost {
   }
 
   /// La finestra di scelta e la lettura senza installare, come
-  /// `check_theme_folder`: la modalità prima della finestra, poi un fascio per
-  /// luce dichiarata e l'impronta, o il rifiuto tipizzato. Una cartella pronta
-  /// diventa la cartella controllata; un rifiuto la dimentica.
+  /// `check_theme_folder`: aprirla scarta il permesso di prima, la modalità si
+  /// controlla prima della finestra, poi un fascio per luce dichiarata e
+  /// l'impronta, o il rifiuto tipizzato. Una cartella pronta diventa la
+  /// cartella controllata.
   function checkThemeFolder(): ThemeFolderCheck {
+    checkedFolder = null;
     developerOn();
     const source = options.pickThemeFolder?.() ?? null;
     if (source === null) return { outcome: "cancelled" };
-    checkedFolder = null;
     const folder = themeFolder(source);
     if ("reason" in folder) return { outcome: "refused", folder: source, refusal: folder };
     const { manifest } = folder.info;
@@ -683,40 +686,42 @@ export function createFakeHost(options: Options = {}): FakeHost {
       return folderLight(manifest, payload);
     });
     const digest = folderDigest(folder);
-    checkedFolder = { source, digest };
+    checkedFolder = { source, digest, replaceOnly: false };
     return { outcome: "ready", folder: source, manifest, lights, digest };
   }
 
-  /// L'installazione da cartella come la fa l'host: la modalità sviluppatore
-  /// si rilegge a ogni chiamata, si installa solo la cartella controllata con
-  /// la sua impronta, un tema revocato non si sostituisce, una collisione
-  /// senza `replace` non tocca niente. Una sostituzione che si ferma
-  /// (`replaceError`) lascia il vecchio; con `replaceLost` il vecchio non
-  /// torna, ed è l'esito `replace_failed`. Dopo l'esito la cartella
-  /// controllata si dimentica, tranne che per la collisione.
+  /// L'installazione da cartella come la fa l'host
+  /// (`Host::install_theme_from_folder`): la modalità sviluppatore si rilegge
+  /// a ogni chiamata, il permesso del controllo si consuma (un'impronta che
+  /// non è la sua è `unchecked` e non lo tocca), una collisione senza
+  /// `replace` lo rinnova solo per «Sostituisci».
   function installThemeFolder(replace: boolean, digest: string): ThemeFolderInstall {
     developerOn();
     const checked = checkedFolder;
-    if (checked === null || checked.digest !== digest) {
-      throw { kind: "conflict", message: "La cartella del tema non è quella controllata: sceglila e controllala di nuovo." };
-    }
+    if (checked === null || checked.digest !== digest) return { outcome: "unchecked" };
+    checkedFolder = null;
+    if (checked.replaceOnly && !replace) return { outcome: "unchecked" };
     const outcome = publishThemeFolder(checked.source, replace, digest);
-    if (outcome.outcome !== "collision" && checkedFolder === checked) checkedFolder = null;
+    if (outcome.outcome === "collision" && !replace && checkedFolder === null) {
+      checkedFolder = { ...checked, replaceOnly: true };
+    }
     return outcome;
   }
 
+  /// Come `fub_host::theme::install_theme_from_folder`: **prima** l'impronta,
+  /// poi la revoca e la collisione, che parlano solo dei byte controllati. Una
+  /// sostituzione che si ferma (`replaceError`) lascia il vecchio, ed è
+  /// `failed` col suo perché (`replaceCause`); con `replaceLost` il vecchio non
+  /// torna, ed è `replace_failed`.
   function publishThemeFolder(source: string, replace: boolean, digest: string): ThemeFolderInstall {
     let folder: ThemeFolderFake | ThemeFolderRefusal;
     try {
       folder = themeFolder(source);
     } catch (error) {
-      checkedFolder = null;
-      throw error;
+      return { outcome: "failed", cause: "other", error: error as PluginError };
     }
-    if ("reason" in folder || digest !== folderDigest(folder)) {
-      checkedFolder = null;
-      throw { kind: "conflict", message: `the theme folder \`${source}\` changed after it was checked: check it again` };
-    }
+    if ("reason" in folder || digest !== folderDigest(folder)) return { outcome: "changed" };
+    if (folder.installRefusal) return { outcome: "refused", refusal: folder.installRefusal };
     const { manifest } = folder.info;
     const { id, name, version } = manifest;
     const at = themes.findIndex((theme) => theme.manifest.id === id);
@@ -725,7 +730,9 @@ export function createFakeHost(options: Options = {}): FakeHost {
       return { outcome: "collision", id, name, version, installed_version: themes[at]!.manifest.version };
     }
     if (at >= 0 && folder.replaceError) {
-      if (!folder.replaceLost) throw folder.replaceError;
+      if (!folder.replaceLost) {
+        return { outcome: "failed", cause: folder.replaceCause ?? "other", error: folder.replaceError };
+      }
       themes.splice(at, 1);
       for (const key of Object.keys(themePayloads)) if (key.startsWith(`${id}:`)) delete themePayloads[key];
       return { outcome: "replace_failed", id, name, version, kept: ".tmp-old-1-2", error: folder.replaceError };
@@ -2133,12 +2140,16 @@ export function createFakeHost(options: Options = {}): FakeHost {
         }
         return gate("readTheme", [id, light], Promise.resolve(payload));
       },
-      checkThemeFolder: (title) =>
+      checkThemeFolder: () =>
         gate(
           "checkThemeFolder",
-          [title],
+          [],
           new Promise<ThemeFolderCheck>((resolve) => resolve(checkThemeFolder())),
         ),
+      discardThemeFolder: () => {
+        checkedFolder = null;
+        return gate("discardThemeFolder", [], Promise.resolve());
+      },
       installThemeFromFolder: (replace, digest) =>
         gate(
           "installThemeFromFolder",
@@ -2635,6 +2646,11 @@ export interface ThemeFolderFake {
   payloads: Record<string, ThemePayload>;
   /// La sostituzione si ferma con questo errore, e il vecchio resta.
   replaceError?: PluginError;
+  /// Il perché tipizzato di `replaceError` (`failed.cause`); di default
+  /// `other`.
+  replaceCause?: DiskCause;
+  /// Le porte dell'installazione rifiutano i byte controllati (`refused`).
+  installRefusal?: ThemeFolderRefusal;
   /// Con `replaceError`: il vecchio non torna (`replace_failed`).
   replaceLost?: boolean;
 }

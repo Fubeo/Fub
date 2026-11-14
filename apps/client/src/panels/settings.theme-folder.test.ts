@@ -21,6 +21,7 @@ const box = vi.hoisted(() => ({
   folder: null as string | null,
   teardown: null as (() => void) | null,
   notify: vi.fn(),
+  tooltip: vi.fn(),
   trouble: vi.fn(),
   clipboard: vi.fn(async (_text: string) => {}),
 }));
@@ -58,7 +59,7 @@ vi.mock("../ui/motion", () => ({
   enterSurface: () => {},
   exitSurface: (_element: HTMLElement, done: () => void) => done(),
 }));
-vi.mock("../ui/tooltip", () => ({ setTooltip: () => {} }));
+vi.mock("../ui/tooltip", () => ({ setTooltip: box.tooltip }));
 vi.mock("../ui/notify", () => ({ notify: box.notify, reportThemeTrouble: box.trouble }));
 vi.mock("../platform/clipboard", () => ({ writeClipboardText: box.clipboard }));
 
@@ -185,7 +186,8 @@ describe("installare un tema da una cartella", () => {
     // Prima la scelta nella finestra nativa e la lettura senza scrivere, poi
     // l'installazione con la sua impronta: la shell non passa mai un path.
     const digest = expect.stringMatching(/^fake-/);
-    expect(gates("checkThemeFolder")).toEqual([["Scegli la cartella del tema"]]);
+    // Il titolo della finestra non lo dà la shell: lo scrive l'host.
+    expect(gates("checkThemeFolder")).toEqual([[]]);
     expect(gates("installThemeFromFolder")).toEqual([[false, digest]]);
     expect(diagnoses()).toEqual([]);
   });
@@ -243,13 +245,65 @@ describe("installare un tema da una cartella", () => {
 
     await vi.waitFor(() => expect(dialog()).toBeNull());
     expect(box.host!.calls.filter((call) => call.gate === "installThemeFromFolder")).toHaveLength(1);
+    // Il «no» scarta il permesso del controllo: una richiesta di sostituire che
+    // arriva dopo, senza il gesto, non tocca niente.
+    await vi.waitFor(() => expect(gates("discardThemeFolder")).toHaveLength(1));
+    const [[, digest]] = gates("installThemeFromFolder") as [[boolean, string]];
+    expect(await box.host!.module.api.installThemeFromFolder(true, digest)).toEqual({ outcome: "unchecked" });
     expect((await box.host!.module.api.listThemes())[0]!.manifest.version).toBe("0.3.2");
+  });
+
+  it("un controllo che non vale più ha la sua frase, non «cartella cambiata»", async () => {
+    await open({
+      developer: true,
+      installed: [folderTheme("acme.carta", "Carta", "0.3.2")],
+      folders: { "/temi/carta": folderTheme("acme.carta", "Carta", "0.4.0") },
+    });
+    box.folder = "/temi/carta";
+    installButton()!.click();
+    await vi.waitFor(() => expect(dialog()).not.toBeNull());
+    // Il permesso si perde mentre la domanda è aperta (un altro controllo).
+    await box.host!.module.api.discardThemeFolder();
+    dialog()!.querySelector<HTMLButtonElement>('[data-action="replace"]')!.click();
+
+    await vi.waitFor(() => expect(box.notify).toHaveBeenCalledTimes(1));
+    expect(box.notify.mock.calls).toEqual([
+      [
+        "Il controllo di «carta» non vale più: ne è arrivato uno più recente, o è già stato usato. Non ho scritto niente: scegli di nuovo la cartella. Quello installato resta com'era.",
+        "guasto",
+      ],
+    ]);
+    expect((await box.host!.module.api.listThemes())[0]!.manifest.version).toBe("0.3.2");
+  });
+
+  it("un rifiuto delle porte dell'installazione è una diagnosi, non un avviso generico", async () => {
+    await open({
+      developer: true,
+      folders: { "/temi/carta": { ...folderTheme(), installRefusal: { reason: "traversal", path: "font/carta.woff2" } } },
+    });
+    box.folder = "/temi/carta";
+    installButton()!.click();
+
+    await vi.waitFor(() => expect(diagnoses()).toHaveLength(1));
+    expect(rowsOf(diagnoses()[0]!)).toEqual([
+      [
+        "font/carta.woff2",
+        "—",
+        "traversal",
+        "È un collegamento, o porta fuori dalla cartella: un tema è fatto solo di file suoi.",
+      ],
+    ]);
+    expect(box.notify.mock.calls).toEqual([
+      ["«Carta» non è installato: 1 motivo, lo trovi sotto «Temi installati».", "guasto"],
+    ]);
+    expect(await box.host!.module.api.listThemes()).toEqual([]);
   });
 
   it("una sostituzione che si ferma lascia il vecchio com'era, e lo dice una volta", async () => {
     const failing = {
       ...folderTheme("acme.carta", "Carta", "0.4.0"),
       replaceError: { kind: "io", message: "I/O error: /config/themes/acme.carta: No space left on device" } as PluginError,
+      replaceCause: "full" as const,
     };
     await open({
       developer: true,
@@ -261,13 +315,11 @@ describe("installare un tema da una cartella", () => {
     await vi.waitFor(() => expect(dialog()).not.toBeNull());
     dialog()!.querySelector<HTMLButtonElement>('[data-action="replace"]')!.click();
 
-    // Non è un rifiuto del tema: un avviso solo, che dice anche che il vecchio resta.
+    // Non è un rifiuto del tema: un avviso solo, col perché tipizzato in
+    // italiano (mai la frase del disco), che dice anche che il vecchio resta.
     await vi.waitFor(() => expect(box.notify).toHaveBeenCalledTimes(1));
     expect(box.notify.mock.calls).toEqual([
-      [
-        "Il tema non si è installato: I/O error: /config/themes/acme.carta: No space left on device. Quello installato resta com'era.",
-        "guasto",
-      ],
+      ["Il disco è pieno: il tema non si è installato. Quello installato resta com'era.", "guasto"],
     ]);
     expect(diagnoses()).toEqual([]);
     expect((await box.host!.module.api.listThemes())[0]!.manifest.version).toBe("0.3.2");
@@ -321,7 +373,7 @@ describe("installare un tema da una cartella", () => {
 
     await vi.waitFor(() =>
       expect(box.notify).toHaveBeenCalledWith(
-        "La cartella /temi/carta è cambiata mentre la installavo: non ho scritto niente. Riprova.",
+        "La cartella «carta» è cambiata dopo il controllo: non ho scritto niente. Riprova. Quello installato resta com'era.",
         "guasto",
       ),
     );
@@ -358,10 +410,14 @@ describe("installare un tema da una cartella", () => {
     expect(dialog()).toBeNull();
     const [block] = diagnoses();
     expect(block!.querySelector(".setting-label")!.textContent).toBe("«Carta» è rifiutato: 1 motivo");
-    expect(block!.querySelector(".muted")!.textContent).toMatch(/Il tema installato resta com'era\.$/);
+    // L'elenco non lo mostra fra i temi installati, e la diagnosi non lo
+    // contraddice: è ritirato, e Fub non lo installa.
+    expect(block!.querySelector(".muted")!.textContent).toMatch(/Il tema resta fuori dai temi installati\.$/);
     expect(rowsOf(block!)).toEqual([
-      ["—", "—", "revoked", "Il tema installato con questo id è revocato dal catalogo: una cartella non lo sostituisce."],
+      ["revoked", "«Carta» è stato ritirato dal catalogo e Fub non lo installa, nemmeno da una cartella."],
     ]);
+    // Un motivo di tutto il tema: niente colonne vuote.
+    expect(block!.querySelector(".tema-diagnosi-riga")!.classList.contains("tema-diagnosi-riga--tema")).toBe(true);
     expect(box.notify.mock.calls).toEqual([
       ["«Carta» non è installato: 1 motivo, lo trovi sotto «Temi installati».", "guasto"],
     ]);
@@ -450,8 +506,9 @@ describe("la diagnosi di un tema rifiutato", () => {
     expect(rows.some(([file, where, code]) => file === "skin.css" && /^\d+:\d+$/.test(where!) && code !== "")).toBe(true);
     // Un esito solo, e vero: il tema non è arrivato nella cartella dei temi,
     // l'host non è stato chiamato a installarlo, e l'avviso dice ciò che dice
-    // la diagnosi.
+    // la diagnosi. Il permesso del controllo è scartato.
     expect(gates("installThemeFromFolder")).toEqual([]);
+    expect(gates("discardThemeFolder")).toHaveLength(1);
     expect(await box.host!.module.api.listThemes()).toEqual([]);
     expect(catalogOptions()).toEqual([]);
     expect(box.notify.mock.calls).toEqual([
@@ -515,6 +572,9 @@ describe("la diagnosi di un tema rifiutato", () => {
         "È lo stato del catalogo che scrive Fub, non parte del tema: toglilo dalla cartella.",
       ],
     ]);
+    // Il nome non si spezza: stretto si accorcia, e intero sta nel suggerimento.
+    const file = diagnoses()[0]!.querySelector<HTMLElement>(".tema-diagnosi-file")!;
+    expect(box.tooltip).toHaveBeenCalledWith(file, ".fub-current.json");
     expect(await box.host!.module.api.listThemes()).toEqual([]);
   });
 
@@ -544,6 +604,46 @@ describe("la diagnosi di un tema rifiutato", () => {
     await open({ developer: false, installed: [folderTheme()] });
     expect(diagnoses()).toEqual([]);
     expect(catalogOptions()).toContain("Carta · chiaro · Della comunità");
+  });
+});
+
+describe("l'host finto installa come quello vero", () => {
+  // Gemello di `an_install_speaks_only_of_the_checked_bytes` (crates/fub-host/
+  // tests/themes.rs): la stessa scena, lo stesso esito.
+  it("l'esito parla solo dei byte controllati: un id cambiato dopo il controllo è «changed»", async () => {
+    const next = folderTheme("acme.lino", "Lino", "1.0.0");
+    await open({ developer: true, installed: [folderTheme("acme.carta", "Carta", "0.3.2")], folders: { "/temi/lino": next } });
+    box.folder = "/temi/lino";
+    const api = box.host!.module.api;
+    const check = await api.checkThemeFolder();
+    if (check.outcome !== "ready") throw new Error(check.outcome);
+    const carta = folderTheme("acme.carta", "Carta", "1.0.0");
+    next.info = carta.info;
+    next.payloads = carta.payloads;
+    expect(await api.installThemeFromFolder(false, check.digest)).toEqual({ outcome: "changed" });
+    expect((await api.listThemes()).map((theme) => theme.manifest.version)).toEqual(["0.3.2"]);
+  });
+
+  // Gemello di `a_checked_folder_installs_once`.
+  it("il controllo vale una volta, e dopo una collisione solo per «Sostituisci»", async () => {
+    await open({
+      developer: true,
+      installed: [folderTheme("acme.carta", "Carta", "0.3.2")],
+      folders: { "/temi/carta": folderTheme("acme.carta", "Carta", "0.4.0") },
+    });
+    box.folder = "/temi/carta";
+    const api = box.host!.module.api;
+    let check = await api.checkThemeFolder();
+    if (check.outcome !== "ready") throw new Error(check.outcome);
+    expect((await api.installThemeFromFolder(false, check.digest)).outcome).toBe("collision");
+    expect(await api.installThemeFromFolder(false, check.digest)).toEqual({ outcome: "unchecked" });
+    expect(await api.installThemeFromFolder(true, check.digest)).toEqual({ outcome: "unchecked" });
+
+    check = await api.checkThemeFolder();
+    if (check.outcome !== "ready") throw new Error(check.outcome);
+    expect((await api.installThemeFromFolder(false, check.digest)).outcome).toBe("collision");
+    expect((await api.installThemeFromFolder(true, check.digest)).outcome).toBe("installed");
+    expect(await api.installThemeFromFolder(true, check.digest)).toEqual({ outcome: "unchecked" });
   });
 });
 

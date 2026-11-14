@@ -2074,7 +2074,9 @@
 /* ── La diagnosi di un tema rifiutato ──────────────────────────────────────
    Una riga per motivo, in quattro colonne che si leggono come una tabella:
    il file, riga:colonna, il codice, il perché. Il filo rosso a sinistra dice
-   che è un rifiuto. Stretto, il perché va a capo sotto. */
+   che è un rifiuto. Stretto, il perché va a capo sotto. Un nome di file non
+   si spezza: si accorcia coi puntini (intero nel suggerimento). Un motivo che
+   riguarda tutto il tema ha solo il codice e il perché. */
 .tema-diagnosi {
   padding-left: var(--space-5);
   box-shadow: inset 3px 0 0 var(--danger);
@@ -2094,11 +2096,19 @@
   gap: var(--space-3);
   font-size: var(--text-sm);
 }
+.tema-diagnosi-riga--tema {
+  grid-template-columns: 8em minmax(0, 1fr);
+}
 .tema-diagnosi-file,
 .tema-diagnosi-dove,
 .tema-diagnosi-codice {
   font-family: var(--font-mono);
   font-size: var(--text-xs);
+}
+.tema-diagnosi-file {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .tema-diagnosi-dove {
   color: var(--muted);

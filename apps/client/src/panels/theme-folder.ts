@@ -17,7 +17,7 @@
 //   cosa.
 import { api } from "../host/ipc";
 import { errorText, isErrorKind } from "../host/errors";
-import type { ThemeFolderCheck, ThemeFolderInstall, ThemeFolderRefusal } from "../host/contract";
+import type { DiskCause, ThemeFolderCheck, ThemeFolderInstall, ThemeFolderRefusal } from "../host/contract";
 import { openDialog } from "../kit/dialog";
 import { writeClipboardText } from "../platform/clipboard";
 import { plural, resolvedLanguage, t } from "../i18n/strings";
@@ -30,6 +30,7 @@ import {
   type Theme,
 } from "../theme/theme";
 import { notify } from "../ui/notify";
+import { setTooltip } from "../ui/tooltip";
 import type { Lifetime } from "../ui/lifetime";
 
 /// La chiave della modalità sviluppatore (`fub_host::settings::DEVELOPER_MODE`).
@@ -189,12 +190,17 @@ export function renderDiagnosis(diagnosis: Diagnosis): HTMLElement {
   for (const row of diagnosis.rows) {
     const item = document.createElement("li");
     item.className = "tema-diagnosi-riga";
-    item.append(
-      span("tema-diagnosi-file", row.file ?? "—"),
-      span("tema-diagnosi-dove", row.where ?? "—"),
-      span("tema-diagnosi-codice", row.code, "code"),
-      span("tema-diagnosi-perche", row.why),
-    );
+    if (row.file === null && row.where === null) {
+      // Un motivo che riguarda tutto il tema: niente colonne vuote.
+      item.classList.add("tema-diagnosi-riga--tema");
+    } else {
+      // Un nome di file non si spezza: stretto si accorcia, e intero sta nel
+      // suggerimento della shell (mai un `title` nativo).
+      const file = span("tema-diagnosi-file", row.file ?? "—");
+      if (row.file !== null) setTooltip(file, row.file);
+      item.append(file, span("tema-diagnosi-dove", row.where ?? "—"));
+    }
+    item.append(span("tema-diagnosi-codice", row.code, "code"), span("tema-diagnosi-perche", row.why));
     list.append(item);
   }
 
@@ -249,34 +255,55 @@ async function installedAlready(id: string): Promise<boolean> {
 }
 
 /// L'errore di una chiamata all'host (o della finestra di scelta): la
-/// modalità spenta si dice per quello che è, la cartella cambiata dopo il
-/// controllo anche (niente è scritto), ogni altro guasto con le parole che
-/// porta. Un rifiuto della cartella non passa di qui: è un esito tipizzato.
-/// Il rifiuto di prima, già tolto, sparisce anche dallo schermo.
-///
-/// `kept`: la sostituzione si è fermata e l'host ha rimesso il vecchio al suo
-/// posto, e l'avviso lo dice.
-async function failed(
-  host: ThemeFolderHost,
-  folder: string | null,
-  error: unknown,
-  kept = false,
-): Promise<void> {
+/// modalità spenta si dice per quello che è, ogni altro guasto con le parole
+/// che porta (l'host le manda già nella lingua di chi guarda). Ogni fermata
+/// dell'installazione è un esito tipizzato e non passa di qui. Il rifiuto di
+/// prima, già tolto, sparisce anche dallo schermo.
+async function failed(host: ThemeFolderHost, error: unknown): Promise<void> {
   refusal = null;
   if (isErrorKind(error, "permission_denied")) notify(t("settings.themes.developer_off"), "guasto");
-  else if (isErrorKind(error, "conflict") && folder !== null) {
-    notify(t("settings.themes.changed", { folder }), "guasto");
-  } else {
-    const reason = errorText(error).replace(/[.\s]+$/, "");
-    notify(t(kept ? "settings.themes.install_failed_kept" : "settings.themes.install_failed", { reason }), "guasto");
-  }
+  else notify(t("settings.themes.install_failed", { reason: errorText(error).replace(/[.\s]+$/, "") }), "guasto");
   await host.rerender();
 }
 
+/// Un'installazione che si è fermata senza scrivere: la cartella cambiata, un
+/// controllo che non vale più, il disco che dice di no. Ognuno ha la sua
+/// frase; con `replace` l'avviso dice anche che il tema installato è com'era.
+async function stopped(
+  host: ThemeFolderHost,
+  folder: string,
+  outcome: Extract<ThemeFolderInstall, { outcome: "changed" | "unchecked" | "failed" }>,
+  replace: boolean,
+): Promise<void> {
+  refusal = null;
+  const what =
+    outcome.outcome === "failed"
+      ? t(DISK_CAUSE[outcome.cause])
+      : t(outcome.outcome === "changed" ? "settings.themes.changed" : "settings.themes.unchecked", {
+          folder: folderName(folder),
+        });
+  notify(replace ? `${what} ${t("settings.themes.install_kept")}` : what, "guasto");
+  await host.rerender();
+}
+
+/// La frase di ogni perché del disco.
+const DISK_CAUSE: Record<DiskCause, "settings.themes.disk.full" | "settings.themes.disk.denied" | "settings.themes.disk.other"> = {
+  full: "settings.themes.disk.full",
+  denied: "settings.themes.disk.denied",
+  other: "settings.themes.disk.other",
+};
+
+/// Scarta il permesso del controllo: la persona ha detto no, o la shell non
+/// installa la cartella. Se l'host non risponde il permesso resta, ma vale solo
+/// per quella cartella controllata: niente da dire alla persona.
+function discard(): void {
+  void api.discardThemeFolder().catch(() => undefined);
+}
+
 /// Il rifiuto tipizzato dell'host, come diagnosi di una riga.
-function hostRefusal(check: Extract<ThemeFolderCheck, { outcome: "refused" }>): Diagnosis {
-  const row = refusalRow(check.refusal);
-  return { name: folderName(check.folder), at: Date.now(), rows: [row], text: [row.why] };
+function hostRefusal(name: string, refused: ThemeFolderRefusal, kept = false): Diagnosis {
+  const row = refusalRow(refused);
+  return { name, at: Date.now(), rows: [row], text: [row.why], kept };
 }
 
 /// Il cancello del catalogo sulla cartella letta: i motivi di ogni luce
@@ -363,52 +390,70 @@ function tellReplaceFailed(
 export async function installThemeFolder(host: ThemeFolderHost): Promise<void> {
   let check: ThemeFolderCheck;
   try {
-    check = await api.checkThemeFolder(t("settings.themes.install_pick"));
+    // Il titolo della finestra lo scrive l'host: è lì che la persona sceglie.
+    check = await api.checkThemeFolder();
   } catch (error) {
-    if (!host.lifetime.closed) await failed(host, null, error);
+    if (!host.lifetime.closed) await failed(host, error);
     return;
   }
-  if (check.outcome === "cancelled" || host.lifetime.closed) return;
+  if (check.outcome === "cancelled" || host.lifetime.closed) {
+    if (check.outcome === "ready") discard();
+    return;
+  }
   refusal = null;
   if (check.outcome === "refused") {
-    await showRefusal(host, hostRefusal(check));
+    await showRefusal(host, hostRefusal(folderName(check.folder), check.refusal));
     return;
   }
   const rejection = await vetted(check);
-  if (host.lifetime.closed) return;
-  if (rejection) {
-    await showRefusal(host, rejection);
+  if (rejection || host.lifetime.closed) {
+    discard();
+    if (rejection && !host.lifetime.closed) await showRefusal(host, rejection);
     return;
   }
-  const { folder, digest } = check;
+  const { folder, digest, manifest } = check;
+  let replace = false;
   let outcome: ThemeFolderInstall;
   try {
     outcome = await api.installThemeFromFolder(false, digest);
   } catch (error) {
-    if (!host.lifetime.closed) await failed(host, folder, error);
+    if (!host.lifetime.closed) await failed(host, error);
     return;
   }
-  if (host.lifetime.closed) return;
   if (outcome.outcome === "collision") {
-    if (!(await askReplace(host, folder, outcome)) || host.lifetime.closed) return;
+    if (host.lifetime.closed || !(await askReplace(host, folder, outcome)) || host.lifetime.closed) {
+      discard();
+      return;
+    }
+    replace = true;
     try {
       outcome = await api.installThemeFromFolder(true, digest);
     } catch (error) {
-      if (!host.lifetime.closed) await failed(host, folder, error, true);
+      if (!host.lifetime.closed) await failed(host, error);
       return;
     }
   }
-  if (outcome.outcome === "revoked") {
-    if (host.lifetime.closed) return;
-    const why = t("settings.themes.refusal.revoked");
-    await showRefusal(host, {
-      name: outcome.name,
-      at: Date.now(),
-      rows: [{ file: null, where: null, code: "revoked", why }],
-      text: [why],
-      kept: true,
-    });
-    return;
+  if (host.lifetime.closed && outcome.outcome !== "installed" && outcome.outcome !== "replace_failed") return;
+  switch (outcome.outcome) {
+    case "revoked": {
+      const why = t("settings.themes.refusal.revoked", { name: outcome.name });
+      await showRefusal(host, { name: outcome.name, at: Date.now(), rows: [{ file: null, where: null, code: "revoked", why }], text: [why] });
+      return;
+    }
+    case "refused":
+      await showRefusal(host, hostRefusal(manifest.name, outcome.refusal, replace || (await installedAlready(manifest.id))));
+      return;
+    case "changed":
+    case "unchecked":
+    case "failed":
+      await stopped(host, folder, outcome, replace);
+      return;
+    case "collision":
+      // Con `replace` l'host non risponde più `collision`.
+      return;
+    case "installed":
+    case "replace_failed":
+      break;
   }
   const wasInUse = currentThemeId() === outcome.id;
   if (host.lifetime.closed) {
@@ -423,8 +468,6 @@ export async function installThemeFolder(host: ThemeFolderHost): Promise<void> {
     await tellReplaceFailed(host, folder, outcome, wasInUse);
     return;
   }
-  // Con `replace` l'host non risponde più `collision`.
-  if (outcome.outcome !== "installed") return;
   notify(
     outcome.replaced
       ? t("settings.themes.replaced", { name: outcome.name, version: outcome.version })
@@ -443,7 +486,7 @@ export function installFolderButton(host: ThemeFolderHost): HTMLButtonElement {
   button.addEventListener("click", () => {
     button.disabled = true;
     void installThemeFolder(host)
-      .catch((error: unknown) => (host.lifetime.closed ? undefined : failed(host, null, error)))
+      .catch((error: unknown) => (host.lifetime.closed ? undefined : failed(host, error)))
       .finally(() => {
         if (button.isConnected) button.disabled = false;
       });

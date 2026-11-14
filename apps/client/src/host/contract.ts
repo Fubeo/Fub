@@ -193,10 +193,17 @@ export type ThemeFolderCheck =
   | { outcome: "refused"; folder: string; refusal: ThemeFolderRefusal };
 
 /**
+ * Perché il disco non ha lasciato scrivere un tema (`fub_host::theme::DiskCause`):
+ * pieno (o la quota finita), negato (i permessi, un disco in sola lettura), un
+ * altro guasto.
+ */
+export type DiskCause = "full" | "denied" | "other";
+
+/**
  * Com'è andata un'installazione da cartella (`install_theme_from_folder`,
- * `fub_host::theme::ThemeFolderInstall`). La cartella cambiata dopo il
- * controllo (o mai controllata), una sostituzione che si ferma rimettendo il
- * vecchio, o la modalità sviluppatore spenta, è un `PluginError` e non sta qui.
+ * `fub_host::theme::ThemeFolderInstall`). Ogni fermata è un esito; un
+ * `PluginError` resta solo per la modalità sviluppatore spenta
+ * (`permission_denied`) e la configurazione che manca (`unserved`).
  *
  * - `installed`: il tema è installato; `replaced` se ha preso il posto di uno
  *   con lo stesso id;
@@ -209,7 +216,15 @@ export type ThemeFolderCheck =
  *   tornare al suo nome. `kept` è il nome della cartella, dentro la cartella
  *   dei temi, dove il vecchio è rimasto: la shell lo dice con le sue parole.
  *   `error` è il guasto del disco così com'è, per «Copia la diagnosi» e il
- *   log, mai da mostrare; la cartella sorgente resta dov'è.
+ *   log, mai da mostrare; la cartella sorgente resta dov'è;
+ * - `refused`: le porte dell'installazione hanno rifiutato i byte controllati,
+ *   come un rifiuto del controllo; niente è scritto;
+ * - `changed`: la cartella non ha più i byte del controllo; niente è scritto;
+ * - `unchecked`: non c'è un controllo con questa impronta (uno più recente ha
+ *   preso il suo posto, o è già stato usato o scartato); niente è scritto;
+ * - `failed`: il disco non ha lasciato scrivere e niente è cambiato (con
+ *   `replace`, quello installato è com'era). `cause` è il perché da dire;
+ *   `error` è il guasto così com'è, mai da mostrare.
  */
 export type ThemeFolderInstall =
   | { outcome: "installed"; id: string; name: string; version: string; replaced: boolean }
@@ -221,7 +236,11 @@ export type ThemeFolderInstall =
       installed_version: string | null;
     }
   | { outcome: "revoked"; id: string; name: string; version: string }
-  | { outcome: "replace_failed"; id: string; name: string; version: string; kept: string; error: PluginError };
+  | { outcome: "replace_failed"; id: string; name: string; version: string; kept: string; error: PluginError }
+  | { outcome: "refused"; refusal: ThemeFolderRefusal }
+  | { outcome: "changed" }
+  | { outcome: "unchecked" }
+  | { outcome: "failed"; cause: DiskCause; error: PluginError };
 
 export interface VaultInfo {
   root: string;

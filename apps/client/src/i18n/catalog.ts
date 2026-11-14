@@ -1442,13 +1442,17 @@ export const IT = { // --- la scocca -------------------------------------------
 // --- installare un tema da una cartella, e la diagnosi (PA T36) ------------
 "settings.themes.none_installed": "Nessun tema installato. Installane uno da una cartella.",
 "settings.themes.install_folder": "Installa da cartella…",
-"settings.themes.install_pick": "Scegli la cartella del tema",
 "settings.themes.installed": "«{name}» installato: lo trovi fra i temi installati.",
 "settings.themes.replaced": "«{name}» sostituito con la versione {version}.",
 "settings.themes.developer_off":
   "La modalità sviluppatore è spenta: accendila nel gruppo «Sviluppo» per installare da una cartella.",
 "settings.themes.install_failed": "Il tema non si è installato: {reason}",
-"settings.themes.install_failed_kept": "Il tema non si è installato: {reason}. Quello installato resta com'era.",
+"settings.themes.install_kept": "Quello installato resta com'era.",
+"settings.themes.disk.full": "Il disco è pieno: il tema non si è installato.",
+"settings.themes.disk.denied": "Il sistema non lascia scrivere nella cartella dei temi: il tema non si è installato.",
+"settings.themes.disk.other": "Il disco non ha lasciato scrivere il tema: non si è installato.",
+"settings.themes.unchecked":
+  "Il controllo di «{folder}» non vale più: ne è arrivato uno più recente, o è già stato usato. Non ho scritto niente: scegli di nuovo la cartella.",
 "settings.themes.replace.title": "«{name}» è già installato",
 "settings.themes.replace.body":
   "La cartella {folder} ha lo stesso id, «{id}», con la versione {version} (installata: {installed}). La cartella nuova è già controllata: si può sostituire.",
@@ -1467,7 +1471,7 @@ export const IT = { // --- la scocca -------------------------------------------
 "settings.themes.diagnosis.when_kept": "Tentativo delle {time}. Il tema installato resta com'era.",
 "settings.themes.refused.one": "«{name}» non è installato: {n} motivo, lo trovi sotto «Temi installati».",
 "settings.themes.refused": "«{name}» non è installato: {n} motivi, li trovi sotto «Temi installati».",
-"settings.themes.changed": "La cartella {folder} è cambiata mentre la installavo: non ho scritto niente. Riprova.",
+"settings.themes.changed": "La cartella «{folder}» è cambiata dopo il controllo: non ho scritto niente. Riprova.",
 "settings.themes.diagnosis.copy": "Copia la diagnosi",
 "settings.themes.diagnosis.copied": "Diagnosi copiata.",
 "settings.themes.diagnosis.copy_failed": "La diagnosi non si è copiata: {reason}",
@@ -1479,7 +1483,7 @@ export const IT = { // --- la scocca -------------------------------------------
 "settings.themes.refusal.traversal": "È un collegamento, o porta fuori dalla cartella: un tema è fatto solo di file suoi.",
 "settings.themes.refusal.catalog_state": "È lo stato del catalogo che scrive Fub, non parte del tema: toglilo dalla cartella.",
 "settings.themes.refusal.malformed": "Il tema non è ben formato: {detail}",
-"settings.themes.refusal.revoked": "Il tema installato con questo id è revocato dal catalogo: una cartella non lo sostituisce.",
+"settings.themes.refusal.revoked": "«{name}» è stato ritirato dal catalogo e Fub non lo installa, nemmeno da una cartella.",
 // --- i tasti che il vault propone (§23.13) -----------------------------
 //
 // Il testo dice che **non sono attive**, e lo dice per primo: chi legge deve
@@ -4667,13 +4671,17 @@ export const EN: Record<Key, string> = { "app.skip_to_editor": "Skip to the edit
 "settings.themes.preview_failed": "Theme preview unavailable: {reason}",
 "settings.themes.none_installed": "No theme installed. Install one from a folder.",
 "settings.themes.install_folder": "Install from folder…",
-"settings.themes.install_pick": "Choose the theme folder",
 "settings.themes.installed": "«{name}» installed: you will find it among the installed themes.",
 "settings.themes.replaced": "«{name}» replaced with version {version}.",
 "settings.themes.developer_off":
   "Developer mode is off: turn it on in the «Development» group to install from a folder.",
 "settings.themes.install_failed": "The theme was not installed: {reason}",
-"settings.themes.install_failed_kept": "The theme was not installed: {reason}. The installed one stays as it was.",
+"settings.themes.install_kept": "The installed one stays as it was.",
+"settings.themes.disk.full": "The disk is full: the theme was not installed.",
+"settings.themes.disk.denied": "The system does not allow writing to the themes folder: the theme was not installed.",
+"settings.themes.disk.other": "The disk did not allow writing the theme: it was not installed.",
+"settings.themes.unchecked":
+  "The check of «{folder}» is no longer valid: a newer one arrived, or it was already used. Nothing was written: choose the folder again.",
 "settings.themes.replace.title": "«{name}» is already installed",
 "settings.themes.replace.body":
   "The folder {folder} has the same id, «{id}», with version {version} (installed: {installed}). The new folder has already been checked: it can replace it.",
@@ -4692,7 +4700,7 @@ export const EN: Record<Key, string> = { "app.skip_to_editor": "Skip to the edit
 "settings.themes.diagnosis.when_kept": "Attempt at {time}. The installed theme stays as it was.",
 "settings.themes.refused.one": "«{name}» is not installed: {n} reason, you will find it under «Installed themes».",
 "settings.themes.refused": "«{name}» is not installed: {n} reasons, you will find them under «Installed themes».",
-"settings.themes.changed": "The folder {folder} changed while it was being installed: nothing was written. Try again.",
+"settings.themes.changed": "The folder «{folder}» changed after the check: nothing was written. Try again.",
 "settings.themes.diagnosis.copy": "Copy the diagnosis",
 "settings.themes.diagnosis.copied": "Diagnosis copied.",
 "settings.themes.diagnosis.copy_failed": "The diagnosis was not copied: {reason}",
@@ -4704,7 +4712,7 @@ export const EN: Record<Key, string> = { "app.skip_to_editor": "Skip to the edit
 "settings.themes.refusal.traversal": "It is a link, or it leads out of the folder: a theme is made only of its own files.",
 "settings.themes.refusal.catalog_state": "It is catalog state that Fub writes, not part of the theme: remove it from the folder.",
 "settings.themes.refusal.malformed": "The theme is not well formed: {detail}",
-"settings.themes.refusal.revoked": "The installed theme with this id is revoked by the catalog: a folder does not replace it.",
+"settings.themes.refusal.revoked": "«{name}» was withdrawn from the catalog and Fub does not install it, not even from a folder.",
 "settings.vault_keys.title": "This vault proposes {count} shortcuts",
 "settings.vault_keys.hint":
   "A vault carries its own shortcuts with it, and these come from outside: until you look at them they press nothing, and the combinations declared by the commands are what counts.",

@@ -381,6 +381,43 @@
       "version": "0.4.0"
     },
     {
+      "outcome": "refused",
+      "refusal": {
+        "reason": "traversal",
+        "path": "escape"
+      }
+    },
+    {
+      "outcome": "changed"
+    },
+    {
+      "outcome": "unchecked"
+    },
+    {
+      "outcome": "failed",
+      "cause": "full",
+      "error": {
+        "kind": "io",
+        "message": "I/O error: /config/themes/.tmp-1-2: No space left on device"
+      }
+    },
+    {
+      "outcome": "failed",
+      "cause": "denied",
+      "error": {
+        "kind": "io",
+        "message": "I/O error: /config/themes: Permission denied"
+      }
+    },
+    {
+      "outcome": "failed",
+      "cause": "other",
+      "error": {
+        "kind": "io",
+        "message": "I/O error: /config/themes: Input/output error"
+      }
+    },
+    {
       "outcome": "replace_failed",
       "id": "acme.carta",
       "name": "Carta",

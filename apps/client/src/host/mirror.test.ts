@@ -18,6 +18,7 @@ import type {
   ComponentWrite,
   ComponentsApplied,
   ComponentsMap,
+  DiskCause,
   ThemeFolderCheck,
   ThemeFolderInstall,
   ThemeFolderLight,
@@ -1974,7 +1975,13 @@ describe("mirror TS↔Rust", () => {
       replace_failed: keysOf<Extract<ThemeFolderInstall, { outcome: "replace_failed" }>>({
         outcome: true, id: true, name: true, version: true, kept: true, error: true,
       }),
+      refused: keysOf<Extract<ThemeFolderInstall, { outcome: "refused" }>>({ outcome: true, refusal: true }),
+      changed: keysOf<Extract<ThemeFolderInstall, { outcome: "changed" }>>({ outcome: true }),
+      unchecked: keysOf<Extract<ThemeFolderInstall, { outcome: "unchecked" }>>({ outcome: true }),
+      failed: keysOf<Extract<ThemeFolderInstall, { outcome: "failed" }>>({ outcome: true, cause: true, error: true }),
     };
+    const causes: Record<DiskCause, true> = { full: true, denied: true, other: true };
+    const seenCauses = new Set<string>();
     for (const sample of samples) {
       switch (sample.outcome) {
         case "installed":
@@ -1991,12 +1998,24 @@ describe("mirror TS↔Rust", () => {
           touchPluginErrorKind(sample.error.kind);
           expect(Object.keys(sample.error).sort()).toEqual(RECORD_KEYS.PluginError);
           break;
+        case "refused":
+          expect(typeof sample.refusal.reason).toBe("string");
+          break;
+        case "changed":
+        case "unchecked":
+          break;
+        case "failed":
+          expect(causes[sample.cause]).toBe(true);
+          seenCauses.add(sample.cause);
+          touchPluginErrorKind(sample.error.kind);
+          break;
         default:
           assertNever(sample);
       }
       expect(Object.keys(sample).sort()).toEqual(fields[sample.outcome]);
     }
     expect(new Set(samples.map((sample) => sample.outcome))).toEqual(new Set(Object.keys(fields)));
+    expect(seenCauses).toEqual(new Set(Object.keys(causes)));
   });
 
   it("«Apri con» porta i tre modi di consegna e le tre righe del menu", () => {

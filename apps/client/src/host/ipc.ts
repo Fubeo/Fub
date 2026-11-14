@@ -494,17 +494,20 @@ export const api = {
   listThemes: () => invoke<ThemeInfo[]>("list_themes"),
   readTheme: (id: string, light: ThemeLight) =>
     invoke<ThemePayload>("read_theme", { id, light }),
-  // «Installa da cartella…»: apre la finestra nativa di scelta (col titolo
-  // dato) e legge la cartella scelta senza installarla: i fasci di ogni luce,
-  // per i cancelli della shell, e l'impronta dei byte. La webview non passa un
-  // path. Solo con `developer.mode` acceso: lo decide l'host, che altrimenti
-  // risponde `permission_denied`.
-  checkThemeFolder: (title: string) => invoke<ThemeFolderCheck>("check_theme_folder", { title }),
+  // «Installa da cartella…»: apre la finestra nativa di scelta (il titolo lo
+  // scrive l'host) e legge la cartella scelta senza installarla: i fasci di
+  // ogni luce, per i cancelli della shell, e l'impronta dei byte. La webview
+  // non passa un path. Solo con `developer.mode` acceso: lo decide l'host, che
+  // altrimenti risponde `permission_denied`.
+  checkThemeFolder: () => invoke<ThemeFolderCheck>("check_theme_folder"),
+  // Scarta il permesso del controllo: «no» a «Sostituisci», o la shell rifiuta
+  // la cartella col suo cancello.
+  discardThemeFolder: () => invoke<void>("discard_theme_folder"),
   // Installa la cartella che l'ultimo controllo ha letto, se `digest` è la sua
-  // impronta: altrimenti (cartella cambiata, o controllo superato) l'host
-  // risponde `conflict` e niente si scrive. Solo con `developer.mode` acceso.
-  // Senza `replace` un id già installato torna come `collision`, e niente si
-  // tocca.
+  // impronta, e consuma il permesso: senza (controllo superato, già usato o
+  // scartato) l'esito è `unchecked`, e una cartella cambiata è `changed`;
+  // niente si scrive. Solo con `developer.mode` acceso. Senza `replace` un id
+  // già installato torna come `collision`, e niente si tocca.
   installThemeFromFolder: (replace: boolean, digest: string) =>
     invoke<ThemeFolderInstall>("install_theme_from_folder", { replace, digest }),
   // Chi questo host sa montare, e chi è acceso: non è `VaultInfo.plugins`, che
