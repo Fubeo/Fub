@@ -12,6 +12,7 @@ import { icon, iconEl } from "./icons";
 import { openLifetime, type Lifetime } from "./lifetime";
 import { figureLabel, figureValue, PAGE_FIGURES } from "./page-mark";
 import { enterSurface, exitSurface } from "./motion";
+import { DURATION, enter, flip, motionLevel, stagger } from "../moto";
 
 export interface MenuItem {
   label: string;
@@ -189,7 +190,66 @@ const fold = (text: string): string => text.toLocaleLowerCase().normalize("NFD")
 interface Row {
   readonly item: MenuItem;
   readonly path?: string;
+  /// Il gruppo che comincia qui si vede col suo nome, come «Altri comandi».
+  readonly heading?: boolean;
 }
+
+/// Quanto si vede la spunta d'accento di una parte premuta prima che il menu
+/// si chiuda e il gesto si faccia.
+const PRESS_MS = 200;
+
+/// L'entrata del menu aperto in un punto: nasce dal punto del clic, e come
+/// ogni moto del menu sta sotto un quinto di secondo.
+const POINT_ENTER_MS = 180;
+const ENTER_EASING = "cubic-bezier(0.2, 0.85, 0.25, 1)";
+
+/// Testata, appunti e voci arrivano una dopo l'altra, a questa distanza; oltre
+/// le prime `PART_STAGGER_MAX` le altre arrivano insieme, perché l'entrata
+/// intera resti sotto un quinto di secondo.
+const PART_STAGGER_MS = 15;
+const PART_STAGGER_MAX = 5;
+
+/// Quanto ci mettono a scivolare la pastiglia della scelta da una voce
+/// all'altra, e la linguetta da una parte all'altra della barra: a tempo, non
+/// a molla, perché la coda di una molla supererebbe il quinto di secondo.
+const GLIDE_MS = 150;
+const TAB_GLIDE_MS = 200;
+
+/// Di quanto scivola un sottomenu che entra, da destra, o torna, da sinistra.
+const SUB_SHIFT = 12;
+
+/// I segni dei formati che una scelta in riga sa disegnare (`icons.ts`).
+const SIGNS: ReadonlySet<string> = new Set(["copy-markdown", "copy-html", "copy-text"]);
+
+/// Il segno di una scelta: la sua icona, se è uno dei segni dei formati, o
+/// quello del formato che il suo nome dice. Le superfici di oggi dichiarano
+/// «Copia come ▸» senza icone (`SurfaceMenuItem`), e i nomi dei formati sono
+/// quelli del catalogo.
+function signOf(item: MenuItem): string | null {
+  if (item.icon !== undefined && SIGNS.has(item.icon)) return item.icon;
+  const named = new Map<string, string>([
+    [t("editor_menu.copy_as.markdown"), "copy-markdown"],
+    [t("editor_menu.copy_as.html"), "copy-html"],
+    [t("editor_menu.copy_as.text"), "copy-text"],
+  ]);
+  return named.get(item.label) ?? null;
+}
+
+/// Le scelte di una voce che le tiene nella riga invece che in un sottomenu:
+/// due o tre, ognuna un gesto semplice col suo segno riconoscibile. Altrimenti
+/// `null`, e resta il sottomenu.
+function optionsOf(item: MenuItem): readonly MenuItem[] | null {
+  if (item.disabled || !Array.isArray(item.items)) return null;
+  const options = item.items as readonly MenuItem[];
+  if (options.length < 2 || options.length > 3) return null;
+  const plain = options.every((option) =>
+    option.items === undefined && !option.submenu && !option.choice && !option.disabled && option.run !== undefined && signOf(option) !== null);
+  return plain ? options : null;
+}
+
+/// Come entra il prossimo menu aperto da qui: col dito un sottomenu prende il
+/// posto del menu ed entra da destra, e il menu di prima torna da sinistra.
+let nextEntry: "forward" | "back" | null = null;
 
 /// Le voci che si possono scegliere, sottomenu compresi, col loro percorso.
 /// Un sottomenu preparato quando serve conta se è già pronto. Con `disabled`
@@ -274,6 +334,8 @@ export function showContextMenu(
   options: ContextMenuOptions = {},
 ): ContextMenuHandle {
   closeContextMenu();
+  const entry = nextEntry;
+  nextEntry = null;
   const lifetime = openLifetime();
   menuLifetime = lifetime;
   menuClose = options.onClose ?? null;
@@ -285,7 +347,14 @@ export function showContextMenu(
   const replaceWith = async (item: MenuItem): Promise<void> => {
     const children = await itemsOf(item);
     if (menuLifetime !== lifetime) return;
-    const back: MenuItem = { label: `‹ ${item.label}`, run: () => showContextMenu({ x, y }, items, options) };
+    const back: MenuItem = {
+      label: `‹ ${item.label}`,
+      run: () => {
+        nextEntry = "back";
+        showContextMenu({ x, y }, items, options);
+      },
+    };
+    nextEntry = "forward";
     showContextMenu({ x, y }, [back, ...children], { ...options, strip: undefined });
   };
   const pointer = options.pointer ?? byPointer(at);
@@ -301,6 +370,9 @@ export function showContextMenu(
   const root = renderMenu(withClipboard(items), lifetime, replaceWith, chrome, { disabled: options.reachDisabled === true, typed: null });
   const menu = root.menu;
   menu.id = "context-menu";
+  // Aperto in un punto (il tasto destro, il tasto Menu): è il menu del posto,
+  // che nasce dal punto e fa arrivare le sue parti una dopo l'altra.
+  if (anchor === null) menu.classList.add("menu-at-point");
   if (options.label) menu.setAttribute("aria-label", options.label);
   else if (options.labelledBy) menu.setAttribute("aria-labelledby", options.labelledBy);
   menu.style.left = `${x}px`;
@@ -316,7 +388,8 @@ export function showContextMenu(
   // La barra si misura sul menu fermo: a entrata cominciata il suo riquadro è
   // già scalato, e la barra resterebbe dove il menu era al primo fotogramma.
   const strip = options.strip ? mountStrip(menu, options, lifetime) : null;
-  enterSurface(menu);
+  if (anchor === null) enterAtPoint(menu, root.parts(), entry);
+  else enterSurface(menu);
   // Il primo click fuori chiude, e il ritardo evita che sia questo stesso click
   // ad attivarlo. Il `once` **non** bastava: se il menu si chiudeva prima —
   // Escape, o una voce scelta da tastiera — l'ascoltatore non era ancora
@@ -349,6 +422,26 @@ export function showContextMenu(
   };
 }
 
+/// L'entrata del menu aperto in un punto: cresce dal punto del clic (l'origine
+/// la mette `growFrom`) mentre testata, appunti e voci arrivano una dopo
+/// l'altra. Il sottomenu che col dito prende il posto del menu entra invece da
+/// destra, e il menu di prima torna da sinistra. Col moto ridotto c'è e basta.
+///
+/// Le corse delle parti non sono legate alla vita del menu: chiuderlo a metà
+/// entrata le fermerebbe prima che l'uscita ne fotografi la posa, e le parti
+/// salterebbero al riposo nell'immagine che sfuma. Finiscono da sole.
+function enterAtPoint(menu: HTMLElement, parts: readonly HTMLElement[], entry: "forward" | "back" | null): void {
+  if (entry !== null) {
+    enter(menu, { from: { x: entry === "forward" ? SUB_SHIFT : -SUB_SHIFT, opacity: 0 }, duration: DURATION.swap, easing: ENTER_EASING, whenReduced: "none" });
+    return;
+  }
+  enter(menu, { from: { scale: 0.94, opacity: 0 }, duration: POINT_ENTER_MS, easing: ENTER_EASING, whenReduced: "none" });
+  stagger(parts, (part) => enter(part, { from: { y: 5, opacity: 0 }, duration: DURATION.swap, easing: ENTER_EASING, whenReduced: "none" }), {
+    each: PART_STAGGER_MS,
+    max: PART_STAGGER_MAX,
+  });
+}
+
 /// Le voci di un sottomenu, preparate se serve.
 async function itemsOf(item: MenuItem): Promise<readonly MenuItem[]> {
   return typeof item.items === "function" ? await item.items() : (item.items ?? []);
@@ -359,10 +452,32 @@ interface RenderedMenu {
   focusActive(): void;
   /// Le voci nuove al posto di quelle di prima, nello stesso menu.
   update(items: readonly MenuItem[]): void;
+  /// Le parti che entrano una dopo l'altra: testata, appunti, voci, piede.
+  parts(): HTMLElement[];
+}
+
+/// Una voce con le sue due o tre scelte nella riga: i tastini, quello scelto,
+/// e il posto che occupa fra le fermate delle frecce.
+interface Choices {
+  readonly row: HTMLElement;
+  /// Il nome della scelta, accanto a quello della voce, mentre la riga è accesa.
+  readonly name: HTMLElement;
+  readonly buttons: readonly HTMLButtonElement[];
+  readonly items: readonly MenuItem[];
+  /// L'indice della riga fra le fermate delle frecce.
+  readonly slot: number;
+  current: number;
 }
 
 /// Un elenco di voci con la sua navigazione da tastiera: il menu principale e
 /// ciascun sottomenu a cascata sono la stessa cosa, cambia solo dove stanno.
+///
+/// **Una scelta sola.** Acceso è ciò che ha il fuoco: il passaggio del
+/// puntatore lo sposta, le frecce ripartono da lì, Invio fa quello, e quando il
+/// puntatore esce dal menu resta acceso. Barra degli appunti ed elenco seguono
+/// la stessa regola: mai due cose accese insieme. Nell'elenco la scelta è una
+/// pastiglia che scivola (`menu-glide`), nella barra una linguetta chiara
+/// (`menu-clipboard-glide`).
 function renderMenu(
   initialItems: readonly MenuItem[],
   lifetime: Lifetime,
@@ -378,16 +493,33 @@ function renderMenu(
   menu.setAttribute("role", "menu");
   menu.setAttribute("aria-orientation", "vertical");
   menu.tabIndex = -1;
+  /// Le fermate delle frecce, nell'ordine: gli appunti (finché non si cerca),
+  /// poi le voci; di una voce con le scelte nella riga conta la scelta di
+  /// adesso. `usable` è la voce di ciascuna, `names` il nome per l'iniziale.
   const buttons: HTMLButtonElement[] = [];
   const usable: MenuItem[] = [];
+  const names: string[] = [];
+  /// Il bottone di ogni voce dell'elenco, per ritrovarlo quando le voci cambiano.
+  const buttonOf = new Map<MenuItem, HTMLButtonElement>();
+  /// Le righe con le scelte, per ciascuno dei loro tastini.
+  const choicesOf = new Map<HTMLButtonElement, Choices>();
   // Il sottomenu aperto, se ce n'è uno: la voce da cui parte e come chiuderlo.
   // Il bottone cambia quando le voci si ridisegnano, il sottomenu resta.
   let open: { button: HTMLButtonElement; item: MenuItem; lifetime: Lifetime; child: RenderedMenu; sub: HTMLElement } | null = null;
   // Dove stava il puntatore al movimento prima e adesso: la mira si legge da qui.
   let pointer: { from: Point; to: Point } | null = null;
+  // Una parte premuta mostra la spunta prima che il menu si chiuda: intanto il
+  // menu non risponde a un secondo gesto.
+  let pressing = false;
   lifetime.listen(menu, "pointermove", (e) => {
     const to = { x: e.clientX, y: e.clientY };
+    const first = pointer === null;
     pointer = { from: pointer?.to ?? to, to };
+    // Il primo movimento può essere quello che il motore finge quando il menu
+    // compare sotto il puntatore fermo: aperto col mouse, niente si accende
+    // finché il puntatore non si muove davvero.
+    if (first || e.pointerType === "touch" || pressing) return;
+    hoverAt(e.target);
   });
   let hoverTimer: ReturnType<typeof setTimeout> | null = null;
   const cancelHover = (): void => {
@@ -427,7 +559,11 @@ function renderMenu(
     sub.style.left = "0px";
     sub.style.top = "0px";
     (menu.parentElement ?? document.body).appendChild(sub);
-    placeCascade(sub, button.getBoundingClientRect(), menu.getBoundingClientRect());
+    const parentBox = menu.getBoundingClientRect();
+    placeCascade(sub, button.getBoundingClientRect(), parentBox);
+    // Entra dal suo lato: da destra quando sta a destra del menu.
+    const right = sub.getBoundingClientRect().left >= parentBox.left;
+    enter(sub, { from: { x: right ? SUB_SHIFT : -SUB_SHIFT, opacity: 0 }, duration: DURATION.swap, easing: ENTER_EASING, whenReduced: "none", lifetime: childLifetime });
     childLifetime.add(() => sub.remove());
     // Un sottomenu lasciato dal puntatore non si chiude finché il puntatore
     // ci sta sopra: la tolleranza diagonale è questa.
@@ -449,19 +585,40 @@ function renderMenu(
     });
     childLifetime.add(trapFocus(sub, back));
     if (focus) child.focusActive();
-    else button.focus();
+    else button.focus({ preventScroll: true });
+  };
+  /// Il passaggio del puntatore su una voce la chiude un sottomenu aperto da
+  /// un'altra, o apre il suo, dopo una pausa breve; più lunga se il puntatore
+  /// sta andando verso il sottomenu aperto: attraversa, non sceglie.
+  const hoverCascade = (e: PointerEvent, owner: HTMLButtonElement | null, item: MenuItem | null): void => {
+    if (e.pointerType === "touch") return;
+    cancelHover();
+    const nested = item !== null && item.items !== undefined && !item.disabled;
+    const aiming = open !== null && open.button !== owner && pointer !== null &&
+      aimsAt(pointer.from, { x: e.clientX, y: e.clientY }, open.sub.getBoundingClientRect());
+    hoverTimer = setTimeout(() => {
+      hoverTimer = null;
+      if (nested && owner !== null) void cascade(owner, item, false);
+      else if (open !== null && open.button !== owner) closeOpen();
+    }, aiming ? AIM_DELAY : HOVER_DELAY);
   };
   // Le voci stanno in un elenco loro, fra la testata e gli appunti sopra e il
-  // piede sotto: scrivere le sostituisce e il resto non si muove.
+  // piede sotto: scrivere le sostituisce e il resto non si muove. La pastiglia
+  // della scelta ci sta dentro, sotto le voci.
   const list = document.createElement("div");
   list.className = "menu-items";
   list.setAttribute("role", "none");
+  const glide = document.createElement("div");
+  glide.className = "menu-glide";
+  glide.setAttribute("aria-hidden", "true");
+  glide.hidden = true;
   // La riga degli appunti, se c'è: pulsanti che sono voci del menu, prima
   // delle altre nel giro delle frecce.
   const quick: HTMLButtonElement[] = [];
   const quickItems: MenuItem[] = [];
+  let head: HTMLElement | null = null;
   if (chrome?.header) {
-    const head = document.createElement("div");
+    head = document.createElement("div");
     head.className = "menu-head";
     head.setAttribute("aria-hidden", "true");
     const glyph = chrome.header.icon === undefined ? null : iconEl(chrome.header.icon);
@@ -479,13 +636,19 @@ function renderMenu(
     menu.append(head);
     menu.setAttribute("aria-label", chrome.header.name ? `${chrome.header.kind} · ${chrome.header.name}` : chrome.header.kind);
   }
+  let bar: HTMLElement | null = null;
+  const tab = document.createElement("div");
+  tab.className = "menu-clipboard-glide";
+  tab.setAttribute("aria-hidden", "true");
   if (chrome && chrome.clipboard.length > 0) {
-    const row = document.createElement("div");
-    row.className = "menu-clipboard";
-    row.setAttribute("role", "group");
-    row.setAttribute("aria-label", t("context.clipboard"));
+    bar = document.createElement("div");
+    bar.className = "menu-clipboard";
+    bar.setAttribute("role", "group");
+    bar.setAttribute("aria-label", t("context.clipboard"));
+    bar.append(tab);
     for (const item of chrome.clipboard) {
       const b = document.createElement("button");
+      b.type = "button";
       b.className = "menu-quick";
       b.setAttribute("role", "menuitem");
       b.tabIndex = -1;
@@ -498,16 +661,17 @@ function renderMenu(
       label.textContent = item.label;
       b.append(label);
       if (item.hint) b.setAttribute("aria-keyshortcuts", item.hint);
-      b.addEventListener("click", () => activate(b, item));
-      row.append(b);
+      b.addEventListener("click", () => press(b, item));
+      b.addEventListener("pointerenter", (e) => hoverCascade(e, null, null));
+      bar.append(b);
       quick.push(b);
       quickItems.push(item);
     }
-    menu.append(row);
+    menu.append(bar);
   }
   menu.append(list);
-  // Il piede: invita a scrivere, poi dice che cosa si è scritto e quanto si è
-  // trovato. Per chi ascolta parlano le voci trovate, che prendono il fuoco.
+  // Il piede: una fascia tenue che invita a scrivere, poi mostra che cosa si
+  // è scritto. Per chi ascolta parlano le voci trovate, che prendono il fuoco.
   const foot = chrome?.search ? document.createElement("div") : null;
   if (foot !== null) {
     foot.className = "menu-foot";
@@ -515,8 +679,17 @@ function renderMenu(
     menu.append(foot);
   }
   let query = "";
+  /// Dove cominciano le voci fra le fermate: dopo gli appunti, che mentre si
+  /// cerca non ci sono.
+  const lead = (): number => (query === "" ? quick.length : 0);
+  /// L'ultima parte della barra che è stata accesa: è lì che si torna con le
+  /// frecce dalla prima voce o dall'ultima.
+  let lastQuick = 0;
   const drawFoot = (found: number): void => {
     if (foot === null) return;
+    foot.classList.toggle("menu-finding", query !== "");
+    const glyph = iconEl("search");
+    glyph?.setAttribute("aria-hidden", "true");
     const text = document.createElement("span");
     text.className = "menu-foot-text";
     if (query === "") {
@@ -525,32 +698,95 @@ function renderMenu(
       const typed = document.createElement("span");
       typed.className = "menu-foot-query";
       typed.textContent = query;
-      text.append(typed, ` · ${found === 1 ? t("context.foot.one") : t("context.foot.many", { count: String(found) })}`);
+      const caret = document.createElement("span");
+      caret.className = "menu-foot-caret";
+      text.append(typed, caret);
+      // Senza tetto le trovate possono essere centinaia: il piede le conta.
+      if (chrome?.full) text.append(` · ${found === 1 ? t("context.foot.one") : t("context.foot.many", { count: String(found) })}`);
     }
-    foot.replaceChildren(text);
-    const hint = menuSearch?.hint() ?? "";
-    if (hint !== "") {
-      const kbd = document.createElement("kbd");
-      kbd.textContent = hint;
-      foot.append(kbd);
-    }
+    foot.replaceChildren(...(glyph === null ? [] : [glyph]), text);
   };
+
+  /// La riga di una voce con due o tre scelte che hanno il loro segno: i
+  /// tastini accanto al nome, al posto del sottomenu.
+  function drawChoices(item: MenuItem, options: readonly MenuItem[], host: HTMLElement, pictured: boolean): void {
+    const row = document.createElement("div");
+    row.className = "menu-choices";
+    row.setAttribute("role", "group");
+    row.setAttribute("aria-label", item.label);
+    const glyph = item.icon === undefined ? null : iconEl(item.icon);
+    if (glyph !== null || pictured) {
+      const picture = document.createElement("span");
+      picture.className = "menu-icon";
+      picture.setAttribute("aria-hidden", "true");
+      if (glyph !== null) picture.append(glyph);
+      row.append(picture);
+    }
+    const label = document.createElement("span");
+    label.className = "menu-label";
+    label.setAttribute("aria-hidden", "true");
+    label.textContent = item.label;
+    const name = document.createElement("span");
+    name.className = "menu-choice-name";
+    label.append(name);
+    row.append(label);
+    const set = document.createElement("span");
+    set.className = "menu-choice-set";
+    const own: HTMLButtonElement[] = [];
+    for (const option of options) {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "menu-choice";
+      b.setAttribute("role", "menuitem");
+      // Le parole non stanno nel tastino: chi ascolta le sente dal suo nome.
+      b.setAttribute("aria-label", `${item.label} ${option.label}`);
+      b.tabIndex = -1;
+      const sign = iconEl(signOf(option)!);
+      if (sign !== null) {
+        sign.setAttribute("aria-hidden", "true");
+        b.append(sign);
+      }
+      b.addEventListener("click", () => press(b, option));
+      set.append(b);
+      own.push(b);
+    }
+    row.append(set);
+    row.addEventListener("pointerenter", (e) => hoverCascade(e, null, null));
+    host.appendChild(row);
+    const choices: Choices = { row, name, buttons: own, items: options, slot: buttons.length, current: 0 };
+    for (const b of own) choicesOf.set(b, choices);
+    buttons.push(own[0]!);
+    usable.push(options[0]!);
+    names.push(item.label);
+    buttonOf.set(item, own[0]!);
+  }
 
   /// Mette nell'elenco le voci `rows`, al posto di quelle di prima.
   function fill(rows: readonly Row[]): void {
-    list.replaceChildren();
+    list.replaceChildren(glide);
+    glide.hidden = true;
     buttons.length = 0;
     usable.length = 0;
-    buttons.push(...quick);
-    usable.push(...quickItems);
+    names.length = 0;
+    buttonOf.clear();
+    choicesOf.clear();
+    // Mentre si cerca la barra degli appunti non c'è: le frecce vanno solo
+    // fra le voci trovate.
+    if (bar !== null) bar.hidden = query !== "";
+    if (query === "") {
+      buttons.push(...quick);
+      usable.push(...quickItems);
+      names.push(...quickItems.map((item) => item.label));
+    }
     const pictured = rows.some(({ item }) => item.sample !== undefined || (item.icon !== undefined && icon(item.icon) !== ""));
     let group = null as { name: string; node: HTMLElement } | null;
-    for (const { item, path } of rows) {
+    for (const { item, path, heading } of rows) {
       // Un gruppo con un nome è un `role="group"` per chi ascolta e una riga per
-      // chi guarda; una riga semplice chiude il gruppo aperto.
+      // chi guarda; una riga semplice chiude il gruppo aperto. Un gruppo con la
+      // sua etichetta («Altri comandi») non ha bisogno anche della riga.
       const named = item.group ?? null;
       if (named !== (group?.name ?? null) || item.separator) {
-        if (list.childElementCount > 0 && (item.separator || named !== null || group !== null)) {
+        if (list.childElementCount > 1 && !heading && (item.separator || named !== null || group !== null)) {
           const rule = document.createElement("div");
           rule.className = "menu-separator";
           rule.setAttribute("role", "separator");
@@ -562,12 +798,25 @@ function renderMenu(
           node.className = "menu-group";
           node.setAttribute("role", "group");
           node.setAttribute("aria-label", named);
+          if (heading) {
+            const title = document.createElement("div");
+            title.className = "menu-group-label";
+            title.setAttribute("aria-hidden", "true");
+            title.textContent = named;
+            node.append(title);
+          }
           list.appendChild(node);
           group = { name: named, node };
         }
       }
       const host = group?.node ?? list;
+      const options = path === undefined ? optionsOf(item) : null;
+      if (options !== null) {
+        drawChoices(item, options, host, pictured);
+        continue;
+      }
       const b = document.createElement("button");
+      b.type = "button";
       b.setAttribute("role", item.choice ? `menuitem${item.choice}` : "menuitem");
       if (item.choice) b.setAttribute("aria-checked", String(item.checked === true));
       b.tabIndex = -1;
@@ -607,16 +856,16 @@ function renderMenu(
       const label = document.createElement("span");
       label.className = "menu-label";
       label.textContent = item.label;
+      b.append(label);
+      // Una riga sola: la spiegazione sta a destra, in grigio, dove non c'è una
+      // scorciatoia; con la scorciatoia la sente soltanto chi ascolta. Intera,
+      // la dice il suggerimento del puntatore.
       if (item.description) {
-        const body = document.createElement("span");
-        body.className = "menu-body";
         const description = document.createElement("span");
-        description.className = "menu-description";
+        description.className = item.hint ? "menu-description menu-quiet" : "menu-description";
         description.textContent = item.description;
-        body.append(label, description);
-        b.append(body);
-      } else {
-        b.append(label);
+        b.append(description);
+        b.title = item.description;
       }
       if (item.choice) {
         const check = document.createElement("span");
@@ -643,27 +892,15 @@ function renderMenu(
         if (nested) b.setAttribute("aria-expanded", "false");
       }
       if (item.danger) b.className = "danger";
-      // Il passaggio del puntatore: su una voce con un sottomenu lo apre, su
-      // un'altra chiude quello aperto. Sempre dopo una pausa breve, e più lunga
-      // se il puntatore sta andando verso il sottomenu aperto: attraversa, non
-      // sceglie.
-      b.addEventListener("pointerenter", (e) => {
-        if (e.pointerType === "touch") return;
-        cancelHover();
-        const aiming = open !== null && open.button !== b && pointer !== null &&
-          aimsAt(pointer.from, { x: e.clientX, y: e.clientY }, open.sub.getBoundingClientRect());
-        hoverTimer = setTimeout(() => {
-          hoverTimer = null;
-          if (nested && !item.disabled) void cascade(b, item, false);
-          else if (open !== null && open.button !== b) closeOpen();
-        }, aiming ? AIM_DELAY : HOVER_DELAY);
-      });
+      b.addEventListener("pointerenter", (e) => hoverCascade(e, b, item));
+      buttonOf.set(item, b);
       if (item.disabled) {
         b.setAttribute("aria-disabled", "true");
         host.appendChild(b);
         if (reach.disabled) {
           buttons.push(b);
           usable.push(item);
+          names.push(item.label);
         }
         continue;
       }
@@ -673,17 +910,17 @@ function renderMenu(
       b.addEventListener("click", () => activate(b, item));
       buttons.push(b);
       usable.push(item);
+      names.push(item.label);
       host.appendChild(b);
     }
   }
   fill(items.map((item) => ({ item })));
   drawFoot(0);
-  const initial = Math.max(
-    0,
-    usable.findIndex((item) => item.selected),
-  );
-  let active = usable.length > 0 && usable[initial]?.selected ? initial : 0;
-  const focusItem = (index: number): void => {
+  // Si parte dalla voce scelta, se c'è, altrimenti dalla prima voce: gli
+  // appunti si raggiungono con le frecce.
+  const chosen = usable.findIndex((item) => item.selected);
+  let active = chosen >= 0 ? chosen : buttons.length > lead() ? lead() : 0;
+  const focusItem = (index: number, scroll = true): void => {
     if (buttons.length === 0) {
       menu.focus();
       return;
@@ -692,17 +929,53 @@ function renderMenu(
     buttons.forEach((button, i) => {
       button.tabIndex = i === active ? 0 : -1;
     });
-    buttons[active]?.focus();
+    for (const choices of new Set(choicesOf.values())) {
+      choices.buttons.forEach((button) => {
+        if (button !== buttons[choices.slot]) button.tabIndex = -1;
+      });
+    }
+    buttons[active]?.focus(scroll ? undefined : { preventScroll: true });
   };
   // La fermata del roving tabindex c'è da subito, anche quando il fuoco resta
   // al menu: Tab e il ritorno dal sottomenu trovano la voce attiva.
   if (buttons[active]) buttons[active].tabIndex = 0;
-  const move = (delta: number): void => {
+
+  /// Cambia la scelta di una riga con le scelte, senza spostare il fuoco.
+  const choose = (choices: Choices, index: number): void => {
+    choices.current = Math.max(0, Math.min(choices.buttons.length - 1, index));
+    if (buttons[choices.slot] === undefined || !choicesOf.has(buttons[choices.slot]!)) return;
+    buttons[choices.slot] = choices.buttons[choices.current]!;
+    usable[choices.slot] = choices.items[choices.current]!;
+  };
+
+  /// Le frecce su e giù. Con la barra degli appunti: ↑ dalla prima voce sale
+  /// alla barra e ↓ dall'ultima ci torna, sulla parte accesa per ultima; dalla
+  /// barra ↓ va alla prima voce e ↑ all'ultima. Senza, il giro si chiude.
+  const step = (delta: number): void => {
+    const count = buttons.length;
+    if (count === 0) {
+      menu.focus();
+      return;
+    }
+    const first = lead();
     const at = buttons.indexOf(document.activeElement as HTMLButtonElement);
     // Nessuna voce col fuoco (il menu aperto dal puntatore): giù va alla voce
-    // attiva, su a quella prima, e dalla prima all'ultima.
-    if (at < 0) focusItem(delta > 0 ? active : active - 1);
-    else focusItem(at + delta);
+    // attiva, su all'ultima voce, o a quella prima della voce scelta.
+    if (at < 0) {
+      focusItem(delta > 0 ? active : active === first ? count - 1 : active - 1);
+      return;
+    }
+    const rows = count - first;
+    if (rows <= 0) return;
+    if (at < first) {
+      focusItem(delta > 0 ? first : count - 1);
+      return;
+    }
+    if (first > 0 && ((delta > 0 && at === count - 1) || (delta < 0 && at === first))) {
+      focusItem(Math.min(lastQuick, first - 1));
+      return;
+    }
+    focusItem(first + ((at - first + delta + rows) % rows));
   };
   // La ricerca per iniziale: una lettera porta alla prossima voce che comincia
   // così, e ripeterla scorre fra quelle che cominciano uguale.
@@ -711,38 +984,129 @@ function renderMenu(
   const typeahead = (key: string): boolean => {
     const wanted = initialOf(key);
     if (wanted === "") return false;
-    for (let step = 1; step <= buttons.length; step++) {
-      const index = (active + step) % buttons.length;
-      if (initialOf(usable[index]!.label) === wanted) {
+    for (let offset = 1; offset <= buttons.length; offset++) {
+      const index = (active + offset) % buttons.length;
+      if (initialOf(names[index]!) === wanted) {
         focusItem(index);
         return true;
       }
     }
     return false;
   };
+
+  /// Il puntatore su una voce, una parte della barra o una scelta la accende:
+  /// prende il fuoco, e lo tiene anche quando il puntatore se ne va. Una voce
+  /// spenta che non si raggiunge non cambia niente.
+  function hoverAt(target: EventTarget | null): void {
+    if (!(target instanceof Element)) return;
+    const button = target.closest("button");
+    const owned = button instanceof HTMLButtonElement && menu.contains(button) ? button : null;
+    const choices = owned !== null ? choicesOf.get(owned) : choicesIn(target.closest(".menu-choices"));
+    if (choices !== undefined && choices !== null) {
+      const index = owned !== null ? choices.buttons.indexOf(owned) : choices.current;
+      if (buttons[choices.slot] === choices.buttons[index] && document.activeElement === buttons[choices.slot]) return;
+      choose(choices, index);
+      focusItem(choices.slot, false);
+      return;
+    }
+    if (owned === null || document.activeElement === owned) return;
+    const index = buttons.indexOf(owned);
+    if (index >= 0) focusItem(index, false);
+  }
+  const choicesIn = (row: Element | null): Choices | null => {
+    if (row === null || !menu.contains(row)) return null;
+    const first = row.querySelector<HTMLButtonElement>(".menu-choice");
+    return first === null ? null : choicesOf.get(first) ?? null;
+  };
+
+  /// Accende ciò che ha il fuoco, e spegne il resto.
+  let glideOn = false;
+  let tabOn = false;
+  const paint = (target: EventTarget | null): void => {
+    for (const lit of menu.querySelectorAll(".menu-lit")) lit.classList.remove("menu-lit");
+    for (const choices of new Set(choicesOf.values())) choices.name.textContent = "";
+    const button = target instanceof HTMLButtonElement ? target : null;
+    const inBar = button !== null && quick.includes(button) && query === "";
+    const inList = button !== null && !inBar && buttons.includes(button);
+    if (bar !== null) bar.classList.toggle("is-on", inBar);
+    if (inBar) {
+      lastQuick = quick.indexOf(button);
+      button.classList.add("menu-lit");
+      slide(tab, button, tabOn, (left, width) => {
+        tab.style.left = `${left}px`;
+        tab.style.width = `${width}px`;
+      });
+      tabOn = true;
+    } else {
+      tabOn = false;
+    }
+    if (!inList) {
+      glide.hidden = true;
+      glideOn = false;
+      return;
+    }
+    const choices = choicesOf.get(button);
+    const row = choices?.row ?? button;
+    row.classList.add("menu-lit");
+    if (choices) {
+      button.classList.add("menu-lit");
+      choices.name.textContent = choices.items[choices.current]!.label;
+    }
+    glide.classList.toggle("danger", row.classList.contains("danger"));
+    glide.hidden = false;
+    slide(glide, row, glideOn, (_left, _width, top, height) => {
+      glide.style.top = `${top}px`;
+      glide.style.height = `${height}px`;
+    });
+    glideOn = true;
+  };
+  /// Posa `mark` sotto `under`: se era già acceso scivola da dov'era. Come le
+  /// parti all'entrata, la corsa non muore col menu: l'uscita la porta con sé.
+  const slide = (mark: HTMLElement, under: HTMLElement, on: boolean, place: (left: number, width: number, top: number, height: number) => void): void => {
+    const move = (): void => place(under.offsetLeft, under.offsetWidth, under.offsetTop, under.offsetHeight);
+    if (on) flip([mark], move, { duration: mark === tab ? TAB_GLIDE_MS : GLIDE_MS, easing: ENTER_EASING, scale: false });
+    else move();
+  };
+  lifetime.listen(menu, "focusin", (e) => paint(e.target));
+
   const onKey = (e: KeyboardEvent): void => {
     // Il tasto arriva anche dai sottomenu, che stanno fuori del menu nel DOM ma
     // non nell'albero degli eventi: risponde solo il menu in cui è nato.
     if (!(e.target instanceof Node) || !menu.contains(e.target)) return;
-    const at = buttons.indexOf(document.activeElement as HTMLButtonElement);
+    // Durante la spunta di una parte premuta il menu non risponde: Invio due
+    // volte non copia due volte.
+    if (pressing) {
+      if (e.key !== "Escape" && e.key !== "Tab") e.preventDefault();
+      return;
+    }
+    const current = document.activeElement as HTMLButtonElement;
+    const at = buttons.indexOf(current);
     if (at >= 0) active = at;
+    const first = lead();
+    const choices = choicesOf.get(current) ?? null;
     if (e.key === "ArrowDown") {
       e.preventDefault();
-      move(1);
+      step(1);
     } else if (e.key === "ArrowUp") {
       e.preventDefault();
-      move(-1);
+      step(-1);
     } else if (e.key === "Home") {
       e.preventDefault();
-      focusItem(0);
+      focusItem(buttons.length > first ? first : 0);
     } else if (e.key === "End") {
       e.preventDefault();
       focusItem(buttons.length - 1);
-    } else if ((e.key === "ArrowRight" || e.key === "ArrowLeft") && at >= 0 && at < quick.length) {
+    } else if ((e.key === "ArrowRight" || e.key === "ArrowLeft") && at >= 0 && at < first) {
       // Dentro la riga degli appunti le frecce di lato vanno da un pulsante
       // all'altro, e si fermano agli estremi.
       e.preventDefault();
-      focusItem(Math.min(quick.length - 1, Math.max(0, at + (e.key === "ArrowRight" ? 1 : -1))));
+      focusItem(Math.min(first - 1, Math.max(0, at + (e.key === "ArrowRight" ? 1 : -1))));
+    } else if ((e.key === "ArrowRight" || e.key === "ArrowLeft") && choices !== null) {
+      // Nella riga con le scelte le frecce di lato cambiano scelta, e si
+      // fermano agli estremi.
+      e.preventDefault();
+      choose(choices, choices.current + (e.key === "ArrowRight" ? 1 : -1));
+      focusItem(choices.slot);
     } else if (e.key === "ArrowRight") {
       const item = usable[active];
       if (item?.items !== undefined && !item.disabled) {
@@ -814,9 +1178,10 @@ function renderMenu(
   };
 
   /// Filtra le voci con `text`: le trovate al posto del menu, col loro
-  /// percorso, e la prima col fuoco; niente scritto, il menu com'era.
-  /// Con `keep`, la voce col fuoco resta quella di prima: le voci sono
-  /// cambiate sotto chi le stava guardando.
+  /// percorso, prima quelle del menu e poi, sotto «Altri comandi», quelle che
+  /// si trovano soltanto scrivendo; la prima col fuoco. Niente scritto, il
+  /// menu com'era. Con `keep`, la voce col fuoco resta quella di prima: le
+  /// voci sono cambiate sotto chi le stava guardando.
   function search(text: string, keep = false): void {
     query = text;
     closeOpen();
@@ -830,17 +1195,31 @@ function renderMenu(
     prepare();
     const wanted = fold(query);
     const full = chrome?.full === true;
-    const found = flatten([...items, ...(chrome?.searchable ?? [])], ready, "", full).filter(
-      ({ item, path }) => fold(item.label).includes(wanted) || (path !== undefined && fold(path).includes(wanted)),
-    );
-    // Dappertutto, le spente vengono dopo le accese, e tutte si vedono.
-    const hits = full ? [...found.filter(({ item }) => !item.disabled), ...found.filter(({ item }) => item.disabled)] : found;
+    const hit = ({ item, path }: Row): boolean => fold(item.label).includes(wanted) || (path !== undefined && fold(path).includes(wanted));
+    const own = flatten(items, ready, "", full).filter(hit);
+    const more = flatten(chrome?.searchable ?? [], ready, "", full).filter(hit);
     // Trovate, le voci perdono i gruppi: è un elenco solo.
-    const rows: Row[] = (full ? hits : hits.slice(0, SEARCH_LIMIT)).map(({ item, path }) => ({ item: { ...item, group: undefined, separator: undefined, selected: false }, path }));
+    const clean = ({ item, path }: Row): Row => ({ item: { ...item, group: undefined, separator: undefined, selected: false }, path });
+    let rows: Row[];
+    let found: number;
+    if (full) {
+      // Dappertutto, le spente vengono dopo le accese, e tutte si vedono.
+      const all = [...own, ...more];
+      rows = [...all.filter(({ item }) => !item.disabled), ...all.filter(({ item }) => item.disabled)].map(clean);
+      found = rows.length;
+    } else {
+      const label = t("context.search.more");
+      rows = [
+        ...own.map(clean),
+        ...more.map((row) => ({ ...clean(row), item: { ...clean(row).item, group: label }, heading: true })),
+      ].slice(0, SEARCH_LIMIT);
+      found = own.length + more.length;
+    }
     const all = menuSearch;
     if (rows.length === 0 && all !== null && !full) {
       const typed = query;
-      rows.push({ item: { label: t("context.search.all", { query: typed }), run: () => all.run(typed) } });
+      const hint = all.hint();
+      rows.push({ item: { label: t("context.search.all", { query: typed }), ...(hint ? { hint } : {}), run: () => all.run(typed) } });
     }
     fill(rows);
     if (rows.length === 0) {
@@ -850,15 +1229,15 @@ function renderMenu(
       empty.textContent = t("context.search.none");
       list.append(empty);
     }
-    drawFoot(hits.length);
+    drawFoot(found);
     if (was >= 0 && buttons.length > 0) focusItem(Math.min(was, buttons.length - 1));
     else if (keep) return;
-    else if (buttons.length > quick.length) focusItem(quick.length);
+    else if (buttons.length > 0) focusItem(0);
     else menu.focus({ preventScroll: true });
   }
   function activate(button: HTMLButtonElement, item: MenuItem): void {
     // Una voce già chiusa non deve rispondere a click tardivi.
-    if (lifetime.closed || item.disabled) return;
+    if (lifetime.closed || item.disabled || pressing) return;
     if (item.items !== undefined) {
       cancelHover();
       if (coarse()) void replaceWith(item);
@@ -868,6 +1247,25 @@ function renderMenu(
     if (document.activeElement !== button) button.focus();
     closeContextMenu();
     item.run?.();
+  }
+  /// Una parte degli appunti o una scelta nella riga: risponde con la spunta
+  /// d'accento, poi il menu si chiude e il gesto si fa. Col moto ridotto si fa
+  /// subito.
+  function press(button: HTMLButtonElement, item: MenuItem): void {
+    if (lifetime.closed || item.disabled || pressing) return;
+    if (document.activeElement !== button) button.focus({ preventScroll: true });
+    const done = (): void => {
+      if (!lifetime.closed) closeContextMenu();
+      item.run?.();
+    };
+    if (motionLevel() === "reduced") {
+      done();
+      return;
+    }
+    pressing = true;
+    button.classList.add("menu-pressed");
+    if (bar !== null && quick.includes(button)) bar.classList.add("menu-pressed");
+    setTimeout(done, PRESS_MS);
   }
   /// Le voci nuove: la ricerca si rifà, altrimenti il fuoco resta alla voce
   /// che aveva, e il sottomenu aperto resta aperto se la sua voce c'è ancora,
@@ -891,7 +1289,7 @@ function renderMenu(
       closeOpen();
       return;
     }
-    const button = list.querySelectorAll<HTMLButtonElement>("button")[index];
+    const button = buttonOf.get(item);
     if (button === undefined) {
       closeOpen();
       return;
@@ -902,7 +1300,13 @@ function renderMenu(
     kept.item = item;
     if (Array.isArray(item.items)) kept.child.update(item.items);
   }
-  return { menu, focusActive: () => focusItem(active), update };
+  const parts = (): HTMLElement[] => [
+    ...(head === null ? [] : [head]),
+    ...(bar === null ? [] : [bar]),
+    ...[...list.children].filter((child): child is HTMLElement => child instanceof HTMLElement && child !== glide),
+    ...(foot === null ? [] : [foot]),
+  ];
+  return { menu, focusActive: () => focusItem(active), update, parts };
 }
 
 /// La mini-barra sopra il menu: un contenitore che chi apre il menu riempie, e
@@ -1004,9 +1408,12 @@ function placeInViewport(menu: HTMLElement, x: number, y: number): void {
   let top = y;
   if (left + width > window.innerWidth - margin) left = Math.max(margin, x - width);
   if (top + height > window.innerHeight - margin) top = Math.max(margin, window.innerHeight - margin - height);
-  menu.style.left = `${Math.max(margin, left)}px`;
-  menu.style.top = `${Math.max(margin, top)}px`;
-  growFrom(menu, Math.max(margin, left), Math.max(margin, top), x, y);
+  // Al pixel intero: un menu posato su una frazione di pixel, dopo l'entrata a
+  // scalare, il motore lo dipingerebbe un pixel più in là.
+  const at = { left: Math.round(Math.max(margin, left)), top: Math.round(Math.max(margin, top)) };
+  menu.style.left = `${at.left}px`;
+  menu.style.top = `${at.top}px`;
+  growFrom(menu, at.left, at.top, x, y);
 }
 
 /// Quanto un menu sta staccato dal pulsante che lo apre.
