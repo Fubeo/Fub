@@ -1,0 +1,87 @@
+{
+  "about": "on: \"board\" è la penna con Alt: il tratto è libero anche sopra una scheda.",
+  "before": {
+    "nodes": [
+      {
+        "id": "t1",
+        "type": "text",
+        "text": "Ciclo dell'acqua",
+        "x": 0,
+        "y": 0,
+        "width": 320,
+        "height": 160
+      },
+      {
+        "id": "t2",
+        "type": "text",
+        "text": "Evaporazione",
+        "x": 400,
+        "y": 0,
+        "width": 320,
+        "height": 160
+      }
+    ],
+    "edges": []
+  },
+  "ops": [
+    {
+      "op": "draw",
+      "on": "board",
+      "points": [
+        [
+          40,
+          60
+        ],
+        [
+          80,
+          60
+        ]
+      ],
+      "pen": "pencil",
+      "color": "black"
+    }
+  ],
+  "expect": {
+    "outcome": "applied",
+    "after": {
+      "nodes": [
+        {
+          "id": "t1",
+          "type": "text",
+          "x": 0,
+          "y": 0,
+          "width": 320,
+          "height": 160,
+          "text": "Ciclo dell'acqua"
+        },
+        {
+          "id": "t2",
+          "type": "text",
+          "x": 400,
+          "y": 0,
+          "width": 320,
+          "height": 160,
+          "text": "Evaporazione"
+        }
+      ],
+      "fub:ink": {
+        "v": 1,
+        "strokes": [
+          {
+            "id": "e220a8397b1dcdaf",
+            "tool": "pen",
+            "brush": "pf1 size=1.5 thinning=0.35 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=0 pen=pencil",
+            "color": "#000000",
+            "anchor": {
+              "kind": "free"
+            },
+            "ink": "1 s100 cxypt 4000,6000,128,0 4000,0,0,8"
+          }
+        ]
+      }
+    },
+    "created": [
+      "e220a8397b1dcdaf"
+    ]
+  }
+}

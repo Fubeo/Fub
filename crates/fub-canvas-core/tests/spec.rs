@@ -103,6 +103,9 @@ fn sample(kind: FieldKind) -> Value {
         FieldKind::Pair => json!([1, 2]),
         FieldKind::Layer => json!("board"),
         FieldKind::Strokes => json!([]),
+        FieldKind::Shape => json!({"kind": "line", "x1": 0, "y1": 0, "x2": 8, "y2": 0}),
+        FieldKind::PenSize => json!(2),
+        FieldKind::InkColor => json!("blue"),
         FieldKind::Any => Value::Null,
     }
 }
@@ -123,6 +126,8 @@ fn wrong(kind: FieldKind) -> Option<Value> {
         FieldKind::Pair => Some(json!("a")),
         FieldKind::Layer => Some(json!(1)),
         FieldKind::Strokes => Some(json!("a")),
+        FieldKind::Shape | FieldKind::PenSize => Some(json!("a")),
+        FieldKind::InkColor => Some(json!(1)),
     }
 }
 
@@ -532,4 +537,151 @@ fn il_problema_si_scrive_come_il_contratto() {
     let list = validate(&json!({}));
     let written = serde_json::to_value(&list[0]).expect("un problema si scrive");
     assert!(written["index"].is_null(), "la lista intera non ha indice");
+}
+
+/// `validate` e serde di una lista: i problemi, e se serde la legge.
+fn problems_and_serde(list: Value) -> (Vec<Problem>, bool) {
+    let reads = Vec::<CanvasOp>::deserialize(&list).is_ok();
+    (validate(&list), reads)
+}
+
+#[test]
+fn un_colore_di_scheda_non_e_un_colore_d_inchiostro() {
+    let (problems, reads) =
+        problems_and_serde(json!([{"op": "draw", "points": [[0, 0]], "color": "cyan"}]));
+    assert!(!reads, "serde legge cyan");
+    assert_eq!(problems.len(), 1, "{problems:?}");
+    assert_eq!(problems[0].code, ProblemCode::BadValue);
+    assert_eq!(problems[0].path, "/0/color");
+
+    let (problems, reads) =
+        problems_and_serde(json!([{"op": "draw", "points": [[0, 0]], "color": "vermillion"}]));
+    assert!(!reads);
+    assert_eq!(problems[0].suggestion.as_deref(), Some("vermilion"));
+    assert_eq!(
+        problems[0].fix,
+        Some(json!({"op": "draw", "points": [[0, 0]], "color": "vermilion"}))
+    );
+
+    for good in ["sky", "#0072B2", "#d55e00"] {
+        let (problems, reads) =
+            problems_and_serde(json!([{"op": "draw", "points": [[0, 0]], "color": good}]));
+        assert!(reads && problems.is_empty(), "{good}: {problems:?}");
+    }
+}
+
+#[test]
+fn la_misura_della_penna_va_da_un_quarto_a_duecento() {
+    let cases = [
+        (json!(0), false),
+        (json!(0.25), true),
+        (json!(200), true),
+        (json!(200.5), false),
+        (json!(-1), false),
+        (json!(2.5), true),
+    ];
+    for (size, ok) in cases {
+        let (problems, reads) =
+            problems_and_serde(json!([{"op": "draw", "points": [[0, 0]], "size": size}]));
+        assert_eq!(reads, ok, "{size}");
+        assert_eq!(problems.is_empty(), ok, "{size}: {problems:?}");
+        if !ok {
+            assert_eq!(problems[0].code, ProblemCode::BadValue, "{size}");
+            assert_eq!(problems[0].path, "/0/size");
+        }
+    }
+}
+
+#[test]
+fn le_forme_di_draw_hanno_il_vicino_e_i_campi() {
+    let (problems, reads) = problems_and_serde(json!([{
+        "op": "draw",
+        "shape": {"kind": "elipse", "x": 0, "y": 0, "width": 10, "height": 10}
+    }]));
+    assert!(!reads);
+    assert_eq!(problems[0].code, ProblemCode::BadValue);
+    assert_eq!(problems[0].path, "/0/shape/kind");
+    assert_eq!(
+        problems[0].fix,
+        Some(json!({
+            "op": "draw",
+            "shape": {"kind": "ellipse", "x": 0, "y": 0, "width": 10, "height": 10}
+        }))
+    );
+
+    let cases = [
+        (json!({"x": 0}), ProblemCode::MissingField, "/0/shape/kind"),
+        (json!({"kind": 3}), ProblemCode::WrongType, "/0/shape/kind"),
+        (
+            json!({"kind": "line", "x1": 0, "y1": 0, "x2": 8}),
+            ProblemCode::MissingField,
+            "/0/shape/y2",
+        ),
+        (
+            json!({"kind": "line", "x1": "0", "y1": 0, "x2": 8, "y2": 0}),
+            ProblemCode::WrongType,
+            "/0/shape/x1",
+        ),
+        (
+            json!({"kind": "star", "cx": 0, "cy": 0, "r": 8, "tips": 4.5}),
+            ProblemCode::WrongType,
+            "/0/shape/tips",
+        ),
+        (
+            json!({"kind": "polygon", "points": [[0, "a"]]}),
+            ProblemCode::WrongType,
+            "/0/shape/points/0/1",
+        ),
+        (
+            json!({"kind": "rect", "x": 0, "y": 0, "width": 1, "height": 1, "w": 2}),
+            ProblemCode::UnknownField,
+            "/0/shape/w",
+        ),
+        (json!("rect"), ProblemCode::WrongType, "/0/shape"),
+    ];
+    for (shape, code, path) in cases {
+        let (problems, reads) = problems_and_serde(json!([{"op": "draw", "shape": shape}]));
+        assert!(!reads, "serde legge {shape}");
+        assert!(has_problem(&problems, code, path), "{shape}: {problems:?}");
+    }
+    // `tips` intero anche scritto 5.0: serde lo legge, e la forma pure.
+    let (problems, reads) = problems_and_serde(json!([{
+        "op": "draw",
+        "shape": {"kind": "star", "cx": 0, "cy": 0, "r": 8, "tips": 5.0}
+    }]));
+    assert!(reads && problems.is_empty(), "{problems:?}");
+}
+
+#[test]
+fn on_e_una_parola_o_un_id_finche_non_arrivano_pagina_e_cella() {
+    let (problems, reads) = problems_and_serde(json!([{
+        "op": "draw",
+        "on": {"card": "p1", "page": 3},
+        "points": [[0, 0]]
+    }]));
+    assert!(!reads);
+    assert!(
+        has_problem(&problems, ProblemCode::WrongType, "/0/on"),
+        "{problems:?}"
+    );
+}
+
+#[test]
+fn troppi_punti_sono_troppi_e_diecimila_un_tratto() {
+    let canvas = example_canvas().expect("la lavagna d'esempio");
+    let many: Vec<Value> = (0..10_001).map(|i| json!([i, 0])).collect();
+    let op: CanvasOp = serde_json::from_value(json!({"op": "draw", "on": "board", "points": many}))
+        .expect("si legge");
+    let error = compile(&canvas, &[op], 1).expect_err("10 001 punti");
+    assert!(
+        matches!(
+            error,
+            fub_canvas_core::ops::OpError::TooMany { limit: 10_000, .. }
+        ),
+        "{error}"
+    );
+    let just: Vec<Value> = (0..10_000).map(|i| json!([i, 0])).collect();
+    let op: CanvasOp = serde_json::from_value(json!({"op": "draw", "on": "board", "points": just}))
+        .expect("si legge");
+    compile(&canvas, &[op], 1).expect("10 000 punti sono un tratto");
 }

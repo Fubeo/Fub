@@ -330,6 +330,85 @@ via l'inchiostro della scheda con lei, e l'annulla lo rimette. I vettori
 sono `apps/client/src/__fixtures__/canvas-patches/*-ink-*.json` e
 `canvas-ops/*strokes*.json`, `canvas-ops/*-card-with-ink.json`.
 
+## In codice
+
+Un modello non sa scrivere la stringa `ink`. Per questo c'è `draw`, che scrive
+**un** tratto dai punti o da una forma, con la penna e il colore per nome. Il
+nucleo fa ciò che fa la tela quando la penna si alza
+(`crates/fub-canvas-core/src/ops/draw.rs`).
+
+```json
+{ "op": "draw", "on": "t1", "shape": { "kind": "ellipse", "x": 8, "y": 8, "width": 304, "height": 144 },
+  "pen": "marker", "color": "vermilion" }
+```
+
+### `draw`
+
+| Campo | Di serie | Valore |
+|---|---|---|
+| `on` | `"auto"` | di chi è il tratto e in che coordinate sono i punti, qui sotto |
+| `points` | — | `[[x, y], …]` o `[[x, y, pressione], …]`, la pressione da 0 a 1 |
+| `shape` | — | una forma, qui sotto; va senza `points`, e uno dei due ci vuole |
+| `pen` | `ballpoint` | una delle sette penne di `apps/client/src/ink/pens.ts` |
+| `size` | la misura della penna | da 0,25 a 200, in unità dell'ancora |
+| `color` | blu (`#0072b2`); giallo (`#f0e442`) con `highlighter` | un nome della tavolozza (`black`, `blue`, `vermilion`, `green`, `purple`, `orange`, `sky`, `yellow`) o `#rrggbb`, scritto minuscolo |
+| `id` | dal seme | l'id del tratto, unico nel livello |
+
+- **`on: "auto"`:** i punti sono della lavagna. Il tratto va alla scheda
+  che lo prenderebbe con la penna: la regola di `anchorAt`
+  (`apps/client/src/editors/canvas/anchor.ts`), portata in
+  `ops/anchor.rs`. Conta solo la scheda più in alto che il riquadro del
+  tratto tocca, allargato di metà misura. La scheda lo prende se contiene il
+  centro del riquadro e almeno metà della sua area, e se il suo livello non
+  è estraneo. Altrimenti il tratto resta libero. Una scheda prende i punti
+  meno il suo angolo, con l'ancora `card` della sua misura di adesso.
+- **`on: "board"`:** il tratto è libero, anche sopra una scheda, come la
+  penna con Alt.
+- **`on` con l'id di una scheda:** i punti sono già nelle sue unità, con 0,0
+  in alto a sinistra, e l'ancora è `card` alla sua misura di adesso. Vale
+  anche per un gruppo. Un id che non c'è è `UnknownNode`, un livello
+  estraneo `ForeignLayer`. `auto` e `board` sono parole: una scheda con
+  quell'id si raggiunge solo con `auto`.
+- **La pagina e la cella** (`{card, page}`, `{card, sheet, cell}`) non ci
+  sono ancora. Oggi un oggetto in `on` non si legge.
+
+Le forme, nelle coordinate di `on`:
+
+| `kind` | Campi | Punti |
+|---|---|---|
+| `line` | `x1`, `y1`, `x2`, `y2` | da un capo all'altro |
+| `arrow` | `x1`, `y1`, `x2`, `y2` | l'asta fino alla cima, poi un'ala della punta (30°, lunga `max(12, 3 · size)`) e indietro, poi l'altra e indietro; i capi devono essere diversi |
+| `rect` | `x`, `y`, `width`, `height` | dall'angolo in alto a sinistra in senso orario, chiuso |
+| `ellipse` | `x`, `y`, `width`, `height` | dall'alto in senso orario, almeno 64 parti, chiusa |
+| `polygon` | `points` | i vertici, almeno 3, poi di nuovo il primo |
+| `star` | `cx`, `cy`, `r`, `tips` | una punta in alto, poi un vertice interno a `r / 2` e una punta, chiusa; almeno 3 punte |
+
+- **I campioni:** ogni lato si divide in parti uguali non più lunghe di 4
+  unità, e l'ellisse in parti non più lunghe di 4 sulla sua circonferenza.
+  Un lato lungo zero non aggiunge campioni. La pressione è 0,5, se un punto
+  non la dà. Il tempo è sintetico: 8 ms per campione, dal primo a 0, e il
+  tratto non ha `at` (il nucleo non ha orologio).
+- **Il tratto:** i punti si quantizzano in `s100` coi canali `xypt`. Il
+  pennello è quello che la GUI scrive con la stessa penna e la stessa misura
+  (`pen_brush` di `fub-ink-codec`, specchio di `penBrush`), per un tratto con
+  la pressione: `sim=0`. Lo strumento lo dà la penna. Il tratto entra poi
+  come con `add_strokes`, in fondo al livello e con lo stesso ordine dei
+  campi.
+- **Gli errori:** `points` e `shape` insieme, nessuno dei due, nessun punto,
+  un punto che non è `[x, y]` o `[x, y, p]`, una pressione fuori da 0…1, una
+  freccia coi capi uguali, misure negative, meno di 3 vertici o di 3 punte,
+  un raggio non positivo: `Invalid`. Più di 10 000 punti, dati o fatti da
+  una forma, sono `TooMany`, contati prima di farli. Una penna, una misura,
+  un colore o una forma che non ci sono non si leggono: `validate` dà
+  `bad_value`, coi nomi vicini (`vermillion` → `vermilion`). `cyan` è un
+  colore di scheda, non d'inchiostro.
+
+I casi della regola dell'ancora sono in
+`apps/client/src/__fixtures__/ink-anchor.json`, scritti a mano: li fanno
+girare i test di `ops/anchor.rs` e
+`apps/client/src/editors/canvas/anchor-vectors.test.ts`, contro `anchor.ts`.
+I vettori di `draw` sono `canvas-ops/draw-*.json`.
+
 ## I vettori
 
 `apps/client/src/__fixtures__/canvas-ink/` tiene un vettore per file, la prova

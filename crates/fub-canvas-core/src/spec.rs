@@ -15,7 +15,7 @@ use serde::Serialize;
 use serde_json::{json, Map, Value};
 
 use crate::model::{Canvas, CanvasError};
-use crate::ops::color;
+use crate::ops::{color, draw};
 
 /// Quanto può differire un nome sbagliato da quello giusto, perché sia un
 /// suggerimento: la distanza di Levenshtein al più di così.
@@ -85,6 +85,14 @@ pub enum FieldKind {
     Layer,
     /// Una lista di tratti d'inchiostro, ognuno un oggetto come nel file.
     Strokes,
+    /// Una forma d'inchiostro di `draw`: un oggetto con `kind` (uno di
+    /// [`SHAPE_KINDS`]) e i campi di quella forma.
+    Shape,
+    /// La misura di una penna: un numero, anche con la virgola, da 0,25 a 200.
+    PenSize,
+    /// Un colore d'inchiostro: un nome della tavolozza dell'inchiostro, o
+    /// `#rrggbb`.
+    InkColor,
     /// Un valore qualunque.
     Any,
 }
@@ -129,6 +137,28 @@ const AXES: &[&str] = &["x", "y"];
 const LAYOUT_KINDS: &[&str] = &["grid", "row", "column", "tree"];
 /// Il verso di un albero in `layout`.
 const LAYOUT_DIRECTIONS: &[&str] = &["down", "right", "up", "left"];
+/// Le penne di `draw`: gli id di `fub_ink_codec::PENS`, nello stesso ordine
+/// (lo controlla un test qui sotto).
+pub const PEN_IDS: &[&str] = &[
+    "ballpoint",
+    "fountain",
+    "brush",
+    "marker",
+    "pencil",
+    "calligraphy",
+    "highlighter",
+];
+/// Le forme di `draw`, il campo `kind` di `shape`.
+pub const SHAPE_KINDS: &[&str] = &["line", "arrow", "rect", "ellipse", "polygon", "star"];
+/// I campi di ogni forma di `draw`, oltre a `kind`: tutti obbligatori.
+const SHAPE_FIELDS: &[(&str, &[&str])] = &[
+    ("line", &["x1", "y1", "x2", "y2"]),
+    ("arrow", &["x1", "y1", "x2", "y2"]),
+    ("rect", &["x", "y", "width", "height"]),
+    ("ellipse", &["x", "y", "width", "height"]),
+    ("polygon", &["points"]),
+    ("star", &["cx", "cy", "r", "tips"]),
+];
 
 /// Le operazioni del nucleo, una voce per variante di [`CanvasOp`], nello
 /// stesso ordine. Un'operazione nuova entra qui nello stesso task.
@@ -701,6 +731,56 @@ pub const OPS: &[OpSpec] = &[
         ],
         examples: &[r#"{"op":"erase_strokes","layer":"board","ids":["s1"]}"#],
     },
+    OpSpec {
+        name: "draw",
+        summary_it: "Scrive un tratto d'inchiostro con i punti (`points`) o con una forma (`shape`), con la penna, la misura e il colore per nome. Con `on: \"auto\"` il tratto va alla scheda che lo prende, come quando si scrive con la penna.",
+        fields: &[
+            FieldSpec {
+                name: "on",
+                kind: FieldKind::Text,
+                required: false,
+                default: Some("\"auto\""),
+                doc_it: "Di chi è il tratto e in che coordinate sono i punti: `\"auto\"` (coordinate della lavagna; il tratto va alla scheda più in alto che lo contiene almeno per metà, o resta libero), `\"board\"` (la lavagna, tratto libero) o l'id di una scheda (le sue coordinate, 0,0 in alto a sinistra).",
+            },
+            optional(
+                "points",
+                FieldKind::Points,
+                "I punti, `[[x, y], …]` o `[[x, y, pressione], …]` con la pressione da 0 a 1 (di serie 0,5); al più 10 000. Un punto solo è un tocco. Va senza `shape`.",
+            ),
+            optional(
+                "shape",
+                FieldKind::Shape,
+                "Una forma che diventa punti ogni 4 unità: `{\"kind\": \"line\"|\"arrow\", x1, y1, x2, y2}`, `{\"kind\": \"rect\"|\"ellipse\", x, y, width, height}`, `{\"kind\": \"polygon\", points}`, `{\"kind\": \"star\", cx, cy, r, tips}` (almeno 3 punte). Va senza `points`.",
+            ),
+            FieldSpec {
+                name: "pen",
+                kind: FieldKind::Enum(PEN_IDS),
+                required: false,
+                default: Some("\"ballpoint\""),
+                doc_it: "La penna, come nel menu della penna: dà il pennello e lo strumento (`highlighter` evidenzia).",
+            },
+            optional(
+                "size",
+                FieldKind::PenSize,
+                "La misura della penna, da 0,25 a 200, in unità della lavagna o della scheda; di serie quella della penna.",
+            ),
+            optional(
+                "color",
+                FieldKind::InkColor,
+                "Un colore dell'inchiostro: `black`, `blue`, `vermilion`, `green`, `purple`, `orange`, `sky`, `yellow`, o `#rrggbb`. Di serie blu per le penne e giallo per l'evidenziatore.",
+            ),
+            optional(
+                "id",
+                FieldKind::Id,
+                "L'id del tratto, unico nel suo livello; senza, lo dà il seme.",
+            ),
+        ],
+        examples: &[
+            r#"{"op":"draw","on":"t1","shape":{"kind":"ellipse","x":8,"y":8,"width":304,"height":144},"pen":"marker","color":"vermilion"}"#,
+            r#"{"op":"draw","points":[[40,200],[120,180],[200,210]],"color":"blue"}"#,
+            r#"{"op":"draw","on":"board","shape":{"kind":"arrow","x1":330,"y1":80,"x2":390,"y2":80},"size":3}"#,
+        ],
+    },
 ];
 
 /// La lavagna su cui girano gli esempi di [`OPS`]: due schede di testo, una
@@ -907,6 +987,120 @@ fn check_field(
         FieldKind::Pair => check_pair(index, path, value, problems),
         FieldKind::Layer => check_layer(index, path, value, problems),
         FieldKind::Strokes => check_strokes(index, path, value, problems),
+        FieldKind::Shape => check_shape(index, object, field, path, value, problems),
+        FieldKind::PenSize => check_pen_size(index, path, value, problems),
+        FieldKind::InkColor => check_ink_color(index, object, field, path, value, problems),
+    }
+}
+
+/// Una forma di `draw`: un oggetto con `kind`, uno di [`SHAPE_KINDS`], e i
+/// campi di quella forma, tutti numeri (`tips` un intero, `points` una lista
+/// di punti). Un `kind` sbagliato ha il suo vicino; un campo che la forma non
+/// ha, i suoi.
+fn check_shape(
+    index: usize,
+    object: &Map<String, Value>,
+    field: &FieldSpec,
+    path: String,
+    value: &Value,
+    problems: &mut Vec<Problem>,
+) {
+    let Value::Object(shape) = value else {
+        problems.push(Problem::new(ProblemCode::WrongType, Some(index), path));
+        return;
+    };
+    let kind_path = format!("{path}/kind");
+    let kind = match shape.get("kind") {
+        Some(Value::String(kind)) => kind.as_str(),
+        Some(_) => {
+            problems.push(Problem::new(ProblemCode::WrongType, Some(index), kind_path));
+            return;
+        }
+        None => {
+            problems.push(Problem::new(
+                ProblemCode::MissingField,
+                Some(index),
+                kind_path,
+            ));
+            return;
+        }
+    };
+    let Some((_, fields)) = SHAPE_FIELDS.iter().find(|(name, _)| *name == kind) else {
+        let mut problem = Problem::new(ProblemCode::BadValue, Some(index), kind_path);
+        let near = nearest(kind, SHAPE_KINDS.iter().copied());
+        suggest(&mut problem, &near, |candidate| {
+            let mut changed = shape.clone();
+            changed.insert("kind".to_owned(), Value::String(candidate.to_owned()));
+            Some(with(object, field.name, field.name, Value::Object(changed)))
+        });
+        problems.push(problem);
+        return;
+    };
+    for name in *fields {
+        let at = format!("{path}/{name}");
+        match (*name, shape.get(*name)) {
+            (_, None) => problems.push(Problem::new(ProblemCode::MissingField, Some(index), at)),
+            ("points", Some(points)) => check_points(index, at, points, problems),
+            ("tips", Some(tips)) => wrong_unless(is_integer(tips), index, at, problems),
+            (_, Some(number)) => wrong_unless(number.is_number(), index, at, problems),
+        }
+    }
+    for key in shape.keys() {
+        if key == "kind" || fields.contains(&key.as_str()) {
+            continue;
+        }
+        let mut problem = Problem::new(
+            ProblemCode::UnknownField,
+            Some(index),
+            format!("{path}/{}", escape(key)),
+        );
+        let near = nearest(key, fields.iter().copied());
+        if !near.is_empty() {
+            problem.suggestion = Some(near.join(", "));
+        }
+        problems.push(problem);
+    }
+}
+
+/// La misura di una penna: un numero da 0,25 a 200.
+fn check_pen_size(index: usize, path: String, value: &Value, problems: &mut Vec<Problem>) {
+    match value.as_f64() {
+        Some(size) if draw::is_pen_size(size) => {}
+        Some(_) => problems.push(Problem::new(ProblemCode::BadValue, Some(index), path)),
+        None => problems.push(Problem::new(ProblemCode::WrongType, Some(index), path)),
+    }
+}
+
+/// Un colore d'inchiostro: un nome della tavolozza o `#rrggbb`. Un nome
+/// sbagliato ha i nomi dell'inchiostro vicini, e la correzione se ce n'è uno
+/// solo.
+fn check_ink_color(
+    index: usize,
+    object: &Map<String, Value>,
+    field: &FieldSpec,
+    path: String,
+    value: &Value,
+    problems: &mut Vec<Problem>,
+) {
+    match value {
+        Value::String(text) if draw::ink_hex(text).is_none() => {
+            let mut problem = Problem::new(ProblemCode::BadValue, Some(index), path);
+            let near = nearest(
+                text,
+                fub_ink_codec::INK_PALETTE.iter().map(|swatch| swatch.id),
+            );
+            suggest(&mut problem, &near, |candidate| {
+                Some(with(
+                    object,
+                    field.name,
+                    field.name,
+                    Value::String(candidate.to_owned()),
+                ))
+            });
+            problems.push(problem);
+        }
+        Value::String(_) => {}
+        _ => problems.push(Problem::new(ProblemCode::WrongType, Some(index), path)),
     }
 }
 
@@ -1373,6 +1567,24 @@ fn field_schema(field: &FieldSpec) -> Value {
             ],
         }),
         FieldKind::Strokes => json!({ "type": "array", "items": { "type": "object" } }),
+        FieldKind::Shape => shape_schema(),
+        FieldKind::PenSize => json!({
+            "type": "number",
+            "minimum": fub_ink_codec::MIN_PEN_SIZE,
+            "maximum": fub_ink_codec::MAX_PEN_SIZE,
+        }),
+        FieldKind::InkColor => {
+            let names: Vec<&str> = fub_ink_codec::INK_PALETTE
+                .iter()
+                .map(|swatch| swatch.id)
+                .collect();
+            json!({
+                "anyOf": [
+                    { "enum": names },
+                    { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$" },
+                ],
+            })
+        }
         FieldKind::Any => json!({}),
     };
     if let Value::Object(map) = &mut schema {
@@ -1387,9 +1599,66 @@ fn field_schema(field: &FieldSpec) -> Value {
     schema
 }
 
+/// Lo schema di una forma di `draw`: un ramo per `kind`, coi suoi campi.
+fn shape_schema() -> Value {
+    let branches: Vec<Value> = SHAPE_FIELDS
+        .iter()
+        .map(|(kind, fields)| {
+            let mut properties = Map::new();
+            properties.insert("kind".to_owned(), json!({ "const": kind }));
+            for name in *fields {
+                let schema = match *name {
+                    "points" => json!({
+                        "type": "array",
+                        "items": { "type": "array", "items": { "type": "number" } },
+                    }),
+                    "tips" => json!({ "type": "integer" }),
+                    _ => json!({ "type": "number" }),
+                };
+                properties.insert((*name).to_owned(), schema);
+            }
+            let mut required = vec!["kind"];
+            required.extend(fields.iter().copied());
+            json!({
+                "type": "object",
+                "properties": properties,
+                "required": required,
+                "additionalProperties": false,
+            })
+        })
+        .collect();
+    json!({ "oneOf": branches })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn le_penne_di_draw_sono_quelle_di_fub_ink_codec() {
+        let ids: Vec<&str> = fub_ink_codec::PENS.iter().map(|pen| pen.id).collect();
+        assert_eq!(PEN_IDS, ids.as_slice());
+    }
+
+    #[test]
+    fn le_forme_di_draw_hanno_i_loro_campi() {
+        let kinds: Vec<&str> = SHAPE_FIELDS.iter().map(|(kind, _)| *kind).collect();
+        assert_eq!(SHAPE_KINDS, kinds.as_slice());
+    }
+
+    #[test]
+    fn on_di_serie_e_auto() {
+        let draw = OPS.iter().find(|op| op.name == "draw").expect("draw");
+        let on = draw
+            .fields
+            .iter()
+            .find(|field| field.name == "on")
+            .expect("on");
+        assert_eq!(
+            on.default,
+            Some(format!("\"{}\"", crate::ops::ON_AUTO).as_str())
+        );
+    }
 
     /// Un campo di prova, con un vocabolario.
     const COLOR: FieldSpec = FieldSpec {

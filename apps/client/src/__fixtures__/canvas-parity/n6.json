@@ -1,7 +1,7 @@
 {
   "version": 1,
   "source": "N6",
-  "max_missing": 6,
+  "max_missing": 4,
   "entries": [
     {
       "id": "N6.card.drop_vault",
@@ -298,24 +298,8 @@
       "source": "N6",
       "gui": [{ "plan": "N6 T87" }],
       "writes": "file",
-      "state": "by_hand",
+      "state": "code",
       "ops": [
-        {
-          "op": "add_strokes",
-          "layer": "board",
-          "strokes": [
-            {
-              "tool": "pen",
-              "brush": "pf1 size=6 thinning=0 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=1 pen=marker",
-              "color": "#d55e00",
-              "anchor": { "kind": "free" },
-              "ink": "1 s100 cxyt 0,0,0 10000,0,8"
-            }
-          ]
-        }
-      ],
-      "computes": "i campioni della forma",
-      "target_ops": [
         {
           "op": "draw",
           "on": "board",
@@ -323,8 +307,7 @@
           "pen": "marker",
           "color": "vermilion"
         }
-      ],
-      "task": "T16"
+      ]
     },
     {
       "id": "N6.card.write_inside",
@@ -375,25 +358,8 @@
       "source": "N6",
       "gui": [{ "plan": "N6 T69" }],
       "writes": "file",
-      "state": "by_hand",
-      "ops": [
-        {
-          "op": "add_strokes",
-          "layer": "board",
-          "strokes": [
-            {
-              "tool": "pen",
-              "brush": "pf1 size=2 thinning=0.25 smoothing=0.5 streamline=0.5 taperStart=2 taperEnd=8 capStart=1 capEnd=1 sim=1 pen=ballpoint",
-              "color": "#000000",
-              "anchor": { "kind": "free" },
-              "ink": "1 s100 cxyt 4000,46000,0 400,0,8"
-            }
-          ]
-        }
-      ],
-      "computes": "la regola dell'ancora",
-      "target_ops": [{ "op": "draw", "on": "auto", "points": [[40, 460], [44, 460]] }],
-      "task": "T16",
+      "state": "code",
+      "ops": [{ "op": "draw", "on": "auto", "points": [[40, 460], [44, 460]] }],
       "note": "`on: \"auto\"` usa la regola di N4 T3 (e di N6 T19 e T38 quando ci sono); `on: \"board\"` è Alt."
     },
     {

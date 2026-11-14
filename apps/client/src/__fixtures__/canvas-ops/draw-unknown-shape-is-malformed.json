@@ -1,0 +1,40 @@
+{
+  "about": "Una forma che draw non ha non si legge (validate: bad_value su kind).",
+  "before": {
+    "nodes": [
+      {
+        "id": "t1",
+        "type": "text",
+        "text": "Ciclo dell'acqua",
+        "x": 0,
+        "y": 0,
+        "width": 320,
+        "height": 160
+      },
+      {
+        "id": "t2",
+        "type": "text",
+        "text": "Evaporazione",
+        "x": 400,
+        "y": 0,
+        "width": 320,
+        "height": 160
+      }
+    ],
+    "edges": []
+  },
+  "ops": [
+    {
+      "op": "draw",
+      "shape": {
+        "kind": "circle",
+        "cx": 0,
+        "cy": 0,
+        "r": 10
+      }
+    }
+  ],
+  "expect": {
+    "outcome": "malformed"
+  }
+}

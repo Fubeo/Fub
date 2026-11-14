@@ -2,7 +2,7 @@
 //! «ridimensiona», «collega», «togli», «cambia», «porta sopra», «allinea»,
 //! «distribuisci», «duplica», «inverti», «raggruppa», «dispone», «incolla»,
 //! «trasforma in file», «da Mermaid», «da una scaletta», «aggiungi tratti»,
-//! «cancella tratti». Un agente o
+//! «cancella tratti», «disegna». Un agente o
 //! la sessione dal tablet pensano così, non in toppe con l'immagine di
 //! prima: [`compile`] traduce una lista di operazioni nelle toppe di
 //! [`crate::patch`], che sono la sola forma con cui una lavagna cambia.
@@ -40,10 +40,12 @@ use crate::patch::{self, upsert_edge_patch, upsert_node_patch, CanvasPatch, Null
 
 mod adjust;
 mod align;
+mod anchor;
 mod card;
 pub(crate) mod color;
 mod connect;
 mod convert;
+pub(crate) mod draw;
 mod duplicate;
 mod group;
 mod import;
@@ -56,6 +58,7 @@ pub use align::{AlignArgs, AlignTo, DistributeArgs, DistributeAxis};
 pub use card::AddCardArgs;
 pub use connect::{AutoWord, ConnectArgs, Ends, SidePair, Sides};
 pub use convert::ConvertArgs;
+pub use draw::{DrawArgs, DrawShape, MAX_DRAW_POINTS, ON_AUTO, ON_BOARD};
 pub use duplicate::DuplicateArgs;
 pub use group::GroupArgs;
 pub use import::{FromMermaidArgs, FromOutlineArgs};
@@ -137,6 +140,10 @@ pub enum CanvasOp {
     },
     /// Cancella dal livello `layer` i tratti `ids`.
     EraseStrokes { layer: LayerRef, ids: Vec<String> },
+    /// Scrive un tratto d'inchiostro con i punti o con una forma, la penna e
+    /// il colore per nome; il tratto entra come con `add_strokes`. Le regole
+    /// sono in `ops/draw.rs`.
+    Draw(DrawArgs),
 }
 
 impl CanvasOp {
@@ -165,6 +172,7 @@ impl CanvasOp {
             Self::FromOutline(_) => "from_outline",
             Self::AddStrokes { .. } => "add_strokes",
             Self::EraseStrokes { .. } => "erase_strokes",
+            Self::Draw(_) => "draw",
         }
     }
 }
@@ -176,7 +184,7 @@ pub struct Compiled {
     pub patches: Vec<CanvasPatch>,
     /// Gli id di ogni scheda, arco e tratto aggiunti (`add_card`, `connect`,
     /// `duplicate`, `group`, `insert`, `from_mermaid`, `from_outline`,
-    /// `add_strokes`), dati o generati, nell'ordine delle operazioni.
+    /// `add_strokes`, `draw`), dati o generati, nell'ordine delle operazioni.
     pub created: Vec<String>,
     /// Ciò che le operazioni non hanno potuto tenere, nell'ordine delle
     /// operazioni: al più [`MAX_NOTES`]. Senza note il campo non si scrive.
@@ -241,8 +249,9 @@ pub enum OpError {
     /// `ids` di un'operazione.
     #[error("canvas op {index}: id {id:?} is already taken or repeated")]
     DuplicateId { index: usize, id: String },
-    /// La lavagna avrebbe più schede o archi del limite, o un `insert` porta
-    /// più schede di [`MAX_INSERTED`].
+    /// La lavagna avrebbe più schede o archi del limite, un `insert` porta
+    /// più schede di [`MAX_INSERTED`], o un tratto di `draw` avrebbe più punti
+    /// di [`MAX_DRAW_POINTS`].
     #[error("canvas op {index}: a canvas holds at most {limit} {what}")]
     TooMany {
         index: usize,
@@ -405,6 +414,7 @@ impl Compiler {
             CanvasOp::FromOutline(args) => self.import_outline(index, args)?,
             CanvasOp::AddStrokes { layer, strokes } => self.add_strokes(index, layer, strokes)?,
             CanvasOp::EraseStrokes { layer, ids } => self.erase_strokes(index, layer, ids)?,
+            CanvasOp::Draw(args) => self.draw(index, args)?,
         };
         if patches.is_empty() {
             return Ok(());

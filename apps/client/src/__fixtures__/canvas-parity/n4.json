@@ -1,7 +1,7 @@
 {
   "version": 1,
   "source": "N4",
-  "max_missing": 4,
+  "max_missing": 1,
   "entries": [
     {
       "id": "N4.ink.pen_card",
@@ -9,24 +9,8 @@
       "source": "N4",
       "gui": [{ "gesture": "pen-on-card" }],
       "writes": "file",
-      "state": "by_hand",
+      "state": "code",
       "ops": [
-        {
-          "op": "add_strokes",
-          "layer": { "node": "f1" },
-          "strokes": [
-            {
-              "tool": "pen",
-              "brush": "pf1 size=2 thinning=0.25 smoothing=0.5 streamline=0.5 taperStart=2 taperEnd=8 capStart=1 capEnd=1 sim=1 pen=ballpoint",
-              "color": "#0072b2",
-              "anchor": { "kind": "card", "width": 480, "height": 304 },
-              "ink": "1 s100 cxyt 4000,6000,0 400,0,8 400,0,8"
-            }
-          ]
-        }
-      ],
-      "computes": "la stringa `ink`, il pennello della penna, l'ancora e a chi va il tratto",
-      "target_ops": [
         {
           "op": "draw",
           "on": "auto",
@@ -34,8 +18,7 @@
           "pen": "ballpoint",
           "color": "blue"
         }
-      ],
-      "task": "T16"
+      ]
     },
     {
       "id": "N4.ink.pen_free",
@@ -43,25 +26,8 @@
       "source": "N4",
       "gui": [{ "gesture": "pen-free" }],
       "writes": "file",
-      "state": "by_hand",
-      "ops": [
-        {
-          "op": "add_strokes",
-          "layer": "board",
-          "strokes": [
-            {
-              "tool": "pen",
-              "brush": "pf1 size=2 thinning=0.25 smoothing=0.5 streamline=0.5 taperStart=2 taperEnd=8 capStart=1 capEnd=1 sim=1 pen=ballpoint",
-              "color": "#0072b2",
-              "anchor": { "kind": "free" },
-              "ink": "1 s100 cxyt 150000,0,0 400,400,8"
-            }
-          ]
-        }
-      ],
-      "computes": "la stringa `ink` e il pennello",
-      "target_ops": [{ "op": "draw", "on": "board", "points": [[1500, 0], [1504, 4]], "pen": "ballpoint" }],
-      "task": "T16"
+      "state": "code",
+      "ops": [{ "op": "draw", "on": "board", "points": [[1500, 0], [1504, 4]], "pen": "ballpoint" }]
     },
     {
       "id": "N4.ink.highlighter",
@@ -69,24 +35,8 @@
       "source": "N4",
       "gui": [{ "toolbar": "ink-pen" }],
       "writes": "file",
-      "state": "by_hand",
+      "state": "code",
       "ops": [
-        {
-          "op": "add_strokes",
-          "layer": { "node": "t1" },
-          "strokes": [
-            {
-              "tool": "highlighter",
-              "brush": "pf1 size=16 thinning=0 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=1 pen=highlighter",
-              "color": "#f0e442",
-              "anchor": { "kind": "card", "width": 320, "height": 160 },
-              "ink": "1 s100 cxyt 2000,4000,0 20000,0,8"
-            }
-          ]
-        }
-      ],
-      "computes": "lo strumento, il pennello, la stringa `ink`",
-      "target_ops": [
         {
           "op": "draw",
           "on": "t1",
@@ -94,8 +44,7 @@
           "pen": "highlighter",
           "color": "yellow"
         }
-      ],
-      "task": "T16"
+      ]
     },
     {
       "id": "N4.ink.menu",
