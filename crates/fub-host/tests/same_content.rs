@@ -364,3 +364,64 @@ fn the_fingerprints_learned_go_to_the_vault_that_was_asked() {
         "l'impronta imparata è andata a un altro vault"
     );
 }
+
+#[test]
+fn a_vault_rebuilt_while_it_is_open_still_knows_its_files() {
+    // Il caso su cui i documenti dicono che «l'indice non è pronto» non arriva
+    // mai: un vault già pubblicato che rifà l'indice. Il rebuild svuota e
+    // rimette l'anagrafe nello stesso prestito esclusivo; chi chiede **durante**
+    // il rebuild, a metà della sua seconda fase, ha una risposta.
+    let (_dir, root) = vault(&[("Note/originale.md", b"# Titolo\n")]);
+    // Un file che la prima indicizzazione non riesce a leggere: la sua voce
+    // resta senza impronta, e la seconda fase del rebuild lo rilegge. È lì che
+    // il gancio fa la domanda, dopo che l'anagrafe è stata svuotata e
+    // rimessa.
+    aged(&root, "Foto/lenta.png", b"PNG di prova: lenta");
+    let reads = Arc::new(AtomicUsize::new(0));
+    let hook: Hook = Arc::new(Mutex::new(None));
+    let failing = Arc::new(AtomicBool::new(true));
+    let host = Arc::new(Host::without_watcher().with_storage(Arc::new(WatchedDisk {
+        suffix: "Foto/lenta.png",
+        reads: Arc::clone(&reads),
+        hook: Arc::clone(&hook),
+        failing: Arc::clone(&failing),
+    })));
+    host.open(&root).unwrap();
+    host.wait_indexed(None).unwrap();
+    failing.store(false, Ordering::SeqCst);
+
+    let answers = Arc::new(Mutex::new(Vec::new()));
+    let weak = Arc::downgrade(&host);
+    let asked_root = root.clone();
+    let seen = Arc::clone(&answers);
+    *hook.lock().unwrap() = Some(Box::new(move || {
+        if let Some(host) = weak.upgrade() {
+            let answer = host.same_content(
+                Some(asked_root.as_str()),
+                &DocId::new("Arrivi/nuova.md"),
+                b"# Titolo\n",
+            );
+            seen.lock().unwrap().push(answer.unwrap());
+        }
+    }));
+    reads.store(0, Ordering::SeqCst);
+    host.invoke_user_command(
+        None,
+        fub_kernel::maintenance::VAULT_REBUILD_INDEX,
+        serde_json::Value::Null,
+        fub_abi::command::InvokeMode::Apply,
+    )
+    .unwrap();
+
+    assert!(
+        reads.load(Ordering::SeqCst) >= 1,
+        "il rebuild ha riletto il file del gancio"
+    );
+    assert_eq!(
+        *answers.lock().unwrap(),
+        vec![SameContent::Found {
+            id: DocId::new("Note/originale.md"),
+        }],
+        "a metà del rebuild la domanda ha una risposta, non «l'indice non è pronto»"
+    );
+}

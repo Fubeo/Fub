@@ -3986,13 +3986,17 @@ impl Host {
     /// rispondendo vanno alla stessa custodia anche se nel frattempo il vault
     /// corrente cambia. I candidati vengono dall'indice vivo, presi sotto la
     /// custodia per un attimo; il confronto si fa fuori da essa, sui byte già
-    /// in memoria. Le impronte calcolate per strada tornano all'indice con un
-    /// prestito esclusivo breve, senza drenare eventi: imparare un'impronta non
-    /// ne produce, e l'indice non ha un lucchetto suo fuori dal workspace.
-    /// L'indice le ricontrolla contro l'anagrafe; nessuna chiamata a un
-    /// provider col lucchetto preso, e nessuna scrittura di `entries.json`
-    /// fuori dall'anagrafe. Un'impronta che non si riesce a riportare costa
-    /// solo una rilettura la prossima volta.
+    /// in memoria. Nessuna chiamata a un provider col lucchetto preso, e
+    /// nessuna scrittura di `entries.json` fuori dall'anagrafe.
+    ///
+    /// Un «non so» per budget finito ([`UnknownReason::BudgetExhausted`]) non è
+    /// stabile come gli altri: le impronte che quel giro ha imparato rendono il
+    /// giro dopo più economico, e il giro dopo può arrivare a un candidato che
+    /// il primo non ha letto. Allora, e solo se il primo giro ha davvero
+    /// insegnato qualcosa all'indice, si fa **un** secondo giro, qui dentro:
+    /// chi chiede fa sempre una domanda sola, e nessuna per nome occupato.
+    ///
+    /// [`UnknownReason::BudgetExhausted`]: fub_kernel::same_content::UnknownReason::BudgetExhausted
     pub fn same_content(
         &self,
         vault: Option<&str>,
@@ -4000,22 +4004,52 @@ impl Host {
         bytes: &[u8],
     ) -> Result<SameContent, PluginError> {
         let workspace = self.session_workspace(vault)?;
+        let (answer, kept) = Self::same_content_round(&workspace, target, bytes)?;
+        let exhausted = matches!(
+            answer,
+            SameContent::Unknown {
+                reason: fub_kernel::same_content::UnknownReason::BudgetExhausted
+            }
+        );
+        if exhausted && kept > 0 {
+            return Ok(Self::same_content_round(&workspace, target, bytes)?.0);
+        }
+        Ok(answer)
+    }
+
+    /// Un giro della domanda di [`same_content`](Self::same_content): la
+    /// risposta, e quante impronte imparate l'indice ha tenuto.
+    ///
+    /// Le impronte tornano all'indice con [`Custody::write`], che **prende il
+    /// turno di scrittura** prima del lucchetto (la presa lo porta con sé fino
+    /// al rilascio): se un altro writer ha il turno aperto attraverso il codice
+    /// di un provider (decisione 0120), la consegna aspetta che lo chiuda e non
+    /// entra a metà del suo lavoro. Non si drenano eventi: imparare
+    /// un'impronta non ne produce, e l'indice non ha un lucchetto suo fuori dal
+    /// workspace. L'indice le ricontrolla contro l'anagrafe; un'impronta che
+    /// non si riesce a riportare costa solo una rilettura la prossima volta.
+    fn same_content_round(
+        workspace: &Custody<Workspace>,
+        target: &DocId,
+        bytes: &[u8],
+    ) -> Result<(SameContent, usize), PluginError> {
         let prepared = workspace
             .read()?
             .prepare_same_content(target, bytes.len() as u64);
         let fub_kernel::same_content::SameContentOutcome { answer, learned } =
             prepared.invoke(bytes);
+        let mut kept = 0;
         if !learned.is_empty() {
             match workspace.write() {
                 Ok(mut workspace) => {
-                    workspace.learn_fingerprints(learned);
+                    kept = workspace.learn_fingerprints(learned);
                 }
                 Err(and) => {
                     tracing::warn!(target: "fub.host", "impronte non riportate nell'indice: {and}");
                 }
             }
         }
-        Ok(answer)
+        Ok((answer, kept))
     }
 
     /// Scrive la proiezione `source` di un documento di videoscrittura.
