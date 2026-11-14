@@ -101,7 +101,7 @@ fn kind_name(kind: FieldKind) -> &'static str {
         FieldKind::Enum(_) => "enum",
         FieldKind::Node => "node",
         FieldKind::Edge => "edge",
-        FieldKind::Object => "object",
+        FieldKind::Object | FieldKind::Patch => "object",
         FieldKind::Points => "points",
         FieldKind::Color => "color",
         FieldKind::Sides => "sides",

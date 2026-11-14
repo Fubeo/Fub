@@ -20,7 +20,7 @@
     { "op": "color", "ids": ["pi", "fi"], "color": "red" },
     { "op": "color", "ids": ["ar", "sa"], "color": "green" }
   ],
-  "needs": ["color"],
+  "needs": [],
   "checks": [
     { "color": { "texts": ["Pioggia", "Fiume"], "color": "red" } },
     { "color": { "texts": ["Argilla", "Sabbia"], "color": "green" } },

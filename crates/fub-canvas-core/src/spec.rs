@@ -70,6 +70,9 @@ pub enum FieldKind {
     Edge,
     /// Un oggetto qualunque.
     Object,
+    /// I campi nuovi di una scheda o di un arco (`set`): un oggetto, il cui
+    /// `color` è un colore.
+    Patch,
     /// Una lista di liste di numeri, `[[x, y], …]`.
     Points,
     /// Un colore di scheda o di arco: un nome, il numero da 1 a 6, o `#rrggbb`.
@@ -110,6 +113,10 @@ const SIDES: &[&str] = &["top", "right", "bottom", "left"];
 const KINDS: &[&str] = &["text", "file", "link", "group"];
 /// Le punte di un arco nella forma breve.
 const ENDS: &[&str] = &["arrow", "none", "both"];
+/// Dove va una scheda con `reorder`: in cima, o in fondo.
+const LAYERS: &[&str] = &["front", "back"];
+/// Il modo di prendere la misura da un contenuto, con `resize`.
+const FITS: &[&str] = &["content"];
 
 /// Le operazioni del nucleo, una voce per variante di [`CanvasOp`], nello
 /// stesso ordine. Un'operazione nuova entra qui nello stesso task.
@@ -216,7 +223,7 @@ pub const OPS: &[OpSpec] = &[
     },
     OpSpec {
         name: "move",
-        summary_it: "Sposta le schede `ids` di `dx` e `dy`. Un gruppo si sposta da solo.",
+        summary_it: "Sposta le schede `ids` di `dx` e `dy`. Un gruppo si sposta da solo, o con `contents` porta con sé le schede dentro.",
         fields: &[
             required("ids", FieldKind::Ids, "Le schede da spostare."),
             required(
@@ -229,26 +236,46 @@ pub const OPS: &[OpSpec] = &[
                 FieldKind::Number,
                 "Di quanto si sposta in verticale, in unità della lavagna.",
             ),
+            optional(
+                "contents",
+                FieldKind::Bool,
+                "Con `true`, un gruppo di `ids` porta con sé le schede che stanno dentro di lui, una volta sola. Su una scheda che non è un gruppo non fa niente.",
+            ),
         ],
         examples: &[r#"{"op":"move","ids":["t1","t2"],"dx":40,"dy":0}"#],
     },
     OpSpec {
         name: "resize",
-        summary_it: "Dà alla scheda `id` le misure `width` e `height`.",
+        summary_it: "Dà alla scheda `id` le misure `width` e `height`, o con `fit: content` l'altezza del suo contenuto.",
         fields: &[
             required("id", FieldKind::Id, "La scheda da ridimensionare."),
-            required(
+            optional(
                 "width",
                 FieldKind::Number,
-                "La larghezza, in unità della lavagna.",
+                "La larghezza, in unità della lavagna. Se manca resta quella che ha.",
             ),
-            required(
+            optional(
                 "height",
                 FieldKind::Number,
-                "L'altezza, in unità della lavagna.",
+                "L'altezza, in unità della lavagna. Se manca resta quella che ha. Non si dà con `fit`.",
+            ),
+            FieldSpec {
+                name: "fit",
+                kind: FieldKind::Enum(FITS),
+                required: false,
+                default: None,
+                doc_it: "`content`: l'altezza viene dal contenuto, con la larghezza data. Un testo si misura con la stima della lavagna; un'immagine o un PDF con le sue proporzioni.",
+            },
+            optional(
+                "content_size",
+                FieldKind::Pair,
+                "Le dimensioni del contenuto di un'immagine o di un PDF, con `fit`: i pixel, o i punti della prima pagina. Se manca le legge il file.",
             ),
         ],
-        examples: &[r#"{"op":"resize","id":"t1","width":400,"height":200}"#],
+        examples: &[
+            r#"{"op":"resize","id":"t1","width":400,"height":200}"#,
+            r#"{"op":"resize","id":"t1","fit":"content"}"#,
+        ],
     },
     OpSpec {
         name: "connect",
@@ -310,21 +337,49 @@ pub const OPS: &[OpSpec] = &[
             required("id", FieldKind::Id, "La scheda o l'arco da cambiare."),
             required(
                 "fields",
-                FieldKind::Object,
-                "I campi nuovi. `id` non si cambia, né `type` di una scheda.",
+                FieldKind::Patch,
+                "I campi nuovi. `id` non si cambia, né `type` di una scheda. Il `color` accetta i nomi di `add_card`.",
             ),
         ],
         examples: &[r#"{"op":"set","id":"t1","fields":{"color":"4","text":"Ciclo dell'acqua"}}"#],
     },
     OpSpec {
         name: "reorder",
-        summary_it: "Porta le schede in cima all'ordine, nell'ordine dato.",
-        fields: &[required(
-            "ids",
-            FieldKind::Ids,
-            "Le schede da portare in cima, nell'ordine dato.",
-        )],
-        examples: &[r#"{"op":"reorder","ids":["t2","t1"]}"#],
+        summary_it: "Porta le schede in cima all'ordine, o in fondo con `to: back`, nell'ordine dato.",
+        fields: &[
+            required(
+                "ids",
+                FieldKind::Ids,
+                "Le schede da portare, nell'ordine dato.",
+            ),
+            FieldSpec {
+                name: "to",
+                kind: FieldKind::Enum(LAYERS),
+                required: false,
+                default: Some("\"front\""),
+                doc_it: "`front`: in cima, sopra le altre (di serie). `back`: in fondo, sotto le altre.",
+            },
+        ],
+        examples: &[
+            r#"{"op":"reorder","ids":["t2","t1"]}"#,
+            r#"{"op":"reorder","ids":["t1"],"to":"back"}"#,
+        ],
+    },
+    OpSpec {
+        name: "color",
+        summary_it: "Colora più schede e archi in una volta, con un nome, un numero da 1 a 6, o `#rrggbb`; `null` toglie il colore.",
+        fields: &[
+            required("ids", FieldKind::Ids, "Le schede o gli archi da colorare."),
+            required(
+                "color",
+                FieldKind::Color,
+                "Il colore: un nome come in `add_card` (`red`, `note-blue`…), un numero da 1 a 6, o `#rrggbb`. `null` toglie il colore. Il campo c'è sempre.",
+            ),
+        ],
+        examples: &[
+            r#"{"op":"color","ids":["t1","t2"],"color":"red"}"#,
+            r#"{"op":"color","ids":["e1"],"color":null}"#,
+        ],
     },
 ];
 
@@ -519,6 +574,7 @@ fn check_field(
         FieldKind::Node | FieldKind::Edge | FieldKind::Object => {
             wrong_unless(value.is_object(), index, path, problems);
         }
+        FieldKind::Patch => check_patch(index, object, field, path, value, problems),
         FieldKind::Enum(values) => check_enum(index, object, field, values, path, problems),
         FieldKind::Ids => check_ids(index, object, field.name, path, value, problems),
         FieldKind::Points => check_points(index, path, value, problems),
@@ -528,8 +584,9 @@ fn check_field(
     }
 }
 
-/// Un colore: un nome, un numero da 1 a 6, o `#rrggbb`. Un nome sbagliato ha i
-/// nomi vicini, e la correzione se ce n'è uno solo.
+/// Un colore: un nome, un numero da 1 a 6, o `#rrggbb`, o `null` (nessun
+/// colore). Un nome sbagliato ha i nomi vicini, e la correzione se ce n'è uno
+/// solo.
 fn check_color(
     index: usize,
     object: &Map<String, Value>,
@@ -538,23 +595,65 @@ fn check_color(
     value: &Value,
     problems: &mut Vec<Problem>,
 ) {
+    check_color_at(index, path, value, problems, |candidate| {
+        Some(with(
+            object,
+            field.name,
+            field.name,
+            Value::String(candidate.to_owned()),
+        ))
+    });
+}
+
+/// Un colore in un punto qualunque del JSON: `fix` costruisce l'operazione
+/// corretta col nome scelto.
+fn check_color_at(
+    index: usize,
+    path: String,
+    value: &Value,
+    problems: &mut Vec<Problem>,
+    fix: impl Fn(&str) -> Option<Value>,
+) {
     match value {
         Value::String(text) if color::parse(text).is_none() => {
             let mut problem = Problem::new(ProblemCode::BadValue, Some(index), path);
             let near = nearest(text, color::names());
-            suggest(&mut problem, &near, |candidate| {
-                Some(with(
-                    object,
-                    field.name,
-                    field.name,
-                    Value::String(candidate.to_owned()),
-                ))
-            });
+            suggest(&mut problem, &near, fix);
             problems.push(problem);
         }
-        Value::String(_) => {}
+        Value::String(_) | Value::Null => {}
         _ => problems.push(Problem::new(ProblemCode::WrongType, Some(index), path)),
     }
+}
+
+/// I campi nuovi di `set`: un oggetto, e il suo `color` (se c'è) è un colore.
+/// Gli altri campi li legge la scheda, e non si controllano qui.
+fn check_patch(
+    index: usize,
+    object: &Map<String, Value>,
+    field: &FieldSpec,
+    path: String,
+    value: &Value,
+    problems: &mut Vec<Problem>,
+) {
+    let Value::Object(fields) = value else {
+        problems.push(Problem::new(ProblemCode::WrongType, Some(index), path));
+        return;
+    };
+    let Some(chosen) = fields.get("color") else {
+        return;
+    };
+    check_color_at(
+        index,
+        format!("{path}/color"),
+        chosen,
+        problems,
+        |candidate| {
+            let mut changed = fields.clone();
+            changed.insert("color".to_owned(), Value::String(candidate.to_owned()));
+            Some(with(object, field.name, field.name, Value::Object(changed)))
+        },
+    );
 }
 
 /// I lati di un arco: la parola `auto`, o un oggetto con `from` e `to`, ognuno
@@ -865,7 +964,9 @@ fn field_schema(field: &FieldSpec) -> Value {
         FieldKind::Number => json!({ "type": "integer" }),
         FieldKind::Bool => json!({ "type": "boolean" }),
         FieldKind::Enum(values) => json!({ "type": "string", "enum": values }),
-        FieldKind::Node | FieldKind::Edge | FieldKind::Object => json!({ "type": "object" }),
+        FieldKind::Node | FieldKind::Edge | FieldKind::Object | FieldKind::Patch => {
+            json!({ "type": "object" })
+        }
         FieldKind::Points => json!({
             "type": "array",
             "items": { "type": "array", "items": { "type": "number" } },

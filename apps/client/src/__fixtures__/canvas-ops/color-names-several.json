@@ -1,0 +1,23 @@
+{
+  "about": "color colora più schede e archi in una sola operazione, con un nome della tavola: «cyan» scrive \"5\" su due schede e su un arco; la terza scheda non cambia.",
+  "before": {
+    "nodes": [
+      { "id": "a", "type": "text", "x": 0, "y": 0, "width": 100, "height": 60, "text": "a" },
+      { "id": "b", "type": "text", "x": 200, "y": 0, "width": 100, "height": 60, "text": "b", "color": "2" },
+      { "id": "c", "type": "text", "x": 400, "y": 0, "width": 100, "height": 60, "text": "c" }
+    ],
+    "edges": [{ "id": "e1", "fromNode": "a", "toNode": "b" }]
+  },
+  "ops": [{ "op": "color", "ids": ["a", "b", "e1"], "color": "cyan" }],
+  "expect": {
+    "outcome": "applied",
+    "after": {
+      "nodes": [
+        { "id": "a", "type": "text", "x": 0, "y": 0, "width": 100, "height": 60, "text": "a", "color": "5" },
+        { "id": "b", "type": "text", "x": 200, "y": 0, "width": 100, "height": 60, "text": "b", "color": "5" },
+        { "id": "c", "type": "text", "x": 400, "y": 0, "width": 100, "height": 60, "text": "c" }
+      ],
+      "edges": [{ "id": "e1", "fromNode": "a", "toNode": "b", "color": "5" }]
+    }
+  }
+}

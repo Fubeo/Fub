@@ -149,7 +149,7 @@ pub fn card_kind(node: &CanvasNode) -> CardKind {
 /// La specie di un percorso, dall'estensione dell'ultimo componente. Un punto
 /// nelle cartelle non conta: `cartella.v2/nota` non ha estensione. Un punto in
 /// testa al nome non apre un'estensione: `.md` è un nome nascosto, e `File`.
-fn kind_of_path(path: &str) -> CardKind {
+pub fn kind_of_path(path: &str) -> CardKind {
     let path = path.split('#').next().unwrap_or(path);
     let name = path.rsplit('/').next().unwrap_or(path);
     let Some(point) = name.rfind('.').filter(|&point| point > 0) else {
@@ -208,6 +208,16 @@ pub fn born_size(kind: CardKind, text: Option<&str>, content: Option<(f64, f64)>
         CardKind::Craft | CardKind::File => (320.0, 160.0),
         CardKind::Group => (480.0, 320.0),
     }
+}
+
+/// L'altezza di una scheda larga `width` che mostra un contenuto di misura
+/// `content` (i pixel di un'immagine, i punti di una pagina PDF), con le sue
+/// proporzioni: agganciata, e non sotto 40 come le misure di nascita. Dà `None`
+/// se la misura del contenuto non è finita e positiva, o se il lato esce dai
+/// limiti del modello.
+pub fn content_height(width: f64, content: (f64, f64)) -> Option<f64> {
+    let (content_width, content_height) = known_content(Some(content))?;
+    proportional(width * content_height / content_width)
 }
 
 /// L'altezza stimata di un testo di larghezza `width`, in unità della lavagna.

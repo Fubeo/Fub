@@ -1,0 +1,8 @@
+{
+  "about": "fit conosce solo content: un altro modo («contain») non si legge.",
+  "before": {
+    "nodes": [{ "id": "t", "type": "text", "x": 0, "y": 0, "width": 320, "height": 160, "text": "a" }]
+  },
+  "ops": [{ "op": "resize", "id": "t", "fit": "contain" }],
+  "expect": { "outcome": "malformed" }
+}
