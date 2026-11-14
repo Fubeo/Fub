@@ -913,6 +913,59 @@ describe("il testo non salvato resta (#237)", () => {
     expect(sessions.text(BENVENUTO)).toContain(TYPED);
     expect(host.files()[BENVENUTO]).toBe(restored);
   });
+
+  /// Gli avvisi a galla che nominano la nota.
+  const toastsAbout = (name: string) =>
+    [...document.querySelectorAll<HTMLElement>("#toasts > .toast .toast-text")]
+      .map((text) => text.textContent ?? "")
+      .filter((text) => text.includes(name));
+
+  it("un conflitto sulla nota a schermo si dice una volta, nella barra: niente fascia né avviso a galla", async () => {
+    const { host, sessions } = await unsavedNote();
+    repair();
+    host.writeFromOutside(BENVENUTO, "# Benvenuto\nda un'altra applicazione\n");
+    await settle();
+    await sessions.flush(BENVENUTO);
+    await settle();
+    await waitFor("la barra del conflitto", () => visible(".conflict-banner").length === 1);
+    expect(visible('.sheet-notice[data-notice="changed_on_disk"], .sheet-notice[data-notice="overwritten"]')).toEqual([]);
+    expect(toastsAbout("Benvenuto")).toEqual([]);
+  });
+
+  it("fuori schermo, il cambio da fuori e il conflitto che segue fanno un avviso solo, col titolo; aperta la nota, resta la barra", async () => {
+    const { host, sessions } = await unsavedNote();
+    await open("Altra.md");
+    // Il disco è ancora guasto: la nota resta sporca, e il cambio da fuori
+    // è un avvertimento, non una rilettura.
+    host.writeFromOutside(BENVENUTO, "# Benvenuto\nda un'altra applicazione\n");
+    await waitFor("l'avviso del cambio da fuori", () => toastsAbout("cambiat").length === 1);
+    repair();
+    await sessions.flush(BENVENUTO);
+    await settle();
+    expect(sessions.inspect(BENVENUTO)).toMatchObject({ result: "conflitto" });
+    expect(toastsAbout("Benvenuto")).toHaveLength(1);
+    expect(toastsAbout("Benvenuto")[0]).toContain("«Benvenuto»");
+    expect(toastsAbout("Benvenuto.md")).toEqual([]);
+    await open(BENVENUTO);
+    await waitFor("la barra del conflitto", () => visible(".conflict-banner").length === 1);
+    expect(toastsAbout("Benvenuto")).toEqual([]);
+  });
+
+  it("un salvataggio che non riesce si dice una volta, col titolo, e l'avviso se ne va quando la nota è salvata", async () => {
+    const { sessions } = await unsavedNote();
+    await sessions.flush(BENVENUTO).catch(() => {});
+    await waitFor("l'avviso del salvataggio fallito", () => toastsAbout("non è stato salvato").length === 1);
+    appendToTextEditor(" ancora");
+    await sessions.flush(BENVENUTO).catch(() => {});
+    await settle();
+    expect(toastsAbout("non è stato salvato")).toHaveLength(1);
+    expect(toastsAbout("non è stato salvato")[0]).toContain("«Benvenuto» non è stato salvato");
+    repair();
+    await sessions.flush(BENVENUTO);
+    await settle();
+    expect(sessions.saveState(BENVENUTO)).toBe("salvato");
+    expect(toastsAbout("Benvenuto")).toEqual([]);
+  });
 });
 
 // Ciò che le fasi dopo spostano (la modalità, la testata) e non deve cambiare

@@ -55,6 +55,17 @@ describe("la pila dei toast", () => {
     expect(toasts()).toHaveLength(0);
   });
 
+  it("chi ha detto uno stato ritira il suo avviso quando lo stato finisce; lo storico lo tiene", () => {
+    const failed = notify("«Nota» non è stato salvato: il disco è pieno", "guasto");
+    notify("Altro", "info");
+    failed.withdraw();
+    expect(toasts().map((toast) => toast.querySelector(".toast-text")?.textContent)).toEqual(["Altro"]);
+    expect(recentNotices().map((notice) => notice.text)).toContain("«Nota» non è stato salvato: il disco è pieno");
+    // Ritirarlo due volte non tocca gli altri.
+    failed.withdraw();
+    expect(toasts()).toHaveLength(1);
+  });
+
   it("un avviso identico a quello in fondo ne rinnova il contatore invece di aprirne un altro", () => {
     notify("Salvataggio non riuscito", "guasto");
     notify("Salvataggio non riuscito", "guasto");

@@ -21,7 +21,12 @@ Ciò che la shell fa sopra le porte generiche, senza contratti propri:
   «adesso», «2 min fa», poi l'ora senza secondi (i secondi nel suggerimento).
   Finché un menu è aperto la pila dei toast si fa da parte (`structure.css`)
   e torna quando si chiude: un menu non sta mai sotto un avviso, nemmeno quello
-  della modalità che si apre dalla banda dove scende la pila. Un vault senza rilevamento delle modifiche esterne lo dice in testa al
+  della modalità che si apre dalla banda dove scende la pila. Un avviso che
+  parla di uno **stato** di una nota (non si salva, è cambiata da fuori, è in
+  conflitto) è uno per nota, la nomina col titolo e si ritira quando lo stato
+  finisce; lo storico lo tiene. Il cambio da fuori e il conflitto lo dicono
+  la riga del foglio e la barra del conflitto: l'avviso a galla c'è solo se la
+  nota non si vede, e se ne va quando la si apre. Un vault senza rilevamento delle modifiche esterne lo dice in testa al
   centro con «Riapri il vault», che scrive ciò che è in sospeso, chiude il
   vault nell'host e lo riapre.
 - **Scrittura.** Con la barra di formattazione spenta

@@ -143,7 +143,7 @@ import { registerShellCommand, type CommandEntry } from "../ui/commands";
 import type { LiveCommandTargets } from "../editors/spatial/live/commands";
 import { EXPORT_COMMAND } from "../ui/shell-ids.generated";
 import { showActivity } from "../panels/activity";
-import { notify } from "../ui/notify";
+import { notify, type NoticeHandle } from "../ui/notify";
 import { applyIntent } from "../ui/intents";
 import { slashContextDoc } from "./slash";
 import { favoriteCommands, openSlashPalette, recentCommands, rememberCommand, toggleFavorite } from "../ui/palette";
@@ -1066,6 +1066,7 @@ export function mountDocumentController(lifetime: Lifetime, d: DocumentDeps, pan
   sessionEventsStop?.();
   paintedSessions.clear();
   deniedSaves.clear();
+  withdrawAllStateNotices();
   const stopSessionEvents = documentSessions.subscribe(handleSessionEvent);
   sessionEventsStop = stopSessionEvents;
   lifetime.add(() => {
@@ -1073,6 +1074,7 @@ export function mountDocumentController(lifetime: Lifetime, d: DocumentDeps, pan
     stopSessionEvents();
     paintedSessions.clear();
     deniedSaves.clear();
+    withdrawAllStateNotices();
     if (sessionEventsStop === stopSessionEvents) sessionEventsStop = undefined;
     for (const r of panes.values()) {
       if (r.shown?.k === "view") unmountViewFromPane(r.shown.view, r.id);
@@ -1128,11 +1130,14 @@ export function mountDocumentController(lifetime: Lifetime, d: DocumentDeps, pan
     withdrawUnsavedQuestion(id, { kind: "removed" });
     const outcome = documentSessions.handleExternalRemoval(id);
     clearSheetNotices(id);
+    // Il file non c'è più: ciò che si diceva sul suo salvataggio è passato, e
+    // l'avviso della rimozione qui sotto prende il suo posto.
+    withdrawStateNotices(id);
     invalidateDocumentCaches(id);
     invalidateLoads(id);
     if (outcome.dirty && outcome.text !== undefined) {
       const text = outcome.text;
-      notify(t("document.deleted_dirty", { doc: id }), "guasto", {
+      notify(t("document.deleted_dirty", { doc: docTitle(id) }), "guasto", {
         label: t("document.recreate"),
         run: async () => {
           await recreate(text, vault);
@@ -1162,6 +1167,10 @@ export function mountDocumentController(lifetime: Lifetime, d: DocumentDeps, pan
     });
     if (outcome.kind !== "collision") {
       moveSheetNotices(from, to);
+      // Gli avvisi a galla nominano la nota col titolo di prima: si ritirano.
+      // Lo stato resta (la riga del foglio e la barra lo leggono dalla
+      // sessione), e il prossimo fatto si dice col nome nuovo.
+      withdrawStateNotices(from);
       renameInDocumentCaches(from, to);
       // Il prestito segue il file col nome nuovo, come le schede qui sotto.
       renameLend(from, to);
@@ -1549,7 +1558,7 @@ export async function resolveDiscardingMine(doc: string | null): Promise<void> {
   }
   // La lettura mancata lascia il conflitto aperto: la scelta si può ripetere.
   if (outcome.kind === "discarded" && outcome.reload.kind === "unavailable") {
-    notify(t("document.reload_failed", { doc }), "guasto");
+    notify(t("document.reload_failed", { doc: docTitle(doc) }), "guasto");
   }
   redrawReading(doc);
   view.drawSave();
@@ -1953,7 +1962,11 @@ async function render(): Promise<void> {
     }
     markMode(r, selectedMode(r)?.id ?? null);
     view.drawToolbar(r);
-    view.drawConflict(r, activeDoc(id));
+    const shownDoc = activeDoc(id);
+    // A schermo la fascia o la barra dicono il cambio da fuori: l'avviso a
+    // galla, detto quando la nota non si vedeva, ha finito il suo lavoro.
+    if (shownDoc) withdrawStateNotices(shownDoc, "outside");
+    view.drawConflict(r, shownDoc);
   }
   view.drawSave();
   linkScrolls();
@@ -2096,6 +2109,64 @@ const paintedSessions = new Map<string, string>();
 /// ogni battuta: torna solo dopo un salvataggio riuscito o un «Riprova».
 const deniedSaves = new Set<string>();
 
+/// Gli avvisi a galla che parlano di uno **stato** di una nota, non di un
+/// gesto: `save` dice che non si salva (e perché, che la riga del foglio non
+/// dice), `outside` che il file è cambiato da fuori o è in conflitto. Uno per
+/// tipo e per nota: lo stesso fatto non si ripete, e un fatto nuovo dello
+/// stesso tipo prende il posto del vecchio. Si ritirano quando lo stato finisce
+/// (`settleStateNotices`): un avviso che dice «non salvato» sotto una nota
+/// salvata mente.
+interface StateNotices {
+  save?: NoticeHandle;
+  outside?: NoticeHandle;
+}
+const stateNotices = new Map<string, StateNotices>();
+
+function showStateNotice(doc: string, slot: keyof StateNotices, show: () => NoticeHandle): void {
+  const own = stateNotices.get(doc) ?? {};
+  own[slot]?.withdraw();
+  own[slot] = show();
+  stateNotices.set(doc, own);
+}
+
+function withdrawStateNotices(doc: string, slot?: keyof StateNotices): void {
+  const own = stateNotices.get(doc);
+  if (!own) return;
+  for (const key of slot ? [slot] : (["save", "outside"] as const)) {
+    own[key]?.withdraw();
+    delete own[key];
+  }
+  if (!own.save && !own.outside) stateNotices.delete(doc);
+}
+
+function withdrawAllStateNotices(): void {
+  for (const doc of [...stateNotices.keys()]) withdrawStateNotices(doc);
+}
+
+/// La nota è la tab attiva di almeno un riquadro: ciò che la barra e il foglio
+/// dicono lo si vede, e un avviso a galla lo ripeterebbe.
+function docOnScreen(doc: string): boolean {
+  return panesWithDoc(doc).some((paneId) => activeDoc(paneId) === doc);
+}
+
+/// Allinea avvisi e righe del foglio allo stato della sessione. Salvata (o
+/// chiusa), non resta niente da dire; in conflitto, la barra del conflitto
+/// dice il fatto per intero: la fascia «cambiato da fuori» e l'avviso di un
+/// salvataggio fallito prima del conflitto se ne vanno, e così l'avviso a
+/// galla se la nota si vede.
+function settleStateNotices(doc: string): void {
+  const state = documentSessions.saveState(doc);
+  if (state === null || state === "salvato") {
+    withdrawStateNotices(doc);
+    return;
+  }
+  if (state === "conflitto") {
+    for (const kind of ["changed_on_disk", "overwritten"] as const) dismissSheetNotice(doc, kind);
+    withdrawStateNotices(doc, "save");
+    if (docOnScreen(doc)) withdrawStateNotices(doc, "outside");
+  }
+}
+
 /// Registra l'aspetto della sessione; falso se è quello già disegnato.
 function sessionLookChanged(doc: string): boolean {
   const state = documentSessions.saveState(doc);
@@ -2113,6 +2184,7 @@ function sessionLookChanged(doc: string): boolean {
 function handleSessionEvent(event: DocumentSessionEvent): void | Promise<void> {
   // Gli altri eventi ridisegnano comunque: il gate va tenuto al passo.
   const looksDifferent = sessionLookChanged(event.id);
+  settleStateNotices(event.id);
   if (event.kind === "deletion-changed") {
     setReadOnlyForDocument(event.id, event.pending);
     view.drawSave();
@@ -2133,7 +2205,12 @@ function handleSessionEvent(event: DocumentSessionEvent): void | Promise<void> {
   }
   if (event.kind === "save-failed") {
     if (event.outcome === "conflitto") {
-      notify(t("document.save_conflict", { doc: event.id }), "guasto");
+      // A schermo basta la barra del conflitto; fuori schermo un avviso, uno
+      // solo anche se il file era già stato detto cambiato da fuori.
+      const doc = event.id;
+      if (!docOnScreen(doc) && !stateNotices.get(doc)?.outside) {
+        showStateNotice(doc, "outside", () => notify(t("document.save_conflict", { doc: docTitle(doc) }), "guasto"));
+      }
     } else if (isErrorKind(event.error, "permission_denied")) {
       // Il file è in sola lettura (PA T59), o l'host lo tiene tale per un
       // suo motivo: la bozza resta sporca e nessun byte è perso, ma non è un
@@ -2141,21 +2218,24 @@ function handleSessionEvent(event: DocumentSessionEvent): void | Promise<void> {
       const doc = event.id;
       if (!deniedSaves.has(doc)) {
         deniedSaves.add(doc);
-        notify(t("document.save_read_only", { doc }), "guasto", {
+        showStateNotice(doc, "save", () => notify(t("document.save_read_only", { doc: docTitle(doc) }), "guasto", {
           label: t("app.retry"),
           run: () => {
             deniedSaves.delete(doc);
             return saveNow();
           },
-        });
+        }));
       }
     } else {
       // La bozza resta sporca e il salvataggio automatico ci riprova alla
       // prossima battuta; «Riprova» serve a chi non vuole scrivere per salvare.
-      notify(t("document.save_failed", { doc: event.id, reason: errorText(event.error) }), "guasto", {
+      // Un avviso per nota: il tentativo dopo che fallisce ancora prende il
+      // posto del precedente, col motivo di adesso.
+      const doc = event.id;
+      showStateNotice(doc, "save", () => notify(t("document.save_failed", { doc: docTitle(doc), reason: errorText(event.error) }), "guasto", {
         label: t("app.retry"),
         run: saveNow,
-      });
+      }));
     }
     view.drawSave();
     redrawTabs(event.id);
@@ -3395,12 +3475,17 @@ async function applyExternalChange(id: string, outcome: ExternalChangeResult): P
   withdrawUnsavedQuestion(id, { kind: "reopen", doc: id, conflict: true });
   invalidateDocumentCaches(id);
   if (outcome.kind === "warning") {
-    if (outcome.cause === "altra_app") {
-      addSheetNotice(id, "overwritten");
-      notify(t("document.overwritten", { doc: id }), "guasto");
-    } else {
-      addSheetNotice(id, "changed_on_disk");
-      notify(t("document.changed_on_disk", { doc: id }), "info");
+    // Già in conflitto, la barra lo dice: il fatto nuovo è lo stesso fatto.
+    // Altrimenti la fascia del foglio lo dice a chi guarda la nota, e un
+    // avviso a galla a chi non la vede, uno per nota.
+    if (documentSessions.saveState(id) !== "conflitto") {
+      const overwritten = outcome.cause === "altra_app";
+      addSheetNotice(id, overwritten ? "overwritten" : "changed_on_disk");
+      if (!docOnScreen(id)) {
+        showStateNotice(id, "outside", () => overwritten
+          ? notify(t("document.overwritten", { doc: docTitle(id) }), "guasto")
+          : notify(t("document.changed_on_disk", { doc: docTitle(id) }), "info"));
+      }
     }
     drawPaneConflict(id);
   } else if (outcome.kind === "untracked") {
