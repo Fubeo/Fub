@@ -4516,7 +4516,7 @@ Esc (un compito in più non serve: lo dice il test della rinomina).
 Fatto quando: `npm run bench:giro -- --solo=scrivere` è verde, e il giro
 intero resta verde.
 Prova: scripts/check.sh --rapido; cd apps/client && npm run build && npm run bench:giro -- --out=$TMPDIR/giro
-Stato: [ ] da fare
+Stato: [~] in corso (coder/pa-t26, da 2fe26793a, 2026-11-14)
 
 ## T27 · Il giro sul banco: i quattro editor dei file degli altri
 
