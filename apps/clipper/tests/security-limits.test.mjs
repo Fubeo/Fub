@@ -21,6 +21,8 @@ describe("capture v1 limits (frozen with AutomationOwner)", () => {
       [{ markdown: "x".repeat(1048576 + 1) }, "markdown:"],
       [{ markdown: "é".repeat(524289) }, "markdown:"],
       [{ source_url: "ftp://h/x" }, "source_url:"],
+      [{ source_url: "https://user:token@example.com/a" }, "source_url:"],
+      [{ source_url: "https://token@example.com/" }, "source_url:"],
       [{ target: { mode: "create", folder: "../etc" } }, "target.folder:"],
       [{ target: { mode: "create", note: "/abs.md" } }, "target.note:"],
       [{ target: { mode: "create", note: "C:\\a.md" } }, "target.note:"],
@@ -32,6 +34,19 @@ describe("capture v1 limits (frozen with AutomationOwner)", () => {
         (e) => e.code === "bad_args" && e.details.length === 1 && e.details[0].startsWith(invalidField));
     }
     assert.equal(Capture.buildArtifact(T({ markdown: "é".repeat(524288) }), { nonce: "valid-nonce-1" }).payload.v, 1);
+  });
+
+  it("the page address loses user name and password before it is captured", () => {
+    assert.equal(Capture.withoutCredentials("https://user:token@example.com/a?b=c#d"), "https://example.com/a?b=c#d");
+    assert.equal(Capture.withoutCredentials("http://token@example.com/"), "http://example.com/");
+    // An "@" after the authority is not a credential: the address stays as it is.
+    assert.equal(Capture.withoutCredentials("https://example.com/@name?to=a@b"), "https://example.com/@name?to=a@b");
+    assert.ok(Capture.isHttpUrl("https://example.com/@name?to=a@b"));
+    assert.equal(Capture.withoutCredentials("about:blank"), "about:blank");
+    const clean = Capture.withoutCredentials("https://user:token@example.com/a");
+    const a = Capture.buildArtifact({ v: 1, title: "T", markdown: "x", source_url: clean, target: { mode: "create" } }, { nonce: "nonce-creds-1" });
+    assert.equal(a.payload.source_url, "https://example.com/a");
+    assert.ok(!Convert.clipHtml("<p>x</p>", { url: clean }).markdown.includes("token"));
   });
   it("fub:// round-trips small captures and refuses oversized ones", () => {
     const a = Capture.buildArtifact(

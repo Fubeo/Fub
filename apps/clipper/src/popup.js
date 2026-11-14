@@ -39,7 +39,7 @@
   var highlightsStore = {};
   var currentUrl = "";
   function pageKey(tab) {
-    var url = tab && tab.url;
+    var url = tab && FubCapture.withoutCredentials(tab.url);
     return typeof url === "string" && /^https?:\/\//i.test(url) && url.length <= 2048 ? url : "";
   }
   function savedFor(url) {
@@ -288,6 +288,9 @@
   function onData(data, tab) {
     current = data;
     var meta = data.metadata || {};
+    // Credentials in the page address never reach the note, the templates
+    // or the capture.
+    if (meta.url) meta.url = FubCapture.withoutCredentials(meta.url);
     var reader = data.reader || {};
     var head = (meta.title || (tab && tab.title) || t("popup.untitled", "Untitled")) +
       (meta.author ? " — " + meta.author : "") +
