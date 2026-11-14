@@ -500,6 +500,8 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
     subpage: opts.onNewSubpage
       ? (name) => opts.onNewSubpage!(resources?.documentId ?? documentId, name)
       : undefined,
+    // In una scheda della lavagna Esc esce dalla scrittura: non seleziona il blocco.
+    escapeLeaves: context.escapeLeaves === true,
   });
   presentation(mode);
 

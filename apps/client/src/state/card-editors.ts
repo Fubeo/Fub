@@ -510,6 +510,8 @@ export function createCardEditorPort(deps: CardEditorDeps): CardEditorHub {
         documentId: path,
         parent: host,
         ...(options.compact ? { compact: true } : {}),
+        // Esc è della scheda: ne esce (canvas-input.md).
+        escapeLeaves: true,
         formatId: source.formatId,
         ...(source.revision !== undefined ? { revision: source.revision } : {}),
       });
@@ -688,6 +690,7 @@ export function createCardEditorPort(deps: CardEditorDeps): CardEditorHub {
         documentId: `${options.documentId}#${surfaceId}`,
         parent: host,
         compact: true,
+        escapeLeaves: true,
         formatId: TEXT_CARD_FORMAT,
       });
       mounted = surface;

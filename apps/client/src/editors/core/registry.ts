@@ -85,6 +85,13 @@ export interface SurfaceMountContext {
    * `false`: a pane always mounts the whole editor.
    */
   readonly compact?: boolean;
+  /**
+   * Escape belongs to the host, which leaves the surface with it (a board
+   * card, compact or not): the surface keeps Escape only to close what it has
+   * open (a menu, a selection of blocks) and gives it no meaning of its own.
+   * Absent means `false`: in a pane Escape is the surface's.
+   */
+  readonly escapeLeaves?: boolean;
 }
 
 /** A selected range, in UTF-8 bytes of the document source, with its text. */

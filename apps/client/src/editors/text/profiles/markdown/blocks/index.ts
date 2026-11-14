@@ -6,7 +6,7 @@ import { blockHandles, type BlocksOptions, blocksOptions } from "./handles";
 import { blockKeysExtension } from "./keys";
 import { blockModel } from "./model";
 import { blockMotionExtension } from "./motion";
-import { blockSelectionExtension } from "./selection";
+import { blockSelectionExtension, escapeLeaves } from "./selection";
 import { pageHeaderExtension } from "./page";
 
 export type { BlocksOptions } from "./handles";
@@ -17,6 +17,7 @@ export function blocksMode(options: BlocksOptions = {}): Extension {
     // Il modello prima di chi lo legge nei propri campi.
     blockModel,
     blocksOptions.of(options),
+    escapeLeaves.of(options.escapeLeaves === true),
     blockSelectionExtension,
     blockKeysExtension,
     blockHandles,

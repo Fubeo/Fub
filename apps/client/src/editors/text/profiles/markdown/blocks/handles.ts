@@ -44,6 +44,10 @@ export interface BlocksOptions {
   /// lo è già, e lì nasce `name`. `null` se è andata, altrimenti la frase che
   /// dice perché no. Senza, la testata non la offre.
   readonly subpage?: (name: string) => Promise<string | null>;
+  /// Esc è di chi ospita l'editor, che con lui ne esce (una scheda della
+  /// lavagna): sul testo Esc non seleziona il blocco del cursore e passa
+  /// all'ospite; una selezione di blocchi già fatta la chiude ancora.
+  readonly escapeLeaves?: boolean;
 }
 
 export const blocksOptions = Facet.define<BlocksOptions, BlocksOptions>({ combine: (values) => values[0] ?? {} });

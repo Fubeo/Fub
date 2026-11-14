@@ -80,7 +80,10 @@ sono selezionati.
   valgono anche in Live.
 
 Durante una composizione (IME) e con Vim fuori dal modo inserimento questi tasti
-si fanno da parte: Esc resta di Vim.
+si fanno da parte: Esc resta di Vim. In una scheda della lavagna Esc è della
+scheda, che esce dalla scrittura: sul testo non seleziona il blocco, e una
+selezione di blocchi già fatta la chiude prima di uscire
+(`SurfaceMountContext.escapeLeaves`).
 
 ## Il movimento
 

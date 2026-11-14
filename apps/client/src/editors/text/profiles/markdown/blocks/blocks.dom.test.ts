@@ -11,8 +11,8 @@ import { markdownGrammar } from "../grammar";
 import { livePreview } from "../livepreview";
 import { liveReveal } from "../../../live-reveal";
 import { blockIdMarks } from "../block-id";
-import { blocksMode } from "./index";
-import { blockSelection } from "./selection";
+import { blocksMode, type BlocksOptions } from "./index";
+import { blockSelection, selectCursorBlock } from "./selection";
 import { addBelow, colorRanges, gripLabel, handlesView } from "./handles";
 import { setContentColor } from "../color";
 import { blockModel } from "./model";
@@ -28,7 +28,7 @@ afterEach(() => {
   document.body.replaceChildren();
 });
 
-function mount(doc: string, anchor = 0, notify = vi.fn(), extra: Extension = []): EditorView {
+function mount(doc: string, anchor = 0, notify = vi.fn(), extra: Extension = [], options: BlocksOptions = {}): EditorView {
   const view = new EditorView({
     parent: document.body,
     state: EditorState.create({
@@ -40,7 +40,7 @@ function mount(doc: string, anchor = 0, notify = vi.fn(), extra: Extension = [])
         livePreview({ openWikilink() {}, searchTag() {} }),
         Prec.highest(liveReveal.of("mai")),
         blockIdMarks,
-        blocksMode({ page: () => "Nota", notify }),
+        blocksMode({ page: () => "Nota", notify, ...options }),
         extra,
       ],
     }),
@@ -202,6 +202,21 @@ describe("il codice", () => {
   it("fuori dal codice Tab resta quello di sempre", () => {
     const view = mount("Testo", 2);
     expect(press(view, "Tab")).toBe(false);
+  });
+});
+
+describe("Esc in una scheda della lavagna", () => {
+  it("sul testo Esc resta all'ospite, che ne esce; una selezione di blocchi la chiude ancora", () => {
+    const view = mount("Uno\n\nDue", 1, vi.fn(), [], { escapeLeaves: true });
+    expect(press(view, "Escape")).toBe(false);
+    expect(view.state.field(blockSelection)).toBeNull();
+    // Una selezione di blocchi fatta in altro modo (dalla maniglia): il
+    // primo Esc torna al testo, il secondo esce.
+    expect(selectCursorBlock(view)).toBe(true);
+    expect(view.state.field(blockSelection)).not.toBeNull();
+    expect(press(view, "Escape")).toBe(true);
+    expect(view.state.field(blockSelection)).toBeNull();
+    expect(press(view, "Escape")).toBe(false);
   });
 });
 
