@@ -625,7 +625,7 @@ export function createFakeHost(options: Options = {}): FakeHost {
   function installThemeFolder(source: string, replace: boolean): ThemeFolderInstall {
     const developer = settings.find((entry) => entry.spec.key === DEVELOPER_MODE_KEY);
     if (developer?.value !== true) {
-      throw { kind: "permission_denied", message: "installing a theme from a folder needs `developer.mode` on" };
+      throw { kind: "permission_denied", message: "Per installare un tema da una cartella accendi la modalità sviluppatore." };
     }
     const folder = themeFolders[source];
     if (folder === undefined) throw { kind: "io", message: `I/O error: ${source}: no such folder` };

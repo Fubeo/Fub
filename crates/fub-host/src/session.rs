@@ -2415,18 +2415,13 @@ impl Host {
             Ok((fub_abi::settings::SettingValue::Toggle(true), _))
         );
         if !on {
-            return Err(PluginError::PermissionDenied(
-                format!(
-                    "installing a theme from a folder needs `{}` on",
-                    crate::settings::DEVELOPER_MODE
-                )
-                .into(),
-            ));
+            return Err(PluginError::PermissionDenied(fub_abi::Text::key(
+                "host.theme_folder.developer_off",
+            )));
         }
-        let dir = self
-            .config_dir
-            .as_deref()
-            .ok_or_else(|| PluginError::Unserved("theme inventory unavailable".into()))?;
+        let dir = self.config_dir.as_deref().ok_or_else(|| {
+            PluginError::Unserved(fub_abi::Text::key("host.theme_folder.unavailable"))
+        })?;
         crate::theme::install_theme_from_folder(dir, source, replace).map_err(Into::into)
     }
 

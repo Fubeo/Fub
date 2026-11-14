@@ -1966,6 +1966,11 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with("host.craft_render.no_cli", "Fub non trova il programma a riga di comando dell'app.")
         .with("host.craft_render.ticket", "Fub non è riuscito a preparare l'anteprima: riprova.")
         .with(
+            "host.theme_folder.developer_off",
+            "Per installare un tema da una cartella accendi la modalità sviluppatore.",
+        )
+        .with("host.theme_folder.unavailable", "Fub non ha una cartella per i temi su questo computer.")
+        .with(
             "host.craft_render.over_limit",
             "Il file supera il peso massimo per un'anteprima fatta dall'app.",
         )
@@ -2610,6 +2615,11 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         )
         .with("host.craft_render.no_cli", "Fub cannot find the app's command-line program.")
         .with("host.craft_render.ticket", "Fub could not prepare the preview: try again.")
+        .with(
+            "host.theme_folder.developer_off",
+            "To install a theme from a folder, turn on developer mode.",
+        )
+        .with("host.theme_folder.unavailable", "Fub has no theme folder on this computer.")
         .with(
             "host.craft_render.over_limit",
             "The file is over the maximum size for a preview made by the app.",

@@ -1661,6 +1661,11 @@ fn installing_from_a_folder_is_refused_with_developer_mode_off() {
         "{error:?}"
     );
     assert!(themes_dir_is_empty(&config));
+    // Il rifiuto arriva alla shell come frase del catalogo, non come chiave.
+    let shown = installed(&config).localized_error(None, error);
+    let wire = serde_json::to_value(&shown).expect("serializes");
+    let sentence = wire["message"].as_str().expect("a sentence on the wire");
+    assert!(!sentence.starts_with("host.theme_folder."), "{sentence}");
 
     let host = developer(&config, true);
     host.set_setting_for_user(

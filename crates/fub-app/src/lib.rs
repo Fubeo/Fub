@@ -1570,7 +1570,8 @@ async fn install_theme_from_folder(
     replace: bool,
 ) -> Result<fub_host::theme::ThemeFolderInstall, PluginError> {
     off_main(app, move |host| {
-        host.install_theme_from_folder(Utf8Path::new(&source), replace)
+        let result = host.install_theme_from_folder(Utf8Path::new(&source), replace);
+        for_the_shell(host, None, result)
     })
     .await
 }
