@@ -53,6 +53,52 @@ impl CommandProvider for PropertiesCommands {
             command(NOTES_PROPERTIES_CLEAR)
                 .with_param(parameter(NOTES_PROPERTIES_CLEAR, DOC, ParamKind::Document))
                 .with_scope(CommandScope::writing(CommandReach::Document)),
+            command(PROPERTY_OPTION_SET)
+                .with_param(parameter(PROPERTY_OPTION_SET, KEY, ParamKind::Text).required())
+                .with_param(parameter(PROPERTY_OPTION_SET, OPTION, ParamKind::Text).required())
+                .with_param(parameter(PROPERTY_OPTION_SET, NAME, ParamKind::Text))
+                .with_param(parameter(
+                    PROPERTY_OPTION_SET,
+                    COLOR,
+                    ParamKind::Choice(
+                        PropertyColor::ALL
+                            .iter()
+                            .map(|color| {
+                                Choice::new(
+                                    color.as_key(),
+                                    Text::key(format!(
+                                        "{PROPERTY_OPTION_SET}.{COLOR}.{}",
+                                        color.as_key()
+                                    )),
+                                )
+                            })
+                            .collect(),
+                    ),
+                ))
+                .with_param(parameter(
+                    PROPERTY_OPTION_SET,
+                    GROUP,
+                    ParamKind::Choice(
+                        StatusGroup::ALL
+                            .iter()
+                            .map(|group| {
+                                Choice::new(
+                                    group.as_key(),
+                                    Text::key(format!(
+                                        "{PROPERTY_OPTION_SET}.{GROUP}.{}",
+                                        group.as_key()
+                                    )),
+                                )
+                            })
+                            .collect(),
+                    ),
+                ))
+                .with_param(parameter(PROPERTY_OPTION_SET, EXPECTED, ParamKind::Text))
+                .with_scope(CommandScope::writing(CommandReach::Settings)),
+            command(PROPERTY_TYPES_RESTORE)
+                .with_param(parameter(PROPERTY_TYPES_RESTORE, VALUE, ParamKind::Text).required())
+                .with_param(parameter(PROPERTY_TYPES_RESTORE, EXPECTED, ParamKind::Text).required())
+                .with_scope(CommandScope::writing(CommandReach::Settings)),
         ]
     }
 
@@ -81,6 +127,8 @@ impl CommandProvider for PropertiesCommands {
             PROPERTY_KEYS_MIGRATE => migrate_property_keys(mode, host),
             NOTES_ALIAS_ADD => add_alias(Args::new(&args), mode, host),
             NOTES_PROPERTIES_CLEAR => clear_properties(Args::new(&args), mode, host),
+            PROPERTY_OPTION_SET => set_property_option(Args::new(&args), mode, host),
+            PROPERTY_TYPES_RESTORE => restore_property_types(Args::new(&args), mode, host),
             other => Err(PluginError::UnknownCommand(other.to_string().into())),
         }
     }
@@ -182,7 +230,13 @@ fn set(
     let grezzo = args.text(VALUE).unwrap_or("");
     let mut value = parse_yaml_value(grezzo);
     let declared = property_types(host).resolve(&key);
-    if declared == Some(PropertyType::Text) && !value.is_string() {
+    // Testo, Selezione, Stato e Url sono testi: `3` o `true` scritti in una
+    // di queste si salvano come la stringa digitata, non come numero.
+    let textual = matches!(
+        declared,
+        Some(PropertyType::Text | PropertyType::Select | PropertyType::Status | PropertyType::Url)
+    );
+    if textual && !value.is_string() {
         value = serde_json::Value::String(grezzo.to_string());
     }
     let mut candidate = fub_abi::model::Frontmatter::default();
@@ -350,6 +404,190 @@ fn writable_property_types(host: &dyn HostApi) -> Result<PropertyTypes, PluginEr
     }
 }
 
+/// Il testo del registro com'è adesso: è la «revisione» del registro, che
+/// `expected` confronta e l'annullo rimette.
+fn property_types_raw(host: &dyn HostApi) -> Result<String, PluginError> {
+    match host.setting(TYPES_KEY)? {
+        SettingValue::Text(raw) => Ok(raw),
+        _ => Err(PluginError::BadArgs(
+            format!("{TYPES_KEY}: expected text").into(),
+        )),
+    }
+}
+
+/// Il registro deve essere ancora quello che il chiamante ha letto.
+fn check_types_unchanged(current: &str, expected: Option<&str>) -> Result<(), PluginError> {
+    if expected.is_some_and(|expected| expected != current) {
+        return Err(PluginError::Conflict(Text::key(E_TYPES_CHANGED)));
+    }
+    Ok(())
+}
+
+/// Aggiunge, rinomina, colora o raggruppa un'opzione di Selezione o di Stato.
+///
+/// L'opzione `option` si aggiunge in fondo se non c'è; se c'è, `name` la
+/// rinomina, `color` e `group` la cambiano. I valori già scritti nelle note
+/// non si toccano: un'opzione rinominata lascia i vecchi valori fuori dalle
+/// opzioni, testo segnato. Il registro si legge con la stessa regola di
+/// [`writable_property_types`]: illeggibile o di una versione futura, non si
+/// riscrive. L'annullo rimette il testo di prima con
+/// `property.types.restore`, solo se nessuno l'ha cambiato nel frattempo.
+fn set_property_option(
+    args: Args<'_>,
+    mode: InvokeMode,
+    host: &mut dyn HostApi,
+) -> Result<CommandOutcome, PluginError> {
+    let key = key_from(args)?;
+    let option = args.text(OPTION).unwrap_or("").trim().to_string();
+    if option.is_empty() {
+        return Err(PluginError::BadArgs(Text::key(E_OPTION_EMPTY)));
+    }
+    let rename = match args.text(NAME).map(str::trim) {
+        Some("") => return Err(PluginError::BadArgs(Text::key(E_OPTION_EMPTY))),
+        other => other.map(str::to_string),
+    };
+    let color = match args.text(COLOR) {
+        None => None,
+        Some(raw) => Some(PropertyColor::from_key(raw).ok_or_else(|| {
+            PluginError::BadArgs(Text::message(E_COLOR, vec![Arg::text(VALUE, raw)]))
+        })?),
+    };
+    let group = match args.text(GROUP) {
+        None => None,
+        Some(raw) => Some(StatusGroup::from_key(raw).ok_or_else(|| {
+            PluginError::BadArgs(Text::message(E_GROUP, vec![Arg::text(VALUE, raw)]))
+        })?),
+    };
+    let before = property_types_raw(host)?;
+    check_types_unchanged(&before, args.text(EXPECTED))?;
+    let mut types = writable_property_types(host).map_err(|_| {
+        PluginError::BadArgs(Text::message(
+            E_TYPES_UNREADABLE,
+            vec![Arg::text(KEY, TYPES_KEY)],
+        ))
+    })?;
+    let kind = types.resolve(&key);
+    if !kind.is_some_and(PropertyType::has_options) {
+        return Err(PluginError::BadArgs(Text::message(
+            E_NOT_CHOICE,
+            vec![Arg::text(KEY, &key)],
+        )));
+    }
+    if group.is_some() && kind != Some(PropertyType::Status) {
+        return Err(PluginError::BadArgs(Text::message(
+            E_GROUP_NOT_STATUS,
+            vec![Arg::text(KEY, &key)],
+        )));
+    }
+    let list = types.options.entry(key.clone()).or_default();
+    let (summary_key, name) = match list.iter().position(|o| o.name == option) {
+        None => {
+            if rename.is_some() {
+                return Err(PluginError::NotFound(Text::message(
+                    E_OPTION_MISSING,
+                    vec![Arg::text(KEY, &key), Arg::text(OPTION, &option)],
+                )));
+            }
+            list.push(PropertyOption {
+                name: option.clone(),
+                color: color.map(|c| c.as_key().to_string()),
+                group: group.map(|g| g.as_key().to_string()),
+            });
+            (P_OPTION_ADD, option.clone())
+        }
+        Some(at) => {
+            if let Some(new) = &rename {
+                if *new != option && list.iter().any(|o| o.name == *new) {
+                    return Err(PluginError::Conflict(Text::message(
+                        E_OPTION_TAKEN,
+                        vec![Arg::text(KEY, &key), Arg::text(OPTION, new)],
+                    )));
+                }
+            }
+            let entry = &mut list[at];
+            if let Some(new) = &rename {
+                entry.name = new.clone();
+            }
+            if let Some(color) = color {
+                entry.color = Some(color.as_key().to_string());
+            }
+            if let Some(group) = group {
+                entry.group = Some(group.as_key().to_string());
+            }
+            (P_OPTION_SET, entry.name.clone())
+        }
+    };
+    let after = serde_json::to_string(&types)
+        .map_err(|e| PluginError::Internal(format!("{TYPES_KEY}: {e}").into()))?;
+    let named = || vec![Arg::text(KEY, &key), Arg::text(OPTION, &name)];
+    if after == before {
+        return Ok(CommandOutcome::notify(Text::message(
+            P_OPTION_SAME,
+            named(),
+        )));
+    }
+    let summary = Text::message(summary_key, named());
+    if mode.is_dry_run() {
+        return Ok(
+            CommandOutcome::done().with_effect(CommandEffect::Plan(CommandPlan {
+                summary,
+                ..CommandPlan::default()
+            })),
+        );
+    }
+    host.set_setting(TYPES_KEY, SettingValue::Text(after.clone()))?;
+    Ok(CommandOutcome::notify(summary)
+        .undoable(Undo::by_command(
+            Text::message(U_OPTION, named()),
+            PROPERTY_TYPES_RESTORE,
+            serde_json::json!({ VALUE: before, EXPECTED: after }),
+        ))
+        .with_effect(CommandEffect::Done))
+}
+
+/// Rimette nel registro il testo `value`, solo se adesso vale `expected`.
+///
+/// È l'annullo di [`set_property_option`]: il testo di prima torna byte per
+/// byte, e un registro cambiato nel frattempo (da un altro comando, a mano)
+/// non si sovrascrive. `value` deve essere un registro che questo Fub sa
+/// leggere, o vuoto: un testo illeggibile non entra nel registro da qui.
+fn restore_property_types(
+    args: Args<'_>,
+    mode: InvokeMode,
+    host: &mut dyn HostApi,
+) -> Result<CommandOutcome, PluginError> {
+    let value = args.text(VALUE).unwrap_or("");
+    let expected = args.text(EXPECTED).unwrap_or("");
+    let current = property_types_raw(host)?;
+    check_types_unchanged(&current, Some(expected))?;
+    if !value.trim().is_empty() && serde_json::from_str::<PropertyTypes>(value).is_err() {
+        return Err(PluginError::BadArgs(Text::message(
+            E_TYPES_UNREADABLE,
+            vec![Arg::text(KEY, TYPES_KEY)],
+        )));
+    }
+    let summary = Text::key(P_TYPES_RESTORE);
+    if value == current {
+        return Ok(CommandOutcome::notify(summary));
+    }
+    if mode.is_dry_run() {
+        return Ok(
+            CommandOutcome::done().with_effect(CommandEffect::Plan(CommandPlan {
+                summary,
+                ..CommandPlan::default()
+            })),
+        );
+    }
+    host.set_setting(TYPES_KEY, SettingValue::Text(value.to_string()))?;
+    Ok(CommandOutcome::notify(summary)
+        .undoable(Undo::by_command(
+            Text::key(U_TYPES_RESTORE),
+            PROPERTY_TYPES_RESTORE,
+            serde_json::json!({ VALUE: current, EXPECTED: value }),
+        ))
+        .with_effect(CommandEffect::Done))
+}
+
 fn rename_property_key(
     args: Args<'_>,
     mode: InvokeMode,
@@ -378,6 +616,12 @@ fn rename_property_key(
                 None
             } else {
                 types.types.insert(new.to_string(), kind);
+                // Le opzioni di una Selezione o di uno Stato seguono il tipo:
+                // senza, ogni valore della chiave nuova sarebbe fuori dalle
+                // opzioni. Quelle che la chiave nuova ha già restano sue.
+                if let Some(options) = types.options.get(old).cloned() {
+                    types.options.entry(new.to_string()).or_insert(options);
+                }
                 Some(
                     serde_json::to_string(&types)
                         .map_err(|e| PluginError::Internal(format!("{TYPES_KEY}: {e}").into()))?,

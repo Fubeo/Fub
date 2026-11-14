@@ -18,7 +18,7 @@ use fub_features::{
     PropertiesCommands, PropertiesView, GLOBAL_PROPERTIES_VIEW, NOTES_ALIAS_ADD,
     NOTES_PROPERTIES_CLEAR, NOTES_PROPERTY_REMOVE, NOTES_PROPERTY_SET, PROPERTIES_ID,
     PROPERTIES_STATUS_VIEW, PROPERTIES_VIEW, PROPERTY_KEYS_MIGRATE, PROPERTY_KEY_DELETE,
-    PROPERTY_KEY_RENAME, PROPERTY_TYPE_SET,
+    PROPERTY_KEY_RENAME, PROPERTY_OPTION_SET, PROPERTY_TYPES_RESTORE, PROPERTY_TYPE_SET,
 };
 use fub_format_markdown::MarkdownProvider;
 use fub_kernel::{FormatRegistry, Workspace, MAIN_PANE};
@@ -94,6 +94,7 @@ fn fields(tree: &UiNode) -> Vec<(String, &'static str)> {
             UiKind::Number { field, .. } => out.push((field.clone(), "number")),
             UiKind::Checkbox { field, .. } => out.push((field.clone(), "checkbox")),
             UiKind::DatePicker { field, .. } => out.push((field.clone(), "date")),
+            UiKind::Select { field, .. } => out.push((field.clone(), "select")),
             UiKind::Stack { children, .. } => children.iter().for_each(|c| walk(c, out)),
             UiKind::List { items } => items.iter().for_each(|c| walk(c, out)),
             UiKind::Form { children, .. } => children.iter().for_each(|c| walk(c, out)),
@@ -1054,4 +1055,295 @@ fn clearing_takes_the_whole_block_and_leaves_the_body() {
         ws.apply_edit(&planned.doc, planned.edit).unwrap();
     }
     assert_eq!(vault.read("a.md"), before);
+}
+
+fn registry(ws: &Workspace) -> String {
+    let SettingValue::Text(raw) = ws.setting("properties.types").unwrap() else {
+        panic!("text setting")
+    };
+    raw
+}
+
+fn option(ws: &mut Workspace, args: serde_json::Value) -> fub_abi::command::CommandOutcome {
+    ws.invoke_command(PROPERTY_OPTION_SET, args, InvokeMode::Apply, Actor::User)
+        .expect("option set")
+}
+
+fn undo_by_command(ws: &mut Workspace, outcome: &fub_abi::command::CommandOutcome) {
+    let undo = outcome.undo.as_ref().expect("undoable");
+    let UndoStep::Command { command, args } = &undo.steps[0] else {
+        panic!("atteso Command, trovato {:?}", undo.steps);
+    };
+    ws.invoke_command(command, args.clone(), InvokeMode::Apply, Actor::User)
+        .expect("undo");
+}
+
+/// Aggiungere, rinominare, colorare e raggruppare un'opzione passa dal
+/// registro; ogni passo si annulla e torna byte per byte al testo di prima.
+#[test]
+fn options_are_added_renamed_colored_and_undone_byte_for_byte() {
+    let vault = Vault::new();
+    let mut ws = vault.open();
+    declare(&mut ws, "stage", "status");
+    let declared = registry(&ws);
+    assert_eq!(declared, r#"{"version":1,"types":{"stage":"status"}}"#);
+
+    let dry = ws
+        .invoke_command(
+            PROPERTY_OPTION_SET,
+            serde_json::json!({"key": "stage", "option": "Da fare"}),
+            InvokeMode::DryRun,
+            Actor::User,
+        )
+        .unwrap();
+    assert!(matches!(dry.effect, CommandEffect::Plan(_)), "{dry:?}");
+    assert_eq!(registry(&ws), declared, "il dry-run non scrive");
+
+    let added = option(
+        &mut ws,
+        serde_json::json!({"key": "stage", "option": "Da fare", "color": "gray", "group": "todo"}),
+    );
+    let with_one = registry(&ws);
+    assert_eq!(
+        with_one,
+        concat!(
+            r#"{"version":1,"types":{"stage":"status"},"#,
+            r#""options":{"stage":[{"name":"Da fare","color":"gray","group":"todo"}]}}"#
+        )
+    );
+    let renamed = option(
+        &mut ws,
+        serde_json::json!({
+            "key": "stage", "option": "Da fare", "name": "Da iniziare", "color": "blue",
+            "expected": with_one
+        }),
+    );
+    let types: PropertyTypes = serde_json::from_str(&registry(&ws)).unwrap();
+    let only = &types.options("stage")[0];
+    assert_eq!(only.name, "Da iniziare");
+    assert_eq!(only.color(), fub_abi::model::PropertyColor::Blue);
+    assert_eq!(only.group(), fub_abi::model::StatusGroup::Todo);
+
+    undo_by_command(&mut ws, &renamed);
+    assert_eq!(registry(&ws), with_one);
+    undo_by_command(&mut ws, &added);
+    assert_eq!(registry(&ws), declared);
+
+    // Lo stesso gesto due volte: la seconda non scrive e non si annulla.
+    let fatto = serde_json::json!({"key": "stage", "option": "Fatto", "group": "done"});
+    option(&mut ws, fatto.clone());
+    let after = registry(&ws);
+    let same = option(&mut ws, fatto);
+    assert!(same.undo.is_none());
+    assert_eq!(registry(&ws), after);
+}
+
+/// L'annullo non sovrascrive un registro cambiato nel frattempo; un
+/// `expected` vecchio non scrive.
+#[test]
+fn a_registry_changed_meanwhile_is_neither_overwritten_nor_undone() {
+    use fub_abi::error::PluginError;
+    let vault = Vault::new();
+    let mut ws = vault.open();
+    declare(&mut ws, "tint", "select");
+    let before = registry(&ws);
+    let added = option(
+        &mut ws,
+        serde_json::json!({"key": "tint", "option": "Rosso", "color": "red"}),
+    );
+    declare(&mut ws, "rating", "number");
+    let changed = registry(&ws);
+    let undo = added.undo.as_ref().unwrap();
+    let UndoStep::Command { command, args } = &undo.steps[0] else {
+        panic!("{:?}", undo.steps);
+    };
+    assert_eq!(command, PROPERTY_TYPES_RESTORE);
+    let refused = ws.invoke_command(command, args.clone(), InvokeMode::Apply, Actor::User);
+    assert!(
+        matches!(refused, Err(PluginError::Conflict(_))),
+        "{refused:?}"
+    );
+    assert_eq!(registry(&ws), changed);
+    let stale = ws.invoke_command(
+        PROPERTY_OPTION_SET,
+        serde_json::json!({"key": "tint", "option": "Blu", "expected": before}),
+        InvokeMode::Apply,
+        Actor::User,
+    );
+    assert!(matches!(stale, Err(PluginError::Conflict(_))), "{stale:?}");
+    assert_eq!(registry(&ws), changed);
+    // Un testo illeggibile non entra nel registro dal ripristino.
+    let unreadable = ws.invoke_command(
+        PROPERTY_TYPES_RESTORE,
+        serde_json::json!({"value": "{broken", "expected": changed}),
+        InvokeMode::Apply,
+        Actor::User,
+    );
+    assert!(
+        matches!(unreadable, Err(PluginError::BadArgs(_))),
+        "{unreadable:?}"
+    );
+    assert_eq!(registry(&ws), changed);
+}
+
+/// Un registro di una versione futura o illeggibile non si riscrive, neanche
+/// per un'opzione.
+#[test]
+fn options_never_rewrite_a_future_or_unreadable_registry() {
+    let vault = Vault::new();
+    let mut ws = vault.open();
+    for raw in [
+        "{broken",
+        r#"{"version":2,"types":{"tint":"select"}}"#,
+        r#"{"version":1,"types":{"tint":"select"},"options":{"tint":[{"name":"a","icon":"x"}]}}"#,
+    ] {
+        ws.set_setting("properties.types", SettingValue::Text(raw.into()))
+            .unwrap();
+        let refused = ws.invoke_command(
+            PROPERTY_OPTION_SET,
+            serde_json::json!({"key": "tint", "option": "Rosso"}),
+            InvokeMode::Apply,
+            Actor::User,
+        );
+        assert!(
+            matches!(refused, Err(fub_abi::error::PluginError::BadArgs(_))),
+            "{raw}: {refused:?}"
+        );
+        assert_eq!(registry(&ws), raw);
+    }
+}
+
+/// Le opzioni restano quando il registro si riscrive per un'altra proprietà,
+/// e seguono il tipo quando la chiave si rinomina.
+#[test]
+fn options_survive_other_rewrites_and_follow_a_renamed_key() {
+    let vault = Vault::new();
+    vault.put("a.md", "---\ntint: Rosso\n---\n");
+    let mut ws = vault.open();
+    declare(&mut ws, "tint", "select");
+    option(
+        &mut ws,
+        serde_json::json!({"key": "tint", "option": "Rosso", "color": "red"}),
+    );
+    declare(&mut ws, "rating", "number");
+    let types: PropertyTypes = serde_json::from_str(&registry(&ws)).unwrap();
+    assert_eq!(types.types["rating"], PropertyType::Number);
+    assert_eq!(types.options("tint")[0].name, "Rosso");
+    assert_eq!(types.options("tint")[0].color.as_deref(), Some("red"));
+
+    ws.invoke_command(
+        PROPERTY_KEY_RENAME,
+        serde_json::json!({"old_key": "tint", "new_key": "hue"}),
+        InvokeMode::Apply,
+        Actor::User,
+    )
+    .unwrap();
+    let types: PropertyTypes = serde_json::from_str(&registry(&ws)).unwrap();
+    assert_eq!(types.resolve("hue"), Some(PropertyType::Select));
+    assert_eq!(types.options("hue"), types.options("tint"));
+}
+
+#[test]
+fn option_arguments_are_checked_with_typed_errors() {
+    use fub_abi::error::PluginError;
+    let vault = Vault::new();
+    let mut ws = vault.open();
+    declare(&mut ws, "tint", "select");
+    declare(&mut ws, "plain", "text");
+    option(
+        &mut ws,
+        serde_json::json!({"key": "tint", "option": "Rosso"}),
+    );
+    option(&mut ws, serde_json::json!({"key": "tint", "option": "Blu"}));
+    let before = registry(&ws);
+    let cases = [
+        (serde_json::json!({"key": "plain", "option": "x"}), "bad"),
+        (serde_json::json!({"key": "missing", "option": "x"}), "bad"),
+        (serde_json::json!({"key": "tint", "option": "  "}), "bad"),
+        (
+            serde_json::json!({"key": "tint", "option": "Rosso", "name": " "}),
+            "bad",
+        ),
+        (
+            serde_json::json!({"key": "tint", "option": "Rosso", "color": "teal"}),
+            "bad",
+        ),
+        (
+            serde_json::json!({"key": "tint", "option": "Rosso", "group": "done"}),
+            "bad",
+        ),
+        // Due opzioni con lo stesso nome non nascono da un comando.
+        (
+            serde_json::json!({"key": "tint", "option": "Blu", "name": "Rosso"}),
+            "conflict",
+        ),
+        (
+            serde_json::json!({"key": "tint", "option": "Verde", "name": "Giallo"}),
+            "missing",
+        ),
+    ];
+    for (args, expected) in cases {
+        let result = ws.invoke_command(
+            PROPERTY_OPTION_SET,
+            args.clone(),
+            InvokeMode::Apply,
+            Actor::User,
+        );
+        let ok = match expected {
+            "bad" => matches!(result, Err(PluginError::BadArgs(_))),
+            "conflict" => matches!(result, Err(PluginError::Conflict(_))),
+            _ => matches!(result, Err(PluginError::NotFound(_))),
+        };
+        assert!(ok, "{args}: {result:?}");
+    }
+    assert_eq!(registry(&ws), before);
+    // Un'opzione che c'è già si aggiorna, non si duplica.
+    option(
+        &mut ws,
+        serde_json::json!({"key": "tint", "option": "Rosso", "color": "pink"}),
+    );
+    let types: PropertyTypes = serde_json::from_str(&registry(&ws)).unwrap();
+    assert_eq!(types.options("tint").len(), 2);
+    assert_eq!(types.options("tint")[0].color.as_deref(), Some("pink"));
+}
+
+/// Nel pannello una Selezione dentro le opzioni è una tendina; fuori dalle
+/// opzioni resta un campo di testo. Un numero scritto in una Selezione si
+/// salva come testo.
+#[test]
+fn the_panel_offers_the_options_and_keeps_outside_values_as_text() {
+    let vault = Vault::new();
+    vault.put(
+        "a.md",
+        "---\ntint: Rosso\nother: Verde\nlink: https://fub.example\n---\n",
+    );
+    let mut ws = vault.open();
+    declare(&mut ws, "tint", "select");
+    declare(&mut ws, "other", "select");
+    declare(&mut ws, "link", "url");
+    option(
+        &mut ws,
+        serde_json::json!({"key": "tint", "option": "Rosso"}),
+    );
+    option(
+        &mut ws,
+        serde_json::json!({"key": "other", "option": "Blu"}),
+    );
+    open_notes(&ws, "a.md");
+    let fields = fields(&ws.render_view(&instance()).unwrap());
+    assert!(fields.contains(&("tint".into(), "select")), "{fields:?}");
+    assert!(fields.contains(&("other".into(), "text")), "{fields:?}");
+    assert!(fields.contains(&("link".into(), "text")), "{fields:?}");
+    ws.invoke_command(
+        NOTES_PROPERTY_SET,
+        serde_json::json!({"doc": "a.md", "key": "tint", "value": "3"}),
+        InvokeMode::Apply,
+        Actor::User,
+    )
+    .unwrap();
+    let text = vault.read("a.md");
+    assert!(
+        text.contains("tint: '3'") || text.contains("tint: \"3\""),
+        "{text}"
+    );
 }
