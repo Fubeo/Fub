@@ -1272,7 +1272,7 @@ Fatto quando: `tasks-query.test.ts` per ogni riga capita e per quella
 sconosciuta; un test DOM del recinto e della spunta; le foto del banco.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/text/profiles/markdown/tasks-query.test.ts
-Stato: [ ] da fare
+Stato: [~] in corso (feat/vista-compiti, da main 9030bcd8b, 2026-11-14)
 
 ## T20 · Sbirciata, Alt clic, link come scheda
 
@@ -2584,7 +2584,7 @@ adattatori (Markdown, documento, foglio); una nota con dieci tabelle con la
 battuta nel budget; il confine verde.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/tabella src/editors/grid src/editors/text/profiles/markdown/table-grid.test.ts
-Stato: [~] in corso (feat/tabella-gesti-foglio)
+Stato: [~] PR #361 (feat/tabella-gesti-foglio @ f56bc6da8) · nel documento 25 casi della prova comune passano, 7 assenti col motivo (Ctrl+freccia salta di parola; carattere, F2+Esc e Tab che conferma non hanno una cella da aprire; niente ordinamento); i gesti che il testo usa già (Invio, Ctrl+R, Ctrl+«+», Maiusc+Spazio) valgono solo con celle scelte; Esc toglie il taglio, poi gli intervalli, poi le celle; la barra del dito ha Tab, Invio e «+ riga» (keydown vero, niente azioni nuove); baseline delle tabelle dal runner
 
 ## T51 · I gesti nuovi, per tabella e foglio
 
