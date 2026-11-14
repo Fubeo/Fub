@@ -4974,7 +4974,7 @@ prova che un fascio rifiutato lascia montato l'ultimo buono e mostra la
 diagnosi.
 Prova: scripts/check.sh --rapido; cargo test -p fub-host --test themes;
 cd apps/client && npx vitest run src/theme/ src/panels/
-Stato: [ ] da fare
+Stato: [x] integrato 2026-11-14 (coder/pa-t37 @ 8aeec2c6e) · tre giri di revisione: il bloccante (i profili di macchina portavano `developer.theme-folder` dalla webview) chiuso con `PROFILE_LOCAL_KEYS` e un turno dell'host su cambio e ripristino; guardiano solo su cartella `ready`, un thread solo del custode (vince l'ultima), `watched` vero anche quando la cartella sparisce e torna, niente link simbolici; check verde 32 passi · le porte dei temi in `docs/reference/theme-ipc.md` · aperto: i percorsi vecchi nei profili non attivi su disco (formato di fub-kernel, issue pronta)
 
 ## T38 · La pagina «Tutti i componenti»
 

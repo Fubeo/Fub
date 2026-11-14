@@ -15,18 +15,34 @@
 //   dell'host arrivano tipizzati e si dicono con le parole della shell. Un
 //   tentativo ha un esito solo: la diagnosi e un avviso che dice la stessa
 //   cosa.
+// - il tema collegato (PA T37): «Collega una cartella…» accanto a «Installa da
+//   cartella…», e sotto «Temi installati» il blocco «Cartella collegata» con
+//   l'ora dell'ultimo rimontaggio e «Scollega». La cartella la sceglie la
+//   persona nella finestra nativa, come per installare; il rimontaggio a ogni
+//   salvataggio è di `theme/theme.ts`, e qui si dice com'è andato.
 import { api } from "../host/ipc";
 import { errorText, isErrorKind } from "../host/errors";
-import type { DiskCause, ThemeBlock, ThemeFolderCheck, ThemeFolderInstall, ThemeFolderRefusal } from "../host/contract";
+import type {
+  DiskCause,
+  ThemeBlock,
+  ThemeFolderCheck,
+  ThemeFolderInstall,
+  ThemeFolderLink,
+  ThemeFolderRefusal,
+} from "../host/contract";
 import { openDialog } from "../kit/dialog";
 import { writeClipboardText } from "../platform/clipboard";
 import { plural, resolvedLanguage, t } from "../i18n/strings";
 import {
   currentThemeId,
+  currentThemePreview,
+  linkedTheme,
   reloadThemeCatalog,
   themeCatalog,
+  themeLinkChanged,
   themeRejections,
   vetThemeFolder,
+  type LinkedThemeStatus,
   type Theme,
 } from "../theme/theme";
 import { notify } from "../ui/notify";
@@ -56,6 +72,10 @@ export interface Diagnosis {
   readonly kept?: boolean;
   /// Il tema non è rifiutato: è ciò che c'è già fra i temi di Fub a fermarlo.
   readonly blocked?: boolean;
+  /// Il tema collegato: l'ora dell'ultimo fascio buono, che resta.
+  readonly lastGood?: number;
+  /// Con `lastGood`: l'ultimo buono è montato adesso (in uso o in anteprima).
+  readonly mounted?: boolean;
 }
 
 /// I file che un canale del loader descrive. `foglio` e `contrasto` parlano
@@ -138,7 +158,36 @@ export function themeDiagnoses(): Diagnosis[] {
     rows: diagnosisRows(rejection.reasons, rejection.light),
     text: rejection.reasons,
   }));
-  return refusal ? [refusal, ...loader] : loader;
+  const linkedOne = linkedDiagnosis(linkedTheme());
+  const all = linkedOne ? [linkedOne, ...loader] : loader;
+  return refusal ? [refusal, ...all] : all;
+}
+
+/// La diagnosi del tema collegato, se l'ultimo tentativo non è riuscito: i
+/// motivi del cancello della shell, o il rifiuto tipizzato dell'host (un
+/// manifest a metà), o la cartella che il disco non legge. La cartella sparita
+/// e la collisione le dice il blocco «Cartella collegata».
+export function linkedDiagnosis(status: LinkedThemeStatus | null): Diagnosis | null {
+  if (status === null || status.attemptAt === null) return null;
+  const { link } = status;
+  const name = link.name ?? folderName(link.folder);
+  const shown = currentThemePreview()?.id ?? currentThemeId();
+  const kept = status.goodAt === null
+    ? {}
+    : { lastGood: status.goodAt, mounted: link.id !== null && shown === link.id };
+  if (status.rejection !== null) {
+    const { reasons, light } = status.rejection;
+    return { name, at: status.attemptAt, rows: diagnosisRows(reasons, light), text: reasons, ...kept };
+  }
+  if (link.state === "refused") {
+    const row = refusalRow(link.refusal);
+    return { name, at: status.attemptAt, rows: [row], text: [row.why], ...kept };
+  }
+  if (link.state === "unreadable") {
+    const why = t("settings.themes.linked.unreadable");
+    return { name, at: status.attemptAt, rows: [{ file: null, where: null, code: "unreadable", why }], text: [why], ...kept };
+  }
+  return null;
 }
 
 /// Solo per i test: dimentica il rifiuto dell'host.
@@ -182,9 +231,14 @@ export function renderDiagnosis(diagnosis: Diagnosis): HTMLElement {
     : plural(count, "settings.themes.diagnosis.title.one", "settings.themes.diagnosis.title", { name: diagnosis.name });
   const when = document.createElement("div");
   when.className = "muted";
-  when.textContent = t(diagnosis.kept ? "settings.themes.diagnosis.when_kept" : "settings.themes.diagnosis.when", {
-    time: clock(diagnosis.at),
-  });
+  when.textContent = diagnosis.lastGood !== undefined
+    ? t(diagnosis.mounted ? "settings.themes.diagnosis.when_last_good" : "settings.themes.diagnosis.when_listed_good", {
+        time: clock(diagnosis.at),
+        good: clock(diagnosis.lastGood),
+      })
+    : t(diagnosis.kept ? "settings.themes.diagnosis.when_kept" : "settings.themes.diagnosis.when", {
+        time: clock(diagnosis.at),
+      });
   text.append(title, when);
 
   const list = document.createElement("ol");
@@ -519,4 +573,181 @@ export function installFolderButton(host: ThemeFolderHost): HTMLButtonElement {
       });
   });
   return button;
+}
+
+// --- il tema collegato (PA T37) ---------------------------------------------
+
+/// Un collegamento che non si è fatto: la cartella di prima resta collegata.
+/// Un rifiuto delle porte è una diagnosi, come per installare; gli altri sono
+/// una frase.
+async function notLinked(host: ThemeFolderHost, outcome: Extract<ThemeFolderLink, { outcome: "refused" }>): Promise<void> {
+  const { link } = outcome;
+  const name = link.name ?? folderName(link.folder);
+  switch (link.state) {
+    case "refused": {
+      const diagnosis = hostRefusal(name, link.refusal);
+      refusal = diagnosis;
+      notify(
+        plural(diagnosis.rows.length, "settings.themes.linked.not_linked.one", "settings.themes.linked.not_linked", { name }),
+        "guasto",
+      );
+      break;
+    }
+    case "collision":
+      refusal = null;
+      notify(t("settings.themes.linked.not_linked_collision", { name, id: link.id ?? name }), "guasto");
+      break;
+    case "missing":
+      refusal = null;
+      notify(t("settings.themes.linked.not_linked_missing"), "guasto");
+      break;
+    case "unreadable":
+      refusal = null;
+      notify(t("settings.themes.linked.not_linked_unreadable", { folder: folderName(link.folder) }), "guasto");
+      break;
+    case "ready":
+      // L'host non rifiuta mai una cartella pronta.
+      refusal = null;
+      break;
+  }
+  await host.rerender();
+}
+
+/// Una chiamata del collegamento che non è arrivata a un esito: la modalità
+/// spenta per quello che è, ogni altro guasto con le parole che porta.
+async function linkFailed(host: ThemeFolderHost, error: unknown, unlink: boolean): Promise<void> {
+  if (isErrorKind(error, "permission_denied") && !unlink) notify(t("settings.themes.developer_off"), "guasto");
+  else {
+    const reason = errorText(error).replace(/[.\s]+$/, "");
+    notify(t(unlink ? "settings.themes.linked.unlink_failed" : "settings.themes.linked.link_failed", { reason }), "guasto");
+  }
+  await host.rerender();
+}
+
+/**
+ * Il giro di «Collega una cartella…»: la scelta nella finestra nativa,
+ * l'host che la legge con le porte dell'installazione e la collega, il
+ * catalogo riletto. Il tema compare fra i temi installati, in sviluppo; se il
+ * cancello della shell lo rifiuta la diagnosi lo dice, e il prossimo
+ * salvataggio riprova.
+ */
+export async function linkThemeFolder(host: ThemeFolderHost): Promise<void> {
+  let outcome: ThemeFolderLink;
+  try {
+    outcome = await api.linkThemeFolder();
+  } catch (error) {
+    if (!host.lifetime.closed) await linkFailed(host, error, false);
+    return;
+  }
+  if (outcome.outcome === "cancelled") return;
+  if (outcome.outcome === "refused") {
+    if (!host.lifetime.closed) await notLinked(host, outcome);
+    return;
+  }
+  refusal = null;
+  // Il collegamento è dell'host anche se il pannello si è chiuso: il catalogo
+  // si rilegge comunque.
+  await themeLinkChanged(outcome.link);
+  if (host.lifetime.closed) return;
+  await host.rerender();
+  const name = outcome.link.name ?? folderName(outcome.link.folder);
+  if (linkedTheme()?.rejection == null && linkedTheme()?.attemptAt == null) {
+    notify(t("settings.themes.linked.done", { name }), "info");
+  }
+}
+
+/// «Scollega»: l'host dimentica la cartella e smette di guardarla, il catalogo
+/// si rilegge e, se il tema collegato era in uso, torna la serie.
+export async function unlinkThemeFolder(host: ThemeFolderHost): Promise<void> {
+  try {
+    await api.unlinkThemeFolder();
+  } catch (error) {
+    if (!host.lifetime.closed) await linkFailed(host, error, true);
+    return;
+  }
+  await themeLinkChanged(null);
+  if (host.lifetime.closed) return;
+  notify(t("settings.themes.linked.unlinked"), "info");
+  await host.rerender();
+}
+
+/// Un bottone di Aspetto che resta spento finché il suo giro non finisce.
+function actionButton(label: string, action: string, run: () => Promise<void>, host: ThemeFolderHost): HTMLButtonElement {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "settings-btn";
+  button.dataset.devAction = action;
+  button.textContent = label;
+  button.addEventListener("click", () => {
+    button.disabled = true;
+    void run()
+      .catch((error: unknown) => (host.lifetime.closed ? undefined : linkFailed(host, error, action === "unlink")))
+      .finally(() => {
+        if (button.isConnected) button.disabled = false;
+      });
+  });
+  return button;
+}
+
+/// Il bottone «Collega una cartella…» del blocco «Temi installati».
+export function linkFolderButton(host: ThemeFolderHost): HTMLButtonElement {
+  return actionButton(t("settings.themes.link_folder"), "link", () => linkThemeFolder(host), host);
+}
+
+/// La riga di stato del blocco: com'è andato l'ultimo giro.
+function linkedStatusText(status: LinkedThemeStatus): string {
+  const { link } = status;
+  if (link.state === "missing") return t("settings.themes.linked.missing");
+  if (link.state === "collision") return t("settings.themes.linked.collision", { id: link.id ?? "" });
+  if (status.reloaded !== null) {
+    const time = clock(status.reloaded.at);
+    return status.reloaded.changed.length > 0
+      ? t("settings.themes.linked.reloaded_after", { time, files: status.reloaded.changed.join(", ") })
+      : t("settings.themes.linked.reloaded", { time });
+  }
+  return t("settings.themes.linked.linked_at", { time: clock(status.since) });
+}
+
+/**
+ * Il blocco «Cartella collegata», sotto «Temi installati»: la cartella, il
+ * tema e la fiducia, l'ultimo rimontaggio (`role="status"`, così chi usa uno
+ * screen reader sente «Ricaricato…» a ogni salvataggio) e «Scollega».
+ */
+export function renderLinkedFolder(host: ThemeFolderHost, status: LinkedThemeStatus): HTMLElement {
+  const block = document.createElement("div");
+  block.className = "setting-row setting-block";
+  block.dataset.themeLinked = "";
+  block.dataset.linkState = status.link.state;
+  const text = document.createElement("div");
+  text.className = "setting-text";
+  const title = document.createElement("div");
+  title.className = "setting-label";
+  title.setAttribute("role", "heading");
+  title.setAttribute("aria-level", "4");
+  title.textContent = t("settings.themes.linked.title");
+  const hint = document.createElement("div");
+  hint.className = "muted";
+  hint.textContent = status.link.name === null
+    ? t("settings.themes.linked.hint_unknown", { folder: status.link.folder })
+    : t("settings.themes.linked.hint", { folder: status.link.folder, name: status.link.name });
+  text.append(title, hint);
+  // Collegata, ma nessuno la guarda: i salvataggi non arrivano. Una cartella
+  // sparita lo dice già la riga di stato.
+  if (!status.link.watched && status.link.state !== "missing") {
+    const unwatched = document.createElement("div");
+    unwatched.className = "muted";
+    unwatched.dataset.linkUnwatched = "";
+    unwatched.textContent = t("settings.themes.linked.unwatched");
+    text.append(unwatched);
+  }
+  const line = document.createElement("div");
+  line.className = "setting-source";
+  line.setAttribute("role", "status");
+  line.setAttribute("aria-live", "polite");
+  line.textContent = linkedStatusText(status);
+  const actions = document.createElement("div");
+  actions.className = "settings-actions";
+  actions.append(actionButton(t("settings.themes.linked.unlink"), "unlink", () => unlinkThemeFolder(host), host));
+  block.append(text, line, actions);
+  return block;
 }

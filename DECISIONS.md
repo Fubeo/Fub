@@ -2810,3 +2810,17 @@ La più recente in cima: data · piano · decisione · perché.
   già approvato il piano. Se è conforme, allora ci sei». Il prototipo T25 (`PLAN-ui/
   lavagna-schede.html`) vale come approvato con le varianti consigliate (D-10 (a):
   bordo d'accento, «Esc per uscire», «↩ N» e «×2»); T22 parte senza mostrarlo prima.
+- 2026-11-14 · T37 · `developer.theme-folder` è una chiave locale della macchina
+  (`PROFILE_LOCAL_KEYS`).
+  - Importare, copiare ed esportare un profilo la tolgono; cambiarlo o azzerarlo
+    rimette il valore di prima, sotto un turno dell'host (`local_keys_turn`),
+    perché il turno di scrittura del kernel è privato.
+  - Il guardiano si monta solo su una cartella `ready`, su un thread solo del
+    custode dove vince l'ultima richiesta. Si segna perso su un errore di notify o
+    se cambia l'identità della radice (dev/ino), e riprova.
+  - Una cartella rifiutata con la stessa radice resta guardata, così la correzione
+    arriva.
+  - Resta su disco il percorso vecchio nei profili non attivi: toglierlo cambia il
+    formato di fub-kernel (`switch_profile` sposta il livello macchina in
+    `profiles[vecchio]`). Non viene mai applicato ed è tolto da export e copia.
+    Issue pronta in `~/.cache/fub-prealpha/issue-chiavi-locali-profili.md`.

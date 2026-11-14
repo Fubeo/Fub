@@ -127,6 +127,7 @@ mod discover;
 mod files;
 mod folder;
 mod install;
+mod linked;
 mod lock;
 mod pointer;
 
@@ -147,6 +148,11 @@ pub use install::{
     install_theme, install_theme_checked, set_theme_revoked, set_theme_revoked_with_provenance,
     theme_catalog_provenance, theme_revocation_provenance, theme_revoked, uninstall_theme,
     update_theme,
+};
+pub(crate) use linked::link_folder;
+pub use linked::{
+    linked_theme_info, read_linked_theme, theme_link, ThemeFolderLink, ThemeLink, ThemeLinkState,
+    MAX_LINK_CHANGED,
 };
 use lock::lock_theme;
 pub use pointer::theme_tree_digest;

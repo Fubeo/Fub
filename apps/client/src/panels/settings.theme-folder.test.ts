@@ -66,7 +66,9 @@ vi.mock("../platform/clipboard", () => ({ writeClipboardText: box.clipboard }));
 
 const { createFakeHost, developerModeSetting, folderTheme, rejectedTheme } = await import("../host/fake");
 const { mountSettings } = await import("./settings");
-const { currentThemeId, reloadThemeCatalog, themeCatalog } = await import("../theme/theme");
+const { currentThemeId, reloadThemeCatalog, themeCatalog, themeFolderChanged, themeLinkChanged } = await import(
+  "../theme/theme"
+);
 const { settings } = await import("../host/query");
 const { diagnosisRows, forgetThemeRefusal, refusalRow } = await import("./theme-folder");
 
@@ -118,6 +120,8 @@ async function open(options: {
   revoked?: string[];
   blocked?: Record<string, ThemeBlock>;
   inUse?: string;
+  linked?: string;
+  watchFails?: boolean;
 }): Promise<void> {
   document.querySelector<HTMLButtonElement>("#settings-close")?.click();
   const installed = options.installed ?? [];
@@ -133,6 +137,8 @@ async function open(options: {
     revokedThemes: options.revoked,
     blockedThemes: options.blocked,
     pickThemeFolder: () => box.folder,
+    linkedThemeFolder: options.linked ?? null,
+    themeWatchFails: options.watchFails,
   });
   await reloadThemeCatalog();
   document.body.innerHTML = `
@@ -725,5 +731,175 @@ describe("i motivi si dividono in campi, non si riscrivono", () => {
       code: "malformed",
       why: "Il tema non è ben formato: missing `id`",
     });
+  });
+});
+
+describe("collegare la cartella di un tema in sviluppo (PA T37)", () => {
+  const linkButton = () => document.querySelector<HTMLButtonElement>('[data-dev-action="link"]');
+  const linkedBlock = () => document.querySelector<HTMLElement>("[data-theme-linked]");
+  const unlinkButton = () => document.querySelector<HTMLButtonElement>('[data-dev-action="unlink"]');
+  const statusLine = () => linkedBlock()!.querySelector("[role=status]")!;
+
+  /// Il tema della cartella dopo un salvataggio che il cancello della shell
+  /// non accetta: la pelle del tema rotto, lo stesso manifest.
+  function savedBroken(): ThemeFolderFake {
+    const good = folderTheme("acme.carta", "Carta", "0.3.2");
+    const badSkin = Object.values(rejectedTheme().payloads)[0]!.skin;
+    return {
+      ...good,
+      payloads: Object.fromEntries(
+        Object.entries(good.payloads).map(([key, payload]) => [key, { ...payload, skin: badSkin }]),
+      ),
+    };
+  }
+
+  beforeEach(async () => {
+    // La storia del collegamento è della finestra: ogni prova parte da zero.
+    box.host = createFakeHost({});
+    await themeLinkChanged(null);
+  });
+
+  it("«Collega una cartella…» c'è solo con la modalità sviluppatore accesa", async () => {
+    await open({ developer: false });
+    expect(linkButton()).toBeNull();
+    expect(linkedBlock()).toBeNull();
+
+    await open({ developer: true });
+    expect(linkButton()?.textContent).toBe("Collega una cartella…");
+    // Accanto a «Installa da cartella…», nello stesso blocco.
+    expect(linkButton()!.previousElementSibling).toBe(installButton());
+    expect(linkedBlock()).toBeNull();
+  });
+
+  it("la cartella collegata entra fra i temi installati, in sviluppo, e «Scollega» la toglie", async () => {
+    await open({ developer: true, folders: { "/temi/carta": folderTheme("acme.carta", "Carta", "0.3.2") } });
+    box.folder = "/temi/carta";
+    linkButton()!.click();
+
+    await vi.waitFor(() => expect(linkedBlock()).not.toBeNull());
+    expect(catalogOptions()).toContain("Carta · chiaro · In sviluppo");
+    expect(linkedBlock()!.querySelector("[role=heading]")!.textContent).toBe("Cartella collegata");
+    expect(linkedBlock()!.querySelector(".muted")!.textContent).toBe(
+      "/temi/carta · Carta · In sviluppo. Salvi un file e il tema si rimonta.",
+    );
+    expect(statusLine().getAttribute("aria-live")).toBe("polite");
+    expect(statusLine().textContent).toMatch(/^Collegata alle \d\d:\d\d:\d\d\.$/);
+    expect(box.notify).toHaveBeenCalledWith(
+      "«Carta» è collegato: compare fra i temi installati, in sviluppo.",
+      "info",
+    );
+    // La cartella la sceglie la finestra nativa: la shell non passa path, e
+    // non si copia niente fra i temi installati.
+    expect(gates("linkThemeFolder")).toEqual([[]]);
+    expect(gates("installThemeFromFolder")).toEqual([]);
+    expect(diagnoses()).toEqual([]);
+
+    unlinkButton()!.click();
+    await vi.waitFor(() => expect(linkedBlock()).toBeNull());
+    expect(catalogOptions()).not.toContain("Carta · chiaro · In sviluppo");
+    expect(box.notify).toHaveBeenCalledWith("Cartella scollegata.", "info");
+    expect(gates("unlinkThemeFolder")).toEqual([[]]);
+  });
+
+  it("collegata ma non guardata: il blocco dice che i salvataggi non arrivano, e cosa fare", async () => {
+    const folders = { "/temi/carta": folderTheme("acme.carta", "Carta", "0.3.2") };
+    await open({ developer: true, folders });
+    box.folder = "/temi/carta";
+    linkButton()!.click();
+    await vi.waitFor(() => expect(linkedBlock()).not.toBeNull());
+    expect(linkedBlock()!.querySelector("[data-link-unwatched]")).toBeNull();
+    unlinkButton()!.click();
+    await vi.waitFor(() => expect(linkedBlock()).toBeNull());
+
+    await open({ developer: true, folders, watchFails: true });
+    linkButton()!.click();
+    await vi.waitFor(() => expect(linkedBlock()).not.toBeNull());
+    expect(linkedBlock()!.querySelector("[data-link-unwatched]")?.textContent).toBe(
+      "Fub non riesce a seguire questa cartella: i salvataggi non arrivano e il tema non si rimonta da solo. " +
+        "Scollegala e collegala di nuovo; se succede ancora, chiudi i programmi che seguono molte cartelle e riprova.",
+    );
+  });
+
+  it("annullare la scelta non collega niente e non dice niente", async () => {
+    await open({ developer: true });
+    box.folder = null;
+    linkButton()!.click();
+    await vi.waitFor(() => expect(linkButton()!.disabled).toBe(false));
+    expect(gates("linkThemeFolder")).toHaveLength(1);
+    expect(linkedBlock()).toBeNull();
+    expect(box.notify).not.toHaveBeenCalled();
+  });
+
+  it("una cartella che le porte rifiutano non si collega: la diagnosi e un avviso", async () => {
+    await open({ developer: true, folders: { "/temi/rotto": { reason: "engine", declared: "theme-9" } } });
+    box.folder = "/temi/rotto";
+    linkButton()!.click();
+
+    await vi.waitFor(() => expect(diagnoses()).toHaveLength(1));
+    expect(linkedBlock()).toBeNull();
+    expect(box.notify).toHaveBeenCalledWith(
+      "«rotto» non è collegato: 1 motivo, lo trovi sotto «Temi installati».",
+      "guasto",
+    );
+  });
+
+  it("un id già installato non si collega, e lo dice", async () => {
+    await open({
+      developer: true,
+      installed: [folderTheme("acme.carta", "Carta", "0.3.2")],
+      folders: { "/temi/carta": folderTheme("acme.carta", "Carta", "0.4.0") },
+    });
+    box.folder = "/temi/carta";
+    linkButton()!.click();
+    await vi.waitFor(() =>
+      expect(box.notify).toHaveBeenCalledWith(expect.stringContaining("acme.carta"), "guasto"),
+    );
+    expect(linkedBlock()).toBeNull();
+  });
+
+  it("un salvataggio rifiutato lascia l'ultimo buono, e la diagnosi dice le due ore", async () => {
+    const folders: Record<string, ThemeFolderFake> = { "/temi/carta": folderTheme("acme.carta", "Carta", "0.3.2") };
+    await open({ developer: true, folders, linked: "/temi/carta" });
+    await vi.waitFor(() => expect(linkedBlock()).not.toBeNull());
+    expect(catalogOptions()).toContain("Carta · chiaro · In sviluppo");
+    const link = (await box.host!.module.api.themeLink())!;
+
+    folders["/temi/carta"] = savedBroken();
+    await themeFolderChanged({ ...link, changed: ["skin.css"] });
+
+    await vi.waitFor(() => expect(diagnoses()).toHaveLength(1));
+    const block = diagnoses()[0]!;
+    expect(block.textContent).toContain("Carta");
+    expect(block.textContent).toMatch(
+      /Tentativo delle \d\d:\d\d:\d\d\. Fra i temi installati resta l'ultimo buono, delle \d\d:\d\d:\d\d\./,
+    );
+    expect(rowsOf(block).length).toBeGreaterThan(0);
+    // Il tema resta fra quelli installati: è l'ultimo buono.
+    expect(catalogOptions()).toContain("Carta · chiaro · In sviluppo");
+    expect(box.notify).toHaveBeenCalledWith(expect.stringContaining("Carta"), "guasto");
+
+    // Sistemato, il salvataggio dopo rimonta: la diagnosi sparisce e la riga dice quando.
+    folders["/temi/carta"] = folderTheme("acme.carta", "Carta", "0.3.2");
+    await themeFolderChanged({ ...link, changed: ["skin.css"] });
+    await vi.waitFor(() => expect(diagnoses()).toEqual([]));
+    expect(statusLine().textContent).toMatch(
+      /^Ricaricato alle \d\d:\d\d:\d\d, dopo il salvataggio di skin\.css\.$/,
+    );
+  });
+
+  it("la cartella sparita lo dice nel blocco, e «Scollega» resta", async () => {
+    const folders: Record<string, ThemeFolderFake> = { "/temi/carta": folderTheme("acme.carta", "Carta", "0.3.2") };
+    await open({ developer: true, folders, linked: "/temi/carta" });
+    await vi.waitFor(() => expect(linkedBlock()).not.toBeNull());
+    delete folders["/temi/carta"];
+    const link = (await box.host!.module.api.themeLink())!;
+    await themeFolderChanged(link);
+    await vi.waitFor(() =>
+      expect(statusLine().textContent).toBe(
+        "La cartella non c'è più: il tema collegato non si monta. Rimettila al suo posto o scollegala.",
+      ),
+    );
+    expect(catalogOptions()).not.toContain("Carta · chiaro · In sviluppo");
+    expect(unlinkButton()).not.toBeNull();
   });
 });
