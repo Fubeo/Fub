@@ -96,5 +96,5 @@
       ]
     }
   },
-  "ops_without_gui": ["layout", "from_mermaid", "from_outline"]
+  "ops_without_gui": ["from_mermaid", "from_outline"]
 }

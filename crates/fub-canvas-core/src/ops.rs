@@ -1,6 +1,6 @@
 //! Le operazioni d'intento sulla lavagna (`CanvasOp`): «aggiungi», «sposta»,
 //! «ridimensiona», «collega», «togli», «cambia», «porta sopra», «allinea»,
-//! «distribuisci», «duplica», «inverti», «raggruppa». Un agente o
+//! «distribuisci», «duplica», «inverti», «raggruppa», «dispone». Un agente o
 //! la sessione dal tablet pensano così, non in toppe con l'immagine di
 //! prima: [`compile`] traduce una lista di operazioni nelle toppe di
 //! [`crate::patch`], che sono la sola forma con cui una lavagna cambia.
@@ -39,6 +39,7 @@ pub(crate) mod color;
 mod connect;
 mod duplicate;
 mod group;
+mod layout;
 mod reverse;
 
 pub use adjust::{ColorArgs, Fit, MoveArgs, ReorderArgs, ReorderTo, ResizeArgs};
@@ -47,6 +48,7 @@ pub use card::AddCardArgs;
 pub use connect::{AutoWord, ConnectArgs, Ends, SidePair, Sides};
 pub use duplicate::DuplicateArgs;
 pub use group::GroupArgs;
+pub use layout::{LayoutArgs, LayoutDirection, LayoutKind};
 pub use reverse::ReverseArgs;
 
 /// Un'operazione d'intento. La forma JSON ha il campo `op` per primo, in
@@ -97,6 +99,9 @@ pub enum CanvasOp {
     /// Mette le schede in un gruppo, sotto di loro. Le regole sono in
     /// `ops/group.rs`.
     Group(GroupArgs),
+    /// Dispone le schede in griglia, in riga, in colonna o ad albero. Le regole
+    /// sono in `ops/layout.rs`.
+    Layout(LayoutArgs),
 }
 
 impl CanvasOp {
@@ -118,6 +123,7 @@ impl CanvasOp {
             Self::Duplicate(_) => "duplicate",
             Self::Reverse(_) => "reverse",
             Self::Group(_) => "group",
+            Self::Layout(_) => "layout",
         }
     }
 }
@@ -275,6 +281,7 @@ impl Compiler {
             CanvasOp::Duplicate(args) => self.duplicate(index, args)?,
             CanvasOp::Reverse(args) => self.reverse(index, args)?,
             CanvasOp::Group(args) => self.group(index, args)?,
+            CanvasOp::Layout(args) => self.layout(index, args)?,
         };
         if patches.is_empty() {
             return Ok(());

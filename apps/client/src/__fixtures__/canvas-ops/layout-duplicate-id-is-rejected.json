@@ -1,0 +1,43 @@
+{
+  "about": "layout con un id ripetuto: DuplicateId, come negli altri comandi con una lista di id.",
+  "before": {
+    "nodes": [
+      {
+        "id": "a",
+        "type": "text",
+        "x": 0,
+        "y": 0,
+        "width": 320,
+        "height": 160,
+        "text": "a"
+      },
+      {
+        "id": "b",
+        "type": "text",
+        "x": 400,
+        "y": 0,
+        "width": 320,
+        "height": 160,
+        "text": "b"
+      }
+    ]
+  },
+  "ops": [
+    {
+      "op": "layout",
+      "ids": [
+        "a",
+        "a"
+      ],
+      "kind": "column"
+    }
+  ],
+  "expect": {
+    "outcome": "rejected",
+    "error": {
+      "kind": "DuplicateId",
+      "index": 0,
+      "id": "a"
+    }
+  }
+}

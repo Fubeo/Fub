@@ -121,6 +121,10 @@ const FITS: &[&str] = &["content"];
 const ALIGN_SIDES: &[&str] = &["left", "center", "right", "top", "middle", "bottom"];
 /// L'asse dei centri di `distribute`.
 const AXES: &[&str] = &["x", "y"];
+/// La disposizione di `layout`.
+const LAYOUT_KINDS: &[&str] = &["grid", "row", "column", "tree"];
+/// Il verso di un albero in `layout`.
+const LAYOUT_DIRECTIONS: &[&str] = &["down", "right", "up", "left"];
 
 /// Le operazioni del nucleo, una voce per variante di [`CanvasOp`], nello
 /// stesso ordine. Un'operazione nuova entra qui nello stesso task.
@@ -474,6 +478,50 @@ pub const OPS: &[OpSpec] = &[
         examples: &[
             r#"{"op":"group","ids":["t1","t2"],"label":"Ciclo"}"#,
             r#"{"op":"group","ids":["f1"]}"#,
+        ],
+    },
+    OpSpec {
+        name: "layout",
+        summary_it: "Dispone le schede `ids` in griglia, riga, colonna o albero (`kind`), dall'origine data o dall'angolo delle schede; senza `ids`, le schede che non stanno in un gruppo.",
+        fields: &[
+            optional(
+                "ids",
+                FieldKind::Ids,
+                "Le schede da disporre, nell'ordine dato. Un gruppo si muove con le schede dentro. Senza `ids`: tutte le schede che non stanno in un gruppo, nell'ordine della lavagna.",
+            ),
+            required(
+                "kind",
+                FieldKind::Enum(LAYOUT_KINDS),
+                "`grid` (ceil(√n) colonne, riempite per righe), `row` (una riga), `column` (una colonna) o `tree` (a strati, con gli archi fra le schede date).",
+            ),
+            FieldSpec {
+                name: "gap",
+                kind: FieldKind::Number,
+                required: false,
+                default: Some("24"),
+                doc_it: "Lo spazio fra due schede vicine, in unità della lavagna. Non negativo.",
+            },
+            optional(
+                "x",
+                FieldKind::Number,
+                "La coordinata orizzontale dell'origine, agganciata a 8. Va con `y`.",
+            ),
+            optional(
+                "y",
+                FieldKind::Number,
+                "La coordinata verticale dell'origine, agganciata a 8. Va con `x`.",
+            ),
+            FieldSpec {
+                name: "direction",
+                kind: FieldKind::Enum(LAYOUT_DIRECTIONS),
+                required: false,
+                default: Some("\"down\""),
+                doc_it: "Il verso di un albero: `down` (la radice in alto, di serie), `right`, `up` o `left`. Solo con `kind: tree`.",
+            },
+        ],
+        examples: &[
+            r#"{"op":"layout","ids":["t1","t2","f1"],"kind":"row"}"#,
+            r#"{"op":"layout","kind":"tree","direction":"right","gap":32}"#,
         ],
     },
 ];

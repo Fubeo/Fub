@@ -1,0 +1,39 @@
+{
+  "about": "layout con ids vuoto: non c'è niente da disporre, quindi niente toppe e la lavagna resta com'è.",
+  "before": {
+    "nodes": [
+      {
+        "id": "a",
+        "type": "text",
+        "x": 0,
+        "y": 0,
+        "width": 320,
+        "height": 160,
+        "text": "a"
+      }
+    ]
+  },
+  "ops": [
+    {
+      "op": "layout",
+      "ids": [],
+      "kind": "grid"
+    }
+  ],
+  "expect": {
+    "outcome": "applied",
+    "after": {
+      "nodes": [
+        {
+          "id": "a",
+          "type": "text",
+          "x": 0,
+          "y": 0,
+          "width": 320,
+          "height": 160,
+          "text": "a"
+        }
+      ]
+    }
+  }
+}

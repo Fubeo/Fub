@@ -217,6 +217,7 @@ fn ogni_operazione_ha_un_vettore() {
         "duplicate",
         "reverse",
         "group",
+        "layout",
     ] {
         assert!(seen.contains(op), "nessun vettore usa {op:?}");
     }
@@ -480,8 +481,149 @@ fn le_operazioni_si_riscrivono_uguali() {
         {"op": "duplicate", "ids": ["a"]},
         {"op": "duplicate", "ids": ["a"], "dx": 0, "dy": 216, "as": ["b"]},
         {"op": "reverse", "ids": ["e1"]},
-        {"op": "group", "ids": ["a"], "id": "g", "label": "Gruppo", "color": "red"}
+        {"op": "group", "ids": ["a"], "id": "g", "label": "Gruppo", "color": "red"},
+        {"op": "layout", "kind": "grid"},
+        {"op": "layout", "ids": ["a", "b"], "kind": "tree", "gap": 32, "x": 0, "y": 96, "direction": "left"}
     ]);
     let read: Vec<CanvasOp> = serde_json::from_value(ops.clone()).expect("si leggono");
     assert_eq!(serde_json::to_value(&read).expect("si scrivono"), ops);
+}
+
+/// Una lavagna con le schede `(id, x, y, larghezza, altezza)` e nessun arco.
+fn board_of(cards: &[(&str, i64, i64, i64, i64)]) -> Canvas {
+    let nodes: Vec<Value> = cards
+        .iter()
+        .map(|&(id, x, y, width, height)| {
+            json!({"id": id, "type": "text", "x": x, "y": y, "width": width, "height": height, "text": id})
+        })
+        .collect();
+    parse(&json!({ "nodes": nodes }).to_string()).expect("la lavagna si legge")
+}
+
+/// Le posizioni `(id, x, y)` delle schede di `canvas`, nell'ordine della lista.
+fn places(canvas: &Canvas) -> Vec<(String, i64, i64)> {
+    canvas
+        .nodes
+        .iter()
+        .map(|node| (node.id.clone(), node.x, node.y))
+        .collect()
+}
+
+/// Compila `ops` su `before` e dà il modello di dopo, con le toppe.
+fn run_layout(before: &Canvas, ops: Value) -> (Canvas, usize) {
+    let ops: Vec<CanvasOp> = serde_json::from_value(ops).expect("la lista si legge");
+    let compiled = compile(before, &ops, 0).expect("il layout si compila");
+    let count = compiled.patches.len();
+    let after = draft(before, &compiled.patches).expect("le toppe si applicano");
+    after.validate().expect("il modello di dopo è valido");
+    (after, count)
+}
+
+/// Un gruppo che porta con sé le sue schede, come `move` con `contents`: la
+/// scheda dentro il gruppo della lista va con lui, una volta sola, e un gruppo
+/// dentro un gruppo della lista va con quello più esterno.
+#[test]
+fn layout_porta_con_se_le_schede_dei_gruppi_una_volta_sola() {
+    // `g2` sta dentro `g1`, e `c` dentro `g2`: li porta `g1`, il più esterno.
+    let value = json!({"nodes": [
+        {"id": "t", "type": "text", "x": 1000, "y": 0, "width": 100, "height": 100, "text": "t"},
+        {"id": "g1", "type": "group", "x": 0, "y": 0, "width": 400, "height": 400, "label": "g1"},
+        {"id": "g2", "type": "group", "x": 24, "y": 24, "width": 300, "height": 300, "label": "g2"},
+        {"id": "c", "type": "text", "x": 50, "y": 50, "width": 100, "height": 60, "text": "c"}
+    ]});
+    let canvas = parse(&value.to_string()).expect("la lavagna si legge");
+    // `t` e `g1` vanno in riga dall'origine (0, 0): `g1` a 100 + 24 = 124, e
+    // `t` a 0. `g1` si sposta di (124, 0), e con lui `g2` e `c`.
+    let (after, count) = run_layout(
+        &canvas,
+        json!([{"op": "layout", "ids": ["t", "g1", "g2", "c"], "kind": "row"}]),
+    );
+    assert_eq!(count, 4, "ogni scheda si sposta una volta sola");
+    assert_eq!(
+        places(&after),
+        vec![
+            ("t".to_owned(), 0, 0),
+            ("g1".to_owned(), 124, 0),
+            ("g2".to_owned(), 148, 24),
+            ("c".to_owned(), 174, 50),
+        ]
+    );
+}
+
+/// Due gruppi con lo stesso rettangolo non si portano a vicenda: sono due
+/// blocchi, e nessuno dei due si perde.
+#[test]
+fn layout_due_gruppi_con_lo_stesso_rettangolo_sono_due_blocchi() {
+    let value = json!({"nodes": [
+        {"id": "a", "type": "group", "x": 0, "y": 500, "width": 200, "height": 200, "label": "a"},
+        {"id": "b", "type": "group", "x": 0, "y": 500, "width": 200, "height": 200, "label": "b"}
+    ]});
+    let canvas = parse(&value.to_string()).expect("la lavagna si legge");
+    let (after, count) = run_layout(
+        &canvas,
+        json!([{"op": "layout", "ids": ["a", "b"], "kind": "row", "x": 0, "y": 0}]),
+    );
+    assert_eq!(count, 2);
+    assert_eq!(
+        places(&after),
+        vec![("a".to_owned(), 0, 0), ("b".to_owned(), 224, 0)]
+    );
+}
+
+/// Senza `ids` si dispongono le schede che non stanno in un gruppo: quelle dentro
+/// un gruppo restano dove sono, insieme al gruppo.
+#[test]
+fn layout_senza_ids_lascia_ferme_le_schede_dentro_un_gruppo() {
+    let value = json!({"nodes": [
+        {"id": "g", "type": "group", "x": 0, "y": 0, "width": 400, "height": 200, "label": "g"},
+        {"id": "c1", "type": "text", "x": 24, "y": 24, "width": 100, "height": 60, "text": "c1"},
+        {"id": "t", "type": "text", "x": 600, "y": 0, "width": 100, "height": 100, "text": "t"},
+        {"id": "u", "type": "text", "x": 600, "y": 300, "width": 100, "height": 100, "text": "u"}
+    ]});
+    let canvas = parse(&value.to_string()).expect("la lavagna si legge");
+    // L'origine è (600, 0): `t` ci sta già, quindi solo `u` ha una toppa.
+    let (after, count) = run_layout(&canvas, json!([{"op": "layout", "kind": "row"}]));
+    assert_eq!(count, 1, "solo u cambia posto");
+    assert_eq!(
+        places(&after),
+        vec![
+            ("g".to_owned(), 0, 0),
+            ("c1".to_owned(), 24, 24),
+            ("t".to_owned(), 600, 0),
+            ("u".to_owned(), 724, 0),
+        ]
+    );
+}
+
+/// Duemila schede in griglia: sotto il secondo, in build di debug. Il tempo è
+/// largo, perché il PC può essere carico; il risultato è quello di sempre.
+#[test]
+fn layout_con_duemila_schede_resta_sotto_il_secondo() {
+    let cards: Vec<(String, i64, i64, i64, i64)> = (0..2000)
+        .map(|i| {
+            let i = i64::from(i);
+            (format!("n{i}"), (i % 50) * 400, (i / 50) * 200, 320, 160)
+        })
+        .collect();
+    let refs: Vec<(&str, i64, i64, i64, i64)> = cards
+        .iter()
+        .map(|(id, x, y, w, h)| (id.as_str(), *x, *y, *w, *h))
+        .collect();
+    let canvas = board_of(&refs);
+    let ops: Vec<CanvasOp> =
+        serde_json::from_value(json!([{"op": "layout", "kind": "grid"}])).expect("si legge");
+    let started = std::time::Instant::now();
+    let compiled = compile(&canvas, &ops, 0).expect("il layout si compila");
+    let elapsed = started.elapsed();
+    let after = draft(&canvas, &compiled.patches).expect("le toppe si applicano");
+    after.validate().expect("il modello di dopo è valido");
+    // 2000 schede: ceil(√2000) = 45 colonne, passo 344 e 184; la prima sta in (0, 0).
+    assert_eq!(after.nodes[0].x, 0);
+    assert_eq!(after.nodes[1].x, 344);
+    assert_eq!(after.nodes[45].x, 0);
+    assert_eq!(after.nodes[45].y, 184);
+    assert!(
+        elapsed < std::time::Duration::from_secs(1),
+        "il layout di 2000 schede ci ha messo {elapsed:?}"
+    );
 }

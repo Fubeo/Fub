@@ -1,7 +1,7 @@
 {
   "version": 1,
   "source": "N6",
-  "max_missing": 9,
+  "max_missing": 8,
   "entries": [
     {
       "id": "N6.card.drop_vault",
@@ -18,40 +18,13 @@
       "source": "N6",
       "gui": [{ "plan": "N6 T9" }],
       "writes": "file",
-      "state": "by_hand",
+      "state": "code",
       "ops": [
-        {
-          "op": "add_card",
-          "node": {
-            "id": "a",
-            "type": "file",
-            "file": "Corsi/a.md",
-            "x": 1400,
-            "y": 0,
-            "width": 320,
-            "height": 240
-          }
-        },
-        {
-          "op": "add_card",
-          "node": {
-            "id": "b",
-            "type": "file",
-            "file": "Corsi/b.md",
-            "x": 1744,
-            "y": 0,
-            "width": 320,
-            "height": 240
-          }
-        }
-      ],
-      "computes": "la griglia di ceil(√n) colonne, il passo 24, il gruppo sopra 12",
-      "target_ops": [
         { "op": "add_card", "id": "a", "file": "Corsi/a.md" },
         { "op": "add_card", "id": "b", "file": "Corsi/b.md" },
         { "op": "layout", "ids": ["a", "b"], "kind": "grid" }
       ],
-      "task": "T12"
+      "note": "La griglia è del nucleo (`layout`, T12): ceil(√n) colonne, passo 24. Il gruppo oltre 12 schede (N6 T9) non è in questa forma: si aggiunge con `group` sulle schede, come farà la GUI con T24."
     },
     {
       "id": "N6.text.grow",
