@@ -177,6 +177,15 @@ describe("Tutto con un testo", () => {
     ]);
   });
 
+  it("le note per nome stanno nell'ordine che il kernel dà, senza che la shell lo rifaccia", async () => {
+    // Il kernel ordina per pertinenza del nome (la corrispondenza esatta o
+    // all'inizio del titolo prima di quella nel mezzo). La shell non rifà la
+    // graduatoria: la mostra com'è, e il gruppo dei nomi viene prima.
+    world.names = ["Guida/Nota lunga.md", "Benvenuto.md", "Idee/Appunti nota.md"];
+    const answer = await ask("all", "nota");
+    expect(keys(answer.rows)).toEqual(["g:notes", "n:Guida/Nota lunga.md", "n:Benvenuto.md", "n:Idee/Appunti nota.md"]);
+  });
+
   it("la ricerca nel testo porta estratto e punto del primo riscontro, senza ripetere le note per nome", async () => {
     world.names = ["Uno.md"];
     world.matches = {
