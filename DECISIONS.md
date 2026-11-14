@@ -2092,3 +2092,8 @@ La più recente in cima: data · piano · decisione · perché.
   dopo parte al primo multiplo di 8 che lascia almeno 24), non il contrario:
   nuovo task T12a · è il comportamento che l'utente vede già nel rilascio dei
   file, e tiene le schede sulla griglia di 8 della tela.
+- 2026-11-14 · T12a · Il nucleo non porta il minimo di 40 px di `roundSize` di N6:
+  `layout` conta la scheda con la sua misura vera · `roundSize` vale per le
+  misure di nascita delle schede nuove, che sono già ≥ 40 quando T24 le passa a
+  `layout`; una scheda più piccola scritta a mano nel file resta com'è, e la
+  griglia non deve gonfiarla.

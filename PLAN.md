@@ -1288,7 +1288,7 @@ scheda; una colonna sola; misure frazionarie (mezzi pixel di T12).
 Fatto quando: il test di parità verde; i vettori di layout rigenerati e
 verdi; `scripts/check.sh --rapido` verde.
 Prova: scripts/check.sh --rapido; cargo test -p fub-canvas-core
-Stato: [ ] da fare
+Stato: [x] fatto · coder/lic-t12a (ffc11001b, Haiku), avanti veloce · `grid` fa partire colonna e riga dopo al primo multiplo di 8 che lascia `gap`; `row` e `column` restano a gap esatto; parità in `tests/grid_n6.rs` coi numeri di `drop-layout.test.ts` (@46aaf6f4c); `canvas-layout.json` (scritto a mano, senza generatore) ricalcolato e controllato con un port di `dropLayout`; misure frazionarie arrotondate all'intero come `roundSize`. La nota di `N6.card.drop_many` in `canvas-parity/n6.json` dice ancora «passo 24»: la aggiorna T24
 
 ## T13 · Incolla un frammento, trasforma un testo in file
 
