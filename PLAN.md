@@ -818,7 +818,7 @@ registro futuro non si riscrive; un test byte per byte del registro senza
 opzioni; il mirror è verde.
 Prova: scripts/check.sh --rapido; cargo nextest run -p fub-abi -p
 fub-kernel -p fub-features properties
-Stato: [ ] da fare
+Stato: [~] PR #354 aperta, CI in corso · `options` in cima al registro (chiave → opzioni), non dentro `types`: così un registro senza opzioni resta byte per byte; annullo con `property.types.restore`
 
 ## T10 · La data a parole nelle proprietà
 
