@@ -4516,7 +4516,7 @@ Esc (un compito in più non serve: lo dice il test della rinomina).
 Fatto quando: `npm run bench:giro -- --solo=scrivere` è verde, e il giro
 intero resta verde.
 Prova: scripts/check.sh --rapido; cd apps/client && npm run build && npm run bench:giro -- --out=$TMPDIR/giro
-Stato: [~] in corso (coder/pa-t26, da 2fe26793a, 2026-11-14)
+Stato: [x] fatto · coder/pa-t26 (5b20b8e16), integrato (2026-11-14) · `--solo=scrivere` verde (6 compiti, anche senza `prepara`), giro intero verde (11 compiti, due luci), `--telefono` verde; fuori dal Tocca: il finto host riscrive i wikilink in `note.rename` come l'host vero (test `src/host/fake-rename.test.ts`) e `?formatbar=1&slash=1` in `bench/fake-ipc.ts` (nessuna foto di base cambia); la palette è Ctrl+Maiusc+P, «Grassetto» sta nella mini-barra. Il compito 6 ricarica la pagina per la query: da sistemare nel corridore (`giro.apri` con la query sempre). Difetti visti in `~/.cache/fub-prealpha/funzionalitarotte.md`
 
 ## T27 · Il giro sul banco: i quattro editor dei file degli altri
 
