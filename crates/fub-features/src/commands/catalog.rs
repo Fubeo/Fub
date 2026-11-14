@@ -236,6 +236,13 @@ fn catalog_it() -> StringCatalog {
              contiene, il più interno se sono annidati. Assente = il cursore \
              del pannello attivo.",
         )
+        .with("note.task.toggle.revision.title", "Revisione")
+        .with(
+            "note.task.toggle.revision.desc",
+            "La revisione della nota che chi chiede la spunta ha letto: se la \
+             nota è cambiata da allora non si scrive niente, e la risposta è \
+             un conflitto. Assente = la nota com'è adesso.",
+        )
         .with("settings.set.title", "Cambia un'impostazione")
         .with(
             "settings.set.desc",
@@ -706,6 +713,13 @@ fn catalog_en() -> StringCatalog {
             "Position in bytes inside the document: the task containing it is \
              ticked, the innermost one if they are nested. Absent = the cursor \
              of the active pane.",
+        )
+        .with("note.task.toggle.revision.title", "Revision")
+        .with(
+            "note.task.toggle.revision.desc",
+            "The revision of the note that whoever asks for the tick has read: \
+             if the note changed since then nothing is written, and the answer \
+             is a conflict. Absent = the note as it is now.",
         )
         .with("settings.set.title", "Change a setting")
         .with(

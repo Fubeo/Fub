@@ -5,6 +5,7 @@
     "tag": [],
     "wikilink": [],
     "task": [],
+    "due": [],
     "math": [],
     "style": []
   },
@@ -14,6 +15,7 @@
     "tag": [],
     "wikilink": [],
     "task": [],
+    "due": [],
     "math": [],
     "style": []
   },
@@ -23,6 +25,7 @@
     "tag": [],
     "wikilink": [],
     "task": [],
+    "due": [],
     "math": [],
     "style": []
   },
@@ -32,6 +35,7 @@
     "tag": [],
     "wikilink": [],
     "task": [],
+    "due": [],
     "math": [],
     "style": []
   },
@@ -41,6 +45,7 @@
     "tag": [],
     "wikilink": [],
     "task": [],
+    "due": [],
     "math": [],
     "style": []
   },
@@ -50,6 +55,7 @@
     "tag": [],
     "wikilink": [],
     "task": [],
+    "due": [],
     "math": [],
     "style": []
   },
@@ -59,6 +65,7 @@
     "tag": [],
     "wikilink": [],
     "task": [],
+    "due": [],
     "math": [],
     "style": []
   },
@@ -68,6 +75,7 @@
     "tag": [],
     "wikilink": [],
     "task": [],
+    "due": [],
     "math": [],
     "style": []
   },
@@ -77,6 +85,7 @@
     "tag": [],
     "wikilink": [],
     "task": [],
+    "due": [],
     "math": [],
     "style": []
   },
@@ -86,6 +95,7 @@
     "tag": [],
     "wikilink": [],
     "task": [],
+    "due": [],
     "math": [],
     "style": []
   },
@@ -95,6 +105,7 @@
     "tag": [],
     "wikilink": [],
     "task": [],
+    "due": [],
     "math": [],
     "style": []
   },
@@ -104,6 +115,7 @@
     "tag": [],
     "wikilink": [],
     "task": [],
+    "due": [],
     "math": [],
     "style": []
   },
@@ -113,6 +125,7 @@
     "tag": [],
     "wikilink": [],
     "task": [],
+    "due": [],
     "math": [],
     "style": []
   },
@@ -122,6 +135,7 @@
     "tag": [],
     "wikilink": [],
     "task": [],
+    "due": [],
     "math": [],
     "style": []
   },
@@ -131,6 +145,7 @@
     "tag": [],
     "wikilink": [],
     "task": [],
+    "due": [],
     "math": [],
     "style": [
       "code"
@@ -142,6 +157,7 @@
     "tag": [],
     "wikilink": [],
     "task": [],
+    "due": [],
     "math": [],
     "style": []
   },
@@ -151,6 +167,7 @@
     "tag": [],
     "wikilink": [],
     "task": [],
+    "due": [],
     "math": [],
     "style": []
   },
@@ -160,6 +177,7 @@
     "tag": [],
     "wikilink": [],
     "task": [],
+    "due": [],
     "math": [],
     "style": []
   },
@@ -169,6 +187,7 @@
     "tag": [],
     "wikilink": [],
     "task": [],
+    "due": [],
     "math": [],
     "style": []
   },
@@ -178,6 +197,7 @@
     "tag": [],
     "wikilink": [],
     "task": [],
+    "due": [],
     "math": [],
     "style": []
   },
@@ -194,6 +214,7 @@
       }
     ],
     "task": [],
+    "due": [],
     "math": [],
     "style": [
       "code"
@@ -211,6 +232,7 @@
         "to": 4
       }
     ],
+    "due": [],
     "math": [],
     "style": []
   },
@@ -226,6 +248,7 @@
         "to": 4
       }
     ],
+    "due": [],
     "math": [],
     "style": []
   },
@@ -241,8 +264,120 @@
         "to": 4
       }
     ],
+    "due": [],
     "math": [],
     "style": []
+  },
+  {
+    "name": "task con scadenze",
+    "source": "- [ ] Chiama [[Mario]] 📅 [[2026-10-19]]\n- [ ] Pagare 📅 `2026-10-20` poi\n- [ ] Su due righe\n  📅 2026-10-21\n- [x] Fatta 📅 2026-02-30\n- [ ] Un [link](https://esempio.it/📅/2026-10-22) e basta\n- [ ] ==Evidente 📅 2026-10-23==\n- [ ] Con alias [[Nota|📅 2026-10-24]]\n- [ ] Padre\n  - [ ] Figlio 📅 2026-10-25\n- [ ] Codice sotto\n  ```\n  📅 2026-10-26\n  ```\n",
+    "tag": [],
+    "wikilink": [
+      {
+        "page": "Mario",
+        "embed": false,
+        "from": 13,
+        "to": 22
+      },
+      {
+        "page": "2026-10-19",
+        "embed": false,
+        "from": 26,
+        "to": 40
+      },
+      {
+        "page": "Nota",
+        "embed": false,
+        "from": 242,
+        "to": 264
+      }
+    ],
+    "task": [
+      {
+        "symbol": null,
+        "from": 3,
+        "to": 4
+      },
+      {
+        "symbol": null,
+        "from": 44,
+        "to": 45
+      },
+      {
+        "symbol": null,
+        "from": 77,
+        "to": 78
+      },
+      {
+        "symbol": "x",
+        "from": 112,
+        "to": 113
+      },
+      {
+        "symbol": null,
+        "from": 138,
+        "to": 139
+      },
+      {
+        "symbol": null,
+        "from": 196,
+        "to": 197
+      },
+      {
+        "symbol": null,
+        "from": 229,
+        "to": 230
+      },
+      {
+        "symbol": null,
+        "from": 268,
+        "to": 269
+      },
+      {
+        "symbol": null,
+        "from": 282,
+        "to": 283
+      },
+      {
+        "symbol": null,
+        "from": 309,
+        "to": 310
+      }
+    ],
+    "due": [
+      {
+        "span": "📅 2026-10-19",
+        "date": "2026-10-19"
+      },
+      {
+        "span": "📅 2026-10-20",
+        "date": "2026-10-20"
+      },
+      {
+        "span": "📅 2026-10-21",
+        "date": "2026-10-21"
+      },
+      {
+        "span": "📅 2026-02-30",
+        "date": null
+      },
+      {
+        "span": "📅 2026-10-23",
+        "date": "2026-10-23"
+      },
+      {
+        "span": "📅 2026-10-24",
+        "date": "2026-10-24"
+      },
+      {
+        "span": "📅 2026-10-25",
+        "date": "2026-10-25"
+      }
+    ],
+    "math": [],
+    "style": [
+      "code"
+    ]
   },
   {
     "name": "enfasi",
@@ -250,6 +385,7 @@
     "tag": [],
     "wikilink": [],
     "task": [],
+    "due": [],
     "math": [],
     "style": [
       "em"
@@ -261,6 +397,7 @@
     "tag": [],
     "wikilink": [],
     "task": [],
+    "due": [],
     "math": [],
     "style": [
       "strong"
@@ -272,6 +409,7 @@
     "tag": [],
     "wikilink": [],
     "task": [],
+    "due": [],
     "math": [],
     "style": [
       "code"
@@ -283,6 +421,7 @@
     "tag": [],
     "wikilink": [],
     "task": [],
+    "due": [],
     "math": [],
     "style": [
       "strong",
@@ -295,6 +434,7 @@
     "tag": [],
     "wikilink": [],
     "task": [],
+    "due": [],
     "math": [],
     "style": []
   },
@@ -304,6 +444,7 @@
     "tag": [],
     "wikilink": [],
     "task": [],
+    "due": [],
     "math": [],
     "style": []
   },
@@ -320,6 +461,7 @@
       }
     ],
     "task": [],
+    "due": [],
     "math": [],
     "style": []
   },
@@ -336,6 +478,7 @@
       }
     ],
     "task": [],
+    "due": [],
     "math": [],
     "style": []
   },
@@ -352,6 +495,7 @@
       }
     ],
     "task": [],
+    "due": [],
     "math": [],
     "style": []
   },
@@ -368,6 +512,7 @@
       }
     ],
     "task": [],
+    "due": [],
     "math": [],
     "style": []
   },
@@ -384,6 +529,7 @@
       }
     ],
     "task": [],
+    "due": [],
     "math": [],
     "style": []
   },
@@ -400,6 +546,7 @@
       }
     ],
     "task": [],
+    "due": [],
     "math": [],
     "style": []
   },
@@ -416,6 +563,7 @@
       }
     ],
     "task": [],
+    "due": [],
     "math": [],
     "style": []
   },
@@ -438,6 +586,7 @@
       }
     ],
     "task": [],
+    "due": [],
     "math": [],
     "style": []
   },
@@ -447,6 +596,7 @@
     "tag": [],
     "wikilink": [],
     "task": [],
+    "due": [],
     "math": [],
     "style": []
   },
@@ -462,6 +612,7 @@
     ],
     "wikilink": [],
     "task": [],
+    "due": [],
     "math": [],
     "style": []
   },
@@ -477,6 +628,7 @@
     ],
     "wikilink": [],
     "task": [],
+    "due": [],
     "math": [],
     "style": []
   },
@@ -507,6 +659,7 @@
     ],
     "wikilink": [],
     "task": [],
+    "due": [],
     "math": [],
     "style": [
       "code"
@@ -518,6 +671,7 @@
     "tag": [],
     "wikilink": [],
     "task": [],
+    "due": [],
     "math": [],
     "style": []
   },
@@ -527,6 +681,7 @@
     "tag": [],
     "wikilink": [],
     "task": [],
+    "due": [],
     "math": [],
     "style": []
   },
@@ -536,6 +691,7 @@
     "tag": [],
     "wikilink": [],
     "task": [],
+    "due": [],
     "math": [],
     "style": [
       "strike"
@@ -547,6 +703,7 @@
     "tag": [],
     "wikilink": [],
     "task": [],
+    "due": [],
     "math": [],
     "style": [
       "sup"
@@ -558,6 +715,7 @@
     "tag": [],
     "wikilink": [],
     "task": [],
+    "due": [],
     "math": [],
     "style": [
       "sub",
@@ -570,6 +728,7 @@
     "tag": [],
     "wikilink": [],
     "task": [],
+    "due": [],
     "math": [],
     "style": []
   },
@@ -579,6 +738,7 @@
     "tag": [],
     "wikilink": [],
     "task": [],
+    "due": [],
     "math": [],
     "style": []
   },
@@ -588,6 +748,7 @@
     "tag": [],
     "wikilink": [],
     "task": [],
+    "due": [],
     "math": [],
     "style": []
   },
@@ -597,6 +758,7 @@
     "tag": [],
     "wikilink": [],
     "task": [],
+    "due": [],
     "math": [],
     "style": []
   },
@@ -606,6 +768,7 @@
     "tag": [],
     "wikilink": [],
     "task": [],
+    "due": [],
     "math": [],
     "style": []
   },
@@ -615,6 +778,7 @@
     "tag": [],
     "wikilink": [],
     "task": [],
+    "due": [],
     "math": [],
     "style": []
   },
@@ -624,6 +788,7 @@
     "tag": [],
     "wikilink": [],
     "task": [],
+    "due": [],
     "math": [],
     "style": []
   },
@@ -633,6 +798,7 @@
     "tag": [],
     "wikilink": [],
     "task": [],
+    "due": [],
     "math": [],
     "style": []
   },
@@ -642,6 +808,7 @@
     "tag": [],
     "wikilink": [],
     "task": [],
+    "due": [],
     "math": [],
     "style": []
   },
@@ -651,6 +818,7 @@
     "tag": [],
     "wikilink": [],
     "task": [],
+    "due": [],
     "math": [],
     "style": []
   },
@@ -673,6 +841,7 @@
       }
     ],
     "task": [],
+    "due": [],
     "math": [
       {
         "from": 53,
@@ -706,6 +875,7 @@
     ],
     "wikilink": [],
     "task": [],
+    "due": [],
     "math": [],
     "style": []
   },
@@ -728,6 +898,7 @@
       }
     ],
     "task": [],
+    "due": [],
     "math": [
       {
         "from": 2,
@@ -756,6 +927,7 @@
     "tag": [],
     "wikilink": [],
     "task": [],
+    "due": [],
     "math": [],
     "style": []
   },
@@ -765,6 +937,7 @@
     "tag": [],
     "wikilink": [],
     "task": [],
+    "due": [],
     "math": [],
     "style": []
   },
@@ -774,6 +947,7 @@
     "tag": [],
     "wikilink": [],
     "task": [],
+    "due": [],
     "math": [],
     "style": []
   },
@@ -783,6 +957,7 @@
     "tag": [],
     "wikilink": [],
     "task": [],
+    "due": [],
     "math": [],
     "style": []
   },
@@ -792,6 +967,7 @@
     "tag": [],
     "wikilink": [],
     "task": [],
+    "due": [],
     "math": [],
     "style": []
   },
@@ -801,6 +977,7 @@
     "tag": [],
     "wikilink": [],
     "task": [],
+    "due": [],
     "math": [
       {
         "from": 5,
@@ -823,6 +1000,7 @@
     "tag": [],
     "wikilink": [],
     "task": [],
+    "due": [],
     "math": [
       {
         "from": 7,
@@ -839,6 +1017,7 @@
     "tag": [],
     "wikilink": [],
     "task": [],
+    "due": [],
     "math": [],
     "style": [
       "code"
@@ -856,6 +1035,7 @@
     ],
     "wikilink": [],
     "task": [],
+    "due": [],
     "math": [],
     "style": [
       "code"
@@ -867,6 +1047,7 @@
     "tag": [],
     "wikilink": [],
     "task": [],
+    "due": [],
     "math": [
       {
         "from": 22,
@@ -883,6 +1064,7 @@
     "tag": [],
     "wikilink": [],
     "task": [],
+    "due": [],
     "math": [
       {
         "from": 9,
@@ -899,6 +1081,7 @@
     "tag": [],
     "wikilink": [],
     "task": [],
+    "due": [],
     "math": [
       {
         "from": 7,
@@ -921,6 +1104,7 @@
     "tag": [],
     "wikilink": [],
     "task": [],
+    "due": [],
     "math": [
       {
         "from": 5,
@@ -949,6 +1133,7 @@
     "tag": [],
     "wikilink": [],
     "task": [],
+    "due": [],
     "math": [
       {
         "from": 6,
@@ -965,6 +1150,7 @@
     "tag": [],
     "wikilink": [],
     "task": [],
+    "due": [],
     "math": [
       {
         "from": 24,
@@ -981,6 +1167,7 @@
     "tag": [],
     "wikilink": [],
     "task": [],
+    "due": [],
     "math": [
       {
         "from": 0,
@@ -1003,6 +1190,7 @@
     "tag": [],
     "wikilink": [],
     "task": [],
+    "due": [],
     "math": [
       {
         "from": 6,
@@ -1022,6 +1210,7 @@
     "tag": [],
     "wikilink": [],
     "task": [],
+    "due": [],
     "math": [
       {
         "from": 9,
@@ -1052,6 +1241,7 @@
     "tag": [],
     "wikilink": [],
     "task": [],
+    "due": [],
     "math": [
       {
         "from": 0,
@@ -1074,6 +1264,7 @@
     "tag": [],
     "wikilink": [],
     "task": [],
+    "due": [],
     "math": [
       {
         "from": 3,
@@ -1096,6 +1287,7 @@
     "tag": [],
     "wikilink": [],
     "task": [],
+    "due": [],
     "math": [
       {
         "from": 2,
@@ -1118,6 +1310,7 @@
         "to": 4
       }
     ],
+    "due": [],
     "math": [
       {
         "from": 6,
@@ -1134,6 +1327,7 @@
     "tag": [],
     "wikilink": [],
     "task": [],
+    "due": [],
     "math": [
       {
         "from": 11,
@@ -1150,6 +1344,7 @@
     "tag": [],
     "wikilink": [],
     "task": [],
+    "due": [],
     "math": [
       {
         "from": 0,
@@ -1172,6 +1367,7 @@
     ],
     "wikilink": [],
     "task": [],
+    "due": [],
     "math": [
       {
         "from": 0,
@@ -1213,6 +1409,7 @@
       }
     ],
     "task": [],
+    "due": [],
     "math": [],
     "style": []
   },
@@ -1235,6 +1432,7 @@
       }
     ],
     "task": [],
+    "due": [],
     "math": [
       {
         "from": 8,
@@ -1293,6 +1491,7 @@
       }
     ],
     "task": [],
+    "due": [],
     "math": [],
     "style": []
   },
@@ -1315,6 +1514,7 @@
       }
     ],
     "task": [],
+    "due": [],
     "math": [],
     "style": [
       "strong"
@@ -1326,6 +1526,7 @@
     "tag": [],
     "wikilink": [],
     "task": [],
+    "due": [],
     "math": [],
     "style": []
   },
@@ -1335,6 +1536,7 @@
     "tag": [],
     "wikilink": [],
     "task": [],
+    "due": [],
     "math": [],
     "style": []
   },
@@ -1344,6 +1546,7 @@
     "tag": [],
     "wikilink": [],
     "task": [],
+    "due": [],
     "math": [],
     "style": []
   },
@@ -1353,6 +1556,7 @@
     "tag": [],
     "wikilink": [],
     "task": [],
+    "due": [],
     "math": [],
     "style": []
   },
@@ -1362,6 +1566,7 @@
     "tag": [],
     "wikilink": [],
     "task": [],
+    "due": [],
     "math": [
       {
         "from": 103,
@@ -1380,6 +1585,7 @@
     "tag": [],
     "wikilink": [],
     "task": [],
+    "due": [],
     "math": [],
     "style": []
   },
@@ -1389,6 +1595,7 @@
     "tag": [],
     "wikilink": [],
     "task": [],
+    "due": [],
     "math": [],
     "style": []
   },
@@ -1398,6 +1605,7 @@
     "tag": [],
     "wikilink": [],
     "task": [],
+    "due": [],
     "math": [],
     "style": []
   },
@@ -1407,6 +1615,7 @@
     "tag": [],
     "wikilink": [],
     "task": [],
+    "due": [],
     "math": [],
     "style": []
   },
@@ -1416,6 +1625,7 @@
     "tag": [],
     "wikilink": [],
     "task": [],
+    "due": [],
     "math": [],
     "style": []
   },
@@ -1425,6 +1635,7 @@
     "tag": [],
     "wikilink": [],
     "task": [],
+    "due": [],
     "math": [],
     "style": []
   },
@@ -1441,6 +1652,7 @@
       }
     ],
     "task": [],
+    "due": [],
     "math": [],
     "style": []
   },
@@ -1450,6 +1662,7 @@
     "tag": [],
     "wikilink": [],
     "task": [],
+    "due": [],
     "math": [],
     "style": []
   },
@@ -1478,6 +1691,7 @@
         "to": 61
       }
     ],
+    "due": [],
     "math": [],
     "style": []
   },
@@ -1494,6 +1708,7 @@
       }
     ],
     "task": [],
+    "due": [],
     "math": [],
     "style": []
   },
@@ -1510,6 +1725,7 @@
       }
     ],
     "task": [],
+    "due": [],
     "math": [],
     "style": []
   },
@@ -1519,6 +1735,7 @@
     "tag": [],
     "wikilink": [],
     "task": [],
+    "due": [],
     "math": [],
     "style": []
   },
@@ -1528,6 +1745,7 @@
     "tag": [],
     "wikilink": [],
     "task": [],
+    "due": [],
     "math": [],
     "style": []
   },
@@ -1537,6 +1755,7 @@
     "tag": [],
     "wikilink": [],
     "task": [],
+    "due": [],
     "math": [],
     "style": []
   },
@@ -1546,6 +1765,7 @@
     "tag": [],
     "wikilink": [],
     "task": [],
+    "due": [],
     "math": [],
     "style": []
   },
@@ -1555,6 +1775,7 @@
     "tag": [],
     "wikilink": [],
     "task": [],
+    "due": [],
     "math": [],
     "style": []
   },
@@ -1564,6 +1785,7 @@
     "tag": [],
     "wikilink": [],
     "task": [],
+    "due": [],
     "math": [],
     "style": []
   },
@@ -1586,6 +1808,7 @@
       }
     ],
     "task": [],
+    "due": [],
     "math": [],
     "style": []
   },
@@ -1602,6 +1825,7 @@
       }
     ],
     "task": [],
+    "due": [],
     "math": [],
     "style": []
   },
@@ -1670,6 +1894,7 @@
         "to": 201
       }
     ],
+    "due": [],
     "math": [],
     "style": [
       "em",

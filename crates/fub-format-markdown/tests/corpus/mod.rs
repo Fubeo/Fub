@@ -106,6 +106,21 @@ pub fn corpus() -> Vec<Case> {
         case("task vuota", "- [ ] da fare\n"),
         case("task fatta", "- [x] fatta\n"),
         case("task a stato personalizzato", "- [/] in corso\n"),
+        // La scadenza `📅` (`fub_abi::rules::tasks`): la regola legge il testo
+        // del compito, e le tre letture — modello, Live, Lettura — devono
+        // vedere la stessa data negli stessi posti.
+        case(
+            "task con scadenze",
+            "- [ ] Chiama [[Mario]] 📅 [[2026-10-19]]\n\
+             - [ ] Pagare 📅 `2026-10-20` poi\n\
+             - [ ] Su due righe\n  📅 2026-10-21\n\
+             - [x] Fatta 📅 2026-02-30\n\
+             - [ ] Un [link](https://esempio.it/📅/2026-10-22) e basta\n\
+             - [ ] ==Evidente 📅 2026-10-23==\n\
+             - [ ] Con alias [[Nota|📅 2026-10-24]]\n\
+             - [ ] Padre\n  - [ ] Figlio 📅 2026-10-25\n\
+             - [ ] Codice sotto\n  ```\n  📅 2026-10-26\n  ```\n",
+        ),
         // --- Inline ---
         case("enfasi", "*enfasi*\n"),
         case("forte", "**forte**\n"),

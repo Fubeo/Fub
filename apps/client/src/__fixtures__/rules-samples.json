@@ -2869,6 +2869,160 @@
       "out": false
     }
   ],
+  "task_due": [
+    {
+      "text": "Pagare 📅 2026-10-19",
+      "out": {
+        "span": "📅 2026-10-19",
+        "date": "2026-10-19"
+      }
+    },
+    {
+      "text": "Ricorda 📅 2026-10-01 poi 📅 2026-10-19 ✅",
+      "out": {
+        "span": "📅 2026-10-19",
+        "date": "2026-10-19"
+      }
+    },
+    {
+      "text": "Senza scadenza",
+      "out": null
+    },
+    {
+      "text": "Refuso 📅 2026-02-30",
+      "out": {
+        "span": "📅 2026-02-30",
+        "date": null
+      }
+    },
+    {
+      "text": "Bisestile 📅 2028-02-29",
+      "out": {
+        "span": "📅 2028-02-29",
+        "date": "2028-02-29"
+      }
+    },
+    {
+      "text": "Vuoto 📅",
+      "out": {
+        "span": "📅",
+        "date": null
+      }
+    },
+    {
+      "text": "Spazi 📅   ",
+      "out": {
+        "span": "📅",
+        "date": null
+      }
+    },
+    {
+      "text": "Parola 📅 domani e poi",
+      "out": {
+        "span": "📅 domani",
+        "date": null
+      }
+    },
+    {
+      "text": "Attaccata 📅2026-10-19, con la virgola",
+      "out": {
+        "span": "📅2026-10-19",
+        "date": "2026-10-19"
+      }
+    },
+    {
+      "text": "Tabulazione 📅\t2026-10-19",
+      "out": {
+        "span": "📅\t2026-10-19",
+        "date": "2026-10-19"
+      }
+    },
+    {
+      "text": "Troppe cifre 📅 2026-10-199",
+      "out": {
+        "span": "📅 2026-10-199",
+        "date": null
+      }
+    },
+    {
+      "text": "Mese tredici 📅 2026-13-01",
+      "out": {
+        "span": "📅 2026-13-01",
+        "date": null
+      }
+    },
+    {
+      "text": "Emoji 🎉🎉 prima 📅 2026-10-19 dopo",
+      "out": {
+        "span": "📅 2026-10-19",
+        "date": "2026-10-19"
+      }
+    },
+    {
+      "text": "📅 2026-10-19",
+      "out": {
+        "span": "📅 2026-10-19",
+        "date": "2026-10-19"
+      }
+    }
+  ],
+  "due_urgency": [
+    {
+      "date": "2026-11-18",
+      "today": "2026-11-14",
+      "out": "near"
+    },
+    {
+      "date": "2026-11-24",
+      "today": "2026-11-14",
+      "out": "later"
+    },
+    {
+      "date": "2027-01-01",
+      "today": "2027-01-02",
+      "out": "overdue"
+    },
+    {
+      "date": "2026-11-13",
+      "today": "2026-11-14",
+      "out": "overdue"
+    },
+    {
+      "date": "2026-11-14",
+      "today": "2026-11-14",
+      "out": "near"
+    },
+    {
+      "date": "2026-11-20",
+      "today": "2026-11-14",
+      "out": "near"
+    },
+    {
+      "date": "2026-11-21",
+      "today": "2026-11-14",
+      "out": "later"
+    },
+    {
+      "date": "2027-01-02",
+      "today": "2026-12-28",
+      "out": "near"
+    },
+    {
+      "date": "2027-01-04",
+      "today": "2026-12-28",
+      "out": "later"
+    },
+    {
+      "date": "2024-03-01",
+      "today": "2024-02-24",
+      "out": "near"
+    },
+    {
+      "date": "2024-03-02",
+      "today": "2024-02-24",
+      "out": "later"
+    }
+  ],
   "topic_matches": [
     {
       "prefix": "com.acme",

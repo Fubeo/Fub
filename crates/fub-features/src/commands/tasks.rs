@@ -91,6 +91,21 @@ pub(super) fn notes_task_toggle(
         }
     };
 
+    // Chi dice quale revisione ha letto la confronta **prima** di tutto: con una
+    // nota cambiata, la posizione può non nominare più un compito, e l'errore
+    // giusto è «la nota è cambiata», non «qui non c'è un compito». Il confronto
+    // si rifà più sotto sulla revisione su cui il formato ha calcolato le spunte,
+    // per una nota che cambia nel frattempo.
+    if let Some(expected) = args.text(A_REVISION) {
+        if host.document_revision(&doc)?.0 != expected {
+            return Err(PluginError::Conflict(one(
+                AND_TASK_CHANGED,
+                A_DOC,
+                doc.as_str(),
+            )));
+        }
+    }
+
     let model = host.read_model(&doc)?;
 
     // Per ogni offset, il task che lo contiene. Se un offset non ha un task,
@@ -169,6 +184,20 @@ pub(super) fn notes_task_toggle(
         Some(base) => base,
         None => host.document_revision(&doc)?,
     };
+    // Chi ha letto la nota prima di chiedere la spunta (la vista dei compiti, un
+    // recinto) dice quale revisione ha letto: se la nota non è più quella, la
+    // posizione può nominare un altro compito, e non si scrive niente. È il
+    // controllo e la scrittura nello stesso passo: l'edit qui sotto porta questa
+    // stessa revisione, e l'host lo rifiuta se il file cambia ancora.
+    if let Some(expected) = args.text(A_REVISION) {
+        if revision.0 != expected {
+            return Err(PluginError::Conflict(one(
+                AND_TASK_CHANGED,
+                A_DOC,
+                doc.as_str(),
+            )));
+        }
+    }
     if recurring.is_some() && host.document_revision(&doc)? != revision {
         return Err(PluginError::Conflict(one(
             AND_TASK_CHANGED,

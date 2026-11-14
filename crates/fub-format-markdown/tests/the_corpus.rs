@@ -79,6 +79,7 @@ use std::path::PathBuf;
 use fub_abi::format::{FormatProvider, ParseContext, RenderOptions};
 use fub_abi::model::{custom_kind, Block, DocumentModel, Inline, LinkTarget, Span};
 use fub_abi::options::syntax;
+use fub_abi::rules::tasks::{task_due, task_text};
 use fub_format_markdown::MarkdownProvider;
 use fub_sdk::testing::conformance;
 use serde_json::{json, Value};
@@ -1222,6 +1223,37 @@ fn model_tasks(model: &DocumentModel, text: &str, out: &mut Vec<Value>) {
     out.sort_by_key(|v| v["from"].as_u64().unwrap_or(0));
 }
 
+/// Le scadenze dei compiti del modello, in ordine: il tratto che la regola
+/// trova nel testo del compito (`task_text`, `task_due`) e la data, `null` se
+/// non si legge. La Live e la Lettura le cercano ognuna sul suo testo, e devono
+/// trovare le stesse.
+fn model_dues(model: &DocumentModel) -> Vec<Value> {
+    fn walk(blocks: &[Block], out: &mut Vec<Value>) {
+        for b in blocks {
+            match b {
+                Block::List { items, .. } => {
+                    for item in items {
+                        if item.task.is_some() {
+                            let text = task_text(&item.blocks);
+                            if let Some(due) = task_due(&text) {
+                                out.push(
+                                    json!({"span": &text[due.from..due.to], "date": due.iso()}),
+                                );
+                            }
+                        }
+                        walk(&item.blocks, out);
+                    }
+                }
+                Block::Quote { blocks, .. } | Block::Custom { blocks, .. } => walk(blocks, out),
+                _ => {}
+            }
+        }
+    }
+    let mut out = Vec::new();
+    walk(&model.body, &mut out);
+    out
+}
+
 /// I wikilink del modello, cioè i riferimenti con bersaglio `Wiki`.
 ///
 /// Si leggono dagli inline e non da `model.links`, per una ragione che è tutto
@@ -1424,6 +1456,7 @@ fn corpus_for_the_shell() -> Value {
             "tag": tags,
             "wikilink": model_wikilinks(&model, case.source),
             "task": task,
+            "due": model_dues(&model),
             "math": model_math(&model, case.source),
             "style": model_styles(&model),
         }));

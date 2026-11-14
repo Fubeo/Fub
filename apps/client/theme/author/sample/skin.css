@@ -3477,6 +3477,74 @@ kbd,
   opacity: 0.7;
 }
 
+/* ── I compiti nell'ispettore ────────────────────────────────────────────
+   La vista «Compiti» (`data-view-id="tasks"`) dichiara un compito come una
+   colonna: la casella col testo, e sotto una riga con la scadenza e la nota.
+   Qui la riga di dettagli rientra sotto il testo, in piccolo, e la nota è un
+   rimando sommesso invece di un bottone. Le intestazioni dei gruppi (Scaduti,
+   Questa settimana…) sono etichette in maiuscoletto, non titoli. */
+.declared-view[data-view-id="tasks"] .ui-section > summary {
+  min-height: 0;
+  padding-top: var(--space-6);
+  padding-bottom: var(--space-2);
+  color: var(--muted);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-bold);
+  letter-spacing: var(--tracking-caps);
+  text-transform: uppercase;
+}
+.declared-view[data-view-id="tasks"] .ui-section > .ui-children {
+  padding: 0 0 var(--space-2);
+}
+.declared-view[data-view-id="tasks"] .ui-children > .ui-stack[data-dir="column"] {
+  margin: 0 calc(var(--space-4) * -1);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-control);
+}
+.declared-view[data-view-id="tasks"] .ui-children > .ui-stack[data-dir="column"]:hover {
+  background: var(--bg-hover);
+}
+.declared-view[data-view-id="tasks"] .ui-checkbox {
+  align-items: flex-start;
+  min-height: 0;
+}
+.declared-view[data-view-id="tasks"] .ui-checkbox input {
+  margin-top: 1px;
+}
+.declared-view[data-view-id="tasks"] .ui-checkbox .ui-field-label {
+  overflow-wrap: anywhere;
+}
+/* Sotto il testo: la casella più lo spazio fra casella e testo. */
+.declared-view[data-view-id="tasks"] .ui-checkbox + .ui-stack[data-dir="row"] {
+  margin-left: calc(13px + var(--space-4));
+}
+.declared-view[data-view-id="tasks"] .ui-checkbox + .ui-stack .ui-button {
+  min-height: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-regular);
+  text-align: left;
+  white-space: normal;
+}
+/* La scadenza vicina: il componente la dice `primary` (il contratto non ha un
+   intento «avviso»), e qui veste l'avviso, come la pastiglia arancio nel
+   testo; la scaduta resta `danger`, rossa. */
+.declared-view[data-view-id="tasks"] .ui-badge.intent-primary {
+  background: var(--warning-wash);
+  color: var(--text);
+}
+/* Fra la scadenza e la nota un respiro: lo spazio della pila è un pixel. */
+.declared-view[data-view-id="tasks"] .ui-checkbox + .ui-stack .ui-badge + .ui-button {
+  margin-left: var(--space-2);
+}
+.declared-view[data-view-id="tasks"] .ui-checkbox + .ui-stack .ui-button:hover {
+  color: var(--text);
+  text-decoration: underline;
+}
+
 /* ── skin/tree.css ──────────────────────────────────────────────────────── */
 
 /* L'albero dei file. */
@@ -11616,6 +11684,180 @@ kbd,
 .rich-proof-grammar {
   text-decoration: underline wavy var(--doc-proof-gram, var(--doc-danger)) 1px;
   text-underline-offset: 3px;
+}
+/* La scadenza di un compito (`📅 AAAA-MM-GG`): una pastiglia sulla carta,
+   nella Live come segno sul testo, in Lettura e nel recinto ```tasks``` come
+   elemento. Rossa quando è passata, arancio quando è vicina: oggi o entro
+   una settimana. */
+.cm-editor .cm-content .cm-fub-due,
+.markdown-rendered .task-due {
+  padding: 0.12em 0.5em;
+  border-radius: var(--radius-chip);
+  background: var(--doc-fill-soft);
+  box-shadow: inset 0 0 0 1px var(--doc-rule);
+  color: var(--doc-gutter-fg);
+  font-family: var(--font-ui);
+  font-size: 0.8em;
+  font-weight: var(--weight-medium);
+  white-space: nowrap;
+}
+.cm-editor .cm-content .cm-fub-due-near,
+.markdown-rendered .task-due-near {
+  background: var(--doc-tint-orange);
+  box-shadow: none;
+  color: var(--doc-color-orange);
+}
+.cm-editor .cm-content .cm-fub-due-overdue,
+.markdown-rendered .task-due-overdue {
+  background: var(--doc-tint-red);
+  box-shadow: none;
+  color: var(--doc-color-red);
+}
+/* Dentro un codice la pastiglia tiene il suo fondo: la regola del codice
+   spegne il fondo dei suoi span interni (`document.css`). */
+.cm-editor .cm-content .cm-fub-code .cm-fub-due {
+  background: var(--doc-fill-soft);
+}
+.cm-editor .cm-content .cm-fub-code .cm-fub-due-near {
+  background: var(--doc-tint-orange);
+}
+.cm-editor .cm-content .cm-fub-code .cm-fub-due-overdue {
+  background: var(--doc-tint-red);
+}
+.cm-editor .cm-content .cm-fub-code .cm-fub-due-bad {
+  background: transparent;
+}
+/* La misura della pastiglia è la stessa dovunque stia: dentro un codice, che
+   è già a 0.88em, i suoi 0.8em si contano dal testo intorno al codice. E un
+   codice che la pastiglia prende intero (`📅 \`2026-11-16\``) ne veste il
+   corpo: niente seconda toppa, niente seconda riduzione, la stessa voce. */
+.cm-editor .cm-content .cm-fub-code .cm-fub-due,
+.markdown-rendered code .task-due {
+  font-size: calc(0.8em / 0.88);
+}
+.cm-editor .cm-content .cm-fub-due .cm-fub-code,
+.markdown-rendered .task-due code {
+  padding: 0;
+  background: transparent;
+  color: inherit;
+  font-family: inherit;
+  font-size: 1em;
+}
+.cm-editor .cm-content .cm-fub-due .cm-fub-code span {
+  color: inherit;
+  font-family: inherit;
+}
+/* Una data che non si legge (`📅 2026-02-30`): la pastiglia resta, col bordo
+   tratteggiato del refuso; il titolo dice come si scrive. */
+.cm-editor .cm-content .cm-fub-due-bad,
+.markdown-rendered .task-due-bad {
+  background: transparent;
+  box-shadow: none;
+  outline: 1px dashed var(--doc-danger);
+  outline-offset: -1px;
+  color: var(--doc-danger);
+}
+/* Il recinto ```tasks```: lo disegna il componente dei compiti (la vista
+   `tasks_query`), con i nodi di ogni vista dichiarata. Qui il blocco veste la
+   carta: un riquadro sommesso, una riga per compito con la casella e il testo,
+   e sotto, in piccolo e rientrate, la scadenza e la nota d'origine. Viene
+   dopo il degrado dei blocchi che nessuno disegna (`[class^="block-"]` in
+   `document.css`) e lo scavalca a parità di peso. */
+.markdown-rendered .block-tasks {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--doc-rule-soft);
+  font-family: inherit;
+  font-size: inherit;
+  white-space: normal;
+}
+.markdown-rendered .block-tasks .block-query-note,
+.markdown-rendered .block-tasks .ui-text,
+.markdown-rendered .block-tasks .ui-empty-title {
+  margin: 0;
+  padding: 0;
+  border: none;
+  color: var(--doc-gutter-fg);
+  font-family: var(--font-ui);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-regular);
+  white-space: normal;
+}
+.markdown-rendered .block-tasks .ui-empty-state {
+  padding: 0;
+  text-align: left;
+}
+/* Un compito: la casella col testo, e sotto la sua riga di dettagli. */
+.markdown-rendered .block-tasks [data-key="tasks"] > .ui-stack[data-dir="column"] {
+  margin: 0 calc(var(--space-2) * -1);
+  padding: var(--space-2);
+  border-radius: var(--radius-control);
+}
+.markdown-rendered .block-tasks [data-key="tasks"] > .ui-stack[data-dir="column"]:hover {
+  background: var(--doc-block-hover);
+}
+.markdown-rendered .block-tasks .ui-checkbox {
+  align-items: baseline;
+  min-height: 0;
+  color: var(--doc-fg);
+  font-family: inherit;
+  font-size: inherit;
+}
+.markdown-rendered .block-tasks .ui-checkbox input {
+  margin: 0;
+  accent-color: var(--doc-link);
+}
+.markdown-rendered .block-tasks .ui-checkbox input:checked + .ui-field-label {
+  color: var(--doc-gutter-fg);
+  text-decoration: line-through;
+}
+/* Sotto la casella: la sua larghezza più lo spazio fra casella e testo. */
+.markdown-rendered .block-tasks .ui-checkbox + .ui-stack[data-dir="row"] {
+  margin-left: calc(13px + var(--space-4));
+}
+/* La scadenza della riga ha la veste della pastiglia nel testo: grigia;
+   rossa quando il componente la dice scaduta (o non leggibile, `danger`);
+   arancio quando la dice vicina (`primary`, il contratto non ha un «avviso»). */
+.markdown-rendered .block-tasks .ui-badge {
+  min-height: 0;
+  padding: 0.05em 0.5em;
+  border-radius: var(--radius-chip);
+  background: var(--doc-fill-soft);
+  box-shadow: inset 0 0 0 1px var(--doc-rule);
+  color: var(--doc-gutter-fg);
+  font-family: var(--font-ui);
+  font-weight: var(--weight-medium);
+}
+.markdown-rendered .block-tasks .ui-badge.intent-danger {
+  background: var(--doc-tint-red);
+  box-shadow: none;
+  color: var(--doc-color-red);
+}
+.markdown-rendered .block-tasks .ui-badge.intent-primary {
+  background: var(--doc-tint-orange);
+  box-shadow: none;
+  color: var(--doc-color-orange);
+}
+.markdown-rendered .block-tasks .ui-checkbox + .ui-stack .ui-button {
+  min-height: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--doc-gutter-fg);
+  font-family: var(--font-ui);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-regular);
+  white-space: normal;
+}
+/* Fra la scadenza e la nota un respiro: lo spazio della pila è un pixel. */
+.markdown-rendered .block-tasks .ui-checkbox + .ui-stack .ui-badge + .ui-button {
+  margin-left: var(--space-2);
+}
+.markdown-rendered .block-tasks .ui-checkbox + .ui-stack .ui-button:hover {
+  color: var(--doc-link);
+  text-decoration: underline;
 }
 
 /* ── skin/draw.css ──────────────────────────────────────────────────────── */

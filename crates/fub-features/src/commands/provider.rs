@@ -99,6 +99,7 @@ impl CoreCommands {
                 .offered_in(CommandSurface::Slash)
                 .with_param(parameter(NOTES_TASK_TOGGLE, "doc", ParamKind::Document))
                 .with_param(parameter(NOTES_TASK_TOGGLE, "at", ParamKind::Numbers))
+                .with_param(parameter(NOTES_TASK_TOGGLE, "revision", ParamKind::Text))
                 .with_scope(CommandScope::writing(CommandReach::Document)),
             // --- le impostazioni (§11.1) --------------------------------
             //

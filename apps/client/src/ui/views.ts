@@ -59,6 +59,7 @@ import { setContextMenuViews } from "./context-views";
 import { activeDoc } from "../state/layout";
 import { on } from "../state/store";
 import { pageName } from "../rules/mirrored";
+import { embeddedViewsDiscovered, setEmbeddedViewHost } from "./embedded-views";
 
 const viewsLeftEl = $("#views-left");
 const viewsRightEl = $("#views-right");
@@ -203,6 +204,15 @@ export function unmountViewFromPane(view: string, pane: string): void {
   if (!mountedView) return;
   unmountMounted(id, mountedView);
 }
+
+// Una view dell'area principale si monta anche dentro un documento (il recinto
+// ```tasks```): l'esemplare è il recinto invece del riquadro, e il resto è lo
+// stesso giro — ridisegno a maschera, azioni, corse. Vedi `embedded-views.ts`.
+setEmbeddedViewHost({
+  known: (view) => primaryView(view) !== undefined,
+  mount: mountViewInPane,
+  unmount: unmountViewFromPane,
+});
 
 /// La superficie di una view → il contenitore che la ospita, o `null` se questa
 /// shell non ce l'ha ancora.
@@ -407,6 +417,7 @@ export async function mountDeclaredViews(parent?: Lifetime): Promise<void> {
   setPrimaryViews(mains);
   setSidePanelViews(lefts);
   setContextMenuViews(contextSpecs);
+  embeddedViewsDiscovered();
 
   viewsBottomEl.hidden = viewsBottomEl.childElementCount === 0;
   viewsStatusEl.hidden = viewsStatusEl.childElementCount === 0;
