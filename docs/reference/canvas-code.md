@@ -425,6 +425,45 @@ pixel (un albero con misure dispari) si arrotonda, la metà sale.
 { "op": "layout", "ids": ["f1", "f2", "f3", "f4", "f5", "f6"], "kind": "grid" }
 ```
 
+### `insert`
+
+Incolla un frammento copiato, come «Incolla» della GUI. `fragment` è la forma degli
+appunti della lavagna (`application/x-fub-canvas+json`): `{"version": 1, "nodes":
+[…], "edges": […]}`, con le schede nell'ordine del file e ogni scheda e arco col suo
+`id`. Ogni scheda e ogni arco prende un id nuovo dal seme, prima le schede poi gli
+archi, nell'ordine del frammento, e gli archi seguono le schede; il resto (campi
+sconosciuti compresi) resta com'era. Le schede entrano in cima all'ordine.
+
+Il frammento si sposta come un blocco: l'angolo in alto a sinistra del suo riquadro
+va in `x`, `y` (insieme, senza aggancio, come nella GUI); se no accanto a `near`, sul
+lato `side` (di serie `right`), con le regole di `add_card` (le distanze di serie, lo
+scivolamento oltre una scheda che occupa il posto) e la misura del riquadro; se no nel
+posto automatico di `add_card`. Dopo un `insert` senza posto, la lista automatica
+riparte: la prossima scheda automatica va accanto a tutto, frammento compreso. Un
+frammento senza schede né archi non dà toppe; ne porta al più 10 000 (`TooMany`
+oltre).
+
+Un arco con un estremo fuori dal frammento, una versione che non è 1, un id ripetuto
+nel frammento, un campo della radice che non è `version`, `nodes` o `edges` (i tratti
+liberi, `fub:ink`, non entrano: la GUI li incolla con le operazioni dell'inchiostro),
+un posto dato due volte o `side` senza `near` sono `Invalid`.
+
+```json
+{ "op": "insert", "fragment": { "version": 1, "nodes": [{ "id": "a", "type": "text", "text": "Domanda", "x": 0, "y": 0, "width": 320, "height": 160 }], "edges": [] }, "near": "t1", "side": "bottom" }
+```
+
+### `convert`
+
+Trasforma la scheda di testo `id` nella scheda del file `file`, come «Trasforma in
+nota» della GUI: la scheda tiene id, posto nell'ordine, posizione, misure, colore e
+campi sconosciuti, quindi gli archi restano; il testo esce dalla scheda. Il file lo
+scrive prima un'altra porta (`fub_create`, `note.create` della GUI): `convert` non
+scrive file. Una scheda che non è un testo, o un `file` vuoto, è `Invalid`.
+
+```json
+{ "op": "convert", "id": "t2", "file": "Idee/Evaporazione.md" }
+```
+
 ### Gli id nuovi
 
 Un id nuovo viene dal seme del chiamante (`seed`, un intero a 64 bit senza
@@ -452,11 +491,11 @@ Ogni errore (`OpError`) dice quale operazione della lista non si compila
 
 | Errore | Quando |
 |---|---|
-| `UnknownNode` | `move`, `resize`, `reorder`, `align`, `distribute`, `duplicate`, `group` o `layout` di un id che non è una scheda; un arco verso una scheda che non c'è |
+| `UnknownNode` | `move`, `resize`, `reorder`, `align`, `distribute`, `duplicate`, `group`, `layout` o `convert` di un id che non è una scheda; il `near` di `insert`; un arco verso una scheda che non c'è |
 | `UnknownEdge` | `remove`, `set` o `color` di un id che non è né una scheda né un arco; `reverse` di un id che non è un arco |
 | `DuplicateId` | un id dato che è già preso (anche in `as`); un id ripetuto nella lista di `move`, `remove`, `reorder`, `color`, `align`, `distribute`, `duplicate` o `layout` |
-| `TooMany`, `TooManyMoved` | la lavagna avrebbe più di 100 000 schede o 200 000 archi, anche con le copie o il gruppo; `TooManyMoved` è un `move` con `contents` che tocca più di 1 000 schede |
-| `Invalid` | una scheda o un arco che il formato non accetta; una forma breve incompleta o mescolata con la intera; `set` di `id` o `type`; un `resize` senza misure o con `fit` e `height`; un id che è sia una scheda sia un arco; `duplicate` con `as` di altra lunghezza da `ids`; `group` senza schede; `layout` con `direction` fuori da `tree`, con `x` senza `y` (o viceversa), o con `gap` negativo |
+| `TooMany`, `TooManyMoved` | la lavagna avrebbe più di 100 000 schede o 200 000 archi, anche con le copie, il gruppo o il frammento; un `insert` porta più di 10 000 schede; `TooManyMoved` è un `move` con `contents` che tocca più di 1 000 schede |
+| `Invalid` | una scheda o un arco che il formato non accetta; una forma breve incompleta o mescolata con la intera; `set` di `id` o `type`; un `resize` senza misure o con `fit` e `height`; un id che è sia una scheda sia un arco; `duplicate` con `as` di altra lunghezza da `ids`; `group` senza schede; `layout` con `direction` fuori da `tree`, con `x` senza `y` (o viceversa), o con `gap` negativo; un frammento di `insert` che non si incolla (vedi sopra); `convert` di una scheda che non è un testo, o con `file` vuoto |
 
 I vettori stanno in `apps/client/src/__fixtures__/canvas-ops/`, uno per file
 (`before`, `seed`, `ops`, `expect`); `tests/op_vectors.rs` li fa girare e
