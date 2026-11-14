@@ -235,7 +235,9 @@ in `target/tauri-driver`, senza toccare il sistema, e misura tutti gli
 scenari con le soglie `targets`. Se manca un display usa `xvfb-run`. Prima
 gli serve WebKitWebDriver, cioè il pacchetto `webkit2gtk-driver`, e senza
 display anche `xvfb`: se mancano, lo script lo dice e si ferma. Gli argomenti
-in più vanno a `run.mjs`, per esempio `--only=R1,T1`.
+in più vanno a `run.mjs`, per esempio `--only=R1,T1`. Su una sessione Wayland
+`misura.sh` non usa Xvfb: senza `--wayland` (o, sotto Xvfb, `--x11` con la
+variabile tolta) il banco si ferma, come dice la sezione che segue.
 
 ## Linux e Windows, passo per passo
 
@@ -258,15 +260,20 @@ in più vanno a `run.mjs`, per esempio `--only=R1,T1`.
    Su Linux aggiungi `--native-driver=/usr/bin/WebKitWebDriver`. Misura sia
    in una sessione Wayland sia in una X11.
 
-   Sotto Xvfb su una sessione Wayland (con `WAYLAND_DISPLAY` impostato) aggiungi
-   `--x11`. Senza, GTK apre la finestra in Wayland, cioè sullo schermo di chi
-   misura e non nel display di Xvfb dove il driver muove il puntatore: S3
-   fallisce con «move target out of bounds». `--x11` toglie `WAYLAND_DISPLAY`
-   al driver e mette `GDK_BACKEND=x11`, e il referto scrive `x11` come
-   sessione. Se la variabile c'è e non hai scelto, il banco lo dice all'inizio. Dentro una sessione Wayland
-   `xvfb-run` da solo non basta: GTK sceglie lo schermo Wayland e la
-   finestra non va in Xvfb. Lancialo con
-   `env -u WAYLAND_DISPLAY GDK_BACKEND=x11`.
+   Con `WAYLAND_DISPLAY` impostato il banco non parte senza una scelta. GTK
+   aprirebbe la finestra in Wayland, cioè sullo schermo di chi misura, e non in
+   Xvfb dove il driver muove il puntatore: S3 fallisce con «move target out of
+   bounds». Il banco si ferma e dice che cosa usare:
+
+   - sotto Xvfb su una sessione Wayland, `--x11`, con la variabile tolta al
+     comando: `xvfb-run -a env -u WAYLAND_DISPLAY npm run bench:webview -- … --x11`.
+     `--x11` toglie `WAYLAND_DISPLAY` al driver e mette `GDK_BACKEND=x11`, e il
+     referto scrive `x11` come sessione;
+   - per misurare sullo schermo vero, su una sessione Wayland, `--wayland`.
+
+   Il job `webview` della CI non ha `WAYLAND_DISPLAY` e non cambia. La guardia
+   è in `bench/webview/display.mjs`, con la sua prova in
+   `bench/webview/display.test.ts`: `npx vitest run bench/webview/display.test.ts`.
 
 Il referto va in `apps/client/bench/.output/webview/referto.json`. Il comando
 esce con 1 se un valore supera la soglia scelta.

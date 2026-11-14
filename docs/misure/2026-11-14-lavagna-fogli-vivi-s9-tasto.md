@@ -30,8 +30,11 @@ dello stesso giro.
     --port=4482 --native-driver=/usr/bin/WebKitWebDriver --x11
   ```
 
-  Sulla sessione Wayland di questa macchina senza `env -u WAYLAND_DISPLAY` e
-  senza `--x11` la finestra va sullo schermo vero, non in Xvfb.
+  Sulla sessione Wayland di questa macchina, senza `env -u WAYLAND_DISPLAY` e
+  senza `--x11`, il banco ora si ferma (la guardia è in
+  [Misure nella WebView](../development/webview-measurements.md)): prima la
+  finestra andava sullo schermo vero, non in Xvfb. La guardia non cambia nulla
+  quando `WAYLAND_DISPLAY` non c'è, né con `--x11`.
 
 ## La macchina
 
