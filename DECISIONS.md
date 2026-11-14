@@ -2247,3 +2247,12 @@ La più recente in cima: data · piano · decisione · perché.
   dati di T12 spinge l'ultima del DOM sotto la banda); la pastiglia del titolo non
   fa più crescere la riga del cursore (salto di 7–9 px, già su `main`) · le
   baseline di T25 si prendono dopo, con questi cambi dentro.
+- 2026-11-14 · workflow · La PR #298 si era chiusa da sola il 2026-11-10: GitHub
+  chiude una PR quando ne cancella il ramo base (`piano/n3-logica-in-rust`, dopo il
+  merge di N3). Riaperta con base `main`. La PR #302 (N6) ha base
+  `piano/n4-inchiostro`: va portata su `main` prima del merge di N4, o si chiude
+  allo stesso modo · un ramo base cancellato chiude senza avviso le PR sopra.
+- 2026-11-14 · T25 · Riallineato con `main` (0caf21879, poi db07c9995): le due
+  sezioni sulla lavagna a penna passano in `docs/architecture/ink-on-canvas.md`
+  perché `ink-and-tools.md` superava la soglia di 450 righe; in `overview.md` il
+  blocco Mermaid di `fub-ink-codec` è unito al precedente · nessuna soglia alzata.

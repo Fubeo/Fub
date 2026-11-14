@@ -1959,7 +1959,7 @@ della CI completa sono verdi, il resoconto della revisione è nel rapporto
 con ogni punto corretto o motivato, ogni riga del cancello ha la sua prova,
 e l'utente ha detto sì al merge.
 Prova: gh pr checks 298; scripts/check.sh
-Stato: [ ] da fare
+Stato: [~] ramo riallineato con `main` (8eb3d3122), PR #298 con base `main` segnata pronta: CI completa in corso; poi la revisione riga per riga; il merge lo dice l'utente
 
 ## Non verificato stanotte
 
