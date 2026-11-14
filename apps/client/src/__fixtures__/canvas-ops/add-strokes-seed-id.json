@@ -1,0 +1,30 @@
+{
+  "about": "Un tratto senza id (o con id null) prende un id dal seme, saltando quelli del livello: il seme 0 dà e220a8397b1dcdaf, già preso, e poi 6e789e6aa1b965f4. Un id dato si tiene.",
+  "before": {
+    "nodes": [
+      { "id": "f1", "type": "text", "x": 0, "y": 0, "width": 300, "height": 200, "text": "nota",
+        "fub:ink": { "v": 1, "strokes": [
+          { "id": "e220a8397b1dcdaf", "tool": "pen", "brush": "pf1 size=3 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=0 pen=ballpoint", "color": "#0072b2", "anchor": { "kind": "card", "width": 300, "height": 200 }, "ink": "1 s100 cxy 100,100 10,0" }
+        ] } }
+    ]
+  },
+  "seed": 0,
+  "ops": [{ "op": "add_strokes", "layer": { "node": "f1" }, "strokes": [
+    { "tool": "pen", "brush": "pf1 size=3 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=0 pen=ballpoint", "color": "#0072b2", "anchor": { "kind": "card", "width": 300, "height": 200 }, "ink": "1 s100 cxy 200,100 10,0" },
+    { "id": "s-dato", "tool": "pen", "brush": "pf1 size=3 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=0 pen=ballpoint", "color": "#0072b2", "anchor": { "kind": "card", "width": 300, "height": 200 }, "ink": "1 s100 cxy 300,100 10,0" }
+  ] }],
+  "expect": {
+    "outcome": "applied",
+    "after": {
+      "nodes": [
+        { "id": "f1", "type": "text", "x": 0, "y": 0, "width": 300, "height": 200, "text": "nota",
+          "fub:ink": { "v": 1, "strokes": [
+            { "id": "e220a8397b1dcdaf", "tool": "pen", "brush": "pf1 size=3 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=0 pen=ballpoint", "color": "#0072b2", "anchor": { "kind": "card", "width": 300, "height": 200 }, "ink": "1 s100 cxy 100,100 10,0" },
+            { "id": "6e789e6aa1b965f4", "tool": "pen", "brush": "pf1 size=3 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=0 pen=ballpoint", "color": "#0072b2", "anchor": { "kind": "card", "width": 300, "height": 200 }, "ink": "1 s100 cxy 200,100 10,0" },
+            { "id": "s-dato", "tool": "pen", "brush": "pf1 size=3 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=0 pen=ballpoint", "color": "#0072b2", "anchor": { "kind": "card", "width": 300, "height": 200 }, "ink": "1 s100 cxy 300,100 10,0" }
+          ] } }
+      ]
+    },
+    "created": ["6e789e6aa1b965f4", "s-dato"]
+  }
+}

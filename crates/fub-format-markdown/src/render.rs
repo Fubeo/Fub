@@ -2,7 +2,7 @@
 //! è una funzione pura del `DocumentModel`, esattamente come vuole il trait, e
 //! la navigazione dei wikilink passa per data-attribute che il frontend risolve.
 
-use fub_abi::format::RenderOptions;
+use fub_abi::format::{RenderOptions, RenderTarget};
 use fub_abi::model::{
     custom_kind, Block, ColumnAlign, DocumentModel, Inline, LinkTarget, TableRow,
 };
@@ -861,6 +861,30 @@ fn render_inline(inline: &Inline, opts: &RenderOptions, out: &mut String) {
         // resa.
         Inline::Custom { custom_kind, .. }
             if custom_kind == fub_abi::model::custom_kind::COMMENT => {}
+        // Il passo di un commento si legge come il resto del testo: i suoi due
+        // estremi non hanno resa.
+        Inline::Custom { custom_kind, .. }
+            if custom_kind == fub_abi::model::custom_kind::COMMENT_RANGE => {}
+        // Un messaggio di una discussione non è testo della nota, e nella resa
+        // non si vede. Per la stampa viaggia in un `<template>`, che il browser
+        // non mostra né stampa: chi esporta «con i commenti» (l'export HTML)
+        // ne fa le note a piè di pagina, chi esporta senza lo toglie. È l'unico
+        // modo di dargli la scelta, perché la resa di stampa non ha opzioni.
+        Inline::Custom {
+            custom_kind, attrs, ..
+        } if custom_kind == fub_abi::model::custom_kind::COMMENT_MESSAGE => {
+            if matches!(opts.target, RenderTarget::Print | RenderTarget::Pdf) {
+                let field = |key: &str| attrs.get(key).and_then(|v| v.as_str());
+                out.push_str("<template class=\"comment-note\"");
+                if let Some(author) = field("author") {
+                    out.push_str(&attr("data-author", author));
+                }
+                if let Some(date) = field("date") {
+                    out.push_str(&attr("data-date", date));
+                }
+                write!(out, ">{}</template>", escape(field("text").unwrap_or(""))).unwrap();
+            }
+        }
         Inline::Custom {
             custom_kind, attrs, ..
         } => {
@@ -1102,6 +1126,63 @@ mod tests {
         let mut out = String::new();
         render_block(&block, &RenderOptions::default(), &mut out);
         out
+    }
+
+    /// Il passo resta testo; il messaggio non c'è a schermo, e per la stampa
+    /// viaggia inerte in un `<template>` con il testo escapato.
+    #[test]
+    fn a_comment_message_is_hidden_on_screen_and_carried_for_print() {
+        let block = Block::Paragraph {
+            inlines: vec![
+                Inline::Custom {
+                    custom_kind: custom_kind::COMMENT_RANGE.into(),
+                    attrs: json!({ "source": "{==", "edge": "start" }),
+                    span: Span { start: 0, end: 3 },
+                },
+                Inline::Text("passo".into()),
+                Inline::Custom {
+                    custom_kind: custom_kind::COMMENT_RANGE.into(),
+                    attrs: json!({ "source": "==}", "edge": "end" }),
+                    span: Span { start: 8, end: 11 },
+                },
+                Inline::Custom {
+                    custom_kind: custom_kind::COMMENT_MESSAGE.into(),
+                    attrs: json!({
+                        "source": "{>>@Anna \"A\" 2026-11-08: <b>no</b><<}",
+                        "author": "Anna \"A\"",
+                        "date": "2026-11-08",
+                        "text": "<b>no</b>",
+                        "anchored": true
+                    }),
+                    span: Span { start: 11, end: 50 },
+                },
+            ],
+            anchor: None,
+            span: Span { start: 0, end: 50 },
+        };
+        let html = |target| {
+            let mut out = String::new();
+            let opts = RenderOptions {
+                target,
+                ..RenderOptions::default()
+            };
+            render_block(&block, &opts, &mut out);
+            out
+        };
+        let screen = html(RenderTarget::Screen);
+        assert!(screen.contains(">passo</p>"), "{screen}");
+        assert!(
+            !screen.contains("Anna") && !screen.contains("no<"),
+            "{screen}"
+        );
+        let print = html(RenderTarget::Print);
+        assert!(
+            print.contains(
+                "passo<template class=\"comment-note\" data-author=\"Anna &quot;A&quot;\" \
+                 data-date=\"2026-11-08\">&lt;b&gt;no&lt;/b&gt;</template></p>"
+            ),
+            "{print}"
+        );
     }
 
     #[test]

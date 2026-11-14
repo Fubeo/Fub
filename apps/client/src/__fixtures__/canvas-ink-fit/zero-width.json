@@ -1,0 +1,44 @@
+{
+  "name": "zero-width",
+  "description": "Un'immagine larga zero: il fattore è zero e l'inchiostro non si vede, senza NaN.",
+  "card": {
+    "type": "file",
+    "file": "Foto/lavagna.png"
+  },
+  "ref": {
+    "width": 200,
+    "height": 100
+  },
+  "size": {
+    "width": 0,
+    "height": 100
+  },
+  "expect": {
+    "mode": "scale",
+    "s": 0,
+    "x": 0,
+    "y": 50,
+    "points": [
+      {
+        "from": [
+          10,
+          10
+        ],
+        "to": [
+          0,
+          50
+        ]
+      },
+      {
+        "from": [
+          200,
+          100
+        ],
+        "to": [
+          0,
+          50
+        ]
+      }
+    ]
+  }
+}

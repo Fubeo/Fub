@@ -2,16 +2,49 @@
 // caricato in WebAssembly da `wasm/core.ts`) applica al sorgente, e i
 // costruttori che il motore usa per farle. Il commit, il suo annulla e la
 // lettura del file stanno tutti nel nucleo; qui c'è solo ciò che serve a
-// descrivere un cambiamento.
+// descrivere un cambiamento. Anche le regole dell'inchiostro (quale livello è
+// estraneo) le dice il nucleo: i costruttori dei tratti le prendono da
+// `CanvasCore.inkLayers()`.
 import type { TextOperation } from "../core/text-operation";
+import { INK_KEY, type InkLayerRef } from "./ink-record";
 import type { CanvasDocument, CanvasEdge, CanvasNode } from "./model";
+import type { CanvasInkLayer } from "./wasm/core";
 
 export type CanvasPatch =
   | { readonly kind: "upsert-node"; readonly before: CanvasNode | null; readonly after: CanvasNode; readonly at?: number }
   | { readonly kind: "remove-node"; readonly before: CanvasNode; readonly after: null; readonly at?: number }
   | { readonly kind: "upsert-edge"; readonly before: CanvasEdge | null; readonly after: CanvasEdge; readonly at?: number }
   | { readonly kind: "remove-edge"; readonly before: CanvasEdge; readonly after: null; readonly at?: number }
-  | { readonly kind: "reorder"; readonly before: readonly string[]; readonly after: readonly string[] };
+  | { readonly kind: "reorder"; readonly before: readonly string[]; readonly after: readonly string[] }
+  | InkPatch;
+
+/**
+ * Un tratto com'è salvato in un livello `fub:ink`: un `id` stringa non vuota
+ * e gli altri campi come sono nel file, anche quelli che Fub non sa disegnare
+ * (`docs/reference/canvas-ink.md`). È il tipo di `before` e `after` di una
+ * toppa `ink`, come `InkStroke` del nucleo Rust.
+ */
+export interface StoredInkStroke {
+  readonly id: string;
+  readonly [field: string]: unknown;
+}
+
+/** Dove sta un livello d'inchiostro: la radice (`"board"`) o una scheda (`{"node": id}`). */
+export type LayerRef = InkLayerRef;
+
+/**
+ * Aggiunge (`before` a `null`), toglie (`after` a `null`) o cambia il tratto
+ * alla posizione `at` dei tratti del livello `layer`, come `CanvasPatch::Ink`
+ * del nucleo Rust (`docs/reference/canvas-ink.md` § «Toppa e operazioni»).
+ * La applica il nucleo, come le altre toppe.
+ */
+export interface InkPatch {
+  readonly kind: "ink";
+  readonly layer: LayerRef;
+  readonly at: number;
+  readonly before: StoredInkStroke | null;
+  readonly after: StoredInkStroke | null;
+}
 
 export interface CanvasOperation extends TextOperation {
   readonly kind: "canvas";
@@ -90,6 +123,78 @@ function edgeById(doc: CanvasDocument, id: string): CanvasEdge | undefined {
   return doc.edges.find((edge) => edge.id === id);
 }
 
+function has(value: object, key: string): boolean {
+  return Object.prototype.hasOwnProperty.call(value, key);
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+// I campi noti di un tratto, nell'ordine in cui si scrivono (R10), come
+// `STROKE_FIELDS` del nucleo Rust; gli sconosciuti vengono dopo, nel loro
+// ordine. L'ancora resta com'è: il nucleo non la riordina.
+const STROKE_ORDER: readonly string[] = ["id", "tool", "at", "brush", "color", "anchor", "ink"];
+
+/**
+ * Una copia del tratto con i campi nell'ordine di scrittura. A differenza di
+ * schede e archi un `null` scritto resta: il nucleo conserva i campi di un
+ * tratto come sono. `Object.fromEntries` tiene anche una chiave `__proto__`.
+ */
+function cloneStroke(stroke: StoredInkStroke): StoredInkStroke {
+  const copy = JSON.parse(JSON.stringify(stroke)) as Record<string, unknown>;
+  const entries: [string, unknown][] = [];
+  for (const key of STROKE_ORDER) if (has(copy, key)) entries.push([key, copy[key]]);
+  for (const [key, value] of Object.entries(copy)) if (!STROKE_ORDER.includes(key)) entries.push([key, value]);
+  return Object.fromEntries(entries) as StoredInkStroke;
+}
+
+function cloneLayerRef(layer: LayerRef): LayerRef {
+  return layer === "board" ? "board" : { node: layer.node };
+}
+
+/** Un tratto che il nucleo Rust legge: un oggetto con un `id` stringa non vuota. */
+function isStoredStroke(value: unknown): value is StoredInkStroke {
+  return isRecord(value) && typeof value.id === "string" && value.id !== "";
+}
+
+/** Chi tiene il livello: la radice o la prima scheda con quell'id (`ink_holder`). */
+function inkHolder(doc: CanvasDocument, layer: LayerRef): Record<string, unknown> | undefined {
+  return layer === "board" ? doc : nodeById(doc, layer.node);
+}
+
+function sameLayer(a: LayerRef, b: LayerRef): boolean {
+  return a === "board" || b === "board" ? a === b : a.node === b.node;
+}
+
+/**
+ * I tratti del livello `layer` se Fub ci può scrivere, secondo `layers`
+ * (`CanvasCore.inkLayers()` dello stesso testo di `doc`): vuoto se il livello
+ * non c'è ancora, `null` se chi lo tiene non c'è o il nucleo lo dice
+ * estraneo. Il nucleo decide; qui si guarda solo che `doc` e `layers` vengano
+ * dallo stesso testo (gli stessi id, nello stesso ordine), e se no non si
+ * scrive.
+ */
+function writableStrokes(
+  doc: CanvasDocument,
+  layers: readonly CanvasInkLayer[],
+  layer: LayerRef,
+): readonly StoredInkStroke[] | null {
+  const holder = inkHolder(doc, layer);
+  if (!holder) return null;
+  const read = layers.find((entry) => sameLayer(entry.layer, layer));
+  if (!read) return has(holder, INK_KEY) ? null : [];
+  if (read.state !== "ok") return null;
+  const value = holder[INK_KEY];
+  const strokes = isRecord(value) && Array.isArray(value.strokes) ? (value.strokes as unknown[]) : null;
+  if (!strokes || strokes.length !== read.strokes.length) return null;
+  for (let i = 0; i < strokes.length; i++) {
+    const stroke = strokes[i];
+    if (!isStoredStroke(stroke) || stroke.id !== read.strokes[i]!.id) return null;
+  }
+  return strokes as StoredInkStroke[];
+}
+
 let canvasIds = 0;
 
 export function newNodeId(prefix = "n"): string {
@@ -135,4 +240,63 @@ export function removeEdgePatch(doc: CanvasDocument, id: string): Extract<Canvas
   const at = doc.edges.findIndex((edge) => edge.id === id);
   if (at < 0) return null;
   return { kind: "remove-edge", before: cloneEdge(doc.edges[at]!), after: null, at };
+}
+
+/**
+ * La toppa che aggiunge `record` in fondo ai tratti del livello `layer` (il
+ * livello nasce se non c'è). `layers` sono i livelli che il nucleo legge
+ * nello stesso testo di `doc` (`CanvasCore.inkLayers()`). `null` se il
+ * livello non lo accetta: la scheda non c'è, il nucleo dice il livello
+ * estraneo, o ha già un tratto con quell'id.
+ */
+export function addStrokePatch(
+  doc: CanvasDocument,
+  layers: readonly CanvasInkLayer[],
+  layer: LayerRef,
+  record: StoredInkStroke,
+): InkPatch | null {
+  const strokes = writableStrokes(doc, layers, layer);
+  if (!strokes || !isStoredStroke(record) || strokes.some((stroke) => stroke.id === record.id)) return null;
+  return { kind: "ink", layer: cloneLayerRef(layer), at: strokes.length, before: null, after: cloneStroke(record) };
+}
+
+/**
+ * La toppa che toglie il tratto `id` dal livello `layer`, con la sua
+ * posizione. `null` se il tratto non c'è o il nucleo dice il livello
+ * estraneo.
+ */
+export function eraseStrokePatch(
+  doc: CanvasDocument,
+  layers: readonly CanvasInkLayer[],
+  layer: LayerRef,
+  id: string,
+): InkPatch | null {
+  return eraseStrokePatches(doc, layers, layer, [id])?.[0] ?? null;
+}
+
+/**
+ * Le toppe che tolgono i tratti `ids` dal livello `layer`, nell'ordine dato:
+ * una passata di gomma, un commit solo. Ogni toppa porta la posizione che il
+ * tratto ha dopo le cancellazioni prima di lei (come `erase_strokes` del
+ * nucleo), così le toppe si applicano in fila e l'inversa rimette ogni tratto
+ * al suo posto. `null` se un id non c'è o è ripetuto, o il nucleo dice il
+ * livello estraneo; una lista vuota per `ids` vuoto.
+ */
+export function eraseStrokePatches(
+  doc: CanvasDocument,
+  layers: readonly CanvasInkLayer[],
+  layer: LayerRef,
+  ids: readonly string[],
+): InkPatch[] | null {
+  const strokes = writableStrokes(doc, layers, layer);
+  if (!strokes) return null;
+  const remaining = [...strokes];
+  const patches: InkPatch[] = [];
+  for (const id of ids) {
+    const at = remaining.findIndex((stroke) => stroke.id === id);
+    if (at < 0) return null;
+    patches.push({ kind: "ink", layer: cloneLayerRef(layer), at, before: cloneStroke(remaining[at]!), after: null });
+    remaining.splice(at, 1);
+  }
+  return patches;
 }
