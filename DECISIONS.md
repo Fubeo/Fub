@@ -2101,3 +2101,5 @@ La più recente in cima: data · piano · decisione · perché.
   sono `Invalid`, e un campo della radice che non conosce (anche `fub:ink`) è
   `Invalid` invece di sparire · i tratti liberi di un frammento non si perdono in
   silenzio; T24 li incolla con le operazioni dell'inchiostro.
+- 2026-11-14 · T20 · `from_outline` si dispone di serie verso destra (`right`), non verso il basso: lo chiedono i compiti 02 e 19 del corpus, che sono come un modello scrive una scaletta · i compiti sono il riferimento del piano per la forma attesa.
+- 2026-11-14 · T20 · L'esito di `canvas.apply` porta sempre `notes` e `notes_omitted` (campi aggiunti): un client che rifiuta i campi sconosciuti li vedrebbe, ma i client di Fub (GUI, CLI, MCP) li leggono o li ignorano · ciò che l'importazione perde si dice sempre, anche quando è niente.

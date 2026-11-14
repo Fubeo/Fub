@@ -1605,7 +1605,7 @@ passa su almeno 15 coppie; il compito del corpus con Mermaid non ha
 `needs`; `dependency_invariant` passa senza cambiare.
 Prova: scripts/check.sh --rapido; cargo test -p fub-canvas-core; cargo
 test -p fub-abi --test dependency_invariant
-Stato: [ ] da fare
+Stato: [x] fatto · coder/lic-t20 (c7ea3035c, Opus), unito in 2c5bc90ca, check rapido verde 35 passi · `import/{mermaid,outline}.rs`, `ops/import.rs`; 21 coppie in `canvas-import/`; i compiti 02, 03 e 19 senza needs; `Compiled` ha `notes` (al più 100) e `notes_omitted`, e `canvas.apply` li mette sempre nell'esito; tetti in più: 10 000 archi, 64 livelli di annidamento, i gruppi contano nei 2000; `from_outline` di serie verso `right`; un rientro dispari arrotonda per difetto con la nota `indent_rounded`; le regole stanno in `docs/reference/canvas-import.md`
 
 ## T21 · L'anteprima
 
