@@ -2058,7 +2058,7 @@ chiudono il gesto una volta sola e le schede tornano vive; S3 non cambia
 numeri; `scripts/check.sh --rapido` verde.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/canvas/engine-touch.test.ts
-Stato: [ ] da fare
+Stato: [~] coder/n6-t20a (e426ab8d4, Haiku), unito in b5d4bf14c, check rapido verde · spostamento, trascinamento, tratto e menu radiale si chiudono una volta sola con cattura persa, movimento senza tasto e blur (21 casi in `engine-lost-release.test.ts`); il radiale lo chiude il motore con `close()`. S3 non misurabile in locale: WebKitWebDriver sotto Xvfb dà «move target out of bounds» anche prima di T20a (1280×800 e 1920×1200, due giri ciascuno); si misura sul runner con la CI completa del ramo
 
 ## T20b · Il rettangolo che sceglie
 
