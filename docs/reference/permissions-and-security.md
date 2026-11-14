@@ -387,9 +387,18 @@ diagnostici devono:
 - non diventare canali di esportazione invisibili.
 
 Il file di log della macchina nasce `0600` su Unix, e uno di prima più
-aperto si stringe alla riapertura (`fub_kernel::log::FileSink`). Gli errori
-della rete dell'host nominano l'indirizzo senza credenziali, query e
-frammento (`fub_host::net`), perché arrivano al log e al plugin.
+aperto si stringe alla riapertura (`fub_kernel::log::FileSink`); se non si
+lascia stringere, il log si apre lo stesso e lo scrive nella sua prima riga.
+Gli errori della rete dell'host nominano l'indirizzo letto dal parser, senza
+credenziali, query e frammento, e il motivo con parole fisse, mai il testo
+dell'errore di trasporto; un indirizzo che non si legge non si mostra
+(`fub_host::net`), perché arrivano al log e al plugin.
+
+I file di stato della macchina che devono essere regolari (il lock dello
+scrittore del vault, il lock del sync, il file degli abbinamenti del
+clipper) si aprono con `fub_host::regular_file::open_regular`: il
+collegamento al posto del file non si segue, una FIFO non blocca, e il
+controllo vale sul file aperto, non su un path guardato prima.
 
 ## Documenti ostili
 
@@ -400,11 +409,12 @@ lettura, mai una pila o una memoria esaurite.
 - `.odt`: annidamento XML fino a 256 elementi (`fub_format_rich::odt`).
 - `.docx`: allineamento delle revisioni con un budget di lavoro e di memoria,
   senza ricorsione; al più 16 Mi caratteri di testo nell'inventario.
-- `.xlsx`: al più 4 milioni di nodi XML tenuti in memoria per parte (le righe
-  che vanno al flusso non contano), righe e colonne non oltre quelle di un
-  foglio.
-- InkML: nodi, punti per tratto e valori per punto contati durante la
-  lettura; un colore scritto è sempre `#rrggbb`.
+- `.xlsx`: al più 2 GiB stimati di albero XML tenuto in memoria per parte
+  (nodi, nomi, attributi e testi; le righe che vanno al flusso non contano),
+  righe e colonne non oltre quelle di un foglio.
+- InkML: nodi (al più 64 per tratto ammesso), punti per tratto e valori per
+  punto contati durante la lettura; la parte più grande che Fub scrive si
+  rilegge; un colore scritto è sempre `#rrggbb`.
 - Arene del modello e della UI: ricostruite fino a 64 livelli
   (`fub_abi::arena::MAX_ARENA_DEPTH`), oltre è `ArenaError::TooDeep`.
 - SVG pulito per il web: senza script, gestori `on*`, URL `javascript:` e, in
@@ -413,6 +423,8 @@ lettura, mai una pila o una memoria esaurite.
   identificatori, e mai `title` o `source_file` del file.
 - Intenti di rinomina e lease di lettura recintano di nuovo i loro path prima
   di comporli con la radice del vault.
+- L'append del kernel rifiuta symlink, hardlink e target non regolari, e
+  conta i nomi del file sull'handle aperto, non riaprendo il path.
 
 ## Servizi remoti
 
@@ -420,8 +432,16 @@ lettura, mai una pila o una memoria esaurite.
   derivata dalla passphrase del vault con PBKDF2-HMAC-SHA256: le buste e le
   password degli account nuove usano `ver=2`, 600.000 iterazioni; quelle di
   `ver=1`, 210.000, si riaprono ancora. Ogni altra coppia di versione e
-  iterazioni si rifiuta prima di derivare, e nessuna derivazione supera
-  1.000.000 di iterazioni (`fub_services::crypto`, `fub_host::remote`).
+  iterazioni si rifiuta dentro la derivazione stessa, per ogni chiamante, e
+  nessuna derivazione supera 1.000.000 di iterazioni
+  (`fub_services::crypto::derive_kek`, `fub_host::remote::derive_vault_kek`).
+- Transizione dei parametri: il server accetta, al caricamento della chiave
+  e all'invito, ogni coppia che conosce (`ver=1`/210.000 e `ver=2`/600.000),
+  così client vecchi e nuovi parlano allo stesso server; una coppia
+  sconosciuta è `400 unsupported wrap version`. Un client che riceve quel
+  rifiuto, o quelli dei server di prima (`stale wrap version`,
+  `bad wrap version`, `bad wrap iterations`), mostra un errore tipizzato
+  (`host.sync.kdf_unsupported`) che chiede di aggiornare Fub o il server.
 - Ruoli `Owner > Admin > Writer > Reader`, nel sync e nei siti: chi non è
   Owner concede, toglie o cambia soltanto ruoli sotto il proprio
   (`fub_services::acl::may_grant`, `check_revoke`).
