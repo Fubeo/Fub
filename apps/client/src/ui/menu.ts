@@ -858,14 +858,13 @@ function renderMenu(
       label.textContent = item.label;
       b.append(label);
       // Una riga sola: la spiegazione sta a destra, in grigio, dove non c'è una
-      // scorciatoia; con la scorciatoia la sente soltanto chi ascolta. Intera,
-      // la dice il suggerimento del puntatore.
+      // scorciatoia; con la scorciatoia la sente soltanto chi ascolta. Il
+      // perché di una voce spenta si vede sempre.
       if (item.description) {
         const description = document.createElement("span");
-        description.className = item.hint ? "menu-description menu-quiet" : "menu-description";
+        description.className = item.hint && !item.disabled ? "menu-description menu-quiet" : "menu-description";
         description.textContent = item.description;
         b.append(description);
-        b.title = item.description;
       }
       if (item.choice) {
         const check = document.createElement("span");
@@ -1265,7 +1264,10 @@ function renderMenu(
     pressing = true;
     button.classList.add("menu-pressed");
     if (bar !== null && quick.includes(button)) bar.classList.add("menu-pressed");
-    setTimeout(done, PRESS_MS);
+    // Esc durante la spunta chiude il menu e annulla il gesto: il tempo muore
+    // con il menu.
+    const pressTimer = setTimeout(done, PRESS_MS);
+    lifetime.add(() => clearTimeout(pressTimer));
   }
   /// Le voci nuove: la ricerca si rifà, altrimenti il fuoco resta alla voce
   /// che aveva, e il sottomenu aperto resta aperto se la sua voce c'è ancora,
