@@ -1422,7 +1422,7 @@ async function main() {
           await session.close();
           // Fub ha un'istanza sola: l'app di questo scenario deve finire prima
           // che parta la successiva. Ipotesi per S9 dopo S3 (T46), che ha dato
-          // «UND_ERR_HEADERS_TIMEOUT» in due giri su quattro: la nuova cede alla
+          // «UND_ERR_HEADERS_TIMEOUT» due volte su sei: la nuova cede alla
           // vecchia e il driver aspetta una finestra che non arriva.
           await pause(3_000);
         }
