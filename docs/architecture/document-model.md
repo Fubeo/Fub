@@ -235,7 +235,10 @@ mostrano. Ciò che succede a quel testo quando un gesto tocca la sessione:
   una risposta esplicita la nota torna aperta dov'era. Un fatto nuovo ritira
   la domanda (il segnale di ritiro di `platform/confirm`) col suo motivo: un
   cambio da fuori la chiude come «Tienila aperta», e il salvataggio tentato
-  subito trova il disco cambiato e mostra la barra del conflitto; una
+  subito trova il disco cambiato e mostra la barra del conflitto (se non
+  parte, lo dice l'avviso del salvataggio fallito); una lettura del disco
+  fallita, un'eco tardiva o una rilettura che non cambia il testo la lasciano
+  chiedere; una
   rinomina da fuori riapre la nota col nome nuovo; un'eliminazione da fuori
   non riapre niente, perché il testo è già nell'avviso con «Ricrea»; una
   seconda domanda sulla stessa nota prende il posto della prima, che non fa
