@@ -1,0 +1,7 @@
+# Tutte le note, senza filtro.
+version: 1
+views:
+  - name: Tutte
+    type: list
+    filters: all   # nessun filtro, per ora
+    limit: 20

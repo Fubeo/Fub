@@ -57,7 +57,7 @@ import {
   type CanvasPatch,
   type InkPatch,
 } from "./operation";
-import type { CanvasDocument, CanvasEdge, CanvasNode } from "./model";
+import { DEFAULT_EDGE_END, edgeEnd, type CanvasDocument, type CanvasEdge, type CanvasNode } from "./model";
 import {
   CanvasCoreError,
   canvasCoreReady,
@@ -2324,7 +2324,7 @@ export class CanvasEngine {
             enabled: writable,
             run: then(() => {
               const next = { ...current, fromNode: current.toNode, toNode: current.fromNode };
-              for (const [from, to] of [["fromSide", "toSide"], ["fromEnd", "toEnd"]] as const) {
+              for (const [from, to] of [["fromSide", "toSide"]] as const) {
                 const a = current[from];
                 const b = current[to];
                 if (b === undefined) delete next[from];
@@ -2332,6 +2332,15 @@ export class CanvasEngine {
                 if (a === undefined) delete next[to];
                 else (next as Record<string, unknown>)[to] = a;
               }
+              // Le punte restano sulla scheda a cui stavano: quella della fine
+              // (di serie la freccia) diventa quella dell'inizio, e viceversa.
+              // Si scrive solo ciò che non è di serie, come nel file.
+              const startEnd = edgeEnd(current, "to");
+              const finishEnd = edgeEnd(current, "from");
+              if (startEnd === DEFAULT_EDGE_END.from) delete next.fromEnd;
+              else next.fromEnd = startEnd;
+              if (finishEnd === DEFAULT_EDGE_END.to) delete next.toEnd;
+              else next.toEnd = finishEnd;
               const patch = upsertEdgePatch(this.#doc!, next);
               if (patch) this.#commit([patch], "input");
             }),
@@ -2982,10 +2991,8 @@ export class CanvasEngine {
       line.setAttribute("d", d);
       if (edge.color) line.setAttribute("stroke", PRESET_FILL[edge.color] ?? edge.color);
       group.append(hit, line);
-      for (const [endpoint, point, end] of [
-        ["from", a, edge.fromEnd], ["to", b, edge.toEnd],
-      ] as const) {
-        if (end !== "arrow") continue;
+      for (const [endpoint, point] of [["from", a], ["to", b]] as const) {
+        if (edgeEnd(edge, endpoint) !== "arrow") continue;
         const angle = Math.atan2(b.y - a.y, b.x - a.x) + (endpoint === "from" ? Math.PI : 0);
         const dx = Math.cos(angle) * 10;
         const dy = Math.sin(angle) * 10;
