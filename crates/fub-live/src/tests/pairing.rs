@@ -138,7 +138,10 @@ async fn too_many_wrong_secrets_spend_the_qr() {
     for _ in 1..crate::limits::MAX_SECRET_FAILURES {
         let closed = attempt(wrong.clone()).await;
         assert_eq!(closed.code, Some(4004));
-        assert_eq!(closed.detail.as_deref(), Some("the pairing secret is wrong"));
+        assert_eq!(
+            closed.detail.as_deref(),
+            Some("the pairing secret is wrong")
+        );
         assert!(live.host.pairing().is_some(), "the QR still stands");
     }
     let closed = attempt(wrong.clone()).await;

@@ -130,16 +130,16 @@ fn reveal(path: &Path) -> bool {
 fn reveal(path: &Path) -> bool {
     if let Some(mut command) = quiet("dbus-send") {
         command
-        .args([
-            "--session",
-            "--print-reply",
-            "--dest=org.freedesktop.FileManager1",
-            "--type=method_call",
-            "/org/freedesktop/FileManager1",
-            "org.freedesktop.FileManager1.ShowItems",
-        ])
-        .arg(format!("array:string:{}", file_uri(path)))
-        .arg("string:");
+            .args([
+                "--session",
+                "--print-reply",
+                "--dest=org.freedesktop.FileManager1",
+                "--type=method_call",
+                "/org/freedesktop/FileManager1",
+                "org.freedesktop.FileManager1.ShowItems",
+            ])
+            .arg(format!("array:string:{}", file_uri(path)))
+            .arg("string:");
         if launched(command) {
             return true;
         }

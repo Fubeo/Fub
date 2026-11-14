@@ -487,10 +487,7 @@ impl ArtifactSink for DirectorySink {
                     .set_permissions(&a.of_side_name, existing.permissions());
             }
         }
-        if let Err(and) = a
-            .parent
-            .rename(&a.of_side_name, &a.parent, &a.dest_name)
-        {
+        if let Err(and) = a.parent.rename(&a.of_side_name, &a.parent, &a.dest_name) {
             return Err(failure(and, "rename to destination failed"));
         }
         if let Some(identity) = identity_at(&a.dest) {
@@ -530,7 +527,9 @@ fn create_temporary(
     }
     #[cfg(not(unix))]
     let _ = existing;
-    parent.open_with(name, &options).map(cap_std::fs::File::into_std)
+    parent
+        .open_with(name, &options)
+        .map(cap_std::fs::File::into_std)
 }
 
 /// Un sink che se ne va con degli artefatti ancora aperti non lascia i loro

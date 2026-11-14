@@ -1282,8 +1282,7 @@ fn the_rollback_from_the_system_trash_stays_inside_the_vault() {
     let vault_dir = tempfile::tempdir().unwrap();
     let root = Utf8PathBuf::from_path_buf(vault_dir.path().to_owned()).unwrap();
     let system_trash = tempfile::tempdir().unwrap();
-    let destination =
-        Utf8PathBuf::from_path_buf(system_trash.path().join("Nota.md")).unwrap();
+    let destination = Utf8PathBuf::from_path_buf(system_trash.path().join("Nota.md")).unwrap();
     let elsewhere = tempfile::tempdir().unwrap();
     std::fs::create_dir(root.join("dir")).unwrap();
     std::fs::write(root.join("dir/Nota.md"), b"# Nota\n").unwrap();
@@ -1295,7 +1294,10 @@ fn the_rollback_from_the_system_trash_stays_inside_the_vault() {
         .unwrap()
         .invoke_os(&MovesTo(destination.clone()))
         .unwrap();
-    assert!(matches!(moved, fub_kernel::vault::CompletedOsTrashMove::Os(_)));
+    assert!(matches!(
+        moved,
+        fub_kernel::vault::CompletedOsTrashMove::Os(_)
+    ));
 
     // La cartella rimasta vuota diventa un collegamento verso fuori.
     std::fs::remove_dir(root.join("dir")).unwrap();
@@ -1315,8 +1317,7 @@ fn the_rollback_from_the_system_trash_puts_the_note_back() {
     let vault_dir = tempfile::tempdir().unwrap();
     let root = Utf8PathBuf::from_path_buf(vault_dir.path().to_owned()).unwrap();
     let system_trash = tempfile::tempdir().unwrap();
-    let destination =
-        Utf8PathBuf::from_path_buf(system_trash.path().join("Nota.md")).unwrap();
+    let destination = Utf8PathBuf::from_path_buf(system_trash.path().join("Nota.md")).unwrap();
     std::fs::create_dir(root.join("dir")).unwrap();
     std::fs::write(root.join("dir/Nota.md"), b"# Nota\n").unwrap();
 
@@ -1328,10 +1329,12 @@ fn the_rollback_from_the_system_trash_puts_the_note_back() {
         .invoke_os(&MovesTo(destination.clone()))
         .unwrap();
     moved.rollback().unwrap();
-    assert_eq!(std::fs::read(root.join("dir/Nota.md")).unwrap(), b"# Nota\n");
+    assert_eq!(
+        std::fs::read(root.join("dir/Nota.md")).unwrap(),
+        b"# Nota\n"
+    );
     assert!(!destination.exists());
 }
-
 
 /// Un altro processo sostituisce una voce del cestino appena censita: la
 /// scrive di nuovo allo stesso nome, con un altro contenuto.
@@ -1380,7 +1383,9 @@ impl VaultStorage for ReplacedAfterCensus {
         // subito prima di distruggere: il censimento è finito, e l'altro
         // processo arriva adesso.
         if path.as_str().contains(".trash/One")
-            && self.replaced.swap(true, std::sync::atomic::Ordering::SeqCst)
+            && self
+                .replaced
+                .swap(true, std::sync::atomic::Ordering::SeqCst)
         {
             self.inner
                 .write(path, b"replaced by another process")

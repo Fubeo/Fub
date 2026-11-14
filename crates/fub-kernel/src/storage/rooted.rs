@@ -869,7 +869,8 @@ impl VaultStorage for RootedFsStorage {
         self.with_lock(to, || {
             // La sorgente è del sistema e si apre per nome; la destinazione
             // passa dalla capability, come ogni scrittura del vault.
-            let source_dir = Dir::open_ambient_dir(source_parent.as_std_path(), ambient_authority())?;
+            let source_dir =
+                Dir::open_ambient_dir(source_parent.as_std_path(), ambient_authority())?;
             let source_name = Path::new(source_name);
             let (to_parent, to_name) = self.parent_dir_and_name(to)?;
             #[cfg(unix)]
@@ -1491,7 +1492,10 @@ mod tests {
         assert!(storage
             .move_in_no_replace(&trashed, &root.join("dir/Nota.md"))
             .is_err());
-        assert!(!elsewhere.join("Nota.md").exists(), "the file left the vault");
+        assert!(
+            !elsewhere.join("Nota.md").exists(),
+            "the file left the vault"
+        );
         assert_eq!(std::fs::read(&trashed).unwrap(), b"# Nota\n");
 
         // Una destinazione occupata resta com'era, e la sorgente pure.
@@ -1513,7 +1517,10 @@ mod tests {
         storage
             .move_in_no_replace(&trashed, &root.join("sotto/Nota.md"))
             .unwrap();
-        assert_eq!(std::fs::read(root.join("sotto/Nota.md")).unwrap(), b"# Nota\n");
+        assert_eq!(
+            std::fs::read(root.join("sotto/Nota.md")).unwrap(),
+            b"# Nota\n"
+        );
         assert!(!trashed.exists());
     }
 
