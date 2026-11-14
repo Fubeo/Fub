@@ -395,6 +395,20 @@ L'app riceve soltanto una copia del documento in una cartella privata 0700,
 che si cancella sempre (vedi
 [Anteprime con la CLI](craft-formats.md#anteprime-con-la-cli)).
 
+## Programmi del sistema
+
+«Mostra nella cartella del sistema», «Apri con un'altra app» e «Stampa…»
+passano un percorso a un programma del sistema (`xdg-open` e `dbus-send` su
+Linux, `open` su macOS, `explorer.exe` su Windows): come argomento, mai
+attraverso una shell, e per percorso assoluto, mai cercato nel `PATH`
+(`crates/fub-app/src/print.rs`). Su Unix il programma si prende dalle
+cartelle che scrive l'amministratore (`/usr/bin`, `/bin`, `/usr/local/bin` e
+quelle di NixOS e Guix; su macOS solo `/usr/bin`), ed è buono se è un file
+regolare, eseguibile e non riscrivibile dal gruppo o dagli altri; su Windows
+viene dalla cartella di sistema (`SystemRoot`). Se non c'è, l'esito è
+«nessun programma» e la shell lo dice. Un file del vault che si eseguirebbe
+aprendolo si mostra e non si apre.
+
 ## Supply chain
 
 - sorgenti delle dipendenze limitate dalla policy;

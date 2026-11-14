@@ -5,7 +5,8 @@
 //! il vault: niente `..`, niente percorsi assoluti, e un collegamento che porta
 //! fuori si riconosce dopo averlo seguito (`fub_host::vault_path`, la stessa
 //! regola di «Apri con» un'app Craft). Il programma si chiama con il
-//! percorso come argomento, mai attraverso una shell (`print.rs`).
+//! percorso come argomento, mai attraverso una shell, e per percorso assoluto
+//! da una cartella del sistema, mai cercato nel `PATH` (`print.rs`).
 //!
 //! Mostrare apre il file manager sulla cartella della voce, con la voce
 //! selezionata dove il sistema lo sa fare: `open -R` su macOS,
@@ -23,7 +24,7 @@ use std::process::{Command, Stdio};
 use fub_abi::PluginError;
 use fub_host::vault_path::inside;
 
-use crate::print::{launched, opener};
+use crate::print::{launched, opener, system_program};
 
 /// Com'è andata.
 #[derive(Debug, PartialEq, serde::Serialize)]
@@ -55,7 +56,7 @@ pub(crate) fn hand_over(
         if runs(&path) {
             return Ok(RevealOutcome::Executable);
         }
-        return Ok(outcome(launched(opener(&path))));
+        return Ok(outcome(opener(&path).is_some_and(launched)));
     }
     Ok(outcome(reveal(&path)))
 }
@@ -93,19 +94,24 @@ fn executable(_path: &Path) -> bool {
     false
 }
 
-fn quiet(mut command: Command) -> Command {
+/// Il programma del sistema `name`, per percorso assoluto e muto; niente se
+/// il sistema non ce l'ha nelle sue cartelle.
+fn quiet(name: &str) -> Option<Command> {
+    let mut command = Command::new(system_program(name)?);
     command
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null());
-    command
+    Some(command)
 }
 
 #[cfg(target_os = "macos")]
 fn reveal(path: &Path) -> bool {
-    let mut command = Command::new("open");
+    let Some(mut command) = quiet("open") else {
+        return false;
+    };
     command.arg("-R").arg(path);
-    launched(quiet(command))
+    launched(command)
 }
 
 #[cfg(target_os = "windows")]
@@ -113,15 +119,17 @@ fn reveal(path: &Path) -> bool {
     use std::os::windows::process::CommandExt;
     // `explorer.exe` legge `/select,` e il percorso come un argomento solo,
     // con le virgolette sue: la quotatura di `arg` lo spezzerebbe.
-    let mut command = Command::new("explorer.exe");
+    let Some(mut command) = quiet("explorer.exe") else {
+        return false;
+    };
     command.raw_arg(format!("/select,\"{}\"", path.display()));
-    launched(quiet(command))
+    launched(command)
 }
 
 #[cfg(not(any(target_os = "macos", target_os = "windows")))]
 fn reveal(path: &Path) -> bool {
-    let mut command = Command::new("dbus-send");
-    command
+    if let Some(mut command) = quiet("dbus-send") {
+        command
         .args([
             "--session",
             "--print-reply",
@@ -132,8 +140,9 @@ fn reveal(path: &Path) -> bool {
         ])
         .arg(format!("array:string:{}", file_uri(path)))
         .arg("string:");
-    if launched(quiet(command)) {
-        return true;
+        if launched(command) {
+            return true;
+        }
     }
     // Senza un file manager che sappia selezionare, la cartella della voce.
     let folder = if path.is_dir() {
@@ -141,7 +150,7 @@ fn reveal(path: &Path) -> bool {
     } else {
         path.parent().unwrap_or(path)
     };
-    launched(opener(folder))
+    opener(folder).is_some_and(launched)
 }
 
 /// `file://` e il percorso, con in `%XX` ogni byte che non sia lettera, cifra,
