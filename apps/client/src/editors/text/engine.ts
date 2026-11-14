@@ -27,13 +27,11 @@ import {
 } from "@codemirror/view";
 import {
   bracketMatching,
-  defaultHighlightStyle,
   foldAll,
   foldGutter,
   foldKeymap,
   indentOnInput,
   indentUnit,
-  syntaxHighlighting,
   syntaxTree,
   unfoldAll,
 } from "@codemirror/language";
@@ -1001,7 +999,6 @@ export class TextEngine {
       dropCursor(),
       EditorState.allowMultipleSelections.of(true),
       indentOnInput(),
-      syntaxHighlighting(defaultHighlightStyle, { fallback: true }),
       bracketMatching(),
       autocompletion(),
       rectangularSelection(),

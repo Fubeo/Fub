@@ -249,24 +249,16 @@ lavori).
 | 7.201 righe | Live | 5,7 · 8,4 · 38,0 ms | 3,0 · 3,9 · 4,2 ms | 6,8 · 11,5 · 29,1 ms |
 | 7.201 righe | Blocchi | 5,5 · 9,6 · 24,2 ms | 3,1 · 4,4 · 5,2 ms | 7,6 · 11,9 · 37,8 ms |
 
-**Il budget non è ancora rispettato sulla nota grande.** La Sorgente, che non
-fa altro che il lavoro di CodeMirror e della sessione del documento, sta già
-intorno ai 4 ms (da 2,7 a 5,6 da un giro all'altro, con lo stesso codice), e
-la Live e i Blocchi le stanno sopra di circa un millisecondo e mezzo (prima
-erano tre). Fra un giro e l'altro la stessa nota varia di più di quanto valga
-una correzione: il numero da guardare è la distanza dalla Sorgente, non la
-cifra di un giro solo.
+**Il budget non è ancora rispettato sulla nota grande.** La Sorgente, che fa
+soltanto il lavoro di CodeMirror e della sessione, sta già intorno ai 4 ms, e
+fra un giro e l'altro la stessa nota varia più di una correzione: il numero da
+guardare è la distanza dalla Sorgente, non la cifra di un giro solo.
 
-Sui core P (sei giri alternati, carico da 3,6 a 9,7) la nota di 7.201 righe dà, mediana · novantesimo: Sorgente 3,9 ·
-5,9 ms, Live 4,9 · 9,8 (prima 6,3 · 10,8), Blocchi 5,5 · 10,5 (prima 6,6 ·
-10,5). Le righe nascoste tolte dal campo dei blocchi (qui sotto) sono venute
-dopo: con carico da 10 a 25 la Sorgente fa 3,7 · 4,8, la Live 6,6 · 11,4
-(prima 8,8 · 12,3), i Blocchi 7,1 · 12,8 (prima 8,6 · 13,2). Della distanza
-che resta dalla Sorgente, il profilo di una battuta nella Live mostra
-soprattutto l'evidenziazione della sintassi di CodeMirror, che riceve il tratto
-visibile spezzato dai blocchi resi in sei pezzi e scorre l'albero dall'inizio
-per ognuno (0,56 ms contro 0,14 della Sorgente), e il confronto delle
-decorazioni che restano nel campo dei blocchi (i 400 widget di blocco).
+Sui core P (14 novembre, sei giri alternati; contano i tre con carico da 23 a
+49, gli altri arrivano a 101) la nota di 7.201 righe dà di mediana: Sorgente da
+3,4 a 4,9 ms, Live da 4,4 a 10,1 (prima da 6,4 a 7,8), Blocchi da 5,1 a 20,1
+(prima da 6,7 a 10,2). Sopra la Sorgente restano i widget di CodeMirror (qui
+sotto), le decorazioni in riga, il campo dei blocchi e i segni (0,3·0,3·0,2).
 
 Una battuta lavora soltanto vicino alle posizioni del cambio, mai con un giro
 sui blocchi di primo livello:
@@ -305,7 +297,15 @@ sui blocchi di primo livello:
   zero, `cm-markdown-gap`) non stanno nel campo dei blocchi ma in un plugin
   della vista che dà soltanto quelle del tratto visibile: CodeMirror confronta
   due volte a ogni aggiornamento tutte le decorazioni a punto della vista, e
-  prima erano 1.600 sulla nota grande (fino a 1,3 ms per battuta).
+  prima erano 1.600 sulla nota grande (fino a 1,3 ms per battuta);
+- **la sintassi** (`theme.ts`, `highlightVisible`): i blocchi resi spezzano il
+  tratto visibile (sette pezzi nella Live), e `syntaxHighlighting` scorreva
+  l'albero dall'inizio per ognuno; il nostro plugin unisce i pezzi a meno di
+  4.000 caratteri in una passata e taglia ai pezzi, con le classi di CodeMirror
+  (`theme.test.ts`). Da 0,60 a 0,24 ms nella Live;
+- **il rientro sospeso** (`hanging.ts`) scorre una volta il tratto visibile e a
+  una battuta non rimisura se vista, altezze e prefissi restano (0,27 → 0,07);
+- **la guardia dei segni** (`format-toggle.ts`) rilegge una riga a battuta.
 
 Un blocco tornato tiene il suo widget: il suo `eq` non guarda la posizione, e
 dopo l'aggiornamento della vista le coordinate `data-md-*` del DOM tornano al
@@ -327,8 +327,9 @@ Resta proporzionale alla nota il lavoro che la Sorgente fa uguale:
   battuta lo ripassa (`lineFeeds`, l'operazione applicata);
 - **la selezione del DOM** che CodeMirror riscrive.
 
-Resta proporzionale alla parte visibile, a ogni battuta, il rientro sospeso
-delle voci (`hanging.ts`).
+Resta di CodeMirror il lavoro sui widget di blocco, che un plugin della vista
+non può dare: `RangeSet.compare` li confronta tutti due volte a ogni
+aggiornamento (0,25 ms sulla nota grande).
 
 Siccome questo banco non sta nella CI, le guardie in CI contano il lavoro di
 una battuta: `render-incremental.test.ts` per la resa e i blocchi della Live
