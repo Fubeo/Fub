@@ -9,7 +9,6 @@ import {
   filterByText,
   linePlace,
   lineTarget,
-  neighbour,
   openWay,
   pillPose,
   previewFits,
@@ -18,73 +17,63 @@ import {
 
 describe("il prefisso sceglie il modo", () => {
   it("senza prefisso il modo resta quello che è, e il testo è tutto domanda", () => {
-    expect(read("files", "nota")).toEqual({ mode: "files", text: "nota" });
-    expect(read("search", "banco visivo")).toEqual({ mode: "search", text: "banco visivo" });
-    expect(read("templates", "")).toEqual({ mode: "templates", text: "" });
+    expect(read("all", "nota")).toEqual({ mode: "all", text: "nota" });
+    expect(read("people", "Anna Bianchi")).toEqual({ mode: "people", text: "Anna Bianchi" });
+    expect(read("all", "")).toEqual({ mode: "all", text: "" });
   });
 
   it("ogni prefisso porta nel suo modo e non resta nella domanda", () => {
-    expect(read("files", ">apri")).toEqual({ mode: "commands", text: "apri" });
-    expect(read("files", "?testo")).toEqual({ mode: "search", text: "testo" });
-    expect(read("files", "@Titoli")).toEqual({ mode: "headings", text: "Titoli" });
-    expect(read("files", "#tema")).toEqual({ mode: "tags", text: "tema" });
-    expect(read("files", ":12")).toEqual({ mode: "line", text: "12" });
+    expect(read("all", ">apri")).toEqual({ mode: "commands", text: "apri" });
+    expect(read("all", "#tema")).toEqual({ mode: "tags", text: "tema" });
+    expect(read("all", "@Anna")).toEqual({ mode: "people", text: "Anna" });
+    expect(read("all", "/tabella")).toEqual({ mode: "blocks", text: "tabella" });
+    expect(read("all", "?tasti")).toEqual({ mode: "help", text: "tasti" });
+    expect(read("all", ":12")).toEqual({ mode: "line", text: "12" });
+  });
+
+  it("un prefisso seguito da niente porta nel modo, con la domanda vuota", () => {
+    expect(read("all", ">")).toEqual({ mode: "commands", text: "" });
+    expect(read("all", "?")).toEqual({ mode: "help", text: "" });
+    expect(read("all", "@")).toEqual({ mode: "people", text: "" });
+    expect(read("all", "/")).toEqual({ mode: "blocks", text: "" });
   });
 
   it("vale da ogni modo, anche da quello che il prefisso nomina già", () => {
-    expect(read("commands", "@a")).toEqual({ mode: "headings", text: "a" });
+    expect(read("commands", "@a")).toEqual({ mode: "people", text: "a" });
     expect(read("tags", "#tema")).toEqual({ mode: "tags", text: "tema" });
   });
 
   it("conta solo in testa: più in là è testo", () => {
     expect(read("line", "12:5")).toEqual({ mode: "line", text: "12:5" });
-    expect(read("files", "a>b")).toEqual({ mode: "files", text: "a>b" });
-    expect(read("files", " #tema")).toEqual({ mode: "files", text: " #tema" });
+    expect(read("all", "a>b")).toEqual({ mode: "all", text: "a>b" });
+    // Un nome che comincia con `#` si scrive preceduto da uno spazio.
+    expect(read("all", " #tema")).toEqual({ mode: "all", text: " #tema" });
   });
 
   it("un prefisso solo non porta via quello che segue", () => {
-    expect(read("files", ">>")).toEqual({ mode: "commands", text: ">" });
+    expect(read("all", ">>")).toEqual({ mode: "commands", text: ">" });
   });
 
-  it("i file e i modelli non hanno prefisso, e nessun prefisso è di due modi", () => {
-    expect(PREFIX.files).toBeNull();
-    expect(PREFIX.templates).toBeNull();
+  it("«Tutto» non ha prefisso, e nessun prefisso è di due modi", () => {
+    expect(PREFIX.all).toBeNull();
     const written = MODES.map((mode) => PREFIX[mode]).filter((each): each is string => each !== null);
     expect(new Set(written).size).toBe(written.length);
     expect(written.every((each) => each.length === 1)).toBe(true);
   });
-});
 
-describe("il modo accanto", () => {
-  it("va avanti e indietro nell'ordine della fila", () => {
-    expect(neighbour("files", 1)).toBe("commands");
-    expect(neighbour("commands", -1)).toBe("files");
-  });
-
-  it("gira in tondo ai due capi", () => {
-    expect(neighbour("templates", 1)).toBe("files");
-    expect(neighbour("files", -1)).toBe("templates");
-  });
-
-  it("un giro intero torna al punto di partenza passando per tutti", () => {
-    const seen = [];
-    let mode = MODES[0]!;
-    do {
-      seen.push(mode);
-      mode = neighbour(mode, 1);
-    } while (mode !== MODES[0]);
-    expect(seen).toEqual(MODES);
+  it("la fila ha Tutto per primo e i sei ambiti più la riga", () => {
+    expect(MODES).toEqual(["all", "commands", "tags", "people", "blocks", "help", "line"]);
   });
 });
 
 describe("la memoria dei modi", () => {
   it("ogni modo ricorda la sua domanda, e solo la sua", () => {
     const memory = createMemory();
-    memory.remember("files", "nota");
+    memory.remember("all", "nota");
     memory.remember("commands", "apri");
-    expect(memory.recall("files")).toBe("nota");
+    expect(memory.recall("all")).toBe("nota");
     expect(memory.recall("commands")).toBe("apri");
-    expect(memory.recall("search")).toBe("");
+    expect(memory.recall("people")).toBe("");
   });
 
   it("l'ultima domanda sostituisce la precedente, anche vuota", () => {
@@ -96,28 +85,27 @@ describe("la memoria dei modi", () => {
 
   it("due memorie non si parlano", () => {
     const first = createMemory();
-    first.remember("files", "nota");
-    expect(createMemory().recall("files")).toBe("");
+    first.remember("all", "nota");
+    expect(createMemory().recall("all")).toBe("");
   });
 });
 
 describe("dove si apre", () => {
-  it("Invio qui, Mod-Invio dividendo, Maiusc-Invio in una linguetta", () => {
-    expect(openWay({}, true)).toBe("here");
-    expect(openWay({ ctrlKey: true }, true)).toBe("split");
-    expect(openWay({ metaKey: true }, true)).toBe("split");
-    expect(openWay({ shiftKey: true }, true)).toBe("tab");
+  it("Invio qui, Ctrl-Invio a lato, Maiusc-Invio in una linguetta", () => {
+    expect(openWay({})).toBe("here");
+    expect(openWay({ ctrlKey: true })).toBe("split");
+    expect(openWay({ metaKey: true })).toBe("split");
+    expect(openWay({ shiftKey: true })).toBe("tab");
   });
 
-  it("Alt-Invio apre una finestra solo dove ce n'è più d'una", () => {
-    expect(openWay({ altKey: true }, true)).toBe("window");
-    expect(openWay({ altKey: true }, false)).toBe("here");
-    expect(openWay({ altKey: true, ctrlKey: true }, false)).toBe("split");
+  it("Alt-Invio apre a lato finché la sbirciata non c'è, senza finestre", () => {
+    expect(openWay({ altKey: true })).toBe("split");
   });
 
-  it("di due modificatori vince la finestra, poi la divisione", () => {
-    expect(openWay({ altKey: true, ctrlKey: true, shiftKey: true }, true)).toBe("window");
-    expect(openWay({ ctrlKey: true, shiftKey: true }, true)).toBe("split");
+  it("di due modificatori vince Ctrl, poi Alt, poi Maiusc", () => {
+    expect(openWay({ altKey: true, ctrlKey: true, shiftKey: true })).toBe("split");
+    expect(openWay({ ctrlKey: true, shiftKey: true })).toBe("split");
+    expect(openWay({ altKey: true, shiftKey: true })).toBe("split");
   });
 });
 

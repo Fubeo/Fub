@@ -7,7 +7,6 @@ const world = vi.hoisted(() => {
     SearchSyntaxError,
     vault: "/vault" as string | null,
     recent: [] as string[],
-    searches: [] as string[],
     names: [] as string[],
     matches: { items: [] as { doc: string; snippet?: string; highlights?: unknown[]; occurrences?: { span: { start: number; end: number } }[] }[], total: 0 },
     asked: [] as unknown[],
@@ -15,11 +14,18 @@ const world = vi.hoisted(() => {
     askedVault: [] as (string | undefined)[],
     indexing: "idle",
     outline: [] as { level: number; text: string; span: { start: number; end: number } }[],
+    /// L'indice che non sa dare i titoli (un host che non risponde a `outline`).
+    outlineFails: false,
     tags: [] as { name: string; count: number }[],
     active: "Uno.md" as string | null,
     shown: { k: "doc", doc: "Uno.md" } as { k: string; doc?: string } | null,
     buffer: "prima\nseconda è\nterza" as string | undefined,
     specs: [] as unknown[],
+    /// Le persone (la cartella delle persone del vault) e la cartella stessa.
+    people: [] as string[],
+    folder: "Persone",
+    /// Le voci del «/» che la superficie sa fare, come le dà il catalogo.
+    slash: [] as { id: string; label: string; section: string; action: boolean }[],
   };
 });
 
@@ -32,6 +38,7 @@ vi.mock("../../../host/ipc", () => ({
     queryIndex: async (query: { kind: string; doc: string }, vault?: string) => {
       world.asked.push(query);
       world.askedVault.push(vault);
+      if (world.outlineFails) throw new Error("host fake: non so rispondere alla query outline");
       return { kind: "outline", value: world.outline };
     },
   },
@@ -59,9 +66,17 @@ vi.mock("../../../state/layout", () => ({
   activeDoc: () => world.active,
 }));
 vi.mock("../../../state/palette-host", () => ({ paletteHost: {} }));
+vi.mock("../../../state/people", () => ({
+  // Come la ricerca vera: le persone il cui nome contiene la domanda.
+  searchPeople: async (text: string) =>
+    world.people.filter((doc) => text === "" || doc.toLowerCase().includes(text.toLowerCase())),
+  peopleFolder: () => world.folder,
+}));
 vi.mock("../../../state/recent", () => ({
   existingRecentNotes: async () => world.recent,
-  recentSearches: () => world.searches,
+}));
+vi.mock("../../../panels/slash/entries", () => ({
+  slashCatalog: () => ({ listed: world.slash, colors: [] }),
 }));
 vi.mock("../../../state/store", () => ({
   // Le domande dei titoli nominano il vault aperto (FUB-001): come il vero.
@@ -87,53 +102,165 @@ vi.mock("../../../ui/palette", () => ({
   paletteHistoryForTest: () => ["shell.palette"],
 }));
 
-import { LIST_LIMIT, SEARCH_LIMIT, TEMPLATE_COMMAND, TEMPLATES_FOLDER, answersAtOnce, listing } from "./sources";
+import { LIST_LIMIT, SEARCH_LIMIT, TEMPLATE_COMMAND, answersAtOnce, listing, selectable, type Row } from "./sources";
+
+const ask = (mode: Parameters<typeof listing>[0], text: string) => listing(mode, text) as Promise<Awaited<ReturnType<typeof listing>>>;
+const keys = (rows: Row[]) => rows.map((row) => row.key);
+
+/// Il comando del kernel com'è dichiarato dal registro.
+function spec(id: string, title: string, keybinding: string | null = null) {
+  return { id, title, description: `${title}, descrizione`, scope: { reach: "document" }, keybinding, surfaces: [] };
+}
 
 beforeEach(() => {
   resetShellCommands();
   world.vault = "/vault";
   world.recent = [];
-  world.searches = [];
   world.names = [];
   world.matches = { items: [], total: 0 };
   world.asked.length = 0;
   world.askedVault.length = 0;
   world.indexing = "idle";
   world.outline = [];
+  world.outlineFails = false;
   world.tags = [];
   world.active = "Uno.md";
   world.shown = { k: "doc", doc: "Uno.md" };
   world.buffer = "prima\nseconda è\nterza";
   world.specs = [];
+  world.people = [];
+  world.folder = "Persone";
+  world.slash = [];
 });
 
-describe("i file", () => {
+describe("Tutto, a campo vuoto", () => {
   it("senza vault lo dice", async () => {
     world.vault = null;
-    expect(await listing("files", "x")).toEqual({ rows: [], note: "launcher.note.no_vault", total: null });
+    expect(await ask("all", "x")).toEqual({ rows: [], note: "launcher.note.no_vault", total: null });
   });
 
-  it("a campo vuoto offre le recenti, o un invito se non ce ne sono", async () => {
-    expect((await listing("files", "  ")).note).toBe("launcher.note.files");
+  it("offre le note recenti, e tre comandi per la nota aperta", async () => {
     world.recent = ["a/Uno.md", "Due.md"];
-    const answer = await listing("files", "");
+    world.specs = [spec("note.export", "Esporta"), spec("note.duplicate", "Duplica"), spec("note.subpage", "Sottopagina"), spec("note.trash", "Cestina")];
+    const answer = await ask("all", "  ");
     expect(answer.rows).toEqual([
-      { kind: "note", key: "n:a/Uno.md", doc: "a/Uno.md", recent: true, at: null, snippet: null },
-      { kind: "note", key: "n:Due.md", doc: "Due.md", recent: true, at: null, snippet: null },
+      { kind: "group", key: "g:recent", title: "launcher.group.recent" },
+      { kind: "note", key: "n:a/Uno.md", doc: "a/Uno.md", hit: "recent", at: null, snippet: null },
+      { kind: "note", key: "n:Due.md", doc: "Due.md", hit: "recent", at: null, snippet: null },
+      { kind: "group", key: "g:here", title: "launcher.group.here" },
+      { kind: "command", key: "c:note.export", entry: expect.objectContaining({ id: "note.export" }) },
+      { kind: "command", key: "c:note.duplicate", entry: expect.objectContaining({ id: "note.duplicate" }) },
+      { kind: "command", key: "c:note.subpage", entry: expect.objectContaining({ id: "note.subpage" }) },
+    ]);
+    expect(answer.rows.filter(selectable)).toHaveLength(5);
+  });
+
+  it("senza note recenti né comandi lo dice, con l'invito a scrivere", async () => {
+    expect((await ask("all", "")).note).toBe("launcher.note.all");
+  });
+
+  it("senza una nota aperta non offre i comandi della nota", async () => {
+    world.recent = ["Due.md"];
+    world.active = null;
+    world.specs = [spec("note.export", "Esporta")];
+    expect(keys((await ask("all", "")).rows)).toEqual(["g:recent", "n:Due.md"]);
+  });
+});
+
+describe("Tutto con un testo", () => {
+  it("le note per nome vengono prima, nel gruppo «Note»", async () => {
+    world.names = ["Guida/Banco.md"];
+    const answer = await ask("all", " banco ");
+    expect(answer.rows).toEqual([
+      { kind: "group", key: "g:notes", title: "launcher.group.notes" },
+      { kind: "note", key: "n:Guida/Banco.md", doc: "Guida/Banco.md", hit: "name", at: null, snippet: null },
     ]);
   });
 
-  it("con un testo cerca per nome", async () => {
-    world.names = ["Guida/Banco.md"];
-    const answer = await listing("files", " banco ");
-    expect(answer.rows).toEqual([{ kind: "note", key: "n:Guida/Banco.md", doc: "Guida/Banco.md", recent: false, at: null, snippet: null }]);
+  it("le note per nome stanno nell'ordine che il kernel dà, senza che la shell lo rifaccia", async () => {
+    // Il kernel ordina per pertinenza del nome (la corrispondenza esatta o
+    // all'inizio del titolo prima di quella nel mezzo). La shell non rifà la
+    // graduatoria: la mostra com'è, e il gruppo dei nomi viene prima.
+    world.names = ["Guida/Nota lunga.md", "Benvenuto.md", "Idee/Appunti nota.md"];
+    const answer = await ask("all", "nota");
+    expect(keys(answer.rows)).toEqual(["g:notes", "n:Guida/Nota lunga.md", "n:Benvenuto.md", "n:Idee/Appunti nota.md"]);
   });
 
-  it("senza risultati offre di creare la nota, se il testo può essere un nome", async () => {
-    expect((await listing("files", "Idea nuova")).rows).toEqual([{ kind: "create", key: "create", name: "Idea nuova" }]);
-    const refused = await listing("files", "///");
+  it("la ricerca nel testo porta estratto e punto del primo riscontro, senza ripetere le note per nome", async () => {
+    world.names = ["Uno.md"];
+    world.matches = {
+      items: [
+        { doc: "Uno.md", snippet: "il banco vede", highlights: [{ start: 3, end: 8 }], occurrences: [{ span: { start: 42, end: 47 } }] },
+        { doc: "Due.md", snippet: "un banco", highlights: [], occurrences: [{ span: { start: 7, end: 12 } }] },
+      ],
+      total: 2,
+    };
+    const answer = await ask("all", "banco");
+    expect(world.asked[0]).toEqual({ expr: { expr: "banco" }, window: { offset: 0, limit: SEARCH_LIMIT } });
+    expect(answer.rows).toEqual([
+      { kind: "group", key: "g:notes", title: "launcher.group.notes" },
+      { kind: "note", key: "n:Uno.md", doc: "Uno.md", hit: "name", at: null, snippet: null },
+      { kind: "group", key: "g:text", title: "launcher.group.text" },
+      { kind: "note", key: "n:Due.md", doc: "Due.md", hit: "text", at: 7, snippet: { text: "un banco", highlights: [] } },
+    ]);
+  });
+
+  it("i titoli della nota attiva sono l'ultimo gruppo, filtrati per testo", async () => {
+    world.outline = [
+      { level: 1, text: "Sintassi", span: { start: 0, end: 10 } },
+      { level: 2, text: "Tabelle", span: { start: 30, end: 40 } },
+    ];
+    const answer = await ask("all", "tab");
+    expect(world.asked).toContainEqual({ kind: "outline", doc: "Uno.md" });
+    expect(answer.rows.slice(-2)).toEqual([
+      { kind: "group", key: "g:headings", title: "launcher.group.headings" },
+      { kind: "heading", key: "h:30", doc: "Uno.md", level: 2, text: "Tabelle", at: 30 },
+    ]);
+  });
+
+  it("se l'indice non dà i titoli, le note trovate restano: il gruppo dei titoli manca soltanto", async () => {
+    world.names = ["Guida/Banco.md"];
+    world.outline = [{ level: 1, text: "Banco", span: { start: 0, end: 5 } }];
+    world.outlineFails = true;
+    const answer = await ask("all", "banco");
+    expect(answer.note).toBeNull();
+    expect(keys(answer.rows)).toEqual(["g:notes", "n:Guida/Banco.md"]);
+  });
+
+  it("la domanda all'indice dei titoli nomina il vault aperto", async () => {
+    await ask("all", "x");
+    expect(world.askedVault).toEqual(["/vault"]);
+  });
+
+  it("una sintassi a metà non blocca i gruppi che trovano, e se non trovano niente la dice", async () => {
+    const answer = await ask("all", '"aperta');
+    expect(answer).toEqual({ rows: [], note: "virgolette aperte", total: null });
+    world.names = ["Aperta.md"];
+    expect(keys((await ask("all", '"aperta')).rows)).toEqual(["g:notes", "n:Aperta.md"]);
+  });
+
+  it("senza risultati propone di creare la nota, se il testo può essere un nome", async () => {
+    expect((await ask("all", "Idea nuova")).note).toBe('launcher.note.all.create {"query":"Idea nuova","name":"Idea nuova"}');
+  });
+
+  it("senza risultati e senza un nome possibile lo dice, senza offrire di creare", async () => {
+    const refused = await ask("all", "///");
     expect(refused.rows).toEqual([]);
-    expect(refused.note).toBe('launcher.note.files.none {"query":"///"}');
+    expect(refused.note).toBe('launcher.note.all.none {"query":"///"}');
+  });
+
+  it("senza risultati distingue l'indice ancora in corso", async () => {
+    expect((await ask("all", "x")).note).toBe('launcher.note.all.create {"query":"x","name":"x"}');
+    world.indexing = "running";
+    expect((await ask("all", "x")).note).toBe("launcher.note.all.indexing");
+  });
+
+  it("un elenco lungo si ferma a LIST_LIMIT righe scelte, e dice quante sono", async () => {
+    world.names = Array.from({ length: LIST_LIMIT + 40 }, (_, index) => `Nota ${index}.md`);
+    const answer = await ask("all", "nota");
+    expect(answer.rows.filter(selectable)).toHaveLength(LIST_LIMIT);
+    expect(answer.total).toBe(LIST_LIMIT + 40);
+    expect(answer.rows[answer.rows.length - 1]).toMatchObject({ kind: "note" });
   });
 });
 
@@ -156,102 +283,114 @@ describe("i comandi", () => {
   });
 });
 
-describe("la ricerca", () => {
-  it("a campo vuoto ripropone le ricerche recenti", async () => {
-    expect((await listing("search", "")).note).toBe("launcher.note.search");
-    world.searches = ["banco", "tag:#tema"];
-    expect((await listing("search", "")).rows).toEqual([
-      { kind: "query", key: "q:banco", query: "banco" },
-      { kind: "query", key: "q:tag:#tema", query: "tag:#tema" },
-    ]);
+describe("l'aiuto", () => {
+  it("elenca i comandi che hanno un tasto, col tasto che vale adesso", () => {
+    registerShellCommand({ id: "shell.switcher", title: "commands.switcher", description: "commands.switcher.desc", layer: "global", run: () => {} });
+    registerShellCommand({ id: "shell.launcher.search", title: "launcher.command.search", description: "launcher.command.search.desc", layer: "global", run: () => {} });
+    const answer = listing("help", "") as Awaited<ReturnType<typeof listing>>;
+    // Il tasto di «Vai alla nota» è quello di serie; chi non ne ha non entra.
+    expect(answer.rows).toEqual([{ kind: "help", key: "k:shell.switcher", entry: expect.objectContaining({ id: "shell.switcher", binding: "Mod-o" }) }]);
   });
 
-  it("chiede una pagina sola, e porta estratto e punto del primo riscontro", async () => {
-    world.matches = {
-      items: [
-        { doc: "Uno.md", snippet: "il banco vede", highlights: [{ start: 3, end: 8 }], occurrences: [{ span: { start: 42, end: 47 } }] },
-        { doc: "Due.md" },
-      ],
-      total: 120,
-    };
-    const answer = await listing("search", "banco");
-    expect(world.asked).toEqual([{ expr: { expr: "banco" }, window: { offset: 0, limit: SEARCH_LIMIT } }]);
-    expect(answer.total).toBe(120);
-    expect(answer.rows).toEqual([
-      { kind: "note", key: "n:Uno.md", doc: "Uno.md", recent: false, at: 42, snippet: { text: "il banco vede", highlights: [{ start: 3, end: 8 }] } },
-      { kind: "note", key: "n:Due.md", doc: "Due.md", recent: false, at: null, snippet: null },
-    ]);
+  it("filtra per testo, e senza niente dice la domanda", () => {
+    registerShellCommand({ id: "shell.switcher", title: "commands.switcher", description: "commands.switcher.desc", layer: "global", run: () => {} });
+    registerShellCommand({ id: "shell.palette", title: "commands.palette", description: "commands.palette.desc", layer: "global", run: () => {} });
+    expect(keys((listing("help", "palette") as Awaited<ReturnType<typeof listing>>).rows)).toEqual(["k:shell.palette"]);
+    expect(listing("help", " zzz ")).toEqual({ rows: [], note: 'launcher.note.help.none {"query":"zzz"}', total: null });
   });
 
-  it("se li mostra tutti non dice un totale", async () => {
-    world.matches = { items: [{ doc: "Uno.md" }], total: 1 };
-    expect((await listing("search", "x")).total).toBeNull();
-  });
-
-  it("una sintassi a metà si dice, non è un guasto", async () => {
-    const answer = await listing("search", '"aperta');
-    expect(answer).toEqual({ rows: [], note: "virgolette aperte", total: null });
-    expect(world.asked).toEqual([]);
-  });
-
-  it("senza risultati distingue l'indice ancora in corso", async () => {
-    expect((await listing("search", "x")).note).toBe('launcher.note.search.none {"query":"x"}');
-    world.indexing = "running";
-    expect((await listing("search", "x")).note).toBe("launcher.note.search.indexing");
+  it("risponde subito, e senza comandi con tasto lo dice", () => {
+    expect(answersAtOnce("help")).toBe(true);
+    expect(listing("help", "")).toEqual({ rows: [], note: "launcher.note.help", total: null });
   });
 });
 
-describe("le intestazioni", () => {
-  it("vogliono una nota attiva", async () => {
-    world.active = null;
-    expect((await listing("headings", "")).note).toBe("launcher.note.no_doc");
-    expect(world.asked).toEqual([]);
+describe("le persone", () => {
+  it("con la cartella spenta lo dice, senza cercare", async () => {
+    world.folder = "";
+    expect((await ask("people", "Anna")).note).toBe("launcher.note.people.off");
   });
 
-  it("vengono dall'indice della nota attiva, filtrate per testo", async () => {
-    world.outline = [
-      { level: 1, text: "Sintassi", span: { start: 0, end: 10 } },
-      { level: 2, text: "Tabelle", span: { start: 30, end: 40 } },
-    ];
-    const all = await listing("headings", "");
-    expect(world.asked).toEqual([{ kind: "outline", doc: "Uno.md" }]);
-    expect(all.rows).toEqual([
-      { kind: "heading", key: "h:0", doc: "Uno.md", level: 1, text: "Sintassi", at: 0 },
-      { kind: "heading", key: "h:30", doc: "Uno.md", level: 2, text: "Tabelle", at: 30 },
+  it("elenca le persone della cartella, e a campo vuoto le prime", async () => {
+    world.people = ["Persone/Anna Bianchi.md", "Persone/Luca.md"];
+    const answer = await ask("people", "");
+    expect(answer.rows).toEqual([
+      { kind: "person", key: "p:Persone/Anna Bianchi.md", doc: "Persone/Anna Bianchi.md" },
+      { kind: "person", key: "p:Persone/Luca.md", doc: "Persone/Luca.md" },
     ]);
-    expect((await listing("headings", "tab")).rows.map((row) => row.key)).toEqual(["h:30"]);
-    expect((await listing("headings", "zzz")).note).toBe('launcher.note.headings.none {"query":"zzz"}');
   });
 
-  it("la domanda all'indice nomina il vault aperto", async () => {
-    await listing("headings", "");
-    expect(world.askedVault).toEqual(["/vault"]);
+  it("con un nome che non è ancora una persona offre di crearla, in fondo", async () => {
+    world.people = ["Persone/Anna Bianchi.md"];
+    const answer = await ask("people", "Luca");
+    expect(answer.rows).toEqual([{ kind: "create-person", key: "P:Luca", name: "Luca" }]);
   });
 
-  it("una nota senza intestazioni lo dice", async () => {
-    expect((await listing("headings", "")).note).toBe("launcher.note.headings");
+  it("con un nome già preso non offre di crearla", async () => {
+    world.people = ["Persone/Luca.md"];
+    expect(keys((await ask("people", "luca")).rows)).toEqual(["p:Persone/Luca.md"]);
+  });
+
+  it("senza persone e senza domanda lo dice", async () => {
+    expect((await ask("people", "")).note).toBe("launcher.note.people");
+    expect((await ask("people", "zzz")).rows.map((row) => row.kind)).toEqual(["create-person"]);
+  });
+});
+
+describe("i blocchi", () => {
+  /// Il registro dei comandi con due blocchi e un testo: uno dei suoi è per le liste.
+  const declareBlocks = (): void => {
+    world.specs = [
+      spec("markdown.table", "Tabella"),
+      spec("markdown.list.bullet", "Elenco"),
+      spec("markdown.bold", "Grassetto"),
+    ];
+    world.slash = [
+      { id: "markdown.table", label: "Tabella", section: "blocks", action: true },
+      { id: "markdown.list.bullet", label: "Elenco", section: "lists", action: true },
+      { id: "markdown.bold", label: "Grassetto", section: "style", action: true },
+    ];
+  };
+
+  it("senza una nota di testo aperta lo dice", async () => {
+    declareBlocks();
+    world.shown = { k: "view" };
+    expect((await ask("blocks", "")).note).toBe("launcher.note.blocks.no_text");
+  });
+
+  it("offre i blocchi del «/», nell'ordine delle sezioni, e lascia fuori lo stile", async () => {
+    declareBlocks();
+    const answer = listing("blocks", "") as Awaited<ReturnType<typeof listing>>;
+    expect(answersAtOnce("blocks")).toBe(true);
+    expect(keys(answer.rows)).toEqual(["b:markdown.list.bullet", "b:markdown.table"]);
+  });
+
+  it("filtra per testo, e senza niente lo dice", async () => {
+    declareBlocks();
+    expect(keys((listing("blocks", "tab") as Awaited<ReturnType<typeof listing>>).rows)).toEqual(["b:markdown.table"]);
+    expect((listing("blocks", "zzz") as Awaited<ReturnType<typeof listing>>).note).toBe('launcher.note.blocks.none {"query":"zzz"}');
   });
 });
 
 describe("le etichette", () => {
   it("si filtrano, chi comincia così per primo", async () => {
     world.tags = [{ name: "sistema", count: 2 }, { name: "tema", count: 12 }];
-    expect((await listing("tags", "tem")).rows).toEqual([
+    expect((await ask("tags", "tem")).rows).toEqual([
       { kind: "tag", key: "t:tema", name: "tema", count: 12 },
       { kind: "tag", key: "t:sistema", name: "sistema", count: 2 },
     ]);
-    expect((await listing("tags", "zzz")).note).toBe('launcher.note.tags.none {"query":"zzz"}');
+    expect((await ask("tags", "zzz")).note).toBe('launcher.note.tags.none {"query":"zzz"}');
   });
 
   it("un elenco lungo si ferma, e dice quante sono", async () => {
     world.tags = Array.from({ length: LIST_LIMIT + 5 }, (_, index) => ({ name: `t${index}`, count: 1 }));
-    const answer = await listing("tags", "");
+    const answer = await ask("tags", "");
     expect(answer.rows).toHaveLength(LIST_LIMIT);
     expect(answer.total).toBe(LIST_LIMIT + 5);
   });
 
   it("un vault senza etichette lo dice", async () => {
-    expect((await listing("tags", "")).note).toBe("launcher.note.tags");
+    expect((await ask("tags", "")).note).toBe("launcher.note.tags");
   });
 });
 
@@ -285,32 +424,13 @@ describe("la riga", () => {
   });
 });
 
-describe("i modelli", () => {
-  /// Il comando com'è quando la feature dei modelli è accesa.
-  const declare = (): void => {
-    world.specs = [{ id: TEMPLATE_COMMAND, title: "Nuova nota da modello", description: "", scope: { reach: "vault" }, keybinding: null }];
-  };
-
-  it("senza il comando del kernel non si offrono", async () => {
-    expect((await listing("templates", "")).note).toBe("launcher.note.templates.unavailable");
-    expect(world.asked).toEqual([]);
+describe("le sorgenti", () => {
+  it("non c'è più un modo dei modelli: il comando del kernel resta nel registro", () => {
+    expect(TEMPLATE_COMMAND).toBe("note.from_template");
   });
 
-  it("sono le note della cartella dei modelli, filtrate per nome", async () => {
-    declare();
-    world.matches = { items: [{ doc: "Templates/Riunione.md" }, { doc: "Templates/Diario.md" }], total: 2 };
-    const all = await listing("templates", "");
-    expect(world.asked).toEqual([{ expr: { expr: `folder:${TEMPLATES_FOLDER}` }, window: "senza-finestra" }]);
-    expect(all.rows).toEqual([
-      { kind: "template", key: "m:Templates/Riunione.md", doc: "Templates/Riunione.md" },
-      { kind: "template", key: "m:Templates/Diario.md", doc: "Templates/Diario.md" },
-    ]);
-    expect((await listing("templates", "dia")).rows.map((row) => row.key)).toEqual(["m:Templates/Diario.md"]);
-    expect((await listing("templates", "zzz")).note).toBe('launcher.note.templates.none {"query":"zzz"}');
-  });
-
-  it("una cartella vuota dice dove metterli", async () => {
-    declare();
-    expect((await listing("templates", "")).note).toBe('launcher.note.templates {"folder":"Templates"}');
+  it("le intestazioni di gruppo non si scelgono", () => {
+    expect(selectable({ kind: "group", key: "g:x", title: "x" })).toBe(false);
+    expect(selectable({ kind: "tag", key: "t:x", name: "x", count: 1 })).toBe(true);
   });
 });

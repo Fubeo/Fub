@@ -1138,12 +1138,44 @@ export const SCENE = onPage("shell", [
   },
   {
     id: "launcher-search",
-    title: "Il lanciatore: la ricerca nel testo",
+    title: "Il lanciatore: la ricerca nel testo, come gruppo di Tutto",
     prepare: async (page) => {
+      // Tutto non ha prefisso: scrivere e basta cerca anche nel testo, e i
+      // riscontri stanno nell'elenco di Tutto. Il finto indice del banco dà i
+      // riscontri nel testo anche come nomi, quindi il gruppo che li mostra è
+      // quello delle note: il gruppo «Nel testo» lo provano i test.
       await page.click("#pill");
       await page.waitForSelector(".launcher-input:focus");
-      await page.fill(".launcher-input", `?${SEARCH}`);
+      await page.fill(".launcher-input", SEARCH);
+      await page.waitForSelector(".launcher-group");
       await page.waitForSelector('.launcher-row:has-text("Il banco che vede")');
+    },
+  },
+  {
+    id: "launcher-actions",
+    title: "Il lanciatore: le azioni della nota (Tab), con l'anteprima che resta",
+    prepare: async (page) => {
+      // La riga da agire è quella della nota che il banco sa rendere per
+      // intero: le frecce la portano lì, poi Tab mostra le azioni.
+      await page.click("#pill");
+      await page.waitForSelector(".launcher-input:focus");
+      await page.fill(".launcher-input", "fub");
+      const row = '.launcher-row:has-text("Sintassi di Fub")';
+      await page.waitForSelector(row);
+      while (!(await page.$eval(row, (each) => each.getAttribute("aria-selected") === "true"))) {
+        await page.keyboard.press("ArrowDown");
+      }
+      await previewShowsActiveRow(page);
+      await page.keyboard.press("Tab");
+      await page.waitForSelector('.launcher-group:has-text("Azioni su")');
+      await page.waitForSelector('.launcher-row:has-text("Apri a lato")');
+      // Con le azioni aperte la riga attiva è un'azione: l'anteprima resta
+      // sulla nota che si agisce, e aspetta la sua resa.
+      await page.waitForFunction(() => {
+        const preview = document.querySelector(".launcher-preview");
+        const shown = preview?.querySelector(".launcher-preview-page")?.textContent ?? "";
+        return !preview.hasAttribute("data-waiting") && shown.includes("Sintassi di Fub");
+      });
     },
   },
   {
