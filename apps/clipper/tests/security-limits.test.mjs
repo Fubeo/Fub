@@ -44,10 +44,7 @@ describe("capture v1 limits (frozen with AutomationOwner)", () => {
     assert.equal(Capture.withoutCredentials("https://example.com/@name?to=a@b"), "https://example.com/@name?to=a@b");
     assert.ok(Capture.isHttpUrl("https://example.com/@name?to=a@b"));
     assert.equal(Capture.withoutCredentials("about:blank"), "about:blank");
-    const clean = Capture.withoutCredentials("https://user:token@example.com/a");
-    const a = Capture.buildArtifact({ v: 1, title: "T", markdown: "x", source_url: clean, target: { mode: "create" } }, { nonce: "nonce-creds-1" });
-    assert.equal(a.payload.source_url, "https://example.com/a");
-    assert.ok(!Convert.clipHtml("<p>x</p>", { url: clean }).markdown.includes("token"));
+    // The popup's wiring is proven in popup-credentials.test.mjs.
   });
   it("fub:// round-trips small captures and refuses oversized ones", () => {
     const a = Capture.buildArtifact(
