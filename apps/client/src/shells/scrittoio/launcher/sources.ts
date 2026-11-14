@@ -194,7 +194,9 @@ async function everything(text: string): Promise<Listing> {
     rows.push(group("text", t("launcher.group.text")));
     rows.push(...inText);
   }
-  const headings = doc ? await headingRows(doc, written) : [];
+  // I titoli sono un gruppo in più: se l'indice non li dà, le note restano
+  // dove sono, e chi cerca una nota non perde il suo risultato per un titolo.
+  const headings = doc ? await headingRows(doc, written).catch(() => []) : [];
   if (headings.length > 0) {
     rows.push(group("headings", t("launcher.group.headings")));
     rows.push(...headings);

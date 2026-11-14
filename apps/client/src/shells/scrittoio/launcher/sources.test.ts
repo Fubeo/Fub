@@ -14,6 +14,8 @@ const world = vi.hoisted(() => {
     askedVault: [] as (string | undefined)[],
     indexing: "idle",
     outline: [] as { level: number; text: string; span: { start: number; end: number } }[],
+    /// L'indice che non sa dare i titoli (un host che non risponde a `outline`).
+    outlineFails: false,
     tags: [] as { name: string; count: number }[],
     active: "Uno.md" as string | null,
     shown: { k: "doc", doc: "Uno.md" } as { k: string; doc?: string } | null,
@@ -36,6 +38,7 @@ vi.mock("../../../host/ipc", () => ({
     queryIndex: async (query: { kind: string; doc: string }, vault?: string) => {
       world.asked.push(query);
       world.askedVault.push(vault);
+      if (world.outlineFails) throw new Error("host fake: non so rispondere alla query outline");
       return { kind: "outline", value: world.outline };
     },
   },
@@ -119,6 +122,7 @@ beforeEach(() => {
   world.askedVault.length = 0;
   world.indexing = "idle";
   world.outline = [];
+  world.outlineFails = false;
   world.tags = [];
   world.active = "Uno.md";
   world.shown = { k: "doc", doc: "Uno.md" };
@@ -203,6 +207,15 @@ describe("Tutto con un testo", () => {
       { kind: "group", key: "g:headings", title: "launcher.group.headings" },
       { kind: "heading", key: "h:30", doc: "Uno.md", level: 2, text: "Tabelle", at: 30 },
     ]);
+  });
+
+  it("se l'indice non dà i titoli, le note trovate restano: il gruppo dei titoli manca soltanto", async () => {
+    world.names = ["Guida/Banco.md"];
+    world.outline = [{ level: 1, text: "Banco", span: { start: 0, end: 5 } }];
+    world.outlineFails = true;
+    const answer = await ask("all", "banco");
+    expect(answer.note).toBeNull();
+    expect(keys(answer.rows)).toEqual(["g:notes", "n:Guida/Banco.md"]);
   });
 
   it("la domanda all'indice dei titoli nomina il vault aperto", async () => {
