@@ -2306,7 +2306,7 @@ l'illuminazione delle gemelle; le foto del banco (skill `banco`), chiaro e
 scuro, mostrano gli stati del prototipo accanto alle sue foto.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/theme/scrittoio/anatomia.test.ts
-Stato: [ ] da fare
+Stato: [x] fatto · coder/n6-t22 (1c327690b, 22fcb2d7a, a19463767), integrato in 04d8702ab (2026-11-14) · il prototipo T25 contato come approvato (D-10 (a)); foto approvate dall'orchestratore; «↩ N» solo per la zona (vista allargata di metà per lato, da zoom 0,35) e solo per i conti che un cambio di link tocca, epoca per file contro le risposte vecchie, tutto da `query_index` (backlinks e linked uscente), nessuna IPC nuova; test con 2000 schede
 
 ## T23 · La pagina di prodotto
 
@@ -3494,7 +3494,7 @@ Prova: cd apps/client && npm run build && cd ../.. && cargo build --release
 --locked -p fub-app --features tauri/custom-protocol && cd apps/client &&
 xvfb-run -a npm run bench:webview -- --only=S1,S3,S9 --budgets=targets
 --native-driver=/usr/bin/WebKitWebDriver
-Stato: [ ] da fare
+Stato: [x] fatto · coder/n6-t46 (1318dba4e), integrato in baf95bf7b (2026-11-14) · flag `--x11`, S9.keyToPaint 16,7 ms nei bersagli (non una soglia), pagina `docs/misure/2026-11-14-lavagna-fogli-vivi-s9-tasto.md`; il banco si ferma con `WAYLAND_DISPLAY` senza `--x11` né `--wayland`
 
 ## T47 · I colori
 
