@@ -430,6 +430,6 @@ mod tests {
         assert_eq!(streamed, 100);
         // Il limite vero: i cinquanta milioni di elementi di
         // `Limits::elements`, se restano tutti, sono ben oltre il tetto.
-        assert!(LIMITS.elements * BARE > LIMITS.retained_bytes);
+        const { assert!(LIMITS.elements * BARE > LIMITS.retained_bytes) };
     }
 }
