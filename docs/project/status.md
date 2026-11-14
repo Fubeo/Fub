@@ -84,10 +84,9 @@ si mostra la loro tela.
 
 Pagine che le fasi scriveranno (nomi già scelti, ancora da scrivere): ciascuna
 nasce quando la sua fase passa il cancello. `misure/motori-*.md` (K0),
-`architecture/componenti.md` (K1 e K2), `product/lavagna.md` (lavagna v1),
-`product/pdf-lettore.md` (P2), `product/pdf-completo.md` (P5),
-`product/disegno-completo.md` (K6), `product/foto.md` e
-`product/libreria-foto.md` (K7 e K8).
+`architecture/componenti.md` (K1 e K2), `product/pdf-lettore.md` (P2),
+`product/pdf-completo.md` (P5), `product/disegno-completo.md` (K6),
+`product/foto.md` e `product/libreria-foto.md` (K7 e K8).
 
 ## Stato di M5
 
