@@ -252,6 +252,41 @@ maniglie e le prese non ci sono; l'inchiostro della scheda sta dopo il
 titolo nel nodo e resta disegnato a ogni livello. Con l'alto contrasto i
 blocchi hanno un bordo.
 
+## Le citazioni e le copie
+
+La testata di una scheda di file (`card-head.ts`, N6 T22) porta, subito dopo
+il titolo, due numeri che non si stringono mai: in una testata stretta si
+taglia il titolo.
+
+- **«↩ N»** (`.canvas-node-cites`): quante note citano il file. Il conto è
+  dell'indice, con le domande `backlinks` e `documents` di `query_index`
+  che la shell dà alla tela (`CanvasCards.citations`): nessuna IPC nuova.
+  Si chiede solo per le schede della zona (`headZonePaths`: quelle che
+  toccano la vista allargata di metà per lato, da zoom 0,35 in su, più
+  l'attiva), una volta per file, al più quattro domande insieme; una scheda
+  che entra nella zona chiede il suo conto se non l'ha o se è vecchio.
+  Quando l'indice cambia, dopo 600 ms invecchiano solo i conti che il cambio
+  può toccare: quelli dei documenti cambiati, dei file che quei documenti
+  citavano (la risposta di `backlinks` porta le note che citano, fino a 64)
+  e di quelli che citano adesso (`linked` uscente; un file che l'indice non
+  conosce, come un PDF, può sempre essere toccato). Un documento cambiato
+  senza l'aspetto `links` non tocca niente; un lotto, il vault aperto, un
+  `overflow` o più di 16 documenti in una pausa fanno invecchiare tutti. Si
+  richiedono subito solo quelli della zona, e i numeri di prima restano in
+  vista finché arrivano i nuovi. Ogni file ha la sua epoca: una risposta
+  chiesta prima del cambio non scrive; una che fallisce lascia il numero
+  com'era. Zero: nessun segno. Il lettore di schermo legge «Citata da N
+  note» (`canvas.card.cites`).
+- **«×N»** (`.canvas-node-twins`): quante schede della lavagna mostrano lo
+  stesso file (C14), il `subpath` escluso: un estratto è una copia della
+  nota. È un pulsante: al passaggio o col fuoco tutte le copie, anche fuori
+  dalla vista, si illuminano (`data-card-twin`, un filo caldo e un alone,
+  senza animazione; da lontano il filo resta di 2 px sullo schermo), e si
+  spengono quando il pulsante perde passaggio e fuoco, o quando la copia da
+  cui si erano accese sparisce. La banda di stato dice «N copie di questo
+  file» per le copie illuminate, o per quelle della sola scheda scelta, e un
+  clic sulla voce le inquadra.
+
 ## Cercare
 
 Ctrl+F (il comando `shell.doc.search`, che chiede prima `find()` alla

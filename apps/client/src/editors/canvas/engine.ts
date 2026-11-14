@@ -120,6 +120,7 @@ import {
   type CanvasStatusPort,
 } from "./chrome/status";
 import type { SurfaceStatusItem } from "../core/registry";
+import { CitationCounts, cardFilePath, headZonePaths, syncCardHead, twinGroups, type CardCitations } from "./card-head";
 import { CanvasDepositError, type DropFolderChoice } from "../../state/canvas-intake";
 import { saveStateKey } from "../../state/saving";
 import { SHARED_RECENT_COMMANDS, openCommandSearch, type CommandSearchHandle, type RecentCommands } from "./chrome/command-search";
@@ -839,6 +840,11 @@ export interface CanvasCards {
    * dei PDF): il comando è spento col perché.
    */
   readonly pdfPages?: PdfPagesReader;
+  /**
+   * Quante note citano il file di una scheda, per «↩ N» nella testata (T22):
+   * l'indice, con la domanda `backlinks`. Assente, la testata non lo dice.
+   */
+  readonly citations?: CardCitations;
 }
 
 /**
@@ -1890,6 +1896,19 @@ export class CanvasEngine {
    */
   #statusShown = "";
   #attachmentDeclared: string | null = null;
+  /**
+   * Le gemelle (C14, T22): per ogni file che più schede mostrano, i loro id;
+   * rifatte a ogni resa. `#litTwins` sono quelle illuminate da «×N» (la
+   * scheda da cui si è acceso e il suo file), `null` se spente;
+   * `#twinsHover` il «×N» sotto il puntatore; `#twinsShown` la firma
+   * delle gemelle che la banda ha letto.
+   */
+  #twins: Map<string, readonly string[]> = new Map();
+  #litTwins: { readonly from: string; readonly path: string } | null = null;
+  #twinsHover: Element | null = null;
+  #twinsShown = "";
+  /** I conti «↩ N» dall'indice (T22); `null` senza la porta. */
+  readonly #citations: CitationCounts | null;
   /** Il navigatore (T55), in basso a destra della vista. */
   readonly #navigator: CanvasNavigator;
   /** «Nascondi il navigatore» per questa lavagna (T55): si ricorda nella vista (T36). */
@@ -2158,9 +2177,13 @@ export class CanvasEngine {
     });
     this.#inkMouseButton = inkMouse;
     parent.replaceChildren(this.#root);
+    const citations = options.cards?.citations;
+    this.#citations = citations ? new CitationCounts(citations, () => this.#syncHeads()) : null;
+    this.#life.add(() => this.#citations?.dispose());
     this.#stopLanguage = onLanguage(() => {
       // I corpi di sempre hanno parole: alla prossima resa si rifanno.
       this.#languageRound++;
+      this.#syncHeads();
       this.#scheduleLabels();
       this.#viewport.setAttribute("aria-label", t("canvas.surface"));
       this.#toolbar.setAttribute("aria-label", t("canvas.surface"));
@@ -2347,6 +2370,30 @@ export class CanvasEngine {
     }, { signal, capture: true });
     this.#viewport.addEventListener("pointerleave", (event) => {
       if (event.pointerType === "pen") this.#setVeilPointer(false);
+    }, { signal });
+    // «×N» illumina le gemelle al passaggio e col fuoco (C14, T22); si
+    // spengono quando li perde tutti e due.
+    const twinsButton = (target: EventTarget | null): Element | null =>
+      target instanceof Element ? target.closest(".canvas-node-twins") : null;
+    this.#viewport.addEventListener("pointerover", (event) => {
+      const button = twinsButton(event.target);
+      if (!button) return;
+      this.#twinsHover = button;
+      this.#lightTwinsFrom(button);
+    }, { signal });
+    this.#viewport.addEventListener("pointerout", (event) => {
+      const button = twinsButton(event.target);
+      if (!button || (event.relatedTarget instanceof Node && button.contains(event.relatedTarget))) return;
+      if (this.#twinsHover === button) this.#twinsHover = null;
+      if (!button.contains(document.activeElement)) this.#lightTwins(null);
+    }, { signal });
+    this.#viewport.addEventListener("focusin", (event) => {
+      const button = twinsButton(event.target);
+      if (button) this.#lightTwinsFrom(button);
+    }, { signal });
+    this.#viewport.addEventListener("focusout", (event) => {
+      const button = twinsButton(event.target);
+      if (button && this.#twinsHover !== button) this.#lightTwins(null);
     }, { signal });
     // La scheda sotto il puntatore tiene l'aspetto del passaggio quando il
     // velo o la cattura del tratto le tolgono `:hover` (T20f).
@@ -5987,13 +6034,32 @@ export class CanvasEngine {
       this.#dropGhosts = layer;
     }
     layer.style.transform = `translate(${this.#camera.x}px, ${this.#camera.y}px) scale(${this.#camera.zoom})`;
-    while (layer.children.length > layout.cards.length) layer.lastElementChild!.remove();
-    layout.cards.forEach((card, index) => {
+    // Il filo e il numero restano della stessa misura sullo schermo (la pelle divide per lo zoom).
+    layer.style.setProperty("--canvas-zoom", String(this.#camera.zoom));
+    // Oltre i dodici (prototipo T25), la cornice del gruppo che li terrà col
+    // numero in mezzo: mentre si trascina si sa quanti sono, non come si chiamano.
+    const rects = layout.group ? [layout.group] : layout.cards;
+    const grouped = layout.group !== null;
+    while (layer.children.length > rects.length) layer.lastElementChild!.remove();
+    rects.forEach((card, index) => {
       let ghost = layer.children[index] as HTMLElement | undefined;
       if (!ghost) {
         ghost = document.createElement("div");
         ghost.className = "canvas-drop-ghost";
         layer.append(ghost);
+      }
+      ghost.classList.toggle("canvas-drop-ghost-group", grouped);
+      if (grouped) {
+        let name = ghost.firstElementChild as HTMLElement | null;
+        if (!name) {
+          name = document.createElement("span");
+          name.className = "canvas-drop-ghost-name";
+          ghost.append(name);
+        }
+        const text = t("canvas.intake.group", { count });
+        if (name.textContent !== text) name.textContent = text;
+      } else {
+        ghost.replaceChildren();
       }
       ghost.style.transform = `translate(${card.x}px, ${card.y}px)`;
       ghost.style.width = `${card.width}px`;
@@ -6943,6 +7009,20 @@ export class CanvasEngine {
         ? (this.#unwritable ? t("canvas.unwritable") : t("canvas.status.readonly.panel"))
         : null),
       folder: () => dropFolderOf(this.#attachmentDeclared, this.#dropChoice, this.#options.documentId ?? ""),
+      twins: () => {
+        const ids = this.#shownTwins();
+        if (ids === null) return null;
+        return {
+          count: ids.length,
+          frame: () => {
+            const chosen = new Set(ids);
+            const nodes = this.#doc?.nodes.filter((node) => chosen.has(node.id)) ?? [];
+            if (nodes.length === 0) return;
+            this.#fitCamera(true, nodes);
+            this.#statusSettle();
+          },
+        };
+      },
       zoomTo: (zoom) => {
         if (this.#destroyed || !this.#doc) return;
         const rect = this.#viewport.getBoundingClientRect();
@@ -6982,10 +7062,90 @@ export class CanvasEngine {
     if (this.#destroyed || !this.#doc || this.#gestureActive()) return;
     // Il navigatore si rilegge con la banda, a fine gesto e al cambio del documento (T55).
     this.#navigator.settle();
+    this.#twinsShown = this.#twinsKey();
     const shown = statusSignature(canvasStatusItems(this.#statusPort()));
     if (shown === this.#statusShown) return;
     this.#statusShown = shown;
     this.#options.onStatusChange?.();
+  }
+
+  // --- la testata: «↩ N» e le gemelle (T22) ----------------------------------
+
+  /** Rifà la testata di ogni scheda: un conto nuovo dall'indice, la lingua. */
+  #syncHeads(): void {
+    if (this.#destroyed) return;
+    for (const entry of this.#cards.values()) this.#syncHead(entry);
+  }
+
+  /**
+   * Chiede i conti «↩ N» della zona (`headZonePaths`): le schede in vista o
+   * vicine, dallo zoom in cui la testata si vede, più quelle che lavorano.
+   * Lo chiamano la resa e la fine di ogni gesto (`#refreshLive`); a lavagna
+   * nascosta o a gesto in corso non chiede niente.
+   */
+  #askCitations(nodes: readonly CanvasNode[] | undefined = this.#doc?.nodes): void {
+    const citations = this.#citations;
+    if (!citations || !nodes || this.#destroyed) return;
+    if (this.#gestureActive() || !this.#isShown()) return;
+    const kept = new Set<string>();
+    for (const id of [this.#activeId, this.#enteringId, this.#writingId]) if (id !== null) kept.add(id);
+    const { view, zoom } = this.#viewRect();
+    citations.want(headZonePaths(nodes, view, zoom, kept));
+  }
+
+  /** «↩ N» e «×N» nella testata di `entry`, e `data-card-twin` se le sue gemelle sono illuminate. */
+  #syncHead(entry: CardEntry): void {
+    const path = cardFilePath(entry.node);
+    const cites = path !== "" && this.#citations ? this.#citations.get(path) : 0;
+    const twins = path !== "" ? this.#twins.get(path)?.length ?? 0 : 0;
+    syncCardHead(entry.title, cites, twins);
+    const lit = twins > 1 && this.#litTwins?.path === path;
+    if (lit !== entry.article.hasAttribute("data-card-twin")) entry.article.toggleAttribute("data-card-twin", lit);
+  }
+
+  /** Illumina le gemelle della scheda che porta il «×N» `button`. */
+  #lightTwinsFrom(button: Element): void {
+    const id = button.closest<HTMLElement>(".canvas-node")?.dataset.node;
+    this.#lightTwins(id ?? null);
+  }
+
+  /**
+   * Illumina tutte le schede che mostrano il file della scheda `id`, lei
+   * compresa, anche fuori dalla vista; `null` le spegne. La banda dice quante
+   * sono e le inquadra.
+   */
+  #lightTwins(id: string | null): void {
+    const node = id === null ? undefined : this.#cards.get(id)?.node;
+    const path = node ? cardFilePath(node) : "";
+    const next = id !== null && path !== "" && this.#twins.has(path) ? { from: id, path } : null;
+    const now = this.#litTwins;
+    if (now?.from === next?.from && now?.path === next?.path) return;
+    this.#litTwins = next;
+    const touched = new Set([...(now ? this.#twins.get(now.path) ?? [] : []), ...(next ? this.#twins.get(next.path) ?? [] : [])]);
+    for (const twin of touched) {
+      const entry = this.#cards.get(twin);
+      if (entry) this.#syncHead(entry);
+    }
+    this.#statusSettle();
+  }
+
+  /**
+   * Le gemelle che la banda dice: quelle illuminate, o quelle della sola
+   * scheda scelta; `null` se nessuna.
+   */
+  #shownTwins(): readonly string[] | null {
+    let path = this.#litTwins?.path ?? null;
+    if (path === null && this.#selection.length === 1) {
+      const node = this.#cards.get(this.#selection[0]!)?.node;
+      path = node ? cardFilePath(node) : null;
+    }
+    return path ? this.#twins.get(path) ?? null : null;
+  }
+
+  /** Una firma delle gemelle della banda: se cambia, la banda si rilegge. */
+  #twinsKey(): string {
+    const ids = this.#shownTwins();
+    return ids === null ? "" : `${ids.length}\u0000${ids.join("\u0001")}`;
   }
 
   /** Che cosa fa il comando `id` su questa tela, o `null` se non lo conosce. */
@@ -8513,6 +8673,8 @@ export class CanvasEngine {
     this.#syncSelectionFrame();
     this.#paintLasso();
     this.#drawToolbar();
+    // Una scheda sola scelta con delle gemelle: la banda le dice (T22).
+    if (this.#twinsKey() !== this.#twinsShown) this.#statusSettle();
   }
 
   #pointerDown(event: PointerEvent): void {
@@ -10561,6 +10723,7 @@ export class CanvasEngine {
     if (this.#destroyed || !doc) return;
     if (this.#gestureActive() || !this.#isShown()) return;
     const { view, zoom } = this.#viewRect();
+    this.#askCitations(doc.nodes);
     if (this.#views.size === 0) {
       this.#refreshDetail(zoom);
       return;
@@ -11264,6 +11427,20 @@ export class CanvasEngine {
       ? keptEntry
       : undefined;
     const present = new Set(nodes.map((node) => node.id));
+    // Le gemelle col documento di adesso (T22). Se la scheda da cui si erano
+    // illuminate non c'è più, o non mostra più quel file, o il file ha ormai
+    // una scheda sola, si spengono.
+    this.#twins = twinGroups(nodes);
+    const lit = this.#litTwins;
+    let unlit = false;
+    if (lit !== null) {
+      const from = nodes.find((node) => node.id === lit.from);
+      if (!from || cardFilePath(from) !== lit.path || !this.#twins.has(lit.path)) {
+        this.#litTwins = null;
+        this.#twinsHover = null;
+        unlit = true;
+      }
+    }
     for (const [id, entry] of this.#cards) {
       if (present.has(id) || entry === kept) continue;
       this.#cards.delete(id);
@@ -11306,6 +11483,8 @@ export class CanvasEngine {
       }
       this.#resizeView(entry);
     }
+    if (unlit) this.#statusSettle();
+    this.#askCitations(nodes);
   }
 
   /** L'involucro di una scheda nuova, col corpo ancora vuoto: lo riempie `#refreshCard`. */
@@ -11429,6 +11608,8 @@ export class CanvasEngine {
     const far = farTitle(node);
     if (entry.far.textContent !== far) entry.far.textContent = far;
     entry.connect.setAttribute("aria-label", t("canvas.connect", { id: node.id }));
+    // «↩ N» e «×N» dopo il titolo, e la luce delle gemelle (T22).
+    this.#syncHead(entry);
     // La testata dell'estratto (T75): le parti e ↗, prima di →.
     const handle = entry.connect.parentElement;
     if (handle) syncExcerptHead(el, handle, entry.connect, node.type === "file" ? node.file ?? null : null, noteExcerptOf(node));
@@ -11609,36 +11790,45 @@ export class CanvasEngine {
     const life = openLifetime();
     entry.viewLife = life;
     entry.article.dataset.cardMissing = "true";
+    // Il buco nella lavagna (prototipo T25): il messaggio nel riquadro grigio
+    // delle schede di file, sotto i due pulsanti del kit.
+    const missing = document.createElement("div");
+    missing.className = "canvas-card-missing";
     const message = document.createElement("span");
     message.className = "canvas-media-placeholder";
     message.textContent = t("canvas.card.missing", { path });
-    body.append(message);
+    missing.append(message);
+    body.append(missing);
     life.add(cards.watch(path, () => this.#fileBack(id)));
     if (this.#readOnly) return;
+    const actions = document.createElement("div");
+    actions.className = "canvas-card-missing-actions";
+    missing.append(actions);
     const pick = this.#options.onPickFile;
     if (pick) {
       const relink = document.createElement("button");
       relink.type = "button";
-      // La classe dei gesti di testo dentro una scheda: nessun aspetto nuovo.
-      relink.className = "canvas-file-link";
+      relink.className = "kit-button";
+      relink.dataset.kind = "primary";
       relink.dataset.cardAction = "relink";
       relink.textContent = t("canvas.card.relink");
       life.listen(relink, "click", (event) => {
         event.stopPropagation();
         this.#relink(id);
       });
-      body.append(relink);
+      actions.append(relink);
     }
     const remove = document.createElement("button");
     remove.type = "button";
-    remove.className = "canvas-file-link";
+    remove.className = "kit-button";
+    remove.dataset.kind = "normal";
     remove.dataset.cardAction = "remove";
     remove.textContent = t("canvas.card.remove");
     life.listen(remove, "click", (event) => {
       event.stopPropagation();
       this.#removeCard(id);
     });
-    body.append(remove);
+    actions.append(remove);
   }
 
   /** «Ritrova…» di una scheda mancante, dal pulsante o dal gesto: lo stesso selettore e lo stesso commit (T16, T93). */

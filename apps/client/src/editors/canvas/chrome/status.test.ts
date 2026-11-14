@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 // La banda di stato della lavagna (T52): le voci che la shell disegna, la
 // cartella dei file trascinati come la scrive il deposito, e il menu dello zoom.
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { t } from "../../../i18n/strings";
 import { closeContextMenu } from "../../../ui/menu";
 import {
@@ -65,6 +65,18 @@ describe("le voci della banda", () => {
     expect(byId(fake()).has("chosen")).toBe(false);
     expect(byId(fake({ chosenCount: () => 1 })).get("chosen")?.text).toBe(t("canvas.status.chosen.one"));
     expect(byId(fake({ chosenCount: () => 3 })).get("chosen")?.text).toBe(t("canvas.status.chosen", { n: 3 }));
+  });
+
+  it("le copie dello stesso file (T22): dopo la scelta, col numero, e un clic le inquadra", () => {
+    expect(byId(fake()).has("twins")).toBe(false);
+    expect(byId(fake({ twins: () => null })).has("twins")).toBe(false);
+    const frame = vi.fn();
+    const items = canvasStatusItems(fake({ chosenCount: () => 1, twins: () => ({ count: 3, frame }) }));
+    expect(items.map((item) => item.id).slice(0, 3)).toEqual(["zoom", "chosen", "twins"]);
+    const twins = items.find((item) => item.id === "twins")!;
+    expect(twins).toMatchObject({ text: t("canvas.status.twins", { n: 3 }), hint: t("canvas.status.twins.frame", { n: 3 }) });
+    twins.open!();
+    expect(frame).toHaveBeenCalledTimes(1);
   });
 
   it("la sola lettura compare solo quando non si cambia, e dice perché", () => {

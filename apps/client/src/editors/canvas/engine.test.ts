@@ -2801,6 +2801,18 @@ describe("CanvasEngine: trascinare e incollare (T15)", () => {
     viewport(host).dispatchEvent(new DragEvent("dragleave", { bubbles: true }));
     expect(ghosts()).toHaveLength(0);
 
+    // Oltre i dodici, la cornice del gruppo col numero (prototipo T25); di nuovo
+    // sotto i dodici, i rettangoli senza numero.
+    const many = transfer({}, { types: ["Files"], items: Array.from({ length: 13 }, () => ({ kind: "file" })) });
+    dragover(host, many);
+    expect(ghosts()).toHaveLength(1);
+    expect(ghosts()[0]!.classList.contains("canvas-drop-ghost-group")).toBe(true);
+    expect(ghosts()[0]!.textContent).toBe("13 file");
+    dragover(host, files);
+    expect(ghosts()).toHaveLength(3);
+    expect(ghosts().some((ghost) => ghost.classList.contains("canvas-drop-ghost-group") || ghost.textContent !== "")).toBe(false);
+    viewport(host).dispatchEvent(new DragEvent("dragleave", { bubbles: true }));
+
     // Le voci dell'albero non si contano prima del rilascio: una.
     dragover(host, transfer({ [ENTRIES_DRAG_TYPE]: "", "text/plain": "" }));
     expect(ghosts()).toHaveLength(1);

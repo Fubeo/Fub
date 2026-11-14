@@ -2369,6 +2369,187 @@
 .canvas-node-link.selected > .canvas-node-handle > .canvas-connect {
   opacity: 1;
 }
+/* La scheda attiva (T14, D-10 a, prototipo T25): l'accento pieno e un alone,
+   «Esc per uscire» nella riga del titolo; il → non serve mentre si lavora
+   dentro. La scheda in scrittura (T41) è attiva anche lei: stesso anello. */
+.canvas-node[data-card-active] {
+  box-shadow:
+    0 0 0 2px var(--accent),
+    0 0 0 6px var(--accent-veil),
+    var(--shadow-2);
+}
+.canvas-node[data-card-active] > .canvas-node-handle > .canvas-connect {
+  display: none;
+}
+.canvas-exit-hint {
+  margin-left: auto;
+  padding: 0 var(--space-4);
+  border-radius: var(--radius-pill);
+  background: var(--accent-wash);
+  color: var(--accent);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-bold);
+  line-height: 20px;
+}
+/* La testata (T22): «↩ 2» quante note la citano, «×2» quante copie ha sulla
+   lavagna. «×2» è un pulsante: passandoci sopra, o col fuoco, le gemelle si
+   illuminano (C14). */
+.canvas-node-cites {
+  color: var(--muted);
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+}
+.canvas-node-twins {
+  padding: 0 var(--space-3);
+  border-radius: var(--radius-pill);
+  box-shadow: inset 0 0 0 1px var(--border-strong);
+  color: var(--muted);
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+  font-weight: var(--weight-bold);
+}
+.canvas-node-twins:hover,
+.canvas-node-twins:focus-visible,
+.canvas-node[data-card-twin] .canvas-node-twins {
+  background: var(--warning-wash);
+  box-shadow: inset 0 0 0 1px var(--warning);
+  color: var(--warning);
+}
+/* Le gemelle illuminate: un filo caldo e un alone tenue, diversi dalla
+   scelta (accento) e dal colore della scheda. Niente animazione: si
+   accendono e basta, anche col moto pieno. */
+.canvas-node[data-card-twin] {
+  box-shadow:
+    0 0 0 2px var(--warning),
+    0 0 0 6px var(--warning-wash),
+    var(--shadow-2);
+}
+/* Il filo resta della stessa misura sullo schermo anche da lontano, come
+   quello della ricerca: le gemelle fuori vista si trovano a colpo d'occhio
+   dopo «Mostra tutta la lavagna». */
+.canvas-node[data-card-detail][data-card-twin] {
+  box-shadow:
+    0 0 0 calc(6px / var(--canvas-detail-zoom, 1)) var(--warning-wash),
+    0 0 0 calc(2px / var(--canvas-detail-zoom, 1)) var(--warning);
+}
+@media (forced-colors: active) {
+  .canvas-node[data-card-active] {
+    outline: 2px solid Highlight;
+    outline-offset: 2px;
+  }
+  .canvas-node[data-card-twin] {
+    outline: 2px dashed Highlight;
+    outline-offset: 2px;
+  }
+  .canvas-node-twins {
+    border: 1px solid CanvasText;
+  }
+}
+/* L'ombra che dice «continua»: il testo della nota sfuma nella carta della
+   scheda, di qualunque colore sia, negli ultimi 40 px. Dentro la scheda
+   attiva il testo scorre, e l'ombra non c'è. */
+.canvas-node:not([data-card-active]) > .canvas-card-body > .canvas-card-note {
+  mask-image: linear-gradient(to bottom, var(--text) calc(100% - 40px), transparent);
+  -webkit-mask-image: linear-gradient(to bottom, var(--text) calc(100% - 40px), transparent);
+}
+/* Il PDF: la pagina bianca sulla carta della scheda. Il numero della pagina
+   c'è sempre, in basso; le frecce compaiono sulla scheda viva al passaggio o
+   col fuoco, e sulla scheda attiva. */
+.canvas-card-pdf {
+  background: var(--sheet-2);
+}
+.canvas-card-pdf-page {
+  background: var(--paper-bg);
+  box-shadow: 0 0 0 1px var(--border);
+}
+.canvas-card-pdf-previous,
+.canvas-card-pdf-next {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border-radius: var(--radius-pill);
+  background: var(--bg-elev);
+  box-shadow: var(--shadow-2);
+  color: var(--text);
+  font-size: var(--text-lg);
+  line-height: 1;
+}
+.canvas-node[data-card-mode="live"]:hover .canvas-card-pdf-previous,
+.canvas-node[data-card-mode="live"]:hover .canvas-card-pdf-next,
+.canvas-node[data-card-mode="live"][data-hover-held] .canvas-card-pdf-previous,
+.canvas-node[data-card-mode="live"][data-hover-held] .canvas-card-pdf-next,
+.canvas-node[data-card-mode="live"]:focus-within .canvas-card-pdf-previous,
+.canvas-node[data-card-mode="live"]:focus-within .canvas-card-pdf-next,
+.canvas-node[data-card-active] .canvas-card-pdf-previous,
+.canvas-node[data-card-active] .canvas-card-pdf-next {
+  display: inline-flex;
+}
+.canvas-card-pdf-previous:hover,
+.canvas-card-pdf-next:hover,
+.canvas-card-pdf-previous:focus-visible,
+.canvas-card-pdf-next:focus-visible {
+  background: var(--accent-wash);
+  color: var(--accent);
+}
+.canvas-card-pdf-previous:disabled,
+.canvas-card-pdf-next:disabled {
+  background: var(--bg-elev);
+  color: var(--muted);
+}
+.canvas-card-pdf-status {
+  padding: var(--space-1) var(--space-4);
+  border-radius: var(--radius-pill);
+  background: var(--bg-elev);
+  box-shadow: var(--shadow-1);
+  color: var(--muted);
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+  font-weight: var(--weight-medium);
+}
+/* «File mancante» (T16): un buco nella lavagna. Il bordo tratteggiato come
+   i gruppi, il fondo della lavagna, il messaggio nel riquadro grigio delle
+   schede di file (`canvas-media-placeholder`) e due pulsanti del kit. Il
+   colore della scheda non conta: il file non c'è. */
+.canvas-node[data-card-missing] {
+  border: 1px dashed var(--outline);
+  background: var(--sheet);
+  box-shadow: none;
+}
+.canvas-node[data-card-missing].selected {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+.canvas-card-missing {
+  gap: var(--space-5);
+}
+.canvas-card-missing > .canvas-media-placeholder {
+  margin: 0;
+  color: var(--text);
+}
+/* Il fantasma del rilascio (T15): dove andranno i file, prima di lasciarli. */
+.canvas-drop-ghost {
+  border: calc(1.5px / var(--canvas-zoom, 1)) dashed var(--accent);
+  border-radius: var(--radius-menu);
+  background: var(--accent-veil);
+}
+/* Oltre i dodici, la cornice del gruppo che li terrà, col numero in mezzo:
+   mentre si trascina si sa quanti sono, non come si chiamano. */
+.canvas-drop-ghost-group {
+  border-width: calc(2px / var(--canvas-zoom, 1));
+  background: color-mix(in srgb, var(--accent-veil) 50%, transparent);
+}
+.canvas-drop-ghost-name {
+  padding: calc(6px / var(--canvas-zoom, 1)) calc(14px / var(--canvas-zoom, 1));
+  overflow: hidden;
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+  color: var(--accent-contrast);
+  font-size: calc(var(--text-md) / var(--canvas-zoom, 1));
+  font-weight: var(--weight-bold);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 /* Senza la testata dentro, il margine in cima è quello dei lati. L'immagine
    e la pagina del PDF arrivano al bordo: il riquadro del contenuto, su cui
    si attacca l'inchiostro, si misura sulla scheda intera. */
@@ -2767,27 +2948,13 @@
   padding: 0;
   box-shadow: none;
 }
-/* La scheda che scrive: l'anello e l'alone della scheda attiva (T25), e
-   «Esc per uscire» pieno d'accento invece che velato. Si vede da lontano
-   che lì dentro si scrive, e non solo che è scelta. */
-.canvas-node[data-card-editing] {
-  box-shadow:
-    0 0 0 2px var(--accent),
-    0 0 0 6px var(--accent-veil),
-    var(--shadow-2);
-}
-.canvas-node[data-card-editing] > .canvas-node-handle > .canvas-connect {
-  display: none;
-}
+/* La scheda in scrittura (prototipo T27, la consigliata): l'anello e
+   l'alone della scheda attiva, e «Esc per uscire» pieno d'accento invece che
+   velato. Si vede da lontano che lì dentro si scrive, e non solo che è
+   attiva. */
 .canvas-node[data-card-editing] > .canvas-node-handle > .canvas-exit-hint {
-  margin-left: auto;
-  padding: 0 var(--space-4);
-  border-radius: var(--radius-pill);
   background: var(--accent);
   color: var(--accent-contrast);
-  font-size: var(--text-xs);
-  font-weight: var(--weight-bold);
-  line-height: 20px;
 }
 /* La nota che si scrive ha la tipografia della nota letta sulla scheda
    (T25): entrando in scrittura il testo resta dov'è, cambia solo che c'è il

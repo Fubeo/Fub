@@ -2,7 +2,7 @@ import { mountMarkdownSurface, type EditorSlashHost, type PageIcons, type System
 import type { CompletionSources } from "../text/profiles/markdown/completions";
 import type { LinkCardSource } from "../text/profiles/markdown/link-card";
 import { api } from "../../host/ipc";
-import { openVaultRoot, state as shellState, vaultArg } from "../../state/store";
+import { on as onSignal, openVaultRoot, state as shellState, vaultArg } from "../../state/store";
 import type { GridHost } from "../grid/engine";
 import { openLifetime } from "../../ui/lifetime";
 import type { GridDialogs, GridRibbon } from "../grid/ribbon/ribbon";
@@ -36,9 +36,10 @@ import { makePdfJsLoader, pdfIdWithoutFragment, type PdfEngineLoader, type PdfJs
 import type { CanvasAttachmentPort, CanvasCards, CanvasMediaPort, CanvasNotesPort, CardLinkRef } from "../canvas/engine";
 import type { DrawingImagePort } from "../canvas/surface";
 import type { CardEditorPort, CardMode, CardRenderer, CardSnapshots, CardView } from "../canvas/cards";
+import type { CardCitations } from "../canvas/card-head";
 import type { NoteCardPort } from "../canvas/cards/note";
 import type { PartsPickerPort } from "../canvas/parts-picker";
-import { documentOutline } from "../../host/query";
+import { backlinkSources, documentOutline, existingDocuments, linkedFrom } from "../../host/query";
 import type { WebCardPort } from "../canvas/cards/web";
 import type { PdfCardPort } from "../canvas/cards/pdf";
 import type { CraftCardPort } from "../canvas/cards/craft";
@@ -435,10 +436,54 @@ async function loadCanvasCards(options: SurfaceBootstrapOptions, ports: CanvasCa
       registry: cards.createCardRegistry(renderers),
       snapshots,
       watch,
+      citations: CANVAS_CITATIONS,
       ...(pdfPort ? { pdfPages: pdf.pdfPagesReader(pdfPort) } : {}),
     };
   };
 }
+
+/// «↩ N» nella testata delle schede (T22): quante note citano il file, e
+/// quali, con la domanda `backlinks` dell'indice; i file che una nota cita
+/// adesso con `documents` (`linked` uscente). Nessuna porta nuova.
+///
+/// I conti cambiano solo quando cambiano dei link, e l'avviso dice di quali
+/// documenti: uno cambiato senza l'aspetto `links` non tocca nessun conto,
+/// uno tolto o rinominato tocca sé stesso e ciò che citava. Un lotto, un
+/// vault aperto, un `overflow` e il segnale `documents` (una creazione, un
+/// ripristino) non dicono quali: «non so» (`null`).
+const CITERS_PAGE = 64;
+const CANVAS_CITATIONS: CardCitations = {
+  count: async (path) => {
+    const { total, sources } = await backlinkSources(path, CITERS_PAGE);
+    return { total, citers: sources };
+  },
+  linksFrom: async (doc, among) => {
+    const list = [...among];
+    const [linked, indexed] = await Promise.all([linkedFrom(doc, list), existingDocuments(list)]);
+    // Di un file che l'indice non conosce (un PDF, un'immagine) non si sa se
+    // `doc` lo cita adesso: può essere toccato.
+    return list.filter((path) => linked.has(path) || !indexed.has(path));
+  },
+  watch: (changed) => {
+    const unknown = () => changed(null);
+    const stops = [
+      onSignal("documents", unknown),
+      onEvent("document_changed", (event) => {
+        const aspects = event.changes?.aspects;
+        if (aspects && !aspects.includes("links")) return;
+        changed([event.id]);
+      }),
+      onEvent("document_removed", (event) => changed([event.id])),
+      onEvent("document_renamed", (event) => changed([event.from, event.to])),
+      onEvent("batch_ended", unknown),
+      onEvent("vault_opened", unknown),
+      onEvent("overflow", unknown),
+    ];
+    return () => {
+      for (const stop of stops) stop();
+    };
+  },
+};
 
 /// Il selettore delle sezioni della lavagna (T74): il sommario che l'indice
 /// ha già (`documentOutline`, la domanda `outline`) e la resa di una sezione
