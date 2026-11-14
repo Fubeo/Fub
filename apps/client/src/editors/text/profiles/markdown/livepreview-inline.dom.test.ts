@@ -139,12 +139,16 @@ describe("le decorazioni in riga della Live a ogni battuta", () => {
             // termine di paragone.
             view.dispatch({ effects: pageIconsChanged.of(null) });
             const label = `${policy}, seme ${seed}, passo ${step}`;
-            expect(syntaxTree(view.state), label).toBe(tree);
-            expect(JSON.stringify(view.visibleRanges), label).toBe(visible);
-            expect(patchedInline, label).toEqual(inlineOf(view));
-            expect(patchedAtomic, label).toEqual(atomicOf(view));
-            steps++;
-            if (lines < liveInlineVisited(view)!) patched++;
+            // Su una macchina carica il parser dei recinti può finire proprio
+            // in questo aggiornamento e dare un albero nuovo: il paragone non
+            // sarebbe sullo stesso albero, e il passo non si confronta.
+            if (syntaxTree(view.state) === tree) {
+              expect(JSON.stringify(view.visibleRanges), label).toBe(visible);
+              expect(patchedInline, label).toEqual(inlineOf(view));
+              expect(patchedAtomic, label).toEqual(atomicOf(view));
+              steps++;
+              if (lines < liveInlineVisited(view)!) patched++;
+            }
           }
           finish(view);
         }

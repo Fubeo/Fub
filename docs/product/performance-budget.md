@@ -228,8 +228,7 @@ tabella), con trenta battute e venti spostamenti del cursore di 200 caratteri:
 ```bash
 cd apps/client
 node bench/interaction.mjs --only=battuta
-# le cifre qui sotto: sui core P e con priorità bassa
-taskset -c 0-7 nice -n 19 node bench/interaction.mjs --only=battuta
+taskset -c 0-7 nice -n 19 node bench/interaction.mjs --only=battuta  # core P
 ```
 
 Il budget è una **mediana di 4 ms** e un **novantesimo percentile di 8 ms**
@@ -258,8 +257,7 @@ erano tre). Fra un giro e l'altro la stessa nota varia di più di quanto valga
 una correzione: il numero da guardare è la distanza dalla Sorgente, non la
 cifra di un giro solo.
 
-Sui soli core P (`taskset -c 0-7 nice -n 19`, sei giri alternati, carico da
-3,6 a 9,7) la nota di 7.201 righe dà, mediana · novantesimo: Sorgente 3,9 ·
+Sui core P (sei giri alternati, carico da 3,6 a 9,7) la nota di 7.201 righe dà, mediana · novantesimo: Sorgente 3,9 ·
 5,9 ms, Live 4,9 · 9,8 (prima 6,3 · 10,8), Blocchi 5,5 · 10,5 (prima 6,6 ·
 10,5). Le righe nascoste tolte dal campo dei blocchi (qui sotto) sono venute
 dopo: con carico da 10 a 25 la Sorgente fa 3,7 · 4,8, la Live 6,6 · 11,4
