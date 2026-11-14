@@ -138,7 +138,7 @@ parametri (`markdown.table` con `rows` e `cols`).
 | PDF | copia e copia con la citazione `[[file.pdf#page=N]]` del testo scelto, copia il link alla pagina, annota, il link `![[ ]]`, apri esterno |
 | Audio e video | sul lettore il menu del sistema; attorno, il link `![[ ]]` e apri esterno |
 
-In modalità Blocchi la maniglia di un blocco apre il suo menu col clic e col
+In Scrittura la maniglia di un blocco apre il suo menu col clic e col
 tasto destro, con la testata «Blocco» e l'inizio del testo: Trasforma in ▸,
 Colore ▸ (Testo e Fondo, coi nove colori dei Blocchi), Duplica, Copia il link
 al blocco, Sposta su e giù, Affianca in colonne, e «Elimina il blocco» per
