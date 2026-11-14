@@ -2084,3 +2084,11 @@ La più recente in cima: data · piano · decisione · perché.
 - 2026-11-14 · decisioni · L'ADR di questo piano diventa la 0244 (era 0241): 0241 è di N4 (`0241-inchiostro-sulla-lavagna.md`), 0242 e 0243 di N6; i tre rami andranno in `main` e due file con lo stesso numero si scontrerebbero.
 - 2026-11-14 · nucleo · T10 tenuto con i suoi scostamenti (varianti newtype, `width`/`height` facoltativi in `resize`, `set` che normalizza e rifiuta `#abc` in ingresso, `pdf_first_page`). Le tre code del suo rapporto (anteprima che non misura i file, descrizione MCP, tetto di `move` con `contents`) diventano T10b, scritto dall'orchestratore per la regola di autonomia: anteprima e scrittura devono dare la stessa lavagna.
 - 2026-11-14 · nucleo · T11, `reverse`: la freccia cambia verso (scelta a del coder). L'operazione inverte nodi e lati e tiene le punte per ruolo (`fromEnd` alla partenza, `toEnd` all'arrivo), così «Inverti la direzione» fa ciò che dice; lo scambio letterale di `engine.ts` (#reverse) scambiava anche le punte e la freccia restava dov'era. In T23 la GUI passa all'operazione del nucleo e cambia ciò che si vede (R8).
+- 2026-11-14 · T12 · `N6.card.drop_many` passa nella parità da `by_hand` a
+  `code`: R4 non ammette `target_ops` che compilano, e il gruppo oltre 12
+  schede lo compone T24 (`layout` poi `group`) · la voce dice ciò che il nucleo
+  sa fare oggi.
+- 2026-11-14 · T12 · La griglia del nucleo adotta la regola di N6 (la colonna
+  dopo parte al primo multiplo di 8 che lascia almeno 24), non il contrario:
+  nuovo task T12a · è il comportamento che l'utente vede già nel rilascio dei
+  file, e tiene le schede sulla griglia di 8 della tela.

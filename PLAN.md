@@ -1256,6 +1256,38 @@ Fatto quando: `cargo test -p fub-canvas-core` passa; i compiti del corpus
 con la griglia e l'albero non hanno `needs`.
 Prova: scripts/check.sh --rapido; cargo test -p fub-canvas-core --test
 op_vectors --test task_corpus
+Stato: [x] fatto · coder/lic-t12 (3f76b2ffa, Haiku), avanti veloce · `ops/layout.rs` con 18 vettori, il compito 14 senza needs, 2000 schede in griglia sotto 1 s in debug; x/y e l'origine si agganciano a 8; mezzi pixel arrotondati verso l'alto; un gruppo nella lista porta le sue schede una volta sola (vince il più esterno); `N6.card.drop_many` passa a `code` (R4 non ammette target_ops che compilano: il gruppo oltre 12 non c'è in questa forma, lo fa T24); aggiunto a MCP (`tools.rs`, `mcp.rs`, `mcp-server.md`). Rischio: quadratico come `align`, misurato fino a 2000 schede. La griglia del nucleo e quella di N6 differiscono di 0–7 px: T12a
+
+## T12a · La griglia del nucleo parte dal multiplo di 8, come N6
+
+Perché: `arrange::grid` (T5) mette ogni colonna e ogni riga a `gap` fisso
+(24) dalla precedente; la griglia dei file lasciati cadere di N6
+(`drop-layout.ts`, `dropLayout`) fa partire la colonna o la riga dopo al
+primo multiplo di 8 che lascia almeno 24. Con misure non multiple di 8 le
+posizioni differiscono di 0–7 px, e T24 deve far passare il rilascio da
+`layout {kind: "grid"}` senza che le schede si spostino. Il nucleo adotta la
+regola di N6: tutto resta sulla griglia di 8 a cui la tela aggancia. Task
+scritto dall'orchestratore (2026-11-14) dal rapporto di T12.
+Tocca: `crates/fub-canvas-core/src/layout/arrange.rs` e i suoi test, i
+vettori `canvas-ops/layout-*.json` e ogni vettore o corpus di `arrange` che
+cambia (rigenerati con il comando del loro header, mai a mano), `docs/reference/canvas-code.md`
+se descrive la griglia.
+Non toccare: `drop-layout.ts` e il client (T24); le altre disposizioni
+(albero, fila, colonna) salvo che usino la stessa funzione di passo.
+Dipende da: T12
+Cosa fare:
+- `grid` calcola l'inizio della colonna (e della riga) dopo come il primo
+  multiplo di 8 che lascia almeno `gap` dalla fine della precedente, con
+  l'origine già agganciata a 8; con misure multiple di 8 il risultato non
+  cambia.
+- Un test di parità coi casi di `drop-layout.test.ts` di N6 (le stesse
+  misure danno le stesse posizioni), scritto in Rust coi numeri copiati e la
+  fonte nel commento.
+Casi limite: misure non multiple di 8 (es. 330×250); `gap` 0; una sola
+scheda; una colonna sola; misure frazionarie (mezzi pixel di T12).
+Fatto quando: il test di parità verde; i vettori di layout rigenerati e
+verdi; `scripts/check.sh --rapido` verde.
+Prova: scripts/check.sh --rapido; cargo test -p fub-canvas-core
 Stato: [ ] da fare
 
 ## T13 · Incolla un frammento, trasforma un testo in file
