@@ -249,20 +249,20 @@ npm run bench:giro -- --solo=avvio --luce=light       # un gruppo, nella luce gi
 ```
 
 Il corridore è `bench/giro.mjs`; i gruppi, in ordine, sono in
-`bench/giro/elenco.mjs`, uno per file accanto. Il gruppo `avvio` prova
-il primo avvio senza vault fino alla scrivania senza lo strato d'avvio,
-l'apertura del vault, una cartella e una nota dall'albero, un titolo, una lista
-e un grassetto scritti in Live, le quattro modalità sulla stessa nota (questo
-non al telefono). Al primo compito che fallisce il giro si ferma, dice quale e
-perché, fotografa la pagina (`…-errore.png`) ed esce con 1. Foto e referto
-(`giro.json`) vanno in `--out` (di serie `bench/.output/giro/`); la porta segue
-`FUB_BENCH_PORT` o `--port`.
+`bench/giro/elenco.mjs`, uno per file accanto che dice in testa che cosa prova.
+`avvio`: dal primo avvio senza vault all'albero, alla scrittura in Live e alle
+quattro modalità. `scrivere` (non al telefono): «/» e maniglia, tasto destro,
+palette, due riquadri, rinomina coi link, ricerca e «In entrata»; ricarica con
+`?formatbar=1&slash=1`, senza cui il finto non dà i comandi di formato. Al
+primo compito che fallisce il giro si ferma, dice quale e perché, fotografa la
+pagina (`…-errore.png`) ed esce con 1. Foto e referto (`giro.json`) in `--out`
+(di serie `bench/.output/giro/`); la porta segue `FUB_BENCH_PORT` o `--port`.
 
-Che cosa **non** prova: i pixel (le foto non hanno baseline, si guardano: per
-i pixel c'è `bench:verify`), il motore vero (risponde il finto host, non
-`fub-host`, né un componente WASM), il sistema operativo (finestre, dialoghi,
-WebView e installer: il selettore di cartella risponde il vault del banco).
-Quelli restano al giro a mano sugli installer.
+Che cosa **non** prova: i pixel (senza baseline, si guardano: `bench:verify`),
+il motore vero (risponde il finto host; i suoi «Struttura» e «Collegamenti»
+sono uguali per ogni nota, e la sua rinomina riscrive solo i wikilink), il
+sistema operativo (finestre, dialoghi, WebView e installer: il selettore di
+cartella risponde il vault del banco). Restano al giro a mano sugli installer.
 
 Varianti usate dalle prove di accettazione della Graph View e dei disegni
 grandi:

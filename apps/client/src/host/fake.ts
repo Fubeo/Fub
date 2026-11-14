@@ -561,6 +561,45 @@ function resolveAgainst(from: string, raw: string): string | null {
   return segments.length ? segments.join("/") : null;
 }
 
+/// Il documento che la pagina di un wikilink nomina, fra `ids`: una nota per
+/// nome, poi un file per nome (`![[foto.png]]`). È la risoluzione del finto,
+/// più povera di quella del kernel: niente omonimi in ordine, niente path
+/// relativi.
+function wikiPageDoc(ids: Iterable<string>, page: string): string | undefined {
+  const all = [...ids];
+  const expected = `${page}.md`;
+  return all.find((id) => id === expected || id.endsWith(`/${expected}`))
+    ?? all.find((id) => id === page || id.endsWith(`/${page}`));
+}
+
+/// Un wikilink (anche incorporato, `![[…]]`): la pagina, poi il frammento e
+/// l'alias, che la rinomina lascia com'erano.
+const WIKILINK = /(!?\[\[)([^\]|#\n]*)([^\]\n]*)\]\]/g;
+
+/// I testi riscritti da una rinomina di `from` in `to`, per documento: i soli
+/// wikilink che nominavano `from` cambiano pagina, nella forma in cui erano
+/// scritti (per nome o per path, con l'estensione se c'era), col frammento e
+/// l'alias intatti. È la parte di `link_retarget_edits` che il banco usa; i
+/// link Markdown `[testo](path)` il finto non li riscrive.
+function renameRewrites(texts: ReadonlyMap<string, string>, from: string, to: string): Map<string, string> {
+  const dot = from.lastIndexOf(".");
+  const ext = dot > from.lastIndexOf("/") ? from.slice(dot) : "";
+  const stem = (id: string): string => (ext && id.endsWith(ext) ? id.slice(0, -ext.length) : id);
+  const rewritten = new Map<string, string>();
+  for (const [id, text] of texts) {
+    const next = text.replace(WIKILINK, (whole, open: string, page: string, rest: string) => {
+      const name = page.trim();
+      if (name === "" || wikiPageDoc(texts.keys(), name) !== from) return whole;
+      const withExt = ext !== "" && name.toLowerCase().endsWith(ext.toLowerCase());
+      const byPath = name.includes("/");
+      const target = byPath ? stem(to) : stem(to).slice(stem(to).lastIndexOf("/") + 1);
+      return `${open}${target}${withExt ? ext : ""}${rest}]]`;
+    });
+    if (next !== text) rewritten.set(id, next);
+  }
+  return rewritten;
+}
+
 /// L'host finto, pronto a rispondere.
 export function createFakeHost(options: Options = {}): FakeHost {
   const root = options.root === undefined ? "/vault" : options.root;
@@ -1225,10 +1264,7 @@ export function createFakeHost(options: Options = {}): FakeHost {
         if (page.trim() === "" && (heading !== null || block !== null)) {
           return { kind: "resolved", value: q.from ? { doc: q.from } : null };
         }
-        const expected = `${page}.md`;
-        // Una nota per nome, poi un allegato per nome: `![[foto.png]]`.
-        const hit = [...docs.keys()].find((id) => id === expected || id.endsWith(`/${expected}`))
-          ?? [...docs.keys()].find((id) => id === page || id.endsWith(`/${page}`));
+        const hit = wikiPageDoc(docs.keys(), page);
         return { kind: "resolved", value: hit ? { doc: hit } : null };
       }
       case "tags":
@@ -1392,9 +1428,20 @@ export function createFakeHost(options: Options = {}): FakeHost {
         const to = String(args?.to);
         const before = docs.get(from);
         if (!before) throw new Error(`host fake: «${from}» non esiste`);
+        // Come il kernel, la rinomina si porta dietro i wikilink che la
+        // nominavano (anche quelli della nota stessa): le note toccate
+        // cambiano revisione e lo dicono con `document_changed`.
+        const rewritten = renameRewrites(new Map([...docs].map(([id, entry]) => [id, entry.text])), from, to);
         docs.delete(from);
         docs.set(to, before);
+        const own = rewritten.get(from);
+        if (own !== undefined) write(to, own);
         emit({ type: "document_renamed", from, to });
+        for (const [id, text] of rewritten) {
+          if (id === from) continue;
+          write(id, text);
+          emit({ type: "document_changed", id });
+        }
         return { notify: null, effect: { kind: "done" as const }, undo: null, partial: null };
       }
       case "trash.os": {
