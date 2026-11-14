@@ -404,6 +404,12 @@ registro, indici ed eventi restano quelli della cancellazione interna. Su
 Windows e macOS usano il fallback perché il backend OS segnala non supportato.
 Il registro marca il trasferimento OS come non annullabile dai
 comandi interni: il recupero avviene dal cestino del sistema.
+Quando invece è Fub a disfare la mossa, perché un passo dopo il
+trasferimento è fallito, il file torna dal cestino del sistema passando dallo
+storage del vault (`VaultStorage::move_in_no_replace`): la destinazione si
+risolve dentro la radice aperta, con i suoi lucchetti, e una cartella
+diventata un collegamento verso fuori fa fallire il ritorno invece di portare
+il file fuori dal vault.
 
 Anche per il cestino del sistema il path torna libero, ma nessuna voce del
 vault porta la nota indietro: ciò che il sistema ripristina è un file nuovo, che

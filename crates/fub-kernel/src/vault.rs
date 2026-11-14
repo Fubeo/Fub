@@ -453,8 +453,11 @@ impl CompletedOsTrash {
         if !self.is_current() {
             return Err(KernelError::Stale(self.original.to_string()));
         }
-        crate::storage::FsStorage
-            .rename_no_replace(&self.destination, &self.vault.path_for(&self.original)?)
+        // Dal cestino del sistema al vault passando dallo storage del vault:
+        // la destinazione ha gli stessi presidi di ogni altra scrittura.
+        self.vault
+            .storage
+            .move_in_no_replace(&self.destination, &self.vault.path_for(&self.original)?)
             .map_err(|source| KernelError::Io {
                 path: self.destination,
                 source,

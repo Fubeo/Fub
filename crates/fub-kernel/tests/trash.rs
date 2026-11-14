@@ -1260,3 +1260,76 @@ fn drafts(ws: &Workspace) -> Vec<String> {
         .map(|b| b.doc.to_string())
         .collect()
 }
+
+/// Un cestino del sistema che sposta il file e basta.
+struct MovesTo(Utf8PathBuf);
+
+impl fub_kernel::os_trash::OsTrashBackend for MovesTo {
+    fn move_file_to_os_trash(&self, source: &Utf8Path) -> std::io::Result<Utf8PathBuf> {
+        std::fs::rename(source, &self.0)?;
+        Ok(self.0.clone())
+    }
+}
+
+/// **Il ritorno dal cestino del sistema passa dallo storage del vault** (B11
+/// dell'audit). Prima la mossa usava il filesystem nudo: se la cartella della
+/// nota diventava un collegamento verso fuori, il file finiva fuori dal vault.
+/// Adesso la destinazione si risolve dentro la radice aperta, la mossa si
+/// rifiuta e il file resta nel cestino del sistema.
+#[cfg(unix)]
+#[test]
+fn the_rollback_from_the_system_trash_stays_inside_the_vault() {
+    let vault_dir = tempfile::tempdir().unwrap();
+    let root = Utf8PathBuf::from_path_buf(vault_dir.path().to_owned()).unwrap();
+    let system_trash = tempfile::tempdir().unwrap();
+    let destination =
+        Utf8PathBuf::from_path_buf(system_trash.path().join("Nota.md")).unwrap();
+    let elsewhere = tempfile::tempdir().unwrap();
+    std::fs::create_dir(root.join("dir")).unwrap();
+    std::fs::write(root.join("dir/Nota.md"), b"# Nota\n").unwrap();
+
+    let vault = fub_kernel::Vault::open(&root).unwrap();
+    let doc = DocId::new("dir/Nota.md");
+    let moved = vault
+        .prepare_trash(&doc)
+        .unwrap()
+        .invoke_os(&MovesTo(destination.clone()))
+        .unwrap();
+    assert!(matches!(moved, fub_kernel::vault::CompletedOsTrashMove::Os(_)));
+
+    // La cartella rimasta vuota diventa un collegamento verso fuori.
+    std::fs::remove_dir(root.join("dir")).unwrap();
+    std::os::unix::fs::symlink(elsewhere.path(), root.join("dir")).unwrap();
+
+    assert!(moved.rollback().is_err());
+    assert!(
+        !elsewhere.path().join("Nota.md").exists(),
+        "the rollback wrote outside the vault"
+    );
+    assert_eq!(std::fs::read(&destination).unwrap(), b"# Nota\n");
+}
+
+/// Il caso buono: il ritorno rimette la nota al suo posto.
+#[test]
+fn the_rollback_from_the_system_trash_puts_the_note_back() {
+    let vault_dir = tempfile::tempdir().unwrap();
+    let root = Utf8PathBuf::from_path_buf(vault_dir.path().to_owned()).unwrap();
+    let system_trash = tempfile::tempdir().unwrap();
+    let destination =
+        Utf8PathBuf::from_path_buf(system_trash.path().join("Nota.md")).unwrap();
+    std::fs::create_dir(root.join("dir")).unwrap();
+    std::fs::write(root.join("dir/Nota.md"), b"# Nota\n").unwrap();
+
+    let vault = fub_kernel::Vault::open(&root).unwrap();
+    let doc = DocId::new("dir/Nota.md");
+    let moved = vault
+        .prepare_trash(&doc)
+        .unwrap()
+        .invoke_os(&MovesTo(destination.clone()))
+        .unwrap();
+    moved.rollback().unwrap();
+    assert_eq!(std::fs::read(root.join("dir/Nota.md")).unwrap(), b"# Nota\n");
+    assert!(!destination.exists());
+}
+
+

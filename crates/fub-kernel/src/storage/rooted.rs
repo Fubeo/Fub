@@ -851,6 +851,68 @@ impl VaultStorage for RootedFsStorage {
         self.with_move_locks(from, to, || self.rename_no_replace_locked(from, to))
     }
 
+    fn move_in_no_replace(&self, outside: &Utf8Path, to: &Utf8Path) -> io::Result<()> {
+        if outside.starts_with(&self.root) {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                format!("{outside} è dentro la root montata: si sposta con rename_no_replace"),
+            ));
+        }
+        let (Some(source_parent), Some(source_name)) = (outside.parent(), outside.file_name())
+        else {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                format!("{outside} non è un file rinominabile"),
+            ));
+        };
+        self.create_parent_synced(to)?;
+        self.with_lock(to, || {
+            // La sorgente è del sistema e si apre per nome; la destinazione
+            // passa dalla capability, come ogni scrittura del vault.
+            let source_dir = Dir::open_ambient_dir(source_parent.as_std_path(), ambient_authority())?;
+            let source_name = Path::new(source_name);
+            let (to_parent, to_name) = self.parent_dir_and_name(to)?;
+            #[cfg(unix)]
+            {
+                use std::os::unix::io::AsRawFd;
+                let moved = super::rename_no_replace_at(
+                    source_dir.as_raw_fd(),
+                    source_name,
+                    to_parent.as_raw_fd(),
+                    &to_name,
+                )?;
+                if !moved {
+                    // Senza la primitiva del sistema: il lucchetto di `to`
+                    // tiene fuori gli altri writer fra la verifica e la mossa.
+                    match to_parent.symlink_metadata(&to_name) {
+                        Ok(_) => {
+                            return Err(io::Error::new(
+                                io::ErrorKind::AlreadyExists,
+                                format!("{to}: esiste già"),
+                            ))
+                        }
+                        Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+                        Err(error) => return Err(error),
+                    }
+                    source_dir.rename(source_name, &to_parent, &to_name)?;
+                }
+            }
+            #[cfg(windows)]
+            rename_no_replace_windows(&source_dir, source_name, &to_parent, &to_name)?;
+            #[cfg(not(any(unix, windows)))]
+            {
+                if to_parent.symlink_metadata(&to_name).is_ok() {
+                    return Err(io::Error::new(
+                        io::ErrorKind::AlreadyExists,
+                        format!("{to}: esiste già"),
+                    ));
+                }
+                source_dir.rename(source_name, &to_parent, &to_name)?;
+            }
+            self.sync_parents(to, None)
+        })
+    }
+
     fn remove(&self, path: &Utf8Path) -> io::Result<()> {
         self.dir.remove_file(self.rel(path)?)?;
         self.sync_parents(path, None)
@@ -1405,6 +1467,54 @@ mod tests {
         storage.append(&log, b"uno\n").unwrap();
         storage.append(&log, b"due\n").unwrap();
         assert_eq!(std::fs::read(&log).unwrap(), b"uno\ndue\n");
+    }
+
+    /// Una voce del cestino del sistema torna nel vault passando dalla
+    /// capability: se la sua cartella è diventata un collegamento che porta
+    /// fuori, la mossa si rifiuta e il file resta nel cestino (B11 dell'audit).
+    #[cfg(unix)]
+    #[test]
+    fn moving_in_from_outside_stays_inside_the_capability() {
+        use std::os::unix::fs::symlink;
+        let vault = tempfile::tempdir().unwrap();
+        let root = Utf8PathBuf::from_path_buf(vault.path().to_owned()).unwrap();
+        let trash = tempfile::tempdir().unwrap();
+        let trash = Utf8PathBuf::from_path_buf(trash.path().to_owned()).unwrap();
+        let elsewhere = tempfile::tempdir().unwrap();
+        let elsewhere = Utf8PathBuf::from_path_buf(elsewhere.path().to_owned()).unwrap();
+        let storage = RootedFsStorage::open(&root).unwrap();
+
+        // La cartella è un collegamento verso fuori: la mossa non passa.
+        let trashed = trash.join("Nota.md");
+        std::fs::write(&trashed, b"# Nota\n").unwrap();
+        symlink(&elsewhere, root.join("dir")).unwrap();
+        assert!(storage
+            .move_in_no_replace(&trashed, &root.join("dir/Nota.md"))
+            .is_err());
+        assert!(!elsewhere.join("Nota.md").exists(), "the file left the vault");
+        assert_eq!(std::fs::read(&trashed).unwrap(), b"# Nota\n");
+
+        // Una destinazione occupata resta com'era, e la sorgente pure.
+        std::fs::write(root.join("Nota.md"), b"nuova").unwrap();
+        let error = storage
+            .move_in_no_replace(&trashed, &root.join("Nota.md"))
+            .unwrap_err();
+        assert_eq!(error.kind(), io::ErrorKind::AlreadyExists);
+        assert_eq!(std::fs::read(root.join("Nota.md")).unwrap(), b"nuova");
+        assert!(trashed.exists());
+
+        // Una sorgente dentro il vault non è «da fuori».
+        let error = storage
+            .move_in_no_replace(&root.join("Nota.md"), &root.join("Altra.md"))
+            .unwrap_err();
+        assert_eq!(error.kind(), io::ErrorKind::InvalidInput);
+
+        // Il caso buono: torna al suo posto, creando la cartella che manca.
+        storage
+            .move_in_no_replace(&trashed, &root.join("sotto/Nota.md"))
+            .unwrap();
+        assert_eq!(std::fs::read(root.join("sotto/Nota.md")).unwrap(), b"# Nota\n");
+        assert!(!trashed.exists());
     }
 
     #[cfg(unix)]
