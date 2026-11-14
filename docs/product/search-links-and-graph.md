@@ -53,9 +53,8 @@ e i blocchi `query` incorporati leggono le stesse parole allo stesso modo:
 - `line:`, `block:` e `section:`, che vogliono tutte le parole nella stessa riga scritta, nello stesso
   blocco (paragrafo, titolo, voce, codice, tabella) o sotto lo stesso titolo: `line:(rosa spina)`,
   `block:"frase"`. Diventano la foglia `scoped`, che l'indice full-text valuta sui suoi candidati.
-- `comment:parola` cerca nei messaggi dei [commenti](../reference/note-conventions.md), autore
-  compreso, che `content:` e la ricerca semplice non vedono: un predicato `custom` (`ns`
-  `fub:comment`, un `TextQuery`) sul campo `comments` dell'indice full-text (schema v9).
+- `comment:parola` cerca nei messaggi dei [commenti](../reference/note-conventions.md), autore compreso,
+  che `content:` non vede: predicato `custom` `fub:comment` col suo `TextQuery`, campo `comments` (schema v9).
 - `due:2026-10-19`, `due:<D`, `due:<=D`, `due:>D` e `due:>=D`: le note con una
   task aperta la cui scadenza (`📅 AAAA-MM-GG` nel suo testo, la scrittura del
   plugin Tasks) cade quel giorno o da quel lato della data. Diventano la foglia
