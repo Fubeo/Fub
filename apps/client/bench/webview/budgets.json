@@ -12,6 +12,7 @@
     "S8.penFrameGap.max": 33,
     "S9.frameGap.p95": 16.7,
     "S9.frameGap.max": 50,
+    "S9.keyToPaint.p95": 16.7,
     "I1.nota.p95": 50,
     "I1.tessera.p95": 50,
     "R1.residuo.MiB": 50,
