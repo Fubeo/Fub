@@ -261,6 +261,10 @@ export function mountLauncher(lifetime: Lifetime): Launcher {
     let shown: Shown | null = null;
     /// Quante righe scelte si vedono adesso: un Maiusc-Invio crea solo se sono zero.
     let visible = 0;
+    /// Vero mentre `paint` rifà l'elenco: le righe passano per uno stato vuoto,
+    /// e lì l'anteprima non deve spegnersi e riaccendersi. `paint` chiama
+    /// `watch` a fine lavoro.
+    let painting = false;
     let askTimer: number | undefined;
     let slowTimer: number | undefined;
     life.add(() => {
@@ -285,8 +289,11 @@ export function mountLauncher(lifetime: Lifetime): Launcher {
 
     const drawRow = (row: Row, cell: HTMLElement): void => {
       if (row.kind === "group") {
-        // L'intestazione di un gruppo: non si sceglie, le frecce la saltano.
+        // L'intestazione di un gruppo: non si sceglie, le frecce la saltano, e
+        // non è un'opzione. Il ruolo `presentation` la lascia fuori dall'elenco
+        // di chi legge (`paint` toglie anche lo stato di opzione che il kit le dà).
         cell.classList.add("launcher-group");
+        cell.setAttribute("role", "presentation");
         cell.textContent = row.title;
         return;
       }
@@ -430,7 +437,9 @@ export function mountLauncher(lifetime: Lifetime): Launcher {
         deferred = way;
         if (askTimer !== undefined) query();
       },
-      onHighlight: () => watch(),
+      onHighlight: () => {
+        if (!painting) watch();
+      },
       disabled: (row) => !selectable(row),
       focus: "activedescendant",
       owner: input,
@@ -451,11 +460,12 @@ export function mountLauncher(lifetime: Lifetime): Launcher {
       if (actionable(list.active())) hints.append(hint("Tab", t("launcher.hint.actions")));
     };
 
-    /// L'anteprima segue la nota della riga attiva, dove l'anteprima c'è. Le
-    /// azioni e i tasti seguono la riga attiva.
+    /// L'anteprima segue la nota della riga attiva, dove l'anteprima c'è; con le
+    /// azioni aperte, la nota che si agisce. Le azioni e i tasti seguono la riga.
     function watch(): void {
       const row = list.active();
-      preview.follow(surface.hasAttribute("data-preview") && row?.kind === "note" ? row.doc : null);
+      const doc = actionsOf ?? (row?.kind === "note" ? row.doc : null);
+      preview.follow(surface.hasAttribute("data-preview") ? doc : null);
       toActions.hidden = actionsOf !== null || !actionable(row);
       paintHints();
     }
@@ -473,8 +483,21 @@ export function mountLauncher(lifetime: Lifetime): Launcher {
       setBusy(false);
       // Le righe si ridisegnano tutte: il segno delle lettere cercate dipende
       // dalla domanda, non solo dalla voce.
-      list.setItems([]);
-      list.setItems(answer.rows);
+      painting = true;
+      try {
+        list.setItems([]);
+        list.setItems(answer.rows);
+      } finally {
+        painting = false;
+      }
+      // Il kit dà a ogni voce il ruolo di opzione e lo stato di scelta, anche
+      // alle intestazioni: quelle non sono opzioni, e la prima opzione è la
+      // prima riga che si può scegliere.
+      for (const head of rows.querySelectorAll<HTMLElement>(".launcher-group")) {
+        head.setAttribute("role", "presentation");
+        head.removeAttribute("aria-selected");
+        head.removeAttribute("aria-disabled");
+      }
       const found = answer.rows.filter(selectable);
       const count = found.length;
       visible = count;

@@ -378,6 +378,26 @@ describe("il campo è un combobox, l'elenco un listbox", () => {
     expect(document.activeElement).toBe(input);
   });
 
+  it("un'intestazione di gruppo non è un'opzione: la prima opzione è il primo risultato", () => {
+    world.answer = () => listed([
+      { kind: "group", key: "g:notes", title: "Note" },
+      note("Guida/Uno.md"),
+      { kind: "group", key: "g:text", title: "Nel testo" },
+      note("Due.md", { hit: "text", at: 3, snippet: { text: "un banco", highlights: [] } }),
+    ]);
+    launcher.open("all");
+    const head = document.querySelector(".launcher-group") as HTMLElement;
+    expect(head.textContent).toBe("Note");
+    expect(head.getAttribute("role")).toBe("presentation");
+    expect(head.hasAttribute("aria-selected")).toBe(false);
+    expect(head.hasAttribute("aria-disabled")).toBe(false);
+    // Il primo `option` del campo è il primo risultato, non l'intestazione.
+    const first = document.querySelector('.launcher-list [role="option"]') as HTMLElement;
+    expect(first.textContent).toContain("Uno");
+    expect(field().getAttribute("aria-activedescendant")).toBe(first.id);
+    expect(document.querySelectorAll('.launcher-list [role="option"]')).toHaveLength(2);
+  });
+
   it("senza righe non è aperto, e la frase del vuoto è detta in una regione viva", () => {
     world.answer = () => nothing("launcher.note.commands.none");
     launcher.open("commands");
@@ -1233,6 +1253,24 @@ describe("la corsa dalla pillola", () => {
 });
 
 describe("l'anteprima accanto all'elenco", () => {
+  it("con le azioni aperte l'anteprima resta sulla nota che si agisce, e torna alla riga quando si esce", async () => {
+    launcher.open("all");
+    vi.advanceTimersByTime(PREVIEW_DELAY_MS);
+    await settle();
+    expect(page().textContent).toBe("Resa di a/Uno.md");
+    press(field(), "Tab");
+    // La riga attiva è ora un'azione: l'anteprima non cambia documento.
+    vi.advanceTimersByTime(PREVIEW_DELAY_MS * 3);
+    await settle();
+    expect(world.rendered).toEqual(["a/Uno.md"]);
+    expect(page().textContent).toBe("Resa di a/Uno.md");
+    press(field(), "Escape");
+    vi.advanceTimersByTime(PREVIEW_DELAY_MS);
+    await settle();
+    expect(world.rendered).toEqual(["a/Uno.md"]);
+    expect(page().textContent).toBe("Resa di a/Uno.md");
+  });
+
   /// Una resa che arriva quando lo dice il test.
   function rendering(): { promise: Promise<{ html: string; parts: [] }>; land(html: string): void; fail(): void } {
     let land!: (html: string) => void;
