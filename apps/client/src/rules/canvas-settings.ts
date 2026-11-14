@@ -1,5 +1,5 @@
 // Le impostazioni della lavagna come le legge il client, senza la lavagna: il
-// nome del bundle `fub.lavagna`, le chiavi delle dodici impostazioni del gruppo
+// nome del bundle `fub.lavagna`, le chiavi delle tredici impostazioni del gruppo
 // «Lavagna» (`crates/fub-features/src/lavagna.rs`), le loro scelte, i valori di
 // serie e la lettura pura delle righe (`preferencesOf`): un valore che non regge
 // la sua specie vale il suo di serie.
@@ -31,6 +31,9 @@ export const PEN_BUTTON_KEY = "canvas.pen_button";
 /// L'impostazione «La rotella del mouse».
 export const WHEEL_KEY = "canvas.wheel";
 
+/// L'impostazione «Trascinare nel vuoto».
+export const DRAG_EMPTY_KEY = "canvas.drag_empty";
+
 /// L'impostazione «Spazio di lavoro».
 export const WORKSPACE_KEY = "canvas.workspace";
 
@@ -55,6 +58,7 @@ export const DROP_FOLDER_PATH_KEY = "canvas.drop_folder_path";
 /// Le scelte, come le scrive la macchina nel Rust; la prima è quella di serie.
 export const PEN_BUTTON_VALUES = ["radial", "eraser", "pan", "lasso"] as const;
 export const WHEEL_VALUES = ["pan", "zoom"] as const;
+export const DRAG_EMPTY_VALUES = ["select", "pan"] as const;
 export const WORKSPACE_VALUES = ["auto", "full", "simple"] as const;
 export const DROP_FOLDER_VALUES = ["notes", "board", "folder"] as const;
 
@@ -64,6 +68,7 @@ export const DROP_FOLDER_PATH_DEFAULT = "Allegati";
 /// Le scelte come le usa il client.
 export type PenButtonAction = (typeof PEN_BUTTON_VALUES)[number];
 export type WheelAction = (typeof WHEEL_VALUES)[number];
+export type DragEmptyAction = (typeof DRAG_EMPTY_VALUES)[number];
 export type WorkspaceMode = (typeof WORKSPACE_VALUES)[number];
 export type DropFolderTarget = (typeof DROP_FOLDER_VALUES)[number];
 
@@ -79,6 +84,9 @@ export interface CanvasPreferences {
   readonly penButton: PenButtonAction;
   /// Che cosa fa la rotella fuori da una scheda attiva.
   readonly wheel: WheelAction;
+  /// Che cosa fa il trascinamento col tasto sinistro sul vuoto, con la Selezione:
+  /// «select» sceglie con un rettangolo, «pan» sposta la vista.
+  readonly dragEmpty: DragEmptyAction;
   /// Quanti strumenti e pannelli mostra la lavagna.
   readonly workspace: WorkspaceMode;
   /// Gli strumenti della colonna, nell'ordine; una lista vuota vale quella di serie.
@@ -102,6 +110,7 @@ export const DEFAULT_PREFERENCES: CanvasPreferences = Object.freeze<CanvasPrefer
   fingerWrites: false,
   penButton: "radial",
   wheel: "pan",
+  dragEmpty: "select",
   workspace: "auto",
   toolbar: Object.freeze<string[]>([]),
   grid: true,
@@ -132,6 +141,7 @@ export function preferencesOf(entries: readonly SettingEntry[]): CanvasPreferenc
     fingerWrites: flag(FINGER_WRITES_KEY, DEFAULT_PREFERENCES.fingerWrites),
     penButton: choice(PEN_BUTTON_KEY, PEN_BUTTON_VALUES, DEFAULT_PREFERENCES.penButton),
     wheel: choice(WHEEL_KEY, WHEEL_VALUES, DEFAULT_PREFERENCES.wheel),
+    dragEmpty: choice(DRAG_EMPTY_KEY, DRAG_EMPTY_VALUES, DEFAULT_PREFERENCES.dragEmpty),
     workspace: choice(WORKSPACE_KEY, WORKSPACE_VALUES, DEFAULT_PREFERENCES.workspace),
     toolbar: Array.isArray(toolbar) ? toolbar.filter((tool): tool is string => typeof tool === "string") : [],
     grid: flag(GRID_KEY, DEFAULT_PREFERENCES.grid),

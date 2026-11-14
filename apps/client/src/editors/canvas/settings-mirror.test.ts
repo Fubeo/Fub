@@ -2,7 +2,7 @@
 // dichiara le impostazioni della lavagna, il client le legge, e chiavi, ordine,
 // specie, valori e default devono essere gli stessi**.
 //
-// `fub.lavagna` dichiara in Rust le dodici impostazioni del gruppo «Lavagna»
+// `fub.lavagna` dichiara in Rust le tredici impostazioni del gruppo «Lavagna»
 // (`crates/fub-features/src/lavagna.rs`); il client le legge da `preferences.ts`.
 // Una chiave rinominata da una parte sola non fa rumore: l'interruttore acceso
 // nelle Impostazioni la lavagna non lo vede più, e resta in silenzio spento.
@@ -15,6 +15,8 @@ import { describe, expect, it } from "vitest";
 import LAVAGNA_RS from "../../../../../crates/fub-features/src/lavagna.rs?raw";
 import {
   DEFAULT_PREFERENCES,
+  DRAG_EMPTY_KEY,
+  DRAG_EMPTY_VALUES,
   DROP_FOLDER_KEY,
   DROP_FOLDER_PATH_DEFAULT,
   DROP_FOLDER_PATH_KEY,
@@ -49,13 +51,14 @@ interface ClientRow {
   readonly machine: boolean;
 }
 
-/// Le dodici righe del client, nell'ordine del pannello.
+/// Le tredici righe del client, nell'ordine del pannello.
 const CLIENT: readonly ClientRow[] = [
   { rust: "CANVAS_INK_MOUSE_REMEMBER_KEY", key: INK_MOUSE_REMEMBER_KEY, kind: "toggle", fallback: DEFAULT_PREFERENCES.inkMouseRemember, machine: true },
   { rust: "CANVAS_FINGER_MOVES_CARD_KEY", key: FINGER_MOVES_CARD_KEY, kind: "toggle", fallback: DEFAULT_PREFERENCES.fingerMovesCard, machine: true },
   { rust: "CANVAS_FINGER_WRITES_KEY", key: FINGER_WRITES_KEY, kind: "toggle", fallback: DEFAULT_PREFERENCES.fingerWrites, machine: true },
   { rust: "CANVAS_PEN_BUTTON_KEY", key: PEN_BUTTON_KEY, kind: "choice", fallback: DEFAULT_PREFERENCES.penButton, values: PEN_BUTTON_VALUES, machine: true },
   { rust: "CANVAS_WHEEL_KEY", key: WHEEL_KEY, kind: "choice", fallback: DEFAULT_PREFERENCES.wheel, values: WHEEL_VALUES, machine: true },
+  { rust: "CANVAS_DRAG_EMPTY_KEY", key: DRAG_EMPTY_KEY, kind: "choice", fallback: DEFAULT_PREFERENCES.dragEmpty, values: DRAG_EMPTY_VALUES, machine: true },
   { rust: "CANVAS_WORKSPACE_KEY", key: WORKSPACE_KEY, kind: "choice", fallback: DEFAULT_PREFERENCES.workspace, values: WORKSPACE_VALUES, machine: false },
   { rust: "CANVAS_TOOLBAR_KEY", key: TOOLBAR_KEY, kind: "list", fallback: DEFAULT_PREFERENCES.toolbar, machine: false },
   { rust: "CANVAS_GRID_KEY", key: GRID_KEY, kind: "toggle", fallback: DEFAULT_PREFERENCES.grid, machine: false },
@@ -134,7 +137,7 @@ function rustRows(): RustRow[] {
 }
 
 describe("le impostazioni della lavagna, Rust e client", () => {
-  it("il sorgente Rust si legge: le dodici righe ci sono, e il bundle è quello del client", () => {
+  it("il sorgente Rust si legge: le tredici righe ci sono, e il bundle è quello del client", () => {
     expect(rustRows()).toHaveLength(CLIENT.length);
     expect(text("LAVAGNA_ID")).toBe(LAVAGNA_BUNDLE);
   });
@@ -172,7 +175,7 @@ describe("le impostazioni della lavagna, Rust e client", () => {
     expect(strings("CANVAS_DROP_FOLDER_VALUES")).toEqual(DROP_FOLDER_VALUES);
   });
 
-  it("le prime cinque sono della macchina, le altre del vault", () => {
+  it("le prime sei sono della macchina, le altre del vault", () => {
     expect(rustRows().map((row) => row.machine)).toEqual(CLIENT.map((row) => row.machine));
     expect(CLIENT.filter((row) => row.machine).map((row) => row.rust)).toEqual([
       "CANVAS_INK_MOUSE_REMEMBER_KEY",
@@ -180,6 +183,7 @@ describe("le impostazioni della lavagna, Rust e client", () => {
       "CANVAS_FINGER_WRITES_KEY",
       "CANVAS_PEN_BUTTON_KEY",
       "CANVAS_WHEEL_KEY",
+      "CANVAS_DRAG_EMPTY_KEY",
     ]);
   });
 });

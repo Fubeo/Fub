@@ -16,13 +16,14 @@
 //!
 //! # Le impostazioni
 //!
-//! [`settings`] dichiara le dodici impostazioni del gruppo «Lavagna», nell'ordine
-//! del pannello. Le prime cinque sono della macchina, come i modi di scrivere e
+//! [`settings`] dichiara le tredici impostazioni del gruppo «Lavagna», nell'ordine
+//! del pannello. Le prime sei sono della macchina, come i modi di scrivere e
 //! di toccare di questo computer; le altre sono del vault. Due dicono come si
 //! scrive e si tocca: [`CANVAS_INK_MOUSE_REMEMBER_KEY`] fa ricordare a ogni
 //! lavagna del computer se «Scrivi col mouse» era acceso, e
 //! [`CANVAS_FINGER_MOVES_CARD_KEY`] lascia al dito spostare la scheda che tocca.
-//! Le altre regolano il tasto della penna, la rotella, lo spazio di lavoro, la
+//! Le altre regolano il tasto della penna, la rotella, il trascinamento nel
+//! vuoto ([`CANVAS_DRAG_EMPTY_KEY`]), lo spazio di lavoro, la
 //! colonna, la griglia, l'aggancio, le parti di una nota e dove vanno i file
 //! trascinati. Le legge l'editor della lavagna (`editors/canvas/preferences.ts`
 //! nel client), che le segue dal vivo; il test del client
@@ -74,6 +75,14 @@ pub const CANVAS_PEN_BUTTON_VALUES: [&str; 4] = ["radial", "eraser", "pan", "las
 pub const CANVAS_WHEEL_KEY: &str = "canvas.wheel";
 /// I valori di [`CANVAS_WHEEL_KEY`]. Il primo è quello di serie.
 pub const CANVAS_WHEEL_VALUES: [&str; 2] = ["pan", "zoom"];
+
+/// L'impostazione «Trascinare nel vuoto»: che cosa fa il trascinamento col tasto
+/// sinistro sul vuoto della lavagna, con la Selezione. Il primo valore è quello di
+/// serie.
+pub const CANVAS_DRAG_EMPTY_KEY: &str = "canvas.drag_empty";
+/// I valori di [`CANVAS_DRAG_EMPTY_KEY`]: «sceglie» disegna un rettangolo e sceglie
+/// le schede che tocca; «sposta la vista» sposta la lavagna come prima.
+pub const CANVAS_DRAG_EMPTY_VALUES: [&str; 2] = ["select", "pan"];
 
 /// L'impostazione «Spazio di lavoro»: quanti strumenti e pannelli mostra la
 /// lavagna.
@@ -179,6 +188,10 @@ const S_WHEEL: &str = "s_wheel";
 const S_WHEEL_DESC: &str = "s_wheel_desc";
 const S_WHEEL_PAN: &str = "s_wheel_pan";
 const S_WHEEL_ZOOM: &str = "s_wheel_zoom";
+const S_DRAG_EMPTY: &str = "s_drag_empty";
+const S_DRAG_EMPTY_DESC: &str = "s_drag_empty_desc";
+const S_DRAG_EMPTY_SELECT: &str = "s_drag_empty_select";
+const S_DRAG_EMPTY_PAN: &str = "s_drag_empty_pan";
 const S_WORKSPACE: &str = "s_workspace";
 const S_WORKSPACE_DESC: &str = "s_workspace_desc";
 const S_WORKSPACE_AUTO: &str = "s_workspace_auto";
@@ -200,10 +213,10 @@ const S_DROP_FOLDER_FOLDER: &str = "s_drop_folder_folder";
 const S_DROP_FOLDER_PATH: &str = "s_drop_folder_path";
 const S_DROP_FOLDER_PATH_DESC: &str = "s_drop_folder_path_desc";
 
-/// Lo schema delle impostazioni della lavagna: le dodici del gruppo «Lavagna»,
+/// Lo schema delle impostazioni della lavagna: le tredici del gruppo «Lavagna»,
 /// nell'ordine del pannello.
 ///
-/// Le prime cinque sono della **macchina**, come i suggerimenti dei disegni:
+/// Le prime sei sono della **macchina**, come i suggerimenti dei disegni:
 /// dicono come si scrive e si tocca su questo computer (un mouse, uno schermo
 /// touch, una penna), non che cosa contiene il vault, e su un vault condiviso
 /// non cambiano le mani degli altri. Le altre sono del **vault**: la colonna,
@@ -255,6 +268,16 @@ pub fn settings() -> Vec<SettingSpec> {
             S_WHEEL,
             S_WHEEL_DESC,
             choice(&CANVAS_WHEEL_VALUES, &[S_WHEEL_PAN, S_WHEEL_ZOOM]),
+        )
+        .for_machine(),
+        row(
+            CANVAS_DRAG_EMPTY_KEY,
+            S_DRAG_EMPTY,
+            S_DRAG_EMPTY_DESC,
+            choice(
+                &CANVAS_DRAG_EMPTY_VALUES,
+                &[S_DRAG_EMPTY_SELECT, S_DRAG_EMPTY_PAN],
+            ),
         )
         .for_machine(),
         row(
@@ -671,6 +694,14 @@ const STRINGS: &[(&str, &str, &str)] = &[
     ),
     (S_WHEEL_PAN, "Sposta la lavagna", "Moves the whiteboard"),
     (S_WHEEL_ZOOM, "Ingrandisce", "Zooms"),
+    (S_DRAG_EMPTY, "Trascinare nel vuoto", "Dragging on empty space"),
+    (
+        S_DRAG_EMPTY_DESC,
+        "Che cosa fa il trascinamento col tasto sinistro sul vuoto della lavagna, con la Selezione. «Sceglie» disegna un rettangolo e sceglie le schede che tocca; Maiusc aggiunge alla scelta, Esc la annulla. «Sposta la vista» sposta la lavagna, come prima. Spazio, il tasto di mezzo e la rotella spostano sempre la vista.",
+        "What a left-button drag on empty space does, with the Selection tool. «Selects» draws a rectangle and chooses the cards it touches; Shift adds to the choice, Esc cancels it. «Moves the view» moves the whiteboard, as before. Space, the middle button and the wheel always move the view.",
+    ),
+    (S_DRAG_EMPTY_SELECT, "Sceglie", "Selects"),
+    (S_DRAG_EMPTY_PAN, "Sposta la vista", "Moves the view"),
     (S_WORKSPACE, "Spazio di lavoro", "Workspace"),
     (
         S_WORKSPACE_DESC,
@@ -843,10 +874,10 @@ mod tests {
         fub_abi::text::Strings::new(&catalogs, "it", &locale).render(text)
     }
 
-    /// Le dodici impostazioni nell'ordine del pannello: la chiave, la specie, il
+    /// Le tredici impostazioni nell'ordine del pannello: la chiave, la specie, il
     /// valore di serie, lo spazio. Le prime cinque sono della macchina.
     #[test]
-    fn le_dodici_impostazioni_hanno_chiave_specie_e_valore_di_serie() {
+    fn le_tredici_impostazioni_hanno_chiave_specie_e_valore_di_serie() {
         use fub_abi::settings::{SettingScope, SettingValue};
         let want: [(&str, &str, SettingValue); 12] = [
             (
@@ -870,6 +901,11 @@ mod tests {
                 SettingValue::Text("radial".into()),
             ),
             ("canvas.wheel", "choice", SettingValue::Text("pan".into())),
+            (
+                "canvas.drag_empty",
+                "choice",
+                SettingValue::Text("select".into()),
+            ),
             (
                 "canvas.workspace",
                 "choice",
@@ -897,7 +933,9 @@ mod tests {
             assert_eq!(spec.kind.name(), *kind, "{key}");
             assert_eq!(&spec.kind.default_value(), default, "{key}");
             assert!(!spec.program_writable, "{key}");
-            let scope = if index < 5 {
+            // Le prime sei sono della macchina: la rotella e il trascinamento nel vuoto
+            // sono come si tocca questo computer.
+            let scope = if index < 6 {
                 SettingScope::Machine
             } else {
                 SettingScope::Vault
@@ -932,11 +970,13 @@ mod tests {
             ["radial", "eraser", "pan", "lasso"]
         );
         assert_eq!(values(CANVAS_WHEEL_KEY), ["pan", "zoom"]);
+        assert_eq!(values(CANVAS_DRAG_EMPTY_KEY), ["select", "pan"]);
         assert_eq!(values(CANVAS_WORKSPACE_KEY), ["auto", "full", "simple"]);
         assert_eq!(values(CANVAS_DROP_FOLDER_KEY), ["notes", "board", "folder"]);
         for key in [
             CANVAS_PEN_BUTTON_KEY,
             CANVAS_WHEEL_KEY,
+            CANVAS_DRAG_EMPTY_KEY,
             CANVAS_WORKSPACE_KEY,
             CANVAS_DROP_FOLDER_KEY,
         ] {
@@ -1005,10 +1045,23 @@ mod tests {
                 "Il nome della cartella accanto alla lavagna, o il percorso nel vault per «In una cartella». Con «Con le note» non si usa.",
             ),
         ];
-        for (spec, (label, description)) in specs.iter().zip(approved) {
+        // «Trascinare nel vuoto» (N6 T20b) non è nel prototipo T25: il suo testo
+        // si controlla qui sotto, a parte, finché il prototipo non lo porta.
+        let approved_rows = specs
+            .iter()
+            .filter(|spec| spec.key != CANVAS_DRAG_EMPTY_KEY);
+        for (spec, (label, description)) in approved_rows.zip(approved) {
             assert_eq!(said(&spec.label, "it"), label, "{}", spec.key);
             assert_eq!(said(&spec.description, "it"), description, "{}", spec.key);
         }
+        let drag = specs
+            .iter()
+            .find(|spec| spec.key == CANVAS_DRAG_EMPTY_KEY)
+            .expect(CANVAS_DRAG_EMPTY_KEY);
+        assert_eq!(said(&drag.label, "it"), "Trascinare nel vuoto");
+        let it = said(&drag.description, "it");
+        assert!(it.contains("«Sceglie» disegna un rettangolo"), "{it}");
+        assert!(it.contains("Esc la annulla"), "{it}");
     }
 
     /// Le opzioni in italiano e in inglese, e le etichette inglesi delle righe.
@@ -1039,6 +1092,10 @@ mod tests {
             ["Sposta la lavagna", "Ingrandisce"]
         );
         assert_eq!(
+            labels(CANVAS_DRAG_EMPTY_KEY, "it"),
+            ["Sceglie", "Sposta la vista"]
+        );
+        assert_eq!(
             labels(CANVAS_WORKSPACE_KEY, "it"),
             ["Automatico", "Completo", "Semplice"]
         );
@@ -1060,6 +1117,10 @@ mod tests {
             ["Moves the whiteboard", "Zooms"]
         );
         assert_eq!(
+            labels(CANVAS_DRAG_EMPTY_KEY, "en"),
+            ["Selects", "Moves the view"]
+        );
+        assert_eq!(
             labels(CANVAS_WORKSPACE_KEY, "en"),
             ["Automatic", "Full", "Simple"]
         );
@@ -1073,6 +1134,7 @@ mod tests {
             "A finger writes",
             "The pen button",
             "The mouse wheel",
+            "Dragging on empty space",
             "Workspace",
             "Column tools",
             "Grid",

@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 //
-// Le preferenze della lavagna contro l'host finto: le dodici impostazioni del
+// Le preferenze della lavagna contro l'host finto: le tredici impostazioni del
 // gruppo «Lavagna» che il bundle `fub.lavagna` dichiara, la cartella dei file
 // trascinati giudicata come nome nuovo, e lo stato di vista che ricorda «Scrivi
 // col mouse». Ogni caso riparte da moduli nuovi, perché `preferences.ts`
@@ -35,6 +35,7 @@ const FINGER = "canvas.finger_moves_card";
 const FINGER_WRITES = "canvas.finger_writes";
 const PEN_BUTTON = "canvas.pen_button";
 const WHEEL = "canvas.wheel";
+const DRAG_EMPTY = "canvas.drag_empty";
 const WORKSPACE = "canvas.workspace";
 const TOOLBAR = "canvas.toolbar";
 const GRID = "canvas.grid";
@@ -53,6 +54,7 @@ const SERIE = {
   fingerWrites: false,
   penButton: "radial",
   wheel: "pan",
+  dragEmpty: "select",
   workspace: "auto",
   toolbar: [] as string[],
   grid: true,
@@ -83,7 +85,7 @@ function lavagnaEntry(key: string, value: unknown, scope: Scope = "machine"): Se
   } as SettingEntry;
 }
 
-/// Le dodici righe della lavagna col valore di serie, nell'ordine del pannello.
+/// Le tredici righe della lavagna col valore di serie, nell'ordine del pannello.
 function serieEntries(): SettingEntry[] {
   return [
     lavagnaEntry(REMEMBER, false),
@@ -91,6 +93,7 @@ function serieEntries(): SettingEntry[] {
     lavagnaEntry(FINGER_WRITES, false),
     lavagnaEntry(PEN_BUTTON, "radial"),
     lavagnaEntry(WHEEL, "pan"),
+    lavagnaEntry(DRAG_EMPTY, "select"),
     lavagnaEntry(WORKSPACE, "auto", "vault"),
     lavagnaEntry(TOOLBAR, [], "vault"),
     lavagnaEntry(GRID, true, "vault"),
@@ -162,6 +165,7 @@ describe("le impostazioni della lavagna", () => {
         lavagnaEntry(FINGER_WRITES, true),
         lavagnaEntry(PEN_BUTTON, "eraser"),
         lavagnaEntry(WHEEL, "zoom"),
+        lavagnaEntry(DRAG_EMPTY, "pan"),
         lavagnaEntry(WORKSPACE, "simple", "vault"),
         lavagnaEntry(TOOLBAR, ["pen", "text"], "vault"),
         lavagnaEntry(GRID, false, "vault"),
@@ -179,6 +183,7 @@ describe("le impostazioni della lavagna", () => {
       fingerWrites: true,
       penButton: "eraser",
       wheel: "zoom",
+      dragEmpty: "pan",
       workspace: "simple",
       toolbar: ["pen", "text"],
       grid: false,
@@ -250,7 +255,7 @@ describe("le impostazioni della lavagna", () => {
     await settle();
     expect(settingsReads(host), "un'altra impostazione non fa rileggere").toHaveLength(1);
 
-    // Ciascuna delle dodici, cambiata, si rilegge: la scrittura dell'host è la
+    // Ciascuna delle tredici, cambiata, si rilegge: la scrittura dell'host è la
     // stessa da qualunque finestra arrivi, e il backend emette `setting_changed`
     // a tutte.
     const changes: [string, SettingValue, Partial<typeof SERIE>][] = [
@@ -261,6 +266,7 @@ describe("le impostazioni della lavagna", () => {
       // Il lazo (T86): il tasto della penna sceglie.
       [PEN_BUTTON, "lasso", { penButton: "lasso" }],
       [WHEEL, "zoom", { wheel: "zoom" }],
+      [DRAG_EMPTY, "pan", { dragEmpty: "pan" }],
       [WORKSPACE, "simple", { workspace: "simple" }],
       [TOOLBAR, ["pen"], { toolbar: ["pen"] }],
       [GRID, false, { grid: false }],
