@@ -120,7 +120,7 @@ import {
   type CanvasStatusPort,
 } from "./chrome/status";
 import type { SurfaceStatusItem } from "../core/registry";
-import { CitationCounts, cardFilePath, syncCardHead, twinGroups, type CardCitations } from "./card-head";
+import { CitationCounts, cardFilePath, headZonePaths, syncCardHead, twinGroups, type CardCitations } from "./card-head";
 import { CanvasDepositError, type DropFolderChoice } from "../../state/canvas-intake";
 import { saveStateKey } from "../../state/saving";
 import { SHARED_RECENT_COMMANDS, openCommandSearch, type CommandSearchHandle, type RecentCommands } from "./chrome/command-search";
@@ -7077,6 +7077,22 @@ export class CanvasEngine {
     for (const entry of this.#cards.values()) this.#syncHead(entry);
   }
 
+  /**
+   * Chiede i conti «↩ N» della zona (`headZonePaths`): le schede in vista o
+   * vicine, dallo zoom in cui la testata si vede, più quelle che lavorano.
+   * Lo chiamano la resa e la fine di ogni gesto (`#refreshLive`); a lavagna
+   * nascosta o a gesto in corso non chiede niente.
+   */
+  #askCitations(nodes: readonly CanvasNode[] | undefined = this.#doc?.nodes): void {
+    const citations = this.#citations;
+    if (!citations || !nodes || this.#destroyed) return;
+    if (this.#gestureActive() || !this.#isShown()) return;
+    const kept = new Set<string>();
+    for (const id of [this.#activeId, this.#enteringId, this.#writingId]) if (id !== null) kept.add(id);
+    const { view, zoom } = this.#viewRect();
+    citations.want(headZonePaths(nodes, view, zoom, kept));
+  }
+
   /** «↩ N» e «×N» nella testata di `entry`, e `data-card-twin` se le sue gemelle sono illuminate. */
   #syncHead(entry: CardEntry): void {
     const path = cardFilePath(entry.node);
@@ -10715,6 +10731,7 @@ export class CanvasEngine {
     if (this.#destroyed || !doc) return;
     if (this.#gestureActive() || !this.#isShown()) return;
     const { view, zoom } = this.#viewRect();
+    this.#askCitations(doc.nodes);
     if (this.#views.size === 0) {
       this.#refreshDetail(zoom);
       return;
@@ -11477,6 +11494,7 @@ export class CanvasEngine {
       this.#resizeView(entry);
     }
     if (unlit) this.#statusSettle();
+    this.#askCitations(nodes);
   }
 
   /** L'involucro di una scheda nuova, col corpo ancora vuoto: lo riempie `#refreshCard`. */

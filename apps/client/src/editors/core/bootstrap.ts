@@ -39,7 +39,7 @@ import type { CardEditorPort, CardMode, CardRenderer, CardSnapshots, CardView } 
 import type { CardCitations } from "../canvas/card-head";
 import type { NoteCardPort } from "../canvas/cards/note";
 import type { PartsPickerPort } from "../canvas/parts-picker";
-import { backlinkCount, documentOutline } from "../../host/query";
+import { backlinkSources, documentOutline, existingDocuments, linkedFrom } from "../../host/query";
 import type { WebCardPort } from "../canvas/cards/web";
 import type { PdfCardPort } from "../canvas/cards/pdf";
 import type { CraftCardPort } from "../canvas/cards/craft";
@@ -442,21 +442,42 @@ async function loadCanvasCards(options: SurfaceBootstrapOptions, ports: CanvasCa
   };
 }
 
-/// «↩ N» nella testata delle schede (T22): quante note citano il file, con la
-/// domanda `backlinks` dell'indice che ha già la riga dei dati della nota.
-/// Nessuna porta nuova. I conti possono cambiare quando l'indice cambia: un
-/// documento scritto, rinominato o tolto, un lotto, un vault aperto.
+/// «↩ N» nella testata delle schede (T22): quante note citano il file, e
+/// quali, con la domanda `backlinks` dell'indice; i file che una nota cita
+/// adesso con `documents` (`linked` uscente). Nessuna porta nuova.
+///
+/// I conti cambiano solo quando cambiano dei link, e l'avviso dice di quali
+/// documenti: uno cambiato senza l'aspetto `links` non tocca nessun conto,
+/// uno tolto o rinominato tocca sé stesso e ciò che citava. Un lotto, un
+/// vault aperto, un `overflow` e il segnale `documents` (una creazione, un
+/// ripristino) non dicono quali: «non so» (`null`).
+const CITERS_PAGE = 64;
 const CANVAS_CITATIONS: CardCitations = {
-  count: (path) => backlinkCount(path),
+  count: async (path) => {
+    const { total, sources } = await backlinkSources(path, CITERS_PAGE);
+    return { total, citers: sources };
+  },
+  linksFrom: async (doc, among) => {
+    const list = [...among];
+    const [linked, indexed] = await Promise.all([linkedFrom(doc, list), existingDocuments(list)]);
+    // Di un file che l'indice non conosce (un PDF, un'immagine) non si sa se
+    // `doc` lo cita adesso: può essere toccato.
+    return list.filter((path) => linked.has(path) || !indexed.has(path));
+  },
   watch: (changed) => {
+    const unknown = () => changed(null);
     const stops = [
-      onSignal("documents", changed),
-      onEvent("document_changed", changed),
-      onEvent("document_removed", changed),
-      onEvent("document_renamed", changed),
-      onEvent("batch_ended", changed),
-      onEvent("vault_opened", changed),
-      onEvent("overflow", changed),
+      onSignal("documents", unknown),
+      onEvent("document_changed", (event) => {
+        const aspects = event.changes?.aspects;
+        if (aspects && !aspects.includes("links")) return;
+        changed([event.id]);
+      }),
+      onEvent("document_removed", (event) => changed([event.id])),
+      onEvent("document_renamed", (event) => changed([event.from, event.to])),
+      onEvent("batch_ended", unknown),
+      onEvent("vault_opened", unknown),
+      onEvent("overflow", unknown),
     ];
     return () => {
       for (const stop of stops) stop();

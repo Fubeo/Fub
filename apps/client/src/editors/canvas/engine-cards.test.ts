@@ -20,6 +20,7 @@ import {
   type CardView,
 } from "./cards";
 import type { CanvasNode } from "./model";
+import { CITATIONS_SETTLE_MS } from "./card-head";
 import { pdfCardRenderer, type PdfCardPort } from "./cards/pdf";
 import type { PdfEngine } from "../media/pdf-view";
 import { canvasCoreReady, openCoreNow } from "./wasm/core";
@@ -2834,9 +2835,11 @@ describe("la testata: «↩ N» e le gemelle (T22)", () => {
 
   it("«↩ N» dall'indice, una domanda per file; nessun segno se nessuna nota cita il file", async () => {
     const counts: Record<string, number> = { "Note/idea.md": 3, "img/foto.png": 0 };
-    const count = vi.fn(async (path: string) => counts[path] ?? 0);
-    const cards: CanvasCards = { ...cardsOf(), citations: { count, watch: () => () => {} } };
-    const { engine, host } = mounted(boardSource(TWINS), { cards });
+    const count = vi.fn(async (path: string) => ({ total: counts[path] ?? 0, citers: null }));
+    const cards: CanvasCards = { ...cardsOf(), citations: { count, linksFrom: async () => [], watch: () => () => {} } };
+    // La copia lontana viene vicina: la lavagna intera si vede da vicino, e la testata con lei.
+    const near = TWINS.map((node) => (node.id === "b" ? { ...node, x: 640, y: 0 } : node));
+    const { engine, host } = mounted(boardSource(near), { cards });
     await settle();
     expect(count.mock.calls.map(([path]) => path).sort()).toEqual(["Note/idea.md", "img/foto.png"]);
     const cites = card(host, "a").querySelector(":scope > .canvas-node-handle > .canvas-node-cites");
@@ -2847,5 +2850,69 @@ describe("la testata: «↩ N» e le gemelle (T22)", () => {
     expect(cites?.nextElementSibling?.classList.contains("canvas-node-twins")).toBe(true);
     expect(card(host, "c").querySelector(".canvas-node-cites")).toBeNull();
     engine.destroy();
+  });
+
+  it("2000 schede: si chiedono solo i conti della zona, anche dopo un cambio dell'indice; la zona che si sposta chiede i suoi", async () => {
+    vi.useFakeTimers();
+    try {
+      // Una griglia di 50 × 40 schede, ognuna col suo file, a passi di 300 × 200.
+      const nodes = Array.from({ length: 2000 }, (_, i) => ({
+        id: `n${i}`, type: "file", x: (i % 50) * 300, y: Math.floor(i / 50) * 200, width: 240, height: 160, file: `Note/n${i}.md`,
+      }));
+      // Una vista di 800 × 600 a zoom 1 dall'origine: allargata di metà per
+      // lato va da (-400, -300) a (1200, 900), cioè 5 colonne per 5 righe.
+      const zone = new Set<string>();
+      for (let row = 0; row < 5; row++) for (let col = 0; col < 5; col++) zone.add(`Note/n${row * 50 + col}.md`);
+      const asked: string[] = [];
+      let fire: (docs: readonly string[] | null) => void = () => {};
+      const citations = {
+        count: async (path: string) => {
+          asked.push(path);
+          // «n0» è citata da «Indice.md»; le altre da nessuno.
+          return path === "Note/n0.md" ? { total: 1, citers: ["Indice.md"] } : { total: 0, citers: [] };
+        },
+        linksFrom: async () => [],
+        watch: (changed: (docs: readonly string[] | null) => void) => {
+          fire = changed;
+          return () => {};
+        },
+      };
+      const states = new Map<string, unknown>([[canvasViewKey("board.canvas"), { version: 1, camera: { x: 0, y: 0, zoom: 1 }, selection: [], pages: {} }]]);
+      const memory = createCanvasViewMemory({ get: async (key) => states.get(key) ?? null, set: async (key, value) => void states.set(key, value) });
+      const { engine, host, viewport } = mounted(boardSource(nodes), { cards: { ...cardsOf(), citations }, viewMemory: memory });
+      await settle();
+      expect(cameraOf(host)).toBe("translate(0px, 0px) scale(1)");
+      await settle();
+      expect(new Set(asked)).toEqual(zone);
+      expect(asked).toHaveLength(zone.size);
+      expect(card(host, "n0").querySelector(".canvas-node-cites [aria-hidden]")?.textContent).toBe("↩ 1");
+
+      // «non so»: tutti i conti invecchiano, ma si richiedono solo i 25 della zona.
+      asked.length = 0;
+      fire(null);
+      vi.advanceTimersByTime(CITATIONS_SETTLE_MS);
+      await settle();
+      expect(new Set(asked)).toEqual(zone);
+      expect(asked).toHaveLength(zone.size);
+
+      // Cambia «Indice.md»: tocca solo «n0», l'unico file che citava.
+      asked.length = 0;
+      fire(["Indice.md"]);
+      vi.advanceTimersByTime(CITATIONS_SETTLE_MS);
+      await settle();
+      expect(asked).toEqual(["Note/n0.md"]);
+
+      // La vista scende di 1000 punti: si chiedono le righe nuove, non quelle già sapute.
+      asked.length = 0;
+      panStart(viewport, 0, -1000)();
+      vi.advanceTimersByTime(1000);
+      await settle();
+      expect(asked.length).toBeGreaterThan(0);
+      expect(asked.length).toBeLessThanOrEqual(zone.size);
+      expect(asked.every((path) => !zone.has(path))).toBe(true);
+      engine.destroy();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
