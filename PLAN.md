@@ -4061,7 +4061,7 @@ non aspettare le animazioni); la shell in inglese (non serve).
 Fatto quando: `npm run bench:giro -- --out=$TMPDIR/giro` è verde con i
 compiti 1–5 e le loro foto, anche con `--telefono` per 1–4.
 Prova: scripts/check.sh --rapido; cd apps/client && npm run build && npm run bench:giro -- --out=$TMPDIR/giro
-Stato: [~] in corso (coder/pa-t14, da 3f68c4a66, 2026-11-14)
+Stato: [x] fatto · coder/pa-t14 (0a44139a4), integrato in 7d16b595b (2026-11-14) · `npm run bench:giro` verde nei compiti 1–5 (finestra, due luci) e 1–4 (`--telefono`); un percorso solo senza ricaricare (compito 1 con `?vault=vuoto`, compito 2 con «Apri vault…», al telefono «Usa spazio privato»); `fai(pagina, giro)` e `controlla(pagina, host, giro)`; `--luce`, `--port`, `--strictPort`, `--solo`; un gruppo può dire `prepara`. Due difetti da capire in `~/.cache/fub-prealpha/funzionalitarotte.md` (Invio che chiude l'elenco in Live, il pannello «Spazio mobile» che resta aperto)
 
 ## T15 · Il simulatore accanto all'app
 
