@@ -2209,7 +2209,7 @@ misti. Task scritto dall'orchestratore (2026-11-13).
 Tocca: `apps/client/src/editors/canvas/engine.ts` (`#placeInkFrame`, la
 cattura del puntatore all'inizio del tratto), `apps/client/src/theme/scrittoio/structure.css`
 (i riquadri), `apps/client/src/editors/canvas/engine-ink.test.ts`,
-`docs/architecture/canvas-ink-layer.md`.
+`docs/architecture/ink-on-canvas.md`.
 Non toccare: lo strato della penna di N4; il velo di T20d; le soglie del banco.
 Dipende da: T20d
 Cosa fare:

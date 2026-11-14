@@ -45,7 +45,7 @@
 - Come comunica la shell TypeScript con il core senza diffondere Tauri? → [architecture/frontend-and-ipc.md](../architecture/frontend-and-ipc.md)
 - Come la shell apre, mostra e modifica una cartella di Excel, e che cosa resta al provider? → [architecture/grid-surface.md](../architecture/grid-surface.md)
 - Come Fub raccoglie l'inchiostro e dove vivono penna, evidenziatore e gomma? → [architecture/ink-and-tools.md](../architecture/ink-and-tools.md)
-- Come la penna scrive sulla lavagna e dove va il tratto finito? → [architecture/canvas-ink-layer.md](../architecture/canvas-ink-layer.md)
+- Come la lavagna prende la penna, disegna il tratto nelle schede e ne fa un passo di annulla? → [architecture/ink-on-canvas.md](../architecture/ink-on-canvas.md)
 - Come Fub costruisce e inserisce i motori copiati (GridCraft e gli altri Craft)? → [architecture/motori.md](../architecture/motori.md)
 - Dove sta la cornice dello Scrittoio su un telefono, quando parte e che cosa cambia? → [architecture/phone-frame.md](../architecture/phone-frame.md)
 - Come usa Fub gli stessi contratti per provider nativi e componenti WASM con un solo Guard? → [architecture/plugin-runtime.md](../architecture/plugin-runtime.md)

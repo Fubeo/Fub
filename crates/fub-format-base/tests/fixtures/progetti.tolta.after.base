@@ -1,0 +1,22 @@
+# Progetti del vault: una riga per progetto.
+version: 1
+filters:
+  and:
+    - condition:
+        property: tipo
+        op: is
+        value: progetto
+properties:
+  - key: stato
+    display_name: Stato   # come si legge nella tabella
+views:
+  # La tabella di tutti i progetti.
+
+  # Per stato, a colonne.
+  - name: Per stato
+    type: kanban
+    group:
+      key: prop.stato
+    summaries:
+      - key: file.name
+        aggregate: count

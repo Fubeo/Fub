@@ -1,6 +1,6 @@
 # 0241 — L'inchiostro della lavagna sta nel `.canvas`, con la stringa dei disegni e la misura della scheda
 
-- **Stato:** proposta
+- **Stato:** accolta (2026-11-14, dopo la prova con Obsidian 1.13.7)
 - **Data:** 2026-11-02
 - **Ambito:** contratto
 - **Sostituisce:** —
@@ -75,9 +75,9 @@ La forma precisa, le regole e i vettori stanno in
   `fub-ink`, un'eccezione nominata nel test delle dipendenze
   (`crates/fub-abi/tests/dependency_invariant.rs`).
 - **Obsidian non vede l'inchiostro.** I campi `fub:ink` per lui sono
-  sconosciuti. Che cosa ne fa quando riscrive il file (li tiene, li riordina,
-  li perde) lo dice soltanto una prova con Obsidian vero: finché la prova non
-  c'è, la decisione resta proposta.
+  sconosciuti e non li disegna. Quando riscrive il file li conserva: la prova
+  con Obsidian 1.13.7 (2026-11-14) li ha trovati tutti uguali per valore,
+  anche sulle schede spostate e ridimensionate (vedi «Verifica»).
 - **Il ridimensionamento non uniforme non deforma, ma non riempie.** Su
   un'immagine o un PDF allargati in un senso solo il tratto scala col fattore
   minore e lascia una fascia vuota ai lati; su una nota, un foglio o un
@@ -92,8 +92,8 @@ La forma precisa, le regole e i vettori stanno in
 L'inchiostro in un disegno a parte, mostrato come scheda `file`. Obsidian lo
 vedrebbe come un'immagine ferma. Ma i file diventano due, spostare una scheda
 non sposta l'inchiostro che le sta sopra e cancellare la lavagna lascia il
-disegno orfano. Resta possibile come copia in più per gli altri programmi, se
-la prova con Obsidian la rende necessaria.
+disegno orfano. La prova con Obsidian non la rende necessaria come copia in
+più: Obsidian conserva i campi `fub:ink`.
 
 ### Il base64 di numeri `f32`
 
@@ -116,5 +116,11 @@ ridimensionata.
   regola della resa quando la scheda cambia misura.
 - Il test delle dipendenze (`dependency_invariant.rs`) nomina l'eccezione del
   nucleo della lavagna.
-- La prova con Obsidian dice che cosa succede ai campi `fub:ink` quando
-  Obsidian riscrive la lavagna.
+- La prova con Obsidian, col kit in `tools/prova-obsidian/`: il 2026-11-14,
+  con Obsidian 1.13.7 su Linux, in un vault di prova vuoto, una scheda
+  spostata e una ridimensionata col mouse, la lavagna chiusa e salvata da
+  Obsidian. `confronta.mjs` è uscito con 0: gli 8 livelli (sei schede, la
+  radice e l'arco, compreso il livello estraneo `v: 2` e i campi sconosciuti
+  dentro un tratto) ci sono e sono uguali per valore. La prova l'ha fatta
+  l'orchestratore, pilotando col mouse un Obsidian isolato (una HOME
+  temporanea, uno schermo virtuale), su indicazione del manutentore.

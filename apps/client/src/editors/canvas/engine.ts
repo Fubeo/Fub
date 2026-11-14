@@ -184,7 +184,7 @@ import {
   type CanvasPatch,
   type InkPatch,
 } from "./operation";
-import type { CanvasDocument, CanvasEdge, CanvasNode } from "./model";
+import { edgeEnd, reversedEdge, type CanvasDocument, type CanvasEdge, type CanvasNode } from "./model";
 import {
   EDGE_SIDES,
   edgeAt,
@@ -7759,15 +7759,7 @@ export class CanvasEngine {
     if (!this.#doc || this.#readOnly || edge === undefined) return;
     const current = this.#doc.edges.find((one) => one.id === edge);
     if (!current) return;
-    const next = { ...current, fromNode: current.toNode, toNode: current.fromNode };
-    for (const [from, to] of [["fromSide", "toSide"], ["fromEnd", "toEnd"]] as const) {
-      const a = current[from];
-      const b = current[to];
-      if (b === undefined) delete next[from];
-      else (next as Record<string, unknown>)[from] = b;
-      if (a === undefined) delete next[to];
-      else (next as Record<string, unknown>)[to] = a;
-    }
+    const next = reversedEdge(current);
     const patch = upsertEdgePatch(this.#doc, next);
     if (patch) this.#commit([patch], "input");
   }
@@ -11207,10 +11199,8 @@ export class CanvasEngine {
       // Il colore del filo, per la pelle: il tratto e le punte (T47).
       paintColor(group, edge.color);
       group.append(hit, line);
-      for (const [endpoint, point, end] of [
-        ["from", a, edge.fromEnd], ["to", b, edge.toEnd],
-      ] as const) {
-        if (end !== "arrow") continue;
+      for (const [endpoint, point] of [["from", a], ["to", b]] as const) {
+        if (edgeEnd(edge, endpoint) !== "arrow") continue;
         const angle = Math.atan2(b.y - a.y, b.x - a.x) + (endpoint === "from" ? Math.PI : 0);
         const dx = Math.cos(angle) * 10;
         const dy = Math.sin(angle) * 10;

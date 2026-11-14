@@ -49,8 +49,9 @@ describe("il costrutto delle icone", () => {
     // cassetto (scrivi, ordina, orologio, freccia in su); poi «…» della
     // testata del foglio, e le undici figure che una cartella o una nota
     // sceglie (libro, calendario, bandiera, idea, in arrivo, archivio,
-    // immagine, cuore, lavoro, persone, musica).
-    expect(names).toHaveLength(63);
+    // immagine, cuore, lavoro, persone, musica); poi la casella spuntata dei
+    // compiti, la figura della vista Compiti.
+    expect(names).toHaveLength(64);
     expect(new Set(names).size).toBe(names.length);
 
     for (const name of names) {

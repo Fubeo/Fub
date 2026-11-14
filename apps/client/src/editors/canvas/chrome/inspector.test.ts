@@ -23,7 +23,6 @@ import {
   edgePatches,
   filterEntries,
   nodePatches,
-  reversedEdge,
   SOURCES_PANEL_ID,
   SOURCES_VIRTUAL_AFTER,
   tipsOf,
@@ -36,6 +35,7 @@ import {
   type CanvasInspector,
   type CanvasSourcesPort,
 } from "./inspector";
+import { reversedEdge } from "../model";
 import { readingOrder } from "../reading-order";
 import { t } from "../../../i18n/strings";
 

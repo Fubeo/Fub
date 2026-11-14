@@ -317,9 +317,9 @@ loro operazioni: il testo dopo il gesto è quello del vettore, in un passo.
 
 ## La lavagna
 
-La lavagna usa lo stesso nucleo con uno strato suo, `editors/canvas/ink-layer.ts`,
-e il suo motore decide dove va il tratto finito: l'una e l'altra cosa stanno in
-[L'inchiostro sulla lavagna](canvas-ink-layer.md).
+La penna sulla lavagna (lo strato, l'asciutto nelle schede, il passo di
+annulla, la gomma, il dito) sta in [L'inchiostro sulla
+lavagna](ink-on-canvas.md).
 
 ## Confini e verifica
 
@@ -335,12 +335,6 @@ e il suo motore decide dove va il tratto finito: l'una e l'altra cosa stanno in
 | con l'albero dei riquadri la gomma prende ciò che prenderebbe la scansione | `tools/box-tree.test.ts`, `tools/hit.test.ts` |
 | la gomma non riprova ciò che ha già segnato | `ink/tools/sweep.test.ts`, `tools/hit.test.ts` |
 | un ridisegno per evento | `ink/dom/pointer-adapter.test.ts` |
-| la penna della lavagna non arriva alla lavagna; il mouse sì | `editors/canvas/ink-layer.test.ts` |
-| l'inchiostro di una scheda la segue senza ridisegnare | `editors/canvas/ink-paint.test.ts` |
-| un tratto è una toppa, un commit e un passo; il ridisegno aspetta la penna | `editors/canvas/engine-ink.test.ts` |
-| la gomma prende il tratto dove si vede, cancella o taglia in un passo; D fa scrivere il mouse; il menu vale dal tratto dopo | `editors/canvas/ink-erase.test.ts`, `editors/canvas/engine-ink.test.ts`, `editors/canvas/pen-menu.test.ts` |
-| il dito sposta e pizzica la lavagna; la penna, anche sospesa, lo ferma | `editors/canvas/touch.test.ts`, `editors/canvas/engine-touch.test.ts` |
-| Rust e client nominano, ordinano e danno gli stessi default alle tredici impostazioni della lavagna; un valore sbagliato vale il default | `editors/canvas/settings-mirror.test.ts`, `editors/canvas/preferences.test.ts`, `fub-host/tests/lavagna_feature.rs` |
 | un puntatore fermo resta fermo nella scena se la vista si muove | `ink/dom/pointer-adapter.test.ts`, `tools/editor.test.ts` |
 
 Il percorso caldo ha due banchi:

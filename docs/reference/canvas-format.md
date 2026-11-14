@@ -146,6 +146,12 @@ vettori della lettura. Nel dubbio si apre e si conserva.
   `"backgroundStyle": "tile"` resta `tile`; la tela disegna un valore che non
   conosce come assente. Lo schema `canvas-v1.schema.json` dice ciò che Fub
   scrive, non ciò che legge, e non cambia.
+- **Punte di serie.** Non è una regola del nucleo: `fromEnd` e `toEnd` restano
+  come sono nel file, e il nucleo non ne deduce nulla. La tela le disegna come
+  dice JSON Canvas 1.0: senza `fromEnd` nessuna punta all'inizio, senza
+  `toEnd` la freccia alla fine (`DEFAULT_EDGE_END` in
+  `apps/client/src/editors/canvas/model.ts`). Invertendo la direzione di un
+  arco si scrive solo la punta che non è di serie.
 
 ## Scrittura
 

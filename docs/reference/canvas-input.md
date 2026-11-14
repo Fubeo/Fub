@@ -208,7 +208,7 @@ persa, che il browser e lo strato della penna gli tolgono quando passa a
 scrivere: il suo gesto lo chiudono il rilascio, il `pointercancel` o la
 finestra. Il tratto della penna segue la stessa regola: la cattura persa e la
 finestra che perde il fuoco lo chiudono e lo salvano fino all'ultimo punto
-(vedi [L'inchiostro sulla lavagna](../architecture/canvas-ink-layer.md)). Il
+(vedi [L'inchiostro sulla lavagna](../architecture/ink-on-canvas.md)). Il
 menu radiale che la penna o il dito tengono si chiude con loro, senza
 scegliere una voce.
 

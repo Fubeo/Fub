@@ -116,6 +116,38 @@ function alignFromOptions(host: HTMLElement, label: string): void {
   entry.click();
 }
 
+/** Tre archi come li scrive Obsidian: uno senza punte, uno con `toEnd` none, uno con `fromEnd` scritta. */
+function tipsSource(): string {
+  return JSON.stringify({
+    nodes: [
+      { id: "a", type: "text", x: 0, y: 0, width: 100, height: 100, text: "a" },
+      { id: "b", type: "text", x: 300, y: 0, width: 100, height: 100, text: "b" },
+      { id: "c", type: "text", x: 0, y: 300, width: 100, height: 100, text: "c" },
+      { id: "d", type: "text", x: 300, y: 300, width: 100, height: 100, text: "d" },
+    ],
+    edges: [
+      { id: "senza", fromNode: "a", toNode: "b" },
+      { id: "nessuna", fromNode: "a", toNode: "c", toEnd: "none" },
+      { id: "due", fromNode: "c", toNode: "d", fromEnd: "arrow" },
+    ],
+  });
+}
+
+/**
+ * Un arco come lo disegna la tela, dalla sua geometria: i due estremi della
+ * linea e il punto da cui parte ciascuna punta (prima quella dell'inizio).
+ */
+function drawnEdge(host: HTMLElement, edge: string): { start: number[]; end: number[]; tips: number[][] } {
+  const group = host.querySelector(`.canvas-edge-line[data-edge="${edge}"]`)!.closest("g")!;
+  const points = (d: string | null): number[] => (d ?? "").match(/-?\d+(?:\.\d+)?(?:e[-+]?\d+)?/gi)!.map(Number);
+  const line = points(group.querySelector(".canvas-edge-line")!.getAttribute("d"));
+  return {
+    start: line.slice(0, 2),
+    end: line.slice(-2),
+    tips: Array.from(group.querySelectorAll(".canvas-edge-arrow"), (arrow) => points(arrow.getAttribute("d")).slice(0, 2)),
+  };
+}
+
 function mounted(source = canvasSource(), overrides: Partial<CanvasEngineOptions> = {}) {
   const host = document.createElement("div");
   document.body.append(host);
@@ -192,6 +224,34 @@ describe("CanvasEngine", () => {
     expect(host.querySelector("iframe")).toBeNull();
     expect(host.querySelector(".canvas-url-text")?.textContent).toBe("https://example.com/x");
     expect(host.querySelectorAll(".canvas-edge").length).toBe(1);
+    engine.destroy();
+  });
+
+  // Le punte di serie di JSON Canvas: senza `toEnd` la freccia è alla fine, senza `fromEnd` nessuna
+  // all'inizio, e il file non cambia finché nessuno lo tocca.
+  it("disegna le punte di serie: senza toEnd la freccia è alla fine, toEnd none la toglie, fromEnd la mette all'inizio", () => {
+    const source = tipsSource();
+    const { engine, host } = mounted(source);
+    expect(engine.getDoc()).toBe(source);
+    const senza = drawnEdge(host, "senza");
+    expect(senza.tips).toEqual([senza.end]);
+    expect(drawnEdge(host, "nessuna").tips).toEqual([]);
+    const due = drawnEdge(host, "due");
+    expect(due.tips).toEqual([due.start, due.end]);
+    engine.destroy();
+  });
+
+  // Invertire il verso non sposta la freccia: quella di serie resta sulla scheda, ora all'inizio.
+  it("invertendo un arco senza punte scritte la freccia resta sulla sua scheda", () => {
+    const { engine, host } = mounted(tipsSource());
+    const pointing = vi.spyOn(document, "elementFromPoint").mockReturnValue(host.querySelector('.canvas-edge-hit[data-edge="senza"]'));
+    const menu = engine.contextMenu({ x: 10, y: 10 });
+    pointing.mockRestore();
+    expect(menu?.target).toEqual({ kind: "edge", ref: "senza" });
+    (menu!.context as readonly SurfaceMenuItem[]).find((item) => item.id === "canvas.edge.reverse")!.run!();
+    expect(readCanvas(engine.getDoc()).edges[0]).toMatchObject({ fromNode: "b", toNode: "a", fromEnd: "arrow", toEnd: "none" });
+    const drawn = drawnEdge(host, "senza");
+    expect(drawn.tips).toEqual([drawn.start]);
     engine.destroy();
   });
 

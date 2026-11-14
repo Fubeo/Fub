@@ -1,14 +1,16 @@
 # L'inchiostro sulla lavagna
 
-> **Ambito:** come la lavagna (`.canvas`) usa il nucleo dell'inchiostro: lo
-> strato che porta la penna sul viewport, chi ferma gli eventi, e come il
-> motore della lavagna decide la scheda e scrive il tratto finito.
-> **Fonti autorevoli:** `apps/client/src/editors/canvas/ink-layer.ts`,
-> `apps/client/src/editors/canvas/engine.ts` e le loro prove.
+Questa pagina spiega come la lavagna (`.canvas`) usa l'inchiostro: chi prende
+la penna, dove si vede il tratto bagnato e quello asciutto, come un tratto
+diventa un passo di annulla.
 
-Il nucleo, gli strumenti, l'adattatore del browser e l'uso in FubDraw stanno in
-[Inchiostro e strumenti](ink-and-tools.md); il formato del tratto sulla
-lavagna in [reference/canvas-ink.md](../reference/canvas-ink.md).
+> **Ambito:** `apps/client/src/editors/canvas/` per la parte dell'inchiostro.
+> **Fonte autorevole:** il codice e i test di quei percorsi.
+> **Decisione:** [ADR 0241](../decisions/0241-inchiostro-sulla-lavagna.md).
+
+Il nucleo, l'adattatore e gli strumenti che la lavagna usa sono in
+[Inchiostro e strumenti](ink-and-tools.md); il formato dell'inchiostro nel
+file è nel [formato della lavagna](../reference/canvas-format.md).
 
 ## Lo strato della lavagna
 
@@ -152,3 +154,14 @@ schede.
   schede» il dito su una scheda la sposta, letta al primo dito. Il palmo
   (per la sessione, `roleOf` dello strato: un dito con la penna giù o
   sospesa) non fa niente, e un dito già giù si ferma quando arriva la penna.
+
+## Confini e verifica
+
+| Regola | Chi la verifica |
+|---|---|
+| la penna della lavagna non arriva alla lavagna; il mouse sì | `editors/canvas/ink-layer.test.ts` |
+| l'inchiostro di una scheda la segue senza ridisegnare | `editors/canvas/ink-paint.test.ts` |
+| un tratto è una toppa, un commit e un passo; il ridisegno aspetta la penna | `editors/canvas/engine-ink.test.ts` |
+| la gomma prende il tratto dove si vede, cancella o taglia in un passo; D fa scrivere il mouse; il menu vale dal tratto dopo | `editors/canvas/ink-erase.test.ts`, `editors/canvas/engine-ink.test.ts`, `editors/canvas/pen-menu.test.ts` |
+| il dito sposta e pizzica la lavagna; la penna, anche sospesa, lo ferma | `editors/canvas/touch.test.ts`, `editors/canvas/engine-touch.test.ts` |
+| Rust e client nominano, ordinano e danno gli stessi default alle tredici impostazioni della lavagna; un valore sbagliato vale il default | `editors/canvas/settings-mirror.test.ts`, `editors/canvas/preferences.test.ts`, `fub-host/tests/lavagna_feature.rs` |

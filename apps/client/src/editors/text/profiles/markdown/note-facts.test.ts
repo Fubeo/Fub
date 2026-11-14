@@ -1,8 +1,9 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { EditorState } from "@codemirror/state";
-import { EditorView } from "@codemirror/view";
+import { type ChangeSpec, EditorState } from "@codemirror/state";
+import { type DecorationSet, EditorView } from "@codemirror/view";
 import { markdown } from "@codemirror/lang-markdown";
+import { ensureSyntaxTree, syntaxTree } from "@codemirror/language";
 import type { NoteFacts, NoteFactsSource } from "../../../../state/note-facts";
 import { openLifetime } from "../../../../ui/lifetime";
 import { markdownGrammar } from "./grammar";
@@ -11,6 +12,7 @@ import {
   noteFactsExtensions,
   noteFactsLabels,
   noteFactsPlace,
+  noteFactsVisited,
   renderNoteFacts,
   type NoteFactsActions,
 } from "./note-facts";
@@ -146,6 +148,72 @@ describe("in Live", () => {
     expect(view.dom.querySelectorAll(".note-facts").length).toBe(1);
     expect(view.dom.querySelectorAll(".note-tag").length).toBe(100);
     view.destroy();
+  });
+});
+
+describe("il posto della riga a ogni battuta", () => {
+  function factsState(doc: string): EditorState {
+    const extensions = noteFactsExtensions({ current: () => FACTS, actions: actions() });
+    const state = EditorState.create({ doc, extensions: [markdown({ base: markdownGrammar }), extensions.field, extensions.live] });
+    ensureSyntaxTree(state, doc.length, 10_000);
+    // Una transazione porta l'albero finito nello stato.
+    return state.update({}).state;
+  }
+
+  /// Dove la Live ha messo la riga: il widget fra le decorazioni dello stato.
+  function placed(state: EditorState): { at: number; side: number } | null {
+    for (const source of state.facet(EditorView.decorations)) {
+      if (typeof source === "function") continue;
+      const iter = (source as DecorationSet).iter();
+      if (iter.value) return { at: iter.from, side: iter.value.spec.side as number };
+    }
+    return null;
+  }
+
+  /// Una modifica col parser che arriva in fondo nel suo tempo; su una
+  /// macchina carica può non arrivarci: si finisce l'albero, e quella
+  /// modifica non si conta.
+  function apply(state: EditorState, changes: ChangeSpec): { state: EditorState; counted: boolean } {
+    const next = state.update({ changes, userEvent: "input.type" }).state;
+    if (syntaxTree(next).length === next.doc.length) return { state: next, counted: true };
+    ensureSyntaxTree(next, next.doc.length, 10_000);
+    return { state: next.update({}).state, counted: false };
+  }
+
+  it("una battuta nel testo non scorre la nota, con o senza titolo", () => {
+    const body = Array.from({ length: 300 }, (_, i) => `## Parte ${i}\n\nTesto ${i}.\n`).join("\n");
+    for (const doc of [`# Titolo\n\n${body}`, body]) {
+      let state = factsState(doc);
+      let counted = 0;
+      let at = doc.indexOf("Testo 150.") + 2;
+      for (const insert of ["a", "b", "\n", "c"]) {
+        const step = apply(state, { from: at, insert });
+        state = step.state;
+        at += insert.length;
+        if (!step.counted) continue;
+        counted++;
+        expect(noteFactsVisited(state), JSON.stringify(insert)).toBeLessThanOrEqual(6);
+      }
+      expect(counted).toBeGreaterThan(0);
+      expect(placed(state)).toEqual(noteFactsPlace(state));
+    }
+  });
+
+  it("dopo modifiche a caso è dove la mette una lettura da capo", () => {
+    const base = "Prima.\n\n# Titolo\n\nTesto.\n\n## Due\n\nAltro.\n\n# Ancora\n\nFine.\n";
+    const pieces = ["a", "\n", "\n\n", "# ", "## ", "```\n", "---\n", "===\n", "> ", "- ", "#", "---\ntags: [a]\n---\n"];
+    for (let seed = 1; seed <= 12; seed++) {
+      let value = seed;
+      const next = () => (value = (value * 1103515245 + 12345) % 2147483648) / 2147483648;
+      let state = factsState(base);
+      for (let step = 0; step < 60; step++) {
+        const length = state.doc.length;
+        const from = Math.floor(next() * (length + 1));
+        const remove = next() < 0.3 ? Math.min(length - from, Math.floor(next() * 5)) : 0;
+        state = apply(state, { from, to: from + remove, insert: pieces[Math.floor(next() * pieces.length)]! }).state;
+        expect(placed(state), `seme ${seed}, passo ${step}`).toEqual(noteFactsPlace(state));
+      }
+    }
   });
 });
 

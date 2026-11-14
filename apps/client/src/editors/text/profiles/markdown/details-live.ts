@@ -7,11 +7,13 @@
 // dell'apertura torna col cursore sopra. Un `<details>` senza chiusura resta
 // sorgente, con l'ondulato.
 import { syntaxTree } from "@codemirror/language";
-import { EditorSelection, type EditorState, type Extension, MapMode, type Range, StateEffect, StateField } from "@codemirror/state";
+import { EditorSelection, type EditorState, type Extension, MapMode, type Range, StateEffect, StateField, type Transaction } from "@codemirror/state";
 import { Decoration, type DecorationSet, EditorView, WidgetType } from "@codemirror/view";
+import type { Tree } from "@lezer/common";
 import { liveReveal } from "../../live-reveal";
 import { blockGesture } from "./block-gesture";
 import { type DetailsPair, pairDetails, type TopBlock } from "./details";
+import { topChanges } from "./top-changes";
 import { liveStrings } from "./strings";
 
 /// La freccia di un ripiegabile: aperto o chiuso, nella vista.
@@ -41,16 +43,83 @@ const toggled = StateField.define<ReadonlyMap<number, boolean>>({
   },
 });
 
-/// I ripiegabili del documento, dai blocchi HTML di primo livello.
-export function detailsOf(state: EditorState): ReturnType<typeof pairDetails> {
+/// I blocchi HTML di primo livello di un albero, coi ripiegabili accoppiati.
+interface HtmlTops {
+  readonly tree: Tree;
+  /// Soltanto i blocchi HTML, in ordine: gli altri nodi non contano per
+  /// l'accoppiamento.
+  readonly tops: readonly TopBlock[];
+  /// Quanti nodi di primo livello l'ultimo aggiornamento ha guardato, per i
+  /// test che contano il lavoro di una battuta.
+  readonly visited: number;
+  details: ReturnType<typeof pairDetails> | null;
+}
+
+/// Tutti i nodi di primo livello dell'albero: alla nascita, quando l'albero
+/// cresce senza modifiche e quando la modifica non si lascia seguire.
+function scanHtmlTops(state: EditorState): HtmlTops {
+  const tree = syntaxTree(state);
   const tops: TopBlock[] = [];
-  const cursor = syntaxTree(state).cursor();
+  let visited = 0;
+  const cursor = tree.cursor();
   if (cursor.firstChild()) {
     do {
+      visited++;
       if (cursor.name === "HTMLBlock") tops.push({ from: cursor.from, to: cursor.to, html: state.sliceDoc(cursor.from, cursor.to) });
     } while (cursor.nextSibling());
   }
-  return pairDetails(tops);
+  return { tree, tops, visited, details: null };
+}
+
+/// Il primo blocco di `tops` che comincia a `pos` o dopo.
+function firstFrom(tops: readonly TopBlock[], pos: number): number {
+  let low = 0;
+  let high = tops.length;
+  while (low < high) {
+    const mid = (low + high) >> 1;
+    if (tops[mid]!.from < pos) low = mid + 1;
+    else high = mid;
+  }
+  return low;
+}
+
+/// I blocchi HTML dopo una modifica, rileggendo soltanto i nodi che cambia
+/// (`topChanges`): quelli prima e dopo restano di prima, spostati. `null`
+/// quando la modifica non si lascia seguire.
+function patchHtmlTops(value: HtmlTops, tr: Transaction): HtmlTops | null {
+  const changed = topChanges(tr, value.tree);
+  if (!changed) return null;
+  const { start, nodes, resync, delta } = changed;
+  const tops = value.tops.slice(0, firstFrom(value.tops, start)).filter((top) => top.to <= start);
+  for (const node of nodes) {
+    if (node.name === "HTMLBlock") tops.push({ from: node.from, to: node.to, html: tr.state.sliceDoc(node.from, node.to) });
+  }
+  if (resync !== null) {
+    for (const top of value.tops.slice(firstFrom(value.tops, resync))) tops.push({ from: top.from + delta, to: top.to + delta, html: top.html });
+  }
+  return { tree: syntaxTree(tr.state), tops, visited: nodes.length, details: null };
+}
+
+const htmlTops = StateField.define<HtmlTops>({
+  create: scanHtmlTops,
+  update(value, tr) {
+    if (syntaxTree(tr.state) === value.tree) return value;
+    if (!tr.docChanged) return scanHtmlTops(tr.state);
+    return patchHtmlTops(value, tr) ?? scanHtmlTops(tr.state);
+  },
+});
+
+/// I ripiegabili del documento, dai blocchi HTML di primo livello: dal campo
+/// che li segue battuta per battuta, o scorrendo l'albero se manca.
+export function detailsOf(state: EditorState): ReturnType<typeof pairDetails> {
+  const value = state.field(htmlTops, false) ?? scanHtmlTops(state);
+  return (value.details ??= pairDetails(value.tops));
+}
+
+/// Quanti nodi di primo livello l'ultimo aggiornamento dei ripiegabili ha
+/// guardato: tutti per una lettura da capo, quelli vicini per una battuta.
+export function detailsVisited(state: EditorState): number | null {
+  return state.field(htmlTops, false)?.visited ?? null;
 }
 
 /// Dove sta il contenuto: dalla riga dopo l'apertura alla fine della chiusura.
@@ -266,5 +335,5 @@ const theme = EditorView.baseTheme({
 
 /// Il ripiegabile della Live e dei Blocchi.
 export function detailsLive(): Extension {
-  return [toggled, decorations, gestures, theme];
+  return [toggled, htmlTops, decorations, gestures, theme];
 }

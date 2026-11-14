@@ -37,7 +37,7 @@ import { textCardName } from "../card-name";
 import { cardKindOf } from "../cards";
 import { colorChoiceOf, colorLook, colorMenuLabel, colorName, colorValueOf, NOTE_COLORS, writeColor, type CanvasColorChoice } from "../colors";
 import { DROP_MIN_SIZE } from "../drop-layout";
-import type { CanvasDocument, CanvasEdge, CanvasEdgeSide, CanvasNode } from "../model";
+import { edgeEnd, reversedEdge, type CanvasDocument, type CanvasEdge, type CanvasEdgeSide, type CanvasNode } from "../model";
 import { upsertEdgePatch, upsertNodePatch, type CanvasPatch } from "../operation";
 import { pickerText } from "../pen-menu";
 import { partsSections, type PartsHeading } from "../parts-picker";
@@ -1476,8 +1476,8 @@ export type EdgeTips = "none" | "start" | "end";
  * legge: nessuna punta all'inizio, una alla fine.
  */
 export function tipsOf(edge: CanvasEdge): EdgeTips | null {
-  const from = edge.fromEnd ?? "none";
-  const to = edge.toEnd ?? "arrow";
+  const from = edgeEnd(edge, "from");
+  const to = edgeEnd(edge, "to");
   if (from === to) return from === "none" ? "none" : null;
   return from === "arrow" ? "start" : "end";
 }
@@ -1497,22 +1497,6 @@ export function withSide(edge: CanvasEdge, end: "from" | "to", side: SideChoice)
   const key = end === "from" ? "fromSide" : "toSide";
   if (side === "auto") delete next[key];
   else next[key] = side;
-  return next;
-}
-
-/** Il filo con la direzione invertita: le estremità scambiate, con le punte al loro posto. */
-export function reversedEdge(edge: CanvasEdge): CanvasEdge {
-  const next: CanvasEdge = {
-    ...edge,
-    fromNode: edge.toNode,
-    toNode: edge.fromNode,
-    fromEnd: edge.toEnd ?? "arrow",
-    toEnd: edge.fromEnd ?? "none",
-  };
-  if (edge.toSide === undefined) delete next.fromSide;
-  else next.fromSide = edge.toSide;
-  if (edge.fromSide === undefined) delete next.toSide;
-  else next.toSide = edge.fromSide;
   return next;
 }
 
