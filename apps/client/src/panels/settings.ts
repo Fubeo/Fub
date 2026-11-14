@@ -90,6 +90,7 @@ import { SOURCE_URL, checkMessage, mountUpdateCheck, type UpdateChecker } from "
 import { vaultNameEditor } from "./vault-rename";
 import { reducedMotion } from "../theme/reduced-motion";
 import { DEVELOPER_MODE_KEY, installFolderButton, renderDiagnosis, themeDiagnoses } from "./theme-folder";
+import { loadCatalogPage } from "../dev/catalogo/carica";
 import {
   CSS_SNIPPETS_KEY, DEFAULT_CSS_SNIPPETS, cancelCssSnippetsPreview,
   cssSnippetCatalog, disableCssSnippet, parseCssSnippets, previewCssSnippets,
@@ -1376,7 +1377,8 @@ function renderThemeCatalog(themes: ThemeInfo[], developer: boolean): HTMLElemen
 }
 
 /// Il bottone che apre «Tutti i componenti» (`dev/catalogo/pagina.ts`): la
-/// pagina arriva con un `import()`, così non pesa su chi non scrive temi.
+/// pagina arriva con un `import()` (`dev/catalogo/carica.ts`), così non pesa
+/// su chi non scrive temi.
 /// Vive quanto l'apertura del pannello: chiuse le impostazioni (anche da un
 /// `vault_closed`), si chiude anche lei.
 function catalogPageButton(): HTMLButtonElement {
@@ -1386,13 +1388,21 @@ function catalogPageButton(): HTMLButtonElement {
   button.dataset.devAction = "catalog";
   button.textContent = t("settings.themes.catalog");
   button.addEventListener("click", () => {
-    import("../dev/catalogo/pagina")
+    // L'apertura del pannello di questo clic. Quando la pagina arriva, si apre
+    // solo se il pannello è ancora quello e il bottone ancora lì: chiuse (e
+    // magari riaperte) le Impostazioni, o cambiata scheda, il clic è vecchio.
+    const owner = openedLifetime;
+    if (!owner) return;
+    const current = (): boolean => owner === openedLifetime && !owner.closed && button.isConnected;
+    loadCatalogPage()
       .then((page) => {
-        if (openedLifetime) page.openCatalogPage(openedLifetime);
+        if (current()) page.openCatalogPage(owner);
       })
-      .catch((error: unknown) =>
-        notify(t("commands.failed", { command: t("settings.themes.catalog"), reason: errorText(error) }), "guasto"),
-      );
+      .catch((error: unknown) => {
+        if (current()) {
+          notify(t("commands.failed", { command: t("settings.themes.catalog"), reason: errorText(error) }), "guasto");
+        }
+      });
   });
   return button;
 }

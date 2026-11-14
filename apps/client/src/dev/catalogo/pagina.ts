@@ -2,9 +2,9 @@
 // guardare mentre lo si scrive.
 //
 // La apre Aspetto in modalità sviluppatore (`panels/settings.ts`), con un
-// `import()`: il suo codice, le sue stringhe e il suo foglio non pesano
-// sull'avvio. Sta sopra le impostazioni, che restano aperte sotto: così vale
-// il tema in uso **o in anteprima**, e chiudendola si torna dove si era.
+// `import()` (`carica.ts`): il suo codice, le sue stringhe e il suo foglio non
+// pesano sull'avvio. Sta sopra le impostazioni, che restano aperte sotto: così
+// vale il tema in uso **o in anteprima**, e chiudendola si torna dove si era.
 //
 // Quattro schede: i componenti dell'anatomia (`COMPONENTS`) e le viste dei
 // componenti (`UiNode`), ciascuno in ogni suo stato; la tavolozza; i
@@ -18,8 +18,8 @@
 // Ce n'è una sola: aprirla di nuovo la riporta davanti.
 import "./catalogo.css";
 import { errorText } from "../../host/errors";
-import { createTabs, iconButton } from "../../kit";
-import { resolvedLanguage, t as shellText } from "../../i18n/strings";
+import { createTabs, iconButton, labelButton } from "../../kit";
+import { onLanguage, resolvedLanguage, t as shellText } from "../../i18n/strings";
 import { renderDiagnosis, themeDiagnoses } from "../../panels/theme-folder";
 import { writeClipboardText } from "../../platform/clipboard";
 import { on } from "../../state/store";
@@ -78,7 +78,14 @@ const STATE_KEYS: Readonly<Record<StateName, CatalogPageKey>> = {
   dragging: "state.dragging",
 };
 
+/// La pagina aperta, la sua vita e la vita di chi l'ha aperta.
 let current: CatalogPage | null = null;
+let currentLifetime: Lifetime | null = null;
+let currentParent: Lifetime | null = null;
+/// Le vite che hanno già il loro smontaggio della pagina: uno per vita, non
+/// uno per apertura. `Lifetime` non toglie uno smontaggio registrato, e una
+/// vita che apre la pagina dieci volte ne terrebbe dieci.
+const watched = new WeakSet<Lifetime>();
 
 /// La pagina aperta, se c'è.
 export function openedCatalogPage(): CatalogPage | null {
@@ -108,6 +115,12 @@ function statesSentence(labels: readonly string[]): string {
 
 /// Tiene un provino nello stato dato: gli stati di puntatore e tastiera coi
 /// gemelli di `forza.ts`, gli altri con gli attributi che la pelle legge.
+///
+/// `aria-current` e `aria-disabled` stanno su un `div` generico perché sono i
+/// selettori con cui la pelle disegna «selezionato» e «disabilitato» (venti e
+/// più regole ciascuno in `skin.css`): senza, il campione mostrerebbe il
+/// riposo. `data-selected` e `data-dragging` per le regole che leggono quelli,
+/// e la classe `selected` per gli hook che la dichiarano.
 function hold(proof: HTMLElement, state: StateName, hooks: readonly string[]): void {
   switch (state) {
     case "hover":
@@ -126,21 +139,20 @@ function hold(proof: HTMLElement, state: StateName, hooks: readonly string[]): v
       break;
     case "disabled":
       proof.setAttribute("aria-disabled", "true");
-      proof.dataset.disabled = "";
       break;
     case "dragging":
       proof.dataset.dragging = "";
-      if (hooks.includes("dragging")) proof.classList.add("dragging");
       break;
     case "rest":
       break;
   }
 }
 
-/// Ciò che il riquadro di destra mostra del componente scelto.
+/// Ciò che il riquadro di destra mostra del componente scelto. La frase si
+/// rifà a ogni lettura, così segue la lingua.
 interface Picked {
   readonly name: string;
-  readonly lede: string;
+  lede(): string;
   readonly hooks: readonly string[];
 }
 
@@ -153,8 +165,34 @@ export function openCatalogPage(parent: Lifetime): CatalogPage {
   }
   if (parent.closed) return { element: document.createElement("div"), close: () => {} };
   const lifetime = openLifetime();
-  parent.add(() => lifetime.close());
+  if (!watched.has(parent)) {
+    watched.add(parent);
+    parent.add(() => {
+      if (currentParent === parent) currentLifetime?.close();
+    });
+  }
+  currentLifetime = lifetime;
+  currentParent = parent;
+  lifetime.add(() => {
+    if (currentLifetime !== lifetime) return;
+    current = null;
+    currentLifetime = null;
+    currentParent = null;
+  });
+  // La costruzione gemella i selettori di tutti i fogli della finestra e mette
+  // la pagina nel documento: se si ferma a metà, la vita chiusa disfa ciò che
+  // ha fatto, e la shell resta com'era.
+  try {
+    const page = buildPage(lifetime);
+    current = page;
+    return page;
+  } catch (error) {
+    lifetime.close();
+    throw error;
+  }
+}
 
+function buildPage(lifetime: Lifetime): CatalogPage {
   // La scelta di Aspetto quando la pagina si apre: chiudendola si rimette.
   const before = currentThemePreview();
   let touched = false;
@@ -165,13 +203,12 @@ export function openCatalogPage(parent: Lifetime): CatalogPage {
   root.setAttribute("aria-labelledby", "dev-catalog-title");
   root.tabIndex = -1;
   const page = el("section", "dev-catalog");
-  page.setAttribute("aria-labelledby", "dev-catalog-title");
   root.append(page);
 
   // ── La testata ─────────────────────────────────────────────────────────────
   const head = el("header", "dev-catalog-head");
   const heading = el("div", "dev-catalog-heading");
-  const title = el("h2", "dev-catalog-title", t("page.title"));
+  const title = el("h2", "dev-catalog-title");
   title.id = "dev-catalog-title";
   const subtitle = el("p", "muted");
   heading.append(title, subtitle);
@@ -179,9 +216,8 @@ export function openCatalogPage(parent: Lifetime): CatalogPage {
   const switches = el("div", "dev-catalog-switches");
   const lights = el("div", "segmented");
   lights.setAttribute("role", "radiogroup");
-  lights.setAttribute("aria-label", t("page.light"));
   const lightButtons = (["light", "dark"] as const).map((light) => {
-    const button = el("button", "segmented-option", t(light === "light" ? "page.light.light" : "page.light.dark"));
+    const button = el("button", "segmented-option");
     button.type = "button";
     button.setAttribute("role", "radio");
     button.dataset.light = light;
@@ -192,7 +228,8 @@ export function openCatalogPage(parent: Lifetime): CatalogPage {
   const contrastInput = el("input", "setting-switch");
   contrastInput.type = "checkbox";
   contrastInput.setAttribute("role", "switch");
-  contrastLabel.append(contrastInput, el("span", undefined, t("page.contrast")));
+  const contrastText = el("span");
+  contrastLabel.append(contrastInput, contrastText);
   const closeButton = iconButton({ icon: "close", label: t("page.close"), onPress: () => close(), lifetime });
   closeButton.classList.add("dev-catalog-close");
   switches.append(lights, contrastLabel, closeButton);
@@ -215,7 +252,10 @@ export function openCatalogPage(parent: Lifetime): CatalogPage {
   body.append(info);
   page.append(head, diagnoses, tablist, body);
 
-  const drawn = new Set<TabId>();
+  /// Ogni scheda disegnata ha la sua vita: un cambio di lingua la chiude e la
+  /// ridisegna, coi suoi ascoltatori.
+  const drawn = new Map<TabId, Lifetime>();
+  let shown: TabId = "componenti";
   const tabs = createTabs({
     tablist,
     tabs: TABS.map(([id, key]) => ({ id, label: t(key), panel: panels.get(id)! })),
@@ -239,7 +279,7 @@ export function openCatalogPage(parent: Lifetime): CatalogPage {
   const infoLede = el("p", "muted");
   const infoHooks = el("ul", "dev-catalog-hooks");
   const infoActions = el("div", "settings-actions");
-  const copyButton = el("button", "settings-btn", t("info.copy"));
+  const copyButton = el("button", "settings-btn");
   copyButton.type = "button";
   infoActions.append(copyButton);
   info.append(infoTitle, infoLede, infoHooks, infoActions);
@@ -251,7 +291,7 @@ export function openCatalogPage(parent: Lifetime): CatalogPage {
     pickedItem = item;
     item.setAttribute("aria-current", "true");
     infoTitle.textContent = next.name;
-    infoLede.textContent = next.lede;
+    infoLede.textContent = next.lede();
     infoHooks.replaceChildren(
       ...(next.hooks.length > 0
         ? next.hooks.map((hook) => {
@@ -274,6 +314,7 @@ export function openCatalogPage(parent: Lifetime): CatalogPage {
   /// Un riquadro della lista: il nome (un pulsante, che sceglie), il pezzo e
   /// lo strato, e un campione per stato.
   const item = (
+    life: Lifetime,
     id: string,
     name: string,
     where: string,
@@ -294,7 +335,7 @@ export function openCatalogPage(parent: Lifetime): CatalogPage {
     const states = el("div", "dev-catalog-states");
     states.append(...figures);
     section.append(nameEl, states);
-    lifetime.listen(section, "click", () => showPicked(details, section));
+    life.listen(section, "click", () => showPicked(details, section));
     return section;
   };
 
@@ -305,10 +346,11 @@ export function openCatalogPage(parent: Lifetime): CatalogPage {
   };
 
   // ── Le schede, disegnate la prima volta che si aprono ─────────────────────
-  const drawComponents = (panel: HTMLElement): void => {
+  const drawComponents = (panel: HTMLElement, life: Lifetime): void => {
     let first: [Picked, HTMLElement] | null = null;
+    let again: [Picked, HTMLElement] | null = null;
+    const chosen = picked?.name;
     COMPONENTS.forEach((component, index) => {
-      const labels = component.states.map(stateLabel);
       const layer = layerOf(component);
       const where = `${component.part} · ${layer}`;
       const figures = component.states.map((state) => {
@@ -325,12 +367,14 @@ export function openCatalogPage(parent: Lifetime): CatalogPage {
       });
       const details: Picked = {
         name: component.name,
-        lede: t("info.lede", { part: component.part, layer, states: statesSentence(labels) }),
+        lede: () =>
+          t("info.lede", { part: component.part, layer, states: statesSentence(component.states.map(stateLabel)) }),
         hooks: component.hooks,
       };
-      const node = item(`dev-item-${index}`, component.name, where, figures, details);
+      const node = item(life, `dev-item-${index}`, component.name, where, figures, details);
       panel.append(node);
       first ??= [details, node];
+      if (again === null && component.name === chosen) again = [details, node];
     });
     // Le viste dei componenti: il renderer vero dei `UiNode`, con una porta
     // che non fa niente.
@@ -349,23 +393,49 @@ export function openCatalogPage(parent: Lifetime): CatalogPage {
       }
       const details: Picked = {
         name: sample.title,
-        lede: t("info.view_lede", {
-          kinds: sample.covers.join(", "),
-          states: statesSentence(sample.states.map((state) => state.label)),
-        }),
+        lede: () =>
+          t("info.view_lede", {
+            kinds: sample.covers.join(", "),
+            states: statesSentence(sample.states.map((state) => state.label)),
+          }),
         hooks: [...hooks],
       };
-      panel.append(item(`dev-view-${index}`, sample.title, t("info.views"), figures, details));
+      const node = item(life, `dev-view-${index}`, sample.title, t("info.views"), figures, details);
+      panel.append(node);
+      if (again === null && sample.title === chosen) again = [details, node];
     });
-    if (first) showPicked(first[0], first[1]);
+    const start = again ?? first;
+    if (start) showPicked(start[0], start[1]);
+    if (panel.isConnected) roomForFloating(panel);
     // Un provino che scorre (la pelle dà a qualche hook un suo `overflow`)
     // resta raggiungibile da tastiera, come nel catalogo del banco.
-    lifetime.add(
+    life.add(
       keepScrollersReachable(
         panel.querySelectorAll<HTMLElement>(".dev-catalog-proof[data-label], .dev-catalog-proof[data-label] > :not([tabindex])"),
         (frame) => frame.closest<HTMLElement>(".dev-catalog-proof")!.dataset.label!,
       ),
     );
+  };
+
+  /// Un hook che la pelle mette fuori dal flusso (il tooltip, un popover, un
+  /// velo: `fixed` o `absolute`) non dà altezza né larghezza al suo riquadro, e
+  /// il riquadro, che lo contiene e lo ritaglia, lo taglierebbe. Quei riquadri
+  /// prendono lo spazio dei provini del banco (`bench/catalog.html`). Si guarda
+  /// la geometria, non lo stile calcolato: un hook che esce dal suo riquadro è
+  /// proprio quello che verrebbe tagliato, qualunque cosa ne dica il tema, e
+  /// le misure di centinaia di riquadri costano un solo calcolo del layout.
+  /// Quindi a pagina nel documento; un riquadro allargato non si restringe più
+  /// (dentro ci sta, ora), finché la scheda non si ridisegna.
+  const roomForFloating = (panel: HTMLElement): void => {
+    const frames = [...panel.querySelectorAll<HTMLElement>(".dev-catalog-proof[data-label]")];
+    const outside = frames.filter((frame) => {
+      const hook = frame.firstElementChild;
+      if (!(hook instanceof HTMLElement)) return false;
+      const box = frame.getBoundingClientRect();
+      const inner = hook.getBoundingClientRect();
+      return inner.bottom > box.bottom + 0.5 || inner.right > box.right + 0.5;
+    });
+    for (const frame of outside) frame.classList.add("dev-catalog-proof--floating");
   };
 
   const drawPalette = (panel: HTMLElement): void => {
@@ -428,14 +498,14 @@ export function openCatalogPage(parent: Lifetime): CatalogPage {
     }
   };
 
-  const drawKit = (panel: HTMLElement): void => {
+  const drawKit = (panel: HTMLElement, life: Lifetime): void => {
     const box = el("div", "dev-catalog-kit");
     let sections = 0;
     renderKit({
-      lifetime,
-      // Sopra le impostazioni la pagina sta più in alto del piano dei popover:
-      // il popover, il dialogo e la scheda al passaggio si provano nel banco.
-      floating: false,
+      // Il popover, il dialogo e la scheda al passaggio ci sono anche qui: la
+      // loro ancora sta dentro un dialogo (`aria-modal`), e il kit li alza sul
+      // piano delle modali (`kit/popover.ts`, `kit/dialog.ts`).
+      lifetime: life,
       section(sectionTitle, _column, ...content) {
         const node = el("section", "sezione");
         const h = el("h3", undefined, sectionTitle);
@@ -449,7 +519,7 @@ export function openCatalogPage(parent: Lifetime): CatalogPage {
     panel.append(box);
   };
 
-  const DRAW: Readonly<Record<TabId, (panel: HTMLElement) => void>> = {
+  const DRAW: Readonly<Record<TabId, (panel: HTMLElement, life: Lifetime) => void>> = {
     componenti: drawComponents,
     tavolozza: drawPalette,
     caratteri: drawFonts,
@@ -457,14 +527,51 @@ export function openCatalogPage(parent: Lifetime): CatalogPage {
   };
 
   function draw(id: TabId): void {
+    shown = id;
     // Il riquadro del componente scelto è della scheda «Componenti»: le altre
     // prendono tutta la larghezza.
     body.dataset.tab = id;
     info.hidden = id !== "componenti";
     if (drawn.has(id)) return;
-    drawn.add(id);
-    DRAW[id](panels.get(id)!);
+    const life = openLifetime();
+    drawn.set(id, life);
+    DRAW[id](panels.get(id)!, life);
   }
+  lifetime.add(() => {
+    for (const life of drawn.values()) life.close();
+    drawn.clear();
+  });
+
+  // ── La lingua ──────────────────────────────────────────────────────────────
+  const label = (): void => {
+    title.textContent = t("page.title");
+    lights.setAttribute("aria-label", t("page.light"));
+    for (const button of lightButtons) {
+      button.textContent = t(button.dataset.light === "light" ? "page.light.light" : "page.light.dark");
+    }
+    contrastText.textContent = t("page.contrast");
+    labelButton(closeButton, t("page.close"));
+    tablist.setAttribute("aria-label", t("page.tabs"));
+    for (const [id, key] of TABS) {
+      const text = tabs.tab(id)?.querySelector(".kit-tab-label");
+      if (text) text.textContent = t(key);
+    }
+    copyButton.textContent = t("info.copy");
+  };
+
+  /// Un cambio di lingua: la testata si rinomina, e le schede già disegnate
+  /// si rifanno, col fuoco e la scheda dove stavano.
+  const relabel = (): void => {
+    label();
+    for (const [id, life] of [...drawn]) {
+      life.close();
+      drawn.delete(id);
+      panels.get(id)!.replaceChildren();
+    }
+    pickedItem = null;
+    draw(shown);
+    sync();
+  };
 
   // ── La luce, il contrasto, il tema ─────────────────────────────────────────
   let offered: readonly Theme[] = ["light", "dark"];
@@ -564,26 +671,26 @@ export function openCatalogPage(parent: Lifetime): CatalogPage {
       void readOffered();
     }),
   );
+  lifetime.add(onLanguage(relabel));
 
   // Gli stati forzati prima dei campioni, così nascono già fermi.
   holdForcedStates(lifetime);
+  label();
   draw("componenti");
   sync();
   void readOffered();
 
   document.body.append(root);
+  lifetime.add(() => root.remove());
+  roomForFloating(panels.get("componenti")!);
   enterSurface(root);
   const release = trapFocus(root, () => close());
-  lifetime.add(() => {
-    release();
-    root.remove();
-  });
+  lifetime.add(release);
   tabs.tab("componenti")?.focus();
 
   const close = (): void => {
     if (lifetime.closed) return;
     lifetime.close();
-    if (current === handle) current = null;
     // La scelta di Aspetto torna com'era: un'anteprima di prima si rimette,
     // altrimenti torna il tema salvato.
     if (touched) {
@@ -593,13 +700,8 @@ export function openCatalogPage(parent: Lifetime): CatalogPage {
       back.catch(() => cancelThemePreview()).catch(() => {});
     }
   };
-  lifetime.add(() => {
-    if (current === handle) current = null;
-  });
 
-  const handle: CatalogPage = { element: root, close };
-  current = handle;
-  return handle;
+  return { element: root, close };
 }
 
 const PART_LAYERS = new Map(PARTS.map((part) => [part.part, part.layer]));

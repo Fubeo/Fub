@@ -39,9 +39,6 @@ export interface KitHost {
   readonly lifetime: Lifetime;
   /// Mette una sezione nella pagina, nella colonna che le spetta.
   section(title: string, column: "left" | "right", ...content: Node[]): void;
-  /// Il popover, il dialogo e la scheda al passaggio. Di serie ci sono; chi
-  /// ospita il catalogo sopra il piano dei popover li lascia fuori.
-  readonly floating?: boolean;
 }
 
 function el<K extends keyof HTMLElementTagNameMap>(
@@ -92,163 +89,159 @@ export function renderKit(host: KitHost): void {
     { id: "trash", label: "Sposta nel cestino", icon: "trash" },
   ];
 
-  // Le superfici che galleggiano sopra la pagina: chi le ospita sotto un suo
-  // piano più alto le lascia fuori (`floating: false`).
-  if (host.floating !== false) {
-    // ── Popover, dialogo, scheda al passaggio ────────────────────────────────────
+  // ── Popover, dialogo, scheda al passaggio ────────────────────────────────────
 
-    /// Un pulsante che apre e chiude la sua superficie. Il gesto che la chiude «da
-    /// fuori» arriva prima del clic che la riaprirebbe: lo si riconosce qui, in
-    /// cattura e prima che un popover esista, quando la superficie c'è ancora.
-    function toggler(label: string, open: (anchor: HTMLButtonElement) => PopoverHandle): HTMLButtonElement {
-      let surface: PopoverHandle | null = null;
-      let closing = false;
-      const trigger: HTMLButtonElement = textButton({
-        label,
-        lifetime,
-        onPress() {
-          if (closing) {
-            closing = false;
-            return;
-          }
-          if (surface && !surface.closed) surface.close();
-          else surface = open(trigger);
-        },
-      });
-      lifetime.listen(
-        document,
-        "pointerdown",
-        (event) => {
-          closing =
-            surface !== null && !surface.closed && event.target instanceof Node && trigger.contains(event.target);
-        },
-        { capture: true },
-      );
-      return trigger;
-    }
-
-    const menuTrigger = toggler("Apri il menu", (anchor) => {
-      const life = openLifetime();
-      const box = el("div");
-      box.setAttribute("aria-label", "Azioni sulla nota");
-      let popover: PopoverHandle | null = null;
-      createList<Entry>({
-        container: box,
-        role: "menu",
-        focus: "roving",
-        items: ACTIONS,
-        key: (entry) => entry.id,
-        render: drawEntry,
-        disabled: (entry) => entry.disabled === true,
-        typeahead: (entry) => entry.label,
-        onActivate: () => popover?.close(),
-        lifetime: life,
-      });
-      // Col nome il popover è un dialogo, e un dialogo è una regione della pagina
-      // anche fuori dal suo `main`: dentro c'è il menu, che porta lo stesso nome.
-      popover = openPopover({
-        anchor,
-        content: box,
-        label: "Azioni sulla nota",
-        onClose: () => life.close(),
-        lifetime,
-      });
-      return popover;
+  /// Un pulsante che apre e chiude la sua superficie. Il gesto che la chiude «da
+  /// fuori» arriva prima del clic che la riaprirebbe: lo si riconosce qui, in
+  /// cattura e prima che un popover esista, quando la superficie c'è ancora.
+  function toggler(label: string, open: (anchor: HTMLButtonElement) => PopoverHandle): HTMLButtonElement {
+    let surface: PopoverHandle | null = null;
+    let closing = false;
+    const trigger: HTMLButtonElement = textButton({
+      label,
+      lifetime,
+      onPress() {
+        if (closing) {
+          closing = false;
+          return;
+        }
+        if (surface && !surface.closed) surface.close();
+        else surface = open(trigger);
+      },
     });
-    menuTrigger.id = "sample-menu";
+    lifetime.listen(
+      document,
+      "pointerdown",
+      (event) => {
+        closing =
+          surface !== null && !surface.closed && event.target instanceof Node && trigger.contains(event.target);
+      },
+      { capture: true },
+    );
+    return trigger;
+  }
 
-    const panelTrigger = toggler("Apri il riquadro", (anchor) => {
+  const menuTrigger = toggler("Apri il menu", (anchor) => {
+    const life = openLifetime();
+    const box = el("div");
+    box.setAttribute("aria-label", "Azioni sulla nota");
+    let popover: PopoverHandle | null = null;
+    createList<Entry>({
+      container: box,
+      role: "menu",
+      focus: "roving",
+      items: ACTIONS,
+      key: (entry) => entry.id,
+      render: drawEntry,
+      disabled: (entry) => entry.disabled === true,
+      typeahead: (entry) => entry.label,
+      onActivate: () => popover?.close(),
+      lifetime: life,
+    });
+    // Col nome il popover è un dialogo, e un dialogo è una regione della pagina
+    // anche fuori dal suo `main`: dentro c'è il menu, che porta lo stesso nome.
+    popover = openPopover({
+      anchor,
+      content: box,
+      label: "Azioni sulla nota",
+      onClose: () => life.close(),
+      lifetime,
+    });
+    return popover;
+  });
+  menuTrigger.id = "sample-menu";
+
+  const panelTrigger = toggler("Apri il riquadro", (anchor) => {
+    const life = openLifetime();
+    let popover: PopoverHandle | null = null;
+    const close = (): void => popover?.close();
+    const name = textField({
+      label: "Nome della vista",
+      value: "Da rileggere",
+      clearable: { label: "Svuota il nome" },
+      lifetime: life,
+    });
+    const answers = el("div", "fila");
+    answers.append(
+      textButton({ label: "Annulla", onPress: close, lifetime: life }),
+      textButton({ label: "Salva", kind: "primary", onPress: close, lifetime: life }),
+    );
+    const box = el("div", "riquadro-libero");
+    box.append(name.element, answers);
+    popover = openPopover({
+      anchor,
+      content: box,
+      label: "Salva la vista",
+      onClose: () => life.close(),
+      lifetime,
+    });
+    return popover;
+  });
+  panelTrigger.id = "sample-panel";
+
+  const answer = caption("nessuna risposta");
+  answer.id = "sample-answer";
+  answer.setAttribute("role", "status");
+
+  const dialogTrigger = textButton({
+    label: "Apri il dialogo",
+    lifetime,
+    onPress() {
       const life = openLifetime();
-      let popover: PopoverHandle | null = null;
-      const close = (): void => popover?.close();
       const name = textField({
-        label: "Nome della vista",
-        value: "Da rileggere",
+        label: "Nome della nota",
+        value: "Appunti di viaggio",
         clearable: { label: "Svuota il nome" },
         lifetime: life,
       });
-      const answers = el("div", "fila");
-      answers.append(
-        textButton({ label: "Annulla", onPress: close, lifetime: life }),
-        textButton({ label: "Salva", kind: "primary", onPress: close, lifetime: life }),
-      );
-      const box = el("div", "riquadro-libero");
-      box.append(name.element, answers);
-      popover = openPopover({
-        anchor,
-        content: box,
-        label: "Salva la vista",
-        onClose: () => life.close(),
+      const dialog = openDialog<string>({
+        title: "Salvare le modifiche?",
+        description: "«Appunti di viaggio» ha modifiche che non sono ancora su disco.",
+        body: name.element,
+        actions: [
+          { id: "cancel", label: "Annulla", value: "annulla" },
+          { id: "discard", label: "Non salvare", kind: "danger", value: "non salvare" },
+          { id: "save", label: "Salva", kind: "primary", value: "salva" },
+        ],
+        dismissValue: "annulla",
         lifetime,
       });
-      return popover;
-    });
-    panelTrigger.id = "sample-panel";
+      void dialog.result.then((value) => {
+        life.close();
+        answer.textContent = `risposta: ${value}`;
+      });
+    },
+  });
+  dialogTrigger.id = "sample-dialog";
 
-    const answer = caption("nessuna risposta");
-    answer.id = "sample-answer";
-    answer.setAttribute("role", "status");
-
-    const dialogTrigger = textButton({
-      label: "Apri il dialogo",
-      lifetime,
-      onPress() {
-        const life = openLifetime();
-        const name = textField({
-          label: "Nome della nota",
-          value: "Appunti di viaggio",
-          clearable: { label: "Svuota il nome" },
-          lifetime: life,
-        });
-        const dialog = openDialog<string>({
-          title: "Salvare le modifiche?",
-          description: "«Appunti di viaggio» ha modifiche che non sono ancora su disco.",
-          body: name.element,
-          actions: [
-            { id: "cancel", label: "Annulla", value: "annulla" },
-            { id: "discard", label: "Non salvare", kind: "danger", value: "non salvare" },
-            { id: "save", label: "Salva", kind: "primary", value: "salva" },
-          ],
-          dismissValue: "annulla",
-          lifetime,
-        });
-        void dialog.result.then((value) => {
-          life.close();
-          answer.textContent = `risposta: ${value}`;
-        });
-      },
-    });
-    dialogTrigger.id = "sample-dialog";
-
-    const link = el("a", "rimando", "Appunti di viaggio");
-    link.id = "sample-card";
-    link.href = "#sample-card";
-    lifetime.listen(link, "click", (event) => event.preventDefault());
-    attachHoverCard({
-      target: link,
-      label: "Anteprima di «Appunti di viaggio»",
-      load: () => {
-        const card = el("div", "scheda");
-        card.append(
-          el("strong", undefined, "Appunti di viaggio"),
-          el("p", undefined, "Lisbona, tre giorni. Il tram 28 al mattino presto, prima della fila; il miradouro al tramonto."),
-        );
-        return Promise.resolve(card);
-      },
-      lifetime,
-    });
-
-    {
-      const row = el("div", "fila");
-      row.append(
-        cell("popover · una lista", menuTrigger),
-        cell("popover · un riquadro", panelTrigger),
-        cell("dialogo", dialogTrigger),
-        cell("la sua risposta", answer),
-        cell("scheda al passaggio", link),
+  const link = el("a", "rimando", "Appunti di viaggio");
+  link.id = "sample-card";
+  link.href = "#sample-card";
+  lifetime.listen(link, "click", (event) => event.preventDefault());
+  attachHoverCard({
+    target: link,
+    label: "Anteprima di «Appunti di viaggio»",
+    load: () => {
+      const card = el("div", "scheda");
+      card.append(
+        el("strong", undefined, "Appunti di viaggio"),
+        el("p", undefined, "Lisbona, tre giorni. Il tram 28 al mattino presto, prima della fila; il miradouro al tramonto."),
       );
-      section("Popover, dialogo, scheda", "left", row);
-    }
+      return Promise.resolve(card);
+    },
+    lifetime,
+  });
+
+  {
+    const row = el("div", "fila");
+    row.append(
+      cell("popover · una lista", menuTrigger),
+      cell("popover · un riquadro", panelTrigger),
+      cell("dialogo", dialogTrigger),
+      cell("la sua risposta", answer),
+      cell("scheda al passaggio", link),
+    );
+    section("Popover, dialogo, scheda", "left", row);
   }
 
   // ── Pulsanti ─────────────────────────────────────────────────────────────────

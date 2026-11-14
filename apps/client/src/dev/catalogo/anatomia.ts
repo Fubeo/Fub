@@ -11,6 +11,7 @@
 // Li disegnano il catalogo del banco (`bench/catalog.ts`), una cella per ogni
 // coppia componente/stato, e la pagina «Tutti i componenti» (`pagina.ts`), un
 // riquadro per componente.
+import { t } from "../../i18n/strings";
 import type { ComponentState, ShellComponent } from "../../theme/scrittoio/anatomia";
 
 /// Hook che **sono** una superficie a sé, non un contenuto: il velo a pagina
@@ -35,7 +36,7 @@ export function anatomyProof(component: ShellComponent, state: ComponentState, h
   if (hook === "grid-viewport") {
     proof.tabIndex = 0;
     proof.setAttribute("role", "document");
-    proof.setAttribute("aria-label", "Foglio di calcolo");
+    proof.setAttribute("aria-label", t("grid.surface"));
     proof.style.minHeight = "var(--space-8)";
   }
   // La carta non ha una misura sua: gliela dà l'editor, dalla pagina

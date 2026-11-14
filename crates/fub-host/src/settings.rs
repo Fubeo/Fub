@@ -2431,8 +2431,9 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with(C_DEVELOPER_MODE, "Modalità sviluppatore")
         .with(
             C_DEVELOPER_MODE_DESC,
-            "Per chi scrive un tema: in «Temi installati» compare «Installa da \
-             cartella…», che lo controlla e lo installa dalla sua cartella.",
+            "Per chi scrive un tema: in «Temi installati» compaiono «Installa da \
+             cartella…», che lo controlla e lo installa dalla sua cartella, e \
+             «Tutti i componenti», che mostra ogni componente in ogni stato.",
         );
     for level in fub_kernel::log::Level::ALL {
         it = it.with(
@@ -3082,7 +3083,8 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with(
             C_DEVELOPER_MODE_DESC,
             "For theme authors: «Install from folder…» appears under \
-             «Installed themes», and checks and installs a theme from its folder.",
+             «Installed themes», and checks and installs a theme from its folder, \
+             along with «All components», which shows every component in every state.",
         );
     for level in fub_kernel::log::Level::ALL {
         en = en.with(
