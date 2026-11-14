@@ -1,0 +1,52 @@
+{
+  "about": "Un poligono ha almeno 3 vertici.",
+  "before": {
+    "nodes": [
+      {
+        "id": "t1",
+        "type": "text",
+        "text": "Ciclo dell'acqua",
+        "x": 0,
+        "y": 0,
+        "width": 320,
+        "height": 160
+      },
+      {
+        "id": "t2",
+        "type": "text",
+        "text": "Evaporazione",
+        "x": 400,
+        "y": 0,
+        "width": 320,
+        "height": 160
+      }
+    ],
+    "edges": []
+  },
+  "ops": [
+    {
+      "op": "draw",
+      "on": "board",
+      "shape": {
+        "kind": "polygon",
+        "points": [
+          [
+            0,
+            0
+          ],
+          [
+            10,
+            0
+          ]
+        ]
+      }
+    }
+  ],
+  "expect": {
+    "outcome": "rejected",
+    "error": {
+      "kind": "Invalid",
+      "index": 0
+    }
+  }
+}

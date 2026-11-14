@@ -25,7 +25,11 @@ un elenco), `node` (una scheda), `edge` (un arco), `color` (un nome, `"1"`…`"6
 o `#rrggbb`, o `null`), `sides` (`"auto"` o `{from, to}`), `pair` (due numeri,
 `[w, h]`), `object`, `patch` (i campi nuovi di `set`, col suo `color`), `points`
 (una lista di liste di numeri), `layer` (un livello d'inchiostro: `"board"` o
-`{"node": id}`), `strokes` (una lista di tratti, ognuno un oggetto) e `any`. Un campo facoltativo `null` vale come
+`{"node": id}`), `strokes` (una lista di tratti, ognuno un oggetto), `shape`
+(una forma di `draw`: un oggetto con `kind` e i campi di quella forma, coi loro
+problemi sotto `/shape/…`), `pen_size` (un numero da 0,25 a 200; fuori è
+`bad_value`), `ink_color` (un nome della tavolozza dell'inchiostro o `#rrggbb`;
+un altro nome è `bad_value`, coi nomi vicini) e `any`. Un campo facoltativo `null` vale come
 assente, per la forma e per serde.
 
 ## Lo schema JSON

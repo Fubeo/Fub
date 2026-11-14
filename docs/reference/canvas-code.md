@@ -488,6 +488,12 @@ id, la disposizione e i limiti stanno in [Da Mermaid e da una scaletta](canvas-i
 { "op": "from_mermaid", "text": "flowchart LR\n  A[Evaporazione] --> B[Condensazione] --> A", "near": "t1", "side": "bottom" }
 ```
 
+### `draw`
+
+Scrive un tratto d'inchiostro dai punti o da una forma, con penna e colore per
+nome: `{"op": "draw", "on": "t1", "shape": {"kind": "rect", "x": 8, "y": 8, "width": 304,
+"height": 144}}`. Campi, forme, `on` ed errori: [In codice](canvas-ink.md#in-codice).
+
 ### Gli id nuovi
 
 Un id nuovo viene dal seme del chiamante (`seed`, un intero a 64 bit senza
@@ -517,13 +523,13 @@ Ogni errore (`OpError`) dice quale operazione della lista non si compila
 
 | Errore | Quando |
 |---|---|
-| `UnknownNode` | `move`, `resize`, `reorder`, `align`, `distribute`, `duplicate`, `group`, `layout` o `convert` di un id che non è una scheda; il `near` di `insert`, `from_mermaid` o `from_outline`; un arco verso una scheda che non c'è |
+| `UnknownNode` | `move`, `resize`, `reorder`, `align`, `distribute`, `duplicate`, `group`, `layout`, `convert` o l'`on` di `draw` con un id che non è una scheda; il `near` di `insert`, `from_mermaid` o `from_outline`; un arco verso una scheda che non c'è |
 | `UnknownEdge` | `remove`, `set` o `color` di un id che non è né una scheda né un arco; `reverse` di un id che non è un arco |
 | `DuplicateId` | un id dato che è già preso (anche in `as`); un id ripetuto nella lista di `move`, `remove`, `reorder`, `color`, `align`, `distribute`, `duplicate` o `layout` |
-| `TooMany`, `TooManyMoved` | la lavagna avrebbe più di 100 000 schede o 200 000 archi, anche con le copie, il gruppo o il frammento; un `insert` porta più di 10 000 schede; i [limiti](canvas-import.md#i-limiti-e-gli-errori) di `from_mermaid` e `from_outline`; `TooManyMoved` è un `move` con `contents` che tocca più di 1 000 schede |
-| `Invalid` | una scheda o un arco che il formato non accetta; una forma breve incompleta o mescolata con la intera; `set` di `id` o `type`; un `resize` senza misure o con `fit` e `height`; un id che è sia una scheda sia un arco; `duplicate` con `as` di altra lunghezza da `ids`; `group` senza schede; `layout` con `direction` fuori da `tree`, con `x` senza `y` (o viceversa), o con `gap` negativo; un frammento di `insert` che non si incolla (vedi sopra); `convert` di una scheda che non è un testo, o con `file` vuoto; un testo che `from_mermaid` o `from_outline` non legge ([i loro errori](canvas-import.md#i-limiti-e-gli-errori)); un tratto che non si disegnerebbe |
+| `TooMany`, `TooManyMoved` | la lavagna avrebbe più di 100 000 schede o 200 000 archi, anche con le copie, il gruppo o il frammento; un `insert` porta più di 10 000 schede; i [limiti](canvas-import.md#i-limiti-e-gli-errori) di `from_mermaid` e `from_outline`; un tratto di `draw` con più di 10 000 punti; `TooManyMoved` è un `move` con `contents` che tocca più di 1 000 schede |
+| `Invalid` | una scheda o un arco che il formato non accetta; una forma breve incompleta o mescolata con la intera; `set` di `id` o `type`; un `resize` senza misure o con `fit` e `height`; un id che è sia una scheda sia un arco; `duplicate` con `as` di altra lunghezza da `ids`; `group` senza schede; `layout` con `direction` fuori da `tree`, con `x` senza `y` (o viceversa), o con `gap` negativo; un frammento di `insert` che non si incolla (vedi sopra); `convert` di una scheda che non è un testo, o con `file` vuoto; un testo che `from_mermaid` o `from_outline` non legge ([i loro errori](canvas-import.md#i-limiti-e-gli-errori)); un tratto che non si disegnerebbe; i punti o la forma di `draw` che non fanno un tratto ([gli errori](canvas-ink.md#in-codice)) |
 | `UnknownStroke` | `erase_strokes` di un id che non è un tratto del livello |
-| `ForeignLayer` | `add_strokes` o `erase_strokes` su un livello estraneo |
+| `ForeignLayer` | `add_strokes`, `erase_strokes` o `draw` su un livello estraneo |
 
 I vettori stanno in `apps/client/src/__fixtures__/canvas-ops/`, uno per file
 (`before`, `seed`, `ops`, `expect`); `tests/op_vectors.rs` li fa girare e

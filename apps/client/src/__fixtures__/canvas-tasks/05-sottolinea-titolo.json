@@ -1,5 +1,5 @@
 {
-  "about": "Sottolineare un titolo a pennarello: una riga dritta sotto la scheda. Serve l'inchiostro in codice (N4), quindi con main non si può.",
+  "about": "Sottolineare un titolo a pennarello: una riga dritta sotto la scheda. Con main si scrive il tratto già codificato (add_strokes: il pennello del pennarello, l'ancora, la stringa ink calcolati a mano); con draw bastano la forma e i nomi.",
   "prompt": "Sottolinea a pennarello, in vermiglio, il titolo «Ciclo dell'acqua»: una riga dritta sotto la scheda.",
   "before": {
     "nodes": [
@@ -7,11 +7,15 @@
     ],
     "edges": []
   },
-  "ops_today": null,
+  "ops_today": [
+    { "op": "add_strokes", "layer": { "node": "t" }, "strokes": [
+      {"tool": "pen", "brush": "pf1 size=6 thinning=0 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=0 pen=marker", "color": "#d55e00", "anchor": {"kind": "card", "width": 320, "height": 160}, "ink": "1 s100 cxypt 2400,15200,128,0 400,0,0,8 400,0,0,8 400,0,0,8 400,0,0,8 400,0,0,8 400,0,0,8 400,0,0,8 400,0,0,8 400,0,0,8 400,0,0,8 400,0,0,8 400,0,0,8 400,0,0,8 400,0,0,8 400,0,0,8 400,0,0,8 400,0,0,8 400,0,0,8 400,0,0,8 400,0,0,8 400,0,0,8 400,0,0,8 400,0,0,8 400,0,0,8 400,0,0,8 400,0,0,8 400,0,0,8 400,0,0,8 400,0,0,8 400,0,0,8 400,0,0,8 400,0,0,8 400,0,0,8 400,0,0,8 400,0,0,8 400,0,0,8 400,0,0,8 400,0,0,8 400,0,0,8 400,0,0,8 400,0,0,8 400,0,0,8 400,0,0,8 400,0,0,8 400,0,0,8 400,0,0,8 400,0,0,8 400,0,0,8 400,0,0,8 400,0,0,8 400,0,0,8 400,0,0,8 400,0,0,8 400,0,0,8 400,0,0,8 400,0,0,8 400,0,0,8 400,0,0,8 400,0,0,8 400,0,0,8 400,0,0,8 400,0,0,8 400,0,0,8 400,0,0,8 400,0,0,8 400,0,0,8 400,0,0,8 400,0,0,8"}
+    ] }
+  ],
   "ops": [
     { "op": "draw", "on": "t", "shape": { "kind": "line", "x1": 24, "y1": 152, "x2": 296, "y2": 152 }, "pen": "marker", "color": "vermilion" }
   ],
-  "needs": ["draw"],
+  "needs": [],
   "checks": [
     { "strokes": { "on_text": "Ciclo dell'acqua", "n": 1 } }
   ]

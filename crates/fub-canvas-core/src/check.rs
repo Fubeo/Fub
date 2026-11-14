@@ -235,7 +235,7 @@ impl Problem {
             ),
             OpError::ForeignLayer { .. } => (
                 Code::ForeignLayer,
-                format!("/{index}/layer"),
+                layer_path(raw, index),
                 "the ink of this layer is not Fub's, and Fub keeps it as it is".to_owned(),
                 None,
             ),
@@ -632,6 +632,21 @@ fn free_prefix(canvas: &Canvas, ops: &[CanvasOp], index: usize, seed: u64) -> Op
 /// cercando in ampiezza: prima i campi di primo livello, poi quelli più in
 /// fondo, così `/3/id` vince su `/3/fields/text`. Il valore `op` non conta. Se
 /// il testo non c'è, il puntatore è quello dell'operazione.
+/// Dove sta il livello estraneo: `layer` per `add_strokes` ed `erase_strokes`,
+/// `on` per `draw`; senza l'uno né l'altro (un `draw` con `on` assente, cioè
+/// `"auto"`, che finisce sulla radice) l'operazione intera. Un campo `null`
+/// vale come assente, come per la forma.
+fn layer_path(raw: &Value, index: usize) -> String {
+    let op = raw.get(index);
+    ["layer", "on"]
+        .into_iter()
+        .find(|field| {
+            op.and_then(|op| op.get(field))
+                .is_some_and(|value| !value.is_null())
+        })
+        .map_or_else(|| format!("/{index}"), |field| format!("/{index}/{field}"))
+}
+
 fn locate(raw: &Value, index: usize, text: &str) -> String {
     let base = format!("/{index}");
     let Some(op) = raw.get(index) else {

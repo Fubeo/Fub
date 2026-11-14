@@ -198,7 +198,9 @@ operazioni producono sono descritte sopra, in «Le toppe».
 ## Inchiostro
 
 La toppa `ink` e le operazioni `add_strokes` ed `erase_strokes` stanno
-nell'[inchiostro della lavagna](canvas-ink.md#toppa-e-operazioni). `move` e
+nell'[inchiostro della lavagna](canvas-ink.md#toppa-e-operazioni); `draw`, che
+scrive un tratto dai punti o da una forma con la penna e il colore per nome, sta
+in [In codice](canvas-ink.md#in-codice). `move` e
 `resize` non toccano l'inchiostro; `remove` lo porta via con la scheda, e
 l'annulla lo rimette.
 

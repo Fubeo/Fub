@@ -42,10 +42,10 @@ nessuna.
 | `unknown_node` | `move`, `resize`, `reorder`, `align`, `distribute`, `duplicate`, `group`, `layout`, `convert`, il `near` di `insert` o un estremo di `connect`, con un id che non è una scheda | le schede col nome vicino |
 | `unknown_edge` | `remove`, `set` o `color` con un id che non è né una scheda né un arco; `reverse` con un id che non è un arco | le schede e gli archi col nome vicino |
 | `duplicate_id` | un id dato che c'è già, o ripetuto nella stessa operazione | per `from_mermaid` e `from_outline` un `prefix` con cui l'operazione si compila (`m1-`, `m2-`… o `s1-`…, al più venti prove) |
-| `too_many`, `too_many_moved` | la lavagna avrebbe più di 100 000 schede o 200 000 archi, o un `insert` porta più di 10 000 schede, o un testo di `from_mermaid` o `from_outline` passa i suoi limiti; `too_many_moved` è un `move` con `contents` che tocca più di 1 000 schede | — |
+| `too_many`, `too_many_moved` | la lavagna avrebbe più di 100 000 schede o 200 000 archi, o un `insert` porta più di 10 000 schede, o un testo di `from_mermaid` o `from_outline` passa i suoi limiti, o un tratto di `draw` ha più di 10 000 punti; `too_many_moved` è un `move` con `contents` che tocca più di 1 000 schede | — |
 | `invalid` | una scheda o un arco che il formato non accetta, col motivo in `message`; un tratto di `add_strokes` che non si disegnerebbe; un'operazione che la forma accetta e serde no, con la frase fissa `the operation does not match its schema` | — |
 | `unknown_stroke` | `erase_strokes` con un id che non è un tratto del livello | — |
-| `foreign_layer` | `add_strokes` o `erase_strokes` su un livello d'inchiostro che Fub non legge (`path` è il suo `layer`) | — |
+| `foreign_layer` | `add_strokes`, `erase_strokes` o `draw` su un livello d'inchiostro che Fub non legge (`path` è il suo `layer`, l'`on` di `draw`, o l'operazione intera per un `draw` senza `on` finito sulla radice) | — |
 
 I nomi vicini sono quelli dello schema: distanza al più 2, maiuscole ASCII
 ignorate (`T1` ha il vicino `t1`). Sono al più tre, alla distanza minima, nell'ordine
