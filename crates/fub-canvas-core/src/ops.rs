@@ -378,8 +378,8 @@ impl Compiler {
             CanvasOp::Layout(args) => self.layout(index, args)?,
             CanvasOp::Insert(args) => self.insert(index, args)?,
             CanvasOp::Convert(args) => self.convert(index, args)?,
-            CanvasOp::FromMermaid(args) => self.from_mermaid(index, args)?,
-            CanvasOp::FromOutline(args) => self.from_outline(index, args)?,
+            CanvasOp::FromMermaid(args) => self.import_mermaid(index, args)?,
+            CanvasOp::FromOutline(args) => self.import_outline(index, args)?,
         };
         if patches.is_empty() {
             return Ok(());

@@ -96,7 +96,7 @@ pub struct FromOutlineArgs {
 impl Compiler {
     /// `from_mermaid`: il diagramma come blocco. Gli id sono quelli di Mermaid,
     /// con `prefix` davanti.
-    pub(super) fn from_mermaid(
+    pub(super) fn import_mermaid(
         &mut self,
         index: usize,
         args: &FromMermaidArgs,
@@ -109,7 +109,7 @@ impl Compiler {
     }
 
     /// `from_outline`: la scaletta come albero, nel verso dato.
-    pub(super) fn from_outline(
+    pub(super) fn import_outline(
         &mut self,
         index: usize,
         args: &FromOutlineArgs,

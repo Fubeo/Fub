@@ -249,7 +249,7 @@ Un agente o la sessione dal tablet scrivono **operazioni d'intento**
 (`CanvasOp`, in `crates/fub-canvas-core/src/ops.rs`), come «sposta» o
 «collega», non toppe. `compile(canvas, ops, seed)` le traduce nelle
 [toppe](canvas-operations.md#le-toppe) e dà `Compiled { patches, created, notes }`:
-`notes` dice ciò che un'operazione non ha potuto tenere (oggi solo
+`notes` dice ciò che un'operazione non ha potuto tenere (le note di
 [`from_mermaid` e `from_outline`](canvas-import.md#le-note)).
 
 Le operazioni si compilano in ordine, ognuna sul modello della precedente (si

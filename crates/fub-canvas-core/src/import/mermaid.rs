@@ -712,8 +712,8 @@ impl<'a> Cursor<'a> {
         self.spaces();
         if self.eat("|") {
             let rest = self.rest();
-            let end = if rest.starts_with('"') {
-                let close = rest[1..].find('"')? + 1;
+            let end = if let Some(quoted) = rest.strip_prefix('"') {
+                let close = quoted.find('"')? + 1;
                 close + rest[close..].find('|')?
             } else {
                 rest.find('|')?
@@ -858,8 +858,8 @@ fn middle_label(rest: &str, stroke: char) -> Option<(String, usize)> {
         '=' => "==",
         _ => ".-",
     };
-    let search_from = if rest.starts_with('"') {
-        rest[1..].find('"')? + 2
+    let search_from = if let Some(quoted) = rest.strip_prefix('"') {
+        quoted.find('"')? + 2
     } else {
         0
     };
@@ -877,7 +877,10 @@ fn is_name_char(character: char) -> bool {
 mod tests {
     use super::*;
 
-    fn chain(text: &str) -> (Vec<Vec<String>>, Vec<(Option<String>, bool, bool)>) {
+    /// Un arco letto: l'etichetta, la punta alla partenza, quella all'arrivo.
+    type Arrow = (Option<String>, bool, bool);
+
+    fn chain(text: &str) -> (Vec<Vec<String>>, Vec<Arrow>) {
         let (groups, links) = parse_chain(text).expect("una catena");
         (
             groups

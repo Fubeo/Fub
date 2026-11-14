@@ -124,7 +124,7 @@ Ciò che un'operazione non ha potuto tenere non è un errore: `Compiled` porta
 dice che cosa e in quale riga, in inglese come gli errori), al più 100, e
 `notes_omitted`, quante ne restano fuori. Il [controllo](canvas-check.md) le
 mostra come avvisi, per prime, e `canvas.apply` le mette nell'esito
-([`notes`, `notes_omitted`](canvas-operations.md#canvasapply)).
+([`notes`, `notes_omitted`](canvas-operations.md#comandi)).
 
 | Codice | Quando |
 |---|---|
