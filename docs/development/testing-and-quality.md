@@ -348,8 +348,8 @@ colori. La carta dei fogli è uno pseudo-elemento, che axe non sa leggere dietro
 il testo: per la sola misura, a scena ferma, il banco la porta sui fratelli che
 le stanno sopra, col suo colore, e il contrasto del testo sul foglio diventa un
 esito invece di un «da verificare».
-Il catalogo contiene i campioni posizionati dentro i rispettivi riquadri;
-le regioni che scorrono hanno nome accessibile e ingresso da tastiera.
+Il catalogo (cuore in `src/dev/catalogo/`, come «Tutti i componenti») ha i
+campioni nei loro riquadri; le regioni che scorrono hanno nome e un Tab.
 Il controllo del focus distingue i discendenti di un `details` chiuso
 dagli elementi realmente visibili e raggiungibili. In ogni scena con la
 modalità nella banda, Invio su `#status-mode` apre il menu (che prende il

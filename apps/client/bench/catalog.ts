@@ -4,12 +4,14 @@
 // cose diverse, e la seconda è quella che manca oggi: quando la §31.2 rifarà i
 // colori e la §31.5 le elevazioni, la domanda «cosa ho cambiato» non si risponde
 // guardando l'app — si risponde mettendo il prima e il dopo di *tutto* uno
-// accanto all'altro. Sono anche, dette dall'altra parte, la pagina di prova che
-// si consegnerà a chi scriverà un tema (§31.9).
+// accanto all'altro. Detti dall'altra parte, sono anche la pagina di prova di
+// chi scrive un tema: l'app la porta con sé come «Tutti i componenti»
+// (`src/dev/catalogo/`), e il cuore dei due è lo stesso.
 //
 //  - **componenti**: ogni `UiNode` che la shell sa disegnare, in ogni stato in
-//    cui un tema lo deve distinguere. L'elenco sta in `samples.ts` e un
-//    presidio lo confronta coi `case` di `src/ui/node.ts`.
+//    cui un tema lo deve distinguere. L'elenco sta in
+//    `src/dev/catalogo/samples.ts` e un presidio lo confronta coi `case` di
+//    `src/ui/node.ts`.
 //  - **tavolozza**: ogni token del foglio col suo nome, il suo valore e — per i
 //    colori — il contrasto **reso** sopra le quattro superfici. I nomi non sono
 //    scritti qui: si leggono dal foglio montato, quindi un token nuovo compare
@@ -30,7 +32,10 @@ import { contrast } from "../src/theme/contrast";
 import { mountTree, mountWebviewFocusMonitor } from "../src/ui/node";
 import { openLifetime } from "../src/ui/lifetime";
 import { COMPONENTS } from "../src/theme/scrittoio/anatomia";
-import { SAMPLES } from "./samples";
+import { anatomyProof, keepScrollersReachable } from "../src/dev/catalogo/anatomia";
+import { FAMILIES, LEADINGS, PROSE, SCALE, WEIGHTS } from "../src/dev/catalogo/caratteri";
+import { SAMPLES } from "../src/dev/catalogo/samples";
+import { SURFACES, isColor, tokenNames as namesIn } from "../src/dev/catalogo/tavolozza";
 
 const params = new URLSearchParams(window.location.search);
 const LIGHT = params.get("light") === "light" ? "light" : "dark";
@@ -82,27 +87,8 @@ function section(title: string): HTMLElement {
 // ---------------------------------------------------------------------------
 
 /** La scena legge la tabella chiusa: una cella per ogni coppia
- * componente/stato, e dentro ogni hook del componente ha **il suo** elemento.
- *
- * Non un solo nodo con tutte le classi addosso: nel DOM vero gli hook stanno
- * su nodi in rapporto — un `.tab` contiene un `.tab-name`, `.views-modal` è
- * un fisso a sé — e la pila piatta li fa combattere su uno stesso elemento
- * con esiti (scrim sotto testo, accent sotto danger) che nessun selettore
- * della pelle produce davvero. Il banco fotograferebbe quei composti come se
- * fossero verità, e il presidio del contrasto li condannerebbe a nome della
- * pelle. Un hook, un elemento: ogni foto è quella di un selettore reale. */
-/** Hook che **sono** una superficie a sé, non un contenuto: il velo a pagina
- * intera di una modale, la carta del disegno, la tavola, l'inchiostro e il
- * laser della presentazione. Si fotografano senza prosa addosso. */
-const SUPERFICI: Set<string> = new Set([
-  "modale",
-  "views-modal",
-  "draw-page",
-  "draw-present-board",
-  "draw-present-ink",
-  "draw-present-laser",
-]);
-
+ * componente/stato, e dentro ogni hook del componente ha **il suo** elemento
+ * (`anatomyProof`): ogni foto è quella di un selettore reale. */
 function anatomy(): void {
   const grid = section("Shell anatomy");
   for (const component of COMPONENTS) {
@@ -110,32 +96,9 @@ function anatomy(): void {
       const cell = el("div", "cella");
       cell.append(el("span", "didascalia", `${component.name} · ${state.label}`));
       for (const hook of component.hooks) {
-        const proof = el("div", hook);
-        proof.dataset.component = component.name;
-        proof.dataset.state = state.name;
-        if (hook === "grid-viewport") {
-          proof.tabIndex = 0;
-          proof.setAttribute("role", "document");
-          proof.setAttribute("aria-label", "Foglio di calcolo");
-          proof.style.minHeight = "var(--space-8)";
-        }
-        // La carta non ha una misura sua: gliela dà l'editor, dalla pagina
-        // del disegno e dalla vista. Qui ne ha una qualunque, così si vede.
-        if (hook === "draw-page") {
-          proof.style.width = "8rem";
-          proof.style.height = "5rem";
-        }
-        // Le superfici di copertura (`.modale`, `.views-modal`) sono un velo
-        // a pagina intera: il loro testo vero sta dentro il pannello che
-        // ospitano — che qui arriva per conto suo, come hook a sé. Mettere
-        // della prosa **sul velo** fotograferebbe uno stato che la pelle non
-        // produce: il velo si fotografa nudo. Così la carta del disegno, che
-        // è bianca in ogni tema e non porta mai testo, e nella presentazione
-        // la tavola, l'inchiostro e il punto del laser.
-        if (!SUPERFICI.has(hook)) proof.textContent = `${component.name} · ${hook}`;
         const frame = el("div", "provino provino-anatomia");
         frame.dataset.label = `${component.name} · ${state.label} · ${hook}`;
-        frame.append(proof);
+        frame.append(anatomyProof(component, state, hook));
         cell.append(frame);
       }
       grid.append(cell);
@@ -162,58 +125,21 @@ function components(): void {
   }
   // Il ritaglio conserva la geometria dei campioni posizionati. Quando
   // serve scorrere, anche la tastiera deve poter raggiungere il provino.
-  const observer = new ResizeObserver((entries) => {
-    for (const entry of entries) {
-      const frame = entry.target as HTMLElement;
-      const style = getComputedStyle(frame);
-      const scrolls = ((style.overflowY === "auto" || style.overflowY === "scroll")
-        && frame.scrollHeight > frame.clientHeight)
-        || ((style.overflowX === "auto" || style.overflowX === "scroll")
-          && frame.scrollWidth > frame.clientWidth);
-      if (scrolls) {
-        frame.tabIndex = 0;
-        frame.setAttribute("role", "region");
-        frame.setAttribute("aria-label", frame.closest<HTMLElement>(".provino-anatomia")!.dataset.label!);
-      } else {
-        frame.removeAttribute("tabindex");
-        frame.removeAttribute("role");
-        frame.removeAttribute("aria-label");
-      }
-    }
-  });
-  for (const frame of root.querySelectorAll(".provino-anatomia, .provino-anatomia > :not([tabindex])")) {
-    observer.observe(frame);
-  }
-  lifetime.add(() => observer.disconnect());
+  lifetime.add(
+    keepScrollersReachable(
+      root.querySelectorAll<HTMLElement>(".provino-anatomia, .provino-anatomia > :not([tabindex])"),
+      (frame) => frame.closest<HTMLElement>(".provino-anatomia")!.dataset.label!,
+    ),
+  );
 }
 
 // ---------------------------------------------------------------------------
 // Tavolozza.
 // ---------------------------------------------------------------------------
-/// I nomi dei token, **letti dal foglio montato** e nel suo ordine.
-///
-/// Non da un elenco scritto qui: un elenco a mano è la seconda metà di una
-/// coppia che nessuno tiene insieme, e il giorno che diverge il catalogo non
-/// diventa rosso — smette solo di mostrare un token, che è il difetto che
-/// questa seduta è nata per non avere più.
+
+/// I nomi dei token del foglio montato, nel suo ordine.
 function tokenNames(): string[] {
-  const stylesheet = LIGHT === "light" ? lightSheet : darkSheet;
-  const withoutComments = stylesheet.replace(/\/\*[\s\S]*?\*\//g, "");
-  return [...withoutComments.matchAll(/^\s*(--[\w-]+)\s*:/gm)].map((m) => m[1]!);
-}
-
-/// Le quattro superfici su cui un inchiostro può stare. Sono i quattro fondi che
-/// la pelle usa davvero, e sono anche quelle che `contrast.test.ts` enumera:
-/// il catalogo mostra lo stesso conto, misurato sull'altro lato — lì dal foglio
-/// come testo, qui da `getComputedStyle` sulla pagina.
-const SURFACES = ["--bg", "--bg-chrome", "--bg-elev", "--bg-input"] as const;
-
-/// Un token è un colore se il suo valore, reso, è un colore pieno che il conto
-/// sa leggere. I veli e le ombre (`rgb(… / …)`, `0 1px 2px …`) non lo sono, e
-/// il loro contrasto non è una funzione dei soli token: si mostrano col loro
-/// valore e senza conti, che è la cosa vera da dire.
-function isColor(value: string): boolean {
-  return /^#|^rgba?\(/i.test(value.trim()) && !/\/\s*0?\.\d/.test(value);
+  return namesIn(LIGHT === "light" ? lightSheet : darkSheet);
 }
 
 function palette(): void {
@@ -267,37 +193,14 @@ function palette(): void {
 // Campionario.
 // ---------------------------------------------------------------------------
 
-const PROSE =
-  "Non si migliora ciò che non si guarda: un gradino che non si vede, un allineamento che salta, un'ombra che non stacca.";
-
 function samples(): void {
   header("Samples");
 
-  const scale = [
-    "--text-xs",
-    "--text-sm",
-    "--text-base",
-    "--text-md",
-    "--text-lg",
-    "--text-xl",
-    "--text-2xl",
-    "--text-3xl",
-  ];
-  const weights: [string, string][] = [
-    ["normale", "400"],
-    ["medium", "var(--weight-medium)"],
-    ["bold", "var(--weight-bold)"],
-  ];
-
-  for (const [family, token] of [
-    ["Carattere dell'interfaccia", "--font-ui"],
-    ["Carattere di lettura", "--font-reading"],
-    ["Carattere monospaziato", "--font-mono"],
-  ] as const) {
+  for (const [family, token] of FAMILIES) {
     const s = el("section", "sezione");
     s.append(el("h2", undefined, family));
-    for (const size of scale) {
-      for (const [weightName, weight] of weights) {
+    for (const size of SCALE) {
+      for (const [weightName, weight] of WEIGHTS) {
         const row = el("div", "riga-scala");
         row.append(el("span", "didascalia", `${size.slice(2)} · ${weightName}`));
         const text = el("p", "misura", PROSE);
@@ -316,13 +219,7 @@ function samples(): void {
   // tema e non si vedono su una riga sola.
   const s = el("section", "sezione");
   s.append(el("h2", undefined, "Interlinea e spaziatura"));
-  for (const [name, style] of [
-    ["normale", ""],
-    ["leading-tight", "line-height: var(--leading-tight)"],
-    ["leading-normal", "line-height: var(--leading-normal)"],
-    ["leading-relaxed", "line-height: var(--leading-relaxed)"],
-    ["tracking-caps", "letter-spacing: var(--tracking-caps); text-transform: uppercase"],
-  ] as const) {
+  for (const [name, style] of LEADINGS) {
     const row = el("div", "riga-scala");
     row.append(el("span", "didascalia", name));
     const paragraph = el("p", "misura", `${PROSE} ${PROSE}`);

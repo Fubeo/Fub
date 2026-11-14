@@ -2849,7 +2849,7 @@ export function developerModeSetting(on: boolean): SettingEntry {
       key: DEVELOPER_MODE_KEY,
       label: "Modalità sviluppatore",
       description:
-        "Per chi scrive un tema: in «Temi installati» compare «Installa da cartella…», che lo controlla e lo installa dalla sua cartella.",
+        "Per chi scrive un tema: in «Temi installati» compaiono «Installa da cartella…», che lo controlla e lo installa dalla sua cartella, «Collega una cartella…», che lo rimonta a ogni salvataggio, e «Tutti i componenti», che mostra ogni componente in ogni stato.",
       group: "Sviluppo",
       scope: "machine",
       kind: { kind: "toggle", default: false },

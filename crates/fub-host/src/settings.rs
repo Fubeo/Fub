@@ -2467,8 +2467,9 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with(
             C_DEVELOPER_MODE_DESC,
             "Per chi scrive un tema: in «Temi installati» compaiono «Installa da \
-             cartella…», che lo controlla e lo installa dalla sua cartella, e \
-             «Collega una cartella…», che lo rimonta a ogni salvataggio.",
+             cartella…», che lo controlla e lo installa dalla sua cartella, \
+             «Collega una cartella…», che lo rimonta a ogni salvataggio, e \
+             «Tutti i componenti», che mostra ogni componente in ogni stato.",
         )
         .with(C_DEVELOPER_THEME_FOLDER, "Cartella collegata")
         .with(
@@ -3130,7 +3131,8 @@ pub fn core_catalog() -> Vec<StringCatalog> {
             C_DEVELOPER_MODE_DESC,
             "For theme authors: «Install from folder…» appears under \
              «Installed themes», and checks and installs a theme from its folder, \
-             with «Link a folder…», which remounts it at every save.",
+             with «Link a folder…», which remounts it at every save, and with \
+             «All components», which shows every component in every state.",
         )
         .with(C_DEVELOPER_THEME_FOLDER, "Linked folder")
         .with(

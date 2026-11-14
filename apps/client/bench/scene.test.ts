@@ -33,7 +33,7 @@
 import { describe, expect, it } from "vitest";
 
 import { LIGHTS as lights, SCENE as scene, photoFilename as foto, sceneUrl } from "./scene.mjs";
-import { SAMPLES } from "./samples";
+import { SAMPLES } from "../src/dev/catalogo/samples";
 import sourceNode from "../src/ui/node.ts?raw";
 
 /// Le baseline in repo, per nome. Il valore non interessa (sono PNG): interessa

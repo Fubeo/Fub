@@ -45,7 +45,7 @@
 | `plugins.disabled` (spegnere per vault) | `crates/fub-host/src/settings.rs` |
 | `SettingSpec` e i livelli delle impostazioni | `crates/fub-abi/src/settings.rs` |
 | `perf.probe` (la sonda N0) | `crates/fub-host/src/settings.rs`, montata da `apps/client/src/perf/` |
-| `developer.mode` (la modalità sviluppatore) | `crates/fub-host/src/settings.rs`; la applicano `Host::check_theme_folder` e `Host::install_theme_from_folder`, il bottone sta in `apps/client/src/panels/theme-folder.ts` |
+| `developer.mode` (la modalità sviluppatore) | `crates/fub-host/src/settings.rs`; la applicano `Host::check_theme_folder` e `Host::install_theme_from_folder`, i bottoni stanno in `apps/client/src/panels/theme-folder.ts` («Installa da cartella…», «Collega una cartella…») e in `apps/client/src/panels/settings.ts` («Tutti i componenti») |
 | Il tema collegato (`developer.theme-folder`) | `crates/fub-host/src/theme/linked.rs` (lettura con le porte), `crates/fub-host/src/theme_watch.rs` (l'osservatore), `Host::link_theme_folder`; il rimontaggio in `apps/client/src/theme/theme.ts`, il blocco «Cartella collegata» in `apps/client/src/panels/theme-folder.ts` |
 | `draw.workspace` (Semplice o Completo) | le impostazioni della feature `draw`, `crates/fub-features/src/draw.rs` |
 | il registro dei comandi del vault | `crates/fub-features/src/commands.rs` e i suoi moduli in `commands/` (dogfood del `CommandProvider`) |
@@ -62,6 +62,7 @@
 | `MemoryHost` (provare un provider) | `crates/fub-sdk/src/testing/mod.rs` |
 | i template dei disegni | `crates/fub-features/templates/` |
 | le scene del banco visivo | `apps/client/bench/scene.mjs` |
+| i cataloghi del banco e la pagina «Tutti i componenti» | `apps/client/src/dev/catalogo/` |
 | i comportamenti della shell (avvisi, menu delle modalità, tasto destro, albero, linguette, avvisi nel foglio) | `apps/client/src/panels/`, `apps/client/src/state/`, `apps/client/src/ui/` e `docs/architecture/shell-behaviours.md` |
 | la cornice del telefono e la soglia dei 600 px | `apps/client/src/shells/scrittoio/mobile/` e `docs/architecture/phone-frame.md` |
 | i budget della CI della WebView | `apps/client/bench/webview/budgets.json` |

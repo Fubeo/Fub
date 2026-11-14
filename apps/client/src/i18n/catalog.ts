@@ -1445,6 +1445,9 @@ export const IT = { // --- la scocca -------------------------------------------
 "settings.themes.preview_none": "Nessuna anteprima attiva.",
 "settings.themes.preview_active": "Anteprima attiva: {theme}. La scelta salvata non è cambiata.",
 "settings.themes.preview_failed": "Anteprima tema non disponibile: {reason}",
+// --- il bottone della pagina «Tutti i componenti» (PA T38); le sue stringhe
+// stanno in dev/catalogo, e un guasto all'apertura dice `commands.failed`
+"settings.themes.catalog": "Tutti i componenti",
 // --- installare un tema da una cartella, e la diagnosi (PA T36) ------------
 "settings.themes.none_installed": "Nessun tema installato. Installane uno da una cartella.",
 "settings.themes.install_folder": "Installa da cartella…",
@@ -4730,6 +4733,7 @@ export const EN: Record<Key, string> = { "app.skip_to_editor": "Skip to the edit
 "settings.themes.preview_none": "No active preview.",
 "settings.themes.preview_active": "Preview active: {theme}. The saved choice has not changed.",
 "settings.themes.preview_failed": "Theme preview unavailable: {reason}",
+"settings.themes.catalog": "All components",
 "settings.themes.none_installed": "No theme installed. Install one from a folder.",
 "settings.themes.install_folder": "Install from folder…",
 "settings.themes.installed": "«{name}» installed: you will find it among the installed themes.",
