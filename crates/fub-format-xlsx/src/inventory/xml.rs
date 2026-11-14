@@ -91,10 +91,11 @@ pub(super) fn parse(
     stream: Option<(&str, &str)>,
     sink: &mut dyn FnMut(Node) -> Result<(), InventoryError>,
 ) -> Result<Node, InventoryError> {
-    parse_within(bytes, part, budget, stream, sink, LIMITS.retained)
+    parse_within(bytes, part, budget, stream, sink, LIMITS.retained_bytes)
 }
 
-/// [`parse`] con il tetto dei nodi tenuti in memoria ([`Limits::retained`]).
+/// [`parse`] con il tetto dei byte tenuti in memoria
+/// ([`Limits::retained_bytes`]).
 fn parse_within(
     bytes: &[u8],
     part: &str,
@@ -103,13 +104,15 @@ fn parse_within(
     sink: &mut dyn FnMut(Node) -> Result<(), InventoryError>,
     retained: u64,
 ) -> Result<Node, InventoryError> {
-    // I nodi vivi sono quelli aperti meno quelli andati al flusso.
-    let mut opened = 0u64;
+    // I byte vivi sono quelli aggiunti all'albero (nodi aperti, testi) meno
+    // quelli andati al flusso o tolti da `close`.
+    let mut added = 0u64;
     let freed = std::cell::Cell::new(0u64);
     let mut counted = |node: Node| {
         freed.set(freed.get().saturating_add(subtree(&node)));
         sink(node)
     };
+    let over = |added: u64, freed: u64| added.saturating_sub(freed) > retained;
     let sink: &mut dyn FnMut(Node) -> Result<(), InventoryError> = &mut counted;
     let mut reader = NsReader::from_reader(bytes);
     reader.config_mut().check_end_names = true;
@@ -129,6 +132,7 @@ fn parse_within(
                     .map_err(|error| xml_error(part, error))?;
                 if let Some(open) = stack.last_mut() {
                     open.text.push_str(&text);
+                    added = added.saturating_add(text.len() as u64);
                 }
                 (None, false)
             }
@@ -136,6 +140,7 @@ fn parse_within(
                 let text = text.decode().map_err(|error| xml_error(part, error))?;
                 if let Some(open) = stack.last_mut() {
                     open.text.push_str(&text);
+                    added = added.saturating_add(text.len() as u64);
                 }
                 (None, false)
             }
@@ -154,18 +159,23 @@ fn parse_within(
                 };
                 if let Some(open) = stack.last_mut() {
                     open.text.push_str(&resolved);
+                    added = added.saturating_add(resolved.len() as u64);
                 }
                 (None, false)
             }
             Event::End(_) => {
                 let mut node = stack.pop().ok_or_else(|| xml_error(part, "unbalanced"))?;
-                close(&mut node);
+                let cleared = close(&mut node);
+                freed.set(freed.get().saturating_add(cleared));
                 attach(&mut stack, &mut root, node, stream, sink, part)?;
                 (None, false)
             }
             Event::Eof => break,
             _ => (None, false),
         };
+        if over(added, freed.get()) {
+            return Err(InventoryError::Limit("xml nodes in memory"));
+        }
         let Some(start) = start else {
             buf.clear();
             continue;
@@ -173,10 +183,6 @@ fn parse_within(
         budget.elements += 1;
         if budget.elements > LIMITS.elements {
             return Err(InventoryError::Limit("xml elements"));
-        }
-        opened += 1;
-        if opened.saturating_sub(freed.get()) > retained {
-            return Err(InventoryError::Limit("xml nodes in memory"));
         }
         if stack.len() >= LIMITS.depth {
             return Err(InventoryError::Limit("xml depth"));
@@ -212,6 +218,10 @@ fn parse_within(
             kids: Vec::new(),
             text: String::new(),
         };
+        added = added.saturating_add(cost(&node));
+        if over(added, freed.get()) {
+            return Err(InventoryError::Limit("xml nodes in memory"));
+        }
         if empty {
             attach(&mut stack, &mut root, node, stream, sink, part)?;
         } else {
@@ -225,22 +235,39 @@ fn parse_within(
     root.ok_or_else(|| xml_error(part, "no root element"))
 }
 
-/// I nodi di un sotto albero, lui compreso.
-fn subtree(node: &Node) -> u64 {
-    let mut count = 0u64;
-    let mut todo = vec![node];
-    while let Some(next) = todo.pop() {
-        count += 1;
-        todo.extend(next.kids.iter());
-    }
-    count
+/// I byte stimati di un nodo senza i suoi figli: la struttura, il nome, ogni
+/// attributo con la sua coppia di stringhe, il testo. Una stima per difetto
+/// (non conta la capacità in più dei vettori), uguale quando il nodo entra
+/// nell'albero e quando ne esce.
+fn cost(node: &Node) -> u64 {
+    let attrs: usize = node
+        .attrs
+        .iter()
+        .map(|(key, value)| std::mem::size_of::<(String, String)>() + key.len() + value.len())
+        .sum();
+    (std::mem::size_of::<Node>() + node.name.len() + attrs + node.text.len()) as u64
 }
 
-/// Il testo fra gli elementi di un elemento che ha figli è soltanto spazio.
-fn close(node: &mut Node) {
-    if !node.kids.is_empty() && node.text.trim().is_empty() {
-        node.text.clear();
+/// I byte stimati di un sotto albero, lui compreso.
+fn subtree(node: &Node) -> u64 {
+    let mut bytes = 0u64;
+    let mut todo = vec![node];
+    while let Some(next) = todo.pop() {
+        bytes = bytes.saturating_add(cost(next));
+        todo.extend(next.kids.iter());
     }
+    bytes
+}
+
+/// Il testo fra gli elementi di un elemento che ha figli è soltanto spazio:
+/// si toglie, e torna quanti byte ha tolto.
+fn close(node: &mut Node) -> u64 {
+    if !node.kids.is_empty() && node.text.trim().is_empty() {
+        let cleared = node.text.len() as u64;
+        node.text.clear();
+        return cleared;
+    }
+    0
 }
 
 fn attach(
@@ -283,6 +310,9 @@ mod tests {
         }
     }
 
+    /// Un nodo `<a/>` senza attributi né testo, per la stima.
+    const BARE: u64 = std::mem::size_of::<Node>() as u64 + 1;
+
     /// I nodi che restano nell'albero hanno un tetto; quelli che vanno al
     /// flusso non contano, perché se ne vanno appena chiusi.
     #[test]
@@ -294,7 +324,7 @@ mod tests {
             &mut budget(),
             None,
             &mut |_| Ok(()),
-            8,
+            8 * BARE,
         );
         assert_eq!(
             kept.unwrap_err(),
@@ -310,7 +340,7 @@ mod tests {
                 rows += 1;
                 Ok(())
             },
-            8,
+            8 * BARE,
         );
         assert!(streamed.is_ok());
         assert_eq!(rows, 10);
@@ -321,7 +351,7 @@ mod tests {
             &mut budget(),
             Some(("r", "a")),
             &mut |_| Ok(()),
-            8,
+            8 * BARE,
         );
         assert!(streamed.is_ok());
         assert!(parse_within(
@@ -330,8 +360,56 @@ mod tests {
             &mut budget(),
             None,
             &mut |_| Ok(()),
-            11
+            11 * BARE
         )
         .is_ok());
+    }
+
+    /// Una parte onesta e grande che non va al flusso, come i record della
+    /// cache di una tabella pivot di un milione di righe: più di quattro
+    /// milioni di elementi piccoli si leggono con i limiti veri.
+    #[test]
+    fn una_parte_grande_e_onesta_si_legge() {
+        let rows = 1_050_000;
+        let mut xml = String::with_capacity(rows * 40 + 64);
+        xml.push_str("<pivotCacheRecords>");
+        for _ in 0..rows {
+            xml.push_str(r#"<r><n v="1"/><s v="ab"/><x v="3"/></r>"#);
+        }
+        xml.push_str("</pivotCacheRecords>");
+        let root = parse(xml.as_bytes(), "p", &mut budget(), None, &mut |_| Ok(()))
+            .expect("una parte onesta si legge");
+        assert_eq!(root.kids.len(), rows);
+    }
+
+    /// Il tetto conta anche attributi e testi: pochi nodi grossi lo passano
+    /// come molti piccoli, e lo spazio tolto da `close` torna libero.
+    #[test]
+    fn il_tetto_conta_attributi_e_testi() {
+        let fat = format!("<r><a v=\"{}\"/></r>", "x".repeat(10_000));
+        let kept = parse_within(fat.as_bytes(), "p", &mut budget(), None, &mut |_| Ok(()), 5_000);
+        assert_eq!(kept.unwrap_err(), InventoryError::Limit("xml nodes in memory"));
+        let text = format!("<r><a>{}</a></r>", "x".repeat(10_000));
+        let kept = parse_within(text.as_bytes(), "p", &mut budget(), None, &mut |_| Ok(()), 5_000);
+        assert_eq!(kept.unwrap_err(), InventoryError::Limit("xml nodes in memory"));
+        // Lo spazio fra i figli si toglie alla chiusura e non resta in conto.
+        let spaced = format!("<r>{}</r>", "<b>\n  <a/>\n</b>".repeat(100));
+        let mut streamed = 0;
+        assert!(parse_within(
+            spaced.as_bytes(),
+            "p",
+            &mut budget(),
+            Some(("r", "b")),
+            &mut |_| {
+                streamed += 1;
+                Ok(())
+            },
+            4 * BARE + 16,
+        )
+        .is_ok());
+        assert_eq!(streamed, 100);
+        // Il limite vero: i cinquanta milioni di elementi di
+        // `Limits::elements`, se restano tutti, sono ben oltre il tetto.
+        assert!(LIMITS.elements * BARE > LIMITS.retained_bytes);
     }
 }
