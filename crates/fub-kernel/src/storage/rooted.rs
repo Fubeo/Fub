@@ -356,6 +356,9 @@ impl RootedFsStorage {
         Ok(!metadata.is_file())
     }
 
+    /// I nomi del file a `path`. Su Unix bastano i metadati già letti; su
+    /// Windows il numero sta soltanto sull'handle, e il file si apre per
+    /// chiederlo a [`Self::handle_link_count`].
     fn link_count(&self, path: &Utf8Path, metadata: &Metadata) -> io::Result<u64> {
         #[cfg(unix)]
         {
@@ -365,23 +368,8 @@ impl RootedFsStorage {
         }
         #[cfg(windows)]
         {
-            use std::mem::MaybeUninit;
-            use std::os::windows::io::AsRawHandle;
-            use windows_sys::Win32::Storage::FileSystem::{
-                GetFileInformationByHandle, BY_HANDLE_FILE_INFORMATION,
-            };
-            let _ = metadata;
             let file = self.dir.open(self.rel(path)?)?;
-            let mut info = MaybeUninit::<BY_HANDLE_FILE_INFORMATION>::zeroed();
-            // SAFETY: `info` è storage valido per la syscall e l'handle resta
-            // vivo per l'intera chiamata.
-            let ok =
-                unsafe { GetFileInformationByHandle(file.as_raw_handle() as _, info.as_mut_ptr()) };
-            if ok == 0 {
-                return Err(io::Error::last_os_error());
-            }
-            // SAFETY: un ritorno non-zero inizializza la struttura.
-            Ok(unsafe { info.assume_init() }.nNumberOfLinks as u64)
+            Self::handle_link_count(&file, metadata)
         }
     }
 

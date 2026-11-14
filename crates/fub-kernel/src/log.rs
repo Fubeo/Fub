@@ -314,6 +314,10 @@ pub struct FileSink {
     path: Utf8PathBuf,
     state: Shelter<Option<Open>>,
     tighten: Tighten,
+    /// L'avviso «il log è rimasto leggibile da altri» è già nel file: un
+    /// episodio si racconta una volta, non a ogni riapertura (rotazione,
+    /// sostituzione). Torna `false` quando una stretta riesce.
+    loose_told: std::sync::atomic::AtomicBool,
 }
 
 /// Come si stringono i permessi di un file di log appena aperto.
@@ -417,6 +421,7 @@ impl FileSink {
             path: path.to_owned(),
             state: Shelter::new(None),
             tighten,
+            loose_told: std::sync::atomic::AtomicBool::new(false),
         };
         match sink.reopen() {
             Ok(open) => {
@@ -443,14 +448,25 @@ impl FileSink {
         // un file di un altro proprietario o su un filesystem senza permessi
         // Unix non si stringe, e un log che non si apre per questo spegnerebbe
         // il racconto di tutta l'app (vedi [`FileSink::open`]). Si scrive
-        // allora nel file stesso che è rimasto aperto agli altri, senza
-        // rientrare in `tracing`, e si continua.
+        // allora nel file stesso che è rimasto aperto agli altri, in fondo a
+        // ciò che c'è, senza rientrare in `tracing`, una volta per episodio, e
+        // si continua.
         let refused = (self.tighten)(&file).err();
+        let tell = match &refused {
+            Some(_) => !self
+                .loose_told
+                .swap(true, std::sync::atomic::Ordering::Relaxed),
+            None => {
+                self.loose_told
+                    .store(false, std::sync::atomic::Ordering::Relaxed);
+                false
+            }
+        };
         let data = file.metadata();
         let written = data.as_ref().map(|m| m.len()).unwrap_or(0);
         let who = data.ok().as_ref().and_then(identity_of);
         let mut open = Open { file, written, who };
-        if let Some(and) = refused {
+        if let Some(and) = refused.filter(|_| tell) {
             let warning = compose(
                 crate::time::now_unix_millis(),
                 Level::Warn,
@@ -834,23 +850,40 @@ mod tests {
 
     /// Stringere i permessi è un tentativo: se non riesce (un file di un altro
     /// proprietario, un filesystem senza permessi Unix) il log si apre lo
-    /// stesso, e la prima riga nel file dice che è rimasto leggibile.
+    /// stesso, e il file dice, in fondo a ciò che c'era, che è rimasto
+    /// leggibile. Una volta sola: le riaperture dopo (rotazione,
+    /// sostituzione) non lo ripetono.
     #[test]
     fn a_log_that_cannot_be_tightened_opens_and_says_so() {
         let (_tmp, dir) = tempdir();
         let path = dir.join("fub.log");
+        std::fs::write(&path, "riga di prima\n").unwrap();
         let sink = FileSink::open_with(&path, |_| {
             Err(std::io::Error::from(std::io::ErrorKind::PermissionDenied))
         })
         .expect("il log si apre anche se non si stringe");
         sink.write_line("dopo");
+        for _ in 0..3 {
+            let fresh = sink.reopen().expect("si riapre");
+            *sink.state.acquire() = Some(fresh);
+        }
+        sink.write_line("ultima");
         let written = std::fs::read_to_string(&path).expect("il file di log");
         assert!(
             written.contains("il file di log non si è stretto"),
             "{written}"
         );
         assert!(written.contains("errore=PermissionDenied"), "{written}");
-        assert!(written.contains("dopo"), "{written}");
+        assert!(written.starts_with("riga di prima\n"), "{written}");
+        assert!(
+            written.contains("dopo") && written.contains("ultima"),
+            "{written}"
+        );
+        assert_eq!(
+            written.matches("non si è stretto").count(),
+            1,
+            "l'avviso si ripete a ogni riapertura: {written}"
+        );
     }
 
     /// Il file ruota, e ciò che c'era prima si ritrova in `.1`.
