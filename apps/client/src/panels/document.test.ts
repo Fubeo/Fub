@@ -965,6 +965,8 @@ describe("il testo non salvato resta (#237)", () => {
     await settle();
     expect(sessions.saveState(BENVENUTO)).toBe("salvato");
     expect(toastsAbout("Benvenuto")).toEqual([]);
+    // Anche quello della bozza che non si scriveva: il testo adesso è sul disco.
+    expect(toastsAbout("non arriva più sul disco")).toEqual([]);
   });
 });
 

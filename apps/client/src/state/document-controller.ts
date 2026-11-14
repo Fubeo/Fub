@@ -2119,6 +2119,8 @@ const deniedSaves = new Set<string>();
 interface StateNotices {
   save?: NoticeHandle;
   outside?: NoticeHandle;
+  /// La bozza non si scrive più: finisce quando il testo è sul disco.
+  draft?: NoticeHandle;
 }
 const stateNotices = new Map<string, StateNotices>();
 
@@ -2132,11 +2134,11 @@ function showStateNotice(doc: string, slot: keyof StateNotices, show: () => Noti
 function withdrawStateNotices(doc: string, slot?: keyof StateNotices): void {
   const own = stateNotices.get(doc);
   if (!own) return;
-  for (const key of slot ? [slot] : (["save", "outside"] as const)) {
+  for (const key of slot ? [slot] : (["save", "outside", "draft"] as const)) {
     own[key]?.withdraw();
     delete own[key];
   }
-  if (!own.save && !own.outside) stateNotices.delete(doc);
+  if (!own.save && !own.outside && !own.draft) stateNotices.delete(doc);
 }
 
 function withdrawAllStateNotices(): void {
@@ -2200,7 +2202,7 @@ function handleSessionEvent(event: DocumentSessionEvent): void | Promise<void> {
     return;
   }
   if (event.kind === "draft-blind") {
-    notify(t("draft.blind"), "guasto");
+    showStateNotice(event.id, "draft", () => notify(t("draft.blind"), "guasto"));
     return;
   }
   if (event.kind === "save-failed") {
