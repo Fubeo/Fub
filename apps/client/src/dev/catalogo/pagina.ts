@@ -43,7 +43,7 @@ import { enterSurface } from "../../ui/motion";
 import { mountTree } from "../../ui/node";
 import { notify } from "../../ui/notify";
 import { TRUST_LABELS } from "../../ui/permissions";
-import { anatomyProof } from "./anatomia";
+import { anatomyProof, keepScrollersReachable } from "./anatomia";
 import { fontStack } from "./caratteri";
 import { force, holdForcedStates } from "./forza";
 import { renderKit } from "./kit";
@@ -281,12 +281,16 @@ export function openCatalogPage(parent: Lifetime): CatalogPage {
     details: Picked,
   ): HTMLElement => {
     const section = el("section", "dev-catalog-item");
-    section.setAttribute("aria-labelledby", id);
+    // Il nome col pezzo: lo stesso nome torna in pezzi diversi
+    // (`context-menu` nei menu e nel moto), e i riquadri restano distinti.
+    section.setAttribute("aria-labelledby", `${id} ${id}-where`);
     const nameEl = el("h3", "dev-catalog-name");
     const pick = el("button", "dev-catalog-pick", name);
     pick.type = "button";
     pick.id = id;
-    nameEl.append(pick, " ", el("span", "muted", where));
+    const whereEl = el("span", "muted", where);
+    whereEl.id = `${id}-where`;
+    nameEl.append(pick, " ", whereEl);
     const states = el("div", "dev-catalog-states");
     states.append(...figures);
     section.append(nameEl, states);
@@ -311,6 +315,7 @@ export function openCatalogPage(parent: Lifetime): CatalogPage {
         const proofs = el("div", "dev-catalog-proofs");
         for (const hook of component.hooks) {
           const frame = el("div", "dev-catalog-proof");
+          frame.dataset.label = `${component.name} · ${stateLabel(state)} · ${hook}`;
           const proof = anatomyProof(component, state, hook);
           hold(proof, state.name, component.hooks);
           frame.append(proof);
@@ -353,6 +358,14 @@ export function openCatalogPage(parent: Lifetime): CatalogPage {
       panel.append(item(`dev-view-${index}`, sample.title, t("info.views"), figures, details));
     });
     if (first) showPicked(first[0], first[1]);
+    // Un provino che scorre (la pelle dà a qualche hook un suo `overflow`)
+    // resta raggiungibile da tastiera, come nel catalogo del banco.
+    lifetime.add(
+      keepScrollersReachable(
+        panel.querySelectorAll<HTMLElement>(".dev-catalog-proof[data-label], .dev-catalog-proof[data-label] > :not([tabindex])"),
+        (frame) => frame.closest<HTMLElement>(".dev-catalog-proof")!.dataset.label!,
+      ),
+    );
   };
 
   const drawPalette = (panel: HTMLElement): void => {

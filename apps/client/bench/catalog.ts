@@ -32,7 +32,7 @@ import { contrast } from "../src/theme/contrast";
 import { mountTree, mountWebviewFocusMonitor } from "../src/ui/node";
 import { openLifetime } from "../src/ui/lifetime";
 import { COMPONENTS } from "../src/theme/scrittoio/anatomia";
-import { anatomyProof } from "../src/dev/catalogo/anatomia";
+import { anatomyProof, keepScrollersReachable } from "../src/dev/catalogo/anatomia";
 import { FAMILIES, LEADINGS, PROSE, SCALE, WEIGHTS } from "../src/dev/catalogo/caratteri";
 import { SAMPLES } from "../src/dev/catalogo/samples";
 import { SURFACES, isColor, tokenNames as namesIn } from "../src/dev/catalogo/tavolozza";
@@ -125,29 +125,12 @@ function components(): void {
   }
   // Il ritaglio conserva la geometria dei campioni posizionati. Quando
   // serve scorrere, anche la tastiera deve poter raggiungere il provino.
-  const observer = new ResizeObserver((entries) => {
-    for (const entry of entries) {
-      const frame = entry.target as HTMLElement;
-      const style = getComputedStyle(frame);
-      const scrolls = ((style.overflowY === "auto" || style.overflowY === "scroll")
-        && frame.scrollHeight > frame.clientHeight)
-        || ((style.overflowX === "auto" || style.overflowX === "scroll")
-          && frame.scrollWidth > frame.clientWidth);
-      if (scrolls) {
-        frame.tabIndex = 0;
-        frame.setAttribute("role", "region");
-        frame.setAttribute("aria-label", frame.closest<HTMLElement>(".provino-anatomia")!.dataset.label!);
-      } else {
-        frame.removeAttribute("tabindex");
-        frame.removeAttribute("role");
-        frame.removeAttribute("aria-label");
-      }
-    }
-  });
-  for (const frame of root.querySelectorAll(".provino-anatomia, .provino-anatomia > :not([tabindex])")) {
-    observer.observe(frame);
-  }
-  lifetime.add(() => observer.disconnect());
+  lifetime.add(
+    keepScrollersReachable(
+      root.querySelectorAll<HTMLElement>(".provino-anatomia, .provino-anatomia > :not([tabindex])"),
+      (frame) => frame.closest<HTMLElement>(".provino-anatomia")!.dataset.label!,
+    ),
+  );
 }
 
 // ---------------------------------------------------------------------------

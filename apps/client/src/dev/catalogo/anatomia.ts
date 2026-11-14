@@ -54,3 +54,37 @@ export function anatomyProof(component: ShellComponent, state: ComponentState, h
   if (!BARE_HOOKS.has(hook)) proof.textContent = `${component.name} · ${hook}`;
   return proof;
 }
+
+/// Tiene raggiungibili da tastiera i riquadri dei provini che scorrono.
+///
+/// Il ritaglio conserva la geometria dei campioni posizionati; quando un
+/// riquadro (o l'hook dentro, se la pelle gli dà un suo `overflow`) scorre
+/// davvero, diventa una regione con un nome e un punto di Tab, e smette di
+/// esserlo quando non scorre più. `label` dà il nome di un riquadro.
+/// Restituisce lo smontaggio.
+export function keepScrollersReachable(
+  frames: Iterable<HTMLElement>,
+  label: (frame: HTMLElement) => string,
+): () => void {
+  const observer = new ResizeObserver((entries) => {
+    for (const entry of entries) {
+      const frame = entry.target as HTMLElement;
+      const style = getComputedStyle(frame);
+      const scrolls = ((style.overflowY === "auto" || style.overflowY === "scroll")
+        && frame.scrollHeight > frame.clientHeight)
+        || ((style.overflowX === "auto" || style.overflowX === "scroll")
+          && frame.scrollWidth > frame.clientWidth);
+      if (scrolls) {
+        frame.tabIndex = 0;
+        frame.setAttribute("role", "region");
+        frame.setAttribute("aria-label", label(frame));
+      } else {
+        frame.removeAttribute("tabindex");
+        frame.removeAttribute("role");
+        frame.removeAttribute("aria-label");
+      }
+    }
+  });
+  for (const frame of frames) observer.observe(frame);
+  return () => observer.disconnect();
+}
