@@ -2097,3 +2097,7 @@ La più recente in cima: data · piano · decisione · perché.
   misure di nascita delle schede nuove, che sono già ≥ 40 quando T24 le passa a
   `layout`; una scheda più piccola scritta a mano nel file resta com'è, e la
   griglia non deve gonfiarla.
+- 2026-11-14 · T13 · Il frammento di `insert` lo legge il compilatore: i suoi errori
+  sono `Invalid`, e un campo della radice che non conosce (anche `fub:ink`) è
+  `Invalid` invece di sparire · i tratti liberi di un frammento non si perdono in
+  silenzio; T24 li incolla con le operazioni dell'inchiostro.

@@ -1321,7 +1321,7 @@ un `file` vuoto (`Invalid`).
 Fatto quando: `cargo test -p fub-canvas-core` passa; `parity` dice 3 voci
 in meno.
 Prova: scripts/check.sh --rapido; cargo test -p fub-canvas-core
-Stato: [ ] da fare
+Stato: [x] fatto · coder/lic-t13 (b01e2aecd, Opus), unito in 33719e915 · `ops/insert.rs` e `ops/convert.rs`, 20 vettori, compiti 16 e 17; parità: `N6.clipboard.paste` a `code`, `N6.convert.extract` e `main.card.convert_to_note` a `composed` (max_missing n6 6, main 0); limite 10 000 schede per insert (`MAX_INSERTED`); un campo della radice sconosciuto, anche `fub:ink`, è `Invalid` (T24 incolla l'inchiostro con le sue operazioni); «Lo schema» passa in `docs/reference/canvas-schema.md` per la soglia di righe; `layout.rs` prende `place_sized_near`. Check: solo `query_index_lock` sotto carico, verde da solo 9/9
 
 ## T14 · Spargi le pagine, estratti
 
