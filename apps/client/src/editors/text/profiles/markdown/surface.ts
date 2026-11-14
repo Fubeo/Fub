@@ -28,6 +28,7 @@ import { notify } from "../../../../ui/notify";
 import { errorText } from "../../../../host/errors";
 import { clipboardSupports, readClipboard, writeClipboardData, writeClipboardText } from "../../../../platform/clipboard";
 import { closeSlashPalette, openSlashPalette } from "../../../../ui/palette";
+import { focusReturnTarget } from "../../../../ui/a11y";
 import type {
   BufferedSurface,
   EditorSelections,
@@ -795,14 +796,26 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
   /// «questo punto» di «Copia il link a questo punto».
   let readingPoint: number | null = null;
 
+  /// Il fuoco è di questa superficie: dentro `parent`, o in una sua parte
+  /// montata fuori (il menu «/», un menu del testo) che glielo restituirà
+  /// quando si chiude.
+  function ownsFocus(): boolean {
+    const active = document.activeElement;
+    if (!active || active === document.body) return false;
+    if (parent.contains(active)) return true;
+    const back = focusReturnTarget(active);
+    return back !== null && parent.contains(back);
+  }
+
   function setMode(next: MarkdownMode): void {
+    // Il fuoco segue il modo solo se era già della superficie: chi lo ha
+    // fuori (la palette dei comandi, un altro riquadro) se lo tiene. Si
+    // guarda prima di chiudere il menu «/», che lo sposterebbe.
+    const hadFocus = ownsFocus();
     closeSlashPalette(parent);
     if (next === mode) return;
     readingPoint = null;
     const previous = mode;
-    // Il fuoco segue il modo solo se era già qui dentro: chi lo ha fuori
-    // dalla superficie (la palette, un altro riquadro) se lo tiene.
-    const hadFocus = parent.contains(document.activeElement);
     if (previous !== "reading" && next === "reading") {
       const anchor = engine.getScrollAnchor();
       mode = next;

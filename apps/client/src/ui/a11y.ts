@@ -97,7 +97,31 @@ export function notActivatable(el: HTMLElement): void {
 /// «comanda l'ultima» non si può scrivere in una superficie che le altre non le
 /// vede. Si svuota da sé — ogni trappola si toglie quando la si scioglie — e a
 /// shell ferma è vuota.
-const trapStack: object[] = [];
+const trapStack: Trap[] = [];
+
+/// Una trappola aperta: la superficie, e dove il fuoco torna quando si scioglie.
+interface Trap {
+  root: HTMLElement;
+  previous: HTMLElement | null;
+}
+
+/// Dove tornerà il fuoco che adesso sta in `node`, se `node` è dentro una
+/// superficie intrappolata (un menu, la palette): l'elemento da cui la
+/// superficie si è aperta, risalendo le superfici annidate. `null` fuori da
+/// ogni trappola. Serve a chi deve sapere «il fuoco è mio» anche quando sta in
+/// un menu che ha aperto lui e che vive fuori dal suo albero.
+export function focusReturnTarget(node: Node): HTMLElement | null {
+  let at: Node = node;
+  let found: HTMLElement | null = null;
+  for (let i = trapStack.length - 1; i >= 0; i--) {
+    const trap = trapStack[i]!;
+    if (!trap.root.contains(at)) continue;
+    found = trap.previous;
+    if (!found) return null;
+    at = found;
+  }
+  return found;
+}
 
 export function focusableElements(root: HTMLElement): HTMLElement[] {
   const selector =
@@ -159,9 +183,9 @@ export function focusZone(zone: HTMLElement): void {
 /// in `theme/scrittoio/structure.css` accanto ai piani.
 export function trapFocus(root: HTMLElement, close: () => void): Teardown {
   const lifetime = openLifetime();
-  // Il segnaposto di *questa* trappola nella pila. Un oggetto vuoto basta: serve
-  // solo la sua identità, e due trappole sulla stessa `root` sono due.
-  const io = {};
+  // *Questa* trappola nella pila: conta la sua identità (due trappole sulla
+  // stessa `root` sono due), e porta dove il fuoco tornerà.
+  const io: Trap = { root, previous: document.activeElement as HTMLElement | null };
   trapStack.push(io);
   lifetime.add(() => {
     // `filter`, non `pop`: chi apre e chi chiude non sono obbligati a farlo in
@@ -171,7 +195,7 @@ export function trapFocus(root: HTMLElement, close: () => void): Teardown {
     const where = trapStack.lastIndexOf(io);
     if (where >= 0) trapStack.splice(where, 1);
   });
-  const previous = document.activeElement as HTMLElement | null;
+  const previous = io.previous;
   // Il fuoco torna da dove era partito. È la metà che si dimentica: senza,
   // chiudere una modale rimanda chi naviga da tastiera all'inizio del
   // documento, e deve rifare tutta la strada per tornare dov'era. Sta *prima*

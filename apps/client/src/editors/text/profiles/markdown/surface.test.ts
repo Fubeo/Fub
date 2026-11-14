@@ -9,6 +9,7 @@ import { api } from "../../../../host/ipc";
 import { state } from "../../../../state/store";
 import { closeCommandPalette } from "../../../../ui/palette";
 import { declareClipboard } from "../../../../platform/clipboard";
+import { trapFocus } from "../../../../ui/a11y";
 
 interface TestEditor {
   ed: MarkdownSurface;
@@ -97,6 +98,26 @@ describe("la superficie Markdown", () => {
     ed.setMode("live_preview");
     expect(view().hasFocus).toBe(true);
     expect(view().state.selection.main.anchor).toBe(5);
+    ed.destroy();
+  });
+  it("cambiando modo da un menu aperto dall'editor, fuori dal riquadro, il fuoco va alla Lettura", () => {
+    const { ed, view, reading } = editor();
+    ed.buffer.setDoc("testo");
+    view().focus();
+    // Un menu del testo: montato fuori dal riquadro, col fuoco che torna
+    // all'editor quando si chiude.
+    const menu = document.createElement("div");
+    const item = document.createElement("button");
+    menu.append(item);
+    document.body.append(menu);
+    const release = trapFocus(menu, () => {});
+    item.focus();
+    expect(document.activeElement).toBe(item);
+
+    ed.setMode("reading");
+    expect(document.activeElement).toBe(reading());
+    release();
+    menu.remove();
     ed.destroy();
   });
   it("cambiando modo non ruba il fuoco a chi lo ha fuori dalla superficie", () => {

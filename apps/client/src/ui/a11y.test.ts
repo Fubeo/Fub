@@ -36,7 +36,7 @@ import samples from "../__fixtures__/mirror-samples.json";
 import type { UiNode } from "../host/contract";
 import css from "../theme/scrittoio/skin.css?raw";
 import { accessibleName, formatIssues, checkAccessibility } from "./a11y-check";
-import { activatable, trapFocus, notActivatable } from "./a11y";
+import { activatable, focusReturnTarget, trapFocus, notActivatable } from "./a11y";
 import { mountTree, unmountTree } from "./node";
 
 const nodes = samples.UiNode as unknown as UiNode[];
@@ -390,6 +390,26 @@ describe("due modali aperte: comanda l'ultima", () => {
     document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
     expect(counts.above).toBe(1);
     releaseAbove();
+  });
+});
+
+describe("dove torna il fuoco di una superficie intrappolata", () => {
+  it("risale le superfici annidate fino a chi ha aperto la prima, e fuori non c'è", () => {
+    document.body.innerHTML = `
+      <button id="editor">Editor</button>
+      <div id="menu" tabindex="-1"><button id="voce">Voce</button></div>
+      <div id="icone" tabindex="-1"><button id="icona">Icona</button></div>`;
+    const at = (id: string) => document.getElementById(id)!;
+    at("editor").focus();
+    const releaseMenu = trapFocus(at("menu"), () => {});
+    at("voce").focus();
+    const releaseIcons = trapFocus(at("icone"), () => {});
+    expect(focusReturnTarget(at("icona"))).toBe(at("editor"));
+    expect(focusReturnTarget(at("voce"))).toBe(at("editor"));
+    expect(focusReturnTarget(at("editor"))).toBeNull();
+    releaseIcons();
+    releaseMenu();
+    expect(focusReturnTarget(at("voce"))).toBeNull();
   });
 });
 
