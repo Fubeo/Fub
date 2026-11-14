@@ -129,7 +129,7 @@ mod folder;
 mod install;
 mod pointer;
 
-use assets::{asset_inventory, asset_names, validate_asset_limits, MAX_THEME_ASSET_BYTES};
+use assets::{asset_inventory, asset_listing, validate_asset_limits, MAX_THEME_ASSET_BYTES};
 pub use bundle::{series_manifest, DiskCause, ThemeBundle, ThemeError, ThemeInfo, ThemePayload};
 use discover::selected_theme_dir;
 pub use discover::{discover_themes, list_themes, read_theme};
@@ -138,8 +138,8 @@ use files::{
     read_theme_bytes, read_theme_text, verify_themes_root,
 };
 pub use folder::{
-    check_theme_folder, install_theme_from_folder, ThemeFolderCheck, ThemeFolderInstall,
-    ThemeFolderLight, ThemeFolderRefusal,
+    check_theme_folder, install_theme_from_folder, CheckedThemeFolder, ThemeBlock,
+    ThemeFolderCheck, ThemeFolderGrant, ThemeFolderInstall, ThemeFolderLight, ThemeFolderRefusal,
 };
 pub use install::{
     install_theme, install_theme_checked, set_theme_revoked, set_theme_revoked_with_provenance,
@@ -148,8 +148,8 @@ pub use install::{
 };
 pub use pointer::theme_tree_digest;
 use pointer::{
-    publish_theme_pointer, read_theme_pointer, write_theme_pointer, ThemePointer, ThemeVersion,
-    POINTER_FILE,
+    copy_tree_digest, publish_theme_pointer, read_theme_pointer, write_theme_pointer, ThemePointer,
+    ThemeVersion, POINTER_FILE,
 };
 
 /// L'id del tema di serie. È l'unico id che l'host conosce per nome, per le

@@ -1576,7 +1576,7 @@ fn icons_need_theme_2() {
 
 // --- installare da una cartella, con la modalità sviluppatore ---------------
 
-use fub_host::theme::{ThemeFolderCheck, ThemeFolderInstall, ThemeFolderRefusal};
+use fub_host::theme::{ThemeBlock, ThemeFolderCheck, ThemeFolderInstall, ThemeFolderRefusal};
 
 /// L'host con la modalità sviluppatore accesa o spenta, scritta come la
 /// scrive la persona dalle Impostazioni.
@@ -1899,8 +1899,8 @@ fn an_install_speaks_only_of_the_checked_bytes() {
     assert_eq!(themes_entries(&config), vec!["acme.carta".to_string()]);
 }
 
-/// Un tema installato che non si legge (il puntatore rotto, la radice che non
-/// è una cartella) è una collisione senza versione, e si può sostituire: la
+/// Un tema installato che non si legge (la radice che non è una cartella, il
+/// manifest rotto) è una collisione senza versione, e si può sostituire: la
 /// persona lo vede nella domanda e decide lei.
 #[test]
 fn an_unreadable_installed_theme_collides_and_can_be_replaced() {
@@ -1913,7 +1913,7 @@ fn an_unreadable_installed_theme_collides_and_can_be_replaced() {
     let themes = fub_host::config::themes_dir(&config);
 
     install_folder(&host, &old, false);
-    std::fs::write(themes.join("acme.carta/.fub-current.json"), "{ not json").unwrap();
+    std::fs::write(themes.join("acme.carta/manifest.json"), "{ not json").unwrap();
     let unknown = ThemeFolderInstall::Collision {
         id: "acme.carta".into(),
         name: "Prova".into(),
@@ -1944,6 +1944,165 @@ fn an_unreadable_installed_theme_collides_and_can_be_replaced() {
     ));
     assert!(themes.join("acme.carta/manifest.json").is_file());
     assert_eq!(themes_entries(&config), vec!["acme.carta".to_string()]);
+}
+
+/// Prova che l'installazione si ferma su ciò che blocca, con e senza
+/// «Sostituisci», e che niente sotto `themes/` cambia: né il tema installato
+/// né una staging rimasta.
+fn assert_blocked(
+    host: &Host,
+    config: &Utf8Path,
+    new: &Utf8Path,
+    why: ThemeBlock,
+    path: &Utf8Path,
+) {
+    let before = themes_entries(config);
+    for replace in [false, true] {
+        let digest = checked(host, new);
+        assert_eq!(
+            host.install_theme_from_folder(replace, &digest).unwrap(),
+            ThemeFolderInstall::Blocked {
+                why,
+                path: path.to_string(),
+            },
+            "replace: {replace}"
+        );
+    }
+    assert_eq!(themes_entries(config), before);
+}
+
+/// Un tema installato col file della versione del catalogo che non si legge
+/// (rotto) non si sostituisce: potrebbe dire «revocato». L'esito è `Blocked`
+/// col perché tipizzato, e il tema resta com'è.
+#[test]
+fn an_installed_theme_whose_pointer_does_not_read_is_blocked() {
+    let (_config_dir, config) = folders();
+    let (_old_dir, old) = folders();
+    let (_new_dir, new) = folders();
+    write_versioned_theme(&old, "acme.carta", "0.3.2");
+    write_versioned_theme(&new, "acme.carta", "0.4.0");
+    let host = developer(&config, true);
+    let themes = fub_host::config::themes_dir(&config);
+    install_folder(&host, &old, false);
+    std::fs::write(themes.join("acme.carta/.fub-current.json"), "{ not json").unwrap();
+
+    assert_blocked(
+        &host,
+        &config,
+        &new,
+        ThemeBlock::Pointer,
+        &themes.join("acme.carta"),
+    );
+    assert_eq!(
+        std::fs::read_to_string(themes.join("acme.carta/.fub-current.json")).unwrap(),
+        "{ not json"
+    );
+}
+
+/// Un tema revocato il cui file della versione non si lascia aprire: la
+/// revoca non si legge, ma non per questo il tema si sostituisce. È
+/// `Blocked`, e il file della revoca resta.
+#[cfg(unix)]
+#[test]
+fn a_revoked_theme_whose_pointer_cannot_be_opened_is_blocked() {
+    use std::os::unix::fs::PermissionsExt;
+    let (_config_dir, config) = folders();
+    let (_old_dir, old) = folders();
+    let (_new_dir, new) = folders();
+    write_versioned_theme(&old, "acme.carta", "0.3.2");
+    write_versioned_theme(&new, "acme.carta", "0.4.0");
+    let host = developer(&config, true);
+    let themes = fub_host::config::themes_dir(&config);
+    install_folder(&host, &old, false);
+    fub_host::theme::set_theme_revoked(&config, "acme.carta", true).unwrap();
+    let pointer = themes.join("acme.carta/.fub-current.json");
+    std::fs::set_permissions(&pointer, std::fs::Permissions::from_mode(0o000)).unwrap();
+    // Chi gira come root legge lo stesso: la prova non dice niente.
+    let readable = std::fs::read(&pointer).is_ok();
+    if !readable {
+        assert_blocked(
+            &host,
+            &config,
+            &new,
+            ThemeBlock::Pointer,
+            &themes.join("acme.carta"),
+        );
+    }
+    std::fs::set_permissions(&pointer, std::fs::Permissions::from_mode(0o644)).unwrap();
+    assert!(fub_host::theme::theme_revoked(&config, "acme.carta"));
+}
+
+/// Un link simbolico al posto del tema installato, o della cartella dei temi
+/// di Fub, non è un difetto della cartella scelta: è `Blocked` (`link`) col
+/// posto, e Fub non scrive attraverso il link.
+#[cfg(unix)]
+#[test]
+fn a_symlink_in_the_themes_folder_is_blocked_not_refused() {
+    let (_config_dir, config) = folders();
+    let (_elsewhere_dir, elsewhere) = folders();
+    let (_new_dir, new) = folders();
+    write_versioned_theme(&elsewhere, "acme.carta", "0.3.2");
+    write_versioned_theme(&new, "acme.carta", "0.4.0");
+    let host = developer(&config, true);
+    let themes = fub_host::config::themes_dir(&config);
+    std::fs::create_dir_all(&themes).unwrap();
+    std::os::unix::fs::symlink(&elsewhere, themes.join("acme.carta")).unwrap();
+
+    assert_blocked(
+        &host,
+        &config,
+        &new,
+        ThemeBlock::Link,
+        &themes.join("acme.carta"),
+    );
+    assert!(std::fs::symlink_metadata(themes.join("acme.carta"))
+        .unwrap()
+        .file_type()
+        .is_symlink());
+    assert!(
+        std::fs::read_to_string(elsewhere.join("manifest.json"))
+            .unwrap()
+            .contains("0.3.2"),
+        "nothing is written through the link"
+    );
+
+    std::fs::remove_file(themes.join("acme.carta")).unwrap();
+    std::fs::remove_dir(&themes).unwrap();
+    let (_real_dir, real) = folders();
+    std::os::unix::fs::symlink(&real, &themes).unwrap();
+    for replace in [false, true] {
+        let digest = checked(&host, &new);
+        assert_eq!(
+            host.install_theme_from_folder(replace, &digest).unwrap(),
+            ThemeFolderInstall::Blocked {
+                why: ThemeBlock::Link,
+                path: themes.to_string(),
+            }
+        );
+    }
+    assert!(std::fs::read_dir(&real).unwrap().next().is_none());
+}
+
+/// La cartella dei temi di Fub che non è una cartella (un file) è `Blocked`
+/// (`layout`), non un guasto del disco.
+#[test]
+fn a_themes_folder_that_is_a_file_is_blocked() {
+    let (_config_dir, config) = folders();
+    let (_new_dir, new) = folders();
+    write_versioned_theme(&new, "acme.carta", "0.4.0");
+    let host = developer(&config, true);
+    let themes = fub_host::config::themes_dir(&config);
+    std::fs::create_dir_all(themes.parent().unwrap()).unwrap();
+    std::fs::write(&themes, "not a folder").unwrap();
+    let digest = checked(&host, &new);
+    assert_eq!(
+        host.install_theme_from_folder(false, &digest).unwrap(),
+        ThemeFolderInstall::Blocked {
+            why: ThemeBlock::Layout,
+            path: themes.to_string(),
+        }
+    );
+    assert_eq!(std::fs::read_to_string(&themes).unwrap(), "not a folder");
 }
 
 /// Un id già installato: l'esito lo dice con le due versioni e non tocca
@@ -2177,6 +2336,8 @@ fn checking_a_folder_reads_both_lights_and_writes_nothing() {
     let ThemeFolderCheck::Ready {
         folder,
         manifest,
+        skin,
+        assets,
         lights,
         digest,
     } = check
@@ -2195,7 +2356,8 @@ fn checking_a_folder_reads_both_lights_and_writes_nothing() {
         ]
     );
     assert_eq!(lights[1].sheet.as_deref(), Some("body { color: #ddd; }\n"));
-    assert!(lights[0].assets.is_empty(), "an image travels by name");
+    assert!(assets.is_empty(), "an image travels by name");
+    assert!(skin.as_deref().unwrap().contains("carta.png"), "{skin:?}");
     assert_eq!(
         lights[0].named,
         vec!["theme://acme.carta/carta.png".to_string()]
@@ -2260,6 +2422,25 @@ fn a_folder_changed_after_the_check_is_not_installed() {
         ThemeFolderInstall::Changed,
         "catalog state appeared after the check"
     );
+}
+
+/// Una cartella tolta o rinominata dopo il controllo non c'è più: niente da
+/// leggere non è un guasto del disco, è una cartella che non ha più i byte
+/// del controllo (`Changed`).
+#[test]
+fn a_folder_moved_after_the_check_is_changed() {
+    let (_config_dir, config) = folders();
+    let (_new_dir, new) = folders();
+    write_versioned_theme(&new, "acme.carta", "0.4.0");
+    let host = developer(&config, true);
+
+    let digest = checked(&host, &new);
+    let moved = new.with_file_name(format!("{}-spostata", new.file_name().unwrap()));
+    std::fs::rename(&new, &moved).unwrap();
+    let outcome = host.install_theme_from_folder(false, &digest).unwrap();
+    std::fs::rename(&moved, &new).unwrap();
+    assert_eq!(outcome, ThemeFolderInstall::Changed);
+    assert!(themes_dir_is_empty(&config), "nothing written");
 }
 
 /// Una sostituzione che il disco ferma prima dello scambio (la cartella dei

@@ -295,21 +295,21 @@ fn expected() -> Value {
         })],
         // La cartella di un tema letta prima di installarla, nei suoi tre
         // esiti: chiusa la finestra di scelta; pronta, col fascio di ogni luce
-        // (qui uno solo, che eredita: i byte solo per il carattere, l'immagine
-        // per nome) e l'impronta che l'installazione chiede di nuovo;
+        // (qui uno solo, che eredita: la pelle e i byte solo per il carattere,
+        // una volta per tutte le luci; l'immagine per nome, nella luce) e l'impronta che l'installazione chiede di nuovo;
         // rifiutata, con un motivo tipizzato. Il mirror vede ogni motivo.
         "ThemeFolderCheck": [
             to_value(fub_host::theme::ThemeFolderCheck::Cancelled),
             to_value(fub_host::theme::ThemeFolderCheck::Ready {
                 folder: "/home/chi/temi/carta".into(),
                 manifest: Box::new(extending_manifest()),
+                skin: Some(".carta { color: inherit; }".into()),
+                assets: [("theme://acme.carta/carta.woff2".to_string(), vec![0x77, 0x4f, 0x46, 0x32])]
+                    .into_iter()
+                    .collect(),
                 lights: vec![fub_host::theme::ThemeFolderLight {
                     light: ThemeLight::Dark,
                     sheet: None,
-                    skin: Some(".carta { color: inherit; }".into()),
-                    assets: [("theme://acme.carta/carta.woff2".to_string(), vec![0x77, 0x4f, 0x46, 0x32])]
-                        .into_iter()
-                        .collect(),
                     named: vec!["theme://acme.carta/carta.png".into()],
                 }],
                 digest: "sha256:9f2c4d6e8a0b1c3d5e7f9a1b3c5d7e9f0a2b4c6d8e0f1a3b5c7d9e1f3a5b7c9d".into(),
@@ -352,6 +352,18 @@ fn expected() -> Value {
                 id: "acme.carta".into(),
                 name: "Carta".into(),
                 version: "0.4.0".into(),
+            }),
+            to_value(fub_host::theme::ThemeFolderInstall::Blocked {
+                why: fub_host::theme::ThemeBlock::Pointer,
+                path: "/home/chi/.config/fub/themes/acme.carta".into(),
+            }),
+            to_value(fub_host::theme::ThemeFolderInstall::Blocked {
+                why: fub_host::theme::ThemeBlock::Link,
+                path: "/home/chi/.config/fub/themes/acme.carta".into(),
+            }),
+            to_value(fub_host::theme::ThemeFolderInstall::Blocked {
+                why: fub_host::theme::ThemeBlock::Layout,
+                path: "/home/chi/.config/fub/themes".into(),
             }),
             to_value(fub_host::theme::ThemeFolderInstall::Refused {
                 refusal: fub_host::theme::ThemeFolderRefusal::Traversal {

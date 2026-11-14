@@ -200,51 +200,21 @@ pub fn read_theme(
     theme_payload(&dir, theme.manifest, light)
 }
 
-/// Il fascio di una luce letto da una cartella di tema già validata
-/// ([`ThemeBundle::load`]): lo stesso per un tema installato ([`read_theme`]) e
-/// per la cartella di chi lo scrive, prima di installarla
-/// ([`check_theme_folder`](super::check_theme_folder)).
+/// Il fascio di una luce di un tema installato, da una cartella già validata
+/// ([`ThemeBundle::load`]). Le sue parti (il foglio della luce, la pelle, gli
+/// asset che la shell legge da sé) sono le stesse che legge la cartella di chi
+/// scrive un tema prima di installarla
+/// ([`check_theme_folder`](super::check_theme_folder)): una regola sola.
 pub(super) fn theme_payload(
     dir: &Utf8Path,
     manifest: ThemeManifest,
     light: ThemeLight,
 ) -> Result<ThemePayload, ThemeError> {
-    let id = manifest.id.clone();
-    let id = id.as_str();
-    if !manifest.lights.contains(&light) {
-        return Err(ThemeError::Malformed(format!(
-            "theme `{id}` does not offer requested light"
-        )));
-    }
-    // Senza `extends` il foglio di ogni luce offerta è d'obbligo; con
-    // `extends` può mancare, e la shell userà quello di serie.
-    let required = manifest.extends.is_none();
-    let sheet_path = sheet_path(dir, light);
-    let sheet = read_theme_text(&sheet_path, dir, id, MAX_THEME_CSS_BYTES, required)?;
-    if required && sheet.is_none() {
-        return Err(ThemeError::Malformed(format!(
-            "missing sheet `{sheet_path}`"
-        )));
-    }
-    let skin_path = dir.join("skin.css");
-    let skin = read_theme_text(&skin_path, dir, id, MAX_THEME_CSS_BYTES, false)?;
+    let sheet = light_sheet(dir, &manifest, light)?;
+    let skin = theme_skin(dir, &manifest.id)?;
     let mut needed =
         referenced_assets(sheet.as_deref(), skin.as_deref(), &manifest.asset_namespace);
-    // I file dei caratteri viaggiano col fascio anche se nessun CSS li nomina:
-    // la regola `@font-face` la scrive la shell.
-    needed.extend(
-        manifest
-            .fonts
-            .iter()
-            .map(|font| format!("{}{}", manifest.asset_namespace, font.file)),
-    );
-    // Il set di icone anche: lo legge la shell, nessun CSS lo nomina.
-    needed.extend(
-        manifest
-            .icons
-            .iter()
-            .map(|file| format!("{}{file}", manifest.asset_namespace)),
-    );
+    needed.extend(shell_assets(&manifest));
     let assets = asset_inventory(dir, &manifest.asset_namespace, &needed)?;
     Ok(ThemePayload {
         manifest,
@@ -253,4 +223,52 @@ pub(super) fn theme_payload(
         skin,
         assets,
     })
+}
+
+/// Il foglio di una luce che il tema offre. Senza `extends` il foglio di ogni
+/// luce offerta è d'obbligo; con `extends` può mancare, e la shell userà
+/// quello di serie.
+pub(super) fn light_sheet(
+    dir: &Utf8Path,
+    manifest: &ThemeManifest,
+    light: ThemeLight,
+) -> Result<Option<String>, ThemeError> {
+    let id = manifest.id.as_str();
+    if !manifest.lights.contains(&light) {
+        return Err(ThemeError::Malformed(format!(
+            "theme `{id}` does not offer requested light"
+        )));
+    }
+    let required = manifest.extends.is_none();
+    let sheet_path = sheet_path(dir, light);
+    let sheet = read_theme_text(&sheet_path, dir, id, MAX_THEME_CSS_BYTES, required)?;
+    if required && sheet.is_none() {
+        return Err(ThemeError::Malformed(format!(
+            "missing sheet `{sheet_path}`"
+        )));
+    }
+    Ok(sheet)
+}
+
+/// La pelle del tema (`skin.css`), facoltativa e uguale per ogni luce.
+pub(super) fn theme_skin(dir: &Utf8Path, id: &str) -> Result<Option<String>, ThemeError> {
+    read_theme_text(&dir.join("skin.css"), dir, id, MAX_THEME_CSS_BYTES, false)
+}
+
+/// Gli asset che la shell legge da sé e che nessun CSS nomina: i file dei
+/// caratteri (la regola `@font-face` la scrive la shell) e il set di icone.
+/// Viaggiano col fascio sempre.
+pub(super) fn shell_assets(manifest: &ThemeManifest) -> std::collections::BTreeSet<String> {
+    let namespace = manifest.asset_namespace.as_str();
+    manifest
+        .fonts
+        .iter()
+        .map(|font| format!("{namespace}{}", font.file))
+        .chain(
+            manifest
+                .icons
+                .iter()
+                .map(|file| format!("{namespace}{file}")),
+        )
+        .collect()
 }

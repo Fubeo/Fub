@@ -8,38 +8,41 @@ pub(super) fn asset_inventory(
     namespace: &str,
     needed: &std::collections::BTreeSet<String>,
 ) -> Result<std::collections::BTreeMap<String, Vec<u8>>, ThemeError> {
-    let mut assets = std::collections::BTreeMap::new();
-    walk_assets(root, root, namespace, &mut |name, path| {
-        if !needed.contains(&name) {
-            return Ok(());
-        }
-        let bytes = read_theme_bytes(
-            path,
-            root,
-            root.file_name().unwrap_or_default(),
-            MAX_THEME_ASSET_BYTES,
-            true,
-        )?
-        .expect("required asset was checked by read_theme_bytes");
-        assets.insert(name, bytes);
-        Ok(())
-    })?;
-    Ok(assets)
+    asset_listing(root, namespace, needed).map(|(assets, _)| assets)
 }
 
-/// I nomi (`theme://…`) di tutti gli asset di un tema, senza leggerne i byte:
-/// le stesse regole di [`asset_inventory`] (niente link, solo file e
-/// cartelle, fuori i quattro file del tema).
-pub(super) fn asset_names(
+/// I byte degli asset letti, e i nomi di tutti gli asset di un tema.
+pub(super) type AssetListing = (
+    std::collections::BTreeMap<String, Vec<u8>>,
+    std::collections::BTreeSet<String>,
+);
+
+/// Come [`asset_inventory`], nella stessa visita: i byte degli asset in
+/// `needed` e i nomi (`theme://…`) di tutti gli asset del tema, per dire che
+/// ci sono senza leggerli.
+pub(super) fn asset_listing(
     root: &Utf8Path,
     namespace: &str,
-) -> Result<std::collections::BTreeSet<String>, ThemeError> {
+    needed: &std::collections::BTreeSet<String>,
+) -> Result<AssetListing, ThemeError> {
+    let mut assets = std::collections::BTreeMap::new();
     let mut names = std::collections::BTreeSet::new();
-    walk_assets(root, root, namespace, &mut |name, _| {
+    walk_assets(root, root, namespace, &mut |name, path| {
+        if needed.contains(&name) {
+            let bytes = read_theme_bytes(
+                path,
+                root,
+                root.file_name().unwrap_or_default(),
+                MAX_THEME_ASSET_BYTES,
+                true,
+            )?
+            .expect("required asset was checked by read_theme_bytes");
+            assets.insert(name.clone(), bytes);
+        }
         names.insert(name);
         Ok(())
     })?;
-    Ok(names)
+    Ok((assets, names))
 }
 
 /// Visita ogni asset sotto `dir` col suo nome nel namespace e il suo path.

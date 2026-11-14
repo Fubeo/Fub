@@ -154,6 +154,22 @@ fn tree_paths(dir: &Utf8Path, paths: &mut Vec<Utf8PathBuf>) -> Result<(), ThemeE
 /// SHA256 over a sorted, length-framed copy of every file in a theme tree.
 /// The exact same function checks both source and staged bytes before publish.
 pub fn theme_tree_digest(root: &Utf8Path) -> Result<String, ThemeError> {
+    tree_digest(root, None)
+}
+
+/// Copia l'albero di `root` dentro `dest` (una cartella vuota che chi chiama
+/// ha appena creato) e ne prende l'impronta **nello stesso passaggio**, con
+/// lo stesso algoritmo di [`theme_tree_digest`]: ogni file si legge una volta
+/// sola, e i byte scritti sono esattamente quelli dell'impronta. Le regole
+/// della sorgente sono le stesse (niente link, solo file regolari, i limiti
+/// degli asset); un file che cambia lunghezza mentre lo si legge è
+/// [`ThemeError::Changed`]. Le cartelle vuote non si copiano: non sono
+/// nell'impronta.
+pub(super) fn copy_tree_digest(root: &Utf8Path, dest: &Utf8Path) -> Result<String, ThemeError> {
+    tree_digest(root, Some(dest))
+}
+
+fn tree_digest(root: &Utf8Path, sink: Option<&Utf8Path>) -> Result<String, ThemeError> {
     let id = root.file_name().unwrap_or("(digest)");
     let canonical = canonical_theme_root(root, id)?;
     validate_asset_limits(&canonical, id)?;
@@ -196,7 +212,21 @@ pub fn theme_tree_digest(root: &Utf8Path) -> Result<String, ThemeError> {
         digest.update(&(relative.len() as u64).to_le_bytes());
         digest.update(relative.as_bytes());
         digest.update(&size.to_le_bytes());
+        let mut copy = match sink {
+            Some(sink) => {
+                let to = sink.join(relative);
+                if let Some(parent) = to.parent() {
+                    std::fs::create_dir_all(parent).map_err(|and| ThemeError::disk(parent, and))?;
+                }
+                Some((
+                    create_nofollow(&to).map_err(|and| ThemeError::disk(&to, and))?,
+                    to,
+                ))
+            }
+            None => None,
+        };
         let mut buffer = [0u8; 64 * 1024];
+        let mut total = 0u64;
         loop {
             let read = file
                 .read(&mut buffer)
@@ -205,6 +235,14 @@ pub fn theme_tree_digest(root: &Utf8Path) -> Result<String, ThemeError> {
                 break;
             }
             digest.update(&buffer[..read]);
+            total += read as u64;
+            if let Some((out, to)) = copy.as_mut() {
+                out.write_all(&buffer[..read])
+                    .map_err(|and| ThemeError::disk(to.as_path(), and))?;
+            }
+        }
+        if total != size {
+            return Err(ThemeError::Changed(path.to_string()));
         }
     }
     let bytes = digest.finish();

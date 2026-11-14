@@ -1175,19 +1175,9 @@ pub struct Host {
     /// **La cartella di tema controllata** ([`Host::check_theme_folder`]): il
     /// path che la finestra di scelta nativa ha dato e l'impronta dei byte
     /// letti. È il permesso, che vale una volta, di installarla
-    /// ([`Host::install_theme_from_folder`]).
-    theme_folder: Mutex<Option<CheckedThemeFolder>>,
-}
-
-/// Una cartella di tema passata dal controllo: dove sta, l'impronta dei byte
-/// che la shell ha visto e a quale domanda il permesso risponde.
-#[derive(Clone, PartialEq)]
-struct CheckedThemeFolder {
-    source: Utf8PathBuf,
-    digest: String,
-    /// Dopo una collisione il permesso vale solo per «Sostituisci»
-    /// (`replace`), una volta.
-    replace_only: bool,
+    /// ([`Host::install_theme_from_folder`]); la regola, con la sua
+    /// generazione, sta in [`crate::theme::ThemeFolderGrant`].
+    theme_folder: Mutex<crate::theme::ThemeFolderGrant>,
 }
 
 impl Default for Host {
@@ -1284,7 +1274,7 @@ impl Host {
             format_source: None,
             startup_source: None,
             session_notice: Mutex::new(None),
-            theme_folder: Mutex::new(None),
+            theme_folder: Mutex::new(crate::theme::ThemeFolderGrant::default()),
             uris: Default::default(),
             machine: with_the_schema(MachineSettings::in_memory()),
             view_states: ViewStates::in_memory(),
@@ -2446,10 +2436,13 @@ impl Host {
     /// aprire una finestra di scelta nuova. Senza modalità sviluppatore: un
     /// permesso si può sempre buttare.
     pub fn forget_theme_folder(&self) {
-        *self
-            .theme_folder
+        self.theme_folder_grant().forget();
+    }
+
+    fn theme_folder_grant(&self) -> std::sync::MutexGuard<'_, crate::theme::ThemeFolderGrant> {
+        self.theme_folder
             .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner) = None;
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
     }
 
     /// Legge la cartella di chi scrive un tema senza installarla
@@ -2458,23 +2451,28 @@ impl Host {
     /// nativa dell'app, mai la webview: una cartella pronta resta qui come
     /// **la** cartella controllata, ed è il permesso di installarla una volta
     /// sola. Un controllo nuovo prende il posto del precedente; un rifiuto lo
-    /// scarta.
+    /// scarta. Un controllo o uno scarto arrivati mentre questo legge vincono:
+    /// questo non dà più il permesso.
     pub fn check_theme_folder(
         &self,
         source: &camino::Utf8Path,
     ) -> Result<crate::theme::ThemeFolderCheck, PluginError> {
-        self.forget_theme_folder();
+        let generation = self.theme_folder_grant().forget();
         self.theme_folder_allowed()?;
         let check = crate::theme::check_theme_folder(source);
-        if let Ok(crate::theme::ThemeFolderCheck::Ready { digest, .. }) = &check {
-            *self
-                .theme_folder
-                .lock()
-                .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(CheckedThemeFolder {
-                source: source.to_owned(),
-                digest: digest.clone(),
-                replace_only: false,
-            });
+        if let Ok(crate::theme::ThemeFolderCheck::Ready {
+            digest, manifest, ..
+        }) = &check
+        {
+            self.theme_folder_grant().grant(
+                generation,
+                crate::theme::CheckedThemeFolder {
+                    source: source.to_owned(),
+                    digest: digest.clone(),
+                    manifest: manifest.clone(),
+                    replace_only: false,
+                },
+            );
         }
         check.map_err(Into::into)
     }
@@ -2504,36 +2502,16 @@ impl Host {
         let dir = self.config_dir.as_deref().ok_or_else(|| {
             PluginError::Unserved(fub_abi::Text::key("host.theme_folder.unavailable"))
         })?;
-        let pending = {
-            let mut slot = self
-                .theme_folder
-                .lock()
-                .unwrap_or_else(std::sync::PoisonError::into_inner);
-            match slot.take() {
-                Some(pending) if pending.digest == digest => pending,
-                other => {
-                    *slot = other;
-                    return Ok(crate::theme::ThemeFolderInstall::Unchecked);
-                }
-            }
+        let Some((generation, pending)) = self.theme_folder_grant().take(digest) else {
+            return Ok(crate::theme::ThemeFolderInstall::Unchecked);
         };
         if pending.replace_only && !replace {
             return Ok(crate::theme::ThemeFolderInstall::Unchecked);
         }
-        let outcome =
-            crate::theme::install_theme_from_folder(dir, &pending.source, replace, &pending.digest);
+        let outcome = crate::theme::install_theme_from_folder(dir, &pending, replace);
         if matches!(outcome, crate::theme::ThemeFolderInstall::Collision { .. }) && !replace {
-            let mut slot = self
-                .theme_folder
-                .lock()
-                .unwrap_or_else(std::sync::PoisonError::into_inner);
-            // Un controllo arrivato nel frattempo vince.
-            if slot.is_none() {
-                *slot = Some(CheckedThemeFolder {
-                    replace_only: true,
-                    ..pending
-                });
-            }
+            // Solo se niente ha controllato o scartato nel frattempo.
+            self.theme_folder_grant().rearm(generation, pending);
         }
         Ok(outcome)
     }
