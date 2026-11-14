@@ -230,7 +230,8 @@ Il quarto blocco è il nucleo della lavagna, `fub-canvas-core`, con chi lo usa.
 Il quinto blocco è `fub-format-craft`, che legge in sola lettura i
 [file delle app Craft](../reference/craft-formats.md): dipende soltanto dal
 contratto, e lo usa soltanto `fub-host`, che ne monta i formati e il bundle
-`fub.craft` (feature `craft`).
+`fub.craft` (feature `craft`). In fondo al blocco c'è il codec dei tratti,
+`fub-ink-codec`, fra i disegni e il nucleo dell'inchiostro.
 
 ```mermaid
 flowchart LR
@@ -259,22 +260,14 @@ flowchart LR
     host --> craft
     craft --> abi
     craft -.-> sdk
-```
 
-Il sesto blocco è il codec dei tratti, `fub-ink-codec`, fra i disegni e il
-nucleo dell'inchiostro.
-
-```mermaid
-flowchart LR
-    %% @grafo-dipendenze
-    %% Il seguito del grafo: il codec dei tratti, i suoi clienti e il nucleo.
+    %% E il codec dei tratti, fra i disegni e il nucleo dell'inchiostro.
 
     scene["fub-scene"]
-    inkcodec["fub-ink-codec"]
     ink["fub-ink"]
 
-    scene --> inkcodec
-    inkcodec --> ink
+    scene --> canvasinkcodec
+    canvasinkcodec --> ink
 ```
 
 Il frontend TypeScript non è un crate Cargo. Entra nel sistema attraverso

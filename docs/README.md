@@ -76,7 +76,8 @@ all'export, dalla sessione dal tablet ai disegni grandi.
   [superficie ricca e il correttore](architecture/rich-surface-and-proofing.md)
   e la [superficie dei fogli](architecture/grid-surface.md), con gli
   [editor dei componenti](architecture/component-editors.md)
-- [Inchiostro e strumenti](architecture/ink-and-tools.md) e
+- [Inchiostro e strumenti](architecture/ink-and-tools.md),
+  [l'inchiostro sulla lavagna](architecture/ink-on-canvas.md) e
   [il disegno sul motore](architecture/disegno.md)
 - [Runtime dei plugin](architecture/plugin-runtime.md), i [provider WASM](architecture/wasm-providers.md) e [capability e sandbox](architecture/plugin-security.md)
 - [Lo strato dei motori](architecture/motori.md)
