@@ -118,13 +118,17 @@ pub(crate) enum Plan {
 }
 
 /// Un'impronta calcolata da una domanda, da riportare all'indice vivo: vale
-/// per la voce `id` solo se la voce ha ancora `size` e `mtime`, e se `mtime` è
-/// strettamente anteriore a `observed_at` (la regola *racily clean*).
+/// per la voce `id` solo se la voce ha ancora `size` e `mtime`, se `mtime` è
+/// strettamente anteriore a `observed_at` (la regola *racily clean*), e se il
+/// file è ancora quello letto (`change_stamp`, `identity`): vedi
+/// [`Workspace::learn_fingerprints`](crate::Workspace::learn_fingerprints).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Learned {
     pub(crate) id: DocId,
     pub(crate) size: u64,
     pub(crate) mtime: u64,
+    pub(crate) change_stamp: Option<u64>,
+    pub(crate) identity: Option<FileIdentity>,
     pub(crate) observed_at: u64,
     pub(crate) fingerprint: Revision,
 }
@@ -383,6 +387,8 @@ fn holds(
                 id: candidate.id.clone(),
                 size: now.size,
                 mtime: now.mtime,
+                change_stamp: now.change_stamp,
+                identity: now.identity.clone(),
                 observed_at: started,
                 fingerprint: computed.clone(),
             });
@@ -641,6 +647,8 @@ mod tests {
                 id: DocId::new("a.md"),
                 size: 5,
                 mtime,
+                change_stamp: vault.change_stamp(&DocId::new("a.md")),
+                identity: vault.file_identity(&DocId::new("a.md")),
                 observed_at: mtime + 1,
                 fingerprint: Revision::of_bytes(b"ciao!"),
             }]),
@@ -667,6 +675,8 @@ mod tests {
                 id: DocId::new("a.md"),
                 size: 4,
                 mtime,
+                change_stamp: vault.change_stamp(&DocId::new("a.md")),
+                identity: vault.file_identity(&DocId::new("a.md")),
                 observed_at: mtime + 1,
                 fingerprint: Revision::of_bytes(b"abcd"),
             }])

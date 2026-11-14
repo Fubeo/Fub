@@ -6616,27 +6616,66 @@ impl Workspace {
     }
 
     /// Riporta nell'indice vivo le impronte che una domanda sul contenuto ha
-    /// calcolato fuori dal lucchetto. Ciascuna si tiene solo se la voce c'è
-    /// ancora con la misura e la data lette, e se quella data era già nel
-    /// passato quando la domanda è cominciata (*racily clean*): una voce
-    /// cambiata nel frattempo, da una scrittura o dal rilevatore, non torna
-    /// indietro. Non scrive niente su disco: l'anagrafe porta le impronte in
+    /// calcolato fuori dal lucchetto. Ciascuna si tiene solo se:
+    ///
+    /// - la data letta era già nel passato quando la domanda è cominciata
+    ///   (*racily clean*);
+    /// - il file nel vault è **ancora quello letto**: stesso timbro di
+    ///   cambiamento e stessa identità adesso, sotto il lucchetto;
+    /// - la voce c'è ancora con la misura e la data lette: una voce cambiata
+    ///   nel frattempo, da una scrittura o dal rilevatore, non torna indietro;
+    /// - se l'anagrafe ha una riga con quella misura e quella data, la riga
+    ///   descrive lo stesso file (timbro, e identità quando entrambe la
+    ///   conoscono). Un file sostituito da un altro con la stessa misura e la
+    ///   stessa data, senza che il rilevatore lo dicesse, ha una voce che
+    ///   descrive ancora quello di prima: la sua impronta, attaccata alla voce,
+    ///   certificherebbe i metadati del file di prima con i byte del nuovo.
+    ///
+    /// Non scrive niente su disco: l'anagrafe porta le impronte in
     /// `entries.json` con [`store_entries`](Self::store_entries), l'unico che lo
     /// scrive. Ritorna quante impronte ha tenuto.
     pub fn learn_fingerprints(&mut self, learned: LearnedFingerprints) -> usize {
-        learned
-            .0
-            .into_iter()
-            .filter(|learned| learned.mtime != 0 && learned.mtime < learned.observed_at)
-            .filter(|learned| {
-                self.indexes.core.learn_fingerprint(
-                    &learned.id,
-                    learned.size,
-                    learned.mtime,
-                    &learned.fingerprint,
-                )
+        let mut kept = 0;
+        for learned in learned.0 {
+            if learned.mtime == 0 || learned.mtime >= learned.observed_at {
+                continue;
+            }
+            if !self.still_the_file_read(&learned) {
+                continue;
+            }
+            if self.indexes.core.learn_fingerprint(
+                &learned.id,
+                learned.size,
+                learned.mtime,
+                &learned.fingerprint,
+            ) {
+                kept += 1;
+            }
+        }
+        kept
+    }
+
+    /// Il file di `learned` è ancora quello che la domanda ha letto, e la riga
+    /// dell'anagrafe con la sua misura e la sua data, se c'è, parla di lui? Le
+    /// domande al supporto sono `stat`, non letture: si fanno sotto il
+    /// lucchetto come in [`store_entries`](Self::store_entries).
+    fn still_the_file_read(&self, learned: &crate::same_content::Learned) -> bool {
+        let vault = &self.docs.vault;
+        if vault.change_stamp(&learned.id) != learned.change_stamp
+            || vault.file_identity(&learned.id) != learned.identity
+        {
+            return false;
+        }
+        self.entry_store
+            .known(&learned.id)
+            .filter(|known| known.describes(learned.size, learned.mtime))
+            .is_none_or(|known| {
+                known.same_change_stamp(learned.change_stamp)
+                    && match (&known.identity, &learned.identity) {
+                        (Some(stored), Some(observed)) => stored == observed,
+                        _ => true,
+                    }
             })
-            .count()
     }
 
     fn check_resource_lease(&self, lease: &ResourceLease) -> Result<()> {

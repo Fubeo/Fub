@@ -119,12 +119,18 @@ impl CoreIndex {
         self.metas.keys().cloned().collect()
     }
 
+    /// Svuota l'indice. Con le voci se ne vanno anche ciò che le riguardava (gli
+    /// istanti *racily clean*) e il segno della scansione finita: un indice
+    /// vuoto non sa quali file ci sono finché una scansione non torna a dirlo
+    /// con [`mark_scanned`](Self::mark_scanned).
     pub(crate) fn clear(&mut self) {
         self.metas.clear();
         self.entries.clear();
         self.names.clear();
         self.folders.clear();
         self.tags.clear();
+        self.observed_in_the_own_instant.clear();
+        self.scanned = false;
         self.graph_epoch = 0;
     }
 

@@ -579,6 +579,72 @@ fn a_write_of_the_index_while_a_fingerprint_is_learned_is_not_rolled_back() {
     assert_eq!(ask(&mut workspace, "b.md", b"efgh"), found("a.md"));
 }
 
+#[test]
+fn a_file_replaced_with_the_same_size_and_date_teaches_nothing() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let root = root_of(&dir);
+    put(&root, "a.md", b"abcd");
+    let mut workspace = open(&root);
+    // Un altro file prende il posto di «a.md» senza che il rilevatore lo dica:
+    // stessa misura, stessa data, ma è un altro file (un'altra identità, un
+    // altro timbro di cambiamento). La voce dell'indice, e la riga
+    // dell'anagrafe, descrivono ancora quello di prima.
+    replace_keeping_the_date(&root, "a.md", b"efgh");
+
+    // La domanda legge il file nuovo, e ne calcola l'impronta…
+    let outcome = workspace
+        .prepare_same_content(&DocId::new("b.md"), 4)
+        .invoke(b"zzzz");
+    assert_eq!(outcome.answer, SameContent::NotFound);
+    assert!(!outcome.learned.is_empty());
+    // …ma la voce non è di quel file: l'impronta non le si attacca, o
+    // l'anagrafe certificherebbe i metadati del file di prima con i byte di
+    // quello nuovo.
+    assert_eq!(
+        workspace.learn_fingerprints(outcome.learned),
+        0,
+        "un file sostituito con la stessa misura e la stessa data non insegna"
+    );
+    // I byte decidono ancora: il file nuovo si ritrova.
+    assert_eq!(ask(&mut workspace, "b.md", b"efgh"), found("a.md"));
+}
+
+/// Mette al posto di `rel` un altro file con questi byte e la data di quello di
+/// prima, senza dirlo a nessuno: un'altra identità, un altro timbro.
+fn replace_keeping_the_date(root: &Utf8Path, rel: &str, bytes: &[u8]) {
+    let path = root.join(rel);
+    let mtime = fs::metadata(&path).expect("il file").modified().expect("data");
+    let other = root.join("sostituto.tmp");
+    fs::write(&other, bytes).expect("il file nuovo");
+    fs::OpenOptions::new()
+        .write(true)
+        .open(&other)
+        .expect("apertura")
+        .set_modified(mtime)
+        .expect("la stessa data");
+    fs::rename(&other, &path).expect("sostituzione");
+}
+
+#[test]
+fn a_file_replaced_after_the_question_teaches_nothing() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let root = root_of(&dir);
+    put(&root, "a.md", b"abcd");
+    let mut workspace = open(&root);
+
+    // La domanda legge «a.md» fuori dal lucchetto e ne calcola l'impronta…
+    let outcome = workspace
+        .prepare_same_content(&DocId::new("b.md"), 4)
+        .invoke(b"zzzz");
+    assert!(!outcome.learned.is_empty());
+    // …poi, prima che l'impronta torni, un altro file prende il suo posto con
+    // la stessa misura e la stessa data: l'impronta letta non è la sua.
+    replace_keeping_the_date(&root, "a.md", b"efgh");
+    assert_eq!(workspace.learn_fingerprints(outcome.learned), 0);
+    assert_eq!(ask(&mut workspace, "b.md", b"abcd"), SameContent::NotFound);
+    assert_eq!(ask(&mut workspace, "b.md", b"efgh"), found("a.md"));
+}
+
 /// Un orologio fermo a un istante scelto dal test.
 struct Stopped(u64);
 
