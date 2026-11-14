@@ -180,6 +180,59 @@ fn the_status_bar_counts_the_properties_and_is_silent_otherwise() {
     assert!(silent(&ws.render_view(&status).unwrap()));
 }
 
+/// Il titolo dell'unico stato vuoto del pannello, già risolto dal kernel.
+fn empty_title(tree: &UiNode) -> Option<String> {
+    fn walk(node: &UiNode) -> Option<String> {
+        match &node.kind {
+            UiKind::EmptyState { title, .. } => Some(title.to_string()),
+            UiKind::Stack { children, .. } => children.iter().find_map(walk),
+            _ => None,
+        }
+    }
+    walk(tree)
+}
+
+/// Un PDF o un'immagine che nessun formato rivendica: il pannello si disegna e
+/// dice che il file non ha proprietà, in modalità strutturata e sorgente,
+/// invece di fallire a ogni ridisegno (`read_model` risponde `NotFound`,
+/// `read_document` rifiuta i byte non UTF-8). Niente modulo per aggiungere:
+/// non c'è un frontmatter dove scriverle.
+#[test]
+fn a_file_without_a_format_says_it_has_no_properties() {
+    let vault = Vault::new();
+    std::fs::write(
+        vault.root.join("Stampa.pdf"),
+        b"%PDF-1.7\n%\x80\x81\x82\x83\n",
+    )
+    .unwrap();
+    std::fs::write(vault.root.join("Immagine.png"), b"\x89PNG\r\n\x1a\n\0\0").unwrap();
+    let mut ws = vault.open();
+    let status = ViewInstance::only(PROPERTIES_STATUS_VIEW);
+    for mode in ["structured", "source"] {
+        ws.view_action(
+            &instance(),
+            UiAction::new("mode").with_payload(serde_json::json!({ "mode": mode })),
+        )
+        .unwrap();
+        for rel in ["Stampa.pdf", "Immagine.png"] {
+            open_notes(&ws, rel);
+            let tree = ws
+                .render_view(&instance())
+                .unwrap_or_else(|error| panic!("{mode} {rel}: {error:?}"));
+            assert_eq!(
+                empty_title(&tree).as_deref(),
+                Some("Questo file non è una nota: non ha proprietà da mostrare."),
+                "{mode} {rel}: {tree:?}"
+            );
+            assert!(fields(&tree).is_empty(), "{mode} {rel}: {tree:?}");
+            assert!(
+                ws.render_view(&status).unwrap().children().is_empty(),
+                "the status bar stays silent on {rel}"
+            );
+        }
+    }
+}
+
 #[test]
 fn set_bool_writes_yaml_and_leaves_the_body() {
     let vault = Vault::new();

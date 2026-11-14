@@ -342,6 +342,12 @@ sorgente, e la selezione va in coda a un template che non la colloca; le
 statistiche contano anche lingue senza spazi con aggiornamenti incrementali.
 Contano il sorgente di una nota in prosa, e di un formato strutturato (canvas,
 base) il testo del modello; la view `stats.document` li dà a `fub-cli wordcount`.
+Un file che nessun formato rivendica si conta sul sorgente se è testo UTF-8;
+se non lo è (un PDF, un'immagine) il pannello dice che non ci sono parole da
+contare, senza errore: un MIME binario noto dall'estensione basta a deciderlo
+senza aprire il file, altrimenti decide la decodifica dei byte. Allo stesso
+modo il pannello proprietà, su un file senza formato, dice che non ha
+proprietà da mostrare, e `fub-cli wordcount` rifiuta il file come argomento.
 
 ## Barra di formattazione
 

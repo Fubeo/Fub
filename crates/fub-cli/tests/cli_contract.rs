@@ -286,6 +286,31 @@ fn daily_outline_wordcount_and_random_answer_through_their_owners() {
     );
     assert_eq!(missing.status.code(), Some(1), "a missing note: {said}");
     assert!(said.contains("not_found"), "{said}");
+
+    // Un PDF non ha parole: la view lo dice con la sua chiave, e il comando
+    // rifiuta l'argomento invece di cercare un conteggio che non c'è.
+    std::fs::write(vault.join("Stampa.pdf"), b"%PDF-1.7\n%\x80\x81\x82\x83\n").unwrap();
+    let binary = cli(&[
+        "--vault",
+        vault.to_str().unwrap(),
+        "--config-dir",
+        config.to_str().unwrap(),
+        "--format",
+        "json",
+        "wordcount",
+        "Stampa.pdf",
+    ]);
+    let said = format!(
+        "{}{}",
+        String::from_utf8_lossy(&binary.stdout),
+        String::from_utf8_lossy(&binary.stderr)
+    );
+    assert_eq!(
+        binary.status.code(),
+        Some(2),
+        "a file that is not text: {said}"
+    );
+    assert!(said.contains("bad_args"), "{said}");
 }
 
 /// Un comando secco apre il vault, domanda ed esce: le domande sul grafo e il

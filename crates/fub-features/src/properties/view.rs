@@ -254,6 +254,16 @@ fn tree(host: &dyn ReadApi, warning: Option<Text>) -> Result<UiNode, PluginError
         children.push(UiNode::empty_state(Text::key(EMPTY_NO_NOTES)));
         return Ok(UiNode::column(1, children));
     };
+    // Un file che nessun formato rivendica (un PDF, un'immagine) non ha un
+    // modello né un frontmatter: lo si dice, senza aprirlo. Leggerlo per
+    // scoprirlo farebbe fallire il pannello a ogni ridisegno — `read_model`
+    // risponde `NotFound`, `read_document` rifiuta i byte che non sono UTF-8 —
+    // e ogni fallimento è un avviso a comparsa. `format_of` è una domanda sul
+    // nome: non tocca il disco.
+    if host.format_of(&doc).is_none() {
+        children.push(UiNode::empty_state(Text::key(EMPTY_NO_FORMAT)));
+        return Ok(UiNode::column(1, children));
+    }
     if mode == "source" {
         let source = host.read_document(&doc)?;
         let span = frontmatter_span(&source);
