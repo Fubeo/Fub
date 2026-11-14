@@ -511,6 +511,8 @@ export function mountSettings(nextHooks: Hooks, parent?: Lifetime): Teardown {
     race.cancel();
     release?.();
     release = null;
+    openedLifetime?.close();
+    openedLifetime = null;
   });
   syncToolbar();
   return teardown;
@@ -535,6 +537,9 @@ let updateChecker: UpdateChecker | null = null;
 /// lo chiamano il pulsante, Escape e l'evento `vault_closed`, e senza questa
 /// guardia il secondo giro rimetterebbe il fuoco dove stava *prima del primo*.
 let release: (() => void) | null = null;
+/// La vita di un'apertura del pannello: si chiude con lui. Ci vive ciò che sta
+/// sopra le impostazioni e non deve restarci senza (`Tutti i componenti`).
+let openedLifetime: Lifetime | null = null;
 
 async function open(): Promise<void> {
   if (settingsLifetime?.closed || release) return;
@@ -547,6 +552,7 @@ async function open(): Promise<void> {
   // chi non vede a parlare con la UI sotto, che è ancora lì e non è più quella
   // che ha davanti.
   release = trapFocus(panelEl, close);
+  openedLifetime = openLifetime();
   // La trappola mette il fuoco sul primo controllo, che nella scocca è la
   // chiusura: si comincia invece dalla scheda corrente, che dice dove si è.
   tabButtons().find((button) => button.dataset.tab === tab)?.focus();
@@ -576,6 +582,8 @@ export async function openSettingsAt(key: string): Promise<void> {
 }
 
 function close(): void {
+  openedLifetime?.close();
+  openedLifetime = null;
   release?.();
   race.cancel();
   cancelCssSnippetsPreview();
@@ -1347,7 +1355,7 @@ function renderThemeCatalog(themes: ThemeInfo[], developer: boolean): HTMLElemen
   // Il gesto di chi scrive un tema; l'host lo rifiuta comunque a chiave spenta.
   if (developer) {
     const owner = settingsLifetime;
-    if (owner) actions.append(installFolderButton({ lifetime: owner, rerender: render }));
+    if (owner) actions.append(installFolderButton({ lifetime: owner, rerender: render }), catalogPageButton());
   }
   refreshPreviewState();
 
@@ -1365,6 +1373,28 @@ function renderThemeCatalog(themes: ThemeInfo[], developer: boolean): HTMLElemen
   panel.append(actions);
   if (themes.length > 0) panel.append(status);
   return panel;
+}
+
+/// Il bottone che apre «Tutti i componenti» (`dev/catalogo/pagina.ts`): la
+/// pagina arriva con un `import()`, così non pesa su chi non scrive temi.
+/// Vive quanto l'apertura del pannello: chiuse le impostazioni (anche da un
+/// `vault_closed`), si chiude anche lei.
+function catalogPageButton(): HTMLButtonElement {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "settings-btn";
+  button.dataset.devAction = "catalog";
+  button.textContent = t("settings.themes.catalog");
+  button.addEventListener("click", () => {
+    import("../dev/catalogo/pagina")
+      .then((page) => {
+        if (openedLifetime) page.openCatalogPage(openedLifetime);
+      })
+      .catch((error: unknown) =>
+        notify(t("commands.failed", { command: t("settings.themes.catalog"), reason: errorText(error) }), "guasto"),
+      );
+  });
+  return button;
 }
 
 /// Una riga di impostazione.
