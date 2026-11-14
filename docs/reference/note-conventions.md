@@ -54,7 +54,8 @@ non si normalizza.
 - Si chiude al primo `==}` e al primo `<<}`. Un `{==` dentro un passo aperto
   lo rompe, e il passo resta testo; dentro un messaggio `{>>`, `<<` e `>>`
   sono testo.
-- I segni dentro codice in riga o formule non aprono niente; `\{==` e
+- I segni dentro codice in riga, formule o una nota in riga `^[…]` non aprono
+  niente (nella nota restano testo della nota, byte per byte); `\{==` e
   `\{>>` sono i caratteri, non un commento. Il passo invece è testo della nota
   come ogni altro: link, tag, enfasi e formule restano suoi.
 - Il testo di un messaggio non è testo della nota: non fa link né tag e non

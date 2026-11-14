@@ -106,12 +106,25 @@ impl CommentPlan {
 }
 
 /// I commenti fra i figli di `node`, o `None` se non ce n'è nessuno.
+///
+/// Con `footnotes` acceso, un segno dentro una nota in riga `^[…]` non conta:
+/// la nota porta il suo testo come sorgente (`attrs.source`), e un commento
+/// riconosciuto lì dentro taglierebbe il testo che la apre, cioè la nota
+/// tornerebbe testo e il serializzatore la riscriverebbe `^\[…\]`. Il
+/// commento resta testo della nota, byte per byte.
 pub(super) fn plan<'a>(
     node: &'a AstNode<'a>,
     source: &str,
     offsets: &Offsets<'_>,
+    footnotes: bool,
 ) -> Option<CommentPlan> {
-    let marks = marks(node, source, offsets);
+    let mut marks = marks(node, source, offsets);
+    if footnotes && !marks.is_empty() {
+        let notes = inline_notes(source, span_of(node, offsets));
+        if !notes.is_empty() {
+            marks.retain(|(at, _)| !notes.iter().any(|note| note.contains(at)));
+        }
+    }
     if marks.is_empty() {
         return None;
     }
@@ -120,6 +133,30 @@ pub(super) fn plan<'a>(
         .any(|a| matches!(a.data.borrow().value, NodeValue::TableCell));
     let cuts = matched(&marks, source, in_cell);
     (!cuts.is_empty()).then_some(CommentPlan { cuts, next: 0 })
+}
+
+/// Le note in riga `^[…]` nella fetta `span` del contenitore, dal `^` al
+/// byte dopo la `]` che le chiude (la chiusura di [`footnote_close`], la
+/// stessa del resto del parser). Una `^[` senza chiusura non è una nota.
+fn inline_notes(source: &str, span: Span) -> Vec<std::ops::Range<usize>> {
+    let bytes = source.as_bytes();
+    let end = span.end.min(bytes.len());
+    let mut notes = Vec::new();
+    let mut at = span.start;
+    while at + 1 < end {
+        if bytes[at] == b'^'
+            && bytes[at + 1] == b'['
+            && backslashes_before(bytes, at).is_multiple_of(2)
+        {
+            if let Some(close) = footnote_close(source, at + 2, end) {
+                notes.push(at..close);
+                at = close;
+                continue;
+            }
+        }
+        at += 1;
+    }
+    notes
 }
 
 /// I segni nei figli di testo di `node`, in ordine di sorgente.

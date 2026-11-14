@@ -1651,6 +1651,74 @@ fn a_highlight_without_a_message_stays_what_it_was() {
     }
 }
 
+/// **Un commento dentro una nota in riga resta testo della nota.** La nota
+/// `^[…]` porta il suo testo come sorgente: riconoscere lì dentro il commento
+/// tagliava il `^[` che la apre, la nota tornava testo e la riscrittura dal
+/// modello scriveva `^\[…\]`, cioè cambiava il file. Fuori dalla nota, nella
+/// stessa riga, il commento resta un commento. Un `{==` rimasto solo fuori
+/// dalla nota si riscrive con la sua barra (la regola di `write_text`, già
+/// così per `==`): lì il criterio è che la rilettura dia lo stesso modello.
+#[test]
+fn a_comment_inside_an_inline_note_stays_text_of_the_note() {
+    let p = provider();
+    for (source, inside, identical) in [
+        (
+            "Frase^[testo {==x==}{>>@Anna Bianchi 2026-11-08 17:40: msg<<} altro] fine.\n",
+            "testo {==x==}{>>@Anna Bianchi 2026-11-08 17:40: msg<<} altro",
+            true,
+        ),
+        (
+            "Frase^[solo {>>punto<<} qui] fine.\n",
+            "solo {>>punto<<} qui",
+            true,
+        ),
+        // Aperto fuori e chiuso dentro: nessun commento, la nota resta.
+        (
+            "Il {==passo^[nota ==}{>>m<<}] fine.\n",
+            "nota ==}{>>m<<}",
+            false,
+        ),
+    ] {
+        let model = parse(source);
+        let mut notes = Vec::new();
+        walk_inlines(&model.body, &mut |nodes| {
+            for n in nodes {
+                if let Inline::Custom {
+                    custom_kind: kind,
+                    attrs,
+                    ..
+                } = n
+                {
+                    if kind == "footnote-reference" {
+                        notes.push(attrs.clone());
+                    }
+                }
+            }
+        });
+        assert_eq!(notes.len(), 1, "{source:?}: {:?}", model.body);
+        assert_eq!(notes[0]["source"], json!(inside), "{source:?}");
+        assert_eq!(notes[0]["inline"], json!(true), "{source:?}");
+        assert!(comment_messages(&model).is_empty(), "{source:?}");
+        let written = p.serialize(&model).expect("si sa scrivere");
+        if identical {
+            assert_eq!(written, source, "la riscrittura ha cambiato il file");
+        }
+        let again = parse(&written);
+        assert_eq!(again.body.len(), model.body.len(), "{written:?}");
+        assert_eq!(again.text, model.text, "{written:?}");
+        assert!(comment_messages(&again).is_empty(), "{written:?}");
+        assert!(written.contains(inside), "{written:?} ha perso la nota");
+    }
+
+    // Accanto alla nota, nella stessa riga, il commento c'è.
+    let source = "Il {==passo==}{>>@Anna: fuori<<} e^[nota {>>dentro<<}] fine.\n";
+    let model = parse(source);
+    let messages = comment_messages(&model);
+    assert_eq!(messages.len(), 1, "{:?}", model.body);
+    assert_eq!(messages[0].0[2], json!("fuori"));
+    assert_eq!(p.serialize(&model).expect("si sa scrivere"), source);
+}
+
 #[test]
 fn a_message_stays_on_its_line() {
     let model = parse("> {>>a\n> b<<} c\n");
@@ -1678,7 +1746,7 @@ fn a_message_stays_on_its_line() {
 /// un documento riscritto dal modello, non uno aperto e salvato dall'editor.
 #[test]
 fn comments_and_tables_break_no_property() {
-    const PIECES: [&str; 33] = [
+    const PIECES: [&str; 35] = [
         "{==",
         "==}",
         "{>>",
@@ -1705,6 +1773,10 @@ fn comments_and_tables_break_no_property() {
         "{",
         "}",
         "^[n]",
+        // Una nota in riga aperta e chiusa a pezzi, perché un commento ci
+        // cada dentro.
+        "^[",
+        "]",
         "\n",
         "é",
         "~~",

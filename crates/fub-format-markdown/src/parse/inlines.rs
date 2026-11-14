@@ -29,7 +29,7 @@ pub(super) fn convert_inlines<'a>(
     // i messaggi tagliano i nodi di testo, e ciò che sta dentro un messaggio
     // non si converte.
     let mut comments = if ctx.enabled(syntax::COMMENTS) {
-        comments::plan(node, source, offsets)
+        comments::plan(node, source, offsets, ctx.enabled(syntax::FOOTNOTES))
     } else {
         None
     };
