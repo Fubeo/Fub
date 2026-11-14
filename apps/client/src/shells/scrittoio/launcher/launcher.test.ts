@@ -280,16 +280,17 @@ describe("i comandi che lo aprono", () => {
 
   it("dai menu contestuali «Cerca fra tutti i comandi» apre i comandi con ciò che si è scritto, e smontato non risponde più", () => {
     showContextMenu(new MouseEvent("contextmenu", { clientX: 10, clientY: 10 }), [{ label: "Apri", run: () => {} }], { pointer: false });
-    const foot = document.querySelector("#context-menu .menu-foot kbd");
-    expect(foot?.textContent).toBe("Ctrl+Shift+P");
     for (const ch of "zz") document.activeElement!.dispatchEvent(new KeyboardEvent("keydown", { key: ch, bubbles: true, cancelable: true }));
-    document.querySelector<HTMLButtonElement>("#context-menu .menu-items [role=menuitem]")!.click();
+    const offer = document.querySelector<HTMLButtonElement>("#context-menu .menu-items [role=menuitem]")!;
+    expect(offer.querySelector(".menu-hint")?.textContent).toBe("Ctrl+Shift+P");
+    offer.click();
     expect(selectedMode()).toContain("launcher.mode.commands");
     expect(world.asked[world.asked.length - 1]).toEqual(["commands", "zz"]);
     launcher.close();
     lifetime.close();
     showContextMenu(new MouseEvent("contextmenu", { clientX: 10, clientY: 10 }), [{ label: "Apri", run: () => {} }], { pointer: false });
-    expect(document.querySelector("#context-menu .menu-foot kbd")).toBeNull();
+    for (const ch of "zz") document.activeElement!.dispatchEvent(new KeyboardEvent("keydown", { key: ch, bubbles: true, cancelable: true }));
+    expect(document.querySelector("#context-menu .menu-items [role=menuitem]")).toBeNull();
     closeContextMenu();
     lifetime = openLifetime();
   });
