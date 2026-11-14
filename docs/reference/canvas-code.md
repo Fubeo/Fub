@@ -280,8 +280,9 @@ facoltativi, di serie quelli di nascita. Completano `id`, `color` (`red`…`purp
 { "op": "add_card", "text": "Nuova idea", "near": "t2", "side": "bottom", "color": "cyan" }
 ```
 
-Un campo che non va col tipo, `x` senza `y`, un posto dato due volte, o la
-forma intera mescolata con la breve, è `Invalid`, con la frase che dice quale.
+Un campo che non va col tipo, `x` senza `y`, un posto dato due volte, `side` o
+`gap` senza `near`, o la forma intera mescolata con la breve, è `Invalid`, con
+la frase che dice quale.
 
 ### `move`
 
