@@ -187,12 +187,19 @@ fn shown_url(url: &str) -> String {
     // `user:pa?ss@host` il parser legge `user` come host e `pa` come porta
     // che non è un numero, e un pezzo di credenziale finirebbe in vista.
     let authority = uri.authority().map_or("", |authority| authority.as_str());
-    let bare = authority.rsplit_once('@').map_or(authority, |(_, bare)| bare);
+    let bare = authority
+        .rsplit_once('@')
+        .map_or(authority, |(_, bare)| bare);
     if bare != format!("{host}{port}") {
         return unreadable();
     }
     let path = match uri.path() {
-        "/" if !url.split_once("://").is_some_and(|(_, rest)| rest.contains('/')) => "",
+        "/" if !url
+            .split_once("://")
+            .is_some_and(|(_, rest)| rest.contains('/')) =>
+        {
+            ""
+        }
         path => path,
     };
     format!("{scheme}://{host}{port}{path}")
@@ -264,15 +271,15 @@ impl UreqNetwork {
             .unwrap_or(&self.agent);
         let mut response = match &request.body {
             Some(body) => {
-                let req = builder
-                    .body(&body[..])
-                    .map_err(|_| PluginError::BadArgs(format!("{shown}: invalid request").into()))?;
+                let req = builder.body(&body[..]).map_err(|_| {
+                    PluginError::BadArgs(format!("{shown}: invalid request").into())
+                })?;
                 agent.run(req).map_err(io)?
             }
             None => {
-                let req = builder
-                    .body(())
-                    .map_err(|_| PluginError::BadArgs(format!("{shown}: invalid request").into()))?;
+                let req = builder.body(()).map_err(|_| {
+                    PluginError::BadArgs(format!("{shown}: invalid request").into())
+                })?;
                 agent.run(req).map_err(io)?
             }
         };
@@ -415,7 +422,10 @@ mod tests {
             "https://user:pa ss@host/x",
         ] {
             let shown = shown_url(url);
-            assert!(!shown.contains("pa") && !shown.contains("ss@"), "{url} -> {shown}");
+            assert!(
+                !shown.contains("pa") && !shown.contains("ss@"),
+                "{url} -> {shown}"
+            );
             assert!(!shown.contains("user"), "{url} -> {shown}");
         }
         assert_eq!(shown_url("non un url?x"), "<unreadable address>");

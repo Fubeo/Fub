@@ -947,7 +947,10 @@ mod tests {
         for text in [&written, &indented] {
             let back = from_inkml(text).expect("Fub rilegge quello che scrive");
             assert_eq!(back.strokes.len(), MAX_TRACES);
-            assert_eq!(back.strokes[MAX_TRACES - 1].brush.pen.as_deref(), Some("penna-9999"));
+            assert_eq!(
+                back.strokes[MAX_TRACES - 1].brush.pen.as_deref(),
+                Some("penna-9999")
+            );
         }
     }
 

@@ -387,11 +387,31 @@ mod tests {
     #[test]
     fn il_tetto_conta_attributi_e_testi() {
         let fat = format!("<r><a v=\"{}\"/></r>", "x".repeat(10_000));
-        let kept = parse_within(fat.as_bytes(), "p", &mut budget(), None, &mut |_| Ok(()), 5_000);
-        assert_eq!(kept.unwrap_err(), InventoryError::Limit("xml nodes in memory"));
+        let kept = parse_within(
+            fat.as_bytes(),
+            "p",
+            &mut budget(),
+            None,
+            &mut |_| Ok(()),
+            5_000,
+        );
+        assert_eq!(
+            kept.unwrap_err(),
+            InventoryError::Limit("xml nodes in memory")
+        );
         let text = format!("<r><a>{}</a></r>", "x".repeat(10_000));
-        let kept = parse_within(text.as_bytes(), "p", &mut budget(), None, &mut |_| Ok(()), 5_000);
-        assert_eq!(kept.unwrap_err(), InventoryError::Limit("xml nodes in memory"));
+        let kept = parse_within(
+            text.as_bytes(),
+            "p",
+            &mut budget(),
+            None,
+            &mut |_| Ok(()),
+            5_000,
+        );
+        assert_eq!(
+            kept.unwrap_err(),
+            InventoryError::Limit("xml nodes in memory")
+        );
         // Lo spazio fra i figli si toglie alla chiusura e non resta in conto.
         let spaced = format!("<r>{}</r>", "<b>\n  <a/>\n</b>".repeat(100));
         let mut streamed = 0;
