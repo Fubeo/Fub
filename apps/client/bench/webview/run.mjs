@@ -72,14 +72,17 @@ const R1_ROUNDS = 30;
 
 /// Un file per modalità, nell'ordine in cui R1 li apre: il nome che si cerca
 /// col selettore rapido e la modalità che il referto nomina.
+/// Un file per modalità, nell'ordine in cui R1 li apre. «Vai alla nota» cerca
+/// le note per nome e per alias (docs/product/search-links-and-graph.md): un
+/// PDF e un'immagine non si trovano così, e il banco di prima li «apriva» con
+/// l'offerta di creare una nota col loro nome. Restano fuori finché non c'è un
+/// passo che li apra dall'albero.
 const MODES = [
   ["Lunga", "nota"],
   ["Lavagna", "lavagna"],
   ["Foglio", "disegno"],
   ["Documento", "documento"],
   ["Tabella", "foglio di calcolo"],
-  ["Stampa", "pdf"],
-  ["Immagine", "immagine"],
 ];
 
 /// Un accordo: il modificatore giù, il tasto, su tutti e due.
@@ -717,12 +720,8 @@ const SCENARIOS = {
     const empty = await settled(driverPid, pause);
     const steps = [];
     for (const [name, mode] of MODES) {
-      // Ogni file si cerca a indice pronto. Aprire il precedente può rimettere
-      // l'indice al lavoro: la barra diceva «Indicizzazione in corso» proprio
-      // mentre «Stampa» non era ancora un nome da trovare. Senza questa attesa
-      // il lanciatore dice «nessuna nota» (giusto per l'indice di quel momento),
-      // e il test lo leggeva come vero solo perché l'offerta «Crea nota» portava
-      // il nome cercato.
+      // Chi cerca per nome lo fa a indice pronto: aprire il precedente può
+      // rimettere l'indice al lavoro, e un nome cercato in quel momento manca.
       await indexed(session);
       await openByName(session, name, "");
       await session.waitFor("return [...document.querySelectorAll('.pane.focus .tab[aria-selected=true] .tab-name')].some((el) => el.textContent.includes(arguments[0]))", [name], 60_000);
