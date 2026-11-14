@@ -31,6 +31,8 @@ describe("webShortcut", () => {
     expect(webShortcut("c.url", "[InternetShortcut]\nIconIndex=0\n")).toBeNull();
     expect(webShortcut("d.url", "[InternetShortcut]\nURL=javascript:alert(1)\n")).toBeNull();
     expect(webShortcut("e.url", "[InternetShortcut]\nURL=file:///etc/passwd\n")).toBeNull();
+    expect(webShortcut("g.url", "[InternetShortcut]\nURL=ftp://example.org/a\n")).toBeNull();
+    expect(webShortcut("h.url", "[InternetShortcut]\nURL=mailto:a@example.org\n")).toEqual({ title: "h", url: "mailto:a@example.org" });
     expect(webShortcut("f.txt", "URL=https://example.org")).toBeNull();
   });
 

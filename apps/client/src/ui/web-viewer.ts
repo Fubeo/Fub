@@ -40,7 +40,7 @@ export function viewerSite(url: string): string | null {
   if (!authority || authority.includes("@") || authority.startsWith("[")) return null;
   const [host, port, ...rest] = authority.split(":");
   if (rest.length > 0 || !host || (port !== undefined && port !== "443")) return null;
-  if (/[\s\\%]/.test(host)) return null;
+  if (/[\s\p{Cc}\\%]/u.test(host)) return null;
   return host.toLowerCase();
 }
 
@@ -65,10 +65,15 @@ export interface WebViewer {
 /// Il visore della finestra, finché è montato.
 let declared: WebViewer | null = null;
 
+/// Un indirizzo che il ripiego del browser di sistema può aprire: http(s).
+/// Un disegno o una nota possono portare qualunque schema.
+const webAddress = (url: string): boolean => /^https?:\/\//i.test(url);
+
 /// Apre una pagina nel visore della finestra; senza visore montato, nel
-/// browser di sistema.
+/// browser di sistema, e soltanto se è http(s).
 export function openWebPage(url: string): Promise<boolean> {
   if (declared) return declared.open(url);
+  if (!webAddress(url)) return Promise.resolve(false);
   window.open(url, "_blank", "noopener,noreferrer");
   return Promise.resolve(true);
 }
@@ -76,7 +81,7 @@ export function openWebPage(url: string): Promise<boolean> {
 /// Un link web cliccato in una nota. `viaViewer` è l'Alt del clic.
 export function openWebLink(url: string, viaViewer: boolean): void {
   if (declared) declared.openLink(url, viaViewer);
-  else window.open(url, "_blank", "noopener,noreferrer");
+  else if (webAddress(url)) window.open(url, "_blank", "noopener,noreferrer");
 }
 
 const listOf = (value: SettingValue | undefined): string[] =>

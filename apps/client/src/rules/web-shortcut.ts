@@ -5,9 +5,11 @@
 /// Un file così grande non è un collegamento: si deposita come allegato.
 const SHORTCUT_LIMIT = 64 * 1024;
 
-/// Gli schemi che un link della nota può portare: un `javascript:` o un
-/// `file:` letto da un file trascinato non diventano un link.
-const SAFE_SCHEME = /^(https?|mailto|ftp):/i;
+/// Gli schemi che un link della nota può portare, gli stessi che il
+/// sanitizer lascia a un link (`LINK_SCHEMES` in `ui/sanitize.ts`): un
+/// `javascript:`, un `file:` o un `ftp:` letto da un file trascinato non
+/// diventano un link.
+const SAFE_SCHEME = /^(https?|mailto):/i;
 
 const XML_ENTITIES: Record<string, string> = { amp: "&", lt: "<", gt: ">", quot: '"', apos: "'" };
 
