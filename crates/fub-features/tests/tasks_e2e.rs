@@ -784,19 +784,27 @@ fn badges(tree: &UiNode) -> Vec<(String, Intent)> {
 }
 
 #[test]
-fn the_badge_is_orange_when_the_due_date_is_near_like_the_pill() {
+fn the_badge_is_red_when_overdue_and_orange_when_near_like_the_pill() {
     let vault = Vault::new();
-    // Venerdì 13: vicina è passata, oggi o fino a giovedì 19 compreso.
+    // Venerdì 13: scaduta fino a giovedì 12, vicina da oggi a giovedì 19.
     vault.put(
         "Date.md",
         "- [ ] Ieri 📅 2026-11-12\n\
-         - [ ] Fra sei giorni 📅 2026-11-19\n\
-         - [ ] Fra sette giorni 📅 2026-11-20\n\
+         - [ ] Oggi 📅 2026-11-13\n\
+         - [ ] Fra quattro giorni 📅 2026-11-17\n\
+         - [ ] Fra dieci giorni 📅 2026-11-23\n\
          - [x] Fatto ieri 📅 2026-11-12\n",
     );
     let clock = Fixed(Arc::new(AtomicU64::new(0)));
     friday_night(&clock);
     let ws = vault.open(&clock, locale(120, Weekday::Monday));
+    let expected = [
+        ("2026-11-12", Intent::Danger),
+        ("2026-11-13", Intent::Primary),
+        ("2026-11-17", Intent::Primary),
+        ("2026-11-23", Intent::Neutral),
+    ];
+    // Il recinto, in ordine di scadenza, coi fatti compresi.
     let tree = ws
         .render_view(&fence("path includes date\nsort by due"))
         .expect("il recinto si disegna");
@@ -805,11 +813,21 @@ fn the_badge_is_orange_when_the_due_date_is_near_like_the_pill() {
         vec![
             ("2026-11-12".to_string(), Intent::Danger),
             ("2026-11-12".to_string(), Intent::Neutral),
-            ("2026-11-19".to_string(), Intent::Danger),
-            ("2026-11-20".to_string(), Intent::Neutral),
+            ("2026-11-13".to_string(), Intent::Primary),
+            ("2026-11-17".to_string(), Intent::Primary),
+            ("2026-11-23".to_string(), Intent::Neutral),
         ],
-        "la soglia è `due_is_near`, la stessa della pastiglia nel testo"
+        "la regola è `due_urgency`, la stessa della pastiglia nel testo"
     );
+    // La vista dell'ispettore, che raggruppa ma dice lo stesso.
+    let tree = ws.render_view(&instance()).expect("la vista si disegna");
+    let shown = badges(&tree);
+    for (date, intent) in expected {
+        assert!(
+            shown.contains(&(date.to_string(), intent)),
+            "{date} come {intent:?} nella vista: {shown:?}"
+        );
+    }
 }
 
 #[test]

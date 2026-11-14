@@ -33,12 +33,13 @@
 //!   `None`): una `📅` scritta male non è un compito senza data, è un compito
 //!   con un refuso, e chi lo mostra deve poterlo dire.
 //!
-//! # Quando è vicina
+//! # Quanto preme
 //!
-//! Una scadenza leggibile di un compito aperto è **vicina** se cade prima di
-//! [`NEAR_DAYS`] giorni da oggi: passata, di oggi o dei sei giorni seguenti
-//! ([`due_is_near`]). Vicina si mostra arancio, dovunque: la pastiglia nel
-//! testo e quella della vista dicono la stessa cosa della stessa data.
+//! Una scadenza leggibile di un compito aperto è **scaduta** se cade prima di
+//! oggi, **vicina** se cade oggi o nei sei giorni seguenti (meno di
+//! [`NEAR_DAYS`] giorni da oggi), **lontana** dopo ([`due_urgency`]). Scaduta
+//! si mostra rossa, vicina arancio, dovunque: la pastiglia nel testo e quella
+//! della vista dicono la stessa cosa della stessa data.
 //!
 //! [`TaskDue::from`]..[`TaskDue::to`] è il tratto che la scadenza occupa nel
 //! testo, segno compreso: è ciò che una superficie disegna come pastiglia, e
@@ -53,11 +54,28 @@ pub const DUE_MARK: &str = "📅";
 /// Quanti giorni da oggi una scadenza resta vicina: oggi più i sei seguenti.
 pub const NEAR_DAYS: i64 = 7;
 
-/// La scadenza `day` è vicina a `today` (giorni dall'epoca): passata, di oggi
-/// o entro [`NEAR_DAYS`] giorni. Chi la mostra la guarda solo per un compito
-/// aperto: uno fatto non ha più fretta.
-pub fn due_is_near(day: i64, today: i64) -> bool {
-    day < today + NEAR_DAYS
+/// Quanto preme una scadenza leggibile.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum DueUrgency {
+    /// Il giorno è passato.
+    Overdue,
+    /// Oggi o entro [`NEAR_DAYS`] giorni.
+    Near,
+    /// Più in là.
+    Later,
+}
+
+/// Quanto preme la scadenza `day` rispetto a `today` (giorni dall'epoca). Chi
+/// la mostra la guarda solo per un compito aperto: uno fatto non ha più
+/// fretta.
+pub fn due_urgency(day: i64, today: i64) -> DueUrgency {
+    if day < today {
+        DueUrgency::Overdue
+    } else if day < today + NEAR_DAYS {
+        DueUrgency::Near
+    } else {
+        DueUrgency::Later
+    }
 }
 
 /// La scadenza trovata in un testo.
@@ -246,12 +264,35 @@ mod tests {
     }
 
     #[test]
-    fn near_is_past_today_or_the_six_days_after() {
+    fn overdue_is_before_today_and_near_is_today_or_the_six_days_after() {
         let today = civil_day("2026-11-14").expect("esiste");
-        assert!(due_is_near(today - 30, today), "passata");
-        assert!(due_is_near(today, today), "oggi");
-        assert!(due_is_near(today + 6, today), "fra sei giorni");
-        assert!(!due_is_near(today + 7, today), "fra sette giorni è lontana");
+        assert_eq!(
+            due_urgency(today - 30, today),
+            DueUrgency::Overdue,
+            "passata"
+        );
+        assert_eq!(due_urgency(today - 1, today), DueUrgency::Overdue, "ieri");
+        assert_eq!(due_urgency(today, today), DueUrgency::Near, "oggi");
+        assert_eq!(
+            due_urgency(today + 4, today),
+            DueUrgency::Near,
+            "fra quattro giorni"
+        );
+        assert_eq!(
+            due_urgency(today + 6, today),
+            DueUrgency::Near,
+            "fra sei giorni"
+        );
+        assert_eq!(
+            due_urgency(today + 7, today),
+            DueUrgency::Later,
+            "fra sette giorni"
+        );
+        assert_eq!(
+            due_urgency(today + 10, today),
+            DueUrgency::Later,
+            "fra dieci giorni"
+        );
     }
 
     fn wiki(page: &str, label: Option<&str>, embed: bool) -> Inline {

@@ -44,7 +44,7 @@ use fub_abi::rules::folders::for_note;
 use fub_abi::rules::keys;
 use fub_abi::rules::path::{relative_ref, resolution_key, resolve_against};
 use fub_abi::rules::path_policy::{check, normalized, Naming};
-use fub_abi::rules::tasks::{civil_day, due_is_near, task_due};
+use fub_abi::rules::tasks::{civil_day, due_urgency, task_due, DueUrgency};
 use fub_abi::rules::theme_font::{
     theme_font_fault, MAX_THEME_FONTS, MAX_THEME_FONT_BYTES, MAX_THEME_FONT_FAMILY,
     MAX_THEME_FONT_FILE_NAME, MAX_THEME_FONT_TOTAL_BYTES, RESERVED_FONT_FAMILIES,
@@ -399,11 +399,14 @@ fn task_due_cases() -> Vec<Value> {
     .collect()
 }
 
-/// Quando una scadenza è vicina: i bordi sono il giorno prima, oggi, il sesto
-/// e il settimo giorno dopo, e un cambio di mese e d'anno in mezzo (dove una
-/// somma fatta sulle stringhe sbaglierebbe).
-fn due_is_near_cases() -> Vec<Value> {
+/// Quanto preme una scadenza: i bordi sono il giorno prima, oggi, il quarto,
+/// il sesto, il settimo e il decimo giorno dopo, e un cambio di mese e d'anno
+/// in mezzo (dove una somma fatta sulle stringhe sbaglierebbe).
+fn due_urgency_cases() -> Vec<Value> {
     [
+        ("2026-11-18", "2026-11-14"),
+        ("2026-11-24", "2026-11-14"),
+        ("2027-01-01", "2027-01-02"),
         ("2026-11-13", "2026-11-14"),
         ("2026-11-14", "2026-11-14"),
         ("2026-11-20", "2026-11-14"),
@@ -417,7 +420,12 @@ fn due_is_near_cases() -> Vec<Value> {
     .map(|(date, today)| {
         let day = civil_day(date).expect("giorno del caso");
         let now = civil_day(today).expect("oggi del caso");
-        json!({"date": date, "today": today, "out": due_is_near(day, now)})
+        let out = match due_urgency(day, now) {
+            DueUrgency::Overdue => "overdue",
+            DueUrgency::Near => "near",
+            DueUrgency::Later => "later",
+        };
+        json!({"date": date, "today": today, "out": out})
     })
     .collect()
 }
@@ -1181,7 +1189,7 @@ fn expected() -> Value {
         "resolve_against": resolve_against_cases(),
         "task_checked": task_checked_cases(),
         "task_due": task_due_cases(),
-        "due_is_near": due_is_near_cases(),
+        "due_urgency": due_urgency_cases(),
         "topic_matches": topic_matches_cases(),
         "folder_contains": folder_contains_cases(),
         "folder_for_note": folder_for_note_cases(),

@@ -1,7 +1,7 @@
 // La pastiglia della scadenza di un compito, in Live e in Lettura.
 //
 // La regola della `📅` è una sola, nel contratto (`fub_abi::rules::tasks`,
-// gemelle `taskDue` e `dueIsNear` in `rules/mirrored.ts`), e vale sul **testo**
+// gemelle `taskDue` e `dueUrgency` in `rules/mirrored.ts`), e vale sul **testo**
 // del compito: il primo paragrafo, righe che lo continuano comprese, senza la
 // sintassi — conta ciò che si legge. Il testo dentro `code`, l'etichetta di un
 // link e l'interno di un wikilink senza alias contano; i segni, la destinazione
@@ -10,13 +10,14 @@
 // riportano il tratto trovato al loro posto. Il corpus (`corpus.test.ts`,
 // famiglia «scadenza») le tiene d'accordo col modello.
 import type { Tree } from "@lezer/common";
-import { dueIsNear, taskDue, type TaskDue } from "../../../../rules/mirrored";
+import { dueUrgency, taskDue, type TaskDue } from "../../../../rules/mirrored";
 import { wikilink } from "../../../../rules/syntax";
 
-/// Come si mostra una scadenza: arancio se è vicina e il compito è aperto,
-/// sbagliata se la data non si legge, normale altrimenti. Vicina vuol dire
-/// la stessa cosa nella vista dei compiti (`due_is_near` del contratto).
-export type DueLook = "near" | "bad" | "plain";
+/// Come si mostra una scadenza: rossa se è passata e arancio se è vicina,
+/// col compito aperto; sbagliata se la data non si legge; normale altrimenti.
+/// Scaduta e vicina vogliono dire la stessa cosa nella vista dei compiti
+/// (`due_urgency` del contratto).
+export type DueLook = "overdue" | "near" | "bad" | "plain";
 
 /// Il giorno di chi guarda, nel fuso della macchina, in forma `AAAA-MM-GG`.
 export function localDay(now: Date = new Date()): string {
@@ -27,7 +28,9 @@ export function localDay(now: Date = new Date()): string {
 /// L'aspetto della pastiglia di `due`.
 export function dueLook(due: TaskDue, done: boolean, today: string): DueLook {
   if (due.date === null) return "bad";
-  return !done && dueIsNear(due.date, today) ? "near" : "plain";
+  if (done) return "plain";
+  const urgency = dueUrgency(due.date, today);
+  return urgency === "later" ? "plain" : urgency;
 }
 
 /// Un testo leggibile e, per ogni sua unità, la posizione da cui viene.

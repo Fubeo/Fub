@@ -64,7 +64,7 @@ export const DRAWERS: PartAnatomy = {
     {
       name: "tasks-view",
       states: [S("rest"), S("hover"), S("focused")],
-      hooks: ["declared-view", "ui-section", "ui-children", "ui-stack", "ui-checkbox", "ui-field-label", "ui-badge", "ui-button"],
+      hooks: ["declared-view", "ui-section", "ui-children", "ui-stack", "ui-checkbox", "ui-field-label", "ui-badge", "ui-button", "intent-primary"],
     },
   ],
 };

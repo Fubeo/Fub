@@ -42,8 +42,9 @@ pastiglia nel testo. Il corpus del formato Markdown tiene d'accordo le tre
 letture del testo (il modello, la Live e la Lettura) sugli stessi casi.
 
 Nella vista il testo del compito si legge senza la data, che sta sotto in una
-pastiglia accanto al nome della nota: **arancione** quando la scadenza è
-vicina, con la stessa soglia della pastiglia nel testo (vedi sotto).
+pastiglia accanto al nome della nota: **rossa** quando la scadenza è passata,
+**arancione** quando è vicina, con la stessa regola della pastiglia nel testo
+(vedi sotto).
 
 Un compito annidato in un'altra lista, o dentro una citazione, conta come
 qualunque altro. Un compito già fatto (`- [x]`) non compare.
@@ -84,10 +85,12 @@ Il nome della nota d'origine, accanto al compito, apre la nota.
 ## La scadenza nel testo
 
 Nella nota, in Live e in Lettura, il `📅` con la sua data diventa una
-pastiglia: grigia di solito, **arancione** quando il compito è aperto e la
-scadenza è vicina, cioè passata, del giorno corrente o dei sei seguenti (la regola
-`due_is_near`, con la gemella `dueIsNear`: la stessa della pastiglia nella vista
-e nel recinto). La
+pastiglia: grigia di solito; col compito aperto, **rossa** quando la scadenza
+è passata e **arancione** quando è vicina, cioè del giorno corrente o dei sei
+seguenti (la regola `due_urgency`, con la gemella `dueUrgency`: la stessa della
+pastiglia nella vista e nel recinto). Il contratto delle viste non ha un
+intento «avviso»: la vista dice la scaduta `danger` e la vicina `primary`, e la
+shell veste `primary` d'arancio nelle viste dei compiti. La
 pastiglia mostra la data com'è scritta: il file non cambia. Un compito fatto
 resta grigio. Una data che non si legge (`2026-02-30`, `📅 domani`) ha la
 pastiglia tratteggiata in rosso, e passandoci sopra dice come si scrive. In Live
@@ -140,8 +143,10 @@ come la vista dell'ispettore: una spunta, o un'altra nota che cambia, si vede da
 sola.
 
 Un `path includes` si guarda prima di leggere la nota: una nota fuori dal
-percorso non si legge. Per i compiti fatti l'indice non tiene la scadenza, e
-una riga `due` la controlla il componente sulle note lette.
+percorso non si legge. Per i compiti fatti l'indice non tiene la scadenza (il
+predicato `task_due` della ricerca vale per le task aperte, e resta così): una
+riga `due` su un recinto che mostra anche i fatti la controlla il componente
+sulle note lette, e a restringere quelle note sono le righe `tag` e `path`.
 
 Il recinto tiene al più **10.000** compiti e ne disegna al più **100**; il
 taglio, come il `limit`, viene dopo l'ordine. Quando il vault ne ha di più lo

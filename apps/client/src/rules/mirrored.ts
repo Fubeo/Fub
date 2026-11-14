@@ -422,14 +422,21 @@ export function taskDue(text: string): TaskDue | null {
 /// `fub_abi::rules::tasks::NEAR_DAYS`.
 export const NEAR_DAYS = 7;
 
-/// La scadenza `date` è vicina a `today` (tutte e due `AAAA-MM-GG`): passata,
-/// di oggi o entro [`NEAR_DAYS`] giorni. Gemella di
-/// `fub_abi::rules::tasks::due_is_near`, che conta in giorni dall'epoca.
-export function dueIsNear(date: string, today: string): boolean {
+/// Quanto preme una scadenza leggibile. Gemello di
+/// `fub_abi::rules::tasks::DueUrgency`.
+export type DueUrgency = "overdue" | "near" | "later";
+
+/// Quanto preme la scadenza `date` rispetto a `today` (tutte e due
+/// `AAAA-MM-GG`): scaduta prima di oggi, vicina oggi o entro [`NEAR_DAYS`]
+/// giorni, lontana dopo. Gemella di `fub_abi::rules::tasks::due_urgency`, che
+/// conta in giorni dall'epoca: le date `AAAA-MM-GG` si confrontano come
+/// stringhe.
+export function dueUrgency(date: string, today: string): DueUrgency {
+  if (date < today) return "overdue";
   const [year, month, day] = today.split("-").map(Number) as [number, number, number];
   const limit = new Date(Date.UTC(year, month - 1, day + NEAR_DAYS));
   const iso = `${String(limit.getUTCFullYear()).padStart(4, "0")}-${String(limit.getUTCMonth() + 1).padStart(2, "0")}-${String(limit.getUTCDate()).padStart(2, "0")}`;
-  return date < iso;
+  return date < iso ? "near" : "later";
 }
 
 /// `AAAA-MM-GG` è un giorno che esiste? Gemella di

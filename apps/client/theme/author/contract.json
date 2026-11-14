@@ -1020,9 +1020,11 @@
     "rich-token",
     "cm-fub-due",
     "cm-fub-due-near",
+    "cm-fub-due-overdue",
     "cm-fub-due-bad",
     "task-due",
     "task-due-near",
+    "task-due-overdue",
     "task-due-bad",
     "block-tasks",
     "block-query-note",
@@ -2632,9 +2634,11 @@
     "rich-token": "segno",
     "cm-fub-due": "segno",
     "cm-fub-due-near": "segno",
+    "cm-fub-due-overdue": "segno",
     "cm-fub-due-bad": "segno",
     "task-due": "segno",
     "task-due-near": "segno",
+    "task-due-overdue": "segno",
     "task-due-bad": "segno",
     "block-tasks": "segno",
     "block-query-note": "segno",
@@ -4269,7 +4273,8 @@
         "ui-checkbox",
         "ui-field-label",
         "ui-badge",
-        "ui-button"
+        "ui-button",
+        "intent-primary"
       ],
       "states": [
         "rest",
@@ -5820,9 +5825,11 @@
       "hooks": [
         "cm-fub-due",
         "cm-fub-due-near",
+        "cm-fub-due-overdue",
         "cm-fub-due-bad",
         "task-due",
         "task-due-near",
+        "task-due-overdue",
         "task-due-bad",
         "cm-fub-code"
       ],
@@ -5845,7 +5852,8 @@
         "ui-text",
         "ui-empty-state",
         "ui-empty-title",
-        "intent-danger"
+        "intent-danger",
+        "intent-primary"
       ],
       "states": [
         "rest",
@@ -8936,7 +8944,7 @@
   "counts": {
     "required_roles": 154,
     "optional_roles": 66,
-    "hooks": 1610,
+    "hooks": 1612,
     "state_names": 7,
     "assigned_states": 773,
     "components": 229,

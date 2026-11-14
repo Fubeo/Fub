@@ -83,7 +83,7 @@ use fub_abi::html::escape;
 use fub_abi::locale::Weekday;
 use fub_abi::model::{canonical_tag, Block, DocId, DocumentModel, Inline};
 use fub_abi::query::{QueryExpr, QueryPredicate, TaskStatus};
-use fub_abi::rules::tasks::{due_is_near, iso_day, task_due, task_text};
+use fub_abi::rules::tasks::{due_urgency, iso_day, task_due, task_text, DueUrgency};
 use fub_abi::session::ContextMask;
 use fub_abi::text::{Arg, StringCatalog, Text};
 use fub_abi::traits::{
@@ -827,12 +827,15 @@ fn task_row(task: &Task, day: Calendar) -> UiNode {
     match task.due {
         Due::Day(due) => meta.push(UiNode::badge(
             Text::from(iso_day(due)),
-            // Vicina come la pastiglia nel testo (`due_is_near`): passata, di
-            // oggi o entro la settimana, e solo per un compito aperto.
-            if !task.checked && due_is_near(due, day.today) {
-                Intent::Danger
-            } else {
-                Intent::Neutral
+            // Come la pastiglia nel testo (`due_urgency`), e solo per un
+            // compito aperto: scaduta è un pericolo; vicina è da guardare, e
+            // la shell la veste d'arancio nelle viste dei compiti (il
+            // contratto non ha un intento «avviso», e un caso nuovo
+            // dell'`enum intent` romperebbe i plugin già compilati).
+            match due_urgency(due, day.today) {
+                DueUrgency::Overdue if !task.checked => Intent::Danger,
+                DueUrgency::Near if !task.checked => Intent::Primary,
+                _ => Intent::Neutral,
             },
         )),
         Due::Unreadable => meta.push(UiNode::badge(Text::key(UNREADABLE_DATE), Intent::Danger)),

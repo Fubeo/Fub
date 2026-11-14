@@ -184,6 +184,44 @@ describe("la pastiglia della scadenza", () => {
     expect(container.querySelectorAll(".task-due")).toHaveLength(5);
   });
 
+  // La regola è `due_urgency`, come nella vista e nel recinto: scaduta prima
+  // di oggi, vicina da oggi a sei giorni dopo, lontana poi.
+  const urgency = [
+    ["- [ ] Ieri 📅 2026-11-13", "📅 2026-11-13", "overdue"],
+    ["- [ ] Oggi 📅 2026-11-14", "📅 2026-11-14", "near"],
+    ["- [ ] Fra quattro giorni 📅 2026-11-18", "📅 2026-11-18", "near"],
+    ["- [ ] Fra dieci giorni 📅 2026-11-24", "📅 2026-11-24", ""],
+  ] as const;
+
+  it("in Lettura è rossa scaduta e arancio vicina", () => {
+    const container = document.createElement("div");
+    container.innerHTML = `<ul>${urgency.map(([line]) => `<li class="task" data-task=""><input type="checkbox" disabled>${line.slice(6)}</li>`).join("")}</ul>`;
+    markTaskDues(container, "2026-11-14");
+    expect([...container.querySelectorAll(".task-due")].map((pill) => [pill.textContent, pill.className])).toEqual(
+      urgency.map(([, text, look]) => [text, look ? `task-due task-due-${look}` : "task-due"]),
+    );
+  });
+
+  it("nella Live è rossa scaduta e arancio vicina", () => {
+    const parent = document.createElement("div");
+    document.body.append(parent);
+    const engine = createTextEngine(parent, {
+      onChange() {},
+      onSelectionChange() {},
+      extensions: () => [markdown({ base: markdownGrammar }), livePreview({ openWikilink() {}, searchTag() {} })],
+    });
+    try {
+      engine.setDoc(urgency.map(([line]) => line).join("\n"));
+      const pills = [...parent.querySelectorAll<HTMLElement>(".cm-fub-due")];
+      expect(pills.map((pill) => [pill.textContent, pill.className.replace(/\s+/g, " ").trim()])).toEqual(
+        urgency.map(([, text, look]) => [text, look ? `cm-fub-due cm-fub-due-${look}` : "cm-fub-due"]),
+      );
+    } finally {
+      engine.destroy();
+      parent.remove();
+    }
+  });
+
   it("in Lettura avvolge anche una data scritta fra due nodi", () => {
     const container = document.createElement("div");
     container.innerHTML = '<ul><li class="task" data-task=""><input type="checkbox" disabled>Pagare 📅 <code>2026-11-16</code> poi</li></ul>';

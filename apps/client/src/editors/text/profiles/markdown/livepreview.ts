@@ -170,9 +170,9 @@ export type LiveDecoKind =
   | "highlight"
   | "tag"
   | "done"
-  // la scadenza `📅 AAAA-MM-GG` di un compito: una pastiglia, arancio quando è
-  // vicina (`data` "near"), segnata quando la data non si legge (`data`
-  // "bad"), grigia altrimenti
+  // la scadenza `📅 AAAA-MM-GG` di un compito: una pastiglia, rossa quando è
+  // passata (`data` "overdue"), arancio quando è vicina (`data` "near"),
+  // segnata quando la data non si legge (`data` "bad"), grigia altrimenti
   | "task-due"
   | "quote-mark"
   | "sup"
@@ -1470,6 +1470,7 @@ function calloutLine(type: string): Decoration {
 const bulletMark = Decoration.mark({ class: "cm-fub-bullet" });
 const dueMark = Decoration.mark({ class: "cm-fub-due" });
 const dueNearMark = Decoration.mark({ class: "cm-fub-due cm-fub-due-near" });
+const dueOverdueMark = Decoration.mark({ class: "cm-fub-due cm-fub-due-overdue" });
 const taskMark = Decoration.mark({ class: "cm-fub-bullet cm-fub-bullet-task" });
 const marksMap: Partial<Record<LiveDecoKind, Decoration>> = Object.fromEntries(
   (["h1", "h2", "h3", "h4", "h5", "h6", "strong", "em", "strike", "sup", "sub", "code", "link", "highlight", "done", "quote-mark", "near", "nobreak", "footnote-label"] as const).map(
@@ -1553,6 +1554,7 @@ function inDecoration(d: LiveDeco, callbacks: LivePreviewCallbacks): Decoration 
     }
     case "task-due":
       if (d.data === "near") return dueNearMark;
+      if (d.data === "overdue") return dueOverdueMark;
       // Il titolo dice perché, nella lingua dell'interfaccia di adesso.
       if (d.data === "bad") {
         return Decoration.mark({ class: "cm-fub-due cm-fub-due-bad", attributes: { title: liveStrings.t("tasks.due.unreadable") } });

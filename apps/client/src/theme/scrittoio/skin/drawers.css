@@ -667,6 +667,13 @@
   text-align: left;
   white-space: normal;
 }
+/* La scadenza vicina: il componente la dice `primary` (il contratto non ha un
+   intento «avviso»), e qui veste l'avviso, come la pastiglia arancio nel
+   testo; la scaduta resta `danger`, rossa. */
+.declared-view[data-view-id="tasks"] .ui-badge.intent-primary {
+  background: var(--warning-wash);
+  color: var(--text);
+}
 /* Fra la scadenza e la nota un respiro: lo spazio della pila è un pixel. */
 .declared-view[data-view-id="tasks"] .ui-checkbox + .ui-stack .ui-badge + .ui-button {
   margin-left: var(--space-2);

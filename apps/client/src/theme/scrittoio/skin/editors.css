@@ -2488,7 +2488,8 @@
 }
 /* La scadenza di un compito (`📅 AAAA-MM-GG`): una pastiglia sulla carta,
    nella Live come segno sul testo, in Lettura e nel recinto ```tasks``` come
-   elemento. Arancio quando è vicina: passata, oggi o entro una settimana. */
+   elemento. Rossa quando è passata, arancio quando è vicina: oggi o entro
+   una settimana. */
 .cm-editor .cm-content .cm-fub-due,
 .markdown-rendered .task-due {
   padding: 0.12em 0.5em;
@@ -2507,6 +2508,12 @@
   box-shadow: none;
   color: var(--doc-color-orange);
 }
+.cm-editor .cm-content .cm-fub-due-overdue,
+.markdown-rendered .task-due-overdue {
+  background: var(--doc-tint-red);
+  box-shadow: none;
+  color: var(--doc-color-red);
+}
 /* Dentro un codice la pastiglia tiene il suo fondo: la regola del codice
    spegne il fondo dei suoi span interni (`document.css`). */
 .cm-editor .cm-content .cm-fub-code .cm-fub-due {
@@ -2514,6 +2521,9 @@
 }
 .cm-editor .cm-content .cm-fub-code .cm-fub-due-near {
   background: var(--doc-tint-orange);
+}
+.cm-editor .cm-content .cm-fub-code .cm-fub-due-overdue {
+  background: var(--doc-tint-red);
 }
 .cm-editor .cm-content .cm-fub-code .cm-fub-due-bad {
   background: transparent;
@@ -2608,8 +2618,9 @@
 .markdown-rendered .block-tasks .ui-checkbox + .ui-stack[data-dir="row"] {
   margin-left: calc(13px + var(--space-4));
 }
-/* La scadenza della riga ha la veste della pastiglia nel testo: grigia, e
-   arancio quando il componente la dice urgente (scaduta, o non leggibile). */
+/* La scadenza della riga ha la veste della pastiglia nel testo: grigia;
+   rossa quando il componente la dice scaduta (o non leggibile, `danger`);
+   arancio quando la dice vicina (`primary`, il contratto non ha un «avviso»). */
 .markdown-rendered .block-tasks .ui-badge {
   min-height: 0;
   padding: 0.05em 0.5em;
@@ -2621,6 +2632,11 @@
   font-weight: var(--weight-medium);
 }
 .markdown-rendered .block-tasks .ui-badge.intent-danger {
+  background: var(--doc-tint-red);
+  box-shadow: none;
+  color: var(--doc-color-red);
+}
+.markdown-rendered .block-tasks .ui-badge.intent-primary {
   background: var(--doc-tint-orange);
   box-shadow: none;
   color: var(--doc-color-orange);

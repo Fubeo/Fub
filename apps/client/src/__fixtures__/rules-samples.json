@@ -2966,46 +2966,61 @@
       }
     }
   ],
-  "due_is_near": [
+  "due_urgency": [
+    {
+      "date": "2026-11-18",
+      "today": "2026-11-14",
+      "out": "near"
+    },
+    {
+      "date": "2026-11-24",
+      "today": "2026-11-14",
+      "out": "later"
+    },
+    {
+      "date": "2027-01-01",
+      "today": "2027-01-02",
+      "out": "overdue"
+    },
     {
       "date": "2026-11-13",
       "today": "2026-11-14",
-      "out": true
+      "out": "overdue"
     },
     {
       "date": "2026-11-14",
       "today": "2026-11-14",
-      "out": true
+      "out": "near"
     },
     {
       "date": "2026-11-20",
       "today": "2026-11-14",
-      "out": true
+      "out": "near"
     },
     {
       "date": "2026-11-21",
       "today": "2026-11-14",
-      "out": false
+      "out": "later"
     },
     {
       "date": "2027-01-02",
       "today": "2026-12-28",
-      "out": true
+      "out": "near"
     },
     {
       "date": "2027-01-04",
       "today": "2026-12-28",
-      "out": false
+      "out": "later"
     },
     {
       "date": "2024-03-01",
       "today": "2024-02-24",
-      "out": true
+      "out": "near"
     },
     {
       "date": "2024-03-02",
       "today": "2024-02-24",
-      "out": false
+      "out": "later"
     }
   ],
   "topic_matches": [

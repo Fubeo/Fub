@@ -12,7 +12,7 @@ import {
   scanTags,
   taskChecked,
   taskDue,
-  dueIsNear,
+  dueUrgency,
   THEME_FONT_LIMITS,
   THEME_ICON_LIMITS,
   themeFontFault,
@@ -74,7 +74,7 @@ const HANDLERS: Record<string, (c: Record<string, never>) => unknown> = {
   },
   // Quando una scadenza è vicina: la pastiglia nel testo e quella della
   // vista devono dare lo stesso colore alla stessa data.
-  due_is_near: (c) => dueIsNear(c.date, c.today),
+  due_urgency: (c) => dueUrgency(c.date, c.today),
   // Il riconoscimento di un `#tag` (§4.4): la regola sale nel contratto
   // perché una superficie di scrittura la deve sapere senza avere il parser.
   scan_tags: (c) => scanTags(c.text),
