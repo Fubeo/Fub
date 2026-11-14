@@ -9,6 +9,9 @@
 // prima. Lo ricorda questo modulo, e allo smontaggio rimette al suo posto ciò
 // che ha coperto. La dichiarazione che torna è una copia equivalente (gesto,
 // livello, titoli), non l'oggetto di prima: di più il registro non dà.
+//
+// «Nuova nota da un modello» non apre un modo: lancia il comando del kernel,
+// come lo lancia la palette. Il lanciatore non ha più un modo dei modelli.
 import type { ShellCommandId } from "../../../ui/shell-keys.generated";
 import {
   allCommands,
@@ -17,29 +20,42 @@ import {
   type ShellCommand,
 } from "../../../ui/commands";
 import type { Lifetime } from "../../../ui/lifetime";
+import { startCommand } from "../../../ui/palette";
+import { paletteHost } from "../../../state/palette-host";
 import type { Mode } from "./model";
+import { TEMPLATE_COMMAND } from "./sources";
 
 /// Che cosa i comandi chiedono al lanciatore.
 export interface LauncherOpener {
   open(mode: Mode): void;
 }
 
-type Declared = Pick<ShellCommand, "title" | "description"> & { id: ShellCommandId; mode: Mode };
+/// `mode` è il modo che il comando apre; `null` per il comando che lancia il
+/// kernel (la nota da modello).
+type Declared = Pick<ShellCommand, "title" | "description"> & { id: ShellCommandId; mode: Mode | null };
 
 /// I due della shell comune che il lanciatore copre, coi loro titoli.
 export const REDECLARED: readonly Declared[] = [
-  { id: "shell.switcher", title: "commands.switcher", description: "commands.switcher.desc", mode: "files" },
+  { id: "shell.switcher", title: "commands.switcher", description: "commands.switcher.desc", mode: "all" },
   { id: "shell.palette", title: "commands.palette", description: "commands.palette.desc", mode: "commands" },
 ];
 
 /// Quelli che esistono solo qui: l'host li dichiara senza accordo.
 export const OWN: readonly Declared[] = [
-  { id: "shell.launcher.search", title: "launcher.command.search", description: "launcher.command.search.desc", mode: "search" },
-  { id: "shell.launcher.headings", title: "launcher.command.headings", description: "launcher.command.headings.desc", mode: "headings" },
+  { id: "shell.launcher.search", title: "launcher.command.search", description: "launcher.command.search.desc", mode: "all" },
+  { id: "shell.launcher.headings", title: "launcher.command.headings", description: "launcher.command.headings.desc", mode: "all" },
   { id: "shell.launcher.tags", title: "launcher.command.tags", description: "launcher.command.tags.desc", mode: "tags" },
   { id: "shell.launcher.line", title: "launcher.command.line", description: "launcher.command.line.desc", mode: "line" },
-  { id: "shell.launcher.templates", title: "launcher.command.templates", description: "launcher.command.templates.desc", mode: "templates" },
+  { id: "shell.launcher.templates", title: "launcher.command.templates", description: "launcher.command.templates.desc", mode: null },
 ];
+
+/// Lancia «Nuova nota da un modello» come la palette: col suo modulo. Senza il
+/// comando (il vault non ha i modelli) si va ai comandi, che lo dicono.
+function newFromTemplate(launcher: LauncherOpener): void {
+  const entry = allCommands().find((each) => each.id === TEMPLATE_COMMAND);
+  if (entry) startCommand(entry, paletteHost);
+  else launcher.open("commands");
+}
 
 export function declareLauncherCommands(lifetime: Lifetime, launcher: LauncherOpener): void {
   const command = (each: Declared): ShellCommand => ({
@@ -47,7 +63,7 @@ export function declareLauncherCommands(lifetime: Lifetime, launcher: LauncherOp
     title: each.title,
     description: each.description,
     layer: "global",
-    run: () => launcher.open(each.mode),
+    run: () => (each.mode === null ? newFromTemplate(launcher) : launcher.open(each.mode)),
   });
 
   for (const each of OWN) {

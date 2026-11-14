@@ -1,20 +1,22 @@
 // Il lanciatore: una superficie sola per aprire, cercare e comandare.
 //
 // Nasce dalla pillola della barra del titolo e ci torna. Ha un campo, che
-// tiene sempre il fuoco, una fila di modi e un elenco: il modo si sceglie col
-// prefisso scritto in testa, con Tab o dalla fila, e ognuno ricorda la sua
-// ultima domanda finché la shell vive. Che cosa c'è da scegliere lo dicono le
-// sorgenti (`sources.ts`), che cosa succede a sceglierlo lo dicono i gesti
+// tiene sempre il fuoco, una fila di modi e un elenco. «Tutto» non ha
+// prefisso: cerca fra le note per nome, nel testo e fra i titoli della nota
+// aperta. Gli altri modi si scelgono col prefisso in testa, dalla fila o col
+// clic, e ognuno ricorda la sua ultima domanda finché la shell vive. Tab non
+// cambia modo: mostra le azioni della riga. Che cosa c'è da scegliere lo dicono
+// le sorgenti (`sources.ts`), che cosa succede a sceglierlo lo dicono i gesti
 // (`actions.ts`); qui stanno il disegno, i tasti e la gara fra le risposte.
-// Nel modo dei file, dove la finestra lo permette, accanto all'elenco c'è
-// l'anteprima della nota attiva (`preview.ts`).
+// In «Tutto», dove la finestra lo permette, accanto all'elenco c'è l'anteprima
+// della nota attiva (`preview.ts`).
 import "./launcher.css";
 import { errorText } from "../../../host/errors";
 import { t, onLanguage } from "../../../i18n/strings";
 import { createList, createTabs, type ListHandle, type TabsHandle } from "../../../kit";
 import { DURATION, animate, motionLevel, prepareExit } from "../../../moto";
-import { platformSupports } from "../../../platform/capabilities";
 import { pageName } from "../../../rules/mirrored";
+import { searchedName } from "../../../rules/searched-name";
 import { focusEditor } from "../../../state/document-controller";
 import { identifier, trapFocus } from "../../../ui/a11y";
 import { allCommands, ariaBinding, displayBinding, matchesBinding } from "../../../ui/commands";
@@ -27,13 +29,13 @@ import { notify } from "../../../ui/notify";
 import { scopeLabel } from "../../../ui/palette";
 import { Race } from "../../../ui/race";
 import { skeleton, SKELETON_DELAY_MS } from "../../../ui/skeleton";
-import { step, toSearchPanel } from "./actions";
+import { state } from "../../../state/store";
+import { actionRows, createNamed, step, toSearchPanel, withEnter } from "./actions";
 import { declareLauncherCommands } from "./commands";
 import {
   MODES,
   PREFIX,
   createMemory,
-  neighbour,
   openWay,
   pillPose,
   previewFits,
@@ -43,7 +45,7 @@ import {
   type Reading,
 } from "./model";
 import { createPreview } from "./preview";
-import { answersAtOnce, listing, type Listing, type Row } from "./sources";
+import { answersAtOnce, listing, selectable, type Listing, type Row } from "./sources";
 
 /// Quanto si aspetta dopo l'ultima battuta prima di chiedere a una sorgente
 /// che risponde da lontano (ms).
@@ -64,54 +66,54 @@ export interface Launcher {
 }
 
 const MODE_LABEL = {
-  files: "launcher.mode.files",
+  all: "launcher.mode.all",
   commands: "launcher.mode.commands",
-  search: "launcher.mode.search",
-  headings: "launcher.mode.headings",
   tags: "launcher.mode.tags",
+  people: "launcher.mode.people",
+  blocks: "launcher.mode.blocks",
+  help: "launcher.mode.help",
   line: "launcher.mode.line",
-  templates: "launcher.mode.templates",
 } as const;
 
 const PLACEHOLDER = {
-  files: "launcher.placeholder.files",
+  all: "launcher.placeholder.all",
   commands: "launcher.placeholder.commands",
-  search: "launcher.placeholder.search",
-  headings: "launcher.placeholder.headings",
   tags: "launcher.placeholder.tags",
+  people: "launcher.placeholder.people",
+  blocks: "launcher.placeholder.blocks",
+  help: "launcher.placeholder.help",
   line: "launcher.placeholder.line",
-  templates: "launcher.placeholder.templates",
 } as const;
 
 const MODE_ICON: Readonly<Record<Mode, string>> = {
-  files: "notes",
+  all: "notes",
   commands: "palette",
-  search: "search",
-  headings: "outline",
   tags: "tag",
+  people: "people",
+  blocks: "blocks",
+  help: "info",
   line: "keyboard",
-  templates: "template",
 };
 
-/// Che cosa fa Invio in un modo, detto nel piede.
+/// Che cosa fa Invio in un modo, detto nel piede. L'aiuto non ha un gesto.
 const ENTER_HINT = {
-  files: "launcher.hint.open",
+  all: "launcher.hint.open",
   commands: "launcher.hint.run",
-  search: "launcher.hint.open",
-  headings: "launcher.hint.go",
   tags: "launcher.hint.pick",
+  people: "launcher.hint.open",
+  blocks: "launcher.hint.insert",
+  help: "launcher.hint.look",
   line: "launcher.hint.go",
-  templates: "launcher.hint.open",
 } as const;
 
 /// Invio, com'è scritto sui tasti del piede.
 const ENTER_KEY = "↵";
 
-/// I modi in cui ciò che si sceglie è una nota, e si può aprire altrove.
-const OPENS_NOTES: readonly Mode[] = ["files", "search"];
+/// I modi in cui ciò che si sceglie è una nota, e si può aprire a lato.
+const OPENS_NOTES: readonly Mode[] = ["all", "people"];
 
 /// I modi che mostrano l'anteprima della nota attiva, dove c'è posto.
-const SHOWS_PREVIEW: readonly Mode[] = ["files"];
+const SHOWS_PREVIEW: readonly Mode[] = ["all"];
 
 /// L'accordo che porta la domanda nel pannello Cerca. È un gesto del
 /// lanciatore, come gli altri Invio del piede, non l'accordo di un comando.
@@ -125,10 +127,29 @@ interface Shown extends Listing {
   failed?: boolean;
 }
 
+/// Le righe su cui Tab mostra le azioni: una nota o una persona.
+function actionable(row: Row | null): row is Extract<Row, { kind: "note" | "person" }> {
+  return row !== null && (row.kind === "note" || row.kind === "person");
+}
+
 function el<K extends keyof HTMLElementTagNameMap>(tag: K, className: string): HTMLElementTagNameMap[K] {
   const node = document.createElement(tag);
   node.className = className;
   return node;
+}
+
+/// Un tasto, come si scrive sul piede e accanto alle righe.
+function keyOf(chord: string): HTMLElement {
+  const key = el("kbd", "launcher-key");
+  key.textContent = chord;
+  return key;
+}
+
+/// Un tasto con la sua parola, nel piede.
+function hint(keys: string, label: string): HTMLElement {
+  const item = el("span", "launcher-hint");
+  item.append(keyOf(keys), label);
+  return item;
 }
 
 /// La cartella di un documento, letta come una strada.
@@ -152,7 +173,6 @@ export function mountLauncher(lifetime: Lifetime): Launcher {
     const pill = document.getElementById("pill");
     const life = openLifetime();
     const race = new Race();
-    const windows = platformSupports("multipleWindows");
 
     const layer = el("div", "launcher-layer");
     const veil = el("div", "launcher-veil");
@@ -182,8 +202,8 @@ export function mountLauncher(lifetime: Lifetime): Launcher {
 
     const strip = el("div", "launcher-modes");
     // Il modo, detto a chi non vede la fila: letto col campo quando si entra,
-    // annunciato quando cambia. Tab lo cambia senza spostare il fuoco, e senza
-    // questa voce cambierebbe in silenzio.
+    // annunciato quando cambia. Tab lo mostra senza cambiarlo, e senza questa
+    // voce il modo cambierebbe in silenzio.
     const said = el("span", "sr-only");
     said.id = identifier("launcher-mode");
     said.setAttribute("role", "status");
@@ -208,15 +228,22 @@ export function mountLauncher(lifetime: Lifetime): Launcher {
     const status = el("span", "launcher-status");
     status.setAttribute("role", "status");
     const hints = el("span", "launcher-hints");
-    // Il controllo che porta la domanda nel pannello Cerca: si vede nel modo
-    // Cerca, col suo accordo scritto sopra. Non è una fermata del Tab, che qui
-    // cambia modo: alla tastiera la strada è l'accordo.
+    // Il controllo che porta la domanda nel pannello Cerca: si vede in «Tutto»,
+    // col suo accordo scritto sopra, e resta spento senza una domanda. Non è una
+    // fermata del Tab, che qui mostra le azioni: alla tastiera la strada è l'accordo.
     const toPanel = el("button", "launcher-panel");
     toPanel.type = "button";
     toPanel.tabIndex = -1;
     toPanel.hidden = true;
     toPanel.setAttribute("aria-keyshortcuts", ariaBinding(PANEL_CHORD));
-    foot.append(status, hints, toPanel);
+    // Le azioni della riga per chi non ha la tastiera (il telefono): lo stesso
+    // che fa Tab.
+    const toActions = el("button", "launcher-panel launcher-actions");
+    toActions.type = "button";
+    toActions.tabIndex = -1;
+    toActions.hidden = true;
+    toActions.textContent = t("launcher.actions");
+    foot.append(status, hints, toActions, toPanel);
 
     content.append(head, strip, said, body, foot);
     surface.append(content);
@@ -228,6 +255,12 @@ export function mountLauncher(lifetime: Lifetime): Launcher {
     let stale = false;
     /// Un Invio arrivato prima della risposta: vale per la prima riga che arriva.
     let deferred: OpenWay | null = null;
+    /// La nota (o la persona) di cui si mostrano le azioni, se si mostrano.
+    let actionsOf: string | null = null;
+    /// L'ultima risposta mostrata, per tornarci dalle azioni.
+    let shown: Shown | null = null;
+    /// Quante righe scelte si vedono adesso: un Maiusc-Invio crea solo se sono zero.
+    let visible = 0;
     let askTimer: number | undefined;
     let slowTimer: number | undefined;
     life.add(() => {
@@ -251,6 +284,12 @@ export function mountLauncher(lifetime: Lifetime): Launcher {
     };
 
     const drawRow = (row: Row, cell: HTMLElement): void => {
+      if (row.kind === "group") {
+        // L'intestazione di un gruppo: non si sceglie, le frecce la saltano.
+        cell.classList.add("launcher-group");
+        cell.textContent = row.title;
+        return;
+      }
       cell.classList.add("launcher-row");
       cell.style.removeProperty("--launcher-indent");
       cell.removeAttribute("aria-disabled");
@@ -265,7 +304,6 @@ export function mountLauncher(lifetime: Lifetime): Launcher {
       };
       switch (row.kind) {
         case "note": {
-          const asked = mode === "files" ? input.value : "";
           // Un documento che non è una nota porta l'icona del suo formato.
           const kind = formatKindOf(row.doc);
           const format = kind && kind !== "note" ? iconEl(FORMAT_ICON[kind]) : null;
@@ -273,20 +311,20 @@ export function mountLauncher(lifetime: Lifetime): Launcher {
             format.classList.add("launcher-row-format");
             title.append(format);
           }
-          title.append(markedTerms(pageName(row.doc), asked));
+          title.append(markedTerms(pageName(row.doc), input.value));
           if (row.snippet) {
             const snippet = row.snippet;
             detail((into) => into.append(highlighted(snippet.text, snippet.highlights)));
           }
-          meta.textContent = row.recent ? t("launcher.row.recent") : folderOf(row.doc);
+          meta.textContent = row.hit === "recent" ? t("launcher.row.recent") : folderOf(row.doc);
           break;
         }
-        case "query":
-          title.textContent = row.query;
-          meta.textContent = t("launcher.row.recent_search");
+        case "person":
+          title.textContent = pageName(row.doc);
+          meta.textContent = t("launcher.row.person");
           break;
-        case "create":
-          title.textContent = t("launcher.row.create", { name: row.name });
+        case "create-person":
+          title.textContent = t("launcher.row.create_person", { name: row.name });
           break;
         case "command": {
           title.textContent = row.entry.title;
@@ -301,13 +339,30 @@ export function mountLauncher(lifetime: Lifetime): Launcher {
           if (row.entry.spec) meta.append(scopeLabel(row.entry.spec));
           else if (row.entry.group) meta.append(row.entry.group);
           const chord = displayBinding(row.entry.binding);
-          if (chord) {
-            const key = el("kbd", "launcher-key");
-            key.textContent = chord;
-            meta.append(key);
-          }
+          if (chord) meta.append(keyOf(chord));
           break;
         }
+        case "block": {
+          title.textContent = row.entry.title;
+          if (row.entry.description) {
+            detail((into) => {
+              into.textContent = row.entry.description;
+            });
+          }
+          const chord = displayBinding(row.entry.binding);
+          if (chord) meta.append(keyOf(chord));
+          break;
+        }
+        case "help": {
+          title.textContent = row.entry.title;
+          const chord = displayBinding(row.entry.binding);
+          if (chord) meta.append(keyOf(chord));
+          break;
+        }
+        case "action":
+          title.textContent = row.title;
+          if (row.keys) meta.append(keyOf(row.keys));
+          break;
         case "heading":
           title.textContent = row.text;
           meta.textContent = `H${row.level}`;
@@ -322,10 +377,6 @@ export function mountLauncher(lifetime: Lifetime): Launcher {
             ? t("launcher.row.line", { line: row.line })
             : t("launcher.row.line_column", { line: row.line, column: row.column });
           meta.textContent = t("launcher.row.lines", { lines: row.lines });
-          break;
-        case "template":
-          title.textContent = pageName(row.doc);
-          meta.textContent = folderOf(row.doc);
           break;
       }
       cell.append(main);
@@ -352,12 +403,12 @@ export function mountLauncher(lifetime: Lifetime): Launcher {
     const choose = (row: Row, way: OpenWay): void => {
       const next = step(row, way, { mode, text: input.value });
       if (next.kind === "go") setMode(next.mode, next.text);
-      else leaveFor(next.run);
+      else if (next.kind === "run") leaveFor(next.run);
     };
 
     /// Porta la domanda nel pannello Cerca, se ce n'è una da portare.
     const carry = (): void => {
-      if (mode !== "search") return;
+      if (mode !== "all") return;
       const run = toSearchPanel(input.value);
       if (run) leaveFor(run);
     };
@@ -369,7 +420,7 @@ export function mountLauncher(lifetime: Lifetime): Launcher {
       key: (row) => row.key,
       render: drawRow,
       onActivate: (row, event) => {
-        const way = openWay(event as KeyboardEvent | MouseEvent, windows);
+        const way = openWay(event as KeyboardEvent | MouseEvent);
         if (!stale) {
           choose(row, way);
           return;
@@ -380,15 +431,33 @@ export function mountLauncher(lifetime: Lifetime): Launcher {
         if (askTimer !== undefined) query();
       },
       onHighlight: () => watch(),
+      disabled: (row) => !selectable(row),
       focus: "activedescendant",
       owner: input,
       lifetime: life,
     });
 
-    /// L'anteprima segue la nota della riga attiva, dove l'anteprima c'è.
+    /// I tasti in fondo al piede: quelli del modo, o quelli delle azioni.
+    const paintHints = (): void => {
+      hints.replaceChildren();
+      if (actionsOf !== null) {
+        hints.append(hint(ENTER_KEY, t("launcher.hint.run")), hint("Esc", t("launcher.hint.back")));
+        return;
+      }
+      if (mode !== "help") hints.append(hint(ENTER_KEY, t(ENTER_HINT[mode])));
+      if (OPENS_NOTES.includes(mode) && actionable(list.active())) {
+        hints.append(hint(withEnter("Mod-Enter"), t("launcher.hint.split")));
+      }
+      if (actionable(list.active())) hints.append(hint("Tab", t("launcher.hint.actions")));
+    };
+
+    /// L'anteprima segue la nota della riga attiva, dove l'anteprima c'è. Le
+    /// azioni e i tasti seguono la riga attiva.
     function watch(): void {
       const row = list.active();
       preview.follow(surface.hasAttribute("data-preview") && row?.kind === "note" ? row.doc : null);
+      toActions.hidden = actionsOf !== null || !actionable(row);
+      paintHints();
     }
 
     /// Il posto dell'anteprima dipende dal modo e dalla finestra, mai da ciò
@@ -399,39 +468,45 @@ export function mountLauncher(lifetime: Lifetime): Launcher {
       preview.element.hidden = !roomy;
     };
 
-    const show = (answer: Shown): void => {
-      window.clearTimeout(slowTimer);
-      slowTimer = undefined;
-      stale = false;
+    /// Disegna un elenco. Torna quante righe scelte ci sono e la prima.
+    const paint = (answer: Shown): Row | null => {
       setBusy(false);
       // Le righe si ridisegnano tutte: il segno delle lettere cercate dipende
       // dalla domanda, non solo dalla voce.
       list.setItems([]);
       list.setItems(answer.rows);
-      const count = answer.rows.length;
+      const found = answer.rows.filter(selectable);
+      const count = found.length;
+      visible = count;
       input.setAttribute("aria-expanded", String(count > 0));
       rows.hidden = count === 0;
       note.hidden = count > 0;
       note.toggleAttribute("data-failed", answer.failed === true);
       const said = count > 0 ? "" : (answer.note ?? "");
       if (note.textContent !== said) note.textContent = said;
-      const only = answer.rows[0];
       const counted = count === 0
         ? ""
-        : only && only.kind === "create"
-          ? t("launcher.status.create")
-          : answer.total !== null
-            ? t("launcher.status.count_of", { count, total: answer.total })
-            : count === 1
-              ? t("launcher.status.one")
-              : t("launcher.status.count", { count });
+        : answer.total !== null
+          ? t("launcher.status.count_of", { count, total: answer.total })
+          : count === 1
+            ? t("launcher.status.one")
+            : t("launcher.status.count", { count });
       if (status.textContent !== counted) status.textContent = counted;
       rows.scrollTop = 0;
       watch();
+      return found[0] ?? null;
+    };
+
+    const show = (answer: Shown): void => {
+      window.clearTimeout(slowTimer);
+      slowTimer = undefined;
+      stale = false;
+      shown = answer;
+      const only = paint(answer);
       const way = deferred;
       deferred = null;
-      // Un Invio dato alla cieca non crea niente: creare vuole la riga vista.
-      if (way !== null && only && only.kind !== "create") choose(only, way);
+      // Un Invio dato alla cieca va alla prima riga che arriva.
+      if (way !== null && only !== null) choose(only, way);
     };
 
     const failure = (error: unknown): Shown => ({
@@ -472,25 +547,15 @@ export function mountLauncher(lifetime: Lifetime): Launcher {
       else askTimer = window.setTimeout(query, ASK_DELAY_MS);
     };
 
-    const hint = (keys: string, label: string): HTMLElement => {
-      const item = el("span", "launcher-hint");
-      const key = el("kbd", "launcher-key");
-      key.textContent = keys;
-      item.append(key, label);
-      return item;
-    };
-    /// Un accordo con Invio, coi nomi dei modificatori della piattaforma.
-    const withEnter = (chord: string): string => displayBinding(chord).replace("Enter", ENTER_KEY);
-
     const panelChord = el("kbd", "launcher-key");
     panelChord.setAttribute("aria-hidden", "true");
     panelChord.textContent = withEnter(PANEL_CHORD);
     toPanel.append(t("launcher.panel"), panelChord);
-    /// Il controllo c'è per tutto il modo Cerca; senza una domanda da portare
-    /// è spento, non sparito: il piede non si muove mentre si scrive.
+    /// Il controllo c'è per tutto «Tutto»; senza una domanda da portare è
+    /// spento, non sparito: il piede non si muove mentre si scrive.
     const offerPanel = (): void => {
-      toPanel.hidden = mode !== "search";
-      toPanel.disabled = mode !== "search" || toSearchPanel(input.value) === null;
+      toPanel.hidden = mode !== "all";
+      toPanel.disabled = mode !== "all" || toSearchPanel(input.value) === null;
     };
 
     const dress = (): void => {
@@ -498,12 +563,7 @@ export function mountLauncher(lifetime: Lifetime): Launcher {
       const drawn = iconEl(MODE_ICON[mode]);
       if (drawn) lens.append(drawn);
       input.placeholder = t(PLACEHOLDER[mode]);
-      hints.replaceChildren(hint(ENTER_KEY, t(ENTER_HINT[mode])));
-      if (OPENS_NOTES.includes(mode)) {
-        hints.append(hint(withEnter("Mod-Enter"), t("launcher.hint.split")));
-        if (windows) hints.append(hint(withEnter("Alt-Enter"), t("launcher.hint.window")));
-      }
-      hints.append(hint("Tab", t("launcher.hint.mode")));
+      paintHints();
     };
 
     const tabs: TabsHandle = createTabs({
@@ -528,7 +588,7 @@ export function mountLauncher(lifetime: Lifetime): Launcher {
       button.append(glyph);
       button.setAttribute("aria-label", t("launcher.mode.hint", { mode: t(MODE_LABEL[each]), prefix }));
     }
-    /// Tab qui cambia modo e non lascia il campo: nessuna linguetta è una
+    /// Tab qui non cambia modo e non lascia il campo: nessuna linguetta è una
     /// fermata del Tab, e non deve dichiararsi tale. Il kit ne tiene una a
     /// zero (è la sua regola, giusta altrove); qui la si toglie ogni volta.
     const outOfTabOrder = (): void => {
@@ -543,6 +603,8 @@ export function mountLauncher(lifetime: Lifetime): Launcher {
     function setMode(next: Mode, asked?: string): void {
       mode = next;
       deferred = null;
+      actionsOf = null;
+      shown = null;
       const recalled = asked === undefined || asked === "";
       const value = recalled ? memory.recall(next) : asked;
       input.value = value;
@@ -563,7 +625,35 @@ export function mountLauncher(lifetime: Lifetime): Launcher {
       query();
     }
 
+    /// Mostra le azioni della riga: si lasciano con Esc o Tab, e l'elenco di
+    /// prima torna com'era.
+    function enterActions(row: Extract<Row, { kind: "note" | "person" }>): void {
+      if (stale || actionsOf !== null) return;
+      actionsOf = row.doc;
+      window.clearTimeout(askTimer);
+      askTimer = undefined;
+      window.clearTimeout(slowTimer);
+      slowTimer = undefined;
+      race.cancel();
+      const name = pageName(row.doc);
+      paint({ rows: [{ kind: "group", key: "g:actions", title: t("launcher.group.actions", { name }) }, ...actionRows(row.doc)], note: null, total: null });
+      status.textContent = t("launcher.group.actions", { name });
+    }
+
+    /// Torna dalle azioni all'elenco di prima.
+    function leaveActions(): void {
+      if (actionsOf === null) return;
+      actionsOf = null;
+      if (shown !== null) paint(shown);
+      else {
+        stale = true;
+        query();
+      }
+    }
+
     life.listen(input, "input", () => {
+      // Scrivere lascia le azioni: la domanda nuova ha il suo elenco.
+      actionsOf = null;
       const reading: Reading = read(mode, input.value);
       if (reading.mode !== mode || reading.text !== input.value) {
         setMode(reading.mode, reading.text);
@@ -576,29 +666,55 @@ export function mountLauncher(lifetime: Lifetime): Launcher {
     });
 
     life.listen(toPanel, "click", () => carry());
+    life.listen(toActions, "click", () => {
+      if (actionable(list.active())) enterActions(list.active() as Extract<Row, { kind: "note" | "person" }>);
+    });
     // In cattura: è un Invio, e l'elenco non deve prenderlo per una scelta.
     life.listen(surface, "keydown", (event) => {
-      if (event.isComposing || mode !== "search" || !matchesBinding(event, PANEL_CHORD)) return;
+      if (event.isComposing || mode !== "all" || !matchesBinding(event, PANEL_CHORD)) return;
       event.preventDefault();
       event.stopPropagation();
       carry();
+    }, { capture: true });
+    // Esc, dalle azioni, torna all'elenco e non chiude. Il giro del fuoco lo
+    // ascolta dal documento in cattura: qui si arriva prima, dalla finestra.
+    life.listen(window, "keydown", (event) => {
+      if (actionsOf === null || event.key !== "Escape" || event.isComposing) return;
+      event.preventDefault();
+      event.stopPropagation();
+      leaveActions();
     }, { capture: true });
     life.listen(window, "resize", () => {
       makeRoom();
       watch();
     });
 
+    // Maiusc-Invio su una ricerca senza risultati crea la nota col nome scritto.
+    // Con una risposta ancora in arrivo, o con righe, non crea niente.
+    life.listen(input, "keydown", (event) => {
+      if (event.isComposing || event.key !== "Enter" || !event.shiftKey) return;
+      if (mode !== "all" || actionsOf !== null || stale || visible > 0 || !state.vaultRoot) return;
+      const name = searchedName(input.value);
+      if (name === null) return;
+      event.preventDefault();
+      leaveFor(() => createNamed(name));
+    });
+
     life.listen(surface, "keydown", (event) => {
       if (event.isComposing) return;
       if (event.key === "Tab") {
-        // Tab non esce: percorre i modi. Il fuoco resta nel campo.
+        // Tab non esce e non cambia modo: mostra le azioni della riga, o le lascia.
         event.preventDefault();
-        setMode(neighbour(mode, event.shiftKey ? -1 : 1));
+        if (actionsOf !== null) leaveActions();
+        else {
+          const row = list.active();
+          if (actionable(row)) enterActions(row);
+        }
         input.focus();
-      } else if (event.key === "Backspace" && event.target === input && input.value === "" && mode !== "files") {
-        // Cancellare a campo vuoto toglie il modo, come si toglie un prefisso.
+      } else if (event.key === "Backspace" && event.target === input && input.value === "" && mode !== "all") {
+        // Cancellare a campo vuoto riporta a «Tutto», come si toglie un prefisso.
         event.preventDefault();
-        setMode("files");
+        setMode("all");
       }
     });
     // Premere dentro la superficie non toglie il fuoco al campo.
@@ -694,7 +810,7 @@ export function mountLauncher(lifetime: Lifetime): Launcher {
     registerMenuSearch({
       run: (query) => launcher.open("commands", query),
       hint: () => displayBinding(allCommands().find((entry) => entry.id === "shell.palette")?.binding),
-      find: (where, query) => launcher.open(where === "tags" ? "tags" : "search", query),
+      find: (where, query) => launcher.open(where === "tags" ? "tags" : "all", query),
     }),
   );
   lifetime.add(() => launcher.close());
