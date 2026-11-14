@@ -84,10 +84,9 @@ fubdraw://live?h=<ip>:<porta>&s=<sessione>&k=<segreto>&f=<impronta>&n=<nome>
 
 Il primo `hello` valido consuma il segreto. Un segreto sbagliato no: il QR
 resta buono per lo scrittore che lo ha davvero inquadrato. Il quinto segreto
-sbagliato sullo stesso QR però lo brucia: chi arriva al segreto ha già l'id di
-sessione, che sta solo nel QR, quindi cinque errori sono un tentativo e non un
-lettore che sbaglia. La connessione chiude con 4004 e la shell riceve
-`pairingExpired`, come alla scadenza.
+sbagliato sullo stesso QR però lo brucia: l'id di sessione sta solo nel QR,
+quindi cinque errori sono un tentativo, non una svista. La connessione chiude
+con 4004 e la shell riceve `pairingExpired`, come alla scadenza.
 
 `LiveHost::renew_pairing` emette un QR nuovo, con un segreto nuovo valido
 5 minuti. Mentre uno scrittore è collegato la richiesta è rifiutata. Uno

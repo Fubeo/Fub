@@ -107,6 +107,14 @@ non sono voci cestinate: il catalogo e lo svuotamento li escludono senza
 rimuoverli. File utente come `Cargo.lock` e contenuti di directory con nomi
 simili restano invece visibili e conservano le normali regole del cestino.
 
+Svuotare il cestino distrugge soltanto le voci che al censimento avevano già
+un sidecar valido, e ciascuna solo se subito prima della rimozione è ancora lo
+stesso file: identità, dimensione, data e timbro di cambiamento. Una voce che
+un'altra finestra o un altro processo Fub ha sostituito nel frattempo resta,
+col suo sidecar, e non si conta. Fra quell'ultimo controllo e la rimozione
+resta la finestra di una chiamata di sistema: chiuderla vorrebbe un lock
+inter-processo sul vault che il kernel non ha.
+
 ### CAS cooperativa
 
 `RootedFsStorage` coordina i writer Fub tramite un file stabile

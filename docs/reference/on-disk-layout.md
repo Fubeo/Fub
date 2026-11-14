@@ -374,14 +374,6 @@ chiama così, in qualunque cartella. Per una voce che il nome da solo non riport
 al suo path, cioè una nota di una cartella, la cestinatura non avviene senza
 sidecar.
 
-Svuotare il cestino distrugge soltanto le voci che al censimento avevano già
-un sidecar valido, e ciascuna solo se subito prima della rimozione è ancora lo
-stesso file: identità, dimensione, data e timbro di cambiamento. Una voce che
-un'altra finestra o un altro processo Fub ha sostituito nel frattempo resta,
-col suo sidecar, e non si conta. Fra quell'ultimo controllo e la rimozione
-resta la finestra di una chiamata di sistema: chiuderla vorrebbe un lock
-inter-processo sul vault che il kernel non ha.
-
 Lo stato per-documento di una nota cestinata non resta sotto il suo path, che
 torna libero: la cestinatura sposta `doc/<path>/` in `doc~trash/<voce>/`, dove
 `<voce>` è l'id della voce del cestino, codificato come ogni documento. Il
@@ -412,12 +404,6 @@ registro, indici ed eventi restano quelli della cancellazione interna. Su
 Windows e macOS usano il fallback perché il backend OS segnala non supportato.
 Il registro marca il trasferimento OS come non annullabile dai
 comandi interni: il recupero avviene dal cestino del sistema.
-Quando invece è Fub a disfare la mossa, perché un passo dopo il
-trasferimento è fallito, il file torna dal cestino del sistema passando dallo
-storage del vault (`VaultStorage::move_in_no_replace`): la destinazione si
-risolve dentro la radice aperta, con i suoi lucchetti, e una cartella
-diventata un collegamento verso fuori fa fallire il ritorno invece di portare
-il file fuori dal vault.
 
 Anche per il cestino del sistema il path torna libero, ma nessuna voce del
 vault porta la nota indietro: ciò che il sistema ripristina è un file nuovo, che
@@ -477,11 +463,6 @@ si rimuove mai. Un secondo processo riceve `Conflict` con la chiave
 lo stesso host il lease è condiviso: riaprire un vault già aperto, o aprirlo in
 due chiamate concorrenti, non si esclude da solo. Snapshot e azzeramento della
 demo tengono il lease dalla chiusura alla riapertura.
-L'azzeramento apre la cartella della demo senza seguire un collegamento al
-suo posto, legge `.fub-demo.json` da quella cartella aperta e la svuota
-attraverso lo stesso handle; poi toglie per nome la radice rimasta vuota. Una
-cartella messa al posto della demo dopo il controllo non si svuota, e la
-rimozione finale la rifiuta perché non è vuota.
 
 Con il vault aperto nell'app desktop, la CLI e l'host nativo del clipper non
 trovano soltanto `busy`: chiedono all'app per il canale di controllo, e l'app

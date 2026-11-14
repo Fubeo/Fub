@@ -60,6 +60,18 @@ consentire una fuga.
 
 Un handle di transfer non diventa automaticamente un path filesystem.
 
+Quando Fub disfa un trasferimento nel cestino del sistema, il file torna
+passando dallo storage del vault (`VaultStorage::move_in_no_replace`): la
+destinazione si risolve dentro la radice aperta, con i suoi lucchetti, e una
+cartella diventata un collegamento verso fuori fa fallire il ritorno invece di
+portare il file fuori dal vault.
+
+L'azzeramento della demo apre la sua cartella senza seguire un collegamento al
+suo posto, legge `.fub-demo.json` da quella cartella aperta e la svuota
+attraverso lo stesso handle; poi toglie per nome la radice rimasta vuota. Una
+cartella messa al posto della demo dopo il controllo non si svuota, e la
+rimozione finale la rifiuta perché non è vuota.
+
 ## Temi installati
 
 Un tema non riceve capability e non può dichiarare permessi. L'host accetta
