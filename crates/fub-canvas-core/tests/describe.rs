@@ -6,12 +6,17 @@
 //! `apps/client/src/__fixtures__/canvas-read/`, `compile(vuota, code(c), 1)`
 //! dà schede e archi uguali a `c`, nello stesso ordine. La radice sconosciuta
 //! non c'è nel codice (nessuna operazione la scrive), e il giro non la chiede.
+//! L'inchiostro sì: il giro passa anche per i vettori di
+//! `apps/client/src/__fixtures__/canvas-ink/`, e chiede uguale anche il livello
+//! libero quando il codice lo porta.
 
 use std::path::PathBuf;
 
 use std::collections::HashSet;
 
 use fub_canvas_core::describe::{code, json, outline, DescribeOptions};
+use fub_canvas_core::ink::LayerRef;
+use fub_canvas_core::ink::INK_KEY;
 use fub_canvas_core::ops::{compile, CanvasOp, OpError};
 use fub_canvas_core::patch;
 use fub_canvas_core::source::canvas_value;
@@ -23,6 +28,26 @@ use serde_json::{json as j, Value};
 /// vuol dire che la cartella si è persa qualcosa.
 const MIN_OPS_BOARDS: usize = 30;
 const MIN_READ_BOARDS: usize = 30;
+/// Quante lavagne almeno da `canvas-ink` (oggi 28, e si aprono tutte).
+const MIN_INK_BOARDS: usize = 28;
+
+/// Le lavagne il cui inchiostro libero il codice non porta: un livello della
+/// radice estraneo, con un tratto che non si disegna, con campi in più o vuoto.
+/// Come la radice sconosciuta, nessuna operazione lo scrive: lo dà `json`. Chi
+/// aggiunge un vettore così lo scrive qui.
+const BOARD_INK_NOT_IN_CODE: &[&str] = &[
+    "erase-strokes-not-drawn.json (prima)",
+    "move-with-ink.json (prima)",
+    "move-with-ink.json (dopo)",
+    "card-on-board.json",
+    "color-three-digits.json",
+    "layer-not-object.json",
+    "reason-brush.json",
+    "reason-color.json",
+    "reason-ink.json",
+    "reason-order.json",
+    "two-foreign-layers.json",
+];
 
 /// Le lavagne con un id uguale su una scheda e su un arco. Il formato le lascia
 /// (`remove-ambiguous-id.json`), le operazioni no: un id è di una sola cosa.
@@ -397,7 +422,7 @@ type Boards = Vec<(String, Canvas)>;
 /// Le lavagne dei vettori che si aprono, `(nome, lavagna)`: quelle di
 /// `canvas-ops` (la prima, e la seconda quando l'operazione va) e quelle di
 /// `canvas-read`.
-fn opened_boards() -> (Boards, Boards) {
+fn opened_boards() -> (Boards, Boards, Boards) {
     let mut ops_boards = Vec::new();
     for (name, vector) in vectors("canvas-ops") {
         let before: Result<Canvas, _> = serde_json::from_value(vector["before"].clone());
@@ -421,7 +446,14 @@ fn opened_boards() -> (Boards, Boards) {
             read_boards.push((name, canvas));
         }
     }
-    (ops_boards, read_boards)
+    let mut ink_boards = Vec::new();
+    for (name, vector) in vectors("canvas-ink") {
+        let source = vector["source"].as_str().expect("un sorgente");
+        if let Ok(canvas) = parse(source) {
+            ink_boards.push((name, canvas));
+        }
+    }
+    (ops_boards, read_boards, ink_boards)
 }
 
 /// I vettori di una cartella di `apps/client/src/__fixtures__/`, in ordine di nome.
@@ -447,9 +479,11 @@ fn vectors(folder: &str) -> Vec<(String, Value)> {
 }
 
 /// Compila il codice di `canvas` su una lavagna vuota e confronta schede e archi
-/// con quelli di `canvas`, nell'ordine. La radice sconosciuta non si confronta.
+/// con quelli di `canvas`, nell'ordine, e il livello libero se il codice lo
+/// porta. Il resto della radice sconosciuta non si confronta.
 fn round_trip(canvas: &Canvas) -> Result<(), String> {
     let ops = code(canvas, &DescribeOptions::default());
+    let board_ink = carries_board_ink(&ops);
     let compiled = compile(&Canvas::default(), &ops, 1)
         .map_err(|error| format!("il codice non si compila: {error}"))?;
     let mut board = Canvas::default();
@@ -462,7 +496,25 @@ fn round_trip(canvas: &Canvas) -> Result<(), String> {
             "schede o archi diversi\n  dato:   {seen}\n  atteso: {expected}"
         ));
     }
+    if board_ink && seen.get(INK_KEY) != expected.get(INK_KEY) {
+        return Err(format!(
+            "inchiostro libero diverso\n  dato:   {seen}\n  atteso: {expected}"
+        ));
+    }
     Ok(())
+}
+
+/// Il codice porta l'inchiostro libero: una `add_strokes` sulla radice.
+fn carries_board_ink(ops: &[CanvasOp]) -> bool {
+    ops.iter().any(|op| {
+        matches!(
+            op,
+            CanvasOp::AddStrokes {
+                layer: LayerRef::Board,
+                ..
+            }
+        )
+    })
 }
 
 /// Un id uguale su una scheda e su un arco: il caso che le operazioni non
@@ -477,7 +529,7 @@ fn shares_an_id(canvas: &Canvas) -> bool {
 
 #[test]
 fn the_code_of_every_vector_recompiles_to_the_same_board() {
-    let (ops_boards, read_boards) = opened_boards();
+    let (ops_boards, read_boards, ink_boards) = opened_boards();
     assert!(
         ops_boards.len() >= MIN_OPS_BOARDS,
         "{} lavagne da canvas-ops",
@@ -488,10 +540,21 @@ fn the_code_of_every_vector_recompiles_to_the_same_board() {
         "{} lavagne da canvas-read",
         read_boards.len()
     );
+    assert!(
+        ink_boards.len() >= MIN_INK_BOARDS,
+        "{} lavagne da canvas-ink",
+        ink_boards.len()
+    );
 
     let mut failures = Vec::new();
     let mut shared = Vec::new();
-    for (name, canvas) in ops_boards.iter().chain(&read_boards) {
+    let mut board_ink_left = Vec::new();
+    for (name, canvas) in ops_boards.iter().chain(&read_boards).chain(&ink_boards) {
+        if canvas.extra.contains_key(INK_KEY)
+            && !carries_board_ink(&code(canvas, &DescribeOptions::default()))
+        {
+            board_ink_left.push(name.clone());
+        }
         if shares_an_id(canvas) {
             shared.push(name.clone());
             match compile(
@@ -512,5 +575,279 @@ fn the_code_of_every_vector_recompiles_to_the_same_board() {
         shared, SHARED_ID_BOARDS,
         "le lavagne con un id condiviso sono cambiate"
     );
+    assert_eq!(
+        board_ink_left, BOARD_INK_NOT_IN_CODE,
+        "le lavagne con un inchiostro libero che il codice non porta sono cambiate"
+    );
     assert!(failures.is_empty(), "{}", failures.join("\n\n"));
+}
+
+/// Il pennello di serie dei vettori dell'inchiostro, con la penna.
+const BALLPOINT: &str = "pf1 size=3 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=0 pen=ballpoint";
+
+/// La lavagna di un vettore di `canvas-ink`.
+fn ink_vector(name: &str) -> Canvas {
+    let (_, vector) = vectors("canvas-ink")
+        .into_iter()
+        .find(|(file, _)| file == name)
+        .unwrap_or_else(|| panic!("manca il vettore {name}"));
+    board(vector["source"].as_str().expect("un sorgente"))
+}
+
+fn values_of(ops: &[CanvasOp]) -> Vec<Value> {
+    ops.iter()
+        .map(|op| serde_json::to_value(op).unwrap())
+        .collect()
+}
+
+#[test]
+fn the_outline_gives_each_ink_layer_its_strokes_and_their_box() {
+    // La scheda `f1` ha un tratto da 120,5 30,2 a 121,06 30,12; quello libero va
+    // da 40 25 a 42,15 25,3. La riga libera viene subito dopo i conti.
+    assert_eq!(
+        outline(
+            &ink_vector("board-and-card.json"),
+            &DescribeOptions::default()
+        ),
+        "cards 2 edges 0 groups 0 bounds 0 0 980×420\n\
+         ink board 1 40 25 2.2×0.4\n\
+         1 f1 sheet \"Corsi/Statistica/voti.xlsx\" 0 0 640×420 ink=1 120.5 30.1 0.6×0.1\n\
+         2 n2 text \"Perché la media è così bassa?\" 700 40 280×90"
+    );
+}
+
+#[test]
+fn a_stroke_that_is_not_drawn_is_counted_and_left_out_of_the_box() {
+    // Un'ancora `free` su una scheda è fuori posto: il tratto si conta, non si
+    // disegna, e il riquadro è quello dell'altro.
+    let lines = outline(
+        &ink_vector("free-on-card.json"),
+        &DescribeOptions::default(),
+    );
+    assert_eq!(
+        lines.lines().nth(1),
+        Some("1 n1 text \"x\" 0 0 300×200 ink=2 bad=1 120.5 30.1 0.6×0.1")
+    );
+    // Nessun tratto che si disegna: il riquadro è `-`.
+    let lines = outline(
+        &ink_vector("reason-order.json"),
+        &DescribeOptions::default(),
+    );
+    assert_eq!(lines.lines().nth(1), Some("ink board 4 bad=4 -"));
+}
+
+#[test]
+fn a_foreign_layer_is_named_and_not_read() {
+    let lines = outline(
+        &ink_vector("layer-version-two.json"),
+        &DescribeOptions::default(),
+    );
+    assert_eq!(
+        lines.lines().nth(1),
+        Some("1 n1 text \"x\" 0 0 300×200 ink=foreign")
+    );
+    let lines = outline(
+        &ink_vector("two-foreign-layers.json"),
+        &DescribeOptions::default(),
+    );
+    assert!(lines.contains("ink=foreign"), "{lines}");
+}
+
+#[test]
+fn ids_leave_out_the_free_ink() {
+    let canvas = ink_vector("board-and-card.json");
+    let lines = outline(&canvas, &ids(&["f1"]));
+    assert!(!lines.contains("ink board"), "{lines}");
+    assert!(lines.contains("ink=1"), "{lines}");
+    assert!(!carries_board_ink(&code(&canvas, &ids(&["f1"]))));
+    assert!(json(&canvas, &ids(&["f1"])).unwrap().get(INK_KEY).is_none());
+}
+
+#[test]
+fn the_ink_of_an_image_follows_the_card_as_it_is_now() {
+    // Scritto sulla scheda a 100 × 100, la scheda ora è 200 × 100: un'immagine
+    // scala di min(2, 1) = 1 e si centra, quindi tutto va 50 a destra. Una
+    // scheda di nota della stessa misura resta com'era.
+    let source = |file: &str| {
+        j!({"nodes": [{"id": "a", "type": "file", "file": file, "x": 0, "y": 0,
+            "width": 200, "height": 100,
+            INK_KEY: {"v": 1, "strokes": [{"id": "s1", "tool": "pen", "brush": BALLPOINT,
+                "color": "#0072b2", "anchor": {"kind": "card", "width": 100, "height": 100},
+                "ink": "1 s10 cxy 100,200 100,0"}]}}],
+            "edges": []})
+        .to_string()
+    };
+    let image = board(&source("foto.PNG"));
+    let lines = outline(&image, &DescribeOptions::default());
+    assert!(lines.ends_with("ink=1 60 20 10×0"), "{lines}");
+    let model = json(&image, &DescribeOptions::default()).unwrap();
+    let stroke = &model["nodes"][0][INK_KEY]["strokes"][0];
+    assert_eq!(stroke["points"], j!([[60, 20], [70, 20]]));
+    assert_eq!(stroke["size"], 3);
+
+    let note = board(&source("nota.md"));
+    let lines = outline(&note, &DescribeOptions::default());
+    assert!(lines.ends_with("ink=1 10 20 10×0"), "{lines}");
+}
+
+#[test]
+fn code_writes_the_strokes_with_add_strokes_and_their_exact_strings() {
+    let canvas = ink_vector("board-and-card.json");
+    let values = values_of(&code(&canvas, &DescribeOptions::default()));
+    assert_eq!(values.len(), 4);
+    // La scheda torna alla forma breve: il livello non è più un campo
+    // sconosciuto, ma la `add_strokes` che la segue.
+    assert_eq!(values[0]["op"], "add_card");
+    assert_eq!(values[0]["file"], "Corsi/Statistica/voti.xlsx");
+    assert!(values[0].get("node").is_none());
+    assert_eq!(
+        values[1],
+        j!({"op": "add_strokes", "layer": {"node": "f1"}, "strokes": [{
+            "id": "s-mh0k2q1x-4f9a-1", "tool": "pen", "at": "2026-11-02T09:20:31.250Z",
+            "brush": BALLPOINT, "color": "#0072b2",
+            "anchor": {"kind": "card", "width": 640, "height": 420},
+            "ink": "1 s100 cxypt 12050,3020,128,0 25,-3,2,8 31,-5,0,8"}]})
+    );
+    assert_eq!(values[2]["op"], "add_card");
+    assert_eq!(values[3]["op"], "add_strokes");
+    assert_eq!(values[3]["layer"], "board");
+    assert_eq!(
+        values[3]["strokes"][0]["ink"],
+        "1 s100 cxy 4000,2500 120,40 95,-10"
+    );
+    assert_eq!(round_trip(&canvas), Ok(()));
+}
+
+#[test]
+fn code_keeps_a_layer_that_add_strokes_cannot_write_inside_the_card() {
+    // Un tratto che non si disegna, un livello estraneo, un livello con `v`
+    // scritto `1.0`: la scheda va intera, col livello com'è nel file.
+    for name in [
+        "free-on-card.json",
+        "layer-version-two.json",
+        "numbers-by-value.json",
+    ] {
+        let canvas = ink_vector(name);
+        let values = values_of(&code(&canvas, &DescribeOptions::default()));
+        assert!(
+            values
+                .iter()
+                .all(|value| value["op"] != "add_strokes" || value["layer"] == "board"),
+            "{name}: {values:?}"
+        );
+        let expected = canvas_value(&canvas).unwrap();
+        assert_eq!(
+            values[0]["node"][INK_KEY], expected["nodes"][0][INK_KEY],
+            "{name}"
+        );
+        assert_eq!(round_trip(&canvas), Ok(()), "{name}");
+    }
+}
+
+#[test]
+fn json_reads_the_strokes_decoded_and_keeps_those_not_drawn_with_the_reason() {
+    let model = json(
+        &ink_vector("board-and-card.json"),
+        &DescribeOptions::default(),
+    )
+    .unwrap();
+    assert_eq!(
+        model["nodes"][0][INK_KEY],
+        j!({"v": 1, "strokes": [{
+            "id": "s-mh0k2q1x-4f9a-1", "color": "#0072b2", "size": 3, "tool": "pen",
+            "pen": "ballpoint",
+            "bounds": {"x": 120.5, "y": 30.1, "width": 0.6, "height": 0.1},
+            "points": [[120.5, 30.2], [120.8, 30.2], [121.1, 30.1]]}]})
+    );
+    assert_eq!(
+        model[INK_KEY]["strokes"][0]["points"],
+        j!([[40, 25], [41.2, 25.4], [42.2, 25.3]])
+    );
+
+    let model = json(
+        &ink_vector("free-on-card.json"),
+        &DescribeOptions::default(),
+    )
+    .unwrap();
+    let strokes = &model["nodes"][0][INK_KEY]["strokes"];
+    assert_eq!(strokes[0]["bad"], "anchor");
+    assert_eq!(
+        strokes[0]["ink"],
+        "1 s100 cxypt 12050,3020,128,0 25,-3,2,8 31,-5,0,8"
+    );
+    assert!(strokes[1].get("points").is_some());
+
+    // Un livello estraneo resta com'è nel file.
+    let canvas = ink_vector("layer-version-two.json");
+    assert_eq!(
+        json(&canvas, &DescribeOptions::default()).unwrap(),
+        canvas_value(&canvas).unwrap()
+    );
+}
+
+#[test]
+fn json_cuts_a_hundred_thousand_samples_to_max_chars() {
+    // Undici tratti liberi da 10 000 campioni: 110 000 in tutto.
+    let deltas = vec!["1,1"; 9_999].join(" ");
+    let strokes: Vec<Value> = (0..11)
+        .map(|i| {
+            j!({"id": format!("s{i}"), "tool": "pen", "brush": BALLPOINT, "color": "#0072b2",
+                "anchor": {"kind": "free"}, "ink": format!("1 s10 cxy 0,{} {deltas}", i * 10)})
+        })
+        .collect();
+    let canvas =
+        board(&j!({"nodes": [], "edges": [], INK_KEY: {"v": 1, "strokes": strokes}}).to_string());
+    let points = |stroke: &Value| stroke["points"].as_array().unwrap().len();
+
+    let whole = json(&canvas, &DescribeOptions::default()).unwrap();
+    let total: usize = whole[INK_KEY]["strokes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(points)
+        .sum();
+    assert_eq!(total, 110_000);
+
+    let limit = 20_000;
+    let cut = json(
+        &canvas,
+        &DescribeOptions {
+            ids: None,
+            max_chars: Some(limit),
+        },
+    )
+    .unwrap();
+    assert!(cut.to_string().chars().count() <= limit);
+    let strokes = cut[INK_KEY]["strokes"].as_array().unwrap();
+    assert_eq!(strokes.len(), 11, "i tratti restano tutti");
+    let shown: usize = strokes.iter().map(points).sum();
+    let omitted: u64 = strokes
+        .iter()
+        .map(|stroke| stroke["points_omitted"].as_u64().unwrap_or(0))
+        .sum();
+    assert!(shown > 0);
+    assert_eq!(shown as u64 + omitted, 110_000);
+    // Il riquadro resta quello di tutti i punti.
+    assert_eq!(
+        strokes[0]["bounds"],
+        j!({"x": 0, "y": 0, "width": 999.9, "height": 999.9})
+    );
+    // Si taglia dalla fine: i punti mostrati sono i primi, nell'ordine.
+    assert_eq!(strokes[0]["points"][1], j!([0.1, 0.1]));
+    assert_eq!(points(&strokes[10]), 0);
+
+    // Un limite più piccolo del modello senza punti: i tratti escono senza punti.
+    let tiny = json(
+        &canvas,
+        &DescribeOptions {
+            ids: None,
+            max_chars: Some(10),
+        },
+    )
+    .unwrap();
+    assert!(tiny[INK_KEY]["strokes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .all(|stroke| points(stroke) == 0 && stroke["points_omitted"] == 10_000));
 }

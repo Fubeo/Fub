@@ -129,6 +129,9 @@ Una riga di arco è `id da -> a ["etichetta"] [color=…] [fromSide=…] [toSide
 I lati e le punte compaiono solo quando non sono quelli di serie: nessun lato,
 la punta alla fine (`toEnd` assente o `arrow`), nessuna punta in partenza.
 
+L'inchiostro aggiunge `ink=…` alla riga di una scheda e la riga `ink board …`
+dopo i conti: [In codice](canvas-ink.md#in-codice).
+
 Un id che ha solo lettere, cifre o `-_.:#` si scrive com'è. Un id con uno
 spazio o un altro carattere si scrive come stringa JSON, così la riga resta
 leggibile. Le chiavi sono i nomi dei campi del formato (`color`, `fromSide`,
@@ -141,7 +144,8 @@ lavagna: prima una `add_card` per scheda, nel suo ordine, poi una `connect`
 per arco. Ogni scheda e ogni arco vanno in forma breve quando ogni campo ci sta
 (`id`, `x` e `y` sempre; `width` e `height` solo se non sono quelle di nascita;
 il colore con il suo nome); altrimenti sono il loro valore JSON del file, come
-`node` o `edge`, con i campi sconosciuti dentro.
+`node` o `edge`, con i campi sconosciuti dentro. L'inchiostro va con
+`add_strokes` ([In codice](canvas-ink.md#in-codice)).
 
 ```json
 [
@@ -157,7 +161,7 @@ il colore con il suo nome); altrimenti sono il loro valore JSON del file, come
 `json(&Canvas, &DescribeOptions) -> Result<Value, SourceError>` dà il modello
 com'è, come lo scrive il file: `nodes` ed `edges` sempre, anche vuoti, poi la
 radice sconosciuta. Con `ids` la radice sconosciuta non c'è, perché non è di
-una scheda.
+una scheda. I livelli d'inchiostro escono letti, coi tratti decodificati.
 
 ### Le opzioni
 
@@ -166,10 +170,10 @@ una scheda.
 - `ids` tiene quelle schede e gli archi che le collegano fra loro. Un id che non
   è una scheda si ignora, e i conti dicono quante schede ci sono davvero.
   Vale per le tre forme.
-- `max_chars` taglia solo l'outline. Si taglia a righe intere, e l'ultima riga
+- `max_chars` taglia l'outline. Si taglia a righe intere, e l'ultima riga
   dice quante ne restano: `…+N`. La prima riga esce sempre, anche se da sola
-  supera il limite. Il codice e il modello non si tagliano: una lista tagliata
-  non si compila.
+  supera il limite. Del modello taglia solo i punti d'inchiostro. Il codice non
+  si taglia: una lista tagliata non si compila.
 
 ## Il giro
 
@@ -177,8 +181,8 @@ Compilato su una lavagna vuota (`compile`, con un seme qualunque), il codice
 di una lavagna ridà la stessa lavagna: le stesse schede e gli stessi archi,
 nello stesso ordine, con i campi sconosciuti. È la prova che `code` non perde
 nulla, e `crates/fub-canvas-core/tests/describe.rs` la fa su ogni lavagna che
-si apre nei vettori di `canvas-ops/` (prima e dopo l'operazione) e di
-`canvas-read/`.
+si apre nei vettori di `canvas-ops/` (prima e dopo l'operazione), di
+`canvas-read/` e di `canvas-ink/`, inchiostro compreso.
 
 Il giro ha tre casi che non tornano uguali, e sono detti qui:
 
@@ -190,7 +194,8 @@ Il giro ha tre casi che non tornano uguali, e sono detti qui:
 - **La radice sconosciuta.** Un campo che il modello non conosce al livello del
   file (per esempio `"meta": [1, 2]` accanto a `nodes`) non sta in nessuna
   operazione. Lo dà [`json`](#il-modello). I campi sconosciuti di una scheda o di
-  un arco, invece, sono dentro la loro operazione e il giro li conserva.
+  un arco, invece, sono dentro la loro operazione e il giro li conserva. Così
+  anche un livello libero che `add_strokes` non ricrea uguale.
 
 ## Misure e posti
 
