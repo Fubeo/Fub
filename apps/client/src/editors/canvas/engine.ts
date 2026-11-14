@@ -110,6 +110,7 @@ import {
   type SelectionBarStrokes,
 } from "./chrome/selection-bar";
 import { Lasso, LASSO_MIN_STEP, extendLasso, lassoPath, type LassoPoint } from "./lasso";
+import { cardsTouched, edgesBetween, marqueeBox, marqueeMoved, sameIds, unionIds } from "./marquee";
 import type { OptionItem } from "../../kit/options-bar";
 import {
   canvasStatusItems,
@@ -147,7 +148,7 @@ import { PARTS_PICKER_MIN_SECTIONS, openPartsPicker, partsSections, type PartsHe
 import { noteHeadingOf } from "./cards/note";
 import { excerptSourcePath, noteExcerptOf, noteSectionsText, sectionHeading, syncExcerptHead } from "./excerpt";
 import { READER_TAP_MS, READER_TAP_SLOP, openReader, type ReaderHandle } from "./reader";
-import { DEFAULT_PREFERENCES, currentPreferences, readInkMouse, readPen, saveInkMouse, savePen, watchPreferences, type PenButtonAction, type WheelAction } from "./preferences";
+import { DEFAULT_PREFERENCES, currentPreferences, readInkMouse, readPen, saveInkMouse, savePen, watchPreferences, type DragEmptyAction, type PenButtonAction, type WheelAction } from "./preferences";
 import { TAP_MAX_MS, TAP_SLOP_PX, isTap, pinchCamera, type TouchCamera, type TouchPoint, type ZoomLimits } from "./touch";
 import { fit, stepCamera, zoomAtPoint, type Camera, type MotionState, type ScaleLimits } from "../../spatial/camera";
 import { onReducedMotionChange, reducedMotion } from "../../theme/reduced-motion";
@@ -493,6 +494,29 @@ interface LassoLayer {
   readonly chosen: SVGGElement;
   readonly frame: SVGRectElement;
   readonly path: SVGPathElement;
+}
+
+/** Lo strato del rettangolo sullo stage (N6 T20b): un solo riquadro, in coordinate della lavagna. */
+interface MarqueeLayer {
+  readonly svg: SVGSVGElement;
+  readonly box: SVGRectElement;
+}
+
+/**
+ * Un trascinamento nel vuoto con la Selezione (N6 T20b): il rettangolo tra il
+ * punto di partenza e quello di adesso, in coordinate della lavagna. `base` è la
+ * scelta com'era all'inizio, da cui Maiusc aggiunge e Esc torna.
+ */
+interface MarqueeGesture {
+  readonly pointerId: number;
+  readonly startX: number;
+  readonly startY: number;
+  readonly from: { x: number; y: number };
+  to: { x: number; y: number };
+  readonly additive: boolean;
+  /** Il puntatore è andato oltre la soglia: è un rettangolo, non un clic. */
+  moved: boolean;
+  readonly base: { readonly nodes: readonly string[]; readonly edges: readonly string[]; readonly strokes: ReadonlySet<string> };
 }
 
 /** I tratti di `units` per livello, nell'ordine in cui arrivano. */
@@ -1645,6 +1669,8 @@ export class CanvasEngine {
   readonly #labelsSchedule: Schedule;
   /** «La rotella del mouse» dalle Impostazioni: `pan` di serie, come prima di T35. */
   #wheelSetting: WheelAction = DEFAULT_PREFERENCES.wheel;
+  /** «Trascinare nel vuoto» dalle Impostazioni (N6 T20b): `select` di serie, il rettangolo. */
+  #dragEmptySetting: DragEmptyAction = DEFAULT_PREFERENCES.dragEmpty;
   // --- il selettore delle sezioni (T74) ---
   /** «Selettore delle parti» dalle Impostazioni (`canvas.parts_picker`): si apre da sé al rilascio. */
   #partsPickerSetting = DEFAULT_PREFERENCES.partsPicker;
@@ -1785,6 +1811,12 @@ export class CanvasEngine {
   #strokeDrag: StrokeDrag | null = null;
   /** Lo strato del lazo sullo stage, creato la prima volta che serve. */
   #lassoLayer: LassoLayer | null = null;
+  /** Il trascinamento nel vuoto con la Selezione, il rettangolo che sceglie (N6 T20b). */
+  #marquee: MarqueeGesture | null = null;
+  /** Lo strato del rettangolo sullo stage, creato la prima volta che serve. */
+  #marqueeLayer: MarqueeLayer | null = null;
+  /** Il fotogramma che aggiorna la scelta del rettangolo, in attesa. */
+  #marqueeFrame: number | undefined = undefined;
   // --- copia e incolla (T68) ---
   /** «Copia» o «Taglia» del menu mentre manda la copia del browser: l'evento è nostro anche col fuoco nel menu. */
   #clipboardCommand: "copy" | "cut" | null = null;
@@ -1891,6 +1923,9 @@ export class CanvasEngine {
     // (`canvas.toolbar`), dal vivo; la lettura arriva dopo il costruttore.
     this.#life.add(watchPreferences((preferences) => {
       this.#wheelSetting = preferences.wheel;
+      // Il trascinamento nel vuoto (N6 T20b) vale dal gesto dopo; la riga dice il gesto di adesso.
+      this.#dragEmptySetting = preferences.dragEmpty;
+      this.#canvasOptions.sync();
       this.#penButtonSetting = preferences.penButton;
       this.#partsPickerSetting = preferences.partsPicker;
       this.#gridSetting = preferences.grid;
@@ -2087,6 +2122,7 @@ export class CanvasEngine {
       swatches: () => this.#colorSwatches(),
       activeCard: () => this.#besideHere() !== null,
       simple: () => this.#workspace.workspace === "simple",
+      dragEmpty: () => this.#dragEmptySetting,
     });
     // La barra della selezione (T51): una sorella della vista, come il
     // navigatore, così i suoi clic non passano dal puntatore della lavagna.
@@ -2649,6 +2685,7 @@ export class CanvasEngine {
     // L'ultima vista si scrive adesso; dopo, nessuna scrittura parte più.
     this.#viewMemo?.close();
     this.#destroyed = true;
+    if (this.#marquee !== null) this.#stopMarquee();
     clearTimeout(this.#pauseTimer);
     this.#pauseTimer = undefined;
     clearTimeout(this.#wheelTimer);
@@ -8625,8 +8662,185 @@ export class CanvasEngine {
       this.#placeText(event.clientX, event.clientY);
       return;
     }
+    // Col mouse e con la Selezione, il vuoto sceglie con un rettangolo (N6 T20b);
+    // con «sposta la vista» resta il comportamento di prima, qui sotto. Il dito e
+    // la penna nel vuoto spostano sempre la vista, e arrivano da un'altra strada.
+    if (event.pointerType === "mouse" && this.#tool === "select" && this.#doc && this.#dragEmptySetting === "select"
+      && !this.#isSceneOversized()) {
+      this.#beginMarquee(event);
+      return;
+    }
     if (!event.shiftKey) this.#clearSelection();
     this.#beginPan(event.pointerId, event.clientX, event.clientY);
+  }
+
+  /**
+   * Il trascinamento sinistro sul vuoto con la Selezione (N6 T20b) comincia il
+   * rettangolo: il puntatore è preso dalla lavagna, e il fuoco va sulla vista, così
+   * Esc arriva. Il clic non cambia ancora la scelta: lo fa il rilascio. Il
+   * rettangolo si disegna al movimento; la scelta si aggiorna una volta per
+   * fotogramma, e a fine gesto.
+   */
+  #beginMarquee(event: PointerEvent): void {
+    const at = this.#screenToWorld(event.clientX, event.clientY);
+    this.#marquee = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      from: at,
+      to: at,
+      additive: event.shiftKey,
+      moved: false,
+      base: { nodes: [...this.#selection], edges: [...this.#edgeSelection], strokes: new Set(this.#strokeSelection) },
+    };
+    this.#viewport.setPointerCapture?.(event.pointerId);
+    this.#viewport.focus({ preventScroll: true });
+    event.preventDefault();
+  }
+
+  /** Il puntatore del rettangolo si muove: il riquadro segue subito, la scelta aspetta il fotogramma. */
+  #moveMarquee(event: PointerEvent): void {
+    const marquee = this.#marquee;
+    if (!marquee) return;
+    marquee.to = this.#screenToWorld(event.clientX, event.clientY);
+    if (!marquee.moved) {
+      if (!marqueeMoved(marquee.startX, marquee.startY, event.clientX, event.clientY)) return;
+      marquee.moved = true;
+    }
+    this.#paintMarquee(marquee);
+    this.#scheduleMarquee();
+  }
+
+  /**
+   * Lo strato del rettangolo sullo stage, creato la prima volta che serve e poi lo
+   * stesso. Si aggiunge allo stage quando serve, e non a ogni movimento: ogni
+   * spostamento di un figlio dello stage rifà lo stile di ciò che gli sta attorno.
+   */
+  #marqueeLayerNow(): MarqueeLayer {
+    let layer = this.#marqueeLayer;
+    if (!layer) {
+      const ns = "http://www.w3.org/2000/svg";
+      const svg = document.createElementNS(ns, "svg");
+      svg.setAttribute("class", "canvas-marquee");
+      svg.setAttribute("aria-hidden", "true");
+      const box = document.createElementNS(ns, "rect");
+      box.setAttribute("class", "canvas-marquee-box");
+      svg.append(box);
+      layer = { svg, box };
+      this.#marqueeLayer = layer;
+    }
+    if (layer.svg.parentElement !== this.#stage) this.#stage.append(layer.svg);
+    return layer;
+  }
+
+  /** Disegna il rettangolo del gesto nel suo strato: quattro attributi, nessuna scheda toccata. */
+  #paintMarquee(marquee: MarqueeGesture): void {
+    const layer = this.#marqueeLayerNow();
+    const box = marqueeBox(marquee.from, marquee.to);
+    layer.box.setAttribute("x", String(box.minX));
+    layer.box.setAttribute("y", String(box.minY));
+    layer.box.setAttribute("width", String(box.maxX - box.minX));
+    layer.box.setAttribute("height", String(box.maxY - box.minY));
+  }
+
+  /** Chiede un fotogramma per la scelta, se non ce n'è già uno in attesa. */
+  #scheduleMarquee(): void {
+    if (this.#marqueeFrame === undefined) this.#marqueeFrame = requestAnimationFrame(() => this.#marqueeStep());
+  }
+
+  /** Il fotogramma del rettangolo: la scelta si rifà una volta, con il rettangolo di adesso. */
+  #marqueeStep(): void {
+    this.#marqueeFrame = undefined;
+    const marquee = this.#marquee;
+    if (marquee !== null && marquee.moved && !this.#destroyed) this.#applyMarquee(marquee);
+  }
+
+  /** La scelta che il rettangolo fa adesso: le schede che tocca (più quelle di prima, con Maiusc) e i fili fra due di loro. */
+  #applyMarquee(marquee: MarqueeGesture): void {
+    const doc = this.#doc;
+    if (!doc) return;
+    const touched = cardsTouched(marqueeBox(marquee.from, marquee.to), doc.nodes);
+    const nodes = marquee.additive ? unionIds(marquee.base.nodes, touched) : touched;
+    const edges = edgesBetween(new Set(nodes), doc.edges);
+    this.#setChoice(
+      nodes,
+      marquee.additive ? unionIds(marquee.base.edges, edges) : edges,
+      marquee.additive ? marquee.base.strokes : new Set(),
+    );
+  }
+
+  /**
+   * Mette la scelta a `nodes`, `edges` e `strokes` e la mostra sullo stage. Solo le
+   * schede che cambiano stato toccano la classe, e i fili si rifanno solo se la
+   * loro scelta cambia: un fotogramma che non sposta niente non tocca lo stage.
+   * La riga delle opzioni e la barra dei comandi si rifanno solo quando la scelta
+   * passa da vuota a piena o viceversa, e lo stato verso chi ascolta (l'ispettore)
+   * solo a fine gesto, come il lazo: a ogni fotogramma costano troppo (N6 T20b).
+   * A fine gesto le rifà chi chiama.
+   */
+  #setChoice(nodes: readonly string[], edges: readonly string[], strokes: ReadonlySet<string>): void {
+    const was = new Set(this.#selection);
+    const next = new Set(nodes);
+    const changed = new Set<string>();
+    for (const id of was) if (!next.has(id)) changed.add(id);
+    for (const id of next) if (!was.has(id)) changed.add(id);
+    const edgesChanged = !sameIds(this.#edgeSelection, edges);
+    const strokesChanged = !sameIds(this.#strokeSelection, strokes);
+    if (changed.size === 0 && !edgesChanged && !strokesChanged) return;
+    this.#selection = [...nodes];
+    this.#edgeSelection = [...edges];
+    this.#strokeSelection = new Set(strokes);
+    if (changed.size > 0) {
+      for (const el of this.#stage.querySelectorAll<HTMLElement>(".canvas-node")) {
+        const id = el.dataset.node ?? "";
+        if (changed.has(id)) el.classList.toggle("selected", next.has(id));
+      }
+    }
+    if (edgesChanged && this.#doc && !this.#isSceneOversized()) this.#drawEdges();
+    if (strokesChanged) this.#paintLasso();
+    this.#syncSelectionFrame();
+    if ((was.size === 0) !== (next.size === 0)) this.#drawToolbar();
+  }
+
+  /**
+   * Il rettangolo finisce col rilascio, con la cattura persa o con la finestra
+   * (una volta sola). Uno spostato lascia la scelta dove il rettangolo l'ha
+   * portata; un clic senza spostamento toglie la scelta, come prima, se non c'è
+   * Maiusc.
+   */
+  #endMarquee(): void {
+    const marquee = this.#marquee;
+    if (marquee === null) return;
+    if (marquee.moved) this.#applyMarquee(marquee);
+    else if (!marquee.additive) this.#clearSelection();
+    this.#stopMarquee();
+    // La riga, la barra dei comandi e chi ascolta la scelta si rifanno a fine gesto, con la scelta di adesso.
+    if (marquee.moved) this.#settleChoice();
+  }
+
+  /** Esc: il rettangolo si annulla e la scelta torna com'era prima del trascinamento. */
+  #cancelMarquee(): void {
+    const marquee = this.#marquee;
+    if (marquee === null) return;
+    this.#stopMarquee();
+    if (marquee.moved) {
+      this.#setChoice(marquee.base.nodes, marquee.base.edges, marquee.base.strokes);
+      this.#settleChoice();
+    }
+  }
+
+  /** La scelta del rettangolo è quella finale: la riga e la barra si rifanno, e chi ascolta la scelta ne è avvisato una volta. */
+  #settleChoice(): void {
+    this.#drawToolbar();
+    this.#options.onSelectionChange();
+  }
+
+  /** Il rettangolo smette: il fotogramma in attesa si ferma e lo strato esce dallo stage. */
+  #stopMarquee(): void {
+    this.#marquee = null;
+    if (this.#marqueeFrame !== undefined) cancelAnimationFrame(this.#marqueeFrame);
+    this.#marqueeFrame = undefined;
+    this.#marqueeLayer?.svg.remove();
   }
 
   /**
@@ -9060,8 +9274,9 @@ export class CanvasEngine {
   /**
    * Un gesto della lavagna è aperto per il puntatore `pointerId`: lo spostamento
    * della vista, il trascinamento di una scheda o di un tratto del Lazo, il
-   * ridimensionamento, il filo, il giro del Lazo, il pizzico e il dito, il tocco
-   * lungo, il menu radiale che il puntatore tiene. Il tratto della penna no:
+   * ridimensionamento, il filo, il giro del Lazo, il rettangolo della Selezione
+   * (N6 T20b), il pizzico e il dito, il tocco lungo, il menu radiale che il
+   * puntatore tiene. Il tratto della penna no:
    * lo tiene l'adattatore dell'inchiostro (`ink/dom/pointer-adapter.ts`), che
    * lo annulla alla cattura persa e alla finestra.
    */
@@ -9069,6 +9284,7 @@ export class CanvasEngine {
     return this.#pan?.pointerId === pointerId || this.#tap?.pointerId === pointerId
       || this.#drag?.pointerId === pointerId || this.#resize?.pointerId === pointerId
       || this.#connect?.pointerId === pointerId || this.#lasso?.pointerId === pointerId
+      || this.#marquee?.pointerId === pointerId
       || this.#strokeDrag?.pointerId === pointerId || this.#edgeScroll?.pointerId === pointerId
       || this.#longPress?.pointerId === pointerId || this.#pinch?.a === pointerId || this.#pinch?.b === pointerId
       || this.#fingers.has(pointerId) || this.#menuHeld === pointerId;
@@ -9308,14 +9524,17 @@ export class CanvasEngine {
   #resizableSelection(): string[] {
     const doc = this.#doc;
     if (!doc) return [];
-    return this.#selection.filter((id) => doc.nodes.some((node) => node.id === id));
+    // Un insieme, non una ricerca per ogni scelta: il rettangolo (N6 T20b) lo rifà a ogni fotogramma.
+    const present = new Set(doc.nodes.map((node) => node.id));
+    return this.#selection.filter((id) => present.has(id));
   }
 
   /** Il rettangolo attorno alle schede `ids` del documento di adesso. */
   #boxOf(ids: readonly string[]): ResizeBox | null {
     const doc = this.#doc;
     if (!doc) return null;
-    return boxAround(ids.flatMap((id) => doc.nodes.filter((node) => node.id === id)));
+    const wanted = new Set(ids);
+    return boxAround(doc.nodes.filter((node) => wanted.has(node.id)));
   }
 
   /** Le maniglie che una cornice mostra a questo zoom: troppo piccola, solo quella in basso a destra. */
@@ -9413,8 +9632,13 @@ export class CanvasEngine {
   #syncSelectionFrame(): void {
     const ids = !this.#readOnly && !this.#isSceneOversized() ? this.#resizableSelection() : [];
     const box = ids.length >= 2 ? this.#boxOf(ids) : null;
-    if (box) this.#stage.dataset.selection = "many";
-    else delete this.#stage.dataset.selection;
+    // Scrivere lo stesso valore non deve rifare lo stile delle maniglie di ogni
+    // scheda: la regola `[data-selection="many"] > .canvas-node` le legge tutte (N6 T20b).
+    if (box) {
+      if (this.#stage.dataset.selection !== "many") this.#stage.dataset.selection = "many";
+    } else if (this.#stage.dataset.selection !== undefined) {
+      delete this.#stage.dataset.selection;
+    }
     if (!box) {
       this.#selectionFrame?.remove();
       return;
@@ -9503,6 +9727,10 @@ export class CanvasEngine {
     if (event.pointerType === "touch" && this.#touchMove(event)) return;
     if (this.#lasso && event.pointerId === this.#lasso.pointerId) {
       this.#moveLasso(event);
+      return;
+    }
+    if (this.#marquee && event.pointerId === this.#marquee.pointerId) {
+      this.#moveMarquee(event);
       return;
     }
     if (this.#strokeDrag && event.pointerId === this.#strokeDrag.pointerId) {
@@ -9655,6 +9883,10 @@ export class CanvasEngine {
     }
     if (this.#lasso && event.pointerId === this.#lasso.pointerId) {
       this.#endLasso();
+      return;
+    }
+    if (this.#marquee && event.pointerId === this.#marquee.pointerId) {
+      this.#endMarquee();
       return;
     }
     if (this.#strokeDrag && event.pointerId === this.#strokeDrag.pointerId) {
@@ -9952,6 +10184,9 @@ export class CanvasEngine {
       this.#lasso = null;
       this.#paintLasso();
     }
+    // Il rettangolo fermato lascia la scelta com'è (N6 T20b): un documento nuovo la
+    // rifà da sé, e un puntatore annullato non la tocca.
+    if (this.#marquee !== null) this.#stopMarquee();
     this.#hideGuides();
     this.#pan = null;
     this.#endConnect();
@@ -10127,6 +10362,12 @@ export class CanvasEngine {
       this.#cancelConnect();
       return;
     }
+    // Esc mentre si trascina il rettangolo lo annulla, e la scelta torna com'era (N6 T20b).
+    if (event.key === "Escape" && this.#marquee !== null) {
+      event.preventDefault();
+      this.#cancelMarquee();
+      return;
+    }
     // D da solo, fuori dai campi: il mouse scrive finché il tasto è giù
     // (regola 1). La ripetizione del tasto non cambia niente.
     if (isInkKey(event) && !event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey
@@ -10288,10 +10529,14 @@ export class CanvasEngine {
 
   // --- le schede vive ---------------------------------------------------------
 
-  /** Un gesto che muove la vista o le schede: il puntatore è ancora giù. */
+  /**
+   * Un gesto che muove la vista o le schede: il puntatore è ancora giù. Il
+   * rettangolo della Selezione conta da quando si è mosso: finché è un clic, non è
+   * ancora un gesto (N6 T20b).
+   */
   #gestureMoving(): boolean {
     return this.#drag !== null || this.#resize !== null || this.#pan !== null || this.#pinch !== null
-      || this.#lasso !== null || this.#strokeDrag !== null;
+      || this.#lasso !== null || this.#strokeDrag !== null || this.#marquee?.moved === true;
   }
 
   /** Un gesto in corso, rotella, volo e inerzia compresi (T53): nessuna scheda cambia modo. */

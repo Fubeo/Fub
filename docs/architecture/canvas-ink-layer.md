@@ -59,7 +59,7 @@ coordinate della lavagna e `onEraseEnd`.
   `ink/dom/idle.ts`, che la fa girare quando il thread è libero
   (`requestIdleCallback` con un `timeout`, altrimenti `setTimeout(0)`). Una
   penna che torna giù prima annulla la consegna.
-- **Le preferenze.** `editors/canvas/preferences.ts` legge le dodici
+- **Le preferenze.** `editors/canvas/preferences.ts` legge le tredici
   impostazioni di `fub.lavagna` (`lavagna.rs`). `watchPreferences` le segue
   con `setting_changed` e torna il disposer. Una cartella dei file trascinati
   non valida vale `Allegati` (`dropFolderPathOf`); dove vanno i file dal

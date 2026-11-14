@@ -340,7 +340,7 @@ e il suo motore decide dove va il tratto finito: l'una e l'altra cosa stanno in
 | un tratto è una toppa, un commit e un passo; il ridisegno aspetta la penna | `editors/canvas/engine-ink.test.ts` |
 | la gomma prende il tratto dove si vede, cancella o taglia in un passo; D fa scrivere il mouse; il menu vale dal tratto dopo | `editors/canvas/ink-erase.test.ts`, `editors/canvas/engine-ink.test.ts`, `editors/canvas/pen-menu.test.ts` |
 | il dito sposta e pizzica la lavagna; la penna, anche sospesa, lo ferma | `editors/canvas/touch.test.ts`, `editors/canvas/engine-touch.test.ts` |
-| Rust e client nominano, ordinano e danno gli stessi default alle dodici impostazioni della lavagna; un valore sbagliato vale il default | `editors/canvas/settings-mirror.test.ts`, `editors/canvas/preferences.test.ts`, `fub-host/tests/lavagna_feature.rs` |
+| Rust e client nominano, ordinano e danno gli stessi default alle tredici impostazioni della lavagna; un valore sbagliato vale il default | `editors/canvas/settings-mirror.test.ts`, `editors/canvas/preferences.test.ts`, `fub-host/tests/lavagna_feature.rs` |
 | un puntatore fermo resta fermo nella scena se la vista si muove | `ink/dom/pointer-adapter.test.ts`, `tools/editor.test.ts` |
 
 Il percorso caldo ha due banchi:

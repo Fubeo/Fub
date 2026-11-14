@@ -61,6 +61,7 @@ import {
 } from "./commands";
 import { ensureCanvasIcons } from "./icons";
 import { TEXT_ALIGNS, TEXT_SIZES, type TextAlign, type TextSize } from "../text-style";
+import type { DragEmptyAction } from "../../../rules/canvas-settings";
 
 /// Che cosa mostra la riga.
 export type CanvasOptionsMode = "ink" | "select" | "lasso" | "cards" | "hand" | "text" | "connect" | "writing";
@@ -119,6 +120,9 @@ export interface CanvasOptionsContext {
   readonly activeCard?: () => boolean;
   /// Lo spazio Semplice (T65): la riga ridotta. Senza, mai.
   readonly simple?: () => boolean;
+  /// «Trascinare nel vuoto» (N6 T20b): il suggerimento della Selezione dice il gesto
+  /// che c'è. Senza, dice «sceglie», il gesto di serie.
+  readonly dragEmpty?: () => DragEmptyAction;
 }
 
 export interface CanvasOptions {
@@ -506,7 +510,8 @@ export function createCanvasOptions(ctx: CanvasOptionsContext): CanvasOptions {
     // Il nome di «Apri a lato per questo» dice il punto, e cambia con lui.
     const besideLabel = catalog.get("canvas.open_beside_here")?.label ?? "";
     if (besideName.textContent !== besideLabel) besideName.textContent = besideLabel;
-    const key = shown ? HINT[shown] : undefined;
+    // Con la Selezione il suggerimento dice il gesto che «Trascinare nel vuoto» ha scelto (N6 T20b).
+    const key = shown === "select" && ctx.dragEmpty?.() === "pan" ? "canvas.options.select_hint_pan" : shown ? HINT[shown] : undefined;
     const text = key ? t(key) : "";
     if (hint.textContent !== text) hint.textContent = text;
     element.setAttribute("aria-label", t("canvas.options"));

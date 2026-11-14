@@ -2,7 +2,8 @@
 // Il gesto che perde il rilascio (N6 T20a): la cattura persa, un movimento
 // senza tasto e la finestra che perde il fuoco chiudono il gesto come un
 // rilascio, una volta sola. Lo spostamento della vista, il trascinamento di una
-// scheda e il dito si fermano dove sono, le schede vive tornano come dopo un
+// scheda, il rettangolo della Selezione (N6 T20b) e il dito si fermano dove sono,
+// le schede vive tornano come dopo un
 // rilascio, e il rilascio che arriva dopo non fa niente. Il gesto di un
 // puntatore non chiude quello di un altro. Il tratto della penna non è qui: lo
 // chiude l'adattatore di N4 (`ink/dom/pointer-adapter.ts`).
@@ -227,6 +228,28 @@ describe("il gesto che perde il rilascio si chiude come un rilascio (T20a)", () 
         expect(liveOf(host)).toEqual(["a", "b"]);
         engine.destroy();
       });
+    });
+  }
+
+  for (const closing of MOUSE_CLOSINGS) {
+    it(`il rettangolo della Selezione chiuso con ${closing.name} resta com'è, e il rilascio che arriva dopo non sceglie di nuovo (N6 T20b)`, () => {
+      const { engine, host, changes } = mounted(BOARD);
+      const viewport = viewportOf(host);
+      // I punti sono della lavagna: la vista di `setDoc` non sta in (0, 0).
+      const camera = cameraOf(host);
+      const screen = (x: number, y: number) => at(x * camera.zoom + camera.x, y * camera.zoom + camera.y);
+      pointer(viewport, "pointerdown", { pointerId: 1, button: 0, buttons: 1, ...screen(-50, -50) });
+      pointer(viewport, "pointermove", { pointerId: 1, buttons: 1, ...screen(250, 150) });
+      closing.close(viewport, 1, "mouse", screen(250, 150));
+      // Chiuso, il rettangolo ha già scelto «a»: senza aspettare un fotogramma.
+      expect(engine.selection().nodes).toEqual(["a"]);
+      expect(host.querySelector(".canvas-marquee")).toBeNull();
+      // Un movimento dopo la chiusura non sceglie, e il rilascio tardivo non fa niente.
+      pointer(viewport, "pointermove", { pointerId: 1, buttons: 0, ...screen(700, 300) });
+      pointer(viewport, "pointerup", { pointerId: 1, button: 0, buttons: 0, ...screen(700, 300) });
+      expect(engine.selection().nodes).toEqual(["a"]);
+      expect(changes).toEqual([]);
+      engine.destroy();
     });
   }
 

@@ -3005,6 +3005,13 @@
 .canvas-lasso-chosen > path {
   stroke: var(--accent);
 }
+/* Il rettangolo del trascinamento nel vuoto (N6 T20b): un velo d'accento
+   trasparente, così le schede sotto restano leggibili, e il bordo pieno, come il
+   giro del Lazo ma senza tratteggio, così si distingue. */
+.canvas-marquee-box {
+  fill: color-mix(in srgb, var(--accent) 14%, transparent);
+  stroke: var(--accent);
+}
 /* Il righello (T87): una riga velata sopra la lavagna, coi bordi e le tacche
    ogni 10 e 50 pixel dal centro, l'angolo in mezzo su una pastiglia. */
 .canvas-ruler-bar {

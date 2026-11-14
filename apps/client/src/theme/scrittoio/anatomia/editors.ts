@@ -116,6 +116,9 @@ export const EDITORS: PartAnatomy = {
     // Il Lazo (T86): il giro, la cornice dei tratti scelti e il loro
     // contorno, segni di Fub sulla lavagna.
     { name: "canvas-lasso", layers: { "canvas-lasso-path": "segno", "canvas-lasso-frame": "segno", "canvas-lasso-chosen": "segno" }, states: REST, hooks: ["canvas-lasso-path", "canvas-lasso-frame", "canvas-lasso-chosen"] },
+    // Il rettangolo del trascinamento nel vuoto con la Selezione (N6 T20b): il
+    // velo e il bordo, segno di Fub sulla lavagna.
+    { name: "canvas-marquee", layers: { "canvas-marquee-box": "segno" }, states: REST, hooks: ["canvas-marquee-box"] },
     // Il righello (T87): la riga velata con le tacche e l'angolo, sopra la
     // lavagna; il suo corpo si sposta e prende il fuoco.
     { name: "canvas-ruler", states: [S("rest"), S("focused")], hooks: ["canvas-ruler-bar", "canvas-ruler-grip", "canvas-ruler-angle"] },

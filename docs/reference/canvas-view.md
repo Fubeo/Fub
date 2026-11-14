@@ -53,6 +53,10 @@ sono quelli di `spatial/camera.ts` (`zoomAtPoint`, `fit`, `stepCamera`).
   senza premere) con una sola scheda di nota scelta apre il lettore
   ([Il lettore](canvas-parts.md#il-lettore)). Lo spostamento non aspetta il
   tocco: la vista si muove subito, e un tocco si riconosce solo al rilascio.
+- **Il trascinamento nel vuoto** col mouse e con la Selezione, di serie, disegna
+  un rettangolo che sceglie le schede che tocca; l'impostazione «Trascinare nel
+  vuoto» lo riporta a spostare la vista, come prima
+  ([Il trascinamento nel vuoto](canvas-input.md#il-trascinamento-nel-vuoto)).
 - **Il tasto centrale** trascina e sposta, senza scegliere. Ctrl, Cmd e Alt
   con un trascinamento nel vuoto spostano come prima; Alt dal corpo di una
   scheda tira un filo ([I fili](canvas-input.md#i-fili)).

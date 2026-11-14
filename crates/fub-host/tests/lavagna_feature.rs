@@ -19,13 +19,14 @@ use camino::{Utf8Path, Utf8PathBuf};
 use fub_abi::settings::SettingValue;
 use fub_kernel::{MachineSettings, SystemLocale, ViewStates};
 
-/// Le cinque impostazioni della macchina, nell'ordine del pannello.
-const MACHINE_KEYS: [&str; 5] = [
+/// Le sei impostazioni della macchina, nell'ordine del pannello.
+const MACHINE_KEYS: [&str; 6] = [
     "canvas.ink_mouse_remember",
     "canvas.finger_moves_card",
     "canvas.finger_writes",
     "canvas.pen_button",
     "canvas.wheel",
+    "canvas.drag_empty",
 ];
 
 /// Le sette impostazioni del vault, nell'ordine del pannello.
@@ -39,7 +40,7 @@ const VAULT_KEYS: [&str; 7] = [
     "canvas.drop_folder_path",
 ];
 
-/// Le dodici chiavi, nell'ordine del pannello.
+/// Le tredici chiavi, nell'ordine del pannello.
 fn all_keys() -> Vec<&'static str> {
     MACHINE_KEYS.into_iter().chain(VAULT_KEYS).collect()
 }
@@ -53,6 +54,7 @@ fn defaults() -> Vec<SettingValue> {
         SettingValue::Toggle(false),
         SettingValue::Text("radial".into()),
         SettingValue::Text("pan".into()),
+        SettingValue::Text("select".into()),
         SettingValue::Text("auto".into()),
         SettingValue::List(Vec::new()),
         SettingValue::Toggle(true),
@@ -174,6 +176,11 @@ fn the_whiteboard_settings_exist_only_with_the_lavagna_feature() {
                 "canvas.wheel",
                 SettingValue::Text("zoom".into()),
                 SettingValue::Text("ruota".into()),
+            ),
+            (
+                "canvas.drag_empty",
+                SettingValue::Text("pan".into()),
+                SettingValue::Text("disegna".into()),
             ),
             (
                 "canvas.workspace",

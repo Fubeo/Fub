@@ -416,7 +416,7 @@ describe("la barra di una scheda in scrittura (T41, T42)", () => {
 });
 
 describe("la riga da sola", () => {
-  function standalone(tool: CanvasToolId = "select", chosen = 2) {
+  function standalone(tool: CanvasToolId = "select", chosen = 2, drag: "select" | "pan" = "select") {
     const lifetime = openLifetime();
     const ran: string[] = [];
     const command = (id: string): CanvasCommand => ({
@@ -436,11 +436,20 @@ describe("la riga da sola", () => {
       commands: () => commands,
       run: (id) => ran.push(id),
       penMenu,
+      dragEmpty: () => drag,
     });
     document.body.append(options.element);
     options.sync();
     return { options, lifetime, ran };
   }
+
+  it("il suggerimento della Selezione dice il gesto di «Trascinare nel vuoto» (N6 T20b)", () => {
+    const hint = (drag: "select" | "pan") => standalone("select", 0, drag).options.element.querySelector(".canvas-options-hint")!.textContent;
+    // Di serie il vuoto sceglie; con «sposta la vista» il suggerimento dice il trascinamento che sposta.
+    expect(hint("select")).toBe(t("canvas.options.select_hint"));
+    expect(hint("pan")).toBe(t("canvas.options.select_hint_pan"));
+    expect(hint("pan")).not.toBe(hint("select"));
+  });
 
   it("a 700 px la Vista va per prima in «…»", () => {
     const { options, lifetime } = standalone();

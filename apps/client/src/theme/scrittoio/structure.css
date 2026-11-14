@@ -3498,6 +3498,22 @@ body:has(#context-menu:not([hidden])) > .toast-stack {
   stroke-dasharray: 5 4;
 }
 
+/* Il rettangolo del trascinamento nel vuoto con la Selezione (N6 T20b): uno
+   strato sopra le schede, in coordinate della lavagna, che non prende il
+   puntatore; il contorno resta sottile a ogni zoom. */
+.canvas-marquee {
+  position: absolute;
+  top: 0;
+  left: 0;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.canvas-marquee-box {
+  stroke-width: 1.5px;
+  vector-effect: non-scaling-stroke;
+}
+
 /* Il righello (T87): un fratello della vista, sopra di lei, che non prende il
    puntatore; la riga è larga quanto basta a passare da un bordo all'altro a
    ogni angolo, con il centro e l'angolo dalla lavagna (`--canvas-ruler-x`,

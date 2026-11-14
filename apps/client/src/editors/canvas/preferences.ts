@@ -1,6 +1,6 @@
 // Le preferenze della lavagna su questo computer.
 //
-// - **Le dodici impostazioni** del gruppo «Lavagna» che il bundle `fub.lavagna`
+// - **Le tredici impostazioni** del gruppo «Lavagna» che il bundle `fub.lavagna`
 //   dichiara (`crates/fub-features/src/lavagna.rs`), ciascuna col suo valore di
 //   serie. Si leggono dal canale dati e si seguono con `setting_changed`, così
 //   un cambio nelle Impostazioni, anche da un'altra finestra, vale subito nelle
@@ -35,6 +35,7 @@ import { DEFAULT_INK_CHOICE, inkWidthOf, type InkPenChoice, type InkPenKind } fr
 import {
   DEFAULT_PREFERENCES,
   DROP_FOLDER_KEY,
+  DRAG_EMPTY_KEY,
   DROP_FOLDER_PATH_KEY,
   FINGER_MOVES_CARD_KEY,
   FINGER_WRITES_KEY,
@@ -62,6 +63,7 @@ const FOLLOWED_KEYS: ReadonlySet<string> = new Set([
   FINGER_WRITES_KEY,
   PEN_BUTTON_KEY,
   WHEEL_KEY,
+  DRAG_EMPTY_KEY,
   WORKSPACE_KEY,
   TOOLBAR_KEY,
   GRID_KEY,
@@ -105,7 +107,7 @@ async function readPreferences(): Promise<CanvasPreferences> {
   }
 }
 
-/// Legge le impostazioni adesso e a ogni cambio delle dodici chiavi, e le dà a
+/// Legge le impostazioni adesso e a ogni cambio delle tredici chiavi, e le dà a
 /// `apply`; una lettura superata da una più recente non arriva. Torna la
 /// funzione che smette: chi chiama ne è il proprietario.
 export function watchPreferences(apply: (preferences: CanvasPreferences) => void): () => void {
